@@ -5,7 +5,7 @@ import cp from "node:child_process";
 import {fileURLToPath} from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const mutants = JSON.parse(fs.readFileSync(path.join(root, "docs", "lanes", "LANE-C-eval-tester-mutants.json"), "utf8"));
+const mutants = JSON.parse(fs.readFileSync(path.join(root, "docs", "lanes", "LANE-C-eval-tester-mutants.json"), "utf8")).mutants;
 const only = process.argv.slice(2);
 const git = (...a) => cp.spawnSync("git", a, {cwd: root, encoding: "utf8"});
 const files = [...new Set(mutants.map(m => m.file))];

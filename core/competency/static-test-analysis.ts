@@ -124,65 +124,56 @@ const EQUAL_METHODS = new Set(["strictEqual", "equal", "deepStrictEqual", "deepE
 const CONTROL = new Set(["if", "else", "for", "while", "do", "switch", "try", "catch", "finally", "with", "return", "throw", "break", "continue", "debugger", "function", "class"]);
 const REQ_ADD = new Set(["../src/add", "../src/add.js"]);
 const REQ_ASSERT = new Set(["node:assert", "assert", "node:assert/strict", "assert/strict"]);
-// //TR: Kapalı dünya: görev yalnız bu iki modüle ihtiyaç duyar. Ortamı/yürütmeyi dinamik değiştirebilen tanımlayıcılar (process, eval, Function, globalThis...) görevde HİÇ yer almaz.
-const DENIED_IDS = new Set(["process", "globalThis", "global", "eval", "Function", "module", "exports", "import"]);
+const isStr = (ts: readonly Tok[]) => ts.length === 1 && ts[0].t === "str";   // mesaj bağımsız değişkeni: yalnız düz string (template ifade içerebilir)
 
 export interface AssertionCase { a: number; b: number; expected: number }
 export interface AddTestAnalysis {
   addId: string | null;          // require("../src/add") bağlanan tanımlayıcı
   assertIds: string[];           // require("node:assert") bağlanan tanımlayıcılar
   assertCalls: number;           // assert tanımlayıcısıyla başlayan üst düzey çağrı deyimleri (nitelikli ya da değil)
-  cases: AssertionCase[];        // nitelikli üst düzey deyimler: assert.<eşitlik>(add(<n>,<n>), <n>) / assert(.ok)(add(<n>,<n>) === <n>)
+  cases: AssertionCase[];        // nitelikli üst düzey deyimler: assert.<eşitlik>(add(<n>,<n>), <n>[, "mesaj"]) / assert(.ok)(add(<n>,<n>) === <n>[, "mesaj"])
   earlyExit: string | null;      // üst düzey return/kontrol akışı/function/class => neden kodu
-  tamper: string | null;         // kapalı dünya ihlali (yeniden bağlama, takma ad, izinli olmayan require, yasaklı tanımlayıcı) => neden kodu
+  tamper: string | null;         // KAPALI DİLBİLGİSİ dışındaki ilk üst düzey deyim => neden kodu
 }
 
-// //TR: Tester golden görevinin biçimini çözümler. Yalnız ÜST DÜZEY deyimler sayılır (geri çağrı/if/döngü içindekiler değil); add çağrısı yalnız sayı değişmezleriyle ve bir eşitlik iddiasının karşılaştırılan tarafında olmalıdır.
+// //TR: Tester golden görevinin KAPALI DİLBİLGİSİ: dosya yalnız (1) iki `const <ad> = require("<izinli modül>")` bildiriminden ve (2) nitelikli assert deyimlerinden oluşur. Bunun dışındaki HER üst düzey deyim (yeniden atama, takma ad, Object.is/prototip kurcalama, process/eval/import, console, blok, başka require...) tamper'dır: dosya kendi iddialarını sessizce etkisiz kılamaz. Nitelikli deyim: yalnız sayı değişmezleriyle add çağrısı, bir eşitlik iddiasının karşılaştırılan tarafında, beklenen değer sayı değişmezi, isteğe bağlı düz string mesaj.
 export function analyzeAddTest(toks: readonly Tok[]): AddTestAnalysis {
   const r: AddTestAnalysis = {addId: null, assertIds: [], assertCalls: 0, cases: [], earlyExit: null, tamper: null};
-  const allowed = new Set<Tok>();   // bağlama adının/`require`ın/assert başının izinli konumları (kimlik ile)
   const stmts = topLevelStatements(toks);
+  const isRequireDecl = (s: readonly Tok[]) => s.length === 7 && s[0].t === "id" && s[0].v === "const" && s[1].t === "id" && s[2].v === "=" && s[3].v === "require" && s[4].v === "(" && s[5].t === "str" && s[6].v === ")";
+  const decls = new Set<readonly Tok[]>();
+  // 1. bağlamalar (yalnız const): assert deyimleri sınıflanmadan önce bilinmeli
   for (const s of stmts) {
     if (s[0].t === "id" && CONTROL.has(s[0].v)) { r.earlyExit ??= `TOP_LEVEL_${s[0].v.toUpperCase()}`; continue; }
-    // const <id> = require("<spec>"): YALNIZ const (let/var yeniden atanabilir; görev metni const der)
-    if (s.length === 7 && s[0].t === "id" && s[0].v === "const" && s[1].t === "id" && s[2].v === "=" && s[3].v === "require" && s[4].v === "(" && s[5].t === "str" && s[6].v === ")") {
-      if (REQ_ADD.has(s[5].v)) { r.addId ??= s[1].v; allowed.add(s[1]); allowed.add(s[3]); }
-      else if (REQ_ASSERT.has(s[5].v)) { r.assertIds.push(s[1].v); allowed.add(s[1]); allowed.add(s[3]); }
-    }
+    if (!isRequireDecl(s)) continue;
+    if (REQ_ADD.has(s[5].v)) { r.addId ??= s[1].v; decls.add(s); } else if (REQ_ASSERT.has(s[5].v)) { r.assertIds.push(s[1].v); decls.add(s); }
   }
+  // 2. her üst düzey deyim bildirim ya da nitelikli assert olmalı; ilk ihlal adlandırılır
+  const violate = (why: string) => { r.tamper ??= why; };
   for (const s of stmts) {
-    if (s[0].t !== "id" || !r.assertIds.includes(s[0].v)) continue;
-    const method = s[1]?.v === "(" ? null : s[1]?.v === "." && s[2]?.t === "id" && s[3]?.v === "(" ? s[2].v : undefined;
-    if (method === undefined) continue;
+    if (s[0].t === "id" && CONTROL.has(s[0].v)) continue;   // earlyExit olarak raporlanır
+    if (decls.has(s)) continue;
+    if (isRequireDecl(s)) { violate(`REQUIRE_SPEC_NOT_ALLOWED:${s[5].v.slice(0, 40)}`); continue; }
+    const method = s[0].t === "id" && r.assertIds.includes(s[0].v) ? (s[1]?.v === "(" ? null : s[1]?.v === "." && s[2]?.t === "id" && s[3]?.v === "(" ? s[2].v : undefined) : undefined;
+    if (method === undefined) { violate(`STATEMENT_NOT_ALLOWED:${s[0].v.slice(0, 30)}`); continue; }
     const open = method === null ? 1 : 3;
     // eşleşen kapanış parantezi deyimin SON belirteci olmalı (assert(...).x ya da zincir değil)
     let depth = 0, close = -1;
     for (let j = open; j < s.length; j++) { if (s[j].v === "(" && s[j].t === "p") depth++; else if (s[j].v === ")" && s[j].t === "p") { depth--; if (depth === 0) { close = j; break; } } }
-    if (close !== s.length - 1) continue;
+    if (close !== s.length - 1) { violate(`STATEMENT_NOT_ALLOWED:${s[0].v.slice(0, 30)}`); continue; }
     r.assertCalls++;
-    allowed.add(s[0]);
-    for (let j = open + 1; j < close; j++) if (r.addId !== null && s[j].t === "id" && s[j].v === r.addId && s[j + 1]?.v === "(") allowed.add(s[j]);
-    if (r.addId === null) continue;
     const args = splitArgs(s.slice(open + 1, close));
-    if (args.length < 1 || args.length > 3) continue;
     let found: AssertionCase | null = null;
-    if (method !== null && EQUAL_METHODS.has(method) && args.length >= 2) {
+    if (r.addId !== null && method !== null && EQUAL_METHODS.has(method) && (args.length === 2 || (args.length === 3 && isStr(args[2])))) {
       for (const [x, y] of [[0, 1], [1, 0]]) { const call = parseAddCall(args[x], r.addId), exp = parseNumber(args[y]); if (call && exp !== null) { found = {...call, expected: exp}; break; } }
-    } else if (method === null || method === "ok") {
+    } else if (r.addId !== null && (method === null || method === "ok") && (args.length === 1 || (args.length === 2 && isStr(args[1])))) {
       const op = args[0].findIndex(t => t.t === "p" && (t.v === "===" || t.v === "=="));
       if (op > 0) {
         const left = args[0].slice(0, op), right = args[0].slice(op + 1);
         for (const [x, y] of [[left, right], [right, left]]) { const call = parseAddCall(x, r.addId), exp = parseNumber(y); if (call && exp !== null) { found = {...call, expected: exp}; break; } }
       }
     }
-    if (found) r.cases.push(found);
-  }
-  // //TR: Kapalı dünya denetimi: bağlama adları yalnız bildirimde ve üst düzey assert çağrılarında geçer; `require` yalnız izinli iki bildirimde geçer; yasaklı tanımlayıcı yoktur. Aksi halde (yeniden atama, takma ad, require/process/eval ile ortamı değiştirme) test sessizce hiçbir şeyi sınamayabilir => tamper.
-  for (const t of toks) {
-    if (t.t !== "id" || r.tamper !== null) continue;
-    if (DENIED_IDS.has(t.v)) r.tamper = `DENIED_IDENTIFIER:${t.v}`;
-    else if (t.v === "require" && !allowed.has(t)) r.tamper = "REQUIRE_OUTSIDE_ALLOWED_DECLARATION";
-    else if ((t.v === r.addId || r.assertIds.includes(t.v)) && !allowed.has(t)) r.tamper = `BOUND_NAME_REUSED:${t.v}`;
+    if (found) r.cases.push(found); else violate("ASSERT_FORM_NOT_ALLOWED");
   }
   return r;
 }

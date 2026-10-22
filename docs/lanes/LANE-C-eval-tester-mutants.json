@@ -1,324 +1,327 @@
-[
- {
-  "id": "T1",
-  "description": "block comments kept as code",
-  "file": "core/competency/static-test-analysis.ts",
-  "old": "if (c === \"/\" && src[i + 1] === \"*\") {",
-  "new": "if (false) {"
- },
- {
-  "id": "T2",
-  "description": "line comments kept as code",
-  "file": "core/competency/static-test-analysis.ts",
-  "old": "if (c === \"/\" && src[i + 1] === \"/\") {",
-  "new": "if (false) {"
- },
- {
-  "id": "T4",
-  "description": "regex literals never recognised",
-  "file": "core/competency/static-test-analysis.ts",
-  "old": "if (regexAllowed) {",
-  "new": "if (false) {"
- },
- {
-  "id": "T5",
-  "description": "template ${} not skipped",
-  "file": "core/competency/static-test-analysis.ts",
-  "old": "else if (ch === \"$\" && src[j + 1] === \"{\") {",
-  "new": "else if (false) {"
- },
- {
-  "id": "T6",
-  "description": "line break inside a block comment ignored",
-  "file": "core/competency/static-test-analysis.ts",
-  "old": "if (LINE_END.test(src.slice(i, e))) nl = true; i = e + 2;",
-  "new": "i = e + 2;"
- },
- {
-  "id": "T7",
-  "description": "<!-- not rejected",
-  "file": "core/competency/static-test-analysis.ts",
-  "old": "if (src.startsWith(\"<!--\", i)) return null;",
-  "new": ""
- },
- {
-  "id": "T8",
-  "description": "--> at line start not rejected",
-  "file": "core/competency/static-test-analysis.ts",
-  "old": "if (src.startsWith(\"-->\", i) && (nl || out.length === 0)) return null;",
-  "new": ""
- },
- {
-  "id": "T9",
-  "description": "slash after a closing brace accepted",
-  "file": "core/competency/static-test-analysis.ts",
-  "old": "if (prev && prev.t === \"p\" && prev.v === \"}\") return null;",
-  "new": ""
- },
- {
-  "id": "T10",
-  "description": "--> rejected anywhere (also mid-line)",
-  "file": "core/competency/static-test-analysis.ts",
-  "old": "(nl || out.length === 0)) return null;",
-  "new": "true) return null;"
- },
- {
-  "id": "A1",
-  "description": "bracket depth not tracked",
-  "file": "core/competency/static-test-analysis.ts",
-  "old": "if (t.v === \"(\" || t.v === \"[\" || t.v === \"{\") depth++;",
-  "new": "if (false) depth++;"
- },
- {
-  "id": "A2",
-  "description": "control flow never flagged",
-  "file": "core/competency/static-test-analysis.ts",
-  "old": "if (s[0].t === \"id\" && CONTROL.has(s[0].v)) {",
-  "new": "if (false) {"
- },
- {
-  "id": "A4",
-  "description": "call must end the statement: check removed",
-  "file": "core/competency/static-test-analysis.ts",
-  "old": "if (close !== s.length - 1) continue;",
-  "new": ""
- },
- {
-  "id": "A5",
-  "description": "notStrictEqual accepted",
-  "file": "core/competency/static-test-analysis.ts",
-  "old": "new Set([\"strictEqual\", \"equal\", \"deepStrictEqual\", \"deepEqual\"])",
-  "new": "new Set([\"strictEqual\", \"equal\", \"deepStrictEqual\", \"deepEqual\", \"notStrictEqual\"])"
- },
- {
-  "id": "A6",
-  "description": "any number of arguments",
-  "file": "core/competency/static-test-analysis.ts",
-  "old": "if (args.length < 1 || args.length > 3) continue;",
-  "new": "if (args.length < 1) continue;"
- },
- {
-  "id": "A7",
-  "description": "hex operands accepted",
-  "file": "core/competency/static-test-analysis.ts",
-  "old": "!/^\\d+(?:\\.\\d+)?$/.test(num.v)",
-  "new": "!/^[\\dxX.]+$/.test(num.v)"
- },
- {
-  "id": "A8",
-  "description": "any callee name accepted",
-  "file": "core/competency/static-test-analysis.ts",
-  "old": "ts[0].v !== addId ||",
-  "new": ""
- },
- {
-  "id": "A9",
-  "description": "== comparison not accepted",
-  "file": "core/competency/static-test-analysis.ts",
-  "old": "(t.v === \"===\" || t.v === \"==\")",
-  "new": "t.v === \"===\""
- },
- {
-  "id": "A10",
-  "description": "reversed operands not accepted",
-  "file": "core/competency/static-test-analysis.ts",
-  "old": "for (const [x, y] of [[0, 1], [1, 0]])",
-  "new": "for (const [x, y] of [[0, 1]])"
- },
- {
-  "id": "A11",
-  "description": "last require wins",
-  "file": "core/competency/static-test-analysis.ts",
-  "old": "r.addId ??= s[1].v;",
-  "new": "r.addId = s[1].v;"
- },
- {
-  "id": "A13",
-  "description": ".js specifier not accepted",
-  "file": "core/competency/static-test-analysis.ts",
-  "old": "new Set([\"../src/add\", \"../src/add.js\"])",
-  "new": "new Set([\"../src/add\"])"
- },
- {
-  "id": "A14",
-  "description": "require statement may be longer",
-  "file": "core/competency/static-test-analysis.ts",
-  "old": "s.length === 7 &&",
-  "new": "s.length >= 7 &&"
- },
- {
-  "id": "A15",
-  "description": "assert.ok not accepted",
-  "file": "core/competency/static-test-analysis.ts",
-  "old": "method === null || method === \"ok\"",
-  "new": "method === null"
- },
- {
-  "id": "A16",
-  "description": "let bindings accepted",
-  "file": "core/competency/static-test-analysis.ts",
-  "old": "s[0].v === \"const\" && s[1].t === \"id\"",
-  "new": "(s[0].v === \"const\" || s[0].v === \"let\") && s[1].t === \"id\""
- },
- {
-  "id": "A17",
-  "description": "no denied identifiers",
-  "file": "core/competency/static-test-analysis.ts",
-  "old": "const DENIED_IDS = new Set([\"process\", \"globalThis\", \"global\", \"eval\", \"Function\", \"module\", \"exports\", \"import\"]);",
-  "new": "const DENIED_IDS = new Set<string>();"
- },
- {
-  "id": "A18",
-  "description": "require allowed anywhere",
-  "file": "core/competency/static-test-analysis.ts",
-  "old": "else if (t.v === \"require\" && !allowed.has(t))",
-  "new": "else if (false)"
- },
- {
-  "id": "A19",
-  "description": "bound names may be reused anywhere",
-  "file": "core/competency/static-test-analysis.ts",
-  "old": "else if ((t.v === r.addId || r.assertIds.includes(t.v)) && !allowed.has(t))",
-  "new": "else if (false)"
- },
- {
-  "id": "A20",
-  "description": "add callee inside assertions not allowed",
-  "file": "core/competency/static-test-analysis.ts",
-  "old": "allowed.add(s[j]);\n    if (r.addId === null) continue;",
-  "new": "\n    if (r.addId === null) continue;"
- },
- {
-  "id": "A21",
-  "description": "assert head not allowed",
-  "file": "core/competency/static-test-analysis.ts",
-  "old": "allowed.add(s[0]);\n",
-  "new": "\n"
- },
- {
-  "id": "A22",
-  "description": "disallowed require spec accepted as allowed declaration",
-  "file": "core/competency/static-test-analysis.ts",
-  "old": "else if (REQ_ASSERT.has(s[5].v)) { r.assertIds.push(s[1].v); allowed.add(s[1]); allowed.add(s[3]); }",
-  "new": "else if (true) { r.assertIds.push(s[1].v); allowed.add(s[1]); allowed.add(s[3]); }"
- },
- {
-  "id": "P1",
-  "description": "size cap not applied",
-  "file": "core/competency/evaluation-pipeline.ts",
-  "old": "const sizeOk = src !== null && bytes <= MAX_TEST_SOURCE_BYTES,",
-  "new": "const sizeOk = src !== null,"
- },
- {
-  "id": "P2",
-  "description": "oversize content handed to the surface classifier",
-  "file": "core/competency/evaluation-pipeline.ts",
-  "old": "return t !== null && Buffer.byteLength(t, \"utf8\") > MAX_TEST_SOURCE_BYTES ? null : t;",
-  "new": "return t;"
- },
- {
-  "id": "P3",
-  "description": "cap exclusive",
-  "file": "core/competency/evaluation-pipeline.ts",
-  "old": "bytes <= MAX_TEST_SOURCE_BYTES,",
-  "new": "bytes < MAX_TEST_SOURCE_BYTES,"
- },
- {
-  "id": "P4",
-  "description": "expected sums not checked",
-  "file": "core/competency/evaluation-pipeline.ts",
-  "old": "cases.every(k => k.expected === k.a + k.b)",
-  "new": "cases.every(k => true)"
- },
- {
-  "id": "P5",
-  "description": "empty case set passes the values check",
-  "file": "core/competency/evaluation-pipeline.ts",
-  "old": "passed: cases.length > 0 && cases.every",
-  "new": "passed: cases.every"
- },
- {
-  "id": "P6",
-  "description": "positive needs only one positive operand",
-  "file": "core/competency/evaluation-pipeline.ts",
-  "old": "cases.some(k => k.a > 0 && k.b > 0)",
-  "new": "cases.some(k => k.a > 0 || k.b > 0)"
- },
- {
-  "id": "P7",
-  "description": "negative needs both operands",
-  "file": "core/competency/evaluation-pipeline.ts",
-  "old": "cases.some(k => k.a < 0 || k.b < 0)",
-  "new": "cases.some(k => k.a < 0 && k.b < 0)"
- },
- {
-  "id": "P8",
-  "description": "zero needs both operands",
-  "file": "core/competency/evaluation-pipeline.ts",
-  "old": "cases.some(k => k.a === 0 || k.b === 0)",
-  "new": "cases.some(k => k.a === 0 && k.b === 0)"
- },
- {
-  "id": "P9",
-  "description": "only two distinct operand pairs",
-  "file": "core/competency/evaluation-pipeline.ts",
-  "old": "distinct >= 3 && pos && neg && zero",
-  "new": "distinct >= 2 && pos && neg && zero"
- },
- {
-  "id": "P10",
-  "description": "naive string wrapper compile",
-  "file": "core/competency/evaluation-pipeline.ts",
-  "old": "try { vm.compileFunction(src, [\"exports\", \"require\", \"module\", \"__filename\", \"__dirname\"], {filename: \"evaluation-test-file.js\"}); return true; }",
-  "new": "try { new vm.Script(\"(function (require, module, exports) {\" + src + \"\\n})\"); return true; }"
- },
- {
-  "id": "P11",
-  "description": "two assertions suffice",
-  "file": "core/competency/evaluation-pipeline.ts",
-  "old": "passed: cases.length >= 3,",
-  "new": "passed: cases.length >= 2,"
- },
- {
-  "id": "P12",
-  "description": "unanalysable text passes the exit check",
-  "file": "core/competency/evaluation-pipeline.ts",
-  "old": "passed: an !== null && an.earlyExit === null",
-  "new": "passed: an === null || an.earlyExit === null"
- },
- {
-  "id": "P13",
-  "description": "oversize file scanned for disabled markers",
-  "file": "core/competency/evaluation-pipeline.ts",
-  "old": "const disabled = sizeOk ? disabledTestMarkers(text) : -1;",
-  "new": "const disabled = disabledTestMarkers(src ?? \"\");"
- },
- {
-  "id": "P14",
-  "description": "oversize text kept in the artifact",
-  "file": "core/competency/evaluation-pipeline.ts",
-  "old": "testFile: sizeOk ? clip(text, 8000) : null",
-  "new": "testFile: src === null ? null : clip(src, 8000)"
- },
- {
-  "id": "P15",
-  "description": "closed_world always passes",
-  "file": "core/competency/evaluation-pipeline.ts",
-  "old": "passed: an !== null && an.tamper === null",
-  "new": "passed: true"
- },
- {
-  "id": "P16",
-  "description": "oversize file compiled",
-  "file": "core/competency/evaluation-pipeline.ts",
-  "old": "passed: sizeOk && compiles(text)",
-  "new": "passed: compiles(src ?? \"\")"
- },
- {
-  "id": "P17",
-  "description": "oversize file tokenised",
-  "file": "core/competency/evaluation-pipeline.ts",
-  "old": "const toks = sizeOk ? tokenize(text) : null",
-  "new": "const toks = tokenize(src ?? \"\")"
- }
-]
+{
+ "//TR": "Tester golden-tests-v1 oracle için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt bir dosyada TAM 1 kez geçen metni değiştirir; docs/lanes/LANE-C-eval-tester-mutants.mjs hepsini çalıştırır ve her birinin test grubu tarafından ÖLDÜRÜLDÜĞÜNÜ (KILLED) bekler.",
+ "mutants": [
+  {
+   "id": "T1",
+   "description": "block comments kept as code",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "if (c === \"/\" && src[i + 1] === \"*\") {",
+   "new": "if (false) {"
+  },
+  {
+   "id": "T2",
+   "description": "line comments kept as code",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "if (c === \"/\" && src[i + 1] === \"/\") {",
+   "new": "if (false) {"
+  },
+  {
+   "id": "T4",
+   "description": "regex literals never recognised",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "if (regexAllowed) {",
+   "new": "if (false) {"
+  },
+  {
+   "id": "T5",
+   "description": "template ${} not skipped",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "else if (ch === \"$\" && src[j + 1] === \"{\") {",
+   "new": "else if (false) {"
+  },
+  {
+   "id": "T6",
+   "description": "line break inside a block comment ignored",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "if (LINE_END.test(src.slice(i, e))) nl = true; i = e + 2;",
+   "new": "i = e + 2;"
+  },
+  {
+   "id": "T7",
+   "description": "<!-- not rejected",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "if (src.startsWith(\"<!--\", i)) return null;",
+   "new": ""
+  },
+  {
+   "id": "T8",
+   "description": "--> at line start not rejected",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "if (src.startsWith(\"-->\", i) && (nl || out.length === 0)) return null;",
+   "new": ""
+  },
+  {
+   "id": "T9",
+   "description": "slash after a closing brace accepted",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "if (prev && prev.t === \"p\" && prev.v === \"}\") return null;",
+   "new": ""
+  },
+  {
+   "id": "T10",
+   "description": "--> rejected anywhere (also mid-line)",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "(nl || out.length === 0)) return null;",
+   "new": "true) return null;"
+  },
+  {
+   "id": "A1",
+   "description": "bracket depth not tracked",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "if (t.v === \"(\" || t.v === \"[\" || t.v === \"{\") depth++;",
+   "new": "if (false) depth++;"
+  },
+  {
+   "id": "A2",
+   "description": "control flow never flagged",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "if (s[0].t === \"id\" && CONTROL.has(s[0].v)) {",
+   "new": "if (false) {"
+  },
+  {
+   "id": "A5",
+   "description": "notStrictEqual accepted",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "new Set([\"strictEqual\", \"equal\", \"deepStrictEqual\", \"deepEqual\"])",
+   "new": "new Set([\"strictEqual\", \"equal\", \"deepStrictEqual\", \"deepEqual\", \"notStrictEqual\"])"
+  },
+  {
+   "id": "A7",
+   "description": "hex operands accepted",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "!/^\\d+(?:\\.\\d+)?$/.test(num.v)",
+   "new": "!/^[\\dxX.]+$/.test(num.v)"
+  },
+  {
+   "id": "A8",
+   "description": "any callee name accepted",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "ts[0].v !== addId ||",
+   "new": ""
+  },
+  {
+   "id": "A9",
+   "description": "== comparison not accepted",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "(t.v === \"===\" || t.v === \"==\")",
+   "new": "t.v === \"===\""
+  },
+  {
+   "id": "A10",
+   "description": "reversed operands not accepted",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "for (const [x, y] of [[0, 1], [1, 0]])",
+   "new": "for (const [x, y] of [[0, 1]])"
+  },
+  {
+   "id": "A11",
+   "description": "last require wins",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "r.addId ??= s[1].v;",
+   "new": "r.addId = s[1].v;"
+  },
+  {
+   "id": "A13",
+   "description": ".js specifier not accepted",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "new Set([\"../src/add\", \"../src/add.js\"])",
+   "new": "new Set([\"../src/add\"])"
+  },
+  {
+   "id": "A14",
+   "description": "require statement may be longer",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "s.length === 7 &&",
+   "new": "s.length >= 7 &&"
+  },
+  {
+   "id": "A15",
+   "description": "assert.ok not accepted",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "method === null || method === \"ok\"",
+   "new": "method === null"
+  },
+  {
+   "id": "P1",
+   "description": "size cap not applied",
+   "file": "core/competency/evaluation-pipeline.ts",
+   "old": "const sizeOk = src !== null && bytes <= MAX_TEST_SOURCE_BYTES,",
+   "new": "const sizeOk = src !== null,"
+  },
+  {
+   "id": "P2",
+   "description": "oversize content handed to the surface classifier",
+   "file": "core/competency/evaluation-pipeline.ts",
+   "old": "return t !== null && Buffer.byteLength(t, \"utf8\") > MAX_TEST_SOURCE_BYTES ? null : t;",
+   "new": "return t;"
+  },
+  {
+   "id": "P3",
+   "description": "cap exclusive",
+   "file": "core/competency/evaluation-pipeline.ts",
+   "old": "bytes <= MAX_TEST_SOURCE_BYTES,",
+   "new": "bytes < MAX_TEST_SOURCE_BYTES,"
+  },
+  {
+   "id": "P4",
+   "description": "expected sums not checked",
+   "file": "core/competency/evaluation-pipeline.ts",
+   "old": "cases.every(k => k.expected === k.a + k.b)",
+   "new": "cases.every(k => true)"
+  },
+  {
+   "id": "P5",
+   "description": "empty case set passes the values check",
+   "file": "core/competency/evaluation-pipeline.ts",
+   "old": "passed: cases.length > 0 && cases.every",
+   "new": "passed: cases.every"
+  },
+  {
+   "id": "P6",
+   "description": "positive needs only one positive operand",
+   "file": "core/competency/evaluation-pipeline.ts",
+   "old": "cases.some(k => k.a > 0 && k.b > 0)",
+   "new": "cases.some(k => k.a > 0 || k.b > 0)"
+  },
+  {
+   "id": "P7",
+   "description": "negative needs both operands",
+   "file": "core/competency/evaluation-pipeline.ts",
+   "old": "cases.some(k => k.a < 0 || k.b < 0)",
+   "new": "cases.some(k => k.a < 0 && k.b < 0)"
+  },
+  {
+   "id": "P8",
+   "description": "zero needs both operands",
+   "file": "core/competency/evaluation-pipeline.ts",
+   "old": "cases.some(k => k.a === 0 || k.b === 0)",
+   "new": "cases.some(k => k.a === 0 && k.b === 0)"
+  },
+  {
+   "id": "P9",
+   "description": "only two distinct operand pairs",
+   "file": "core/competency/evaluation-pipeline.ts",
+   "old": "distinct >= 3 && pos && neg && zero",
+   "new": "distinct >= 2 && pos && neg && zero"
+  },
+  {
+   "id": "P10",
+   "description": "naive string wrapper compile",
+   "file": "core/competency/evaluation-pipeline.ts",
+   "old": "try { vm.compileFunction(src, [\"exports\", \"require\", \"module\", \"__filename\", \"__dirname\"], {filename: \"evaluation-test-file.js\"}); return true; }",
+   "new": "try { new vm.Script(\"(function (require, module, exports) {\" + src + \"\\n})\"); return true; }"
+  },
+  {
+   "id": "P11",
+   "description": "two assertions suffice",
+   "file": "core/competency/evaluation-pipeline.ts",
+   "old": "passed: cases.length >= 3,",
+   "new": "passed: cases.length >= 2,"
+  },
+  {
+   "id": "P12",
+   "description": "unanalysable text passes the exit check",
+   "file": "core/competency/evaluation-pipeline.ts",
+   "old": "passed: an !== null && an.earlyExit === null",
+   "new": "passed: an === null || an.earlyExit === null"
+  },
+  {
+   "id": "P13",
+   "description": "oversize file scanned for disabled markers",
+   "file": "core/competency/evaluation-pipeline.ts",
+   "old": "const disabled = sizeOk ? disabledTestMarkers(text) : -1;",
+   "new": "const disabled = disabledTestMarkers(src ?? \"\");"
+  },
+  {
+   "id": "P14",
+   "description": "oversize text kept in the artifact",
+   "file": "core/competency/evaluation-pipeline.ts",
+   "old": "testFile: sizeOk ? clip(text, 8000) : null",
+   "new": "testFile: src === null ? null : clip(src, 8000)"
+  },
+  {
+   "id": "P15",
+   "description": "closed_world always passes",
+   "file": "core/competency/evaluation-pipeline.ts",
+   "old": "passed: an !== null && an.tamper === null",
+   "new": "passed: true"
+  },
+  {
+   "id": "P16",
+   "description": "oversize file compiled",
+   "file": "core/competency/evaluation-pipeline.ts",
+   "old": "passed: sizeOk && compiles(text)",
+   "new": "passed: compiles(src ?? \"\")"
+  },
+  {
+   "id": "P17",
+   "description": "oversize file tokenised",
+   "file": "core/competency/evaluation-pipeline.ts",
+   "old": "const toks = sizeOk ? tokenize(text) : null",
+   "new": "const toks = tokenize(src ?? \"\")"
+  },
+  {
+   "id": "A16",
+   "description": "let bindings accepted",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "s[0].v === \"const\" && s[1].t === \"id\"",
+   "new": "(s[0].v === \"const\" || s[0].v === \"let\") && s[1].t === \"id\""
+  },
+  {
+   "id": "S1",
+   "description": "non-assert statements allowed",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "if (method === undefined) { violate(`STATEMENT_NOT_ALLOWED:${s[0].v.slice(0, 30)}`); continue; }",
+   "new": "if (method === undefined) { continue; }"
+  },
+  {
+   "id": "S2",
+   "description": "a call chained onto an assertion allowed",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "if (close !== s.length - 1) { violate(`STATEMENT_NOT_ALLOWED:${s[0].v.slice(0, 30)}`); continue; }",
+   "new": "if (close !== s.length - 1) { continue; }"
+  },
+  {
+   "id": "S3",
+   "description": "require declarations of other modules allowed",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "if (isRequireDecl(s)) { violate(`REQUIRE_SPEC_NOT_ALLOWED:${s[5].v.slice(0, 40)}`); continue; }",
+   "new": "if (isRequireDecl(s)) { continue; }"
+  },
+  {
+   "id": "S4",
+   "description": "non-qualifying assert calls allowed",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "if (found) r.cases.push(found); else violate(\"ASSERT_FORM_NOT_ALLOWED\");",
+   "new": "if (found) r.cases.push(found);"
+  },
+  {
+   "id": "S5",
+   "description": "any message argument accepted",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "const isStr = (ts: readonly Tok[]) => ts.length === 1 && ts[0].t === \"str\";",
+   "new": "const isStr = (ts: readonly Tok[]) => ts.length >= 1;"
+  },
+  {
+   "id": "S6",
+   "description": "extra arguments accepted on equality asserts",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "(args.length === 2 || (args.length === 3 && isStr(args[2])))",
+   "new": "(args.length >= 2)"
+  },
+  {
+   "id": "S7",
+   "description": "extra arguments accepted on ok/bare asserts",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "(args.length === 1 || (args.length === 2 && isStr(args[1])))",
+   "new": "(args.length >= 1)"
+  },
+  {
+   "id": "S8",
+   "description": "any require spec bound as the assert module",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "else if (REQ_ASSERT.has(s[5].v)) { r.assertIds.push(s[1].v); decls.add(s); }",
+   "new": "else { r.assertIds.push(s[1].v); decls.add(s); }"
+  }
+ ]
+}

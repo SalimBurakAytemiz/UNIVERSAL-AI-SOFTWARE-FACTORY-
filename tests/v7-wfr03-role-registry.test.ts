@@ -986,6 +986,12 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       ["require of node:process", T({"test/add.test.js": H + 'const p = require("node:process");\np.exit(0);\n' + A}), "closed_world"],
       ["require of child_process", T({"test/add.test.js": H + 'const cp = require("node:child_process");\n' + A}), "closed_world"],
       ["dynamic import", T({"test/add.test.js": H + 'import("node:process");\n' + A}), "closed_world"],
+      ["Object.is replaced (assert.strictEqual would always pass)", T({"test/add.test.js": H + "Object.is = () => true;\n" + A}), "closed_world"],
+      ["prototype/descriptor tampering", T({"test/add.test.js": H + 'Object.defineProperty(assert, "strictEqual", {value() {}});\n' + A}), "closed_world"],
+      ["a block that rebinds add", T({"test/add.test.js": H + "{ add = (a, b) => a + b; }\n" + A}), "closed_world"],
+      ["an IIFE before the assertions", T({"test/add.test.js": H + "(() => { Object.is = () => true; })();\n" + A}), "closed_world"],
+      ["a call chained onto an assertion through ASI", T({"test/add.test.js": H + "assert.strictEqual(add(2, 3), 5)\n(Object.is = () => true)\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(0, 7), 7);\nassert.strictEqual(add(4, 5), 9);\n"}), "closed_world"],
+      ["a template-literal message with an expression", T({"test/add.test.js": H + "assert.strictEqual(add(2, 3), 5, `${Object.is = () => true}`);\n" + "assert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(0, 7), 7);\n"}), "assertion_count_min_3"],
       // text V8 runs differently from what a lexer sees: fail closed (the file cannot be analysed)
       ["HTML-like comment markers hide the assertions", T({"test/add.test.js": H + "<!-- assert.strictEqual(add(2, 3), 5);\n<!-- assert.strictEqual(add(-2, -3), -5);\n<!-- assert.strictEqual(add(0, 7), 7);\n"}), "references_module"],
       ["HTML close-comment markers at the start of a line", T({"test/add.test.js": H + "--> assert.strictEqual(add(2, 3), 5);\n--> assert.strictEqual(add(-2, -3), -5);\n--> assert.strictEqual(add(0, 7), 7);\n"}), "references_module"],
@@ -1021,14 +1027,14 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     expect(await evaluate(fakePair(), TESTER, {bindings: FIRST_DELIVERY_BINDINGS.map(b => b === t ? {...b, allowedTools: [...b.allowedTools, "WebFetch"]} : b)})).toEqual({status: "REFUSED", reason: "ROLE_NOT_EXECUTABLE:TOOL_NOT_ALLOWED"});
   });
 
-  it("tester oracle accepts every spelling the mission allows (an alias for add, reversed operands, assert.ok / bare assert, no semicolons, CRLF, comments, a message argument, extra statements, decimals) and PASSES them", { timeout: 300_000 }, async () => {
+  it("tester oracle accepts every spelling the mission allows (an alias for add, reversed operands, assert.ok / bare assert, no semicolons, CRLF, comments, a message argument, decimals) and PASSES them", { timeout: 300_000 }, async () => {
     const H = 'const assert = require("node:assert");\nconst add = require("../src/add");\n';
     const variants: Array<[string, string]> = [
       ["an alias for add and the .js specifier", 'const assert = require("assert");\nconst sum = require("../src/add.js");\nassert.strictEqual(sum(2, 3), 5);\nassert.strictEqual(sum(-2, -3), -5);\nassert.strictEqual(sum(0, 7), 7);\n'],
       ["strict assert module", 'const assert = require("node:assert/strict");\nconst add = require("../src/add");\nassert.equal(add(2, 3), 5);\nassert.equal(add(-2, -3), -5);\nassert.equal(add(0, 7), 7);\n'],
       ["reversed operands with equal / deepStrictEqual / deepEqual", H + "assert.equal(5, add(2, 3));\nassert.deepStrictEqual(-5, add(-2, -3));\nassert.deepEqual(add(0, 7), 7);\n"],
       ["assert.ok and bare assert with === and ==", H + "assert.ok(add(2, 3) === 5);\nassert(-5 == add(-2, -3));\nassert(add(0, 7) === 7);\n"],
-      ["no semicolons, CRLF, comments, a message argument and an extra statement", 'const assert = require("node:assert") // node:assert\r\nconst add = require("../src/add")\r\n/* three cases */\r\nassert.strictEqual(add(2, 3), 5, "two plus three")\r\nassert.strictEqual(add(-2, -3), -5)\r\nconsole.log("ok")\r\nassert.strictEqual(add(0, 7), 7)\r\n'],
+      ["no semicolons, CRLF, comments and a message argument", 'const assert = require("node:assert") // node:assert\r\nconst add = require("../src/add")\r\n/* three cases */\r\nassert.strictEqual(add(2, 3), 5, "two plus three")\r\nassert.strictEqual(add(-2, -3), -5)\r\nassert.strictEqual(add(0, 7), 7)\r\n'],
       ["mixed-sign operands (negative through ONE operand)", H + "assert.strictEqual(add(2, -3), -1);\nassert.strictEqual(add(4, 5), 9);\nassert.strictEqual(add(0, 7), 7);\n"],
       ["decimal operands", H + "assert.strictEqual(add(2.5, 0.5), 3);\nassert.strictEqual(add(-1.5, -0.5), -2);\nassert.strictEqual(add(0, 0.25), 0.25);\n"]
     ];
@@ -1118,14 +1124,18 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
         expect([src, an(src).earlyExit]).toEqual([src, code]);
       expect(an('const add = require("../src/add");\nconst add2 = require("../src/add.js");').addId).toBe("add");
       expect([an('let add = require("../src/add");').addId, an('var add = require("../src/add");').addId]).toEqual([null, null]); // only const bindings count
-      // closed world: the first violation is named
+      // closed grammar: the first statement outside {two const requires, qualifying asserts} is named
       const tamper = (src: string) => an(`${H}${src}`).tamper;
-      for (const [src, code] of [["add = 1;", "BOUND_NAME_REUSED:add"], ["assert.strictEqual = 1;", "BOUND_NAME_REUSED:assert"], ["const x = assert;", "BOUND_NAME_REUSED:assert"], ["console.log(add(1, 2));", "BOUND_NAME_REUSED:add"],
-        ["require = 1;", "REQUIRE_OUTSIDE_ALLOWED_DECLARATION"], ['const p = require("node:process");', "REQUIRE_OUTSIDE_ALLOWED_DECLARATION"], ['const f = require("../src/add").y;', "REQUIRE_OUTSIDE_ALLOWED_DECLARATION"],
-        ["process.exit(0);", "DENIED_IDENTIFIER:process"], ["const p = process;", "DENIED_IDENTIFIER:process"], ['eval("1");', "DENIED_IDENTIFIER:eval"], ["Function('x')();", "DENIED_IDENTIFIER:Function"], ["globalThis.x = 1;", "DENIED_IDENTIFIER:globalThis"],
-        ["global.x = 1;", "DENIED_IDENTIFIER:global"], ["module.exports = 1;", "DENIED_IDENTIFIER:module"], ["exports.x = 1;", "DENIED_IDENTIFIER:exports"], ['import("x");', "DENIED_IDENTIFIER:import"],
-        ["assert(true);", null], ["assert.throws(() => {});", null], ["const o = {assert: 1};", "BOUND_NAME_REUSED:assert"], ["console.log(1);", null]] as const)
+      for (const [src, code] of [["add = 1;", "STATEMENT_NOT_ALLOWED:add"], ["assert.strictEqual = 1;", "STATEMENT_NOT_ALLOWED:assert"], ["const x = assert;", "STATEMENT_NOT_ALLOWED:const"], ["console.log(add(1, 2));", "STATEMENT_NOT_ALLOWED:console"],
+        ["require = 1;", "STATEMENT_NOT_ALLOWED:require"], ['const p = require("node:process");', "REQUIRE_SPEC_NOT_ALLOWED:node:process"], ['const f = require("../src/add").y;', "STATEMENT_NOT_ALLOWED:const"],
+        ["process.exit(0);", "STATEMENT_NOT_ALLOWED:process"], ["Object.is = () => true;", "STATEMENT_NOT_ALLOWED:Object"], ['eval("1");', "STATEMENT_NOT_ALLOWED:eval"], ["{ add = 1; }", "STATEMENT_NOT_ALLOWED:{"], ["(() => {})();", "STATEMENT_NOT_ALLOWED:("],
+        ["assert(true);", "ASSERT_FORM_NOT_ALLOWED"], ["assert.throws(() => {});", "ASSERT_FORM_NOT_ALLOWED"], ["assert.strictEqual(add(1, 2), 3, `x${1}`);", "ASSERT_FORM_NOT_ALLOWED"], ["assert.strictEqual(add(1, 2), 3, 4);", "ASSERT_FORM_NOT_ALLOWED"],
+        ["assert.strictEqual(add(1, 2), 3).x;", "STATEMENT_NOT_ALLOWED:assert"], ["assert.ok(add(1, 2) === 3, 4);", "ASSERT_FORM_NOT_ALLOWED"],
+        ['assert.strictEqual(add(1, 2), 3, "msg");', null], ['assert.ok(add(1, 2) === 3, "m");', null], ["assert(add(1, 2) == 3);", null], [";;", null]] as const)
         expect([src, tamper(src)]).toEqual([src, code]);
+      // the FIRST offender wins, in source order
+      expect(tamper("console.log(1);\nObject.is = 1;\nassert(true);")).toBe("STATEMENT_NOT_ALLOWED:console");
+      expect(tamper('assert(true);\nconsole.log(1);')).toBe("ASSERT_FORM_NOT_ALLOWED");
       expect(an(`const assert = require("node:assert");\nconst sum = require("../src/add");\nassert.strictEqual(sum(1, 2), 3);`).tamper).toBeNull();
       expect(an('const a = require("x"), b = 2;\nconst c = require("node:fs");').addId).toBeNull();
       expect(an('const x = require("../src/add").y;').addId).toBeNull();
