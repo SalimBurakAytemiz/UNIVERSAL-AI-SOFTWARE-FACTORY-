@@ -194,3 +194,4 @@ export async function render(ctx){
     attentionPanel(ctx,att),
     panel(ctx,{titleKey:"inbox.legacy",id:"inbox-legacy-p",className:"inbox-section"},h(doc,"p",{class:"note",text:ctx.t("inbox.legacyNote")}),legacy));
 }
+export {viewSkeleton as skeleton} from "../components.js";

@@ -313,6 +313,9 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
   .search-results{max-height:min(40vh,16rem)}
 }
 
+/* //TR: UI-105 yükleme iskeleti: yalnız token renkleri; animasyon mevcut pulse anahtar karelerini kullanır, reduced-motion altında kapanır. */
+.skel-block{height:4.5rem;margin:var(--space-3) 0;border-radius:.6rem;background:var(--surface-2);border:1px solid var(--border);animation:pulse 1.6s ease-in-out infinite}
+
 /* //TR: Hover geçişleri hareket token'larını kullanır; reduced-motion altında süreler 0'dır. */
 .btn,.nav-link,.tabs [role="tab"],.area-card,.card{transition:border-color var(--motion-hover) ease,background-color var(--motion-hover) ease,box-shadow var(--motion-hover) ease}
 @media (prefers-reduced-motion:reduce){
@@ -320,7 +323,7 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
   *,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
 }
 @media (forced-colors:active){
-  .btn,.btn-stop,.card,.kpi,.panel,.chip,.area-card,.nav-link,.dialog,.strip-item,.fact,.form-status,.status-timeline li,.field input,.field select,.field textarea{border:1px solid CanvasText;forced-color-adjust:auto}
+  .skel-block,.btn,.btn-stop,.card,.kpi,.panel,.chip,.area-card,.nav-link,.dialog,.strip-item,.fact,.form-status,.status-timeline li,.field input,.field select,.field textarea{border:1px solid CanvasText;forced-color-adjust:auto}
   .status-timeline .step-current{border:3px solid Highlight}
   .link-btn{color:LinkText}
   .btn-stop{border:3px double CanvasText;background:ButtonFace;color:ButtonText}
@@ -367,6 +370,14 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 .ack-block legend{font-weight:600;padding:0 4px}
 .ack-check{display:flex;align-items:flex-start;gap:6px;margin:6px 0}
 .ack-check input{margin-top:3px}
+
+/* //TR: UI-226 aşama zaman çizelgesi (salt-okunur, gerçek timestamp'lerden; animasyon yok) */
+.tw-trace{display:grid;gap:var(--space-2);min-width:0}
+.tw-trace-row{display:grid;grid-template-columns:minmax(6rem,12rem) 1fr;gap:var(--space-2);align-items:center}
+.tw-trace-track{position:relative;overflow:hidden;height:.75rem;border:1px solid var(--border-ui);border-radius:var(--radius-lg)}
+.tw-trace-bar{position:absolute;top:0;bottom:0;min-width:2px;background:var(--accent);border-radius:var(--radius-lg)}
+@media (forced-colors:active){.tw-trace-bar{background:Highlight;forced-color-adjust:none}}
+.tw-trace-list{margin:0;padding-left:var(--space-4)}
 
 /* UX WP4: Control Tower 2B operasyon haritası (durağan; animasyon yok, parıltı yalnız sabit SVG filtresi) */
 .ct-campus{display:grid;gap:var(--space-3);min-width:0}

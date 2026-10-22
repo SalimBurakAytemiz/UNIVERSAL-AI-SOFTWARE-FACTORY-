@@ -59,7 +59,12 @@ const BADGE_TR = "Testler çalıştırılmadı — NOT_VERIFIED (sandbox doğrul
 const ev = (kind: string, i: number) => ({evidenceId: `evd_${String(i).padStart(12, "0")}`, step: "VERIFY", cycle: 0, kind});
 const m1aRun = (extra: any = {}) => ({runId: RUN, missionId: MID, projectId: PID, status: "AWAITING_APPROVAL", step: "REPORT", headSha: HEAD, executor: {implementer: "I", reviewer: "R"}, checkpoints: [],
   evidence: [ev("IMPLEMENT", 1), ev("VERIFY_TESTS_NOT_EXECUTED", 2), ev("TEST_SURFACE", 3), ev("SECURITY_REPORT", 4), ev("REVIEW", 5), ev("REGRESSION_TESTS_NOT_EXECUTED", 6), ev("REPORT", 7)], ...extra});
-const execRun = () => m1aRun({runId: RUN2, status: "SUCCEEDED", evidence: [ev("IMPLEMENT", 1), ev("VERIFY_TESTS", 2), ev("REGRESSION_TESTS", 3), ev("REPORT", 4)]});
+// PQ-001: tam kanıt = run.headSha için VERIFY_TESTS + REGRESSION_TESTS, exit 0, sandbox tanığı, TEST_SURFACE'te yürütülen test sayısı > 0 (sunucu kuralı).
+const fullEv = (kind: string, i: number, extra: any = {}) => ({...ev(kind, i), commitSha: HEAD, exitCode: 0, sandboxProviderId: "sbx.fake", ...extra});
+const execEvidence = () => [ev("IMPLEMENT", 1), fullEv("VERIFY_TESTS", 2), fullEv("REGRESSION_TESTS", 3), fullEv("TEST_SURFACE", 5, {exitCode: null, sandboxProviderId: undefined, testSurface: {functionalAcceptance: "UNVERIFIED_ORACLE", executedTests: 12, modified: [], deleted: [], renamed: [], harness: [], weakened: []}}), ev("REPORT", 4)];
+const execRun = () => m1aRun({runId: RUN2, status: "SUCCEEDED", evidence: execEvidence()});
+// PQ-001: kısmi kanıt (yalnız VERIFY_TESTS, ham test kanıtı) NOT_VERIFIED kalır.
+const partialRun = () => m1aRun({runId: RUN2, status: "SUCCEEDED", evidence: [ev("IMPLEMENT", 1), ev("VERIFY_TESTS", 2), ev("REGRESSION_TESTS", 3), ev("REPORT", 4)]});
 const reqs = (tc = false) => ({headSha: HEAD, functionalAcceptance: "NOT_EXECUTED", notExecuted: {required: true, reason: "SANDBOX_UNAVAILABLE"},
   testChanges: {required: tc, testSurfaceSha256: TSSHA, changed: {modified: tc ? ["tests/a.test.mjs"] : [], deleted: [], renamed: [], harness: tc ? ["vitest.config.ts"] : [], truncated: false}}});
 const mission = (extra: any = {}) => ({missionId: MID, projectId: PID, title: "Görev A", objective: "Hedef", acceptanceCriteria: ["k1"], riskLevel: "R1", status: "REPORTING", createdAt: "2026-10-15T09:00:00.000Z", ...extra});
@@ -94,9 +99,13 @@ describe("M1a NOT_VERIFIED badge (evidence-derived, no fake data)", () => {
     const notRun = core.mapWorkRun(m1aRun()), executed = core.mapWorkRun(execRun());
     expect(notRun).toMatchObject({testsExecuted: false, testsNotExecuted: true, headSha: HEAD});
     expect(executed).toMatchObject({testsExecuted: true, testsNotExecuted: false});
+    // PQ-001: kısmi/sha'sız/tanıksız test kanıtı testsExecuted olsa da ürün doğrulaması sayılmaz
+    expect(core.mapWorkRun(partialRun())).toMatchObject({testsExecuted: true, evidenceVerification: {state: "NOT_VERIFIED"}});
+    expect(executed.evidenceVerification.state).toBe("PRODUCT_VERIFIED");
     const a = work.runCard(ctx, notRun), b = work.runCard(ctx, executed);
     expect(byData(a, "m1aBadge", "run").map(n => n.textContent)).toEqual([BADGE_TR]);
     expect(byData(b, "m1aBadge")).toHaveLength(0);
+    expect(byData(work.runCard(ctx, core.mapWorkRun(partialRun())), "m1aBadge")).toHaveLength(1);
     // a run blocked before any test step (e.g. IMPLEMENT CLAUDE_PROFILE_LOGIN_REQUIRED) is also NOT_VERIFIED
     expect(byData(work.runCard(ctx, core.mapWorkRun({runId: RUN, status: "BLOCKED", reason: "CLAUDE_PROFILE_LOGIN_REQUIRED", evidence: [ev("IMPLEMENT", 1)], checkpoints: []})), "m1aBadge")).toHaveLength(1);
   });
