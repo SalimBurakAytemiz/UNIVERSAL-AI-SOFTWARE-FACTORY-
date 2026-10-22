@@ -201,12 +201,14 @@ describe("CORE-7 Agent Team Composer scale derivation", () => {
 // //TR: LANE-C: rol tanımı -> RoleExecutionProfile çözümleyicisi (GERÇEK 599 katalog; hiçbir rol certified değil).
 import {resolveRoleExecution, instantiateAgent, advanceAgent, authorizeToolUse, agentTraceEnvelope, profileDefect, evaluationState, BUILDER_ALLOWED_TOOLS, claudeProfileRoleOf, AgentError} from "../core/agents/role-execution.js";
 import type {RoleExecutionProfile} from "../core/agents/role-execution.js";
-import {FIRST_DELIVERY_BINDINGS, FIRST_DELIVERY_FUNCTIONS, assertRoleExecutes} from "../core/agents/first-delivery-bindings.js";
+import {FIRST_DELIVERY_BINDINGS, FIRST_DELIVERY_FUNCTIONS, assertRoleExecutes, assertImplementerRole} from "../core/agents/first-delivery-bindings.js";
+import {routeReadiness, checkpointAgent, restoreAgent} from "../core/agents/agent-routing.js";
+import os from "node:os";
 
 describe("LANE-C role execution resolver", () => {
   const resolve = (id: string, b: readonly RoleExecutionProfile[] = FIRST_DELIVERY_BINDINGS) => resolveRoleExecution(id, CATALOG.roles as never, b);
-  it("binds all six first-delivery functions to real catalog roles, executable but NOT certified", () => {
-    expect(FIRST_DELIVERY_FUNCTIONS.length).toBe(6);
+  it("binds all nine first-delivery functions to real catalog roles, executable but NOT certified", () => {
+    expect(FIRST_DELIVERY_FUNCTIONS.length).toBe(9);
     for (const b of FIRST_DELIVERY_BINDINGS) {
       expect(CATALOG_IDS.has(b.roleId)).toBe(true);
       const r = resolve(b.roleId);
@@ -218,11 +220,14 @@ describe("LANE-C role execution resolver", () => {
     const plan = buildCrewPlan();
     expect(plan.roleIds).toContain("UASCO-0019");
     expect(plan.roleIds).toContain("UASCO-0043");
+    // every pre-dev primary role (PRE_DEV_ROLE_MAP[kind][0]) is bound, in the same function order as the crew plan
+    const fnOf: Record<string, string> = {BusinessAnalysis: "business-analyst", Requirements: "requirements-engineer", Plan: "planner", Architecture: "architect", UxSpec: "ux-designer"};
+    for (const ph of plan.phases) expect(FIRST_DELIVERY_BINDINGS.find(b => b.roleId === ph.primaryRoleId)?.function).toBe(fnOf[ph.kind]);
   });
   it("every other catalog role stays NOT_EXECUTABLE with a fixed reason", () => {
     const bound = new Set(FIRST_DELIVERY_BINDINGS.map(b => b.roleId));
     const others = CATALOG.roles.filter(r => !bound.has(r.roleId));
-    expect(others.length).toBe(599 - 6);
+    expect(others.length).toBe(599 - 9);
     for (const r of others) expect(resolve(r.roleId)).toMatchObject({status: "NOT_EXECUTABLE", reason: "ROLE_HAS_NO_BINDING", certification: "NOT_CERTIFIED"});
     expect(resolve("UASCO-9999")).toMatchObject({status: "NOT_EXECUTABLE", reason: "ROLE_NOT_IN_CATALOG"});
   });
@@ -286,7 +291,7 @@ describe("LANE-C role execution resolver", () => {
     expect(() => crewDevExecutors("UASCO-0001", "UASCO-0252", port, port, "x")).toThrow(CrewDevReviewError);
     expect(() => crewDevExecutors("UASCO-0085", "UASCO-0001", port, port, "x")).toThrow("ROLE_HAS_NO_BINDING");
     expect(() => crewDevExecutors("UASCO-0252", "UASCO-0085", port, port, "x")).toThrow("BINDING_ROLE_MISMATCH");
-    expect(() => assertRoleExecutes("UASCO-0085", "developer", [{...FIRST_DELIVERY_BINDINGS[2], allowedTools: ["Bash"]}])).toThrow("TOOL_NOT_ALLOWED");
+    expect(() => assertRoleExecutes("UASCO-0085", "developer", [{...FIRST_DELIVERY_BINDINGS.find(b => b.function === "developer")!, allowedTools: ["Bash"]}])).toThrow("TOOL_NOT_ALLOWED");
   });
   it("team summary reports per-role executability without implying live agents or certification", () => {
     const sum = summarizeProposedTeam(composeTeam(TASKHUB_BRIEF, INPUTS, CATALOG), CATALOG);
@@ -301,3 +306,44 @@ describe("LANE-C role execution resolver", () => {
     expect(sum.certifiedWorkerCount).toBe(0);
   });
 });
+
+describe("LANE-C agent routing readiness and checkpoint/restore", () => {
+  const bind = (fn: string) => FIRST_DELIVERY_BINDINGS.find(b => b.function === fn)!;
+  it("route readiness is honest: no login -> NOT_READY, studio route READY, NONE refused, no files written", () => {
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-route-"));
+    try {
+      expect(routeReadiness(bind("developer"), root)).toEqual({state: "NOT_READY", route: "CLAUDE_IMPLEMENTER", reason: "CLAUDE_PROFILE_LOGIN_REQUIRED"});
+      expect(routeReadiness(bind("security-reviewer"), root)).toMatchObject({state: "NOT_READY", reason: "CLAUDE_PROFILE_LOGIN_REQUIRED"});
+      expect(routeReadiness(bind("delivery"), root)).toEqual({state: "READY", route: "DETERMINISTIC_STUDIO"});
+      expect(routeReadiness({...bind("developer"), providerRoute: "NONE"}, root)).toMatchObject({state: "NOT_READY", reason: "PROVIDER_ROUTE_MISSING"});
+      expect(fs.readdirSync(root)).toEqual([]); // read-only: nothing created
+    } finally { fs.rmSync(root, {recursive: true, force: true}); }
+  });
+  it("checkpoint/restore round-trips and fails closed on corruption, missing or changed or incomplete binding", () => {
+    const a = instantiateAgent(resolveRoleExecution("UASCO-0085", CATALOG.roles as never, FIRST_DELIVERY_BINDINGS), "run9", "ag9");
+    advanceAgent(a, "RUNNING"); authorizeToolUse(a, "Edit"); authorizeToolUse(a, "Bash");
+    const cp = checkpointAgent(a);
+    const back = restoreAgent(cp, FIRST_DELIVERY_BINDINGS);
+    expect(back).toMatchObject({agentInstanceId: "ag9", runId: "run9", roleId: "UASCO-0085", state: "RUNNING"});
+    expect(back.toolTrace).toEqual(a.toolTrace);
+    expect(authorizeToolUse(back, "Edit")).toBe(true);
+    expect(authorizeToolUse(back, "Bash")).toBe(false);
+    expect(() => restoreAgent({...cp, state: "COMPLETED"}, FIRST_DELIVERY_BINDINGS)).toThrow("AGENT_CHECKPOINT_CORRUPT");
+    expect(() => restoreAgent({...cp, toolTrace: []}, FIRST_DELIVERY_BINDINGS)).toThrow("AGENT_CHECKPOINT_CORRUPT");
+    expect(() => restoreAgent(cp, [])).toThrow("AGENT_RESTORE_ROLE_HAS_NO_BINDING");
+    expect(() => restoreAgent(cp, [{...bind("developer"), limits: {maxCycles: 9, timeoutMs: 5000, maxFilesWritten: 1}}])).toThrow("AGENT_RESTORE_BINDING_CHANGED");
+    // binding changed AND recomputed checkpoint over a now-incomplete profile is refused as not executable
+    const broken = {...bind("developer"), allowedTools: ["Bash"]};
+    const a2 = {...a, profile: broken as never};
+    expect(() => restoreAgent(checkpointAgent(a2), [broken])).toThrow("AGENT_RESTORE_NOT_EXECUTABLE:TOOL_NOT_ALLOWED");
+  });
+  it("implementer gate accepts developer and tester only; reviewer, pre-dev, delivery and unbound roles are refused", () => {
+    expect(assertImplementerRole("UASCO-0085").function).toBe("developer");
+    expect(assertImplementerRole("UASCO-0313").function).toBe("tester");
+    for (const id of ["UASCO-0252", "UASCO-0019", "UASCO-0043", "UASCO-0232"]) expect(() => assertImplementerRole(id)).toThrow("BINDING_ROLE_MISMATCH");
+    expect(() => assertImplementerRole("UASCO-0001")).toThrow("ROLE_HAS_NO_BINDING");
+    const tester = FIRST_DELIVERY_BINDINGS.find(b => b.function === "tester")!;
+    expect(() => assertImplementerRole("UASCO-0313", [{...tester, allowedTools: [...tester.allowedTools, "Bash"]}])).toThrow("TOOL_NOT_ALLOWED");
+  });
+});
+
