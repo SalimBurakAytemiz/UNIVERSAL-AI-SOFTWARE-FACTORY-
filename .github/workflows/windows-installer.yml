@@ -4,6 +4,7 @@ name: Windows Installer
 on:
   push:
     branches: [v7/integration]
+  # //TR: PR'da yalnız paketlemeyi doğrudan etkileyen girdiler (scripts/build-installer.mjs DESKTOP_FILES, BACKEND_ENTRY, STATIC_DATA_FILES, RUNTIME_CONFIG_FILES, RUNTIME_SCRIPTS ve derleme/kurulum araçları) tetikler; renderer ve route değişiklikleri zorunlu CI'da doğrulanır ve her v7/integration push'unda bu kurulum testi yine çalışır (zorunlu kontrol değildir, Windows runner kuyruğunu boşaltır).
   pull_request:
     paths:
       - .github/workflows/windows-installer.yml
@@ -11,9 +12,25 @@ on:
       - scripts/build-installer.mjs
       - scripts/installer-install-test.mjs
       - scripts/provision-electron.mjs
+      - scripts/capture-provider-provenance.mjs
+      - scripts/claude-builder-broker.mjs
       - automation/lib/electron-provision.mjs
-      - apps/desktop/**
-      - apps/control-api/**
+      - automation/lib/dependency-install.mjs
+      - apps/desktop/main.mjs
+      - apps/desktop/preload.mjs
+      - apps/desktop/backend-error.html
+      - apps/control-api/src/packaged-entry.ts
+      - registries/agents.json
+      - registries/capabilities.json
+      - registries/execution-fabrics.json
+      - registries/tool-adapters.json
+      - registries/domain-packs.json
+      - registries/role-definitions.json
+      - roadmap/review-packages.json
+      - config/environment-policy.json
+      - config/execution-backends.json
+      - config/automation.json
+      - config/builder-execution-policy.json
       - package.json
       - package-lock.json
       - tsconfig.build.json
@@ -22,7 +39,8 @@ permissions:
   contents: read
 concurrency:
   group: windows-installer-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # //TR: PR'da eski deneme iptal edilir; v7/integration push derlemesi yarıda kesilmez (bekleyen push yine yenisiyle değişir).
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   installer:
     name: installer (windows-latest)

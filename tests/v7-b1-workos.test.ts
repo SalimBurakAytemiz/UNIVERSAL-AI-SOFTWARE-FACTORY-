@@ -1263,3 +1263,185 @@ describe("LANE-B task outcome reconcile", () => {
     expect(Object.values(t).filter(v => v === "DONE")).toHaveLength(1);
   });
 });
+
+// //TR: LANE-B memory API: Proje Belleği (SC-14) route modülü; append/okuma/güncel görünüm/köken, yazma kapıları, tenant izolasyonu, sır reddi ve bozuk zincirde fail-closed davranışı gerçek dosya I/O ile test edilir.
+describe("LANE-B project memory routes", () => {
+  const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
+  const mkApp = async (stopped = false, allowed = true, tenantId = "tA") => {
+    const [{default: Fastify}, {registerMemoryRoutes}, {WorkOsError}] = await Promise.all([import("fastify"), import("../apps/control-api/src/routes/memory.js"), import("../core/workos/types.js")]);
+    const app = Fastify({logger: false});
+    app.addHook("onRequest", async (req, reply) => { if (req.headers["x-uasco-control-token"] !== token) return reply.code(403).send({error: "FORBIDDEN"}); });
+    const store = new WorkOsStore(path.join(tmp, "data"));
+    const audits: any[] = [];
+    registerMemoryRoutes(app, {getStore: () => store, scope: {tenantId}, orgId: "o1", actor: "FOUNDER_LOCAL", audit: (e: string, x?: any) => { audits.push({e, x}); }, workosStopped: () => stopped,
+      workosPolicy: () => allowed ? {allowed: true} : {allowed: false, reason: "NO"}, workosFail: (r: any, e: any) => r.code(e instanceof WorkOsError ? 400 : 500).send({error: e?.code ?? "INTERNAL_ERROR"})});
+    return {app, store, audits, p: store.createProject(proj())};
+  };
+  const add = (app: any, pid: string, body: unknown, headers: any = hdr) => app.inject({method: "POST", url: `/v1/projects/${pid}/memory`, headers, payload: body as any});
+  const get = (app: any, url: string, headers: any = hdr) => app.inject({method: "GET", url, headers});
+  const NOW = "2026-10-22T00:00:00.000Z";
+
+  it("appends, lists, filters, searches, supersedes and returns provenance; survives restart; author is the server actor", async () => {
+    const {app, p, audits} = await mkApp(), base = `/v1/projects/${p.projectId}/memory`;
+    expect((await get(app, `${base}/health`)).json().health.state).toBe("ABSENT");
+    const a = await add(app, p.projectId, {kind: "DECISION", title: "Use SQLite", body: "Single-file store", tags: ["db"], sources: [{ref: "https://example.test/doc", retrievedAt: NOW}]});
+    expect(a.statusCode).toBe(201);
+    const rec = a.json().record;
+    expect(rec).toMatchObject({id: "mem_000001", seq: 1, kind: "DECISION", projectId: p.projectId, author: {role: "FOUNDER_LOCAL"}});
+    const b = await add(app, p.projectId, {kind: "REVISION", title: "Use Postgres", body: "Needs concurrency", supersedes: rec.id});
+    expect(b.statusCode).toBe(201);
+    await add(app, p.projectId, {kind: "NOTE", title: "Unrelated", body: "side note", tags: ["misc"]});
+    expect(audits.map(x => x.e)).toEqual(["WORKOS_MEMORY_APPENDED", "WORKOS_MEMORY_APPENDED", "WORKOS_MEMORY_APPENDED"]);
+    const { app: app2 } = await mkApp().catch(() => ({app}));
+    const all = (await get(app2, base)).json();
+    expect(all.records.map((r: any) => r.id)).toEqual(["mem_000001", "mem_000002", "mem_000003"]);
+    expect(all.health).toMatchObject({state: "OK", records: 3});
+    expect((await get(app2, `${base}?kind=NOTE`)).json().records).toHaveLength(1);
+    expect((await get(app2, `${base}?tag=db`)).json().records.map((r: any) => r.id)).toEqual(["mem_000001"]);
+    expect((await get(app2, `${base}?q=postgres`)).json().records.map((r: any) => r.id)).toEqual(["mem_000002"]);
+    expect((await get(app2, `${base}/current`)).json().current.map((e: any) => e.head.id)).toEqual(["mem_000002", "mem_000003"]);
+    expect((await get(app2, `${base}/mem_000001`)).json().record.title).toBe("Use SQLite");
+    const prov = (await get(app2, `${base}/mem_000001/provenance`)).json().provenance;
+    expect(prov.currentHeadId).toBe("mem_000002");
+    expect(JSON.stringify(a.json())).not.toContain(tmp);
+  });
+  it("refuses bad bodies, client-supplied author, secrets, bad supersedes and oversize input with fixed codes and writes nothing", async () => {
+    const {app, p, audits} = await mkApp(), base = `/v1/projects/${p.projectId}/memory`;
+    const ok = {kind: "FACT", title: "t", body: "b"};
+    for (const bad of [{}, {...ok, kind: "NOPE"}, {...ok, title: " "}, {...ok, author: {role: "ROOT"}}, {...ok, extra: 1}, {...ok, supersedes: "x"}, {...ok, sources: [{ref: "r"}]}, {...ok, tags: ["a"].concat(Array(40).fill("t"))}])
+      expect((await add(app, p.projectId, bad)).statusCode).toBe(400);
+    const key = "AKIA" + "IOSFODNN7EXAMPLE";
+    const secret = await add(app, p.projectId, {...ok, body: `key=${key}`});
+    expect(secret.statusCode).toBe(400); expect(secret.json()).toEqual({error: "MEMORY_SECRET_REJECTED"});
+    expect(secret.body).not.toContain(key);
+    const missing = await add(app, p.projectId, {...ok, supersedes: "mem_000009"});
+    expect(missing.statusCode).toBe(409); expect(missing.json().error).toBe("MEMORY_SUPERSEDES_MISSING");
+    const first = (await add(app, p.projectId, ok)).json().record;
+    expect((await add(app, p.projectId, {...ok, supersedes: first.id})).statusCode).toBe(201);
+    expect((await add(app, p.projectId, {...ok, supersedes: first.id})).json().error).toBe("MEMORY_SUPERSEDES_NOT_HEAD");
+    expect((await add(app, p.projectId, {...ok, body: "x".repeat(40 * 1024)})).statusCode).toBe(413);
+    expect((await get(app, base)).json().records).toHaveLength(2);
+    expect(audits.filter(x => x.e === "WORKOS_MEMORY_APPEND_REFUSED").map(x => x.x.reason)).toEqual(["MEMORY_SECRET_REJECTED", "MEMORY_SUPERSEDES_MISSING", "MEMORY_SUPERSEDES_NOT_HEAD"]);
+  });
+  it("enforces token, Global Stop, policy, ids, queries and tenant isolation (no memory file touched for another tenant)", async () => {
+    const {app, p} = await mkApp(), ok = {kind: "FACT", title: "t", body: "b"};
+    expect((await add(app, p.projectId, ok, {...hdr, "x-uasco-control-token": "x"})).statusCode).toBe(403);
+    const stop = await mkApp(true), deny = await mkApp(false, false);
+    expect((await add(stop.app, stop.p.projectId, ok)).statusCode).toBe(423);
+    const d = await add(deny.app, deny.p.projectId, ok);
+    expect(d.statusCode).toBe(403); expect(d.json().error).toBe("ACTION_DENIED");
+    expect((await add(app, "bad", ok)).statusCode).toBe(400);
+    expect((await add(app, "prj_" + "0".repeat(24), ok)).statusCode).toBe(404);
+    const base = `/v1/projects/${p.projectId}/memory`;
+    expect((await get(app, `${base}/bad`)).statusCode).toBe(400);
+    expect((await get(app, `${base}/mem_000042`)).statusCode).toBe(404);
+    expect((await get(app, `${base}?kind=NOPE`)).statusCode).toBe(400);
+    expect((await get(app, `${base}?q=${"x".repeat(201)}`)).statusCode).toBe(400);
+    const other = await mkApp(false, true, "tB");
+    expect((await get(other.app, base)).statusCode).toBe(404);
+    expect((await add(other.app, p.projectId, ok)).statusCode).toBe(404);
+    expect(fs.existsSync(path.join(tmp, "data", "projects", p.projectId, "memory"))).toBe(false);
+  });
+  it("fails closed with 503 on a tampered chain and read-only 503 on a torn tail, never repairing the file", async () => {
+    const {app, p} = await mkApp(), base = `/v1/projects/${p.projectId}/memory`, file = path.join(tmp, "data", "projects", p.projectId, "memory", "journal.jsonl");
+    await add(app, p.projectId, {kind: "FACT", title: "one", body: "b"});
+    await add(app, p.projectId, {kind: "FACT", title: "two", body: "b"});
+    const good = fs.readFileSync(file, "utf8");
+    fs.writeFileSync(file, good + '{"seq":3,"id":"mem_000003",');
+    expect((await get(app, base)).json().records).toHaveLength(2);
+    const torn = await add(app, p.projectId, {kind: "FACT", title: "three", body: "b"});
+    expect(torn.statusCode).toBe(503); expect(torn.json().error).toBe("MEMORY_READ_ONLY");
+    expect(fs.readFileSync(file, "utf8")).toBe(good + '{"seq":3,"id":"mem_000003",');
+    fs.writeFileSync(file, good.replace("one", "ONE"));
+    const bad = await get(app, base);
+    expect(bad.statusCode).toBe(503); expect(bad.json().error).toBe("MEMORY_TAMPERED");
+    expect((await get(app, `${base}/health`)).json().health.state).toBe("TAMPERED");
+    expect((await add(app, p.projectId, {kind: "FACT", title: "x", body: "b"})).json().error).toBe("MEMORY_TAMPERED");
+  });
+});
+
+// //TR: LANE-B knowledge API: proje bilgi özeti (Proje Belleği + kanıt dizini) salt okunur route'u; sayımlar, örnekleme/kesilme işareti, UNAVAILABLE/ERROR dürüstlüğü, bozuk bellekte fail-closed ve tenant izolasyonu test edilir.
+describe("LANE-B project knowledge summary", () => {
+  const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
+  const ev = (id: string, kind: string, status: string, at: string | null, missionId: string): any => ({evidenceId: id, kind, source: {path: null, sha256: null, sizeBytes: null, locator: null}, commit: null, createdAt: at,
+    scope: {tenantId: "tA", projectId: null, missionId, runId: null}, verification: {status, checkedAt: "x", basis: "b", reason: null}});
+  const mkApp = async (evidenceIndex?: any, tenantId = "tA") => {
+    const [{default: Fastify}, {registerKnowledgeRoutes}, {WorkOsError}] = await Promise.all([import("fastify"), import("../apps/control-api/src/routes/knowledge.js"), import("../core/workos/types.js")]);
+    const app = Fastify({logger: false});
+    app.addHook("onRequest", async (req, reply) => { if (req.headers["x-uasco-control-token"] !== token) return reply.code(403).send({error: "FORBIDDEN"}); });
+    const store = new WorkOsStore(path.join(tmp, "data"));
+    registerKnowledgeRoutes(app, {getStore: () => store, scope: {tenantId}, orgId: "o1", actor: "FOUNDER_LOCAL", audit: () => {}, workosStopped: () => false, workosPolicy: () => ({allowed: true}),
+      workosFail: (r: any, e: any) => r.code(e instanceof WorkOsError ? 400 : 500).send({error: e?.code ?? "INTERNAL_ERROR"}), ...(evidenceIndex ? {evidenceIndex: () => evidenceIndex} : {})});
+    return {app, store, p: store.createProject(proj())};
+  };
+  const know = (app: any, pid: string, headers: any = hdr) => app.inject({method: "GET", url: `/v1/projects/${pid}/knowledge`, headers});
+  const memFile = (pid: string) => path.join(tmp, "data", "projects", pid, "memory", "journal.jsonl");
+  const addMem = async (pid: string, rows: {kind: any; title: string; supersedes?: string; tags?: string[]}[]) => {
+    const {ProjectMemory} = await import("../core/knowledge/project-memory.js");
+    const m = new ProjectMemory({rootDir: path.join(tmp, "data"), projectId: pid});
+    return rows.map(r => m.append({kind: r.kind, title: r.title, body: "b", supersedes: r.supersedes, tags: r.tags ?? [], author: {role: "FOUNDER_LOCAL"}}).id);
+  };
+
+  it("summarizes memory (counts, current heads only, newest first) and says evidence is not wired instead of inventing numbers", async () => {
+    const {app, p} = await mkApp();
+    const empty = (await know(app, p.projectId)).json().knowledge;
+    expect(empty.memory).toMatchObject({state: "ABSENT", total: 0, currentHeads: []});
+    expect(empty.evidence).toEqual({state: "UNAVAILABLE", reason: "EVIDENCE_NOT_WIRED"});
+    const [a] = await addMem(p.projectId, [{kind: "DECISION", title: "v1"}, {kind: "NOTE", title: "n", tags: ["x"]}]);
+    await addMem(p.projectId, [{kind: "REVISION", title: "v2", supersedes: a}]);
+    const k = (await know(app, p.projectId)).json().knowledge;
+    expect(k.memory).toMatchObject({state: "OK", total: 3, byKind: {DECISION: 1, NOTE: 1, REVISION: 1, FACT: 0, SOURCE: 0}});
+    expect(k.memory.currentHeads.map((h: any) => h.title)).toEqual(["v2", "n"]);
+    expect(JSON.stringify(k)).not.toContain(tmp);
+  });
+  it("counts sampled evidence per mission, marks truncation and the mission cap, and reports ERROR when the index fails", async () => {
+    const calls: any[] = [];
+    const index = {list: async (q: any) => { calls.push(q); return calls.length === 1 ? {items: [ev("e1", "REVIEW_EVIDENCE", "VERIFIED", "2026-01-02T00:00:00Z", q.missionId), ev("e2", "WORK_RUN_LOG", "MISMATCH", "2026-01-03T00:00:00Z", q.missionId)], nextCursor: "c", sources: {}} : {items: [ev("e3", "WORK_RUN_STEP", "VERIFIED", null, q.missionId)], nextCursor: null, sources: {}}; }};
+    const {app, store, p} = await mkApp(index);
+    store.createMission(msn(p.projectId)); store.createMission(msn(p.projectId));
+    const k = (await know(app, p.projectId)).json().knowledge.evidence;
+    expect(k).toMatchObject({state: "AVAILABLE", sampled: true, missionsQueried: 2, total: 3, truncated: true, byKind: {REVIEW_EVIDENCE: 1, WORK_RUN_LOG: 1, WORK_RUN_STEP: 1, AUDIT_CHECKPOINT: 0}, byVerification: {VERIFIED: 2, MISMATCH: 1, MISSING: 0}});
+    expect(k.latest.map((x: any) => x.evidenceId)).toEqual(["e2", "e1", "e3"]);
+    expect(calls).toHaveLength(2); expect(calls.every(c => c.limit === 25 && /^msn_/.test(c.missionId))).toBe(true);
+    const many = await mkApp({list: async () => ({items: [], nextCursor: null, sources: {}})});
+    for (let i = 0; i < 12; i++) many.store.createMission(msn(many.p.projectId));
+    const capped = (await know(many.app, many.p.projectId)).json().knowledge.evidence;
+    expect(capped).toMatchObject({state: "AVAILABLE", missionsQueried: 10, truncated: true, total: 0});
+    const boom = await mkApp({list: async () => { throw new Error("secret path /x"); }});
+    boom.store.createMission(msn(boom.p.projectId));
+    const err = await know(boom.app, boom.p.projectId);
+    expect(err.json().knowledge.evidence).toEqual({state: "ERROR", reason: "EVIDENCE_QUERY_FAILED"});
+    expect(err.body).not.toContain("secret path");
+  });
+  it("aggregates kinds/verification across missions and keeps only the 10 latest evidence rows", async () => {
+    const {summarizeEvidence} = await import("../core/knowledge/knowledge-summary.js");
+    const items = Array.from({length: 14}, (_, i) => ev(`e${i}`, i % 2 ? "REVIEW_EVIDENCE" : "WORK_RUN_STEP", i % 3 ? "VERIFIED" : "MISSING", `2026-01-${String(i + 1).padStart(2, "0")}T00:00:00Z`, "msn_x"));
+    const r: any = await summarizeEvidence({list: async () => ({items, nextCursor: null, sources: {} as any})}, ["msn_a"]);
+    expect(r).toMatchObject({state: "AVAILABLE", total: 14, truncated: false, byKind: {REVIEW_EVIDENCE: 7, WORK_RUN_STEP: 7, WORK_RUN_LOG: 0}, byVerification: {VERIFIED: 9, MISSING: 5, MISMATCH: 0, UNVERIFIABLE: 0}});
+    expect(r.latest).toHaveLength(10); expect(r.latest[0].evidenceId).toBe("e13"); expect(r.latest[9].evidenceId).toBe("e4");
+  });
+  it("works with the real EvidenceIndex (no evidence yet -> AVAILABLE, total 0)", async () => {
+    const {EvidenceIndex} = await import("../core/evidence/index.js");
+    const {app, store, p} = await mkApp();
+    store.createMission(msn(p.projectId));
+    const real = await mkApp(new EvidenceIndex({repoRoot: tmp, dataDir: path.join(tmp, "data"), scope: {tenantId: "tA"}, store: () => store, includeRepositoryEvidence: false}));
+    const k = (await know(real.app, p.projectId)).json().knowledge.evidence;
+    expect(k).toMatchObject({state: "AVAILABLE", total: 0, missionsQueried: 1});
+    void app;
+  });
+  it("fails closed on a tampered memory chain (no counts), reads a torn tail's verified prefix, and enforces token/ids/tenant", async () => {
+    const {app, p} = await mkApp();
+    await addMem(p.projectId, [{kind: "FACT", title: "one"}, {kind: "FACT", title: "two"}]);
+    const good = fs.readFileSync(memFile(p.projectId), "utf8");
+    fs.writeFileSync(memFile(p.projectId), good + '{"seq":3,"id":"mem_000003",');
+    expect((await know(app, p.projectId)).json().knowledge.memory).toMatchObject({state: "TORN_TAIL", total: 2});
+    fs.writeFileSync(memFile(p.projectId), good.replace("one", "ONE"));
+    const t = (await know(app, p.projectId)).json().knowledge;
+    expect(t.memory).toMatchObject({state: "TAMPERED", total: null, byKind: null, currentHeads: null});
+    expect(t.evidence.state).toBe("UNAVAILABLE");
+    expect((await know(app, p.projectId, {...hdr, "x-uasco-control-token": "x"})).statusCode).toBe(403);
+    expect((await know(app, "bad")).statusCode).toBe(400);
+    expect((await know(app, "prj_" + "0".repeat(24))).statusCode).toBe(404);
+    expect((await know((await mkApp(undefined, "tB")).app, p.projectId)).statusCode).toBe(404);
+  });
+});
