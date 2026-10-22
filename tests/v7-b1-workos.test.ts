@@ -1621,3 +1621,90 @@ describe("LANE-B founder attention queue", () => {
     expect((await app.inject({method: "POST", url: "/v1/attention", headers: hdr, payload: {}})).statusCode).toBe(404);
   });
 });
+
+// //TR: LANE-B pre-dev kararları: Founder diziyi başlatır, ajanın yazdığı DRAFT artefaktı kanıtla onaylar/reddeder; karar kapıları (bağımsız onaylayan, kanıt, faz sırası) store/driver tarafından zorlanır ve burada sabit kodlarla görünür.
+describe("LANE-B pre-dev Founder decisions", () => {
+  const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210", "content-type": "application/json"};
+  const ACT = "FOUNDER_LOCAL", SC = {tenantId: "tA"}, AGENT = "agent-ba@local.invalid";
+  const mkApp = async (stopped = false, allowed = true, tenantId = "tA") => {
+    const [{default: Fastify}, {registerPredevDecisionRoutes}, {WorkOsError}] = await Promise.all([import("fastify"), import("../apps/control-api/src/routes/predev-decisions.js"), import("../core/workos/types.js")]);
+    const app = Fastify({logger: false});
+    app.addHook("onRequest", async (req, reply) => { if (req.headers["x-uasco-control-token"] !== token) return reply.code(403).send({error: "FORBIDDEN"}); });
+    const store = new WorkOsStore(path.join(tmp, "data")), audits: any[] = [];
+    registerPredevDecisionRoutes(app, {getStore: () => store, scope: {tenantId}, orgId: "o1", actor: ACT, audit: (e: string, x?: any) => { audits.push({e, x}); }, workosStopped: () => stopped,
+      workosPolicy: () => allowed ? {allowed: true} : {allowed: false, reason: "NO"}, workosFail: (r: any, e: any) => r.code(e instanceof WorkOsError ? 400 : 500).send({error: e?.code ?? "INTERNAL_ERROR"})});
+    const p = store.createProject(proj()), m = store.createMission(msn(p.projectId));
+    for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission(SC, m.missionId, to, "go", ACT);
+    return {app, store, audits, m};
+  };
+  const post = (app: any, url: string, body: unknown = {}, headers: any = hdr) => app.inject({method: "POST", url, headers, payload: JSON.stringify(body)});
+  const agentDriver = async (store: WorkOsStore) => {
+    const [{PreDevDriver}, {TASKHUB_BRIEF}, {TASKHUB_ARTIFACTS}] = await Promise.all([import("../core/workos/predev/driver.js"), import("../core/workos/predev/fixtures/taskhub-brief.js"), import("../core/workos/predev/fixtures/taskhub/index.js")]);
+    return new PreDevDriver({store, brief: TASKHUB_BRIEF, builder: {produce: async (kind: any) => JSON.stringify((TASKHUB_ARTIFACTS as any)[kind])}});
+  };
+  const EV = ["evd_taskhub_ba_signed"];
+
+  it("walks the whole pre-dev sequence: start, agent drafts, Founder approves with evidence, phases advance to PRE_DEV_COMPLETE; start replays", async () => {
+    const {app, store, audits, m} = await mkApp(), id = m.missionId, driver = await agentDriver(store);
+    const s = await post(app, `/v1/missions/${id}/predev/start`);
+    expect(s.statusCode).toBe(201); expect(s.json().predev.phase).toBe("BUSINESS_ANALYSIS"); expect(s.json().replayed).toBe(false);
+    const again = await post(app, `/v1/missions/${id}/predev/start`);
+    expect(again.statusCode).toBe(200); expect(again.json().replayed).toBe(true);
+    const phases: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const out = await driver.produceCurrentPhase(SC, id, AGENT);
+      if (out.status !== "RECORDED") throw new Error("draft not recorded: " + JSON.stringify(out));
+      const r = await post(app, `/v1/missions/${id}/predev/artifacts/${out.artifactId}/approve`, {evidenceRefs: EV});
+      expect(r.statusCode, r.body).toBe(200);
+      phases.push(r.json().predev.phase);
+    }
+    expect(phases).toEqual(["REQUIREMENTS", "PLANNING", "ARCHITECTURE", "UX_DESIGN", "PRE_DEV_COMPLETE"]);
+    expect(audits.map(a => a.e)).toEqual(["WORKOS_PREDEV_STARTED", ...Array(5).fill("WORKOS_PREDEV_ARTIFACT_APPROVED")]);
+    expect(store.getMission(SC, id)!.status).toBe("AUTHORIZED");
+    expect(JSON.stringify(s.json())).not.toContain(tmp);
+  });
+  it("shows the decision gates as fixed codes: self-approval, missing evidence, reject keeps the phase, wrong mission/artifact, replay safe", async () => {
+    const {app, store, m} = await mkApp(), id = m.missionId, driver = await agentDriver(store);
+    expect((await post(app, `/v1/missions/${id}/predev/artifacts/pda_${"0".repeat(24)}/approve`, {evidenceRefs: EV})).statusCode).toBe(404);
+    await post(app, `/v1/missions/${id}/predev/start`);
+    const ba = await driver.produceCurrentPhase(SC, id, ACT);
+    if (ba.status !== "RECORDED") throw new Error("not recorded");
+    const self = await post(app, `/v1/missions/${id}/predev/artifacts/${ba.artifactId}/approve`, {evidenceRefs: EV});
+    expect(self.statusCode).toBe(409); expect(self.json()).toEqual({error: "PREDEV_GATE_REFUSED", reason: "PREDEV_APPROVER_NOT_INDEPENDENT"});
+    expect(store.preDevReadModel(SC, id).phase).toBe("BUSINESS_ANALYSIS");
+    const other = store.createMission({...msn(m.projectId), title: "other"});
+    expect((await post(app, `/v1/missions/${other.missionId}/predev/artifacts/${ba.artifactId}/approve`, {evidenceRefs: EV})).statusCode).toBe(404);
+    expect((await post(app, `/v1/missions/${id}/predev/artifacts/${ba.artifactId}/reject`, {reason: "scope too vague"})).json().predev.artifacts.BusinessAnalysis.state).toBe("REJECTED");
+    expect(store.preDevReadModel(SC, id).phase).toBe("BUSINESS_ANALYSIS");
+    expect(store.getPreDevArtifact(SC, ba.artifactId)).toMatchObject({state: "REJECTED", rejectedBy: ACT});
+    // Recovery after a rejection: the store requires the new version to SUPERSEDE the rejected one. (PreDevDriver.produceCurrentPhase does not pass `supersedes`
+    // today, so it cannot re-draft a rejected phase: Lane C gap reported separately.) The routes support the recovery once a producer records it correctly.
+    const [{PRE_DEV_ROLE_MAP}, {TASKHUB_ARTIFACTS}] = await Promise.all([import("../core/workos/predev/types.js"), import("../core/workos/predev/fixtures/taskhub/index.js")]);
+    const preDevId = store.preDevReadModel(SC, id).preDevId!;
+    const ba2 = store.recordPreDevArtifact(SC, preDevId, {kind: "BusinessAnalysis", authorRoleId: PRE_DEV_ROLE_MAP.BusinessAnalysis[0], content: TASKHUB_ARTIFACTS.BusinessAnalysis, supersedes: ba.artifactId}, AGENT);
+    expect(ba2.version).toBe(2);
+    expect((await post(app, `/v1/missions/${id}/predev/artifacts/${ba2.id}/approve`, {evidenceRefs: []})).statusCode).toBe(400);
+    const ok = await post(app, `/v1/missions/${id}/predev/artifacts/${ba2.id}/approve`, {evidenceRefs: EV});
+    expect(ok.statusCode, ok.body).toBe(200); expect(ok.json().predev.phase).toBe("REQUIREMENTS");
+    // The recorded approval carries exactly the Founder's evidence and the Founder as approver (the route supplies neither).
+    expect(store.getPreDevArtifact(SC, ba2.id)).toMatchObject({state: "APPROVED", approvedBy: ACT, recordedBy: AGENT, evidenceRefs: EV});
+  });
+  it("rejects bad input and enforces token, Global Stop, policy, ids and tenant isolation without touching the journal", async () => {
+    const {app, store, m} = await mkApp(), id = m.missionId;
+    const stop = await mkApp(true), deny = await mkApp(false, false), tenantB = await mkApp(false, true, "tB");
+    const n0 = () => fs.readFileSync(path.join(tmp, "data", "journal.jsonl"), "utf8").split("\n").filter(Boolean).length, before = n0();
+    expect((await post(app, `/v1/missions/${id}/predev/start`, {x: 1})).statusCode).toBe(400);
+    expect((await post(app, `/v1/missions/${id}/predev/start`, {}, {...hdr, "x-uasco-control-token": "x"})).statusCode).toBe(403);
+    expect((await post(app, "/v1/missions/bad/predev/start")).statusCode).toBe(400);
+    expect((await post(app, `/v1/missions/msn_${"0".repeat(24)}/predev/start`)).statusCode).toBe(404);
+    expect((await post(stop.app, `/v1/missions/${stop.m.missionId}/predev/start`)).statusCode).toBe(423);
+    const d = await post(deny.app, `/v1/missions/${deny.m.missionId}/predev/start`);
+    expect(d.statusCode).toBe(403); expect(d.json().error).toBe("ACTION_DENIED");
+    expect((await post(tenantB.app, `/v1/missions/${id}/predev/start`)).statusCode).toBe(404);
+    for (const bad of [{}, {evidenceRefs: "x"}, {evidenceRefs: ["has space"]}, {evidenceRefs: EV, extra: 1}]) expect((await post(app, `/v1/missions/${id}/predev/artifacts/pda_${"0".repeat(24)}/approve`, bad)).statusCode).toBe(400);
+    for (const bad of [{}, {reason: "  "}, {reason: "x", y: 1}]) expect((await post(app, `/v1/missions/${id}/predev/artifacts/pda_${"0".repeat(24)}/reject`, bad)).statusCode).toBe(400);
+    expect((await post(app, `/v1/missions/${id}/predev/artifacts/bad/reject`, {reason: "x"})).statusCode).toBe(400);
+    expect(store.getPreDevSequence(SC, id)).toBeUndefined();
+    expect(n0() - before).toBe(0);
+  });
+});
