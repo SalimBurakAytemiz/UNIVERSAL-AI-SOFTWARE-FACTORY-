@@ -33,6 +33,7 @@ export const ROUTES=Object.freeze([
   {id:"operations",hash:"#/operations",icon:"pulse",factory:false,view:"planned",component:"operations"},
   {id:"install",hash:"#/install",icon:"check",factory:false,view:"planned",component:"install"},
   {id:"audit",hash:"#/audit",icon:"receipt",factory:false,view:"planned",component:"audit"},
+  {id:"domains",hash:"#/domains",icon:"layers",factory:false,view:"planned",component:"domains"},
   {id:"settings",hash:"#/settings",icon:"gear",factory:false,view:"settings"}
 ]);
 export const DEFAULT_ROUTE="home";

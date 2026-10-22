@@ -12,9 +12,10 @@ import * as matrix from "./matrix.js";
 import * as operations from "./operations.js";
 import * as install from "./install.js";
 import * as audit from "./audit.js";
+import * as domains from "./domains.js";
 import {recoveryPanel} from "../recovery-panel.js";
 
-const REAL=Object.freeze({company,delivery,academy,journey,executive,queue,readiness,posture,matrix,operations,install,audit});
+const REAL=Object.freeze({company,delivery,academy,journey,executive,queue,readiness,posture,matrix,operations,install,audit,domains});
 export async function render(ctx,route){
   const real=REAL[route.component];
   // //TR: UI-251: yerel görünüm render hatası app.js'te yalnız düz bir hata notuna iner; bu sınır, hata mesajı/yığın izi göstermeden Recovery Center panelini (yeniden dene + ana sayfa) gösterir. Sağlık durumu yalnız GET /health okumasıdır.
