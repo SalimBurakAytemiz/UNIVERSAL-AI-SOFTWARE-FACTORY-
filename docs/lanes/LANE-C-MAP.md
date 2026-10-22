@@ -10,3 +10,4 @@
 - Runner IMPLEMENT gate accepts implementer-route roles (developer 0085, tester 0313) via `assertImplementerRole`.
 - Run evidence: role-assigned runs write `AGENT_TRACE` for IMPLEMENT (bound implementer) and REVIEW (bound security-reviewer, verdict in note). REVIEW BLOCKS before any review call if the reviewer role binding is missing/incomplete (`RunnerOptions.reviewerRoleId` overrides the default UASCO-0252). Per-call tool trace stays NOT_OBSERVABLE_FROM_ADAPTER.
 - Tests: tests/v7-b3a-runner.test.ts (LANE-C role gate + AGENT_TRACE); `tests/v7-core-predev-team-composer.test.ts` ("LANE-C role execution resolver").
+- SANDBOX WARNING: `core/agents/linux-unshare-sandbox.ts` (v1, #168) is NOT VERIFIED and its `selfTest` is insufficient (independent review reproduced HIGH escapes: readable host fs, host unix sockets, writable /dev,/dev/shm,/sys, root-supervisor DAC, bypassable timeout kill). It is not wired and must not be registered in server.ts. Hardened v2: PR #184.
