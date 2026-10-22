@@ -1724,6 +1724,34 @@ describe("LANE-A task run link", () => {
     expect(text(rows[0])).toContain("Running"); expect(text(rows[0])).not.toContain("not readable");
     expect(text(rows[1])).toContain("run record not readable"); expect(text(rows[1])).not.toContain("Running");
   });
+  it("mirrors the server rule that maps a run result to the task (every known run status; unknown or unreadable status implies nothing)", async () => {
+    const c = await load(rend, "work-core.js");
+    const expected: Record<string, string> = {SUCCEEDED: "DONE", FAILED: "BLOCKED", RECOVERY_FAILED: "BLOCKED", CANCELLED: "BLOCKED", QUARANTINED: "BLOCKED", BLOCKED: "BLOCKED", CREATED: "NONE", QUEUED: "NONE"};
+    for (const st of c.RUN_TASK_STATUSES) expect(c.taskTargetForRun(st), st).toBe(expected[st] ?? "IN_PROGRESS");
+    expect(c.RUN_TASK_STATUSES).toHaveLength(18);
+    // The renderer copy must stay equal to the server rule (core/workos/task-outcome.ts), status by status.
+    const server = await import("../core/workos/task-outcome.js");
+    for (const st of c.RUN_TASK_STATUSES) expect(c.taskTargetForRun(st), st).toBe(server.targetForRun(st) ?? "NONE");
+    for (const bad of [null, undefined, "", "succeeded", "WHATEVER", 5, ["SUCCEEDED"]]) expect(c.taskTargetForRun(bad as any), String(bad)).toBeNull();
+    expect(c.taskFollowsRun([{runId: R1, status: "FAILED"}, {runId: R2, status: "RUNNING"}, {runId: R3, status: null}])).toEqual([{runId: R1, governing: false, target: "BLOCKED"}, {runId: R2, governing: false, target: "IN_PROGRESS"}, {runId: R3, governing: true, target: null}]);
+    expect(c.taskFollowsRun([{runId: R1, status: "SUCCEEDED"}])).toEqual([{runId: R1, governing: true, target: "DONE"}]);
+    expect(c.taskFollowsRun(null as any)).toEqual([]);
+  });
+  it("shows the server rule only for the latest linked run, marks older runs as superseded, and never claims a transition happened", async () => {
+    const mk = (id: string, st: string | null, at: string) => ({link: {taskId: T1, runId: id, missionId: MID, linkedAt: at, linkedBy: "x"}, run: st ? {runId: id, status: st} : null});
+    const o = await open({linked: {runs: [mk(R1, "FAILED", "2026-10-21T09:00:00.000Z"), mk(R2, "SUCCEEDED", "2026-10-21T10:00:00.000Z")]}, missionRuns: [R1, R2]});
+    const rows = byData(o.root, "taskRun");
+    expect(rows.map(n => n.dataset.taskRunGoverning)).toEqual(["0", "1"]);
+    expect(byData(rows[0], "taskRunFollow").map(n => n.dataset.taskRunFollow)).toEqual(["superseded"]);
+    expect(byData(rows[1], "taskRunFollow").map(n => n.dataset.taskRunFollow)).toEqual(["DONE"]);
+    expect(text(rows[1])).toContain("By the server rule"); expect(text(rows[1])).toContain("Done");
+    expect(text(rows[0])).toContain("newer linked run governs");
+    expect(o.calls.post).toEqual([]);
+    const u = await open({linked: {runs: [mk(R1, null, "2026-10-21T10:00:00.000Z")]}, missionRuns: [R1]});
+    expect(byData(byData(u.root, "taskRun")[0], "taskRunFollow").map(n => n.dataset.taskRunFollow)).toEqual(["unknown"]);
+    const n = await open({linked: {runs: [mk(R1, "QUEUED", "2026-10-21T10:00:00.000Z")]}, missionRuns: [R1]});
+    expect(byData(byData(n.root, "taskRun")[0], "taskRunFollow").map(x => x.dataset.taskRunFollow)).toEqual(["none"]);
+  });
   it("links the chosen run with exactly {runId} and reports success without claiming anything started", async () => {
     const o = await open({linked: {runs: []}, missionRuns: [R1, R2], post: () => ({status: 201, body: {link: link(R2).link}})});
     const sel = byId(o.root, "taskruns-run")!; sel.value = R2; sel.fire("change");
@@ -1762,7 +1790,7 @@ describe("LANE-A task run link", () => {
     const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js");
     const E = en.default ?? en.EN ?? en, T = tr.default ?? tr.TR ?? tr;
     const keys = Object.keys(E).filter(k => k.startsWith("taskruns.") || k.startsWith("flow.taskRuns"));
-    expect(keys.length).toBe(17);
+    expect(keys.length).toBe(21);
     for (const k of keys) expect(T[k], k).toBeTruthy();
   });
 });
