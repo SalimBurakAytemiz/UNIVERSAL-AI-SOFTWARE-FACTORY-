@@ -163,7 +163,7 @@
       "id": "PQ-003",
       "source": "UASCO-AUD-065 / inventory UI-050 (PARTIAL)",
       "title": "Evidence lineage as a navigable graph view in #/assurance (read-only)",
-      "status": "TESTED",
+      "status": "INTEGRATED",
       "base": "claude/ui-105@632a774 (stacked; draft PR #125 open)",
       "files": [
         "apps/desktop/renderer/views/assurance.js",
@@ -183,13 +183,20 @@
       "branch": "claude/lane-a-lineage-graph",
       "head": "4561648",
       "pr": null,
-      "note": "Lane A deliverable, coordinator-verified (Linux) 2026-10-21T12:45Z; branch only (PR limit); not integrated."
+      "note": "Lane A deliverable, coordinator-verified (Linux) 2026-10-21T12:45Z; branch only (PR limit); not integrated.",
+      "integration": {
+        "pr": 156,
+        "mergeCommit": "7d2d89d",
+        "mergedAt": "2026-10-22T00:43:15Z",
+        "method": "GitHub auto-merge (MERGE) on required CI",
+        "mergedBy": "SalimBurakAytemiz (auto-merge)"
+      }
     },
     {
       "id": "PQ-004",
       "source": "UASCO-AUD-065 / inventory UI-246 (DESIGN parity UNVERIFIED)",
       "title": "Theme contrast lab in #/settings: WCAG contrast preview built from the existing tokens",
-      "status": "TESTED",
+      "status": "INTEGRATED",
       "base": "claude/ui-105@632a774 (stacked; draft PR #125 open)",
       "files": [
         "apps/desktop/renderer/views/settings.js",
@@ -207,7 +214,15 @@
       "pr": 141,
       "branch": "claude/lane-a-contrast-lab",
       "head": "dc0f006",
-      "note": "Lane A deliverable, coordinator-verified (Linux) 2026-10-21T08:26Z; not integrated."
+      "note": "Lane A deliverable, coordinator-verified (Linux) 2026-10-21T08:26Z; not integrated.",
+      "integration": {
+        "pr": 155,
+        "mergeCommit": "2e6078a",
+        "mergedAt": "2026-10-22T00:40:21Z",
+        "note": "supersedes #141",
+        "method": "GitHub auto-merge (MERGE) on required CI",
+        "mergedBy": "SalimBurakAytemiz (auto-merge)"
+      }
     },
     {
       "id": "PQ-005",
@@ -287,7 +302,7 @@
       "lane": "C",
       "source": "docs/mobile/screens MOB-6 (UI-097, UI-099, UI-102, UI-177) + ADR-MOB-001 (read-only STALE cache) + API-CONTRACT (PROPOSED routes)",
       "title": "Mobile Companion core: read-only monitoring state store, view models and STALE/OFFLINE cache rules in pure TypeScript (no dependencies, no network, no privileged actions)",
-      "status": "TESTED",
+      "status": "INTEGRATED",
       "base": "v7/integration",
       "files": [
         "apps/mobile/src/core/monitoring-store.ts",
@@ -322,7 +337,15 @@
           "findings 3-5 low/nit: carried into the repair task"
         ]
       },
-      "note": "Review finding 2 repaired by PQ-008-R1 at 3d2e1d3; needs a fresh independent review on that head."
+      "note": "Review finding 2 repaired by PQ-008-R1 at 3d2e1d3; needs a fresh independent review on that head.",
+      "integration": {
+        "pr": 159,
+        "mergeCommit": "0b52605",
+        "mergedAt": "2026-10-22T01:13:13Z",
+        "note": "supersedes #129",
+        "method": "GitHub auto-merge (MERGE) on required CI",
+        "mergedBy": "SalimBurakAytemiz (auto-merge)"
+      }
     },
     {
       "id": "PQ-009",
@@ -454,7 +477,7 @@
       "lane": "C",
       "source": "Review rejection of PR #129 (finding 2, confirmed against docs/mobile/CONNECTIVITY-AND-PAIRING.md:250,:256)",
       "title": "Repair PQ-008: no cached data after device revocation, re-auth or pin mismatch; ordered refresh",
-      "status": "TESTED",
+      "status": "INTEGRATED",
       "branch": "claude/pq-008",
       "base": "claude/pq-008@0c212ce (repair on the PR branch, same PR #129)",
       "files": [
@@ -479,7 +502,14 @@
       "finalSha": "3d2e1d3c6d14bba4c6ae72b11930e11dd48be113",
       "evidence": "Coordinator re-ran at 3d2e1d3: apps/mobile/src/core/monitoring.test.ts 37/37, tsc --noEmit 0, TR PASS, secret-sanity PASS; diff 0c212ce..3d2e1d3 touches only the 4 listed files; the one changed assertion is the DEVICE_REVOKED expectation the acceptance requires, the old last-sync assertion moved to a new UNREACHABLE test.",
       "ci": "Run 39545952327 on 3d2e1d3: Linux FAIL only at dependency-supply-chain (DEPENDENCY_AUDIT_BLOCKERS:1, the vite advisory); every other step PASS. Not this task: the lockfile fix is PR #128. Re-run after #128 merges and v7/integration is merged into claude/pq-008.",
-      "completedAt": "2026-10-21T04:51:14.191Z"
+      "completedAt": "2026-10-21T04:51:14.191Z",
+      "integration": {
+        "pr": 159,
+        "mergeCommit": "0b52605",
+        "mergedAt": "2026-10-22T01:13:13Z",
+        "method": "GitHub auto-merge (MERGE) on required CI",
+        "mergedBy": "SalimBurakAytemiz (auto-merge)"
+      }
     },
     {
       "id": "PQ-013",
@@ -565,7 +595,7 @@
     }
   ],
   "checkpoint": {
-    "at": "2026-10-21T23:46:00Z",
+    "at": "2026-10-22T01:16:00Z",
     "by": "coordinator",
     "integrationHead": "a910883",
     "openProductionPrs": [
@@ -583,7 +613,7 @@
     ],
     "next": "Verify #136 review result; integration L1; first-delivery orchestrator on L1; lanes continue.",
     "engine": "First worker-built task end to end: claim 20741ed 04:51:55Z -> draft PR #133 04:58Z (about 7 min), coordinator-verified.",
-    "note": "Founder auto-merge policy live: 5 PRs auto-merged on required CI (145,130,133,134,135). In flight with auto-merge: 147,148,149,150 (Lane A), 151,152 (Lane B). #146 (Windows installer CI + installed-app IPC fix) green incl. real install test; merge held: safety layer requires review for the coordinator own protected-path change."
+    "note": "17 PRs auto/required-CI merged since 23:03Z; in flight: 154,157,160,162,163,164,165,167(COORD protected, Founder auto-merge)"
   },
   "builderCapBasis": "Founder directive MAXIMUM PRODUCT DEVELOPMENT SPRINT (2026-10-21, chat): three lanes if resources allow (A desktop, B backend/central brain, C mobile/QA). Coordinator-reported.",
   "lanes": {
@@ -1326,6 +1356,76 @@
       "pr": 135,
       "mergeCommit": "318461c",
       "mergedAt": "2026-10-21T23:42:29Z"
+    },
+    {
+      "pr": 147,
+      "mergeCommit": "(23:44:58Z)",
+      "what": "Lane A run-readiness"
+    },
+    {
+      "pr": 148,
+      "mergeCommit": "9873084",
+      "mergedAt": "2026-10-21T23:47:13Z"
+    },
+    {
+      "pr": 149,
+      "mergeCommit": "fe2d5e3",
+      "mergedAt": "2026-10-21T23:58:48Z"
+    },
+    {
+      "pr": 151,
+      "mergeCommit": "df0b58b",
+      "mergedAt": "2026-10-22T00:03:32Z"
+    },
+    {
+      "pr": 152,
+      "mergeCommit": "128cfcb",
+      "mergedAt": "2026-10-22T00:25:26Z"
+    },
+    {
+      "pr": 150,
+      "mergeCommit": "20cdf6e",
+      "mergedAt": "2026-10-22T00:39:28Z"
+    },
+    {
+      "pr": 155,
+      "mergeCommit": "2e6078a",
+      "mergedAt": "2026-10-22T00:40:21Z"
+    },
+    {
+      "pr": 156,
+      "mergeCommit": "7d2d89d",
+      "mergedAt": "2026-10-22T00:43:15Z"
+    },
+    {
+      "pr": 146,
+      "mergeCommit": "af91bfe",
+      "mergedAt": "2026-10-22T00:51:08Z",
+      "what": "COORD protected batch (Founder-enabled auto-merge)"
+    },
+    {
+      "pr": 153,
+      "mergeCommit": "007bd9c",
+      "mergedAt": "2026-10-22T00:54:28Z",
+      "what": "merged by coordinator on green required CI (unstable only from optional reviewer)"
+    },
+    {
+      "pr": 159,
+      "mergeCommit": "0b52605",
+      "mergedAt": "2026-10-22T01:13:13Z"
     }
-  ]
+  ],
+  "windowsDelivery": {
+    "workflow": ".github/workflows/windows-installer.yml",
+    "firstTestedIntegrationBuild": {
+      "run": 39702517755,
+      "sourceSha": "007bd9c",
+      "artifact": "uasco-windows-installer-39702517755-1",
+      "artifactId": 12393487273,
+      "expiresAt": "2026-11-21T01:02:41Z",
+      "tests": "silent install, isolated launch (/health VERIFIED + window), single instance, repair, uninstall; RENDERER_IPC_REJECTED guard",
+      "signed": false,
+      "publicRelease": "NOT_PUBLISHED (Founder decision 2026-10-21: after product acceptance)"
+    }
+  }
 }
