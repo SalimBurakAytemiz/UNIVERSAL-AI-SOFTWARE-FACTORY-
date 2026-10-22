@@ -143,11 +143,14 @@ const s = new WorkOsStore(process.argv[2]);
 for (let i = 0; i < 12; i++) s.createProject({tenantId: "tA", orgId: "o", name: "P" + process.argv[3] + "-" + i, environmentId: "dev", createdBy: "CHILD"});
 `);
     const tsx = path.join(REPO, "node_modules", "tsx", "dist", "cli.mjs");
+    // //TR: tsx alt süreçleri os.tmpdir() altında unix soketi açar; uzun TMPDIR sokete sığmaz (yol sınırı ~104). Test atlanmaz: alt süreçlere kısa, özel bir geçici kök verilir.
+    const shortRoot = process.platform === "win32" ? os.tmpdir() : fs.mkdtempSync(path.join(fs.existsSync("/tmp") ? "/tmp" : os.tmpdir(), "ub2-"));
+    const env = {...process.env, TMPDIR: shortRoot, TMP: shortRoot, TEMP: shortRoot};
     const kids = [0, 1, 2].map(i => new Promise<number | null>(resolve => {
-      const c = cp.spawn(process.execPath, [tsx, script, dir, String(i)], {stdio: "ignore", cwd: REPO});
+      const c = cp.spawn(process.execPath, [tsx, script, dir, String(i)], {stdio: "ignore", cwd: REPO, env});
       c.on("exit", code => resolve(code));
     }));
-    return Promise.all(kids).then(codes => {
+    return Promise.all(kids).finally(() => { if (shortRoot !== os.tmpdir()) fs.rmSync(shortRoot, {recursive: true, force: true}); }).then(codes => {
       expect(codes).toEqual([0, 0, 0]);
       const fresh = new WorkOsStore(dir);
       expect(fresh.isTampered).toBe(false);
