@@ -776,27 +776,29 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     }
   });
 
-  it("regular_file oracle: the right bytes committed as an executable file or as a symlink are FAILED, not PASSED", { timeout: 120_000 }, async () => {
-    const mode = (kind: "exec" | "symlink" | "link-bytes"): ExecutorPair => {
-      const fake = fakePair();
-      return {...fake, implementer: {identity: "MODE_IMPL", async implement(ws, _spec, _ctx) {
-        const at = new Date().toISOString(), g = (args: string[]) => cp.spawnSync("git", ["-c", "user.name=T", "-c", "user.email=t@local.invalid", "-c", "commit.gpgsign=false", ...args], {cwd: ws, encoding: "utf8"});
-        if (kind === "exec") { fs.writeFileSync(path.join(ws, "greeting.txt"), "hello\n"); g(["add", "-A"]); g(["update-index", "--chmod=+x", "greeting.txt"]); }
-        else if (kind === "link-bytes") { fs.symlinkSync("hello\n", path.join(ws, "greeting.txt")); g(["add", "-A"]); } // git stores a symlink as a blob holding its target: the BYTES are exactly "hello\n"
-        else { fs.writeFileSync(path.join(ws, "target.txt"), "hello\n"); fs.symlinkSync("target.txt", path.join(ws, "greeting.txt")); g(["add", "-A"]); }
-        g(["commit", "-q", "-m", "mode"]);
-        return {exitCode: 0, log: "", argv: [], startedAt: at, endedAt: at, timedOut: false, aborted: false, transient: false};
-      }}};
-    };
-    const exec = evaluated(await evaluate(mode("exec"), DEV));
+  // //TR: Mod/symlink oracle yardımcısı: aynı baytlar yürütülebilir dosya ya da symlink olarak commit edilir.
+  const modePair = (kind: "exec" | "symlink" | "link-bytes"): ExecutorPair => {
+    const fake = fakePair();
+    return {...fake, implementer: {identity: "MODE_IMPL", async implement(ws, _spec, _ctx) {
+      const at = new Date().toISOString(), g = (args: string[]) => cp.spawnSync("git", ["-c", "user.name=T", "-c", "user.email=t@local.invalid", "-c", "commit.gpgsign=false", ...args], {cwd: ws, encoding: "utf8"});
+      if (kind === "exec") { fs.writeFileSync(path.join(ws, "greeting.txt"), "hello\n"); g(["add", "-A"]); g(["update-index", "--chmod=+x", "greeting.txt"]); }
+      else if (kind === "link-bytes") { fs.symlinkSync("hello\n", path.join(ws, "greeting.txt")); g(["add", "-A"]); } // git stores a symlink as a blob holding its target: the BYTES are exactly "hello\n"
+      else { fs.writeFileSync(path.join(ws, "target.txt"), "hello\n"); fs.symlinkSync("target.txt", path.join(ws, "greeting.txt")); g(["add", "-A"]); }
+      g(["commit", "-q", "-m", "mode"]);
+      return {exitCode: 0, log: "", argv: [], startedAt: at, endedAt: at, timedOut: false, aborted: false, transient: false};
+    }}};
+  };
+  it("regular_file oracle: the right bytes committed as an executable file are FAILED, not PASSED", { timeout: 120_000 }, async () => {
+    const exec = evaluated(await evaluate(modePair("exec"), DEV));
     expect([exec.verdict, exec.checks.filter(c => !c.passed).map(c => c.id)]).toEqual(["FAILED", ["regular_file"]]);
-    if (process.platform !== "win32") {
-      const link = evaluated(await evaluate(mode("symlink"), DEV));
-      expect(link.verdict).toBe("FAILED"); expect(link.checks.find(c => !c.passed)?.id).toBeDefined();
-      // the bytes oracle alone would PASS this one (blob == "hello\n", only greeting.txt added): regular_file is the only check that can fail it
-      const same = evaluated(await evaluate(mode("link-bytes"), DEV));
-      expect([same.verdict, same.checks.filter(c => !c.passed).map(c => c.id)]).toEqual(["FAILED", ["regular_file"]]);
-    }
+  });
+  // //TR: Windows'ta symlink oluşturmak ayrıcalık ister; test orada ATLANIR ve sonuçta "skipped" görünür (sessiz geçiş yok).
+  it.skipIf(process.platform === "win32")("regular_file oracle: a symlink is FAILED, also when its target text makes the blob bytes exactly right (only regular_file can fail that one)", { timeout: 120_000 }, async () => {
+    const link = evaluated(await evaluate(modePair("symlink"), DEV));
+    expect(link.verdict).toBe("FAILED"); expect(link.checks.find(c => !c.passed)?.id).toBeDefined();
+    // the bytes oracle alone would PASS this one (blob == "hello\n", only greeting.txt added): regular_file is the only check that can fail it
+    const same = evaluated(await evaluate(modePair("link-bytes"), DEV));
+    expect([same.verdict, same.checks.filter(c => !c.passed).map(c => c.id)]).toEqual(["FAILED", ["regular_file"]]);
   });
 
   it("infrastructure trouble is NOT an evaluation result: exit code, timeout, abort and non-role blocks -> NOT_EXECUTED and NOTHING is staged; role-caused builder refusals -> FAILED", { timeout: 180_000 }, async () => {
@@ -1147,11 +1149,6 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     const nl = evaluated(await evaluate(predevPair(() => `{\n${KEY}\n}`), BA));
     for (const f of [nl.artifactFile, nl.evidenceFile]) expect(fs.readFileSync(f, "utf8")).not.toContain(KEY);
     expect(fs.readFileSync(nl.artifactFile, "utf8")).toContain("[REDACTED:AWS_ACCESS_KEY]");
-    if (process.platform !== "win32") { // a file name containing a line break cannot exist on Windows
-      const named = evaluated(await evaluate(fakePair({implement: () => ({files: {"greeting.txt": "hello\n", [`a\n${KEY}.txt`]: "x\n"}})}), DEV));
-      expect(JSON.stringify(named)).not.toContain(KEY);
-      for (const f of [named.artifactFile, named.evidenceFile]) expect(fs.readFileSync(f, "utf8")).not.toContain(KEY);
-    }
     // the evidence hash binds the redacted bytes, so the staged file still verifies when the pair is non-FAKE
     expect(createEvidenceVerifier(path.resolve(path.dirname(path.dirname(path.dirname(path.dirname(path.dirname(dev.evidenceFile)))))))(dev.evidenceRef, DEV, "EV-01", "FAILED")).toBe("FAKE_EVIDENCE");
   });
@@ -1167,6 +1164,15 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     expect(fs.readFileSync(r.artifactFile, "utf8")).toContain("[REDACTED:AWS_ACCESS_KEY]");
     expect(JSON.parse(fs.readFileSync(r.evidenceFile, "utf8")).artifactSha256).toBe(sha(fs.readFileSync(r.artifactFile)));
     expect(createEvidenceVerifier(root)(r.evidenceRef, DEV, "EV-01", "FAILED")).toBeNull();
+  });
+
+  // //TR: Satır sonu içeren dosya adı Windows'ta VAR OLAMAZ (dolayısıyla tehdit de yoktur); bu durum orada ATLANIR ve sonuçta "skipped" görünür. Windows'ta dosya adındaki gizli anahtarın redaksiyonunu yukarıdaki `${KEY}.txt` durumu kapsar.
+  it.skipIf(process.platform === "win32")("a secret on a line of its own INSIDE a file name (line break in the name, POSIX only) is redacted in both staged files too", { timeout: 120_000 }, async () => {
+    const KEY = ["AKIA", "IOSFODNN7EXAMPLE"].join("");
+    const named = evaluated(await evaluate(fakePair({implement: () => ({files: {"greeting.txt": "hello\n", [`a\n${KEY}.txt`]: "x\n"}})}), DEV));
+    expect(JSON.stringify(named)).not.toContain(KEY);
+    for (const f of [named.artifactFile, named.evidenceFile]) expect(fs.readFileSync(f, "utf8")).not.toContain(KEY);
+    expect(fs.readFileSync(named.artifactFile, "utf8")).toContain("[REDACTED:AWS_ACCESS_KEY]");
   });
 
   describe("staging confinement", () => {
@@ -1356,7 +1362,7 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       expect(life(pr.repo, withRef(pr.role, r))).toMatchObject({tested: true, certified: false});
     });
 
-    it("tampering after staging is caught by the verifier: evidence bytes, artifact bytes, a swapped role directory, a symlinked artifact", { timeout: 180_000 }, async () => {
+    it("tampering after staging is caught by the verifier: evidence bytes, artifact bytes, a swapped role directory", { timeout: 180_000 }, async () => {
       const root = stagingOf();
       const r = evaluated(await evaluate({...fakePair(), kind: "LOCAL_CLAUDE"}, DEV, {stagingRoot: root}));
       const base = (mutate: (repo: string) => void) => { const p = promote(root, DEV, "PASSED"); mutate(p.repo); return life(p.repo, withRef(p.role, r)).tested; };
@@ -1365,7 +1371,17 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       expect(base(repo => fs.appendFileSync(path.join(dir(repo), "EV-01.json"), " "))).toBe(false);
       expect(base(repo => fs.appendFileSync(path.join(dir(repo), "EV-01.artifact.json"), " "))).toBe(false);
       expect(base(repo => { const d = path.join(repo, "audit", "evidence", "role-evaluations"); fs.renameSync(path.join(d, DEV), path.join(d, "UASCO-0313")); })).toBe(false);
-      if (process.platform !== "win32") expect(base(repo => { const f = path.join(dir(repo), "EV-01.artifact.json"), o = path.join(workDir(), "art.json"); fs.copyFileSync(f, o); fs.rmSync(f); fs.symlinkSync(o, f); })).toBe(false);
+    });
+
+    // //TR: Windows'ta symlink oluşturmak ayrıcalık ister; test orada ATLANIR ve sonuçta "skipped" görünür (sessiz geçiş yok).
+    it.skipIf(process.platform === "win32")("a symlinked artifact in the promoted copy is rejected by the verifier", { timeout: 180_000 }, async () => {
+      const root = stagingOf();
+      const r = evaluated(await evaluate({...fakePair(), kind: "LOCAL_CLAUDE"}, DEV, {stagingRoot: root}));
+      const p = promote(root, DEV, "PASSED");
+      expect(life(p.repo, withRef(JSON.parse(JSON.stringify(p.role)), r)).tested).toBe(true); // control: the untouched copy counts
+      const f = path.join(p.repo, "audit", "evidence", "role-evaluations", DEV, "EV-01.artifact.json"), o = path.join(workDir(), "art.json");
+      fs.copyFileSync(f, o); fs.rmSync(f); fs.symlinkSync(o, f);
+      expect(life(p.repo, withRef(p.role, r)).tested).toBe(false);
     });
   });
 
