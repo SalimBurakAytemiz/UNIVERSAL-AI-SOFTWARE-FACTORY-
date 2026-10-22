@@ -79,7 +79,7 @@ const journal = (c: Ctx) => fs.readFileSync(path.join(c.dataDir, "journal.jsonl"
 const kinds = (r: WorkRun) => r.evidence.map(e => e.kind);
 
 import cp from "node:child_process";
-import {repositoryHead} from "../core/workos/runner.js";
+import {repositoryHead, repositoryPrecondition as repoPrecondition} from "../core/workos/runner.js"; // //TR: ayrı ad: #214 bölmesi üst import satırından repositoryPrecondition'ı çıkarır; bu blok o satıra bağlı kalmaz (her iki dizilimde derlenir)
 import type {RepositoryHead} from "../core/workos/runner.js";
 // //TR: LANE-C C-RUNNER-HEAD-PREDICATE: "HEAD çözülüyor mu VE yol work-tree kökü mü" kararı TEK saf fonksiyondur (repositoryHead; sonuç çağıranın ortamına bağlı değildir). Runner WORKSPACE adımı aynı fonksiyonu çağırır (readiness için Lane B isteği). `git rev-parse` yukarı doğru keşfettiği için düz bir alt dizin üst deponun HEAD'ini çözer; eski davranış `git clone <alt dizin>` hatasıyla yanıltıcı WORKSPACE_CLONE_FAILED verirdi. Testler her durumu gerçek git ile kurar; beklenen cevap bağımsız git çağrısından türetilir, her hile için önce "ham git bunu kabul eder/çalıştırır" önkoşulu doğrulanır.
 describe("LANE-C repository head predicate: repositoryHead (does HEAD resolve AND is the path the work-tree root; the runner uses the very same function)", () => {
@@ -322,7 +322,7 @@ describe("LANE-C repository head predicate: repositoryHead (does HEAD resolve AN
     ];
     for (const [label, repo, reason] of cases) {
       const {c, fake} = mkCtx(repo);
-      const pre = repositoryPrecondition(c.store.getProject({tenantId: "tA"}, c.projectId)!, c.dataDir);
+      const pre = repoPrecondition(c.store.getProject({tenantId: "tA"}, c.projectId)!, c.dataDir);
       expect([label, pre.ok && (repositoryHead(pre.src) as {reason?: string}).reason]).toEqual([label, reason]);
       const r = start(c, fake);
       await runner(c, fake).tick();
@@ -331,7 +331,7 @@ describe("LANE-C repository head predicate: repositoryHead (does HEAD resolve AN
       expect([label, run.evidence.filter(e => e.kind === "WORKSPACE").length]).toEqual([label, 0]);
     }
     const ok = setup("tA"), okFake = new FakeExecutors(okScript());
-    const okPre = repositoryPrecondition(ok.store.getProject({tenantId: "tA"}, ok.projectId)!, ok.dataDir);
+    const okPre = repoPrecondition(ok.store.getProject({tenantId: "tA"}, ok.projectId)!, ok.dataDir);
     expect(okPre.ok && repositoryHead(okPre.src)).toEqual(okAt(ok.head));
     const okRun = start(ok, okFake);
     await runner(ok, okFake).tick();
