@@ -1724,6 +1724,75 @@ describe("LANE-A task run link", () => {
     expect(text(rows[0])).toContain("Running"); expect(text(rows[0])).not.toContain("not readable");
     expect(text(rows[1])).toContain("run record not readable"); expect(text(rows[1])).not.toContain("Running");
   });
+  const RES = (over: any = {}) => ({taskId: T1, from: "IN_PROGRESS", to: "DONE", action: "TRANSITIONED", reason: null, ...over});
+  const RECON = (results: any[], over: any = {}) => ({runId: R1, runStatus: "SUCCEEDED", results, ...over});
+  it("builds the reconcile request with an EMPTY body and a canonical run id only", async () => {
+    const c = await load(rend, "work-core.js");
+    expect(c.buildReconcileRequest({runId: R1})).toEqual({ok: true, path: `/v1/work-runs/${R1}/tasks/reconcile`, body: {}, errors: {}});
+    for (const bad of ["x", "", null, "run_x", "RUN_" + "01".repeat(12), R1 + "/", [R1]]) { const r = c.buildReconcileRequest({runId: bad as any}); expect(r.ok, String(bad)).toBe(false); expect(r.body).toBeNull(); expect(r.errors).toEqual({runId: "taskruns.err.run"}); }
+    expect(c.reconcilePath(R1 + "?x=1")).toBeNull();
+  });
+  it("maps the reconcile answer strictly; one malformed row makes the whole answer ERROR", async () => {
+    const c = await load(rend, "work-core.js");
+    const ok = c.mapReconcile(RECON([RES(), RES({taskId: "tsk_" + "b2".repeat(12), action: "UNCHANGED", from: "PENDING", to: "PENDING", reason: "RUN_QUEUED"})]), T1);
+    expect(ok.state).toBe("VERIFIED"); expect(ok.mine).toMatchObject({taskId: T1, action: "TRANSITIONED", to: "DONE"}); expect(ok.othersTransitioned).toBe(0);
+    expect(c.mapReconcile(RECON([RES(), RES({taskId: "tsk_" + "b2".repeat(12)})]), T1).othersTransitioned).toBe(1);
+    expect(c.mapReconcile(RECON([RES()]), "tsk_" + "c3".repeat(12)).mine).toBeNull();
+    const bads = [null, [], {}, RECON([], {runId: "run_x"}), RECON([], {runStatus: "bad"}), RECON([], {runStatus: 5}), {runId: R1, runStatus: "SUCCEEDED"}, RECON("x" as any), RECON(Array.from({length: 501}, () => RES())),
+      RECON([null]), RECON([RES({taskId: "tsk_x"})]), RECON([RES({from: "NOPE"})]), RECON([RES({to: "NOPE"})]), RECON([RES({action: "DONE"})]), RECON([RES({reason: "lower"})]), RECON([RES({reason: 5})]), RECON([RES(), null])];
+    for (const b of bads) expect(c.mapReconcile(b as any, T1).state, JSON.stringify(b)?.slice(0, 60)).toBe("ERROR");
+    expect(c.mapReconcile(RECON(Array.from({length: 500}, () => RES())), T1).state).toBe("VERIFIED");
+  });
+  it("classifies the POST outcome: not enabled (refused path, 404/501/403 without a server error code), result, invalid, failed", async () => {
+    const c = await load(rend, "work-core.js");
+    expect(c.classifyReconcile({ok: false, thrown: true, message: "INVALID_API_PATH"}, T1).kind).toBe("NOT_ENABLED");
+    expect(c.classifyReconcile({ok: false, thrown: true, message: "BRIDGE_UNAVAILABLE"}, T1).kind).toBe("FAILED");
+    for (const st of [404, 501]) expect(c.classifyReconcile({ok: false, status: st, body: {error: "Not Found"}}, T1).kind, String(st)).toBe("NOT_ENABLED");
+    expect(c.classifyReconcile({ok: false, status: 404, body: {error: "OUTCOME_RUN_NOT_FOUND"}}, T1).kind).toBe("FAILED");
+    expect(c.classifyReconcile({ok: false, status: 404, body: {error: "RUN_NOT_FOUND"}}, T1).kind).toBe("FAILED");
+    expect(c.classifyReconcile({ok: false, status: 403, body: {}}, T1).kind).toBe("NOT_ENABLED");
+    expect(c.classifyReconcile({ok: false, status: 403, body: {error: "ACTION_DENIED", reason: "x"}}, T1).kind).toBe("FAILED");
+    for (const st of [400, 409, 423, 500, 503]) expect(c.classifyReconcile({ok: false, status: st, body: {}}, T1).kind, String(st)).toBe("FAILED");
+    expect(c.classifyReconcile(null, T1).kind).toBe("FAILED");
+    expect(c.classifyReconcile({ok: true, status: 200, body: RECON([RES()])}, T1)).toMatchObject({kind: "RESULT", runStatus: "SUCCEEDED"});
+    expect(c.classifyReconcile({ok: true, status: 200, body: {runId: "x"}}, T1).kind).toBe("INVALID");
+  });
+  it("turns a reconcile result into a status key without inventing anything", async () => {
+    const c = await load(rend, "work-core.js");
+    const k = (results: any[]) => c.reconcileStatusKey(c.mapReconcile(RECON(results), T1));
+    expect(k([RES()])).toEqual({key: "taskruns.recon.transitioned", vars: {from: "IN_PROGRESS", to: "DONE", others: 0}});
+    expect(k([RES({action: "UNCHANGED", from: "PENDING", to: "PENDING", reason: "RUN_QUEUED"})])).toEqual({key: "taskruns.recon.unchanged", vars: {reason: "RUN_QUEUED", others: 0}});
+    expect(k([RES({action: "UNCHANGED", reason: null})]).vars.reason).toBe("—");
+    for (const r of c.RECON_SKIP_REASONS) expect(k([RES({action: "SKIPPED", reason: r})]).key, r).toBe(`taskruns.recon.skipped.${r}`);
+    expect(k([RES({action: "SKIPPED", reason: "SOMETHING_NEW"})])).toEqual({key: "taskruns.recon.skipped", vars: {reason: "SOMETHING_NEW", others: 0}});
+    expect(k([RES({action: "SKIPPED", reason: null})]).vars.reason).toBe("—");
+    expect(k([RES({taskId: "tsk_" + "b2".repeat(12)})])).toEqual({key: "taskruns.recon.noMine", vars: {others: 1}});
+  });
+  const press = async (o: any) => { byId(o.root, "taskreconcile-submit")!.fire("click"); await tick(); await tick(); return mount(o.doc, await o.view.render(o.ctx)); };
+  it("the update button sits on the latest linked run only, sends an empty body, and reports the server's own answer", async () => {
+    const o = await open({linked: {runs: [link(R1), link(R2, {linkedAt: "2026-10-21T11:00:00.000Z"})]}, missionRuns: [R1, R2], taskStatus: "IN_PROGRESS", post: (p: string, b: any) => ({status: 200, body: RECON([RES()], {runId: R2})})});
+    const btns = all(o.root).filter(n => n.id === "taskreconcile-submit");
+    expect(btns).toHaveLength(1); expect(btns[0].dataset.reconcileRun).toBe(R2);
+    expect(o.calls.post).toEqual([]);
+    const after = await press(o);
+    expect(o.calls.post).toEqual([{path: `/v1/work-runs/${R2}/tasks/reconcile`, body: {}}]);
+    const st = byId(after, "task-reconcile-status")!; expect(st.dataset.result).toBe("ok");
+    expect(text(st)).toContain("IN_PROGRESS to DONE");
+  });
+  it("without the allow-list entry or route it says 'Not enabled' and shows no result", async () => {
+    for (const post of [() => { throw new Error("INVALID_API_PATH"); }, () => ({status: 404, body: {error: "Not Found"}}), () => ({status: 403, body: {}})]) {
+      const o = await open({linked: {runs: [link(R1)]}, missionRuns: [R1], taskStatus: "IN_PROGRESS", post});
+      const after = await press(o);
+      const st = byId(after, "task-reconcile-status")!; expect(st.dataset.result).toBe("error");
+      expect(text(st)).toContain("Not enabled"); expect(text(st)).not.toContain("moved this task");
+    }
+  });
+  it("a 2xx answer that does not parse is reported as unreadable, and a policy denial is reported as denial (not as 'not enabled')", async () => {
+    const o = await open({linked: {runs: [link(R1)]}, missionRuns: [R1], taskStatus: "IN_PROGRESS", post: () => ({status: 200, body: {runId: "x"}})});
+    expect(text(byId(await press(o), "task-reconcile-status")!)).toContain("could not be read as a valid result");
+    const d = await open({linked: {runs: [link(R1)]}, missionRuns: [R1], taskStatus: "IN_PROGRESS", post: () => ({status: 403, body: {error: "ACTION_DENIED", reason: "GLOBAL_STOP"}})});
+    const t = text(byId(await press(d), "task-reconcile-status")!); expect(t).not.toContain("Not enabled");
+  });
   it("links the chosen run with exactly {runId} and reports success without claiming anything started", async () => {
     const o = await open({linked: {runs: []}, missionRuns: [R1, R2], post: () => ({status: 201, body: {link: link(R2).link}})});
     const sel = byId(o.root, "taskruns-run")!; sel.value = R2; sel.fire("change");
@@ -1762,7 +1831,7 @@ describe("LANE-A task run link", () => {
     const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js");
     const E = en.default ?? en.EN ?? en, T = tr.default ?? tr.TR ?? tr;
     const keys = Object.keys(E).filter(k => k.startsWith("taskruns.") || k.startsWith("flow.taskRuns"));
-    expect(keys.length).toBe(17);
+    expect(keys.length).toBe(29);
     for (const k of keys) expect(T[k], k).toBeTruthy();
   });
 });
