@@ -1306,11 +1306,12 @@ describe("LANE-C runner export: repositoryHead (does HEAD resolve AND is the pat
       return {dir: child, want: NOT_ROOT};
     }],
     ["a subdirectory inside a BARE repository (objects/): not the work-tree root", () => { const d = mkd(tmp, "bsub-src"), bare = path.join(tmp, "bsub.git"); initRepo(d, true); git(tmp, ["clone", "-q", "--bare", d, bare]); return {dir: path.join(bare, "objects"), want: NOT_ROOT}; }],
+    ["a repository with a .git directory but core.bare=true: git reports no work tree, so the path is not the work-tree root (and not a bare git directory either)", () => { const d = mkd(tmp, "corebare"); initRepo(d, true); git(d, ["config", "core.bare", "true"]); return {dir: d, want: NOT_ROOT}; }],
     ["a repository whose OWN config puts the work tree elsewhere (core.worktree): the path is not its work-tree root", () => { const d = mkd(tmp, "cwelsewhere"), other = mkd(tmp, "cwother"); initRepo(d, true); git(d, ["config", "core.worktree", other]); return {dir: d, want: NOT_ROOT}; }],
     ["plain directory outside every repository: HEAD unresolved (not a repository at all)", () => { const d = mkd(tmp, "plain"); return {dir: d, want: insideAnyRepo(d) ? NOT_ROOT : UNRESOLVED}; }]
   ];
 
-  it("every repository shape gets exactly one answer: the work-tree root with a resolvable HEAD is ok, everything else is refused with a specific reason (real git, 14 shapes)", () => {
+  it("every repository shape gets exactly one answer: the work-tree root with a resolvable HEAD is ok, everything else is refused with a specific reason (real git, 15 shapes)", () => {
     for (const [label, build] of builders) { const {dir, want} = build(); expect([label, repositoryHead(dir, cleanEnv())]).toEqual([label, want]); }
   });
 
