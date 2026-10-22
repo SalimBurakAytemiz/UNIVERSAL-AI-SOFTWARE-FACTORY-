@@ -837,3 +837,11 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 .view-domains .integ-tally{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-1)}
 .view-domains .integ-state{border-left:4px solid var(--warn);padding-left:var(--space-2)}
 .view-domains .integ-state.state-error,.view-domains .integ-state.state-offline{border-left-color:var(--danger)}
+.integ-state{display:grid;gap:var(--space-1);padding:var(--space-3);margin:var(--space-3) 0;border:1px dashed var(--border-ui);border-radius:var(--radius-md)}
+.integ-state-head{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);margin:0}
+.integ-sources{margin-bottom:var(--space-2)}
+.integ-list{margin-top:var(--space-2);grid-template-columns:repeat(auto-fill,minmax(min(100%,16rem),1fr))}
+.integ-row{overflow-wrap:anywhere}
+.integ-facts{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-2);margin:var(--space-1) 0 0}
+.integ-fact-label{color:var(--muted)}
+.integ-tally{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-1)}
