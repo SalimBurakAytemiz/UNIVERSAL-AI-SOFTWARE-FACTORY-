@@ -13,6 +13,8 @@ import path from "node:path";
 import os from "node:os";
 import cp from "node:child_process";
 import {ENGINE, ORPHAN_MS, REPO as PAR_REPO, git, groupLive, parHarness, procAlive, release, setup as parSetup, sleep, waitUntil, writerParked} from "./support/par.js";
+// //TR: POSIX: yazar kendi oturumundadır ve çöken motoru geçer. Windows: libuv ayrık olmayan çocukları motorun iş nesnesine koyar (KILL_ON_JOB_CLOSE), motor ölünce ağaç da ölür.
+const WRITER_OUTLIVES_ENGINE = process.platform !== "win32";
 
 let tmp = "";
 beforeEach(() => { tmp = tmpRoot("uasco-relfx1-"); });
@@ -346,6 +348,8 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
     const aliveBeforeKill = groupAlive(pgid), membersBeforeKill = (await wg())?.groupMembers?.(pgid)?.length ?? null;
     e1.child.kill("SIGKILL"); await e1.closed;
     const aliveAfterKill = groupAlive(pgid);
+    // //TR: Platform sözleşmesi: POSIX'te yazar kendi oturumundadır ve motor ölse de yaşar (yetim). Windows'ta libuv, ayrık (detached) olmayan çocukları motorun iş nesnesine (KILL_ON_JOB_CLOSE) koyar: motor ölünce yazar ağacı da ölür, yetim KALMAZ (CI kanıtı: writerAliveAfterKill=false). İkisi de burada doğrulanır; sözleşme değişirse test bunu söyler.
+    expect(aliveAfterKill, WRITER_OUTLIVES_ENGINE ? "POSIX: the writer must outlive the crashed engine (own session)" : "win32: the writer dies with the engine (libuv job object)").toBe(WRITER_OUTLIVES_ENGINE);
     return {dir, runId, pgid, killedAt, aliveBeforeKill, membersBeforeKill, aliveAfterKill, work: path.join(dir, "data", "runs", runId, "work")};
   };
   const recoveryNote = (dir: string, runId: string) => new WorkOsStore(path.join(dir, "data")).engineGetRun(runId)!.evidence.find(e => e.kind === "RECOVERY")?.note ?? "";
@@ -364,7 +368,7 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
     expect(run.status, why()).toBe("CANCELLED");
     expect(groupAlive(x.pgid), why()).toBe(false);
     expect(fs.existsSync(path.join(x.work, "ORPHAN.txt")), why()).toBe(false);
-    expect(run.evidence.find(e => e.kind === "CANCEL")?.note ?? "", why()).toMatch(/stopped writer group/);
+    expect(run.evidence.find(e => e.kind === "CANCEL")?.note ?? "", why()).toMatch(WRITER_OUTLIVES_ENGINE ? /stopped writer group/ : /was already gone/);
   });
 
   it("TK-2 / PAR04-EXHAUSTED-NO-REAP: a takeover that exhausts the recovery budget still stops the writer; the reason stays RECOVERY_BUDGET_EXHAUSTED and the note names the stopped group", { timeout: 180_000 }, async () => {
@@ -377,13 +381,13 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
     expect([run.status, run.reason], why()).toEqual(["RECOVERY_FAILED", "RECOVERY_BUDGET_EXHAUSTED"]);
     expect(groupAlive(x.pgid), why()).toBe(false);
     expect(fs.existsSync(path.join(x.work, "ORPHAN.txt")), why()).toBe(false);
-    expect(recoveryNote(x.dir, x.runId), why()).toMatch(/stopped writer group/);
+    expect(recoveryNote(x.dir, x.runId), why()).toMatch(WRITER_OUTLIVES_ENGINE ? /stopped writer group/ : /was already gone/);
   });
 
   it("TEST-PAR04-DEFENCES (M7): a descendant in the writer's process group is stopped too, not only the leader", { timeout: 180_000 }, async () => {
     const x = await crashEngine(path.join(tmp, "grp"), {grandchild: "group"});
     const gcPid = Number(fs.readFileSync(path.join(x.dir, "group.pid"), "utf8"));
-    expect(procAlive(gcPid)).toBe(true); // yetim torun çöken motordan sonra sürüyor
+    expect(procAlive(gcPid)).toBe(WRITER_OUTLIVES_ENGINE); // POSIX: yetim torun çöken motordan sonra sürüyor; Windows: iş nesnesiyle motorla birlikte ölür
     const e2 = spawnEngine(x.dir, "2", {grandchild: "group"});
     expect(await e2.closed, JSON.stringify(e2.text())).toBe(0);
     expect(await waitUntil(() => !procAlive(gcPid), 5000), "a group member survived the kill").toBe(true);
@@ -614,6 +618,13 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
     try { await c.runner({executors: c.base}).tick(); } finally { vi.restoreAllMocks(); }
     const run = c.store.engineGetRun(r.runId)!;
     expect([run.status, run.reason], JSON.stringify(run.evidence.map(e => e.note))).toEqual(["CANCELLED", "GLOBAL_STOP_ACTIVE: TEST_STOP"]);
+  });
+
+  it("R2-12 (Windows CI finding): an access-denied pid is 'not our writer' ONLY when its start time is unreadable too; a readable token (the recorded writer we merely cannot signal) stays fail-closed on every platform", async () => {
+    const G = await wg();
+    expect(G!.accessDeniedVerdict("win32", null)).toBe("NOT_OUR_WRITER"); // elevated/SYSTEM process: StartTime is access-denied as well
+    expect(G!.accessDeniedVerdict("win32", "638000000000000000")).toBe("UNKNOWN"); // token readable (and, checked by the caller, equal to the record): fail-closed (this was the fail-open found on windows-latest)
+    for (const platform of ["linux", "darwin"] as const) { expect(G!.accessDeniedVerdict(platform, null)).toBe("UNKNOWN"); expect(G!.accessDeniedVerdict(platform, "123")).toBe("UNKNOWN"); }
   });
 
   it("TK-6 / TK-8: the macOS/BSD identity command pins TZ/locale and uses an absolute ps; the Windows kill is ONE PowerShell call that re-checks the start time and refuses a non-numeric token", async () => {

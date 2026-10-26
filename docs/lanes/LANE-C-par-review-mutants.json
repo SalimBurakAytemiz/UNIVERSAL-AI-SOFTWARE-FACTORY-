@@ -413,6 +413,15 @@
    "filter": "R2-11",
    "old": "try { this.writeOwner(run.runId, this.ownerRecord(run, leaseId)); } catch { note = `${note ? `${note}; ` : \"\"}owner record not refreshed`; }",
    "new": "this.writeOwner(run.runId, this.ownerRecord(run, leaseId));"
+  },
+  {
+   "id": "R12",
+   "description": "R2-12: an access-denied pid with a READABLE start token is 'not our writer' on Windows (the fail-open the Windows CI found)",
+   "file": "core/workos/writer-guard.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "R2-12",
+   "old": "return platform === \"win32\" && startTokenNow === null ? \"NOT_OUR_WRITER\" : \"UNKNOWN\"; }",
+   "new": "return platform === \"win32\" ? \"NOT_OUR_WRITER\" : \"UNKNOWN\"; }"
   }
  ]
 }

@@ -105,6 +105,8 @@ export function windowsKillArgs(pgid: number, expectedStart: string | null): str
   if (!Number.isSafeInteger(pgid) || pgid <= 1 || expectedStart === null || !/^\d{1,20}$/.test(expectedStart)) return null;
   return ["-NoProfile", "-NonInteractive", "-Command", `$p = Get-Process -Id ${pgid} -ErrorAction SilentlyContinue; if ($p -and $p.StartTime.ToUniversalTime().Ticks -eq ${expectedStart}) { & taskkill.exe /pid ${pgid} /T /F | Out-Null; exit 0 }; exit 3`];
 }
+// //TR: Erişim reddi (EPERM/OTHER_USER) kararı SAF bir fonksiyondur (Linux'ta test edilebilsin): kayıtlı pid'e sinyal gönderemiyoruz. Başlangıç belirteci OKUNABİLİYORSA (kayıtla eşitliği çağıranda zaten denetlenmiştir) bu hâlâ kayıtlı yazar olabilir -> UNKNOWN (fail-closed). Yalnız Windows'ta ve belirteç de OKUNAMIYORSA (yükseltilmiş/SYSTEM sürecin StartTime'ı erişim reddi verir; bizim yazarımız aynı kullanıcının çocuğudur ve her zaman okunabilir) pid başka bir sürece geçmiştir -> NOT_OUR_WRITER.
+export function accessDeniedVerdict(platform: NodeJS.Platform, startTokenNow: string | null): "NOT_OUR_WRITER" | "UNKNOWN" { return platform === "win32" && startTokenNow === null ? "NOT_OUR_WRITER" : "UNKNOWN"; }
 export function killWriterGroup(pgid: number, expectedStart: string | null): Promise<void> {
   if (process.platform === "win32") {
     const args = windowsKillArgs(pgid, expectedStart);
