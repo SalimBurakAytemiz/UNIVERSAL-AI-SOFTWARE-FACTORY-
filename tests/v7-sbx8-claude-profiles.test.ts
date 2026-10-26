@@ -199,12 +199,17 @@ describe("C-IMPL-WIN-1: finding the Claude Code CLI (Windows semantics, simulate
     expect(withClaudeCliOnPath({PATH: "C:\\Windows"}, r, "win32").PATH).toBe(`${NATIVE};C:\\Windows`);
   });
 
-  it("nothing found: NOT_FOUND lists what was searched and tells the Founder what to install", () => {
-    const r = WIN([], env("C:\\Windows;relative\\dir;\"C:\\Quoted\""));
+  it("nothing found: NOT_FOUND counts what was searched (the server's PATH folders are NOT part of the status) and tells the Founder what to install", () => {
+    const probed: string[] = [];
+    const r = detectClaudeCli({platform: "win32", env: env("C:\\Windows;relative\\dir;\"C:\\Quoted\""), isFile: p => { probed.push(p.toLowerCase()); return false; }});
     expect(r.state).toBe("NOT_FOUND");
-    expect(r.searched).toEqual(expect.arrayContaining(["C:\\Windows", "C:\\Quoted", NATIVE, `C:\\Users\\f\\.claude\\local`, NPM]));
-    expect(r.searched).not.toContain("relative\\dir"); // relative PATH entries are never trusted
+    expect(r.searchedCount).toBe(5); // C:\Windows, C:\Quoted, the native folder, ~\.claude\local, npm
+    expect(Object.keys(r)).not.toContain("searched");
+    expect(JSON.stringify(r)).not.toMatch(/Quoted|Windows\\|AppData/); // no folder of the server's PATH leaves through the API
+    expect(probed.some(p => p.startsWith("relative"))).toBe(false); // relative PATH entries are never trusted (never even probed)
+    expect(probed.some(p => p.startsWith("c:\\quoted\\"))).toBe(true);
     expect(r.founderAction).toContain(CLAUDE_CLI_INSTALL_HINT);
+    expect(r.founderAction).toContain("searched 5 folders");
     expect(withClaudeCliOnPath({PATH: "x"}, r, "win32").PATH).toBe("x"); // nothing to prepend
   });
 
@@ -212,6 +217,22 @@ describe("C-IMPL-WIN-1: finding the Claude Code CLI (Windows semantics, simulate
     expect(WIN([`${NPM}\\claude.cmd`], {...env(NPM), PATHEXT: ".EXE;.COM"}).state).toBe("NOT_FOUND");
     expect(WIN([`${NPM}\\claude.cmd`, `${NPM}\\claude.exe`], env(NPM))).toMatchObject({state: "FOUND", path: `${NPM}\\claude.exe`});
     expect(WIN([`${NPM}\\claude.cmd`, `${NPM}\\claude.bat`], env(NPM)).kind).toBe("BAT"); // .BAT precedes .CMD in the default PATHEXT
+  });
+
+  it("M3: claude.com is an executable launcher (PATHEXT .COM)", () => {
+    expect(WIN([`${OTHER}\\claude.com`], env(`C:\\Windows;${OTHER}`))).toMatchObject({state: "FOUND", path: `${OTHER}\\claude.com`, kind: "EXECUTABLE"});
+  });
+
+  it("M8: inside ONE folder the first PATHEXT match wins (where.exe order): with .CMD before .EXE a folder holding both is the unsupported shim, not a found CLI", () => {
+    const r = WIN([`${OTHER}\\claude.cmd`, `${OTHER}\\claude.exe`], {Path: `C:\\Windows;${OTHER}`, PathExt: ".CMD;.EXE", UserProfile: "C:\\Users\\f", AppData: "C:\\Users\\f\\AppData\\Roaming"});
+    expect(r).toMatchObject({state: "SHIM_UNSUPPORTED", kind: "CMD", path: `${OTHER}\\claude.cmd`});
+  });
+
+  it("M10: with no PATH at all the CLI's folder becomes the whole PATH (never 'dir;undefined')", () => {
+    const found = WIN([`${NATIVE}\\claude.exe`], {UserProfile: "C:\\Users\\f", AppData: "C:\\Users\\f\\AppData\\Roaming"});
+    expect(found).toMatchObject({state: "FOUND", pathDir: NATIVE});
+    expect(withClaudeCliOnPath({}, found, "win32")).toEqual({PATH: NATIVE});
+    expect(withClaudeCliOnPath({Path: "X"}, found, "win32")).toEqual({Path: `${NATIVE};X`});
   });
 
   it("POSIX hosts: the plain `claude` file on PATH, no well-known folders", () => {
@@ -231,7 +252,7 @@ describe("C-IMPL-WIN-1: launcher proof, per-role readiness and auth failures", (
     return launcher;
   };
   const login = (role: "implementer" | "reviewer") => { ensureClaudeProfile(control(), role, {forbiddenRoots: [path.join(tmp, "data")]}); fs.writeFileSync(path.join(claudeProfileDir(control(), role), ".credentials.json"), ""); };
-  const FOUND = {state: "FOUND" as const, path: "C:\\x\\claude.exe", kind: "EXECUTABLE" as const, source: "PATH" as const, pathDir: null, searched: [], founderAction: null};
+  const FOUND = {state: "FOUND" as const, path: "C:\\x\\claude.exe", kind: "EXECUTABLE" as const, source: "PATH" as const, pathDir: null, searchedCount: 0, founderAction: null};
   const o = {get forbiddenRoots() { return [path.join(tmp, "data")]; }}; // evaluated when spread (tmp is created per test)
 
   it("claudeLauncherCheck gives one machine-readable code per failure", () => {
@@ -244,6 +265,44 @@ describe("C-IMPL-WIN-1: launcher proof, per-role readiness and auth failures", (
     writeProv({claude: {provenanceLevel: "FULL_PACKAGE", resolvedPath: launcher, launcherSha256: "0".repeat(64)}}); expect(claudeLauncherCheck(control())).toEqual({ok: false, code: "CLAUDE_LAUNCHER_PROVENANCE_CHANGED"}); // content changed
     writeProv(); fs.rmSync(launcher); expect(claudeLauncherCheck(control())).toEqual({ok: false, code: "CLAUDE_CLI_NOT_FOUND"}); // the verified launcher is gone
     fs.writeFileSync(path.join(control(), ".ai", "runtime", "PROVIDER_PROVENANCE.json"), "{not json"); expect(claudeLauncherCheck(control())).toEqual({ok: false, code: "PROVIDER_PROVENANCE_NOT_READY"});
+  });
+
+  it("M-228-1: for FULL_PACKAGE the package.json hash is part of the launcher proof (the broker refuses CLAUDE_PACKAGE_PROVENANCE_CHANGED), so readiness says so BEFORE any run", () => {
+    const launcher = writeProv(), pkg = path.join(tmp, "package.json"), sha = (f: string) => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
+    fs.writeFileSync(pkg, '{"name":"@anthropic-ai/claude-code","version":"1.0.0"}');
+    const full = (claude: Record<string, unknown> = {}) => writeProv({claude: {provenanceLevel: "FULL_PACKAGE", resolvedPath: launcher, launcherSha256: sha(launcher), packageJsonPath: pkg, packageJsonSha256: sha(pkg), ...claude}});
+    full(); expect(claudeLauncherCheck(control())).toEqual({ok: true, resolvedPath: launcher});
+    fs.writeFileSync(pkg, '{"name":"x","version":"2.0.0"}'); // the npm package was changed after it was verified
+    expect(claudeLauncherCheck(control())).toEqual({ok: false, code: "CLAUDE_PACKAGE_PROVENANCE_CHANGED"});
+    login("implementer"); login("reviewer");
+    for (const role of ["implementer", "reviewer"] as const) expect(claudeRoleReadiness(control(), role, {...o, cli: FOUND})).toMatchObject({ready: false, blocker: "CLAUDE_PACKAGE_PROVENANCE_CHANGED", founderAction: expect.stringContaining("package.json")});
+    fs.rmSync(pkg); // a vanished package.json is a change too (the broker would throw)
+    expect(claudeLauncherCheck(control())).toEqual({ok: false, code: "CLAUDE_PACKAGE_PROVENANCE_CHANGED"});
+    fs.writeFileSync(pkg, "{}"); full({packageJsonSha256: "0".repeat(64)}); // a recorded hash that does not match
+    expect(claudeLauncherCheck(control())).toEqual({ok: false, code: "CLAUDE_PACKAGE_PROVENANCE_CHANGED"});
+    // nothing recorded / UNKNOWN / the standalone level: nothing to compare (the broker does not compare either)
+    full({packageJsonPath: "UNKNOWN"}); expect(claudeLauncherCheck(control())).toEqual({ok: true, resolvedPath: launcher});
+    full({packageJsonPath: undefined}); expect(claudeLauncherCheck(control())).toEqual({ok: true, resolvedPath: launcher});
+    writeProv(); expect(claudeLauncherCheck(control())).toEqual({ok: true, resolvedPath: launcher});
+  });
+
+  it("L4: the same blocker code is listed once (no CLI and a vanished verified launcher is ONE CLAUDE_CLI_NOT_FOUND)", () => {
+    const launcher = writeProv(); fs.rmSync(launcher);
+    const r = claudeRoleReadiness(control(), "implementer", {...o, cli: {...FOUND, state: "NOT_FOUND", path: null, kind: null, source: null, founderAction: "install it"}});
+    expect(r.blockers.filter(b => b === "CLAUDE_CLI_NOT_FOUND")).toHaveLength(1);
+    expect(new Set(r.blockers).size).toBe(r.blockers.length);
+  });
+
+  it("M2: a signed-in role whose settings.json was modified or removed is NOT ready", () => {
+    writeProv(); login("reviewer");
+    expect(claudeRoleReadiness(control(), "reviewer", {...o, cli: FOUND})).toMatchObject({ready: true, blockers: []});
+    const settings = path.join(claudeProfileDir(control(), "reviewer"), "settings.json");
+    fs.writeFileSync(settings, '{"hooks": {"PreToolUse": []}}'); // modified
+    const modified = claudeRoleReadiness(control(), "reviewer", {...o, cli: FOUND});
+    expect(modified.ready).toBe(false); expect(modified.blocker).toMatch(/^CLAUDE_PROFILE_REFUSED:/);
+    fs.rmSync(settings); // removed
+    const removed = claudeRoleReadiness(control(), "reviewer", {...o, cli: FOUND});
+    expect(removed.ready).toBe(false); expect(removed.blocker).toMatch(/^CLAUDE_PROFILE_REFUSED:/);
   });
 
   it("claudeRoleReadiness reports every blocker in setup order with the exact action and the Founder's own login command", () => {
@@ -270,7 +329,7 @@ describe("C-IMPL-WIN-1: launcher proof, per-role readiness and auth failures", (
   });
 
   it("claudeAuthFailure recognises the CLI's own sign-in errors at the start of a line and nothing else", () => {
-    for (const l of ["Invalid API key · Please run /login", "OAuth token has expired. Please run /login", "Error: Not logged in · Please run /login", "\u001b[31mPlease run /login\u001b[0m", "authentication_error: invalid x-api-key", "Your session has expired"]) expect([l, claudeAuthFailure(`noise\n${l}\n`)]).toEqual([l, true]);
+    for (const l of ["Invalid API key · Please run /login", "OAuth token has expired. Please run /login", "Error: Not logged in · Please run /login", "\u001b[31mPlease run /login\u001b[0m", "authentication_error: invalid x-api-key", "Your session has expired", "API Error: 401 {\"type\":\"authentication_error\"}"]) expect([l, claudeAuthFailure(`noise\n${l}\n`)]).toEqual([l, true]);
     for (const l of ["TypeError: authenticationError is not a function", "the docs say: please run /login to sign in", "log: invalid api key found in config (just text)", "build failed", ""]) expect([l, claudeAuthFailure(l)]).toEqual([l, false]);
     expect(claudeAuthFailure("Please run /login\n" + "x".repeat(9000))).toBe(false); // only the last 8 KiB is inspected
   });
@@ -318,6 +377,37 @@ describe("C-IMPL-WIN-1: a run refuses with the exact reason, instantly, and neve
     expect(r).toMatchObject({verdict: "BLOCKED", valid: false, invalidReason: "PROVIDER_PROVENANCE_NOT_READY"}); expect(r.log).toContain("PROVENANCE_REFUSED");
     const launcher = path.join(tmp, "launcher.bin"); fs.writeFileSync(launcher, "v1"); prov(a.controlRoot, launcher); fs.rmSync(launcher);
     r = await review(); expect(r).toMatchObject({valid: false, invalidReason: "CLAUDE_CLI_NOT_FOUND"});
+  });
+
+  it("M-228-1 (run): FULL_PACKAGE with a changed package.json -> the implementer is BLOCKED and the reviewer INVALID with the exact code; the broker never starts", { timeout: 60_000 }, async () => {
+    const a = setupApp(), launcher = path.join(tmp, "launcher.bin"), pkg = path.join(tmp, "package.json"), sha = (f: string) => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
+    fs.writeFileSync(launcher, "v1"); fs.writeFileSync(pkg, '{"version":"1"}');
+    prov(a.controlRoot, launcher, {claude: {provenanceLevel: "FULL_PACKAGE", resolvedPath: launcher, launcherSha256: sha(launcher), packageJsonPath: pkg, packageJsonSha256: sha(pkg)}});
+    for (const role of ["implementer", "reviewer"] as const) { ensureClaudeProfile(a.controlRoot, role, {forbiddenRoots: [path.join(tmp, "data")]}); fs.writeFileSync(path.join(claudeProfileDir(a.controlRoot, role), ".credentials.json"), ""); }
+    fs.writeFileSync(pkg, '{"version":"2"}');
+    const p = a.pair();
+    expect(await p.implementer.implement(a.ws, a.spec, {timeoutMs: 30_000})).toMatchObject({exitCode: null, blockReason: "CLAUDE_PACKAGE_PROVENANCE_CHANGED", transient: false});
+    expect(fs.existsSync(path.join(tmp, "BROKER_STARTED"))).toBe(false);
+    const rv = await p.reviewer.review(a.ws, {runId: a.spec.runId, missionId: "m", projectId: "p", title: "t", objective: "o", acceptanceCriteria: [], riskLevel: "R1", cycle: 0, baseSha: a.spec.baseSha}, "", {timeoutMs: 10_000});
+    expect(rv).toMatchObject({valid: false, invalidReason: "CLAUDE_PACKAGE_PROVENANCE_CHANGED"});
+  });
+
+  it("L1/L2: the reviewer's expired sign-in is never retried (exit 75 too) and is concluded only from a FAILED exit, never from text inside a successful run's output", { timeout: 60_000 }, async () => {
+    const a = setupApp(), launcher = path.join(tmp, "launcher.bin"); fs.writeFileSync(launcher, "v1"); prov(a.controlRoot, launcher);
+    ensureClaudeProfile(a.controlRoot, "reviewer", {forbiddenRoots: [path.join(tmp, "data")]}); fs.writeFileSync(path.join(claudeProfileDir(a.controlRoot, "reviewer"), ".credentials.json"), "");
+    const review = (exitCode: number, stdout: string, stderr: string) => new LocalClaudeExecutors(a.appRoot, a.controlRoot, {profile: {forbiddenRoots: [path.join(tmp, "data")]}, runReviewer: async (argv) => ({argv, exitCode, stdout, stderr, startedAt: "t", endedAt: "t", timedOut: false, aborted: false, spawnError: false})})
+      .pair().reviewer.review(a.ws, {runId: a.spec.runId, missionId: "m", projectId: "p", title: "t", objective: "o", acceptanceCriteria: [], riskLevel: "R1", cycle: 0, baseSha: a.spec.baseSha}, "", {timeoutMs: 10_000});
+    expect(await review(75, "", "Invalid API key · Please run /login\n")).toMatchObject({valid: false, invalidReason: "CLAUDE_PROFILE_LOGIN_EXPIRED", transient: false}); // 75 normally means "retry"
+    expect(await review(1, "", "OAuth token has expired. Please run /login\n")).toMatchObject({valid: false, invalidReason: "CLAUDE_PROFILE_LOGIN_EXPIRED"});
+    const ok0 = await review(0, "Invalid API key\nPlease run /login\n", ""); // exit 0, no verdict: the sign-in text came from the reviewed content, not from the CLI
+    expect(ok0.valid).toBe(false); expect(ok0.invalidReason).not.toBe("CLAUDE_PROFILE_LOGIN_EXPIRED");
+  });
+
+  it("M1: an implementer that exits 0 is never concluded to be signed out from text in its output (the engine commit goes ahead)", { timeout: 60_000 }, async () => {
+    const a = setupApp();
+    const impl = new EditOnlyImplementer("TEST_IMPL", path.join(a.appRoot, "config", "environment-policy.json"), () => ({argv: [process.execPath, "-e", "console.error('Invalid API key · Please run /login'); require('node:fs').writeFileSync('feature.txt', 'ok\\n')"], env: {PATH: process.env.PATH ?? ""}, input: ""}));
+    const r = await impl.implement(a.ws, a.spec, {timeoutMs: 30_000});
+    expect(r.exitCode).toBe(0); expect(r.blockReason).toBeUndefined(); expect(r.commitSha).toMatch(/^[0-9a-f]{40}$/);
   });
 
   it("an expired sign-in (credential file present, CLI asks to log in) is CLAUDE_PROFILE_LOGIN_EXPIRED for the implementer and the reviewer, not a retry and not a generic failure", { timeout: 60_000 }, async () => {
@@ -375,6 +465,55 @@ describe("C-IMPL-WIN-1: the executors status the desktop shows", () => {
     const r = await s.setup.enableLocalClaude("FOUNDER");
     expect(r).toMatchObject({ok: false, reason: "PROVENANCE_CAPTURE_FAILED"});
     expect(fs.readFileSync(seen, "utf8").startsWith(`${NATIVE};`)).toBe(true);
+  });
+
+  const signedIn = (controlRoot: string, launcher: string) => {
+    const sha = crypto.createHash("sha256").update(fs.readFileSync(launcher)).digest("hex");
+    fs.mkdirSync(path.join(controlRoot, ".ai", "runtime"), {recursive: true});
+    fs.writeFileSync(path.join(controlRoot, ".ai", "runtime", "PROVIDER_PROVENANCE.json"), JSON.stringify({final: "PASS", capturedAt: "2026-10-26T00:00:00.000Z", claude: {provenanceLevel: "STANDALONE_LAUNCHER", resolvedPath: launcher, launcherSha256: sha, version: "9.9.9"}}));
+    for (const role of ["implementer", "reviewer"] as const) { ensureClaudeProfile(controlRoot, role, {forbiddenRoots: [path.join(tmp, "data")]}); fs.writeFileSync(path.join(claudeProfileDir(controlRoot, role), ".credentials.json"), ""); }
+  };
+
+  it("L3: per-role readiness is NOT ready while the executor is not enabled (EXECUTOR_NOT_ENABLED comes after the CLI/launcher/sign-in blockers); enabling makes it ready", async () => {
+    const launcher = path.join(tmp, "claude-launcher.bin"); fs.writeFileSync(launcher, "x");
+    const none = mk({...win([], "C:\\n")}).setup.status().LOCAL_CLAUDE.readiness.implementer; // nothing installed, verified or signed in (own control root: taken BEFORE the signed-in setup below shares this test's tmp)
+    expect(none.blockers[0]).toBe("CLAUDE_CLI_NOT_FOUND"); expect(none.blockers[none.blockers.length - 1]).toBe("EXECUTOR_NOT_ENABLED"); // the other blockers still come first
+    const {setup, controlRoot} = mk({...win(["C:\\n\\claude.exe"], "C:\\n"), captureProvenance: async () => ({ok: true})});
+    signedIn(controlRoot, launcher);
+    const before = setup.status().LOCAL_CLAUDE;
+    expect(before.state).toBe("NOT_CONFIGURED");
+    for (const role of ["implementer", "reviewer"] as const) expect(before.readiness[role]).toMatchObject({ready: false, blockers: ["EXECUTOR_NOT_ENABLED"], blocker: "EXECUTOR_NOT_ENABLED", founderAction: expect.stringContaining("Settings")});
+    expect((await setup.enableLocalClaude("FOUNDER")).ok).toBe(true);
+    const after = setup.status().LOCAL_CLAUDE;
+    expect(after.state).toBe("READY");
+    for (const role of ["implementer", "reviewer"] as const) expect(after.readiness[role]).toMatchObject({ready: true, blockers: [], blocker: null});
+  });
+
+  it("L5: one status() hashes the launcher once, and the cli detail carries a folder count but no listing of the server's PATH", () => {
+    const launcher = path.join(tmp, "claude-launcher.bin"); fs.writeFileSync(launcher, "x");
+    const {setup, controlRoot} = mk({...win(["C:\\n\\claude.exe"], "C:\\Windows;C:\\n")});
+    signedIn(controlRoot, launcher);
+    const read = vi.spyOn(fs, "readFileSync");
+    const s = setup.status().LOCAL_CLAUDE;
+    expect(read.mock.calls.filter(c => String(c[0]) === launcher), "the launcher was read more than once for one status()").toHaveLength(1);
+    read.mockRestore();
+    expect(s.state).toBe("NOT_CONFIGURED");
+    expect(Object.keys(s.cli)).not.toContain("searched");
+    expect(s.cli.searchedCount).toBe(5); // C:\\Windows, C:\\n and the three well-known folders
+    expect(JSON.stringify(s.cli)).not.toContain("Windows");
+  });
+
+  it("the provenance capture child gets the deterministic env allow-list: provider keys and arbitrary variables of the host are NOT passed on", async () => {
+    const seen = path.join(tmp, "captured-env.json");
+    const s = mk({...win(["C:\\n\\claude.exe"], "C:\\n")});
+    const script = path.join(tmp, "app", "scripts", "capture-provider-provenance.mjs");
+    fs.mkdirSync(path.dirname(script), {recursive: true});
+    fs.writeFileSync(script, `import fs from "node:fs"; fs.writeFileSync(${JSON.stringify(seen)}, JSON.stringify(Object.keys(process.env)));\n`);
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-test-not-for-the-capture"); vi.stubEnv("UASCO_PROBE_SECRET", "x"); vi.stubEnv("GITHUB_TOKEN", "ghp_test");
+    try { await s.setup.enableLocalClaude("FOUNDER"); } finally { vi.unstubAllEnvs(); }
+    const keys = JSON.parse(fs.readFileSync(seen, "utf8")) as string[];
+    expect(keys.length).toBeGreaterThan(0);
+    for (const k of ["ANTHROPIC_API_KEY", "UASCO_PROBE_SECRET", "GITHUB_TOKEN"]) expect(keys, k).not.toContain(k);
   });
 
   it("an injected finder (the existing test hook) still decides: found -> FOUND, absent -> NOT_FOUND", () => {

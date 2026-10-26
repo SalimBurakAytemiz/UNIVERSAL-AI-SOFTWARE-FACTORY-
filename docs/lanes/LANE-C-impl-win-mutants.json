@@ -203,6 +203,132 @@
    "file": "core/workos/executor-setup.ts",
    "old": "env: withClaudeCliOnPath(safeChildEnv(this.o.envPolicyFile, {provider: \"DETERMINISTIC\"}), this.cliStatus(), this.o.platform)",
    "new": "env: safeChildEnv(this.o.envPolicyFile, {provider: \"DETERMINISTIC\"})"
+  },
+  {
+   "id": "W1",
+   "description": "M-228-1: the package.json hash is not part of the launcher proof",
+   "file": "core/workos/claude-profiles.ts",
+   "old": "if (level === \"FULL_PACKAGE\" && pj && pj !== \"UNKNOWN\") {",
+   "new": "if (false) {"
+  },
+  {
+   "id": "W2",
+   "description": "M-228-1: a package.json whose hash differs is accepted",
+   "file": "core/workos/claude-profiles.ts",
+   "old": "if (crypto.createHash(\"sha256\").update(pjBytes).digest(\"hex\") !== prov.claude.packageJsonSha256) return {ok: false, code: \"CLAUDE_PACKAGE_PROVENANCE_CHANGED\"};",
+   "new": "if (false) return {ok: false, code: \"CLAUDE_PACKAGE_PROVENANCE_CHANGED\"};"
+  },
+  {
+   "id": "W3",
+   "description": "M-228-1: an unreadable or vanished package.json is accepted",
+   "file": "core/workos/claude-profiles.ts",
+   "old": "try { pjBytes = fs.readFileSync(String(pj)); } catch { return {ok: false, code: \"CLAUDE_PACKAGE_PROVENANCE_CHANGED\"}; }",
+   "new": "try { pjBytes = fs.readFileSync(String(pj)); } catch { return {ok: true, resolvedPath: resolved}; }"
+  },
+  {
+   "id": "W4",
+   "description": "L1: the reviewer's expired sign-in stays transient (exit 75 is retried)",
+   "file": "core/workos/executors.ts",
+   "old": "{ r.invalidReason = \"CLAUDE_PROFILE_LOGIN_EXPIRED\"; r.transient = false; }",
+   "new": "{ r.invalidReason = \"CLAUDE_PROFILE_LOGIN_EXPIRED\"; }"
+  },
+  {
+   "id": "W5",
+   "description": "L2/M1: the reviewer concludes an expired sign-in from text even when the run exited 0",
+   "file": "core/workos/executors.ts",
+   "old": "!r.timedOut && r.exitCode !== 0 && claudeAuthFailure(r.log)",
+   "new": "!r.timedOut && claudeAuthFailure(r.log)"
+  },
+  {
+   "id": "W6",
+   "description": "M1: the implementer concludes an expired sign-in from text even when it exited 0",
+   "file": "core/workos/executors.ts",
+   "old": "if (r.exitCode !== 0 && !r.aborted && !r.timedOut && claudeAuthFailure(procLog(r)))",
+   "new": "if (!r.aborted && !r.timedOut && claudeAuthFailure(procLog(r)))"
+  },
+  {
+   "id": "W7",
+   "description": "L3: the executor-not-enabled blocker is never added",
+   "file": "core/workos/executor-setup.ts",
+   "old": "if (enabled || r.blockers.includes(EXECUTOR_NOT_ENABLED)) return r;",
+   "new": "return r;"
+  },
+  {
+   "id": "W8",
+   "description": "L3: the executor-not-enabled blocker comes FIRST instead of after the CLI/launcher/sign-in blockers",
+   "file": "core/workos/executor-setup.ts",
+   "old": "blockers: [...r.blockers, EXECUTOR_NOT_ENABLED]",
+   "new": "blockers: [EXECUTOR_NOT_ENABLED, ...r.blockers]"
+  },
+  {
+   "id": "W9",
+   "description": "L4: the same blocker code can be listed twice",
+   "file": "core/workos/claude-profiles.ts",
+   "old": " && !blockers.includes(launcher.code)) { blockers.push(launcher.code);",
+   "new": ") { blockers.push(launcher.code);"
+  },
+  {
+   "id": "W10",
+   "description": "L5: status() hashes the launcher again for the provenance",
+   "file": "core/workos/executor-setup.ts",
+   "old": "prov = this.provenance(launcher)",
+   "new": "prov = this.provenance()"
+  },
+  {
+   "id": "W11",
+   "description": "L5: status() hashes the launcher again for each role",
+   "file": "core/workos/executor-setup.ts",
+   "old": "cli, launcher}), enabled)])",
+   "new": "cli}), enabled)])"
+  },
+  {
+   "id": "W12",
+   "description": "L6: the cli detail lists the folders of the server's PATH again",
+   "file": "core/workos/claude-profiles.ts",
+   "old": "searchedCount: searched.length, founderAction: null};",
+   "new": "searchedCount: searched.length, searched, founderAction: null};"
+  },
+  {
+   "id": "W13",
+   "description": "M2: a modified or removed profile settings.json does not block readiness",
+   "file": "core/workos/claude-profiles.ts",
+   "old": "else if (ps.settings !== \"PRESENT\") {",
+   "new": "else if (false) {"
+  },
+  {
+   "id": "W14",
+   "description": "M3: claude.com is not an executable launcher",
+   "file": "core/workos/claude-profiles.ts",
+   "old": "ext === \".exe\" || ext === \".com\" || !win ? \"EXECUTABLE\" : null;",
+   "new": "ext === \".exe\" || !win ? \"EXECUTABLE\" : null;"
+  },
+  {
+   "id": "W15",
+   "description": "M4: an `API Error: 401` line is not recognised as a sign-in failure",
+   "file": "core/workos/claude-profiles.ts",
+   "old": "|api error: 401\\b)/i;",
+   "new": ")/i;"
+  },
+  {
+   "id": "W16",
+   "description": "M8: every PATHEXT in a folder counts as a hit (no first-match break)",
+   "file": "core/workos/claude-profiles.ts",
+   "old": "pathIndex: source === \"PATH\" ? i : -1}); break; } }",
+   "new": "pathIndex: source === \"PATH\" ? i : -1}); } }"
+  },
+  {
+   "id": "W17",
+   "description": "M10: with no PATH at all the prepend produces `dir;undefined`",
+   "file": "core/workos/claude-profiles.ts",
+   "old": "[key]: env[key] ? `${cli.pathDir}${sep}${env[key]}` : cli.pathDir}",
+   "new": "[key]: `${cli.pathDir}${sep}${env[key]}`}"
+  },
+  {
+   "id": "W18",
+   "description": "capture probe: the capture child inherits the host environment instead of the allow-list",
+   "file": "core/workos/executor-setup.ts",
+   "old": "env: withClaudeCliOnPath(safeChildEnv(this.o.envPolicyFile, {provider: \"DETERMINISTIC\"}), this.cliStatus(), this.o.platform)",
+   "new": "env: withClaudeCliOnPath({...process.env}, this.cliStatus(), this.o.platform)"
   }
  ]
 }
