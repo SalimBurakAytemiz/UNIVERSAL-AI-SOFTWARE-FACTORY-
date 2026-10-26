@@ -984,8 +984,8 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
       return await new Promise<any>(resolve => {
         const c = cp.spawn(cmd[0], cmd.slice(1), {cwd: "/", env: {PATH: LIN_PATH, HOME: "/tmp", LANG: "C", ...extraEnv}, stdio: ["pipe", "pipe", "pipe"], ...(dropUid !== undefined && !asRoot ? {uid: dropUid, gid: dropUid} : {})});
         const out: Buffer[] = []; let aborted = false, timedOut = false, done = false;
-        c.stdout.on("data", d => out.push(d)); c.stderr.on("data", () => undefined); c.stdin.on("error", () => undefined);
-        const fin = (code: number | null) => { if (done) return; done = true; clearInterval(poll); clearTimeout(t); resolve(R(code, Buffer.concat(out), {aborted, timedOut})); };
+        const err: Buffer[] = []; c.stdout.on("data", d => out.push(d)); c.stderr.on("data", d => err.push(d)); c.stdin.on("error", () => undefined);
+        const fin = (code: number | null) => { if (done) return; done = true; clearInterval(poll); clearTimeout(t); resolve(R(code, Buffer.concat(out), {aborted, timedOut, stderr: Buffer.concat(err)})); };
         const poll = setInterval(() => { if (o.shouldAbort?.()) { aborted = true; try { c.kill("SIGKILL"); } catch { /* çıkmış */ } setTimeout(() => fin(null), 200); } }, 50);
         const t = setTimeout(() => { timedOut = true; try { c.kill("SIGKILL"); } catch { /* çıkmış */ } setTimeout(() => fin(null), 200); }, o.timeoutMs + 3000);
         c.on("error", () => fin(null)); c.on("close", code => fin(code));
