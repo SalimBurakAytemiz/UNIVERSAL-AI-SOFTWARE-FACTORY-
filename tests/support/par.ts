@@ -16,22 +16,25 @@ import type {ExecutorPair} from "../../core/workos/executors.js";
 // //TR: "Yavaş git" modeli: eşleşen git çağrısı senkron spawnSync ile gelirse olay döngüsü BLOKLANIR (düzeltme öncesi runner), eşzamansız execFile ile gelirse yalnız sonucu gecikir (düzeltme sonrası runner). Gecikme süresi her iki yolda aynıdır; deterministik, shim/PATH gerekmez, Windows'ta da çalışır.
 // //TR: C-PAR-1 (test birleştirme): modül mock'u (vi.mock) dosya genelindedir ve başka testlerin child_process'ini etkilerdi. Bu yüzden kaynakların kullandığı VARSAYILAN dışa aktarım nesnesinde (git-isolation.mjs ve runner.ts `import cp ...; cp.spawnSync/cp.execFile` ile çağırır) vi.spyOn kullanılır; casus yalnız bu dosyanın testlerinde kurulur ve her testten sonra geri alınır.
 export const slow = {rule: null as null | {ms: number; match: (cwd: string, args: string[]) => boolean}, hits: {sync: 0, async: 0}, observe: null as null | ((cwd: string, args: string[], env: NodeJS.ProcessEnv) => void)}; // observe: her git çağrısını (senkron/eşzamansız) gözler; çocuğun ortamını denetleyen testler için
-const realSpawnSync = cp.spawnSync, realExecFile = cp.execFile as (...x: unknown[]) => unknown;
+const realSpawnSync = cp.spawnSync, realSpawn = cp.spawn as (...x: unknown[]) => cp.ChildProcess;
 const isSlow = (cmd: unknown, args: unknown, opts: unknown) => cmd === "git" && slow.rule !== null && slow.rule.match(String((opts as {cwd?: unknown} | undefined)?.cwd ?? ""), Array.isArray(args) ? args.map(String) : []);
+// //TR: #224 tur 3: eşzamansız git artık `cp.spawn` ile çalışır (execFile `detached`ı yok sayıyordu, bkz. git-async.ts). Yavaş model aynı kalır: eşleşen çağrının "close" olayı ms kadar geciktirilir (gerçek git hemen biter; sonuç gecikir).
 export function installSlowGit() {
   vi.spyOn(cp, "spawnSync").mockImplementation(((...a: Parameters<typeof cp.spawnSync>) => {
     if (isSlow(a[0], a[1], a[2])) { slow.hits.sync += 1; for (const until = Date.now() + slow.rule!.ms; Date.now() < until;) { /* senkron git: olay döngüsü bloklanır */ } }
     return realSpawnSync(...a);
   }) as typeof cp.spawnSync);
-  vi.spyOn(cp, "execFile").mockImplementation(((...a: unknown[]) => {
-    const [cmd, args, opts, cb] = a as [string, string[], unknown, ((...r: unknown[]) => void) | undefined];
+  vi.spyOn(cp, "spawn").mockImplementation(((...a: unknown[]) => {
+    const [cmd, args, opts] = a as [string, string[], unknown];
     if (cmd === "git") slow.observe?.(String((opts as {cwd?: unknown} | undefined)?.cwd ?? ""), Array.isArray(args) ? args.map(String) : [], ((opts as {env?: NodeJS.ProcessEnv} | undefined)?.env) ?? {});
-    if (typeof cb === "function" && isSlow(cmd, args, opts)) {
+    const child = realSpawn(...a);
+    if (isSlow(cmd, args, opts)) {
       slow.hits.async += 1; const ms = slow.rule!.ms;
-      return realExecFile(cmd, args, opts, (...r: unknown[]) => { setTimeout(() => cb(...r), ms); });
+      const delayClose = (orig: (ev: string, l: (...r: unknown[]) => void) => unknown) => (ev: string, l: (...r: unknown[]) => void) => orig(ev, ev === "close" ? (...r: unknown[]) => { setTimeout(() => l(...r), ms); } : l);
+      child.on = delayClose(child.on.bind(child) as never) as never; child.once = delayClose(child.once.bind(child) as never) as never;
     }
-    return realExecFile(...a);
-  }) as typeof cp.execFile);
+    return child;
+  }) as typeof cp.spawn);
 }
 
 export const REPO = path.resolve(import.meta.dirname, "..", "..");

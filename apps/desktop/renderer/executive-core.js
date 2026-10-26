@@ -1,7 +1,8 @@
-// //TR: Bu modül Kurucu Yönetim Özeti ve İcra Defteri görünümünün saf (DOM'suz) çekirdeğidir (FA-V2-PRODUCT, UI-236): yalnız dört salt-okunur GET (GET /v1/cockpit, GET /v1/missions, GET /v1/work-runs, GET /v1/founder-attention; dördü de zaten izinlidir) yanıtını güvenli, sınırlı alanlara eşler. HİÇBİR veri uydurulmaz: kimlik/enum/biçim/sayı bozuksa okuma KISMEN değil tümden ERROR olur (fail-closed), eksik alan tahmin edilmez, durumlar kayıttan AYNEN taşınır (yükseltme yok). Teslim yalnız kaynak düzeyindedir; ürün doğrulaması bu modülde hiçbir yerde üretilmez ve ilgili sabit değer bu dosyada hiç yer almaz.
+// //TR: Bu modül Kurucu Yönetim Özeti ve İcra Defteri görünümünün saf (DOM'suz) çekirdeğidir (FA-V2-PRODUCT, UI-236): yalnız dört salt-okunur GET (GET /v1/cockpit, GET /v1/missions, GET /v1/work-runs, GET /v1/attention; dördü de zaten izinlidir) yanıtını güvenli, sınırlı alanlara eşler. HİÇBİR veri uydurulmaz: kimlik/enum/biçim/sayı bozuksa okuma KISMEN değil tümden ERROR olur (fail-closed), eksik alan tahmin edilmez, durumlar kayıttan AYNEN taşınır (yükseltme yok). Teslim yalnız kaynak düzeyindedir; ürün doğrulaması bu modülde hiçbir yerde üretilmez ve ilgili sabit değer bu dosyada hiç yer almaz.
+import {ATTENTION_PATH as ATTENTION_PATH_WORKOS,mapAttentionQueue} from "./attention-core.js";
 import {MISSION_STATUSES,RISK_LEVELS,MISSION_ID_RE,PROJECT_ID_RE} from "./work-core.js";
 
-export const COCKPIT_PATH="/v1/cockpit",MISSIONS_PATH="/v1/missions",WORK_RUNS_PATH="/v1/work-runs",ATTENTION_PATH="/v1/founder-attention";
+export const COCKPIT_PATH="/v1/cockpit",MISSIONS_PATH="/v1/missions",WORK_RUNS_PATH="/v1/work-runs",ATTENTION_PATH=ATTENTION_PATH_WORKOS;
 /** Görünümün okuyabildiği TÜM kaynaklar (sıra sabit); hepsi salt-okunur ve önceden izinlidir, yeni uç nokta yoktur. */
 export const EXECUTIVE_SOURCES=Object.freeze(["cockpit","missions","workRuns","attention"]);
 export const EXECUTIVE_SOURCE_PATHS=Object.freeze({cockpit:COCKPIT_PATH,missions:MISSIONS_PATH,workRuns:WORK_RUNS_PATH,attention:ATTENTION_PATH});
@@ -196,13 +197,11 @@ export function mapExecWorkRuns(raw){
     prepared:items.filter(r=>r.delivery.state==="ARTIFACT_PREPARED").length,accepted:items.filter(r=>r.delivery.state==="SOURCE_ACCEPTED").length}};
 }
 
-// ---------- GET /v1/founder-attention ----------
-/** GET /v1/founder-attention -> {state:"VERIFIED",attention:{blocked}} | {state:"UNAVAILABLE"} (sunucu zamanlayıcı doğrulamasını REDDETTİYSE) | {state:"ERROR"}. */
+// ---------- GET /v1/attention ----------
+/** GET /v1/attention -> {state:"VERIFIED",attention:{total,counts,truncated,dropped}} | {state:"ERROR"}; toplam sunucunun doğrulanmış sayaçlarının toplamıdır (liste kesilse bile). Emekli scheduler kaynağı (/v1/founder-attention) ve onun retry/checkpoint olguları artık yoktur. */
 export function mapExecAttention(raw){
-  if(!isObj(raw))return {state:"ERROR",attention:null};
-  if(raw.schedulerVerification==="REJECTED")return {state:"UNAVAILABLE",attention:null};
-  if(!Array.isArray(raw.blocked)||raw.blocked.some(x=>!isObj(x)))return {state:"ERROR",attention:null};
-  return {state:"VERIFIED",attention:{blocked:raw.blocked.length}};
+  const m=mapAttentionQueue(raw);
+  return m.state==="VERIFIED"?{state:"VERIFIED",attention:{total:m.queue.total,counts:m.queue.counts,truncated:m.queue.truncated,dropped:m.queue.dropped}}:{state:"ERROR",attention:null};
 }
 
 // ---------- Özet (KPI) türetimi ----------
@@ -228,7 +227,7 @@ export function executiveSummary({cockpit,missions,runs,attention}){
     inProgress:isOk(missions)&&missions.missions?blk("VERIFIED",missions.missions.inProgress,mp,null,{total:missions.missions.total}):blk(failState(missions?.state),null,mp),
     runs:isOk(runs)&&runs.runs?blk("VERIFIED",runs.runs.total,rp,null,{open:runs.runs.open,awaiting:runs.runs.awaiting,ended:runs.runs.ended}):blk(failState(runs?.state),null,rp),
     deliveries:isOk(runs)&&runs.runs?blk("VERIFIED",runs.runs.accepted,rp,null,{prepared:runs.runs.prepared,accepted:runs.runs.accepted}):blk(failState(runs?.state),null,rp),
-    blocked:isOk(attention)&&attention.attention?blk("VERIFIED",attention.attention.blocked,ap):blk(failState(attention?.state),null,ap)
+    attention:isOk(attention)&&attention.attention?blk("VERIFIED",attention.attention.total,ap,null,{truncated:attention.attention.truncated,dropped:attention.attention.dropped}):blk(failState(attention?.state),null,ap)
   };
   const platform={
     globalStop:c?{...c.globalStop}:null,

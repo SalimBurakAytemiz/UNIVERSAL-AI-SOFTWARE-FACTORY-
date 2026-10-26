@@ -12,6 +12,8 @@ export function formatTime(iso,lang="tr"){
 export function classifyFailure(err){
   const msg=String(err&&err.message!==undefined?err.message:err??"");const m=/HTTP (\d{3})/.exec(msg);
   if(m){const status=Number(m[1]);return status===404||status===501?{state:"UNAVAILABLE",status}:{state:"ERROR",status}}
+  // //TR: A-FLOW-GAP-2: köprü allow-list'i yolu kabul etmediyse (INVALID_API_PATH) bu masaüstü derlemesinde uç nokta henüz açık değildir: ERROR değil dürüst UNAVAILABLE (okuyucu başına ayrı ayrı çevrilmesine gerek kalmaz).
+  if(/INVALID_API_PATH/.test(msg))return {state:"UNAVAILABLE",status:null};
   if(/fetch failed|ECONNREFUSED|ECONNRESET|ENOTFOUND|EAI_AGAIN|network|timed? ?out|BRIDGE_UNAVAILABLE|CONTROL_API_UNREACHABLE/i.test(msg))return {state:"OFFLINE",status:null};
   return {state:"ERROR",status:null};
 }

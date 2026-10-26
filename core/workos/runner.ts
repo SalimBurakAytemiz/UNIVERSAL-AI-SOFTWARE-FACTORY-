@@ -19,7 +19,7 @@ import {canonicalPath, managedRepoCanonical, pathOverlapsDataDir} from "./path-g
 import {runGitAsync} from "./git-async.js";
 import type {GitRun} from "./git-async.js";
 import {
-  OWNER_FILE, WRITER_KILL_WAIT_MS, bootId, bootTimeMs, installTerminationForwarding, isTerminating, killWriterGroup, leaderlessGroupProof, readOwner, sameBoot, startToken, startTokenLinux, sweepWriters,
+  OWNER_FILE, WRITER_KILL_WAIT_MS, accessDeniedVerdict, bootId, bootTimeMs, creationTicks, installTerminationForwarding, isTerminating, killWriterGroup, leaderlessGroupProof, readOwner, reusedPid, sameBoot, startToken, startTokenLinux, sweepWriters, waitWriterGone,
   trackWriterGroup, untrackWriterGroup, writeOwner, writerEnvFor, writerState
 } from "./writer-guard.js";
 import type {WorkspaceOwner} from "./writer-guard.js";
@@ -68,6 +68,10 @@ type Outcome =
 const RUN_ID = /^run_[0-9a-f]{24}$/;
 // //TR: Founder'ın kendisinin giderebileceği ön koşul retleri (oturum yok/süresi dolmuş, CLI yok/.cmd başlatıcı, başlatıcı kanıtı yok/değişmiş) run'ı BLOCKED yapar (düzeltilince devam edilebilir); incelemenin kendi geçersizliği (ör. REVIEW_WORKSPACE_MODIFIED, REVIEWER_IDENTITY_MISMATCH) FAILED kalır.
 export const FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;
+// //TR: #224 tur 3: runner git çocuğunun sahiplik kaydı yazılamadı (geçici disk/rename hatası): executeStep bunu RETRY (OWNER_RECORD_WRITE_FAILED) yapar.
+class OwnerRecordError extends Error { constructor() { super("OWNER_RECORD_WRITE_FAILED"); } }
+// //TR: #224 tur 3 (HB-R3-2): adım abort sinyali bir runner git çocuğunu öldürdü; executeStep bunu CANCEL sonucuna çevirir (implementer'ın aborted yolu ile aynı).
+class StepAbortedError extends Error { constructor() { super("STEP_ABORTED"); } }
 const SHA = /^[0-9a-f]{40}$/;
 const NEXT: Record<RunStep, RunStep | "FINISHED"> = {WORKSPACE: "IMPLEMENT", IMPLEMENT: "VERIFY", VERIFY: "SECURITY", SECURITY: "REVIEW", REVIEW: "REGRESSION", REGRESSION: "REPORT", REPORT: "FINISHED"};
 // Adım bittiğinde mission'ın gideceği durum (state machine allowlist'i store tarafından ayrıca uygulanır).
@@ -126,7 +130,9 @@ export type {WorkspaceOwner} from "./writer-guard.js";
 
 // //TR: recovered: bu lease devralma ile alındı (önceki lease'in yazarı durdurulmadan workspace'e dokunulmaz, cancel dahil); reap: durdurma sonucu (sürüşün ilk adımında bir kez hesaplanır).
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
-interface OwnedRun { leaseId: string; drive: Promise<void> | null; renewedAt: number; lost: boolean; recovered: boolean; reap: {problem: string | null; note: string} | null }
+// //TR: #224 tur 3 (SWEEP-5): transient=true geçici bir durdurma/tarama hatasıdır (öldürülen süreç henüz gitmedi, /proc okunamadı): devir RECOVERY_FAILED YAPMAZ, bir sonraki devirde (bütçe dahilinde) yeniden dener.
+interface ReapResult { problem: string | null; note: string; transient?: true }
+interface OwnedRun { leaseId: string; drive: Promise<void> | null; renewedAt: number; lost: boolean; recovered: boolean; reap: ReapResult | null; abort: (() => boolean) | null }
 const LOOP_RESOLUTION_MS = 20;
 const STALL_SAMPLE_MS = 1_000;
 const STALL_MEMORY_MS = 5_000;
@@ -279,10 +285,20 @@ export class MissionRunner {
   }
   private gitEnv() { return safeChildEnv(this.o.envPolicyFile, {provider: "DETERMINISTIC"}); }
   // //TR: PAR-03: workspace/klon/diff git işleri EŞZAMANSIZdır (olay döngüsü akar); gitSync yalnız eşzamanlı geri çağrı gerektiren küçük okumalarda (test yüzeyi dosya içeriği, aralık denetimi) ve span() içinde kullanılır.
-  private git(cwd: string, args: string[], onSpawn?: (c: SpawnedChild) => void, extraEnv?: Record<string, string>): Promise<GitRun> { return runGitAsync(cwd, args, extraEnv ? {...this.gitEnv(), ...extraEnv} : this.gitEnv(), onSpawn); }
+  private git(cwd: string, args: string[], onSpawn?: (c: SpawnedChild) => void, extraEnv?: Record<string, string>, shouldAbort?: () => boolean): Promise<GitRun> { return runGitAsync(cwd, args, extraEnv ? {...this.gitEnv(), ...extraEnv} : this.gitEnv(), onSpawn, shouldAbort ? {shouldAbort} : {}); }
   // Workspace/klon DEĞİŞTİREN git (clone/checkout/reset/clean): çocuk sahiplik kaydına yazılır, devirde implementer gibi durdurulur; kayıt yazılamazsa çocuk öldürülür (status null).
   // //TR: Git çocuğuna lease işareti verilir (TK-1) ve Windows'ta PowerShell kimlik çağrısı yapılmaz (identify=false; TK-8): kısa ömürlüdür, devirde hâlâ canlıysa fail-closed.
-  private async gitW(run: WorkRun, leaseId: string, cwd: string, args: string[]): Promise<GitRun> { return this.withChild(run, leaseId, onSpawn => this.git(cwd, args, onSpawn, writerEnvFor(run.runId, leaseId)), false); }
+  // //TR: #224 tur 3 (HB-R3-1): çocuk doğunca sahiplik kaydı yazılamazsa (geçici disk/rename hatası) çocuk öldürülür ve sonuç `status: null`'dur; çağıranlar bunu KALICI "klon/sıfırlama başarısız" bloğu sayardı. Burada ayrılır: kayıt hatası OwnerRecordError (executeStep RETRY yapar, bütçe dahilinde); gerçek fence (başka lease kaydı devraldı) WORKOS_LEASE_FENCED olarak aynen fırlar.
+  // //TR: #224 tur 3 (HB-R3-2): adımın abort sinyali (Global Stop, stop(), kaybedilen lease) UZUN git klonlarına bağlanır; abort edilen çocuk öldürülür (klon dizini adım yeniden girişinde silinir) ve StepAbortedError executeStep'te CANCEL olur.
+  private async gitW(run: WorkRun, leaseId: string, cwd: string, args: string[]): Promise<GitRun> {
+    let recordError: unknown = null;
+    const abort = args[0] === "clone" ? this.owned.get(run.runId)?.abort ?? undefined : undefined; // //TR: yalnız UZUN klonlar abort edilir; kısa checkout/reset/clean SIGKILL ile yarıda kesilirse .git/index.lock kalır ve sonraki devir WORKSPACE_RESET_FAILED ile terminal olurdu
+    const r = await this.withChild(run, leaseId, onSpawn => this.git(cwd, args, onSpawn, writerEnvFor(run.runId, leaseId), abort), false, e => { recordError = e; });
+    if (r.aborted) throw new StepAbortedError();
+    if (recordError === null) return r;
+    if (recordError instanceof WorkOsError && recordError.code === "WORKOS_LEASE_FENCED") throw recordError;
+    throw new OwnerRecordError();
+  }
   private async gitWOk(run: WorkRun, leaseId: string, cwd: string, args: string[]): Promise<string | null> { const r = await this.gitW(run, leaseId, cwd, args); return r.status === 0 ? r.stdout.trim() : null; }
   private async gitOk(cwd: string, args: string[]): Promise<string | null> { const r = await this.git(cwd, args); return r.status === 0 ? r.stdout.trim() : null; }
   private gitSync(cwd: string, args: string[]) { return spawnGitSync(cwd, args, {env: this.gitEnv(), maxBuffer: 64 * 1024 * 1024}); }
@@ -304,7 +320,7 @@ export class MissionRunner {
     this.renewAllOwned();
     try { return fn(); } finally { this.renewAllOwned(); }
   }
-  private own(runId: string, leaseId: string, recovered = false): void { this.owned.set(runId, {leaseId, drive: null, renewedAt: this.o.now(), lost: false, recovered, reap: null}); }
+  private own(runId: string, leaseId: string, recovered = false): void { this.owned.set(runId, {leaseId, drive: null, renewedAt: this.o.now(), lost: false, recovered, reap: null, abort: null}); }
 
   // //TR: PAR-03: olay döngüsü gecikmesi (p99) lease TTL/6'yı aşıyorsa İKİNCİ (ve sonraki) run için lease alınmaz; zaten stall olan döngüde yeni lease'in heartbeat'i aç kalır. Pencere her okumada sıfırlanır; tick() adımlama kipinde (kilit tick başına alınır) pencere boştur.
   private startLoopMonitor(): void {
@@ -363,50 +379,61 @@ export class MissionRunner {
     if (!o || o.leaseId !== leaseId) throw new WorkOsError("WORKOS_LEASE_FENCED", run.runId);
   }
   // Çocuk doğar doğmaz (eşzamanlı) süreç grubu kayda yazılır; yazılamazsa executors.ts çocuğu öldürür: kayıtsız yazar bırakılmaz. identify=false: kısa ömürlü git çocukları için Windows'ta PowerShell kimlik çağrısı YAPILMAZ (childStart null kalır; devirde hâlâ canlıysa kimlik kanıtlanamadığından fail-closed).
-  private recordChild(run: WorkRun, leaseId: string, c: SpawnedChild, identify = true): void {
+  private recordChild(run: WorkRun, leaseId: string, c: SpawnedChild, identify = true): string | null {
     const o = this.ownerOf(run.runId);
     if (!o || o.leaseId !== leaseId) throw new WorkOsError("WORKOS_LEASE_FENCED", run.runId);
     const pgid = c.pgid ?? c.pid;
     if (o.childPgid !== null && o.childPgid !== pgid) untrackWriterGroup(o.childPgid); // aynı adımda art arda doğan çocuklar (implementer, sonra engine commit'inin git çocukları): önceki grup artık kayıtlı değil
-    this.writeOwner(run.runId, {...o, childPgid: pgid, childStart: process.platform === "linux" ? startTokenLinux(c.pid) : null, at: new Date(this.o.now()).toISOString()});
+    const childStart = process.platform === "linux" ? startTokenLinux(c.pid) : null;
+    this.writeOwner(run.runId, {...o, childPgid: pgid, childStart, at: new Date(this.o.now()).toISOString()});
     trackWriterGroup(pgid);
     if (process.platform !== "linux" && identify && c.short !== true) void startToken(c.pid).then(t => { const cur = this.ownerOf(run.runId); if (t && cur && cur.leaseId === leaseId && cur.childPgid === pgid) this.writeOwner(run.runId, {...cur, childStart: t}); }).catch(() => undefined); // yazılamazsa kimlik belirteci eksik kalır: devirde fail-closed
+    return childStart;
   }
   private clearChild(run: WorkRun, leaseId: string): void {
     const o = this.ownerOf(run.runId);
     if (o && o.leaseId === leaseId && o.childPgid !== null) this.writeOwner(run.runId, {...o, childPgid: null, childStart: null});
   }
   // Çocuk bitince grup kaydı temizlenir; adapter fırlatsa bile.
-  private async withChild<T>(run: WorkRun, leaseId: string, call: (onSpawn: (c: SpawnedChild) => void) => Promise<T>, identify = true): Promise<T> {
-    let pgid: number | null = null;
-    try { return await call(c => { this.recordChild(run, leaseId, c, identify); pgid = c.pgid ?? c.pid; }); } finally {
-      if (pgid !== null) untrackWriterGroup(pgid);
+  // //TR: #224 tur 3 (SWEEP-3): lider çıktığında grupta canlı üye kaldıysa (aynı grupta kalan arka plan torunu) kayıt silinmeden ÖNCE öldürülür; implementer'dan sonra ayrıca lease işaretiyle taranır (sweepOwnWriters) ama REVIEWER ve git çocuklarının sonrasında tarama yoktur. Önce ucuz yoklama (grup yoksa /proc taranmaz). Yalnız Linux ve yalnız KANITLI üyelere: hepsi kayıtlı liderden sonra başlamış ve en az biri bu lease'in işaretini taşımalı (leaderlessGroupProof); aksi halde dokunulmaz (pgid yeniden kullanılmış olabilir). Diğer POSIX'te /proc yok: bilinen kalıntı.
+  private async withChild<T>(run: WorkRun, leaseId: string, call: (onSpawn: (c: SpawnedChild) => void) => Promise<T>, identify = true, onRecordError?: (e: unknown) => void): Promise<T> {
+    let pgid: number | null = null, started: string | null = null;
+    try { return await call(c => { try { started = this.recordChild(run, leaseId, c, identify); } catch (e) { onRecordError?.(e); throw e; } pgid = c.pgid ?? c.pid; }); } finally {
+      if (pgid !== null) {
+        untrackWriterGroup(pgid);
+        if (process.platform === "linux" && started !== null && writerState(pgid) === "ALIVE" && leaderlessGroupProof(pgid, this.ownerRecord(run, leaseId, {childPgid: pgid, childStart: started})).ok) { try { process.kill(-pgid, "SIGKILL"); } catch { /* grup zaten bitmiş */ } }
+      }
       try { this.clearChild(run, leaseId); } catch { /* sonraki devir kaydı okur */ }
     }
   }
   // Kaydedilmiş yazar grubunu durdurur (kimliği kanıtlanırsa): ölü -> sorun yok; kimlik belirteci farklı -> pid yeniden kullanılmış, öldürülecek yazar yok; kanıtlanamıyorsa fail-closed.
-  private async stopRecordedGroup(prev: WorkspaceOwner, pgid: number): Promise<{problem: string | null; note: string}> {
-    const alive = (note: string) => ({problem: "WORKSPACE_WRITER_ALIVE", note});
+  private async stopRecordedGroup(prev: WorkspaceOwner, pgid: number): Promise<ReapResult> {
+    const alive = (note: string, transient = false): ReapResult => ({problem: "WORKSPACE_WRITER_ALIVE", note, ...(transient ? {transient: true as const} : {})});
     if (prev.hostname !== os.hostname()) return alive(`writer group ${pgid} belongs to host ${prev.hostname.slice(0, 64)} and cannot be checked`);
     const st = writerState(pgid);
     if (st === "GONE") return {problem: null, note: `writer group ${pgid} was already gone`}; // //TR: kanıt notu "durdurulacak yazar yoktu" der: yazarın devirden ÖNCE öldüğü (ya da hiç yaşamadığı) not'tan okunur
     if (st === "UNKNOWN") return alive(`writer group ${pgid} state unknown`);
     const now = await startToken(pgid);
     // //TR: TK-3: kimlik belirteci EPERM'den ÖNCE karşılaştırılır. Kayıtlı pid başka bir kullanıcının sürecine geçtiyse (kill -> EPERM) belirteç farklıdır: bizim yazarımız yoktur, devir fail-closed OLMAZ. Linux /proc/<pid>/stat dünya okunurdur.
-    if (prev.childStart !== null && now !== null && now !== prev.childStart) return {problem: null, note: `pid ${pgid} was reused by another process; no writer to stop`};
-    // //TR: R2 (Windows): bizim yazarımız aynı kullanıcının çocuğudur ve açılabilir; OpenProcess erişim reddi (EPERM) kaydedilen pid'in artık başka bir (yükseltilmiş/SYSTEM) sürece ait olduğunu kanıtlar. Linux'ta kimlik belirteci zaten yukarıda karşılaştırıldı; orada belirteç okunamıyorsa fail-closed kalır.
-    if (st === "OTHER_USER") return process.platform === "win32" ? {problem: null, note: `pid ${pgid} is not accessible to this user; it cannot be the recorded writer`} : alive(`writer group ${pgid} state unknown`);
+    // //TR: SWEEP-4: kayıtta başlangıç belirteci yoksa (kısa ömürlü git çocuğu) bile, kayıt yazıldıktan SONRA başlamış canlı süreç kayıtlı yazar olamaz (Windows ticks / macOS lstart; Linux'ta belirteç her zaman kayıtlıdır): karar reusedPid'de.
+    if (reusedPid(process.platform, prev, now)) return {problem: null, note: `pid ${pgid} was reused by another process; no writer to stop`};
+    // //TR: Erişim reddi: karar accessDeniedVerdict'te (SWEEP-6: Windows'ta yalnız StartTime da okunamıyorsa VE bağımsız CIM oluşturma zamanı okunup kayıtlı başlangıçtan/kayıt anından farklıysa yazar yok; aksi halde fail-closed).
+    if (st === "OTHER_USER") {
+      const probe = process.platform === "win32" ? {creationTicks: await creationTicks(pgid), recordedStart: prev.childStart, recordAtIso: prev.at} : undefined;
+      return accessDeniedVerdict(process.platform, now, probe) === "NOT_OUR_WRITER" ? {problem: null, note: `pid ${pgid} is not accessible to this user, its start time is unreadable and its creation time differs from the recorded writer; it cannot be the recorded writer`} : alive(`writer group ${pgid} state unknown`);
+    }
     if (prev.childStart === null || (now === null && process.platform !== "linux")) return alive(`writer group ${pgid} is alive but its identity cannot be proven`);
     // Lider yok ama grup canlı (Linux): TK-7: aynı önyükleme + her üye lider kaydından sonra başlamış olmalı.
-    if (now === null) { const proof = leaderlessGroupProof(pgid, prev); if (!proof.ok) return alive(proof.why); }
+    if (now === null) { const proof = leaderlessGroupProof(pgid, prev); if (!proof.ok) return alive(proof.why, proof.transient === true); }
     await killWriterGroup(pgid, prev.childStart);
-    for (const until = Date.now() + WRITER_KILL_WAIT_MS; writerState(pgid) !== "GONE" && Date.now() < until;) await sleep(50);
-    if (writerState(pgid) !== "GONE") return alive(`writer group ${pgid} survived the kill`);
+    const gone = await waitWriterGone(pgid, now ?? prev.childStart);
+    if (gone === "REUSED") return {problem: null, note: `writer group ${pgid} ended and its pid was reused by another process; nothing further to stop`};
+    if (gone === "ALIVE") return alive(`writer group ${pgid} survived the kill`, true);
     return {problem: null, note: `stopped writer group ${pgid} of engine ${prev.engineId}${process.platform === "linux" ? "" : "; descendants that left the process group are not swept on this platform"}`};
   }
   // Devir: önceki lease'in yazarı (varsa) ölmeden workspace'e dokunulmaz. (1) Kayıt: yırtık/okunamayan kayıt önyüklemeden ESKİYSE yazar yok (TK-4), değilse fail-closed; farklı önyükleme = yazar yok. (2) Kayıtlı grup: aynı makinede canlıysa ve kimliği kanıtlanırsa öldürülür ve ölmesi beklenir (TK-3/7). (3) TK-1: grubu terk eden (setsid) torunlar lease işaretiyle/çalışma dizinine göre taranır ve öldürülür; biri bile ölmezse fail-closed. Not yazılır: yalnız tarama temizse "stopped".
-  private async reapPriorWriter(run: WorkRun, leaseId: string): Promise<{problem: string | null; note: string}> {
-    const alive = (note: string) => ({problem: "WORKSPACE_WRITER_ALIVE", note});
+  private async reapPriorWriter(run: WorkRun, leaseId: string): Promise<ReapResult> {
+    const alive = (note: string, transient = false): ReapResult => ({problem: "WORKSPACE_WRITER_ALIVE", note, ...(transient ? {transient: true as const} : {})});
     const rec = readOwner(this.ownerPath(run.runId));
     let note = "", previousBoot = false;
     if (rec.kind === "INVALID") {
@@ -423,7 +450,7 @@ export class MissionRunner {
     }
     if (!previousBoot && process.platform === "linux") {
       const sw = await sweepWriters({runDir: this.runDir(run.runId), runId: run.runId, currentLeaseId: leaseId});
-      if (sw.survivors.length) return alive(`${sw.survivors.length} detached writer process(es) of an earlier lease survived the sweep`);
+      if (sw.survivors.length) return alive(`${sw.survivors.length} detached writer process(es) of an earlier lease survived the sweep`, true);
       if (sw.killed.length) note = `${note ? `${note}; ` : ""}swept ${sw.killed.length} detached writer process(es)`;
     }
     this.renew(run.runId, leaseId);
@@ -431,10 +458,10 @@ export class MissionRunner {
     try { this.writeOwner(run.runId, this.ownerRecord(run, leaseId)); } catch { note = `${note ? `${note}; ` : ""}owner record not refreshed`; }
     return {problem: null, note};
   }
-  // //TR: R2: implementer çocuğu bittiğinde (başarı, hata, abort, zaman aşımı fark etmez) bu lease'in işaretini taşıyan ya da run dizininde çalışan artıklar (setsid ile gruptan kaçan torunlar) öldürülür: yoksa sonraki deneme/adım onlar yazarken başlar ve engine commit'i onların dosyasını da alırdı. Yalnız Linux (diğerlerinde eşdeğeri yoktur: bilinen kalıntı).
+  // //TR: R2: implementer çocuğu bittiğinde (başarı, hata, abort, zaman aşımı fark etmez) bu lease'in işaretini taşıyan artıklar (setsid ile gruptan kaçan torunlar) öldürülür; cwd ile eşleşme YOKTUR (byCwd:false: Kurucu'nun run dizininde çalışan kabuğu/editörü hedef olamaz, #224 tur 3 SWEEP-2): yoksa sonraki deneme/adım onlar yazarken başlar ve engine commit'i onların dosyasını da alırdı. Yalnız Linux (diğerlerinde eşdeğeri yoktur: bilinen kalıntı).
   private async sweepOwnWriters(run: WorkRun, leaseId: string): Promise<boolean> {
     if (process.platform !== "linux") return true;
-    const sw = await sweepWriters({runDir: this.runDir(run.runId), runId: run.runId, currentLeaseId: leaseId, includeCurrent: true}, 2_000);
+    const sw = await sweepWriters({runDir: this.runDir(run.runId), runId: run.runId, currentLeaseId: leaseId, includeCurrent: true, byCwd: false}, 2_000);
     return sw.survivors.length === 0;
   }
 
@@ -553,10 +580,11 @@ export class MissionRunner {
   // Crash-resume: son tamamlanmış checkpoint'ten devam; workspace/commit tutarsızsa RECOVERY_FAILED + kanıt (tahmin yok).
   // Recovery bütçesi: son checkpoint'ten beri yapılan devralma sayısı = attempt - son checkpoint'teki attempt (checkpoint yoksa ilk lease = 1). Her TAKEOVER attempt'i journal'da artırır,
   // bu yüzden recovery kanıtı yazılamasa bile sayım ilerler. maxRecoveries aşılırsa adım tekrar edilmez: RECOVERY_FAILED + mission BLOCKED (RECOVERY_BUDGET_EXHAUSTED).
-  private async recoverCheck(run: WorkRun, leaseId: string, reap: {problem: string | null; note: string} | null): Promise<boolean> {
+  private async recoverCheck(run: WorkRun, leaseId: string, reap: ReapResult | null): Promise<boolean> {
     const at = new Date(this.o.now()).toISOString();
     const work = path.join(this.runDir(run.runId), "work");
     const problems: string[] = [];
+    let retryLater = false; // //TR: SWEEP-5: geçici durdurma/tarama hatası: terminal değil, sonraki devirde yeniden
     const last = run.checkpoints[run.checkpoints.length - 1];
     const baseline = last && typeof last.data.attempt === "number" && Number.isSafeInteger(last.data.attempt) ? last.data.attempt : 1;
     const recoveries = run.attempt - baseline;
@@ -566,7 +594,8 @@ export class MissionRunner {
     const writer = w.problem ? `${w.problem}: ${w.note}` : w.note;
     if (exhausted) problems.push("RECOVERY_BUDGET_EXHAUSTED");
     else {
-      if (w.problem) problems.push(w.problem);
+      if (w.problem && reap?.transient === true) retryLater = true; // bütçe tükenince (exhausted) terminal: yukarıdaki dal
+      else if (w.problem) problems.push(w.problem);
       else if (run.step !== "WORKSPACE") {
         if (!run.baseSha || !SHA.test(run.baseSha) || !fs.existsSync(path.join(work, ".git"))) problems.push("WORKSPACE_MISSING");
         else {
@@ -576,8 +605,9 @@ export class MissionRunner {
         }
       }
     }
-    const note = `takeover attempt ${run.attempt}; resume step ${run.step} cycle ${run.remediationCycle}; completed checkpoints ${run.checkpoints.length}; recovery ${recoveries} of budget ${this.o.maxRecoveries}${writer ? `; writer ${writer}` : ""}${problems.length ? `; problems ${problems.join(",")}` : ""}`;
-    this.o.store.addRunEvidence(run.runId, leaseId, {step: "RECOVERY", cycle: run.remediationCycle, kind: "RECOVERY", argv: [], startedAt: at, endedAt: at, exitCode: problems.length ? 1 : 0, logPath: null, logSha256: null, note}, this.o.actor);
+    const note = `takeover attempt ${run.attempt}; resume step ${run.step} cycle ${run.remediationCycle}; completed checkpoints ${run.checkpoints.length}; recovery ${recoveries} of budget ${this.o.maxRecoveries}${writer ? `; writer ${writer}` : ""}${problems.length ? `; problems ${problems.join(",")}` : ""}${retryLater ? "; transient writer stop failure: retrying at the next takeover (bounded by the recovery budget)" : ""}`;
+    this.o.store.addRunEvidence(run.runId, leaseId, {step: "RECOVERY", cycle: run.remediationCycle, kind: "RECOVERY", argv: [], startedAt: at, endedAt: at, exitCode: problems.length || retryLater ? 1 : 0, logPath: null, logSha256: null, note}, this.o.actor);
+    if (retryLater) return false; // //TR: SWEEP-5: run RECOVERING kalır, lease yenilenmez; dolunca sonraki devir yazarı yeniden durdurmayı dener (her devir recovery bütçesinden yer): terminal yalnız bütçe tükenince (RECOVERY_BUDGET_EXHAUSTED)
     if (!problems.length) return true;
     const reason = exhausted ? "RECOVERY_BUDGET_EXHAUSTED" : `RECOVERY_FAILED: ${problems.join(",")}`;
     this.o.store.transitionRun(run.runId, leaseId, "RECOVERY_FAILED", reason, this.o.actor, {mission: {to: "BLOCKED", reason}});
@@ -601,7 +631,16 @@ export class MissionRunner {
     const hb = setInterval(() => { try { this.renew(run.runId, leaseId); } catch { lost = true; if (entry) entry.lost = true; } }, Math.max(50, Math.floor(this.o.leaseTtlMs / 3)));
     let out: Outcome;
     const epoch = this.stopEpoch;
-    try { out = await this.performStep(cur, leaseId, () => lost || entry?.lost === true || this.halted(epoch) || this.stopActive() !== null); } finally { clearInterval(hb); }
+    // //TR: #224 tur 3 (HB-R3-1): adım içindeki bir runner git çocuğunun sahiplik kaydı yazılamadıysa (OwnerRecordError) sonuç kalıcı FAILED/BLOCKED değil RETRY'dir (TK-4 ile aynı kural, bütçe dahilinde). HB-R3-2: abort edilen git çocuğu (StepAbortedError) implementer'ın aborted yolu gibi CANCEL'dır.
+    const abort = () => lost || entry?.lost === true || this.halted(epoch) || this.stopActive() !== null;
+    if (entry) entry.abort = abort;
+    try { out = await this.performStep(cur, leaseId, abort); }
+    catch (e) {
+      if (e instanceof OwnerRecordError) out = {kind: "RETRY", reason: "OWNER_RECORD_WRITE_FAILED"};
+      else if (e instanceof StepAbortedError) out = {kind: "CANCEL", reason: this.cancelReason()};
+      else throw e;
+    }
+    finally { clearInterval(hb); if (entry && entry.abort === abort) entry.abort = null; }
     // //TR: R2: motor durdurulurken (stop(), SIGTERM/SIGINT/SIGHUP, exit) çocuk bizim tarafımızdan öldürülmüş olabilir: bu "başarısız" bir adım DEĞİLDİR. Tamamlanmış sonuçlar (DONE, REMEDIATE) ve GLOBAL_STOP iptali işlenir; başarısızlık/engel/yeniden-dene/lease-kaybı iptali kaydedilmez, run kilitli kalır ve sonraki engine devralır (terminal FAILED/CANCELLED olmaz).
     if (this.halted(epoch) && out.kind !== "DONE" && out.kind !== "REMEDIATE" && !(out.kind === "CANCEL" && this.stopActive() !== null)) return;
     await this.applyOutcome(cur, leaseId, out);
@@ -785,6 +824,8 @@ export class MissionRunner {
     if (!start || !SHA.test(start) || !fs.existsSync(path.join(work, ".git"))) return {kind: "BLOCK", reason: "WORKSPACE_MISSING", status: "FAILED"};
     // //TR: PAR-04: sıfırlama workspace'i değiştirir; kayıt bu lease'e ait değilse (başka engine devraldı) hiçbir şey değiştirilmez. Beklenen HEAD yoktur: sıfırlamanın amacı HEAD'i start'a getirmektir.
     this.guardWorkspace(run, leaseId);
+    // //TR: SWEEP-5 (iç inceleme): bir YENİDEN DENEMEDE önceki denemenin SIGKILL'e rağmen ölmeyen artığı sıfırlama sırasında hâlâ yazıyor olabilir: sıfırlamadan ÖNCE yeniden taranır; hâlâ yaşıyorsa yine RETRY (bütçe dahilinde).
+    if (run.retryCount > 0 && !(await this.sweepOwnWriters(run, leaseId))) return {kind: "RETRY", reason: "WORKSPACE_WRITER_ALIVE"};
     for (const args of [["checkout", "-q", "-B", branch, start], ["reset", "-q", "--hard", start], ["clean", "-qfdx"]]) {
       if ((await this.gitWOk(run, leaseId, work, args)) === null) return {kind: "BLOCK", reason: "WORKSPACE_RESET_FAILED", status: "FAILED"};
     }
@@ -792,7 +833,7 @@ export class MissionRunner {
     const spec: MissionSpec = {...this.missionSpec(run), startSha: start};
     const lim = this.limitsOf(run);
     const r = await this.withChild(run, leaseId, onSpawn => this.o.executors.implementer.implement(work, spec, {timeoutMs: lim.executorTimeoutMs, shouldAbort: abort, onSpawn, writerEnv: writerEnvFor(run.runId, leaseId), span: fn => this.span(fn)}));
-    if (!(await this.sweepOwnWriters(run, leaseId))) return {kind: "BLOCK", reason: "WORKSPACE_WRITER_ALIVE", status: "FAILED"};
+    if (!(await this.sweepOwnWriters(run, leaseId))) return {kind: "RETRY", reason: "WORKSPACE_WRITER_ALIVE"}; // //TR: SWEEP-5: SIGKILL sonrası 2 sn içinde ölmeyen artık geçici olabilir: yeniden deneme (bütçe dahilinde; adım yeniden girişte workspace sıfırlanır); terminal yalnız retry bütçesi tükenince
     const head = await this.gitOk(work, ["rev-parse", "HEAD"]);
     const log = this.writeLog(run, "implement", r.log);
     const produced = r.exitCode === 0 && !r.blockReason && head && SHA.test(head) && head !== start ? head : undefined;
