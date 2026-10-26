@@ -1,0 +1,138 @@
+{
+ "//TR": "C-FLOW-ANALYSIS-1 mutasyon listesi: her mutant tam metin değişikliğidir (dosyada tam 1 kez bulunmalı); docs/lanes/LANE-C-flow-analysis-mutants.mjs her birini uygular ve tests/v7-lane-c-flow-analysis.test.ts dosyasının BAŞARISIZ olmasını bekler.",
+ "mutants": [
+  {
+   "id": "F1",
+   "description": "readiness is not checked before a paid call",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "if (!readiness.ready) return {status: \"BLOCKED\"",
+   "new": "if (false) return {status: \"BLOCKED\""
+  },
+  {
+   "id": "F2",
+   "description": "a SUBMITTED draft is not recognised as waiting (a second paid call would start)",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "(rm.artifacts[k].state === \"DRAFT\" || rm.artifacts[k].state === \"SUBMITTED\")",
+   "new": "rm.artifacts[k].state === \"DRAFT\""
+  },
+  {
+   "id": "F3",
+   "description": "the analysis is complete after three approved artefacts",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "if (approved.length === ANALYSIS_KINDS.length) return",
+   "new": "if (approved.length >= 3) return"
+  },
+  {
+   "id": "F4",
+   "description": "the sequence is started on every step",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "if (!rm.active || rm.phase === \"AUTHORIZED\") driver.start(",
+   "new": "if (true) driver.start("
+  },
+  {
+   "id": "F5",
+   "description": "the draft is recorded under the Founder's identity",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "const out = await driver.produceCurrentPhase(scope, missionId, PREDEV_AGENT_ACTOR);",
+   "new": "const out = await driver.produceCurrentPhase(scope, missionId, \"FOUNDER_LOCAL\");"
+  },
+  {
+   "id": "F6",
+   "description": "a builder failure escapes as a thrown error instead of its exact code",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "if (e instanceof PreDevBuilderError) return {status: \"BUILDER_FAILED\", kind: phaseKind, code: e.code};",
+   "new": "if (false) return {status: \"BUILDER_FAILED\", kind: phaseKind, code: e.code};"
+  },
+  {
+   "id": "F7",
+   "description": "a rejected output is reported as recorded",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "if (out.status === \"REJECTED\") return {status: \"REJECTED\", kind: out.kind, reason: out.reason};",
+   "new": ""
+  },
+  {
+   "id": "R1",
+   "description": "only one Claude profile is required",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "for (const r of CLAUDE_PROFILE_ROLES) for (const [i, code] of profiles[r].blockers.entries()) {",
+   "new": "for (const r of ([\"reviewer\"] as const)) for (const [i, code] of profiles[r].blockers.entries()) {"
+  },
+  {
+   "id": "R2",
+   "description": "the role-binding check is skipped",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "try { assertRoleExecutes(b.primaryRoleId, PREDEV_KIND_FUNCTION[kind], bindings); }",
+   "new": "try { /* skipped */ }"
+  },
+  {
+   "id": "R3",
+   "description": "a shared CLI/launcher blocker is listed once per profile",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "if (shared && blockers.includes(code)) continue;",
+   "new": ""
+  },
+  {
+   "id": "R4",
+   "description": "the profile name is dropped from a profile blocker",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "blockers.push(shared ? code : `${r}:${code}`);",
+   "new": "blockers.push(code);"
+  },
+  {
+   "id": "P1",
+   "description": "analysis not complete still yields a plan draft",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "if (missing.length > 0) return {ok: false, code: \"ANALYSIS_NOT_COMPLETE\"",
+   "new": "if (false) return {ok: false, code: \"ANALYSIS_NOT_COMPLETE\""
+  },
+  {
+   "id": "P2",
+   "description": "work packages keep their written order (no dependency sort)",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "const i = left.findIndex(w => w.dependsOn.every(d => placed.some(p => p.id === d)));",
+   "new": "const i = 0;"
+  },
+  {
+   "id": "P3",
+   "description": "dependsOn indexes are not sorted",
+   "file": "core/workos/crew/analysis.ts",
+   "old": ".map(d => index.get(d)!).sort((a, b) => a - b)}",
+   "new": ".map(d => index.get(d)!)}"
+  },
+  {
+   "id": "P4",
+   "description": "51 tasks are accepted",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "if (wps.length > MAX_PLAN_TASKS)",
+   "new": "if (wps.length > MAX_PLAN_TASKS + 1)"
+  },
+  {
+   "id": "P5",
+   "description": "a title is not cut",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "`${w.id}: ${w.title}`.slice(0, 200)",
+   "new": "`${w.id}: ${w.title}`"
+  },
+  {
+   "id": "P6",
+   "description": "an unknown dependency is ignored",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "for (const d of w.dependsOn) if (!ids.has(d)) return",
+   "new": "for (const d of w.dependsOn) if (false) return"
+  },
+  {
+   "id": "P7",
+   "description": "a refused plan module result is thrown",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "if (e instanceof PlanError) return {ok: false, code: e.code, detail: e.code};",
+   "new": "if (false) return {ok: false, code: e.code, detail: e.code};"
+  },
+  {
+   "id": "P8",
+   "description": "the trace invents nothing for an unknown requirement but drops the criteria",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "acceptanceCriteria: [...r.acceptanceCriteria]}] : []; })}));",
+   "new": "acceptanceCriteria: []}] : []; })}));"
+  }
+ ]
+}
