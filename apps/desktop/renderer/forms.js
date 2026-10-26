@@ -71,6 +71,9 @@ export function recordPost(formId,res,okKey,okVars={}){
 export function focusStatus(doc,formId){const n=doc.getElementById?.(`${formId}-status`);if(n&&typeof n.focus==="function")n.focus()}
 /** Odağı belirlenimci yerleştirir (focus.js settleFocus): odak canlı bir denetimdeyse dokunmaz; değilse `keys` sırasıyla, sonra ilk liste öğesi, sonra görünüm başlığı; asla gövde. */
 export function settle(ctx,keys=[]){return typeof ctx.settleFocus==="function"?ctx.settleFocus({keys}):null}
+/** //TR: A-PREDEV-BUSY-1: aşağıdaki YEDİ eylem (analiz adımı, yeniden onay, analiz planı, pre-dev başlat/onayla/reddet, elle plan) mission verisini yazar ve karşılıklı dışlayıcıdır (geçiş, koşu başlatma ve görev durumu bu kilide DAHİL DEĞİLDİR): biri sürerken hiçbiri gönderilmez (düğmeler kapalı, gönderim işlevleri de {ok:false,busy:true} döner). Kilit mission'lar arası geneldir (temkinli); neden metinle açıklanır. */
+export const MISSION_WRITE_FORMS=Object.freeze(["analysis-step","analysis-plan","analysis-reapprove","predev-start","predev-approve","predev-reject","mission-plan"]);
+export const missionWriteBusy=()=>MISSION_WRITE_FORMS.some(f=>drafts.busy[f]===true);
 /** Bir eylemin sonucundan sonra odağı sonuç bloğuna (varsa) taşır, yoksa `keys` yedeğiyle yerleştirir; sonunda odak asla gövdede kalmaz. */
 export function focusResult(ctx,formId,keys=[]){
   const n=ctx.doc.getElementById?.(`${formId}-status`);
