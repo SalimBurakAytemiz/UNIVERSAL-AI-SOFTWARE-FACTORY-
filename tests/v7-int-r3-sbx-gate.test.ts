@@ -24,7 +24,7 @@ import {buildServer} from "../apps/control-api/src/server.js";
 import {deriveOutcomes} from "../core/workos/outcomes.js";
 import {TEST_HOST_PASSTHROUGH_SANDBOX, testExecutionGate} from "./support/test-sandbox.js";
 import {LINUX_SANDBOX_HELPER_PATH, LINUX_SANDBOX_NS_FLAGS, LINUX_SANDBOX_SETUP} from "../core/agents/linux-unshare-sandbox.js";
-import {LINUX_SANDBOX_LOOPBACK_PROBE, loopbackVerdict, networkRouteProblem} from "../core/agents/linux-unshare-sandbox.js";
+import {LINUX_SANDBOX_LOOPBACK_PROBE, loopbackVerdict, netnsProblemOf, networkRouteProblem} from "../core/agents/linux-unshare-sandbox.js";
 
 const REPO = path.resolve(import.meta.dirname, "..");
 const ENV_POLICY = path.join(REPO, "config", "environment-policy.json");
@@ -1521,23 +1521,100 @@ describe("C-SBX-LO-1: loopback inside the Linux sandbox, no way out", () => {
   });
 
   it("loopbackVerdict: every outcome (host loopback reached, outbound connected or unverified, no loopback with and without ip, node unavailable)", () => {
+    const V = (o: {ipPresent: boolean; stdout: string; hostConnections: number; exitCode?: number | null; timedOut?: boolean}) => loopbackVerdict({exitCode: 0, timedOut: false, ...o});
     const out = (...t: string[]) => t.join("\n") + "\n";
     const ok = (lo: boolean, reason: string | null) => ({ok: true, capabilities: {loopback: lo, loopbackReason: reason}});
     const full = out("probe_started", "loopback_ok", "outbound_blocked");
-    expect(loopbackVerdict({ipPresent: true, stdout: full, hostConnections: 1})).toEqual({ok: false, detail: "SELFTEST_HOST_LOOPBACK_REACHED"});
-    expect(loopbackVerdict({ipPresent: false, stdout: "", hostConnections: 2})).toEqual({ok: false, detail: "SELFTEST_HOST_LOOPBACK_REACHED"});
-    for (const ip of [true, false]) expect(loopbackVerdict({ipPresent: ip, stdout: out("probe_started", "loopback_ok", "outbound_connected"), hostConnections: 0})).toEqual({ok: false, detail: "SELFTEST_OUTBOUND_CONNECT_SUCCEEDED"});
-    expect(loopbackVerdict({ipPresent: true, stdout: out("probe_started", "loopback_ok"), hostConnections: 0})).toEqual({ok: false, detail: "SELFTEST_OUTBOUND_NOT_VERIFIED"}); // probe died before its verdict: fail closed
-    expect(loopbackVerdict({ipPresent: true, stdout: out("probe_started", "loopback_failed", "outbound_blocked"), hostConnections: 0})).toEqual({ok: false, detail: "SELFTEST_LOOPBACK_NOT_AVAILABLE"});
-    expect(loopbackVerdict({ipPresent: true, stdout: full, hostConnections: 0})).toEqual(ok(true, null));
-    expect(loopbackVerdict({ipPresent: false, stdout: out("probe_started", "loopback_failed", "outbound_blocked"), hostConnections: 0})).toEqual(ok(false, "LOOPBACK_TOOL_MISSING")); // no ip: still verified, loopback not claimed
-    expect(loopbackVerdict({ipPresent: false, stdout: full, hostConnections: 0})).toEqual(ok(true, null)); // the truth wins if lo is up some other way
-    expect(loopbackVerdict({ipPresent: true, stdout: "node: not found\n", hostConnections: 0})).toEqual(ok(false, "LOOPBACK_PROBE_NODE_UNAVAILABLE"));
-    expect(loopbackVerdict({ipPresent: false, stdout: "", hostConnections: 0})).toEqual(ok(false, "LOOPBACK_TOOL_MISSING"));
-    expect(loopbackVerdict({ipPresent: true, stdout: "xprobe_started\nloopback_ok\noutbound_blocked\n", hostConnections: 0})).toEqual(ok(false, "LOOPBACK_PROBE_NODE_UNAVAILABLE")); // tokens match whole lines only
+    expect(V({ipPresent: true, stdout: full, hostConnections: 1})).toEqual({ok: false, detail: "SELFTEST_HOST_LOOPBACK_REACHED"});
+    expect(V({ipPresent: false, stdout: "", hostConnections: 2})).toEqual({ok: false, detail: "SELFTEST_HOST_LOOPBACK_REACHED"});
+    for (const ip of [true, false]) expect(V({ipPresent: ip, stdout: out("probe_started", "loopback_ok", "outbound_connected"), hostConnections: 0})).toEqual({ok: false, detail: "SELFTEST_OUTBOUND_CONNECT_SUCCEEDED"});
+    expect(V({ipPresent: true, stdout: out("probe_started", "loopback_ok"), hostConnections: 0})).toEqual({ok: false, detail: "SELFTEST_OUTBOUND_NOT_VERIFIED"}); // probe died before its verdict: fail closed
+    expect(V({ipPresent: true, stdout: out("probe_started", "loopback_failed", "outbound_blocked"), hostConnections: 0})).toEqual({ok: false, detail: "SELFTEST_LOOPBACK_NOT_AVAILABLE"});
+    expect(V({ipPresent: true, stdout: full, hostConnections: 0})).toEqual(ok(true, null));
+    expect(V({ipPresent: false, stdout: out("probe_started", "loopback_failed", "outbound_blocked"), hostConnections: 0})).toEqual(ok(false, "LOOPBACK_TOOL_MISSING")); // no ip: still verified, loopback not claimed
+    expect(V({ipPresent: false, stdout: full, hostConnections: 0})).toEqual(ok(true, null)); // the truth wins if lo is up some other way
+    expect(V({ipPresent: true, stdout: "node: not found\n", hostConnections: 0, exitCode: 127})).toEqual(ok(false, "LOOPBACK_PROBE_NODE_UNAVAILABLE"));
+    expect(V({ipPresent: false, stdout: "", hostConnections: 0, exitCode: 127})).toEqual(ok(false, "LOOPBACK_TOOL_MISSING"));
+    expect(V({ipPresent: true, stdout: "xprobe_started\nloopback_ok\noutbound_blocked\n", hostConnections: 0, exitCode: 127})).toEqual(ok(false, "LOOPBACK_PROBE_NODE_UNAVAILABLE")); // tokens match whole lines only
+    // LC-LO-01: a probe that printed nothing counts as "node unavailable" ONLY for exit 127 without a timeout; every other silent result is not proven and fails closed
+    for (const silent of [{exitCode: 1, timedOut: false}, {exitCode: null, timedOut: true}, {exitCode: 127, timedOut: true}, {exitCode: 0, timedOut: false}, {exitCode: null, timedOut: false}, {exitCode: 137, timedOut: false}])
+      for (const ip of [true, false]) expect([silent, V({ipPresent: ip, stdout: "", hostConnections: 0, ...silent})]).toEqual([silent, {ok: false, detail: "SELFTEST_LOOPBACK_PROBE_FAILED"}]);
+    expect(netnsProblemOf("x\nnetns=net:[4026539999]\n", "net:[4026531840]")).toBeNull(); // differs from the host's
+    expect(netnsProblemOf("netns=net:[4026531840]\n", "net:[4026531840]")).toBe("SELFTEST_NETNS_SHARED");
+    for (const bad of ["", "no netns line\n", "netns=\n"]) expect(netnsProblemOf(bad, "net:[4026531840]")).toBe("SELFTEST_NETNS_NOT_VERIFIED");
+    expect(netnsProblemOf("netns=net:[1]\n", null)).toBe("SELFTEST_NETNS_NOT_VERIFIED"); // the host's own link unreadable: nothing to compare with
     expect(networkRouteProblem("a\nno_route_out\n")).toBeNull();
     expect(networkRouteProblem("a\nno_route_out_not\n")).toBe("SELFTEST_ROUTE_OUT_EXISTS");
     expect(networkRouteProblem("")).toBe("SELFTEST_ROUTE_OUT_EXISTS");
+  });
+
+  // LC-LO-03: selfTest's WIRING (host-loopback listener count, route check, netns check, port handed to the probe, the capability publish only after EVERY step) with a scripted `exec`: the real sandbox is not needed, only the pre-flight tools (an environment without them skips, it does not pass).
+  describe("selfTest wiring (scripted sandbox exec)", () => {
+    const TOKENS = ["supervisor_ok", "host_fs_hidden", "host_dirs_hidden", "root_ro_ok", "scratch_ok", "proc_sys_ro_ok", "mount_audit_ok", "caps_dropped_all", "net_none", "no_ctty", "extra_roots_isolated", "nested_userns_blocked", "pid_ns_private"];
+    type Script = {route?: boolean; netns?: string | null; lp?: {stdout?: string; exitCode?: number | null; timedOut?: boolean; reachHost?: boolean}; stdin?: string};
+    const run = async (script: Script) => {
+      const p = new LinuxUnshareSandboxProvider(procOpts);
+      const seen = {probePort: 0, probeCwd: "", calls: [] as string[]};
+      const res = (argv: string[], over: Record<string, unknown> = {}) => ({argv, exitCode: 0, stdout: "", stderr: "", startedAt: "t", endedAt: "t", timedOut: false, aborted: false, spawnError: false, ...over});
+      vi.spyOn(p as unknown as {exec: (...a: unknown[]) => unknown}, "exec").mockImplementation((async (argv: string[], opts: {cwd: string}) => {
+        const cmd = argv.join(" "), body = argv[0] === "sh" ? String(argv[2] ?? "") : "";
+        seen.calls.push(argv[0] === process.execPath ? "node-probe" : body.slice(0, 24) || cmd.slice(0, 24));
+        if (cmd === "sh -c echo sandbox_ok") return res(argv, {stdout: "sandbox_ok\n"});
+        if (body.includes("supervisor_ok")) { fs.writeFileSync(path.join(opts.cwd, "p"), ""); return res(argv, {stdout: TOKENS.join("\n") + "\n" + (script.route === false ? "" : "no_route_out\n") + (script.netns === null ? "" : `netns=${script.netns ?? "net:[4026539999]"}\n`)}); } // the probe's `touch p` lands in the host-visible scratch directory
+        if (argv[0] === process.execPath) {
+          seen.probePort = Number(argv[argv.length - 1]); seen.probeCwd = opts.cwd;
+          if (script.lp?.reachHost) await new Promise<void>(r => { const c = net.connect({host: "127.0.0.1", port: seen.probePort}, () => { c.destroy(); setTimeout(r, 50); }); c.once("error", () => r()); }); // "the sandbox reached the host's loopback listener"
+          return res(argv, {stdout: script.lp?.stdout ?? "probe_started\nloopback_ok\noutbound_blocked\n", exitCode: script.lp?.exitCode ?? 0, timedOut: script.lp?.timedOut ?? false});
+        }
+        if (body.includes("ok=0; fail=0")) return res(argv, {stdout: "ok=48 fail=102\n"});
+        if (body.includes("command -v perl")) return res(argv, {timedOut: true, exitCode: null});
+        if (body.includes("read -r l")) return res(argv, {stdout: script.stdin ?? "got=PIPED\n"});
+        throw new Error(`unscripted sandbox call: ${cmd.slice(0, 80)}`);
+      }) as never);
+      const st = await p.selfTest();
+      return {p, st, seen};
+    };
+    const PRE = /^(PLATFORM_NOT_LINUX|UNSHARE_|REQUIRED_TOOL_MISSING)/;
+    const T = 120_000;
+
+    it.skipIf(process.platform !== "linux")("a fully proven run publishes the capabilities (frozen), hands the probe the host listener's port and runs it in the scratch workspace", { timeout: T }, async (ctx) => {
+      const {p, st, seen} = await run({});
+      if (!st.ok && PRE.test(st.detail ?? "")) return ctx.skip();
+      expect(st, JSON.stringify(st)).toMatchObject({ok: true});
+      expect(p.capabilities).toEqual({loopback: true, loopbackReason: null});
+      expect(Object.isFrozen(p.capabilities)).toBe(true);
+      expect(() => { (p.capabilities as {loopback: boolean}).loopback = false; }).toThrow(); // LC-LO-02: nothing can flip a published capability through the getter
+      const a = p.capabilities, b = p.capabilities;
+      expect(a).not.toBe(b); expect(a).toEqual(b); // a fresh frozen copy per read: the provider's own record is never handed out
+      expect(seen.probePort, "the probe must be given the host listener's port").toBeGreaterThan(0);
+      expect(seen.probeCwd).toContain("uasco-sbx-selftest-");
+    });
+
+    it.skipIf(process.platform !== "linux")("every refusal leaves the capabilities NOT_PROBED and names the exact reason: host loopback reached, route out exists, netns shared or unproven, silent probe, a later stdin failure", { timeout: 6 * T }, async (ctx) => {
+      const cases: Array<[string, Script, string]> = [
+        ["host loopback reached", {lp: {reachHost: true}}, "SELFTEST_HOST_LOOPBACK_REACHED"],
+        ["a route out exists", {route: false}, "SELFTEST_ROUTE_OUT_EXISTS"],
+        ["the netns is the host's", {netns: fs.readlinkSync("/proc/self/ns/net")}, "SELFTEST_NETNS_SHARED"],
+        ["no netns line", {netns: null}, "SELFTEST_NETNS_NOT_VERIFIED"],
+        ["probe crashed (exit 1, no output)", {lp: {stdout: "", exitCode: 1}}, "SELFTEST_LOOPBACK_PROBE_FAILED"],
+        ["probe timed out silently", {lp: {stdout: "", exitCode: null, timedOut: true}}, "SELFTEST_LOOPBACK_PROBE_FAILED"],
+        ["stdin is not forwarded (the very last step)", {stdin: "nothing\n"}, "SELFTEST_STDIN_NOT_FORWARDED"]
+      ];
+      for (const [name, script, detail] of cases) {
+        const {p, st} = await run(script);
+        if (!st.ok && PRE.test(st.detail ?? "")) return ctx.skip();
+        expect([name, st.ok, st.detail]).toEqual([name, false, detail]);
+        expect([name, p.capabilities]).toEqual([name, {loopback: false, loopbackReason: "NOT_PROBED"}]);
+      }
+    });
+
+    it.skipIf(process.platform !== "linux")("node genuinely absent inside the sandbox (exit 127, no timeout) is verified WITHOUT loopback; the route and netns proofs still decide", { timeout: T }, async (ctx) => {
+      const {p, st} = await run({lp: {stdout: "sh: node: not found\n", exitCode: 127}});
+      if (!st.ok && PRE.test(st.detail ?? "")) return ctx.skip();
+      expect(st.ok, JSON.stringify(st)).toBe(true);
+      expect(p.capabilities.loopback).toBe(false);
+      expect(["LOOPBACK_PROBE_NODE_UNAVAILABLE", "LOOPBACK_TOOL_MISSING"]).toContain(p.capabilities.loopbackReason);
+    });
   });
 
   it.skipIf(!hostCanIsolate)("a real provider is verified, claims loopback only when it works, and nothing inside can reach the host loopback listener", { timeout: T2 }, async () => {

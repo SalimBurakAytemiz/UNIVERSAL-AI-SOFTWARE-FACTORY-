@@ -288,6 +288,51 @@ export function buildLinkRunRequest({taskId,runId,taskStatus}){
   return {ok,path,body:ok?{runId}:null,errors};
 }
 
+// ---------- Koşu başlatıldıktan sonra "koşuyu görevlere bağla" adımı (LANE-A A-RUN-TASK-LINK) ----------
+// //TR: Koşu başlatma yanıtı (201/200 {run:{runId,missionId,...}}) YALNIZ kimliği şemaya uyan ve istenen mission'a ait bir koşu taşıyorsa okunur; aksi halde bağ adımı sunulmaz (kimlik uydurulmaz). Bağlanacak görevleri Founder seçer; hiçbir görev çıkarım yoluyla seçilmez ve DONE görevler hiç sunulmaz.
+export function parseStartedRun(res,missionId){
+  if(!res||res.thrown||!Number.isSafeInteger(res.status)||res.status<200||res.status>=300)return null;
+  const r=isObj(res.body)?res.body.run:null;
+  return isObj(r)&&typeof r.runId==="string"&&RUN_ID_RE.test(r.runId)&&r.missionId===missionId?r.runId:null;
+}
+/** Mission görevlerinden bağlanabilir olanlar: geçerli kimlikli ve DONE olmayanlar (durumu okunamayan görev DONE sayılmaz, olduğu gibi gösterilir). */
+export function linkableTasks(tasks){
+  return (Array.isArray(tasks)?tasks:[]).filter(t=>isObj(t)&&TASK_ID_RE.test(String(t.taskId))&&t.status!=="DONE").map(t=>({taskId:t.taskId,title:typeof t.title==="string"?t.title:MISSING,status:typeof t.status==="string"?t.status:MISSING}));
+}
+export const LINK_CODE_RE=/^[A-Z][A-Z0-9_]{1,63}$/;
+/**
+ * POST /v1/tasks/:id/runs sonucunu görev başına sınıflar: LINKED (201), ALREADY_LINKED (200 yeniden oynatma), REFUSED ({code,status}: sunucunun sabit hata kodu AYNEN),
+ * DENIED ({reason}), STOPPED (423 Global Stop), NOT_ENABLED (izin listesi/rota yok), INVALID (2xx ama bağ bu görev/koşu değil), FAILED ({key,vars}: describePostResult).
+ */
+export function classifyLinkResult(res,taskId,runId){
+  if(!res)return {kind:"FAILED",key:"post.err.generic",vars:{status:MISSING}};
+  if(res.thrown&&/INVALID_API_PATH/.test(String(res.message??"")))return {kind:"NOT_ENABLED"};
+  if(res.thrown){const d=describePostResult(res);return {kind:"FAILED",key:d.key,vars:d.vars}}
+  const s=res.status,err=typeof res.body?.error==="string"?res.body.error:"";
+  if(s===200||s===201){
+    const l=isObj(res.body)?res.body.link:null;
+    return isObj(l)&&l.taskId===taskId&&l.runId===runId?{kind:s===201?"LINKED":"ALREADY_LINKED"}:{kind:"INVALID"};
+  }
+  if(s===423)return {kind:"STOPPED"};
+  if(s===403&&err==="ACTION_DENIED"){const reason=denialReason(res.body?.reason);if(reason)return {kind:"DENIED",reason}}
+  if(Number.isSafeInteger(s)&&s>=400&&LINK_CODE_RE.test(err)&&err!=="ACTION_DENIED"&&err!=="GLOBAL_STOP_ACTIVE")return {kind:"REFUSED",code:err,status:s};
+  const d=describePostResult(res);return {kind:"FAILED",key:d.key,vars:d.vars};
+}
+
+// ---------- Koşuya bağlı görevler (LANE-A A-FLOW-2) ----------
+// //TR: GET /v1/work-runs/:id/tasks {links:[{taskId,runId,missionId,linkedAt,...}]} yanıtı SIKI eşlenir: her bağ istenen koşuya ait, kimlikler kanonik, görev tekrarsız olmalıdır; tek bozuk satır tüm okumayı ERROR yapar. Uç nokta masaüstü allow-list'inde henüz yoksa (INVALID_API_PATH) okuma UNAVAILABLE olur ve "bağlı görev yok" ASLA söylenmez.
+export const runTasksPath=id=>typeof id==="string"&&RUN_ID_RE.test(id)?`/v1/work-runs/${id}/tasks`:null;
+export function mapRunTasks(raw,runId){
+  const bad={state:"ERROR",links:[]};
+  const list=isObj(raw)?raw.links:null;if(!Array.isArray(list)||list.length>500)return bad;
+  const seen=new Set(),links=[];
+  for(const l of list){
+    if(!isObj(l)||typeof l.taskId!=="string"||!TASK_ID_RE.test(l.taskId)||l.runId!==runId||typeof l.missionId!=="string"||!MISSION_ID_RE.test(l.missionId)||seen.has(l.taskId))return bad;
+    seen.add(l.taskId);links.push({taskId:l.taskId,runId,missionId:l.missionId,linkedAt:iso(l.linkedAt)});
+  }
+  return {state:"VERIFIED",links};
+}
+
 // ---------- Koşu hazırlığı ve bloklu koşu nedenleri (LANE-A first-delivery) ----------
 // //TR: Koşu başlamadan önce kayıtlardan okunabilen eksikler: depo yoksa runner REPOSITORY_NOT_CONFIGURED (uzak URL ise REMOTE_REPO_NOT_SUPPORTED_YET), mission ve proje kaydında test komutu yoksa TEST_COMMAND_NOT_CONFIGURED ile BLOK verir. "Kayıtlı" bir test komutu kabul edileceğini vaat etmez (runner komutu ayrıca izin listesinden geçirir); bu yüzden yalnız EKSİK durumlar kesin uyarıdır. Kayıt okunamadıysa UNKNOWN: olumlu bir hazırlık iddiası yok.
 export function runReadiness({project,mission}){
@@ -300,8 +345,13 @@ export function runReadiness({project,mission}){
   return {repository,testCommand,blockers};
 }
 /** Bilinen koşu BLOK nedenleri -> açıklama anahtarı; bilinmeyen neden aynen ham kalır. SANDBOX_UNAVAILABLE'ın mevcut açıklaması korunur. */
-export const RUN_REASON_HINTS=Object.freeze(["REPOSITORY_NOT_CONFIGURED","TEST_COMMAND_NOT_CONFIGURED","REMOTE_REPO_NOT_SUPPORTED_YET","PROJECT_NOT_FOUND","MISSION_NOT_FOUND"]);
-export const runReasonHintKey=reason=>typeof reason==="string"&&RUN_REASON_HINTS.includes(reason)?`run.reason.${reason}`:null;
+export const RUN_REASON_HINTS=Object.freeze(["CLAUDE_PROFILE_LOGIN_REQUIRED","CLAUDE_PROFILE_LOGIN_EXPIRED","CLAUDE_PROFILE_REFUSED","CLAUDE_CLI_NOT_FOUND","CLAUDE_CLI_SHIM_UNSUPPORTED","CLI_SHIM_UNSUPPORTED","PROVIDER_PROVENANCE_NOT_READY","PROVENANCE_MISSING","CLAUDE_PACKAGE_PROVENANCE_REQUIRED","CLAUDE_LAUNCHER_PROVENANCE_CHANGED","EXECUTOR_NOT_CONFIGURED","REPOSITORY_NOT_CONFIGURED","TEST_COMMAND_NOT_CONFIGURED","REMOTE_REPO_NOT_SUPPORTED_YET","PROJECT_NOT_FOUND","MISSION_NOT_FOUND"]);
+// //TR: "KOD:neden" biçimi (ör. CLAUDE_PROFILE_REFUSED:SETTINGS_NOT_WRITTEN) önek üzerinden çözülür; ham neden ekranda aynen kalır.
+export const runReasonHintKey=reason=>{
+  if(typeof reason!=="string")return null;
+  const head=reason.split(":")[0];
+  return RUN_REASON_HINTS.includes(head)?`run.reason.${head}`:null;
+};
 
 /** Durum geçişi isteği; yalnız durum makinesinin izin verdiği hedefler, yüksek riskli hedeflerde confirmed===true şart.
  *  D-M1A-STATE-MODEL-2026-10-15: geçiş gövdesi hiçbir onay alanı taşımaz (COMPLETE yalnız PRODUCT_VERIFIED kanıtıyla olur); onay verilmeye çalışılırsa istek kurulmaz. */
@@ -346,9 +396,13 @@ function denialReason(raw){
   return /^[A-Z][A-Z0-9_]{1,63}$/.test(code)?code:"";
 }
 /** Köprü POST yanıtını {ok, key, vars} olarak sınıflar; key bir sözlük anahtarıdır (post.*). */
+// //TR: LANE-A A-FLOW-4 (B-RUN-1): ürün başlat/durdur reddi gövdesi {error:<kod>, reason?:<kesin neden>}; neden yalnız güvenli desenliyse aktarılır (ham metin gösterilmez).
+const PRODUCT_409=new Set(["DEVRUN_SANDBOX_UNAVAILABLE","PRODUCT_RUN_NOT_DELIVERABLE","PRODUCT_RUN_NOT_THIS_DELIVERY","DEVRUN_ALREADY_RUNNING","DEVRUN_BLOCKED","DEVRUN_LOCKED","DEVRUN_DELIVERY_HEAD_MISSING"]);
+const SAFE_REASON_RE=/^[A-Z][A-Z0-9_]{0,63}(?::[A-Za-z0-9_.:-]{1,80})?$/;
 export function describePostResult(res){
   if(!res)return {ok:false,key:"post.err.generic",vars:{status:MISSING}};
-  if(res.thrown)return {ok:false,key:res.state==="OFFLINE"?"post.err.offline":"post.err.generic",vars:{status:MISSING}};
+  // //TR: A-FLOW-GAP-2: köprü allow-list'i yolu kabul etmediyse (state UNAVAILABLE) "genel hata" değil "bu sürümde açık değil" denir.
+  if(res.thrown)return {ok:false,key:res.state==="OFFLINE"?"post.err.offline":res.state==="UNAVAILABLE"?"post.err.unavailable":"post.err.generic",vars:{status:MISSING}};
   const s=res.status,err=typeof res.body?.error==="string"?res.body.error:"";
   if(s>=200&&s<300)return {ok:true,key:"post.ok",vars:{}};
   if(s===400)return {ok:false,key:"post.err.400",vars:{status:s}};
@@ -356,8 +410,11 @@ export function describePostResult(res){
   if(s===401||s===403)return {ok:false,key:"post.err.auth",vars:{status:s}};
   if(s===404||s===501)return {ok:false,key:"post.err.unavailable",vars:{status:s}};
   if(s===409&&err==="WORKOS_CONFLICT"&&KNOWN_COMPLETION_409.has(res.body?.reason))return {ok:false,key:`post.err.409.${res.body.reason}`,vars:{status:s}};
+  if(s===409&&PRODUCT_409.has(err)){const r=res.body?.reason;return {ok:false,key:`post.err.409.${err}`,vars:{status:s,reason:typeof r==="string"&&r.length<=160&&SAFE_REASON_RE.test(r)?r:"UNKNOWN"}}}
   if(s===409)return KNOWN_409.has(err)?{ok:false,key:`post.err.409.${err}`,vars:{status:s}}:{ok:false,key:"post.err.409",vars:{status:s}};
   if(s===423)return {ok:false,key:"post.err.423",vars:{status:s}};
+  // //TR: A-FLOW-GAP-2: yönetilen depo kurulamadı (intake şablonu / proje oluşturma); sunucu geri alır, kod aynen gösterilir.
+  if(s===500&&err==="PROJECT_REPOSITORY_INIT_FAILED")return {ok:false,key:"post.err.500.PROJECT_REPOSITORY_INIT_FAILED",vars:{status:s}};
   if(s===503)return {ok:false,key:"post.err.503",vars:{status:s}};
   return {ok:false,key:"post.err.generic",vars:{status:Number.isSafeInteger(s)?s:MISSING}};
 }
@@ -438,8 +495,19 @@ export function productVerificationOf(head,evidence){
   if(nonEmpty(surf.modified)||nonEmpty(surf.deleted)||nonEmpty(surf.renamed)||nonEmpty(surf.harness)||nonEmpty(surf.weakened))return pv("NOT_VERIFIED","TEST_CHANGES_REQUIRE_INDEPENDENT_VERIFICATION");
   return pv("PRODUCT_VERIFIED","TESTS_EXECUTED_IN_VERIFIED_SANDBOX");
 }
+/** //TR: LANE-A A-FLOW-GAP-2: test sonucu adımı. Karar SUNUCUNUN kararıdır: GET /v1/work-runs/:id yanıtındaki delivery görünümü (productVerification {state,reason} + testsExecuted), kanıt listesinden istemcide yeniden HESAPLANMAZ (liste 100 kayıtla kesilir, sunucu tüm kanıta bakar). PRODUCT_VERIFIED -> EXECUTED_VERIFIED; FAILED -> FAILED (testler koştu, çıkış kodu sıfır değil); NOT_VERIFIED + "NOT_EXECUTED:*": sunucu testsExecuted=false diyorsa NOT_EXECUTED (neden: SANDBOX_UNAVAILABLE, TESTS_NOT_REACHED, NO_HEAD_COMMIT), testsExecuted=true diyorsa (ör. VERIFY koştu, REGRESSION'a ulaşılamadı) NOT_VERIFIED; diğer NOT_VERIFIED nedenleri -> NOT_VERIFIED. Teslim görünümü yoksa (liste öğesi, okunamayan ayrıntı) UNKNOWN: "çalıştırılmadı" asla kanıtsız söylenmez. */
+export function testResultOf(run){
+  const none={kind:"UNKNOWN",reason:null},d=run?.delivery,v=isObj(d)?d.productVerification:null;
+  if(!isObj(v)||typeof v.state!=="string"||typeof v.reason!=="string")return none;
+  if(v.state==="PRODUCT_VERIFIED")return {kind:"EXECUTED_VERIFIED",reason:v.reason};
+  if(v.state==="FAILED")return {kind:"FAILED",reason:v.reason};
+  if(v.state!=="NOT_VERIFIED")return none;
+  if(!v.reason.startsWith("NOT_EXECUTED:"))return {kind:"NOT_VERIFIED",reason:v.reason};
+  const why=v.reason.slice("NOT_EXECUTED:".length);
+  return d.testsExecuted===true?{kind:"NOT_VERIFIED",reason:why}:{kind:"NOT_EXECUTED",reason:why};
+}
 /** Eşlenmiş koşu yalnız sunucunun kesin kuralıyla PRODUCT_VERIFIED ise true; tek başına testsExecuted asla yeterli değildir. */
-export const isProductVerified=run=>run?.evidenceVerification?.state==="PRODUCT_VERIFIED";
+export const isProductVerified=run=>run?.delivery?.productVerification?.state!==undefined?run.delivery.productVerification.state==="PRODUCT_VERIFIED":run?.evidenceVerification?.state==="PRODUCT_VERIFIED"; // //TR: sunucunun teslim görünümü varsa karar odur; yoksa liste kanıtından gelen (yalnız kanıtlıysa doğrulanmış) eski sonuç
 export function mapWorkRun(x){
   if(!isObj(x))return null;
   const idv=pick(x.runId,x.workRunId,x.id);if(typeof idv!=="string"||!SAFE_ID_RE.test(idv))return null;
