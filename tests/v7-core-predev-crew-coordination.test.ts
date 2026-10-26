@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 import {WorkOsStore} from "../core/workos/store.js";
-import {PreDevDriver, type BuilderPort, type MissionContext} from "../core/workos/predev/driver.js";
+import {PreDevDriver, PreDevDriverError, type BuilderPort, type MissionContext} from "../core/workos/predev/driver.js";
 import {PRE_DEV_ROLE_MAP, PRE_DEV_ROLE_IDS, ARTIFACT_KINDS} from "../core/workos/predev/types.js";
 import type {ArtifactKind} from "../core/workos/predev/types.js";
 import {TASKHUB_BRIEF} from "../core/workos/predev/fixtures/taskhub-brief.js";
@@ -663,7 +663,9 @@ describe("C-FLOW-ANALYSIS-1: intake -> analysis -> plan", () => {
     const t = setup();
     const first = await t.flow.step(t.missionId) as {artifactId: string};
     t.approve(first.artifactId);
-    const flow = new AnalysisFlow({store: t.store, scope: SCOPE, builder: NO_ANALYSIS_BUILDER, readiness: () => READY});
+    // //TR: C-FLOW-ANALYSIS-2: paylaşılan NO_ANALYSIS_BUILDER artık BLOCKED EXECUTOR_NOT_ENABLED verir (kendi testi var); PreDevDriverError dalı bu yüzden aynı hatayı fırlatan SENTİNEL OLMAYAN bir builder ile sınanır.
+    const throwing: BuilderPort = {produce: async () => { throw new PreDevDriverError("PREDEV_DRIVER_BUILDER_NOT_CONFIGURED"); }};
+    const flow = new AnalysisFlow({store: t.store, scope: SCOPE, builder: throwing, readiness: () => READY});
     expect(await flow.step(t.missionId)).toEqual({status: "BUILDER_FAILED", kind: "Requirements", code: "PREDEV_DRIVER_BUILDER_NOT_CONFIGURED"});
   });
 
