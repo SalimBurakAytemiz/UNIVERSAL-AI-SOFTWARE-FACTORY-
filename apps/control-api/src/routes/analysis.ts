@@ -48,18 +48,19 @@ export function registerAnalysisRoutes(app: any, d: AnalysisRouteDeps): void {
     if (!lock.ok) { d.audit("WORKOS_ANALYSIS_STEP", {actor: d.actor, missionId: id, status: "REFUSED", reason: lock.error}); return reply.code(409).send({error: lock.error}); }
     try {
       let out;
-      const flow = d.analysisFlow(d.workosStopped);
+      let flow: AnalysisFlowWithTrace | undefined, traceThrew = false;
       // Ücretli çağrı özeti (sır/istem yok): rol, tür, yürütücü kimliği, çıktı özeti, çıkış kodu, süre; builder hiç çağrılmadıysa boş.
-      const trace = (): AnalysisBuilderTrace | null => { try { return flow.builderTrace?.() ?? null; } catch { return null; } };
+      const trace = (): AnalysisBuilderTrace | null => { try { return flow?.builderTrace?.() ?? null; } catch { traceThrew = true; return null; } };
       const tf = (): Record<string, unknown> => { const t = trace(); return t ? {roleId: t.roleId ?? null, artifactKind: t.kind ?? null, executor: t.identity ?? null, outputSha256: t.outputSha256 ?? null, exitCode: t.exitCode ?? null, durationMs: t.durationMs ?? null} : {}; };
-      try { out = await flow.step(id); }
+      // Fabrika da denetlenen bölgededir: fırlatan bir fabrika (ör. builder yapılandırması) FAILED denetimi bırakır.
+      try { flow = d.analysisFlow(d.workosStopped); out = await flow.step(id); }
       catch (e) {
         // Ücretli koşu sonrası fırlayan hata (ör. kayıt sırasında WORKOS_DISK_FULL) da denetlenir.
         if (isStopped(e)) { d.audit("WORKOS_ANALYSIS_STEP", {actor: d.actor, missionId: id, status: "STOPPED", reason: "GLOBAL_STOP_ACTIVE", ...tf()}); return reply.code(423).send({error: "GLOBAL_STOP_ACTIVE"}); }
-        // builderRan: kanıta dayanır. AnalysisError ücretli çağrıdan önceki istek hatasıdır (false); aksi halde builder izi varsa builder çağrılmıştır (izin yokluğu = hazırlık/kayıt öncesi fırlatma: false); iz kaynağı yoksa BİLİNMEZ (null). Eskiden her AnalysisError-dışı hata true yazılırdı. detail: WorkOsError "<kod>: <ayrıntı>" ayrıntısı (ör. koşu sırasında MISSION_NOT_PREDEV_ELIGIBLE), yalnız güvenli simge biçimindeyse.
+        // builderRan: KANIT önce. İz varsa builder çağrılmıştır (true, AnalysisError olsa bile); iz yoksa: fabrika fırlattıysa ya da AnalysisError (ücretli çağrıdan önceki istek hatası) ise false; iz kaynağı var ama boş döndüyse false; kaynak yoksa ya da kaynak fırlattıysa BİLİNMEZ (null). detail: WorkOsError "<kod>: <ayrıntı>" ayrıntısı (ör. koşu sırasında MISSION_NOT_PREDEV_ELIGIBLE), yalnız güvenli simge biçimindeyse.
         const code = String((e as {code?: unknown} | null)?.code ?? "INTERNAL_ERROR").slice(0, 64), msg = (e as {message?: unknown} | null)?.message;
         const detail = typeof msg === "string" && msg.startsWith(`${code}: `) && /^[A-Z0-9_]{1,64}$/.test(msg.slice(code.length + 2)) ? msg.slice(code.length + 2) : undefined;
-        d.audit("WORKOS_ANALYSIS_STEP", {actor: d.actor, missionId: id, status: "FAILED", reason: code, ...(detail ? {detail} : {}), builderRan: e instanceof AnalysisError ? false : flow.builderTrace ? trace() !== null : null, ...tf()});
+        d.audit("WORKOS_ANALYSIS_STEP", {actor: d.actor, missionId: id, status: "FAILED", reason: code, ...(detail ? {detail} : {}), builderRan: trace() !== null ? true : (!flow || e instanceof AnalysisError) ? false : (!flow.builderTrace || traceThrew) ? null : false, ...tf()});
         throw e;
       }
       // Derinlemesine savunma: üretim sürerken Global Stop gelmiş olabilir; DRAFT_READY yanıtından ÖNCE yeniden denetlenir.
