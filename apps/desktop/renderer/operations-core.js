@@ -1,14 +1,10 @@
-// //TR: Bu modül Operasyon ve Kurtarma görünümünün saf (DOM'suz) çekirdeğidir (FA-V2-PRODUCT, UI-071): yalnız üç salt-okunur ve zaten izinli GET (GET /v1/control/status, GET /v1/runs, GET /v1/founder-attention; üçü de sorgusuz sabit yoldur) yanıtını güvenli, sınırlı alanlara eşler ve bunlardan bir kurtarma kontrol listesi türetir. HİÇBİR veri uydurulmaz: kimlik/enum/biçim/zaman damgası bozuksa ya da iki alan birbiriyle çelişiyorsa okuma KISMEN değil tümden ERROR olur (fail-closed), eksik alan tahmin edilmez, durumlar kayıttan AYNEN taşınır (yükseltme yok). "Takıldı/durdu" (STALLED) YALNIZ gerçek kayıtlı zaman damgasından (koşu başlangıcı, yeniden deneme zamanı, checkpoint güncelleme) ve açıkça belgelenmiş görüntü eşiklerinden (kontrol düzleminde SLA/zaman aşımı kaydı YOKTUR; eşikler yalnız görüntü sınıflamasıdır) türetilir; zaman damgası yoksa/gelecekteyse sınıflama yapılmaz (UNDETERMINED). Okunamayan kaynağın sayıları null'dır (0 değil). Genel durum (NO_ISSUES_RECORDED) yalnız üç kaynağın HEPSİ okunabilir ve doğrulanmışsa, global stop aktif değilse, Work OS günlüğü OK ise, zamanlayıcı doğrulanmışsa, en az bir koşu kayıtlıysa ve kayıtlı hiçbir sorun yoksa verilir; aksi halde ASLA. Mevcut Stop/Resume/Retry kontrolleri BURADA yeniden uygulanmaz ve tetiklenmez; yalnız dürüst durumları gösterilir. Bu modül ürün doğrulamasını hesaplamaz ve ilgili sabit değer bu dosyada hiç yer almaz.
+// //TR: Bu modül Operasyon ve Kurtarma görünümünün saf (DOM'suz) çekirdeğidir (FA-V2-PRODUCT, UI-071): yalnız üç salt-okunur ve zaten izinli GET (GET /v1/control/status, GET /v1/runs, GET /v1/attention; üçü de sorgusuz sabit yoldur) yanıtını güvenli, sınırlı alanlara eşler ve bunlardan bir kurtarma kontrol listesi türetir. HİÇBİR veri uydurulmaz: kimlik/enum/biçim/zaman damgası bozuksa ya da iki alan birbiriyle çelişiyorsa okuma KISMEN değil tümden ERROR olur (fail-closed), eksik alan tahmin edilmez, durumlar kayıttan AYNEN taşınır (yükseltme yok). "Takıldı/durdu" (STALLED) YALNIZ gerçek kayıtlı zaman damgasından (koşu başlangıcı) ve açıkça belgelenmiş görüntü eşiklerinden (kontrol düzleminde SLA/zaman aşımı kaydı YOKTUR; eşikler yalnız görüntü sınıflamasıdır) türetilir; zaman damgası yoksa/gelecekteyse sınıflama yapılmaz (UNDETERMINED). Okunamayan kaynağın sayıları null'dır (0 değil). Genel durum (NO_ISSUES_RECORDED) yalnız üç kaynağın HEPSİ okunabilir ve doğrulanmışsa, global stop aktif değilse, Work OS günlüğü OK ise, en az bir koşu kayıtlıysa ve kayıtlı hiçbir sorun yoksa verilir; aksi halde ASLA. Mevcut Stop/Resume/Retry kontrolleri BURADA yeniden uygulanmaz ve tetiklenmez; yalnız dürüst durumları gösterilir. Bu modül ürün doğrulamasını hesaplamaz ve ilgili sabit değer bu dosyada hiç yer almaz.
 import {ATTENTION_PATH,mapQueueAttention,waitSince,waitParts} from "./queue-core.js";
 
-import {
-  RETRY_OVERDUE_AFTER_MS,validateRetryRecord,classifyRetryPhase
-} from "./retry-core.js";
-
-export {ATTENTION_PATH,waitSince,waitParts,RETRY_OVERDUE_AFTER_MS,validateRetryRecord,classifyRetryPhase};
+export {ATTENTION_PATH,waitSince,waitParts};
 export const CONTROL_PATH="/v1/control/status";
 export const RUNS_PATH="/v1/runs";
-/** Görünümün okuyabildiği TÜM kaynaklar (sıra sabit); üçü de salt-okunur ve önceden izinlidir, yeni uç nokta yoktur. */
+/** Görünümün okuyabildiği TÜM kaynaklar (sıra sabit); üçü de salt-okunur GET'tir. Dikkat kaynağı GET /v1/attention'dır (Work OS kayıtlarından türetilir); emekli scheduler kaynağı (/v1/founder-attention) ve onun retry/checkpoint kayıtları artık okunmaz. */
 export const OPS_SOURCES=Object.freeze(["control","runs","attention"]);
 export const OPS_SOURCE_PATHS=Object.freeze({control:CONTROL_PATH,runs:RUNS_PATH,attention:ATTENTION_PATH});
 /** Work OS günlük sağlığı (sunucu journalHealth sözleşmesi). */
@@ -22,7 +18,6 @@ export const GROUP_OF_STATUS=Object.freeze({FATAL:"ATTENTION",FOUNDER_ATTENTION_
 export const LIVENESS=Object.freeze(["FINISHED","IN_PROGRESS","STALLED","UNDETERMINED"]);
 /** GÖRÜNTÜ eşikleri (kayıtlı SLA/zaman aşımı DEĞİL): özeti olmayan bir koşu başlangıcından bu yana bu süreyi aştıysa STALLED; yeniden deneme zamanı bu tolerans kadar geçtiyse ve kayıt hâlâ duruyorsa OVERDUE; checkpoint bu süredir temizlenmediyse bayattır. */
 export const RUN_STALL_AFTER_MS=6*3600000;
-export const CHECKPOINT_STALE_AFTER_MS=RUN_STALL_AFTER_MS;
 /** /v1/runs sunucuda en yeni 100 koşuyla sınırlıdır; tam bu sayıda satır gelirse liste kısaltılmış olabilir. */
 export const SERVER_RUNS_CAP=100;
 export const MAX_OPS_ROWS=200;
@@ -32,15 +27,15 @@ export const TIERS=Object.freeze(["ATTENTION_NEEDED","UNKNOWN","UNVERIFIED","WAT
 export const TIER_OF_SEVERITY=Object.freeze({ACTION:"ATTENTION_NEEDED",UNKNOWN:"UNKNOWN",UNVERIFIED:"UNVERIFIED",WATCH:"WATCH"});
 /** Kontrol listesi adımları (sabit küme; her biri ops.step.<ID>.* anahtarlarıyla yerelleştirilir). */
 export const STEP_IDS=Object.freeze({
-  ACTION:Object.freeze(["STOP_ACTIVE","STOP_FAIL_CLOSED","JOURNAL_TAMPERED","JOURNAL_TORN_TAIL","JOURNAL_UNAVAILABLE","SCHEDULER_REJECTED","BLOCKED_PACKAGE","RETRY_OVERDUE","CHECKPOINT_STALE","RUN_STALLED","LATEST_RUN_ATTENTION"]),
+  ACTION:Object.freeze(["STOP_ACTIVE","STOP_FAIL_CLOSED","JOURNAL_TAMPERED","JOURNAL_TORN_TAIL","JOURNAL_UNAVAILABLE","ATTENTION_ITEM","RUN_STALLED","LATEST_RUN_ATTENTION"]),
   UNKNOWN:Object.freeze(["SOURCE_UNREADABLE"]),
-  UNVERIFIED:Object.freeze(["SCHEDULER_NOT_VERIFIED","JOURNAL_ABSENT","JOURNAL_NOT_REPORTED","NO_RUNS_RECORDED","RUN_UNDETERMINED","RETRY_UNDETERMINED"]),
-  WATCH:Object.freeze(["RETRY_WAITING","RETRY_DUE","RUN_IN_PROGRESS"])});
+  UNVERIFIED:Object.freeze(["ATTENTION_TRUNCATED","ATTENTION_DROPPED","JOURNAL_ABSENT","JOURNAL_NOT_REPORTED","NO_RUNS_RECORDED","RUN_UNDETERMINED"]),
+  WATCH:Object.freeze(["RUN_IN_PROGRESS"])});
 /** UI-186: kayıtlı koşu durumu RECOVERY_FAILED olan koşular "kurtarma başarısız" sayılır (core/workos/run-state.ts uç durumu); başka hiçbir durum bu gruba yükseltilmez. */
 export const RECOVERY_FAILED_STATUS="RECOVERY_FAILED";
 export const UNKNOWN_DETAILS=Object.freeze(["OFFLINE","UNAVAILABLE","ERROR"]);
-/** Mevcut IPC denetimi bu paket kimliği biçimi dışında yeniden denemeyi reddeder (main.mjs'teki retry-blocked IPC kuralı ile aynı). */
-export const RETRY_PACKAGE_RE=/^PKG-\d{3}$/;
+/** Operasyon kontrol listesine yalnız bu üç dikkat türü girer: koşu/mission/görev düzeyinde ENGELLİ ya da karar bekleyen iş. Diğer üç tür (onay bekleyen koşu, Founder dikkati, yetki bekleyen mission) operasyonel arıza değil, Founder kuyruğu öğesidir ve Gelen Kutusu'nda gösterilir. */
+export const OPS_ATTENTION_KINDS=Object.freeze(["RUN_NEEDS_DECISION","MISSION_BLOCKED","TASK_BLOCKED"]);
 
 const isObj=x=>x!==null&&typeof x==="object"&&!Array.isArray(x);
 const matches=(re,x)=>typeof x==="string"&&re.test(x);
@@ -118,33 +113,13 @@ export function mapOperationsRuns(raw){
   return {state:"VERIFIED",runs:{total:items.length,capped:items.length>=SERVER_RUNS_CAP,items}};
 }
 
-// ---------- GET /v1/founder-attention ----------
+// ---------- GET /v1/attention ----------
 /**
- * GET /v1/founder-attention -> {state:"VERIFIED",attention:{total,items,schedulerVerification,retryableKinds,retry,checkpoint}} | {state:"UNAVAILABLE",attention:null,schedulerRejected:true} | {state:"ERROR",attention:null}.
- * Engelli paket satırları kuyruk ekranıyla AYNI katı eşleyiciden geçer (tek sahiplik); ek olarak retry (yeniden deneme kaydı) ve checkpoint ayrı ayrı doğrulanır. Tek bozuk öğe TÜM okumayı ERROR yapar.
+ * GET /v1/attention -> {state:"VERIFIED",attention:{total,items,counts,truncated,dropped}} | {state:"ERROR",attention:null}.
+ * Kuyruk ekranıyla AYNI katı eşleyiciden geçer (tek sahiplik). Emekli scheduler kaynağının schedulerVerification, retry ve checkpoint alanları artık YOKTUR; bu alanlar yanıtta görünse bile okunmaz ve hiçbir şey ima etmez.
  */
 export function mapOperationsAttention(raw){
-  const bad={state:"ERROR",attention:null};
-  const base=mapQueueAttention(raw);
-  if(base.state==="UNAVAILABLE")return {state:"UNAVAILABLE",attention:null,schedulerRejected:true};
-  if(base.state!=="VERIFIED"||!base.attention)return bad;
-  let retryableKinds=[];
-  if(raw.retryableKinds!==undefined&&raw.retryableKinds!==null){
-    if(!Array.isArray(raw.retryableKinds)||raw.retryableKinds.length>20||raw.retryableKinds.some(k=>!matches(KIND_RE,k)))return bad;
-    retryableKinds=[...raw.retryableKinds];
-  }
-  let retry=null;
-  if(raw.retry!==undefined&&raw.retry!==null){
-    retry=validateRetryRecord(raw.retry);
-    if(retry===null)return bad;
-  }
-  let checkpoint=null;
-  if(raw.checkpoint!==undefined&&raw.checkpoint!==null){
-    const c=raw.checkpoint;
-    if(!isObj(c)||iso(c.updatedAt)===null||!Number.isSafeInteger(c.generation)||c.generation<1)return bad;
-    checkpoint={generation:c.generation,updatedAt:c.updatedAt};
-  }
-  return {state:"VERIFIED",attention:{...base.attention,retryableKinds,retry,checkpoint}};
+  return mapQueueAttention(raw);
 }
 
 // ---------- Türetim ----------
@@ -170,15 +145,10 @@ function deriveRuns(R,nowMs){
   return {total:items.length,capped:R.capped,items,byState,groups,live,inProgress:live.IN_PROGRESS,stalled:live.STALLED,undetermined:live.UNDETERMINED,latest:items[0]??null};
 }
 function deriveQueue(A,nowMs){
-  const items=A.items.map(x=>{const {waitMs,band}=waitSince(x.at,nowMs);return {...x,waitMs,band,retryNow:x.retryable===true&&matches(RETRY_PACKAGE_RE,x.packageId)}});
-  const retryUsable=items.filter(x=>x.retryNow).length,retryable=items.filter(x=>x.retryable===true).length,notRetryable=items.filter(x=>x.retryable===false).length,unknownRetry=items.filter(x=>x.retryable===null).length;
-  let retry=null;
-  if(A.retry){
-    retry=classifyRetryPhase(A.retry,nowMs);
-  }
-  let checkpoint=null;
-  if(A.checkpoint){const {waitMs}=waitSince(A.checkpoint.updatedAt,nowMs);checkpoint={...A.checkpoint,ageMs:waitMs,stale:waitMs!==null&&waitMs>CHECKPOINT_STALE_AFTER_MS}}
-  return {total:items.length,items,retryable,retryUsable,notRetryable,unknownRetry,retryableKinds:A.retryableKinds,schedulerVerification:A.schedulerVerification,retry,checkpoint};
+  // Toplam, sunucunun doğrulanmış sayaçlarındandır (liste kesilse ya da öğe atılsa bile); öğe listesi yalnız okunabilen öğeleri taşır.
+  const total=OPS_ATTENTION_KINDS.reduce((n,k)=>n+A.counts[k],0);
+  const items=A.items.filter(x=>OPS_ATTENTION_KINDS.includes(x.kind)).map(x=>{const {waitMs,band}=waitSince(x.since,nowMs);return {...x,waitMs,band}});
+  return {total,items,counts:Object.fromEntries(OPS_ATTENTION_KINDS.map(k=>[k,A.counts[k]])),truncated:A.truncated,dropped:A.dropped};
 }
 function deriveControl(C,nowMs){
   const failClosed=C.active&&(C.verification==="REJECTED"||FAIL_CLOSED_STOP_REASONS.includes(C.reason));
@@ -191,7 +161,7 @@ export function deriveSafeStop(control,runs,queue){
   return {
     stop:control===null?null:{active:control.active,failClosed:control.failClosed,reason:control.reason,actor:control.actor,activatedAt:control.activatedAt},
     failedRuns:runs===null?null:runs.items.filter(r=>r.status===RECOVERY_FAILED_STATUS).map(r=>({runId:r.runId,status:r.status,finishedAt:r.finishedAt,packageId:r.packageId,error:r.error})),
-    blockedPackages:queue===null?null:queue.total
+    blockedItems:queue===null?null:queue.total
   };
 }
 
@@ -204,7 +174,6 @@ export function buildOperations(res,nowMs){
   const usable={control:ok(res.control)&&isObj(res.control.control),runs:ok(res.runs)&&isObj(res.runs.runs),attention:ok(res.attention)&&isObj(res.attention.attention)};
   const sources=Object.fromEntries(OPS_SOURCES.map(k=>[k,{state:usable[k]?"VERIFIED":ok(res[k])?"ERROR":failState(res[k]?.state)}]));
   const unreadable=OPS_SOURCES.filter(k=>sources[k].state!=="VERIFIED");
-  const rejected=!usable.attention&&Boolean(res.attention)&&res.attention.schedulerRejected===true&&sources.attention.state==="UNAVAILABLE";
   const control=usable.control?deriveControl(res.control.control,nowMs):null;
   const runs=usable.runs?deriveRuns(res.runs.runs,nowMs):null;
   const queue=usable.attention?deriveQueue(res.attention.attention,nowMs):null;
@@ -220,19 +189,10 @@ export function buildOperations(res,nowMs){
     else if(j.state==="UNAVAILABLE")add("JOURNAL_UNAVAILABLE","ACTION","control",{reason:j.reason});
     else if(j.state==="ABSENT")add("JOURNAL_ABSENT","UNVERIFIED","control");
   }
-  if(rejected)add("SCHEDULER_REJECTED","ACTION","attention",{},{route:"inbox"});
   if(queue){
-    for(const x of queue.items)add("BLOCKED_PACKAGE","ACTION","attention",{packageId:x.packageId,phase:x.phase,kind:x.kind,reason:x.reason,retryable:x.retryable,retryNow:x.retryNow,at:x.at,waitMs:x.waitMs},{key:`${x.packageId??""}|${x.phase??""}`,control:x.retryNow?"retry":null,route:"tower"});
-    if(queue.schedulerVerification!=="VERIFIED")add("SCHEDULER_NOT_VERIFIED","UNVERIFIED","attention",{verification:queue.schedulerVerification});
-    const r=queue.retry;
-    if(r){
-      const p={packageId:r.packageId,retryAt:r.retryAt,reason:r.reason};
-      if(r.phase==="OVERDUE")add("RETRY_OVERDUE","ACTION","attention",{...p,overdueMs:r.overdueMs});
-      else if(r.phase==="DUE")add("RETRY_DUE","WATCH","attention",{...p,overdueMs:r.overdueMs});
-      else if(r.phase==="WAITING")add("RETRY_WAITING","WATCH","attention",{...p,remainingMs:r.remainingMs});
-      else if(r.phase==="UNDETERMINED")add("RETRY_UNDETERMINED","UNVERIFIED","attention",{...p});
-    }
-    if(queue.checkpoint&&queue.checkpoint.stale)add("CHECKPOINT_STALE","ACTION","attention",{generation:queue.checkpoint.generation,updatedAt:queue.checkpoint.updatedAt,ageMs:queue.checkpoint.ageMs});
+    for(const x of queue.items)add("ATTENTION_ITEM","ACTION","attention",{kind:x.kind,title:x.title,reason:x.reason,runId:x.runId,taskId:x.taskId,missionId:x.missionId,nextAction:x.nextAction,at:x.since,waitMs:x.waitMs},{key:`${x.kind}:${x.taskId??x.runId??x.missionId}`,route:"inbox"});
+    if(queue.truncated)add("ATTENTION_TRUNCATED","UNVERIFIED","attention",{});
+    if(queue.dropped>0)add("ATTENTION_DROPPED","UNVERIFIED","attention",{dropped:queue.dropped});
   }
   if(runs){
     if(runs.total===0)add("NO_RUNS_RECORDED","UNVERIFIED","runs");
@@ -244,7 +204,7 @@ export function buildOperations(res,nowMs){
       else if(r.liveness==="UNDETERMINED")add("RUN_UNDETERMINED","UNVERIFIED","runs",{runId:r.runId,status:r.status},{key:r.runId});
     }
   }
-  for(const k of unreadable)if(!(k==="attention"&&rejected))add("SOURCE_UNREADABLE","UNKNOWN",k,{source:k,state:sources[k].state},{key:k});
+  for(const k of unreadable)add("SOURCE_UNREADABLE","UNKNOWN",k,{source:k,state:sources[k].state},{key:k});
   // Kontrol listesi: ACTION -> UNKNOWN -> UNVERIFIED -> WATCH; aynı düzeyde ekleme sırası korunur (kararlı sıralama).
   const steps=F.map((f,i)=>({f,i})).sort((a,b)=>rankOf(a.f.severity)-rankOf(b.f.severity)||a.i-b.i).map(x=>x.f);
   const top=steps.length?steps[0].severity:null;
@@ -252,5 +212,5 @@ export function buildOperations(res,nowMs){
   const unknownStates=unreadable.map(k=>sources[k].state);
   const unknownState=unknownStates.includes("OFFLINE")?"OFFLINE":unknownStates.includes("ERROR")?"ERROR":unknownStates.length?"UNAVAILABLE":null;
   const counts=Object.fromEntries(SEVERITIES.map(s=>[s,steps.filter(x=>x.severity===s).length]));
-  return {sources,unreadable,unknownState,schedulerRejected:rejected,control,runs,queue,steps,counts,tier,safeStop:deriveSafeStop(control,runs,queue)};
+  return {sources,unreadable,unknownState,control,runs,queue,steps,counts,tier,safeStop:deriveSafeStop(control,runs,queue)};
 }

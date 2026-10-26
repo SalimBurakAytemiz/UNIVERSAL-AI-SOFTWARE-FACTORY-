@@ -18,6 +18,7 @@ import {SCHEDULER_PATH,mapScheduler} from "./scheduler-core.js";
 import {CAPABILITIES_PATH,ADAPTERS_PATH,FABRICS_PATH,mapCapabilities,mapAdapters,mapFabrics} from "./integrations-core.js";
 import {knowledgePath,mapKnowledge,provenancePath,mapProvenance,mapMemoryList} from "./knowledge-core.js";
 import {STATUS_SUMMARY_PATH,mapStatusSummary} from "./agent-factory-core.js";
+import {ATTENTION_PATH as WORKOS_ATTENTION_PATH,mapAttentionQueue,attentionAsBlocked} from "./attention-core.js";
 import {INSTALL_PATH,PHASE0_PATH,mapInstallReport,mapPhase0Report} from "./install-core.js";
 import {RUNS_PATH as AUDIT_RUNS_PATH,EVIDENCE_PATH as AUDIT_EVIDENCE_PATH,runEventsPath,mapAuditRuns,mapAuditEvents,mapAuditEvidence} from "./audit-core.js";
 
@@ -53,7 +54,13 @@ export function createApi({bridge,store,now=()=>Date.now()}){
     async projects(){const r=await get("/v1/projects");return r.ok?mapProjects(r.data):{state:r.state,items:[],message:r.message}},
     async missions(){const q=store.projectId?`/v1/missions?projectId=${store.projectId}`:"/v1/missions";const r=await get(q);return r.ok?mapMissions(r.data):{state:r.state,items:[],message:r.message}},
     async control(){const r=await get("/v1/control/status");return r.ok?mapControlStatus(r.data):{state:r.state,active:false,reason:null,message:r.message}},
-    async attention(){const r=await get("/v1/founder-attention");return r.ok?mapAttention(r.data):{state:r.state,blocked:[],message:r.message}},
+    // //TR: Founder dikkati artık GET /v1/attention'dan (yalnız Work OS kayıtları) okunur; emekli scheduler kaynağı /v1/founder-attention bu okumada KULLANILMAZ. Eski tüketiciler için blocked[] aynı öğelerden türetilir, tam kuyruk queue alanındadır. Ana süreç izin listesi girişi koordinatörün grubundadır: köprü yolu reddederse (INVALID_API_PATH) durum UNAVAILABLE'dır, öğe uydurulmaz.
+    async attention(){
+      const r=await get(WORKOS_ATTENTION_PATH);
+      if(!r.ok)return {state:/INVALID_API_PATH/.test(String(r.message??""))?"UNAVAILABLE":r.state,blocked:[],queue:null,message:r.message};
+      const m=mapAttentionQueue(r.data);
+      return m.state==="VERIFIED"?{state:"VERIFIED",blocked:m.queue.items.map(attentionAsBlocked),queue:m.queue}:{state:"ERROR",blocked:[],queue:null};
+    },
     async health(){const r=await get("/health");return r.ok?{state:"VERIFIED",data:r.data}:{state:r.state,data:null,message:r.message}},
     async runs(){const r=await get("/v1/runs");return r.ok?{state:"VERIFIED",runs:Array.isArray(r.data?.runs)?r.data.runs:[]}:{state:r.state,runs:[],message:r.message}},
     async runEvents(runId){

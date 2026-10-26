@@ -361,8 +361,8 @@ describe("UX hardening: tower day-0 negative / honest states", () => {
       expect(f.textContent).not.toContain(m.t("tower.noRetry"));
     }
   });
-  it("tower.retry classifies a valid record with the Operations function and never claims recovery (UI-194)", async () => {
-    const ops = await load("operations-core.js");
+  it("tower.retry classifies a valid record with the shared retry-core function and never claims recovery (UI-194)", async () => {
+    const ops = await load("retry-core.js");
     const rec = (retryAt: string) => ({packageId: "PKG-007", phaseIds: [3, 4], retryAt, reason: "SECRET-FREE-TEXT"});
     const cases: Array<[string, string]> = [["2026-10-20T13:30:00Z", "WAITING"], ["2026-10-20T11:55:00Z", "DUE"], ["2026-10-20T11:00:00Z", "OVERDUE"]];
     for (const [at, phase] of cases) {
