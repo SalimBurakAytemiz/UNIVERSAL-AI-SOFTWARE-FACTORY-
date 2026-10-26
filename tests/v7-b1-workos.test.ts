@@ -1179,6 +1179,14 @@ describe("LANE-B task-run link routes", () => {
     const r = await app.inject({method: "GET", url: `/v1/tasks/${task.taskId}/runs`, headers: hdr});
     expect(r.statusCode).toBe(503); expect(r.json().error).toBe("LINK_STORE_CORRUPT");
   });
+  it("GET /v1/work-runs/:id/tasks validates the run id strictly (400 INVALID_RUN_ID for every malformed shape) and answers 404 RUN_NOT_FOUND for a well-formed unknown run", async () => {
+    const {app, run} = await mkApp();
+    for (const bad of ["run_x", "run_" + "A".repeat(24), "run_" + "a".repeat(23), "run_" + "a".repeat(25), "xxx_" + "a".repeat(24), "msn_" + "a".repeat(24)]) {
+      const r = await app.inject({method: "GET", url: `/v1/work-runs/${bad}/tasks`, headers: hdr}); expect(r.statusCode, bad).toBe(400); expect(r.json()).toEqual({error: "INVALID_RUN_ID"});
+    }
+    expect((await app.inject({method: "GET", url: `/v1/work-runs/run_${"c".repeat(24)}/tasks`, headers: hdr})).json()).toEqual({error: "RUN_NOT_FOUND"});
+    expect((await app.inject({method: "GET", url: `/v1/work-runs/${run.runId}/tasks`, headers: hdr})).statusCode).toBe(200);
+  });
 });
 
 // //TR: LANE-B flow + task-run link: akış okuması görev-koşu bağı sayısını yalnız doğrulanmış bağ kaydından türetir; bağ dosyası bozuksa null (UNKNOWN) döner.
