@@ -2918,6 +2918,10 @@ describe("LANE-B batch 4b: analysis routes and server registration", () => {
       const {submitIntake} = await import("../core/workos/intake.js"); const tb = submitIntake({store: t.store, scope: {tenantId: "tB"}, orgId: "o1", actor: "FOUNDER_LOCAL"}, {idea: "A small team task board with deadlines and reminders for freelancers who juggle several clients", projectType: "web", targetOS: ["web"]});
       expect(t.store.getMission({tenantId: "tB"}, tb.intake.missionId)).toBeTruthy();
       const x = await mkApp({store: t.store, flow: t.flow}); expect([(await post(x.app, `/v1/missions/${tb.intake.missionId}/analysis/plan`)).statusCode, (await post(x.app, `/v1/missions/${tb.intake.missionId}/analysis/step`)).statusCode, x.calls]).toEqual([404, 404, []]);
+      // Gerçek akışta x.calls hep [] kalır (yalnız sahte akış sayar): "akış kurulmadı / builder çağrılmadı" sayan fabrika ve gerçek builder sayacıyla sabitlenir.
+      let factoryCalls = 0; const counted = await mkApp({store: t.store, flow: (st: () => boolean) => { factoryCalls++; return t.flow(st); }});
+      const stepRes = await post(counted.app, `/v1/missions/${tb.intake.missionId}/analysis/step`); const planRes = await post(counted.app, `/v1/missions/${tb.intake.missionId}/analysis/plan`);
+      expect([stepRes.statusCode, stepRes.json(), planRes.statusCode, factoryCalls, t.calls.length]).toEqual([404, {error: "WORKOS_NOT_FOUND"}, 404, 0, 4]);
     } finally { t.done(); }
     const un = await mkApp({noMission: true}); expect([(await post(un.app, `/v1/missions/${MSN}/analysis/plan`)).statusCode, un.calls]).toEqual([404, []]);
     for (const [code, status] of [["PLAN_MISSION_NOT_FOUND", 404], ["PLAN_ALREADY_EXISTS", 409], ["MISSION_NOT_PLANNABLE", 409], ["PLAN_INVALID", 409]] as const) {
@@ -2945,7 +2949,7 @@ describe("LANE-B batch 4b: analysis routes and server registration", () => {
     const act = await mkApp({status: "BLOCKED", active: true}); const r = await post(act.app, `/v1/missions/${MSN}/analysis/step`); expect([r.statusCode, act.calls]).toEqual([200, [`step:${MSN}`]]);
     const no = await mkApp({status: "BLOCKED", active: false}); expect([(await post(no.app, `/v1/missions/${MSN}/analysis/step`)).statusCode, no.calls]).toEqual([409, []]);
     const gone = await mkApp({throwObj: new WorkOsError("WORKOS_CONFLICT", "MISSION_NOT_PREDEV_ELIGIBLE")}); expect((await post(gone.app, `/v1/missions/${MSN}/analysis/step`)).statusCode).toBeGreaterThanOrEqual(400);
-    expect(gone.auditLog).toContainEqual(expect.objectContaining({status: "FAILED", reason: "WORKOS_CONFLICT", detail: "MISSION_NOT_PREDEV_ELIGIBLE", builderRan: true}));
+    expect(gone.auditLog).toContainEqual(expect.objectContaining({status: "FAILED", reason: "WORKOS_CONFLICT", detail: "MISSION_NOT_PREDEV_ELIGIBLE", builderRan: null}));
     const free = await mkApp({throwObj: Object.assign(new Error("WORKOS_DISK_FULL: /secret/path with spaces"), {code: "WORKOS_DISK_FULL"})}); await post(free.app, `/v1/missions/${MSN}/analysis/step`);
     expect(free.auditLog.find(a => a.status === "FAILED")).not.toHaveProperty("detail");
     const pre = await mkApp({throwErr: "ANALYSIS_MISSION_NOT_FOUND"}); await post(pre.app, `/v1/missions/${MSN}/analysis/step`); expect(pre.auditLog).toContainEqual(expect.objectContaining({status: "FAILED", builderRan: false}));
@@ -2958,6 +2962,75 @@ describe("LANE-B batch 4b: analysis routes and server registration", () => {
     // uygunluk kilitten ÖNCE: başka bir produce kilidi tutulurken uygun olmayan misyon 409 BUSY değil 409 ELIGIBLE alır
     const {tryProduceLock} = await import("../apps/control-api/src/routes/produce-lock.js"); const held = tryProduceLock("msn_" + "b".repeat(24));
     try { const e = await post((await mkApp({status: "BLOCKED"})).app, `/v1/missions/${MSN}/analysis/step`); expect([e.statusCode, e.json()]).toEqual([409, {error: "WORKOS_CONFLICT", reason: "MISSION_NOT_PREDEV_ELIGIBLE"}]); } finally { if (held.ok) held.release(); }
+  });
+
+  it("B-ANALYSIS-LOWS-3 (e)/(b): builderRan is evidence-based (trace present -> true, absent -> false, no trace source -> null, AnalysisError -> false) and the step audit carries the same paid-call fields as predev/produce - and nothing else", async () => {
+    const {AnalysisError} = await import("../core/workos/crew/analysis.js"); const url = `/v1/missions/${MSN}/analysis/step`;
+    const TRACE = {roleId: "analyst", kind: "Requirements", identity: "claude-cli@test", outputSha256: "ab".repeat(32), exitCode: 0, durationMs: 1234, prompt: "SECRET PROMPT", output: "RAW MODEL TEXT"};
+    const run = async (flow: any) => { const m = await mkApp({flow}); const r = await post(m.app, url); return {r, audit: m.auditLog.filter(a => a.e === "WORKOS_ANALYSIS_STEP")}; };
+    const boom = Object.assign(new Error("WORKOS_DISK_FULL"), {code: "WORKOS_DISK_FULL"});
+    expect((await run({step: async () => { throw boom; }, builderTrace: () => TRACE})).audit[0]).toMatchObject({status: "FAILED", reason: "WORKOS_DISK_FULL", builderRan: true, roleId: "analyst", artifactKind: "Requirements", executor: "claude-cli@test", exitCode: 0, durationMs: 1234});
+    expect((await run({step: async () => { throw boom; }, builderTrace: () => null})).audit[0], "throw before the paid call").toMatchObject({status: "FAILED", builderRan: false});
+    expect((await run({step: async () => { throw boom; }})).audit[0], "no trace source: unknown").toMatchObject({status: "FAILED", builderRan: null});
+    expect((await run({step: async () => { throw new AnalysisError("ANALYSIS_MISSION_NOT_FOUND"); }, builderTrace: () => null})).audit[0], "request error without a trace is never a paid failure").toMatchObject({builderRan: false});
+    const ok = await run({step: async () => ({status: "DRAFT_READY", kind: "Requirements", artifactId: "art_1", version: 1, roleId: "analyst", next: "FOUNDER_APPROVAL"}), builderTrace: () => TRACE});
+    expect(ok.audit[0]).toMatchObject({status: "DRAFT_READY", kind: "Requirements", artifactId: "art_1", version: 1, roleId: "analyst", artifactKind: "Requirements", executor: "claude-cli@test", outputSha256: TRACE.outputSha256, exitCode: 0, durationMs: 1234});
+    expect(JSON.stringify(ok.audit), "no prompt / model text in the audit").not.toMatch(/SECRET PROMPT|RAW MODEL TEXT/);
+    const drafted = await run({step: async () => ({status: "DRAFT_READY", kind: "Requirements", artifactId: "art_1", version: 1, roleId: "analyst", next: "FOUNDER_APPROVAL"}), builderTrace: () => TRACE}); expect(drafted.audit[0].executor).toBe("claude-cli@test");
+    const throwing = await run({step: async () => ({status: "BUILDER_FAILED", kind: "Requirements", code: "X"}), builderTrace: () => { throw new Error("trace boom"); }}); expect([throwing.r.statusCode, throwing.audit[0].status]).toEqual([200, "BUILDER_FAILED"]);
+  });
+
+  it("B-ANALYSIS-LOWS-3 (g): the audit detail is taken only when the message starts with `<code>: ` AND the rest is a safe token", async () => {
+    const run = async (err: Error) => { const m = await mkApp({throwObj: err}); await post(m.app, `/v1/missions/${MSN}/analysis/step`); return m.auditLog.find(a => a.status === "FAILED")!; };
+    expect(await run(Object.assign(new Error("AB: SAFE_TOKEN"), {code: "AB"}))).toMatchObject({detail: "SAFE_TOKEN"});
+    expect(await run(Object.assign(new Error("XY: SAFE_TOKEN"), {code: "AB"})), "foreign prefix of the same length").not.toHaveProperty("detail");
+    expect(await run(Object.assign(new Error("SAFE_TOKEN"), {code: "AB"}))).not.toHaveProperty("detail");
+    expect(await run(Object.assign(new Error("AB: not a token"), {code: "AB"}))).not.toHaveProperty("detail");
+  });
+
+  it("B-ANALYSIS-LOWS-3 (d): the plan success body has the exact shape the Desktop traceability view reads (tasks, replayed, trace[{index,workPackageId,estimate,satisfies,requirements[{id,statement,acceptanceCriteria}]}], summary{requirements,architecture,plan}) from a real approved analysis", async () => {
+    const t = await realFlow();
+    try {
+      await t.approveAll(); const res = await post((await mkApp({store: t.view, flow: t.flow})).app, `/v1/missions/${t.missionId}/analysis/plan`); expect(res.statusCode).toBe(200); const b = res.json();
+      expect(Object.keys(b).sort()).toEqual(["replayed", "summary", "tasks", "trace"]); expect(b.replayed).toBe(false);
+      expect(b.tasks.length).toBeGreaterThan(0); expect(b.trace).toHaveLength(b.tasks.length); for (const x of b.tasks) expect(typeof x.taskId === "string" && typeof x.title === "string").toBe(true);
+      for (const [i, x] of b.trace.entries()) { expect(Object.keys(x).sort()).toEqual(["estimate", "index", "requirements", "satisfies", "workPackageId"]); expect(x.index).toBe(i); for (const r of x.requirements) expect(Object.keys(r).sort()).toEqual(["acceptanceCriteria", "id", "statement"]); }
+      expect(Object.keys(b.summary).sort()).toEqual(["architecture", "plan", "requirements"]); expect(Object.keys(b.summary.requirements).sort()).toEqual(["acceptanceCriteria", "functional", "nonFunctional"]);
+      expect(Object.keys(b.summary.architecture).sort()).toEqual(["components", "techChoices"]); expect(Object.keys(b.summary.plan).sort()).toEqual(["milestones", "workPackages"]);
+      const again = await post((await mkApp({store: t.view, flow: t.flow})).app, `/v1/missions/${t.missionId}/analysis/plan`); expect(again.json().replayed).toBe(true);
+    } finally { t.done(); }
+  });
+
+  it("B-ANALYSIS-LOWS-3 (a): the produce lock covers the WHOLE step (the route cannot know beforehand whether a step is paid): while another produce holds it, even a step that would do no paid work answers 409 PREDEV_PRODUCE_BUSY with a REFUSED audit and the flow is never called", async () => {
+    const {tryProduceLock} = await import("../apps/control-api/src/routes/produce-lock.js"); const held = tryProduceLock("msn_" + "c".repeat(24));
+    try {
+      const m = await mkApp({step: {status: "AWAITING_APPROVAL", kind: "Plan", artifactId: "art_1", artifactState: "DRAFT", next: "FOUNDER_APPROVAL"}}); const r = await post(m.app, `/v1/missions/${MSN}/analysis/step`);
+      expect([r.statusCode, r.json(), m.calls]).toEqual([409, {error: "PREDEV_PRODUCE_BUSY"}, []]); expect(m.auditLog).toContainEqual(expect.objectContaining({status: "REFUSED", reason: "PREDEV_PRODUCE_BUSY"}));
+    } finally { if (held.ok) held.release(); }
+    const free = await mkApp({step: {status: "AWAITING_APPROVAL", kind: "Plan", artifactId: "art_1", artifactState: "DRAFT", next: "FOUNDER_APPROVAL"}}); expect((await post(free.app, `/v1/missions/${MSN}/analysis/step`)).statusCode).toBe(200);
+  });
+
+  it("B-ANALYSIS-LOWS-4 (1)-(3): builderRan checks the EVIDENCE first (trace -> true even for AnalysisError; no trace: AnalysisError / empty source -> false; no source or a source that throws -> null); both STOPPED audits carry the trace fields (the draft-recorded recheck and the flow's AnalysisStoppedError); a throwing factory still leaves a FAILED audit", async () => {
+    const {AnalysisError, AnalysisStoppedError} = await import("../core/workos/crew/analysis.js"); const url = `/v1/missions/${MSN}/analysis/step`;
+    const TRACE = {roleId: "analyst", kind: "Requirements", identity: "claude-cli@test", outputSha256: "cd".repeat(32), exitCode: 0, durationMs: 77};
+    const FIELDS = {roleId: "analyst", artifactKind: "Requirements", executor: "claude-cli@test", outputSha256: TRACE.outputSha256, exitCode: 0, durationMs: 77};
+    const failed = async (flow: any) => { const m = await mkApp({flow}); await post(m.app, url); return m.auditLog.find(a => a.e === "WORKOS_ANALYSIS_STEP" && a.status === "FAILED"); };
+    const aerr = () => new AnalysisError("ANALYSIS_MISSION_NOT_FOUND"), boom = () => Object.assign(new Error("WORKOS_DISK_FULL"), {code: "WORKOS_DISK_FULL"});
+    expect(await failed({step: async () => { throw aerr(); }, builderTrace: () => TRACE}), "evidence beats the error class").toMatchObject({builderRan: true});
+    expect(await failed({step: async () => { throw aerr(); }, builderTrace: () => null})).toMatchObject({builderRan: false});
+    expect(await failed({step: async () => { throw boom(); }, builderTrace: () => null}), "empty trace source").toMatchObject({builderRan: false});
+    expect(await failed({step: async () => { throw boom(); }, builderTrace: () => { throw new Error("trace boom"); }}), "source threw").toMatchObject({builderRan: null});
+    expect(await failed({step: async () => { throw boom(); }}), "no source").toMatchObject({builderRan: null});
+    // (3) fabrika fırlatırsa da FAILED denetimi (builder hiç çağrılmadı: false) ve 5xx
+    const fm = await mkApp({flow: () => { throw Object.assign(new Error("factory boom"), {code: "FACTORY_BROKEN"}); }}); const fr = await post(fm.app, url);
+    expect(fr.statusCode).toBeGreaterThanOrEqual(500); expect(fm.auditLog).toContainEqual(expect.objectContaining({e: "WORKOS_ANALYSIS_STEP", status: "FAILED", reason: "FACTORY_BROKEN", builderRan: false})); expect(fm.calls).toEqual([]);
+    // (2) STOPPED #1: taslak kaydedildikten sonra Global Stop gelir (gerçekten durur) - izin alanları + stoppedAfterRecord
+    let trip = () => {}; const after = await mkApp({flow: {step: async () => { trip(); return {status: "DRAFT_READY", kind: "Requirements", artifactId: "art_1", version: 2, roleId: "analyst", next: "FOUNDER_APPROVAL"}; }, builderTrace: () => TRACE}}); trip = after.setStop;
+    const ar = await post(after.app, url); expect([ar.statusCode, ar.json()]).toEqual([423, {error: "GLOBAL_STOP_ACTIVE"}]);
+    expect(after.auditLog.find(a => a.status === "STOPPED")).toMatchObject({reason: "GLOBAL_STOP_ACTIVE", stoppedAfterRecord: true, kind: "Requirements", artifactId: "art_1", version: 2, ...FIELDS});
+    // (2) STOPPED #2: akış AnalysisStoppedError fırlatır (ücretli çağrı iptal edildi) - izin alanları, stoppedAfterRecord YOK
+    const thrown = await mkApp({flow: {step: async () => { throw new AnalysisStoppedError(); }, builderTrace: () => TRACE}}); const tr = await post(thrown.app, url); expect(tr.statusCode).toBe(423);
+    const stoppedAudit = thrown.auditLog.find(a => a.status === "STOPPED"); expect(stoppedAudit).toMatchObject({reason: "GLOBAL_STOP_ACTIVE", ...FIELDS}); expect(stoppedAudit).not.toHaveProperty("stoppedAfterRecord");
   });
 
   it("R2: Global Stop arriving while the step runs is re-checked before DRAFT_READY is answered (423, audited); other statuses are unaffected", async () => {

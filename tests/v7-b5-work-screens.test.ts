@@ -2845,3 +2845,74 @@ describe("LANE-A A-FLOW-GAP-2: the Journey end to end (stateful fake server, rea
     expect([...new Set(srv.S.blocked)].sort()).toEqual([`GET /v1/work-runs/${IRUN}/product`, `POST /v1/missions/${IMSN}/analysis/step`].sort());
   });
 });
+
+// //TR: A-PREDEV-BUSY-1: elle plan, analiz/pre-dev eylemleriyle aynı mission-yazma kilidini paylaşır (aynı mission'ın görevlerini yazar).
+describe("LANE-A A-PREDEV-BUSY-1: the hand plan shares the mission-write lock", () => {
+  const tick = (ms = 20) => new Promise(r => setTimeout(r, ms));
+  const planGet = () => (p: string) => {
+    if (p === "/v1/projects") return {projects: [project()]};
+    if (p === "/v1/missions") return {missions: [mission({status: "AUTHORIZED"})]};
+    if (p === `/v1/missions/${MID}`) return {mission: mission({status: "AUTHORIZED"}), tasks: []};
+    if (p.startsWith("/v1/work-runs")) return {workRuns: []};
+    if (p.startsWith("/v1/evidence")) return {evidence: []};
+    return undefined;
+  };
+  const OKPLAN = (b: any) => ({status: 201, body: {tasks: b.tasks.map((t: any, i: number) => ({taskId: "tsk_" + String(i).repeat(24), title: t.title}))}});
+  const open = async (post: (p: string, b: any) => any) => {
+    const c = await mkCtx({get: planGet(), post});
+    forms.selection.missionId = MID;
+    const view = await load(rend, "views", "work.js"), pf = await load(rend, "views", "plan-form.js");
+    pf.resetPlanDraft(null);
+    return {...c, view, pf, root: mount(c.doc, await view.render(c.ctx))};
+  };
+  const type = (root: N, id: string, v: string) => { byId(root, id)!.value = v; byId(root, id)!.fire("input"); };
+  const deferred = () => { let res: (v: any) => void = () => {}; const p = new Promise<any>(r => { res = r; }); return {p, res}; };
+  const soon = <T,>(p: Promise<T>): Promise<T | "NOT_REFUSED_IN_TIME"> => Promise.race([p, new Promise<"NOT_REFUSED_IN_TIME">(r => setTimeout(() => r("NOT_REFUSED_IN_TIME"), 300))]); // fail fast when a call is not refused (no timeout is raised)
+
+  it("another mission-write action in flight: the hand plan button is disabled with a note, a submit is refused ({ok:false,busy:true}) and nothing is posted; it is usable again afterwards", async () => {
+    const {ctx, calls, root, pf, view, doc} = await open((_p, b) => OKPLAN(b));
+    type(root, "plan-title-0", "A");
+    forms.drafts.busy["analysis-step"] = true; // an analysis step is in flight
+    const busyRoot = mount(doc, await view.render(ctx));
+    expect(byId(busyRoot, "plan-submit")!.attrs.get("disabled")).toBeDefined(); expect(byId(busyRoot, "plan-in-flight")!.textContent).toContain("Mission verisini değiştiren başka bir istek sürüyor"); expect(byId(busyRoot, "plan-in-flight")!.attrs.get("tabindex")).toBe("-1"); // the focus target
+    // the note names no mission and no request kind (the lock is global), and uses the same word as the rest of the Turkish UI
+    expect(byId(busyRoot, "plan-in-flight")!.textContent).not.toMatch(/bu mission|misyon|analiz isteği|ön[- ]?geliştirme isteği|el planı/i);
+    expect(await pf.submitPlan(ctx, MID)).toEqual({ok: false, busy: true}); byId(busyRoot, "plan-form")!.fire("submit"); await tick();
+    expect(calls.post).toEqual([]);
+    forms.drafts.busy["analysis-step"] = false;
+    const freeRoot = mount(doc, await view.render(ctx));
+    expect(byId(freeRoot, "plan-submit")!.attrs.get("disabled")).toBeUndefined(); expect(byId(freeRoot, "plan-in-flight")).toBeNull();
+  });
+
+  it("a hand plan in flight locks the other actions; the lock is released on a rejecting repaint and on a dropped (other-mission) answer; same-tick double call = 1 POST; the note takes focus", async () => {
+    const d = deferred(); const posts: string[] = [];
+    const c = await open((p, b) => { posts.push(p); return d.p; });
+    type(c.root, "plan-title-0", "A");
+    const seen: boolean[] = [], orig = c.ctx.rerender; c.ctx.rerender = async () => { seen.push(forms.missionWriteBusy()); return orig(); }; // the lock state at every repaint
+    const p1 = c.pf.submitPlan(c.ctx, MID), p2 = c.pf.submitPlan(c.ctx, MID);
+    expect(await soon(p2)).toEqual({ok: false, busy: true}); expect(forms.missionWriteBusy()).toBe(true);
+    await tick(); expect(posts).toHaveLength(1);
+    // the lock is shared: an analysis submit is refused while the hand plan runs
+    const an = await load(rend, "views", "analysis-step.js"); expect(await an.submitAnalysisStep(c.ctx, MID)).toEqual({ok: false, busy: true});
+    c.pf.resetPlanDraft("msn_" + "9".repeat(24)); // another mission selected while A's request is in flight
+    d.res(OKPLAN({tasks: [{title: "A"}]})); const r = await p1;
+    expect(r).toMatchObject({ok: false, stale: true}); expect(forms.missionWriteBusy()).toBe(false); expect(c.calls.refresh).toBe(0); // no refresh for the dropped answer
+    expect(seen, "busy at each repaint: set before the POST, released before the dropped answer repaints").toEqual([true, false]); // exactly one repaint for the dropped answer
+    expect(forms.drafts.status["mission-plan"]).toBeUndefined(); // the dropped answer wrote no status for the other mission
+    // rejecting repaint
+    const e = await open((_p, b) => OKPLAN(b)); type(e.root, "plan-title-0", "A"); e.ctx.rerender = async () => { throw new Error("REPAINT_FAILED"); };
+    await expect(e.pf.submitPlan(e.ctx, MID)).rejects.toThrow("REPAINT_FAILED"); expect(forms.missionWriteBusy()).toBe(false); expect(e.calls.post).toEqual([]);
+    // focus
+    const f = await open((_p, b) => OKPLAN(b)); type(f.root, "plan-title-0", "A"); const spy: any[] = []; f.ctx.settleFocus = (o: any) => { spy.push(o); return null; };
+    await f.pf.submitPlan(f.ctx, MID); expect(spy[0]).toEqual({keys: ["id:plan-in-flight"]});
+  });
+
+  it("the busy refusal comes before validation: an invalid (empty) hand plan while another request runs is refused as busy and writes no validation status", async () => {
+    const c = await open((_p, b) => OKPLAN(b)); // rows are empty = invalid
+    forms.drafts.busy["predev-approve"] = true;
+    expect(await soon(c.pf.submitPlan(c.ctx, MID))).toEqual({ok: false, busy: true}); expect(forms.drafts.status["mission-plan"]).toBeUndefined(); expect(c.calls.post).toEqual([]);
+    forms.drafts.busy["predev-approve"] = false;
+    const r = await c.pf.submitPlan(c.ctx, MID); expect(r).toMatchObject({validation: true}); expect(forms.drafts.status["mission-plan"]).toBeDefined(); // without the lock the same input is a validation error
+  });
+});
+

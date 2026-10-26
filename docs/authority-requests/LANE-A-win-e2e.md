@@ -5,7 +5,7 @@
 
 ## What exists (branch `claude/lane-a-win-e2e`)
 - `scripts/e2e/fake-backend.ts`: the real Control API (`buildServer`) in a temp data dir, FAKE executor, runner on, **no sandbox injected** (no verified sandbox => tests are honestly NOT_EXECUTED; nothing runs project code on the host), real token, 127.0.0.1 only. No real Claude, no network.
-- `scripts/e2e/desktop-journey.e2e.mjs`: Playwright `_electron` drives the repo's Electron (`apps/desktop/main.mjs`, dev mode, isolated `--user-data-dir`). A fixed denominator of **20 planned steps**, each with a kind (`FUNCTIONAL`, `GATED_ASSERTED` = depends on the batch 4b routes, `NOT_EXECUTED_ASSERTED` = the honest "not executed" display). Each step asserts the on-screen state, takes a screenshot into `<out>/screenshots`; the result is `<out>/report.json`. The temporary app data dir is a fresh `mkdtemp` `<out>/data-XXXXXX` (an existing `<out>/data` is never touched) and is removed on exit, also on SIGINT (130) / SIGTERM (143).
+- `scripts/e2e/desktop-journey.e2e.mjs`: Playwright `_electron` drives the repo's Electron (`apps/desktop/main.mjs`, dev mode, isolated `--user-data-dir`). A fixed denominator of **21 planned steps**, each with a kind (`FUNCTIONAL`, `GATED_ASSERTED` = depends on the batch 4b routes, `NOT_EXECUTED_ASSERTED` = the honest "not executed" display). Each step asserts the on-screen state, takes a screenshot into `<out>/screenshots`; the result is `<out>/report.json`. The temporary app data dir is a fresh `mkdtemp` `<out>/data-XXXXXX` (an existing `<out>/data` is never touched) and is removed on exit, also on SIGINT (130) / SIGTERM (143).
 
 | # | step | kind |
 |---|------|------|
@@ -24,13 +24,14 @@
 | 13 | run-reaches-review | FUNCTIONAL |
 | 14 | test-result-honest (expectation derived from the server's `GET /v1/work-runs/:id`; the UI kind/reason must equal it) | NOT_EXECUTED_ASSERTED |
 | 15 | link-run-to-task | FUNCTIONAL |
-| 16 | open-project-workspace | FUNCTIONAL |
-| 17 | delivery-prepare (card productVerification state and reason equal the work-run's) | FUNCTIONAL |
-| 18 | delivery-accept (NOT_VERIFIED acknowledged) | FUNCTIONAL |
-| 19 | product (one start request, server 409, card error, reason `SANDBOX_UNAVAILABLE`, no running product) | GATED_ASSERTED |
-| 20 | request-ledger (the server's own request log for the whole journey: analysis step == clicks, approve == 1, analysis plan == 0, product start == 1; the `/__e2e` routes answer 403 without a valid token and 404 for an unknown mission) | FUNCTIONAL |
+| 16 | task-status-done (Start sends one request and no confirmation; a refused Done confirmation sends none; a confirmed Done leaves the task DONE on the server and not reopenable; the mission is not COMPLETE) | FUNCTIONAL |
+| 17 | open-project-workspace | FUNCTIONAL |
+| 18 | delivery-prepare (card productVerification state and reason equal the work-run's) | FUNCTIONAL |
+| 19 | delivery-accept (NOT_VERIFIED acknowledged) | FUNCTIONAL |
+| 20 | product (one start request, server 409, card error, reason `SANDBOX_UNAVAILABLE`, no running product) | GATED_ASSERTED |
+| 21 | request-ledger (the server's own request log for the journey mission/run only. Positive control in EVERY mode: exactly one 2xx `delivery/accept`, at least one run start and exactly two 2xx task transitions (Start, Done) for the planned task with none non-2xx, so an empty or mis-scoped ledger fails. Then analysis step == clicks, approve == 1, analysis plan == 0, product start == 1 (post-4b); the `/__e2e` routes answer 403 without a valid token and 404 for an unknown mission. In `GATED_4B` mode the step / approve / product-start zeros are **not evidence** (the desktop cannot send those requests), and plan == 0 is only a negative guard that a post-4b run with a planted plan request can falsify) | FUNCTIONAL |
 
-- A startup failure (backend/Electron did not come up) is reported **separately** in `report.json` `startup` (backend log tail and Electron main-process stdout/stderr tail), not as a 21st step; it makes the result `FAIL` (exit 1).
+- A startup failure (backend/Electron did not come up) is reported **separately** in `report.json` `startup` (backend log tail and Electron main-process stdout/stderr tail), not as a planned step; it makes the result `FAIL` (exit 1).
 - Exit codes: `0` pass or `PASS_WITH_NOT_VERIFIED`, `1` a step or the startup failed, `3` BLOCKED (**only** `PLAYWRIGHT_MISSING`, `ELECTRON_BINARY_MISSING`, `NO_DISPLAY`: missing preconditions checked before anything is started), `4` NOT_VERIFIED **or NOT_EXECUTED** with `--require-post-4b`. BLOCKED is never a pass. A step that cannot run because its route is not admitted by this desktop build is `NOT_EXECUTED:GATED_4B` (never PASS); a planned step that never ran because an earlier step failed is `NOT_REACHED` (result `FAIL:INCOMPLETE`). `report.json` counts use the same names: `PASS`, `NOT_VERIFIED`, `NOT_EXECUTED`, `NOT_REACHED`, `FAIL`.
 - Electron: `automation/lib/electron-provision.mjs` `verifyProvisionedElectron` (the sealed binary from `scripts/provision-electron.mjs`) first, then `node_modules/electron` (not with `CI=true`). `report.json` `electron` carries `source`, `path`, `version` (from `dist/version`, Electron 44.x here) and `provisionError`. Playwright is not a repo dependency; the script finds `playwright`/`playwright-core` (or `PLAYWRIGHT_MODULE_DIR`).
 
@@ -77,7 +78,7 @@ Test pin to add next to the existing `sanitizePostBody` test in `tests/v7-b5-wor
 With no verified provider (this E2E injects none) the server refuses Start with the plain 409 `SANDBOX_UNAVAILABLE` (the execution gate answers before the bridge check); the UI shows it as `Refused (SANDBOX_UNAVAILABLE)`. `DEVRUN_SANDBOX_UNAVAILABLE:<reason>` appears only when a verified provider exists but cannot bridge a loopback port; that case is covered by the unit tests, not reachable in this E2E without injecting a sandbox. The step accepts either code and fails for anything else.
 
 ## Linux result (this sandbox, real Electron 44.9.3 under xvfb-run, root, `--no-sandbox`)
-- Base mode (routes not admitted): `PASS 14 / NOT_VERIFIED 2 (analysis, product: GATED_4B) / FAIL 0`, result `PASS_WITH_NOT_VERIFIED`.
+- Base mode (routes not admitted), measured on the A-JOURNEY-E2E-4 head: `PASS 16 / NOT_VERIFIED 2 (analysis, product: GATED_4B) / NOT_EXECUTED 2 (analysis-stuck-shown, reapprove-once: GATED_4B) / NOT_REACHED 0 / FAIL 0 of 20`, result `PASS_WITH_NOT_VERIFIED` (exit 0; exit 4 with `--require-post-4b`). With the post-4b server (#242): `PASS 20 / 20`. With the task-status-done step (21 planned) the base mode measured `PASS 17 / NOT_VERIFIED 2 / NOT_EXECUTED 2 / FAIL 0 / NOT_REACHED 0 of 21` twice on Linux (xvfb); the post-4b composition with this step was NOT run.
 - Composition (local only, not pushed: this branch + 4b `fee6cef` + `63d4c1c` + `771e1d3`; both merge conflicts in test files kept both sides; `devrun.ts`/remediation test took the lane-b side): without the main.mjs change above `analysis` FAILS (finding); with it (composition commit `5b85947`, the unpushed main.mjs patch on top of `2ddbfd4`) `PASS 16 / NOT_VERIFIED 0 / FAIL 0`, twice.
 - No display => `BLOCKED:NO_DISPLAY`, exit 3 (checked).
 - On the composition `tests/v7-b5-work-screens.test.ts` + `tests/v7-b1-workos.test.ts`: 295 passed / 1 failed. The one failure is #226's own end-to-end test pin that asserts the two routes are blocked (`expected [] to include 'POST /v1/missions/msn_...analysis/step'`); it must flip when 4b lands (the blocked list becomes empty, the analysis/product steps go through the admitted path).

@@ -1,6 +1,6 @@
 // //TR: Bu görünüm parçası Proje Yolculuğu'ndaki "Analiz" adımıdır (A-FLOW-5): "Analiz et" POST /v1/missions/:id/analysis/step ile mevcut analiz fazının taslağını ürettirir (BusinessAnalysis, Requirements, Plan, Architecture); taslaklar aşağıdaki mevcut Pre-dev kararları bölümünde Founder tarafından onaylanır ya da reddedilir. BLOCKED durumunda sunucunun kesin engelleri ve Founder'ın kendi giriş komutu (yalnız metin) gösterilir. "Analiz tamam" YALNIZ dört fazın da onaylandığı COMPLETE sonucunda yazılır; ardından "Plan oluştur" POST .../analysis/plan ile onaylı plandan görev planını kurar ve görev -> gereksinim -> kabul kriteri izlenebilirliğini gösterir. Uç noktalar masaüstü allow-list'inde yoksa dürüst "etkin değil" yazılır; hiçbir sonuç uydurulmaz.
 import {h,badge} from "../components.js";
-import {drafts,field,statusBlock,setStatus,focusResult,settle} from "../forms.js";
+import {drafts,field,statusBlock,setStatus,focusResult,settle,missionWriteBusy} from "../forms.js";
 import {selection} from "../forms.js";
 import {buildAnalysisStepRequest,buildAnalysisPlanRequest,classifyAnalysisStep,classifyAnalysisPlan,analysisStatusKey,ANALYSIS_KINDS,buildReapproveRequest,reapproveOutcome} from "../analysis-core.js";
 
@@ -14,7 +14,7 @@ export function resetAnalysis(missionId=null){
   delete drafts.status[ANALYSIS_STEP_FORM];delete drafts.status[ANALYSIS_PLAN_FORM];delete drafts.status[ANALYSIS_REAPPROVE_FORM];
 }
 /** //TR: A-ANALYSIS-ORDER-1: Analiz et, Yeniden onayla ve Plan oluştur AYNI mission durumunu yazar; biri sürerken diğerleri gönderilmez (düğmeler kapalı, işlevler de reddeder), böylece geç gelen bir cevap diğerinin daha yeni sonucunu ezemez. */
-export const analysisBusy=()=>[ANALYSIS_STEP_FORM,ANALYSIS_PLAN_FORM,ANALYSIS_REAPPROVE_FORM].some(f=>drafts.busy[f]===true);
+export const analysisBusy=missionWriteBusy;
 const tOr=(ctx,k,fallback)=>{const v=ctx.t(k);return v===k?fallback:v};
 
 export async function submitAnalysisStep(ctx,missionId){
@@ -145,7 +145,7 @@ export function analysisPanel(ctx,{missionId,exec}){
   return h(doc,"div",{class:"analysis-step",id:"analysis-step",role:"region","aria-label":ctx.t("analysis.title"),dataset:{analysisMission:missionId}},
     h(doc,"h3",{text:ctx.t("analysis.title")}),
     h(doc,"p",{class:"note",text:ctx.t("analysis.lead")}),
-    busyAny?h(doc,"p",{class:"note",id:"analysis-in-flight",tabindex:"-1",role:"status",dataset:{analysisBusy:"1",focusKey:"analysis-in-flight"},text:ctx.t("analysis.inFlight")}):null,
+    busyAny?h(doc,"p",{class:"note",id:"analysis-in-flight",tabindex:"-1",role:"status",dataset:{analysisBusy:"1",focusKey:"analysis-in-flight"},text:ctx.t("busy.missionWrite")}):null,
     h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn btn-primary",id:"analysis-step-submit",dataset:{focusKey:"analysis-step-submit"},disabled:busyS,text:ctx.t("analysis.step.button"),
       on:{click:()=>{if(!analysisBusy())submitAnalysisStep(ctx,missionId)}}})),
     step?stepBlock(ctx,step,exec,missionId):h(doc,"p",{class:"note",dataset:{analysisStatus:"NONE"},text:ctx.t("analysis.none")}),

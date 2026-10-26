@@ -4,6 +4,8 @@ import path from "node:path";
 import crypto from "node:crypto";
 import {spawnGitSync} from "../../automation/lib/git-isolation.mjs";
 import {safeChildEnv} from "../../automation/lib/env-policy.mjs";
+import {runGitAsync} from "./git-async.js";
+import type {SpawnedChild} from "./executors.js";
 import {agentConfigPattern} from "./agent-config-paths.js";
 
 export const BUILDER_GIT_IDENTITY = {name: "UASCO Builder (CLAUDE_BUILDER)", email: "builder@local.invalid"} as const;
@@ -42,7 +44,7 @@ export function agentConfigInWorkspace(workspace: string, envPolicyFile: string)
 
 export type BuilderCommitResult =
   | {ok: true; commitSha: string; changed: string[]; log: string}
-  | {ok: false; reason: string; changed: string[]; log: string};
+  | {ok: false; reason: string; changed: string[]; log: string; transient?: boolean};
 
 // `git status --porcelain=v1 -z` girdilerinden yol listesi (rename/copy kaydının ikinci alanı da yoldur).
 function parseStatusZ(out: string): string[] {
@@ -77,52 +79,76 @@ export function forbiddenChange(workspace: string, rel: string): string | null {
   return null;
 }
 
-export function commitBuilderOutput(workspace: string, opts: {envPolicyFile: string; startSha: string; gitDigestBefore: string | null; message: string}): BuilderCommitResult {
-  const env = safeChildEnv(opts.envPolicyFile, {provider: "DETERMINISTIC"});
+// //TR: HB-1: engine-owned commit adımları TEK yerde (jeneratör): her `yield` bir git çağrısı ister ve sonucunu geri alır. Eşzamanlı sürücü (commitBuilderOutput: testler, eşzamanlı çağıranlar) ve eşzamansız sürücü (commitBuilderOutputAsync: EditOnlyImplementer, crew geliştirme adaptörü) aynı sırayı, aynı HARDEN öneğini ve aynı ortamı uygular. Eşzamansız yol, birden çok run'ın aynı süreçte sürüldüğü servis kipinde `git status --untracked-files=all` gibi büyük ağaç taramalarının olay döngüsünü bloklayıp diğer run'ların lease'ini aç bırakmasını önler (PAR-03).
+interface GitReq { args: string[] }
+interface GitRes { status: number | null; stdout: string; stderr: string }
+function* commitSteps(workspace: string, opts: {startSha: string; gitDigestBefore: string | null; message: string}, span: <T>(fn: () => T) => T): Generator<GitReq, BuilderCommitResult, GitRes> {
   const lines: string[] = [];
-  const git = (args: string[]) => {
-    const r = spawnGitSync(workspace, [...HARDEN, ...args], {env, maxBuffer: 64 * 1024 * 1024});
+  let recordFailed = false; // //TR: R2: yazar kaydı yazılamadığı için öldürülen git çocuğu (SPAWN_RECORD_FAILED) geçici bir diskhatasıdır: sonuç kalıcı BUILDER_* bloğu DEĞİL, yeniden denemedir.
+  const git = function* (args: string[]): Generator<GitReq, {ok: boolean; out: string}, GitRes> {
+    const r = yield {args};
+    if (r.status === null && String(r.stderr ?? "").startsWith("SPAWN_RECORD_FAILED")) recordFailed = true;
     lines.push(`$ git ${args.join(" ")}\n[exit=${r.status}]${r.status === 0 ? "" : `\n${String(r.stderr ?? "").slice(0, 2000)}`}`);
     return {ok: r.status === 0, out: String(r.stdout ?? "")};
   };
-  const fail = (reason: string, changed: string[] = []): BuilderCommitResult => ({ok: false, reason, changed, log: `${lines.join("\n")}\nBUILDER_COMMIT_REFUSED ${reason}\n`});
+  const fail = (reason: string, changed: string[] = []): BuilderCommitResult => ({ok: false, reason, changed, log: `${lines.join("\n")}\nBUILDER_COMMIT_REFUSED ${reason}\n`, ...(recordFailed ? {transient: true} : {})});
   if (!SHA.test(opts.startSha)) return fail("BUILDER_START_SHA_INVALID");
   // Builder'ın .git'e dokunması (config, HEAD, refs, info/attributes, hooks) engine git çağrısından ÖNCE yakalanır.
-  const after = gitControlDigest(workspace);
+  const after = span(() => gitControlDigest(workspace));
   if (!opts.gitDigestBefore || after !== opts.gitDigestBefore) return fail("BUILDER_TOUCHED_GIT_INTERNALS");
   // Index builder'dan devralınmaz: silinip HEAD'den yeniden kurulur (skip-worktree/assume-unchanged gibi bayraklar düşer).
   try { fs.rmSync(path.join(workspace, ".git", "index"), {force: true}); } catch { return fail("BUILDER_INDEX_RESET_FAILED"); }
-  if (!git(["read-tree", opts.startSha]).ok) return fail("BUILDER_INDEX_RESET_FAILED");
-  const head = git(["rev-parse", "--verify", "HEAD^{commit}"]);
+  if (!(yield* git(["read-tree", opts.startSha])).ok) return fail("BUILDER_INDEX_RESET_FAILED");
+  const head = yield* git(["rev-parse", "--verify", "HEAD^{commit}"]);
   if (!head.ok || head.out.trim() !== opts.startSha) return fail("BUILDER_MOVED_HEAD");
-  const st = git(["status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored=no", "--no-renames"]);
+  const st = yield* git(["status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored=no", "--no-renames"]);
   if (!st.ok) return fail("BUILDER_STATUS_FAILED");
   const changed = [...new Set(parseStatusZ(st.out))].sort();
   lines.push(`changed (${changed.length}):\n${changed.map(f => `  ${f}`).join("\n")}`);
   if (!changed.length) return fail("BUILDER_PRODUCED_NO_CHANGE");
   for (const f of changed) {
-    const why = forbiddenChange(workspace, f);
+    const why = span(() => forbiddenChange(workspace, f));
     if (why) return fail(`BUILDER_CHANGED_FORBIDDEN_PATH:${why}`, changed);
   }
   // SBX-8: builder ajan yapılandırmasına (.claude/**, .mcp.json, .claude.json, CLAUDE.md, CLAUDE.local.md) dokunamaz; .gitignore ile gizlenmiş olanlar da sayılır. Böylece bu dosyalar asla reviewer klonuna ulaşmaz.
-  const ign = git(["status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored=matching", "--no-renames"]);
+  const ign = yield* git(["status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored=matching", "--no-renames"]);
   if (!ign.ok) return fail("BUILDER_STATUS_FAILED", changed);
-  // RV-SBX8-C1-F1: `status --ignored=matching` yoksayılan bir DİZİNİ (ör. dist/) tek girişe daraltır; içindeki dist/.claude/settings.json gibi ajan yapılandırması gizli kalır. Bu yüzden yoksayılanlar dahil izlenmeyen dosyalar `ls-files -z --others` ile (--exclude-standard YOK) TEK TEK sayılır ve her biri ajan yapılandırması desenine göre denetlenir; gizlenmiş bir yazma da reddedilir.
-  const others = git(["-c", "core.quotePath=false", "ls-files", "-z", "--others"]);
+  // RV-SBX8-C1-F1: `status --ignored=matching` yoksayılan bir DİZİNİ (ör. dist/) tek girişe daraltır; içindeki dist/.claude/settings.json gibi ajan yapılandırması gizli kalır. Bu yüzden yoksayılanlar dahil izlenmeyen dosyalar `ls-files -z --others` ile (--exclude-standard YOK) TEK TEK sayılır ve her biri ajan yapılandırması desenine göre denetlenir.
+  const others = yield* git(["-c", "core.quotePath=false", "ls-files", "-z", "--others"]);
   if (!others.ok) return fail("BUILDER_STATUS_FAILED", changed);
   const othersPaths = String(others.out).split("\0").filter(Boolean);
   const touched = [...new Set([...changed, ...parseStatusZ(ign.out), ...othersPaths])].filter(f => agentConfigPattern(f) !== null).sort();
   if (touched.length) { lines.push(`agent config touched:\n${touched.map(f => `  ${f}`).join("\n")}`); return fail("BUILDER_TOUCHED_AGENT_CONFIG", changed); }
-  if (!git(["add", "-A"]).ok) return fail("BUILDER_STAGE_FAILED", changed);
-  const raw = git(["diff", "--cached", "--raw", "-z", "--no-renames", opts.startSha]);
+  if (!(yield* git(["add", "-A"])).ok) return fail("BUILDER_STAGE_FAILED", changed);
+  const raw = yield* git(["diff", "--cached", "--raw", "-z", "--no-renames", opts.startSha]);
   if (!raw.ok) return fail("BUILDER_STAGE_FAILED", changed);
   if (!raw.out.trim()) return fail("BUILDER_PRODUCED_NO_CHANGE", changed);
   if (/(^|\0):\d{6} 160000 |(^|\0):160000 /.test(raw.out)) return fail("BUILDER_CHANGED_FORBIDDEN_PATH:GITLINK", changed);
   const msg = opts.message.replace(/\r/g, "").slice(0, 4000);
-  if (!git(["-c", `user.name=${BUILDER_GIT_IDENTITY.name}`, "-c", `user.email=${BUILDER_GIT_IDENTITY.email}`, "-c", "commit.gpgsign=false", "commit", "-q", "--no-verify", "-m", msg]).ok) return fail("BUILDER_COMMIT_FAILED", changed);
-  const sha = git(["rev-parse", "--verify", "HEAD^{commit}"]).out.trim();
-  const parent = git(["rev-parse", "--verify", "HEAD^1"]).out.trim();
+  if (!(yield* git(["-c", `user.name=${BUILDER_GIT_IDENTITY.name}`, "-c", `user.email=${BUILDER_GIT_IDENTITY.email}`, "-c", "commit.gpgsign=false", "commit", "-q", "--no-verify", "-m", msg])).ok) return fail("BUILDER_COMMIT_FAILED", changed);
+  const sha = (yield* git(["rev-parse", "--verify", "HEAD^{commit}"])).out.trim();
+  const parent = (yield* git(["rev-parse", "--verify", "HEAD^1"])).out.trim();
   if (!SHA.test(sha) || parent !== opts.startSha) return fail("BUILDER_COMMIT_FAILED", changed);
   lines.push(`BUILDER_COMMIT ${sha} parent=${parent} author=${BUILDER_GIT_IDENTITY.name}`);
   return {ok: true, commitSha: sha, changed, log: `${lines.join("\n")}\n`};
+}
+type CommitOpts = {envPolicyFile: string; startSha: string; gitDigestBefore: string | null; message: string};
+const NO_SPAN = <T,>(fn: () => T): T => fn();
+export function commitBuilderOutput(workspace: string, opts: CommitOpts): BuilderCommitResult {
+  const env = safeChildEnv(opts.envPolicyFile, {provider: "DETERMINISTIC"});
+  const g = commitSteps(workspace, opts, NO_SPAN);
+  let step = g.next();
+  while (!step.done) {
+    const r = spawnGitSync(workspace, [...HARDEN, ...step.value.args], {env, maxBuffer: 64 * 1024 * 1024});
+    step = g.next({status: r.status, stdout: String(r.stdout ?? ""), stderr: String(r.stderr ?? "")});
+  }
+  return step.value;
+}
+// //TR: span: küçük senkron .git/yol denetimleri (gitControlDigest, forbiddenChange) çağıranın span'ına sarılır (runner: TÜM lease'ler önce/sonra yenilenir). onSpawn: engine commit'inin git çocukları da workspace'i DEĞİŞTİRİR; çağıranın onSpawn'ı (runner'ın yazar kaydı) her git çocuğu için çağrılır, böylece engine commit sırasında çökerse devralan bu çocuğu da durdurur.
+export async function commitBuilderOutputAsync(workspace: string, opts: CommitOpts, o: {span?: <T>(fn: () => T) => T; extraEnv?: Record<string, string>; onSpawn?: (c: SpawnedChild) => void} = {}): Promise<BuilderCommitResult> {
+  const env = {...safeChildEnv(opts.envPolicyFile, {provider: "DETERMINISTIC"}), ...(o.extraEnv ?? {})};
+  const g = commitSteps(workspace, opts, o.span ?? NO_SPAN);
+  let step = g.next();
+  while (!step.done) step = g.next(await runGitAsync(workspace, [...HARDEN, ...step.value.args], env, o.onSpawn));
+  return step.value;
 }
