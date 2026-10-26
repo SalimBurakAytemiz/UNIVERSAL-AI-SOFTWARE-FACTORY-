@@ -382,6 +382,26 @@
       "ref": "wf_8713b7da-8ab (correctness+windows lenses; 1 MEDIUM refuted by skeptic; M1/M2/M3 mutants; expect counts never decrease)",
       "policy": "TEP-1",
       "at": "2026-10-26T18:56:01.492Z"
+    },
+    {
+      "pr": 256,
+      "sha": "698b83832b0dfda4fa48e9dba154b3c0373039fe",
+      "kind": "full",
+      "base": null,
+      "verdict": "NO_BLOCKERS_4LOW",
+      "ref": "wf_6f0af4f8-b7a (security+tests lenses; not R2: BLOCKED/FAILED both terminal, fresh review on new run; LOWs: comment invariant wrong (IDENTITY_MISMATCH/MUTATED_CLONE end BLOCKED), no near-miss FAILED rows, describe placement)",
+      "policy": "TEP-1",
+      "at": "2026-10-26T18:57:48.098Z"
+    },
+    {
+      "pr": 257,
+      "sha": "661ebd00a1a6da308b72eccf77154a668aa7df67",
+      "kind": "full",
+      "base": null,
+      "verdict": "NO_BLOCKERS_4LOW",
+      "ref": "wf_6f0af4f8-b7a (combined lens; no NFKC fold lost; LOW-but-real: previously accepted honest text e.g. '<<Fíll>>' now rejected -> replay could seal store; doc note omits it; \\p{Mc} untested; stale NFKC comment)",
+      "policy": "TEP-1",
+      "at": "2026-10-26T18:57:48.148Z"
     }
   ],
   "tests": [],
