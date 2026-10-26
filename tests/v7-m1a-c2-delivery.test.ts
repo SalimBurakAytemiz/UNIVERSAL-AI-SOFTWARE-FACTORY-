@@ -474,7 +474,23 @@ describe("LANE-B first-delivery backend E2E (intake template -> plan -> run -> V
     expect((await get(`/v1/tasks/${tasks[1].taskId}`)).json().task.status).toBe("PENDING");
     const flow = (await get(`/v1/projects/${projectId}/flow`)).json().flow;
     expect(flow.latestRunId).toBe(run.runId); expect(flow.testCommand).toBe("CONFIGURED"); expect(flow.taskRuns).toMatchObject({tasksWithRuns: 1, tasks: 2});
-    return {executed: st.ok, branch};
+    // 7. (eval-only B-INT-L2) the running product: start through the provider bridge -> GET 200 -> stop; without a verified provider / proven loopback the exact honest refusal
+    const caps = (provider as any).capabilities as {loopback?: boolean; loopbackReason?: string | null} | undefined;
+    const start = await post(`/v1/projects/${projectId}/devrun/start`, {});
+    let product: string;
+    if (!st.ok) {
+      expect(start.statusCode, start.body).toBe(409); expect(start.json().error).toBe("SANDBOX_UNAVAILABLE"); product = "REFUSED_SANDBOX_UNAVAILABLE";
+    } else if (!caps || caps.loopback !== true) {
+      expect(start.statusCode, start.body).toBe(409); expect(start.json()).toMatchObject({error: "DEVRUN_SANDBOX_UNAVAILABLE"}); expect(String(start.json().reason)).toMatch(/^SANDBOX_LOOPBACK_NOT_VERIFIED:/); product = `REFUSED_${start.json().reason}`;
+    } else {
+      expect(start.statusCode, start.body).toBe(200);
+      const dv = start.json().devrun; expect(dv).toMatchObject({status: "RUNNING", bridged: true}); expect(dv.preview.state).toBe("AVAILABLE");
+      const res = await fetch(`http://127.0.0.1:${dv.port}/`); expect(res.status).toBe(200); expect(await res.text()).toContain("Reading streak");
+      const stop = await post(`/v1/projects/${projectId}/devrun/stop`, {}); expect(stop.statusCode, stop.body).toBe(200); expect(stop.json().devrun.status).toBe("STOPPED");
+      await expect(fetch(`http://127.0.0.1:${dv.port}/`)).rejects.toBeTruthy(); product = "RUNNING_200_STOPPED";
+    }
+    console.log(`B-INT-L2 product step (${label}): ${product}`);
+    return {executed: st.ok, branch, product};
   }
   it("real Linux sandbox provider on this host: EXECUTED+passed when it verifies, otherwise honest NOT_EXECUTED with the exact reason (the CI host takes one branch; it is printed)", { timeout: T }, async () => {
     const {LinuxUnshareSandboxProvider} = await import("../core/agents/linux-unshare-sandbox.js");
@@ -485,6 +501,6 @@ describe("LANE-B first-delivery backend E2E (intake template -> plan -> run -> V
   it("a host that cannot isolate (unshare missing) always yields the honest NOT_EXECUTED outcome with SANDBOX_UNAVAILABLE and never a PASS", { timeout: T }, async () => {
     const {LinuxUnshareSandboxProvider} = await import("../core/agents/linux-unshare-sandbox.js");
     const r = await walk(() => new LinuxUnshareSandboxProvider({unshareBinary: "/nonexistent/unshare"}), "forced-unavailable");
-    expect(r).toEqual({executed: false, branch: "SANDBOX_UNAVAILABLE_UNSHARE_MISSING"});
+    expect(r).toEqual({executed: false, branch: "SANDBOX_UNAVAILABLE_UNSHARE_MISSING", product: "REFUSED_SANDBOX_UNAVAILABLE"});
   });
 });
