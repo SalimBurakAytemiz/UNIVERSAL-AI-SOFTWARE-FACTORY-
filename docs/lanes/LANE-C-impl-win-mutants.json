@@ -1,0 +1,208 @@
+{
+ "//TR": "C-IMPL-WIN-1 mutasyon listesi: her mutant tam metin değişikliğidir (dosyada tam 1 kez bulunmalı); docs/lanes/LANE-C-impl-win-mutants.mjs her birini uygular ve tests/v7-lane-c-claude-readiness.test.ts dosyasının BAŞARISIZ olmasını bekler.",
+ "mutants": [
+  {
+   "id": "D1",
+   "description": "a .cmd launcher is treated as a runnable executable",
+   "file": "core/workos/claude-profiles.ts",
+   "old": "ext === \".cmd\" ? \"CMD\" : ext === \".bat\" ? \"BAT\" :",
+   "new": "ext === \".cmd\" ? \"EXECUTABLE\" : ext === \".bat\" ? \"BAT\" :"
+  },
+  {
+   "id": "D2",
+   "description": "the well-known install folders are not searched",
+   "file": "core/workos/claude-profiles.ts",
+   "old": "  if (win) {\n    const home = get(\"USERPROFILE\")",
+   "new": "  if (false) {\n    const home = get(\"USERPROFILE\")"
+  },
+  {
+   "id": "D3",
+   "description": "the folder to prepend is never reported",
+   "file": "core/workos/claude-profiles.ts",
+   "old": "pathDir: exe.source === \"WELL_KNOWN\" || shadowed ? exe.dir : null",
+   "new": "pathDir: null"
+  },
+  {
+   "id": "D4",
+   "description": "relative PATH entries are trusted",
+   "file": "core/workos/claude-profiles.ts",
+   "old": "filter(d => d && P.isAbsolute(d))",
+   "new": "filter(d => d)"
+  },
+  {
+   "id": "D5",
+   "description": "PATHEXT is ignored (only .exe)",
+   "file": "core/workos/claude-profiles.ts",
+   "old": "const exts = win ? (get(\"PATHEXT\") ?? \".COM;.EXE;.BAT;.CMD\")",
+   "new": "const exts = win ? (\".EXE\")"
+  },
+  {
+   "id": "D6",
+   "description": "a shadowing .cmd on PATH hides a real claude.exe behind it (first hit wins)",
+   "file": "core/workos/claude-profiles.ts",
+   "old": "const exe = hits.find(h => h.kind === \"EXECUTABLE\");",
+   "new": "const exe = hits[0]?.kind === \"EXECUTABLE\" ? hits[0] : undefined;"
+  },
+  {
+   "id": "D7",
+   "description": "environment names are case sensitive on Windows",
+   "file": "core/workos/claude-profiles.ts",
+   "old": "if (win ? k.toUpperCase() === n : k === n)",
+   "new": "if (k === n)"
+  },
+  {
+   "id": "P1",
+   "description": "the PATH key spelling is not preserved",
+   "file": "core/workos/claude-profiles.ts",
+   "old": "(win ? k.toUpperCase() === \"PATH\" : k === \"PATH\")) ?? \"PATH\"",
+   "new": "(k === \"PATH\")) ?? \"PATH\""
+  },
+  {
+   "id": "P2",
+   "description": "the folder is appended instead of prepended",
+   "file": "core/workos/claude-profiles.ts",
+   "old": "`${cli.pathDir}${sep}${env[key]}`",
+   "new": "`${env[key]}${sep}${cli.pathDir}`"
+  },
+  {
+   "id": "L1",
+   "description": "a changed launcher is accepted",
+   "file": "core/workos/claude-profiles.ts",
+   "old": "return crypto.createHash(\"sha256\").update(bytes).digest(\"hex\") === prov.claude.launcherSha256 ? {ok: true, resolvedPath: resolved} :",
+   "new": "return true ? {ok: true, resolvedPath: resolved} :"
+  },
+  {
+   "id": "L2",
+   "description": "a vanished launcher is reported as changed",
+   "file": "core/workos/claude-profiles.ts",
+   "old": "code: (e as NodeJS.ErrnoException).code === \"ENOENT\" ? \"CLAUDE_CLI_NOT_FOUND\" : \"CLAUDE_LAUNCHER_PROVENANCE_CHANGED\"",
+   "new": "code: \"CLAUDE_LAUNCHER_PROVENANCE_CHANGED\""
+  },
+  {
+   "id": "L3",
+   "description": "a provenance whose final is not PASS is accepted",
+   "file": "core/workos/claude-profiles.ts",
+   "old": "if (prov?.final !== \"PASS\") return",
+   "new": "if (false) return"
+  },
+  {
+   "id": "L4",
+   "description": "a launcher-only provenance level is accepted",
+   "file": "core/workos/claude-profiles.ts",
+   "old": "if (level !== \"FULL_PACKAGE\" && level !== \"STANDALONE_LAUNCHER\") return {ok: false, code: \"CLAUDE_PACKAGE_PROVENANCE_REQUIRED\"};",
+   "new": ""
+  },
+  {
+   "id": "R1",
+   "description": "readiness is always ready",
+   "file": "core/workos/claude-profiles.ts",
+   "old": "ready: blockers.length === 0,",
+   "new": "ready: true,"
+  },
+  {
+   "id": "R2",
+   "description": "a missing sign-in is not a blocker",
+   "file": "core/workos/claude-profiles.ts",
+   "old": "if (ps.state === \"LOGIN_REQUIRED\") { blockers.push(\"CLAUDE_PROFILE_LOGIN_REQUIRED\");",
+   "new": "if (false) { blockers.push(\"CLAUDE_PROFILE_LOGIN_REQUIRED\");"
+  },
+  {
+   "id": "R3",
+   "description": "a PATH miss undoes an already verified launcher",
+   "file": "core/workos/claude-profiles.ts",
+   "old": "if (cli.state !== \"FOUND\" && !launcher.ok) {",
+   "new": "if (cli.state !== \"FOUND\") {"
+  },
+  {
+   "id": "R4",
+   "description": "a .cmd shim is reported as not found",
+   "file": "core/workos/claude-profiles.ts",
+   "old": "cli.state === \"SHIM_UNSUPPORTED\" ? \"CLAUDE_CLI_SHIM_UNSUPPORTED\" : \"CLAUDE_CLI_NOT_FOUND\"",
+   "new": "\"CLAUDE_CLI_NOT_FOUND\""
+  },
+  {
+   "id": "R5",
+   "description": "the login command is dropped from readiness",
+   "file": "core/workos/claude-profiles.ts",
+   "old": "profile: ps.state, loginCommand: ps.loginCommand, loginHint: ps.loginHint}",
+   "new": "profile: ps.state, loginCommand: null, loginHint: null}"
+  },
+  {
+   "id": "A1",
+   "description": "an auth error anywhere in a line counts",
+   "file": "core/workos/claude-profiles.ts",
+   "old": "const CLAUDE_AUTH_ERROR_RE = /^(?:error:\\s*)?(?:invalid api key",
+   "new": "const CLAUDE_AUTH_ERROR_RE = /(?:error:\\s*)?(?:invalid api key"
+  },
+  {
+   "id": "A2",
+   "description": "only the first 8 KiB of the log is inspected",
+   "file": "core/workos/claude-profiles.ts",
+   "old": "String(log ?? \"\").slice(-8192)",
+   "new": "String(log ?? \"\").slice(0, 8192)"
+  },
+  {
+   "id": "X1",
+   "description": "the implementer starts the broker without checking the launcher",
+   "file": "core/workos/executors.ts",
+   "old": "          if (!lc.ok) return {refuse: lc.code};\n",
+   "new": ""
+  },
+  {
+   "id": "X2",
+   "description": "the reviewer's provenance refusal has no exact reason",
+   "file": "core/workos/executors.ts",
+   "old": "valid: false, invalidReason: (e as Error).message.slice(0, 200), exitCode: null, log: `PROVENANCE_REFUSED",
+   "new": "valid: false, exitCode: null, log: `PROVENANCE_REFUSED"
+  },
+  {
+   "id": "X3",
+   "description": "an expired sign-in is not recognised for the implementer",
+   "file": "core/workos/executors.ts",
+   "old": "if (r.exitCode !== 0 && !r.aborted && !r.timedOut && claudeAuthFailure(procLog(r))) return",
+   "new": "if (false) return"
+  },
+  {
+   "id": "X4",
+   "description": "an expired sign-in is not recognised for the reviewer",
+   "file": "core/workos/executors.ts",
+   "old": "if (!r.valid && !r.aborted && !r.timedOut && claudeAuthFailure(r.log)) r.invalidReason",
+   "new": "if (false) r.invalidReason"
+  },
+  {
+   "id": "X5",
+   "description": "an expired sign-in stays transient",
+   "file": "core/workos/executors.ts",
+   "old": "return {...base, transient: false, exitCode: r.exitCode, blockReason: \"CLAUDE_PROFILE_LOGIN_EXPIRED\"",
+   "new": "return {...base, exitCode: r.exitCode, blockReason: \"CLAUDE_PROFILE_LOGIN_EXPIRED\""
+  },
+  {
+   "id": "S1",
+   "description": "enabling with a shim reports CLI_NOT_FOUND",
+   "file": "core/workos/executor-setup.ts",
+   "old": "cli.state === \"SHIM_UNSUPPORTED\" ? \"CLI_SHIM_UNSUPPORTED\" : \"CLI_NOT_FOUND\"",
+   "new": "\"CLI_NOT_FOUND\""
+  },
+  {
+   "id": "S2",
+   "description": "the state never says CLI_NOT_FOUND",
+   "file": "core/workos/executor-setup.ts",
+   "old": "if (cli.state !== \"FOUND\" && !prov.ok) state = \"CLI_NOT_FOUND\";",
+   "new": "if (false) state = \"CLI_NOT_FOUND\";"
+  },
+  {
+   "id": "S3",
+   "description": "enabling captures even when the CLI is not found",
+   "file": "core/workos/executor-setup.ts",
+   "old": "if (cli.state !== \"FOUND\") return {ok: false,",
+   "new": "if (false) return {ok: false,"
+  },
+  {
+   "id": "S4",
+   "description": "the capture never gets the CLI folder on its PATH",
+   "file": "core/workos/executor-setup.ts",
+   "old": "env: withClaudeCliOnPath(safeChildEnv(this.o.envPolicyFile, {provider: \"DETERMINISTIC\"}), this.cliStatus(), this.o.platform)",
+   "new": "env: safeChildEnv(this.o.envPolicyFile, {provider: \"DETERMINISTIC\"})"
+  }
+ ]
+}
