@@ -4,7 +4,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
-import {computeRoleReadiness, loadReadinessInputFromRepo, reconcileLegacyStatusSummary, PROMOTED_TECHNOLOGY_STATUSES, READINESS_LAYERS} from "../core/agents/readiness-audit.js";
+import {auditSkills, auditTechnologies, computeRoleReadiness, loadEntityAuditInputsFromRepo, loadReadinessInputFromRepo, reconcileLegacyStatusSummary, PROMOTED_TECHNOLOGY_STATUSES, READINESS_LAYERS} from "../core/agents/readiness-audit.js";
+import {loadRoleContextInputFromRepo, resolveRoleContext} from "../core/agents/role-context.js";
 import type {AdapterRealityEntry, KnowledgeUnitLike, LayerCount, ProposedProfileLike, ReadinessAudit, ReadinessInput, ReadinessLayer, ReadinessRole, RoleReadiness} from "../core/agents/readiness-audit.js";
 import {computeRoleStatusSummary, createEvidenceVerifier} from "../core/agents/role-lifecycle.js";
 import type {RunsObservation} from "../core/agents/role-lifecycle.js";
@@ -61,6 +62,8 @@ const fxInput = (roleOver: Record<string, unknown> = {}, over: Partial<Readiness
   knowledgeProfiles: new Map([["tech-a", [goodUnit()]]]), sourceProvenance: PROV, now: NOW, ...over
 });
 const only = (i: ReadinessInput) => computeRoleReadiness(i).roles[0];
+// //TR: PROFILED artık rol bağlamı çözümleyicisinden geçer (599 rol için bir denetim ~0,1 sn); yalnız tek rolün katmanını yoklayan testler küçük bir rol alt kümesi kullanır (gerçek 599 sayıları ayrı testlerde tam kayıtla sınanır).
+const subsetRoles = (ids: readonly string[]): ReadinessRole[] => realInput().roles.filter(r => ids.includes(r.roleId)) as ReadinessRole[];
 // //TR: Eski beş sayaç, denetimle AYNI girdi üzerinde (aynı roller, doğrulayıcı, now); uzlaştırma testleri için.
 const legacyOf = (i: ReadinessInput) => computeRoleStatusSummary({roles: i.roles, guildIds: i.guilds.map(g => g.guildId), roleDefinitionsSha256: i.roleDefinitionsSha256, bindings: i.bindings, verify: i.verify, runs: i.runs?.journal === "PRESENT" ? i.runs.runs : [], now: i.now});
 
@@ -166,7 +169,7 @@ describe("C-RDY-1 readiness-audit", () => {
     const file = `audit/evidence/role-evaluations/${role}/${evalId}.json`; fs.writeFileSync(path.join(root, file), body);
     return `${file}#sha256=${wrongSha ? "0".repeat(64) : sha(body)}`;
   };
-  const withSpecs = (role: string, specs: unknown[]) => realInput().roles.map(r => r.roleId === role ? {...r, evaluationSpecs: specs} : r) as ReadinessRole[];
+  const withSpecs = (role: string, specs: unknown[]) => subsetRoles(["UASCO-0085", "UASCO-0313", "UASCO-0001"]).map(r => r.roleId === role ? {...r, evaluationSpecs: specs} : r) as ReadinessRole[];
   const spec1 = (ref: string | null, status = "PASSED") => [{evaluationId: "EV-01", status, evaluatorEvidenceRef: ref}, ...notExecuted().slice(1)];
   const inputWith = (root: string, role: string, specs: unknown[], over: Partial<ReadinessInput> = {}) => realInput({roles: withSpecs(role, specs), verify: createEvidenceVerifier(root), ...over});
   const audit = (root: string, role: string, specs: unknown[]) => computeRoleReadiness(inputWith(root, role, specs));
@@ -217,7 +220,7 @@ describe("C-RDY-1 readiness-audit", () => {
     const specs = IDS.map((id, n) => ({evaluationId: id, status: "PASSED", evaluatorEvidenceRef: refs[n]}));
     const claim = (over: Record<string, unknown> = {}) => ({evaluationSpecs: specs, proficiencyStatus: "CERTIFIED", certifiedScope: {scope: "fixture"}, evaluatorEvidenceRefs: refs, reviewerEvidenceRef: reviewer, expiresAt: "2027-06-01T00:00:00Z", ...over});
     const run = (over: Record<string, unknown> = {}, now = NOW, verify = createEvidenceVerifier(root)) => {
-      const i = realInput({roles: realInput().roles.map(r => r.roleId === ROLE ? {...r, ...claim(over)} : r) as ReadinessRole[], verify, now});
+      const i = realInput({roles: subsetRoles([ROLE, "UASCO-0001"]).map(r => r.roleId === ROLE ? {...r, ...claim(over)} : r) as ReadinessRole[], verify, now});
       return {i, a: computeRoleReadiness(i)};
     };
     // //TR: TRUE yolu: 6/6 doğrulanmış PASSED + reviewer APPROVED + kapsam + kanıt listesi + süresi dolmamış; EVALUATED ve EXECUTABLE da TRUE, anomali yok, eski sayaçla uzlaşır (certified 1).
@@ -277,10 +280,10 @@ describe("C-RDY-1 readiness-audit", () => {
     expect(empty.totals.RUNNING.measured).toBe(true);
     // //TR: AÇIKÇA PRESENT olmayan her günlük gözlemi UNKNOWN'dur: undefined, bilinmeyen değer, büyük/küçük harf farkı, runs dizisi olmayan PRESENT; hiçbiri ölçülmüş 0 raporlamaz.
     for (const runs of [undefined, {}, {journal: "UNKNOWN"}, {journal: "present"}, {journal: "PRESENT"}, {journal: "PRESENT", runs: "none"}]) {
-      const a = computeRoleReadiness(realInput({runs: runs as never}));
-      expect(countOnly(a.totals.RUNNING), JSON.stringify(runs)).toEqual({TRUE: 0, FALSE: 0, UNKNOWN: 599});
+      const a = computeRoleReadiness(realInput({runs: runs as never, roles: subsetRoles(["UASCO-0085", "UASCO-0252", "UASCO-0001"])}));
+      expect(countOnly(a.totals.RUNNING), JSON.stringify(runs)).toEqual({TRUE: 0, FALSE: 0, UNKNOWN: 3});
       expect(a.totals.RUNNING.measured, JSON.stringify(runs)).toBe(false);
-      expect(reasonsOf(a, "RUNNING"), JSON.stringify(runs)).toEqual({NO_RUN_JOURNAL: 599});
+      expect(reasonsOf(a, "RUNNING"), JSON.stringify(runs)).toEqual({NO_RUN_JOURNAL: 3});
       expect(a.inputs.journal, JSON.stringify(runs)).toBe("ABSENT");
     }
     const absent = computeRoleReadiness(realInput({runs: {journal: "ABSENT"}}));
@@ -630,5 +633,206 @@ describe("C-RDY-1 readiness-audit", () => {
     expect(r.sourceProvenance.requiredFields).toEqual(["sourceId", "uriOrLocator", "sourceClass", "effectiveVersion", "fetchedAt", "digestOrRevision", "supersedes"]);
     expect(r.proposedProfiles).toHaveLength(599);
     expect(BOUND).toHaveLength(9);
+  });
+
+  it("a journal tag other than PRESENT is never a measurement, even when a runs array is present", () => {
+    const trace = {kind: "AGENT_TRACE", note: "agent=a1 role=UASCO-0085 state=RUNNING", evidenceId: "e", step: "IMPLEMENT", cycle: 0, argv: [], startedAt: "", endedAt: "", exitCode: 0, logPath: null, logSha256: null};
+    const open = [{status: "RUNNING", evidence: [trace]}];
+    // //TR: Etiket ABSENT/UNKNOWN iken runs dizisi (boş ya da AÇIK bir run içeren) YOK SAYILIR: RUNNING her rol için UNKNOWN, measured false; yalnız etiketi PRESENT olan günlük gözlemdir.
+    for (const runs of [{journal: "ABSENT", runs: []}, {journal: "UNKNOWN", runs: open}, {journal: "ABSENT", runs: open}, {journal: "present", runs: open}]) {
+      const a = computeRoleReadiness(realInput({runs: runs as never, roles: subsetRoles(["UASCO-0085", "UASCO-0252", "UASCO-0001"])}));
+      expect(countOnly(a.totals.RUNNING), JSON.stringify(runs)).toEqual({TRUE: 0, FALSE: 0, UNKNOWN: 3});
+      expect(a.totals.RUNNING.measured, JSON.stringify(runs)).toBe(false);
+      expect(reasonsOf(a, "RUNNING"), JSON.stringify(runs)).toEqual({NO_RUN_JOURNAL: 3});
+      expect(a.inputs.journal, JSON.stringify(runs)).toBe("ABSENT");
+    }
+    const present = computeRoleReadiness(realInput({runs: {journal: "PRESENT", runs: open as never}, roles: subsetRoles(["UASCO-0085", "UASCO-0252", "UASCO-0001"])}));
+    expect(countOnly(present.totals.RUNNING)).toEqual({TRUE: 1, FALSE: 2, UNKNOWN: 0});
+  });
+
+  it("the loader rejects empty technologies, sourceClasses, requiredProvenance and profiles with a typed error", () => {
+    const files: Array<[string, string]> = [["registries/technologies.json", JSON.stringify({technologies: []})], ["registries/role-execution-profiles.json", JSON.stringify({profiles: []})],
+      ["registries/technology-source-registry.json", JSON.stringify({requiredProvenance: ["sourceId"], sourceClasses: []})], ["registries/technology-source-registry.json", JSON.stringify({requiredProvenance: [], sourceClasses: [{class: "OFFICIAL_DOCUMENTATION", allowedForCertification: true}]})]];
+    // //TR: Boş girdi ölçüm değildir: aksi halde "ölçülmüş" FALSE 599 çıkardı. Her biri READINESS_INPUT_UNAVAILABLE:<yol> ile reddedilir, boş küme ikame edilmez.
+    for (const [rel, body] of files) expect(() => load(mini("empty-low", f => { f[rel] = body; })), `${rel} ${body}`).toThrow(`READINESS_INPUT_UNAVAILABLE:${rel}`);
+    expect(load(mini("nonempty-low"))).toBeDefined();
+  });
+});
+
+describe("C-RDY-2b entity readiness", () => {
+  const rd = (rel: string) => JSON.parse(fs.readFileSync(path.join(REPO, rel), "utf8"));
+  let ENT: ReturnType<typeof loadEntityAuditInputsFromRepo> | null = null;
+  const entities = () => (ENT ??= loadEntityAuditInputsFromRepo(REPO, {runtimeConsumers: 0}));
+  const counts = (c: LayerCount) => ({TRUE: c.TRUE, FALSE: c.FALSE, UNKNOWN: c.UNKNOWN, NOT_APPLICABLE: c.NOT_APPLICABLE, denominator: c.denominator, measured: c.measured});
+  // //TR: Varlık denetimi değişmezleri: nedenler sıralı/tekil ve YALNIZ TRUE iken boş, dört durum paydayı toplar, measured === (payda > 0 && UNKNOWN === 0), özet 64 onaltılık.
+  const wellFormed = (a: {totals: Readonly<Record<ReadinessLayer, LayerCount>>; digest: string}, items: ReadonlyArray<{layers: Readonly<Record<ReadinessLayer, {state: string; reasons: readonly string[]}>>}>) => {
+    for (const x of items) for (const l of READINESS_LAYERS) { expect(x.layers[l].reasons.length === 0).toBe(x.layers[l].state === "TRUE"); expect([...x.layers[l].reasons]).toEqual([...new Set(x.layers[l].reasons)].sort()); }
+    for (const c of Object.values(a.totals)) { expect(c.TRUE + c.FALSE + c.UNKNOWN + c.NOT_APPLICABLE).toBe(c.denominator); expect(c.measured).toBe(c.denominator > 0 && c.UNKNOWN === 0); }
+    expect(a.digest).toMatch(/^[0-9a-f]{64}$/);
+  };
+
+  it("skills: 425 defined, none canonical, 402 legacy-referenced, competency packs flagged ONTOLOGY_SPLIT", () => {
+    const a = auditSkills(entities().skills);
+    wellFormed(a, a.skills);
+    const raw = rd("registries/skills-v2.json").skills as Array<{id: string; certificationState: string}>;
+    const matrix = rd("registries/agent-skill-matrix.json").agents as Array<{requiredSkillIds: string[]}>;
+    const legacy = new Set(matrix.flatMap(m => m.requiredSkillIds));
+    expect(a.entity).toBe("SKILL");
+    expect(a.authority).toBe("AUTHORITATIVE_READINESS_MEASUREMENT");
+    expect(a.denominator).toBe(425);
+    expect(counts(a.totals.DEFINED)).toMatchObject({TRUE: 425, FALSE: 0, denominator: 425, measured: true});
+    expect(counts(a.totals.PROFILED)).toMatchObject({TRUE: 0, FALSE: 425});
+    expect(a.reasonCounts.PROFILED).toEqual({NOT_CANONICALLY_REQUIRED_BY_ANY_ROLE: 425});
+    // //TR: LEGACY_REFERENCE bir KATMAN değil bir bilgi alanıdır: 402/425 eski matriste geçer, 23'ü hiç geçmez; hiçbiri PROFILED yapmaz.
+    expect(a.legacyReference).toEqual({referenced: raw.filter(s => legacy.has(s.id)).length, unreferenced: raw.filter(s => !legacy.has(s.id)).length});
+    expect(a.legacyReference).toEqual({referenced: 402, unreferenced: 23});
+    expect(a.skills.filter(s => s.legacyReference && s.layers.PROFILED.state === "TRUE")).toEqual([]);
+    expect(counts(a.totals.KNOWLEDGE_READY)).toMatchObject({TRUE: 0, FALSE: 425});
+    expect(counts(a.totals.INTERNALLY_CERTIFIED)).toMatchObject({TRUE: 0, FALSE: 425});
+    expect(a.reasonCounts.INTERNALLY_CERTIFIED).toEqual({NOT_CERTIFIED_STATE: raw.filter(s => s.certificationState === "NOT_CERTIFIED").length});
+    expect(a.reasonCounts.INTERNALLY_CERTIFIED).toEqual({NOT_CERTIFIED_STATE: 425});
+    for (const l of ["TOOL_READY", "EXECUTABLE", "EVALUATED"] as const) expect(counts(a.totals[l])).toMatchObject({TRUE: 0, FALSE: 0, UNKNOWN: 0, NOT_APPLICABLE: 425, measured: true});
+    // //TR: Yetkinlik paketi başvuruları V1 SKILL-* ontolojisindedir: 588 başvurunun SK2'de çözülen sayısı 0 -> ONTOLOGY_SPLIT.
+    const refs = (rd("registries/competency-packs.json").packs as Array<{requiredSkills: string[]}>).flatMap(p => p.requiredSkills);
+    expect(a.competencyPacks).toEqual({refs: 588, unique: 578, resolvingInSk2: 0, flag: "ONTOLOGY_SPLIT"});
+    expect(refs.filter(r => raw.some(s => s.id === r))).toHaveLength(0);
+    // //TR: Entity RUNNING tüketici 0 iken yapısal 0 (FALSE, NO_RUNTIME_CONSUMER); tüketici sayısı verilmezse UNKNOWN; tüketici varsa günlük olmadığından UNKNOWN.
+    expect(counts(a.totals.RUNNING)).toMatchObject({TRUE: 0, FALSE: 425, UNKNOWN: 0});
+    expect(a.reasonCounts.RUNNING).toEqual({NO_RUNTIME_CONSUMER: 425});
+    expect(a.runtimeConsumers).toBe(0);
+    const none = auditSkills({...entities().skills, runtimeConsumers: undefined as never});
+    expect(counts(none.totals.RUNNING)).toMatchObject({TRUE: 0, FALSE: 0, UNKNOWN: 425, measured: false});
+    expect(none.runtimeConsumers).toBe("NOT_SUPPLIED");
+    expect(auditSkills({...entities().skills, runtimeConsumers: 2}).reasonCounts.RUNNING).toEqual({NO_ENTITY_RUN_JOURNAL: 425});
+  });
+
+  it("technologies: 415 defined, 0 source-backed, 6225 NOT_RESEARCHED units, RUNNING is a structural 0", () => {
+    const a = auditTechnologies(entities().technologies);
+    wellFormed(a, a.technologies);
+    expect(a.entity).toBe("TECHNOLOGY");
+    expect(a.denominator).toBe(415);
+    expect(counts(a.totals.DEFINED)).toMatchObject({TRUE: 415, FALSE: 0});
+    // //TR: Kayıt defterinin knowledgeState alanı (415/415 SEED_PROFILE) KANIT DEĞİLDİR: kaynak destekli 0/415, 6225 birimin hepsi NOT_RESEARCHED.
+    const raw = rd("registries/technologies.json").technologies as Array<{knowledgeState: string}>;
+    expect(raw.every(t => t.knowledgeState === "SEED_PROFILE")).toBe(true);
+    expect(a.sourceBacked).toEqual({backed: 0, notBacked: 415});
+    expect(a.units).toEqual({total: 6225, byState: {NOT_RESEARCHED: 6225}, researchedSourced: 0});
+    expect(a.technologies.every(t => t.units.total === 15 && t.registryKnowledgeState === "SEED_PROFILE")).toBe(true);
+    expect(counts(a.totals.KNOWLEDGE_READY)).toMatchObject({TRUE: 0, FALSE: 415});
+    expect(a.reasonCounts.KNOWLEDGE_READY).toEqual({NO_RESEARCHED_SOURCED_UNIT: 415});
+    expect(counts(a.totals.PROFILED)).toMatchObject({TRUE: 0, FALSE: 415});
+    expect(a.reasonCounts.PROFILED).toEqual({NOT_REQUIRED_BY_ANY_ROLE: 187, TECHNOLOGY_STATUS_NOT_PROMOTED: 228});
+    expect(counts(a.totals.INTERNALLY_CERTIFIED)).toMatchObject({TRUE: 0, FALSE: 415});
+    expect(a.reasonCounts.INTERNALLY_CERTIFIED).toEqual({NOT_CERTIFIED_STATE: 415});
+    expect(counts(a.totals.RUNNING)).toMatchObject({TRUE: 0, FALSE: 415, UNKNOWN: 0});
+    expect(a.reasonCounts.RUNNING).toEqual({NO_RUNTIME_CONSUMER: 415});
+    for (const l of ["TOOL_READY", "EXECUTABLE", "EVALUATED"] as const) expect(counts(a.totals[l])).toMatchObject({NOT_APPLICABLE: 415, TRUE: 0});
+  });
+
+  it("PROFILED parity: for 599/599 roles the audit equals the value derived from resolveRoleContext (canonical skills only)", () => {
+    const rc = loadRoleContextInputFromRepo(REPO);
+    const base = realInput();
+    const skillList = [...base.skillIds].sort();
+    // //TR: Anlamlı karşılaştırma için kayıt değiştirilir: her 3. role geçerli bir kanonik beceri, her 7. role SK2'de olmayan bir kimlik verilir; terfi kümesi iki gerçek durumu da içerir. Beklenen değer rol bağlamından, ayrı bir kuralla türetilir.
+    const roles = base.roles.map((r, n) => ({...r, requiredSkillIds: n % 7 === 0 ? ["SK2-NOT-IN-SK2"] : n % 3 === 0 ? [skillList[n % skillList.length]] : r.requiredSkillIds}));
+    const promoted = new Set(["CANDIDATE_NOT_VERIFIED", "NAME_NOT_VERIFIED_IN_REGISTRY"]);
+    const audit = computeRoleReadiness({...base, roles, legacySkills: rc.legacySkills, promotedTechnologyStatuses: promoted});
+    const ctxInput = {...rc, roles: rc.roles.map(r => ({...r, requiredSkillIds: roles.find(x => x.roleId === r.roleId)!.requiredSkillIds}))};
+    let trues = 0, falses = 0, withProposedOnly = 0;
+    for (const r of audit.roles) {
+      const res = resolveRoleContext(ctxInput, r.roleId);
+      if (res.status !== "RESOLVED") throw new Error(`context not resolved ${r.roleId}`);
+      const c = res.context, required = c.technologies.filter(t => t.requirement === "REQUIRED");
+      const expected = c.skills.canonical.length > 0 && c.skills.canonicalNotInSk2.length === 0 && required.length > 0 && required.every(t => t.registryId !== null && promoted.has(t.status));
+      expect(r.layers.PROFILED.state, r.roleId).toBe(expected ? "TRUE" : "FALSE");
+      if (expected) trues++; else falses++;
+      if (c.skills.canonical.length === 0 && c.skills.proposed.length > 0) { withProposedOnly++; expect(r.layers.PROFILED.state, `${r.roleId} proposed skills must not profile`).toBe("FALSE"); expect(r.layers.PROFILED.reasons).toContain(c.skills.canonicalNotInSk2.length > 0 ? "SKILL_NOT_IN_SK2" : "NO_CANONICAL_SKILLS"); }
+    }
+    expect(trues + falses).toBe(599);
+    expect(trues).toBeGreaterThan(50);
+    expect(falses).toBeGreaterThan(50);
+    expect(withProposedOnly).toBeGreaterThan(20);
+    // //TR: Gerçek kayıtta (hiç değişiklik yok, varsayılan boş terfi kümesi) PROFILED 599/599 FALSE kalır ve önerilen becerili roller de PROFILED olmaz.
+    const real = computeRoleReadiness({...base, legacySkills: rc.legacySkills});
+    expect(real.totals.PROFILED.TRUE).toBe(0);
+    const permissive = computeRoleReadiness({...base, legacySkills: rc.legacySkills, promotedTechnologyStatuses: promoted});
+    expect(permissive.totals.PROFILED.TRUE).toBe(0);
+    expect(permissive.reasonCounts.PROFILED).toEqual({NO_CANONICAL_SKILLS: 599});
+  });
+
+  it("entity layers on fixtures: canonical use, source provenance, certification claims and runtime", () => {
+    const prov = {requiredFields: ["sourceId", "uriOrLocator", "sourceClass", "effectiveVersion", "fetchedAt", "digestOrRevision", "supersedes"], certifiableClasses: new Set(["OFFICIAL_DOCUMENTATION"])};
+    const goodRef = {sourceId: "s", uriOrLocator: "https://x.test", sourceClass: "OFFICIAL_DOCUMENTATION", effectiveVersion: "1", fetchedAt: "2026-10-01", digestOrRevision: "d", supersedes: null};
+    const role = (over: Record<string, unknown> = {}) => ({roleId: "UASCO-0001", title: "T", guildId: "G01", clusterId: "CL01", responsibilities: [], forbiddenActions: [], specializationBoundaries: [], requiredSkillIds: ["SK2-A"], requiredTechnologies: [{technologyId: "tech-a", status: "CANDIDATE_NOT_VERIFIED"}], optionalTechnologies: [], legacyAliases: [], gapIds: [], ...over});
+    const rcInput = (roles: unknown[]) => ({roles: roles as never, guilds: [{guildId: "G01", clusterId: "CL01"}], skillIds: new Set(["SK2-A", "SK2-B", "SK2-C"]), technologies: new Map([["tech-a", {id: "TECH-A", status: "REGISTERED", knowledgeState: "SEED_PROFILE"}]]), legacySkills: new Map([["001", ["SK2-B"]]]), profiles: [], bindings: []});
+    const sk = (id: string, over: Record<string, unknown> = {}) => ({id, status: "REGISTERED", certificationState: "NOT_CERTIFIED", ...over});
+    const run = (skills: unknown[], roles: unknown[] = [role()], over: Record<string, unknown> = {}) => auditSkills({skills: skills as never, roleContext: rcInput(roles), competencyPackRefs: ["SKILL-X", "SK2-A"], sourceProvenance: prov, runtimeConsumers: 0, ...over});
+    const a = run([sk("SK2-A"), sk("SK2-B"), sk("SK2-C")], [role(), role({roleId: "UASCO-0002", requiredSkillIds: ["SK2-A"], legacyAliases: [{legacyId: "001", status: "SEMANTIC_VERIFIED"}]})]);
+    // //TR: Yalnız bir rolün KANONİK requiredSkillIds'inde geçen beceri PROFILED olur (kaç rolde geçtiği canonicalRoles); eski matriste geçen (SK2-B) ve önerilen beceri PROFILED OLMAZ.
+    expect(a.skills.map(x => [x.id, x.layers.PROFILED.state, x.canonicalRoles, x.legacyReference])).toEqual([["SK2-A", "TRUE", 2, false], ["SK2-B", "FALSE", 0, true], ["SK2-C", "FALSE", 0, false]]);
+    expect(a.legacyReference).toEqual({referenced: 1, unreferenced: 2});
+    expect(a.competencyPacks).toEqual({refs: 2, unique: 2, resolvingInSk2: 1, flag: "ONTOLOGY_SPLIT"});
+    expect(run([sk("SK2-A")], [role()], {competencyPackRefs: ["SK2-A"]}).competencyPacks.flag).toBe("NONE");
+    expect(run([sk("SK2-A")], [role()], {competencyPackRefs: []}).competencyPacks).toEqual({refs: 0, unique: 0, resolvingInSk2: 0, flag: "NONE"});
+    wellFormed(a, a.skills);
+    // //TR: DEFINED: biçimsiz ve yinelenen kimlik FALSE (asla UNKNOWN); KNOWLEDGE_READY yalnız TAM kaynak izi olan beceride TRUE; sertifika iddiası kanıt mekanizması olmadığından asla TRUE olmaz.
+    const d = run([sk("bad id"), sk("SK2-A"), sk("SK2-A"), sk("SK2-B", {sourceRefs: [goodRef]}), sk("SK2-C", {sourceRefs: [{...goodRef, sourceClass: "BLOG"}], certificationState: "CERTIFIED"})]);
+    expect(d.skills.map(x => [x.id, x.layers.DEFINED.state, x.layers.DEFINED.reasons.join()])).toEqual([["SK2-A", "FALSE", "DUPLICATE_ENTITY_ID"], ["SK2-A", "FALSE", "DUPLICATE_ENTITY_ID"], ["SK2-B", "TRUE", ""], ["SK2-C", "TRUE", ""], ["bad id", "FALSE", "BAD_ENTITY_ID"]]);
+    expect(d.skills.find(x => x.id === "SK2-B")!.layers.KNOWLEDGE_READY).toEqual({state: "TRUE", reasons: []});
+    expect(d.skills.find(x => x.id === "SK2-C")!.layers.KNOWLEDGE_READY.state).toBe("FALSE");
+    expect(d.skills.find(x => x.id === "SK2-C")!.layers.INTERNALLY_CERTIFIED).toEqual({state: "FALSE", reasons: ["CERTIFICATION_NOT_EVIDENCED"]});
+    expect(d.totals.INTERNALLY_CERTIFIED.TRUE).toBe(0);
+    // //TR: Terfi kümesi varsayılandan farklıysa varlık denetimi de AUTHORITATIVE etiketlenmez ve küme açıklanır; özet kümeye bağlıdır.
+    const over = run([sk("SK2-A")], [role()], {promotedTechnologyStatuses: new Set(["X"])});
+    expect(over.authority).toBe("NON_AUTHORITATIVE_PROMOTED_STATUS_OVERRIDE");
+    expect(over.promotedTechnologyStatuses).toEqual(["X"]);
+    expect(over.digest).not.toBe(run([sk("SK2-A")]).digest);
+    expect(run([sk("SK2-A")]).digest).toBe(run([sk("SK2-A")]).digest);
+
+    const unit = (over: Record<string, unknown> = {}) => ({facet: "f", state: "RESEARCHED", sourceRefs: [goodRef], lastValidatedAt: "2026-10-01T00:00:00Z", certification: "NOT_CERTIFIED", ...over}) as never;
+    const tech = (slug: string) => ({id: `TECH-${slug.toUpperCase()}`, slug, status: "REGISTERED", knowledgeState: "SEED_PROFILE"});
+    const tRun = (profiles: Array<[string, unknown[]]>, over: Record<string, unknown> = {}, roles: unknown[] = [role()]) => auditTechnologies({technologies: ["tech-a", "tech-b", "tech-c", "Tech D"].map(tech), knowledgeProfiles: new Map(profiles) as never, roles: roles as never, sourceProvenance: prov, runtimeConsumers: 0, ...over});
+    const t = tRun([["tech-a", [unit()]], ["tech-b", [unit({state: "NOT_RESEARCHED", lastValidatedAt: null})]], ["tech-c", [unit({sourceRefs: [{...goodRef, sourceClass: "BLOG"}]})]]]);
+    // //TR: Kaynak destekli = en az bir birimin TÜM kaynak referansları tam; KNOWLEDGE_READY = en az bir birim araştırılmış + ISO doğrulama + tam kaynak. Profil yoksa KNOWLEDGE_PROFILE_MISSING. SEED_PROFILE alanı hiçbir şeyi kanıtlamaz.
+    const by = (slug: string) => t.technologies.find(x => x.id === slug)!;
+    expect([by("tech-a").sourceBacked, by("tech-a").layers.KNOWLEDGE_READY.state]).toEqual([true, "TRUE"]);
+    // //TR: tech-b: kaynak izi TAM ama birim NOT_RESEARCHED -> kaynak destekli EVET, KNOWLEDGE_READY HAYIR (ikisi ayrı kavramlardır).
+    expect([by("tech-b").sourceBacked, by("tech-b").layers.KNOWLEDGE_READY.state]).toEqual([true, "FALSE"]);
+    expect([by("tech-c").sourceBacked, by("tech-c").layers.KNOWLEDGE_READY.state]).toEqual([false, "FALSE"]);
+    expect(by("tech-c").registryKnowledgeState).toBe("SEED_PROFILE");
+    expect(by("Tech D").layers.KNOWLEDGE_READY).toEqual({state: "FALSE", reasons: ["KNOWLEDGE_PROFILE_MISSING"]});
+    expect(by("Tech D").layers.DEFINED).toEqual({state: "FALSE", reasons: ["BAD_ENTITY_ID"]});
+    expect(t.sourceBacked).toEqual({backed: 2, notBacked: 2});
+    expect(t.units).toEqual({total: 3, byState: {NOT_RESEARCHED: 1, RESEARCHED: 2}, researchedSourced: 1});
+    wellFormed(t, t.technologies);
+    // //TR: PROFILED: bir rolün GEREKLİ teknolojisi + terfi etmiş durum. Bugünkü boş kümede FALSE; küme verilirse yalnız gerekli teknoloji TRUE olur (isteğe bağlı ya da hiç istenmeyen olmaz).
+    expect(by("tech-a").layers.PROFILED).toEqual({state: "FALSE", reasons: ["TECHNOLOGY_STATUS_NOT_PROMOTED"]});
+    expect(by("tech-b").layers.PROFILED).toEqual({state: "FALSE", reasons: ["NOT_REQUIRED_BY_ANY_ROLE"]});
+    const promotedRun = tRun([], {promotedTechnologyStatuses: new Set(["CANDIDATE_NOT_VERIFIED"])});
+    expect(promotedRun.technologies.map(x => [x.id, x.layers.PROFILED.state])).toEqual([["Tech D", "FALSE"], ["tech-a", "TRUE"], ["tech-b", "FALSE"], ["tech-c", "FALSE"]]);
+    expect(promotedRun.authority).toBe("NON_AUTHORITATIVE_PROMOTED_STATUS_OVERRIDE");
+    // //TR: Teknolojide sertifika iddiası: birimlerin hepsi NOT_CERTIFIED değilse CERTIFICATION_NOT_EVIDENCED; asla TRUE.
+    const cert = tRun([["tech-a", [unit({certification: "CERTIFIED"})]]]);
+    expect(cert.technologies.find(x => x.id === "tech-a")!.layers.INTERNALLY_CERTIFIED).toEqual({state: "FALSE", reasons: ["CERTIFICATION_NOT_EVIDENCED"]});
+    expect(cert.totals.INTERNALLY_CERTIFIED.TRUE).toBe(0);
+    expect(tRun([], {runtimeConsumers: undefined}).totals.RUNNING.UNKNOWN).toBe(4);
+  });
+
+  it("entity input loader fails closed", () => {
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-rdy2b-"));
+    try {
+      // //TR: Tek bir depo kopyası (bilgi dosyaları bir kez kopyalanır); bozulan dosya her denemede yerinde değiştirilir/silinir, yükleyici yalnız okur.
+      fs.mkdirSync(path.join(root, "registries"));
+      for (const f of ["role-definitions", "skills-v2", "technologies", "agent-skill-matrix", "role-execution-profiles", "technology-source-registry", "competency-packs"]) fs.copyFileSync(path.join(REPO, "registries", `${f}.json`), path.join(root, "registries", `${f}.json`));
+      fs.cpSync(path.join(REPO, "knowledge"), path.join(root, "knowledge"), {recursive: true});
+      expect(loadEntityAuditInputsFromRepo(root).skills.skills).toHaveLength(425);
+      const rel = "registries/competency-packs.json";
+      for (const body of [null, "{not json", JSON.stringify({packs: []}), JSON.stringify({packs: [{requiredSkills: "none"}]})]) {
+        if (body === null) fs.rmSync(path.join(root, rel), {force: true}); else fs.writeFileSync(path.join(root, rel), body);
+        expect(() => loadEntityAuditInputsFromRepo(root), String(body)).toThrow(`READINESS_INPUT_UNAVAILABLE:${rel}`);
+      }
+    } finally { fs.rmSync(root, {recursive: true, force: true}); }
+    const e = entities();
+    expect([e.skills.skills.length, e.skills.competencyPackRefs.length, e.technologies.technologies.length, e.technologies.knowledgeProfiles.size, e.technologies.roles.length]).toEqual([425, 588, 415, 415, 599]);
   });
 });
