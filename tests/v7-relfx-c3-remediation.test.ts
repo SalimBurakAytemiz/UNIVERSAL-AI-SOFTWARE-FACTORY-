@@ -369,6 +369,7 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
     let started = false; // yalnız implementer çocuğu gerçekten başladıktan sonra bakılır (öncesindeki kayıtlı grup kısa ömürlü bir git çocuğudur)
     const mr = c.runner({executors: wrapImplementer(pair0, (w, spec, ctx) => { started = true; return pair0.implementer.implement(w, spec, ctx); })});
     mr.start(250);
+    try { // bir onaylama başarısız olursa bile motorun zamanlayıcısı, 20 sn'lik yazar ve sonlanma kancaları sızmasın
     const work = () => path.join(c.dataDir, "runs", A.runId, "work");
     const ownerFile = path.join(c.dataDir, "runs", A.runId, "workspace.owner.json");
     let pgid = 0;
@@ -385,6 +386,7 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
     expect(notCancelled()).toEqual(["RUNNING", "IMPLEMENT"]); // yeni adım başlamadı
     expect(fs.existsSync(path.join(work(), "feature.txt"))).toBe(false);
     expect(slowImpl.calls.implement, "a new implementer was started after stop()").toBe(1);
+    } finally { await mr.stop(); }
   });
 
   // ---- R2 (second adversarial pass): stop()/termination safety ----

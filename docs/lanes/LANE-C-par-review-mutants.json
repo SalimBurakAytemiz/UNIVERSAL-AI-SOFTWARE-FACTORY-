@@ -36,7 +36,7 @@
    "filter": "TK-3",
    "edits": [
     {
-     "old": "    if (st === \"OTHER_USER\") return alive(`writer group ${pgid} state unknown`);\n",
+     "old": "    if (st === \"OTHER_USER\") return process.platform === \"win32\" ? {problem: null, note: `pid ${pgid} is not accessible to this user; it cannot be the recorded writer`} : alive(`writer group ${pgid} state unknown`);\n",
      "new": ""
     },
     {
@@ -105,7 +105,7 @@
    "file": "core/workos/writer-guard.ts",
    "testFile": "tests/v7-relfx-1-completion.test.ts",
    "filter": "TK-1: a descendant",
-   "old": "hit = lease !== current;",
+   "old": "hit = o.includeCurrent === true || lease !== current;",
    "new": "hit = false;"
   },
   {
@@ -114,7 +114,7 @@
    "file": "core/workos/writer-guard.ts",
    "testFile": "tests/v7-relfx-1-completion.test.ts",
    "filter": "TK-1 \\(cwd\\)",
-   "old": "hit = cwd === o.runDir || cwd.startsWith(o.runDir + path.sep);",
+   "old": "hit = dirs.some(d => cwd === d || cwd.startsWith(d + path.sep));",
    "new": "hit = false;"
   },
   {
@@ -222,8 +222,8 @@
    "file": "core/workos/runner.ts",
    "testFile": "tests/v7-relfx-c3-remediation.test.ts",
    "filter": "STOP-NO-ABORT",
-   "old": "return Promise.allSettled(drives).then(() => { if (this.timer === null) this.stopping = false; });",
-   "new": "this.stopping = false; return Promise.resolve();"
+   "old": "return Promise.allSettled(drives).then(() => { off?.(); if (this.timer === null && this.stopEpoch === epoch) this.stopping = false; });",
+   "new": "off?.(); this.stopping = false; return Promise.resolve();"
   },
   {
    "id": "ST2",
@@ -231,17 +231,8 @@
    "file": "core/workos/runner.ts",
    "testFile": "tests/v7-relfx-c3-remediation.test.ts",
    "filter": "STOP-NO-ABORT",
-   "old": "lost || entry?.lost === true || this.stopping || this.stopActive() !== null",
+   "old": "lost || entry?.lost === true || this.halted(epoch) || this.stopActive() !== null",
    "new": "lost || entry?.lost === true || this.stopActive() !== null"
-  },
-  {
-   "id": "ST3",
-   "description": "an aborted-by-shutdown run is cancelled",
-   "file": "core/workos/runner.ts",
-   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
-   "filter": "STOP-NO-ABORT",
-   "old": "if (out.reason === \"ENGINE_STOPPING\") return; // motor kapanıyor: run iptal edilmez, lease dolunca sonraki engine devralır\n",
-   "new": ""
   },
   {
    "id": "ST4",
@@ -249,7 +240,7 @@
    "file": "core/workos/runner.ts",
    "testFile": "tests/v7-relfx-c3-remediation.test.ts",
    "filter": "STOP-NO-ABORT",
-   "old": "if (this.stopping) { this.owned.delete(runId); return steps > 0; } // motor kapanıyor: yeni adım yok, run bırakılır (lease dolunca sonraki engine devralır)\n",
+   "old": "if (this.halted(epoch)) { this.owned.delete(runId); return steps > 0; } // motor kapanıyor: yeni adım yok, run bırakılır (lease dolunca sonraki engine devralır)\n",
    "new": ""
   },
   {
@@ -294,8 +285,8 @@
    "file": "core/workos/runner.ts",
    "testFile": "tests/v7-relfx-c3-remediation.test.ts",
    "filter": "M10",
-   "old": "lost || entry?.lost === true || this.stopping",
-   "new": "lost || this.stopping"
+   "old": "lost || entry?.lost === true || this.halted(epoch)",
+   "new": "lost || this.halted(epoch)"
   },
   {
    "id": "M7",
