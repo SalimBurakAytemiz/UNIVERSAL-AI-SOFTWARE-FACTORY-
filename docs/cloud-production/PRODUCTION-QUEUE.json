@@ -1791,8 +1791,8 @@
   },
   "integrationBoard": {
     "//TR": "Koordinatör entegrasyon panosu: her açık PR için gerçek engel ve bekleyen sorumlu. Ortak kök neden (base dependency gate) PR'a özgü hatalardan ayrı tutulur; #221/#225 birleşmeden tekrar CI tetiklenmez.",
-    "at": "2026-10-26T09:43:00Z",
-    "base": "f189693 (v7/integration, after #233)",
+    "at": "2026-10-26T10:26:00Z",
+    "base": "f149c20 (v7/integration, after #234 and #229)",
     "sharedRootCause": {
       "id": "NONE_ACTIVE",
       "previous": "BASE_DEPENDENCY_GATE resolved by #225 (e2323d9)",
@@ -1829,9 +1829,9 @@
       }
     ],
     "branchOnlyChains": {
-      "laneA": "claude/lane-a-win-e2e 7fb25e1 (Electron journey E2E; 662f7a7 delta NO MEDIUM+; final LOW push L1-L3 + workflow draft hardening under delta check wiah5p23g; Windows NOT_EXECUTED); #232/#192/#196/#233 merged",
+      "laneA": "A-WIN-E2E-1 merged as #234 db5fff1 (Electron journey E2E harness; Windows NOT_EXECUTED until desktop-journey-e2e.yml lands via the transition PR); #232/#192/#196/#233/#234 merged; next A-ANALYSIS-STUCK-1 (re-approve UI from the structured BLOCKED kind/artifactId)",
       "laneB": "claude/lane-b-analysis-routes 6bd6f30 (200-with-body steps, shared produce lock, stop->423 audit; PR after #229 F1 fix); #231 sandbox in Founder tier",
-      "laneC": "#229 F1 fix + #224 round-3 fixes pending; C-FLOW-ANALYSIS-2 claude/lane-c-flow-analysis-2 76772d4 (after #229); #228 merged ddcb371",
+      "laneC": "C-FLOW-ANALYSIS-1 merged as #229 f149c20; flow-analysis-2 branch-only @da450ce; #224 round-3 delta review wd77md0vz running",
       "coordinator": "claude/coord-protected-batch-4b fee6cef -> rebuild after #229/analysis-routes (adds AnalysisFlow stopped hook, #226 journey pin flip, M4 pin); claude/coord-transition-autonomy (reform, wgguxa5j0) + CI speed plan (N=6 shards, draft gating, preflight needs, npm cache, selftest tmp cleanup; measured BEFORE p50 21.7 min)"
     },
     "mergedVia225": {
@@ -1969,6 +1969,26 @@
         "review": "process-mode review NO_BLOCKERS (wf_a696c4b7-833) + coordinator delta check (F1/F2 mutants killed, 55/55)",
         "pushCi": "Windows Installer 40299295868 success; CI 40299295801 in progress at 09:43Z; previous base pushes 7070714 and a14bd26 CI success",
         "riskTier": "ROUTINE (renderer + locales + tests)"
+      },
+      {
+        "pr": 234,
+        "merge": "db5fff1",
+        "by": "auto-merge (armed by coordinator on d6920e9)",
+        "at": "2026-10-26T10:21:59Z",
+        "postMerge": "VERIFIED: parent1 f189693, parent2 = reviewed head d6920e9, merge-tree f746109 == merge tree",
+        "review": "process-mode reviews: dba4270 BLOCKERS B1-B9/L1-L11 fixed by Lane A; 5bd26b7 re-review, 662f7a7 delta, 7fb25e1 delta NO_BLOCKERS; N1/N2 LOWs fixed in bcf8023",
+        "pushCi": "pending at 10:26Z",
+        "riskTier": "ROUTINE (scripts/e2e + renderer badge reason + tests + docs; 0 protected paths)"
+      },
+      {
+        "pr": 229,
+        "merge": "f149c20",
+        "by": "auto-merge (SHA-bound, armed by coordinator on febd9a3 at 10:04:10Z)",
+        "at": "2026-10-26T10:22:58Z",
+        "postMerge": "VERIFIED: parent1 db5fff1, parent2 = reviewed head febd9a3, merge-tree 45f08ad == merge tree",
+        "review": "process-mode reviews (M-229-1/2, L1-L4, re-verify F1-F3) + coordinator delta check on febd9a3 NO_BLOCKERS (4 files; tests-8 51/51; tsc 0; coordinator mutant drop{kind,artifactId} KILLED); Lane C mutants 50/50 KILLED",
+        "pushCi": "pending at 10:26Z",
+        "riskTier": "ROUTINE (core/workos/crew + tests + docs; 0 protected paths)"
       }
     ],
     "wslProvider": {
