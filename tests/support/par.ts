@@ -15,12 +15,13 @@ import type {ExecutorPair} from "../../core/workos/executors.js";
 
 // //TR: "Yavaş git" modeli: eşleşen git çağrısı senkron spawnSync ile gelirse olay döngüsü BLOKLANIR (düzeltme öncesi runner), eşzamansız execFile ile gelirse yalnız sonucu gecikir (düzeltme sonrası runner). Gecikme süresi her iki yolda aynıdır; deterministik, shim/PATH gerekmez, Windows'ta da çalışır.
 // //TR: C-PAR-1 (test birleştirme): modül mock'u (vi.mock) dosya genelindedir ve başka testlerin child_process'ini etkilerdi. Bu yüzden kaynakların kullandığı VARSAYILAN dışa aktarım nesnesinde (git-isolation.mjs ve runner.ts `import cp ...; cp.spawnSync/cp.execFile` ile çağırır) vi.spyOn kullanılır; casus yalnız bu dosyanın testlerinde kurulur ve her testten sonra geri alınır.
-export const slow = {rule: null as null | {ms: number; match: (cwd: string, args: string[]) => boolean}, hits: {sync: 0, async: 0}, observe: null as null | ((cwd: string, args: string[], env: NodeJS.ProcessEnv) => void)}; // observe: her git çağrısını (senkron/eşzamansız) gözler; çocuğun ortamını denetleyen testler için
+export const slow = {rule: null as null | {ms: number; match: (cwd: string, args: string[]) => boolean}, hits: {sync: 0, async: 0}, observe: null as null | ((cwd: string, args: string[], env: NodeJS.ProcessEnv) => void), observeSync: null as null | ((cwd: string, args: string[]) => void)}; // observe: her git çağrısını (senkron/eşzamansız) gözler; çocuğun ortamını denetleyen testler için
 const realSpawnSync = cp.spawnSync, realSpawn = cp.spawn as (...x: unknown[]) => cp.ChildProcess;
 const isSlow = (cmd: unknown, args: unknown, opts: unknown) => cmd === "git" && slow.rule !== null && slow.rule.match(String((opts as {cwd?: unknown} | undefined)?.cwd ?? ""), Array.isArray(args) ? args.map(String) : []);
 // //TR: #224 tur 3: eşzamansız git artık `cp.spawn` ile çalışır (execFile `detached`ı yok sayıyordu, bkz. git-async.ts). Yavaş model aynı kalır: eşleşen çağrının "close" olayı ms kadar geciktirilir (gerçek git hemen biter; sonuç gecikir).
 export function installSlowGit() {
   vi.spyOn(cp, "spawnSync").mockImplementation(((...a: Parameters<typeof cp.spawnSync>) => {
+    if (a[0] === "git") slow.observeSync?.(String((a[2] as {cwd?: unknown} | undefined)?.cwd ?? ""), Array.isArray(a[1]) ? a[1].map(String) : []); // //TR: yalnız senkron git çağrılarını gözler (span içinde mi sorusu için)
     if (isSlow(a[0], a[1], a[2])) { slow.hits.sync += 1; for (const until = Date.now() + slow.rule!.ms; Date.now() < until;) { /* senkron git: olay döngüsü bloklanır */ } }
     return realSpawnSync(...a);
   }) as typeof cp.spawnSync);
@@ -53,7 +54,7 @@ export const git = (cwd: string, args: string[]) => { const r = spawnGitSync(cwd
 export function parHarness(): {tmp: () => string} {
   let tmp = "";
   beforeEach(() => { tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-par-")); slow.rule = null; slow.observe = null; slow.hits = {sync: 0, async: 0}; installSlowGit(); });
-  afterEach(() => { slow.rule = null; slow.observe = null; vi.restoreAllMocks(); try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* Windows: kapanan süreçler dosyayı kısa süre tutabilir */ } });
+  afterEach(() => { slow.rule = null; slow.observe = null; slow.observeSync = null; vi.restoreAllMocks(); try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* Windows: kapanan süreçler dosyayı kısa süre tutabilir */ } });
   return {tmp: () => tmp};
 }
 
@@ -82,7 +83,29 @@ export const journal = (dataDir: string): Array<{type: string; payload: Record<s
 export const wrapImplementer = (base: ExecutorPair, implement: ExecutorPair["implementer"]["implement"]): ExecutorPair => ({...base, implementer: {...base.implementer, implement}});
 
 export const waitUntil = async (pred: () => boolean, ms: number) => { for (const until = Date.now() + ms; Date.now() < until;) { if (pred()) return true; await sleep(50); } return false; };
+// //TR: #224 tur 3 (ST4): stop() sonsuza dek asılırsa (ör. durmuş bir motor yeni adım başlatmayı sürdürürse) test 90 sn'lik zaman aşımına kadar sessizce beklemesin ve `finally`deki ikinci stop() de asılmasın: söz `ms` içinde çözülmezse "STOP_HUNG" döner (sınırlı bekleme; zamanlayıcı her durumda temizlenir).
+export const stopWithin = async (p: Promise<unknown>, ms = 15_000): Promise<"OK" | "STOP_HUNG"> => {
+  let t: NodeJS.Timeout | undefined;
+  try { return await Promise.race([p.then(() => "OK" as const), new Promise<"STOP_HUNG">(r => { t = setTimeout(() => r("STOP_HUNG"), ms); })]); } finally { clearTimeout(t); }
+};
+// //TR: #224 tur 3 (Windows HB-1 onarımı): lease-marjı testlerinde olay döngüsü gecikmesini ÖLÇER (50 ms'lik bir zamanlayıcının en büyük sapması). Başarısızlık iletisine eklenir: sapma TTL'yi aşıyorsa neden CPU açlığı/senkron iş (marj), aşmıyorsa fence edilen run gerçek bir boşluktur.
+export const stallProbe = (tickMs = 50) => {
+  let last = performance.now(), max = 0;
+  const t = setInterval(() => { const n = performance.now(); max = Math.max(max, n - last - tickMs); last = n; }, tickMs);
+  return {maxStallMs: () => Math.round(max), stop: () => clearInterval(t)};
+};
 export const procAlive = (pid: number) => { try { process.kill(pid, 0); } catch { return false; } return !(process.platform === "linux" && (() => { try { const st = fs.readFileSync(`/proc/${pid}/stat`, "utf8"); return ["Z", "X"].includes(st.slice(st.lastIndexOf(")") + 2, st.lastIndexOf(")") + 3)); } catch { return true; } })()); };
+// //TR: Linux'ta `root`un tüm (zombi olmayan) torunları (/proc ppid zinciri); izleme dışı kalan öksüzleri (ppid 1'e geçmiş) bulmaz: çağıran, soy ağacını öldürmeden ÖNCE ölçmelidir.
+export const descendantPids = (root: number): number[] => {
+  const kids = new Map<number, number[]>();
+  for (const name of fs.readdirSync("/proc")) {
+    if (!/^\d+$/.test(name)) continue;
+    try { const st = fs.readFileSync(`/proc/${name}/stat`, "utf8"), f = st.slice(st.lastIndexOf(")") + 2).split(" "); if (f[0] === "Z" || f[0] === "X") continue; const ppid = Number(f[1]); kids.set(ppid, [...(kids.get(ppid) ?? []), Number(name)]); } catch { /* süreç bitti */ }
+  }
+  const out: number[] = [];
+  for (const queue = [root]; queue.length;) for (const k of kids.get(queue.shift()!) ?? []) { out.push(k); queue.push(k); }
+  return out;
+};
 // //TR: Linux'ta zombi (Z) üyeler yazamaz ve sayılmaz (reaper'sız kapta öldürülen grubun zombileri kill(-pgid, 0)'ı sonsuza dek başarılı tutar); diğer platformlarda kill(…, 0).
 export const groupLive = (pgid: number): boolean => {
   if (process.platform !== "linux") { try { process.kill(process.platform === "win32" ? pgid : -pgid, 0); return true; } catch { return false; } }

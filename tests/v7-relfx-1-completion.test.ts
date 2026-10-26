@@ -326,19 +326,31 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
     const child = cp.spawn(process.execPath, ["--import", "tsx", ENGINE, REPO, dir, phase, String(ttlOverride ?? TTL), String(ORPHAN_MS), JSON.stringify(opts)], {cwd: REPO, stdio: ["ignore", "pipe", "pipe"], windowsHide: true});
     let out = "", err = "";
     child.stdout.on("data", d => { out += String(d); }); child.stderr.on("data", d => { err += String(d); });
-    const closed = new Promise<number | null>(r => child.on("close", code => r(code)));
-    return {child, closed, text: () => ({out, err})};
+    const t0 = Date.now();
+    let exit: {code: number | null; signal: string | null; afterMs: number} | null = null;
+    const closed = new Promise<number | null>(r => child.on("close", (code, signal) => { exit = {code, signal, afterMs: Date.now() - t0}; r(code); }));
+    return {child, closed, text: () => ({out, err}), exit: () => exit};
   };
   const waitFor = waitUntil, groupAlive = groupLive;
   // //TR: Başarısız bir testin arkasında yetim implementer/torun grupları kalmasın (sızıntı sonraki testi ve Windows tmp temizliğini bozar).
   const leaked: number[] = [];
   afterEach(() => { for (const g of leaked.splice(0)) { try { process.kill(-g, "SIGKILL"); } catch { /* bitmiş */ } } });
   // Faz 1'i başlatır, implementer çocuğu uyurken motoru öldürür (SIGKILL); {dir, runId, pgid, killedAt} döner.
+  // //TR: #224 tur 3 (Windows onarımı, d77d1e4): shard 2'de motor 1 `{"out":"","err":""}` ile, implementing.json yazılmadan sessizce çıktı (yarış `e1.closed.then(() => false)`i kazandı). Başlatma artık koşul tabanlı sınırlı bir beklemedir: sonuç yarıştan sonra dosyanın varlığıyla YENİDEN denetlenir (dosya son yoklama ile çıkış arasında düşmüş olabilir), başarısızlık iletisi çıkış kodu/sinyali/geçen süre/dizin listesini yazar ve YALNIZ motor hiç çıktı üretmeden ve implementing.json olmadan öldüyse temiz bir dizinde BİR kez yeniden başlatılır (ilk denemenin ayrıntısı sonraki başarısızlık iletilerinde de görünür); çıktısı olan ya da dosyayı yazmış bir motorun ölümü yeniden denenmez.
+  const listDir = (dir: string) => { try { return (fs.readdirSync(dir, {recursive: true}) as string[]).slice(0, 40); } catch (e) { return [`<unreadable: ${(e as Error).message}>`]; } };
   const crashEngine = async (dir: string, opts: Record<string, unknown> = {}) => {
-    fs.mkdirSync(dir);
-    const e1 = spawnEngine(dir, "1", opts);
-    expect(await Promise.race([waitFor(() => fs.existsSync(path.join(dir, "implementing.json")), 120_000), e1.closed.then(() => false)]), JSON.stringify(e1.text())).toBe(true);
-    expect(await writerParked(dir, e1.closed, 30_000), "the implementer must have read its directive and parked before the engine is killed").toBe(true); // motor 1 erken çıkarsa (içe aktarma hatası) 120 sn beklemeden stderr ile başarısız ol
+    const attempt = async () => {
+      fs.rmSync(dir, {recursive: true, force: true, maxRetries: 5, retryDelay: 100}); fs.mkdirSync(dir);
+      const e = spawnEngine(dir, "1", opts), t0 = Date.now();
+      const raced = await Promise.race([waitFor(() => fs.existsSync(path.join(dir, "implementing.json")), 120_000), e.closed.then(() => false)]);
+      const up = raced || fs.existsSync(path.join(dir, "implementing.json"));
+      return {e, up, diag: () => JSON.stringify({text: e.text(), exit: e.exit(), waitedMs: Date.now() - t0, dir: listDir(dir)})};
+    };
+    let first = await attempt(), retried: string | null = null;
+    if (!first.up && first.e.text().out === "" && first.e.text().err === "") { retried = `first attempt (engine died silently before implementing.json): ${first.diag()}`; first = await attempt(); }
+    expect(first.up, `engine 1 never reached implementing.json: ${first.diag()}${retried ? ` | ${retried}` : ""}`).toBe(true);
+    const e1 = first.e;
+    expect(await writerParked(dir, e1.closed, 30_000), `the implementer must have read its directive and parked before the engine is killed: ${first.diag()}${retried ? ` | ${retried}` : ""}`).toBe(true); // motor 1 erken çıkarsa (içe aktarma hatası) 120 sn beklemeden stderr ile başarısız ol
     const {runId} = JSON.parse(fs.readFileSync(path.join(dir, "state.json"), "utf8")) as {runId: string};
     const ownerFile = path.join(dir, "data", "runs", runId, "workspace.owner.json");
     let pgid = 0;

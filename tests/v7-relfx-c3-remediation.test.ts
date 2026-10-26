@@ -6,7 +6,7 @@ import {spawnSync} from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import {EditOnlyImplementer, FakeExecutors, LocalClaudeExecutors} from "../core/workos/executors.js";
-import type {ExecutorPair, MissionSpec, ProcOptions, ProcResult} from "../core/workos/executors.js";
+import type {ExecContext, ExecutorPair, MissionSpec, ProcOptions, ProcResult} from "../core/workos/executors.js";
 import {CLAUDE_CREDENTIAL_STORE_FILE, claudeProfileDir} from "../core/workos/claude-profiles.js";
 import {crewDevExecutors} from "../core/workos/crew/dev-review.js";
 import {runGitAsync} from "../core/workos/git-async.js";
@@ -17,7 +17,7 @@ import {REPO, T, drive, okScript, rmTmp, runner, setup, startRun, tmpRoot} from 
 import {repositoryHead, repositoryHeadAsync} from "../core/workos/runner.js";
 import {canonicalPath} from "../core/workos/path-guard.js";
 import type {RepositoryHead} from "../core/workos/runner.js";
-import {ENV_POLICY, REPO as PAR_REPO, git, groupLive, journal, parHarness, procAlive, setup as parSetup, slow, sleep, waitUntil, wrapImplementer} from "./support/par.js";
+import {ENV_POLICY, REPO as PAR_REPO, descendantPids, git, groupLive, journal, parHarness, procAlive, setup as parSetup, slow, sleep, stallProbe, stopWithin, waitUntil, wrapImplementer} from "./support/par.js";
 import cp from "node:child_process";
 import os from "node:os";
 
@@ -169,10 +169,14 @@ describe("LANE-C parallel runs: heartbeat and scheduling (C-PAR-1 PAR-03/05, #21
   let tmp = ""; beforeEach(() => { tmp = par.tmp(); });
   const REPO = PAR_REPO;
   const setup = (name?: string, seed?: Record<string, string>, clock?: () => number) => parSetup(tmp, name, seed, clock);
+  // //TR: #224 tur 3 (Windows HB-1 onarımı, d77d1e4): eşzamansız-lease testlerinin TTL/gecikme çifti birlikte ölçeklendi (TTL 2 s -> 5 s, gecikme 3 s -> 7 s; oran ve "gecikme > TTL" iddiası aynı): Windows runner'ında süreç başlatma + CPU açlığı 2 s'lik TTL'yi aşabiliyordu (marj). Fence edilen run gerçek bir boşluksa bu artış onu GİZLEMEZ: iddia hâlâ "gecikme TTL'den uzun", ve başarısızlık iletisi fence edilen run'ı + ölçülen en büyük döngü gecikmesini yazar.
+  const HB_TTL = 5000, HB_BLOCK = 7000;
+  const hbDiag = (c: {store: {engineGetRun(id: string): {status: string; reason?: string | null} | undefined}}, runs: Record<string, string>, fenced: string[], probe: {maxStallMs(): number}, ttl: number) =>
+    `fenced=${JSON.stringify(fenced.map(id => Object.entries(runs).find(([, v]) => v === id)?.[0] ?? id))} maxLoopStallMs=${probe.maxStallMs()} ttlMs=${ttl} ${Object.entries(runs).map(([k, id]) => `${k}=${c.store.engineGetRun(id)?.status}/${c.store.engineGetRun(id)?.reason ?? ""}`).join(" ")}`;
 describe("C-PAR-1 PAR-03: synchronous git in one run must not starve another run's lease heartbeat (cap 2)", () => {
   // //TR: Aynı senaryo iki yavaş git noktası için: A'nın VERIFY tarama klonu ve A'nın WORKSPACE adımındaki depo kökü/HEAD probu (#218 ile birleşimde eşzamansız sürücü).
   const slowGitLeavesBUnfenced = async (slowMatch: (A: {runId: string}, srcRepo: string) => (cwd: string, args: string[]) => boolean) => {
-    const TTL = 2000, BLOCK = 3000;
+    const TTL = HB_TTL, BLOCK = HB_BLOCK;
     const c = setup(); const A = c.mkRun("A"), B = c.mkRun("B");
     const calls = {A: 0, B: 0, Baborted: 0};
     const pair = wrapImplementer(c.base, async (w, spec, ctx) => {
@@ -188,18 +192,19 @@ describe("C-PAR-1 PAR-03: synchronous git in one run must not starve another run
       return c.base.implementer.implement(w, spec, ctx);
     });
     slow.rule = {ms: BLOCK, match: slowMatch(A, c.repo)};
-    const rep = await c.runner({maxConcurrentRuns: 2, leaseTtlMs: TTL, executors: pair}).tick();
+    const probe = stallProbe();
+    const rep = await c.runner({maxConcurrentRuns: 2, leaseTtlMs: TTL, executors: pair}).tick().finally(() => probe.stop());
     expect(slow.hits.sync + slow.hits.async, "the slow-git scenario really fired once").toBe(1);
     expect(rep.claimed.sort()).toEqual([A.runId, B.runId].sort());
-    expect(rep.fenced).toEqual([]);
+    expect(rep.fenced, hbDiag(c, {A: A.runId, B: B.runId}, rep.fenced, probe, TTL)).toEqual([]);
     expect(calls.B).toBe(1);
     expect(calls.Baborted).toBe(0);
     expect([c.status(A.runId), c.status(B.runId)]).toEqual(["AWAITING_APPROVAL", "AWAITING_APPROVAL"]);
   };
-  it("run A's slow git clone (3 s, TTL 2 s) leaves run B (long async implementer call) unfenced: no abort, no re-run", { timeout: 90_000 }, async () => {
+  it("run A's slow git clone (7 s, TTL 5 s) leaves run B (long async implementer call) unfenced: no abort, no re-run", { timeout: 120_000 }, async () => {
     await slowGitLeavesBUnfenced(A => (cwd, args) => cwd.includes(A.runId) && args.includes("clone") && args.some(a => a.endsWith("scan-c0"))); // A'nın VERIFY tarama klonu
   });
-  it("run A's slow repository HEAD probe (3 s, TTL 2 s, WORKSPACE step) leaves run B unfenced too: the probe is asynchronous", { timeout: 90_000 }, async () => {
+  it("run A's slow repository HEAD probe (7 s, TTL 5 s, WORKSPACE step) leaves run B unfenced too: the probe is asynchronous", { timeout: 120_000 }, async () => {
     let fired = false; // yalnız İLK HEAD okuması yavaş (A'nınki); B'ninki ve sonraki adımlar hızlı
     await slowGitLeavesBUnfenced((_A, srcRepo) => (cwd, args) => { const here = canonicalPath(cwd), repo = canonicalPath(srcRepo); const hit = !fired && here.ok && repo.ok && here.key === repo.key && args.includes("HEAD^{commit}") && args.includes("HEAD"); if (hit) fired = true; return hit; }); // //TR: Windows CI: runner depo yolunu path-guard'ın kanonik biçimine (8.3 kısa adları açılmış, harf büyüklüğü katlanmış) çevirir; sabit `===` eşleşmeyip yavaş-git senaryosu hiç tetiklenmiyordu
   });
@@ -317,8 +322,8 @@ describe("C-PAR-1 + #218: the runner's repository HEAD probe is the same decisio
 
 // //TR: #224 koordinatör incelemesi (REVIEW-0baa72f) düzeltmelerinin testleri. Her test, düzeltilmemiş runner'da (c0259b7) BAŞARISIZ olacak biçimde yazılmıştır (yeni modüller dinamik içe aktarılır ki dosya eski kodda da yüklensin). Motor tabanlı testler tests/v7-par-engine.mts'i iki ayrı süreçte çalıştırır ve birini SIGKILL/SIGINT ile durdurur.
 describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
-  it("HB-1: the production implementer path (EditOnlyImplementer + engine commit) does not starve another run's lease: a slow engine commit (3 s, TTL 2 s) leaves run B unfenced", { timeout: 120_000 }, async () => {
-    const TTL = 2000, BLOCK = 3000;
+  it("HB-1: the production implementer path (EditOnlyImplementer + engine commit) does not starve another run's lease: a slow engine commit (7 s, TTL 5 s) leaves run B unfenced", { timeout: 120_000 }, async () => {
+    const TTL = HB_TTL, BLOCK = HB_BLOCK;
     const c = setup(); const A = c.mkRun("A"), B = c.mkRun("B");
     const script = (delayMs: number) => `setTimeout(() => require("node:fs").writeFileSync("feature.txt", "ok\\n"), ${delayMs});`;
     // A: hemen yazar; B: uzun ücretli çağrı (eşzamansız süreç). Her ikisi de ÜRETİM yolundan geçer: EditOnlyImplementer + engine commit.
@@ -326,11 +331,13 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
     const pair: ExecutorPair = {...c.base, implementer: impl};
     let fired = false;
     slow.rule = {ms: BLOCK, match: (cwd, args) => { const hit = !fired && cwd.includes(A.runId) && args.includes("read-tree"); if (hit) fired = true; return hit; }}; // A'nın engine commit'i (indeks yeniden kurulumu)
-    const rep = await c.runner({maxConcurrentRuns: 2, leaseTtlMs: TTL, executors: pair}).tick();
+    const probe = stallProbe();
+    const rep = await c.runner({maxConcurrentRuns: 2, leaseTtlMs: TTL, executors: pair}).tick().finally(() => probe.stop());
+    const diag = hbDiag(c, {A: A.runId, B: B.runId}, rep.fenced, probe, TTL);
     expect(slow.hits.sync + slow.hits.async, "the slow engine-commit scenario really fired once").toBe(1);
     expect(rep.claimed.sort()).toEqual([A.runId, B.runId].sort());
-    expect(rep.fenced).toEqual([]);
-    expect([c.status(A.runId), c.status(B.runId)]).toEqual(["AWAITING_APPROVAL", "AWAITING_APPROVAL"]);
+    expect(rep.fenced, diag).toEqual([]);
+    expect([c.status(A.runId), c.status(B.runId)], diag).toEqual(["AWAITING_APPROVAL", "AWAITING_APPROVAL"]);
   });
 
   it("HB-2: the per-file test-surface reads renew every owned lease before EACH `git show` (total 4+ s sync work, TTL 2 s, each call 0.7 s): run B stays unfenced", { timeout: 120_000 }, async () => {
@@ -355,20 +362,22 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
   });
 
   // //TR: #224 tur 3 (R1-HB1 alt düzeltmeleri sabitlenir): (a) crew geliştirme köprüsünün engine commit'i de eşzamansızdır; (b) LOCAL_CLAUDE reviewer'ının önce/sonra çalışma alanı anlık görüntüleri (senkron git) ctx.span İÇİNDE çalışır, yani runner her anlık görüntü çevresinde bütün lease'leri yeniler.
-  it("HB-1 (crew development bridge, #224 round 3): crewDevExecutors' engine commit is asynchronous too: a slow commit (3 s, TTL 2 s) leaves run B unfenced", { timeout: 120_000 }, async () => {
-    const TTL = 2000, BLOCK = 3000;
+  it("HB-1 (crew development bridge, #224 round 3): crewDevExecutors' engine commit is asynchronous too: a slow commit (7 s, TTL 5 s) leaves run B unfenced", { timeout: 120_000 }, async () => {
+    const TTL = HB_TTL, BLOCK = HB_BLOCK;
     const c = setup(); const A = c.mkRun("A"), B = c.mkRun("B");
     const builder = {build: async (ctx: {runId: string}) => { if (ctx.runId === B.runId) await sleep(BLOCK + TTL); return {files: {"feature.txt": "ok\n"}}; }};
     const crew = crewDevExecutors("UASCO-0085", "UASCO-0252", builder, {review: async () => ({verdict: "REVIEW_CLEAN" as const})}, ENV_POLICY);
     const pair: ExecutorPair = {...c.base, implementer: {...crew.implementer, identity: c.base.implementer.identity}, reviewer: {...crew.reviewer, identity: c.base.reviewer.identity}}; // koşuların kayıtlı kimlikleriyle eşleşsin
     let fired = false;
     slow.rule = {ms: BLOCK, match: (cwd, args) => { const hit = !fired && cwd.includes(A.runId) && args.includes("read-tree"); if (hit) fired = true; return hit; }}; // A'nın engine commit'i
-    const rep = await c.runner({maxConcurrentRuns: 2, leaseTtlMs: TTL, executors: pair}).tick();
+    const probe = stallProbe();
+    const rep = await c.runner({maxConcurrentRuns: 2, leaseTtlMs: TTL, executors: pair}).tick().finally(() => probe.stop());
+    const diag = hbDiag(c, {A: A.runId, B: B.runId}, rep.fenced, probe, TTL);
     expect(slow.hits.sync + slow.hits.async, "the slow engine-commit scenario really fired once").toBe(1);
     expect(slow.hits.sync, "the crew bridge's commit must not use the blocking driver").toBe(0);
     expect(rep.claimed.sort()).toEqual([A.runId, B.runId].sort());
-    expect(rep.fenced).toEqual([]);
-    expect([c.status(A.runId), c.status(B.runId)]).toEqual(["AWAITING_APPROVAL", "AWAITING_APPROVAL"]);
+    expect(rep.fenced, diag).toEqual([]);
+    expect([c.status(A.runId), c.status(B.runId)], diag).toEqual(["AWAITING_APPROVAL", "AWAITING_APPROVAL"]);
   });
 
   it("HB-1 (reviewer snapshot, #224 round 3): the LOCAL_CLAUDE reviewer's before/after workspace snapshots run inside ctx.span (every synchronous git call of both snapshots is inside a span, two spans in all)", { timeout: 60_000 }, async () => {
@@ -390,8 +399,55 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
     expect(spans).toBe(2);
   });
 
-  it("HB-2 (async rm, #224 round 3): removing the workspace directory (3 s, TTL 2 s) is asynchronous: run B (long async call) stays unfenced and the removal really went through fs.promises.rm", { timeout: 120_000 }, async () => {
-    const TTL = 2000, DELAY = 3000;
+  // //TR: #224 tur 3 incelemesi (R1-HB1-SPAN-WIRING): span bağlantısı iki uçtan sabitlenir: (1) runner ctx.span'i HEM implementer'a HEM reviewer'a verir ve çağrı sahip olunan BÜTÜN lease'leri yeniler (yalnız çağıranınkini değil); (2) EditOnlyImplementer'ın engine süreci içindeki senkron git çağrılarının hepsi ctx.span içindedir.
+  it("HB-1 (span wiring, #224 round 3 review): the runner hands ctx.span to the implementer AND the reviewer, and calling it renews EVERY owned lease, not only the caller's (virtual clock, so the TTL/10 throttle lets the renewal through)", { timeout: 120_000 }, async () => {
+    let vt = Date.now(); const clock = () => vt;
+    const c = setup("spanwire", undefined, clock);
+    const A = c.mkRun("A"), B = c.mkRun("B");
+    const lease = (id: string) => Date.parse(c.store.engineGetRun(id)!.leaseExpiresAt ?? "");
+    const probes: Record<string, unknown> = {};
+    const probe = (who: string, span: ExecContext["span"]) => {
+      if (typeof span !== "function") { probes[who] = "NO_SPAN"; return; }
+      const [a0, b0] = [lease(A.runId), lease(B.runId)];
+      vt += 20_000; // > TTL/10 (6 s): the throttle passes; < TTL (60 s): nothing expires
+      const ret = span(() => "inside");
+      probes[who] = {ret, advancedA: lease(A.runId) - a0, advancedB: lease(B.runId) - b0};
+    };
+    const pair: ExecutorPair = {
+      ...wrapImplementer(c.base, (w, spec, ctx) => { if (spec.title === "A") probe("implementer", ctx.span); return c.base.implementer.implement(w, spec, ctx); }),
+      reviewer: {...c.base.reviewer, review: async (clone, spec, diff, ctx) => { if (spec.title === "A") probe("reviewer", ctx.span); return c.base.reviewer.review(clone, spec, diff, ctx); }},
+    };
+    const rep = await c.runner({maxConcurrentRuns: 2, executors: pair, now: clock}).tick();
+    expect(rep.claimed.sort()).toEqual([A.runId, B.runId].sort());
+    for (const who of ["implementer", "reviewer"]) {
+      expect(probes[who], `${who}: ctx.span must be a function`).not.toBe("NO_SPAN");
+      expect(probes[who], `${who}: span returns fn's value and renews both leases (A = the caller, B = the other owned run)`).toMatchObject({ret: "inside", advancedA: expect.any(Number), advancedB: expect.any(Number)});
+      const p = probes[who] as {advancedA: number; advancedB: number};
+      expect(p.advancedA, `${who}: the caller's lease`).toBeGreaterThan(0);
+      expect(p.advancedB, `${who}: the OTHER run's lease`).toBeGreaterThan(0);
+    }
+    expect(rep.fenced).toEqual([]);
+  });
+
+  it("HB-1 (EditOnlyImplementer span, #224 round 3 review): every SYNCHRONOUS git call the edit-only implementer makes inside the engine process (the agent-config scan's `git ls-files`) runs inside ctx.span, and the engine-process .git digests and path checks around the commit run in spans too", { timeout: 120_000 }, async () => {
+    const repo = path.join(tmp, "eo-repo"); fs.mkdirSync(repo); git(repo, ["init", "-q", "-b", "main"]); fs.writeFileSync(path.join(repo, "README.txt"), "base\n"); git(repo, ["add", "-A"]);
+    git(repo, ["-c", "user.name=Seed", "-c", "user.email=seed@local.invalid", "commit", "-q", "-m", "seed"]);
+    const startSha = git(repo, ["rev-parse", "HEAD"]);
+    let depth = 0, spans = 0; const calls: Array<{args: string; inside: boolean}> = [];
+    slow.observeSync = (cwd, args) => { if (cwd === repo) calls.push({args: args.join(" "), inside: depth > 0}); }; // yalnız gözler
+    const impl = new EditOnlyImplementer("TEST_EDIT_ONLY", ENV_POLICY, () => ({argv: [process.execPath, "-e", 'require("node:fs").writeFileSync("feature.txt", "ok\\n")'], env: {PATH: process.env.PATH ?? ""}, input: ""}));
+    const spec: MissionSpec = {runId: "run_" + "0".repeat(24), missionId: "msn_" + "1".repeat(24), projectId: "prj_" + "2".repeat(24), title: "t", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", cycle: 0, baseSha: startSha, startSha};
+    const r = await impl.implement(repo, spec, {timeoutMs: 60_000, span: fn => { depth += 1; spans += 1; try { return fn(); } finally { depth -= 1; } }});
+    slow.observeSync = null; // the test's own git reads below are not under observation
+    expect([r.exitCode, r.blockReason ?? null], r.log).toEqual([0, null]);
+    expect(git(repo, ["rev-parse", "HEAD"]), "the engine committed the builder's file").not.toBe(startSha);
+    expect(calls.length, "the edit-only implementer made synchronous git calls in the engine process").toBeGreaterThanOrEqual(1);
+    expect(calls.filter(x => !x.inside).map(x => x.args), "a synchronous git call ran outside ctx.span").toEqual([]);
+    expect(spans, "the .git digest before, the agent-config scan (its synchronous `git ls-files`), the .git digest after the commit and the forbidden-change check of the one changed file each run in a span").toBe(4);
+  });
+
+  it("HB-2 (async rm, #224 round 3): removing the workspace directory (7 s, TTL 5 s) is asynchronous: run B (long async call) stays unfenced and the removal really went through fs.promises.rm", { timeout: 120_000 }, async () => {
+    const TTL = HB_TTL, DELAY = HB_BLOCK;
     const c = setup(); const A = c.mkRun("A"), B = c.mkRun("B");
     let hits = 0;
     const realRm = fs.promises.rm.bind(fs.promises);
@@ -404,11 +460,13 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
       for (const until = Date.now() + DELAY + TTL + 1500; Date.now() < until;) { await sleep(100); if (ctx.shouldAbort?.()) return {exitCode: null, log: "aborted", argv: ["fake-long"], startedAt, endedAt: new Date().toISOString(), timedOut: false, aborted: true, transient: false}; }
       return c.base.implementer.implement(w, spec, ctx);
     });
-    const rep = await c.runner({maxConcurrentRuns: 2, leaseTtlMs: TTL, executors: pair}).tick();
+    const probe = stallProbe();
+    const rep = await c.runner({maxConcurrentRuns: 2, leaseTtlMs: TTL, executors: pair}).tick().finally(() => probe.stop());
+    const diag = hbDiag(c, {A: A.runId, B: B.runId}, rep.fenced, probe, TTL);
     expect(hits, "A's workspace removal went through the asynchronous rm").toBe(1);
-    expect(rep.fenced).toEqual([]);
+    expect(rep.fenced, diag).toEqual([]);
     expect(calls.B).toBe(1);
-    expect([c.status(A.runId), c.status(B.runId)]).toEqual(["AWAITING_APPROVAL", "AWAITING_APPROVAL"]);
+    expect([c.status(A.runId), c.status(B.runId)], diag).toEqual(["AWAITING_APPROVAL", "AWAITING_APPROVAL"]);
   });
 
   it("HB-3: a stall right after the loop-delay window was reset is still seen (the drift sentinel does not depend on the histogram's dropped first sample)", { timeout: 60_000 }, async () => {
@@ -439,7 +497,7 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
     const t0 = Date.now();
     const stopped = mr.stop();
     expect(stopped).toBeInstanceOf(Promise);
-    await stopped;
+    expect(await stopWithin(stopped), "stop() never settled (a stopping engine keeps starting steps)").toBe("OK");
     expect(Date.now() - t0).toBeLessThan(10_000);
     expect(procAlive(pgid), "the implementer group outlived stop()").toBe(false);
     const notCancelled = () => { const r = c.store.engineGetRun(A.runId)!; return [r.status, r.step]; };
@@ -448,7 +506,7 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
     expect(notCancelled()).toEqual(["RUNNING", "IMPLEMENT"]); // yeni adım başlamadı
     expect(fs.existsSync(path.join(work(), "feature.txt"))).toBe(false);
     expect(slowImpl.calls.implement, "a new implementer was started after stop()").toBe(1);
-    } finally { await mr.stop(); }
+    } finally { await stopWithin(mr.stop()); }
   });
 
   // ---- R2 (second adversarial pass): stop()/termination safety ----
@@ -473,10 +531,10 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
       const armed = process.listenerCount("exit"); // kanca takılı (başka bileşenlerin kendi exit dinleyicileri de sayılır: yalnız değişim ölçülür)
       const stopped = f.mr.stop(); // çağıran beklemiyor
       expect(process.listenerCount("exit"), "the exit hook was removed while the writer group was still alive").toBe(armed);
-      await stopped;
+      expect(await stopWithin(stopped), "stop() never settled").toBe("OK");
       expect(process.listenerCount("exit"), "the exit hook must be released once the drives settled").toBeLessThan(armed);
       expect(procAlive(f.pgid)).toBe(false);
-    } finally { await f.mr.stop(); }
+    } finally { await stopWithin(f.mr.stop()); }
   });
 
   it.skipIf(process.platform === "win32")("R2-2: a forwarded SIGHUP that does not end the process (another listener exists) kills the writer group but the run is NOT recorded FAILED/BLOCKED: it stays leased for the next engine", { timeout: 90_000 }, async () => {
@@ -489,7 +547,7 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
       await sleep(2500); // sürüşün devamı (kanıt yazımı, süpürme) çocuğun ölümünü işler; sonuç KAYDEDİLMEMELİ
       expect(f.state().slice(0, 2)).toEqual(["RUNNING", "IMPLEMENT"]);
       expect(f.state()[2] ?? "").not.toMatch(/IMPLEMENT_FAILED/);
-    } finally { process.off("SIGHUP", keep); await f.mr.stop(); }
+    } finally { process.off("SIGHUP", keep); await stopWithin(f.mr.stop()); }
   });
 
   it("R2-3: stop() followed by start() while the drive is still draining: the in-flight implementer is still aborted and the run is neither cancelled (LEASE_LOST) nor advanced", { timeout: 90_000 }, async () => {
@@ -498,12 +556,12 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
       const t0 = Date.now();
       const drained = f.mr.stop();
       f.mr.start(250); // stopping bayrağı burada sıfırlanır; tur sayısı sıfırlanmaz
-      await drained;
+      expect(await stopWithin(drained), "stop() never settled").toBe("OK");
       expect(Date.now() - t0, "the writer was not aborted (stopping was reset by start())").toBeLessThan(10_000);
       expect(procAlive(f.pgid)).toBe(false);
       expect(f.state().slice(0, 2)).toEqual(["RUNNING", "IMPLEMENT"]);
       expect(f.state()[2] ?? "").not.toMatch(/LEASE_LOST|GLOBAL_STOP/);
-    } finally { await f.mr.stop(); }
+    } finally { await stopWithin(f.mr.stop()); }
   });
 
   // ---- R2: engine commit children ----
@@ -604,41 +662,69 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
       expect(await waitUntil(() => cloneStarted, 30_000)).toBe(true);
       await sleep(300); // çocuk doğdu, abort yoklaması çalışır durumda
       const t0 = Date.now();
-      await mr.stop();
+      expect(await stopWithin(mr.stop()), "stop() never settled").toBe("OK");
       const took = Date.now() - t0;
       expect(took, `stop() waited for the clone (${took} ms)`).toBeLessThan(SLOW - 3000);
       const after = c.store.engineGetRun(A.runId)!;
       expect(["CANCELLED", "FAILED", "BLOCKED"], `${after.status}/${after.reason}`).not.toContain(after.status);
-    } finally { await mr.stop(); }
+    } finally { await stopWithin(mr.stop()); }
   });
 
-  it("HB-R3-2 (#224 round 3): runGitAsync kills a REAL blocked git child TREE when shouldAbort turns true (recorded child = its own process group), resolves aborted at once and stops polling; a normal finish stops polling too", { timeout: 60_000 }, async () => {
+  it("HB-R3-2 / T-ABORT-1 (#224 round 3): runGitAsync kills a REAL blocked git child TREE when shouldAbort turns true (recorded child = its own process group: the git root AND its `sleep` grandchild are dead), resolves aborted at once and stops polling; a normal finish stops polling too", { timeout: 60_000 }, async () => {
     const repo = path.join(tmp, "abort-repo"); fs.mkdirSync(repo); git(repo, ["init", "-q", "-b", "main"]);
     const {groupMembers} = await import("../core/workos/writer-guard.js");
     for (const recorded of [true, false]) {
       let abort = false, polls = 0, child: {pid: number; pgid: number | null} | null = null;
-      // an alias runs `sleep` below git (git -> sh -> sleep): a real child tree that only dies when it is killed (stdin is closed, so a stdin-blocked command would just exit)
-      const p = runGitAsync(repo, ["-c", `alias.zzz=!sleep ${recorded ? 31 : 32}`, "zzz"], {...process.env}, recorded ? c => { child = c; } : undefined, {shouldAbort: () => { polls += 1; return abort; }});
-      expect(await waitUntil(() => polls >= 1, 5000), "the abort signal was never polled").toBe(true);
-      await sleep(150);
-      abort = true;
-      const r = await p;
-      expect(r, `recorded=${recorded}`).toMatchObject({status: null, stdout: "", stderr: "ABORTED", aborted: true});
-      if (recorded) {
-        // //TR: Windows'ta süreç grubu yoktur (pgid null; ağaç taskkill /T ile öldürülür): lider iddiası yalnız POSIX'te
-        if (process.platform === "win32") expect(child!.pgid, "no process groups on Windows").toBeNull();
-        else expect(child!.pgid, "a recorded git child must be the leader of its own process group").toBe(child!.pid);
-        if (process.platform === "linux") expect(await waitUntil(() => (groupMembers(child!.pgid!) ?? ["unreadable"]).length === 0, 5000), "a member of the aborted git child's group survived").toBe(true);
-        else expect(await waitUntil(() => !procAlive(child!.pid), 5000), "the aborted git child survived").toBe(true);
+      const tree: number[] = []; // git -> sh -> sleep: every descendant, measured BEFORE the abort
+      try {
+        // an alias runs `sleep` below git (git -> sh -> sleep): a real child tree that only dies when it is killed (stdin is closed, so a stdin-blocked command would just exit)
+        const p = runGitAsync(repo, ["-c", `alias.zzz=!sleep ${recorded ? 31 : 32}`, "zzz"], {...process.env}, recorded ? c => { child = c; } : undefined, {shouldAbort: () => { polls += 1; return abort; }});
+        expect(await waitUntil(() => polls >= 1, 5000), "the abort signal was never polled").toBe(true);
+        await sleep(150);
+        // //TR: T-ABORT-1: iddia boş olmasın diye soy ağacı gerçekten `sleep` torununa ulaşana kadar beklenir (aksi halde "hepsi öldü" boş küme için de doğru olurdu); kök pid çocuk kaydından ya da /proc'tan (kayıtsız) bulunur.
+        if (process.platform === "linux") {
+          const root = recorded ? child!.pid : (() => { for (const n of fs.readdirSync("/proc")) { if (!/^\d+$/.test(n)) continue; try { const cmd = fs.readFileSync(`/proc/${n}/cmdline`, "utf8"); if (cmd.includes("alias.zzz=!sleep 32") && cmd.startsWith("git")) return Number(n); } catch { /* bitti */ } } return 0; })();
+          expect(root, `recorded=${recorded}: the blocked git root was not found`).toBeGreaterThan(0);
+          expect(await waitUntil(() => descendantPids(root).length > 0, 5000), `recorded=${recorded}: the git child never started its sleep grandchild`).toBe(true);
+          tree.push(root, ...descendantPids(root));
+        }
+        abort = true;
+        const r = await p;
+        expect(r, `recorded=${recorded}`).toMatchObject({status: null, stdout: "", stderr: "ABORTED", aborted: true});
+        if (recorded) {
+          // //TR: Windows'ta süreç grubu yoktur (pgid null; ağaç taskkill /T ile öldürülür): lider iddiası yalnız POSIX'te
+          if (process.platform === "win32") expect(child!.pgid, "no process groups on Windows").toBeNull();
+          else expect(child!.pgid, "a recorded git child must be the leader of its own process group").toBe(child!.pid);
+          if (process.platform === "linux") {
+            expect(await waitUntil(() => (groupMembers(child!.pgid!) ?? ["unreadable"]).length === 0, 5000), "a member of the aborted git child's group survived").toBe(true);
+            expect(tree.length, "the recorded tree must contain git AND its sleep grandchild").toBeGreaterThanOrEqual(2);
+            for (const pid of tree) expect(await waitUntil(() => !procAlive(pid), 5000), `pid ${pid} of the aborted git tree survived`).toBe(true);
+          } else expect(await waitUntil(() => !procAlive(child!.pid), 5000), "the aborted git child survived").toBe(true);
+        } else if (process.platform === "linux") {
+          // //TR: kayıtsız (salt-okunur yoklama) çocuğun yalnız kökü öldürülür; onun `sleep` torunu öksüz kalabilir: iddia yalnız kök için, öksüz ise test sonunda temizlenir (süreç sızıntısı bırakılmaz).
+          expect(await waitUntil(() => !procAlive(tree[0]!), 5000), "the aborted unrecorded git root survived").toBe(true);
+        }
+        const after = polls; await sleep(350);
+        expect(polls, `polling continued after the abort (recorded=${recorded})`).toBe(after);
+      } finally {
+        for (const pid of tree) { try { process.kill(pid, "SIGKILL"); } catch { /* zaten bitmiş */ } } // no orphan outlives the test
       }
-      const after = polls; await sleep(350);
-      expect(polls, `polling continued after the abort (recorded=${recorded})`).toBe(after);
     }
     let n = 0;
     const done = await runGitAsync(repo, ["--version"], {...process.env}, undefined, {shouldAbort: () => { n += 1; return false; }});
     expect(done.status).toBe(0);
     const seen = n; await sleep(350);
     expect(n, "polling continued after a normal finish").toBe(seen);
+  });
+
+  it("GA-MAXBUF-1 (#224 round 3 review): output over the 64 MiB cap is a FAILURE (status null), never a truncated status 0 (a diff sized to the cap must not slip past the secret scan); exactly the cap is fine", { timeout: 120_000 }, async () => {
+    const MAX = 64 * 1024 * 1024;
+    const repo = path.join(tmp, "maxbuf-repo"); fs.mkdirSync(repo); git(repo, ["init", "-q", "-b", "main"]);
+    const blob = (bytes: number) => { const f = path.join(tmp, `blob-${bytes}.bin`); fs.writeFileSync(f, Buffer.alloc(bytes, 0x61)); return git(repo, ["hash-object", "-w", f]); };
+    const over = await runGitAsync(repo, ["cat-file", "blob", blob(MAX + 1)], {...process.env});
+    expect(over, "one byte over the cap").toMatchObject({status: null, stdout: "", stderr: "maxBuffer exceeded"});
+    const exact = await runGitAsync(repo, ["cat-file", "blob", blob(MAX)], {...process.env});
+    expect([exact.status, exact.stdout.length], "exactly the cap").toEqual([0, MAX]);
   });
 
   it.skipIf(process.platform !== "linux")("PAR-04 (#224 round 3): a RECORDED runner git child really is a process group leader (child_process.execFile ignores `detached`, so the first implementation recorded a pgid that was never a group: takeover, termination forwarding and the leftover kill all signalled nothing)", { timeout: 30_000 }, async () => {
@@ -670,7 +756,7 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
     expect(c.status(A.runId)).toBe("CANCELLED");
   });
 
-  it("TEST-PAR05-REFILL (M3): with a 10 s timer the freed slot is refilled IMMEDIATELY (C starts within 2 s of A finishing while B is still in IMPLEMENT)", { timeout: 120_000 }, async () => {
+  it("TEST-PAR05-REFILL (M3): with a 60 s timer the freed slot is refilled IMMEDIATELY (C starts within 2 s of A finishing while B is still in IMPLEMENT)", { timeout: 120_000 }, async () => {
     const c = setup(); const A = c.mkRun("A"), B = c.mkRun("B"), C = c.mkRun("C");
     const t0 = Date.now(), at: Record<string, number> = {}, mark = (k: string) => { at[k] ??= Date.now() - t0; };
     const pair = wrapImplementer(c.base, async (w, spec, ctx) => {
@@ -679,7 +765,7 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
       try { return await c.base.implementer.implement(w, spec, ctx); } finally { mark(`end${spec.title}`); }
     });
     const mr = c.runner({maxConcurrentRuns: 2, executors: pair});
-    mr.start(10_000); // zamanlayıcı yavaş: yalnız iş-korumalı hemen doldurma C'yi zamanında başlatır
+    mr.start(60_000); // //TR: zamanlayıcı sınırdan ÇOK daha yavaş (60 sn >> 2 sn): anında doldurma yoksa C ancak ~60 sn sonra başlar; yükte bile M3 belirleyici olarak yakalanır (B artık startC'yi beklediği için eski kararsızlık kaynağı yok)
     (mr as unknown as {pump(freshOnly: boolean): void}).pump(false);
     const ids: Record<string, string> = {A: A.runId, B: B.runId, C: C.runId};
     try {
@@ -688,8 +774,8 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
         if (at.doneA !== undefined && at.startC !== undefined) break;
         await sleep(50);
       }
-    } finally { await mr.stop(); }
-    expect(at.startC - at.doneA, JSON.stringify(at)).toBeLessThanOrEqual(6000); // //TR: kaçırılmış anında doldurma 10 sn'lik zamanlayıcıya düşer (>= 7 sn); 6 sn sınırı C'nin kendi WORKSPACE adımının yükte uzamasını da karşılar
+    } finally { await stopWithin(mr.stop()); }
+    expect(at.startC - at.doneA, JSON.stringify(at)).toBeLessThanOrEqual(2000);
     expect(at.startC, JSON.stringify(at)).toBeGreaterThan(at.doneA);
   });
 
