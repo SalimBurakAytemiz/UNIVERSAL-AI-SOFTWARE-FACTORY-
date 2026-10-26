@@ -448,11 +448,12 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
 
   it("a provider that is ALREADY de-verified never gets spawn() (cached gate result is not enough); a de-verify stop that times out is retried by the periodic check", async () => {
     const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
-    let verified = true; const {provider, spawned} = spawning({isVerified: () => verified});
+    let verified: unknown = true; const {provider, spawned} = spawning({isVerified: () => verified});
     const m = manager(dataDir, new ExecutionGate(provider));
     try {
       await m.start(p); await m.stop(p.projectId); expect(spawned).toHaveLength(1);
       verified = false; await expect(m.start(p)).rejects.toMatchObject({code: "SANDBOX_UNAVAILABLE", reason: "SANDBOX_UNVERIFIED"}); expect(spawned).toHaveLength(1);
+      verified = undefined; await expect(m.start(p)).rejects.toMatchObject({code: "SANDBOX_UNAVAILABLE", reason: "SANDBOX_UNVERIFIED"}); expect(spawned, "a non-boolean isVerified() is not verified").toHaveLength(1);
       verified = true; await m.start(p);
       const real = (m as any).stopDetailed.bind(m); let tries = 0;
       (m as any).stopDetailed = async (id: string, why?: string) => { if (why === "SANDBOX_UNVERIFIED" && ++tries === 1) return "TIMEOUT"; return real(id, why); };
