@@ -1,0 +1,237 @@
+{
+ "//TR": "C-FLOW-ANALYSIS-2 mutasyon listesi: her mutant tam metin değişikliğidir (dosyada tam 1 kez bulunmalı); docs/lanes/LANE-C-flow-analysis-2-mutants.mjs her birini uygular ve tests/v7-lane-c-flow-analysis.test.ts dosyasının BAŞARISIZ olmasını bekler.",
+ "mutants": [
+  {
+   "id": "A1",
+   "description": "login detection removed",
+   "file": "core/workos/predev/claude-builder.ts",
+   "old": "if (json && (r.exitCode !== 0 || envl?.kind === \"error\") && claudeAuthFailure(",
+   "new": "if (false && (r.exitCode !== 0 || envl?.kind === \"error\") && claudeAuthFailure("
+  },
+  {
+   "id": "A2",
+   "description": "login detection only on a non-zero exit",
+   "file": "core/workos/predev/claude-builder.ts",
+   "old": "(r.exitCode !== 0 || envl?.kind === \"error\") && claudeAuthFailure",
+   "new": "(r.exitCode !== 0) && claudeAuthFailure"
+  },
+  {
+   "id": "A3",
+   "description": "login detection ignores the envelope text",
+   "file": "core/workos/predev/claude-builder.ts",
+   "old": "${envl?.kind === \"error\" ? envl.text : \"\"}\\n${rawOut}",
+   "new": "${\"\"}\\n${rawOut}"
+  },
+  {
+   "id": "A4",
+   "description": "login detection ignores stderr",
+   "file": "core/workos/predev/claude-builder.ts",
+   "old": "\\n${String(r.stderr ?? \"\")}`)) return fail(\"PREDEV_BUILDER_LOGIN_EXPIRED\")",
+   "new": "`)) return fail(\"PREDEV_BUILDER_LOGIN_EXPIRED\")"
+  },
+  {
+   "id": "A5",
+   "description": "login detection ignores plain stdout",
+   "file": "core/workos/predev/claude-builder.ts",
+   "old": "${envl?.kind === \"error\" ? envl.text : \"\"}\\n${rawOut}\\n",
+   "new": "${envl?.kind === \"error\" ? envl.text : \"\"}\\n\\n"
+  },
+  {
+   "id": "A6",
+   "description": "login detection also reads a SUCCESSFUL reply text",
+   "file": "core/workos/predev/claude-builder.ts",
+   "edits": [
+    {
+     "old": "(r.exitCode !== 0 || envl?.kind === \"error\") && claudeAuthFailure(`${envl?.kind === \"error\" ? envl.text : \"\"}",
+     "new": "(true) && claudeAuthFailure(`${envl?.kind === \"error\" ? envl.text : envl?.kind === \"ok\" ? envl.result : \"\"}"
+    }
+   ]
+  },
+  {
+   "id": "X1",
+   "description": "non-zero exit is not an error",
+   "file": "core/workos/predev/claude-builder.ts",
+   "old": "if (r.exitCode !== 0) return fail(\"PREDEV_BUILDER_EXIT_NONZERO\");",
+   "new": ""
+  },
+  {
+   "id": "X2",
+   "description": "a reply that is not a result envelope is accepted",
+   "file": "core/workos/predev/claude-builder.ts",
+   "old": "if (json && rawOut !== \"\" && envl!.kind === \"invalid\") return fail(\"PREDEV_BUILDER_ENVELOPE_INVALID\");",
+   "new": ""
+  },
+  {
+   "id": "X3",
+   "description": "an error envelope is not an error",
+   "file": "core/workos/predev/claude-builder.ts",
+   "old": "if (envl?.kind === \"error\") return fail(\"PREDEV_BUILDER_CLI_ERROR\");",
+   "new": ""
+  },
+  {
+   "id": "X4",
+   "description": "a non-success subtype (max turns) is not an error",
+   "file": "core/workos/predev/claude-builder.ts",
+   "old": "if (e.is_error === true || e.subtype !== \"success\") return",
+   "new": "if (e.is_error === true) return"
+  },
+  {
+   "id": "X5",
+   "description": "is_error=true is not an error",
+   "file": "core/workos/predev/claude-builder.ts",
+   "old": "if (e.is_error === true || e.subtype !== \"success\") return",
+   "new": "if (e.subtype !== \"success\") return"
+  },
+  {
+   "id": "X6",
+   "description": "a missing result text is accepted",
+   "file": "core/workos/predev/claude-builder.ts",
+   "old": "if (typeof e.result !== \"string\") return {kind: \"invalid\"};\n  return {kind: \"ok\", result: e.result};",
+   "new": "return {kind: \"ok\", result: e.result as string};"
+  },
+  {
+   "id": "X7",
+   "description": "an empty reply is read as an envelope (wrong code)",
+   "file": "core/workos/predev/claude-builder.ts",
+   "old": "const envl = json && rawOut !== \"\" ? readEnvelope(rawOut) : null;",
+   "new": "const envl = json ? readEnvelope(rawOut) : null;"
+  },
+  {
+   "id": "X8",
+   "description": "the envelope is never read (raw stdout is the output)",
+   "file": "core/workos/predev/claude-builder.ts",
+   "old": "const json = this.rt.outputFormat === \"claude-json\";",
+   "new": "const json = false;"
+  },
+  {
+   "id": "X9",
+   "description": "the result text is not trimmed",
+   "file": "core/workos/predev/claude-builder.ts",
+   "old": "unwrapSingleFence(envl.result.trim())",
+   "new": "unwrapSingleFence(envl.result)"
+  },
+  {
+   "id": "X10",
+   "description": "a fenced reply is not unwrapped",
+   "file": "core/workos/predev/claude-builder.ts",
+   "old": "return m ? m[1]!.trim() : t;",
+   "new": "return t;"
+  },
+  {
+   "id": "X11",
+   "description": "text after the closing fence is accepted",
+   "file": "core/workos/predev/claude-builder.ts",
+   "old": "\\r?\\n```$/",
+   "new": "\\r?\\n```/"
+  },
+  {
+   "id": "X12",
+   "description": "text before the opening fence is accepted",
+   "file": "core/workos/predev/claude-builder.ts",
+   "old": "/^```(?:json)?",
+   "new": "/```(?:json)?"
+  },
+  {
+   "id": "G1",
+   "description": "the placeholder guard is off",
+   "file": "core/workos/predev/driver.ts",
+   "old": "if (hasPlaceholder(parsed)) return",
+   "new": "if (false) return"
+  },
+  {
+   "id": "G2",
+   "description": "the guard does not look inside arrays",
+   "file": "core/workos/predev/driver.ts",
+   "old": "if (Array.isArray(x)) return x.some(hasPlaceholder);",
+   "new": "if (Array.isArray(x)) return false;"
+  },
+  {
+   "id": "G3",
+   "description": "the guard does not look at object values",
+   "file": "core/workos/predev/driver.ts",
+   "old": "|| hasPlaceholder(v))",
+   "new": "|| false)"
+  },
+  {
+   "id": "G4",
+   "description": "the guard does not look at keys",
+   "file": "core/workos/predev/driver.ts",
+   "old": "k.includes(PLACEHOLDER_MARKER) || hasPlaceholder(v)",
+   "new": "hasPlaceholder(v)"
+  },
+  {
+   "id": "G5",
+   "description": "the guard runs after the shape validation",
+   "file": "core/workos/predev/driver.ts",
+   "edits": [
+    {
+     "old": "    if (hasPlaceholder(parsed)) return {status: \"REJECTED\", kind, phase, reason: \"PREDEV_DRIVER_PLACEHOLDER_VALUE\"};\n\n    const v = validateArtifactContent(kind, parsed, toUpstreamContents(kind, ctx.approvedUpstream));\n    if (!v.ok) return {status: \"REJECTED\", kind, phase, reason: v.errors};",
+     "new": "    const v = validateArtifactContent(kind, parsed, toUpstreamContents(kind, ctx.approvedUpstream));\n    if (!v.ok) return {status: \"REJECTED\", kind, phase, reason: v.errors};\n    if (hasPlaceholder(parsed)) return {status: \"REJECTED\", kind, phase, reason: \"PREDEV_DRIVER_PLACEHOLDER_VALUE\"};"
+    }
+   ]
+  },
+  {
+   "id": "G6",
+   "description": "the guard checks strings by equality, not containment",
+   "file": "core/workos/predev/driver.ts",
+   "old": "return x.includes(PLACEHOLDER_MARKER);",
+   "new": "return x === PLACEHOLDER_MARKER;"
+  },
+  {
+   "id": "E1",
+   "description": "the pre-dev builder asks for text output",
+   "file": "core/workos/executors.ts",
+   "old": "argv: l => reviewerArgv(l, \"json\"), outputFormat: \"claude-json\",",
+   "new": "argv: l => reviewerArgv(l), outputFormat: \"claude-json\","
+  },
+  {
+   "id": "E2",
+   "description": "the pre-dev builder does not read the envelope",
+   "file": "core/workos/executors.ts",
+   "old": "argv: l => reviewerArgv(l, \"json\"), outputFormat: \"claude-json\",",
+   "new": "argv: l => reviewerArgv(l, \"json\"),"
+  },
+  {
+   "id": "E3",
+   "description": "reviewerArgv ignores the requested format",
+   "file": "core/workos/executors.ts",
+   "old": "\"--output-format\", outputFormat];",
+   "new": "\"--output-format\", \"text\"];"
+  },
+  {
+   "id": "S1",
+   "description": "the prompt carries no output skeleton",
+   "file": "core/workos/predev/role-prompts.ts",
+   "old": "    JSON.stringify(OUTPUT_SKELETONS[kind], null, 2)\n  ];",
+   "new": "    \"\"\n  ];"
+  },
+  {
+   "id": "S2",
+   "description": "a skeleton key drifts from the validators (Plan.estimate)",
+   "file": "core/workos/predev/role-prompts.ts",
+   "old": "estimate: F(\"estimate, e.g. 2d\")",
+   "new": "estimates: F(\"estimate, e.g. 2d\")"
+  },
+  {
+   "id": "S3",
+   "description": "the Requirements skeleton carries a real-looking goal id instead of a placeholder",
+   "file": "core/workos/predev/role-prompts.ts",
+   "old": "nonFunctional: [{id: \"NFR1\", statement: F(\"non-functional requirement\"), acceptanceCriteria: [F(\"testable acceptance criterion\")], tracesTo: [F(\"goal id that exists in the approved BusinessAnalysis\")]}]",
+   "new": "nonFunctional: [{id: \"NFR1\", statement: F(\"non-functional requirement\"), acceptanceCriteria: [F(\"testable acceptance criterion\")], tracesTo: [\"G1\"]}]"
+  },
+  {
+   "id": "S4",
+   "description": "the Architecture skeleton drops a required key",
+   "file": "core/workos/predev/role-prompts.ts",
+   "old": "dataModel: F(\"data model description\"), integrations",
+   "new": "integrations"
+  },
+  {
+   "id": "S5",
+   "description": "the UxSpec skeleton has no placeholders",
+   "file": "core/workos/predev/role-prompts.ts",
+   "old": "screens: [{id: \"SC1\", name: F(\"screen name\")}]",
+   "new": "screens: [{id: \"SC1\", name: \"Home\"}]"
+  }
+ ]
+}
