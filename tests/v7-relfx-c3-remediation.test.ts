@@ -248,11 +248,13 @@ describe("C-PAR-1 PAR-03: synchronous git in one run must not starve another run
   });
 });
 
-// //TR: #218 (repositoryHead) + C-PAR-1 birleşimi: runner WORKSPACE adımı depo kökü/HEAD kararını artık EŞZAMANSIZ sürücüyle verir (olay döngüsünü bloklamaz); karar prosedürü (headDecision) tek yerde, iki sürücü aynı ortam izin listesini ve aynı tavanı kullanır. Bu testler iki sürücünün aynı cevabı verdiğini, host GIT_* değişkenlerinin hiçbirini görmediğini ve eşzamansız sürücünün döngüyü bloklamadığını kanıtlar.
+// //TR: Reviewer başlatılamıyorsa ve Founder bunu kendisi giderebiliyorsa (oturum, CLI, başlatıcı kanıtı) run BLOCKED olur; adapter'ın kendi geçersizlik nedenleri FAILED kalır. Desen yakın-kaçırma satırlarıyla sabitlenir (`CLAUDE_` ya da `PROVIDER_` öneki, başa çapa, alt çizgi): geniş bir desen gerçek bir geçersizliği Founder'ın giderebileceği bir blok gibi gösterirdi.
 describe("C-PAR-1 follow-up: a reviewer that cannot start for a reason the Founder can fix BLOCKS the run (like a missing sign-in), it does not FAIL it", () => {
   it("CLI missing / .cmd shim / unverified, changed or vanished launcher / expired sign-in -> BLOCKED with the exact code; a review that is invalid for its own reasons stays FAILED", { timeout: 120_000 }, async () => {
     const rows: Array<[string, "BLOCKED" | "FAILED"]> = [["CLAUDE_PROFILE_LOGIN_REQUIRED", "BLOCKED"], ["CLAUDE_PROFILE_LOGIN_EXPIRED", "BLOCKED"], ["CLAUDE_CLI_NOT_FOUND", "BLOCKED"], ["CLAUDE_CLI_SHIM_UNSUPPORTED", "BLOCKED"],
-      ["PROVIDER_PROVENANCE_NOT_READY", "BLOCKED"], ["CLAUDE_PACKAGE_PROVENANCE_REQUIRED", "BLOCKED"], ["CLAUDE_LAUNCHER_PROVENANCE_CHANGED", "BLOCKED"], ["REVIEW_WORKSPACE_MODIFIED", "FAILED"], ["REVIEW_FAILED", "FAILED"]];
+      ["PROVIDER_PROVENANCE_NOT_READY", "BLOCKED"], ["CLAUDE_PACKAGE_PROVENANCE_REQUIRED", "BLOCKED"], ["CLAUDE_LAUNCHER_PROVENANCE_CHANGED", "BLOCKED"], ["REVIEW_WORKSPACE_MODIFIED", "FAILED"], ["REVIEW_FAILED", "FAILED"],
+      ["CLAUDE_REVIEW_OUTPUT_INVALID", "FAILED"], ["PROVIDER_ROUTE_UNKNOWN", "FAILED"], ["X_CLAUDE_CLI_NOT_FOUND", "FAILED"],
+      ["CLAUDE_PROFILEX", "FAILED"], ["CLAUDE_CLIENT_ERROR", "FAILED"], ["CLAUDE_PACKAGE_PROVENANCEX", "FAILED"], ["CLAUDE_LAUNCHER_PROVENANCEX", "FAILED"], ["PROVIDER_PROVENANCEX", "FAILED"]];
     for (const [i, [code, want]] of rows.entries()) {
       const c = setup(`rb${i}`), run = c.mkRun("A"), at = new Date().toISOString();
       const pair: ExecutorPair = {...c.base, reviewer: {...c.base.reviewer, review: async () => ({verdict: "BLOCKED", findings: [], valid: false, invalidReason: code, exitCode: null, log: "x", argv: [], startedAt: at, endedAt: at, timedOut: false, aborted: false, transient: false})}};
@@ -263,6 +265,7 @@ describe("C-PAR-1 follow-up: a reviewer that cannot start for a reason the Found
   });
 });
 
+// //TR: #218 (repositoryHead) + C-PAR-1 birleşimi: runner WORKSPACE adımı depo kökü/HEAD kararını artık EŞZAMANSIZ sürücüyle verir (olay döngüsünü bloklamaz); karar prosedürü (headDecision) tek yerde, iki sürücü aynı ortam izin listesini ve aynı tavanı kullanır. Bu testler iki sürücünün aynı cevabı verdiğini, host GIT_* değişkenlerinin hiçbirini görmediğini ve eşzamansız sürücünün döngüyü bloklamadığını kanıtlar.
 describe("C-PAR-1 + #218: the runner's repository HEAD probe is the same decision, asynchronous", () => {
   const ID = ["-c", "user.name=Seed", "-c", "user.email=seed@local.invalid", "-c", "commit.gpgsign=false"];
   const commit = (dir: string, name = "f.txt") => { fs.writeFileSync(path.join(dir, name), `${name}\n`); git(dir, ["add", "-A"]); git(dir, [...ID, "commit", "-q", "-m", `add ${name}`]); return git(dir, ["rev-parse", "HEAD"]); };

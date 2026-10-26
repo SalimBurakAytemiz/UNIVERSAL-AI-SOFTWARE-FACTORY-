@@ -1008,12 +1008,93 @@
   },
   {
    "id": "RB2",
-   "description": "reviewer-blocked: an invalid review (the review's own invalidity) BLOCKs the run instead of FAILing it",
+   "description": "reviewer-blocked: every invalid review the adapter reports (also REVIEW_WORKSPACE_MODIFIED, REVIEW_FAILED) BLOCKs the run instead of FAILing it (the REVIEWER_IDENTITY_MISMATCH / REVIEWER_MUTATED_CLONE paths are separate and stay BLOCKED either way)",
    "file": "core/workos/runner.ts",
    "testFile": "tests/v7-relfx-c3-remediation.test.ts",
    "filter": "CLI missing",
    "old": "status: FOUNDER_ACTIONABLE_REFUSAL.test(r.invalidReason ?? \"\") ? \"BLOCKED\" : \"FAILED\"}",
    "new": "status: \"BLOCKED\"}"
+  },
+  {
+   "id": "RB3",
+   "description": "reviewer-blocked: the pattern is too broad on CLAUDE_ (any CLAUDE_* reason, e.g. CLAUDE_REVIEW_OUTPUT_INVALID, becomes a Founder-actionable BLOCK)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "CLI missing",
+   "old": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;",
+   "new": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_|PROVIDER_PROVENANCE_)/;"
+  },
+  {
+   "id": "RB4",
+   "description": "reviewer-blocked: PROVIDER_ instead of PROVIDER_PROVENANCE_ (PROVIDER_ROUTE_UNKNOWN becomes a Founder-actionable BLOCK)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "CLI missing",
+   "old": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;",
+   "new": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_)/;"
+  },
+  {
+   "id": "RB5",
+   "description": "reviewer-blocked: the start anchor is dropped (X_CLAUDE_CLI_NOT_FOUND matches in the middle)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "CLI missing",
+   "old": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;",
+   "new": "FOUNDER_ACTIONABLE_REFUSAL = /(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;"
+  },
+  {
+   "id": "RB6",
+   "description": "reviewer-blocked: the trailing underscore is dropped from every alternative (CLAUDE_PROFILEX, CLAUDE_CLIENT_ERROR, ... match)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "CLI missing",
+   "old": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;",
+   "new": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE|CLAUDE_CLI|CLAUDE_PACKAGE_PROVENANCE|CLAUDE_LAUNCHER_PROVENANCE|PROVIDER_PROVENANCE)/;"
+  },
+  {
+   "id": "RB7",
+   "description": "reviewer-blocked: the trailing underscore is dropped from CLAUDE_PROFILE_ only",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "CLI missing",
+   "old": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;",
+   "new": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;"
+  },
+  {
+   "id": "RB8",
+   "description": "reviewer-blocked: the trailing underscore is dropped from CLAUDE_CLI_ only (CLAUDE_CLIENT_ERROR matches)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "CLI missing",
+   "old": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;",
+   "new": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;"
+  },
+  {
+   "id": "RB9",
+   "description": "reviewer-blocked: the trailing underscore is dropped from CLAUDE_PACKAGE_PROVENANCE_ only",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "CLI missing",
+   "old": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;",
+   "new": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;"
+  },
+  {
+   "id": "RB10",
+   "description": "reviewer-blocked: the trailing underscore is dropped from CLAUDE_LAUNCHER_PROVENANCE_ only",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "CLI missing",
+   "old": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;",
+   "new": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE|PROVIDER_PROVENANCE_)/;"
+  },
+  {
+   "id": "RB11",
+   "description": "reviewer-blocked: the trailing underscore is dropped from PROVIDER_PROVENANCE_ only",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "CLI missing",
+   "old": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;",
+   "new": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE)/;"
   }
  ]
 }
