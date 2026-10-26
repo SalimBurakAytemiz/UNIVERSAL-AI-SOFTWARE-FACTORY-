@@ -1,7 +1,7 @@
 {
   "//TR": "Bu manifest normal feature build sırasında korunacak trust-root dosyalarının artifact-creation anındaki SHA-256 değerlerini taşır.",
   "schemaVersion": "1.0.0",
-  "generatedAt": "2026-10-26T04:29:01.964Z",
+  "generatedAt": "2026-10-26T15:43:22.598Z",
   "sealStatus": "SEALED",
   "files": [
     {
@@ -10,7 +10,7 @@
     },
     {
       "path": ".github/workflows/ci.yml",
-      "sha256": "bb35600e945945fc09a05eaee18ab6f0cdbce61ad907d82c2db800cf4c35ec47"
+      "sha256": "03d5bac85d80a87c6a901f1ee82dbdf44be19082e986af6ca728e781d8dacd4a"
     },
     {
       "path": ".gitignore",
@@ -1458,7 +1458,7 @@
     },
     {
       "path": "scripts/validate-shards.mjs",
-      "sha256": "53173beb5693901fe628279b4901d7d2df26df5c1df72881a070c290f817a570"
+      "sha256": "64f3ffe64d5ad03df340559e330c54d97f97a7c4bb9bb4ceaa80f6d537f24d74"
     },
     {
       "path": "scripts/validate-technology-graph.mjs",

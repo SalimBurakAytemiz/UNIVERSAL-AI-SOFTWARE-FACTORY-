@@ -1,5 +1,6 @@
 # //TR: Bu korunan workflow (public repo, ucretsiz standart GitHub-hosted runner'lar) Linux + Windows uzerinde deterministic lockfile install, canonical/mechanical validation (600 sn adim limiti altinda sirali tests kabuklari dahil), baseline secret scan ve trust-kernel self-test calistirir; yalniz master/v7/integration push'unda, PR'larda ve elle tetiklenir (cift tetikleme yok), PR'da eskiyen kosu iptal edilir, sonuc commit SHA'sina bagli CI_EVIDENCE.json (yalniz adim kimligi/durum/sure) olarak 14 gun saklanir; self-hosted, larger veya ucretli runner kullanmaz. Yetki: FD-PUBLIC-CI-2026-10-19 (yalniz PR #49).
 # //TR: CI-PARALLEL (oneri, Founder yetkisi gerekir): Linux validate tek is olarak degismez; Windows dogrulamasi config/validation.json shardPlan.win32 ile ayni adimlari, ayni 600 sn limitini koruyarak 3 kabuga (validate-windows-shard (1..3)) bolunur ve zorunlu 'validate (windows-latest)' baglami fail-closed scripts/validate-shards.mjs birlestiricisidir (eksik/fazla/tekrar/SHA/ozet/FAIL/zaman asimi = FAIL); secret-sanity, kernel self-test ve ci-evidence orada calisir.
+# //TR: CI-TEP1 (Founder yetkisi gerekir): preflight (ubuntu-latest, 15 dk) mevcut ucuz kontrolleri (tedarik zinciri, trust-root, secret, //TR, mimari, typecheck) Windows kabuklarindan ONCE calistirir; validate-windows-shard ona baglidir (needs), Linux validate bagimsizdir ve her adimi calistirir. preflight FAIL olursa kabuklar atlanir ve zorunlu 'validate (windows-latest)' preflight'i adlandirarak kirmizi olur. Birlestirici bu run_id'nin TUM attempt'lerindeki kabuk artifact'lerini ayri alt dizinlere indirir ve --max-attempt ile her kabuk icin bu attempt'i asmayan en yuksek attempt'in raporunu kullanir (COORD-001: yalniz basarisiz kabugun yeniden calistirilmasi artik birlestiriciyi her zaman dusurmez; yeni FAIL eski PASS ile ortulmez).
 name: CI
 on:
   push:
@@ -49,8 +50,31 @@ jobs:
           include-hidden-files: true
           retention-days: 14
           if-no-files-found: warn
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+      - name: Require lockfile
+        shell: bash
+        run: test -f package-lock.json || (echo "package-lock.json missing; run install/bootstrap once and commit lockfile" && exit 1)
+      - run: node scripts/ensure-dependencies.mjs
+      - run: node scripts/dependency-supply-chain.mjs
+      - run: node scripts/validate-release-supply-chain.mjs
+      - run: node scripts/verify-trust-root.mjs
+      - run: node scripts/secret-sanity.mjs
+      - run: node scripts/validate-tr-comments.mjs
+      - run: node scripts/validate-architecture.mjs
+      - run: node node_modules/typescript/bin/tsc --noEmit
   validate-windows-shard:
     name: validate-windows-shard (${{ matrix.shard }})
+    needs: preflight
     strategy:
       fail-fast: false
       matrix:
@@ -83,14 +107,18 @@ jobs:
           if-no-files-found: error
   validate-windows:
     name: validate (windows-latest)
-    needs: validate-windows-shard
+    needs: [preflight, validate-windows-shard]
     if: always()
     runs-on: windows-latest
     timeout-minutes: 30
     env:
       UASCO_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      PREFLIGHT_RESULT: ${{ needs.preflight.result }}
       SHARDS_RESULT: ${{ needs.validate-windows-shard.result }}
     steps:
+      - name: Require preflight to succeed (the Windows shards are skipped when it fails)
+        shell: bash
+        run: test "$PREFLIGHT_RESULT" = "success" || (echo "preflight result=$PREFLIGHT_RESULT (expected success); validate-windows-shard result=$SHARDS_RESULT because the Windows shards need preflight" && exit 1)
       - name: Require every Windows shard job to succeed
         shell: bash
         run: test "$SHARDS_RESULT" = "success" || (echo "validate-windows-shard result=$SHARDS_RESULT (expected success)" && exit 1)
@@ -101,15 +129,15 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
-      - name: Download shard reports (this run attempt only)
+      # //TR: merge-multiple YOK: her artifact (validation-shard-<run_id>-<attempt>-<i>) kendi alt dizinine iner, boylece farkli attempt'lerin ayni adli raporlari birbirinin uzerine yazilmaz.
+      - name: Download shard reports (this run, every attempt; one subdirectory per artifact)
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          pattern: validation-shard-${{ github.run_id }}-${{ github.run_attempt }}-*
-          merge-multiple: true
+          pattern: validation-shard-${{ github.run_id }}-*
           path: .ai/runtime/shards
-      - name: Aggregate shards (fail-closed)
+      - name: Aggregate shards (fail-closed; per shard the highest attempt <= this attempt)
         shell: bash
-        run: node scripts/validate-shards.mjs --count 3 --sha "$UASCO_HEAD_SHA" --platform win32 --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" --dir .ai/runtime/shards
+        run: node scripts/validate-shards.mjs --count 3 --sha "$UASCO_HEAD_SHA" --platform win32 --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" --max-attempt "$GITHUB_RUN_ATTEMPT" --dir .ai/runtime/shards
       - run: node scripts/secret-sanity.mjs
       - name: Bootstrap trust-kernel self-test
         run: node scripts/bootstrap-kernel-selftest.mjs
