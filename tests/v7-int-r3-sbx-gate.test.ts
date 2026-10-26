@@ -815,6 +815,24 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
       expect(await new WslUnshareSandboxProvider().selfTest()).toEqual({ok: false, detail: "PLATFORM_NOT_WIN32"});
     });
 
+    it("B-WSL-WIRE-1 real-shaped `wsl -l -v` bytes: UTF-16LE with BOM + CRLF (localized header), UTF-16LE without BOM, UTF-8 and UTF-8 with BOM all decode and keep the `*` default marker; docker-desktop / WSL 1 / no-default stay null", async () => {
+      const {decodeWslText, discoverDefaultDistro} = await import("../core/sandbox/wsl-unshare-sandbox.js");
+      const hdr = "  NOM                    ÉTAT           VERSION";
+      const fx = (rows: string[]) => [hdr, ...rows].join("\r\n") + "\r\n";
+      const ubuntu = fx(["* Ubuntu                 Running         2", "  docker-desktop         Stopped         2"]);
+      const enc = {
+        "utf16le+BOM": Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(ubuntu, "utf16le")]), "utf16le": Buffer.from(ubuntu, "utf16le"),
+        "utf8": Buffer.from(ubuntu, "utf8"), "utf8+BOM": Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(ubuntu, "utf8")])};
+      for (const [label, buf] of Object.entries(enc)) { const text = decodeWslText(buf); expect([label, text.includes("\0"), /^\s*\* Ubuntu|\n\* Ubuntu/.test(text), discoverDefaultDistro(text)]).toEqual([label, false, true, "Ubuntu"]); }
+      const u16 = (t: string) => Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(t, "utf16le")]);
+      expect(discoverDefaultDistro(decodeWslText(u16(fx(["* docker-desktop         Running         2", "  Ubuntu                 Stopped         2"]))))).toBeNull();
+      expect(discoverDefaultDistro(decodeWslText(u16(fx(["* Ubuntu                 Running         1"]))))).toBeNull();
+      expect(discoverDefaultDistro(decodeWslText(u16(fx(["  Ubuntu                 Running         2"]))))).toBeNull();
+      // sağlayıcı uçtan uca: UTF-16LE (WSL_UTF8 yok sayılsa bile) -> keşif -> selfTest
+      const saved = process.env.UASCO_WSL_DISTRO; delete process.env.UASCO_WSL_DISTRO;
+      try { const {p} = await mk({}, {distro: undefined}); expect(await p.selfTest()).toEqual({ok: true}); } finally { if (saved !== undefined) process.env.UASCO_WSL_DISTRO = saved; }
+    });
+
     it("B-WSL-WIRE-1 distro discovery: with no UASCO_WSL_DISTRO the DEFAULT (*) WSL 2 distro is discovered from `wsl -l -v` (no user input) and used for every call; v1, docker/rancher/podman internals, no default or an invalid configured name are never picked", async () => {
       const {discoverDefaultDistro} = await import("../core/sandbox/wsl-unshare-sandbox.js");
       const tbl = (rows: string[]) => ["  NAME            STATE           VERSION", ...rows].join("\r\n");
