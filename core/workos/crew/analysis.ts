@@ -4,7 +4,7 @@ import {assertRoleExecutes, FIRST_DELIVERY_BINDINGS} from "../../agents/first-de
 import type {RoleExecutionProfile} from "../../agents/role-execution.js";
 import {CLAUDE_PROFILE_ROLES, claudeRoleReadiness, detectClaudeCli} from "../claude-profiles.js";
 import type {ClaudeCliStatus, ClaudeProfileOptions, ClaudeProfileRole, ClaudeRoleReadiness} from "../claude-profiles.js";
-import {PREDEV_AGENT_ACTOR, PreDevBuilderError} from "../predev/claude-builder.js";
+import {ClaudePreDevBuilder, PREDEV_AGENT_ACTOR, PreDevBuilderError} from "../predev/claude-builder.js";
 import {briefFromRecords} from "../predev/brief.js";
 import {PreDevDriver, PreDevDriverError} from "../predev/driver.js";
 import {composeRolePrompt} from "../predev/role-prompts.js";
@@ -24,6 +24,9 @@ export const MAX_PLAN_TASKS = 50; // plan.ts planCreateSchema ile aynı sınır;
 
 // //TR: Üretim BuilderPort'u yoksa (LOCAL_CLAUDE seçili değil) route bunu verir: hazırlık geçse bile adım dürüstçe BUILDER_FAILED/PREDEV_DRIVER_BUILDER_NOT_CONFIGURED döner, hiçbir şey uydurulmaz.
 export const NO_ANALYSIS_BUILDER: BuilderPort = {produce: async () => { throw new PreDevDriverError("PREDEV_DRIVER_BUILDER_NOT_CONFIGURED"); }};
+
+// //TR: Global Stop sürerken (ücretli çağrıdan önce, çağrı sırasında ya da bittikten sonra, kayıttan ÖNCE) fırlatılır: hiçbir şey kaydedilmedi, faz ilerlemedi. Route bunu 423 GLOBAL_STOP_ACTIVE'e çevirir (dürüst: hiçbir şey yazılmadı).
+export class AnalysisStoppedError extends Error { constructor() { super("GLOBAL_STOP_ACTIVE"); this.name = "AnalysisStoppedError"; } }
 
 export class AnalysisError extends Error {
   constructor(readonly code: "ANALYSIS_MISSION_NOT_FOUND" | "ANALYSIS_PROJECT_NOT_FOUND") { super(code); this.name = "AnalysisError"; }
@@ -103,7 +106,7 @@ export interface AnalysisDeps {
   store: WorkOsStore; scope: Scope; builder: BuilderPort;
   // Üretimden ÖNCE sorulur (ücretli iş yalnız hazırsa başlar); üretimde claudeAnalysisReadiness, testte enjekte edilir.
   readiness: () => AnalysisReadiness;
-  // //TR: Global Stop açık mı (route d.workosStopped'ı verir)? Ücretli çağrıdan ÖNCE ve çağrı BİTTİKTEN sonra, kayıttan önce sorulur: durdurma sırasında üretilen taslak kaydedilmez.
+  // //TR: Global Stop açık mı (route d.workosStopped'ı verir)? Verilmişse builder destekliyorsa shouldAbort'a bağlanır (çalışan süreç grubu öldürülür), ücretli çağrıdan ÖNCE ve çağrı BİTTİKTEN sonra, kayıttan önce sorulur; durmuşsa AnalysisStoppedError: durdurma sırasında üretilen taslak kaydedilmez.
   stopped?: () => boolean;
 }
 
@@ -145,22 +148,26 @@ export class AnalysisFlow {
   }
 
   private async produceStep(driver: PreDevDriver, missionId: string, rm: ReturnType<WorkOsStore["preDevReadModel"]>): Promise<AnalysisStep> {
-    const scope = this.d.scope, stopBlock = () => blockedStep("GLOBAL_STOP_ACTIVE", "Global Stop is active: nothing was started or recorded. Clear the stop to continue.");
+    const scope = this.d.scope;
     const readiness = this.d.readiness();
     if (!readiness.ready) return {status: "BLOCKED", blocker: readiness.blocker ?? "ANALYSIS_NOT_READY", blockers: readiness.blockers, founderAction: readiness.founderAction, readiness};
-    if (this.d.stopped?.()) return stopBlock();
+    if (this.d.stopped?.()) throw new AnalysisStoppedError();
     const phaseKind = ANALYSIS_KINDS.find(k => rm.artifacts[k].state !== "APPROVED")!;
     // //TR: Ücretli çağrı önce ve yazmadan yapılır; hata ya da Global Stop depoyu olduğu gibi bırakır.
     let raw: string;
+    // //TR: builder shouldAbort'u destekliyorsa (ClaudePreDevBuilder: süreç grubu öldürülür) Global Stop'a bağlanır; paylaşılan NO_ANALYSIS_BUILDER'a dokunulmaz.
+    const b = this.d.builder as BuilderPort & {shouldAbort?: () => boolean};
+    if (this.d.stopped && (b instanceof ClaudePreDevBuilder || "shouldAbort" in b)) b.shouldAbort = this.d.stopped;
     try {
       const ctx = driver.buildMissionContext(scope, missionId, phaseKind);
       raw = await this.d.builder.produce(phaseKind, composeRolePrompt(phaseKind, ctx), ctx);
     } catch (e) {
+      if (this.d.stopped?.()) throw new AnalysisStoppedError(); // abort edilen çağrı bir "builder hatası" değil, durdurmadır
       if (e instanceof PreDevBuilderError) return {status: "BUILDER_FAILED", kind: phaseKind, code: e.code};
       if (e instanceof PreDevDriverError) return {status: "BUILDER_FAILED", kind: phaseKind, code: e.message.slice(0, 120)};
       throw e;
     }
-    if (this.d.stopped?.()) return stopBlock();
+    if (this.d.stopped?.()) throw new AnalysisStoppedError();
     // //TR: Kayıt mevcut sürücüden geçer (doğrulayıcı kapısı, DRAFT, aynı kimlikler); içerik zaten ödenmiş olan çağrının çıktısıdır.
     const recorder = this.driver(missionId, {produce: async () => raw});
     try {
