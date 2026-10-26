@@ -362,6 +362,16 @@
       "ref": "wf_42570092-000 (3 lenses: fix-correctness/test-integrity/security; P1/P2/P3 FIXED; 5 LOW: P2 serial-kill not pinned x3, stale-sample comment overclaim, M2 title overclaim)",
       "policy": "TEP-1",
       "at": "2026-10-26T18:25:26.123Z"
+    },
+    {
+      "pr": 258,
+      "sha": "689f49af2a578411712f5a06dae2b973c926febd",
+      "kind": "full",
+      "base": null,
+      "verdict": "NO_BLOCKERS_1LOW",
+      "ref": "wf_48da0905-b01 (266/266; 3 mutants re-killed; merge-tree clean with #255 + base; LOW: run-card 'none' state not asserted, deferred to Lane A next push)",
+      "policy": "TEP-1",
+      "at": "2026-10-26T18:30:56.181Z"
     }
   ],
   "tests": [],
