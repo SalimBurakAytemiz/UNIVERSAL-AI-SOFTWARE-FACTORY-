@@ -482,13 +482,23 @@
       "ref": "COORD base merge 459205c: diff vs merge-tree(459205c,d642963) = only 2 conflict resolutions (ps1a-c2 import union; trust-root reseal, verify PASS); Linux scope 574/11 env-fail identical on d642963",
       "policy": "TEP-1",
       "at": "2026-10-26T21:21:37.232Z"
+    },
+    {
+      "pr": 262,
+      "sha": "0beafb3d5cbb399b7c433fc2f8d27bffa1f23251",
+      "kind": "full",
+      "base": null,
+      "verdict": "BLOCKERS_HIGH_packaged_503",
+      "ref": "wf_b028361d-62d (3 lenses + 9 skeptics, none refuted): HIGH packaged app 503 + v7-b7-installer D-M1-01 red (readiness inputs not staged); MEDIUM isOpenRun only pinned for RUNNING; MEDIUM bare catch/503 untested; MEDIUM per-request reload of ~420 files (6x latency, 598 KB); 5 LOW",
+      "policy": "TEP-1",
+      "at": "2026-10-26T21:52:16.121Z"
     }
   ],
   "tests": [],
   "fingerprint": {
-    "value": "75e7905836799368cd2a4eb7aa72623138aff8397cb1ad293fb0a4b2b9b99619",
-    "at": "2026-10-26T20:42:26.951Z",
-    "base": "45d7292a9538432f9e2fb83bca8ed2e2a2639530",
-    "prs": 8
+    "value": "5ff111cfe6e2ab1926fcbee0112fdc0268c49462ef0b86e7111ba288a584352e",
+    "at": "2026-10-26T21:42:13.120Z",
+    "base": "459205ca73890760015662bdbc7e4ee9b920bf86",
+    "prs": 7
   }
 }
