@@ -1,0 +1,6 @@
+<!-- //TR: LANE-C yetki talebi: yeni test dosyasının config/validation.json (korumalı) bir parçasına kaydı koordinatör işidir. -->
+# LANE-C authority request: register `tests/v7-lane-c-linux-sandbox-exports.test.ts`
+
+Package C-LINUX-SANDBOX-EXPORTS (coordinator request for Lane B's `claude/lane-b-sbx-win-1`, `docs/authority-requests/LANE-B-wsl-sandbox.md`). `core/agents/linux-unshare-sandbox.ts` now exports `LINUX_SANDBOX_NS_FLAGS`, `LINUX_SANDBOX_HELPER_PATH` and `LINUX_SANDBOX_SETUP`, the unchanged values the provider runs with. The only non-alias change: `NS_FLAGS` is `Object.freeze`d (typed `readonly string[]`), so a consumer cannot mutate the provider's isolation flags through the shared array; the provider only spreads it.
+
+New file, 2 tests, under 1 s: add `"tests/v7-lane-c-linux-sandbox-exports.test.ts"` to the end of the `command` array of any existing shard (no `platforms` filter: it only imports the module and builds argv, nothing is executed). It pins (1) the literal values, the frozen array, `PATH=<exported helper path>` inside the exported script; (2) that the provider's own private argv builder returns `[...exported flags, shell, "-c", exported setup, ...]` for the same inputs.

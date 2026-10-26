@@ -20,8 +20,11 @@ export interface LinuxSandboxOptions {
   acceptUnenforcedProcessLimit?: boolean;
 }
 
-const NS_FLAGS = ["--user", "--map-root-user", "--net", "--pid", "--ipc", "--uts", "--mount", "--fork", "--kill-child=SIGKILL"];
+// //TR: C-LINUX-SANDBOX-EXPORTS: üç sabit Lane B'nin WSL2 sağlayıcısı (core/sandbox/wsl-unshare-sandbox.ts) tarafından AYNEN yeniden kullanılır (betik kopyalanmaz). Değerler değişmedi; yalnız dışa aktarılır. NS_FLAGS dondurulmuştur: dışarıdan değiştirilirse bu sağlayıcının izolasyon bayrakları da değişirdi.
+const NS_FLAGS: readonly string[] = Object.freeze(["--user", "--map-root-user", "--net", "--pid", "--ipc", "--uts", "--mount", "--fork", "--kill-child=SIGKILL"]);
 const HELPER_PATH = "/usr/sbin:/usr/bin:/sbin:/bin";
+export const LINUX_SANDBOX_NS_FLAGS = NS_FLAGS;
+export const LINUX_SANDBOX_HELPER_PATH = HELPER_PATH;
 const REQUIRED_TOOLS = ["mount", "umount", "pivot_root", "setpriv", "mkdir", "ln", "awk", "sh"] as const;
 // //TR: Kurulum betiği namespace İÇİNDE, pid 1 olarak çalışır. Argümanlar: SCRATCH CPU ADRES_KB DOSYA_BLOK KOK_BAGI EK_RO_KOKLER komut... Sıra: özel mount -> tmpfs kök -> ro bağlar -> sentetik /etc -> özel /dev -> özel /tmp -> /work (scratch) -> /proc (+ ro maskeler) -> iç içe userns kapat -> hepsini ro yap -> pivot_root + eski kökü ayır -> DENETİM (ro olmayan bağ varsa 126) -> ulimit -> yetenek bırak ve komutu pid 1 olmayan çocuk olarak çalıştır (gözetmen pid 1 kalır, stdin korunur).
 const SETUP = [
@@ -66,6 +69,7 @@ const SETUP = [
   'if [ -n "$PRL" ]; then exec "$PRL" --nproc="$NPROC" "$SETPRIV" --no-new-privs --bounding-set=-all --inh-caps=-all "$SUPSH" -c "$INNER" sh "$@"; fi',
   'exec "$SETPRIV" --no-new-privs --bounding-set=-all --inh-caps=-all "$SUPSH" -c "$INNER" sh "$@"'
 ].join("\n");
+export const LINUX_SANDBOX_SETUP = SETUP;
 
 const now = () => new Date().toISOString();
 function refusal(argv: string[], why: string): ProcResult {
