@@ -1,6 +1,7 @@
 //TR: Bu dosya Founder'ın pre-dev kararlarını sağlar (diziyi başlat, artefaktı kanıtla onayla+ilerlet, reddet); karar kapıları (bağımsız onaylayan, kanıt zorunlu, faz sırası) MEVCUT store/driver tarafından zorlanır, burada yeniden yazılmaz. server.ts'e tek satırlık kayıt gerekir (docs/authority-requests/LANE-B-predev-decisions.md).
 import AjvModule from "ajv";
 import {LANE_WRITE_BODY_LIMIT} from "./deps.js";
+import {tryProduceLock} from "./produce-lock.js";
 import type {RouteDeps} from "./deps.js";
 import {PreDevDriver, PreDevDriverError, type ProjectBrief} from "../../../../core/workos/predev/driver.js";
 import {WorkOsError} from "../../../../core/workos/types.js";
@@ -97,7 +98,6 @@ export function registerPredevDecisionRoutes(app: any, d: PredevRouteDeps): void
 
   // //TR: C-PREDEV-PRODUCE: mevcut fazın artefaktını bağlı rol (PRE_DEV_ROLE_MAP[kind][0]) üzerinden üretir ve DRAFT kaydeder; ONAYLAMAZ (Founder karar verir). Kapı sırası diğer pre-dev rotalarıyla aynıdır (kimlik 400 -> Global Stop 423 -> politika 403 -> boş gövde 400 -> misyon/tenant 404); sonra builder yoksa 409, aynı misyonda eşzamanlı ikinci çağrı 409 (çift süreç YOK). Faz/bekleyen-taslak kapıları builder çağrılmadan ÖNCE driver'dadır. Üretim idempotent DEĞİLDİR: her başarılı çağrı yeni bir model çağrısıdır.
   // //TR: Süreç genelinde AYNI ANDA en çok BİR produce (yerel makinede N misyon = N model süreci olmasın): aynı misyonda ikinci çağrı IN_PROGRESS, başka misyonda BUSY; ikisi de süreç başlatmadan 409. Kilit builder-yapılandırma denetiminden SONRA alınır, böylece erken çıkış kilidi sızdıramaz.
-  let producingMission: string | null = null;
   app.post("/v1/missions/:id/predev/produce", {bodyLimit: LANE_WRITE_BODY_LIMIT}, guard(async (req: any, reply: any) => {
     const body = req.body ?? {};
     const id: string = req.params.id;
@@ -106,8 +106,8 @@ export function registerPredevDecisionRoutes(app: any, d: PredevRouteDeps): void
     if (!missionOr404(req, reply)) return reply;
     const builder = d.preDevBuilder?.() ?? null;
     if (!builder) return reply.code(409).send({error: "PREDEV_DRIVER_BUILDER_NOT_CONFIGURED"});
-    if (producingMission !== null) return reply.code(409).send({error: producingMission === id ? "PREDEV_PRODUCE_IN_PROGRESS" : "PREDEV_PRODUCE_BUSY"});
-    producingMission = id;
+    const lock = tryProduceLock(id);
+    if (!lock.ok) return reply.code(409).send({error: lock.error});
     try {
       const store = d.getStore(), mission = store.getMission(d.scope, id)!, project = store.getProject(d.scope, mission.projectId);
       if (!project) return reply.code(404).send({error: "WORKOS_NOT_FOUND"});
@@ -134,6 +134,6 @@ export function registerPredevDecisionRoutes(app: any, d: PredevRouteDeps): void
       }
       audit("RECORDED", {phase: out.phase, artifactId: out.artifactId, version: out.version});
       return reply.code(201).send({produced: {status: "RECORDED", kind: out.kind, phase: out.phase, artifactId: out.artifactId, version: out.version, roleId: trace()?.roleId ?? null}, predev: model(id)});
-    } finally { producingMission = null; }
+    } finally { lock.release(); }
   }));
 }

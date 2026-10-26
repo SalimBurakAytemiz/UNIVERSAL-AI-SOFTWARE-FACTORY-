@@ -686,7 +686,7 @@ describe("LANE-A pre-dev decisions — view (Journey)", () => {
     const btn = byId(root, "predev-start-submit")!;
     fire(btn, "click"); await new Promise(r => setTimeout(r, 0));
     expect(posts).toEqual([{path: POST_START, body: {}}]);
-    expect(rerenders()).toBe(1);
+    expect(rerenders()).toBe(2); // one repaint when the lock is set (before the POST), one with the answer
     const st = status(await renderJourney(ctx), "predev-start");
     expect(st.dataset.result).toBe("ok"); expect(st.textContent).toBe("Pre-dev sequence started. The server reports the phase: BUSINESS_ANALYSIS.");
     void dec;
@@ -947,7 +947,7 @@ describe("LANE-A A-FLOW-5 analysis step — pure core", () => {
     expect(c.mapAnalysisStep({status: "REJECTED", kind: "Plan", reason: "workPackages[0].id duplicate"})).toEqual({status: "REJECTED", kind: "Plan", reason: "workPackages[0].id duplicate"});
     expect(c.mapAnalysisStep({status: "BUILDER_FAILED", kind: "Architecture", code: "PREDEV_DRIVER_BUILDER_NOT_CONFIGURED"})).toEqual({status: "BUILDER_FAILED", kind: "Architecture", code: "PREDEV_DRIVER_BUILDER_NOT_CONFIGURED"});
     expect(c.mapAnalysisStep(complete({approved: [...KINDS].reverse()}))).toEqual({status: "COMPLETE", approved: KINDS}); // canonical order
-    expect(c.mapAnalysisStep(blocked())).toEqual({status: "BLOCKED", blocker: "CLAUDE_CLI_NOT_FOUND", blockers: ["CLAUDE_CLI_NOT_FOUND", "implementer:CLAUDE_PROFILE_LOGIN_REQUIRED"]}); // free text founderAction is never carried
+    expect(c.mapAnalysisStep(blocked())).toEqual({status: "BLOCKED", blocker: "CLAUDE_CLI_NOT_FOUND", blockers: ["CLAUDE_CLI_NOT_FOUND", "implementer:CLAUDE_PROFILE_LOGIN_REQUIRED"], phaseStuck: false, target: null, founderAction: null}); // free text founderAction is never carried for an ordinary blocker
     expect(c.mapAnalysisStep(blocked({blocker: "ANALYSIS_NOT_READY", blockers: []})).blockers).toEqual([]);
     const bad: any[] = [null, [], "COMPLETE", {}, {status: "DONE"}, {status: "complete"},
       draft({kind: "UxSpec"}), draft({kind: undefined}), draft({artifactId: "pda_zz"}), draft({artifactId: [A1]}), draft({version: 0}), draft({version: 1.5}), draft({version: "1"}), draft({roleId: "bad role"}), draft({roleId: undefined}), draft({next: "NOTHING"}), draft({next: undefined}),
@@ -1047,7 +1047,7 @@ describe("LANE-A A-FLOW-5 analysis step — view (Journey)", () => {
     expect(byData(block(b.root), "analysisPlanGate", "CLOSED")).toBeDefined(); expect(b.posts).toEqual([]);
     expect(allData(b.root, "kind").length).toBeGreaterThan(0); // the existing pre-dev section is still rendered next to it
     const after = await press(b, "analysis-step-submit");
-    expect(b.posts).toEqual([{path: STEP, body: {}}]); expect(b.rerenders()).toBe(1);
+    expect(b.posts).toEqual([{path: STEP, body: {}}]); expect(b.rerenders()).toBe(2); // one repaint when the lock is set (before the POST), one with the answer
     expect(byData(block(after), "analysisStatus")!.dataset.analysisStatus).toBe("DRAFT_READY");
     expect(block(after).textContent).toContain("Draft ready: Business analysis"); expect(block(after).textContent).toContain("version 1"); expect(block(after).textContent).toContain("UASCO-0300");
     expect(stOf(after).dataset.result).toBe("ok");
@@ -1239,10 +1239,394 @@ describe("LANE-A A-FLOW-5 analysis step — view (Journey)", () => {
   it("is present in English and Turkish with the same keys; no analysis text is a raw key", async () => {
     const en = await load("locales", "en.js"), tr = await load("locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
     const keys = Object.keys(E).filter(k => k.startsWith("analysis."));
-    expect(keys.length).toBe(50);
+    expect(keys.length).toBe(58);
     for (const h of ["CLAUDE_CLI_NOT_FOUND", "CLAUDE_CLI_SHIM_UNSUPPORTED", "PROVIDER_PROVENANCE_NOT_READY", "CLAUDE_PACKAGE_PROVENANCE_REQUIRED", "CLAUDE_LAUNCHER_PROVENANCE_CHANGED", "CLAUDE_PROFILE_LOGIN_REQUIRED", "CLAUDE_PROFILE_LOGIN_EXPIRED", "CLAUDE_PROFILE_REFUSED", "PROVENANCE_MISSING"]) expect(E[`analysis.blocker.${h}`], h).toBeTruthy();
     for (const k of keys) { expect(T[k], k).toBeTruthy(); expect(E[k], k).not.toBe(k); }
     const b = await open({status: 200, body: {status: "COMPLETE", approved: KINDS}}); const r = await press(b, "analysis-step-submit");
     expect(block(r).textContent).not.toMatch(/analysis\.[a-z]/);
   });
 });
+
+describe("LANE-A A-ANALYSIS-STUCK-1: an approved artefact whose phase did not advance (ANALYSIS_PHASE_NOT_ADVANCED)", () => {
+  const STEP = `/v1/missions/${MSN}/analysis/step`, A1 = "pda_" + "ab".repeat(12), A2 = "pda_" + "cd".repeat(12);
+  const PLAN = `/v1/missions/${MSN}/analysis/plan`, KINDS = ["BusinessAnalysis", "Requirements", "Plan", "Architecture"];
+  const APPROVE = (id: string) => `/v1/missions/${MSN}/predev/artifacts/${id}/approve`;
+  const deferred = () => { let res: (v: any) => void = () => {}; const p = new Promise<any>(r => { res = r; }); return {p, res}; };
+  const OKPLAN = {tasks: [{}], replayed: false, trace: [{index: 0, workPackageId: "WP1", estimate: "1d", satisfies: [], requirements: []}]};
+  const stuck = (over: any = {}) => ({status: 200, body: {status: "BLOCKED", blocker: "ANALYSIS_PHASE_NOT_ADVANCED", blockers: ["ANALYSIS_PHASE_NOT_ADVANCED"], founderAction: "Approve the artefact again to resume (server prose, never parsed).", kind: "Requirements", artifactId: A1, readiness: {ready: false}, ...over}});
+  async function open(stepAnswer: any, approveAnswer: any = {status: 200, body: {...predevBody({phase: "PLANNING"}), replayed: false}}, planAnswer: any = {status: 404, body: {}}) {
+    const served = serve({[`/v1/predev/${MSN}`]: DRAFT_PREDEV()}), approves: string[] = [];
+    const base = await mkDecisionCtx(served, (p: string) => {
+      if (p === STEP) return typeof stepAnswer === "function" ? stepAnswer() : stepAnswer;
+      if (p === PLAN) return typeof planAnswer === "function" ? planAnswer() : planAnswer;
+      if (p.endsWith("/approve")) { approves.push(p); return typeof approveAnswer === "function" ? approveAnswer() : approveAnswer; }
+      return {status: 404, body: {}};
+    });
+    const an = await load("views", "analysis-step.js"); an.resetAnalysis(null); for (const f of ["analysis-step", "analysis-plan", "analysis-reapprove"]) { delete base.forms.drafts.status[f]; base.forms.drafts.busy[f] = false; }
+    return {...base, an, approves, root: await renderJourney(base.ctx)};
+  }
+  const press = async (b: any, id: string) => { fire(byId(b.root, id)!, "click"); await new Promise(r => setTimeout(r, 0)); b.root = await renderJourney(b.ctx); return b.root; };
+  const text = (n: N) => n.textContent, stuckOf = (root: N) => allData(byId(root, "analysis-step")!, "analysisStuck");
+
+  it("core: kind/artifactId come only from the structured fields and only for this blocker; a missing or malformed field leaves no target (the prose is never parsed)", async () => {
+    const c = await load("analysis-core.js"), m = (over: any) => c.mapAnalysisStep({status: "BLOCKED", blocker: "ANALYSIS_PHASE_NOT_ADVANCED", blockers: ["ANALYSIS_PHASE_NOT_ADVANCED"], founderAction: "Approve pda_" + "ee".repeat(12) + " of kind Plan again", ...over});
+    expect(m({kind: "Requirements", artifactId: A1})).toMatchObject({phaseStuck: true, target: {kind: "Requirements", artifactId: A1}, founderAction: null});
+    for (const bad of [{kind: undefined}, {artifactId: undefined}, {kind: "Nope"}, {artifactId: "pda_zz"}, {artifactId: 5}]) {
+      const r = m({kind: "Requirements", artifactId: A1, ...bad});
+      expect(r, JSON.stringify(bad)).toMatchObject({phaseStuck: true, target: null}); expect(r.founderAction).toContain("Approve pda_"); // text only; the id in the prose is NOT adopted
+    }
+    const other = c.mapAnalysisStep({status: "BLOCKED", blocker: "CLAUDE_CLI_NOT_FOUND", blockers: ["CLAUDE_CLI_NOT_FOUND"], kind: "Requirements", artifactId: A1, founderAction: "x"});
+    expect(other).toMatchObject({phaseStuck: false, target: null, founderAction: null}); // kind/artifactId on any other blocker are ignored
+    expect(c.buildReapproveRequest({missionId: MSN, step: m({kind: "Requirements", artifactId: A1}), evidenceText: "ev-1 ev-2"})).toEqual({ok: true, path: `/v1/missions/${MSN}/predev/artifacts/${A1}/approve`, body: {evidenceRefs: ["ev-1", "ev-2"]}, errors: {}});
+    expect(c.buildReapproveRequest({missionId: MSN, step: m({}), evidenceText: "ev-1"})).toMatchObject({ok: false, path: null, errors: {artifact: "analysis.err.noTarget"}});
+    expect(c.buildReapproveRequest({missionId: MSN, step: m({kind: "Requirements", artifactId: A1}), evidenceText: ""})).toMatchObject({ok: false, errors: {evidenceRefs: "predev.err.evidenceRequired"}});
+    expect(c.buildReapproveRequest({missionId: MSN, step: null, evidenceText: "ev"}).ok).toBe(false);
+  });
+
+  it("view: the stuck artefact is shown as a Founder action (not FAILED / BUILDER_FAILED) with the structured target; Re-approve needs the Founder's own evidence and posts exactly to that artefact's approve path", async () => {
+    const b = await open(stuck());
+    const after = await press(b, "analysis-step-submit");
+    const blk = byData(byId(after, "analysis-step")!, "analysisStatus", "BLOCKED")!;
+    expect(["BUILDER_FAILED", "REJECTED"].some(s => byData(byId(after, "analysis-step")!, "analysisStatus", s))).toBe(false);
+    const box = stuckOf(after)[0]; expect(box.dataset.analysisStuck).toBe("Requirements"); expect(box.dataset.artifact).toBe(A1);
+    expect(text(box)).toContain("The Requirements artefact is approved but the phase did not advance. Approve it again to resume"); expect(text(blk)).toContain("approved, but the pre-development phase did not move on");
+    expect(text(blk)).not.toContain("(not recognised)"); expect(b.posts.map((p: any) => p.path)).toEqual([STEP]);
+    expect(text(box)).toContain("the artefact keeps the evidence of its original approval"); expect(text(box)).not.toContain("records them as your evidence"); // the resume path does not record new evidence, so the hint must not promise it
+    // no evidence -> nothing is posted
+    await press(b, "analysis-reapprove-submit");
+    expect(b.approves).toEqual([]); expect(status(b.root, "analysis-reapprove").dataset.result).toBe("invalid");
+    setVal(b.root, "analysis-reapprove-evidence", "evidence-1"); await press(b, "analysis-reapprove-submit");
+    expect(b.approves).toEqual([APPROVE(A1)]); expect(b.posts[b.posts.length - 1]).toEqual({path: APPROVE(A1), body: {evidenceRefs: ["evidence-1"]}});
+    expect(b.posts.filter((p: any) => p.path === STEP)).toHaveLength(1); // no step (no paid call) is started by the button
+    expect(stuckOf(b.root)).toHaveLength(0); // the stale stuck block is gone
+    const done = status(b.root, "analysis-reapprove"); expect(done.dataset.result).toBe("ok"); expect(text(done)).toContain("Approved again"); expect(text(done)).toContain("Nothing was generated");
+  });
+
+  it("view: a failed re-approve keeps the stuck block and its button and says the server's real reason; nothing is claimed", async () => {
+    for (const [ans, expectText] of [[{status: 409, body: {error: "PREDEV_GATE_REFUSED", reason: "PREDEV_INDEPENDENT_APPROVER_REQUIRED"}}, "PREDEV_INDEPENDENT_APPROVER_REQUIRED"], [{status: 404, body: {}}, "not enabled"], [{status: 500, body: {}}, ""]] as const) {
+      const b = await open(stuck(), ans); await press(b, "analysis-step-submit");
+      setVal(b.root, "analysis-reapprove-evidence", "ev"); await press(b, "analysis-reapprove-submit");
+      expect(stuckOf(b.root)).toHaveLength(1); expect(byId(b.root, "analysis-reapprove-submit")).toBeDefined();
+      const st = status(b.root, "analysis-reapprove"); expect(st.dataset.result).toBe("error"); expect(text(st)).not.toContain("Approved again");
+      if (expectText) expect(text(st).toLowerCase()).toContain(expectText.toLowerCase());
+    }
+  });
+
+  it("view: without a structured kind or artifactId there is no button; the founderAction is shown as text only", async () => {
+    for (const over of [{kind: undefined}, {artifactId: undefined}, {artifactId: "pda_bad"}]) {
+      const b = await open(stuck(over)); const r = await press(b, "analysis-step-submit");
+      expect(byId(r, "analysis-reapprove-submit")).toBeUndefined(); expect(byId(r, "analysis-reapprove-evidence")).toBeUndefined();
+      expect(stuckOf(r)[0].dataset.analysisStuck).toBe("NO_TARGET"); expect(text(byData(byId(r, "analysis-step")!, "analysisFounderAction")!)).toContain("Approve the artefact again to resume");
+      expect(b.approves).toEqual([]);
+    }
+  });
+
+  it("view: the button posts the CURRENT answer's artefact (a second step with another artefact replaces the first)", async () => {
+    let ans = stuck(); // the step answer switches between two calls
+    const served = serve({[`/v1/predev/${MSN}`]: DRAFT_PREDEV()}), approves: string[] = [];
+    const base = await mkDecisionCtx(served, (p: string) => { if (p === STEP) return ans; if (p.endsWith("/approve")) { approves.push(p); return {status: 200, body: {...predevBody({phase: "PLANNING"}), replayed: false}}; } return {status: 404, body: {}}; });
+    const an = await load("views", "analysis-step.js"); an.resetAnalysis(null);
+    const h = {...base, root: await renderJourney(base.ctx)} as any;
+    await press(h, "analysis-step-submit"); ans = stuck({artifactId: A2, kind: "Plan"}); await press(h, "analysis-step-submit");
+    expect(stuckOf(h.root)[0].dataset.artifact).toBe(A2);
+    setVal(h.root, "analysis-reapprove-evidence", "ev"); await press(h, "analysis-reapprove-submit");
+    expect(approves).toEqual([APPROVE(A2)]);
+  });
+
+  it("switching missions (the real panel render path) drops a stuck step, typed evidence and a re-approve status", async () => {
+    const b = await open(stuck(), {status: 409, body: {error: "PREDEV_GATE_REFUSED", reason: "PREDEV_INDEPENDENT_APPROVER_REQUIRED"}});
+    await press(b, "analysis-step-submit"); setVal(b.root, "analysis-reapprove-evidence", "typed-evidence"); await press(b, "analysis-reapprove-submit");
+    expect(b.an.analysisUi.step).toMatchObject({phaseStuck: true}); expect(b.an.analysisUi.evidence).toBe("typed-evidence"); expect(b.forms.drafts.status["analysis-reapprove"]).toBeDefined(); expect(b.forms.drafts.status["analysis-step"]).toBeDefined();
+    const other = b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null}) as N; // what Journey does when another mission is selected
+    expect(b.an.analysisUi).toMatchObject({missionId: MSN2, step: null, plan: null, evidence: ""});
+    for (const f of ["analysis-reapprove", "analysis-step", "analysis-plan"]) expect(b.forms.drafts.status[f], f).toBeUndefined();
+    expect(allData(other, "analysisStuck")).toHaveLength(0); expect(byId(other, "analysis-reapprove-submit")).toBeUndefined();
+  });
+
+  it("a successful re-approve also removes the stale 'The analysis is blocked' status line", async () => {
+    const b = await open(stuck()); await press(b, "analysis-step-submit");
+    expect(text(byId(b.root, "analysis-step")!)).toContain("The analysis is blocked"); expect(status(b.root, "analysis-step").dataset.result).toBe("error");
+    setVal(b.root, "analysis-reapprove-evidence", "ev"); await press(b, "analysis-reapprove-submit");
+    expect(text(byId(b.root, "analysis-step")!)).not.toContain("The analysis is blocked"); expect(status(b.root, "analysis-step").dataset.result).toBeUndefined();
+    expect(status(b.root, "analysis-reapprove").dataset.result).toBe("ok");
+  });
+
+  it("a result that lands after another mission was selected is dropped: re-approve (success and refusal), Analyse and Create plan never touch the new mission", async () => {
+    const OK = {status: 200, body: {...predevBody({phase: "PLANNING"}), replayed: false}}, REFUSED = {status: 409, body: {error: "PREDEV_GATE_REFUSED", reason: "PREDEV_INDEPENDENT_APPROVER_REQUIRED"}};
+    for (const [label, answer] of [["success", OK], ["refusal", REFUSED]] as const) {
+      const d = deferred(), b = await open(stuck(), () => d.p); await press(b, "analysis-step-submit"); setVal(b.root, "analysis-reapprove-evidence", "ev");
+      const pending = b.an.submitReapprove(b.ctx, MSN);
+      b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null}); // mission B selected while A's request is in flight
+      b.an.analysisUi.step = {status: "COMPLETE", approved: KINDS}; b.an.analysisUi.evidence = "B-evidence"; b.forms.drafts.status["analysis-step"] = {ok: true, key: "analysis.step.COMPLETE", vars: {}, errors: null};
+      d.res(answer); const r = await pending;
+      expect(r, label).toMatchObject({ok: false, stale: true});
+      expect(b.an.analysisUi.step, label).toMatchObject({status: "COMPLETE"}); expect(b.an.analysisUi.evidence, label).toBe("B-evidence");
+      expect(b.forms.drafts.status["analysis-reapprove"], label).toBeUndefined(); expect(b.forms.drafts.status["analysis-step"], label).toMatchObject({key: "analysis.step.COMPLETE"});
+    }
+    { // Analyse: A's late stuck answer is not adopted by B
+      const d = deferred(), b = await open(() => d.p);
+      const pending = b.an.submitAnalysisStep(b.ctx, MSN); b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null}); d.res(stuck());
+      expect(await pending).toMatchObject({ok: false, stale: true}); expect(b.an.analysisUi.step).toBeNull(); expect(b.forms.drafts.status["analysis-step"]).toBeUndefined();
+      const after = b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null}) as N; expect(byId(after, "analysis-reapprove-submit")).toBeUndefined();
+    }
+    { // Create plan: A's late plan is not adopted by B
+      const d = deferred(), b = await open({status: 200, body: {status: "COMPLETE", approved: KINDS}}, undefined, () => d.p); await press(b, "analysis-step-submit");
+      const pending = b.an.submitAnalysisPlan(b.ctx, MSN); b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null}); d.res({status: 201, body: OKPLAN});
+      expect(await pending).toMatchObject({ok: false, stale: true}); expect(b.an.analysisUi.plan).toBeNull(); expect(b.forms.drafts.status["analysis-plan"]).toBeUndefined();
+    }
+  });
+
+  it("in flight: three clicks send one POST and the button is disabled meanwhile", async () => {
+    const d = deferred(), b = await open(stuck(), () => d.p); await press(b, "analysis-step-submit"); setVal(b.root, "analysis-reapprove-evidence", "ev");
+    const btn = byId(b.root, "analysis-reapprove-submit")!; expect(btn.attrs.get("disabled")).toBeUndefined();
+    fire(btn, "click"); fire(btn, "click"); fire(btn, "click"); await new Promise(r => setTimeout(r, 0));
+    expect(b.approves).toHaveLength(1);
+    b.root = await renderJourney(b.ctx); expect(byId(b.root, "analysis-reapprove-submit")!.attrs.get("disabled")).toBeDefined();
+    d.res({status: 409, body: {error: "PREDEV_GATE_REFUSED", reason: "PREDEV_INDEPENDENT_APPROVER_REQUIRED"}}); await new Promise(r => setTimeout(r, 0));
+    b.root = await renderJourney(b.ctx); expect(byId(b.root, "analysis-reapprove-submit")!.attrs.get("disabled")).toBeUndefined();
+  });
+
+  it("a malformed or other-mission 2xx answer is an error and the stuck block and button stay", async () => {
+    for (const bad of [{status: 200, body: {}}, {status: 200, body: {predev: {...predevBody({phase: "PLANNING"}).predev, missionId: MSN2}}}, {status: 200, body: {...predevBody({phase: "PLANNING"}), replayed: "yes"}}]) {
+      const b = await open(stuck(), bad); await press(b, "analysis-step-submit"); setVal(b.root, "analysis-reapprove-evidence", "ev"); await press(b, "analysis-reapprove-submit");
+      expect(status(b.root, "analysis-reapprove").dataset.result, JSON.stringify(bad).slice(0, 50)).toBe("error"); expect(text(status(b.root, "analysis-reapprove"))).not.toContain("Approved again");
+      expect(stuckOf(b.root)).toHaveLength(1); expect(byId(b.root, "analysis-reapprove-submit")).toBeDefined(); expect(b.an.analysisUi.step).toMatchObject({phaseStuck: true});
+    }
+  });
+
+  it("re-approve is refused, then Analyse returns a draft: the old refusal and the stuck block are gone", async () => {
+    let n = 0; const b = await open(() => (n++ === 0 ? stuck() : {status: 200, body: {status: "DRAFT_READY", kind: "Requirements", artifactId: A1, version: 1, roleId: "UASCO-0300", next: "FOUNDER_APPROVAL"}}),
+      {status: 409, body: {error: "PREDEV_GATE_REFUSED", reason: "PREDEV_INDEPENDENT_APPROVER_REQUIRED"}});
+    await press(b, "analysis-step-submit"); setVal(b.root, "analysis-reapprove-evidence", "ev"); await press(b, "analysis-reapprove-submit");
+    expect(text(status(b.root, "analysis-reapprove"))).toContain("PREDEV_INDEPENDENT_APPROVER_REQUIRED");
+    await press(b, "analysis-step-submit");
+    expect(byData(byId(b.root, "analysis-step")!, "analysisStatus", "DRAFT_READY")).toBeDefined(); expect(stuckOf(b.root)).toHaveLength(0);
+    expect(status(b.root, "analysis-reapprove").dataset.result).toBeUndefined(); expect(text(byId(b.root, "analysis-step")!)).not.toContain("PREDEV_INDEPENDENT_APPROVER_REQUIRED");
+  });
+
+  it("en + tr text exists for every new key and a raw key is never shown", async () => {
+    const en = await load("locales", "en.js"), tr = await load("locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
+    for (const k of ["analysis.blocker.ANALYSIS_PHASE_NOT_ADVANCED", "analysis.stuck.title", "analysis.stuck.head", "analysis.stuck.noTarget", "analysis.stuck.evidenceHint", "analysis.reapprove.button", "analysis.reapprove.done", "analysis.err.noTarget"]) { expect(E[k], k).toBeTruthy(); expect(T[k], k).toBeTruthy(); expect(T[k]).not.toBe(E[k]); }
+    const b = await open(stuck()); const r = await press(b, "analysis-step-submit"); expect(text(byId(r, "analysis-step")!)).not.toMatch(/analysis\.[a-z]+\./);
+  });
+
+  // ---- A-ANALYSIS-ORDER-1 ----
+  it("Analyse and Re-approve never run at the same time: while one is in flight the other button is disabled, a click or a direct call sends nothing, and the late answer cannot override the newer state", async () => {
+    // (1) Analyse in flight -> Re-approve is blocked
+    let n = 0; const dStep = deferred();
+    const a = await open(() => (n++ === 0 ? stuck() : dStep.p)); await press(a, "analysis-step-submit"); setVal(a.root, "analysis-reapprove-evidence", "ev");
+    fire(byId(a.root, "analysis-step-submit")!, "click"); await new Promise(r => setTimeout(r, 0)); a.root = await renderJourney(a.ctx);
+    expect(byId(a.root, "analysis-step-submit")!.attrs.get("disabled")).toBeDefined(); expect(byId(a.root, "analysis-reapprove-submit")!.attrs.get("disabled")).toBeDefined();
+    fire(byId(a.root, "analysis-reapprove-submit")!, "click"); await new Promise(r => setTimeout(r, 0));
+    expect(await a.an.submitReapprove(a.ctx, MSN)).toEqual({ok: false, busy: true}); expect(a.approves).toEqual([]);
+    dStep.res({status: 200, body: {status: "DRAFT_READY", kind: "Requirements", artifactId: A1, version: 1, roleId: "UASCO-0300", next: "FOUNDER_APPROVAL"}}); await new Promise(r => setTimeout(r, 0));
+    a.root = await renderJourney(a.ctx); expect(byData(byId(a.root, "analysis-step")!, "analysisStatus", "DRAFT_READY")).toBeDefined(); expect(stuckOf(a.root)).toHaveLength(0);
+    // (2) Re-approve in flight -> Analyse is blocked and its answer never overrides
+    const dApp = deferred(), r = await open(stuck(), () => dApp.p); await press(r, "analysis-step-submit"); setVal(r.root, "analysis-reapprove-evidence", "ev");
+    fire(byId(r.root, "analysis-reapprove-submit")!, "click"); await new Promise(x => setTimeout(x, 0)); r.root = await renderJourney(r.ctx);
+    expect(byId(r.root, "analysis-step-submit")!.attrs.get("disabled")).toBeDefined();
+    const stepsBefore = r.posts.filter((p: any) => p.path === STEP).length;
+    fire(byId(r.root, "analysis-step-submit")!, "click"); await new Promise(x => setTimeout(x, 0));
+    expect(await r.an.submitAnalysisStep(r.ctx, MSN)).toEqual({ok: false, busy: true}); expect(r.posts.filter((p: any) => p.path === STEP).length).toBe(stepsBefore);
+    dApp.res({status: 200, body: {...predevBody({phase: "PLANNING"}), replayed: false}}); await new Promise(x => setTimeout(x, 0));
+    r.root = await renderJourney(r.ctx); expect(r.an.analysisUi.step).toBeNull(); expect(status(r.root, "analysis-reapprove").dataset.result).toBe("ok");
+    // (3) Create plan in flight -> Analyse is blocked
+    const dPlan = deferred(), p = await open({status: 200, body: {status: "COMPLETE", approved: KINDS}}, undefined, () => dPlan.p); await press(p, "analysis-step-submit");
+    fire(byId(p.root, "analysis-plan-submit")!, "click"); await new Promise(x => setTimeout(x, 0)); p.root = await renderJourney(p.ctx);
+    expect(byId(p.root, "analysis-step-submit")!.attrs.get("disabled")).toBeDefined(); expect(await p.an.submitAnalysisStep(p.ctx, MSN)).toEqual({ok: false, busy: true});
+    dPlan.res({status: 201, body: OKPLAN}); await new Promise(x => setTimeout(x, 0));
+  });
+
+  it("Create plan is blocked while Analyse is in flight (button disabled, direct call refused, no plan POST), so a stale COMPLETE cannot start a plan", async () => {
+    let n = 0; const d = deferred(), plans: string[] = [];
+    const b = await open(() => (n++ === 0 ? {status: 200, body: {status: "COMPLETE", approved: KINDS}} : d.p), undefined, () => { plans.push("plan"); return {status: 201, body: OKPLAN}; });
+    await press(b, "analysis-step-submit"); expect(byId(b.root, "analysis-plan-submit")).toBeDefined();
+    fire(byId(b.root, "analysis-step-submit")!, "click"); await new Promise(r => setTimeout(r, 0)); b.root = await renderJourney(b.ctx);
+    expect(byId(b.root, "analysis-plan-submit")!.attrs.get("disabled")).toBeDefined();
+    fire(byId(b.root, "analysis-plan-submit")!, "click"); await new Promise(r => setTimeout(r, 0));
+    expect(await b.an.submitAnalysisPlan(b.ctx, MSN)).toEqual({ok: false, busy: true}); expect(plans).toEqual([]);
+    d.res({status: 200, body: {status: "COMPLETE", approved: KINDS}}); await new Promise(r => setTimeout(r, 0));
+  });
+
+  it("a dropped (stale) answer still repaints the panel exactly once, for re-approve, Analyse and Create plan", async () => {
+    const OK = {status: 200, body: {...predevBody({phase: "PLANNING"}), replayed: false}};
+    const cases: Array<[string, (b: any) => Promise<any>, any, (b: any) => any]> = [
+      ["re-approve", b => b.an.submitReapprove(b.ctx, MSN), OK, () => ({})],
+      ["analyse", b => b.an.submitAnalysisStep(b.ctx, MSN), stuck(), () => ({})],
+      ["plan", b => b.an.submitAnalysisPlan(b.ctx, MSN), {status: 201, body: OKPLAN}, () => ({})],
+    ];
+    for (const [label, start, answer] of cases) {
+      const d = deferred();
+      const b = label === "re-approve" ? await open(stuck(), () => d.p) : label === "analyse" ? await open(() => d.p) : await open({status: 200, body: {status: "COMPLETE", approved: KINDS}}, undefined, () => d.p);
+      if (label !== "analyse") await press(b, "analysis-step-submit");
+      if (label === "re-approve") setVal(b.root, "analysis-reapprove-evidence", "ev");
+      const seen: boolean[] = [], orig = b.ctx.rerender; b.ctx.rerender = async () => { seen.push(b.an.analysisBusy()); return orig(); }; // the lock state at every repaint
+      const pending = start(b); b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null});
+      const before = b.rerenders(); d.res(answer); const r = await pending;
+      expect(r, label).toMatchObject({ok: false, stale: true}); expect(b.rerenders() - before, `${label}: one repaint for the dropped answer`).toBe(1);
+      expect(seen, `${label}: busy at each repaint (set, then released before the stale repaint)`).toEqual([true, false]); expect(b.an.analysisBusy(), `${label}: the lock is released`).toBe(false);
+      const fresh = b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null}) as N; expect(byId(fresh, "analysis-step-submit")!.attrs.get("disabled"), `${label}: a fresh panel's Analyse is enabled`).toBeUndefined();
+    }
+  });
+
+  it("the typed evidence is cleared after a successful re-approve and a later stuck answer starts with an empty field", async () => {
+    let n = 0; const b = await open(() => (n++ === 0 ? stuck() : stuck({artifactId: A2, kind: "Plan"})));
+    await press(b, "analysis-step-submit"); setVal(b.root, "analysis-reapprove-evidence", "first-evidence"); await press(b, "analysis-reapprove-submit");
+    expect(b.an.analysisUi.evidence).toBe(""); expect(b.approves).toEqual([APPROVE(A1)]);
+    await press(b, "analysis-step-submit"); expect((byId(b.root, "analysis-reapprove-evidence") as any).value).toBe("");
+    await press(b, "analysis-reapprove-submit"); expect(b.approves).toEqual([APPROVE(A1)]); // the old evidence is NOT reused: an empty field is a validation error, nothing is posted
+    expect(status(b.root, "analysis-reapprove").dataset.result).toBe("invalid");
+  });
+
+  it("the lock is visible right after the click (the other buttons are disabled by the click's own repaint, with an explanatory note), and it also explains the disabled buttons of another mission", async () => {
+    const d = deferred(), b = await open(stuck(), () => d.p); await press(b, "analysis-step-submit"); setVal(b.root, "analysis-reapprove-evidence", "ev");
+    expect(byData(byId(b.root, "analysis-step")!, "analysisBusy")).toBeUndefined();
+    b.ctx.rerender = async () => { b.root = await renderJourney(b.ctx); }; // a real repaint, as in the app
+    fire(byId(b.root, "analysis-reapprove-submit")!, "click"); await new Promise(r => setTimeout(r, 40)); // the click's own repaint only: NO extra manual repaint
+    expect(byId(b.root, "analysis-step-submit")!.attrs.get("disabled")).toBeDefined(); expect(byId(b.root, "analysis-reapprove-submit")!.attrs.get("disabled")).toBeDefined();
+    expect(text(byData(byId(b.root, "analysis-step")!, "analysisBusy")!)).toContain("Another request that changes mission data is running");
+    const other = b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null}) as N; // mission B while A's request runs: the same conservative lock, but explained
+    expect(byId(other, "analysis-step-submit")!.attrs.get("disabled")).toBeDefined(); expect(byData(other, "analysisBusy")).toBeDefined();
+    d.res({status: 409, body: {error: "PREDEV_GATE_REFUSED", reason: "PREDEV_INDEPENDENT_APPROVER_REQUIRED"}}); await new Promise(r => setTimeout(r, 0)); await new Promise(r => setTimeout(r, 0));
+    const after = b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null}) as N; expect(byId(after, "analysis-step-submit")!.attrs.get("disabled")).toBeUndefined(); expect(byData(after, "analysisBusy")).toBeUndefined();
+  });
+
+  it("two calls in the same tick send exactly one POST and the second is refused as busy (step, re-approve, create plan)", async () => {
+    { const d = deferred(), b = await open(() => d.p); const p1 = b.an.submitAnalysisStep(b.ctx, MSN), p2 = b.an.submitAnalysisStep(b.ctx, MSN);
+      expect(await p2).toEqual({ok: false, busy: true}); d.res({status: 200, body: {status: "COMPLETE", approved: KINDS}}); await p1; expect(b.posts.filter((p: any) => p.path === STEP)).toHaveLength(1); }
+    { const d = deferred(), b = await open(stuck(), () => d.p); await press(b, "analysis-step-submit"); setVal(b.root, "analysis-reapprove-evidence", "ev");
+      const p1 = b.an.submitReapprove(b.ctx, MSN), p2 = b.an.submitReapprove(b.ctx, MSN);
+      expect(await p2).toEqual({ok: false, busy: true}); d.res({status: 409, body: {error: "PREDEV_GATE_REFUSED", reason: "PREDEV_INDEPENDENT_APPROVER_REQUIRED"}}); await p1; expect(b.approves).toHaveLength(1); }
+    { const d = deferred(), b = await open({status: 200, body: {status: "COMPLETE", approved: KINDS}}, undefined, () => d.p); await press(b, "analysis-step-submit");
+      const p1 = b.an.submitAnalysisPlan(b.ctx, MSN), p2 = b.an.submitAnalysisPlan(b.ctx, MSN);
+      expect(await p2).toEqual({ok: false, busy: true}); d.res({status: 201, body: OKPLAN}); await p1; expect(b.posts.filter((p: any) => p.path === PLAN)).toHaveLength(1); }
+  });
+
+  it("a pre-POST repaint that rejects releases the lock (no POST is sent, nobody stays locked) and the in-flight note takes focus when the lock repaints", async () => {
+    const fails: Array<[string, (b: any) => Promise<any>, () => Promise<any>]> = [
+      ["step", b => b.an.submitAnalysisStep(b.ctx, MSN), () => open(stuck())],
+      ["re-approve", b => b.an.submitReapprove(b.ctx, MSN), async () => { const b = await open(stuck()); await press(b, "analysis-step-submit"); setVal(b.root, "analysis-reapprove-evidence", "ev"); return b; }],
+      ["plan", b => b.an.submitAnalysisPlan(b.ctx, MSN), async () => { const b = await open({status: 200, body: {status: "COMPLETE", approved: KINDS}}); await press(b, "analysis-step-submit"); return b; }],
+    ];
+    for (const [label, call, mk] of fails) {
+      const b = await mk(), posts0 = b.posts.length; b.ctx.rerender = async () => { throw new Error("REPAINT_FAILED"); };
+      await expect(call(b), label).rejects.toThrow("REPAINT_FAILED");
+      expect(b.an.analysisBusy(), `${label}: the lock is released`).toBe(false); expect(b.posts.length, `${label}: nothing was posted`).toBe(posts0);
+      const other = b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null}) as N; expect(byId(other, "analysis-step-submit")!.attrs.get("disabled"), `${label}: another mission's Analyse is enabled`).toBeUndefined(); expect(byData(other, "analysisBusy")).toBeUndefined();
+    }
+    // focus: the rebuilt button is disabled, so the in-flight note (stable id, tabindex -1) takes it; asserted for all three submits
+    for (const [label, call, mk] of fails) {
+      const d = deferred(), b = await mk(); const spy: any[] = []; b.ctx.settleFocus = (o: any) => { spy.push(o); return null; };
+      b.ctx.api.post = async (p: string) => { await d.p; return {status: 404, body: {}}; }; // hold the POST
+      const pending = call(b); await new Promise(r => setTimeout(r, 0));
+      expect(spy, `${label}: settle before the POST answers`).toEqual([{keys: ["id:analysis-in-flight"]}]);
+      const note = byData(b.an.analysisPanel(b.ctx, {missionId: MSN, exec: null}) as N, "analysisBusy")!;
+      expect([note.id, note.attrs.get("tabindex")], label).toEqual(["analysis-in-flight", "-1"]);
+      d.res(null); await pending;
+    }
+  });
+});
+
+describe("LANE-A A-PREDEV-BUSY-1: one mission-write lock for the pre-dev decisions, the analysis actions and the hand plan", () => {
+  const STEP = `/v1/missions/${MSN}/analysis/step`, START = `/v1/missions/${MSN}/predev/start`, ART = "pda_" + "aa".repeat(12);
+  const APPROVE = `/v1/missions/${MSN}/predev/artifacts/${ART}/approve`, REJECT = `/v1/missions/${MSN}/predev/artifacts/${ART}/reject`;
+  const OK_PREDEV = {status: 200, body: {...predevBody({phase: "REQUIREMENTS"}), replayed: false}};
+  const deferred = () => { let res: (v: any) => void = () => {}; const p = new Promise<any>(r => { res = r; }); return {p, res}; };
+  const settleMs = (ms = 30) => new Promise(r => setTimeout(r, ms));
+  const soon = <T,>(p: Promise<T>): Promise<T | "NOT_REFUSED_IN_TIME"> => Promise.race([p, new Promise<"NOT_REFUSED_IN_TIME">(r => setTimeout(() => r("NOT_REFUSED_IN_TIME"), 300))]); // a call that is not refused would wait for the held POST: fail fast (no timeout is raised)
+  async function open(handlers: Record<string, any>, predev: any = DRAFT_PREDEV()) {
+    const served = serve({[`/v1/predev/${MSN}`]: predev}), pending: Record<string, number> = {};
+    const base = await mkDecisionCtx(served, (p: string) => { pending[p] = (pending[p] ?? 0) + 1; const h = handlers[p]; const a = typeof h === "function" ? h() : h; return a ?? {status: 404, body: {}}; });
+    const an = await load("views", "analysis-step.js"); an.resetAnalysis(null);
+    const f = await load("forms.js"); for (const id of f.MISSION_WRITE_FORMS) { delete base.forms.drafts.status[id]; base.forms.drafts.busy[id] = false; }
+    const b: any = {...base, an, calls: pending, root: await renderJourney(base.ctx)};
+    b.ctx.rerender = async () => { b.root = await renderJourney(b.ctx); }; // a real repaint, as in the app
+    return b;
+  }
+  const text = (n: N) => n.textContent, dis = (b: any, id: string) => byId(b.root, id)!.attrs.get("disabled");
+  const typeEv = (b: any) => setVal(b.root, "predev-evidence", "ev-1");
+
+  it("the shared predicate names exactly the forms the views use", async () => {
+    const f = await load("forms.js"), an = await load("views", "analysis-step.js"), dec = await load("views", "predev-decisions.js"), pf = await load("views", "plan-form.js");
+    expect([...f.MISSION_WRITE_FORMS].sort()).toEqual([an.ANALYSIS_STEP_FORM, an.ANALYSIS_PLAN_FORM, an.ANALYSIS_REAPPROVE_FORM, dec.PREDEV_START_FORM, dec.PREDEV_APPROVE_FORM, dec.PREDEV_REJECT_FORM, pf.PLAN_FORM].sort());
+    expect(an.analysisBusy).toBe(f.missionWriteBusy);
+  });
+
+  it("an in-flight analysis step disables Approve / Reject and refuses their submits (and the reverse); the explanation note shows on both panels", async () => {
+    const d = deferred(), b = await open({[STEP]: () => d.p, [APPROVE]: OK_PREDEV, [REJECT]: OK_PREDEV});
+    expect(dis(b, "predev-approve-submit")).toBeUndefined();
+    fire(byId(b.root, "analysis-step-submit")!, "click"); await settleMs(); // analysis step in flight, real repaint
+    expect(dis(b, "predev-approve-submit")).toBeDefined(); expect(dis(b, "predev-reject-submit")).toBeDefined(); expect(dis(b, "analysis-step-submit")).toBeDefined();
+    expect(byData(byId(b.root, "predev-decisions")!, "predevBusy")).toBeDefined(); expect(text(byData(byId(b.root, "predev-decisions")!, "predevBusy")!)).toContain("Another request that changes mission data is running");
+    typeEv(b); b.dec.predevDraft.reason = "no";
+    expect(await b.dec.submitApprove(b.ctx, MSN, ART)).toEqual({ok: false, busy: true}); expect(await b.dec.submitReject(b.ctx, MSN, ART)).toEqual({ok: false, busy: true});
+    fire(byId(b.root, "predev-approve-submit")!, "click"); await settleMs();
+    expect(b.calls[APPROVE] ?? 0).toBe(0); expect(b.calls[REJECT] ?? 0).toBe(0);
+    d.res({status: 200, body: {status: "AWAITING_APPROVAL", kind: "BusinessAnalysis", artifactId: ART, artifactState: "DRAFT", next: "FOUNDER_APPROVAL"}}); await settleMs();
+    expect(dis(b, "predev-approve-submit")).toBeUndefined(); expect(byData(byId(b.root, "predev-decisions")!, "predevBusy")).toBeUndefined();
+    // reverse: Approve in flight -> analysis buttons and submits are blocked
+    const d2 = deferred(), r = await open({[STEP]: {status: 200, body: {status: "COMPLETE", approved: ["BusinessAnalysis", "Requirements", "Plan", "Architecture"]}}, [APPROVE]: () => d2.p});
+    typeEv(r); fire(byId(r.root, "predev-approve-submit")!, "click"); await settleMs();
+    expect(dis(r, "analysis-step-submit")).toBeDefined(); expect(text(byData(byId(r.root, "analysis-step")!, "analysisBusy")!)).toContain("running");
+    expect(await r.an.submitAnalysisStep(r.ctx, MSN)).toEqual({ok: false, busy: true}); expect(await r.an.submitReapprove(r.ctx, MSN)).toEqual({ok: false, busy: true}); expect(await r.an.submitAnalysisPlan(r.ctx, MSN)).toEqual({ok: false, busy: true});
+    expect(r.calls[STEP] ?? 0).toBe(0);
+    d2.res(OK_PREDEV); await settleMs(); expect(dis(r, "analysis-step-submit")).toBeUndefined();
+  });
+
+  it("Start is locked too (an inactive pre-dev record) in both directions", async () => {
+    const d = deferred(), b = await open({[STEP]: () => d.p, [START]: OK_PREDEV}, inactivePredev());
+    fire(byId(b.root, "analysis-step-submit")!, "click"); await settleMs();
+    expect(dis(b, "predev-start-submit")).toBeDefined(); expect(await b.dec.submitStart(b.ctx, MSN)).toEqual({ok: false, busy: true}); expect(b.calls[START] ?? 0).toBe(0);
+    d.res({status: 200, body: {status: "BLOCKED", blocker: "X", blockers: ["X"]}}); await settleMs();
+    const d2 = deferred(), r = await open({[STEP]: {status: 200, body: {status: "BLOCKED", blocker: "X", blockers: ["X"]}}, [START]: () => d2.p}, inactivePredev());
+    fire(byId(r.root, "predev-start-submit")!, "click"); await settleMs();
+    expect(dis(r, "analysis-step-submit")).toBeDefined(); expect(await r.an.submitAnalysisStep(r.ctx, MSN)).toEqual({ok: false, busy: true});
+    d2.res(OK_PREDEV); await settleMs();
+  });
+
+  it("same-tick double call: one POST, the second is refused as busy (Approve, Reject, Start)", async () => {
+    for (const [label, mk] of [["approve", (b: any) => b.dec.submitApprove(b.ctx, MSN, ART)], ["reject", (b: any) => b.dec.submitReject(b.ctx, MSN, ART)]] as const) {
+      const d = deferred(), b = await open({[APPROVE]: () => d.p, [REJECT]: () => d.p}); typeEv(b); b.dec.predevDraft.reason = "not good";
+      const p1 = mk(b), p2 = mk(b); expect(await soon(p2), label).toEqual({ok: false, busy: true}); d.res(OK_PREDEV); await p1;
+      expect(b.calls[label === "approve" ? APPROVE : REJECT], label).toBe(1);
+    }
+    const d = deferred(), b = await open({[START]: () => d.p}, inactivePredev());
+    const p1 = b.dec.submitStart(b.ctx, MSN), p2 = b.dec.submitStart(b.ctx, MSN); expect(await soon(p2)).toEqual({ok: false, busy: true}); d.res(OK_PREDEV); await p1; expect(b.calls[START]).toBe(1);
+  });
+
+  it("the lock is released when the pre-POST repaint rejects and when a stale answer is dropped; the note takes focus; a result for another mission is not adopted", async () => {
+    // rejecting repaint
+    const b = await open({[APPROVE]: OK_PREDEV}); typeEv(b); const orig = b.ctx.rerender; b.ctx.rerender = async () => { throw new Error("REPAINT_FAILED"); };
+    await expect(b.dec.submitApprove(b.ctx, MSN, ART)).rejects.toThrow("REPAINT_FAILED");
+    const f = await load("forms.js"); expect(f.missionWriteBusy()).toBe(false); expect(b.calls[APPROVE] ?? 0).toBe(0);
+    // focus + stale answer
+    b.ctx.rerender = orig; const spy: any[] = []; b.ctx.settleFocus = (o: any) => { spy.push(o); return null; };
+    const d = deferred(); const b2 = await open({[APPROVE]: () => d.p}); typeEv(b2); b2.ctx.settleFocus = (o: any) => { spy.push(o); return null; };
+    const seen: boolean[] = [], r0 = b2.ctx.rerender; b2.ctx.rerender = async () => { seen.push(f.missionWriteBusy()); return r0(); };
+    const pending = b2.dec.submitApprove(b2.ctx, MSN, ART); await settleMs();
+    expect(spy).toContainEqual({keys: ["id:predev-in-flight"]}); const note = byData(byId(b2.root, "predev-decisions")!, "predevBusy")!; expect([note.id, note.attrs.get("tabindex")]).toEqual(["predev-in-flight", "-1"]);
+    b2.dec.decisionsPanel(b2.ctx, {missionId: MSN2, pre: (await load("journey-core.js")).mapPredev(DRAFT_PREDEV())}); // mission B selected (real reset path) while A's request is in flight
+    d.res(OK_PREDEV); const res = await pending;
+    expect(res).toMatchObject({ok: false, stale: true}); expect(f.missionWriteBusy()).toBe(false); expect(b2.forms.drafts.status["predev-approve"]).toBeUndefined(); expect(b2.dec.predevDraft.keepStatus).toBe(false); // the dropped answer wrote neither a status nor the keep-status flag
+    expect(seen.at(-1)).toBe(false); // released before the stale repaint
+  });
+
+  it("the in-flight note is true on every panel and mission: it names no request kind and no mission (the lock is global)", async () => {
+    const d = deferred(), b = await open({[APPROVE]: () => d.p}); typeEv(b);
+    fire(byId(b.root, "predev-approve-submit")!, "click"); await settleMs(); // a pre-dev Approve is in flight
+    const notes = [byData(byId(b.root, "predev-decisions")!, "predevBusy")!, byData(byId(b.root, "analysis-step")!, "analysisBusy")!, // mission A: both panels
+      byData(b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null}) as N, "analysisBusy")!, // a SECOND mission's analysis panel
+      byData(b.dec.decisionsPanel(b.ctx, {missionId: MSN2, pre: (await load("journey-core.js")).mapPredev(DRAFT_PREDEV())}) as N, "predevBusy")!]; // a SECOND mission's decisions panel
+    for (const n of notes) { expect(n, "note present").toBeDefined(); expect(text(n)).toContain("Another request that changes mission data is running"); expect(text(n)).not.toMatch(/this mission|analysis request|pre-?dev request|hand plan/i); }
+    d.res(OK_PREDEV); await settleMs();
+  });
+
+  it("the busy refusal comes before validation: an invalid submit while another request runs is refused as busy and writes no validation status (Approve, analysis Re-approve)", async () => {
+    const d = deferred(), b = await open({[STEP]: () => d.p, [APPROVE]: OK_PREDEV});
+    fire(byId(b.root, "analysis-step-submit")!, "click"); await settleMs(); // an analysis step is in flight; the evidence field is EMPTY (invalid)
+    expect(await soon(b.dec.submitApprove(b.ctx, MSN, ART))).toEqual({ok: false, busy: true}); expect(b.forms.drafts.status["predev-approve"]).toBeUndefined();
+    expect(await soon(b.an.submitReapprove(b.ctx, MSN))).toEqual({ok: false, busy: true}); expect(b.forms.drafts.status["analysis-reapprove"]).toBeUndefined();
+    d.res({status: 200, body: {status: "BLOCKED", blocker: "X", blockers: ["X"]}}); await settleMs();
+  });
+});
+

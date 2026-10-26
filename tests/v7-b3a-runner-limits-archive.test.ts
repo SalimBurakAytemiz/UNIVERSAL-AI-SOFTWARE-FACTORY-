@@ -77,7 +77,7 @@ const kinds = (r: WorkRun) => r.evidence.map(e => e.kind);
 
 describe("LANE-C bound role TaskLimits are enforced by the runner (never loosened, role-less runs unchanged)", () => {
   const roleRun = (c: Ctx, fake: FakeExecutors, roleId: string | null) => { const p = fake.pair(); return c.store.createRun({tenantId: "tA", missionId: c.missionId, roleId, executor: {implementer: p.implementer.identity, reviewer: p.reviewer.identity}, createdBy: "FOUNDER_LOCAL"}); };
-  const manyFiles = (n: number, tag = "f") => Object.fromEntries(Array.from({length: n}, (_, i) => [`gen/${tag}-${i}.txt`, `${i}\n`]));
+  const manyFiles = (n: number, tag = "f") => Object.fromEntries(Array.from({length: n}, (_, i) => [`gen/${tag}-${i}.txt`, "x\n"]));
   const seenTimeouts = (fake: FakeExecutors, seen: number[]) => { const p = fake.pair(); return {...p, implementer: {...p.implementer, implement: (w: string, s: MissionSpec, ctx: {timeoutMs: number; shouldAbort?: () => boolean}) => { seen.push(ctx.timeoutMs); return p.implementer.implement(w, s, ctx); }}}; };
 
   it("effectiveLimits only tightens: lowest of run default and role limit; null limits change nothing", () => {
@@ -153,6 +153,7 @@ describe("LANE-C bound role TaskLimits are enforced by the runner (never loosene
       else {
         expect(run.status).toBe("BLOCKED");
         expect(run.reason).toBe("TASK_LIMIT_FILES_EXCEEDED:101>100");
+        expect(run.step).toBe("IMPLEMENT"); // blocked by the IMPLEMENT gate itself, not at the start of a later step
         expect(kinds(run)).toEqual(expect.arrayContaining(["IMPLEMENT", "AGENT_TRACE"]));
         expect(kinds(run)).not.toContain("VERIFY_TESTS");
         expect(fake.calls.review).toBe(0);
@@ -524,19 +525,18 @@ describe("LANE-C runner exports: effectiveTestCommand and repositoryPrecondition
     expect(runOf(ok, okRun.runId).status).toBe("AWAITING_APPROVAL");
   });
 
-  it("the runner verifies with the mission's testCommand when both are set, and with the project's when the mission has none", { timeout: T }, async () => {
+  // //TR: Her durum kendi süre bütçesiyle TEK bir runner geçişi yapar; üç tam pipeline tek testte birikmez (yavaş Windows runner'ında 120 sn sınırı aşılıyordu). Durum tablosu ve iddia aynıdır.
+  it.each([["mission passes, project would fail", ["node", "never.mjs"], ["node", "test.mjs"], "AWAITING_APPROVAL"], ["mission would fail, project passes", ["node", "test.mjs"], ["node", "never.mjs"], "BLOCKED"], ["mission none, project passes", ["node", "test.mjs"], undefined, "AWAITING_APPROVAL"]] as const)("the runner verifies with the effective testCommand: %s", async (label, projectCmd, missionCmd, expected) => {
     const dataDir = path.join(tmp, `data-tc-${crypto.randomBytes(3).toString("hex")}`), { repo } = makeRepo(crypto.randomBytes(4).toString("hex"));
-    for (const [label, projectCmd, missionCmd, expected] of [["mission passes, project would fail", ["node", "never.mjs"], ["node", "test.mjs"], "AWAITING_APPROVAL"], ["mission would fail, project passes", ["node", "test.mjs"], ["node", "never.mjs"], "BLOCKED"], ["mission none, project passes", ["node", "test.mjs"], undefined, "AWAITING_APPROVAL"]] as const) {
-      const store = new WorkOsStore(path.join(dataDir, label.replace(/\W+/g, "-"))), runtime = path.join(tmp, `rt-${crypto.randomBytes(3).toString("hex")}`);
-      fs.mkdirSync(runtime, {recursive: true});
-      const p = store.createProject({tenantId: "tA", orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL", repository: {path: repo}, testCommand: [...projectCmd]});
-      const m = store.createMission({tenantId: "tA", projectId: p.projectId, title: "t", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL", ...(missionCmd ? {testCommand: [...missionCmd]} : {})});
-      for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
-      const c: Ctx = {store, dataDir: path.join(dataDir, label.replace(/\W+/g, "-")), runtime, stopFile: path.join(runtime, "GLOBAL_STOP.json"), repo, head: "", missionId: m.missionId, projectId: p.projectId};
-      const fake = new FakeExecutors(okScript());
-      const r = start(c, fake);
-      await runner(c, fake, {maxRemediations: 0}).tick();
-      expect([label, runOf(c, r.runId).status]).toEqual([label, expected]);
-    }
-  });
+    const store = new WorkOsStore(path.join(dataDir, label.replace(/\W+/g, "-"))), runtime = path.join(tmp, `rt-${crypto.randomBytes(3).toString("hex")}`);
+    fs.mkdirSync(runtime, {recursive: true});
+    const p = store.createProject({tenantId: "tA", orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL", repository: {path: repo}, testCommand: [...projectCmd]});
+    const m = store.createMission({tenantId: "tA", projectId: p.projectId, title: "t", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL", ...(missionCmd ? {testCommand: [...missionCmd]} : {})});
+    for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
+    const c: Ctx = {store, dataDir: path.join(dataDir, label.replace(/\W+/g, "-")), runtime, stopFile: path.join(runtime, "GLOBAL_STOP.json"), repo, head: "", missionId: m.missionId, projectId: p.projectId};
+    const fake = new FakeExecutors(okScript());
+    const r = start(c, fake);
+    await runner(c, fake, {maxRemediations: 0}).tick();
+    expect([label, runOf(c, r.runId).status]).toEqual([label, expected]);
+  }, T);
 });

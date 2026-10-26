@@ -10,7 +10,9 @@ const only = process.argv.slice(2);
 const git = (...a) => cp.spawnSync("git", a, {cwd: root, encoding: "utf8"});
 const files = [...new Set(mutants.map(m => m.file))];
 if (git("status", "--porcelain", "--", ...files).stdout.trim() !== "") { console.error("REFUSED: the mutated files have uncommitted changes"); process.exit(2); }
-const vitest = (testFiles, filter) => cp.spawnSync("npx", ["vitest", "run", ...testFiles, "-t", filter], {cwd: root, encoding: "utf8", shell: process.platform === "win32", timeout: 1_200_000});
+// //TR: win32'de shell:true argümanları TIRNAKLAMAZ: `|`, boşluk ve parantez içeren bir -t süzgeci cmd.exe'de boru/ayrı argüman olur; win32'de süzgeç çift tırnak içinde verilir.
+const quoteFilter = f => process.platform === "win32" ? `"${f}"` : f;
+const vitest = (testFiles, filter) => cp.spawnSync("npx", ["vitest", "run", ...testFiles, "-t", quoteFilter(filter)], {cwd: root, encoding: "utf8", shell: process.platform === "win32", timeout: 1_200_000});
 const tests = out => /Tests\s+([^\n]+)/.exec(out)?.[1]?.trim() ?? "no summary";
 const base = vitest([...new Set(mutants.map(m => m.testFile))], "parallel runs"), baseOut = String(base.stdout) + String(base.stderr);
 if (base.status !== 0) { console.error(`REFUSED: the unmutated baseline is not green (exit ${base.status}): ${tests(baseOut)}`); process.exit(2); }
