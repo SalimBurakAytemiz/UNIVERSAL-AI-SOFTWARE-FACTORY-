@@ -71,10 +71,10 @@ function readEnvelope(stdout: string): Envelope {
   if (typeof e.result !== "string") return {kind: "invalid"};
   return {kind: "ok", result: e.result};
 }
-// //TR: Modelin TÜM çıktısı tek bir ```json ... ``` (veya ``` ... ```) çitiyse yalnız çit sarmalayıcısı kaldırılır; içerik DEĞİŞTİRİLMEZ ve kapıyı yine driver doğrulayıcıları tutar. Çit dışında metin varsa (öncesinde/sonrasında) veya birden çok çit varsa HİÇBİR şey ayıklanmaz: çıktı olduğu gibi geçer ve driver onu PREDEV_DRIVER_INVALID_JSON ile reddeder (JSON "kurtarılmaz").
+// //TR: Modelin TÜM çıktısı tek bir ```json ... ``` (veya ``` ... ```) çitiyse yalnız çit sarmalayıcısı kaldırılır; içerik DEĞİŞTİRİLMEZ ve kapıyı yine driver doğrulayıcıları tutar. Çit dışında metin varsa (öncesinde/sonrasında) HİÇBİR şey ayıklanmaz; birden çok çitte kalan metin geçerli JSON olamaz. Her iki durumda çıktı olduğu gibi geçer ve driver onu PREDEV_DRIVER_INVALID_JSON ile reddeder (JSON "kurtarılmaz").
 function unwrapSingleFence(t: string): string {
   const m = /^```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n```$/.exec(t);
-  return m && !m[1]!.includes("```") ? m[1]!.trim() : t;
+  return m ? m[1]!.trim() : t;
 }
 
 export class ClaudePreDevBuilder implements BuilderPort {

@@ -344,12 +344,13 @@ process.exit(s.exit ?? 0);
   it("one ```json fence around the WHOLE reply is unwrapped; prose around the JSON, two fences, a bare brace-less reply are not repaired: REJECTED with the exact driver code, nothing recorded", T, async () => {
     const fenced = "```json\n" + JSON.stringify(TASKHUB_ARTIFACTS.BusinessAnalysis, null, 2) + "\n```";
     const t = rig();
-    t.scenario({"*": {stdout: envelope(fenced)}});
+    t.scenario({"*": {stdout: envelope(fenced + "\n")}}); // the CLI may end its text with a newline
     const ok = await t.flow.step(t.missionId);
     expect(ok.status).toBe("DRAFT_READY");
     expect(t.store.getPreDevArtifact(SCOPE, (ok as {artifactId: string}).artifactId)!.content).toEqual(TASKHUB_ARTIFACTS.BusinessAnalysis);
     for (const [name, text] of [
       ["prose before", "Here is the analysis:\n" + JSON.stringify(TASKHUB_ARTIFACTS.BusinessAnalysis)],
+      ["prose before a fence", "Sure!\n```json\n" + JSON.stringify(TASKHUB_ARTIFACTS.BusinessAnalysis) + "\n```"],
       ["prose after", "```json\n" + JSON.stringify(TASKHUB_ARTIFACTS.BusinessAnalysis) + "\n```\nHope this helps!"],
       ["two fences", "```json\n{}\n```\n```json\n" + JSON.stringify(TASKHUB_ARTIFACTS.BusinessAnalysis) + "\n```"],
       ["not json", "I could not produce the analysis."]
@@ -484,7 +485,8 @@ process.exit(s.exit ?? 0);
     const poison = (mutate: (c: any) => void) => { const c = JSON.parse(JSON.stringify(TASKHUB_ARTIFACTS.BusinessAnalysis)); mutate(c); return JSON.stringify(c); };
     for (const [name, out] of [
       ["goal statement", poison(c => { c.goals[0].statement = `${PLACEHOLDER_MARKER}: goal>>`; })],
-      ["last risk", poison(c => { c.risks[c.risks.length - 1] = `see ${PLACEHOLDER_MARKER}: x>>`; })]
+      ["last risk", poison(c => { c.risks[c.risks.length - 1] = `see ${PLACEHOLDER_MARKER}: x>>`; })],
+      ["a key (the guard runs before the shape check)", poison(c => { c[`${PLACEHOLDER_MARKER}: key>>`] = "x"; })]
     ] as const) {
       const t = setup(() => out);
       expect([name, await t.flow.step(t.missionId)]).toEqual([name, {status: "REJECTED", kind: "BusinessAnalysis", reason: "PREDEV_DRIVER_PLACEHOLDER_VALUE"}]);
