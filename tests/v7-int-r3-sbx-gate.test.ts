@@ -811,8 +811,9 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
       const missing = defaultSandboxProviderFor({platform: "win32", makeWsl: () => new WslUnshareSandboxProvider({platform: "win32", runner: async () => ({exitCode: null, stdout: Buffer.alloc(0), stderr: Buffer.alloc(0), timedOut: false, aborted: false, spawnError: true})})})!;
       expect(await missing.selfTest()).toEqual({ok: false, detail: "WSL_EXE_MISSING"});
       const gate = new ExecutionGate(missing); expect(await gate.authorize("STUDIO_DEVRUN")).toMatchObject({allowed: false, reason: "SANDBOX_UNAVAILABLE"});
-      // Windows olmayan ana makinede varsayılan WSL sağlayıcısı kendini doğrulamaz
-      expect(await new WslUnshareSandboxProvider().selfTest()).toEqual({ok: false, detail: "PLATFORM_NOT_WIN32"});
+      // Windows olmayan platformda WSL sağlayıcısı kendini doğrulamaz (platform ENJEKTE edilir: sonuç çalıştıran ana makineye bağlı değildir)
+      expect(await new WslUnshareSandboxProvider({platform: "linux"}).selfTest()).toEqual({ok: false, detail: "PLATFORM_NOT_WIN32"});
+      if (process.platform !== "win32") expect(await new WslUnshareSandboxProvider().selfTest()).toEqual({ok: false, detail: "PLATFORM_NOT_WIN32"}); // ana makine varsayılanı yalnız Windows olmayan ana makinede ileri sürülür
     });
 
     it("B-WSL-WIRE-1 real-shaped `wsl -l -v` bytes: UTF-16LE with BOM + CRLF (localized header), UTF-16LE without BOM, UTF-8 and UTF-8 with BOM all decode and keep the `*` default marker; docker-desktop / WSL 1 / no-default stay null", async () => {
