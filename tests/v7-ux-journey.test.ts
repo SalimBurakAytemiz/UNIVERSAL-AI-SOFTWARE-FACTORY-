@@ -1177,6 +1177,20 @@ describe("LANE-A A-FLOW-5 analysis step — view (Journey)", () => {
     b.forms.selection.missionId = "msn_" + "ee".repeat(12);
     fire(byId(r2, "analysis-open-plan")!, "click"); expect(b.forms.selection.missionId).toBe(MSN); expect(b.nav).toEqual(["work"]);
   });
+  it("a plan larger than the display caps says how much is not shown (criteria and requirements), in en and tr; nothing is silently cut", async () => {
+    const crit = Array.from({length: 250}, (_, i) => `criterion ${i}`), reqs = Array.from({length: 205}, (_, i) => ({id: `FR-${i}`, statement: "s", acceptanceCriteria: i === 0 ? crit : []}));
+    const big = {index: 0, workPackageId: "WP1", estimate: "S", satisfies: [], requirements: reqs};
+    const T = (await load("locales", "tr.js")).default as Record<string, string>; expect(T["analysis.trace.more"]).toContain("{n}"); expect(T["analysis.trace.more"]).not.toBe("{n} more not shown");
+    for (const more of ["more not shown"]) {
+      const b = await open({status: 200, body: {status: "COMPLETE", approved: KINDS}}, {}, () => ({status: 201, body: {tasks: [{taskId: "tsk_" + "1".repeat(24)}], replayed: false, trace: [big], summary: {}}}));
+      await press(b, "analysis-step-submit");
+      const res = byId(await press(b, "analysis-plan-submit"), "analysis-plan-result")!;
+      expect(allData(res, "traceCriterion")).toHaveLength(200); expect(allData(res, "traceReq")).toHaveLength(200);
+      const crits = allData(res, "traceHidden", "criteria"), rqs = allData(res, "traceHidden", "requirements");
+      expect(crits).toHaveLength(1); expect(crits[0].textContent).toContain("50"); expect(crits[0].textContent).toContain(more);
+      expect(rqs).toHaveLength(1); expect(rqs[0].textContent).toContain("5"); expect(rqs[0].textContent).toContain(more);
+    }
+  });
   it("BLOCKED details: an empty blocker list still shows the single blocker, one login block per role even with two sign-in blockers, and the command may come from the per-role readiness reading", async () => {
     const e1 = await open({status: 409, body: {status: "BLOCKED", blocker: "ANALYSIS_NOT_READY", blockers: [], founderAction: null}});
     const r1 = await press(e1, "analysis-step-submit");

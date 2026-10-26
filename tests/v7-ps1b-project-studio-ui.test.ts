@@ -2692,6 +2692,7 @@ describe("LANE-A A-FLOW-4: running product after delivery (B-RUN-1 contract, run
     // M3: a delivery whose product is not verified yet (DELIVERY stage not DONE) can still be started; the route's own `deliverable` wins over the guess
     expect(c.productOffer(P(dv(), {deliverable: {ok: true}}), null)).toMatchObject({deliverable: true, start: true});
     expect(c.productOffer(P(dv(), {deliverable: {ok: false, reason: "SOURCE_GENERATION_NOT_COMPLETE"}}), D())).toMatchObject({deliverable: false, start: false});
+    expect(c.productOffer(P(dv(), {deliveredHeadSha: null, deliverable: {ok: true}}), D())).toMatchObject({deliverable: false, hasCommit: false, start: false}); // the route's own ok never starts a product without a delivered commit
     expect(c.mapRunProduct(prod(dv(), {deliverable: {ok: "yes"}}), RUN).state).toBe("ERROR"); expect(c.mapRunProduct(prod(dv(), {deliverable: {ok: true, reason: "bad reason"}}), RUN).state).toBe("ERROR");
     expect(c.productOffer(P(live()), D()).start).toBe(false);
     expect(c.productOffer(P(live()), D())).toMatchObject({start: false, stop: true, open: true});
@@ -2785,6 +2786,10 @@ describe("LANE-A A-FLOW-4: running product after delivery (B-RUN-1 contract, run
     expect(text((await reasonOf("CRASHED", "BRAND_NEW_REASON"))!)).toContain("BRAND_NEW_REASON (not recognised)");
     expect(text((await reasonOf("BLOCKED", "DEVRUN_SANDBOX_UNAVAILABLE:BRAND_NEW_DETAIL"))!)).toContain("(BRAND_NEW_DETAIL)");
     // LOW (review #226): the B-RUN-1 / devrun reasons have their own text, not "(not recognised)"
+    // the server also reports PROCESS_EXITED:<code|signal> (CRASHED) and SANDBOX_UNVERIFIED: recognised, with the detail shown as given
+    const px = (await reasonOf("CRASHED", "PROCESS_EXITED:SIGTERM"))!; expect(text(px)).toContain("exited by itself"); expect(text(px)).toContain("(SIGTERM)"); expect(text(px)).not.toContain("not recognised");
+    const su = (await reasonOf("BLOCKED", "SANDBOX_UNVERIFIED"))!; expect(text(su)).toContain("could not be verified"); expect(text(su)).not.toContain("not recognised");
+    expect(text((await reasonOf("CRASHED", "PROCESS_EXITED:1", "tr"))!)).toContain("sonlandı");
     for (const r of ["DEVRUN_BRIDGE_FAILED", "DEVRUN_COMMAND_NOT_CONFIGURED", "DEVRUN_COMMAND_NOT_ALLOWED", "REPOSITORY_NOT_CONFIGURED", "DEVRUN_DELIVERY_HEAD_MISSING", "DEVRUN_SPAWN_FAILED"]) { const n = (await reasonOf("BLOCKED", r))!; expect(n.dataset.productReason, r).toBe(r); expect(text(n), r).not.toContain("not recognised"); expect(text(n), r).not.toContain("product.reason"); }
     expect(await reasonOf("STOPPED", "SANDBOX_UNAVAILABLE")).toBeUndefined();
     expect(text((await reasonOf("BLOCKED", "DEVRUN_SANDBOX_UNAVAILABLE:NSENTER_MISSING", "tr"))!)).toContain("Başlatma reddedildi");
@@ -2806,7 +2811,7 @@ describe("LANE-A A-FLOW-4: running product after delivery (B-RUN-1 contract, run
     expect(d(423, {error: "GLOBAL_STOP_ACTIVE"}).key).toBe("post.err.423"); expect(d(403, {error: "ACTION_DENIED"}).key).toBe("post.err.auth");
     const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
     const keys = Object.keys(E).filter(k => k.startsWith("product.") || /^post\.err\.409\.(DEVRUN|PRODUCT)/.test(k));
-    expect(keys.length).toBe(46);
+    expect(keys.length).toBe(48);
     // LOW (review #226): the keys the card can reach exist, and no key is left unreachable
     for (const k of ["product.reason.DEVRUN_BRIDGE_FAILED", "product.reason.DEVRUN_COMMAND_NOT_CONFIGURED", "product.reason.DEVRUN_COMMAND_NOT_ALLOWED", "product.reason.REPOSITORY_NOT_CONFIGURED", "product.reason.DEVRUN_DELIVERY_HEAD_MISSING", "product.reason.DEVRUN_SPAWN_FAILED"]) expect(E[k], k).toBeTruthy();
     for (const k of ["product.reason.DEVRUN_BLOCKED", "product.detail.DEVRUN_BRIDGE_FAILED", "product.notDelivered"]) expect(E[k], k).toBeUndefined();

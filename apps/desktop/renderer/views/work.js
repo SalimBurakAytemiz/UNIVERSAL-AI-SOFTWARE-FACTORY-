@@ -239,7 +239,8 @@ function testResultRow(ctx,run){
   if(r.kind==="UNKNOWN")sentence=ctx.t("run.test.UNKNOWN");
   else if(r.kind==="EXECUTED_VERIFIED"||r.kind==="FAILED")sentence=`${ctx.t(`run.test.${r.kind}`)} (${r.reason})`;
   else{
-    const key=`run.test.${r.kind}.${r.reason}`,v=ctx.t(key);
+    // //TR: Sunucu bazı nedenlere ayrıntı ekler (ör. TEST_SURFACE_BLOCKED:<ayrıntı>): metin ":" öncesindeki kodla çözülür, ayrıntı olduğu gibi parantezde gösterilir.
+    const head=r.reason.split(":")[0],key=`run.test.${r.kind}.${head}`,v=ctx.t(key);
     sentence=v!==key?`${v} (${r.reason})`:`${ctx.t(`run.test.${r.kind}.generic`)} (${r.reason} — ${ctx.t("run.test.unrecognised")})`;
   }
   return [h(doc,"dt",{text:ctx.t("run.test.label")}),h(doc,"dd",{dataset:{runTestResult:r.kind,runTestReason:r.reason??""},text:sentence})];
