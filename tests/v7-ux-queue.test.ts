@@ -175,12 +175,12 @@ describe("Queue — GENUINE control-api read-models flow through mappers, queue 
     const s = await seedRealStore();
     const app = mkApp();
     const core = await load("queue-core.js");
-    const raw = {missions: await getJson(app, "/v1/missions"), runs: await getJson(app, "/v1/work-runs"), attention: attentionBody([])}; // //TR: gerçek sunucuda /v1/attention henüz kayıtlı değil (Lane B #191 + server.ts kaydı bekliyor): bu kaynak sabit boş gövdedir
+    const raw = {missions: await getJson(app, "/v1/missions"), runs: await getJson(app, "/v1/work-runs"), attention: await getJson(app, "/v1/attention")}; // //TR: /v1/attention tabanda kayıtlıdır: üç kaynağın hepsi GERÇEK sunucudan gelir
     const mm = core.mapQueueMissions(raw.missions), rm = core.mapQueueWorkRuns(raw.runs), am = core.mapQueueAttention(raw.attention);
     for (const r of [mm, rm, am]) expect(r.state).toBe("VERIFIED");
     expect(mm.missions.total).toBe(6);
     expect(rm.runs).toMatchObject({total: 3, awaiting: 2});
-    expect(am.attention).toMatchObject({total: 0, items: [], truncated: false, dropped: 0});
+    expect(am.attention).toMatchObject({total: 4, truncated: false, dropped: 0}); expect(am.attention.items).toHaveLength(4); // the real route also lists the four waiting records; none of them is a BLOCKED_ITEM kind
 
     const nowMs = Date.now() + 2 * H; // gerçek kayıtlar ~şimdi yazıldı: tüm bekleme süreleri ≈ 2 saat
     const q = core.buildQueue({missions: mm, runs: rm, attention: am}, nowMs);
@@ -931,7 +931,7 @@ describe("LANE-A Queue on GET /v1/attention", () => {
     expect(core.QUEUE_ATTENTION_KINDS).toEqual(["RUN_NEEDS_DECISION", "MISSION_BLOCKED", "TASK_BLOCKED"]);
     const rows = q.items.filter((i: any) => i.kind === "BLOCKED_ITEM");
     expect(rows.map((i: any) => i.blockerKind).sort()).toEqual(["MISSION_BLOCKED", "RUN_NEEDS_DECISION", "TASK_BLOCKED"]);
-    expect(rows.find((i: any) => i.blockerKind === "RUN_NEEDS_DECISION")).toMatchObject({key: `attention:RUN_NEEDS_DECISION:${R_OK}`, runId: R_OK, nextAction: "REVIEW_RUN", reason: "tests failed", basis: "ATTENTION_SINCE", priority: 1});
+    expect(rows.find((i: any) => i.blockerKind === "RUN_NEEDS_DECISION")).toMatchObject({key: `attention:RUN_NEEDS_DECISION:${R_OK}`, runId: R_OK, nextAction: "REVIEW_RUN", reason: "tests failed", basis: "RUN_UPDATED", priority: 1}); // the server's since for a run needing a decision is the run's last update, not "when the server recorded it"
     expect(q.items.filter((i: any) => i.key === K.rep || i.key === K.fa || i.key === K.pf)).toHaveLength(3); // the same work, once, from the mission/run sources
     expect(q.items).toHaveLength(7 + 1);
   });
@@ -953,5 +953,55 @@ describe("LANE-A Queue on GET /v1/attention", () => {
     const unread = await renderView(serve({"/v1/missions": undefined}));
     expect(allData(itemFor(unread.root, K.pkg), "status").map(n => n.dataset.status)).not.toContain("EXECUTING");
     expect(field(itemFor(unread.root, K.pkg), "mission")!.textContent).toContain("Mission title unavailable");
+  });
+});
+
+// //TR: #196 incelemesi (HIGH/MED): dikkat kaynağı kesik ya da okunamayan öğe içeriyorsa kuyruk eksiktir (boş/VERIFIED/sayılı gösterilmez); BLOCKED_ITEM için uydurma "Waiting" rozeti yoktur; since'in anlamı türe göre söylenir; kaynak adı canlı kaynaktır.
+describe("LANE-A Queue: a cut or partly unreadable attention list is never empty or counted (review #196)", () => {
+  const zero = {RUN_AWAITING_APPROVAL: 0, MISSION_FOUNDER_ATTENTION: 0, RUN_NEEDS_DECISION: 0, MISSION_AUTHORIZATION_PENDING: 0, MISSION_BLOCKED: 0, TASK_BLOCKED: 0};
+  const none = {"/v1/missions": {missions: []}, "/v1/work-runs": {runs: []}};
+  const cut = () => attentionBody(Array.from({length: 200}, (_, i) => ({...ATTENTION_ITEMS[0], taskId: "tsk_" + (i + 1).toString(16).padStart(24, "a")})), {truncated: true, counts: {...zero, TASK_BLOCKED: 250}});
+  const dropped = () => attentionBody([{kind: "NEW"}], {counts: {...zero, TASK_BLOCKED: 1}});
+  it("core: dropped or truncated attention makes the queue incomplete (counts null, no 'empty'), with a distinct NOT_VERIFIED state; a failing source keeps its own state", async () => {
+    const d = await derive({...none, "/v1/attention": dropped()});
+    expect(d.q).toMatchObject({complete: false, partial: true, incompleteState: "NOT_VERIFIED", counts: null, unreadable: []}); expect(d.q.sources.attention.state).toBe("NOT_VERIFIED"); expect(d.q.items).toEqual([]);
+    const t = await derive({...none, "/v1/attention": cut()});
+    expect(t.q).toMatchObject({complete: false, partial: true, incompleteState: "NOT_VERIFIED", counts: null}); expect(t.q.items).toHaveLength(200);
+    const ok = await derive({...none, "/v1/attention": attentionBody([])});
+    expect(ok.q).toMatchObject({complete: true, partial: false, incompleteState: null}); expect(ok.q.counts.total).toBe(0);
+    const off = await derive({"/v1/attention": {state: "OFFLINE"}});
+    expect(off.q.partial).toBe(false);
+  });
+  it("view: one dropped item => no 'Nothing is awaiting', queueEmpty=unknown, total not shown, source strip NOT_VERIFIED with the dropped note", async () => {
+    const r = await renderView(serve({...none, "/v1/attention": dropped()}));
+    const empty = byData(r.root, "queueEmpty");
+    expect(empty).toBeDefined(); expect(empty!.dataset.queueEmpty).toBe("unknown"); expect(r.root.textContent).not.toContain(r.ctx.t("queue.empty"));
+    expect(byData(r.root, "queueAttentionPartial")).toBeDefined(); expect(allData(r.root, "source").find(n => n.dataset.source === "attention")!.dataset.sourceState).toBe("NOT_VERIFIED");
+    expect(byData(r.root, "note", "attention-dropped")!.dataset.dropped).toBe("1");
+  });
+  it("view: a truncated list (200 of 250) is not a VERIFIED 200: incomplete, NOT_VERIFIED, no total", async () => {
+    const r = await renderView(serve({...none, "/v1/attention": cut()}));
+    expect(allData(r.root, "source").find(n => n.dataset.source === "attention")!.dataset.sourceState).toBe("NOT_VERIFIED"); expect(byData(r.root, "queueAttentionPartial")).toBeDefined();
+    expect(byData(r.root, "note", "attention-truncated")).toBeDefined(); expect(allData(r.root, "source").find(n => n.dataset.source === "attention")!.textContent).not.toContain("Read OK"); expect(all(allData(r.root, "source").find(n => n.dataset.source === "attention")!).filter(n => "pill" in n.dataset).map(n => n.dataset.pill)).toEqual(["NOT_VERIFIED"]); // the pill itself, not only the data attribute
+  });
+  it("a BLOCKED_ITEM run shows no invented 'Waiting' pill (its status is not known from this source); a real waiting run still does", async () => {
+    const r = await renderView(serve({"/v1/attention": attentionBody([{kind: "RUN_NEEDS_DECISION", nextAction: "REVIEW_RUN", projectId: PRJ_ATT, missionId: M_EXE, runId: R_OK, taskId: null, title: "Failed run", reason: "tests failed", since: "2026-10-17T08:00:00.000Z"}])}));
+    const li = itemFor(r.root, `attention:RUN_NEEDS_DECISION:${R_OK}`), runField = field(li, "run")!;
+    expect(runField.textContent).toContain(R_OK); expect(runField.textContent).not.toMatch(/Waiting/i);
+    const gate = itemFor((await renderView(serve())).root, K.gate); expect(field(gate, "run")!.textContent).toMatch(/AWAITING_APPROVAL/);
+  });
+  it("since is explained per kind: a blocked mission 'since' is its creation time, a run needing a decision is its last update", async () => {
+    const {q} = await derive({"/v1/attention": attentionBody([
+      {kind: "MISSION_BLOCKED", nextAction: "REVIEW_MISSION", projectId: PRJ_ATT, missionId: M_REP2, runId: null, taskId: null, title: "B", reason: null, since: "2026-10-16T10:00:00.000Z"},
+      {kind: "TASK_BLOCKED", nextAction: "UNBLOCK_TASK", projectId: PRJ_ATT, missionId: M_EXE, runId: null, taskId: TSK_A, title: "T", reason: null, since: "2026-10-16T10:00:00.000Z"}])});
+    expect(q.items.find((i: any) => i.blockerKind === "MISSION_BLOCKED")!.basis).toBe("MISSION_CREATED"); expect(q.items.find((i: any) => i.blockerKind === "TASK_BLOCKED")!.basis).toBe("ATTENTION_SINCE");
+  });
+  it("no queue/executive text or KPI source names the retired /v1/founder-attention as the live source (en and tr)", async () => {
+    for (const lang of ["en", "tr"]) {
+      const L = (await load("locales", `${lang}.js`)).default as Record<string, string>;
+      for (const k of ["queue.readonly", "executive.readonly", "queue.tier.1.desc"]) { expect(L[k], `${lang} ${k}`).not.toMatch(/founder-attention|scheduler/i); }
+      expect(L["queue.readonly"]).toContain("GET /v1/attention"); expect(L["executive.readonly"]).toContain("GET /v1/attention");
+    }
+    expect(read("views", "queue.js")).not.toMatch(/source:"GET \/v1\/founder-attention/);
   });
 });

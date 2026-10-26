@@ -182,7 +182,7 @@ describe("Executive — GENUINE control-api read-models flow through mappers and
     const seeded = await seedRealStore();
     const app = mkApp();
     const core = await load("executive-core.js");
-    const raw = {cockpit: await getJson(app, "/v1/cockpit"), missions: await getJson(app, "/v1/missions"), runs: await getJson(app, "/v1/work-runs"), attention: attentionBody(0)}; // //TR: gerçek sunucuda /v1/attention henüz kayıtlı değil (Lane B #191 + server.ts kaydı bekliyor): bu kaynak sabit gövdedir
+    const raw = {cockpit: await getJson(app, "/v1/cockpit"), missions: await getJson(app, "/v1/missions"), runs: await getJson(app, "/v1/work-runs"), attention: await getJson(app, "/v1/attention")}; // //TR: /v1/attention tabanda kayıtlıdır: dört kaynağın hepsi GERÇEK sunucudan gelir
     const cp = core.mapExecCockpit(raw.cockpit), ms = core.mapExecMissions(raw.missions), rn = core.mapExecWorkRuns(raw.runs), at = core.mapExecAttention(raw.attention);
     for (const r of [cp, ms, rn, at]) expect(r.state).toBe("VERIFIED");
     expect(cp.cockpit.projects).toEqual({state: "VERIFIED", count: 1});
@@ -194,14 +194,14 @@ describe("Executive — GENUINE control-api read-models flow through mappers and
     expect(cp.cockpit.workforce.registeredRoles).toBeNull();
     expect(cp.cockpit.workforce.activeWorkerRuns).toBe(1);
     expect(rn.runs).toMatchObject({total: 3, open: 1, awaiting: 1, ended: 1, prepared: 0, accepted: 0});
-    expect(at.attention.total).toBe(0);
+    expect(at.attention).toMatchObject({total: 2, truncated: false, dropped: 0}); // the real route counts the two seeded waiting records (REPORTING run + FOUNDER_ATTENTION mission)
 
     const expectedOrder = [...raw.runs.runs].sort((x: any, y: any) => Date.parse(y.updatedAt) - Date.parse(x.updatedAt)).map((r: any) => r.runId);
     expect(rn.runs.items.map((r: any) => r.runId)).toEqual(expectedOrder);
     expect(expectedOrder[0]).toBe(seeded.B); // en son yazılan koşu önce
 
     const executive = await load("views", "executive.js");
-    const {ctx, calls} = await mkCtx(async p => (p === "/v1/attention" ? attentionBody(0) : getJson(app, p)));
+    const {ctx, calls} = await mkCtx(async p => getJson(app, p));
     const root: N = await executive.render(ctx);
     expect(calls.slice().sort()).toEqual(FOUR);
     expect(rows(root).map(n => n.dataset.run)).toEqual(expectedOrder);
@@ -209,7 +209,7 @@ describe("Executive — GENUINE control-api read-models flow through mappers and
     expect(kpiValue(root, "missions")).toBe("4");
     expect(kpiValue(root, "runs")).toBe("3");
     expect(kpiValue(root, "deliveries")).toBe("0");
-    expect(kpiValue(root, "attention")).toBe("0");
+    expect(kpiValue(root, "attention")).toBe("2");
     const a = rowFor(root, seeded.A);
     expect(a.dataset.status).toBe("AWAITING_APPROVAL");
     expect(a.dataset.verdict).toBe("CLEAN");
@@ -233,7 +233,7 @@ describe("Executive — GENUINE control-api read-models flow through mappers and
   it("a real Work OS without any journal shows honest UNAVAILABLE cockpit figures (never a zero), and a real journal with only a project shows real zeros", async () => {
     // Günlük yok: sunucu bloklarını UNAVAILABLE bildirir; görünüm bunu "—" + durum olarak gösterir, 0 uydurmaz.
     let app = mkApp();
-    let r = await renderView(p => (p === "/v1/attention" ? attentionBody(0) : getJson(app, p)));
+    let r = await renderView(p => getJson(app, p));
     for (const k of ["projects", "missions", "approvals", "evidence"]) { expect(kpiValue(r.root, k), k).toBe("—"); expect(kpi(r.root, k).dataset.state, k).toBe("UNAVAILABLE"); }
     expect(["orchestrator", "roles", "workers"].map(k => pills(byData(r.root, "fact", k)!))).toEqual([["UNAVAILABLE"], ["UNAVAILABLE"], ["UNAVAILABLE"]]);
     // Uç noktalar boş liste döndürdü (günlük yok => kayıtlı koşu yok): bu gerçek bir sıfırdır ve metinle belirtilir.
@@ -244,7 +244,7 @@ describe("Executive — GENUINE control-api read-models flow through mappers and
     const store = new WorkOsStore(dataDir());
     store.createProject({tenantId: "tA", orgId: "org1", name: "Only a project", environmentId: "env-dev", createdBy: RECORDER});
     app = mkApp();
-    r = await renderView(p => (p === "/v1/attention" ? attentionBody(0) : getJson(app, p)));
+    r = await renderView(p => getJson(app, p));
     expect(kpiValue(r.root, "projects")).toBe("1");
     expect(kpiValue(r.root, "missions")).toBe("0");
     expect(kpiValue(r.root, "inProgress")).toBe("0");

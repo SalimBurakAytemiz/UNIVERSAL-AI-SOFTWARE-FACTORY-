@@ -1,4 +1,4 @@
-// //TR: Bu modül İnsan Onayı Bekleyen İş Kuyruğu görünümünün saf (DOM'suz) çekirdeğidir (FA-V2-PRODUCT, UI-211): yalnız üç salt-okunur ve zaten izinli GET (GET /v1/founder-attention, GET /v1/missions, GET /v1/work-runs) yanıtını güvenli, sınırlı alanlara eşler ve bunlardan kuyruk türetir. HİÇBİR veri uydurulmaz: kimlik/enum/biçim/zaman damgası bozuksa okuma KISMEN değil tümden ERROR olur (fail-closed), eksik alan tahmin edilmez, durumlar kayıttan AYNEN taşınır (yükseltme yok). Kuyruk öğesi YALNIZ kayıtlı bir duruma dayanır: FOUNDER_ATTENTION_REQUIRED ve PREFLIGHT mission'ları (kontrol düzleminin kokpitte "onay bekliyor" saydığı durumlar), AWAITING_APPROVAL koşuları ve Founder dikkati engelli paketleri. Öncelik kayıtlı bir alan DEĞİLDİR; yalnız öğe türünden türetilen, açıkça belgelenmiş bir sıralama düzeyidir. Bekleme süresi YALNIZ gerçek zaman damgasından (engel zamanı / koşu güncelleme / mission oluşturma) hesaplanır; kontrol düzleminde SLA hedefi kaydı YOKTUR, bu yüzden SLA değeri uydurulmaz ve bekleme bantları yalnız geçen sürenin görüntü gruplamasıdır (son tarih değildir). Bir kaynak okunamıyorsa toplam/öncelik sayıları gösterilmez (eksik kuyruk "boş" ya da sayılı gösterilmez). Ürün doğrulaması bu modülde hiçbir yerde üretilmez ve ilgili sabit değer bu dosyada hiç yer almaz.
+// //TR: Bu modül İnsan Onayı Bekleyen İş Kuyruğu görünümünün saf (DOM'suz) çekirdeğidir (FA-V2-PRODUCT, UI-211): yalnız üç salt-okunur ve zaten izinli GET (GET /v1/attention, GET /v1/missions, GET /v1/work-runs) yanıtını güvenli, sınırlı alanlara eşler ve bunlardan kuyruk türetir. HİÇBİR veri uydurulmaz: kimlik/enum/biçim/zaman damgası bozuksa okuma KISMEN değil tümden ERROR olur (fail-closed), eksik alan tahmin edilmez, durumlar kayıttan AYNEN taşınır (yükseltme yok). Kuyruk öğesi YALNIZ kayıtlı bir duruma dayanır: FOUNDER_ATTENTION_REQUIRED ve PREFLIGHT mission'ları (kontrol düzleminin kokpitte "onay bekliyor" saydığı durumlar), AWAITING_APPROVAL koşuları ve Founder dikkati engelli paketleri. Öncelik kayıtlı bir alan DEĞİLDİR; yalnız öğe türünden türetilen, açıkça belgelenmiş bir sıralama düzeyidir. Bekleme süresi YALNIZ gerçek zaman damgasından (engel zamanı / koşu güncelleme / mission oluşturma) hesaplanır; kontrol düzleminde SLA hedefi kaydı YOKTUR, bu yüzden SLA değeri uydurulmaz ve bekleme bantları yalnız geçen sürenin görüntü gruplamasıdır (son tarih değildir). Bir kaynak okunamıyorsa toplam/öncelik sayıları gösterilmez (eksik kuyruk "boş" ya da sayılı gösterilmez). Ürün doğrulaması bu modülde hiçbir yerde üretilmez ve ilgili sabit değer bu dosyada hiç yer almaz.
 import {MISSION_STATUSES,RISK_LEVELS,MISSION_ID_RE,PROJECT_ID_RE} from "./work-core.js";
 import {RUN_STATUSES,RUN_STEPS,MISSIONS_PATH,WORK_RUNS_PATH,ATTENTION_PATH} from "./executive-core.js";
 import {mapAttentionQueue} from "./attention-core.js";
@@ -96,6 +96,8 @@ export function waitParts(ms){
 
 // ---------- Kuyruk türetimi ----------
 const ok=res=>Boolean(res)&&res.state==="VERIFIED";
+// //TR: Sunucunun since alanı türe göre farklı bir andır: MISSION_BLOCKED için mission OLUŞTURMA zamanı, RUN_NEEDS_DECISION için koşunun son güncellemesi; "sunucu kaydetti" denmez.
+const ATTENTION_BASIS=Object.freeze({MISSION_BLOCKED:"MISSION_CREATED",RUN_NEEDS_DECISION:"RUN_UPDATED"});
 const failState=s=>s==="OFFLINE"||s==="UNAVAILABLE"?s:"ERROR";
 function mk(over){
   return {key:"",kind:"",priority:0,title:null,missionTitle:null,missionId:null,projectId:null,riskLevel:null,missionStatus:null,missionKnown:false,runId:null,runStatus:null,step:null,
@@ -118,12 +120,14 @@ const byQueueOrder=(a,b)=>{
  */
 export function buildQueue({missions,runs,attention},nowMs){
   const m=ok(missions)&&missions.missions?missions.missions:null,r=ok(runs)&&runs.runs?runs.runs:null,a=ok(attention)&&attention.attention?attention.attention:null;
-  const complete=m!==null&&r!==null&&a!==null;
+  // //TR: Dikkat kaynağı okundu ama sunucu listeyi KESTİ ya da bazı öğeler OKUNAMADI ise kaynak eksiktir: kuyruk ne "boş" ne de sayılı VERIFIED gösterilir (sunucu sayaçları ancak öğe listesiyle tutarlıysa tamdır).
+  const partial=a!==null&&(a.truncated===true||a.dropped>0);
+  const complete=m!==null&&r!==null&&a!==null&&!partial;
   const sources={
-    attention:{state:a?"VERIFIED":failState(attention?.state)},
+    attention:{state:a?(partial?"NOT_VERIFIED":"VERIFIED"):failState(attention?.state)},
     missions:{state:m?"VERIFIED":failState(missions?.state)},
     workRuns:{state:r?"VERIFIED":failState(runs?.state)}};
-  const unreadable=QUEUE_SOURCES.filter(k=>sources[k].state!=="VERIFIED");
+  const unreadable=QUEUE_SOURCES.filter(k=>sources[k].state!=="VERIFIED"&&!(k==="attention"&&partial));
   const byId=new Map(m?m.items.map(x=>[x.missionId,x]):[]);
   const items=[];
   const push=over=>{const w=waitSince(over.since,nowMs);items.push(mk({...over,priority:PRIORITY_OF_KIND[over.kind],waitMs:w.waitMs,band:w.band}))};
@@ -145,7 +149,7 @@ export function buildQueue({missions,runs,attention},nowMs){
     if(!QUEUE_ATTENTION_KINDS.includes(x.kind))continue;
     const ms=byId.get(x.missionId)??null;
     push({kind:"BLOCKED_ITEM",key:`attention:${x.kind}:${x.taskId??x.runId??x.missionId}`,title:x.title,missionTitle:ms?ms.title:null,missionId:x.missionId,projectId:x.projectId,riskLevel:ms?ms.riskLevel:null,missionStatus:ms?ms.status:null,missionKnown:ms!==null,
-      runId:x.runId,taskId:x.taskId,nextAction:x.nextAction,blockerKind:x.kind,reason:x.reason,since:x.since,basis:x.since?"ATTENTION_SINCE":null});
+      runId:x.runId,taskId:x.taskId,nextAction:x.nextAction,blockerKind:x.kind,reason:x.reason,since:x.since,basis:x.since===null?null:ATTENTION_BASIS[x.kind]??"ATTENTION_SINCE"});
   }
   items.sort(byQueueOrder);
   const groups=PRIORITIES.map(p=>({priority:p,items:items.filter(i=>i.priority===p)}));
@@ -156,6 +160,6 @@ export function buildQueue({missions,runs,attention},nowMs){
     byBand:{...Object.fromEntries(WAIT_BAND_IDS.map(id=>[id,items.filter(i=>i.band===id).length])),UNKNOWN:items.filter(i=>i.band===null).length},
     longestWaitMs:items.reduce((mx,i)=>i.waitMs!==null&&(mx===null||i.waitMs>mx)?i.waitMs:mx,null)
   }:null;
-  const incompleteState=unreadable.some(k=>sources[k].state==="OFFLINE")?"OFFLINE":unreadable.some(k=>sources[k].state==="ERROR")?"ERROR":"UNAVAILABLE";
-  return {complete,sources,unreadable,incompleteState:complete?null:incompleteState,items,groups,counts,attentionNotes:a?{truncated:a.truncated,dropped:a.dropped}:null};
+  const incompleteState=unreadable.some(k=>sources[k].state==="OFFLINE")?"OFFLINE":unreadable.some(k=>sources[k].state==="ERROR")?"ERROR":unreadable.some(k=>sources[k].state==="UNAVAILABLE")?"UNAVAILABLE":"NOT_VERIFIED";
+  return {complete,partial,sources,unreadable,incompleteState:complete?null:incompleteState,items,groups,counts,attentionNotes:a?{truncated:a.truncated,dropped:a.dropped}:null};
 }

@@ -12,6 +12,8 @@ const mono=(doc,t)=>t!==null&&t!==undefined&&t!==""?h(doc,"span",{class:"mono",t
 const dash=v=>v===null||v===undefined||v===""?MISSING:String(v);
 /** Önem düzeyi -> rozet türü (renk tek başına anlam taşımaz; her rozet metin taşır). */
 const SEVERITY_PILL=Object.freeze({ACTION:"ATTENTION",UNVERIFIED:"NOT_VERIFIED",WATCH:"WAITING"});
+// //TR: Sunucunun since alanı türe göre farklıdır: MISSION_BLOCKED = mission oluşturma anı, RUN_NEEDS_DECISION = koşunun son güncellemesi; "Engelli olduğu an" denmez.
+const SINCE_LABEL=Object.freeze({MISSION_BLOCKED:"ops.field.missionCreated",RUN_NEEDS_DECISION:"ops.field.runUpdated"});
 const TIER_PILL=Object.freeze({ATTENTION_NEEDED:"ATTENTION",UNVERIFIED:"NOT_VERIFIED",WATCH:"WAITING",NO_ISSUES_RECORDED:"DONE"});
 const GROUP_PILL=Object.freeze({ATTENTION:"ATTENTION",WAITING:"WAITING",STOPPED:"STOPPED",FINISHED:"DONE",RUNNING:"ACTIVE",OTHER:"NEUTRAL",UNKNOWN:"NEUTRAL"});
 const LIVE_PILL=Object.freeze({IN_PROGRESS:"ACTIVE",STALLED:"ATTENTION",UNDETERMINED:"NOT_VERIFIED"});
@@ -247,7 +249,7 @@ function blockedList(ctx,a){
           ["mission",t("ops.field.mission"),{},mono(doc,x.missionId)],
           ["run",t("ops.field.run"),{},mono(doc,x.runId)],
           ["task",t("ops.field.task"),{},mono(doc,x.taskId)],
-          ["blockedAt",t("ops.field.blockedAt"),{},timeEl(ctx,x.since)," · ",dur(ctx,x.waitMs)],
+          ["blockedAt",t(SINCE_LABEL[x.kind]??"ops.field.blockedAt"),{},timeEl(ctx,x.since)," · ",dur(ctx,x.waitMs)],
           ["reason",t("ops.field.reason"),{},x.reason??MISSING]]));
     }))];
 }

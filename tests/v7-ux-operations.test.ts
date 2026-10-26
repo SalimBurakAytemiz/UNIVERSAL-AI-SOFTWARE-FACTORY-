@@ -154,9 +154,9 @@ function mkApp(): App {
   apps.push(app); return app;
 }
 const getJson = async (app: App, url: string) => { const r = await app.inject({method: "GET", url, headers: hdr}); if (r.statusCode !== 200) throw new Error(`${url}: HTTP ${r.statusCode}`); return r.json(); };
-/** Gerçek sunucuda /v1/attention henüz kayıtlı değil (Lane B #191 + server.ts kaydı bekliyor): dikkat kaynağı sabit gövdedir, diğer ikisi GERÇEK sunucudan gelir. */
-const realGet = (app: App, att: any = attBody()) => async (p: string) => (p === "/v1/attention" ? att : getJson(app, p));
-async function realRaw(app: App) { return {control: await getJson(app, KEYS.control), runs: await getJson(app, KEYS.runs), attention: attBody()}; }
+/** /v1/attention artık tabanda kayıtlıdır (registerAttentionRoutes): üç kaynak da GERÇEK sunucudan gelir. `att` yalnız gerçek depoda üretilemeyen belirli bir öğe listesini görünüme vermek için açıkça enjekte edilir. */
+const realGet = (app: App, att?: any) => async (p: string) => (p === "/v1/attention" && att !== undefined ? att : getJson(app, p));
+async function realRaw(app: App) { return {control: await getJson(app, KEYS.control), runs: await getJson(app, KEYS.runs), attention: await getJson(app, "/v1/attention")}; }
 async function realAssess(app: App, now: number) {
   const core = await load("operations-core.js");
   const raw = await realRaw(app);
@@ -310,6 +310,9 @@ describe("Operations — GENUINE control-api read-models flow through mappers, d
     expect(overallOf(r).dataset.overall).toBe("NO_ISSUES_RECORDED");
     expect(pills(overallOf(r))).toContain("DONE");
     expect(overallOf(r).textContent).toContain("No issues recorded");
+    // review #196: the "no issues" claim states its scope (Work OS sources only) and says the legacy supervisor records are not read
+    expect(overallOf(r).textContent).toMatch(/covers only those sources/); expect(overallOf(r).textContent).toMatch(/legacy supervisor.s retry and checkpoint records are not read here/);
+    const trv = await renderView(realGet(app), "tr", now); expect(overallOf(trv.root).textContent).toMatch(/yalnızca o kaynakları kapsar/);
     expect(byData(r, "opsEmpty", "clear")).toBeTruthy();
     expect(stepsOf(r).length).toBe(0);
     expect(surface(r)).not.toContain(FORBIDDEN);
@@ -676,7 +679,7 @@ describe("Operations — view honesty", () => {
     expect(controlOf(r, "resume").dataset.controlState).toBe("relevant");
     expect(controlOf(r, "retry").dataset.controlState).toBe("noSource");
     expect(pills(controlOf(r, "retry"))).toEqual(["UNAVAILABLE"]);
-    expect(controlOf(r, "retry").textContent).toContain("No source");
+    expect(controlOf(r, "retry").textContent).toContain("Not shown here"); expect(controlOf(r, "retry").textContent).not.toMatch(/retired scheduler|no source/i);
     expect(controlOf(r, "stop").textContent).toContain("EMERGENCY STOP");
     expect(byData(r, "note", "controls-defer")!.textContent).toContain("Nothing is stopped, resumed or retried from this view.");
     // Kontrol düzlemi + kuyruk.
@@ -684,7 +687,7 @@ describe("Operations — view honesty", () => {
     expect(field(byId(r, "ops-plane")!, "reason")!.textContent).toBe("Founder stop");
     expect(field(byId(r, "ops-plane")!, "journal")!.dataset.value).toBe("OK");
     expect(allData(r, "field", "scheduler").length).toBe(0); // emekli kaynak: alan hiç yok
-    for (const k of ["retry", "checkpoint"]) { const f = field(byId(r, "ops-plane")!, k)!; expect([f.dataset.value, pills(f)]).toEqual(["noSource", ["UNAVAILABLE"]]); expect(f.textContent).toContain("No source"); }
+    for (const k of ["retry", "checkpoint"]) { const f = field(byId(r, "ops-plane")!, k)!; expect([f.dataset.value, pills(f)]).toEqual(["noSource", ["UNAVAILABLE"]]); expect(f.textContent).toContain("Not shown here"); }
     expect(["RUN_NEEDS_DECISION", "MISSION_BLOCKED", "TASK_BLOCKED"].map(k => field(byId(r, "ops-plane")!, "count" + k)!.dataset.value)).toEqual(["0", "1", "1"]);
     expect(blockedItems(r).map(n => [n.dataset.opsBlockedItem, n.dataset.attentionKind, n.dataset.nextAction])).toEqual([[`MISSION_BLOCKED:${MSN_A}`, "MISSION_BLOCKED", "REVIEW_MISSION"], [`TASK_BLOCKED:${TSK(5)}`, "TASK_BLOCKED", "UNBLOCK_TASK"]]);
     // Koşular: kayıtlı durum AYNEN, canlılık yalnız kayıtlı zamandan.
@@ -822,7 +825,7 @@ describe("Operations — view honesty", () => {
     const {root: r} = await renderView(serve());
     expect(controlOf(r, "stop").textContent).toContain("shell header");
     expect(controlOf(r, "resume").textContent).toContain("stop banner");
-    expect(controlOf(r, "retry").textContent).toContain("no longer read");
+    expect(controlOf(r, "retry").textContent).toContain("not read by this screen"); expect(controlOf(r, "retry").textContent).toContain("Control Tower");
     expect(all(r).filter(n => n.tagName === "BUTTON").length).toBe(2);
   });
   it("honest empty states: no runs and no blocked work are readable zeros with explicit text (only when they were READ); a cut or partly unreadable list is never evidence that nothing is blocked", async () => {
@@ -866,6 +869,16 @@ describe("Operations — view honesty", () => {
     expect(field(task, "mission")!.textContent).toBe(MSN_A);
     expect(field(task, "task")!.textContent).toBe(TSK(1));
     expect(field(task, "blockedAt")!.textContent).toContain("3 h 0 min");
+    // review #196: the server's since is a different moment per kind, and the label says which
+    const lab = (li: N) => li.textContent;
+    expect(lab(task)).toContain("Blocked since"); expect(lab(task)).not.toMatch(/Mission created|Run last updated/);
+    const withSince = blockedRow({kind: "MISSION_BLOCKED", nextAction: "REVIEW_MISSION", taskId: null, reason: null, since: "2026-10-16T10:00:00.000Z", title: "Mission Y"});
+    const runRow = blockedRow({kind: "RUN_NEEDS_DECISION", nextAction: "REVIEW_RUN", taskId: null, runId: "run_" + "ab".repeat(12), since: "2026-10-16T10:00:00.000Z", title: "Run Z"});
+    const kinds = await renderView(serve({"/v1/attention": attBody({blocked: [withSince, runRow]})}), "en");
+    const items2 = blockedItems(kinds.root), m2 = items2.find(n => n.textContent.includes("Mission Y"))!, r2 = items2.find(n => n.textContent.includes("Run Z"))!;
+    expect(lab(m2)).toContain("Mission created"); expect(lab(m2)).not.toContain("Blocked since"); expect(lab(r2)).toContain("Run last updated"); expect(lab(r2)).not.toContain("Blocked since");
+    const kinds_tr = await renderView(serve({"/v1/attention": attBody({blocked: [withSince, runRow]})}), "tr");
+    expect(blockedItems(kinds_tr.root).map(lab).join(" ")).not.toContain("ops.field");
     expect(field(task, "reason")!.textContent).toBe("Quota exhausted");
     expect(field(mission, "reason")!.textContent).toBe("—");
     expect(field(mission, "blockedAt")!.textContent).toBe("— · —");
