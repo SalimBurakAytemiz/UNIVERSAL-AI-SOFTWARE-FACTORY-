@@ -1,6 +1,6 @@
 // //TR: Bu görünüm parçası Proje Yolculuğu'ndaki "Analiz" adımıdır (A-FLOW-5): "Analiz et" POST /v1/missions/:id/analysis/step ile mevcut analiz fazının taslağını ürettirir (BusinessAnalysis, Requirements, Plan, Architecture); taslaklar aşağıdaki mevcut Pre-dev kararları bölümünde Founder tarafından onaylanır ya da reddedilir. BLOCKED durumunda sunucunun kesin engelleri ve Founder'ın kendi giriş komutu (yalnız metin) gösterilir. "Analiz tamam" YALNIZ dört fazın da onaylandığı COMPLETE sonucunda yazılır; ardından "Plan oluştur" POST .../analysis/plan ile onaylı plandan görev planını kurar ve görev -> gereksinim -> kabul kriteri izlenebilirliğini gösterir. Uç noktalar masaüstü allow-list'inde yoksa dürüst "etkin değil" yazılır; hiçbir sonuç uydurulmaz.
 import {h,badge} from "../components.js";
-import {drafts,field,statusBlock,setStatus,focusResult} from "../forms.js";
+import {drafts,field,statusBlock,setStatus,focusResult,settle,missionWriteBusy} from "../forms.js";
 import {selection} from "../forms.js";
 import {buildAnalysisStepRequest,buildAnalysisPlanRequest,classifyAnalysisStep,classifyAnalysisPlan,analysisStatusKey,ANALYSIS_KINDS,buildReapproveRequest,reapproveOutcome} from "../analysis-core.js";
 
@@ -13,15 +13,19 @@ export function resetAnalysis(missionId=null){
   analysisUi.missionId=missionId;analysisUi.step=null;analysisUi.plan=null;analysisUi.evidence="";
   delete drafts.status[ANALYSIS_STEP_FORM];delete drafts.status[ANALYSIS_PLAN_FORM];delete drafts.status[ANALYSIS_REAPPROVE_FORM];
 }
+/** //TR: A-ANALYSIS-ORDER-1: Analiz et, Yeniden onayla ve Plan oluştur AYNI mission durumunu yazar; biri sürerken diğerleri gönderilmez (düğmeler kapalı, işlevler de reddeder), böylece geç gelen bir cevap diğerinin daha yeni sonucunu ezemez. */
+export const analysisBusy=missionWriteBusy;
 const tOr=(ctx,k,fallback)=>{const v=ctx.t(k);return v===k?fallback:v};
 
 export async function submitAnalysisStep(ctx,missionId){
+  if(analysisBusy())return {ok:false,busy:true};
   const req=buildAnalysisStepRequest({missionId});
   if(!req.ok){setStatus(ANALYSIS_STEP_FORM,{ok:false,errors:req.errors});await ctx.rerender();return {ok:false,validation:true}}
   if(analysisUi.missionId!==missionId)resetAnalysis(missionId);
   delete drafts.status[ANALYSIS_REAPPROVE_FORM]; // yeni adım: eski yeniden-onay durumu bayatlar
   drafts.busy[ANALYSIS_STEP_FORM]=true;
-  let res;try{res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[ANALYSIS_STEP_FORM]=false}
+  // //TR: kilit görünür olsun (diğer düğmeler istek sürerken kapanır); yeniden çizim reddedilirse de kilit BIRAKILIR (try/finally içinde); düğme kapandığı için odak not bloğuna alınır.
+  let res;try{await ctx.rerender();settle(ctx,["id:analysis-in-flight"]);res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[ANALYSIS_STEP_FORM]=false}
   if(analysisUi.missionId!==missionId){await ctx.rerender();return {ok:false,stale:true,status:res?.status??null}} // //TR: istek sürerken başka mission seçildi: gelen cevap o mission'ın durumuna yazılmaz
   const c=classifyAnalysisStep(res),k=analysisStatusKey(c,res,"step");
   // Bir denetim başarısız olursa eski sonuç gösterilmez (bayat "tamam" kalmasın): Plan oluştur kapısı da kapanır.
@@ -32,11 +36,13 @@ export async function submitAnalysisStep(ctx,missionId){
 }
 /** //TR: A-ANALYSIS-STUCK-1: onaylı ama ilerlemeyen artefaktı mevcut pre-dev onay yoluyla yeniden onaylar (kanıt Founder'ın girdisi). Ücretli üretim BAŞLATMAZ ve adımı kendiliğinden yeniden çalıştırmaz: Founder "Analiz et"e kendisi basar. Başarısızlıkta engel görünür kalır ve sunucunun gerçek nedeni söylenir. */
 export async function submitReapprove(ctx,missionId){
+  if(analysisBusy())return {ok:false,busy:true};
   const step=analysisUi.missionId===missionId?analysisUi.step:null;
   const req=buildReapproveRequest({missionId,step,evidenceText:analysisUi.evidence});
   if(!req.ok){setStatus(ANALYSIS_REAPPROVE_FORM,{ok:false,errors:req.errors});await ctx.rerender();focusResult(ctx,ANALYSIS_REAPPROVE_FORM,["id:analysis-reapprove-submit","id:analysis-reapprove-evidence"]);return {ok:false,validation:true}}
   drafts.busy[ANALYSIS_REAPPROVE_FORM]=true;
-  let res;try{res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[ANALYSIS_REAPPROVE_FORM]=false}
+  // //TR: kilit görünür olsun (diğer düğmeler istek sürerken kapanır); yeniden çizim reddedilirse de kilit BIRAKILIR (try/finally içinde); düğme kapandığı için odak not bloğuna alınır.
+  let res;try{await ctx.rerender();settle(ctx,["id:analysis-in-flight"]);res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[ANALYSIS_REAPPROVE_FORM]=false}
   if(analysisUi.missionId!==missionId){await ctx.rerender();return {ok:false,stale:true,status:res?.status??null}} // //TR: istek sürerken başka mission seçildi: gelen cevap o mission'ın durumuna yazılmaz
   const o=reapproveOutcome(res,missionId);
   if(o.ok){analysisUi.step=null;analysisUi.evidence="";delete drafts.status[ANALYSIS_STEP_FORM]} // eski "engelli" durum satırı da kalkar // bayat "engelli" cevabı kalmaz; yeni bir adım çalıştırılana kadar hiçbir sonuç iddia edilmez
@@ -45,6 +51,7 @@ export async function submitReapprove(ctx,missionId){
   return {ok:o.ok,kind:o.kind,status:res?.status??null};
 }
 export async function submitAnalysisPlan(ctx,missionId){
+  if(analysisBusy())return {ok:false,busy:true};
   // "Plan oluştur" yalnız bu oturumda bu mission için COMPLETE görülmüşse gönderilir; aksi halde hiçbir şey gitmez.
   if(analysisUi.missionId!==missionId||!analysisUi.step||analysisUi.step.status!=="COMPLETE"){
     setStatus(ANALYSIS_PLAN_FORM,{ok:false,key:"analysis.err.notComplete",vars:{},errors:null});await ctx.rerender();return {ok:false,validation:true};
@@ -52,7 +59,8 @@ export async function submitAnalysisPlan(ctx,missionId){
   const req=buildAnalysisPlanRequest({missionId});
   if(!req.ok){setStatus(ANALYSIS_PLAN_FORM,{ok:false,errors:req.errors});await ctx.rerender();return {ok:false,validation:true}}
   drafts.busy[ANALYSIS_PLAN_FORM]=true;
-  let res;try{res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[ANALYSIS_PLAN_FORM]=false}
+  // //TR: kilit görünür olsun (diğer düğmeler istek sürerken kapanır); yeniden çizim reddedilirse de kilit BIRAKILIR (try/finally içinde); düğme kapandığı için odak not bloğuna alınır.
+  let res;try{await ctx.rerender();settle(ctx,["id:analysis-in-flight"]);res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[ANALYSIS_PLAN_FORM]=false}
   if(analysisUi.missionId!==missionId){await ctx.rerender();return {ok:false,stale:true,status:res?.status??null}} // //TR: istek sürerken başka mission seçildi: gelen cevap o mission'ın durumuna yazılmaz
   const c=classifyAnalysisPlan(res),k=analysisStatusKey(c,res,"plan");
   if(c.kind==="PLAN")analysisUi.plan=c.plan;
@@ -85,14 +93,14 @@ function stuckBlock(ctx,step,missionId){
     return h(doc,"div",{class:"note",dataset:{analysisStuck:"NO_TARGET"}},h(doc,"p",{text:ctx.t("analysis.stuck.noTarget")}),
       step.founderAction?h(doc,"p",{dataset:{analysisFounderAction:"1"},text:step.founderAction}):null);
   }
-  const busy=drafts.busy[ANALYSIS_REAPPROVE_FORM]===true;
+  const busy=analysisBusy();
   return h(doc,"div",{class:"analysis-stuck",role:"group","aria-label":ctx.t("analysis.stuck.title"),dataset:{analysisStuck:t.kind,artifact:t.artifactId}},
     h(doc,"h4",{text:ctx.t("analysis.stuck.title")}),
     h(doc,"p",{text:ctx.t("analysis.stuck.head",{kind:ctx.t(`journey.kind.${t.kind}`)})}),
     h(doc,"p",{class:"note mono",text:t.artifactId}),
     field(ctx,{id:"analysis-reapprove-evidence",labelKey:"predev.evidence.label",value:analysisUi.evidence,onInput:v=>{analysisUi.evidence=v},hintKey:"analysis.stuck.evidenceHint",multiline:true,required:true}),
     h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn btn-primary",id:"analysis-reapprove-submit",dataset:{focusKey:"analysis-reapprove-submit"},disabled:busy,text:ctx.t("analysis.reapprove.button"),
-      on:{click:()=>{if(!drafts.busy[ANALYSIS_REAPPROVE_FORM])submitReapprove(ctx,missionId)}}})),
+      on:{click:()=>{if(!analysisBusy())submitReapprove(ctx,missionId)}}})),
     statusBlock(ctx,ANALYSIS_REAPPROVE_FORM));
 }
 function stepBlock(ctx,step,exec,missionId){
@@ -133,19 +141,20 @@ function planBlock(ctx,plan){
 export function analysisPanel(ctx,{missionId,exec}){
   const doc=ctx.doc;
   if(analysisUi.missionId!==missionId)resetAnalysis(missionId);
-  const busyS=drafts.busy[ANALYSIS_STEP_FORM]===true,busyP=drafts.busy[ANALYSIS_PLAN_FORM]===true,step=analysisUi.step,complete=step&&step.status==="COMPLETE";
+  const busyAny=analysisBusy(),busyS=busyAny,busyP=busyAny,step=analysisUi.step,complete=step&&step.status==="COMPLETE";
   return h(doc,"div",{class:"analysis-step",id:"analysis-step",role:"region","aria-label":ctx.t("analysis.title"),dataset:{analysisMission:missionId}},
     h(doc,"h3",{text:ctx.t("analysis.title")}),
     h(doc,"p",{class:"note",text:ctx.t("analysis.lead")}),
+    busyAny?h(doc,"p",{class:"note",id:"analysis-in-flight",tabindex:"-1",role:"status",dataset:{analysisBusy:"1",focusKey:"analysis-in-flight"},text:ctx.t("busy.missionWrite")}):null,
     h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn btn-primary",id:"analysis-step-submit",dataset:{focusKey:"analysis-step-submit"},disabled:busyS,text:ctx.t("analysis.step.button"),
-      on:{click:()=>{if(!drafts.busy[ANALYSIS_STEP_FORM])submitAnalysisStep(ctx,missionId)}}})),
+      on:{click:()=>{if(!analysisBusy())submitAnalysisStep(ctx,missionId)}}})),
     step?stepBlock(ctx,step,exec,missionId):h(doc,"p",{class:"note",dataset:{analysisStatus:"NONE"},text:ctx.t("analysis.none")}),
     statusBlock(ctx,ANALYSIS_STEP_FORM),
     step&&step.phaseStuck&&step.target?null:statusBlock(ctx,ANALYSIS_REAPPROVE_FORM), // yeniden onay sonucu (engel kalktıysa) burada; engel sürüyorsa kendi bloğunun içindedir
     // Analiz adımı kullanılamıyorsa ya da beklenmedik biçimde bitiyorsa Founder planı elle yazabilir: düğme yalnız Görevler'e gider (orada gönderilen POST zaten kabul edilen /plan yoludur).
     h(doc,"div",{class:"btn-row"},h(doc,"p",{class:"note",dataset:{analysisHandPlan:"1"},text:ctx.t("analysis.handPlan")}),h(doc,"button",{type:"button",class:"btn",id:"analysis-hand-plan",dataset:{focusKey:"analysis-hand-plan"},text:ctx.t("analysis.handPlan.open"),on:{click:()=>{selection.missionId=missionId;ctx.navigate("work")}}})),
     complete?h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn btn-primary",id:"analysis-plan-submit",dataset:{focusKey:"analysis-plan-submit"},disabled:busyP,text:ctx.t("analysis.plan.button"),
-      on:{click:()=>{if(!drafts.busy[ANALYSIS_PLAN_FORM])submitAnalysisPlan(ctx,missionId)}}})):h(doc,"p",{class:"note",dataset:{analysisPlanGate:"CLOSED"},text:ctx.t("analysis.plan.gate")}),
+      on:{click:()=>{if(!analysisBusy())submitAnalysisPlan(ctx,missionId)}}})):h(doc,"p",{class:"note",dataset:{analysisPlanGate:"CLOSED"},text:ctx.t("analysis.plan.gate")}),
     statusBlock(ctx,ANALYSIS_PLAN_FORM),
     analysisUi.plan?planBlock(ctx,analysisUi.plan):null,
     analysisUi.plan?h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn",id:"analysis-open-plan",dataset:{focusKey:"analysis-open-plan"},text:ctx.t("analysis.plan.open"),on:{click:()=>{selection.missionId=missionId;ctx.navigate("work")}}})):null);

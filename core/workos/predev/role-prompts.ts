@@ -1,5 +1,6 @@
 // //TR: Bu dosya ilk-sürüm pre-dev rollerinin prompt ŞABLONLARINI SALT VERİ (TypeScript string sabitleri) olarak tutar; prompts/ KORUNMUŞ önekine HİÇBİR dosya eklemez/değiştirmez (bu şablonlar runtime prompt dosyası değil, kod sabitidir). Her şablon bir CLAUDE_BUILDER'a YALNIZ o tür için tipli sözleşme şeklini üretmesini söyler; açık kurallarla: proje özetinde veya onaylı üst artefaktlarda OLMAYAN gerçekleri ASLA uydurma; izlenebilirlik alanlarını gerçek kimliklerle doldur; bilgi eksikse uydurmak yerine açık bir varsayım/açık-soru maddesi yaz. Şablonlar sır veya ağ adresi taşımaz; yan etkisi yoktur.
 import {PRE_DEV_ROLE_MAP} from "./types.js";
+import {PLACEHOLDER_MARKER} from "./placeholder.js";
 import type {ArtifactKind} from "./types.js";
 import type {MissionContext} from "./driver.js";
 
@@ -95,6 +96,38 @@ export const ROLE_PROMPTS: Readonly<Record<ArtifactKind, RolePromptTemplate>> = 
 
 export function getRolePrompt(kind: ArtifactKind): RolePromptTemplate { return ROLE_PROMPTS[kind]; }
 
+// //TR: C-FLOW-ANALYSIS-2: yer tutucu işareti. İskeletteki her yer tutucu değer bu işaretle başlar; model çıktısında KALAN herhangi bir işaret (her büyük/küçük harf, boşluk ve Unicode varyantı) validateArtifactContent içindeki paylaşılan korumayla reddedilir (driver'da PREDEV_DRIVER_PLACEHOLDER_VALUE, store yazma kapısında/rework'te/yetkinlik değerlendirmesinde PLACEHOLDER_VALUE); iskeleti olduğu gibi yankılayan çıktı sahte geçiş olamaz.
+export {PLACEHOLDER_MARKER}; // //TR: işaretin tanımı ve koruma placeholder.ts'tedir (validateArtifactContent ile paylaşılır)
+const F = (hint: string) => `${PLACEHOLDER_MARKER}: ${hint}>>`;
+
+// //TR: Tür başına çıktı iskeleti: doğrulayıcıların (validators.ts exactKeys) kabul ettiği TAM anahtar kümesi ve iç içe şekil. Örnek id'ler (G1, FR1, S1, WP1...) yalnız biçimi gösterir; izlenebilirlik alanları yer tutucudur (modelin onaylı üst artefakttaki GERÇEK id'leri yazması gerekir). Test, iskeleti doldurup gerçek doğrulayıcılardan geçirerek anahtar kümesinin sapmadığını kanıtlar.
+export const OUTPUT_SKELETONS: Readonly<Record<ArtifactKind, unknown>> = {
+  BusinessAnalysis: {
+    problem: F("problem statement from the brief"), stakeholders: [F("stakeholder from the brief")],
+    goals: [{id: "G1", statement: F("business goal derived from the brief objectives")}],
+    constraints: [F("constraint from the brief")], successMetrics: [F("measurable success metric")], assumptions: [F("explicit assumption")], risks: [F("risk")]
+  },
+  Requirements: {
+    functional: [{id: "FR1", statement: F("functional requirement"), acceptanceCriteria: [F("testable acceptance criterion")], tracesTo: [F("goal id that exists in the approved BusinessAnalysis")]}],
+    nonFunctional: [{id: "NFR1", statement: F("non-functional requirement"), acceptanceCriteria: [F("testable acceptance criterion")], tracesTo: [F("goal id that exists in the approved BusinessAnalysis")]}]
+  },
+  Plan: {
+    scope: [{id: "S1", statement: F("scope item")}],
+    workPackages: [{id: "WP1", title: F("work package title"), dependsOn: [], estimate: F("estimate, e.g. 2d"), satisfies: [F("requirement id that exists in the approved Requirements")]}],
+    milestones: [{id: "M1", title: F("milestone title"), workPackageIds: ["WP1"]}],
+    outOfScope: [F("explicitly out of scope")]
+  },
+  Architecture: {
+    components: [{id: "C1", name: F("component name"), responsibility: F("component responsibility"), covers: [F("scope id that exists in the approved Plan")]}],
+    techChoices: [{choice: F("technology choice"), rationale: F("why"), alternativesConsidered: [F("alternative that was considered")]}],
+    dataModel: F("data model description"), integrations: [F("integration")], infraNeeds: [F("infrastructure need")], risks: [F("risk")]
+  },
+  UxSpec: {
+    screens: [{id: "SC1", name: F("screen name")}], flows: [{id: "F1", name: F("flow name"), steps: [F("flow step")]}],
+    components: [{id: "UC1", name: F("UI component name")}], a11yNotes: [F("accessibility note")]
+  }
+};
+
 // //TR: Şablonu + SALT-OKUNUR mission bağlamını (proje özeti + onaylı üst artefaktlar) tek bir prompt metnine dürüstçe birleştirir. Yetkili kaynak malzeme olarak yalnız bu bağlam gömülür; böylece "özette/üstte olmayanı uydurma" kuralı somutlaşır. Saf string birleştirme; ağ/dosya/sır yok.
 export function composeRolePrompt(kind: ArtifactKind, missionContext: MissionContext): string {
   const t = ROLE_PROMPTS[kind];
@@ -122,7 +155,9 @@ export function composeRolePrompt(kind: ArtifactKind, missionContext: MissionCon
     JSON.stringify(missionContext.approvedUpstream),
     "",
     `## ÇIKTI`,
-    `Yalnız ${t.kind} tipli sözleşme şekline uyan tek bir JSON nesnesi döndür.`
+    `Yalnız ${t.kind} tipli sözleşme şekline uyan tek bir JSON nesnesi döndür.`,
+    `Aşağıdaki iskelet YALNIZ şekli gösterir (anahtar kümesi tam olarak budur; liste öğeleri çoğaltılabilir). "${PLACEHOLDER_MARKER}" ile başlayan HER değeri proje özetinden/onaylı üst artefaktlardan gelen GERÇEK içerikle değiştir; hiçbir yer tutucu bırakma (bırakılırsa çıktı reddedilir).`,
+    JSON.stringify(OUTPUT_SKELETONS[kind], null, 2)
   ];
   return lines.join("\n");
 }

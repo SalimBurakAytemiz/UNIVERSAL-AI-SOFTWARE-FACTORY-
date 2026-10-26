@@ -52,7 +52,10 @@ export interface RoleLifecycle { roleId: string; guildId: string; registered: tr
 export interface LifecycleContext {
   bindings: readonly RoleExecutionProfile[]; verify: EvidenceVerifier; runningRoleIds: ReadonlySet<string>; nowMs: number;
 }
-const consumedFunctions = (): ReadonlySet<string> => new Set(Object.values(STAGE_CONSUMERS).flat());
+// //TR: C-RDY-1: readiness-audit.ts aynı tüketilen-fonksiyon kümesini kullanır (tek doğruluk kaynağı); davranış değişmedi, yalnız dışa açıldı.
+export const consumedFunctions = (): ReadonlySet<string> => new Set(Object.values(STAGE_CONSUMERS).flat());
+// //TR: C-RDY-1: run günlüğü gözlemi. ABSENT = günlük yok (running ÖLÇÜLEMEZ, 0 değildir); PRESENT = günlük var ve runs gerçek listedir (boş liste ölçülmüş sıfırdır).
+export type RunsObservation = {journal: "PRESENT"; runs: readonly Pick<WorkRun, "status" | "evidence">[]} | {journal: "ABSENT"};
 
 export function roleLifecycle(role: LifecycleRole, catalog: readonly CatalogRoleLike[], ctx: LifecycleContext): RoleLifecycle {
   const res = resolveRoleExecution(role.roleId, catalog, ctx.bindings);
@@ -90,6 +93,9 @@ export interface RoleStatusSummary {
 }
 export interface SummaryInput { roles: readonly LifecycleRole[]; guildIds: readonly string[]; roleDefinitionsSha256: string; bindings: readonly RoleExecutionProfile[]; verify: EvidenceVerifier; runs: readonly Pick<WorkRun, "status" | "evidence">[]; now: Date }
 
+/**
+ * @deprecated Legacy 5-counter projection kept for the existing renderer contract (apps/desktop/renderer/agent-factory-core.js:20-41 requires integer counters). The authoritative measurement is computeRoleReadiness in ./readiness-audit.ts. running=0 with an absent journal is not a measurement.
+ */
 export function computeRoleStatusSummary(i: SummaryInput): RoleStatusSummary {
   const known = new Set(i.roles.map(r => r.roleId));
   const ctx: LifecycleContext = {bindings: i.bindings, verify: i.verify, runningRoleIds: runningRoleIdsFromRuns(i.runs, known), nowMs: i.now.getTime()};

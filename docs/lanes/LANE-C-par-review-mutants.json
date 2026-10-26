@@ -1,0 +1,1100 @@
+{
+ "//TR": "C-PAR-1 inceleme turu 1-3 (#224) mutasyon listesi: her mutant tam metin değişikliğidir (dosyada tam 1 kez bulunmalı; edits varsa hepsi). docs/lanes/LANE-C-par-review-mutants.mjs her birini uygular ve mutanta özgü testleri (testFile + -t filter) çalıştırır; taban çizgisi iki dosyanın tümüdür. Tur 3'te kod değişince EP1/LL1/SW3/R10a/R10b/R12 kalıpları onarıldı; B1-B6, H1-H3, S3a-b, W4a-d, F1-F5, X6a-b, A1-A4, C1-C2, T1, D1 eklendi. Windows'a özgü bağlantı (creationTicks/probe) Linux'ta çalıştırılamaz: saf karar fonksiyonları (accessDeniedVerdict, reusedPid, startedAfterRecord, waitWriterGone) mutantlıdır, `process.platform === \"win32\" ? probe : undefined` bağlantısı değil (Linux'ta eşdeğer). Tur 3 sonu: G1 (git çocuğu detached değil), K1-K2, F6 (yeniden denemede ön tarama), A5 eklendi (toplam 81); tur 3 onarım itmesi: GA1-GA3 (64 MiB taşma koruması ve sınırı), TA1-TA2 (T-ABORT-1: kök + torun ölümü), ST5 (sınırlı stop), SP1-SP7 (ctx.span bağlantısı) eklendi; M3 ve ST4 geri yüklenen/sınırlı testlere karşı yeniden koşturuldu (toplam 94).; #224 delta incelemesi sonrası: GA4-GA5 (ham bayt sayımı, taşmada tek kill), SF1-SF3 (withFinalStop), CE1-CE4 (crashEngine: sessiz motor, yeniden deneme, canlı motoru öldürmeme, run kaydı) eklendi (toplam 103); CE2 \"retry ile gizlenen aralıklı erken bitiş\" sondasını geri getirir ve test BAŞARISIZ olmalıdır.; #224 son tur (TEP-1): SF1-SF3 yeniden yazıldı (withFinalStop: gövde hatası birincil, cleanup/stop sorunları eklenir), SF4-SF5 ve CE5-CE7 eklendi (öldürmeden önce canlılık, SIGKILL sinyali, sahip kaydı) (toplam 108).; reviewer-blocked (FOUNDER_ACTIONABLE_REFUSAL): RB1-RB2 (toplam 110).",
+ "mutants": [
+  {
+   "id": "GS1",
+   "description": "no reap at the start of a taken-over run's drive (cancel and exhausted paths never stop the writer)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "PAR04-GSTOP|TK-2",
+   "old": "if (own && own.recovered && own.reap === null) own.reap = await this.reapPriorWriter(run, leaseId);",
+   "new": ""
+  },
+  {
+   "id": "GS2",
+   "description": "the exhausted takeover drops the writer note",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "TK-2",
+   "old": "const writer = w.problem ? `${w.problem}: ${w.note}` : w.note;",
+   "new": "const writer = \"\";"
+  },
+  {
+   "id": "GS3",
+   "description": "the cancel evidence drops the writer note",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "PAR04-GSTOP",
+   "old": "note: `${why}${writerNote ? `; writer ${writerNote}` : \"\"}`.slice(0, 500)",
+   "new": "note: `${why}`.slice(0, 500)"
+  },
+  {
+   "id": "EP1",
+   "description": "EPERM is mapped to unknown before the start token is compared (the base regression)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "TK-3",
+   "edits": [
+    {
+     "old": "    if (st === \"OTHER_USER\") {\n      const probe = process.platform === \"win32\" ? {creationTicks: await creationTicks(pgid), recordedStart: prev.childStart, recordAtIso: prev.at} : undefined;\n      return accessDeniedVerdict(process.platform, now, probe) === \"NOT_OUR_WRITER\" ? {problem: null, note: `pid ${pgid} is not accessible to this user, its start time is unreadable and its creation time differs from the recorded writer; it cannot be the recorded writer`} : alive(`writer group ${pgid} state unknown`);\n    }\n",
+     "new": ""
+    },
+    {
+     "old": "    const now = await startToken(pgid);\n    // //TR: TK-3",
+     "new": "    if (st === \"OTHER_USER\") return alive(`writer group ${pgid} state unknown`);\n    const now = await startToken(pgid);\n    // //TR: TK-3"
+    }
+   ]
+  },
+  {
+   "id": "BT1",
+   "description": "a torn owner record older than the boot is still fail-closed",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "TK-4: a torn",
+   "old": "if (rec.mtimeMs !== null && rec.mtimeMs + BOOT_GRACE_MS < bootTimeMs())",
+   "new": "if (false)"
+  },
+  {
+   "id": "BT2",
+   "description": "a record from another boot is not recognised",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "TK-4: a torn",
+   "old": "if (prev.bootId !== null && this.boot !== null && !sameBoot(prev.bootId, this.boot))",
+   "new": "if (false)"
+  },
+  {
+   "id": "LL1",
+   "description": "a leaderless group is killed without proof",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "TK-7",
+   "old": "if (now === null) { const proof = leaderlessGroupProof(pgid, prev); if (!proof.ok) return alive(proof.why, proof.transient === true); }",
+   "new": ""
+  },
+  {
+   "id": "LL2",
+   "description": "leaderless proof ignores the members' start times",
+   "file": "core/workos/writer-guard.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "TK-7",
+   "old": "members.some(m => !Number.isSafeInteger(m.start) || m.start < childStart)",
+   "new": "false"
+  },
+  {
+   "id": "LL3",
+   "description": "leaderless proof ignores the boot",
+   "file": "core/workos/writer-guard.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "TK-7",
+   "old": "if (prev.bootId === null || !sameBoot(prev.bootId, bootId()))",
+   "new": "if (false)"
+  },
+  {
+   "id": "SW1",
+   "description": "the detached-descendant sweep is off",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "TK-1",
+   "old": "if (!previousBoot && process.platform === \"linux\") {",
+   "new": "if (false) {"
+  },
+  {
+   "id": "SW2",
+   "description": "the sweep ignores the lease marker",
+   "file": "core/workos/writer-guard.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "TK-1: a descendant",
+   "old": "hit = o.includeCurrent === true || lease !== current;",
+   "new": "hit = false;"
+  },
+  {
+   "id": "SW3",
+   "description": "the sweep ignores the working directory",
+   "file": "core/workos/writer-guard.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "TK-1 \\(cwd\\)",
+   "old": "hit = inWriterDir(fs.readlinkSync(`/proc/${name}/cwd`), dirs);",
+   "new": "hit = false;"
+  },
+  {
+   "id": "SW4",
+   "description": "the FAKE implementer does not receive the lease marker",
+   "file": "core/workos/executors.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "TK-1: a descendant",
+   "old": "env: withWriterEnv(env(), ctx), timeoutMs: ctx.timeoutMs, input: JSON.stringify(self.script.implement(n, spec)),",
+   "new": "env: env(), timeoutMs: ctx.timeoutMs, input: JSON.stringify(self.script.implement(n, spec)),"
+  },
+  {
+   "id": "SG1",
+   "description": "termination forwarding is never installed (writer-guard)",
+   "file": "core/workos/writer-guard.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "TK-5",
+   "old": "if (forwardRefs++ === 0) {",
+   "new": "if (forwardRefs++ < 0) {"
+  },
+  {
+   "id": "SG2",
+   "description": "start() does not install termination forwarding",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "TK-5",
+   "old": "this.forwardOff ??= installTerminationForwarding();",
+   "new": ""
+  },
+  {
+   "id": "SG3",
+   "description": "spawned groups are not tracked for forwarding",
+   "file": "core/workos/writer-guard.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "TK-5",
+   "old": "export const trackWriterGroup = (pgid: number): void => { if (process.platform !== \"win32\") liveGroups.add(pgid); };",
+   "new": "export const trackWriterGroup = (_pgid: number): void => undefined;"
+  },
+  {
+   "id": "AT1",
+   "description": "the owner record is written non-atomically",
+   "file": "core/workos/writer-guard.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "TK-4: owner.json",
+   "old": "export function writeOwner(file: string, rec: WorkspaceOwner): void { writeJsonAtomic(file, rec); }",
+   "new": "export function writeOwner(file: string, rec: WorkspaceOwner): void { fs.writeFileSync(file, JSON.stringify(rec) + \"\\n\"); }"
+  },
+  {
+   "id": "AT2",
+   "description": "a step-start owner write failure is not retried",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "TK-4: the owner record cannot",
+   "old": "try { this.writeOwner(run.runId, this.ownerRecord(cur, leaseId)); } catch { await this.applyOutcome(cur, leaseId, {kind: \"RETRY\", reason: \"OWNER_RECORD_WRITE_FAILED\"}); return; }",
+   "new": "this.writeOwner(run.runId, this.ownerRecord(cur, leaseId));"
+  },
+  {
+   "id": "PS1",
+   "description": "the ps identity command does not pin TZ",
+   "file": "core/workos/writer-guard.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "TK-6",
+   "old": "env: {LC_ALL: \"C\", LANG: \"C\", TZ: \"UTC0\", PATH: \"/bin:/usr/bin\"}",
+   "new": "env: {PATH: \"/bin:/usr/bin\"}"
+  },
+  {
+   "id": "WK1",
+   "description": "the Windows kill accepts a non-numeric token",
+   "file": "core/workos/writer-guard.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "TK-6",
+   "old": "!/^\\d{1,20}$/.test(expectedStart)",
+   "new": "false"
+  },
+  {
+   "id": "HB1",
+   "description": "the engine commit is synchronous again",
+   "file": "core/workos/builder-output.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "HB-1",
+   "old": "step = g.next(await runGitAsync(workspace, [...HARDEN, ...step.value.args], env, o.onSpawn));",
+   "new": "{ const r = spawnGitSync(workspace, [...HARDEN, ...step.value.args], {env, maxBuffer: 64 * 1024 * 1024}); step = g.next({status: r.status, stdout: String(r.stdout ?? \"\"), stderr: String(r.stderr ?? \"\")}); }"
+  },
+  {
+   "id": "HB2",
+   "description": "the per-file test-surface read does not renew the leases",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "HB-2",
+   "old": "{ this.renewAllOwned(); const x = this.gitSync(scanClone, [\"show\", `${ref}:${p}`]);",
+   "new": "{ const x = this.gitSync(scanClone, [\"show\", `${ref}:${p}`]);"
+  },
+  {
+   "id": "HB3",
+   "description": "no drift sentinel",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "HB-3",
+   "old": "if (drift > this.o.leaseTtlMs / 6) this.stallAt = Date.now();",
+   "new": ""
+  },
+  {
+   "id": "ST1",
+   "description": "stop() does not await the drives",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "STOP-NO-ABORT",
+   "old": "return Promise.allSettled(drives).then(() => { off?.(); if (this.timer === null && this.stopEpoch === epoch) this.stopping = false; });",
+   "new": "off?.(); this.stopping = false; return Promise.resolve();"
+  },
+  {
+   "id": "ST2",
+   "description": "stop() does not abort in-flight children",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "STOP-NO-ABORT",
+   "old": "lost || entry?.lost === true || this.halted(epoch) || this.stopActive() !== null",
+   "new": "lost || entry?.lost === true || this.stopActive() !== null"
+  },
+  {
+   "id": "ST4",
+   "description": "a stopping engine starts the next step",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "STOP-NO-ABORT",
+   "old": "if (this.halted(epoch)) { this.owned.delete(runId); return steps > 0; } // motor kapanıyor: yeni adım yok, run bırakılır (lease dolunca sonraki engine devralır)\n",
+   "new": ""
+  },
+  {
+   "id": "M3",
+   "description": "no work-conserving refill",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "PAR05-REFILL",
+   "old": "if (this.timer && this.owned.size < this.o.maxConcurrentRuns) setImmediate(() => { if (this.timer) this.pump(true); });",
+   "new": ""
+  },
+  {
+   "id": "M9",
+   "description": "the engine takes over its own in-flight run",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "SELF-TAKEOVER",
+   "old": "if (this.owned.get(run.runId)?.drive) continue;",
+   "new": "if (false) continue;"
+  },
+  {
+   "id": "M11",
+   "description": "an unrecordable child is not killed",
+   "file": "core/workos/executors.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "M11",
+   "old": "spawnError = true; stderr = `SPAWN_RECORD_FAILED: ${(e as Error).message}`; settled = true; killTree(child, group);",
+   "new": "spawnError = true; stderr = `SPAWN_RECORD_FAILED: ${(e as Error).message}`; settled = true;"
+  },
+  {
+   "id": "M5",
+   "description": "recordChild does not check the lease",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "M5",
+   "old": "    const o = this.ownerOf(run.runId);\n    if (!o || o.leaseId !== leaseId) throw new WorkOsError(\"WORKOS_LEASE_FENCED\", run.runId);\n    const pgid = c.pgid ?? c.pid;",
+   "new": "    const o = this.ownerOf(run.runId);\n    if (!o) throw new WorkOsError(\"WORKOS_LEASE_FENCED\", run.runId);\n    const pgid = c.pgid ?? c.pid;"
+  },
+  {
+   "id": "M10",
+   "description": "the `lost` flag is not in the abort predicate",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "M10",
+   "old": "lost || entry?.lost === true || this.halted(epoch)",
+   "new": "lost || this.halted(epoch)"
+  },
+  {
+   "id": "M7",
+   "description": "only the leader of the writer group is killed",
+   "file": "core/workos/writer-guard.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "M7",
+   "old": "try { process.kill(-pgid, \"SIGKILL\"); } catch { /* grup zaten bitmiş olabilir */ }\n  return Promise.resolve();",
+   "new": "try { process.kill(pgid, \"SIGKILL\"); } catch { /* grup zaten bitmiş olabilir */ }\n  return Promise.resolve();"
+  },
+  {
+   "id": "R1",
+   "description": "R2-1: stop() releases the exit/signal hooks immediately (before the drives settled)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "R2-1",
+   "old": "const off = this.forwardOff; this.forwardOff = null;",
+   "new": "const off = null; this.forwardOff?.(); this.forwardOff = null;"
+  },
+  {
+   "id": "R2",
+   "description": "R2-2: the signal handler does not mark the process as terminating",
+   "file": "core/workos/writer-guard.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "R2-2",
+   "old": "const h = () => { terminating = true; killTrackedGroups();",
+   "new": "const h = () => { killTrackedGroups();"
+  },
+  {
+   "id": "R2b",
+   "description": "R2-2: a halted engine still records FAILED/BLOCKED/RETRY outcomes of killed children",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "R2-2",
+   "old": "if (this.halted(epoch) && out.kind !== \"DONE\" && out.kind !== \"REMEDIATE\" && !(out.kind === \"CANCEL\" && this.stopActive() !== null)) return;",
+   "new": ""
+  },
+  {
+   "id": "R3",
+   "description": "R2-3: halted() ignores the stop epoch (stop() then start() resets the abort)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "R2-3",
+   "old": "return this.stopping || isTerminating() || this.stopEpoch !== epoch;",
+   "new": "return this.stopping || isTerminating();"
+  },
+  {
+   "id": "R4",
+   "description": "R2-4: an owner-record failure in the engine commit is a permanent BUILDER_* block again",
+   "file": "core/workos/builder-output.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "R2-4/5",
+   "old": "if (r.status === null && String(r.stderr ?? \"\").startsWith(\"SPAWN_RECORD_FAILED\")) recordFailed = true;",
+   "new": ""
+  },
+  {
+   "id": "R5a",
+   "description": "R2-5: the engine commit's git children get no lease marker",
+   "file": "core/workos/executors.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "R2-4/5",
+   "old": "{span: sp, extraEnv: ctx.writerEnv, onSpawn: shortChildren(ctx.onSpawn)}",
+   "new": "{span: sp, onSpawn: shortChildren(ctx.onSpawn)}"
+  },
+  {
+   "id": "R5b",
+   "description": "R2-5: the engine commit's git children are not reported as short-lived",
+   "file": "core/workos/executors.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "R2-4/5",
+   "old": "onSpawn && (c => onSpawn({...c, short: true}));",
+   "new": "onSpawn;"
+  },
+  {
+   "id": "R7",
+   "description": "R2-7: a leaderless group is killed without the lease-marker proof",
+   "file": "core/workos/writer-guard.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "TK-7",
+   "old": "if (!members.some(m => envHas(m.pid, mark))) return {ok: false, why: `writer group ${pgid} has no leader and no member carries the recorded lease marker`};",
+   "new": ""
+  },
+  {
+   "id": "R8",
+   "description": "R2-8: the sweep signals each process only once",
+   "file": "core/workos/writer-guard.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "R2-8",
+   "old": "for (const pid of hits) { killed.add(pid); kill(pid); }",
+   "new": "for (const pid of hits) { if (!killed.has(pid)) kill(pid); killed.add(pid); }"
+  },
+  {
+   "id": "R9",
+   "description": "R2-9: the run directory is compared lexically (a symlinked data directory disables the cwd sweep)",
+   "file": "core/workos/writer-guard.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "R2-9",
+   "old": "const dirs = [...new Set([o.runDir, canonicalDir(o.runDir)])];",
+   "new": "const dirs = [o.runDir];"
+  },
+  {
+   "id": "R10a",
+   "description": "R2-10: no sweep of the step's own lease marker after the implementer (timeout/abort/retry paths)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "R2-10",
+   "old": "if (!(await this.sweepOwnWriters(run, leaseId))) return {kind: \"RETRY\", reason: \"WORKSPACE_WRITER_ALIVE\"};",
+   "new": ""
+  },
+  {
+   "id": "R10b",
+   "description": "R2-10: the own-lease sweep ignores the current lease's marker (takeover semantics)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "R2-10",
+   "old": "currentLeaseId: leaseId, includeCurrent: true, byCwd: false}",
+   "new": "currentLeaseId: leaseId, byCwd: false}"
+  },
+  {
+   "id": "R11",
+   "description": "R2-11: the owner-record refresh at the end of the takeover is unguarded (a write failure blocks the emergency cancel)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "R2-11",
+   "old": "try { this.writeOwner(run.runId, this.ownerRecord(run, leaseId)); } catch { note = `${note ? `${note}; ` : \"\"}owner record not refreshed`; }",
+   "new": "this.writeOwner(run.runId, this.ownerRecord(run, leaseId));"
+  },
+  {
+   "id": "R12",
+   "description": "R2-12: an access-denied pid with a READABLE start token is judged by the creation time on Windows (the fail-open the Windows CI found)",
+   "file": "core/workos/writer-guard.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "R2-12",
+   "old": "if (platform !== \"win32\" || startTokenNow !== null || !probe || probe.creationTicks === null) return \"UNKNOWN\";",
+   "new": "if (platform !== \"win32\" || !probe || probe.creationTicks === null) return \"UNKNOWN\";"
+  },
+  {
+   "id": "B1",
+   "description": "SWEEP-2: the sweep after a NORMAL implementer matches by cwd again (byCwd:false removed)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "SWEEP-2",
+   "old": "currentLeaseId: leaseId, includeCurrent: true, byCwd: false}",
+   "new": "currentLeaseId: leaseId, includeCurrent: true}"
+  },
+  {
+   "id": "B2",
+   "description": "SWEEP-2: findLeaseWriters ignores byCwd:false",
+   "file": "core/workos/writer-guard.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "SWEEP-2",
+   "old": "if (!hit && o.byCwd !== false && tty === 0) {",
+   "new": "if (!hit && tty === 0) {"
+  },
+  {
+   "id": "B3",
+   "description": "SWEEP-2: the cwd rule reaches processes with a controlling terminal",
+   "file": "core/workos/writer-guard.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "SWEEP-2",
+   "old": "if (!hit && o.byCwd !== false && tty === 0) {",
+   "new": "if (!hit && o.byCwd !== false) {"
+  },
+  {
+   "id": "B4",
+   "description": "SWEEP-2: the cwd rule reaches logs/ (any directory under the run dir)",
+   "file": "core/workos/writer-guard.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "TK-1 \\(cwd\\)",
+   "old": "dirs.some(d => cwd.startsWith(d + path.sep) && RUN_WRITER_DIR.test(cwd.slice(d.length + 1).split(path.sep)[0]))",
+   "new": "dirs.some(d => cwd.startsWith(d + path.sep))"
+  },
+  {
+   "id": "B5",
+   "description": "SWEEP-2: the cwd rule reaches the run root itself",
+   "file": "core/workos/writer-guard.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "TK-1 \\(cwd\\)",
+   "old": "dirs.some(d => cwd.startsWith(d + path.sep) && RUN_WRITER_DIR.test(",
+   "new": "dirs.some(d => cwd === d || cwd.startsWith(d + path.sep) && RUN_WRITER_DIR.test("
+  },
+  {
+   "id": "B6",
+   "description": "SWEEP-2: the clone directories are not writer directories (only work/)",
+   "file": "core/workos/writer-guard.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "TK-1 \\(cwd\\)",
+   "old": "export const RUN_WRITER_DIR = /^(work|(scan|security|review)-.+)$/;",
+   "new": "export const RUN_WRITER_DIR = /^work$/;"
+  },
+  {
+   "id": "H1",
+   "description": "HB-R3-1: gitW returns the killed child's result (no OwnerRecordError): the caller turns it into a terminal block",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "HB-R3-1",
+   "old": "throw new OwnerRecordError();",
+   "new": "return r;"
+  },
+  {
+   "id": "H2",
+   "description": "HB-R3-1: executeStep does not map OwnerRecordError to RETRY (the error ends as ENGINE_ERROR)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "HB-R3-1",
+   "old": "if (e instanceof OwnerRecordError) out = {kind: \"RETRY\", reason: \"OWNER_RECORD_WRITE_FAILED\"};",
+   "new": "if (e instanceof OwnerRecordError) throw e;"
+  },
+  {
+   "id": "H3",
+   "description": "HB-R3-1: a real fence is treated as a record failure (RETRY instead of fenced)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "HB-R3-1",
+   "old": "    if (recordError instanceof WorkOsError && recordError.code === \"WORKOS_LEASE_FENCED\") throw recordError;\n",
+   "new": ""
+  },
+  {
+   "id": "S3a",
+   "description": "SWEEP-3: no kill of the leftover group after a child ends",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "SWEEP-3",
+   "old": "leaderlessGroupProof(pgid, this.ownerRecord(run, leaseId, {childPgid: pgid, childStart: started})).ok)",
+   "new": "false)"
+  },
+  {
+   "id": "S3b",
+   "description": "SWEEP-3: the leftover group is killed without proof (marker / age)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "SWEEP-3",
+   "old": "leaderlessGroupProof(pgid, this.ownerRecord(run, leaseId, {childPgid: pgid, childStart: started})).ok)",
+   "new": "true)"
+  },
+  {
+   "id": "W4a",
+   "description": "SWEEP-4: a pid that started after the record is not judged reused",
+   "file": "core/workos/writer-guard.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "SWEEP-4",
+   "old": "return started !== null && Number.isFinite(at) && started > at + slackMs;",
+   "new": "return false;"
+  },
+  {
+   "id": "W4b",
+   "description": "SWEEP-4: the wait after the kill does not stop on a changed start token",
+   "file": "core/workos/writer-guard.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "SWEEP-4",
+   "old": "if (startedToken !== null) { const t = await token(pgid); if (t !== null && t !== startedToken) return \"REUSED\"; }",
+   "new": ""
+  },
+  {
+   "id": "W4c",
+   "description": "SWEEP-4: reusedPid ignores the record time when there is no recorded token",
+   "file": "core/workos/writer-guard.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "SWEEP-4",
+   "old": "  return startedAfterRecord(platform, tokenNow, prev.at);\n}",
+   "new": "  return false;\n}"
+  },
+  {
+   "id": "W4d",
+   "description": "SWEEP-4: the takeover does not use reusedPid (a reused pid stays fail-closed / is signalled)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "TK-3",
+   "old": "if (reusedPid(process.platform, prev, now)) return",
+   "new": "if (false) return"
+  },
+  {
+   "id": "F1",
+   "description": "SWEEP-5: a transient takeover failure is terminal again",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "SWEEP-5",
+   "old": "if (w.problem && reap?.transient === true) retryLater = true;",
+   "new": "if (false) retryLater = true;"
+  },
+  {
+   "id": "F2",
+   "description": "SWEEP-5: the retry does not stop the drive (the step runs despite the surviving writer)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "SWEEP-5",
+   "old": "    if (retryLater) return false;",
+   "new": "    if (retryLater) return true;"
+  },
+  {
+   "id": "F3",
+   "description": "SWEEP-5: survivors after the implementer are a terminal FAILED again",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "SWEEP-5",
+   "old": "if (!(await this.sweepOwnWriters(run, leaseId))) return {kind: \"RETRY\", reason: \"WORKSPACE_WRITER_ALIVE\"};",
+   "new": "if (!(await this.sweepOwnWriters(run, leaseId))) return {kind: \"BLOCK\", reason: \"WORKSPACE_WRITER_ALIVE\", status: \"FAILED\"};"
+  },
+  {
+   "id": "F4",
+   "description": "SWEEP-5: sweep survivors at takeover are not transient",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "SWEEP-5",
+   "old": "survived the sweep`, true);",
+   "new": "survived the sweep`);"
+  },
+  {
+   "id": "F5",
+   "description": "SWEEP-5: the recovery budget does not end a transient retry loop",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "SWEEP-5",
+   "old": "if (exhausted) problems.push(\"RECOVERY_BUDGET_EXHAUSTED\");",
+   "new": "if (exhausted && reap?.transient !== true) problems.push(\"RECOVERY_BUDGET_EXHAUSTED\");"
+  },
+  {
+   "id": "X6a",
+   "description": "SWEEP-6: any creation-time difference counts (no tolerance, no recorded comparison)",
+   "file": "core/workos/writer-guard.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "SWEEP-6",
+   "old": "return recorded !== null && Math.abs(created - recorded) > CREATION_TOLERANCE_MS ? \"NOT_OUR_WRITER\" : \"UNKNOWN\"; }",
+   "new": "return recorded !== null ? \"NOT_OUR_WRITER\" : \"UNKNOWN\"; }"
+  },
+  {
+   "id": "X6b",
+   "description": "SWEEP-6: no second source needed (an unreadable StartTime alone is 'not our writer')",
+   "file": "core/workos/writer-guard.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "SWEEP-6",
+   "old": "startTokenNow !== null || !probe || probe.creationTicks === null) return \"UNKNOWN\";",
+   "new": "startTokenNow !== null) return \"UNKNOWN\"; if (!probe || probe.creationTicks === null) return \"NOT_OUR_WRITER\";"
+  },
+  {
+   "id": "A1",
+   "description": "HB-R3-2: the abort signal is never polled after the spawn",
+   "file": "core/workos/git-async.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "HB-R3-2",
+   "old": "poll = setInterval(() => { if (!shouldAbort()) return; kill(); settle({status: null, stdout: \"\", stderr: \"ABORTED\", aborted: true}); }, 100);\n        poll.unref?.();",
+   "new": ""
+  },
+  {
+   "id": "A2",
+   "description": "HB-R3-2: gitW does not pass the abort signal to the git child",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "HB-R3-2",
+   "old": "this.git(cwd, args, onSpawn, writerEnvFor(run.runId, leaseId), abort)",
+   "new": "this.git(cwd, args, onSpawn, writerEnvFor(run.runId, leaseId))"
+  },
+  {
+   "id": "A3",
+   "description": "HB-R3-2: an aborted git child is not turned into CANCEL",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "HB-R3-2",
+   "old": "else if (e instanceof StepAbortedError) out = {kind: \"CANCEL\", reason: this.cancelReason()};",
+   "new": "else if (e instanceof StepAbortedError) throw e;"
+  },
+  {
+   "id": "A4",
+   "description": "HB-R3-2: gitW ignores an aborted git result",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "HB-R3-2",
+   "old": "if (r.aborted) throw new StepAbortedError();",
+   "new": ""
+  },
+  {
+   "id": "C1",
+   "description": "HB-1 (crew bridge): the engine commit uses the blocking driver",
+   "file": "core/workos/crew/dev-review.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "HB-1 \\(crew",
+   "edits": [
+    {
+     "old": "import {agentConfigInWorkspace, commitBuilderOutputAsync, gitControlDigest}",
+     "new": "import {agentConfigInWorkspace, commitBuilderOutput, gitControlDigest}"
+    },
+    {
+     "old": "await commitBuilderOutputAsync(workspace,",
+     "new": "commitBuilderOutput(workspace,"
+    }
+   ]
+  },
+  {
+   "id": "C2",
+   "description": "HB-1 (reviewer snapshot): the before-snapshot runs outside ctx.span",
+   "file": "core/workos/executors.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "HB-1 \\(reviewer",
+   "old": "const before = sp(() => reviewWorkspaceSnapshot(cleanClone, envPolicyFile));",
+   "new": "const before = reviewWorkspaceSnapshot(cleanClone, envPolicyFile);"
+  },
+  {
+   "id": "T1",
+   "description": "TK-4 (WORKSPACE step): an owner-record write failure is not caught (ENGINE_ERROR)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "TK-4 \\(#224 round 3\\)",
+   "old": "try { this.writeOwner(run.runId, this.ownerRecord(run, leaseId)); } catch { return {kind: \"RETRY\", reason: \"OWNER_RECORD_WRITE_FAILED\"}; } // TK-4",
+   "new": "this.writeOwner(run.runId, this.ownerRecord(run, leaseId)); // TK-4"
+  },
+  {
+   "id": "D1",
+   "description": "HB-2: the workspace directory is removed synchronously",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "HB-2 \\(async rm",
+   "old": "await fs.promises.rm(target, {recursive: true, force: true});",
+   "new": "fs.rmSync(target, {recursive: true, force: true});"
+  },
+  {
+   "id": "G1",
+   "description": "PAR-04: the recorded git child is not detached (the pgid is not a real group: the execFile-era defect)",
+   "file": "core/workos/git-async.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "PAR-04 \\(#224 round 3\\)|HB-R3-2",
+   "old": "...(group ? {detached: true} : {})}",
+   "new": "}"
+  },
+  {
+   "id": "K1",
+   "description": "HB-R3-2: the abort does not kill the recorded group",
+   "file": "core/workos/git-async.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "HB-R3-2",
+   "old": "else if (group && child.pid) process.kill(-child.pid, \"SIGKILL\");",
+   "new": "else if (group && child.pid) { /* no kill */ }"
+  },
+  {
+   "id": "K2",
+   "description": "HB-R3-2: the abort poll is not cleared when the git child settles",
+   "file": "core/workos/git-async.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "HB-R3-2",
+   "old": "      if (poll) clearInterval(poll);\n",
+   "new": ""
+  },
+  {
+   "id": "F6",
+   "description": "SWEEP-5: a retry of IMPLEMENT does not sweep the previous attempt's survivor before the reset",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "SWEEP-5",
+   "old": "    if (run.retryCount > 0 && !(await this.sweepOwnWriters(run, leaseId))) return {kind: \"RETRY\", reason: \"WORKSPACE_WRITER_ALIVE\"};\n",
+   "new": ""
+  },
+  {
+   "id": "A5",
+   "description": "HB-R3-2: the abort signal reaches SHORT mutating git children too (checkout/reset/clean)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "HB-R3-2",
+   "old": "const abort = args[0] === \"clone\" ? this.owned.get(run.runId)?.abort ?? undefined : undefined;",
+   "new": "const abort = this.owned.get(run.runId)?.abort ?? undefined;"
+  },
+  {
+   "id": "GA1",
+   "description": "GA-MAXBUF-1: the per-stream overflow guard is removed (an oversized stream accumulates and returns status 0)",
+   "file": "core/workos/git-async.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "GA-MAXBUF-1",
+   "old": "if ((which === \"out\" ? outBytes : errBytes) > MAX_BUFFER) { overflow = true; kill(); return; }\n",
+   "new": ""
+  },
+  {
+   "id": "GA2",
+   "description": "GA-MAXBUF-1: the cap boundary is off by one (exactly the cap is rejected)",
+   "file": "core/workos/git-async.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "GA-MAXBUF-1",
+   "old": "(which === \"out\" ? outBytes : errBytes) > MAX_BUFFER",
+   "new": "(which === \"out\" ? outBytes : errBytes) >= MAX_BUFFER"
+  },
+  {
+   "id": "GA3",
+   "description": "GA-MAXBUF-1: close ignores the overflow flag (truncated output returned with git's exit status)",
+   "file": "core/workos/git-async.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "GA-MAXBUF-1",
+   "old": "if (overflow) { settle({status: null, stdout: \"\", stderr: \"maxBuffer exceeded\"}); return; }\n",
+   "new": ""
+  },
+  {
+   "id": "TA1",
+   "description": "T-ABORT-1: abort kills only the recorded git root, not its group (the sleep grandchild survives)",
+   "file": "core/workos/git-async.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "T-ABORT-1",
+   "old": "else if (group && child.pid) process.kill(-child.pid, \"SIGKILL\");",
+   "new": "else if (group && child.pid) child.kill(\"SIGKILL\");"
+  },
+  {
+   "id": "TA2",
+   "description": "T-ABORT-1: an aborted UNRECORDED git child is not killed at all (the abort only resolves the promise)",
+   "file": "core/workos/git-async.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "T-ABORT-1",
+   "old": "else child.kill(\"SIGKILL\");",
+   "new": "else { /* no kill */ }"
+  },
+  {
+   "id": "ST5",
+   "description": "ST4 bounded: stop() never settles (the test must fail with STOP_HUNG within seconds, not time out after 90 s or hang the harness)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "STOP-NO-ABORT",
+   "old": "return Promise.allSettled(drives).then(() => { off?.(); if (this.timer === null && this.stopEpoch === epoch) this.stopping = false; });",
+   "new": "return new Promise<void>(() => undefined);"
+  },
+  {
+   "id": "SP1",
+   "description": "span wiring: the runner passes no ctx.span to the implementer",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "span wiring",
+   "old": "timeoutMs: lim.executorTimeoutMs, shouldAbort: abort, onSpawn, writerEnv: writerEnvFor(run.runId, leaseId), span: fn => this.span(fn)}",
+   "new": "timeoutMs: lim.executorTimeoutMs, shouldAbort: abort, onSpawn, writerEnv: writerEnvFor(run.runId, leaseId)}"
+  },
+  {
+   "id": "SP2",
+   "description": "span wiring: the runner passes no ctx.span to the reviewer",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "span wiring",
+   "old": "timeoutMs: reviewTimeoutMs, shouldAbort: abort, onSpawn, writerEnv: writerEnvFor(run.runId, leaseId), span: fn => this.span(fn)}",
+   "new": "timeoutMs: reviewTimeoutMs, shouldAbort: abort, onSpawn, writerEnv: writerEnvFor(run.runId, leaseId)}"
+  },
+  {
+   "id": "SP3",
+   "description": "span wiring: span() runs the work without renewing any lease",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "span wiring",
+   "old": "    this.renewAllOwned();\n    try { return fn(); } finally { this.renewAllOwned(); }\n",
+   "new": "    return fn();\n"
+  },
+  {
+   "id": "SP4",
+   "description": "span wiring: the edit-only implementer runs its agent-config scan (synchronous git ls-files) outside ctx.span",
+   "file": "core/workos/executors.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "EditOnlyImplementer span",
+   "old": "const agentConfig = sp(() => agentConfigInWorkspace(workspace, this.envPolicyFile));",
+   "new": "const agentConfig = agentConfigInWorkspace(workspace, this.envPolicyFile);"
+  },
+  {
+   "id": "SP5",
+   "description": "span wiring: the edit-only implementer's .git digest before the builder runs outside ctx.span",
+   "file": "core/workos/executors.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "EditOnlyImplementer span",
+   "old": "const before = sp(() => gitControlDigest(workspace));",
+   "new": "const before = gitControlDigest(workspace);"
+  },
+  {
+   "id": "SP6",
+   "description": "span wiring: the engine commit's .git digest after the builder runs outside ctx.span",
+   "file": "core/workos/builder-output.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "EditOnlyImplementer span",
+   "old": "const after = span(() => gitControlDigest(workspace));",
+   "new": "const after = gitControlDigest(workspace);"
+  },
+  {
+   "id": "SP7",
+   "description": "span wiring: the engine commit's per-file forbidden-change check runs outside ctx.span",
+   "file": "core/workos/builder-output.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "EditOnlyImplementer span",
+   "old": "const why = span(() => forbiddenChange(workspace, f));",
+   "new": "const why = forbiddenChange(workspace, f);"
+  },
+  {
+   "id": "GA4",
+   "description": "GA-MAXBUF-1: the cap counts DECODED bytes (non-UTF-8 output is counted three times: the effective cap drops to ~21 MiB)",
+   "file": "core/workos/git-async.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "GA-MAXBUF-1",
+   "old": "if (which === \"out\") outBytes += chunk.length; else errBytes += chunk.length;",
+   "new": "if (which === \"out\") outBytes += Buffer.byteLength(chunk.toString(\"utf8\"), \"utf8\"); else errBytes += Buffer.byteLength(chunk.toString(\"utf8\"), \"utf8\");"
+  },
+  {
+   "id": "GA5",
+   "description": "GA-MAXBUF-1: chunks after the overflow are not dropped (the child is killed again for every late chunk)",
+   "file": "core/workos/git-async.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "GA-MAXBUF-1",
+   "old": "        if (overflow) return;\n        if (which === \"out\") outBytes",
+   "new": "        if (which === \"out\") outBytes"
+  },
+  {
+   "id": "CE1",
+   "description": "crashEngine helper: the engine is silent again when its tick returns before the kill (no tick report)",
+   "file": "tests/v7-par-engine.mts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "HELPER",
+   "old": "console.log(JSON.stringify({phase1: \"TICK_RETURNED_BEFORE_THE_KILL\"",
+   "new": "void (JSON.stringify({phase1: \"TICK_RETURNED_BEFORE_THE_KILL\""
+  },
+  {
+   "id": "CE2",
+   "description": "crashEngine helper retries the engine in a clean directory (the retry-hides-an-intermittent-early-end probe must FAIL the test)",
+   "file": "tests/v7-relfx-1-completion.test.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "HELPER",
+   "edits": [
+    {
+     "old": "const e1 = spawnEngine(dir, \"1\", opts), t0 = Date.now();\n    const raced",
+     "new": "let e1 = spawnEngine(dir, \"1\", opts), t0 = Date.now();\n    const raced"
+    },
+    {
+     "old": "if (!(raced || fs.existsSync(path.join(dir, \"implementing.json\")))) await failEngine(\"engine 1 never reached implementing.json\", dir, e1, t0);",
+     "new": "if (!(raced || fs.existsSync(path.join(dir, \"implementing.json\")))) { fs.rmSync(dir, {recursive: true, force: true}); fs.mkdirSync(dir); e1 = spawnEngine(dir, \"1\", opts); t0 = Date.now(); await waitFor(() => fs.existsSync(path.join(dir, \"implementing.json\")), startMs); }"
+    }
+   ]
+  },
+  {
+   "id": "CE3",
+   "description": "crashEngine helper does not kill an engine that is still alive at the failure (a hung engine leaks)",
+   "file": "tests/v7-relfx-1-completion.test.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "HELPER",
+   "old": "if (e.exit() === null) { e.child.kill(\"SIGKILL\"); await Promise.race([e.closed, sleep(10_000)]); }",
+   "new": "if (false) { e.child.kill(\"SIGKILL\"); await Promise.race([e.closed, sleep(10_000)]); }"
+  },
+  {
+   "id": "CE4",
+   "description": "crashEngine helper: the failure message carries no run record",
+   "file": "tests/v7-relfx-1-completion.test.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "HELPER",
+   "old": "waitedMs: Date.now() - t0, run: runRecord(dir), dir: listDir(dir)});",
+   "new": "waitedMs: Date.now() - t0, dir: listDir(dir)});"
+  },
+  {
+   "id": "SF1",
+   "description": "withFinalStop swallows a hung final stop() (STOP_HUNG is not reported)",
+   "file": "tests/support/par.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "withFinalStop",
+   "old": "if (await stopWithin(stop(), stopMs) === \"STOP_HUNG\") also.push(\"the final stop() never settled\");",
+   "new": "await stopWithin(stop(), stopMs);"
+  },
+  {
+   "id": "SF2",
+   "description": "withFinalStop swallows the body failure when nothing else went wrong",
+   "file": "tests/support/par.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "withFinalStop",
+   "old": "    if (also.length === 0) throw bodyError;\n",
+   "new": "    if (also.length === 0) return;\n"
+  },
+  {
+   "id": "SF3",
+   "description": "withFinalStop runs its cleanup after the stop instead of before",
+   "file": "tests/support/par.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "withFinalStop",
+   "old": "  try { cleanup?.(); } catch (e) { also.push(`cleanup threw: ${text(e)}`); }\n  try { if (await stopWithin(stop(), stopMs) === \"STOP_HUNG\") also.push(\"the final stop() never settled\"); } catch (e) { also.push(`the final stop() rejected: ${text(e)}`); }\n",
+   "new": "  try { if (await stopWithin(stop(), stopMs) === \"STOP_HUNG\") also.push(\"the final stop() never settled\"); } catch (e) { also.push(`the final stop() rejected: ${text(e)}`); }\n  try { cleanup?.(); } catch (e) { also.push(`cleanup threw: ${text(e)}`); }\n"
+  },
+  {
+   "id": "SF4",
+   "description": "a rejecting final stop() replaces the failure of the body",
+   "file": "tests/support/par.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "withFinalStop",
+   "old": "catch (e) { also.push(`the final stop() rejected: ${text(e)}`); }",
+   "new": "catch (e) { throw e; }"
+  },
+  {
+   "id": "SF5",
+   "description": "the other problems replace the body failure instead of being appended to it",
+   "file": "tests/support/par.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "withFinalStop",
+   "old": "if (bodyError instanceof Error) { bodyError.message = `${bodyError.message} | ALSO: ${also.join(\"; \")}`; throw bodyError; }",
+   "new": "if (bodyError instanceof Error) { throw new Error(also.join(\"; \")); }"
+  },
+  {
+   "id": "CE5",
+   "description": "crashEngine helper: no check that engine 1 is still alive right before the kill (an engine that crashed on its own passes as the simulated crash)",
+   "file": "tests/v7-relfx-1-completion.test.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "HELPER",
+   "old": "    if (e1.exit() !== null) await failEngine(\"engine 1 exited on its own before the kill\", dir, e1, t0);\n",
+   "new": ""
+  },
+  {
+   "id": "CE6",
+   "description": "crashEngine helper: no check that engine 1 ended by the helper's SIGKILL",
+   "file": "tests/v7-relfx-1-completion.test.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "HELPER",
+   "old": "    expect(e1.exit()?.signal, `engine 1 must end by the helper's SIGKILL, not on its own: ${engineDiag(dir, e1, t0)}`).toBe(\"SIGKILL\");\n",
+   "new": ""
+  },
+  {
+   "id": "CE7",
+   "description": "crashEngine helper: the owner-record wait result is ignored again",
+   "file": "tests/v7-relfx-1-completion.test.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "HELPER",
+   "old": "    if (!ownerOk) await failEngine(",
+   "new": "    if (false) await failEngine("
+  },
+  {
+   "id": "RB1",
+   "description": "reviewer-blocked: a Founder-actionable reviewer refusal FAILS the run instead of BLOCKing it",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "CLI missing",
+   "old": "status: FOUNDER_ACTIONABLE_REFUSAL.test(r.invalidReason ?? \"\") ? \"BLOCKED\" : \"FAILED\"}",
+   "new": "status: \"FAILED\"}"
+  },
+  {
+   "id": "RB2",
+   "description": "reviewer-blocked: every invalid review the adapter reports (also REVIEW_WORKSPACE_MODIFIED, REVIEW_FAILED) BLOCKs the run instead of FAILing it (the REVIEWER_IDENTITY_MISMATCH / REVIEWER_MUTATED_CLONE paths are separate and stay BLOCKED either way)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "CLI missing",
+   "old": "status: FOUNDER_ACTIONABLE_REFUSAL.test(r.invalidReason ?? \"\") ? \"BLOCKED\" : \"FAILED\"}",
+   "new": "status: \"BLOCKED\"}"
+  },
+  {
+   "id": "RB3",
+   "description": "reviewer-blocked: the pattern is too broad on CLAUDE_ (any CLAUDE_* reason, e.g. the hypothetical CLAUDE_REVIEW_OUTPUT_INVALID, becomes a Founder-actionable BLOCK)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "CLI missing",
+   "old": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;",
+   "new": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_|PROVIDER_PROVENANCE_)/;"
+  },
+  {
+   "id": "RB4",
+   "description": "reviewer-blocked: PROVIDER_ instead of PROVIDER_PROVENANCE_ (the hypothetical PROVIDER_ROUTE_UNKNOWN becomes a Founder-actionable BLOCK)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "CLI missing",
+   "old": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;",
+   "new": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_)/;"
+  },
+  {
+   "id": "RB5",
+   "description": "reviewer-blocked: the start anchor is dropped (X_CLAUDE_CLI_NOT_FOUND matches in the middle)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "CLI missing",
+   "old": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;",
+   "new": "FOUNDER_ACTIONABLE_REFUSAL = /(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;"
+  },
+  {
+   "id": "RB6",
+   "description": "reviewer-blocked: the trailing underscore is dropped from every alternative (CLAUDE_PROFILEX, CLAUDE_CLIENT_ERROR, ... match)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "CLI missing",
+   "old": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;",
+   "new": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE|CLAUDE_CLI|CLAUDE_PACKAGE_PROVENANCE|CLAUDE_LAUNCHER_PROVENANCE|PROVIDER_PROVENANCE)/;"
+  },
+  {
+   "id": "RB7",
+   "description": "reviewer-blocked: the trailing underscore is dropped from CLAUDE_PROFILE_ only",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "CLI missing",
+   "old": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;",
+   "new": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;"
+  },
+  {
+   "id": "RB8",
+   "description": "reviewer-blocked: the trailing underscore is dropped from CLAUDE_CLI_ only (CLAUDE_CLIENT_ERROR matches)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "CLI missing",
+   "old": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;",
+   "new": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;"
+  },
+  {
+   "id": "RB9",
+   "description": "reviewer-blocked: the trailing underscore is dropped from CLAUDE_PACKAGE_PROVENANCE_ only",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "CLI missing",
+   "old": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;",
+   "new": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;"
+  },
+  {
+   "id": "RB10",
+   "description": "reviewer-blocked: the trailing underscore is dropped from CLAUDE_LAUNCHER_PROVENANCE_ only",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "CLI missing",
+   "old": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;",
+   "new": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE|PROVIDER_PROVENANCE_)/;"
+  },
+  {
+   "id": "RB11",
+   "description": "reviewer-blocked: the trailing underscore is dropped from PROVIDER_PROVENANCE_ only",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "CLI missing",
+   "old": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;",
+   "new": "FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE)/;"
+  }
+ ]
+}

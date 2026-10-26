@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 import {WorkOsStore} from "../core/workos/store.js";
-import {PreDevDriver, type BuilderPort, type MissionContext} from "../core/workos/predev/driver.js";
+import {PreDevDriver, PreDevDriverError, type BuilderPort, type MissionContext} from "../core/workos/predev/driver.js";
 import {PRE_DEV_ROLE_MAP, PRE_DEV_ROLE_IDS, ARTIFACT_KINDS} from "../core/workos/predev/types.js";
 import type {ArtifactKind} from "../core/workos/predev/types.js";
 import {TASKHUB_BRIEF} from "../core/workos/predev/fixtures/taskhub-brief.js";
@@ -16,7 +16,7 @@ import {CrewCoordinator, CrewCoordinatorError, type ReworkDecider, type ReworkDe
 import {submitIntake} from "../core/workos/intake.js";
 import {submitPlan, validatePlanCreate} from "../core/workos/plan.js";
 import {briefFromRecords} from "../core/workos/predev/brief.js";
-import {PREDEV_AGENT_ACTOR, PreDevBuilderError} from "../core/workos/predev/claude-builder.js";
+import {ClaudePreDevBuilder, PREDEV_AGENT_ACTOR, PreDevBuilderError} from "../core/workos/predev/claude-builder.js";
 import {FIRST_DELIVERY_BINDINGS} from "../core/agents/first-delivery-bindings.js";
 import {ensureClaudeProfile, claudeProfileDir} from "../core/workos/claude-profiles.js";
 import {ANALYSIS_KINDS, AnalysisFlow, AnalysisStoppedError, NO_ANALYSIS_BUILDER, claudeAnalysisReadiness, tasksFromPlan} from "../core/workos/crew/analysis.js";
@@ -24,6 +24,10 @@ import type {PlanContent, RequirementsContent} from "../core/workos/predev/types
 import type {ClaudeCliStatus} from "../core/workos/claude-profiles.js";
 import type {AnalysisReadiness} from "../core/workos/crew/analysis.js";
 import crypto from "node:crypto";
+import {FakeExecutors, LocalClaudeExecutors, reviewerArgv, runProcess} from "../core/workos/executors.js";
+import type {ProcOptions, ProcResult} from "../core/workos/executors.js";
+import {OUTPUT_SKELETONS, PLACEHOLDER_MARKER, composeRolePrompt} from "../core/workos/predev/role-prompts.js";
+import {validateArtifactContent} from "../core/workos/predev/validators.js";
 // //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
 vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
@@ -223,6 +227,26 @@ describe("CrewCoordinator over the REAL driver/validators/store with a mock Buil
     expect(reqs.filter(a => a.state === "APPROVED")).toHaveLength(1);
   });
 
+  // //TR: #237 inceleme (LOW): rework yolu (reproduceSuperseding) da paylaşılan yer tutucu korumasından geçer: iskelet/işaret taşıyan bir rework yanıtı kaydedilmez ve onaylanmaz.
+  it("a rework reply that still carries the placeholder marker fails closed in reproduceSuperseding (the guard lives in validateArtifactContent): nothing superseding is recorded, nothing is approved", async () => {
+    const missionId = authorizedMission();
+    const b = new TaskHubFixtureBuilder();
+    const orig = b.produce.bind(b);
+    b.produce = async (kind, prompt, ctx) => {
+      if (kind !== "Plan" || b.countFor("Plan") !== 1) return orig(kind, prompt, ctx);
+      b.calls.push({kind, context: JSON.parse(JSON.stringify(ctx))}); // the rework call (the second Plan call)
+      const plan = JSON.parse(JSON.stringify(TASKHUB_ARTIFACTS.Plan)); plan.workPackages[0].title = "<<FILL: title>>";
+      return JSON.stringify(plan);
+    };
+    const {coord} = coordinator(new ReworkOnceDecider("Plan", "ARCH_DOWNSTREAM_PLAN_INSUFFICIENT"), 2, b);
+    await expect(coord.run(SCOPE, missionId)).rejects.toThrow("CREW_REWORK_INVALID:PLACEHOLDER_VALUE");
+    expect(b.countFor("Plan")).toBe(2);
+    const rm = store.preDevReadModel(SCOPE, missionId);
+    const plans = store.listPreDevArtifacts(SCOPE, rm.preDevId!).filter(a => a.kind === "Plan");
+    expect(plans.map(a => [a.version, a.state])).toEqual([[1, "REJECTED"]]); // v1 was really rejected; no superseding v2 exists
+    expect(rm.phase).toBe("PLANNING"); // not advanced
+  });
+
   it("exceeding the rework bound fails closed: NO approval, NO advance (never auto-approves)", async () => {
     const missionId = authorizedMission();
     // maxReworkPerPhase=1: Plan sürekli reddedilirse, ilk supersede'den sonra ikinci rework talebi sınırı aşar ve fail-closed olur.
@@ -371,7 +395,7 @@ describe("PQ-012 selectNextTask (pure next-task selector)", () => {
 });
 
 // //TR: C-FLOW-ANALYSIS-1 (test birleştirme): analiz adımı testleri kayıtlı bir dosyaya taşındı (yeni test dosyası config/validation.json kaydı gerektirirdi). Aşağıdaki blok kendi tmp/SCOPE/yardımcılarını tanımlar (ana dosyanın aynı adlı tanımlarını gölgeler).
-describe("LANE-C analysis flow: C-FLOW-ANALYSIS-1", () => {
+describe("LANE-C analysis flow: C-FLOW-ANALYSIS-1/2", () => {
 let tmp = "";
 beforeEach(() => { tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-fa-")); });
 afterEach(() => { try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* Windows */ } });
@@ -504,10 +528,14 @@ describe("C-FLOW-ANALYSIS-1: intake -> analysis -> plan", () => {
     expect(t.store.getPreDevArtifact(SCOPE, (second as {artifactId: string}).artifactId)!.supersedes).toBe(first.artifactId);
   });
 
-  it("no production builder configured: a ready setup still answers with the exact code and records nothing", async () => {
+  // //TR: C-FLOW-ANALYSIS-2 (Lane B boşluğu): üretim BuilderPort'u yoksa artık BUILDER_FAILED/502 değil, ücretli çağrıdan ÖNCE BLOCKED (EXECUTOR_NOT_ENABLED) ve Founder eylemi döner. Başka bir builder aynı kodu kendisi fırlatırsa eski yol (BUILDER_FAILED) geçerlidir.
+  it("no production builder configured: a ready setup is BLOCKED (EXECUTOR_NOT_ENABLED, with a Founder action) and records nothing; a builder that throws NOT_CONFIGURED itself still maps to BUILDER_FAILED", async () => {
     const t = setup();
     const flow = new AnalysisFlow({store: t.store, scope: SCOPE, builder: NO_ANALYSIS_BUILDER, readiness: () => READY});
-    expect(await flow.step(t.missionId)).toEqual({status: "BUILDER_FAILED", kind: "BusinessAnalysis", code: "PREDEV_DRIVER_BUILDER_NOT_CONFIGURED"});
+    expect(await flow.step(t.missionId)).toMatchObject({status: "BLOCKED", blocker: "EXECUTOR_NOT_ENABLED", blockers: ["EXECUTOR_NOT_ENABLED"], founderAction: expect.stringContaining("LOCAL_CLAUDE")});
+    expect(t.rm()).toMatchObject({active: false, phase: "NOT_STARTED"});
+    const own: BuilderPort = {produce: async () => { throw new PreDevBuilderError("PREDEV_BUILDER_EXIT_NONZERO"); }};
+    expect(await new AnalysisFlow({store: t.store, scope: SCOPE, builder: own, readiness: () => READY}).step(t.missionId)).toEqual({status: "BUILDER_FAILED", kind: "BusinessAnalysis", code: "PREDEV_BUILDER_EXIT_NONZERO"});
     expect(t.rm().artifacts.BusinessAnalysis.state).toBe("NOT_STARTED");
     expect(t.rm(), "no builder configured: nothing is written, the sequence is not opened").toMatchObject({active: false, phase: "NOT_STARTED"}); // L2
   });
@@ -564,7 +592,7 @@ describe("C-FLOW-ANALYSIS-1: intake -> analysis -> plan", () => {
     expect(during.calls).toHaveLength(1); // the paid call happened ...
     expect(during.rm().artifacts.BusinessAnalysis.state).toBe("NOT_STARTED"); // ... but its output was not recorded
     expect(during.rm()).toMatchObject({active: false, phase: "NOT_STARTED"});
-    expect(await new AnalysisFlow({store: during.store, scope: SCOPE, builder: NO_ANALYSIS_BUILDER, readiness: () => READY, stopped: () => false}).step(during.missionId)).toMatchObject({status: "BUILDER_FAILED", code: "PREDEV_DRIVER_BUILDER_NOT_CONFIGURED"});
+    expect(await new AnalysisFlow({store: during.store, scope: SCOPE, builder: NO_ANALYSIS_BUILDER, readiness: () => READY, stopped: () => false}).step(during.missionId)).toMatchObject({status: "BLOCKED", blocker: "EXECUTOR_NOT_ENABLED", blockers: ["EXECUTOR_NOT_ENABLED"], founderAction: expect.stringContaining("LOCAL_CLAUDE")}); // C-FLOW-ANALYSIS-2: no production builder is a BLOCKED answer before any paid call (flow-1 answers BUILDER_FAILED / PREDEV_DRIVER_BUILDER_NOT_CONFIGURED)
     expect("shouldAbort" in NO_ANALYSIS_BUILDER, "the shared no-builder sentinel is never wired").toBe(false);
     // an aborted builder (it throws once the stop is up) is a stop, not a builder failure
     stopped = false;
@@ -572,6 +600,15 @@ describe("C-FLOW-ANALYSIS-1: intake -> analysis -> plan", () => {
     await expect(new AnalysisFlow({store: during.store, scope: SCOPE, builder: aborted, readiness: () => READY, stopped: () => stopped}).step(during.missionId)).rejects.toBeInstanceOf(AnalysisStoppedError);
     stopped = false; // cleared: works again
     expect((await new AnalysisFlow({store: during.store, scope: SCOPE, builder: during.builder, readiness: () => READY, stopped: () => stopped}).step(during.missionId)).status).toBe("DRAFT_READY");
+  });
+
+  // //TR: C-FLOW-ANALYSIS-2: paylaşılan no-builder sentinel'i artık BLOCKED EXECUTOR_NOT_ENABLED ile bu bağlantıya HİÇ ulaşmaz; "sentinel'e shouldAbort verilmez" iddiası burada, sentinel olmayan düz bir builder üzerinden sabitlenir (V14).
+  it("L1 (flow-2): a builder that is neither a ClaudePreDevBuilder nor exposes shouldAbort is never given one: the stop is wired only where it can abort a process", async () => {
+    const t = setup();
+    const plain = {produce: async (kind: ArtifactKind) => JSON.stringify(TASKHUB_ARTIFACTS[kind])} as BuilderPort;
+    const flow = new AnalysisFlow({store: t.store, scope: SCOPE, builder: plain, readiness: () => READY, stopped: () => false});
+    expect((await flow.step(t.missionId)).status).toBe("DRAFT_READY");
+    expect("shouldAbort" in plain, "the stop was wired onto a builder that cannot use it").toBe(false);
   });
 
   it("L3: when another actor recorded this phase's draft while our paid call ran (a lost race), the answer points at the pending approval, not BUILDER_FAILED for the wrong phase", async () => {
@@ -651,11 +688,32 @@ describe("C-FLOW-ANALYSIS-1: intake -> analysis -> plan", () => {
     expect(asked).toBe(1);
   });
 
+  // //TR: #237 inceleme (EXECUTOR_NOT_ENABLED sırası): paylaşılan NO_ANALYSIS_BUILDER ile de sıra korunur: takılı faz (ücretli çağrı da hazırlık da sorulmaz) > hazırlık engelleri (yürütücü engeli EN SONA eklenir) > yalnız yürütücü eksik.
+  it("EXECUTOR_NOT_ENABLED ordering with the shared no-builder sentinel: a stuck phase answers ANALYSIS_PHASE_NOT_ADVANCED (readiness is never asked); a not-ready setup answers ITS blocker with the executor blocker appended LAST; only a ready setup answers EXECUTOR_NOT_ENABLED", async () => {
+    let asked = 0;
+    const notReady: AnalysisReadiness = {ready: false, blockers: ["CLAUDE_CLI_NOT_FOUND"], blocker: "CLAUDE_CLI_NOT_FOUND", founderAction: "install claude", profiles: null};
+    const t = setup();
+    const draft = await t.flow.step(t.missionId) as {artifactId: string};
+    approveWithoutAdvance(t, draft.artifactId);
+    const stuck = new AnalysisFlow({store: t.store, scope: SCOPE, builder: NO_ANALYSIS_BUILDER, readiness: () => { asked += 1; return notReady; }});
+    expect(await stuck.step(t.missionId)).toMatchObject({status: "BLOCKED", blocker: "ANALYSIS_PHASE_NOT_ADVANCED", blockers: ["ANALYSIS_PHASE_NOT_ADVANCED"], kind: "BusinessAnalysis", artifactId: draft.artifactId});
+    expect(asked, "readiness must not be asked while the sequence is stuck").toBe(0);
+    t.approve(draft.artifactId); // resumed
+    const blocked = await stuck.step(t.missionId);
+    expect(blocked).toMatchObject({status: "BLOCKED", blocker: "CLAUDE_CLI_NOT_FOUND", blockers: ["CLAUDE_CLI_NOT_FOUND", "EXECUTOR_NOT_ENABLED"], founderAction: "install claude"});
+    expect(asked).toBe(1);
+    const ready = await new AnalysisFlow({store: t.store, scope: SCOPE, builder: NO_ANALYSIS_BUILDER, readiness: () => READY}).step(t.missionId);
+    expect(ready).toMatchObject({status: "BLOCKED", blocker: "EXECUTOR_NOT_ENABLED", blockers: ["EXECUTOR_NOT_ENABLED"]});
+    expect(t.calls, "no paid call on any of the three").toHaveLength(1);
+  });
+
   it("L2 (re-verify, X3b): a PreDevDriverError from the builder (no production builder) in a LATER phase names that phase's kind", async () => {
     const t = setup();
     const first = await t.flow.step(t.missionId) as {artifactId: string};
     t.approve(first.artifactId);
-    const flow = new AnalysisFlow({store: t.store, scope: SCOPE, builder: NO_ANALYSIS_BUILDER, readiness: () => READY});
+    // //TR: C-FLOW-ANALYSIS-2: paylaşılan NO_ANALYSIS_BUILDER artık BLOCKED EXECUTOR_NOT_ENABLED verir (kendi testi var); PreDevDriverError dalı bu yüzden aynı hatayı fırlatan SENTİNEL OLMAYAN bir builder ile sınanır.
+    const throwing: BuilderPort = {produce: async () => { throw new PreDevDriverError("PREDEV_DRIVER_BUILDER_NOT_CONFIGURED"); }};
+    const flow = new AnalysisFlow({store: t.store, scope: SCOPE, builder: throwing, readiness: () => READY});
     expect(await flow.step(t.missionId)).toEqual({status: "BUILDER_FAILED", kind: "Requirements", code: "PREDEV_DRIVER_BUILDER_NOT_CONFIGURED"});
   });
 
@@ -842,6 +900,392 @@ describe("C-FLOW-ANALYSIS-1: tasksFromPlan (approved Plan -> the task list the p
   it("a title is cut at 200 characters and never empty", () => {
     const r = tasksFromPlan(plan([wp("A", [], {title: "x".repeat(500)})]), REQS);
     expect(r.ok && r.body.tasks[0].title.length).toBe(200);
+  });
+});
+
+const REPO = path.resolve(import.meta.dirname, ".."); // C-FLOW-ANALYSIS-2
+// ---------------------------------------------------------------------------------------------------------------------------
+// C-FLOW-ANALYSIS-2: real analysis content. The production BuilderPort (ClaudePreDevBuilder from LocalClaudeExecutors) runs against a
+// FAKE Claude CLI: a real child process (a node script standing in for `claude -p --output-format json`) started by the real
+// runProcess, so timeouts, process-group kills, stdin, exit codes and the scratch directory are the production ones. No model, no network.
+// ---------------------------------------------------------------------------------------------------------------------------
+describe("C-FLOW-ANALYSIS-2: the Desktop analysis through the production builder and a fake Claude CLI process", () => {
+  const FOUND: ClaudeCliStatus = {state: "FOUND", path: process.execPath, kind: "EXECUTABLE", source: "PATH", pathDir: null, searchedCount: 0, founderAction: null};
+  const T = {timeout: 120_000};
+  type Scenario = {stdout?: string; stderr?: string; exit?: number; sleepMs?: number; touch?: boolean; echoSkeleton?: boolean};
+  const envelope = (result: unknown, over: Record<string, unknown> = {}) => JSON.stringify({type: "result", subtype: "success", is_error: false, duration_ms: 1200, num_turns: 1, result, session_id: "s-1", total_cost_usd: 0.0123, ...over}) + "\n";
+  const good = (kind: ArtifactKind) => envelope(JSON.stringify(TASKHUB_ARTIFACTS[kind]));
+
+  function rig(o: {login?: boolean; timeoutMs?: number} = {}) {
+    const control = path.join(tmp, "userdata", "control"), data = path.join(tmp, "data");
+    const script = path.join(tmp, "fake-claude.mjs"), scenarioFile = path.join(tmp, "scenario.json"), logFile = path.join(tmp, "calls.jsonl");
+    const sha = crypto.createHash("sha256").update(fs.readFileSync(process.execPath)).digest("hex");
+    fs.mkdirSync(path.join(control, ".ai", "runtime"), {recursive: true});
+    fs.writeFileSync(path.join(control, ".ai", "runtime", "PROVIDER_PROVENANCE.json"), JSON.stringify({final: "PASS", claude: {provenanceLevel: "STANDALONE_LAUNCHER", resolvedPath: process.execPath, launcherSha256: sha, version: "fake"}}));
+    for (const role of ["implementer", "reviewer"] as const) if (o.login !== false) { ensureClaudeProfile(control, role, {forbiddenRoots: [data]}); fs.writeFileSync(path.join(claudeProfileDir(control, role), ".credentials.json"), ""); }
+    fs.writeFileSync(script, `import fs from "node:fs";
+const chunks = []; for await (const c of process.stdin) chunks.push(c);
+const prompt = Buffer.concat(chunks).toString("utf8");
+const kind = /# ARTEFAKT TÜRÜ: (\\w+)/.exec(prompt)?.[1];
+fs.appendFileSync(${JSON.stringify(logFile)}, JSON.stringify({kind, pid: process.pid, argv: process.argv.slice(2), cwd: process.cwd(), cfg: process.env.CLAUDE_CONFIG_DIR, keys: Object.keys(process.env).filter(k => /ANTHROPIC_API_KEY|ANTHROPIC_AUTH_TOKEN/i.test(k)), prompt: prompt.length}) + "\\n");
+const sc = JSON.parse(fs.readFileSync(${JSON.stringify(scenarioFile)}, "utf8")); const s = sc[kind] ?? sc["*"] ?? {};
+if (s.sleepMs) await new Promise(r => setTimeout(r, s.sleepMs));
+if (s.touch) fs.writeFileSync("STRAY.txt", "x");
+let out = s.stdout;
+if (s.echoSkeleton) out = JSON.stringify({type: "result", subtype: "success", is_error: false, result: prompt.slice(prompt.lastIndexOf("\\n{\\n") + 1)}) + "\\n";
+if (out !== undefined) process.stdout.write(out);
+if (s.stderr) process.stderr.write(s.stderr);
+process.exit(s.exit ?? 0);
+`);
+    const scenario = (s: Record<string, Scenario>) => fs.writeFileSync(scenarioFile, JSON.stringify(s));
+    scenario({});
+    const runReviewer = (argv: string[], po: ProcOptions): Promise<ProcResult> => runProcess([process.execPath, script, ...argv.slice(1)], o.timeoutMs ? {...po, timeoutMs: o.timeoutMs} : po);
+    const pair = () => new LocalClaudeExecutors(REPO, control, {runReviewer, profile: {forbiddenRoots: [data]}}).pair();
+    let last: ReturnType<NonNullable<ReturnType<typeof pair>["preDevBuilder"]>> | null = null;
+    const builder: BuilderPort = {produce(kind, prompt, ctx) { last = pair().preDevBuilder!(); return last.produce(kind, prompt, ctx); }};
+    const readiness = () => claudeAnalysisReadiness({controlRoot: control, profile: {forbiddenRoots: [data]}, cli: FOUND});
+    const store = new WorkOsStore(path.join(tmp, "data"));
+    const {intake} = submitIntake({store, scope: SCOPE, orgId: "o1", actor: "FOUNDER_LOCAL"}, {idea: IDEA, projectType: "web", targetOS: ["web"]});
+    const flow = new AnalysisFlow({store, scope: SCOPE, builder, readiness});
+    const mission = store.getMission(SCOPE, intake.missionId)!, project = store.getProject(SCOPE, intake.projectId)!;
+    const founder = new PreDevDriver({store, brief: briefFromRecords({project, mission}), builder});
+    return {
+      control, store, flow, scenario, pair, missionId: intake.missionId, builder: () => last, readiness,
+      spawns: (): Array<{kind: string; pid: number; argv: string[]; cwd: string; cfg: string; keys: string[]; prompt: number}> => fs.existsSync(logFile) ? fs.readFileSync(logFile, "utf8").split("\n").filter(Boolean).map(l => JSON.parse(l)) : [],
+      rm: () => store.preDevReadModel(SCOPE, intake.missionId),
+      approve: (artifactId: string) => founder.approveAndAdvance(SCOPE, intake.missionId, artifactId, "FOUNDER_LOCAL", ["ev-founder-review-1"])
+    };
+  }
+  const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+
+  it("good output: all four roles produce real drafts through the production builder; one process per draft, read-only json argv, reviewer profile, empty scratch outside the repo, no API key; the approved plan becomes tasks", T, async () => {
+    const t = rig();
+    t.scenario({"*": {}, ...Object.fromEntries(ANALYSIS_KINDS.map(k => [k, {stdout: good(k)}]))});
+    const prevKey = process.env.ANTHROPIC_API_KEY; process.env.ANTHROPIC_API_KEY = "sk-test-not-real";
+    try {
+      for (const [i, kind] of ANALYSIS_KINDS.entries()) {
+        const r = await t.flow.step(t.missionId);
+        expect(r).toMatchObject({status: "DRAFT_READY", kind, version: 1, roleId: PRE_DEV_ROLE_MAP[kind][0]});
+        expect(t.spawns()).toHaveLength(i + 1); // exactly one paid call per draft
+        const trace = t.builder()!.lastTrace!;
+        expect(trace).toMatchObject({kind, failure: null, exitCode: 0, roleId: PRE_DEV_ROLE_MAP[kind][0]});
+        expect(trace.outputSha256).toBe(crypto.createHash("sha256").update(JSON.stringify(TASKHUB_ARTIFACTS[kind])).digest("hex"));
+        const art = t.store.getPreDevArtifact(SCOPE, (r as {artifactId: string}).artifactId)!;
+        expect(art).toMatchObject({state: "DRAFT", recordedBy: PREDEV_AGENT_ACTOR, content: TASKHUB_ARTIFACTS[kind]}); // the draft IS the model's content
+        t.approve(art.id);
+      }
+    } finally { if (prevKey === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = prevKey; }
+    expect(await t.flow.step(t.missionId)).toMatchObject({status: "COMPLETE"});
+    const calls = t.spawns();
+    for (const c of calls) {
+      expect(c.argv).toEqual(reviewerArgv(process.execPath, "json").slice(1)); // read-only tools + isolation flags, -p, --output-format json
+      expect(c.argv.slice(-2)).toEqual(["--output-format", "json"]);
+      expect(c.cfg).toBe(claudeProfileDir(t.control, "reviewer"));
+      expect(c.keys).toEqual([]); // no paid API key reaches the process
+      expect(c.prompt).toBeGreaterThan(500);
+      const rel = path.relative(REPO, c.cwd); expect(rel.startsWith("..") || path.isAbsolute(rel)).toBe(true);
+      expect(fs.existsSync(c.cwd)).toBe(false); // the scratch directory is gone
+    }
+    expect(new Set(calls.map(c => c.cwd)).size).toBe(4);
+    expect(calls.map(c => c.kind)).toEqual([...ANALYSIS_KINDS]);
+    const plan = t.flow.createPlan(t.missionId, "FOUNDER_LOCAL");
+    expect(plan.ok && plan.tasks.length).toBe(6);
+  });
+
+  it("one ```json (or bare ```) fence around the WHOLE reply is unwrapped; prose around the JSON, two fences, an unclosed or unopened fence, a ```text / ```javascript fence and a non-JSON reply are not repaired: REJECTED PREDEV_DRIVER_INVALID_JSON, nothing recorded, one spawn each", T, async () => {
+    const fenced = "```json\n" + JSON.stringify(TASKHUB_ARTIFACTS.BusinessAnalysis, null, 2) + "\n```";
+    const t = rig();
+    t.scenario({"*": {stdout: envelope(fenced + "\n")}}); // the CLI may end its text with a newline
+    const ok = await t.flow.step(t.missionId);
+    expect(ok.status).toBe("DRAFT_READY");
+    expect(t.store.getPreDevArtifact(SCOPE, (ok as {artifactId: string}).artifactId)!.content).toEqual(TASKHUB_ARTIFACTS.BusinessAnalysis);
+    for (const [name, text] of [
+      ["prose before", "Here is the analysis:\n" + JSON.stringify(TASKHUB_ARTIFACTS.BusinessAnalysis)],
+      ["prose before a fence", "Sure!\n```json\n" + JSON.stringify(TASKHUB_ARTIFACTS.BusinessAnalysis) + "\n```"],
+      ["prose after", "```json\n" + JSON.stringify(TASKHUB_ARTIFACTS.BusinessAnalysis) + "\n```\nHope this helps!"],
+      ["two fences", "```json\n{}\n```\n```json\n" + JSON.stringify(TASKHUB_ARTIFACTS.BusinessAnalysis) + "\n```"],
+      ["fence opened, never closed", "```json\n" + JSON.stringify(TASKHUB_ARTIFACTS.BusinessAnalysis)],
+      ["fence closed, never opened", JSON.stringify(TASKHUB_ARTIFACTS.BusinessAnalysis) + "\n```"],
+      ["a ```text fence is not a json fence", "```text\n" + JSON.stringify(TASKHUB_ARTIFACTS.BusinessAnalysis) + "\n```"],
+      ["a ```javascript fence", "```javascript\n" + JSON.stringify(TASKHUB_ARTIFACTS.BusinessAnalysis) + "\n```"],
+      ["not json", "I could not produce the analysis."]
+    ] as const) {
+      fs.rmSync(path.join(tmp, "calls.jsonl"), {force: true}); fs.rmSync(path.join(tmp, "data"), {recursive: true, force: true}); // fresh spawn log and store per case
+      const u = rig();
+      u.scenario({"*": {stdout: envelope(text)}});
+      expect([name, await u.flow.step(u.missionId)]).toEqual([name, {status: "REJECTED", kind: "BusinessAnalysis", reason: "PREDEV_DRIVER_INVALID_JSON"}]);
+      expect([name, u.rm().artifacts.BusinessAnalysis.state]).toEqual([name, "NOT_STARTED"]);
+      expect([name, u.spawns().length]).toEqual([name, 1]); // a rejection never re-spawns on its own
+    }
+  });
+
+  it("malformed JSON and schema misses are REJECTED with the validator's exact code (BA_SHAPE, REQ_TRACEABILITY_BROKEN), never repaired; the corrected retry is a second, separate call", T, async () => {
+    const t = rig();
+    const ba = TASKHUB_ARTIFACTS.BusinessAnalysis as unknown as Record<string, unknown>;
+    const {problem: _drop, ...noProblem} = ba;
+    t.scenario({"*": {stdout: envelope('{"problem": "cut off')}});
+    expect(await t.flow.step(t.missionId)).toEqual({status: "REJECTED", kind: "BusinessAnalysis", reason: "PREDEV_DRIVER_INVALID_JSON"});
+    t.scenario({"*": {stdout: envelope(JSON.stringify(noProblem))}});
+    expect(await t.flow.step(t.missionId)).toEqual({status: "REJECTED", kind: "BusinessAnalysis", reason: "BA_SHAPE"});
+    t.scenario({"*": {stdout: envelope(JSON.stringify({...ba, extra: "smuggled"}))}});
+    expect(await t.flow.step(t.missionId)).toMatchObject({status: "REJECTED", reason: "BA_SHAPE"}); // an unknown key is a miss too
+    expect(t.rm().artifacts.BusinessAnalysis.state).toBe("NOT_STARTED");
+    expect(t.spawns()).toHaveLength(3);
+    t.scenario({"*": {stdout: good("BusinessAnalysis")}});
+    const r = await t.flow.step(t.missionId); expect(r.status).toBe("DRAFT_READY");
+    t.approve((r as {artifactId: string}).artifactId);
+    // downstream traceability: requirements that trace to a goal that is not in the approved analysis
+    const reqs = JSON.parse(JSON.stringify(TASKHUB_ARTIFACTS.Requirements)) as RequirementsContent;
+    reqs.functional[0].tracesTo = ["G99"];
+    t.scenario({"*": {stdout: envelope(JSON.stringify(reqs))}});
+    expect(await t.flow.step(t.missionId)).toEqual({status: "REJECTED", kind: "Requirements", reason: "REQ_TRACEABILITY_BROKEN"});
+    expect(t.spawns()).toHaveLength(5);
+    expect(t.rm().artifacts.Requirements.state).toBe("NOT_STARTED");
+  });
+
+  it("an echoed output skeleton cannot pass: every placeholder is rejected as PREDEV_DRIVER_PLACEHOLDER_VALUE (the skeleton is shape-valid, so only the guard stops it)", T, async () => {
+    const t = rig();
+    t.scenario({"*": {echoSkeleton: true}});
+    expect(await t.flow.step(t.missionId)).toEqual({status: "REJECTED", kind: "BusinessAnalysis", reason: "PREDEV_DRIVER_PLACEHOLDER_VALUE"});
+    expect(t.rm().artifacts.BusinessAnalysis.state).toBe("NOT_STARTED");
+    expect(t.spawns()).toHaveLength(1);
+  });
+
+  it("timeout: the fake CLI hangs -> BUILDER_FAILED PREDEV_BUILDER_TIMEOUT, the process (group) is killed, nothing recorded; the retry after the cause is gone produces", T, async () => {
+    const t = rig({timeoutMs: 1_500});
+    t.scenario({"*": {sleepMs: 60_000, stdout: good("BusinessAnalysis")}});
+    const t0 = Date.now();
+    expect(await t.flow.step(t.missionId)).toEqual({status: "BUILDER_FAILED", kind: "BusinessAnalysis", code: "PREDEV_BUILDER_TIMEOUT"});
+    expect(Date.now() - t0).toBeLessThan(30_000);
+    expect(t.builder()!.lastTrace).toMatchObject({failure: "PREDEV_BUILDER_TIMEOUT", outputSha256: null});
+    const [c] = t.spawns(); expect(c.kind).toBe("BusinessAnalysis");
+    expect(alive(c.pid)).toBe(false);
+    expect(t.rm().artifacts.BusinessAnalysis.state).toBe("NOT_STARTED");
+    t.scenario({"*": {stdout: good("BusinessAnalysis")}});
+    expect((await t.flow.step(t.missionId)).status).toBe("DRAFT_READY");
+    expect(t.spawns()).toHaveLength(2);
+  });
+
+  it("builder failure codes: PREDEV_BUILDER_LOGIN_EXPIRED only from the documented auth envelope (is_error true, subtype success) or from the STDERR of a failed process; the text of any other envelope or of plain stdout is never an auth signal; every parsed error envelope is CLI_ERROR whatever the exit code; a malformed envelope is ENVELOPE_INVALID", T, async () => {
+    const loginMsg = "Invalid API key · Please run /login";
+    const cases: Array<[string, Scenario, string]> = [
+      ["auth envelope + exit 1", {stdout: envelope(loginMsg, {is_error: true}), exit: 1}, "PREDEV_BUILDER_LOGIN_EXPIRED"],
+      ["auth envelope + exit 0", {stdout: envelope(loginMsg, {is_error: true}), exit: 0}, "PREDEV_BUILDER_LOGIN_EXPIRED"],
+      ["stderr only + exit 1", {stderr: "Error: OAuth token has expired\n", exit: 1}, "PREDEV_BUILDER_LOGIN_EXPIRED"],
+      ["stderr says /login but the process exited 0 with a good envelope: not an auth failure", {stdout: good("BusinessAnalysis"), stderr: "Please run /login\n", exit: 0}, "DRAFT_READY"],
+      ["login text in a NON-success envelope (error_during_execution) + exit 1", {stdout: envelope("OAuth token revoked · Please run /login", {is_error: true, subtype: "error_during_execution"}), exit: 1}, "PREDEV_BUILDER_CLI_ERROR"],
+      ["login text in a NON-success envelope + exit 0", {stdout: envelope("Please run /login", {is_error: true, subtype: "error_during_execution"}), exit: 0}, "PREDEV_BUILDER_CLI_ERROR"],
+      ["login text in an error_max_turns envelope", {stdout: envelope("Please run /login", {is_error: false, subtype: "error_max_turns"}), exit: 0}, "PREDEV_BUILDER_CLI_ERROR"],
+      ["plain stdout with auth text + exit 1 (not an envelope, not stderr)", {stdout: loginMsg + "\n", exit: 1}, "PREDEV_BUILDER_EXIT_NONZERO"],
+      ["exit 1, no auth text", {stdout: "", stderr: "boom\n", exit: 1}, "PREDEV_BUILDER_EXIT_NONZERO"],
+      ["malformed envelope + exit 1", {stdout: "{not json", exit: 1}, "PREDEV_BUILDER_EXIT_NONZERO"],
+      ["is_error, not auth + exit 0", {stdout: envelope("Credit balance is too low", {is_error: true}), exit: 0}, "PREDEV_BUILDER_CLI_ERROR"],
+      ["is_error, not auth + exit 1 (rate limit / API error)", {stdout: envelope("API Error: 429 rate limited", {is_error: true}), exit: 1}, "PREDEV_BUILDER_CLI_ERROR"],
+      ["max turns", {stdout: envelope("", {subtype: "error_max_turns"}), exit: 0}, "PREDEV_BUILDER_CLI_ERROR"],
+      ["success text that mentions /login is NOT an auth failure", {stdout: envelope("Please run /login\n" + JSON.stringify(TASKHUB_ARTIFACTS.BusinessAnalysis)), exit: 0}, "REJECTED:PREDEV_DRIVER_INVALID_JSON"],
+      ["plain JSON, no envelope", {stdout: JSON.stringify(TASKHUB_ARTIFACTS.BusinessAnalysis), exit: 0}, "PREDEV_BUILDER_ENVELOPE_INVALID"],
+      ["array of events", {stdout: JSON.stringify([{type: "result", subtype: "success", is_error: false, result: "{}"}]), exit: 0}, "PREDEV_BUILDER_ENVELOPE_INVALID"],
+      ["envelope of type assistant", {stdout: JSON.stringify({type: "assistant", subtype: "success", is_error: false, result: "{}"}), exit: 0}, "PREDEV_BUILDER_ENVELOPE_INVALID"],
+      ["envelope without is_error", {stdout: JSON.stringify({type: "result", subtype: "success", result: "{}"}), exit: 0}, "PREDEV_BUILDER_ENVELOPE_INVALID"],
+      ["is_error is not a boolean", {stdout: JSON.stringify({type: "result", subtype: "success", is_error: "false", result: "{}"}), exit: 0}, "PREDEV_BUILDER_ENVELOPE_INVALID"],
+      ["envelope without result text", {stdout: JSON.stringify({type: "result", subtype: "success", is_error: false}), exit: 0}, "PREDEV_BUILDER_ENVELOPE_INVALID"],
+      ["empty result", {stdout: envelope("   "), exit: 0}, "PREDEV_BUILDER_EMPTY_OUTPUT"],
+      ["no stdout at all", {stdout: "", exit: 0}, "PREDEV_BUILDER_EMPTY_OUTPUT"],
+      ["the process wrote into its scratch", {stdout: good("BusinessAnalysis"), touch: true}, "PREDEV_BUILDER_SCRATCH_MODIFIED"]
+    ];
+    for (const [name, sc, expected] of cases) {
+      const t = rig();
+      t.scenario({"*": sc});
+      const r = await t.flow.step(t.missionId);
+      const got = r.status === "BUILDER_FAILED" ? r.code : r.status === "REJECTED" ? `REJECTED:${r.reason}` : r.status;
+      expect([name, got]).toEqual([name, expected]);
+      expect([name, t.rm().artifacts.BusinessAnalysis.state]).toEqual([name, expected === "DRAFT_READY" ? "DRAFT" : "NOT_STARTED"]);
+      expect([name, t.spawns().length]).toEqual([name, 1]);
+      fs.rmSync(path.join(tmp, "calls.jsonl"), {force: true}); fs.rmSync(path.join(tmp, "data"), {recursive: true, force: true});
+    }
+  });
+
+  // //TR: #237 inceleme: metin kipi (outputFormat verilmez; eski rota) HİÇBİR oturum sınıflaması yapmaz: stderr'de "Please run /login" + çıkış 1 yine EXIT_NONZERO'dur. Ve reviewerArgv'nin varsayılanı "text"tir (yalnız pre-dev "json" ister).
+  it("text mode (no outputFormat, the legacy route) never classifies an auth failure: exit 1 with `Please run /login` on stderr is still EXIT_NONZERO; reviewerArgv defaults to `--output-format text` and only the pre-dev route asks for json", T, async () => {
+    const proc = (over: Partial<ProcResult>): ProcResult => ({argv: [], exitCode: 0, stdout: "", stderr: "", startedAt: "", endedAt: "", timedOut: false, aborted: false, spawnError: false, ...over});
+    const make = (over: Partial<ProcResult>) => new ClaudePreDevBuilder({identity: "id", launcher: () => "/x/claude", profile: () => ({ok: true as const, dir: path.join(tmp, "profile")}), env: () => ({}), argv: l => [l], scratchRoot: tmp, run: async argv => proc({argv, ...over})});
+    const ctx = {brief: TASKHUB_BRIEF, approvedUpstream: {}};
+    for (const [name, over] of [["stderr", {exitCode: 1, stderr: "Error: Please run /login\n"}], ["stdout", {exitCode: 1, stdout: "Invalid API key · Please run /login\n"}]] as const) {
+      await expect(make(over).produce("BusinessAnalysis", "# ARTEFAKT TÜRÜ: BusinessAnalysis\nprompt", ctx), name).rejects.toMatchObject({code: "PREDEV_BUILDER_EXIT_NONZERO"});
+    }
+    expect(await make({stdout: "{}\n"}).produce("BusinessAnalysis", "# ARTEFAKT TÜRÜ: BusinessAnalysis\nprompt", ctx)).toBe("{}"); // text mode: stdout IS the output, no envelope reading
+    expect(reviewerArgv("claude").slice(-2)).toEqual(["--output-format", "text"]);
+    expect(reviewerArgv("claude", "text").slice(-2)).toEqual(["--output-format", "text"]);
+    expect(reviewerArgv("claude", "json").slice(-2)).toEqual(["--output-format", "json"]);
+    expect(reviewerArgv("claude", "json").slice(0, -2)).toEqual(reviewerArgv("claude").slice(0, -2));
+  });
+
+  it("claudeAnalysisReadiness gates every spawn: not signed in, launcher changed after readiness, or the CLI missing -> no process is ever started", T, async () => {
+    const t = rig({login: false});
+    t.scenario({"*": {stdout: good("BusinessAnalysis")}});
+    const blocked = await t.flow.step(t.missionId);
+    expect(blocked).toMatchObject({status: "BLOCKED", blocker: "implementer:CLAUDE_PROFILE_LOGIN_REQUIRED"});
+    expect((blocked as {blockers: string[]}).blockers).toEqual(["implementer:CLAUDE_PROFILE_LOGIN_REQUIRED", "reviewer:CLAUDE_PROFILE_LOGIN_REQUIRED"]);
+    expect(t.spawns()).toHaveLength(0);
+    expect(t.rm()).toMatchObject({active: false, phase: "NOT_STARTED"});
+
+    // readiness passed once, then the launcher bytes change: the builder's own provenance check stops the spawn (defence in depth)
+    const u = rig();
+    u.scenario({"*": {stdout: good("BusinessAnalysis")}});
+    expect(u.readiness().ready).toBe(true);
+    const prov = path.join(u.control, ".ai", "runtime", "PROVIDER_PROVENANCE.json");
+    fs.writeFileSync(prov, fs.readFileSync(prov, "utf8").replace(/"launcherSha256":"[0-9a-f]{64}"/, `"launcherSha256":"${"0".repeat(64)}"`));
+    expect(await u.flow.step(u.missionId)).toMatchObject({status: "BLOCKED", blocker: "CLAUDE_LAUNCHER_PROVENANCE_CHANGED"});
+    expect(u.spawns()).toHaveLength(0);
+  });
+
+  it("the roles' prompts carry a per-kind output skeleton whose keys are exactly the validators' keys; a filled skeleton passes the REAL validators chain (G1 -> FR1 -> S1/WP1 -> C1)", () => {
+    const fill = (x: unknown): unknown => typeof x === "string" ? (x.includes(PLACEHOLDER_MARKER) ? "filled text" : x) : Array.isArray(x) ? x.map(fill) : x && typeof x === "object" ? Object.fromEntries(Object.entries(x).map(([k, v]) => [k, fill(v)])) : x;
+    const filled = Object.fromEntries((Object.keys(OUTPUT_SKELETONS) as ArtifactKind[]).map(k => [k, fill(OUTPUT_SKELETONS[k])])) as Record<ArtifactKind, any>;
+    filled.Requirements.functional[0].tracesTo = ["G1"]; filled.Requirements.nonFunctional[0].tracesTo = ["G1"];
+    filled.Plan.workPackages[0].satisfies = ["FR1", "NFR1"];
+    filled.Architecture.components[0].covers = ["S1"];
+    expect(validateArtifactContent("BusinessAnalysis", filled.BusinessAnalysis)).toEqual({ok: true});
+    expect(validateArtifactContent("Requirements", filled.Requirements, {businessAnalysis: filled.BusinessAnalysis})).toEqual({ok: true});
+    expect(validateArtifactContent("Plan", filled.Plan, {requirements: filled.Requirements})).toEqual({ok: true});
+    expect(validateArtifactContent("Architecture", filled.Architecture, {plan: filled.Plan})).toEqual({ok: true});
+    expect(validateArtifactContent("UxSpec", filled.UxSpec)).toEqual({ok: true});
+    for (const k of Object.keys(OUTPUT_SKELETONS) as ArtifactKind[]) {
+      const prompt = composeRolePrompt(k, {brief: {projectName: "p", isReference: false, label: "l", summary: "s", stakeholders: [], objectives: [], constraints: [], outOfScope: [], notes: []}, approvedUpstream: {}});
+      expect([k, prompt.endsWith(JSON.stringify(OUTPUT_SKELETONS[k], null, 2))]).toEqual([k, true]);
+      expect([k, JSON.stringify(OUTPUT_SKELETONS[k]).includes(PLACEHOLDER_MARKER)]).toEqual([k, true]);
+    }
+    // every text leaf of a skeleton is a placeholder; the only literal strings are the example ids (id / workPackageIds): in particular the traceability slots (tracesTo, satisfies, covers) and every name/statement are placeholders
+    const leaves = (x: unknown, key = "", out: Array<[string, string]> = []): Array<[string, string]> => { if (typeof x === "string") out.push([key, x]); else if (Array.isArray(x)) x.forEach(v => leaves(v, key, out)); else if (x && typeof x === "object") Object.entries(x).forEach(([k, v]) => leaves(v, k, out)); return out; };
+    for (const k of Object.keys(OUTPUT_SKELETONS) as ArtifactKind[]) for (const [key, val] of leaves(OUTPUT_SKELETONS[k])) if (!val.includes(PLACEHOLDER_MARKER)) expect([k, key, val.length > 0 && ["id", "workPackageIds"].includes(key)]).toEqual([k, key, true]);
+    // the traceability slots are placeholders: copying the skeleton cannot satisfy the real chain
+    expect(validateArtifactContent("Requirements", OUTPUT_SKELETONS.Requirements, {businessAnalysis: filled.BusinessAnalysis})).toEqual({ok: false, errors: "PLACEHOLDER_VALUE"});
+    // with every placeholder replaced EXCEPT the traceability slots the chain would also refuse it (the slots are not valid ids)
+    const keepSlots = JSON.parse(JSON.stringify(filled.Requirements)); keepSlots.functional[0].tracesTo = ["not-a-goal"];
+    expect(validateArtifactContent("Requirements", keepSlots, {businessAnalysis: filled.BusinessAnalysis})).toEqual({ok: false, errors: "REQ_TRACEABILITY_BROKEN"});
+  });
+
+  it("the placeholder guard looks at every string, at any depth, keys included; honest text that merely looks similar passes", T, async () => {
+    const poison = (mutate: (c: any) => void) => { const c = JSON.parse(JSON.stringify(TASKHUB_ARTIFACTS.BusinessAnalysis)); mutate(c); return JSON.stringify(c); };
+    for (const [name, out] of [
+      ["goal statement", poison(c => { c.goals[0].statement = `${PLACEHOLDER_MARKER}: goal>>`; })],
+      ["last risk", poison(c => { c.risks[c.risks.length - 1] = `see ${PLACEHOLDER_MARKER}: x>>`; })],
+      ["a key (the guard runs before the shape check)", poison(c => { c[`${PLACEHOLDER_MARKER}: key>>`] = "x"; })],
+      ["the bare marker <<FILL>> (no hint)", poison(c => { c.problem = "<<FILL>>"; })]
+    ] as const) {
+      const t = setup(() => out);
+      expect([name, await t.flow.step(t.missionId)]).toEqual([name, {status: "REJECTED", kind: "BusinessAnalysis", reason: "PREDEV_DRIVER_PLACEHOLDER_VALUE"}]);
+      expect([name, t.rm().artifacts.BusinessAnalysis.state]).toEqual([name, "NOT_STARTED"]);
+    }
+    const honest = setup(() => poison(c => { c.assumptions.push("Users fill in <<name>> fields and the word FILL appears in text"); }));
+    expect((await honest.flow.step(honest.missionId)).status).toBe("DRAFT_READY");
+  });
+
+  // //TR: #237 inceleme (MEDIUM + LOW): koruma validateArtifactContent'in İÇİNDEDİR (apply.ts yazma kapısı, CrewCoordinator.reproduceSuperseding ve yetkinlik değerlendirmesi de alır); büyük/küçük harf, boşluk, Unicode varyantlarına karşı normalize eder (NFKC + biçim karakterlerini at) ve çok derin yanıt RangeError değil tipli bir ret olur.
+  it("the placeholder guard is part of validateArtifactContent (every caller gets it) and is not bypassed by case, spacing, full-width forms or INVISIBLE code points (format characters, variation selectors, grapheme joiner); honest text passes, including accented text the previous NFKC guard accepted (visible marks and cross-script confusables are a documented limit); a deeply nested reply is a typed rejection, never a RangeError", T, async () => {
+    const ba = () => JSON.parse(JSON.stringify(TASKHUB_ARTIFACTS.BusinessAnalysis));
+    const variants: Array<[string, string]> = [
+      ["marker", `${PLACEHOLDER_MARKER}: x>>`], ["lower case", "<<fill: x>>"], ["mixed case", "<<FiLl: x>>"], ["bare", "<<FILL>>"], ["bare lower case", "<<fill>>"],
+      ["space after the chevrons", "<< FILL: x>>"], ["newline after the chevrons", "<<\nFILL: x>>"], ["tab", "<<\tfill>>"], ["space between the chevrons", "< < FILL: x>>"],
+      ["full-width characters", "＜＜ＦＩＬＬ: x>>"], ["zero-width space inside", "<<F\u200BILL: x>>"], ["zero-width joiner between the chevrons", "<\u200D<FILL: x>>"],
+      ["soft hyphen inside", "<<FI\u00ADLL: x>>"], ["right-to-left override before FILL", "<<\u202EFILL: x>>"], ["byte order mark", "<<\uFEFFFILL>>"],
+      ["inside a longer text", "see the template <<FILL: x>> for details"],
+      // //TR: #257 takibi: yalnız GÖRÜNMEZ kod noktaları atılır (\p{Default_Ignorable_Code_Point}: varyasyon seçicileri, birleştirici grafem birleştiricisi, Hangul dolgusu)
+      ["variation selector after the last L", "<<FILL\uFE0F: x>>"], ["variation selector 1 inside", "<<FI\uFE00LL: x>>"], ["combining grapheme joiner inside", "<<F\u034FILL: x>>"],
+      ["Hangul filler between the chevrons", "<\u3164<FILL>>"], ["Mongolian free variation selector", "<<FI\u180BLL: x>>"]
+    ];
+    for (const [name, text] of variants) {
+      const asValue = ba(); asValue.goals[0].statement = text;
+      expect([name, validateArtifactContent("BusinessAnalysis", asValue)]).toEqual([name, {ok: false, errors: "PLACEHOLDER_VALUE"}]);
+      const asKey = ba(); asKey[text] = "x";
+      expect([`${name} as a key`, validateArtifactContent("BusinessAnalysis", asKey)]).toEqual([`${name} as a key`, {ok: false, errors: "PLACEHOLDER_VALUE"}]);
+      const ux = JSON.parse(JSON.stringify(TASKHUB_ARTIFACTS.UxSpec)); ux[Object.keys(ux)[0]!] = [text];
+      expect([`${name} in a UxSpec`, validateArtifactContent("UxSpec", ux)]).toEqual([`${name} in a UxSpec`, {ok: false, errors: "PLACEHOLDER_VALUE"}]);
+    }
+    for (const text of ["Users fill in <<name>> fields", "the FILL level", "<<fillable>> template", "<<filling>>", "fill << then", "a << b and fill", "<fill>", "<<", "FILL>>", "Pad ids with std::cout << fill('0')", "<<Fill-in form>>", "a < b << fill", "<<FILL-IN>> button", "<<fill in the blanks", "Café déjà vu <<naïve>> façade", "<<Fíll>> er stór", "Orðið << fíll: >> þýðir", "<<´fill: y", "<<Fìll>> (gd)", "<<fíl: >>"]) {
+      const c = ba(); c.goals[0].statement = text;
+      expect([text, validateArtifactContent("BusinessAnalysis", c)]).toEqual([text, {ok: true}]);
+    }
+    // //TR: BELGELENMİŞ SINIR (not ve davranış ayrışmasın diye sabitlenir): GÖRÜNÜR işaretli harfler (Mn aksan, Mc, Me, bindirme, ayrışık/önceden birleştirilmiş İ) ve betikler arası benzer görünen harfler (Kiril І, Yunan Ι) TANINMAZ; koruma tembel bir iskelet yankısına karşıdır, kasıtlı gizlemeye karşı değildir. (Aksanlı dürüst metnin yeniden oynatmada reddedilip mağazayı mühürlememesi için de ATILMAZLAR.)
+    for (const [name, text] of [["Mn acute accent on the F", "<<F\u0301ILL: x>>"], ["precomposed dotted capital I", "<<F\u0130LL: x>>"], ["precomposed accented I", "<<F\u00CCLL>>"], ["Mn combining long solidus overlay", "<<F\u0338ILL>>"], ["Mc Devanagari vowel sign AA", "<<F\u093EILL: x>>"], ["Me combining enclosing circle", "<<F\u20DDILL: x>>"], ["Cyrillic I", "<<F\u0406LL: x>>"], ["Greek Iota", "<<F\u0399LL>>"]] as const) {
+      const c = ba(); c.goals[0].statement = text;
+      expect([`documented limit (${name})`, validateArtifactContent("BusinessAnalysis", c)]).toEqual([`documented limit (${name})`, {ok: true}]);
+    }
+    // //TR: yeniden oynatma uyumu: önceki NFKC korumasının kabul ettiği (yazma kapısından geçen) aksanlı bir artefakt, mağaza yeniden açıldığında (journal yeniden oynatması) REDDEDİLMEZ ve mağaza mühürlenmez
+    {
+      const t = setup();
+      const seq = t.store.openPreDevSequence(SCOPE, t.missionId, "FOUNDER_LOCAL");
+      t.store.advancePreDevPhase(SCOPE, seq.preDevId, "BUSINESS_ANALYSIS", "FOUNDER_LOCAL");
+      const accented = ba(); accented.problem = "Orðið << fíll: >> þýðir fíll á íslensku, og <<Fíll>> er stór";
+      const rec = t.store.recordPreDevArtifact(SCOPE, seq.preDevId, {kind: "BusinessAnalysis", authorRoleId: PRE_DEV_ROLE_MAP.BusinessAnalysis[0], content: accented}, PREDEV_AGENT_ACTOR);
+      const replayed = new WorkOsStore(path.join(tmp, "data"));
+      expect(replayed.isTampered, "replaying an accented artefact must not seal the store").toBe(false);
+      expect(replayed.getPreDevArtifact(SCOPE, rec.id)?.content).toEqual(accented);
+    }
+    // the skeletons themselves can never pass any kind (including the two whose shape is valid verbatim)
+    for (const kind of ["BusinessAnalysis", "UxSpec"] as const) expect(validateArtifactContent(kind, OUTPUT_SKELETONS[kind])).toEqual({ok: false, errors: "PLACEHOLDER_VALUE"});
+    // depth: a reply nested 100 000 deep parses fine (JSON.parse is iterative) and must not overflow the guard
+    const deepArray = "[".repeat(100_000) + "]".repeat(100_000), deepObject = '{"a":'.repeat(50_000) + "1" + "}".repeat(50_000);
+    for (const [name, raw] of [["array", deepArray], ["object", deepObject]] as const) {
+      expect([name, validateArtifactContent("BusinessAnalysis", JSON.parse(raw))]).toEqual([name, {ok: false, errors: "CONTENT_TOO_DEEP"}]);
+      const nested = ba(); nested.problem = JSON.parse(raw);
+      expect([`${name} inside a field`, validateArtifactContent("BusinessAnalysis", nested)]).toEqual([`${name} inside a field`, {ok: false, errors: "CONTENT_TOO_DEEP"}]);
+      const t = setup(() => raw);
+      expect([name, await t.flow.step(t.missionId)]).toEqual([name, {status: "REJECTED", kind: "BusinessAnalysis", reason: "CONTENT_TOO_DEEP"}]);
+      expect([name, t.rm().artifacts.BusinessAnalysis.state]).toEqual([name, "NOT_STARTED"]);
+    }
+    // ... and an artefact that is nested sensibly (depth well under the cap) is untouched by the cap
+    expect(validateArtifactContent("BusinessAnalysis", ba())).toEqual({ok: true});
+    // the store's write gate (apply.ts) refuses such content too: nothing is appended
+    const t = setup();
+    const seq = t.store.openPreDevSequence(SCOPE, t.missionId, "FOUNDER_LOCAL");
+    t.store.advancePreDevPhase(SCOPE, seq.preDevId, "BUSINESS_ANALYSIS", "FOUNDER_LOCAL");
+    const before = t.store.preDevReadModel(SCOPE, t.missionId).artifacts.BusinessAnalysis.artifactId;
+    const poisoned = ba(); poisoned.problem = "<<fill>>";
+    expect(() => t.store.recordPreDevArtifact(SCOPE, seq.preDevId, {kind: "BusinessAnalysis", authorRoleId: PRE_DEV_ROLE_MAP.BusinessAnalysis[0], content: poisoned}, PREDEV_AGENT_ACTOR)).toThrow(/PREDEV_ARTIFACT_INVALID:PLACEHOLDER_VALUE/);
+    expect(t.store.preDevReadModel(SCOPE, t.missionId).artifacts.BusinessAnalysis.artifactId).toBe(before);
+  });
+
+  it("EXECUTOR_NOT_ENABLED: readiness says ready but there is no production builder (no pair, or a FAKE pair) -> BLOCKED with a Founder action BEFORE any paid call and before anything is recorded; LOCAL_CLAUDE is unchanged", T, async () => {
+    const t = rig();
+    expect(t.readiness().ready).toBe(true); // CLI, launcher proof and both sign-ins are fine: only the executor is missing
+    // exactly how the analysis route composes the builder (apps/control-api/src/routes/analysis.ts, Lane B)
+    const compose = (pair: {preDevBuilder?: () => BuilderPort} | null): BuilderPort => pair?.preDevBuilder?.() ?? NO_ANALYSIS_BUILDER;
+    const fake = new FakeExecutors({implement: () => ({}), review: () => ({verdict: "CLEAN"})}).pair();
+    expect(fake.preDevBuilder).toBeUndefined();
+    for (const [name, builder] of [["no executors pair", compose(null)], ["FAKE pair", compose(fake)]] as const) {
+      const flow = new AnalysisFlow({store: t.store, scope: SCOPE, builder, readiness: t.readiness});
+      const r = await flow.step(t.missionId);
+      expect([name, r.status]).toEqual([name, "BLOCKED"]);
+      const b = r as Extract<typeof r, {status: "BLOCKED"}>;
+      expect([name, b.blocker, b.blockers]).toEqual([name, "EXECUTOR_NOT_ENABLED", ["EXECUTOR_NOT_ENABLED"]]);
+      expect(b.founderAction).toContain("LOCAL_CLAUDE");
+      expect(b.readiness.ready).toBe(false);
+      expect(t.rm()).toMatchObject({active: false, phase: "NOT_STARTED"}); // nothing opened, nothing recorded
+    }
+    expect(t.spawns()).toHaveLength(0);
+    // LOCAL_CLAUDE: the composed builder is the real one and the very same flow proceeds
+    const real = compose(t.pair());
+    expect(real).not.toBe(NO_ANALYSIS_BUILDER);
+    t.scenario({"*": {stdout: good("BusinessAnalysis")}});
+    const flow = new AnalysisFlow({store: t.store, scope: SCOPE, builder: real, readiness: t.readiness});
+    expect((await flow.step(t.missionId)).status).toBe("DRAFT_READY");
+    expect(t.spawns()).toHaveLength(1);
+  });
+
+  it("EXECUTOR_NOT_ENABLED in claudeAnalysisReadiness: executorEnabled=false adds the blocker AFTER the CLI/launcher/sign-in blockers; true or absent changes nothing", T, () => {
+    const t = rig();
+    const o = {controlRoot: t.control, profile: {forbiddenRoots: [path.join(tmp, "data")]}};
+    expect(claudeAnalysisReadiness({...o, cli: FOUND})).toMatchObject({ready: true, blockers: []});
+    expect(claudeAnalysisReadiness({...o, cli: FOUND, executorEnabled: true})).toMatchObject({ready: true, blockers: []});
+    const off = claudeAnalysisReadiness({...o, cli: FOUND, executorEnabled: false});
+    expect(off).toMatchObject({ready: false, blocker: "EXECUTOR_NOT_ENABLED", blockers: ["EXECUTOR_NOT_ENABLED"]});
+    expect(off.founderAction).toContain("Settings");
+    const noCli: ClaudeCliStatus = {state: "NOT_FOUND", path: null, kind: null, source: null, pathDir: null, searchedCount: 1, founderAction: "install claude"};
+    const both = claudeAnalysisReadiness({controlRoot: path.join(tmp, "nothing-set-up"), profile: o.profile, cli: noCli, executorEnabled: false});
+    expect(both.blocker).toBe("CLAUDE_CLI_NOT_FOUND"); // the executor can only be enabled once the CLI exists: it stays last
+    expect(both.blockers[both.blockers.length - 1]).toBe("EXECUTOR_NOT_ENABLED");
+    expect(both.founderAction).toBe("install claude");
   });
 });
 });

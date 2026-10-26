@@ -6,7 +6,7 @@ import crypto from "node:crypto";
 import cp from "node:child_process";
 import {fileURLToPath} from "node:url";
 import {safeChildEnv} from "../../automation/lib/env-policy.mjs";
-import {agentConfigInWorkspace, commitBuilderOutput, gitControlDigest} from "./builder-output.js";
+import {agentConfigInWorkspace, commitBuilderOutputAsync, gitControlDigest} from "./builder-output.js";
 import {spawnGitSync} from "../../automation/lib/git-isolation.mjs";
 import {CLAUDE_ISOLATION_FLAGS, claudeAuthFailure, claudeLauncherCheck, claudeProfileForRun, withClaudeProfileEnv} from "./claude-profiles.js";
 import type {ClaudeProfileOptions} from "./claude-profiles.js";
@@ -30,7 +30,13 @@ export interface ProcResult {
   argv: string[]; exitCode: number | null; stdout: string; stderr: string; startedAt: string; endedAt: string;
   timedOut: boolean; aborted: boolean; spawnError: boolean;
 }
-export interface ExecContext { timeoutMs: number; shouldAbort?: () => boolean }
+// //TR: PAR-04: onSpawn, adapter her implementer/reviewer çocuğunu doğurduğu anda (eşzamanlı) çağrılır; pgid POSIX'te çocuğun yeni süreç grubudur (pgid = pid), Windows'ta null (pid çocuk ağacının köküdür). Fırlatırsa çocuk öldürülür ve spawn hatası sayılır: kayıtsız yazar bırakılmaz.
+export interface SpawnedChild { pid: number; pgid: number | null; short?: boolean } // short: kısa ömürlü yardımcı çocuk (engine commit'inin git'i): kayıt tutulur ama Windows'ta PowerShell kimlik çağrısı yapılmaz
+// //TR: writerEnv (TK-1): çocuğun ortamına EKLENİR (lease işareti: setsid ile gruptan kaçan torunlar da miras alır; devralan engine bunlarla tarar). span (HB-1): adapter'ın engine süreci içindeki KÜÇÜK senkron işleri (ör. .git özeti, çalışma alanı anlık görüntüsü) bu çağrıya sarar; runner bunu span()'a bağlar (diğer run'ların lease'i işten önce/sonra yenilenir).
+// //TR: R2: engine commit'inin git çocukları yazar kaydına girer (kayıtsız yazar bırakılmaz) ama kısa ömürlüdür: kimlik belirteci için Windows/macOS'ta süreç başlatılmaz.
+export const shortChildren = (onSpawn: ((c: SpawnedChild) => void) | undefined): ((c: SpawnedChild) => void) | undefined => onSpawn && (c => onSpawn({...c, short: true}));
+export interface ExecContext { timeoutMs: number; shouldAbort?: () => boolean; onSpawn?: (child: SpawnedChild) => void; writerEnv?: Record<string, string>; span?: <T>(fn: () => T) => T }
+const withWriterEnv = (env: NodeJS.ProcessEnv, ctx: ExecContext): NodeJS.ProcessEnv => ctx.writerEnv ? {...env, ...ctx.writerEnv} : env;
 // blockReason: adapter builder çıktısını commit etmeyi reddettiyse (ör. BUILDER_PRODUCED_NO_CHANGE) runner run'ı BLOCKED yapar.
 export interface ImplementResult { exitCode: number | null; commitSha?: string; blockReason?: string; log: string; argv: string[]; startedAt: string; endedAt: string; timedOut: boolean; aborted: boolean; transient: boolean }
 export interface ReviewFinding { severity: string; title: string }
@@ -60,7 +66,7 @@ function killTree(child: cp.ChildProcess, group = false): void {
     else child.kill("SIGKILL");
   } catch { /* süreç zaten bitmiş olabilir */ }
 }
-export interface ProcOptions { cwd: string; env: NodeJS.ProcessEnv; timeoutMs: number; input?: string; shouldAbort?: () => boolean; newSession?: boolean }
+export interface ProcOptions { cwd: string; env: NodeJS.ProcessEnv; timeoutMs: number; input?: string; shouldAbort?: () => boolean; newSession?: boolean; onSpawn?: (child: SpawnedChild) => void }
 // Shell kullanılmaz (argv dizisi); zaman aşımı ve abort (GLOBAL_STOP / lease kaybı) süreç ağacını sonlandırır.
 export function runProcess(argv: string[], opts: ProcOptions): Promise<ProcResult> {
   return runChild(argv, opts, () => cp.spawn(argv[0], argv.slice(1), {cwd: opts.cwd, env: opts.env, shell: false, windowsHide: true, stdio: ["pipe", "pipe", "pipe"], ...(opts.newSession && process.platform !== "win32" ? {detached: true} : {})}));
@@ -72,7 +78,7 @@ export function runProcess(argv: string[], opts: ProcOptions): Promise<ProcResul
  */
 export function runNodeScript(script: string, args: string[], opts: ProcOptions): Promise<ProcResult> {
   const argv = [process.execPath, script, ...args];
-  return runChild(argv, opts, () => cp.fork(script, args, {cwd: opts.cwd, env: opts.env, execArgv: [], windowsHide: true, stdio: ["pipe", "pipe", "pipe", "ipc"]} as cp.ForkOptions));
+  return runChild(argv, opts, () => cp.fork(script, args, {cwd: opts.cwd, env: opts.env, execArgv: [], windowsHide: true, stdio: ["pipe", "pipe", "pipe", "ipc"], ...(opts.newSession && process.platform !== "win32" ? {detached: true} : {})} as cp.ForkOptions));
 }
 function runChild(argv: string[], opts: ProcOptions, start: () => cp.ChildProcess): Promise<ProcResult> {
   return new Promise(resolve => {
@@ -90,6 +96,12 @@ function runChild(argv: string[], opts: ProcOptions, start: () => cp.ChildProces
       resolve({argv, exitCode: null, stdout, stderr, startedAt, endedAt: new Date().toISOString(), timedOut, aborted, spawnError}); return;
     }
     const group = opts.newSession === true && process.platform !== "win32";
+    if (opts.onSpawn && child.pid) {
+      try { opts.onSpawn({pid: child.pid, pgid: group ? child.pid : null}); } catch (e) {
+        spawnError = true; stderr = `SPAWN_RECORD_FAILED: ${(e as Error).message}`; settled = true; killTree(child, group);
+        resolve({argv, exitCode: null, stdout, stderr, startedAt, endedAt: new Date().toISOString(), timedOut, aborted, spawnError}); return;
+      }
+    }
     const timer = setTimeout(() => { timedOut = true; killTree(child, group); }, Math.max(1, opts.timeoutMs));
     const poll: NodeJS.Timeout | null = opts.shouldAbort ? setInterval(() => { if (opts.shouldAbort!()) { aborted = true; killTree(child, group); } }, 250) : null;
     child.stdout?.on("data", (d: Buffer) => { if (stdout.length < MAX_CAPTURE) stdout += d.toString("utf8"); });
@@ -126,7 +138,7 @@ function toReview(r: ProcResult): ReviewResult {
 }
 
 // ---- FAKE adapter (yalnız testler; programatik enjeksiyonla seçilir, env ile seçilemez) ----
-export interface FakeImplementDirective { files?: Record<string, string>; exitCode?: number; noCommit?: boolean; message?: string; sleepMs?: number; stderr?: string; deleteFiles?: string[] }
+export interface FakeImplementDirective { files?: Record<string, string>; exitCode?: number; noCommit?: boolean; message?: string; sleepMs?: number; waitFile?: string; readyFile?: string; stderr?: string; deleteFiles?: string[]; grandchild?: {file: string; delayMs: number; detached?: boolean; pidFile?: string; cwd?: string; waitFile?: string} }
 export interface FakeReviewDirective { verdict?: "CLEAN" | "BLOCKED"; findings?: ReviewFinding[]; exitCode?: number; mutate?: boolean; raw?: string }
 export interface FakeScript {
   implement: (call: number, spec: MissionSpec) => FakeImplementDirective;
@@ -146,7 +158,7 @@ export class FakeExecutors {
         identity: this.identities.implementer,
         async implement(workspace, spec, ctx) {
           const n = ++self.calls.implement;
-          const r = await runProcess([process.execPath, FAKE_EXECUTOR_SCRIPT, "implement", workspace], {cwd: workspace, env: env(), timeoutMs: ctx.timeoutMs, input: JSON.stringify(self.script.implement(n, spec)), shouldAbort: ctx.shouldAbort});
+          const r = await runProcess([process.execPath, FAKE_EXECUTOR_SCRIPT, "implement", workspace], {cwd: workspace, env: withWriterEnv(env(), ctx), timeoutMs: ctx.timeoutMs, input: JSON.stringify(self.script.implement(n, spec)), shouldAbort: ctx.shouldAbort, newSession: true, onSpawn: ctx.onSpawn});
           return {exitCode: r.exitCode, log: procLog(r), argv: r.argv, startedAt: r.startedAt, endedAt: r.endedAt, timedOut: r.timedOut, aborted: r.aborted, transient: r.timedOut || r.spawnError || r.exitCode === 75};
         }
       },
@@ -155,7 +167,7 @@ export class FakeExecutors {
         async review(cleanClone, spec, diff, ctx) {
           const n = ++self.calls.review;
           const directive = {...self.script.review(n, spec), diffSha256: crypto.createHash("sha256").update(diff).digest("hex")};
-          return toReview(await runProcess([process.execPath, FAKE_EXECUTOR_SCRIPT, "review", cleanClone], {cwd: cleanClone, env: env(), timeoutMs: ctx.timeoutMs, input: JSON.stringify(directive), shouldAbort: ctx.shouldAbort}));
+          return toReview(await runProcess([process.execPath, FAKE_EXECUTOR_SCRIPT, "review", cleanClone], {cwd: cleanClone, env: withWriterEnv(env(), ctx), timeoutMs: ctx.timeoutMs, input: JSON.stringify(directive), shouldAbort: ctx.shouldAbort, newSession: true, onSpawn: ctx.onSpawn}));
         }
       }
     };
@@ -201,24 +213,27 @@ export class EditOnlyImplementer implements ImplementerAdapter {
   constructor(readonly identity: string, private readonly envPolicyFile: string, private readonly makeProcess: (workspace: string, spec: MissionSpec) => EditOnlyProcess | {refuse: string}, private readonly transientExitCodes: number[] = []) {}
   async implement(workspace: string, spec: MissionSpec, ctx: ExecContext): Promise<ImplementResult> {
     const startSha = spec.startSha ?? "";
-    const before = gitControlDigest(workspace);
+    // //TR: HB-1: engine süreci içindeki küçük senkron işler (.git özeti, ajan yapılandırması taraması) runner'ın span'ına sarılır; engine commit'i EŞZAMANSIZdır (commitBuilderOutputAsync).
+    const sp: <T>(fn: () => T) => T = ctx.span ?? (fn => fn());
+    const before = sp(() => gitControlDigest(workspace));
     // SBX-8 (RV-INT-R3-C1-F1): çalışma alanında ajan yapılandırması (ör. yönetilmeyen depo yolundan gelen .claude/settings.json, .mcp.json) varsa builder hiç başlatılmaz.
-    const agentConfig = agentConfigInWorkspace(workspace, this.envPolicyFile);
+    const agentConfig = sp(() => agentConfigInWorkspace(workspace, this.envPolicyFile));
     const p = agentConfig === null ? {refuse: "WORKSPACE_AGENT_CONFIG_SCAN_FAILED"} : agentConfig.length ? {refuse: "WORKSPACE_CONTAINS_AGENT_CONFIG"} : this.makeProcess(workspace, spec);
     if ("refuse" in p) {
       const at = new Date().toISOString();
       const detail = agentConfig?.length ? `\nagent config in workspace:\n${agentConfig.slice(0, 100).map(f => `  ${f}`).join("\n")}` : "";
       return {exitCode: null, blockReason: p.refuse, log: `NOT_EXECUTED: ${p.refuse} (builder not started)${detail}\n`, argv: [], startedAt: at, endedAt: at, timedOut: false, aborted: false, transient: false};
     }
-    const po = {cwd: workspace, env: p.env, timeoutMs: ctx.timeoutMs, input: p.input, shouldAbort: ctx.shouldAbort};
+    const po = {cwd: workspace, env: withWriterEnv(p.env, ctx), timeoutMs: ctx.timeoutMs, input: p.input, shouldAbort: ctx.shouldAbort, newSession: true, onSpawn: ctx.onSpawn};
     const r = p.nodeScript ? await runNodeScript(p.argv[0], p.argv.slice(1), po) : await runProcess(p.argv, po);
     const base = {argv: r.argv, startedAt: r.startedAt, timedOut: r.timedOut, aborted: r.aborted, transient: r.timedOut || r.spawnError || (r.exitCode !== null && this.transientExitCodes.includes(r.exitCode))};
     // C-IMPL-WIN-1: kimlik dosyası var ama CLI oturum istiyor (süresi dolmuş): beklemeden/yeniden denemeden kesin neden (Founder kendi giriş komutunu yeniden çalıştırır).
     if (r.exitCode !== 0 && !r.aborted && !r.timedOut && claudeAuthFailure(procLog(r))) return {...base, transient: false, exitCode: r.exitCode, blockReason: "CLAUDE_PROFILE_LOGIN_EXPIRED", log: procLog(r), endedAt: r.endedAt};
     if (r.exitCode !== 0 || r.aborted) return {...base, exitCode: r.exitCode, log: procLog(r), endedAt: r.endedAt};
     const subject = `uasco run ${spec.runId} cycle ${spec.cycle}: ${spec.title.replace(/[\r\n]+/g, " ").slice(0, 120)}`;
-    const c = commitBuilderOutput(workspace, {envPolicyFile: this.envPolicyFile, startSha, gitDigestBefore: before, message: `${subject}\n\nMission: ${spec.missionId}\nCommitted by the UASCO engine on behalf of ${this.identity} (edit-only builder).`});
+    const c = await commitBuilderOutputAsync(workspace, {envPolicyFile: this.envPolicyFile, startSha, gitDigestBefore: before, message: `${subject}\n\nMission: ${spec.missionId}\nCommitted by the UASCO engine on behalf of ${this.identity} (edit-only builder).`}, {span: sp, extraEnv: ctx.writerEnv, onSpawn: shortChildren(ctx.onSpawn)});
     const log = `${procLog(r)}--- engine commit ---\n${c.log}`;
+    if (!c.ok && c.transient) return {...base, exitCode: null, transient: true, log, endedAt: new Date().toISOString()}; // yazar kaydı yazılamadı: kalıcı BUILDER_* bloğu değil, yeniden deneme
     return c.ok ? {...base, exitCode: 0, commitSha: c.commitSha, log, endedAt: new Date().toISOString()} : {...base, exitCode: 0, blockReason: c.reason, log, endedAt: new Date().toISOString()};
   }
 }
@@ -238,8 +253,9 @@ export function syncBrokerControlConfig(appRoot: string, controlRoot: string): v
 // SBX-8 reviewer: yalnız okuma araçları; yazma/komut/ağ/alt ajan/skill/MCP araçları yasak; builder broker'ıyla aynı yalıtım bayrakları.
 export const REVIEWER_TOOLS = ["Read", "Grep", "Glob"] as const;
 export const REVIEWER_DISALLOWED_TOOLS = ["Edit", "Write", "MultiEdit", "Bash", "PowerShell", "NotebookEdit", "WebFetch", "WebSearch", "Agent", "Task", "Skill", "mcp__*"] as const;
-export function reviewerArgv(launcher: string): string[] {
-  return [launcher, "-p", "--permission-mode", "dontAsk", "--tools", REVIEWER_TOOLS.join(","), "--disallowedTools", REVIEWER_DISALLOWED_TOOLS.join(","), ...CLAUDE_ISOLATION_FLAGS, "--output-format", "text"];
+// //TR: C-FLOW-ANALYSIS-2: outputFormat yalnız çıktı biçimini değiştirir ("json" = tek sonuç zarfı: is_error/subtype/result); araç ve yalıtım bayrakları AYNIDIR. Pre-dev üretimi "json" ister, böylece oturum/CLI hatası düz metinden tahmin edilmez.
+export function reviewerArgv(launcher: string, outputFormat: "text" | "json" = "text"): string[] {
+  return [launcher, "-p", "--permission-mode", "dontAsk", "--tools", REVIEWER_TOOLS.join(","), "--disallowedTools", REVIEWER_DISALLOWED_TOOLS.join(","), ...CLAUDE_ISOLATION_FLAGS, "--output-format", outputFormat];
 }
 const REVIEW_GIT_HARDEN = ["-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false"];
 export interface ReviewWorkspaceSnapshot { head: string | null; status: string | null; gitDigest: string | null }
@@ -312,14 +328,15 @@ export class LocalClaudeExecutors {
           const prof = claudeProfileForRun(self.controlRoot, "reviewer", self.opts.profile);
           if (!prof.ok) return {verdict: "BLOCKED", findings: [], valid: false, invalidReason: prof.reason, exitCode: null, log: `NOT_EXECUTED: ${prof.reason} (reviewer not started)\n`, argv, startedAt: at, endedAt: new Date().toISOString(), timedOut: false, aborted: false, transient: false};
           const envPolicyFile = path.join(self.repoRoot, "config", "environment-policy.json");
-          const before = reviewWorkspaceSnapshot(cleanClone, envPolicyFile);
-          const po: ProcOptions = {cwd: cleanClone, env: withClaudeProfileEnv(self.env(), prof.dir), timeoutMs: ctx.timeoutMs, input: reviewPrompt(spec, diff), shouldAbort: ctx.shouldAbort};
+          const sp: <T>(fn: () => T) => T = ctx.span ?? (fn => fn()); // HB-1: anlık görüntüdeki senkron git çağrıları runner span'ına sarılır
+          const before = sp(() => reviewWorkspaceSnapshot(cleanClone, envPolicyFile));
+          const po: ProcOptions = {cwd: cleanClone, env: withWriterEnv(withClaudeProfileEnv(self.env(), prof.dir), ctx), timeoutMs: ctx.timeoutMs, input: reviewPrompt(spec, diff), shouldAbort: ctx.shouldAbort, newSession: true, onSpawn: ctx.onSpawn};
           const r = toReview(await (self.opts.runReviewer ?? runProcess)(argv, po));
           // C-IMPL-WIN-1: oturum süresi dolmuş (kimlik dosyası var ama CLI giriş istiyor): genel REVIEW_FAILED değil, kesin neden.
           // //TR: yalnız BAŞARISIZ çıkışta (uygulayıcıyla aynı kural): çıkış 0 iken güvenilmeyen çıktıdan (alıntı/prompt injection) "oturum doldu" sonucu çıkarılmaz; ve süresi dolmuş oturum yeniden DENENMEZ (çıkış 75 geçici sayılsa bile).
           if (!r.valid && !r.aborted && !r.timedOut && r.exitCode !== 0 && claudeAuthFailure(r.log)) { r.invalidReason = "CLAUDE_PROFILE_LOGIN_EXPIRED"; r.transient = false; }
           // Review sonrası çalışma alanı bayt düzeyinde aynı olmalı; değilse review GEÇERSİZ (verdict ne olursa olsun CLEAN sayılmaz).
-          const changed = reviewWorkspaceChange(before, reviewWorkspaceSnapshot(cleanClone, envPolicyFile));
+          const changed = reviewWorkspaceChange(before, sp(() => reviewWorkspaceSnapshot(cleanClone, envPolicyFile)));
           if (changed) return {...r, verdict: "BLOCKED", findings: [], valid: false, invalidReason: changed, transient: false, log: `${r.log}REVIEW_INVALID: ${changed}\n`};
           return r;
         }
@@ -328,7 +345,7 @@ export class LocalClaudeExecutors {
       preDevBuilder: () => new ClaudePreDevBuilder({
         identity: self.reviewerIdentity, launcher: () => self.verifiedLauncher(),
         profile: () => { const p = claudeProfileForRun(self.controlRoot, "reviewer", self.opts.profile); return p.ok ? {ok: true, dir: p.dir} : {ok: false, reason: p.reason}; },
-        env: dir => withClaudeProfileEnv(self.env(), dir), argv: reviewerArgv, run: self.opts.runReviewer ?? runProcess
+        env: dir => withClaudeProfileEnv(self.env(), dir), argv: l => reviewerArgv(l, "json"), outputFormat: "claude-json", run: self.opts.runReviewer ?? runProcess
       })
     };
   }

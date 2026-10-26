@@ -14,7 +14,8 @@ import {redactSecrets} from "../workos/secret-scan.js";
 import {disabledTestMarkers, evaluateTestSurface, parseNameStatusZ} from "../workos/test-surface.js";
 import {MAX_TEST_SOURCE_BYTES, analyzeAddTest, tokenize} from "./static-test-analysis.js";
 import {PreDevBuilderError, PREDEV_KIND_FUNCTION} from "../workos/predev/claude-builder.js";
-import {composeRolePrompt} from "../workos/predev/role-prompts.js";
+import {OUTPUT_SKELETONS, composeRolePrompt} from "../workos/predev/role-prompts.js";
+import {placeholderProblem} from "../workos/predev/placeholder.js";
 import {toUpstreamContents} from "../workos/predev/driver.js";
 import {validateArtifactContent} from "../workos/predev/validators.js";
 import {TASKHUB_BRIEF} from "../workos/predev/fixtures/taskhub-brief.js";
@@ -142,11 +143,23 @@ export const GIT_REPO_ENV = /^GIT_(DIR|WORK_TREE|INDEX_FILE|OBJECT_DIRECTORY|ALT
 const cleanGitEnv = (): NodeJS.ProcessEnv => Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^GIT_/i.test(k)));
 const git = (cwd: string, args: string[]) => spawnGitSync(cwd, ["-c", "core.fsmonitor=false", ...args], {maxBuffer: 16 * 1024 * 1024, env: cleanGitEnv()});
 const gitOut = (cwd: string, args: string[]): string | null => { const r = git(cwd, args); return r.status === 0 ? String(r.stdout ?? "") : null; };
+// //TR: Teşhis (A-TEST-DIAG-1): git adımı başarısız olduğunda NE olduğu görünsün: çıkış kodu / sinyal / başlatma hatası kodu + redakte edilmiş, boşlukları daraltılmış, en çok 120 karakterlik stderr. Yalnız ileti metnidir: sonuç (NOT_EXECUTED), yeniden deneme ya da süre davranışı DEĞİŞMEZ.
+type GitRes = {status: number | null; signal?: NodeJS.Signals | null; error?: Error; stderr?: unknown};
+const gitDetail = (r: GitRes): string => {
+  const how = r.error ? `spawn=${(r.error as NodeJS.ErrnoException).code ?? "ERR"}` : r.signal ? `signal=${r.signal}` : `exit=${r.status}`;
+  const scrubbed = String(r.stderr ?? "").replace(/([a-z][a-z0-9+.-]{0,31}:\/\/)[^\s/]+@/gi, "$1[REDACTED]@"); // URL userinfo (user:password@host, the password may hold '@'); linear: the scheme part is bounded
+  return `${how}:${redactSecrets(scrubbed.replace(/\s+/g, " ").trim()).slice(0, 120)}`; // collapse -> redact -> clip: collapsing first lets a pattern split by a newline match, clipping last never leaves a secret fragment
+};
+const setupFail = (step: string, r: GitRes): string => `WORKSPACE_SETUP_FAILED:${step}:${gitDetail(r)}`;
 function seedRepo(dir: string, files: Readonly<Record<string, string>>): string {
   fs.mkdirSync(dir, {recursive: true});
-  if (git(dir, ["init", "-q", "-b", "main"]).status !== 0) throw new Error("GIT_INIT_FAILED");
+  const init = git(dir, ["init", "-q", "-b", "main"]);
+  if (init.status !== 0) throw new Error(`GIT_SEED_FAILED:init:${gitDetail(init)}`);
   for (const [f, c] of Object.entries(files)) { const target = path.join(dir, f); fs.mkdirSync(path.dirname(target), {recursive: true}); fs.writeFileSync(target, c); }
-  if (git(dir, ["add", "-A"]).status !== 0 || git(dir, [...ID, "commit", "-q", "-m", "seed"]).status !== 0) throw new Error("GIT_SEED_FAILED");
+  const add = git(dir, ["add", "-A"]);
+  if (add.status !== 0) throw new Error(`GIT_SEED_FAILED:add:${gitDetail(add)}`);
+  const commit = git(dir, [...ID, "commit", "-q", "-m", "seed"]);
+  if (commit.status !== 0) throw new Error(`GIT_SEED_FAILED:commit:${gitDetail(commit)}`);
   return (gitOut(dir, ["rev-parse", "HEAD"]) ?? "").trim();
 }
 const DIFF_FLAGS = ["diff", "--no-color", "--no-ext-diff", "--no-textconv", "--text", "--no-renames", "--src-prefix=a/", "--dst-prefix=b/"];
@@ -163,7 +176,8 @@ async function implementGolden(c: ProcCtx, g: GoldenImpl): Promise<Implemented> 
   const identities = {implementer: impl.identity};
   const infra = (reason: string): Implemented => ({ok: false, run: {infra: reason, checks: [], artifact: {}, identities}});
   const start = seedRepo(ws, g.seed);
-  if (git(ws, ["checkout", "-q", "-B", g.branch, start]).status !== 0) return infra("WORKSPACE_SETUP_FAILED");
+  const checkout = git(ws, ["checkout", "-q", "-B", g.branch, start]);
+  if (checkout.status !== 0) return infra(setupFail("checkout", checkout));
   const spec: MissionSpec = {runId: "run_evaluation", missionId: "msn_evaluation", projectId: "prj_evaluation", title: g.title, objective: g.objective,
     acceptanceCriteria: [...g.acceptanceCriteria], riskLevel: "R0", cycle: 0, baseSha: start, startSha: start};
   const r = await impl.implement(ws, spec, {timeoutMs: c.timeoutMs, ...(c.shouldAbort ? {shouldAbort: c.shouldAbort} : {})});
@@ -256,10 +270,14 @@ async function goldenReview(c: ProcCtx): Promise<ProcedureRun> {
     const repo = path.join(c.tmp, `repo-${k.id}`), clone = path.join(c.tmp, `clone-${k.id}`);
     const base = seedRepo(repo, GOLDEN_REVIEW_SEED);
     for (const [f, content] of Object.entries(k.change)) fs.writeFileSync(path.join(repo, f), content);
-    if (git(repo, ["add", "-A"]).status !== 0 || git(repo, [...ID, "commit", "-q", "-m", k.id]).status !== 0) return {infra: "WORKSPACE_SETUP_FAILED", checks: [], artifact: {}, identities};
+    const setup = (step: string, r: GitRes): ProcedureRun => ({infra: setupFail(step, r), checks: [], artifact: {}, identities});
+    const addR = git(repo, ["add", "-A"]); if (addR.status !== 0) return setup("add", addR);
+    const commitR = git(repo, [...ID, "commit", "-q", "-m", k.id]); if (commitR.status !== 0) return setup("commit", commitR);
     const head = (gitOut(repo, ["rev-parse", "HEAD"]) ?? "").trim();
-    const diff = gitOut(repo, [...DIFF_FLAGS, base, head]);
-    if (diff === null || git(c.tmp, ["clone", "--no-hardlinks", "--quiet", repo, clone]).status !== 0 || git(clone, ["checkout", "-q", "--detach", head]).status !== 0) return {infra: "WORKSPACE_SETUP_FAILED", checks: [], artifact: {}, identities};
+    const diffR = git(repo, [...DIFF_FLAGS, base, head]); if (diffR.status !== 0) return setup("diff", diffR);
+    const diff = String(diffR.stdout ?? "");
+    const cloneR = git(c.tmp, ["clone", "--no-hardlinks", "--quiet", repo, clone]); if (cloneR.status !== 0) return setup("clone", cloneR);
+    const detachR = git(clone, ["checkout", "-q", "--detach", head]); if (detachR.status !== 0) return setup("checkout", detachR);
     const spec: MissionSpec = {runId: "run_evaluation", missionId: "msn_evaluation", projectId: "prj_evaluation", title: k.title, objective: k.objective, acceptanceCriteria: [...k.acceptanceCriteria], riskLevel: "R0", cycle: 0, baseSha: base, startSha: base};
     const r = await reviewer.review(clone, spec, diff, {timeoutMs: c.timeoutMs, ...(c.shouldAbort ? {shouldAbort: c.shouldAbort} : {})});
     if (r.aborted) return {infra: "ABORTED", checks: [], artifact: {}, identities};
@@ -284,7 +302,7 @@ async function goldenReview(c: ProcCtx): Promise<ProcedureRun> {
   return {infra: null, checks, artifact: {cases}, identities};
 }
 
-// ---------------------------------------------------------------- procedure: golden-predev-v1 (beş pre-dev birincil rolü)
+// ---------------------------------------------------------------- procedure: golden-predev-v2 (beş pre-dev birincil rolü; v2 = istemler çıktı iskeleti taşır, yer tutucu işareti taşıyan çıktı FAILED)
 async function goldenPredev(c: ProcCtx, fn: FirstDeliveryFunction): Promise<ProcedureRun> {
   const kind = KIND_OF_FUNCTION[fn], identities: Record<string, string> = {};
   const builder = c.pair.preDevBuilder?.();
@@ -313,8 +331,13 @@ async function goldenPredev(c: ProcCtx, fn: FirstDeliveryFunction): Promise<Proc
   try { parsed = JSON.parse(out); } catch { parses = false; }
   checks.push({id: "json_parses", passed: parses, detail: parses ? `${Buffer.byteLength(out, "utf8")} bytes` : "output is not JSON"});
   if (parses) {
-    const v = validateArtifactContent(kind, parsed, toUpstreamContents(kind, approvedUpstream as never));
-    checks.push({id: "validators_accept", passed: v.ok, detail: v.ok ? "accepted" : String(v.errors).slice(0, 100)});
+    // //TR: #237 incelemesi (v2): istem çıktı iskeletiyle biter; iskeleti (ya da yer tutucu işaretinin herhangi bir varyantını) yankılayan yanıt şekil olarak geçerli olsa bile PASSED olamaz. Ayrı bir kontrol olarak kanıtta görünür; çok derin yanıt da burada (RangeError değil) başarısız kontrol olur. Doğrulayıcılar yalnız yer tutucusuz çıktıya sorulur.
+    const placeholder = placeholderProblem(parsed);
+    checks.push({id: "no_placeholder", passed: placeholder === null, detail: placeholder === null ? "no placeholder marker" : placeholder});
+    if (placeholder === null) {
+      const v = validateArtifactContent(kind, parsed, toUpstreamContents(kind, approvedUpstream as never));
+      checks.push({id: "validators_accept", passed: v.ok, detail: v.ok ? "accepted" : String(v.errors).slice(0, 100)});
+    }
   }
   return {infra: null, checks, artifact: {kind, outputSha256: sha256(out), output: clip(out, 100_000), briefLabel: TASKHUB_BRIEF.label}, identities};
 }
@@ -327,8 +350,8 @@ export const EVALUATION_PROCEDURES: readonly Procedure[] = [
   {id: "golden-tests", version: GOLDEN_TESTS_VERSION, fixtureDigest: FIXTURE_DIGESTS[GOLDEN_TESTS_VERSION], specKind: "ROLE_SPECIFIC_GOLDEN_MISSION", functions: ["tester"],
     covers: ["authors ONE new, scoped test file (at most 16 KiB) for a precise mission that states every threshold", "the file compiles (compile only, nothing is run) and, in the code tokens only (comments, strings, callbacks and dead code never count), declares require of ../src/add and node:assert at the top level and contains at least three top-level assertion statements assert.<strictEqual|equal|deepStrictEqual|deepEqual>(add(<n>, <n>), <n>) or assert[.ok](add(<n>, <n>) === <n>) with distinct operands covering a positive, a negative and a zero case", "every asserted value equals the true sum (statically computed from the literals)", "leaves existing tests, src and the harness untouched; no skipped/disabled tests, no top-level return, loop, conditional, function or class", "a closed grammar: the file consists ONLY of the two `const` require declarations, BEFORE the first assertion (a declaration after an assertion would throw a ReferenceError at run time), and qualifying top-level assert statements (optional plain-string message); every other top-level statement (reassignment, alias, Object/prototype tampering, process/eval/import, console, blocks, other requires) fails, so the file cannot rebind, neuter or exit its own assertions"],
     doesNotCover: ["that the tests pass or fail correctly: nothing is executed (no verified sandbox)", "defect-detection power (no mutation testing): the detection guarantee covers an add that SUBTRACTS (a - b) only; a file whose cases satisfy a * b == a + b (for example 2, 2, 4) also passes for a multiplying add", "tests in any other style (node:test callbacks, table-driven loops, destructured assert imports or an assert binding not named assert): they are FAILED against the precise mission text, not judged", "test design quality beyond the static checks"], run: c => goldenTests(c)},
-  {id: "golden-predev", version: "golden-predev-v1", fixtureDigest: sha256Json({brief: TASKHUB_BRIEF, artifacts: TASKHUB_ARTIFACTS}), specKind: "ROLE_SPECIFIC_GOLDEN_MISSION", functions: ["business-analyst", "requirements-engineer", "planner", "architect", "ux-designer"],
-    covers: ["produces JSON that the existing artifact validators accept for the TaskHub reference brief (shape and traceability to approved upstream)"], doesNotCover: ["content quality or correctness", "any customer project", "the TaskHub reference content is not a verified project"], run: (c, fn) => goldenPredev(c, fn)}
+  {id: "golden-predev", version: "golden-predev-v2", fixtureDigest: sha256Json({brief: TASKHUB_BRIEF, artifacts: TASKHUB_ARTIFACTS, outputSkeletons: OUTPUT_SKELETONS}), specKind: "ROLE_SPECIFIC_GOLDEN_MISSION", functions: ["business-analyst", "requirements-engineer", "planner", "architect", "ux-designer"],
+    covers: ["produces JSON that the existing artifact validators accept for the TaskHub reference brief (shape and traceability to approved upstream)", "the reply carries no output-skeleton placeholder marker (an echoed skeleton, in any case/spacing/Unicode variant, is FAILED even where its shape is valid)", "through the production JSON route (the builder removes ONE whole-reply code fence) a fenced reply is judged by its content; any text outside the fence, or a legacy text-mode fenced reply, is FAILED json_parses"], doesNotCover: ["content quality or correctness", "any customer project", "the TaskHub reference content is not a verified project", "evidence recorded under golden-predev-v1 (prompts without the output skeleton, no placeholder check) is a different procedure and a different fixtureDigest"], run: (c, fn) => goldenPredev(c, fn)}
 ];
 
 // ---------------------------------------------------------------- pipeline
@@ -357,6 +380,9 @@ export function verdictOf(checks: readonly EvalCheck[]): "PASSED" | "FAILED" | n
   return checks.length === 0 ? null : checks.every(c => c.passed) ? "PASSED" : "FAILED";
 }
 
+// //TR: Fırlatılan değer yazdırılamıyorsa (null-prototipli nesne, toString'i fırlatan nesne) catch'in kendisi düşmemeli.
+const msgOf = (e: unknown): string => { try { return String((e as Error)?.message ?? e); } catch { return "UNPRINTABLE_THROW"; } };
+
 export async function runRoleEvaluation(deps: EvaluationDeps, roleId: string, evaluationId: string): Promise<EvaluationOutcome> {
   const plan = planFor(roleId, evaluationId, deps.bindings);
   if ("refused" in plan) return {status: "REFUSED", reason: plan.refused};
@@ -375,7 +401,7 @@ export async function runRoleEvaluation(deps: EvaluationDeps, roleId: string, ev
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-eval-"));
   let run: ProcedureRun;
   try { run = await procedure.run({pair: deps.pair, profile, timeoutMs, ...(deps.shouldAbort ? {shouldAbort: deps.shouldAbort} : {}), tmp}, profile.function); }
-  catch (e) { return {status: "NOT_EXECUTED", roleId, evaluationId, reason: `PROCEDURE_EXCEPTION:${(e as Error).message.slice(0, 80)}`}; }
+  catch (e) { return {status: "NOT_EXECUTED", roleId, evaluationId, reason: `PROCEDURE_EXCEPTION:${redactSecrets(msgOf(e).replace(/\s+/g, " ").trim()).slice(0, 240)}`}; }
   finally { try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* geçici dizin en iyi çabayla silinir */ } }
   // //TR: Altyapı kaynaklı sonuç bir DEĞERLENDİRME SONUCU değildir: hiçbir kanıt yazılmaz (rol ne geçer ne kalır).
   if (run.infra !== null) return {status: "NOT_EXECUTED", roleId, evaluationId, reason: run.infra};

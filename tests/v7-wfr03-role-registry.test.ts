@@ -13,13 +13,16 @@ import {computeRoleStatusSummary, createEvidenceVerifier, runningRoleIdsFromRuns
 import {registerRoleStatusRoutes} from "../apps/control-api/src/routes/role-status.js";
 import {EvaluationStaging, EvaluationStagingError, EVALUATION_PROCEDURES, planFor, runRoleEvaluation, verdictOf} from "../core/competency/evaluation-pipeline.js";
 import type {EvaluationOutcome} from "../core/competency/evaluation-pipeline.js";
-import {GOLDEN_TESTS} from "../core/competency/evaluation-fixtures.js";
+import {GOLDEN_TESTS, sha256Json} from "../core/competency/evaluation-fixtures.js";
 import {executeBlockers, parseArgs, resolveControlRoot, runCli} from "../core/competency/evaluation-cli.js";
 import {MAX_TEST_SOURCE_BYTES, analyzeAddTest, tokenize, topLevelStatements} from "../core/competency/static-test-analysis.js";
-import {FakeExecutors, reviewerArgv} from "../core/workos/executors.js";
+import {FakeExecutors, LocalClaudeExecutors, reviewerArgv} from "../core/workos/executors.js";
 import type {ExecutorPair, FakeScript, ProcResult} from "../core/workos/executors.js";
 import {ClaudePreDevBuilder} from "../core/workos/predev/claude-builder.js";
+import {OUTPUT_SKELETONS} from "../core/workos/predev/role-prompts.js";
+import {CLAUDE_CREDENTIAL_STORE_FILE, claudeProfileDir} from "../core/workos/claude-profiles.js";
 import {TASKHUB_ARTIFACTS} from "../core/workos/predev/fixtures/taskhub/index.js";
+import {TASKHUB_BRIEF} from "../core/workos/predev/fixtures/taskhub-brief.js";
 import {deriveRoleProfiles, buildDerivationInputs, NEVER_GRANTED, ROUTE_TOOL_ALLOWLIST, PERMISSION_READ, PERMISSION_WRITE_SCRATCH} from "../core/agents/role-profile-derivation.js";
 import {NO_REAL_WSL_ON_WIN32} from "./support/test-sandbox.js";
 // //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
@@ -742,6 +745,19 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       run: async (argv, opts) => { const o = outFor(/# ARTEFAKT TÜRÜ: (\w+)/.exec(String(opts.input))?.[1] ?? ""); return procResult(argv, typeof o === "string" ? {stdout: o} : o); }})
   });
   const goodPredev = (kind: string) => JSON.stringify((TASKHUB_ARTIFACTS as any)[kind]);
+  // //TR: #237 inceleme: ÜRETİM yolunun aynısı: LocalClaudeExecutors'ın preDevBuilder'ı (`--output-format json` + sonuç zarfı + tek-çit sarmalayıcı açma); yalnız süreç çalıştırıcısı kayıtlıdır. Eski `predevPair` metin kipi sınar (zarf yok).
+  const jsonPredevPair = (replyFor: (kind: string) => string, over: Partial<ProcResult> = {}): ExecutorPair => {
+    const control = workDir();
+    fs.mkdirSync(path.join(control, ".ai", "runtime"), {recursive: true});
+    fs.writeFileSync(path.join(control, ".ai", "runtime", "PROVIDER_PROVENANCE.json"), JSON.stringify({final: "PASS", claude: {provenanceLevel: "STANDALONE_LAUNCHER", resolvedPath: process.execPath, launcherSha256: sha(fs.readFileSync(process.execPath)), version: "fake"}}));
+    fs.mkdirSync(claudeProfileDir(control, "reviewer"), {recursive: true});
+    fs.writeFileSync(path.join(claudeProfileDir(control, "reviewer"), CLAUDE_CREDENTIAL_STORE_FILE), "");
+    const runReviewer = async (argv: string[], opts: {input?: string}): Promise<ProcResult> => {
+      const kind = /# ARTEFAKT TÜRÜ: (\w+)/.exec(String(opts.input))?.[1] ?? "";
+      return procResult(argv, {stdout: JSON.stringify({type: "result", subtype: "success", is_error: false, result: replyFor(kind)}) + "\n", ...over});
+    };
+    return new LocalClaudeExecutors(REPO, control, {runReviewer}).pair();
+  };
   const evaluated = (o: EvaluationOutcome) => { if (o.status !== "EVALUATED") throw new Error(`expected EVALUATED, got ${JSON.stringify(o)}`); return o; };
   const listing = (d: string): string[] => fs.existsSync(d) ? fs.readdirSync(d, {recursive: true}).map(String).sort() : [];
   const repoSnapshot = () => sha(JSON.stringify({reg: sha(fs.readFileSync(REG_FILE)), evidence: listing(path.join(REPO, "audit", "evidence", "role-evaluations")), git: cp.spawnSync("git", ["status", "--porcelain"], {cwd: REPO, encoding: "utf8"}).stdout}));
@@ -882,7 +898,7 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     const roles = [["UASCO-0022", "BusinessAnalysis"], ["UASCO-0023", "Requirements"], ["UASCO-0019", "Plan"], ["UASCO-0043", "Architecture"], ["UASCO-0031", "UxSpec"]] as const;
     for (const [role, kind] of roles) {
       const r = evaluated(await evaluate(predevPair(goodPredev), role));
-      expect([role, r.verdict, r.executorKind, r.checks.map(c => c.id)]).toEqual([role, "PASSED", "FAKE", ["json_parses", "validators_accept"]]);
+      expect([role, r.verdict, r.executorKind, r.checks.map(c => c.id)]).toEqual([role, "PASSED", "FAKE", ["json_parses", "no_placeholder", "validators_accept"]]);
       expect(JSON.parse(fs.readFileSync(r.artifactFile, "utf8")).kind).toBe(kind);
     }
     const bad: Array<[string, string, string]> = [
@@ -900,6 +916,46 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       expect([label, await evaluate(pair, BA, {stagingRoot: root})]).toEqual([label, {status: "NOT_EXECUTED", roleId: BA, evaluationId: "EV-01", reason}]);
     }
     expect(listing(root)).toEqual([]);
+  });
+
+  // //TR: #237 inceleme (MEDIUM): composeRolePrompt artık çıktı iskeletiyle biter; iskeleti yankılayan bir yanıt BusinessAnalysis/UxSpec için doğrulayıcıdan olduğu gibi geçerdi (PASSED, countsIfPromoted:true). Değerlendirme artık yer tutucuyu reddeder, yordam golden-predev-v2'dir ve fixtureDigest iskeletleri kapsar (v1 kanıtı ile v2 kanıtı ayırt edilir).
+  it("pre-dev golden mission through the PRODUCTION json route (LocalClaudeExecutors preDevBuilder): an echoed output skeleton is FAILED (never PASSED) for every role; a whole-reply fence is unwrapped by the builder and PASSES (as in production) while the text-mode pair still FAILS it; prose around the fence FAILS", { timeout: 180_000 }, async () => {
+    const roles = [["UASCO-0022", "BusinessAnalysis"], ["UASCO-0023", "Requirements"], ["UASCO-0019", "Plan"], ["UASCO-0043", "Architecture"], ["UASCO-0031", "UxSpec"]] as const;
+    for (const [role, kind] of roles) {
+      const good = evaluated(await evaluate(jsonPredevPair(goodPredev), role));
+      expect([role, good.verdict, good.executorKind, good.verifier]).toEqual([role, "PASSED", "LOCAL_CLAUDE", {countsIfPromoted: true, problem: null}]);
+      const echo = evaluated(await evaluate(jsonPredevPair(k => JSON.stringify((OUTPUT_SKELETONS as any)[k], null, 2)), role));
+      expect([role, "skeleton echo", echo.verdict, echo.checks.find(c => !c.passed)?.id]).toEqual([role, "skeleton echo", "FAILED", "no_placeholder"]);
+      // the evidence of a FAILED run is honest evidence of the failure (countsIfPromoted means "verifies for the claimed verdict"): what must never exist is a PASSED record for a skeleton
+      expect([role, JSON.parse(fs.readFileSync(echo.evidenceFile, "utf8")).verdict, JSON.parse(fs.readFileSync(echo.artifactFile, "utf8")).output.includes("<<FILL")]).toEqual([role, "FAILED", true]);
+    }
+    const fenced = (k: string) => "```json\n" + goodPredev(k) + "\n```";
+    const viaJson = evaluated(await evaluate(jsonPredevPair(fenced), BA));
+    expect([viaJson.verdict, viaJson.checks.map(c => `${c.id}:${c.passed}`)]).toEqual(["PASSED", ["json_parses:true", "no_placeholder:true", "validators_accept:true"]]); // the production builder unwraps ONE whole-reply fence
+    const viaText = evaluated(await evaluate(predevPair(fenced), BA));
+    expect([viaText.verdict, viaText.checks.find(c => !c.passed)?.id]).toEqual(["FAILED", "json_parses"]); // legacy text mode: no unwrapping
+    const prose = evaluated(await evaluate(jsonPredevPair(k => "Here you go:\n```json\n" + goodPredev(k) + "\n```"), BA));
+    expect([prose.verdict, prose.checks.find(c => !c.passed)?.id]).toEqual(["FAILED", "json_parses"]);
+    // marker variants a model may produce while "filling" (case, spacing, full-width) are rejected too
+    for (const text of ["<<fill: x>>", "<< FILL >>", "＜＜ＦＩＬＬ>>"]) {
+      const ba = JSON.parse(goodPredev("BusinessAnalysis")); ba.problem = text;
+      const r = evaluated(await evaluate(jsonPredevPair(() => JSON.stringify(ba)), BA));
+      expect([text, r.verdict, r.checks.find(c => !c.passed)?.id]).toEqual([text, "FAILED", "no_placeholder"]);
+    }
+    // a nested-to-the-limit reply is a FAILED result, never an exception
+    const deep = evaluated(await evaluate(jsonPredevPair(() => "[".repeat(100_000) + "]".repeat(100_000)), BA));
+    expect([deep.verdict, deep.checks.find(c => !c.passed)?.id]).toEqual(["FAILED", "no_placeholder"]);
+  });
+
+  it("the golden-predev procedure is golden-predev-v2: a new version AND a new fixtureDigest (the prompts now carry the output skeletons), and the staged evidence says so", { timeout: 120_000 }, async () => {
+    const proc = EVALUATION_PROCEDURES.find(p => p.id === "golden-predev")!;
+    expect(proc.version).toBe("golden-predev-v2");
+    const v1 = sha256Json({brief: TASKHUB_BRIEF, artifacts: TASKHUB_ARTIFACTS}); // exactly how golden-predev-v1 computed it
+    expect(proc.fixtureDigest).toMatch(/^[0-9a-f]{64}$/);
+    expect(proc.fixtureDigest, "the v1 digest hashed only the brief and the artefacts").not.toBe(v1);
+    expect(proc.covers.join(" ")).toMatch(/placeholder/i);
+    const r = evaluated(await evaluate(jsonPredevPair(goodPredev), BA));
+    expect(JSON.parse(fs.readFileSync(r.evidenceFile, "utf8"))).toMatchObject({procedure: {version: "golden-predev-v2", fixtureDigest: proc.fixtureDigest}});
   });
 
   it("pre-dev: an empty or oversized reply (exit 0) is the role's FAILED result; other builder failures stay infrastructure; the pipeline's own timeout is enforced and recorded as TIMEOUT", { timeout: 120_000 }, async () => {
@@ -1694,3 +1750,118 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     });
   });
 });
+
+// //TR: A-TEST-DIAG-1: git adımı başarısız olduğunda neden görünür olur (adım, çıkış kodu/sinyal/başlatma hatası, redakte stderr); sonuç yine NOT_EXECUTED'dır (altyapı rolü ne yükseltir ne cezalandırır), yeniden deneme ya da süre değişikliği yoktur. Gerçek git çalışır; yalnız seçilen alt komutun sonucu uydurulur (cp.spawnSync gölgesi).
+describe("A-TEST-DIAG-1: a failing git step in the evaluation pipeline is diagnosable (NOT_EXECUTED, no retry)", () => {
+  const DEV = "UASCO-0085", REVIEWER = "UASCO-0252";
+  const fakePair = (): ExecutorPair => new FakeExecutors({implement: () => ({files: {"greeting.txt": "hello\n"}}), review: n => (n === 1 ? {verdict: "CLEAN"} : {verdict: "BLOCKED", findings: [{severity: "HIGH", title: "command injection via unsanitised ref"}]})}).pair();
+  const evaluate = (role: string): Promise<EvaluationOutcome> => runRoleEvaluation({repoRoot: REPO, stagingRoot: path.join(fs.mkdtempSync(path.join(tmp, "diag-")), "staging"), pair: fakePair()}, role, "EV-01");
+  // The token is assembled at run time so the repository never contains a secret-looking literal.
+  const SECRET = "AKIA" + "ABCDEFGHIJKLMNOP";
+  type Fail = {status: number | null; signal?: string | null; error?: {code: string}; stderr?: string};
+  // Real git runs, except the Nth call whose argv contains `sub`, which returns `fail`. Returns the call counter.
+  const shim = (sub: string, fail: Fail, nth = 1) => {
+    const real = cp.spawnSync.bind(cp); let seen = 0;
+    const spy = vi.spyOn(cp, "spawnSync").mockImplementation(((cmd: string, args: string[], opts: any) => {
+      if (cmd === "git" && Array.isArray(args) && args.includes(sub) && ++seen === nth) return {output: [], pid: 0, signal: null, stdout: "", stderr: "", ...fail} as any;
+      return (real as any)(cmd, args, opts);
+    }) as any);
+    return {spy, hits: () => spy.mock.calls.filter(c => c[0] === "git" && Array.isArray(c[1]) && (c[1] as string[]).includes(sub)).length};
+  };
+  const run = async (role: string, sub: string, fail: Fail, nth = 1) => { const s = shim(sub, fail, nth); try { return {out: await evaluate(role), hits: s.hits()}; } finally { s.spy.mockRestore(); } };
+  const reasonOf = (o: EvaluationOutcome): string => { expect(o.status).toBe("NOT_EXECUTED"); return (o as {reason: string}).reason; };
+
+  it("seedRepo names the failed step and the result: init / add / commit with exit=N, and the stderr is redacted, whitespace-collapsed and at most 120 characters", async () => {
+    for (const step of ["init", "add", "commit"]) {
+      const { out, hits } = await run(DEV, step, {status: 128, stderr: `fatal:   could not\nwrite  ${SECRET}  ${"x".repeat(300)}`});
+      const reason = reasonOf(out);
+      expect(reason, step).toMatch(new RegExp(`^PROCEDURE_EXCEPTION:GIT_SEED_FAILED:${step}:exit=128:fatal: could not write \\[REDACTED:AWS_ACCESS_KEY\\] x+$`));
+      expect(reason, step).not.toContain(SECRET);
+      expect(reason.split(`${step}:exit=128:`)[1].length, `${step}: stderr part at most 120`).toBeLessThanOrEqual(120);
+      expect(hits, `${step}: the git step ran exactly once (no retry)`).toBe(1);
+    }
+    expect(reasonOf((await run(DEV, "add", {status: null, signal: "SIGKILL"})).out)).toBe("PROCEDURE_EXCEPTION:GIT_SEED_FAILED:add:signal=SIGKILL:");
+    expect(reasonOf((await run(DEV, "commit", {status: null, error: {code: "ENOENT"}})).out)).toBe("PROCEDURE_EXCEPTION:GIT_SEED_FAILED:commit:spawn=ENOENT:");
+  });
+
+  it("the workspace-setup paths keep the WORKSPACE_SETUP_FAILED prefix and add the step and result: developer checkout; reviewer add / commit / diff / clone / detach", async () => {
+    const dev = await run(DEV, "-B", {status: 1, stderr: `error: ${SECRET}  refused`});
+    expect(reasonOf(dev.out)).toBe("WORKSPACE_SETUP_FAILED:checkout:exit=1:error: [REDACTED:AWS_ACCESS_KEY] refused"); expect(dev.hits).toBe(1);
+    // the reviewer procedure seeds first (its own add/commit succeed); the SECOND add / commit is the case change
+    for (const [sub, step, nth] of [["add", "add", 2], ["commit", "commit", 2], ["diff", "diff", 1], ["clone", "clone", 1], ["--detach", "checkout", 1]] as const) {
+      const { out, hits } = await run(REVIEWER, sub, {status: 128, stderr: `fatal: ${step} failed ${SECRET}`}, nth);
+      expect(reasonOf(out), step).toBe(`WORKSPACE_SETUP_FAILED:${step}:exit=128:fatal: ${step} failed [REDACTED:AWS_ACCESS_KEY]`);
+      expect(hits, `${step}: no retry`).toBe(nth);
+    }
+  });
+
+  it("PROCEDURE_EXCEPTION keeps up to 240 characters of the message (it was cut at 80)", async () => {
+    const real = cp.spawnSync.bind(cp);
+    const spy = vi.spyOn(cp, "spawnSync").mockImplementation(((cmd: string, args: string[], opts: any) => { if (cmd === "git") throw new Error("E".repeat(500)); return (real as any)(cmd, args, opts); }) as any);
+    try { expect(reasonOf(await evaluate(DEV))).toBe(`PROCEDURE_EXCEPTION:${"E".repeat(240)}`); } finally { spy.mockRestore(); }
+  });
+
+  // //TR: Redakte önce, kırpma sonra: kırpma bir gizli anahtarı ortadan keserse redaksiyon artık eşleşemezdi. Error olmayan fırlatma (`throw "x"`) TypeError değil NOT_EXECUTED verir.
+  it("PROCEDURE_EXCEPTION redacts before it clips, and a non-Error throw is still NOT_EXECUTED", async () => {
+    const throwing = (err: unknown): ExecutorPair => new FakeExecutors({implement: () => { throw err; }, review: () => ({verdict: "CLEAN"})}).pair();
+    const evalWith = (pair: ExecutorPair) => runRoleEvaluation({repoRoot: REPO, stagingRoot: path.join(fs.mkdtempSync(path.join(tmp, "diag-")), "staging"), pair}, DEV, "EV-01");
+    const TOKEN = "ghp_" + "a1B2c3D4e5".repeat(3) + "Zz9Yx8"; // 36 alphanumerics, assembled at run time
+    const reason = reasonOf(await evalWith(throwing(new Error("EXECUTOR_FAILED: " + "y".repeat(90) + " Bearer " + TOKEN))));
+    expect(reason).not.toContain(TOKEN);
+    expect(reason).not.toMatch(/ghp_/);
+    expect(reason).toContain("[REDACTED:GITHUB_TOKEN]");
+    expect(reason.length).toBeLessThanOrEqual("PROCEDURE_EXCEPTION:".length + 240);
+    // the token straddles the 240 cut: clipping first would leave an unmatched ghp_ fragment
+    const straddle = reasonOf(await evalWith(throwing(new Error("EXECUTOR_FAILED: " + "y".repeat(200) + " " + TOKEN))));
+    expect(straddle).not.toMatch(/ghp_/);
+    expect(straddle).toContain("[REDACTED:GITHUB_TOKEN"); // the marker itself may be clipped at 240, the secret may not survive
+    expect(reasonOf(await evalWith(throwing("x")))).toBe("PROCEDURE_EXCEPTION:x");
+    expect(reasonOf(await evalWith(throwing(new Error("a\n\n  b\tc"))))).toBe("PROCEDURE_EXCEPTION:a b c"); // whitespace is collapsed and trimmed
+    expect(reasonOf(await evalWith(throwing(new Error("  \n x \t\n"))))).toBe("PROCEDURE_EXCEPTION:x"); // trimmed at both ends
+    // collapse comes first: a pattern split by a newline (a PEM header) still matches
+    const pem = reasonOf(await evalWith(throwing(new Error("EXECUTOR_FAILED: " + "-".repeat(5) + "BEGIN RSA\nPRIVATE KEY" + "-".repeat(5)))));
+    expect(pem).toContain("[REDACTED:PRIVATE_KEY]");
+    expect(pem).not.toContain("BEGIN RSA");
+  });
+
+  it("a throw that cannot be printed (null-prototype object, a throwing toString) is NOT_EXECUTED with UNPRINTABLE_THROW", async () => {
+    const throwing = (err: unknown): ExecutorPair => new FakeExecutors({implement: () => { throw err; }, review: () => ({verdict: "CLEAN"})}).pair();
+    for (const bad of [Object.create(null), {toString() { throw new Error("no toString"); }}]) {
+      const o = await runRoleEvaluation({repoRoot: REPO, stagingRoot: path.join(fs.mkdtempSync(path.join(tmp, "diag-")), "staging"), pair: throwing(bad)}, DEV, "EV-01");
+      expect(reasonOf(o)).toBe("PROCEDURE_EXCEPTION:UNPRINTABLE_THROW");
+    }
+  });
+
+  it("git stderr never keeps URL userinfo (user:password@host), also when the password holds '@' or the scheme follows a word character, while the host stays", async () => {
+    const PASS = "p" + "w0rd" + "Zq7";
+    const reasonFor = async (stderr: string, role = DEV, sub = "add") => reasonOf((await run(role, sub, {status: 128, stderr})).out);
+    const plain = await reasonFor(`fatal: unable to access 'https://alice:${PASS}@git.example.com/r.git/': denied`);
+    expect(plain).not.toContain("alice"); expect(plain).not.toContain(PASS);
+    expect(plain).toContain("https://[REDACTED]@git.example.com/r.git/");
+    const at = await reasonFor("fatal: https://alice:p@ss@host/ denied");
+    expect(at).not.toContain("ss@"); expect(at).not.toContain("alice"); expect(at).toContain("https://[REDACTED]@host/");
+    const glued = await reasonFor("fatal: _https://alice:pw@host/ denied"); // no word boundary before the scheme
+    expect(glued).not.toContain("alice"); expect(glued).toContain("[REDACTED]@host/");
+    const pem = await reasonFor("fatal: " + "-".repeat(5) + "BEGIN RSA\nPRIVATE KEY" + "-".repeat(5), DEV, "-B"); // setup path (the seed path is redacted a second time by the catch); collapse first: a pattern split by a newline still matches
+    expect(pem).toContain("[REDACTED:PRIVATE_KEY]"); expect(pem).not.toContain("BEGIN RSA");
+    expect(await reasonFor("\n error: refused \n", DEV, "-B")).toBe("WORKSPACE_SETUP_FAILED:checkout:exit=128:error: refused"); // real git ends stderr with a newline: trimmed
+    // the same scrub on a WORKSPACE_SETUP_FAILED path (developer checkout -B)
+    const ws = await reasonFor(`error: https://alice:${PASS}@git.example.com/r.git refused`, DEV, "-B");
+    expect(ws).toMatch(/^WORKSPACE_SETUP_FAILED:checkout:exit=128:/);
+    expect(ws).not.toContain("alice"); expect(ws).not.toContain(PASS); expect(ws).toContain("https://[REDACTED]@git.example.com/r.git");
+  });
+
+  it("scrubbing a 200k-character stderr stays linear (regression guard, not a timeout)", async () => {
+    const real = cp.spawnSync.bind(cp); let t0 = 0;
+    const spy = vi.spyOn(cp, "spawnSync").mockImplementation(((cmd: string, args: string[], opts: any) => {
+      if (cmd === "git" && Array.isArray(args) && args.includes("init")) { t0 = performance.now(); return {output: [], pid: 0, signal: null, status: 128, stdout: "", stderr: "a.".repeat(100000)} as any; }
+      return (real as any)(cmd, args, opts);
+    }) as any);
+    try {
+      const reason = reasonOf(await evaluate(DEV)); const ms = performance.now() - t0;
+      expect(reason).toMatch(/^PROCEDURE_EXCEPTION:GIT_SEED_FAILED:init:exit=128:a\.a\./);
+      expect(ms, `scrub + clip took ${ms.toFixed(0)} ms`).toBeLessThan(500);
+    } finally { spy.mockRestore(); }
+  });
+});
+
