@@ -559,9 +559,9 @@ describe("LANE-C Linux unshare sandbox provider v2 (SandboxProvider contract)", 
 // //TR: LANE-B B-SBX-WIN-1: Windows için WSL2 tabanlı sandbox sağlayıcısı. Linux CI'da sahte bir wsl çalıştırıcısı enjekte edilir (her ret nedeni, argüman kurulumu, kopyalama, ortam/argv çevirisi, temizlik); GERÇEK WSL selfTest'i yalnız win32 + WSL + UASCO_WSL_DISTRO varsa çalışır, aksi halde SKIP olarak görünür ve ASLA PASS sayılmaz.
 describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on win32 with WSL)", () => {
   const ISO = {nsFlags: ["--user", "--map-root-user", "--net", "--pid", "--mount", "--fork", "--kill-child=SIGKILL"], setup: "set -eu\n# isolation setup (test double)\n", helperPath: "/usr/sbin:/usr/bin:/sbin:/bin"};
-  const GOOD_PROBE = "MNT_C=absent\nDRVFS=0\nUNIX_PATH_SOCKETS=0\nWSL_RUNTIME_DIRS=absent\nRW_usr=ro\nRW_etc=ro\nRW_bin=ro\nWORK=writable\nNET_IFACES=0\nCAPS_DROPPED=ok\nNO_CTTY=ok\nNESTED_USERNS=blocked\nPID_NS_PRIVATE=ok\nVSOCK=blocked\nIO_URING=blocked\nSUPERVISOR=ok\nHOST_DIRS=hidden\nPROC_SYS_RO=ok\nHOST_CANARY=hidden\nDONE=1\n";
+  const GOOD_PROBE = "netns=net:[4026532001]\nMNT_C=absent\nDRVFS=0\nUNIX_PATH_SOCKETS=0\nWSL_RUNTIME_DIRS=absent\nRW_usr=ro\nRW_etc=ro\nRW_bin=ro\nWORK=writable\nNET_IFACES=0\nCAPS_DROPPED=ok\nNO_CTTY=ok\nNESTED_USERNS=blocked\nPID_NS_PRIVATE=ok\nVSOCK=blocked\nIO_URING=blocked\nSUPERVISOR=ok\nHOST_DIRS=hidden\nPROC_SYS_RO=ok\nHOST_CANARY=hidden\nDONE=1\n";
   interface Cfg { status?: number; spawnError?: boolean; distros?: string; version?: string; interop?: string | string[]; peRc?: number; peNoexec?: string; tools?: string; roots?: string[]; probe?: string; probeRc?: number; mktempFails?: boolean; runOut?: string; runRc?: number; runDelayMs?: number;
-    forkOut?: string; timeoutRc?: number; late?: boolean; stdinOut?: string; pkillRc?: number; pgrepAlive?: boolean; scratchRemains?: boolean; duOut?: string; truncated?: boolean; runBytes?: Buffer; outerRc?: number; reject?: boolean; nodePath?: string; noTarget?: boolean; abortIgnored?: boolean; pgrepRc?: number; pgidAlive?: boolean; rcFile?: string; duRc?: number; abortLate?: boolean; late2?: boolean; noPgid?: boolean; netns?: string; netnsRc?: number; pgrepOut?: string; statOut?: string }
+    forkOut?: string; timeoutRc?: number; late?: boolean; stdinOut?: string; pkillRc?: number; pgrepAlive?: boolean; scratchRemains?: boolean; duOut?: string; truncated?: boolean; runBytes?: Buffer; outerRc?: number; reject?: boolean; nodePath?: string; noTarget?: boolean; abortIgnored?: boolean; pgrepRc?: number; pgidAlive?: boolean; rcFile?: string; duRc?: number; abortLate?: boolean; late2?: boolean; noPgid?: boolean; netns?: string; netnsRc?: number; hostNetns?: string; hostNetnsRc?: number; pgrepOut?: string; statOut?: string }
   const u16 = (t: string) => Buffer.from("﻿" + t, "utf16le");
   const mkRunner = (cfg: Cfg = {}) => {
     const calls: {args: string[]; input?: Buffer | string}[] = []; const files = new Map<string, string>();
@@ -584,6 +584,7 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
       if (cmd[0] === "/bin/tar") { tarIn = Buffer.from(o.input as Buffer); return R(0); }
       if (cmd[0] === "/usr/bin/du") return R(cfg.duRc ?? 0, cfg.duOut ?? "120\t/tmp/uasco-sbx-AbC123/work\n");
       if (cmd[0] === "/usr/bin/pkill") return R(cfg.pkillRc ?? 1);
+      if (cmd[0] === "/usr/bin/readlink" && cmd[1] === "/proc/self/ns/net") return R(cfg.hostNetnsRc ?? 0, cfg.hostNetns ?? "net:[4026532777]\n");
       if (cmd[0] === "/usr/bin/readlink") return R(cfg.netnsRc ?? 0, cfg.netns ?? "net:[4026532999]\n");
       if (cmd[0] === "/usr/bin/pgrep" && cmd[1] === "-P") return cfg.noTarget ? R(1) : R(0, "777\n");
       if (cmd[0] === "/usr/bin/pgrep" && cmd[1] === "-g") return R(cfg.pgidAlive ? 0 : 1, cfg.pgrepOut ?? "");
@@ -849,6 +850,17 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
       expect(await td({pgrepOut: "4243\n", statOut: "4243 (sleep) S 1 4242 4242 0\n"})).toBe("PROCESS_SURVIVED");
       expect(await td({pgrepOut: "4243\n", statOut: "garbage"})).toBe("PROCESS_SURVIVED");
       expect(await td({pgrepOut: ""})).toBe("PROCESS_SURVIVED");
+    });
+
+    it("LC-LO-04: the sandbox's net namespace id must DIFFER from the distro's own (outside the sandbox); a shared id, a missing netns line or an unreadable host id is PROBE_NETNS (Lane C's netnsProblemOf)", async () => {
+      expect(await (await mk({})).p.selfTest()).toEqual({ok: true});
+      const cases: Array<[string, any]> = [
+        ["shared id", {hostNetns: "net:[4026532001]\n"}],
+        ["missing netns line", {probe: GOOD_PROBE.split("\n").filter(l => !l.startsWith("netns=")).join("\n")}],
+        ["empty netns line", {probe: GOOD_PROBE.replace(/^netns=.*$/m, "netns=")}],
+        ["host id unreadable", {hostNetns: "garbage\n"}],
+        ["host readlink fails", {hostNetns: "", hostNetnsRc: 1}]];
+      for (const [label, cfg] of cases) expect([label, await (await mk(cfg)).p.selfTest()]).toEqual([label, {ok: false, detail: "PROBE_NETNS"}]);
     });
 
     it("NEW-1: a selfTest that was in flight when the provider de-verified cannot bring verification back (verification epoch); a fresh selfTest afterwards can", async () => {

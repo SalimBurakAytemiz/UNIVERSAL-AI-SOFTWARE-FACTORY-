@@ -9,6 +9,7 @@ import type {ProcResult} from "../workos/executors.js";
 import type {SandboxChild, SandboxProvider, SandboxRunOptions} from "../workos/execution-gate.js";
 import type {BridgeHandle} from "../workos/devrun-bridge.js";
 import * as linuxModule from "../agents/linux-unshare-sandbox.js";
+import {netnsProblemOf} from "../agents/linux-unshare-sandbox.js";
 import {buildTar, TarError} from "./wsl-tar.js";
 import type {TarLimits} from "./wsl-tar.js";
 
@@ -201,6 +202,7 @@ export const PROBE_SCRIPT = [
   String.raw`echo "WSL_RUNTIME_DIRS=$([ -e /run/WSL ] || [ -e /mnt/wslg ] || [ -e /tmp/.X11-unix ] && echo present || echo absent)"`,
   String.raw`for d in /usr /etc /bin; do if ( : > "$d/uasco-probe" ) 2>/dev/null; then echo "RW_$(basename $d)=writable"; else echo "RW_$(basename $d)=ro"; fi; done`,
   String.raw`if ( : > /work/probe.txt ) 2>/dev/null; then echo "WORK=writable"; else echo "WORK=ro"; fi`,
+  String.raw`echo "netns=$(readlink /proc/self/ns/net 2>/dev/null)"`,
   String.raw`echo "NET_IFACES=$(awk 'NR>2 {n=$1; sub(/:$/,"",n); if (n != "lo") c++} END{print c+0}' /proc/net/dev)"`,
   // Linux sağlayıcısının zorunlu kıldığı değişmezler burada da yeniden doğrulanır (betik uygulanır ama sonuç etkisiz olabilir: ör. setpriv no-op).
   String.raw`if [ "$(awk '/^(CapInh|CapPrm|CapEff|CapBnd|CapAmb):/{print $2}' /proc/self/status | sort -u)" = 0000000000000000 ] && grep -q '^NoNewPrivs:.1' /proc/self/status; then echo "CAPS_DROPPED=ok"; else echo "CAPS_DROPPED=no"; fi`,
@@ -679,6 +681,9 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
       if (r.exitCode !== 0) return no("PROBE_FAILED");
       const ev = evaluateProbe(utf8(r.stdout));
       if (!ev.ok) return {ok: false, detail: ev.reason};
+      // LC-LO-04: sandbox içi net namespace kimliği, dağıtımın (sandbox DIŞI) kimliğinden FARKLI olmalı; satır yok/boş/eşit = ret (Lane C'nin saf denetimi).
+      const hostNs = utf8((await this.wsl(["/usr/bin/readlink", "/proc/self/ns/net"], 15_000)).stdout).trim();
+      if (netnsProblemOf(utf8(r.stdout), /^net:\[[0-9]+\]$/.test(hostNs) ? hostNs : null)) return {ok: false, detail: "PROBE_NETNS"};
       const life = await this.lifecycleProbes(S);
       return life ? {ok: false, detail: life} : {ok: true};
     }
