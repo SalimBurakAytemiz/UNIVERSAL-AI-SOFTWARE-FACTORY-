@@ -472,6 +472,16 @@
       "ref": "wf_ab716acc-dd2 (M1 + L1-L6 addressed; 40/40 runner mutants + 5/6 hand mutants killed; real-registry honesty T1 holds; COORD 9abe30c whitelist-only; protected diff = tests-8 append + validation.json reseal (R1 PREAUTHORIZED); LOWs deferred: H1 journal-tag pin, loader empty technologies/sourceClasses/requiredProvenance/profiles)",
       "policy": "TEP-1",
       "at": "2026-10-26T20:35:57.788Z"
+    },
+    {
+      "pr": 231,
+      "sha": "c9a3e2d5764869270664488bcbfe9e5ec34ff17e",
+      "kind": "delta",
+      "base": "d642963e35af6fc143dcdaed356f65f2e2246243",
+      "verdict": "NO_BLOCKERS_MECHANICAL_BASE_MERGE",
+      "ref": "COORD base merge 459205c: diff vs merge-tree(459205c,d642963) = only 2 conflict resolutions (ps1a-c2 import union; trust-root reseal, verify PASS); Linux scope 574/11 env-fail identical on d642963",
+      "policy": "TEP-1",
+      "at": "2026-10-26T21:21:37.232Z"
     }
   ],
   "tests": [],
