@@ -1,11 +1,13 @@
-//TR: Kalem -> kanıt bağlantıları: PR (EXPLICIT / başlıkta / dalda / gövdede kimlik), commit (v7 commit mesajında kimlik; kayıtlı dal başının v7 atası olması), HEAD'de route/IPC literal'i (pickaxe ile ilk getiren commit), koordinatör kayıtları, ledger incelemeleri ve destekleyici metin anmaları. Bağlar (itemId, kind, ref) ile sıralanır.
+//TR: Kalem -> kanıt bağlantıları: PR (EXPLICIT: 19 Ekim 'prs' alanında notsuz tekil ve kimlik kapısından geçen referans; INVENTORY_WEAK: aralık/iç içe/rol notlu/kapıdan geçmeyen; başlıkta / dalda (rakamla bitmeyen kimlikler tam eşleşmeyle) / gövdede kimlik), commit (v7 commit mesajında kimlik; kayıtlı dal başının v7 atası olması), HEAD'de route/IPC literal'i (pickaxe ile ilk getiren commit), koordinatör kayıtları, ledger incelemeleri ve destekleyici metin anmaları. Bağlar (itemId, kind, ref) ile sıralanır.
 import { sha256, cmp } from '../core/canonical-json.mjs';
-import { inventoryPrNums } from './baseline.mjs';
+import { inventoryPrRefs } from './baseline.mjs';
 
 export const linkId = (l) => `L-${sha256(`${l.itemId}|${l.kind}|${l.ref}|${l.strength}|${l.source}`).slice(0, 12)}`;
 
 export function buildLinks(items, ctx) {
-  const { pulls, commits, routes, ipc, literalIntro, reachable, shortMap, headDates, resolver, ledgerReviews, supportTexts, overlayLinks, linkPatterns, v7sha } = ctx;
+  const { pulls, commits, routes, ipc, literalIntro, reachable, shortMap, headDates, resolver, ledgerReviews, supportTexts, overlayLinks, linkPatterns, v7sha, statusMap } = ctx;
+  const IP = linkPatterns.inventoryPrs;
+  const titlePrRe = new RegExp(IP.itemTitleNamesPrRegex, 'g');
   const out = [];
   const add = (l) => { l.id = linkId(l); out.push(l); };
   const prAt = (p) => p.mergedAt || p.createdAt || null;
@@ -16,6 +18,8 @@ export function buildLinks(items, ctx) {
   for (const p of pulls.values()) {
     for (const id of resolver.resolveText(p.title)) push(byTitle, id, p.number);
     for (const id of resolver.resolveText(p.headRef || '')) push(byBranch, id, p.number);
+    for (const id of resolver.resolveLiteral(p.title, 'title')) push(byTitle, id, p.number);
+    for (const id of resolver.resolveLiteral(p.headRef || '', 'branch')) push(byBranch, id, p.number);
     for (const id of resolver.resolveTokens(p.bodyTokens)) push(byBody, id, p.number);
   }
   const byCommit = new Map();
@@ -29,9 +33,17 @@ export function buildLinks(items, ctx) {
   for (const it of items) {
     if (it.excluded) continue;
     const explicit = new Map(); // n -> source
-    if (it.baseline) for (const n of inventoryPrNums(it.baseline, pulls)) explicit.set(n, explicit.get(n) || 'inventory.prs');
-    for (const r of it.records) if (r.pr && pulls.has(r.pr)) { const src = `${r.kind.toLowerCase()}:${r.ref}.pr`; if (!explicit.has(r.pr) || explicit.get(r.pr) === 'inventory.prs') explicit.set(r.pr, explicit.has(r.pr) ? `${explicit.get(r.pr)}+${src}` : src); }
+    const weak = new Map(); // n -> reason (19-Oct prs references that are not EXPLICIT)
+    if (it.baseline) {
+      const names = (m, n) => (m.get(it.id) || []).includes(n);
+      const titlePrs = new Set([...String(it.baseline.title || '').matchAll(titlePrRe)].map((m) => Number(m[1])));
+      const claimsMerged = statusMap.baselineMergedClaim.includes(it.baseline.status19);
+      const gate = (n) => (names(byTitle, n) || names(byBranch, n) || names(byBody, n) ? 'PR_NAMES_ITEM' : titlePrs.has(n) ? 'ITEM_TITLE_NAMES_PR' : claimsMerged ? 'STATUS19_CLAIMS_MERGED' : null);
+      for (const r of inventoryPrRefs(it.baseline, pulls, IP, gate)) { if (r.strength === 'EXPLICIT') explicit.set(r.n, `inventory.prs[${r.gate}]`); else weak.set(r.n, r.reason); }
+    }
+    for (const r of it.records) if (r.pr && pulls.has(r.pr)) { const src = `${r.kind.toLowerCase()}:${r.ref}.pr`; if (!explicit.has(r.pr) || explicit.get(r.pr).startsWith('inventory.prs')) explicit.set(r.pr, explicit.has(r.pr) ? `${explicit.get(r.pr)}+${src}` : src); }
     for (const [n, src] of [...explicit.entries()].sort((a, b) => a[0] - b[0])) add({ itemId: it.id, kind: 'PR', ref: `#${n}`, pr: n, strength: 'EXPLICIT', source: src, at: prAt(pulls.get(n)) });
+    for (const [n, why] of [...weak.entries()].sort((a, b) => a[0] - b[0])) if (!explicit.has(n)) add({ itemId: it.id, kind: 'PR', ref: `#${n}`, pr: n, strength: 'INVENTORY_WEAK', source: `inventory.prs:${why}`, at: prAt(pulls.get(n)) });
     for (const o of overlayLinks.filter((x) => x.itemId === it.id)) { const n = Number(String(o.value).replace('#', '')); if (pulls.has(n)) add({ itemId: it.id, kind: 'PR', ref: `#${n}`, pr: n, strength: 'OVERLAY', source: `overlay:${o.by}`, at: prAt(pulls.get(n)) }); }
     for (const [m, strength] of [[byTitle, 'ID_IN_TITLE'], [byBranch, 'ID_IN_BRANCH'], [byBody, 'ID_IN_BODY']]) {
       for (const n of [...new Set(m.get(it.id) || [])].sort((a, b) => a - b)) add({ itemId: it.id, kind: 'PR', ref: `#${n}`, pr: n, strength, source: strength === 'ID_IN_BODY' ? 'pr.body' : strength === 'ID_IN_TITLE' ? 'pr.title' : 'pr.head.ref', at: prAt(pulls.get(n)) });

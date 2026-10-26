@@ -1,4 +1,4 @@
-//TR: Günlük çıktıları uasco/production-reports dalına checkout yapmadan git plumbing ile yayınlar: geçici index, yalnız daily/<tarih>/ yolları, commit-tree, yalnız ileri sarma (fast-forward) push. Asla force push yok. İleri sarma reddedilirse bir kez yeni ebeveyn üzerine yeniden kurar; ikinci başarısızlık PUBLISH_RACE (çıkış 6). restoreLatest en yeni günlük dizini yerel klasöre geri yükler.
+//TR: Günlük çıktıları uasco/production-reports dalına checkout yapmadan git plumbing ile yayınlar: geçici index, yalnız daily/<tarih>/ yolları, commit-tree, yalnız ileri sarma (fast-forward) push. Asla force push yok. İleri sarma reddedilirse bir kez yeni ebeveyn üzerine yeniden kurar; her denemede yeni ebeveynde aynı günün manifest.json'u varsa hiçbir şey itmez (SKIP, karşılaştır-ve-değiştir); ikinci başarısızlık PUBLISH_RACE (çıkış 6). restoreLatest en yeni günlük dizini yerel klasöre geri yükler.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -26,7 +26,9 @@ function buildCommit(repo, parent, dirPath, files, msg, env) {
 }
 
 // files: [{name, content}] (content written last-to-first is irrelevant: one commit). Returns {commit, parent, attempts}.
-export function publishDaily({ repo, remote = 'origin', branch = 'uasco/production-reports', dailyDir, date, files, msg, env = {}, beforePush = null }) {
+// Compare-and-swap on the guard file: every attempt (including the non-fast-forward retry) re-reads the freshly fetched parent; if
+// <dailyDir>/<date>/<guardFile> already exists there, another run published this date and nothing is pushed ({ skipped, existing }).
+export function publishDaily({ repo, remote = 'origin', branch = 'uasco/production-reports', dailyDir, date, files, msg, env = {}, beforePush = null, guardFile = 'manifest.json' }) {
   const dirPath = `${dailyDir}/${date}`;
   let attempts = 0;
   for (;;) {
@@ -34,6 +36,10 @@ export function publishDaily({ repo, remote = 'origin', branch = 'uasco/producti
     const f = gitTry(repo, ['fetch', '-q', remote, branch], { env });
     if (!f.ok) throw new Error(`FETCH_FAILED:${f.err.trim()}`);
     const parent = gitTry(repo, ['rev-parse', '--verify', '-q', `refs/remotes/${remote}/${branch}`], { env }).out.trim() || null;
+    if (parent && guardFile && gitTry(repo, ['cat-file', '-e', `${parent}:${dirPath}/${guardFile}`], { env }).ok) {
+      const by = gitTry(repo, ['log', '-1', '--format=%H', parent, '--', `${dirPath}/${guardFile}`], { env }).out.trim() || parent;
+      return { skipped: true, existing: by, parent, attempts };
+    }
     const commit = buildCommit(repo, parent, dirPath, files, msg, env);
     if (beforePush) beforePush(attempts);
     const p = gitTry(repo, ['push', '-q', remote, `${commit}:refs/heads/${branch}`], { env });

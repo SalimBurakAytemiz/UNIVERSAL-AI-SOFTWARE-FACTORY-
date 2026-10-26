@@ -1,5 +1,5 @@
 //TR: Kimlik modeli: 19 Ekim satırları, backlog, Wave 0 paketleri, kuyruk görevleri, lane teslimatları ve coordinatorBuild kayıtlarını tek kalem kümesinde birleştirir. Olaylar: ADDED (yeni kimlik + gerekçe), MERGED (kaynak kimlik mevcut kalemle aynı), RELATED (kaynak metni mevcut kimlik(ler)i anıyor: yeni kalem değil, bağlantı), REMOVED (yalnız overlay OBSOLETE), EXCLUDED (19 Ekim DUPLICATE/OBSOLETE). Roller ve değerlendirme spec'leri kalem olmaz.
-import { canonicalId, knownIdScan } from '../core/ids.mjs';
+import { canonicalId, knownIdScan, literalIdScan, isLiteralId } from '../core/ids.mjs';
 import { cmp, uniqSorted } from '../core/canonical-json.mjs';
 import { phaseId } from './roadmap.mjs';
 
@@ -28,6 +28,8 @@ export function createResolver() {
       return [...out].sort(cmp);
     },
     aliasEntries: () => [...alias.entries()].map(([a, s]) => [a, [...s].sort(cmp)]).sort((x, y) => cmp(x[0], y[0])),
+    // exact-id match for ids that do not end in -<digits> (rules/link-patterns.json literalIdMatch); PR title/branch only
+    resolveLiteral(text, mode) { keyCache = keyCache || keys(); return uniqSorted(literalIdScan(text, [...keyCache].filter(isLiteralId), mode).flatMap((k) => api.targets(k))); },
   };
   return api;
 }
@@ -94,11 +96,11 @@ export function buildIdentity({ baseline, roadmap, coordinator, dependencyMap, o
   // 3) Wave 0 packages
   for (const p of coordinator.wave0Packages) {
     relateOrAdd(p.id, p.id, 'WAVE0', (cid) => newItem(cid, { title: p.title, description: p.title, dimension: 'wave0-packages', origin: 'WAVE0', priority: p.priority }),
-      { kind: 'WAVE0', ref: p.id, status: null, dependsOn: p.dependsOn, reason: 'Master V2 Wave 0 package (inputs/wave0-baseline.json)' });
+      { kind: 'WAVE0', ref: p.id, status: null, dependsOn: p.dependsOn, mvp: p.mvp === true, reason: 'Master V2 Wave 0 package (inputs/wave0-baseline.json)' });
   }
   // 4) queue tasks: id match -> MERGED; repair (-R<n>) -> repair record on the base task's items; source cites ids -> RELATED; else ADDED
   for (const t of coordinator.queueTasks) {
-    const rec = { kind: 'QUEUE_TASK', ref: t.id, status: t.status, pr: t.pr, head: t.head, branch: t.branch, owner: t.owner, lane: t.lane, startedAt: t.startedAt, reason: 'queue task with no inventory id in its source' };
+    const rec = { kind: 'QUEUE_TASK', ref: t.id, status: t.status, pr: t.pr, head: t.head, branch: t.branch, owner: t.owner, lane: t.lane, startedAt: t.startedAt, mvp: t.mvp === true, reason: 'queue task with no inventory id in its source' };
     const rm = /^(.*)-R\d+$/.exec(t.id);
     if (rm && !res.has(canonicalId(t.id))) {
       const targets = res.targets(canonicalId(rm[1]));

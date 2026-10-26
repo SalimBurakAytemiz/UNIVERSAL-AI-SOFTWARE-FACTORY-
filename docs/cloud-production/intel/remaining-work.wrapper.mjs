@@ -1,4 +1,4 @@
-//TR: reports/local/remaining-work.mjs ince sarmalayıcısının kanonik kaynağı: Intel V1 motorunu bulur (UASCO_INTEL_DIR, pqw çalışma ağacı, claude/coord-intel-v1 çalışma ağacı, aksi halde motoru içeren ilk ref'ten git archive ile ağaç sha'sına göre önbelleğe çıkarılmış kopya) ve `intel.mjs report` çalıştırır; --force ve --now aynen geçirilir.
+//TR: reports/local/remaining-work.mjs ince sarmalayıcısının kanonik kaynağı: Intel V1 motorunu bulur (UASCO_INTEL_DIR, pqw çalışma ağacı, claude/coord-intel-v1 çalışma ağacı, aksi halde motoru içeren ilk ref'ten git archive ile ağaç sha'sına göre önbelleğe çıkarılmış kopya) ve `intel.mjs report --fetch` çalıştırır (origin/* ref'leri önce salt okunur fetch edilir; --no-fetch ile kapatılır); --force, --now ve --dump-inputs (yeniden kurulum kontrolü için girdi paketi) aynen geçirilir.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -18,6 +18,8 @@ if (!dir) {
 }
 if (!has(dir)) { process.stdout.write('INTEL FAIL ENGINE_NOT_FOUND\n'); process.exit(1); }
 const argv = process.argv.slice(2);
-const pass = argv.flatMap((a, i) => (a === '--force' ? ['--force'] : a === '--now' && argv[i + 1] ? ['--now', argv[i + 1]] : []));
+const pass = argv.flatMap((a, i) => (a === '--force' ? ['--force'] : (a === '--now' || a === '--dump-inputs') && argv[i + 1] ? [a, argv[i + 1]] : []));
+// live data: refresh origin/* refs first (read-only git fetch) unless --no-fetch; the report labels refs UNFETCHED/STALE otherwise
+if (!argv.includes('--no-fetch')) pass.push('--fetch');
 const r = spawnSync(process.execPath, [path.join(dir, 'intel.mjs'), 'report', '--repo', REPO, '--out', path.join(REPO, 'reports/local'), ...pass], { stdio: 'inherit' });
 process.exit(r.status ?? 1);

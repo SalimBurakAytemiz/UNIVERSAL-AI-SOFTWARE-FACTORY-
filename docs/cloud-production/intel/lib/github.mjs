@@ -1,4 +1,4 @@
-//TR: Saf olmayan GitHub kenarı: curl ile salt okunur REST (vekil ve CA paketi geçerli kalır). Asla fırlatmaz; ETag ile koşullu GET (304 hız kotası harcamaz), artımlı imleçler, çağrı tavanları ve hız rezervi. Rezervin altına inilirse sonuç PARTIAL olur ve imleç ertesi geceye kalır. Gövde metni saklanmaz; yalnız aday kimlik belirteçleri ve sha256'sı saklanır.
+//TR: Saf olmayan GitHub kenarı: curl ile salt okunur REST (vekil ve CA paketi geçerli kalır). Asla fırlatmaz; ETag ile koşullu GET (304 hız kotası harcamaz; ETag yalnız koşullu URL için ve yalnız tam geçişten sonra saklanır), artımlı imleçler, sayfalı dosya listesi, çağrı tavanları ve hız rezervi. Rezervin altına inilirse sonuç PARTIAL olur ve imleç ertesi geceye kalır. Gövde metni saklanmaz; yalnız aday kimlik belirteçleri ve sha256'sı saklanır.
 import { execFile } from 'node:child_process';
 import { sha256 } from '../core/canonical-json.mjs';
 import { ID_RE } from '../core/ids.mjs';
@@ -41,14 +41,15 @@ export function createGithub({ api, rateReserve = 500, concurrency = 8, fetcher 
   const acquire = () => new Promise((r) => { if (active < concurrency) { active++; r(); } else waiters.push(r); });
   const release = () => { active--; const w = waiters.shift(); if (w) { active++; w(); } };
 
-  async function getJson(path, { useEtag = true } = {}) {
+  // storeEtag: only conditional URLs keep an ETag (bounded cache); the pulls pass stores its page-1 ETag itself, and only after a complete pass.
+  async function getJson(path, { useEtag = true, storeEtag = useEtag } = {}) {
     if (state.rateRemaining !== null && state.rateRemaining < rateReserve) { state.partial = true; return { status: 0, error: 'RATE_RESERVE', json: null }; }
     const url = path.startsWith('http') ? path : api + path;
     await acquire();
     try {
       state.calls++;
       if (fetcher) { // injected (tests): must return {status, etag, json, rateRemaining}
-        try { const r = await fetcher(url, useEtag ? state.etags[url] : null); if (r.etag) state.etags[url] = r.etag; if (typeof r.rateRemaining === 'number') state.rateRemaining = r.rateRemaining; if (r.status === 304) state.notModified++; return r; }
+        try { const r = await fetcher(url, useEtag ? state.etags[url] : null); if (r.etag && storeEtag) state.etags[url] = r.etag; if (typeof r.rateRemaining === 'number') state.rateRemaining = r.rateRemaining; if (r.status === 304) state.notModified++; return r; }
         catch (e) { state.errors.push(String(e.message || e)); return { status: 0, error: String(e.message || e), json: null }; }
       }
       const args = ['-sS', '-i', '--compressed', '--max-time', '60', '-H', 'Accept: application/vnd.github+json', '-H', 'X-GitHub-Api-Version: 2022-11-28'];
@@ -62,7 +63,7 @@ export function createGithub({ api, rateReserve = 500, concurrency = 8, fetcher 
       if (p.status === 304) { state.notModified++; return { status: 304, json: null, etag: state.etags[url] }; }
       if (p.status !== 200) { state.errors.push(`${url}: HTTP ${p.status}`); return { status: p.status, error: `HTTP_${p.status}`, json: null }; }
       let json = null; try { json = JSON.parse(p.body); } catch { state.errors.push(`${url}: BAD_JSON`); return { status: 0, error: 'BAD_JSON', json: null }; }
-      if (p.headers.etag) state.etags[url] = p.headers.etag;
+      if (p.headers.etag && storeEtag) state.etags[url] = p.headers.etag;
       return { status: 200, json, etag: p.headers.etag || null };
     } finally { release(); }
   }
@@ -74,15 +75,21 @@ export function createGithub({ api, rateReserve = 500, concurrency = 8, fetcher 
     bodyTokens: bodyTokens(p.body), bodySha: sha256(String(p.body ?? '')),
   });
 
-  // Pulls sorted by updated desc; stop once a page's oldest entry is at/below the cursor. Page-1 304 = unchanged.
+  // Pulls sorted by updated desc; stop once a page's oldest entry is at/below the cursor. Page-1 304 = unchanged since the last COMPLETE pass:
+  // the page-1 ETag (like the cursor) is persisted only after a complete pass and dropped after an incomplete one, so a retry never skips
+  // pages that the failed pass did not fetch.
+  const PULLS1 = '/pulls?state=all&sort=updated&direction=desc&per_page=100&page=1';
   async function fetchPullsIncremental(table, cursor) {
     const out = new Map((table || []).map((p) => [p.number, p]));
-    let complete = true, pages = 0;
+    const key1 = api + PULLS1;
+    let complete = true, pages = 0, okPages = 0, page1Etag = null;
     for (let page = 1; page <= 50; page++) {
-      const r = await getJson(`/pulls?state=all&sort=updated&direction=desc&per_page=100&page=${page}`, { useEtag: page === 1 && !!cursor });
+      const r = await getJson(`/pulls?state=all&sort=updated&direction=desc&per_page=100&page=${page}`, { useEtag: page === 1 && !!cursor, storeEtag: false });
       pages++;
-      if (r.status === 304) break;
+      if (page === 1) page1Etag = r.etag || null;
+      if (r.status === 304) { okPages++; break; }
       if (r.status !== 200 || !Array.isArray(r.json)) { complete = false; break; }
+      okPages++;
       for (const p of r.json) { const prev = out.get(p.number); const c = compactPull(p); if (prev && prev.mergedBy !== undefined) c.mergedBy = prev.mergedBy; out.set(p.number, c); }
       if (r.json.length < 100) break;
       const oldest = r.json[r.json.length - 1].updated_at;
@@ -90,7 +97,8 @@ export function createGithub({ api, rateReserve = 500, concurrency = 8, fetcher 
     }
     const pulls = [...out.values()].sort((a, b) => a.number - b.number);
     const newCursor = pulls.reduce((m, p) => (p.updatedAt > m ? p.updatedAt : m), cursor || '');
-    return { pulls, cursor: complete ? newCursor : cursor, complete, pages };
+    if (complete && page1Etag) state.etags[key1] = page1Etag; else if (!complete) delete state.etags[key1];
+    return { pulls, cursor: complete ? newCursor : cursor, complete, pages, okPages };
   }
 
   const compactRun = (r) => ({
@@ -129,9 +137,16 @@ export function createGithub({ api, rateReserve = 500, concurrency = 8, fetcher 
     return (r.json.jobs || []).map((j) => ({ name: j.name, status: j.status, conclusion: j.conclusion ?? null, startedAt: j.started_at ?? null, completedAt: j.completed_at ?? null }))
       .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   }
-  async function fetchPrFiles(n) {
-    const r = await getJson(`/pulls/${n}/files?per_page=100`, { useEtag: false });
-    return r.status === 200 && Array.isArray(r.json) ? r.json.map((f) => f.filename).sort() : null;
+  // Paginated (GitHub lists at most 3000 files, 30 pages of 100); any failed page -> null (no partial list is ever served as complete).
+  async function fetchPrFiles(n, maxPages = 30) {
+    const files = [];
+    for (let page = 1; page <= maxPages; page++) {
+      const r = await getJson(`/pulls/${n}/files?per_page=100&page=${page}`, { useEtag: false });
+      if (r.status !== 200 || !Array.isArray(r.json)) return null;
+      files.push(...r.json.map((f) => f.filename));
+      if (r.json.length < 100) break;
+    }
+    return [...new Set(files)].sort();
   }
   async function fetchMergedBy(n) {
     const r = await getJson(`/pulls/${n}`, { useEtag: false });

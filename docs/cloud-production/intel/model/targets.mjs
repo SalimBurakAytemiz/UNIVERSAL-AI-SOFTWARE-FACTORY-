@@ -33,13 +33,20 @@ export function loadTargets(rulesTargets, texts, nowIso, acceptedKeys, tz) {
   const dq = [];
   const lineOk = (s) => { const t = texts[`${s.ref}:${s.path}`]; if (t === undefined) return 'SOURCE_UNREADABLE'; const l = String(t).split('\n')[s.line - 1] || ''; return l.includes(s.match) ? 'VERIFIED' : 'LINE_MISMATCH'; };
   const today = trtDate(nowIso, tz), clock = trtClock(nowIso, tz);
-  const passed = (q) => { if (!q.date) return false; if (today > q.date) return true; if (today < q.date) return false; return q.time ? clock >= q.time : false; };
+  // ranges are kept as ranges; a quantile has passed only after the END of its date/time range
+  const endDate = (q) => q.dateRange?.to || q.date || null, endTime = (q) => q.timeRange?.to || q.time || null;
+  const passed = (q) => { const d = endDate(q); if (!d) return false; if (today > d) return true; if (today < d) return false; const t = endTime(q); return t ? clock >= t : false; };
   const targets = rulesTargets.targets.map((t) => {
-    const quantiles = t.quantiles.map((q) => { const v = lineOk(q.source); if (v !== 'VERIFIED') dq.push({ code: `TARGET_SOURCE_${v}`, ref: `${t.id}/${q.q}`, detail: `${q.source.ref}:${q.source.path}:${q.source.line}` }); return { ...q, sourceCheck: v, passed: passed(q) }; });
+    const quantiles = t.quantiles.map((q) => {
+      const v = lineOk(q.source); if (v !== 'VERIFIED') dq.push({ code: `TARGET_SOURCE_${v}`, ref: `${t.id}/${q.q}`, detail: `${q.source.ref}:${q.source.path}:${q.source.line}` });
+      const rv = q.rangeSource ? lineOk(q.rangeSource) : null; if (rv && rv !== 'VERIFIED') dq.push({ code: `TARGET_RANGE_SOURCE_${rv}`, ref: `${t.id}/${q.q}`, detail: `${q.rangeSource.ref}:${q.rangeSource.path}:${q.rangeSource.line}` });
+      return { ...q, dateRange: q.dateRange ?? null, timeRange: q.timeRange ?? null, sourceCheck: v, rangeSourceCheck: rv, passed: passed(q) };
+    });
+    const cv = t.confidenceSource ? lineOk(t.confidenceSource) : null; if (cv && cv !== 'VERIFIED') dq.push({ code: `TARGET_CONFIDENCE_SOURCE_${cv}`, ref: t.id, detail: `${t.confidenceSource.ref}:${t.confidenceSource.path}:${t.confidenceSource.line}` });
     const primary = quantiles[0];
     const met = !!(t.acceptanceKey && acceptedKeys.has(t.acceptanceKey));
     let state = t.supersededBy ? 'SUPERSEDED' : met ? 'MET_WITH_EVIDENCE' : primary.passed ? 'PASSED_WITHOUT_ACCEPTANCE_EVIDENCE' : 'PENDING';
-    return { id: t.id, label: t.label, kind: t.kind || 'TARGET', date: primary.date ?? null, range: primary.range ?? null, quantile: primary.q, quantiles, confidence: t.confidence, source: primary.source, statedAt: t.statedAt, state, supersededBy: t.supersededBy ?? null, acceptanceKey: t.acceptanceKey ?? null };
+    return { id: t.id, label: t.label, kind: t.kind || 'TARGET', date: primary.date ?? null, range: primary.dateRange ?? null, quantile: primary.q, quantiles, confidence: t.confidence, confidenceSource: t.confidenceSource ? { ...t.confidenceSource, check: cv } : null, source: primary.source, statedAt: t.statedAt, state, supersededBy: t.supersededBy ?? null, acceptanceKey: t.acceptanceKey ?? null };
   });
   const flags = (rulesTargets.flags || []).map((f) => ({ id: f.id, text: f.text, check: lineOk(f.check) }));
   return { targets, flags, dq };

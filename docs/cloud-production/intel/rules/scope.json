@@ -1,8 +1,39 @@
 {
-  "//TR": "Kapsam kuralları: 19 Ekim oct31_impact alanı -> MVP/DEFERRED/FULL. Sonradan eklenen kalemler yalnız kural veya overlay ile MVP olur; aksi halde FULL.",
-  "schemaVersion": "1.0.0",
-  "oct31Map": { "AT_RISK": "MVP", "NOT_DELIVERABLE": "DEFERRED", "NONE": "FULL" },
-  "addedItemRules": [],
-  "addedDefault": "FULL",
-  "milestones": { "MVP": "T-M2-OCT31", "WAVE0_PREFIX": "C-", "WAVE0": "MASTER_V2_WAVE0" }
+  "//TR": "Kapsam kuralları: 19 Ekim oct31_impact alanı -> MVP / DEFERRED / FULL_ONLY (FULL_ONLY = yalnız tam üründe gereken, 31 Ekim etkisi yok; panodaki 'FULL' sütunu ise TÜM canlı kalemlerdir). Sonradan eklenen kalemler yalnız açık bir kaynakla MVP olur: MVP zinciri kuralının adlandırdığı PR, Wave 0 paketindeki mvp bayrağı veya kuyruk görevindeki MVP işareti; aksi halde gerekçesiyle FULL_ONLY.",
+  "schemaVersion": "1.1.0",
+  "oct31Map": {
+    "AT_RISK": "MVP",
+    "NOT_DELIVERABLE": "DEFERRED",
+    "NONE": "FULL_ONLY"
+  },
+  "addedItemRules": [
+    {
+      "id": "MVP_CHAIN_PR",
+      "scope": "MVP",
+      "when": "linkedPrInMvpChain",
+      "source": "rules/mvp-chain.json steps[].implementedWhen|blockedWhen|inProgressWhen prMerged/prOpen and openItems[].openWhilePrOpen",
+      "reason": "a PR linked to the item (record PR, or item id in the PR title/branch) is named by MVP-chain step {step} (#{pr})"
+    },
+    {
+      "id": "WAVE0_MVP_FLAG",
+      "scope": "MVP",
+      "when": "wave0MvpFlag",
+      "source": "inputs/wave0-baseline.json packages[].mvp === true",
+      "reason": "Wave 0 package carries mvp: true"
+    },
+    {
+      "id": "QUEUE_MVP_MARKER",
+      "scope": "MVP",
+      "when": "queueMvpMarker",
+      "source": "PRODUCTION-QUEUE.json tasks[].mvp === true or tasks[].milestone naming MVP / OCT31",
+      "reason": "queue task carries an MVP marker"
+    }
+  ],
+  "addedDefault": "FULL_ONLY",
+  "addedDefaultReason": "no explicit MVP source (MVP-chain PR, Wave 0 mvp flag, queue MVP marker) names this item",
+  "milestones": {
+    "MVP": "T-M2-OCT31",
+    "WAVE0_PREFIX": "C-",
+    "WAVE0": "MASTER_V2_WAVE0"
+  }
 }

@@ -1,4 +1,4 @@
-//TR: UASCO Intel V1 toplu kanıt betiği (node docs/cloud-production/intel/intel.proof.mjs). Ağ yoktur: alt süreçler HTTPS_PROXY=http://127.0.0.1:9 ile çalışır, GitHub kaynağı enjekte edilir ve çağrı sayısı 0 doğrulanır. Kapsam: alt kanıtlar (P3 P4 P5 P6 P10 P11) + P1 determinizm, P2 taban uzlaştırması (gerçek 19 Ekim blob'u), P7 tazelik/hız, P8 guard/zaman, P9 eski anahtar sürekliliği, P12 mutantlar.
+//TR: UASCO Intel V1 toplu kanıt betiği (node docs/cloud-production/intel/intel.proof.mjs). Ağ yoktur: betik kendini ağ korumasıyla (lib/net-guard.mjs, proof kipi: her node sürecine NODE_OPTIONS ile ön yüklenir; git yalnız file protokolü) ve izin listeli ortamla (token/sır yok, iki harf düzeninde ölü vekil, GIT_CONFIG_GLOBAL=/dev/null, imzasız commit) yeniden çalıştırır; GitHub kaynağı enjekte edilir ve çağrı sayısı 0 doğrulanır. Kapsam: alt kanıtlar (P3 P4 P5 P6 P10 P11) + P1 determinizm, P2 taban uzlaştırması (gerçek 19 Ekim blob'u), P7 tazelik/hız (ETag, kaynak başına tazelik, parmak izi, git ref tazeliği), P8 guard/zaman, P9 eski anahtar sürekliliği, P12 mutantlar, P13 ürün kodu kum havuzu (ortam + ağ sondası), P14 sınırlı arşiv.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -11,14 +11,31 @@ import { legacyView, loadBaseline } from './model/baseline.mjs';
 import { FIELD_SEMANTICS } from './render/report-json.mjs';
 import { sha256 } from './core/canonical-json.mjs';
 import { trtDate, trtClock } from './core/time.mjs';
-import { verifyOutputs, buildOutputs } from './intel.mjs';
+import { verifyOutputs, buildOutputs, pruneArchive } from './intel.mjs';
+import { gatherInputs, inputsFingerprint } from './lib/gather.mjs';
+import { runReadiness } from './lib/readiness-runner.mjs';
+import net from 'node:net';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ONLY = (() => { const i = process.argv.indexOf('--only'); return i > 0 ? process.argv[i + 1] : null; })();
 const want = (k) => !ONLY || ONLY === k;
 let passed = 0, failed = 0;
 const check = (name, ok) => { if (ok) { passed++; console.log(`PASS ${name}`); } else { failed++; console.log(`FAIL ${name}`); } };
-const NOENV = { ...process.env, HTTPS_PROXY: 'http://127.0.0.1:9', HTTP_PROXY: 'http://127.0.0.1:9', GIT_AUTHOR_NAME: 'proof', GIT_AUTHOR_EMAIL: 'p@example.invalid', GIT_COMMITTER_NAME: 'proof', GIT_COMMITTER_EMAIL: 'p@example.invalid' };
+// Allowlisted env (no token/key/secret of the caller), dead proxies in both cases, hermetic git (no global/system config, no signing), and the
+// network guard preloaded into every node process. The whole proof re-executes itself under it.
+const DEAD = 'http://127.0.0.1:9';
+const NOENV = {
+  ...Object.fromEntries(['PATH', 'HOME', 'LANG', 'LC_ALL', 'TZ', 'TMPDIR'].filter((k) => typeof process.env[k] === 'string').map((k) => [k, process.env[k]])),
+  HTTPS_PROXY: DEAD, HTTP_PROXY: DEAD, ALL_PROXY: DEAD, https_proxy: DEAD, http_proxy: DEAD, all_proxy: DEAD, NO_PROXY: '', no_proxy: '',
+  GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'commit.gpgsign', GIT_CONFIG_VALUE_0: 'false', GIT_TERMINAL_PROMPT: '0',
+  GIT_AUTHOR_NAME: 'proof', GIT_AUTHOR_EMAIL: 'p@example.invalid', GIT_COMMITTER_NAME: 'proof', GIT_COMMITTER_EMAIL: 'p@example.invalid',
+  NODE_OPTIONS: `--import ${new URL('./lib/net-guard.mjs', import.meta.url).href}`, INTEL_NET_GUARD: 'proof',
+  INTEL_REPO: process.env.INTEL_REPO || path.dirname(fileURLToPath(import.meta.url)),
+};
+if (process.env.INTEL_NET_GUARD_ACTIVE !== 'proof') {
+  const r = spawnSync(process.execPath, [fileURLToPath(import.meta.url), ...process.argv.slice(2)], { stdio: 'inherit', env: NOENV });
+  process.exit(r.status ?? 1);
+}
 const { rules } = loadRules(HERE);
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'intel-proof-'));
 const outputs = (bundle) => {
@@ -126,6 +143,128 @@ try {
     const ir = await inc.fetchPullsIncremental(cached, '2026-10-20T00:00:00Z');
     check('P7 incremental merge: PR #1 updated, PR #2 added, cursor advanced, body kept only as tokens', ir.pulls.length === 2 && ir.pulls[0].mergedAt === '2026-10-25T00:00:00Z' && ir.pulls[1].bodyTokens.includes('UI-002') && !('body' in ir.pulls[1]) && ir.cursor === '2026-10-26T01:00:00Z');
     check('P7 offline builds make 0 GitHub calls', outputs(miniBundle()).m.inputs.github.calls === 0);
+
+    // M4: a page-1 ETag from an INCOMPLETE pull pass must not make the next run skip the pages it never fetched (fails on 4fe58dd)
+    const C0 = '2026-10-20T00:00:00Z';
+    const ghPr = (n, upd, mergedAt) => ({ number: n, state: mergedAt ? 'closed' : 'open', draft: false, title: `t${n}`, head: { ref: `b${n}`, sha: S(`h${n}`) }, base: { ref: 'v7/integration' }, created_at: '2026-10-19T00:00:00Z', updated_at: upd, closed_at: mergedAt, merged_at: mergedAt, merge_commit_sha: mergedAt ? S(`m${n}`) : null, body: '' });
+    const serverPrs = [...Array.from({ length: 100 }, (_, i) => ghPr(150 - i, `2026-10-22T${String(23 - Math.floor(i / 5)).padStart(2, '0')}:${String(59 - (i % 5)).padStart(2, '0')}:00Z`, null)),
+      ...Array.from({ length: 50 }, (_, i) => ghPr(50 - i, `2026-10-21T12:${String(59 - i).padStart(2, '0')}:00Z`, '2026-10-21T12:00:00Z'))];
+    let failPage2 = true, pullCalls = 0;
+    const pullsFetcher = async (url, etag) => {
+      pullCalls++;
+      const page = Number(/[?&]page=(\d+)/.exec(url)[1]);
+      const items = serverPrs.slice((page - 1) * 100, page * 100);
+      const et = `W/"${sha256(JSON.stringify(items)).slice(0, 8)}"`;
+      if (page === 2 && failPage2) throw new Error('ECONNRESET (proof)');
+      if (etag && etag === et) return { status: 304, json: null, etag: et };
+      return { status: 200, json: items, etag: et };
+    };
+    const stale50 = Array.from({ length: 50 }, (_, i) => ({ number: i + 1, state: 'open', mergedAt: null, updatedAt: '2026-10-19T00:00:00Z', headSha: S(`h${i + 1}`), base: 'v7/integration' }));
+    const g1 = createGithub({ api: 'https://api.github.invalid/r', fetcher: pullsFetcher });
+    const run1 = await g1.fetchPullsIncremental(stale50, C0);
+    check('M4 run 1: page 2 fails -> incomplete, cursor kept, and NO page-1 ETag persisted', run1.complete === false && run1.cursor === C0 && Object.keys(g1.state.etags).length === 0);
+    failPage2 = false;
+    const g2 = createGithub({ api: 'https://api.github.invalid/r', fetcher: pullsFetcher, etags: g1.state.etags });
+    const run2 = await g2.fetchPullsIncremental(run1.pulls, run1.cursor);
+    const fixed = run2.pulls.filter((p) => p.number <= 50);
+    check('M4 run 2 (server unchanged): pages 1 and 2 are fetched and all 50 merged PRs are refreshed (no 304 skip)', run2.complete === true && g2.state.notModified === 0 && fixed.length === 50 && fixed.every((p) => p.mergedAt === '2026-10-21T12:00:00Z'));
+    const g3 = createGithub({ api: 'https://api.github.invalid/r', fetcher: pullsFetcher, etags: g2.state.etags });
+    const run3 = await g3.fetchPullsIncremental(run2.pulls, run2.cursor);
+    check('M4 run 3 after a complete pass: the persisted page-1 ETag gives one 304 call', run3.complete === true && g3.state.calls === 1 && g3.state.notModified === 1 && Object.keys(g2.state.etags).length === 1);
+    // LOW: open-PR file lists are paginated (fails on 4fe58dd: capped at 100)
+    const fileFetcher = async (url) => { const page = Number(/[?&]page=(\d+)/.exec(url)?.[1] || 1); const n = page === 1 ? 100 : page === 2 ? 100 : 7; return { status: 200, json: Array.from({ length: page <= 3 ? n : 0 }, (_, i) => ({ filename: page === 3 && i === 6 ? '.github/workflows/ci.yml' : `f${page}-${i}` })) }; };
+    const gf = createGithub({ api: 'https://api.github.invalid/r', fetcher: fileFetcher });
+    const files = await gf.fetchPrFiles(9);
+    check('LOW PR file list follows pagination past 100 files (207 files, the protected file on page 3 is seen)', Array.isArray(files) && files.length === 207 && files.includes('.github/workflows/ci.yml'));
+
+    // M5: per-source freshness through the real gatherInputs on a synthetic repo; check-runs fail, the cached CI is served and marked (fails on 4fe58dd)
+    const syn = path.join(tmp, 'syn'); fs.mkdirSync(syn); g(syn, 'init', '-q');
+    fs.mkdirSync(path.join(syn, 'inv')); fs.writeFileSync(path.join(syn, 'inv', 'i.json'), JSON.stringify({ items: [] })); fs.writeFileSync(path.join(syn, 'inv', 'i.csv'), 'id,title\n');
+    g(syn, 'add', '-A'); g(syn, 'commit', '-q', '-m', 'syn');
+    for (const r of ['origin/v7/integration', 'origin/uasco/production-queue', 'origin/uasco/production-reports']) g(syn, 'update-ref', `refs/remotes/${r}`, 'HEAD');
+    const rulesSyn = JSON.parse(JSON.stringify(rules));
+    rulesSyn.sources.inventory.jsonBlob = g(syn, 'rev-parse', 'HEAD:inv/i.json'); rulesSyn.sources.inventory.csvBlob = g(syn, 'rev-parse', 'HEAD:inv/i.csv'); rulesSyn.config.tsxCandidates = [];
+    const OPEN_HEAD = S('syn-open-head');
+    const ghStub = async (url) => {
+      if (/\/pulls\?state=all/.test(url)) return { status: 200, json: /page=1$/.test(url) ? [{ ...ghPr(7, '2026-10-26T10:00:00Z', null), head: { ref: 'claude/lane-a-x', sha: OPEN_HEAD } }] : [] };
+      if (/\/actions\/runs\?/.test(url)) return { status: 200, json: { workflow_runs: [] } };
+      if (/\/check-runs/.test(url)) throw new Error('HTTP 403 secondary rate limit (proof stub)');
+      if (/\/files\?/.test(url)) return { status: 200, json: [] };
+      return { status: 200, json: { merged_by: null } };
+    };
+    const oldChecks = [{ name: 'validate (ubuntu-latest)', status: 'in_progress', conclusion: null, startedAt: '2026-10-25T00:00:00Z', completedAt: null }];
+    const { inputs: gi } = await gatherInputs({ repo: syn, engineDir: HERE, outDir: path.join(tmp, 'syn-out'), nowIso: '2026-10-26T19:41:00Z', rules: rulesSyn, overlay: { entries: [] }, tsx: null, cache: { checks: { [OPEN_HEAD]: oldChecks }, checksAt: { [OPEN_HEAD]: '2026-10-25T00:00:00Z' } }, cacheFrom: 'proof', priorSnapshots: [], fetcher: ghStub, workDir: tmp });
+    const sc = gi.github.sources?.checks;
+    check('M5 a failed check-runs call marks that source (STALE_CACHE: 1/1 failed) and the overall GitHub state PARTIAL, not FRESH', gi.github.freshness.state === 'PARTIAL' && !!sc && sc.state === 'STALE_CACHE' && sc.failed === 1 && gi.github.sources.pulls.state === 'FRESH');
+    check('M5 the cached CI served after the failure carries its age (cacheAsOf 2026-10-25T00:00:00Z, 43.7 h) and is listed in staleChecks', sc && sc.servedFromCache === 1 && sc.cacheAsOf === '2026-10-25T00:00:00Z' && sc.cacheAgeHours === 43.7 && gi.github.staleChecks[OPEN_HEAD] === '2026-10-25T00:00:00Z' && JSON.stringify(gi.github.checks[OPEN_HEAD]) === JSON.stringify(oldChecks));
+    check('M5 git refs that this run did not fetch are UNFETCHED (not FRESH)', gi.meta.refsFetch?.ran === false);
+    const mb = miniBundle();
+    mb.inputs.github.sources = gi.github.sources; mb.inputs.github.freshness = gi.github.freshness; mb.inputs.github.staleChecks = { [S('head5')]: '2026-10-25T00:00:00Z' }; mb.inputs.github.checks[S('head5')] = oldChecks;
+    const mo = outputs(mb), mr = JSON.parse(mo.json);
+    check('M5 section J lists every GitHub source with its state and the age of cached data; the open PR CI is marked as cached', /\| GitHub: check-runs \| STALE_CACHE \| 1 çağrı, 1 başarısız; önbellekten 1 kayıt \(as of 2026-10-25T00:00:00Z, 43,7 sa önce\)/.test(mo.md) && mr.openPrs.find((p) => p.number === 5)?.ciSource === 'STALE_CACHE' && /\[önbellek, as of 2026-10-25T00:00:00Z\]/.test(mo.md) && mr.dataQuality.sectionConfidence.F === 'MEDIUM');
+    // LOW: git-ref freshness comes from the fetch this run did (fails on 4fe58dd: always FRESH)
+    const refState = (rf) => { const b2 = miniBundle(); b2.inputs.meta.refsFetch = rf; return JSON.parse(outputs(b2).json).freshness.v7; };
+    const rU = refState({ ran: false, ok: null, at: null, error: null, lastFetchHeadAt: '2026-10-24T08:00:00Z' }), rF = refState({ ran: true, ok: true, at: '2026-10-26T19:41:00Z', error: null, lastFetchHeadAt: null }), rS = refState({ ran: true, ok: false, at: null, error: 'fatal: unable to access', lastFetchHeadAt: '2026-10-24T08:00:00Z' });
+    check('LOW git refs: no fetch -> UNFETCHED with the FETCH_HEAD time; fetch ok -> FRESH; fetch failed -> STALE', rU.state === 'UNFETCHED' && rU.lastFetchAt === '2026-10-24T08:00:00Z' && rF.state === 'FRESH' && rF.fetchedAt === '2026-10-26T19:41:00Z' && rS.state === 'STALE');
+    // LOW: the input fingerprint covers every output-affecting input but not call accounting (fails on 4fe58dd: checks/texts ignored)
+    const fpOf = (mut) => { const b3 = miniBundle(); mut(b3.inputs); return inputsFingerprint(b3.inputs, b3.meta, { nowIso: b3.nowIso, tz: 'Europe/Istanbul' }); };
+    const fp0 = fpOf(() => {});
+    check('LOW fingerprint changes when check-run conclusions, reports texts or open-PR files change', fp0 !== fpOf((I) => { I.github.checks[S('head1')] = I.github.checks[S('head1')].map((c) => ({ ...c, conclusion: 'failure' })); }) && fp0 !== fpOf((I) => { I.texts['reports:docs/cloud-production/reports/PRODUCTION-LOG.md'] = 'appended'; }) && fp0 !== fpOf((I) => { I.github.prFiles[30] = ['x']; }));
+    check('LOW fingerprint ignores GitHub call accounting and the FRESH asOf clock', fp0 === fpOf((I) => { I.github.calls = 99; I.github.notModified = 7; I.github.rateRemaining = 4000; I.github.freshness.asOf = '2026-10-26T20:00:00Z'; }));
+  }
+
+  // ---- P13 product-code sandbox: the readiness runner gives v7 code no secrets and no network (fails on 4fe58dd: env leaked, connect reached)
+  if (want('P13')) {
+    let hits = 0;
+    const srv = net.createServer((c) => { hits++; c.destroy(); });
+    await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+    const port = srv.address().port;
+    const saved = {};
+    const FAKE = { GH_TOKEN: 'proof-fake-gh', GITHUB_TOKEN: 'proof-fake-github', AWS_SECRET_ACCESS_KEY: 'proof-fake-aws', AWS_ACCESS_KEY_ID: 'proof-fake-akid', MY_API_KEY: 'proof-fake-key', SOME_SECRET_VALUE: 'proof-fake-secret', CLAUDE_CODE_MESSAGING_TOKEN: 'proof-fake-msg' };
+    for (const [k, v] of Object.entries(FAKE)) { saved[k] = process.env[k]; process.env[k] = v; }
+    const probeRepo = path.join(tmp, 'probe'); fs.mkdirSync(path.join(probeRepo, 'core', 'agents'), { recursive: true }); g(probeRepo, 'init', '-q');
+    fs.writeFileSync(path.join(probeRepo, 'core', 'agents', 'probe.mjs'), `
+import net from 'node:net'; import dns from 'node:dns'; import cp from 'node:child_process';
+const out = { env: Object.keys(process.env).filter((k) => /TOKEN|SECRET|_KEY|KEY_ID|PASSWORD|CREDENTIAL|^GH_|^GITHUB_|^AWS_/i.test(k)).sort(), proxies: ['HTTPS_PROXY','https_proxy','HTTP_PROXY','http_proxy','ALL_PROXY','all_proxy'].map((k) => k + '=' + (process.env[k] || '')), net: null, fetch: null, dns: null, curl: null, sh: null };
+const code = (e) => (e && (e.code || e.name)) || String(e);
+out.net = await new Promise((res) => { try { const s = net.connect(${port}, '127.0.0.1'); s.on('connect', () => { s.destroy(); res('CONNECTED'); }); s.on('error', (e) => res(code(e))); setTimeout(() => res('TIMEOUT'), 2000); } catch (e) { res(code(e)); } });
+try { await fetch('http://127.0.0.1:${port}/', { signal: AbortSignal.timeout(1500) }); out.fetch = 'RESPONDED'; } catch (e) { out.fetch = code(e.cause || e); }
+try { dns.lookup('example.com', () => {}); out.dns = 'CALLED'; } catch (e) { out.dns = code(e); }
+try { cp.execFileSync('curl', ['-sS', 'http://127.0.0.1:${port}/'], { stdio: 'ignore', timeout: 2000 }); out.curl = 'RAN'; } catch (e) { out.curl = code(e); }
+try { cp.execSync('true'); out.sh = 'RAN'; } catch (e) { out.sh = code(e); }
+export const loadReadinessInputFromRepo = () => ({});
+export const computeRoleReadiness = () => ({ schemaVersion: 'probe', authority: 'probe', denominator: 0, totals: {}, stageWired: [], byGuild: [], byCluster: [], reasonCounts: {}, proposedOnly: {}, inputs: { probe: out }, anomalies: [], computedAt: null, digest: 'probe' });
+`);
+    g(probeRepo, 'add', '-A'); g(probeRepo, 'commit', '-q', '-m', 'probe');
+    const rr = runReadiness({ repo: probeRepo, v7sha: g(probeRepo, 'rev-parse', 'HEAD'), tsx: process.execPath, nowIso: '2026-10-26T19:41:00Z', archivePaths: ['core'], module: 'core/agents/probe.mjs', workDir: tmp });
+    await new Promise((r) => setTimeout(r, 300));
+    srv.close();
+    for (const k of Object.keys(FAKE)) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; }
+    const pr = rr.audit?.inputs?.probe;
+    check(`P13 probe ran inside the real runReadiness path (state ${rr.state}${rr.detail ? `: ${String(rr.detail).slice(0, 120)}` : ''})`, rr.state === 'MEASURED' && !!pr);
+    check(`M6 no token/key/secret/credential reaches product code (seen: ${pr ? pr.env.join(',') || 'none' : '?'})`, !!pr && pr.env.length === 0);
+    check('M6 every proxy variable, both cases, points at the closed port', !!pr && pr.proxies.every((x) => /=http:\/\/127\.0\.0\.1:9$/.test(x)));
+    check(`M6 TCP connect, fetch, DNS, curl and a shell are all blocked (net ${pr?.net}, fetch ${pr?.fetch}, dns ${pr?.dns}, curl ${pr?.curl}, sh ${pr?.sh})`, !!pr && pr.net !== 'CONNECTED' && pr.fetch !== 'RESPONDED' && pr.dns === 'INTEL_NET_BLOCKED' && pr.curl === 'INTEL_NET_BLOCKED' && pr.sh === 'INTEL_NET_BLOCKED' && [pr.net, pr.fetch].every((x) => x === 'INTEL_NET_BLOCKED' || rr.sandbox?.isolation === 'netns+guard'));
+    check(`M6 the listening socket outside the sandbox saw no connection (hits ${hits})`, hits === 0);
+    const rg = runReadiness({ repo: probeRepo, v7sha: g(probeRepo, 'rev-parse', 'HEAD'), tsx: process.execPath, nowIso: '2026-10-26T19:41:00Z', archivePaths: ['core'], module: 'core/agents/probe.mjs', workDir: tmp, netns: false });
+    const pg = rg.audit?.inputs?.probe;
+    check(`M6 without a network namespace the preload guard alone blocks connect and fetch (net ${pg?.net}, fetch ${pg?.fetch}; isolation ${rg.sandbox?.isolation})`, !!pg && rg.sandbox?.isolation === 'guard' && pg.net === 'INTEL_NET_BLOCKED' && pg.fetch === 'INTEL_NET_BLOCKED' && pg.env.length === 0);
+  }
+
+  // ---- P14 bounded local archive: newest intel snapshot per TRT date, legacy-v0 never pruned (fails on 4fe58dd: grew without bound)
+  if (want('P14')) {
+    const od = path.join(tmp, 'arch-out');
+    const put = (d, j) => { fs.mkdirSync(path.join(od, 'archive', d), { recursive: true }); fs.writeFileSync(path.join(od, 'archive', d, 'UASCO_REMAINING_WORK.json'), JSON.stringify(j)); };
+    put('20261026T200549Z', { generatedAt: '2026-10-26T20:05:49Z', totals: {} });
+    put('20261025T100000Z', { generatedAt: '2026-10-25T10:00:00Z', schemaVersion: 'intel-1.0.0', trendPoint: {} });
+    put('20261025T120000Z', { generatedAt: '2026-10-25T12:00:00Z', schemaVersion: 'intel-1.0.0', trendPoint: {} });
+    put('20261027T193000Z', { generatedAt: '2026-10-27T19:30:00Z', schemaVersion: 'intel-1.0.0', trendPoint: {} });
+    const dropped = pruneArchive(od, { tz: 'Europe/Istanbul', archiveMaxDays: 60 });
+    const left = fs.readdirSync(path.join(od, 'archive')).sort();
+    check(`P14 same-TRT-date intel duplicates pruned to the newest, legacy-v0 kept (left ${left.join(',')})`, JSON.stringify(dropped) === '["20261025T100000Z"]' && JSON.stringify(left) === '["20261025T120000Z","20261026T200549Z","20261027T193000Z"]');
+    put('20261028T193000Z', { generatedAt: '2026-10-28T19:30:00Z', schemaVersion: 'intel-1.0.0', trendPoint: {} });
+    pruneArchive(od, { tz: 'Europe/Istanbul', archiveMaxDays: 2 });
+    check('P14 at most archiveMaxDays intel dates are kept (oldest intel date dropped, legacy-v0 kept)', JSON.stringify(fs.readdirSync(path.join(od, 'archive')).sort()) === '["20261026T200549Z","20261027T193000Z","20261028T193000Z"]');
   }
 
   // ---- P8 guard and time
@@ -172,7 +311,10 @@ try {
   // ---- P12 mutants: each mutation must fail at least one proof
   if (want('P12')) {
     const MUT = [
-      { name: 'swap precedence rules 5 (FOUNDER) and 6 (BLOCKED)', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("else if (openDecisions.length || bc === 'STALE_FOUNDER'", "else if (queueStates.includes('BLOCKED') || backlogStates.includes('BLOCKED') || bc === 'STALE_BLOCKED') { status = 'BLOCKED'; rule = 6; }\n  else if (openDecisions.length || bc === 'STALE_FOUNDER'") },
+      { name: 'swap precedence rules 5 (FOUNDER) and 6 (BLOCKED)', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("else if (openDecisions.length || ebc === 'STALE_FOUNDER'", "else if (queueStates.includes('BLOCKED') || backlogStates.includes('BLOCKED') || ebc === 'STALE_BLOCKED') { status = 'BLOCKED'; rule = 6; }\n  else if (openDecisions.length || ebc === 'STALE_FOUNDER'") },
+      { name: 'H1: treat every 19-Oct prs reference as EXPLICIT (the v0 rule)', file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("if (r.strength === 'EXPLICIT') explicit.set(", "if (true) explicit.set(") },
+      { name: 'H1: count PARTIAL as integrated', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('const integrated = integratedBy.length > 0 && !partial;', 'const integrated = integratedBy.length > 0;') },
+      { name: 'M1: start from any linked PR incl. closed-unmerged', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('return !!(p && (p.mergedAt || p.state === \'open\'));', 'return !!p;') },
       { name: 'count DUPLICATE rows as live', file: 'model/identity.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("if (r.status19 === 'DUPLICATE' || r.status19 === 'OBSOLETE') { it.excluded", "if (r.status19 === 'OBSOLETE') { it.excluded") },
       { name: 'add body-only promotion for non-claim rows', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('const relink = [...recExplicit, ...overlayL, ...tb];', 'const relink = [...recExplicit, ...overlayL, ...tb, ...body];') },
       { name: 'drop the UNASSIGNED fallback', file: 'model/departments.mjs', proof: 'model/departments.proof.mjs', apply: (s) => s.replace("return { department: 'UNASSIGNED', ruleId: 'FALLBACK' };", "return { department: 'DESKTOP_UX', ruleId: 'FALLBACK' };") },

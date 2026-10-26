@@ -7,7 +7,7 @@ import { loadCoordinator } from './coordinator.mjs';
 import { buildIdentity } from './identity.mjs';
 import { buildLinks } from './links.mjs';
 import { deriveItem, RECON_CLASSES } from './status.mjs';
-import { scopeOf } from './scope.mjs';
+import { scopeOf, mvpChainPrIndex } from './scope.mjs';
 import { compileRules, classify, workspaceIndex } from './departments.mjs';
 import { loadTargets, scanCandidates } from './targets.mjs';
 import { buildDecisions } from './decisions.mjs';
@@ -15,6 +15,11 @@ import { STATUSES, block, ratios3, roadmapMetrics, evalMvpChain, etaFrom, oct31V
 import { computeProductivity } from '../metrics/productivity.mjs';
 import { computeAgentFactory } from '../metrics/agent-factory.mjs';
 import { diffSnapshots, trend } from '../metrics/history.mjs';
+
+// Model semantics version of the trend point / snapshot. intel-1.1: typed 19-Oct prs references (EXPLICIT vs WEAK), PARTIAL integration,
+// own-evidence actual start, MVP scope for added items by explicit source. Points of another semantics never feed velocity.
+export const SEMANTICS = 'intel-1.1';
+const START_SOURCES = ['inventory.prs EXPLICIT PR (merged or open)', 'queue/deliverable/coordinatorBuild record PR (merged or open)', 'overlay LINK PR (merged or open)', 'PR title/branch naming the id (merged or open)', 'v7 commit message naming the id', 'coordinator record head in v7/integration'];
 
 export function validateOverlay(raw, refs) {
   const accepted = [], rejected = [];
@@ -56,7 +61,7 @@ export function buildAll(inputs, rules, overlayRaw, meta, nowIsoRaw) {
   for (const it of identity.items) for (const r of it.records) { r.headFull = r.head ? shortMap[r.head] ?? null : null; r.headAt = r.headFull ? headDates[r.headFull] ?? null : null; }
   const supportTexts = [['queue:PRODUCTION-QUEUE.json', coordinator.queueText], ['ledger:COORD-LEDGER.json', coordinator.ledgerText], ...Object.entries(coordinator.dispatchTexts).sort((a, b) => cmp(a[0], b[0])).map(([k, v]) => [`dispatch:${k}`, v])];
   const links = buildLinks(identity.items, { pulls, commits: inputs.v7.commits, routes: inputs.v7.routes, ipc: inputs.v7.ipc, literalIntro: inputs.v7.literalIntro, reachable, shortMap, headDates,
-    resolver: identity.resolver, ledgerReviews: coordinator.ledgerReviews, supportTexts, overlayLinks: overlay.accepted.filter((o) => o.action === 'LINK'), linkPatterns: LP, v7sha: inputs.meta.refs.v7.sha });
+    resolver: identity.resolver, ledgerReviews: coordinator.ledgerReviews, supportTexts, overlayLinks: overlay.accepted.filter((o) => o.action === 'LINK'), linkPatterns: LP, v7sha: inputs.meta.refs.v7.sha, statusMap: SM });
   const unlinks = new Set(overlay.accepted.filter((o) => o.action === 'UNLINK').map((o) => `${o.itemId}|${o.value}`));
   const linksByItem = new Map();
   for (const l of links) { if (unlinks.has(`${l.itemId}|${l.ref}`)) continue; if (!linksByItem.has(l.itemId)) linksByItem.set(l.itemId, []); linksByItem.get(l.itemId).push(l); }
@@ -79,10 +84,11 @@ export function buildAll(inputs, rules, overlayRaw, meta, nowIsoRaw) {
   const deptDefaultLane = new Map(rules.departments.departments.map((d) => [d.id, d.defaultLane]));
   const ibOwner = new Map(coordinator.integrationBoard.prs.filter((p) => p.pr).map((p) => [p.pr, p.owner]));
   const T = rules['next-actions'].templates;
+  const mvpChainPrs = mvpChainPrIndex(rules['mvp-chain'].steps);
   const items = identity.items.map((it) => {
     const ls = linksByItem.get(it.id) || [];
     const d = deriveItem(it, ls, ctx);
-    const { scope, scopeRule } = scopeOf(it, rules.scope, overlayScope);
+    const { scope, scopeRule, scopeReason } = scopeOf(it, rules.scope, overlayScope, { mvpChainPrs, linkedPrs: d.linkedPrs });
     const { department, ruleId } = classify(it, compiled, deptCtx, overlayDept);
     const ph = it.roadmapPhase !== null ? phaseById.get(it.roadmapPhase) : null;
     const strongPrs = d.linkedPrs.map((n) => pulls.get(n)).filter(Boolean);
@@ -92,23 +98,23 @@ export function buildAll(inputs, rules, overlayRaw, meta, nowIsoRaw) {
     const ibo = strongPrs.map((p) => ibOwner.get(p.number)).find(Boolean);
     const owner = qOwner || bOwner || it.owner || ibo || null;
     const execRaw = it.executorRaw || qOwner || null;
-    const commitDates = ls.filter((l) => l.kind === 'COMMIT' && l.at && d.substeps.coded === 'TRUE' && (l.strength === 'EXPLICIT' || d.commitEvidence)).map((l) => l.at);
-    const prCreated = strongPrs.map((p) => p.createdAt);
+    // actual start: earliest evidence that the item itself started (own merged/open PR, commit naming it, record head in v7); never a closed-unmerged PR or a WEAK reference
+    const startCands = [...d.ownStart.prs.map((p) => ({ at: p.createdAt, src: `PR #${p.number} createdAt` })), ...d.ownStart.commits.map((c) => ({ at: c.at, src: `commit ${/^[0-9a-f]{40}$/.test(c.ref) ? c.ref.slice(0, 7) : c.ref} (${c.strength})` }))].filter((c) => Number.isFinite(toMs(c.at))).map((c) => ({ ...c, at: new Date(toMs(c.at)).toISOString().replace('.000Z', 'Z') })).sort((a, b) => toMs(a.at) - toMs(b.at) || cmp(a.src, b.src));
+    const start = startCands[0]?.at || null;
     const integratedMerged = d.integratedPrs.map((n) => pulls.get(n).mergedAt);
-    const start = [...prCreated, ...commitDates].sort(cmp)[0] || null;
     const lastMergedAt = integratedMerged.sort(cmp).slice(-1)[0] || null;
-    const firstPrCreated = prCreated.sort(cmp)[0] || null;
+    const firstPrCreated = d.ownStart.prs.map((p) => p.createdAt).sort(cmp)[0] || null;
     const openDec = (decisionsByItem.get(it.id) || []).filter((x) => x.state === 'OPEN');
     const ciRuns = uniqSorted(d.integratedPrs.flatMap((n) => inputs.github.runs.filter((r) => r.name === C.ciWorkflowName && r.headSha === pulls.get(n).headSha).map((r) => r.id)));
     const nextAction = fill(T[d.status] || T.UNKNOWN, { id: it.id, prs: d.linkedPrs.map((n) => `#${n}`).join(','), decision: openDec[0]?.id || d.blockers[0] || 'kayıt', blockers: d.blockers.join(', '), lane, missing: (d.missingEvidence[0] || '').slice(0, 120) });
     return {
       id: it.id, title: it.title, description: it.description, dimension: it.dimension, origin: it.origin, department, departmentRule: ruleId,
       roadmapPhase: it.roadmapPhase, relatedPhases: it.relatedPhases, wave: ph ? ph.wave : null, period: ph ? ph.period : null,
-      milestone: scope === 'MVP' ? rules.scope.milestones.MVP : it.origin === 'WAVE0' ? rules.scope.milestones.WAVE0 : null, scope, scopeRule,
+      milestone: scope === 'MVP' ? rules.scope.milestones.MVP : it.origin === 'WAVE0' ? rules.scope.milestones.WAVE0 : null, scope, scopeRule, scopeReason,
       owner, lane, executor: normExecutor(execRaw, SM.executorMap), dependsOn: it.dependsOn,
       planned: { start: null, end: null, sourcesChecked: rules.sources.datesSourceSet.id },
-      actual: { start, lastMergedAt, done: d.substeps.accepted === 'TRUE' ? (acceptance.get(it.id)?.at ?? null) : null },
-      status: d.status, statusRule: d.rule, reconClass: d.reconClass, baselineClass: d.baselineClass, evidenceClass: d.evidenceClass, matchKind: d.matchKind,
+      actual: { start, startState: start ? 'KNOWN' : 'UNKNOWN', startSource: startCands[0]?.src ?? null, startSourcesChecked: start ? null : START_SOURCES, lastMergedAt, done: d.substeps.accepted === 'TRUE' ? (acceptance.get(it.id)?.at ?? null) : null },
+      status: d.status, statusRule: d.rule, reconClass: d.reconClass, baselineClass: d.baselineClass, evidenceBaselineClass: d.evidenceBaselineClass, evidenceClass: d.evidenceClass, matchKind: d.matchKind, weakInventoryRefs: d.weakInventoryRefs,
       substeps: d.substeps, evidence: d.evidence, links: ls.map((l) => l.id).sort(cmp), blockers: d.blockers, founderDecision: openDec[0]?.id ?? null, nextAction,
       sizeEstimate: it.effort ? `${it.effort} (analyst estimate, 19-Oct)` : null,
       measuredDurationHours: firstPrCreated && lastMergedAt ? round1(hoursBetween(firstPrCreated, lastMergedAt)) : null, cost: null,
@@ -168,8 +174,14 @@ export function buildAll(inputs, rules, overlayRaw, meta, nowIsoRaw) {
     excluded: items.filter((x) => x.excluded19).length, excludedByStatus: tally(items.filter((x) => x.excluded19), (x) => x.excluded19),
     baselinePartition, currentPartition, transitionMatrix: { full: matrix(base), mvp: matrix(baseMvp) }, r323, overlap,
     liveNow: { baseline: base.length, removed: removed.length, added: added.length, value: base.length - removed.length + added.length, addedByOrigin: tally(added, (x) => x.origin), removedIds: removed.map((x) => x.id) },
-    addedItems: added.map((x) => ({ id: x.id, origin: x.origin, title: String(x.title || '').slice(0, 100), reason: identity.idEvents.find((e) => e.event === 'ADDED' && e.itemId === x.id)?.reason ?? null, status: x.status })),
-    idEvents: identity.idEvents, statusEvents,
+    addedItems: added.map((x) => ({ id: x.id, origin: x.origin, title: String(x.title || '').slice(0, 100), reason: identity.idEvents.find((e) => e.event === 'ADDED' && e.itemId === x.id)?.reason ?? null, status: x.status, scope: x.scope, scopeRule: x.scopeRule })),
+    mvpScope: {
+      baseline: baseMvp.length, value: mvp.length, addedMvp: added.filter((x) => x.scope === 'MVP').map((x) => ({ id: x.id, origin: x.origin, rule: x.scopeRule, reason: x.scopeReason })),
+      removedFromBaseline: baseMvp.length - base.filter((x) => x.scope === 'MVP').length,
+      rulesChecked: (rules.scope.addedItemRules || []).map((r) => ({ id: r.id, source: r.source, matched: added.filter((x) => String(x.scopeRule).split(':')[0] === r.id).length })),
+      addedNotMvp: added.filter((x) => x.scope !== 'MVP').length, addedDefaultReason: rules.scope.addedDefaultReason,
+    },
+    idEvents: identity.idEvents, statusEvents, startSourcesChecked: START_SOURCES,
   };
 
   // ---- roadmap, chain, oct31, ETA
@@ -178,15 +190,15 @@ export function buildAll(inputs, rules, overlayRaw, meta, nowIsoRaw) {
   const chain = evalMvpChain(rules['mvp-chain'].steps, { pulls, runs: inputs.github.runs, pathsPresent: inputs.pathsPresent, decisions, acceptedKeys: accKeys, acceptedItems: full.statusCounts.COMPLETED_AND_VERIFIED });
   const v7Pulls = inputs.github.pulls.filter((p) => p.base === C.integrationBranch);
   const merged7d = v7Pulls.filter((p) => p.mergedAt && toMs(nowIso) - toMs(p.mergedAt) <= 7 * 864e5).length;
-  const oct31 = oct31View(mvp, mvpB, chain, decisions, coordinator.capacity, round1(merged7d / 7), { DEFERRED: base.filter((x) => x.scope === 'DEFERRED').length, FULL: base.filter((x) => x.scope === 'FULL').length, total: base.filter((x) => x.scope !== 'MVP').length });
+  const oct31 = oct31View(mvp, mvpB, chain, decisions, coordinator.capacity, round1(merged7d / 7), { DEFERRED: base.filter((x) => x.scope === 'DEFERRED').length, FULL_ONLY: base.filter((x) => x.scope === 'FULL_ONLY').length, total: base.filter((x) => x.scope !== 'MVP').length, basis: '19-Oct baseline (741); added items are listed in reconciliation.mvpScope' });
   const today = trtDate(nowIso, C.tz);
   const merged24 = v7Pulls.filter((p) => p.mergedAt && toMs(nowIso) - toMs(p.mergedAt) <= 864e5).length;
-  const trendPoint = { date: today, generatedAt: nowIso, semantics: 'intel-1', liveNow: full.n, mvpN: mvpB.n, fullIntegrated: full.substeps.integrated.TRUE, mvpIntegrated: mvpB.substeps.integrated.TRUE, fullAccepted: full.substeps.accepted.TRUE, mvpAccepted: mvpB.substeps.accepted.TRUE, unreconciled: fullBase.unreconciled, unknown: full.statusCounts.UNKNOWN, mergesPerDay: merged24 };
+  const trendPoint = { date: today, generatedAt: nowIso, semantics: SEMANTICS, liveNow: full.n, mvpN: mvpB.n, fullIntegrated: full.substeps.integrated.TRUE, mvpIntegrated: mvpB.substeps.integrated.TRUE, fullAccepted: full.substeps.accepted.TRUE, mvpAccepted: mvpB.substeps.accepted.TRUE, unreconciled: fullBase.unreconciled, unknown: full.statusCounts.UNKNOWN, mergesPerDay: merged24 };
   const priorPoints = (inputs.prior || []).map((p) => p.trendPoint).filter(Boolean);
   const points = [...priorPoints.filter((p) => p.date !== today), trendPoint];
   const eta = {
-    mvpAcceptance: etaFrom(points, 'mvpAccepted', mvpB.n - mvpB.substeps.accepted.TRUE, nowIso, C.trendMinSnapshots, C.trendMinSpanDays, 'MVP accepted completion'),
-    mvpIntegrationOnly: etaFrom(points, 'mvpIntegrated', mvpB.n - mvpB.substeps.integrated.TRUE, nowIso, C.trendMinSnapshots, C.trendMinSpanDays, 'code integration only, not completion'),
+    mvpAcceptance: etaFrom(points, 'mvpAccepted', mvpB.n - mvpB.substeps.accepted.TRUE, nowIso, C.trendMinSnapshots, C.trendMinSpanDays, 'MVP accepted completion', SEMANTICS),
+    mvpIntegrationOnly: etaFrom(points, 'mvpIntegrated', mvpB.n - mvpB.substeps.integrated.TRUE, nowIso, C.trendMinSnapshots, C.trendMinSpanDays, 'code integration only, not completion', SEMANTICS),
   };
   const targetsOut = loadTargets(rules.targets, inputs.texts, nowIso, accKeys, C.tz);
   dq.push(...targetsOut.dq);
@@ -217,7 +229,11 @@ export function buildAll(inputs, rules, overlayRaw, meta, nowIsoRaw) {
   let prevCompact = null;
   if (prev) prevCompact = prev.items ? { items: prev.items, metrics: prev.metrics } : { items: legacy.rows.filter((r) => !['DUPLICATE', 'OBSOLETE'].includes(r.now) || true).map((r) => ({ id: r.id, status: r.now === 'DUPLICATE' ? 'OBSOLETE' : r.now })), metrics: prev.metrics };
   const diff = prev ? diffSnapshots(prevCompact, { items: curCompact.items.map((x) => (prev.items ? x : { id: x.id, status: x.status })), metrics: curCompact.metrics }) : null;
-  const history = { previous: prev ? { source: prev.source, date: prev.date, generatedAt: prev.generatedAt, semantics: prev.trendPoint?.semantics ?? null, itemsReconstructed: !prev.items } : null, diff, trend: trend(points, today, C.historyDays) };
+  const prevSem = prev ? (prev.trendPoint?.semantics ?? prev.semantics ?? null) : null;
+  const history = { previous: prev ? { source: prev.source, date: prev.date, generatedAt: prev.generatedAt, semantics: prevSem, itemsReconstructed: !prev.items } : null,
+    semantics: SEMANTICS, ruleChange: prev ? prevSem !== SEMANTICS : false,
+    ruleChangeNote: prev && prevSem !== SEMANTICS ? `previous snapshot uses semantics ${prevSem}, this one ${SEMANTICS}: item changes and metric deltas below mix project events with reclassification by the new evidence rules; they are not day-over-day progress` : null,
+    diff, trend: trend(points, today, C.historyDays) };
 
   // ---- data quality
   const strongPrSet = new Set(live.flatMap((x) => x.prs));
@@ -234,9 +250,12 @@ export function buildAll(inputs, rules, overlayRaw, meta, nowIsoRaw) {
   contradictions.sort((a, b) => cmp(a.code, b.code) || natCmp(a.ref, b.ref));
   const v0Report = (inputs.prior || []).find((p) => p.source && p.legacyHeader);
   const corrections = computeCorrections({ base, legacy, agentFactory, inputs, v0Report, meta: inputs.meta });
+  // git refs: FRESH only when this run fetched them successfully; otherwise UNFETCHED (no fetch this run) or STALE (fetch failed), with the last FETCH_HEAD time
+  const rf = inputs.meta.refsFetch || { ran: false, ok: null, lastFetchHeadAt: null };
+  const refFresh = rf.ran && rf.ok ? { state: 'FRESH', fetchedAt: rf.at } : { state: rf.ran ? 'STALE' : 'UNFETCHED', fetchedAt: null, lastFetchAt: rf.lastFetchHeadAt ?? null, error: rf.error ?? null };
   const sectionConfidence = (xs) => { const u = xs.filter((x) => x.status === 'UNKNOWN' || x.stale).length; return !xs.length ? 'LOW' : u / xs.length > 0.5 ? 'LOW' : u > 0 ? 'MEDIUM' : 'HIGH'; };
   const dataQuality = {
-    freshness: { v7: { state: 'FRESH', ...inputs.meta.refs.v7 }, queue: { state: 'FRESH', ...inputs.meta.refs.queue }, reports: { state: 'FRESH', ...inputs.meta.refs.reports }, github: { ...inputs.github.freshness, calls: inputs.github.calls, notModified: inputs.github.notModified, rateRemaining: inputs.github.rateRemaining, errors: inputs.github.errors }, readiness: { state: inputs.readiness.state, reason: inputs.readiness.reason ?? null }, cache: inputs.meta.cacheFrom },
+    freshness: { v7: { ...refFresh, ...inputs.meta.refs.v7 }, queue: { ...refFresh, ...inputs.meta.refs.queue }, reports: { ...refFresh, ...inputs.meta.refs.reports }, github: { ...inputs.github.freshness, calls: inputs.github.calls, notModified: inputs.github.notModified, rateRemaining: inputs.github.rateRemaining, errors: inputs.github.errors, sources: inputs.github.sources || null, staleChecks: inputs.github.staleChecks || {} }, readiness: { state: inputs.readiness.state, reason: inputs.readiness.reason ?? null, sandbox: inputs.readiness.sandbox ?? null }, cache: inputs.meta.cacheFrom },
     unreconciled536: { v0: v0Unrec.size, byBaselineClass: tally(base.filter((x) => v0Unrec.has(x.id)), (x) => x.baselineClass), nowByStatus: tally(base.filter((x) => v0Unrec.has(x.id)), (x) => x.status, STATUSES) },
     statusOnlyUnverified: base.filter((x) => x.reconClass === 'STATUS_ONLY_UNVERIFIED').length,
     candidateLinks: live.filter((x) => x.candidateLinks.length).map((x) => ({ id: x.id, candidates: x.candidateLinks })),

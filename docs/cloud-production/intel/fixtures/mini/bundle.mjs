@@ -24,15 +24,15 @@ export const ROWS = [
   ['UI-011', 'Stale in progress', 'IN_PROGRESS', 'none', 'AT_RISK', 'x', 'UI-011'],
   ['UI-012', 'Implemented not tested', 'IMPLEMENTED_NOT_TESTED', 'none', 'AT_RISK', 'x', 'UI-012'],
   ['UI-013', 'Blocked', 'BLOCKED', 'none', 'NONE', 'x', 'UI-013'],
-  ['UI-014', 'Closed only', 'PENDING_CI', '#4', 'AT_RISK', 'x', 'UI-014'],
+  ['UI-014', 'Closed only (PR #4)', 'PENDING_CI', '#4', 'AT_RISK', 'x', 'UI-014'],
   ['UI-015', 'Duplicate row', 'DUPLICATE', 'none', 'NONE', 'x', 'UI-015'],
   ['UI-016', 'Obsolete row', 'OBSOLETE', 'none', 'NONE', 'x', 'UI-016'],
-  ['UI-017', 'Open PR', 'PENDING_REVIEW', '#5', 'AT_RISK', 'x', 'UI-017'],
+  ['UI-017', 'Open PR (PR #5)', 'PENDING_REVIEW', '#5', 'AT_RISK', 'x', 'UI-017'],
   ['UI-110', 'Queue merged', 'AUTHORITY_REQUIRED', 'none', 'AT_RISK', 'x', 'UI-110'],
   ['I-DP-001', 'Project memory', 'DESIGN_ONLY', 'none', 'AT_RISK', 'I-data-persistence', 'x'],
   ['UI-018', 'Mobile home', 'DESIGN_ONLY', 'none', 'NOT_DELIVERABLE', 'mobile', 'UI-018'],
   ['PH-000', 'Private repo and toolchain baseline', 'AUTHORITY_REQUIRED', 'none', 'AT_RISK', 'TRUST_CORE / Period A', 'Phase 0'],
-  ['PH-001', 'Canonical primitive registry', 'DESIGN_ONLY', 'none', 'NONE', 'TRUST_CORE / Period A', 'Phase 1'],
+  ['PH-001', 'Canonical primitive registry', 'DESIGN_ONLY', '#31 (UI-DOMAIN-PACKS read-only catalog screen, open)', 'NONE', 'TRUST_CORE / Period A', 'Phase 1'],
   ['PH-002', 'Game Studio', 'DESIGN_ONLY', 'none', 'NOT_DELIVERABLE', 'SPECIALIZED_DOMAIN / Period N', 'Phase 2'],
   ['PH-003', 'Mission OS', 'DESIGN_ONLY', 'none', 'NONE', 'EXECUTION / Period B', 'Phase 3'],
   ['PH-004', 'Company OS', 'DESIGN_ONLY', 'none', 'NONE', 'BUSINESS_COMMUNICATION / Period B', 'Phase 4'],
@@ -43,6 +43,14 @@ export const ROWS = [
   ['UX-DEC-001', 'Cockpit decision', 'AUTHORITY_REQUIRED', 'none', 'NONE', 'C-ux-decision', 'SC-02'],
   ['UI-019', 'Accepted with evidence', 'INTEGRATED_NOT_VERIFIED', '#1', 'AT_RISK', 'x', 'UI-019'],
   ['UI-020', 'Fake acceptance', 'INTEGRATED_NOT_VERIFIED', 'none', 'AT_RISK', 'x', 'UI-020'],
+  // typed 19-Oct prs references (H1): annotated / range / other-item / nested refs are WEAK and never upgrade a no-progress row
+  ['UI-021', 'Consumer-annotated merged PR, no progress claim', 'DESIGN_ONLY', '#6 (open, consumer)', 'AT_RISK', 'x', 'UI-021'],
+  ['UI-022', 'Range reference, no progress claim', 'AUTHORITY_REQUIRED', '#1-#2 (open; UASCO own UI a11y tests only)', 'AT_RISK', 'x', 'UI-022'],
+  ['UI-023', 'Another item PR, no progress claim', 'DESIGN_ONLY', '#10 (UI-003 return summary, merged)', 'AT_RISK', 'x', 'UI-023'],
+  ['UI-024', 'PR names the item', 'IN_PROGRESS', '#7', 'AT_RISK', 'x', 'UI-024'],
+  ['UI-025', 'Merged claim with only a consumer reference', 'INTEGRATED_NOT_VERIFIED', '#6 (open, consumer)', 'AT_RISK', 'x', 'UI-025'],
+  ['UI-026', 'Integrated with failing CI', 'INTEGRATED_NOT_VERIFIED', '#8', 'AT_RISK', 'x', 'UI-026'],
+  ['UI-027', 'Nested reference, progress claim', 'IN_PROGRESS', '#4 (closed; #7 builds on it)', 'AT_RISK', 'x', 'UI-027'],
   ['E-ROLE-UASCO-0001', 'Role (not a work item)', 'DESIGN_ONLY', 'none', 'NONE', 'roles', 'x'],
 ];
 
@@ -58,7 +66,16 @@ export function miniBundle() {
     merged(2, '2026-10-18T05:00:00Z'),
     pr(3), pr(4),
     pr(5, { state: 'open', closedAt: null, updatedAt: '2026-10-26T10:00:00Z', headRef: 'claude/lane-b-open' }),
+    merged(6, '2026-10-18T06:00:00Z', { title: 'consumer screen' }),
+    merged(7, '2026-10-18T07:00:00Z', { title: 'UI-024: real work', createdAt: '2026-10-17T07:00:00Z' }),
+    merged(8, '2026-10-18T08:00:00Z', { title: 'wave 8' }),
     merged(10, '2026-10-19T10:00:00Z', { title: 'UI-003: return summary', headRef: 'claude/ui-003' }),
+    merged(26, '2026-10-22T06:00:00Z', { title: 'L-WORKFORCE UI-197: read-only taxonomy', headRef: 'claude/l-workforce-ui197' }),
+    merged(27, '2026-10-22T07:00:00Z', { title: 'CI-green: process-leak fix', headRef: 'feature/ci-green-fixes' }),
+    merged(28, '2026-10-22T08:00:00Z', { title: 'v7 pkg-lease1: atomic lease', headRef: 'claude/atomic-lease' }),
+    merged(29, '2026-10-22T09:00:00Z', { title: 'SEC-IMPORT-GUARD-2: follow-up', headRef: 'claude/sec-import-guard-2' }),
+    pr(31, { title: 'UI-DOMAIN-PACKS read-only catalog', headRef: 'claude/l-domains', createdAt: '2026-10-18T21:59:29Z' }),
+    merged(143, '2026-10-22T10:00:00Z', { title: 'COORD-FIRST-DELIVERY-WIRING: first-delivery chain', headRef: 'claude/coord-first-delivery-wiring' }),
     merged(11, '2026-10-19T11:00:00Z', { title: 'wave', bodyTokens: ['UI-004'] }),
     merged(12, '2026-10-19T12:00:00Z', { title: 'wave 2', bodyTokens: ['UI-008'] }),
     merged(13, '2026-10-19T13:00:00Z', { title: 'fix', headRef: 'claude/lane-a-ui-009' }),
@@ -75,6 +92,7 @@ export function miniBundle() {
   const reachable = [...mergedHeads.map((p) => p.mergeCommitSha), ...commits.map((c) => c.sha), S('head-lane-a-x')];
   const checks = {};
   checks[S('head1')] = [{ name: 'validate (ubuntu-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-18T01:00:00Z', completedAt: '2026-10-18T01:20:00Z' }, { name: 'validate (windows-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-18T01:00:00Z', completedAt: '2026-10-18T01:40:00Z' }];
+  checks[S('head8')] = [{ name: 'validate (ubuntu-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-18T01:00:00Z', completedAt: null }, { name: 'validate (windows-latest)', status: 'completed', conclusion: 'failure', startedAt: '2026-10-18T01:00:00Z', completedAt: null }];
   checks[S('head2')] = [{ name: 'validate (ubuntu-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-18T01:00:00Z', completedAt: null }, { name: 'validate (windows-latest)', status: 'completed', conclusion: 'failure', startedAt: '2026-10-18T01:00:00Z', completedAt: null }];
   const runs = [
     { id: 1001, name: 'CI', event: 'pull_request', status: 'completed', conclusion: 'success', runAttempt: 1, headSha: S('head24'), headBranch: 'claude/lane-c-rdy-1', createdAt: '2026-10-26T18:00:00Z', updatedAt: '2026-10-26T18:25:00Z', runStartedAt: '2026-10-26T18:00:10Z', prs: [24] },
@@ -96,7 +114,7 @@ export function miniBundle() {
     founderQueue: [{ id: 'FQ-PQ-009', priority: '0', kind: 'FOUNDER_ONLY', action: 'Merge #25 (lockfile-only fix).' }, { item: 'Raise the 2-builder cap', why: 'explicit Founder limit' }, { item: 'UASCO-AUD-005 sandbox substrate decision', why: 'hardware' }],
     integrationQueue: { founderDecisions: ['D1 (blocks everything): repair review secrets; affects UI-007.', 'D2: merge permission for #20, after review.'] },
     productionLanes: { startedAt: '2026-10-21T07:23:41Z', deliverables: { 'LANE-A-x': { pr: 'branch only (PR limit)', branch: 'claude/lane-a-x', head: S('head-lane-a-x').slice(0, 7), status: 'TESTED', note: 'branch only' }, 'LANE-B-y': { pr: 'branch only (PR limit)', branch: 'claude/lane-b-y', head: S('head-lane-b-y').slice(0, 7), status: 'TESTED' } } },
-    coordinatorBuild: { 'COORD-Z': { branch: 'claude/coord-z', head: S('head-coord-z').slice(0, 7), status: 'IN_PROGRESS', owner: 'coord' } },
+    coordinatorBuild: { 'COORD-Z': { branch: 'claude/coord-z', head: S('head-coord-z').slice(0, 7), status: 'IN_PROGRESS', owner: 'coord' }, 'COORD-FIRST-DELIVERY-WIRING': { pr: '143', branch: 'claude/coord-first-delivery-wiring', status: 'MERGED', owner: 'coord' } },
     integrationBoard: { prs: [{ pr: 30, owner: 'COORDINATOR', kind: 'x', state: 'DRAFT' }, { pr: 30, owner: 'COORDINATOR', kind: 'x', state: 'DRAFT' }], merges: [{ pr: 24, merge: S('merge24').slice(0, 7), by: 'auto', at: '2026-10-26T21:00:13Z', postMerge: 'VERIFIED' }] },
     autoMergeEvidence: [],
   };
@@ -109,6 +127,11 @@ export function miniBundle() {
     { id: 'UI-007+008', title: 'Two screens', status: 'BLOCKED', owner: 'FOUNDER', dependsOn: [] },
     { id: 'UI-010', title: 'Design only screen', status: 'DRAFT_NOT_READY', owner: 'LOCAL', dependsOn: [] },
     { id: 'CP-DONE-ONLY', title: 'Done by record only', status: 'DONE', owner: 'CLOUD', dependsOn: [] },
+    // exact-id matching (M2): literal ids (no trailing -digits) found in PR titles/branches
+    { id: 'L-WORKFORCE', title: 'Workforce lane', status: 'DONE', owner: 'CLOUD', dependsOn: [] },
+    { id: 'CI-GREEN', title: 'CI green', status: 'DONE', owner: 'CLOUD', dependsOn: [] },
+    { id: 'PKG-LEASE1', title: 'Lease package', status: 'DONE', owner: 'CLOUD', dependsOn: [] },
+    { id: 'SEC-IMPORT-GUARD', title: 'Import guard', status: 'DONE', owner: 'CLOUD', dependsOn: [] },
   ] };
   const wave0 = { packages: [{ id: 'C-RDY-1', priority: 'P0', order: 1, title: 'Role Readiness Auditor', dependsOn: [] }, { id: 'C-CTX-1', priority: 'P0', order: 2, title: 'Role Context Resolver', dependsOn: ['C-RDY-1'] }], founderDecisions: ['FD-1 Legacy alias approval: decide canonical skills; blocks C-BIND-1.'] };
   const contracts = [0, 1, 2, 3, 4].map((n) => ({ phase: n, title: ROWS.find((r) => r[0] === `PH-${String(n).padStart(3, '0')}`)[1], domain: ['TRUST_CORE', 'TRUST_CORE', 'SPECIALIZED_DOMAIN', 'EXECUTION', 'BUSINESS_COMMUNICATION'][n], state: 'PLANNED', dependsOn: n ? [n - 1] : [], riskLevel: 2, reviewProfile: 'STANDARD', review: ['independent Codex package review'], requiredArtifacts: [] }));

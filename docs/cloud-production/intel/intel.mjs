@@ -34,7 +34,7 @@ export function compactPrior(source, json, mdText, invJson, tz) {
   if (!json || !json.generatedAt) return null;
   const date = trtDate(json.generatedAt, tz);
   if (json.schemaVersion && json.trendPoint) {
-    return { source, date, generatedAt: json.generatedAt, semantics: 'intel-1', trendPoint: json.trendPoint, metrics: json.snapshotMetrics || null,
+    return { source, date, generatedAt: json.generatedAt, semantics: json.trendPoint.semantics || 'intel-1', trendPoint: json.trendPoint, metrics: json.snapshotMetrics || null,
       items: invJson ? invJson.items.map((x) => ({ id: x.id, status: x.status, reconClass: x.reconClass, scope: x.scope, department: x.department, substeps: x.substeps, links: x.links })) : null };
   }
   const t = json.totals?.allWorkDimensions || {};
@@ -125,8 +125,31 @@ function writeOutputs(outDir, files, extra = {}) {
   fs.mkdirSync(outDir, { recursive: true });
   for (const [n, c] of Object.entries({ ...files, ...extra })) { const p = path.join(outDir, n); fs.mkdirSync(path.dirname(p), { recursive: true }); const t = `${p}.${process.pid}.tmp`; fs.writeFileSync(t, c); fs.renameSync(t, p); }
 }
+// Engine identity for meta/manifest: a dirty working copy is marked DIRTY with its changed files and a hash of the files that really ran.
+export function engineMeta(id) {
+  const dirtyFiles = id.dirty ? id.dirty.split('\n').map((l) => l.trim()).filter(Boolean).sort() : [];
+  return { engineTree: id.engineTree, engineDirty: dirtyFiles.length > 0, engineDirtyFiles: dirtyFiles, engineWorkHash: dirtyFiles.length ? id.workHash : null,
+    rulesBlobIds: id.rulesWorkingBlobIds || id.rulesBlobIds, overlayBlobId: id.overlayBlobId, wave0BlobId: id.wave0BlobId };
+}
+// Bounded local archive: per TRT date keep only the newest intel snapshot (legacy-v0 archives are never pruned) and at most archiveMaxDays dates.
+export function pruneArchive(outDir, C) {
+  const arch = path.join(outDir, 'archive');
+  if (!fs.existsSync(arch)) return [];
+  const rows = [];
+  for (const d of fs.readdirSync(arch).sort(cmp)) {
+    const j = readJson(path.join(arch, d, OUT_FILES.json));
+    if (!j || !j.generatedAt) continue;
+    rows.push({ d, legacy: !(j.schemaVersion && j.trendPoint), date: trtDate(j.generatedAt, C.tz), at: j.generatedAt });
+  }
+  const intel = rows.filter((r) => !r.legacy).sort((a, b) => cmp(b.at, a.at) || cmp(b.d, a.d));
+  const keep = new Set(), dates = [];
+  for (const r of intel) { if (dates.includes(r.date)) continue; if (dates.length >= (C.archiveMaxDays || 60)) continue; dates.push(r.date); keep.add(r.d); }
+  const drop = intel.filter((r) => !keep.has(r.d)).map((r) => r.d);
+  for (const d of drop) fs.rmSync(path.join(arch, d), { recursive: true, force: true });
+  return drop;
+}
 function manifestOf({ date, nowIso, meta, inputs, fingerprint, files, reused, from }) {
-  return { '//TR': 'Günlük çıktı manifestosu; en son yazılır, varlığı guard işaretidir.', date, now: nowIso, engineTree: meta.engineTree, rulesBlobIds: meta.rulesBlobIds, overlayBlobId: meta.overlayBlobId, wave0BlobId: meta.wave0BlobId,
+  return { '//TR': 'Günlük çıktı manifestosu; en son yazılır, varlığı guard işaretidir.', date, now: nowIso, engineTree: meta.engineTree, engineDirty: !!meta.engineDirty, engineDirtyFiles: meta.engineDirtyFiles || [], engineWorkHash: meta.engineWorkHash || null, rulesBlobIds: meta.rulesBlobIds, overlayBlobId: meta.overlayBlobId, wave0BlobId: meta.wave0BlobId,
     inputs: { v7: inputs.meta.refs.v7.sha, queue: inputs.meta.refs.queue.sha, reports: inputs.meta.refs.reports.sha, inventoryBlob: inputs.meta.inventoryBlob, csvBlob: inputs.meta.csvBlob }, fingerprint,
     files: Object.fromEntries(Object.entries(files).sort((a, b) => cmp(a[0], b[0])).map(([n, c]) => [n, sha256(c)])), reused: !!reused, from: from || null };
 }
@@ -138,7 +161,8 @@ async function cmdReport({ publish = false } = {}) {
   if (args.tz) rules.config.tz = args.tz;
   if (args['not-before']) rules.config.notBefore = args['not-before'];
   const C = rules.config;
-  if (publish || args.fetch) fetchRefs(repo, Object.values(C.remoteBranches));
+  let refsFetch = { ran: false };
+  if (publish || args.fetch) { const fr = fetchRefs(repo, Object.values(C.remoteBranches)); refsFetch = { ran: true, ok: fr.ok, error: fr.ok ? null : String(fr.err || '').trim().split('\n')[0] }; }
   const nowIso = args.now ? new Date(args.now).toISOString() : new Date().toISOString();
   const date = trtDate(nowIso, C.tz);
   if (publish) {
@@ -148,15 +172,15 @@ async function cmdReport({ publish = false } = {}) {
   }
   const id = engineIdentity(HERE);
   if (publish && id.dirty) fail('DIRTY_ENGINE', id.dirty.split('\n')[0]);
-  const meta = { engineTree: id.engineTree, rulesBlobIds: id.rulesWorkingBlobIds || id.rulesBlobIds, overlayBlobId: id.overlayBlobId, wave0BlobId: id.wave0BlobId };
-  if (args.archive !== 'false') { const a = archivePrevious(outDir, nowIso); if (a && !a.existed) say(`INTEL ARCHIVE ${a.dir}`); }
+  const meta = engineMeta(id);
+  if (args.archive !== 'false') { const a = archivePrevious(outDir, nowIso); if (a && !a.existed) say(`INTEL ARCHIVE ${a.dir}`); const pr = pruneArchive(outDir, C); if (pr.length) say(`INTEL ARCHIVE PRUNED ${pr.length}`); }
   const priors = loadPriors(repo, outDir, C.refs.reports, C.dailyDir, C.tz);
   const { cache, from } = loadCache(outDir, repo, C.refs.reports, C.dailyDir);
   let inputs, cacheOut;
-  try { ({ inputs, cache: cacheOut } = await gatherInputs({ repo, engineDir: HERE, outDir, nowIso, rules, overlay, tsx: args.tsx, cache, cacheFrom: from, priorSnapshots: priors, workDir: args['work-dir'], log: (s) => process.stderr.write(`${s}\n`) })); }
+  try { ({ inputs, cache: cacheOut } = await gatherInputs({ repo, engineDir: HERE, outDir, nowIso, rules, overlay, tsx: args.tsx, cache, cacheFrom: from, priorSnapshots: priors, workDir: args['work-dir'], refsFetch, log: (s) => process.stderr.write(`${s}\n`) })); }
   catch (e) { fail('GATHER', String(e.message || e).slice(0, 200)); }
   inputs.overlayRefs = resolveOverlayRefs(repo, overlay);
-  const fingerprint = inputsFingerprint(inputs, meta);
+  const fingerprint = inputsFingerprint(inputs, meta, { nowIso, tz: C.tz });
   const prevJson = readJson(path.join(outDir, OUT_FILES.json));
   meta.fingerprint = fingerprint; meta.reused = !!(prevJson && prevJson.fingerprint === fingerprint);
   const out = await buildOutputs({ inputs, rules, overlay, meta, nowIso });
@@ -173,6 +197,7 @@ async function cmdReport({ publish = false } = {}) {
   const dir = fs.existsSync(path.join(outDir, '.intel-cache')) && args.force && gitTry(repo, ['rev-parse', '--verify', '-q', `${C.refs.reports}:${C.dailyDir}/${date}/manifest.json`]).ok ? `${date}/r2` : date;
   try {
     const res = publishDaily({ repo, branch: C.remoteBranches.reports, dailyDir: C.dailyDir, date: dir, files, msg: `report: UASCO daily intel ${date} (TRT) [skip ci]` });
+    if (res.skipped) { say(`INTEL SKIP ${date} PRESENT ${String(res.existing || '').slice(0, 7)}`); return 0; }
     say(`INTEL DONE ${date} ${res.commit.slice(0, 7)} ${head}`); return 0;
   } catch (e) { if (e instanceof PublishRace) { say('INTEL FAIL PUBLISH_RACE'); return 6; } fail('PUBLISH', String(e.message || e).slice(0, 200)); }
   return 0;
@@ -194,7 +219,7 @@ async function cmdBuild() {
   const nowIso = new Date(args.now || bundle.nowIso).toISOString();
   const meta = { ...bundle.meta };
   const inputs = bundle.inputs;
-  meta.fingerprint = meta.fingerprint || inputsFingerprint(inputs, meta);
+  meta.fingerprint = meta.fingerprint || inputsFingerprint(inputs, meta, { nowIso, tz: rules.config.tz });
   const out = await buildOutputs({ inputs, rules, overlay: bundle.overlay || overlay, meta, nowIso });
   const bad = verifyOutputs(out.report, JSON.parse(out.files[OUT_FILES.invJson]), out.files[OUT_FILES.md], out.files[OUT_FILES.invCsv]);
   if (bad.length) fail('INVARIANT', bad.slice(0, 8).join(';'));

@@ -1,8 +1,10 @@
-//TR: Mühendislik verimliliği (bölüm F): 1s/24s/7g/başlangıçtan beri pencerelerinde açılan/merge edilen PR, açılış->merge saatleri (medyan, p90), ilk CI başarı oranı, yeniden çalıştırmalar, CI süreleri (TIMING veya APPROX etiketli), runner dakikaları (jobs API, yalnız 7g, tavanlı), kuyruk kaydı bloke süreleri (commit ayrıntısında 'koordinatör kaydı zamanı'), Founder karar yaşı ve merge reformu. Token/maliyet kaydı olmadığı için UNKNOWN.
+//TR: Mühendislik verimliliği (bölüm F): 1s/24s/7g/başlangıçtan beri pencerelerinde açılan/merge edilen PR, açılış->merge saatleri (medyan: çift n'de iki ortanın ortalaması; p90: en yakın sıra), ilk CI başarı oranı, yeniden çalıştırmalar, CI süreleri (TIMING veya APPROX etiketli), runner dakikaları (jobs API, yalnız 7g, tavanlı), kuyruk kaydı bloke süreleri (commit ayrıntısında 'koordinatör kaydı zamanı'), Founder karar yaşı ve merge reformu. Token/maliyet kaydı olmadığı için UNKNOWN.
 import { windowStart, hoursBetween, round1, toMs, pct } from '../core/time.mjs';
 import { cmp } from '../core/canonical-json.mjs';
 
+// p90/max: nearest-rank quantile (s[ceil(q*n)-1]). Median: conventional (mean of the two middle values when n is even).
 export const quantile = (xs, q) => { const s = xs.filter((x) => typeof x === 'number' && Number.isFinite(x)).sort((a, b) => a - b); if (!s.length) return null; return s[Math.max(0, Math.ceil(q * s.length) - 1)]; };
+export const median = (xs) => { const s = xs.filter((x) => typeof x === 'number' && Number.isFinite(x)).sort((a, b) => a - b); if (!s.length) return null; const h = s.length >> 1; return s.length % 2 ? s[h] : (s[h - 1] + s[h]) / 2; };
 const inWin = (iso, a, b) => { const t = toMs(iso); return Number.isFinite(t) && t >= toMs(a) && t <= toMs(b); };
 
 export function computeProductivity({ pulls, runs, timings, jobs, runDetail, queueHistory, decisions, integrationBoard, nowIso, startIso, secondAnchor, config, statusMap }) {
@@ -39,10 +41,10 @@ export function computeProductivity({ pulls, runs, timings, jobs, runDetail, que
     return {
       window: w, from: ws, to: nowIso,
       prsOpened: opened.length, prsMerged: merged.length,
-      openToMergeHours: { median: round1(quantile(o2m, 0.5)), p90: round1(quantile(o2m, 0.9)), n: o2m.length },
+      openToMergeHours: { median: round1(median(o2m)), p90: round1(quantile(o2m, 0.9)), n: o2m.length },
       firstCiSuccess: { success: fc.filter((r) => r.conclusion === 'success').length, of: fc.length, rate: pct(fc.filter((r) => r.conclusion === 'success').length, fc.length), prsWithoutFirstRun: opened.length - fc.length },
       reruns: { runsWithRerun: ciW.filter((r) => r.runAttempt > 1).length, ciRuns: ciW.length, ratio: pct(ciW.filter((r) => r.runAttempt > 1).length, ciW.length) },
-      ciDurationMinutes: { median: round1(quantile(durs.map((d) => d.m), 0.5)), p90: round1(quantile(durs.map((d) => d.m), 0.9)), n: durs.length, methods: { TIMING: durs.filter((d) => d.method === 'TIMING').length, APPROX: durs.filter((d) => d.method === 'APPROX').length } },
+      ciDurationMinutes: { median: round1(median(durs.map((d) => d.m))), p90: round1(quantile(durs.map((d) => d.m), 0.9)), n: durs.length, methods: { TIMING: durs.filter((d) => d.method === 'TIMING').length, APPROX: durs.filter((d) => d.method === 'APPROX').length } },
       runnerMinutes: w === '7d' || w === '24h' || w === '1h' ? { value: withJobs.length === done.length ? round1(runnerMin) : (withJobs.length ? round1(runnerMin) : 'UNKNOWN'), coverage: `${withJobs.length}/${done.length}`, complete: withJobs.length === done.length, source: 'jobs API (7d window, capped)' } : { value: 'UNKNOWN', reason: 'jobs API fetched for the 7d window only' },
       queueBlockedHours: { value: round1(blockedH), label: 'coordinator-record time (PRODUCTION-QUEUE.json commit granularity)' },
     };
@@ -56,7 +58,7 @@ export function computeProductivity({ pulls, runs, timings, jobs, runDetail, que
     windows,
     runDetail,
     blockedIntervals: blockedIntervals.map((b) => ({ ...b, hours: round1(hoursBetween(b.from, b.to || nowIso)) })),
-    founderDecisionAgeHours: { open: openDec.length, median: round1(quantile(openDec.map((d) => d.ageHours), 0.5)), max: round1(quantile(openDec.map((d) => d.ageHours), 1)) },
+    founderDecisionAgeHours: { open: openDec.length, median: round1(median(openDec.map((d) => d.ageHours))), max: round1(quantile(openDec.map((d) => d.ageHours), 1)) },
     mergeReform: { recordedMerges: integrationBoard.merges.length, postMergeVerified: ver.length, coordinatorAtVsGithubMergedAtSeconds: { min: atDiffs.length ? round1(Math.min(...atDiffs)) : null, max: atDiffs.length ? round1(Math.max(...atDiffs)) : null, n: atDiffs.length }, authority: 'GitHub merged_at' },
     tokensAndCost: { value: 'UNKNOWN', reason: 'no token or cost records exist in git or GitHub' },
   };

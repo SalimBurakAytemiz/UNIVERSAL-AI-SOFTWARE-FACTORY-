@@ -1,4 +1,4 @@
-//TR: İş envanteri eki: UASCO_WORK_INVENTORY.json (kalemler id'ye göre sıralı + bağlantılar) ve aynı kalemlerin sabit sütun sıralı CSV'si. Bu dosyalarda zaman damgası yoktur; değişmeyen günlerde aynı git blob'u yeniden kullanılır.
+//TR: İş envanteri eki: UASCO_WORK_INVENTORY.json (kalemler id'ye göre sıralı + bağlantılar) ve aynı kalemlerin sabit sütun sıralı CSV'si (bilinmeyen tarih CSV'de UNKNOWN; JSON'da null + startSourcesChecked). Bu dosyalarda zaman damgası yoktur; değişmeyen günlerde aynı git blob'u yeniden kullanılır.
 import { toCsv } from '../core/csv.mjs';
 import { cmp } from '../core/canonical-json.mjs';
 
@@ -9,7 +9,8 @@ export function inventoryItem(x) {
   return {
     id: x.id, title: x.title, description: x.description, dimension: x.dimension, origin: x.origin, department: x.department, departmentRule: x.departmentRule,
     roadmapPhase: x.roadmapPhase, relatedPhases: x.relatedPhases, wave: x.wave, period: x.period, milestone: x.milestone, scope: x.scope, scopeRule: x.scopeRule, owner: x.owner, lane: x.lane, executor: x.executor,
-    dependsOn: x.dependsOn, planned: x.planned, actual: x.actual, status: x.status, status19: x.status19, statusRule: x.statusRule, reconClass: x.reconClass, baselineClass: x.baselineClass, evidenceClass: x.evidenceClass, matchKind: x.matchKind,
+    dependsOn: x.dependsOn, planned: x.planned, actual: x.actual, status: x.status, status19: x.status19, statusRule: x.statusRule, reconClass: x.reconClass, baselineClass: x.baselineClass, evidenceBaselineClass: x.evidenceBaselineClass ?? null, evidenceClass: x.evidenceClass, matchKind: x.matchKind,
+    scopeReason: x.scopeReason ?? null, weakInventoryRefs: x.weakInventoryRefs || [],
     substeps: x.substeps, evidence: x.evidence, links: x.links, blockers: x.blockers, founderDecision: x.founderDecision, nextAction: x.nextAction, sizeEstimate: x.sizeEstimate,
     measuredDurationHours: x.measuredDurationHours, cost: x.cost, confidence: x.confidence, stale: x.stale, missingEvidence: x.missingEvidence, aliases: x.aliases,
     priority: x.priority, oct31: x.oct31, prs: x.prs, integratedPrs: x.integratedPrs, openPrs: x.openPrs, mergeCommits: x.mergeCommits, mergedAt: x.mergedAt, commits: x.commits, ciRuns: x.ciRuns,
@@ -27,7 +28,7 @@ export function inventoryJson(model, meta) {
 }
 export function inventoryCsv(model) {
   const rows = [...model.items].sort((a, b) => cmp(a.id, b.id)).map((x) => ({
-    ...x, dependsOn: [...x.dependsOn].sort(cmp), plannedStart: x.planned.start, plannedEnd: x.planned.end, actualStart: x.actual.start, lastMergedAt: x.actual.lastMergedAt, actualDone: x.actual.done,
+    ...x, dependsOn: [...x.dependsOn].sort(cmp), plannedStart: x.planned.start ?? 'UNKNOWN', plannedEnd: x.planned.end ?? 'UNKNOWN', actualStart: x.actual.start ?? 'UNKNOWN', lastMergedAt: x.actual.lastMergedAt, actualDone: x.actual.done,
     coded: x.substeps.coded, integrated: x.substeps.integrated, tested: x.substeps.tested, runtimeVerified: x.substeps.runtimeVerified, accepted: x.substeps.accepted,
     prs: x.prs.map((n) => `#${n}`), mergeCommits: [...x.mergeCommits].sort(cmp), commits: [...x.commits].sort(cmp), ciRuns: x.ciRuns.map(String), blockers: [...x.blockers].sort(cmp), missingEvidence: [...x.missingEvidence].sort(cmp),
     stale: x.stale ? 'true' : 'false', description: x.description ? String(x.description).replace(/\r?\n/g, ' ') : '',

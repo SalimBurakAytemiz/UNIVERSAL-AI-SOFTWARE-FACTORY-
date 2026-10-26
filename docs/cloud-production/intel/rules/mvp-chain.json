@@ -1,5 +1,5 @@
 {
-  "//TR": "31 Ekim MVP zinciri: 9 adım, her biri kanıt yüklemleriyle. DONE yalnız kabul kanıtıyla olur; BLOCKED açık engelleyici PR veya açık karar varsa; IN_PROGRESS açık ilgili PR varsa; IMPLEMENTED_NOT_VERIFIED uygulama yüklemlerinin hepsi kanıtlıysa; aksi halde NOT_STARTED. Adım referansları v0 raporundaki (2026-10-26) mvp[] kayıtlarından alındı.",
+  "//TR": "31 Ekim MVP zinciri: 9 adım, her biri kanıt yüklemleriyle. DONE yalnız kabul kanıtıyla olur; BLOCKED açık engelleyici PR veya açık karar varsa; IN_PROGRESS açık ilgili PR varsa; IMPLEMENTED_NOT_VERIFIED uygulama yüklemlerinin hepsi kanıtlıysa; aksi halde NOT_STARTED. Adım referansları v0 raporundaki (2026-10-26) mvp[] kayıtlarından alındı. İstisna: Desktop adımı installer CI başarısını yalnız 'derleniyor/kurulum paketi üretiliyor' kanıtı olarak kullanır (evidenceException etiketli); bu ürün veya runtime kanıtı değildir ve adımı asla IMPLEMENTED_NOT_VERIFIED'ın ötesine taşımaz.",
   "schemaVersion": "1.0.0",
   "steps": [
     {
@@ -10,7 +10,8 @@
           "workflowSuccess": {
             "name": "Windows Installer",
             "branch": "v7/integration",
-            "event": "push"
+            "event": "push",
+            "evidenceException": "EXCEPTION: installer CI = build evidence only, not product/runtime evidence"
           }
         }
       ],

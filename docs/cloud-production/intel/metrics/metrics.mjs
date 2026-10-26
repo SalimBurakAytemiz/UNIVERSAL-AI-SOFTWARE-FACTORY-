@@ -1,10 +1,13 @@
-//TR: Saf metrikler. Paydalar her sayıyla birlikte raporlanır. Üç ayrı oran (FULL ve MVP için): kod entegrasyonu (PR merge != bitti), çalışma zamanı doğrulaması ve kabul edilmiş tamamlanma. Geliştirme ilerlemesi yalnız coded+integrated+tested'den hesaplanır (UNKNOWN=0, alt sınır) ve asla tamamlanmayla karıştırılmaz. Ağırlıklar critical-path.json weightModel'e bağlıdır; bilinmeyen model eşit ağırlığa kapalı düşer.
+//TR: Saf metrikler. Paydalar her sayıyla birlikte raporlanır. Kısmi entegrasyon (PARTIAL) ayrı sayılır ve entegre sayılmaz; runtime doğrulaması ölçüm kaynağı olmadığı için NOT_MEASURED'dır (%0 değil). Üç ayrı oran (FULL ve MVP için): kod entegrasyonu (PR merge != bitti), çalışma zamanı doğrulaması ve kabul edilmiş tamamlanma. Geliştirme ilerlemesi yalnız coded+integrated+tested'den hesaplanır (UNKNOWN=0, alt sınır) ve asla tamamlanmayla karıştırılmaz. Ağırlıklar critical-path.json weightModel'e bağlıdır; bilinmeyen model eşit ağırlığa kapalı düşer.
 import { pct, round1, round2, toMs, trtDate } from '../core/time.mjs';
 import { tally, cmp } from '../core/canonical-json.mjs';
 
 export const STATUSES = ['COMPLETED_AND_VERIFIED', 'MERGED_NOT_VERIFIED', 'IMPLEMENTED_NOT_MERGED', 'FOUNDER_ACTION_REQUIRED', 'BLOCKED', 'IN_PROGRESS', 'QUEUED', 'NOT_STARTED', 'UNKNOWN'];
 const SUB = ['coded', 'integrated', 'tested', 'runtimeVerified', 'accepted'];
 const ratio = (n, d) => ({ n, d, pct: pct(n, d) });
+// No runtime-evidence source exists, so the ratio is not computable: it is NOT_MEASURED, never a measured 0 %.
+export const NOT_MEASURED = 'NOT_MEASURED';
+const notMeasured = (d) => ({ n: NOT_MEASURED, d, pct: NOT_MEASURED });
 
 export function resolveWeights(weightModel, weightsRules) {
   const m = weightsRules.models[weightModel];
@@ -18,20 +21,20 @@ export function block(xs, weights) {
   const statusCounts = tally(xs, (x) => x.status, STATUSES);
   delete statusCounts.OBSOLETE;
   const substeps = {};
-  for (const s of SUB) substeps[s] = tally(xs, (x) => x.substeps[s], ['TRUE', 'FALSE', 'UNKNOWN']);
+  for (const s of SUB) substeps[s] = tally(xs, (x) => x.substeps[s], s === 'integrated' ? ['TRUE', 'FALSE', 'UNKNOWN', 'PARTIAL'] : ['TRUE', 'FALSE', 'UNKNOWN']);
   const t = (s) => substeps[s].TRUE;
   let dev = 0, devU = 0;
   for (const x of xs) {
     const tr = ['coded', 'integrated', 'tested'].filter((s) => x.substeps[s] === 'TRUE').length * weights.substep;
-    const un = ['coded', 'integrated', 'tested'].filter((s) => x.substeps[s] === 'UNKNOWN').length * weights.substep;
+    const un = ['coded', 'integrated', 'tested'].filter((s) => x.substeps[s] === 'UNKNOWN' || x.substeps[s] === 'PARTIAL').length * weights.substep;
     dev += (weights.item * tr) / (3 * weights.substep); devU += (weights.item * un) / (3 * weights.substep);
   }
   const unknown = statusCounts.UNKNOWN, stale = xs.filter((x) => x.stale).length;
   return {
     n, statusCounts, substeps,
     ratios: {
-      codedRatio: ratio(t('coded'), n), integratedRatio: ratio(t('integrated'), n), testedRatio: ratio(t('tested'), n), testedUnknown: substeps.tested.UNKNOWN,
-      runtimeVerifiedRatio: ratio(t('runtimeVerified'), n), acceptedRatio: ratio(t('accepted'), n), completedAccepted: ratio(statusCounts.COMPLETED_AND_VERIFIED, n),
+      codedRatio: ratio(t('coded'), n), integratedRatio: ratio(t('integrated'), n), integratedPartial: substeps.integrated.PARTIAL, testedRatio: ratio(t('tested'), n), testedUnknown: substeps.tested.UNKNOWN,
+      runtimeVerifiedRatio: notMeasured(n), acceptedRatio: ratio(t('accepted'), n), completedAccepted: ratio(statusCounts.COMPLETED_AND_VERIFIED, n),
     },
     devProgressLowerBound: pct(dev, n * weights.item), devProgressUnknownShare: pct(devU, n * weights.item),
     unknown, stale, unreconciled: xs.filter((x) => x.status === 'UNKNOWN' || x.stale).length,
@@ -40,9 +43,10 @@ export function block(xs, weights) {
 
 export function ratios3(full, mvp) {
   return {
-    codeIntegrationRatio: { label: 'PR merged ≠ done', full: full.ratios.integratedRatio, mvp: mvp.ratios.integratedRatio, measured: true },
-    runtimeVerificationRatio: { full: full.ratios.runtimeVerifiedRatio, mvp: mvp.ratios.runtimeVerifiedRatio, measured: false, reason: 'NO_RUNTIME_EVIDENCE_SOURCE: no real-run evidence record exists in git or GitHub; FAKE executor CI, JSON status fields and installer-created artifacts are excluded' },
-    acceptedCompletionRatio: { full: full.ratios.acceptedRatio, mvp: mvp.ratios.acceptedRatio, measured: false, reason: 'product_verified is NO on 1364/1364 inventory rows and no acceptance record exists' },
+    codeIntegrationRatio: { label: 'PR merged ≠ done', full: full.ratios.integratedRatio, mvp: mvp.ratios.integratedRatio, partial: { full: full.ratios.integratedPartial, mvp: mvp.ratios.integratedPartial }, measured: true,
+      reason: 'integrated = every EXPLICIT PR merged into v7/integration, or v7 commit/route evidence for a merged claim; PARTIAL (some EXPLICIT PRs merged, the rest closed unmerged) is counted separately and never as integrated' },
+    runtimeVerificationRatio: { full: full.ratios.runtimeVerifiedRatio, mvp: mvp.ratios.runtimeVerifiedRatio, measured: false, state: NOT_MEASURED, reason: 'NO_RUNTIME_EVIDENCE_SOURCE: no real-run evidence record exists in git or GitHub; FAKE executor CI, JSON status fields and installer-created artifacts are excluded' },
+    acceptedCompletionRatio: { full: full.ratios.acceptedRatio, mvp: mvp.ratios.acceptedRatio, measured: true, source: 'overlay ACCEPTANCE records with a resolvable, non-FAKE evidenceRef', reason: `${full.ratios.acceptedRatio.n} accepted item(s) with an acceptance record; product_verified is NO on 1364/1364 inventory rows` },
   };
 }
 
@@ -55,7 +59,8 @@ export function roadmapMetrics(roadmap, itemsById, derived) {
     const own = itemsById.get(p.id);
     return { phase: p.phase, id: p.id, title: p.title, period: p.period, wave: p.wave, package: p.package, criticalPath: p.criticalPath, priority: p.priority, contractState: p.contractState,
       closedByEvidence: p.closedByEvidence, exitToken: p.exitToken, itemStatus: own ? own.status : null, status19: own ? own.status19 : null, oct31: own ? own.oct31 : null, linkedItems: xs.length, integratedItems: integ,
-      phaseDevSignal: xs.length ? pct(integ, xs.length) : 'UNKNOWN', plannedStart: null, plannedEnd: null, actualStart: own ? own.actual.start : null, actualEnd: null };
+      phaseDevSignal: xs.length ? pct(integ, xs.length) : 'UNKNOWN', plannedStart: null, plannedEnd: null, actualStart: own ? own.actual.start : null,
+      actualStartState: own && own.actual.start ? 'KNOWN' : 'UNKNOWN', actualStartSource: own ? own.actual.startSource : null, actualEnd: null };
   });
   const closed = byPhase.filter((p) => p.closedByEvidence).length;
   const byWave = roadmap.waves.map((w) => { const ps = byPhase.filter((p) => w.phaseIds.includes(p.phase)); const c = ps.filter((p) => p.closedByEvidence).length; return { wave: w.id, phases: ps.length, closed: c, progress: ps.length ? pct(c, ps.length) : 'UNKNOWN', linkedItems: ps.reduce((s, p) => s + p.linkedItems, 0), integratedItems: ps.reduce((s, p) => s + p.integratedItems, 0) }; });
@@ -82,7 +87,7 @@ export function evalMvpChain(steps, ctx) {
   for (const s of steps) {
     const ev = [], open = [];
     const pred = (p) => {
-      if (p.workflowSuccess) { const w = p.workflowSuccess; const rs = runs.filter((r) => r.name === w.name && r.headBranch === w.branch && r.event === w.event && r.status === 'completed').sort((a, b) => b.id - a.id); const r = rs[0]; if (!r) return { ok: null, ev: `no completed ${w.name} ${w.event} run on ${w.branch}` }; return { ok: r.conclusion === 'success', ev: `${w.name} ${w.event} run ${r.id} @${r.headSha.slice(0, 7)} ${r.conclusion}` }; }
+      if (p.workflowSuccess) { const w = p.workflowSuccess; const tag = w.evidenceException ? ` [${w.evidenceException}]` : ''; const rs = runs.filter((r) => r.name === w.name && r.headBranch === w.branch && r.event === w.event && r.status === 'completed').sort((a, b) => b.id - a.id); const r = rs[0]; if (!r) return { ok: null, ev: `no completed ${w.name} ${w.event} run on ${w.branch}${tag}` }; return { ok: r.conclusion === 'success', ev: `${w.name} ${w.event} run ${r.id} @${r.headSha.slice(0, 7)} ${r.conclusion}${tag}`, exception: w.evidenceException || null }; }
       if (p.prMerged) { const ps = p.prMerged.map((n) => pulls.get(n)); if (ps.some((x) => !x)) return { ok: null, ev: `PR ${p.prMerged.map((n) => `#${n}`).join(',')} not found` }; return { ok: ps.every((x) => x.mergedAt), ev: ps.map((x) => `#${x.number} ${x.mergedAt ? `merged ${x.mergeCommitSha.slice(0, 7)}` : x.state}`).join(', ') }; }
       if (p.prOpen) { const ps = p.prOpen.map((n) => pulls.get(n)).filter(Boolean); return { ok: ps.some((x) => x.state === 'open'), ev: ps.map((x) => `#${x.number} ${x.state === 'open' ? 'open' : x.mergedAt ? 'merged' : 'closed'}`).join(', ') }; }
       if (p.decisionTextOpen) { const ds = decisions.filter((d) => d.text.includes(p.decisionTextOpen)); return { ok: ds.some((d) => d.state === 'OPEN'), ev: ds.map((d) => `${d.id} ${d.state}`).join(', ') || `no decision mentions ${p.decisionTextOpen}` }; }
@@ -105,14 +110,15 @@ export function evalMvpChain(steps, ctx) {
     else if (impl.some((r) => r.ok === null)) status = 'UNKNOWN';
     else status = 'NOT_STARTED';
     byId.set(s.id, status);
-    out.push({ id: s.id, step: s.label, status, evidence: ev.join('; '), open, acceptanceKey: s.acceptanceKey });
+    const exceptions = impl.map((r) => r.exception).filter(Boolean);
+    out.push({ id: s.id, step: s.label, status, evidence: ev.join('; '), open, acceptanceKey: s.acceptanceKey, evidenceException: exceptions[0] || null });
   }
   return out;
 }
 
 // ETA only from measured velocity: >= minSnapshots daily points spanning >= minSpanDays with v > 0.
-export function etaFrom(points, key, remaining, nowIso, minSnapshots, minSpanDays, label) {
-  const ps = points.filter((p) => p.semantics === 'intel-1' && typeof p[key] === 'number').sort((a, b) => cmp(a.date, b.date));
+export function etaFrom(points, key, remaining, nowIso, minSnapshots, minSpanDays, label, semantics = 'intel-1') {
+  const ps = points.filter((p) => p.semantics === semantics && typeof p[key] === 'number').sort((a, b) => cmp(a.date, b.date));
   if (ps.length < minSnapshots) return { state: 'ETA_UNKNOWN', reason: 'INSUFFICIENT_HISTORY', points: ps.length, label };
   const a = ps[0], b = ps[ps.length - 1];
   const days = (toMs(`${b.date}T00:00:00Z`) - toMs(`${a.date}T00:00:00Z`)) / 864e5;

@@ -1,4 +1,4 @@
-//TR: P11 yayın kanıtı (geçici bare depoda, ağsız): yalnız daily/<tarih>/ yolları değişir; benzetilen ileri-sarma yarışı bir kez yeniden denenir ve başarır; ikinci yarış PUBLISH_RACE verir; force push asla yapılmaz (uzak dal her zaman önceki ucun torunudur); kirli motor ağacı yayını reddeder (DIRTY_ENGINE).
+//TR: P11 yayın kanıtı (geçici bare depoda, ağsız): yalnız daily/<tarih>/ yolları değişir; benzetilen ileri-sarma yarışı bir kez yeniden denenir ve başarır; ikinci yarış PUBLISH_RACE verir; aynı günü yayınlayan çakışan çalıştırma SKIP olur ve rakibin dosyaları korunur; force push asla yapılmaz (uzak dal her zaman önceki ucun torunudur); kirli motor ağacı yayını reddeder (DIRTY_ENGINE).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -6,6 +6,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { publishDaily, PublishRace } from './publish.mjs';
 import { engineIdentity } from './gather.mjs';
+import { engineMeta } from '../intel.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 let passed = 0, failed = 0;
@@ -43,6 +44,14 @@ try {
   check('a second race exits as PUBLISH_RACE', race instanceof PublishRace && race.code === 'PUBLISH_RACE');
   const tip = g(work, 'ls-remote', 'origin', 'refs/heads/uasco/production-reports').split('\t')[0];
   check('after a lost race the remote tip is the competitor (nothing overwritten)', tip === competitorTip);
+  // overlapping publishes of the SAME date (fails on 4fe58dd: the retry rebuilt on the new parent and overwrote the competitor's files)
+  g(other, 'pull', '-q', 'origin', 'uasco/production-reports');
+  const competeSameDate = () => { const dd = path.join(other, `${dailyDir}/2026-10-30`); fs.mkdirSync(dd, { recursive: true }); fs.writeFileSync(path.join(dd, 'manifest.json'), '{"who":"A"}\n'); g(other, 'add', '-A'); g(other, 'commit', '-q', '-m', 'A publishes 2026-10-30'); g(other, 'push', '-q', 'origin', 'HEAD:uasco/production-reports'); competitorTip = g(other, 'rev-parse', 'HEAD'); };
+  const r4 = publishDaily({ repo: work, dailyDir, date: '2026-10-30', files: [{ name: 'manifest.json', content: '{"who":"B"}\n' }], msg: 'B', env, beforePush: (attempt) => { if (attempt === 1) competeSameDate(); } });
+  const tip4 = g(work, 'ls-remote', 'origin', 'refs/heads/uasco/production-reports').split('\t')[0];
+  check('overlapping same-date publish: the retry sees the competitor manifest and SKIPs (nothing pushed, competitor files kept)', r4.skipped === true && r4.existing === competitorTip && tip4 === competitorTip && g(work, 'show', `${tip4}:${dailyDir}/2026-10-30/manifest.json`) === '{"who":"A"}');
+  const r5 = publishDaily({ repo: work, dailyDir, date: '2026-10-30', files: [{ name: 'manifest.json', content: '{"who":"C"}\n' }], msg: 'C', env });
+  check('a later sequential publish of an already published date also SKIPs on the first attempt', r5.skipped === true && r5.attempts === 1);
   const src = fs.readFileSync(path.join(HERE, 'publish.mjs'), 'utf8');
   check('publish.mjs never issues a force push', !/--force|\s-f\b|\+refs\/heads|\+\$\{commit\}/.test(src));
   // DIRTY_ENGINE: a dirty engine tree refuses to publish
@@ -52,6 +61,9 @@ try {
   check('clean engine tree reports no dirt', !engineIdentity(path.join(eng, 'docs/cloud-production/intel')).dirty);
   fs.appendFileSync(path.join(eng, 'docs/cloud-production/intel/rules/config.json'), ' ');
   check('dirty engine tree is detected', !!engineIdentity(path.join(eng, 'docs/cloud-production/intel')).dirty);
+  // LOW (fails on 4fe58dd: meta carried only the committed tree id): a local report from a dirty engine is marked DIRTY with a working hash
+  const dm = engineMeta(engineIdentity(path.join(eng, 'docs/cloud-production/intel')));
+  check('dirty engine: report meta is engineDirty with the changed file and a working-file hash', dm.engineDirty === true && dm.engineDirtyFiles.some((f) => f.endsWith('rules/config.json')) && /^[0-9a-f]{64}$/.test(dm.engineWorkHash || ''));
   const run = spawnSync(process.execPath, [path.join(eng, 'docs/cloud-production/intel/intel.mjs'), 'daily', '--publish', '--repo', work, '--out', path.join(tmp, 'out'), '--now', '2026-10-26T19:45:00Z'], { encoding: 'utf8', env: { ...process.env, ...env } });
   check('daily --publish from a dirty engine exits 1 with INTEL FAIL DIRTY_ENGINE', run.status === 1 && /INTEL FAIL DIRTY_ENGINE/.test(run.stdout));
 } finally { fs.rmSync(tmp, { recursive: true, force: true }); }

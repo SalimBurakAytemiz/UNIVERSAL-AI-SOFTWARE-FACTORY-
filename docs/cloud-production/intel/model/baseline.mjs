@@ -1,4 +1,4 @@
-//TR: 19 Ekim envanterini (JSON + CSV, sabitlenmiş blob'lar) yükler; remaining-work.mjs v0 reconcile() kuralının DONDURULMUŞ kopyasını (v0 çapası) ve her satır için tek bir baselineClass üretir. Roller (E-ROLE) iş kalemi değildir.
+//TR: 19 Ekim envanterini (JSON + CSV, sabitlenmiş blob'lar) yükler; remaining-work.mjs v0 reconcile() kuralının DONDURULMUŞ kopyasını (v0 çapası) ve her satır için tek bir baselineClass üretir. Kanıt modeli için serbest metin 'prs' alanını tipli referanslara ayırır (tekil / aralık / iç içe / rol notlu); yalnız notsuz tekil ve kimlik kapısından geçen referans EXPLICIT'tir, gerisi WEAK. Roller (E-ROLE) iş kalemi değildir.
 import { parseCsvRecords } from '../core/csv.mjs';
 import { cmp, tally } from '../core/canonical-json.mjs';
 
@@ -58,10 +58,13 @@ export function legacyView(baselineRows, prMap) {
 
 export const BASELINE_CLASSES = ['PR_MERGED_ALL', 'PR_MERGED_PARTIAL', 'STALE_STATUS_SAYS_MERGED', 'PR_CLOSED_UNMERGED_ONLY', 'PR_OPEN', 'STALE_FOUNDER', 'STALE_NOT_STARTED', 'STALE_IN_PROGRESS', 'STALE_IMPLEMENTED_NOT_TESTED', 'STALE_BLOCKED', 'STALE_PENDING', 'STALE_OTHER', 'EXCLUDED_DUPLICATE', 'EXCLUDED_OBSOLETE'];
 export function baselineClass(row, prMap) {
+  const nums = [...String(row.prs || '').matchAll(/#(\d{1,4})/g)].map((m) => Number(m[1])).filter((n) => prMap.has(n));
+  return classOfPrs(row, nums.map((n) => prMap.get(n)));
+}
+// Same ladder over an explicit PR list (the evidence model passes only EXPLICIT inventory references; the v0 view passes every #N).
+export function classOfPrs(row, st) {
   if (row.status19 === 'DUPLICATE') return 'EXCLUDED_DUPLICATE';
   if (row.status19 === 'OBSOLETE') return 'EXCLUDED_OBSOLETE';
-  const nums = [...String(row.prs || '').matchAll(/#(\d{1,4})/g)].map((m) => Number(m[1])).filter((n) => prMap.has(n));
-  const st = nums.map((n) => prMap.get(n));
   if (st.some((p) => p.state === 'open')) return 'PR_OPEN';
   if (st.length && st.every((p) => mergedOf(p))) return 'PR_MERGED_ALL';
   if (st.some((p) => mergedOf(p))) return 'PR_MERGED_PARTIAL';
@@ -77,7 +80,80 @@ export function baselineClass(row, prMap) {
     default: return 'STALE_OTHER';
   }
 }
-export const inventoryPrNums = (row, prMap) => [...new Set([...String(row.prs || '').matchAll(/#(\d{1,4})/g)].map((m) => Number(m[1])).filter((n) => prMap.has(n)))].sort((a, b) => a - b);
+
+// ---- Typed parse of the 19-Oct free-text `prs` field (the v0 regex above stays frozen for the legacy view).
+// Each #N becomes { n, form: SINGLE|RANGE, nested, role, segment }:
+//  - segments are split on ';' outside () and [];
+//  - a #N inside () or [] is NESTED (it describes another PR inside an annotation);
+//  - #A-#B is a RANGE (expanded to its members, span <= maxRangeSpan);
+//  - refs separated only by ',', '+', '/', '&', spaces share the annotation that follows the last of them;
+//  - the annotation is the text after the ref (or group) up to the next top-level ref, with [..] review notes removed and the
+//    part of a parenthetical from a nested #N onwards removed; the segment prefix (text before its first ref) applies to every ref;
+//  - role = first match of rules/link-patterns.json inventoryPrs.roleAnnotationRegex in prefix + annotation (consumer, relies on, ...).
+export function parseInventoryPrs(text, P) {
+  const s = String(text ?? '');
+  const roleRe = new RegExp(P.roleAnnotationRegex, 'i');
+  const groupSep = new RegExp(P.groupSeparatorRegex);
+  const maxSpan = P.maxRangeSpan;
+  const segs = []; let depth = 0, cur = '';
+  for (const ch of s) { if (ch === '(' || ch === '[') depth++; else if ((ch === ')' || ch === ']') && depth > 0) depth--; if (ch === ';' && depth === 0) { segs.push(cur); cur = ''; } else cur += ch; }
+  segs.push(cur);
+  const out = [];
+  for (const seg of segs) {
+    const depthAt = []; let d = 0;
+    for (let i = 0; i < seg.length; i++) { depthAt[i] = d; const ch = seg[i]; if (ch === '(' || ch === '[') d++; else if ((ch === ')' || ch === ']') && d > 0) d--; }
+    const refs = [];
+    for (const m of seg.matchAll(/#(\d{1,4})(?:\s*[-\u2013]\s*#?(\d{1,4}))?(?!\d)/g)) {
+      const a = Number(m[1]), b = m[2] ? Number(m[2]) : null;
+      refs.push({ a, b: b !== null && b > a && b - a <= maxSpan ? b : null, start: m.index, end: m.index + m[0].length, nested: depthAt[m.index] > 0 });
+    }
+    // annotation text with nested-ref clauses and [..] notes removed
+    const clean = (from, to) => {
+      let t = '';
+      for (let i = from; i < to; i++) {
+        if (seg[i] === '[') { let k = i, dd = 0; for (; k < seg.length; k++) { if (seg[k] === '[') dd++; else if (seg[k] === ']') { dd--; if (dd === 0) break; } } i = k; continue; }
+        const nr = refs.find((r) => r.nested && r.start === i);
+        if (nr) { const base = depthAt[i]; let k = i; for (; k < seg.length; k++) { if ((seg[k] === ')' || seg[k] === ']') && depthAt[k] === base) break; } i = k - 1; continue; }
+        t += seg[i];
+      }
+      return t;
+    };
+    const top = refs.filter((r) => !r.nested);
+    const prefix = top.length ? clean(0, top[0].start) : '';
+    for (let i = 0; i < top.length; i++) {
+      let j = i;
+      while (j < top.length - 1 && groupSep.test(clean(top[j].end, top[j + 1].start))) j++;
+      const ann = clean(top[j].end, j + 1 < top.length ? top[j + 1].start : seg.length);
+      const rm = roleRe.exec(`${prefix} ${ann}`);
+      top[i].role = rm ? rm[0].toLowerCase() : null;
+    }
+    for (const r of refs) {
+      const role = r.nested ? 'nested' : r.role;
+      const nums = r.b !== null ? Array.from({ length: r.b - r.a + 1 }, (_, k) => r.a + k) : [r.a];
+      for (const n of nums) out.push({ n, form: r.b !== null ? 'RANGE' : 'SINGLE', range: r.b !== null ? `#${r.a}-#${r.b}` : null, nested: r.nested, role, segment: seg.trim().slice(0, 120) });
+    }
+  }
+  return out;
+}
+// Per PR number: EXPLICIT when at least one SINGLE, non-nested, role-free reference exists AND the gate holds
+// (PR title/branch/body names the item, the item's own 19-Oct title names the PR, or the 19-Oct status already claims merged/integrated);
+// otherwise WEAK with the first reason found. Unknown PR numbers are dropped.
+export function inventoryPrRefs(row, prMap, P, gate) {
+  const byN = new Map();
+  for (const r of parseInventoryPrs(row.prs, P)) { if (!prMap.has(r.n)) continue; if (!byN.has(r.n)) byN.set(r.n, []); byN.get(r.n).push(r); }
+  const out = [];
+  for (const [n, rs] of [...byN.entries()].sort((a, b) => a[0] - b[0])) {
+    const cand = rs.find((r) => r.form === 'SINGLE' && !r.nested && !r.role);
+    const g = cand ? gate(n) : null;
+    if (cand && g) out.push({ n, strength: 'EXPLICIT', gate: g, reason: null });
+    else {
+      const r0 = rs.find((r) => r.form === 'RANGE') || rs.find((r) => r.nested) || rs.find((r) => r.role) || rs[0];
+      const reason = cand ? 'no-id-match' : r0.form === 'RANGE' ? `range ${r0.range}` : r0.nested ? 'nested' : `role:${r0.role}`;
+      out.push({ n, strength: 'WEAK', gate: null, reason });
+    }
+  }
+  return out;
+}
 
 export function partition(rows, keyFn, scopeFn) {
   const classes = [...new Set(rows.map(keyFn))].sort(cmp);

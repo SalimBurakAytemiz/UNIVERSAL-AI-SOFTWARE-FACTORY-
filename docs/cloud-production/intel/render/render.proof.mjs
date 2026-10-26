@@ -1,4 +1,4 @@
-//TR: P10 çıktı kanıtı (ağsız): MD başlıkları A–J tam bu sırada; çapa sayılar JSON alanlarına eşit; CSV sabit sütun sırasıyla JSON kalemlerine geri dönüşür; //TR ilk satırları/ilk anahtarları mevcut; CSV'de yorum satırı yok.
+//TR: P10 çıktı kanıtı (ağsız): MD başlıkları A–J tam bu sırada; runtime NOT_MEASURED, FULL/FULL_ONLY ayrımı, hedef aralıkları, installer istisnası, PARTIAL satırı ve MVP payda gerekçesi panoda; çapa sayılar JSON alanlarına eşit; CSV sabit sütun sırasıyla JSON kalemlerine geri dönüşür; //TR ilk satırları/ilk anahtarları mevcut; CSV'de yorum satırı yok.
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { miniBundle } from '../fixtures/mini/bundle.mjs';
@@ -24,7 +24,16 @@ check('MD has headings A-J exactly in order', JSON.stringify(heads) === JSON.str
 check('MD first line is the //TR comment', md.split('\n')[0] === '<!-- //TR: UASCO günlük proje istihbarat raporu (deterministik, tek kaynak) -->');
 check('MD executive summary (A) comes first', md.indexOf(SECTION_HEADINGS[0]) < md.indexOf(SECTION_HEADINGS[1]));
 const row = (label) => md.split('\n').find((l) => l.startsWith(`| ${label}`));
-check('anchor: live denominators equal JSON metrics', row('Canlı iş (payda)') === `| Canlı iş (payda) | ${r.metrics.full.n} | ${r.metrics.baseline741.n} | ${r.metrics.mvp.n} |`);
+const inv = inventoryJson(m, { inputsShort: {} });
+check('anchor: live denominators equal JSON metrics (FULL liveNow, FULL 19-Oct, MVP liveNow, MVP 19-Oct)', row('Canlı iş (payda)') === `| Canlı iş (payda) | ${r.metrics.full.n} | ${r.metrics.baseline741.n} | ${r.metrics.mvp.n} | ${r.metrics.mvpBaseline.n} |`);
+// LOW label fixes (each fails on 4fe58dd)
+check('LOW runtime row shows NOT_MEASURED, never 0/n (%0)', /^\| Runtime doğrulandı \(runtimeVerificationRatio\) \| NOT_MEASURED/.test(row('Runtime doğrulandı') || '') && !/\| 0\/\d+ \(%0\)/.test(row('Runtime doğrulandı') || ''));
+check("LOW 'FULL' has one meaning: the scope subset is FULL_ONLY (31 Ekim view and inventory scope)", md.includes('Ertelenebilir (DEFERRED + FULL_ONLY; 19 Ekim tabanı)') && !md.includes('(DEFERRED + FULL)') && inv.items.every((x) => x.scope !== 'FULL'));
+check('LOW target ranges are shown as ranges (M0 P80 16:00–17:00, M2 P80 2026-11-10..2026-11-12) with the stated confidence line', md.includes('P80 2026-10-15 16:00–17:00 TSİ') && md.includes('P80 2026-11-10..2026-11-12') && /\| T-M0 \|[^\n]*\| MEDIUM \(satır 78/.test(md));
+check('LOW installer CI in the MVP chain is labelled as an exception', md.includes('İstisna (DESKTOP_INSTALLER): EXCEPTION: installer CI = build evidence only'));
+check('H1 PARTIAL integration has its own dashboard row', !!row('Kısmi entegrasyon (PARTIAL; entegre sayılmaz)') && row('Kısmi entegrasyon (PARTIAL; entegre sayılmaz)').includes(`| ${r.metrics.full.substeps.integrated?.PARTIAL} |`));
+check('M3 MVP denominator change is reported with its reasons', !!r.reconciliation.mvpScope && md.includes(`- MVP paydası: ${r.reconciliation.mvpScope.value} = 19 Ekim AT_RISK ${r.reconciliation.mvpScope.baseline} + açık kuralla MVP olan eklenen ${r.reconciliation.mvpScope.addedMvp.length}`));
+check('M1 phase actual-start line names the sources checked and the UNKNOWN count', /bilinen faz: \d+\/\d+; UNKNOWN \d+ \(kontrol edilen kaynaklar: inventory\.prs EXPLICIT PR/.test(md));
 const ci = r.metrics.ratios3.codeIntegrationRatio;
 check('anchor: code integration ratio equals JSON', row('Kod entegrasyonu').includes(`${ci.full.n}/${ci.full.d}`) && row('Kod entegrasyonu').includes(`${ci.mvp.n}/${ci.mvp.d}`));
 check('anchor: closed phases equals JSON', md.includes(`**${r.metrics.roadmap.phases.closedByEvidence}/${r.metrics.roadmap.phases.total}**`));
@@ -33,7 +42,6 @@ check('anchor: oct31 risk equals JSON', md.includes(`**31 Ekim riski:** ${r.oct3
 check('anchor: department total row equals JSON totals', row('**Toplam**').startsWith(`| **Toplam** | ${r.metrics.full.n} | ${r.metrics.full.statusCounts.MERGED_NOT_VERIFIED} |`));
 check('anchor: MVP chain rows equal JSON mvp[]', r.mvp.every((s) => md.includes(`| ${s.step} | ${s.status} |`)));
 check('report JSON first key is //TR', Object.keys(r)[0] === '//TR');
-const inv = inventoryJson(m, { inputsShort: {} });
 check('inventory JSON first key is //TR and items are sorted by id', Object.keys(inv)[0] === '//TR' && inv.items.every((x, i, a) => i === 0 || a[i - 1].id < x.id));
 const csv = inventoryCsv(m);
 const rows = parseCsv(csv);

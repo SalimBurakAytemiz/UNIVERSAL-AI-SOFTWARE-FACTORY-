@@ -1,8 +1,9 @@
-//TR: P6 metrik ayrımı kanıtı (ağsız): acceptedRatio merge'leri yok sayar; devProgress yalnız coded/integrated/tested kullanır; UNIT ağırlık modelinde eşit ağırlık notu vardır; bilinmeyen weightModel eşit ağırlığa kapalı düşer ve DQ üretir; ölçülmemiş hazırlık katmanı 0 olarak gösterilmez; ETA yalnız ölçülmüş hızdan.
+//TR: P6 metrik ayrımı kanıtı (ağsız): acceptedRatio merge'leri yok sayar; runtime oranı NOT_MEASURED'dır (%0 değil); PARTIAL entegre sayılmaz; medyan çift n'de iki ortanın ortalamasıdır; devProgress yalnız coded/integrated/tested kullanır; UNIT ağırlık modelinde eşit ağırlık notu vardır; bilinmeyen weightModel eşit ağırlığa kapalı düşer ve DQ üretir; ölçülmemiş hazırlık katmanı 0 olarak gösterilmez; ETA yalnız ölçülmüş hızdan.
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { block, resolveWeights, etaFrom, ratios3 } from './metrics.mjs';
+import { median, quantile } from './productivity.mjs';
 import { computeAgentFactory } from './agent-factory.mjs';
 import { loadRules } from '../lib/gather.mjs';
 import { miniBundle } from '../fixtures/mini/bundle.mjs';
@@ -34,7 +35,14 @@ check('UNIT weight model carries the equal-weight limitation note', /every item 
 const W2 = resolveWeights('DURATION_WEIGHTED_V9', rules.weights);
 check('unknown weightModel fails closed to equal weights with a DQ warning', W2.model === 'UNIT_WEIGHT_UNTIL_RUNTIME_DURATION_DATA_EXISTS' && W2.dq && W2.dq.code === 'UNKNOWN_WEIGHT_MODEL');
 const r3 = ratios3(bl, bl);
-check('three ratios are separate; runtime and acceptance are measured:false with reasons', r3.codeIntegrationRatio.measured === true && r3.runtimeVerificationRatio.measured === false && !!r3.runtimeVerificationRatio.reason && r3.acceptedCompletionRatio.measured === false);
+check('three ratios are separate; runtime is NOT_MEASURED (never a measured 0), acceptance is a measured count with its source', r3.codeIntegrationRatio.measured === true && r3.runtimeVerificationRatio.measured === false && r3.runtimeVerificationRatio.state === 'NOT_MEASURED' && !!r3.runtimeVerificationRatio.reason && r3.acceptedCompletionRatio.measured === true && !!r3.acceptedCompletionRatio.source);
+check('LOW runtime ratio is NOT_MEASURED, not 0 % (fails on 4fe58dd: {n:0,pct:0})', bl.ratios.runtimeVerifiedRatio.n === 'NOT_MEASURED' && bl.ratios.runtimeVerifiedRatio.pct === 'NOT_MEASURED' && r3.runtimeVerificationRatio.full.pct === 'NOT_MEASURED');
+// PARTIAL integration is a separate bucket: not TRUE, counted in the UNKNOWN share of dev progress
+const bp = block([...xs, { status: 'UNKNOWN', substeps: sub('TRUE', 'PARTIAL', 'UNKNOWN'), stale: false }], W);
+check('H1 PARTIAL integration is tallied separately and never counted as integrated', bp.substeps.integrated.PARTIAL === 1 && bp.ratios.integratedRatio.n === 2 && bp.ratios.integratedPartial === 1);
+check('H1 PARTIAL counts in the dev-progress UNKNOWN share, not in the lower bound: lower (3+2+1)/3/5 = 40 %, unknown (1+3+2)/3/5 = 40 %', bp.devProgressLowerBound === 40 && bp.devProgressUnknownShare === 40);
+// conventional median (fails on 4fe58dd: lower-middle element)
+check('LOW median of an even sample is the mean of the two middle values (1.585, 1.726 -> 1.6555)', Math.abs(median([1.726, 0.5, 1.585, 9]) - 1.6555) < 1e-9 && median([3, 1, 2]) === 2 && median([]) === null && quantile([1, 2, 3, 4], 0.9) === 4);
 // agent factory: unmeasured layers are never shown as 0
 const reg = JSON.parse(fs.readFileSync(path.join(HERE, '..', 'fixtures', 'registries-mini', 'registries.json'), 'utf8'));
 const afU = computeAgentFactory({ registries: reg, readiness: { state: 'UNAVAILABLE', reason: 'READINESS_RUNTIME_UNAVAILABLE' }, wave0: { packages: [] }, rules: rules['agent-factory'], resolvers: [], itemsById: new Map() });

@@ -24,5 +24,7 @@
   "trendMinSnapshots": 3,
   "trendMinSpanDays": 3,
   "planTopNPerLane": 3,
-  "mdListCap": 40
+  "mdListCap": 40,
+  "archiveMaxDays": 60,
+  "maxRunsTable": 20000
 }

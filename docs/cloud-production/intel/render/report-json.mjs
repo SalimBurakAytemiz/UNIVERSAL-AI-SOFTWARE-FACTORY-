@@ -22,7 +22,14 @@ export const FIELD_SEMANTICS = {
   'totals.KNOWN_OPEN_WORK.openPrs': 'open PRs (all bases), as in v0',
   'inputs.wave0': 'git blob id of docs/cloud-production/intel/inputs/wave0-baseline.json (v0: the string read/UNAVAILABLE for an ephemeral scratchpad file)',
   'inputs.queueSha': 'origin/uasco/production-queue tip read by this run',
-  fingerprint: 'sha256 over v7/queue SHAs, inventory blobs, rules + overlay + wave0 blob ids, engine tree, PR-table digest, runs digest and readiness digest (clock excluded); v0 covered SHAs + open PR heads only',
+  fingerprint: 'sha256 over the whole normalized inputs bundle (git refs, inventory, coordinator records, PRs, runs, check-runs, files, merged_by, timings/jobs, texts, readiness, priors older than today, freshness states) + rules/overlay/wave0 blob ids + engine tree (and working-file hash when DIRTY); excluded: the clock (FRESH asOf, cache ages, fetch time) and GitHub call accounting; v0 covered SHAs + open PR heads only',
+  'items[].substeps.integrated': "TRUE only when every EXPLICIT PR of the item merged into v7/integration (or v7 commit/route evidence backs a merged claim); 'PARTIAL' when only some EXPLICIT PRs merged and the rest closed unmerged (never counted as integrated); a WEAK 19-Oct prs reference (range, nested, role-annotated such as consumer/relies on/tests only/reviews on/precedent, or a PR that does not name the item) never upgrades a row without a merged claim",
+  'items[].actual.start': 'earliest createdAt of a merged or open PR of the item itself, or of a commit naming the item / record head; UNKNOWN (null) with actual.startSourcesChecked otherwise; closed-unmerged PRs and WEAK references are never used',
+  'items[].scope': "MVP / DEFERRED / FULL_ONLY. Baseline: 19-Oct oct31_impact (FULL_ONLY = impact NONE). Added items: MVP only by an explicit source (MVP-chain PR, Wave 0 mvp flag, queue MVP marker), else FULL_ONLY with scopeReason. The dashboard column 'FULL' means ALL live items, not scope FULL_ONLY",
+  'metrics.mvp': 'live MVP-scope items = 19-Oct AT_RISK rows + added items made MVP by an explicit rule (reconciliation.mvpScope lists them with reasons); metrics.mvpBaseline is the 19-Oct-only MVP set',
+  'metrics.ratios3.runtimeVerificationRatio': "NOT_MEASURED (n and pct are the string NOT_MEASURED): no runtime-evidence source exists; it is never shown as a measured 0 %",
+  'freshness.github.sources': 'per-source freshness (pulls, runs, check-runs, run timing/jobs, open-PR files, merged_by): FRESH, PARTIAL (some calls failed; cached data served with cacheAsOf / cacheAgeHours) or STALE_CACHE (nothing refreshed); the overall github state is the worst source',
+  'freshness.v7.state': 'FRESH only when this run fetched the refs successfully (fetchedAt); UNFETCHED when no fetch ran (lastFetchAt = FETCH_HEAD time); STALE when the fetch failed',
   githubCalls: 'GitHub REST calls of this run including 304 Not Modified answers',
   mvp: 'computed from rules/mvp-chain.json predicates against GitHub/git state (v0: hand-written)',
   mvpCritical: 'open items of the computed MVP chain',
@@ -51,13 +58,15 @@ export function buildReport(m, meta) {
   const decisionRefs = new Set(m.decisions.filter((d) => d.state === 'OPEN').flatMap((d) => d.refs.map((r) => Number(r.slice(1)))));
   const openPrs = open.map((p) => {
     const runs = m.inputs.github.checks[p.headSha] || null;
+    const staleAt = (m.inputs.github.staleChecks || {})[p.headSha];
     const c = (n) => { if (!runs) return 'NOT_REPORTED'; const r = runs.filter((x) => x.name === n).sort((a, b) => cmp(b.startedAt || '', a.startedAt || ''))[0]; return r ? (r.conclusion || r.status) : 'NOT_REPORTED'; };
     const files = m.inputs.github.prFiles[p.number] || [];
     const u = c('validate (ubuntu-latest)'), w = c('validate (windows-latest)');
     const ci = [u, w].includes('failure') ? 'FAILED' : (u === 'success' && w === 'success') ? 'GREEN' : 'PENDING';
     const lane = /lane-a/.test(p.headRef) ? 'A' : /lane-b/.test(p.headRef) ? 'B' : /lane-c/.test(p.headRef) ? 'C' : /coord/.test(p.headRef) ? 'COORD' : 'OTHER';
     const founder = files.some(isProt) || /FOUNDER-TIER|PROTECTED/.test(p.title) || decisionRefs.has(p.number);
-    return { number: p.number, lane, title: p.title.slice(0, 90), head: (p.headSha || '').slice(0, 7), draft: p.draft, autoMerge: p.autoMerge, ci, ubuntu: u, windows: w, protectedFiles: files.filter(isProt).length, founder, url: p.url };
+    const filesKnown = Object.prototype.hasOwnProperty.call(m.inputs.github.prFiles, p.number);
+    return { number: p.number, lane, title: p.title.slice(0, 90), head: (p.headSha || '').slice(0, 7), draft: p.draft, autoMerge: p.autoMerge, ci, ciSource: staleAt !== undefined ? 'STALE_CACHE' : runs ? 'FRESH' : 'NONE', ciAsOf: staleAt !== undefined ? (staleAt || 'UNKNOWN') : null, ubuntu: u, windows: w, protectedFiles: files.filter(isProt).length, protectedFilesKnown: filesKnown, founder, url: p.url };
   });
   const lanes = ['A', 'B', 'C', 'COORD'].map((L) => { const mm = pulls.filter((p) => p.mergedAt && (L === 'COORD' ? /coord/.test(p.headRef) : new RegExp(`lane-${L.toLowerCase()}`).test(p.headRef)));
     const o = openPrs.filter((p) => p.lane === L); return { lane: L, mergedPrs: mm.length, openPrs: o.map((p) => p.number), ciFailed: o.filter((p) => p.ci === 'FAILED').map((p) => p.number), founder: o.filter((p) => p.founder).map((p) => p.number) }; });
@@ -100,7 +109,7 @@ export function buildReport(m, meta) {
     // ---- Intel V1 additions
     schemaVersion: 'intel-1.0.0',
     fieldSemantics: FIELD_SEMANTICS,
-    meta: { engineTree: meta.engineTree, rulesBlobIds: meta.rulesBlobIds, overlayBlobId: meta.overlayBlobId, reused: meta.reused, refs: m.inputs.meta.refs, inventoryCsvBlob: m.inputs.meta.csvBlob, cacheFrom: m.inputs.meta.cacheFrom },
+    meta: { engineTree: meta.engineTree, engineDirty: !!meta.engineDirty, engineDirtyFiles: meta.engineDirtyFiles || [], engineWorkHash: meta.engineWorkHash || null, rulesBlobIds: meta.rulesBlobIds, overlayBlobId: meta.overlayBlobId, reused: meta.reused, refs: m.inputs.meta.refs, refsFetch: m.inputs.meta.refsFetch || null, inventoryCsvBlob: m.inputs.meta.csvBlob, cacheFrom: m.inputs.meta.cacheFrom, semantics: m.history.semantics },
     freshness: m.dataQuality.freshness,
     reconciliation: m.reconciliation,
     metrics: {

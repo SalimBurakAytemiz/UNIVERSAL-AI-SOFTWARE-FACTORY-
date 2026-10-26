@@ -1,5 +1,5 @@
 {
-  "//TR": "Kimlik bağlama kuralları: hangi önekler kimliktir, hangi alanlar taranır ve hangi bağ gücü hangi sınıfa yeterlidir. Gövde (body) metninde geçen kimlik yalnız 19 Ekim'de zaten 'merge edildi' denen satırları DÜŞÜK güvenle destekler; ilerleme iddiası olmayan satırı yükseltmez.",
+  "//TR": "Kimlik bağlama kuralları: hangi önekler kimliktir, hangi alanlar taranır ve hangi bağ gücü hangi sınıfa yeterlidir. Gövde (body) metninde geçen kimlik ve 19 Ekim 'prs' alanındaki WEAK referans (aralık, iç içe, rol notlu veya kimlik kapısından geçmeyen) yalnız 19 Ekim'de zaten 'merge edildi' denen satırları DÜŞÜK güvenle destekler; ilerleme iddiası olmayan satırı yükseltmez. Rakamla bitmeyen kimlikler (L-WORKFORCE, CI-GREEN, PKG-LEASE1) PR başlığında ve dalında tam kimlik olarak eşleşir.",
   "schemaVersion": "1.0.0",
   "idPrefixes": [
     "UI",
@@ -20,6 +20,35 @@
   "literalIdPrefixes": [
     "BL-REQ-"
   ],
+  "literalIdMatch": {
+    "appliesTo": "known item/alias ids that do not end in -<digits> and contain a hyphen",
+    "fields": [
+      "pr.title",
+      "pr.head.ref"
+    ],
+    "title": "whole hyphen-token, compared upper-cased (titles use slug or mixed case, e.g. 'v7 pkg-lease1:', 'CI-green:'); a following '-<alnum>' blocks the match",
+    "branch": "per '/' segment: starts the segment or follows '-', ends the segment or is followed by '-<letter>'; a following '-<digit>' blocks the match (SEC-IMPORT-GUARD-2 is not SEC-IMPORT-GUARD)",
+    "longestWins": true,
+    "strength": "ID_IN_TITLE / ID_IN_BRANCH (HIGH; counted as explicit evidence by strengthPolicy.addedItemEvidence and relinkNonClaim)"
+  },
+  "inventoryPrs": {
+    "roleAnnotationRegex": "\\bconsumers?\\b|\\brel(?:y|ies) on\\b|\\btests? only\\b|\\b(?:reviews?|comments?|fix(?:es)?|reseal commits?|authored commits|parity) (?:on|in)\\b|\\bprecedent\\b|\\bbuilds (?:on|a separate)\\b|\\bneeded by\\b|\\brecords it\\b|\\bsupersed\\w*|\\bDUPLICATE\\b|\\bdiagnosis only\\b|\\btarget\\b|\\badds shard ids\\b|\\bmerged before\\b|\\brequest\\b|\\bopen PRs\\b|\\bchanged by\\b|\\bproposals?\\b",
+    "groupSeparatorRegex": "^[\\s,+/&]*(?:and\\s*)?$",
+    "maxRangeSpan": 100,
+    "itemTitleNamesPrRegex": "\\bPR\\s*#(\\d{1,5})\\b",
+    "explicitGates": {
+      "PR_NAMES_ITEM": "the PR title, head branch or body names the item id (resolver, incl. aliases and literal ids)",
+      "ITEM_TITLE_NAMES_PR": "the item's own 19-Oct title names the PR ('PR #N')",
+      "STATUS19_CLAIMS_MERGED": "the item's 19-Oct status already claims merged/integrated (status-map baselineMergedClaim)"
+    },
+    "weakReasons": [
+      "range",
+      "nested",
+      "role:<annotation>",
+      "no-id-match"
+    ],
+    "weakPolicy": "INVENTORY_WEAK: LOW confidence; corroborates only rows whose 19-Oct status claims merged (after every stronger source); never upgrades a row without a merged claim; never sets coded, actual start, lane or owner"
+  },
   "fieldsSearched": {
     "pr": [
       "title",
@@ -41,6 +70,7 @@
     "ID_IN_TITLE",
     "ID_IN_BRANCH",
     "ID_IN_BODY",
+    "INVENTORY_WEAK",
     "ID_IN_COMMIT_MESSAGE",
     "ROUTE_LITERAL_AT_HEAD",
     "IPC_CHANNEL_LITERAL_AT_HEAD",
@@ -54,7 +84,8 @@
       "ID_IN_BODY",
       "ID_IN_COMMIT_MESSAGE",
       "ROUTE_LITERAL_AT_HEAD",
-      "IPC_CHANNEL_LITERAL_AT_HEAD"
+      "IPC_CHANNEL_LITERAL_AT_HEAD",
+      "INVENTORY_WEAK"
     ],
     "relinkNonClaim": [
       "EXPLICIT",
@@ -70,7 +101,8 @@
     ],
     "candidateOnly": [
       "ID_IN_BODY",
-      "ID_IN_COMMIT_MESSAGE"
+      "ID_IN_COMMIT_MESSAGE",
+      "INVENTORY_WEAK"
     ],
     "supportingOnly": [
       "QUEUE_TEXT",
@@ -85,7 +117,8 @@
       "ID_IN_COMMIT_MESSAGE": "MEDIUM",
       "ROUTE_LITERAL_AT_HEAD": "MEDIUM",
       "IPC_CHANNEL_LITERAL_AT_HEAD": "MEDIUM",
-      "OVERLAY": "MEDIUM"
+      "OVERLAY": "MEDIUM",
+      "INVENTORY_WEAK": "LOW"
     }
   },
   "laneBranchRules": [

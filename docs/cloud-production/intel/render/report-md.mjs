@@ -2,7 +2,8 @@
 const esc = (v) => String(v ?? '—').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
 const P = (x) => (x === 'UNKNOWN' || x === null || x === undefined ? 'UNKNOWN' : `%${String(x).replace('.', ',')}`);
 const N = (x) => (typeof x === 'number' && !Number.isInteger(x) ? String(x).replace('.', ',') : x ?? '—');
-const R = (r) => (r ? `${r.n}/${r.d} (${P(r.pct)})` : '—');
+const R = (r) => (!r ? '—' : r.n === 'NOT_MEASURED' ? `NOT_MEASURED (payda ${r.d}; ölçüm kaynağı yok)` : `${r.n}/${r.d} (${P(r.pct)})`);
+const qWhen = (q) => `${q.dateRange ? `${q.dateRange.from}..${q.dateRange.to}` : q.date || 'UNKNOWN'}${q.timeRange ? ` ${q.timeRange.from}–${q.timeRange.to} TSİ` : q.time ? ` ${q.time} TSİ` : ''}`;
 const sha7 = (s) => (s ? String(s).slice(0, 7) : '—');
 const table = (head, rows) => [`| ${head.map(esc).join(' | ')} |`, `|${head.map(() => '---').join('|')}|`, ...rows.map((r) => `| ${r.map(esc).join(' | ')} |`)].join('\n');
 const list = (xs, cap) => (xs.length > cap ? `${xs.slice(0, cap).join(', ')} … (+${xs.length - cap})` : xs.join(', ') || '—');
@@ -29,28 +30,35 @@ export function renderMarkdown(r, { listCap = 40 } = {}) {
   L.push('# UASCO: Kalan İş ve Proje İstihbaratı (Intel V1, deterministik)', '');
   L.push(`- **Oluşturulma:** ${r.generatedAtTRT} (${r.generatedAt})`);
   L.push(`- **Kaynak SHA'lar:** v7/integration \`${sha7(r.inputs.baseSha)}\`, uasco/production-queue \`${sha7(r.inputs.queueSha)}\`, uasco/production-reports \`${sha7(r.meta.refs.reports.sha)}\`, envanter blob'u \`${sha7(r.inputs.inventoryBlob)}\` (2026-10-19; tarihsel taban, güncel gerçek değil)`);
-  L.push(`- **Yöntem:** \`docs/cloud-production/intel/intel.mjs\` (motor ağacı \`${sha7(r.meta.engineTree)}\`)`);
+  L.push(`- **Yöntem:** \`docs/cloud-production/intel/intel.mjs\` (motor ağacı \`${sha7(r.meta.engineTree)}\`${r.meta.engineDirty ? `; **DIRTY**: çalışan kopya HEAD'den farklı (${r.meta.engineDirtyFiles.length} dosya), çalışma özeti \`${String(r.meta.engineWorkHash || '').slice(0, 12)}…\`` : ''}; semantik ${r.meta.semantics || '—'})`);
   L.push(`  - ${r.githubCalls} salt okuma GitHub çağrısı (${gh.notModified} adet 304); GitHub verisi ${gh.state}${asOf}; LLM yok.`);
   L.push(`  - Girdi parmak izi \`${String(r.fingerprint).slice(0, 12)}…\`; yeniden kullanım: ${r.meta.reused ? 'evet' : 'hayır'}.`);
   L.push('- **Veri yolu:** `reports/local/UASCO_REMAINING_WORK.json`; ek: `UASCO_WORK_INVENTORY.json` ve `UASCO_WORK_INVENTORY.csv`', '');
-  L.push('**Kural:** JSON durum alanları, FAKE yürütücü çalıştırmaları, installer CI ve backlog "DONE" kanıt değildir. "PR merge edildi" tamamlandı demek değildir; tamamlanma yalnız ürün kabul kanıtıyla sayılır.', '');
+  L.push('**Kural:** JSON durum alanları, FAKE yürütücü çalıştırmaları, installer CI ve backlog "DONE" kanıt değildir. "PR merge edildi" tamamlandı demek değildir; tamamlanma yalnız ürün kabul kanıtıyla sayılır. 19 Ekim "prs" metninde yalnız notsuz tekil ve kalemle eşleşen PR referansı EXPLICIT kanıttır; aralık, iç içe, "consumer / relies on / tests only / reviews on / precedent" gibi notlu ya da başka kalemin PR\'ı WEAK\'tir ve ilerleme iddiası olmayan satırı yükseltmez. İstisna (etiketli): MVP zincirindeki Desktop adımı installer CI başarısını yalnız derleme kanıtı olarak kullanır.', '');
+  L.push('**Terimler:** "FULL" sütunu TÜM canlı kalemlerdir; kalem kapsamı "FULL_ONLY" ise yalnız tam üründe gereken (31 Ekim etkisi NONE) alt kümedir. "MVP (liveNow)" 19 Ekim AT_RISK satırları + açık kuralla MVP olan eklenen kalemlerdir.', '');
 
   // ---- A
   L.push(SECTION_HEADINGS[0], '');
   const ra = M.ratios3, rb = r.metrics.ratios3Baseline;
   L.push('**PR merge edildi ≠ bitti.** Üç oran ayrı tutulur; hiçbiri diğerine karışmaz.', '');
-  L.push(table(['Ölçüt', 'FULL (liveNow)', 'FULL (19 Ekim tabanı)', 'MVP'], [
-    ['Canlı iş (payda)', F.n, B.n, V.n],
-    ['Kod entegrasyonu: PR merge / v7 commit kanıtı (codeIntegrationRatio)', R(ra.codeIntegrationRatio.full), R(rb.codeIntegrationRatio.full), R(ra.codeIntegrationRatio.mvp)],
-    ['Gerçekten tamamlandı + ürün kabulü (acceptedCompletionRatio)', R(ra.acceptedCompletionRatio.full), R(rb.acceptedCompletionRatio.full), R(ra.acceptedCompletionRatio.mvp)],
-    ['Runtime doğrulandı (runtimeVerificationRatio; ölçülmedi)', R(ra.runtimeVerificationRatio.full), R(rb.runtimeVerificationRatio.full), R(ra.runtimeVerificationRatio.mvp)],
-    ['CI ile test edildi (testedRatio)', `${R(F.ratios.testedRatio)}; UNKNOWN ${F.ratios.testedUnknown}`, `${R(B.ratios.testedRatio)}; UNKNOWN ${B.ratios.testedUnknown}`, `${R(V.ratios.testedRatio)}; UNKNOWN ${V.ratios.testedUnknown}`],
-    ['Geliştirme ilerlemesi alt sınırı (coded+integrated+tested, UNKNOWN=0)', `${P(F.devProgressLowerBound)} (UNKNOWN payı ${P(F.devProgressUnknownShare)})`, `${P(B.devProgressLowerBound)} (UNKNOWN payı ${P(B.devProgressUnknownShare)})`, `${P(V.devProgressLowerBound)} (UNKNOWN payı ${P(V.devProgressUnknownShare)})`],
-    ['Uzlaşmamış (UNKNOWN veya STALE)', F.unreconciled, B.unreconciled, V.unreconciled],
-    ['UNKNOWN durum', F.statusCounts.UNKNOWN, B.statusCounts.UNKNOWN, V.statusCounts.UNKNOWN],
+  const VB = M.mvpBaseline;
+  const cols4 = (f) => [f(F), f(B), f(V), f(VB)];
+  L.push(table(['Ölçüt', 'FULL (liveNow)', 'FULL (19 Ekim tabanı)', 'MVP (liveNow)', 'MVP (19 Ekim tabanı)'], [
+    ['Canlı iş (payda)', ...cols4((x) => x.n)],
+    ['Kod entegrasyonu: tüm EXPLICIT PR merge / v7 commit kanıtı (codeIntegrationRatio)', R(ra.codeIntegrationRatio.full), R(rb.codeIntegrationRatio.full), R(ra.codeIntegrationRatio.mvp), R(rb.codeIntegrationRatio.mvp)],
+    ['Kısmi entegrasyon (PARTIAL; entegre sayılmaz)', ...cols4((x) => x.substeps.integrated.PARTIAL ?? 0)],
+    ['Gerçekten tamamlandı + ürün kabulü (acceptedCompletionRatio)', R(ra.acceptedCompletionRatio.full), R(rb.acceptedCompletionRatio.full), R(ra.acceptedCompletionRatio.mvp), R(rb.acceptedCompletionRatio.mvp)],
+    ['Runtime doğrulandı (runtimeVerificationRatio)', R(ra.runtimeVerificationRatio.full), R(rb.runtimeVerificationRatio.full), R(ra.runtimeVerificationRatio.mvp), R(rb.runtimeVerificationRatio.mvp)],
+    ['CI ile test edildi (testedRatio)', ...cols4((x) => `${R(x.ratios.testedRatio)}; UNKNOWN ${x.ratios.testedUnknown}`)],
+    ['Geliştirme ilerlemesi alt sınırı (coded+integrated+tested, UNKNOWN/PARTIAL=0)', ...cols4((x) => `${P(x.devProgressLowerBound)} (UNKNOWN/PARTIAL payı ${P(x.devProgressUnknownShare)})`)],
+    ['Uzlaşmamış (UNKNOWN veya STALE)', ...cols4((x) => x.unreconciled)],
+    ['UNKNOWN durum', ...cols4((x) => x.statusCounts.UNKNOWN)],
   ]), '');
+  L.push(`- Kod entegrasyonu: ${ra.codeIntegrationRatio.reason}.`);
   L.push(`- Runtime doğrulama: ${ra.runtimeVerificationRatio.reason}.`);
-  L.push(`- Kabul: ${ra.acceptedCompletionRatio.reason}.`);
+  L.push(`- Kabul: ${ra.acceptedCompletionRatio.reason} (kaynak: ${ra.acceptedCompletionRatio.source}).`);
+  const MS = rec.mvpScope;
+  L.push(`- MVP paydası: ${MS.value} = 19 Ekim AT_RISK ${MS.baseline} + açık kuralla MVP olan eklenen ${MS.addedMvp.length}${MS.addedMvp.length ? ` (${MS.addedMvp.map((x) => `${x.id}: ${x.rule}`).join('; ')})` : ''}; eklenen diğer ${MS.addedNotMvp} kalem FULL_ONLY (${MS.addedDefaultReason}). Kontrol edilen kurallar: ${MS.rulesChecked.map((x) => `${x.id} ${x.matched}`).join(', ')}.`);
   L.push(`- Ağırlık: ${M.weights.model}: ${M.weights.note}.`);
   L.push(`- **31 Ekim riski:** ${r.oct31Risk}. **ETA:** ${r.eta} (${r.metrics.eta.mvpAcceptance.reason || r.metrics.eta.mvpAcceptance.state}).`);
   const chainBlocks = r.metrics.mvpChain.filter((s) => s.status === 'BLOCKED').map((s) => ({ id: `MVP:${s.id}`, text: `${s.step} BLOCKED — ${s.evidence}${s.open.length ? `; açık: ${s.open.join('; ')}` : ''}` }));
@@ -58,7 +66,7 @@ export function renderMarkdown(r, { listCap = 40 } = {}) {
   L.push(`- **Bekleyen Founder kararları:** ${r.decisions.filter((d) => d.state === 'OPEN').length} açık (kanıtla çözülmüş ${r.decisions.filter((d) => d.state === 'RESOLVED_BY_EVIDENCE').length}).`);
   L.push('- **İlk 5 engel (önce BLOCKED MVP adımları, sonra en eski açık Founder kararı):**');
   for (const d of topBlock) L.push(`  - ${d.id}${d.ageHours !== undefined ? ` (${N(d.ageHours ?? 'UNKNOWN')} sa)` : ''}: ${esc(d.text.slice(0, 160))}`);
-  L.push(`- **Tazelik:** v7 \`${sha7(fr.v7.sha)}\` @${fr.v7.at}; kuyruk \`${sha7(fr.queue.sha)}\` @${fr.queue.at}; GitHub ${gh.state} (${gh.calls} çağrı, kalan kota ${gh.rateRemaining ?? 'UNKNOWN'}); hazırlık ölçümü ${fr.readiness.state}.`, '');
+  L.push(`- **Tazelik:** v7 \`${sha7(fr.v7.sha)}\` @${fr.v7.at} (${fr.v7.state}); kuyruk \`${sha7(fr.queue.sha)}\` @${fr.queue.at} (${fr.queue.state}); GitHub ${gh.state}${Object.values(gh.sources || {}).some((x) => x.state !== 'FRESH') ? ` (${Object.values(gh.sources).filter((x) => x.state !== 'FRESH').map((x) => `${x.source} ${x.state}`).join(', ')})` : ''} (${gh.calls} çağrı, kalan kota ${gh.rateRemaining ?? 'UNKNOWN'}); hazırlık ölçümü ${fr.readiness.state}.`, '');
 
   // ---- B
   L.push(SECTION_HEADINGS[1], '');
@@ -73,19 +81,21 @@ export function renderMarkdown(r, { listCap = 40 } = {}) {
   L.push(table(['Ölçüt', 'Değer'], [
     ['Tamamlandı (kabul)', `${O.done.accepted}/${O.done.of}`], ['Entegre (kod)', `${O.integrated.n}/${O.integrated.of}`], ['Eksik (MVP, entegre değil)', O.missing],
     ['MVP zinciri DONE', `${O.mvpChainDone.done}/${O.mvpChainDone.of}`], ['Founder kararına bağlı MVP kalemi', O.founderBlocked], ['Açık Founder kararı', O.openDecisions],
-    ['Ertelenebilir (DEFERRED + FULL)', `${O.deferrable.total} (DEFERRED ${O.deferrable.DEFERRED} + FULL ${O.deferrable.FULL})`],
+    ['Ertelenebilir (DEFERRED + FULL_ONLY; 19 Ekim tabanı)', `${O.deferrable.total} (DEFERRED ${O.deferrable.DEFERRED} + FULL_ONLY ${O.deferrable.FULL_ONLY})`],
     ['Kapasite', `builderCap ${O.capacity.queueBuilderCap} (${O.capacity.sources.queueBuilderCap}) / ${O.capacity.lanesBuilderCap} (${O.capacity.sources.lanesBuilderCap}); maxOpenPrs ${O.capacity.queueMaxOpenPrs}; merge/gün (7g) ${N(O.capacity.mergesPerDay7d)}`],
   ]), '');
   L.push('**MVP zinciri (9 adım; DONE yalnız kabul kanıtıyla)**', '');
   L.push(table(['Adım', 'Durum', 'Kanıt', 'Açık iş'], r.mvp.map((s) => [s.step, s.status, s.evidence, s.open.join('; ') || '—'])), '');
+  for (const s of M.mvpChain.filter((x) => x.evidenceException)) L.push(`- İstisna (${s.id}): ${s.evidenceException}; adım IMPLEMENTED_NOT_VERIFIED'ın ötesine geçemez.`);
+  if (M.mvpChain.some((x) => x.evidenceException)) L.push('');
   const E = M.eta;
   L.push(`- ETA (MVP kabul): ${E.mvpAcceptance.state}${E.mvpAcceptance.reason ? ` (${E.mvpAcceptance.reason}, ${E.mvpAcceptance.points} nokta)` : ` ${E.mvpAcceptance.eta}`}. Yalnız kod entegrasyonu ETA'sı (tamamlanma değil): ${E.mvpIntegrationOnly.state}${E.mvpIntegrationOnly.reason ? ` (${E.mvpIntegrationOnly.reason})` : ` ${E.mvpIntegrationOnly.eta}`}.`, '');
   L.push('**Hedefler (hepsi kaynağıyla; aşılmış olanlar da)**', '');
-  L.push(table(['Id', 'Hedef', 'Tarih', 'Nicelik', 'Güven', 'Durum', 'Kaynak'], r.targets.map((t) => [t.id, t.label, t.date || (t.range ? `${t.range.from}..${t.range.to}` : 'UNKNOWN'), t.quantiles.map((q) => `${q.q} ${q.date || 'UNKNOWN'}${q.time ? ` ${q.time} TSİ` : ''}`).join('; '), t.confidence, t.state, `${t.source.path}@${t.source.ref}:${t.source.line} (${t.quantiles[0].sourceCheck})`])), '');
+  L.push(table(['Id', 'Hedef', 'Tarih', 'Nicelik (aralıklar kaynaktaki gibi)', 'Güven', 'Durum', 'Kaynak'], r.targets.map((t) => [t.id, t.label, t.date || (t.range ? `${t.range.from}..${t.range.to}` : 'UNKNOWN'), t.quantiles.map((q) => `${q.q} ${qWhen(q)}`).join('; '), `${t.confidence}${t.confidenceSource ? ` (satır ${t.confidenceSource.line}, ${t.confidenceSource.check})` : ''}`, t.state, `${t.source.path}@${t.source.ref}:${t.quantiles.map((q) => q.rangeSource ? `${q.source.line}/${q.rangeSource.line}` : q.source.line).join(',')} (${t.quantiles.every((q) => q.sourceCheck === 'VERIFIED' && (q.rangeSourceCheck ?? 'VERIFIED') === 'VERIFIED') ? 'VERIFIED' : 'CHECK_FAILED'})`])), '');
   L.push(`- Program uyumu (faz): ${M.schedule.phaseAdherence.state}: ${M.schedule.phaseAdherence.reason} (payda ${M.schedule.phaseAdherence.denominator}).`);
   L.push(`- Planlanan başlangıç/bitiş: 149 fazın hepsinde null; kontrol edilen kaynak kümesi ${M.datesChecked.sourceSet}; bulunan tarih alanı: ${M.datesChecked.fieldsFound.length ? M.datesChecked.fieldsFound.join(', ') : 'yok'}; scheduler updatedAt ${M.datesChecked.schedulerUpdatedAt ?? 'null'}. Hiçbir tarih enterpolasyonla üretilmedi.`);
   const withStart = M.byPhase.filter((p) => p.actualStart).length;
-  L.push(`- Gerçek başlangıç (bağlı PR/commit kanıtının en erkeni) bilinen faz: ${withStart}/${M.byPhase.length}; gerçek bitiş yalnız attestation tarihidir (bugün UNKNOWN).`, '');
+  L.push(`- Gerçek başlangıç (yalnız kalemin kendi kanıtı: merge edilmiş/açık kendi PR'ı, kimliğini anan commit veya kayıt başı; kapanmış-merge edilmemiş PR ve WEAK referans asla) bilinen faz: ${withStart}/${M.byPhase.length}; UNKNOWN ${M.byPhase.length - withStart} (kontrol edilen kaynaklar: ${(r.reconciliation.startSourcesChecked || []).join('; ') || 'kalem actual.startSourcesChecked'}). Gerçek bitiş yalnız attestation tarihidir (bugün UNKNOWN).`, '');
 
   // ---- C
   L.push(SECTION_HEADINGS[2], '');
@@ -113,7 +123,7 @@ export function renderMarkdown(r, { listCap = 40 } = {}) {
   const ovl = rec.overlap;
   L.push(`- Örtüşme (v0 323 ile v0 536): yalnız 323 = ${ovl.a323only.full} (MVP ${ovl.a323only.mvp}); ikisi = ${ovl.both.full} (MVP ${ovl.both.mvp}); yalnız 536 = ${ovl.a536only.full} (MVP ${ovl.a536only.mvp}); hiçbiri = ${ovl.neither.full} (MVP ${ovl.neither.mvp}). Toplam ${ovl.a323only.full + ovl.both.full + ovl.a536only.full + ovl.neither.full} / MVP ${ovl.a323only.mvp + ovl.both.mvp + ovl.a536only.mvp + ovl.neither.mvp}.`);
   L.push(`- liveNow = ${rec.liveNow.baseline} − ${rec.liveNow.removed} çıkarılan + ${rec.liveNow.added} eklenen = **${rec.liveNow.value}** (eklenenler: ${Object.entries(rec.liveNow.addedByOrigin).map(([k, v]) => `${k} ${v}`).join(', ') || 'yok'}).`, '');
-  L.push(table(['Eklenen kalem', 'Köken', 'Durum', 'Gerekçe'], rec.addedItems.slice(0, listCap * 2).map((x) => [x.id, x.origin, x.status, x.reason])), rec.addedItems.length > listCap * 2 ? `\n… (+${rec.addedItems.length - listCap * 2}; tamamı JSON reconciliation.addedItems)` : '', '');
+  L.push(table(['Eklenen kalem', 'Köken', 'Durum', 'Kapsam', 'Gerekçe'], rec.addedItems.slice(0, listCap * 2).map((x) => [x.id, x.origin, x.status, `${x.scope} (${x.scopeRule})`, x.reason])), rec.addedItems.length > listCap * 2 ? `\n… (+${rec.addedItems.length - listCap * 2}; tamamı JSON reconciliation.addedItems)` : '', '');
   L.push('### D.4 Ekran, çalışma alanı ve endpoint kanıtı', '');
   const dimEv = (dim) => { const xs = (r.reconciliation.r323 || []).filter((x) => x.dimension === dim); return xs; };
   const ev = ['screens', 'workspaces', 'ux-decisions', 'endpoints', 'data-persistence'].map((d) => { const b = r.totals.byDimension[d]; const xs = dimEv(d); return [d, b ? b.live : 0, xs.filter((x) => x.evidenceClass === 'EVIDENCED_BY_PR').length, xs.filter((x) => x.evidenceClass === 'EVIDENCED_BY_COMMIT').length, xs.filter((x) => x.evidenceClass === 'STATUS_ONLY_UNVERIFIED').length]; });
@@ -123,6 +133,7 @@ export function renderMarkdown(r, { listCap = 40 } = {}) {
   L.push(SECTION_HEADINGS[4], '');
   const AF = r.agentFactory;
   L.push(`- Kaynak: ${AF.state === 'MEASURED' ? `${AF.source}; authority ${AF.authority}; digest \`${String(AF.digest).slice(0, 12)}…\`` : `UNAVAILABLE (${AF.reason}); katmanlar UNKNOWN`}. Roller iş toplamına girmez.`);
+  if (fr.readiness.sandbox) L.push(`- Ürün kodu kum havuzunda çalıştı: ${fr.readiness.sandbox.version}, yalıtım ${fr.readiness.sandbox.isolation}; ortam yalnız ${fr.readiness.sandbox.envKeys.length} izinli anahtar (token/anahtar/sır yok).`);
   L.push(`- Rol ${AF.roles.denominator}, lonca ${AF.roles.guilds}, küme ${AF.roles.clusters}.`, '');
   L.push(table(['Katman', 'TRUE', 'FALSE', 'UNKNOWN', 'Payda', 'Ölçüldü', 'Nedenler'], AF.layers.map((l) => [l.layer, l.measured ? l.TRUE : 'UNKNOWN', l.measured ? l.FALSE : `(${l.FALSE})`, l.UNKNOWN, l.denominator, l.measured ? 'evet' : 'HAYIR (ölçülmeyen katman 0 gösterilmez)', l.reasons ? Object.entries(l.reasons).map(([k, v]) => `${k} ${v}`).join(', ') || '—' : (l.reason || '—')])), '');
   L.push(table(['Founder sütunu', 'Katman', 'TRUE / payda', 'Not'], AF.founderColumns.map((c) => [c.column, c.layer || '—', c.layer && c.measured ? `${c.TRUE}/${c.denominator}` : 'UNKNOWN (ölçülmedi)', c.note || '—'])), '');
@@ -146,7 +157,7 @@ export function renderMarkdown(r, { listCap = 40 } = {}) {
 
   // ---- G
   L.push(SECTION_HEADINGS[6], '');
-  L.push(table(['PR', 'Lane', 'CI', 'Korumalı dosya', 'Founder', 'Yapılacak'], r.openPrs.map((p) => [`#${p.number}`, p.lane, `${p.ci} (u ${p.ubuntu}, w ${p.windows})`, p.protectedFiles, p.founder ? 'evet' : 'hayır', (r.founder.find((f) => f.pr === p.number) || {}).action || '—'])), '');
+  L.push(table(['PR', 'Lane', 'CI', 'Korumalı dosya', 'Founder', 'Yapılacak'], r.openPrs.map((p) => [`#${p.number}`, p.lane, `${p.ci} (u ${p.ubuntu}, w ${p.windows})${p.ciSource === 'STALE_CACHE' ? ` [önbellek, as of ${p.ciAsOf}]` : ''}`, p.protectedFilesKnown === false ? 'UNKNOWN (dosya listesi alınamadı)' : p.protectedFiles, p.founder ? 'evet' : 'hayır', (r.founder.find((f) => f.pr === p.number) || {}).action || '—'])), '');
   L.push(table(['Karar', 'Kaynak', 'Durum', 'İlk görülme', 'Yaş (sa)', 'Çözüm kanıtı', 'Metin'], r.decisions.map((d) => [d.id + (d.synthesized ? ' (türetilmiş id)' : ''), d.source.replace('PRODUCTION-QUEUE.json ', 'queue '), d.state + (d.stale ? ' (STALE)' : ''), d.firstSeenAt ? `${d.firstSeenAt.slice(0, 16)} ${d.firstSeenCommit}` : 'UNKNOWN', N(d.ageHours ?? 'UNKNOWN'), d.resolution || (d.refsAllFinal ? 'tüm referans PR kapalı (karar metni kanıtla eşleşmedi)' : '—'), d.text.slice(0, 160)])), '');
 
   // ---- H
@@ -166,6 +177,7 @@ export function renderMarkdown(r, { listCap = 40 } = {}) {
   L.push(SECTION_HEADINGS[8], '');
   const H = r.history;
   L.push(`- Önceki anlık görüntü: ${H.previous ? `${H.previous.source} (${H.previous.date}, ${H.previous.semantics || 'semantik bilinmiyor'}${H.previous.itemsReconstructed ? '; kalem durumları v0 kuralıyla yeniden kuruldu' : ''})` : 'yok'}.`, '');
+  if (H.ruleChange) L.push(`- **Kural değişikliği:** önceki görüntü ${H.previous.semantics || 'bilinmeyen'} semantiğinde, bu görüntü ${H.semantics}. Aşağıdaki kalem değişimleri ve metrik farkları proje olaylarıyla yeni kanıt kurallarına göre yeniden sınıflandırmayı karıştırır; günlük ilerleme değildir. Trend sütunlarının paydası da semantiğe göre değişir (v0: 741, intel: liveNow).`, '');
   if (H.diff) {
     L.push(`- Fark: eklenen ${H.diff.counts.added}, çıkarılan ${H.diff.counts.removed}, değişen ${H.diff.counts.changed} kalem; metrik farkı ${H.diff.counts.metricDeltas}.`, '');
     L.push(`- Ayrıntı: ${'`'}UASCO_DELTA.json${'`'} ve JSON history.diff.`, '');
@@ -178,7 +190,9 @@ export function renderMarkdown(r, { listCap = 40 } = {}) {
 
   // ---- J
   L.push(SECTION_HEADINGS[9], '');
-  L.push(table(['Kaynak', 'Durum', 'Ayrıntı'], [['v7/integration', fr.v7.state, `${fr.v7.sha} @${fr.v7.at}`], ['uasco/production-queue', fr.queue.state, `${fr.queue.sha} @${fr.queue.at}`], ['uasco/production-reports', fr.reports.state, `${fr.reports.sha} @${fr.reports.at}`], ['GitHub REST', gh.state, `asOf ${gh.asOf}; ${gh.calls} çağrı; 304 ${gh.notModified}; kalan ${gh.rateRemaining ?? 'UNKNOWN'}${gh.error ? `; hata ${gh.error}` : ''}`], ['Hazırlık ölçümü (C-RDY-1)', fr.readiness.state, fr.readiness.reason || '—'], ['Önbellek', fr.cache, '']]), '');
+  const refDet = (x) => `${x.sha} @${x.at}; ${x.state === 'FRESH' ? `bu çalıştırmada fetch edildi ${x.fetchedAt}` : x.state === 'UNFETCHED' ? `bu çalıştırmada fetch yok; son FETCH_HEAD ${x.lastFetchAt || 'UNKNOWN'}` : `fetch başarısız${x.error ? ` (${x.error})` : ''}; son FETCH_HEAD ${x.lastFetchAt || 'UNKNOWN'}`}`;
+  const srcRows = Object.values(gh.sources || {}).map((x) => [`GitHub: ${x.source}`, x.state, `${x.attempted} çağrı, ${x.failed} başarısız${x.servedFromCache ? `; önbellekten ${x.servedFromCache} kayıt (as of ${x.cacheAsOf || 'UNKNOWN'}${x.cacheAgeHours !== null && x.cacheAgeHours !== undefined ? `, ${N(x.cacheAgeHours)} sa önce` : ''})` : ''}${x.note ? `; ${x.note}` : ''}`]);
+  L.push(table(['Kaynak', 'Durum', 'Ayrıntı'], [['v7/integration', fr.v7.state, refDet(fr.v7)], ['uasco/production-queue', fr.queue.state, refDet(fr.queue)], ['uasco/production-reports', fr.reports.state, refDet(fr.reports)], ['GitHub REST (genel = en kötü kaynak)', gh.state, `asOf ${gh.asOf}; ${gh.calls} çağrı; 304 ${gh.notModified}; kalan ${gh.rateRemaining ?? 'UNKNOWN'}${gh.error ? `; hata ${gh.error}` : ''}`], ...srcRows, ['Hazırlık ölçümü (C-RDY-1)', fr.readiness.state, `${fr.readiness.reason || '—'}${fr.readiness.sandbox ? `; kum havuzu ${fr.readiness.sandbox.isolation}` : ''}`], ['Önbellek', fr.cache, '']]), '');
   L.push(`- v0 536 uzlaşmamış iş: baselineClass dağılımı ${Object.entries(dq.unreconciled536.byBaselineClass).map(([k, v]) => `${k} ${v}`).join(', ')}; bugünkü durumları ${Object.entries(dq.unreconciled536.nowByStatus).filter(([, v]) => v).map(([k, v]) => `${k} ${v}`).join(', ')}.`);
   L.push(`- STATUS_ONLY_UNVERIFIED: ${dq.statusOnlyUnverified}. Aday bağlantı (yalnız gövde veya commit anması; yükseltme yapmaz): ${dq.candidateLinks.length} kalem. Hiçbir kaleme bağlanmayan merge edilmiş PR: ${dq.unattributedPrCount} (${list(dq.unattributedPrs.map((n) => `#${n}`), listCap)}).`);
   L.push(`- Reddedilen overlay kaydı: ${dq.rejectedOverlay.length}. UNASSIGNED payı: ${P(dq.unassigned.full)}. İncelenmemiş hedef adayı: ${dq.unreviewedTargetCandidates} (JSON targetCandidates).`, '');
