@@ -1061,6 +1061,13 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
         ["numeric separator", "assert.strictEqual(add(1_000, 1), 1001);"], ["exponent", "assert.strictEqual(add(1e3, 1), 1001);"], ["leading dot", "assert.strictEqual(add(.5, 1), 1.5);"], ["trailing dot", "assert.strictEqual(add(5., 1), 6);"],
         ["hex", "assert.strictEqual(add(0x10, 1), 17);"], ["plus sign", "assert.strictEqual(add(+3, 1), 4);"], ["BigInt", "assert.strictEqual(add(3n, 1n), 4n);"]] as Array<[string, string]>).map(([label, stmt]) =>
         [label, T({"test/add.test.js": H + A + stmt + "\n"}), "closed_world"] as [string, Partial<FakeScript>, string, string?]),
+      // inequality is not an equality assertion: only === and == qualify in the assert / assert.ok form (an extra statement next to three good ones would otherwise be graded as a fourth case)
+      ...([["assert(... !== ...)", "assert(add(2, 3) !== 5);"], ["assert(... != ...)", "assert(add(2, 3) != 5);"], ["assert.ok(... !== ...)", "assert.ok(add(2, 3) !== 5);"], ["assert.ok(... != ...)", "assert.ok(add(2, 3) != 5);"],
+        ["reversed !==", "assert(5 !== add(2, 3));"], ["reversed != in the ok form", "assert.ok(5 != add(2, 3));"]] as Array<[string, string]>).map(([label, stmt]) =>
+        [`${label} is not an equality assertion`, T({"test/add.test.js": H + A + stmt + "\n"}), "closed_world", "ASSERT_FORM_NOT_ALLOWED"] as [string, Partial<FakeScript>, string, string?]),
+      // V8 ends a // comment at CR, LF, U+2028 and U+2029: the assertion after the separator is REAL code (here a wrong sum), not part of the comment
+      ...([["U+2028", "\u2028"], ["U+2029", "\u2029"], ["a lone CR", "\r"]] as Array<[string, string]>).map(([label, sep]) =>
+        [`${label} ends a line comment, the next assertion runs and is wrong`, T({"test/add.test.js": H + A + "// note" + sep + "assert.strictEqual(add(1, 1), 3);\n"}), "asserted_values_correct"] as [string, Partial<FakeScript>, string, string?]),
       ["no commit at all", {implement: () => ({files: {"test/add.test.js": good}, noCommit: true})}, "commit_produced"]
     ];
     for (const [label, o, failing, detail] of cases) {
@@ -1104,6 +1111,9 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       ["mixed-sign operands (negative through ONE operand)", H + "assert.strictEqual(add(2, -3), -1);\nassert.strictEqual(add(4, 5), 9);\nassert.strictEqual(add(0, 7), 7);\n"],
       ["Prettier style: multi-line asserts with a trailing comma", H + "assert.strictEqual(\n  add(2, 3),\n  5,\n);\nassert.strictEqual(\n  add(-2, -3),\n  -5,\n  \"negative\",\n);\nassert.ok(\n  add(0, 7) === 7,\n);\n"],
       ["number boundaries: 9-digit operands, a 10-digit expected sum, 6 fraction digits", H + "assert.strictEqual(add(999999999, 1), 1000000000);\nassert.strictEqual(add(-999999999, -1), -1000000000);\nassert.strictEqual(add(0.000001, 1), 1.000001);\nassert.strictEqual(add(0, 0.000001), 0.000001);\n"],
+      ["zero only in the SECOND operand (add(7, 0))", H + "assert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(7, 0), 7);\n"],
+      ["calls that share a FIRST operand are still distinct calls (add(2, 3), add(2, -3), add(0, 7))", H + "assert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(2, -3), -1);\nassert.strictEqual(add(0, 7), 7);\n"],
+      ["calls that share a SECOND operand are still distinct calls (add(2, 3), add(-2, 3), add(0, 3))", H + "assert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, 3), 1);\nassert.strictEqual(add(0, 3), 3);\n"],
       ["decimal operands", H + "assert.strictEqual(add(2.5, 0.5), 3);\nassert.strictEqual(add(-1.5, -0.5), -2);\nassert.strictEqual(add(0, 0.25), 0.25);\n"],
       ["declarations in the other order (add first, assert second), both before every assertion", 'const add = require("../src/add");\nconst assert = require("node:assert");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(0, 7), 7);\n'],
       ["a declaration split over lines after const (V8 continues it, no ASI)", 'const\n  assert = require("node:assert");\nconst /* c */\n  add = require("../src/add");\nassert.strictEqual(add(2, 3), 5);\nassert.strictEqual(add(-2, -3), -5);\nassert.strictEqual(add(0, 7), 7);\n'],
@@ -1166,6 +1176,7 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       expect(toks("return /x/")).toEqual(["id:return", "re:/x/"]);
       expect(toks("1e-5 + 0x1F + .5 + 2.5")).toEqual(["num:1e-5", "p:+", "num:0x1F", "p:+", "num:.5", "p:+", "num:2.5"]);
       expect(toks("a === b => c ?? d")).toEqual(["id:a", "p:===", "id:b", "p:=>", "id:c", "p:??", "id:d"]);
+      for (const sep of ["\n", "\r", "\u2028", "\u2029"]) expect([JSON.stringify(sep), toks(`a // c${sep}b`)]).toEqual([JSON.stringify(sep), ["id:a", "id:b"]]); // every ECMAScript line terminator ends a // comment
       expect(toks("#!/usr/bin/env node\nx")).toEqual(["id:x"]);
       expect(toks("\"a\\\"b\" 'c\\'d'")).toEqual(['str:a\\"b', "str:c\\'d"]);
       expect(toks("é = 1")).toEqual(["id:é", "p:=", "num:1"]);
@@ -1233,6 +1244,7 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
         ["process.exit(0);", "STATEMENT_NOT_ALLOWED:process"], ["Object.is = () => true;", "STATEMENT_NOT_ALLOWED:Object"], ['eval("1");', "STATEMENT_NOT_ALLOWED:eval"], ["{ add = 1; }", "STATEMENT_NOT_ALLOWED:{"], ["(() => {})();", "STATEMENT_NOT_ALLOWED:("],
         ["assert(true);", "ASSERT_FORM_NOT_ALLOWED"], ["assert.throws(() => {});", "ASSERT_FORM_NOT_ALLOWED"], ["assert.strictEqual(add(1, 2), 3, `x${1}`);", "ASSERT_FORM_NOT_ALLOWED"], ["assert.strictEqual(add(1, 2), 3, 4);", "ASSERT_FORM_NOT_ALLOWED"],
         ["assert.strictEqual(add(1, 2), 3).x;", "STATEMENT_NOT_ALLOWED:assert"], ["assert.ok(add(1, 2) === 3, 4);", "ASSERT_FORM_NOT_ALLOWED"],
+        ["assert(add(1, 2) !== 3);", "ASSERT_FORM_NOT_ALLOWED"], ["assert(add(1, 2) != 3);", "ASSERT_FORM_NOT_ALLOWED"], ["assert.ok(add(1, 2) !== 3);", "ASSERT_FORM_NOT_ALLOWED"], ["assert.ok(3 != add(1, 2));", "ASSERT_FORM_NOT_ALLOWED"],
         ['assert.strictEqual(add(1, 2), 3, "msg");', null], ['assert.ok(add(1, 2) === 3, "m");', null], ["assert(add(1, 2) == 3);", null], [";;", null]] as const)
         expect([src, tamper(src)]).toEqual([src, code]);
       // the FIRST offender wins, in source order

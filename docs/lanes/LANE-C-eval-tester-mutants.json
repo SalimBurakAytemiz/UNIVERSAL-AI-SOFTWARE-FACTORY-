@@ -674,6 +674,62 @@
    "file": "core/competency/evaluation-fixtures.ts",
    "old": "(both `const`; they are the first two statements, so every assertion comes after both declarations)",
    "new": "(both `const`)"
+  },
+  {
+   "id": "N1",
+   "description": "`!==` is read as an equality operator in the assert / assert.ok comparison form (assert(add(2, 3) !== 5) would grade PASSED)",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "t.t === \"p\" && (t.v === \"===\" || t.v === \"==\")",
+   "new": "t.t === \"p\" && (t.v === \"===\" || t.v === \"==\" || t.v === \"!==\")"
+  },
+  {
+   "id": "N1b",
+   "description": "`!=` is read as an equality operator in the assert / assert.ok comparison form",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "t.t === \"p\" && (t.v === \"===\" || t.v === \"==\")",
+   "new": "t.t === \"p\" && (t.v === \"===\" || t.v === \"==\" || t.v === \"!=\")"
+  },
+  {
+   "id": "N3",
+   "description": "U+2028 does not end a // comment (the assertion after it is swallowed although V8 runs it)",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "const LINE_END = /[\\n\\r\\u2028\\u2029]/;",
+   "new": "const LINE_END = /[\\n\\r\\u2029]/;"
+  },
+  {
+   "id": "N3b",
+   "description": "U+2029 does not end a // comment",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "const LINE_END = /[\\n\\r\\u2028\\u2029]/;",
+   "new": "const LINE_END = /[\\n\\r\\u2028]/;"
+  },
+  {
+   "id": "N3c",
+   "description": "a lone CR does not end a // comment",
+   "file": "core/competency/static-test-analysis.ts",
+   "old": "const LINE_END = /[\\n\\r\\u2028\\u2029]/;",
+   "new": "const LINE_END = /[\\n\\u2028\\u2029]/;"
+  },
+  {
+   "id": "N2",
+   "description": "zero is looked for in the first operand only (a file with add(7, 0) is refused: false FAIL)",
+   "file": "core/competency/evaluation-pipeline.ts",
+   "old": "zero = cases.some(k => k.a === 0 || k.b === 0)",
+   "new": "zero = cases.some(k => k.a === 0)"
+  },
+  {
+   "id": "N8",
+   "description": "distinct calls are counted on the first operand only (add(2, 3) / add(2, -3) / add(0, 7) is refused: false FAIL)",
+   "file": "core/competency/evaluation-pipeline.ts",
+   "old": "new Set(cases.map(k => `${k.a},${k.b}`)).size",
+   "new": "new Set(cases.map(k => `${k.a}`)).size"
+  },
+  {
+   "id": "N8b",
+   "description": "distinct calls are counted on the second operand only",
+   "file": "core/competency/evaluation-pipeline.ts",
+   "old": "new Set(cases.map(k => `${k.a},${k.b}`)).size",
+   "new": "new Set(cases.map(k => `${k.b}`)).size"
   }
  ]
 }
