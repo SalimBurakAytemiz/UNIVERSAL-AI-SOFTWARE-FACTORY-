@@ -432,6 +432,16 @@
       "ref": "wf_458d1f0a-f68 (spec-honesty + tests-protected lenses; MEDIUM confirmed by skeptic: X1 certTrue=certified||tested and X6 Date.now survive 13/13; 8 LOW incl. RUNNING measured-0 for non-ABSENT journal, measured:true on empty denominator, X2/X3/X4 survivors; protected commit 1dd7597 verified)",
       "policy": "TEP-1",
       "at": "2026-10-26T20:13:25.550Z"
+    },
+    {
+      "pr": 258,
+      "sha": "559f33eb2c65f81b771baf352b25a6378c3c2905",
+      "kind": "delta",
+      "base": "689f49af2a578411712f5a06dae2b973c926febd",
+      "verdict": "NO_BLOCKERS",
+      "ref": "wf_d7a25fc3-1be (9 sites follow sync-proof+dwell+bounded-until; 0 expects removed; X1/X2/X4 mutants killed by block; CI failure reproduced at 60ms on old, 100/100 on new; run-card LOW closed)",
+      "policy": "TEP-1",
+      "at": "2026-10-26T20:19:03.528Z"
     }
   ],
   "tests": [],
