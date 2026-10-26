@@ -947,7 +947,7 @@ describe("LANE-A A-FLOW-5 analysis step — pure core", () => {
     expect(c.mapAnalysisStep({status: "REJECTED", kind: "Plan", reason: "workPackages[0].id duplicate"})).toEqual({status: "REJECTED", kind: "Plan", reason: "workPackages[0].id duplicate"});
     expect(c.mapAnalysisStep({status: "BUILDER_FAILED", kind: "Architecture", code: "PREDEV_DRIVER_BUILDER_NOT_CONFIGURED"})).toEqual({status: "BUILDER_FAILED", kind: "Architecture", code: "PREDEV_DRIVER_BUILDER_NOT_CONFIGURED"});
     expect(c.mapAnalysisStep(complete({approved: [...KINDS].reverse()}))).toEqual({status: "COMPLETE", approved: KINDS}); // canonical order
-    expect(c.mapAnalysisStep(blocked())).toEqual({status: "BLOCKED", blocker: "CLAUDE_CLI_NOT_FOUND", blockers: ["CLAUDE_CLI_NOT_FOUND", "implementer:CLAUDE_PROFILE_LOGIN_REQUIRED"]}); // free text founderAction is never carried
+    expect(c.mapAnalysisStep(blocked())).toEqual({status: "BLOCKED", blocker: "CLAUDE_CLI_NOT_FOUND", blockers: ["CLAUDE_CLI_NOT_FOUND", "implementer:CLAUDE_PROFILE_LOGIN_REQUIRED"], phaseStuck: false, target: null, founderAction: null}); // free text founderAction is never carried for an ordinary blocker
     expect(c.mapAnalysisStep(blocked({blocker: "ANALYSIS_NOT_READY", blockers: []})).blockers).toEqual([]);
     const bad: any[] = [null, [], "COMPLETE", {}, {status: "DONE"}, {status: "complete"},
       draft({kind: "UxSpec"}), draft({kind: undefined}), draft({artifactId: "pda_zz"}), draft({artifactId: [A1]}), draft({version: 0}), draft({version: 1.5}), draft({version: "1"}), draft({roleId: "bad role"}), draft({roleId: undefined}), draft({next: "NOTHING"}), draft({next: undefined}),
@@ -1239,10 +1239,100 @@ describe("LANE-A A-FLOW-5 analysis step — view (Journey)", () => {
   it("is present in English and Turkish with the same keys; no analysis text is a raw key", async () => {
     const en = await load("locales", "en.js"), tr = await load("locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
     const keys = Object.keys(E).filter(k => k.startsWith("analysis."));
-    expect(keys.length).toBe(50);
+    expect(keys.length).toBe(57);
     for (const h of ["CLAUDE_CLI_NOT_FOUND", "CLAUDE_CLI_SHIM_UNSUPPORTED", "PROVIDER_PROVENANCE_NOT_READY", "CLAUDE_PACKAGE_PROVENANCE_REQUIRED", "CLAUDE_LAUNCHER_PROVENANCE_CHANGED", "CLAUDE_PROFILE_LOGIN_REQUIRED", "CLAUDE_PROFILE_LOGIN_EXPIRED", "CLAUDE_PROFILE_REFUSED", "PROVENANCE_MISSING"]) expect(E[`analysis.blocker.${h}`], h).toBeTruthy();
     for (const k of keys) { expect(T[k], k).toBeTruthy(); expect(E[k], k).not.toBe(k); }
     const b = await open({status: 200, body: {status: "COMPLETE", approved: KINDS}}); const r = await press(b, "analysis-step-submit");
     expect(block(r).textContent).not.toMatch(/analysis\.[a-z]/);
   });
 });
+
+describe("LANE-A A-ANALYSIS-STUCK-1: an approved artefact whose phase did not advance (ANALYSIS_PHASE_NOT_ADVANCED)", () => {
+  const STEP = `/v1/missions/${MSN}/analysis/step`, A1 = "pda_" + "ab".repeat(12), A2 = "pda_" + "cd".repeat(12);
+  const APPROVE = (id: string) => `/v1/missions/${MSN}/predev/artifacts/${id}/approve`;
+  const stuck = (over: any = {}) => ({status: 200, body: {status: "BLOCKED", blocker: "ANALYSIS_PHASE_NOT_ADVANCED", blockers: ["ANALYSIS_PHASE_NOT_ADVANCED"], founderAction: "Approve the artefact again to resume (server prose, never parsed).", kind: "Requirements", artifactId: A1, readiness: {ready: false}, ...over}});
+  async function open(stepAnswer: any, approveAnswer: any = {status: 200, body: {...predevBody({phase: "PLANNING"}), replayed: false}}) {
+    const served = serve({[`/v1/predev/${MSN}`]: DRAFT_PREDEV()}), approves: string[] = [];
+    const base = await mkDecisionCtx(served, (p: string) => {
+      if (p === STEP) return stepAnswer;
+      if (p.endsWith("/approve")) { approves.push(p); return typeof approveAnswer === "function" ? approveAnswer() : approveAnswer; }
+      return {status: 404, body: {}};
+    });
+    const an = await load("views", "analysis-step.js"); an.resetAnalysis(null); for (const f of ["analysis-step", "analysis-plan", "analysis-reapprove"]) { delete base.forms.drafts.status[f]; base.forms.drafts.busy[f] = false; }
+    return {...base, an, approves, root: await renderJourney(base.ctx)};
+  }
+  const press = async (b: any, id: string) => { fire(byId(b.root, id)!, "click"); await new Promise(r => setTimeout(r, 0)); b.root = await renderJourney(b.ctx); return b.root; };
+  const text = (n: N) => n.textContent, stuckOf = (root: N) => allData(byId(root, "analysis-step")!, "analysisStuck");
+
+  it("core: kind/artifactId come only from the structured fields and only for this blocker; a missing or malformed field leaves no target (the prose is never parsed)", async () => {
+    const c = await load("analysis-core.js"), m = (over: any) => c.mapAnalysisStep({status: "BLOCKED", blocker: "ANALYSIS_PHASE_NOT_ADVANCED", blockers: ["ANALYSIS_PHASE_NOT_ADVANCED"], founderAction: "Approve pda_" + "ee".repeat(12) + " of kind Plan again", ...over});
+    expect(m({kind: "Requirements", artifactId: A1})).toMatchObject({phaseStuck: true, target: {kind: "Requirements", artifactId: A1}, founderAction: null});
+    for (const bad of [{kind: undefined}, {artifactId: undefined}, {kind: "Nope"}, {artifactId: "pda_zz"}, {artifactId: 5}]) {
+      const r = m({kind: "Requirements", artifactId: A1, ...bad});
+      expect(r, JSON.stringify(bad)).toMatchObject({phaseStuck: true, target: null}); expect(r.founderAction).toContain("Approve pda_"); // text only; the id in the prose is NOT adopted
+    }
+    const other = c.mapAnalysisStep({status: "BLOCKED", blocker: "CLAUDE_CLI_NOT_FOUND", blockers: ["CLAUDE_CLI_NOT_FOUND"], kind: "Requirements", artifactId: A1, founderAction: "x"});
+    expect(other).toMatchObject({phaseStuck: false, target: null, founderAction: null}); // kind/artifactId on any other blocker are ignored
+    expect(c.buildReapproveRequest({missionId: MSN, step: m({kind: "Requirements", artifactId: A1}), evidenceText: "ev-1 ev-2"})).toEqual({ok: true, path: `/v1/missions/${MSN}/predev/artifacts/${A1}/approve`, body: {evidenceRefs: ["ev-1", "ev-2"]}, errors: {}});
+    expect(c.buildReapproveRequest({missionId: MSN, step: m({}), evidenceText: "ev-1"})).toMatchObject({ok: false, path: null, errors: {artifact: "analysis.err.noTarget"}});
+    expect(c.buildReapproveRequest({missionId: MSN, step: m({kind: "Requirements", artifactId: A1}), evidenceText: ""})).toMatchObject({ok: false, errors: {evidenceRefs: "predev.err.evidenceRequired"}});
+    expect(c.buildReapproveRequest({missionId: MSN, step: null, evidenceText: "ev"}).ok).toBe(false);
+  });
+
+  it("view: the stuck artefact is shown as a Founder action (not FAILED / BUILDER_FAILED) with the structured target; Re-approve needs the Founder's own evidence and posts exactly to that artefact's approve path", async () => {
+    const b = await open(stuck());
+    const after = await press(b, "analysis-step-submit");
+    const blk = byData(byId(after, "analysis-step")!, "analysisStatus", "BLOCKED")!;
+    expect(["BUILDER_FAILED", "REJECTED"].some(s => byData(byId(after, "analysis-step")!, "analysisStatus", s))).toBe(false);
+    const box = stuckOf(after)[0]; expect(box.dataset.analysisStuck).toBe("Requirements"); expect(box.dataset.artifact).toBe(A1);
+    expect(text(box)).toContain("The Requirements artefact is approved but the phase did not advance. Approve it again to resume"); expect(text(blk)).toContain("approved, but the pre-development phase did not move on");
+    expect(text(blk)).not.toContain("(not recognised)"); expect(b.posts.map((p: any) => p.path)).toEqual([STEP]);
+    // no evidence -> nothing is posted
+    await press(b, "analysis-reapprove-submit");
+    expect(b.approves).toEqual([]); expect(status(b.root, "analysis-reapprove").dataset.result).toBe("invalid");
+    setVal(b.root, "analysis-reapprove-evidence", "evidence-1"); await press(b, "analysis-reapprove-submit");
+    expect(b.approves).toEqual([APPROVE(A1)]); expect(b.posts[b.posts.length - 1]).toEqual({path: APPROVE(A1), body: {evidenceRefs: ["evidence-1"]}});
+    expect(b.posts.filter((p: any) => p.path === STEP)).toHaveLength(1); // no step (no paid call) is started by the button
+    expect(stuckOf(b.root)).toHaveLength(0); // the stale stuck block is gone
+    const done = status(b.root, "analysis-reapprove"); expect(done.dataset.result).toBe("ok"); expect(text(done)).toContain("Approved again"); expect(text(done)).toContain("Nothing was generated");
+  });
+
+  it("view: a failed re-approve keeps the stuck block and its button and says the server's real reason; nothing is claimed", async () => {
+    for (const [ans, expectText] of [[{status: 409, body: {error: "PREDEV_GATE_REFUSED", reason: "PREDEV_INDEPENDENT_APPROVER_REQUIRED"}}, "PREDEV_INDEPENDENT_APPROVER_REQUIRED"], [{status: 404, body: {}}, "not enabled"], [{status: 500, body: {}}, ""]] as const) {
+      const b = await open(stuck(), ans); await press(b, "analysis-step-submit");
+      setVal(b.root, "analysis-reapprove-evidence", "ev"); await press(b, "analysis-reapprove-submit");
+      expect(stuckOf(b.root)).toHaveLength(1); expect(byId(b.root, "analysis-reapprove-submit")).toBeDefined();
+      const st = status(b.root, "analysis-reapprove"); expect(st.dataset.result).toBe("error"); expect(text(st)).not.toContain("Approved again");
+      if (expectText) expect(text(st).toLowerCase()).toContain(expectText.toLowerCase());
+    }
+  });
+
+  it("view: without a structured kind or artifactId there is no button; the founderAction is shown as text only", async () => {
+    for (const over of [{kind: undefined}, {artifactId: undefined}, {artifactId: "pda_bad"}]) {
+      const b = await open(stuck(over)); const r = await press(b, "analysis-step-submit");
+      expect(byId(r, "analysis-reapprove-submit")).toBeUndefined(); expect(byId(r, "analysis-reapprove-evidence")).toBeUndefined();
+      expect(stuckOf(r)[0].dataset.analysisStuck).toBe("NO_TARGET"); expect(text(byData(byId(r, "analysis-step")!, "analysisFounderAction")!)).toContain("Approve the artefact again to resume");
+      expect(b.approves).toEqual([]);
+    }
+  });
+
+  it("view: the button posts the CURRENT answer's artefact (a second step with another artefact replaces the first), and another mission never inherits it", async () => {
+    let ans = stuck(); // the step answer switches between two calls
+    const served = serve({[`/v1/predev/${MSN}`]: DRAFT_PREDEV()}), approves: string[] = [];
+    const base = await mkDecisionCtx(served, (p: string) => { if (p === STEP) return ans; if (p.endsWith("/approve")) { approves.push(p); return {status: 200, body: {...predevBody({phase: "PLANNING"}), replayed: false}}; } return {status: 404, body: {}}; });
+    const an = await load("views", "analysis-step.js"); an.resetAnalysis(null);
+    const h = {...base, root: await renderJourney(base.ctx)} as any;
+    await press(h, "analysis-step-submit"); ans = stuck({artifactId: A2, kind: "Plan"}); await press(h, "analysis-step-submit");
+    expect(stuckOf(h.root)[0].dataset.artifact).toBe(A2);
+    setVal(h.root, "analysis-reapprove-evidence", "ev"); await press(h, "analysis-reapprove-submit");
+    expect(approves).toEqual([APPROVE(A2)]);
+    an.resetAnalysis(MSN2); expect(an.analysisUi.step).toBeNull(); expect(an.analysisUi.evidence).toBe("");
+  });
+
+  it("en + tr text exists for every new key and a raw key is never shown", async () => {
+    const en = await load("locales", "en.js"), tr = await load("locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
+    for (const k of ["analysis.blocker.ANALYSIS_PHASE_NOT_ADVANCED", "analysis.stuck.title", "analysis.stuck.head", "analysis.stuck.noTarget", "analysis.reapprove.button", "analysis.reapprove.done", "analysis.err.noTarget"]) { expect(E[k], k).toBeTruthy(); expect(T[k], k).toBeTruthy(); expect(T[k]).not.toBe(E[k]); }
+    const b = await open(stuck()); const r = await press(b, "analysis-step-submit"); expect(text(byId(r, "analysis-step")!)).not.toMatch(/analysis\.[a-z]+\./);
+  });
+});
+
