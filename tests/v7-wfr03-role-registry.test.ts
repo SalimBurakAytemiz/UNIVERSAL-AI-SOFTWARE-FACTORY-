@@ -1841,7 +1841,7 @@ describe("A-TEST-DIAG-1: a failing git step in the evaluation pipeline is diagno
     expect(at).not.toContain("ss@"); expect(at).not.toContain("alice"); expect(at).toContain("https://[REDACTED]@host/");
     const glued = await reasonFor("fatal: _https://alice:pw@host/ denied"); // no word boundary before the scheme
     expect(glued).not.toContain("alice"); expect(glued).toContain("[REDACTED]@host/");
-    const pem = await reasonFor("fatal: " + "-".repeat(5) + "BEGIN RSA\nPRIVATE KEY" + "-".repeat(5)); // collapse first: a pattern split by a newline still matches
+    const pem = await reasonFor("fatal: " + "-".repeat(5) + "BEGIN RSA\nPRIVATE KEY" + "-".repeat(5), DEV, "-B"); // setup path (the seed path is redacted a second time by the catch); collapse first: a pattern split by a newline still matches
     expect(pem).toContain("[REDACTED:PRIVATE_KEY]"); expect(pem).not.toContain("BEGIN RSA");
     // the same scrub on a WORKSPACE_SETUP_FAILED path (developer checkout -B)
     const ws = await reasonFor(`error: https://alice:${PASS}@git.example.com/r.git refused`, DEV, "-B");
