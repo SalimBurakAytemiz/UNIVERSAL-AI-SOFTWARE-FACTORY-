@@ -229,7 +229,7 @@ describe("C-PAR-1 PAR-04: after an engine crash the implementer child must not k
       fs.mkdirSync(path.dirname(file), {recursive: true});
       fs.writeFileSync(file, JSON.stringify({leaseId: "lse_gone", engineId: "engine_gone", hostname: os.hostname(), pid: 1, childPgid: null, childStart: null, step: "IMPLEMENT", at: new Date().toISOString(), ...patch}));
       await sleep(450); // lease süresi doldu
-      const rep = await c.runner({leaseTtlMs: 300, executors: c.base}).tick();
+      const rep = await c.runner({executors: c.base}).tick(); // generous TTL: only the first runner's lease (300 ms) must expire; the takeover runner runs a whole pipeline and must not fence itself under CPU load
       expect(rep.recovered).toEqual([r.runId]);
       const run = c.store.engineGetRun(r.runId)!;
       return {run, note: run.evidence.find(e => e.kind === "RECOVERY")?.note ?? ""};

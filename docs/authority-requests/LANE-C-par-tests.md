@@ -14,7 +14,7 @@ Add `"tests/v7-par-runner.test.ts"` to the end of the `command` array of one exi
 "command": ["node", "node_modules/vitest/vitest.mjs", "run", "<existing files of the chosen shard>", "tests/v7-par-runner.test.ts"]
 ```
 
-`tests/ci-validation-shards.test.ts` (if it pins the shard file lists) needs the same one-line addition.
+The gate that pins the lists is `tests/pkg-vs-validation-sharding.test.ts` ("runs every tests/*.test.ts file in exactly one vitest step" and "lists every tests/v7-*.test.ts in the logical tests list"). It is red on this branch until `tests/v7-par-runner.test.ts` is in exactly one shard's `command` as the exact path; that is the only red expected, and it is the registration this request asks for. `tests/v7-par-engine.mts` is not a `.test.ts` file and needs no entry.
 
 ## What the file proves (each case FAILS on `fe08022`, PASSES on the fix; both runs recorded in the PR)
 1. PAR-03: a slow git clone in run A (3 s, TTL 2 s) no longer fences run B (`fenced = []`, B implementer calls 1, aborted 0).
