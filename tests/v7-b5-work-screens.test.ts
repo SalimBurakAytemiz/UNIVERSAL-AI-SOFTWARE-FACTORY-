@@ -1622,7 +1622,9 @@ describe("COORD run expert selection", () => {
 describe("COORD first-delivery Desktop allow-list (main.mjs)", () => {
   const H = (c: string) => c.repeat(24);
   const ITK = `itk_${H("a")}`, TSK = `tsk_${H("b")}`, MSN = `msn_${H("c")}`, PRJ = `prj_${H("d")}`;
-  const GETS = ["/v1/intakes", `/v1/intakes/${ITK}`, `/v1/missions/${MSN}/tasks`, `/v1/projects/${PRJ}/flow`, `/v1/tasks/${TSK}`, `/v1/tasks/${TSK}/runs`];
+  const RUNID = `run_${H("e")}`;
+  // Batch 4a: the run-scoped task list and project readiness are admitted (exact shapes, GET only).
+  const GETS = ["/v1/intakes", `/v1/intakes/${ITK}`, `/v1/missions/${MSN}/tasks`, `/v1/projects/${PRJ}/flow`, `/v1/tasks/${TSK}`, `/v1/tasks/${TSK}/runs`, `/v1/work-runs/${RUNID}/tasks`, `/v1/projects/${PRJ}/readiness`];
   const POSTS = ["/v1/intakes", `/v1/missions/${MSN}/plan`, `/v1/tasks/${TSK}/transition`, `/v1/tasks/${TSK}/runs`];
   const nearMisses = (p: string) => [p + "/", p + "?x=1", p + "#", p.toUpperCase(), p.replace(/[0-9a-f]{24}/, H("a").slice(0, 23)), p.replace(/[0-9a-f]{24}/, H("a") + "a"),
     p.replace(/[0-9a-f]{24}/, H("A")), p.replace("/v1/", "/v1//"), p.replace("/v1/", "/v2/"), p + "/x", p.replace(/\//g, "%2F"), " " + p].filter(m => m !== p);
@@ -1638,8 +1640,16 @@ describe("COORD first-delivery Desktop allow-list (main.mjs)", () => {
     for (const p of [`/v1/intakes/${ITK}`, `/v1/missions/${MSN}/tasks`, `/v1/projects/${PRJ}/flow`, `/v1/tasks/${TSK}`]) expect(post(p), `POST ${p}`).toBe(false);
     for (const p of [`/v1/missions/${MSN}/plan`, `/v1/tasks/${TSK}/transition`]) expect(get(p), `GET ${p}`).toBe(false);
     for (const p of [`/v1/intakes/itk_${H("a")}/x`, `/v1/intakes/prj_${H("a")}`, `/v1/tasks/msn_${H("a")}`, `/v1/tasks/${TSK}/transition/x`, `/v1/missions/${MSN}/tasks/${TSK}`]) { expect(get(p), p).toBe(false); expect(post(p), p).toBe(false); }
-    // Task-run link: only the task-scoped path; the run-scoped reverse lookup is deliberately not admitted.
-    for (const p of [`/v1/work-runs/run_${H("e")}/tasks`, `/v1/tasks/tsk_x/runs`, `/v1/tasks/${TSK}/runs/run_${H("e")}`, `/v1/tasks/${TSK}/run`]) { expect(get(p), p).toBe(false); expect(post(p), p).toBe(false); }
+    // Task-run link: the run-scoped list is admitted for GET only (batch 4a); never as POST, and no other reverse shapes.
+    expect(post(`/v1/work-runs/${RUNID}/tasks`)).toBe(false);
+    for (const p of [`/v1/work-runs/${RUNID}/tasks/${TSK}`, `/v1/work-runs/run_${H("e")}x/tasks`, `/v1/projects/${PRJ}/readiness/x`]) { expect(get(p), p).toBe(false); expect(post(p), p).toBe(false); }
+    for (const p of [`/v1/tasks/tsk_x/runs`, `/v1/tasks/${TSK}/runs/run_${H("e")}`, `/v1/tasks/${TSK}/run`]) { expect(get(p), p).toBe(false); expect(post(p), p).toBe(false); }
+  });
+  it("run-summaries list: bare path and the five known query keys only, with typed values (batch 4a)", () => {
+    const get = loadGet(), {desktopPostPathAllowed: post} = loadPost();
+    for (const p of ["/v1/run-summaries", `/v1/run-summaries?projectId=${PRJ}`, `/v1/run-summaries?projectId=${PRJ}&status=RUNNING&limit=10`, `/v1/run-summaries?missionId=${MSN}`]) expect(get(p), p).toBe(true);
+    for (const p of ["/v1/run-summaries/", "/v1/run-summaries?x=1", "/v1/run-summaries?status=running", "/v1/run-summaries?projectId=prj_x", "/v1/run-summaries?limit=0", `/v1/run-summaries?projectId=${PRJ}&projectId=${PRJ}`, "/v1/run-summaries/run_x", "/v1//run-summaries"]) expect(get(p), p).toBe(false);
+    expect(post("/v1/run-summaries")).toBe(false);
   });
   it("server.ts registers the task-run link routes once, right after the task routes", () => {
     const server = fs.readFileSync(path.join(root, "apps", "control-api", "src", "server.ts"), "utf8");

@@ -36,7 +36,7 @@ export function parseArgs(argv: string[]): ParsedArgs | {error: string} {
 
 const truthy = (v: string | undefined) => v !== undefined && v !== "" && v !== "0" && v.toLowerCase() !== "false";
 // //TR: Gerçek çalıştırma kapıları (hepsi salt okunur kontrol). ok=false => neden kodu; hiçbir süreç başlatılmaz.
-// //TR: Kontrol kökü sunucuyla AYNI kuralla çözülür (apps/control-api/src/server.ts: controlRoot ?? UASCO_CONTROL_ROOT ?? repoRoot): önce --control-root, sonra UASCO_CONTROL_ROOT, sonra depo kökü. Boş değer "yok" sayılır.
+// //TR: Kontrol kökü sunucunun SIRASIYLA çözülür (apps/control-api/src/server.ts: controlRoot ?? UASCO_CONTROL_ROOT ?? repoRoot): önce --control-root, sonra UASCO_CONTROL_ROOT, sonra depo kökü; iki bilinçli fark: boş değer burada "yok" sayılır (sunucuda çalışma dizini olurdu) ve göreli değer reddedilir (sunucu çalışma dizinine göre çözer).
 export function resolveControlRoot(flag: string | null, env: NodeJS.ProcessEnv, repoRoot: string): string {
   if (flag !== null && flag !== "") return flag;
   const fromEnv = env.UASCO_CONTROL_ROOT;
@@ -72,7 +72,7 @@ export async function runCli(argv: string[], o: CliOptions): Promise<number> {
   const args = parseArgs(argv);
   if ("error" in args) { o.err(JSON.stringify({status: "USAGE", error: args.error, usage: USAGE}) + "\n"); return 2; }
   const controlRoot = resolveControlRoot(args.controlRoot, o.env, o.repoRoot), stagingRoot = path.join(args.dataDir, "evaluations", "staging");
-  // //TR: Ortam değişkeninden gelen kontrol kökü de bayrak gibi MUTLAK olmalı: göreli yol broker'da çalışma dizinine göre çözülür ve dry run'ın "engel yok" demesine rağmen --execute her zaman başarısız olurdu.
+  // //TR: Ortam değişkeninden gelen kontrol kökü de bayrak gibi MUTLAK olmalı: göreli yol, developer/tester rotasında broker'da çalışma dizinine göre çözülür ve dry run'ın "engel yok" demesine rağmen o rotada --execute her zaman başarısız olurdu (reviewer ve pre-dev rotaları kökü süreç içinde çözer ve çalışırdı; belirsizlik yine de reddedilir).
   if (!path.isAbsolute(controlRoot)) { o.err(JSON.stringify({status: "USAGE", error: "CONTROL_ROOT_MUST_BE_ABSOLUTE", usage: USAGE}) + "\n"); return 2; }
   const plan = planFor(args.role, args.evaluation);
   if ("refused" in plan) { o.err(JSON.stringify({status: "REFUSED", reason: plan.refused}) + "\n"); return 2; }

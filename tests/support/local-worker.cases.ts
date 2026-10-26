@@ -31,7 +31,8 @@ export function registerLocalWorkerCases() {
     it("the plan lists every canonical validation step once, in order; heavy steps go local with a GitHub-hosted fallback; required checks unchanged", () => {
       const plan = C.validatePlan(PLAN, VALIDATION);
       expect(plan.steps.map((s: any) => s.id)).toEqual(VALIDATION.steps.map((s: any) => s.id));
-      expect(C.localSteps(plan).length).toBe(15);
+      // //TR: COORD-PROTECTED-BS1D-SPLIT: tests-bs1-g (d'den ayrılan FRF adımı, ölçülen/türetilen >= 60 sn) yerelde koşan ağır adımlara eklenir; 15 -> 16.
+      expect(C.localSteps(plan).length).toBe(16);
       expect(plan.steps.filter((s: any) => s.windows === "LOCAL_PRIMARY").every((s: any) => s.measuredWindowsSec >= 60)).toBe(true);
       expect(plan.steps.every((s: any) => s.fallback === C.FALLBACK)).toBe(true);
       expect([plan.phase, plan.replacesRequiredCheck, plan.requiredChecksUnchanged]).toEqual(["SHADOW", false, [...C.REQUIRED_CHECK_CONTEXTS]]);
