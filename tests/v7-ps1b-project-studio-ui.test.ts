@@ -1773,7 +1773,8 @@ describe("LANE-A project intake from an idea (fake DOM)", () => {
     expect(calls.post.length).toBe(1);
     expect(calls.post[0].path).toBe("/v1/intakes");
     expect(calls.post[0].body).toMatchObject({idea: IDEA, title: "Kitap Kulübü"});
-    expect(Object.keys(calls.post[0].body).sort()).toEqual(["idea", "idempotencyKey", "title"]);
+    expect(Object.keys(calls.post[0].body).sort()).toEqual(["idea", "idempotencyKey", "template", "title"]); // web-node is the visible default of the template select
+    expect(calls.post[0].body.template).toBe("web-node");
     expect(forms.drafts.status.intake.ok).toBe(true);
     const root2 = mount(doc, await projectsView.render(ctx));
     const res = byId(root2, "intake-result")!;
@@ -1807,6 +1808,142 @@ describe("LANE-A project intake from an idea (fake DOM)", () => {
     byId(odd.root, "intake-form")!.fire("submit"); await tick();
     expect(forms.drafts.status.intake.ok).toBe(true); // sunucu 201 dedi; kayıt bozuk -> kısayol/kaynak etiketi uydurulmaz
     expect(byId(mount(odd.doc, await projectsView.render(odd.ctx)), "intake-result")).toBeNull();
+  });
+  describe("LANE-A A-FLOW-2: intake template and run readiness", () => {
+    const RD = `/v1/projects/${PID}/readiness`;
+    const chk = (id: string, state = "OK", blocking = true, reason: string | null = null, nextAction: string | null = null) => ({id, state, blocking, reason, nextAction});
+    const okChecks = () => [chk("MISSION"), chk("RISK"), chk("REPOSITORY"), chk("TEST_COMMAND", "OK", false), chk("PLAN", "OK", false)];
+    const readiness = (extra: any = {}, checks: any[] = okChecks()) => ({readiness: {projectId: PID, missionId: MSN, ready: true, verifiable: true, checks, ...extra}});
+    const blockedChecks = () => [chk("MISSION"), chk("RISK"), chk("REPOSITORY", "BLOCKED", true, "REPOSITORY_NOT_CONFIGURED", "CONFIGURE_REPOSITORY"), chk("TEST_COMMAND", "BLOCKED", false, "TEST_COMMAND_MISSING", "SET_TEST_COMMAND"), chk("PLAN", "BLOCKED", false, "NO_PLANNED_TASKS", "PLAN_MISSION")];
+    const submitted = async (opts: {rd?: any; lang?: string; pick?: string}) => {
+      const c = await mkCtx({lang: opts.lang ?? "en", get: projectsGet({"/v1/intakes": {intakes: []}, ...(opts.rd === undefined ? {} : {[RD]: opts.rd})}), post: (_p: string, b: any) => ({status: 201, body: {intake: rec({...(b.template === undefined ? {} : {template: b.template})})}})} as any);
+      (await load(rend, "views", "intake.js")).resetIntakeAll();
+      const o = {...c, root: mount(c.doc, await projectsView.render(c.ctx))};
+      type(o.root, "intake-idea", IDEA);
+      if (opts.pick !== undefined) { byId(o.root, "intake-template")!.value = opts.pick; byId(o.root, "intake-template")!.fire("change"); }
+      byId(o.root, "intake-form")!.fire("submit"); await tick();
+      return {...o, shown: mount(o.doc, await projectsView.render(o.ctx))};
+    };
+    it("sends template only when chosen and validates it against the server enum (trimmed, no repository field exists)", async () => {
+      const c = await load(rend, "intake-core.js");
+      expect(c.INTAKE_TEMPLATES).toEqual(["web-node", "node-lib", "empty"]);
+      for (const t of ["web-node", "node-lib", "empty"]) expect(c.buildIntakeRequest({idea: IDEA, template: ` ${t} `}).body).toEqual({idea: IDEA, template: t});
+      expect(c.buildIntakeRequest({idea: IDEA, template: ""}).body).toEqual({idea: IDEA});
+      expect(c.buildIntakeRequest({idea: IDEA}).body).toEqual({idea: IDEA});
+      for (const bad of ["Web-Node", "web", "x", "web-node,empty", "__proto__"]) expect(c.buildIntakeRequest({idea: IDEA, template: bad}), bad).toMatchObject({ok: false, body: null, errors: {template: "intake.err.template"}});
+      expect(Object.keys(c.buildIntakeRequest({idea: IDEA, template: "empty", riskLevel: "R1"}, {key: "k1"}).body)).toEqual(["idea", "riskLevel", "template", "idempotencyKey"]);
+    });
+    it("carries the server-echoed template; a missing template is null and an unknown one makes the record invalid", async () => {
+      const c = await load(rend, "intake-core.js");
+      expect(c.mapIntake(rec()).template).toBeNull();
+      for (const t of ["web-node", "node-lib", "empty"]) expect(c.mapIntake(rec({template: t})).template).toBe(t);
+      for (const bad of ["cobol", "", null, 5, ["web-node"], "WEB-NODE"]) expect(c.mapIntake(rec({template: bad})), JSON.stringify(bad)).toBeNull();
+      expect(c.mapIntakes({intakes: [rec({template: "x"})]}).state).toBe("ERROR");
+    });
+    it("shows a template select that defaults to web-node, offers every template plus an explicit none, and posts the chosen value", async () => {
+      const f = await open({});
+      const sel = byId(f.root, "intake-template")!;
+      expect(sel).not.toBeNull(); expect(sel.value).toBe("web-node");
+      expect(all(sel).filter(n => n.tagName === "OPTION").map(n => n.attrs.get("value"))).toEqual(["web-node", "node-lib", "empty", ""]);
+      expect(text(sel)).toContain("Web app (Node)"); expect(text(sel)).toContain("No template");
+      for (const [pick, want] of [["node-lib", "node-lib"], ["empty", "empty"], ["", undefined], [undefined, "web-node"]] as const) {
+        forms.resetAllForms();
+        const o = await submitted({pick: pick as any});
+        expect(o.calls.post.length).toBe(1);
+        expect(o.calls.post[0].body.template, String(pick)).toBe(want);
+        if (want === undefined) expect(Object.hasOwn(o.calls.post[0].body, "template")).toBe(false);
+      }
+    });
+    it("the result card names the template the server recorded, or says no repository was created", async () => {
+      forms.resetAllForms();
+      const a = await submitted({pick: "node-lib"});
+      const card = byId(a.shown, "intake-result")!;
+      expect(all(card).find(n => n.dataset.intakeTemplate === "node-lib")).toBeTruthy(); expect(text(card)).toContain("Library (Node)");
+      forms.resetAllForms();
+      const b = await submitted({pick: ""});
+      const none = all(byId(b.shown, "intake-result")!).find(n => n.dataset.intakeTemplate === "NONE")!;
+      expect(text(none)).toContain("no repository was created");
+    });
+    it("maps run readiness strictly: fixed order and vocabulary, and ready/verifiable must agree with the checks", async () => {
+      const p = await load(rend, "project-core.js");
+      expect(p.readinessPath(PID)).toBe(RD); expect(p.readinessPath("prj_zz")).toBeNull(); expect(p.readinessPath(`${PID}/x`)).toBeNull();
+      const good = p.mapRunReadiness(readiness());
+      expect(good.state).toBe("VERIFIED"); expect(good.readiness).toMatchObject({projectId: PID, missionId: MSN, ready: true, verifiable: true}); expect(good.readiness.checks.map((c: any) => c.id)).toEqual(["MISSION", "RISK", "REPOSITORY", "TEST_COMMAND", "PLAN"]);
+      const bl = p.mapRunReadiness(readiness({ready: false, verifiable: false}, blockedChecks()));
+      expect(bl.readiness).toMatchObject({ready: false, verifiable: false}); expect(bl.readiness.checks[2]).toEqual({id: "REPOSITORY", state: "BLOCKED", blocking: true, reason: "REPOSITORY_NOT_CONFIGURED", nextAction: "CONFIGURE_REPOSITORY"});
+      const nonBlocking = okChecks(); nonBlocking[3] = chk("TEST_COMMAND", "BLOCKED", false, "TEST_COMMAND_MISSING", "SET_TEST_COMMAND");
+      expect(p.mapRunReadiness(readiness({ready: true, verifiable: false}, nonBlocking)).readiness).toMatchObject({ready: true, verifiable: false});
+      const sw = (i: number, j: number) => { const c = okChecks(); [c[i], c[j]] = [c[j], c[i]]; return c; };
+      const one = (id: string, c: any) => okChecks().map(x => x.id === id ? c : x);
+      const nb = {ready: false, verifiable: false};
+      const bad: any[] = [null, {}, {readiness: null}, readiness({projectId: "prj_zz"}), readiness({missionId: "msn_zz"}), readiness({missionId: undefined}), readiness({ready: "true"}), readiness({verifiable: 1}),
+        readiness({}, okChecks().slice(0, 4)), readiness({}, [...okChecks(), chk("PLAN")]), readiness({}, sw(0, 1)), readiness({}, one("RISK", chk("SECURITY"))),
+        readiness(nb, okChecks()), // claims blocked, every check OK
+        readiness({}, blockedChecks()), // claims ready/verifiable, a blocking check is BLOCKED
+        readiness({ready: true, verifiable: true}, nonBlocking), // verifiable with a non-OK check
+        readiness(nb, nonBlocking), // not ready although only a non-blocking check is not OK
+        readiness({}, one("MISSION", chk("MISSION", "OK", true, "NO_OPEN_MISSION"))), // OK with a reason
+        readiness(nb, one("MISSION", chk("MISSION", "BLOCKED", true, null))), // BLOCKED without a reason
+        readiness({}, one("MISSION", chk("MISSION", "MAYBE"))), readiness({ready: true, verifiable: false}, one("PLAN", chk("PLAN", "MAYBE", false, "NO_PLANNED_TASKS"))), // unknown state even with a reason and a consistent ready flag
+ readiness({}, one("MISSION", {...chk("MISSION"), blocking: "yes"})),
+        readiness(nb, one("MISSION", chk("MISSION", "BLOCKED", true, "no open mission"))),
+        readiness(nb, one("MISSION", chk("MISSION", "BLOCKED", true, ["NO_OPEN_MISSION"] as any))),
+        readiness(nb, one("MISSION", chk("MISSION", "BLOCKED", true, "NO_OPEN_MISSION", "x y")))];
+      for (const b of bad) expect(p.mapRunReadiness(b).state, JSON.stringify(b)?.slice(0, 90)).toBe("ERROR");
+      expect(p.mapRunReadiness(readiness({missionId: null, ready: false, verifiable: false}, [chk("MISSION", "BLOCKED", true, "NO_OPEN_MISSION", "CREATE_MISSION"), chk("RISK", "UNKNOWN", true, "SOURCE_UNREADABLE"), chk("REPOSITORY"), chk("TEST_COMMAND", "OK", false), chk("PLAN", "UNKNOWN", false, "SOURCE_UNREADABLE")])).state).toBe("VERIFIED");
+    });
+    it("shows a blocked first run with the server's exact reasons and next steps, and never a ready state", async () => {
+      forms.resetAllForms();
+      const o = await submitted({rd: readiness({ready: false, verifiable: false}, blockedChecks())});
+      expect(o.calls.get).toContain(RD);
+      const blk = byId(o.shown, "intake-readiness")!;
+      expect(blk.dataset.runReadiness).toBe("BLOCKED");
+      const row = (id: string) => all(blk).find(n => n.dataset.readyCheck === id)!;
+      expect(row("REPOSITORY").dataset).toMatchObject({readyState: "BLOCKED", readyBlocking: "true"});
+      expect(text(row("REPOSITORY"))).toContain("The project has no code repository."); expect(text(row("REPOSITORY"))).toContain("Attach code (import) or create the project from a template.");
+      expect(row("TEST_COMMAND").dataset.readyBlocking).toBe("false");
+      expect(text(row("TEST_COMMAND"))).toContain("does not block the run"); expect(text(row("TEST_COMMAND"))).toContain("NOT_EXECUTED");
+      expect(text(row("MISSION"))).not.toContain("does not block"); expect(row("MISSION").dataset.readyState).toBe("OK");
+      expect(text(blk)).toContain("Blocked: the first run cannot start"); expect(text(blk)).not.toContain("A run can start");
+    });
+    it("distinguishes ready-but-unverifiable from fully verifiable, and says readiness is not product verification", async () => {
+      forms.resetAllForms();
+      const nb = okChecks(); nb[3] = chk("TEST_COMMAND", "BLOCKED", false, "TEST_COMMAND_MISSING", "SET_TEST_COMMAND");
+      const a = await submitted({rd: readiness({ready: true, verifiable: false}, nb)});
+      const ba = byId(a.shown, "intake-readiness")!;
+      expect(ba.dataset.runReadiness).toBe("READY"); expect(text(ba)).toContain("A run can start. Some results cannot be fully verified yet");
+      forms.resetAllForms();
+      const b = await submitted({rd: readiness()});
+      const bb = byId(b.shown, "intake-readiness")!;
+      expect(text(bb)).toContain("every check passed. This is not a product verification."); expect(text(bb)).toContain("does not say the product works");
+      expect(all(bb).filter(n => n.dataset.readyCheck).map(n => n.dataset.readyCheck)).toEqual(["MISSION", "RISK", "REPOSITORY", "TEST_COMMAND", "PLAN"]);
+    });
+    it("is honest when the read is unavailable, contradictory, for another project, or has an unrecognised code", async () => {
+      forms.resetAllForms();
+      const off = await submitted({});
+      const bo = byId(off.shown, "intake-readiness")!;
+      expect(bo.dataset.runReadiness).toBe("UNAVAILABLE"); expect(text(bo)).toContain("not available to the desktop yet"); expect(text(bo)).toContain("does not mean the project is ready");
+      expect(all(bo).some(n => n.dataset.readyCheck)).toBe(false);
+      forms.resetAllForms();
+      const lie = await submitted({rd: readiness({}, blockedChecks())});
+      expect(byId(lie.shown, "intake-readiness")!.dataset.runReadiness).toBe("ERROR"); expect(all(byId(lie.shown, "intake-readiness")!).some(n => n.dataset.readyCheck)).toBe(false);
+      forms.resetAllForms();
+      const other = await submitted({rd: readiness({projectId: "prj_" + "ee".repeat(12)})});
+      expect(byId(other.shown, "intake-readiness")!.dataset.runReadiness).toBe("ERROR");
+      forms.resetAllForms();
+      const odd = okChecks(); odd[2] = chk("REPOSITORY", "BLOCKED", true, "BRAND_NEW_REASON", "BRAND_NEW_ACTION");
+      const unk = await submitted({rd: readiness({ready: false, verifiable: false}, odd)});
+      const r = all(byId(unk.shown, "intake-readiness")!).find(n => n.dataset.readyCheck === "REPOSITORY")!;
+      expect(text(r)).toContain("BRAND_NEW_REASON (not recognised)"); expect(text(r)).toContain("BRAND_NEW_ACTION (not recognised)");
+    });
+    it("shows no readiness before an intake exists, and has a Turkish text for every code it can show", async () => {
+      forms.resetAllForms();
+      const f = await open({});
+      expect(byId(f.root, "intake-readiness")).toBeNull(); expect(f.calls.get.some((g: string) => g.endsWith("/readiness"))).toBe(false);
+      forms.resetAllForms();
+      const t = await submitted({lang: "tr", rd: readiness({ready: false, verifiable: false}, blockedChecks())});
+      expect(text(byId(t.shown, "intake-readiness")!)).toContain("Projede kod deposu yok.");
+    });
   });
   it("lists earlier intakes from GET /v1/intakes and shows an honest UNAVAILABLE note when the read is not reachable", async () => {
     const c = await mkCtx({lang: "en", get: projectsGet({"/v1/intakes": {intakes: [rec()]}})});
@@ -1862,7 +1999,7 @@ describe("LANE-A project intake from an idea (fake DOM)", () => {
     const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js");
     const E = en.default ?? en.EN ?? en, T = tr.default ?? tr.TR ?? tr;
     const keys = Object.keys(E).filter(k => k.startsWith("intake.") || k === "form.field.idea");
-    expect(keys.length).toBe(34);
+    expect(keys.length).toBe(39);
     for (const k of keys) expect(T[k], k).toBeTruthy();
   });
 });

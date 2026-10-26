@@ -349,6 +349,28 @@ export function mapFlow(raw){
   return {state:"VERIFIED",flow:{projectId:f.projectId,stages,missionCount:cnt(f.missionCount),taskCount:cnt(f.taskCount),latestRunId:rid,taskRuns:tr}};
 }
 
+// ---------- Koşu hazırlığı (GET /v1/projects/:id/readiness) ----------
+// //TR: LANE-A A-FLOW-2: "ilk koşu neden başlamıyor?" yanıtı (MISSION, RISK, REPOSITORY, TEST_COMMAND, PLAN) sabit sırada ve sabit durum sözlüğüyle eşlenir. Çelişkili yanıt tüm okumayı ERROR yapar: `ready` yalnız tüm engelleyici kontroller OK iken, `verifiable` yalnız ready ve tüm kontroller OK iken doğru olabilir; OK kontrolün gerekçesi, BLOCKED kontrolün ise gerekçesi olmak zorundadır. Hiçbir olumlu durum uydurulmaz.
+export const READINESS_CHECKS=Object.freeze(["MISSION","RISK","REPOSITORY","TEST_COMMAND","PLAN"]);
+export const READINESS_STATES=Object.freeze(["OK","BLOCKED","UNKNOWN"]);
+const READINESS_CODE_RE=/^[A-Z][A-Z0-9_]{0,59}$/;
+export const readinessPath=id=>pid(id)?`/v1/projects/${id}/readiness`:null;
+export function mapRunReadiness(raw){
+  const bad={state:"ERROR",readiness:null};
+  const r=isObj(raw)?raw.readiness:null;
+  if(!isObj(r)||!pid(r.projectId)||!(r.missionId===null||/^msn_[0-9a-f]{24}$/.test(typeof r.missionId==="string"?r.missionId:""))||typeof r.ready!=="boolean"||typeof r.verifiable!=="boolean"||!Array.isArray(r.checks)||r.checks.length!==READINESS_CHECKS.length)return bad;
+  const checks=[];
+  for(const [i,c] of r.checks.entries()){
+    const code=v=>v===null||(typeof v==="string"&&READINESS_CODE_RE.test(v));
+    if(!isObj(c)||c.id!==READINESS_CHECKS[i]||!READINESS_STATES.includes(c.state)||typeof c.blocking!=="boolean"||!code(c.reason)||!code(c.nextAction))return bad;
+    if(c.state==="OK"?c.reason!==null:c.reason===null)return bad;
+    checks.push({id:c.id,state:c.state,blocking:c.blocking,reason:c.reason,nextAction:c.nextAction});
+  }
+  const ready=checks.filter(c=>c.blocking).every(c=>c.state==="OK"),verifiable=ready&&checks.every(c=>c.state==="OK");
+  if(r.ready!==ready||r.verifiable!==verifiable)return bad;
+  return {state:"VERIFIED",readiness:{projectId:r.projectId,missionId:r.missionId,ready,verifiable,checks}};
+}
+
 // //TR: LANE-A: Akış aşamasının `detail` kodunu okunur anlama eşler. Anlam YALNIZ aşama durumuyla (state) birlikte geçerlidir: sunucu ACTIVE mission aşamasına son mission'ın durumunu (ör. COMPLETE) yazabilir, bu yüzden "tüm mission'lar tamamlandı" yalnız state=DONE iken söylenir. Bilinen kod yanlış durumla gelirse çevrilmez (MISSION için yalnız düz durum etiketi, diğerleri ham ve "beklenmeyen" notuyla); bilinmeyen kod AYNEN ham ve "tanınmadı" notuyla gösterilir. Olumlu anlam eklenmez.
 export const FLOW_DETAIL_STATES=Object.freeze({
   MISSION:Object.freeze({COMPLETE:["DONE"],BLOCKED:["BLOCKED"]}),
