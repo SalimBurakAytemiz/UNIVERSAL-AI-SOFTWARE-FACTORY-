@@ -126,6 +126,76 @@
    "file": "core/agents/linux-unshare-sandbox.ts",
    "old": "proven = verdict.capabilities;",
    "new": "proven = {loopback: true, loopbackReason: null};"
+  },
+  {
+   "id": "N1",
+   "description": "LC-LO-01: the sandbox's net namespace is not compared with the host's",
+   "file": "core/agents/linux-unshare-sandbox.ts",
+   "old": "if (netnsProblem) return {ok: false, detail: netnsProblem};",
+   "new": ""
+  },
+  {
+   "id": "N2",
+   "description": "LC-LO-01: a shared net namespace is accepted",
+   "file": "core/agents/linux-unshare-sandbox.ts",
+   "old": "return inside === hostNetns ? \"SELFTEST_NETNS_SHARED\" : null;",
+   "new": "return null;"
+  },
+  {
+   "id": "N3",
+   "description": "LC-LO-01: ANY silent probe result counts as node unavailable",
+   "file": "core/agents/linux-unshare-sandbox.ts",
+   "old": "if (i.exitCode === 127 && !i.timedOut) return",
+   "new": "if (true) return"
+  },
+  {
+   "id": "N4",
+   "description": "LC-LO-01: a timed-out silent probe with exit 127 counts as node unavailable",
+   "file": "core/agents/linux-unshare-sandbox.ts",
+   "old": "if (i.exitCode === 127 && !i.timedOut) return",
+   "new": "if (i.exitCode === 127) return"
+  },
+  {
+   "id": "N5",
+   "description": "LC-LO-02: the capabilities getter hands out the provider's own mutable record",
+   "file": "core/agents/linux-unshare-sandbox.ts",
+   "old": "return Object.freeze({...this.caps}); }",
+   "new": "return this.caps; }"
+  },
+  {
+   "id": "N6",
+   "description": "LC-LO-03: the host listener's connection count is not given to the verdict",
+   "file": "core/agents/linux-unshare-sandbox.ts",
+   "old": "hostConnections: loConnections, exitCode",
+   "new": "hostConnections: 0, exitCode"
+  },
+  {
+   "id": "N7",
+   "description": "LC-LO-03: the route-out check is not applied",
+   "file": "core/agents/linux-unshare-sandbox.ts",
+   "old": "if (routeProblem) return {ok: false, detail: routeProblem};",
+   "new": ""
+  },
+  {
+   "id": "N8",
+   "description": "LC-LO-03: the probe is not given the host listener's port",
+   "file": "core/agents/linux-unshare-sandbox.ts",
+   "old": "String(loPort)], {cwd: ws",
+   "new": "\"0\"], {cwd: ws"
+  },
+  {
+   "id": "N9",
+   "description": "LC-LO-03: the capabilities are published right after the loopback verdict (before the later steps)",
+   "file": "core/agents/linux-unshare-sandbox.ts",
+   "old": "proven = verdict.capabilities;",
+   "new": "proven = verdict.capabilities; this.caps = proven;"
+  },
+  {
+   "id": "N10",
+   "description": "LC-LO-03: the probe's exit code and timeout are not given to the verdict",
+   "file": "core/agents/linux-unshare-sandbox.ts",
+   "old": "exitCode: lp.exitCode, timedOut: lp.timedOut});",
+   "new": "exitCode: 127, timedOut: false});"
   }
  ]
 }
