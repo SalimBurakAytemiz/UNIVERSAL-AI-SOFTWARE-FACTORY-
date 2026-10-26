@@ -13,7 +13,7 @@ Without it the route builds its own `ProjectStudio` with the same `dataDir` and 
 -const laneDeps={ ... };
 +const laneDeps={ ..., studio:()=>getStudio() };
 ```
-(`studio?: () => {createTemplateRepository(...)}` is an optional field of `RouteDeps`. Pass a closure, `studio:()=>getStudio()`, not the bare `getStudio`: `laneDeps` is built before `getStudio` is initialised, so the bare reference is a TDZ error (TS2448/TS2454).)
+(`studio?: () => {createTemplateRepository(...)}` is an optional field of `RouteDeps`. Pass a closure, `studio:()=>getStudio()`, not the bare `getStudio`: `laneDeps` is built before `getStudio` is initialised, so the bare reference is a TDZ error (TS2448/TS2454). This registration also closes a cwd dependency: without `studio`, `routes/intake.ts` builds a route-local `ProjectStudio` whose `config/environment-policy.json` is resolved against `process.cwd()`, not `repoRoot` (`RouteDeps` does not expose `repoRoot`; adding it needs `server.ts`). It is fail-closed (500 `PROJECT_REPOSITORY_INIT_FAILED`, nothing left behind) when cwd differs from `repoRoot`; the shared `getStudio()` uses `repoRoot` and removes the difference.)
 
 ## Evidence
 `npx vitest run tests/v7-b1-workos.test.ts`: 120 passed (+4 in "LANE-B project intake"). Mutations: base intake.ts (3 of the 4 new tests fail), managed-repo wiring removed (3 fail), template testCommand default ignored (1), exclusivity dropped (1), template left out of the idempotency digest (1), StudioError mapping removed (1) — all killed.
