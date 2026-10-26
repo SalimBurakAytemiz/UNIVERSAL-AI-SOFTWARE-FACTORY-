@@ -1503,7 +1503,7 @@ export default {
   "analysis.title":"Analiz",
   "analysis.lead":"Analiz, her seferinde tek faz olmak üzere iş analizi, kabul kriterli gereksinimler, plan ve mimari kararı taslaklarını üretir. Her taslağı aşağıda onaylar ya da reddedersiniz; sizsiz hiçbiri kabul edilmez. Tamamlandı iletisi yalnızca dördü de onaylandığında görünür.",
   "analysis.step.button":"Analiz et (sonraki taslağı üret)",
-  "analysis.inFlight":"Bir analiz isteği sürüyor; bitene kadar düğmeler kapalı kalır.",
+  "busy.missionWrite":"Misyon verisini değiştiren başka bir istek sürüyor; bitene kadar düğmeler kapalı kalır.",
   "analysis.none":"Bu görünümde henüz bir analiz adımı çalıştırılmadı. Sonraki taslağı üretmek için düğmeye basın; kararınızı bekleyen bir taslak varsa yeni bir şey üretilmez.",
   "analysis.notEnabled":"Analiz adımı bu sürümde henüz etkin değil. Hiçbir şey gönderilmedi.",
   "analysis.notFound":"Sunucu bu mission'ı tanımıyor.",
