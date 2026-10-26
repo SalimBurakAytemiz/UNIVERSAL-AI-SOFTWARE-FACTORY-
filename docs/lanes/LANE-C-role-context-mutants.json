@@ -1,0 +1,145 @@
+{
+ "//TR": "C-CTX-1 (Rol Bağlamı Çözümleyicisi) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt core/agents/role-context.ts içinde TAM 1 kez geçen bir metni değiştirir; docs/lanes/LANE-C-role-context-mutants.mjs hepsini tests/v7-core-role-context.test.ts ile çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. M1-M4 dağıtım paketindeki zorunlu mutantlardır (M1 önerilen beceri kanonike karışır, M2 çözülemeyen teknoloji düşer, M3 SUSPECTED/CONFLICT takma adlarından da çözülür, M4 özet kanonik metni dışlar); M5-M20 ek savunma mutantlarıdır (doğrulanmış durum uydurma, durum yükseltme, bayt sınırı ve kesme sırası, yinelenen kimlik, SK2 süzgeçleri, boşluk kimlikleri, yükleyicinin kapalı başarısızlığı).",
+ "mutants": [
+  {
+   "id": "M1",
+   "description": "proposed skills are merged into the canonical list",
+   "file": "core/agents/role-context.ts",
+   "old": "skills: {canonical, canonicalNotInSk2:",
+   "new": "skills: {canonical: [...canonical, ...proposedAll.map(p => ({skillId: p.skillId, origin: \"CANONICAL_ROLE_REGISTRY\" as const}))], canonicalNotInSk2:"
+  },
+  {
+   "id": "M2",
+   "description": "technology references that are not in the registry are dropped (optional ones)",
+   "file": "core/agents/role-context.ts",
+   "old": "const optional = role.optionalTechnologies.map(t => tech(t, \"OPTIONAL\")).sort(bySlug);",
+   "new": "const optional = role.optionalTechnologies.map(t => tech(t, \"OPTIONAL\")).filter(t => t.registryId !== null).sort(bySlug);"
+  },
+  {
+   "id": "M3",
+   "description": "skills are also resolved through SUSPECTED and CONFLICT aliases (every alias but REJECTED)",
+   "file": "core/agents/role-context.ts",
+   "old": "if (a.status !== \"SEMANTIC_VERIFIED\") continue;",
+   "new": "if (a.status === \"REJECTED\") continue;"
+  },
+  {
+   "id": "M4",
+   "description": "the digest excludes the canonical role text",
+   "file": "core/agents/role-context.ts",
+   "old": "const digest = sha256(stable(body));",
+   "new": "const digest = sha256(stable({...body, canonical: undefined}));"
+  },
+  {
+   "id": "M5",
+   "description": "verifiedKnowledge is true",
+   "file": "core/agents/role-context.ts",
+   "old": "roleId: role.roleId, verifiedKnowledge: false,",
+   "new": "roleId: role.roleId, verifiedKnowledge: true,"
+  },
+  {
+   "id": "M6",
+   "description": "a registered technology takes the registry status instead of the role status (status upgrade)",
+   "file": "core/agents/role-context.ts",
+   "old": "status: reg ? t.status : NAME_NOT_VERIFIED",
+   "new": "status: reg ? reg.status : NAME_NOT_VERIFIED"
+  },
+  {
+   "id": "M7",
+   "description": "an unresolved technology keeps the role status instead of NAME_NOT_VERIFIED_IN_REGISTRY",
+   "file": "core/agents/role-context.ts",
+   "old": "status: reg ? t.status : NAME_NOT_VERIFIED",
+   "new": "status: t.status"
+  },
+  {
+   "id": "M8",
+   "description": "the byte cap is never enforced",
+   "file": "core/agents/role-context.ts",
+   "old": "while (size(body) > maxBytes) {",
+   "new": "while (false) {"
+  },
+  {
+   "id": "M9",
+   "description": "the shrink step drops a whole list at once instead of halving it",
+   "file": "core/agents/role-context.ts",
+   "old": "const shrink = (n: number) => (n === 0 ? 0 : Math.floor(n / 2));",
+   "new": "const shrink = (n: number) => 0;"
+  },
+  {
+   "id": "M10",
+   "description": "a duplicated role id resolves the first row instead of a typed refusal",
+   "file": "core/agents/role-context.ts",
+   "old": "if (matches.length > 1) return {status: \"NOT_RESOLVED\", roleId, reason: \"ROLE_ID_DUPLICATE\"};",
+   "new": ""
+  },
+  {
+   "id": "M11",
+   "description": "every alias is reported as used for proposed skills",
+   "file": "core/agents/role-context.ts",
+   "old": "usedForProposedSkills: a.status === \"SEMANTIC_VERIFIED\"",
+   "new": "usedForProposedSkills: true"
+  },
+  {
+   "id": "M12",
+   "description": "canonical skill ids that are not in SK2 count as canonical",
+   "file": "core/agents/role-context.ts",
+   "old": "canonicalIds.filter(s => i.skillIds.has(s)).map(",
+   "new": "canonicalIds.map("
+  },
+  {
+   "id": "M13",
+   "description": "proposed skills that are not in SK2 are kept",
+   "file": "core/agents/role-context.ts",
+   "old": "if (i.skillIds.has(s) && !canonicalSet.has(s)) via.set(",
+   "new": "if (!canonicalSet.has(s)) via.set("
+  },
+  {
+   "id": "M14",
+   "description": "a skill that is already canonical is also proposed",
+   "file": "core/agents/role-context.ts",
+   "old": "if (i.skillIds.has(s) && !canonicalSet.has(s)) via.set(",
+   "new": "if (i.skillIds.has(s)) via.set("
+  },
+  {
+   "id": "M15",
+   "description": "profile gap ids are not merged into gapIds",
+   "file": "core/agents/role-context.ts",
+   "old": "...(profile ? [profile.reviewChain.gapId, profile.candidateSkills.gapId].filter((g): g is string => typeof g === \"string\") : [])",
+   "new": "...[]"
+  },
+  {
+   "id": "M16",
+   "description": "the loader accepts an empty registry array",
+   "file": "core/agents/role-context.ts",
+   "old": " || (doc[key] as unknown[]).length === 0",
+   "new": ""
+  },
+  {
+   "id": "M17",
+   "description": "duplicate keys in the loader are last-wins instead of a typed error",
+   "file": "core/agents/role-context.ts",
+   "old": "if (m.has(key(x))) throw new Error(`ROLE_CONTEXT_INPUT_INVALID:${code}:${key(x)}`); m.set(key(x), x); }",
+   "new": "m.set(key(x), x); }"
+  },
+  {
+   "id": "M18",
+   "description": "optional technologies are shrunk before the proposed skills (wrong cut order)",
+   "file": "core/agents/role-context.ts",
+   "old": "if (kp > 0) kp = shrink(kp); else if (ko > 0) ko = shrink(ko);",
+   "new": "if (ko > 0) ko = shrink(ko); else if (kp > 0) kp = shrink(kp);"
+  },
+  {
+   "id": "M19",
+   "description": "the byte size counts characters instead of UTF-8 bytes",
+   "file": "core/agents/role-context.ts",
+   "old": "Buffer.byteLength(stable(c), \"utf8\")",
+   "new": "stable(c).length"
+  },
+  {
+   "id": "M20",
+   "description": "the over-cap case silently returns the largest body instead of a typed refusal",
+   "file": "core/agents/role-context.ts",
+   "old": "else return {status: \"NOT_RESOLVED\", roleId, reason: \"ROLE_CONTEXT_EXCEEDS_BYTE_CAP\"};",
+   "new": "else break;"
+  }
+ ]
+}
