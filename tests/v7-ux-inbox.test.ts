@@ -126,7 +126,7 @@ describe("UX WP-INBOX-APPROVAL — Founder-attention queue bound to real data", 
     const big = Array.from({length: 200}, (_, i) => ({...ATT_ITEMS[2], taskId: "tsk_" + String(i).padStart(24, "0").replace(/0/g, "a")}));
     const t = await mkCtx({get: fromFix(liveFix({"/v1/attention": attention(big, attCounts({RUN_AWAITING_APPROVAL: 0, RUN_NEEDS_DECISION: 0, TASK_BLOCKED: 250}), true)})), lang: "en"});
     const tp = byId(await inbox.render(t.ctx), "inbox-attention-queue")!;
-    expect(byData(tp, "attentionTruncated")).toHaveLength(1); expect(tp.textContent).toContain("Showing 200 of at least 250"); expect(byData(tp, "attentionCount")[0].dataset.truncated).toBe("1");
+    expect(byData(tp, "attentionTruncated")).toHaveLength(1); expect(tp.textContent).toContain("Showing 200 of 250 items"); expect(tp.textContent).not.toContain("at least"); expect(byData(tp, "attentionCount")[0].textContent).toContain("250 item(s) awaiting Founder attention"); expect(byData(tp, "counter").find(n => n.dataset.counter === "TASK_BLOCKED")!.dataset.value).toBe("250"); expect(byData(tp, "attentionCount")[0].dataset.truncated).toBe("1");
   });
 
   it("empty Founder-attention is an honest empty state, never zeros presented as items", async () => {
@@ -152,6 +152,76 @@ describe("UX WP-INBOX-APPROVAL — Founder-attention queue bound to real data", 
   });
 });
 
+// //TR: #192 incelemesi: aşağıdaki iki blok (uyarılar kokpite bağlı / onay eylemleri) dikkat kuyruğundan bağımsız korumalardır; taban sürümden aynen geri konuldu, yeni /v1/attention fixture'ıyla çalışır.
+describe("UX WP-INBOX-APPROVAL — alerts bound to the cockpit, no fabrication", () => {
+  it("shows the real blocked/attention counts and the Global Stop state, inventing no numbers or percentages", async () => {
+    const inbox = await load("views", "inbox.js");
+    const {ctx} = await mkCtx({get: fromFix(liveFix()), lang: "en"});
+    const root = await inbox.render(ctx);
+    const alerts = byId(root, "inbox-alerts")!;
+    expect(byData(alerts, "fact", "blocked")[0].textContent).toContain("2");
+    expect(byData(alerts, "fact", "attention")[0].textContent).toContain("1");
+    const stop = byData(alerts, "fact", "stop")[0];
+    expect(pillsIn(stop)).toContain("VERIFIED");
+    expect(stop.textContent).toContain("Not active");
+    expect(byId(root, "inbox-alerts-status")!.dataset.alertsTotal).toBe("3");
+    expect(alerts.textContent).not.toMatch(/\d+(\.\d+)?\s?%/);
+    expect(sourceState(root, "alerts")).toBe("ATTENTION");
+  });
+
+  it("surfaces an ACTIVE Global Stop with its reason (STOPPED)", async () => {
+    const inbox = await load("views", "inbox.js");
+    const {ctx} = await mkCtx({get: fromFix(liveFix({"/v1/cockpit": {generatedAt: "2026-10-15T10:00:00.000Z", globalStop: {active: true, reason: "FOUNDER_HOLD"},
+      missions: {state: "VERIFIED", total: 2, byStatus: {DRAFT: 2}}, awaitingApproval: {state: "VERIFIED", items: []}}})), lang: "en"});
+    const root = await inbox.render(ctx);
+    const stop = byData(byId(root, "inbox-alerts")!, "fact", "stop")[0];
+    expect(pillsIn(stop)).toContain("STOPPED");
+    expect(stop.textContent).toContain("FOUNDER_HOLD");
+  });
+
+  it("when the cockpit is unreachable, alerts are honestly unavailable with no numbers", async () => {
+    const inbox = await load("views", "inbox.js");
+    const {ctx} = await mkCtx({get: () => { throw new Error("fetch failed"); }, lang: "en"});
+    const root = await inbox.render(ctx);
+    const alerts = byId(root, "inbox-alerts")!;
+    expect(alerts.textContent).toContain("could not be read");
+    expect(byData(alerts, "fact").length).toBe(0);
+    expect(alerts.textContent).not.toMatch(/\b\d+\b/);
+    for (const k of ["decisions", "approvals", "attention", "alerts"]) expect(sourceState(root, k), k).toBe("OFFLINE");
+  });
+});
+
+describe("UX WP-INBOX-APPROVAL — approval actions preserved with confirmation; no direct POST from the view", () => {
+  it("keeps the two real decision kinds in order and offers COMPLETE only for a PRODUCT_VERIFIED run", async () => {
+    const inbox = await load("views", "inbox.js");
+    const {ctx, calls} = await mkCtx({get: fromFix(liveFix()), post: () => ({status: 200, body: {}})});
+    const root = await inbox.render(ctx);
+    expect(byData(root, "decisionMission").map(n => [n.dataset.decision, n.dataset.decisionMission])).toEqual([["DELIVERY_DECISION", MID], ["FOUNDER_ATTENTION", MID2]]);
+    expect(byId(root, `ib-COMPLETE-${MID}`)).not.toBeNull();
+    expect(byId(root, `ib-PREFLIGHT-${MID2}`)).not.toBeNull();
+    expect(calls.post).toEqual([]);
+    expect(calls.confirm).toEqual([]);
+    expect(root.textContent).toContain("otomatik onaylanmaz"); // noAuto principle present (TR default copy)
+  });
+
+  it("accept (COMPLETE) requires the confirm dialog before it POSTs the transition; the view itself never calls api.post", async () => {
+    let answer = false;
+    const inbox = await load("views", "inbox.js");
+    const {ctx, calls} = await mkCtx({get: fromFix(liveFix()), confirm: () => answer, post: () => ({status: 200, body: {}})});
+    const root = await inbox.render(ctx);
+    byId(root, `ib-COMPLETE-${MID}`)!.fire("click"); await new Promise(r => setTimeout(r, 0));
+    expect(calls.confirm.length).toBe(1);
+    expect(calls.confirm[0].target).toContain(MID);
+    expect(calls.post).toEqual([]);
+    answer = true;
+    byId(root, `ib-COMPLETE-${MID}`)!.fire("click"); await new Promise(r => setTimeout(r, 0));
+    expect(calls.post).toEqual([{path: `/v1/missions/${MID}/transition`, body: {to: "COMPLETE", reason: "REPORTING -> COMPLETE (UASCO Desktop)"}}]);
+    // the view source performs no direct POST and schedules no timers
+    expect(code(read("views", "inbox.js"))).not.toMatch(/api\.post|\.post\(/);
+    expect(code(read("views", "inbox.js"))).not.toMatch(/setInterval|setTimeout/);
+  });
+});
+
 describe("UX WP-INBOX-APPROVAL — read-only surface + dictionary parity", () => {
   it("reads only allow-listed read-only GET paths and writes nothing during render", async () => {
     const inbox = await load("views", "inbox.js");
@@ -166,8 +236,8 @@ describe("UX WP-INBOX-APPROVAL — read-only surface + dictionary parity", () =>
     const en = (await load("locales", "en.js")).default, tr = (await load("locales", "tr.js")).default;
     const keys = ["inbox.eyebrow", "inbox.readonly", "inbox.sources", "inbox.src.decisions", "inbox.src.approvals", "inbox.src.attention", "inbox.src.alerts",
       "inbox.alerts", "inbox.alerts.lead", "inbox.alerts.none", "inbox.alerts.count", "inbox.alerts.unavailable", "inbox.alerts.blocked", "inbox.alerts.attention", "inbox.alerts.stop", "inbox.alerts.stopActive", "inbox.alerts.stopInactive",
-      "inbox.attention", "inbox.attention.lead", "inbox.attention.none", "inbox.attention.unavailable", "inbox.attention.count", "inbox.attention.retryable", "inbox.attention.notRetryable",
-      "inbox.attention.item.phase", "inbox.attention.item.reason", "inbox.attention.item.when", "inbox.attention.item.unknown"];
+      "inbox.attention", "inbox.attention.lead", "inbox.attention.none", "inbox.attention.unavailable", "inbox.attention.count",
+      "inbox.attention.item.reason"];
     const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join(",");
     for (const k of keys) {
       expect(typeof en[k], `en ${k}`).toBe("string");
@@ -535,5 +605,72 @@ describe("LANE-A Founder attention core (GET /v1/attention)", () => {
     expect(Object.keys(tr).filter(k => k.startsWith("attention.")).sort()).toEqual([...keys].sort());
     for (const k of m.ATTENTION_KINDS) expect(en[`attention.kind.${k}`], k).toBeTruthy();
     for (const a of m.NEXT_ACTIONS) { expect(en[`attention.next.${a}`], a).toBeTruthy(); expect(tr[`attention.next.${a}`], a).toBeTruthy(); }
+  });
+});
+
+// //TR: #192 incelemesi (HIGH/MED): kuyruk özeti sunucu sayaçlarından gelir; kesik ya da okunamayan öğe asla "boş/VERIFIED" okunmaz; Gelen Kutusu şeridi, Teslimat ve Tower aynı özeti kullanır; eski kopya liste kalktı; öğe türleri ham kod değil etiket gösterir.
+describe("LANE-A attention consumers: honest summary in Inbox strip, Delivery and Tower (review #192)", () => {
+  const cmod = () => load("attention-core.js");
+  const big = (n: number) => Array.from({length: n}, (_, i) => ({...ATT_ITEMS[2], taskId: "tsk_" + (i + 1).toString(16).padStart(24, "a")}));
+  const truncatedFix = () => liveFix({"/v1/attention": attention(big(200), attCounts({RUN_AWAITING_APPROVAL: 0, RUN_NEEDS_DECISION: 0, TASK_BLOCKED: 201}), true)});
+  const droppedFix = () => liveFix({"/v1/attention": attention([{kind: "NEW"}], attCounts({RUN_AWAITING_APPROVAL: 0, RUN_NEEDS_DECISION: 1, TASK_BLOCKED: 0}))});
+  const delFix = (att: any) => ({"/health": {status: "HEALTHY", system: "UNIVERSAL-AI-SOFTWARE-COMPANY-OS", serverIdentity: "VERIFIED"}, "/v1/control/status": {globalStop: {active: false, reason: null}}, "/v1/attention": att, "/v1/work-runs": {workRuns: []}});
+  it("attentionSummary uses the server counters: complete+empty is VERIFIED, truncated or dropped is never empty, unreadable is UNREADABLE", async () => {
+    const c = await cmod();
+    const q = (raw: any) => c.mapAttentionQueue(raw);
+    expect(c.attentionSummary(q(attention([], attCounts({RUN_AWAITING_APPROVAL: 0, RUN_NEEDS_DECISION: 0, TASK_BLOCKED: 0}))))).toMatchObject({kind: "VERIFIED", total: 0, shown: 0, truncated: false, dropped: 0});
+    expect(c.attentionSummary(q(attention())).kind).toBe("ATTENTION");
+    expect(c.attentionSummary(q(attention([{kind: "NEW"}], attCounts({RUN_AWAITING_APPROVAL: 0, RUN_NEEDS_DECISION: 1, TASK_BLOCKED: 0}))))).toMatchObject({kind: "ATTENTION", total: 1, shown: 0, dropped: 1});
+    expect(c.attentionSummary(q(attention([{kind: "NEW"}], attCounts({RUN_AWAITING_APPROVAL: 0, RUN_NEEDS_DECISION: 0, TASK_BLOCKED: 0}))))).toMatchObject({kind: "ATTENTION", total: 0, dropped: 1}); // inconsistent server: still not empty
+    expect(c.attentionSummary(q(attention(big(200), attCounts({RUN_AWAITING_APPROVAL: 0, RUN_NEEDS_DECISION: 0, TASK_BLOCKED: 250}), true)))).toMatchObject({kind: "ATTENTION", total: 250, shown: 200, truncated: true});
+    for (const bad of [null, undefined, {state: "OFFLINE"}, {state: "VERIFIED", queue: null}]) expect(c.attentionSummary(bad).kind).toBe("UNREADABLE");
+  });
+  it("the Inbox source strip says ATTENTION (never VERIFIED) when every item is unreadable or the list is truncated", async () => {
+    const inbox = await load("views", "inbox.js");
+    for (const fix of [droppedFix(), truncatedFix()]) { const {ctx} = await mkCtx({get: fromFix(fix), lang: "en"}); expect(sourceState(await inbox.render(ctx), "attention")).toBe("ATTENTION"); }
+    const {ctx} = await mkCtx({get: fromFix(liveFix({"/v1/attention": attention([], attCounts({RUN_AWAITING_APPROVAL: 0, RUN_NEEDS_DECISION: 0, TASK_BLOCKED: 0}))})), lang: "en"});
+    expect(sourceState(await inbox.render(ctx), "attention")).toBe("VERIFIED");
+  });
+  it("Delivery shows the server's total with the right noun for a truncated list (201 tasks), never the shown count as 'missions'", async () => {
+    const delivery = await load("views", "delivery.js");
+    const {ctx} = await mkCtx({get: fromFix(delFix(attention(big(200), attCounts({RUN_AWAITING_APPROVAL: 0, RUN_NEEDS_DECISION: 0, TASK_BLOCKED: 201}), true))), lang: "en"});
+    const root = await delivery.render(ctx), line = byId(root, "delivery-attention-status")!;
+    expect(line.dataset.attention).toBe("201"); expect(line.textContent).toContain("201 item(s) are awaiting Founder attention"); expect(line.textContent).not.toContain("mission(s)"); expect(line.textContent).not.toContain("200 item(s)");
+    expect(line.textContent).toContain("Showing 200 of 201 items"); expect(sourceState(root, "attention")).toBe("ATTENTION");
+    for (const lang of ["en", "tr"]) { const lead = (await load("locales", `${lang}.js`).then(m => m.default as Record<string, string>))["delivery.health.lead"]; expect(lead, lang).toContain("/v1/attention"); expect(lead, lang).not.toContain("founder-attention"); } // the strip names the live source
+  });
+  it("Delivery never says 'none' while the server counts items that could not be read", async () => {
+    const delivery = await load("views", "delivery.js");
+    const {ctx} = await mkCtx({get: fromFix(delFix(attention([{kind: "NEW"}], attCounts({RUN_AWAITING_APPROVAL: 0, RUN_NEEDS_DECISION: 1, TASK_BLOCKED: 0})))), lang: "en"});
+    const root = await delivery.render(ctx), line = byId(root, "delivery-attention-status")!;
+    expect(line.textContent).not.toContain("No Founder-attention items"); expect(line.textContent).toContain("1 item(s) are awaiting Founder attention"); expect(line.textContent).toContain("1 item(s) from the server could not be read"); expect(sourceState(root, "attention")).toBe("ATTENTION");
+    // a server that counts none but sends an item we cannot read: still not "none"
+    const odd = await mkCtx({get: fromFix(delFix(attention([{kind: "NEW"}], attCounts({RUN_AWAITING_APPROVAL: 0, RUN_NEEDS_DECISION: 0, TASK_BLOCKED: 0})))), lang: "en"});
+    const orow = byId(await delivery.render(odd.ctx), "delivery-attention-status")!;
+    expect(orow.textContent).not.toContain("No Founder-attention items"); expect(orow.textContent).toContain("counted items awaiting Founder attention that could not be read");
+    const empty = await mkCtx({get: fromFix(delFix(attention([], attCounts({RUN_AWAITING_APPROVAL: 0, RUN_NEEDS_DECISION: 0, TASK_BLOCKED: 0})))), lang: "en"});
+    const er = await delivery.render(empty.ctx); expect(byId(er, "delivery-attention-status")!.textContent).toContain("No Founder-attention items"); expect(sourceState(er, "attention")).toBe("VERIFIED");
+  });
+  it("the legacy blocker rows show a label for every attention kind in en and tr (no raw TASK_BLOCKED), and the Inbox lists the items once (no 'legacy scheduler snapshot' copy)", async () => {
+    const comp = await load("components.js"), i18n = await load("i18n.js"), c = await cmod();
+    for (const lang of ["en", "tr"]) {
+      const t = (k: string, v?: any) => i18n.translate(lang, k, v);
+      for (const k of c.ATTENTION_KINDS) { const lab = comp.statusLabel({t}, k); expect(lab, `${lang} ${k}`).toBe(t(`attention.kind.${k}`)); expect(lab).not.toBe(k); }
+    }
+    const inbox = await load("views", "inbox.js");
+    const {ctx} = await mkCtx({get: fromFix(liveFix()), lang: "en"});
+    const root = await inbox.render(ctx);
+    expect(byId(root, "inbox-legacy-p")).toBeNull(); expect(byId(root, "inbox-attention")).toBeNull(); expect(root.textContent).not.toMatch(/legacy scheduler|LEGACY_SNAPSHOT/i);
+    expect(all(root).filter(n => n.textContent === "Engelli görev" && n.tagName === "H3").length).toBe(1);
+  });
+  it("Tower says the list is cut or partly unreadable, and never 'no pending blockers' when the server counted unreadable items", async () => {
+    const tower = await load("views", "tower.js");
+    const run = async (fix: any) => { const {ctx} = await mkCtx({get: (p: string) => { if (p in fix) return fix[p]; throw new Error(`${p}: HTTP 404`); }, lang: "en"}); ctx.requestStop = () => {}; ctx.requestResume = () => {}; ctx.renderAttention = (el: N, att: any) => { el.textContent = att.blocked.length ? `${att.blocked.length} rows` : "No pending blockers."; }; return byId(await tower.render(ctx), "tower-attention")!; };
+    const cut = await run({"/v1/attention": attention(big(200), attCounts({RUN_AWAITING_APPROVAL: 0, RUN_NEEDS_DECISION: 0, TASK_BLOCKED: 250}), true)});
+    expect(byData(cut, "attentionTruncated")).toHaveLength(1); expect(cut.textContent).toContain("Showing 200 of 250 items");
+    const drop = await run({"/v1/attention": attention([{kind: "NEW"}], attCounts({RUN_AWAITING_APPROVAL: 0, RUN_NEEDS_DECISION: 1, TASK_BLOCKED: 0}))});
+    expect(drop.textContent).not.toContain("No pending blockers"); expect(drop.textContent).toContain("could not be read"); expect(byData(drop, "attentionDropped")).toHaveLength(1);
+    const none = await run({"/v1/attention": attention([], attCounts({RUN_AWAITING_APPROVAL: 0, RUN_NEEDS_DECISION: 0, TASK_BLOCKED: 0}))});
+    expect(none.textContent).toContain("No pending blockers"); expect(byData(none, "attentionTruncated")).toEqual([]);
   });
 });
