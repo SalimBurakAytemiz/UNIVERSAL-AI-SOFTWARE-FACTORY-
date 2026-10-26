@@ -182,7 +182,19 @@ export function statusTimeline(ctx,status){
     }),
     offPath?h(doc,"li",{class:"step-current step-off",dataset:{step:status,state:"current"},"aria-current":"step"},h(doc,"span",{class:"step-mark","aria-hidden":"true",text:"●"}),h(doc,"span",{text:statusLabel(ctx,status)}),h(doc,"span",{class:"sr-only",text:` — ${ctx.t("work.timeline.offPath")}`})):null]);
 }
-export function runCard(ctx,run){
+/** //TR: A-FLOW-2: koşuya bağlı görevler; okuma doğrulanmadıysa "bağlı görev yok" denmez. linked: {res:api.runTasks sonucu,tasks:mission görevleri}. */
+function linkedTasksBlock(ctx,run,linked){
+  const doc=ctx.doc,res=linked.res;
+  let body;
+  if(res.state==="VERIFIED"){
+    const byId=new Map((Array.isArray(linked.tasks)?linked.tasks:[]).map(t=>[t.taskId,t]));
+    body=res.links.length
+      ?h(doc,"ul",{class:"run-linked-tasks"},res.links.map(l=>{const t=byId.get(l.taskId);return h(doc,"li",{dataset:{runLinkedTask:l.taskId}},h(doc,"span",{text:t?t.title:ctx.t("run.linked.unknownTask")})," ",t&&t.status?statusPill(ctx,t.status):null," ",h(doc,"span",{class:"mono",text:l.taskId}))}))
+      :h(doc,"p",{class:"note",role:"status",dataset:{runLinked:"none"},text:ctx.t("run.linked.none")});
+  }else body=h(doc,"p",{class:"note",role:"status",dataset:{runLinked:res.state==="UNAVAILABLE"?"unavailable":"error"},text:ctx.t(res.state==="UNAVAILABLE"?"run.linked.unavailable":"run.linked.error")});
+  return h(doc,"div",{class:"run-linked",dataset:{runLinkedFor:run.runId}},h(doc,"h6",{text:ctx.t("run.linked.title")}),body);
+}
+export function runCard(ctx,run,linked=null){
   const doc=ctx.doc,lang=ctx.i18n.lang,step=run.step?`${run.step.name??MISSING}${run.step.index!==null?` (${run.step.index}${run.step.total!==null?`/${run.step.total}`:""})`:""}`:MISSING;
   const ev=run.evidence.length?h(doc,"ul",{class:"evidence-links"},run.evidence.map(e=>h(doc,"li",{},
     e.evidenceId?h(doc,"button",{type:"button",class:"link-btn",dataset:{focusKey:`ev-${run.runId}-${e.evidenceId}`},on:{click:()=>{selection.evidenceId=e.evidenceId;ctx.navigate("assurance")}},text:`${e.kind??ctx.t("evidence.kindUnknown")} · ${e.evidenceId}`}):h(doc,"span",{text:e.kind??MISSING}),
@@ -215,13 +227,13 @@ export function runCard(ctx,run){
       ...(run.status==="RETRY_SCHEDULED"?[h(doc,"dt",{text:ctx.t("run.retryScheduledFor")}),h(doc,"dd",{dataset:{runRetryAt:run.retryAt??""},text:formatDateTime(run.retryAt,lang)})]:[]),
       // SBX-GATE: BLOCKED/FAILED nedeni dürüstçe gösterilir; SANDBOX_UNAVAILABLE için kodun yanında açıklama vardır.
       ...(run.reason?[h(doc,"dt",{text:ctx.t("run.reason")}),h(doc,"dd",{dataset:{runReason:run.reason},text:run.reason==="SANDBOX_UNAVAILABLE"?`SANDBOX_UNAVAILABLE — ${ctx.t("run.reason.SANDBOX_UNAVAILABLE")}`:runReasonHintKey(run.reason)?`${run.reason} — ${ctx.t(runReasonHintKey(run.reason))}`:run.reason})]:[])),
-    h(doc,"h6",{text:ctx.t("run.checkpoints")}),cps,steps?h(doc,"h6",{text:ctx.t("run.steps.title")}):null,steps,h(doc,"h6",{text:ctx.t("run.evidence")}),ev);
+    linked?linkedTasksBlock(ctx,run,linked):null,h(doc,"h6",{text:ctx.t("run.checkpoints")}),cps,steps?h(doc,"h6",{text:ctx.t("run.steps.title")}):null,steps,h(doc,"h6",{text:ctx.t("run.evidence")}),ev);
 }
-function runsSection(ctx,runsRes,details){
+function runsSection(ctx,runsRes,details,linkOf=()=>null){
   const doc=ctx.doc;
   if(runsRes.state!=="VERIFIED")return stateNote(ctx,runsRes.state,runsRes.state==="UNAVAILABLE"?"run.unavailable":undefined);
   if(!runsRes.items.length)return emptyNote(ctx,"run.none");
-  return h(doc,"ul",{class:"cards run-list"},runsRes.items.map(r=>runCard(ctx,details.get(r.runId)??r)));
+  return h(doc,"ul",{class:"cards run-list"},runsRes.items.map(r=>runCard(ctx,details.get(r.runId)??r,linkOf(r.runId))));
 }
 /** M1a c2: kabul bekleyen (AWAITING_APPROVAL) en son koşunun sunucu ayrıntısı (iki eksen + teslim görünümü); yoksa null. */
 export function awaitingRun(runsRes,details){
@@ -320,7 +332,7 @@ function taskRunsFor(ctx,m,runsRes,taskRuns){
   const task=m.tasks.find(t=>t.taskId===taskRuns.taskId);
   return task?taskRunsPanel(ctx,{task,linked:taskRuns.res,runsRes}):null;
 }
-function detailPanel(ctx,detail,runsRes,runDetails,evRes,project=null,taskRuns=null){
+function detailPanel(ctx,detail,runsRes,runDetails,evRes,project=null,taskRuns=null,runLinks=new Map()){
   const doc=ctx.doc;
   if(detail.state!=="VERIFIED")return panel(ctx,{titleKey:"work.detail",id:"work-detail"},stateNote(ctx,detail.state));
   const m=detail.mission;
@@ -337,7 +349,7 @@ function detailPanel(ctx,detail,runsRes,runDetails,evRes,project=null,taskRuns=n
     transitionControls(ctx,m,awaitingRun(runsRes,runDetails),runReadiness({project,mission:m})),
     runLinkPanel(ctx,m),
     tl?[h(doc,"h4",{text:ctx.t("work.runtl.title")}),h(doc,"p",{class:"note",text:ctx.t("work.runtl.lead")}),tl]:null,
-    h(doc,"h4",{text:ctx.t("run.timeline")}),runsSection(ctx,runsRes,runDetails),
+    h(doc,"h4",{text:ctx.t("run.timeline")}),runsSection(ctx,runsRes,runDetails,id=>{const res=runLinks.get(id);return res?{res,tasks:detail.mission.tasks}:null}),
     h(doc,"h4",{text:ctx.t("work.evidence.title")}),h(doc,"p",{class:"note",text:ctx.t("work.evidence.lead")}),evidenceSection(ctx,evRes));
 }
 
@@ -354,8 +366,10 @@ export async function render(ctx){
     const [detail,runsRes,evRes]=await Promise.all([ctx.api.missionDetail(selection.missionId),ctx.api.workRuns({missionId:selection.missionId}),ctx.api.evidenceList({missionId:selection.missionId,limit:EVIDENCE_LIMIT})]);
     const runDetails=new Map();
     if(runsRes.state==="VERIFIED")await Promise.all([...new Set([...runsRes.items.slice(0,RUN_DETAIL_LIMIT),...runsRes.items.filter(r=>r.status==="AWAITING_APPROVAL")])].map(async r=>{const d=await ctx.api.workRunDetail(r.runId);if(d.state==="VERIFIED"&&d.run)runDetails.set(r.runId,d.run)}));
+    const runLinks=new Map();
+    await Promise.all([...runDetails.keys()].map(async id=>{runLinks.set(id,await ctx.api.runTasks(id))}));
     const taskRuns=inspectedTask?.missionId===selection.missionId?{taskId:inspectedTask.taskId,res:await loadTaskRuns(ctx,inspectedTask.taskId)}:null;
-    detailNode=detailPanel(ctx,detail,runsRes,runDetails,evRes,detail.state==="VERIFIED"?(projects.find(p=>p.projectId===detail.mission.projectId)??null):null,taskRuns);
+    detailNode=detailPanel(ctx,detail,runsRes,runDetails,evRes,detail.state==="VERIFIED"?(projects.find(p=>p.projectId===detail.mission.projectId)??null):null,taskRuns,runLinks);
   }
   // //TR: Premium başlık (hero): göz üstü etiket + başlık + alt başlık + dürüst kaynak çipi/kapsam. Mevcut h1#view-title korunur (odak hedefi).
   const header=h(doc,"div",{class:"hero"},

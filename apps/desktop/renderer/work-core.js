@@ -319,6 +319,20 @@ export function classifyLinkResult(res,taskId,runId){
   const d=describePostResult(res);return {kind:"FAILED",key:d.key,vars:d.vars};
 }
 
+// ---------- Koşuya bağlı görevler (LANE-A A-FLOW-2) ----------
+// //TR: GET /v1/work-runs/:id/tasks {links:[{taskId,runId,missionId,linkedAt,...}]} yanıtı SIKI eşlenir: her bağ istenen koşuya ait, kimlikler kanonik, görev tekrarsız olmalıdır; tek bozuk satır tüm okumayı ERROR yapar. Uç nokta masaüstü allow-list'inde henüz yoksa (INVALID_API_PATH) okuma UNAVAILABLE olur ve "bağlı görev yok" ASLA söylenmez.
+export const runTasksPath=id=>typeof id==="string"&&RUN_ID_RE.test(id)?`/v1/work-runs/${id}/tasks`:null;
+export function mapRunTasks(raw,runId){
+  const bad={state:"ERROR",links:[]};
+  const list=isObj(raw)?raw.links:null;if(!Array.isArray(list)||list.length>500)return bad;
+  const seen=new Set(),links=[];
+  for(const l of list){
+    if(!isObj(l)||typeof l.taskId!=="string"||!TASK_ID_RE.test(l.taskId)||l.runId!==runId||typeof l.missionId!=="string"||!MISSION_ID_RE.test(l.missionId)||seen.has(l.taskId))return bad;
+    seen.add(l.taskId);links.push({taskId:l.taskId,runId,missionId:l.missionId,linkedAt:iso(l.linkedAt)});
+  }
+  return {state:"VERIFIED",links};
+}
+
 // ---------- Koşu hazırlığı ve bloklu koşu nedenleri (LANE-A first-delivery) ----------
 // //TR: Koşu başlamadan önce kayıtlardan okunabilen eksikler: depo yoksa runner REPOSITORY_NOT_CONFIGURED (uzak URL ise REMOTE_REPO_NOT_SUPPORTED_YET), mission ve proje kaydında test komutu yoksa TEST_COMMAND_NOT_CONFIGURED ile BLOK verir. "Kayıtlı" bir test komutu kabul edileceğini vaat etmez (runner komutu ayrıca izin listesinden geçirir); bu yüzden yalnız EKSİK durumlar kesin uyarıdır. Kayıt okunamadıysa UNKNOWN: olumlu bir hazırlık iddiası yok.
 export function runReadiness({project,mission}){

@@ -2263,3 +2263,92 @@ describe("LANE-A run -> task link step", () => {
     expect(c.buildLinkRunRequest({taskId: T("3"), runId: RID, taskStatus: "DONE"}).ok).toBe(false);
   });
 });
+
+// //TR: LANE-A A-FLOW-2: Görevler > koşu kartı "Bu koşuya bağlı görevler" (GET /v1/work-runs/:id/tasks). Okuma doğrulanmadıysa (allow-list yok / sunucu hatası / bozuk yanıt) "bağlı görev yok" ASLA söylenmez; bağlar görev başlıklarıyla ve durumlarıyla gösterilir.
+describe("LANE-A run card: tasks linked to the run", () => {
+  const R24 = "run_" + "ab".repeat(12), TID = (c: string) => "tsk_" + c.repeat(24), tasksPath = `/v1/work-runs/${R24}/tasks`;
+  const TASKS = [{taskId: TID("1"), title: "Plan A", status: "PENDING"}, {taskId: TID("2"), title: "<b>Plan B</b>", status: "DONE"}];
+  const getFor = (linkBody: any) => (p: string) => {
+    if (p === "/v1/projects") return {projects: [project()]};
+    if (p === "/v1/missions") return {missions: [mission()]};
+    if (p === `/v1/missions/${MID}`) return {mission: mission(), tasks: TASKS};
+    if (p === `/v1/work-runs?missionId=${MID}`) return {workRuns: [{runId: R24, missionId: MID, status: "RUNNING"}]};
+    if (p === `/v1/work-runs/${R24}`) return {workRun: {runId: R24, missionId: MID, status: "RUNNING"}};
+    if (p === tasksPath) { if (linkBody instanceof Error) throw linkBody; return linkBody; }
+    return undefined;
+  };
+  const link = (taskId: string, over: any = {}) => ({taskId, runId: R24, missionId: MID, tenantId: "t", linkedAt: "2026-10-26T01:00:00.000Z", linkedBy: "FOUNDER_LOCAL", ...over});
+  async function render(linkBody: any, lang = "en") {
+    const m = await mkCtx({get: getFor(linkBody), lang});
+    forms.selection.missionId = MID;
+    const root = mount(m.doc, await (await load(rend, "views", "work.js")).render(m.ctx));
+    return {...m, root, block: byData(root, "runLinkedFor", R24)[0]};
+  }
+  it("maps the answer strictly: only links of THIS run with canonical ids and unique tasks; one bad row makes the whole read an error", async () => {
+    const c = await load(rend, "work-core.js");
+    expect(c.runTasksPath(R24)).toBe(tasksPath);
+    for (const bad of ["", "run_zz", "run_0123456789ab", R24 + "/x", R24 + "?a=1", "RUN_" + "ab".repeat(12), undefined, null, 5, [R24]]) expect(c.runTasksPath(bad), String(bad)).toBeNull();
+    expect(c.mapRunTasks({links: [link(TID("1")), link(TID("2"), {linkedAt: "garbage"})]}, R24)).toEqual({state: "VERIFIED", links: [
+      {taskId: TID("1"), runId: R24, missionId: MID, linkedAt: "2026-10-26T01:00:00.000Z"}, {taskId: TID("2"), runId: R24, missionId: MID, linkedAt: null}]});
+    expect(c.mapRunTasks({links: []}, R24)).toEqual({state: "VERIFIED", links: []});
+    for (const bad of [null, undefined, [], "x", {}, {links: "x"}, {links: {}}, {links: [null]}, {links: [link("tsk_zz")]}, {links: [link(TID("1"), {runId: "run_" + "cd".repeat(12)})]}, {links: [link(TID("1"), {missionId: "msn_zz"})]},
+      {links: [link(TID("1")), link(TID("1"))]}, {links: [link([TID("1")] as any)]}, {links: Array.from({length: 501}, (_, i) => link(TID(String(i % 10)) as string))}])
+      expect(c.mapRunTasks(bad, R24), JSON.stringify(bad)?.slice(0, 60)).toEqual({state: "ERROR", links: []});
+  });
+  it("the api reads exactly the canonical path once per detailed run; a missing allow-list entry is UNAVAILABLE, a server error is the client's state, a bad id sends nothing", async () => {
+    const ok = await mkCtx({get: getFor({links: [link(TID("1"))]})});
+    expect((await ok.ctx.api.runTasks(R24)).state).toBe("VERIFIED");
+    expect(ok.calls.get).toEqual([tasksPath]);
+    for (const bad of ["run_zz", "", undefined]) expect((await ok.ctx.api.runTasks(bad)).state, String(bad)).toBe("ERROR");
+    expect(ok.calls.get).toHaveLength(1);
+    expect((await (await mkCtx({get: getFor(new Error("INVALID_API_PATH"))})).ctx.api.runTasks(R24)).state).toBe("UNAVAILABLE");
+    expect((await (await mkCtx({get: getFor(new Error(`${tasksPath}: HTTP 500`))})).ctx.api.runTasks(R24)).state).toBe("ERROR");
+    expect((await (await mkCtx({get: getFor({links: "x"})})).ctx.api.runTasks(R24)).state).toBe("ERROR");
+  });
+  it("shows the linked tasks with the mission's task title and status; a task missing from the mission list is named as such; markup is text", async () => {
+    const r = await render({links: [link(TID("1")), link(TID("2")), link(TID("3"))]});
+    const items = byData(r.block, "runLinkedTask");
+    expect(items.map(n => n.dataset.runLinkedTask)).toEqual([TID("1"), TID("2"), TID("3")]);
+    expect(text(items[0])).toContain("Plan A"); expect(text(items[0])).toContain(TID("1"));
+    expect(text(items[1])).toContain("<b>Plan B</b>");
+    expect(text(items[2])).toContain("Task not in this mission's list");
+    expect(all(r.root).some(n => n.tagName === "B")).toBe(false);
+    expect(text(byData(r.block, "runLinked", "none")[0] ?? r.block)).not.toContain("No task is linked");
+    expect(r.calls.get.filter((p: string) => p === tasksPath)).toHaveLength(1);
+    expect(r.calls.post).toEqual([]);
+  });
+  it("an empty verified read says no task is linked; an unreadable one NEVER says so (not enabled / server error / malformed answer)", async () => {
+    const none = await render({links: []});
+    expect(byData(none.block, "runLinked", "none")).toHaveLength(1);
+    expect(text(none.block)).toContain("No task is linked to this run");
+    for (const [body, kind] of [[new Error("INVALID_API_PATH"), "unavailable"], [new Error(`${tasksPath}: HTTP 404`), "unavailable"], [new Error(`${tasksPath}: HTTP 500`), "error"], [{links: [{}]}, "error"], [{nope: 1}, "error"]] as Array<[any, string]>) {
+      const r = await render(body);
+      expect(byData(r.block, "runLinked").map(n => n.dataset.runLinked), String(body?.message ?? JSON.stringify(body))).toEqual([kind]);
+      expect(text(r.block)).not.toContain("No task is linked");
+      expect(byData(r.block, "runLinkedTask")).toHaveLength(0);
+    }
+  });
+  it("a run whose id cannot name a link (not run_ + 24 hex) is shown as unreadable and sends no tasks request", async () => {
+    const m = await mkCtx({get: p => p === `/v1/work-runs?missionId=${MID}` ? {workRuns: [{runId: "run_0123456789ab", missionId: MID, status: "RUNNING"}]} : p === "/v1/work-runs/run_0123456789ab" ? {workRun: {runId: "run_0123456789ab", missionId: MID, status: "RUNNING"}} : getFor({links: []})(p)});
+    forms.selection.missionId = MID;
+    const root = mount(m.doc, await (await load(rend, "views", "work.js")).render(m.ctx));
+    expect(byData(root, "runLinked").map(n => n.dataset.runLinked)).toEqual(["error"]);
+    expect(m.calls.get.some((p: string) => p.endsWith("/tasks"))).toBe(false);
+  });
+  it("renders in Turkish without raw keys; every run.linked.* key exists in EN and TR and none is dead", async () => {
+    const r = await render({links: [link(TID("1"))]}, "tr");
+    expect(text(r.block)).toContain("Bu koşuya bağlı görevler");
+    expect(text(r.block)).not.toMatch(/run\.linked\.|\{[a-zA-Z]+\}/);
+    const en = (await load(rend, "locales", "en.js")).default, tr = (await load(rend, "locales", "tr.js")).default;
+    const have = (d: any) => Object.keys(d).filter(k => k.startsWith("run.linked.")).sort();
+    expect(have(en)).toEqual(have(tr));
+    const used = new Set([...read(rend, "views", "work.js").matchAll(/"(run\.linked\.[A-Za-z]+)"/g)].map(m => m[1]));
+    expect(have(en).filter(k => !used.has(k))).toEqual([]);
+    expect([...used].filter(k => !(k in en) || !(k in tr))).toEqual([]);
+  });
+  it("the read adds no write path: the new api accessor only GETs, and the protected allow-list change is requested in docs/authority-requests, not made", () => {
+    expect(read(rend, "api.js")).toMatch(/async runTasks\(runId\)\{const p=runTasksPath\(runId\);if\(!p\)return \{state:"ERROR",links:\[\]\};const r=await get\(p\)/);
+    const doc = fs.readFileSync(path.join(root, "docs", "authority-requests", "LANE-A-run-tasks-allowlist.md"), "utf8");
+    expect(doc).toContain("RUN_TASKS_RE=/^\\/v1\\/work-runs\\/run_[0-9a-f]{24}\\/tasks$/");
+  });
+});

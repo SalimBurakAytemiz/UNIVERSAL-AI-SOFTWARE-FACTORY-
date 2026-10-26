@@ -3169,4 +3169,9 @@ export default {
   "runlink.result.NOT_ENABLED":"Not linked: this build does not allow the link request. The remaining checked tasks were not attempted.",
   "runlink.result.INVALID":"The server answered, but the answer did not describe this task and run, so no link is claimed.",
   "runlink.result.NOT_ATTEMPTED":"Not attempted because an earlier request stopped the batch.",
+  "run.linked.title":"Tasks linked to this run",
+  "run.linked.none":"No task is linked to this run. The run's result cannot update any task until you link it.",
+  "run.linked.unavailable":"The tasks linked to this run cannot be read in this build yet (the read is not enabled here). Nothing is claimed either way.",
+  "run.linked.error":"The tasks linked to this run could not be read, so none are shown.",
+  "run.linked.unknownTask":"Task not in this mission's list"
 };

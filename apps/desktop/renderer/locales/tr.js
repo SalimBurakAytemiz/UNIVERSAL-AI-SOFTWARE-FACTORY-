@@ -3169,4 +3169,9 @@ export default {
   "runlink.result.NOT_ENABLED":"Bağlanmadı: bu sürüm bağ isteğine izin vermiyor. Kalan işaretli görevler denenmedi.",
   "runlink.result.INVALID":"Sunucu yanıt verdi ama yanıt bu görevi ve koşuyu anlatmıyor; bu yüzden bağ iddia edilmez.",
   "runlink.result.NOT_ATTEMPTED":"Denenmedi: önceki bir istek toplu işlemi durdurdu.",
+  "run.linked.title":"Bu koşuya bağlı görevler",
+  "run.linked.none":"Bu koşuya bağlı görev yok. Siz bağlamadıkça koşunun sonucu hiçbir görevi güncelleyemez.",
+  "run.linked.unavailable":"Bu koşuya bağlı görevler bu sürümde henüz okunamıyor (okuma burada etkin değil). Her iki yönde de hiçbir şey iddia edilmez.",
+  "run.linked.error":"Bu koşuya bağlı görevler okunamadı; bu yüzden hiçbiri gösterilmez.",
+  "run.linked.unknownTask":"Görev bu mission'ın listesinde yok"
 };

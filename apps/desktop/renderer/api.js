@@ -1,6 +1,6 @@
 // //TR: Bu modül renderer veri erişiminin tek kapısıdır: yalnız preload köprüsü (window.uasco.apiGet / apiPost) üzerinden GET ve sabit allow-list'li JSON POST yapar, token'ı hiç görmez; sonuçları epoch'lu önbellekte tutar, aynı anda gelen istekleri birleştirir ve eski epoch yanıtlarını atar.
 import {classifyFailure,mapRolesPage,mapRoleCatalogPage,mapRoleDetail,mapCockpit,emptyCockpit,mapProjects,mapMissions,mapControlStatus,mapEvents,mapAttention} from "./model.js";
-import {MISSION_ID_RE,SAFE_ID_RE,mapMissionDetail,mapWorkRuns,mapWorkRunDetail,mapEvidenceList,mapEvidenceDetail} from "./work-core.js";
+import {MISSION_ID_RE,SAFE_ID_RE,mapMissionDetail,mapWorkRuns,mapWorkRunDetail,runTasksPath,mapRunTasks,mapEvidenceList,mapEvidenceDetail} from "./work-core.js";
 import {devrunPath,filesPath,filePath,gitLogPath,gitDiffPath,exportsPath,exportItemPath,EXECUTORS_PATH,mapDevRun,mapFileList,mapFileContent,mapGitLog,mapGitDiff,mapExports,mapExecutors} from "./project-core.js";
 import {deliveriesPath,deliveryPath,mapDeliveries,mapDelivery} from "./delivery-core.js";
 import {COMPANY_KEYS,COMPANY_PATHS,COMPANY_MAPPERS,companyFailureState} from "./company-core.js";
@@ -66,6 +66,8 @@ export function createApi({bridge,store,now=()=>Date.now()}){
       if(missionId!==undefined&&!MISSION_ID_RE.test(String(missionId)))return {state:"ERROR",items:[]};
       const r=await get(missionId?`/v1/work-runs?missionId=${missionId}`:"/v1/work-runs");return r.ok?mapWorkRuns(r.data):{state:r.state,items:[],message:r.message};
     },
+    // //TR: LANE-A A-FLOW-2: koşuya bağlı görevler (GET /v1/work-runs/:id/tasks); allow-list'te yoksa UNAVAILABLE (asla "bağ yok" değil).
+    async runTasks(runId){const p=runTasksPath(runId);if(!p)return {state:"ERROR",links:[]};const r=await get(p);return r.ok?mapRunTasks(r.data,runId):{state:/INVALID_API_PATH/.test(String(r.message??""))?"UNAVAILABLE":r.state,links:[],message:r.message}},
     async workRunDetail(id){if(!SAFE_ID_RE.test(String(id)))return {state:"ERROR",run:null};const r=await get(`/v1/work-runs/${id}`);return r.ok?mapWorkRunDetail(r.data):{state:r.state,run:null,message:r.message}},
     /** Sorgu parametreleri sabit sırada ve yalnız geçerli değerlerle kurulur (main allow-list ile aynı kurallar). */
     async evidenceList({missionId,runId,kind,cursor,limit}={}){
