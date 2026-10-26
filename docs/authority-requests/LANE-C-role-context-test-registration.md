@@ -40,7 +40,7 @@ That hash is informational: it is only valid while `config/validation.json` on t
 ## Why it is safe to register
 
 - The test reads `registries/{role-definitions,skills-v2,technologies,agent-skill-matrix,role-execution-profiles}.json` read-only and writes only inside `fs.mkdtempSync(os.tmpdir())` directories that it removes; it spawns no process, opens no port and needs no network.
-- Linux measurement (4 CPU, Node 22): the whole file takes about 2-3 s, so the default vitest timeouts are kept.
+- Linux measurement (4 CPU, Node 22): the 599 contexts are computed once in `beforeAll` (about 0.4 s) and shared; the whole file takes about 2 s and the slowest test about 0.2 s, so the default vitest timeouts are kept.
 - It depends on the counts of `v7/integration` (599 roles, 51 guilds, 425 skills, 415 technologies, 363 legacy agents, 599 profiles; 197 roles with proposed skills; 41 unresolved technology references; UASCO-0085 with 72 proposed skills). A change to any of these is a deliberate measurement change and must update the assertions in the same PR.
 
 ## Not part of this request

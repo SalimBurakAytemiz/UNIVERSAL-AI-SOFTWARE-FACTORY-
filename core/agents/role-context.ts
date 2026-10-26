@@ -7,7 +7,7 @@ import type {NotExecutableReason, ProviderRoute, RoleExecutionProfile} from "./r
 import {FIRST_DELIVERY_BINDINGS} from "./first-delivery-bindings.js";
 
 export const ROLE_CONTEXT_SCHEMA_VERSION = "1.0.0";
-// //TR: Varsayılan bayt sınırı: serileştirilmiş bağlam (özet hariç) bu sınırı aşarsa listeler öncelik sırasıyla kısaltılır ve kısaltma AÇIKÇA işaretlenir; kanonik metin asla kısaltılmaz (sığmıyorsa tipli ret).
+// //TR: Varsayılan bayt sınırı: SON serileştirilmiş bağlam (bytes ve digest alanları DAHİL) bu sınırı aşarsa listeler öncelik sırasıyla kısaltılır ve kısaltma AÇIKÇA işaretlenir; kanonik metin asla kısaltılmaz (sığmıyorsa tipli ret). maxBytes sonlu ve pozitif bir sayı olmalıdır; NaN/sonsuz/sıfır/negatif sınırı sessizce kapatacağından ROLE_CONTEXT_INPUT_INVALID:MAX_BYTES:<değer> ile reddedilir.
 export const ROLE_CONTEXT_DEFAULT_MAX_BYTES = 24_576;
 export const NAME_NOT_VERIFIED = "NAME_NOT_VERIFIED_IN_REGISTRY";
 const REGISTRY = "registries/role-definitions.json";
@@ -22,7 +22,8 @@ export interface ContextRole {
   legacyAliases: readonly ContextAlias[]; gapIds: readonly string[];
   evaluationSpecs?: readonly {evaluationId: string; status: string; evaluatorEvidenceRef?: string | null}[];
 }
-export interface ContextProfileLike { roleId: string; reviewChain: {value: readonly string[]; gapId: string | null}; candidateSkills: {value: readonly string[]; gapId: string | null} }
+// //TR: Profil alanlarının KENDİ durumu (status) vardır (bugün hepsi PROPOSED_DERIVED); inceleme zincirinin kaynak etiketi bu durumdan gelir, çözümleyicide sabit yazılmaz.
+export interface ContextProfileLike { roleId: string; reviewChain: {value: readonly string[]; gapId: string | null; status: string}; candidateSkills: {value: readonly string[]; gapId: string | null} }
 export interface RoleContextInput {
   roles: readonly ContextRole[];
   guilds: readonly {guildId: string; name?: string; clusterId: string}[];
@@ -45,7 +46,7 @@ export interface RoleContext {
   technologies: readonly ContextTechnology[];
   skills: {canonical: readonly {skillId: string; origin: "CANONICAL_ROLE_REGISTRY"}[]; canonicalNotInSk2: readonly string[]; proposed: readonly ContextProposedSkill[]; proposedOrigin: "PROPOSED_DERIVED"};
   aliases: readonly {legacyId: string; legacyTitle: string | null; status: string; approval: string | null; origin: "LEGACY_REFERENCE"; usedForProposedSkills: boolean}[];
-  reviewChain: {origin: "PROPOSED_DERIVED"; value: readonly string[]; gapId: string | null} | null;
+  reviewChain: {origin: string; value: readonly string[]; gapId: string | null} | null;
   binding: {origin: "CODE_BINDING_TABLE"; resolverLabel: "EXECUTABLE" | "NOT_EXECUTABLE"; reason: NotExecutableReason | null; function: string | null; providerRoute: ProviderRoute | null; adapters: readonly string[]; note: "RESOLVER_LABEL_NOT_THE_READINESS_EXECUTABLE_LAYER"};
   gapIds: readonly string[];
   truncation: readonly ContextTruncation[];
@@ -72,12 +73,25 @@ function indexBy<T>(xs: readonly T[], key: (x: T) => string, code: string): Map<
   return m;
 }
 
+// //TR: Seçenek doğrulaması: geçersiz maxBytes bir VERİ sorunu değil çağıran hatasıdır ve (rol aranmadan önce) fırlatılır.
+function checkMaxBytes(o: {maxBytes?: number}): number {
+  const maxBytes = o.maxBytes ?? ROLE_CONTEXT_DEFAULT_MAX_BYTES;
+  if (typeof maxBytes !== "number" || !Number.isFinite(maxBytes) || maxBytes <= 0) throw new Error(`ROLE_CONTEXT_INPUT_INVALID:MAX_BYTES:${String(maxBytes)}`);
+  return maxBytes;
+}
+// //TR: SON serileştirilmiş biçimin bayt uzunluğu: `bytes` alanı kendi hanelerini de sayar (sabit nokta; en küçük tutarlı değer) ve özet yer tutucusu 64 onaltılık karakterdir; gövde ile bytes/digest alanlarının toplamı sınırı aşamaz.
+const DIGEST_PLACEHOLDER = "0".repeat(64);
+function finalSize(body: Omit<RoleContext, "bytes" | "digest">): number {
+  const base = Buffer.byteLength(stable({...body, bytes: 0, digest: DIGEST_PLACEHOLDER}), "utf8") - 1;
+  for (let digits = 1; ; digits++) { const x = base + digits; if (String(x).length === digits) return x; }
+}
+
 export function resolveRoleContext(i: RoleContextInput, roleId: string, o: {maxBytes?: number} = {}): RoleContextResult {
+  const maxBytes = checkMaxBytes(o);
   const matches = i.roles.filter(r => r.roleId === roleId);
   if (matches.length === 0) return {status: "NOT_RESOLVED", roleId, reason: "ROLE_NOT_IN_CATALOG"};
   if (matches.length > 1) return {status: "NOT_RESOLVED", roleId, reason: "ROLE_ID_DUPLICATE"};
   const role = matches[0];
-  const maxBytes = o.maxBytes ?? ROLE_CONTEXT_DEFAULT_MAX_BYTES;
   const guild = i.guilds.find(g => g.guildId === role.guildId);
 
   // //TR: Teknolojiler: gerekli önce, sonra isteğe bağlı; ad kayıt defterinde yoksa registryId null ve durum NAME_NOT_VERIFIED_IN_REGISTRY (düşürülmez, gizlenmez). Durum rolün KENDİ durumudur, asla yükseltilmez.
@@ -117,7 +131,7 @@ export function resolveRoleContext(i: RoleContextInput, roleId: string, o: {maxB
     technologies: [...required, ...optional.slice(0, keepOptional)],
     skills: {canonical, canonicalNotInSk2: canonicalIds.filter(s => !i.skillIds.has(s)), proposed: proposedAll.slice(0, keepProposed), proposedOrigin: "PROPOSED_DERIVED"},
     aliases: aliases.slice(0, keepAliases),
-    reviewChain: profile ? {origin: "PROPOSED_DERIVED", value: [...profile.reviewChain.value], gapId: profile.reviewChain.gapId} : null,
+    reviewChain: profile ? {origin: profile.reviewChain.status, value: [...profile.reviewChain.value], gapId: profile.reviewChain.gapId} : null,
     binding, gapIds,
     truncation: [
       ...(keepProposed < proposedAll.length ? [{field: "skills.proposed" as const, kept: keepProposed, total: proposedAll.length}] : []),
@@ -126,21 +140,21 @@ export function resolveRoleContext(i: RoleContextInput, roleId: string, o: {maxB
     ]
   });
   // //TR: Bayt sınırı: önce önerilen beceriler, sonra isteğe bağlı teknolojiler, sonra takma adlar yarıya indirilerek kısaltılır; her kısaltma truncation'da kayıtlıdır. Kanonik metin ve gerekli teknolojiler kısaltılmaz: hepsi atıldığında da sığmıyorsa tipli ret.
-  const size = (c: Omit<RoleContext, "bytes" | "digest">) => Buffer.byteLength(stable(c), "utf8");
   let kp = proposedAll.length, ko = optional.length, ka = aliases.length;
   let body = build(kp, ko, ka);
   const shrink = (n: number) => (n === 0 ? 0 : Math.floor(n / 2));
-  while (size(body) > maxBytes) {
+  while (finalSize(body) > maxBytes) {
     if (kp > 0) kp = shrink(kp); else if (ko > 0) ko = shrink(ko); else if (ka > 0) ka = shrink(ka); else return {status: "NOT_RESOLVED", roleId, reason: "ROLE_CONTEXT_EXCEEDS_BYTE_CAP"};
     body = build(kp, ko, ka);
   }
-  const bytes = size(body);
+  const bytes = finalSize(body);
   const digest = sha256(stable(body));
   return {status: "RESOLVED", context: {...body, bytes, digest}};
 }
 
-// //TR: Tüm roller için çözüm (roleId sırasıyla); hata fırlatmaz.
+// //TR: Tüm roller için çözüm (roleId sırasıyla); veri sorunlarında hata fırlatmaz (rol başına tipli ret), geçersiz maxBytes ise çağıran hatasıdır ve ilk roldan önce fırlatılır.
 export function resolveAllRoleContexts(i: RoleContextInput, o: {maxBytes?: number} = {}): RoleContextResult[] {
+  checkMaxBytes(o);
   return uniqSorted(i.roles.map(r => r.roleId)).map(id => resolveRoleContext(i, id, o));
 }
 
@@ -170,7 +184,7 @@ export function loadRoleContextInputFromRepo(repoRoot: string): RoleContextInput
   const matrix = readArray(repoRoot, REL_MATRIX, "agents");
   for (const a of matrix) if (!isObject(a) || typeof a.agentId !== "string" || !strArr(a.requiredSkillIds)) throw unavailable(REL_MATRIX);
   const profiles = readArray(repoRoot, PROFILES, "profiles");
-  for (const p of profiles) if (!isObject(p) || typeof p.roleId !== "string" || !isObject(p.reviewChain) || !strArr(p.reviewChain.value) || !isObject(p.candidateSkills) || !strArr(p.candidateSkills.value)) throw unavailable(PROFILES);
+  for (const p of profiles) if (!isObject(p) || typeof p.roleId !== "string" || !isObject(p.reviewChain) || !strArr(p.reviewChain.value) || typeof p.reviewChain.status !== "string" || !isObject(p.candidateSkills) || !strArr(p.candidateSkills.value)) throw unavailable(PROFILES);
   const slug = indexBy(techs as {slug: string; id: string; status: string; knowledgeState: string}[], t => t.slug, "DUPLICATE_TECHNOLOGY_SLUG");
   const legacy = indexBy(matrix as {agentId: string; requiredSkillIds: string[]}[], a => a.agentId, "DUPLICATE_LEGACY_AGENT_ID");
   indexBy(profiles as {roleId: string}[], p => p.roleId, "DUPLICATE_PROFILE_ROLE_ID");
