@@ -1,5 +1,5 @@
 {
- "//TR": "C-FLOW-ANALYSIS-1 mutasyon listesi: her mutant tam metin değişikliğidir (dosyada tam 1 kez bulunmalı); docs/lanes/LANE-C-flow-analysis-mutants.mjs her birini uygular ve tests/v7-lane-c-flow-analysis.test.ts dosyasının BAŞARISIZ olmasını bekler. Yeniden-doğrulama (F1-F3) için NA1-NA4, MA, X1-X4, X9, O2c, O3c eklendi (toplam 43).",
+ "//TR": "C-FLOW-ANALYSIS-1 mutasyon listesi: her mutant tam metin değişikliğidir (dosyada tam 1 kez bulunmalı); docs/lanes/LANE-C-flow-analysis-mutants.mjs her birini uygular ve tests/v7-lane-c-flow-analysis.test.ts dosyasının BAŞARISIZ olmasını bekler. Yeniden-doğrulama (F1-F3) için NA1-NA4, MA, X1-X4, X9, O2c, O3c eklendi (toplam 44).",
  "mutants": [
   {
    "id": "F1",
