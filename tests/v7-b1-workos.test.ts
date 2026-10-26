@@ -2602,3 +2602,75 @@ describe("LANE-B P3 read shapes: /v1/capabilities, /v1/retry, /v1/factory", () =
     noLeak(r.body, "symlink");
   });
 });
+
+// //TR: LANE-B G-FB-011/073/076: GET /v1/adapters, GET /v1/scheduler ve POST /v1/control/retry-blocked (eski, emekli scheduler) HATA yolları. Geçerli (imzalı) scheduler durumu gerektiren VERIFIED / PACKAGE_NOT_BLOCKED / BLOCKER_NOT_TECHNICALLY_RETRYABLE / başarı yolları KASITLI olarak sınanmaz: durumu uydurmak gerekir ve başarı yolu ayrılmış bir supervisor süreci başlatır. Symlink senaryoları Windows'ta atlanır.
+describe("LANE-B P3 legacy reads: /v1/adapters, /v1/scheduler and the retry-blocked refusals", () => {
+  const token = "s".repeat(32), HOST = "127.0.0.1:3210";
+  const hdr = {"x-uasco-control-token": token, host: HOST};
+  const mkApp = () => {
+    const runtime = path.join(tmp, "runtime"); fs.mkdirSync(runtime, {recursive: true});
+    return {runtime, app: buildServer({controlToken: token, runtime, dataDir: path.join(tmp, "data"), port: 3210, logger: false})};
+  };
+  const get = (app: any, url: string, headers: any = hdr) => app.inject({method: "GET", url, headers});
+  const post = (app: any, body: unknown, headers: any = hdr) => app.inject({method: "POST", url: "/v1/control/retry-blocked", headers, payload: body as any});
+  const noLeak = (body: string, label: string) => { for (const bad of [tmp, token]) expect(body, `${label} ${bad}`).not.toContain(bad); };
+
+  it("/v1/adapters returns the registry file unchanged and needs the token", async () => {
+    const {app} = mkApp();
+    const r = await get(app, "/v1/adapters");
+    expect(r.statusCode).toBe(200);
+    expect(r.json()).toEqual(JSON.parse(fs.readFileSync(path.join(process.cwd(), "registries/tool-adapters.json"), "utf8")));
+    noLeak(r.body, "adapters");
+    for (const h of [{host: HOST}, {host: HOST, "x-uasco-control-token": "x".repeat(32)}]) expect((await get(app, "/v1/adapters", h)).statusCode).toBe(403);
+  });
+
+  it("/v1/scheduler answers NOT_INITIALIZED when absent and a fixed REJECTED answer for an unverifiable state file", async () => {
+    const {app, runtime} = mkApp();
+    expect((await get(app, "/v1/scheduler")).json()).toEqual({status: "NOT_INITIALIZED", verification: "PENDING"});
+    fs.writeFileSync(path.join(runtime, "scheduler-state.json"), "{not json");
+    const r = await get(app, "/v1/scheduler"), b = r.json();
+    expect(r.statusCode).toBe(200);
+    expect(b).toMatchObject({status: "INVALID", verification: "REJECTED", error: "SCHEDULER_STATE_INVALID"});
+    expect(typeof b.detail).toBe("string");
+    noLeak(r.body, "scheduler invalid");
+    for (const h of [{host: HOST}, {host: HOST, "x-uasco-control-token": "x".repeat(32)}]) expect((await get(app, "/v1/scheduler", h)).statusCode).toBe(403);
+  });
+
+  it.skipIf(process.platform === "win32")("/v1/scheduler rejects a symlinked state file without serving the target (symlinks skipped on Windows)", async () => {
+    const {app, runtime} = mkApp();
+    const target = path.join(tmp, "sched-target.json"); fs.writeFileSync(target, JSON.stringify({marker: "SCHED-TARGET-MARKER"}));
+    fs.symlinkSync(target, path.join(runtime, "scheduler-state.json"));
+    const r = await get(app, "/v1/scheduler");
+    expect(r.json()).toMatchObject({status: "INVALID", verification: "REJECTED"});
+    expect(r.body).not.toContain("SCHED-TARGET-MARKER");
+    noLeak(r.body, "scheduler symlink");
+  });
+
+  it("POST /v1/control/retry-blocked refuses before touching anything: bad package id 400, no state 409, unknown package 404, unverifiable state 409, token 403; nothing is written or started", async () => {
+    const {app, runtime} = mkApp();
+    for (const body of [{}, {packageId: ""}, {packageId: "PKG-1"}, {packageId: "PKG-0001"}, {packageId: "pkg-001"}, {packageId: "PKG-001; rm"}, {packageId: 1}]) {
+      const r = await post(app, body);
+      expect(r.statusCode, JSON.stringify(body)).toBe(400);
+      expect(r.json()).toEqual({error: "INVALID_PACKAGE_ID"});
+    }
+    expect((await post(app, {packageId: "PKG-001"})).json()).toEqual({error: "SCHEDULER_NOT_INITIALIZED"});
+    const sf = path.join(runtime, "scheduler-state.json"); fs.writeFileSync(sf, "{not json");
+    const before = fs.readFileSync(sf);
+    expect((await post(app, {packageId: "PKG-999"})).json()).toEqual({error: "PACKAGE_NOT_FOUND"});
+    const inv = await post(app, {packageId: "PKG-001"});
+    expect(inv.statusCode).toBe(409);
+    expect(inv.json().error).toBe("SCHEDULER_STATE_INVALID");
+    noLeak(inv.body, "retry invalid state");
+    expect(fs.readFileSync(sf).equals(before)).toBe(true);
+    expect(fs.readdirSync(runtime).sort()).toEqual(["scheduler-state.json"]);
+    for (const h of [{host: HOST}, {host: HOST, "x-uasco-control-token": "x".repeat(32)}]) expect((await post(app, {packageId: "PKG-001"}, h)).statusCode).toBe(403);
+  });
+
+  it.skipIf(process.platform === "win32")("POST /v1/control/retry-blocked refuses a symlinked state file with SCHEDULER_STATE_UNSAFE_PATH (symlinks skipped on Windows)", async () => {
+    const {app, runtime} = mkApp();
+    const target = path.join(tmp, "sched-target2.json"); fs.writeFileSync(target, "{}");
+    fs.symlinkSync(target, path.join(runtime, "scheduler-state.json"));
+    expect((await post(app, {packageId: "PKG-001"})).json()).toEqual({error: "SCHEDULER_STATE_UNSAFE_PATH"});
+    expect(fs.readFileSync(target, "utf8")).toBe("{}");
+  });
+});
