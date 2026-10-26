@@ -1791,8 +1791,8 @@
   },
   "integrationBoard": {
     "//TR": "Koordinatör entegrasyon panosu: her açık PR için gerçek engel ve bekleyen sorumlu. Ortak kök neden (base dependency gate) PR'a özgü hatalardan ayrı tutulur; #221/#225 birleşmeden tekrar CI tetiklenmez.",
-    "at": "2026-10-26T10:26:00Z",
-    "base": "f149c20 (v7/integration, after #234 and #229)",
+    "at": "2026-10-26T11:31:00Z",
+    "base": "4e17857 (v7/integration, after #236)",
     "sharedRootCause": {
       "id": "NONE_ACTIVE",
       "previous": "BASE_DEPENDENCY_GATE resolved by #225 (e2323d9)",
@@ -1826,12 +1826,40 @@
         "state": "DRAFT @ffeaf79",
         "blocker": "held for Founder decision (protected workflow)",
         "owner": "FOUNDER"
+      },
+      {
+        "pr": "231",
+        "kind": "FOUNDER-TIER sandbox",
+        "state": "DRAFT @ad2fc4b (CI 5/5 green incl. Windows)",
+        "blocker": "3 reviews done (wbeqjgq2e, wy0uyd5qv, wlq9ddafp): consolidated fix list to Lane B (M1 start() takeover leak, M2 TOCTOU liveness, M3 one teardown per project, M4 orphan test, M5 D2 startedAt; S1 bare-name wsl.exe fallback, S2 distro binding, S3-S5, test/lifecycle LOWs); merge = Founder decision (R2) after real-WSL acceptance",
+        "owner": "LANE_B -> FOUNDER"
+      },
+      {
+        "pr": "224",
+        "kind": "LANE_C PAR runner",
+        "state": "DRAFT @d77d1e4",
+        "blocker": "round-3 review BLOCKERS (GA-MAXBUF-1 truncated diff with status 0 -> secret-scan bypass; PAR05 bound loosened; 4 LOW) + repair round 1 (Windows HB-1 fenced B, TK-2 crashEngine precondition) -> Lane C one push",
+        "owner": "LANE_C"
+      },
+      {
+        "pr": "235",
+        "kind": "LANE_B analysis routes",
+        "state": "READY @3512413, SHA-bound auto-merge armed 11:23:35Z",
+        "blocker": "review BLOCKERS fixed (paid call for ineligible mission; Global Stop pre-gate unpinned); delta NO_BLOCKERS (w75pak1n1); waits on Windows CI",
+        "owner": "LANE_B"
+      },
+      {
+        "pr": "237",
+        "kind": "LANE_C C-FLOW-ANALYSIS-2 (real Claude CLI content builder)",
+        "state": "DRAFT @fdf43b0",
+        "blocker": "review wb5spggwp running",
+        "owner": "LANE_C"
       }
     ],
     "branchOnlyChains": {
-      "laneA": "A-WIN-E2E-1 merged as #234 db5fff1 (Electron journey E2E harness; Windows NOT_EXECUTED until desktop-journey-e2e.yml lands via the transition PR); #232/#192/#196/#233/#234 merged; next A-ANALYSIS-STUCK-1 (re-approve UI from the structured BLOCKED kind/artifactId)",
-      "laneB": "claude/lane-b-analysis-routes 6bd6f30 (200-with-body steps, shared produce lock, stop->423 audit; PR after #229 F1 fix); #231 sandbox in Founder tier",
-      "laneC": "C-FLOW-ANALYSIS-1 merged as #229 f149c20; flow-analysis-2 branch-only @da450ce; #224 round-3 delta review wd77md0vz running",
+      "laneA": "A-ANALYSIS-STUCK-1 merged as #236 4e17857; next A-ANALYSIS-ORDER-1 (same-mission cross-form ordering + LOW pins) from the new base",
+      "laneB": "#235 analysis routes READY + auto-merge armed (3512413); #231 consolidated fix list in work; batch-4b server.ts line verified by coordinator review",
+      "laneC": "#237 C-FLOW-ANALYSIS-2 draft under review; #224 review + repair push pending",
       "coordinator": "claude/coord-protected-batch-4b fee6cef -> rebuild after #229/analysis-routes (adds AnalysisFlow stopped hook, #226 journey pin flip, M4 pin); claude/coord-transition-autonomy (reform, wgguxa5j0) + CI speed plan (N=6 shards, draft gating, preflight needs, npm cache, selftest tmp cleanup; measured BEFORE p50 21.7 min)"
     },
     "mergedVia225": {
@@ -1989,6 +2017,16 @@
         "review": "process-mode reviews (M-229-1/2, L1-L4, re-verify F1-F3) + coordinator delta check on febd9a3 NO_BLOCKERS (4 files; tests-8 51/51; tsc 0; coordinator mutant drop{kind,artifactId} KILLED); Lane C mutants 50/50 KILLED",
         "pushCi": "pending at 10:26Z",
         "riskTier": "ROUTINE (core/workos/crew + tests + docs; 0 protected paths)"
+      },
+      {
+        "pr": 236,
+        "merge": "4e17857",
+        "by": "auto-merge (SHA-bound, armed by coordinator on 8f394e3 at 11:15:51Z)",
+        "at": "2026-10-26T11:28:55Z",
+        "postMerge": "VERIFIED: parent1 f149c20, parent2 = reviewed head 8f394e3, merge-tree ce090c0 == merge tree",
+        "review": "process-mode review wcd0r9e2m BLOCKERS (stale block after success; mission-switch result leak) fixed in 8f394e3; delta wzrti2173 NO_BLOCKERS (23/30 independent mutants killed, survivors LOW)",
+        "pushCi": "pending at 11:31Z",
+        "riskTier": "ROUTINE (renderer + locales + tests; 0 protected paths)"
       }
     ],
     "wslProvider": {
