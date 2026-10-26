@@ -1791,7 +1791,7 @@
   },
   "integrationBoard": {
     "//TR": "Koordinatör entegrasyon panosu: her açık PR için gerçek engel ve bekleyen sorumlu. Ortak kök neden (base dependency gate) PR'a özgü hatalardan ayrı tutulur; #221/#225 birleşmeden tekrar CI tetiklenmez.",
-    "at": "2026-10-26T20:32:00.287Z",
+    "at": "2026-10-26T20:45:12.862Z",
     "base": "f663ee9 (v7/integration, after #238)",
     "sharedRootCause": {
       "id": "NONE_ACTIVE",
@@ -2225,6 +2225,15 @@
         "postMerge": "VERIFIED: parent1 8c45845, parent2 = gated head 559f33e, merge-tree == merge tree",
         "review": "689f49a full NO_BLOCKERS_1LOW -> 559f33e delta NO_BLOCKERS (A-PREDEV-BUSY-1 timing flake fixed: sync lock proof + kept dwell + bounded until; X1/X2/X4 killed; CI failure reproduced and fixed)",
         "riskTier": "ROUTINE (tests/v7-ux-journey.test.ts only)"
+      },
+      {
+        "pr": 256,
+        "merge": "7a97b5c",
+        "by": "auto-merge (armed by coordinator on 23b8a11 after merge-gate OPEN)",
+        "at": "2026-10-26T20:44:42Z",
+        "postMerge": "VERIFIED: parent1 45d7292, parent2 = gated head 23b8a11, merge-tree == merge tree",
+        "review": "698b838 full NO_BLOCKERS_4LOW (security lens: not R2) -> 71131ed delta NO_BLOCKERS_1LOW -> 23b8a11 delta NO_BLOCKERS_1LOW (real adapter codes; PH17 doc)",
+        "riskTier": "ROUTINE (core/workos/runner.ts refusal status mapping, unprotected; security-reviewed)"
       }
     ],
     "wslProvider": {
