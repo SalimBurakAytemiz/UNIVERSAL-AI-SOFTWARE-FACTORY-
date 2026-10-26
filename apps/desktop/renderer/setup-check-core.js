@@ -9,7 +9,8 @@ const row=(id,state,reasons=[],extra={})=>({id,state,reasons,login:null,provider
 function cliRow(exec){
   const lc=local(exec),cli=lc?lc.cli:null,rd=exec.readiness;
   const roles=rd?[rd.implementer,rd.reviewer].filter(Boolean):[];
-  const blockers=[...new Set(roles.flatMap(r=>r.blockers.filter(b=>!b.startsWith("CLAUDE_PROFILE_"))))];
+  // //TR: Rol engelleyicilerinden yalnız CLI/başlatıcıya ait olanlar CLI satırına girer: oturum kodları (CLAUDE_PROFILE_*) oturum satırlarına, EXECUTOR_NOT_ENABLED (sunucu bunu her rolün sonuna ekler) YÜRÜTÜCÜ satırına aittir.
+  const blockers=[...new Set(roles.flatMap(r=>r.blockers.filter(b=>!b.startsWith("CLAUDE_PROFILE_")&&b!=="EXECUTOR_NOT_ENABLED")))];
   if(blockers.length)return row("CLI","BLOCKED",blockers);
   if(roles.length===2)return row("CLI","PASS",[],{note:cli&&(cli.state==="NOT_FOUND"||cli.state==="SHIM_UNSUPPORTED")?cli.state:null});
   if(cli&&cli.state==="NOT_FOUND")return row("CLI","BLOCKED",["CLAUDE_CLI_NOT_FOUND"]);
