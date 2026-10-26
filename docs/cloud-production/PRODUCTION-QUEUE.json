@@ -1791,69 +1791,41 @@
   },
   "integrationBoard": {
     "//TR": "Koordinatör entegrasyon panosu: her açık PR için gerçek engel ve bekleyen sorumlu. Ortak kök neden (base dependency gate) PR'a özgü hatalardan ayrı tutulur; #221/#225 birleşmeden tekrar CI tetiklenmez.",
-    "at": "2026-10-26T05:15:00Z",
-    "base": "e2323d9 (v7/integration, #225 merged)",
+    "at": "2026-10-26T05:50:00Z",
+    "base": "b77abe1 (v7/integration)",
     "sharedRootCause": {
-      "id": "BASE_DEPENDENCY_GATE",
-      "detail": "npm audit: electron high GHSA-jr5w-w6x2-84p9, undici high, fast-uri moderate (published after #220). Every PR fails dependency-supply-chain on Linux and Windows shard 1 for this reason only.",
-      "fix": "#221 51c9ced (green on all required checks, run 40261485904); also contained in #225",
-      "owner": "FOUNDER (dependency + protected-path merge)",
-      "ciPolicy": "lifted: coordinator ran update-branch on #219/#222/#223/#218/#212 at 05:1xZ; drafts merge base on their next push",
-      "status": "RESOLVED by #225 merge e2323d9 (contains #221 51c9ced); all required checks green on 7f6591c (validate ubuntu + windows aggregator, installer)"
+      "id": "NONE_ACTIVE",
+      "previous": "BASE_DEPENDENCY_GATE resolved by #225 (e2323d9)",
+      "watch": "Windows shard failures on e2323d9 push and #223 under diagnosis"
     },
     "prs": [
       {
-        "pr": 219,
-        "kind": "LANE_B",
-        "state": "READY, auto-merge ON, base merged",
-        "blocker": "CI on updated head",
-        "owner": "CI / COORDINATOR (watch)",
-        "review": "coordinator independent review NO_BLOCKERS (wkbc1hsll); LOW nits ride next code push"
-      },
-      {
-        "pr": 222,
-        "kind": "LANE_B",
-        "state": "READY, auto-merge ON, base merged",
-        "blocker": "CI on updated head",
-        "owner": "CI / COORDINATOR (watch)",
-        "review": "NO_BLOCKERS (wkbc1hsll); LOW nits + intake-template doc TDZ form ride next code push"
-      },
-      {
         "pr": 223,
         "kind": "LANE_B docs",
-        "state": "READY, auto-merge ON, base merged",
-        "blocker": "CI on updated head",
-        "owner": "CI / COORDINATOR (watch)",
-        "review": "BLOCKERS c74e38b -> fixed c1c94c3, re-check NO_BLOCKERS (wiu22eij1)"
+        "state": "READY, auto-merge ON",
+        "blocker": "validate-windows-shard (3) red on 555c2c6: tests/v7-int-r3-sbx-gate.test.ts:216 expected 409 to be 200 (docs-only PR => base/Windows issue; diagnosis running)",
+        "owner": "COORDINATOR"
       },
       {
-        "pr": 218,
-        "kind": "LANE_C",
-        "state": "READY, auto-merge ON, base merged (#214 now in base)",
-        "blocker": "CI on updated head",
-        "owner": "CI / COORDINATOR (watch)"
+        "pr": 226,
+        "kind": "LANE_A chain",
+        "state": "DRAFT, CI running",
+        "blocker": "independent chain review w6vswhvtl",
+        "owner": "COORDINATOR (review) / LANE_A (fixes)"
       },
       {
-        "pr": 212,
-        "kind": "LANE_C",
-        "state": "READY, auto-merge ON, base merged",
-        "blocker": "CI on updated head",
-        "owner": "CI / COORDINATOR (watch)",
-        "evidence": "N1/N2/N3/N8 killed on b1984dc"
+        "pr": 227,
+        "kind": "LANE_B product-run (B-RUN-1)",
+        "state": "DRAFT",
+        "blocker": "round-3 security findings C-1/C-8/C-9 fixes from Lane B; registration via batch 4b",
+        "owner": "LANE_B"
       },
       {
         "pr": 224,
         "kind": "LANE_C",
         "state": "DRAFT",
-        "blocker": "review BLOCKERS (HB-1, GSTOP/exhausted reap, TK-3, TK-4) + tests into registered files",
-        "owner": "LANE_C fixes; COORDINATOR re-review"
-      },
-      {
-        "pr": 197,
-        "kind": "LANE_A",
-        "state": "DRAFT",
-        "blocker": "superseded by Lane A chain PR (contains 54b741c)",
-        "owner": "LANE_A / COORDINATOR (close when chain PR opens)"
+        "blocker": "review BLOCKERS fixes in progress (18 findings)",
+        "owner": "LANE_C"
       },
       {
         "pr": 196,
@@ -1873,7 +1845,7 @@
         "pr": 66,
         "kind": "LEGACY",
         "state": "DRAFT",
-        "blocker": "Founder decision (FD-E2E-DESKTOP-66)",
+        "blocker": "Founder decision",
         "owner": "FOUNDER"
       }
     ],
@@ -1896,6 +1868,55 @@
       "closedOrSuperseded": [
         220
       ]
+    },
+    "merges": [
+      {
+        "pr": 225,
+        "merge": "e2323d9",
+        "by": "Founder auto-merge",
+        "postMerge": "VERIFIED (parents fe08022+7f6591c)",
+        "pushCi": "run 40272855009 FAILURE: validate-windows-shard (1) red, shards 2/3 green (diagnosis running)"
+      },
+      {
+        "pr": 218,
+        "merge": "ae8d744",
+        "by": "auto-merge (coordinator enabled after independent review)",
+        "at": "2026-10-26T05:35:31Z",
+        "postMerge": "VERIFIED",
+        "pushCi": "cancelled by newer push"
+      },
+      {
+        "pr": 222,
+        "merge": "d9011e3",
+        "by": "auto-merge",
+        "at": "2026-10-26T05:35:34Z",
+        "postMerge": "VERIFIED (base advanced by #218 between test and merge; push CI is the combined check)",
+        "pushCi": "run 40275049728 in progress"
+      },
+      {
+        "pr": 212,
+        "merge": "089ae37",
+        "by": "auto-merge",
+        "at": "2026-10-26T05:41:10Z",
+        "postMerge": "VERIFIED",
+        "pushCi": "cancelled by newer push"
+      },
+      {
+        "pr": 219,
+        "merge": "b77abe1",
+        "by": "auto-merge",
+        "at": "2026-10-26T05:41:13Z",
+        "postMerge": "VERIFIED",
+        "pushCi": "run 40275559844 pending"
+      }
+    ],
+    "wslProvider": {
+      "review": "round 3 BLOCKERS (io_uring AF_VSOCK HIGH, adversarially confirmed) evidence claude/coord-par-repros fa87522",
+      "owner": "LANE_B B-SBX-WIN-4"
+    },
+    "reform": {
+      "transitionBranch": "claude/coord-transition-autonomy (building, wgguxa5j0)",
+      "ciSpeed": "measurement w744y3a76"
     }
   }
 }
