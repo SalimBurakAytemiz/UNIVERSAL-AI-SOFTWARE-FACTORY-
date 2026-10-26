@@ -376,9 +376,9 @@
   ],
   "tests": [],
   "fingerprint": {
-    "value": "11cc9f97e41c8cafcc8ead9faa366aed763a4bcc83c75676693aba7ef46055a0",
-    "at": "2026-10-26T17:42:37.261Z",
-    "base": "e8ad4a378dc0357b7ba107acf96244408a133d33",
-    "prs": 9
+    "value": "12e09747b50c3dd478348631ed3dc81342166ac33d4f20ed580002740802e339",
+    "at": "2026-10-26T18:42:29.795Z",
+    "base": "0ddb170e7f7039ae520a3f66936b6668840a7243",
+    "prs": 8
   }
 }
