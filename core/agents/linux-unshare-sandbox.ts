@@ -20,8 +20,11 @@ export interface LinuxSandboxOptions {
   acceptUnenforcedProcessLimit?: boolean;
 }
 
-const NS_FLAGS = ["--user", "--map-root-user", "--net", "--pid", "--ipc", "--uts", "--mount", "--fork", "--kill-child=SIGKILL"];
+// //TR: C-LINUX-SANDBOX-EXPORTS: üç sabit Lane B'nin WSL2 sağlayıcısı (core/sandbox/wsl-unshare-sandbox.ts) tarafından AYNEN yeniden kullanılır (betik kopyalanmaz). Değerler değişmedi; yalnız dışa aktarılır. NS_FLAGS dondurulmuştur: dışarıdan değiştirilirse bu sağlayıcının izolasyon bayrakları da değişirdi.
+const NS_FLAGS: readonly string[] = Object.freeze(["--user", "--map-root-user", "--net", "--pid", "--ipc", "--uts", "--mount", "--fork", "--kill-child=SIGKILL"]);
 const HELPER_PATH = "/usr/sbin:/usr/bin:/sbin:/bin";
+export const LINUX_SANDBOX_NS_FLAGS = NS_FLAGS;
+export const LINUX_SANDBOX_HELPER_PATH = HELPER_PATH;
 const REQUIRED_TOOLS = ["mount", "umount", "pivot_root", "setpriv", "mkdir", "ln", "awk", "sh"] as const;
 // //TR: Kurulum betiği namespace İÇİNDE, pid 1 olarak çalışır. Argümanlar: SCRATCH CPU ADRES_KB DOSYA_BLOK KOK_BAGI EK_RO_KOKLER komut... Sıra: özel mount -> tmpfs kök -> ro bağlar -> sentetik /etc -> özel /dev -> özel /tmp -> /work (scratch) -> /proc (+ ro maskeler) -> iç içe userns kapat -> hepsini ro yap -> pivot_root + eski kökü ayır -> DENETİM (ro olmayan bağ varsa 126) -> ulimit -> yetenek bırak ve komutu pid 1 olmayan çocuk olarak çalıştır (gözetmen pid 1 kalır, stdin korunur).
 const SETUP = [
@@ -33,6 +36,9 @@ const SETUP = [
   'PRL=$(command -v prlimit 2>/dev/null) || PRL=""',
   // //TR: prlimit best-effort: sunucunun hard NPROC sınırı istenen değerin altındaysa (yükseltmek init userns CAP_SYS_RESOURCE ister) ayar atlanır; komut bu yüzden başarısız OLMAZ.
   'if [ -n "$PRL" ] && ! "$PRL" --nproc="$NPROC" true 2>/dev/null; then PRL=""; fi',
+  // //TR: C-SBX-LO-1: yeni net namespace'te lo KAPALIDIR. `ip` sabit HELPER_PATH ile (arayanın PATH'i değil) ve yetenekler bırakılmadan ÖNCE çözülür; yoksa lo kapalı kalır (sağlayıcı yine doğrulanır, capabilities.loopback=false). Yalnız namespace İÇİ loopback açılır: yönlendirme yok, dışarıya yol yok. Başka bir araca (python vb.) geri düşülmez.
+  'IPB=$(command -v ip 2>/dev/null) || IPB=""',
+  'if [ -n "$IPB" ]; then "$IPB" link set lo up 2>/dev/null || true; fi',
   "mount --make-rprivate /",
   'mount -t tmpfs -o mode=755,size=16m tmpfs "$R"',
   'mkdir "$R/usr" "$R/etc" "$R/dev" "$R/proc" "$R/tmp" "$R/work"',
@@ -66,6 +72,59 @@ const SETUP = [
   'if [ -n "$PRL" ]; then exec "$PRL" --nproc="$NPROC" "$SETPRIV" --no-new-privs --bounding-set=-all --inh-caps=-all "$SUPSH" -c "$INNER" sh "$@"; fi',
   'exec "$SETPRIV" --no-new-privs --bounding-set=-all --inh-caps=-all "$SUPSH" -c "$INNER" sh "$@"'
 ].join("\n");
+export const LINUX_SANDBOX_SETUP = SETUP;
+
+// //TR: C-SBX-LO-1: sağlayıcının kanıtlanmış yetenekleri. loopback yalnız sandbox İÇİNDE 127.0.0.1 üzerinde dinle+bağlan gerçekten çalıştıysa true'dur (selfTest kanıtı); NOT_PROBED = selfTest henüz geçmedi.
+export type LinuxLoopbackReason = "LOOPBACK_TOOL_MISSING" | "LOOPBACK_PROBE_NODE_UNAVAILABLE" | "NOT_PROBED";
+export interface LinuxSandboxCapabilities { loopback: boolean; loopbackReason: LinuxLoopbackReason | null }
+const NOT_PROBED: LinuxSandboxCapabilities = Object.freeze({loopback: false, loopbackReason: "NOT_PROBED" as const});
+// //TR: Sandbox İÇİNDE `node -e` ile çalışır (argv[1] = ana makinedeki 127.0.0.1 dinleyicisinin portu): 127.0.0.1 üzerinde dinle+bağlan "pong" okur -> loopback_ok; 1.1.1.1:53, 8.8.8.8:53, 93.184.216.34:80 ve ana makine loopback portuna bağlantıların HEPSİ başarısız olmalı -> outbound_blocked, herhangi biri başarılıysa outbound_connected.
+export const LINUX_SANDBOX_LOOPBACK_PROBE = [
+  'const net = require("net");',
+  'console.log("probe_started");',
+  'const attempt = (host, port) => new Promise(res => { const s = net.connect({host, port, timeout: 1500}); const done = ok => { s.destroy(); res(ok); }; s.once("connect", () => done(true)); s.once("timeout", () => done(false)); s.once("error", () => done(false)); });',
+  "(async () => {",
+  "  const hostPort = Number(process.argv[1]);",
+  '  const srv = net.createServer(c => c.end("pong"));',
+  '  const up = await new Promise(r => { srv.once("error", () => r(false)); srv.listen(0, "127.0.0.1", () => r(true)); });',
+  "  let lo = false;",
+  '  if (up) lo = await new Promise(r => { let got = ""; const c = net.connect({host: "127.0.0.1", port: srv.address().port, timeout: 1500}); c.on("data", d => { got += d; }); c.once("close", () => r(got === "pong")); c.once("error", () => r(false)); c.once("timeout", () => { c.destroy(); r(false); }); });',
+  "  srv.close();",
+  '  console.log(lo ? "loopback_ok" : "loopback_failed");',
+  '  const targets = [["1.1.1.1", 53], ["8.8.8.8", 53], ["93.184.216.34", 80]];',
+  '  if (Number.isInteger(hostPort) && hostPort > 0) targets.push(["127.0.0.1", hostPort]);',
+  "  const r = await Promise.all(targets.map(([h, p]) => attempt(h, p)));",
+  '  console.log(r.some(Boolean) ? "outbound_connected" : "outbound_blocked");',
+  "  process.exit(0);",
+  "})();"
+].join("\n");
+/** Sandbox içi yönlendirme sondasının çıktısı (`no_route_out` = başlık hariç hiç rota yok); aksi halde dışarıya çıkış yolu vardır. */
+export function networkRouteProblem(isoStdout: string): string | null {
+  return isoStdout.split("\n").some(l => l.trim() === "no_route_out") ? null : "SELFTEST_ROUTE_OUT_EXISTS";
+}
+/** LC-LO-01: sandbox içi `netns=<readlink /proc/self/ns/net>` satırı ana makinenin net namespace bağlantısından FARKLI olmalı; satır yok/boşsa kanıtsızdır (fail-closed), eşitse ağ ana makineyle paylaşılıyordur. */
+export function netnsProblemOf(isoStdout: string, hostNetns: string | null): string | null {
+  const line = isoStdout.split("\n").map(l => l.trim()).find(l => l.startsWith("netns="));
+  const inside = line ? line.slice("netns=".length).trim() : "";
+  if (!inside || !hostNetns) return "SELFTEST_NETNS_NOT_VERIFIED";
+  return inside === hostNetns ? "SELFTEST_NETNS_SHARED" : null;
+}
+export function hostNetns(): string | null { try { return fs.readlinkSync("/proc/self/ns/net"); } catch { return null; } }
+/** selfTest kararı (saf): sandbox içi sonda çıktısı + ana makine dinleyicisinin bağlantı sayısı + `ip` ana makinede (sabit HELPER_PATH) var mı. Dışarı bağlanabilmek veya ana makine loopback'ine erişmek her zaman başarısızlıktır; loopback yokluğu yalnız `ip` VARKEN başarısızlıktır (lo açılmalıydı). */
+// //TR: LC-LO-01: sonda hiç başlamadıysa (probe_started yok) YALNIZ "komut bulunamadı" (çıkış 127, zaman aşımı yok: sandbox içinde node görünmüyor) loopback yok sayılır; çökme, zaman aşımı, başka çıkış kodu ya da sessiz başarı sonucu kanıtsız bırakır ve fail-closed olur (ana makine/dış bağlantı negatif sondası hiç koşmadan AVAILABLE denmez).
+export function loopbackVerdict(i: {ipPresent: boolean; stdout: string; hostConnections: number; exitCode: number | null; timedOut: boolean}): {ok: true; capabilities: LinuxSandboxCapabilities} | {ok: false; detail: string} {
+  if (i.hostConnections > 0) return {ok: false, detail: "SELFTEST_HOST_LOOPBACK_REACHED"};
+  const has = (t: string) => i.stdout.split("\n").some(l => l.trim() === t);
+  if (!has("probe_started")) {
+    if (i.exitCode === 127 && !i.timedOut) return {ok: true, capabilities: {loopback: false, loopbackReason: i.ipPresent ? "LOOPBACK_PROBE_NODE_UNAVAILABLE" : "LOOPBACK_TOOL_MISSING"}};
+    return {ok: false, detail: "SELFTEST_LOOPBACK_PROBE_FAILED"};
+  }
+  if (has("outbound_connected")) return {ok: false, detail: "SELFTEST_OUTBOUND_CONNECT_SUCCEEDED"};
+  if (!has("outbound_blocked")) return {ok: false, detail: "SELFTEST_OUTBOUND_NOT_VERIFIED"};
+  const lo = has("loopback_ok");
+  if (i.ipPresent && !lo) return {ok: false, detail: "SELFTEST_LOOPBACK_NOT_AVAILABLE"};
+  return {ok: true, capabilities: lo ? {loopback: true, loopbackReason: null} : {loopback: false, loopbackReason: "LOOPBACK_TOOL_MISSING"}};
+}
 
 const now = () => new Date().toISOString();
 function refusal(argv: string[], why: string): ProcResult {
@@ -132,7 +191,11 @@ export class LinuxUnshareSandboxProvider implements SandboxProvider {
   private verified = false;
   private probing: Promise<{ok: boolean; detail?: string}> | null = null;
   private shell = "/bin/sh";
+  private caps: LinuxSandboxCapabilities = NOT_PROBED;
   constructor(private readonly o: LinuxSandboxOptions = {}) {}
+  /** selfTest'in KANITLADIĞI yetenekler (selfTest geçmeden: NOT_PROBED). */
+  // //TR: LC-LO-02: her okumada DONDURULMUŞ kopya: işlem içi bir tutucu loopback=true yapıp nsenter köprüsünün kilidini açamaz.
+  get capabilities(): LinuxSandboxCapabilities { return Object.freeze({...this.caps}); }
   private get unshare(): string { return this.o.unshareBinary ?? resolveTool("unshare") ?? "/usr/bin/unshare"; }
   /** Bağlanacak ek kökler (doğrulanmış); reddedilen kökler asla bağlanmaz. Çözümlenemeyen/reddedilen varsayılan node öneki `toolchain().problem` ile görünür. */
   toolchain(): {roots: string[]; problem?: string} {
@@ -199,6 +262,8 @@ export class LinuxUnshareSandboxProvider implements SandboxProvider {
     const hostShm = path.join("/dev/shm", `uasco-sbx-canary-${process.pid}-${Date.now()}`), shmProbe = `uasco-sbx-private-${process.pid}-${Date.now()}`;
     const env: NodeJS.ProcessEnv = {PATH: HELPER_PATH};
     let server: net.Server | null = null, connections = 0, acceptedUnenforced = false;
+    let hostLo: net.Server | null = null, loConnections = 0, proven: LinuxSandboxCapabilities = NOT_PROBED;
+    this.caps = NOT_PROBED;
     try {
       // Ana makine kanaryaları: dosya, dinleyen unix soketi, host /dev/shm dosyası. Sandbox bunların HİÇBİRİNİ görmemeli.
       const canary = path.join(outside, "canary.txt"); fs.writeFileSync(canary, "HOST-SECRET");
@@ -219,6 +284,10 @@ export class LinuxUnshareSandboxProvider implements SandboxProvider {
         "awk '{mp=$5; if (mp==\"/work\"||mp==\"/tmp\"||mp==\"/dev/shm\") next; if ($6 !~ /(^|,)ro(,|$)/) bad=1} END{exit bad}' /proc/self/mountinfo && echo mount_audit_ok",
         "[ \"$(awk '/^(CapInh|CapPrm|CapEff|CapBnd|CapAmb):/{print $2}' /proc/self/status | sort -u)\" = 0000000000000000 ] && grep -q '^NoNewPrivs:.1' /proc/self/status && echo caps_dropped_all",
         '[ -z "$(tail -n +3 /proc/net/dev | cut -d: -f1 | tr -d " " | grep -v "^lo$")" ] && echo net_none',
+        // LC-LO-01: sandbox'ın net namespace'i ana makinenin ki OLMAMALI (karşılaştırma ana makinede, aşağıda).
+        'echo "netns=$(readlink /proc/self/ns/net)"',
+        // C-SBX-LO-1: lo açık olsa da yönlendirme tablosunda (başlık satırı hariç) HİÇ rota yoktur: dışarıya çıkış yolu yok.
+        '[ -z "$(tail -n +2 /proc/net/route)" ] && echo no_route_out',
         // F2: kontrol eden terminal yok (tty_nr = 0) ve /dev/tty düğümü yok -> TIOCSTI ile ana makine kabuğuna girdi basılamaz.
         `[ "$(awk '{print $7}' /proc/self/stat)" = 0 ] && [ ! -e /dev/tty ] && echo no_ctty`,
         // F1: ek salt-okunur köklerin üst dizinleri YALNIZ kökün yoluna giden bileşenleri içerir (kardeş/ana dizin içeriği, .ssh vb. görünmez).
@@ -228,10 +297,21 @@ export class LinuxUnshareSandboxProvider implements SandboxProvider {
       ].join("; ");
       const iso = await this.exec(["sh", "-c", probe], {cwd: ws, env, timeoutMs: 20_000});
       for (const token of ["supervisor_ok", "host_fs_hidden", "host_dirs_hidden", "root_ro_ok", "scratch_ok", "proc_sys_ro_ok", "mount_audit_ok", "caps_dropped_all", "net_none", "no_ctty", "extra_roots_isolated", "nested_userns_blocked", "pid_ns_private"]) if (!iso.stdout.includes(token)) return {ok: false, detail: `SELFTEST_${token.toUpperCase()}_FAILED`};
+      const routeProblem = networkRouteProblem(iso.stdout);
+      if (routeProblem) return {ok: false, detail: routeProblem};
+      const netnsProblem = netnsProblemOf(iso.stdout, hostNetns());
+      if (netnsProblem) return {ok: false, detail: netnsProblem};
       if (!fs.existsSync(path.join(ws, "p"))) return {ok: false, detail: "SELFTEST_SCRATCH_NOT_HOST_VISIBLE"};
       if (fs.existsSync(hostShm) && fs.readFileSync(hostShm, "utf8") !== "HOST-SHM") return {ok: false, detail: "SELFTEST_HOST_SHM_TAMPERED"};
       if (fs.readdirSync("/dev/shm").some(n => n === shmProbe)) return {ok: false, detail: "SELFTEST_SHM_NOT_PRIVATE"};
       if (connections !== 0) return {ok: false, detail: "SELFTEST_HOST_SOCKET_REACHED"};
+      // C-SBX-LO-1: sandbox İÇİNDE loopback çalışıyor mu ve dışarıya (internet + ana makinenin 127.0.0.1 dinleyicisi) hiçbir bağlantı kurulamıyor mu.
+      hostLo = net.createServer(s => { loConnections++; s.destroy(); });
+      const loPort = await new Promise<number>((res, rej) => { hostLo!.once("error", rej); hostLo!.listen(0, "127.0.0.1", () => res((hostLo!.address() as net.AddressInfo).port)); });
+      const lp = await this.exec([process.execPath, "-e", LINUX_SANDBOX_LOOPBACK_PROBE, String(loPort)], {cwd: ws, env, timeoutMs: 20_000});
+      const verdict = loopbackVerdict({ipPresent: resolveTool("ip") !== null, stdout: lp.stdout, hostConnections: loConnections, exitCode: lp.exitCode, timedOut: lp.timedOut});
+      if (!verdict.ok) return {ok: false, detail: verdict.detail};
+      proven = verdict.capabilities;
       // F3: süreç sayısı sınırı GERÇEKTEN uygulanıyor mu (küçük bir sınırla aynı yoldan): sınırı aşan çatallar başarısız olmalı. Çekirdek init-user kuid 0'ı RLIMIT_NPROC'tan muaf tutar; supervisor root ise sınır uygulanamaz ve (acceptUnenforcedProcessLimit olmadıkça) sağlayıcı DOGRULANMAZ.
       const NPROC_PROBE = 48;
       const forks = 'ok=0; fail=0; i=0; while [ $i -lt 150 ]; do if (sleep 25 &) 2>/dev/null; then ok=$((ok+1)); else fail=$((fail+1)); fi; i=$((i+1)); done; echo ok=$ok fail=$fail';
@@ -253,9 +333,11 @@ export class LinuxUnshareSandboxProvider implements SandboxProvider {
       // stdin geçişi (runner test girdisi verebilir)
       const sin = await this.exec(["sh", "-c", "read -r l; echo got=$l"], {cwd: ws, env, timeoutMs: 20_000, input: "PIPED\n"});
       if (!sin.stdout.includes("got=PIPED")) return {ok: false, detail: "SELFTEST_STDIN_NOT_FORWARDED"};
+      this.caps = proven;
       return acceptedUnenforced ? {ok: true, detail: "PROCESS_LIMIT_NOT_ENFORCED_ACCEPTED"} : {ok: true};
     } finally {
       try { server?.close(); } catch { /* kapalı */ }
+      try { hostLo?.close(); } catch { /* kapalı */ }
       fs.rmSync(ws, {recursive: true, force: true}); fs.rmSync(outside, {recursive: true, force: true}); fs.rmSync(hostShm, {force: true});
     }
   }

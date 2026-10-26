@@ -17,6 +17,7 @@ import {CLAUDE_CLI_INSTALL_HINT, claudeAuthFailure, claudeLauncherCheck, claudeR
 import {EditOnlyImplementer, LocalClaudeExecutors} from "../core/workos/executors.js";
 import {ExecutorSetup} from "../core/workos/executor-setup.js";
 
+import {NO_REAL_WSL_ON_WIN32} from "./support/test-sandbox.js";
 const REPO = path.resolve(import.meta.dirname, "..");
 const TOKEN = `tok-${crypto.randomBytes(16).toString("hex")}`;
 const HDR = {"x-uasco-control-token": TOKEN, host: "127.0.0.1:3210"};
@@ -143,7 +144,7 @@ describe("SBX-8 B: GET /v1/system/executors exposes profile status and the Found
   it("control root outside any work tree -> both profiles LOGIN_REQUIRED with the exact login command; existing executor fields unchanged", async () => {
     const runtime = path.join(tmp, "runtime"), dataDir = path.join(tmp, "data"), controlRoot = path.join(tmp, "userdata", "control");
     fs.mkdirSync(runtime, {recursive: true});
-    const app = buildServer({controlToken: TOKEN, runtime, dataDir, repoRoot: REPO, controlRoot, port: 3210, logger: false, tenantId: "tA"});
+    const app = buildServer({...NO_REAL_WSL_ON_WIN32, controlToken: TOKEN, runtime, dataDir, repoRoot: REPO, controlRoot, port: 3210, logger: false, tenantId: "tA"});
     apps.push(app);
     const j = (await call(app)).json();
     expect(Object.keys(j).sort()).toEqual(["active", "claudeProfiles", "executors", "sandbox"]);
@@ -158,7 +159,7 @@ describe("SBX-8 B: GET /v1/system/executors exposes profile status and the Found
     const runtime = path.join(tmp, "runtime"), dataDir = path.join(tmp, "data");
     fs.mkdirSync(runtime, {recursive: true});
     const existed = fs.existsSync(path.join(REPO, "claude-profiles"));
-    const app = buildServer({controlToken: TOKEN, runtime, dataDir, repoRoot: REPO, controlRoot: REPO, port: 3210, logger: false, tenantId: "tA"});
+    const app = buildServer({...NO_REAL_WSL_ON_WIN32, controlToken: TOKEN, runtime, dataDir, repoRoot: REPO, controlRoot: REPO, port: 3210, logger: false, tenantId: "tA"});
     apps.push(app);
     const j = (await call(app)).json();
     for (const role of ["implementer", "reviewer"]) expect(j.claudeProfiles[role]).toMatchObject({state: "REFUSED", reason: "PROFILE_PATH_INSIDE_GIT_WORKTREE", loginCommand: null});

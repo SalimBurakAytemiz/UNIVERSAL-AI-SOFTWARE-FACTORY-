@@ -6,6 +6,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import {PassThrough} from "node:stream";
 import {pathToFileURL} from "node:url";
+import {NO_REAL_WSL_ON_WIN32} from "./support/test-sandbox.js";
 // //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
 vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
@@ -287,7 +288,7 @@ describe("INT-R3 D-M1-04 packaged GET /v1/agents", () => {
       for (const f of STATIC_DATA_FILES as string[]) { fs.mkdirSync(path.dirname(path.join(app0, f)), {recursive: true}); fs.copyFileSync(path.join(root, f), path.join(app0, f)); }
       const tokenValue = "a".repeat(64), runtimeDir = path.join(app0, "ud", "runtime");
       fs.mkdirSync(runtimeDir, {recursive: true});
-      const app = buildServer({controlToken: tokenValue, runtime: runtimeDir, dataDir: path.join(app0, "ud", "workos"), repoRoot: app0, port: 3210, logger: false});
+      const app = buildServer({...NO_REAL_WSL_ON_WIN32, controlToken: tokenValue, runtime: runtimeDir, dataDir: path.join(app0, "ud", "workos"), repoRoot: app0, port: 3210, logger: false});
       try {
         const r = await app.inject({method: "GET", url: "/v1/agents", headers: {"x-uasco-control-token": tokenValue, host: "127.0.0.1:3210"}});
         expect(r.statusCode).toBe(200);

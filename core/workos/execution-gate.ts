@@ -17,8 +17,18 @@ export interface SandboxProvider {
   selfTest(): Promise<{ok: boolean; detail?: string}>;
   run(argv: string[], opts: SandboxRunOptions): Promise<ProcResult>;
   spawn(command: string, args: string[], opts: SpawnOptions): ChildProcess;
+  /** İsteğe bağlı (B-RUN-WIN-1): hazırlığı eşzamansız olan sağlayıcılar (WSL: kopyalama + betik) için; varsa dev-run spawn() yerine bunu kullanır. Dönen süreç `sandboxTeardown` taşıyabilir: çıkıştan sonra Linux tarafı ağacı/dizini temizleyen söz. */
+  /** İsteğe bağlı: sağlayıcının şu anki doğrulanmış durumu; kapı her authorize()/status()'ta sorar (false ise önbellek geçersizdir). */
+  isVerified?(): boolean;
+  /** İsteğe bağlı (C-5): API yeniden başlatıldıktan sonra sahipsiz kalmış sağlayıcı-taraflı scratch'ı kapatır; null = temiz, aksi halde kod. */
+  teardownScratch?(scratch: string, binding?: SandboxBinding): Promise<string | null>;
+  /** shouldAbort: çağıran (devrun) iptal edildiyse sağlayıcı hazırlığı yarıda keser ve süreç başlatmaz. */
+  spawnAsync?(command: string, args: string[], opts: SpawnOptions & {shouldAbort?: () => boolean}): Promise<SandboxChild>;
 }
-export type SandboxDenialDetail = "NO_VERIFIED_PROVIDER" | "SELF_TEST_FAILED" | "SELF_TEST_ERROR";
+/** S2: scratch'ı kuran sağlayıcı + dağıtım (devrun kaydı bunu scratch ile birlikte saklar; temizlik yalnız aynı bağda yapılır). */
+export interface SandboxBinding { providerId: string; distro: string | null }
+export type SandboxChild = ChildProcess & {sandboxTeardown?: Promise<unknown>; sandboxScratch?: string; sandboxBinding?: SandboxBinding};
+export type SandboxDenialDetail = "NO_VERIFIED_PROVIDER" | "SELF_TEST_FAILED" | "SELF_TEST_ERROR" | "SELFTEST_TIMEOUT";
 export type GateDecision =
   | {allowed: true; kind: ProjectExecutionKind; providerId: string; provider: SandboxProvider}
   | {allowed: false; kind: ProjectExecutionKind; reason: typeof SANDBOX_UNAVAILABLE; detail: SandboxDenialDetail};
@@ -32,15 +42,21 @@ export class ExecutionGate {
   private readonly provider: SandboxProvider | null;
   private selfTestResult: Promise<{ok: boolean; detail: SandboxDenialDetail | null}> | null = null;
   /** provider yalnız programatik verilir (testlerde enjekte edilen sahte sağlayıcı); null/eksik/geçersiz = doğrulanmış sağlayıcı yok = BLOCKED. */
-  constructor(provider: SandboxProvider | null = null) { this.provider = isProvider(provider) ? provider : null; }
+  /** selfTestTimeoutMs: authorize()/status() bir sağlayıcı yoklamasını (soğuk WSL 10-30 sn sürebilir) bundan uzun BEKLEMEZ: SELFTEST_TIMEOUT ile UNAVAILABLE döner (fail-closed); yoklama arka planda sürer ve sonucu sonraki çağrıda görünür. */
+  private readonly selfTestTimeoutMs: number;
+  constructor(provider: SandboxProvider | null = null, o: {selfTestTimeoutMs?: number} = {}) { this.provider = isProvider(provider) ? provider : null; this.selfTestTimeoutMs = o.selfTestTimeoutMs ?? 20_000; }
   get registered(): boolean { return this.provider !== null; }
   private verified(): Promise<{ok: boolean; detail: SandboxDenialDetail | null}> {
     const p = this.provider;
     if (!p) return Promise.resolve({ok: false, detail: "NO_VERIFIED_PROVIDER"});
     // Öz-test süreç (kapı örneği) başına bir kez çalışır; yalnız açık {ok: true} geçer, hata/zaman aşımı/başka değer fail-closed'dur.
-    return this.selfTestResult ??= Promise.resolve().then(() => p.selfTest()).then(
+    // NEW-GATE-STALE-AVAILABLE: sağlayıcı kendini doğrulanmamış yaptıysa (isVerified() false) önbellekteki başarı atılır; selfTest yeniden sorulur (sağlayıcı yeniden sondalar ve başarısız olur).
+    if (this.selfTestResult && typeof p.isVerified === "function") { let still = false; try { still = p.isVerified() === true; } catch { still = false; } if (!still) this.selfTestResult = null; }
+    const real = this.selfTestResult ??= Promise.resolve().then(() => p.selfTest()).then(
       r => (r && typeof r === "object" && r.ok === true ? {ok: true, detail: null} : {ok: false, detail: "SELF_TEST_FAILED" as const}),
       () => ({ok: false, detail: "SELF_TEST_ERROR" as const}));
+    // Gerçek yoklama sözü ÖNBELLEKTE kalır (düşürülmez); çağıran yalnız sınırlı süre bekler.
+    return new Promise(resolve => { const t = setTimeout(() => resolve({ok: false, detail: "SELFTEST_TIMEOUT"}), this.selfTestTimeoutMs); t.unref?.(); void real.then(v => { clearTimeout(t); resolve(v); }); });
   }
   /** Tek karar noktası: izin yalnız kayıtlı sağlayıcı + geçmiş öz-test ile verilir; aksi halde SANDBOX_UNAVAILABLE (ana makinede yürütme yok). */
   async authorize(kind: ProjectExecutionKind): Promise<GateDecision> {

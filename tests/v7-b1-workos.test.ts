@@ -225,7 +225,7 @@ describe("Work OS API", () => {
   const mkApp = (extra: Record<string, unknown> = {}) => {
     const runtime = path.join(tmp, "runtime");
     fs.mkdirSync(runtime, {recursive: true});
-    return {runtime, app: buildServer({controlToken: token, runtime, dataDir: path.join(tmp, "data"), port: 3210, logger: false, ...extra})};
+    return {runtime, app: buildServer({...NO_REAL_WSL_ON_WIN32, controlToken: token, runtime, dataDir: path.join(tmp, "data"), port: 3210, logger: false, ...extra})};
   };
   const project = {name: "API project", environmentId: "dev"};
   const mission = (projectId: string) => ({projectId, title: "M", objective: "obj", acceptanceCriteria: ["a"], riskLevel: "R2"});
@@ -856,6 +856,7 @@ import {fakeSecurity} from "../core/workos/security-tools.js";
 import {testExecutionGate} from "./support/test-sandbox.js";
 import {spawnGitSync} from "../automation/lib/git-isolation.mjs";
 
+import {NO_REAL_WSL_ON_WIN32} from "./support/test-sandbox.js";
 describe("COORD-INTEGRATION-L1 first-delivery chain (real modules, temp data dir)", () => {
   const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
   const IDEA = "A small web app where I can track my daily reading with a streak counter";
@@ -1033,7 +1034,7 @@ describe("COORD first-delivery wiring through the real server", () => {
   const mkApp = (extra: Record<string, unknown> = {}) => {
     const runtime = path.join(tmp, "runtime");
     fs.mkdirSync(runtime, {recursive: true});
-    return {runtime, app: buildServer({controlToken: token, runtime, dataDir: path.join(tmp, "data"), port: 3210, logger: false, ...extra})};
+    return {runtime, app: buildServer({...NO_REAL_WSL_ON_WIN32, controlToken: token, runtime, dataDir: path.join(tmp, "data"), port: 3210, logger: false, ...extra})};
   };
   const req = (app: any, method: string, url: string, payload?: unknown, headers: any = hdr) => app.inject({method, url, headers, ...(payload === undefined ? {} : {payload: payload as any})});
   const seed = async (app: any) => {
@@ -1586,7 +1587,7 @@ describe("LANE-B first-delivery 4xx/5xx contract sweep", () => {
 
   it("never answers 5xx to malformed ids/bodies, always returns a fixed error code, and leaks no path or stack", async () => {
     const runtime = path.join(tmp, "runtime"); fs.mkdirSync(runtime, {recursive: true});
-    const app = buildServer({controlToken: token, runtime, dataDir: path.join(tmp, "data"), port: 3210, logger: false});
+    const app = buildServer({...NO_REAL_WSL_ON_WIN32, controlToken: token, runtime, dataDir: path.join(tmp, "data"), port: 3210, logger: false});
     (await import("../apps/control-api/src/routes/error-contract.js")).registerErrorContract(app);
     const sc = {tenantId: "local"};
     const store = new WorkOsStore(path.join(tmp, "data"));
@@ -2464,7 +2465,7 @@ describe("LANE-B control /health (server half only; Electron main-process handsh
   const mkSrv = async (controlToken = token) => {
     const runtime = path.join(tmp, "runtime"); fs.mkdirSync(runtime, {recursive: true});
     const {controlChallengeProof} = await import("../automation/lib/control-boundary.mjs");
-    return {app: buildServer({controlToken, runtime, dataDir: path.join(tmp, "data"), port: 3210, logger: false}), proof: controlChallengeProof as (t: string, c: string) => string | null, runtime};
+    return {app: buildServer({...NO_REAL_WSL_ON_WIN32, controlToken, runtime, dataDir: path.join(tmp, "data"), port: 3210, logger: false}), proof: controlChallengeProof as (t: string, c: string) => string | null, runtime};
   };
   const health = (app: any, query = `?challenge=${CH}`, host: string | null = HOST) => app.inject({method: "GET", url: `/health${query}`, headers: host === null ? {} : {host}});
 
@@ -2546,7 +2547,7 @@ describe("LANE-B legacy run reads: path safety of /v1/runs events and logs", () 
     const outside = path.join(tmp, "outside"); fs.mkdirSync(outside, {recursive: true});
     fs.writeFileSync(path.join(outside, "secret.log"), OUTSIDE); fs.writeFileSync(path.join(outside, "events.jsonl"), JSON.stringify({event: OUTSIDE}) + "\n");
     fs.writeFileSync(path.join(tmp, "secret.log"), OUTSIDE);
-    return {runtime, runs, a, outside, app: buildServer({controlToken: token, runtime, dataDir: path.join(tmp, "data"), port: 3210, logger: false})};
+    return {runtime, runs, a, outside, app: buildServer({...NO_REAL_WSL_ON_WIN32, controlToken: token, runtime, dataDir: path.join(tmp, "data"), port: 3210, logger: false})};
   };
   const get = (app: any, url: string, headers: any = hdr) => app.inject({method: "GET", url, headers});
 
@@ -2649,7 +2650,7 @@ describe("LANE-B P3 read shapes: /v1/capabilities, /v1/retry, /v1/factory", () =
   const hdr = {"x-uasco-control-token": token, host: HOST};
   const mkApp = () => {
     const runtime = path.join(tmp, "runtime"); fs.mkdirSync(runtime, {recursive: true});
-    return {runtime, app: buildServer({controlToken: token, runtime, dataDir: path.join(tmp, "data"), port: 3210, logger: false})};
+    return {runtime, app: buildServer({...NO_REAL_WSL_ON_WIN32, controlToken: token, runtime, dataDir: path.join(tmp, "data"), port: 3210, logger: false})};
   };
   const get = (app: any, url: string, headers: any = hdr) => app.inject({method: "GET", url, headers});
   const fileJson = (rel: string) => JSON.parse(fs.readFileSync(path.join(process.cwd(), rel), "utf8"));
@@ -3046,7 +3047,7 @@ describe("LANE-B P3 legacy reads: /v1/adapters, /v1/scheduler and the retry-bloc
   const hdr = {"x-uasco-control-token": token, host: HOST};
   const mkApp = () => {
     const runtime = path.join(tmp, "runtime"); fs.mkdirSync(runtime, {recursive: true});
-    return {runtime, app: buildServer({controlToken: token, runtime, dataDir: path.join(tmp, "data"), port: 3210, logger: false})};
+    return {runtime, app: buildServer({...NO_REAL_WSL_ON_WIN32, controlToken: token, runtime, dataDir: path.join(tmp, "data"), port: 3210, logger: false})};
   };
   const get = (app: any, url: string, headers: any = hdr) => app.inject({method: "GET", url, headers});
   const post = (app: any, body: unknown, headers: any = hdr) => app.inject({method: "POST", url: "/v1/control/retry-blocked", headers, payload: body as any});

@@ -11,6 +11,7 @@ import {WorkOsStore} from "../core/workos/store.js";
 import {SkillAcademy} from "../core/academy/academy.js";
 import {buildServer} from "../apps/control-api/src/server.js";
 
+import {NO_REAL_WSL_ON_WIN32} from "./support/test-sandbox.js";
 const sha = (v: unknown) => crypto.createHash("sha256").update(typeof v === "string" ? v : JSON.stringify(v)).digest("hex");
 const rend = path.resolve(__dirname, "..", "apps", "desktop", "renderer");
 const load = async (...p: string[]): Promise<any> => import(pathToFileURL(path.join(rend, ...p)).href);
@@ -28,7 +29,7 @@ const dataDir = () => path.join(tmp, "data");
 const runtime = () => path.join(tmp, "runtime");
 function mkApp(tenantId = "tA"): App {
   fs.mkdirSync(runtime(), {recursive: true});
-  const app = buildServer({controlToken: TOKEN, runtime: runtime(), dataDir: dataDir(), tenantId, port: 3210, logger: false});
+  const app = buildServer({...NO_REAL_WSL_ON_WIN32, controlToken: TOKEN, runtime: runtime(), dataDir: dataDir(), tenantId, port: 3210, logger: false});
   apps.push(app); return app;
 }
 const get = (app: App, url: string, headers: Record<string, string> = hdr) => app.inject({method: "GET", url, headers});

@@ -17,6 +17,7 @@ import {MissionRunner} from "../core/workos/runner.js";
 import {fakeSecurity} from "../core/workos/security-tools.js";
 import {buildServer} from "../apps/control-api/src/server.js";
 import {testExecutionGate} from "./support/test-sandbox.js";
+import {NO_REAL_WSL_ON_WIN32} from "./support/test-sandbox.js";
 // //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
 vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
@@ -117,7 +118,7 @@ describe("SBX-8 E: Studio import quarantines agent config", () => {
   it("API: POST /v1/projects/:id/import returns the quarantine evidence and writes the manifest next to (not inside) the managed repo", { timeout: T }, async () => {
     const runtime = path.join(tmp, "runtime"), dataDir = path.join(tmp, "api-data");
     fs.mkdirSync(runtime, {recursive: true});
-    const app = buildServer({controlToken: TOKEN, runtime, dataDir, repoRoot: REPO, controlRoot: path.join(tmp, "control"), port: 3210, logger: false, tenantId: "tA"});
+    const app = buildServer({...NO_REAL_WSL_ON_WIN32, controlToken: TOKEN, runtime, dataDir, repoRoot: REPO, controlRoot: path.join(tmp, "control"), port: 3210, logger: false, tenantId: "tA"});
     apps.push(app);
     const call = (method: "GET" | "POST", url: string, payload?: unknown) => app.inject({method, url, headers: HDR, ...(payload !== undefined ? {payload: payload as object} : {})});
     const created = await call("POST", "/v1/projects", {name: "Imp", environmentId: "dev", idempotencyKey: "sbx8-imp"});

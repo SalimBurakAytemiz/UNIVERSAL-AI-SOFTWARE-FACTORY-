@@ -1,6 +1,7 @@
 // //TR: Bu dosya mission runner'ın executor ADAPTER sözleşmesini (implement/review), deterministik FAKE adapter'ı (testler; küçük bir node script'i başlatır) ve varsayılan olarak KAPALI LOCAL_CLAUDE adapter'ını tanımlar; implementer ve reviewer kimliği aynıysa yapılandırma fail-closed reddedilir.
 import fs from "node:fs";
 import path from "node:path";
+import {systemExe} from "../sandbox/win-exe.js";
 import crypto from "node:crypto";
 import cp from "node:child_process";
 import {fileURLToPath} from "node:url";
@@ -60,7 +61,7 @@ const MAX_CAPTURE = 4 * 1024 * 1024;
 // //TR: newSession (yalnız POSIX): çocuk yeni oturum+süreç grubu lideri olarak başlar (kontrol eden terminal MİRAS ALINMAZ) ve zaman aşımı/abort tüm GRUBA SIGKILL gönderir; sandbox sağlayıcısı kullanır (ns-init'in pdeathsig'ine güvenilmez).
 function killTree(child: cp.ChildProcess, group = false): void {
   try {
-    if (process.platform === "win32" && child.pid) cp.spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], {windowsHide: true, stdio: "ignore"});
+    if (process.platform === "win32" && child.pid) { const tk = systemExe("taskkill.exe"); if (tk) cp.spawnSync(tk, ["/pid", String(child.pid), "/T", "/F"], {windowsHide: true, stdio: "ignore"}); else child.kill("SIGKILL"); }
     else if (group && child.pid) { try { process.kill(-child.pid, "SIGKILL"); } catch { child.kill("SIGKILL"); } }
     else child.kill("SIGKILL");
   } catch { /* süreç zaten bitmiş olabilir */ }
