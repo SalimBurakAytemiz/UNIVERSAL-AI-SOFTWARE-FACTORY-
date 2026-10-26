@@ -242,6 +242,26 @@
       "ref": "wf_3b29c4cf-1c2+wf_508a9b18-5bb",
       "policy": "TEP-1",
       "at": "2026-10-26T16:32:05.226Z"
+    },
+    {
+      "pr": 252,
+      "sha": "d0f3670373bb31544a4b9c3096ced40916c0a44f",
+      "kind": "full",
+      "base": null,
+      "verdict": "NO_BLOCKERS_2LOW_SEC",
+      "ref": "wf_a70a2d8a-cae",
+      "policy": "TEP-1",
+      "at": "2026-10-26T16:56:20.103Z"
+    },
+    {
+      "pr": 252,
+      "sha": "a2eb3d4f5c80bd656133ccccc0031cae9e48fb94",
+      "kind": "delta",
+      "base": "d0f3670373bb31544a4b9c3096ced40916c0a44f",
+      "verdict": "NO_BLOCKERS_5LOW",
+      "ref": "wf_5c074b19-53d",
+      "policy": "TEP-1",
+      "at": "2026-10-26T17:15:04.631Z"
     }
   ],
   "tests": [],

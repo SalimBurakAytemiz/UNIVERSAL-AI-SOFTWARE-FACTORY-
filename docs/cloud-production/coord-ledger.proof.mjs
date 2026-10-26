@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { POLICY, load, save, reviewCheck, reviewRecord, testKey, testCheck, testRecord, fingerprintCompare } from './coord-ledger.mjs';
+import { POLICY, load, save, reviewCheck, reviewRecord, testKey, testCheck, testRecord, fingerprintCompare, mergeGate } from './coord-ledger.mjs';
 
 let passed = 0, failed = 0;
 const check = (name, cond) => { if (cond) { passed++; console.log(`PASS ${name}`); } else { failed++; console.log(`FAIL ${name}`); } };
@@ -32,6 +32,19 @@ try {
   check(`round ${POLICY.maxReviewRounds + 1} -> ROUND_LIMIT (code 4)`, lim.code === 4 && lim.rounds === POLICY.maxReviewRounds);
   check('--security bypasses the round limit', reviewCheck(j, { pr: 1, sha: S('e'), security: true }).state === 'NEW');
   check('a reviewed head stays DONE after the limit', reviewCheck(j, { pr: 1, sha: S('d') }).state === 'DONE');
+
+  // Merge gate (COORD-002): only a clean record for the CURRENT head opens it; an older head's clean record never does.
+  j = load(path.join(tmp, 'none.json'));
+  check('merge-gate: no record for the head -> CLOSED (code 5)', mergeGate(j, { pr: 9, sha: S('a') }).code === 5 && mergeGate(j, { pr: 9, sha: S('a') }).reason === 'NO_REVIEW_FOR_HEAD');
+  reviewRecord(j, { pr: 9, sha: S('a'), kind: 'full', verdict: 'NO_BLOCKERS', ref: 'r1' });
+  check('merge-gate: clean record for the head -> OPEN (code 0)', mergeGate(j, { pr: 9, sha: S('a') }).code === 0);
+  check('merge-gate: a newer head with only the older head reviewed -> CLOSED (the #249 case)', mergeGate(j, { pr: 9, sha: S('b') }).reason === 'NO_REVIEW_FOR_HEAD');
+  reviewRecord(j, { pr: 9, sha: S('b'), kind: 'delta', base: S('a'), verdict: 'BLOCKERS_HIGH', ref: 'r2' });
+  check('merge-gate: blocking verdict -> CLOSED', mergeGate(j, { pr: 9, sha: S('b') }).reason === 'VERDICT_BLOCKING');
+  reviewRecord(j, { pr: 9, sha: S('c'), kind: 'delta', base: S('b'), verdict: 'BASE_MERGE_ONLY_EMPTY_DELTA', ref: 'r3' });
+  check('merge-gate: base-merge-only record -> OPEN', mergeGate(j, { pr: 9, sha: S('c') }).code === 0);
+  check('merge-gate: other PR record never opens this PR', mergeGate(j, { pr: 10, sha: S('a') }).code === 5);
+  check('merge-gate: a short SHA is refused (gate needs the exact head)', throws(() => mergeGate(j, { pr: 9, sha: 'aaaaaaa' }), 'BAD_ARGS'));
 
   // Tests: only a PASS under the same sha+scope+env+deps+config is reused.
   const wt = path.join(tmp, 'repo');
@@ -70,6 +83,7 @@ try {
   check('CLI review-check after record exits 0 (DONE)', cli('review-check', '--pr', '7', '--sha', 'fffffff').status === 0);
   fs.writeFileSync(path.join(tmp, 'st.json'), JSON.stringify(st));
   check('CLI fingerprint first run exits 3, second run exits 0', cli('fingerprint', '--input', path.join(tmp, 'st.json')).status === 3 && cli('fingerprint', '--input', path.join(tmp, 'st.json')).status === 0);
+  check('CLI merge-gate exits 0 for a clean head and 5 for an unreviewed one', cli('merge-gate', '--pr', '7', '--sha', S('f')).status === 0 && cli('merge-gate', '--pr', '7', '--sha', S('e')).status === 5);
   check('CLI bad args exit 1 with COORD_LEDGER_ERROR', (() => { const r = cli('review-check', '--pr', 'x', '--sha', 'q'); return r.status === 1 && /COORD_LEDGER_ERROR/.test(r.stderr); })());
   check('saved ledger is valid JSON and no temp file is left', load(lp).reviews.length === 1 && fs.readdirSync(tmp).every((f) => !f.endsWith('.tmp')));
   save(load(lp), lp);

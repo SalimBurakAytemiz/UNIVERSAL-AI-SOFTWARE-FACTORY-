@@ -5,6 +5,7 @@
 //   node coord-ledger.mjs test-key      --worktree P --scope X              prints the key JSON + hash
 //   node coord-ledger.mjs test-check    --worktree P --scope X              exit 0 DONE(PASS reused) | 3 NEW
 //   node coord-ledger.mjs test-record   --worktree P --scope X --result PASS|FAIL --ref R
+//   node coord-ledger.mjs merge-gate    --pr N --sha S                     exit 0 OPEN | 5 CLOSED (auto-merge may stay armed only while OPEN)
 //   node coord-ledger.mjs fingerprint   [--input state.json]                 exit 0 UNCHANGED | 3 CHANGED (state stored)
 //   node coord-ledger.mjs policy
 import fs from 'node:fs';
@@ -22,6 +23,7 @@ export const POLICY = Object.freeze({
   maxRepairRoundsPerHead: 2,
   ciMonitoring: { mode: 'event-driven', pollFallbackMinutes: [5, 10, 20, 40, 60] },
   testReuse: 'PASS only, key = sha+scope+env+deps+config; required merge checks always run in CI',
+  autoMerge: 'armed only while merge-gate is OPEN for the current head; any head change disarms it until that head has a clean review record (COORD-002)',
 });
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -57,6 +59,16 @@ export function reviewRecord(j, { pr, sha, kind, verdict, ref, base = null }) {
   if (reviewCheck(j, { pr, sha, security: true }).state === 'DONE') throw new Error('ALREADY_RECORDED');
   j.reviews.push({ pr, sha, kind, base, verdict, ref, policy: POLICY.version, at: now() });
   return j;
+}
+
+//TR: Merge kapısı (COORD-002): auto-merge yalnız GÜNCEL head için temiz bir inceleme kaydı varken açık kalabilir; daha eski bir head'in temiz kaydı yeni head'i açmaz (#249: eski head'te kurulan auto-merge, delta incelemesi bitmeden yeni head'i birleştirdi).
+const OPEN_VERDICT = /^(NO_BLOCKERS|NO_CODE_BLOCKERS|BASE_MERGE_ONLY)/;
+export function mergeGate(j, { pr, sha }) {
+  if (!Number.isInteger(pr) || !SHA_RE.test(sha) || sha.length < 40) throw new Error('BAD_ARGS');
+  const rec = j.reviews.filter((r) => r.pr === pr && r.policy === POLICY.version && same(r.sha, sha)).at(-1);
+  if (!rec) return { code: 5, state: 'CLOSED', reason: 'NO_REVIEW_FOR_HEAD' };
+  if (!OPEN_VERDICT.test(rec.verdict)) return { code: 5, state: 'CLOSED', reason: 'VERDICT_BLOCKING', verdict: rec.verdict };
+  return { code: 0, state: 'OPEN', record: rec };
 }
 
 export function testKey({ worktree, scope }) {
@@ -118,6 +130,7 @@ function main() {
     case 'test-key': out = { code: 0, ...testKey({ worktree: a.worktree, scope: a.scope }) }; break;
     case 'test-check': out = testCheck(j, testKey({ worktree: a.worktree, scope: a.scope }).hash); break;
     case 'test-record': testRecord(j, testKey({ worktree: a.worktree, scope: a.scope }), { result: a.result, ref: a.ref }); save(j); out = { code: 0, state: 'RECORDED' }; break;
+    case 'merge-gate': out = mergeGate(j, { pr, sha: String(a.sha || '') }); break;
     case 'fingerprint': out = fingerprintCompare(j, a.input ? JSON.parse(fs.readFileSync(a.input, 'utf8')) : liveState()); save(j); break;
     default: console.error('usage: see header'); return 2;
   }

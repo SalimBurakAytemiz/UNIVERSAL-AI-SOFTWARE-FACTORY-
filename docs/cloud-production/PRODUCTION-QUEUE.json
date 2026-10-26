@@ -2140,6 +2140,16 @@
         "postMerge": "VERIFIED: parent1 732eaf3, parent2 = 8761a97 (= reviewed cf60d17 + base merge b371ebd, merge-tree delta empty), merge-tree == merge tree",
         "review": "cf60d17 full NO_BLOCKERS (w5g780907); 8761a97 delta BASE_MERGE_ONLY_EMPTY_DELTA (merge-tree(b371ebd,cf60d17)==8761a97^{tree})",
         "riskTier": "ROUTINE (journey E2E tests)"
+      },
+      {
+        "pr": 249,
+        "merge": "e8ad4a3",
+        "by": "auto-merge (armed by coordinator on cd95758; stayed armed across the Lane A r2 push)",
+        "at": "2026-10-26T17:16:07Z",
+        "postMerge": "VERIFIED: parent1 d79d0e9, parent2 = head 022b9e7, merge-tree == merge tree; CI 022b9e7 all green (Windows shards 1032/1160/1507 s)",
+        "review": "cd95758 full NO_BLOCKERS (wf_636238d3); 022b9e7 r2 delta review w7iecsyaj NOT finished at merge time -> PROCESS GAP (auto-merge survived a new head); review completes post-merge, any blocker -> follow-up fix PR",
+        "riskTier": "ROUTINE (test support file)",
+        "processGap": "COORD-002: auto-merge armed on an older head merged a newer head before its delta review; fix = ledger merge-gate + disarm on head change"
       }
     ],
     "wslProvider": {
