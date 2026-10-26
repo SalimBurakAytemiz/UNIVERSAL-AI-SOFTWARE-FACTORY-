@@ -332,6 +332,26 @@
       "ref": "tree(85b29eb)==tree(1d3f79e)==merge-tree(e8ad4a3,ad2b612)",
       "policy": "TEP-1",
       "at": "2026-10-26T17:37:43.847Z"
+    },
+    {
+      "pr": 255,
+      "sha": "14a9eef081730ebae051aa69935da6b2e5c08686",
+      "kind": "full",
+      "base": null,
+      "verdict": "NO_BLOCKERS_4LOW",
+      "ref": "wf_d9791554-a02",
+      "policy": "TEP-1",
+      "at": "2026-10-26T17:56:54.622Z"
+    },
+    {
+      "pr": 255,
+      "sha": "441d718cc311e4740c7593b46d66fd08fb83f108",
+      "kind": "delta",
+      "base": "14a9eef081730ebae051aa69935da6b2e5c08686",
+      "verdict": "NO_BLOCKERS",
+      "ref": "coordinator inline: 4 LOWs fixed; old not.toContain kept, new data-result=error assertion live; E2E waitSel ok + must(missionStatus); J8 + E2E mutant killed (Lane A)",
+      "policy": "TEP-1",
+      "at": "2026-10-26T18:00:38.753Z"
     }
   ],
   "tests": [],

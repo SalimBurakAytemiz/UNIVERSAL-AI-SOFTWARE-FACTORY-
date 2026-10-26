@@ -1791,7 +1791,7 @@
   },
   "integrationBoard": {
     "//TR": "Koordinatör entegrasyon panosu: her açık PR için gerçek engel ve bekleyen sorumlu. Ortak kök neden (base dependency gate) PR'a özgü hatalardan ayrı tutulur; #221/#225 birleşmeden tekrar CI tetiklenmez.",
-    "at": "2026-10-26T13:06:00Z",
+    "at": "2026-10-26T18:23:00Z",
     "base": "f663ee9 (v7/integration, after #238)",
     "sharedRootCause": {
       "id": "NONE_ACTIVE",
@@ -2178,6 +2178,16 @@
         "review": "d0f3670 full NO_BLOCKERS (2 LOW) -> a2eb3d4 delta NO_BLOCKERS (5 LOW) -> ad2b612 round 3 NO_BLOCKERS (3 LOW deferred: guard bound 2-3 s optional, whitespace in userinfo pre-existing, PROCEDURE_EXCEPTION userinfo scrub) -> 85b29eb BASE_MERGE_ONLY",
         "riskTier": "ROUTINE (core/competency diagnostics, unprotected)",
         "followUps": "3 LOWs from wf_bd8c991a (round limit reached)"
+      },
+      {
+        "pr": 254,
+        "merge": "13d8859",
+        "by": "auto-merge (armed by coordinator on 65098ba after merge-gate OPEN)",
+        "at": "2026-10-26T18:21:51Z",
+        "postMerge": "VERIFIED: parent1 5dd3614, parent2 = gated head 65098ba, merge-tree == merge tree e087a4e",
+        "review": "828b0b0 full BLOCKERS_MEDIUM (assertion commented out by trailing //) -> 65098ba delta NO_BLOCKERS (tabindex + TR negative check; mutants killed)",
+        "riskTier": "ROUTINE (renderer locale + test pin, unprotected)",
+        "ci": "run 40369695661: one Windows shard-3 failure ps1a-project-studio:215 (pre-existing PID-reuse flake, RCA wf_6aac57ee) -> one full re-run green"
       }
     ],
     "wslProvider": {
