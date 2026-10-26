@@ -1240,6 +1240,15 @@ describe("LANE-B task-run link routes", () => {
     const r = await app.inject({method: "GET", url: `/v1/tasks/${task.taskId}/runs`, headers: hdr});
     expect(r.statusCode).toBe(503); expect(r.json().error).toBe("LINK_STORE_CORRUPT");
   });
+
+  it("GET /v1/work-runs/:id/tasks validates the run id strictly (400 INVALID_RUN_ID for every malformed shape) and answers 404 RUN_NOT_FOUND for a well-formed unknown run", async () => {
+    const {app, run} = await mkApp();
+    for (const bad of ["run_x", "run_" + "A".repeat(24), "run_" + "a".repeat(23), "run_" + "a".repeat(25), "xxx_" + "a".repeat(24), "msn_" + "a".repeat(24)]) {
+      const r = await app.inject({method: "GET", url: `/v1/work-runs/${bad}/tasks`, headers: hdr}); expect(r.statusCode, bad).toBe(400); expect(r.json()).toEqual({error: "INVALID_RUN_ID"});
+    }
+    expect((await app.inject({method: "GET", url: `/v1/work-runs/run_${"c".repeat(24)}/tasks`, headers: hdr})).json()).toEqual({error: "RUN_NOT_FOUND"});
+    expect((await app.inject({method: "GET", url: `/v1/work-runs/${run.runId}/tasks`, headers: hdr})).statusCode).toBe(200);
+  });
 });
 
 // //TR: LANE-B flow + task-run link: akış okuması görev-koşu bağı sayısını yalnız doğrulanmış bağ kaydından türetir; bağ dosyası bozuksa null (UNKNOWN) döner.
@@ -2738,5 +2747,59 @@ describe("LANE-B P3 legacy reads: /v1/adapters, /v1/scheduler and the retry-bloc
     fs.symlinkSync(target, path.join(runtime, "scheduler-state.json"));
     expect((await post(app, {packageId: "PKG-001"})).json()).toEqual({error: "SCHEDULER_STATE_UNSAFE_PATH"});
     expect(fs.readFileSync(target, "utf8")).toBe("{}");
+  });
+});
+
+// //TR: LANE-B B-RUN-1 route'ları: teslim edilen ürünün çalıştırılması. Sahte dev-run yöneticisiyle kapılar (503/400/404/423/403/409), teslim kaydına bağlama ve başka koşunun ürününü durdurmama doğrulanır; gerçek köprü/sandbox testleri tests/v7-ps1a-c2-remediation.test.ts içindedir.
+describe("LANE-B product run routes (B-RUN-1)", () => {
+  const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
+  const RUN = (c: string) => "run_" + c.repeat(24);
+  const mkApp = async (o: {wired?: boolean; stopped?: boolean; allowed?: boolean; deliverable?: boolean; active?: string | null; startError?: any} = {}) => {
+    const [{default: Fastify}, {registerProductRunRoutes}, {StudioError}] = await Promise.all([import("fastify"), import("../apps/control-api/src/routes/product-run.js"), import("../core/workos/project-studio.js")]);
+    const app = Fastify({logger: false});
+    app.addHook("onRequest", async (req, reply) => { if (req.headers["x-uasco-control-token"] !== token) return reply.code(403).send({error: "FORBIDDEN"}); });
+    const store = new WorkOsStore(path.join(tmp, "data")); const audits: string[] = [];
+    const p = store.createProject(proj()), m = store.createMission(msn(p.projectId));
+    for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission({tenantId: "tA"}, m.missionId, to, "go", "FOUNDER_LOCAL");
+    const run = store.createRun({tenantId: "tA", missionId: m.missionId, executor: {implementer: "a", reviewer: "b"}, createdBy: "FOUNDER_LOCAL"});
+    const calls: any[] = []; let active = o.active ?? null;
+    const view = () => ({status: active ? "RUNNING" : "STOPPED", deliveryRunId: active, port: 4321});
+    const devruns = async () => ({view, isActive: () => !!active, start: async (pr: any, link: any) => { calls.push(["start", pr.projectId, link]); if (o.startError) throw o.startError; active = link.runId; }, stop: async (id: string) => { calls.push(["stop", id]); active = null; return true; }}) as any;
+    registerProductRunRoutes(app, {getStore: () => store, scope: {tenantId: "tA"}, orgId: "o1", actor: "FOUNDER_LOCAL", audit: (e: string) => { audits.push(e); }, workosStopped: () => !!o.stopped,
+      workosPolicy: () => o.allowed === false ? {allowed: false, reason: "NO"} : {allowed: true},
+      workosFail: (r: any, e: any) => e instanceof StudioError ? r.code(e.status).send({error: e.code, ...(e.reason ? {reason: e.reason} : {})}) : r.code(500).send({error: "INTERNAL_ERROR"}),
+      ...(o.wired === false ? {} : {devruns})}, o.deliverable ? {deliverable: () => ({ok: true, headSha: "a".repeat(40)})} : {});
+    return {app, store, run, audits, calls};
+  };
+  const post = (app: any, id: string, action: string, body: unknown = {}, headers: any = hdr) => app.inject({method: "POST", url: `/v1/work-runs/${id}/product/${action}`, headers, payload: body as any});
+
+  it("gates: no token 403, not wired 503, bad id 400, unknown run 404, Global Stop 423, policy 403, non-empty body 400, run without delivered source 409 (real evidence check)", async () => {
+    const w = await mkApp({wired: false});
+    expect((await w.app.inject({method: "GET", url: `/v1/work-runs/${w.run.runId}/product`, headers: hdr})).json()).toEqual({error: "DEVRUN_NOT_WIRED"});
+    const a = await mkApp();
+    expect((await a.app.inject({method: "GET", url: `/v1/work-runs/${a.run.runId}/product`, headers: {host: "127.0.0.1:3210"}})).statusCode).toBe(403);
+    expect((await post(a.app, "nope", "start")).statusCode).toBe(400);
+    expect((await post(a.app, RUN("f"), "start")).json()).toEqual({error: "RUN_NOT_FOUND"});
+    expect((await post(a.app, a.run.runId, "start", {x: 1})).statusCode).toBe(400);
+    const st = await mkApp({stopped: true}); expect((await post(st.app, st.run.runId, "start")).statusCode).toBe(423); expect(st.calls).toEqual([]);
+    const den = await mkApp({allowed: false}); expect((await post(den.app, den.run.runId, "start")).statusCode).toBe(403); expect(den.calls).toEqual([]);
+    const r = await post(a.app, a.run.runId, "start"); expect(r.statusCode).toBe(409); expect(r.json()).toMatchObject({error: "PRODUCT_RUN_NOT_DELIVERABLE"}); expect(r.json().reason).toContain("NOT_STARTED"); expect(a.calls).toEqual([]);
+  });
+
+  it("start ties the dev-run to the delivery (runId + delivered head), audits it, reports tiedToThisRun; a sandbox refusal from the manager surfaces as the exact 409 code + reason", async () => {
+    const ok = await mkApp({deliverable: true});
+    const r = await post(ok.app, ok.run.runId, "start"); expect(r.statusCode).toBe(200);
+    expect(ok.calls).toEqual([["start", ok.run.projectId, {runId: ok.run.runId, headSha: "a".repeat(40)}]]);
+    expect(r.json().product).toMatchObject({runId: ok.run.runId, tiedToThisRun: true, devrun: {status: "RUNNING", port: 4321}}); expect(ok.audits).toContain("WORKOS_PRODUCT_START");
+    const { StudioError } = await import("../core/workos/project-studio.js");
+    const bad = await mkApp({deliverable: true, startError: new StudioError("DEVRUN_SANDBOX_UNAVAILABLE", 409, "SANDBOX_LOOPBACK_NOT_VERIFIED:NOT_REPORTED")});
+    const rb = await post(bad.app, bad.run.runId, "start"); expect(rb.statusCode).toBe(409); expect(rb.json()).toEqual({error: "DEVRUN_SANDBOX_UNAVAILABLE", reason: "SANDBOX_LOOPBACK_NOT_VERIFIED:NOT_REPORTED"});
+  });
+
+  it("stop only stops THIS delivery's product (another run's product is never closed); stop without a running product is idempotent; status shows tiedToThisRun=false for foreign runs", async () => {
+    const other = await mkApp({active: RUN("9")});
+    const r = await post(other.app, other.run.runId, "stop"); expect(r.statusCode).toBe(409); expect(r.json()).toEqual({error: "PRODUCT_RUN_NOT_THIS_DELIVERY", reason: "RUNNING_FOR_OTHER_RUN"}); expect(other.calls).toEqual([]);
+    expect((await other.app.inject({method: "GET", url: `/v1/work-runs/${other.run.runId}/product`, headers: hdr})).json().product.tiedToThisRun).toBe(false);
+    const mine = await mkApp(); const own = await post(mine.app, mine.run.runId, "stop"); expect(own.statusCode).toBe(200); expect(mine.calls).toEqual([["stop", mine.run.projectId]]); expect(mine.audits).toContain("WORKOS_PRODUCT_STOP");
   });
 });

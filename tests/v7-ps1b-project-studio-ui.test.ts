@@ -2788,7 +2788,8 @@ describe("LANE-A A-FLOW-4: running product after delivery (B-RUN-1 contract, run
     // LOW (review #226): the B-RUN-1 / devrun reasons have their own text, not "(not recognised)"
     // the server also reports PROCESS_EXITED:<code|signal> (CRASHED) and SANDBOX_UNVERIFIED: recognised, with the detail shown as given
     const px = (await reasonOf("CRASHED", "PROCESS_EXITED:SIGTERM"))!; expect(text(px)).toContain("exited by itself"); expect(text(px)).toContain("(SIGTERM)"); expect(text(px)).not.toContain("not recognised");
-    const su = (await reasonOf("BLOCKED", "SANDBOX_UNVERIFIED"))!; expect(text(su)).toContain("could not be verified"); expect(text(su)).not.toContain("not recognised");
+    const su = (await reasonOf("BLOCKED", "SANDBOX_UNVERIFIED"))!; expect(text(su)).toContain("lost its verification"); expect(text(su)).toContain("running product was stopped"); expect(text(su)).not.toMatch(/was not started|could not be verified/); expect(text(su)).not.toContain("not recognised"); // the server uses it only to STOP an already running product (devrun checkProvider)
+    expect(text((await reasonOf("BLOCKED", "SANDBOX_UNVERIFIED", "tr"))!)).toContain("durduruldu");
     expect(text((await reasonOf("CRASHED", "PROCESS_EXITED:1", "tr"))!)).toContain("sonlandı");
     for (const r of ["DEVRUN_BRIDGE_FAILED", "DEVRUN_COMMAND_NOT_CONFIGURED", "DEVRUN_COMMAND_NOT_ALLOWED", "REPOSITORY_NOT_CONFIGURED", "DEVRUN_DELIVERY_HEAD_MISSING", "DEVRUN_SPAWN_FAILED"]) { const n = (await reasonOf("BLOCKED", r))!; expect(n.dataset.productReason, r).toBe(r); expect(text(n), r).not.toContain("not recognised"); expect(text(n), r).not.toContain("product.reason"); }
     expect(await reasonOf("STOPPED", "SANDBOX_UNAVAILABLE")).toBeUndefined();

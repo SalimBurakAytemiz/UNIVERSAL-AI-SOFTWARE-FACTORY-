@@ -743,7 +743,7 @@ describe("B5 Gelen Kutusu screen", () => {
   const getFn = (extra: Record<string, any> = {}) => (p: string) => {
     if (p in extra) return extra[p];
     if (p === "/v1/cockpit") return {generatedAt: "2026-10-14T10:00:00.000Z", awaitingApproval: {state: "VERIFIED", items: []}};
-    if (p === "/v1/founder-attention") return {blocked: []};
+    if (p === "/v1/attention") return {attention: {items: [], counts: {RUN_AWAITING_APPROVAL: 0, MISSION_FOUNDER_ATTENTION: 0, RUN_NEEDS_DECISION: 0, MISSION_AUTHORIZATION_PENDING: 0, MISSION_BLOCKED: 0, TASK_BLOCKED: 0}, truncated: false, source: "WORKOS"}};
     if (p === "/v1/missions") return {missions: [mission({status: "REPORTING"}), mission({missionId: MID2, title: "Dikkat", status: "FOUNDER_ATTENTION_REQUIRED", riskLevel: "R3"}), mission({missionId: "msn_" + "77".repeat(12), title: "Yürütülüyor", status: "EXECUTING"})]};
     if (p === "/v1/work-runs") return {workRuns: [{runId: RUN, missionId: MID, status: "AWAITING_APPROVAL"}]};
     return undefined;

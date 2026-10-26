@@ -160,3 +160,109 @@ export function withClaudeProfileEnv(env: NodeJS.ProcessEnv, dir: string): NodeJ
   out.CLAUDE_CONFIG_DIR = dir;
   return out;
 }
+
+// ---- C-IMPL-WIN-1: Claude Code CLI keşfi, başlatıcı kanıtı ve rol başına tam hazırlık ----
+// //TR: Paketli Windows uygulaması CLI'yi PATH'ten VE bilinen kurulum dizinlerinden arar. Provenance yakalama (korumalı scripts/capture-provider-provenance.mjs) `where claude` ile ilk eşleşmeyi alıp kabuksuz çalıştırır: .cmd/.bat başlatıcı kabuksuz başlatılamaz (Node EINVAL), bu yüzden SHIM_UNSUPPORTED dürüstçe bildirilir. Bulunan çalıştırılabilir PATH'te değilse/gölgelenmişse `pathDir` yakalama alt sürecinin PATH'inin BAŞINA eklenir.
+export type ClaudeCliState = "FOUND" | "NOT_FOUND" | "SHIM_UNSUPPORTED";
+export interface ClaudeCliStatus {
+  state: ClaudeCliState; path: string | null; kind: "EXECUTABLE" | "CMD" | "BAT" | null; source: "PATH" | "WELL_KNOWN" | null;
+  // yakalama alt sürecinin PATH'inin başına eklenecek dizin (CLI PATH'te ilk eşleşme değilse); yoksa null
+  // //TR: searchedCount: kaç klasör arandı (sunucunun PATH listesi API ile DIŞARI verilmez); path/pathDir: bulunan yer.
+  pathDir: string | null; searchedCount: number; founderAction: string | null;
+}
+export interface ClaudeCliOptions { env?: NodeJS.ProcessEnv; platform?: NodeJS.Platform; isFile?: (p: string) => boolean }
+export const CLAUDE_CLI_INSTALL_HINT = "Install the native Claude Code for Windows (it provides claude.exe), for example in PowerShell: irm https://claude.ai/install.ps1 | iex (check Anthropic's current install instructions), then restart UASCO.";
+
+export function detectClaudeCli(o: ClaudeCliOptions = {}): ClaudeCliStatus {
+  const env = o.env ?? process.env, platform = o.platform ?? process.platform, win = platform === "win32", P = win ? path.win32 : path.posix;
+  const get = (n: string): string | undefined => { for (const [k, v] of Object.entries(env)) if (win ? k.toUpperCase() === n : k === n) return v; return undefined; };
+  const isFile = o.isFile ?? ((f: string) => { try { return fs.statSync(f).isFile(); } catch { return false; } });
+  const exts = win ? (get("PATHEXT") ?? ".COM;.EXE;.BAT;.CMD").split(";").map(e => e.trim().toLowerCase()).filter(e => /^\.[a-z0-9]+$/.test(e)) : [""];
+  const kindOf = (ext: string): "EXECUTABLE" | "CMD" | "BAT" | null => ext === ".cmd" ? "CMD" : ext === ".bat" ? "BAT" : ext === ".exe" || ext === ".com" || !win ? "EXECUTABLE" : null;
+  const clean = (d: string) => d.trim().replace(/^"(.*)"$/, "$1");
+  const pathDirs = (get("PATH") ?? "").split(win ? ";" : ":").map(clean).filter(d => d && P.isAbsolute(d));
+  const wellKnown: string[] = [];
+  if (win) {
+    const home = get("USERPROFILE"), appData = get("APPDATA");
+    if (home) wellKnown.push(P.join(home, ".local", "bin"), P.join(home, ".claude", "local"));
+    if (appData) wellKnown.push(P.join(appData, "npm"));
+  }
+  type Hit = {path: string; kind: "EXECUTABLE" | "CMD" | "BAT"; source: "PATH" | "WELL_KNOWN"; dir: string; pathIndex: number};
+  const hits: Hit[] = [], searched: string[] = [];
+  const scan = (dirs: string[], source: "PATH" | "WELL_KNOWN") => dirs.forEach((dir, i) => {
+    searched.push(dir);
+    for (const ext of exts) { const kind = kindOf(ext), f = P.join(dir, "claude" + ext); if (kind && isFile(f)) { hits.push({path: f, kind, source, dir, pathIndex: source === "PATH" ? i : -1}); break; } }
+  });
+  scan(pathDirs, "PATH"); scan(wellKnown.filter(d => !pathDirs.some(p => p.toLowerCase() === d.toLowerCase())), "WELL_KNOWN");
+  const exe = hits.find(h => h.kind === "EXECUTABLE");
+  if (exe) {
+    const first = hits[0], shadowed = first !== exe; // `where claude` ilk satırı alır: ilk eşleşme çalıştırılabilir değilse veya CLI PATH'te değilse dizin başa eklenir
+    return {state: "FOUND", path: exe.path, kind: "EXECUTABLE", source: exe.source, pathDir: exe.source === "WELL_KNOWN" || shadowed ? exe.dir : null, searchedCount: searched.length, founderAction: null};
+  }
+  const shim = hits[0];
+  if (shim) return {state: "SHIM_UNSUPPORTED", path: shim.path, kind: shim.kind, source: shim.source, pathDir: null, searchedCount: searched.length,
+    founderAction: `Found ${shim.path}, a ${shim.kind === "CMD" ? ".cmd" : ".bat"} launcher (an npm install). UASCO starts the CLI without a shell and Windows does not allow that for .cmd/.bat files. ${CLAUDE_CLI_INSTALL_HINT}`};
+  return {state: "NOT_FOUND", path: null, kind: null, source: null, pathDir: null, searchedCount: searched.length, founderAction: `The Claude Code CLI was not found (searched ${searched.length} folder${searched.length === 1 ? "" : "s"}). ${CLAUDE_CLI_INSTALL_HINT}`};
+}
+// Yakalama/başlatma alt süreci için env: CLI PATH'te ilk eşleşme değilse bulunduğu dizin PATH'in başına eklenir (anahtar harf biçimi korunur).
+export function withClaudeCliOnPath(env: NodeJS.ProcessEnv, cli: ClaudeCliStatus, platform: NodeJS.Platform = process.platform): NodeJS.ProcessEnv {
+  if (cli.state !== "FOUND" || !cli.pathDir) return env;
+  const win = platform === "win32", key = Object.keys(env).find(k => (win ? k.toUpperCase() === "PATH" : k === "PATH")) ?? "PATH", sep = win ? ";" : ":";
+  return {...env, [key]: env[key] ? `${cli.pathDir}${sep}${env[key]}` : cli.pathDir};
+}
+
+export type LauncherCheck = {ok: true; resolvedPath: string} | {ok: false; code: "PROVIDER_PROVENANCE_NOT_READY" | "CLAUDE_PACKAGE_PROVENANCE_REQUIRED" | "CLAUDE_CLI_NOT_FOUND" | "CLAUDE_LAUNCHER_PROVENANCE_CHANGED" | "CLAUDE_PACKAGE_PROVENANCE_CHANGED"};
+// Reviewer/implementer ile aynı kural (PASS + paket/standalone seviyesi + launcher sha256), tek yerde ve makine-okunur kodlarla: provenance dosyası yok/okunamaz = NOT_READY; launcher dosyası artık yok = CLI_NOT_FOUND; içerik değişti = CHANGED.
+export function claudeLauncherCheck(controlRoot: string): LauncherCheck {
+  let prov: any;
+  try { prov = JSON.parse(fs.readFileSync(path.join(controlRoot, ".ai", "runtime", "PROVIDER_PROVENANCE.json"), "utf8")); } catch { return {ok: false, code: "PROVIDER_PROVENANCE_NOT_READY"}; }
+  if (prov?.final !== "PASS") return {ok: false, code: "PROVIDER_PROVENANCE_NOT_READY"};
+  const level = prov.claude?.provenanceLevel;
+  if (level !== "FULL_PACKAGE" && level !== "STANDALONE_LAUNCHER") return {ok: false, code: "CLAUDE_PACKAGE_PROVENANCE_REQUIRED"};
+  const resolved = prov.claude?.resolvedPath;
+  if (typeof resolved !== "string" || !resolved || typeof prov.claude?.launcherSha256 !== "string" || !prov.claude.launcherSha256) return {ok: false, code: "CLAUDE_LAUNCHER_PROVENANCE_CHANGED"};
+  let bytes: Buffer;
+  try { bytes = fs.readFileSync(resolved); } catch (e) { return {ok: false, code: (e as NodeJS.ErrnoException).code === "ENOENT" ? "CLAUDE_CLI_NOT_FOUND" : "CLAUDE_LAUNCHER_PROVENANCE_CHANGED"}; }
+  if (crypto.createHash("sha256").update(bytes).digest("hex") !== prov.claude.launcherSha256) return {ok: false, code: "CLAUDE_LAUNCHER_PROVENANCE_CHANGED"};
+  // //TR: scripts/claude-builder-broker.mjs her çalıştırmada FULL_PACKAGE için ayrıca package.json'un sha256'sını doğrular (packageJsonPath varsa ve "UNKNOWN" değilse) ve eşleşmezse CLAUDE_PACKAGE_PROVENANCE_CHANGED ile çıkar; hazırlık aynı kuralı uygulamazsa "hazır" der, broker ise reddederdi. Okunamayan/yok olan dosya da değişmiş sayılır (broker da fırlatırdı).
+  const pj = prov.claude.packageJsonPath;
+  if (level === "FULL_PACKAGE" && pj && pj !== "UNKNOWN") {
+    let pjBytes: Buffer;
+    try { pjBytes = fs.readFileSync(String(pj)); } catch { return {ok: false, code: "CLAUDE_PACKAGE_PROVENANCE_CHANGED"}; }
+    if (crypto.createHash("sha256").update(pjBytes).digest("hex") !== prov.claude.packageJsonSha256) return {ok: false, code: "CLAUDE_PACKAGE_PROVENANCE_CHANGED"};
+  }
+  return {ok: true, resolvedPath: resolved};
+}
+
+// //TR: Rol başına TAM hazırlık (salt-okunur): profil oturumu + CLI + başlatıcı kanıtı. blockers sıralıdır (CLI, kanıt, oturum): Founder kurulum sırasını izler; ready yalnız hepsi tamamsa true. Çalıştırma zamanındaki ret sırası executors.ts'te (profil önce) korunur.
+export interface ClaudeRoleReadiness {
+  role: ClaudeProfileRole; ready: boolean; blockers: string[]; blocker: string | null; founderAction: string | null;
+  profile: ClaudeProfileState; loginCommand: string | null; loginHint: string | null;
+}
+const LAUNCHER_ACTION: Record<string, string> = {
+  PROVIDER_PROVENANCE_NOT_READY: "The Claude launcher has not been verified yet: enable the Claude executor in Settings (it captures and checks the launcher).",
+  CLAUDE_PACKAGE_PROVENANCE_REQUIRED: "The installed Claude launcher is not a recognised Claude Code package: reinstall Claude Code and enable the executor again.",
+  CLAUDE_CLI_NOT_FOUND: "The verified Claude launcher no longer exists on disk: reinstall Claude Code and enable the executor again.",
+  CLAUDE_LAUNCHER_PROVENANCE_CHANGED: "The Claude launcher changed after it was verified: enable the executor again to verify the new one.",
+  CLAUDE_PACKAGE_PROVENANCE_CHANGED: "The installed Claude Code package changed after it was verified (its package.json differs): enable the executor again to verify the new install."
+};
+export function claudeRoleReadiness(controlRoot: string, role: ClaudeProfileRole, o: ClaudeProfileOptions & {cli?: ClaudeCliStatus; launcher?: LauncherCheck} = {}): ClaudeRoleReadiness {
+  const cli = o.cli ?? detectClaudeCli({env: o.env}), launcher = o.launcher ?? claudeLauncherCheck(controlRoot);
+  let ps: ClaudeProfileStatus;
+  try { ps = claudeProfileStatus(controlRoot, role, o); } catch { ps = {role, dir: claudeProfileDir(controlRoot, role), state: "REFUSED", reason: "PROFILE_STATUS_UNAVAILABLE", settings: "MISSING", credentialStore: "ABSENT", loginCommand: null, loginHint: null}; }
+  const blockers: string[] = [], actions: string[] = [];
+  // Bir launcher kanıtı yoksa CLI'nin PATH'te olması yeter değildir; kanıt VARSA (CLI daha önce doğrulandı) PATH aramasının sonucu tek başına engel değildir.
+  if (cli.state !== "FOUND" && !launcher.ok) { blockers.push(cli.state === "SHIM_UNSUPPORTED" ? "CLAUDE_CLI_SHIM_UNSUPPORTED" : "CLAUDE_CLI_NOT_FOUND"); actions.push(cli.founderAction ?? ""); }
+  // //TR: aynı kod iki kez listelenmez (CLI yok VE doğrulanmış başlatıcı da yok => CLAUDE_CLI_NOT_FOUND tek satır).
+  if (!launcher.ok && !(cli.state !== "FOUND" && launcher.code === "PROVIDER_PROVENANCE_NOT_READY") && !blockers.includes(launcher.code)) { blockers.push(launcher.code); actions.push(LAUNCHER_ACTION[launcher.code]); }
+  if (ps.state === "LOGIN_REQUIRED") { blockers.push("CLAUDE_PROFILE_LOGIN_REQUIRED"); actions.push(`Sign in once for this role: ${ps.loginCommand} (${ps.loginHint})`); }
+  else if (ps.state === "REFUSED") { blockers.push(`CLAUDE_PROFILE_REFUSED:${ps.reason ?? "UNKNOWN"}`); actions.push("The UASCO Claude profile folder was refused (see the reason); UASCO never falls back to your personal Claude profile."); }
+  else if (ps.settings !== "PRESENT") { blockers.push("CLAUDE_PROFILE_REFUSED:SETTINGS_NOT_WRITTEN"); actions.push("The UASCO profile settings.json is missing or was modified: open Settings so UASCO can restore it."); }
+  return {role, ready: blockers.length === 0, blockers, blocker: blockers[0] ?? null, founderAction: actions.find(a => a) ?? null, profile: ps.state, loginCommand: ps.loginCommand, loginHint: ps.loginHint};
+}
+
+// //TR: Claude CLI yazdırma kipinde oturum yokluğunu/süresini satır başındaki hata iletisiyle bildirir (bekleyip asılı kalmaz). Yalnız satır başı eşleşir (rastgele stderr oturum hatası sayılmaz); kota/hız sınırı bundan ayrı sınıflandırılır (runner executorLimit).
+const CLAUDE_AUTH_ERROR_RE = /^(?:error:\s*)?(?:invalid api key\b|oauth token (?:has )?(?:expired|revoked)\b|(?:your )?(?:session|login) (?:has )?expired\b|not logged in\b|please run \/login\b|authentication[_ ]error\b|api error: 401\b)/i;
+export function claudeAuthFailure(log: string): boolean {
+  return String(log ?? "").slice(-8192).split("\n").some(l => CLAUDE_AUTH_ERROR_RE.test(l.trim().replace(/\u001b\[[0-9;]*m/g, "")));
+}
