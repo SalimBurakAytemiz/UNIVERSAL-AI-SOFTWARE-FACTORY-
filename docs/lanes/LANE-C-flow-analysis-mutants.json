@@ -133,6 +133,83 @@
    "file": "core/workos/crew/analysis.ts",
    "old": "acceptanceCriteria: [...r.acceptanceCriteria]}] : []; })}));",
    "new": "acceptanceCriteria: []}] : []; })}));"
+  },
+  {
+   "id": "V1",
+   "description": "M-229-1: the plan draft is not validated by the plan route's validator",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "if (!valid.ok) return {ok: false, code: \"PLAN_INVALID\", detail: valid.errors.slice(0, 300)};",
+   "new": ""
+  },
+  {
+   "id": "V2",
+   "description": "M-229-2: no single-flight (a second concurrent step starts a second paid call)",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "if (IN_FLIGHT.has(key)) return blockedStep(",
+   "new": "if (false) return blockedStep("
+  },
+  {
+   "id": "V3",
+   "description": "M-229-2: the single-flight guard is never released",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "finally { IN_FLIGHT.delete(key); }",
+   "new": "finally { /* never released */ }"
+  },
+  {
+   "id": "V4",
+   "description": "L1: Global Stop is not checked before the paid call",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "    if (this.d.stopped?.()) return stopBlock();\n    const phaseKind =",
+   "new": "    const phaseKind ="
+  },
+  {
+   "id": "V5",
+   "description": "L1: Global Stop is not checked after the paid call, before recording",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "    if (this.d.stopped?.()) return stopBlock();\n    // //TR: Kayıt mevcut",
+   "new": "    // //TR: Kayıt mevcut"
+  },
+  {
+   "id": "V6",
+   "description": "L3: a lost race is reported as BUILDER_FAILED for the stale phase",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "return this.pendingStep(fresh) ?? {status: \"BUILDER_FAILED\", kind: ANALYSIS_KINDS.find(k => fresh.artifacts[k].state !== \"APPROVED\") ?? phaseKind, code: e.message.slice(0, 120)};",
+   "new": "return {status: \"BUILDER_FAILED\", kind: phaseKind, code: e.message.slice(0, 120)};"
+  },
+  {
+   "id": "V7",
+   "description": "L2: the sequence is opened before the paid call (a failed step writes)",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "    let raw: string;\n    try {\n      const ctx = driver.buildMissionContext",
+   "new": "    let raw: string;\n    if (!rm.active || rm.phase === \"AUTHORIZED\") driver.start(scope, missionId, PREDEV_AGENT_ACTOR);\n    try {\n      const ctx = driver.buildMissionContext"
+  },
+  {
+   "id": "V8",
+   "description": "L4: the draft is recorded under the Founder's identity (the recorder step)",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "const out = await recorder.produceCurrentPhase(scope, missionId, PREDEV_AGENT_ACTOR);",
+   "new": "const out = await recorder.produceCurrentPhase(scope, missionId, \"FOUNDER_LOCAL\");"
+  },
+  {
+   "id": "V9",
+   "description": "L4: the sequence is opened under the Founder's identity",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "recorder.start(scope, missionId, PREDEV_AGENT_ACTOR);",
+   "new": "recorder.start(scope, missionId, \"FOUNDER_LOCAL\");"
+  },
+  {
+   "id": "V10",
+   "description": "L4: createPlan ignores the actor it is given",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "const r = submitPlan(this.d.store, this.d.scope, actor, missionId, draft.body);",
+   "new": "const r = submitPlan(this.d.store, this.d.scope, \"WORKOS_RUNNER\", missionId, draft.body);"
+  },
+  {
+   "id": "V11",
+   "description": "L4: the plan gate allows 51 tasks (>= instead of >)",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "if (wps.length > MAX_PLAN_TASKS) return",
+   "new": "if (wps.length > MAX_PLAN_TASKS + 1) return"
   }
  ]
 }

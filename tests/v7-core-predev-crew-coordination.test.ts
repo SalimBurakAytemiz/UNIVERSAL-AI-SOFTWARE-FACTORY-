@@ -606,8 +606,8 @@ describe("C-FLOW-ANALYSIS-1: intake -> analysis -> plan", () => {
 });
 
 describe("C-FLOW-ANALYSIS-1: readiness comes from the role bindings, the CLI, the launcher proof and BOTH Claude profiles", () => {
-  const FOUND: ClaudeCliStatus = {state: "FOUND", path: "/x/claude", kind: "EXECUTABLE", source: "PATH", pathDir: null, searched: [], founderAction: null};
-  const NOT_FOUND: ClaudeCliStatus = {state: "NOT_FOUND", path: null, kind: null, source: null, pathDir: null, searched: ["/a"], founderAction: "install claude"};
+  const FOUND: ClaudeCliStatus = {state: "FOUND", path: "/x/claude", kind: "EXECUTABLE", source: "PATH", pathDir: null, searchedCount: 0, founderAction: null};
+  const NOT_FOUND: ClaudeCliStatus = {state: "NOT_FOUND", path: null, kind: null, source: null, pathDir: null, searchedCount: 1, founderAction: "install claude"};
   const control = () => path.join(tmp, "control");
   const data = () => path.join(tmp, "data");
   const verify = () => {
