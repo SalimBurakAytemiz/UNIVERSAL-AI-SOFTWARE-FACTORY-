@@ -433,7 +433,13 @@ describe("PS-1A executor setup", () => {
       return {ok: true};
     };
     const none = mk({extra: {controlRoot: control, executorSetup: {findClaudeCli: () => null, captureProvenance: capture}}});
-    expect((await call(none.app, "GET", "/v1/system/executors")).json().executors).toEqual({LOCAL_CLAUDE: {state: "CLI_NOT_FOUND", enabled: false, source: "NONE"}, FAKE: {state: "TEST_ONLY"}});
+    // C-IMPL-WIN-1: the report carries two more fields, `cli` (exact detection result) and `readiness` (exact per-role blockers + the Founder's own login command); the original three are unchanged.
+    const roleNotReady = (role: string) => ({role, ready: false, blocker: "CLAUDE_CLI_NOT_FOUND", blockers: ["CLAUDE_CLI_NOT_FOUND", "CLAUDE_PROFILE_LOGIN_REQUIRED", "EXECUTOR_NOT_ENABLED"], founderAction: expect.stringContaining("Claude Code CLI was not found"), profile: "LOGIN_REQUIRED", loginCommand: expect.stringContaining(`claude-profiles${path.sep}${role}`), loginHint: expect.stringContaining("/login")});
+    expect((await call(none.app, "GET", "/v1/system/executors")).json().executors).toEqual({
+      LOCAL_CLAUDE: {state: "CLI_NOT_FOUND", enabled: false, source: "NONE",
+        cli: {state: "NOT_FOUND", path: null, kind: null, source: null, pathDir: null, searchedCount: 0, founderAction: expect.stringContaining("Claude Code CLI was not found")},
+        readiness: {implementer: roleNotReady("implementer"), reviewer: roleNotReady("reviewer")}},
+      FAKE: {state: "TEST_ONLY"}});
     const refused = await call(none.app, "POST", "/v1/system/executors/local-claude/enable", {});
     expect(refused.statusCode).toBe(409);
     expect(refused.json()).toMatchObject({error: "EXECUTOR_ENABLE_REFUSED", reason: "CLI_NOT_FOUND"});
@@ -447,7 +453,11 @@ describe("PS-1A executor setup", () => {
     captureOk = true;
     const ok = await call(app, "POST", "/v1/system/executors/local-claude/enable", {});
     expect(ok.statusCode, ok.body).toBe(200);
-    expect(ok.json()).toEqual({executors: {LOCAL_CLAUDE: {state: "READY", enabled: true, source: "SETTING", version: "9.9.9 (fake)", provenanceCapturedAt: "2026-10-15T00:00:00.000Z"}, FAKE: {state: "TEST_ONLY"}}, active: {reason: "LOCAL_CLAUDE"}});
+    // READY is the executor state (CLI found + provenance); `readiness` is the per-role truth: nobody has signed in yet, so both roles still need the Founder's own login.
+    const loginNeeded = (role: string) => ({role, ready: false, blocker: "CLAUDE_PROFILE_LOGIN_REQUIRED", blockers: ["CLAUDE_PROFILE_LOGIN_REQUIRED"], founderAction: expect.stringContaining("Sign in once for this role"), profile: "LOGIN_REQUIRED", loginCommand: expect.stringContaining(`claude-profiles${path.sep}${role}`), loginHint: expect.stringContaining("/login")});
+    expect(ok.json()).toEqual({executors: {LOCAL_CLAUDE: {state: "READY", enabled: true, source: "SETTING", version: "9.9.9 (fake)", provenanceCapturedAt: "2026-10-15T00:00:00.000Z",
+      cli: {state: "FOUND", path: cli, kind: "EXECUTABLE", source: "PATH", pathDir: null, searchedCount: 0, founderAction: null},
+      readiness: {implementer: loginNeeded("implementer"), reviewer: loginNeeded("reviewer")}}, FAKE: {state: "TEST_ONLY"}}, active: {reason: "LOCAL_CLAUDE"}});
     expect(captures).toEqual([path.resolve(control), path.resolve(control)]);
     expect(JSON.parse(fs.readFileSync(path.join(dataDir, "settings", "executors.json"), "utf8")).localClaude.enabled).toBe(true);
     const later = mk({dataDir, runtime, extra: {controlRoot: control, executorSetup: {findClaudeCli: () => cli}}});
