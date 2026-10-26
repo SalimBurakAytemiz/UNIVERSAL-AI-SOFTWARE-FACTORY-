@@ -2291,8 +2291,11 @@ describe("LANE-A run card: tasks linked to the run", () => {
     expect(c.mapRunTasks({links: [link(TID("1")), link(TID("2"), {linkedAt: "garbage"})]}, R24)).toEqual({state: "VERIFIED", links: [
       {taskId: TID("1"), runId: R24, missionId: MID, linkedAt: "2026-10-26T01:00:00.000Z"}, {taskId: TID("2"), runId: R24, missionId: MID, linkedAt: null}]});
     expect(c.mapRunTasks({links: []}, R24)).toEqual({state: "VERIFIED", links: []});
+    const many = (n: number) => ({links: Array.from({length: n}, (_, i) => link("tsk_" + i.toString(16).padStart(24, "0")))});
+    expect(c.mapRunTasks(many(500), R24).links).toHaveLength(500);
+    expect(c.mapRunTasks(many(501), R24)).toEqual({state: "ERROR", links: []});
     for (const bad of [null, undefined, [], "x", {}, {links: "x"}, {links: {}}, {links: [null]}, {links: [link("tsk_zz")]}, {links: [link(TID("1"), {runId: "run_" + "cd".repeat(12)})]}, {links: [link(TID("1"), {missionId: "msn_zz"})]},
-      {links: [link(TID("1")), link(TID("1"))]}, {links: [link([TID("1")] as any)]}, {links: Array.from({length: 501}, (_, i) => link(TID(String(i % 10)) as string))}])
+      {links: [link(TID("1")), link(TID("1"))]}, {links: [link([TID("1")] as any)]}])
       expect(c.mapRunTasks(bad, R24), JSON.stringify(bad)?.slice(0, 60)).toEqual({state: "ERROR", links: []});
   });
   it("the api reads exactly the canonical path once per detailed run; a missing allow-list entry is UNAVAILABLE, a server error is the client's state, a bad id sends nothing", async () => {
@@ -2310,6 +2313,8 @@ describe("LANE-A run card: tasks linked to the run", () => {
     const items = byData(r.block, "runLinkedTask");
     expect(items.map(n => n.dataset.runLinkedTask)).toEqual([TID("1"), TID("2"), TID("3")]);
     expect(text(items[0])).toContain("Plan A"); expect(text(items[0])).toContain(TID("1"));
+    expect(all(items[0]).some(n => n.dataset.status === "PENDING")).toBe(true); // durum rozeti
+    expect(all(items[2]).some(n => "status" in n.dataset)).toBe(false); // listede olmayan görev için durum uydurulmaz
     expect(text(items[1])).toContain("<b>Plan B</b>");
     expect(text(items[2])).toContain("Task not in this mission's list");
     expect(all(r.root).some(n => n.tagName === "B")).toBe(false);
