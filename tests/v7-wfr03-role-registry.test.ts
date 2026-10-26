@@ -1749,3 +1749,55 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     });
   });
 });
+
+// //TR: A-TEST-DIAG-1: git adımı başarısız olduğunda neden görünür olur (adım, çıkış kodu/sinyal/başlatma hatası, redakte stderr); sonuç yine NOT_EXECUTED'dır (altyapı rolü ne yükseltir ne cezalandırır), yeniden deneme ya da süre değişikliği yoktur. Gerçek git çalışır; yalnız seçilen alt komutun sonucu uydurulur (cp.spawnSync gölgesi).
+describe("A-TEST-DIAG-1: a failing git step in the evaluation pipeline is diagnosable (NOT_EXECUTED, no retry)", () => {
+  const DEV = "UASCO-0085", REVIEWER = "UASCO-0252";
+  const fakePair = (): ExecutorPair => new FakeExecutors({implement: () => ({files: {"greeting.txt": "hello\n"}}), review: n => (n === 1 ? {verdict: "CLEAN"} : {verdict: "BLOCKED", findings: [{severity: "HIGH", title: "command injection via unsanitised ref"}]})}).pair();
+  const evaluate = (role: string): Promise<EvaluationOutcome> => runRoleEvaluation({repoRoot: REPO, stagingRoot: path.join(fs.mkdtempSync(path.join(tmp, "diag-")), "staging"), pair: fakePair()}, role, "EV-01");
+  // The token is assembled at run time so the repository never contains a secret-looking literal.
+  const SECRET = "AKIA" + "ABCDEFGHIJKLMNOP";
+  type Fail = {status: number | null; signal?: string | null; error?: {code: string}; stderr?: string};
+  // Real git runs, except the Nth call whose argv contains `sub`, which returns `fail`. Returns the call counter.
+  const shim = (sub: string, fail: Fail, nth = 1) => {
+    const real = cp.spawnSync.bind(cp); let seen = 0;
+    const spy = vi.spyOn(cp, "spawnSync").mockImplementation(((cmd: string, args: string[], opts: any) => {
+      if (cmd === "git" && Array.isArray(args) && args.includes(sub) && ++seen === nth) return {output: [], pid: 0, signal: null, stdout: "", stderr: "", ...fail} as any;
+      return (real as any)(cmd, args, opts);
+    }) as any);
+    return {spy, hits: () => spy.mock.calls.filter(c => c[0] === "git" && Array.isArray(c[1]) && (c[1] as string[]).includes(sub)).length};
+  };
+  const run = async (role: string, sub: string, fail: Fail, nth = 1) => { const s = shim(sub, fail, nth); try { return {out: await evaluate(role), hits: s.hits()}; } finally { s.spy.mockRestore(); } };
+  const reasonOf = (o: EvaluationOutcome): string => { expect(o.status).toBe("NOT_EXECUTED"); return (o as {reason: string}).reason; };
+
+  it("seedRepo names the failed step and the result: init / add / commit with exit=N, and the stderr is redacted, whitespace-collapsed and at most 120 characters", async () => {
+    for (const step of ["init", "add", "commit"]) {
+      const { out, hits } = await run(DEV, step, {status: 128, stderr: `fatal:   could not\nwrite  ${SECRET}  ${"x".repeat(300)}`});
+      const reason = reasonOf(out);
+      expect(reason, step).toMatch(new RegExp(`^PROCEDURE_EXCEPTION:GIT_SEED_FAILED:${step}:exit=128:fatal: could not write \\[REDACTED:AWS_ACCESS_KEY\\] x+$`));
+      expect(reason, step).not.toContain(SECRET);
+      expect(reason.split(`${step}:exit=128:`)[1].length, `${step}: stderr part at most 120`).toBeLessThanOrEqual(120);
+      expect(hits, `${step}: the git step ran exactly once (no retry)`).toBe(1);
+    }
+    expect(reasonOf((await run(DEV, "add", {status: null, signal: "SIGKILL"})).out)).toBe("PROCEDURE_EXCEPTION:GIT_SEED_FAILED:add:signal=SIGKILL:");
+    expect(reasonOf((await run(DEV, "commit", {status: null, error: {code: "ENOENT"}})).out)).toBe("PROCEDURE_EXCEPTION:GIT_SEED_FAILED:commit:spawn=ENOENT:");
+  });
+
+  it("the workspace-setup paths keep the WORKSPACE_SETUP_FAILED prefix and add the step and result: developer checkout; reviewer add / commit / diff / clone / detach", async () => {
+    const dev = await run(DEV, "-B", {status: 1, stderr: `error: ${SECRET}  refused`});
+    expect(reasonOf(dev.out)).toBe("WORKSPACE_SETUP_FAILED:checkout:exit=1:error: [REDACTED:AWS_ACCESS_KEY] refused"); expect(dev.hits).toBe(1);
+    // the reviewer procedure seeds first (its own add/commit succeed); the SECOND add / commit is the case change
+    for (const [sub, step, nth] of [["add", "add", 2], ["commit", "commit", 2], ["diff", "diff", 1], ["clone", "clone", 1], ["--detach", "checkout", 1]] as const) {
+      const { out, hits } = await run(REVIEWER, sub, {status: 128, stderr: `fatal: ${step} failed ${SECRET}`}, nth);
+      expect(reasonOf(out), step).toBe(`WORKSPACE_SETUP_FAILED:${step}:exit=128:fatal: ${step} failed [REDACTED:AWS_ACCESS_KEY]`);
+      expect(hits, `${step}: no retry`).toBe(nth);
+    }
+  });
+
+  it("PROCEDURE_EXCEPTION keeps up to 240 characters of the message (it was cut at 80)", async () => {
+    const real = cp.spawnSync.bind(cp);
+    const spy = vi.spyOn(cp, "spawnSync").mockImplementation(((cmd: string, args: string[], opts: any) => { if (cmd === "git") throw new Error("E".repeat(500)); return (real as any)(cmd, args, opts); }) as any);
+    try { expect(reasonOf(await evaluate(DEV))).toBe(`PROCEDURE_EXCEPTION:${"E".repeat(240)}`); } finally { spy.mockRestore(); }
+  });
+});
+

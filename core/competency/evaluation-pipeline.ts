@@ -143,11 +143,22 @@ export const GIT_REPO_ENV = /^GIT_(DIR|WORK_TREE|INDEX_FILE|OBJECT_DIRECTORY|ALT
 const cleanGitEnv = (): NodeJS.ProcessEnv => Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^GIT_/i.test(k)));
 const git = (cwd: string, args: string[]) => spawnGitSync(cwd, ["-c", "core.fsmonitor=false", ...args], {maxBuffer: 16 * 1024 * 1024, env: cleanGitEnv()});
 const gitOut = (cwd: string, args: string[]): string | null => { const r = git(cwd, args); return r.status === 0 ? String(r.stdout ?? "") : null; };
+// //TR: Teşhis (A-TEST-DIAG-1): git adımı başarısız olduğunda NE olduğu görünsün: çıkış kodu / sinyal / başlatma hatası kodu + redakte edilmiş, boşlukları daraltılmış, en çok 120 karakterlik stderr. Yalnız ileti metnidir: sonuç (NOT_EXECUTED), yeniden deneme ya da süre davranışı DEĞİŞMEZ.
+type GitRes = {status: number | null; signal?: NodeJS.Signals | null; error?: Error; stderr?: unknown};
+const gitDetail = (r: GitRes): string => {
+  const how = r.error ? `spawn=${(r.error as NodeJS.ErrnoException).code ?? "ERR"}` : r.signal ? `signal=${r.signal}` : `exit=${r.status}`;
+  return `${how}:${redactSecrets(String(r.stderr ?? "")).replace(/\s+/g, " ").trim().slice(0, 120)}`;
+};
+const setupFail = (step: string, r: GitRes): string => `WORKSPACE_SETUP_FAILED:${step}:${gitDetail(r)}`;
 function seedRepo(dir: string, files: Readonly<Record<string, string>>): string {
   fs.mkdirSync(dir, {recursive: true});
-  if (git(dir, ["init", "-q", "-b", "main"]).status !== 0) throw new Error("GIT_INIT_FAILED");
+  const init = git(dir, ["init", "-q", "-b", "main"]);
+  if (init.status !== 0) throw new Error(`GIT_SEED_FAILED:init:${gitDetail(init)}`);
   for (const [f, c] of Object.entries(files)) { const target = path.join(dir, f); fs.mkdirSync(path.dirname(target), {recursive: true}); fs.writeFileSync(target, c); }
-  if (git(dir, ["add", "-A"]).status !== 0 || git(dir, [...ID, "commit", "-q", "-m", "seed"]).status !== 0) throw new Error("GIT_SEED_FAILED");
+  const add = git(dir, ["add", "-A"]);
+  if (add.status !== 0) throw new Error(`GIT_SEED_FAILED:add:${gitDetail(add)}`);
+  const commit = git(dir, [...ID, "commit", "-q", "-m", "seed"]);
+  if (commit.status !== 0) throw new Error(`GIT_SEED_FAILED:commit:${gitDetail(commit)}`);
   return (gitOut(dir, ["rev-parse", "HEAD"]) ?? "").trim();
 }
 const DIFF_FLAGS = ["diff", "--no-color", "--no-ext-diff", "--no-textconv", "--text", "--no-renames", "--src-prefix=a/", "--dst-prefix=b/"];
@@ -164,7 +175,8 @@ async function implementGolden(c: ProcCtx, g: GoldenImpl): Promise<Implemented> 
   const identities = {implementer: impl.identity};
   const infra = (reason: string): Implemented => ({ok: false, run: {infra: reason, checks: [], artifact: {}, identities}});
   const start = seedRepo(ws, g.seed);
-  if (git(ws, ["checkout", "-q", "-B", g.branch, start]).status !== 0) return infra("WORKSPACE_SETUP_FAILED");
+  const checkout = git(ws, ["checkout", "-q", "-B", g.branch, start]);
+  if (checkout.status !== 0) return infra(setupFail("checkout", checkout));
   const spec: MissionSpec = {runId: "run_evaluation", missionId: "msn_evaluation", projectId: "prj_evaluation", title: g.title, objective: g.objective,
     acceptanceCriteria: [...g.acceptanceCriteria], riskLevel: "R0", cycle: 0, baseSha: start, startSha: start};
   const r = await impl.implement(ws, spec, {timeoutMs: c.timeoutMs, ...(c.shouldAbort ? {shouldAbort: c.shouldAbort} : {})});
@@ -257,10 +269,14 @@ async function goldenReview(c: ProcCtx): Promise<ProcedureRun> {
     const repo = path.join(c.tmp, `repo-${k.id}`), clone = path.join(c.tmp, `clone-${k.id}`);
     const base = seedRepo(repo, GOLDEN_REVIEW_SEED);
     for (const [f, content] of Object.entries(k.change)) fs.writeFileSync(path.join(repo, f), content);
-    if (git(repo, ["add", "-A"]).status !== 0 || git(repo, [...ID, "commit", "-q", "-m", k.id]).status !== 0) return {infra: "WORKSPACE_SETUP_FAILED", checks: [], artifact: {}, identities};
+    const setup = (step: string, r: GitRes): ProcedureRun => ({infra: setupFail(step, r), checks: [], artifact: {}, identities});
+    const addR = git(repo, ["add", "-A"]); if (addR.status !== 0) return setup("add", addR);
+    const commitR = git(repo, [...ID, "commit", "-q", "-m", k.id]); if (commitR.status !== 0) return setup("commit", commitR);
     const head = (gitOut(repo, ["rev-parse", "HEAD"]) ?? "").trim();
-    const diff = gitOut(repo, [...DIFF_FLAGS, base, head]);
-    if (diff === null || git(c.tmp, ["clone", "--no-hardlinks", "--quiet", repo, clone]).status !== 0 || git(clone, ["checkout", "-q", "--detach", head]).status !== 0) return {infra: "WORKSPACE_SETUP_FAILED", checks: [], artifact: {}, identities};
+    const diffR = git(repo, [...DIFF_FLAGS, base, head]); if (diffR.status !== 0) return setup("diff", diffR);
+    const diff = String(diffR.stdout ?? "");
+    const cloneR = git(c.tmp, ["clone", "--no-hardlinks", "--quiet", repo, clone]); if (cloneR.status !== 0) return setup("clone", cloneR);
+    const detachR = git(clone, ["checkout", "-q", "--detach", head]); if (detachR.status !== 0) return setup("checkout", detachR);
     const spec: MissionSpec = {runId: "run_evaluation", missionId: "msn_evaluation", projectId: "prj_evaluation", title: k.title, objective: k.objective, acceptanceCriteria: [...k.acceptanceCriteria], riskLevel: "R0", cycle: 0, baseSha: base, startSha: base};
     const r = await reviewer.review(clone, spec, diff, {timeoutMs: c.timeoutMs, ...(c.shouldAbort ? {shouldAbort: c.shouldAbort} : {})});
     if (r.aborted) return {infra: "ABORTED", checks: [], artifact: {}, identities};
@@ -381,7 +397,7 @@ export async function runRoleEvaluation(deps: EvaluationDeps, roleId: string, ev
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-eval-"));
   let run: ProcedureRun;
   try { run = await procedure.run({pair: deps.pair, profile, timeoutMs, ...(deps.shouldAbort ? {shouldAbort: deps.shouldAbort} : {}), tmp}, profile.function); }
-  catch (e) { return {status: "NOT_EXECUTED", roleId, evaluationId, reason: `PROCEDURE_EXCEPTION:${(e as Error).message.slice(0, 80)}`}; }
+  catch (e) { return {status: "NOT_EXECUTED", roleId, evaluationId, reason: `PROCEDURE_EXCEPTION:${(e as Error).message.slice(0, 240)}`}; }
   finally { try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* geçici dizin en iyi çabayla silinir */ } }
   // //TR: Altyapı kaynaklı sonuç bir DEĞERLENDİRME SONUCU değildir: hiçbir kanıt yazılmaz (rol ne geçer ne kalır).
   if (run.infra !== null) return {status: "NOT_EXECUTED", roleId, evaluationId, reason: run.infra};
