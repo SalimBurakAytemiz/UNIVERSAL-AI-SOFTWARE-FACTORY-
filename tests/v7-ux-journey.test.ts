@@ -1482,7 +1482,10 @@ describe("LANE-A A-ANALYSIS-STUCK-1: an approved artefact whose phase did not ad
     const d = deferred(), b = await open(stuck(), () => d.p); await press(b, "analysis-step-submit"); setVal(b.root, "analysis-reapprove-evidence", "ev");
     expect(byData(byId(b.root, "analysis-step")!, "analysisBusy")).toBeUndefined();
     b.ctx.rerender = async () => { b.root = await renderJourney(b.ctx); }; // a real repaint, as in the app
-    fire(byId(b.root, "analysis-reapprove-submit")!, "click"); await new Promise(r => setTimeout(r, 40)); // the click's own repaint only: NO extra manual repaint
+    fire(byId(b.root, "analysis-reapprove-submit")!, "click"); // the click's own repaint only: NO extra manual repaint; it is an IPC-backed module load in vitest, so wait (bounded) for it after the original dwell
+    expect(b.forms.missionWriteBusy()).toBe(true);
+    await new Promise(r => setTimeout(r, 40));
+    for (const end = Date.now() + 2000; byId(b.root, "analysis-step-submit")!.attrs.get("disabled") === undefined && Date.now() < end;) await new Promise(r => setTimeout(r, 5));
     expect(byId(b.root, "analysis-step-submit")!.attrs.get("disabled")).toBeDefined(); expect(byId(b.root, "analysis-reapprove-submit")!.attrs.get("disabled")).toBeDefined();
     expect(text(byData(byId(b.root, "analysis-step")!, "analysisBusy")!)).toContain("Another request that changes mission data is running");
     const other = b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null}) as N; // mission B while A's request runs: the same conservative lock, but explained
@@ -1527,12 +1530,147 @@ describe("LANE-A A-ANALYSIS-STUCK-1: an approved artefact whose phase did not ad
   });
 });
 
+// //TR: A-FLOW-2: ilk teslim akışının "görev -> koşu" bağı GERÇEK control-api ve gerçek görünümlerle uçtan uca doğrulanır (yürütücü FAKE, koşu yalnız oluşturulur): fikir -> iki görevli elle plan -> mission AUTHORIZED -> koşu başlat -> "koşuyu görevlere bağla" adımı (hiçbir görev kendiliğinden seçilmez) -> bağ -> koşu kartı ve görev denetçisi AYNI bağı gösterir. Her POST önce main.mjs'in B5 POST izin listesinden geçer.
+describe("LANE-A A-FLOW-2: the task to run link of the first-delivery flow against the real control-api", () => {
+  const block = (name: string) => { const m = new RegExp(`// ${name}-BEGIN\\n([\\s\\S]*?)// ${name}-END`).exec(mainSrc); if (!m) throw new Error(`missing ${name}`); return m[1]; };
+  const postAllowed = new Function(`${block("B5-POST-ALLOWLIST")}\nreturn desktopPostPathAllowed;`)() as (v: unknown) => boolean;
+  const IDEA = "A small task list web app where one person can add, finish and remove tasks.";
+  const text = (n: N) => n.textContent;
+  const jsonOf = (r: any) => { try { return r.json(); } catch { return {}; } };
+
+  async function setup() {
+    fs.mkdirSync(runtime(), {recursive: true});
+    const {FakeExecutors} = await import("../core/workos/executors.js");
+    const fake = new FakeExecutors({implement: () => ({files: {"feature.txt": "x\n"}, message: "fake"}), review: () => ({verdict: "CLEAN"})});
+    const app = buildServer({controlToken: TOKEN, runtime: runtime(), dataDir: dataDir(), tenantId: "tA", port: 3210, logger: false, executors: fake.pair()}); apps.push(app);
+    const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js"), forms = await load("forms.js");
+    forms.resetAllForms();
+    const doc = new D(), store = st.createStore(null);
+    const calls = {post: [] as Array<{path: string; body: any; status: number}>, resp: [] as any[], confirm: [] as any[], refresh: 0};
+    const bridge = {
+      apiGet: async (p: string) => { const r = await app.inject({method: "GET", url: p, headers: hdr}); if (r.statusCode !== 200) throw new Error(`${p}: HTTP ${r.statusCode}`); return r.json(); },
+      apiPost: async (p: string, b: unknown) => {
+        if (!postAllowed(p)) throw new Error("INVALID_API_PATH");
+        const r = await app.inject({method: "POST", url: p, headers: {...hdr, "content-type": "application/json"}, payload: JSON.stringify(b)});
+        calls.post.push({path: p, body: b, status: r.statusCode}); calls.resp.push(jsonOf(r)); return {status: r.statusCode, body: jsonOf(r)};
+      }
+    };
+    const api = apiMod.createApi({bridge, store});
+    const ctx: any = {doc, store, api, i18n: {lang: "en", t: (k: string, v?: any) => i18n.translate("en", k, v)}, t: (k: string, v?: any) => i18n.translate("en", k, v), navigate: () => {},
+      rerender: async () => { store.cache.clear(); }, refreshAll: async () => { calls.refresh++; store.cache.clear(); },
+      confirm: async (o: any) => { calls.confirm.push(o); return true; }, selectProject() {}, renderAttention() {}, principal: "FOUNDER_LOCAL", settleFocus: () => {}};
+    return {app, ctx, doc, calls, forms};
+  }
+  // idea -> project + mission -> two-task hand plan -> PREFLIGHT -> AUTHORIZED -> run started through the real routes
+  async function flowToStartedRun(s: Awaited<ReturnType<typeof setup>>) {
+    const intake = await load("views", "intake.js"), plan = await load("views", "plan-form.js"), actions = await load("work-actions.js");
+    intake.resetIntakeAll(); (await load("views", "task-status.js")).resetTaskStatusDraft(null); (await load("views", "task-runs.js")).resetTaskRunsDraft(null);
+    Object.assign(intake.intakeDraft, {idea: IDEA, title: "Task list"});
+    expect(await intake.submitIntake(s.ctx)).toEqual({ok: true});
+    const missionId: string = intake.intakeUi.last.missionId; s.forms.selection.missionId = missionId;
+    plan.resetPlanDraft(missionId); plan.planDraft.rows = [{title: "Add a task", deps: ""}, {title: "Finish a task", deps: ""}];
+    expect(await plan.submitPlan(s.ctx, missionId)).toMatchObject({ok: true, status: 201});
+    for (const [from, to] of [["DRAFT", "PREFLIGHT"], ["PREFLIGHT", "AUTHORIZED"]]) expect(await actions.performTransition(s.ctx, {missionId, title: "Task list", from, to, reason: `${from} -> ${to}`})).toMatchObject({ok: true});
+    const started = await actions.startRun(s.ctx, {missionId, status: "AUTHORIZED"});
+    expect(started).toMatchObject({ok: true, status: 201});
+    expect(s.calls.post.at(-1)!.path).toBe(`/v1/missions/${missionId}/runs`);
+    const runId: string = s.calls.resp.at(-1).run.runId; // the server's own answer, not what the view parsed
+    return {missionId, runId, actions};
+  }
+  const view = async (s: Awaited<ReturnType<typeof setup>>) => { const root: N = await (await load("views", "work.js")).render(s.ctx); s.doc.body.replaceChildren(root); return root; };
+  const linksOnServer = async (s: Awaited<ReturnType<typeof setup>>, taskId: string) => (await getJson(s.app, `/v1/tasks/${taskId}/runs`)).runs.map((x: any) => x.link.runId);
+  const tick = () => new Promise(r => setTimeout(r, 0));
+
+  it("start run -> the link step offers every open task unchecked -> one checked task is linked -> the run card and both task inspectors show the same link", async () => {
+    const s = await setup(), {missionId, runId} = await flowToStartedRun(s), actions = await load("work-actions.js");
+    const detail = await s.ctx.api.missionDetail(missionId), [t1, t2] = [detail.mission.tasks.find((t: any) => t.title === "Add a task"), detail.mission.tasks.find((t: any) => t.title === "Finish a task")];
+    expect(runId).toMatch(/^run_[0-9a-f]{24}$/);
+    // the step appears right after a successful start, names the run, and chooses nothing for the Founder
+    let root = await view(s);
+    const panel = byId(root, "run-link")!;
+    expect(panel.dataset.runLink).toBe(missionId); expect(panel.dataset.runId).toBe(runId); expect(text(panel)).toContain(runId);
+    expect(allData(panel, "runlinkTask").map(n => n.dataset.runlinkTask).sort()).toEqual([t1.taskId, t2.taskId].sort());
+    expect(allData(panel, "runlinkTask").every(n => !n.attrs.has("checked"))).toBe(true); // nothing is chosen for the Founder
+    expect(allData(panel, "runlinkItem").every(n => n.dataset.runlinkState === "IDLE")).toBe(true);
+    expect(await linksOnServer(s, t1.taskId)).toEqual([]); expect(await linksOnServer(s, t2.taskId)).toEqual([]); // nothing is linked by starting a run
+    // the run card exists for the mission and reports no linked task yet
+    expect(byData(root, "runId", runId)).toBeDefined();
+    expect(byData(root, "runLinkedFor", runId)).toBeDefined(); expect(allData(root, "runLinkedTask")).toEqual([]);
+    expect(byData(byData(root, "runLinkedFor", runId)!, "runLinked", "none")).toBeDefined(); // the VERIFIED-empty state, not an error or an unavailable note
+    // nothing checked: no request
+    const post0 = s.calls.post.length;
+    expect(await actions.submitRunLinks(s.ctx, detail.mission)).toMatchObject({ok: false, validation: true, posted: 0});
+    expect(s.calls.post.length).toBe(post0);
+    // check task 1 only and link
+    fire(byData(panel, "runlinkTask", t1.taskId)!, "change", {target: {checked: true}});
+    const detail2 = await s.ctx.api.missionDetail(missionId);
+    expect(await actions.submitRunLinks(s.ctx, detail2.mission)).toEqual({ok: true, posted: 1});
+    expect(s.calls.post.at(-1)).toEqual({path: `/v1/tasks/${t1.taskId}/runs`, body: {runId}, status: 201});
+    expect(s.calls.post.length).toBe(post0 + 1);
+    expect(await linksOnServer(s, t1.taskId)).toEqual([runId]); expect(await linksOnServer(s, t2.taskId)).toEqual([]);
+    root = await view(s);
+    const afterPanel = byId(root, "run-link")!;
+    expect(byData(afterPanel, "runlinkItem", t1.taskId)!.dataset.runlinkState).toBe("LINKED");
+    expect(byData(afterPanel, "runlinkItem", t2.taskId)!.dataset.runlinkState).toBe("IDLE");
+    expect(byData(afterPanel, "runlink", "summary")!.dataset).toMatchObject({linked: "1", notLinked: "0"});
+    // submitting again sends nothing for the linked task
+    const post1 = s.calls.post.length;
+    expect(await actions.submitRunLinks(s.ctx, (await s.ctx.api.missionDetail(missionId)).mission)).toMatchObject({ok: false, validation: true, posted: 0});
+    expect(s.calls.post.length).toBe(post1);
+    // the run card now lists exactly the linked task (reverse read GET /v1/work-runs/:id/tasks)
+    const card = byData(root, "runLinkedFor", runId)!;
+    expect(allData(card, "runLinkedTask").map(n => n.dataset.runLinkedTask)).toEqual([t1.taskId]);
+    // task 1 inspector: the run is listed and governs; task 2 inspector: no run linked, and the unlinked run can be linked from the task side
+    const open = async (taskId: string) => { let r = await view(s); if (byId(r, "task-runs")?.dataset.taskRunsFor !== taskId) { fire(byData(r, "taskInspect", taskId)!, "click"); r = await view(s); } return r; };
+    root = await open(t1.taskId);
+    expect(byId(root, "task-runs")!.dataset.taskRunsFor).toBe(t1.taskId);
+    expect(byData(byId(root, "task-runs")!, "taskRun", runId)!.dataset.taskRunGoverning).toBe("1");
+    root = await open(t2.taskId);
+    expect(text(byId(root, "task-runs")!)).toContain("No run is linked to this task.");
+    expect(allData(byId(root, "task-runs")!, "taskRun")).toEqual([]);
+    expect(byId(root, "taskruns-run")).toBeDefined();
+    expect((byId(root, "taskruns-run") as any).value).toBe(runId); // the only unlinked run is preselected
+    const post2 = s.calls.post.length;
+    fire(byId(root, "taskruns-submit")!, "click");
+    for (let i = 0; i < 200 && s.calls.post.length === post2; i++) await tick();
+    expect(s.calls.post.length).toBe(post2 + 1);
+    expect(s.calls.post.at(-1)).toEqual({path: `/v1/tasks/${t2.taskId}/runs`, body: {runId}, status: 201});
+    expect(await linksOnServer(s, t2.taskId)).toEqual([runId]);
+    root = await open(t2.taskId);
+    expect(byData(byId(root, "task-runs")!, "taskRun", runId)).toBeDefined();
+    expect(allData(byData(root, "runLinkedFor", runId)!, "runLinkedTask").map(n => n.dataset.runLinkedTask).sort()).toEqual([t1.taskId, t2.taskId].sort()); // both ends agree
+    await tick();
+  });
+
+  it("with Global Stop active the first link is refused (423), the remaining checked task is not attempted, and nothing is linked on the server", async () => {
+    const s = await setup(), {missionId, runId, actions} = await flowToStartedRun(s);
+    const detail = await s.ctx.api.missionDetail(missionId), ids = detail.mission.tasks.map((t: any) => t.taskId);
+    const root = await view(s), panel = byId(root, "run-link")!;
+    for (const id of ids) fire(byData(panel, "runlinkTask", id)!, "change", {target: {checked: true}});
+    const stop = await s.app.inject({method: "POST", url: "/v1/control/stop", headers: {...hdr, "content-type": "application/json"}, payload: JSON.stringify({reason: "journey test"})});
+    expect(stop.statusCode, stop.body).toBe(200);
+    const post0 = s.calls.post.length;
+    expect(await actions.submitRunLinks(s.ctx, (await s.ctx.api.missionDetail(missionId)).mission)).toEqual({ok: false, posted: 1});
+    expect(s.calls.post.length).toBe(post0 + 1); // the batch stopped after the first refusal
+    expect(s.calls.post.at(-1)!.status).toBe(423);
+    for (const id of ids) expect(await linksOnServer(s, id)).toEqual([]);
+    const after = byId(await view(s), "run-link")!;
+    expect(allData(after, "runlinkItem").map(n => n.dataset.runlinkState).sort()).toEqual(["NOT_ATTEMPTED", "STOPPED"]);
+    expect(text(after)).toContain("the global stop is active");
+    expect(byData(after, "runlink", "summary")!.dataset).toMatchObject({linked: "0", notLinked: "2"});
+    expect(runId).toMatch(/^run_/);
+  });
+});
+
 describe("LANE-A A-PREDEV-BUSY-1: one mission-write lock for the pre-dev decisions, the analysis actions and the hand plan", () => {
   const STEP = `/v1/missions/${MSN}/analysis/step`, START = `/v1/missions/${MSN}/predev/start`, ART = "pda_" + "aa".repeat(12);
   const APPROVE = `/v1/missions/${MSN}/predev/artifacts/${ART}/approve`, REJECT = `/v1/missions/${MSN}/predev/artifacts/${ART}/reject`;
   const OK_PREDEV = {status: 200, body: {...predevBody({phase: "REQUIREMENTS"}), replayed: false}};
   const deferred = () => { let res: (v: any) => void = () => {}; const p = new Promise<any>(r => { res = r; }); return {p, res}; };
   const settleMs = (ms = 30) => new Promise(r => setTimeout(r, ms));
+  // The lock is shown by the click's OWN repaint, and open() repaints for real: renderJourney() loads the view through vitest's module runner, an IPC round trip to the main
+  // process, so a fixed timer can fire before that repaint lands on a loaded runner (CI run 40377419792). Wait for the asserted observable itself (bounded; no manual repaint, no retry), then assert it.
+  const until = async (cond: () => boolean, boundMs = 2000) => { const end = Date.now() + boundMs; while (!cond() && Date.now() < end) await settleMs(5); };
   const soon = <T,>(p: Promise<T>): Promise<T | "NOT_REFUSED_IN_TIME"> => Promise.race([p, new Promise<"NOT_REFUSED_IN_TIME">(r => setTimeout(() => r("NOT_REFUSED_IN_TIME"), 300))]); // a call that is not refused would wait for the held POST: fail fast (no timeout is raised)
   async function open(handlers: Record<string, any>, predev: any = DRAFT_PREDEV()) {
     const served = serve({[`/v1/predev/${MSN}`]: predev}), pending: Record<string, number> = {};
@@ -1555,31 +1693,43 @@ describe("LANE-A A-PREDEV-BUSY-1: one mission-write lock for the pre-dev decisio
   it("an in-flight analysis step disables Approve / Reject and refuses their submits (and the reverse); the explanation note shows on both panels", async () => {
     const d = deferred(), b = await open({[STEP]: () => d.p, [APPROVE]: OK_PREDEV, [REJECT]: OK_PREDEV});
     expect(dis(b, "predev-approve-submit")).toBeUndefined();
-    fire(byId(b.root, "analysis-step-submit")!, "click"); await settleMs(); // analysis step in flight, real repaint
+    fire(byId(b.root, "analysis-step-submit")!, "click"); // analysis step in flight, real repaint
+    expect(b.forms.missionWriteBusy()).toBe(true); // the lock is set synchronously by the click
+    await settleMs();
+    await until(() => dis(b, "predev-approve-submit") !== undefined);
     expect(dis(b, "predev-approve-submit")).toBeDefined(); expect(dis(b, "predev-reject-submit")).toBeDefined(); expect(dis(b, "analysis-step-submit")).toBeDefined();
     expect(byData(byId(b.root, "predev-decisions")!, "predevBusy")).toBeDefined(); expect(text(byData(byId(b.root, "predev-decisions")!, "predevBusy")!)).toContain("Another request that changes mission data is running");
     typeEv(b); b.dec.predevDraft.reason = "no";
     expect(await b.dec.submitApprove(b.ctx, MSN, ART)).toEqual({ok: false, busy: true}); expect(await b.dec.submitReject(b.ctx, MSN, ART)).toEqual({ok: false, busy: true});
     fire(byId(b.root, "predev-approve-submit")!, "click"); await settleMs();
     expect(b.calls[APPROVE] ?? 0).toBe(0); expect(b.calls[REJECT] ?? 0).toBe(0);
-    d.res({status: 200, body: {status: "AWAITING_APPROVAL", kind: "BusinessAnalysis", artifactId: ART, artifactState: "DRAFT", next: "FOUNDER_APPROVAL"}}); await settleMs();
+    d.res({status: 200, body: {status: "AWAITING_APPROVAL", kind: "BusinessAnalysis", artifactId: ART, artifactState: "DRAFT", next: "FOUNDER_APPROVAL"}}); await settleMs(); await until(() => dis(b, "predev-approve-submit") === undefined);
     expect(dis(b, "predev-approve-submit")).toBeUndefined(); expect(byData(byId(b.root, "predev-decisions")!, "predevBusy")).toBeUndefined();
     // reverse: Approve in flight -> analysis buttons and submits are blocked
     const d2 = deferred(), r = await open({[STEP]: {status: 200, body: {status: "COMPLETE", approved: ["BusinessAnalysis", "Requirements", "Plan", "Architecture"]}}, [APPROVE]: () => d2.p});
-    typeEv(r); fire(byId(r.root, "predev-approve-submit")!, "click"); await settleMs();
+    typeEv(r); fire(byId(r.root, "predev-approve-submit")!, "click");
+    expect(r.forms.missionWriteBusy()).toBe(true);
+    await settleMs();
+    await until(() => dis(r, "analysis-step-submit") !== undefined);
     expect(dis(r, "analysis-step-submit")).toBeDefined(); expect(text(byData(byId(r.root, "analysis-step")!, "analysisBusy")!)).toContain("running");
     expect(await r.an.submitAnalysisStep(r.ctx, MSN)).toEqual({ok: false, busy: true}); expect(await r.an.submitReapprove(r.ctx, MSN)).toEqual({ok: false, busy: true}); expect(await r.an.submitAnalysisPlan(r.ctx, MSN)).toEqual({ok: false, busy: true});
     expect(r.calls[STEP] ?? 0).toBe(0);
-    d2.res(OK_PREDEV); await settleMs(); expect(dis(r, "analysis-step-submit")).toBeUndefined();
+    d2.res(OK_PREDEV); await settleMs(); await until(() => dis(r, "analysis-step-submit") === undefined); expect(dis(r, "analysis-step-submit")).toBeUndefined();
   });
 
   it("Start is locked too (an inactive pre-dev record) in both directions", async () => {
     const d = deferred(), b = await open({[STEP]: () => d.p, [START]: OK_PREDEV}, inactivePredev());
-    fire(byId(b.root, "analysis-step-submit")!, "click"); await settleMs();
+    fire(byId(b.root, "analysis-step-submit")!, "click");
+    expect(b.forms.missionWriteBusy()).toBe(true);
+    await settleMs();
+    await until(() => dis(b, "predev-start-submit") !== undefined);
     expect(dis(b, "predev-start-submit")).toBeDefined(); expect(await b.dec.submitStart(b.ctx, MSN)).toEqual({ok: false, busy: true}); expect(b.calls[START] ?? 0).toBe(0);
     d.res({status: 200, body: {status: "BLOCKED", blocker: "X", blockers: ["X"]}}); await settleMs();
     const d2 = deferred(), r = await open({[STEP]: {status: 200, body: {status: "BLOCKED", blocker: "X", blockers: ["X"]}}, [START]: () => d2.p}, inactivePredev());
-    fire(byId(r.root, "predev-start-submit")!, "click"); await settleMs();
+    fire(byId(r.root, "predev-start-submit")!, "click");
+    expect(r.forms.missionWriteBusy()).toBe(true);
+    await settleMs();
+    await until(() => dis(r, "analysis-step-submit") !== undefined);
     expect(dis(r, "analysis-step-submit")).toBeDefined(); expect(await r.an.submitAnalysisStep(r.ctx, MSN)).toEqual({ok: false, busy: true});
     d2.res(OK_PREDEV); await settleMs();
   });
@@ -1603,7 +1753,10 @@ describe("LANE-A A-PREDEV-BUSY-1: one mission-write lock for the pre-dev decisio
     b.ctx.rerender = orig; const spy: any[] = []; b.ctx.settleFocus = (o: any) => { spy.push(o); return null; };
     const d = deferred(); const b2 = await open({[APPROVE]: () => d.p}); typeEv(b2); b2.ctx.settleFocus = (o: any) => { spy.push(o); return null; };
     const seen: boolean[] = [], r0 = b2.ctx.rerender; b2.ctx.rerender = async () => { seen.push(f.missionWriteBusy()); return r0(); };
-    const pending = b2.dec.submitApprove(b2.ctx, MSN, ART); await settleMs();
+    const pending = b2.dec.submitApprove(b2.ctx, MSN, ART);
+    expect(b2.forms.missionWriteBusy()).toBe(true);
+    await settleMs();
+    await until(() => byData(byId(b2.root, "predev-decisions")!, "predevBusy") !== undefined);
     expect(spy).toContainEqual({keys: ["id:predev-in-flight"]}); const note = byData(byId(b2.root, "predev-decisions")!, "predevBusy")!; expect([note.id, note.attrs.get("tabindex")]).toEqual(["predev-in-flight", "-1"]);
     b2.dec.decisionsPanel(b2.ctx, {missionId: MSN2, pre: (await load("journey-core.js")).mapPredev(DRAFT_PREDEV())}); // mission B selected (real reset path) while A's request is in flight
     d.res(OK_PREDEV); const res = await pending;
@@ -1613,7 +1766,10 @@ describe("LANE-A A-PREDEV-BUSY-1: one mission-write lock for the pre-dev decisio
 
   it("the in-flight note is true on every panel and mission: it names no request kind and no mission (the lock is global)", async () => {
     const d = deferred(), b = await open({[APPROVE]: () => d.p}); typeEv(b);
-    fire(byId(b.root, "predev-approve-submit")!, "click"); await settleMs(); // a pre-dev Approve is in flight
+    fire(byId(b.root, "predev-approve-submit")!, "click"); // a pre-dev Approve is in flight
+    expect(b.forms.missionWriteBusy()).toBe(true);
+    await settleMs();
+    await until(() => byData(byId(b.root, "predev-decisions")!, "predevBusy") !== undefined);
     const notes = [byData(byId(b.root, "predev-decisions")!, "predevBusy")!, byData(byId(b.root, "analysis-step")!, "analysisBusy")!, // mission A: both panels
       byData(b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null}) as N, "analysisBusy")!, // a SECOND mission's analysis panel
       byData(b.dec.decisionsPanel(b.ctx, {missionId: MSN2, pre: (await load("journey-core.js")).mapPredev(DRAFT_PREDEV())}) as N, "predevBusy")!]; // a SECOND mission's decisions panel
