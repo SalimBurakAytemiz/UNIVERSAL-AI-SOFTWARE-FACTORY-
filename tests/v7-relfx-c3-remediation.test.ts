@@ -11,6 +11,7 @@ import {disabledTestMarkers, evaluateTestSurface, parseTestRunStreams, parseTest
 import type {NameStatusEntry} from "../core/workos/test-surface.js";
 import {REPO, T, drive, okScript, rmTmp, runner, setup, startRun, tmpRoot} from "./support/relfx.js";
 import {repositoryHead, repositoryHeadAsync} from "../core/workos/runner.js";
+import {canonicalPath} from "../core/workos/path-guard.js";
 import type {RepositoryHead} from "../core/workos/runner.js";
 import {ENV_POLICY, REPO as PAR_REPO, git, groupLive, journal, parHarness, procAlive, setup as parSetup, slow, sleep, waitUntil, wrapImplementer} from "./support/par.js";
 import cp from "node:child_process";
@@ -196,7 +197,7 @@ describe("C-PAR-1 PAR-03: synchronous git in one run must not starve another run
   });
   it("run A's slow repository HEAD probe (3 s, TTL 2 s, WORKSPACE step) leaves run B unfenced too: the probe is asynchronous", { timeout: 90_000 }, async () => {
     let fired = false; // yalnız İLK HEAD okuması yavaş (A'nınki); B'ninki ve sonraki adımlar hızlı
-    await slowGitLeavesBUnfenced((_A, srcRepo) => (cwd, args) => { const hit = !fired && cwd === fs.realpathSync(srcRepo) && args.includes("HEAD^{commit}") && args.includes("HEAD"); if (hit) fired = true; return hit; });
+    await slowGitLeavesBUnfenced((_A, srcRepo) => (cwd, args) => { const here = canonicalPath(cwd), repo = canonicalPath(srcRepo); const hit = !fired && here.ok && repo.ok && here.key === repo.key && args.includes("HEAD^{commit}") && args.includes("HEAD"); if (hit) fired = true; return hit; }); // //TR: Windows CI: runner depo yolunu path-guard'ın kanonik biçimine (8.3 kısa adları açılmış, harf büyüklüğü katlanmış) çevirir; sabit `===` eşleşmeyip yavaş-git senaryosu hiç tetiklenmiyordu
   });
 
   it("span() renews EVERY owned lease before and after a synchronous span (throttled to TTL/10, so the journal does not balloon)", { timeout: 60_000 }, async () => {
