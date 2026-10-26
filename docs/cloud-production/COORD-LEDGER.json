@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "policy": "TEP-1",
+  "reviews": [
+    {
+      "pr": 231,
+      "sha": "0b342ebfbe33da2ec832b4b9aff97427cd21bea6",
+      "kind": "full",
+      "base": null,
+      "verdict": "BLOCKERS",
+      "ref": "review-231-0b342eb.json",
+      "policy": "TEP-1",
+      "at": "2026-10-26T14:05:57.451Z"
+    },
+    {
+      "pr": 231,
+      "sha": "ad2fc4bb3947b8fccfda7bec3eaafef9894d89ab",
+      "kind": "delta",
+      "base": "0b342ebfbe33da2ec832b4b9aff97427cd21bea6",
+      "verdict": "BLOCKERS",
+      "ref": "review-231-ad2fc4b.json",
+      "policy": "TEP-1",
+      "at": "2026-10-26T14:05:57.517Z"
+    },
+    {
+      "pr": 237,
+      "sha": "fdf43b0fa3eaf0ebe7339d475dafbb818ef02308",
+      "kind": "full",
+      "base": null,
+      "verdict": "BLOCKERS",
+      "ref": "wb5spggwp",
+      "policy": "TEP-1",
+      "at": "2026-10-26T14:05:57.570Z"
+    },
+    {
+      "pr": 224,
+      "sha": "375e0d6d3b0245e9672c38487ac04c495203d605",
+      "kind": "delta",
+      "base": null,
+      "verdict": "BLOCKERS",
+      "ref": "wkgbdaqts",
+      "policy": "TEP-1",
+      "at": "2026-10-26T14:05:57.622Z"
+    },
+    {
+      "pr": 242,
+      "sha": "d6d39d213dff11ab6fcb05954601dff04aaddc17",
+      "kind": "full",
+      "base": null,
+      "verdict": "NO_CODE_BLOCKERS_TRAILER_LOW",
+      "ref": "wszl32rse",
+      "policy": "TEP-1",
+      "at": "2026-10-26T14:05:57.691Z"
+    }
+  ],
+  "tests": [],
+  "fingerprint": {
+    "value": "b0af6cf45cebcd4046ece2611a545efe51d498f95893a540635f6459eb91184f",
+    "at": "2026-10-26T14:06:04.167Z",
+    "base": "b59304189a8afb4fbaf550ac2c11fbc49554b5da",
+    "prs": 9
+  }
+}
