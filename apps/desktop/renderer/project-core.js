@@ -341,7 +341,7 @@ export function mapRoleReadiness(raw){
     const p=raw[role];
     if(!isObj(p)||typeof p.ready!=="boolean"||!Array.isArray(p.blockers)||p.blockers.length>8||!p.blockers.every(b=>typeof b==="string"&&BLOCKER_RE.test(b))||p.ready!==(p.blockers.length===0)){out[role]=null;continue}
     const profile=typeof p.profile==="string"&&/^[A-Z][A-Z_]{0,39}$/.test(p.profile)?p.profile:null,cmd=p.loginCommand;
-    out[role]={ready:p.ready,blockers:[...p.blockers],profile,loginCommand:typeof cmd==="string"&&cmd.length<=2000&&!CONTROL_RE.test(cmd)&&cmd.startsWith("$env:CLAUDE_CONFIG_DIR='")?cmd:null};
+    out[role]={ready:p.ready,blockers:[...p.blockers],profile,loginCommand:typeof cmd==="string"&&cmd.length<=2000&&!CONTROL_RE.test(cmd)&&cmd.startsWith("$env:CLAUDE_CONFIG_DIR='")?redactText(cmd):null};
   }
   return out;
 }
@@ -367,7 +367,7 @@ export function mapSandbox(raw){
   if(!isObj(raw))return null;
   const st=raw.state==="AVAILABLE"||raw.state==="UNAVAILABLE"?raw.state:null;if(!st)return null;
   const code=v=>typeof v==="string"&&/^[A-Z][A-Z0-9_]{0,63}$/.test(v)?v:null;
-  return {state:st,reason:code(raw.reason),detail:code(raw.detail),providerId:typeof raw.providerId==="string"&&/^[A-Za-z0-9_.:-]{1,64}$/.test(raw.providerId)?raw.providerId:null};
+  return {state:st,reason:code(raw.reason),detail:code(raw.detail),providerId:typeof raw.providerId==="string"&&/^[A-Za-z0-9_.:-]{1,64}$/.test(raw.providerId)&&redactText(raw.providerId)===raw.providerId?raw.providerId:null};
 }
 /** SBX-8 (D-SBX-11 b): GET /v1/system/executors claudeProfiles -> [{role,state,reason,loginCommand}]; yalnız implementer/reviewer, güvenli desenli durum/neden; giriş komutu yalnız metin olarak gösterilir (renderer asla çalıştırmaz). */
 export const CLAUDE_PROFILE_ROLES=["implementer","reviewer"];
@@ -378,7 +378,8 @@ export function mapClaudeProfiles(raw){
     const state=typeof p.state==="string"&&/^[A-Z][A-Z_]{0,39}$/.test(p.state)?p.state:null;
     const reason=typeof p.reason==="string"&&/^[A-Z][A-Z0-9_:]{0,119}$/.test(p.reason)?p.reason:null;
     const cmd=p.loginCommand;
-    const loginCommand=typeof cmd==="string"&&cmd.length<=2000&&!CONTROL_RE.test(cmd)&&cmd.startsWith("$env:CLAUDE_CONFIG_DIR='")?cmd:null;
+    // //TR: komut bilinçli olarak METİN gösterilir; yalnız anahtar/belirteç desenleri maskelenir.
+    const loginCommand=typeof cmd==="string"&&cmd.length<=2000&&!CONTROL_RE.test(cmd)&&cmd.startsWith("$env:CLAUDE_CONFIG_DIR='")?redactText(cmd):null;
     return {role,state,reason,loginCommand};
   }).filter(Boolean);
 }
