@@ -1482,7 +1482,10 @@ describe("LANE-A A-ANALYSIS-STUCK-1: an approved artefact whose phase did not ad
     const d = deferred(), b = await open(stuck(), () => d.p); await press(b, "analysis-step-submit"); setVal(b.root, "analysis-reapprove-evidence", "ev");
     expect(byData(byId(b.root, "analysis-step")!, "analysisBusy")).toBeUndefined();
     b.ctx.rerender = async () => { b.root = await renderJourney(b.ctx); }; // a real repaint, as in the app
-    fire(byId(b.root, "analysis-reapprove-submit")!, "click"); await new Promise(r => setTimeout(r, 40)); // the click's own repaint only: NO extra manual repaint
+    fire(byId(b.root, "analysis-reapprove-submit")!, "click"); // the click's own repaint only: NO extra manual repaint; it is an IPC-backed module load in vitest, so wait (bounded) for it after the original dwell
+    expect(b.forms.missionWriteBusy()).toBe(true);
+    await new Promise(r => setTimeout(r, 40));
+    for (const end = Date.now() + 2000; byId(b.root, "analysis-step-submit")!.attrs.get("disabled") === undefined && Date.now() < end;) await new Promise(r => setTimeout(r, 5));
     expect(byId(b.root, "analysis-step-submit")!.attrs.get("disabled")).toBeDefined(); expect(byId(b.root, "analysis-reapprove-submit")!.attrs.get("disabled")).toBeDefined();
     expect(text(byData(byId(b.root, "analysis-step")!, "analysisBusy")!)).toContain("Another request that changes mission data is running");
     const other = b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null}) as N; // mission B while A's request runs: the same conservative lock, but explained
@@ -1593,6 +1596,7 @@ describe("LANE-A A-FLOW-2: the task to run link of the first-delivery flow again
     // the run card exists for the mission and reports no linked task yet
     expect(byData(root, "runId", runId)).toBeDefined();
     expect(byData(root, "runLinkedFor", runId)).toBeDefined(); expect(allData(root, "runLinkedTask")).toEqual([]);
+    expect(byData(byData(root, "runLinkedFor", runId)!, "runLinked", "none")).toBeDefined(); // the VERIFIED-empty state, not an error or an unavailable note
     // nothing checked: no request
     const post0 = s.calls.post.length;
     expect(await actions.submitRunLinks(s.ctx, detail.mission)).toMatchObject({ok: false, validation: true, posted: 0});
@@ -1664,6 +1668,9 @@ describe("LANE-A A-PREDEV-BUSY-1: one mission-write lock for the pre-dev decisio
   const OK_PREDEV = {status: 200, body: {...predevBody({phase: "REQUIREMENTS"}), replayed: false}};
   const deferred = () => { let res: (v: any) => void = () => {}; const p = new Promise<any>(r => { res = r; }); return {p, res}; };
   const settleMs = (ms = 30) => new Promise(r => setTimeout(r, ms));
+  // The lock is shown by the click's OWN repaint, and open() repaints for real: renderJourney() loads the view through vitest's module runner, an IPC round trip to the main
+  // process, so a fixed timer can fire before that repaint lands on a loaded runner (CI run 40377419792). Wait for the asserted observable itself (bounded; no manual repaint, no retry), then assert it.
+  const until = async (cond: () => boolean, boundMs = 2000) => { const end = Date.now() + boundMs; while (!cond() && Date.now() < end) await settleMs(5); };
   const soon = <T,>(p: Promise<T>): Promise<T | "NOT_REFUSED_IN_TIME"> => Promise.race([p, new Promise<"NOT_REFUSED_IN_TIME">(r => setTimeout(() => r("NOT_REFUSED_IN_TIME"), 300))]); // a call that is not refused would wait for the held POST: fail fast (no timeout is raised)
   async function open(handlers: Record<string, any>, predev: any = DRAFT_PREDEV()) {
     const served = serve({[`/v1/predev/${MSN}`]: predev}), pending: Record<string, number> = {};
@@ -1686,31 +1693,43 @@ describe("LANE-A A-PREDEV-BUSY-1: one mission-write lock for the pre-dev decisio
   it("an in-flight analysis step disables Approve / Reject and refuses their submits (and the reverse); the explanation note shows on both panels", async () => {
     const d = deferred(), b = await open({[STEP]: () => d.p, [APPROVE]: OK_PREDEV, [REJECT]: OK_PREDEV});
     expect(dis(b, "predev-approve-submit")).toBeUndefined();
-    fire(byId(b.root, "analysis-step-submit")!, "click"); await settleMs(); // analysis step in flight, real repaint
+    fire(byId(b.root, "analysis-step-submit")!, "click"); // analysis step in flight, real repaint
+    expect(b.forms.missionWriteBusy()).toBe(true); // the lock is set synchronously by the click
+    await settleMs();
+    await until(() => dis(b, "predev-approve-submit") !== undefined);
     expect(dis(b, "predev-approve-submit")).toBeDefined(); expect(dis(b, "predev-reject-submit")).toBeDefined(); expect(dis(b, "analysis-step-submit")).toBeDefined();
     expect(byData(byId(b.root, "predev-decisions")!, "predevBusy")).toBeDefined(); expect(text(byData(byId(b.root, "predev-decisions")!, "predevBusy")!)).toContain("Another request that changes mission data is running");
     typeEv(b); b.dec.predevDraft.reason = "no";
     expect(await b.dec.submitApprove(b.ctx, MSN, ART)).toEqual({ok: false, busy: true}); expect(await b.dec.submitReject(b.ctx, MSN, ART)).toEqual({ok: false, busy: true});
     fire(byId(b.root, "predev-approve-submit")!, "click"); await settleMs();
     expect(b.calls[APPROVE] ?? 0).toBe(0); expect(b.calls[REJECT] ?? 0).toBe(0);
-    d.res({status: 200, body: {status: "AWAITING_APPROVAL", kind: "BusinessAnalysis", artifactId: ART, artifactState: "DRAFT", next: "FOUNDER_APPROVAL"}}); await settleMs();
+    d.res({status: 200, body: {status: "AWAITING_APPROVAL", kind: "BusinessAnalysis", artifactId: ART, artifactState: "DRAFT", next: "FOUNDER_APPROVAL"}}); await settleMs(); await until(() => dis(b, "predev-approve-submit") === undefined);
     expect(dis(b, "predev-approve-submit")).toBeUndefined(); expect(byData(byId(b.root, "predev-decisions")!, "predevBusy")).toBeUndefined();
     // reverse: Approve in flight -> analysis buttons and submits are blocked
     const d2 = deferred(), r = await open({[STEP]: {status: 200, body: {status: "COMPLETE", approved: ["BusinessAnalysis", "Requirements", "Plan", "Architecture"]}}, [APPROVE]: () => d2.p});
-    typeEv(r); fire(byId(r.root, "predev-approve-submit")!, "click"); await settleMs();
+    typeEv(r); fire(byId(r.root, "predev-approve-submit")!, "click");
+    expect(r.forms.missionWriteBusy()).toBe(true);
+    await settleMs();
+    await until(() => dis(r, "analysis-step-submit") !== undefined);
     expect(dis(r, "analysis-step-submit")).toBeDefined(); expect(text(byData(byId(r.root, "analysis-step")!, "analysisBusy")!)).toContain("running");
     expect(await r.an.submitAnalysisStep(r.ctx, MSN)).toEqual({ok: false, busy: true}); expect(await r.an.submitReapprove(r.ctx, MSN)).toEqual({ok: false, busy: true}); expect(await r.an.submitAnalysisPlan(r.ctx, MSN)).toEqual({ok: false, busy: true});
     expect(r.calls[STEP] ?? 0).toBe(0);
-    d2.res(OK_PREDEV); await settleMs(); expect(dis(r, "analysis-step-submit")).toBeUndefined();
+    d2.res(OK_PREDEV); await settleMs(); await until(() => dis(r, "analysis-step-submit") === undefined); expect(dis(r, "analysis-step-submit")).toBeUndefined();
   });
 
   it("Start is locked too (an inactive pre-dev record) in both directions", async () => {
     const d = deferred(), b = await open({[STEP]: () => d.p, [START]: OK_PREDEV}, inactivePredev());
-    fire(byId(b.root, "analysis-step-submit")!, "click"); await settleMs();
+    fire(byId(b.root, "analysis-step-submit")!, "click");
+    expect(b.forms.missionWriteBusy()).toBe(true);
+    await settleMs();
+    await until(() => dis(b, "predev-start-submit") !== undefined);
     expect(dis(b, "predev-start-submit")).toBeDefined(); expect(await b.dec.submitStart(b.ctx, MSN)).toEqual({ok: false, busy: true}); expect(b.calls[START] ?? 0).toBe(0);
     d.res({status: 200, body: {status: "BLOCKED", blocker: "X", blockers: ["X"]}}); await settleMs();
     const d2 = deferred(), r = await open({[STEP]: {status: 200, body: {status: "BLOCKED", blocker: "X", blockers: ["X"]}}, [START]: () => d2.p}, inactivePredev());
-    fire(byId(r.root, "predev-start-submit")!, "click"); await settleMs();
+    fire(byId(r.root, "predev-start-submit")!, "click");
+    expect(r.forms.missionWriteBusy()).toBe(true);
+    await settleMs();
+    await until(() => dis(r, "analysis-step-submit") !== undefined);
     expect(dis(r, "analysis-step-submit")).toBeDefined(); expect(await r.an.submitAnalysisStep(r.ctx, MSN)).toEqual({ok: false, busy: true});
     d2.res(OK_PREDEV); await settleMs();
   });
@@ -1734,7 +1753,10 @@ describe("LANE-A A-PREDEV-BUSY-1: one mission-write lock for the pre-dev decisio
     b.ctx.rerender = orig; const spy: any[] = []; b.ctx.settleFocus = (o: any) => { spy.push(o); return null; };
     const d = deferred(); const b2 = await open({[APPROVE]: () => d.p}); typeEv(b2); b2.ctx.settleFocus = (o: any) => { spy.push(o); return null; };
     const seen: boolean[] = [], r0 = b2.ctx.rerender; b2.ctx.rerender = async () => { seen.push(f.missionWriteBusy()); return r0(); };
-    const pending = b2.dec.submitApprove(b2.ctx, MSN, ART); await settleMs();
+    const pending = b2.dec.submitApprove(b2.ctx, MSN, ART);
+    expect(b2.forms.missionWriteBusy()).toBe(true);
+    await settleMs();
+    await until(() => byData(byId(b2.root, "predev-decisions")!, "predevBusy") !== undefined);
     expect(spy).toContainEqual({keys: ["id:predev-in-flight"]}); const note = byData(byId(b2.root, "predev-decisions")!, "predevBusy")!; expect([note.id, note.attrs.get("tabindex")]).toEqual(["predev-in-flight", "-1"]);
     b2.dec.decisionsPanel(b2.ctx, {missionId: MSN2, pre: (await load("journey-core.js")).mapPredev(DRAFT_PREDEV())}); // mission B selected (real reset path) while A's request is in flight
     d.res(OK_PREDEV); const res = await pending;
@@ -1744,7 +1766,10 @@ describe("LANE-A A-PREDEV-BUSY-1: one mission-write lock for the pre-dev decisio
 
   it("the in-flight note is true on every panel and mission: it names no request kind and no mission (the lock is global)", async () => {
     const d = deferred(), b = await open({[APPROVE]: () => d.p}); typeEv(b);
-    fire(byId(b.root, "predev-approve-submit")!, "click"); await settleMs(); // a pre-dev Approve is in flight
+    fire(byId(b.root, "predev-approve-submit")!, "click"); // a pre-dev Approve is in flight
+    expect(b.forms.missionWriteBusy()).toBe(true);
+    await settleMs();
+    await until(() => byData(byId(b.root, "predev-decisions")!, "predevBusy") !== undefined);
     const notes = [byData(byId(b.root, "predev-decisions")!, "predevBusy")!, byData(byId(b.root, "analysis-step")!, "analysisBusy")!, // mission A: both panels
       byData(b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null}) as N, "analysisBusy")!, // a SECOND mission's analysis panel
       byData(b.dec.decisionsPanel(b.ctx, {missionId: MSN2, pre: (await load("journey-core.js")).mapPredev(DRAFT_PREDEV())}) as N, "predevBusy")!]; // a SECOND mission's decisions panel
