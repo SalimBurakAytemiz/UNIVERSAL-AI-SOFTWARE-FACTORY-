@@ -12,7 +12,7 @@ import type {Ctx} from "./support/relfx.js";
 import path from "node:path";
 import os from "node:os";
 import cp from "node:child_process";
-import {ENGINE, REPO as PAR_REPO, git, groupLive, parHarness, procAlive, setup as parSetup, sleep, waitUntil} from "./support/par.js";
+import {ENGINE, ORPHAN_MS, REPO as PAR_REPO, git, groupLive, parHarness, procAlive, release, setup as parSetup, sleep, waitUntil, writerParked} from "./support/par.js";
 
 let tmp = "";
 beforeEach(() => { tmp = tmpRoot("uasco-relfx1-"); });
@@ -223,7 +223,7 @@ describe("LANE-C parallel runs: writer reaping (C-PAR-1 PAR-04, #224 review)", (
   const REPO = PAR_REPO;
   const setup = (name?: string, seed?: Record<string, string>, clock?: () => number) => parSetup(tmp, name, seed, clock);
 describe("C-PAR-1 PAR-04: after an engine crash the implementer child must not keep writing into runs/<id>/work", () => {
-  const ORPHAN_MS = 8000, TTL = 1500;
+  const TTL = 1500; // ORPHAN_MS ve release: tests/support/par.ts (yetim sabit pencereye değil release dosyasına bağlıdır)
   const spawnEngine = (dir: string, phase: "1" | "2") => {
     const child = cp.spawn(process.execPath, ["--import", "tsx", ENGINE, REPO, dir, phase, String(TTL), String(ORPHAN_MS)], {cwd: REPO, stdio: ["ignore", "pipe", "pipe"], windowsHide: true});
     let out = "", err = "";
@@ -236,18 +236,18 @@ describe("C-PAR-1 PAR-04: after an engine crash the implementer child must not k
   it("a surviving implementer child is stopped at takeover: ORPHAN.txt absent, work HEAD == run.headSha, run completes", { timeout: 180_000 }, async () => {
     const dir = path.join(tmp, "engine"); fs.mkdirSync(dir);
     const e1 = spawnEngine(dir, "1");
-    expect(await waitFor(() => fs.existsSync(path.join(dir, "implementing.json")), 120_000), JSON.stringify(e1.text())).toBe(true);
+    expect(await Promise.race([waitFor(() => fs.existsSync(path.join(dir, "implementing.json")), 120_000), e1.closed.then(() => false)]), JSON.stringify(e1.text())).toBe(true);
+    expect(await writerParked(dir, e1.closed, 30_000), "the implementer must have read its directive and parked before the engine is killed").toBe(true);
     const { runId } = JSON.parse(fs.readFileSync(path.join(dir, "state.json"), "utf8")) as {runId: string};
     const ownerFile = path.join(dir, "data", "runs", runId, "workspace.owner.json");
     // //TR: düzeltilmiş motorda sahiplik kaydı çocuğun grubunu taşır (Linux dışında kimlik belirteci eşzamansız eklenir); düzeltme öncesi motorda kayıt hiç yoktur ve bekleme süresi dolar.
     await waitFor(() => { try { const o = JSON.parse(fs.readFileSync(ownerFile, "utf8")); return o.childPgid != null && (process.platform === "linux" || o.childStart != null); } catch { return false; } }, 10_000);
-    const killedAt = Date.now();
     e1.child.kill("SIGKILL"); await e1.closed;
     const e2 = spawnEngine(dir, "2");
     expect(await e2.closed, JSON.stringify(e2.text())).toBe(0);
     const rep = JSON.parse(e2.text().out.trim().split("\n").pop()!) as {recovered: string[]};
     expect(rep.recovered).toEqual([runId]);
-    await sleep(Math.max(0, killedAt + ORPHAN_MS + 2000 - Date.now())); // yetim çocuk (hâlâ yaşıyorsa) uyanıp yazmış olurdu
+    await release(dir); // yetim çocuk (hâlâ yaşıyorsa) şimdi uyanıp yazardı
     const run = new WorkOsStore(path.join(dir, "data")).engineGetRun(runId)!;
     const work = path.join(dir, "data", "runs", runId, "work");
     expect(run.status).toBe("AWAITING_APPROVAL");
@@ -318,7 +318,7 @@ describe("C-PAR-1 PAR-04: after an engine crash the implementer child must not k
 
 describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability", () => {
   const wg = () => import("../core/workos/writer-guard.js").catch(() => null);
-  const ORPHAN_MS = 6000, TTL = 1500;
+  const TTL = 1500;
   const spawnEngine = (dir: string, phase: "1" | "2", opts: Record<string, unknown> = {}, ttlOverride?: number) => {
     const child = cp.spawn(process.execPath, ["--import", "tsx", ENGINE, REPO, dir, phase, String(ttlOverride ?? TTL), String(ORPHAN_MS), JSON.stringify(opts)], {cwd: REPO, stdio: ["ignore", "pipe", "pipe"], windowsHide: true});
     let out = "", err = "";
@@ -327,22 +327,30 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
     return {child, closed, text: () => ({out, err})};
   };
   const waitFor = waitUntil, groupAlive = groupLive;
+  // //TR: Başarısız bir testin arkasında yetim implementer/torun grupları kalmasın (sızıntı sonraki testi ve Windows tmp temizliğini bozar).
+  const leaked: number[] = [];
+  afterEach(() => { for (const g of leaked.splice(0)) { try { process.kill(-g, "SIGKILL"); } catch { /* bitmiş */ } } });
   // Faz 1'i başlatır, implementer çocuğu uyurken motoru öldürür (SIGKILL); {dir, runId, pgid, killedAt} döner.
   const crashEngine = async (dir: string, opts: Record<string, unknown> = {}) => {
     fs.mkdirSync(dir);
     const e1 = spawnEngine(dir, "1", opts);
-    expect(await waitFor(() => fs.existsSync(path.join(dir, "implementing.json")), 120_000), JSON.stringify(e1.text())).toBe(true);
+    expect(await Promise.race([waitFor(() => fs.existsSync(path.join(dir, "implementing.json")), 120_000), e1.closed.then(() => false)]), JSON.stringify(e1.text())).toBe(true);
+    expect(await writerParked(dir, e1.closed, 30_000), "the implementer must have read its directive and parked before the engine is killed").toBe(true); // motor 1 erken çıkarsa (içe aktarma hatası) 120 sn beklemeden stderr ile başarısız ol
     const {runId} = JSON.parse(fs.readFileSync(path.join(dir, "state.json"), "utf8")) as {runId: string};
     const ownerFile = path.join(dir, "data", "runs", runId, "workspace.owner.json");
     let pgid = 0;
     await waitFor(() => { try { const o = JSON.parse(fs.readFileSync(ownerFile, "utf8")); pgid = o.childPgid ?? 0; return o.childPgid != null && (process.platform === "linux" || o.childStart != null); } catch { return false; } }, 10_000);
     if (opts.grandchild) expect(await waitFor(() => fs.existsSync(path.join(dir, `${String(opts.grandchild)}.pid`)), 10_000)).toBe(true); // torun doğdu ve pid'ini yazdı
     const killedAt = Date.now();
+    if (pgid > 1) leaked.push(pgid);
+    const aliveBeforeKill = groupAlive(pgid), membersBeforeKill = (await wg())?.groupMembers?.(pgid)?.length ?? null;
     e1.child.kill("SIGKILL"); await e1.closed;
-    return {dir, runId, pgid, killedAt, work: path.join(dir, "data", "runs", runId, "work")};
+    const aliveAfterKill = groupAlive(pgid);
+    return {dir, runId, pgid, killedAt, aliveBeforeKill, membersBeforeKill, aliveAfterKill, work: path.join(dir, "data", "runs", runId, "work")};
   };
-  const afterOrphanWindow = (killedAt: number) => sleep(Math.max(0, killedAt + ORPHAN_MS + 2000 - Date.now())); // yetim (hâlâ yaşıyorsa) uyanıp yazmış olurdu
   const recoveryNote = (dir: string, runId: string) => new WorkOsStore(path.join(dir, "data")).engineGetRun(runId)!.evidence.find(e => e.kind === "RECOVERY")?.note ?? "";
+  // //TR: Başarısız bir onaylamanın nedeni okunabilsin diye durum özeti (yetim artık sabit bir pencereye değil release dosyasına bağlıdır).
+  const snap = (x: {dir: string; runId: string; pgid: number; killedAt: number; work: string; aliveBeforeKill?: boolean; membersBeforeKill?: number | null; aliveAfterKill?: boolean}, closedAfterMs: number) => () => { const r = new WorkOsStore(path.join(x.dir, "data")).engineGetRun(x.runId)!; return JSON.stringify({takeoverClosedMsAfterKill: closedAfterMs, writerAliveBeforeKill: x.aliveBeforeKill, writerMembersBeforeKill: x.membersBeforeKill, writerAliveAfterKill: x.aliveAfterKill, status: r.status, reason: r.reason, groupAlive: groupAlive(x.pgid), orphanFile: fs.existsSync(path.join(x.work, "ORPHAN.txt")), note: recoveryNote(x.dir, x.runId), cancelNote: r.evidence.find(e => e.kind === "CANCEL")?.note ?? null, head: (() => { try { return git(x.work, ["log", "--format=%s", "-3"]); } catch { return "n/a"; } })()}); };
 
   it("PAR04-GSTOP-NO-REAP: a GLOBAL_STOP that is active at takeover still stops the crashed engine's writer BEFORE the run is cancelled", { timeout: 180_000 }, async () => {
     const x = await crashEngine(path.join(tmp, "stop"));
@@ -350,24 +358,26 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
     fs.writeFileSync(path.join(x.dir, "rt", "GLOBAL_STOP.json"), JSON.stringify({active: true, reason: "TEST_STOP", actor: "test"}));
     const e2 = spawnEngine(x.dir, "2");
     expect(await e2.closed, JSON.stringify(e2.text())).toBe(0);
-    await afterOrphanWindow(x.killedAt);
+    const why = snap(x, Date.now() - x.killedAt);
+    await release(x.dir);
     const run = new WorkOsStore(path.join(x.dir, "data")).engineGetRun(x.runId)!;
-    expect(run.status).toBe("CANCELLED");
-    expect(groupAlive(x.pgid)).toBe(false);
-    expect(fs.existsSync(path.join(x.work, "ORPHAN.txt"))).toBe(false);
-    expect(run.evidence.find(e => e.kind === "CANCEL")?.note ?? "").toMatch(/stopped writer group/);
+    expect(run.status, why()).toBe("CANCELLED");
+    expect(groupAlive(x.pgid), why()).toBe(false);
+    expect(fs.existsSync(path.join(x.work, "ORPHAN.txt")), why()).toBe(false);
+    expect(run.evidence.find(e => e.kind === "CANCEL")?.note ?? "", why()).toMatch(/stopped writer group/);
   });
 
   it("TK-2 / PAR04-EXHAUSTED-NO-REAP: a takeover that exhausts the recovery budget still stops the writer; the reason stays RECOVERY_BUDGET_EXHAUSTED and the note names the stopped group", { timeout: 180_000 }, async () => {
     const x = await crashEngine(path.join(tmp, "exhaust"));
     const e2 = spawnEngine(x.dir, "2", {maxRecoveries: 0});
     expect(await e2.closed, JSON.stringify(e2.text())).toBe(0);
-    await afterOrphanWindow(x.killedAt);
+    const why = snap(x, Date.now() - x.killedAt);
+    await release(x.dir);
     const run = new WorkOsStore(path.join(x.dir, "data")).engineGetRun(x.runId)!;
-    expect([run.status, run.reason]).toEqual(["RECOVERY_FAILED", "RECOVERY_BUDGET_EXHAUSTED"]);
-    expect(groupAlive(x.pgid)).toBe(false);
-    expect(fs.existsSync(path.join(x.work, "ORPHAN.txt"))).toBe(false);
-    expect(recoveryNote(x.dir, x.runId)).toMatch(/stopped writer group/);
+    expect([run.status, run.reason], why()).toEqual(["RECOVERY_FAILED", "RECOVERY_BUDGET_EXHAUSTED"]);
+    expect(groupAlive(x.pgid), why()).toBe(false);
+    expect(fs.existsSync(path.join(x.work, "ORPHAN.txt")), why()).toBe(false);
+    expect(recoveryNote(x.dir, x.runId), why()).toMatch(/stopped writer group/);
   });
 
   it("TEST-PAR04-DEFENCES (M7): a descendant in the writer's process group is stopped too, not only the leader", { timeout: 180_000 }, async () => {
@@ -377,11 +387,12 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
     const e2 = spawnEngine(x.dir, "2", {grandchild: "group"});
     expect(await e2.closed, JSON.stringify(e2.text())).toBe(0);
     expect(await waitUntil(() => !procAlive(gcPid), 5000), "a group member survived the kill").toBe(true);
+    await release(x.dir); // torun (hâlâ yaşıyorsa) şimdi ORPHAN2.txt yazardı
     expect(fs.existsSync(path.join(x.work, "ORPHAN2.txt"))).toBe(false);
     expect(new WorkOsStore(path.join(x.dir, "data")).engineGetRun(x.runId)!.status).toBe("AWAITING_APPROVAL");
   });
 
-  it("TK-1: a descendant that called setsid (left the process group) AND works outside the run directory is found by the lease marker alone and stopped; the run delivers only the new engine's work", { timeout: 180_000 }, async () => {
+  it.skipIf(process.platform !== "linux")("TK-1: a descendant that called setsid (left the process group) AND works outside the run directory is found by the lease marker alone and stopped; the run delivers only the new engine's work", { timeout: 180_000 }, async () => {
     const x = await crashEngine(path.join(tmp, "setsid"), {grandchild: "setsid"});
     const gcPid = Number(fs.readFileSync(path.join(x.dir, "setsid.pid"), "utf8"));
     expect(procAlive(gcPid)).toBe(true);
@@ -390,28 +401,31 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
     expect(await e2.closed, JSON.stringify(e2.text())).toBe(0);
     const run = new WorkOsStore(path.join(x.dir, "data")).engineGetRun(x.runId)!;
     expect(procAlive(gcPid), "the detached descendant survived the takeover").toBe(false);
+    await release(x.dir); // torun (hâlâ yaşıyorsa) şimdi ORPHAN3.txt yazardı
     expect(fs.existsSync(path.join(x.work, "ORPHAN3.txt"))).toBe(false);
     expect(run.status).toBe("AWAITING_APPROVAL");
     expect(git(x.work, ["rev-parse", "HEAD"])).toBe(run.headSha);
-    if (process.platform === "linux") expect(recoveryNote(x.dir, x.runId)).toMatch(/swept \d+ detached writer process/);
+    expect(recoveryNote(x.dir, x.runId)).toMatch(/swept \d+ detached writer process/);
   });
 
   it.skipIf(process.platform === "win32")("TK-5: SIGINT to the engine (service mode) kills the implementer group it started in its own session; the engine then dies of the signal", { timeout: 180_000 }, async () => {
     const dir = path.join(tmp, "sigint"); fs.mkdirSync(dir);
     const e1 = spawnEngine(dir, "1", {service: true}, 60_000);
-    expect(await waitFor(() => fs.existsSync(path.join(dir, "implementing.json")), 120_000), JSON.stringify(e1.text())).toBe(true);
-    const {runId} = JSON.parse(fs.readFileSync(path.join(dir, "state.json"), "utf8")) as {runId: string};
-    const ownerFile = path.join(dir, "data", "runs", runId, "workspace.owner.json");
-    let pgid = 0;
-    expect(await waitFor(() => { try { pgid = JSON.parse(fs.readFileSync(ownerFile, "utf8")).childPgid ?? 0; return pgid > 1; } catch { return false; } }, 10_000)).toBe(true);
-    const sentAt = Date.now();
-    e1.child.kill("SIGINT"); // yalnız motora (çocuk kendi oturumundadır: terminalin Ctrl+C'si ona ulaşmazdı)
-    const code = await Promise.race([e1.closed, sleep(15_000).then(() => "TIMEOUT" as const)]);
-    if (code === "TIMEOUT") e1.child.kill("SIGKILL");
-    expect(code, JSON.stringify(e1.text())).not.toBe("TIMEOUT");
-    expect(await waitFor(() => !groupAlive(pgid), 5_000), "the implementer group outlived the engine").toBe(true);
-    await sleep(Math.max(0, sentAt + ORPHAN_MS + 2000 - Date.now()));
-    expect(fs.existsSync(path.join(dir, "data", "runs", runId, "work", "ORPHAN.txt"))).toBe(false);
+    try { // servis kipindeki motor kendiliğinden çıkmaz: bir onaylama başarısız olursa bile motor ve yazar grubu burada öldürülür
+      expect(await Promise.race([waitFor(() => fs.existsSync(path.join(dir, "implementing.json")), 120_000), e1.closed.then(() => false)]), JSON.stringify(e1.text())).toBe(true);
+    expect(await writerParked(dir, e1.closed, 30_000), "the implementer must have read its directive and parked before the engine is killed").toBe(true);
+      const {runId} = JSON.parse(fs.readFileSync(path.join(dir, "state.json"), "utf8")) as {runId: string};
+      const ownerFile = path.join(dir, "data", "runs", runId, "workspace.owner.json");
+      let pgid = 0;
+      expect(await waitFor(() => { try { pgid = JSON.parse(fs.readFileSync(ownerFile, "utf8")).childPgid ?? 0; return pgid > 1; } catch { return false; } }, 10_000)).toBe(true);
+      leaked.push(pgid);
+      e1.child.kill("SIGINT"); // yalnız motora (çocuk kendi oturumundadır: terminalin Ctrl+C'si ona ulaşmazdı)
+      const code = await Promise.race([e1.closed, sleep(15_000).then(() => "TIMEOUT" as const)]);
+      expect(code, JSON.stringify(e1.text())).not.toBe("TIMEOUT");
+      expect(await waitFor(() => !groupAlive(pgid), 5_000), "the implementer group outlived the engine").toBe(true);
+      await release(dir);
+      expect(fs.existsSync(path.join(dir, "data", "runs", runId, "work", "ORPHAN.txt"))).toBe(false);
+    } finally { try { e1.child.kill("SIGKILL"); } catch { /* bitmiş */ } }
   });
 
   // ---- in-process: owner-record identity and durability ----
@@ -508,17 +522,18 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
     expect(JSON.parse(fs.readFileSync(file, "utf8"))).toHaveProperty("bootId");
   });
 
-  it.skipIf(process.platform !== "linux")("TK-7: a leaderless group is killed only when its boot and its members' start times prove it is the recorded writer's; otherwise fail-closed and untouched", { timeout: 180_000 }, async () => {
+  it.skipIf(process.platform !== "linux")("TK-7: a leaderless group is killed only when its boot, its members' start times AND the recorded lease marker prove it is the recorded writer's; otherwise fail-closed and untouched", { timeout: 180_000 }, async () => {
     const c = setup(), G = await wg();
-    const leaderless = async () => { // lider çıkar, üye (sleep) grupta kalır
-      const leader = cp.spawn("sh", ["-c", "sleep 60 & sleep 1.2; exit 0"], {stdio: "ignore", detached: true});
+    const leaderless = async (lease?: string) => { // lider çıkar, üye (sleep) grupta kalır; lease verilirse üye yazarın lease işaretini taşır (çocuk ortamı miras alır)
+      const leader = cp.spawn("sh", ["-c", "sleep 60 & sleep 1.2; exit 0"], {stdio: "ignore", detached: true, env: {...process.env, ...(lease ? {UASCO_WRITER_LEASE: lease} : {})}});
       const token = G!.startTokenLinux(leader.pid!)!;
       await new Promise<void>(r => leader.on("exit", () => r()));
       await waitFor(() => (G!.groupMembers(leader.pid!) ?? []).length > 0, 3000);
       return {pgid: leader.pid!, token};
     };
     const cleanup = (pgid: number) => { try { process.kill(-pgid, "SIGKILL"); } catch { /* bitmiş */ } };
-    let a = await leaderless();
+    let a = await leaderless("lse_gone");
+    const stranger = await leaderless(); // aynı önyükleme, lider kayıttan sonra başlamış üyeler, AMA lease işareti yok: grup kimliği yeniden alınmış yabancı bir grup (çift çatallanmış daemon) gibi
     try {
       // (a) kayıtlı başlangıçtan ÖNCE başlamış bir üye: bu grup yazarın değil -> öldürülmez
       let x = await crashedRun(c, {childPgid: a.pgid, childStart: String(Number(a.token) + 100_000_000)});
@@ -528,12 +543,77 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
       x = await crashedRun(c, {childPgid: a.pgid, childStart: a.token, bootId: null});
       expect([x.run.status, x.run.reason]).toEqual(["RECOVERY_FAILED", "RECOVERY_FAILED: WORKSPACE_WRITER_ALIVE"]);
       expect(G!.groupMembers(a.pgid)!.length).toBeGreaterThan(0);
-      // (c) aynı önyükleme + üye lider başladıktan sonra başlamış: kanıtlandı -> öldürülür
+      // (b2) R2: önyükleme ve başlangıç zamanı tutuyor ama hiçbir üyenin ortamında kaydın lease işareti yok: yabancı grup -> öldürülmez
+      x = await crashedRun(c, {childPgid: stranger.pgid, childStart: stranger.token});
+      expect([x.run.status, x.run.reason]).toEqual(["RECOVERY_FAILED", "RECOVERY_FAILED: WORKSPACE_WRITER_ALIVE"]);
+      expect(x.note).toMatch(/no member carries the recorded lease marker/);
+      expect(G!.groupMembers(stranger.pgid)!.length).toBeGreaterThan(0);
+      // (c) aynı önyükleme + üye lider başladıktan sonra başlamış + üye lease işaretini taşıyor: kanıtlandı -> öldürülür
       x = await crashedRun(c, {childPgid: a.pgid, childStart: a.token});
       expect(x.run.status).toBe("AWAITING_APPROVAL");
       expect(x.note).toMatch(/stopped writer group/);
       expect(await waitFor(() => (G!.groupMembers(a.pgid) ?? []).length === 0, 3000)).toBe(true);
-    } finally { cleanup(a.pgid); }
+    } finally { cleanup(a.pgid); cleanup(stranger.pgid); }
+  });
+
+  // ---- R2 (second adversarial pass): sweep and reap ----
+  it("R2-8: the sweep re-scans and re-kills until a scan is clean (a descendant forked after the first snapshot is not left alive); an unkillable one is reported as a survivor", async () => {
+    const G = await wg();
+    const scans: number[][] = [[11], [11, 12], [12], []], killed: number[] = [];
+    const r = await G!.sweepWriters({runDir: "/x", runId: "r", currentLeaseId: "l"}, 5000, {find: () => scans.shift() ?? [], kill: pid => { killed.push(pid); }});
+    expect(killed).toEqual([11, 11, 12, 12]);
+    expect([r.killed.sort(), r.survivors]).toEqual([[11, 12], []]);
+    const stuck = await G!.sweepWriters({runDir: "/x", runId: "r", currentLeaseId: "l"}, 200, {find: () => [7], kill: () => undefined});
+    expect(stuck.survivors).toEqual([7]);
+  });
+
+  it.skipIf(process.platform !== "linux")("R2-9: an unmarked process whose cwd is inside the run directory is found even when the configured run directory goes through a symlink; a sibling directory with the same prefix is not", async () => {
+    const G = await wg();
+    const real = path.join(tmp, "real"), run = path.join(real, "run_x"), sibling = path.join(real, "run_x_other");
+    fs.mkdirSync(run, {recursive: true}); fs.mkdirSync(sibling, {recursive: true});
+    const link = path.join(tmp, "link"); fs.symlinkSync(real, link, "dir");
+    const spawn = (cwd: string) => cp.spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {cwd, stdio: "ignore", detached: true});
+    const inside = spawn(run), outside = spawn(sibling);
+    leaked.push(inside.pid!, outside.pid!);
+    try {
+      expect(await waitFor(() => { try { return fs.readlinkSync(`/proc/${inside.pid}/cwd`) === run && fs.readlinkSync(`/proc/${outside.pid}/cwd`) === sibling; } catch { return false; } }, 10_000)).toBe(true);
+      const hits = G!.findLeaseWriters({runDir: path.join(link, "run_x"), runId: "run_x", currentLeaseId: "lse_now"});
+      expect(hits).toContain(inside.pid);
+      expect(hits).not.toContain(outside.pid);
+    } finally { inside.kill("SIGKILL"); outside.kill("SIGKILL"); }
+  });
+
+  it.skipIf(process.platform !== "linux")("R2-10: a detached descendant that outlives a TIMED-OUT implementer is killed before the next step (the step's own lease marker is swept after every implementer, not only at takeover)", { timeout: 120_000 }, async () => {
+    const c = setup(); c.mkRun("A");
+    const pidFile = path.join(tmp, "gc.pid");
+    const fake = new FakeExecutors({implement: () => ({files: {"feature.txt": "ok\n"}, sleepMs: 30_000, grandchild: {file: path.join(tmp, "never.txt"), delayMs: 60_000, detached: true, pidFile, cwd: tmp}}), review: () => ({verdict: "CLEAN"})});
+    let gc = 0;
+    try {
+      await c.runner({executors: fake.pair(), executorTimeoutMs: 1500, maxStepsPerTick: 2}).tick(); // WORKSPACE + IMPLEMENT (zaman aşımı)
+      gc = Number(fs.readFileSync(pidFile, "utf8"));
+      expect(gc).toBeGreaterThan(1);
+      expect(await waitFor(() => !procAlive(gc), 3000), "the detached descendant of the timed-out implementer is still running").toBe(true);
+    } finally { if (gc > 1) { try { process.kill(gc, "SIGKILL"); } catch { /* bitmiş */ } } }
+  });
+
+  it("R2-11: a failed owner-record refresh at the end of the takeover does not block the emergency cancel: GLOBAL_STOP still ends the run CANCELLED (not FAILED with ENGINE_ERROR)", { timeout: 90_000 }, async () => {
+    const c = setup(), r = c.mkRun("A");
+    const first = c.runner({leaseTtlMs: 300, maxStepsPerTick: 0, executors: c.base});
+    expect((await first.tick()).claimed).toEqual([r.runId]);
+    const file = path.join(c.dataDir, "runs", r.runId, "workspace.owner.json");
+    fs.mkdirSync(path.dirname(file), {recursive: true});
+    fs.writeFileSync(file, JSON.stringify({leaseId: "lse_gone", engineId: "engine_gone", hostname: os.hostname(), pid: 1, childPgid: null, childStart: null, step: "IMPLEMENT", at: new Date().toISOString(), bootId: (await wg())?.bootId?.() ?? null}));
+    const gs = path.join(path.dirname(c.dataDir), "rt", "GLOBAL_STOP.json");
+    fs.mkdirSync(path.dirname(gs), {recursive: true});
+    fs.writeFileSync(gs, JSON.stringify({active: true, reason: "TEST_STOP", actor: "test"}));
+    await sleep(450); // ilk lease doldu
+    const realRename = fs.renameSync.bind(fs), realCopy = fs.copyFileSync.bind(fs);
+    const eperm = () => Object.assign(new Error("EPERM: simulated"), {code: "EPERM"});
+    vi.spyOn(fs, "renameSync").mockImplementation(((a: fs.PathLike, b: fs.PathLike) => { if (String(b).endsWith("workspace.owner.json")) throw eperm(); return realRename(a, b); }) as typeof fs.renameSync);
+    vi.spyOn(fs, "copyFileSync").mockImplementation(((a: fs.PathLike, b: fs.PathLike, m?: number) => { if (String(b).endsWith("workspace.owner.json")) throw eperm(); return realCopy(a, b, m); }) as typeof fs.copyFileSync);
+    try { await c.runner({executors: c.base}).tick(); } finally { vi.restoreAllMocks(); }
+    const run = c.store.engineGetRun(r.runId)!;
+    expect([run.status, run.reason], JSON.stringify(run.evidence.map(e => e.note))).toEqual(["CANCELLED", "GLOBAL_STOP_ACTIVE: TEST_STOP"]);
   });
 
   it("TK-6 / TK-8: the macOS/BSD identity command pins TZ/locale and uses an absolute ps; the Windows kill is ONE PowerShell call that re-checks the start time and refuses a non-numeric token", async () => {

@@ -19,7 +19,7 @@ import {canonicalPath, managedRepoCanonical, pathOverlapsDataDir} from "./path-g
 import {runGitAsync} from "./git-async.js";
 import type {GitRun} from "./git-async.js";
 import {
-  OWNER_FILE, WRITER_KILL_WAIT_MS, bootId, bootTimeMs, installTerminationForwarding, killWriterGroup, leaderlessGroupProof, readOwner, sameBoot, startToken, startTokenLinux, sweepWriters,
+  OWNER_FILE, WRITER_KILL_WAIT_MS, bootId, bootTimeMs, installTerminationForwarding, isTerminating, killWriterGroup, leaderlessGroupProof, readOwner, sameBoot, startToken, startTokenLinux, sweepWriters,
   trackWriterGroup, untrackWriterGroup, writeOwner, writerEnvFor, writerState
 } from "./writer-guard.js";
 import type {WorkspaceOwner} from "./writer-guard.js";
@@ -216,6 +216,7 @@ export class MissionRunner {
   private stallAt = 0;
   // //TR: stop() sonrası sürüşler yeni ücretli adım başlatmaz ve çalışan çocukları durdurur; run terminal İPTAL edilmez (sonraki engine devralır).
   private stopping = false;
+  private stopEpoch = 0; // //TR: R2: her stop() bir tur sayar; stop()->start() sırasında bitmemiş bir sürüş hâlâ "durduruldu" sayılır (stopping bayrağı start() ile sıfırlanır, tur sayısı sıfırlanmaz)
   private forwardOff: (() => void) | null = null;
   private readonly boot = bootId();
   private readonly loopDelay: (() => number) | undefined;
@@ -249,11 +250,15 @@ export class MissionRunner {
   stop(): Promise<void> {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
-    this.forwardOff?.(); this.forwardOff = null;
+    // //TR: R2: sonlanma kancaları (exit/SIGINT/SIGTERM/SIGHUP) sürüşler bitene kadar TAKILI kalır: çağıran dönen sözü beklemeyip hemen process.exit yaparsa (server.ts onClose) yazar grupları exit kancasıyla öldürülür.
+    const off = this.forwardOff; this.forwardOff = null;
+    const epoch = ++this.stopEpoch;
     this.stopping = true;
     const drives = [...this.owned.values()].map(o => o.drive).filter((d): d is Promise<void> => d !== null);
-    return Promise.allSettled(drives).then(() => { if (this.timer === null) this.stopping = false; });
+    return Promise.allSettled(drives).then(() => { off?.(); if (this.timer === null && this.stopEpoch === epoch) this.stopping = false; });
   }
+  // //TR: R2: motor durduruldu mu (stop() çağrıldı, süreç sonlanıyor ya da bu adım/sürüş başladığından beri bir stop() geçti)? start() stopping'i sıfırlasa bile tur sayısı farklıysa o sürüş durdurulmuş sayılır.
+  private halted(epoch: number): boolean { return this.stopping || isTerminating() || this.stopEpoch !== epoch; }
   // //TR: İptal nedeni: GLOBAL_STOP, motor kapanışı (run iptal EDİLMEZ) ya da lease kaybı.
   private cancelReason(): string { return this.stopActive() ?? (this.stopping ? "ENGINE_STOPPING" : "LEASE_LOST"); }
 
@@ -365,7 +370,7 @@ export class MissionRunner {
     if (o.childPgid !== null && o.childPgid !== pgid) untrackWriterGroup(o.childPgid); // aynı adımda art arda doğan çocuklar (implementer, sonra engine commit'inin git çocukları): önceki grup artık kayıtlı değil
     this.writeOwner(run.runId, {...o, childPgid: pgid, childStart: process.platform === "linux" ? startTokenLinux(c.pid) : null, at: new Date(this.o.now()).toISOString()});
     trackWriterGroup(pgid);
-    if (process.platform !== "linux" && identify) void startToken(c.pid).then(t => { const cur = this.ownerOf(run.runId); if (t && cur && cur.leaseId === leaseId && cur.childPgid === pgid) this.writeOwner(run.runId, {...cur, childStart: t}); }).catch(() => undefined); // yazılamazsa kimlik belirteci eksik kalır: devirde fail-closed
+    if (process.platform !== "linux" && identify && c.short !== true) void startToken(c.pid).then(t => { const cur = this.ownerOf(run.runId); if (t && cur && cur.leaseId === leaseId && cur.childPgid === pgid) this.writeOwner(run.runId, {...cur, childStart: t}); }).catch(() => undefined); // yazılamazsa kimlik belirteci eksik kalır: devirde fail-closed
   }
   private clearChild(run: WorkRun, leaseId: string): void {
     const o = this.ownerOf(run.runId);
@@ -384,19 +389,20 @@ export class MissionRunner {
     const alive = (note: string) => ({problem: "WORKSPACE_WRITER_ALIVE", note});
     if (prev.hostname !== os.hostname()) return alive(`writer group ${pgid} belongs to host ${prev.hostname.slice(0, 64)} and cannot be checked`);
     const st = writerState(pgid);
-    if (st === "GONE") return {problem: null, note: ""};
+    if (st === "GONE") return {problem: null, note: `writer group ${pgid} was already gone`}; // //TR: kanıt notu "durdurulacak yazar yoktu" der: yazarın devirden ÖNCE öldüğü (ya da hiç yaşamadığı) not'tan okunur
     if (st === "UNKNOWN") return alive(`writer group ${pgid} state unknown`);
     const now = await startToken(pgid);
     // //TR: TK-3: kimlik belirteci EPERM'den ÖNCE karşılaştırılır. Kayıtlı pid başka bir kullanıcının sürecine geçtiyse (kill -> EPERM) belirteç farklıdır: bizim yazarımız yoktur, devir fail-closed OLMAZ. Linux /proc/<pid>/stat dünya okunurdur.
     if (prev.childStart !== null && now !== null && now !== prev.childStart) return {problem: null, note: `pid ${pgid} was reused by another process; no writer to stop`};
-    if (st === "OTHER_USER") return alive(`writer group ${pgid} state unknown`);
+    // //TR: R2 (Windows): bizim yazarımız aynı kullanıcının çocuğudur ve açılabilir; OpenProcess erişim reddi (EPERM) kaydedilen pid'in artık başka bir (yükseltilmiş/SYSTEM) sürece ait olduğunu kanıtlar. Linux'ta kimlik belirteci zaten yukarıda karşılaştırıldı; orada belirteç okunamıyorsa fail-closed kalır.
+    if (st === "OTHER_USER") return process.platform === "win32" ? {problem: null, note: `pid ${pgid} is not accessible to this user; it cannot be the recorded writer`} : alive(`writer group ${pgid} state unknown`);
     if (prev.childStart === null || (now === null && process.platform !== "linux")) return alive(`writer group ${pgid} is alive but its identity cannot be proven`);
     // Lider yok ama grup canlı (Linux): TK-7: aynı önyükleme + her üye lider kaydından sonra başlamış olmalı.
     if (now === null) { const proof = leaderlessGroupProof(pgid, prev); if (!proof.ok) return alive(proof.why); }
     await killWriterGroup(pgid, prev.childStart);
     for (const until = Date.now() + WRITER_KILL_WAIT_MS; writerState(pgid) !== "GONE" && Date.now() < until;) await sleep(50);
     if (writerState(pgid) !== "GONE") return alive(`writer group ${pgid} survived the kill`);
-    return {problem: null, note: `stopped writer group ${pgid} of engine ${prev.engineId}`};
+    return {problem: null, note: `stopped writer group ${pgid} of engine ${prev.engineId}${process.platform === "linux" ? "" : "; descendants that left the process group are not swept on this platform"}`};
   }
   // Devir: önceki lease'in yazarı (varsa) ölmeden workspace'e dokunulmaz. (1) Kayıt: yırtık/okunamayan kayıt önyüklemeden ESKİYSE yazar yok (TK-4), değilse fail-closed; farklı önyükleme = yazar yok. (2) Kayıtlı grup: aynı makinede canlıysa ve kimliği kanıtlanırsa öldürülür ve ölmesi beklenir (TK-3/7). (3) TK-1: grubu terk eden (setsid) torunlar lease işaretiyle/çalışma dizinine göre taranır ve öldürülür; biri bile ölmezse fail-closed. Not yazılır: yalnız tarama temizse "stopped".
   private async reapPriorWriter(run: WorkRun, leaseId: string): Promise<{problem: string | null; note: string}> {
@@ -421,8 +427,15 @@ export class MissionRunner {
       if (sw.killed.length) note = `${note ? `${note}; ` : ""}swept ${sw.killed.length} detached writer process(es)`;
     }
     this.renew(run.runId, leaseId);
-    this.writeOwner(run.runId, this.ownerRecord(run, leaseId));
+    // //TR: R2: kayıt yenilenemezse (geçici disk/rename hatası) devir bundan ETKİLENMEZ: iptal ve bütçe-tükendi kararları bu yazıya bağlı olmamalı; sonraki adımın başındaki yazı (hatası RETRY) kaydı yeniler.
+    try { this.writeOwner(run.runId, this.ownerRecord(run, leaseId)); } catch { note = `${note ? `${note}; ` : ""}owner record not refreshed`; }
     return {problem: null, note};
+  }
+  // //TR: R2: implementer çocuğu bittiğinde (başarı, hata, abort, zaman aşımı fark etmez) bu lease'in işaretini taşıyan ya da run dizininde çalışan artıklar (setsid ile gruptan kaçan torunlar) öldürülür: yoksa sonraki deneme/adım onlar yazarken başlar ve engine commit'i onların dosyasını da alırdı. Yalnız Linux (diğerlerinde eşdeğeri yoktur: bilinen kalıntı).
+  private async sweepOwnWriters(run: WorkRun, leaseId: string): Promise<boolean> {
+    if (process.platform !== "linux") return true;
+    const sw = await sweepWriters({runDir: this.runDir(run.runId), runId: run.runId, currentLeaseId: leaseId, includeCurrent: true}, 2_000);
+    return sw.survivors.length === 0;
   }
 
   // //TR: tick() deterministik adımlama sözleşmesidir (testler/araçlar): talep + sahip olunan run'ları sür + BU çağrının başlattığı sürüşlerin bitmesini bekle; tick içinde yeniden doldurma yoktur. Servis kipi (start) beklemez: pump().
@@ -517,7 +530,7 @@ export class MissionRunner {
   }
 
   private async drive(runId: string, leaseId: string): Promise<"CANCELLED" | boolean> {
-    const s = this.o.store;
+    const s = this.o.store, epoch = this.stopEpoch;
     let steps = 0;
     for (;;) {
       const run = s.engineGetRun(runId);
@@ -525,7 +538,7 @@ export class MissionRunner {
       // //TR: PAR04-GSTOP-NO-REAP / TK-2: devralınan run'ın önceki yazarı HER yolda (iptal, GLOBAL_STOP, bütçe tükenmesi, normal devam) workspace'e dokunulmadan ve run terminal olmadan ÖNCE durdurulur; sonuç sürüşün ilk iterasyonunda bir kez hesaplanır. Yazar ölmese bile iptal yine yapılır (not'a yazılır).
       const own = this.owned.get(runId);
       if (own && own.recovered && own.reap === null) own.reap = await this.reapPriorWriter(run, leaseId);
-      if (this.stopping) { this.owned.delete(runId); return steps > 0; } // motor kapanıyor: yeni adım yok, run bırakılır (lease dolunca sonraki engine devralır)
+      if (this.halted(epoch)) { this.owned.delete(runId); return steps > 0; } // motor kapanıyor: yeni adım yok, run bırakılır (lease dolunca sonraki engine devralır)
       const stop = this.stopActive();
       if (stop || run.status === "CANCELLING") { const w = own?.reap; this.cancelLeased(run, leaseId, stop ?? run.reason ?? "CANCEL_REQUESTED", w ? `${w.problem ? `${w.problem}: ` : ""}${w.note}`.replace(/: $/, "") : ""); return "CANCELLED"; }
       if (run.status === "RETRY_SCHEDULED" && Date.parse(run.retryAt ?? "") > this.o.now()) { this.renew(runId, leaseId); return steps > 0; }
@@ -587,7 +600,10 @@ export class MissionRunner {
     // Heartbeat: uzun adımlarda lease yenilenir; yenileme fence edilirse süreç durdurulur ve sonraki yazı reddedilir.
     const hb = setInterval(() => { try { this.renew(run.runId, leaseId); } catch { lost = true; if (entry) entry.lost = true; } }, Math.max(50, Math.floor(this.o.leaseTtlMs / 3)));
     let out: Outcome;
-    try { out = await this.performStep(cur, leaseId, () => lost || entry?.lost === true || this.stopping || this.stopActive() !== null); } finally { clearInterval(hb); }
+    const epoch = this.stopEpoch;
+    try { out = await this.performStep(cur, leaseId, () => lost || entry?.lost === true || this.halted(epoch) || this.stopActive() !== null); } finally { clearInterval(hb); }
+    // //TR: R2: motor durdurulurken (stop(), SIGTERM/SIGINT/SIGHUP, exit) çocuk bizim tarafımızdan öldürülmüş olabilir: bu "başarısız" bir adım DEĞİLDİR. Tamamlanmış sonuçlar (DONE, REMEDIATE) ve GLOBAL_STOP iptali işlenir; başarısızlık/engel/yeniden-dene/lease-kaybı iptali kaydedilmez, run kilitli kalır ve sonraki engine devralır (terminal FAILED/CANCELLED olmaz).
+    if (this.halted(epoch) && out.kind !== "DONE" && out.kind !== "REMEDIATE" && !(out.kind === "CANCEL" && this.stopActive() !== null)) return;
     await this.applyOutcome(cur, leaseId, out);
   }
 
@@ -776,6 +792,7 @@ export class MissionRunner {
     const spec: MissionSpec = {...this.missionSpec(run), startSha: start};
     const lim = this.limitsOf(run);
     const r = await this.withChild(run, leaseId, onSpawn => this.o.executors.implementer.implement(work, spec, {timeoutMs: lim.executorTimeoutMs, shouldAbort: abort, onSpawn, writerEnv: writerEnvFor(run.runId, leaseId), span: fn => this.span(fn)}));
+    if (!(await this.sweepOwnWriters(run, leaseId))) return {kind: "BLOCK", reason: "WORKSPACE_WRITER_ALIVE", status: "FAILED"};
     const head = await this.gitOk(work, ["rev-parse", "HEAD"]);
     const log = this.writeLog(run, "implement", r.log);
     const produced = r.exitCode === 0 && !r.blockReason && head && SHA.test(head) && head !== start ? head : undefined;

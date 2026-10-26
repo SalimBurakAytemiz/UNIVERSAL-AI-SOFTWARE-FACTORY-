@@ -30,8 +30,10 @@ export interface ProcResult {
   timedOut: boolean; aborted: boolean; spawnError: boolean;
 }
 // //TR: PAR-04: onSpawn, adapter her implementer/reviewer çocuğunu doğurduğu anda (eşzamanlı) çağrılır; pgid POSIX'te çocuğun yeni süreç grubudur (pgid = pid), Windows'ta null (pid çocuk ağacının köküdür). Fırlatırsa çocuk öldürülür ve spawn hatası sayılır: kayıtsız yazar bırakılmaz.
-export interface SpawnedChild { pid: number; pgid: number | null }
+export interface SpawnedChild { pid: number; pgid: number | null; short?: boolean } // short: kısa ömürlü yardımcı çocuk (engine commit'inin git'i): kayıt tutulur ama Windows'ta PowerShell kimlik çağrısı yapılmaz
 // //TR: writerEnv (TK-1): çocuğun ortamına EKLENİR (lease işareti: setsid ile gruptan kaçan torunlar da miras alır; devralan engine bunlarla tarar). span (HB-1): adapter'ın engine süreci içindeki KÜÇÜK senkron işleri (ör. .git özeti, çalışma alanı anlık görüntüsü) bu çağrıya sarar; runner bunu span()'a bağlar (diğer run'ların lease'i işten önce/sonra yenilenir).
+// //TR: R2: engine commit'inin git çocukları yazar kaydına girer (kayıtsız yazar bırakılmaz) ama kısa ömürlüdür: kimlik belirteci için Windows/macOS'ta süreç başlatılmaz.
+export const shortChildren = (onSpawn: ((c: SpawnedChild) => void) | undefined): ((c: SpawnedChild) => void) | undefined => onSpawn && (c => onSpawn({...c, short: true}));
 export interface ExecContext { timeoutMs: number; shouldAbort?: () => boolean; onSpawn?: (child: SpawnedChild) => void; writerEnv?: Record<string, string>; span?: <T>(fn: () => T) => T }
 const withWriterEnv = (env: NodeJS.ProcessEnv, ctx: ExecContext): NodeJS.ProcessEnv => ctx.writerEnv ? {...env, ...ctx.writerEnv} : env;
 // blockReason: adapter builder çıktısını commit etmeyi reddettiyse (ör. BUILDER_PRODUCED_NO_CHANGE) runner run'ı BLOCKED yapar.
@@ -135,7 +137,7 @@ function toReview(r: ProcResult): ReviewResult {
 }
 
 // ---- FAKE adapter (yalnız testler; programatik enjeksiyonla seçilir, env ile seçilemez) ----
-export interface FakeImplementDirective { files?: Record<string, string>; exitCode?: number; noCommit?: boolean; message?: string; sleepMs?: number; stderr?: string; deleteFiles?: string[]; grandchild?: {file: string; delayMs: number; detached?: boolean; pidFile?: string; cwd?: string} }
+export interface FakeImplementDirective { files?: Record<string, string>; exitCode?: number; noCommit?: boolean; message?: string; sleepMs?: number; waitFile?: string; readyFile?: string; stderr?: string; deleteFiles?: string[]; grandchild?: {file: string; delayMs: number; detached?: boolean; pidFile?: string; cwd?: string; waitFile?: string} }
 export interface FakeReviewDirective { verdict?: "CLEAN" | "BLOCKED"; findings?: ReviewFinding[]; exitCode?: number; mutate?: boolean; raw?: string }
 export interface FakeScript {
   implement: (call: number, spec: MissionSpec) => FakeImplementDirective;
@@ -226,8 +228,9 @@ export class EditOnlyImplementer implements ImplementerAdapter {
     const base = {argv: r.argv, startedAt: r.startedAt, timedOut: r.timedOut, aborted: r.aborted, transient: r.timedOut || r.spawnError || (r.exitCode !== null && this.transientExitCodes.includes(r.exitCode))};
     if (r.exitCode !== 0 || r.aborted) return {...base, exitCode: r.exitCode, log: procLog(r), endedAt: r.endedAt};
     const subject = `uasco run ${spec.runId} cycle ${spec.cycle}: ${spec.title.replace(/[\r\n]+/g, " ").slice(0, 120)}`;
-    const c = await commitBuilderOutputAsync(workspace, {envPolicyFile: this.envPolicyFile, startSha, gitDigestBefore: before, message: `${subject}\n\nMission: ${spec.missionId}\nCommitted by the UASCO engine on behalf of ${this.identity} (edit-only builder).`}, {span: sp, onSpawn: ctx.onSpawn});
+    const c = await commitBuilderOutputAsync(workspace, {envPolicyFile: this.envPolicyFile, startSha, gitDigestBefore: before, message: `${subject}\n\nMission: ${spec.missionId}\nCommitted by the UASCO engine on behalf of ${this.identity} (edit-only builder).`}, {span: sp, extraEnv: ctx.writerEnv, onSpawn: shortChildren(ctx.onSpawn)});
     const log = `${procLog(r)}--- engine commit ---\n${c.log}`;
+    if (!c.ok && c.transient) return {...base, exitCode: null, transient: true, log, endedAt: new Date().toISOString()}; // yazar kaydı yazılamadı: kalıcı BUILDER_* bloğu değil, yeniden deneme
     return c.ok ? {...base, exitCode: 0, commitSha: c.commitSha, log, endedAt: new Date().toISOString()} : {...base, exitCode: 0, blockReason: c.reason, log, endedAt: new Date().toISOString()};
   }
 }

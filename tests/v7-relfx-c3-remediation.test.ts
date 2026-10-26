@@ -383,6 +383,7 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
     let started = false; // yalnız implementer çocuğu gerçekten başladıktan sonra bakılır (öncesindeki kayıtlı grup kısa ömürlü bir git çocuğudur)
     const mr = c.runner({executors: wrapImplementer(pair0, (w, spec, ctx) => { started = true; return pair0.implementer.implement(w, spec, ctx); })});
     mr.start(250);
+    try { // bir onaylama başarısız olursa bile motorun zamanlayıcısı, 20 sn'lik yazar ve sonlanma kancaları sızmasın
     const work = () => path.join(c.dataDir, "runs", A.runId, "work");
     const ownerFile = path.join(c.dataDir, "runs", A.runId, "workspace.owner.json");
     let pgid = 0;
@@ -399,6 +400,91 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
     expect(notCancelled()).toEqual(["RUNNING", "IMPLEMENT"]); // yeni adım başlamadı
     expect(fs.existsSync(path.join(work(), "feature.txt"))).toBe(false);
     expect(slowImpl.calls.implement, "a new implementer was started after stop()").toBe(1);
+    } finally { await mr.stop(); }
+  });
+
+  // ---- R2 (second adversarial pass): stop()/termination safety ----
+  // Uzun süren gerçek bir implementer çocuğu (FAKE, 20 s uyur) başlamış bir motor; start() servis kipinde.
+  const inFlight = async (name: string) => {
+    const c = setup(name); const A = c.mkRun("A");
+    const slowImpl = new FakeExecutors({implement: () => ({files: {"feature.txt": "ok\n"}, sleepMs: 20_000}), review: () => ({verdict: "CLEAN"})});
+    const pair0 = slowImpl.pair();
+    let started = false;
+    const mr = c.runner({executors: wrapImplementer(pair0, (w, spec, ctx) => { started = true; return pair0.implementer.implement(w, spec, ctx); })});
+    mr.start(250);
+    const ownerFile = path.join(c.dataDir, "runs", A.runId, "workspace.owner.json");
+    let pgid = 0;
+    expect(await waitUntil(() => { try { pgid = JSON.parse(fs.readFileSync(ownerFile, "utf8")).childPgid ?? 0; return started && pgid > 1 && c.store.engineGetRun(A.runId)!.step === "IMPLEMENT"; } catch { return false; } }, 30_000)).toBe(true);
+    const state = () => { const r = c.store.engineGetRun(A.runId)!; return [r.status, r.step, r.reason]; };
+    return {c, A, mr, pgid, slowImpl, state};
+  };
+
+  it.skipIf(process.platform === "win32")("R2-1: stop() keeps the exit/signal hooks installed until the drives have settled (server.ts onClose does not await stop(): the exit hook must still be there to kill the writer group)", { timeout: 90_000 }, async () => {
+    const f = await inFlight("r21");
+    try {
+      const armed = process.listenerCount("exit"); // kanca takılı (başka bileşenlerin kendi exit dinleyicileri de sayılır: yalnız değişim ölçülür)
+      const stopped = f.mr.stop(); // çağıran beklemiyor
+      expect(process.listenerCount("exit"), "the exit hook was removed while the writer group was still alive").toBe(armed);
+      await stopped;
+      expect(process.listenerCount("exit"), "the exit hook must be released once the drives settled").toBeLessThan(armed);
+      expect(procAlive(f.pgid)).toBe(false);
+    } finally { await f.mr.stop(); }
+  });
+
+  it.skipIf(process.platform === "win32")("R2-2: a forwarded SIGHUP that does not end the process (another listener exists) kills the writer group but the run is NOT recorded FAILED/BLOCKED: it stays leased for the next engine", { timeout: 90_000 }, async () => {
+    const f = await inFlight("r22");
+    const keep = () => undefined; // süreci ayakta tutan başka dinleyici (packaged-entry'nin kapanış mantığı gibi): kanca yeniden sinyal göndermez
+    process.on("SIGHUP", keep);
+    try {
+      process.emit("SIGHUP", "SIGHUP");
+      expect(await waitUntil(() => !procAlive(f.pgid), 5000), "the forwarded signal did not kill the writer group").toBe(true);
+      await sleep(2500); // sürüşün devamı (kanıt yazımı, süpürme) çocuğun ölümünü işler; sonuç KAYDEDİLMEMELİ
+      expect(f.state().slice(0, 2)).toEqual(["RUNNING", "IMPLEMENT"]);
+      expect(f.state()[2] ?? "").not.toMatch(/IMPLEMENT_FAILED/);
+    } finally { process.off("SIGHUP", keep); await f.mr.stop(); }
+  });
+
+  it("R2-3: stop() followed by start() while the drive is still draining: the in-flight implementer is still aborted and the run is neither cancelled (LEASE_LOST) nor advanced", { timeout: 90_000 }, async () => {
+    const f = await inFlight("r23");
+    try {
+      const t0 = Date.now();
+      const drained = f.mr.stop();
+      f.mr.start(250); // stopping bayrağı burada sıfırlanır; tur sayısı sıfırlanmaz
+      await drained;
+      expect(Date.now() - t0, "the writer was not aborted (stopping was reset by start())").toBeLessThan(10_000);
+      expect(procAlive(f.pgid)).toBe(false);
+      expect(f.state().slice(0, 2)).toEqual(["RUNNING", "IMPLEMENT"]);
+      expect(f.state()[2] ?? "").not.toMatch(/LEASE_LOST|GLOBAL_STOP/);
+    } finally { await f.mr.stop(); }
+  });
+
+  // ---- R2: engine commit children ----
+  it("R2-4/5: the engine commit's git children carry the lease marker and are recorded as short-lived writers; an owner-record failure there is a transient RETRY, not a permanent BUILDER_* block", { timeout: 120_000 }, async () => {
+    const c = setup(); const A = c.mkRun("A");
+    const impl = new EditOnlyImplementer("TEST_EDIT_ONLY", ENV_POLICY, () => ({argv: [process.execPath, "-e", 'require("node:fs").writeFileSync("feature.txt", "ok\\n")'], env: {PATH: process.env.PATH ?? ""}, input: ""}));
+    const commitGit: Array<{marker: string | undefined; lease: string | undefined}> = [];
+    let failOwnerWrites = false;
+    const realRename = fs.renameSync.bind(fs);
+    const realCopy = fs.copyFileSync.bind(fs); // atomik yazıcı rename başarısızsa kopyaya düşer: ikisi de başarısız olunca yazı başarısızdır
+    const eperm = () => Object.assign(new Error("EPERM: simulated"), {code: "EPERM"});
+    vi.spyOn(fs, "renameSync").mockImplementation(((a: fs.PathLike, b: fs.PathLike) => { if (failOwnerWrites && String(b).endsWith("workspace.owner.json")) throw eperm(); return realRename(a, b); }) as typeof fs.renameSync);
+    vi.spyOn(fs, "copyFileSync").mockImplementation(((a: fs.PathLike, b: fs.PathLike, m?: number) => { if (failOwnerWrites && String(b).endsWith("workspace.owner.json")) throw eperm(); return realCopy(a, b, m); }) as typeof fs.copyFileSync);
+    slow.observe = (cwd, args, env) => {
+      if (!cwd.includes(A.runId) || !args.includes("read-tree")) return; // engine commit'inin ilk git çağrısı
+      commitGit.push({marker: env.UASCO_WRITER_RUN, lease: env.UASCO_WRITER_LEASE});
+      failOwnerWrites = true; // çocuk doğduktan sonra onSpawn kaydı yazılamaz (geçici disk/rename hatası)
+    };
+    const shorts: boolean[] = [];
+    const pair: ExecutorPair = {...c.base, implementer: {identity: impl.identity, implement: (w, spec, ctx) => impl.implement(w, spec, {...ctx, onSpawn: ch => { shorts.push(ch.short === true); ctx.onSpawn?.(ch); }})}};
+    await c.runner({executors: pair, maxStepsPerTick: 2}).tick(); // WORKSPACE + IMPLEMENT
+    failOwnerWrites = false;
+    expect(commitGit.length, "the engine commit ran").toBe(1);
+    expect(commitGit[0]!.marker, "the commit's git child must carry the run marker").toBe(A.runId);
+    expect(commitGit[0]!.lease, "...and the lease marker").toMatch(/^lse_/);
+    expect(shorts.slice(1).every(Boolean) && shorts.length > 1, "commit git children are reported as short-lived").toBe(true);
+    expect(shorts[0], "the implementer child itself is not short-lived").toBe(false);
+    const after = c.store.engineGetRun(A.runId)!;
+    expect([after.status, after.reason]).toEqual(["RETRY_SCHEDULED", "IMPLEMENT_TRANSIENT_FAILURE"]);
   });
 
   it("TEST-PAR05-REFILL (M3): with a 10 s timer the freed slot is refilled IMMEDIATELY (C starts within 2 s of A finishing while B is still in IMPLEMENT)", { timeout: 120_000 }, async () => {
@@ -439,6 +525,9 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
     try {
       expect(await waitUntil(() => started, 30_000)).toBe(true);
       clock.t += 5_000; // A'nın lease'i hem store'a hem talep geçişine göre doldu (bir stall sonrası görünüm)
+      // //TR: Senaryonun gerçekten kurulduğunu kanıtla (yoksa test boşuna geçer): lease saate göre DOLMUŞ ve sürüş hâlâ devam ediyor.
+      expect(Date.parse(c.store.engineGetRun(A.runId)!.leaseExpiresAt!), "the scenario needs A's lease to look expired").toBeLessThan(clock.t);
+      expect(release, "the scenario needs A's drive to still be in flight").toBe(false);
       (mr as unknown as {pump(freshOnly: boolean): void}).pump(false); // servis kipi talep geçişi, sürüş SÜRERKEN
       const takeovers = journal(c.dataDir).filter(e => e.type === "RUN_LEASE" && e.payload.runId === A.runId && e.payload.kind === "TAKEOVER");
       expect(takeovers, "the engine took over a run whose own drive was still in flight").toEqual([]);
@@ -454,17 +543,21 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
     expect(await waitUntil(() => !procAlive(pid), 5000), "the unrecorded child is still running").toBe(true);
   });
 
-  it("TEST-PAR04-DEFENCES (M5): recordChild refuses a run whose owner record belongs to another lease (WORKOS_LEASE_FENCED) and leaves the record untouched", () => {
+  it("TEST-PAR04-DEFENCES (M5): recordChild refuses a run whose owner record belongs to another lease (WORKOS_LEASE_FENCED) and leaves the record untouched", async () => {
+    const FAKE_PGID = 2_000_000_000; // hiçbir gerçek grup değil: sızan bir kanca bunu öldürmeye kalkarsa ESRCH alır
+    const {untrackWriterGroup} = await import("../core/workos/writer-guard.js");
     const c = setup(), r = c.mkRun("A"), mr = c.runner(), run = c.store.engineGetRun(r.runId)!;
     const file = path.join(c.dataDir, "runs", r.runId, "workspace.owner.json");
     fs.mkdirSync(path.dirname(file), {recursive: true});
     const rec = JSON.stringify({leaseId: "lse_a", engineId: "e", hostname: os.hostname(), pid: process.pid, childPgid: null, childStart: null, step: "IMPLEMENT", at: new Date().toISOString(), bootId: null});
     fs.writeFileSync(file, rec);
-    const recordChild = (lease: string) => (mr as unknown as {recordChild(run: unknown, lease: string, c: {pid: number; pgid: number | null}): void}).recordChild(run, lease, {pid: 4242, pgid: 4242});
+    const recordChild = (lease: string) => (mr as unknown as {recordChild(run: unknown, lease: string, c: {pid: number; pgid: number | null}): void}).recordChild(run, lease, {pid: FAKE_PGID, pgid: FAKE_PGID});
     expect(() => recordChild("lse_b")).toThrow(/WORKOS_LEASE_FENCED/);
     expect(fs.readFileSync(file, "utf8")).toBe(rec);
-    expect(() => recordChild("lse_a")).not.toThrow();
-    expect(JSON.parse(fs.readFileSync(file, "utf8"))).toMatchObject({childPgid: 4242});
+    try {
+      expect(() => recordChild("lse_a")).not.toThrow();
+      expect(JSON.parse(fs.readFileSync(file, "utf8"))).toMatchObject({childPgid: FAKE_PGID});
+    } finally { untrackWriterGroup(FAKE_PGID); }
   });
 
   it("TEST-PAR04-DEFENCES (M10): when renewAllOwned fences run B, B's child is aborted by the `lost` flag at once, long before B's own heartbeat (TTL/3 = 20 s) could notice", { timeout: 120_000 }, async () => {
