@@ -1484,7 +1484,7 @@ describe("LANE-A A-ANALYSIS-STUCK-1: an approved artefact whose phase did not ad
     b.ctx.rerender = async () => { b.root = await renderJourney(b.ctx); }; // a real repaint, as in the app
     fire(byId(b.root, "analysis-reapprove-submit")!, "click"); await new Promise(r => setTimeout(r, 40)); // the click's own repaint only: NO extra manual repaint
     expect(byId(b.root, "analysis-step-submit")!.attrs.get("disabled")).toBeDefined(); expect(byId(b.root, "analysis-reapprove-submit")!.attrs.get("disabled")).toBeDefined();
-    expect(text(byData(byId(b.root, "analysis-step")!, "analysisBusy")!)).toContain("Another analysis request is running");
+    expect(text(byData(byId(b.root, "analysis-step")!, "analysisBusy")!)).toContain("An analysis request is running");
     const other = b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null}) as N; // mission B while A's request runs: the same conservative lock, but explained
     expect(byId(other, "analysis-step-submit")!.attrs.get("disabled")).toBeDefined(); expect(byData(other, "analysisBusy")).toBeDefined();
     d.res({status: 409, body: {error: "PREDEV_GATE_REFUSED", reason: "PREDEV_INDEPENDENT_APPROVER_REQUIRED"}}); await new Promise(r => setTimeout(r, 0)); await new Promise(r => setTimeout(r, 0));
@@ -1500,5 +1500,29 @@ describe("LANE-A A-ANALYSIS-STUCK-1: an approved artefact whose phase did not ad
     { const d = deferred(), b = await open({status: 200, body: {status: "COMPLETE", approved: KINDS}}, undefined, () => d.p); await press(b, "analysis-step-submit");
       const p1 = b.an.submitAnalysisPlan(b.ctx, MSN), p2 = b.an.submitAnalysisPlan(b.ctx, MSN);
       expect(await p2).toEqual({ok: false, busy: true}); d.res({status: 201, body: OKPLAN}); await p1; expect(b.posts.filter((p: any) => p.path === PLAN)).toHaveLength(1); }
+  });
+
+  it("a pre-POST repaint that rejects releases the lock (no POST is sent, nobody stays locked) and the in-flight note takes focus when the lock repaints", async () => {
+    const fails: Array<[string, (b: any) => Promise<any>, () => Promise<any>]> = [
+      ["step", b => b.an.submitAnalysisStep(b.ctx, MSN), () => open(stuck())],
+      ["re-approve", b => b.an.submitReapprove(b.ctx, MSN), async () => { const b = await open(stuck()); await press(b, "analysis-step-submit"); setVal(b.root, "analysis-reapprove-evidence", "ev"); return b; }],
+      ["plan", b => b.an.submitAnalysisPlan(b.ctx, MSN), async () => { const b = await open({status: 200, body: {status: "COMPLETE", approved: KINDS}}); await press(b, "analysis-step-submit"); return b; }],
+    ];
+    for (const [label, call, mk] of fails) {
+      const b = await mk(), posts0 = b.posts.length; b.ctx.rerender = async () => { throw new Error("REPAINT_FAILED"); };
+      await expect(call(b), label).rejects.toThrow("REPAINT_FAILED");
+      expect(b.an.analysisBusy(), `${label}: the lock is released`).toBe(false); expect(b.posts.length, `${label}: nothing was posted`).toBe(posts0);
+      const other = b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null}) as N; expect(byId(other, "analysis-step-submit")!.attrs.get("disabled"), `${label}: another mission's Analyse is enabled`).toBeUndefined(); expect(byData(other, "analysisBusy")).toBeUndefined();
+    }
+    // focus: the rebuilt button is disabled, so the in-flight note (stable id, tabindex -1) takes it; asserted for all three submits
+    for (const [label, call, mk] of fails) {
+      const d = deferred(), b = await mk(); const spy: any[] = []; b.ctx.settleFocus = (o: any) => { spy.push(o); return null; };
+      b.ctx.api.post = async (p: string) => { await d.p; return {status: 404, body: {}}; }; // hold the POST
+      const pending = call(b); await new Promise(r => setTimeout(r, 0));
+      expect(spy, `${label}: settle before the POST answers`).toEqual([{keys: ["id:analysis-in-flight"]}]);
+      const note = byData(b.an.analysisPanel(b.ctx, {missionId: MSN, exec: null}) as N, "analysisBusy")!;
+      expect([note.id, note.attrs.get("tabindex")], label).toEqual(["analysis-in-flight", "-1"]);
+      d.res(null); await pending;
+    }
   });
 });

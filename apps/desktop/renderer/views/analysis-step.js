@@ -1,6 +1,6 @@
 // //TR: Bu görünüm parçası Proje Yolculuğu'ndaki "Analiz" adımıdır (A-FLOW-5): "Analiz et" POST /v1/missions/:id/analysis/step ile mevcut analiz fazının taslağını ürettirir (BusinessAnalysis, Requirements, Plan, Architecture); taslaklar aşağıdaki mevcut Pre-dev kararları bölümünde Founder tarafından onaylanır ya da reddedilir. BLOCKED durumunda sunucunun kesin engelleri ve Founder'ın kendi giriş komutu (yalnız metin) gösterilir. "Analiz tamam" YALNIZ dört fazın da onaylandığı COMPLETE sonucunda yazılır; ardından "Plan oluştur" POST .../analysis/plan ile onaylı plandan görev planını kurar ve görev -> gereksinim -> kabul kriteri izlenebilirliğini gösterir. Uç noktalar masaüstü allow-list'inde yoksa dürüst "etkin değil" yazılır; hiçbir sonuç uydurulmaz.
 import {h,badge} from "../components.js";
-import {drafts,field,statusBlock,setStatus,focusResult} from "../forms.js";
+import {drafts,field,statusBlock,setStatus,focusResult,settle} from "../forms.js";
 import {selection} from "../forms.js";
 import {buildAnalysisStepRequest,buildAnalysisPlanRequest,classifyAnalysisStep,classifyAnalysisPlan,analysisStatusKey,ANALYSIS_KINDS,buildReapproveRequest,reapproveOutcome} from "../analysis-core.js";
 
@@ -24,8 +24,8 @@ export async function submitAnalysisStep(ctx,missionId){
   if(analysisUi.missionId!==missionId)resetAnalysis(missionId);
   delete drafts.status[ANALYSIS_REAPPROVE_FORM]; // yeni adım: eski yeniden-onay durumu bayatlar
   drafts.busy[ANALYSIS_STEP_FORM]=true;
-  await ctx.rerender(); // //TR: kilit görünür olsun: diğer düğmeler istek sürerken (cevap beklenmeden) kapanır
-  let res;try{res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[ANALYSIS_STEP_FORM]=false}
+  // //TR: kilit görünür olsun (diğer düğmeler istek sürerken kapanır); yeniden çizim reddedilirse de kilit BIRAKILIR (try/finally içinde); düğme kapandığı için odak not bloğuna alınır.
+  let res;try{await ctx.rerender();settle(ctx,["id:analysis-in-flight"]);res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[ANALYSIS_STEP_FORM]=false}
   if(analysisUi.missionId!==missionId){await ctx.rerender();return {ok:false,stale:true,status:res?.status??null}} // //TR: istek sürerken başka mission seçildi: gelen cevap o mission'ın durumuna yazılmaz
   const c=classifyAnalysisStep(res),k=analysisStatusKey(c,res,"step");
   // Bir denetim başarısız olursa eski sonuç gösterilmez (bayat "tamam" kalmasın): Plan oluştur kapısı da kapanır.
@@ -41,8 +41,8 @@ export async function submitReapprove(ctx,missionId){
   const req=buildReapproveRequest({missionId,step,evidenceText:analysisUi.evidence});
   if(!req.ok){setStatus(ANALYSIS_REAPPROVE_FORM,{ok:false,errors:req.errors});await ctx.rerender();focusResult(ctx,ANALYSIS_REAPPROVE_FORM,["id:analysis-reapprove-submit","id:analysis-reapprove-evidence"]);return {ok:false,validation:true}}
   drafts.busy[ANALYSIS_REAPPROVE_FORM]=true;
-  await ctx.rerender(); // //TR: kilit görünür olsun: diğer düğmeler istek sürerken (cevap beklenmeden) kapanır
-  let res;try{res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[ANALYSIS_REAPPROVE_FORM]=false}
+  // //TR: kilit görünür olsun (diğer düğmeler istek sürerken kapanır); yeniden çizim reddedilirse de kilit BIRAKILIR (try/finally içinde); düğme kapandığı için odak not bloğuna alınır.
+  let res;try{await ctx.rerender();settle(ctx,["id:analysis-in-flight"]);res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[ANALYSIS_REAPPROVE_FORM]=false}
   if(analysisUi.missionId!==missionId){await ctx.rerender();return {ok:false,stale:true,status:res?.status??null}} // //TR: istek sürerken başka mission seçildi: gelen cevap o mission'ın durumuna yazılmaz
   const o=reapproveOutcome(res,missionId);
   if(o.ok){analysisUi.step=null;analysisUi.evidence="";delete drafts.status[ANALYSIS_STEP_FORM]} // eski "engelli" durum satırı da kalkar // bayat "engelli" cevabı kalmaz; yeni bir adım çalıştırılana kadar hiçbir sonuç iddia edilmez
@@ -59,8 +59,8 @@ export async function submitAnalysisPlan(ctx,missionId){
   const req=buildAnalysisPlanRequest({missionId});
   if(!req.ok){setStatus(ANALYSIS_PLAN_FORM,{ok:false,errors:req.errors});await ctx.rerender();return {ok:false,validation:true}}
   drafts.busy[ANALYSIS_PLAN_FORM]=true;
-  await ctx.rerender(); // //TR: kilit görünür olsun: diğer düğmeler istek sürerken (cevap beklenmeden) kapanır
-  let res;try{res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[ANALYSIS_PLAN_FORM]=false}
+  // //TR: kilit görünür olsun (diğer düğmeler istek sürerken kapanır); yeniden çizim reddedilirse de kilit BIRAKILIR (try/finally içinde); düğme kapandığı için odak not bloğuna alınır.
+  let res;try{await ctx.rerender();settle(ctx,["id:analysis-in-flight"]);res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[ANALYSIS_PLAN_FORM]=false}
   if(analysisUi.missionId!==missionId){await ctx.rerender();return {ok:false,stale:true,status:res?.status??null}} // //TR: istek sürerken başka mission seçildi: gelen cevap o mission'ın durumuna yazılmaz
   const c=classifyAnalysisPlan(res),k=analysisStatusKey(c,res,"plan");
   if(c.kind==="PLAN")analysisUi.plan=c.plan;
@@ -145,7 +145,7 @@ export function analysisPanel(ctx,{missionId,exec}){
   return h(doc,"div",{class:"analysis-step",id:"analysis-step",role:"region","aria-label":ctx.t("analysis.title"),dataset:{analysisMission:missionId}},
     h(doc,"h3",{text:ctx.t("analysis.title")}),
     h(doc,"p",{class:"note",text:ctx.t("analysis.lead")}),
-    busyAny?h(doc,"p",{class:"note",role:"status",dataset:{analysisBusy:"1"},text:ctx.t("analysis.inFlight")}):null,
+    busyAny?h(doc,"p",{class:"note",id:"analysis-in-flight",tabindex:"-1",role:"status",dataset:{analysisBusy:"1",focusKey:"analysis-in-flight"},text:ctx.t("analysis.inFlight")}):null,
     h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn btn-primary",id:"analysis-step-submit",dataset:{focusKey:"analysis-step-submit"},disabled:busyS,text:ctx.t("analysis.step.button"),
       on:{click:()=>{if(!analysisBusy())submitAnalysisStep(ctx,missionId)}}})),
     step?stepBlock(ctx,step,exec,missionId):h(doc,"p",{class:"note",dataset:{analysisStatus:"NONE"},text:ctx.t("analysis.none")}),
