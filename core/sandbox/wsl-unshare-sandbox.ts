@@ -41,6 +41,7 @@ export interface WslSandboxOptions {
   /** Zaman aşımı sondasında "geç" işaretinin görünmesi için beklenen süre (ms); testlerde 0. */
   /** Dev-run çocuğu ve köprü bağlantıları için wsl.exe başlatıcısı (testlerde sahte). stdio: run için [ignore,pipe,pipe], röle için [pipe,pipe,ignore]. */ spawner?: (args: string[], stdio: cp.StdioOptions) => cp.ChildProcess;
   /** Dev-run en uzun ömrü (ms; varsayılan 6 saat): timeout(SIGKILL) ile sınırlanır. */ devMaxMs?: number; maxBridgeConnections?: number; bridgeIdleMs?: number; bridgeTargetWaitMs?: number;
+  /** Sandbox'a salt-okunur bağlanacak ek mutlak dizinler (ör. /opt altındaki node kurulumu); /mnt ve kök yasak. Varsayılan boş: yalnız /usr,/bin,/lib* görünür. */ extraReadOnlyRoots?: string[];
   settleMs?: number; /** Koşu sonrası /work için kb üst sınırı (aşılırsa koşu BAŞARISIZ sayılır ve not düşülür). */ maxWorkKb?: number;
 }
 
@@ -268,6 +269,7 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
     return this.runner(["-d", d ?? "", "--exec", ...args], {timeoutMs, input, shouldAbort});
   }
   private newRoot = "/srv";
+  private extraRoots(): string[] { return (this.o.extraReadOnlyRoots ?? []).filter(r => /^\/[A-Za-z0-9_.\/-]{1,200}$/.test(r) && r !== "/" && !r.startsWith("/mnt") && !r.includes("..") && !r.includes(":")).map(r => r.replace(/\/+$/, "")); }
   private nodePath: string | null = null;
   /** ISOLATED: sandbox kendi ağ ad alanındadır; dev-run ürünü yalnız bridge() ile erişilebilir. */
   readonly network = "ISOLATED" as const;
@@ -322,7 +324,7 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
     const secs = Math.max(1, Math.ceil(timeoutMs / 1000)), cpu = secs + 5;
     const nproc = nprocOverride ?? Math.max(16, Math.floor(this.o.maxProcesses ?? 4096));
     const chain = ["/usr/bin/timeout", "--signal=KILL", "--kill-after=3", String(secs), "/usr/bin/unshare", ...iso.nsFlags.map(shq), "/bin/sh", shq(`${S}/ctl/setup.sh`),
-      shq(`${S}/work`), String(cpu), String(this.o.addressSpaceKb ?? 16 * 1024 * 1024), String(this.o.maxFileBlocks ?? 2 * 1024 * 1024), shq(this.newRoot), "''", String(nproc), ...["/usr/bin/perl", "-e", SECCOMP_PL, "--", ...command].map(shq)];
+      shq(`${S}/work`), String(cpu), String(this.o.addressSpaceKb ?? 16 * 1024 * 1024), String(this.o.maxFileBlocks ?? 2 * 1024 * 1024), shq(this.newRoot), shq(this.extraRoots().join(":")), String(nproc), ...["/usr/bin/perl", "-e", SECCOMP_PL, "--", ...command].map(shq)];
     const line = ["/usr/bin/env", "-i", shq(`PATH=${LINUX_PATH}`), ...env.map(shq), "/bin/sh", "-c", shq('echo $$ > "$1"; shift; exec "$@"'), "sh", shq(`${S}/ctl/pid`), ...chain].join(" ");
     const runSh = `#!/bin/sh\n${line}\nrc=$?\necho "$rc" > ${shq(`${S}/ctl/rc`)}\nexit "$rc"\n`;
     return (await this.put(S, "setup.sh", iso.setup.endsWith("\n") ? iso.setup : iso.setup + "\n")) && (await this.put(S, "run.sh", runSh)) && (await this.put(S, "kill.sh", killScript(S))) ? "OK" : "STAGE_FAILED";
@@ -343,8 +345,9 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
     if (!(peRc === "126" && noexec)) return peRc === "126" || peRc === "127" ? "INTEROP_PROBE_INCONCLUSIVE" : "INTEROP_ENABLED";
     if (!/^TOOLS=ok$/m.test(o)) return "WSL_TOOLS_MISSING";
     // Linux tarafı `node` MUTLAK ve /mnt dışında olmalı (Windows node.exe asla; dev-run röle betiği bu yolla çalışır).
+    // ... ve sandbox'ın GÖRDÜĞÜ ağaçta olmalı (/usr,/bin,/sbin veya extraReadOnlyRoots); aksi halde komut sandbox içinde bulunamaz.
     const nm = /^NODE=(\/[A-Za-z0-9_.\/+-]{1,200})$/m.exec(o);
-    if (!nm || nm[1].startsWith("/mnt/")) return "WSL_TOOLS_MISSING";
+    if (!nm || nm[1].startsWith("/mnt/") || !(/^\/(usr|bin|sbin)\//.test(nm[1]) || this.extraRoots().some(r => nm[1].startsWith(r + "/")))) return "WSL_TOOLS_MISSING";
     this.nodePath = nm[1];
     return null;
   }

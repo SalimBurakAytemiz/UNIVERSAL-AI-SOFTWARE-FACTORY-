@@ -1088,7 +1088,8 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
     it.skipIf(!canReal)("REAL probes on Linux (needs the Linux provider's isolation exports; skipped when absent): unmodified isolation passes selfTest as a non-root exec user; a root exec user fails closed (process limit); each weakened control fails with its PROBE_<KEY>", async ctx => {
       const mod = await import("../core/sandbox/wsl-unshare-sandbox.js"); const iso = await lin();
       if (!iso) return ctx.skip();
-      const make = (isolation: any, asRoot = false) => new mod.WslUnshareSandboxProvider({platform: "win32", distro: "Ubuntu", runner: localWsl({}, asRoot) as any, isolation});
+      const nodeRoot = path.dirname(path.dirname(fs.realpathSync(process.execPath)));
+      const make = (isolation: any, asRoot = false) => new mod.WslUnshareSandboxProvider({platform: "win32", distro: "Ubuntu", runner: localWsl({PATH: `${nodeRoot}/bin:${LIN_PATH}`}, asRoot) as any, isolation, extraReadOnlyRoots: /^\/(usr|bin|sbin)\//.test(process.execPath) ? [] : [nodeRoot]});
       // zayıflatılmış izolasyonlar (hızlı başarısız olur)
       const weak = async (label: string, mut: (i: NonNullable<typeof iso>) => NonNullable<typeof iso>, accept: string[]) => { const w = await make(mut(iso)).selfTest(); expect(w.ok, label).toBe(false); expect(accept, `${label}: ${JSON.stringify(w)}`).toContain(w.detail); };
       await weak("caps kept", i => ({...i, setup: i.setup.replaceAll("--bounding-set=-all --inh-caps=-all", "")}), ["PROBE_CAPS_DROPPED"]);
@@ -1099,8 +1100,8 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
       if (dropUid === undefined && process.getuid?.() === 0) return;
       const good = make(iso); const r = await good.selfTest(); expect(r, JSON.stringify(r)).toEqual({ok: true});
       // gerçek koşu: vsock sandbox içinde de engelli, rc geri okunur, temizlik sonrası kalıntı yok
-      const dir = ws(); fs.writeFileSync(path.join(dir, "v.js"), "const {spawnSync}=require('child_process');console.log('rc-ok')");
-      try { const run = await good.run(["node", "v.js"], {cwd: dir, env: {}, timeoutMs: 30_000}); expect(run, JSON.stringify(run)).toMatchObject({exitCode: 0, timedOut: false}); expect(run.stdout).toContain("rc-ok"); } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+      const dir = ws(); fs.writeFileSync(path.join(dir, "v.js"), "console.log('rc-ok')");
+      try { const run = await good.run(["sh", "-c", "echo rc-ok"], {cwd: dir, env: {}, timeoutMs: 30_000}); expect(run, JSON.stringify(run)).toMatchObject({exitCode: 0, timedOut: false}); expect(run.stdout).toContain("rc-ok"); } finally { fs.rmSync(dir, {recursive: true, force: true}); }
     }, 180_000);
   });
 
