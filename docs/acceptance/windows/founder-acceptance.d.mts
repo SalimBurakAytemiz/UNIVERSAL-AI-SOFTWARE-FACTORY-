@@ -14,3 +14,4 @@ export function renderTable(report: any): string;
 export function runAcceptance(o: any, deps: any): Promise<any>;
 export function sha256File(f: string): string | null;
 export function parseArgs(argv: string[], env?: NodeJS.ProcessEnv): any;
+export const INTEROP_SCRIPT: string;

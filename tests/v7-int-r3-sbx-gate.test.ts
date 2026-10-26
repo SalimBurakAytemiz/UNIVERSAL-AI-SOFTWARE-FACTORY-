@@ -1201,15 +1201,20 @@ describe("LANE-B Windows acceptance kit (injected fakes)", () => {
   const GOOD_CONF = "[interop]\nenabled=false\nappendWindowsPath=false\n";
   type W = {code: number | null; stdout: Buffer};
   const mkDeps = (o: Record<string, any> = {}) => {
-    const calls: string[][] = [];
-    const wsl = async (args: string[]): Promise<W> => {
-      calls.push(args);
+    const calls: string[][] = []; const inputs: string[] = [];
+    const wsl = async (args: string[], input?: string): Promise<W> => {
+      calls.push(args); if (args.join(" ") === "-d Ubuntu --exec /bin/sh -s") inputs.push(String(input));
       const j = args.join(" ");
       if (j === "--status") return {code: o.status ?? 0, stdout: Buffer.from("ok")};
       if (j === "-l -q") return {code: 0, stdout: u16(o.distros ?? "Ubuntu\r\n")};
       if (j === "-l -v") return {code: 0, stdout: u16(o.verbose ?? "  NAME STATE VERSION\r\n* Ubuntu Running 2\r\n")};
       if (j.endsWith("/bin/cat /etc/wsl.conf")) return o.conf === null ? {code: 1, stdout: Buffer.alloc(0)} : {code: 0, stdout: Buffer.from(o.conf ?? GOOD_CONF)};
-      if (j.endsWith("/bin/cat /proc/sys/fs/binfmt_misc/WSLInterop")) return o.interopRt === "enabled" ? {code: 0, stdout: Buffer.from("enabled\ninterpreter /init\n")} : {code: 1, stdout: Buffer.alloc(0)};
+      if (j === "-d Ubuntu --exec /bin/sh -s") {
+        const rt = o.interopRt ?? "off", st = (n: string) => rt === "enabled" && n === "WSLInterop" || rt === "late" && n === "WSLInterop-late" ? "enabled" : rt === "disabled" ? "disabled" : "absent";
+        if (rt === "error") return {code: 1, stdout: Buffer.alloc(0)};
+        if (rt === "garbage") return {code: 0, stdout: Buffer.from("DONE=1\n")};
+        return {code: 0, stdout: Buffer.from(`WSLInterop=${st("WSLInterop")}\nWSLInterop-late=${st("WSLInterop-late")}\nDONE=1\n`)};
+      }
       if (j.endsWith("/usr/bin/env node --version")) return o.node === null ? {code: 127, stdout: Buffer.alloc(0)} : {code: 0, stdout: Buffer.from("v24.1.0\n")};
       return {code: 1, stdout: Buffer.alloc(0)};
     };
@@ -1220,7 +1225,7 @@ describe("LANE-B Windows acceptance kit (injected fakes)", () => {
       detectClaudeCli: o.cli === null ? null : () => o.cli ?? {state: "FOUND", path: "C:\\Users\\f\\.local\\bin\\claude.exe"},
       claudeProfileStatus: o.noProfiles ? null : (_r: string, role: string) => prof(o.profiles?.[role] ?? "READY"),
       runVitest: async () => { vitestRuns++; return o.vitest ?? vitestOk(); }};
-    return {deps, calls, runs: () => vitestRuns};
+    return {deps, calls, inputs, runs: () => vitestRuns};
   };
   const vitestOk = (st: Record<string, string> = {}) => ({testResults: [{assertionResults: [
     {fullName: "x REAL WSL (win32 + UASCO_WSL_DISTRO): selfTest passes its negative probes and a node test runs inside the sandbox (SKIPPED elsewhere)", status: st.a ?? "passed", failureMessages: []},
@@ -1241,12 +1246,25 @@ describe("LANE-B Windows acceptance kit (injected fakes)", () => {
   });
 
   it("all good on Windows: every check PASS, ACCEPTED, bound to the git SHA, evidence hash is reproducible, and only READ-ONLY wsl commands were issued", async () => {
-    const k = await load(); const {deps, calls, runs} = mkDeps();
+    const k = await load(); const {deps, calls, inputs, runs} = mkDeps();
     const r = await k.runAcceptance({distro: "Ubuntu"}, deps);
     expect(r.verdict).toBe("ACCEPTED"); expect(r.fail).toBe(0); expect(r.skip).toBe(0); expect(r.pass).toBe(r.checks.length); expect(r.repo).toEqual({headSha: "a".repeat(40), shaSource: "GIT", dirty: false}); expect(runs()).toBe(1);
     const {evidenceSha256, ...body} = r; expect(evidenceSha256).toBe(crypto.createHash("sha256").update(JSON.stringify(body)).digest("hex"));
-    const allowed = [/^--status$/, /^-l -q$/, /^-l -v$/, /^-d Ubuntu --exec \/bin\/cat \/etc\/wsl\.conf$/, /^-d Ubuntu --exec \/bin\/cat \/proc\/sys\/fs\/binfmt_misc\/WSLInterop$/, /^-d Ubuntu --exec \/usr\/bin\/env node --version$/];
+    const allowed = [/^--status$/, /^-l -q$/, /^-l -v$/, /^-d Ubuntu --exec \/bin\/cat \/etc\/wsl\.conf$/, /^-d Ubuntu --exec \/bin\/sh -s$/, /^-d Ubuntu --exec \/usr\/bin\/env node --version$/];
     for (const c of calls) expect(allowed.some(a => a.test(c.join(" "))), c.join(" ")).toBe(true);
+    expect(inputs).toEqual([k.INTEROP_SCRIPT]);
+  });
+
+  it.skipIf(process.platform !== "linux")("C-4: INTEROP_SCRIPT (real sh, binfmt dir redirected) reports absent/disabled/enabled for WSLInterop and WSLInterop-late separately", async () => {
+    const k = await load(); const d = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-bm-"));
+    try {
+      const run = () => cp.spawnSync("/bin/sh", ["-s"], {input: k.INTEROP_SCRIPT.replaceAll("/proc/sys/fs/binfmt_misc", d), encoding: "utf8"}).stdout;
+      expect(run()).toBe("WSLInterop=absent\nWSLInterop-late=absent\nDONE=1\n");
+      fs.writeFileSync(path.join(d, "WSLInterop"), "disabled\n"); fs.writeFileSync(path.join(d, "WSLInterop-late"), "enabled\ninterpreter /init\n");
+      expect(run()).toBe("WSLInterop=disabled\nWSLInterop-late=enabled\nDONE=1\n");
+      fs.writeFileSync(path.join(d, "WSLInterop"), "enabled\n"); fs.writeFileSync(path.join(d, "WSLInterop-late"), "disabled\n");
+      expect(run()).toBe("WSLInterop=enabled\nWSLInterop-late=disabled\nDONE=1\n");
+    } finally { fs.rmSync(d, {recursive: true, force: true}); }
   });
 
   it("each failed precondition is FAIL with the exact Founder fix command; the report never changes settings", async () => {
@@ -1258,6 +1276,10 @@ describe("LANE-B Windows acceptance kit (injected fakes)", () => {
     const cf = await run({conf: "[interop]\nenabled=true\n"}); expect(cf.WSL_CONF.status).toBe("FAIL"); expect(cf.WSL_CONF.detail).toContain("interop.enabled"); expect(cf.WSL_CONF.detail).toContain("appendWindowsPath"); expect(cf.WSL_CONF.fix).toContain("enabled=false"); expect(cf.WSL_CONF.fix).toContain("appendWindowsPath=false"); expect(cf.WSL_CONF.fix).toContain("wsl --shutdown");
     expect((await run({conf: null})).WSL_CONF.status).toBe("FAIL");
     expect((await run({interopRt: "enabled"})).WSL_INTEROP_RUNTIME).toMatchObject({status: "FAIL"});
+    // C-4: yalnız AÇIK absent/disabled kanıtı PASS; -late kaydı, wsl hatası ve eksik satırlar FAIL
+    expect((await run({interopRt: "late"})).WSL_INTEROP_RUNTIME).toMatchObject({status: "FAIL", detail: expect.stringContaining("WSLInterop-late=enabled")});
+    expect((await run({interopRt: "error"})).WSL_INTEROP_RUNTIME.status).toBe("FAIL"); expect((await run({interopRt: "garbage"})).WSL_INTEROP_RUNTIME).toMatchObject({status: "FAIL", detail: expect.stringContaining("missing")});
+    expect((await run({interopRt: "disabled"})).WSL_INTEROP_RUNTIME).toMatchObject({status: "PASS"}); expect((await run({})).WSL_INTEROP_RUNTIME).toMatchObject({status: "PASS", detail: "WSLInterop=absent; WSLInterop-late=absent"});
     expect((await run({node: null})).WSL_NODE).toMatchObject({status: "FAIL", fix: expect.stringContaining("apt-get install")});
     expect((await run({cli: {state: "SHIM_UNSUPPORTED", path: "C:\\npm\\claude.cmd", founderAction: "Install the native Claude Code (claude.exe)"}})).CLAUDE_CLI).toMatchObject({status: "FAIL", fix: "Install the native Claude Code (claude.exe)"});
     expect((await run({cli: {state: "NOT_FOUND", path: null, founderAction: null}})).CLAUDE_CLI.fix).toContain("claude.ai/install.ps1");

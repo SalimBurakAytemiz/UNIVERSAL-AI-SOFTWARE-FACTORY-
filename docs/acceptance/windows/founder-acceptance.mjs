@@ -49,6 +49,13 @@ export function parseWslConf(text) {
   }
   return {interopEnabled: interop ?? true, appendWindowsPath: append ?? true, interopExplicit: interop !== null, appendExplicit: append !== null};
 }
+/** C-4: /proc/sys/fs/binfmt_misc/WSLInterop ve WSLInterop-late durumu (absent | disabled | enabled); betik wsl.exe argv'sine konmaz, stdin ile verilir. */
+export const INTEROP_SCRIPT = [
+  "for n in WSLInterop WSLInterop-late; do",
+  '  f="/proc/sys/fs/binfmt_misc/$n"',
+  '  if [ ! -e "$f" ]; then echo "$n=absent"; else v=$(head -n 1 "$f" 2>/dev/null); if [ "$v" = disabled ]; then echo "$n=disabled"; else echo "$n=enabled"; fi; fi',
+  "done", "echo DONE=1", ""
+].join("\n");
 export const wslConfFixCommands = distro => [
   `wsl -d ${distro} -u root -- nano /etc/wsl.conf   (add these lines, then save)`,
   "    [interop]", "    enabled=false", "    appendWindowsPath=false",
@@ -84,9 +91,12 @@ export async function preflight(distro, deps) {
         const bad = [c.interopEnabled ? "interop.enabled is not false" : null, c.appendWindowsPath ? "interop.appendWindowsPath is not false" : null].filter(Boolean);
         out.push(bad.length ? status("WSL_CONF", "/etc/wsl.conf: interop=false, appendWindowsPath=false", FAIL, bad.join("; "), wslConfFixCommands(distro)) : status("WSL_CONF", "/etc/wsl.conf: interop=false, appendWindowsPath=false", PASS, "both false"));
       }
-      const bm = await deps.wsl(["-d", distro, "--exec", "/bin/cat", "/proc/sys/fs/binfmt_misc/WSLInterop"]);
-      const bmText = decodeWslText(bm.stdout).trim().split(/\r?\n/)[0] ?? "";
-      out.push(bm.code !== 0 || bmText === "disabled" ? status("WSL_INTEROP_RUNTIME", "Interop is off at runtime", PASS, bm.code !== 0 ? "WSLInterop handler not registered" : "WSLInterop disabled") : status("WSL_INTEROP_RUNTIME", "Interop is off at runtime", FAIL, "WSLInterop handler is ACTIVE", wslConfFixCommands(distro)));
+      // C-4: PASS yalnız AÇIK bir "kayıtlı değil / disabled" kanıtıyla: tek sh betiği (stdin) WSLInterop ve WSLInterop-late'i ayrı ayrı raporlar; wsl hatası, eksik satır veya bilinmeyen değer = FAIL.
+      const bm = await deps.wsl(["-d", distro, "--exec", "/bin/sh", "-s"], INTEROP_SCRIPT);
+      const kv = new Map(decodeWslText(bm.stdout).split(/\r?\n/).map(l => l.trim()).filter(l => l.includes("=")).map(l => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]));
+      const states = ["WSLInterop", "WSLInterop-late"].map(n => `${n}=${kv.get(n) ?? "missing"}`);
+      const offOk = bm.code === 0 && kv.get("DONE") === "1" && ["WSLInterop", "WSLInterop-late"].every(n => kv.get(n) === "absent" || kv.get(n) === "disabled");
+      out.push(offOk ? status("WSL_INTEROP_RUNTIME", "Interop is off at runtime", PASS, states.join("; ")) : status("WSL_INTEROP_RUNTIME", "Interop is off at runtime", FAIL, bm.code === 0 ? states.join("; ") : `check failed (exit ${bm.code})`, wslConfFixCommands(distro)));
       const nodeV = await deps.wsl(["-d", distro, "--exec", "/usr/bin/env", "node", "--version"]);
       const nv = decodeWslText(nodeV.stdout).trim();
       out.push(nodeV.code === 0 && /^v\d+\./.test(nv) ? status("WSL_NODE", "Linux node inside the distro", PASS, nv) : status("WSL_NODE", "Linux node inside the distro", FAIL, "node not found inside the distro (with appendWindowsPath=false Windows node is not visible)", `wsl -d ${distro} -u root -- sh -c "apt-get update && apt-get install -y nodejs util-linux coreutils procps findutils bash tar"`));
@@ -161,7 +171,7 @@ function realDeps(opts) {
   const wslExe = process.platform === "win32" ? "wsl.exe" : "wsl";
   return {
     platform: process.platform, controlRoot: opts.controlRoot,
-    wsl: args => new Promise(res => { const c = cp.spawn(wslExe, args, {shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], env: {...process.env, WSL_UTF8: "1"}}); const o = []; c.stdout.on("data", d => o.push(d)); c.on("error", () => res({code: null, stdout: Buffer.alloc(0)})); c.on("close", code => res({code, stdout: Buffer.concat(o)})); setTimeout(() => { try { c.kill(); } catch { /* çıkmış */ } }, 60_000).unref(); }),
+    wsl: (args, input) => new Promise(res => { const c = cp.spawn(wslExe, args, {shell: false, windowsHide: true, stdio: ["pipe", "pipe", "pipe"], env: {...process.env, WSL_UTF8: "1"}}); const o = []; c.stdout.on("data", d => o.push(d)); c.stdin.on("error", () => undefined); c.stdin.end(input ?? ""); c.on("error", () => res({code: null, stdout: Buffer.alloc(0)})); c.on("close", code => res({code, stdout: Buffer.concat(o)})); setTimeout(() => { try { c.kill(); } catch { /* çıkmış */ } }, 60_000).unref(); }),
     git: () => {
       const r = cp.spawnSync("git", ["rev-parse", "HEAD"], {cwd: repo, encoding: "utf8", windowsHide: true}), s = cp.spawnSync("git", ["status", "--porcelain"], {cwd: repo, encoding: "utf8", windowsHide: true});
       return {headSha: r.status === 0 && /^[0-9a-f]{40}$/.test(r.stdout.trim()) ? r.stdout.trim() : null, dirty: s.status === 0 ? s.stdout.trim().length > 0 : null};
