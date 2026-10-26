@@ -88,7 +88,7 @@ export const stopWithin = async (p: Promise<unknown>, ms = 15_000): Promise<"OK"
   let t: NodeJS.Timeout | undefined;
   try { return await Promise.race([p.then(() => "OK" as const), new Promise<"STOP_HUNG">(r => { t = setTimeout(() => r("STOP_HUNG"), ms); })]); } finally { clearTimeout(t); }
 };
-// //TR: #224 tur 3 (Windows HB-1 onarımı): lease testlerinde olay döngüsü gecikmesini ÖLÇER (50 ms'lik bir zamanlayıcının en büyük sapması) ve harcanan CPU süresini (process.cpuUsage) kaydeder. Başarısızlık iletisine eklenir. Yorum kuralı: TTL'yi aşan bir gecikme, aksi KANITLANMADIKÇA bir gerilemedir (span'a sarılmamış senkron iş ya da engellenen döngü); "marj" ancak ölçüm bunu gösterirse (ör. cpuMs duvar süresinin çok altında = süreç CPU alamadı) söylenebilir. Gecikme TTL'nin altında olduğu hâlde bir run fence edildiyse sorun gerçek bir lease boşluğudur.
+// //TR: #224 tur 3 (Windows HB-1 onarımı): lease testlerinde olay döngüsü gecikmesini ÖLÇER (50 ms'lik bir zamanlayıcının en büyük sapması) ve harcanan CPU süresini (process.cpuUsage) kaydeder. Başarısızlık iletisine eklenir. Yorum kuralı: TTL'yi aşan bir gecikme, aksi KANITLANMADIKÇA bir gerilemedir. Bu testlerin koruduğu gerileme, olay döngüsünü bloklayan senkron bekleme/iştir: böyle bir bekleme CPU'yu YAKAR ya da bloklar ve duvar süresi boyunca döngü akmaz, yani cpuMs duvar süresine yakındır (senkron iş) ya da döngü tamamen durur; bu bir "marj" değildir. Süreç CPU'dan yoksun kaldıysa cpuMs duvar süresinin çok altındadır ve bu AYRICA gösterilmelidir; tek başına sorunu "marj" yapmaz. Gecikme TTL'nin altında olduğu hâlde bir run fence edildiyse sorun gerçek bir lease boşluğudur.
 export const stallProbe = (tickMs = 50) => {
   let last = performance.now(), max = 0;
   const t0 = performance.now(), cpu0 = process.cpuUsage();
@@ -100,12 +100,20 @@ export const stallProbe = (tickMs = 50) => {
     stop: () => clearInterval(t)
   };
 };
-// //TR: #224 tur 3 (coordinator delta review): stop() sonucu `finally` içinde YUTULMAZ. Gövde çalışır, sonra (her durumda) sınırlı stop yapılır ve sonucu gövde BİTTİKTEN SONRA doğrulanır: asılı bir stop() testi geçirmez (STOP_HUNG). Gövde fırlatırsa asıl hata korunur (stop yine de denenir). `cleanup` stop'tan önce çalışır.
+// //TR: #224 tur 3 (coordinator delta review, 2 tur): stop() sonucu `finally` içinde YUTULMAZ. Gövde çalışır, sonra (her durumda) cleanup ve sınırlı stop yapılır; gövde hatası BİRİNCİL kalır ve aynı anda oluşan diğer sorunlar (cleanup fırlattı, stop() reddedildi, stop() asıldı) onun iletisine EKLENİR; gövde başarılıysa bu sorunların kendisi başarısızlıktır. Böylece asılı/reddedilen bir stop() testi geçirmez ve gövdenin gerçek hatasını da örtmez.
 export const withFinalStop = async (stop: () => Promise<unknown>, body: () => Promise<void> | void, cleanup?: () => void, stopMs = 15_000): Promise<void> => {
-  let failed = false, bodyError: unknown, st: "OK" | "STOP_HUNG" = "OK";
-  try { await body(); } catch (e) { failed = true; bodyError = e; } finally { cleanup?.(); st = await stopWithin(stop(), stopMs); }
-  if (failed) throw bodyError;
-  expect(st, "the final stop() never settled").toBe("OK");
+  const text = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0, 300);
+  let bodyFailed = false, bodyError: unknown;
+  const also: string[] = [];
+  try { await body(); } catch (e) { bodyFailed = true; bodyError = e; }
+  try { cleanup?.(); } catch (e) { also.push(`cleanup threw: ${text(e)}`); }
+  try { if (await stopWithin(stop(), stopMs) === "STOP_HUNG") also.push("the final stop() never settled"); } catch (e) { also.push(`the final stop() rejected: ${text(e)}`); }
+  if (bodyFailed) {
+    if (also.length === 0) throw bodyError;
+    if (bodyError instanceof Error) { bodyError.message = `${bodyError.message} | ALSO: ${also.join("; ")}`; throw bodyError; }
+    throw new Error(`${String(bodyError)} | ALSO: ${also.join("; ")}`, {cause: bodyError});
+  }
+  if (also.length > 0) throw new Error(also.join("; "));
 };
 export const procAlive = (pid: number) => { try { process.kill(pid, 0); } catch { return false; } return !(process.platform === "linux" && (() => { try { const st = fs.readFileSync(`/proc/${pid}/stat`, "utf8"); return ["Z", "X"].includes(st.slice(st.lastIndexOf(")") + 2, st.lastIndexOf(")") + 3)); } catch { return true; } })()); };
 // //TR: Linux'ta `root`un tüm (zombi olmayan) torunları (/proc ppid zinciri); izleme dışı kalan öksüzleri (ppid 1'e geçmiş) bulmaz: çağıran, soy ağacını öldürmeden ÖNCE ölçmelidir.

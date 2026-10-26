@@ -718,7 +718,7 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
     expect(n, "polling continued after a normal finish").toBe(seen);
   });
 
-  it("GA-MAXBUF-1 (#224 round 3 review): output over the 64 MiB cap is a FAILURE (status null), never a truncated status 0 (a diff sized to the cap must not slip past the secret scan); exactly the cap is fine; the cap counts RAW bytes (non-UTF-8 output is not counted three times)", { timeout: 180_000 }, async () => {
+  it("GA-MAXBUF-1 (#224 round 3 review): output over the 64 MiB cap is a FAILURE (status null), never a truncated status 0 (a diff sized to the cap must not slip past the secret scan); exactly the cap is fine; the cap counts RAW bytes (non-UTF-8 output is not counted three times)", { timeout: 120_000 }, async () => {
     const MAX = 64 * 1024 * 1024;
     const repo = path.join(tmp, "maxbuf-repo"); fs.mkdirSync(repo); git(repo, ["init", "-q", "-b", "main"]);
     const blob = (bytes: number, fill = 0x61) => { const f = path.join(tmp, `blob-${bytes}-${fill}.bin`); fs.writeFileSync(f, Buffer.alloc(bytes, fill)); return git(repo, ["hash-object", "-w", f]); };
@@ -748,8 +748,18 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
   });
 
   // //TR: #224 tur 3 (coordinator delta review): withFinalStop'un KENDİ sözleşmesi: asılı stop() testi geçirmez; gövde hatası korunur ama stop yine de denenir; cleanup stop'tan önce çalışır.
-  it("withFinalStop: a final stop() that never settles FAILS the test (STOP_HUNG is not swallowed); a body failure is reported as itself and the stop is still attempted; cleanup runs first", { timeout: 60_000 }, async () => {
-    await expect(withFinalStop(() => new Promise(() => undefined), async () => undefined, undefined, 200)).rejects.toThrow(/the final stop\(\) never settled/);
+  it("withFinalStop: a final stop() that never settles FAILS the test (STOP_HUNG is not swallowed); the body failure stays PRIMARY and every other problem (hung/rejected stop, throwing cleanup) is reported next to it; cleanup runs before the stop", { timeout: 60_000 }, async () => {
+    const hang = () => new Promise<void>(() => undefined);
+    await expect(withFinalStop(hang, async () => undefined, undefined, 200)).rejects.toThrow(/the final stop\(\) never settled/);
+    await expect(withFinalStop(async () => { throw new Error("stop blew up"); }, async () => undefined)).rejects.toThrow(/the final stop\(\) rejected: stop blew up/);
+    await expect(withFinalStop(async () => undefined, async () => undefined, () => { throw new Error("cleanup blew up"); })).rejects.toThrow(/cleanup threw: cleanup blew up/);
+    // the body error is primary; the others are appended, not substituted
+    const both = await withFinalStop(hang, async () => { throw new Error("the body failed"); }, undefined, 200).then(() => null, e => e as Error);
+    expect(both?.message).toMatch(/^the body failed \| ALSO: .*the final stop\(\) never settled/);
+    const rejected = await withFinalStop(async () => { throw new Error("stop blew up"); }, async () => { throw new Error("the body failed"); }, () => { throw new Error("cleanup blew up"); }).then(() => null, e => e as Error);
+    expect(rejected?.message).toMatch(/^the body failed \| ALSO: cleanup threw: cleanup blew up; the final stop\(\) rejected: stop blew up/);
+    const plain = await withFinalStop(async () => undefined, async () => { throw new Error("only the body"); }).then(() => null, e => e as Error);
+    expect(plain?.message, "no extra text when nothing else went wrong").toBe("only the body");
     const order: string[] = [];
     await expect(withFinalStop(async () => { order.push("stop"); }, async () => { order.push("body"); throw new Error("the body failed"); }, () => order.push("cleanup"))).rejects.toThrow("the body failed");
     expect(order).toEqual(["body", "cleanup", "stop"]);

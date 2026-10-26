@@ -322,8 +322,10 @@ describe("C-PAR-1 PAR-04: after an engine crash the implementer child must not k
 describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability", () => {
   const wg = () => import("../core/workos/writer-guard.js").catch(() => null);
   const TTL = 1500;
+  const engines: cp.ChildProcess[] = [];
   const spawnEngine = (dir: string, phase: "1" | "2", opts: Record<string, unknown> = {}, ttlOverride?: number) => {
     const child = cp.spawn(process.execPath, ["--import", "tsx", ENGINE, REPO, dir, phase, String(ttlOverride ?? TTL), String(ORPHAN_MS), JSON.stringify(opts)], {cwd: REPO, stdio: ["ignore", "pipe", "pipe"], windowsHide: true});
+    engines.push(child); // //TR: her motor izlenir; test sonunda canlı kalan HER motor öldürülür (hatalı/mutant bir yardımcı sürümü bir "hang" motorunu sızdıramaz)
     let out = "", err = "";
     child.stdout.on("data", d => { out += String(d); }); child.stderr.on("data", d => { err += String(d); });
     const t0 = Date.now();
@@ -334,7 +336,10 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
   const waitFor = waitUntil, groupAlive = groupLive;
   // //TR: Başarısız bir testin arkasında yetim implementer/torun grupları kalmasın (sızıntı sonraki testi ve Windows tmp temizliğini bozar).
   const leaked: number[] = [];
-  afterEach(() => { for (const g of leaked.splice(0)) { try { process.kill(-g, "SIGKILL"); } catch { /* bitmiş */ } } });
+  afterEach(() => {
+    for (const g of leaked.splice(0)) { try { process.kill(-g, "SIGKILL"); } catch { /* bitmiş */ } }
+    for (const c of engines.splice(0)) { if (c.exitCode === null && c.signalCode === null) { try { c.kill("SIGKILL"); } catch { /* bitmiş */ } } }
+  });
   // Faz 1'i başlatır, implementer çocuğu uyurken motoru öldürür (SIGKILL); {dir, runId, pgid, killedAt} döner.
   // //TR: #224 tur 3 (Windows onarımı, d77d1e4 + coordinator delta review): shard 2'de motor 1 `{"out":"","err":""}` ile, implementing.json yazılmadan sessizce çıktı. Başlatma koşul tabanlı sınırlı bir beklemedir; sonuç yarıştan sonra dosyanın varlığıyla YENİDEN denetlenir. Başarısızlık ASLA yeniden denenmez ("Gerçek bulguları retry ile gizleme": önceki sürümün temiz-dizin yeniden denemesi, tick'i BLOCK/RETRY/fence ile biten ve çıktısı olmayan her motoru gizliyordu). Faz 1 sessiz bitmez (tick raporu + run kaydı basar); başarısızlık iletisi motorun çıktısını, çıkış kodunu/sinyalini, canlı olup olmadığını, geçen süreyi, mağazadaki run kaydını (durum/adım/neden/lease/son kanıt) ve dizin listesini taşır; motor zaman aşımında hâlâ canlıysa ÖLDÜRÜLÜR ve hemen başarısız olunur (iki motor sızmaz).
   const listDir = (dir: string) => { try { return (fs.readdirSync(dir, {recursive: true}) as string[]).slice(0, 40); } catch (e) { return [`<unreadable: ${(e as Error).message}>`]; } };
@@ -352,7 +357,9 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
     if (e.exit() === null) { e.child.kill("SIGKILL"); await Promise.race([e.closed, sleep(10_000)]); } // canlı motor sızdırılmaz
     throw new Error(`${why}: ${diag} | after cleanup: ${JSON.stringify(e.exit())}`);
   };
-  const crashEngine = async (dir: string, opts: Record<string, unknown> = {}, startMs = 120_000) => {
+  // //TR: #224 tur 3 (coordinator delta review #2): park ETTİKTEN sonra motorun KENDİ çıkışı da denetlenir: (a) öldürmeden hemen önce motor hâlâ canlı olmalı (kendi kendine çöken bir motor "simüle edilmiş çökme" sayılmaz), (b) öldürmeden sonra çıkış sinyali SIGKILL olmalı, (c) sahip kaydı yazarı gerçekten adlandırmalı (görmezden gelinmez). `hooks` yalnız yardımcının KENDİ testleri içindir: deterministik "motor tam o anda çöker" ve "kayıt yok" durumları.
+  type CrashHooks = {beforeOwnerWait?: (ownerFile: string) => void; ownerWaitMs?: number; beforeKill?: (e: Engine) => Promise<void>; kill?: (e: Engine) => void};
+  const crashEngine = async (dir: string, opts: Record<string, unknown> = {}, startMs = 120_000, hooks: CrashHooks = {}) => {
     fs.mkdirSync(dir);
     const e1 = spawnEngine(dir, "1", opts), t0 = Date.now();
     const raced = await Promise.race([waitFor(() => fs.existsSync(path.join(dir, "implementing.json")), startMs), e1.closed.then(() => false)]);
@@ -362,12 +369,17 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
     const {runId} = JSON.parse(fs.readFileSync(path.join(dir, "state.json"), "utf8")) as {runId: string};
     const ownerFile = path.join(dir, "data", "runs", runId, "workspace.owner.json");
     let pgid = 0;
-    await waitFor(() => { try { const o = JSON.parse(fs.readFileSync(ownerFile, "utf8")); pgid = o.childPgid ?? 0; return o.childPgid != null && (process.platform === "linux" || o.childStart != null); } catch { return false; } }, 10_000);
+    hooks.beforeOwnerWait?.(ownerFile);
+    const ownerOk = await waitFor(() => { try { const o = JSON.parse(fs.readFileSync(ownerFile, "utf8")); pgid = o.childPgid ?? 0; return o.childPgid != null && (process.platform === "linux" || o.childStart != null); } catch { return false; } }, hooks.ownerWaitMs ?? 10_000);
+    if (!ownerOk) await failEngine(`the owner record never named the writer's process group${process.platform === "linux" ? "" : " and its start token"}`, dir, e1, t0);
     if (opts.grandchild) expect(await waitFor(() => fs.existsSync(path.join(dir, `${String(opts.grandchild)}.pid`)), 10_000)).toBe(true); // torun doğdu ve pid'ini yazdı
     const killedAt = Date.now();
     if (pgid > 1) leaked.push(pgid);
     const aliveBeforeKill = groupAlive(pgid), membersBeforeKill = (await wg())?.groupMembers?.(pgid)?.length ?? null;
-    e1.child.kill("SIGKILL"); await e1.closed;
+    await hooks.beforeKill?.(e1);
+    if (e1.exit() !== null) await failEngine("engine 1 exited on its own before the kill", dir, e1, t0);
+    (hooks.kill ?? ((e: Engine) => { e.child.kill("SIGKILL"); }))(e1); await e1.closed;
+    expect(e1.exit()?.signal, `engine 1 must end by the helper's SIGKILL, not on its own: ${engineDiag(dir, e1, t0)}`).toBe("SIGKILL");
     const aliveAfterKill = groupAlive(pgid);
     // //TR: Platform sözleşmesi: POSIX'te yazar kendi oturumundadır ve motor ölse de yaşar (yetim). Windows'ta libuv, ayrık (detached) olmayan çocukları motorun iş nesnesine (KILL_ON_JOB_CLOSE) koyar: motor ölünce yazar ağacı da ölür, yetim KALMAZ (CI kanıtı: writerAliveAfterKill=false). İkisi de burada doğrulanır; sözleşme değişirse test bunu söyler.
     expect(aliveAfterKill, WRITER_OUTLIVES_ENGINE ? "POSIX: the writer must outlive the crashed engine (own session)" : "win32: the writer dies with the engine (libuv job object)").toBe(WRITER_OUTLIVES_ENGINE);
@@ -405,6 +417,38 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
     expect(pid).toBeGreaterThan(0);
     expect(await waitFor(() => !procAlive(pid), 5000), "the hung engine process must be dead").toBe(true);
     } finally { if (hungPid > 0) { try { process.kill(hungPid, "SIGKILL"); } catch { /* zaten ölü */ } } } // yardımcı öldürmediyse (hatalı sürüm) test yine de motoru sızdırmaz
+  });
+
+  // //TR: #224 tur 3 (coordinator delta review #2, MEDIUM): park ettikten SONRA kendi kendine çöken bir motor (kod 3 + stderr) "simüle edilmiş çökme" sayılmamalı. Handshake: motor yalnız test <dir>/engine-exit-now dosyasını yazınca çıkar, yardımcı bunu öldürmeden hemen önce (beforeKill) yapar: zamanlamaya bağlı değildir.
+  it("HELPER: an engine that crashes on its own AFTER the writer parked (exit 3 + stderr) is a loud failure, never the simulated crash", { timeout: 120_000 }, async () => {
+    const dir = path.join(tmp, "helper-selfcrash");
+    const err = await crashEngine(dir, {exitOnFile: true}, 120_000, {beforeKill: async e => { fs.writeFileSync(path.join(dir, "engine-exit-now"), "1"); await waitFor(() => e.exit() !== null, 10_000); }}).then(() => null, e => e as Error);
+    try {
+      expect(err, "the helper must FAIL when engine 1 died on its own").not.toBeNull();
+      expect(err!.message).toMatch(/engine 1 exited on its own before the kill/);
+      expect(err!.message).toMatch(/"exit":\{"code":3,"signal":null/);
+      expect(err!.message).toContain("injected engine-1 crash after the writer parked");
+    } finally { fs.writeFileSync(path.join(dir, "release"), "1"); } // the orphan writer ends at once
+  });
+
+  it.skipIf(process.platform === "win32")("HELPER: an engine that is not ended by the helper's SIGKILL (the helper's kill was SIGTERM here) fails the exit-signal check", { timeout: 120_000 }, async () => {
+    const dir = path.join(tmp, "helper-signal");
+    const err = await crashEngine(dir, {}, 120_000, {kill: e => { e.child.kill("SIGTERM"); }}).then(() => null, e => e as Error);
+    try {
+      expect(err, "the helper must FAIL when the engine did not die of SIGKILL").not.toBeNull();
+      expect(err!.message).toMatch(/engine 1 must end by the helper's SIGKILL/);
+      expect(err!.message).toMatch(/"signal":"SIGTERM"/);
+    } finally { fs.writeFileSync(path.join(dir, "release"), "1"); }
+  });
+
+  it("HELPER: a missing owner record (the writer was never recorded) is a loud failure naming the record, not an ignored wait", { timeout: 120_000 }, async () => {
+    const dir = path.join(tmp, "helper-norecord");
+    const err = await crashEngine(dir, {}, 120_000, {ownerWaitMs: 400, beforeOwnerWait: f => fs.writeFileSync(f, "not json")}).then(() => null, e => e as Error);
+    try {
+      expect(err, "the helper must FAIL when the owner record never names the writer").not.toBeNull();
+      expect(err!.message).toMatch(/the owner record never named the writer's process group/);
+      expect(err!.message).toMatch(/"alive":true/);
+    } finally { fs.writeFileSync(path.join(dir, "release"), "1"); }
   });
 
   it("PAR04-GSTOP-NO-REAP: a GLOBAL_STOP that is active at takeover still stops the crashed engine's writer BEFORE the run is cancelled", { timeout: 180_000 }, async () => {
