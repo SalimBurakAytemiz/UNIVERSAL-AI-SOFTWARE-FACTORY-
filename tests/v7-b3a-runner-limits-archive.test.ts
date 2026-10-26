@@ -77,7 +77,7 @@ const kinds = (r: WorkRun) => r.evidence.map(e => e.kind);
 
 describe("LANE-C bound role TaskLimits are enforced by the runner (never loosened, role-less runs unchanged)", () => {
   const roleRun = (c: Ctx, fake: FakeExecutors, roleId: string | null) => { const p = fake.pair(); return c.store.createRun({tenantId: "tA", missionId: c.missionId, roleId, executor: {implementer: p.implementer.identity, reviewer: p.reviewer.identity}, createdBy: "FOUNDER_LOCAL"}); };
-  const manyFiles = (n: number, tag = "f") => Object.fromEntries(Array.from({length: n}, (_, i) => [`gen/${tag}-${i}.txt`, `${i}\n`]));
+  const manyFiles = (n: number, tag = "f") => Object.fromEntries(Array.from({length: n}, (_, i) => [`gen/${tag}-${i}.txt`, "x\n"]));
   const seenTimeouts = (fake: FakeExecutors, seen: number[]) => { const p = fake.pair(); return {...p, implementer: {...p.implementer, implement: (w: string, s: MissionSpec, ctx: {timeoutMs: number; shouldAbort?: () => boolean}) => { seen.push(ctx.timeoutMs); return p.implementer.implement(w, s, ctx); }}}; };
 
   it("effectiveLimits only tightens: lowest of run default and role limit; null limits change nothing", () => {
@@ -153,6 +153,7 @@ describe("LANE-C bound role TaskLimits are enforced by the runner (never loosene
       else {
         expect(run.status).toBe("BLOCKED");
         expect(run.reason).toBe("TASK_LIMIT_FILES_EXCEEDED:101>100");
+        expect(run.step).toBe("IMPLEMENT"); // blocked by the IMPLEMENT gate itself, not at the start of a later step
         expect(kinds(run)).toEqual(expect.arrayContaining(["IMPLEMENT", "AGENT_TRACE"]));
         expect(kinds(run)).not.toContain("VERIFY_TESTS");
         expect(fake.calls.review).toBe(0);
