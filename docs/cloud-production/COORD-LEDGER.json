@@ -522,13 +522,23 @@
       "ref": "wf_58637099-715 (2 lenses + 1 skeptic): all round-1 items FIXED; MEDIUM M3 invalidation pinned for technologies.json only (A12/A14 survive; READINESS_STATIC_RELS hand copy); LOWs: cached evidence verifier stale, symlink-following STATIC_DATA_DIRS, stale route contract doc, L4/eviction/now/regBefore untested",
       "policy": "TEP-1",
       "at": "2026-10-26T22:41:16.354Z"
+    },
+    {
+      "pr": 265,
+      "sha": "c7a33f8415bd8ec8f292262417ab7ed7c118e83b",
+      "kind": "full",
+      "base": null,
+      "verdict": "BLOCKERS_4MEDIUM_test_gaps",
+      "ref": "wf_65c8b156-ae0 (2 lenses + 4 skeptics, none refuted): floor test lets required tech/gapIds/reviewChain/canonical be cut (X5-X9, N16); registryStatus/knowledgeState unchecked (N13 877 fake VERIFIED, N26, N27); truncation records for optional tech/aliases unpinned; parity test cannot tell re-derivation from copy; ~9 LOW",
+      "policy": "TEP-1",
+      "at": "2026-10-26T22:42:39.042Z"
     }
   ],
   "tests": [],
   "fingerprint": {
-    "value": "5ff111cfe6e2ab1926fcbee0112fdc0268c49462ef0b86e7111ba288a584352e",
-    "at": "2026-10-26T21:42:13.120Z",
+    "value": "2817d98bf99a16359fc2390e8486146ab3695f43df13d340e62fc81db6a9fdae",
+    "at": "2026-10-26T22:42:02.267Z",
     "base": "459205ca73890760015662bdbc7e4ee9b920bf86",
-    "prs": 7
+    "prs": 9
   }
 }
