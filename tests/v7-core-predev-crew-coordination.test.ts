@@ -1182,14 +1182,17 @@ process.exit(s.exit ?? 0);
   });
 
   // //TR: #237 inceleme (MEDIUM + LOW): koruma validateArtifactContent'in İÇİNDEDİR (apply.ts yazma kapısı, CrewCoordinator.reproduceSuperseding ve yetkinlik değerlendirmesi de alır); büyük/küçük harf, boşluk, Unicode varyantlarına karşı normalize eder (NFKC + biçim karakterlerini at) ve çok derin yanıt RangeError değil tipli bir ret olur.
-  it("the placeholder guard is part of validateArtifactContent (every caller gets it) and is not bypassed by case, spacing or Unicode variants; honest look-alikes pass; a deeply nested reply is a typed rejection, never a RangeError", T, async () => {
+  it("the placeholder guard is part of validateArtifactContent (every caller gets it) and is not bypassed by case, spacing, full-width forms or INVISIBLE code points (format characters, variation selectors, grapheme joiner); honest text passes, including accented text the previous NFKC guard accepted (visible marks and cross-script confusables are a documented limit); a deeply nested reply is a typed rejection, never a RangeError", T, async () => {
     const ba = () => JSON.parse(JSON.stringify(TASKHUB_ARTIFACTS.BusinessAnalysis));
     const variants: Array<[string, string]> = [
       ["marker", `${PLACEHOLDER_MARKER}: x>>`], ["lower case", "<<fill: x>>"], ["mixed case", "<<FiLl: x>>"], ["bare", "<<FILL>>"], ["bare lower case", "<<fill>>"],
       ["space after the chevrons", "<< FILL: x>>"], ["newline after the chevrons", "<<\nFILL: x>>"], ["tab", "<<\tfill>>"], ["space between the chevrons", "< < FILL: x>>"],
       ["full-width characters", "＜＜ＦＩＬＬ: x>>"], ["zero-width space inside", "<<F\u200BILL: x>>"], ["zero-width joiner between the chevrons", "<\u200D<FILL: x>>"],
       ["soft hyphen inside", "<<FI\u00ADLL: x>>"], ["right-to-left override before FILL", "<<\u202EFILL: x>>"], ["byte order mark", "<<\uFEFFFILL>>"],
-      ["inside a longer text", "see the template <<FILL: x>> for details"]
+      ["inside a longer text", "see the template <<FILL: x>> for details"],
+      // //TR: #257 takibi: yalnız GÖRÜNMEZ kod noktaları atılır (\p{Default_Ignorable_Code_Point}: varyasyon seçicileri, birleştirici grafem birleştiricisi, Hangul dolgusu)
+      ["variation selector after the last L", "<<FILL\uFE0F: x>>"], ["variation selector 1 inside", "<<FI\uFE00LL: x>>"], ["combining grapheme joiner inside", "<<F\u034FILL: x>>"],
+      ["Hangul filler between the chevrons", "<\u3164<FILL>>"], ["Mongolian free variation selector", "<<FI\u180BLL: x>>"]
     ];
     for (const [name, text] of variants) {
       const asValue = ba(); asValue.goals[0].statement = text;
@@ -1199,9 +1202,25 @@ process.exit(s.exit ?? 0);
       const ux = JSON.parse(JSON.stringify(TASKHUB_ARTIFACTS.UxSpec)); ux[Object.keys(ux)[0]!] = [text];
       expect([`${name} in a UxSpec`, validateArtifactContent("UxSpec", ux)]).toEqual([`${name} in a UxSpec`, {ok: false, errors: "PLACEHOLDER_VALUE"}]);
     }
-    for (const text of ["Users fill in <<name>> fields", "the FILL level", "<<fillable>> template", "<<filling>>", "fill << then", "a << b and fill", "<fill>", "<<", "FILL>>", "Pad ids with std::cout << fill('0')", "<<Fill-in form>>", "a < b << fill", "<<FILL-IN>> button", "<<fill in the blanks"]) {
+    for (const text of ["Users fill in <<name>> fields", "the FILL level", "<<fillable>> template", "<<filling>>", "fill << then", "a << b and fill", "<fill>", "<<", "FILL>>", "Pad ids with std::cout << fill('0')", "<<Fill-in form>>", "a < b << fill", "<<FILL-IN>> button", "<<fill in the blanks", "Café déjà vu <<naïve>> façade", "<<Fíll>> er stór", "Orðið << fíll: >> þýðir", "<<´fill: y", "<<Fìll>> (gd)", "<<fíl: >>"]) {
       const c = ba(); c.goals[0].statement = text;
       expect([text, validateArtifactContent("BusinessAnalysis", c)]).toEqual([text, {ok: true}]);
+    }
+    // //TR: BELGELENMİŞ SINIR (not ve davranış ayrışmasın diye sabitlenir): GÖRÜNÜR işaretli harfler (Mn aksan, Mc, Me, bindirme, ayrışık/önceden birleştirilmiş İ) ve betikler arası benzer görünen harfler (Kiril І, Yunan Ι) TANINMAZ; koruma tembel bir iskelet yankısına karşıdır, kasıtlı gizlemeye karşı değildir. (Aksanlı dürüst metnin yeniden oynatmada reddedilip mağazayı mühürlememesi için de ATILMAZLAR.)
+    for (const [name, text] of [["Mn acute accent on the F", "<<F\u0301ILL: x>>"], ["precomposed dotted capital I", "<<F\u0130LL: x>>"], ["precomposed accented I", "<<F\u00CCLL>>"], ["Mn combining long solidus overlay", "<<F\u0338ILL>>"], ["Mc Devanagari vowel sign AA", "<<F\u093EILL: x>>"], ["Me combining enclosing circle", "<<F\u20DDILL: x>>"], ["Cyrillic I", "<<F\u0406LL: x>>"], ["Greek Iota", "<<F\u0399LL>>"]] as const) {
+      const c = ba(); c.goals[0].statement = text;
+      expect([`documented limit (${name})`, validateArtifactContent("BusinessAnalysis", c)]).toEqual([`documented limit (${name})`, {ok: true}]);
+    }
+    // //TR: yeniden oynatma uyumu: önceki NFKC korumasının kabul ettiği (yazma kapısından geçen) aksanlı bir artefakt, mağaza yeniden açıldığında (journal yeniden oynatması) REDDEDİLMEZ ve mağaza mühürlenmez
+    {
+      const t = setup();
+      const seq = t.store.openPreDevSequence(SCOPE, t.missionId, "FOUNDER_LOCAL");
+      t.store.advancePreDevPhase(SCOPE, seq.preDevId, "BUSINESS_ANALYSIS", "FOUNDER_LOCAL");
+      const accented = ba(); accented.problem = "Orðið << fíll: >> þýðir fíll á íslensku, og <<Fíll>> er stór";
+      const rec = t.store.recordPreDevArtifact(SCOPE, seq.preDevId, {kind: "BusinessAnalysis", authorRoleId: PRE_DEV_ROLE_MAP.BusinessAnalysis[0], content: accented}, PREDEV_AGENT_ACTOR);
+      const replayed = new WorkOsStore(path.join(tmp, "data"));
+      expect(replayed.isTampered, "replaying an accented artefact must not seal the store").toBe(false);
+      expect(replayed.getPreDevArtifact(SCOPE, rec.id)?.content).toEqual(accented);
     }
     // the skeletons themselves can never pass any kind (including the two whose shape is valid verbatim)
     for (const kind of ["BusinessAnalysis", "UxSpec"] as const) expect(validateArtifactContent(kind, OUTPUT_SKELETONS[kind])).toEqual({ok: false, errors: "PLACEHOLDER_VALUE"});
