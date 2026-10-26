@@ -26,7 +26,7 @@ The card reads only `GET /v1/work-runs/:id/product`, `GET /v1/projects/:id/flow`
 The card shows an honest `UNAVAILABLE` ("not available to the desktop yet… nothing is assumed"); it never falls back to the older project dev-run route and never offers a host-run path.
 
 ## Rules the card follows (asserted in `tests/v7-ps1b-project-studio-ui.test.ts`, "LANE-A A-FLOW-4")
-- Start is offered only when the server's flow reports DELIVERY DONE, the product record has a delivered commit, no other delivery's product is running, and after the existing confirmation. Stop only for this delivery's own product.
+- Start is offered only when the route's own condition holds (source generation SOURCE_GENERATION_COMPLETE and the product record has a delivered commit; the DELIVERY stage being DONE means PRODUCT_VERIFIED and is not required), no other delivery's product is running, and after the existing confirmation. Stop only for this delivery's own product.
 - The local address is shown only for this delivery's product with status RUNNING, `bridged=true`, an AVAILABLE preview and exactly `http://127.0.0.1:<port>/` (port equal to the reported one).
 - A refusal shows the server's exact reason (`DEVRUN_SANDBOX_UNAVAILABLE:<reason>`, `SANDBOX_UNAVAILABLE`, `PRODUCT_RUN_NOT_DELIVERABLE`, `PRODUCT_RUN_NOT_THIS_DELIVERY`); unknown codes stay raw and flagged.
 - `BLOCKED` is retryable (`devRunActions("BLOCKED").start === true`): the server re-asks the sandbox gate on every start.
