@@ -1017,7 +1017,7 @@
   },
   {
    "id": "RB3",
-   "description": "reviewer-blocked: the pattern is too broad on CLAUDE_ (any CLAUDE_* reason, e.g. CLAUDE_REVIEW_OUTPUT_INVALID, becomes a Founder-actionable BLOCK)",
+   "description": "reviewer-blocked: the pattern is too broad on CLAUDE_ (any CLAUDE_* reason, e.g. the hypothetical CLAUDE_REVIEW_OUTPUT_INVALID, becomes a Founder-actionable BLOCK)",
    "file": "core/workos/runner.ts",
    "testFile": "tests/v7-relfx-c3-remediation.test.ts",
    "filter": "CLI missing",
@@ -1026,7 +1026,7 @@
   },
   {
    "id": "RB4",
-   "description": "reviewer-blocked: PROVIDER_ instead of PROVIDER_PROVENANCE_ (PROVIDER_ROUTE_UNKNOWN becomes a Founder-actionable BLOCK)",
+   "description": "reviewer-blocked: PROVIDER_ instead of PROVIDER_PROVENANCE_ (the hypothetical PROVIDER_ROUTE_UNKNOWN becomes a Founder-actionable BLOCK)",
    "file": "core/workos/runner.ts",
    "testFile": "tests/v7-relfx-c3-remediation.test.ts",
    "filter": "CLI missing",

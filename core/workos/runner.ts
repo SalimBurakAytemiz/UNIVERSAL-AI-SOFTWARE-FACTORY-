@@ -66,7 +66,7 @@ type Outcome =
   | {kind: "CANCEL"; reason: string};
 
 const RUN_ID = /^run_[0-9a-f]{24}$/;
-// //TR: Founder'ın kendisinin giderebileceği ön koşul retleri (oturum yok/süresi dolmuş, CLI yok/.cmd başlatıcı, başlatıcı kanıtı yok/değişmiş) run'ı BLOCKED yapar (düzeltilince devam edilebilir); adapter'ın bildirdiği başka her geçersizlik nedeni (ör. REVIEW_WORKSPACE_MODIFIED, CLAUDE_REVIEW_OUTPUT_INVALID, PROVIDER_ROUTE_UNKNOWN) FAILED kalır. Bu desen YALNIZCA adapter'ın invalidReason'ı içindir: REVIEWER_IDENTITY_MISMATCH (stepReview başı) ve REVIEWER_MUTATED_CLONE (klon değişti) bu dala hiç girmez, durum belirtmeden BLOCK döner ve BLOCKED olur; o davranış bu paketle DEĞİŞMEDİ.
+// //TR: Founder'ın kendisinin giderebileceği ön koşul retleri (oturum yok/süresi dolmuş, CLI yok/.cmd başlatıcı, başlatıcı kanıtı yok/değişmiş) run'ı BLOCKED yapar (düzeltilince devam edilebilir); adapter'ın bildirdiği başka her geçersizlik nedeni (gerçek örnekler, executors.ts: REVIEW_WORKSPACE_MODIFIED, REVIEW_WORKSPACE_NOT_CLEAN_BEFORE) FAILED kalır. Bu desen YALNIZCA adapter'ın invalidReason'ı içindir: REVIEWER_IDENTITY_MISMATCH (stepReview başı) ve REVIEWER_MUTATED_CLONE (klon değişti) bu dala hiç girmez, durum belirtmeden BLOCK döner ve BLOCKED olur; o davranış bu paketle DEĞİŞMEDİ.
 export const FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;
 // //TR: #224 tur 3: runner git çocuğunun sahiplik kaydı yazılamadı (geçici disk/rename hatası): executeStep bunu RETRY (OWNER_RECORD_WRITE_FAILED) yapar.
 class OwnerRecordError extends Error { constructor() { super("OWNER_RECORD_WRITE_FAILED"); } }

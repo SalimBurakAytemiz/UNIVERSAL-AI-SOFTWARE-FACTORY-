@@ -248,12 +248,12 @@ describe("C-PAR-1 PAR-03: synchronous git in one run must not starve another run
   });
 });
 
-// //TR: Reviewer başlatılamıyorsa ve Founder bunu kendisi giderebiliyorsa (oturum, CLI, başlatıcı kanıtı) run BLOCKED olur; adapter'ın kendi geçersizlik nedenleri FAILED kalır. Desen yakın-kaçırma satırlarıyla sabitlenir (`CLAUDE_` ya da `PROVIDER_` öneki, başa çapa, alt çizgi): geniş bir desen gerçek bir geçersizliği Founder'ın giderebileceği bir blok gibi gösterirdi.
+// //TR: Reviewer başlatılamıyorsa ve Founder bunu kendisi giderebiliyorsa (oturum, CLI, başlatıcı kanıtı) run BLOCKED olur; adapter'ın kendi geçersizlik nedenleri FAILED kalır. Desen yakın-kaçırma satırlarıyla sabitlenir (`CLAUDE_` ya da `PROVIDER_` öneki, başa çapa, alt çizgi): geniş bir desen gerçek bir geçersizliği Founder'ın giderebileceği bir blok gibi gösterirdi. Gerçek adapter kodları REVIEW_WORKSPACE_MODIFIED ve REVIEW_WORKSPACE_NOT_CLEAN_BEFORE'dur (executors.ts); CLAUDE_REVIEW_OUTPUT_INVALID, PROVIDER_ROUTE_UNKNOWN, X_CLAUDE_CLI_NOT_FOUND ve sonu `X` olan satırlar bugün üretilmeyen VARSAYIMSAL yakın-kaçırmalardır (öneklerini gerçek kodlarla paylaşır).
 describe("C-PAR-1 follow-up: a reviewer that cannot start for a reason the Founder can fix BLOCKS the run (like a missing sign-in), it does not FAIL it", () => {
   it("CLI missing / .cmd shim / unverified, changed or vanished launcher / expired sign-in -> BLOCKED with the exact code; a review that is invalid for its own reasons stays FAILED", { timeout: 120_000 }, async () => {
     const rows: Array<[string, "BLOCKED" | "FAILED"]> = [["CLAUDE_PROFILE_LOGIN_REQUIRED", "BLOCKED"], ["CLAUDE_PROFILE_LOGIN_EXPIRED", "BLOCKED"], ["CLAUDE_CLI_NOT_FOUND", "BLOCKED"], ["CLAUDE_CLI_SHIM_UNSUPPORTED", "BLOCKED"],
       ["PROVIDER_PROVENANCE_NOT_READY", "BLOCKED"], ["CLAUDE_PACKAGE_PROVENANCE_REQUIRED", "BLOCKED"], ["CLAUDE_LAUNCHER_PROVENANCE_CHANGED", "BLOCKED"], ["REVIEW_WORKSPACE_MODIFIED", "FAILED"], ["REVIEW_FAILED", "FAILED"],
-      ["CLAUDE_REVIEW_OUTPUT_INVALID", "FAILED"], ["PROVIDER_ROUTE_UNKNOWN", "FAILED"], ["X_CLAUDE_CLI_NOT_FOUND", "FAILED"],
+      ["REVIEW_WORKSPACE_NOT_CLEAN_BEFORE", "FAILED"], ["CLAUDE_REVIEW_OUTPUT_INVALID", "FAILED"], ["PROVIDER_ROUTE_UNKNOWN", "FAILED"], ["X_CLAUDE_CLI_NOT_FOUND", "FAILED"],
       ["CLAUDE_PROFILEX", "FAILED"], ["CLAUDE_CLIENT_ERROR", "FAILED"], ["CLAUDE_PACKAGE_PROVENANCEX", "FAILED"], ["CLAUDE_LAUNCHER_PROVENANCEX", "FAILED"], ["PROVIDER_PROVENANCEX", "FAILED"]];
     for (const [i, [code, want]] of rows.entries()) {
       const c = setup(`rb${i}`), run = c.mkRun("A"), at = new Date().toISOString();
