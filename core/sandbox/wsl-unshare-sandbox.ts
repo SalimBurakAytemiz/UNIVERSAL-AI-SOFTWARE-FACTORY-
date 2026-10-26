@@ -144,16 +144,49 @@ export function minimalPe(): Buffer {
   return b;
 }
 
-/** AF_VSOCK engeli: `--net` AF_VSOCK'u (Hyper-V hvsocket -> Windows ana makinesi) yalıtmaz. Sandbox İÇİNDE komuttan önce çalışan, yalnız dağıtımda zaten bulunan perl ile (kurulum yok) no_new_privs + seccomp filtresi kurar: socket()/socketpair() ailesi 40 (AF_VSOCK) -> EAFNOSUPPORT; x86_64 ve aarch64 dışı mimaride 125 ile çalıştırmaz (fail-closed). */
+/** Klasik BPF komutu: [kod, jt, jf, k]. */
+export type BpfInsn = readonly [number, number, number, number];
+export const SECCOMP_ARCHS = {
+  x86_64: {audit: 0xC000003E, socket: 41, socketpair: 53, prctl: 157, perl: "x86_64"},
+  aarch64: {audit: 0xC00000B7, socket: 198, socketpair: 199, prctl: 167, perl: "aarch64"}
+} as const;
+/** io_uring_setup/enter/register (IORING_OP_SOCKET seccomp'u atlar: AF_VSOCK fd'si) her iki mimaride aynı numaralar. */
+export const IO_URING_NRS = [425, 426, 427] as const;
+export const SECCOMP_X32_BIT = 0x40000000;
+/** Tek doğruluk kaynağı: perl betiği bu programın onaltılık dökümünü gömer; testler aynı diziyi JS'te değerlendirir.
+ * 0 mimari; yanlış mimari->KILL; x32 biti->KILL; io_uring->EPERM; socket/socketpair(40)->EAFNOSUPPORT; gerisi izinli. */
+export function seccompProgram(arch: keyof typeof SECCOMP_ARCHS): BpfInsn[] {
+  const c = SECCOMP_ARCHS[arch];
+  return [
+    [0x20, 0, 0, 4], [0x15, 0, 12, c.audit], [0x20, 0, 0, 0], [0x45, 10, 0, SECCOMP_X32_BIT],
+    [0x15, 8, 0, IO_URING_NRS[0]], [0x15, 7, 0, IO_URING_NRS[1]], [0x15, 6, 0, IO_URING_NRS[2]],
+    [0x15, 1, 0, c.socket], [0x15, 0, 2, c.socketpair], [0x20, 0, 0, 16], [0x15, 1, 0, 40],
+    [0x06, 0, 0, 0x7fff0000], [0x06, 0, 0, 0x00050000 | 97], [0x06, 0, 0, 0x00050000 | 1], [0x06, 0, 0, 0x80000000]
+  ];
+}
+/** Klasik BPF değerlendiricisi (yalnız bu programın kullandığı komutlar): seccomp_data = {nr, arch, args}. */
+export function evalSeccomp(prog: readonly BpfInsn[], d: {nr: number; arch: number; arg0?: number}): number {
+  let a = 0, pc = 0;
+  for (let n = 0; n < 1000; n++) {
+    const [code, jt, jf, k] = prog[pc]!;
+    if (code === 0x20) { a = k === 0 ? d.nr : k === 4 ? d.arch : k === 16 ? (d.arg0 ?? 0) : 0; pc++; }
+    else if (code === 0x15) pc += 1 + (a === k ? jt : jf);
+    else if (code === 0x45) pc += 1 + ((a & k) !== 0 ? jt : jf);
+    else if (code === 0x06) return k >>> 0;
+    else throw new Error("BPF_UNSUPPORTED");
+  }
+  throw new Error("BPF_LOOP");
+}
+const bpfHex = (prog: readonly BpfInsn[]) => prog.map(([c, jt, jf, k]) => { const b = Buffer.alloc(8); b.writeUInt16LE(c, 0); b[2] = jt; b[3] = jf; b.writeUInt32LE(k >>> 0, 4); return b.toString("hex"); }).join("");
+/** AF_VSOCK engeli: `--net` AF_VSOCK'u (Hyper-V hvsocket -> Windows ana makinesi) yalıtmaz. Sandbox İÇİNDE komuttan önce çalışan, yalnız dağıtımda zaten bulunan perl ile (kurulum yok) no_new_privs + seccomp filtresi kurar (seccompProgram); x86_64 ve aarch64 dışı mimaride 125 ile çalıştırmaz (fail-closed). */
 export const SECCOMP_PL = [
   'use Config;',
-  'my %K=("x86_64"=>[0xC000003E,41,53,157],"aarch64"=>[0xC00000B7,198,199,167]);',
+  `my %K=(${(Object.keys(SECCOMP_ARCHS) as (keyof typeof SECCOMP_ARCHS)[]).map(a => `"${a}"=>[${SECCOMP_ARCHS[a].prctl},"${bpfHex(seccompProgram(a))}"]`).join(",")});`,
   'my ($arch)=$Config{archname}=~/^(x86_64|aarch64)/;',
   'my $k=$K{$arch//""} or do{print STDERR "SECCOMP_ARCH_UNSUPPORTED\\n";exit 125};',
-  'my ($A,$S,$P,$PR)=@$k;',
-  'sub I{pack("SCCL",@_)}',
-  'my $prog=join("",I(0x20,0,0,4),I(0x15,0,7,$A),I(0x20,0,0,0),I(0x15,1,0,$S),I(0x15,0,2,$P),I(0x20,0,0,16),I(0x15,1,0,40),I(0x06,0,0,0x7fff0000),I(0x06,0,0,0x00050000|97),I(0x06,0,0,0x80000000));',
-  'my $fp=pack("S x6 P",10,$prog);',
+  'my ($PR,$hex)=@$k;',
+  'my $prog=pack("H*",$hex);',
+  'my $fp=pack("S x6 P",length($prog)/8,$prog);',
   'syscall($PR,38,1,0,0,0)==0 or do{print STDERR "SECCOMP_NNP_FAILED\\n";exit 125};',
   'syscall($PR,22,2,$fp)==0 or do{print STDERR "SECCOMP_INSTALL_FAILED\\n";exit 125};',
   'exec {$ARGV[0]} @ARGV or do{print STDERR "SECCOMP_EXEC_FAILED\\n";exit 127};'
@@ -176,6 +209,8 @@ export const PROBE_SCRIPT = [
   String.raw`if [ "$(ls /proc | grep -c '^[0-9]')" -lt 20 ]; then echo "PID_NS_PRIVATE=ok"; else echo "PID_NS_PRIVATE=no"; fi`,
   // AF_VSOCK (hvsocket -> Windows ana makinesi): socket(40) yalnız EAFNOSUPPORT/EACCES/EPERM ile reddedilirse "blocked"; başarı veya yorumlayıcı yok = açık/bilinmiyor (fail-closed).
   String.raw`v=unknown; if [ -x /usr/bin/perl ]; then v=$(/usr/bin/perl -e 'if (socket(S,40,1,0)) {print "open"} else {$e=$!+0; print(($e==97||$e==13||$e==1)?"blocked":"unknown")}' 2>/dev/null); fi; echo "VSOCK=$v"`,
+  // io_uring (IORING_OP_SOCKET seccomp'u atlayıp AF_VSOCK fd'si üretir): io_uring_setup(425) yalnız EPERM(1)/ENOSYS(38) ile reddedilirse "blocked"; başarı veya yorumlayıcı yok = açık/bilinmiyor.
+  String.raw`u=unknown; if [ -x /usr/bin/perl ]; then u=$(/usr/bin/perl -e '$p=pack("x120"); if (syscall(425,4,$p)>=0) {print "open"} else {$e=$!+0; print(($e==1||$e==38)?"blocked":"unknown")}' 2>/dev/null); fi; echo "IO_URING=$u"`,
   // Linux sağlayıcısındaki zorunlu değişmezlerin kalanı (supervisor, ana makine dizinleri, /proc/sys salt-okunur, ana makine kanaryası).
   String.raw`if [ "$PPID" = 1 ] && [ "$$" != 1 ]; then echo "SUPERVISOR=ok"; else echo "SUPERVISOR=no"; fi`,
   String.raw`h=hidden; for d in /home /root /run /var /sys /mnt; do [ -e "$d" ] && h=present; done; echo "HOST_DIRS=$h"`,
@@ -186,7 +221,7 @@ export const PROBE_SCRIPT = [
 const PROBE_EXPECT: Record<string, (v: string) => boolean> = {
   MNT_C: v => v === "absent", DRVFS: v => v === "0", UNIX_PATH_SOCKETS: v => v === "0",
   WSL_RUNTIME_DIRS: v => v === "absent", RW_usr: v => v === "ro", RW_etc: v => v === "ro", RW_bin: v => v === "ro", WORK: v => v === "writable", NET_IFACES: v => v === "0",
-  VSOCK: v => v === "blocked", SUPERVISOR: v => v === "ok", HOST_DIRS: v => v === "hidden", PROC_SYS_RO: v => v === "ok", HOST_CANARY: v => v === "hidden",
+  VSOCK: v => v === "blocked", IO_URING: v => v === "blocked", SUPERVISOR: v => v === "ok", HOST_DIRS: v => v === "hidden", PROC_SYS_RO: v => v === "ok", HOST_CANARY: v => v === "hidden",
   CAPS_DROPPED: v => v === "ok", NO_CTTY: v => v === "ok", NESTED_USERNS: v => v === "blocked", PID_NS_PRIVATE: v => v === "ok", DONE: v => v === "1"
 };
 export function evaluateProbe(stdout: string): {ok: true} | {ok: false; reason: `PROBE_${string}`} {

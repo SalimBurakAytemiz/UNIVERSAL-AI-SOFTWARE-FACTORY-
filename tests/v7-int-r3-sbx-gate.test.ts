@@ -533,7 +533,7 @@ describe("LANE-C Linux unshare sandbox provider v2 (SandboxProvider contract)", 
 // //TR: LANE-B B-SBX-WIN-1: Windows için WSL2 tabanlı sandbox sağlayıcısı. Linux CI'da sahte bir wsl çalıştırıcısı enjekte edilir (her ret nedeni, argüman kurulumu, kopyalama, ortam/argv çevirisi, temizlik); GERÇEK WSL selfTest'i yalnız win32 + WSL + UASCO_WSL_DISTRO varsa çalışır, aksi halde SKIP olarak görünür ve ASLA PASS sayılmaz.
 describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on win32 with WSL)", () => {
   const ISO = {nsFlags: ["--user", "--map-root-user", "--net", "--pid", "--mount", "--fork", "--kill-child=SIGKILL"], setup: "set -eu\n# isolation setup (test double)\n", helperPath: "/usr/sbin:/usr/bin:/sbin:/bin"};
-  const GOOD_PROBE = "MNT_C=absent\nDRVFS=0\nUNIX_PATH_SOCKETS=0\nWSL_RUNTIME_DIRS=absent\nRW_usr=ro\nRW_etc=ro\nRW_bin=ro\nWORK=writable\nNET_IFACES=0\nCAPS_DROPPED=ok\nNO_CTTY=ok\nNESTED_USERNS=blocked\nPID_NS_PRIVATE=ok\nVSOCK=blocked\nSUPERVISOR=ok\nHOST_DIRS=hidden\nPROC_SYS_RO=ok\nHOST_CANARY=hidden\nDONE=1\n";
+  const GOOD_PROBE = "MNT_C=absent\nDRVFS=0\nUNIX_PATH_SOCKETS=0\nWSL_RUNTIME_DIRS=absent\nRW_usr=ro\nRW_etc=ro\nRW_bin=ro\nWORK=writable\nNET_IFACES=0\nCAPS_DROPPED=ok\nNO_CTTY=ok\nNESTED_USERNS=blocked\nPID_NS_PRIVATE=ok\nVSOCK=blocked\nIO_URING=blocked\nSUPERVISOR=ok\nHOST_DIRS=hidden\nPROC_SYS_RO=ok\nHOST_CANARY=hidden\nDONE=1\n";
   interface Cfg { status?: number; spawnError?: boolean; distros?: string; version?: string; interop?: string | string[]; peRc?: number; peNoexec?: string; tools?: string; roots?: string[]; probe?: string; probeRc?: number; mktempFails?: boolean; runOut?: string; runRc?: number; runDelayMs?: number;
     forkOut?: string; timeoutRc?: number; late?: boolean; stdinOut?: string; pkillRc?: number; pgrepAlive?: boolean; scratchRemains?: boolean; duOut?: string; truncated?: boolean; runBytes?: Buffer; outerRc?: number; reject?: boolean; nodePath?: string; noTarget?: boolean; abortIgnored?: boolean; pgrepRc?: number; pgidAlive?: boolean; rcFile?: string; duRc?: number; abortLate?: boolean; late2?: boolean; noPgid?: boolean }
   const u16 = (t: string) => Buffer.from("﻿" + t, "utf16le");
@@ -648,7 +648,7 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
     } finally { fs.rmSync(dir, {recursive: true, force: true}); }
   });
 
-  it.each([["MNT_C", "present"], ["DRVFS", "2"], ["UNIX_PATH_SOCKETS", "1"], ["CAPS_DROPPED", "no"], ["NO_CTTY", "no"], ["NESTED_USERNS", "allowed"], ["PID_NS_PRIVATE", "no"], ["VSOCK", "open"], ["VSOCK", "unknown"], ["SUPERVISOR", "no"], ["HOST_DIRS", "present"], ["PROC_SYS_RO", "no"], ["HOST_CANARY", "visible"], ["WSL_RUNTIME_DIRS", "present"], ["RW_usr", "writable"], ["RW_etc", "writable"], ["RW_bin", "writable"], ["WORK", "ro"], ["NET_IFACES", "1"], ["DONE", "0"]])(
+  it.each([["MNT_C", "present"], ["DRVFS", "2"], ["UNIX_PATH_SOCKETS", "1"], ["CAPS_DROPPED", "no"], ["NO_CTTY", "no"], ["NESTED_USERNS", "allowed"], ["PID_NS_PRIVATE", "no"], ["VSOCK", "open"], ["VSOCK", "unknown"], ["IO_URING", "open"], ["IO_URING", "unknown"], ["SUPERVISOR", "no"], ["HOST_DIRS", "present"], ["PROC_SYS_RO", "no"], ["HOST_CANARY", "visible"], ["WSL_RUNTIME_DIRS", "present"], ["RW_usr", "writable"], ["RW_etc", "writable"], ["RW_bin", "writable"], ["WORK", "ro"], ["NET_IFACES", "1"], ["DONE", "0"]])(
     "the negative probe %s=%s makes the provider unavailable (PROBE_<KEY>), and a missing key does too", async (key, bad) => {
       const probe = GOOD_PROBE.replace(new RegExp(`^${key}=.*$`, "m"), `${key}=${bad}`);
       expect((await (await mk({probe})).p.selfTest())).toEqual({ok: false, detail: `PROBE_${key.toUpperCase()}`});
@@ -1045,6 +1045,59 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
       const probe = (wrap: boolean) => cp.spawnSync(wrap ? "perl" : "sh", wrap ? ["-e", SECCOMP_PL, "--", "sh", "-c", PROBE_SCRIPT, "sh", "/nonexistent/canary"] : ["-c", PROBE_SCRIPT, "sh", "/nonexistent/canary"], {encoding: "utf8"}).stdout;
       expect(probe(false)).toContain("VSOCK=open"); expect(probe(true)).toContain("VSOCK=blocked");
       expect(evaluateProbe(probe(false).replace(/VSOCK=.*/, "VSOCK=open"))).toMatchObject({ok: false});
+    });
+
+    it("VSOCK-IOURING-BYPASS: the seccomp program (JS BPF evaluator, both archs) denies io_uring_setup/enter/register with EPERM, kills x32-ABI and wrong-arch calls, answers socket/socketpair(40) with EAFNOSUPPORT and allows the rest", async () => {
+      const {seccompProgram, evalSeccomp, SECCOMP_ARCHS, SECCOMP_PL} = await import("../core/sandbox/wsl-unshare-sandbox.js");
+      const ALLOW = 0x7fff0000, KILL = 0x80000000, EPERM = 0x00050001, AFNO = 0x00050000 | 97;
+      for (const a of ["x86_64", "aarch64"] as const) {
+        const c = SECCOMP_ARCHS[a], prog = seccompProgram(a), ev = (nr: number, arg0 = 0, arch: number = c.audit) => evalSeccomp(prog, {nr, arch, arg0});
+        expect(prog.length).toBe(15);
+        for (const nr of [425, 426, 427]) { expect(ev(nr)).toBe(EPERM); expect(ev(nr | 0x40000000)).toBe(KILL); }
+        expect(ev(c.socket, 40)).toBe(AFNO); expect(ev(c.socketpair, 40)).toBe(AFNO);
+        expect(ev(c.socket, 2)).toBe(ALLOW); expect(ev(c.socketpair, 1)).toBe(ALLOW);
+        expect(ev(0)).toBe(ALLOW); expect(ev(1)).toBe(ALLOW); expect(ev(c.prctl)).toBe(ALLOW);
+        expect(ev(0x40000000 | c.socket, 2)).toBe(KILL); expect(ev(1, 0, 0x40000003)).toBe(KILL); expect(ev(1, 0, 0)).toBe(KILL);
+      }
+      expect(SECCOMP_PL).toContain("x86_64"); expect(SECCOMP_PL).toContain("aarch64");
+    });
+
+    it.skipIf(process.platform !== "linux" || cp.spawnSync("sh", ["-c", "command -v perl"]).status !== 0 || !["x86_64", "aarch64"].includes(os.arch() === "x64" ? "x86_64" : os.arch() === "arm64" ? "aarch64" : ""))("VSOCK-IOURING-BYPASS (real kernel): io_uring_setup works bare but is EPERM under the wrapper; a raw io_uring IORING_OP_SOCKET(AF_VSOCK) program cannot get a socket fd under the wrapper; the probe reports IO_URING=blocked only wrapped", async () => {
+      const {SECCOMP_PL, PROBE_SCRIPT, evaluateProbe} = await import("../core/sandbox/wsl-unshare-sandbox.js");
+      const setup = "my $p=pack('x120'); my $r=syscall(425,4,$p); print(($r>=0)?'open':'blocked'.($!+0));";
+      const bare = cp.spawnSync("perl", ["-e", setup], {encoding: "utf8"}).stdout;
+      if (bare !== "open") return; // bu çekirdekte io_uring zaten kapalı: kanıtlanacak bir şey yok
+      expect(cp.spawnSync("perl", ["-e", SECCOMP_PL, "--", "perl", "-e", setup], {encoding: "utf8"}).stdout).toBe("blocked1");
+      const probe = (wrap: boolean) => cp.spawnSync(wrap ? "perl" : "sh", wrap ? ["-e", SECCOMP_PL, "--", "sh", "-c", PROBE_SCRIPT, "sh", "/nonexistent/canary"] : ["-c", PROBE_SCRIPT, "sh", "/nonexistent/canary"], {encoding: "utf8"}).stdout;
+      expect(probe(false)).toContain("IO_URING=open"); expect(probe(true)).toContain("IO_URING=blocked");
+      const good = "MNT_C=absent\nDRVFS=0\nUNIX_PATH_SOCKETS=0\nWSL_RUNTIME_DIRS=absent\nRW_usr=ro\nRW_etc=ro\nRW_bin=ro\nWORK=writable\nNET_IFACES=0\nCAPS_DROPPED=ok\nNO_CTTY=ok\nNESTED_USERNS=blocked\nPID_NS_PRIVATE=ok\nVSOCK=blocked\nSUPERVISOR=ok\nHOST_DIRS=hidden\nPROC_SYS_RO=ok\nHOST_CANARY=hidden\nDONE=1\n";
+      expect(evaluateProbe(good + probe(true).match(/IO_URING=.*/)![0])).toMatchObject({ok: true});
+      expect(evaluateProbe(good + probe(false).match(/IO_URING=.*/)![0])).toMatchObject({ok: false, reason: "PROBE_IO_URING"});
+      if (cp.spawnSync("sh", ["-c", "command -v cc"]).status !== 0) return;
+      const d = fs.mkdtempSync(path.join(os.tmpdir(), "uring-")); const src = path.join(d, "u.c"), bin = path.join(d, "u");
+      fs.writeFileSync(src, `#include <linux/io_uring.h>
+#include <sys/syscall.h>
+#include <sys/mman.h>
+#include <unistd.h>
+#include <string.h>
+#include <stdio.h>
+int main(void){struct io_uring_params p;memset(&p,0,sizeof p);long fd=syscall(425,4,&p);if(fd<0){puts("setup-denied");return 3;}
+size_t sq=p.sq_off.array+p.sq_entries*4,cq=p.cq_off.cqes+p.cq_entries*sizeof(struct io_uring_cqe);
+char*sqp=mmap(0,sq,PROT_READ|PROT_WRITE,MAP_SHARED|MAP_POPULATE,fd,IORING_OFF_SQ_RING);char*cqp=mmap(0,cq,PROT_READ|PROT_WRITE,MAP_SHARED|MAP_POPULATE,fd,IORING_OFF_CQ_RING);
+struct io_uring_sqe*sqe=mmap(0,p.sq_entries*sizeof(struct io_uring_sqe),PROT_READ|PROT_WRITE,MAP_SHARED|MAP_POPULATE,fd,IORING_OFF_SQES);
+if(sqp==MAP_FAILED||cqp==MAP_FAILED||sqe==MAP_FAILED){puts("mmap-failed");return 4;}
+memset(&sqe[0],0,sizeof sqe[0]);sqe[0].opcode=45;sqe[0].fd=40;sqe[0].off=1;sqe[0].len=0;sqe[0].user_data=7;
+((unsigned*)(sqp+p.sq_off.array))[0]=0;__atomic_store_n((unsigned*)(sqp+p.sq_off.tail),1,__ATOMIC_RELEASE);
+long n=syscall(426,fd,1,1,IORING_ENTER_GETEVENTS,0,0);if(n<0){puts("enter-denied");return 5;}
+struct io_uring_cqe*c=(struct io_uring_cqe*)(cqp+p.cq_off.cqes);printf("socket-res=%d\\n",c[0].res);return c[0].res>=0?0:6;}
+`);
+      try {
+        const cc = cp.spawnSync("cc", ["-O0", "-o", bin, src], {encoding: "utf8"}); expect(cc.status).toBe(0);
+        const bareRun = cp.spawnSync(bin, {encoding: "utf8"});
+        const wrapped = cp.spawnSync("perl", ["-e", SECCOMP_PL, "--", bin], {encoding: "utf8"});
+        expect(wrapped.stdout).toBe("setup-denied\n"); expect(wrapped.status).toBe(3);
+        if (bareRun.status === 0) expect(bareRun.stdout).toMatch(/socket-res=\d+/); // çıplak: AF_VSOCK fd'si gerçekten oluştu (bypass kanıtı)
+      } finally { fs.rmSync(d, {recursive: true, force: true}); }
     });
 
     it("run.sh wraps EVERY sandboxed command (probes, runs, dev-run) in the seccomp wrapper and stages kill.sh; the probe script has the parity invariants (supervisor, host dirs, /proc/sys ro, host canary) and the PE probe is locale-independent", async () => {
