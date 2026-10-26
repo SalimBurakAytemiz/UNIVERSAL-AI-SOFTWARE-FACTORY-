@@ -19,7 +19,7 @@ const dataRoot = fs.mkdtempSync(path.join(outDir, "data-"));
 // Planlı adımlar (sabit payda). kind: FUNCTIONAL = gerçek işlev sürülür; GATED_ASSERTED = 4b kapısına bağlı iddia (kapalıysa NOT_VERIFIED:GATED_4B); NOT_EXECUTED_ASSERTED = "çalıştırılmadı" durumunun dürüst gösterimi.
 const PLAN = [["first-run-dialog", "FUNCTIONAL"], ["detect-routes", "FUNCTIONAL"], ["setup-check", "FUNCTIONAL"], ["intake-idea", "FUNCTIONAL"], ["analysis", "GATED_ASSERTED"], ["plan-gate-closed", "FUNCTIONAL"], ["analysis-stuck-shown", "GATED_ASSERTED"], ["reapprove-once", "GATED_ASSERTED"], ["plan-task-by-hand", "FUNCTIONAL"],
   ["authorize-mission", "FUNCTIONAL"], ["run-engine-truth", "FUNCTIONAL"], ["start-run", "FUNCTIONAL"], ["run-reaches-review", "FUNCTIONAL"], ["test-result-honest", "NOT_EXECUTED_ASSERTED"],
-  ["link-run-to-task", "FUNCTIONAL"], ["open-project-workspace", "FUNCTIONAL"], ["delivery-prepare", "FUNCTIONAL"], ["delivery-accept", "FUNCTIONAL"], ["product", "GATED_ASSERTED"], ["request-ledger", "FUNCTIONAL"]];
+  ["link-run-to-task", "FUNCTIONAL"], ["task-status-done", "FUNCTIONAL"], ["open-project-workspace", "FUNCTIONAL"], ["delivery-prepare", "FUNCTIONAL"], ["delivery-accept", "FUNCTIONAL"], ["product", "GATED_ASSERTED"], ["request-ledger", "FUNCTIONAL"]];
 const KIND = Object.fromEntries(PLAN);
 const steps = [];
 const mode = {analysis: "UNKNOWN", product: "UNKNOWN"}; // ADMITTED | GATED_4B (uygulamadaki gerçek allow-list'ten)
@@ -387,6 +387,42 @@ async function runSteps() {
     must(await win.evaluate(sel => !document.querySelector(`${sel} [data-run-linked="none"], ${sel} [data-run-linked="unavailable"], ${sel} [data-run-linked="error"]`), panel), "the run card still reports no/unavailable/error links after linking");
     return `task ${plannedTaskId} linked to the run (POST /v1/tasks/:id/runs)`;
   });
+  await step("task-status-done", async () => {
+    // //TR: Görev durumu adımı UI'dan ve sunucudan birlikte doğrulanır: PENDING -> IN_PROGRESS (onaysız), DONE için onay penceresi (vazgeçilirse HİÇ istek yok), onaylanınca sunucuda DONE ve görev yeniden açılamaz.
+    const tid = plannedTaskId, transitionRe = new RegExp(`^/v1/tasks/${tid}/transition$`);
+    must(tid, "no planned task id from the earlier steps");
+    const statusOf = async () => (await serverGet(`/v1/tasks/${tid}`))?.task?.status ?? null;
+    must(await statusOf() === "PENDING", `the planned task is ${await statusOf()} before the status step, expected PENDING`);
+    await go("#/work");
+    if (!await win.evaluate(id => document.querySelector("#task-status")?.dataset.taskStatus === id, tid)) {
+      await waitSel(`[data-task-inspect="${tid}"]`, 20000); await win.click(`[data-task-inspect="${tid}"]`);
+    }
+    await waitSel(`#task-status[data-task-status="${tid}"]`, 20000);
+    must(await win.evaluate(() => !document.querySelector("#taskst-DONE")), "Done is offered for a task that was never started");
+    const before = await requestCount("POST", transitionRe);
+    await waitSel("#taskst-IN_PROGRESS:not([disabled])", 20000); await win.click("#taskst-IN_PROGRESS");
+    await waitSel("#task-status-status[data-result='ok']", 20000);
+    must(await statusOf() === "IN_PROGRESS", `the server's task status is ${await statusOf()}, not IN_PROGRESS`);
+    must(await win.evaluate(() => !document.querySelector("#confirmDialog[open]")), "starting a task asked for a confirmation (only Done may)");
+    expectCount("transition requests after Start (no confirmation, one request)", await requestCount("POST", transitionRe), before + 1);
+    // Done, confirmation refused: nothing is sent and the server keeps IN_PROGRESS
+    await waitSel("#taskst-DONE:not([disabled])", 20000); await win.click("#taskst-DONE");
+    await win.waitForSelector("#confirmDialog[open]", {timeout: 10000, state: "attached"}).catch(() => { throw new Check("the Done confirmation did not open"); });
+    await win.click("#confirmCancel"); await waitFn(() => !document.querySelector("#confirmDialog[open]"), null, 10000, "confirm dialog closed: cancel Done");
+    await waitSel("#task-status-status[data-result='error']", 20000);
+    expectCount("transition requests after a refused Done confirmation", await requestCount("POST", transitionRe), before + 1);
+    must(await statusOf() === "IN_PROGRESS", `the server's task status is ${await statusOf()} after a refused confirmation`);
+    // Done, confirmed
+    await win.click("#taskst-DONE"); await confirmDialog("mark task done");
+    await waitFn(() => !document.querySelector("#taskst-DONE") && !!document.querySelector("#task-status [data-taskst-note='terminal']"), null, 20000, "the Done task shows the terminal note and no more status buttons");
+    must(await statusOf() === "DONE", `the server's task status is ${await statusOf()}, not DONE`);
+    expectCount("transition requests after Done (start + done)", await requestCount("POST", transitionRe), before + 2);
+    const posted = ((await serverGet("/__e2e/requests"))?.requests ?? []).filter(r => r.method === "POST" && transitionRe.test(r.url));
+    must(posted.length === before + 2 && posted.every(r => r.status >= 200 && r.status < 300), `transition request statuses: ${JSON.stringify(posted.map(r => r.status))}`);
+    const missionStatus = (await serverGet(`/v1/missions/${await missionIdOf()}`))?.mission?.status ?? null;
+    must(missionStatus !== "COMPLETE", `a Done task made the mission ${missionStatus}`);
+    return `task ${tid}: PENDING -> IN_PROGRESS -> (Done refused: no request) -> DONE (server confirms; ${posted.length} transition requests, all 2xx); mission stays ${missionStatus}`;
+  });
   await step("open-project-workspace", async () => {
     await go("#/projects"); await win.getByRole("button", {name: "Open workspace"}).first().click();
     await waitSel("#studio-tab-delivery", 20000);
@@ -457,6 +493,9 @@ async function runSteps() {
     const acceptRe = new RegExp(`^/v1/work-runs/${runId}/delivery/accept$`), runsRe = new RegExp(`^/v1/missions/${mid}/runs$`);
     expectCount("2xx delivery accept requests (positive control: the ledger holds the journey's own writes)", reqs.filter(r => r.method === "POST" && acceptRe.test(r.url) && r.status >= 200 && r.status < 300).length, 1);
     must(n("POST", runsRe) >= 1, `positive control: expected at least 1 run start request for the journey mission, got ${n("POST", runsRe)}`);
+    const taskTransitions = reqs.filter(r => r.method === "POST" && new RegExp(`^/v1/tasks/${plannedTaskId}/transition$`).test(r.url));
+    expectCount("2xx task transition requests for the planned task (positive control: Start and Done, the refused Done sent none)", taskTransitions.filter(r => r.status >= 200 && r.status < 300).length, 2);
+    expectCount("non-2xx task transition requests for the planned task", taskTransitions.filter(r => r.status < 200 || r.status >= 300).length, 0);
     const approveRe = new RegExp(`^/v1/missions/${mid}/predev/artifacts/[^/]+/approve$`), startRe = new RegExp(`^/v1/work-runs/${runId}/product/start$`);
     expectCount("analysis step requests in the whole journey", n("POST", stepRe(mid)), gated ? 0 : stepsAfterStuck);
     expectCount("approve requests in the whole journey", n("POST", approveRe), gated ? 0 : 1);
