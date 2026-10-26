@@ -24,6 +24,7 @@ export async function submitAnalysisStep(ctx,missionId){
   if(analysisUi.missionId!==missionId)resetAnalysis(missionId);
   delete drafts.status[ANALYSIS_REAPPROVE_FORM]; // yeni adım: eski yeniden-onay durumu bayatlar
   drafts.busy[ANALYSIS_STEP_FORM]=true;
+  await ctx.rerender(); // //TR: kilit görünür olsun: diğer düğmeler istek sürerken (cevap beklenmeden) kapanır
   let res;try{res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[ANALYSIS_STEP_FORM]=false}
   if(analysisUi.missionId!==missionId){await ctx.rerender();return {ok:false,stale:true,status:res?.status??null}} // //TR: istek sürerken başka mission seçildi: gelen cevap o mission'ın durumuna yazılmaz
   const c=classifyAnalysisStep(res),k=analysisStatusKey(c,res,"step");
@@ -40,6 +41,7 @@ export async function submitReapprove(ctx,missionId){
   const req=buildReapproveRequest({missionId,step,evidenceText:analysisUi.evidence});
   if(!req.ok){setStatus(ANALYSIS_REAPPROVE_FORM,{ok:false,errors:req.errors});await ctx.rerender();focusResult(ctx,ANALYSIS_REAPPROVE_FORM,["id:analysis-reapprove-submit","id:analysis-reapprove-evidence"]);return {ok:false,validation:true}}
   drafts.busy[ANALYSIS_REAPPROVE_FORM]=true;
+  await ctx.rerender(); // //TR: kilit görünür olsun: diğer düğmeler istek sürerken (cevap beklenmeden) kapanır
   let res;try{res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[ANALYSIS_REAPPROVE_FORM]=false}
   if(analysisUi.missionId!==missionId){await ctx.rerender();return {ok:false,stale:true,status:res?.status??null}} // //TR: istek sürerken başka mission seçildi: gelen cevap o mission'ın durumuna yazılmaz
   const o=reapproveOutcome(res,missionId);
@@ -57,6 +59,7 @@ export async function submitAnalysisPlan(ctx,missionId){
   const req=buildAnalysisPlanRequest({missionId});
   if(!req.ok){setStatus(ANALYSIS_PLAN_FORM,{ok:false,errors:req.errors});await ctx.rerender();return {ok:false,validation:true}}
   drafts.busy[ANALYSIS_PLAN_FORM]=true;
+  await ctx.rerender(); // //TR: kilit görünür olsun: diğer düğmeler istek sürerken (cevap beklenmeden) kapanır
   let res;try{res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[ANALYSIS_PLAN_FORM]=false}
   if(analysisUi.missionId!==missionId){await ctx.rerender();return {ok:false,stale:true,status:res?.status??null}} // //TR: istek sürerken başka mission seçildi: gelen cevap o mission'ın durumuna yazılmaz
   const c=classifyAnalysisPlan(res),k=analysisStatusKey(c,res,"plan");
@@ -138,10 +141,11 @@ function planBlock(ctx,plan){
 export function analysisPanel(ctx,{missionId,exec}){
   const doc=ctx.doc;
   if(analysisUi.missionId!==missionId)resetAnalysis(missionId);
-  const busyS=analysisBusy(),busyP=analysisBusy(),step=analysisUi.step,complete=step&&step.status==="COMPLETE";
+  const busyAny=analysisBusy(),busyS=busyAny,busyP=busyAny,step=analysisUi.step,complete=step&&step.status==="COMPLETE";
   return h(doc,"div",{class:"analysis-step",id:"analysis-step",role:"region","aria-label":ctx.t("analysis.title"),dataset:{analysisMission:missionId}},
     h(doc,"h3",{text:ctx.t("analysis.title")}),
     h(doc,"p",{class:"note",text:ctx.t("analysis.lead")}),
+    busyAny?h(doc,"p",{class:"note",role:"status",dataset:{analysisBusy:"1"},text:ctx.t("analysis.inFlight")}):null,
     h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn btn-primary",id:"analysis-step-submit",dataset:{focusKey:"analysis-step-submit"},disabled:busyS,text:ctx.t("analysis.step.button"),
       on:{click:()=>{if(!analysisBusy())submitAnalysisStep(ctx,missionId)}}})),
     step?stepBlock(ctx,step,exec,missionId):h(doc,"p",{class:"note",dataset:{analysisStatus:"NONE"},text:ctx.t("analysis.none")}),

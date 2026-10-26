@@ -1503,6 +1503,7 @@ export default {
   "analysis.title":"Analysis",
   "analysis.lead":"The analysis produces, one phase at a time, a business analysis, the requirements with acceptance criteria, the plan and the architecture decision. You approve or reject each draft below; nothing is accepted without you. The completion message appears only when all four are approved.",
   "analysis.step.button":"Analyse (produce the next draft)",
+  "analysis.inFlight":"Another analysis request is running; the buttons stay disabled until it finishes.",
   "analysis.none":"No analysis step has been run in this view yet. Press the button to produce the next draft; if a draft already waits for your decision, nothing new is produced.",
   "analysis.notEnabled":"The analysis step is not enabled in this build yet. Nothing was sent.",
   "analysis.notFound":"The server does not know this mission.",
