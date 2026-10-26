@@ -793,6 +793,41 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
       try { expect((await p.run(["node", "test.js"], {cwd: dir, env: {}, timeoutMs: 5000})).stdout).toBe("Tests  12 passed (12)\n\0\n"); } finally { fs.rmSync(dir, {recursive: true, force: true}); }
     });
 
+    it("B-WSL-WIRE-1 selector: linux -> Linux provider, win32 -> WSL provider, every other platform -> null; a constructor throw -> null; no env/body input chooses or alters the provider; the win32 path is fail-closed when WSL is missing (gate SANDBOX_UNAVAILABLE)", async () => {
+      const {defaultSandboxProviderFor} = await import("../core/sandbox/select-provider.js");
+      const {WslUnshareSandboxProvider, WSL_SANDBOX_ID} = await import("../core/sandbox/wsl-unshare-sandbox.js");
+      const lin = defaultSandboxProviderFor({platform: "linux"}), win = defaultSandboxProviderFor({platform: "win32"});
+      expect(lin?.id).toBe(LINUX_SANDBOX_ID); expect(win?.id).toBe(WSL_SANDBOX_ID); expect(win).toBeInstanceOf(WslUnshareSandboxProvider);
+      for (const pl of ["darwin", "freebsd", "aix", "sunos", "openbsd", "android"] as const) expect(defaultSandboxProviderFor({platform: pl}), pl).toBeNull();
+      const boom = () => { throw new Error("ctor"); };
+      expect(defaultSandboxProviderFor({platform: "linux", makeLinux: boom})).toBeNull(); expect(defaultSandboxProviderFor({platform: "win32", makeWsl: boom})).toBeNull();
+      // ortam değişkenleri sağlayıcı seçemez/değiştiremez
+      const keys = ["UASCO_SANDBOX", "UASCO_SANDBOX_PROVIDER", "UASCO_WSL_BINARY", "SANDBOX_PROVIDER", "UASCO_FORCE_WSL", "UASCO_FORCE_LINUX"]; const saved = keys.map(k => process.env[k]);
+      try { for (const k of keys) process.env[k] = "wsl-unshare-v1"; expect(defaultSandboxProviderFor({platform: "linux"})?.id).toBe(LINUX_SANDBOX_ID); expect(defaultSandboxProviderFor({platform: "darwin"})).toBeNull(); expect(defaultSandboxProviderFor({platform: "win32"})?.id).toBe(WSL_SANDBOX_ID); }
+      finally { keys.forEach((k, i) => { if (saved[i] === undefined) delete process.env[k]; else process.env[k] = saved[i]; }); }
+      // WSL yok: wsl.exe başlatılamıyor -> selfTest ret -> kapı SANDBOX_UNAVAILABLE (hiçbir şey çalışmaz)
+      const missing = defaultSandboxProviderFor({platform: "win32", makeWsl: () => new WslUnshareSandboxProvider({platform: "win32", runner: async () => ({exitCode: null, stdout: Buffer.alloc(0), stderr: Buffer.alloc(0), timedOut: false, aborted: false, spawnError: true})})})!;
+      expect(await missing.selfTest()).toEqual({ok: false, detail: "WSL_EXE_MISSING"});
+      const gate = new ExecutionGate(missing); expect(await gate.authorize("STUDIO_DEVRUN")).toMatchObject({allowed: false, reason: "SANDBOX_UNAVAILABLE"});
+      // Windows olmayan ana makinede varsayılan WSL sağlayıcısı kendini doğrulamaz
+      expect(await new WslUnshareSandboxProvider().selfTest()).toEqual({ok: false, detail: "PLATFORM_NOT_WIN32"});
+    });
+
+    it("B-WSL-WIRE-1 distro discovery: with no UASCO_WSL_DISTRO the DEFAULT (*) WSL 2 distro is discovered from `wsl -l -v` (no user input) and used for every call; v1, docker/rancher/podman internals, no default or an invalid configured name are never picked", async () => {
+      const {discoverDefaultDistro} = await import("../core/sandbox/wsl-unshare-sandbox.js");
+      const tbl = (rows: string[]) => ["  NAME            STATE           VERSION", ...rows].join("\r\n");
+      expect([discoverDefaultDistro(tbl(["* Ubuntu          Running         2", "  Debian          Stopped         2"])), discoverDefaultDistro(tbl(["  Ubuntu          Running         2", "* Debian          Stopped         2"])),
+        discoverDefaultDistro(tbl(["* Ubuntu-22.04     Running         2"]))]).toEqual(["Ubuntu", "Debian", "Ubuntu-22.04"]);
+      for (const bad of [tbl(["* Ubuntu          Running         1"]), tbl(["* docker-desktop   Running         2", "  Ubuntu          Running         2"]), tbl(["* rancher-desktop Running         2"]), tbl(["  Ubuntu          Running         2"]), "", tbl(["* bad name!       Running         2"])]) expect(discoverDefaultDistro(bad), bad).toBeNull();
+      const saved = process.env.UASCO_WSL_DISTRO; delete process.env.UASCO_WSL_DISTRO;
+      try {
+        const {p, f} = await mk({}, {distro: undefined}); expect(await p.selfTest(), "discovered default Ubuntu").toEqual({ok: true});
+        expect(f.calls.filter(c => c.args[0] === "-d").every(c => c.args[1] === "Ubuntu")).toBe(true); expect(f.calls.some(c => c.args[0] === "-d")).toBe(true);
+        process.env.UASCO_WSL_DISTRO = "bad name!"; const inv = await mk({}, {distro: undefined}); expect(await inv.p.selfTest()).toEqual({ok: false, detail: "WSL_DISTRO_NOT_CONFIGURED"}); // verilmiş ama geçersiz: keşfe düşülmez
+        expect(inv.f.calls.some(c => c.args[0] === "-l" && c.args[1] === "-v")).toBe(false);
+      } finally { if (saved === undefined) delete process.env.UASCO_WSL_DISTRO; else process.env.UASCO_WSL_DISTRO = saved; }
+    });
+
     it("NEW-0: orphaned zombies (state Z/X) in the process group are not survivors (teardown is clean) while a live member, unparseable state or no parsable pid stays PROCESS_SURVIVED (fail-closed); procStatState handles ')' inside comm", async () => {
       const {procStatState} = await import("../core/sandbox/wsl-unshare-sandbox.js");
       expect([procStatState("12 (sleep) Z 1 12 12 0"), procStatState("12 (a) b (c)) S 1 1 1"), procStatState("12 (x) X 1"), procStatState("junk"), procStatState("")]).toEqual(["Z", "S", "X", null, null]);

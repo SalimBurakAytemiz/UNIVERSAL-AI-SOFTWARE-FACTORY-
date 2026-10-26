@@ -256,6 +256,18 @@ const STDIN_PROBE = "read -r l; echo got=$l";
 
 /** Sandbox zincirini öldürür: kayıtlı timeout süreç grubuna YALNIZ hâlâ bizimse (cmdline S'yi içeriyorsa) SIGKILL; lider çıkmışsa pgid yeniden kullanılmış olabilir, grup öldürülmez (pid ad alanı çökünce zaten dağılır). Çıktı: PGID=<n|none>. */
 /** /proc/<pid>/stat içeriğinden süreç durumu harfi (comm parantezi içinde ')' olabilir: SON ')' sonrası). Ayrıştırılamazsa null. */
+/** `wsl -l -v` çıktısından varsayılan (*) dağıtımı seçer: WSL 2 olmalı ve docker-desktop/rancher-desktop/podman gibi iç dağıtım olmamalı; aksi halde null (kullanıcı seçmeli). */
+export function discoverDefaultDistro(text: string): string | null {
+  for (const line of text.split(/\r?\n/)) {
+    if (!/^\s*\*/.test(line)) continue;
+    const c = line.replace(/^\s*\*/, "").trim().split(/\s+/);
+    if (c.length !== 3 || c[2] !== "2") return null;
+    const name = c[0]!;
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(name) || /^(docker-desktop|rancher-desktop|podman)/i.test(name)) return null;
+    return name;
+  }
+  return null;
+}
 export function procStatState(text: string): string | null {
   const i = text.lastIndexOf(") ");
   const c = i < 0 ? "" : text.charAt(i + 2);
@@ -310,7 +322,13 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
   isVerified(): boolean { return this.verified; }
   constructor(private readonly o: WslSandboxOptions = {}) {}
   private get platform(): NodeJS.Platform { return this.o.platform ?? process.platform; }
-  private get distro(): string | undefined { const d = this.o.distro ?? process.env.UASCO_WSL_DISTRO; return d && /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(d) ? d : undefined; }
+  /** Dağıtım adı: önce seçenek, sonra Founder'ın ortam değişkeni UASCO_WSL_DISTRO (VERİLMİŞ ama geçersizse ret: keşfe düşülmez), hiçbiri yoksa selfTest'te `wsl -l -v`'den KEŞFEDİLEN varsayılan v2 dağıtım. İstek gövdesi bunu seçemez. */
+  private get distro(): string | undefined {
+    const given = this.o.distro ?? process.env.UASCO_WSL_DISTRO;
+    const d = given !== undefined && given !== "" ? given : this.discovered;
+    return d && /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(d) ? d : undefined;
+  }
+  private discovered: string | undefined;
   private get runner(): WslRunner { return this.o.runner ??= spawnWslRunner(this.o.wslBinary ?? "wsl.exe", this.o.killGraceMs); }
   private get isolation(): LinuxIsolation | null { return this.o.isolation === undefined ? linuxIsolationFromModule() : this.o.isolation; }
 
@@ -622,6 +640,11 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
     const st = await this.runner(["--status"], {timeoutMs: 20_000});
     if (st.spawnError) return no("WSL_EXE_MISSING");
     if (st.exitCode !== 0) return no("WSL_NOT_AVAILABLE");
+    if (this.distro === undefined && !(this.o.distro ?? process.env.UASCO_WSL_DISTRO)) {
+      // Girdisiz keşif: `wsl -l -v` çıktısındaki VARSAYILAN (*) dağıtım, WSL 2 ve docker/rancher/podman iç dağıtımı değilse. Seçilen ad yine selfTest'in tüm kanıtlarından geçmek zorundadır.
+      const v = await this.runner(["-l", "-v"], {timeoutMs: 20_000});
+      this.discovered = v.exitCode === 0 ? discoverDefaultDistro(decodeWslText(v.stdout)) ?? undefined : undefined;
+    }
     const distro = this.distro;
     if (!distro) return no("WSL_DISTRO_NOT_CONFIGURED");
     const list = await this.runner(["-l", "-q"], {timeoutMs: 20_000});
