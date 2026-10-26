@@ -1,6 +1,11 @@
 // //TR: protected-change-grammar.mjs icin TypeScript bildirimi (testler dil bilgisi denetimlerini tip guvenli cagirir); davranis .mjs dosyasindadir.
 export declare const DENY_TOKENS: readonly string[];
+export declare const CASE_SENSITIVE_DENY_TOKENS: readonly string[];
+export declare const GLOBAL_NAMES: readonly string[];
 export declare const ALLOWLIST_MARKERS: readonly (readonly [string, string])[];
+export declare function lineCharViolation(line: string): string | null;
+export declare function commentViolation(rest: unknown): string | null;
+export declare function lazyExpressionOk(expr: unknown): boolean;
 export declare function safeExpression(expr: unknown): boolean;
 export declare function insertedLines(baseLines: string[], headLines: string[]): number[] | null;
 export declare function pathRegexBodyOk(body: unknown): boolean;

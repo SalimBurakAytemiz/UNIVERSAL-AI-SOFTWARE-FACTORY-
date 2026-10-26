@@ -100,7 +100,7 @@ export async function waitForCi(gh, headSha, {prNumber = null, timeoutMs = 100 *
   }
 }
 
-// //TR: Önceden yetkilendirilmiş bir sınıfın adayı olan korunan dosyanın metni, contents API ile TAM base ve head SHA'sında okunur: boyut sınırı, tür, base64, uzunluk, git blob SHA'sı ve UTF-8 doğrulanır; herhangi bir sapma veya hata null'dır (içerik eksik = FOUNDER, fail-closed). Metin hiçbir çıktıya yazılmaz, yalnız sınıflandırıcıya verilir.
+// //TR: Önceden yetkilendirilmiş bir sınıfın adayı olan korunan dosyanın metni, contents API ile TAM base ve head SHA'sında okunur: boyut sınırı, tür, base64, uzunluk, git blob SHA'sı ve UTF-8 doğrulanır; herhangi bir sapma veya hata null'dır (içerik eksik = FOUNDER, fail-closed). Metin kanıtın fileContents alanında taşınır: collect onu evidence.json'a yazar (decide sınıflandırmayı aynı SHA'ya bağlı içerikle yeniden hesaplar) ve bu dosya uasco-review-input/-evidence artifact'larına girer; bu, pr.diff ile aynı depo içeriğidir, başka bir çıktıya yazılmaz.
 export const MAX_CONTENT_BYTES = 1_000_000;
 export async function fileText(gh, filePath, sha) {
   if (!SHA_RE.test(String(sha)) || typeof filePath !== "string" || !CONTENT_CANDIDATES.includes(filePath)) return null;

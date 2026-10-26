@@ -40,6 +40,8 @@ const m4aAllow = () => applyDiff(FX.main4a.base, FX.main4a.diff, i => i < 2);
 const addRegister = (head: string, line: string) => head.replace("registerTaskRoutes(app,laneDeps);", `${line}\nregisterTaskRoutes(app,laneDeps);`);
 const routeImport = 'import {registerWidgetStatusRoutes} from "./routes/widget-status.js";';
 const withImport = (t: string) => t.replace('import {registerRunSummaryRoutes} from "./routes/run-summaries.js";', `import {registerRunSummaryRoutes} from "./routes/run-summaries.js";\n${routeImport}`);
+// JS line terminators other than LF, and invisible format characters, written as code points so this source file itself never contains them.
+const CR = String.fromCharCode(13), LS = String.fromCharCode(0x2028), PS = String.fromCharCode(0x2029), RLO = String.fromCharCode(0x202e), ZWSP = String.fromCharCode(0x200b);
 
 export function registerMergeRiskCases() {
   describe("merge risk classifier (COORD-TRANSITION-AUTONOMY)", () => {
@@ -108,6 +110,72 @@ export function registerMergeRiskCases() {
         expect(G.routeRegistrationViolations(base, base)).toEqual(["NO_CHANGE"]);
         expect(G.routeRegistrationViolations(null, base)).toEqual(["CONTENT_MISSING"]);
       });
+      it("a lazy expression is one expression: a top-level comma (extra or overriding object keys, eagerly evaluated) is FOUNDER, and the deny tokens match in any case", () => {
+        const base = FX.server4a.base, head0 = withImport(s4aRoutes());
+        const lazyOk = addRegister(head0, "registerWidgetStatusRoutes(app,{...laneDeps,widgets:()=>getStore()});");
+        expect(G.routeRegistrationViolations(base, lazyOk)).toEqual([]);
+        for (const tail of ["demo:()=>0,orgId:Math.max(1,2)", "demo:()=>0,extra:Math.max(1,2)", "widgets:()=>getStore(),workosPolicy:()=>allowAll,workosStopped:()=>false",
+          "widgets:()=>getStore(),orgId:getStore()", "widgets:()=>getStore(),extra:getStore().wipe()", "widgets:()=>(getStore(),orgId)", "widgets:()=>{getStore()}",
+          "widgets:()=>Object.setPrototypeOf(getStore(),zz)", "widgets:()=>getStore().w(!zz)", "widgets:()=>getStore().w(zz?a:b)", "widgets:()=>getStore()[0]", "__proto__:()=>getStore()"]) {
+          const head = addRegister(head0, `registerWidgetStatusRoutes(app,{...laneDeps,${tail}});`);
+          expect(G.routeRegistrationViolations(base, head).filter(c => c === "DEPENDENCY_EXPRESSION_DENIED" || c === "LANE_DEP_OVERRIDE"), tail).not.toEqual([]);
+          expect(tierOf(SRV, base, head).tier, tail).toBe("FOUNDER");
+        }
+        expect(G.safeExpression("Object.SETPROTOTYPEOF(a)")).toBe(false);
+        expect(G.safeExpression("getSandboxProvider()")).toBe(false);
+        expect(G.lazyExpressionOk("a,b")).toBe(false);
+        expect(G.lazyExpressionOk("new AnalysisFlow({store:getStore(),scope,builder:x?.y?.()??z,readiness:()=>f({a:[b.c]})})")).toBe(true);
+      });
+      it("comments carry no tool directives (@ts-nocheck at line 1, @ts-ignore in a function body, eslint/coverage pragmas, triple-slash and source directives are FOUNDER)", () => {
+        const base = FX.server4a.base, head0 = addRegister(withImport(s4aRoutes()), "registerWidgetStatusRoutes(app,laneDeps);");
+        expect(G.routeRegistrationViolations(base, head0)).toEqual([]);
+        expect(G.routeRegistrationViolations(base, head0.replace(routeImport, `// //TR: widget durum route'u (salt-okunur).\n${routeImport}`))).toEqual([]);
+        const bad: [string, string, string][] = [
+          ["@ts-nocheck as line 1", `// @ts-nocheck\n${head0}`, "COMMENT_PRAGMA"],
+          ["@ts-ignore inside a function body", head0.replace(/^(  const env=executorsFromEnv)/m, "// @ts-ignore\n$1"), "COMMENT_PRAGMA"],
+          ["@ts-expect-error", `// @ts-expect-error\n${head0}`, "COMMENT_PRAGMA"],
+          ["eslint directive", addRegister(head0, "// eslint-disable-next-line no-restricted-syntax"), "COMMENT_PRAGMA"],
+          ["coverage directive", addRegister(head0, "// c8 ignore next"), "COMMENT_PRAGMA"],
+          ["prettier directive", addRegister(head0, "// prettier-ignore"), "COMMENT_PRAGMA"],
+          ["triple-slash directive", `/// <reference path="./evil.d.ts"/>\n${head0}`, "LINE_NOT_IN_GRAMMAR"],
+          ["source directive", addRegister(head0, "//# sourceMappingURL=data:x"), "LINE_NOT_IN_GRAMMAR"],
+        ];
+        for (const [name, head, code] of bad) {
+          expect(G.routeRegistrationViolations(base, head), name).toContain(code);
+          expect(tierOf(SRV, base, head).tier, name).toBe("FOUNDER");
+        }
+      });
+      it("a CR, U+2028 or U+2029 in an added line (a comment included) ends the JS line, so it is FOUNDER; so are bidi and zero-width characters", () => {
+        const base = FX.server4a.base, head0 = withImport(s4aRoutes());
+        for (const [label, lt] of [["CR", CR], ["U+2028", LS], ["U+2029", PS]]) {
+          const inComment = addRegister(head0, `// widget routes${lt}app.addHook("onRequest",async()=>{});\nregisterWidgetStatusRoutes(app,laneDeps);`);
+          expect(G.routeRegistrationViolations(base, inComment), label).toContain("LINE_TERMINATOR_IN_LINE");
+          expect(tierOf(SRV, base, inComment).tier, label).toBe("FOUNDER");
+          const inCode = addRegister(head0, `registerWidgetStatusRoutes(app,laneDeps);${lt}app.addHook("onRequest",async()=>{});`);
+          expect(G.routeRegistrationViolations(base, inCode), label).toContain("LINE_TERMINATOR_IN_LINE");
+          expect(tierOf(SRV, base, inCode).tier, label).toBe("FOUNDER");
+        }
+        for (const ch of [RLO, ZWSP]) {
+          const head = addRegister(head0, `// note ${ch}x\nregisterWidgetStatusRoutes(app,laneDeps);`);
+          expect(G.routeRegistrationViolations(base, head)).toContain("CONTROL_CHARACTER_IN_LINE");
+          expect(tierOf(SRV, base, head).tier).toBe("FOUNDER");
+        }
+      });
+      it("an added import never shadows a JS/Node global or a name the file already uses (process, JSON, Boolean, URL, structuredClone, getStore), nor binds a name twice", () => {
+        const base = FX.server4a.base, head0 = addRegister(withImport(s4aRoutes()), "registerWidgetStatusRoutes(app,laneDeps);");
+        const withCore = (names: string, mod = "workos/host-process") => head0.replace(routeImport, `${routeImport}\nimport {${names}} from "../../../core/${mod}.js";`);
+        expect(G.routeRegistrationViolations(base, withCore("hostProcessInfo"))).toEqual([]);
+        for (const n of ["process", "JSON", "Boolean", "URL", "structuredClone", "Intl", "getStore", "orgId", "toString", "constructorX,JSON"]) {
+          const head = withCore(n);
+          expect(G.routeRegistrationViolations(base, head), n).toContain("IMPORT_SHADOWS_NAME");
+          expect(tierOf(SRV, base, head).tier, n).toBe("FOUNDER");
+        }
+        // URL and structuredClone do not occur in the base excerpt: only the global-name rule catches them; getStore and orgId are not globals: only the base-text rule does.
+        for (const n of ["URL", "structuredClone"]) expect(new RegExp(`\\b${n}\\b`).test(base), n).toBe(false);
+        expect(["getStore", "orgId"].some(n => G.GLOBAL_NAMES.includes(n) || n in globalThis)).toBe(false);
+        const twice = head0.replace(routeImport, `${routeImport}\nimport {hostProcessInfo} from "../../../core/workos/a.js";\nimport {hostProcessInfo} from "../../../core/workos/b.js";`);
+        expect(G.routeRegistrationViolations(base, twice)).toContain("IMPORT_SHADOWS_NAME");
+      });
     });
 
     describe("DESKTOP_ALLOWLIST_APPEND (apps/desktop/main.mjs)", () => {
@@ -163,6 +231,31 @@ export function registerMergeRiskCases() {
         const electron = `${base}\nnew BrowserWindow({webPreferences:{contextIsolation:false}});`;
         expect(G.desktopAllowlistViolations(base, electron)).toContain("CHANGE_OUTSIDE_ALLOWLIST");
         expect(G.pathRegexBodyOk("^\\/v1\\/missions\\/msn_[0-9a-f]{24}\\/analysis\\/(?:step|plan)$")).toBe(true);
+      });
+      it("a CR, U+2028 or U+2029 in a B4/B5 line or an array comment, a bidi character, or a tool directive in a region comment is FOUNDER", () => {
+        const {base, head} = m4b();
+        const decl = "const WORK_RUN_PRODUCT_RE=/^\\/v1\\/work-runs\\/run_[0-9a-f]{24}\\/product$/;";
+        const post = "function desktopPostPathAllowed(value){", arr = "  /^\\/v1\\/missions\\/msn_[0-9a-f]{24}\\/analysis\\/(?:step|plan)$/,";
+        expect(head).toContain(arr);
+        for (const [label, lt] of [["CR", CR], ["U+2028", LS], ["U+2029", PS]]) {
+          for (const [where, h] of [["B5 line", head.replace(post, `// allow-list note${lt}POST_ROUTE_RES.push(/^/);\n${post}`)],
+            ["B4 line", head.replace(decl, `${decl}\n// note${lt}EXTRA_GET_ROUTES.add("/v1/admin");`)],
+            ["array comment", head.replace(arr, `  // note${lt}/^/,\n${arr}`)]] as [string, string][]) {
+            expect(G.desktopAllowlistViolations(base, h), `${label} ${where}`).toContain("LINE_TERMINATOR_IN_LINE");
+            expect(tierOf(MAIN, base, h).tier, `${label} ${where}`).toBe("FOUNDER");
+          }
+        }
+        const bad: [string, string, string][] = [
+          ["bidi in a region comment", head.replace(decl, `${decl}\n// note ${RLO}x`), "CONTROL_CHARACTER_IN_LINE"],
+          ["@ts-nocheck in a region", head.replace(decl, `${decl}\n// @ts-nocheck`), "COMMENT_PRAGMA"],
+          ["eslint directive in an array comment", head.replace(arr, `  // eslint-disable-line\n${arr}`), "COMMENT_PRAGMA"],
+          ["triple-slash directive in a region", head.replace(decl, `${decl}\n/// <reference path="x"/>`), "COMMENT_NOT_IN_GRAMMAR"],
+        ];
+        for (const [name, h, code] of bad) {
+          expect(G.desktopAllowlistViolations(base, h), name).toContain(code);
+          expect(tierOf(MAIN, base, h).tier, name).toBe("FOUNDER");
+        }
+        expect(G.desktopAllowlistViolations(base, head.replace(decl, `${decl}\n// //TR: yeni çapalı yol.`))).toEqual([]);
       });
     });
 
@@ -233,7 +326,7 @@ export function registerMergeRiskCases() {
     describe("path tiers", () => {
       const names = (files: [string, string?, string?][]) => classify(files.map(([filename, status = "modified", previous_filename]) => ({filename, status, ...(previous_filename ? {previous_filename} : {})})));
       it("routine product code, tests and docs are ROUTINE", () => {
-        const r = names([["apps/control-api/src/routes/widget.ts", "added"], ["core/workos/crew/analysis.ts"], ["tests/v7-new.test.ts", "added"], ["docs/planning/MERGE_GATE.md"],
+        const r = names([["apps/control-api/src/routes/widget.ts", "added"], ["core/workos/crew/analysis.ts"], ["tests/v7-new.test.ts", "added"], ["docs/planning/ROADMAP-NOTES.md"],
           ["apps/desktop/renderer/views/flow.js"], ["tests/support/production-lanes.cases.ts"]]);
         expect(r.tier).toBe("ROUTINE");
         expect(r.classes).toEqual(["ROUTINE"]);
@@ -246,7 +339,8 @@ export function registerMergeRiskCases() {
           "docs/planning/merge-risk.mjs", "docs/planning/pr-controller.mjs", "docs/planning/merge-gate.proof.mjs", "core/authority/approval.ts", "core/sandbox/policy.ts",
           "core/agents/linux-unshare-sandbox.ts", "core/workos/execution-gate.ts", "apps/desktop/preload.mjs", "apps/desktop/renderer/index.html", "apps/desktop/renderer/app.js",
           "tests/review-governance.test.ts", "tests/support/autonomous-authority.cases.ts", "tests/support/merge-risk.cases.ts", "tests/support/merge-risk.fixtures.json",
-          "tests/support/pr-controller.cases.ts"]) {
+          "tests/support/pr-controller.cases.ts", "docs/authority-requests/COORD-TRANSITION-AUTONOMY.md", "docs/planning/MERGE_GATE.md", "docs/governance/UASCO-INDEPENDENT-REVIEW.md",
+          "core/workos/risk-admission.ts", "core/workos/secret-scan.ts", "scripts/local-worker/sandbox.mjs"]) {
           const r = R.classifyChange({files: [{filename: f, status: "modified"}], protectedPaths: thin});
           expect(r.tier, f).toBe("FOUNDER");
         }
@@ -264,6 +358,18 @@ export function registerMergeRiskCases() {
         expect(classify([{filename: "a.ts", status: "modified"}, {filename: "A.ts", status: "modified"}]).tier).toBe("FOUNDER");
         expect(R.classifyChange({files: "x", protectedPaths: REAL_PP})).toEqual({tier: "FOUNDER", files: [], classes: ["FILES_MALFORMED"]});
         expect(R.classifyChange({files: [{filename: "a.ts", status: "modified"}], protectedPaths: {exactPaths: [], protectedPrefixes: []}}).tier).toBe("FOUNDER");
+      });
+      it("a case-only rename of a test or protected file is a removal; NTFS aliases and non-canonical names are malformed; a content class applies only to its target modified in place", () => {
+        expect(names([["tests/V7-b3c-security-stage.test.ts", "renamed", "tests/v7-b3c-security-stage.test.ts"]]).files[0]).toEqual({file: "tests/V7-b3c-security-stage.test.ts", tier: "FOUNDER", code: "TEST_FILE_REMOVED"});
+        expect(names([["Apps/desktop/main.mjs", "renamed", "apps/desktop/main.mjs"]]).files[0].code).toBe("PROTECTED_PATH_REMOVED");
+        for (const f of ["apps/desktop/main.mjs.", "apps/desktop/main.mjs ", "apps/desktop/main.mjs:evil", "apps/desktop/MAIN~1.MJS", "./apps/x.ts", "apps//x.ts", "apps\\x.ts", " apps/x.ts"])
+          expect(names([[f, "added"]]).files[0].code, JSON.stringify(f)).toBe("FILE_ENTRY_MALFORMED");
+        expect(names([["apps/x.ts", "renamed", "apps/desktop/main.mjs."]]).files[0].code).toBe("FILE_ENTRY_MALFORMED");
+        const {base, head} = s4b();
+        for (const status of ["added", "changed"]) expect(classify([{filename: SRV, status, baseText: base, headText: head}]).files[0].tier, status).toBe("FOUNDER");
+        expect(classify([{filename: SRV, status: "copied", previous_filename: "apps/control-api/src/old.ts", baseText: base, headText: head}]).files[0].tier).toBe("FOUNDER");
+        expect(classify([{filename: SRV, status: "modified", previous_filename: SRV, baseText: base, headText: head}]).files[0].tier).toBe("FOUNDER");
+        expect(classify([{filename: SRV, status: "modified", baseText: base, headText: head}]).files[0].tier).toBe("PREAUTHORIZED");
       });
       it("the PR tier is the highest file tier and every output code is a fixed code (no PR text is echoed)", () => {
         const marker = "ZQX-MARKER";
@@ -283,14 +389,15 @@ export function registerMergeRiskCases() {
         // The trust-root boundary rule would not seal scripts/validate-role-registry.mjs; the gate still classes it FOUNDER.
         expect(classify([{filename: "scripts/validate-role-registry.mjs", status: "modified"}]).tier).toBe("FOUNDER");
       });
-      it("the new gate files are FOUNDER by both lists: config/protected-paths.json and the high-risk set", () => {
+      it("the new gate files and the recorded authority terms are FOUNDER by both lists: config/protected-paths.json and the high-risk set", () => {
         const m = R.pathMatcher(REAL_PP);
         for (const f of ["docs/planning/merge-gate.mjs", "docs/planning/merge-risk.mjs", "docs/planning/merge-risk.d.mts", "docs/planning/pr-controller.mjs", "docs/planning/pr-controller.d.mts",
           "docs/planning/merge-gate.proof.mjs", "docs/planning/merge-risk.proof.mjs", "core/authority/autonomous-authority.mjs", "core/authority/protected-change-grammar.mjs",
           "tests/review-governance.test.ts", "tests/support/merge-risk.cases.ts", "tests/support/merge-risk.fixtures.json", "tests/support/pr-controller.cases.ts",
-          "tests/support/autonomous-authority.cases.ts", "scripts/ci/uasco-review/review-gate.mjs", "scripts/ci/uasco-review/review-gate.proof.mjs"]) {
-          expect(m.protectedHit(f), f).toBe(true);
-          expect(R.isHighRisk(f), f).toBe(true);
+          "tests/support/autonomous-authority.cases.ts", "scripts/ci/uasco-review/review-gate.mjs", "scripts/ci/uasco-review/review-gate.proof.mjs",
+          "docs/authority-requests/COORD-TRANSITION-AUTONOMY.md", "docs/planning/MERGE_GATE.md", "docs/governance/UASCO-INDEPENDENT-REVIEW.md"]) {
+          expect(m.protectedHit(R.normPath(f)!), f).toBe(true);
+          expect(R.isHighRisk(R.normPath(f)), f).toBe(true);
         }
       });
     });

@@ -48,6 +48,10 @@ function suite(R) {
   const MB = man([[MAIN, m4bB], [SRV, s4bB]], "t1");
   const bad = s4bH.replace("devruns:()=>getDevRuns()", "devruns:()=>process.env");
   const thin = {exactPaths: ["x"], protectedPrefixes: ["y/"]};
+  const LS = String.fromCharCode(0x2028), CR = String.fromCharCode(13), RLO = String.fromCharCode(0x202e);
+  const regW = reg(s4aI, "registerWidgetStatusRoutes(app,laneDeps);");
+  const core = names => regW.replace(imp, `${imp}\nimport {${names}} from "../../../core/workos/host-process.js";`);
+  const post = "function desktopPostPathAllowed(value){", arr = "  /^\\/v1\\/missions\\/msn_[0-9a-f]{24}\\/analysis\\/(?:step|plan)$/,";
   return [
     ["P1 batch 4b server.ts (fee6cef) is PREAUTHORIZED", tier(SRV, s4bB, s4bH) === "PREAUTHORIZED"],
     ["P2 batch 4b main.mjs (fee6cef) is PREAUTHORIZED", tier(MAIN, m4bB, m4bH) === "PREAUTHORIZED"],
@@ -95,6 +99,26 @@ function suite(R) {
     ["N30 a malformed entry is FOUNDER", C([{filename: "a.ts", status: "moved"}]).tier === "FOUNDER"],
     ["N31 the canonical matcher is raw startsWith (scripts/validate-role-registry.mjs is protected)", R.pathMatcher(PP).protectedHit("scripts/validate-role-registry.mjs") === true],
     ["N32 a renamed pre-authorized target is FOUNDER", C([{filename: SRV, status: "renamed", previous_filename: "apps/control-api/src/old.ts", baseText: s4bB, headText: s4bH}]).tier === "FOUNDER"],
+    // Review round 1 regressions.
+    ["N33 a top-level comma in a lazy dependency (extra eager key) is FOUNDER", tier(SRV, s4aB, reg(s4aI, "registerWidgetStatusRoutes(app,{...laneDeps,w:()=>getStore(),orgId:getStore()});")) === "FOUNDER"],
+    ["N34 a // @ts-nocheck comment is FOUNDER", tier(SRV, s4aB, `// @ts-nocheck\n${regW}`) === "FOUNDER"],
+    ["N35 a U+2028 inside a server.ts comment is FOUNDER", tier(SRV, s4aB, reg(s4aI, `// note${LS}app.addHook("onRequest",async()=>{});\nregisterWidgetStatusRoutes(app,laneDeps);`)) === "FOUNDER"],
+    ["N36 a CR inside a main.mjs region comment is FOUNDER", tier(MAIN, m4bB, m4bH.replace(post, `// note${CR}POST_ROUTE_RES.push(/^/);\n${post}`)) === "FOUNDER"],
+    ["N37 an import shadowing a global the base never uses (URL) is FOUNDER", !/\bURL\b/.test(s4aB) && tier(SRV, s4aB, core("URL")) === "FOUNDER"],
+    ["N37b an import shadowing a name the base uses (getStore) is FOUNDER", tier(SRV, s4aB, core("getStore")) === "FOUNDER"],
+    ["N37c a fresh core import name passes", tier(SRV, s4aB, core("hostProcessInfo")) === "PREAUTHORIZED"],
+    ["N38 a case-only rename of a registered test is FOUNDER", C([{filename: "tests/V7-b3c-security-stage.test.ts", status: "renamed", previous_filename: "tests/v7-b3c-security-stage.test.ts"}]).tier === "FOUNDER"],
+    ["N39 an NTFS alias of a protected file is FOUNDER", C([{filename: "apps/desktop/main.mjs.", status: "added"}]).tier === "FOUNDER"],
+    ["N40 a pre-authorized target with status added and contents is FOUNDER", C([{filename: SRV, status: "added", baseText: s4bB, headText: s4bH}]).tier === "FOUNDER"],
+    ["N41 a pre-authorized target modified with a previous_filename is FOUNDER", C([{filename: SRV, status: "modified", previous_filename: SRV, baseText: s4bB, headText: s4bH}]).tier === "FOUNDER"],
+    ["N42 Object.setPrototypeOf in a dependency is FOUNDER (case-insensitive deny tokens)", tier(SRV, s4aB, lazy("Object.setPrototypeOf(getStore(),zz)")) === "FOUNDER"],
+    ["N43 a U+2028 in an allow-list array comment is FOUNDER", tier(MAIN, m4bB, m4bH.replace(arr, `  // note${LS}/^/,\n${arr}`)) === "FOUNDER"],
+    ["N44 a // @ts-nocheck line in an allow-list region is FOUNDER", tier(MAIN, m4bB, m4bH.replace(decl, `${decl}\n// @ts-nocheck`)) === "FOUNDER"],
+    ["N45 a bidi control in a server.ts comment is FOUNDER", tier(SRV, s4aB, reg(s4aI, `// note ${RLO}x\nregisterWidgetStatusRoutes(app,laneDeps);`)) === "FOUNDER"],
+    ["N46 an eslint directive in an allow-list array comment is FOUNDER", tier(MAIN, m4bB, m4bH.replace(arr, `  // eslint-disable-line\n${arr}`)) === "FOUNDER"],
+    ["N47 an operator in a dependency is FOUNDER", tier(SRV, s4aB, lazy("getStore().w(!zz)")) === "FOUNDER"],
+    ["N48 a //TR comment in a region and in server.ts passes", tier(MAIN, m4bB, m4bH.replace(decl, `${decl}\n// //TR: yol.`)) === "PREAUTHORIZED"
+      && tier(SRV, s4aB, regW.replace(imp, `// //TR: widget.\n${imp}`)) === "PREAUTHORIZED"],
   ];
 }
 
@@ -102,14 +126,14 @@ function suite(R) {
 const G = "core/authority/protected-change-grammar.mjs", AAE = "core/authority/autonomous-authority.mjs", MR = "docs/planning/merge-risk.mjs";
 const MUTANTS = [
   ["drop the process. deny token", G, '["process.", ', "["],
-  ["drop the Sandbox deny token", G, '"sandbox", "Sandbox", ', '"sandbox", '],
-  ["drop the quote/backslash/semicolon ban in expressions", G, 'if (/["\'`\\\\;/#]/.test(expr) || ', "if ("],
+  ["drop both sandbox deny tokens", G, '"sandbox", "Sandbox", ', ""],
+  ["skip unknown characters in a dependency expression", G, "if (!p) return null;", "if (!p) { i++; continue; }"],
   ["accept removed or modified lines", G, "return j === baseLines.length ? added : null;", "return added;"],
-  ["skip the laneDeps override check", G, 'if (depKeys.has(lazy[2]) || lazy[2] === "app") r.push("LANE_DEP_OVERRIDE");', ""],
+  ["skip the laneDeps override check", G, 'if (depKeys.has(lazy[2]) || lazy[2] === "app" || lazy[2] === "__proto__") r.push("LANE_DEP_OVERRIDE");', ""],
   ["skip the registration-block check", G, 'if (!(k === deps || REGISTER_ANY_RE.test(head[k]))) r.push("REGISTER_OUTSIDE_BLOCK");', ""],
   ["skip the import check for registrations", G, 'if (!importedRoutes.has(name)) r.push("REGISTER_NOT_IMPORTED");', ""],
   ["skip the duplicate registration check", G, 'if (head.filter(h => h.startsWith(`${name}(`)).length !== 1 || base.some(b => b.startsWith(`${name}(`))) r.push("REGISTER_DUPLICATE");', ""],
-  ["allow comments that open or close block comments", G, '{ if (BLOCK_COMMENT_RE.test(l)) r.push("COMMENT_NOT_IN_GRAMMAR"); continue; }', "continue;"],
+  ["allow comments that open or close block comments", G, 'if (BLOCK_COMMENT_RE.test(rest) || /^[/#!]/.test(rest)) return "COMMENT_NOT_IN_GRAMMAR";', 'if (/^[/#!]/.test(rest)) return "COMMENT_NOT_IN_GRAMMAR";'],
   ["skip the ^ anchor", G, "String.raw`^\\^(?:${SEGMENT})+\\$$`", "String.raw`^\\^?(?:${SEGMENT})+\\$$`"],
   ["skip the $ anchor", G, "String.raw`^\\^(?:${SEGMENT})+\\$$`", "String.raw`^\\^(?:${SEGMENT})+\\$?$`"],
   ["accept any regex body", G, "export const pathRegexBodyOk = body => typeof body === \"string\" && body.length <= 200 && PATH_REGEX_BODY.test(body);", "export const pathRegexBodyOk = body => typeof body === \"string\";"],
@@ -131,6 +155,24 @@ const MUTANTS = [
   ["take the minimum tier", MR, "if (RANK[x.tier] > RANK[tier]) tier = x.tier;", "if (RANK[x.tier] < RANK[tier]) tier = x.tier;"],
   ["use the trust-root boundary matcher for prefixes", MR, "prefixes.some(p => n.startsWith(p))", "prefixes.some(p => n === p.replace(/\\/$/, \"\") || n.startsWith(p.endsWith(\"/\") ? p : `${p}/`))"],
   ["accept renamed pre-authorized targets", MR, 'if (f.status === "modified" && !hasPrev && !ci', 'if (!ci'],
+  // Review round 1: each new rule has a mutant that removes it.
+  ["skip the line-terminator check in server.ts", G, "const cv = lineCharViolation(l);\n    if (cv) { r.push(cv); continue; }", ""],
+  ["skip the line-terminator check in allow-list regions", G, "for (const l of headLines) { const cv = lineCharViolation(l); if (cv) { r.push(cv); return; } }", ""],
+  ["treat only CR as a line terminator", G, "const LINE_TERMINATOR_RE = /[\\r\\u2028\\u2029]/;", "const LINE_TERMINATOR_RE = /[\\r]/;"],
+  ["accept invisible format characters", G, "\\u007f-\\u009f\\p{Cf}]/u;", "\\u007f-\\u009f]/u;"],
+  ["accept tool directives in comments", G, 'return COMMENT_PRAGMA_RE.test(rest) ? "COMMENT_PRAGMA" : null;', "return null;"],
+  ["skip the comment check in server.ts", G, 'if (l.startsWith("// ")) { const c = commentViolation(l.slice(2)); if (c) r.push(c); continue; }', 'if (l.startsWith("// ")) continue;'],
+  ["skip the comment check on region lines", G, "{ const c = commentViolation(t.trim().slice(2)); if (c) r.push(c); continue; }", "continue;"],
+  ["skip the comment check in allow-list arrays", G, "for (const c of he.comments) { const v = be.comments.includes(c) ? null : commentViolation(c.slice(2)); if (v) r.push(v); }", ""],
+  ["accept a top-level comma after the lazy expression", G, "return body() && i === t.length;", "return body();"],
+  ["match deny tokens case-sensitively", G, "(CASE_SENSITIVE_DENY_TOKENS.includes(t) ? s.includes(t) : l.includes(t.toLowerCase()))", "s.includes(t)"],
+  ["skip the import shadowing check", G, 'if (shadows(baseText, n) || bound.has(n)) r.push("IMPORT_SHADOWS_NAME");', ""],
+  ["ignore global names when importing", G, "const shadows = (baseText, n) => GLOBAL_NAMES.includes(n) || n in globalThis || usedIn(baseText, n);", "const shadows = (baseText, n) => usedIn(baseText, n);"],
+  ["ignore names the base already uses when importing", G, "const shadows = (baseText, n) => GLOBAL_NAMES.includes(n) || n in globalThis || usedIn(baseText, n);", "const shadows = (baseText, n) => GLOBAL_NAMES.includes(n) || n in globalThis;"],
+  ["compare renames on normalised names", MR, "f.previous_filename !== file ? [ns[1]] : []", "ns[1] !== ns[0] ? [ns[1]] : []"],
+  ["skip the canonical path check", MR, 'if (!isCanonicalPath(file) || (hasPrev && !isCanonicalPath(f.previous_filename))) return founder(file, "FILE_ENTRY_MALFORMED");', ""],
+  ["apply content classes to any non-removed status", MR, 'if (f.status === "modified" && !hasPrev && !ci', 'if (f.status !== "removed" && !hasPrev && !ci'],
+  ["apply content classes to entries with a previous_filename", MR, 'if (f.status === "modified" && !hasPrev && !ci', 'if (f.status === "modified" && !ci'],
 ];
 const COPY = [G, AAE, MR, "automation/lib/lease-verdict.mjs", "automation/lib/task-lease.mjs", "automation/lib/atomic-json.mjs"];
 

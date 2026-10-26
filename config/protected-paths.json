@@ -151,7 +151,10 @@
     "tests/support/autonomous-authority.cases.ts",
     "tests/support/merge-risk.cases.ts",
     "tests/support/merge-risk.fixtures.json",
-    "tests/support/pr-controller.cases.ts"
+    "tests/support/pr-controller.cases.ts",
+    "docs/authority-requests/COORD-TRANSITION-AUTONOMY.md",
+    "docs/planning/MERGE_GATE.md",
+    "docs/governance/UASCO-INDEPENDENT-REVIEW.md"
   ],
   "protectedPrefixes": [
     "automation/lib/",

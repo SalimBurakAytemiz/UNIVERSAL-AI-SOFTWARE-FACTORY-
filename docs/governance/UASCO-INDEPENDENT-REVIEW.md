@@ -51,7 +51,9 @@ The check summary states the tier as a fixed code (`Risk tier: ...`), and `conte
 
 **Evidence:**
 - **Check run:** written by the App, bound to the head SHA. Its `external_id` and summary carry the sha256 digest of the canonical decision record.
-- **Artifacts:** `uasco-review-input-<attempt>`, `uasco-review-verdict-<attempt>` and `uasco-review-evidence-<attempt>` hold `evidence.json`, `verdict.json`, `reviewer-diagnostics.json`, `decision.json`, the diff and the reviewer instructions. Anyone can recompute the digest from the decision record.
+- **Artifacts:** `uasco-review-input-<attempt>`, `uasco-review-verdict-<attempt>` and `uasco-review-evidence-<attempt>` hold `evidence.json`, `verdict.json`, `reviewer-diagnostics.json`, `decision.json`, the diff and the reviewer instructions. Anyone can recompute the digest from the decision record. `evidence.json` includes `fileContents`: the base and head text (at the exact SHAs, up to 1,000,000 bytes each) of the changed pre-authorized candidates (`server.ts`, `main.mjs`, `config/validation.json`, the trust-root manifest), so that `decide` recomputes the same risk tier. This is the same repository content as the diff.
+
+**What this check does not do for auto-merge.** While the check is not a required status check, GitHub auto-merge does not wait for it. An armed auto-merge is not bound to a head: it survives pushes by the shared account and merges any later head that passes the two `validate` checks, even when this check failed on that head (#218: armed on `a2ed5c11`, merged `16f47821` after a push, with this check failure on `16f47821`). The coordinator therefore merges head-bound and never arms auto-merge (`docs/planning/MERGE_GATE.md` step 3). Requiring this check, pinned to the App, makes GitHub wait for it on every head.
 
 ## Why the Builder cannot fake or alter the check
 

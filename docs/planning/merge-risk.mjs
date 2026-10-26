@@ -1,7 +1,7 @@
 // //TR: Bu modül PR değişikliğinin dosya başına risk sınıflandırmasını yapan saf ve deterministik çekirdektir (COORD-TRANSITION-AUTONOMY): ROUTINE (rutin, Founder gerekmez), PREAUTHORIZED (korunan dosyada Founder'ın önceden yetkilendirdiği ve içerikten yapısal olarak doğrulanan dar sınıf: route kaydı, masaüstü izin listesi, test kaydı, trust-root yeniden mühürleme) ve FOUNDER (yüksek risk: güvenlik kapısı, CI/bağımlılık tanımı, sır, yetki genişlemesi, otorite/kapı makinesinin kendisi, korunan dosya silme, test silme, içerik eksik). PR tier'ı dosyaların en yükseğidir. Çıktıdaki kodlar sabittir; PR metni asla kopyalanmaz. Merge-gate taban listeleri (floor) ve tek kanonik yol eşleştirici burada tanımlıdır.
 // Pure: no I/O, no network, no clock. Contents (baseText/headText) are read by the caller at the exact base/head SHAs; missing contents are fail-closed (FOUNDER).
 import path from "node:path";
-import {evaluateProtectedChange, AUTO, PROTECTED_CHANGE_TARGET, MANIFEST_PATH} from "../../core/authority/autonomous-authority.mjs";
+import {evaluateProtectedChange, isCanonicalPath, AUTO, PROTECTED_CHANGE_TARGET, MANIFEST_PATH} from "../../core/authority/autonomous-authority.mjs";
 
 // Floor that always applies, so an evidence file whose protectedPaths was emptied or truncated cannot open these.
 export const PROTECTED_FLOOR = Object.freeze([".github/workflows/", "automation/lib/", "scripts/validate-", "scripts/run-validation.mjs", "config/", "prompts/"]);
@@ -22,7 +22,10 @@ export const CI_EXECUTED_FLOOR = Object.freeze([
 // //TR: Bugün korunmasa bile her zaman FOUNDER olan yüksek risk kümesi (lower-case, ham startsWith ile eşleşir; tek kanonik ve daha sıkı eşleştirici). Kapı/otorite/sınıflandırıcı makinesi, CI ve bağımlılık tanımları, sandbox ve Electron güvenlik yüzeyi buradadır.
 export const HIGH_RISK_EXACT = Object.freeze(["package.json", "package-lock.json", "npm-shrinkwrap.json", ".npmrc", "scripts/generate-trust-root.mjs", "scripts/verify-trust-root.mjs",
   "scripts/secret-sanity.mjs", "scripts/ensure-dependencies.mjs", "claude.md", "agents.md", "core/agents/linux-unshare-sandbox.ts", "core/workos/execution-gate.ts",
-  "apps/desktop/preload.mjs", "apps/desktop/renderer/index.html", "apps/desktop/renderer/app.js", "tests/review-governance.test.ts"]);
+  "apps/desktop/preload.mjs", "apps/desktop/renderer/index.html", "apps/desktop/renderer/app.js", "tests/review-governance.test.ts",
+  // The recorded authority terms (also exact paths in config/protected-paths.json) and the security gates that admit or redact host work.
+  "docs/authority-requests/coord-transition-autonomy.md", "docs/planning/merge_gate.md", "docs/governance/uasco-independent-review.md",
+  "core/workos/risk-admission.ts", "core/workos/secret-scan.ts", "scripts/local-worker/sandbox.mjs"]);
 export const HIGH_RISK_PREFIXES = Object.freeze([".github/", "scripts/ci/", "scripts/run-validation.mjs", "scripts/validate-", "automation/lib/", "config/", "prompts/", "core/authority/",
   "core/sandbox/", "tsconfig", "vitest.config.", "docs/planning/merge-gate.", "docs/planning/merge-risk.", "docs/planning/pr-controller.", "tests/support/merge-risk",
   "tests/support/pr-controller"]);
@@ -91,10 +94,13 @@ export function classifyChange(input) {
       const moved = f.status === "renamed" || f.status === "copied";
       const hasPrev = f.previous_filename !== undefined && f.previous_filename !== null;
       if ((moved && !hasPrev) || (hasPrev && !isStr(f.previous_filename))) return founder(file, "FILE_ENTRY_MALFORMED");
+      // //TR: Ham ad kanonik olmalıdır: NTFS takma adları ("main.mjs.", "main.mjs ", "x:akış", "PROGRA~1") ve "./", "a//b", "\\" gibi eşdeğer yazımlar korunan bir dosyayı ROUTINE gösteremez.
+      if (!isCanonicalPath(file) || (hasPrev && !isCanonicalPath(f.previous_filename))) return founder(file, "FILE_ENTRY_MALFORMED");
       const ns = [normPath(f.filename), ...(hasPrev ? [normPath(f.previous_filename)] : [])];
       if (ns.some(n => n === null) || seen.get(ns[0]) !== 1) return founder(file, "FILE_ENTRY_MALFORMED");
-      // The name that disappears: the file itself when removed, the old name when renamed (a copy keeps its source).
-      const gone = f.status === "removed" ? [ns[0]] : hasPrev && f.status !== "copied" && ns[1] !== ns[0] ? [ns[1]] : [];
+      // The name that disappears: the file itself when removed, the old name when renamed (a copy keeps its source). Compared on the raw names: a case-only
+      // rename ("tests/a.test.ts" -> "tests/A.test.ts") removes the registered path on a case-sensitive checkout although both normalise to the same name.
+      const gone = f.status === "removed" ? [ns[0]] : hasPrev && f.status !== "copied" && f.previous_filename !== file ? [ns[1]] : [];
       if (gone.some(touchesRisk)) return founder(file, "PROTECTED_PATH_REMOVED");
       if (gone.some(n => TEST_FILE_PATTERN.test(n))) return founder(file, "TEST_FILE_REMOVED");
       const ci = ns.some(n => m.ciCategories(n).length > 0), high = ns.some(isHighRisk), prot = ns.some(m.protectedHit);

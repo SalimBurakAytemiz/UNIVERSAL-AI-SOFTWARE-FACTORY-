@@ -35,7 +35,7 @@ const GOOD = () => ({
   reviews: [review()],
   issueComments: [{body: `${MK}comment`, user: {login: "owner1"}}],
   // docs/planning/merge-gate.mjs itself is high risk now (self-protection), so the routine fixture uses another planning file.
-  diffFiles: [F("docs/planning/notes-helper.mjs", "added"), F("docs/planning/MERGE_GATE.md", "modified"), F("docs/planning/old-note.md", "renamed", "docs/planning/older-note.md")],
+  diffFiles: [F("docs/planning/notes-helper.mjs", "added"), F("docs/planning/ROADMAP-NOTES.md", "modified"), F("docs/planning/old-note.md", "renamed", "docs/planning/older-note.md")],
   protectedPaths: structuredClone(PROTECTED_FIXTURE),
   rules: RULES(),
 });

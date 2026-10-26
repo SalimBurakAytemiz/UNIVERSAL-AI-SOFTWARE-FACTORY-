@@ -1,7 +1,7 @@
 {
   "//TR": "Bu manifest normal feature build sırasında korunacak trust-root dosyalarının artifact-creation anındaki SHA-256 değerlerini taşır.",
   "schemaVersion": "1.0.0",
-  "generatedAt": "2026-10-26T06:27:08.284Z",
+  "generatedAt": "2026-10-26T08:00:07.123Z",
   "sealStatus": "SEALED",
   "files": [
     {
@@ -446,7 +446,7 @@
     },
     {
       "path": "config/protected-paths.json",
-      "sha256": "430e90cf40724ccb6ddbcc1553b52c45e585a9c4329c2e19e38811db781a5bca"
+      "sha256": "d602e6a787b5a0e0c55b4618fc68e16a74b4ac4080d98474f950e6ce8893204d"
     },
     {
       "path": "config/reviewer-execution-policy.json",
@@ -478,15 +478,27 @@
     },
     {
       "path": "core/authority/protected-change-grammar.d.mts",
-      "sha256": "3205b0862a891076950fa64dd43a2d57ae03f5b6a18c83e38969831b7068253d"
+      "sha256": "6840e9b8452cc5e99d5008c378262d876ecd7c3c7ed4c70087a69f43dfa9240d"
     },
     {
       "path": "core/authority/protected-change-grammar.mjs",
-      "sha256": "2e5af039525d436839808225fd61bb16675f238704a5e72d50f6ce905cbdeec3"
+      "sha256": "b501fe9e881ac42f0ed64e3105f23be90769df48f93b7df5980f8549913990c1"
+    },
+    {
+      "path": "docs/authority-requests/COORD-TRANSITION-AUTONOMY.md",
+      "sha256": "0755e455e6044e31840db0e863f262da1de191eb4698229fbefc6721896b1a98"
     },
     {
       "path": "docs/closure/MECHANICAL-CLOSURE-FIX-LEDGER.md",
       "sha256": "9ae3f016aa533f0f3a34d11e2e1ec1a0ed032dbc835e253b1b1f45881f797e84"
+    },
+    {
+      "path": "docs/governance/UASCO-INDEPENDENT-REVIEW.md",
+      "sha256": "e99e08d628f96cc68587d8514926520bf842c6a40d0d7c3f963bdd72679bb893"
+    },
+    {
+      "path": "docs/planning/MERGE_GATE.md",
+      "sha256": "06b9c770f35f2edf74a63a9522091e9163304f522888ca76bf997ac50bd0b954"
     },
     {
       "path": "docs/planning/merge-gate.mjs",
@@ -494,7 +506,7 @@
     },
     {
       "path": "docs/planning/merge-gate.proof.mjs",
-      "sha256": "dd7676ae8a69e6fceaf903394711ac42470d725a250c10d658b7a4b94aaba35c"
+      "sha256": "b74e40665ce9f0a59a58a09d24c6c2727a1405db69e2418c0242e45b768205dc"
     },
     {
       "path": "docs/planning/merge-risk.d.mts",
@@ -502,19 +514,19 @@
     },
     {
       "path": "docs/planning/merge-risk.mjs",
-      "sha256": "bf4538ac3a4699f0b4833cf0b054ade308573cbc15dbb9483b73cb1f356488bc"
+      "sha256": "61f093e13ff30722b4a61a262c72595d542133fbaf1350a623f3003b67f81c38"
     },
     {
       "path": "docs/planning/merge-risk.proof.mjs",
-      "sha256": "091432397abeae2f62ea527e47973d3ddf632f63cb691b2f69527dc2a86bdec7"
+      "sha256": "2fe8210ec097818742d14a220ea98f87d3953b4d046109d3f215deed8164546c"
     },
     {
       "path": "docs/planning/pr-controller.d.mts",
-      "sha256": "8736c3bc2ee4a89baaa095f94af35526b650116dbe7c1e14c187d26a79885e6c"
+      "sha256": "db930ea6bb43f9eb021f48253601a9c98a2e69f2567e9c3cef102cfd6065c69a"
     },
     {
       "path": "docs/planning/pr-controller.mjs",
-      "sha256": "dbf1972d86f56884f0adc4e93156a3a738cc7082303194459d2d2e0847f5bef5"
+      "sha256": "4a35204f74662629167f4923b77dec157cb7fe613b2ab062f60b9b0f0b1050e8"
     },
     {
       "path": "governance/accepted-debt.json",
@@ -1254,7 +1266,7 @@
     },
     {
       "path": "scripts/ci/uasco-review/github.mjs",
-      "sha256": "e927c4f100d4a17df80625b4b91ccec95cb829f14a3327281dc51c5078b76735"
+      "sha256": "15036b13e7b4e4cd8d1623188352c057eec5667c1982225346345916a726b53f"
     },
     {
       "path": "scripts/ci/uasco-review/review-gate.mjs",
@@ -1574,7 +1586,7 @@
     },
     {
       "path": "tests/support/merge-risk.cases.ts",
-      "sha256": "8a95612ed73d1e4b396fa3d55a6157c4ca7e8787b6a47ff8a523cba5ddaadeed"
+      "sha256": "07ccdab817acb8f12ca0c405b38ff6bbef0a5633f387fc356816766ed96634e7"
     },
     {
       "path": "tests/support/merge-risk.fixtures.json",
@@ -1582,7 +1594,7 @@
     },
     {
       "path": "tests/support/pr-controller.cases.ts",
-      "sha256": "74a59e633dcb44a11d311eed89c4b6c1598481cd7f907da02892f45000a3fc6f"
+      "sha256": "f8bed0163f6b1e59074faf87333b6e3951f1f943301007df921849aff80049f8"
     },
     {
       "path": "tsconfig.json",
