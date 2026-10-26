@@ -22,6 +22,7 @@ export async function submitAnalysisStep(ctx,missionId){
   delete drafts.status[ANALYSIS_REAPPROVE_FORM]; // yeni adım: eski yeniden-onay durumu bayatlar
   drafts.busy[ANALYSIS_STEP_FORM]=true;
   let res;try{res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[ANALYSIS_STEP_FORM]=false}
+  if(analysisUi.missionId!==missionId){await ctx.rerender();return {ok:false,stale:true,status:res?.status??null}} // //TR: istek sürerken başka mission seçildi: gelen cevap o mission'ın durumuna yazılmaz
   const c=classifyAnalysisStep(res),k=analysisStatusKey(c,res,"step");
   // Bir denetim başarısız olursa eski sonuç gösterilmez (bayat "tamam" kalmasın): Plan oluştur kapısı da kapanır.
   analysisUi.step=c.kind==="STEP"?c.step:null;
@@ -36,8 +37,9 @@ export async function submitReapprove(ctx,missionId){
   if(!req.ok){setStatus(ANALYSIS_REAPPROVE_FORM,{ok:false,errors:req.errors});await ctx.rerender();focusResult(ctx,ANALYSIS_REAPPROVE_FORM,["id:analysis-reapprove-submit","id:analysis-reapprove-evidence"]);return {ok:false,validation:true}}
   drafts.busy[ANALYSIS_REAPPROVE_FORM]=true;
   let res;try{res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[ANALYSIS_REAPPROVE_FORM]=false}
+  if(analysisUi.missionId!==missionId){await ctx.rerender();return {ok:false,stale:true,status:res?.status??null}} // //TR: istek sürerken başka mission seçildi: gelen cevap o mission'ın durumuna yazılmaz
   const o=reapproveOutcome(res,missionId);
-  if(o.ok){analysisUi.step=null;analysisUi.evidence=""} // bayat "engelli" cevabı kalmaz; yeni bir adım çalıştırılana kadar hiçbir sonuç iddia edilmez
+  if(o.ok){analysisUi.step=null;analysisUi.evidence="";delete drafts.status[ANALYSIS_STEP_FORM]} // eski "engelli" durum satırı da kalkar // bayat "engelli" cevabı kalmaz; yeni bir adım çalıştırılana kadar hiçbir sonuç iddia edilmez
   setStatus(ANALYSIS_REAPPROVE_FORM,{ok:o.ok,key:o.key,vars:o.vars,errors:null});
   await ctx.rerender();focusResult(ctx,ANALYSIS_REAPPROVE_FORM,["id:analysis-step-submit","id:analysis-reapprove-submit"]);
   return {ok:o.ok,kind:o.kind,status:res?.status??null};
@@ -51,6 +53,7 @@ export async function submitAnalysisPlan(ctx,missionId){
   if(!req.ok){setStatus(ANALYSIS_PLAN_FORM,{ok:false,errors:req.errors});await ctx.rerender();return {ok:false,validation:true}}
   drafts.busy[ANALYSIS_PLAN_FORM]=true;
   let res;try{res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[ANALYSIS_PLAN_FORM]=false}
+  if(analysisUi.missionId!==missionId){await ctx.rerender();return {ok:false,stale:true,status:res?.status??null}} // //TR: istek sürerken başka mission seçildi: gelen cevap o mission'ın durumuna yazılmaz
   const c=classifyAnalysisPlan(res),k=analysisStatusKey(c,res,"plan");
   if(c.kind==="PLAN")analysisUi.plan=c.plan;
   setStatus(ANALYSIS_PLAN_FORM,{ok:k.ok,key:k.key,vars:k.vars,errors:null});
@@ -87,7 +90,7 @@ function stuckBlock(ctx,step,missionId){
     h(doc,"h4",{text:ctx.t("analysis.stuck.title")}),
     h(doc,"p",{text:ctx.t("analysis.stuck.head",{kind:ctx.t(`journey.kind.${t.kind}`)})}),
     h(doc,"p",{class:"note mono",text:t.artifactId}),
-    field(ctx,{id:"analysis-reapprove-evidence",labelKey:"predev.evidence.label",value:analysisUi.evidence,onInput:v=>{analysisUi.evidence=v},hintKey:"predev.evidence.hint",multiline:true,required:true}),
+    field(ctx,{id:"analysis-reapprove-evidence",labelKey:"predev.evidence.label",value:analysisUi.evidence,onInput:v=>{analysisUi.evidence=v},hintKey:"analysis.stuck.evidenceHint",multiline:true,required:true}),
     h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn btn-primary",id:"analysis-reapprove-submit",dataset:{focusKey:"analysis-reapprove-submit"},disabled:busy,text:ctx.t("analysis.reapprove.button"),
       on:{click:()=>{if(!drafts.busy[ANALYSIS_REAPPROVE_FORM])submitReapprove(ctx,missionId)}}})),
     statusBlock(ctx,ANALYSIS_REAPPROVE_FORM));

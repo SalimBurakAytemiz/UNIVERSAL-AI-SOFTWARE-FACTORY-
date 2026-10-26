@@ -1239,7 +1239,7 @@ describe("LANE-A A-FLOW-5 analysis step — view (Journey)", () => {
   it("is present in English and Turkish with the same keys; no analysis text is a raw key", async () => {
     const en = await load("locales", "en.js"), tr = await load("locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
     const keys = Object.keys(E).filter(k => k.startsWith("analysis."));
-    expect(keys.length).toBe(57);
+    expect(keys.length).toBe(58);
     for (const h of ["CLAUDE_CLI_NOT_FOUND", "CLAUDE_CLI_SHIM_UNSUPPORTED", "PROVIDER_PROVENANCE_NOT_READY", "CLAUDE_PACKAGE_PROVENANCE_REQUIRED", "CLAUDE_LAUNCHER_PROVENANCE_CHANGED", "CLAUDE_PROFILE_LOGIN_REQUIRED", "CLAUDE_PROFILE_LOGIN_EXPIRED", "CLAUDE_PROFILE_REFUSED", "PROVENANCE_MISSING"]) expect(E[`analysis.blocker.${h}`], h).toBeTruthy();
     for (const k of keys) { expect(T[k], k).toBeTruthy(); expect(E[k], k).not.toBe(k); }
     const b = await open({status: 200, body: {status: "COMPLETE", approved: KINDS}}); const r = await press(b, "analysis-step-submit");
@@ -1249,12 +1249,16 @@ describe("LANE-A A-FLOW-5 analysis step — view (Journey)", () => {
 
 describe("LANE-A A-ANALYSIS-STUCK-1: an approved artefact whose phase did not advance (ANALYSIS_PHASE_NOT_ADVANCED)", () => {
   const STEP = `/v1/missions/${MSN}/analysis/step`, A1 = "pda_" + "ab".repeat(12), A2 = "pda_" + "cd".repeat(12);
+  const PLAN = `/v1/missions/${MSN}/analysis/plan`, KINDS = ["BusinessAnalysis", "Requirements", "Plan", "Architecture"];
   const APPROVE = (id: string) => `/v1/missions/${MSN}/predev/artifacts/${id}/approve`;
+  const deferred = () => { let res: (v: any) => void = () => {}; const p = new Promise<any>(r => { res = r; }); return {p, res}; };
+  const OKPLAN = {tasks: [{}], replayed: false, trace: [{index: 0, workPackageId: "WP1", estimate: "1d", satisfies: [], requirements: []}]};
   const stuck = (over: any = {}) => ({status: 200, body: {status: "BLOCKED", blocker: "ANALYSIS_PHASE_NOT_ADVANCED", blockers: ["ANALYSIS_PHASE_NOT_ADVANCED"], founderAction: "Approve the artefact again to resume (server prose, never parsed).", kind: "Requirements", artifactId: A1, readiness: {ready: false}, ...over}});
-  async function open(stepAnswer: any, approveAnswer: any = {status: 200, body: {...predevBody({phase: "PLANNING"}), replayed: false}}) {
+  async function open(stepAnswer: any, approveAnswer: any = {status: 200, body: {...predevBody({phase: "PLANNING"}), replayed: false}}, planAnswer: any = {status: 404, body: {}}) {
     const served = serve({[`/v1/predev/${MSN}`]: DRAFT_PREDEV()}), approves: string[] = [];
     const base = await mkDecisionCtx(served, (p: string) => {
-      if (p === STEP) return stepAnswer;
+      if (p === STEP) return typeof stepAnswer === "function" ? stepAnswer() : stepAnswer;
+      if (p === PLAN) return typeof planAnswer === "function" ? planAnswer() : planAnswer;
       if (p.endsWith("/approve")) { approves.push(p); return typeof approveAnswer === "function" ? approveAnswer() : approveAnswer; }
       return {status: 404, body: {}};
     });
@@ -1287,6 +1291,7 @@ describe("LANE-A A-ANALYSIS-STUCK-1: an approved artefact whose phase did not ad
     const box = stuckOf(after)[0]; expect(box.dataset.analysisStuck).toBe("Requirements"); expect(box.dataset.artifact).toBe(A1);
     expect(text(box)).toContain("The Requirements artefact is approved but the phase did not advance. Approve it again to resume"); expect(text(blk)).toContain("approved, but the pre-development phase did not move on");
     expect(text(blk)).not.toContain("(not recognised)"); expect(b.posts.map((p: any) => p.path)).toEqual([STEP]);
+    expect(text(box)).toContain("the artefact keeps the evidence of its original approval"); expect(text(box)).not.toContain("records them as your evidence"); // the resume path does not record new evidence, so the hint must not promise it
     // no evidence -> nothing is posted
     await press(b, "analysis-reapprove-submit");
     expect(b.approves).toEqual([]); expect(status(b.root, "analysis-reapprove").dataset.result).toBe("invalid");
@@ -1326,12 +1331,82 @@ describe("LANE-A A-ANALYSIS-STUCK-1: an approved artefact whose phase did not ad
     expect(stuckOf(h.root)[0].dataset.artifact).toBe(A2);
     setVal(h.root, "analysis-reapprove-evidence", "ev"); await press(h, "analysis-reapprove-submit");
     expect(approves).toEqual([APPROVE(A2)]);
-    an.resetAnalysis(MSN2); expect(an.analysisUi.step).toBeNull(); expect(an.analysisUi.evidence).toBe("");
+  });
+
+  it("switching missions (the real panel render path) drops a stuck step, typed evidence and a re-approve status", async () => {
+    const b = await open(stuck(), {status: 409, body: {error: "PREDEV_GATE_REFUSED", reason: "PREDEV_INDEPENDENT_APPROVER_REQUIRED"}});
+    await press(b, "analysis-step-submit"); setVal(b.root, "analysis-reapprove-evidence", "typed-evidence"); await press(b, "analysis-reapprove-submit");
+    expect(b.an.analysisUi.step).toMatchObject({phaseStuck: true}); expect(b.an.analysisUi.evidence).toBe("typed-evidence"); expect(b.forms.drafts.status["analysis-reapprove"]).toBeDefined(); expect(b.forms.drafts.status["analysis-step"]).toBeDefined();
+    const other = b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null}) as N; // what Journey does when another mission is selected
+    expect(b.an.analysisUi).toMatchObject({missionId: MSN2, step: null, plan: null, evidence: ""});
+    for (const f of ["analysis-reapprove", "analysis-step", "analysis-plan"]) expect(b.forms.drafts.status[f], f).toBeUndefined();
+    expect(allData(other, "analysisStuck")).toHaveLength(0); expect(byId(other, "analysis-reapprove-submit")).toBeUndefined();
+  });
+
+  it("a successful re-approve also removes the stale 'The analysis is blocked' status line", async () => {
+    const b = await open(stuck()); await press(b, "analysis-step-submit");
+    expect(text(byId(b.root, "analysis-step")!)).toContain("The analysis is blocked"); expect(status(b.root, "analysis-step").dataset.result).toBe("error");
+    setVal(b.root, "analysis-reapprove-evidence", "ev"); await press(b, "analysis-reapprove-submit");
+    expect(text(byId(b.root, "analysis-step")!)).not.toContain("The analysis is blocked"); expect(status(b.root, "analysis-step").dataset.result).toBeUndefined();
+    expect(status(b.root, "analysis-reapprove").dataset.result).toBe("ok");
+  });
+
+  it("a result that lands after another mission was selected is dropped: re-approve (success and refusal), Analyse and Create plan never touch the new mission", async () => {
+    const OK = {status: 200, body: {...predevBody({phase: "PLANNING"}), replayed: false}}, REFUSED = {status: 409, body: {error: "PREDEV_GATE_REFUSED", reason: "PREDEV_INDEPENDENT_APPROVER_REQUIRED"}};
+    for (const [label, answer] of [["success", OK], ["refusal", REFUSED]] as const) {
+      const d = deferred(), b = await open(stuck(), () => d.p); await press(b, "analysis-step-submit"); setVal(b.root, "analysis-reapprove-evidence", "ev");
+      const pending = b.an.submitReapprove(b.ctx, MSN);
+      b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null}); // mission B selected while A's request is in flight
+      b.an.analysisUi.step = {status: "COMPLETE", approved: KINDS}; b.an.analysisUi.evidence = "B-evidence"; b.forms.drafts.status["analysis-step"] = {ok: true, key: "analysis.step.COMPLETE", vars: {}, errors: null};
+      d.res(answer); const r = await pending;
+      expect(r, label).toMatchObject({ok: false, stale: true});
+      expect(b.an.analysisUi.step, label).toMatchObject({status: "COMPLETE"}); expect(b.an.analysisUi.evidence, label).toBe("B-evidence");
+      expect(b.forms.drafts.status["analysis-reapprove"], label).toBeUndefined(); expect(b.forms.drafts.status["analysis-step"], label).toMatchObject({key: "analysis.step.COMPLETE"});
+    }
+    { // Analyse: A's late stuck answer is not adopted by B
+      const d = deferred(), b = await open(() => d.p);
+      const pending = b.an.submitAnalysisStep(b.ctx, MSN); b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null}); d.res(stuck());
+      expect(await pending).toMatchObject({ok: false, stale: true}); expect(b.an.analysisUi.step).toBeNull(); expect(b.forms.drafts.status["analysis-step"]).toBeUndefined();
+      const after = b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null}) as N; expect(byId(after, "analysis-reapprove-submit")).toBeUndefined();
+    }
+    { // Create plan: A's late plan is not adopted by B
+      const d = deferred(), b = await open({status: 200, body: {status: "COMPLETE", approved: KINDS}}, undefined, () => d.p); await press(b, "analysis-step-submit");
+      const pending = b.an.submitAnalysisPlan(b.ctx, MSN); b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null}); d.res({status: 201, body: OKPLAN});
+      expect(await pending).toMatchObject({ok: false, stale: true}); expect(b.an.analysisUi.plan).toBeNull(); expect(b.forms.drafts.status["analysis-plan"]).toBeUndefined();
+    }
+  });
+
+  it("in flight: three clicks send one POST and the button is disabled meanwhile", async () => {
+    const d = deferred(), b = await open(stuck(), () => d.p); await press(b, "analysis-step-submit"); setVal(b.root, "analysis-reapprove-evidence", "ev");
+    const btn = byId(b.root, "analysis-reapprove-submit")!; expect(btn.attrs.get("disabled")).toBeUndefined();
+    fire(btn, "click"); fire(btn, "click"); fire(btn, "click"); await new Promise(r => setTimeout(r, 0));
+    expect(b.approves).toHaveLength(1);
+    b.root = await renderJourney(b.ctx); expect(byId(b.root, "analysis-reapprove-submit")!.attrs.get("disabled")).toBeDefined();
+    d.res({status: 409, body: {error: "PREDEV_GATE_REFUSED", reason: "PREDEV_INDEPENDENT_APPROVER_REQUIRED"}}); await new Promise(r => setTimeout(r, 0));
+    b.root = await renderJourney(b.ctx); expect(byId(b.root, "analysis-reapprove-submit")!.attrs.get("disabled")).toBeUndefined();
+  });
+
+  it("a malformed or other-mission 2xx answer is an error and the stuck block and button stay", async () => {
+    for (const bad of [{status: 200, body: {}}, {status: 200, body: {predev: {...predevBody({phase: "PLANNING"}).predev, missionId: MSN2}}}, {status: 200, body: {...predevBody({phase: "PLANNING"}), replayed: "yes"}}]) {
+      const b = await open(stuck(), bad); await press(b, "analysis-step-submit"); setVal(b.root, "analysis-reapprove-evidence", "ev"); await press(b, "analysis-reapprove-submit");
+      expect(status(b.root, "analysis-reapprove").dataset.result, JSON.stringify(bad).slice(0, 50)).toBe("error"); expect(text(status(b.root, "analysis-reapprove"))).not.toContain("Approved again");
+      expect(stuckOf(b.root)).toHaveLength(1); expect(byId(b.root, "analysis-reapprove-submit")).toBeDefined(); expect(b.an.analysisUi.step).toMatchObject({phaseStuck: true});
+    }
+  });
+
+  it("re-approve is refused, then Analyse returns a draft: the old refusal and the stuck block are gone", async () => {
+    let n = 0; const b = await open(() => (n++ === 0 ? stuck() : {status: 200, body: {status: "DRAFT_READY", kind: "Requirements", artifactId: A1, version: 1, roleId: "UASCO-0300", next: "FOUNDER_APPROVAL"}}),
+      {status: 409, body: {error: "PREDEV_GATE_REFUSED", reason: "PREDEV_INDEPENDENT_APPROVER_REQUIRED"}});
+    await press(b, "analysis-step-submit"); setVal(b.root, "analysis-reapprove-evidence", "ev"); await press(b, "analysis-reapprove-submit");
+    expect(text(status(b.root, "analysis-reapprove"))).toContain("PREDEV_INDEPENDENT_APPROVER_REQUIRED");
+    await press(b, "analysis-step-submit");
+    expect(byData(byId(b.root, "analysis-step")!, "analysisStatus", "DRAFT_READY")).toBeDefined(); expect(stuckOf(b.root)).toHaveLength(0);
+    expect(status(b.root, "analysis-reapprove").dataset.result).toBeUndefined(); expect(text(byId(b.root, "analysis-step")!)).not.toContain("PREDEV_INDEPENDENT_APPROVER_REQUIRED");
   });
 
   it("en + tr text exists for every new key and a raw key is never shown", async () => {
     const en = await load("locales", "en.js"), tr = await load("locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
-    for (const k of ["analysis.blocker.ANALYSIS_PHASE_NOT_ADVANCED", "analysis.stuck.title", "analysis.stuck.head", "analysis.stuck.noTarget", "analysis.reapprove.button", "analysis.reapprove.done", "analysis.err.noTarget"]) { expect(E[k], k).toBeTruthy(); expect(T[k], k).toBeTruthy(); expect(T[k]).not.toBe(E[k]); }
+    for (const k of ["analysis.blocker.ANALYSIS_PHASE_NOT_ADVANCED", "analysis.stuck.title", "analysis.stuck.head", "analysis.stuck.noTarget", "analysis.stuck.evidenceHint", "analysis.reapprove.button", "analysis.reapprove.done", "analysis.err.noTarget"]) { expect(E[k], k).toBeTruthy(); expect(T[k], k).toBeTruthy(); expect(T[k]).not.toBe(E[k]); }
     const b = await open(stuck()); const r = await press(b, "analysis-step-submit"); expect(text(byId(r, "analysis-step")!)).not.toMatch(/analysis\.[a-z]+\./);
   });
 });

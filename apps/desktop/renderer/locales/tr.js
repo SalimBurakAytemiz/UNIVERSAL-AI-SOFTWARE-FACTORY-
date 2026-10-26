@@ -1515,6 +1515,7 @@ export default {
   "analysis.stuck.title":"Onay tamamlanmadı",
   "analysis.stuck.head":"{kind} artefaktı onaylı ama aşama ilerlemedi. Devam etmek için yeniden onaylayın; onaylamak hiçbir şey üretmez.",
   "analysis.stuck.noTarget":"Aşama ilerlemedi ama sunucu artefaktı bildirmedi; bu yüzden burada düğme yok. Aşağıdaki geliştirme öncesi kararlarını açın.",
+  "analysis.stuck.evidenceHint":"Onay yolu için zorunludur; artefakt ilk onayındaki kanıtı korur.",
   "analysis.reapprove.button":"Yeniden onayla",
   "analysis.reapprove.done":"Yeniden onaylandı; sunucu {phase} aşamasını bildiriyor. Hiçbir şey üretilmedi: devam etmek için Analiz et'e basın.",
   "analysis.err.noTarget":"Sunucu yeniden onaylanacak artefaktı bildirmedi.",

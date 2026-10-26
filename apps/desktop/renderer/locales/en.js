@@ -1515,6 +1515,7 @@ export default {
   "analysis.stuck.title":"Approval did not complete",
   "analysis.stuck.head":"The {kind} artefact is approved but the phase did not advance. Approve it again to resume; approving does not generate anything.",
   "analysis.stuck.noTarget":"The phase did not advance, but the server did not name the artefact, so no button is offered here. Open the pre-development decisions below.",
+  "analysis.stuck.evidenceHint":"Required by the approval route; the artefact keeps the evidence of its original approval.",
   "analysis.reapprove.button":"Re-approve",
   "analysis.reapprove.done":"Approved again; the server reports the {phase} phase. Nothing was generated: press Analyse to continue.",
   "analysis.err.noTarget":"The server did not name the artefact to approve again.",
