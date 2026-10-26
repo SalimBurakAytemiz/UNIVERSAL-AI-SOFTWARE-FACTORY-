@@ -535,7 +535,7 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
   const ISO = {nsFlags: ["--user", "--map-root-user", "--net", "--pid", "--mount", "--fork", "--kill-child=SIGKILL"], setup: "set -eu\n# isolation setup (test double)\n", helperPath: "/usr/sbin:/usr/bin:/sbin:/bin"};
   const GOOD_PROBE = "MNT_C=absent\nDRVFS=0\nUNIX_PATH_SOCKETS=0\nWSL_RUNTIME_DIRS=absent\nRW_usr=ro\nRW_etc=ro\nRW_bin=ro\nWORK=writable\nNET_IFACES=0\nCAPS_DROPPED=ok\nNO_CTTY=ok\nNESTED_USERNS=blocked\nPID_NS_PRIVATE=ok\nVSOCK=blocked\nIO_URING=blocked\nSUPERVISOR=ok\nHOST_DIRS=hidden\nPROC_SYS_RO=ok\nHOST_CANARY=hidden\nDONE=1\n";
   interface Cfg { status?: number; spawnError?: boolean; distros?: string; version?: string; interop?: string | string[]; peRc?: number; peNoexec?: string; tools?: string; roots?: string[]; probe?: string; probeRc?: number; mktempFails?: boolean; runOut?: string; runRc?: number; runDelayMs?: number;
-    forkOut?: string; timeoutRc?: number; late?: boolean; stdinOut?: string; pkillRc?: number; pgrepAlive?: boolean; scratchRemains?: boolean; duOut?: string; truncated?: boolean; runBytes?: Buffer; outerRc?: number; reject?: boolean; nodePath?: string; noTarget?: boolean; abortIgnored?: boolean; pgrepRc?: number; pgidAlive?: boolean; rcFile?: string; duRc?: number; abortLate?: boolean; late2?: boolean; noPgid?: boolean }
+    forkOut?: string; timeoutRc?: number; late?: boolean; stdinOut?: string; pkillRc?: number; pgrepAlive?: boolean; scratchRemains?: boolean; duOut?: string; truncated?: boolean; runBytes?: Buffer; outerRc?: number; reject?: boolean; nodePath?: string; noTarget?: boolean; abortIgnored?: boolean; pgrepRc?: number; pgidAlive?: boolean; rcFile?: string; duRc?: number; abortLate?: boolean; late2?: boolean; noPgid?: boolean; netns?: string; netnsRc?: number }
   const u16 = (t: string) => Buffer.from("﻿" + t, "utf16le");
   const mkRunner = (cfg: Cfg = {}) => {
     const calls: {args: string[]; input?: Buffer | string}[] = []; const files = new Map<string, string>();
@@ -557,6 +557,7 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
       if (cmd[0] === "/bin/tar") { tarIn = Buffer.from(o.input as Buffer); return R(0); }
       if (cmd[0] === "/usr/bin/du") return R(cfg.duRc ?? 0, cfg.duOut ?? "120\t/tmp/uasco-sbx-AbC123/work\n");
       if (cmd[0] === "/usr/bin/pkill") return R(cfg.pkillRc ?? 1);
+      if (cmd[0] === "/usr/bin/readlink") return R(cfg.netnsRc ?? 0, cfg.netns ?? "net:[4026532999]\n");
       if (cmd[0] === "/usr/bin/pgrep" && cmd[1] === "-P") return cfg.noTarget ? R(1) : R(0, "777\n");
       if (cmd[0] === "/usr/bin/pgrep" && cmd[1] === "-g") return R(cfg.pgidAlive ? 0 : 1);
       if (cmd[0] === "/usr/bin/pgrep") return R(cfg.pgrepAlive ? 0 : cfg.pgrepRc ?? 1);
@@ -825,7 +826,7 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
     };
     const mkS = async (cfg: Cfg = {}) => {
       const spawned: {args: string[]; stdio: unknown; child: any}[] = [];
-      const spawner = (args: string[], stdio: unknown) => { const isRelay = args.includes("relay.sh") || String(args[args.length - 3]).endsWith("relay.sh"); const c: any = fakeChild(); if (isRelay) { c.stdin = new PassThrough(); c.stdout = c.stdin; } spawned.push({args, stdio, child: c}); return c; };
+      const spawner = (args: string[], stdio: unknown) => { const isRelay = args.includes("relay.sh") || String(args[args.length - 4]).endsWith("relay.sh"); const c: any = fakeChild(); if (isRelay) { c.stdin = new PassThrough(); c.stdout = c.stdin; } spawned.push({args, stdio, child: c}); return c; };
       const m = await mk(cfg, {spawner}); await m.p.selfTest();
       return {...m, spawned};
     };
@@ -907,7 +908,7 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
         const h = await p.bridge(child, port); expect(h.port).toBe(port);
         const c1 = net.connect(port, "127.0.0.1"); const got = await new Promise<string>((res, rej) => { c1.once("error", rej); c1.on("data", d => res(String(d))); c1.write("ping"); });
         expect(got).toBe("ping");
-        expect(spawned.length).toBe(before + 1); expect(spawned[before].args).toEqual(["-d", "Ubuntu", "--exec", "/bin/sh", "/tmp/uasco-sbx-AbC123/ctl/relay.sh", "777", String(port)]); expect(spawned[before].stdio).toEqual(["pipe", "pipe", "ignore"]);
+        expect(spawned.length).toBe(before + 1); expect(spawned[before].args).toEqual(["-d", "Ubuntu", "--exec", "/bin/sh", "/tmp/uasco-sbx-AbC123/ctl/relay.sh", "777", String(port), "net:[4026532999]"]); expect(spawned[before].stdio).toEqual(["pipe", "pipe", "ignore"]);
         // yalnız loopback: 127.0.0.1 dışı adrese bağlanılamaz (IPv6 ::1 ve 0.0.0.0 dinleyici yok)
         await expect(new Promise((res, rej) => { const s = net.connect(port, "::1"); s.once("connect", res); s.once("error", rej); })).rejects.toBeTruthy();
         const ext = Object.values(os.networkInterfaces()).flat().find(i => i && i.family === "IPv4" && !i.internal)?.address;
@@ -926,6 +927,8 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
         const none = await mk({noTarget: true}, {bridgeTargetWaitMs: 300, spawner: () => fakeChild()}); await none.p.selfTest();
         const c: any = await none.p.spawnAsync("node", ["x"], opts(dir));
         await expect(none.p.bridge(c, 40001)).rejects.toThrow("BRIDGE_TARGET_MISSING");
+        const badNs = await mk({netns: "garbage\n"}, {spawner: () => fakeChild()}); await badNs.p.selfTest();
+        await expect(badNs.p.bridge(await badNs.p.spawnAsync("node", ["x"], opts(dir)), 40002)).rejects.toThrow("BRIDGE_NETNS_UNKNOWN");
         const { freeLoopbackPort } = await import("../core/workos/devrun.js");
         const capped = await mkS({}); const cc: any = await capped.p.spawnAsync("node", ["x"], opts(dir));
         const cp2 = await mk({}, {maxBridgeConnections: 1, spawner: (a: string[]) => { const x: any = fakeChild(); if (a.includes("/tmp/uasco-sbx-AbC123/ctl/relay.sh")) { x.stdin = new PassThrough(); x.stdout = x.stdin; } return x; }}); await cp2.p.selfTest();
@@ -941,14 +944,30 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
       expect(await (await mk({nodePath: "node"})).p.selfTest()).toEqual({ok: false, detail: "WSL_TOOLS_MISSING"});
       const {relayScript} = await import("../core/sandbox/wsl-unshare-sandbox.js");
       const sh = relayScript("/tmp/uasco-sbx-AbC123", "/usr/bin/node");
-      expect(sh).toContain("exit 98"); expect(sh).toContain("exit 96"); expect(sh).toContain("exit 97");
-      // Gerçek sh ile: geçersiz pid -> 98, var olmayan pid -> 96, KENDİ ağ ad alanı (pid=$$) -> 97 (nsenter hiç çalışmaz)
+      for (const c of ["exit 98", "exit 96", "exit 97", "exit 94", "exit 95"]) expect(sh).toContain(c);
+      // Gerçek sh ile: geçersiz pid -> 98, geçersiz ns -> 98, var olmayan pid -> 96, kayıtlı ns'den FARKLI -> 94, KENDİ ağ ad alanı -> 97 (nsenter hiç çalışmaz)
       const tmp2 = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-relay-")); const f = path.join(tmp2, "relay.sh");
       try {
         fs.writeFileSync(f, sh);
         if (process.platform === "linux") {
-          const rc = (a: string[]) => cp.spawnSync("/bin/sh", [f, ...a]).status;
-          expect(rc(["x1", "80"])).toBe(98); expect(rc(["2999999", "80"])).toBe(96); expect(rc([String(process.pid), "80"])).toBe(97);
+          const rc = (a: string[], script = f) => cp.spawnSync("/bin/sh", [script, ...a], {timeout: 8000}).status;
+          const own = cp.spawnSync("readlink", ["/proc/self/ns/net"], {encoding: "utf8"}).stdout.trim();
+          expect(rc(["x1", "80", own])).toBe(98); expect(rc([String(process.pid), "80", "garbage"])).toBe(98); expect(rc(["2999999", "80", own])).toBe(96);
+          expect(rc([String(process.pid), "80", "net:[1]"])).toBe(94); expect(rc([String(process.pid), "80", own])).toBe(97);
+          // C-6: ayrı ağ ad alanındaki gerçek hedef; relay yalnız kayıtlı ns + pid dosyasındaki ebeveyn (cmdline'ında S) ile devam eder
+          const S = path.join(tmp2, "scratch"); fs.mkdirSync(path.join(S, "ctl"), {recursive: true});
+          const sh2 = path.join(tmp2, "relay2.sh"); fs.writeFileSync(sh2, relayScript(S, "/nonexistent-node"));
+          const parent = cp.spawn("/bin/sh", ["-c", "unshare -Urn sleep 30 & wait", "uasco-test", S], {stdio: "ignore"});
+          try {
+            let kid = ""; for (let i = 0; i < 40 && !kid; i++) { kid = cp.spawnSync("pgrep", ["-P", String(parent.pid)], {encoding: "utf8"}).stdout.trim().split(/\s+/)[0]; if (!kid) cp.spawnSync("sleep", ["0.1"]); }
+            const ns = kid ? cp.spawnSync("readlink", [`/proc/${kid}/ns/net`], {encoding: "utf8"}).stdout.trim() : "";
+            if (/^net:\[\d+\]$/.test(ns) && ns !== own) {
+              expect(rc([kid, "80", ns], sh2)).toBe(95); // pid dosyası yok
+              fs.writeFileSync(path.join(S, "ctl", "pid"), "1\n"); expect(rc([kid, "80", ns], sh2)).toBe(95); // ebeveyn eşleşmiyor
+              fs.writeFileSync(path.join(S, "ctl", "pid"), `${process.pid}\n`); expect(rc([kid, "80", ns], sh2)).toBe(95); // ebeveyn doğru ama cmdline'da S yok
+              fs.writeFileSync(path.join(S, "ctl", "pid"), `${parent.pid}\n`); expect([94, 95, 96, 97, 98]).not.toContain(rc([kid, "80", ns], sh2)); // tüm denetimler geçer (nsenter'a ulaşılır)
+            }
+          } finally { cp.spawnSync("pkill", ["-P", String(parent.pid)]); parent.kill("SIGKILL"); }
         }
       } finally { fs.rmSync(tmp2, {recursive: true, force: true}); }
     });

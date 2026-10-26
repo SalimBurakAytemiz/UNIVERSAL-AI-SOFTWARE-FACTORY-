@@ -278,10 +278,18 @@ export const WSL_RELAY_JS = 'const n=require("node:net");const s=n.connect({host
 /** Sandbox DIŞINDA (WSL) çalışır: hedef pid'in ağ ad alanı bu sürecinkinden FARKLI olmalı (aynıysa nsenter WSL loopback'ine bağlanırdı); pid/port yalnız rakam. */
 export const relayScript = (S: string, node: string): string => [
   "#!/bin/sh",
-  "p=$1; port=$2",
+  // C-6: ns = köprü kurulurken kaydedilen ağ ad alanı kimliği; hedef pid yeniden kullanılsa/başka ağa geçse de relay yalnız o sandbox'a girer.
+  "p=$1; port=$2; ns=$3",
   'case "$p$port" in *[!0-9]*|"") exit 98;; esac',
+  `printf '%s\\n' "$ns" | /usr/bin/grep -Eq '^net:\\[[0-9]+\\]$' || exit 98`,
   '[ -d "/proc/$p" ] || exit 96',
-  '[ "$(/usr/bin/readlink "/proc/$p/ns/net")" != "$(/usr/bin/readlink /proc/self/ns/net)" ] || exit 97',
+  'cur=$(/usr/bin/readlink "/proc/$p/ns/net") || exit 96',
+  '[ "$cur" = "$ns" ] || exit 94',
+  '[ "$cur" != "$(/usr/bin/readlink /proc/self/ns/net)" ] || exit 97',
+  `t=$(cat ${shq(`${S}/ctl/pid`)} 2>/dev/null)`,
+  'case "$t" in ""|*[!0-9]*) exit 95;; esac',
+  `[ "$(/usr/bin/awk '{sub(/^.*\\) /, ""); print $2}' "/proc/$p/stat")" = "$t" ] || exit 95`,
+  `/usr/bin/tr '\\000' ' ' < "/proc/$t/cmdline" | /usr/bin/grep -qF -- ${shq(S)} || exit 95`,
   `exec /usr/bin/nsenter -U --preserve-credentials -n -t "$p" ${shq(node)} ${shq(`${S}/ctl/relay.js`)} "$port"`
 ].join("\n") + "\n";
 
@@ -466,12 +474,15 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
       if (!target) await new Promise(r => setTimeout(r, 250));
     }
     if (!target) throw new Error("BRIDGE_TARGET_MISSING");
+    // C-6: hedefin ağ ad alanı kimliği şimdi kaydedilir ve her relay'e geçirilir (relay.sh farklıysa reddeder).
+    const nsOut = utf8((await this.wsl(["/usr/bin/readlink", `/proc/${target}/ns/net`], 15_000)).stdout).trim();
+    if (!/^net:\[[0-9]+\]$/.test(nsOut)) throw new Error("BRIDGE_NETNS_UNKNOWN");
     const max = this.o.maxBridgeConnections ?? 32, idleMs = this.o.bridgeIdleMs ?? 120_000, spawner = this.realSpawner();
     const live = new Set<net.Socket>(), kids = new Set<cp.ChildProcess>();
     const server = net.createServer(sock => {
       if (!this.verified || live.size >= max || child.exitCode !== null || child.signalCode !== null) { sock.destroy(); return; }
       live.add(sock); sock.setTimeout(idleMs, () => sock.destroy());
-      const r = spawner(["-d", this.distro ?? "", "--exec", "/bin/sh", `${rec.S}/ctl/relay.sh`, target as string, String(port)], ["pipe", "pipe", "ignore"]);
+      const r = spawner(["-d", this.distro ?? "", "--exec", "/bin/sh", `${rec.S}/ctl/relay.sh`, target as string, String(port), nsOut], ["pipe", "pipe", "ignore"]);
       kids.add(r);
       const end = () => { live.delete(sock); kids.delete(r); sock.destroy(); this.killLocal(r); };
       sock.on("close", end); sock.on("error", end); r.on("close", end); r.on("error", end);
