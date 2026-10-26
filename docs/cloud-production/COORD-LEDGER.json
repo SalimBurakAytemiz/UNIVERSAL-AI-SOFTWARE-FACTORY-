@@ -532,6 +532,16 @@
       "ref": "wf_65c8b156-ae0 (2 lenses + 4 skeptics, none refuted): floor test lets required tech/gapIds/reviewChain/canonical be cut (X5-X9, N16); registryStatus/knowledgeState unchecked (N13 877 fake VERIFIED, N26, N27); truncation records for optional tech/aliases unpinned; parity test cannot tell re-derivation from copy; ~9 LOW",
       "policy": "TEP-1",
       "at": "2026-10-26T22:42:39.042Z"
+    },
+    {
+      "pr": 263,
+      "sha": "d6b46f81c8595606e9ee8bcd951d9c99bed82f78",
+      "kind": "delta",
+      "base": "79799cafdd3748e0bc957cc2df05f95ef3c8ab4c",
+      "verdict": "BLOCKERS_4MEDIUM_test_gaps",
+      "ref": "wf_b472c394-70b (2 lenses + 4 skeptics, none refuted): M1-M7/L1/L4/L7/L8 FIXED; MEDIUM: reconciliation-note expected text built from template (N26-N30), proposedOnly profiles==den fixture (N04-N06,N15,N16,N31), tr unavailable+reason unasserted (N01,N02,N22), THEAD unpinned; LOWs: false 'no run journal' reason when readiness unavailable, shared read epoch, L1 one-direction, null/readinessError combo",
+      "policy": "TEP-1",
+      "at": "2026-10-26T23:07:08.461Z"
     }
   ],
   "tests": [],
