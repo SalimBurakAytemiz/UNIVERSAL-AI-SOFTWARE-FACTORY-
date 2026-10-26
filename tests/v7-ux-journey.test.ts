@@ -1630,3 +1630,127 @@ describe("LANE-A A-PREDEV-BUSY-1: one mission-write lock for the pre-dev decisio
   });
 });
 
+
+// //TR: A-FLOW-TASK-1: ilk teslim akışının "plan -> koşu" arasındaki yazması olan GÖREV DURUMU adımı GERÇEK control-api ile uçtan uca doğrulanır: fikir (intake) -> elle plan -> görev durumu denetimi; her POST önce main.mjs'in B5 POST izin listesinden geçer (köprü kapısı), sonra gerçek sunucuya gider. Görünüm DONE'ı açık onay olmadan göndermez, bağımlılığı bitmemiş görevi başlatmaz, Global Stop'ta (423) başarı göstermez ve görev DONE olsa da mission'ı tamamlandı saymaz.
+describe("LANE-A A-FLOW-TASK-1: the task status step of the first-delivery flow against the real control-api", () => {
+  const block = (name: string) => { const m = new RegExp(`// ${name}-BEGIN\\n([\\s\\S]*?)// ${name}-END`).exec(mainSrc); if (!m) throw new Error(`missing ${name}`); return m[1]; };
+  const postAllowed = new Function(`${block("B5-POST-ALLOWLIST")}\nreturn desktopPostPathAllowed;`)() as (v: unknown) => boolean;
+  const IDEA = "A small task list web app where one person can add, finish and remove tasks.";
+  const body = (r: any) => { try { return r.json(); } catch { return {}; } };
+  const text = (n: N) => n.textContent;
+
+  // The bridge is the main-process contract: POST paths must pass the allow-list, GET failures throw like the real bridge.
+  async function setup(lang = "en") {
+    const app = mkApp(), apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js"), forms = await load("forms.js");
+    forms.resetAllForms();
+    const doc = new D(), store = st.createStore(null);
+    const calls = {post: [] as Array<{path: string; body: any; status: number}>, confirm: [] as any[], refresh: 0, rerender: 0};
+    const bridge = {
+      apiGet: async (p: string) => { const r = await app.inject({method: "GET", url: p, headers: hdr}); if (r.statusCode !== 200) throw new Error(`${p}: HTTP ${r.statusCode}`); return r.json(); },
+      apiPost: async (p: string, b: unknown) => {
+        if (!postAllowed(p)) throw new Error("INVALID_API_PATH");
+        const r = await app.inject({method: "POST", url: p, headers: {...hdr, "content-type": "application/json"}, payload: JSON.stringify(b)});
+        calls.post.push({path: p, body: b, status: r.statusCode}); return {status: r.statusCode, body: body(r)};
+      }
+    };
+    const api = apiMod.createApi({bridge, store});
+    let answer = false;
+    const ctx: any = {doc, store, api, i18n: {lang, t: (k: string, v?: any) => i18n.translate(lang, k, v)}, t: (k: string, v?: any) => i18n.translate(lang, k, v), navigate: () => {},
+      rerender: async () => { calls.rerender++; store.cache.clear(); }, refreshAll: async () => { calls.refresh++; store.cache.clear(); },
+      confirm: async (o: any) => { calls.confirm.push(o); return answer; }, selectProject() {}, renderAttention() {}, principal: "FOUNDER_LOCAL", settleFocus: () => {}};
+    return {app, ctx, doc, calls, forms, answer: (v: boolean) => { answer = v; }};
+  }
+  // idea -> project + mission (real POST /v1/intakes), then a three-task hand plan (2 depends on 1) through the real plan form
+  async function flowToPlan(s: Awaited<ReturnType<typeof setup>>) {
+    const intake = await load("views", "intake.js"), plan = await load("views", "plan-form.js"), ts = await load("views", "task-status.js");
+    intake.resetIntakeAll(); ts.resetTaskStatusDraft(null);
+    Object.assign(intake.intakeDraft, {idea: IDEA, title: "Task list"});
+    expect(await intake.submitIntake(s.ctx)).toEqual({ok: true});
+    const missionId: string = intake.intakeUi.last.missionId; s.forms.selection.missionId = missionId;
+    plan.resetPlanDraft(missionId); plan.planDraft.rows = [{title: "Add a task", deps: ""}, {title: "Finish a task", deps: "1"}, {title: "Remove a task", deps: ""}];
+    expect(await plan.submitPlan(s.ctx, missionId)).toMatchObject({ok: true, status: 201});
+    return {missionId, ts};
+  }
+  async function openTask(s: Awaited<ReturnType<typeof setup>>, ts: any, missionId: string, title: string) {
+    const view = await load("views", "work.js"), md = await s.ctx.api.missionDetail(missionId);
+    let root: N = await view.render(s.ctx); s.doc.body.replaceChildren(root);
+    const t = md.mission.tasks.find((x: any) => x.title === title);
+    if (byId(root, "task-status")?.dataset.taskStatus !== t.taskId) { fire(byData(root, "taskInspect", t.taskId)!, "click"); root = await view.render(s.ctx); s.doc.body.replaceChildren(root); } // a second click on the open task would close it
+    expect(byId(root, "task-status")!.dataset.taskStatus).toBe(t.taskId);
+    return {root, task: t, md, ts};
+  }
+  const taskOnServer = async (app: App, id: string) => (await getJson(app, `/v1/tasks/${id}`)).task;
+
+  it("walks one task through the real routes: IN_PROGRESS, a cancelled DONE changes nothing, a confirmed DONE unlocks the dependent task, and the mission is not called complete", async () => {
+    const s = await setup(), {missionId, ts} = await flowToPlan(s);
+    const post0 = s.calls.post.length, refresh0 = s.calls.refresh;
+    let o = await openTask(s, ts, missionId, "Add a task");
+    expect(allData(o.root, "taskTo").map(n => n.dataset.taskTo)).toEqual(["IN_PROGRESS", "BLOCKED"]); // PENDING offers exactly these two
+    expect(s.calls.post.length).toBe(post0); // opening and rendering never write
+    // PENDING -> IN_PROGRESS: no confirm, exact body, real server state
+    const r1 = await ts.submitTaskTransition(s.ctx, o.md.mission, o.task, "IN_PROGRESS");
+    expect(r1).toMatchObject({ok: true, status: 200});
+    expect(s.calls.post.at(-1)).toEqual({path: `/v1/tasks/${o.task.taskId}/transition`, body: {to: "IN_PROGRESS", reason: "PENDING -> IN_PROGRESS (UASCO Desktop)"}, status: 200});
+    expect(s.calls.confirm).toEqual([]); // only DONE asks
+    expect(s.calls.refresh).toBe(refresh0 + 1); // the success refreshed the whole app once
+    expect((await taskOnServer(s.app, o.task.taskId)).status).toBe("IN_PROGRESS");
+    o = await openTask(s, ts, missionId, "Add a task");
+    expect(allData(o.root, "taskTo").map(n => n.dataset.taskTo)).toEqual(["DONE", "BLOCKED", "PENDING"]);
+    expect(text(byId(o.root, "task-status")!)).toContain('Task "Add a task" moved to In progress. No run was started.');
+    // DONE, confirmation refused: no request, honest status, server unchanged
+    s.answer(false); const postN = s.calls.post.length, refreshN = s.calls.refresh;
+    expect(await ts.submitTaskTransition(s.ctx, o.md.mission, o.task, "DONE")).toEqual({ok: false, cancelled: true});
+    expect(s.calls.post.length).toBe(postN); expect(s.calls.refresh).toBe(refreshN); expect(s.calls.confirm.length).toBe(1);
+    expect(s.calls.confirm[0].target).toContain(o.task.taskId);
+    expect(text(byId(await (await load("views", "work.js")).render(s.ctx), "task-status")!)).toContain("Action was not confirmed; nothing was changed.");
+    expect((await taskOnServer(s.app, o.task.taskId)).status).toBe("IN_PROGRESS");
+    // the dependent task cannot start yet: no button, a validation refusal, no request
+    const second = await openTask(s, ts, missionId, "Finish a task");
+    expect(allData(second.root, "taskTo").map(n => n.dataset.taskTo)).toEqual(["BLOCKED"]);
+    expect(text(byId(second.root, "task-status")!)).toContain("must be done before this one can start: Add a task");
+    const postV = s.calls.post.length;
+    expect(await ts.submitTaskTransition(s.ctx, second.md.mission, second.task, "IN_PROGRESS")).toEqual({ok: false, validation: true});
+    expect(s.calls.post.length).toBe(postV);
+    // DONE, confirmed: final, and it unlocks the dependent task
+    s.answer(true);
+    o = await openTask(s, ts, missionId, "Add a task");
+    expect(await ts.submitTaskTransition(s.ctx, o.md.mission, o.task, "DONE")).toMatchObject({ok: true, status: 200});
+    expect(s.calls.post.at(-1)).toMatchObject({path: `/v1/tasks/${o.task.taskId}/transition`, body: {to: "DONE", reason: "IN_PROGRESS -> DONE (UASCO Desktop)"}, status: 200});
+    expect((await taskOnServer(s.app, o.task.taskId)).status).toBe("DONE");
+    const done = await openTask(s, ts, missionId, "Add a task");
+    expect(allData(done.root, "taskTo")).toEqual([]); expect(text(byId(done.root, "task-status")!)).toContain("This task is done; a done task is not reopened.");
+    const unlocked = await openTask(s, ts, missionId, "Finish a task");
+    expect(allData(unlocked.root, "taskTo").map(n => n.dataset.taskTo)).toEqual(["IN_PROGRESS", "BLOCKED"]);
+    // a done task is not a complete mission, and no verification is claimed
+    const m = (await getJson(s.app, `/v1/missions/${missionId}`)).mission;
+    expect(m.status).not.toBe("COMPLETE");
+    expect(surface(unlocked.root)).not.toMatch(/PRODUCT_VERIFIED|spill-product_verified/);
+    expect(text(unlocked.root)).not.toMatch(/mission (is )?complete/i);
+  });
+
+  it("BLOCKED needs a reason, and with Global Stop active the server refuses (423): the view shows a failure and keeps the old status", async () => {
+    const s = await setup(), {missionId, ts} = await flowToPlan(s);
+    const o = await openTask(s, ts, missionId, "Remove a task");
+    const post0 = s.calls.post.length;
+    expect(await ts.submitTaskTransition(s.ctx, o.md.mission, o.task, "BLOCKED")).toEqual({ok: false, validation: true}); // empty reason
+    expect(s.calls.post.length).toBe(post0);
+    ts.taskStatusDraft.reason = "waiting for the design";
+    expect(await ts.submitTaskTransition(s.ctx, o.md.mission, o.task, "BLOCKED")).toMatchObject({ok: true, status: 200});
+    expect(s.calls.post.at(-1)!.body).toEqual({to: "BLOCKED", reason: "waiting for the design"});
+    expect((await taskOnServer(s.app, o.task.taskId)).status).toBe("BLOCKED");
+    // Global Stop: the write is refused by the server and the view must not report success
+    const stop = await s.app.inject({method: "POST", url: "/v1/control/stop", headers: {...hdr, "content-type": "application/json"}, payload: JSON.stringify({reason: "journey test"})});
+    expect(stop.statusCode, stop.body).toBe(200);
+    const blocked = await openTask(s, ts, missionId, "Remove a task");
+    expect(allData(blocked.root, "taskTo").map(n => n.dataset.taskTo)).toEqual(["PENDING"]);
+    const refresh0 = s.calls.refresh;
+    const res = await ts.submitTaskTransition(s.ctx, blocked.md.mission, blocked.task, "PENDING");
+    expect(res).toMatchObject({ok: false, status: 423});
+    expect(s.calls.post.at(-1)).toMatchObject({status: 423});
+    expect((await taskOnServer(s.app, o.task.taskId)).status).toBe("BLOCKED"); // unchanged
+    const rendered = await (await load("views", "work.js")).render(s.ctx);
+    expect(byId(rendered, "task-status-status")!.dataset.result).toBe("error"); // the view shows a failure
+    expect(text(byId(rendered, "task-status")!)).not.toContain("moved to Pending");
+    expect(s.calls.refresh).toBe(refresh0 + 1);
+  });
+});
