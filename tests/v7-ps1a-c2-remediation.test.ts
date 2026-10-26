@@ -760,16 +760,17 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
   it("S5 (Windows liveness): with the default reader on win32 recover() reads ALL candidate start times with ONE batched PowerShell call; the batch answer is USED (a different start time -> ORPHAN_PID_MISMATCH_NOT_KILLED and the process stays alive; a pid missing from a successful answer is gone -> MISMATCH, not read again; the matching one is killed); a failed batch falls back to per-pid reads; a batch that never answers is bounded by ownerCheckMs and then falls back", async () => {
     const {app, dataDir} = mk(); const ps: Project[] = []; for (let i = 0; i < 3; i++) ps.push(await createProject(app, {template: "web-node"}));
     const m0: any = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any));
-    const seed = async () => { const rows: {pid: number; t: string | null}[] = []; for (const p of ps) { const pid = idle(); const t = await processStartTime(pid); rows.push({pid, t}); seedRec(dataDir, p, deadRec(m0, p, {status: "RUNNING", pid, pidStartTime: t, startedAt: new Date().toISOString()})); } return rows; };
+    const known = new Map<number, string | null>(); // enjekte edilen okuyucular gerçek processStartTime (Windows'ta PowerShell) çağırmaz
+    const seed = async () => { const rows: {pid: number; t: string | null}[] = []; for (const p of ps) { const pid = idle(); const t = await processStartTime(pid); rows.push({pid, t}); known.set(pid, t); seedRec(dataDir, p, deadRec(m0, p, {status: "RUNNING", pid, pidStartTime: t, startedAt: new Date().toISOString()})); } return rows; };
     for (const mode of ["answer", "failed", "hang"] as const) {
-      const rows = await seed(); const scripts: string[] = []; const ownerCheckMs = mode === "hang" ? 1500 : 5000;
+      const rows = await seed(); const scripts: string[] = []; const ownerCheckMs = mode === "hang" ? 300 : 5000;
       const powershell = async (script: string) => {
         scripts.push(script); if (mode === "failed") return null; if (mode === "hang") return new Promise<string | null>(() => undefined);
         const ids = [...script.matchAll(/-Id ([\d,]+)/g)][0][1].split(",").map(Number);
-        const lines = await Promise.all(ids.map(async id => id === rows[1].pid ? null : `${id},${id === rows[0].pid ? "DIFFERENT-START-TIME" : await processStartTime(id)}`));
+        const lines = await Promise.all(ids.map(async id => id === rows[1].pid ? null : `${id},${id === rows[0].pid ? "DIFFERENT-START-TIME" : known.get(id)}`));
         return lines.filter(Boolean).join("\r\n");
       };
-      const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {platform: "win32", powershell, ownerCheckMs});
+      const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {platform: "win32", powershell, ownerCheckMs, startTimeOf: (pid: number) => Promise.resolve(pid === process.pid ? "SELF" : known.get(pid) ?? null)});
       const t0 = Date.now(); const out = await m.recover(); const took = Date.now() - t0;
       expect(scripts, `${mode}: exactly one batched call`).toHaveLength(1); for (const r of rows) expect(scripts[0]).toContain(String(r.pid));
       const res = (p: Project) => out.find(x => x.projectId === p.projectId)?.result;
@@ -778,21 +779,39 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
         expect(pidAlive(rows[0].pid) && pidAlive(rows[1].pid), "mismatched / gone pids are not killed").toBe(true); expect(pidAlive(rows[2].pid)).toBe(false); killProcessTree(rows[0].pid); killProcessTree(rows[1].pid);
       } else {
         expect(out.map(x => x.result), mode).toEqual(Array(3).fill("ORPHAN_KILLED")); for (const r of rows) expect(pidAlive(r.pid)).toBe(false);
-        if (mode === "hang") expect(took, `a never-answering batch is bounded (${took} ms)`).toBeLessThan(ownerCheckMs + 4000);
+        if (mode === "hang") expect(took, `a never-answering batch is bounded (${took} ms)`).toBeLessThan(2500);
       }
     }
   }, 90_000);
 
-  it("M-a: a record rewritten by a LIVE peer in the post-kill window (after the orphan was killed, before the record is written) is NOT taken over: no write, no lock removal, no result for it", async () => {
+  it("M-a: a record rewritten by a LIVE peer EXACTLY between the orphan kill and the CAS is NOT taken over: no write, the lock stays, no recovery result, no schedule - and the superseded kill is audited", async () => {
     const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
     const orphan = idle(); const ostart = await processStartTime(orphan); const peerPid = idle(); const peerStart = await processStartTime(peerPid); const ownerT = await processStartTime(process.ppid);
-    const m0: any = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any)); const f = seedRec(dataDir, p, deadRec(m0, p, {status: "RUNNING", pid: orphan, pidStartTime: ostart, startedAt: new Date().toISOString()}));
-    const events: string[] = [];
-    // Kendi başlangıç zamanı okuması, yetim ÖLDÜRÜLDÜKTEN sonra döner ve tam o pencerede kaydı canlı bir eş olarak yeniden yazar.
-    const startTimeOf = async (pid: number) => { if (pid === process.pid) { while (pidAlive(orphan)) await sleep(10); fs.writeFileSync(f, JSON.stringify({...m0.blank(p), instanceId: "dev_peer", ownerPid: process.ppid, ownerStartTime: ownerT, status: "RUNNING", pid: peerPid, pidStartTime: peerStart, startedAt: new Date().toISOString()})); return "SELF"; } return pid === orphan ? ostart : pid === process.ppid ? ownerT : null; };
-    const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {startTimeOf, ownerCheckMs: 20_000, audit: (e: string) => events.push(e)});
-    const out = await m.recover();
-    expect(out).toEqual([]); expect(events).not.toContain("DEVRUN_ORPHAN_RECOVERED"); expect(readRec(f)).toMatchObject({instanceId: "dev_peer", status: "RUNNING", pid: peerPid}); expect(pidAlive(peerPid), "the peer's product survives").toBe(true);
+    const m0: any = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any)); const seeded = deadRec(m0, p, {status: "RUNNING", pid: orphan, pidStartTime: ostart, startedAt: new Date().toISOString(), sandboxScratch: SCR});
+    const f = seedRec(dataDir, p, seeded); const release = m0.takeLock(p.projectId); const lockFile = path.join(path.dirname(f), "devrun.lock"); expect(fs.existsSync(lockFile)).toBe(true);
+    const events: Array<[string, any]> = []; let killed = 0;
+    // Yalnız instanceId / sahip / durum / pid değişir (startedAt ve sandboxScratch AYNI): CAS'ı yalnız instanceId karşılaştırması reddedebilir.
+    const killTree = (pid: number) => { killProcessTree(pid); killed++; fs.writeFileSync(f, JSON.stringify({...seeded, instanceId: "dev_peer", ownerPid: process.ppid, ownerStartTime: ownerT, status: "RUNNING", pid: peerPid, pidStartTime: peerStart})); };
+    const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {killTree, startTimeOf: async (pid: number) => pid === process.pid ? "SELF" : pid === orphan ? ostart : pid === process.ppid ? ownerT : null, audit: (e: string, d: any) => events.push([e, d])});
+    try {
+      const out = await m.recover(); await m.settleRecovery();
+      expect(killed).toBe(1); expect(out).toEqual([]); expect(events.map(x => x[0])).not.toContain("DEVRUN_ORPHAN_RECOVERED");
+      expect(events).toContainEqual(["DEVRUN_ORPHAN_KILLED_RECORD_SUPERSEDED", {projectId: p.projectId, pid: orphan, result: "ORPHAN_KILLED"}]);
+      expect(readRec(f)).toMatchObject({instanceId: "dev_peer", status: "RUNNING", pid: peerPid, sandboxScratch: SCR}); expect(pidAlive(peerPid), "the peer's product survives").toBe(true); expect(fs.existsSync(lockFile), "the lock is not removed").toBe(true);
+    } finally { release(); }
+  }, 60_000);
+
+  it("B1: the own start-time read costs NOTHING when no record is written: zero records, project dirs without records, and a live peer's record with a never-answering own read all return far below ownerCheckMs; buildServer with an existing project dir and a never-answering reader is ready in < 2 s", async () => {
+    const {app, dataDir} = mk(); const ps = [await createProject(app, {template: "web-node"}), await createProject(app, {template: "web-node"})]; const ownerT = await processStartTime(process.ppid);
+    const never = () => new Promise<string | null>(() => undefined);
+    const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {ownerCheckMs: 5000, startTimeOf: (pid: number) => pid === process.pid ? never() : pid === process.ppid ? Promise.resolve(ownerT) : Promise.resolve(null)});
+    let t0 = Date.now(); expect(await m.recover(), "project dirs, no records").toEqual([]); expect(Date.now() - t0).toBeLessThan(1500);
+    const m0: any = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any));
+    seedRec(dataDir, ps[0], {...m0.blank(ps[0]), instanceId: "dev_peer", ownerPid: process.ppid, ownerStartTime: ownerT, status: "RUNNING", pid: null, startedAt: new Date().toISOString()});
+    t0 = Date.now(); expect(await m.recover(), "a live peer's record is untouched").toEqual([]); expect(Date.now() - t0).toBeLessThan(1500);
+    const { buildServer } = await import("../apps/control-api/src/server.js");
+    const srv = buildServer({sandbox: TEST_HOST_PASSTHROUGH_SANDBOX, controlToken: TOKEN, runtime: path.join(tmp, "rt-b1"), dataDir, repoRoot: REPO, port: 3210, logger: false, tenantId: "tA", studio: {devrun: {startTimeOf: (pid: number) => pid === process.pid ? never() : Promise.resolve(pid === process.ppid ? ownerT : null)}}});
+    try { t0 = Date.now(); await srv.ready(); expect(Date.now() - t0, "ready must not wait for the own start-time read").toBeLessThan(2000); } finally { await srv.close(); }
   }, 60_000);
 
   it("M-b: the own start-time read is awaited ONCE before the loop: N orphan records with a never-answering read cost one budget, not N", async () => {

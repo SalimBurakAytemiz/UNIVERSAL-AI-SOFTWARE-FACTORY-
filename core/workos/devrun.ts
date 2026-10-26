@@ -70,6 +70,8 @@ export interface DevRunOptions {
   killWaitMs?: number;
   // Test enjeksiyonu: toplu başlangıç zamanı okuması için platform ve PowerShell çalıştırıcısı (varsayılan process.platform / powershell.exe).
   platform?: NodeJS.Platform; powershell?: (script: string) => Promise<string | null>;
+  // Test enjeksiyonu: sahipsiz süreç ağacını öldürme (varsayılan killProcessTree); M-a testi eş kaydını öldürme ile CAS arasına tam oraya yazar.
+  killTree?: (pid: number) => void;
 }
 const NO_PREVIEW_TYPES = new Set(["desktop", "mobile", "native"]);
 const ACTIVE: ReadonlySet<DevRunStatus> = new Set(["STARTING", "RUNNING"]);
@@ -791,7 +793,7 @@ export class DevRunManager {
     const t = now !== undefined ? now : st.pid ? await timed<string | null | typeof LOOKUP_TIMEOUT>(this.o.startTimeOf(st.pid).catch(() => null), this.o.ownerCheckMs ?? 4000, LOOKUP_TIMEOUT) : null;
     if (t === LOOKUP_TIMEOUT) return null;
     if (!t || !st.pidStartTime || t !== st.pidStartTime) return "ORPHAN_PID_MISMATCH_NOT_KILLED";
-    killProcessTree(st.pid!); for (let i = 0; i < 50 && pidAlive(st.pid); i++) await sleep(100);
+    (this.o.killTree ?? killProcessTree)(st.pid!); for (let i = 0; i < 50 && pidAlive(st.pid); i++) await sleep(100);
     return pidAlive(st.pid) ? "ORPHAN_KILL_FAILED" : "ORPHAN_KILLED";
   }
   // M1: start() ölü sahibin ETKİN kaydını devralırken recover() ile aynı işi yapar (sahipsiz süreç + scratch), kilidi almadan ÖNCE.
@@ -821,7 +823,7 @@ export class DevRunManager {
     type Verdict = {key: string; live: boolean; now?: string | null | typeof LOOKUP_TIMEOUT};
     // Varsayılan okuyucu + win32: tüm aday pid'ler (sahipler + sahipsiz süreçler) için TEK toplu PowerShell okuması (sınırlı); okunamayanlar tek tek okunur.
     let batch = new Map<number, string | null>();
-    if (this.o.startTimeOf === processStartTime && (this.o.platform ?? process.platform) === "win32") {
+    if ((this.o.startTimeOf === processStartTime || this.o.powershell !== undefined) && (this.o.platform ?? process.platform) === "win32") {
       const pids: number[] = [];
       for (const id of ids) { const r = this.readState(id); if (needsCheck(r)) { if (r.ownerPid !== process.pid) pids.push(r.ownerPid); if (r.pid) pids.push(r.pid); } }
       batch = await timed(processStartTimes(pids.filter(pidAlive), {platform: this.o.platform, powershell: this.o.powershell}), budget, new Map<number, string | null>());
@@ -833,8 +835,8 @@ export class DevRunManager {
       const now = !live && ACTIVE.has(r.status) && r.pid && pidAlive(r.pid) ? await timed<string | null | typeof LOOKUP_TIMEOUT>(read(r.pid).catch(() => null), budget, LOOKUP_TIMEOUT) : undefined;
       return {key: keyOf(r), live, now};
     };
-    // M-b: kendi başlangıç zamanı döngüden ÖNCE BİR kez, tek bütçeyle beklenir (kayıt başına bütçe N x ownerCheckMs tutardı); null = okuyucular için fail-closed.
-    const self = await timed(selfP, budget, null);
+    // Kendi başlangıç zamanı TEMBEL ve tek bütçelidir: yalnız kayıt yazılacak yetim dalında, orphanKill'den SONRA beklenir (hiç kayıt yazılmıyorsa ücretsiz: açılış süresine eklenmez; N yetim için toplam bir bütçe; öldürmeden önce bayat örnek yok). null = okuyucular için fail-closed.
+    let selfV: Promise<string | null> | undefined; const getSelf = (): Promise<string | null> => (selfV ??= timed(selfP, budget, null));
     const verdicts = new Map<string, Verdict>();
     await Promise.all(ids.map(async id => { const r = this.readState(id); if (needsCheck(r)) verdicts.set(id, await check(r)); }));
     for (const id of ids) {
@@ -863,10 +865,12 @@ export class DevRunManager {
       // C-5: sağlayıcı-taraflı scratch (WSL) Linux tarafında kapatılır; kapatılamazsa kayıt STOP_INCOMPLETE ile scratch'ı korur.
       const pendingScratch = Boolean(st.sandboxScratch); // kapatma arka planda (scheduleScratch) denenir; sonuç kayda yazılır
       const rec: DevRunRecovery = {at: new Date().toISOString(), result, previousInstanceId: st.instanceId, pid: st.pid};
+      const self = await getSelf();
       const next: DevRunState = {...st, status: result === "ORPHAN_KILL_FAILED" ? "CRASHED" : "STOPPED", reason: pendingScratch ? "STOP_INCOMPLETE:TEARDOWN_PENDING" : `RECOVERED_AFTER_API_RESTART:${result}`, ...(pendingScratch ? {stopIncomplete: "TEARDOWN_PENDING", sandboxScratch: st.sandboxScratch ?? null} : {sandboxScratch: null, sandboxBinding: null}), endedAt: rec.at, instanceId: this.instanceId, ownerPid: process.pid, ownerHost: os.hostname(), ownerStartTime: self,
         preview: {url: null, state: "UNAVAILABLE", lastProbeAt: st.preview?.lastProbeAt ?? null, reason: "NOT_RUNNING"}, recovery: rec};
       // M-a: orphanKill'in bekleme döngüsü ve await'ler boyunca canlı bir eş bu kaydı yeniden yazmış olabilir: yalnız OKUNAN kayıt hâlâ aynıysa yazılır (aksi halde devralma, kilit silme, denetim ve zamanlama YOK).
-      if (!this.casWrite(st, next, true)) continue;
+      // Öldürme yapıldı ama kayıt bu arada başka bir (canlı) örnekçe yeniden yazıldı: devralma YOK (fail-closed), ama görünmez kalmaz.
+      if (!this.casWrite(st, next, true)) { this.o.audit("DEVRUN_ORPHAN_KILLED_RECORD_SUPERSEDED", {projectId: id, pid: st.pid, result}); continue; }
       const lf = this.lockFile(id), ls = inspectProcessLock(lf) as {state: string; pid?: number; runId?: string | null};
       const reusedLock = ownerReused && ls.state === "ACTIVE" && ls.pid === st.ownerPid && ls.runId === st.instanceId;
       if (ls.state !== "ABSENT" && (ls.pid === process.pid || ls.state === "STALE_SAME_HOST_DEAD_PID" || reusedLock)) { try { fs.rmSync(lf, {force: true}); } catch { /* kilit */ } }
