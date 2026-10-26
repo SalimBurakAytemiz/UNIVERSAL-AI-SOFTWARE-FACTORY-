@@ -1791,7 +1791,7 @@
   },
   "integrationBoard": {
     "//TR": "Koordinatör entegrasyon panosu: her açık PR için gerçek engel ve bekleyen sorumlu. Ortak kök neden (base dependency gate) PR'a özgü hatalardan ayrı tutulur; #221/#225 birleşmeden tekrar CI tetiklenmez.",
-    "at": "2026-10-26T20:45:12.862Z",
+    "at": "2026-10-26T21:00:38.523Z",
     "base": "f663ee9 (v7/integration, after #238)",
     "sharedRootCause": {
       "id": "NONE_ACTIVE",
@@ -2234,6 +2234,16 @@
         "postMerge": "VERIFIED: parent1 45d7292, parent2 = gated head 23b8a11, merge-tree == merge tree",
         "review": "698b838 full NO_BLOCKERS_4LOW (security lens: not R2) -> 71131ed delta NO_BLOCKERS_1LOW -> 23b8a11 delta NO_BLOCKERS_1LOW (real adapter codes; PH17 doc)",
         "riskTier": "ROUTINE (core/workos/runner.ts refusal status mapping, unprotected; security-reviewed)"
+      },
+      {
+        "pr": 260,
+        "merge": "9ab1791",
+        "by": "auto-merge (armed by coordinator on 81cea57 after merge-gate OPEN)",
+        "at": "2026-10-26T21:00:13Z",
+        "postMerge": "VERIFIED: parent1 7a97b5c, parent2 = gated head 81cea57, merge-tree == merge tree",
+        "review": "1dd7597 full BLOCKERS_MEDIUM (certified TRUE path untested) -> 81cea57 delta NO_BLOCKERS_2LOW (M1+L1-L6 fixed; 40/40 mutants)",
+        "riskTier": "R1 PREAUTHORIZED (TEST_REGISTRATION_APPEND + TRUST_ROOT_RESEAL by COORD 1dd7597) + ROUTINE code (core/agents/readiness-audit.ts)",
+        "masterV2": "C-RDY-1 Role Readiness Auditor = Master V2 package 1 DONE (merged, not product-accepted)"
       }
     ],
     "wslProvider": {
