@@ -65,6 +65,9 @@ import {registerKnowledgeRoutes} from "./routes/knowledge.js";
 import {registerErrorContract,frameworkErrors} from "./routes/error-contract.js";
 // //TR: LANE-B-attention-api: Founder dikkat kuyruğu Work OS journal'ından türetilir (salt-okunur, tenant kapsamlı, hiçbir şey saklanmaz).
 import {registerAttentionRoutes} from "./routes/attention.js";
+// //TR: COORD korumalı paket 3b: pre-dev Founder kararları (LANE-B-predev-decisions) ve kanıttan hesaplanan rol yaşam döngüsü özeti (LANE-C-role-status-route).
+import {registerPredevDecisionRoutes} from "./routes/predev-decisions.js";
+import {registerRoleStatusRoutes} from "./routes/role-status.js";
 import {bindingForFunction} from "../../../core/agents/first-delivery-bindings.js";
 // //TR: LANE-C: gövdede roleId yoksa run bağlı geliştirici rolüyle (first-delivery bağı) başlar; böylece runner rol kapısı ve AGENT_TRACE ürün akışında da çalışır. Açık roleId her zaman önceliklidir; uygun olmayan rol runner kapısında BLOCKED olur.
 const DEFAULT_RUN_ROLE_ID=bindingForFunction("developer").roleId;
@@ -256,6 +259,8 @@ registerTaskRunRoutes(app,laneDeps);
 registerMemoryRoutes(app,laneDeps);
 registerKnowledgeRoutes(app,laneDeps);
 registerAttentionRoutes(app,laneDeps);
+registerPredevDecisionRoutes(app,laneDeps);
+registerRoleStatusRoutes(app,{...laneDeps,repoRoot});
 
 // //TR: B3a mission runner route'ları: aynı token hook'u ve aynı yazma kapısı sırası (GLOBAL_STOP 423 -> action-gateway 403 -> şema 400). Run'lar aynı Work OS journal'ındadır; eski /v1/runs route'larına dokunulmaz.
 const validWorkRunId=(x:unknown)=>typeof x==="string"&&/^run_[0-9a-f]{24}$/.test(x);
