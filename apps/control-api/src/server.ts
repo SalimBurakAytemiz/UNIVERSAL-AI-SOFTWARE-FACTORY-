@@ -72,7 +72,7 @@ import {registerRoleStatusRoutes} from "./routes/role-status.js";
 import {registerReadinessRoutes} from "./routes/readiness.js";
 import {registerRunSummaryRoutes} from "./routes/run-summaries.js";
 // //TR: COORD korumalı paket 4a (LANE-C-linux-sandbox-provider v2): ücretsiz Linux unshare sağlayıcısı yalnız linux'ta ExecutionGate'e verilir; öz-test geçmezse kapı SANDBOX_UNAVAILABLE kalır (ana makinede yürütme yok).
-import {LinuxUnshareSandboxProvider} from "../../../core/agents/linux-unshare-sandbox.js";
+import {defaultSandboxProviderFor} from "../../../core/sandbox/select-provider.js";
 import {bindingForFunction} from "../../../core/agents/first-delivery-bindings.js";
 // //TR: LANE-C: gövdede roleId yoksa run bağlı geliştirici rolüyle (first-delivery bağı) başlar; böylece runner rol kapısı ve AGENT_TRACE ürün akışında da çalışır. Açık roleId her zaman önceliklidir; uygun olmayan rol runner kapısında BLOCKED olur.
 const DEFAULT_RUN_ROLE_ID=bindingForFunction("developer").roleId;
@@ -82,7 +82,7 @@ const DEFAULT_RUN_ROLE_ID=bindingForFunction("developer").roleId;
 // //TR: PS-1A: controlRoot provenance/ayar kontrol köküdür (paketli: userData, geliştirme: repo); studio/executorSetup yalnız test enjeksiyonudur (sahte provenance yakalayıcı, CLI keşfi, dev-run zamanlamaları, ZIP sınırları).
 export interface BuildServerOptions{controlToken?:string;runtime?:string;port?:number;dataDir?:string;repoRoot?:string;tenantId?:string;orgId?:string;actor?:string;policyContext?:Partial<ActionPolicyContext>;logger?:boolean;executors?:ExecutorPair;runner?:{enabled?:boolean;intervalMs?:number}&Partial<Pick<RunnerOptions,"leaseTtlMs"|"maxRemediations"|"maxRetries"|"retryBackoffMs"|"testTimeoutMs"|"executorTimeoutMs"|"security">>;
   controlRoot?:string;studio?:{zipLimits?:Partial<ZipLimits>;devrun?:Partial<Pick<DevRunOptions,"startTimeOf"|"startWaitMs"|"graceMs"|"probeIntervalMs"|"stopPollMs"|"logRingBytes"|"logTailBytes"|"treeSnapshotMs">>};executorSetup?:Pick<ExecutorSetupOptions,"captureProvenance"|"findClaudeCli">;
-  // //TR: SBX-GATE: sandbox yalnız programatik test enjeksiyonudur (testlerdeki sahte sağlayıcı); env/config/journal/API gövdesi/masaüstü ayarı sağlayıcı kaydedemez. Seçenek hiç verilmezse Linux'ta varsayılan LinuxUnshareSandboxProvider denenir; selfTest geçmeden hiçbir proje kodu yürütülmez (SANDBOX_UNAVAILABLE). Açıkça null/undefined verilirse sağlayıcı yoktur ve yürütme her zaman SANDBOX_UNAVAILABLE ile reddedilir.
+  // //TR: SBX-GATE: sandbox yalnız programatik test enjeksiyonudur (testlerdeki sahte sağlayıcı); env/config/journal/API gövdesi/masaüstü ayarı sağlayıcı kaydedemez. Seçenek hiç verilmezse platform seçicisi (core/sandbox/select-provider.ts) varsayılanı kurar: linux -> LinuxUnshareSandboxProvider, win32 -> WslUnshareSandboxProvider, diğer -> yok; selfTest geçmeden hiçbir proje kodu yürütülmez (SANDBOX_UNAVAILABLE). Açıkça null/undefined verilirse sağlayıcı yoktur ve yürütme her zaman SANDBOX_UNAVAILABLE ile reddedilir.
   sandbox?:SandboxProvider|null;workosStoreOptions?:WorkOsStoreOptions}
 export function buildServer(opts:BuildServerOptions={}){
 const app=Fastify({logger:opts.logger??true,requestIdHeader:"x-request-id",genReqId:()=>crypto.randomUUID(),bodyLimit:64*1024,frameworkErrors});
@@ -285,8 +285,8 @@ function selectExecutors():{pair:ExecutorPair|null;reason:string}{
 const getExecutors=()=>executorsCache??=opts.executors?{pair:opts.executors,reason:opts.executors.kind}:selectExecutors();
 let workRunner:MissionRunner|null=null;
 // //TR: SBX-GATE (FD-REL-1-REJECT-HOST-EXEC-2026-10-15): runner testleri ve Studio dev-run için tek karar noktası; sağlayıcı opts.sandbox (test) ile gelir.
-// //TR: COORD korumalı paket 4a (LANE-C-linux-sandbox-provider v2): opts.sandbox yoksa yalnız linux'ta LinuxUnshareSandboxProvider varsayılan seçenekleriyle kurulur (env/config/gövde sağlayıcı seçemez). Kurucu hata atarsa null döner (NO_VERIFIED_PROVIDER, sunucu açılışı çökmez); acceptUnenforcedProcessLimit bilerek VERİLMEZ, root gözetmende öz-test geçmez ve kapı SANDBOX_UNAVAILABLE kalır (fail-closed).
-const defaultSandboxProvider=():SandboxProvider|null=>{if(process.platform!=="linux")return null;try{return new LinuxUnshareSandboxProvider()}catch{return null}};
+// //TR: COORD korumalı paket 4a + B-WSL-WIRE-1 (R2, Founder): opts.sandbox yoksa platforma göre tek seçici (core/sandbox/select-provider.ts): linux -> Linux unshare, win32 -> WSL2, diğer -> null; env/config/gövde sağlayıcı seçemez. Kurucu hata atarsa null döner (NO_VERIFIED_PROVIDER, sunucu açılışı çökmez); acceptUnenforcedProcessLimit bilerek VERİLMEZ, root gözetmende öz-test geçmez ve kapı SANDBOX_UNAVAILABLE kalır (fail-closed).
+const defaultSandboxProvider=():SandboxProvider|null=>defaultSandboxProviderFor();
 const executionGate=new ExecutionGate("sandbox" in opts?(opts.sandbox??null):defaultSandboxProvider());
 function getRunner(){
   if(workRunner)return workRunner;

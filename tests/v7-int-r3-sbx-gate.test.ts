@@ -100,8 +100,11 @@ describe("SBX-GATE ExecutionGate: single decision point", () => {
     // tek kayıt yolu: buildServer opts.sandbox (programatik); packaged/CLI girişleri sağlayıcı vermez, env okunmaz
     expect(server).toContain("new ExecutionGate(\"sandbox\" in opts?(opts.sandbox??null):defaultSandboxProvider());");
     // Batch 4a: the default provider is Linux-only, and a constructor throw degrades to "no provider" (never a startup crash).
-    // B-WSL-WIRE-1: varsayılan sağlayıcı ya eski Linux-yalnız satırdır ya da platform seçicisine (core/sandbox/select-provider.ts) devredilen tek satır (LANE-B-wsl-wire.md).
-    expect(server.includes("const defaultSandboxProvider=():SandboxProvider|null=>{if(process.platform!==\"linux\")return null;try{return new LinuxUnshareSandboxProvider()}catch{return null}};") || server.includes("const defaultSandboxProvider=():SandboxProvider|null=>defaultSandboxProviderFor();")).toBe(true);
+    // B-WSL-WIRE-1 (uygulandı, R2/Founder): varsayılan sağlayıcı yalnız platform seçicisine (core/sandbox/select-provider.ts) devredilen tek satırdır; eski Linux-yalnız satır ve doğrudan LinuxUnshareSandboxProvider kurulumu geri gelemez.
+    expect(server).toContain("const defaultSandboxProvider=():SandboxProvider|null=>defaultSandboxProviderFor();");
+    expect(server).toContain("import {defaultSandboxProviderFor} from \"../../../core/sandbox/select-provider.js\";");
+    expect(code(server)).not.toMatch(/new\s+(LinuxUnshareSandboxProvider|WslUnshareSandboxProvider)\s*\(/);
+    expect(code(server)).not.toMatch(/process\.platform\s*!==\s*"linux"\s*\)\s*return\s+null/);
     expect(code(server)).not.toMatch(/acceptUnenforcedProcessLimit/);
     expect(server).not.toMatch(/process\.env\.[A-Z_]*SANDBOX/);
     // packaged entry never passes a sandbox option (comments may mention it); no env var is read for one
