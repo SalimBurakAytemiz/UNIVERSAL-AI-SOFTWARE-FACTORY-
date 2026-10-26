@@ -1791,7 +1791,7 @@
   },
   "integrationBoard": {
     "//TR": "Koordinatör entegrasyon panosu: her açık PR için gerçek engel ve bekleyen sorumlu. Ortak kök neden (base dependency gate) PR'a özgü hatalardan ayrı tutulur; #221/#225 birleşmeden tekrar CI tetiklenmez.",
-    "at": "2026-10-26T18:30:00Z",
+    "at": "2026-10-26T19:44:06.322Z",
     "base": "f663ee9 (v7/integration, after #238)",
     "sharedRootCause": {
       "id": "NONE_ACTIVE",
@@ -2197,6 +2197,15 @@
         "postMerge": "VERIFIED: parent1 13d8859, parent2 = gated head 441d718, merge-tree == merge tree 85a83d5",
         "review": "14a9eef full NO_BLOCKERS_4LOW -> 441d718 delta NO_BLOCKERS (4 LOWs fixed; J8 + E2E mutants killed)",
         "riskTier": "ROUTINE (renderer task status journey + tests, unprotected)"
+      },
+      {
+        "pr": 257,
+        "merge": "56694bf",
+        "by": "coordinator SHA-bound merge (expectedHeadSha 4fa32fd; merge-gate OPEN; CI all green)",
+        "at": "2026-10-26T19:44:06.321Z",
+        "postMerge": "VERIFIED: parent1 0ddb170, parent2 = gated head 4fa32fd, merge-tree == merge tree",
+        "review": "661ebd0 full NO_BLOCKERS_4LOW (replay-compat real LOW) -> 4fa32fd delta NO_BLOCKERS_1LOW (exhaustive code-point check: 0 visible-text regressions vs base)",
+        "riskTier": "ROUTINE (core/workos/predev/placeholder.ts guard, unprotected)"
       }
     ],
     "wslProvider": {
