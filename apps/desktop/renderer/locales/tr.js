@@ -1609,6 +1609,8 @@ export default {
   "run.test.NOT_VERIFIED.SANDBOX_UNAVAILABLE":"Bu koşu için bazı testler kaydedildi, ancak sunucunun kuralı son commit için doğrulanmış bir sandbox bulamadı; bu yüzden sonuç DOĞRULANMADI. Neyin eksik olduğu için Ayarlar > Hazır mı? bölümüne bakın.",
   "product.reason.PROCESS_EXITED":"Ürün süreci kendiliğinden sonlandı.",
   "product.reason.SANDBOX_UNVERIFIED":"Sandbox doğrulanamadı; bu yüzden ürün başlatılmadı.",
+  "analysis.busy.SAME":"Bu mission için bir analiz ya da ön geliştirme taslağı zaten üretiliyor. Bitince yeniden deneyin; yeni bir şey başlatılmadı.",
+  "analysis.busy.OTHER":"Başka bir mission için bir analiz ya da ön geliştirme taslağı zaten üretiliyor. Bitince yeniden deneyin; yeni bir şey başlatılmadı.",
   "intake.err.key":"Idempotency anahtarı geçersiz.",
   "form.field.idea":"Proje fikri",
   "flow.title":"İlk teslim akışı",

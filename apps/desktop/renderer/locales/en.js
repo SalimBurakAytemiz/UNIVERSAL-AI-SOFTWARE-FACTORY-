@@ -1609,6 +1609,8 @@ export default {
   "run.test.NOT_VERIFIED.SANDBOX_UNAVAILABLE":"Some tests were recorded for this run, but the server's rule found no verified sandbox for the final commit, so the result is NOT VERIFIED. See Settings > Ready to build? for what is missing.",
   "product.reason.PROCESS_EXITED":"The product process exited by itself.",
   "product.reason.SANDBOX_UNVERIFIED":"The sandbox could not be verified, so the product was not started.",
+  "analysis.busy.SAME":"An analysis or pre-dev draft is already being produced for this mission. Try again when it finishes; nothing new was started.",
+  "analysis.busy.OTHER":"An analysis or pre-dev draft is already being produced for another mission. Try again when it finishes; nothing new was started.",
   "intake.err.key":"The idempotency key is invalid.",
   "form.field.idea":"Project idea",
   "flow.title":"First delivery flow",

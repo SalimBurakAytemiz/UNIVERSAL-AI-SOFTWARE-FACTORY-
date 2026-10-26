@@ -78,6 +78,8 @@ export function classifyAnalysisStep(res){
     return step===null?{kind:"INVALID"}:{kind:"STEP",step};
   }
   if(s>=200&&s<300)return {kind:"INVALID"};
+  // //TR: Ortak ücretli üretim kilidi: aynı mission zaten üretiliyor (PREDEV_PRODUCE_IN_PROGRESS) ya da başka bir mission üretiyor (PREDEV_PRODUCE_BUSY); bu bir idempotency çakışması DEĞİLDİR, sonuç da iddia edilmez.
+  if(s===409&&isObj(body)&&(body.error==="PREDEV_PRODUCE_IN_PROGRESS"||body.error==="PREDEV_PRODUCE_BUSY"))return {kind:"BUSY",scope:body.error==="PREDEV_PRODUCE_BUSY"?"OTHER":"SAME"};
   if(s===423)return {kind:"STOPPED"};
   if(s===403)return {kind:"DENIED"};
   if(s===404&&notFoundBody(body))return {kind:"NOT_FOUND"};
@@ -134,6 +136,7 @@ export function analysisStatusKey(c,res,verb){
   if(c.kind==="NOT_ENABLED")return {ok:false,key:"analysis.notEnabled",vars:{}};
   if(c.kind==="NOT_FOUND")return {ok:false,key:"analysis.notFound",vars:{}};
   if(c.kind==="INVALID")return {ok:false,key:"analysis.invalid",vars:{}};
+  if(c.kind==="BUSY")return {ok:false,key:`analysis.busy.${c.scope}`,vars:{}};
   if(c.kind==="STOPPED")return {ok:false,key:"post.err.423",vars:{status:423}};
   // 403: sunucunun ACTION_DENIED nedeni (varsa) ya da yetki hatası; describePostResult ikisini de doğru ayırır.
   const d=describePostResult(res);return {ok:false,key:d.key,vars:d.vars};
