@@ -402,6 +402,26 @@
       "ref": "wf_6f0af4f8-b7a (combined lens; no NFKC fold lost; LOW-but-real: previously accepted honest text e.g. '<<Fíll>>' now rejected -> replay could seal store; doc note omits it; \\p{Mc} untested; stale NFKC comment)",
       "policy": "TEP-1",
       "at": "2026-10-26T18:57:48.148Z"
+    },
+    {
+      "pr": 256,
+      "sha": "71131ed400e35cfa24f2d86f8dc22e3ac5ba1fc9",
+      "kind": "delta",
+      "base": "698b83832b0dfda4fa48e9dba154b3c0373039fe",
+      "verdict": "NO_BLOCKERS_1LOW",
+      "ref": "wf_5bff2170-3d5 (3 prior LOWs addressed; RB3/RB5/RB8 re-killed; 61/61; LOW: comment example codes not real adapter codes)",
+      "policy": "TEP-1",
+      "at": "2026-10-26T19:42:58.050Z"
+    },
+    {
+      "pr": 257,
+      "sha": "4fa32fdf6aa5337b876687fa3526bb1afbe03e17",
+      "kind": "delta",
+      "base": "661ebd00a1a6da308b72eccf77154a668aa7df67",
+      "verdict": "NO_BLOCKERS_1LOW",
+      "ref": "wf_5bff2170-3d5 (exhaustive U+0000..10FFFF: 0 visible-text regressions vs base, only DI-inside-marker; replay test real; PH18/PH19 killed; LOW: PH17 description)",
+      "policy": "TEP-1",
+      "at": "2026-10-26T19:42:58.101Z"
     }
   ],
   "tests": [],
