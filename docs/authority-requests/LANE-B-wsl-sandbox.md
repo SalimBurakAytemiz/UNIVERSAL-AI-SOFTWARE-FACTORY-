@@ -31,7 +31,8 @@ Until they exist the WSL provider answers `LINUX_ISOLATION_EXPORTS_MISSING` (a t
 `apps/control-api/src/server.ts` line 274:
 ```diff
 -const executionGate=new ExecutionGate(opts.sandbox??null);
-+const executionGate=new ExecutionGate(opts.sandbox??(process.platform==="linux"?new LinuxUnshareSandboxProvider():process.platform==="win32"?new WslUnshareSandboxProvider():null));
++const makeDefaultSandbox=()=>{try{return process.platform==="linux"?new LinuxUnshareSandboxProvider():process.platform==="win32"?new WslUnshareSandboxProvider():null}catch{return null}};
++const executionGate=new ExecutionGate(opts.sandbox??makeDefaultSandbox());
 ```
 plus `import {WslUnshareSandboxProvider} from "../../../core/sandbox/wsl-unshare-sandbox.js";` (and the Linux import from LANE-C-linux-sandbox-provider.md). The gate authorizes only after `selfTest()` passes, so a host without a correctly configured WSL keeps today's behaviour (`SANDBOX_UNAVAILABLE`, tests `NOT_EXECUTED`). The distro comes from `UASCO_WSL_DISTRO` (never auto-picked).
 
@@ -56,3 +57,11 @@ appendWindowsPath=false
 
 ## Evidence
 `npx vitest run tests/v7-int-r3-sbx-gate.test.ts -t "LANE-B WSL"`: 29 passed + 1 real-WSL case skipped on Linux (describe "LANE-B WSL unshare sandbox provider"): every reason code above, each negative probe (bad value and missing key), argument/script construction, copy-in contents (no symlink, no host path, no `/mnt/`), env filtering, argv translation, timeout, cleanup, spawn refusal. 12 mutations (interop check, probe leniency, `/mnt` root, argv translation, env filter, cleanup, verified gate, KILL signal, WSL version, unsafe names, quoting, home guard) each failed a test.
+
+## B-SBX-WIN-2: security-review fixes (review WSL-SANDBOX-REVIEW-4a80a18)
+- Interop is re-checked on EVERY run() (binfmt read, fail-closed on unreadable/unknown + a valid PE run outside the sandbox with `bash -c`: only exit 126 with "cannot execute binary file" means off). The in-sandbox INTEROP_FILE probe was vacuous (fresh /proc has no binfmt_misc) and is removed; the real gates are the OUTER read and the PE run. If interop turns on later, the provider becomes unverified.
+- selfTest now re-asserts caps dropped + NoNewPrivs, no controlling tty, nested userns blocked, private pid ns, and runs the lifecycle probes through the same run.sh path: process limit enforced (`PROBE_PROCESS_LIMIT_NOT_ENFORCED`, root default user fails closed, no accept flag), timeout kills a TERM-ignoring tree (`PROBE_TIMEOUT_NOT_ENFORCED` / `PROBE_TIMEOUT_TREE_SURVIVED`), stdin (`PROBE_STDIN_NOT_FORWARDED`). The distro now also needs `bash`, `procps` (pkill, pgrep, kill), `findutils`, `util-linux` prlimit.
+- Output per stream is capped at 4 MiB (drained past the cap, `truncated` noted); run output is decoded as UTF-8 (UTF-16 heuristic only for wsl.exe management output).
+- run.sh no longer starts with `exec`, writes the timeout pid/rc files; cleanup kills that process group, runs pkill (exit code checked), polls pgrep, `chmod -R u+rwX` then `rm -rf`, verifies removal and reports `[sandbox] CLEANUP_FAILED: <code>` in stderr. Stale `uasco-sbx-*` older than 20 min are swept at selfTest. taskkill is issued once and never for an exited process. Hardlinks (`nlink>1`) are not copied.
+- Server hook above now constructs the provider inside try/catch (null -> SANDBOX_UNAVAILABLE).
+- NOT fixed here (needs Lane C's SETUP): a hard `/work` quota. `/work` is a bind mount of the distro ext4 scratch dir; a size-capped tmpfs mounted inside the sandbox mount namespace would give a real limit. Mitigation implemented: after the run `du -sk` is compared with a 1 GiB cap (exceeded or unknown = run fails with `WORK_SIZE_EXCEEDED_OR_UNKNOWN`), plus the per-file `ulimit -f` and the timeout. UNVERIFIED_WSL: everything that depends on real wsl.exe behaviour still needs the Founder's run.

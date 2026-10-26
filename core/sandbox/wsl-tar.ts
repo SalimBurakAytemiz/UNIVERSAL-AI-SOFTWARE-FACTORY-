@@ -44,7 +44,7 @@ export function buildTar(root: string, limits: TarLimits = DEFAULT_TAR_LIMITS): 
       if (e.isDirectory()) { chunks.push(header(name + "/", 0, true)); walk(abs, name, depth + 1); continue; }
       if (!e.isFile()) { skippedLinks++; continue; }
       const st = fs.lstatSync(abs);
-      if (!st.isFile()) { skippedLinks++; continue; }
+      if (!st.isFile() || st.nlink > 1) { skippedLinks++; continue; }
       if (st.size > limits.maxFileBytes) throw new TarError("COPY_FILE_TOO_LARGE");
       if (++files > limits.maxFiles) throw new TarError("COPY_TOO_MANY_FILES");
       bytes += st.size; if (bytes > limits.maxTotalBytes) throw new TarError("COPY_TOO_LARGE");

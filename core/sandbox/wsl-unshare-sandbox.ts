@@ -16,7 +16,7 @@ export const WSL_SANDBOX_ID = "wsl-unshare-v1";
 export type WslUnavailableReason =
   | "PLATFORM_NOT_WIN32" | "WSL_EXE_MISSING" | "WSL_NOT_AVAILABLE" | "WSL_DISTRO_NOT_CONFIGURED" | "WSL_DISTRO_MISSING" | "WSL_VERSION_NOT_2"
   | "INTEROP_ENABLED" | "LINUX_ISOLATION_EXPORTS_MISSING" | "WSL_TOOLS_MISSING" | "NO_NEW_ROOT_MOUNTPOINT" | "SCRATCH_CREATE_FAILED"
-  | "PROBE_FAILED" | "SELFTEST_ERROR"
+  | "PROBE_FAILED" | "SELFTEST_ERROR" | "PROBE_PROCESS_LIMIT_NOT_ENFORCED" | "PROBE_TIMEOUT_NOT_ENFORCED" | "PROBE_TIMEOUT_TREE_SURVIVED" | "PROBE_STDIN_NOT_FORWARDED"
   | `PROBE_${string}`;
 
 /** Linux sağlayıcısının izolasyon betiği ve bayrakları (tek kaynak: core/agents/linux-unshare-sandbox.ts; Lane C dışa aktarır, burada yeniden yazılmaz). */
@@ -28,7 +28,7 @@ export function linuxIsolationFromModule(mod: unknown = linuxModule): LinuxIsola
     ? {nsFlags: nsFlags as string[], setup, helperPath} : null;
 }
 
-export interface WslRunResult { exitCode: number | null; stdout: Buffer; stderr: Buffer; timedOut: boolean; aborted: boolean; spawnError: boolean }
+export interface WslRunResult { exitCode: number | null; stdout: Buffer; stderr: Buffer; timedOut: boolean; aborted: boolean; spawnError: boolean; truncated?: boolean }
 export interface WslRunOptions { timeoutMs: number; input?: Buffer | string; shouldAbort?: () => boolean }
 /** wsl.exe çağrısı (argv, kabuk yok). Testlerde sahte çalıştırıcı enjekte edilir. */
 export type WslRunner = (args: string[], o: WslRunOptions) => Promise<WslRunResult>;
@@ -36,6 +36,8 @@ export type WslRunner = (args: string[], o: WslRunOptions) => Promise<WslRunResu
 export interface WslSandboxOptions {
   wslBinary?: string; distro?: string; platform?: NodeJS.Platform; runner?: WslRunner; isolation?: LinuxIsolation | null;
   addressSpaceKb?: number; maxFileBlocks?: number; maxProcesses?: number; tarLimits?: TarLimits; killGraceMs?: number;
+  /** Zaman aşımı sondasında "geç" işaretinin görünmesi için beklenen süre (ms); testlerde 0. */
+  settleMs?: number; /** Koşu sonrası /work için kb üst sınırı (aşılırsa koşu BAŞARISIZ sayılır ve not düşülür). */ maxWorkKb?: number;
 }
 
 const HOST_ONLY_ENV = new Set(["PATH", "PATHEXT", "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "APPDATA", "LOCALAPPDATA", "TEMP", "TMP", "USERNAME", "USERDOMAIN",
@@ -43,6 +45,9 @@ const HOST_ONLY_ENV = new Set(["PATH", "PATHEXT", "SYSTEMROOT", "SYSTEMDRIVE", "
 const LINUX_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
 const ROOT_CANDIDATES = ["/srv", "/media"] as const; // /mnt ASLA: orada Windows sürücüleri (drvfs) bağlı olabilir
 const SCRATCH_RE = /^\/tmp\/uasco-sbx-[A-Za-z0-9]{6}$/;
+/** executors.ts MAX_CAPTURE ile aynı: her akış için 4 MiB. */
+export const MAX_CAPTURE = 4 * 1024 * 1024;
+const DEFAULT_MAX_WORK_KB = 1024 * 1024;
 const now = () => new Date().toISOString();
 
 function refusal(argv: string[], why: string): ProcResult {
@@ -70,50 +75,88 @@ export function translateArgv(argv: string[], hostExecPath: string = process.exe
   return [first, ...rest];
 }
 
-/** `wsl.exe -l -q` çıktısı UTF-16LE gelebilir (WSL_UTF8 yoksa); NUL'lı ise çöz, satırlara böl. */
+/** YALNIZ wsl.exe'nin kendi yönetim çıktısı (`--status`, `-l -q`, `-l -v`) için: UTF-16LE gelebilir. Güvenilmeyen test çıktısına UYGULANMAZ (tek NUL baytı akışı bozar): o `toString("utf8")` ile çözülür. */
 export function decodeWslText(b: Buffer): string {
   const s = b.includes(0) ? b.toString("utf16le") : b.toString("utf8");
   return s.replace(/^﻿/, "").replace(/\u0000/g, "");
 }
+const utf8 = (b: Buffer): string => b.toString("utf8");
 
-/** Gerçek wsl.exe çalıştırıcısı: kabuk yok, WSL_UTF8=1, zaman aşımı/abort'ta Windows tarafı süreç ağacı öldürülür. */
-export function spawnWslRunner(binary: string, killGraceMs = 3000): WslRunner {
+/** Akış başına üst sınırlı yakalama: sınırdan sonra okumaya (boşaltmaya) devam edilir ama bellekte tutulmaz; truncated işaretlenir. */
+export class BoundedCapture {
+  private chunks: Buffer[] = []; private size = 0; truncated = false;
+  constructor(private readonly max: number = MAX_CAPTURE) {}
+  push(d: Buffer): void {
+    const room = this.max - this.size;
+    if (d.length > room) { if (room > 0) { this.chunks.push(d.subarray(0, room)); this.size += room; } this.truncated = true; return; }
+    this.chunks.push(d); this.size += d.length;
+  }
+  get buffer(): Buffer { return Buffer.concat(this.chunks); }
+}
+
+/** Gerçek wsl.exe çalıştırıcısı: kabuk yok, WSL_UTF8=1, zaman aşımı/abort'ta Windows tarafı süreç ağacı BİR KEZ öldürülür (çıkmış sürece asla; PID yeniden kullanımı riski). Linux tarafı temizliği sağlayıcıdadır. */
+export function spawnWslRunner(binary: string, killGraceMs = 3000, maxCapture: number = MAX_CAPTURE): WslRunner {
   return (args, o) => new Promise<WslRunResult>(resolve => {
-    const out: Buffer[] = [], err: Buffer[] = [];
-    let timedOut = false, aborted = false, settled = false;
+    const out = new BoundedCapture(maxCapture), err = new BoundedCapture(maxCapture);
+    let timedOut = false, aborted = false, settled = false, killed = false;
     let child: cp.ChildProcess;
     try { child = cp.spawn(binary, args, {shell: false, windowsHide: true, stdio: ["pipe", "pipe", "pipe"], env: {...process.env, WSL_UTF8: "1"}}); }
     catch { resolve({exitCode: null, stdout: Buffer.alloc(0), stderr: Buffer.alloc(0), timedOut: false, aborted: false, spawnError: true}); return; }
-    const kill = () => { try { if (process.platform === "win32" && child.pid) cp.spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], {windowsHide: true}); else child.kill("SIGKILL"); } catch { /* en iyi çaba */ } };
-    const done = (r: WslRunResult) => { if (settled) return; settled = true; clearTimeout(timer); clearInterval(poll); resolve(r); };
+    const kill = () => {
+      if (killed || child.exitCode !== null || child.signalCode !== null) return;
+      killed = true;
+      try { if (process.platform === "win32" && child.pid) cp.spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], {windowsHide: true}); else child.kill("SIGKILL"); } catch { /* en iyi çaba */ }
+    };
+    const result = (code: number | null, spawnError: boolean): WslRunResult => ({exitCode: code, stdout: out.buffer, stderr: err.buffer, timedOut, aborted, spawnError, truncated: out.truncated || err.truncated});
+    let poll: NodeJS.Timeout | undefined;
+    const done = (r: WslRunResult) => { if (settled) return; settled = true; clearTimeout(timer); if (poll) clearInterval(poll); resolve(r); };
     const timer = setTimeout(() => { timedOut = true; kill(); }, o.timeoutMs + killGraceMs);
-    const poll = setInterval(() => { if (o.shouldAbort?.()) { aborted = true; kill(); } }, 100);
+    poll = setInterval(() => { if (o.shouldAbort?.()) { aborted = true; if (poll) clearInterval(poll); kill(); } }, 100);
     child.stdout?.on("data", d => out.push(Buffer.from(d))); child.stderr?.on("data", d => err.push(Buffer.from(d)));
-    child.on("error", () => done({exitCode: null, stdout: Buffer.concat(out), stderr: Buffer.concat(err), timedOut, aborted, spawnError: true}));
-    child.on("close", code => done({exitCode: code, stdout: Buffer.concat(out), stderr: Buffer.concat(err), timedOut, aborted, spawnError: false}));
+    child.on("error", () => done(result(null, true)));
+    child.on("close", code => done(result(code, false)));
     child.stdin?.on("error", () => { /* süreç erken kapanabilir */ });
     if (o.input !== undefined) child.stdin?.end(o.input); else child.stdin?.end();
   });
 }
 
-// //TR: Betikler wsl.exe argv'sine KONMAZ (wsl.exe/CreateProcess alıntılama kırılganlığı): stdin ile `tee` üzerinden WSL'e dosya olarak yazılır ve `sh <dosya>` ile çalışır. Sondalar sandbox İÇİNDE (Linux izolasyon betiğiyle) koşar; çıktı ANAHTAR=değer satırlarıdır, eksik anahtar veya beklenmeyen değer = PROBE_<ANAHTAR> ile ret.
+/** Küçük ama GEÇERLİ bir PE32 (DOS başlığı + PE imzası + bölüm + giriş noktası `xor eax,eax; ret`): WSL interop açıksa /init bunu gerçekten başlatmaya çalışır; kapalıysa çekirdek ENOEXEC döndürür. */
+export function minimalPe(): Buffer {
+  const b = Buffer.alloc(0x400);
+  b.write("MZ", 0, "latin1"); b.writeUInt32LE(0x40, 0x3c);
+  b.write("PE\0\0", 0x40, "latin1");
+  b.writeUInt16LE(0x014c, 0x44); b.writeUInt16LE(1, 0x46); b.writeUInt16LE(0xe0, 0x54); b.writeUInt16LE(0x0103, 0x56);
+  const o = 0x58;
+  b.writeUInt16LE(0x10b, o); b.writeUInt32LE(0x200, o + 4); b.writeUInt32LE(0x1000, o + 16); b.writeUInt32LE(0x1000, o + 20); b.writeUInt32LE(0x400000, o + 28);
+  b.writeUInt32LE(0x1000, o + 32); b.writeUInt32LE(0x200, o + 36); b.writeUInt16LE(4, o + 40); b.writeUInt16LE(4, o + 48);
+  b.writeUInt32LE(0x2000, o + 56); b.writeUInt32LE(0x200, o + 60); b.writeUInt16LE(3, o + 68); b.writeUInt32LE(16, o + 92);
+  const sh = o + 0xe0;
+  b.write(".text", sh, "latin1"); b.writeUInt32LE(0x10, sh + 8); b.writeUInt32LE(0x1000, sh + 12); b.writeUInt32LE(0x200, sh + 16); b.writeUInt32LE(0x200, sh + 20); b.writeUInt32LE(0x60000020, sh + 36);
+  b[0x200] = 0x31; b[0x201] = 0xc0; b[0x202] = 0xc3;
+  return b;
+}
+
+// //TR: Betikler wsl.exe argv'sine KONMAZ (wsl.exe/CreateProcess alıntılama kırılganlığı): stdin ile `tee` üzerinden WSL'e dosya olarak yazılır ve `sh <dosya>` ile çalışır. Sondalar sandbox İÇİNDE (Linux izolasyon betiğiyle) koşar; çıktı ANAHTAR=değer satırlarıdır, eksik anahtar veya beklenmeyen değer = PROBE_<ANAHTAR> ile ret. NOT: WSL interop tespiti sandbox İÇİNDEN yapılamaz (taze /proc'ta binfmt_misc yoktur); gerçek kapılar OUTER_SCRIPT'in binfmt okuması + geçerli PE'nin sandbox DIŞINDA `bash -c` ile çalıştırılmasıdır (her run()'da yeniden).
 const PROBE_SCRIPT = [
   "set -u",
   String.raw`echo "MNT_C=$([ -e /mnt/c ] && echo present || echo absent)"`,
   String.raw`echo "DRVFS=$(grep -Eci 'drvfs|9p|/mnt/[a-z]( |$)' /proc/self/mountinfo || true)"`,
-  String.raw`echo "INTEROP_FILE=$([ -e /proc/sys/fs/binfmt_misc/WSLInterop ] || [ -e /proc/sys/fs/binfmt_misc/WSLInterop-late ] && echo present || echo absent)"`,
-  String.raw`printf 'MZ\220\000\003\000' > /work/probe.exe; chmod +x /work/probe.exe 2>/dev/null`,
-  String.raw`/work/probe.exe >/dev/null 2>&1; echo "PE_EXEC_RC=$?"`,
   String.raw`echo "UNIX_PATH_SOCKETS=$(awk 'NR>1 && $8 ~ /^\// {c++} END{print c+0}' /proc/net/unix)"`,
   String.raw`echo "WSL_RUNTIME_DIRS=$([ -e /run/WSL ] || [ -e /mnt/wslg ] || [ -e /tmp/.X11-unix ] && echo present || echo absent)"`,
   String.raw`for d in /usr /etc /bin; do if ( : > "$d/uasco-probe" ) 2>/dev/null; then echo "RW_$(basename $d)=writable"; else echo "RW_$(basename $d)=ro"; fi; done`,
   String.raw`if ( : > /work/probe.txt ) 2>/dev/null; then echo "WORK=writable"; else echo "WORK=ro"; fi`,
   String.raw`echo "NET_IFACES=$(awk 'NR>2 {n=$1; sub(/:$/,"",n); if (n != "lo") c++} END{print c+0}' /proc/net/dev)"`,
+  // Linux sağlayıcısının zorunlu kıldığı değişmezler burada da yeniden doğrulanır (betik uygulanır ama sonuç etkisiz olabilir: ör. setpriv no-op).
+  String.raw`if [ "$(awk '/^(CapInh|CapPrm|CapEff|CapBnd|CapAmb):/{print $2}' /proc/self/status | sort -u)" = 0000000000000000 ] && grep -q '^NoNewPrivs:.1' /proc/self/status; then echo "CAPS_DROPPED=ok"; else echo "CAPS_DROPPED=no"; fi`,
+  String.raw`if [ "$(awk '{print $7}' /proc/self/stat)" = 0 ] && [ ! -e /dev/tty ]; then echo "NO_CTTY=ok"; else echo "NO_CTTY=no"; fi`,
+  String.raw`if unshare -U true 2>/dev/null; then echo "NESTED_USERNS=allowed"; else echo "NESTED_USERNS=blocked"; fi`,
+  String.raw`if [ "$(ls /proc | grep -c '^[0-9]')" -lt 20 ]; then echo "PID_NS_PRIVATE=ok"; else echo "PID_NS_PRIVATE=no"; fi`,
   'echo "DONE=1"'
 ].join("\n") + "\n";
 const PROBE_EXPECT: Record<string, (v: string) => boolean> = {
-  MNT_C: v => v === "absent", DRVFS: v => v === "0", INTEROP_FILE: v => v === "absent", PE_EXEC_RC: v => v === "126" || v === "127", UNIX_PATH_SOCKETS: v => v === "0",
-  WSL_RUNTIME_DIRS: v => v === "absent", RW_usr: v => v === "ro", RW_etc: v => v === "ro", RW_bin: v => v === "ro", WORK: v => v === "writable", NET_IFACES: v => v === "0", DONE: v => v === "1"
+  MNT_C: v => v === "absent", DRVFS: v => v === "0", UNIX_PATH_SOCKETS: v => v === "0",
+  WSL_RUNTIME_DIRS: v => v === "absent", RW_usr: v => v === "ro", RW_etc: v => v === "ro", RW_bin: v => v === "ro", WORK: v => v === "writable", NET_IFACES: v => v === "0",
+  CAPS_DROPPED: v => v === "ok", NO_CTTY: v => v === "ok", NESTED_USERNS: v => v === "blocked", PID_NS_PRIVATE: v => v === "ok", DONE: v => v === "1"
 };
 export function evaluateProbe(stdout: string): {ok: true} | {ok: false; reason: `PROBE_${string}`} {
   const kv = new Map<string, string>();
@@ -121,18 +164,26 @@ export function evaluateProbe(stdout: string): {ok: true} | {ok: false; reason: 
   for (const [k, ok] of Object.entries(PROBE_EXPECT)) { const v = kv.get(k); if (v === undefined || !ok(v)) return {ok: false, reason: `PROBE_${k.toUpperCase()}`}; }
   return {ok: true};
 }
-// Sandbox DIŞINDA (yalnız okuma): WSL interop kayıt dosyası ve araçlar. Çıktı: INTEROP=absent|disabled|enabled, TOOLS=ok|missing, DONE=1
-const OUTER_SCRIPT = [
+// Sandbox DIŞINDA: WSL interop kaydı (okunamayan/bilinmeyen = enabled sayılır: fail-closed), araçlar ve GEÇERLİ bir PE'nin `bash -c` ile çalıştırılması (bash ENOEXEC'te kabuk betiği gibi çalıştırmaz: ikili dosyada 126 + "cannot execute binary file"; env/execvp/dash ise sh'ye düşer, bu yüzden KULLANILMAZ; başka her sonuç = interop açık). Betik S/ctl/outer.sh olarak çalışır; PE S/ctl/probe.exe.
+export const OUTER_SCRIPT = [
   "set -u",
   "st=absent",
-  String.raw`for p in /proc/sys/fs/binfmt_misc/WSLInterop /proc/sys/fs/binfmt_misc/WSLInterop-late; do if [ -e "$p" ]; then if grep -qi '^enabled' "$p" 2>/dev/null; then st=enabled; else st=disabled; fi; fi; done`,
+  String.raw`for p in /proc/sys/fs/binfmt_misc/WSLInterop /proc/sys/fs/binfmt_misc/WSLInterop-late; do if [ -e "$p" ]; then l=""; if read -r l < "$p" 2>/dev/null && [ "$l" = disabled ]; then [ "$st" = enabled ] || st=disabled; else st=enabled; fi; fi; done`,
   'echo "INTEROP=$st"',
-  String.raw`ok=ok; for t in unshare setpriv mount pivot_root awk timeout tar mktemp rm sh env tee mkdir; do command -v "$t" >/dev/null 2>&1 || ok=missing; done; echo "TOOLS=$ok"`,
+  String.raw`ok=ok; for t in unshare setpriv mount pivot_root awk sort grep ls timeout tar mktemp rm sh env tee mkdir bash chmod cat kill pkill pgrep prlimit find du sleep; do command -v "$t" >/dev/null 2>&1 || ok=missing; done; echo "TOOLS=$ok"`,
+  String.raw`d=$(dirname "$0"); o=$(/bin/bash -c '"$0"' "$d/probe.exe" 2>&1 >/dev/null); rc=$?; echo "PE_EXEC_RC=$rc"; case "$o" in *"cannot execute binary file"*) echo "PE_ENOEXEC=yes";; *) echo "PE_ENOEXEC=no";; esac`,
   'echo "DONE=1"'
 ].join("\n") + "\n";
 
 /** POSIX tek tırnak alıntısı (run.sh içine yazılan her değer bununla alıntılanır; wsl.exe argv'sine değer konmaz). */
 export const shq = (v: string): string => `'${v.replace(/'/g, `'\\''`)}'`;
+
+// Yaşam döngüsü sondaları (Linux sağlayıcısındaki zorunlu sondaların karşılığı), aynı stageSandbox/run.sh yolundan geçer.
+const FORK_PROBE_LIMIT = 48;
+const FORK_PROBE = 'ok=0; fail=0; i=0; while [ $i -lt 150 ]; do if (sleep 25 &) 2>/dev/null; then ok=$((ok+1)); else fail=$((fail+1)); fi; i=$((i+1)); done; echo ok=$ok fail=$fail';
+const TIMEOUT_PROBE_MS = 2000;
+const TIMEOUT_PROBE = 'trap "" TERM; ( trap "" TERM; sleep 5; : > /work/late.txt ) & sleep 60';
+const STDIN_PROBE = "read -r l; echo got=$l";
 
 export class WslUnshareSandboxProvider implements SandboxProvider {
   readonly id = WSL_SANDBOX_ID;
@@ -161,23 +212,59 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
     if (m.exitCode !== 0) { await this.cleanup(S); return null; }
     return S;
   }
-  private async put(S: string, name: string, text: string): Promise<boolean> {
-    const r = await this.wsl(["/usr/bin/tee", `${S}/ctl/${name}`], 20_000, text);
+  private async put(S: string, name: string, data: string | Buffer): Promise<boolean> {
+    const r = await this.wsl(["/usr/bin/tee", `${S}/ctl/${name}`], 20_000, data);
     return r.exitCode === 0;
   }
-  private async cleanup(S: string): Promise<void> {
-    try { await this.wsl(["/usr/bin/pkill", "-KILL", "-f", "--", S], 15_000); } catch { /* en iyi çaba */ }
-    try { await this.wsl(["/bin/rm", "-rf", "--", S], 15_000); } catch { /* en iyi çaba */ }
+  /** Linux tarafı temizliği: (1) run.sh'in yazdığı timeout süreç grubunu öldür, (2) pkill, (3) sürecin kalmadığını doğrula, (4) chmod -R u+rwX + rm -rf, (5) dizinin gittiğini doğrula. Başarısızlık neden koduyla döner (yutulmaz). */
+  private async cleanup(S: string): Promise<string | null> {
+    let bad: string | null = null;
+    try {
+      const pidTxt = utf8((await this.wsl(["/bin/cat", `${S}/ctl/pid`], 15_000)).stdout).trim();
+      if (/^[0-9]{1,9}$/.test(pidTxt) && Number(pidTxt) > 1) await this.wsl(["/bin/kill", "-KILL", "--", `-${pidTxt}`], 15_000);
+      const pk = await this.wsl(["/usr/bin/pkill", "-KILL", "-f", "--", S], 15_000);
+      if (pk.exitCode !== 0 && pk.exitCode !== 1) bad = "PKILL_FAILED";
+      let alive = true;
+      for (let i = 0; i < 5 && alive; i++) { alive = (await this.wsl(["/usr/bin/pgrep", "-f", "--", S], 15_000)).exitCode === 0; if (alive) await new Promise(r => setTimeout(r, 200)); }
+      if (alive) bad ??= "PROCESS_SURVIVED";
+      await this.wsl(["/bin/chmod", "-R", "u+rwX", "--", S], 15_000);
+      await this.wsl(["/bin/rm", "-rf", "--", S], 15_000);
+      if ((await this.wsl(["/usr/bin/test", "!", "-e", S], 15_000)).exitCode !== 0) bad ??= "SCRATCH_NOT_REMOVED";
+    } catch { bad ??= "CLEANUP_ERROR"; }
+    return bad;
   }
-  /** setup.sh + run.sh yazar; run.sh: env -i + timeout(SIGKILL) + unshare + Linux izolasyon betiği + alıntılı komut. */
-  private async stageSandbox(S: string, timeoutMs: number, env: string[], command: string[]): Promise<"OK" | "LINUX_ISOLATION_EXPORTS_MISSING" | "STAGE_FAILED"> {
+  /** Bayat uasco-sbx-* dizinlerini (çökme sonrası kalan) temizler; en iyi çaba. */
+  private async sweepStale(): Promise<void> {
+    try {
+      await this.wsl(["/usr/bin/find", "/tmp", "-maxdepth", "1", "-type", "d", "-name", "uasco-sbx-??????", "-mmin", "+20", "-exec", "/bin/chmod", "-R", "u+rwX", "--", "{}", "+"], 30_000);
+      await this.wsl(["/usr/bin/find", "/tmp", "-maxdepth", "1", "-type", "d", "-name", "uasco-sbx-??????", "-mmin", "+20", "-exec", "/bin/rm", "-rf", "--", "{}", "+"], 30_000);
+    } catch { /* en iyi çaba */ }
+  }
+  /** setup.sh + run.sh yazar. run.sh: env -i + (pid yazan sh -> exec timeout(SIGKILL)) + unshare + Linux izolasyon betiği + alıntılı komut; BAŞTA exec YOK (timeout'ta kabuk 137 ile çıkar), rc dosyaya da yazılır. */
+  private async stageSandbox(S: string, timeoutMs: number, env: string[], command: string[], nprocOverride?: number): Promise<"OK" | "LINUX_ISOLATION_EXPORTS_MISSING" | "STAGE_FAILED"> {
     const iso = this.isolation;
     if (!iso) return "LINUX_ISOLATION_EXPORTS_MISSING";
     const secs = Math.max(1, Math.ceil(timeoutMs / 1000)), cpu = secs + 5;
-    const nproc = Math.max(16, Math.floor(this.o.maxProcesses ?? 4096));
-    const parts = ["exec", "/usr/bin/env", "-i", shq(`PATH=${LINUX_PATH}`), ...env.map(shq), "/usr/bin/timeout", "--signal=KILL", "--kill-after=3", String(secs), "/usr/bin/unshare", ...iso.nsFlags.map(shq), "/bin/sh", shq(`${S}/ctl/setup.sh`),
+    const nproc = nprocOverride ?? Math.max(16, Math.floor(this.o.maxProcesses ?? 4096));
+    const chain = ["/usr/bin/timeout", "--signal=KILL", "--kill-after=3", String(secs), "/usr/bin/unshare", ...iso.nsFlags.map(shq), "/bin/sh", shq(`${S}/ctl/setup.sh`),
       shq(`${S}/work`), String(cpu), String(this.o.addressSpaceKb ?? 16 * 1024 * 1024), String(this.o.maxFileBlocks ?? 2 * 1024 * 1024), shq(this.newRoot), "''", String(nproc), ...command.map(shq)];
-    return (await this.put(S, "setup.sh", iso.setup.endsWith("\n") ? iso.setup : iso.setup + "\n")) && (await this.put(S, "run.sh", `#!/bin/sh\n${parts.join(" ")}\n`)) ? "OK" : "STAGE_FAILED";
+    const line = ["/usr/bin/env", "-i", shq(`PATH=${LINUX_PATH}`), ...env.map(shq), "/bin/sh", "-c", shq('echo $$ > "$1"; shift; exec "$@"'), "sh", shq(`${S}/ctl/pid`), ...chain].join(" ");
+    const runSh = `#!/bin/sh\n${line}\nrc=$?\necho "$rc" > ${shq(`${S}/ctl/rc`)}\nexit "$rc"\n`;
+    return (await this.put(S, "setup.sh", iso.setup.endsWith("\n") ? iso.setup : iso.setup + "\n")) && (await this.put(S, "run.sh", runSh)) ? "OK" : "STAGE_FAILED";
+  }
+  private isTimeout(r: WslRunResult, timeoutMs: number, elapsed: number): boolean {
+    return r.timedOut || ((r.exitCode === 137 || r.exitCode === 124) && elapsed >= timeoutMs * 0.9);
+  }
+  /** Interop sandbox DIŞINDA denetlenir (kernel-geneli kayıt); her run()'da ve selfTest'te yeniden. null = güvenli, aksi halde neden kodu. */
+  private async interopCheck(S: string): Promise<WslUnavailableReason | null> {
+    if (!(await this.put(S, "outer.sh", OUTER_SCRIPT)) || !(await this.put(S, "probe.exe", minimalPe()))) return "PROBE_FAILED";
+    if ((await this.wsl(["/bin/chmod", "+x", `${S}/ctl/probe.exe`], 15_000)).exitCode !== 0) return "PROBE_FAILED";
+    const outer = await this.wsl(["/bin/sh", `${S}/ctl/outer.sh`], 30_000);
+    const o = utf8(outer.stdout);
+    if (outer.exitCode !== 0 || !/^DONE=1$/m.test(o)) return "PROBE_FAILED";
+    if (!/^INTEROP=(absent|disabled)$/m.test(o) || !/^PE_EXEC_RC=126$/m.test(o) || !/^PE_ENOEXEC=yes$/m.test(o)) return "INTEROP_ENABLED";
+    if (!/^TOOLS=ok$/m.test(o)) return "WSL_TOOLS_MISSING";
+    return null;
   }
 
   run(argv: string[], opts: SandboxRunOptions): Promise<ProcResult> {
@@ -203,22 +290,58 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
     try { const t = buildTar(cwd, this.o.tarLimits); tar = t.archive; skipped = t.skippedLinks; } catch (e) { return fail(e instanceof TarError ? e.code : "COPY_FAILED"); }
     const S = await this.prepare();
     if (!S) return fail("SCRATCH_CREATE_FAILED");
-    try {
-      const x = await this.wsl(["/bin/tar", "-x", "--no-same-owner", "--no-same-permissions", "-C", `${S}/work`], 120_000, tar);
-      if (x.exitCode !== 0) return fail("COPY_IN_FAILED");
-      const st = await this.stageSandbox(S, opts.timeoutMs, wslEnv(opts.env), command);
-      if (st !== "OK") return fail(st);
-      const t0 = Date.now();
-      const r = await this.wsl(["/bin/sh", `${S}/ctl/run.sh`], opts.timeoutMs, opts.input, opts.shouldAbort);
-      const elapsed = Date.now() - t0;
-      const timedOut = r.timedOut || ((r.exitCode === 137 || r.exitCode === 124) && elapsed >= opts.timeoutMs * 0.9);
-      const note = skipped > 0 ? `\n[sandbox] ${skipped} symbolic link(s)/special file(s) were not copied into WSL\n` : "";
-      return {argv, exitCode: timedOut ? null : r.exitCode, stdout: decodeWslText(r.stdout), stderr: decodeWslText(r.stderr) + note, startedAt, endedAt: now(), timedOut, aborted: r.aborted, spawnError: r.spawnError};
-    } finally { await this.cleanup(S); }
+    let res: ProcResult;
+    try { res = await this.inside(S, argv, opts, command, tar, skipped, startedAt, fail); } catch { res = fail("RUN_FAILED"); }
+    const bad = await this.cleanup(S);
+    return bad ? {...res, stderr: `${res.stderr}\n[sandbox] CLEANUP_FAILED: ${bad}\n`} : res;
+  }
+  private async inside(S: string, argv: string[], opts: SandboxRunOptions, command: string[], tar: Buffer, skipped: number, startedAt: string, fail: (why: string) => ProcResult): Promise<ProcResult> {
+    // Interop her koşuda yeniden denetlenir: kernel-geneli kayıt çalışma zamanında açılabilir; açıksa bu sağlayıcı artık DOĞRULANMAMIŞtır.
+    const interop = await this.interopCheck(S);
+    if (interop) {
+      if (interop === "INTEROP_ENABLED" || interop === "WSL_TOOLS_MISSING") { this.verified = false; this.probing = null; this.lastSelfTest = {ok: false, detail: interop}; }
+      return fail(interop);
+    }
+    const x = await this.wsl(["/bin/tar", "-x", "--no-same-owner", "--no-same-permissions", "-C", `${S}/work`], 120_000, tar);
+    if (x.exitCode !== 0) return fail("COPY_IN_FAILED");
+    const st = await this.stageSandbox(S, opts.timeoutMs, wslEnv(opts.env), command);
+    if (st !== "OK") return fail(st);
+    const t0 = Date.now();
+    const r = await this.wsl(["/bin/sh", `${S}/ctl/run.sh`], opts.timeoutMs, opts.input, opts.shouldAbort);
+    const elapsed = Date.now() - t0;
+    const timedOut = this.isTimeout(r, opts.timeoutMs, elapsed);
+    let note = skipped > 0 ? `\n[sandbox] ${skipped} symbolic link(s)/special file(s) were not copied into WSL\n` : "";
+    if (r.truncated) note += `\n[sandbox] output truncated at ${MAX_CAPTURE} bytes per stream\n`;
+    let exitCode = timedOut ? null : r.exitCode;
+    const du = await this.wsl(["/usr/bin/du", "-sk", "--", `${S}/work`], 30_000);
+    const kb = Number(/^(\d+)/.exec(utf8(du.stdout))?.[1] ?? Number.NaN);
+    if (!Number.isFinite(kb) || kb > (this.o.maxWorkKb ?? DEFAULT_MAX_WORK_KB)) { note += `\n[sandbox] WORK_SIZE_EXCEEDED_OR_UNKNOWN\n`; if (exitCode === 0) exitCode = 1; }
+    return {argv, exitCode, stdout: utf8(r.stdout), stderr: utf8(r.stderr) + note, startedAt, endedAt: now(), timedOut, aborted: r.aborted, spawnError: r.spawnError};
   }
 
   selfTest(): Promise<{ok: boolean; detail?: string}> {
     return this.probing ??= this.probe().then(r => { this.verified = r.ok; this.lastSelfTest = r; return r; }, () => { this.verified = false; this.lastSelfTest = {ok: false, detail: "SELFTEST_ERROR"}; return this.lastSelfTest; });
+  }
+  private async lifecycleProbes(S: string): Promise<`PROBE_${string}` | null> {
+    const stage = async (timeoutMs: number, cmd: string, nproc?: number) => (await this.stageSandbox(S, timeoutMs, [], ["/bin/sh", "-c", cmd], nproc)) === "OK";
+    // (1) süreç sayısı sınırı GERÇEKTEN uygulanıyor mu (kuid 0 RLIMIT_NPROC'tan muaftır: root varsayılan kullanıcı ise ret; kabul bayrağı YOK)
+    if (!(await stage(30_000, FORK_PROBE, FORK_PROBE_LIMIT))) return "PROBE_FAILED";
+    const lim = utf8((await this.wsl(["/bin/sh", `${S}/ctl/run.sh`], 30_000)).stdout);
+    const okN = Number(/ok=(\d+)/.exec(lim)?.[1] ?? Number.NaN), failN = Number(/fail=(\d+)/.exec(lim)?.[1] ?? Number.NaN);
+    if (!(Number.isFinite(okN) && Number.isFinite(failN) && failN > 0 && okN <= FORK_PROBE_LIMIT)) return "PROBE_PROCESS_LIMIT_NOT_ENFORCED";
+    // (2) zaman aşımı TÜM ağacı öldürür (TERM'i yok sayan çocuk + geç işaret dosyası)
+    if (!(await stage(TIMEOUT_PROBE_MS, TIMEOUT_PROBE))) return "PROBE_FAILED";
+    const t0 = Date.now();
+    const to = await this.wsl(["/bin/sh", `${S}/ctl/run.sh`], TIMEOUT_PROBE_MS);
+    if (!this.isTimeout(to, TIMEOUT_PROBE_MS, Date.now() - t0)) return "PROBE_TIMEOUT_NOT_ENFORCED";
+    await new Promise(r => setTimeout(r, this.o.settleMs ?? 4000));
+    if ((await this.wsl(["/usr/bin/test", "!", "-e", `${S}/work/late.txt`], 15_000)).exitCode !== 0) return "PROBE_TIMEOUT_TREE_SURVIVED";
+    if ((await this.wsl(["/usr/bin/pgrep", "-f", "--", S], 15_000)).exitCode !== 1) return "PROBE_TIMEOUT_TREE_SURVIVED";
+    // (3) stdin iletimi
+    if (!(await stage(20_000, STDIN_PROBE))) return "PROBE_FAILED";
+    const sin = await this.wsl(["/bin/sh", `${S}/ctl/run.sh`], 20_000, "PIPED\n");
+    if (!utf8(sin.stdout).includes("got=PIPED")) return "PROBE_STDIN_NOT_FORWARDED";
+    return null;
   }
   private async probe(): Promise<{ok: boolean; detail?: string}> {
     const no = (detail: WslUnavailableReason) => ({ok: false, detail});
@@ -234,15 +357,12 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
     const row = decodeWslText(ver.stdout).split(/\r?\n/).map(l => l.replace(/^\*/, "").trim().split(/\s+/)).find(c => c[0] === distro);
     if (ver.exitCode !== 0 || !row || row[row.length - 1] !== "2") return no("WSL_VERSION_NOT_2");
     if (!this.isolation) return no("LINUX_ISOLATION_EXPORTS_MISSING");
+    await this.sweepStale();
     const S = await this.prepare();
     if (!S) return no("SCRATCH_CREATE_FAILED");
     try {
-      if (!(await this.put(S, "outer.sh", OUTER_SCRIPT))) return no("PROBE_FAILED");
-      const outer = await this.wsl(["/bin/sh", `${S}/ctl/outer.sh`], 30_000);
-      const o = decodeWslText(outer.stdout);
-      if (outer.exitCode !== 0 || !/^DONE=1$/m.test(o)) return no("PROBE_FAILED");
-      if (!/^INTEROP=(absent|disabled)$/m.test(o)) return no("INTEROP_ENABLED");
-      if (!/^TOOLS=ok$/m.test(o)) return no("WSL_TOOLS_MISSING");
+      const interop = await this.interopCheck(S);
+      if (interop) return no(interop);
       let root: string | null = null;
       for (const c of ROOT_CANDIDATES) if (!root && (await this.wsl(["/usr/bin/test", "-d", c], 15_000)).exitCode === 0) root = c;
       if (!root) return no("NO_NEW_ROOT_MOUNTPOINT");
@@ -251,8 +371,10 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
       if (st !== "OK") return no(st === "STAGE_FAILED" ? "PROBE_FAILED" : st);
       const r = await this.wsl(["/bin/sh", `${S}/ctl/run.sh`], 60_000);
       if (r.exitCode !== 0) return no("PROBE_FAILED");
-      const ev = evaluateProbe(decodeWslText(r.stdout));
-      return ev.ok ? {ok: true} : {ok: false, detail: ev.reason};
+      const ev = evaluateProbe(utf8(r.stdout));
+      if (!ev.ok) return {ok: false, detail: ev.reason};
+      const life = await this.lifecycleProbes(S);
+      return life ? {ok: false, detail: life} : {ok: true};
     } finally { await this.cleanup(S); }
   }
 }
