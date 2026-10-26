@@ -17,7 +17,7 @@ import {buildServer} from "../apps/control-api/src/server.js";
 import type {BuildServerOptions} from "../apps/control-api/src/server.js";
 import {WorkOsStore} from "../core/workos/store.js";
 import {ProjectStudio, StudioError} from "../core/workos/project-studio.js";
-import {DevRunManager, freeLoopbackPort, killProcessTree, pidAlive, processStartTime} from "../core/workos/devrun.js";
+import {DevRunManager, freeLoopbackPort, killProcessTree, pidAlive, processStartTime, ownStartTestHooks} from "../core/workos/devrun.js";
 import type {Project} from "../core/workos/types.js";
 
 const REPO = path.resolve(import.meta.dirname, "..");
@@ -731,6 +731,20 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
     for (const r of rows) { expect(readRec(r.f).status).toBe("RUNNING"); expect(pidAlive(r.pid)).toBe(true); }
     answer = true; const again = await m.recover(); expect(again.map(x => x.result)).toEqual(Array(5).fill("ORPHAN_KILLED"));
     for (const r of rows) expect(pidAlive(r.pid)).toBe(false);
+  }, 60_000);
+
+  it("F3 (repair round 2): a FAILED own-start-time read is never cached - not process-wide, not per manager: the next start / next manager reads again and persists the real value (null is still persisted while the read fails: fail-closed, nothing invented)", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"}); let reads = 0;
+    ownStartTestHooks.setReader(async () => { reads++; return reads === 1 ? null : "T1"; });
+    const f = path.join(dataDir, "projects", p.projectId, "devrun", "state.json");
+    const m1 = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any)); let m2: DevRunManager | undefined;
+    try {
+      await m1.start(p); expect(readRec(f).ownerStartTime, "failed read: fail-closed null").toBeNull(); await m1.stop(p.projectId);
+      expect(await (m1 as any).ownStartTime(), "same manager re-reads").toBe("T1");
+      m2 = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any)); await m2.start(p); expect(readRec(f).ownerStartTime, "a later manager persists the real value").toBe("T1");
+      expect(reads).toBe(2); // başarılı okuma süreç genelinde ÖNBELLEKTE: üçüncü okuma yok
+      expect(await (manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any)) as any).ownStartTime()).toBe("T1"); expect(reads).toBe(2);
+    } finally { ownStartTestHooks.setReader(null); await m1.close().catch(() => undefined); await m2?.close().catch(() => undefined); }
   }, 60_000);
 
   it("S5 (Windows liveness): with the default reader on win32 recover() reads ALL candidate start times with ONE batched PowerShell call (not N parallel ones that time out together on a loaded host); a failed batch falls back to per-pid reads", async () => {

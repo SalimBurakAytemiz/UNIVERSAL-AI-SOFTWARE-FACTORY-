@@ -81,7 +81,16 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 const timed = <T>(p: Promise<T>, ms: number, onTimeout: T): Promise<T> => new Promise<T>(res => { const t = setTimeout(() => res(onTimeout), ms); p.then(v => { clearTimeout(t); res(v); }, () => { clearTimeout(t); res(onTimeout); }); });
 
 // Süreç kimliği: pid tek başına yeniden kullanılabilir; başlangıç zamanı ile birlikte doğrulanır (Windows: .NET Process.StartTime, Linux: /proc/<pid>/stat alan 22, diğer: ps lstart).
+// Yalnız BAŞARILI (null olmayan) okuma önbelleğe alınır: başarısız okuma (zaman aşımı, sıfır olmayan çıkış) bir sonraki çağrıda yeniden denenir; aksi halde süreç ömrü boyunca her yönetici null yazar ve pid yeniden kullanımı denetimi (F3) sessizce kapanırdı.
 let OWN_START_CACHE: Promise<string | null> | null = null;
+let OWN_START_READER: (pid: number) => Promise<string | null> = pid => processStartTime(pid);
+/** Test kancası: süreç genelindeki kendi-başlangıç-zamanı okuyucusunu değiştirir (null = varsayılan) ve önbelleği sıfırlar. */
+export const ownStartTestHooks = { setReader(fn: ((pid: number) => Promise<string | null>) | null): void { OWN_START_READER = fn ?? (pid => processStartTime(pid)); OWN_START_CACHE = null; } };
+function cachedOwnStart(): Promise<string | null> {
+  if (OWN_START_CACHE) return OWN_START_CACHE;
+  const p: Promise<string | null> = OWN_START_READER(process.pid).catch(() => null).then(t => { if (t === null && OWN_START_CACHE === p) OWN_START_CACHE = null; return t; });
+  return OWN_START_CACHE = p;
+}
 export async function processStartTime(pid: number): Promise<string | null> {
   if (!Number.isInteger(pid) || pid <= 0) return null;
   const run = (file: string, args: string[]) => new Promise<string | null>(resolve => {
@@ -261,8 +270,10 @@ export class DevRunManager {
   // Bu sürecin başlangıç zamanı süreç ömrü boyunca sabittir: varsayılan okuyucu için süreç genelinde BİR kez okunur (Windows'ta PowerShell çağrısı sunucu başına yüzlerce ms-sn sürer ve onReady süresini yer).
   private ownStartTime(): Promise<string | null> {
     if (this.selfStartP) return this.selfStartP;
-    const read = this.o.startTimeOf === processStartTime ? (OWN_START_CACHE ??= processStartTime(process.pid).catch(() => null)) : this.o.startTimeOf(process.pid);
-    return this.selfStartP = read.then(t => { this.selfStart = t; return t; }, () => null);
+    const read = this.o.startTimeOf === processStartTime ? cachedOwnStart() : this.o.startTimeOf(process.pid);
+    // Başarısız (null / reddedilen) okuma bu örnekte de sabitlenmez: sonraki çağrı yeniden okur. Kayda yine null yazılır (fail-closed); başka kaynaktan zaman UYDURULMAZ.
+    const p: Promise<string | null> = read.then(t => { this.selfStart = t; if (t === null && this.selfStartP === p) this.selfStartP = null; return t; }, () => { if (this.selfStartP === p) this.selfStartP = null; return null; });
+    return this.selfStartP = p;
   }
   // PS1A-C1-F3: kaydın sahibi başka bir canlı API süreci mi? Aynı süreç (başka yönetici örneği) burada canlı sayılmaz (kilit ayrıca bakar).
   // pid ölü -> değil; pid canlı ama kayıtlı başlangıç zamanı farklı -> pid yeniden kullanılmış, değil; zaman yok/okunamıyor -> fail-closed canlı.
