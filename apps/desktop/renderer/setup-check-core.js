@@ -21,7 +21,8 @@ function cliRow(exec){
 // //TR: Yürütücü satırı: sunucunun KULLANDIĞI yürütücü (active.reason) ya da LOCAL_CLAUDE.state; Local Claude etkin değilse (EXECUTOR_NOT_CONFIGURED / NOT_CONFIGURED) motor çalışmaz: BLOCKED EXECUTOR_NOT_ENABLED.
 function executorRow(exec){
   const lc=local(exec),active=typeof exec.active==="string"?exec.active:null,st=lc?lc.state:null;
-  if(active==="LOCAL_CLAUDE")return row("EXECUTOR","PASS");
+  // //TR: Bayat önbellekte active LOCAL_CLAUDE görünse bile bir rolün hazırlığı hâlâ EXECUTOR_NOT_ENABLED diyorsa PASS verilmez.
+  if(active==="LOCAL_CLAUDE"){const rd=exec.readiness;return rd&&[rd.implementer,rd.reviewer].some(r=>r&&r.blockers.includes("EXECUTOR_NOT_ENABLED"))?row("EXECUTOR","BLOCKED",["EXECUTOR_NOT_ENABLED"]):row("EXECUTOR","PASS")}
   if(active!==null)return row("EXECUTOR","BLOCKED",[active==="EXECUTOR_NOT_CONFIGURED"?"EXECUTOR_NOT_ENABLED":active]);
   if(st===null)return row("EXECUTOR","UNKNOWN",["EXECUTOR_STATUS_NOT_REPORTED"]);
   if(st==="READY")return row("EXECUTOR","UNKNOWN",["ACTIVE_EXECUTOR_NOT_REPORTED"]);

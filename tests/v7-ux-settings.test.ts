@@ -852,10 +852,31 @@ describe("LANE-A A-SETUP-FIX-1: EXECUTOR_NOT_ENABLED and package-provenance code
     const unk = await panelFor(wire(setup, b => { b.executors.LOCAL_CLAUDE.readiness.implementer.blockers = ["BRAND_NEW_CLI_CODE", "EXECUTOR_NOT_ENABLED"]; b.executors.LOCAL_CLAUDE.readiness.implementer.blocker = "BRAND_NEW_CLI_CODE"; }));
     expect(stateOf(unk, "CLI")).toBe("BLOCKED"); expect(reasonsOf(unk, "CLI")).toEqual(["BRAND_NEW_CLI_CODE"]); expect(fixOf(unk, "CLI")).toBe("setup.fix.CLI.unknownCode");
     expect(text(within(unk).find(n => n.dataset.setupReason === "BRAND_NEW_CLI_CODE")!)).toBe("BRAND_NEW_CLI_CODE (not recognised)"); expect(text(rowNode(unk, "CLI"))).not.toContain("Install the native");
+    for (const code of ["PROVIDER_PROVENANCE_NOT_READY", "CLAUDE_PACKAGE_PROVENANCE_REQUIRED", "CLAUDE_LAUNCHER_PROVENANCE_CHANGED", "CLAUDE_PACKAGE_PROVENANCE_CHANGED"]) { // all four launcher-family codes get the launcher fix
+      const r = await panelFor(wire(setup, b => { for (const x of ["implementer", "reviewer"]) { b.executors.LOCAL_CLAUDE.readiness[x].blockers = [code, "EXECUTOR_NOT_ENABLED"]; b.executors.LOCAL_CLAUDE.readiness[x].blocker = code; } }));
+      expect(fixOf(r, "CLI"), code).toBe("setup.fix.CLI.launcher"); expect(reasonsOf(r, "CLI")).toEqual([code]);
+    }
+    for (const mix of [["CLAUDE_CLI_NOT_FOUND", "CLAUDE_PACKAGE_PROVENANCE_CHANGED"], ["CLAUDE_PACKAGE_PROVENANCE_CHANGED", "CLAUDE_CLI_SHIM_UNSUPPORTED"]]) { // 'enable again' cannot succeed without a CLI, so an install code wins over a launcher-family code
+      const r = await panelFor(wire(setup, b => { for (const x of ["implementer", "reviewer"]) { b.executors.LOCAL_CLAUDE.readiness[x].blockers = [...mix, "EXECUTOR_NOT_ENABLED"]; b.executors.LOCAL_CLAUDE.readiness[x].blocker = mix[0]; } }));
+      expect(fixOf(r, "CLI"), mix.join("+")).toBe("setup.fix.CLI.install"); expect(reasonsOf(r, "CLI")).toEqual(mix);
+    }
     for (const code of ["CLAUDE_CLI_NOT_FOUND", "CLAUDE_CLI_SHIM_UNSUPPORTED"]) {
       const r = await panelFor(wire(setup, b => { b.executors.LOCAL_CLAUDE.readiness.implementer.blockers = [code, "EXECUTOR_NOT_ENABLED"]; b.executors.LOCAL_CLAUDE.readiness.implementer.blocker = code; }));
       expect(fixOf(r, "CLI")).toBe("setup.fix.CLI.install"); expect(reasonsOf(r, "CLI")).toEqual([code]);
     }
+  });
+
+  it("a stale 'LOCAL_CLAUDE is active' reading never hides a role readiness that still says EXECUTOR_NOT_ENABLED; a clean readiness still passes", async () => {
+    const {tmp, controlRoot, dataDir, setup} = mkSetup(); const l = launcherOf(tmp);
+    prov(controlRoot, {provenanceLevel: "STANDALONE_LAUNCHER", resolvedPath: l, launcherSha256: sha(l), version: "9.9.9"}); signIn(controlRoot, dataDir, ["implementer", "reviewer"]);
+    const stale = await panelFor(wire(setup, b => { b.active = {reason: "LOCAL_CLAUDE"}; }));
+    expect(stateOf(stale, "EXECUTOR")).toBe("BLOCKED"); expect(reasonsOf(stale, "EXECUTOR")).toEqual(["EXECUTOR_NOT_ENABLED"]); expect(fixOf(stale, "EXECUTOR")).toBe("setup.fix.EXECUTOR"); expect(stateOf(stale, "CLI")).toBe("PASS");
+    const one = await panelFor(wire(setup, b => { b.active = {reason: "LOCAL_CLAUDE"}; const r = b.executors.LOCAL_CLAUDE.readiness.reviewer; r.blockers = []; r.blocker = null; r.ready = true; })); // only one role still says it
+    expect(stateOf(one, "EXECUTOR")).toBe("BLOCKED");
+    const other = await panelFor(wire(setup, b => { b.active = {reason: "LOCAL_CLAUDE"}; const r = b.executors.LOCAL_CLAUDE.readiness.implementer; r.blockers = []; r.blocker = null; r.ready = true; })); // ... or only the other one
+    expect(stateOf(other, "EXECUTOR")).toBe("BLOCKED");
+    const clean = await panelFor(wire(setup, b => { b.active = {reason: "LOCAL_CLAUDE"}; for (const x of ["implementer", "reviewer"]) { const r = b.executors.LOCAL_CLAUDE.readiness[x]; r.blockers = []; r.blocker = null; r.ready = true; } }));
+    expect(stateOf(clean, "EXECUTOR")).toBe("PASS"); expect(reasonsOf(clean, "EXECUTOR")).toEqual([]);
   });
 
   it("key coverage: every code the CLI row can show has en + tr reason text and every fix key it can pick exists in both locales", async () => {
