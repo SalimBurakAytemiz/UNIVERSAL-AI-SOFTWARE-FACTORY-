@@ -1,8 +1,8 @@
-<!-- //TR: LANE-C yetki talebi: yeni test dosyasının config/validation.json (korumalı) bir parçasına kaydı ve Lane A/B için API alanları koordinatör işidir. -->
+<!-- //TR: LANE-C yetki talebi: Lane A/B için API alanları (yeni test dosyası artık yok: testler kayıtlı bir dosyaya taşındı, config/validation.json kaydı gerekmez). -->
 # LANE-C authority request: C-IMPL-WIN-1, real implementer readiness on Windows
 
-## Registration (coordinator, protected `config/validation.json`)
-New file `tests/v7-lane-c-claude-readiness.test.ts` (18 tests, about 3 s on Linux, no process of its own except `node -e` fakes, no `platforms` filter: the Windows detection is simulated with `path.win32` and injected `isFile`/`env`, so it must also run on Linux CI). Add the exact path to the `command` array of one existing shard. `tests/pkg-vs-validation-sharding.test.ts` is red until then.
+## Tests (no registration needed)
+The 18 tests live in the already-registered `tests/v7-sbx8-claude-profiles.test.ts` (step `tests-5`), as the `C-IMPL-WIN-1: ...` describe blocks at the end of the file (about 0.4 s on Linux, no process of its own except `node -e` fakes; the Windows detection is simulated with `path.win32` and injected `isFile`/`env`, so it also runs on Linux CI). The separate file `tests/v7-lane-c-claude-readiness.test.ts` was removed, so `tests/pkg-vs-validation-sharding.test.ts` stays green without a `config/validation.json` change. `tests/v7-ps1a-project-studio.test.ts` ("PS-1A executor setup") follows the 5-field executor report: the original three fields are unchanged, `cli` and `readiness` are asserted by shape.
 
 ## What Lane A/B can read (additive; no state value changed)
 `GET /v1/system/executors` already returns `executors: ExecutorSetup.status()`. `LOCAL_CLAUDE` keeps `state` (`READY | NOT_CONFIGURED | PROVENANCE_MISSING | CLI_NOT_FOUND`, the desktop maps these) and gains:
