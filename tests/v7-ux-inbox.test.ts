@@ -105,6 +105,10 @@ describe("UX WP-INBOX-APPROVAL — Founder-attention queue bound to real data", 
     expect(items[0].textContent).toContain("Accept the delivery"); expect(items[2].textContent).toContain("Unblock the task"); expect(items[2].textContent).not.toContain("Reason:"); expect(items[0].textContent).toContain("Since");
     expect(byData(panel, "counter").map(n => [n.dataset.counter, n.dataset.value])).toEqual([["RUN_AWAITING_APPROVAL", "1"], ["MISSION_FOUNDER_ATTENTION", "0"], ["RUN_NEEDS_DECISION", "1"], ["MISSION_AUTHORIZATION_PENDING", "0"], ["MISSION_BLOCKED", "0"], ["TASK_BLOCKED", "1"]]);
     expect(byData(panel, "attentionCount")[0].dataset.attentionCount).toBe("3");
+    // the VISIBLE counter text (not only the data attribute) equals the server count for every kind (review #192 M13)
+    expect(byData(panel, "counter").map(n => n.children[0].textContent)).toEqual(["1", "0", "1", "0", "0", "1"]);
+    expect(byData(panel, "counter").map(n => n.textContent)).toEqual(["1 Run awaiting your approval", "0 Mission needs your attention", "1 Run needs a decision", "0 Mission awaiting authorization", "0 Mission blocked", "1 Task blocked"]);
+    expect(byData(panel, "attentionCount")[0].textContent).toContain("3 item(s) awaiting Founder attention");
     expect(byData(panel, "attentionTruncated")).toEqual([]); expect(byData(panel, "attentionDropped")).toEqual([]);
     // no write/approve/reject control anywhere in the read-only queue panel
     expect(all(panel).filter(n => n.tagName === "BUTTON").length).toBe(0);
@@ -631,6 +635,14 @@ describe("LANE-A attention consumers: honest summary in Inbox strip, Delivery an
     const {ctx} = await mkCtx({get: fromFix(liveFix({"/v1/attention": attention([], attCounts({RUN_AWAITING_APPROVAL: 0, RUN_NEEDS_DECISION: 0, TASK_BLOCKED: 0}))})), lang: "en"});
     expect(sourceState(await inbox.render(ctx), "attention")).toBe("VERIFIED");
   });
+  it("tr: Delivery and Inbox use the Turkish noun and the exact-count truncation text (no 'En az', no 'mission' noun) for a truncated list", async () => {
+    const delivery = await load("views", "delivery.js"), inbox = await load("views", "inbox.js");
+    const fx = attention(big(200), attCounts({RUN_AWAITING_APPROVAL: 0, RUN_NEEDS_DECISION: 0, TASK_BLOCKED: 250}), true);
+    const d = await mkCtx({get: fromFix(delFix(fx)), lang: "tr"}); const line = byId(await delivery.render(d.ctx), "delivery-attention-status")!;
+    expect(line.textContent).toContain("250 öğe Founder dikkatini bekliyor"); expect(line.textContent).toContain("görevler, koşular ve missionlar"); expect(line.textContent).toContain("250 öğeden 200 tanesi gösteriliyor"); expect(line.textContent).not.toMatch(/En az|en az/);
+    const i = await mkCtx({get: fromFix(liveFix({"/v1/attention": fx})), lang: "tr"}); const panel = byId(await inbox.render(i.ctx), "inbox-attention-queue")!;
+    expect(panel.textContent).toContain("250 öğeden 200 tanesi gösteriliyor"); expect(panel.textContent).not.toMatch(/En az|en az/); expect(byData(panel, "attentionCount")[0].textContent).toContain("250 öğe Founder dikkati bekliyor");
+  });
   it("Delivery shows the server's total with the right noun for a truncated list (201 tasks), never the shown count as 'missions'", async () => {
     const delivery = await load("views", "delivery.js");
     const {ctx} = await mkCtx({get: fromFix(delFix(attention(big(200), attCounts({RUN_AWAITING_APPROVAL: 0, RUN_NEEDS_DECISION: 0, TASK_BLOCKED: 201}), true))), lang: "en"});
@@ -662,6 +674,7 @@ describe("LANE-A attention consumers: honest summary in Inbox strip, Delivery an
     const root = await inbox.render(ctx);
     expect(byId(root, "inbox-legacy-p")).toBeNull(); expect(byId(root, "inbox-attention")).toBeNull(); expect(root.textContent).not.toMatch(/legacy scheduler|LEGACY_SNAPSHOT/i);
     expect(all(root).filter(n => n.textContent === "Engelli görev" && n.tagName === "H3").length).toBe(1);
+    expect(read("views", "inbox.js").split("\n")[0]).not.toMatch(/Legacy blocker listesi \(yeniden deneme eylemiyle\) değişmeden korunur/); // the header no longer promises the removed legacy list / retry action
   });
   it("Tower says the list is cut or partly unreadable, and never 'no pending blockers' when the server counted unreadable items", async () => {
     const tower = await load("views", "tower.js");
