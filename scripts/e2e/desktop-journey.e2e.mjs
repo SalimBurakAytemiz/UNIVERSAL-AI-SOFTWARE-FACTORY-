@@ -157,6 +157,7 @@ async function main() {
     if (!ready) { await startupFail(`fake backend did not become ready (exit=${backend.exitCode}): ${backendLog.slice(-600)}`); return finish(); }
     meta.noSandbox = process.platform === "linux" && (process.getuid?.() === 0 || process.env.E2E_NO_SANDBOX === "1");
     const args = ["-r", path.join(here, "main-log-hook.cjs"), path.join("apps", "desktop", "main.mjs"), `--user-data-dir=${path.join(dataRoot, "electron-user-data")}`, ...(meta.noSandbox ? ["--no-sandbox"] : []), ...(process.platform === "linux" ? ["--disable-gpu"] : [])];
+    fs.writeFileSync(mainLogFile, ""); // eski bir koşunun başlatma günlüğü (aynı --out) bu koşunun raporuna karışmasın
     app = await pw._electron.launch({executablePath: exe.path, args, cwd: repo, env: childEnv({CONTROL_API_PORT: String(port), UASCO_CONTROL_TOKEN: token, E2E_MAIN_LOG: mainLogFile}), timeout: 60000});
     for (const st of [app.process().stdout, app.process().stderr]) st?.on("data", d => { mainLog = tail(mainLog + d, 4000); }); // Electron ana süreç çıktısı (başlatma hatasında rapora girer)
     win = await app.firstWindow();
@@ -324,8 +325,8 @@ async function runSteps() {
     await win.click("#studio-tab-delivery"); await waitSel(`[data-delivery-run="${runId}"]`, 20000);
     must((await win.evaluate(id => document.querySelector(`[data-delivery-run="${id}"]`).dataset.deliveryState, runId)) === "NOT_PREPARED", "delivery is not NOT_PREPARED before preparing");
     // Teslim kartındaki ürün ekseni, sunucunun (doğrudan okunan) koşu kaydındaki productVerification ile aynı olmalı.
-    const cardPv = await win.evaluate(id => document.querySelector(`[data-delivery-run="${id}"] [data-axis="productVerification"]`)?.dataset.axisState ?? null, runId);
-    must(cardPv === serverPv?.state, `the delivery card shows productVerification ${cardPv} but the server's work-run says ${serverPv?.state}`);
+    const card = await win.evaluate(id => { const n = document.querySelector(`[data-delivery-run="${id}"] [data-axis="productVerification"]`); return n ? {state: n.dataset.axisState, reason: n.dataset.axisReason} : null; }, runId);
+    must(card && card.state === serverPv?.state && card.reason === serverPv?.reason, `the delivery card shows productVerification ${card?.state}/${card?.reason} but the server's work-run says ${serverPv?.state}/${serverPv?.reason}`);
     await win.click(`#dl-prep-${runId}`);
     await waitFn(id => document.querySelector(`[data-delivery-run="${id}"]`)?.dataset.deliveryState === "PREPARED", runId, 60000, "delivery PREPARED");
     return "export artifact prepared (POST /v1/work-runs/:id/delivery/prepare)";

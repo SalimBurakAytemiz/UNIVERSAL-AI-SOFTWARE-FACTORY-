@@ -233,6 +233,8 @@ describe("M1a c2 Studio > Delivery: run deliveries (prepare, bound acceptance di
     const card = byData(root, "deliveryRun", RUN)[0];
     expect(card.dataset.deliveryState).toBe("PREPARED");
     for (const s of [RUN, MID, HEAD, H1, SG, NV]) expect(card.textContent).toContain(s);
+    const pvBadge = byData(card, "axis", "productVerification")[0]; // the desktop E2E compares state AND reason of this axis with the server's work-run
+    expect([pvBadge.dataset.axisState, pvBadge.dataset.axisReason]).toEqual(["NOT_VERIFIED", "NOT_EXECUTED:SANDBOX_UNAVAILABLE"]);
     expect(byId(root, `dl-prep-${RUN}`)).not.toBeNull();
     expect(byId(root, `dl-open-${RUN}`)).not.toBeNull();
     expect(byId(root, `dl-export-${RUN}`)).toBeNull(); // export only after the acceptance
