@@ -2656,3 +2656,41 @@ describe("LANE-B product run routes (B-RUN-1)", () => {
     const mine = await mkApp(); const own = await post(mine.app, mine.run.runId, "stop"); expect(own.statusCode).toBe(200); expect(mine.calls).toEqual([["stop", mine.run.projectId]]); expect(mine.audits).toContain("WORKOS_PRODUCT_STOP");
   });
 });
+
+// //TR: LANE-B batch 4b: analiz adımı route'ları (sahte AnalysisFlow ile kapılar ve durum eşlemesi); server.ts kaydı korumalıdır (LANE-B-batch-4b.md, bekliyor).
+describe("LANE-B batch 4b: analysis routes and server registration", () => {
+  const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
+  const MSN = "msn_" + "a".repeat(24);
+  const mkApp = async (o: {stopped?: boolean; allowed?: boolean; step?: any; plan?: any; throwErr?: string} = {}) => {
+    const [{default: Fastify}, {registerAnalysisRoutes}, {AnalysisError}] = await Promise.all([import("fastify"), import("../apps/control-api/src/routes/analysis.js"), import("../core/workos/crew/analysis.js")]);
+    const app = Fastify({logger: false}); const audits: string[] = []; const calls: string[] = [];
+    app.addHook("onRequest", async (req, reply) => { if (req.headers["x-uasco-control-token"] !== token) return reply.code(403).send({error: "FORBIDDEN"}); });
+    const flow: any = {step: async (id: string) => { calls.push(`step:${id}`); if (o.throwErr) throw new AnalysisError(o.throwErr as any); return o.step ?? {status: "COMPLETE", approved: []}; },
+      createPlan: (id: string, actor: string) => { calls.push(`plan:${id}:${actor}`); return o.plan ?? {ok: true, tasks: [], replayed: false, trace: [], summary: {}}; }};
+    registerAnalysisRoutes(app, {getStore: () => ({}) as any, scope: {tenantId: "tA"}, orgId: "o1", actor: "FOUNDER_LOCAL", audit: (e: string) => { audits.push(e); }, workosStopped: () => !!o.stopped,
+      workosPolicy: () => o.allowed === false ? {allowed: false, reason: "NO"} : {allowed: true}, workosFail: (r: any) => r.code(500).send({error: "INTERNAL_ERROR"}), analysisFlow: () => flow});
+    return {app, calls, audits};
+  };
+  const post = (app: any, url: string, payload: any = {}, headers: any = hdr) => app.inject({method: "POST", url, headers, payload});
+
+  it("gates: token 403, bad id 400, Global Stop 423, policy 403, non-empty body 400; nothing reaches the flow when a gate refuses", async () => {
+    const m = await mkApp();
+    expect((await post(m.app, `/v1/missions/${MSN}/analysis/step`, {}, {host: "127.0.0.1:3210"})).statusCode).toBe(403);
+    for (const bad of ["msn_x", "msn_" + "A".repeat(24), "msn_" + "a".repeat(23)]) expect((await post(m.app, `/v1/missions/${bad}/analysis/step`)).statusCode, bad).toBe(400);
+    expect((await post(m.app, `/v1/missions/${MSN}/analysis/step`, {x: 1})).statusCode).toBe(400);
+    const st = await mkApp({stopped: true}); expect((await post(st.app, `/v1/missions/${MSN}/analysis/plan`)).statusCode).toBe(423);
+    const den = await mkApp({allowed: false}); expect((await post(den.app, `/v1/missions/${MSN}/analysis/step`)).json()).toMatchObject({error: "ACTION_DENIED", reason: "NO"});
+    expect(m.calls.concat(st.calls, den.calls)).toEqual([]);
+  });
+
+  it("step maps results: BLOCKED 409 (full step + ANALYSIS_BLOCKED), REJECTED/BUILDER_FAILED 502, DRAFT_READY/AWAITING_APPROVAL/COMPLETE 200; unknown mission 404; plan: success body, replay audited, ok:false codes 409", async () => {
+    const blocked = {status: "BLOCKED", blocker: "CLAUDE_CLI_NOT_FOUND", blockers: ["CLAUDE_CLI_NOT_FOUND"], founderAction: "install", readiness: {ready: false}};
+    const b = await post((await mkApp({step: blocked})).app, `/v1/missions/${MSN}/analysis/step`); expect(b.statusCode).toBe(409); expect(b.json()).toMatchObject({status: "BLOCKED", error: "ANALYSIS_BLOCKED", blocker: "CLAUDE_CLI_NOT_FOUND"});
+    for (const s of [{status: "REJECTED", kind: "Plan", reason: "x"}, {status: "BUILDER_FAILED", kind: "Plan", code: "X"}]) expect((await post((await mkApp({step: s})).app, `/v1/missions/${MSN}/analysis/step`)).statusCode).toBe(502);
+    for (const s of [{status: "DRAFT_READY", kind: "Plan"}, {status: "AWAITING_APPROVAL", kind: "Plan"}, {status: "COMPLETE", approved: []}]) { const r = await post((await mkApp({step: s})).app, `/v1/missions/${MSN}/analysis/step`); expect(r.statusCode).toBe(200); expect(r.json().status).toBe(s.status); }
+    expect((await post((await mkApp({throwErr: "ANALYSIS_MISSION_NOT_FOUND"})).app, `/v1/missions/${MSN}/analysis/step`)).json()).toEqual({error: "ANALYSIS_MISSION_NOT_FOUND"});
+    const ok = await mkApp(); const p = await post(ok.app, `/v1/missions/${MSN}/analysis/plan`); expect(p.statusCode).toBe(200); expect(p.json()).toMatchObject({replayed: false}); expect(ok.calls).toEqual([`plan:${MSN}:FOUNDER_LOCAL`]); expect(ok.audits).toContain("WORKOS_ANALYSIS_PLAN");
+    const rp = await mkApp({plan: {ok: true, tasks: [], replayed: true, trace: [], summary: {}}}); await post(rp.app, `/v1/missions/${MSN}/analysis/plan`); expect(rp.audits).toContain("WORKOS_IDEMPOTENT_REPLAY");
+    const no = await post((await mkApp({plan: {ok: false, code: "ANALYSIS_NOT_COMPLETE", detail: "x"}})).app, `/v1/missions/${MSN}/analysis/plan`); expect(no.statusCode).toBe(409); expect(no.json()).toEqual({error: "ANALYSIS_NOT_COMPLETE"});
+  });
+});
