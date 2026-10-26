@@ -65,6 +65,8 @@ const MEMORY_GET_RES=[/^\/v1\/projects\/prj_[0-9a-f]{24}\/memory\/(?:current|hea
   /^\/v1\/projects\/prj_[0-9a-f]{24}\/knowledge$/];
 // //TR: LANE-B-attention-api: Founder dikkat kuyruğu GET /v1/attention sorgusuz tam eşleşir (eski /v1/founder-attention değişmez).
 const ATTENTION_GET_RE=/^\/v1\/attention$/;
+// //TR: COORD korumalı paket 3b (LANE-C-role-status-route): salt-okunur rol yaşam döngüsü özeti; sorgu yok, sabit yol (sabit EXTRA_GET_ROUTES kümesine dokunulmaz).
+const ROLE_STATUS_SUMMARY_RE=/^\/v1\/roles\/status-summary$/;
 const MEMORY_LIST_BASE_RE=/^\/v1\/projects\/prj_[0-9a-f]{24}\/memory$/;
 const MEMORY_KINDS=new Set(["DECISION","FACT","SOURCE","REVISION","NOTE"]);
 function memoryTextOk(enc,max){
@@ -140,7 +142,7 @@ function desktopExtraGetPathAllowed(value){
   // //TR: COORD batch 3: bellek listesi sorgusu kodlanmış metin taşıdığı için kendi üst sınırıyla (2600) 400 karakter sınırından önce denetlenir.
   if(typeof value==="string"&&value.length<=2600&&memoryListAllowed(value))return true;
   if(typeof value!=="string"||value.length>400)return false;
-  return EXTRA_GET_ROUTES.has(value)||FIRST_DELIVERY_GET_RES.some(re=>re.test(value))||MEMORY_GET_RES.some(re=>re.test(value))||ATTENTION_GET_RE.test(value)||ROLE_DETAIL_RE.test(value)||ACADEMY_LIST_RE.test(value)||ACADEMY_DETAIL_RE.test(value)||PREDEV_DETAIL_RE.test(value)||CREW_DETAIL_RE.test(value)||DELIVERY_DETAIL_RE.test(value)||DELIVERY_LIST_RE.test(value)||PROJECT_MISSIONS_RE.test(value)||MISSION_DETAIL_RE.test(value)||WORK_RUN_DETAIL_RE.test(value)||EVIDENCE_DETAIL_RE.test(value)||listQueryAllowed(value,"/v1/work-runs",["missionId"])||listQueryAllowed(value,"/v1/evidence",["missionId","runId","kind","cursor","limit"])||listQueryAllowed(value,"/v1/roles",["limit","cursor"])||listQueryAllowed(value,"/v1/company/contacts",["accountId"])||listQueryAllowed(value,"/v1/company/opportunities",["accountId"])||listQueryAllowed(value,"/v1/company/invoices",["accountId"])||listQueryAllowed(value,"/v1/company/payments",["invoiceId"])||listQueryAllowed(value,"/v1/company/contracts",["accountId"])||REVIEWS_LIST_RE.test(value)||REVIEW_DETAIL_RE.test(value)||listQueryAllowed(value,"/v1/reviews",["missionId","runId"]);
+  return EXTRA_GET_ROUTES.has(value)||FIRST_DELIVERY_GET_RES.some(re=>re.test(value))||MEMORY_GET_RES.some(re=>re.test(value))||ATTENTION_GET_RE.test(value)||ROLE_STATUS_SUMMARY_RE.test(value)||ROLE_DETAIL_RE.test(value)||ACADEMY_LIST_RE.test(value)||ACADEMY_DETAIL_RE.test(value)||PREDEV_DETAIL_RE.test(value)||CREW_DETAIL_RE.test(value)||DELIVERY_DETAIL_RE.test(value)||DELIVERY_LIST_RE.test(value)||PROJECT_MISSIONS_RE.test(value)||MISSION_DETAIL_RE.test(value)||WORK_RUN_DETAIL_RE.test(value)||EVIDENCE_DETAIL_RE.test(value)||listQueryAllowed(value,"/v1/work-runs",["missionId"])||listQueryAllowed(value,"/v1/evidence",["missionId","runId","kind","cursor","limit"])||listQueryAllowed(value,"/v1/roles",["limit","cursor"])||listQueryAllowed(value,"/v1/company/contacts",["accountId"])||listQueryAllowed(value,"/v1/company/opportunities",["accountId"])||listQueryAllowed(value,"/v1/company/invoices",["accountId"])||listQueryAllowed(value,"/v1/company/payments",["invoiceId"])||listQueryAllowed(value,"/v1/company/contracts",["accountId"])||REVIEWS_LIST_RE.test(value)||REVIEW_DETAIL_RE.test(value)||listQueryAllowed(value,"/v1/reviews",["missionId","runId"]);
 }
 // B4-ALLOWLIST-END
 
@@ -155,7 +157,9 @@ const POST_ROUTE_RES=[/^\/v1\/projects$/,/^\/v1\/missions$/,/^\/v1\/missions\/ms
   // COORD-FIRST-DELIVERY-WIRING (Founder onayı 2026-10-21): fikir -> proje + ilk mission, görev planı ve görev durum geçişi; kimlikler sıkı biçimli, gövde aynı 32 KB sınırında.
   /^\/v1\/intakes$/,/^\/v1\/missions\/msn_[0-9a-f]{24}\/plan$/,/^\/v1\/tasks\/tsk_[0-9a-f]{24}\/transition$/,/^\/v1\/tasks\/tsk_[0-9a-f]{24}\/runs$/,
   // COORD protected batch 3 (LANE-A reconcile button, LANE-B task outcomes): bir koşunun görev sonuçlarını Work OS journal'ından yeniden türet; gövde boş nesne, aynı kapılar (Global Stop 423, politika 403).
-  /^\/v1\/work-runs\/run_[0-9a-f]{24}\/tasks\/reconcile$/];
+  /^\/v1\/work-runs\/run_[0-9a-f]{24}\/tasks\/reconcile$/,
+  // COORD protected batch 3b (LANE-B-predev-decisions, LANE-A #197): pre-dev dizisini başlat ({}), bir taslağı onayla ({evidenceRefs}) veya reddet ({reason}); onaylayan her zaman sunucu aktörüdür, kapılar sunucuda (Global Stop 423, politika 403, sıkı gövde 400, bağımsız onaylayan/kanıt/faz sırası 409).
+  /^\/v1\/missions\/msn_[0-9a-f]{24}\/predev\/start$/,/^\/v1\/missions\/msn_[0-9a-f]{24}\/predev\/artifacts\/pda_[0-9a-f]{24}\/(?:approve|reject)$/];
 function desktopPostPathAllowed(value){
   return typeof value==="string"&&value.length<=128&&POST_ROUTE_RES.some(re=>re.test(value));
 }
