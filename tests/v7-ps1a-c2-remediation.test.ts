@@ -757,11 +757,13 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
     } finally { ownStartTestHooks.setReader(null); await m1.close().catch(() => undefined); await m2?.close().catch(() => undefined); }
   }, 60_000);
 
-  it("S5 (Windows liveness): with the default reader on win32 recover() reads ALL candidate start times with ONE batched PowerShell call; the batch answer is USED (a different start time -> ORPHAN_PID_MISMATCH_NOT_KILLED and the process stays alive; a pid missing from a successful answer is gone -> MISMATCH, not read again; the matching one is killed); a failed batch falls back to per-pid reads; a batch that never answers is bounded by ownerCheckMs and then falls back", async () => {
+  it("S5 (Windows liveness): with the DEFAULT reader on win32 (the production arm; the own read is stubbed through the process-wide hook) recover() reads ALL candidate start times with ONE batched PowerShell call; the batch answer is USED (a different start time -> ORPHAN_PID_MISMATCH_NOT_KILLED and the process stays alive; a pid missing from a successful answer is gone -> MISMATCH, not read again; the matching one is killed); a failed batch falls back to per-pid reads; a batch that never answers is bounded by ownerCheckMs and then falls back", async () => {
     const {app, dataDir} = mk(); const ps: Project[] = []; for (let i = 0; i < 3; i++) ps.push(await createProject(app, {template: "web-node"}));
     const m0: any = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any));
     const known = new Map<number, string | null>(); // enjekte edilen okuyucular gerçek processStartTime (Windows'ta PowerShell) çağırmaz
     const seed = async () => { const rows: {pid: number; t: string | null}[] = []; for (const p of ps) { const pid = idle(); const t = await processStartTime(pid); rows.push({pid, t}); known.set(pid, t); seedRec(dataDir, p, deadRec(m0, p, {status: "RUNNING", pid, pidStartTime: t, startedAt: new Date().toISOString()})); } return rows; };
+    ownStartTestHooks.setReader(async () => "SELF"); // kendi okuması gerçek PowerShell'e gitmesin; varsayılan okuyucu kolu (üretim) korunur
+    try {
     for (const mode of ["answer", "failed", "hang"] as const) {
       const rows = await seed(); const scripts: string[] = []; const ownerCheckMs = mode === "hang" ? 300 : 5000;
       const powershell = async (script: string) => {
@@ -770,7 +772,7 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
         const lines = await Promise.all(ids.map(async id => id === rows[1].pid ? null : `${id},${id === rows[0].pid ? "DIFFERENT-START-TIME" : known.get(id)}`));
         return lines.filter(Boolean).join("\r\n");
       };
-      const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {platform: "win32", powershell, ownerCheckMs, startTimeOf: (pid: number) => Promise.resolve(pid === process.pid ? "SELF" : known.get(pid) ?? null)});
+      const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {platform: "win32", powershell, ownerCheckMs, ...(mode === "answer" ? {} : {fallbackStartTimeOf: (pid: number) => Promise.resolve(known.get(pid) ?? null)})});
       const t0 = Date.now(); const out = await m.recover(); const took = Date.now() - t0;
       expect(scripts, `${mode}: exactly one batched call`).toHaveLength(1); for (const r of rows) expect(scripts[0]).toContain(String(r.pid));
       const res = (p: Project) => out.find(x => x.projectId === p.projectId)?.result;
@@ -782,6 +784,7 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
         if (mode === "hang") expect(took, `a never-answering batch is bounded (${took} ms)`).toBeLessThan(2500);
       }
     }
+    } finally { ownStartTestHooks.setReader(null); }
   }, 90_000);
 
   it("M-a: a record rewritten by a LIVE peer EXACTLY between the orphan kill and the CAS is NOT taken over: no write, the lock stays, no recovery result, no schedule - and the superseded kill is audited", async () => {
@@ -792,12 +795,13 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
     const events: Array<[string, any]> = []; let killed = 0;
     // Yalnız instanceId / sahip / durum / pid değişir (startedAt ve sandboxScratch AYNI): CAS'ı yalnız instanceId karşılaştırması reddedebilir.
     const killTree = (pid: number) => { killProcessTree(pid); killed++; fs.writeFileSync(f, JSON.stringify({...seeded, instanceId: "dev_peer", ownerPid: process.ppid, ownerStartTime: ownerT, status: "RUNNING", pid: peerPid, pidStartTime: peerStart})); };
-    const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {killTree, startTimeOf: async (pid: number) => pid === process.pid ? "SELF" : pid === orphan ? ostart : pid === process.ppid ? ownerT : null, audit: (e: string, d: any) => events.push([e, d])});
+    let teardowns = 0; const gate = new ExecutionGate(hostSpawn({async teardownScratch() { teardowns++; return null; }}));
+    const m = manager(dataDir, gate, {killTree, startTimeOf: async (pid: number) => pid === process.pid ? "SELF" : pid === orphan ? ostart : pid === process.ppid ? ownerT : null, audit: (e: string, d: any) => events.push([e, d])});
     try {
       const out = await m.recover(); await m.settleRecovery();
       expect(killed).toBe(1); expect(out).toEqual([]); expect(events.map(x => x[0])).not.toContain("DEVRUN_ORPHAN_RECOVERED");
       expect(events).toContainEqual(["DEVRUN_ORPHAN_KILLED_RECORD_SUPERSEDED", {projectId: p.projectId, pid: orphan, result: "ORPHAN_KILLED"}]);
-      expect(readRec(f)).toMatchObject({instanceId: "dev_peer", status: "RUNNING", pid: peerPid, sandboxScratch: SCR}); expect(pidAlive(peerPid), "the peer's product survives").toBe(true); expect(fs.existsSync(lockFile), "the lock is not removed").toBe(true);
+      expect(readRec(f)).toMatchObject({instanceId: "dev_peer", status: "RUNNING", pid: peerPid, sandboxScratch: SCR}); expect(pidAlive(peerPid), "the peer's product survives").toBe(true); expect(fs.existsSync(lockFile), "the lock is not removed").toBe(true); expect(teardowns, "nothing is scheduled").toBe(0);
     } finally { release(); }
   }, 60_000);
 
@@ -814,7 +818,28 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
     try { t0 = Date.now(); await srv.ready(); expect(Date.now() - t0, "ready must not wait for the own start-time read").toBeLessThan(2000); } finally { await srv.close(); }
   }, 60_000);
 
-  it("M-b: the own start-time read is awaited ONCE before the loop: N orphan records with a never-answering read cost one budget, not N", async () => {
+  it("P2: kills do NOT wait for the own start-time read or for each other: with 3 orphans and an own read that takes ~1.9 s, every kill happens within a small fraction of that delay of its start-time sample", async () => {
+    const {app, dataDir} = mk(); const ps: Project[] = []; for (let i = 0; i < 3; i++) ps.push(await createProject(app, {template: "web-node"}));
+    const m0: any = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any)); const rows: {pid: number; t: string | null; project: Project}[] = [];
+    for (const p of ps) { const pid = idle(); const t = await processStartTime(pid); rows.push({pid, t, project: p}); seedRec(dataDir, p, deadRec(m0, p, {status: "RUNNING", pid, pidStartTime: t, startedAt: new Date().toISOString()})); }
+    const sampled = new Map<number, number>(), killedAt = new Map<number, number>();
+    const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {ownerCheckMs: 5000,
+      startTimeOf: async (pid: number) => { if (pid === process.pid) { await sleep(1900); return "SELF"; } const r = rows.find(x => x.pid === pid); if (r) sampled.set(pid, Date.now()); return r?.t ?? null; },
+      killTree: (pid: number) => { killedAt.set(pid, Date.now()); killProcessTree(pid); }});
+    const out = await m.recover(); expect(out.map(x => x.result)).toEqual(Array(3).fill("ORPHAN_KILLED"));
+    for (const r of rows) { const gap = killedAt.get(r.pid)! - sampled.get(r.pid)!; expect(gap, `orphan ${r.pid}: ${gap} ms between sample and kill`).toBeLessThan(700); }
+  }, 60_000);
+
+  it("P3a (B1 ordering): the kill happens BEFORE the own start-time read resolves, and the late-but-in-budget read is still recorded", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"}); const orphan = idle(); const ostart = await processStartTime(orphan);
+    const m0: any = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any)); const f = seedRec(dataDir, p, deadRec(m0, p, {status: "RUNNING", pid: orphan, pidStartTime: ostart, startedAt: new Date().toISOString()}));
+    let ownResolved = false, resolvedAtKill: boolean | null = null;
+    const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {ownerCheckMs: 400, startTimeOf: async (pid: number) => { if (pid === process.pid) { await sleep(250); ownResolved = true; return "SELF-LATE"; } return pid === orphan ? ostart : null; },
+      killTree: (pid: number) => { resolvedAtKill = ownResolved; killProcessTree(pid); }});
+    const out = await m.recover(); expect(out).toHaveLength(1); expect(resolvedAtKill, "kill before the own read resolved").toBe(false); expect(readRec(f).ownerStartTime).toBe("SELF-LATE");
+  }, 30_000);
+
+  it("M-b: the own start-time read is memoized: N orphan records with a never-answering read cost one budget, not N", async () => {
     const {app, dataDir} = mk(); const ps: Project[] = []; for (let i = 0; i < 5; i++) ps.push(await createProject(app, {template: "web-node"}));
     const m0: any = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any)); const files = ps.map(p => seedRec(dataDir, p, deadRec(m0, p, {status: "RUNNING", pid: null, startedAt: new Date().toISOString()})));
     const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {ownerCheckMs: 400, startTimeOf: () => new Promise<string | null>(() => undefined)});

@@ -72,6 +72,8 @@ export interface DevRunOptions {
   platform?: NodeJS.Platform; powershell?: (script: string) => Promise<string | null>;
   // Test enjeksiyonu: sahipsiz süreç ağacını öldürme (varsayılan killProcessTree); M-a testi eş kaydını öldürme ile CAS arasına tam oraya yazar.
   killTree?: (pid: number) => void;
+  // Test enjeksiyonu: toplu okuma başarısız olduğunda / bir pid'i kaçırdığında kullanılan TEK-pid okuyucusu (varsayılan startTimeOf). Toplu yol yalnız varsayılan okuyucuyla (üretim kolu) açılır; bu tohum o kolu değiştirmez.
+  fallbackStartTimeOf?: (pid: number) => Promise<string | null>;
 }
 const NO_PREVIEW_TYPES = new Set(["desktop", "mobile", "native"]);
 const ACTIVE: ReadonlySet<DevRunStatus> = new Set(["STARTING", "RUNNING"]);
@@ -823,12 +825,12 @@ export class DevRunManager {
     type Verdict = {key: string; live: boolean; now?: string | null | typeof LOOKUP_TIMEOUT};
     // Varsayılan okuyucu + win32: tüm aday pid'ler (sahipler + sahipsiz süreçler) için TEK toplu PowerShell okuması (sınırlı); okunamayanlar tek tek okunur.
     let batch = new Map<number, string | null>();
-    if ((this.o.startTimeOf === processStartTime || this.o.powershell !== undefined) && (this.o.platform ?? process.platform) === "win32") {
+    if (this.o.startTimeOf === processStartTime && (this.o.platform ?? process.platform) === "win32") {
       const pids: number[] = [];
       for (const id of ids) { const r = this.readState(id); if (needsCheck(r)) { if (r.ownerPid !== process.pid) pids.push(r.ownerPid); if (r.pid) pids.push(r.pid); } }
       batch = await timed(processStartTimes(pids.filter(pidAlive), {platform: this.o.platform, powershell: this.o.powershell}), budget, new Map<number, string | null>());
     }
-    const read = (pid: number): Promise<string | null> => batch.has(pid) ? Promise.resolve(batch.get(pid)!) : this.o.startTimeOf(pid);
+    const read = (pid: number): Promise<string | null> => batch.has(pid) ? Promise.resolve(batch.get(pid)!) : (this.o.fallbackStartTimeOf ?? this.o.startTimeOf)(pid);
     // Sahip-canlı denetimleri ve (sahip ölüyse) sahipsiz pid başlangıç zamanı okumaları PARALEL ve her biri sınırlı: süre dolarsa sahip 'canlı' sayılır (fail-closed, kayda dokunulmaz).
     const check = async (r: DevRunState): Promise<Verdict> => {
       const live = await timed(this.ownerLive(r, read), budget, true);
@@ -839,6 +841,8 @@ export class DevRunManager {
     let selfV: Promise<string | null> | undefined; const getSelf = (): Promise<string | null> => (selfV ??= timed(selfP, budget, null));
     const verdicts = new Map<string, Verdict>();
     await Promise.all(ids.map(async id => { const r = this.readState(id); if (needsCheck(r)) verdicts.set(id, await check(r)); }));
+    // P2: iki aşama. Faz 1: her uygun yetim için öldürme, hükmünün hemen ardından ve EŞZAMANLI başlar (hiçbir öldürme getSelf() ya da başka yetimin öldürme beklemesini beklemez: bayat örnek yok). Faz 2: getSelf() bir kez, sonra sırayla CAS yazımı, denetim, kilit silme, zamanlama.
+    const orphans: Array<{id: string; st: DevRunState; ownerReused: boolean; kill: Promise<DevRunRecovery["result"] | null>}> = [];
     for (const id of ids) {
       let st = this.readState(id);
       if (!st || st.instanceId === this.instanceId || this.active.has(id)) continue;
@@ -860,7 +864,11 @@ export class DevRunManager {
       if (!v || v.live !== false) continue;
       const ownerReused = st.ownerPid !== process.pid && pidAlive(st.ownerPid);
       // S5: okuma ZAMAN AŞIMINA uğradıysa (uyumsuzluk değil) ACTIVE kayıt olduğu gibi kalır; sonraki açılışta yeniden denenir (ORPHAN_PID_MISMATCH_NOT_KILLED yazılsa sahipsiz süreç bir daha denenmezdi).
-      const result = await this.orphanKill(st, v.now);
+      orphans.push({id, st, ownerReused, kill: this.orphanKill(st, v.now)});
+    }
+    const killed = await Promise.all(orphans.map(o => o.kill));
+    for (const [i, { id, st, ownerReused }] of orphans.entries()) {
+      const result = killed[i];
       if (result === null) continue;
       // C-5: sağlayıcı-taraflı scratch (WSL) Linux tarafında kapatılır; kapatılamazsa kayıt STOP_INCOMPLETE ile scratch'ı korur.
       const pendingScratch = Boolean(st.sandboxScratch); // kapatma arka planda (scheduleScratch) denenir; sonuç kayda yazılır
