@@ -1253,8 +1253,12 @@ describe("LANE-B Windows acceptance kit (injected fakes)", () => {
     const nf = await k.runAcceptance({distro: "Ubuntu"}, mkDeps({vitest: {testResults: []}}).deps); expect(byId(nf).WSL_PRODUCT_BRIDGE).toMatchObject({status: "FAIL", detail: expect.stringContaining("TEST_NOT_FOUND")});
     const fl = await k.runAcceptance({distro: "Ubuntu"}, mkDeps({vitest: vitestOk({b: "failed"})}).deps); expect(byId(fl).WSL_PRODUCT_BRIDGE.status).toBe("FAIL");
     const blocked = mkDeps({distros: "Debian\r\n"}); const rb = await k.runAcceptance({distro: "Ubuntu"}, blocked.deps); expect(byId(rb).WSL_SELFTEST_AND_RUN.detail).toContain("PRECONDITION_FAILED: WSL_DISTRO"); expect(blocked.runs()).toBe(0);
-    const nosha = await k.runAcceptance({distro: "Ubuntu"}, mkDeps({git: {headSha: null, dirty: null}}).deps); expect(nosha.verdict).toBe("NOT_ACCEPTED"); expect(nosha.reasons).toEqual(["HEAD_SHA_UNKNOWN"]); expect(nosha.repo.shaSource).toBe("UNKNOWN");
-    const arg = await k.runAcceptance({distro: "Ubuntu", shaArg: "b".repeat(40)}, mkDeps({git: {headSha: null, dirty: null}}).deps); expect(arg.verdict).toBe("ACCEPTED"); expect(arg.repo).toMatchObject({shaSource: "ARGUMENT", headSha: "b".repeat(40)});
+    const nosha = await k.runAcceptance({distro: "Ubuntu"}, mkDeps({git: {headSha: null, dirty: null}}).deps); expect(nosha.verdict).toBe("NOT_ACCEPTED"); expect(nosha.reasons).toEqual(["HEAD_SHA_UNKNOWN", "DIRTY_UNKNOWN"]); expect(nosha.repo.shaSource).toBe("UNKNOWN");
+    const arg = await k.runAcceptance({distro: "Ubuntu", shaArg: "b".repeat(40)}, mkDeps({git: {headSha: null, dirty: null}}).deps); expect(arg.verdict).toBe("NOT_ACCEPTED"); expect(arg.reasons).toEqual(["SHA_UNVERIFIED", "DIRTY_UNKNOWN"]); expect(arg.repo).toMatchObject({shaSource: "ARGUMENT", headSha: "b".repeat(40)});
+    // C-2: kirli ağaç, bilinmeyen kirlilik ve --sha ile temiz-bilinmeyen = ACCEPTED OLAMAZ; yalnız GIT + temiz ACCEPTED
+    const dirty = await k.runAcceptance({distro: "Ubuntu"}, mkDeps({git: {headSha: "a".repeat(40), dirty: true}}).deps); expect(dirty.verdict).toBe("NOT_ACCEPTED"); expect(dirty.reasons).toEqual(["DIRTY_TREE"]);
+    const unk = await k.runAcceptance({distro: "Ubuntu"}, mkDeps({git: {headSha: "a".repeat(40), dirty: null}}).deps); expect(unk.verdict).toBe("NOT_ACCEPTED"); expect(unk.reasons).toEqual(["DIRTY_UNKNOWN"]);
+    const clean = await k.runAcceptance({distro: "Ubuntu"}, mkDeps({git: {headSha: "a".repeat(40), dirty: false}}).deps); expect(clean.verdict).toBe("ACCEPTED"); expect(clean.reasons).toEqual([]);
   });
 
   it("table: one line per check, the fix block, and the SKIP-is-never-PASS verdict line; argument parsing is strict", async () => {

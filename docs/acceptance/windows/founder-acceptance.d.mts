@@ -9,7 +9,7 @@ export function parseWslConf(text: string): {interopEnabled: boolean; appendWind
 export function wslConfFixCommands(distro: string): string;
 export function preflight(distro: string | null, deps: any): Promise<any[]>;
 export function mapVitestJson(json: unknown): any[];
-export function verdictOf(checks: any[], sha: string | null): any;
+export function verdictOf(checks: any[], sha: string | null, repo?: {shaSource: string; dirty: boolean | null}): any;
 export function renderTable(report: any): string;
 export function runAcceptance(o: any, deps: any): Promise<any>;
 export function sha256File(f: string): string | null;

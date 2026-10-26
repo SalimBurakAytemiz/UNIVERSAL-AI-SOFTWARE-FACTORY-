@@ -121,9 +121,11 @@ export function mapVitestJson(json) {
 }
 
 export function sha256File(f) { try { return crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex"); } catch { return null; } }
-export function verdictOf(checks, sha) {
+/** C-2: kanıt yalnız git'ten okunan, TEMİZ çalışma ağacındaki HEAD için ACCEPTED olabilir (kirli/bilinmeyen ağaç veya --sha argümanı = NOT_ACCEPTED). repo: {shaSource, dirty}. */
+export function verdictOf(checks, sha, repo = {shaSource: "UNKNOWN", dirty: null}) {
   const fails = checks.filter(c => c.status === FAIL), skips = checks.filter(c => c.status === SKIP);
-  const reasons = [...fails.map(c => `FAIL:${c.id}`), ...skips.map(c => `SKIP:${c.id}`), ...(sha ? [] : ["HEAD_SHA_UNKNOWN"])];
+  const reasons = [...fails.map(c => `FAIL:${c.id}`), ...skips.map(c => `SKIP:${c.id}`), ...(sha ? [] : ["HEAD_SHA_UNKNOWN"]),
+    ...(sha && repo.shaSource !== "GIT" ? ["SHA_UNVERIFIED"] : []), ...(repo.dirty === true ? ["DIRTY_TREE"] : repo.dirty === false ? [] : ["DIRTY_UNKNOWN"])];
   return {verdict: reasons.length === 0 ? "ACCEPTED" : "NOT_ACCEPTED", reasons, pass: checks.filter(c => c.status === PASS).length, fail: fails.length, skip: skips.length};
 }
 export function renderTable(report) {
@@ -146,9 +148,10 @@ export async function runAcceptance(o, deps) {
   else checks.push(...mapVitestJson(await deps.runVitest(distro)));
   const git = deps.git();
   const sha = git.headSha ?? o.shaArg ?? null;
-  const v = verdictOf(checks, sha);
+  const shaSource = git.headSha ? "GIT" : o.shaArg ? "ARGUMENT" : "UNKNOWN";
+  const v = verdictOf(checks, sha, {shaSource, dirty: git.dirty ?? null});
   const body = {schemaVersion: 1, kit: "founder-acceptance-windows", generatedAt: deps.now(), host: {platform: deps.platform, arch: os.arch(), node: process.version, release: os.release()},
-    repo: {headSha: sha, shaSource: git.headSha ? "GIT" : o.shaArg ? "ARGUMENT" : "UNKNOWN", dirty: git.dirty}, files: {script: deps.scriptSha256 ?? null, test: deps.testSha256 ?? null}, distro, checks, ...v};
+    repo: {headSha: sha, shaSource, dirty: git.dirty}, files: {script: deps.scriptSha256 ?? null, test: deps.testSha256 ?? null}, distro, checks, ...v};
   const evidenceSha256 = crypto.createHash("sha256").update(JSON.stringify(body)).digest("hex");
   return {...body, evidenceSha256};
 }
