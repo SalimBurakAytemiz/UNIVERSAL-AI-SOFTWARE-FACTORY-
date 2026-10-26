@@ -1,4 +1,4 @@
-// //TR: Bu betik gerçek Electron masaüstü uygulamasını (Playwright _electron) geçici veri dizini ve FAKE yürütücü ile sürer: fikir -> intake (web-node) -> plan -> görev -> koşu -> teslim. Her adımda ekrandaki durum doğrulanır ve ekran görüntüsü alınır; GATED_4B adımlar dürüstçe "etkin değil" görünmelidir. Gerçek Claude ve ağ yoktur. Çıkış kodu: 0 = tüm planlı adımlar geçti (NOT_VERIFIED:GATED_4B olabilir), 1 = bir adım ya da başlatma başarısız, 3 = BLOCKED (yalnız HİÇBİR ŞEY başlatılmadan önce denetlenen ön koşul eksik: Playwright, Electron binary'si ya da ekran; PASS sayılmaz), 4 = --require-post-4b iken NOT_VERIFIED ya da NOT_EXECUTED (rotası bu masaüstü derlemesinde kayıtlı/izinli olmadığı için NEDENİYLE çalıştırılamayan) adım var. 20 planlı adım sabit paydadır; planlı ama hiç çalışmayan adım NOT_REACHED sayılır (sonuç FAIL:INCOMPLETE). Son adım (request-ledger) sunucunun istek günlüğünü TÜM yolculuk için sayar. Batch 4b öncesi/sonrası: gerçek main.mjs allow-list'i uygulama içinden yoklanır (detect-routes). Kullanım: node scripts/e2e/desktop-journey.e2e.mjs [--out <dizin>] [--require-post-4b] (Linux başsız ortam: xvfb-run -a node ...).
+// //TR: Bu betik gerçek Electron masaüstü uygulamasını (Playwright _electron) geçici veri dizini ve FAKE yürütücü ile sürer: fikir -> intake (web-node) -> plan -> görev -> koşu -> teslim. Her adımda ekrandaki durum doğrulanır ve ekran görüntüsü alınır; GATED_4B adımlar dürüstçe "etkin değil" görünmelidir. Gerçek Claude ve ağ yoktur. Çıkış kodu: 0 = tüm planlı adımlar geçti (NOT_VERIFIED:GATED_4B olabilir), 1 = bir adım ya da başlatma başarısız, 3 = BLOCKED (yalnız HİÇBİR ŞEY başlatılmadan önce denetlenen ön koşul eksik: Playwright, Electron binary'si ya da ekran; PASS sayılmaz), 4 = --require-post-4b iken NOT_VERIFIED ya da NOT_EXECUTED (rotası bu masaüstü derlemesinde kayıtlı/izinli olmadığı için NEDENİYLE çalıştırılamayan) adım var. 21 planlı adım sabit paydadır; planlı ama hiç çalışmayan adım NOT_REACHED sayılır (sonuç FAIL:INCOMPLETE). Son adım (request-ledger) sunucunun istek günlüğünü TÜM yolculuk için sayar. Batch 4b öncesi/sonrası: gerçek main.mjs allow-list'i uygulama içinden yoklanır (detect-routes). Kullanım: node scripts/e2e/desktop-journey.e2e.mjs [--out <dizin>] [--require-post-4b] (Linux başsız ortam: xvfb-run -a node ...).
 import {spawn} from "node:child_process";
 import {createRequire} from "node:module";
 import crypto from "node:crypto";
@@ -414,12 +414,14 @@ async function runSteps() {
     must(await statusOf() === "IN_PROGRESS", `the server's task status is ${await statusOf()} after a refused confirmation`);
     // Done, confirmed
     await win.click("#taskst-DONE"); await confirmDialog("mark task done");
+    await waitSel("#task-status-status[data-result='ok']", 20000);
     await waitFn(() => !document.querySelector("#task-status [data-task-to]") && !!document.querySelector("#task-status [data-taskst-note='terminal']"), null, 20000, "the Done task shows the terminal note and no status button at all (a done task is not reopened)");
     must(await statusOf() === "DONE", `the server's task status is ${await statusOf()}, not DONE`);
     expectCount("transition requests after Done (start + done)", await requestCount("POST", transitionRe), before + 2);
     const posted = ((await serverGet("/__e2e/requests"))?.requests ?? []).filter(r => r.method === "POST" && transitionRe.test(r.url));
     must(posted.length === before + 2 && posted.every(r => r.status >= 200 && r.status < 300), `transition request statuses: ${JSON.stringify(posted.map(r => r.status))}`);
     const missionStatus = (await serverGet(`/v1/missions/${await missionIdOf()}`))?.mission?.status ?? null;
+    must(missionStatus, "the server returned no mission status");
     must(missionStatus !== "COMPLETE", `a Done task made the mission ${missionStatus}`);
     return `task ${tid}: PENDING -> IN_PROGRESS -> (Done refused: no request) -> DONE (server confirms; ${posted.length} transition requests, all 2xx); mission stays ${missionStatus}`;
   });
@@ -508,7 +510,7 @@ async function runSteps() {
     const unknown = await raw("/__e2e/seed-stuck-artefact", {method: "POST", headers: {"content-type": "application/json", "x-uasco-control-token": apiToken}, body: JSON.stringify({missionId: "msn_" + "0".repeat(24)})});
     must(unknown === 404, `seeding an unknown mission answered ${unknown}, expected 404`);
     const zeros = [gated ? "analysis step, approve" : null, "plan", gatedProduct ? "product start" : null].filter(Boolean);
-    return `journey mission/run only: analysis step ${n("POST", stepRe(mid))}, approve ${n("POST", approveRe)}, plan ${n("POST", planRe(mid))}, product start ${n("POST", startRe)}; positive control: 1 accepted delivery, ${n("POST", runsRe)} run start(s); control routes: 403 without a token, 404 for an unknown mission${gated || gatedProduct ? `; NOT evidence in this mode: the zeros for ${zeros.join(" / ")} (the desktop cannot send those requests while their routes are not admitted); plan == 0 is a negative guard that only a post-4b run can falsify` : "; plan == 0 is a negative guard (falsified only by a planted plan request)"}`;
+    return `journey mission/run only: analysis step ${n("POST", stepRe(mid))}, approve ${n("POST", approveRe)}, plan ${n("POST", planRe(mid))}, product start ${n("POST", startRe)}; positive control: 1 accepted delivery, ${n("POST", runsRe)} run start(s), ${taskTransitions.length} task transitions (all 2xx); control routes: 403 without a token, 404 for an unknown mission${gated || gatedProduct ? `; NOT evidence in this mode: the zeros for ${zeros.join(" / ")} (the desktop cannot send those requests while their routes are not admitted); plan == 0 is a negative guard that only a post-4b run can falsify` : "; plan == 0 is a negative guard (falsified only by a planted plan request)"}`;
   });
 }
 await main();

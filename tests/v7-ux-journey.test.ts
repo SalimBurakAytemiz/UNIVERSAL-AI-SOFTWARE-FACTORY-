@@ -1748,8 +1748,9 @@ describe("LANE-A A-FLOW-TASK-1: the task status step of the first-delivery flow 
     expect(res).toMatchObject({ok: false, status: 423});
     expect(s.calls.post.at(-1)).toMatchObject({status: 423});
     expect((await taskOnServer(s.app, o.task.taskId)).status).toBe("BLOCKED"); // unchanged
-    const shown = text(byId(await (await load("views", "work.js")).render(s.ctx), "task-status")!);
-    expect(shown).not.toContain("moved to Pending");
+    const rendered = await (await load("views", "work.js")).render(s.ctx);
+    expect(byId(rendered, "task-status-status")!.dataset.result).toBe("error"); // the view shows a failure
+    expect(text(byId(rendered, "task-status")!)).not.toContain("moved to Pending");
     expect(s.calls.refresh).toBe(refresh0 + 1);
   });
 });
