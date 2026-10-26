@@ -46,7 +46,7 @@ export async function submitAnalysisPlan(ctx,missionId){
 /** "rol:KOD" ya da "KOD:ayrıntı" -> okunur metin; bilinmeyen kod ham ve "tanınmadı" notuyla. */
 export function blockerText(ctx,code){
   const m=/^(implementer|reviewer):(.+)$/.exec(code),role=m?m[1]:null,c=m?m[2]:code,i=c.indexOf(":"),head=i<0?c:c.slice(0,i),detail=i<0?null:c.slice(i+1);
-  const v=tOr(ctx,`run.reason.${head}`,null)??tOr(ctx,`analysis.blocker.${head}`,null);
+  const v=tOr(ctx,`analysis.blocker.${head}`,null); // analize özgü metinler (koşu metinleri "koşu başlamadı" der, analiz için yanlıştır)
   const base=v===null?`${c} (${ctx.t("analysis.unrecognised")})`:detail?`${v} (${detail.slice(0,80)})`:v;
   return role?`${ctx.t(`exec.profile.role.${role}`)}: ${base}`:base;
 }
@@ -90,7 +90,9 @@ function planBlock(ctx,plan){
     h(doc,"ol",{"aria-label":ctx.t("analysis.trace.title"),class:"analysis-trace"},plan.trace.map(t=>h(doc,"li",{dataset:{traceTask:t.workPackageId}},
       h(doc,"strong",{class:"mono",text:t.workPackageId})," ",h(doc,"span",{class:"note",text:ctx.t("analysis.trace.estimate",{estimate:t.estimate})}),
       t.requirements.length?h(doc,"ul",{},t.requirements.map(r=>h(doc,"li",{dataset:{traceReq:r.id}},h(doc,"span",{class:"mono",text:r.id})," ",h(doc,"span",{text:r.statement}),
-        r.acceptanceCriteria.length?h(doc,"ul",{},r.acceptanceCriteria.map(c=>h(doc,"li",{dataset:{traceCriterion:"1"},text:c}))):null))):h(doc,"p",{class:"note",dataset:{traceNone:"1"},text:ctx.t("analysis.trace.none")})))));
+        r.acceptanceCriteria.length?h(doc,"ul",{},r.acceptanceCriteria.map(c=>h(doc,"li",{dataset:{traceCriterion:"1"},text:c}))):null,
+        r.hiddenCriteria>0?h(doc,"p",{class:"note",dataset:{traceHidden:"criteria"},text:ctx.t("analysis.trace.more",{n:String(r.hiddenCriteria)})}):null))):h(doc,"p",{class:"note",dataset:{traceNone:"1"},text:ctx.t("analysis.trace.none")}),
+      t.hiddenRequirements>0?h(doc,"p",{class:"note",dataset:{traceHidden:"requirements"},text:ctx.t("analysis.trace.more",{n:String(t.hiddenRequirements)})}):null))));
 }
 /** exec: ctx.api.executors() sonucu (giriş komutu için); null olabilir. */
 export function analysisPanel(ctx,{missionId,exec}){

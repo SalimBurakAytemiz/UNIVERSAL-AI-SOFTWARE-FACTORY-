@@ -653,7 +653,7 @@ describe("LANE-A pre-dev decisions — pure core", () => {
     expect(cls(refuse(undefined, 404, "WORKOS_NOT_FOUND"))).toEqual({kind: "NOT_FOUND"});
     expect(cls({status: 404, body: {}})).toEqual({kind: "NOT_ENABLED"});
     expect(cls({status: 501, body: {}})).toEqual({kind: "NOT_ENABLED"});
-    expect(cls({status: 403, body: {error: "FORBIDDEN"}})).toEqual({kind: "NOT_ENABLED"});
+    expect(cls({status: 403, body: {error: "FORBIDDEN"}})).toEqual({kind: "FAILED"}); // a token/auth 403 is an auth error, never "the desktop shell does not allow it"
     expect(cls({thrown: true, state: "ERROR", message: "INVALID_API_PATH"})).toEqual({kind: "NOT_ENABLED"});
     for (const res of [null, undefined, {thrown: true, state: "OFFLINE", message: "fetch failed"}, {status: 403, body: {error: "ACTION_DENIED", reason: "NO"}}, {status: 423, body: {error: "GLOBAL_STOP_ACTIVE"}}, {status: 400, body: {error: "INVALID_BODY"}}, {status: 500, body: {}}, {status: 409, body: {error: "OTHER"}}]) expect(cls(res), JSON.stringify(res)).toEqual({kind: "FAILED"});
   });
@@ -666,6 +666,8 @@ describe("LANE-A pre-dev decisions — pure core", () => {
       [{kind: "REFUSED", reason: null, known: false}, null, "approve"], [{kind: "REFUSED", reason: "PREDEV_X", known: false}, null, "approve"], [{kind: "NOT_FOUND"}, null, "approve"], [{kind: "NOT_ENABLED"}, null, "start"], [{kind: "INVALID"}, null, "start"], [{kind: "FAILED"}, {status: 423, body: {}}, "start"]];
     for (const r of core.PREDEV_REFUSAL_REASONS) cases.push([{kind: "REFUSED", reason: r, known: true}, null, "approve"]);
     for (const [c, res, verb] of cases) { const k = core.predevStatusKey(c, res, verb); keys.add(k.key); expect(k.ok, k.key).toBe(c.kind === "RESULT"); expect(en[k.key], k.key).toBeTruthy(); expect(tr[k.key], k.key).toBeTruthy(); expect((tr[k.key].match(/\{\w+\}/g) ?? []).sort().join(), k.key).toBe((en[k.key].match(/\{\w+\}/g) ?? []).sort().join()); }
+    // LOW (review #226): a token/auth 403 is shown as an auth error, not as "the desktop shell does not allow it"
+    expect(core.predevStatusKey(core.classifyPredevPost({status: 403, body: {error: "FORBIDDEN"}}, MSN), {status: 403, body: {error: "FORBIDDEN"}}, "start")).toMatchObject({ok: false, key: "post.err.auth"});
     expect(core.predevStatusKey({kind: "REFUSED", reason: "PREDEV_X", known: false}, null, "approve")).toEqual({ok: false, key: "predev.refused.unrecognised", vars: {reason: "PREDEV_X"}});
     expect(core.predevStatusKey({kind: "RESULT", predev: phase, replayed: true}, null, "start")).toEqual({ok: true, key: "predev.started.replayed", vars: {phase: "PLANNING"}});
     // Her bilinen ret nedeni kendi kodunu metinde AYNEN taşır.
@@ -950,13 +952,17 @@ describe("LANE-A A-FLOW-5 analysis step — pure core", () => {
     const bad: any[] = [null, [], "COMPLETE", {}, {status: "DONE"}, {status: "complete"},
       draft({kind: "UxSpec"}), draft({kind: undefined}), draft({artifactId: "pda_zz"}), draft({artifactId: [A1]}), draft({version: 0}), draft({version: 1.5}), draft({version: "1"}), draft({roleId: "bad role"}), draft({roleId: undefined}), draft({next: "NOTHING"}), draft({next: undefined}),
       await_({artifactState: "APPROVED"}), await_({artifactId: "x"}), await_({kind: "Other"}), await_({next: undefined}),
-      {status: "REJECTED", kind: "Plan", reason: ""}, {status: "REJECTED", kind: "Plan", reason: "a\nb"}, {status: "REJECTED", kind: "Plan", reason: "x".repeat(301)}, {status: "REJECTED", kind: "Nope", reason: "r"},
-      {status: "BUILDER_FAILED", kind: "Plan", code: ""}, {status: "BUILDER_FAILED", kind: "Plan", code: "a\u0000b"}, {status: "BUILDER_FAILED", kind: "Plan", code: "x".repeat(121)}, {status: "BUILDER_FAILED", kind: "Plan"},
+      {status: "REJECTED", kind: "Plan", reason: ""}, {status: "REJECTED", kind: "Nope", reason: "r"},
+      {status: "BUILDER_FAILED", kind: "Plan", code: ""}, {status: "BUILDER_FAILED", kind: "Plan"},
       complete({approved: KINDS.slice(0, 3)}), complete({approved: [...KINDS, "UxSpec"]}), complete({approved: ["BusinessAnalysis", "BusinessAnalysis", "Plan", "Architecture"]}), complete({approved: ["BusinessAnalysis", "Requirements", "Plan", "UxSpec"]}), complete({approved: "all"}), complete({approved: undefined}),
-      blocked({blocker: ""}), blocked({blocker: undefined}), blocked({blockers: "x"}), blocked({blockers: [5]}), blocked({blockers: Array(21).fill("A")}), blocked({blocker: "OTHER"}), blocked({blockers: ["a\nb"], blocker: "a\nb"}),
-      blocked({blocker: "A", blockers: Array(21).fill("A")}), blocked({blocker: "A", blockers: ["A", 5]}), {status: "BUILDER_FAILED", kind: "Nope", code: "C"}, complete({approved: [...KINDS, "Plan"]})];
+      blocked({blocker: ""}), blocked({blocker: undefined}), blocked({blockers: "x"}), blocked({blockers: [5]}), blocked({blockers: Array(51).fill("A")}), blocked({blocker: "OTHER"}), 
+      blocked({blocker: "A", blockers: Array(51).fill("A")}), blocked({blocker: "A", blockers: ["A", 5]}), {status: "BUILDER_FAILED", kind: "Nope", code: "C"}, complete({approved: [...KINDS, "Plan"]})];
     for (const b of bad) expect(c.mapAnalysisStep(b), JSON.stringify(b)?.slice(0, 80)).toBeNull();
-    expect(c.mapAnalysisStep(blocked({blocker: "A", blockers: Array(20).fill("A")})).blockers).toHaveLength(20); // 20 is the limit
+    expect(c.mapAnalysisStep(blocked({blocker: "A", blockers: Array(20).fill("A")})).blockers).toHaveLength(20);
+    // LOW (review #226): the server's own text is shown, control characters become spaces and long text is cut for display only; a step is never refused for its wording
+    expect(c.mapAnalysisStep({status: "REJECTED", kind: "Plan", reason: "a\nb"})).toMatchObject({reason: "a b"});
+    expect(c.mapAnalysisStep({status: "REJECTED", kind: "Plan", reason: "x".repeat(5000)}).reason.length).toBeLessThan(5000);
+    expect(c.mapAnalysisStep(blocked({blocker: "A", blockers: Array(50).fill("A")})).blockers).toHaveLength(50); // 50 is the limit
   });
   it("classifies the HTTP answer with a consistency check between status and result: a blocked step is not a success and a 'complete' on an error status is invalid", async () => {
     const c = await load("analysis-core.js");
@@ -981,14 +987,16 @@ describe("LANE-A A-FLOW-5 analysis step — pure core", () => {
   it("maps the created plan strictly (task count, traceability task -> requirement -> acceptance criteria) and classifies refusals by their exact code", async () => {
     const c = await load("analysis-core.js");
     const ok = c.mapAnalysisPlan(plan());
-    expect(ok).toMatchObject({taskCount: 2, replayed: false}); expect(ok.trace[0]).toEqual(trace(0));
+    expect(ok).toMatchObject({taskCount: 2, replayed: false}); expect(ok.trace[0]).toEqual({...trace(0), hiddenRequirements: 0, requirements: [{...trace(0).requirements[0], hiddenCriteria: 0}]});
     expect(c.mapAnalysisPlan(plan(50)).taskCount).toBe(50);
     const bad: any[] = [null, [], {}, plan(0), plan(51), plan(2, {replayed: "no"}), plan(2, {replayed: undefined}), plan(2, {trace: [trace(0)]}), plan(2, {trace: [trace(1), trace(0)]}), plan(2, {tasks: "x"}),
-      plan(1, {trace: [trace(0, {workPackageId: "bad id"})]}), plan(1, {trace: [trace(0, {estimate: ""})]}), plan(1, {trace: [trace(0, {satisfies: "FR-1"})]}), plan(1, {trace: [trace(0, {satisfies: [5]})]}),
-      plan(1, {trace: [trace(0, {requirements: [{id: "FR 1", statement: "s", acceptanceCriteria: []}]})]}), plan(1, {trace: [trace(0, {requirements: [{id: "FR-1", statement: "", acceptanceCriteria: []}]})]}),
-      plan(1, {trace: [trace(0, {requirements: [{id: "FR-1", statement: "s", acceptanceCriteria: [""]}]})]}), plan(1, {trace: [trace(0, {requirements: [{id: "FR-1", statement: "s", acceptanceCriteria: "x"}]})]}), plan(1, {trace: [null]}),
-      plan(1, {trace: [trace(0, {requirements: [{id: "FR-1", statement: "s", acceptanceCriteria: Array(21).fill("c")}]})]})];
+      plan(1, {trace: [trace(0, {estimate: ""})]}), plan(1, {trace: [trace(0, {satisfies: "FR-1"})]}), plan(1, {trace: [trace(0, {satisfies: [5]})]}),
+      plan(1, {trace: [trace(0, {requirements: [{id: "FR-1", statement: "", acceptanceCriteria: []}]})]}),
+      plan(1, {trace: [trace(0, {requirements: [{id: "FR-1", statement: "s", acceptanceCriteria: [""]}]})]}), plan(1, {trace: [trace(0, {requirements: [{id: "FR-1", statement: "s", acceptanceCriteria: "x"}]})]}), plan(1, {trace: [null]})];
     expect(c.mapAnalysisPlan(plan(1, {trace: [trace(0, {requirements: [{id: "FR-1", statement: "s", acceptanceCriteria: Array(20).fill("c")}]})]})).trace[0].requirements[0].acceptanceCriteria).toHaveLength(20);
+    // LOW (review #226): a plan the server's validators accept (any non-empty ids / statements / criteria, no length caps, up to 50 tasks) is shown, never "could not be read"
+    const lane = c.mapAnalysisPlan(plan(1, {trace: [trace(0, {workPackageId: "WP 1 / signup", requirements: [{id: "FR 1", statement: "s".repeat(5000), acceptanceCriteria: Array(300).fill("c")}]})]}));
+    expect(lane).not.toBeNull(); expect(lane.trace[0].workPackageId).toBe("WP 1 / signup"); expect(lane.trace[0].requirements[0].acceptanceCriteria).toHaveLength(200); expect(lane.trace[0].requirements[0].hiddenCriteria).toBe(100); expect(lane.trace[0].requirements[0].statement.length).toBeLessThan(5000);
     for (const b of bad) expect(c.mapAnalysisPlan(b), JSON.stringify(b)?.slice(0, 80)).toBeNull();
     expect(c.mapAnalysisPlan(plan(1, {trace: [trace(0, {requirements: []})]})).trace[0].requirements).toEqual([]); // a task without a requirement is shown as such
     const R = (status: number, body: any) => c.classifyAnalysisPlan({status, body});
@@ -997,6 +1005,15 @@ describe("LANE-A A-FLOW-5 analysis step — pure core", () => {
     expect(R(409, {error: "plan cycle!"}).kind).toBe("FAILED"); expect(R(409, {}).kind).toBe("FAILED");
     expect(R(423, {}).kind).toBe("STOPPED"); expect(R(403, {}).kind).toBe("DENIED"); expect(R(404, {error: "WORKOS_NOT_FOUND"}).kind).toBe("NOT_FOUND"); expect(R(404, {}).kind).toBe("NOT_ENABLED"); expect(R(500, {}).kind).toBe("FAILED");
     expect(c.classifyAnalysisPlan({thrown: true, message: "INVALID_API_PATH"}).kind).toBe("NOT_ENABLED"); expect(c.classifyAnalysisPlan(null).kind).toBe("FAILED");
+    // M1 (review #226): the server's own 404 codes mean "this mission/project is unknown", never "the step is not enabled"
+    for (const code of ["ANALYSIS_MISSION_NOT_FOUND", "ANALYSIS_PROJECT_NOT_FOUND", "WORKOS_NOT_FOUND"]) {
+      expect(R(404, {error: code}).kind, `plan ${code}`).toBe("NOT_FOUND"); expect(c.classifyAnalysisStep({status: 404, body: {error: code}}).kind, `step ${code}`).toBe("NOT_FOUND");
+    }
+    expect(R(404, {error: "SOMETHING_ELSE"}).kind).toBe("NOT_ENABLED"); expect(c.classifyAnalysisStep({status: 404, body: {error: "SOMETHING_ELSE"}}).kind).toBe("NOT_ENABLED");
+    expect(c.analysisStatusKey({kind: "NOT_FOUND"}, {}, "step").key).toBe("analysis.notFound");
+    // LOW (review #226): a 403 ACTION_DENIED shows the server's reason; a token 403 is an auth error
+    expect(c.analysisStatusKey({kind: "DENIED"}, {status: 403, body: {error: "ACTION_DENIED", reason: "NO_PERMISSION"}}, "step")).toMatchObject({ok: false, key: "post.err.denied", vars: {reason: "NO_PERMISSION"}});
+    expect(c.analysisStatusKey({kind: "DENIED"}, {status: 403, body: {error: "FORBIDDEN"}}, "plan")).toMatchObject({ok: false, key: "post.err.auth"});
     const k = (cl: any, res: any = {}, verb = "step") => c.analysisStatusKey(cl, res, verb);
     expect(k({kind: "STEP", step: {status: "COMPLETE"}})).toMatchObject({ok: true, key: "analysis.step.COMPLETE"});
     for (const st of ["BLOCKED", "REJECTED", "BUILDER_FAILED"]) expect(k({kind: "STEP", step: {status: st, kind: "Plan"}}).ok, st).toBe(false);
@@ -1064,8 +1081,9 @@ describe("LANE-A A-FLOW-5 analysis step — view (Journey)", () => {
     const items = allData(blk, "analysisBlocker").map(n => [n.dataset.analysisBlocker, n.textContent]);
     expect(items.map(i => i[0])).toEqual(answer.body.blockers);
     expect(items[0][1]).toContain("npm .cmd/.bat launcher");
-    expect(items[1][1]).toContain("Implementer profile: the UASCO Claude profile is not signed in");
-    expect(items[2][1]).toContain("Reviewer profile (read-only): the UASCO Claude profile folder was refused"); expect(items[2][1]).toContain("(SETTINGS_NOT_WRITTEN)");
+    expect(items[1][1]).toContain("Implementer profile: This UASCO Claude profile is not signed in");
+    for (const it of items) expect(it[1], "analysis text, not run text").not.toMatch(/nothing was started|no run|run will/i); // LOW (review #226): analysis blockers never use the run wording
+    expect(items[2][1]).toContain("Reviewer profile (read-only): This UASCO Claude profile folder was refused"); expect(items[2][1]).toContain("(SETTINGS_NOT_WRITTEN)");
     expect(items[3][1]).toContain("not bound to an executable profile"); expect(items[3][1]).toContain("(UASCO-0300 unbound)");
     expect(items[4][1]).toBe("BRAND_NEW (not recognised)");
     expect(blk.textContent).not.toMatch(/claude\.cmd|C:\\Users/); // the server's free text and paths are never shown
@@ -1191,7 +1209,8 @@ describe("LANE-A A-FLOW-5 analysis step — view (Journey)", () => {
   it("is present in English and Turkish with the same keys; no analysis text is a raw key", async () => {
     const en = await load("locales", "en.js"), tr = await load("locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
     const keys = Object.keys(E).filter(k => k.startsWith("analysis."));
-    expect(keys.length).toBe(37);
+    expect(keys.length).toBe(48);
+    for (const h of ["CLAUDE_CLI_NOT_FOUND", "CLAUDE_CLI_SHIM_UNSUPPORTED", "PROVIDER_PROVENANCE_NOT_READY", "CLAUDE_PACKAGE_PROVENANCE_REQUIRED", "CLAUDE_LAUNCHER_PROVENANCE_CHANGED", "CLAUDE_PROFILE_LOGIN_REQUIRED", "CLAUDE_PROFILE_LOGIN_EXPIRED", "CLAUDE_PROFILE_REFUSED", "PROVENANCE_MISSING"]) expect(E[`analysis.blocker.${h}`], h).toBeTruthy();
     for (const k of keys) { expect(T[k], k).toBeTruthy(); expect(E[k], k).not.toBe(k); }
     const b = await open({status: 200, body: {status: "COMPLETE", approved: KINDS}}); const r = await press(b, "analysis-step-submit");
     expect(block(r).textContent).not.toMatch(/analysis\.[a-z]/);

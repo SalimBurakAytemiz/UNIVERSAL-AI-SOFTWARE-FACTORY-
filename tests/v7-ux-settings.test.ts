@@ -656,6 +656,7 @@ describe("LANE-A A-SETUP-1: 'Ready to build?' setup check (read-only, only what 
     expect(await ex({reason: "LOCAL_CLAUDE"}, "NOT_CONFIGURED")).toMatchObject({state: "PASS"}); // the server's own active executor wins
     expect(await ex(undefined, "NOT_CONFIGURED")).toMatchObject({state: "BLOCKED", reasons: ["EXECUTOR_NOT_ENABLED"]}); // no active field: the state decides
     expect(await ex(undefined, "PROVENANCE_MISSING")).toMatchObject({state: "BLOCKED", reasons: ["EXECUTOR_NOT_ENABLED"]});
+    expect(await ex({reason: "PROVENANCE_MISSING"}, "PROVENANCE_MISSING")).toMatchObject({state: "BLOCKED", reasons: ["PROVENANCE_MISSING"]}); // LOW (review #226): the server's own reason, with its own text (key exists en+tr, below)
     expect(await ex(undefined, "READY")).toMatchObject({state: "UNKNOWN", reasons: ["ACTIVE_EXECUTOR_NOT_REPORTED"]});
     const none = (await rowsOf({executors: {FAKE: {state: "TEST_ONLY"}}, sandbox: {state: "AVAILABLE", providerId: "x"}})).EXECUTOR;
     expect(none).toMatchObject({state: "UNKNOWN", reasons: ["EXECUTOR_STATUS_NOT_REPORTED"]});
@@ -767,7 +768,7 @@ describe("LANE-A A-SETUP-1: 'Ready to build?' setup check (read-only, only what 
     expect(new Set(calls)).toEqual(new Set(["/health", "/v1/adapters", "/v1/capabilities", "/v1/control/status", "/v1/factory", "/v1/system/executors"]));
     const en = await load("locales", "en.js"), tr = await load("locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
     const keys = Object.keys(E).filter(k => k.startsWith("setup."));
-    expect(keys.length).toBe(48);
+    expect(keys.length).toBe(49); expect(E["setup.reason.PROVENANCE_MISSING"]).toBeTruthy();
     for (const k of keys) expect(T[k], k).toBeTruthy();
     const trRoot = await panelFor(body(), "tr");
     expect(text(rowNode(trRoot, "CLI"))).toContain("Claude CLI (yerel kurulum)"); expect(text(trRoot)).toContain("Windows kabul denetimi");

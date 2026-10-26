@@ -212,16 +212,24 @@ export function mapRunProduct(raw,runId){
   const d=mapDevRun(isObj(x.devrun)?{devrun:x.devrun}:null);
   if(d.state!=="VERIFIED")return bad;
   if(x.tiedToThisRun!==(d.run.deliveryRunId===runId))return bad;
-  return {state:"VERIFIED",product:{runId,deliveredHeadSha:head,tiedToThisRun:x.tiedToThisRun,run:d.run}};
+  // //TR: sunucu ürün kaydına `deliverable` ({ok:boolean, reason?:kod}) eklerse o okunur; biçim bozuksa tüm okuma ERROR (yarım güvenle başlatma sunulmaz). Yoksa null.
+  let deliverable=null;
+  if(Object.hasOwn(x,"deliverable")){
+    const dv=x.deliverable;
+    if(!isObj(dv)||typeof dv.ok!=="boolean"||!(dv.reason===undefined||dv.reason===null||(typeof dv.reason==="string"&&/^[A-Z][A-Z0-9_:]{0,79}$/.test(dv.reason))))return bad;
+    deliverable={ok:dv.ok,reason:typeof dv.reason==="string"?dv.reason:null};
+  }
+  return {state:"VERIFIED",product:{runId,deliveredHeadSha:head,tiedToThisRun:x.tiedToThisRun,deliverable,run:d.run}};
 }
-/** //TR: "Ürünü başlat" YALNIZ akışın DELIVERY aşaması sunucuda DONE, teslim edilen commit biliniyor ve durum başlatmaya izin veriyorsa; "Durdur" YALNIZ bu teslimin kendi çalışan ürünü için (başka teslimin ürününü bu düğme kapatmaz); yerel adres YALNIZ bu teslime bağlı, RUNNING, bridged=true ve önizleme AVAILABLE iken. DONE ürünün doğrulandığı anlamına gelmez. */
-export function productOffer(product,flow){
-  const stages=flow&&Array.isArray(flow.stages)?flow.stages:[];
-  const deliveryDone=stages.some(s=>s&&s.stage==="DELIVERY"&&s.state==="DONE");
+/** //TR: "Ürünü başlat" YALNIZ bu teslim ürünü çalıştırılabilirse sunulur. Koşul B-RUN-1 route'unun KENDİ koşuludur (routes/product-run.ts `deliverable`): kaynak üretimi SOURCE_GENERATION_COMPLETE ve 40 hex teslim commit'i. DELIVERY aşamasının DONE olması BEKLENMEZ: DONE yalnızca PRODUCT_VERIFIED demektir (flow.ts, outcomes.ts), oysa kabul edilmiş NOT_VERIFIED bir kaynak teslimi de çalıştırılabilir. Kaynak: ürün kaydındaki `deliverable` alanı varsa o ({ok:boolean}); yoksa sunucunun koşu teslim görünümü (delivery.sourceGeneration.state) + ürün kaydının deliveredHeadSha'sı. İkisi de okunamıyorsa başlatma sunulmaz (UNKNOWN). "Durdur" YALNIZ bu teslimin kendi çalışan ürünü için (başka teslimin ürününü bu düğme kapatmaz); yerel adres YALNIZ bu teslime bağlı, RUNNING, bridged=true ve önizleme AVAILABLE iken. Çalışıyor olmak ürünün doğrulandığı anlamına gelmez. */
+export function productOffer(product,delivery){
   const run=product.run,a=devRunActions(run.status),hasCommit=product.deliveredHeadSha!==null;
+  let deliverable=null; // true | false | null (bilinmiyor)
+  if(product.deliverable!==null&&product.deliverable!==undefined)deliverable=product.deliverable.ok===true&&hasCommit;
+  else if(delivery&&delivery.sourceGeneration&&typeof delivery.sourceGeneration.state==="string")deliverable=delivery.sourceGeneration.state==="SOURCE_GENERATION_COMPLETE"&&hasCommit;
   const otherRunning=!product.tiedToThisRun&&(run.status==="STARTING"||run.status==="RUNNING");
-  return {deliveryDone,hasCommit,otherRunning,
-    start:deliveryDone&&hasCommit&&!otherRunning&&a.start,
+  return {deliverable,hasCommit,otherRunning,
+    start:deliverable===true&&!otherRunning&&a.start,
     stop:product.tiedToThisRun&&a.stop,
     open:product.tiedToThisRun&&run.status==="RUNNING"&&run.bridged===true&&previewOpenable(run)};
 }

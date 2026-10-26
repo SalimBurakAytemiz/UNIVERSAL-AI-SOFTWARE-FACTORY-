@@ -75,7 +75,6 @@ export function classifyPredevPost(res,missionId){
   }
   if(s===404&&err==="WORKOS_NOT_FOUND")return {kind:"NOT_FOUND"};
   if(s===404||s===501)return {kind:"NOT_ENABLED"};
-  if(s===403&&err!=="ACTION_DENIED")return {kind:"NOT_ENABLED"};
   return {kind:"FAILED"};
 }
 /** Sınıfı form durum anahtarına çevirir: {ok,key,vars}; yalnız sunucunun bildirdiği sonuç/neden söylenir. `verb` start|approve|reject. */

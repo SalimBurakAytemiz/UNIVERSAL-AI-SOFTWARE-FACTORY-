@@ -251,6 +251,9 @@ describe("B5 form request builders", () => {
     expect(d(400).key).toBe("post.err.400");
     expect(d(404).key).toBe("post.err.unavailable");
     expect(d(500).key).toBe("post.err.generic");
+    // LOW (review #226): #222 PROJECT_REPOSITORY_INIT_FAILED (HTTP 500) has its own text, in en and tr
+    expect(d(500, "PROJECT_REPOSITORY_INIT_FAILED")).toMatchObject({ok: false, key: "post.err.500.PROJECT_REPOSITORY_INIT_FAILED"});
+    expect(en["post.err.500.PROJECT_REPOSITORY_INIT_FAILED"]).toMatch(/repository/i); expect(tr["post.err.500.PROJECT_REPOSITORY_INIT_FAILED"]).toMatch(/depo/i);
     expect(c.describePostResult({thrown: true, state: "OFFLINE"}).key).toBe("post.err.offline");
     expect(c.describePostResult({thrown: true, state: "ERROR"}).key).toBe("post.err.generic");
     expect(c.describePostResult(null).ok).toBe(false);
@@ -2446,6 +2449,9 @@ describe("LANE-A A-FLOW-3: the run step tells the truth about who does the work"
     expect(miss.dataset.engineProfileState).toBe("MISSING"); expect(text(miss)).toContain("did not report this profile");
     const n = await render(execBody({active: {reason: "EXECUTOR_NOT_CONFIGURED"}}));
     expect(n.eng!.dataset.runEngine).toBe("BLOCKED"); expect(text(all(n.eng!).find(x => x.dataset.engineActive)!)).toContain("no executor is enabled");
+    // LOW (review #226): the server's own PROVENANCE_MISSING has its text, not "(not recognised)"
+    const pm = await render(execBody({active: {reason: "PROVENANCE_MISSING"}}));
+    expect(pm.eng!.dataset.runEngine).toBe("BLOCKED"); expect(text(all(pm.eng!).find(x => x.dataset.engineActive)!)).toContain("provenance evidence is missing"); expect(text(all(pm.eng!).find(x => x.dataset.engineActive)!)).not.toContain("not recognised");
     const odd = await render(execBody({active: {reason: "BRAND_NEW"}}));
     expect(text(all(odd.eng!).find(x => x.dataset.engineActive)!)).toContain("BRAND_NEW (not recognised)");
   });
@@ -2543,78 +2549,94 @@ describe("LANE-A A-FLOW-3: the run step tells the truth about who does the work"
     const c = await load(rend, "work-core.js");
     expect(c.runReasonHintKey("CLAUDE_PROFILE_LOGIN_REQUIRED")).toBe("run.reason.CLAUDE_PROFILE_LOGIN_REQUIRED");
     expect(c.runReasonHintKey("EXECUTOR_NOT_CONFIGURED")).toBe("run.reason.EXECUTOR_NOT_CONFIGURED");
+    // LOW (review #226): "CODE:detail" reasons (e.g. CLAUDE_PROFILE_REFUSED:<reason>) are explained by their code; PROVENANCE_MISSING has its own text
+    expect(c.runReasonHintKey("CLAUDE_PROFILE_REFUSED:SETTINGS_NOT_WRITTEN")).toBe("run.reason.CLAUDE_PROFILE_REFUSED");
+    expect(c.runReasonHintKey("PROVENANCE_MISSING")).toBe("run.reason.PROVENANCE_MISSING"); expect(c.runReasonHintKey("SOMETHING_ELSE:X")).toBeNull();
     const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
     const keys = Object.keys(E).filter(k => k.startsWith("runengine.") || /^run\.reason\.(CLAUDE|CLI_|PROVIDER|EXECUTOR)/.test(k) || k === "runengine.role.notReady");
-    expect(keys.length).toBe(27);
+    expect(keys.length).toBe(28);
     for (const k of keys) expect(T[k], k).toBeTruthy();
+    // LOW (review #226): a refused profile with its detail (CLAUDE_PROFILE_REFUSED:<reason>) shows the code's explanation, not the bare code
+    const wk = await load(rend, "views", "work.js"), mc = await mkCtx({lang: "en"});
+    const rcard = wk.runCard(mc.ctx, {runId: "run_" + "ab".repeat(12), missionId: MID, status: "BLOCKED", reason: "CLAUDE_PROFILE_REFUSED:SETTINGS_NOT_WRITTEN", evidence: [], checkpoints: [], reviewer: null, step: null, role: null, evidenceVerification: null}) as N;
+    const rr = byData(rcard, "runReason")[0]; expect(rr.dataset.runReason).toBe("CLAUDE_PROFILE_REFUSED:SETTINGS_NOT_WRITTEN"); expect(rr.textContent).toContain(E["run.reason.CLAUDE_PROFILE_REFUSED"]);
     const t = await render(execBody({claudeProfiles: {implementer: profile("LOGIN_REQUIRED"), reviewer: profile("READY")}}), "tr");
     expect(text(t.eng!)).toContain("Bloke");
   });
 });
 
 describe("LANE-A A-FLOW-GAP-2: the test-result step of a run says what really happened (executed / failed / not executed with its reason)", () => {
+  // M2 (review #226): the row shows the SERVER's decision (GET /v1/work-runs/:id -> delivery.productVerification + testsExecuted); the client never recomputes it from the (truncated) evidence list.
   const HEAD = "a".repeat(40), RUNX = "run_" + "ab".repeat(12);
-  const ev = (kind: string, extra: any = {}) => ({evidenceId: "evd_" + "1".repeat(24), kind, commitSha: HEAD, exitCode: 0, step: "VERIFY", cycle: 0, ...extra});
-  const run = (evidence: any[] | undefined, over: any = {}) => ({runId: RUNX, missionId: MID, status: "AWAITING_APPROVAL", headSha: HEAD, ...(evidence === undefined ? {} : {evidence}), ...over});
-  const attested = (kind: string, extra: any = {}) => ev(kind, {sandboxProviderId: "linux-unshare-v2", ...extra});
-  const surface = (n: number | null, extra: any = {}) => ({kind: "TEST_SURFACE", commitSha: HEAD, testSurface: {executedTests: n, functionalAcceptance: "OK", modified: [], deleted: [], renamed: [], harness: [], weakened: [], ...extra}});
+  const run = (over: any = {}) => ({runId: RUNX, missionId: MID, status: "AWAITING_APPROVAL", headSha: HEAD, ...over});
+  const dlv = (state: string, reason: string, testsExecuted: boolean) => ({runId: RUNX, missionId: MID, status: "AWAITING_APPROVAL", sourceGeneration: {state: "SOURCE_GENERATION_COMPLETE", reason: null}, productVerification: {state, reason}, testsExecuted});
+  const detail = async (delivery: any, over: any = {}) => { const core = await load(rend, "work-core.js"); return core.mapWorkRunDetail({run: run(over), delivery, outcomes: null}).run; };
   const card = async (x: any, lang = "en") => {
     const c = await mkCtx({lang}); const core = await load(rend, "work-core.js"), work = await load(rend, "views", "work.js");
-    return {node: work.runCard(c.ctx, core.mapWorkRun(x)) as N, core};
+    return {node: work.runCard(c.ctx, x) as N, core};
   };
   const result = (n: N) => within(n).find(x => x.dataset.runTestResult) ?? null;
   const within = (n: N): N[] => [n, ...n.children.flatMap(c => within(c))];
-  const CASES: Array<[string, any[] | undefined, string, string, string]> = [
-    // name, evidence, kind, reason, text it must contain
-    ["tests ran and failed", [attested("VERIFY_TESTS", {exitCode: 1}), attested("REGRESSION_TESTS")], "FAILED", "TESTS_FAILED", "ran and at least one exited with a non-zero code"],
-    ["regression failed", [attested("VERIFY_TESTS"), attested("REGRESSION_TESTS", {exitCode: 2})], "FAILED", "TESTS_FAILED", "FAILED"],
-    ["no verified sandbox", [ev("VERIFY_TESTS_NOT_EXECUTED"), ev("REGRESSION_TESTS_NOT_EXECUTED")], "NOT_EXECUTED", "SANDBOX_UNAVAILABLE", "No verified sandbox existed, so the tests were not run"],
-    ["run never reached the tests", [ev("EXECUTOR_RUN", {step: "IMPLEMENT"})], "NOT_EXECUTED", "TESTS_NOT_REACHED", "did not reach the test step"],
-    ["tests ran without a sandbox attestation", [ev("VERIFY_TESTS"), ev("REGRESSION_TESTS"), surface(4)], "NOT_VERIFIED", "SANDBOX_ATTESTATION_MISSING", "no sandbox attested it"],
-    ["zero tests executed", [attested("VERIFY_TESTS"), attested("REGRESSION_TESTS"), surface(0)], "NOT_VERIFIED", "ZERO_TESTS_EXECUTED", "executed zero tests"],
-    ["test count unknown", [attested("VERIFY_TESTS"), attested("REGRESSION_TESTS")], "NOT_VERIFIED", "EXECUTED_TEST_COUNT_UNKNOWN", "number of executed tests is not known"],
-    ["tests were changed", [attested("VERIFY_TESTS"), attested("REGRESSION_TESTS"), surface(5, {modified: ["a.test.js"]})], "NOT_VERIFIED", "TEST_CHANGES_REQUIRE_INDEPENDENT_VERIFICATION", "tests were changed"],
-    ["test surface blocked", [attested("VERIFY_TESTS"), attested("REGRESSION_TESTS"), surface(5, {functionalAcceptance: "BLOCKED"})], "NOT_VERIFIED", "TEST_SURFACE_BLOCKED", "test surface is blocked"],
-    ["everything proven", [attested("VERIFY_TESTS"), attested("REGRESSION_TESTS"), surface(7)], "EXECUTED_VERIFIED", "TESTS_EXECUTED_IN_VERIFIED_SANDBOX", "executed in a verified sandbox"],
+  const CASES: Array<[string, any, string, string, string]> = [
+    // name, server delivery view, kind, reason, text it must contain
+    ["tests ran and failed", dlv("FAILED", "TESTS_FAILED", true), "FAILED", "TESTS_FAILED", "ran and at least one exited with a non-zero code"],
+    ["no verified sandbox", dlv("NOT_VERIFIED", "NOT_EXECUTED:SANDBOX_UNAVAILABLE", false), "NOT_EXECUTED", "SANDBOX_UNAVAILABLE", "No verified sandbox existed, so the tests were not run"],
+    ["run never reached the tests", dlv("NOT_VERIFIED", "NOT_EXECUTED:TESTS_NOT_REACHED", false), "NOT_EXECUTED", "TESTS_NOT_REACHED", "did not reach the test step"],
+    ["no commit", dlv("NOT_VERIFIED", "NOT_EXECUTED:NO_HEAD_COMMIT", false), "NOT_EXECUTED", "NO_HEAD_COMMIT", "produced no commit"],
+    ["tests ran without a sandbox attestation", dlv("NOT_VERIFIED", "SANDBOX_ATTESTATION_MISSING", true), "NOT_VERIFIED", "SANDBOX_ATTESTATION_MISSING", "no sandbox attested it"],
+    ["zero tests executed", dlv("NOT_VERIFIED", "ZERO_TESTS_EXECUTED", true), "NOT_VERIFIED", "ZERO_TESTS_EXECUTED", "executed zero tests"],
+    ["test count unknown", dlv("NOT_VERIFIED", "EXECUTED_TEST_COUNT_UNKNOWN", true), "NOT_VERIFIED", "EXECUTED_TEST_COUNT_UNKNOWN", "number of executed tests is not known"],
+    ["tests were changed", dlv("NOT_VERIFIED", "TEST_CHANGES_REQUIRE_INDEPENDENT_VERIFICATION", true), "NOT_VERIFIED", "TEST_CHANGES_REQUIRE_INDEPENDENT_VERIFICATION", "tests were changed"],
+    ["test surface blocked", dlv("NOT_VERIFIED", "TEST_SURFACE_BLOCKED", true), "NOT_VERIFIED", "TEST_SURFACE_BLOCKED", "test surface is blocked"],
+    ["everything proven", dlv("PRODUCT_VERIFIED", "TESTS_EXECUTED_IN_VERIFIED_SANDBOX", true), "EXECUTED_VERIFIED", "TESTS_EXECUTED_IN_VERIFIED_SANDBOX", "executed in a verified sandbox"],
+    // M2: the tests really ran (testsExecuted) although the run is stopped before the end; the server's NOT_EXECUTED:* wording must NOT turn into "not executed"
+    ["tests ran, server reason says not reached", dlv("NOT_VERIFIED", "NOT_EXECUTED:TESTS_NOT_REACHED", true), "NOT_VERIFIED", "TESTS_NOT_REACHED", "NOT VERIFIED"],
   ];
-  it("maps the recorded evidence to one test-result kind and reason (server rule), and a run without an evidence list is UNKNOWN, never 'not executed'", async () => {
+  it("shows the server's decision (delivery.productVerification + testsExecuted); a run without the server's delivery view is UNKNOWN, never 'not executed'", async () => {
     const core = await load(rend, "work-core.js");
-    for (const [name, evidence, kind, reason] of CASES) expect(core.testResultOf(core.mapWorkRun(run(evidence))), name).toEqual({kind, reason});
-    expect(core.testResultOf(core.mapWorkRun(run(undefined)))).toEqual({kind: "UNKNOWN", reason: null}); // list entry without evidence: nothing is claimed
-    expect(core.testResultOf(core.mapWorkRun(run([], {headSha: undefined})))).toEqual({kind: "NOT_EXECUTED", reason: "NO_HEAD_COMMIT"});
-    for (const bad of [null, undefined, {}, {evidenceVerification: null}, {evidenceVerification: {state: 5, reason: "x"}}]) expect(core.testResultOf(bad as any), String(bad)).toEqual({kind: "UNKNOWN", reason: null});
-    expect(core.testResultOf({evidenceReported: true, evidenceVerification: {state: "NOT_VERIFIED", reason: "SOMETHING_NEW"}})).toEqual({kind: "NOT_VERIFIED", reason: "SOMETHING_NEW"});
-    expect(core.testResultOf({evidenceReported: true, evidenceVerification: {state: "WEIRD", reason: "X"}})).toEqual({kind: "UNKNOWN", reason: null});
-    for (const st of ["FAILED", "NOT_VERIFIED", "PRODUCT_VERIFIED"]) expect(core.testResultOf({evidenceReported: true, evidenceVerification: {state: st, reason: 5}}), st).toEqual({kind: "UNKNOWN", reason: null}); // a non-text reason is never trusted
-    expect(core.testResultOf({evidenceReported: false, evidenceVerification: {state: "FAILED", reason: "TESTS_FAILED"}})).toEqual({kind: "UNKNOWN", reason: null});
+    for (const [name, d, kind, reason] of CASES) expect(core.testResultOf(await detail(d)), name).toEqual({kind, reason});
+    expect(core.testResultOf(core.mapWorkRun(run()))).toEqual({kind: "UNKNOWN", reason: null}); // list entry without the delivery view: nothing is claimed
+    expect(core.testResultOf(await detail(undefined))).toEqual({kind: "UNKNOWN", reason: null});
+    // M2: the evidence list is NOT consulted (the server looks at all evidence, the list is cut at 100)
+    const withEvidence = core.mapWorkRun(run({evidence: [{evidenceId: "evd_" + "1".repeat(24), kind: "VERIFY_TESTS_NOT_EXECUTED", commitSha: HEAD, exitCode: 0, step: "VERIFY", cycle: 0}]}));
+    expect(core.testResultOf(withEvidence)).toEqual({kind: "UNKNOWN", reason: null});
+    const ranButEvidenceCut = await detail(dlv("PRODUCT_VERIFIED", "TESTS_EXECUTED_IN_VERIFIED_SANDBOX", true), {evidence: []});
+    expect(core.testResultOf(ranButEvidenceCut)).toEqual({kind: "EXECUTED_VERIFIED", reason: "TESTS_EXECUTED_IN_VERIFIED_SANDBOX"});
+    for (const bad of [null, undefined, {}, {delivery: null}, {delivery: {productVerification: null}}, {delivery: {productVerification: {state: 5, reason: "x"}}}, {delivery: {productVerification: {state: "WEIRD", reason: "X"}}}]) expect(core.testResultOf(bad as any), String(bad)).toEqual({kind: "UNKNOWN", reason: null});
+    for (const st of ["FAILED", "NOT_VERIFIED", "PRODUCT_VERIFIED"]) expect(core.testResultOf({delivery: {productVerification: {state: st, reason: 5}, testsExecuted: true}}), st).toEqual({kind: "UNKNOWN", reason: null}); // a non-text reason is never trusted
+    expect(core.testResultOf({delivery: {productVerification: {state: "NOT_VERIFIED", reason: "SOMETHING_NEW"}, testsExecuted: false}})).toEqual({kind: "NOT_VERIFIED", reason: "SOMETHING_NEW"});
   });
   it("the run card shows the test result row with the exact reason code and a plain sentence for every case; the generic NOT_VERIFIED badge stays", async () => {
-    for (const [name, evidence, kind, reason, sentence] of CASES) {
-      const {node} = await card(run(evidence));
+    for (const [name, d, kind, reason, sentence] of CASES) {
+      const {node} = await card(await detail(d));
       const r = result(node)!;
       expect(r, name).not.toBeNull(); expect(r.dataset.runTestResult, name).toBe(kind); expect(r.dataset.runTestReason, name).toBe(reason);
-      expect(r.textContent, name).toContain(sentence); expect(r.textContent, name).toContain(`(${reason})`);
+      expect(r.textContent, name).toContain(sentence); expect(r.textContent, name).toContain(`(${reason}`);
       expect(within(node).some(x => x.dataset.m1aBadge === "run"), name).toBe(kind !== "EXECUTED_VERIFIED"); // the Founder-approved NOT_VERIFIED badge is unchanged
     }
-    const mk = async (state: string, reason: string) => { const c = await mkCtx({lang: "en"}); const work = await load(rend, "views", "work.js"); return result(work.runCard(c.ctx, {runId: RUNX, status: "AWAITING_APPROVAL", evidenceReported: true, evidenceVerification: {state, reason}, evidence: [], checkpoints: [], reason: null, reviewer: null, step: null, role: null}) as N)!; };
+    const mk = async (state: string, reason: string, testsExecuted = false) => { const c = await mkCtx({lang: "en"}); const work = await load(rend, "views", "work.js"); return result(work.runCard(c.ctx, await detail(dlv(state, reason, testsExecuted))) as N)!; };
     expect((await mk("NOT_VERIFIED", "SOMETHING_NEW")).textContent).toBe("The result is NOT VERIFIED. (SOMETHING_NEW — reason not recognised)");
     expect((await mk("NOT_VERIFIED", "NOT_EXECUTED:SOMETHING_NEW")).textContent).toBe("The tests were not executed. (SOMETHING_NEW — reason not recognised)");
-    const failed = result((await card(run(CASES[0][1]))).node)!;
+    const failed = result((await card(await detail(CASES[0][1]))).node)!;
     expect(failed.textContent).not.toContain("sandbox not verified"); // a failed test run is never described as a sandbox problem
   });
-  it("a card without an evidence list says the result is not reported; a failed run keeps both lines (reason and result) and nothing says 'passed' unless the rule holds", async () => {
-    const un = result((await card(run(undefined))).node)!;
+  it("a card without the server's delivery view says the result is not reported; a failed run keeps both lines (reason and result) and nothing says 'passed' unless the rule holds", async () => {
+    const core = await load(rend, "work-core.js");
+    const un = result((await card(core.mapWorkRun(run()))).node)!;
     expect(un.dataset.runTestResult).toBe("UNKNOWN"); expect(un.textContent).toContain("not reported for this run"); expect(un.textContent).not.toMatch(/not executed|passed|verified in/i);
-    const blocked = await card(run([ev("VERIFY_TESTS_NOT_EXECUTED"), ev("REGRESSION_TESTS_NOT_EXECUTED")], {status: "BLOCKED", reason: "SANDBOX_UNAVAILABLE"}));
+    const blocked = await card(await detail(dlv("NOT_VERIFIED", "NOT_EXECUTED:SANDBOX_UNAVAILABLE", false), {status: "BLOCKED", reason: "SANDBOX_UNAVAILABLE"}));
     expect(within(blocked.node).some(x => x.dataset.runReason === "SANDBOX_UNAVAILABLE")).toBe(true); expect(result(blocked.node)!.dataset.runTestResult).toBe("NOT_EXECUTED");
-    for (const [name, evidence, kind] of CASES) { if (kind !== "EXECUTED_VERIFIED") expect(result((await card(run(evidence))).node)!.textContent, name).not.toMatch(/\bpassed\b/i); }
+    // M2: a run BLOCKED at REVIEW (reviewer login required) after the tests really ran is not shown as "NOT EXECUTED"
+    const atReview = await card(await detail(dlv("NOT_VERIFIED", "NOT_EXECUTED:TESTS_NOT_REACHED", true), {status: "BLOCKED", reason: "CLAUDE_PROFILE_LOGIN_REQUIRED"}));
+    expect(result(atReview.node)!.dataset.runTestResult).toBe("NOT_VERIFIED"); expect(result(atReview.node)!.textContent).not.toMatch(/were not executed|did not reach the test step|NOT EXECUTED/);
+    for (const [name, d, kind] of CASES) { if (kind !== "EXECUTED_VERIFIED") expect(result((await card(await detail(d))).node)!.textContent, name).not.toMatch(/\bpassed\b/i); }
   });
   it("is present in English and Turkish for every kind and reason", async () => {
     const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
     const keys = Object.keys(E).filter(k => k.startsWith("run.test."));
     expect(keys.length).toBe(15);
     for (const k of keys) { expect(T[k], k).toBeTruthy(); expect(E[k], k).not.toBe(k); }
-    const tn = result((await card(run(CASES[0][1]), "tr")).node)!;
+    const tn = result((await card(await detail(CASES[0][1]), "tr")).node)!;
     expect(tn.textContent).toContain("BAŞARISIZ");
   });
 });
@@ -2640,7 +2662,7 @@ describe("LANE-A A-FLOW-GAP-2: the Journey end to end (stateful fake server, rea
       if (p.startsWith("/v1/missions?projectId=")) return {missions: S.mission ? [missionObj()] : []};
       if (S.mission && p === `/v1/missions/${IMSN}`) return {mission: missionObj(), tasks: S.tasks};
       if (p === "/v1/work-runs" || p === `/v1/work-runs?missionId=${IMSN}`) return {workRuns: S.run ? [S.run] : []};
-      if (S.run && p === `/v1/work-runs/${IRUN}`) return {workRun: S.run};
+      if (S.run && p === `/v1/work-runs/${IRUN}`) return {workRun: S.run, outcomes: null, delivery: S.delivery()}; // the server also returns its delivery view (productVerification + testsExecuted)
       if (S.run && p === `/v1/work-runs/${IRUN}/tasks`) return {links: S.links};
       if (p.startsWith("/v1/evidence")) return {evidence: []};
       if (p === `/v1/projects/${IPRJ}/readiness`) return {readiness: {projectId: IPRJ, missionId: IMSN, ready: true, verifiable: S.tasks.length > 0, checks: [
@@ -2704,7 +2726,7 @@ describe("LANE-A A-FLOW-GAP-2: the Journey end to end (stateful fake server, rea
     forms.selection.missionId = "msn_" + H("9"); byId(jr, "analysis-hand-plan")!.fire("click"); expect(c.calls.navigate).toEqual(["work"]); expect(forms.selection.missionId).toBe(IMSN); expect(srv.S.posts.length).toBe(before); // navigation only, nothing sent
     // run card: NOT_EXECUTED because of the sandbox points to the setup check
     const core = await load(rend, "work-core.js"), work = await load(rend, "views", "work.js");
-    const rc = work.runCard(c.ctx, core.mapWorkRun({...srv.S.run, evidence: [{evidenceId: "evd_" + H("1"), kind: "VERIFY_TESTS_NOT_EXECUTED", commitSha: HEAD}, {evidenceId: "evd_" + H("2"), kind: "REGRESSION_TESTS_NOT_EXECUTED", commitSha: HEAD}]}));
+    const rc = work.runCard(c.ctx, core.mapWorkRunDetail({workRun: srv.S.run, outcomes: null, delivery: srv.S.delivery()}).run);
     expect(byData(rc, "runTestResult")[0].textContent).toContain("See Settings > Ready to build?");
   });
   it("drives idea -> intake -> analysis -> plan -> mission/task -> run -> test result -> product -> delivery and records every step's status", async () => {

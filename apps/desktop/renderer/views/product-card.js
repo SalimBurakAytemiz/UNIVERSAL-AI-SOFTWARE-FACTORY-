@@ -1,7 +1,7 @@
 // //TR: Bu görünüm parçası Proje Studio Genel Bakış'taki "Çalışan ürün" kartıdır (teslimden sonra) ve B-RUN-1 sözleşmesine bağlıdır: durum GET /v1/work-runs/:id/product, başlat/durdur POST .../product/start|stop (boş gövde). Ürün YALNIZ doğrulanmış sandbox sağlayıcısında tek bir köprülü portla çalışır; sunucu reddederse (DEVRUN_SANDBOX_UNAVAILABLE + kesin neden) neden aynen gösterilir ve "ana makinede yine de çalıştır" yolu YOKTUR. Yerel adres YALNIZ bu teslime bağlı, RUNNING, bridged=true ve önizleme AVAILABLE iken gösterilir. Uç nokta masaüstü allow-list'inde yoksa dürüst UNAVAILABLE gösterilir; ürünün çalıştığı ya da doğrulandığı hiçbir koşulda varsayılmaz.
 import {h,stateNote,badge,panel} from "../components.js";
 import {drafts,statusBlock,recordPost,focusResult} from "../forms.js";
-import {buildProductRequest,productOffer,flowPath,mapFlow} from "../project-core.js";
+import {buildProductRequest,productOffer} from "../project-core.js";
 import {setTab} from "../studio-state.js";
 
 export const PRODUCT_FORM="product-run";
@@ -29,17 +29,19 @@ export async function productAction(ctx,project,runId,action){
   await ctx.api.runProduct(runId,{force:true});
   await ctx.rerender();focusResult(ctx,PRODUCT_FORM,KEYS);return {ok,status:res?.status??null};
 }
-/** run: projenin en son koşusu (ya da null). */
-export async function productCard(ctx,project,run){
+/** run: projenin en son koşusu (ya da null); runsState: koşu/mission okumasının durumu — "VERIFIED" dışındaysa kart "koşu yok" DEMEZ, okuma durumunu gösterir. */
+export async function productCard(ctx,project,run,runsState="VERIFIED"){
   const doc=ctx.doc,id="studio-ov-product",lead=h(doc,"p",{class:"note",text:ctx.t("product.lead")});
+  if(runsState!=="VERIFIED")return panel(ctx,{titleKey:"product.title",id},lead,stateNote(ctx,runsState,runsState==="UNAVAILABLE"?"product.runsUnavailable":undefined),h(doc,"p",{class:"note",dataset:{productDelivery:"RUNS_"+runsState},text:ctx.t("product.runsUnknown")}));
   if(!run)return panel(ctx,{titleKey:"product.title",id},lead,h(doc,"p",{class:"note",dataset:{productDelivery:"NO_RUN"},text:ctx.t("product.noRun")}));
-  const [prod,flowRes,exec]=await Promise.all([ctx.api.runProduct(run.runId),ctx.api.raw(flowPath(project.projectId)),ctx.api.executors()]);
+  const [prod,detail,exec]=await Promise.all([ctx.api.runProduct(run.runId),ctx.api.workRunDetail(run.runId),ctx.api.executors()]);
   if(prod.state!=="VERIFIED")return panel(ctx,{titleKey:"product.title",id},lead,stateNote(ctx,prod.state,prod.state==="UNAVAILABLE"?"product.unavailable":undefined),
     // Okuma yoksa bile Founder'ın yapabileceği tek şey: proje çalıştır sekmesi (aynı doğrulanmış sandbox kapısı sunucuda geçerli).
     h(doc,"p",{class:"note",dataset:{productNext:"RUN_TAB"},text:ctx.t("product.next.runTab")}),
     h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn",id:"product-open-run",dataset:{focusKey:"product-open-run"},text:ctx.t("product.openRunTab"),on:{click:async()=>{setTab("run");await ctx.rerender()}}})));
-  const flow=flowRes.ok?mapFlow(flowRes.data):{state:flowRes.state,flow:null},p=prod.product,r=p.run,offer=productOffer(p,flow.state==="VERIFIED"?flow.flow:null);
+  const p=prod.product,r=p.run,offer=productOffer(p,detail.state==="VERIFIED"&&detail.run?detail.run.delivery:null);
   const sb=exec&&exec.state==="VERIFIED"&&exec.sandbox?exec.sandbox.state:null,busy=drafts.busy[PRODUCT_FORM]===true;
+  const sgState=detail.state==="VERIFIED"&&detail.run&&detail.run.delivery?detail.run.delivery.sourceGeneration.state:null;
   const body=[
     h(doc,"p",{},badge(ctx,ctx.t(`devrun.state.${r.status}`),r.status==="RUNNING"&&p.tiedToThisRun?"badge-ok":r.status==="STOPPED"?"":"badge-risk"),
       r.status==="RUNNING"&&p.tiedToThisRun&&!offer.open?h(doc,"span",{class:"note",text:` ${ctx.t(r.bridged===true?"product.noUrl":"product.notBridged")}`}):null),
@@ -47,8 +49,9 @@ export async function productCard(ctx,project,run){
     offer.otherRunning?h(doc,"p",{class:"note",dataset:{productOther:"1"},text:ctx.t("product.otherRunning")}):null,
     r.reason&&(r.status==="BLOCKED"||r.status==="CRASHED")?h(doc,"p",{class:"note",dataset:{productReason:r.reason},text:reasonText(ctx,r.reason)}):null,
     p.deliveredHeadSha===null?h(doc,"p",{class:"note",dataset:{productCommit:"NONE"},text:ctx.t("product.noCommit")}):null,
-    flow.state!=="VERIFIED"?h(doc,"p",{class:"note",dataset:{productDelivery:"UNKNOWN"},text:ctx.t("product.deliveryUnknown")}):
-      !offer.deliveryDone?h(doc,"p",{class:"note",dataset:{productDelivery:"NOT_DONE"},text:ctx.t("product.notDelivered")}):null,
+    // Başlatılabilirlik B-RUN-1'in kendi koşuludur (kaynak üretimi tamam + teslim commit'i); DELIVERY aşaması DONE (=PRODUCT_VERIFIED) beklenmez.
+    offer.deliverable===null?h(doc,"p",{class:"note",dataset:{productDelivery:"UNKNOWN"},text:ctx.t("product.deliveryUnknown")}):
+      offer.deliverable===false?h(doc,"p",{class:"note",dataset:{productDelivery:"NOT_DELIVERABLE"},text:ctx.t("product.notDeliverable",{why:p.deliverable&&p.deliverable.reason?p.deliverable.reason:(sgState??"NO_DELIVERED_COMMIT")})}):null,
     h(doc,"p",{class:"note",dataset:{productSandbox:sb??"UNKNOWN"},text:ctx.t(sb==="AVAILABLE"?"product.sandbox.AVAILABLE":sb==="UNAVAILABLE"?"product.sandbox.UNAVAILABLE":"product.sandbox.UNKNOWN")}),
     h(doc,"div",{class:"btn-row"},
       offer.start?h(doc,"button",{type:"button",class:"btn btn-primary",id:"product-start",dataset:{focusKey:"product-start"},disabled:busy,text:ctx.t("product.start"),on:{click:()=>{productAction(ctx,project,run.runId,"start")}}}):null,

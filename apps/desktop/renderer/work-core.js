@@ -345,8 +345,13 @@ export function runReadiness({project,mission}){
   return {repository,testCommand,blockers};
 }
 /** Bilinen koşu BLOK nedenleri -> açıklama anahtarı; bilinmeyen neden aynen ham kalır. SANDBOX_UNAVAILABLE'ın mevcut açıklaması korunur. */
-export const RUN_REASON_HINTS=Object.freeze(["CLAUDE_PROFILE_LOGIN_REQUIRED","CLAUDE_PROFILE_LOGIN_EXPIRED","CLAUDE_PROFILE_REFUSED","CLAUDE_CLI_NOT_FOUND","CLAUDE_CLI_SHIM_UNSUPPORTED","CLI_SHIM_UNSUPPORTED","PROVIDER_PROVENANCE_NOT_READY","CLAUDE_PACKAGE_PROVENANCE_REQUIRED","CLAUDE_LAUNCHER_PROVENANCE_CHANGED","EXECUTOR_NOT_CONFIGURED","REPOSITORY_NOT_CONFIGURED","TEST_COMMAND_NOT_CONFIGURED","REMOTE_REPO_NOT_SUPPORTED_YET","PROJECT_NOT_FOUND","MISSION_NOT_FOUND"]);
-export const runReasonHintKey=reason=>typeof reason==="string"&&RUN_REASON_HINTS.includes(reason)?`run.reason.${reason}`:null;
+export const RUN_REASON_HINTS=Object.freeze(["CLAUDE_PROFILE_LOGIN_REQUIRED","CLAUDE_PROFILE_LOGIN_EXPIRED","CLAUDE_PROFILE_REFUSED","CLAUDE_CLI_NOT_FOUND","CLAUDE_CLI_SHIM_UNSUPPORTED","CLI_SHIM_UNSUPPORTED","PROVIDER_PROVENANCE_NOT_READY","PROVENANCE_MISSING","CLAUDE_PACKAGE_PROVENANCE_REQUIRED","CLAUDE_LAUNCHER_PROVENANCE_CHANGED","EXECUTOR_NOT_CONFIGURED","REPOSITORY_NOT_CONFIGURED","TEST_COMMAND_NOT_CONFIGURED","REMOTE_REPO_NOT_SUPPORTED_YET","PROJECT_NOT_FOUND","MISSION_NOT_FOUND"]);
+// //TR: "KOD:neden" biçimi (ör. CLAUDE_PROFILE_REFUSED:SETTINGS_NOT_WRITTEN) önek üzerinden çözülür; ham neden ekranda aynen kalır.
+export const runReasonHintKey=reason=>{
+  if(typeof reason!=="string")return null;
+  const head=reason.split(":")[0];
+  return RUN_REASON_HINTS.includes(head)?`run.reason.${head}`:null;
+};
 
 /** Durum geçişi isteği; yalnız durum makinesinin izin verdiği hedefler, yüksek riskli hedeflerde confirmed===true şart.
  *  D-M1A-STATE-MODEL-2026-10-15: geçiş gövdesi hiçbir onay alanı taşımaz (COMPLETE yalnız PRODUCT_VERIFIED kanıtıyla olur); onay verilmeye çalışılırsa istek kurulmaz. */
@@ -408,6 +413,8 @@ export function describePostResult(res){
   if(s===409&&PRODUCT_409.has(err)){const r=res.body?.reason;return {ok:false,key:`post.err.409.${err}`,vars:{status:s,reason:typeof r==="string"&&r.length<=160&&SAFE_REASON_RE.test(r)?r:"UNKNOWN"}}}
   if(s===409)return KNOWN_409.has(err)?{ok:false,key:`post.err.409.${err}`,vars:{status:s}}:{ok:false,key:"post.err.409",vars:{status:s}};
   if(s===423)return {ok:false,key:"post.err.423",vars:{status:s}};
+  // //TR: A-FLOW-GAP-2: yönetilen depo kurulamadı (intake şablonu / proje oluşturma); sunucu geri alır, kod aynen gösterilir.
+  if(s===500&&err==="PROJECT_REPOSITORY_INIT_FAILED")return {ok:false,key:"post.err.500.PROJECT_REPOSITORY_INIT_FAILED",vars:{status:s}};
   if(s===503)return {ok:false,key:"post.err.503",vars:{status:s}};
   return {ok:false,key:"post.err.generic",vars:{status:Number.isSafeInteger(s)?s:MISSING}};
 }
@@ -488,17 +495,19 @@ export function productVerificationOf(head,evidence){
   if(nonEmpty(surf.modified)||nonEmpty(surf.deleted)||nonEmpty(surf.renamed)||nonEmpty(surf.harness)||nonEmpty(surf.weakened))return pv("NOT_VERIFIED","TEST_CHANGES_REQUIRE_INDEPENDENT_VERIFICATION");
   return pv("PRODUCT_VERIFIED","TESTS_EXECUTED_IN_VERIFIED_SANDBOX");
 }
-/** //TR: LANE-A A-FLOW-GAP-2: test sonucu adımı. productVerificationOf kuralının sonucu tek bir türe çevrilir: PRODUCT_VERIFIED -> EXECUTED_VERIFIED; FAILED -> FAILED (testler koştu, çıkış kodu sıfır değil); NOT_VERIFIED + "NOT_EXECUTED:*" -> NOT_EXECUTED (neden: SANDBOX_UNAVAILABLE, TESTS_NOT_REACHED, NO_HEAD_COMMIT); diğer NOT_VERIFIED nedenleri -> NOT_VERIFIED (testler koştu ama sonuç doğrulanmadı ya da koştukları kesin değil). Koşu kaydında kanıt listesi hiç bildirilmediyse UNKNOWN: "çalıştırılmadı" asla kanıtsız söylenmez. */
+/** //TR: LANE-A A-FLOW-GAP-2: test sonucu adımı. Karar SUNUCUNUN kararıdır: GET /v1/work-runs/:id yanıtındaki delivery görünümü (productVerification {state,reason} + testsExecuted), kanıt listesinden istemcide yeniden HESAPLANMAZ (liste 100 kayıtla kesilir, sunucu tüm kanıta bakar). PRODUCT_VERIFIED -> EXECUTED_VERIFIED; FAILED -> FAILED (testler koştu, çıkış kodu sıfır değil); NOT_VERIFIED + "NOT_EXECUTED:*": sunucu testsExecuted=false diyorsa NOT_EXECUTED (neden: SANDBOX_UNAVAILABLE, TESTS_NOT_REACHED, NO_HEAD_COMMIT), testsExecuted=true diyorsa (ör. VERIFY koştu, REGRESSION'a ulaşılamadı) NOT_VERIFIED; diğer NOT_VERIFIED nedenleri -> NOT_VERIFIED. Teslim görünümü yoksa (liste öğesi, okunamayan ayrıntı) UNKNOWN: "çalıştırılmadı" asla kanıtsız söylenmez. */
 export function testResultOf(run){
-  const none={kind:"UNKNOWN",reason:null},v=run?.evidenceVerification;
-  if(!run||run.evidenceReported!==true||!isObj(v)||typeof v.state!=="string"||typeof v.reason!=="string")return none;
+  const none={kind:"UNKNOWN",reason:null},d=run?.delivery,v=isObj(d)?d.productVerification:null;
+  if(!isObj(v)||typeof v.state!=="string"||typeof v.reason!=="string")return none;
   if(v.state==="PRODUCT_VERIFIED")return {kind:"EXECUTED_VERIFIED",reason:v.reason};
   if(v.state==="FAILED")return {kind:"FAILED",reason:v.reason};
   if(v.state!=="NOT_VERIFIED")return none;
-  return v.reason.startsWith("NOT_EXECUTED:")?{kind:"NOT_EXECUTED",reason:v.reason.slice("NOT_EXECUTED:".length)}:{kind:"NOT_VERIFIED",reason:v.reason};
+  if(!v.reason.startsWith("NOT_EXECUTED:"))return {kind:"NOT_VERIFIED",reason:v.reason};
+  const why=v.reason.slice("NOT_EXECUTED:".length);
+  return d.testsExecuted===true?{kind:"NOT_VERIFIED",reason:why}:{kind:"NOT_EXECUTED",reason:why};
 }
 /** Eşlenmiş koşu yalnız sunucunun kesin kuralıyla PRODUCT_VERIFIED ise true; tek başına testsExecuted asla yeterli değildir. */
-export const isProductVerified=run=>run?.evidenceVerification?.state==="PRODUCT_VERIFIED";
+export const isProductVerified=run=>run?.delivery?.productVerification?.state!==undefined?run.delivery.productVerification.state==="PRODUCT_VERIFIED":run?.evidenceVerification?.state==="PRODUCT_VERIFIED"; // //TR: sunucunun teslim görünümü varsa karar odur; yoksa liste kanıtından gelen (yalnız kanıtlıysa doğrulanmış) eski sonuç
 export function mapWorkRun(x){
   if(!isObj(x))return null;
   const idv=pick(x.runId,x.workRunId,x.id);if(typeof idv!=="string"||!SAFE_ID_RE.test(idv))return null;
@@ -523,7 +532,7 @@ export function mapWorkRun(x){
     testsExecuted:arr(x.evidence,100).some(e=>isObj(e)&&(e.kind==="VERIFY_TESTS"||e.kind==="REGRESSION_TESTS")),
     testsNotExecuted:arr(x.evidence,100).some(e=>isObj(e)&&(e.kind==="VERIFY_TESTS_NOT_EXECUTED"||e.kind==="REGRESSION_TESTS_NOT_EXECUTED")),
     headSha:typeof x.headSha==="string"&&/^[0-9a-f]{40}$/.test(x.headSha)?x.headSha:null,
-    evidenceVerification:productVerificationOf(x.headSha,arr(x.evidence,100)),evidenceReported:Array.isArray(x.evidence),
+    evidenceVerification:productVerificationOf(x.headSha,arr(x.evidence,100)),
     evidence:mapRunEvidence(x.evidence),reviewer:identity||verdict?{identity,verdict}:null
   };
 }

@@ -13,8 +13,16 @@ export const buildAnalysisStepRequest=({missionId})=>{const p=analysisStepPath(m
 export const buildAnalysisPlanRequest=({missionId})=>{const p=analysisPlanPath(missionId);return result(p,p?{}:{mission:"analysis.err.mission"})};
 
 const isObj=x=>x!==null&&typeof x==="object"&&!Array.isArray(x);
-const CONTROL_RE=/[\u0000-\u001f\u007f]/;
-const text=(x,max)=>typeof x==="string"&&x.length>0&&x.length<=max&&!CONTROL_RE.test(x)?x:null;
+// //TR: Sunucunun "bu kayıt yok" yanıtları (route VAR ve istek gönderildi): WORKOS_NOT_FOUND ve AnalysisFlow'un kendi kodları. Bunların dışındaki 404 (route yok / kod yok) "bu sürümde açık değil"dir.
+export const NOT_FOUND_CODES=Object.freeze(["WORKOS_NOT_FOUND","ANALYSIS_MISSION_NOT_FOUND","ANALYSIS_PROJECT_NOT_FOUND"]);
+const notFoundBody=b=>isObj(b)&&typeof b.error==="string"&&NOT_FOUND_CODES.includes(b.error);
+const CONTROL_RE=/[\u0000-\u001f\u007f]+/g;
+// //TR: Sunucu doğrulayıcıları (core/workos/predev/validators.ts) kimlik, ifade, tahmin ve kriter için yalnız "boş olmayan metin" ister; uzunluk ya da karakter sınırı yoktur ve LLM çıktısı satır sonu içerebilir. Bu yüzden görüntü metni REDDEDİLMEZ: denetim karakterleri boşluğa çevrilir ve ekran için kısaltılır (metin yalnız textContent ile yazılır, etkisizdir). Boş ya da metin olmayan değer ise hâlâ geçersizdir.
+const text=(x,max)=>{
+  if(typeof x!=="string"||x.trim().length===0)return null;
+  const t=x.replace(CONTROL_RE," ").trim();
+  return t.length?t.slice(0,max):null;
+};
 const ROLE_RE=/^[A-Za-z0-9_.-]{1,64}$/;
 const kindOf=x=>ANALYSIS_KINDS.includes(x)?x:null;
 
@@ -24,7 +32,7 @@ export function mapAnalysisStep(x){
   switch(x.status){
     case "BLOCKED":{
       const blocker=text(x.blocker,200);
-      if(blocker===null||!Array.isArray(x.blockers)||x.blockers.length>20)return null;
+      if(blocker===null||!Array.isArray(x.blockers)||x.blockers.length>50)return null;
       const blockers=x.blockers.map(b=>text(b,200));
       if(blockers.includes(null)||(blockers.length>0&&blockers[0]!==blocker))return null;
       return {status:"BLOCKED",blocker,blockers};
@@ -72,25 +80,31 @@ export function classifyAnalysisStep(res){
   if(s>=200&&s<300)return {kind:"INVALID"};
   if(s===423)return {kind:"STOPPED"};
   if(s===403)return {kind:"DENIED"};
-  if(s===404&&isObj(body)&&body.error==="WORKOS_NOT_FOUND")return {kind:"NOT_FOUND"};
+  if(s===404&&notFoundBody(body))return {kind:"NOT_FOUND"};
   if(s===404||s===501)return {kind:"NOT_ENABLED"};
   return {kind:"FAILED"};
 }
 
 const CODE_RE=/^[A-Z][A-Z0-9_]{0,63}$/;
-const ID_RE=/^[A-Za-z0-9_.-]{1,64}$/;
-/** createPlan sonucu {tasks,replayed,trace,summary} -> sayı ve izlenebilirlik (görev -> gereksinim -> kabul kriteri). Biçim bozuksa null. */
+const MAX_SHOWN=200;
+/** createPlan sonucu {tasks,replayed,trace,summary} -> sayı ve izlenebilirlik (görev -> gereksinim -> kabul kriteri). Sunucu doğrulayıcılarının kabul ettiği her plan okunur: kimlik/ifade/kriter uzunluğu ve sayısı sınırlanmaz, yalnız ekran için kısaltılır (gizlenen sayısı taşınır). Biçim gerçekten bozuksa null. */
 export function mapAnalysisPlan(x){
   if(!isObj(x)||!Array.isArray(x.tasks)||x.tasks.length<1||x.tasks.length>MAX_PLAN_TASKS||typeof x.replayed!=="boolean"||!Array.isArray(x.trace)||x.trace.length!==x.tasks.length)return null;
   const trace=[];
   for(const [i,t] of x.trace.entries()){
-    if(!isObj(t)||t.index!==i||typeof t.workPackageId!=="string"||!ID_RE.test(t.workPackageId)||text(t.estimate,40)===null||!Array.isArray(t.satisfies)||t.satisfies.length>50||!t.satisfies.every(s=>typeof s==="string"&&ID_RE.test(s))||!Array.isArray(t.requirements)||t.requirements.length>50)return null;
+    const wp=isObj(t)?text(t.workPackageId,200):null,est=isObj(t)?text(t.estimate,100):null;
+    if(!isObj(t)||t.index!==i||wp===null||est===null||!Array.isArray(t.satisfies)||!Array.isArray(t.requirements))return null;
+    const satisfies=t.satisfies.map(s=>text(s,200));
+    if(satisfies.includes(null))return null;
     const reqs=[];
     for(const r of t.requirements){
-      if(!isObj(r)||typeof r.id!=="string"||!ID_RE.test(r.id)||text(r.statement,500)===null||!Array.isArray(r.acceptanceCriteria)||r.acceptanceCriteria.length>20||!r.acceptanceCriteria.every(c=>text(c,500)!==null))return null;
-      reqs.push({id:r.id,statement:r.statement,acceptanceCriteria:[...r.acceptanceCriteria]});
+      const id=isObj(r)?text(r.id,200):null,statement=isObj(r)?text(r.statement,2000):null;
+      if(id===null||statement===null||!Array.isArray(r.acceptanceCriteria))return null;
+      const crit=r.acceptanceCriteria.map(c=>text(c,2000));
+      if(crit.includes(null))return null;
+      reqs.push({id,statement,acceptanceCriteria:crit.slice(0,MAX_SHOWN),hiddenCriteria:Math.max(0,crit.length-MAX_SHOWN)});
     }
-    trace.push({index:i,workPackageId:t.workPackageId,estimate:t.estimate,satisfies:[...t.satisfies],requirements:reqs});
+    trace.push({index:i,workPackageId:wp,estimate:est,satisfies:satisfies.slice(0,MAX_SHOWN),requirements:reqs.slice(0,MAX_SHOWN),hiddenRequirements:Math.max(0,reqs.length-MAX_SHOWN)});
   }
   return {taskCount:x.tasks.length,replayed:x.replayed,trace};
 }
@@ -107,7 +121,7 @@ export function classifyAnalysisPlan(res){
   }
   if(s===423)return {kind:"STOPPED"};
   if(s===403)return {kind:"DENIED"};
-  if(s===404&&isObj(body)&&body.error==="WORKOS_NOT_FOUND")return {kind:"NOT_FOUND"};
+  if(s===404&&notFoundBody(body))return {kind:"NOT_FOUND"};
   if(s===404||s===501)return {kind:"NOT_ENABLED"};
   return {kind:"FAILED"};
 }
@@ -121,6 +135,6 @@ export function analysisStatusKey(c,res,verb){
   if(c.kind==="NOT_FOUND")return {ok:false,key:"analysis.notFound",vars:{}};
   if(c.kind==="INVALID")return {ok:false,key:"analysis.invalid",vars:{}};
   if(c.kind==="STOPPED")return {ok:false,key:"post.err.423",vars:{status:423}};
-  if(c.kind==="DENIED")return {ok:false,key:"post.err.auth",vars:{status:403}};
+  // 403: sunucunun ACTION_DENIED nedeni (varsa) ya da yetki hatası; describePostResult ikisini de doğru ayırır.
   const d=describePostResult(res);return {ok:false,key:d.key,vars:d.vars};
 }
