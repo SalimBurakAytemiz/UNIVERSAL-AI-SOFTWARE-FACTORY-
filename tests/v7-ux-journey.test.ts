@@ -578,3 +578,346 @@ describe("Project Journey — route delegation (app.js VIEWS unchanged)", () => 
     expect(byId(root, "view-title")!.textContent).toBe("Project Journey");
   });
 });
+
+// //TR: LANE-A Pre-dev Founder kararları: istek kurucuları, yanıt sınıflayıcı ve Yolculuk'taki karar paneli. Kararlar yalnız sunucu sözleşmesi şekilli yanıtlarla (Lane B #194: 201/200 {predev,replayed}, 409 PREDEV_GATE_REFUSED {reason}) sınanır; kapılar sunucudadır ve burada yeniden uygulanmaz.
+const PDA = "pda_" + "aa".repeat(12), PDA2 = "pda_" + "bb".repeat(12);
+const POST_START = `/v1/missions/${MSN}/predev/start`, POST_APPROVE = `/v1/missions/${MSN}/predev/artifacts/${PDA}/approve`, POST_REJECT = `/v1/missions/${MSN}/predev/artifacts/${PDA}/reject`;
+const PD_ALLOW = /^\/v1\/missions\/msn_[0-9a-f]{24}\/predev\/(start|artifacts\/pda_[0-9a-f]{24}\/(approve|reject))$/;
+const OK = (body: any, status = 200) => ({status, body});
+const refuse = (reason: any, status = 409, error = "PREDEV_GATE_REFUSED") => ({status, body: reason === undefined ? {error} : {error, reason}});
+async function mkDecisionCtx(getFn: (p: string) => any, postFn: (p: string, b: unknown) => any, lang = "en") {
+  const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js"), forms = await load("forms.js"), dec = await load("views", "predev-decisions.js");
+  const doc = new D(), store = st.createStore(null), posts: Array<{path: string; body: any}> = [];
+  const bridge = {apiGet: async (p: string) => getFn(p), apiPost: async (p: string, b: unknown) => { posts.push({path: p, body: b}); return postFn(p, b); }};
+  const api = apiMod.createApi({bridge, store, now: () => 1_760_000_000_000});
+  const tr = (k: string, v?: any) => i18n.translate(lang, k, v);
+  let rerenders = 0;
+  const ctx: any = {doc, store, api, i18n: {lang, t: tr}, t: tr, navigate: () => {}, rerender: async () => { rerenders += 1; }, settleFocus: () => {}};
+  dec.resetPredevDraft(null, null); for (const f of ["predev-start", "predev-approve", "predev-reject"]) { delete forms.drafts.status[f]; forms.drafts.busy[f] = false; }
+  forms.selection.missionId = MSN;
+  return {ctx, posts, dec, forms, rerenders: () => rerenders};
+}
+const renderJourney = async (ctx: any) => (await load("views", "journey.js")).render(ctx) as Promise<N>;
+const DRAFT_PREDEV = () => predevBody({phase: "BUSINESS_ANALYSIS"}, {BusinessAnalysis: preArt("DRAFT"), Requirements: preArt("NOT_STARTED"), Plan: preArt("NOT_STARTED")});
+const setVal = (root: N, id: string, v: string) => { const n = byId(root, id)!; (n as any).value = v; fire(n, "input"); };
+const status = (root: N, formId: string) => byId(root, `${formId}-status`)!;
+
+describe("LANE-A pre-dev decisions — pure core", () => {
+  it("builds only the canonical POST paths (nothing else is ever requested)", async () => {
+    const core = await load("predev-decisions-core.js");
+    expect(core.predevStartPath(MSN)).toBe(POST_START);
+    expect(core.predevDecisionPath(MSN, PDA, "approve")).toBe(POST_APPROVE);
+    expect(core.predevDecisionPath(MSN, PDA, "reject")).toBe(POST_REJECT);
+    for (const p of [core.predevStartPath(MSN), core.predevDecisionPath(MSN, PDA, "approve"), core.predevDecisionPath(MSN, PDA, "reject")]) expect(p).toMatch(PD_ALLOW);
+    for (const bad of ["", "bad", "msn_zz", MSN + "/x", MSN + "?a=1", "MSN_" + "ab".repeat(12), undefined, null, 5]) { expect(core.predevStartPath(bad), String(bad)).toBeNull(); expect(core.predevDecisionPath(bad, PDA, "approve"), String(bad)).toBeNull(); }
+    for (const bad of ["", "pda_zz", PDA + "/x", PDA + "?a=1", "PDA_" + "aa".repeat(12), "pda_" + "aa".repeat(11), "pda_" + "a".repeat(23), "pda_" + "a".repeat(25), undefined, null]) expect(core.predevDecisionPath(MSN, bad, "approve"), String(bad)).toBeNull();
+    for (const verb of ["delete", "", "APPROVE", "approve/", undefined]) expect(core.predevDecisionPath(MSN, PDA, verb), String(verb)).toBeNull();
+  });
+  it("parses evidence references by the server's schema: 1..20, unique, [A-Za-z0-9._:-]{1,128}; separators are spaces, commas and new lines", async () => {
+    const core = await load("predev-decisions-core.js");
+    expect(core.parseEvidenceRefs("evd_a, evd_b\nevd_c  evd.d:1-2")).toEqual({refs: ["evd_a", "evd_b", "evd_c", "evd.d:1-2"], error: null});
+    expect(core.parseEvidenceRefs("x".repeat(128))).toEqual({refs: ["x".repeat(128)], error: null});
+    expect(core.parseEvidenceRefs(Array.from({length: 20}, (_, i) => "e" + i).join(" ")).refs).toHaveLength(20);
+    const err = (t: any) => core.parseEvidenceRefs(t);
+    for (const t of ["", "  ,\n ", undefined, null, 5]) expect(err(t), String(t)).toEqual({refs: [], error: "predev.err.evidenceRequired"});
+    for (const t of ["bad/ref", "ünï", "a;b", "x".repeat(129), "ok bad!"]) expect(err(t), t).toEqual({refs: [], error: "predev.err.evidenceFormat"});
+    expect(err("a b a")).toEqual({refs: [], error: "predev.err.evidenceDuplicate"});
+    expect(err(Array.from({length: 21}, (_, i) => "e" + i).join(" "))).toEqual({refs: [], error: "predev.err.evidenceMany"});
+    expect([core.MAX_EVIDENCE_REFS, core.REJECT_REASON_MAX]).toEqual([20, 1000]);
+  });
+  it("builds exact request bodies; invalid input yields errors and NO path or body", async () => {
+    const core = await load("predev-decisions-core.js");
+    expect(core.buildStartRequest({missionId: MSN})).toEqual({ok: true, path: POST_START, body: {}, errors: {}});
+    expect(core.buildStartRequest({missionId: "bad"})).toEqual({ok: false, path: null, body: null, errors: {mission: "predev.err.mission"}});
+    expect(core.buildApproveRequest({missionId: MSN, artifactId: PDA, evidenceText: "evd_1 evd_2"})).toEqual({ok: true, path: POST_APPROVE, body: {evidenceRefs: ["evd_1", "evd_2"]}, errors: {}});
+    expect(core.buildApproveRequest({missionId: MSN, artifactId: "x", evidenceText: ""})).toEqual({ok: false, path: null, body: null, errors: {artifact: "predev.err.artifact", evidenceRefs: "predev.err.evidenceRequired"}});
+    expect(core.buildRejectRequest({missionId: MSN, artifactId: PDA, reason: "  scope too vague \n"})).toEqual({ok: true, path: POST_REJECT, body: {reason: "scope too vague"}, errors: {}});
+    expect(core.buildRejectRequest({missionId: MSN, artifactId: PDA, reason: "x".repeat(1000)}).ok).toBe(true);
+    expect(core.buildRejectRequest({missionId: MSN, artifactId: PDA, reason: "x".repeat(1001)}).errors).toEqual({reason: "predev.err.reasonLong"});
+    for (const r of ["", "   \n", undefined, null, 5]) expect(core.buildRejectRequest({missionId: MSN, artifactId: PDA, reason: r}).errors, String(r)).toEqual({reason: "err.reasonRequired"});
+    expect(core.buildRejectRequest({missionId: "bad", artifactId: "bad", reason: "x"}).errors).toEqual({artifact: "predev.err.artifact"});
+  });
+  it("classifies POST answers: a result only from a strictly mapped body of the SAME mission; the server's PREDEV_* reason is carried verbatim; nothing is invented", async () => {
+    const core = await load("predev-decisions-core.js");
+    const cls = (res: any) => core.classifyPredevPost(res, MSN);
+    const good = predevBody();
+    expect(cls(OK(good))).toMatchObject({kind: "RESULT", replayed: false}); expect(cls(OK(good)).predev.phase).toBe("PLANNING");
+    expect(cls(OK({...good, replayed: true}, 200))).toMatchObject({kind: "RESULT", replayed: true});
+    expect(cls(OK({...good, replayed: false}, 201))).toMatchObject({kind: "RESULT", replayed: false});
+    for (const bad of [{...good, replayed: "yes"}, {predev: {...good.predev, missionId: MSN2}}, {predev: {...good.predev, phase: "NOPE"}}, {}, null, "ok", [], {predev: null}]) expect(cls(OK(bad)), JSON.stringify(bad)?.slice(0, 60)).toEqual({kind: "INVALID"});
+    for (const r of core.PREDEV_REFUSAL_REASONS) expect(cls(refuse(r)), r).toEqual({kind: "REFUSED", reason: r, known: true});
+    expect(cls(refuse("PREDEV_SOMETHING_NEW"))).toEqual({kind: "REFUSED", reason: "PREDEV_SOMETHING_NEW", known: false});
+    for (const r of [undefined, null, 5, "", "predev_lower", "PREDEV_", "SECRET " + "x", "PREDEV_" + "A".repeat(81), "<b>PREDEV_X</b>", ["PREDEV_X"]]) expect(cls(refuse(r)), String(r)).toEqual({kind: "REFUSED", reason: null, known: false});
+    expect(cls(refuse(undefined, 409, "PREDEV_DRIVER_SEQUENCE_NOT_ACTIVE"))).toEqual({kind: "REFUSED", reason: "PREDEV_DRIVER_SEQUENCE_NOT_ACTIVE", known: true});
+    expect(cls(refuse(undefined, 404, "PREDEV_DRIVER_ARTIFACT_NOT_FOUND"))).toEqual({kind: "REFUSED", reason: "PREDEV_DRIVER_ARTIFACT_NOT_FOUND", known: true});
+    expect(cls(refuse(undefined, 404, "WORKOS_NOT_FOUND"))).toEqual({kind: "NOT_FOUND"});
+    expect(cls({status: 404, body: {}})).toEqual({kind: "NOT_ENABLED"});
+    expect(cls({status: 501, body: {}})).toEqual({kind: "NOT_ENABLED"});
+    expect(cls({status: 403, body: {error: "FORBIDDEN"}})).toEqual({kind: "NOT_ENABLED"});
+    expect(cls({thrown: true, state: "ERROR", message: "INVALID_API_PATH"})).toEqual({kind: "NOT_ENABLED"});
+    for (const res of [null, undefined, {thrown: true, state: "OFFLINE", message: "fetch failed"}, {status: 403, body: {error: "ACTION_DENIED", reason: "NO"}}, {status: 423, body: {error: "GLOBAL_STOP_ACTIVE"}}, {status: 400, body: {error: "INVALID_BODY"}}, {status: 500, body: {}}, {status: 409, body: {error: "OTHER"}}]) expect(cls(res), JSON.stringify(res)).toEqual({kind: "FAILED"});
+  });
+  it("maps every classification to a localized status key that exists in EN and TR (placeholders identical); the server's code is passed through as data", async () => {
+    const core = await load("predev-decisions-core.js");
+    const en = (await load("locales", "en.js")).default as Record<string, string>, tr = (await load("locales", "tr.js")).default as Record<string, string>;
+    const keys = new Set<string>();
+    const phase = predevBody().predev;
+    const cases: Array<[any, any, string]> = [[{kind: "RESULT", predev: phase, replayed: false}, null, "start"], [{kind: "RESULT", predev: phase, replayed: true}, null, "start"], [{kind: "RESULT", predev: phase}, null, "approve"], [{kind: "RESULT", predev: phase}, null, "reject"],
+      [{kind: "REFUSED", reason: null, known: false}, null, "approve"], [{kind: "REFUSED", reason: "PREDEV_X", known: false}, null, "approve"], [{kind: "NOT_FOUND"}, null, "approve"], [{kind: "NOT_ENABLED"}, null, "start"], [{kind: "INVALID"}, null, "start"], [{kind: "FAILED"}, {status: 423, body: {}}, "start"]];
+    for (const r of core.PREDEV_REFUSAL_REASONS) cases.push([{kind: "REFUSED", reason: r, known: true}, null, "approve"]);
+    for (const [c, res, verb] of cases) { const k = core.predevStatusKey(c, res, verb); keys.add(k.key); expect(k.ok, k.key).toBe(c.kind === "RESULT"); expect(en[k.key], k.key).toBeTruthy(); expect(tr[k.key], k.key).toBeTruthy(); expect((tr[k.key].match(/\{\w+\}/g) ?? []).sort().join(), k.key).toBe((en[k.key].match(/\{\w+\}/g) ?? []).sort().join()); }
+    expect(core.predevStatusKey({kind: "REFUSED", reason: "PREDEV_X", known: false}, null, "approve")).toEqual({ok: false, key: "predev.refused.unrecognised", vars: {reason: "PREDEV_X"}});
+    expect(core.predevStatusKey({kind: "RESULT", predev: phase, replayed: true}, null, "start")).toEqual({ok: true, key: "predev.started.replayed", vars: {phase: "PLANNING"}});
+    // Her bilinen ret nedeni kendi kodunu metinde AYNEN taşır.
+    for (const r of core.PREDEV_REFUSAL_REASONS) { expect(en[`predev.refused.${r}`], r).toContain(`(${r})`); expect(tr[`predev.refused.${r}`], r).toContain(`(${r})`); }
+    expect(keys.size).toBeGreaterThan(20);
+  });
+});
+
+describe("LANE-A pre-dev decisions — view (Journey)", () => {
+  it("not started: only a Start control; it POSTs {} to the canonical path and reports the server's phase; the mission list and predev are re-read afterwards", async () => {
+    const {ctx, posts, dec, rerenders} = await mkDecisionCtx(serve({[`/v1/predev/${MSN}`]: inactivePredev()}), () => OK(predevBody({phase: "BUSINESS_ANALYSIS"}), 201));
+    const root = await renderJourney(ctx);
+    expect(byData(root, "decision", "start")!.textContent).toContain("No pre-dev sequence exists");
+    expect(allData(root, "decision", "pending").length).toBe(0);
+    expect(byId(root, "predev-approve-submit")).toBeUndefined();
+    const btn = byId(root, "predev-start-submit")!;
+    fire(btn, "click"); await new Promise(r => setTimeout(r, 0));
+    expect(posts).toEqual([{path: POST_START, body: {}}]);
+    expect(rerenders()).toBe(1);
+    const st = status(await renderJourney(ctx), "predev-start");
+    expect(st.dataset.result).toBe("ok"); expect(st.textContent).toBe("Pre-dev sequence started. The server reports the phase: BUSINESS_ANALYSIS.");
+    void dec;
+  });
+  it("start: a replay, a refusal (verbatim code), not-enabled, a server error and a malformed 2xx are each reported as such — never as success", async () => {
+    const run = async (answer: any) => {
+      const {ctx, posts} = await mkDecisionCtx(serve({[`/v1/predev/${MSN}`]: inactivePredev()}), () => (answer instanceof Error ? (() => { throw answer; })() : answer));
+      const root = await renderJourney(ctx); fire(byId(root, "predev-start-submit")!, "click"); await new Promise(r => setTimeout(r, 0));
+      const st = status(await renderJourney(ctx), "predev-start"); return {st, posts};
+    };
+    const rep = await run(OK({...predevBody(), replayed: true}, 200)); expect(rep.st.dataset.result).toBe("ok"); expect(rep.st.textContent).toContain("already existed");
+    const ref = await run(refuse("PREDEV_SEQUENCE_EXISTS_FOR_MISSION")); expect(ref.st.dataset.result).toBe("error"); expect(ref.st.textContent).toContain("(PREDEV_SEQUENCE_EXISTS_FOR_MISSION)");
+    const none = await run(Object.assign(new Error("INVALID_API_PATH"), {})); expect(none.st.dataset.result).toBe("error"); expect(none.st.textContent).toContain("not enabled in this build");
+    const stop = await run({status: 423, body: {error: "GLOBAL_STOP_ACTIVE"}}); expect(stop.st.dataset.result).toBe("error"); expect(stop.st.textContent.length).toBeGreaterThan(10);
+    const bad = await run(OK({predev: {missionId: MSN, active: true}}, 201)); expect(bad.st.dataset.result).toBe("error"); expect(bad.st.textContent).toContain("could not be read");
+    const other = await run(OK(predevBody({missionId: MSN2}), 201)); expect(other.st.dataset.result).toBe("error");
+  });
+  it("a DRAFT awaiting a decision shows its facts, the server-gates note and both forms; nothing is posted until the Founder acts", async () => {
+    const {ctx, posts} = await mkDecisionCtx(serve({[`/v1/predev/${MSN}`]: DRAFT_PREDEV()}), () => { throw new Error("must not post"); });
+    const root = await renderJourney(ctx);
+    const panel = byId(root, "predev-decisions")!;
+    expect(panel.dataset.predevDecisions).toBe(MSN);
+    expect(byData(panel, "decision", "pending")!.dataset.artifact).toBe(PDA);
+    expect(byData(panel, "decision", "pending")!.textContent).toBe("A Business analysis draft is waiting for your decision.");
+    expect(byData(panel, "note", "server-gates")!.textContent).toContain("independent of the author");
+    expect(allData(panel, "decision", "start").length).toBe(0);
+    for (const id of ["predev-evidence", "predev-reason", "predev-approve-submit", "predev-reject-submit"]) expect(byId(panel, id), id).toBeTruthy();
+    expect(byId(panel, "predev-evidence")!.tagName).toBe("TEXTAREA");
+    expect(posts).toEqual([]);
+  });
+  it("approve: empty/invalid evidence is a validation error and sends NOTHING; valid evidence POSTs exactly {evidenceRefs}; success re-reads and says what the server reports", async () => {
+    let answer: any = OK(predevBody({phase: "REQUIREMENTS"}));
+    const {ctx, posts} = await mkDecisionCtx(serve({[`/v1/predev/${MSN}`]: DRAFT_PREDEV()}), () => answer);
+    let root = await renderJourney(ctx);
+    fire(byId(root, "predev-approve-submit")!, "click"); await new Promise(r => setTimeout(r, 0));
+    expect(posts).toEqual([]);
+    root = await renderJourney(ctx);
+    expect(status(root, "predev-approve").dataset.result).toBe("invalid");
+    expect(status(root, "predev-approve").textContent).toContain("At least one evidence reference is required.");
+    setVal(root, "predev-evidence", "bad/ref"); fire(byId(root, "predev-approve-submit")!, "click"); await new Promise(r => setTimeout(r, 0));
+    expect(posts).toEqual([]);
+    root = await renderJourney(ctx);
+    expect(status(root, "predev-approve").textContent).toContain("not allowed");
+    setVal(root, "predev-evidence", "evd_taskhub_ba_signed, evd_2"); fire(byId(root, "predev-approve-submit")!, "click"); await new Promise(r => setTimeout(r, 0));
+    expect(posts).toEqual([{path: POST_APPROVE, body: {evidenceRefs: ["evd_taskhub_ba_signed", "evd_2"]}}]);
+    root = await renderJourney(ctx);
+    expect(status(root, "predev-approve").dataset.result).toBe("ok");
+    expect(status(root, "predev-approve").textContent).toBe("Approved. The server advanced the sequence; phase: REQUIREMENTS.");
+  });
+  it("approve refused by the server: the code is shown verbatim (known, unrecognised and missing reasons), the draft stays decidable and the entered evidence is kept", async () => {
+    const evil = "PREDEV_X";
+    for (const [answer, expected] of [
+      [refuse("PREDEV_APPROVER_NOT_INDEPENDENT"), "Refused (PREDEV_APPROVER_NOT_INDEPENDENT): the approver must be independent of whoever recorded the draft."],
+      [refuse("PREDEV_APPROVAL_EVIDENCE_REQUIRED"), "Refused (PREDEV_APPROVAL_EVIDENCE_REQUIRED): approval needs evidence."],
+      [refuse(evil), "The server refused this decision: PREDEV_X. This reason is not one this screen knows, so it is shown as returned."],
+      [refuse("<img src=x onerror=1>"), "The server refused this decision and gave no reason."],
+      [refuse(undefined), "The server refused this decision and gave no reason."]] as Array<[any, string]>) {
+      const {ctx, posts} = await mkDecisionCtx(serve({[`/v1/predev/${MSN}`]: DRAFT_PREDEV()}), () => answer);
+      let root = await renderJourney(ctx);
+      setVal(root, "predev-evidence", "evd_1"); fire(byId(root, "predev-approve-submit")!, "click"); await new Promise(r => setTimeout(r, 0));
+      expect(posts).toHaveLength(1);
+      root = await renderJourney(ctx);
+      const st = status(root, "predev-approve");
+      expect(st.dataset.result).toBe("error"); expect(st.textContent).toBe(expected);
+      expect(byData(root, "decision", "pending")).toBeTruthy(); // taslak hâlâ karar bekliyor
+      expect((byId(root, "predev-evidence") as any).value).toBe("evd_1");
+      expect(all(root).some(n => n.tagName === "IMG")).toBe(false);
+    }
+  });
+  it("reject: a blank reason is a validation error and sends nothing; a reason POSTs exactly {reason}; the phase text says it does not advance", async () => {
+    const {ctx, posts} = await mkDecisionCtx(serve({[`/v1/predev/${MSN}`]: DRAFT_PREDEV()}), () => OK(predevBody({phase: "BUSINESS_ANALYSIS"}, {BusinessAnalysis: preArt("REJECTED")})));
+    let root = await renderJourney(ctx);
+    setVal(root, "predev-reason", "   "); fire(byId(root, "predev-reject-submit")!, "click"); await new Promise(r => setTimeout(r, 0));
+    expect(posts).toEqual([]);
+    root = await renderJourney(ctx);
+    expect(status(root, "predev-reject").textContent).toContain("A reason is required");
+    setVal(root, "predev-reason", "  scope too vague "); fire(byId(root, "predev-reject-submit")!, "click"); await new Promise(r => setTimeout(r, 0));
+    expect(posts).toEqual([{path: POST_REJECT, body: {reason: "scope too vague"}}]);
+    root = await renderJourney(ctx);
+    expect(status(root, "predev-reject").textContent).toBe("Rejected. The phase does not advance; phase: BUSINESS_ANALYSIS.");
+    setVal(root, "predev-reason", "x".repeat(1001)); fire(byId(root, "predev-reject-submit")!, "click"); await new Promise(r => setTimeout(r, 0));
+    expect(posts).toHaveLength(1);
+  });
+  it("there is NO decision control unless a DRAFT/SUBMITTED artifact with a canonical id awaits one: rejected, approved, not-started, unreadable id, completed sequence", async () => {
+    const cases: Array<[string, any, string]> = [
+      ["rejected", predevBody({phase: "BUSINESS_ANALYSIS"}, {BusinessAnalysis: preArt("REJECTED")}), "rejected"],
+      ["approved", predevBody({phase: "BUSINESS_ANALYSIS"}, {BusinessAnalysis: preArt("APPROVED")}), "approved"],
+      ["not started", predevBody({phase: "BUSINESS_ANALYSIS"}, {BusinessAnalysis: preArt("NOT_STARTED")}), "noDraft"],
+      ["unreadable id", predevBody({phase: "BUSINESS_ANALYSIS"}, {BusinessAnalysis: preArt("DRAFT", {artifactId: "art-1"})}), "unreadable"],
+      ["authorized (no artifact phase)", predevBody({phase: "AUTHORIZED"}), "phase"]];
+    for (const [label, body, why] of cases) {
+      const {ctx} = await mkDecisionCtx(serve({[`/v1/predev/${MSN}`]: body}), () => { throw new Error("must not post"); });
+      const root = await renderJourney(ctx);
+      expect(byData(root, "decision", "none")!.dataset.why, label).toBe(why);
+      for (const id of ["predev-evidence", "predev-reason", "predev-approve-submit", "predev-reject-submit", "predev-start-submit"]) expect(byId(root, id), `${label}/${id}`).toBeUndefined();
+    }
+    const {ctx} = await mkDecisionCtx(serve({[`/v1/predev/${MSN}`]: predevBody({phase: "PRE_DEV_COMPLETE"}, {BusinessAnalysis: preArt("APPROVED"), Requirements: preArt("APPROVED"), Plan: preArt("APPROVED"), Architecture: preArt("APPROVED"), UxSpec: preArt("APPROVED")})}), () => { throw new Error("must not post"); });
+    const root = await renderJourney(ctx);
+    expect(byData(root, "decision", "complete")!.textContent).toContain("complete");
+    expect(byId(root, "predev-approve-submit")).toBeUndefined();
+  });
+  it("SUBMITTED artifacts are decidable too; the decision always targets the CURRENT phase's artifact id", async () => {
+    const {ctx, posts} = await mkDecisionCtx(serve({[`/v1/predev/${MSN}`]: predevBody({phase: "PLANNING"}, {Plan: preArt("SUBMITTED", {artifactId: PDA2})})}), () => OK(predevBody()));
+    let root = await renderJourney(ctx);
+    expect(byData(root, "decision", "pending")!.dataset.artifact).toBe(PDA2);
+    setVal(root, "predev-evidence", "evd_1"); fire(byId(root, "predev-approve-submit")!, "click"); await new Promise(r => setTimeout(r, 0));
+    expect(posts[0].path).toBe(`/v1/missions/${MSN}/predev/artifacts/${PDA2}/approve`);
+    root = await renderJourney(ctx);
+    expect(byData(root, "decision", "pending")).toBeTruthy();
+  });
+  it("a second click while a request is in flight sends nothing; the buttons are disabled meanwhile", async () => {
+    let release: (v: any) => void = () => {};
+    const {ctx, posts} = await mkDecisionCtx(serve({[`/v1/predev/${MSN}`]: DRAFT_PREDEV()}), () => new Promise(r => { release = r; }));
+    const root = await renderJourney(ctx);
+    setVal(root, "predev-evidence", "evd_1");
+    fire(byId(root, "predev-approve-submit")!, "click"); await new Promise(r => setTimeout(r, 0));
+    fire(byId(root, "predev-approve-submit")!, "click"); fire(byId(root, "predev-approve-submit")!, "click");
+    await new Promise(r => setTimeout(r, 0));
+    expect(posts).toHaveLength(1);
+    expect((await renderJourney(ctx)).children.length).toBeGreaterThan(0);
+    const mid = await renderJourney(ctx);
+    expect(byId(mid, "predev-approve-submit")!.attrs.get("disabled")).toBeDefined();
+    release(OK(predevBody())); await new Promise(r => setTimeout(r, 0));
+  });
+  it("start and reject also ignore a second click while their request is in flight", async () => {
+    for (const [btnId, predev, count] of [["predev-start-submit", inactivePredev(), 1], ["predev-reject-submit", DRAFT_PREDEV(), 1]] as Array<[string, any, number]>) {
+      let release: (v: any) => void = () => {};
+      const {ctx, posts} = await mkDecisionCtx(serve({[`/v1/predev/${MSN}`]: predev}), () => new Promise(r => { release = r; }));
+      const root = await renderJourney(ctx);
+      if (btnId === "predev-reject-submit") setVal(root, "predev-reason", "because");
+      fire(byId(root, btnId)!, "click"); await new Promise(r => setTimeout(r, 0));
+      fire(byId(root, btnId)!, "click"); fire(byId(root, btnId)!, "click"); await new Promise(r => setTimeout(r, 0));
+      expect(posts, btnId).toHaveLength(count);
+      expect(byId(await renderJourney(ctx), btnId)!.attrs.get("disabled"), btnId).toBeDefined();
+      release(OK(predevBody())); await new Promise(r => setTimeout(r, 0));
+    }
+  });
+  it("a successful decision keeps its own result visible when the next draft takes over; the start result stays visible once the sequence is active; the draft's pill follows its state", async () => {
+    let body: any = DRAFT_PREDEV();
+    const answers: any[] = [OK(predevBody({phase: "REQUIREMENTS"}))];
+    const {ctx} = await mkDecisionCtx(p => (p === `/v1/predev/${MSN}` ? body : serve()(p)), () => answers.shift());
+    let root = await renderJourney(ctx);
+    expect(pills(byId(root, "predev-decisions")!)).toContain("ACTIVE");
+    setVal(root, "predev-evidence", "evd_1"); fire(byId(root, "predev-approve-submit")!, "click"); await new Promise(r => setTimeout(r, 0));
+    ctx.store.cache.clear();
+    body = predevBody({phase: "REQUIREMENTS"}, {BusinessAnalysis: preArt("APPROVED"), Requirements: preArt("SUBMITTED", {artifactId: PDA2}), Plan: preArt("NOT_STARTED")});
+    root = await renderJourney(ctx);
+    expect(byData(root, "decision", "pending")!.dataset.artifact).toBe(PDA2);
+    expect(pills(byId(root, "predev-decisions")!)).toContain("WAITING");
+    expect(status(root, "predev-approve").textContent).toBe("Approved. The server advanced the sequence; phase: REQUIREMENTS.");
+    expect((byId(root, "predev-evidence") as any).value).toBe("");
+    // Başlatma: okuma artık etkin diziyi gösterse de başlatma sonucu görünür kalır.
+    let pre: any = inactivePredev();
+    const c2 = await mkDecisionCtx(p => (p === `/v1/predev/${MSN}` ? pre : serve()(p)), () => OK(predevBody({phase: "BUSINESS_ANALYSIS"}), 201));
+    const r0 = await renderJourney(c2.ctx);
+    fire(byId(r0, "predev-start-submit")!, "click"); await new Promise(r => setTimeout(r, 0));
+    c2.ctx.store.cache.clear(); pre = predevBody({phase: "BUSINESS_ANALYSIS"}, {BusinessAnalysis: preArt("NOT_STARTED"), Requirements: preArt("NOT_STARTED"), Plan: preArt("NOT_STARTED")});
+    const r1 = await renderJourney(c2.ctx);
+    expect(byId(r1, "predev-start-submit")).toBeUndefined();
+    expect(status(r1, "predev-start").textContent).toBe("Pre-dev sequence started. The server reports the phase: BUSINESS_ANALYSIS.");
+  });
+  it("a draft that becomes REJECTED by someone else clears the old entered text and the old result (they belonged to a decidable draft)", async () => {
+    let body: any = DRAFT_PREDEV();
+    const {ctx} = await mkDecisionCtx(p => (p === `/v1/predev/${MSN}` ? body : serve()(p)), () => refuse("PREDEV_APPROVER_NOT_INDEPENDENT"));
+    let root = await renderJourney(ctx);
+    setVal(root, "predev-evidence", "evd_1"); fire(byId(root, "predev-approve-submit")!, "click"); await new Promise(r => setTimeout(r, 0));
+    root = await renderJourney(ctx);
+    expect(status(root, "predev-approve").textContent).toContain("PREDEV_APPROVER_NOT_INDEPENDENT");
+    ctx.store.cache.clear();
+    body = predevBody({phase: "BUSINESS_ANALYSIS"}, {BusinessAnalysis: preArt("REJECTED"), Requirements: preArt("NOT_STARTED"), Plan: preArt("NOT_STARTED")});
+    root = await renderJourney(ctx);
+    expect(byData(root, "decision", "none")!.dataset.why).toBe("rejected");
+    expect(status(root, "predev-approve").textContent).toBe("");
+  });
+  it("drafts never leak to another artifact or mission: changing the awaiting artifact (not caused by a decision) or the mission clears entered text and old results", async () => {
+    let body: any = DRAFT_PREDEV();
+    const {ctx, dec} = await mkDecisionCtx(p => (p === `/v1/predev/${MSN}` ? body : serve()(p)), () => refuse("PREDEV_APPROVER_NOT_INDEPENDENT"));
+    let root = await renderJourney(ctx);
+    setVal(root, "predev-evidence", "evd_1"); setVal(root, "predev-reason", "because");
+    fire(byId(root, "predev-approve-submit")!, "click"); await new Promise(r => setTimeout(r, 0));
+    root = await renderJourney(ctx);
+    expect(status(root, "predev-approve").textContent).toContain("PREDEV_APPROVER_NOT_INDEPENDENT");
+    // Başka bir taslak (ajan yeni sürüm kaydetti): eski girdi ve eski ret metni gösterilmez.
+    ctx.store.cache.clear();
+    body = predevBody({phase: "BUSINESS_ANALYSIS"}, {BusinessAnalysis: preArt("DRAFT", {artifactId: PDA2, version: 2}), Requirements: preArt("NOT_STARTED"), Plan: preArt("NOT_STARTED")});
+    root = await renderJourney(ctx);
+    expect(byData(root, "decision", "pending")!.dataset.artifact).toBe(PDA2);
+    expect((byId(root, "predev-evidence") as any).value).toBe("");
+    expect((byId(root, "predev-reason") as any).value).toBe("");
+    expect(status(root, "predev-approve").textContent).toBe("");
+    expect(dec.predevDraft.artifactId).toBe(PDA2);
+  });
+  it("an unreadable predev read draws NO decision panel (the Journey already shows the honest read state)", async () => {
+    for (const thrown of ["x: HTTP 404", "fetch failed", "x: HTTP 500"]) {
+      const {ctx} = await mkDecisionCtx(p => { if (p === `/v1/predev/${MSN}`) throw new Error(thrown); return serve()(p); }, () => { throw new Error("must not post"); });
+      const root = await renderJourney(ctx);
+      expect(byId(root, "predev-decisions"), thrown).toBeUndefined();
+      expect(allData(root, "journeyState").length, thrown).toBeGreaterThan(0);
+    }
+  });
+  it("server text is rendered as text only, in English and Turkish, with no raw i18n keys", async () => {
+    for (const lang of ["en", "tr"]) {
+      const {ctx} = await mkDecisionCtx(serve({[`/v1/predev/${MSN}`]: DRAFT_PREDEV()}), () => refuse("PREDEV_APPROVAL_EVIDENCE_REQUIRED"), lang);
+      let root = await renderJourney(ctx);
+      setVal(root, "predev-evidence", "evd_1");
+      fire(byId(root, "predev-approve-submit")!, "click"); await new Promise(r => setTimeout(r, 0));
+      root = await renderJourney(ctx);
+      expect(status(root, "predev-approve").textContent, lang).toContain("(PREDEV_APPROVAL_EVIDENCE_REQUIRED)");
+      expect(all(root).some(n => ["SCRIPT", "IMG", "IFRAME"].includes(n.tagName)), lang).toBe(false);
+      expect(root.textContent, lang).not.toMatch(/\bpredev\.[a-zA-Z]+\.?[A-Za-z_]*\b|\{[a-zA-Z]+\}/);
+      expect(byId(root, "predev-decisions")!.getAttribute("aria-label"), lang).toBe(lang === "en" ? "Pre-development decisions" : "Ön geliştirme kararları");
+    }
+  });
+  it("the module only writes through ctx.api.post with core-built paths; nothing else (no fetch/bridge/eval/HTML sinks); the paths fit the shape the desktop shell must allow", async () => {
+    const src = read("views", "predev-decisions.js"), core = read("predev-decisions-core.js");
+    expect(src.match(/ctx\.api\.post\(/g)).toHaveLength(1);
+    for (const s of [src, core]) expect(s).not.toMatch(/window\.uasco|\bbridge\b|apiPost|\bfetch\(|XMLHttpRequest|\beval\(|innerHTML|outerHTML|insertAdjacentHTML|new Function|localStorage|sessionStorage/);
+    expect(src).toContain("req.path");
+    const {scanImports} = await import("./support/static-imports.js");
+    expect(scanImports(path.join(rend, "predev-decisions-core.js")).map((r: any) => r.specifier).sort()).toEqual(["./journey-core.js", "./work-core.js"]);
+    expect(scanImports(path.join(rend, "views", "predev-decisions.js")).map((r: any) => r.specifier).sort()).toEqual(["../components.js", "../forms.js", "../journey-core.js", "../model.js", "../predev-decisions-core.js"]);
+  });
+  it("every predev.* key used by the view and core exists in EN and TR and no predev.* key is dead", async () => {
+    const en = (await load("locales", "en.js")).default as Record<string, string>, tr = (await load("locales", "tr.js")).default as Record<string, string>;
+    const core = await load("predev-decisions-core.js");
+    const need = new Set<string>();
+    for (const f of ["views/predev-decisions.js", "predev-decisions-core.js"]) for (const m of read(...f.split("/")).matchAll(/"(predev\.[A-Za-z0-9_.]+)"/g)) need.add(m[1]);
+    for (const r of core.PREDEV_REFUSAL_REASONS) need.add(`predev.refused.${r}`);
+    for (const k of ["started", "started.replayed", "approved", "rejected"]) need.add(`predev.${k}`);
+    expect([...need].filter(k => !(k in en) || !(k in tr))).toEqual([]);
+    const have = (d: Record<string, string>) => Object.keys(d).filter(k => k.startsWith("predev.")).sort();
+    expect(have(en)).toEqual(have(tr));
+    expect(have(en).filter(k => !need.has(k))).toEqual([]);
+    for (const k of ["form.field.evidenceRefs", "form.field.artifact", "form.field.mission"]) { expect(en[k], k).toBeTruthy(); expect(tr[k], k).toBeTruthy(); }
+  });
+});
