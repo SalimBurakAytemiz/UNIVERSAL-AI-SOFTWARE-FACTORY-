@@ -492,6 +492,16 @@
       "ref": "wf_b028361d-62d (3 lenses + 9 skeptics, none refuted): HIGH packaged app 503 + v7-b7-installer D-M1-01 red (readiness inputs not staged); MEDIUM isOpenRun only pinned for RUNNING; MEDIUM bare catch/503 untested; MEDIUM per-request reload of ~420 files (6x latency, 598 KB); 5 LOW",
       "policy": "TEP-1",
       "at": "2026-10-26T21:52:16.121Z"
+    },
+    {
+      "pr": 263,
+      "sha": "79799cafdd3748e0bc957cc2df05f95ef3c8ab4c",
+      "kind": "full",
+      "base": null,
+      "verdict": "BLOCKERS_8MEDIUM_display_test_gaps",
+      "ref": "wf_6354c9da-ebd (3 lenses + 8 skeptics, none refuted): implemented label only on VERIFIED stat + header never; no-sum/hidden-running checks textContent-only; proposedOnly separation; unavailable zeros; sum>den accepted; NOT_APPLICABLE untested; tr render; ~12 LOW. b28fb5c (fail-closed running) to be reviewed as part of the round-1 delta",
+      "policy": "TEP-1",
+      "at": "2026-10-26T22:13:29.792Z"
     }
   ],
   "tests": [],
