@@ -1,0 +1,92 @@
+{
+ "cap": 1,
+ "ttlMs": 1500,
+ "blockMs": 2250,
+ "implementerCalls": {
+  "A": 2,
+  "B": 1,
+  "Baborted": 0
+ },
+ "ticks": [
+  {
+   "tick": 1,
+   "ms": 3201,
+   "claimed": [
+    "A"
+   ],
+   "deferred": [
+    "B"
+   ],
+   "fenced": [
+    "A"
+   ],
+   "recovered": [],
+   "advanced": [],
+   "A": {
+    "status": "RUNNING",
+    "step": "IMPLEMENT",
+    "attempt": 1,
+    "reason": "step IMPLEMENT started"
+   },
+   "B": {
+    "status": "QUEUED",
+    "step": "WORKSPACE",
+    "attempt": 0,
+    "reason": "queued for runner"
+   }
+  },
+  {
+   "tick": 2,
+   "ms": 1205,
+   "claimed": [],
+   "deferred": [
+    "B"
+   ],
+   "fenced": [],
+   "recovered": [
+    "A"
+   ],
+   "advanced": [
+    "A"
+   ],
+   "A": {
+    "status": "AWAITING_APPROVAL",
+    "step": "REPORT",
+    "attempt": 2,
+    "reason": "DELIVERY_DECISION_PENDING_FOUNDER"
+   },
+   "B": {
+    "status": "QUEUED",
+    "step": "WORKSPACE",
+    "attempt": 0,
+    "reason": "queued for runner"
+   }
+  },
+  {
+   "tick": 3,
+   "ms": 6599,
+   "claimed": [
+    "B"
+   ],
+   "deferred": [],
+   "fenced": [],
+   "recovered": [],
+   "advanced": [
+    "B"
+   ],
+   "A": {
+    "status": "AWAITING_APPROVAL",
+    "step": "REPORT",
+    "attempt": 2,
+    "reason": "DELIVERY_DECISION_PENDING_FOUNDER"
+   },
+   "B": {
+    "status": "AWAITING_APPROVAL",
+    "step": "REPORT",
+    "attempt": 1,
+    "reason": "DELIVERY_DECISION_PENDING_FOUNDER"
+   }
+  }
+ ],
+ "bRecoveryEvidence": []
+}

@@ -1,0 +1,28 @@
+{
+ "phase2tick": {
+  "recovered": [
+   "run_234c45fb286a136f147c22fe"
+  ],
+  "advanced": [
+   "run_234c45fb286a136f147c22fe"
+  ],
+  "fenced": []
+ },
+ "runAfterPhase2": {
+  "status": "AWAITING_APPROVAL",
+  "attempt": 2,
+  "headSha": "9dbbca7b648f92810dc1cea5e66c80ac7430f67d"
+ },
+ "workHeadAfterPhase2": "9dbbca7b648f92810dc1cea5e66c80ac7430f67d",
+ "afterOrphanWindow": {
+  "workHead": "0bebc1dcfdaa15f1568c7a67fcd77b0836eb4197",
+  "workLog": [
+   "orphan commit",
+   "fake implement",
+   "seed"
+  ],
+  "orphanFilePresent": true,
+  "runHeadSha": "9dbbca7b648f92810dc1cea5e66c80ac7430f67d"
+ },
+ "workspaceDivergedFromRecordedHead": true
+}

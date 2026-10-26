@@ -1,0 +1,18 @@
+{
+ "slowMs": 6000,
+ "maxStepsPerTick": "1",
+ "ticks": 14,
+ "timeline": [
+  "0.79s tick 1 claimed=A,B deferred=C fenced=",
+  "0.88s implement start A",
+  "0.94s implement start B",
+  "0.98s implement end A",
+  "7.01s implement end B",
+  "9.24s AWAITING_APPROVAL A",
+  "9.24s AWAITING_APPROVAL B",
+  "9.44s tick 8 claimed=C deferred= fenced=",
+  "9.54s implement start C",
+  "9.60s implement end C",
+  "11.22s AWAITING_APPROVAL C"
+ ]
+}

@@ -1,0 +1,69 @@
+{
+ "cap": 2,
+ "ttlMs": 1500,
+ "blockMs": 2250,
+ "implementerCalls": {
+  "A": 2,
+  "B": 2,
+  "Baborted": 1
+ },
+ "ticks": [
+  {
+   "tick": 1,
+   "ms": 3379,
+   "claimed": [
+    "A",
+    "B"
+   ],
+   "deferred": [],
+   "fenced": [
+    "A",
+    "B"
+   ],
+   "recovered": [],
+   "advanced": [],
+   "A": {
+    "status": "RUNNING",
+    "step": "IMPLEMENT",
+    "attempt": 1,
+    "reason": "step IMPLEMENT started"
+   },
+   "B": {
+    "status": "RUNNING",
+    "step": "IMPLEMENT",
+    "attempt": 1,
+    "reason": "step IMPLEMENT started"
+   }
+  },
+  {
+   "tick": 2,
+   "ms": 1858,
+   "claimed": [],
+   "deferred": [],
+   "fenced": [],
+   "recovered": [
+    "A",
+    "B"
+   ],
+   "advanced": [
+    "A",
+    "B"
+   ],
+   "A": {
+    "status": "AWAITING_APPROVAL",
+    "step": "REPORT",
+    "attempt": 2,
+    "reason": "DELIVERY_DECISION_PENDING_FOUNDER"
+   },
+   "B": {
+    "status": "AWAITING_APPROVAL",
+    "step": "REPORT",
+    "attempt": 2,
+    "reason": "DELIVERY_DECISION_PENDING_FOUNDER"
+   }
+  }
+ ],
+ "bRecoveryEvidence": [
+  "takeover attempt 2; resume step IMPLEMENT cycle 0; completed checkpoints 1; recovery 1 of budget 2"
+ ]
+}

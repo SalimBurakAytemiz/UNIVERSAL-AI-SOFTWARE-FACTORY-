@@ -1,0 +1,54 @@
+{
+  "area": "Parallel execution (mission section 4)",
+  "base": "v7/integration fe08022bce8d3381a45b4de79361a001b2e405c7 (read-only worktree audit-base)",
+  "env": "Linux 6.18 sandbox, 4 CPUs, Node v24.22.1; NOT a Windows/production measurement",
+  "effectiveValues": {
+    "config/automation.json:7 maxParallelLanes": "1 (only runtime reader automation/factory-supervisor.mjs:55 is unreachable: the supervisor exits 64 at line 3 after ESM imports load; observed exit=64 'LEGACY_CODEX_REVIEW_PATH_RETIRED'); pinned to 1 by scripts/validate-config-runtime-enforcement.mjs:10,16 and scripts/validate-mechanical-closure.mjs:106 (both in config/validation.json:192,200)",
+    "core/workos/runner.ts:123-124 defaults": "leaseTtlMs 120000 (heartbeat every 40000 ms, runner.ts:281), maxConcurrentRuns 1, maxStepsPerTick Infinity, executorTimeoutMs 3600000, maxRetries 2, maxRecoveries 2, maxRemediations 2",
+    "apps/control-api/src/server.ts:75,279-280 (only production constructor)": "passes leaseTtlMs/maxRemediations/maxRetries/retryBackoffMs/testTimeoutMs/executorTimeoutMs/security only; BuildServerOptions.runner Pick excludes maxConcurrentRuns and maxStepsPerTick -> production cap is always 1, steps per tick always Infinity",
+    "apps/control-api/src/packaged-entry.ts:57": "runner: {enabled: true} -> desktop runs the engine with all defaults, tick interval 2000 ms",
+    "scripts/uasco-orchestrator.mjs:34 + automation/lib/orchestrator-engine.mjs:186-201": "construction orchestrator: single-worker process lock, strictly sequential action loop (maxActionsPerTick 12, config/orchestrator-policy.json:16)",
+    "docs/planning/LANES.json capacity": "builderCap 4, ciSlots 6; lanes A/B/C/Z maxActive 1, maxOpenPrs 3/3/3/2 (coordinator-level parallelism lives outside the repo runtime)"
+  },
+  "existingTests": {
+    "command": "vitest run (scratch config, cacheDir in scratch) tests/v7-b3a-runner.test.ts tests/v7-b3a-recovery-budget.test.ts -t <cap|fencing|crash-resume|GLOBAL_STOP|lost lease|recovery budget>",
+    "result": "16 passed, 45 skipped, exit 0, wall 24 s (Linux)",
+    "log": "vitest-par.log"
+  },
+  "repro_heartbeatStarvation": {
+    "script": "repro-hb-starve.mts (cap ttlMs blockMs); run A blocks the event loop synchronously for blockMs inside its step while run B is in an async (paid) implementer call",
+    "cap2_ttl1500_block2250": "tick1 claimed=[A,B] fenced=[A,B]; B implementer aborted 1x and re-executed (implementer calls B=2); tick2 recovered=[A,B]; B evidence 'takeover attempt 2; ... recovery 1 of budget 2'",
+    "cap1_ttl1500_block2250 (control)": "tick1 claimed=[A] deferred=[B] fenced=[A]; B never leased while A blocked; B implementer calls 1, aborted 0",
+    "cap2_ttl1500_block0 (control)": "both AWAITING_APPROVAL in tick 1, no fence, implementer calls A=1 B=1",
+    "files": ["repro-cap2.json", "repro-cap1-block2250.json", "repro-cap2-block0.json", "repro-cap2-block2250.json"]
+  },
+  "repro_convoy": {
+    "script": "repro-convoy.mts (cap 2, runs A fast, B slow 6000 ms, C queued)",
+    "maxStepsPerTick_inf (production default)": "A implement end 0.70 s; B implement end 6.75 s; tick 1 returns 8.11 s; C implement start 8.37 s -> freed slot idle ~7.4 s until the slowest run in the batch finished",
+    "maxStepsPerTick_1": "A implement end 0.98 s; B end 7.01 s; C claimed at 9.44 s (tick 8) -> still gated by B's longest single step",
+    "files": ["repro-convoy-inf.json", "repro-convoy-1.json"]
+  },
+  "repro_orphanWriter": {
+    "script": "repro-orphan-engine.mts (engine 1 SIGKILLed during an 8 s implementer call; engine 2 takes over after lease expiry)",
+    "result": "implementer child alive after engine kill: 1; engine 2 recovered run -> AWAITING_APPROVAL headSha 9dbbca7b; then the orphan child wrote ORPHAN.txt and committed 'orphan commit' in the same runs/<id>/work: work HEAD 0bebc1dc != recorded headSha (workspaceDivergedFromRecordedHead=true)",
+    "file": "repro-orphan.json"
+  },
+  "bench_journalWrite": {
+    "script": "bench-journal.mts (synthetic valid RENEW entries; one renewRunLease write = lock + full read/verify/replay + append + snapshot)",
+    "results_ms": [
+      {"entries": 1007, "bytes": 442423, "writeMedian": 21.3, "readAfterExternalWrite": 12.3},
+      {"entries": 5007, "bytes": 2202423, "writeMedian": 53.9, "readAfterExternalWrite": 49.8},
+      {"entries": 10007, "bytes": 4402431, "writeMedian": 82.9, "readAfterExternalWrite": 79.9},
+      {"entries": 25007, "bytes": 11017431, "writeMedian": 221.4, "readAfterExternalWrite": 209.0},
+      {"entries": 50007, "bytes": 22042431, "writeMedian": 443.7, "readAfterExternalWrite": 447.3}
+    ],
+    "journalEntriesPerFastHappyRun": "(117 total - 7 setup) / 2 runs = 55 (repro-cap2-block0-journal.json); production adds 1 RENEW per active run per 40 s (code constant TTL/3)",
+    "file": "bench-journal.json"
+  },
+  "measure_syncClone": {
+    "what": "git clone --no-hardlinks of the UASCO repo itself (same argv as runner.ts:430), single sample",
+    "wall_s": 25.2,
+    "size": ".git 83M + worktree 47M",
+    "clonesPerRunCycle": "WORKSPACE 1 (runner.ts:430) + per cycle: VERIFY scan clone (524), SECURITY clone (590) + bare clone (608), REVIEW clone (689), REGRESSION clone (723) = 5 synchronous spawnGitSync clones per cycle"
+  }
+}
