@@ -1791,8 +1791,8 @@
   },
   "integrationBoard": {
     "//TR": "Koordinatör entegrasyon panosu: her açık PR için gerçek engel ve bekleyen sorumlu. Ortak kök neden (base dependency gate) PR'a özgü hatalardan ayrı tutulur; #221/#225 birleşmeden tekrar CI tetiklenmez.",
-    "at": "2026-10-26T08:56:00Z",
-    "base": "7070714 (v7/integration, after #196)",
+    "at": "2026-10-26T09:43:00Z",
+    "base": "f189693 (v7/integration, after #233)",
     "sharedRootCause": {
       "id": "NONE_ACTIVE",
       "previous": "BASE_DEPENDENCY_GATE resolved by #225 (e2323d9)",
@@ -1800,31 +1800,24 @@
     },
     "prs": [
       {
-        "pr": 233,
-        "kind": "LANE_A A-SETUP-FIX-1 (setup-check fix texts)",
-        "state": "DRAFT @87ac9f7",
-        "blocker": "review NO_BLOCKERS; 2 LOW regressions (F1 install-before-launcher fixKey order, F2 executorRow with stale LOCAL_CLAUDE) + F3 pins requested before merge",
-        "owner": "LANE_A"
-      },
-      {
         "pr": 229,
         "kind": "LANE_C AnalysisFlow",
-        "state": "DRAFT @a635b6e (tree == e37311c)",
-        "blocker": "re-verify BLOCKERS: F1 MEDIUM verified (APPROVED-but-not-advanced phase triggers a discarded paid builder call every step(); regression from L2) + LOW F2/F3 survivors",
+        "state": "DRAFT @722a2ae (dea3bfc + clean base merge 7070714)",
+        "blocker": "F1 fixed (ANALYSIS_PHASE_NOT_ADVANCED before the paid call) + F2/F3 pins; delta re-check wiah5p23g running; Windows shard 3 v7-b3a-runner 'default cap 1' BOUNDED_TICK_TIMEOUT judged not this PR's (one re-run queued by Lane C)",
         "owner": "LANE_C"
       },
       {
         "pr": 224,
         "kind": "LANE_C PAR runner",
         "state": "DRAFT @705acae",
-        "blocker": "round-3 re-review BLOCKERS: R2-10/SWEEP-2 cwd sweep after every IMPLEMENT SIGKILLs same-user processes; HB-R3-1 owner-record failure on runner git children is terminal; M9 pin vacuous under load",
+        "blocker": "round-3 fixes in Lane C final verification (incl. their own find: execFile does not forward detached, so runner git children were never group leaders; fixed with spawn)",
         "owner": "LANE_C"
       },
       {
         "pr": 231,
         "kind": "FOUNDER-TIER sandbox (WSL provider + devrun + Lane C loopback)",
-        "state": "DRAFT @9bdb026",
-        "blocker": "delta security reviews done (isolation NO_BLOCKERS); 2 MEDIUM devrun (D1 stop during spawnAsync, D2 blank BLOCKED erases STOP_INCOMPLETE) + 14 LOW -> Lane B; B-WSL-WIRE-1 server.ts classified R2 (Founder, real-WSL acceptance) -> coordinator applies inside #231 after the fix push",
+        "state": "DRAFT @392dbb2",
+        "blocker": "Lane B D1/D2/L1-L14 (d71acac) + coordinator B-WSL-WIRE-1 server.ts wiring + reseal (77864f2) + Windows-safe D1-ownership test (392dbb2); delta security review wbeqjgq2e running; merge = Founder decision (R2) after real-WSL acceptance",
         "owner": "COORDINATOR -> FOUNDER"
       },
       {
@@ -1836,7 +1829,7 @@
       }
     ],
     "branchOnlyChains": {
-      "laneA": "claude/lane-a-win-e2e 5bd26b7 (Electron journey E2E; dba4270 review BLOCKERS B1-B9/L1-L11 fixed by Lane A, 10/10 local Linux xvfb runs PASS_WITH_NOT_VERIFIED; independent re-review wj1elg26x running; Windows NOT_EXECUTED); #232 merged d3ebcc1",
+      "laneA": "claude/lane-a-win-e2e 7fb25e1 (Electron journey E2E; 662f7a7 delta NO MEDIUM+; final LOW push L1-L3 + workflow draft hardening under delta check wiah5p23g; Windows NOT_EXECUTED); #232/#192/#196/#233 merged",
       "laneB": "claude/lane-b-analysis-routes 6bd6f30 (200-with-body steps, shared produce lock, stop->423 audit; PR after #229 F1 fix); #231 sandbox in Founder tier",
       "laneC": "#229 F1 fix + #224 round-3 fixes pending; C-FLOW-ANALYSIS-2 claude/lane-c-flow-analysis-2 76772d4 (after #229); #228 merged ddcb371",
       "coordinator": "claude/coord-protected-batch-4b fee6cef -> rebuild after #229/analysis-routes (adds AnalysisFlow stopped hook, #226 journey pin flip, M4 pin); claude/coord-transition-autonomy (reform, wgguxa5j0) + CI speed plan (N=6 shards, draft gating, preflight needs, npm cache, selftest tmp cleanup; measured BEFORE p50 21.7 min)"
@@ -1965,6 +1958,16 @@
         "at": "2026-10-26T08:55:15Z",
         "postMerge": "VERIFIED: parent1 a14bd26, parent2 = reviewed head 7097af4, merge-tree 18141a5 == merge tree",
         "review": "delta re-check NO_BLOCKERS (wf_60c53ffd-c40) + coordinator merge-commit check (locale key-level 3-way union 3452/3452, non-locale == clean 3-way merge)",
+        "riskTier": "ROUTINE (renderer + locales + tests)"
+      },
+      {
+        "pr": 233,
+        "merge": "f189693",
+        "by": "SalimBurakAytemiz (auto-merge, enabled by coordinator 09:00:42Z)",
+        "at": "2026-10-26T09:24:25Z",
+        "postMerge": "VERIFIED: parent1 7070714, parent2 = reviewed head 2a956e8, merge-tree 4c3c2e3 == merge tree",
+        "review": "process-mode review NO_BLOCKERS (wf_a696c4b7-833) + coordinator delta check (F1/F2 mutants killed, 55/55)",
+        "pushCi": "Windows Installer 40299295868 success; CI 40299295801 in progress at 09:43Z; previous base pushes 7070714 and a14bd26 CI success",
         "riskTier": "ROUTINE (renderer + locales + tests)"
       }
     ],
