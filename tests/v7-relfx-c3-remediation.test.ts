@@ -250,7 +250,7 @@ describe("C-PAR-1 PAR-03: synchronous git in one run must not starve another run
 
 // //TR: #218 (repositoryHead) + C-PAR-1 birleşimi: runner WORKSPACE adımı depo kökü/HEAD kararını artık EŞZAMANSIZ sürücüyle verir (olay döngüsünü bloklamaz); karar prosedürü (headDecision) tek yerde, iki sürücü aynı ortam izin listesini ve aynı tavanı kullanır. Bu testler iki sürücünün aynı cevabı verdiğini, host GIT_* değişkenlerinin hiçbirini görmediğini ve eşzamansız sürücünün döngüyü bloklamadığını kanıtlar.
 describe("C-PAR-1 follow-up: a reviewer that cannot start for a reason the Founder can fix BLOCKS the run (like a missing sign-in), it does not FAIL it", () => {
-  it("CLI missing / .cmd shim / unverified, changed or vanished launcher / expired sign-in -> BLOCKED with the exact code; a review that is invalid for its own reasons stays FAILED", { timeout: 180_000 }, async () => {
+  it("CLI missing / .cmd shim / unverified, changed or vanished launcher / expired sign-in -> BLOCKED with the exact code; a review that is invalid for its own reasons stays FAILED", { timeout: 120_000 }, async () => {
     const rows: Array<[string, "BLOCKED" | "FAILED"]> = [["CLAUDE_PROFILE_LOGIN_REQUIRED", "BLOCKED"], ["CLAUDE_PROFILE_LOGIN_EXPIRED", "BLOCKED"], ["CLAUDE_CLI_NOT_FOUND", "BLOCKED"], ["CLAUDE_CLI_SHIM_UNSUPPORTED", "BLOCKED"],
       ["PROVIDER_PROVENANCE_NOT_READY", "BLOCKED"], ["CLAUDE_PACKAGE_PROVENANCE_REQUIRED", "BLOCKED"], ["CLAUDE_LAUNCHER_PROVENANCE_CHANGED", "BLOCKED"], ["REVIEW_WORKSPACE_MODIFIED", "FAILED"], ["REVIEW_FAILED", "FAILED"]];
     for (const [i, [code, want]] of rows.entries()) {
