@@ -18,6 +18,8 @@ export interface SandboxProvider {
   run(argv: string[], opts: SandboxRunOptions): Promise<ProcResult>;
   spawn(command: string, args: string[], opts: SpawnOptions): ChildProcess;
   /** İsteğe bağlı (B-RUN-WIN-1): hazırlığı eşzamansız olan sağlayıcılar (WSL: kopyalama + betik) için; varsa dev-run spawn() yerine bunu kullanır. Dönen süreç `sandboxTeardown` taşıyabilir: çıkıştan sonra Linux tarafı ağacı/dizini temizleyen söz. */
+  /** İsteğe bağlı: sağlayıcının şu anki doğrulanmış durumu; kapı her authorize()/status()'ta sorar (false ise önbellek geçersizdir). */
+  isVerified?(): boolean;
   spawnAsync?(command: string, args: string[], opts: SpawnOptions): Promise<SandboxChild>;
 }
 export type SandboxChild = ChildProcess & {sandboxTeardown?: Promise<unknown>};
@@ -41,6 +43,8 @@ export class ExecutionGate {
     const p = this.provider;
     if (!p) return Promise.resolve({ok: false, detail: "NO_VERIFIED_PROVIDER"});
     // Öz-test süreç (kapı örneği) başına bir kez çalışır; yalnız açık {ok: true} geçer, hata/zaman aşımı/başka değer fail-closed'dur.
+    // NEW-GATE-STALE-AVAILABLE: sağlayıcı kendini doğrulanmamış yaptıysa (isVerified() false) önbellekteki başarı atılır; selfTest yeniden sorulur (sağlayıcı yeniden sondalar ve başarısız olur).
+    if (this.selfTestResult && typeof p.isVerified === "function") { let still = false; try { still = p.isVerified() === true; } catch { still = false; } if (!still) this.selfTestResult = null; }
     return this.selfTestResult ??= Promise.resolve().then(() => p.selfTest()).then(
       r => (r && typeof r === "object" && r.ok === true ? {ok: true, detail: null} : {ok: false, detail: "SELF_TEST_FAILED" as const}),
       () => ({ok: false, detail: "SELF_TEST_ERROR" as const}));
