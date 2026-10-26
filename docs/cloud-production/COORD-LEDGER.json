@@ -180,7 +180,8 @@
       "verdict": "NO_BLOCKERS",
       "ref": "wf_636238d3-079",
       "policy": "TEP-1",
-      "at": "2026-10-26T15:46:08.824Z"
+      "at": "2026-10-26T15:46:08.824Z",
+      "ciOutcome": "RED: attempt1 shard3 wfr03 GIT_SEED_FAILED (not PR); attempt2 shard1 batch-3b:55 5 s timeout (PR target, insufficient fix) -> repair r2"
     },
     {
       "pr": 242,
@@ -231,13 +232,23 @@
       "ref": "wf_508a9b18-5bb",
       "policy": "TEP-1",
       "at": "2026-10-26T16:28:36.012Z"
+    },
+    {
+      "pr": 231,
+      "sha": "d2328635393369e39baf41451da3a81ad01891f0",
+      "kind": "delta",
+      "base": "c46db00e0a46c34cc72487d52314ba3568642343",
+      "verdict": "BLOCKERS_HIGH_MaTestRace_MEDIUM_eagerSelf",
+      "ref": "wf_3b29c4cf-1c2+wf_508a9b18-5bb",
+      "policy": "TEP-1",
+      "at": "2026-10-26T16:32:05.226Z"
     }
   ],
   "tests": [],
   "fingerprint": {
-    "value": "a90b6aa8ebaf8de6f3f02917e5dc113dd56d7965def4947d2015cb347cedb8e2",
-    "at": "2026-10-26T15:45:17.830Z",
-    "base": "00f609cea6aadd0edf226a89f6f95f486455a376",
-    "prs": 9
+    "value": "2762c61e86453be4deaa8e9a4a00e5b35944475c349b32dddd7ad1dabd34456e",
+    "at": "2026-10-26T16:42:19.339Z",
+    "base": "d79d0e9279329ced49e3d543be9d97a65b25f847",
+    "prs": 8
   }
 }
