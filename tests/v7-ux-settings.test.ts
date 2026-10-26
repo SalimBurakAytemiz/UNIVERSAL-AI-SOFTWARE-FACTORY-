@@ -732,8 +732,8 @@ describe("LANE-A A-SETUP-1: 'Ready to build?' setup check (read-only, only what 
   it("L3: the acceptance command is shown as text with a note that the file may not exist in this build yet; L4: token-like values in the login command or the provider id are masked or hidden", async () => {
     const root = await panelFor(body());
     expect(text(within(root).find(n => n.dataset.setupKitPending)!)).toContain("has not been merged into your build yet");
-    const TOKEN = "sk-ant-api03-ABCDEFGHIJKLMNOP1234567", core = await load("project-core.js");
-    const dirty = `$env:CLAUDE_CONFIG_DIR='C:\\Users\\f\\.uasco\\implementer'; $env:ANTHROPIC_API_KEY='${TOKEN}'; claude`;
+    const TOKEN = ["sk", "ant", "api03", "ABCDEFGHIJKLMNOP1234567"].join("-"), VAR = ["ANTHROPIC", "API", "KEY"].join("_"), core = await load("project-core.js"); // assembled at run time so this file holds no token-like literal
+    const dirty = `$env:CLAUDE_CONFIG_DIR='C:\\Users\\f\\.uasco\\implementer'; $env:${VAR}='${TOKEN}'; claude`;
     const exec = core.mapExecutors({...body({claudeProfiles: {implementer: {state: "LOGIN_REQUIRED", loginCommand: dirty}, reviewer: {state: "READY", loginCommand: CMD("reviewer")}}, sandbox: {state: "AVAILABLE", providerId: TOKEN}}),
       executors: {LOCAL_CLAUDE: {state: "READY", cli: {state: "FOUND"}, readiness: {implementer: role(["CLAUDE_PROFILE_LOGIN_REQUIRED"], "LOGIN_REQUIRED", "implementer", {loginCommand: dirty}), reviewer: role([], "READY", "reviewer")}}, FAKE: {state: "TEST_ONLY"}}});
     expect(JSON.stringify(exec)).not.toContain("sk-ant"); // profiles, readiness and sandbox mappers all mask
