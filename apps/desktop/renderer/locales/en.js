@@ -770,7 +770,7 @@ export default {
   "work.run.expert":"Expert developer",
   "work.run.expertHint":"The run is bound to this role definition's execution profile (tools, limits), and the server checks again that the role can execute. The role is not certified.",
   "work.run.expertOpt":"{roleId} · {fn}",
-  "work.run.expertNone":"Start without a role",
+  "work.run.expertDefault":"Developer {roleId} (default)",
   "work.run.fn.developer":"developer",
   "err.roleNotExecutable":"This role cannot execute a run; choose one of the listed expert roles.",
   "form.field.roleId":"Expert role",

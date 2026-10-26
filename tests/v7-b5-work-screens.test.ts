@@ -1614,9 +1614,24 @@ describe("COORD run expert selection", () => {
     const r3 = mount(x.doc, await view.render(x.ctx));
     expect(byId(r3, "run-expert")).toBeNull();
   });
+  it("the option that sends no roleId is labelled with the role the server then assigns (UASCO-0085, default), never as 'none', and still posts {}", async () => {
+    for (const [lang, want] of [["en", ["UASCO-0085 · developer", "Developer UASCO-0085 (default)"]], ["tr", ["UASCO-0085 · geliştirici", "Geliştirici UASCO-0085 (varsayılan)"]]] as const) {
+      forms.resetAllForms();
+      const {ctx, doc, calls} = await mkCtx({lang, get: getFor("AUTHORIZED"), post: () => ({status: 202, body: {}})});
+      const view = await load(rend, "views", "work.js");
+      forms.selection.missionId = MID;
+      const root2 = mount(doc, await view.render(ctx)), sel = byId(root2, "run-expert")!;
+      expect(sel.children.map(o => o.textContent), lang).toEqual(want);
+      expect(sel.children.map(o => o.attrs.get("value") ?? (o as any).value), lang).toEqual(["UASCO-0085", ""]);
+      for (const o of sel.children) expect(o.textContent, lang).not.toMatch(/\bnone\b|without a role|atamadan|rolsüz/i);
+      sel.value = ""; sel.fire("change");
+      byId(root2, "run-start")!.fire("click"); await tick();
+      expect(calls.post, lang).toEqual([{path: `/v1/missions/${MID}/runs`, body: {}}]);
+    }
+  });
   it("expert strings exist in en and tr", async () => {
     const en = (await load(rend, "locales", "en.js")).default, tr = (await load(rend, "locales", "tr.js")).default;
-    for (const k of ["work.run.expert", "work.run.expertHint", "work.run.expertOpt", "work.run.expertNone", "work.run.fn.developer", "err.roleNotExecutable", "form.field.roleId"]) { expect(en[k], k).toBeTruthy(); expect(tr[k], k).toBeTruthy(); }
+    for (const k of ["work.run.expert", "work.run.expertHint", "work.run.expertOpt", "work.run.expertDefault", "work.run.fn.developer", "err.roleNotExecutable", "form.field.roleId"]) { expect(en[k], k).toBeTruthy(); expect(tr[k], k).toBeTruthy(); }
     expect(tr["work.run.expertHint"]).toMatch(/sertifikalı değildir/);
   });
 });
