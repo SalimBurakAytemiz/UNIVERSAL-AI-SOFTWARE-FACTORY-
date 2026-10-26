@@ -512,6 +512,16 @@
       "ref": "wf_6e9db67e-cb2 (2 lenses + 5 skeptics, none refuted): comment/string mentions count as callers + SCRIPT_LITERAL (R9/R10, latent over-report); github code-backed but unmapped (under-report, exact-5 claim wrong); NOT_OBSERVED default pinned only for bindings (R1/R16); entrypoint:true bypasses caller requirement (R11); ~13 LOW",
       "policy": "TEP-1",
       "at": "2026-10-26T22:28:34.443Z"
+    },
+    {
+      "pr": 262,
+      "sha": "d2d12d07b4a8e95fd2b21ef6c7acdeec88c7245f",
+      "kind": "delta",
+      "base": "0beafb3d5cbb399b7c433fc2f8d27bffa1f23251",
+      "verdict": "BLOCKERS_1MEDIUM_cache_invalidation_untested",
+      "ref": "wf_58637099-715 (2 lenses + 1 skeptic): all round-1 items FIXED; MEDIUM M3 invalidation pinned for technologies.json only (A12/A14 survive; READINESS_STATIC_RELS hand copy); LOWs: cached evidence verifier stale, symlink-following STATIC_DATA_DIRS, stale route contract doc, L4/eviction/now/regBefore untested",
+      "policy": "TEP-1",
+      "at": "2026-10-26T22:41:16.354Z"
     }
   ],
   "tests": [],
