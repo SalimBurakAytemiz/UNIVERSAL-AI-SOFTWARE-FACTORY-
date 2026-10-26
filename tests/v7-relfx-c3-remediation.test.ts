@@ -17,9 +17,10 @@ import {REPO, T, drive, okScript, rmTmp, runner, setup, startRun, tmpRoot} from 
 import {repositoryHead, repositoryHeadAsync} from "../core/workos/runner.js";
 import {canonicalPath} from "../core/workos/path-guard.js";
 import type {RepositoryHead} from "../core/workos/runner.js";
-import {ENV_POLICY, REPO as PAR_REPO, descendantPids, git, groupLive, journal, parHarness, procAlive, setup as parSetup, slow, sleep, stallProbe, stopWithin, waitUntil, wrapImplementer} from "./support/par.js";
+import {ENV_POLICY, REPO as PAR_REPO, descendantPids, git, groupLive, journal, parHarness, procAlive, setup as parSetup, slow, sleep, stallProbe, stopWithin, waitUntil, withFinalStop, wrapImplementer} from "./support/par.js";
 import cp from "node:child_process";
 import os from "node:os";
+import {EventEmitter} from "node:events";
 
 let tmp = "";
 beforeEach(() => { tmp = tmpRoot("uasco-relfxc3-"); });
@@ -169,10 +170,10 @@ describe("LANE-C parallel runs: heartbeat and scheduling (C-PAR-1 PAR-03/05, #21
   let tmp = ""; beforeEach(() => { tmp = par.tmp(); });
   const REPO = PAR_REPO;
   const setup = (name?: string, seed?: Record<string, string>, clock?: () => number) => parSetup(tmp, name, seed, clock);
-  // //TR: #224 tur 3 (Windows HB-1 onarımı, d77d1e4): eşzamansız-lease testlerinin TTL/gecikme çifti birlikte ölçeklendi (TTL 2 s -> 5 s, gecikme 3 s -> 7 s; oran ve "gecikme > TTL" iddiası aynı): Windows runner'ında süreç başlatma + CPU açlığı 2 s'lik TTL'yi aşabiliyordu (marj). Fence edilen run gerçek bir boşluksa bu artış onu GİZLEMEZ: iddia hâlâ "gecikme TTL'den uzun", ve başarısızlık iletisi fence edilen run'ı + ölçülen en büyük döngü gecikmesini yazar.
+  // //TR: #224 tur 3 (Windows HB-1, d77d1e4 + coordinator delta review): eşzamansız-lease testlerinin TTL/gecikme çifti BİRLİKTE ölçeklendi (TTL 2 s -> 5 s, gecikme 3 s -> 7 s; oran ve "gecikme > TTL" iddiası aynı; tüm HB-1/PAR-03 mutantları yeni sabitlerle de ÖLÜR). Shard 1'deki fence'in NEDENİ KANITLANMADI (günlükte yalnız fence edilen run kimliği vardı): ölçekleme bir "marj" olduğunu KANITLAMAZ. Başarısızlık iletisi artık fence edilen run'ı, ölçülen en büyük olay döngüsü gecikmesini ve CPU/duvar süresini yazar. Kural: TTL'yi aşan bir gecikme, aksi gösterilmedikçe bir gerilemedir; gecikme TTL'nin altında olduğu hâlde fence olduysa gerçek bir lease boşluğudur.
   const HB_TTL = 5000, HB_BLOCK = 7000;
-  const hbDiag = (c: {store: {engineGetRun(id: string): {status: string; reason?: string | null} | undefined}}, runs: Record<string, string>, fenced: string[], probe: {maxStallMs(): number}, ttl: number) =>
-    `fenced=${JSON.stringify(fenced.map(id => Object.entries(runs).find(([, v]) => v === id)?.[0] ?? id))} maxLoopStallMs=${probe.maxStallMs()} ttlMs=${ttl} ${Object.entries(runs).map(([k, id]) => `${k}=${c.store.engineGetRun(id)?.status}/${c.store.engineGetRun(id)?.reason ?? ""}`).join(" ")}`;
+  const hbDiag = (c: {store: {engineGetRun(id: string): {status: string; reason?: string | null} | undefined}}, runs: Record<string, string>, fenced: string[], probe: {maxStallMs(): number; cpuMs(): number; wallMs(): number}, ttl: number) =>
+    `fenced=${JSON.stringify(fenced.map(id => Object.entries(runs).find(([, v]) => v === id)?.[0] ?? id))} maxLoopStallMs=${probe.maxStallMs()} cpuMs=${probe.cpuMs()} wallMs=${probe.wallMs()} ttlMs=${ttl} ${Object.entries(runs).map(([k, id]) => `${k}=${c.store.engineGetRun(id)?.status}/${c.store.engineGetRun(id)?.reason ?? ""}`).join(" ")}`;
 describe("C-PAR-1 PAR-03: synchronous git in one run must not starve another run's lease heartbeat (cap 2)", () => {
   // //TR: Aynı senaryo iki yavaş git noktası için: A'nın VERIFY tarama klonu ve A'nın WORKSPACE adımındaki depo kökü/HEAD probu (#218 ile birleşimde eşzamansız sürücü).
   const slowGitLeavesBUnfenced = async (slowMatch: (A: {runId: string}, srcRepo: string) => (cwd: string, args: string[]) => boolean) => {
@@ -201,10 +202,10 @@ describe("C-PAR-1 PAR-03: synchronous git in one run must not starve another run
     expect(calls.Baborted).toBe(0);
     expect([c.status(A.runId), c.status(B.runId)]).toEqual(["AWAITING_APPROVAL", "AWAITING_APPROVAL"]);
   };
-  it("run A's slow git clone (7 s, TTL 5 s) leaves run B (long async implementer call) unfenced: no abort, no re-run", { timeout: 120_000 }, async () => {
+  it("run A's slow git clone (7 s, TTL 5 s) leaves run B (long async implementer call) unfenced: no abort, no re-run", { timeout: 90_000 }, async () => {
     await slowGitLeavesBUnfenced(A => (cwd, args) => cwd.includes(A.runId) && args.includes("clone") && args.some(a => a.endsWith("scan-c0"))); // A'nın VERIFY tarama klonu
   });
-  it("run A's slow repository HEAD probe (7 s, TTL 5 s, WORKSPACE step) leaves run B unfenced too: the probe is asynchronous", { timeout: 120_000 }, async () => {
+  it("run A's slow repository HEAD probe (7 s, TTL 5 s, WORKSPACE step) leaves run B unfenced too: the probe is asynchronous", { timeout: 90_000 }, async () => {
     let fired = false; // yalnız İLK HEAD okuması yavaş (A'nınki); B'ninki ve sonraki adımlar hızlı
     await slowGitLeavesBUnfenced((_A, srcRepo) => (cwd, args) => { const here = canonicalPath(cwd), repo = canonicalPath(srcRepo); const hit = !fired && here.ok && repo.ok && here.key === repo.key && args.includes("HEAD^{commit}") && args.includes("HEAD"); if (hit) fired = true; return hit; }); // //TR: Windows CI: runner depo yolunu path-guard'ın kanonik biçimine (8.3 kısa adları açılmış, harf büyüklüğü katlanmış) çevirir; sabit `===` eşleşmeyip yavaş-git senaryosu hiç tetiklenmiyordu
   });
@@ -489,7 +490,7 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
     let started = false; // yalnız implementer çocuğu gerçekten başladıktan sonra bakılır (öncesindeki kayıtlı grup kısa ömürlü bir git çocuğudur)
     const mr = c.runner({executors: wrapImplementer(pair0, (w, spec, ctx) => { started = true; return pair0.implementer.implement(w, spec, ctx); })});
     mr.start(250);
-    try { // bir onaylama başarısız olursa bile motorun zamanlayıcısı, 20 sn'lik yazar ve sonlanma kancaları sızmasın
+    await withFinalStop(() => mr.stop(), async () => { // bir onaylama başarısız olursa bile motorun zamanlayıcısı, 20 sn'lik yazar ve sonlanma kancaları sızmasın; son stop() sonucu da doğrulanır (asılı stop testi geçirmez)
     const work = () => path.join(c.dataDir, "runs", A.runId, "work");
     const ownerFile = path.join(c.dataDir, "runs", A.runId, "workspace.owner.json");
     let pgid = 0;
@@ -506,7 +507,7 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
     expect(notCancelled()).toEqual(["RUNNING", "IMPLEMENT"]); // yeni adım başlamadı
     expect(fs.existsSync(path.join(work(), "feature.txt"))).toBe(false);
     expect(slowImpl.calls.implement, "a new implementer was started after stop()").toBe(1);
-    } finally { await stopWithin(mr.stop()); }
+    });
   });
 
   // ---- R2 (second adversarial pass): stop()/termination safety ----
@@ -527,32 +528,32 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
 
   it.skipIf(process.platform === "win32")("R2-1: stop() keeps the exit/signal hooks installed until the drives have settled (server.ts onClose does not await stop(): the exit hook must still be there to kill the writer group)", { timeout: 90_000 }, async () => {
     const f = await inFlight("r21");
-    try {
+    await withFinalStop(() => f.mr.stop(), async () => {
       const armed = process.listenerCount("exit"); // kanca takılı (başka bileşenlerin kendi exit dinleyicileri de sayılır: yalnız değişim ölçülür)
       const stopped = f.mr.stop(); // çağıran beklemiyor
       expect(process.listenerCount("exit"), "the exit hook was removed while the writer group was still alive").toBe(armed);
       expect(await stopWithin(stopped), "stop() never settled").toBe("OK");
       expect(process.listenerCount("exit"), "the exit hook must be released once the drives settled").toBeLessThan(armed);
       expect(procAlive(f.pgid)).toBe(false);
-    } finally { await stopWithin(f.mr.stop()); }
+    });
   });
 
   it.skipIf(process.platform === "win32")("R2-2: a forwarded SIGHUP that does not end the process (another listener exists) kills the writer group but the run is NOT recorded FAILED/BLOCKED: it stays leased for the next engine", { timeout: 90_000 }, async () => {
     const f = await inFlight("r22");
     const keep = () => undefined; // süreci ayakta tutan başka dinleyici (packaged-entry'nin kapanış mantığı gibi): kanca yeniden sinyal göndermez
     process.on("SIGHUP", keep);
-    try {
+    await withFinalStop(() => f.mr.stop(), async () => {
       process.emit("SIGHUP", "SIGHUP");
       expect(await waitUntil(() => !procAlive(f.pgid), 5000), "the forwarded signal did not kill the writer group").toBe(true);
       await sleep(2500); // sürüşün devamı (kanıt yazımı, süpürme) çocuğun ölümünü işler; sonuç KAYDEDİLMEMELİ
       expect(f.state().slice(0, 2)).toEqual(["RUNNING", "IMPLEMENT"]);
       expect(f.state()[2] ?? "").not.toMatch(/IMPLEMENT_FAILED/);
-    } finally { process.off("SIGHUP", keep); await stopWithin(f.mr.stop()); }
+    }, () => process.off("SIGHUP", keep));
   });
 
   it("R2-3: stop() followed by start() while the drive is still draining: the in-flight implementer is still aborted and the run is neither cancelled (LEASE_LOST) nor advanced", { timeout: 90_000 }, async () => {
     const f = await inFlight("r23");
-    try {
+    await withFinalStop(() => f.mr.stop(), async () => {
       const t0 = Date.now();
       const drained = f.mr.stop();
       f.mr.start(250); // stopping bayrağı burada sıfırlanır; tur sayısı sıfırlanmaz
@@ -561,7 +562,7 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
       expect(procAlive(f.pgid)).toBe(false);
       expect(f.state().slice(0, 2)).toEqual(["RUNNING", "IMPLEMENT"]);
       expect(f.state()[2] ?? "").not.toMatch(/LEASE_LOST|GLOBAL_STOP/);
-    } finally { await stopWithin(f.mr.stop()); }
+    });
   });
 
   // ---- R2: engine commit children ----
@@ -658,7 +659,7 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
     slow.observe = (cwd, args) => { if (cwd.includes(A.runId) && args.includes("clone")) cloneStarted = true; };
     const mr = c.runner({executors: c.base});
     mr.start(250);
-    try {
+    await withFinalStop(() => mr.stop(), async () => {
       expect(await waitUntil(() => cloneStarted, 30_000)).toBe(true);
       await sleep(300); // çocuk doğdu, abort yoklaması çalışır durumda
       const t0 = Date.now();
@@ -667,7 +668,7 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
       expect(took, `stop() waited for the clone (${took} ms)`).toBeLessThan(SLOW - 3000);
       const after = c.store.engineGetRun(A.runId)!;
       expect(["CANCELLED", "FAILED", "BLOCKED"], `${after.status}/${after.reason}`).not.toContain(after.status);
-    } finally { await stopWithin(mr.stop()); }
+    });
   });
 
   it("HB-R3-2 / T-ABORT-1 (#224 round 3): runGitAsync kills a REAL blocked git child TREE when shouldAbort turns true (recorded child = its own process group: the git root AND its `sleep` grandchild are dead), resolves aborted at once and stops polling; a normal finish stops polling too", { timeout: 60_000 }, async () => {
@@ -717,14 +718,43 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
     expect(n, "polling continued after a normal finish").toBe(seen);
   });
 
-  it("GA-MAXBUF-1 (#224 round 3 review): output over the 64 MiB cap is a FAILURE (status null), never a truncated status 0 (a diff sized to the cap must not slip past the secret scan); exactly the cap is fine", { timeout: 120_000 }, async () => {
+  it("GA-MAXBUF-1 (#224 round 3 review): output over the 64 MiB cap is a FAILURE (status null), never a truncated status 0 (a diff sized to the cap must not slip past the secret scan); exactly the cap is fine; the cap counts RAW bytes (non-UTF-8 output is not counted three times)", { timeout: 180_000 }, async () => {
     const MAX = 64 * 1024 * 1024;
     const repo = path.join(tmp, "maxbuf-repo"); fs.mkdirSync(repo); git(repo, ["init", "-q", "-b", "main"]);
-    const blob = (bytes: number) => { const f = path.join(tmp, `blob-${bytes}.bin`); fs.writeFileSync(f, Buffer.alloc(bytes, 0x61)); return git(repo, ["hash-object", "-w", f]); };
+    const blob = (bytes: number, fill = 0x61) => { const f = path.join(tmp, `blob-${bytes}-${fill}.bin`); fs.writeFileSync(f, Buffer.alloc(bytes, fill)); return git(repo, ["hash-object", "-w", f]); };
     const over = await runGitAsync(repo, ["cat-file", "blob", blob(MAX + 1)], {...process.env});
     expect(over, "one byte over the cap").toMatchObject({status: null, stdout: "", stderr: "maxBuffer exceeded"});
     const exact = await runGitAsync(repo, ["cat-file", "blob", blob(MAX)], {...process.env});
     expect([exact.status, exact.stdout.length], "exactly the cap").toEqual([0, MAX]);
+    // raw bytes: 30 MiB of 0xFF decodes to 30 Mi replacement characters (3 UTF-8 bytes each = 90 MiB if the DECODED string were counted)
+    const raw = await runGitAsync(repo, ["cat-file", "blob", blob(30 * 1024 * 1024, 0xff)], {...process.env});
+    expect([raw.status, raw.stdout.length], "non-UTF-8 output well under the cap is accepted").toEqual([0, 30 * 1024 * 1024]);
+    const rawOver = await runGitAsync(repo, ["cat-file", "blob", blob(MAX + 1, 0xff)], {...process.env});
+    expect(rawOver, "non-UTF-8 output over the cap").toMatchObject({status: null, stdout: "", stderr: "maxBuffer exceeded"});
+  });
+
+  // //TR: #224 tur 3 (coordinator delta review, LOW): taşmadan sonra gelen HER parça için çocuk yeniden öldürülmesin. Gerçek git ile sonraki parça sayısı yarışa bağlıdır; bu yüzden deterministik: sahte bir çocuk sınırı aşan parçaları art arda yayar, ardından kapanır.
+  it("GA-MAXBUF-1 (kill once): after the cap is crossed the child is killed ONCE and later chunks are dropped, however many arrive (fake child, deterministic)", { timeout: 60_000 }, async () => {
+    const MiB = 1024 * 1024, child = new EventEmitter() as EventEmitter & {stdout: EventEmitter; stderr: EventEmitter; stdin: {on(): void; end(): void}; kill: ReturnType<typeof vi.fn>; pid?: number};
+    child.stdout = new EventEmitter(); child.stderr = new EventEmitter(); child.stdin = {on() { /* yok */ }, end() { /* yok */ }}; child.kill = vi.fn();
+    vi.spyOn(cp, "spawn").mockImplementationOnce((() => child) as never);
+    const p = runGitAsync(os.tmpdir(), ["cat-file", "blob", "x"], {...process.env});
+    const chunk = Buffer.alloc(MiB, 0x61);
+    for (let i = 0; i < 70; i++) child.stdout.emit("data", chunk); // 70 MiB: the cap (64 MiB) is crossed by chunk 65, five more arrive afterwards
+    child.stderr.emit("data", Buffer.from("late stderr"));
+    child.emit("close", null, "SIGKILL");
+    expect(await p).toMatchObject({status: null, stdout: "", stderr: "maxBuffer exceeded"});
+    expect(child.kill.mock.calls.length, "the child must be killed once, not once per late chunk").toBe(1);
+  });
+
+  // //TR: #224 tur 3 (coordinator delta review): withFinalStop'un KENDİ sözleşmesi: asılı stop() testi geçirmez; gövde hatası korunur ama stop yine de denenir; cleanup stop'tan önce çalışır.
+  it("withFinalStop: a final stop() that never settles FAILS the test (STOP_HUNG is not swallowed); a body failure is reported as itself and the stop is still attempted; cleanup runs first", { timeout: 60_000 }, async () => {
+    await expect(withFinalStop(() => new Promise(() => undefined), async () => undefined, undefined, 200)).rejects.toThrow(/the final stop\(\) never settled/);
+    const order: string[] = [];
+    await expect(withFinalStop(async () => { order.push("stop"); }, async () => { order.push("body"); throw new Error("the body failed"); }, () => order.push("cleanup"))).rejects.toThrow("the body failed");
+    expect(order).toEqual(["body", "cleanup", "stop"]);
+    await expect(withFinalStop(async () => { order.push("stop2"); }, async () => undefined)).resolves.toBeUndefined();
+    expect(order.at(-1)).toBe("stop2");
   });
 
   it.skipIf(process.platform !== "linux")("PAR-04 (#224 round 3): a RECORDED runner git child really is a process group leader (child_process.execFile ignores `detached`, so the first implementation recorded a pgid that was never a group: takeover, termination forwarding and the leftover kill all signalled nothing)", { timeout: 30_000 }, async () => {
@@ -768,13 +798,13 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
     mr.start(60_000); // //TR: zamanlayıcı sınırdan ÇOK daha yavaş (60 sn >> 2 sn): anında doldurma yoksa C ancak ~60 sn sonra başlar; yükte bile M3 belirleyici olarak yakalanır (B artık startC'yi beklediği için eski kararsızlık kaynağı yok)
     (mr as unknown as {pump(freshOnly: boolean): void}).pump(false);
     const ids: Record<string, string> = {A: A.runId, B: B.runId, C: C.runId};
-    try {
+    await withFinalStop(() => mr.stop(), async () => {
       for (const deadline = Date.now() + 100_000; Date.now() < deadline;) {
         for (const [t, id] of Object.entries(ids)) if (c.status(id) === "AWAITING_APPROVAL") mark(`done${t}`);
         if (at.doneA !== undefined && at.startC !== undefined) break;
         await sleep(50);
       }
-    } finally { await stopWithin(mr.stop()); }
+    });
     expect(at.startC - at.doneA, JSON.stringify(at)).toBeLessThanOrEqual(2000);
     expect(at.startC, JSON.stringify(at)).toBeGreaterThan(at.doneA);
   });

@@ -1,5 +1,5 @@
 // //TR: C-PAR-1 test destek modülü (vitest dosyası DEĞİL; tests/*.test.ts değildir, kayıt gerektirmez): MissionRunner paralel-çalışma testlerinin ortak parçaları. "Yavaş git" modeli (eşleşen git çağrısı senkron spawnSync ile gelirse olay döngüsü BLOKLANIR, eşzamansız execFile ile gelirse yalnız sonucu gecikir; gecikme iki yolda aynıdır, shim/PATH gerekmez, Windows'ta da çalışır), depo+store+mission kurulumu ve süreç/grup yardımcıları. Testler iki kayıtlı dosyaya bölünmüştür (heartbeat/planlama ve yazar durdurma) ki hiçbir Windows adımı 600 sn sınırına yaklaşmasın.
-import {beforeEach, afterEach, vi} from "vitest";
+import {beforeEach, afterEach, vi, expect} from "vitest";
 import cp from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -88,11 +88,24 @@ export const stopWithin = async (p: Promise<unknown>, ms = 15_000): Promise<"OK"
   let t: NodeJS.Timeout | undefined;
   try { return await Promise.race([p.then(() => "OK" as const), new Promise<"STOP_HUNG">(r => { t = setTimeout(() => r("STOP_HUNG"), ms); })]); } finally { clearTimeout(t); }
 };
-// //TR: #224 tur 3 (Windows HB-1 onarımı): lease-marjı testlerinde olay döngüsü gecikmesini ÖLÇER (50 ms'lik bir zamanlayıcının en büyük sapması). Başarısızlık iletisine eklenir: sapma TTL'yi aşıyorsa neden CPU açlığı/senkron iş (marj), aşmıyorsa fence edilen run gerçek bir boşluktur.
+// //TR: #224 tur 3 (Windows HB-1 onarımı): lease testlerinde olay döngüsü gecikmesini ÖLÇER (50 ms'lik bir zamanlayıcının en büyük sapması) ve harcanan CPU süresini (process.cpuUsage) kaydeder. Başarısızlık iletisine eklenir. Yorum kuralı: TTL'yi aşan bir gecikme, aksi KANITLANMADIKÇA bir gerilemedir (span'a sarılmamış senkron iş ya da engellenen döngü); "marj" ancak ölçüm bunu gösterirse (ör. cpuMs duvar süresinin çok altında = süreç CPU alamadı) söylenebilir. Gecikme TTL'nin altında olduğu hâlde bir run fence edildiyse sorun gerçek bir lease boşluğudur.
 export const stallProbe = (tickMs = 50) => {
   let last = performance.now(), max = 0;
+  const t0 = performance.now(), cpu0 = process.cpuUsage();
   const t = setInterval(() => { const n = performance.now(); max = Math.max(max, n - last - tickMs); last = n; }, tickMs);
-  return {maxStallMs: () => Math.round(max), stop: () => clearInterval(t)};
+  return {
+    maxStallMs: () => Math.round(max),
+    cpuMs: () => { const u = process.cpuUsage(cpu0); return Math.round((u.user + u.system) / 1000); },
+    wallMs: () => Math.round(performance.now() - t0),
+    stop: () => clearInterval(t)
+  };
+};
+// //TR: #224 tur 3 (coordinator delta review): stop() sonucu `finally` içinde YUTULMAZ. Gövde çalışır, sonra (her durumda) sınırlı stop yapılır ve sonucu gövde BİTTİKTEN SONRA doğrulanır: asılı bir stop() testi geçirmez (STOP_HUNG). Gövde fırlatırsa asıl hata korunur (stop yine de denenir). `cleanup` stop'tan önce çalışır.
+export const withFinalStop = async (stop: () => Promise<unknown>, body: () => Promise<void> | void, cleanup?: () => void, stopMs = 15_000): Promise<void> => {
+  let failed = false, bodyError: unknown, st: "OK" | "STOP_HUNG" = "OK";
+  try { await body(); } catch (e) { failed = true; bodyError = e; } finally { cleanup?.(); st = await stopWithin(stop(), stopMs); }
+  if (failed) throw bodyError;
+  expect(st, "the final stop() never settled").toBe("OK");
 };
 export const procAlive = (pid: number) => { try { process.kill(pid, 0); } catch { return false; } return !(process.platform === "linux" && (() => { try { const st = fs.readFileSync(`/proc/${pid}/stat`, "utf8"); return ["Z", "X"].includes(st.slice(st.lastIndexOf(")") + 2, st.lastIndexOf(")") + 3)); } catch { return true; } })()); };
 // //TR: Linux'ta `root`un tüm (zombi olmayan) torunları (/proc ppid zinciri); izleme dışı kalan öksüzleri (ppid 1'e geçmiş) bulmaz: çağıran, soy ağacını öldürmeden ÖNCE ölçmelidir.

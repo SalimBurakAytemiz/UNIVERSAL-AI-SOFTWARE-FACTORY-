@@ -30,20 +30,23 @@ export function runGitAsync(cwd: string, args: string[], env: NodeJS.ProcessEnv,
           else child.kill("SIGKILL");
         } catch { /* zaten bitmiş */ }
       };
-      // //TR: #224 tur 3 (GA-MAXBUF-1): execFile gibi AKIŞ BAŞINA bayt sayılır (Buffer.byteLength) ve taşma SONUÇ için son kararlıdır: git çıktıyı yazıp zaten çıkmış olsa bile (kill() boşa gider) kesilmiş çıktı status 0 ile DÖNMEZ; aksi halde boyutlandırılmış bir diff, kesilmiş haliyle sır taramasından geçerdi (fail-open). Taşma = status null.
-      let stdout = "", stderr = "", outBytes = 0, errBytes = 0, overflow = false;
-      const collect = (which: "out" | "err") => (chunk: string) => {
-        if (which === "out") outBytes += Buffer.byteLength(chunk, "utf8"); else errBytes += Buffer.byteLength(chunk, "utf8");
+      // //TR: #224 tur 3 (GA-MAXBUF-1 + delta review): execFile gibi AKIŞ BAŞINA, HAM bayt sayılır (Buffer.length; çıktı çözülmeden önce: UTF-8 olmayan bayt U+FFFD'ye çevrilip üç bayt sayılsaydı geçerli üst sınır ~21 MiB olurdu) ve taşma SONUÇ için son kararlıdır: git çıktıyı yazıp zaten çıkmış olsa bile (kill() boşa gider) kesilmiş çıktı status 0 ile DÖNMEZ; aksi halde boyutlandırılmış bir diff, kesilmiş haliyle sır taramasından geçerdi (fail-open). Taşma = status null. Taşma bir kez işaretlenir, çocuk bir kez öldürülür ve sonraki parçalar atılır; çıktı close'ta tek seferde çözülür.
+      const outChunks: Buffer[] = [], errChunks: Buffer[] = [];
+      let outBytes = 0, errBytes = 0, overflow = false;
+      const collect = (which: "out" | "err") => (chunk: Buffer) => {
+        if (overflow) return;
+        if (which === "out") outBytes += chunk.length; else errBytes += chunk.length;
         if ((which === "out" ? outBytes : errBytes) > MAX_BUFFER) { overflow = true; kill(); return; }
-        if (which === "out") stdout += chunk; else stderr += chunk;
+        (which === "out" ? outChunks : errChunks).push(chunk);
       };
-      child.stdout?.setEncoding("utf8"); child.stdout?.on("data", collect("out"));
-      child.stderr?.setEncoding("utf8"); child.stderr?.on("data", collect("err"));
+      child.stdout?.on("data", collect("out"));
+      child.stderr?.on("data", collect("err"));
       child.stdin?.on("error", () => undefined);
       child.stdin?.end(); // //TR: git'in stdin okuyan bir komutu sonsuza dek beklemesin (EOF)
       child.on("error", e => settle({status: null, stdout: "", stderr: e.message}));
       child.on("close", (code, signal) => {
         if (overflow) { settle({status: null, stdout: "", stderr: "maxBuffer exceeded"}); return; }
+        const stdout = Buffer.concat(outChunks).toString("utf8"), stderr = Buffer.concat(errChunks).toString("utf8");
         settle({status: typeof code === "number" ? code : null, stdout, stderr: stderr || (signal ? `terminated by ${signal}` : "")});
       });
       if (o.timeoutMs !== undefined) timer = setTimeout(kill, o.timeoutMs);

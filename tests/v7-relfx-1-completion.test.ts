@@ -336,21 +336,29 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
   const leaked: number[] = [];
   afterEach(() => { for (const g of leaked.splice(0)) { try { process.kill(-g, "SIGKILL"); } catch { /* bitmiş */ } } });
   // Faz 1'i başlatır, implementer çocuğu uyurken motoru öldürür (SIGKILL); {dir, runId, pgid, killedAt} döner.
-  // //TR: #224 tur 3 (Windows onarımı, d77d1e4): shard 2'de motor 1 `{"out":"","err":""}` ile, implementing.json yazılmadan sessizce çıktı (yarış `e1.closed.then(() => false)`i kazandı). Başlatma artık koşul tabanlı sınırlı bir beklemedir: sonuç yarıştan sonra dosyanın varlığıyla YENİDEN denetlenir (dosya son yoklama ile çıkış arasında düşmüş olabilir), başarısızlık iletisi çıkış kodu/sinyali/geçen süre/dizin listesini yazar ve YALNIZ motor hiç çıktı üretmeden ve implementing.json olmadan öldüyse temiz bir dizinde BİR kez yeniden başlatılır (ilk denemenin ayrıntısı sonraki başarısızlık iletilerinde de görünür); çıktısı olan ya da dosyayı yazmış bir motorun ölümü yeniden denenmez.
+  // //TR: #224 tur 3 (Windows onarımı, d77d1e4 + coordinator delta review): shard 2'de motor 1 `{"out":"","err":""}` ile, implementing.json yazılmadan sessizce çıktı. Başlatma koşul tabanlı sınırlı bir beklemedir; sonuç yarıştan sonra dosyanın varlığıyla YENİDEN denetlenir. Başarısızlık ASLA yeniden denenmez ("Gerçek bulguları retry ile gizleme": önceki sürümün temiz-dizin yeniden denemesi, tick'i BLOCK/RETRY/fence ile biten ve çıktısı olmayan her motoru gizliyordu). Faz 1 sessiz bitmez (tick raporu + run kaydı basar); başarısızlık iletisi motorun çıktısını, çıkış kodunu/sinyalini, canlı olup olmadığını, geçen süreyi, mağazadaki run kaydını (durum/adım/neden/lease/son kanıt) ve dizin listesini taşır; motor zaman aşımında hâlâ canlıysa ÖLDÜRÜLÜR ve hemen başarısız olunur (iki motor sızmaz).
   const listDir = (dir: string) => { try { return (fs.readdirSync(dir, {recursive: true}) as string[]).slice(0, 40); } catch (e) { return [`<unreadable: ${(e as Error).message}>`]; } };
-  const crashEngine = async (dir: string, opts: Record<string, unknown> = {}) => {
-    const attempt = async () => {
-      fs.rmSync(dir, {recursive: true, force: true, maxRetries: 5, retryDelay: 100}); fs.mkdirSync(dir);
-      const e = spawnEngine(dir, "1", opts), t0 = Date.now();
-      const raced = await Promise.race([waitFor(() => fs.existsSync(path.join(dir, "implementing.json")), 120_000), e.closed.then(() => false)]);
-      const up = raced || fs.existsSync(path.join(dir, "implementing.json"));
-      return {e, up, diag: () => JSON.stringify({text: e.text(), exit: e.exit(), waitedMs: Date.now() - t0, dir: listDir(dir)})};
-    };
-    let first = await attempt(), retried: string | null = null;
-    if (!first.up && first.e.text().out === "" && first.e.text().err === "") { retried = `first attempt (engine died silently before implementing.json): ${first.diag()}`; first = await attempt(); }
-    expect(first.up, `engine 1 never reached implementing.json: ${first.diag()}${retried ? ` | ${retried}` : ""}`).toBe(true);
-    const e1 = first.e;
-    expect(await writerParked(dir, e1.closed, 30_000), `the implementer must have read its directive and parked before the engine is killed: ${first.diag()}${retried ? ` | ${retried}` : ""}`).toBe(true); // motor 1 erken çıkarsa (içe aktarma hatası) 120 sn beklemeden stderr ile başarısız ol
+  const runRecord = (dir: string) => {
+    try {
+      const {runId} = JSON.parse(fs.readFileSync(path.join(dir, "state.json"), "utf8")) as {runId: string};
+      const r = new WorkOsStore(path.join(dir, "data")).engineGetRun(runId), last = r?.evidence.at(-1);
+      return r ? {status: r.status, step: r.step, reason: r.reason, leaseExpiresAt: r.leaseExpiresAt, retryCount: r.retryCount, lastEvidence: last ? {kind: last.kind, step: last.step, exitCode: last.exitCode, note: String(last.note ?? "").slice(0, 200)} : null} : "<run not found>";
+    } catch (e) { return `<unavailable: ${(e as Error).message.slice(0, 120)}>`; }
+  };
+  type Engine = ReturnType<typeof spawnEngine>;
+  const engineDiag = (dir: string, e: Engine, t0: number) => JSON.stringify({pid: e.child.pid, alive: e.exit() === null, exit: e.exit(), engineOutput: e.text(), waitedMs: Date.now() - t0, run: runRecord(dir), dir: listDir(dir)});
+  const failEngine = async (why: string, dir: string, e: Engine, t0: number): Promise<never> => {
+    const diag = engineDiag(dir, e, t0);
+    if (e.exit() === null) { e.child.kill("SIGKILL"); await Promise.race([e.closed, sleep(10_000)]); } // canlı motor sızdırılmaz
+    throw new Error(`${why}: ${diag} | after cleanup: ${JSON.stringify(e.exit())}`);
+  };
+  const crashEngine = async (dir: string, opts: Record<string, unknown> = {}, startMs = 120_000) => {
+    fs.mkdirSync(dir);
+    const e1 = spawnEngine(dir, "1", opts), t0 = Date.now();
+    const raced = await Promise.race([waitFor(() => fs.existsSync(path.join(dir, "implementing.json")), startMs), e1.closed.then(() => false)]);
+    if (!(raced || fs.existsSync(path.join(dir, "implementing.json")))) await failEngine("engine 1 never reached implementing.json", dir, e1, t0);
+    // motor 1 erken çıkarsa (içe aktarma hatası) 30 sn beklemeden başarısız ol; çıkmadıysa ve park etmediyse öldürüp başarısız ol
+    if (!(await writerParked(dir, e1.closed, 30_000))) await failEngine("the implementer must have read its directive and parked before the engine is killed", dir, e1, t0);
     const {runId} = JSON.parse(fs.readFileSync(path.join(dir, "state.json"), "utf8")) as {runId: string};
     const ownerFile = path.join(dir, "data", "runs", runId, "workspace.owner.json");
     let pgid = 0;
@@ -368,6 +376,36 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
   const recoveryNote = (dir: string, runId: string) => new WorkOsStore(path.join(dir, "data")).engineGetRun(runId)!.evidence.find(e => e.kind === "RECOVERY")?.note ?? "";
   // //TR: Başarısız bir onaylamanın nedeni okunabilsin diye durum özeti (yetim artık sabit bir pencereye değil release dosyasına bağlıdır).
   const snap = (x: {dir: string; runId: string; pgid: number; killedAt: number; work: string; aliveBeforeKill?: boolean; membersBeforeKill?: number | null; aliveAfterKill?: boolean}, closedAfterMs: number) => () => { const r = new WorkOsStore(path.join(x.dir, "data")).engineGetRun(x.runId)!; return JSON.stringify({takeoverClosedMsAfterKill: closedAfterMs, writerAliveBeforeKill: x.aliveBeforeKill, writerMembersBeforeKill: x.membersBeforeKill, writerAliveAfterKill: x.aliveAfterKill, status: r.status, reason: r.reason, groupAlive: groupAlive(x.pgid), orphanFile: fs.existsSync(path.join(x.work, "ORPHAN.txt")), note: recoveryNote(x.dir, x.runId), cancelNote: r.evidence.find(e => e.kind === "CANCEL")?.note ?? null, head: (() => { try { return git(x.work, ["log", "--format=%s", "-3"]); } catch { return "n/a"; } })()}); };
+
+  // //TR: #224 tur 3 (coordinator delta review): yardımcının KENDİ sözleşmesi. (1) Motor park etmeden BİR KEZ erken biterse (implementer hiç başlamadan başarısız) bu yüksek sesli bir başarısızlıktır ve ASLA yeniden denenmez: işaret dosyası yalnız ilk motoru bozar, yeniden deneme olsaydı ikincisi geçer ve test sessizce yeşil olurdu. (2) Hiç ilerlemeyen ama canlı motor zaman aşımında öldürülür; başarısızlık hemen ve eksiksiz gelir.
+  it("HELPER: an engine that ends before it parks (once-only injected early failure) is a LOUD failure naming the tick report, exit code and run record; nothing is retried away", { timeout: 120_000 }, async () => {
+    const dir = path.join(tmp, "helper-early"), marker = path.join(tmp, "fail-first.marker");
+    const err = await crashEngine(dir, {failFirst: marker}).then(() => null, e => e as Error);
+    expect(err, "the helper must FAIL when the engine ends before it parks (a retry would have passed: the marker only breaks the first engine)").not.toBeNull();
+    expect(err!.message).toMatch(/engine 1 never reached implementing\.json/);
+    expect(err!.message, "the engine's own tick report is in the failure").toContain("TICK_RETURNED_BEFORE_THE_KILL");
+    expect(err!.message).toMatch(/"exit":\{"code":0,"signal":null/);
+    expect(err!.message, "the run record of the (only) attempt").toMatch(/"run":\{"status":"[A-Z_]+","step":"IMPLEMENT"/);
+    expect(err!.message).toMatch(/"lastEvidence":\{"kind":"IMPLEMENT"/);
+    expect(fs.existsSync(marker), "the marker proves exactly one engine ran its implementer").toBe(true);
+    expect(fs.existsSync(path.join(dir, "implementing.json")), "no second engine got as far as the writer").toBe(false);
+  });
+
+  it("HELPER: a live engine that never reaches the writer is killed at the timeout and the failure is immediate and complete (no leaked engine)", { timeout: 60_000 }, async () => {
+    const t0 = Date.now();
+    const err = await crashEngine(path.join(tmp, "helper-hang"), {hang: true}, 1500).then(() => null, e => e as Error);
+    const hungPid = Number(/"pid":(\d+)/.exec(err?.message ?? "")?.[1]);
+    try {
+    expect(err).not.toBeNull();
+    expect(Date.now() - t0, "the failure must not wait for the long default timeouts").toBeLessThan(20_000);
+    expect(err!.message).toMatch(/engine 1 never reached implementing\.json/);
+    expect(err!.message).toMatch(/"alive":true/);
+    expect(err!.message, "the engine was killed by the helper").toMatch(/after cleanup: \{"code":null,"signal":"SIGKILL"/);
+    const pid = Number(/"pid":(\d+)/.exec(err!.message)?.[1]);
+    expect(pid).toBeGreaterThan(0);
+    expect(await waitFor(() => !procAlive(pid), 5000), "the hung engine process must be dead").toBe(true);
+    } finally { if (hungPid > 0) { try { process.kill(hungPid, "SIGKILL"); } catch { /* zaten ölü */ } } } // yardımcı öldürmediyse (hatalı sürüm) test yine de motoru sızdırmaz
+  });
 
   it("PAR04-GSTOP-NO-REAP: a GLOBAL_STOP that is active at takeover still stops the crashed engine's writer BEFORE the run is cancelled", { timeout: 180_000 }, async () => {
     const x = await crashEngine(path.join(tmp, "stop"));

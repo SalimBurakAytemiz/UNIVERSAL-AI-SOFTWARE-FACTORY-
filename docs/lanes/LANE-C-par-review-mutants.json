@@ -1,5 +1,5 @@
 {
- "//TR": "C-PAR-1 inceleme turu 1-3 (#224) mutasyon listesi: her mutant tam metin değişikliğidir (dosyada tam 1 kez bulunmalı; edits varsa hepsi). docs/lanes/LANE-C-par-review-mutants.mjs her birini uygular ve mutanta özgü testleri (testFile + -t filter) çalıştırır; taban çizgisi iki dosyanın tümüdür. Tur 3'te kod değişince EP1/LL1/SW3/R10a/R10b/R12 kalıpları onarıldı; B1-B6, H1-H3, S3a-b, W4a-d, F1-F5, X6a-b, A1-A4, C1-C2, T1, D1 eklendi. Windows'a özgü bağlantı (creationTicks/probe) Linux'ta çalıştırılamaz: saf karar fonksiyonları (accessDeniedVerdict, reusedPid, startedAfterRecord, waitWriterGone) mutantlıdır, `process.platform === \"win32\" ? probe : undefined` bağlantısı değil (Linux'ta eşdeğer). Tur 3 sonu: G1 (git çocuğu detached değil), K1-K2, F6 (yeniden denemede ön tarama), A5 eklendi (toplam 81); tur 3 onarım itmesi: GA1-GA3 (64 MiB taşma koruması ve sınırı), TA1-TA2 (T-ABORT-1: kök + torun ölümü), ST5 (sınırlı stop), SP1-SP7 (ctx.span bağlantısı) eklendi; M3 ve ST4 geri yüklenen/sınırlı testlere karşı yeniden koşturuldu (toplam 94).",
+ "//TR": "C-PAR-1 inceleme turu 1-3 (#224) mutasyon listesi: her mutant tam metin değişikliğidir (dosyada tam 1 kez bulunmalı; edits varsa hepsi). docs/lanes/LANE-C-par-review-mutants.mjs her birini uygular ve mutanta özgü testleri (testFile + -t filter) çalıştırır; taban çizgisi iki dosyanın tümüdür. Tur 3'te kod değişince EP1/LL1/SW3/R10a/R10b/R12 kalıpları onarıldı; B1-B6, H1-H3, S3a-b, W4a-d, F1-F5, X6a-b, A1-A4, C1-C2, T1, D1 eklendi. Windows'a özgü bağlantı (creationTicks/probe) Linux'ta çalıştırılamaz: saf karar fonksiyonları (accessDeniedVerdict, reusedPid, startedAfterRecord, waitWriterGone) mutantlıdır, `process.platform === \"win32\" ? probe : undefined` bağlantısı değil (Linux'ta eşdeğer). Tur 3 sonu: G1 (git çocuğu detached değil), K1-K2, F6 (yeniden denemede ön tarama), A5 eklendi (toplam 81); tur 3 onarım itmesi: GA1-GA3 (64 MiB taşma koruması ve sınırı), TA1-TA2 (T-ABORT-1: kök + torun ölümü), ST5 (sınırlı stop), SP1-SP7 (ctx.span bağlantısı) eklendi; M3 ve ST4 geri yüklenen/sınırlı testlere karşı yeniden koşturuldu (toplam 94).; #224 delta incelemesi sonrası: GA4-GA5 (ham bayt sayımı, taşmada tek kill), SF1-SF3 (withFinalStop), CE1-CE4 (crashEngine: sessiz motor, yeniden deneme, canlı motoru öldürmeme, run kaydı) eklendi (toplam 103); CE2 \"retry ile gizlenen aralıklı erken bitiş\" sondasını geri getirir ve test BAŞARISIZ olmalıdır.",
  "mutants": [
   {
    "id": "GS1",
@@ -862,6 +862,95 @@
    "filter": "EditOnlyImplementer span",
    "old": "const why = span(() => forbiddenChange(workspace, f));",
    "new": "const why = forbiddenChange(workspace, f);"
+  },
+  {
+   "id": "GA4",
+   "description": "GA-MAXBUF-1: the cap counts DECODED bytes (non-UTF-8 output is counted three times: the effective cap drops to ~21 MiB)",
+   "file": "core/workos/git-async.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "GA-MAXBUF-1",
+   "old": "if (which === \"out\") outBytes += chunk.length; else errBytes += chunk.length;",
+   "new": "if (which === \"out\") outBytes += Buffer.byteLength(chunk.toString(\"utf8\"), \"utf8\"); else errBytes += Buffer.byteLength(chunk.toString(\"utf8\"), \"utf8\");"
+  },
+  {
+   "id": "GA5",
+   "description": "GA-MAXBUF-1: chunks after the overflow are not dropped (the child is killed again for every late chunk)",
+   "file": "core/workos/git-async.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "GA-MAXBUF-1",
+   "old": "        if (overflow) return;\n        if (which === \"out\") outBytes",
+   "new": "        if (which === \"out\") outBytes"
+  },
+  {
+   "id": "SF1",
+   "description": "withFinalStop does not assert the stop result (a hung final stop() passes the test)",
+   "file": "tests/support/par.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "withFinalStop",
+   "old": "  expect(st, \"the final stop() never settled\").toBe(\"OK\");\n",
+   "new": ""
+  },
+  {
+   "id": "SF2",
+   "description": "withFinalStop swallows the failure of the body",
+   "file": "tests/support/par.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "withFinalStop",
+   "old": "  if (failed) throw bodyError;\n",
+   "new": ""
+  },
+  {
+   "id": "SF3",
+   "description": "withFinalStop runs its cleanup after the stop instead of before",
+   "file": "tests/support/par.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "withFinalStop",
+   "old": "finally { cleanup?.(); st = await stopWithin(stop(), stopMs); }",
+   "new": "finally { st = await stopWithin(stop(), stopMs); cleanup?.(); }"
+  },
+  {
+   "id": "CE1",
+   "description": "crashEngine helper: the engine is silent again when its tick returns before the kill (no tick report)",
+   "file": "tests/v7-par-engine.mts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "HELPER",
+   "old": "console.log(JSON.stringify({phase1: \"TICK_RETURNED_BEFORE_THE_KILL\"",
+   "new": "void (JSON.stringify({phase1: \"TICK_RETURNED_BEFORE_THE_KILL\""
+  },
+  {
+   "id": "CE2",
+   "description": "crashEngine helper retries the engine in a clean directory (the retry-hides-an-intermittent-early-end probe must FAIL the test)",
+   "file": "tests/v7-relfx-1-completion.test.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "HELPER",
+   "edits": [
+    {
+     "old": "const e1 = spawnEngine(dir, \"1\", opts), t0 = Date.now();\n    const raced",
+     "new": "let e1 = spawnEngine(dir, \"1\", opts), t0 = Date.now();\n    const raced"
+    },
+    {
+     "old": "if (!(raced || fs.existsSync(path.join(dir, \"implementing.json\")))) await failEngine(\"engine 1 never reached implementing.json\", dir, e1, t0);",
+     "new": "if (!(raced || fs.existsSync(path.join(dir, \"implementing.json\")))) { fs.rmSync(dir, {recursive: true, force: true}); fs.mkdirSync(dir); e1 = spawnEngine(dir, \"1\", opts); t0 = Date.now(); await waitFor(() => fs.existsSync(path.join(dir, \"implementing.json\")), startMs); }"
+    }
+   ]
+  },
+  {
+   "id": "CE3",
+   "description": "crashEngine helper does not kill an engine that is still alive at the failure (a hung engine leaks)",
+   "file": "tests/v7-relfx-1-completion.test.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "HELPER",
+   "old": "if (e.exit() === null) { e.child.kill(\"SIGKILL\"); await Promise.race([e.closed, sleep(10_000)]); }",
+   "new": "if (false) { e.child.kill(\"SIGKILL\"); await Promise.race([e.closed, sleep(10_000)]); }"
+  },
+  {
+   "id": "CE4",
+   "description": "crashEngine helper: the failure message carries no run record",
+   "file": "tests/v7-relfx-1-completion.test.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "HELPER",
+   "old": "waitedMs: Date.now() - t0, run: runRecord(dir), dir: listDir(dir)});",
+   "new": "waitedMs: Date.now() - t0, dir: listDir(dir)});"
   }
  ]
 }
