@@ -14,7 +14,7 @@ export const ROLE_REGISTRY_FILE_REL = path.join("registries", "role-definitions.
 const statKey = (root: string, rel: string): string => { try { const st = fs.statSync(path.join(root, rel)); return `${rel}|${st.size}|${st.mtimeMs}`; } catch { return `${rel}|absent`; } };
 const fingerprint = (root: string, slugs: readonly string[]): string => [...READINESS_INPUT_FILES.registries, ...slugs.map(x => `${READINESS_INPUT_FILES.knowledgeDir}/${x}.json`)].map(r => statKey(root, r)).join("\n");
 // //TR: Bilinen sınırlama: boyut + mtime parmak izi, AYNI boyutta ve AYNI mtime ile yapılan bir içerik değişikliğini görmez (içerik özeti alınmaz); rol kaydı için sha çapraz denetimi (aşağıda) bu durumu yakalar.
-const slugsOnDisk = (root: string): string[] => { try { const t = JSON.parse(fs.readFileSync(path.join(root, "registries/technologies.json"), "utf8")); return Array.isArray(t?.technologies) ? t.technologies.map((x: any) => String(x?.slug)) : []; } catch { return []; } };
+const slugsOnDisk = (root: string): string[] => { try { const t = JSON.parse(fs.readFileSync(path.join(root, READINESS_INPUT_FILES.registries.find(r => r.endsWith("/technologies.json"))!), "utf8")); return Array.isArray(t?.technologies) ? t.technologies.map((x: any) => String(x?.slug)) : []; } catch { return []; } };
 const staticInputCache = new Map<string, {fp: string; slugs: string[]; input: ReadinessInput}>();
 /** Test kancası: önbelleği boşaltır. */
 export function resetReadinessInputCache(): void { staticInputCache.clear(); }

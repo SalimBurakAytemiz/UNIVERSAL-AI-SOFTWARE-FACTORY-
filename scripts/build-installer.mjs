@@ -44,6 +44,13 @@ export const PACKAGED_RUNTIME_READ_EXCLUSIONS = {
 export function stageRuntimeFiles(root, stage) {
   const files = [...DESKTOP_FILES, ...STATIC_DATA_FILES, ...RUNTIME_CONFIG_FILES, ...RUNTIME_SCRIPTS];
   // Dizin girdileri YALNIZ düz dosya olabilir (copyDir ile aynı kural): lstat bir sembolik bağı ya da düz olmayan girdiyi reddeder; copyFileSync bağı izleyip depo dışı içeriği paketlerdi.
+  // Dizinin KENDİSİ de gerçek bir dizin olmalı ve (sembolik üst bileşenler çözüldüğünde) depo kökünün içinde kalmalı; aksi halde bağlı bir dizin depo dışı dosyaları paketlerdi.
+  for (const dir of STATIC_DATA_DIRS) {
+    const abs = path.join(root, dir), realRoot = fs.realpathSync(root);
+    if (!fs.lstatSync(abs).isDirectory()) throw new Error(`SYMLINK_DENIED:${dir}`);
+    const realDir = fs.realpathSync(abs);
+    if (path.relative(realRoot, realDir).split(path.sep).join("/") !== dir) throw new Error(`SYMLINK_DENIED:${dir}`); // path.relative: Windows'ta büyük/küçük harfe duyarsız
+  }
   for (const dir of STATIC_DATA_DIRS) for (const n of fs.readdirSync(path.join(root, dir)).filter(x => x.endsWith(".json")).sort()) {
     if (!fs.lstatSync(path.join(root, dir, n)).isFile()) throw new Error(`SYMLINK_DENIED:${dir}/${n}`);
     files.push(`${dir}/${n}`);

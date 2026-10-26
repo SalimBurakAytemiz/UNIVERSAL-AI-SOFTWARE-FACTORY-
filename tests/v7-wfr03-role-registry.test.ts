@@ -766,6 +766,30 @@ describe("LANE-C C1 role lifecycle computed only from evidence", () => {
       } finally { fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); }
     });
 
+    it("F1: a knowledge profile that was ALREADY read changes DURING the load -> not cached (the next request reloads); registry-only guards with an after-load fingerprint fail here", async () => {
+      const stage = await stagePackaged(); const real = fs.readFileSync; const kdir = path.join("knowledge", "technologies"); const seenK: string[] = []; let t = 70_000_000;
+      const spy = vi.spyOn(fs, "readFileSync").mockImplementation(((p: any, ...r: any[]) => {
+        const sp = String(p);
+        if (sp.includes(kdir) && seenK.length < 2 && !seenK.includes(sp)) { seenK.push(sp); if (seenK.length === 2) { const when = new Date(Date.now() + (t += 10_000)); fs.utimesSync(seenK[0], when, when); } }
+        return (real as any).call(fs, p, ...r);
+      }) as any);
+      try {
+        const reads = () => spy.mock.calls.filter(c => String(c[0]).includes(kdir)).length;
+        await getAt(stage, null); const first = reads(); expect(seenK.length).toBe(2);
+        await getAt(stage, null); expect(reads(), "an already-read knowledge file changed during the load -> reloaded").toBeGreaterThan(first);
+      } finally { spy.mockRestore(); fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); }
+    });
+
+    it("F2: the loader reads ONLY the exported input list (the 5 registries and knowledge/<slug>.json) - an unlisted read would make the cache fingerprint blind to it", async () => {
+      const spy = vi.spyOn(fs, "readFileSync"); resetReadinessInputCache();
+      try {
+        loadReadinessInputFromRepo(REPO, {runs: {journal: "ABSENT"}, now: NOW});
+        const rels = [...new Set(spy.mock.calls.map(c => String(c[0])).filter(x => x.startsWith(REPO)).map(x => path.relative(REPO, x).split(path.sep).join("/")))];
+        const allowed = new Set<string>(READINESS_INPUT_FILES.registries); const bad = rels.filter(r => !allowed.has(r) && !new RegExp(`^${READINESS_INPUT_FILES.knowledgeDir}/[a-z0-9][a-z0-9.-]*\\.json$`).test(r));
+        expect(bad).toEqual([]); expect(rels.filter(r => allowed.has(r)).length).toBe(READINESS_INPUT_FILES.registries.length); expect(rels.length).toBeGreaterThan(100);
+      } finally { spy.mockRestore(); }
+    });
+
     it("R2-L3: a loader input that changes DURING the load is not cached (the full input-list fingerprint is taken before the load)", async () => {
       const stage = await stagePackaged(); const real = fs.readFileSync; let touched = false; let t = 50_000_000;
       const spy = vi.spyOn(fs, "readFileSync").mockImplementation(((p: any, ...r: any[]) => {
