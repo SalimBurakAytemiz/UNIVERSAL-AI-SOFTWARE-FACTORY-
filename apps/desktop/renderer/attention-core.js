@@ -44,6 +44,12 @@ export function mapAttentionQueue(raw){
   const sorted=items.map((it,i)=>({it,i})).sort((p,q)=>rank[p.it.kind]-rank[q.it.kind]||p.i-q.i).map(p=>p.it);
   return {state:"VERIFIED",queue:{items:sorted,counts,total,truncated:a.truncated,dropped,shownCounts}};
 }
+/** //TR: Kuyruğun dürüst özeti: sayaçlar SUNUCUNUN sayılarıdır; kesilmiş ya da okunamayan öğe varsa kuyruk ASLA boş/VERIFIED sayılmaz (kind ATTENTION kalır). Okunamayan kaynak {kind:"UNREADABLE"}. */
+export function attentionSummary(att){
+  if(!att||att.state!=="VERIFIED"||!att.queue)return {kind:"UNREADABLE",total:null,shown:0,truncated:false,dropped:0};
+  const q=att.queue;
+  return {kind:q.total>0||q.dropped>0?"ATTENTION":"VERIFIED",total:q.total,shown:q.items.length,truncated:q.truncated,dropped:q.dropped};
+}
 /** Eski tüketiciler (kabuk rozeti, Teslimat, Kule) yalnız {state,blocked[]} bilir; yeni öğe, eski satır biçimine KAYIPSIZ çevrilir (tür ve gerekçe aynen, yeniden deneme yetkisi yok). */
 export function attentionAsBlocked(item){
   return {packageId:item.taskId??item.runId??item.missionId,kind:item.kind,reason:item.reason,at:item.since,retryable:false,nextAction:item.nextAction,missionId:item.missionId};

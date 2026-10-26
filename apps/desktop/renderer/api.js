@@ -54,7 +54,7 @@ export function createApi({bridge,store,now=()=>Date.now()}){
     async projects(){const r=await get("/v1/projects");return r.ok?mapProjects(r.data):{state:r.state,items:[],message:r.message}},
     async missions(){const q=store.projectId?`/v1/missions?projectId=${store.projectId}`:"/v1/missions";const r=await get(q);return r.ok?mapMissions(r.data):{state:r.state,items:[],message:r.message}},
     async control(){const r=await get("/v1/control/status");return r.ok?mapControlStatus(r.data):{state:r.state,active:false,reason:null,message:r.message}},
-    // //TR: Founder dikkati artık GET /v1/attention'dan (yalnız Work OS kayıtları) okunur; emekli scheduler kaynağı /v1/founder-attention bu okumada KULLANILMAZ. Eski tüketiciler için blocked[] aynı öğelerden türetilir, tam kuyruk queue alanındadır. Ana süreç izin listesi girişi koordinatörün grubundadır: köprü yolu reddederse (INVALID_API_PATH) durum UNAVAILABLE'dır, öğe uydurulmaz.
+    // //TR: Founder dikkati artık GET /v1/attention'dan (yalnız Work OS kayıtları) okunur; emekli scheduler kaynağı /v1/founder-attention bu okumada KULLANILMAZ. Eski tüketiciler için blocked[] aynı öğelerden türetilir, tam kuyruk queue alanındadır. Ana süreç izin listesi girişi tabandadır (main.mjs EXTRA bloğu); yine de köprü yolu reddederse (INVALID_API_PATH) durum UNAVAILABLE'dır, öğe uydurulmaz.
     async attention(){
       const r=await get(WORKOS_ATTENTION_PATH);
       if(!r.ok)return {state:/INVALID_API_PATH/.test(String(r.message??""))?"UNAVAILABLE":r.state,blocked:[],queue:null,message:r.message};
