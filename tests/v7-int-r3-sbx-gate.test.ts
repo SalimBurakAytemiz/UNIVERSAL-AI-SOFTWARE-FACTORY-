@@ -912,6 +912,9 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
         await expect(new Promise((res, rej) => { const s = net.connect(port, "::1"); s.once("connect", res); s.once("error", rej); })).rejects.toBeTruthy();
         const ext = Object.values(os.networkInterfaces()).flat().find(i => i && i.family === "IPv4" && !i.internal)?.address;
         if (ext) await expect(new Promise((res, rej) => { const s = net.connect(port, ext); s.once("connect", res); s.once("error", rej); })).rejects.toBeTruthy();
+        // C-1: sağlayıcı doğrulanmamış olunca köprü yeni bağlantıyı REDDEDER ve relay başlatmaz
+        const n0 = spawned.length; (p as any).verified = false; expect(p.isVerified()).toBe(false);
+        const c2 = net.connect(port, "127.0.0.1"); expect(await new Promise<boolean>(r => { c2.once("close", () => r(true)); c2.on("error", () => undefined); setTimeout(() => r(false), 1000); })).toBe(true); expect(spawned.length).toBe(n0);
         c1.destroy(); h.close();
         await expect(new Promise((res, rej) => { const s = net.connect(port, "127.0.0.1"); s.once("connect", res); s.once("error", rej); })).rejects.toBeTruthy();
       } finally { fs.rmSync(dir, {recursive: true, force: true}); }
