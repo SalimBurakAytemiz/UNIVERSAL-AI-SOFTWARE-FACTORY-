@@ -3,6 +3,7 @@ import path from "node:path";
 import fs from "node:fs";
 import {buildServer} from "../../apps/control-api/src/server.js";
 import {FakeExecutors} from "../../core/workos/executors.js";
+import {secureStringEqual} from "../../automation/lib/control-boundary.mjs";
 import {WorkOsStore} from "../../core/workos/store.js";
 import {AnalysisFlow} from "../../core/workos/crew/analysis.js";
 import {TASKHUB_ARTIFACTS} from "../../core/workos/predev/fixtures/taskhub/index.js";
@@ -13,15 +14,18 @@ const runtime = path.join(root, "runtime"), dataDir = path.join(root, "workos"),
 for (const d of [runtime, dataDir, controlRoot]) fs.mkdirSync(d, {recursive: true});
 const fake = new FakeExecutors({implement: () => ({files: {"feature.txt": "e2e\n"}, message: "e2e: fake implementation"}), review: () => ({verdict: "CLEAN"})});
 const app = buildServer({controlToken: token, runtime, dataDir, controlRoot, port, repoRoot: process.cwd(), logger: false, executors: fake.pair(), runner: {enabled: true, intervalMs: 500}});
-// //TR: Yalnız bu test arka ucuna özgü iki kontrol rotası (gerçek sunucu kodunda YOKTUR; masaüstü izin listesi bu yolları zaten reddeder, çağıran yalnız E2E betiğidir ve aynı belirteçle kimlik doğrular): (1) istek günlüğü, (2) "onay yazıldı ama faz ilerlemedi" durumunun tohumu.
+// //TR: Yalnız bu test arka ucuna özgü iki kontrol rotası (gerçek sunucu kodunda YOKTUR; masaüstü izin listesi bu yolları zaten reddeder). Sunucunun kendi kancası belirteci YALNIZ /v1/ yolları için denetler; bu yüzden her iki rota da aynı belirteci kendisi, sunucunun tokenOk'u gibi zamanlamadan bağımsız karşılaştırmayla (secureStringEqual) denetler ve yoksa/yanlışsa 403 verir. Host kancası (421) tüm yollara uygulanır. (1) istek günlüğü, (2) "onay yazıldı ama faz ilerlemedi" durumunun tohumu.
+const e2eTokenOk = (req: any): boolean => { const v = req.headers["x-uasco-control-token"]; return typeof v === "string" && secureStringEqual(token, v); };
 const requests: Array<{method: string; url: string; status: number}> = [];
 app.addHook("onResponse", async (req: any, reply: any) => { if (!String(req.url).startsWith("/__e2e/")) requests.push({method: req.method, url: String(req.url), status: reply.statusCode}); });
-app.get("/__e2e/requests", async () => ({requests}));
+app.get("/__e2e/requests", async (req: any, reply: any) => e2eTokenOk(req) ? {requests} : reply.code(403).send({error: "FORBIDDEN"}));
 // Tohum: sunucunun AYNI veri dizininde ikinci bir depo örneği kullanılır (yazılanlar API'den görünür, doğrulandı); taslak sabit TaskHub örneğinden üretilir (gerçek Claude YOK), sonra onay yazılır ama faz ilerletilmez (kesintiye uğramış onay).
 app.post("/__e2e/seed-stuck-artefact", async (req: any, reply: any) => {
+  if (!e2eTokenOk(req)) return reply.code(403).send({error: "FORBIDDEN"});
   const missionId = String(req.body?.missionId ?? "");
   if (!/^msn_[0-9a-f]{24}$/.test(missionId)) return reply.code(400).send({error: "INVALID_MISSION_ID"});
   const scope = {tenantId: "local"}, store = new WorkOsStore(dataDir);
+  if (!store.getMission(scope, missionId)) return reply.code(404).send({error: "WORKOS_NOT_FOUND"}); // bilinmeyen görev: 500 değil 404
   const flow = new AnalysisFlow({store, scope, builder: {async produce(kind: any) { return JSON.stringify((TASKHUB_ARTIFACTS as any)[kind]); }}, readiness: () => ({ready: true, blockers: [], blocker: null, founderAction: null, profiles: null})});
   const draft: any = await flow.step(missionId);
   if (draft.status !== "DRAFT_READY") return reply.code(409).send({error: "SEED_NOT_DRAFT_READY", status: draft.status});
