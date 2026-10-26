@@ -990,6 +990,12 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
         const h = await p.bridge(child, port); let ok = 0;
         for (let i = 0; i < 40 && !ok; i++) { try { const r = await fetch(`http://127.0.0.1:${port}/`); ok = r.status; } catch { await new Promise(r => setTimeout(r, 500)); } }
         expect(ok).toBe(200); h.close();
+        // C-3: Linux tarafı kapatma kanıtı (taskkill Windows tarafını bitirir; sandbox ağacı ve scratch Linux'ta kapatılmalıdır)
+        const S = (child as any).sandboxScratch as string; expect(S).toMatch(/^\/tmp\/uasco-sbx-[A-Za-z0-9]{6}$/);
+        if (child.pid) cp.spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], {windowsHide: true});
+        expect(await (child as any).sandboxTeardown).toBeNull(); expect(p.isVerified()).toBe(true);
+        const wslx = (a: string[]) => cp.spawnSync("wsl.exe", ["-d", process.env.UASCO_WSL_DISTRO!, "--exec", ...a], {windowsHide: true}).status;
+        expect(wslx(["/usr/bin/pgrep", "-f", "uasco-sbx"])).toBe(1); expect(wslx(["/usr/bin/test", "!", "-e", S])).toBe(0);
       } finally { if (child.pid) cp.spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], {windowsHide: true}); await child.sandboxTeardown; fs.rmSync(dir, {recursive: true, force: true}); }
     });
   });
@@ -1045,7 +1051,7 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
         const mark = f.calls.length; const t0 = Date.now();
         const r = await p.run(["node", "x"], {cwd: dir, env: {}, timeoutMs: 20_000, shouldAbort: () => Date.now() - t0 > 100});
         const seq = f.calls.slice(mark).map(c => c.args.slice(3).join(" "));
-        const firstKill = seq.findIndex(a => a.endsWith("/ctl/kill.sh")), runReturned = seq.indexOf("__run_returned__");
+        const firstKill = seq.findIndex(a => a === "/bin/sh /tmp/uasco-sbx-AbC123/ctl/kill.sh"), runReturned = seq.indexOf("__run_returned__");
         expect(firstKill).toBeGreaterThan(-1); expect(runReturned).toBeGreaterThan(-1); expect(firstKill).toBeLessThan(runReturned);
         void r;
       } finally { fs.rmSync(dir, {recursive: true, force: true}); }
@@ -1180,6 +1186,28 @@ struct io_uring_cqe*c=(struct io_uring_cqe*)(cqp+p.cq_off.cqes);printf("socket-r
       // gerçek koşu: vsock sandbox içinde de engelli, rc geri okunur, temizlik sonrası kalıntı yok
       const dir = ws(); fs.writeFileSync(path.join(dir, "v.js"), "console.log('rc-ok')");
       try { const run = await good.run(["sh", "-c", "echo rc-ok"], {cwd: dir, env: {}, timeoutMs: 30_000}); expect(run, JSON.stringify(run)).toMatchObject({exitCode: 0, timedOut: false}); expect(run.stdout).toContain("rc-ok"); } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+    }, 180_000);
+
+    // C-3: ürün koşusunun Linux tarafı kapatma kanıtı (gerçek WSL testiyle AYNI doğrulamalar, yerel "wsl" ile): kök kill edilince sandboxTeardown temiz (null) döner, sağlayıcı doğrulanmış kalır, hiçbir uasco-sbx süreci kalmaz, scratch silinir.
+    it.skipIf(!canReal)("C-3 (Linux stand-in of the WSL product test): after the sandboxed process is killed, sandboxTeardown resolves clean, the provider stays verified, no uasco-sbx process survives (pgrep exit 1) and the scratch is gone", async ctx => {
+      const mod = await import("../core/sandbox/wsl-unshare-sandbox.js"); const iso = await lin();
+      if (!iso) return ctx.skip();
+      if (dropUid === undefined && process.getuid?.() === 0) return;
+      const nodeRoot = path.dirname(path.dirname(fs.realpathSync(process.execPath)));
+      const spawner = (args: string[], stdio: any) => cp.spawn(args[3], args.slice(4), {cwd: "/", env: {PATH: `${nodeRoot}/bin:${LIN_PATH}`, HOME: "/tmp", LANG: "C"}, stdio, ...(dropUid !== undefined ? {uid: dropUid, gid: dropUid} : {})});
+      const p = new mod.WslUnshareSandboxProvider({platform: "win32", distro: "Ubuntu", runner: localWsl({PATH: `${nodeRoot}/bin:${LIN_PATH}`}) as any, isolation: iso, spawner, extraReadOnlyRoots: /^\/(usr|bin|sbin)\//.test(process.execPath) ? [] : [nodeRoot]});
+      expect(await p.selfTest()).toEqual({ok: true});
+      const dir = ws();
+      try {
+        const child: any = await p.spawnAsync("sleep", ["120"], {cwd: dir, env: {}, shell: false, stdio: ["ignore", "pipe", "pipe"]});
+        const S = child.sandboxScratch as string; expect(S).toMatch(/^\/tmp\/uasco-sbx-[A-Za-z0-9]{6}$/);
+        for (let i = 0; i < 40 && cp.spawnSync("pgrep", ["-f", "--", S]).status !== 0; i++) await sleepMs(100);
+        expect(cp.spawnSync("pgrep", ["-f", "--", S]).status).toBe(0); // sandbox içindeki süreç gerçekten çalışıyor
+        child.kill("SIGKILL");
+        expect(await child.sandboxTeardown).toBeNull();
+        expect(p.isVerified()).toBe(true);
+        expect(cp.spawnSync("pgrep", ["-f", "uasco-sbx"]).status).toBe(1); expect(fs.existsSync(S)).toBe(false);
+      } finally { fs.rmSync(dir, {recursive: true, force: true}); }
     }, 180_000);
   });
 
