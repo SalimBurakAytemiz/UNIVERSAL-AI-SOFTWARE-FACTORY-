@@ -422,6 +422,16 @@
       "ref": "wf_5bff2170-3d5 (exhaustive U+0000..10FFFF: 0 visible-text regressions vs base, only DI-inside-marker; replay test real; PH18/PH19 killed; LOW: PH17 description)",
       "policy": "TEP-1",
       "at": "2026-10-26T19:42:58.101Z"
+    },
+    {
+      "pr": 260,
+      "sha": "1dd7597ac31657c6d778bf4feb1b6ab644fb0547",
+      "kind": "full",
+      "base": null,
+      "verdict": "BLOCKERS_MEDIUM_certified_true_path_untested",
+      "ref": "wf_458d1f0a-f68 (spec-honesty + tests-protected lenses; MEDIUM confirmed by skeptic: X1 certTrue=certified||tested and X6 Date.now survive 13/13; 8 LOW incl. RUNNING measured-0 for non-ABSENT journal, measured:true on empty denominator, X2/X3/X4 survivors; protected commit 1dd7597 verified)",
+      "policy": "TEP-1",
+      "at": "2026-10-26T20:13:25.550Z"
     }
   ],
   "tests": [],
