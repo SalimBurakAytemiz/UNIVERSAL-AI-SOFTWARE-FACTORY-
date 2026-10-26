@@ -572,7 +572,7 @@ describe("C-FLOW-ANALYSIS-1: intake -> analysis -> plan", () => {
     expect(during.calls).toHaveLength(1); // the paid call happened ...
     expect(during.rm().artifacts.BusinessAnalysis.state).toBe("NOT_STARTED"); // ... but its output was not recorded
     expect(during.rm()).toMatchObject({active: false, phase: "NOT_STARTED"});
-    expect(await new AnalysisFlow({store: during.store, scope: SCOPE, builder: NO_ANALYSIS_BUILDER, readiness: () => READY, stopped: () => false}).step(during.missionId)).toMatchObject({status: "BUILDER_FAILED", code: "PREDEV_DRIVER_BUILDER_NOT_CONFIGURED"});
+    expect(await new AnalysisFlow({store: during.store, scope: SCOPE, builder: NO_ANALYSIS_BUILDER, readiness: () => READY, stopped: () => false}).step(during.missionId)).toMatchObject({status: "BLOCKED", blocker: "EXECUTOR_NOT_ENABLED", blockers: ["EXECUTOR_NOT_ENABLED"], founderAction: expect.stringContaining("LOCAL_CLAUDE")}); // C-FLOW-ANALYSIS-2: no production builder is a BLOCKED answer before any paid call (flow-1 answers BUILDER_FAILED / PREDEV_DRIVER_BUILDER_NOT_CONFIGURED)
     expect("shouldAbort" in NO_ANALYSIS_BUILDER, "the shared no-builder sentinel is never wired").toBe(false);
     // an aborted builder (it throws once the stop is up) is a stop, not a builder failure
     stopped = false;
