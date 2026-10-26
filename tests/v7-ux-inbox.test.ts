@@ -635,7 +635,7 @@ describe("LANE-A attention consumers: honest summary in Inbox strip, Delivery an
     const {ctx} = await mkCtx({get: fromFix(liveFix({"/v1/attention": attention([], attCounts({RUN_AWAITING_APPROVAL: 0, RUN_NEEDS_DECISION: 0, TASK_BLOCKED: 0}))})), lang: "en"});
     expect(sourceState(await inbox.render(ctx), "attention")).toBe("VERIFIED");
   });
-  it("tr: Delivery and Inbox use the Turkish noun and the exact-count truncation text (no 'En az', no 'mission' noun) for a truncated list", async () => {
+  it("tr: Delivery and Inbox use the Turkish item noun (öğe) with the 'görevler, koşular ve missionlar' list and the exact-count truncation text (no 'En az') for a truncated list", async () => {
     const delivery = await load("views", "delivery.js"), inbox = await load("views", "inbox.js");
     const fx = attention(big(200), attCounts({RUN_AWAITING_APPROVAL: 0, RUN_NEEDS_DECISION: 0, TASK_BLOCKED: 250}), true);
     const d = await mkCtx({get: fromFix(delFix(fx)), lang: "tr"}); const line = byId(await delivery.render(d.ctx), "delivery-attention-status")!;

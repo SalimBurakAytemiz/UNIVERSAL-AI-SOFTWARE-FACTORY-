@@ -587,7 +587,7 @@ describe("UI-110 run stop/failure reason (renderer-only)", () => {
   const RUNS_FIX = (failedReason: unknown = "ENGINE_ERROR: boom") => ({runs: [
     mk(RUN_IDS.failed, 1, "FAILED", failedReason), mk(RUN_IDS.blocked, 2, "BLOCKED", "SECRET_IN_DIFF"), mk(RUN_IDS.cancelled, 3, "CANCELLED", "GLOBAL_STOP_ACTIVE: stop"),
     mk(RUN_IDS.running, 4, "RUNNING", "step IMPLEMENT started"), mk(RUN_IDS.nullReason, 5, "FAILED", null)]});
-  const EXEC_GETS = ["/v1/cockpit", "/v1/missions", "/v1/work-runs", "/v1/founder-attention"];
+  const EXEC_GETS = ["/v1/cockpit", "/v1/missions", "/v1/work-runs", "/v1/attention"];
   const READY_GETS = ["/v1/work-runs", "/v1/reviews", "/v1/cockpit", "/v1/missions"];
   async function mk2(runs: any, storage?: any) {
     const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js");
