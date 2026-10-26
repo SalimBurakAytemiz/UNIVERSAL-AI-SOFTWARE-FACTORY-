@@ -460,7 +460,7 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
     const max = this.o.maxBridgeConnections ?? 32, idleMs = this.o.bridgeIdleMs ?? 120_000, spawner = this.realSpawner();
     const live = new Set<net.Socket>(), kids = new Set<cp.ChildProcess>();
     const server = net.createServer(sock => {
-      if (live.size >= max || child.exitCode !== null || child.signalCode !== null) { sock.destroy(); return; }
+      if (!this.verified || live.size >= max || child.exitCode !== null || child.signalCode !== null) { sock.destroy(); return; }
       live.add(sock); sock.setTimeout(idleMs, () => sock.destroy());
       const r = spawner(["-d", this.distro ?? "", "--exec", "/bin/sh", `${rec.S}/ctl/relay.sh`, target as string, String(port)], ["pipe", "pipe", "ignore"]);
       kids.add(r);

@@ -384,6 +384,31 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
     } finally { await m.stopAll("CLEANUP"); }
   }, T);
 
+  it("C-1: a RUNNING bridged product is stopped on the provider side and becomes BLOCKED (SANDBOX_UNVERIFIED) when the provider de-verifies; view masks the preview at once, the bridge closes, the process is gone and a new start is refused", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+    const net = await import("node:net");
+    let innerPort = 0, closed = 0, verified = true, child: cp.ChildProcess | null = null; const proxies = new Set<import("node:net").Socket>();
+    const provider = {id: "FAKE_ISOLATED", network: "ISOLATED", async selfTest() { return {ok: verified}; }, isVerified() { return verified; }, async run() { throw new Error("unused"); },
+      spawn(c: string, a: string[], o: cp.SpawnOptions) { innerPort = Math.floor(30000 + Math.random() * 20000); child = cp.spawn(c, a, {...o, env: {...(o.env as any), PORT: String(innerPort)}}); return child; },
+      async bridge(_c: cp.ChildProcess, port: number) {
+        const srv = net.createServer(s => { const u = net.connect(innerPort, "127.0.0.1"); proxies.add(s); s.pipe(u); u.pipe(s); s.on("error", () => u.destroy()); u.on("error", () => s.destroy()); });
+        await new Promise<void>(r => srv.listen(port, "127.0.0.1", () => r()));
+        return {port, close() { closed++; srv.close(); for (const s of proxies) s.destroy(); }};
+      }};
+    const m = manager(dataDir, new ExecutionGate(provider as any));
+    try {
+      const v = await m.start(p); expect(v).toMatchObject({status: "RUNNING", bridged: true});
+      expect((await fetch(`http://127.0.0.1:${v.port}/`)).status).toBe(200);
+      verified = false;
+      const masked = m.view(p); expect(masked.preview).toMatchObject({state: "UNAVAILABLE", url: null, reason: "SANDBOX_UNVERIFIED"});
+      for (let i = 0; i < 100 && m.view(p).status !== "BLOCKED"; i++) await new Promise(r => setTimeout(r, 100));
+      const done = m.view(p); expect(done).toMatchObject({status: "BLOCKED", reason: "SANDBOX_UNVERIFIED"}); expect(closed).toBe(1);
+      expect(child!.exitCode !== null || child!.signalCode !== null).toBe(true);
+      await expect(fetch(`http://127.0.0.1:${v.port}/`)).rejects.toBeTruthy();
+      await expect(m.start(p)).rejects.toMatchObject({code: "SANDBOX_UNAVAILABLE"});
+    } finally { await m.stopAll("CLEANUP"); }
+  }, T);
+
   it("startNsenterBridge refuses a target that shares the host network namespace (it would expose host loopback), an exited/invalid pid and a bad port", async () => {
     const {startNsenterBridge} = await import("../core/workos/devrun-bridge.js");
     const idleChild = cp.spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {stdio: "ignore"}); procs.push(idleChild);

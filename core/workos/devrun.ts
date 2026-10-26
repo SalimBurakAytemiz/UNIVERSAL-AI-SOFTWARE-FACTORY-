@@ -190,6 +190,7 @@ interface Active {
   state: DevRunState; child: cp.ChildProcess | null; stopping: boolean; stdout: Ring; stderr: Ring;
   release: (() => void) | null; probeTimer: NodeJS.Timeout | null; flushTimer: NodeJS.Timeout | null; exited: Promise<void>; projectType: string | undefined;
   known: Map<number, number>; snapTimer: NodeJS.Timeout | null; bridge: BridgeHandle | null;
+  provider: {isVerified?(): boolean} | null; blockedReason: string | null;
 }
 
 export class DevRunManager {
@@ -261,11 +262,24 @@ export class DevRunManager {
 
   view(project: Project): DevRunView {
     const a = this.active.get(project.projectId);
+    if (a) this.checkProvider(a);
     const st = a?.state ?? this.readState(project.projectId) ?? this.blank(project);
     const {ownerPid: _o, ownerHost: _h, instanceId: _i, pidStartTime: _p, ownerStartTime: _ost, schemaVersion: _s, tenantId: _t, ...pub} = st;
     // PS1A-C1-F3: önizleme URL'si yalnız bu örneğin kendi HTTP yoklamasından gelir; dosyadan okunan (başka/eski örneğe ait) AVAILABLE önizleme maskelenir.
-    const preview: DevRunPreview = !a && pub.preview?.state === "AVAILABLE" ? {url: null, state: "UNAVAILABLE", lastProbeAt: pub.preview.lastProbeAt ?? null, reason: "NOT_OWNED_BY_THIS_INSTANCE"} : {...pub.preview};
+    const preview: DevRunPreview = a?.blockedReason ? {url: null, state: "UNAVAILABLE", lastProbeAt: pub.preview?.lastProbeAt ?? null, reason: a.blockedReason} : !a && pub.preview?.state === "AVAILABLE" ? {url: null, state: "UNAVAILABLE", lastProbeAt: pub.preview.lastProbeAt ?? null, reason: "NOT_OWNED_BY_THIS_INSTANCE"} : {...pub.preview};
     return {...pub, argv: [...pub.argv], preview, logTail: this.readLogs(project.projectId, a)};
+  }
+  // C-1: sağlayıcı kendini doğrulanmamış yaptıysa (isVerified() false) çalışan ürün çalışır/köprülü/200 kalamaz: sağlayıcı tarafında kapatılır ve BLOCKED yazılır.
+  private checkProvider(a: Active): void {
+    if (a.blockedReason || !ACTIVE.has(a.state.status) || typeof a.provider?.isVerified !== "function") return;
+    let ok = false; try { ok = a.provider.isVerified() === true; } catch { ok = false; }
+    if (ok) return;
+    a.blockedReason = "SANDBOX_UNVERIFIED";
+    try { a.bridge?.close(); } catch { /* kapalı */ }
+    a.bridge = null;
+    a.state.preview = {url: null, state: "UNAVAILABLE", lastProbeAt: a.state.preview.lastProbeAt, reason: "SANDBOX_UNVERIFIED"};
+    this.o.audit("DEVRUN_SANDBOX_DEVERIFIED", {projectId: a.state.projectId});
+    void this.stopDetailed(a.state.projectId, "SANDBOX_UNVERIFIED").catch(() => undefined);
   }
   isActive(projectId: string): boolean { const a = this.active.get(projectId); return Boolean(a && ACTIVE.has(a.state.status)); }
 
@@ -324,7 +338,7 @@ export class DevRunManager {
     catch (e) { if (e instanceof StudioError && e.code === "REPOSITORY_NOT_CONFIGURED") return this.block(project, "REPOSITORY_NOT_CONFIGURED"); throw e; }
     // Yer tutucu: aynı süreçteki eşzamanlı ikinci start await'ten önce reddedilir.
     const st: DevRunState = {...this.blank(project), status: "STARTING", startedAt: new Date().toISOString(), argv: [...argv]};
-    const a: Active = {state: st, child: null, stopping: false, stdout: new Ring(this.o.logRingBytes), stderr: new Ring(this.o.logRingBytes), release: null, probeTimer: null, flushTimer: null, exited: Promise.resolve(), projectType: project.projectType, known: new Map(), snapTimer: null, bridge: null};
+    const a: Active = {state: st, child: null, stopping: false, stdout: new Ring(this.o.logRingBytes), stderr: new Ring(this.o.logRingBytes), release: null, probeTimer: null, flushTimer: null, exited: Promise.resolve(), projectType: project.projectType, known: new Map(), snapTimer: null, bridge: null, provider: null, blockedReason: null};
     this.active.set(id, a);
     // PS1A-C1-F2: her await'ten sonra (özellikle spawn'dan hemen önce) stop/stopAll/GLOBAL_STOP ve harita sahipliği yeniden kontrol edilir.
     const aborted = () => a.stopping || this.active.get(id) !== a || this.stopActive() !== null;
@@ -359,7 +373,7 @@ export class DevRunManager {
       const spawnOpts = {cwd: ws, env, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] as ["ignore", "pipe", "pipe"], detached: process.platform !== "win32"};
       // B-RUN-WIN-1: eşzamansız hazırlık gerektiren sağlayıcı (WSL) spawnAsync sunar; yoksa eşzamanlı spawn.
       const child: SandboxChild = gate.provider.spawnAsync ? await gate.provider.spawnAsync(exe, argv.slice(1), spawnOpts) : gate.provider.spawn(exe, argv.slice(1), spawnOpts);
-      a.child = child;
+      a.child = child; a.provider = gate.provider;
       a.exited = new Promise<void>(resolve => {
         // PS1A-C2-F2: çıkış (çökme veya durdurma) sonrası kalan ağaç (ayrık torunlar dahil) temizlenmeden exited çözülmez.
         child.once("exit", (code, signal) => { this.onExit(a, code, signal); void Promise.all([this.reapTree(a).catch(() => undefined), Promise.resolve(child.sandboxTeardown).catch(() => undefined)]).finally(resolve); });
@@ -419,6 +433,8 @@ export class DevRunManager {
     const tick = async () => {
       a.probeTimer = null;
       if (!ACTIVE.has(a.state.status) || !a.state.port) return;
+      this.checkProvider(a);
+      if (a.blockedReason) return;
       const code = await probe(a.state.port);
       if (!ACTIVE.has(a.state.status)) return;
       const at = new Date().toISOString();
@@ -507,8 +523,8 @@ export class DevRunManager {
     const st = a.state;
     st.endedAt = new Date().toISOString(); st.exitCode = code; st.signal = signal ?? null;
     delete st.stopTimedOut;
-    st.status = a.stopping ? "STOPPED" : "CRASHED";
-    st.reason = a.stopping ? (st.reason ?? "STOP_REQUESTED") : (reason ?? `PROCESS_EXITED${code !== null ? `:${code}` : signal ? `:${signal}` : ""}`);
+    st.status = a.blockedReason ? "BLOCKED" : a.stopping ? "STOPPED" : "CRASHED";
+    st.reason = a.blockedReason ? a.blockedReason : a.stopping ? (st.reason ?? "STOP_REQUESTED") : (reason ?? `PROCESS_EXITED${code !== null ? `:${code}` : signal ? `:${signal}` : ""}`);
     st.preview = {url: null, state: "UNAVAILABLE", lastProbeAt: st.preview.lastProbeAt, reason: "NOT_RUNNING"};
     this.cleanup(a);
     try { this.writeState(st); } catch { /* durum yazılamadı */ }
@@ -552,6 +568,7 @@ export class DevRunManager {
     this.stopTimer = setInterval(() => {
       if (!this.active.size) { if (this.stopTimer) clearInterval(this.stopTimer); this.stopTimer = null; return; }
       if (this.stopActive()) void this.stopAll("GLOBAL_STOP_ACTIVE");
+      else for (const a of this.active.values()) this.checkProvider(a);
     }, this.o.stopPollMs);
     this.stopTimer.unref?.();
   }
