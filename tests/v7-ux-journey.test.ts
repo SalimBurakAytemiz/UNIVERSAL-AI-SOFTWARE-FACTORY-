@@ -1617,7 +1617,6 @@ describe("LANE-A A-FLOW-2: the task to run link of the first-delivery flow again
     const card = byData(root, "runLinkedFor", runId)!;
     expect(allData(card, "runLinkedTask").map(n => n.dataset.runLinkedTask)).toEqual([t1.taskId]);
     // task 1 inspector: the run is listed and governs; task 2 inspector: no run linked, and the unlinked run can be linked from the task side
-    const ts = await load("views", "task-runs.js");
     const open = async (taskId: string) => { let r = await view(s); if (byId(r, "task-runs")?.dataset.taskRunsFor !== taskId) { fire(byData(r, "taskInspect", taskId)!, "click"); r = await view(s); } return r; };
     root = await open(t1.taskId);
     expect(byId(root, "task-runs")!.dataset.taskRunsFor).toBe(t1.taskId);
@@ -1626,7 +1625,11 @@ describe("LANE-A A-FLOW-2: the task to run link of the first-delivery flow again
     expect(text(byId(root, "task-runs")!)).toContain("No run is linked to this task.");
     expect(allData(byId(root, "task-runs")!, "taskRun")).toEqual([]);
     expect(byId(root, "taskruns-run")).toBeDefined();
-    expect(await ts.submitLinkRun(s.ctx, (await s.ctx.api.missionDetail(missionId)).mission.tasks.find((t: any) => t.taskId === t2.taskId), runId)).toMatchObject({ok: true, status: 201});
+    expect((byId(root, "taskruns-run") as any).value).toBe(runId); // the only unlinked run is preselected
+    const post2 = s.calls.post.length;
+    fire(byId(root, "taskruns-submit")!, "click");
+    for (let i = 0; i < 200 && s.calls.post.length === post2; i++) await tick();
+    expect(s.calls.post.length).toBe(post2 + 1);
     expect(s.calls.post.at(-1)).toEqual({path: `/v1/tasks/${t2.taskId}/runs`, body: {runId}, status: 201});
     expect(await linksOnServer(s, t2.taskId)).toEqual([runId]);
     root = await open(t2.taskId);
