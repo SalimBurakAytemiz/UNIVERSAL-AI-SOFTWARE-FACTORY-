@@ -352,6 +352,16 @@
       "ref": "coordinator inline: 4 LOWs fixed; old not.toContain kept, new data-result=error assertion live; E2E waitSel ok + must(missionStatus); J8 + E2E mutant killed (Lane A)",
       "policy": "TEP-1",
       "at": "2026-10-26T18:00:38.753Z"
+    },
+    {
+      "pr": 231,
+      "sha": "d642963e35af6fc143dcdaed356f65f2e2246243",
+      "kind": "delta",
+      "base": "239641f",
+      "verdict": "NO_BLOCKERS_5LOW_SECURITY_DELTA",
+      "ref": "wf_42570092-000 (3 lenses: fix-correctness/test-integrity/security; P1/P2/P3 FIXED; 5 LOW: P2 serial-kill not pinned x3, stale-sample comment overclaim, M2 title overclaim)",
+      "policy": "TEP-1",
+      "at": "2026-10-26T18:25:26.123Z"
     }
   ],
   "tests": [],
