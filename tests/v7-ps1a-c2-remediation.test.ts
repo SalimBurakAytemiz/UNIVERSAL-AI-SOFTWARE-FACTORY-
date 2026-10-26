@@ -322,3 +322,236 @@ describe("B-DEVRUN-RESTART-SAFE: a stop that cannot confirm the exit never allow
     } finally { await m.stopAll("CLEANUP"); }
   }, T);
 });
+
+// //TR: LANE-B B-RUN-1: teslim edilen ürünün çalıştırılması. Ağ-izole sağlayıcıda ürün yalnız sağlayıcı köprüsüyle (127.0.0.1, tek port) açılır; köprü/loopback yoksa kesin DEVRUN_SANDBOX_UNAVAILABLE ve HİÇBİR süreç başlamaz. Gerçek Linux sağlayıcılı test yalnız selfTest + loopback + nsenter varsa çalışır, aksi halde SKIP görünür (PASS sayılmaz).
+describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
+  const manager = (dataDir: string, gate: ExecutionGate, o: Record<string, unknown> = {}) => new DevRunManager({executionGate: gate, studio: new ProjectStudio({dataDir, envPolicyFile: ENV_POLICY}), envPolicyFile: ENV_POLICY,
+    globalStopFile: path.join(tmp, "m-runtime", "GLOBAL_STOP.json"), stopPollMs: 100, probeIntervalMs: 100, ...o});
+  const fakeIsolated = (extra: Record<string, unknown> = {}) => {
+    const spawned: string[] = [];
+    const provider = {id: "linux-unshare-v2", async selfTest() { return {ok: true}; }, async run() { throw new Error("unused"); }, spawn(c: string, a: string[], o: cp.SpawnOptions) { spawned.push(c); return cp.spawn(c, a, o); }, ...extra};
+    return {provider, spawned};
+  };
+  it("bridgeSupport: HOST test doubles need no bridge; the Linux provider needs a proven loopback and nsenter; WSL has none yet; every refusal carries an exact reason", async () => {
+    const {bridgeSupport, providerNetwork} = await import("../core/workos/devrun-bridge.js");
+    expect(providerNetwork(TEST_HOST_PASSTHROUGH_SANDBOX)).toBe("HOST"); expect(bridgeSupport(TEST_HOST_PASSTHROUGH_SANDBOX)).toMatchObject({ok: true, start: null});
+    const lin = (caps?: unknown) => ({id: "linux-unshare-v2", selfTest: async () => ({ok: true}), run: async () => ({}) as any, spawn: () => ({}) as any, ...(caps ? {capabilities: caps} : {})});
+    // Platform kapısı yeteneklerden ÖNCE gelir (üründe doğru); beklentiler çalıştıran işletim sistemine bağlı olmasın diye platform açıkça verilir (win32 -> BRIDGE_PLATFORM_NOT_LINUX, linux -> yetenek kodları).
+    const L = {platform: "linux" as const};
+    expect(bridgeSupport(lin(), {platform: "win32"})).toEqual({ok: false, reason: "BRIDGE_PLATFORM_NOT_LINUX"});
+    expect(bridgeSupport(lin(), L)).toEqual({ok: false, reason: "SANDBOX_LOOPBACK_NOT_VERIFIED:NOT_REPORTED"});
+    expect(bridgeSupport(lin({loopback: false, loopbackReason: "LOOPBACK_TOOL_MISSING"}), L)).toEqual({ok: false, reason: "SANDBOX_LOOPBACK_NOT_VERIFIED:LOOPBACK_TOOL_MISSING"});
+    expect(bridgeSupport(lin({loopback: true}), {...L, nsenterBinary: null})).toEqual({ok: false, reason: "NSENTER_MISSING"});
+    expect(bridgeSupport(lin({loopback: true}), {nsenterBinary: "/usr/bin/nsenter", platform: "win32"})).toEqual({ok: false, reason: "BRIDGE_PLATFORM_NOT_LINUX"});
+    expect(bridgeSupport(lin({loopback: true}), {nsenterBinary: "/usr/bin/nsenter", platform: "linux"})).toMatchObject({ok: true, network: "ISOLATED"});
+    expect(bridgeSupport({...lin(), id: "wsl-unshare-v1"} as any, L)).toEqual({ok: false, reason: "PROVIDER_HAS_NO_BRIDGE:wsl-unshare-v1"});
+    const own = async () => ({port: 1, close() {}});
+    expect(bridgeSupport({...lin(), bridge: own} as any, L)).toMatchObject({ok: true});
+  });
+
+  it("an isolated provider without a usable bridge is refused with DEVRUN_SANDBOX_UNAVAILABLE + exact reason BEFORE anything is cloned or spawned; state is BLOCKED; an unverified provider keeps SANDBOX_UNAVAILABLE", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+    const {provider, spawned} = fakeIsolated();
+    const m = manager(dataDir, new ExecutionGate(provider as any), {bridgeOptions: {platform: "linux"}});
+    await expect(m.start(p)).rejects.toMatchObject({code: "DEVRUN_SANDBOX_UNAVAILABLE", status: 409, reason: "SANDBOX_LOOPBACK_NOT_VERIFIED:NOT_REPORTED"});
+    expect(spawned).toEqual([]); expect(fs.existsSync(path.join(dataDir, "projects", p.projectId, "devrun", "workspace"))).toBe(false);
+    const v = m.view(p); expect(v.status).toBe("BLOCKED"); expect(v.reason).toBe("DEVRUN_SANDBOX_UNAVAILABLE:SANDBOX_LOOPBACK_NOT_VERIFIED:NOT_REPORTED");
+    const bad = manager(dataDir, new ExecutionGate({...provider, selfTest: async () => ({ok: false, detail: "X"})} as any));
+    await expect(bad.start(p)).rejects.toMatchObject({code: "SANDBOX_UNAVAILABLE", status: 409});
+    expect(spawned).toEqual([]);
+  }, T);
+
+  it("C-1: a RUNNING bridged product is stopped on the provider side and becomes BLOCKED (SANDBOX_UNVERIFIED) when the provider de-verifies; view masks the preview at once, the bridge closes and the process is gone", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+    // net: üst düzey import
+    const net = await import("node:net");
+    let innerPort = 0, closed = 0, verified = true, child: cp.ChildProcess | null = null; const proxies = new Set<import("node:net").Socket>();
+    const provider = {id: "FAKE_ISOLATED", network: "ISOLATED", async selfTest() { return {ok: verified}; }, isVerified() { return verified; }, async run() { throw new Error("unused"); },
+      spawn(c: string, a: string[], o: cp.SpawnOptions) { innerPort = Math.floor(30000 + Math.random() * 20000); child = cp.spawn(c, a, {...o, env: {...(o.env as any), PORT: String(innerPort)}}); return child; },
+      async bridge(_c: cp.ChildProcess, port: number) {
+        const srv = net.createServer(s => { const u = net.connect(innerPort, "127.0.0.1"); proxies.add(s); s.pipe(u); u.pipe(s); s.on("error", () => u.destroy()); u.on("error", () => s.destroy()); });
+        await new Promise<void>(r => srv.listen(port, "127.0.0.1", () => r()));
+        return {port, close() { closed++; srv.close(); for (const s of proxies) s.destroy(); }};
+      }};
+    const m = manager(dataDir, new ExecutionGate(provider as any));
+    try {
+      const v = await m.start(p); expect(v).toMatchObject({status: "RUNNING", bridged: true});
+      expect((await fetch(`http://127.0.0.1:${v.port}/`)).status).toBe(200);
+      verified = false;
+      const masked = m.view(p); expect(masked.preview).toMatchObject({state: "UNAVAILABLE", url: null, reason: "SANDBOX_UNVERIFIED"});
+      expect(closed, "the bridge closes IMMEDIATELY on de-verify, before the stop completes").toBe(1);
+      for (let i = 0; i < 100 && m.view(p).status !== "BLOCKED"; i++) await new Promise(r => setTimeout(r, 100));
+      const done = m.view(p); expect(done).toMatchObject({status: "BLOCKED", reason: "SANDBOX_UNVERIFIED"}); expect(closed).toBe(1);
+      expect(child!.exitCode !== null || child!.signalCode !== null).toBe(true);
+      await expect(fetch(`http://127.0.0.1:${v.port}/`)).rejects.toBeTruthy();
+    } finally { await m.stopAll("CLEANUP"); }
+  }, T);
+
+  it("STOP-409 (Windows stop timeout): stop returns STOPPED as soon as the root exits even when the tree reap is slow (reap is a separate background budget); a new start waits for that reap and is refused with 409 DEVRUN_STOP_PENDING if it takes too long", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+    const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {stopWaitMs: 1500, reapWaitMs: 300});
+    let reaps = 0; (m as any).reapTree = async () => { reaps++; await new Promise(r => setTimeout(r, 3000)); };
+    try {
+      await m.start(p);
+      const t0 = Date.now(); expect(await m.stop(p.projectId)).toBe(true); expect(Date.now() - t0, "stop must not wait for the slow reap").toBeLessThan(1400);
+      expect(m.view(p).status).toBe("STOPPED");
+      await expect(m.start(p)).rejects.toMatchObject({code: "DEVRUN_STOP_PENDING", status: 409});
+      (m as any).o.reapWaitMs = 10_000; const v = await m.start(p); expect(reaps).toBe(1); expect(v.status).toMatch(/RUNNING|STARTING/);
+    } finally { (m as any).reapTree = async () => undefined; await m.stopAll("CLEANUP"); }
+  }, 40_000);
+
+  const spawning = (extra: Record<string, unknown> = {}) => { const spawned: string[] = []; return {spawned, provider: {...TEST_HOST_PASSTHROUGH_SANDBOX, spawn(c: string, a: string[], o: cp.SpawnOptions) { spawned.push(c); return cp.spawn(c, a, o); }, ...extra} as any}; };
+
+  it("START-WAIT-STOP: a stop, stopAll or close that arrives while a start waits for the previous reap cancels that start (0 spawns, never RUNNING); the wait timers are cleared", async () => {
+    for (const how of ["stop", "stopAll", "close"] as const) {
+      const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+      const {provider, spawned} = spawning();
+      const m = manager(dataDir, new ExecutionGate(provider), {reapWaitMs: 10_000});
+      (m as any).reapTree = async () => { await new Promise(r => setTimeout(r, 1500)); };
+      try {
+        await m.start(p); expect(spawned).toHaveLength(1); await m.stop(p.projectId);
+        const s = m.start(p).then(v => v, e => e);
+        await new Promise(r => setTimeout(r, 200)); // start şimdi önceki ağaç temizliğini bekliyor (yer tutucu yok)
+        if (how === "stop") await m.stop(p.projectId); else if (how === "stopAll") await m.stopAll("TEST"); else await m.close();
+        const r: any = await s;
+        if (how === "close") expect(r).toMatchObject({code: "DEVRUN_CLOSED"}); else expect(r.status, JSON.stringify(r).slice(0, 200)).toBe("STOPPED");
+        expect(spawned, how).toHaveLength(1); expect(m.isActive(p.projectId)).toBe(false);
+        if (how === "close") await expect(m.start(p)).rejects.toMatchObject({code: "DEVRUN_CLOSED"});
+      } finally { (m as any).reapTree = async () => undefined; await m.close().catch(() => undefined); }
+    }
+  }, 60_000);
+
+  it("M04: the manager-wide cap defaults to 2 (third concurrent start is 409 DEVRUN_CAPACITY)", async () => {
+    const {app, dataDir} = mk(); const ps = [await createProject(app, {template: "web-node"}), await createProject(app, {template: "web-node"}), await createProject(app, {template: "web-node"})];
+    const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any));
+    try {
+      await m.start(ps[0]!); await m.start(ps[1]!);
+      await expect(m.start(ps[2]!)).rejects.toMatchObject({code: "DEVRUN_CAPACITY", status: 409});
+    } finally { await m.stopAll("CLEANUP"); }
+  }, T);
+
+  it("M06/M16: the periodic check alone (no view() call) stops a product whose provider de-verifies; a non-boolean isVerified() result is NOT accepted as verified", async () => {
+    for (const bad of [false, undefined]) {
+      const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+      let verified: unknown = true; const {provider} = spawning({isVerified: () => verified});
+      const m = manager(dataDir, new ExecutionGate(provider), {probeIntervalMs: 60_000}); // yoklama döngüsü devre dışı sayılır: yalnız stopPollMs (100 ms) zamanlayıcısı denetler
+      try {
+        await m.start(p); expect(m.isActive(p.projectId)).toBe(true);
+        verified = bad; // view() ÇAĞRILMAZ: yalnız zamanlayıcı denetler
+        for (let i = 0; i < 80 && m.isActive(p.projectId); i++) await new Promise(r => setTimeout(r, 100));
+        expect(m.isActive(p.projectId), `isVerified()=${String(bad)}`).toBe(false);
+        expect(JSON.parse(fs.readFileSync(path.join(dataDir, "projects", p.projectId, "devrun", "state.json"), "utf8"))).toMatchObject({status: "BLOCKED", reason: "SANDBOX_UNVERIFIED"});
+      } finally { await m.close(); }
+    }
+  }, 60_000);
+
+  it("a provider that is ALREADY de-verified never gets spawn() (cached gate result is not enough); a de-verify stop that times out is retried by the periodic check", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+    let verified = true; const {provider, spawned} = spawning({isVerified: () => verified});
+    const m = manager(dataDir, new ExecutionGate(provider));
+    try {
+      await m.start(p); await m.stop(p.projectId); expect(spawned).toHaveLength(1);
+      verified = false; await expect(m.start(p)).rejects.toMatchObject({code: "SANDBOX_UNAVAILABLE", reason: "SANDBOX_UNVERIFIED"}); expect(spawned).toHaveLength(1);
+      verified = true; await m.start(p);
+      const real = (m as any).stopDetailed.bind(m); let tries = 0;
+      (m as any).stopDetailed = async (id: string, why?: string) => { if (why === "SANDBOX_UNVERIFIED" && ++tries === 1) return "TIMEOUT"; return real(id, why); };
+      verified = false;
+      for (let i = 0; i < 80 && m.isActive(p.projectId); i++) await new Promise(r => setTimeout(r, 100));
+      expect(tries).toBeGreaterThanOrEqual(2); expect(m.isActive(p.projectId)).toBe(false);
+    } finally { await m.close(); }
+  }, 60_000);
+
+  it("M13: close() waits for the background tree reaps (bounded by stopWaitMs) before it resolves", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+    const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {stopWaitMs: 5000});
+    let reaped = false; (m as any).reapTree = async () => { await new Promise(r => setTimeout(r, 1200)); reaped = true; };
+    await m.start(p); await m.close();
+    expect(reaped, "close must not resolve before the reap finishes").toBe(true);
+  }, 30_000);
+
+  it("C-8: the delivery link is on the STARTING placeholder (product stop works during STARTING); C-9: the manager-wide cap refuses the next start with 409 DEVRUN_CAPACITY", async () => {
+    const {app, dataDir} = mk(); const p1 = await createProject(app, {template: "web-node"}), p2 = await createProject(app, {template: "web-node"});
+    let release: (n: number) => void = () => undefined, reached = false;
+    const gateP = new Promise<number>(r => { release = r; });
+    const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {maxConcurrent: 1, startTimeOf: async () => { reached = true; await new Promise(r => setTimeout(r, 400)); return null; }, freePort: async () => gateP});
+    const link = {runId: "run_" + "c".repeat(24), headSha: git(path.join(dataDir, "projects", p1.projectId, "repo"), ["rev-parse", "HEAD"]).trim()};
+    const first = m.start(p1, link);
+    try {
+      for (let i = 0; i < 100 && !reached; i++) await new Promise(r => setTimeout(r, 50));
+      expect(m.view(p1)).toMatchObject({status: "STARTING", deliveryRunId: link.runId});
+      await expect(m.start(p2)).rejects.toMatchObject({code: "DEVRUN_CAPACITY", status: 409});
+      release(await (await import("../core/workos/devrun.js")).freeLoopbackPort()); await first;
+      await expect(m.start(p2)).rejects.toMatchObject({code: "DEVRUN_CAPACITY"});
+      await m.stop(p1.projectId); expect((await m.start(p2)).status).toMatch(/RUNNING|STARTING/);
+    } finally { release(1); await first.catch(() => undefined); await m.stopAll("CLEANUP"); }
+  }, T);
+
+  it("with a provider bridge the product starts, the host reaches it ONLY on 127.0.0.1:<port> through the bridge, the run is tied to the delivery (runId + exact head), a wrong head is refused, and stop closes the bridge", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+    const head = git(path.join(dataDir, "projects", p.projectId, "repo"), ["rev-parse", "HEAD"]).trim();
+    const net = await import("node:net");
+    let innerPort = 0, bridgeCalls: number[] = [], closed = 0; const proxies = new Set<import("node:net").Socket>();
+    const provider = {id: "FAKE_ISOLATED", network: "ISOLATED", async selfTest() { return {ok: true}; }, async run() { throw new Error("unused"); },
+      spawn(c: string, a: string[], o: cp.SpawnOptions) { innerPort = Math.floor(30000 + Math.random() * 20000); return cp.spawn(c, a, {...o, env: {...(o.env as any), PORT: String(innerPort)}}); },
+      async bridge(_child: cp.ChildProcess, port: number) {
+        bridgeCalls.push(port);
+        const srv = net.createServer(s => { const u = net.connect(innerPort, "127.0.0.1"); proxies.add(s); s.pipe(u); u.pipe(s); s.on("error", () => u.destroy()); u.on("error", () => s.destroy()); });
+        await new Promise<void>(r => srv.listen(port, "127.0.0.1", () => r()));
+        return {port, close() { closed++; srv.close(); for (const s of proxies) s.destroy(); }};
+      }};
+    const m = manager(dataDir, new ExecutionGate(provider as any));
+    try {
+      await expect(m.start(p, {runId: "run_" + "a".repeat(24), headSha: "b".repeat(40)})).rejects.toMatchObject({code: "DEVRUN_BLOCKED", reason: "DEVRUN_DELIVERY_HEAD_MISSING"});
+      const v = await m.start(p, {runId: "run_" + "a".repeat(24), headSha: head});
+      expect(v).toMatchObject({status: "RUNNING", bridged: true, deliveryRunId: "run_" + "a".repeat(24), headSha: head}); expect(v.preview.state).toBe("AVAILABLE");
+      expect(bridgeCalls).toEqual([v.port]); expect(v.preview.url).toContain(`127.0.0.1:${v.port}`);
+      const res = await fetch(`http://127.0.0.1:${v.port}/`); expect(res.status).toBe(200);
+      await m.stop(p.projectId); expect(closed).toBe(1);
+      await expect(fetch(`http://127.0.0.1:${v.port}/`)).rejects.toBeTruthy();
+      expect(m.view(p).status).toBe("STOPPED");
+    } finally { await m.stopAll("CLEANUP"); }
+  }, T);
+
+  it("startNsenterBridge refuses a target that shares the host network namespace (it would expose host loopback), an exited/invalid pid and a bad port", async () => {
+    const {startNsenterBridge} = await import("../core/workos/devrun-bridge.js");
+    const idleChild = cp.spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {stdio: "ignore"}); procs.push(idleChild);
+    await expect(startNsenterBridge(idleChild, await freeLoopbackPort(), {nsenterBinary: "/usr/bin/nsenter", isolationWaitMs: 100})).rejects.toThrow(process.platform === "linux" ? "BRIDGE_TARGET_NOT_ISOLATED" : /./);
+    await expect(startNsenterBridge(idleChild, 0, {nsenterBinary: "/usr/bin/nsenter"})).rejects.toThrow("BRIDGE_PORT_INVALID");
+    await expect(startNsenterBridge({pid: undefined} as any, 8080, {nsenterBinary: "/usr/bin/nsenter"})).rejects.toThrow("BRIDGE_TARGET_MISSING");
+    await expect(startNsenterBridge(idleChild, 8080, {nsenterBinary: null})).rejects.toThrow(/NSENTER_MISSING|BRIDGE_TARGET/);
+  });
+
+  // Gerçek ağ ad alanı: ip varsa (yoksa SKIP) sandbox-benzeri unshare --net içindeki sunucuya köprü 200 döner; köprü olmadan ana makineden erişilemez.
+  it("REAL netns: a server inside a private user+net namespace is unreachable from the host directly and reachable ONLY through the nsenter bridge (skipped without ip/nsenter/unshare)", async ctx => {
+    const have = (b: string) => cp.spawnSync("sh", ["-c", `command -v ${b}`]).status === 0;
+    // Araç varlığı yetmez: GitHub ubuntu-24.04 gibi ana makineler kullanıcı ad alanını (AppArmor) engelleyebilir; gerçek yeteneği ayni komutla sına, yoksa SKIP (kesin neden yazdırılır).
+    const userns = process.platform === "linux" && have("unshare") ? cp.spawnSync("unshare", ["--user", "--map-root-user", "--net", "true"], {encoding: "utf8"}) : null;
+    if (process.platform !== "linux" || !have("ip") || !have("nsenter") || !userns || userns.status !== 0) { console.log(`REAL netns skipped: ${userns ? `unshare --user --map-root-user --net exit ${userns.status}: ${String(userns.stderr).trim().slice(0, 120)}` : "tools missing"}`); ctx.skip(); }
+    const {startNsenterBridge} = await import("../core/workos/devrun-bridge.js");
+    const inner = 20000 + Math.floor(Math.random() * 20000);
+    const child = cp.spawn("unshare", ["--user", "--map-root-user", "--net", "--fork", "sh", "-c", `ip link set lo up && exec ${process.execPath} -e "require('http').createServer((q,r)=>r.end('inside')).listen(${inner},'127.0.0.1')"`], {stdio: "ignore", detached: true}); procs.push(child);
+    await sleep(1500);
+    const hostPort = await freeLoopbackPort();
+    await expect(fetch(`http://127.0.0.1:${inner}/`)).rejects.toBeTruthy();
+    const b = await startNsenterBridge(child, inner, {}).catch(e => e); // köprü portu = sandbox portu (dev-run ikisini aynı seçer)
+    try { expect(b, String(b)).toHaveProperty("close"); const r = await fetch(`http://127.0.0.1:${inner}/`); expect(await r.text()).toBe("inside"); void hostPort; } finally { (b as any).close?.(); if (child.pid) killProcessTree(child.pid); }
+  });
+
+  // Gerçek sağlayıcı: yalnız selfTest geçer + loopback kanıtlanmış + nsenter varsa; aksi halde SKIP (kesin neden yazdırılır).
+  it("REAL Linux provider: the generated web-node product starts inside the sandbox and the bridged port answers 200 (skipped unless selfTest passes with proven loopback)", async ctx => {
+    const {LinuxUnshareSandboxProvider} = await import("../core/agents/linux-unshare-sandbox.js");
+    const isRoot = typeof process.getuid === "function" && process.getuid() === 0;
+    const provider = new LinuxUnshareSandboxProvider(isRoot ? {acceptUnenforcedProcessLimit: true} : {});
+    const st = await provider.selfTest();
+    const sup = st.ok ? (await import("../core/workos/devrun-bridge.js")).bridgeSupport(provider as any) : null;
+    console.log(`B-RUN-1 real provider: selfTest=${JSON.stringify(st)} bridge=${JSON.stringify(sup && (sup.ok ? "OK" : sup))}`);
+    if (!st.ok || !sup || !sup.ok) ctx.skip();
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+    const m = manager(dataDir, new ExecutionGate(provider as any), {startWaitMs: 30_000});
+    try {
+      const v = await m.start(p).catch(e => { throw new Error(`${e.code}:${e.reason}`); });
+      expect(v).toMatchObject({status: "RUNNING", bridged: true}); expect(v.preview.state).toBe("AVAILABLE");
+      const r = await fetch(`http://127.0.0.1:${v.port}/`); expect(r.status).toBe(200);
+    } finally { await m.stopAll("CLEANUP"); }
+  }, T);
+});

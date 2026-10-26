@@ -4,6 +4,8 @@ import {h,panel,chip,stateNote,emptyNote,statusLabel} from "../components.js";
 import {formatCount,MISSING} from "../model.js";
 import {validateRetryRecord,classifyRetryPhase} from "../retry-core.js";
 import {waitParts} from "../queue-core.js";
+import {attentionSummary} from "../attention-core.js";
+import {attentionNotes} from "./attention-notes.js";
 import {buildCampusInput} from "../control-tower/feed.js";
 import {mountCampus} from "../control-tower/mount.js";
 import {buildStageTimeline,formatMs} from "../trace-core.js";
@@ -52,7 +54,9 @@ export async function render(ctx){
     logButtons.replaceChildren(...(nodes.length?nodes:[logs.ok?doc.createTextNode(ctx.t("tower.noLogs")):stateNote(ctx,logs.state)]));
   }
   const runList=runs.runs.slice(0,20).map(x=>h(doc,"button",{type:"button",class:"btn",on:{click:()=>loadRun(x.runId)},text:`${x.runId} · ${statusLabel(ctx,x.summary?.status??x.manifest?.status??"RUNNING")}`}));
-  const attention=h(doc,"div",{id:"attention"});ctx.renderAttention(attention,att);
+  // //TR: Kuyrukta öğe yok ama sunucu okunamayan öğe saydıysa "bekleyen yok" denmez; kesik/okunamayan notları paneli tamamlar.
+  const attention=h(doc,"div",{id:"attention"}),attSum=attentionSummary(att);
+  if(attSum.kind==="ATTENTION"&&att.blocked.length===0)attention.append(h(doc,"p",{class:"note",text:ctx.t("attention.unreadable")}));else ctx.renderAttention(attention,att);
   const stopCard=h(doc,"div",{class:"panel panel-critical"},h(doc,"h2",{class:"panel-title",text:ctx.t("stop.title")}),
     h(doc,"p",{id:"stopState",text:control.active?ctx.t("stop.activeLine",{reason:control.reason??""}):ctx.t(control.state==="VERIFIED"?"stop.running":`state.${control.state}`)}),
     h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn btn-danger",id:"towerStop",on:{click:()=>ctx.requestStop()},text:ctx.t("stop.button")}),h(doc,"button",{type:"button",class:"btn",id:"towerResume",on:{click:()=>confirmAndResume(ctx,{onCancel:typeof ctx.announce==="function"?ctx.announce:undefined})},text:ctx.t("stop.resume")})));
@@ -63,7 +67,7 @@ export async function render(ctx){
         fact("tower.scheduler",Array.isArray(s?.phases)?`${completed}/${s.phases.length}`:(s?.status??MISSING)),fact("tower.agents",roles(agents)),fact("tower.caps",cnt(caps)),fact("tower.tools",cnt(tools)),
         retryFact(ctx,retry,fact))),
     stopCard,
-    panel(ctx,{titleKey:"tower.attention",id:"tower-attention"},attention),
+    panel(ctx,{titleKey:"tower.attention",id:"tower-attention"},attention,...attentionNotes(ctx,att.queue)),
     panel(ctx,{titleKey:"tower.runs",id:"tower-runs"},runs.state!=="VERIFIED"?stateNote(ctx,runs.state):runList.length?h(doc,"div",{class:"btn-row"},runList):emptyNote(ctx,"tower.noRuns")),
     panel(ctx,{titleKey:"tower.selected",id:"tower-selected"},selected,h(doc,"h3",{text:ctx.t("tower.events")}),eventsEl,h(doc,"h3",{text:ctx.t("tower.trace.title")}),traceEl,h(doc,"h3",{text:ctx.t("tower.logs")}),logButtons,logText));
 }

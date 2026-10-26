@@ -1,4 +1,4 @@
-// //TR: Bu görünüm İnsan Onayı Bekleyen İş Kuyruğu'dur (FA-V2-PRODUCT, UI-211): YALNIZ üç salt-okunur ve zaten izinli GET'ten okunur — GET /v1/founder-attention (Founder dikkati engelli paketler), GET /v1/missions (onay bekleyen mission durumları) ve GET /v1/work-runs (kapı bekleyen koşular). Kuyruk, öncelik düzeyine (türden türetilen belgelenmiş sıra) ve GERÇEK zaman damgasından hesaplanan bekleme süresine göre gruplanır/sıralanır; SLA hedefi kontrol düzleminde kayıtlı olmadığı için hiçbir SLA/son tarih değeri uydurulmaz, bekleme bantları yalnız geçen sürenin görüntü gruplamasıdır. HİÇBİR sayı, öğe veya onay UYDURULMAZ: bozuk yanıt tümden ERROR olarak gösterilir (kısmi/tahmini değer yok), okunamayan kaynak varsa toplam/öncelik sayıları gösterilmez ve kuyruk "boş" diye sunulmaz. Bu görünüm SALT-OKUNURDUR: onay/ret/yeniden-deneme burada yapılmaz; her öğe için MEVCUT akışlara (Gelen Kutusu, Work) gezinme sunulur. Toplu (bulk) eylem YOKTUR: her geçiş kendi gerekçesini ve yüksek riskli hedefte kendi onayını ister, bu yüzden her öğe mevcut akışta tek tek karara bağlanır. Ürün doğrulaması bu görünümde ASLA iddia edilmez ve ilgili sabit değer hiçbir yerde üretilmez. API verisi HTML olarak yorumlanmaz; yalnız h()/textContent kullanılır.
+// //TR: Bu görünüm İnsan Onayı Bekleyen İş Kuyruğu'dur (FA-V2-PRODUCT, UI-211): YALNIZ üç salt-okunur ve zaten izinli GET'ten okunur — GET /v1/attention (Founder dikkati: karar bekleyen koşu, engelli mission ve görev), GET /v1/missions (onay bekleyen mission durumları) ve GET /v1/work-runs (kapı bekleyen koşular). Kuyruk, öncelik düzeyine (türden türetilen belgelenmiş sıra) ve GERÇEK zaman damgasından hesaplanan bekleme süresine göre gruplanır/sıralanır; SLA hedefi kontrol düzleminde kayıtlı olmadığı için hiçbir SLA/son tarih değeri uydurulmaz, bekleme bantları yalnız geçen sürenin görüntü gruplamasıdır. HİÇBİR sayı, öğe veya onay UYDURULMAZ: bozuk yanıt tümden ERROR olarak gösterilir (kısmi/tahmini değer yok), okunamayan kaynak varsa toplam/öncelik sayıları gösterilmez ve kuyruk "boş" diye sunulmaz. Bu görünüm SALT-OKUNURDUR: onay/ret/yeniden-deneme burada yapılmaz; her öğe için MEVCUT akışlara (Gelen Kutusu, Work) gezinme sunulur. Toplu (bulk) eylem YOKTUR: her geçiş kendi gerekçesini ve yüksek riskli hedefte kendi onayını ister, bu yüzden her öğe mevcut akışta tek tek karara bağlanır. Ürün doğrulaması bu görünümde ASLA iddia edilmez ve ilgili sabit değer hiçbir yerde üretilmez. API verisi HTML olarak yorumlanmaz; yalnız h()/textContent kullanılır.
 import {h,panel,statePill,statusPill,badge,kpiTile} from "../components.js";
 import {MISSING} from "../model.js";
 import {formatDateTime} from "../work-core.js";
@@ -12,11 +12,11 @@ const failState=state=>state==="OFFLINE"||state==="UNAVAILABLE"?state:"ERROR";
 const stateRes=res=>res&&typeof res.state==="string"?res:{state:"UNAVAILABLE"};
 const mono=(doc,t)=>t!==null&&t!==undefined&&t!==""?h(doc,"span",{class:"mono",text:String(t)}):MISSING;
 /** Öğe türünden durum rozeti türü: iş engelliyse ATTENTION, karar/kapı/yetki bekliyorsa WAITING (renk tek başına anlam taşımaz; etiket yerelleştirilmiş tür adıdır). */
-const PILL_FOR_KIND=Object.freeze({FOUNDER_ATTENTION:"ATTENTION",BLOCKED_PACKAGE:"ATTENTION",DELIVERY_DECISION:"WAITING",RUN_GATE:"WAITING",MISSION_STATUS_UNKNOWN:"WAITING",AUTHORIZATION:"WAITING"});
+const PILL_FOR_KIND=Object.freeze({FOUNDER_ATTENTION:"ATTENTION",BLOCKED_ITEM:"ATTENTION",DELIVERY_DECISION:"WAITING",RUN_GATE:"WAITING",MISSION_STATUS_UNKNOWN:"WAITING",AUTHORIZATION:"WAITING"});
 /** Mevcut Gelen Kutusu akışının listelediği türler. RUN_GATE (mission listesi okundu ve mission REPORTING değil) Gelen Kutusu'nda karar olarak sunulmaz.
  * MISSION_STATUS_UNKNOWN (mission listesi okunamadı) için mission REPORTING olabilir ve o zaman teslim kararı Gelen Kutusu'ndadır; durum bilinmediği için yol AÇIK tutulur
  * ve açıklama bunun doğrulanamadığını söyler (yol sessizce düşürülmez, karar da iddia edilmez). */
-const INBOX_KINDS=Object.freeze(["FOUNDER_ATTENTION","BLOCKED_PACKAGE","DELIVERY_DECISION","MISSION_STATUS_UNKNOWN","AUTHORIZATION"]);
+const INBOX_KINDS=Object.freeze(["FOUNDER_ATTENTION","BLOCKED_ITEM","DELIVERY_DECISION","MISSION_STATUS_UNKNOWN","AUTHORIZATION"]);
 const safeId=key=>String(key).replace(/[^A-Za-z0-9_-]/g,"_");
 
 function header(ctx){
@@ -43,12 +43,14 @@ function stateBlock(ctx,res,source){
 function sourcesList(ctx,res,q){
   const doc=ctx.doc;
   return h(doc,"ul",{class:"company-sources queue-sources","aria-label":ctx.t("queue.sources.aria")},QUEUE_SOURCES.map(k=>{
-    const ok=isOk(res[k]),kind=ok?"VERIFIED":failKind(res[k].state);
-    const verification=k==="attention"&&ok&&q.schedulerVerification!==null&&q.schedulerVerification!=="VERIFIED"?q.schedulerVerification:null;
-    return h(doc,"li",{dataset:{source:k,sourceState:ok?"VERIFIED":failState(res[k].state)}},
+    // //TR: Okunmuş ama kesik/okunamayan öğeli kaynak (kuyruk çekirdeği NOT_VERIFIED der) "Read OK" ya da VERIFIED gösterilmez.
+    const ok=isOk(res[k]),partial=ok&&q.sources[k].state!=="VERIFIED",kind=partial?q.sources[k].state:ok?"VERIFIED":failKind(res[k].state);
+    const notes=k==="attention"&&ok&&q.attentionNotes?q.attentionNotes:null;
+    return h(doc,"li",{dataset:{source:k,sourceState:partial?q.sources[k].state:ok?"VERIFIED":failState(res[k].state)}},
       h(doc,"span",{class:"company-src-name",text:ctx.t(`queue.src.${k}`)}),
-      statePill(ctx,kind,{label:ok?ctx.t("queue.src.ok"):undefined}),
-      verification?h(doc,"span",{class:"note",dataset:{note:"scheduler-verification"},text:ctx.t("queue.src.verification",{value:verification})}):null);
+      statePill(ctx,kind,{label:ok&&!partial?ctx.t("queue.src.ok"):undefined}),
+      notes&&notes.truncated?h(doc,"span",{class:"note",dataset:{note:"attention-truncated"},text:ctx.t("queue.src.truncated")}):null,
+      notes&&notes.dropped>0?h(doc,"span",{class:"note",dataset:{note:"attention-dropped",dropped:String(notes.dropped)},text:ctx.t("queue.src.dropped",{n:notes.dropped})}):null);
   }));
 }
 
@@ -65,7 +67,7 @@ function waitText(ctx,ms){
 function kpiRow(ctx,q){
   const doc=ctx.doc,c=q.counts;
   // Sayılar yalnız kuyruk TAMAMSA (üç kaynak da okundu) gösterilir; aksi halde değer null ve rozet dürüst durumdur.
-  const block=value=>({state:q.complete?"VERIFIED":q.incompleteState,value:q.complete?value:null,loading:false,source:"GET /v1/founder-attention · /v1/missions · /v1/work-runs",asOf:null});
+  const block=value=>({state:q.complete?"VERIFIED":q.incompleteState,value:q.complete?value:null,loading:false,source:"GET /v1/attention · /v1/missions · /v1/work-runs",asOf:null});
   const tile=(id,iconName,value,qualifier)=>kpiTile(ctx,{id:`queue-${id}`,iconName,labelKey:`queue.kpi.${id}`,block:block(value),qualifier});
   return h(doc,"div",{class:"kpi-row queue-kpis",role:"group","aria-label":ctx.t("queue.kpi.group")},
     tile("total","inbox",c?c.total:null,ctx.t("queue.kpi.q.total")),
@@ -88,7 +90,8 @@ function summaryPanel(ctx,res,q){
     h(doc,"h3",{class:"queue-sub",text:ctx.t("queue.sources.title")}),
     sourcesList(ctx,res,q),
     failures,
-    !q.complete?h(doc,"p",{class:"note",role:"status",dataset:{queuePartial:q.unreadable.join(",")},text:ctx.t("queue.partial",{sources:q.unreadable.map(k=>ctx.t(`queue.srcShort.${k}`)).join(", ")})}):null,
+    q.unreadable.length?h(doc,"p",{class:"note",role:"status",dataset:{queuePartial:q.unreadable.join(",")},text:ctx.t("queue.partial",{sources:q.unreadable.map(k=>ctx.t(`queue.srcShort.${k}`)).join(", ")})}):null,
+    q.partial?h(doc,"p",{class:"note",role:"status",dataset:{queueAttentionPartial:"1"},text:ctx.t("queue.partialAttention")}):null,
     kpiRow(ctx,q),
     h(doc,"h3",{class:"queue-sub",text:ctx.t("queue.bands.title")}),
     h(doc,"p",{class:"note",text:ctx.t("queue.bands.lead")}),
@@ -104,16 +107,17 @@ function facts(ctx,it,q){
   add("needs","queue.field.needs",t(`queue.kindDesc.${it.kind}`));
   if(it.missionId!==null){
     // Başlık yalnız mission listesinden gelir; liste okunamadıysa ya da koşunun mission'ı listede yoksa bu AÇIKÇA söylenir (başlık uydurulmaz).
-    const title=it.title!==null?it.title:t(q.sources.missions.state==="VERIFIED"?"queue.mission.unknown":"queue.mission.unread");
+    const shownTitle=it.kind==="BLOCKED_ITEM"?it.missionTitle:it.title;
+    const title=shownTitle!==null?shownTitle:t(q.sources.missions.state==="VERIFIED"?"queue.mission.unknown":"queue.mission.unread");
     add("mission","queue.field.mission",title," · ",mono(doc,it.missionId),it.missionStatus!==null?" ":null,it.missionStatus!==null?statusPill(ctx,it.missionStatus):null);
   }
-  if(it.runId!==null)add("run","queue.field.run",mono(doc,it.runId)," · ",statePill(ctx,"WAITING",{label:it.runStatus})," · ",mono(doc,it.step));
-  if(it.kind==="BLOCKED_PACKAGE"){
-    if(it.packageId!==null)add("package","queue.field.package",mono(doc,it.packageId));
-    if(it.phase!==null)add("phase","queue.field.phase",mono(doc,it.phase));
-    add("blocker","queue.field.blocker",statePill(ctx,"ATTENTION",{label:it.blockerKind}));
+  // //TR: Koşu durumu yalnız koşu kaynağından gelir; BLOCKED_ITEM için bilinmez (null) -> "Bekliyor" rozeti uydurulmaz (başarısız koşuya "Waiting" denmez).
+  if(it.runId!==null)add("run","queue.field.run",mono(doc,it.runId),it.runStatus!==null?[" · ",statePill(ctx,"WAITING",{label:it.runStatus})]:null,it.step!==null?[" · ",mono(doc,it.step)]:null);
+  if(it.kind==="BLOCKED_ITEM"){
+    if(it.taskId!==null)add("task","queue.field.task",mono(doc,it.taskId));
+    add("blocker","queue.field.blocker",statePill(ctx,"ATTENTION",{label:t(`attention.kind.${it.blockerKind}`)}));
+    add("next","queue.field.next",t(`attention.next.${it.nextAction}`));
     if(it.reason!==null)add("reason","queue.field.reason",it.reason);
-    if(it.retryable!==null)add("retryable","queue.field.retryable",t(it.retryable?"queue.retry.yes":"queue.retry.no"));
   }
   if(it.riskLevel!==null)add("risk","queue.field.risk",badge(ctx,it.riskLevel,"badge-risk"));
   const wait=it.waitMs!==null
@@ -135,7 +139,7 @@ function actions(ctx,it,heading){
 }
 function itemCard(ctx,it,q){
   const doc=ctx.doc;
-  const heading=it.title??it.packageId??(it.phase!==null?ctx.t("queue.item.phase",{phase:it.phase}):it.runId??it.missionId??MISSING);
+  const heading=it.title??it.taskId??it.runId??it.missionId??MISSING;
   return h(doc,"li",{class:"card queue-item",dataset:{queueItem:it.key,kind:it.kind,priority:it.priority,band:it.band===null?"UNKNOWN":it.band,basis:it.basis===null?"NONE":it.basis}},
     h(doc,"h4",{text:String(heading)}),
     h(doc,"p",{class:"panel-meta"},statePill(ctx,PILL_FOR_KIND[it.kind],{label:ctx.t(`queue.kind.${it.kind}`)}),it.band!==null?badge(ctx,ctx.t(`queue.band.${it.band}`)):null),
@@ -159,13 +163,13 @@ function queuePanel(ctx,q){
     // Boş kuyruk YALNIZ üç kaynak da okunduysa söylenir; aksi halde "boş" iddia edilmez.
     body=q.complete
       ?h(doc,"p",{class:"note",dataset:{queueEmpty:"1"},role:"status",text:ctx.t("queue.empty")})
-      :h(doc,"p",{class:"note",dataset:{queueEmpty:"unknown"},role:"status",text:q.unreadable.length===QUEUE_SOURCES.length?ctx.t("queue.emptyAll"):ctx.t("queue.emptyPartial",{sources:q.unreadable.map(k=>ctx.t(`queue.srcShort.${k}`)).join(", ")})});
+      :h(doc,"p",{class:"note",dataset:{queueEmpty:"unknown"},role:"status",text:q.unreadable.length===QUEUE_SOURCES.length?ctx.t("queue.emptyAll"):q.unreadable.length===0?ctx.t("queue.emptyPartialAttention"):ctx.t("queue.emptyPartial",{sources:q.unreadable.map(k=>ctx.t(`queue.srcShort.${k}`)).join(", ")})});
   }else{
     let budget=MAX_QUEUE_ROWS,shownTotal=0;
     const tiers=q.groups.map(g=>{const t=tierSection(ctx,g,q,budget);budget-=t.shown;shownTotal+=t.shown;return t.node});
     // Mission listesi okunamadığında listelenen koşuların mission durumu bilinmez; bu AÇIKÇA söylenir (teslim kararı olup olmadığı iddia edilmez).
     const unknownStatus=q.items.some(i=>i.kind==="MISSION_STATUS_UNKNOWN");
-    body=[shownTotal<q.items.length?h(doc,"p",{class:"note",dataset:{note:"truncated"},text:ctx.t("queue.truncated",{shown:shownTotal,total:q.items.length})}):null,
+    body=[shownTotal<q.items.length?h(doc,"p",{class:"note",dataset:{note:"truncated"},text:q.complete?ctx.t("queue.truncated",{shown:shownTotal,total:q.items.length}):ctx.t("queue.truncatedIncomplete",{shown:shownTotal})}):null,
       unknownStatus?h(doc,"p",{class:"note",role:"status",dataset:{note:"mission-status-unknown"},text:ctx.t("queue.unknownStatus.note")}):null,...tiers];
   }
   return panel(ctx,{titleKey:"queue.list.title",id:"queue-list",className:"queue-section"},

@@ -1,6 +1,8 @@
-// //TR: Bu görünüm Teslimat & SRE alanıdır (UX WP-DELIVERY): yalnız allow-list'li salt-okunur GET verisine bağlanır ve hiçbir veriyi uydurmaz. Operasyonel sağlık (GET /health, /v1/control/status, /v1/founder-attention) ve yayın hazırlığı (GET /v1/work-runs) gerçek kaynaklardan okunur; üretilen kaynağın teslim/dışa aktarımı gerçek olarak (Project Studio > Teslim köprüsü uasco.exportDelivery) belirtilir. GERÇEK ÜRETİM DEPLOY eylemleri ve CANLI SRE izleme Founder kapılıdır (gerçek-deploy yetkisi + FD-REL-1): bunlar sahte buton veya uydurma uptime/SLO metriği olarak değil, kapıyı açıkça anan BLOCKED/NOT_CONNECTED durumları olarak gösterilir. API verisi HTML olarak yorumlanmaz; yalnız h()/textContent kullanılır.
+// //TR: Bu görünüm Teslimat & SRE alanıdır (UX WP-DELIVERY): yalnız allow-list'li salt-okunur GET verisine bağlanır ve hiçbir veriyi uydurmaz. Operasyonel sağlık (GET /health, /v1/control/status, /v1/attention) ve yayın hazırlığı (GET /v1/work-runs) gerçek kaynaklardan okunur; üretilen kaynağın teslim/dışa aktarımı gerçek olarak (Project Studio > Teslim köprüsü uasco.exportDelivery) belirtilir. GERÇEK ÜRETİM DEPLOY eylemleri ve CANLI SRE izleme Founder kapılıdır (gerçek-deploy yetkisi + FD-REL-1): bunlar sahte buton veya uydurma uptime/SLO metriği olarak değil, kapıyı açıkça anan BLOCKED/NOT_CONNECTED durumları olarak gösterilir. API verisi HTML olarak yorumlanmaz; yalnız h()/textContent kullanılır.
 import {h,panel,statePill,statusPill,stateNote,emptyNote,badge} from "../components.js";
-import {MISSING} from "../model.js";
+import {MISSING,formatCount} from "../model.js";
+import {attentionSummary} from "../attention-core.js";
+import {attentionNotes} from "./attention-notes.js";
 import {formatDateTime,isProductVerified} from "../work-core.js";
 
 /** Gerçek, allow-list'li okuma kaynakları (hepsi main.mjs izin listesinde zaten var; yeni yetki eklenmez). */
@@ -9,7 +11,7 @@ const SOURCES=Object.freeze(["health","control","attention","runs"]);
 function failKind(state){return state==="OFFLINE"?"OFFLINE":state==="UNAVAILABLE"?"UNAVAILABLE":"FAILED"}
 function healthKind(r){return r.state==="VERIFIED"?"VERIFIED":failKind(r.state)}
 function controlKind(r){return r.state==="VERIFIED"?(r.active?"STOPPED":"VERIFIED"):failKind(r.state)}
-function attentionKind(r){return r.state==="VERIFIED"?(r.blocked.length?"ATTENTION":"VERIFIED"):failKind(r.state)}
+function attentionKind(r){const s=attentionSummary(r);return s.kind==="UNREADABLE"?failKind(r.state==="VERIFIED"?"ERROR":r.state):s.kind}
 function runsKind(r){return r.state==="VERIFIED"?"VERIFIED":failKind(r.state)}
 
 const nonEmpty=v=>typeof v==="string"&&v.length>0;
@@ -31,7 +33,7 @@ function sourceStrip(ctx,kinds){
     h(doc,"li",{dataset:{source:k,sourceState:kinds[k]}},h(doc,"span",{class:"company-src-name",text:ctx.t(`delivery.src.${k}`)}),statePill(ctx,kinds[k]))));
 }
 
-/** Operasyonel sağlık paneli: GET /health + /v1/control/status + /v1/founder-attention; yalnız gerçek durumlar, uydurma yok. */
+/** Operasyonel sağlık paneli: GET /health + /v1/control/status + /v1/attention; yalnız gerçek durumlar, uydurma yok. */
 function healthPanel(ctx,health,control,attention,kinds){
   const doc=ctx.doc;
   const healthLine=health.state==="VERIFIED"
@@ -40,8 +42,10 @@ function healthPanel(ctx,health,control,attention,kinds){
   const controlLine=control.state==="VERIFIED"
     ?h(doc,"p",{id:"delivery-control-status",dataset:{control:control.active?"STOPPED":"RUNNING"}},statePill(ctx,controlKind(control)),h(doc,"span",{text:control.active?ctx.t("delivery.control.active",{reason:control.reason??MISSING}):ctx.t("delivery.control.running")}))
     :h(doc,"p",{id:"delivery-control-status",dataset:{control:kinds.control}},statePill(ctx,kinds.control),h(doc,"span",{text:ctx.t("delivery.control.unavailable")}));
-  const attentionLine=attention.state==="VERIFIED"
-    ?h(doc,"p",{id:"delivery-attention-status",dataset:{attention:String(attention.blocked.length)}},statePill(ctx,attentionKind(attention)),h(doc,"span",{text:attention.blocked.length?ctx.t("delivery.attention.count",{n:attention.blocked.length}):ctx.t("delivery.attention.none")}))
+  // //TR: Sayı SUNUCUNUN sayaçlarıdır (kesilmiş/okunamayan öğeler dahil); gösterilen öğe sayısı değil. Kesik ya da okunamayan öğe varsa asla "yok" denmez.
+  const sum=attentionSummary(attention);
+  const attentionLine=sum.kind!=="UNREADABLE"
+    ?h(doc,"div",{id:"delivery-attention-status",dataset:{attention:String(sum.total)}},statePill(ctx,attentionKind(attention)),h(doc,"span",{text:sum.total>0?ctx.t("delivery.attention.count",{n:formatCount(sum.total)}):sum.dropped>0?ctx.t("attention.unreadable"):ctx.t("delivery.attention.none")}),...attentionNotes(ctx,attention.queue))
     :h(doc,"p",{id:"delivery-attention-status",dataset:{attention:kinds.attention}},statePill(ctx,kinds.attention),h(doc,"span",{text:ctx.t("delivery.attention.unavailable")}));
   return panel(ctx,{titleKey:"delivery.health.title",id:"delivery-health",className:"delivery-section"},
     h(doc,"p",{class:"note",text:ctx.t("delivery.health.lead")}),
