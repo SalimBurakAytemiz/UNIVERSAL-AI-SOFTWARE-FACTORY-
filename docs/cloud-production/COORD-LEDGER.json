@@ -262,6 +262,76 @@
       "ref": "wf_5c074b19-53d",
       "policy": "TEP-1",
       "at": "2026-10-26T17:15:04.631Z"
+    },
+    {
+      "pr": 253,
+      "sha": "7f3a847c6d202a20488227fd4cefc363a4a965a5",
+      "kind": "full",
+      "base": null,
+      "verdict": "NO_BLOCKERS_2LOW_STYLE",
+      "ref": "wf_88cf2ca5-a1d",
+      "policy": "TEP-1",
+      "at": "2026-10-26T17:27:20.891Z"
+    },
+    {
+      "pr": 231,
+      "sha": "239641fb41e9ffc9e12886af68c5875f70d7ab85",
+      "kind": "delta",
+      "base": "d2328635393369e39baf41451da3a81ad01891f0",
+      "verdict": "BLOCKERS_MEDIUM_S5_prod_arm_untested",
+      "ref": "wf_e257bb95-6a2",
+      "policy": "TEP-1",
+      "at": "2026-10-26T17:27:55.236Z"
+    },
+    {
+      "pr": 249,
+      "sha": "022b9e7e273c50446b55d66ed5ba4d43603c4681",
+      "kind": "delta",
+      "base": "cd95758c358195b82373c90db11ec2ec497ca7de",
+      "verdict": "NO_BLOCKERS_POST_MERGE",
+      "ref": "wf_e257bb95-6a2",
+      "policy": "TEP-1",
+      "at": "2026-10-26T17:27:55.275Z"
+    },
+    {
+      "pr": 254,
+      "sha": "828b0b012429ac5d67898b1fccf5d4a77df02e1f",
+      "kind": "full",
+      "base": null,
+      "verdict": "BLOCKERS_MEDIUM_assertion_commented_out",
+      "ref": "wf_c06d5517-daa",
+      "policy": "TEP-1",
+      "at": "2026-10-26T17:31:07.537Z"
+    },
+    {
+      "pr": 254,
+      "sha": "65098ba582b6d5b40d40cf693ec3b07657bc6964",
+      "kind": "delta",
+      "base": "828b0b012429ac5d67898b1fccf5d4a77df02e1f",
+      "verdict": "NO_BLOCKERS",
+      "ref": "coordinator inline: tabindex expect live at :2877, negative regex on own line; Lane A mutants 5/5 killed",
+      "policy": "TEP-1",
+      "at": "2026-10-26T17:33:53.711Z"
+    },
+    {
+      "pr": 252,
+      "sha": "ad2b612ee86b648d9e155ed75e811e4cd4d47f53",
+      "kind": "delta",
+      "base": "a2eb3d4f5c80bd656133ccccc0031cae9e48fb94",
+      "verdict": "NO_BLOCKERS_3LOW_DEFERRED",
+      "ref": "wf_bd8c991a-3b2",
+      "policy": "TEP-1",
+      "at": "2026-10-26T17:37:43.801Z"
+    },
+    {
+      "pr": 252,
+      "sha": "85b29eb6a1de1ae21f3c4b7511bb48fa39faad6c",
+      "kind": "delta",
+      "base": "ad2b612ee86b648d9e155ed75e811e4cd4d47f53",
+      "verdict": "BASE_MERGE_ONLY_EMPTY_DELTA",
+      "ref": "tree(85b29eb)==tree(1d3f79e)==merge-tree(e8ad4a3,ad2b612)",
+      "policy": "TEP-1",
+      "at": "2026-10-26T17:37:43.847Z"
     }
   ],
   "tests": [],

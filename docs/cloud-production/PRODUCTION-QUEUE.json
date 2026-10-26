@@ -2147,7 +2147,7 @@
         "by": "auto-merge (armed by coordinator on cd95758; stayed armed across the Lane A r2 push)",
         "at": "2026-10-26T17:16:07Z",
         "postMerge": "VERIFIED: parent1 d79d0e9, parent2 = head 022b9e7, merge-tree == merge tree; CI 022b9e7 all green (Windows shards 1032/1160/1507 s)",
-        "review": "cd95758 full NO_BLOCKERS (wf_636238d3); 022b9e7 r2 delta review w7iecsyaj NOT finished at merge time -> PROCESS GAP (auto-merge survived a new head); review completes post-merge, any blocker -> follow-up fix PR",
+        "review": "cd95758 full NO_BLOCKERS (wf_636238d3); 022b9e7 r2 delta review w7iecsyaj NOT finished at merge time -> PROCESS GAP (auto-merge survived a new head); review completes post-merge, any blocker -> follow-up fix PR; POST-MERGE delta review 022b9e7 NO_BLOCKERS (wf_e257bb95-6a2, no defect at any severity)",
         "riskTier": "ROUTINE (test support file)",
         "processGap": "COORD-002: auto-merge armed on an older head merged a newer head before its delta review; fix = ledger merge-gate + disarm on head change"
       }
