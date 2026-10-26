@@ -1791,8 +1791,8 @@
   },
   "integrationBoard": {
     "//TR": "Koordinatör entegrasyon panosu: her açık PR için gerçek engel ve bekleyen sorumlu. Ortak kök neden (base dependency gate) PR'a özgü hatalardan ayrı tutulur; #221/#225 birleşmeden tekrar CI tetiklenmez.",
-    "at": "2026-10-26T11:31:00Z",
-    "base": "4e17857 (v7/integration, after #236)",
+    "at": "2026-10-26T11:40:00Z",
+    "base": "335aead (v7/integration, after #236 and #235)",
     "sharedRootCause": {
       "id": "NONE_ACTIVE",
       "previous": "BASE_DEPENDENCY_GATE resolved by #225 (e2323d9)",
@@ -1842,13 +1842,6 @@
         "owner": "LANE_C"
       },
       {
-        "pr": "235",
-        "kind": "LANE_B analysis routes",
-        "state": "READY @3512413, SHA-bound auto-merge armed 11:23:35Z",
-        "blocker": "review BLOCKERS fixed (paid call for ineligible mission; Global Stop pre-gate unpinned); delta NO_BLOCKERS (w75pak1n1); waits on Windows CI",
-        "owner": "LANE_B"
-      },
-      {
         "pr": "237",
         "kind": "LANE_C C-FLOW-ANALYSIS-2 (real Claude CLI content builder)",
         "state": "DRAFT @fdf43b0",
@@ -1858,9 +1851,9 @@
     ],
     "branchOnlyChains": {
       "laneA": "A-ANALYSIS-STUCK-1 merged as #236 4e17857; next A-ANALYSIS-ORDER-1 (same-mission cross-form ordering + LOW pins) from the new base",
-      "laneB": "#235 analysis routes READY + auto-merge armed (3512413); #231 consolidated fix list in work; batch-4b server.ts line verified by coordinator review",
+      "laneB": "#235 analysis routes merged 335aead; #231 consolidated fix list in work; next after #231: route LOWs (a)-(f) branch",
       "laneC": "#237 C-FLOW-ANALYSIS-2 draft under review; #224 review + repair push pending",
-      "coordinator": "claude/coord-protected-batch-4b fee6cef -> rebuild after #229/analysis-routes (adds AnalysisFlow stopped hook, #226 journey pin flip, M4 pin); claude/coord-transition-autonomy (reform, wgguxa5j0) + CI speed plan (N=6 shards, draft gating, preflight needs, npm cache, selftest tmp cleanup; measured BEFORE p50 21.7 min)"
+      "coordinator": "batch 4b rebuild wuqlg9lh1 on 335aead (analysis + product-run registration, allow-list, journey pin, reseal, R1/R2 classification); transition r5 wif331nql"
     },
     "mergedVia225": {
       "merge": "e2323d9",
@@ -2027,6 +2020,16 @@
         "review": "process-mode review wcd0r9e2m BLOCKERS (stale block after success; mission-switch result leak) fixed in 8f394e3; delta wzrti2173 NO_BLOCKERS (23/30 independent mutants killed, survivors LOW)",
         "pushCi": "pending at 11:31Z",
         "riskTier": "ROUTINE (renderer + locales + tests; 0 protected paths)"
+      },
+      {
+        "pr": 235,
+        "merge": "335aead",
+        "by": "auto-merge (SHA-bound, armed by coordinator on 3512413 at 11:23:35Z)",
+        "at": "2026-10-26T11:31:05Z",
+        "postMerge": "VERIFIED: parent1 4e17857, parent2 = reviewed head 3512413, merge-tree e57b793 == merge tree",
+        "review": "process-mode review webfhj7bn BLOCKERS (paid call for ineligible mission; Global Stop pre-gate unpinned) fixed in 3512413; delta w75pak1n1 NO_BLOCKERS (7 independent mutants killed)",
+        "pushCi": "pending at 11:40Z (combined with #236 on base)",
+        "riskTier": "ROUTINE (control-api routes not yet registered + tests + docs; 0 protected paths)"
       }
     ],
     "wslProvider": {
