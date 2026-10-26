@@ -10,6 +10,7 @@ import type {SandboxChild, SandboxProvider, SandboxRunOptions} from "../workos/e
 import type {BridgeHandle} from "../workos/devrun-bridge.js";
 import * as linuxModule from "../agents/linux-unshare-sandbox.js";
 import {netnsProblemOf} from "../agents/linux-unshare-sandbox.js";
+import {systemExe} from "./win-exe.js";
 import {buildTar, TarError} from "./wsl-tar.js";
 import type {TarLimits} from "./wsl-tar.js";
 
@@ -101,11 +102,12 @@ export class BoundedCapture {
 }
 
 /** Gerçek wsl.exe çalıştırıcısı: kabuk yok, WSL_UTF8=1, zaman aşımı/abort'ta Windows tarafı süreç ağacı BİR KEZ öldürülür (çıkmış sürece asla; PID yeniden kullanımı riski). Linux tarafı temizliği sağlayıcıdadır. */
-export function spawnWslRunner(binary: string, killGraceMs = 3000, maxCapture: number = MAX_CAPTURE): WslRunner {
+export function spawnWslRunner(binary: string | null, killGraceMs = 3000, maxCapture: number = MAX_CAPTURE): WslRunner {
   return (args, o) => new Promise<WslRunResult>(resolve => {
     const out = new BoundedCapture(maxCapture), err = new BoundedCapture(maxCapture);
     let timedOut = false, aborted = false, settled = false, killed = false;
     let child: cp.ChildProcess;
+    if (binary === null) { resolve({exitCode: null, stdout: Buffer.alloc(0), stderr: Buffer.alloc(0), timedOut: false, aborted: false, spawnError: true}); return; }
     try { child = cp.spawn(binary, args, {shell: false, windowsHide: true, stdio: ["pipe", "pipe", "pipe"], env: {...process.env, WSL_UTF8: "1"}}); }
     catch { resolve({exitCode: null, stdout: Buffer.alloc(0), stderr: Buffer.alloc(0), timedOut: false, aborted: false, spawnError: true}); return; }
     const kill = () => {
@@ -113,7 +115,7 @@ export function spawnWslRunner(binary: string, killGraceMs = 3000, maxCapture: n
       killed = true;
       // Öldürmeden sonra stdio boru kapanışı (torunlar tutabilir) sınırsız beklenmez: kısa bir ek süreden sonra sonuç döner (Linux tarafı ağacı ayrıca sağlayıcıca öldürülür).
       setTimeout(() => done(result(null, false)), Math.max(200, Math.min(killGraceMs, 3000))).unref();
-      try { if (process.platform === "win32" && child.pid) cp.spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], {windowsHide: true}); else child.kill("SIGKILL"); } catch { /* en iyi çaba */ }
+      try { if (process.platform === "win32" && child.pid) { const tk = systemExe("taskkill.exe"); if (tk) cp.spawnSync(tk, ["/PID", String(child.pid), "/T", "/F"], {windowsHide: true}); else child.kill("SIGKILL"); } else child.kill("SIGKILL"); } catch { /* en iyi çaba */ }
     };
     const result = (code: number | null, spawnError: boolean): WslRunResult => ({exitCode: code, stdout: out.buffer, stderr: err.buffer, timedOut, aborted, spawnError, truncated: out.truncated || err.truncated});
     let poll: NodeJS.Timeout | undefined;
@@ -326,12 +328,18 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
   private get platform(): NodeJS.Platform { return this.o.platform ?? process.platform; }
   /** Dağıtım adı: önce seçenek, sonra Founder'ın ortam değişkeni UASCO_WSL_DISTRO (VERİLMİŞ ama geçersizse ret: keşfe düşülmez), hiçbiri yoksa selfTest'te `wsl -l -v`'den KEŞFEDİLEN varsayılan v2 dağıtım. İstek gövdesi bunu seçemez. */
   private get distro(): string | undefined {
-    const given = this.o.distro !== undefined ? this.o.distro : (process.env.UASCO_WSL_DISTRO || undefined);
+    if (this.verifiedDistro !== undefined) return this.verifiedDistro; // L9: selfTest'in doğruladığı dağıtım; sonradan değişen env/keşif sonucu kullanılmaz
+    const given = this.configuredDistro();
     const d = given !== undefined ? given : this.discovered;
     return d && /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(d) ? d : undefined;
   }
   private discovered: string | undefined;
-  private get runner(): WslRunner { return this.o.runner ??= spawnWslRunner(this.o.wslBinary ?? "wsl.exe", this.o.killGraceMs); }
+  private verifiedDistro: string | undefined;
+  /** Seçenek veya UASCO_WSL_DISTRO (BOŞ değer de "verilmiş ama geçersiz" sayılır: keşfe düşülmez). */
+  private configuredDistro(): string | undefined { return this.o.distro !== undefined ? this.o.distro : process.env.UASCO_WSL_DISTRO; }
+  /** L9: doğrulanmış dağıtımdan farklı bir yapılandırma görüldüyse doğrulama düşer (fail-closed). */
+  private distroDrifted(): boolean { const c = this.configuredDistro(); return this.verifiedDistro !== undefined && c !== undefined && c !== this.verifiedDistro; }
+  private get runner(): WslRunner { return this.o.runner ??= spawnWslRunner(this.o.wslBinary ?? systemExe("wsl.exe"), this.o.killGraceMs); }
   private get isolation(): LinuxIsolation | null { return this.o.isolation === undefined ? linuxIsolationFromModule() : this.o.isolation; }
 
   private wsl(args: string[], timeoutMs: number, input?: Buffer | string, shouldAbort?: () => boolean): Promise<WslRunResult> {
@@ -372,9 +380,13 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
     if (pids.length === 0) return true;
     for (const pid of pids) {
       const st = await this.wsl(["/bin/cat", `/proc/${pid}/stat`], 15_000);
-      if (st.exitCode !== 0) continue; // süreç bu arada gitti
+      // L1: okunamayan durum (zaman aşımı, spawnError, rc != 0) CANLI sayılır; süreç gerçekten gittiyse bir sonraki pgrep turu bunu gösterir.
+      if (st.exitCode !== 0 || st.timedOut || st.spawnError) return true;
       const state = procStatState(utf8(st.stdout));
       if (state !== "Z" && state !== "X") return true;
+      // L2: lideri zombi ama başka iş parçacıkları (task) yaşayan çok iş parçacıklı süreç ölü sayılmaz.
+      const tasks = await this.wsl(["/bin/ls", "-1", `/proc/${pid}/task`], 15_000);
+      if (tasks.exitCode === 0 && utf8(tasks.stdout).split(/\s+/).filter(x => /^[0-9]+$/.test(x) && x !== pid).length > 0) return true;
     }
     return false;
   }
@@ -440,6 +452,7 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
   }
 
   run(argv: string[], opts: SandboxRunOptions): Promise<ProcResult> {
+    if (this.verified && this.distroDrifted()) this.deverify("DISTRO_CHANGED");
     if (!this.verified) return Promise.resolve(refusal(argv, "selfTest has not passed"));
     return this.exec(argv, opts);
   }
@@ -448,10 +461,10 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
   }
 
   private realSpawner(): (args: string[], stdio: cp.StdioOptions) => cp.ChildProcess {
-    return this.o.spawner ?? ((args, stdio) => cp.spawn(this.o.wslBinary ?? "wsl.exe", args, {shell: false, windowsHide: true, stdio, env: {...process.env, WSL_UTF8: "1"}}));
+    return this.o.spawner ?? ((args, stdio) => cp.spawn(this.o.wslBinary ?? systemExe("wsl.exe") ?? "wsl.exe-not-in-system32", args, {shell: false, windowsHide: true, stdio, env: {...process.env, WSL_UTF8: "1"}}));
   }
   private killLocal(child: cp.ChildProcess): void {
-    try { if (child.exitCode !== null || child.signalCode !== null) return; if (process.platform === "win32" && child.pid) cp.spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], {windowsHide: true}); else child.kill("SIGKILL"); } catch { /* en iyi çaba */ }
+    try { if (child.exitCode !== null || child.signalCode !== null) return; if (process.platform === "win32" && child.pid) { const tk = systemExe("taskkill.exe"); if (tk) cp.spawnSync(tk, ["/PID", String(child.pid), "/T", "/F"], {windowsHide: true}); else child.kill("SIGKILL"); } else child.kill("SIGKILL"); } catch { /* en iyi çaba */ }
   }
 
   /** shouldAbort ilk kez true döndüğünde Linux tarafı ağacı HEMEN (boru kapanışını beklemeden) öldürülür. */
@@ -461,29 +474,40 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
     return () => { const v = should(); if (v && !issued) { issued = true; void this.killTree(S).catch(() => undefined); } return v; };
   }
   /** Dev-run için: run() ile AYNI izolasyon (kopyala-içeri + setup.sh + unshare/pivot_root), ama süreç çalışır bırakılır. Eşzamansız hazırlık gerektiği için spawn() yerine spawnAsync() kullanılır. Çıkışta (durdurma/çökme/abort) Linux tarafı timeout süreç grubu + dizin temizlenir (`sandboxTeardown`). */
-  async spawnAsync(command: string, args: string[], opts: SpawnOptions): Promise<SandboxChild> {
+  async spawnAsync(command: string, args: string[], opts: SpawnOptions & {shouldAbort?: () => boolean}): Promise<SandboxChild> {
+    if (this.verified && this.distroDrifted()) this.deverify("DISTRO_CHANGED");
     if (!this.verified) throw new Error("SANDBOX_NOT_VERIFIED: selfTest has not passed");
     const chk = this.checkInputs([command, ...args], opts.cwd, opts.env);
     if ("why" in chk) throw new Error(`SANDBOX_REFUSED: ${chk.why}`);
+    // L3: doğrulama (epoch) ve iptal HER await'ten sonra yeniden denetlenir; hazırlık sırasında doğrulama düşerse veya iptal gelirse sandbox KURULMAZ ve süreç başlatılmaz.
+    const ep = this.epoch;
+    const gone = (): string | null => (!this.verified || this.epoch !== ep || this.distroDrifted()) ? "SANDBOX_NOT_VERIFIED: de-verified during start" : opts.shouldAbort?.() === true ? "SANDBOX_REFUSED: ABORTED" : null;
     let tar: Buffer;
     try { tar = buildTar(opts.cwd as string, this.o.tarLimits).archive; } catch (e) { throw new Error(`SANDBOX_REFUSED: ${e instanceof TarError ? e.code : "COPY_FAILED"}`); }
     const S = await this.prepare();
     if (!S) throw new Error("SANDBOX_REFUSED: SCRATCH_CREATE_FAILED");
+    // Temizlik başarısızsa scratch tanıtıcısı hata üzerinde taşınır (çağıran kalıcı kaydeder; recover() Linux tarafını kapatır).
+    const fail = async (e: unknown): Promise<never> => { const bad = await this.cleanup(S); if (bad) { this.deverify(`CLEANUP_${bad}`); if (e && typeof e === "object") Object.assign(e, {sandboxScratch: S, cleanupCode: bad}); } throw e; };
     try {
+      { const g = gone(); if (g) throw new Error(g); }
       // Interop her başlatmada yeniden denetlenir (kernel-geneli kayıt çalışma zamanında açılabilir).
       const interop = await this.interopCheck(S);
       if (interop) {
         if (interop === "INTEROP_ENABLED" || interop === "WSL_TOOLS_MISSING") { this.deverify(interop); }
         throw new Error(`SANDBOX_REFUSED: ${interop}`);
       }
+      { const g = gone(); if (g) throw new Error(g); }
       if ((await this.wsl(["/bin/tar", "-x", "--no-same-owner", "--no-same-permissions", "-C", `${S}/work`], 120_000, tar)).exitCode !== 0) throw new Error("SANDBOX_REFUSED: COPY_IN_FAILED");
+      { const g = gone(); if (g) throw new Error(g); }
       const st = await this.stageSandbox(S, this.o.devMaxMs ?? 6 * 3600_000, wslEnv(opts.env as NodeJS.ProcessEnv), chk.command);
       if (st !== "OK") throw new Error(`SANDBOX_REFUSED: ${st}`);
+      { const g = gone(); if (g) throw new Error(g); }
       if (!this.nodePath || !(await this.put(S, "seccomp.pl", SECCOMP_PL + "\n")) || !(await this.put(S, "relay.js", WSL_RELAY_JS)) || !(await this.put(S, "relay.sh", relayScript(S, this.nodePath)))) throw new Error("SANDBOX_REFUSED: STAGE_FAILED");
-    } catch (e) { await this.cleanup(S); throw e; }
+      { const g = gone(); if (g) throw new Error(g); }
+    } catch (e) { return await fail(e); }
     let child: SandboxChild;
     try { child = this.realSpawner()(["-d", this.distro ?? "", "--exec", "/bin/sh", `${S}/ctl/run.sh`], ["ignore", "pipe", "pipe"]) as SandboxChild; }
-    catch { await this.cleanup(S); throw new Error("SANDBOX_REFUSED: SPAWN_FAILED"); }
+    catch (e0) { return await fail(Object.assign(new Error("SANDBOX_REFUSED: SPAWN_FAILED"), {cause: e0})); }
     let tornDown = false;
     child.sandboxScratch = S;
     child.sandboxTeardown = new Promise<string | null>(res => {
@@ -601,11 +625,11 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
 
   /** NEW-1: her doğrulama kaybı dönemi (epoch) artırır; uçuştaki eski bir selfTest sonucu sonradan gelen bir doğrulama kaybını EZEMEZ. */
   private epoch = 0;
-  private deverify(detail: string): void { this.epoch++; this.verified = false; this.probing = null; this.lastSelfTest = {ok: false, detail}; }
+  private deverify(detail: string): void { this.epoch++; this.verifiedDistro = undefined; this.verified = false; this.probing = null; this.lastSelfTest = {ok: false, detail}; }
   selfTest(): Promise<{ok: boolean; detail?: string}> {
     const e = this.epoch;
     const stale = (): {ok: boolean; detail?: string} => ({ok: false, detail: "SELFTEST_SUPERSEDED"});
-    return this.probing ??= this.probe().then(r => { if (e !== this.epoch) return stale(); this.verified = r.ok; this.lastSelfTest = r; return r; }, () => { if (e !== this.epoch) return stale(); this.verified = false; this.lastSelfTest = {ok: false, detail: "SELFTEST_ERROR"}; return this.lastSelfTest; });
+    return this.probing ??= this.probe().then(r => { if (e !== this.epoch) return stale(); this.verified = r.ok; this.verifiedDistro = r.ok ? this.distro : undefined; this.lastSelfTest = r; return r; }, () => { if (e !== this.epoch) return stale(); this.verified = false; this.lastSelfTest = {ok: false, detail: "SELFTEST_ERROR"}; return this.lastSelfTest; });
   }
   private async lifecycleProbes(S: string): Promise<`PROBE_${string}` | null> {
     const stage = async (timeoutMs: number, cmd: string, nproc?: number) => (await this.stageSandbox(S, timeoutMs, [], ["/bin/sh", "-c", cmd], nproc)) === "OK";
@@ -642,7 +666,7 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
     const st = await this.runner(["--status"], {timeoutMs: 20_000});
     if (st.spawnError) return no("WSL_EXE_MISSING");
     if (st.exitCode !== 0) return no("WSL_NOT_AVAILABLE");
-    if (this.o.distro === undefined && !process.env.UASCO_WSL_DISTRO) {
+    if (this.configuredDistro() === undefined) {
       // Girdisiz keşif: `wsl -l -v` çıktısındaki VARSAYILAN (*) dağıtım, WSL 2 ve docker/rancher/podman iç dağıtımı değilse. Seçilen ad yine selfTest'in tüm kanıtlarından geçmek zorundadır.
       const v = await this.runner(["-l", "-v"], {timeoutMs: 20_000});
       this.discovered = v.exitCode === 0 ? discoverDefaultDistro(decodeWslText(v.stdout)) ?? undefined : undefined;

@@ -561,7 +561,7 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
   const ISO = {nsFlags: ["--user", "--map-root-user", "--net", "--pid", "--mount", "--fork", "--kill-child=SIGKILL"], setup: "set -eu\n# isolation setup (test double)\n", helperPath: "/usr/sbin:/usr/bin:/sbin:/bin"};
   const GOOD_PROBE = "netns=net:[4026532001]\nMNT_C=absent\nDRVFS=0\nUNIX_PATH_SOCKETS=0\nWSL_RUNTIME_DIRS=absent\nRW_usr=ro\nRW_etc=ro\nRW_bin=ro\nWORK=writable\nNET_IFACES=0\nCAPS_DROPPED=ok\nNO_CTTY=ok\nNESTED_USERNS=blocked\nPID_NS_PRIVATE=ok\nVSOCK=blocked\nIO_URING=blocked\nSUPERVISOR=ok\nHOST_DIRS=hidden\nPROC_SYS_RO=ok\nHOST_CANARY=hidden\nDONE=1\n";
   interface Cfg { status?: number; spawnError?: boolean; distros?: string; version?: string; interop?: string | string[]; peRc?: number; peNoexec?: string; tools?: string; roots?: string[]; probe?: string; probeRc?: number; mktempFails?: boolean; runOut?: string; runRc?: number; runDelayMs?: number;
-    forkOut?: string; timeoutRc?: number; late?: boolean; stdinOut?: string; pkillRc?: number; pgrepAlive?: boolean; scratchRemains?: boolean; duOut?: string; truncated?: boolean; runBytes?: Buffer; outerRc?: number; reject?: boolean; nodePath?: string; noTarget?: boolean; abortIgnored?: boolean; pgrepRc?: number; pgidAlive?: boolean; rcFile?: string; duRc?: number; abortLate?: boolean; late2?: boolean; noPgid?: boolean; netns?: string; netnsRc?: number; hostNetns?: string; hostNetnsRc?: number; pgrepOut?: string; statOut?: string }
+    forkOut?: string; timeoutRc?: number; late?: boolean; stdinOut?: string; pkillRc?: number; pgrepAlive?: boolean; scratchRemains?: boolean; duOut?: string; truncated?: boolean; runBytes?: Buffer; outerRc?: number; reject?: boolean; nodePath?: string; noTarget?: boolean; abortIgnored?: boolean; pgrepRc?: number; pgidAlive?: boolean; rcFile?: string; duRc?: number; abortLate?: boolean; late2?: boolean; noPgid?: boolean; netns?: string; netnsRc?: number; hostNetns?: string; hostNetnsRc?: number; pgrepOut?: string; statOut?: string; taskOut?: string; statRc?: number }
   const u16 = (t: string) => Buffer.from("﻿" + t, "utf16le");
   const mkRunner = (cfg: Cfg = {}) => {
     const calls: {args: string[]; input?: Buffer | string}[] = []; const files = new Map<string, string>();
@@ -577,7 +577,8 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
       if (cmd[0] === "/usr/bin/mktemp") return cfg.mktempFails ? R(1) : R(0, "/tmp/uasco-sbx-AbC123\n");
       if (cmd[0] === "/bin/mkdir" || cmd[0] === "/bin/chmod" || cmd[0] === "/bin/kill" || cmd[0] === "/usr/bin/find" || cmd[0] === "/bin/rm") return R(0);
       if (cmd[0] === "/usr/bin/tee") { files.set(cmd[1], String(o.input)); return R(0); }
-      if (cmd[0] === "/bin/cat" && /^\/proc\/[0-9]+\/stat$/.test(cmd[1])) return cfg.statOut === undefined ? R(1) : R(0, cfg.statOut);
+      if (cmd[0] === "/bin/cat" && /^\/proc\/[0-9]+\/stat$/.test(cmd[1])) return cfg.statOut === undefined ? R(cfg.statRc ?? 1) : R(cfg.statRc ?? 0, cfg.statOut);
+      if (cmd[0] === "/bin/ls" && /^\/proc\/[0-9]+\/task$/.test(cmd[2] ?? "")) return R(0, cfg.taskOut ?? "");
       if (cmd[0] === "/bin/cat") return R(0, cmd[1].endsWith("/rc") ? `${cfg.rcFile ?? "0"}\n` : "4242\n");
       if (cmd[0] === "/bin/sh" && cmd[1] === "-s") { files.set("SWEEP", String(o.input)); return R(0); }
       if (cmd[0] === "/bin/sh" && cmd[1].endsWith("/ctl/kill.sh")) return R(0, cfg.noPgid ? "PGID=none\n" : "PGID=4242\n");
@@ -865,7 +866,9 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
       const td = async (cfg: any) => (await mk({pgidAlive: true, ...cfg})).p.teardownScratch(S);
       expect(await td({pgrepOut: "4243\n", statOut: "4243 (sleep) Z 1 4242 4242 0\n"})).toBeNull();
       expect(await td({pgrepOut: "4243\n4244\n", statOut: "4243 (sleep) Z 1 4242 4242 0\n"})).toBeNull();
-      expect(await td({pgrepOut: "4243\n"})).toBeNull(); // stat okunamıyor: süreç bu arada gitti
+      expect(await td({pgrepOut: "4243\n"}), "unreadable stat is LIVE (fail-closed, L1)").toBe("PROCESS_SURVIVED");
+      expect(await td({pgrepOut: "4243\n", statOut: "4243 (sleep) Z 1 4242 4242 0\n", statRc: 0, taskOut: "4243\n"})).toBeNull(); // yalnız lider görev: gerçek zombi
+      expect(await td({pgrepOut: "4243\n", statOut: "4243 (srv) Z 1 4242 4242 0\n", taskOut: "4243\n4251\n"}), "zombie leader with a live thread (L2)").toBe("PROCESS_SURVIVED");
       expect(await td({pgrepOut: "4243\n", statOut: "4243 (sleep) S 1 4242 4242 0\n"})).toBe("PROCESS_SURVIVED");
       expect(await td({pgrepOut: "4243\n", statOut: "garbage"})).toBe("PROCESS_SURVIVED");
       expect(await td({pgrepOut: ""})).toBe("PROCESS_SURVIVED");

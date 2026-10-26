@@ -471,6 +471,83 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
     expect(reaped, "close must not resolve before the reap finishes").toBe(true);
   }, 30_000);
 
+  const heldSpawnAsync = (o: {honourAbort: boolean; teardownCode?: () => string | null}) => {
+    let release!: () => void; const hold = new Promise<void>(r => { release = r; }); const st = {calls: 0, spawned: 0, children: [] as cp.ChildProcess[], torn: [] as string[]};
+    const provider = hostSpawn({
+      async spawnAsync(c: string, a: string[], op: cp.SpawnOptions & {shouldAbort?: () => boolean}) {
+        st.calls++; await hold;
+        if (o.honourAbort && op.shouldAbort?.()) throw new Error("SANDBOX_REFUSED: ABORTED");
+        const ch: any = cp.spawn(c, a, op); st.spawned++; st.children.push(ch); ch.sandboxScratch = "/tmp/uasco-sbx-Hd0001";
+        ch.sandboxTeardown = new Promise(res => ch.once("exit", () => res(o.teardownCode?.() ?? null))); return ch;
+      },
+      async teardownScratch(sc: string) { st.torn.push(sc); return o.teardownCode?.() ?? null; }});
+    return {provider, st, release: () => release()};
+  };
+
+  it("D1: a stop, stopAll or close that arrives while spawnAsync is still preparing does NOT answer STOPPED before the sandbox exists: with a provider that honours shouldAbort nothing is spawned; with one that ignores it the stop waits for the spawn, kills it and waits for exit + provider teardown; a second start then runs and its record is never overwritten by the cancelled run's late exit", async () => {
+    for (const honour of [true, false]) for (const how of ["stop", "stopAll", "close"] as const) {
+      const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+      const {provider, st, release} = heldSpawnAsync({honourAbort: honour});
+      const m = manager(dataDir, new ExecutionGate(provider));
+      try {
+        const first = m.start(p).then(v => v, e => e);
+        for (let i = 0; i < 100 && st.calls < 1; i++) await new Promise(r => setTimeout(r, 20));
+        expect(st.calls).toBe(1);
+        let stopSettled = false; const stopping = (how === "stop" ? m.stop(p.projectId) : how === "stopAll" ? m.stopAll("TEST") : m.close()).then(() => { stopSettled = true; });
+        await new Promise(r => setTimeout(r, 200)); expect(stopSettled, `${how} must wait for the in-flight spawn (honour=${honour})`).toBe(false);
+        release(); await stopping; const r1: any = await first;
+        if (honour) { expect(st.spawned, "no sandbox is created after the cancel").toBe(0); } else { expect(st.spawned).toBe(1); expect(st.children[0]!.exitCode !== null || st.children[0]!.signalCode !== null, "the late spawn is killed and awaited").toBe(true); }
+        expect(m.isActive(p.projectId)).toBe(false); expect(JSON.stringify(r1).includes('"status":"RUNNING"')).toBe(false);
+        if (how !== "close") {
+          const second = await m.start(p); expect(second.status).toMatch(/RUNNING|STARTING/); const startedAt = second.startedAt;
+          await new Promise(r => setTimeout(r, 400));
+          const rec = JSON.parse(fs.readFileSync(path.join(dataDir, "projects", p.projectId, "devrun", "state.json"), "utf8")); expect(rec.startedAt, "late exit of the cancelled run must not overwrite the new run").toBe(startedAt); expect(rec.status).toMatch(/RUNNING|STARTING/);
+        }
+      } finally { release(); await m.close().catch(() => undefined); }
+    }
+  }, 120_000);
+
+  it("D1 ownership: the late exit of a superseded run never overwrites the persisted record of the project's NEW active run (startedAt ownership)", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+    const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {maxConcurrent: 4});
+    try {
+      await m.start(p); const a1 = (m as any).active.get(p.projectId); const pid1 = a1.child.pid as number;
+      (m as any).active.delete(p.projectId); (m as any).reaping.delete(p.projectId); a1.release?.(); a1.release = null; // eski çalıştırma haritadan düşmüş (iptal/yarış senaryosu)
+      await new Promise(r => setTimeout(r, 1100)); // startedAt farklı olsun
+      const second = await m.start(p); expect(second.status).toMatch(/RUNNING|STARTING/);
+      const rec = () => JSON.parse(fs.readFileSync(path.join(dataDir, "projects", p.projectId, "devrun", "state.json"), "utf8"));
+      const before = rec(); expect(before.startedAt).toBe(second.startedAt); expect(before.startedAt).not.toBe(a1.state.startedAt);
+      (m as any).onExit(a1, 1, null); // eski çalıştırmanın GEÇ çıkışı
+      expect(rec(), "the new run's record must be untouched").toMatchObject({startedAt: second.startedAt, status: before.status}); expect(rec().exitCode ?? null).toBeNull();
+      killProcessTree(pid1);
+    } finally { await m.close().catch(() => undefined); }
+  }, 60_000);
+
+  it("D2: a refusal on top of an incomplete teardown keeps stopIncomplete + sandboxScratch (the next start retries the teardown or is refused 409); a post-spawn bridge failure with an incomplete teardown surfaces DEVRUN_STOP_INCOMPLETE", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+    let code: string | null = "PROCESS_SURVIVED"; const {provider, st, release} = heldSpawnAsync({honourAbort: true, teardownCode: () => code}); release();
+    const m = manager(dataDir, new ExecutionGate(provider));
+    try {
+      await m.start(p); await expect(m.stop(p.projectId)).rejects.toMatchObject({code: "DEVRUN_STOP_INCOMPLETE"});
+      const keep = () => JSON.parse(fs.readFileSync(path.join(dataDir, "projects", p.projectId, "devrun", "state.json"), "utf8"));
+      expect(keep()).toMatchObject({stopIncomplete: "PROCESS_SURVIVED", sandboxScratch: "/tmp/uasco-sbx-Hd0001"});
+      (provider as any).network = "ISOLATED"; // köprüsüz yalıtılmış sağlayıcı: bridgeSupport reddi (kapı reddi ile aynı yazım yolu)
+      await expect(m.start(p)).rejects.toMatchObject({code: "DEVRUN_SANDBOX_UNAVAILABLE"});
+      expect(keep()).toMatchObject({status: "BLOCKED", stopIncomplete: "PROCESS_SURVIVED", sandboxScratch: "/tmp/uasco-sbx-Hd0001"});
+      (provider as any).network = "HOST";
+      await expect(m.start(p)).rejects.toMatchObject({code: "DEVRUN_STOP_INCOMPLETE"}); expect(st.torn).toEqual(["/tmp/uasco-sbx-Hd0001"]);
+      code = null; expect((await m.start(p)).status).toMatch(/RUNNING|STARTING/); expect(st.torn).toHaveLength(2);
+    } finally { code = null; await m.close().catch(() => undefined); }
+    const {app: app2, dataDir: d2} = mk(); const p2 = await createProject(app2, {template: "web-node"});
+    const h2 = heldSpawnAsync({honourAbort: true, teardownCode: () => "PROCESS_SURVIVED"}); h2.release();
+    const iso = {...h2.provider, id: "FAKE_ISOLATED", network: "ISOLATED", async bridge() { throw new Error("BRIDGE_X"); }};
+    const m2 = manager(d2, new ExecutionGate(iso as any));
+    try {
+      await expect(m2.start(p2)).rejects.toMatchObject({code: "DEVRUN_STOP_INCOMPLETE", status: 409, reason: "PROCESS_SURVIVED"});
+      expect(JSON.parse(fs.readFileSync(path.join(d2, "projects", p2.projectId, "devrun", "state.json"), "utf8"))).toMatchObject({stopIncomplete: "PROCESS_SURVIVED", sandboxScratch: "/tmp/uasco-sbx-Hd0001"});
+    } finally { await m2.close().catch(() => undefined); }
+  }, 90_000);
+
   it("C-8: the delivery link is on the STARTING placeholder (product stop works during STARTING); C-9: the manager-wide cap refuses the next start with 409 DEVRUN_CAPACITY", async () => {
     const {app, dataDir} = mk(); const p1 = await createProject(app, {template: "web-node"}), p2 = await createProject(app, {template: "web-node"});
     let release: (n: number) => void = () => undefined, reached = false;
@@ -538,18 +615,6 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
     } finally { await m.stopAll("CLEANUP"); }
   }, T);
 
-  it("STOP-409 (Windows stop timeout): stop returns STOPPED as soon as the root exits even when the tree reap is slow (reap is a separate background budget); a new start waits for that reap and is refused with 409 DEVRUN_STOP_PENDING if it takes too long", async () => {
-    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
-    const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {stopWaitMs: 1500, reapWaitMs: 300});
-    let reaps = 0; (m as any).reapTree = async () => { reaps++; await new Promise(r => setTimeout(r, 3000)); };
-    try {
-      await m.start(p);
-      const t0 = Date.now(); expect(await m.stop(p.projectId)).toBe(true); expect(Date.now() - t0, "stop must not wait for the slow reap").toBeLessThan(1400);
-      expect(m.view(p).status).toBe("STOPPED");
-      await expect(m.start(p)).rejects.toMatchObject({code: "DEVRUN_STOP_PENDING", status: 409});
-      (m as any).o.reapWaitMs = 10_000; const v = await m.start(p); expect(reaps).toBe(1); expect(v.status).toMatch(/RUNNING|STARTING/);
-    } finally { (m as any).reapTree = async () => undefined; await m.stopAll("CLEANUP"); }
-  }, 40_000);
 
   it("NEW-2: a new run for the same project is refused (409 DEVRUN_STOP_INCOMPLETE) while the previous provider teardown is incomplete - the record and scratch are not dropped; start retries the teardown first and proceeds only on a clean result", async () => {
     const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
@@ -582,47 +647,7 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
     } finally { finish(); await started; await m.stopAll("CLEANUP"); }
   }, T);
 
-  it("C-8: the delivery link is on the STARTING placeholder (product stop works during STARTING); C-9: the manager-wide cap refuses the next start with 409 DEVRUN_CAPACITY", async () => {
-    const {app, dataDir} = mk(); const p1 = await createProject(app, {template: "web-node"}), p2 = await createProject(app, {template: "web-node"});
-    let release: (n: number) => void = () => undefined, reached = false;
-    const gateP = new Promise<number>(r => { release = r; });
-    const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {maxConcurrent: 1, startTimeOf: async () => { reached = true; await new Promise(r => setTimeout(r, 400)); return null; }, freePort: async () => gateP});
-    const link = {runId: "run_" + "c".repeat(24), headSha: git(path.join(dataDir, "projects", p1.projectId, "repo"), ["rev-parse", "HEAD"]).trim()};
-    const first = m.start(p1, link);
-    try {
-      for (let i = 0; i < 100 && !reached; i++) await new Promise(r => setTimeout(r, 50));
-      expect(m.view(p1)).toMatchObject({status: "STARTING", deliveryRunId: link.runId});
-      await expect(m.start(p2)).rejects.toMatchObject({code: "DEVRUN_CAPACITY", status: 409});
-      release(await (await import("../core/workos/devrun.js")).freeLoopbackPort()); await first;
-      await expect(m.start(p2)).rejects.toMatchObject({code: "DEVRUN_CAPACITY"});
-      await m.stop(p1.projectId); expect((await m.start(p2)).status).toMatch(/RUNNING|STARTING/);
-    } finally { release(1); await first.catch(() => undefined); await m.stopAll("CLEANUP"); }
-  }, T);
 
-  it("C-1: a RUNNING bridged product is stopped on the provider side and becomes BLOCKED (SANDBOX_UNVERIFIED) when the provider de-verifies; view masks the preview at once, the bridge closes, the process is gone and a new start is refused", async () => {
-    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
-    // net: üst düzey import
-    let innerPort = 0, closed = 0, verified = true, child: cp.ChildProcess | null = null; const proxies = new Set<import("node:net").Socket>();
-    const provider = {id: "FAKE_ISOLATED", network: "ISOLATED", async selfTest() { return {ok: verified}; }, isVerified() { return verified; }, async run() { throw new Error("unused"); },
-      spawn(c: string, a: string[], o: cp.SpawnOptions) { innerPort = Math.floor(30000 + Math.random() * 20000); child = cp.spawn(c, a, {...o, env: {...(o.env as any), PORT: String(innerPort)}}); return child; },
-      async bridge(_c: cp.ChildProcess, port: number) {
-        const srv = net.createServer(s => { const u = net.connect(innerPort, "127.0.0.1"); proxies.add(s); s.pipe(u); u.pipe(s); s.on("error", () => u.destroy()); u.on("error", () => s.destroy()); });
-        await new Promise<void>(r => srv.listen(port, "127.0.0.1", () => r()));
-        return {port, close() { closed++; srv.close(); for (const s of proxies) s.destroy(); }};
-      }};
-    const m = manager(dataDir, new ExecutionGate(provider as any));
-    try {
-      const v = await m.start(p); expect(v).toMatchObject({status: "RUNNING", bridged: true});
-      expect((await fetch(`http://127.0.0.1:${v.port}/`)).status).toBe(200);
-      verified = false;
-      const masked = m.view(p); expect(masked.preview).toMatchObject({state: "UNAVAILABLE", url: null, reason: "SANDBOX_UNVERIFIED"});
-      for (let i = 0; i < 100 && m.view(p).status !== "BLOCKED"; i++) await new Promise(r => setTimeout(r, 100));
-      const done = m.view(p); expect(done).toMatchObject({status: "BLOCKED", reason: "SANDBOX_UNVERIFIED"}); expect(closed).toBe(1);
-      expect(child!.exitCode !== null || child!.signalCode !== null).toBe(true);
-      await expect(fetch(`http://127.0.0.1:${v.port}/`)).rejects.toBeTruthy();
-      await expect(m.start(p)).rejects.toMatchObject({code: "SANDBOX_UNAVAILABLE"});
-    } finally { await m.stopAll("CLEANUP"); }
-  }, T);
 
   it.skipIf(process.platform !== "linux")("C-7: the Linux nsenter relay runs with an empty env, no_new_privs and an empty capability set (real nsenter into an unshared userns+netns holder; the relay 'node' is a probe script that prints what it runs with)", async () => {
     const {startNsenterBridge} = await import("../core/workos/devrun-bridge.js");

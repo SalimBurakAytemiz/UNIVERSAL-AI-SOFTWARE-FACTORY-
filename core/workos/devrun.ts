@@ -18,6 +18,7 @@ import {ExecutionGate} from "./execution-gate.js";
 import {bridgeSupport} from "./devrun-bridge.js";
 import type {BridgeHandle, NsenterOptions} from "./devrun-bridge.js";
 import type {SandboxChild} from "./execution-gate.js";
+import {systemExe} from "../sandbox/win-exe.js";
 
 export type DevRunStatus = "STOPPED" | "STARTING" | "RUNNING" | "CRASHED" | "BLOCKED";
 export interface DevRunPreview { url: string | null; state: "AVAILABLE" | "UNAVAILABLE"; lastProbeAt: string | null; reason?: string }
@@ -113,7 +114,7 @@ export function startTimeMs(s: string | null): number | null {
 }
 export function killProcessTree(pid: number): void {
   try {
-    if (process.platform === "win32") cp.spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], {windowsHide: true, stdio: "ignore", timeout: 15_000});
+    if (process.platform === "win32") { const tk = systemExe("taskkill.exe"); if (tk) cp.spawnSync(tk, ["/pid", String(pid), "/T", "/F"], {windowsHide: true, stdio: "ignore", timeout: 15_000}); }
     else { try { process.kill(-pid, "SIGKILL"); } catch { process.kill(pid, "SIGKILL"); } }
   } catch { /* süreç zaten bitmiş olabilir */ }
 }
@@ -200,6 +201,8 @@ interface Active {
   release: (() => void) | null; probeTimer: NodeJS.Timeout | null; flushTimer: NodeJS.Timeout | null; exited: Promise<void>; rootExited: Promise<void>; teardown: Promise<void>; projectType: string | undefined;
   known: Map<number, number>; snapTimer: NodeJS.Timeout | null; bridge: BridgeHandle | null;
   provider: {isVerified?(): boolean} | null; blockedReason: string | null; deverifyStop: boolean;
+  // D1: uçuştaki spawn/spawnAsync; stop/stopAll/close sandbox kurulmadan 'STOPPED' demez, bunun bitmesini (ve iptal edildiyse söküldüğünü) bekler.
+  spawning: Promise<void> | null;
 }
 
 export class DevRunManager {
@@ -326,9 +329,13 @@ export class DevRunManager {
     try { return acquireProcessLock(f, this.instanceId); } catch { throw new StudioError("DEVRUN_LOCKED", 409); }
   }
 
+  // D2: reddedilen/engellenen bir başlatma önceki çalıştırmanın STOP_INCOMPLETE kaydını ve scratch tanıtıcısını SİLMEZ (sonraki start Linux tarafı kapatmayı yeniden dener).
+  private keepIncomplete(cur: DevRunState | null): Partial<DevRunState> {
+    return cur ? {...(cur.stopIncomplete ? {stopIncomplete: cur.stopIncomplete} : {}), ...(cur.sandboxScratch ? {sandboxScratch: cur.sandboxScratch} : {})} : {};
+  }
   private block(project: Project, reason: string): never {
-    const st = {...this.blank(project), status: "BLOCKED" as const, reason, endedAt: new Date().toISOString()};
     const cur = this.readState(project.projectId);
+    const st = {...this.blank(project), status: "BLOCKED" as const, reason, endedAt: new Date().toISOString(), ...this.keepIncomplete(cur)};
     try { this.writeState(st, !cur || !ACTIVE.has(cur.status)); } catch { /* durum yazılamadı */ }
     throw new StudioError("DEVRUN_BLOCKED", 409, reason);
   }
@@ -344,7 +351,7 @@ export class DevRunManager {
     const gate = await this.o.executionGate.authorize("STUDIO_DEVRUN");
     if (!gate.allowed) {
       const cur = this.readState(id);
-      if (!cur || !ACTIVE.has(cur.status)) { try { this.writeState({...this.blank(project), status: "BLOCKED", reason: gate.reason, endedAt: new Date().toISOString()}, true); } catch { /* durum yazılamadı */ } }
+      if (!cur || !ACTIVE.has(cur.status)) { try { this.writeState({...this.blank(project), status: "BLOCKED", reason: gate.reason, endedAt: new Date().toISOString(), ...this.keepIncomplete(cur)}, true); } catch { /* durum yazılamadı */ } }
       this.o.audit("WORKOS_DEVRUN_REFUSED", {projectId: id, reason: gate.reason, detail: gate.detail});
       throw new StudioError(gate.reason, 409, gate.detail);
     }
@@ -352,7 +359,7 @@ export class DevRunManager {
     const bridge = bridgeSupport(gate.provider, this.o.bridgeOptions);
     if (!bridge.ok) {
       const cur = this.readState(id);
-      if (!cur || !ACTIVE.has(cur.status)) { try { this.writeState({...this.blank(project), status: "BLOCKED", reason: `DEVRUN_SANDBOX_UNAVAILABLE:${bridge.reason}`, endedAt: new Date().toISOString()}, true); } catch { /* durum yazılamadı */ } }
+      if (!cur || !ACTIVE.has(cur.status)) { try { this.writeState({...this.blank(project), status: "BLOCKED", reason: `DEVRUN_SANDBOX_UNAVAILABLE:${bridge.reason}`, endedAt: new Date().toISOString(), ...this.keepIncomplete(cur)}, true); } catch { /* durum yazılamadı */ } }
       this.o.audit("WORKOS_DEVRUN_REFUSED", {projectId: id, reason: "DEVRUN_SANDBOX_UNAVAILABLE", detail: bridge.reason});
       throw new StudioError("DEVRUN_SANDBOX_UNAVAILABLE", 409, bridge.reason);
     }
@@ -383,9 +390,10 @@ export class DevRunManager {
     const st: DevRunState = {...this.blank(project), status: "STARTING", startedAt: new Date().toISOString(), argv: [...argv]};
     // C-8: teslim bağlantısı STARTING yer tutucusundan itibaren kayıtlıdır (ürün durdurma STARTING sırasında da çalışır).
     if (link) st.deliveryRunId = link.runId;
-    const a: Active = {state: st, child: null, stopping: false, stdout: new Ring(this.o.logRingBytes), stderr: new Ring(this.o.logRingBytes), release: null, probeTimer: null, flushTimer: null, exited: Promise.resolve(), rootExited: Promise.resolve(), teardown: Promise.resolve(), projectType: project.projectType, known: new Map(), snapTimer: null, bridge: null, provider: null, blockedReason: null, deverifyStop: false};
+    const a: Active = {state: st, child: null, stopping: false, stdout: new Ring(this.o.logRingBytes), stderr: new Ring(this.o.logRingBytes), release: null, probeTimer: null, flushTimer: null, exited: Promise.resolve(), rootExited: Promise.resolve(), teardown: Promise.resolve(), projectType: project.projectType, known: new Map(), snapTimer: null, bridge: null, provider: null, blockedReason: null, deverifyStop: false, spawning: null};
     this.active.set(id, a);
     // PS1A-C1-F2: her await'ten sonra (özellikle spawn'dan hemen önce) stop/stopAll/GLOBAL_STOP ve harita sahipliği yeniden kontrol edilir.
+    let spawnDoneRef: () => void = () => undefined;
     const aborted = () => a.stopping || this.closed || this.active.get(id) !== a || this.stopActive() !== null;
     try {
       st.ownerStartTime = await this.ownStartTime();
@@ -417,7 +425,9 @@ export class DevRunManager {
       // SBX-GATE: süreç ana makinede değil, kapının doğruladığı sağlayıcıda başlatılır.
       // Zaten doğrulanmamış bir sağlayıcıda süreç BAŞLATILMAZ (kapının önbelleği eski olabilir).
       { const vp = gate.provider as {isVerified?(): boolean}; if (typeof vp.isVerified === "function" && vp.isVerified() !== true) throw new StudioError("SANDBOX_UNAVAILABLE", 409, "SANDBOX_UNVERIFIED"); }
-      const spawnOpts = {cwd: ws, env, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] as ["ignore", "pipe", "pipe"], detached: process.platform !== "win32"};
+      let spawnDone: () => void = () => undefined;
+      a.spawning = new Promise<void>(r => { spawnDone = r; }); spawnDoneRef = () => spawnDone();
+      const spawnOpts = {cwd: ws, env, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] as ["ignore", "pipe", "pipe"], detached: process.platform !== "win32", shouldAbort: aborted};
       // B-RUN-WIN-1: eşzamansız hazırlık gerektiren sağlayıcı (WSL) spawnAsync sunar; yoksa eşzamanlı spawn.
       const child: SandboxChild = gate.provider.spawnAsync ? await gate.provider.spawnAsync(exe, argv.slice(1), spawnOpts) : gate.provider.spawn(exe, argv.slice(1), spawnOpts);
       a.child = child; a.provider = gate.provider; if (child.sandboxScratch) st.sandboxScratch = child.sandboxScratch;
@@ -430,6 +440,7 @@ export class DevRunManager {
       this.reaping.set(id, a.exited); void a.exited.finally(() => { if (this.reaping.get(id) === a.exited) this.reaping.delete(id); });
       child.stdout?.on("data", (b: Buffer) => { a.stdout.push(b); this.scheduleFlush(a); });
       child.stderr?.on("data", (b: Buffer) => { a.stderr.push(b); this.scheduleFlush(a); });
+      spawnDoneRef(); // kurulum bitti, tüm çıkış/teardown izleyicileri bağlı: stop artık çocuğu ve sağlayıcı kapatmasını bekleyebilir
       if (child.pid === undefined) { await a.exited; return this.view(project); }
       st.pid = child.pid;
       // NEW-3: sağlayıcı-taraflı scratch, köprü kurulumundan ÖNCE kalıcı yazılır (API bu aralıkta çökerse recover() Linux tarafını kapatabilsin).
@@ -465,10 +476,25 @@ export class DevRunManager {
       if (st.status === "STARTING" && a.child && a.child.exitCode === null) { st.status = "RUNNING"; this.writeState(st); }
       return this.view(project);
     } catch (e) {
+      spawnDoneRef();
       if (a.child && a.child.exitCode === null && a.child.pid) { a.stopping = true; killProcessTree(a.child.pid); await timed(a.exited, 10_000, undefined); }
+      // D1/L4: sağlayıcı hazırlığı iptal/doğrulama kaybıyla yarıda kaldı ve scratch temizlenemediyse tanıtıcı KALICI yazılır (recover() Linux tarafını kapatır).
+      const incompleteCode = (e as {cleanupCode?: unknown} | null)?.cleanupCode, scratch = (e as {sandboxScratch?: unknown} | null)?.sandboxScratch;
+      if (typeof incompleteCode === "string" && typeof scratch === "string") { a.state.stopIncomplete = incompleteCode; a.state.sandboxScratch = scratch; }
       this.cleanup(a);
       if (this.active.get(id) === a) this.active.delete(id);
-      if (e instanceof StudioError && e.code === "DEVRUN_BLOCKED") this.block(project, e.reason ?? "DEVRUN_BLOCKED");
+      const inc = a.state.stopIncomplete ?? this.readState(id)?.stopIncomplete;
+      if (a.state.stopIncomplete && a.state.sandboxScratch) { try { this.writeState({...this.blank(project), status: "BLOCKED", reason: `STOP_INCOMPLETE:${a.state.stopIncomplete}`, endedAt: new Date().toISOString(), stopIncomplete: a.state.stopIncomplete, sandboxScratch: a.state.sandboxScratch}, true); } catch { /* durum yazılamadı */ } }
+      if (e instanceof StudioError && e.code === "DEVRUN_BLOCKED") {
+        try { this.block(project, e.reason ?? "DEVRUN_BLOCKED"); } catch (be) { if (inc) throw new StudioError("DEVRUN_STOP_INCOMPLETE", 409, inc); throw be; }
+      }
+      // Hazırlık sırasında stop/close geldi: hata değil, iptal edilmiş başlatma.
+      if (e instanceof Error && /SANDBOX_REFUSED: ABORTED/.test(e.message)) {
+        if (inc) throw new StudioError("DEVRUN_STOP_INCOMPLETE", 409, inc);
+        if (this.closed) throw new StudioError("DEVRUN_CLOSED", 409);
+        return this.view(project);
+      }
+      if (inc && !(e instanceof StudioError)) throw new StudioError("DEVRUN_STOP_INCOMPLETE", 409, inc);
       throw e;
     }
   }
@@ -548,7 +574,7 @@ export class DevRunManager {
         method = "PPID_WALK";
         victims = treeDescendants(ps, root, a.known).map(p => p.pid);
         for (let i = 0; i < victims.length; i += 20) {
-          cp.spawnSync("taskkill", ["/F", "/T", ...victims.slice(i, i + 20).flatMap(p => ["/PID", String(p)])], {windowsHide: true, stdio: "ignore", timeout: 15_000});
+          const tk = systemExe("taskkill.exe"); if (tk) cp.spawnSync(tk, ["/F", "/T", ...victims.slice(i, i + 20).flatMap(p => ["/PID", String(p)])], {windowsHide: true, stdio: "ignore", timeout: 15_000});
         }
         for (let i = 0; i < 30 && victims.some(pidAlive); i++) await sleep(100);
       }
@@ -580,7 +606,9 @@ export class DevRunManager {
     st.reason = a.blockedReason ? a.blockedReason : a.stopping ? (st.reason ?? "STOP_REQUESTED") : (reason ?? `PROCESS_EXITED${code !== null ? `:${code}` : signal ? `:${signal}` : ""}`);
     st.preview = {url: null, state: "UNAVAILABLE", lastProbeAt: st.preview.lastProbeAt, reason: "NOT_RUNNING"};
     this.cleanup(a);
-    try { this.writeState(st); } catch { /* durum yazılamadı */ }
+    // D1: geç çıkış, AYNI projenin yeni (etkin) çalıştırmasının kaydını ezmez (startedAt sahipliği).
+    const own = this.readState(st.projectId);
+    if (!own || own.startedAt === st.startedAt || !ACTIVE.has(own.status)) { try { this.writeState(st); } catch { /* durum yazılamadı */ } }
     if (this.active.get(st.projectId) === a) this.active.delete(st.projectId);
     this.o.audit(a.stopping ? "DEVRUN_STOPPED" : "DEVRUN_CRASHED", {projectId: st.projectId, exitCode: code, signal: signal ?? null, reason: st.reason});
   }
@@ -591,6 +619,8 @@ export class DevRunManager {
     const a = this.active.get(projectId);
     if (!a) return "NOT_ACTIVE";
     a.stopping = true; a.state.reason = reason;
+    // D1: sandbox hâlâ kuruluyorsa 'STOPPED' denmez; kurulum (ve iptal edildiyse sökülme) beklenir, süre dolarsa TIMEOUT (stop 409 DEVRUN_STOP_TIMEOUT).
+    if (a.spawning && !(await timed(a.spawning.then(() => true), this.o.stopWaitMs, false))) return "TIMEOUT";
     const running = () => Boolean(a.child?.pid && a.child.exitCode === null && a.child.signalCode === null);
     // POSIX: kök ölünce yetimlerin ppid'si kaybolur; öldürmeden önce soy kaydedilir. Bekleme sonrası kök hâlâ çalışıyorsa öldürülür (toplanmış pid'e sinyal yok). Windows davranışı değişmez.
     if (running() && process.platform !== "win32" && PROCESS_LIST_SUPPORTED) await this.recordTree(a);

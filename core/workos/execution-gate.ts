@@ -22,7 +22,8 @@ export interface SandboxProvider {
   isVerified?(): boolean;
   /** İsteğe bağlı (C-5): API yeniden başlatıldıktan sonra sahipsiz kalmış sağlayıcı-taraflı scratch'ı kapatır; null = temiz, aksi halde kod. */
   teardownScratch?(scratch: string): Promise<string | null>;
-  spawnAsync?(command: string, args: string[], opts: SpawnOptions): Promise<SandboxChild>;
+  /** shouldAbort: çağıran (devrun) iptal edildiyse sağlayıcı hazırlığı yarıda keser ve süreç başlatmaz. */
+  spawnAsync?(command: string, args: string[], opts: SpawnOptions & {shouldAbort?: () => boolean}): Promise<SandboxChild>;
 }
 export type SandboxChild = ChildProcess & {sandboxTeardown?: Promise<unknown>; sandboxScratch?: string};
 export type SandboxDenialDetail = "NO_VERIFIED_PROVIDER" | "SELF_TEST_FAILED" | "SELF_TEST_ERROR";
