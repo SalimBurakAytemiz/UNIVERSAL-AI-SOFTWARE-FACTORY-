@@ -71,6 +71,10 @@ import {registerRoleStatusRoutes} from "./routes/role-status.js";
 // //TR: COORD korumalı paket 4a (LANE-B-vertical-flow-wiring, LANE-B-run-readiness, LANE-B-run-summaries, LANE-A-readiness-allowlist): birleşmiş ama kayıtsız salt-okunur akış route'ları (proje koşu-hazırlığı ve hafif sayfalı koşu özeti).
 import {registerReadinessRoutes} from "./routes/readiness.js";
 import {registerRunSummaryRoutes} from "./routes/run-summaries.js";
+// //TR: COORD korumalı paket 4b (LANE-B-batch-4b, LANE-C-flow-analysis, LANE-B-devrun-bridge B-RUN-1): analiz adımı/plan route'ları Lane C'nin AnalysisFlow'u üzerinde; teslim edilen ürünü yalnız doğrulanmış sandbox içinde çalıştıran start/stop/status route'ları.
+import {registerAnalysisRoutes} from "./routes/analysis.js";
+import {AnalysisFlow,NO_ANALYSIS_BUILDER,claudeAnalysisReadiness} from "../../../core/workos/crew/analysis.js";
+import {registerProductRunRoutes} from "./routes/product-run.js";
 // //TR: COORD korumalı paket 4a (LANE-C-linux-sandbox-provider v2): ücretsiz Linux unshare sağlayıcısı yalnız linux'ta ExecutionGate'e verilir; öz-test geçmezse kapı SANDBOX_UNAVAILABLE kalır (ana makinede yürütme yok).
 import {LinuxUnshareSandboxProvider} from "../../../core/agents/linux-unshare-sandbox.js";
 import {bindingForFunction} from "../../../core/agents/first-delivery-bindings.js";
@@ -269,6 +273,10 @@ registerMemoryRoutes(app,laneDeps);
 registerKnowledgeRoutes(app,laneDeps);
 registerAttentionRoutes(app,laneDeps);
 registerPredevDecisionRoutes(app,laneDeps);
+// //TR: COORD korumalı paket 4b (LANE-B-batch-4b): analiz akışı her istekte route'un verdiği Global Stop denetimiyle (stopped) kurulur. Builder mevcut yürütücü çiftinin preDevBuilder'ıdır: ÜCRETLİ yerel Claude çağrısı yalnız Founder LOCAL_CLAUDE'u etkinleştirmiş, provenance geçerli ve hazırlık (rol bağı, CLI, iki profil oturumu) tamamken Founder'ın tıklamasıyla yapılır; aksi halde NO_ANALYSIS_BUILDER ya da ücretsiz BLOCKED. getExecutors/getExecSetup/controlRoot aşağıda tanımlıdır; geçici ölü bölgeye (TDZ) düşmemek için hepsi istek anında tembel okunur.
+registerAnalysisRoutes(app,{...laneDeps,analysisFlow:(stopped)=>new AnalysisFlow({store:getStore(),scope,builder:getExecutors().pair?.preDevBuilder?.()??NO_ANALYSIS_BUILDER,readiness:()=>claudeAnalysisReadiness({controlRoot,profile:{forbiddenRoots:[getStore().dataDir]},cli:getExecSetup().cliStatus()}),stopped})});
+// //TR: COORD korumalı paket 4b (LANE-B-devrun-bridge B-RUN-1): ürün çalıştırma teslim kaydına bağlıdır (sandbox + tek port 127.0.0.1 köprüsü); getDevRuns aşağıda tanımlıdır ve istek anında tembel okunur. restart route'u yoktur.
+registerProductRunRoutes(app,{...laneDeps,devruns:()=>getDevRuns()});
 registerRoleStatusRoutes(app,{...laneDeps,repoRoot});
 
 // //TR: B3a mission runner route'ları: aynı token hook'u ve aynı yazma kapısı sırası (GLOBAL_STOP 423 -> action-gateway 403 -> şema 400). Run'lar aynı Work OS journal'ındadır; eski /v1/runs route'larına dokunulmaz.

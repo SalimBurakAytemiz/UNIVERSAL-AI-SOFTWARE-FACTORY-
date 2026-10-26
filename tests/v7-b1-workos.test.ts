@@ -2751,7 +2751,7 @@ describe("LANE-B product run routes (B-RUN-1)", () => {
   });
 });
 
-// //TR: LANE-B batch 4b: analiz adımı route'ları (sahte AnalysisFlow ile kapılar ve durum eşlemesi); server.ts kaydı korumalıdır (LANE-B-batch-4b.md, bekliyor).
+// //TR: LANE-B batch 4b: analiz adımı route'ları (sahte AnalysisFlow ile kapılar ve durum eşlemesi); server.ts kaydı COORD korumalı paket 4b ile yapılır (aşağıdaki buildServer testi).
 describe("LANE-B batch 4b: analysis routes and server registration", () => {
   const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
   const MSN = "msn_" + "a".repeat(24);
@@ -2942,6 +2942,32 @@ describe("LANE-B batch 4b: analysis routes and server registration", () => {
     const m = await mkApp({step: {status: "DRAFT_READY", kind: "Plan"}, stopDuring: true});
     const r = await post(m.app, `/v1/missions/${MSN}/analysis/step`); expect([r.statusCode, r.json()]).toEqual([423, {error: "GLOBAL_STOP_ACTIVE"}]); expect(m.audits).toContain("WORKOS_ANALYSIS_STEP");
     const ok = await mkApp({step: {status: "AWAITING_APPROVAL", kind: "Plan"}, stopDuring: true}); expect((await post(ok.app, `/v1/missions/${MSN}/analysis/step`)).statusCode).toBe(200);
+  });
+
+  // //TR: COORD korumalı paket 4b: server.ts kaydı gerçek buildServer ile; analiz ve ürün çalıştırma route'larına ulaşılır, gerçek AnalysisFlow sunucunun hazırlık denetimini alır (CLI yok: ücretsiz BLOCKED, hiçbir şey yazılmaz), tembel bağımlılıklar geçici ölü bölgeye (TDZ) düşmez, Global Stop gerçek laneDeps'ten gelir, restart route'u yoktur.
+  it("server.ts registration (buildServer): analysis and product-run routes are reachable, the real AnalysisFlow gets the server readiness (free BLOCKED, nothing written), lazy dependencies do not hit the TDZ, Global Stop gates every write, no restart route", async () => {
+    const runtime = path.join(tmp, "runtime"), controlRoot = path.join(tmp, "control"); fs.mkdirSync(runtime, {recursive: true}); fs.mkdirSync(controlRoot, {recursive: true});
+    const app = buildServer({controlToken: token, runtime, dataDir: path.join(tmp, "data"), controlRoot, port: 3210, logger: false, executorSetup: {findClaudeCli: () => null}});
+    const call = (method: "GET" | "POST", url: string, payload: unknown = {}) => app.inject({method, url, headers: hdr, ...(method === "POST" ? {payload: payload as any} : {})});
+    try {
+      const RUN = "run_" + "b".repeat(24);
+      for (const [m, u] of [["GET", `/v1/work-runs/${RUN}/product`], ["POST", `/v1/work-runs/${RUN}/product/start`], ["POST", `/v1/work-runs/${RUN}/product/stop`]] as const) { const r = await call(m, u); expect([r.statusCode, r.json()], u).toEqual([404, {error: "RUN_NOT_FOUND"}]); }
+      expect((await call("POST", `/v1/work-runs/${RUN}/product/restart`)).statusCode).toBe(404);
+      expect((await call("GET", `/v1/work-runs/${RUN}/product/start`)).statusCode).toBe(404);
+      for (const u of [`/v1/missions/${MSN}/analysis/step`, `/v1/missions/${MSN}/analysis/plan`]) { const r = await call("POST", u); expect([r.statusCode, r.json()], u).toEqual([404, {error: "WORKOS_NOT_FOUND"}]); }
+      expect((await call("POST", `/v1/missions/${MSN}/analysis/step`, {x: 1})).json()).toEqual({error: "INVALID_BODY"});
+      expect((await call("POST", `/v1/work-runs/${RUN}/product/start`, {x: 1})).json()).toEqual({error: "INVALID_BODY"});
+      expect((await app.inject({method: "POST", url: `/v1/missions/${MSN}/analysis/step`, headers: {host: "127.0.0.1:3210"}, payload: {}})).statusCode).toBe(403);
+      const i = await call("POST", "/v1/intakes", {idea: "A small web app where I can track my daily reading with a streak counter"}); expect(i.statusCode, i.body).toBe(201);
+      const mid: string = i.json().intake.missionId;
+      const s = await call("POST", `/v1/missions/${mid}/analysis/step`);
+      expect(s.statusCode, s.body).toBe(200); expect(s.json().status).toBe("BLOCKED"); expect(s.json().blockers).toContain("CLAUDE_CLI_NOT_FOUND");
+      expect((await call("GET", `/v1/predev/${mid}`)).json().predev.active).toBe(false); // the free BLOCKED answer opened no pre-dev sequence
+      const pl = await call("POST", `/v1/missions/${mid}/analysis/plan`); expect([pl.statusCode, pl.json()]).toEqual([409, {error: "ANALYSIS_NOT_COMPLETE"}]);
+      fs.writeFileSync(path.join(runtime, "GLOBAL_STOP.json"), JSON.stringify({active: true, reason: "test", actor: "TEST"}));
+      for (const u of [`/v1/missions/${mid}/analysis/step`, `/v1/missions/${mid}/analysis/plan`, `/v1/work-runs/${RUN}/product/start`, `/v1/work-runs/${RUN}/product/stop`]) { const r = await call("POST", u); expect([r.statusCode, r.json()], u).toEqual([423, {error: "GLOBAL_STOP_ACTIVE"}]); }
+      expect((await call("GET", `/v1/work-runs/${RUN}/product`)).json()).toEqual({error: "RUN_NOT_FOUND"}); // reads are not gated
+    } finally { await app.close(); }
   });
 });
 
