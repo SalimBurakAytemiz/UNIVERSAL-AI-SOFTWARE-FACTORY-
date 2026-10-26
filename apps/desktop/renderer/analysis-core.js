@@ -1,11 +1,12 @@
 // //TR: Bu modül Analiz adımının (A-FLOW-5) saf, DOM'suz çekirdeğidir: POST /v1/missions/:id/analysis/step (mevcut aşamanın taslağını üretir) ve POST .../analysis/plan (onaylı plandan görev planı) isteklerini kurar, yanıtlarını katı biçimde eşler ve sınıflar. Sonuçlar Lane C AnalysisFlow sözleşmesidir: BLOCKED | DRAFT_READY | AWAITING_APPROVAL | REJECTED | BUILDER_FAILED | COMPLETE. "Analiz tamam" YALNIZ dört analiz fazının da onaylandığı COMPLETE sonucunda söylenir; bozuk ya da çelişkili yanıt INVALID olur ve hiçbir olumlu durum uydurulmaz.
 import {MISSION_ID_RE} from "./journey-core.js";
 import {describePostResult} from "./work-core.js";
-import {ARTIFACT_ID_RE} from "./predev-decisions-core.js";
+import {ARTIFACT_ID_RE,buildApproveRequest,classifyPredevPost,predevStatusKey} from "./predev-decisions-core.js";
 
 export const ANALYSIS_KINDS=Object.freeze(["BusinessAnalysis","Requirements","Plan","Architecture"]);
 export const ANALYSIS_STATUSES=Object.freeze(["BLOCKED","DRAFT_READY","AWAITING_APPROVAL","REJECTED","BUILDER_FAILED","COMPLETE"]);
 export const MAX_PLAN_TASKS=50;
+export const STUCK_BLOCKER="ANALYSIS_PHASE_NOT_ADVANCED";
 export const analysisStepPath=id=>typeof id==="string"&&MISSION_ID_RE.test(id)?`/v1/missions/${id}/analysis/step`:null;
 export const analysisPlanPath=id=>typeof id==="string"&&MISSION_ID_RE.test(id)?`/v1/missions/${id}/analysis/plan`:null;
 const result=(path,errors)=>Object.keys(errors).length?{ok:false,path:null,body:null,errors}:{ok:true,path,body:{},errors:{}};
@@ -35,7 +36,10 @@ export function mapAnalysisStep(x){
       if(blocker===null||!Array.isArray(x.blockers)||x.blockers.length>50)return null;
       const blockers=x.blockers.map(b=>text(b,200));
       if(blockers.includes(null)||(blockers.length>0&&blockers[0]!==blocker))return null;
-      return {status:"BLOCKED",blocker,blockers};
+      // //TR: A-ANALYSIS-STUCK-1: kind/artifactId sunucunun YAPILANDIRILMIŞ alanlarıdır ve yalnız ANALYSIS_PHASE_NOT_ADVANCED cevabında anlamlıdır; founderAction düzyazısı ASLA ayrıştırılmaz (yalnız metin olarak gösterilir). Alan eksik/bozuksa target:null ve düğme yoktur.
+      const phaseStuck=blocker===STUCK_BLOCKER,kind=kindOf(x.kind);
+      const target=phaseStuck&&kind!==null&&typeof x.artifactId==="string"&&ARTIFACT_ID_RE.test(x.artifactId)?{kind,artifactId:x.artifactId}:null;
+      return {status:"BLOCKED",blocker,blockers,phaseStuck,target,founderAction:phaseStuck&&target===null?text(x.founderAction,600):null}; // düzyazı yalnız hedefsiz takılma cevabında, yalnız metin olarak taşınır; diğer engellerde serbest metin atılır
     }
     case "DRAFT_READY":{
       const kind=kindOf(x.kind);
@@ -78,6 +82,8 @@ export function classifyAnalysisStep(res){
     return step===null?{kind:"INVALID"}:{kind:"STEP",step};
   }
   if(s>=200&&s<300)return {kind:"INVALID"};
+  // //TR: Ortak ücretli üretim kilidi: aynı mission zaten üretiliyor (PREDEV_PRODUCE_IN_PROGRESS) ya da başka bir mission üretiyor (PREDEV_PRODUCE_BUSY); bu bir idempotency çakışması DEĞİLDİR, sonuç da iddia edilmez.
+  if(s===409&&isObj(body)&&(body.error==="PREDEV_PRODUCE_IN_PROGRESS"||body.error==="PREDEV_PRODUCE_BUSY"))return {kind:"BUSY",scope:body.error==="PREDEV_PRODUCE_BUSY"?"OTHER":"SAME"};
   if(s===423)return {kind:"STOPPED"};
   if(s===403)return {kind:"DENIED"};
   if(s===404&&notFoundBody(body))return {kind:"NOT_FOUND"};
@@ -134,7 +140,21 @@ export function analysisStatusKey(c,res,verb){
   if(c.kind==="NOT_ENABLED")return {ok:false,key:"analysis.notEnabled",vars:{}};
   if(c.kind==="NOT_FOUND")return {ok:false,key:"analysis.notFound",vars:{}};
   if(c.kind==="INVALID")return {ok:false,key:"analysis.invalid",vars:{}};
+  if(c.kind==="BUSY")return {ok:false,key:`analysis.busy.${c.scope}`,vars:{}};
   if(c.kind==="STOPPED")return {ok:false,key:"post.err.423",vars:{status:423}};
   // 403: sunucunun ACTION_DENIED nedeni (varsa) ya da yetki hatası; describePostResult ikisini de doğru ayırır.
   const d=describePostResult(res);return {ok:false,key:d.key,vars:d.vars};
+}
+
+/** //TR: A-ANALYSIS-STUCK-1: "Yeniden onayla" isteği yalnız sunucunun yapılandırılmış hedefinden (step.target) kurulur; hedef yoksa istek yoktur. Onay kanıtı Founder'ın kendi girdisidir (uydurulmaz); yol mevcut pre-dev onay yoludur. */
+export function buildReapproveRequest({missionId,step,evidenceText}){
+  const t=step&&step.status==="BLOCKED"&&step.phaseStuck?step.target:null;
+  if(!t)return {ok:false,path:null,body:null,errors:{artifact:"analysis.err.noTarget"}};
+  return buildApproveRequest({missionId,artifactId:t.artifactId,evidenceText});
+}
+/** Yeniden onay yanıtı -> {ok,key,vars,kind}; başarıda "aşama ilerledi" DEĞİL yalnız sunucunun bildirdiği aşama söylenir, hiçbir şey üretilmediği belirtilir. */
+export function reapproveOutcome(res,missionId){
+  const c=classifyPredevPost(res,missionId);
+  if(c.kind==="RESULT")return {ok:true,key:"analysis.reapprove.done",vars:{phase:c.predev.phase},kind:c.kind};
+  const k=predevStatusKey(c,res,"approve");return {ok:false,key:k.key,vars:k.vars,kind:c.kind};
 }

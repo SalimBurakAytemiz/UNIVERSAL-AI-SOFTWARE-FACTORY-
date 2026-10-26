@@ -101,16 +101,19 @@ const RUNS = {runs: [
   runRow(R_GATE, M_EXE, {updatedAt: "2026-10-10T12:00:00.000Z"}),
   runRow(R_BUSY, M_REP2, {status: "RUNNING", step: "IMPLEMENT", updatedAt: "2026-10-17T11:59:00.000Z"}),
   runRow(R_OK, M_DONE, {status: "SUCCEEDED", updatedAt: "2026-10-16T09:00:00.000Z"})]};
-const attentionBody = (blocked: any[] = ATTENTION_ITEMS, over: Record<string, any> = {}) => ({blocked, retryableKinds: [], schedulerVerification: "VERIFIED", ...over});
+const ATT_KINDS = ["RUN_AWAITING_APPROVAL", "MISSION_FOUNDER_ATTENTION", "RUN_NEEDS_DECISION", "MISSION_AUTHORIZATION_PENDING", "MISSION_BLOCKED", "TASK_BLOCKED"];
+const TSK_A = "tsk_" + "9a".repeat(12), PRJ_ATT = "prj_" + "ab".repeat(12);
+const countsOf = (items: any[]) => Object.fromEntries(ATT_KINDS.map(k => [k, items.filter(x => x && x.kind === k).length]));
+const attentionBody = (items: any[] = ATTENTION_ITEMS, over: Record<string, any> = {}) => ({attention: {items, counts: countsOf(items), truncated: false, source: "WORKOS", ...over}});
 const ATTENTION_ITEMS = [
-  {phase: 3, packageId: "PKG-A", kind: "REVIEW_PENDING_PROVIDER_QUOTA", reason: "provider quota", at: "2026-10-17T08:00:00.000Z", retryable: true},
-  {phase: 0, kind: "FOUNDER_ATTENTION", retryable: false}];
-const PATHS = ["/v1/founder-attention", "/v1/missions", "/v1/work-runs"];
+  {kind: "TASK_BLOCKED", nextAction: "UNBLOCK_TASK", projectId: PRJ_ATT, missionId: M_EXE, runId: null, taskId: TSK_A, title: "Blocked task", reason: "waiting on a dependency", since: "2026-10-17T08:00:00.000Z"},
+  {kind: "MISSION_BLOCKED", nextAction: "REVIEW_MISSION", projectId: PRJ_ATT, missionId: M_REP2, runId: null, taskId: null, title: "Blocked mission", reason: null, since: null}];
+const PATHS = ["/v1/attention", "/v1/missions", "/v1/work-runs"];
 const serve = (over: Record<string, any> = {}) => (p: string) => {
-  const m: Record<string, any> = {"/v1/missions": MISSIONS, "/v1/work-runs": RUNS, "/v1/founder-attention": attentionBody(), ...over};
-  return p in m ? m[p] : fail(p);
+  const m: Record<string, any> = {"/v1/missions": MISSIONS, "/v1/work-runs": RUNS, "/v1/attention": attentionBody(), ...over};
+  return p in m && m[p] !== undefined ? m[p] : fail(p);
 };
-const K = {fa: `mission:${M_FA}`, pf: `mission:${M_PF}`, pf2: `mission:${M_PF2}`, rep: `run:${R_REP}`, gate: `run:${R_GATE}`, pkg: "attention:PKG-A|3", ph0: "attention:|0"};
+const K = {fa: `mission:${M_FA}`, pf: `mission:${M_PF}`, pf2: `mission:${M_PF2}`, rep: `run:${R_REP}`, gate: `run:${R_GATE}`, pkg: `attention:TASK_BLOCKED:${TSK_A}`, ph0: `attention:MISSION_BLOCKED:${M_REP2}`};
 const H = 3600000, D1 = 86400000;
 
 // ---------------- (1) GENUINE control-api -> mappers -> queue -> view ----------------
@@ -173,14 +176,12 @@ describe("Queue — GENUINE control-api read-models flow through mappers, queue 
     const s = await seedRealStore();
     const app = mkApp();
     const core = await load("queue-core.js");
-    const raw = {missions: await getJson(app, "/v1/missions"), runs: await getJson(app, "/v1/work-runs"), attention: await getJson(app, "/v1/founder-attention")};
+    const raw = {missions: await getJson(app, "/v1/missions"), runs: await getJson(app, "/v1/work-runs"), attention: await getJson(app, "/v1/attention")}; // //TR: /v1/attention tabanda kayıtlıdır: üç kaynağın hepsi GERÇEK sunucudan gelir
     const mm = core.mapQueueMissions(raw.missions), rm = core.mapQueueWorkRuns(raw.runs), am = core.mapQueueAttention(raw.attention);
     for (const r of [mm, rm, am]) expect(r.state).toBe("VERIFIED");
     expect(mm.missions.total).toBe(6);
     expect(rm.runs).toMatchObject({total: 3, awaiting: 2});
-    // Zamanlayıcı durumu yok: sunucu bunu PENDING bildirir ve engelli paket listesi boştur (gerçek sıfır).
-    expect(raw.attention.schedulerVerification).toBe("PENDING");
-    expect(am.attention).toMatchObject({total: 0, schedulerVerification: "PENDING"});
+    expect(am.attention).toMatchObject({total: 4, truncated: false, dropped: 0}); expect(am.attention.items).toHaveLength(4); // the real route also lists the four waiting records; none of them is a BLOCKED_ITEM kind
 
     const nowMs = Date.now() + 2 * H; // gerçek kayıtlar ~şimdi yazıldı: tüm bekleme süreleri ≈ 2 saat
     const q = core.buildQueue({missions: mm, runs: rm, attention: am}, nowMs);
@@ -200,7 +201,7 @@ describe("Queue — GENUINE control-api read-models flow through mappers, queue 
     expect(q.counts).toMatchObject({total: 4, byPriority: {1: 1, 2: 2, 3: 1}, byBand: {UNDER_1H: 0, UNDER_1D: 4, UNDER_7D: 0, OVER_7D: 0, UNKNOWN: 0}});
 
     const queue = await load("views", "queue.js"), forms = await load("forms.js");
-    const {ctx, calls, nav} = await mkCtx(async p => getJson(app, p), "en", nowMs);
+    const {ctx, calls, nav} = await mkCtx(async p => (p === "/v1/attention" ? attentionBody([]) : getJson(app, p)), "en", nowMs);
     const view: N = await queue.render(ctx);
     expect(calls.slice().sort()).toEqual(PATHS);
     expect(itemsOf(view).map(n => n.dataset.queueItem)).toEqual(q.items.map((i: any) => i.key));
@@ -215,8 +216,8 @@ describe("Queue — GENUINE control-api read-models flow through mappers, queue 
     expect(field(fa, "waiting")!.textContent).toContain("2 h 0 min");
     expect(allData(fa, "waitMs")[0].dataset.waitMs).toBe(String(by(`mission:${s.fa}`).waitMs));
     expect(field(itemFor(view, `run:${s.gateRun}`), "run")!.textContent).toContain(s.gateRun);
-    // Gerçek PENDING zamanlayıcı doğrulaması dürüstçe belirtilir; toplam yine de gerçek bir sıfırdır (engelli paket yok).
-    expect(byData(view, "note", "scheduler-verification")!.textContent).toBe("Scheduler verification: PENDING");
+    // Emekli scheduler doğrulama notu artık yoktur; dikkat kaynağı sağlam ve boştur.
+    expect(byData(view, "note", "scheduler-verification")).toBeUndefined();
     // Gezinme MEVCUT akışlara: mission -> Work (seçim ayarlanır), Gelen Kutusu -> inbox. Hiçbir geçiş/POST yok.
     click(all(fa).find(n => n.tagName === "BUTTON" && n.dataset.navigate === "work")!);
     expect(nav).toEqual(["work"]);
@@ -233,7 +234,7 @@ describe("Queue — GENUINE control-api read-models flow through mappers, queue 
     const p = store.createProject({tenantId: "tA", orgId: "org1", name: "Only a project", environmentId: "env-dev", createdBy: RECORDER});
     store.createMission({tenantId: "tA", projectId: p.projectId, title: "Draft only", objective: "o", acceptanceCriteria: ["ac"], riskLevel: "R1", createdBy: RECORDER});
     const app = mkApp();
-    const {root} = await renderView(async p2 => getJson(app, p2), "en", Date.now());
+    const {root} = await renderView(async p2 => getJson(app, p2), "en", Date.now()); // all three sources from the REAL server, including /v1/attention
     expect(itemsOf(root).length).toBe(0);
     expect(byData(root, "queueEmpty", "1")!.textContent).toContain("Nothing is awaiting human approval.");
     expect(kpiValue(root, "total")).toBe("0");
@@ -242,6 +243,25 @@ describe("Queue — GENUINE control-api read-models flow through mappers, queue 
     expect(allData(root, "tierEmpty").length).toBe(0);
     expect(allData(root, "queueTier").length).toBe(0);
     expect(surface(root)).not.toContain(FORBIDDEN);
+  });
+});
+
+describe("Queue (real server): a blocked mission arrives through the REAL /v1/attention route and is listed with an honest basis (review #196 g)", () => {
+  it("real MISSION_BLOCKED => BLOCKED_ITEM row from the real route; since = mission creation, no invented Waiting pill, no run row", async () => {
+    const store = new WorkOsStore(dataDir()), scope = {tenantId: "tA"};
+    const p = store.createProject({tenantId: "tA", orgId: "org1", name: "Blocked project", environmentId: "env-dev", createdBy: RECORDER});
+    const m = store.createMission({tenantId: "tA", projectId: p.projectId, title: "Really blocked mission", objective: "o", acceptanceCriteria: ["ac"], riskLevel: "R1", createdBy: RECORDER}).missionId;
+    for (const to of ["PREFLIGHT", "BLOCKED"]) store.transitionMission(scope, m, to as any, "go", RECORDER);
+    const app = mkApp();
+    const real = await getJson(app, "/v1/attention");
+    expect(real.attention.items.map((i: any) => [i.kind, i.missionId])).toEqual([["MISSION_BLOCKED", m]]); // the real route, not a fixture
+    const core = await load("queue-core.js");
+    const q = core.buildQueue({missions: core.mapQueueMissions(await getJson(app, "/v1/missions")), runs: core.mapQueueWorkRuns(await getJson(app, "/v1/work-runs")), attention: core.mapQueueAttention(real)}, Date.now() + H);
+    expect(q.complete).toBe(true); const row = q.items.find((i: any) => i.kind === "BLOCKED_ITEM");
+    expect(row).toMatchObject({key: `attention:MISSION_BLOCKED:${m}`, blockerKind: "MISSION_BLOCKED", basis: "MISSION_CREATED", missionTitle: "Really blocked mission", runId: null});
+    const {root} = await renderView(async p2 => getJson(app, p2), "en", Date.now() + H);
+    const li = itemFor(root, `attention:MISSION_BLOCKED:${m}`);
+    expect(li.textContent).toContain("Really blocked mission"); expect(li.textContent).toContain("Mission blocked"); expect(all(li).filter(n => "pill" in n.dataset).map(n => n.dataset.pill)).not.toContain("WAITING"); expect(field(li, "run")).toBeUndefined();
   });
 });
 
@@ -273,7 +293,7 @@ describe("Queue — only already-allow-listed read-only GETs are used (protected
     }
     const imports = moduleSpecifiers({source: read("views", "queue.js")}).sort();
     expect(imports).toEqual(["../components.js", "../forms.js", "../model.js", "../queue-core.js", "../work-core.js"]);
-    expect(moduleSpecifiers({source: read("queue-core.js")}).sort()).toEqual(["./executive-core.js", "./work-core.js"]);
+    expect(moduleSpecifiers({source: read("queue-core.js")}).sort()).toEqual(["./attention-core.js", "./executive-core.js", "./work-core.js"]);
     for (const m of ["queueAttention", "queueMissions", "queueWorkRuns"]) expect(read("views", "queue.js")).toContain(`api.${m}(`);
     // api.js: tek apiPost çağrısı korunur (yeni POST yolu eklenmez); kuyruk erişimcileri yalnız sabit GET yollarını okur.
     expect(read("api.js").match(/bridge\.apiPost\(/g)?.length).toBe(1);
@@ -284,12 +304,12 @@ describe("Queue — only already-allow-listed read-only GETs are used (protected
   it("the api layer requests exactly the three fixed paths, with no query string and no caller-chosen path", async () => {
     const {ctx, calls} = await mkCtx(serve());
     const core = await load("queue-core.js");
-    expect(core.QUEUE_SOURCE_PATHS).toEqual({attention: "/v1/founder-attention", missions: "/v1/missions", workRuns: "/v1/work-runs"});
+    expect(core.QUEUE_SOURCE_PATHS).toEqual({attention: "/v1/attention", missions: "/v1/missions", workRuns: "/v1/work-runs"});
     expect(core.QUEUE_SOURCES).toEqual(["attention", "missions", "workRuns"]);
     expect((await ctx.api.queueAttention()).state).toBe("VERIFIED");
     expect((await ctx.api.queueMissions()).state).toBe("VERIFIED");
     expect((await ctx.api.queueWorkRuns()).state).toBe("VERIFIED");
-    expect(calls).toEqual(["/v1/founder-attention", "/v1/missions", "/v1/work-runs"]);
+    expect(calls).toEqual(["/v1/attention", "/v1/missions", "/v1/work-runs"]);
     for (const m of ["queueAttention", "queueMissions", "queueWorkRuns"]) expect(ctx.api[m].length).toBe(0);
   });
   it("read failures are classified honestly by the api layer: OFFLINE / UNAVAILABLE / ERROR, and a malformed 200 is ERROR", async () => {
@@ -336,37 +356,19 @@ describe("Queue — pure mappers are fail-closed and never elevate state", () =>
     expect(core.mapQueueWorkRuns({runs: [runRow(R_REP, M_REP), runRow(R_REP, M_REP)]})).toEqual({state: "ERROR", runs: null});
     for (const raw of [null, [], "x", {}, {runs: {}}, {runs: [1]}]) expect(core.mapQueueWorkRuns(raw), JSON.stringify(raw)).toEqual({state: "ERROR", runs: null});
   });
-  it("mapQueueAttention carries real blocked items verbatim; a REJECTED scheduler is UNAVAILABLE (never zero); anything malformed is ERROR", async () => {
+  it("mapQueueAttention carries the server's items verbatim in severity order; a bad envelope is ERROR (never zero); unreadable items are dropped and counted; the retired scheduler fields mean nothing", async () => {
     const core = await load("queue-core.js");
     const ok = core.mapQueueAttention(attentionBody());
     expect(ok.state).toBe("VERIFIED");
-    expect(ok.attention).toEqual({total: 2, schedulerVerification: "VERIFIED", items: [
-      {packageId: "PKG-A", phase: 3, kind: "REVIEW_PENDING_PROVIDER_QUOTA", at: "2026-10-17T08:00:00.000Z", reason: "provider quota", retryable: true},
-      {packageId: null, phase: 0, kind: "FOUNDER_ATTENTION", at: null, reason: null, retryable: false}]});
-    expect(core.mapQueueAttention({blocked: []}).attention).toEqual({total: 0, items: [], schedulerVerification: null});
-    expect(core.mapQueueAttention({blocked: [], schedulerVerification: "PENDING"}).attention.schedulerVerification).toBe("PENDING");
-    expect(core.mapQueueAttention({blocked: [], schedulerVerification: "REJECTED", error: "SCHEDULER_STATE_INVALID"})).toEqual({state: "UNAVAILABLE", attention: null});
-    // phase string (paket kimliği biçimi) ve yalnız packageId kabul edilir.
-    expect(core.mapQueueAttention({blocked: [{phase: "P3", kind: "X"}, {packageId: "PKG-Z", kind: "X"}]}).state).toBe("VERIFIED");
+    expect(ok.attention.total).toBe(2); expect(ok.attention.truncated).toBe(false); expect(ok.attention.dropped).toBe(0);
+    expect(ok.attention.items.map((i: any) => [i.kind, i.nextAction, i.missionId, i.taskId, i.title, i.reason, i.since])).toEqual([
+      ["MISSION_BLOCKED", "REVIEW_MISSION", M_REP2, null, "Blocked mission", null, null],
+      ["TASK_BLOCKED", "UNBLOCK_TASK", M_EXE, TSK_A, "Blocked task", "waiting on a dependency", "2026-10-17T08:00:00.000Z"]]);
+    expect(core.mapQueueAttention(attentionBody([])).attention).toMatchObject({total: 0, items: [], dropped: 0});
+    const dropped = core.mapQueueAttention(attentionBody([ATTENTION_ITEMS[0], {kind: "X"}], {counts: {...countsOf(ATTENTION_ITEMS), TASK_BLOCKED: 2}}));
+    expect(dropped.attention).toMatchObject({total: 3, dropped: 1}); expect(dropped.attention.items).toHaveLength(1);
     const err = {state: "ERROR", attention: null};
-    const one = (item: any) => core.mapQueueAttention({blocked: [item]});
-    expect(one({kind: "X"}), "no identity").toEqual(err);
-    expect(one({packageId: "PKG-A"}), "no kind").toEqual(err);
-    expect(one({packageId: "PKG-A", kind: "bad kind!"})).toEqual(err);
-    expect(one({packageId: "PKG-A", kind: ["X"]})).toEqual(err);
-    expect(one({packageId: "has space", kind: "X"})).toEqual(err);
-    expect(one({packageId: 5, kind: "X"})).toEqual(err);
-    expect(one({phase: -1, kind: "X"})).toEqual(err);
-    expect(one({phase: 1.5, kind: "X"})).toEqual(err);
-    expect(one({phase: {}, kind: "X"})).toEqual(err);
-    expect(one({packageId: "PKG-A", kind: "X", at: "not-a-date"})).toEqual(err);
-    expect(one({packageId: "PKG-A", kind: "X", at: 123})).toEqual(err);
-    expect(one({packageId: "PKG-A", kind: "X", reason: 5})).toEqual(err);
-    expect(one({packageId: "PKG-A", kind: "X", retryable: "yes"})).toEqual(err);
-    expect(one("x")).toEqual(err);
-    expect(core.mapQueueAttention({blocked: [{packageId: "PKG-A", phase: 1, kind: "X"}, {packageId: "PKG-A", phase: 1, kind: "Y"}]}), "duplicate").toEqual(err);
-    expect(core.mapQueueAttention({blocked: [], schedulerVerification: "bad value"})).toEqual(err);
-    for (const raw of [null, undefined, [], "x", 1, {}, {blocked: {}}, {blocked: "x"}]) expect(core.mapQueueAttention(raw), JSON.stringify(raw)).toEqual(err);
+    for (const raw of [null, undefined, [], "x", 1, {}, {blocked: []}, {blocked: [], schedulerVerification: "VERIFIED"}, {blocked: [], schedulerVerification: "REJECTED", error: "SCHEDULER_STATE_INVALID"}, {attention: null}, attentionBody([], {source: "SCHEDULER"}), attentionBody([], {truncated: 1}), attentionBody(ATTENTION_ITEMS, {counts: {}}), attentionBody(ATTENTION_ITEMS, {counts: countsOf([])})]) expect(core.mapQueueAttention(raw), JSON.stringify(raw)).toEqual(err);
   });
   it("waitSince derives elapsed time only from a usable timestamp; band edges are exact; future or missing times are unknown (never invented)", async () => {
     const core = await load("queue-core.js");
@@ -394,8 +396,8 @@ describe("Queue — pure mappers are fail-closed and never elevate state", () =>
 // ---------------- (4) queue derivation ----------------
 async function derive(over: Record<string, any> = {}, nowMs = NOW) {
   const core = await load("queue-core.js");
-  const body = {"/v1/missions": MISSIONS, "/v1/work-runs": RUNS, "/v1/founder-attention": attentionBody(), ...over};
-  const res = {missions: core.mapQueueMissions(body["/v1/missions"]), runs: core.mapQueueWorkRuns(body["/v1/work-runs"]), attention: core.mapQueueAttention(body["/v1/founder-attention"])};
+  const body = {"/v1/missions": MISSIONS, "/v1/work-runs": RUNS, "/v1/attention": attentionBody(), ...over};
+  const res = {missions: core.mapQueueMissions(body["/v1/missions"]), runs: core.mapQueueWorkRuns(body["/v1/work-runs"]), attention: core.mapQueueAttention(body["/v1/attention"])};
   return {core, res, q: core.buildQueue(res, nowMs)};
 }
 describe("Queue — derivation is from recorded state only, deterministic, and never invents SLA or counts", () => {
@@ -409,8 +411,9 @@ describe("Queue — derivation is from recorded state only, deterministic, and n
       [3, [K.pf, K.pf2]]]);
     const by = (k: string) => q.items.find((i: any) => i.key === k);
     expect(by(K.fa)).toMatchObject({kind: "FOUNDER_ATTENTION", waitMs: 6 * H, band: "UNDER_1D", basis: "MISSION_CREATED", riskLevel: "R3", title: "Needs founder"});
-    expect(by(K.pkg)).toMatchObject({kind: "BLOCKED_PACKAGE", waitMs: 4 * H, basis: "BLOCKED_AT", packageId: "PKG-A", phase: 3, blockerKind: "REVIEW_PENDING_PROVIDER_QUOTA", reason: "provider quota", retryable: true, title: null, riskLevel: null});
-    expect(by(K.ph0)).toMatchObject({kind: "BLOCKED_PACKAGE", waitMs: null, band: null, basis: null, since: null, packageId: null, phase: 0, retryable: false});
+    expect(by(K.pkg)).toMatchObject({kind: "BLOCKED_ITEM", waitMs: 4 * H, basis: "ATTENTION_SINCE", taskId: TSK_A, runId: null, nextAction: "UNBLOCK_TASK", blockerKind: "TASK_BLOCKED", reason: "waiting on a dependency", title: "Blocked task", missionId: M_EXE});
+    expect(by(K.ph0)).toMatchObject({kind: "BLOCKED_ITEM", waitMs: null, band: null, basis: null, since: null, taskId: null, nextAction: "REVIEW_MISSION", blockerKind: "MISSION_BLOCKED", title: "Blocked mission"});
+    for (const i of q.items.filter((x: any) => x.kind === "BLOCKED_ITEM")) { expect(i).not.toHaveProperty("packageId"); expect(i).not.toHaveProperty("retryable"); expect(i).not.toHaveProperty("phase"); }
     expect(by(K.gate)).toMatchObject({kind: "RUN_GATE", waitMs: 7 * D1, band: "OVER_7D", basis: "RUN_UPDATED", title: "Executing with gate", missionStatus: "EXECUTING", step: "REPORT"});
     expect(by(K.rep)).toMatchObject({kind: "DELIVERY_DECISION", waitMs: 2 * H, band: "UNDER_1D", missionStatus: "REPORTING", riskLevel: "R2"});
     expect(by(K.pf)).toMatchObject({kind: "AUTHORIZATION", waitMs: 3 * D1, band: "UNDER_7D", riskLevel: "R4"});
@@ -419,7 +422,7 @@ describe("Queue — derivation is from recorded state only, deterministic, and n
     const keys = q.items.map((i: any) => i.key);
     for (const k of [`mission:${M_DONE}`, `mission:${M_REP2}`, `mission:${M_EXE}`, `mission:${M_REP}`, `run:${R_BUSY}`, `run:${R_OK}`]) expect(keys, k).not.toContain(k);
     expect(q.counts).toEqual({total: 7, byPriority: {1: 3, 2: 2, 3: 2}, byBand: {UNDER_1H: 1, UNDER_1D: 3, UNDER_7D: 1, OVER_7D: 1, UNKNOWN: 1}, longestWaitMs: 7 * D1});
-    expect(q.schedulerVerification).toBe("VERIFIED");
+    expect(q).not.toHaveProperty("schedulerVerification"); expect(q.attentionNotes).toEqual({truncated: false, dropped: 0});
   });
   it("the same inputs always give the same order; equal waits fall back to higher risk and then to the identifier", async () => {
     const same = {missions: [
@@ -427,8 +430,8 @@ describe("Queue — derivation is from recorded state only, deterministic, and n
       missionRow(MSN("b2"), {status: "PREFLIGHT", riskLevel: "R4", createdAt: "2026-10-17T10:00:00.000Z"}),
       missionRow(MSN("c3"), {status: "PREFLIGHT", riskLevel: "R4", createdAt: "2026-10-17T10:00:00.000Z"}),
       missionRow(MSN("d4"), {status: "PREFLIGHT", riskLevel: "R0", createdAt: "2026-10-17T09:00:00.000Z"})]};
-    const a = (await derive({"/v1/missions": same, "/v1/work-runs": {runs: []}, "/v1/founder-attention": attentionBody([])})).q;
-    const b = (await derive({"/v1/missions": {missions: [...same.missions].reverse()}, "/v1/work-runs": {runs: []}, "/v1/founder-attention": attentionBody([])})).q;
+    const a = (await derive({"/v1/missions": same, "/v1/work-runs": {runs: []}, "/v1/attention": attentionBody([])})).q;
+    const b = (await derive({"/v1/missions": {missions: [...same.missions].reverse()}, "/v1/work-runs": {runs: []}, "/v1/attention": attentionBody([])})).q;
     const order = (q: any) => q.items.map((i: any) => i.key);
     // En uzun bekleyen (R0, 3 sa) önce; eşit beklemelerde R4 > R1; R4'ler arasında kimlik sırası.
     expect(order(a)).toEqual([`mission:${MSN("d4")}`, `mission:${MSN("b2")}`, `mission:${MSN("c3")}`, `mission:${MSN("a1")}`]);
@@ -467,15 +470,15 @@ describe("Queue — derivation is from recorded state only, deterministic, and n
     const noRuns = (await derive({"/v1/work-runs": {runs: "x"}})).q;
     expect(noRuns.items.map((i: any) => i.key).sort()).toEqual([K.fa, K.pf, K.pf2, K.pkg, K.ph0].sort());
     // founder-attention okunamaz: yalnız mission/koşu öğeleri.
-    const noAtt = (await derive({"/v1/founder-attention": {schedulerVerification: "REJECTED"}})).q;
+    const noAtt = (await derive({"/v1/attention": {x: 1}})).q;
     expect(noAtt.items.map((i: any) => i.key).sort()).toEqual([K.fa, K.pf, K.pf2, K.rep, K.gate].sort());
   });
   it("an incomplete queue never reports counts, totals or a longest wait (null), and names the unreadable sources", async () => {
     for (const [over, unreadable, state] of [
-      [{"/v1/founder-attention": {schedulerVerification: "REJECTED"}}, ["attention"], "UNAVAILABLE"],
+      [{"/v1/attention": {x: 1}}, ["attention"], "ERROR"],
       [{"/v1/missions": {x: 1}}, ["missions"], "ERROR"],
       [{"/v1/work-runs": {runs: [{}]}}, ["workRuns"], "ERROR"],
-      [{"/v1/missions": {x: 1}, "/v1/work-runs": {x: 1}, "/v1/founder-attention": {x: 1}}, ["attention", "missions", "workRuns"], "ERROR"]] as const) {
+      [{"/v1/missions": {x: 1}, "/v1/work-runs": {x: 1}, "/v1/attention": {x: 1}}, ["attention", "missions", "workRuns"], "ERROR"]] as const) {
       const {q} = await derive(over as any);
       expect(q.complete).toBe(false);
       expect(q.counts).toBeNull();
@@ -490,10 +493,10 @@ describe("Queue — derivation is from recorded state only, deterministic, and n
   });
   it("waits and bands are never faked: missing or future timestamps are unknown, and an empty complete queue has real zeros", async () => {
     const future = {missions: [missionRow(M_PF, {status: "PREFLIGHT", createdAt: "2026-10-18T00:00:00.000Z"})]};
-    const {q} = await derive({"/v1/missions": future, "/v1/work-runs": {runs: []}, "/v1/founder-attention": attentionBody([])});
+    const {q} = await derive({"/v1/missions": future, "/v1/work-runs": {runs: []}, "/v1/attention": attentionBody([])});
     expect(q.items[0]).toMatchObject({waitMs: null, band: null});
     expect(q.counts).toMatchObject({total: 1, longestWaitMs: null, byBand: {UNKNOWN: 1, UNDER_1H: 0}});
-    const empty = (await derive({"/v1/missions": {missions: []}, "/v1/work-runs": {runs: []}, "/v1/founder-attention": attentionBody([])})).q;
+    const empty = (await derive({"/v1/missions": {missions: []}, "/v1/work-runs": {runs: []}, "/v1/attention": attentionBody([])})).q;
     expect(empty.complete).toBe(true);
     expect(empty.items).toEqual([]);
     expect(empty.counts).toEqual({total: 0, byPriority: {1: 0, 2: 0, 3: 0}, byBand: {UNDER_1H: 0, UNDER_1D: 0, UNDER_7D: 0, OVER_7D: 0, UNKNOWN: 0}, longestWaitMs: null});
@@ -501,8 +504,8 @@ describe("Queue — derivation is from recorded state only, deterministic, and n
   });
   it("priority is only a documented display order derived from the item kind (no recorded field is claimed)", async () => {
     const core = await load("queue-core.js");
-    expect(core.QUEUE_KINDS).toEqual(["FOUNDER_ATTENTION", "BLOCKED_PACKAGE", "DELIVERY_DECISION", "RUN_GATE", "MISSION_STATUS_UNKNOWN", "AUTHORIZATION"]);
-    expect(core.PRIORITY_OF_KIND).toEqual({FOUNDER_ATTENTION: 1, BLOCKED_PACKAGE: 1, DELIVERY_DECISION: 2, RUN_GATE: 2, MISSION_STATUS_UNKNOWN: 2, AUTHORIZATION: 3});
+    expect(core.QUEUE_KINDS).toEqual(["FOUNDER_ATTENTION", "BLOCKED_ITEM", "DELIVERY_DECISION", "RUN_GATE", "MISSION_STATUS_UNKNOWN", "AUTHORIZATION"]);
+    expect(core.PRIORITY_OF_KIND).toEqual({FOUNDER_ATTENTION: 1, BLOCKED_ITEM: 1, DELIVERY_DECISION: 2, RUN_GATE: 2, MISSION_STATUS_UNKNOWN: 2, AUTHORIZATION: 3});
     expect(core.PRIORITIES).toEqual([1, 2, 3]);
     const src = read("queue-core.js");
     expect(src).not.toMatch(/\bsla(Target|Breach|Deadline|Status)\b|\boverdue\b|\bbreached\b/i);
@@ -539,15 +542,17 @@ describe("Queue — view honesty", () => {
     expect(field(fa, "waiting")!.textContent).toContain("6 h 0 min");
     expect(field(fa, "waiting")!.textContent).toContain("since the mission was created (no status-change time is recorded)");
     const pkg = itemFor(root, K.pkg);
-    expect(pkg.textContent).toContain("PKG-A");
-    expect(field(pkg, "blocker")!.textContent).toContain("REVIEW_PENDING_PROVIDER_QUOTA");
-    expect(field(pkg, "reason")!.textContent).toBe("provider quota");
-    expect(field(pkg, "retryable")!.textContent).toContain("Allowed (as reported by the server)");
+    expect(pkg.textContent).toContain("Blocked task");
+    expect(field(pkg, "task")!.textContent).toBe(TSK_A);
+    expect(field(pkg, "blocker")!.textContent).toContain("Task blocked");
+    expect(field(pkg, "next")!.textContent).toBe("Unblock the task");
+    expect(field(pkg, "reason")!.textContent).toBe("waiting on a dependency");
+    expect(field(pkg, "retryable")).toBeUndefined();
     expect(field(pkg, "waiting")!.textContent).toContain("4 h 0 min");
-    expect(field(pkg, "waiting")!.textContent).toContain("since it was recorded as blocked");
+    expect(field(pkg, "waiting")!.textContent).toContain("since the server recorded it");
     // Süresi bilinmeyen öğe: "—" ve açık "bilinmiyor" metni, uydurma süre yok.
     const ph0 = itemFor(root, K.ph0);
-    expect(ph0.textContent).toContain("Phase 0");
+    expect(ph0.textContent).toContain("Blocked mission");
     expect(field(ph0, "waiting")!.textContent).toBe("Unknown — no usable recorded time");
     expect(allData(ph0, "waitMs")[0].dataset.waitMs).toBe("—");
     expect(ph0.dataset.band).toBe("UNKNOWN");
@@ -576,8 +581,8 @@ describe("Queue — view honesty", () => {
     const scenarios: Array<[string, (p: string) => any]> = [
       ["full", serve()], ["carrying-forbidden", serve({"/v1/work-runs": carrying})],
       ["offline", () => { throw new Error("fetch failed"); }], ["unavailable", () => fail("x", 404)], ["error", () => fail("x", 500)], ["malformed", () => ({nonsense: true})],
-      ["empty", serve({"/v1/work-runs": {runs: []}, "/v1/missions": {missions: []}, "/v1/founder-attention": attentionBody([])})],
-      ["partial-attention", serve({"/v1/founder-attention": {schedulerVerification: "REJECTED", blocked: []}})],
+      ["empty", serve({"/v1/work-runs": {runs: []}, "/v1/missions": {missions: []}, "/v1/attention": attentionBody([])})],
+      ["partial-attention", serve({"/v1/attention": undefined})],
       ["partial-missions", (p: string) => (p === "/v1/missions" ? fail(p, 500) : serve()(p))],
       ["partial-runs", (p: string) => (p === "/v1/work-runs" ? fail(p, 404) : serve()(p))]];
     for (const lang of ["en", "tr"]) for (const [name, fn] of scenarios) {
@@ -590,8 +595,8 @@ describe("Queue — view honesty", () => {
     }
   });
   it("each source fails independently with its own honest state; healthy sources stay intact and figures are withheld", async () => {
-    // founder-attention reddedildi (UNAVAILABLE): mission/koşu öğeleri listelenir, sayılar gösterilmez, kuyruk eksik bildirilir.
-    let r = await renderView(serve({"/v1/founder-attention": {schedulerVerification: "REJECTED", blocked: []}}));
+    // /v1/attention okunamadı (404 => UNAVAILABLE): mission/koşu öğeleri listelenir, sayılar gösterilmez, kuyruk eksik bildirilir.
+    let r = await renderView(serve({"/v1/attention": undefined}));
     expect(allData(r.root, "queueState").map(n => [n.dataset.source, n.dataset.queueState])).toEqual([["attention", "UNAVAILABLE"]]);
     expect(allData(r.root, "source").filter(n => n.tagName === "LI").map(n => [n.dataset.source, n.dataset.sourceState])).toEqual([["attention", "UNAVAILABLE"], ["missions", "VERIFIED"], ["workRuns", "VERIFIED"]]);
     expect(itemsOf(r.root).map(n => n.dataset.queueItem)).toEqual([K.fa, K.gate, K.rep, K.pf, K.pf2]);
@@ -601,7 +606,7 @@ describe("Queue — view honesty", () => {
     expect(byData(r.root, "longestWait")!.dataset.longestWait).toBe("—");
     expect(allData(r.root, "bandCount").every(n => n.dataset.bandCount === "—")).toBe(true);
     expect(allData(r.root, "tierEmpty").length).toBe(0);
-    expect(byData(r.root, "queueState")!.textContent).toContain("GET /v1/founder-attention");
+    expect(byData(r.root, "queueState")!.textContent).toContain("GET /v1/attention");
     // mission listesi bozuk (ERROR): hiçbir mission öğesi yok; koşular başlıksız, mission durumu BİLİNMİYOR olarak listelenir —
     // okunamayan bir mission durumu hakkında ("REPORTING değil" gibi) hiçbir iddia kurulmaz (fixture'da K.rep'in mission'ı gerçekte REPORTING'dir).
     r = await renderView(serve({"/v1/missions": {missions: [{...MISSIONS.missions[0], riskLevel: "R9"}]}}));
@@ -687,13 +692,13 @@ describe("Queue — view honesty", () => {
     expect(allData(root, "queueState").map(n => [n.dataset.source, n.dataset.queueState])).toEqual([["workRuns", "ERROR"]]);
     expect(itemsOf(root).map(n => n.dataset.queueItem)).toEqual([K.fa, K.pkg, K.ph0, K.pf, K.pf2]); // sağlam ilk koşu bile gösterilmez
     expect(kpiValue(root, "total")).toBe("—");
-    const badAtt = await renderView(serve({"/v1/founder-attention": attentionBody([ATTENTION_ITEMS[0], {kind: "X"}])}));
+    const badAtt = await renderView(serve({"/v1/attention": {attention: {items: [], counts: {}, truncated: false, source: "WORKOS"}}}));
     expect(allData(badAtt.root, "queueState").map(n => [n.dataset.source, n.dataset.queueState])).toEqual([["attention", "ERROR"]]);
-    expect(itemsOf(badAtt.root).some(n => n.dataset.kind === "BLOCKED_PACKAGE")).toBe(false);
+    expect(itemsOf(badAtt.root).some(n => n.dataset.kind === "BLOCKED_ITEM")).toBe(false);
   });
   it("honest empty state: nothing waiting is a readable zero with explicit text, not a made-up number", async () => {
     const calm = {missions: [missionRow(M_EXE), missionRow(M_DONE, {status: "COMPLETE"})]};
-    const {root} = await renderView(serve({"/v1/missions": calm, "/v1/work-runs": {runs: [runRow(R_BUSY, M_EXE, {status: "RUNNING", step: "IMPLEMENT"})]}, "/v1/founder-attention": attentionBody([])}));
+    const {root} = await renderView(serve({"/v1/missions": calm, "/v1/work-runs": {runs: [runRow(R_BUSY, M_EXE, {status: "RUNNING", step: "IMPLEMENT"})]}, "/v1/attention": attentionBody([])}));
     expect(itemsOf(root).length).toBe(0);
     expect(byData(root, "queueEmpty", "1")!.textContent).toBe("Nothing is awaiting human approval. All three read-only sources were read successfully and none lists an item that needs a decision.");
     expect(kpiValue(root, "total")).toBe("0");
@@ -705,19 +710,19 @@ describe("Queue — view honesty", () => {
   });
   it("an empty result from a partly unreadable queue is never called empty, and an empty tier says whether the queue is complete", async () => {
     const calm = {missions: [missionRow(M_EXE)]}, noRuns = {runs: []};
-    let r = await renderView(serve({"/v1/missions": calm, "/v1/work-runs": noRuns, "/v1/founder-attention": {schedulerVerification: "REJECTED", blocked: []}}));
+    let r = await renderView(serve({"/v1/missions": calm, "/v1/work-runs": noRuns, "/v1/attention": undefined}));
     expect(itemsOf(r.root).length).toBe(0);
     expect(byData(r.root, "queueEmpty", "unknown")!.textContent).toBe("No items were found in the readable sources, but the queue cannot be called empty because Founder attention could not be read.");
     expect(byData(r.root, "queueEmpty", "1")).toBeUndefined();
     expect(kpiValue(r.root, "total")).toBe("—");
     // Yalnız PREFLIGHT mission: 1. ve 2. düzey boştur; tam kuyrukta "öğe yok", eksik kuyrukta "okunabilen kaynaklarda öğe yok (kuyruk eksik)".
     const pre = {missions: [missionRow(M_PF, {status: "PREFLIGHT", createdAt: "2026-10-17T11:00:00.000Z"})]};
-    r = await renderView(serve({"/v1/missions": pre, "/v1/work-runs": noRuns, "/v1/founder-attention": attentionBody([])}));
+    r = await renderView(serve({"/v1/missions": pre, "/v1/work-runs": noRuns, "/v1/attention": attentionBody([])}));
     expect(allData(r.root, "tierEmpty").map(n => [n.dataset.tierEmpty, n.textContent])).toEqual([["1", "No items at this priority."], ["2", "No items at this priority."]]);
     expect(allData(r.root, "queueTier").map(n => n.dataset.queueTier)).toEqual(["3"]);
     expect(kpiValue(r.root, "p1")).toBe("0");
     expect(kpiValue(r.root, "p3")).toBe("1");
-    r = await renderView(serve({"/v1/missions": pre, "/v1/work-runs": {runs: "x"}, "/v1/founder-attention": attentionBody([])}));
+    r = await renderView(serve({"/v1/missions": pre, "/v1/work-runs": {runs: "x"}, "/v1/attention": attentionBody([])}));
     expect(allData(r.root, "tierEmpty").map(n => n.textContent)).toEqual(["No items at this priority in the readable sources (the queue is incomplete).", "No items at this priority in the readable sources (the queue is incomplete)."]);
     expect(kpiValue(r.root, "p1")).toBe("—");
     // Tier başlığındaki sayı yalnız LİSTELENEN öğe sayısıdır (toplam iddiası değil).
@@ -726,7 +731,7 @@ describe("Queue — view honesty", () => {
   });
   it("very long queues are truncated honestly (the first 200 shown, the real total stated)", async () => {
     const many = {missions: Array.from({length: 205}, (_, i) => missionRow("msn_" + i.toString(16).padStart(24, "0"), {status: "PREFLIGHT", title: `T${i}`, createdAt: new Date(NOW - (i + 1) * 60000).toISOString()}))};
-    const {root} = await renderView(serve({"/v1/missions": many, "/v1/work-runs": {runs: []}, "/v1/founder-attention": attentionBody([])}));
+    const {root} = await renderView(serve({"/v1/missions": many, "/v1/work-runs": {runs: []}, "/v1/attention": attentionBody([])}));
     expect(itemsOf(root).length).toBe(200);
     expect(byData(root, "note", "truncated")!.textContent).toBe("Showing the first 200 of 205 items (priority first, longest wait first within a priority).");
     expect(kpiValue(root, "total")).toBe("205");
@@ -737,8 +742,8 @@ describe("Queue — view honesty", () => {
   });
   it("API text is rendered as text only (no markup interpretation)", async () => {
     const m = {missions: [missionRow(M_PF, {status: "PREFLIGHT", title: "<b>x</b>"})]};
-    const a = attentionBody([{packageId: "PKG-A", kind: "X", reason: "<img src=x onerror=alert(1)>", at: "2026-10-17T08:00:00.000Z"}]);
-    const {root} = await renderView(serve({"/v1/missions": m, "/v1/work-runs": {runs: []}, "/v1/founder-attention": a}));
+    const a = attentionBody([{...ATTENTION_ITEMS[0], title: "<i>t</i>", reason: "<img src=x onerror=alert(1)>"}]);
+    const {root} = await renderView(serve({"/v1/missions": m, "/v1/work-runs": {runs: []}, "/v1/attention": a}));
     expect(all(root).some(n => n.tagName === "IMG" || n.tagName === "B")).toBe(false);
     expect(root.textContent).toContain("<b>x</b>");
     expect(root.textContent).toContain("<img src=x onerror=alert(1)>");
@@ -761,8 +766,8 @@ describe("Queue — view honesty", () => {
     const root: N = await queue.render(ctx);
     const buttons = all(root).filter(n => n.tagName === "BUTTON");
     expect(buttons.length).toBeGreaterThan(0);
-    // Mission'lı 6 öğe -> Work; Gelen Kutusu: RUN_GATE hariç 6 öğe (3 mission/koşu + 2 paket + ...); RUN_GATE yalnız Work.
-    expect(buttons.filter(n => n.dataset.navigate === "work").length).toBe(5);
+    // Mission'lı 7 öğe -> Work (artık iki engelli öğe de mission taşır); Gelen Kutusu: RUN_GATE hariç 6 öğe; RUN_GATE yalnız Work.
+    expect(buttons.filter(n => n.dataset.navigate === "work").length).toBe(7);
     expect(buttons.filter(n => n.dataset.navigate === "inbox").length).toBe(6);
     for (const b of buttons) click(b);
     expect(nav.length).toBe(buttons.length);
@@ -881,7 +886,7 @@ describe("Queue — locale parity and key coverage", () => {
     for (const k of core.WAIT_BASES) need.add(`queue.basis.${k}`);
     for (const p of core.PRIORITIES) { need.add(`queue.tier.${p}`); need.add(`queue.tier.${p}.desc`); }
     for (const k of ["OFFLINE", "UNAVAILABLE", "ERROR"]) { need.add(`queue.state.${k}`); need.add(`queue.hint.${k}`); }
-    for (const k of ["needs", "mission", "run", "package", "phase", "blocker", "reason", "retryable", "risk", "waiting", "band"]) need.add(`queue.field.${k}`);
+    for (const k of ["needs", "mission", "run", "task", "next", "blocker", "reason", "risk", "waiting", "band"]) need.add(`queue.field.${k}`);
     for (const k of ["dh", "hm", "m", "lt1m", "unknown"]) need.add(`queue.wait.${k}`);
     need.add("area.queue.title"); need.add("area.queue.desc");
     expect([...need].filter(k => !(k in en))).toEqual([]);
@@ -933,5 +938,99 @@ describe("Queue — route delegation (app.js VIEWS unchanged)", () => {
     for (const lang of ["en", "tr"]) for (const r of routes.ROUTES) expect(i18n.translate(lang, `area.${r.id}.title`), `${lang}/${r.id}`).not.toBe(`area.${r.id}.title`);
     expect(i18n.translate("tr", "area.queue.title")).toBe("İnsan Onayı Bekleyen İş Kuyruğu");
     expect(i18n.translate("en", "area.queue.desc")).toContain("Read-only.");
+  });
+});
+
+// //TR: LANE-A Kuyruk dikkat kaynağı artık GET /v1/attention: yalnız burada türetilmeyen üç tür kuyruğa girer, çifte sayım yok, kesilme/atılma açıkça söylenir.
+describe("LANE-A Queue on GET /v1/attention", () => {
+  const item = (over: Record<string, any>) => ({...ATTENTION_ITEMS[0], ...over});
+  const RUN_ITEM = (over: Record<string, any> = {}) => item({kind: "RUN_NEEDS_DECISION", nextAction: "REVIEW_RUN", runId: R_OK, taskId: null, title: "Failed run", reason: "tests failed", since: "2026-10-17T10:00:00.000Z", ...over});
+  it("only RUN_NEEDS_DECISION, MISSION_BLOCKED and TASK_BLOCKED become queue rows; the three kinds the mission and run sources already give are not counted twice", async () => {
+    const dup = [item({kind: "RUN_AWAITING_APPROVAL", nextAction: "ACCEPT_DELIVERY", runId: R_REP, taskId: null}), item({kind: "MISSION_FOUNDER_ATTENTION", nextAction: "REVIEW_MISSION", taskId: null}), item({kind: "MISSION_AUTHORIZATION_PENDING", nextAction: "AUTHORIZE_MISSION", taskId: null}), RUN_ITEM(), ...ATTENTION_ITEMS];
+    const {q, core} = await derive({"/v1/attention": attentionBody(dup)});
+    expect(core.QUEUE_ATTENTION_KINDS).toEqual(["RUN_NEEDS_DECISION", "MISSION_BLOCKED", "TASK_BLOCKED"]);
+    const rows = q.items.filter((i: any) => i.kind === "BLOCKED_ITEM");
+    expect(rows.map((i: any) => i.blockerKind).sort()).toEqual(["MISSION_BLOCKED", "RUN_NEEDS_DECISION", "TASK_BLOCKED"]);
+    expect(rows.find((i: any) => i.blockerKind === "RUN_NEEDS_DECISION")).toMatchObject({key: `attention:RUN_NEEDS_DECISION:${R_OK}`, runId: R_OK, nextAction: "REVIEW_RUN", reason: "tests failed", basis: "RUN_UPDATED", priority: 1}); // the server's since for a run needing a decision is the run's last update, not "when the server recorded it"
+    expect(q.items.filter((i: any) => i.key === K.rep || i.key === K.fa || i.key === K.pf)).toHaveLength(3); // the same work, once, from the mission/run sources
+    expect(q.items).toHaveLength(7 + 1);
+  });
+  it("the source strip says when the server cut its list or when items could not be read, and shows the retired scheduler note nowhere", async () => {
+    const trunc = await renderView(serve({"/v1/attention": attentionBody(Array.from({length: 200}, (_, i) => item({taskId: "tsk_" + String(i).padStart(24, "a")})), {truncated: true, counts: {...countsOf([]), TASK_BLOCKED: 250}})}));
+    expect(byData(trunc.root, "note", "attention-truncated")!.textContent).toBe("The server cut its list; more items exist than are counted here.");
+    expect(byData(trunc.root, "note", "scheduler-verification")).toBeUndefined();
+    const drop = await renderView(serve({"/v1/attention": attentionBody([ATTENTION_ITEMS[0], {kind: "NEW"}], {counts: {...countsOf([]), TASK_BLOCKED: 2}})}));
+    const n = byData(drop.root, "note", "attention-dropped")!; expect(n.dataset.dropped).toBe("1"); expect(n.textContent).toBe("1 item(s) from the server could not be read and are not listed.");
+    const clean = await renderView(serve());
+    expect(byData(clean.root, "note", "attention-truncated")).toBeUndefined(); expect(byData(clean.root, "note", "attention-dropped")).toBeUndefined();
+  });
+  it("a truncated attention list makes the queue incomplete: the row-cap note shows NO total taken from the cut list (no 'of 205'), in en and tr (review #196 d)", async () => {
+    const cut = attentionBody(Array.from({length: 200}, (_, i) => item({taskId: "tsk_" + String(i).padStart(24, "a")})), {truncated: true, counts: {...countsOf([]), TASK_BLOCKED: 250}});
+    for (const [lang, text] of [["en", "Showing the first 200 listed items (priority first, longest wait first within a priority). The queue is incomplete, so no total is available."], ["tr", "Listelenen öğelerin ilk 200 tanesi gösteriliyor (önce öncelik, öncelik içinde en uzun bekleyen önce). Kuyruk eksik olduğu için toplam yoktur."]] as const) {
+      const r = await renderView(serve({"/v1/attention": cut}), lang);
+      const n = byData(r.root, "note", "truncated")!; expect(n.textContent, lang).toBe(text); expect(n.textContent).not.toMatch(/of 20\d|205|öğenin ilk/);
+    }
+    const full = await renderView(serve({"/v1/attention": attentionBody(Array.from({length: 200}, (_, i) => item({taskId: "tsk_" + String(i).padStart(24, "a")})))}));
+    expect(byData(full.root, "note", "truncated")!.textContent).toMatch(/^Showing the first 200 of 2\d\d items/); // a complete queue still states its real total
+  });
+  it("a blocked item shows its mission status when the mission is known and never asserts one when the mission list is unreadable", async () => {
+    const known = await renderView(serve());
+    expect(field(itemFor(known.root, K.pkg), "mission")!.textContent).toContain(M_EXE);
+    expect(itemFor(known.root, K.pkg).textContent).toContain("Blocked task");
+    expect(field(itemFor(known.root, K.pkg), "mission")!.textContent).toContain("Executing with gate"); // the MISSION's title, not the task's
+    expect(allData(itemFor(known.root, K.pkg), "status").map(n => n.dataset.status)).toContain("EXECUTING");
+    const unread = await renderView(serve({"/v1/missions": undefined}));
+    expect(allData(itemFor(unread.root, K.pkg), "status").map(n => n.dataset.status)).not.toContain("EXECUTING");
+    expect(field(itemFor(unread.root, K.pkg), "mission")!.textContent).toContain("Mission title unavailable");
+  });
+});
+
+// //TR: #196 incelemesi (HIGH/MED): dikkat kaynağı kesik ya da okunamayan öğe içeriyorsa kuyruk eksiktir (boş/VERIFIED/sayılı gösterilmez); BLOCKED_ITEM için uydurma "Waiting" rozeti yoktur; since'in anlamı türe göre söylenir; kaynak adı canlı kaynaktır.
+describe("LANE-A Queue: a cut or partly unreadable attention list is never empty or counted (review #196)", () => {
+  const zero = {RUN_AWAITING_APPROVAL: 0, MISSION_FOUNDER_ATTENTION: 0, RUN_NEEDS_DECISION: 0, MISSION_AUTHORIZATION_PENDING: 0, MISSION_BLOCKED: 0, TASK_BLOCKED: 0};
+  const none = {"/v1/missions": {missions: []}, "/v1/work-runs": {runs: []}};
+  const cut = () => attentionBody(Array.from({length: 200}, (_, i) => ({...ATTENTION_ITEMS[0], taskId: "tsk_" + (i + 1).toString(16).padStart(24, "a")})), {truncated: true, counts: {...zero, TASK_BLOCKED: 250}});
+  const dropped = () => attentionBody([{kind: "NEW"}], {counts: {...zero, TASK_BLOCKED: 1}});
+  it("core: dropped or truncated attention makes the queue incomplete (counts null, no 'empty'), with a distinct NOT_VERIFIED state; a failing source keeps its own state", async () => {
+    const d = await derive({...none, "/v1/attention": dropped()});
+    expect(d.q).toMatchObject({complete: false, partial: true, incompleteState: "NOT_VERIFIED", counts: null, unreadable: []}); expect(d.q.sources.attention.state).toBe("NOT_VERIFIED"); expect(d.q.items).toEqual([]);
+    const t = await derive({...none, "/v1/attention": cut()});
+    expect(t.q).toMatchObject({complete: false, partial: true, incompleteState: "NOT_VERIFIED", counts: null}); expect(t.q.items).toHaveLength(200);
+    const ok = await derive({...none, "/v1/attention": attentionBody([])});
+    expect(ok.q).toMatchObject({complete: true, partial: false, incompleteState: null}); expect(ok.q.counts.total).toBe(0);
+    const off = await derive({"/v1/attention": {state: "OFFLINE"}});
+    expect(off.q.partial).toBe(false);
+  });
+  it("view: one dropped item => no 'Nothing is awaiting', queueEmpty=unknown, total not shown, source strip NOT_VERIFIED with the dropped note", async () => {
+    const r = await renderView(serve({...none, "/v1/attention": dropped()}));
+    const empty = byData(r.root, "queueEmpty");
+    expect(empty).toBeDefined(); expect(empty!.dataset.queueEmpty).toBe("unknown"); expect(r.root.textContent).not.toContain(r.ctx.t("queue.empty"));
+    expect(byData(r.root, "queueAttentionPartial")).toBeDefined(); expect(allData(r.root, "source").find(n => n.dataset.source === "attention")!.dataset.sourceState).toBe("NOT_VERIFIED");
+    expect(byData(r.root, "note", "attention-dropped")!.dataset.dropped).toBe("1");
+  });
+  it("view: a truncated list (200 of 250) is not a VERIFIED 200: incomplete, NOT_VERIFIED, no total", async () => {
+    const r = await renderView(serve({...none, "/v1/attention": cut()}));
+    expect(allData(r.root, "source").find(n => n.dataset.source === "attention")!.dataset.sourceState).toBe("NOT_VERIFIED"); expect(byData(r.root, "queueAttentionPartial")).toBeDefined();
+    expect(byData(r.root, "note", "attention-truncated")).toBeDefined(); expect(allData(r.root, "source").find(n => n.dataset.source === "attention")!.textContent).not.toContain("Read OK"); expect(all(allData(r.root, "source").find(n => n.dataset.source === "attention")!).filter(n => "pill" in n.dataset).map(n => n.dataset.pill)).toEqual(["NOT_VERIFIED"]); // the pill itself, not only the data attribute
+  });
+  it("a BLOCKED_ITEM run shows no invented 'Waiting' pill (its status is not known from this source); a real waiting run still does", async () => {
+    const r = await renderView(serve({"/v1/attention": attentionBody([{kind: "RUN_NEEDS_DECISION", nextAction: "REVIEW_RUN", projectId: PRJ_ATT, missionId: M_EXE, runId: R_OK, taskId: null, title: "Failed run", reason: "tests failed", since: "2026-10-17T08:00:00.000Z"}])}));
+    const li = itemFor(r.root, `attention:RUN_NEEDS_DECISION:${R_OK}`), runField = field(li, "run")!;
+    expect(runField.textContent).toContain(R_OK); expect(runField.textContent).not.toMatch(/Waiting/i);
+    const gate = itemFor((await renderView(serve())).root, K.gate); expect(field(gate, "run")!.textContent).toMatch(/AWAITING_APPROVAL/);
+  });
+  it("since is explained per kind: a blocked mission 'since' is its creation time, a run needing a decision is its last update", async () => {
+    const {q} = await derive({"/v1/attention": attentionBody([
+      {kind: "MISSION_BLOCKED", nextAction: "REVIEW_MISSION", projectId: PRJ_ATT, missionId: M_REP2, runId: null, taskId: null, title: "B", reason: null, since: "2026-10-16T10:00:00.000Z"},
+      {kind: "TASK_BLOCKED", nextAction: "UNBLOCK_TASK", projectId: PRJ_ATT, missionId: M_EXE, runId: null, taskId: TSK_A, title: "T", reason: null, since: "2026-10-16T10:00:00.000Z"}])});
+    expect(q.items.find((i: any) => i.blockerKind === "MISSION_BLOCKED")!.basis).toBe("MISSION_CREATED"); expect(q.items.find((i: any) => i.blockerKind === "TASK_BLOCKED")!.basis).toBe("ATTENTION_SINCE");
+  });
+  it("no queue/executive text or KPI source names the retired /v1/founder-attention as the live source (en and tr)", async () => {
+    for (const lang of ["en", "tr"]) {
+      const L = (await load("locales", `${lang}.js`)).default as Record<string, string>;
+      for (const k of ["queue.readonly", "executive.readonly", "queue.tier.1.desc"]) { expect(L[k], `${lang} ${k}`).not.toMatch(/founder-attention|scheduler/i); }
+      expect(L["queue.readonly"]).toContain("GET /v1/attention"); expect(L["executive.readonly"]).toContain("GET /v1/attention");
+    }
+    expect(read("views", "queue.js")).not.toMatch(/source:"GET \/v1\/founder-attention/);
   });
 });

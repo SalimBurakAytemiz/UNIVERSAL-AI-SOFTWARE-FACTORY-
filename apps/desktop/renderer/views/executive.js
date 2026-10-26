@@ -1,4 +1,4 @@
-// //TR: Bu görünüm Kurucu Yönetim Özeti ve İcra Defteri'dir (FA-V2-PRODUCT, UI-236): YALNIZ dört salt-okunur ve zaten izinli GET'ten okunur — GET /v1/cockpit (başlık göstergeleri), GET /v1/missions (hat içi mission), GET /v1/work-runs (İcra Defteri satırları + teslim durumları) ve GET /v1/founder-attention (Founder'ı bekleyen engelli paketler). HİÇBİR sayı, koşu, karar veya teslim UYDURULMAZ: bozuk yanıt tümden ERROR olarak gösterilir (kısmi/tahmini değer yok), okunamayan kaynak 0 değil dürüst OFFLINE/UNAVAILABLE/ERROR gösterir. Teslim yalnız kaynak düzeyindedir (doğrulanmadı); ürün doğrulaması bu görünümde ASLA iddia edilmez ve ilgili sabit değer hiçbir yerde üretilmez. Şirket/gelir/müşteri/uptime metriği yoktur. API verisi HTML olarak yorumlanmaz; yalnız h()/textContent kullanılır.
+// //TR: Bu görünüm Kurucu Yönetim Özeti ve İcra Defteri'dir (FA-V2-PRODUCT, UI-236): YALNIZ dört salt-okunur ve zaten izinli GET'ten okunur — GET /v1/cockpit (başlık göstergeleri), GET /v1/missions (hat içi mission), GET /v1/work-runs (İcra Defteri satırları + teslim durumları) ve GET /v1/attention (Founder'ı bekleyen öğeler). HİÇBİR sayı, koşu, karar veya teslim UYDURULMAZ: bozuk yanıt tümden ERROR olarak gösterilir (kısmi/tahmini değer yok), okunamayan kaynak 0 değil dürüst OFFLINE/UNAVAILABLE/ERROR gösterir. Teslim yalnız kaynak düzeyindedir (doğrulanmadı); ürün doğrulaması bu görünümde ASLA iddia edilmez ve ilgili sabit değer hiçbir yerde üretilmez. Şirket/gelir/müşteri/uptime metriği yoktur. API verisi HTML olarak yorumlanmaz; yalnız h()/textContent kullanılır.
 import {h,panel,statePill,kpiTile,miniBars,emptyNote} from "../components.js";
 import {MISSING,topEntries} from "../model.js";
 import {formatDateTime} from "../work-core.js";
@@ -57,7 +57,7 @@ function kpiRow(ctx,summary,res){
     tile("inProgress","pulse",k.inProgress,{qualifier:k.inProgress.detail?t("executive.kpi.q.inProgress",{total:k.inProgress.detail.total}):undefined}),
     tile("runs","bot",k.runs,{qualifier:k.runs.detail?t("executive.kpi.q.runs",k.runs.detail):undefined}),
     tile("approvals","inbox",k.approvals,{qualifier:t("executive.kpi.q.approvals")}),
-    tile("blocked","ban",k.blocked,{qualifier:t("executive.kpi.q.blocked"),risk:live(k.blocked)&&k.blocked.value>0}),
+    tile("attention","ban",k.attention,{qualifier:t("executive.kpi.q.attention"),risk:live(k.attention)&&k.attention.value>0}),
     // Teslimler: yalnız kaynak düzeyi; rozet daima NOT_VERIFIED (ürün doğrulandı iddiası yok).
     tile("deliveries","rocket",k.deliveries,{pillKind:live(k.deliveries)?"NOT_VERIFIED":blockKind(k.deliveries.state),qualifier:k.deliveries.detail?t("executive.kpi.q.deliveries",k.deliveries.detail):undefined}),
     tile("evidence","evidence",k.evidence,{qualifier:k.evidence.detail?t("executive.kpi.q.evidence",k.evidence.detail):undefined}));

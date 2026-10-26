@@ -1,16 +1,17 @@
 // //TR: Bu görünüm parçası Proje Yolculuğu'ndaki "Analiz" adımıdır (A-FLOW-5): "Analiz et" POST /v1/missions/:id/analysis/step ile mevcut analiz fazının taslağını ürettirir (BusinessAnalysis, Requirements, Plan, Architecture); taslaklar aşağıdaki mevcut Pre-dev kararları bölümünde Founder tarafından onaylanır ya da reddedilir. BLOCKED durumunda sunucunun kesin engelleri ve Founder'ın kendi giriş komutu (yalnız metin) gösterilir. "Analiz tamam" YALNIZ dört fazın da onaylandığı COMPLETE sonucunda yazılır; ardından "Plan oluştur" POST .../analysis/plan ile onaylı plandan görev planını kurar ve görev -> gereksinim -> kabul kriteri izlenebilirliğini gösterir. Uç noktalar masaüstü allow-list'inde yoksa dürüst "etkin değil" yazılır; hiçbir sonuç uydurulmaz.
 import {h,badge} from "../components.js";
-import {drafts,statusBlock,setStatus,focusResult} from "../forms.js";
+import {drafts,field,statusBlock,setStatus,focusResult} from "../forms.js";
 import {selection} from "../forms.js";
-import {buildAnalysisStepRequest,buildAnalysisPlanRequest,classifyAnalysisStep,classifyAnalysisPlan,analysisStatusKey,ANALYSIS_KINDS} from "../analysis-core.js";
+import {buildAnalysisStepRequest,buildAnalysisPlanRequest,classifyAnalysisStep,classifyAnalysisPlan,analysisStatusKey,ANALYSIS_KINDS,buildReapproveRequest,reapproveOutcome} from "../analysis-core.js";
 
 export const ANALYSIS_STEP_FORM="analysis-step";
 export const ANALYSIS_PLAN_FORM="analysis-plan";
-export const analysisUi={missionId:null,step:null,plan:null};
+export const ANALYSIS_REAPPROVE_FORM="analysis-reapprove";
+export const analysisUi={missionId:null,step:null,plan:null,evidence:""};
 /** Mission değişince eski sonuçlar ve durumlar silinir (başka mission'a ait "tamam" gösterilmesin). */
 export function resetAnalysis(missionId=null){
-  analysisUi.missionId=missionId;analysisUi.step=null;analysisUi.plan=null;
-  delete drafts.status[ANALYSIS_STEP_FORM];delete drafts.status[ANALYSIS_PLAN_FORM];
+  analysisUi.missionId=missionId;analysisUi.step=null;analysisUi.plan=null;analysisUi.evidence="";
+  delete drafts.status[ANALYSIS_STEP_FORM];delete drafts.status[ANALYSIS_PLAN_FORM];delete drafts.status[ANALYSIS_REAPPROVE_FORM];
 }
 const tOr=(ctx,k,fallback)=>{const v=ctx.t(k);return v===k?fallback:v};
 
@@ -18,14 +19,30 @@ export async function submitAnalysisStep(ctx,missionId){
   const req=buildAnalysisStepRequest({missionId});
   if(!req.ok){setStatus(ANALYSIS_STEP_FORM,{ok:false,errors:req.errors});await ctx.rerender();return {ok:false,validation:true}}
   if(analysisUi.missionId!==missionId)resetAnalysis(missionId);
+  delete drafts.status[ANALYSIS_REAPPROVE_FORM]; // yeni adım: eski yeniden-onay durumu bayatlar
   drafts.busy[ANALYSIS_STEP_FORM]=true;
   let res;try{res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[ANALYSIS_STEP_FORM]=false}
+  if(analysisUi.missionId!==missionId){await ctx.rerender();return {ok:false,stale:true,status:res?.status??null}} // //TR: istek sürerken başka mission seçildi: gelen cevap o mission'ın durumuna yazılmaz
   const c=classifyAnalysisStep(res),k=analysisStatusKey(c,res,"step");
   // Bir denetim başarısız olursa eski sonuç gösterilmez (bayat "tamam" kalmasın): Plan oluştur kapısı da kapanır.
   analysisUi.step=c.kind==="STEP"?c.step:null;
   setStatus(ANALYSIS_STEP_FORM,{ok:k.ok,key:k.key,vars:k.vars,errors:null});
   await ctx.rerender();focusResult(ctx,ANALYSIS_STEP_FORM,["id:analysis-step-submit"]);
   return {ok:k.ok,kind:c.kind,status:res?.status??null};
+}
+/** //TR: A-ANALYSIS-STUCK-1: onaylı ama ilerlemeyen artefaktı mevcut pre-dev onay yoluyla yeniden onaylar (kanıt Founder'ın girdisi). Ücretli üretim BAŞLATMAZ ve adımı kendiliğinden yeniden çalıştırmaz: Founder "Analiz et"e kendisi basar. Başarısızlıkta engel görünür kalır ve sunucunun gerçek nedeni söylenir. */
+export async function submitReapprove(ctx,missionId){
+  const step=analysisUi.missionId===missionId?analysisUi.step:null;
+  const req=buildReapproveRequest({missionId,step,evidenceText:analysisUi.evidence});
+  if(!req.ok){setStatus(ANALYSIS_REAPPROVE_FORM,{ok:false,errors:req.errors});await ctx.rerender();focusResult(ctx,ANALYSIS_REAPPROVE_FORM,["id:analysis-reapprove-submit","id:analysis-reapprove-evidence"]);return {ok:false,validation:true}}
+  drafts.busy[ANALYSIS_REAPPROVE_FORM]=true;
+  let res;try{res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[ANALYSIS_REAPPROVE_FORM]=false}
+  if(analysisUi.missionId!==missionId){await ctx.rerender();return {ok:false,stale:true,status:res?.status??null}} // //TR: istek sürerken başka mission seçildi: gelen cevap o mission'ın durumuna yazılmaz
+  const o=reapproveOutcome(res,missionId);
+  if(o.ok){analysisUi.step=null;analysisUi.evidence="";delete drafts.status[ANALYSIS_STEP_FORM]} // eski "engelli" durum satırı da kalkar // bayat "engelli" cevabı kalmaz; yeni bir adım çalıştırılana kadar hiçbir sonuç iddia edilmez
+  setStatus(ANALYSIS_REAPPROVE_FORM,{ok:o.ok,key:o.key,vars:o.vars,errors:null});
+  await ctx.rerender();focusResult(ctx,ANALYSIS_REAPPROVE_FORM,["id:analysis-step-submit","id:analysis-reapprove-submit"]);
+  return {ok:o.ok,kind:o.kind,status:res?.status??null};
 }
 export async function submitAnalysisPlan(ctx,missionId){
   // "Plan oluştur" yalnız bu oturumda bu mission için COMPLETE görülmüşse gönderilir; aksi halde hiçbir şey gitmez.
@@ -36,6 +53,7 @@ export async function submitAnalysisPlan(ctx,missionId){
   if(!req.ok){setStatus(ANALYSIS_PLAN_FORM,{ok:false,errors:req.errors});await ctx.rerender();return {ok:false,validation:true}}
   drafts.busy[ANALYSIS_PLAN_FORM]=true;
   let res;try{res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[ANALYSIS_PLAN_FORM]=false}
+  if(analysisUi.missionId!==missionId){await ctx.rerender();return {ok:false,stale:true,status:res?.status??null}} // //TR: istek sürerken başka mission seçildi: gelen cevap o mission'ın durumuna yazılmaz
   const c=classifyAnalysisPlan(res),k=analysisStatusKey(c,res,"plan");
   if(c.kind==="PLAN")analysisUi.plan=c.plan;
   setStatus(ANALYSIS_PLAN_FORM,{ok:k.ok,key:k.key,vars:k.vars,errors:null});
@@ -61,7 +79,23 @@ function loginCommands(exec,blockers){
   }
   return out;
 }
-function stepBlock(ctx,step,exec){
+function stuckBlock(ctx,step,missionId){
+  const doc=ctx.doc,t=step.target;
+  if(!t){ // hedef sunucudan gelmedi: düzyazı ayrıştırılmaz, yalnız metin olarak gösterilir; düğme yok
+    return h(doc,"div",{class:"note",dataset:{analysisStuck:"NO_TARGET"}},h(doc,"p",{text:ctx.t("analysis.stuck.noTarget")}),
+      step.founderAction?h(doc,"p",{dataset:{analysisFounderAction:"1"},text:step.founderAction}):null);
+  }
+  const busy=drafts.busy[ANALYSIS_REAPPROVE_FORM]===true;
+  return h(doc,"div",{class:"analysis-stuck",role:"group","aria-label":ctx.t("analysis.stuck.title"),dataset:{analysisStuck:t.kind,artifact:t.artifactId}},
+    h(doc,"h4",{text:ctx.t("analysis.stuck.title")}),
+    h(doc,"p",{text:ctx.t("analysis.stuck.head",{kind:ctx.t(`journey.kind.${t.kind}`)})}),
+    h(doc,"p",{class:"note mono",text:t.artifactId}),
+    field(ctx,{id:"analysis-reapprove-evidence",labelKey:"predev.evidence.label",value:analysisUi.evidence,onInput:v=>{analysisUi.evidence=v},hintKey:"analysis.stuck.evidenceHint",multiline:true,required:true}),
+    h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn btn-primary",id:"analysis-reapprove-submit",dataset:{focusKey:"analysis-reapprove-submit"},disabled:busy,text:ctx.t("analysis.reapprove.button"),
+      on:{click:()=>{if(!drafts.busy[ANALYSIS_REAPPROVE_FORM])submitReapprove(ctx,missionId)}}})),
+    statusBlock(ctx,ANALYSIS_REAPPROVE_FORM));
+}
+function stepBlock(ctx,step,exec,missionId){
   const doc=ctx.doc,kindName=k=>ctx.t(`journey.kind.${k}`);
   switch(step.status){
     case "BLOCKED":{
@@ -69,6 +103,7 @@ function stepBlock(ctx,step,exec){
       return h(doc,"div",{class:"note",role:"status",dataset:{analysisStatus:"BLOCKED"}},
         h(doc,"p",{text:ctx.t("analysis.blocked.head")}),
         h(doc,"ul",{dataset:{analysisBlockers:"1"}},(step.blockers.length?step.blockers:[step.blocker]).map(b=>h(doc,"li",{dataset:{analysisBlocker:b},text:blockerText(ctx,b)}))),
+        step.phaseStuck?stuckBlock(ctx,step,missionId):null,
         ...logins.flatMap(l=>l.command?[h(doc,"p",{text:ctx.t("exec.profile.loginHint")}),h(doc,"pre",{class:"code",dataset:{analysisLogin:l.role}},h(doc,"code",{text:l.command}))]:[h(doc,"p",{class:"note",dataset:{analysisLoginMissing:l.role},text:ctx.t("analysis.blocked.noCommand",{role:ctx.t(`exec.profile.role.${l.role}`)})})]));
     }
     case "DRAFT_READY":
@@ -104,8 +139,9 @@ export function analysisPanel(ctx,{missionId,exec}){
     h(doc,"p",{class:"note",text:ctx.t("analysis.lead")}),
     h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn btn-primary",id:"analysis-step-submit",dataset:{focusKey:"analysis-step-submit"},disabled:busyS,text:ctx.t("analysis.step.button"),
       on:{click:()=>{if(!drafts.busy[ANALYSIS_STEP_FORM])submitAnalysisStep(ctx,missionId)}}})),
-    step?stepBlock(ctx,step,exec):h(doc,"p",{class:"note",dataset:{analysisStatus:"NONE"},text:ctx.t("analysis.none")}),
+    step?stepBlock(ctx,step,exec,missionId):h(doc,"p",{class:"note",dataset:{analysisStatus:"NONE"},text:ctx.t("analysis.none")}),
     statusBlock(ctx,ANALYSIS_STEP_FORM),
+    step&&step.phaseStuck&&step.target?null:statusBlock(ctx,ANALYSIS_REAPPROVE_FORM), // yeniden onay sonucu (engel kalktıysa) burada; engel sürüyorsa kendi bloğunun içindedir
     // Analiz adımı kullanılamıyorsa ya da beklenmedik biçimde bitiyorsa Founder planı elle yazabilir: düğme yalnız Görevler'e gider (orada gönderilen POST zaten kabul edilen /plan yoludur).
     h(doc,"div",{class:"btn-row"},h(doc,"p",{class:"note",dataset:{analysisHandPlan:"1"},text:ctx.t("analysis.handPlan")}),h(doc,"button",{type:"button",class:"btn",id:"analysis-hand-plan",dataset:{focusKey:"analysis-hand-plan"},text:ctx.t("analysis.handPlan.open"),on:{click:()=>{selection.missionId=missionId;ctx.navigate("work")}}})),
     complete?h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn btn-primary",id:"analysis-plan-submit",dataset:{focusKey:"analysis-plan-submit"},disabled:busyP,text:ctx.t("analysis.plan.button"),

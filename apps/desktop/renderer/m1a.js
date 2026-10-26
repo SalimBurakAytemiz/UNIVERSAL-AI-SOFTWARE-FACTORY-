@@ -32,7 +32,7 @@ export function axisBadges(ctx,sg,pv,scope){
   const doc=ctx.doc;
   return h(doc,"span",{class:"axis-badges",dataset:{m1aAxes:scope}},
     h(doc,"span",{class:`badge ${sg?.state==="SOURCE_GENERATION_COMPLETE"?"badge-ok":"badge-risk"}`,dataset:{axis:"sourceGeneration",axisState:sg?.state??"UNKNOWN"},text:axisLabel(ctx,"sourceGeneration",sg)})," ",
-    h(doc,"span",{class:`badge ${pv?.state==="PRODUCT_VERIFIED"?"badge-ok":"badge-notverified"}`,dataset:{axis:"productVerification",axisState:pv?.state??"UNKNOWN"},text:axisLabel(ctx,"productVerification",pv)}));
+    h(doc,"span",{class:`badge ${pv?.state==="PRODUCT_VERIFIED"?"badge-ok":"badge-notverified"}`,dataset:{axis:"productVerification",axisState:pv?.state??"UNKNOWN",axisReason:pv?.reason??""},text:axisLabel(ctx,"productVerification",pv)}));
 }
 
 // ---------- NOT_VERIFIED kaynak teslimi kabul onayları ----------
