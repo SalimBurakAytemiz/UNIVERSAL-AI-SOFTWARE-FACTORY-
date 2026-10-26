@@ -1,4 +1,4 @@
-// //TR: Test yardımcısı (vitest dosyası DEĞİL): v7-par-runner.test.ts bu betiği AYRI bir süreçte çalıştırır ve faz 1'deki motoru SIGKILL ile "çökertir" (PAR-04). Faz 1: depo + mission + run kurar, uzun süren (orphan) bir implementer çocuğu başlatır; faz 2: yeni bir motor süresi dolan lease'i devralır ve run'ı sürer.
+// //TR: Test yardımcısı (vitest dosyası DEĞİL): v7-relfx-c3-remediation.test.ts içindeki C-PAR-1 bloğu bu betiği AYRI bir süreçte çalıştırır ve faz 1'deki motoru SIGKILL ile "çökertir" (PAR-04). Faz 1: depo + mission + run kurar, uzun süren (orphan) bir implementer çocuğu başlatır; faz 2: yeni bir motor süresi dolan lease'i devralır ve run'ı sürer.
 // Kullanım: node --import tsx tests/v7-par-engine.mts <repoRoot> <dir> <phase 1|2> <leaseTtlMs> <orphanMs>
 import fs from "node:fs";
 import path from "node:path";
