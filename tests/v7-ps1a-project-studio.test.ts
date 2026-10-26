@@ -20,6 +20,8 @@ import {FakeExecutors} from "../core/workos/executors.js";
 import {fakeSecurity} from "../core/workos/security-tools.js";
 import {listZipEntries, readZipEntry, writeZip, crc32, ZipError} from "../core/workos/zip.js";
 import {pidAlive, processStartTime} from "../core/workos/devrun.js";
+// Ölü olması beklenen süreçler pid + başlangıç zamanı ile denetlenir (Windows pid yeniden kullanımı: çıplak pidAlive yeni ve ilgisiz bir süreci canlı sayabilir); kimlik süreç canlıyken, durdurmadan önce yakalanır.
+import {captureIdentity, sameProcessAlive} from "./support/pid-identity.js";
 import {M1A_LABELS} from "../core/workos/outcomes.js";
 
 const REPO = path.resolve(import.meta.dirname, "..");
@@ -208,15 +210,19 @@ describe("PS-1A dev-run and live preview (PS-005/006, PS-AT-002/004)", () => {
     expect(second.statusCode).toBe(409);
     expect(second.json().error).toBe("DEVRUN_ALREADY_RUNNING");
     const pid1 = v.pid as number;
+    const pid1Id = await captureIdentity(pid1);
+    // Pozitif kontrol: kimlik karşılaştırması canlı süreci gerçekten aynı süreç olarak tanır (ölü denetimleri boşuna geçmez).
+    expect(await sameProcessAlive(pid1Id)).toBe(true);
     const rs = await call(app, "POST", `/v1/projects/${p.projectId}/devrun/restart`, {});
     expect(rs.statusCode, rs.body).toBe(200);
     expect(rs.json().devrun.status).toBe("RUNNING");
     expect(rs.json().devrun.pid).not.toBe(pid1);
-    expect(pidAlive(pid1)).toBe(false);
+    expect(await sameProcessAlive(pid1Id)).toBe(false);
     const pid2 = rs.json().devrun.pid as number;
+    const pid2Id = await captureIdentity(pid2);
     const st = await call(app, "POST", `/v1/projects/${p.projectId}/devrun/stop`, {});
     expect(st.json().devrun).toMatchObject({status: "STOPPED", reason: "STOP_REQUESTED", preview: {url: null, state: "UNAVAILABLE"}});
-    expect(pidAlive(pid2)).toBe(false);
+    expect(await sameProcessAlive(pid2Id)).toBe(false);
     // Kalıcı log dosyası yalnız dev-run dizinindedir (run workspace'leri kullanılmaz).
     expect(fs.readFileSync(path.join(dataDir, "projects", p.projectId, "devrun", "logs", "stdout.log"), "utf8")).toContain("listening on");
     expect(fs.existsSync(path.join(dataDir, "runs"))).toBe(false);
@@ -248,20 +254,22 @@ describe("PS-1A dev-run and live preview (PS-005/006, PS-AT-002/004)", () => {
     const p = await createProject(app, {template: "web-node"});
     const s = await call(app, "POST", `/v1/projects/${p.projectId}/devrun/start`, {});
     const pid = s.json().devrun.pid as number;
+    const pidId = await captureIdentity(pid);
     const stop = await call(app, "POST", "/v1/control/stop", {reason: "test"});
     expect(stop.json().devRunsStopped).toBe(1);
     expect(await devrun(app, p.projectId)).toMatchObject({status: "STOPPED", reason: "GLOBAL_STOP_ACTIVE"});
-    expect(pidAlive(pid)).toBe(false);
+    expect(await sameProcessAlive(pidId)).toBe(false);
     const refused = await call(app, "POST", `/v1/projects/${p.projectId}/devrun/start`, {});
     expect(refused.statusCode).toBe(423);
     expect(refused.json()).toEqual({error: "GLOBAL_STOP_ACTIVE"});
     clearGlobalStop(path.join(runtime, "GLOBAL_STOP.json"), "TEST");
     const again = await call(app, "POST", `/v1/projects/${p.projectId}/devrun/start`, {});
     expect(again.json().devrun.status).toBe("RUNNING");
+    const againId = await captureIdentity(again.json().devrun.pid);
     activateGlobalStop(path.join(runtime, "GLOBAL_STOP.json"), "out of band", "TEST");
     const stopped = await until(() => devrun(app, p.projectId), d => d.status === "STOPPED");
     expect(stopped.reason).toBe("GLOBAL_STOP_ACTIVE");
-    expect(pidAlive(again.json().devrun.pid)).toBe(false);
+    expect(await sameProcessAlive(againId)).toBe(false);
   }, T);
 
   it("recovers orphaned dev-runs after a new API instance: kills only a pid whose start time matches, reports a mismatch", async () => {
@@ -270,6 +278,7 @@ describe("PS-1A dev-run and live preview (PS-005/006, PS-AT-002/004)", () => {
     const s = await call(a.app, "POST", `/v1/projects/${p.projectId}/devrun/start`, {});
     const pid = s.json().devrun.pid as number;
     expect(pidAlive(pid)).toBe(true);
+    const pidId = await captureIdentity(pid);
     // İkinci proje: kaydedilen pid canlı (bu test süreci) ama başlangıç zamanı farklı -> öldürülmez.
     const q = await createProject(a.app, {template: "web-node"});
     const dead = cp.spawnSync(process.execPath, ["-e", "process.exit(0)"]).pid!;
@@ -280,7 +289,7 @@ describe("PS-1A dev-run and live preview (PS-005/006, PS-AT-002/004)", () => {
     expect(v.status).toBe("STOPPED");
     expect(v.reason).toBe("RECOVERED_AFTER_API_RESTART:ORPHAN_KILLED");
     expect(v.recovery).toMatchObject({result: "ORPHAN_KILLED", pid});
-    expect(pidAlive(pid)).toBe(false);
+    expect(await sameProcessAlive(pidId)).toBe(false);
     const w = await devrun(b.app, q.projectId);
     expect(w.recovery).toMatchObject({result: "ORPHAN_PID_MISMATCH_NOT_KILLED", pid: process.pid});
     expect(w.status).toBe("STOPPED");
