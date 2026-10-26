@@ -1791,7 +1791,7 @@
   },
   "integrationBoard": {
     "//TR": "Koordinatör entegrasyon panosu: her açık PR için gerçek engel ve bekleyen sorumlu. Ortak kök neden (base dependency gate) PR'a özgü hatalardan ayrı tutulur; #221/#225 birleşmeden tekrar CI tetiklenmez.",
-    "at": "2026-10-26T18:23:00Z",
+    "at": "2026-10-26T18:30:00Z",
     "base": "f663ee9 (v7/integration, after #238)",
     "sharedRootCause": {
       "id": "NONE_ACTIVE",
@@ -2188,6 +2188,15 @@
         "review": "828b0b0 full BLOCKERS_MEDIUM (assertion commented out by trailing //) -> 65098ba delta NO_BLOCKERS (tabindex + TR negative check; mutants killed)",
         "riskTier": "ROUTINE (renderer locale + test pin, unprotected)",
         "ci": "run 40369695661: one Windows shard-3 failure ps1a-project-studio:215 (pre-existing PID-reuse flake, RCA wf_6aac57ee) -> one full re-run green"
+      },
+      {
+        "pr": 255,
+        "merge": "0ddb170",
+        "by": "auto-merge (armed by coordinator on 441d718 after merge-gate OPEN)",
+        "at": "2026-10-26T18:29:08Z",
+        "postMerge": "VERIFIED: parent1 13d8859, parent2 = gated head 441d718, merge-tree == merge tree 85a83d5",
+        "review": "14a9eef full NO_BLOCKERS_4LOW -> 441d718 delta NO_BLOCKERS (4 LOWs fixed; J8 + E2E mutants killed)",
+        "riskTier": "ROUTINE (renderer task status journey + tests, unprotected)"
       }
     ],
     "wslProvider": {
