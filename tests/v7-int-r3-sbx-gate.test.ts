@@ -990,9 +990,11 @@ describe("LANE-B Windows acceptance kit (injected fakes)", () => {
       runVitest: async () => { vitestRuns++; return o.vitest ?? vitestOk(); }};
     return {deps, calls, runs: () => vitestRuns};
   };
-  const vitestOk = (st: Record<string, string> = {}) => ({testResults: [{assertionResults: [
+  const vitestOk = (st: Record<string, string> = {}, acc?: any) => ({testResults: [{assertionResults: [
     {fullName: "x REAL WSL (win32 + UASCO_WSL_DISTRO): selfTest passes its negative probes and a node test runs inside the sandbox (SKIPPED elsewhere)", status: st.a ?? "passed", failureMessages: []},
-    {fullName: "x REAL WSL (win32 + UASCO_WSL_DISTRO): the generated web-node product starts in the sandbox, the bridged", status: st.b ?? "passed", failureMessages: []}]}]});
+    {fullName: "x REAL WSL (win32 + UASCO_WSL_DISTRO): the generated web-node product starts in the sandbox, the bridged", status: st.b ?? "passed", failureMessages: []},
+    {fullName: "x REAL WSL (win32 + UASCO_WSL_DISTRO): idea to running product - intake, plan, fake run", status: st.c ?? "passed", failureMessages: []}]}],
+    acceptResult: acc === undefined ? {row: "IDEA_TO_RUNNING_PRODUCT", steps: ["INTAKE_201", "STOPPED_PORT_CLOSED"], blocked: null, complete: true} : acc});
   const byId = (r: any) => Object.fromEntries(r.checks.map((c: any) => [c.id, c]));
   const load = () => import("../docs/acceptance/windows/founder-acceptance.mjs") as Promise<any>;
 
@@ -1047,10 +1049,28 @@ describe("LANE-B Windows acceptance kit (injected fakes)", () => {
     const arg = await k.runAcceptance({distro: "Ubuntu", shaArg: "b".repeat(40)}, mkDeps({git: {headSha: null, dirty: null}}).deps); expect(arg.verdict).toBe("ACCEPTED"); expect(arg.repo).toMatchObject({shaSource: "ARGUMENT", headSha: "b".repeat(40)});
   });
 
+  it("IDEA_TO_RUNNING_PRODUCT row: PASS only with vitest passed AND the result file showing the port closed after stop; BLOCKED:<code> when the chain reported a blocker; no evidence / failure / not run are never PASS", async () => {
+    const k = await load(); const row = async (v: any) => byId(await k.runAcceptance({distro: "Ubuntu"}, mkDeps({vitest: v}).deps)).IDEA_TO_RUNNING_PRODUCT;
+    expect(await row(vitestOk())).toMatchObject({status: "PASS", detail: "2 steps, port closed after stop"});
+    expect(await row(vitestOk({}, null))).toMatchObject({status: "FAIL", detail: expect.stringContaining("NO_EVIDENCE")});
+    expect(await row(vitestOk({}, {steps: ["INTAKE_201"], blocked: null, complete: false}))).toMatchObject({status: "FAIL"});
+    expect(await row(vitestOk({c: "failed"}))).toMatchObject({status: "FAIL"});
+    const blocked = await row(vitestOk({c: "skipped"}, {steps: ["INTAKE_201"], blocked: "SANDBOX_UNAVAILABLE:SELF_TEST_FAILED", complete: false}));
+    expect(blocked).toMatchObject({status: "BLOCKED", detail: "BLOCKED:SANDBOX_UNAVAILABLE:SELF_TEST_FAILED"});
+    expect(await row(vitestOk({c: "skipped"}, null))).toMatchObject({status: "SKIP"});
+    expect(await row(vitestOk({c: "passed"}, {steps: [], blocked: "X", complete: false}))).toMatchObject({status: "FAIL"}); // 'passed' with a blocker is not a pass
+    const missing = {testResults: [{assertionResults: [{fullName: "x REAL WSL (win32 + UASCO_WSL_DISTRO): selfTest passes its negative probes", status: "passed", failureMessages: []}]}]};
+    expect(await row(missing)).toMatchObject({status: "FAIL", detail: expect.stringContaining("TEST_NOT_FOUND")});
+    const rep = await k.runAcceptance({distro: "Ubuntu"}, mkDeps({vitest: vitestOk({c: "skipped"}, {steps: [], blocked: "SANDBOX_UNAVAILABLE:SELF_TEST_FAILED", complete: false})}).deps);
+    expect(rep.verdict).toBe("NOT_ACCEPTED"); expect(rep.reasons).toContain("BLOCKED:IDEA_TO_RUNNING_PRODUCT"); expect(rep.blocked).toBe(1);
+    const t = k.renderTable(rep); expect(t).toContain("BLOCKED IDEA_TO_RUNNING_PRODUCT"); expect(t).toContain("BLOCKED:SANDBOX_UNAVAILABLE:SELF_TEST_FAILED"); expect(t).toContain("SKIP and BLOCKED are never PASS");
+    const lin = await k.runAcceptance({distro: "Ubuntu"}, mkDeps({platform: "linux"}).deps); expect(byId(lin).IDEA_TO_RUNNING_PRODUCT).toMatchObject({status: "SKIP", detail: expect.stringContaining("NOT_WINDOWS")});
+  });
+
   it("table: one line per check, the fix block, and the SKIP-is-never-PASS verdict line; argument parsing is strict", async () => {
     const k = await load();
     const r = await k.runAcceptance({distro: "Ubuntu"}, mkDeps({conf: "", vitest: vitestOk({b: "skipped"})}).deps); const t = k.renderTable(r);
-    expect(t).toContain("FAIL  WSL_CONF"); expect(t).toContain("WHAT TO DO"); expect(t).toContain("appendWindowsPath=false"); expect(t).toContain("RESULT: NOT_ACCEPTED"); expect(t).toContain("SKIP is never PASS"); expect(t.split("\n").filter((l: string) => /^(PASS|FAIL|SKIP) /.test(l))).toHaveLength(r.checks.length);
+    expect(t).toContain("FAIL    WSL_CONF"); expect(t).toContain("WHAT TO DO"); expect(t).toContain("appendWindowsPath=false"); expect(t).toContain("RESULT: NOT_ACCEPTED"); expect(t).toContain("never PASS"); expect(t.split("\n").filter((l: string) => /^(PASS|FAIL|SKIP|BLOCKED) /.test(l))).toHaveLength(r.checks.length);
     expect(k.parseArgs(["--distro", "Ubuntu", "--sha", "a".repeat(40)], {}).distro).toBe("Ubuntu");
     expect(k.parseArgs(["--distro", "bad name"], {}).error).toBeTruthy(); expect(k.parseArgs(["--sha", "xyz"], {}).error).toBeTruthy(); expect(k.parseArgs(["--nope"], {}).error).toContain("unknown argument");
     expect(k.parseArgs([], {UASCO_WSL_DISTRO: "Debian"}).distro).toBe("Debian");

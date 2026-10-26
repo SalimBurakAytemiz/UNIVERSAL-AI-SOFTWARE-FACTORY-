@@ -491,12 +491,13 @@ describe("LANE-B first-delivery backend E2E (intake template -> plan -> run -> V
 
 // //TR: LANE-B B-E2E-REAL-1: GERÇEK buildServer (varsayılan LinuxUnshareSandboxProvider) ile uçtan uca arka uç zinciri: intake(web-node) -> yönetilen depo -> plan -> görev -> FAKE implementer ile koşu -> testler sandbox içinde -> teslim -> POST /product/start -> 127.0.0.1 köprüsünden 200 -> stop -> port kapalı. Sandbox/loopback bu ortamda yoksa her adımda dürüst ret doğrulanır, BLOCKED kodu yazdırılır ve test ATLANIR (PASS sayılmaz).
 describe("LANE-B real-sandbox backend E2E (B-E2E-REAL-1)", () => {
-  async function chain(serverSandbox: "DEFAULT" | null, runProvider: () => import("../core/workos/execution-gate.js").SandboxProvider, label: string) {
+  async function chain(serverSandbox: "DEFAULT" | null | import("../core/workos/execution-gate.js").SandboxProvider, runProvider: () => import("../core/workos/execution-gate.js").SandboxProvider, label: string) {
     const dataDir = path.join(tmp, `data-real-${label}`), runtime = path.join(tmp, `runtime-real-${label}`); fs.mkdirSync(runtime, {recursive: true});
     const c0 = {tmp, runtime, dataDir, tenantId: "tA"} as Ctx;
     // DEFAULT: buildServer'a HİÇ sandbox anahtarı verilmez (api() her zaman verir); sunucu kendi varsayılan LinuxUnshareSandboxProvider'ını kurar.
     let app: ReturnType<typeof api>;
     if (serverSandbox === null) app = api(c0, {sandbox: null});
+    else if (serverSandbox !== "DEFAULT") app = api(c0, {sandbox: serverSandbox});
     else { const {buildServer} = await import("../apps/control-api/src/server.js"); fs.mkdirSync(path.join(tmp, "config"), {recursive: true}); fs.copyFileSync(ENV_POLICY, path.join(tmp, "config", "environment-policy.json"));
       app = buildServer({controlToken: HDR["x-uasco-control-token"], runtime, repoRoot: tmp, dataDir, tenantId: "tA", port: 3210, logger: false}) as any; }
     apps.push(app);
@@ -542,7 +543,7 @@ describe("LANE-B real-sandbox backend E2E (B-E2E-REAL-1)", () => {
     if (serverSandbox === null || !st.ok || gate.state !== "AVAILABLE") {
       expect(start.statusCode, start.body).toBe(409); expect(start.json().error).toBe("SANDBOX_UNAVAILABLE");
       blocked = `SANDBOX_UNAVAILABLE:${gate.detail ?? (serverSandbox === null ? "NO_VERIFIED_PROVIDER" : st.detail)}`;
-    } else if (!caps || caps.loopback !== true) {
+    } else if ((provider as any).id !== "wsl-unshare-v1" && (!caps || caps.loopback !== true)) { // Linux: loopback şart; WSL: köprü sağlayıcının kendisindedir
       expect(start.statusCode, start.body).toBe(409); expect(start.json()).toMatchObject({error: "DEVRUN_SANDBOX_UNAVAILABLE"}); expect(String(start.json().reason)).toMatch(/^SANDBOX_LOOPBACK_NOT_VERIFIED:/);
       blocked = `DEVRUN_SANDBOX_UNAVAILABLE:${start.json().reason}`;
     }
@@ -561,6 +562,9 @@ describe("LANE-B real-sandbox backend E2E (B-E2E-REAL-1)", () => {
     return {steps, blocked: null};
   }
 
+  /** Kabul kiti (founder-acceptance.mjs) için: UASCO_ACCEPT_RESULT_FILE verilmişse zincir sonucu (adımlar, BLOCKED kodu) oraya yazılır. */
+  const writeAcceptResult = (r: {steps: string[]; blocked: string | null}, row: string) => { const f = process.env.UASCO_ACCEPT_RESULT_FILE; if (f) { try { fs.writeFileSync(f, JSON.stringify({row, steps: r.steps, blocked: r.blocked, complete: r.steps.includes("STOPPED_PORT_CLOSED")})); } catch { /* kanıt dosyası yazılamadı */ } } };
+
   it("REAL: buildServer's default Linux provider runs the whole chain; where the sandbox or its loopback is not available every step asserts the exact refusal, the BLOCKED code is printed and the test is SKIPPED (never PASS)", { timeout: T }, async ctx => {
     const {LinuxUnshareSandboxProvider} = await import("../core/agents/linux-unshare-sandbox.js");
     // Sunucu varsayılan sağlayıcısını (seçeneksiz) kurar; koşu için AYNI seçeneklerle ayrı bir örnek kullanılır.
@@ -574,5 +578,57 @@ describe("LANE-B real-sandbox backend E2E (B-E2E-REAL-1)", () => {
     const {LinuxUnshareSandboxProvider} = await import("../core/agents/linux-unshare-sandbox.js");
     const r = await chain(null, () => new LinuxUnshareSandboxProvider({unshareBinary: "/nonexistent/unshare"}), "null");
     expect(r.blocked).toBe("SANDBOX_UNAVAILABLE:NO_VERIFIED_PROVIDER"); expect(r.steps).toContain("TESTS_NOT_EXECUTED_UNSHARE_MISSING");
+  });
+
+  // Windows/WSL: FİKİR -> ÇALIŞAN ÜRÜN zinciri WSL sağlayıcısıyla (kabul kitinin satırı). Yalnız win32 + WSL + UASCO_WSL_DISTRO'da çalışır; aksi halde ATLANIR, PASS sayılmaz. UNVERIFIED_WSL: gerçek wsl.exe davranışı Founder koşusunu bekler.
+  const realWsl = process.platform === "win32" && !!process.env.UASCO_WSL_DISTRO && cp.spawnSync("wsl.exe", ["--status"], {windowsHide: true}).status === 0;
+  it.skipIf(!realWsl)("REAL WSL (win32 + UASCO_WSL_DISTRO): idea to running product - intake, plan, fake run, tests in the WSL sandbox, delivery, product start, 127.0.0.1 HTTP 200, stop", { timeout: 20 * 60_000 }, async ctx => {
+    const {WslUnshareSandboxProvider} = await import("../core/sandbox/wsl-unshare-sandbox.js");
+    const wsl = new WslUnshareSandboxProvider();
+    const r = await chain(wsl, () => wsl, "wsl");
+    console.log(`B-ACCEPT-E2E-1 steps: ${r.steps.join(" > ")}`); writeAcceptResult(r, "IDEA_TO_RUNNING_PRODUCT");
+    if (r.blocked) { console.log(`B-ACCEPT-E2E-1 BLOCKED: ${r.blocked}`); ctx.skip(); }
+    expect(r.steps).toContain("STOPPED_PORT_CLOSED");
+  });
+
+  // Linux'ta WSL sağlayıcısının AYNI zinciri: wsl.exe yerine yerel stand-in (--exec komutlarını yerel çalıştırır; root ise uid 65534'e düşer) ve Linux sağlayıcısının izolasyon betiği (Lane C dışa aktarımları); eksik önkoşul BLOCKED koduyla ATLANIR.
+  it("WSL provider on a Linux stand-in: the same chain; any missing prerequisite is printed as BLOCKED and the test is SKIPPED", { timeout: 20 * 60_000 }, async ctx => {
+    const mod = await import("../core/sandbox/wsl-unshare-sandbox.js"); const iso = mod.linuxIsolationFromModule();
+    const blockedWith = (code: string): never => { console.log(`B-ACCEPT-E2E-1 stand-in BLOCKED: ${code}`); writeAcceptResult({steps: [], blocked: code}, "IDEA_TO_RUNNING_PRODUCT_STANDIN"); return ctx.skip() as never; };
+    if (process.platform !== "linux") return blockedWith("NOT_LINUX");
+    if (!iso) return blockedWith("LINUX_ISOLATION_EXPORTS_MISSING");
+    const uid = typeof process.getuid === "function" && process.getuid() === 0 ? 65534 : undefined;
+    if (uid !== undefined && process.env.UASCO_STANDIN_AS_ROOT !== "1") return blockedWith("RUNNING_AS_ROOT_NO_NONROOT_EXEC_USER_NEEDS_UID_DROP");
+    const PATHS = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+    const nodeRoot = path.dirname(path.dirname(fs.realpathSync(process.execPath)));
+    const exec = (cmd: string[], stdio: cp.StdioOptions) => cp.spawn(cmd[0], cmd.slice(1), {cwd: "/", env: {PATH: `${nodeRoot}/bin:${PATHS}`, HOME: "/tmp", LANG: "C"}, stdio, ...(uid !== undefined ? {uid, gid: uid} : {})});
+    const runner = async (args: string[], o: {timeoutMs: number; input?: Buffer | string; shouldAbort?: () => boolean}) => {
+      const R = (exitCode: number | null, out: Buffer | string = "", extra: any = {}) => ({exitCode, stdout: Buffer.from(out), stderr: Buffer.alloc(0), timedOut: false, aborted: false, spawnError: false, ...extra});
+      if (args[0] === "--status") return R(0);
+      if (args[0] === "-l" && args[1] === "-q") return R(0, Buffer.from("\uFEFFUbuntu\r\n", "utf16le"));
+      if (args[0] === "-l" && args[1] === "-v") return R(0, Buffer.from("\uFEFF  NAME STATE VERSION\r\n* Ubuntu Running 2\r\n", "utf16le"));
+      const cmd = args.slice(3);
+      return await new Promise<any>(resolve => {
+        const c = exec(cmd, ["pipe", "pipe", "pipe"]); const out: Buffer[] = []; let aborted = false, timedOut = false, done = false;
+        c.stdout!.on("data", d => out.push(d)); c.stderr!.on("data", () => undefined); c.stdin!.on("error", () => undefined);
+        const fin = (code: number | null) => { if (done) return; done = true; clearInterval(poll); clearTimeout(t); resolve(R(code, Buffer.concat(out), {aborted, timedOut})); };
+        const poll = setInterval(() => { if (o.shouldAbort?.()) { aborted = true; try { c.kill("SIGKILL"); } catch { /* çıkmış */ } setTimeout(() => fin(null), 200); } }, 50);
+        const t = setTimeout(() => { timedOut = true; try { c.kill("SIGKILL"); } catch { /* çıkmış */ } setTimeout(() => fin(null), 200); }, o.timeoutMs + 3000);
+        c.on("error", () => fin(null)); c.on("close", code => fin(code));
+        if (o.input !== undefined) c.stdin!.end(o.input); else c.stdin!.end();
+      });
+    };
+    // Node /usr dışındaysa sandbox'a ek salt-okunur kök gerekir (extraReadOnlyRoots; WSL-WIN-3 ile gelir): seçenek yoksa BLOCKED.
+    const nodeInUsr = /^\/(usr|bin|sbin)\//.test(fs.realpathSync(process.execPath));
+    const supportsExtraRoots = typeof (new mod.WslUnshareSandboxProvider({} as any) as any).isVerified === "function";
+    if (!nodeInUsr && !supportsExtraRoots) return blockedWith("NODE_NOT_UNDER_USR_AND_NO_EXTRA_ROOTS_OPTION");
+    const mk = () => new mod.WslUnshareSandboxProvider({platform: "win32", distro: "Ubuntu", runner: runner as any, isolation: iso, ...(nodeInUsr ? {} : {extraReadOnlyRoots: [nodeRoot]}),
+      spawner: (args: string[], stdio: cp.StdioOptions) => exec(args.slice(3), stdio)} as any);
+    const wsl = mk(); const st = await wsl.selfTest();
+    if (!st.ok) return blockedWith(`WSL_STANDIN_SELFTEST_${st.detail}`);
+    const r = await chain(wsl, () => wsl, "wsl-standin");
+    console.log(`B-ACCEPT-E2E-1 stand-in steps: ${r.steps.join(" > ")}`); writeAcceptResult(r, "IDEA_TO_RUNNING_PRODUCT_STANDIN");
+    if (r.blocked) return blockedWith(r.blocked);
+    expect(r.steps).toContain("STOPPED_PORT_CLOSED");
   });
 });

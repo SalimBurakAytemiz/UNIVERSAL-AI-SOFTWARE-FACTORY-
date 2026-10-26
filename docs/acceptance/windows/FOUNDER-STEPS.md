@@ -29,6 +29,7 @@
 | CLAUDE_PROFILE_* | adım 6 |
 | WSL_SELFTEST_AND_RUN | `selfTest` bir `PROBE_*` / `INTEROP_*` kodu verir; kodu koordinatöre gönderin (ör. `PROBE_PROCESS_LIMIT_NOT_ENFORCED` = root kullanıcı, `PROBE_VSOCK` = seccomp sarmalayıcısı çalışmadı) |
 | WSL_PRODUCT_BRIDGE | ürün başlamadı / köprü 200 vermedi; JSON dosyasını gönderin |
+| IDEA_TO_RUNNING_PRODUCT | **FİKİR → ÇALIŞAN ÜRÜN** zinciri (intake → plan → sahte koşu → testler WSL sandbox'ında → teslim → ürünü başlat → `127.0.0.1` HTTP 200 → durdur). `PASS` = zincir sonuna kadar koştu ve port kapandı. `BLOCKED:<kod>` = zincir bir önkoşulda durdu (ör. `SANDBOX_UNAVAILABLE:SELF_TEST_FAILED`, `DEVRUN_SANDBOX_UNAVAILABLE:...`); kodu okuyup ilgili adımı düzeltin, BLOCKED asla PASS değildir. `FAIL` = bir adım yanlış sonuç verdi; JSON'u gönderin |
 
 ## English
 
@@ -56,3 +57,4 @@
 | CLAUDE_PROFILE_* | step 6 |
 | WSL_SELFTEST_AND_RUN | `selfTest` reports a `PROBE_*` / `INTEROP_*` code; send the code to the coordinator (for example `PROBE_PROCESS_LIMIT_NOT_ENFORCED` = root user, `PROBE_VSOCK` = the seccomp wrapper did not work) |
 | WSL_PRODUCT_BRIDGE | the product did not start / the bridge did not answer 200; send the JSON file |
+| IDEA_TO_RUNNING_PRODUCT | the **IDEA → RUNNING PRODUCT** chain (intake → plan → fake run → tests in the WSL sandbox → delivery → product start → `127.0.0.1` HTTP 200 → stop). `PASS` = the chain ran to the end and the port closed. `BLOCKED:<code>` = the chain stopped at a precondition (for example `SANDBOX_UNAVAILABLE:SELF_TEST_FAILED`, `DEVRUN_SANDBOX_UNAVAILABLE:...`); read the code and fix that step; BLOCKED is never a PASS. `FAIL` = a step returned a wrong result; send the JSON |

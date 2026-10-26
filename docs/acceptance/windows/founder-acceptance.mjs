@@ -9,10 +9,13 @@ import {fileURLToPath, pathToFileURL} from "node:url";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_REPO = path.resolve(HERE, "..", "..", "..");
 export const TEST_FILE = "tests/v7-int-r3-sbx-gate.test.ts";
+export const DELIVERY_TEST_FILE = "tests/v7-m1a-c2-delivery.test.ts";
 /** Gerçek-WSL testlerinin adları (vitest JSON'unda aranır); bulunamayan test PASS sayılmaz, FAIL(TEST_NOT_FOUND) olur. */
 export const REAL_TESTS = [
   {id: "WSL_SELFTEST_AND_RUN", title: "WSL provider selfTest (all negative probes) + a node test runs inside the sandbox", match: /REAL WSL \(win32 \+ UASCO_WSL_DISTRO\): selfTest passes its negative probes/},
-  {id: "WSL_PRODUCT_BRIDGE", title: "Generated web-node product via spawnAsync + bridged 127.0.0.1 port answers 200, stop tears down", match: /REAL WSL \(win32 \+ UASCO_WSL_DISTRO\): the generated web-node product/}
+  {id: "WSL_PRODUCT_BRIDGE", title: "Generated web-node product via spawnAsync + bridged 127.0.0.1 port answers 200, stop tears down", match: /REAL WSL \(win32 \+ UASCO_WSL_DISTRO\): the generated web-node product/},
+  // FİKİR -> ÇALIŞAN ÜRÜN: intake -> plan -> FAKE run -> testler WSL sandbox'ında -> teslim -> product start -> 127.0.0.1 HTTP 200 -> stop. Sonuç PASS / FAIL / BLOCKED:<kod>; test koşmadıysa asla PASS değil.
+  {id: "IDEA_TO_RUNNING_PRODUCT", title: "Idea to running product on the WSL sandbox (intake, plan, fake run, tests in WSL, delivery, product start, 127.0.0.1 HTTP 200, stop)", match: /REAL WSL \(win32 \+ UASCO_WSL_DISTRO\): idea to running product/, accept: true}
 ];
 
 /** wsl.exe yönetim çıktısı UTF-16LE gelebilir. */
@@ -56,7 +59,7 @@ export const wslConfFixCommands = distro => [
 ].join("\n");
 
 const status = (id, title, st, detail, fix = null) => ({id, title, status: st, detail: String(detail ?? "").slice(0, 400), fix});
-const PASS = "PASS", FAIL = "FAIL", SKIP = "SKIP";
+const PASS = "PASS", FAIL = "FAIL", SKIP = "SKIP", BLOCKED = "BLOCKED";
 
 /** Salt-okunur ön kontrol. deps: {platform, wsl(args)->{code,stdout}, detectClaudeCli, claudeProfileStatus, controlRoot, importError}. */
 export async function preflight(distro, deps) {
@@ -108,31 +111,36 @@ export async function preflight(distro, deps) {
 }
 
 /** vitest --reporter=json çıktısı -> gerçek-WSL testlerinin durumları. Bulunamayan = FAIL (asla PASS); skipped/pending = SKIP. */
-export function mapVitestJson(json) {
+export function mapVitestJson(json, acceptResult = null) {
   const tests = [];
   for (const f of json?.testResults ?? []) for (const a of f.assertionResults ?? []) tests.push({name: String(a.fullName ?? a.title ?? ""), status: a.status, msg: (a.failureMessages ?? []).join(" ").slice(0, 300)});
   return REAL_TESTS.map(rt => {
     const t = tests.find(x => rt.match.test(x.name));
     if (!t) return status(rt.id, rt.title, FAIL, "TEST_NOT_FOUND in vitest output (wrong checkout?)", "git pull, then npm ci, then run this kit again");
-    if (t.status === "passed") return status(rt.id, rt.title, PASS, "vitest passed");
+    if (t.status === "passed") {
+      // Kanıt dosyalı satır: test geçse bile zincirin SON adımı (port kapandı) kayıtlı olmalı; yoksa PASS değildir.
+      if (rt.accept && !(acceptResult && acceptResult.complete === true)) return status(rt.id, rt.title, FAIL, "NO_EVIDENCE: vitest passed but the result file lacks the STOPPED_PORT_CLOSED step", "send artifacts/runtime/acceptance/*.json to the coordinator");
+      return status(rt.id, rt.title, PASS, rt.accept ? `${acceptResult.steps.length} steps, port closed after stop` : "vitest passed");
+    }
     if (t.status === "failed") return status(rt.id, rt.title, FAIL, t.msg || "vitest failed", "send artifacts/runtime/acceptance/*.json to the coordinator");
+    if (rt.accept && acceptResult && typeof acceptResult.blocked === "string" && acceptResult.blocked) return status(rt.id, rt.title, BLOCKED, `BLOCKED:${String(acceptResult.blocked).slice(0, 160)}`, "fix the blocking precondition named in the code above, then run this kit again");
     return status(rt.id, rt.title, SKIP, `vitest reported '${t.status}' (the real-WSL guard did not open: platform/distro/wsl --status)`);
   });
 }
 
 export function sha256File(f) { try { return crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex"); } catch { return null; } }
 export function verdictOf(checks, sha) {
-  const fails = checks.filter(c => c.status === FAIL), skips = checks.filter(c => c.status === SKIP);
-  const reasons = [...fails.map(c => `FAIL:${c.id}`), ...skips.map(c => `SKIP:${c.id}`), ...(sha ? [] : ["HEAD_SHA_UNKNOWN"])];
-  return {verdict: reasons.length === 0 ? "ACCEPTED" : "NOT_ACCEPTED", reasons, pass: checks.filter(c => c.status === PASS).length, fail: fails.length, skip: skips.length};
+  const fails = checks.filter(c => c.status === FAIL), skips = checks.filter(c => c.status === SKIP), blocks = checks.filter(c => c.status === BLOCKED);
+  const reasons = [...fails.map(c => `FAIL:${c.id}`), ...blocks.map(c => `BLOCKED:${c.id}`), ...skips.map(c => `SKIP:${c.id}`), ...(sha ? [] : ["HEAD_SHA_UNKNOWN"])];
+  return {verdict: reasons.length === 0 ? "ACCEPTED" : "NOT_ACCEPTED", reasons, pass: checks.filter(c => c.status === PASS).length, fail: fails.length, skip: skips.length, blocked: blocks.length};
 }
 export function renderTable(report) {
   const w = Math.max(...report.checks.map(c => c.id.length), 8), lines = [];
   lines.push(`UASCO Windows acceptance - ${report.repo.headSha ?? "SHA UNKNOWN"}${report.repo.dirty ? " (dirty tree)" : ""} - distro ${report.distro ?? "-"}`, "");
-  for (const c of report.checks) lines.push(`${c.status.padEnd(5)} ${c.id.padEnd(w)}  ${c.title}${c.detail ? "  [" + c.detail + "]" : ""}`);
+  for (const c of report.checks) lines.push(`${c.status.padEnd(7)} ${c.id.padEnd(w)}  ${c.title}${c.detail ? "  [" + c.detail + "]" : ""}`);
   const fixes = report.checks.filter(c => c.status === FAIL && c.fix);
   if (fixes.length) { lines.push("", "WHAT TO DO (this kit never changes your settings; run these yourself):"); for (const c of fixes) lines.push(`- ${c.id}:`, ...String(c.fix).split("\n").map(l => "    " + l)); }
-  lines.push("", `RESULT: ${report.verdict}  (PASS ${report.pass}, FAIL ${report.fail}, SKIP ${report.skip}; SKIP is never PASS)`);
+  lines.push("", `RESULT: ${report.verdict}  (PASS ${report.pass}, FAIL ${report.fail}, BLOCKED ${report.blocked ?? 0}, SKIP ${report.skip}; SKIP and BLOCKED are never PASS)`);
   if (report.reasons.length) lines.push(`Not accepted because: ${report.reasons.join(", ")}`);
   return lines.join("\n");
 }
@@ -143,12 +151,12 @@ export async function runAcceptance(o, deps) {
   const blocking = checks.filter(c => ["WSL_EXE", "WSL_DISTRO", "WSL_VERSION_2"].includes(c.id) && c.status !== PASS);
   if (deps.platform !== "win32") for (const rt of REAL_TESTS) checks.push(status(rt.id, rt.title, SKIP, `NOT_WINDOWS (platform=${deps.platform})`));
   else if (blocking.length) for (const rt of REAL_TESTS) checks.push(status(rt.id, rt.title, SKIP, `PRECONDITION_FAILED: ${blocking.map(c => c.id).join(", ")} (fix those first)`));
-  else checks.push(...mapVitestJson(await deps.runVitest(distro)));
+  else { const vit = await deps.runVitest(distro); checks.push(...mapVitestJson(vit, vit?.acceptResult ?? null)); }
   const git = deps.git();
   const sha = git.headSha ?? o.shaArg ?? null;
   const v = verdictOf(checks, sha);
   const body = {schemaVersion: 1, kit: "founder-acceptance-windows", generatedAt: deps.now(), host: {platform: deps.platform, arch: os.arch(), node: process.version, release: os.release()},
-    repo: {headSha: sha, shaSource: git.headSha ? "GIT" : o.shaArg ? "ARGUMENT" : "UNKNOWN", dirty: git.dirty}, files: {script: deps.scriptSha256 ?? null, test: deps.testSha256 ?? null}, distro, checks, ...v};
+    repo: {headSha: sha, shaSource: git.headSha ? "GIT" : o.shaArg ? "ARGUMENT" : "UNKNOWN", dirty: git.dirty}, files: {script: deps.scriptSha256 ?? null, test: deps.testSha256 ?? null, deliveryTest: deps.deliveryTestSha256 ?? null}, distro, checks, ...v};
   const evidenceSha256 = crypto.createHash("sha256").update(JSON.stringify(body)).digest("hex");
   return {...body, evidenceSha256};
 }
@@ -164,14 +172,18 @@ function realDeps(opts) {
       return {headSha: r.status === 0 && /^[0-9a-f]{40}$/.test(r.stdout.trim()) ? r.stdout.trim() : null, dirty: s.status === 0 ? s.stdout.trim().length > 0 : null};
     },
     now: () => new Date().toISOString(),
-    scriptSha256: sha256File(fileURLToPath(import.meta.url)), testSha256: sha256File(path.join(repo, TEST_FILE)),
+    scriptSha256: sha256File(fileURLToPath(import.meta.url)), testSha256: sha256File(path.join(repo, TEST_FILE)), deliveryTestSha256: sha256File(path.join(repo, DELIVERY_TEST_FILE)),
     runVitest: distro => new Promise(res => {
       const entry = path.join(repo, "node_modules", "vitest", "vitest.mjs");
       if (!fs.existsSync(entry)) { res({testResults: []}); return; }
-      const outFile = path.join(os.tmpdir(), `uasco-accept-${process.pid}-${Date.now()}.json`);
-      const c = cp.spawn(process.execPath, [entry, "run", TEST_FILE, "-t", "REAL WSL", "--reporter=json", `--outputFile=${outFile}`], {cwd: repo, shell: false, windowsHide: true, stdio: ["ignore", "inherit", "inherit"], env: {...process.env, UASCO_WSL_DISTRO: distro}});
+      const outFile = path.join(os.tmpdir(), `uasco-accept-${process.pid}-${Date.now()}.json`), resFile = path.join(os.tmpdir(), `uasco-accept-res-${process.pid}-${Date.now()}.json`);
+      const c = cp.spawn(process.execPath, [entry, "run", TEST_FILE, DELIVERY_TEST_FILE, "-t", "REAL WSL", "--reporter=json", `--outputFile=${outFile}`], {cwd: repo, shell: false, windowsHide: true, stdio: ["ignore", "inherit", "inherit"], env: {...process.env, UASCO_WSL_DISTRO: distro, UASCO_ACCEPT_RESULT_FILE: resFile}});
       const t = setTimeout(() => { try { c.kill(); } catch { /* çıkmış */ } }, 20 * 60_000); t.unref();
-      c.on("close", () => { try { res(JSON.parse(fs.readFileSync(outFile, "utf8"))); } catch { res({testResults: []}); } try { fs.rmSync(outFile, {force: true}); } catch { /* temizlik */ } });
+      c.on("close", () => {
+        let acceptResult = null; try { acceptResult = JSON.parse(fs.readFileSync(resFile, "utf8")); } catch { /* sonuç dosyası yok */ }
+        try { res({...JSON.parse(fs.readFileSync(outFile, "utf8")), acceptResult}); } catch { res({testResults: [], acceptResult}); }
+        for (const f of [outFile, resFile]) { try { fs.rmSync(f, {force: true}); } catch { /* temizlik */ } }
+      });
       c.on("error", () => res({testResults: []}));
     })
   };
