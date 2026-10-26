@@ -542,6 +542,16 @@
       "ref": "wf_b472c394-70b (2 lenses + 4 skeptics, none refuted): M1-M7/L1/L4/L7/L8 FIXED; MEDIUM: reconciliation-note expected text built from template (N26-N30), proposedOnly profiles==den fixture (N04-N06,N15,N16,N31), tr unavailable+reason unasserted (N01,N02,N22), THEAD unpinned; LOWs: false 'no run journal' reason when readiness unavailable, shared read epoch, L1 one-direction, null/readinessError combo",
       "policy": "TEP-1",
       "at": "2026-10-26T23:07:08.461Z"
+    },
+    {
+      "pr": 262,
+      "sha": "17f96c799b70a4e7173d1f5d1ffa0b0bc7bf44c1",
+      "kind": "delta",
+      "base": "d2d12d07b4a8e95fd2b21ef6c7acdeec88c7245f",
+      "verdict": "ROUND_LIMIT_2MEDIUM_test_gaps_1SEC_LOW",
+      "ref": "wf_7785a594-09c (2 lenses + 2 skeptics): production code correct; MEDIUM R2-L3 test passes on old route (N6 survives); MEDIUM no test pins loader reads ONLY READINESS_INPUT_FILES (N2d survives); security LOW symlinked STATIC_DATA_DIRS dir followed; LOWs skipIf(win32) blanket, slugsOnDisk literal path. Strategy change: one bounded final push verified by coordinator mutant checklist (N6, N2d, symlinked dir), no open-ended round 4",
+      "policy": "TEP-1",
+      "at": "2026-10-26T23:24:53.314Z"
     }
   ],
   "tests": [],
