@@ -498,6 +498,7 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
         release(); await stopping; const r1: any = await first;
         if (honour) { expect(st.spawned, "no sandbox is created after the cancel").toBe(0); } else { expect(st.spawned).toBe(1); expect(st.children[0]!.exitCode !== null || st.children[0]!.signalCode !== null, "the late spawn is killed and awaited").toBe(true); }
         expect(m.isActive(p.projectId)).toBe(false); expect(JSON.stringify(r1).includes('"status":"RUNNING"')).toBe(false);
+        for (const c of st.children) for (let i = 0; i < 100 && c.pid && pidAlive(c.pid); i++) await new Promise(r => setTimeout(r, 50)); // Windows: canlı cwd dizini silinemez
         if (how !== "close") {
           const second = await m.start(p); expect(second.status).toMatch(/RUNNING|STARTING/); const startedAt = second.startedAt;
           await new Promise(r => setTimeout(r, 400));
@@ -513,13 +514,14 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
     try {
       await m.start(p); const a1 = (m as any).active.get(p.projectId); const pid1 = a1.child.pid as number;
       (m as any).active.delete(p.projectId); (m as any).reaping.delete(p.projectId); a1.release?.(); a1.release = null; // eski çalıştırma haritadan düşmüş (iptal/yarış senaryosu)
+      // Windows'ta cwd'si workspace içinde CANLI bir süreç varken dizin silinemez (EPERM): eski çalıştırmanın süreci gerçekten ölmeden yenisi başlatılmaz.
+      killProcessTree(pid1); for (let i = 0; i < 100 && pidAlive(pid1); i++) await new Promise(r => setTimeout(r, 50)); expect(pidAlive(pid1), "run 1 really gone").toBe(false);
       await new Promise(r => setTimeout(r, 1100)); // startedAt farklı olsun
       const second = await m.start(p); expect(second.status).toMatch(/RUNNING|STARTING/);
       const rec = () => JSON.parse(fs.readFileSync(path.join(dataDir, "projects", p.projectId, "devrun", "state.json"), "utf8"));
       const before = rec(); expect(before.startedAt).toBe(second.startedAt); expect(before.startedAt).not.toBe(a1.state.startedAt);
-      (m as any).onExit(a1, 1, null); // eski çalıştırmanın GEÇ çıkışı
+      (m as any).onExit(a1, 1, null); // eski çalıştırmanın GEÇ (ikinci) çıkış bildirimi: ilk gerçek çıkış run 2 başlamadan önce işlendi
       expect(rec(), "the new run's record must be untouched").toMatchObject({startedAt: second.startedAt, status: before.status}); expect(rec().exitCode ?? null).toBeNull();
-      killProcessTree(pid1);
     } finally { await m.close().catch(() => undefined); }
   }, 60_000);
 
