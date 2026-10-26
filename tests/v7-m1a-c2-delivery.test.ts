@@ -13,7 +13,7 @@ import {ProjectStudio} from "../core/workos/project-studio.js";
 import {completionEvidence, deliveryView, deriveOutcomes, productVerificationOf, sourceDeliveryAcceptanceCheck, sourceGenerationOf, M1A_LABELS} from "../core/workos/outcomes.js";
 import type {RunEvidence, WorkRun} from "../core/workos/types.js";
 import {listZipEntries, readZipEntry} from "../core/workos/zip.js";
-import {T, setup, okScript, runner, api, HDR, git, journalEntries, rewriteJournal, tmpRoot, rmTmp, ENV_POLICY} from "./support/relfx.js";
+import {T, setup, okScript, runner, drive, api, HDR, git, journalEntries, rewriteJournal, tmpRoot, rmTmp, ENV_POLICY} from "./support/relfx.js";
 import type {Ctx} from "./support/relfx.js";
 
 let tmp = "";
@@ -403,5 +403,176 @@ describe("LANE-B delivery routes: write gates and refusal audit events", () => {
     expect(JSON.stringify(named(c, "WORKOS_SOURCE_DELIVERY_REFUSED"))).toContain("DELIVERY_ARTIFACT_MODIFIED");
     const all = JSON.stringify(auditEvents(c));
     expect(all).not.toContain(c.tmp);
+  });
+});
+
+// //TR: LANE-B B-E2E-1: ilk teslim zincirinin backend uçtan uca kanıtı tek testte: intake(template) -> yönetilen depo -> plan -> koşu (sahte implementer'ın küçük gerçek değişikliği) -> VERIFY'ın ExecutionGate üzerinden GERÇEK LinuxUnshareSandboxProvider ile çalışması -> teslim kaydının okunması -> görev durumunun koşuyu izlemesi. Sandbox bu ana makinede doğrulanırsa testler ÇALIŞMIŞ olmalıdır; doğrulanamazsa dürüst NOT_EXECUTED / SANDBOX_UNAVAILABLE ve tam neden beklenir (asla sahte PASS).
+describe("LANE-B first-delivery backend E2E (intake template -> plan -> run -> VERIFY via ExecutionGate -> delivery -> task status)", () => {
+  async function walk(mkProvider: () => import("../core/workos/execution-gate.js").SandboxProvider, label: string) {
+    const {LINUX_SANDBOX_ID} = await import("../core/agents/linux-unshare-sandbox.js");
+    const dataDir = path.join(tmp, "data-e2e"), runtime = path.join(tmp, "runtime-e2e"); fs.mkdirSync(runtime, {recursive: true});
+    const ctx0 = {tmp, runtime, dataDir, tenantId: "tA"} as Ctx;
+    const provider = mkProvider();
+    const st = await provider.selfTest();
+    const branch = st.ok ? "SANDBOX_VERIFIED_TESTS_EXECUTED" : `SANDBOX_UNAVAILABLE_${st.detail}`;
+    console.log(`B-E2E-1 ${label} sandbox branch: ${branch}`);
+    const app = api(ctx0, {sandbox: provider}); apps.push(app);
+    const post = (url: string, payload: unknown) => app.inject({method: "POST", url, headers: HDR, payload: payload as any});
+    const get = (url: string) => app.inject({method: "GET", url, headers: HDR});
+
+    // 1. intake with a template -> project with a managed repository and the template's test command
+    const itk = await post("/v1/intakes", {idea: "A small web app with an API where I track my daily reading streak", template: "web-node", idempotencyKey: "e2e-1"});
+    expect(itk.statusCode, itk.body).toBe(201);
+    const {projectId, missionId} = itk.json().intake as {projectId: string; missionId: string};
+    const project = (await get("/v1/projects")).json().projects.find((x: any) => x.projectId === projectId);
+    expect(project).toMatchObject({template: "web-node", testCommand: ["node", "test.js"], repository: {managed: true}});
+    // 2. plan -> tasks
+    const plan = await post(`/v1/missions/${missionId}/plan`, {tasks: [{title: "Add the reading page"}, {title: "Keep the API health check"}]});
+    expect(plan.statusCode, plan.body).toBeLessThan(300);
+    const tasks = (await get(`/v1/missions/${missionId}/tasks`)).json().tasks as {taskId: string; title: string}[];
+    expect(tasks.length).toBe(2);
+    // 3. mission authorized, one run with the fake implementer's small real change
+    for (const to of ["PREFLIGHT", "AUTHORIZED"]) expect((await post(`/v1/missions/${missionId}/transition`, {to, reason: "go"})).statusCode).toBe(200);
+    const page = '<!doctype html><html><head><meta charset="utf-8"><title>Reading streak</title></head><body><h1>Reading streak</h1><p>Read today to keep your streak.</p></body></html>\n';
+    const fake = new FakeExecutors(okScript({implement: () => ({files: {"public/index.html": page}})})), pair = fake.pair(), store = new WorkOsStore(dataDir);
+    const run0 = store.createRun({tenantId: "tA", missionId, executor: {implementer: pair.implementer.identity, reviewer: pair.reviewer.identity}, createdBy: "FOUNDER_LOCAL"});
+    const link = await post(`/v1/tasks/${tasks[0].taskId}/runs`, {runId: run0.runId});
+    expect(link.statusCode, link.body).toBeLessThan(300);
+    const c = {tmp, store, dataDir, runtime, stopFile: path.join(runtime, "GLOBAL_STOP.json"), repo: "", head: "", missionId, projectId, tenantId: "tA"} as Ctx;
+    const run = await drive(c, runner(c, fake, {executionGate: new ExecutionGate(provider)}), run0.runId);
+    expect(run.status, run.reason ?? "").toBe("AWAITING_APPROVAL");
+    expect(run.headSha).toBeTruthy(); expect(run.headSha).not.toBe(run.baseSha);
+    const ev = run.evidence.map(e => e.kind);
+    expect(ev).toContain("IMPLEMENT"); expect(ev).toContain("REVIEW");
+    // 4. VERIFY: executed through the real sandbox, or honestly NOT_EXECUTED with the exact reason
+    const delivery = (await get(`/v1/work-runs/${run.runId}/delivery`)).json().delivery;
+    expect(delivery).toMatchObject({runId: run.runId, missionId, sourceCommit: run.headSha, sourceGeneration: {state: "SOURCE_GENERATION_COMPLETE"}});
+    if (st.ok) {
+      const v = run.evidence.find(e => e.kind === "VERIFY_TESTS")!;
+      expect(ev).not.toContain("VERIFY_TESTS_NOT_EXECUTED");
+      expect(v, `branch ${branch}: ${run.reason ?? ""}`).toBeTruthy();
+      expect(v.exitCode).toBe(0);
+      expect(v.sandboxProviderId).toBe(LINUX_SANDBOX_ID);
+      expect(fs.readFileSync(path.join(dataDir, v.logPath!), "utf8")).toContain("tests 3");
+      expect(delivery.productVerification, JSON.stringify(delivery.productVerification)).toMatchObject({state: "PRODUCT_VERIFIED"});
+    } else {
+      expect(run.reason).toContain("TESTS_NOT_EXECUTED_SANDBOX_UNAVAILABLE");
+      expect(ev).toContain("VERIFY_TESTS_NOT_EXECUTED"); expect(ev).not.toContain("VERIFY_TESTS");
+      expect(run.evidence.find(e => e.kind === "VERIFY_TESTS_NOT_EXECUTED")!.note).toMatch(/^NOT_EXECUTED: SANDBOX_UNAVAILABLE \(SELF_TEST_FAILED\)/);
+      expect(st.detail).toMatch(/^[A-Z_]+$/);
+      expect(delivery.productVerification).toMatchObject({state: "NOT_VERIFIED", reason: "NOT_EXECUTED:SANDBOX_UNAVAILABLE"});
+    }
+    // 5. the delivery record can be prepared and read back
+    const prep = await post(`/v1/work-runs/${run.runId}/delivery/prepare`, {});
+    expect(prep.statusCode, prep.body).toBe(201);
+    expect(prep.json().artifact).toMatchObject({runId: run.runId, sourceCommit: run.headSha});
+    expect((await get(`/v1/work-runs/${run.runId}/delivery`)).json().delivery.artifact?.exportArtifactHash).toBe(prep.json().artifact.exportArtifactHash);
+    // 6. the task status follows the run (AWAITING_APPROVAL -> IN_PROGRESS), the other task is untouched; the flow view shows the chain
+    const rec = await post(`/v1/work-runs/${run.runId}/tasks/reconcile`, {});
+    expect(rec.statusCode, rec.body).toBe(200);
+    expect((await get(`/v1/tasks/${tasks[0].taskId}`)).json().task.status).toBe("IN_PROGRESS");
+    expect((await get(`/v1/tasks/${tasks[1].taskId}`)).json().task.status).toBe("PENDING");
+    const flow = (await get(`/v1/projects/${projectId}/flow`)).json().flow;
+    expect(flow.latestRunId).toBe(run.runId); expect(flow.testCommand).toBe("CONFIGURED"); expect(flow.taskRuns).toMatchObject({tasksWithRuns: 1, tasks: 2});
+    return {executed: st.ok, branch};
+  }
+  it("real Linux sandbox provider on this host: EXECUTED+passed when it verifies, otherwise honest NOT_EXECUTED with the exact reason (the CI host takes one branch; it is printed)", { timeout: T }, async () => {
+    const {LinuxUnshareSandboxProvider} = await import("../core/agents/linux-unshare-sandbox.js");
+    const isRoot = (process.getuid?.() ?? 0) === 0;
+    const r = await walk(() => new LinuxUnshareSandboxProvider(isRoot ? {acceptUnenforcedProcessLimit: true} : {}), "real");
+    expect(typeof r.executed).toBe("boolean");
+  });
+  it("a host that cannot isolate (unshare missing) always yields the honest NOT_EXECUTED outcome with SANDBOX_UNAVAILABLE and never a PASS", { timeout: T }, async () => {
+    const {LinuxUnshareSandboxProvider} = await import("../core/agents/linux-unshare-sandbox.js");
+    const r = await walk(() => new LinuxUnshareSandboxProvider({unshareBinary: "/nonexistent/unshare"}), "forced-unavailable");
+    expect(r).toEqual({executed: false, branch: "SANDBOX_UNAVAILABLE_UNSHARE_MISSING"});
+  });
+});
+
+// //TR: LANE-B B-E2E-REAL-1: GERÇEK buildServer (varsayılan LinuxUnshareSandboxProvider) ile uçtan uca arka uç zinciri: intake(web-node) -> yönetilen depo -> plan -> görev -> FAKE implementer ile koşu -> testler sandbox içinde -> teslim -> POST /product/start -> 127.0.0.1 köprüsünden 200 -> stop -> port kapalı. Sandbox/loopback bu ortamda yoksa her adımda dürüst ret doğrulanır, BLOCKED kodu yazdırılır ve test ATLANIR (PASS sayılmaz).
+describe("LANE-B real-sandbox backend E2E (B-E2E-REAL-1)", () => {
+  async function chain(serverSandbox: "DEFAULT" | null, runProvider: () => import("../core/workos/execution-gate.js").SandboxProvider, label: string) {
+    const dataDir = path.join(tmp, `data-real-${label}`), runtime = path.join(tmp, `runtime-real-${label}`); fs.mkdirSync(runtime, {recursive: true});
+    const c0 = {tmp, runtime, dataDir, tenantId: "tA"} as Ctx;
+    // DEFAULT: buildServer'a HİÇ sandbox anahtarı verilmez (api() her zaman verir); sunucu kendi varsayılan LinuxUnshareSandboxProvider'ını kurar.
+    let app: ReturnType<typeof api>;
+    if (serverSandbox === null) app = api(c0, {sandbox: null});
+    else { const {buildServer} = await import("../apps/control-api/src/server.js"); fs.mkdirSync(path.join(tmp, "config"), {recursive: true}); fs.copyFileSync(ENV_POLICY, path.join(tmp, "config", "environment-policy.json"));
+      app = buildServer({controlToken: HDR["x-uasco-control-token"], runtime, repoRoot: tmp, dataDir, tenantId: "tA", port: 3210, logger: false}) as any; }
+    apps.push(app);
+    const post = (url: string, payload: unknown = {}) => app.inject({method: "POST", url, headers: HDR, payload: payload as any});
+    const get = (url: string) => app.inject({method: "GET", url, headers: HDR});
+    const steps: string[] = [];
+    // 1. intake (web-node) -> project + managed git repo
+    const itk = await post("/v1/intakes", {idea: "A small web app where I track my daily reading streak", template: "web-node", idempotencyKey: `real-${label}`});
+    expect(itk.statusCode, itk.body).toBe(201); steps.push("INTAKE_201");
+    const {projectId, missionId} = itk.json().intake as {projectId: string; missionId: string};
+    const project = (await get("/v1/projects")).json().projects.find((x: any) => x.projectId === projectId);
+    expect(project).toMatchObject({template: "web-node", testCommand: ["node", "test.js"], repository: {managed: true}}); steps.push("MANAGED_REPO");
+    // 2. plan -> tasks
+    expect((await post(`/v1/missions/${missionId}/plan`, {tasks: [{title: "Add the reading page"}, {title: "Keep the API health check"}]})).statusCode).toBeLessThan(300);
+    const tasks = (await get(`/v1/missions/${missionId}/tasks`)).json().tasks as {taskId: string}[]; expect(tasks.length).toBe(2); steps.push("PLAN_2_TASKS");
+    // 3. authorize + run with the fake implementer (no Claude, nothing paid); VERIFY goes through the REAL provider (or honestly NOT_EXECUTED)
+    for (const to of ["PREFLIGHT", "AUTHORIZED"]) expect((await post(`/v1/missions/${missionId}/transition`, {to, reason: "go"})).statusCode).toBe(200);
+    const page = '<!doctype html><html><head><meta charset="utf-8"><title>Reading streak</title></head><body><h1>Reading streak</h1><p>Read today to keep your streak.</p></body></html>\n';
+    const fake = new FakeExecutors(okScript({implement: () => ({files: {"public/index.html": page}})})), pair = fake.pair(), store = new WorkOsStore(dataDir);
+    const run0 = store.createRun({tenantId: "tA", missionId, executor: {implementer: pair.implementer.identity, reviewer: pair.reviewer.identity}, createdBy: "FOUNDER_LOCAL"});
+    expect((await post(`/v1/tasks/${tasks[0].taskId}/runs`, {runId: run0.runId})).statusCode).toBeLessThan(300);
+    const provider = runProvider(), st = await provider.selfTest();
+    const c = {tmp, store, dataDir, runtime, stopFile: path.join(runtime, "GLOBAL_STOP.json"), repo: "", head: "", missionId, projectId, tenantId: "tA"} as Ctx;
+    const run = await drive(c, runner(c, fake, {executionGate: new ExecutionGate(provider)}), run0.runId);
+    expect(run.status, run.reason ?? "").toBe("AWAITING_APPROVAL"); expect(run.headSha).toBeTruthy(); expect(run.headSha).not.toBe(run.baseSha); steps.push("RUN_AWAITING_APPROVAL");
+    const delivery = (await get(`/v1/work-runs/${run.runId}/delivery`)).json().delivery;
+    expect(delivery).toMatchObject({runId: run.runId, sourceCommit: run.headSha, sourceGeneration: {state: "SOURCE_GENERATION_COMPLETE"}});
+    if (st.ok) {
+      const v = run.evidence.find((e: any) => e.kind === "VERIFY_TESTS")!;
+      expect(v, run.reason ?? "").toBeTruthy(); expect(v.exitCode).toBe(0); expect(fs.readFileSync(path.join(dataDir, v.logPath!), "utf8")).toContain("tests 3");
+      expect(delivery.productVerification).toMatchObject({state: "PRODUCT_VERIFIED"}); steps.push("TESTS_EXECUTED_IN_SANDBOX_PRODUCT_VERIFIED");
+    } else {
+      expect(run.reason).toContain("TESTS_NOT_EXECUTED_SANDBOX_UNAVAILABLE"); expect(delivery.productVerification).toMatchObject({state: "NOT_VERIFIED", reason: "NOT_EXECUTED:SANDBOX_UNAVAILABLE"}); steps.push(`TESTS_NOT_EXECUTED_${st.detail}`);
+    }
+    // 4. delivery record
+    const prep = await post(`/v1/work-runs/${run.runId}/delivery/prepare`, {}); expect(prep.statusCode, prep.body).toBe(201); steps.push("DELIVERY_PREPARED");
+    // 5. product: start (tied to the delivery) -> status -> 127.0.0.1 bridge 200 -> stop -> port closed; or the exact honest refusal with ZERO spawn
+    const gate = (await get("/v1/system/executors")).json().sandbox;
+    const caps = (provider as any).capabilities as {loopback?: boolean} | undefined;
+    const start = await post(`/v1/work-runs/${run.runId}/product/start`, {});
+    const dv = (await get(`/v1/projects/${projectId}/devrun`)).json().devrun;
+    let blocked: string | null = null;
+    if (serverSandbox === null || !st.ok || gate.state !== "AVAILABLE") {
+      expect(start.statusCode, start.body).toBe(409); expect(start.json().error).toBe("SANDBOX_UNAVAILABLE");
+      blocked = `SANDBOX_UNAVAILABLE:${gate.detail ?? (serverSandbox === null ? "NO_VERIFIED_PROVIDER" : st.detail)}`;
+    } else if (!caps || caps.loopback !== true) {
+      expect(start.statusCode, start.body).toBe(409); expect(start.json()).toMatchObject({error: "DEVRUN_SANDBOX_UNAVAILABLE"}); expect(String(start.json().reason)).toMatch(/^SANDBOX_LOOPBACK_NOT_VERIFIED:/);
+      blocked = `DEVRUN_SANDBOX_UNAVAILABLE:${start.json().reason}`;
+    }
+    if (blocked) {
+      expect(dv).toMatchObject({status: "BLOCKED", pid: null, port: null}); // ZERO spawn: no process, no port, no bridge
+      expect(fs.existsSync(path.join(dataDir, "projects", projectId, "devrun", "workspace"))).toBe(false); steps.push(`PRODUCT_REFUSED_${blocked}`);
+      return {steps, blocked};
+    }
+    expect(start.statusCode, start.body).toBe(200);
+    const pr = start.json().product; expect(pr).toMatchObject({runId: run.runId, deliveredHeadSha: run.headSha, tiedToThisRun: true, devrun: {status: "RUNNING", bridged: true, deliveryRunId: run.runId, headSha: run.headSha}}); expect(pr.devrun.preview.state).toBe("AVAILABLE"); steps.push("PRODUCT_STARTED_BRIDGED");
+    const stat = (await get(`/v1/work-runs/${run.runId}/product`)); expect(stat.statusCode).toBe(200); expect(stat.json().product).toMatchObject({tiedToThisRun: true, devrun: {status: "RUNNING"}}); steps.push("PRODUCT_STATUS_RUNNING");
+    const port = pr.devrun.port as number; const res = await fetch(`http://127.0.0.1:${port}/`);
+    expect(res.status).toBe(200); expect(await res.text()).toContain("Reading streak"); steps.push("HTTP_200_DELIVERED_PAGE_VIA_127.0.0.1_BRIDGE");
+    const stop = await post(`/v1/work-runs/${run.runId}/product/stop`, {}); expect(stop.statusCode, stop.body).toBe(200); expect(stop.json().product.devrun.status).toBe("STOPPED");
+    await expect(fetch(`http://127.0.0.1:${port}/`)).rejects.toBeTruthy(); steps.push("STOPPED_PORT_CLOSED");
+    return {steps, blocked: null};
+  }
+
+  it("REAL: buildServer's default Linux provider runs the whole chain; where the sandbox or its loopback is not available every step asserts the exact refusal, the BLOCKED code is printed and the test is SKIPPED (never PASS)", { timeout: T }, async ctx => {
+    const {LinuxUnshareSandboxProvider} = await import("../core/agents/linux-unshare-sandbox.js");
+    // Sunucu varsayılan sağlayıcısını (seçeneksiz) kurar; koşu için AYNI seçeneklerle ayrı bir örnek kullanılır.
+    const r = await chain("DEFAULT", () => new LinuxUnshareSandboxProvider(), "default");
+    console.log(`B-E2E-REAL-1 steps: ${r.steps.join(" > ")}`);
+    if (r.blocked) { console.log(`B-E2E-REAL-1 BLOCKED: ${r.blocked}`); ctx.skip(); }
+    expect(r.steps).toContain("STOPPED_PORT_CLOSED");
+  });
+
+  it("no provider (sandbox: null): the product start is refused 409 SANDBOX_UNAVAILABLE with zero spawn, no workspace, no port; the rest of the chain still completes honestly NOT_EXECUTED", { timeout: T }, async () => {
+    const {LinuxUnshareSandboxProvider} = await import("../core/agents/linux-unshare-sandbox.js");
+    const r = await chain(null, () => new LinuxUnshareSandboxProvider({unshareBinary: "/nonexistent/unshare"}), "null");
+    expect(r.blocked).toBe("SANDBOX_UNAVAILABLE:NO_VERIFIED_PROVIDER"); expect(r.steps).toContain("TESTS_NOT_EXECUTED_UNSHARE_MISSING");
   });
 });
