@@ -65,7 +65,8 @@ export function claudeAnalysisReadiness(o: ClaudeAnalysisReadinessOptions): Anal
 
 // ---- Adım sonucu ----
 export type AnalysisStep =
-  | {status: "BLOCKED"; blocker: string; blockers: string[]; founderAction: string | null; readiness: AnalysisReadiness}
+  // //TR: kind/artifactId yalnız ANALYSIS_PHASE_NOT_ADVANCED (onaylı ama ilerlemeyen artefakt) cevabında dolar: arayüz "yeniden onayla"yı (POST .../predev/artifacts/:artifactId/approve) düzyazıyı ayrıştırmadan sunabilsin.
+  | {status: "BLOCKED"; blocker: string; blockers: string[]; founderAction: string | null; readiness: AnalysisReadiness; kind?: ArtifactKind; artifactId?: string}
   | {status: "DRAFT_READY"; kind: ArtifactKind; artifactId: string; version: number; roleId: string; next: "FOUNDER_APPROVAL"}
   | {status: "AWAITING_APPROVAL"; kind: ArtifactKind; artifactId: string; artifactState: "DRAFT" | "SUBMITTED"; next: "FOUNDER_APPROVAL"}
   | {status: "REJECTED"; kind: ArtifactKind; reason: string}
@@ -112,9 +113,9 @@ export interface AnalysisDeps {
 
 // //TR: Tek uçuş: route her istekte yeni bir AnalysisFlow kurar, bu yüzden koruma modül düzeyindedir (mission başına). İkinci eşzamanlı step() ücretli çağrı başlatmadan ANALYSIS_IN_PROGRESS ile cevaplanır; sürüş bitince (başarı, hata, fırlatma) bırakılır.
 const IN_FLIGHT = new Set<string>();
-const blockedStep = (code: string, founderAction: string): AnalysisStep => {
+const blockedStep = (code: string, founderAction: string, target: {kind?: ArtifactKind; artifactId?: string} = {}): AnalysisStep => {
   const readiness: AnalysisReadiness = {ready: false, blockers: [code], blocker: code, founderAction, profiles: null};
-  return {status: "BLOCKED", blocker: code, blockers: [code], founderAction, readiness};
+  return {status: "BLOCKED", blocker: code, blockers: [code], founderAction, readiness, ...target};
 };
 
 export class AnalysisFlow {
@@ -156,7 +157,8 @@ export class AnalysisFlow {
     const approvedStuck = current !== undefined && rm.artifacts[current].state === "APPROVED";
     return blockedStep("ANALYSIS_PHASE_NOT_ADVANCED", approvedStuck
       ? `The ${current} artefact is already approved but the pre-dev phase (${rm.phase}) did not advance (an interrupted approval). Approve it again: the approval resumes the advance. No new draft is produced until then.`
-      : `The pre-dev phase (${rm.phase}) does not match the next analysis step (${next ?? "none"}). Nothing was produced; the sequence needs the Founder's attention before the analysis can continue.`);
+      : `The pre-dev phase (${rm.phase}) does not match the next analysis step (${next ?? "none"}). Nothing was produced; the sequence needs the Founder's attention before the analysis can continue.`,
+      approvedStuck && current !== undefined && rm.artifacts[current].artifactId !== null ? {kind: current, artifactId: rm.artifacts[current].artifactId!} : {});
   }
 
   private async produceStep(driver: PreDevDriver, missionId: string, rm: ReturnType<WorkOsStore["preDevReadModel"]>): Promise<AnalysisStep> {

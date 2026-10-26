@@ -620,7 +620,7 @@ describe("C-FLOW-ANALYSIS-1: intake -> analysis -> plan", () => {
       expect(t.rm().artifacts[kind].state).toBe("APPROVED");
       const phase = t.rm().phase, callsBefore = t.calls.length;
       for (let n = 0; n < 2; n++) {
-        expect(await t.flow.step(t.missionId), `call ${n + 1} for ${kind}`).toMatchObject({status: "BLOCKED", blocker: "ANALYSIS_PHASE_NOT_ADVANCED", blockers: ["ANALYSIS_PHASE_NOT_ADVANCED"], founderAction: expect.stringContaining(kind)});
+        expect(await t.flow.step(t.missionId), `call ${n + 1} for ${kind}`).toMatchObject({status: "BLOCKED", blocker: "ANALYSIS_PHASE_NOT_ADVANCED", blockers: ["ANALYSIS_PHASE_NOT_ADVANCED"], founderAction: expect.stringContaining(kind), kind, artifactId}); // structured target: the UI offers "re-approve" (POST .../predev/artifacts/:artifactId/approve) without parsing prose
         expect(t.calls, "a paid builder call was made for a state the driver would refuse anyway").toHaveLength(callsBefore);
       }
       expect(t.rm().phase, "nothing was advanced or recorded").toBe(phase);
@@ -634,6 +634,46 @@ describe("C-FLOW-ANALYSIS-1: intake -> analysis -> plan", () => {
     await stuck("Requirements", (req as {artifactId: string}).artifactId); // a later phase
     expect(await t.flow.step(t.missionId)).toMatchObject({status: "DRAFT_READY", kind: "Plan"});
     expect(t.calls.map(c => c.kind)).toEqual(["BusinessAnalysis", "Requirements", "Plan"]);
+  });
+
+  it("L1 (re-verify): the phase check runs BEFORE the readiness question: a stuck artefact is answered ANALYSIS_PHASE_NOT_ADVANCED even when the setup is not ready, and readiness is never asked", async () => {
+    let asked = 0;
+    const notReady: AnalysisReadiness = {ready: false, blockers: ["CLAUDE_CLI_NOT_FOUND"], blocker: "CLAUDE_CLI_NOT_FOUND", founderAction: "install claude", profiles: null};
+    const t = setup();
+    const draft = await t.flow.step(t.missionId) as {artifactId: string};
+    approveWithoutAdvance(t, draft.artifactId);
+    const flow = new AnalysisFlow({store: t.store, scope: SCOPE, builder: t.builder, readiness: () => { asked += 1; return notReady; }});
+    const r = await flow.step(t.missionId);
+    expect(r).toMatchObject({status: "BLOCKED", blocker: "ANALYSIS_PHASE_NOT_ADVANCED", kind: "BusinessAnalysis", artifactId: draft.artifactId});
+    expect(asked, "readiness must not be asked while the sequence is stuck").toBe(0);
+    t.approve(draft.artifactId); // resumed: now the readiness answer is the one that blocks
+    expect(await flow.step(t.missionId)).toMatchObject({status: "BLOCKED", blocker: "CLAUDE_CLI_NOT_FOUND"});
+    expect(asked).toBe(1);
+  });
+
+  it("L2 (re-verify, X3b): a PreDevDriverError from the builder (no production builder) in a LATER phase names that phase's kind", async () => {
+    const t = setup();
+    const first = await t.flow.step(t.missionId) as {artifactId: string};
+    t.approve(first.artifactId);
+    const flow = new AnalysisFlow({store: t.store, scope: SCOPE, builder: NO_ANALYSIS_BUILDER, readiness: () => READY});
+    expect(await flow.step(t.missionId)).toEqual({status: "BUILDER_FAILED", kind: "Requirements", code: "PREDEV_DRIVER_BUILDER_NOT_CONFIGURED"});
+  });
+
+  it("L2 (re-verify, X3c): when the recorder fails after a lost race (another actor approved this phase's artefact without advancing it while our paid call ran), the answer names the NEXT unfinished kind of the fresh state, not the stale or the first one", async () => {
+    let t!: ReturnType<typeof setup>;
+    t = setup((kind, n) => {
+      if (kind === "Requirements" && n === 1) { // the other actor: records and approves Requirements (no advance) during our paid call
+        const preDevId = t.rm().preDevId!;
+        const art = t.store.recordPreDevArtifact(SCOPE, preDevId, {kind, authorRoleId: PRE_DEV_ROLE_MAP[kind][0], content: TASKHUB_ARTIFACTS[kind] as never}, PREDEV_AGENT_ACTOR);
+        approveWithoutAdvance(t, art.id);
+      }
+      return undefined;
+    });
+    const first = await t.flow.step(t.missionId) as {artifactId: string};
+    t.approve(first.artifactId);
+    const r = await t.flow.step(t.missionId);
+    expect(t.rm().artifacts.Requirements.state).toBe("APPROVED");
+    expect(r).toEqual({status: "BUILDER_FAILED", kind: "Plan", code: "PREDEV_DRIVER_ARTIFACT_PENDING:Requirements:APPROVED"});
   });
 
   it("F2: the plan gate needs every kind APPROVED: a DRAFT, SUBMITTED or REJECTED Architecture is ANALYSIS_NOT_COMPLETE for planFromApproved AND createPlan and creates no task", async () => {
