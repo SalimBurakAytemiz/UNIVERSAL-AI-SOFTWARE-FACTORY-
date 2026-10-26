@@ -51,7 +51,9 @@ export function verdictIsNegative(v) {
   if (Array.isArray(v.findings) && v.findings.some(f => isObj(f) && (f.classification === "BLOCKER" || f.severity === "P0" || f.severity === "P1"))) return true;
   return isObj(v.checks) && CHECK_KEYS.some(k => isStr(v.checks[k]) && v.checks[k] !== "PASS" && v.checks[k] !== "NOT_APPLICABLE");
 }
-const AUTHORITY_CODE = /^(?:PROTECTED_PATH$|CI_EXECUTED_PATH:)/;
+// //TR: Founder yetkisi isteyen kodlar yalnız merge-gate'in FOUNDER risk sınıfındaki dosyalar için ürettikleridir (korunan, CI'da çalışan veya yüksek riskli yol). İçerikten doğrulanan PREAUTHORIZED sınıflar (route kaydı, masaüstü izin listesi, test kaydı, trust-root yeniden mühürleme) hiçbir kod üretmez; yine de CI ve bağımsız CLEAN karar gerekir.
+const AUTHORITY_CODE = /^(?:PROTECTED_PATH$|CI_EXECUTED_PATH:|HIGH_RISK_PATH$)/;
+export const RISK_TIERS = Object.freeze(["ROUTINE", "PREAUTHORIZED", "FOUNDER"]);
 
 // Canonical JSON (sorted keys) so a digest can be recomputed by anyone from the published evidence file.
 export function canonical(v) {
@@ -94,10 +96,14 @@ export function founderAuthorityOk(approvals, founderLogin) {
 // Deterministic pre-gates only (no verdict): used before the reviewer runs, so a red or incomplete PR never spends review tokens.
 export function preGate(evidence) {
   let mg;
-  try { mg = evaluateMergeGate(evidence, {mode: "process"}); } catch { return {blockers: ["INTERNAL_ERROR"], authority: [], headSha: null, baseSha: null}; }
+  try { mg = evaluateMergeGate(evidence, {mode: "process"}); } catch { return {blockers: ["INTERNAL_ERROR"], authority: [], headSha: null, baseSha: null, riskTier: "FOUNDER"}; }
   const reasons = Array.isArray(mg.reasons) ? mg.reasons : ["INTERNAL_ERROR"];
   const kept = reasons.filter(x => !MERGE_GATE_VERDICT_CODE.test(x));
-  return {blockers: kept.filter(x => !AUTHORITY_CODE.test(x)), authority: kept.filter(x => AUTHORITY_CODE.test(x)), headSha: mg.expectedHeadSha, baseSha: mg.expectedBaseSha};
+  const blockers = kept.filter(x => !AUTHORITY_CODE.test(x)), authority = kept.filter(x => AUTHORITY_CODE.test(x));
+  const riskTier = RISK_TIERS.includes(mg.riskTier) ? mg.riskTier : "FOUNDER";
+  // Defence in depth: a FOUNDER tier must always surface as Founder authority or as a hard blocker, never as nothing.
+  if (riskTier === "FOUNDER" && !authority.length && !blockers.length) blockers.push("RISK_TIER_UNRESOLVED");
+  return {blockers, authority, headSha: mg.expectedHeadSha, baseSha: mg.expectedBaseSha, riskTier};
 }
 
 // //TR: Reviewer teşhisi: claude-code-action'ın yürütme kaydındaki son "result" mesajı yalnız bellekte, sabit desenlerle tek bir sabit koda sınıflandırılır; kaydın hiçbir metni (PR içeriği, prompt injection veya sır taşıyabilir) kopyalanmaz, yazılmaz ya da yayımlanmaz. Teşhis yalnız hiç karar teslim edilmediğinde (karar yok veya okunamadı) ek bir blokaj nedeni ve sabit bir çözüm cümlesi ekler; teslim edilmiş bir kararı (olumlu, olumsuz, bozuk veya sır içeren) asla etkilemez, hiçbir nedeni silemez ve bir başarısızlığı asla başarıya çeviremez.
@@ -160,12 +166,14 @@ export const reviewerFailureCode = d => isObj(d) && isStr(d.code) && d.code !== 
 // Final decision. input = {evidence, verdict, currentHeadSha, approvals, policy:{founderLogin, reviewerSession}, reviewerDiagnostics?}.
 // reviewerDiagnostics (the ai-review job's fixed-shape record) only adds its failure code, after every other reason, when no verdict was delivered.
 export function decide(input) {
+  let riskTier = "FOUNDER";
   try {
     const r = [];
     if (!isObj(input) || !isObj(input.evidence)) return finish(["EVIDENCE_MALFORMED:root"], null, null, input);
     const ev = input.evidence, pol = isObj(input.policy) ? input.policy : {};
     const pre = preGate(ev);
     r.push(...pre.blockers);
+    riskTier = pre.riskTier;
     const headSha = isObj(ev.pr) && isObj(ev.pr.head) && isSha(ev.pr.head.sha) ? ev.pr.head.sha : null;
     const baseSha = isSha(ev.currentBaseSha) ? ev.currentBaseSha : null;
     // Staleness: the PR head re-read just before concluding must still be the reviewed head. A newer commit gets its own run and check.
@@ -203,18 +211,18 @@ export function decide(input) {
     // VERDICT_UNREADABLE), so it can neither remove a reason, nor reach a passing decision, nor change how a delivered verdict is recorded.
     const diag = noVerdictDelivered ? reviewerFailureCode(input.reviewerDiagnostics) : null;
     if (diag !== null) r.push(diag);
-    return finish([...new Set(r)], headSha, baseSha, input);
+    return finish([...new Set(r)], headSha, baseSha, input, riskTier);
   } catch {
-    return finish(["INTERNAL_ERROR"], null, null, input);
+    return finish(["INTERNAL_ERROR"], null, null, input, "FOUNDER");
   }
 }
 
-function finish(reasons, headSha, baseSha, input) {
+function finish(reasons, headSha, baseSha, input, riskTier = "FOUNDER") {
   const conclusion = reasons.length === 0 ? "success" : "failure";
   const verdict = isObj(input) && isObj(input.verdict) ? input.verdict : null;
   const ev = isObj(input) && isObj(input.evidence) ? input.evidence : null;
   const record = {check: CHECK_NAME, conclusion, reasons, headSha, baseSha, headTree: ev && isSha(ev.headTree) ? ev.headTree : null, pr: ev && isObj(ev.pr) ? ev.pr.number ?? null : null,
-    verdict, reviewerSession: isObj(input) && isObj(input.policy) && isStr(input.policy.reviewerSession) ? input.policy.reviewerSession : null};
+    verdict, reviewerSession: isObj(input) && isObj(input.policy) && isStr(input.policy.reviewerSession) ? input.policy.reviewerSession : null, riskTier};
   return {...record, digest: sha256(canonical(record))};
 }
 
@@ -222,7 +230,9 @@ function finish(reasons, headSha, baseSha, input) {
 const flat = (s, n) => String(s).replace(/[\r\n\t]+/g, " ").replace(/[|`<>]/g, "'").replace(/@/g, "(at)").slice(0, n);
 export function renderSummary(d, runUrl) {
   const lines = [`**${d.conclusion === "success" ? "PASS" : "FAIL"}**: ${CHECK_NAME} for head \`${d.headSha ?? "unknown"}\` (base \`${d.baseSha ?? "unknown"}\`).`, "",
-    `Evidence digest (sha256 of the canonical decision record): \`${d.digest}\``];
+    `Evidence digest (sha256 of the canonical decision record): \`${d.digest}\``,
+    // A fixed code: ROUTINE and PREAUTHORIZED need no Founder (still CI and a CLEAN verdict); FOUNDER needs uasco-founder-authority approval.
+    `Risk tier: \`${RISK_TIERS.includes(d.riskTier) ? d.riskTier : "FOUNDER"}\``];
   if (isStr(runUrl) && /^https:\/\/github\.com\/[^\s)]+$/.test(runUrl)) lines.push(`Run and evidence artifact: ${runUrl}`);
   lines.push("", d.reasons.length ? `Blocking reasons: ${d.reasons.map(x => `\`${x}\``).join(", ")}` : "Blocking reasons: none.");
   // A reviewer diagnosis among the reasons gets its fixed remedy sentence (never any text of the reviewer's output).

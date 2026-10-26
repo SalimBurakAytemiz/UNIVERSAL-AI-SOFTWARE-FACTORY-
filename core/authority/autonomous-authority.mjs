@@ -5,6 +5,7 @@ import path from "node:path";
 import {verifyVerdict} from "../../automation/lib/lease-verdict.mjs";
 import {isValidLeaseRecord, isExpired} from "../../automation/lib/task-lease.mjs";
 import {stableStringify} from "../../automation/lib/atomic-json.mjs";
+import {routeRegistrationViolations, desktopAllowlistViolations} from "./protected-change-grammar.mjs";
 
 export const AUTO = "AUTO_AUTHORIZED_BY_POLICY";
 export const BLOCKED = "BLOCKED_BY_POLICY";
@@ -18,8 +19,8 @@ export const ROUTINE_ACTION_CLASSES = Object.freeze([
   "BRANCH_CREATE", "FEATURE_BRANCH_PUSH", "PR_UPDATE", "REVIEW_DISPATCH", "CI_FAILURE_REPAIR",
   "EVIDENCE_ARCHIVE", "GOVERNED_MERGE", "NEXT_TASK_CLAIM", "TASK_RECOVERY", "STATUS_REPORT",
 ]);
-// //TR: Korunan dosyalarda yalniz bu dar, yapisal olarak dogrulanan degisiklik siniflari otomatik yetkilenebilir.
-export const PROTECTED_CHANGE_CLASSES = Object.freeze(["TEST_REGISTRATION_APPEND", "TRUST_ROOT_RESEAL"]);
+// //TR: Korunan dosyalarda yalniz bu dar, yapisal olarak dogrulanan degisiklik siniflari otomatik yetkilenebilir (COORD-TRANSITION-AUTONOMY: route kaydi ve masaustu izin listesi eklemesi de dar siniftir; dil bilgisi protected-change-grammar.mjs'tedir).
+export const PROTECTED_CHANGE_CLASSES = Object.freeze(["TEST_REGISTRATION_APPEND", "TRUST_ROOT_RESEAL", "ROUTE_REGISTRATION_APPEND", "DESKTOP_ALLOWLIST_APPEND"]);
 // //TR: Politika icerigi ne derse desin asla otomatik yetkilenmeyen siniflar (Founder istisna yonetimi: BLOCKED_BY_POLICY + kanit).
 export const NEVER_AUTO_CLASSES = Object.freeze([
   "SPEND", "NEW_PAID_SERVICE", "LEGAL_FINANCIAL_AUTHORITY", "PRODUCTION_CHANGE", "DESTRUCTIVE", "IRREVERSIBLE",
@@ -34,13 +35,16 @@ export const POLICY_CORE_PATHS = Object.freeze([
   "config/protected-paths.json", "config/action-policy.json", "scripts/run-validation.mjs", ".github/workflows/**",
 ]);
 // //TR: Dar korunan-degisiklik siniflarinin tek hedef dosyalari; bu dosyalar POLICY_CORE degildir ama yalniz ilgili sinifla degisebilir.
-const PROTECTED_CHANGE_TARGET = Object.freeze({TEST_REGISTRATION_APPEND: "config/validation.json", TRUST_ROOT_RESEAL: MANIFEST_PATH});
-const TASK_BOUND = new Set(["SOURCE_CHANGE", "TEST_CHANGE", "FAILURE_REPAIR", "FEATURE_BRANCH_PUSH", "PR_UPDATE", "CI_FAILURE_REPAIR", "TASK_RECOVERY", "TEST_REGISTRATION_APPEND", "TRUST_ROOT_RESEAL"]);
+export const PROTECTED_CHANGE_TARGET = Object.freeze({TEST_REGISTRATION_APPEND: "config/validation.json", TRUST_ROOT_RESEAL: MANIFEST_PATH,
+  ROUTE_REGISTRATION_APPEND: "apps/control-api/src/server.ts", DESKTOP_ALLOWLIST_APPEND: "apps/desktop/main.mjs"});
+const TASK_BOUND = new Set(["SOURCE_CHANGE", "TEST_CHANGE", "FAILURE_REPAIR", "FEATURE_BRANCH_PUSH", "PR_UPDATE", "CI_FAILURE_REPAIR", "TASK_RECOVERY", "TEST_REGISTRATION_APPEND", "TRUST_ROOT_RESEAL",
+  "ROUTE_REGISTRATION_APPEND", "DESKTOP_ALLOWLIST_APPEND"]);
 // //TR: Korunan dosyayi tasiyan dali itebilen/PR'i guncelleyebilen/merge edebilen siniflar (degisikligin kendisi ayni SHA'da yeniden hesaplanan AUTO yapisal kararla yetkili olmali).
 const CARRIES_PROTECTED_CHANGE = new Set(["FEATURE_BRANCH_PUSH", "PR_UPDATE", "GOVERNED_MERGE"]);
 // //TR: Yalniz bu ciddiyetler engellemez; bilinmeyen, kucuk harfli veya bos ciddiyet engeller (fail-closed).
 const NON_BLOCKING_SEVERITIES = new Set(["P2", "P3", "NIT", "INFO"]);
-const CHANGE_CLASSES = new Set(["SOURCE_CHANGE", "TEST_CHANGE", "FAILURE_REPAIR", "CI_FAILURE_REPAIR", "FEATURE_BRANCH_PUSH", "PR_UPDATE", "TEST_REGISTRATION_APPEND", "TRUST_ROOT_RESEAL"]);
+const CHANGE_CLASSES = new Set(["SOURCE_CHANGE", "TEST_CHANGE", "FAILURE_REPAIR", "CI_FAILURE_REPAIR", "FEATURE_BRANCH_PUSH", "PR_UPDATE", "TEST_REGISTRATION_APPEND", "TRUST_ROOT_RESEAL",
+  "ROUTE_REGISTRATION_APPEND", "DESKTOP_ALLOWLIST_APPEND"]);
 const SHA_RE = /^[0-9a-f]{40}$/;
 const MAX_AUTO_RISK = 3;
 
@@ -390,11 +394,20 @@ export function evaluateMerge(ev = {}, ctx = {}) {
 function deepEqual(a, b) { return stableStringify(a) === stableStringify(b); }
 const TEST_FILE_RE = /^tests\/[a-z0-9.-]+\.test\.ts$/;
 const isShard = (id) => id === "tests" || /^tests-([2-9]|[1-9]\d+)$/.test(id);
+const TEXT_CLASSES = Object.freeze({ROUTE_REGISTRATION_APPEND: routeRegistrationViolations, DESKTOP_ALLOWLIST_APPEND: desktopAllowlistViolations});
+// //TR: a, b'nin sira korunan alt dizisi mi? Eslesmeyen b ogeleri eklenenlerdir; null = a'nin bir ogesi b'de yok veya sirasi degismis.
+function insertedItems(a, b) {
+  const added = [];
+  let j = 0;
+  for (const x of b) { if (j < a.length && deepEqual(x, a[j])) j++; else added.push(x); }
+  return j === a.length ? added : null;
+}
 
 /**
  * //TR: Dar korunan-degisiklik siniflarinin YAPISAL dogrulamasi (dosya icerigi uzerinden, mesaj uzerinden degil):
- * TEST_REGISTRATION_APPEND: config/validation.json'da yalniz son tests kabuguna, diskte var olan ve hicbir adimda bulunmayan yeni tests/*.test.ts dosyalari eklenir; baska hicbir alan degismez.
+ * TEST_REGISTRATION_APPEND: config/validation.json'da yalniz mevcut tests kabuklarinin (tests, tests-N) vitest komutlarina, diskte var olan ve hicbir adimda bulunmayan yeni tests/*.test.ts dosyalari eklenir; mevcut her oge sirasini korur, baska hicbir alan (shardPlan dahil) degismez.
  * TRUST_ROOT_RESEAL: manifestte yalniz yetkili korunan dosyalarin sha256'si, head dosya baytlarindan hesaplanan degerle guncellenir (+generatedAt); giris eklenmez/silinmez, muhur SEALED kalir.
+ * ROUTE_REGISTRATION_APPEND / DESKTOP_ALLOWLIST_APPEND: metin dil bilgisi (protected-change-grammar.mjs); gerekce kodlari sabittir.
  */
 export function evaluateProtectedChange(input = {}) {
   const {classId, file, baseText, headText, headSha, headFileExists, headFileBytes, authorizedChangedProtectedPaths} = input;
@@ -403,24 +416,31 @@ export function evaluateProtectedChange(input = {}) {
   if (!PROTECTED_CHANGE_CLASSES.includes(classId)) { reasons.push(`UNSUPPORTED_PROTECTED_CHANGE_CLASS:${classId}`); return done(); }
   if (PROTECTED_CHANGE_TARGET[classId] !== file) { reasons.push(`CLASS_FILE_MISMATCH:${file}`); return done(); }
   if (!SHA_RE.test(headSha ?? "")) reasons.push("HEAD_SHA_INVALID");
+  if (Object.hasOwn(TEXT_CLASSES, classId)) { reasons.push(...TEXT_CLASSES[classId](baseText, headText)); return done(); }
   let base, head; try { base = JSON.parse(baseText); head = JSON.parse(headText); } catch { reasons.push("JSON_UNREADABLE"); return done(); }
   if (classId === "TEST_REGISTRATION_APPEND") {
     const {steps: bs, ...bRest} = base ?? {}, {steps: hs, ...hRest} = head ?? {};
     if (!deepEqual(bRest, hRest)) reasons.push("NON_STEP_FIELDS_CHANGED");
     if (!Array.isArray(bs) || !Array.isArray(hs) || bs.length !== hs.length) { reasons.push("STEP_COUNT_CHANGED"); return done(); }
-    const shardIdx = bs.map((s, i) => (isShard(s?.id) ? i : -1)).filter((i) => i >= 0);
-    const last = shardIdx.at(-1);
-    if (last === undefined) { reasons.push("NO_TEST_SHARD"); return done(); }
-    for (let i = 0; i < bs.length; i++) if (i !== last && !deepEqual(bs[i], hs[i])) reasons.push(`STEP_CHANGED:${bs[i]?.id}`);
-    const b = bs[last], h = hs[last];
-    const {command: bc, ...bo} = b, {command: hc, ...ho} = h;
-    if (!deepEqual(bo, ho)) reasons.push("SHARD_FIELDS_CHANGED");
-    if (!Array.isArray(bc) || !Array.isArray(hc) || hc.length <= bc.length || !deepEqual(hc.slice(0, bc.length), bc)) { reasons.push("NOT_A_PURE_APPEND"); return done(); }
-    const appended = hc.slice(bc.length);
+    if (!bs.some((s) => isShard(s?.id))) { reasons.push("NO_TEST_SHARD"); return done(); }
+    const appended = [];
+    for (let i = 0; i < bs.length; i++) {
+      const b = bs[i], h = hs[i];
+      if (!isShard(b?.id)) { if (!deepEqual(b, h)) reasons.push(`STEP_CHANGED:${b?.id}`); continue; }
+      const {command: bc, ...bo} = b, {command: hc, ...ho} = h ?? {};
+      if (!deepEqual(bo, ho)) reasons.push("SHARD_FIELDS_CHANGED");
+      // The runner prefix (up to and including "run") stays as it is; test files may only be added among the file arguments.
+      const at = Array.isArray(bc) ? bc.indexOf("run") : -1;
+      if (at < 0 || !Array.isArray(hc) || !deepEqual(hc.slice(0, at + 1), bc.slice(0, at + 1))) { reasons.push("NOT_A_PURE_APPEND"); continue; }
+      const added = insertedItems(bc.slice(at + 1), hc.slice(at + 1));
+      if (added === null) { reasons.push("NOT_A_PURE_APPEND"); continue; }
+      appended.push(...added);
+    }
+    if (!appended.length) { reasons.push("NOT_A_PURE_APPEND"); return done(); }
     const existing = new Set(bs.flatMap((s) => (Array.isArray(s?.command) ? s.command : [])));
     if (new Set(appended).size !== appended.length) reasons.push("DUPLICATE_APPEND");
     for (const t of appended) {
-      if (!TEST_FILE_RE.test(t)) reasons.push(`NOT_A_TEST_FILE:${t}`);
+      if (typeof t !== "string" || !TEST_FILE_RE.test(t)) reasons.push(`NOT_A_TEST_FILE:${t}`);
       else if (existing.has(t)) reasons.push(`ALREADY_REGISTERED:${t}`);
       else if (typeof headFileExists !== "function" || headFileExists(t) !== true) reasons.push(`TEST_FILE_NOT_AT_HEAD:${t}`);
     }

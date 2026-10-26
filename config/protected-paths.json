@@ -139,7 +139,19 @@
     "scripts/verify-release-extract.mjs",
     "scripts/verify-remote-protection.mjs",
     "scripts/verify-trust-root.mjs",
-    "tsconfig.json"
+    "tsconfig.json",
+    "docs/planning/merge-gate.mjs",
+    "docs/planning/merge-gate.proof.mjs",
+    "docs/planning/merge-risk.mjs",
+    "docs/planning/merge-risk.d.mts",
+    "docs/planning/merge-risk.proof.mjs",
+    "docs/planning/pr-controller.mjs",
+    "docs/planning/pr-controller.d.mts",
+    "tests/review-governance.test.ts",
+    "tests/support/autonomous-authority.cases.ts",
+    "tests/support/merge-risk.cases.ts",
+    "tests/support/merge-risk.fixtures.json",
+    "tests/support/pr-controller.cases.ts"
   ],
   "protectedPrefixes": [
     "automation/lib/",
@@ -154,7 +166,9 @@
     "schemas/phase0-acceptance.schema.json",
     "prompts/",
     "roadmap/contracts/",
-    "config/"
+    "config/",
+    "core/authority/",
+    "scripts/ci/uasco-review/"
   ],
   "stateOwnedBySupervisor": [
     ".ai/runtime/"

@@ -34,7 +34,8 @@ const GOOD = () => ({
   checkRuns: [run_(UBU), run_(WIN), {name: `${MK}other-check`, status: "completed", conclusion: "failure", head_sha: HEAD, app_slug: "github-actions", completed_at: "2026-10-19T09:00:00Z"}],
   reviews: [review()],
   issueComments: [{body: `${MK}comment`, user: {login: "owner1"}}],
-  diffFiles: [F("docs/planning/merge-gate.mjs", "added"), F("docs/planning/MERGE_GATE.md", "modified"), F("docs/planning/old-note.md", "renamed", "docs/planning/older-note.md")],
+  // docs/planning/merge-gate.mjs itself is high risk now (self-protection), so the routine fixture uses another planning file.
+  diffFiles: [F("docs/planning/notes-helper.mjs", "added"), F("docs/planning/MERGE_GATE.md", "modified"), F("docs/planning/old-note.md", "renamed", "docs/planning/older-note.md")],
   protectedPaths: structuredClone(PROTECTED_FIXTURE),
   rules: RULES(),
 });
@@ -182,6 +183,48 @@ for (const [file, cat] of [["scripts/ensure-dependencies.mjs", "ensure-dependenc
   blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F("docs/moved-away.txt", "renamed", file)); }), code, {}, `N42i rename OUT OF ${file}`);
 }
 blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F("scripts/ci/new-helper.mjs", "added")); }), "CI_EXECUTED_PATH:ci-scripts", {}, "N42j new file under scripts/ci/");
+// e3. Risk tiers (COORD-TRANSITION-AUTONOMY): the gate and its classifier are high risk whatever protectedPaths says; a removed test file is high risk;
+// a pre-authorized protected change passes only with SHA-bound contents that match its class.
+{
+  const g = run(GOOD());
+  check("R0 a routine PR reports riskTier ROUTINE with fixed class codes only", g.decision === "MERGE" && g.riskTier === "ROUTINE" && JSON.stringify(g.riskClasses) === JSON.stringify(["ROUTINE"]), JSON.stringify(g));
+}
+for (const file of ["docs/planning/merge-gate.mjs", "docs/planning/merge-risk.mjs", "docs/planning/merge-risk.d.mts", "docs/planning/pr-controller.mjs", "docs/planning/merge-gate.proof.mjs",
+  "docs/planning/dispatch.proof.mjs", "core/authority/autonomous-authority.mjs", "core/authority/protected-change-grammar.mjs", "tests/review-governance.test.ts", "tests/support/merge-risk.cases.ts",
+  "tests/support/pr-controller.cases.ts", "tests/support/autonomous-authority.cases.ts", "tsconfig.json", "tsconfig.build.json", "vitest.config.ts", "scripts/generate-trust-root.mjs",
+  "scripts/verify-trust-root.mjs", "core/sandbox/x.ts", "core/agents/linux-unshare-sandbox.ts", "core/workos/execution-gate.ts", "apps/desktop/preload.mjs", "apps/desktop/renderer/index.html",
+  "apps/desktop/renderer/app.js", ".github/CODEOWNERS"]) {
+  const r = run(mut(e => { e.protectedPaths = {exactPaths: ["x"], protectedPrefixes: ["y/"]}; e.pr.changed_files++; e.diffFiles.push(F(file)); }));
+  check(`N53 high-risk path ${file} (not in protectedPaths) -> BLOCK HIGH_RISK_PATH, riskTier FOUNDER`, r.decision === "BLOCK" && r.reasons.includes("HIGH_RISK_PATH") && r.riskTier === "FOUNDER", JSON.stringify(r));
+}
+blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F("tests/v7-b5-work-screens.test.ts", "removed")); }), "HIGH_RISK_PATH", {}, "N54 a removed test file (test removal)");
+blocks(mut(e => { e.pr.changed_files++; e.diffFiles.push(F("tests/renamed-away.md", "renamed", "tests/v7-b1-workos.test.ts")); }), "HIGH_RISK_PATH", {}, "N54b a test file renamed away");
+{
+  const SRV = "apps/control-api/src/server.ts";
+  const base = ['import {registerFlowRoutes} from "./routes/flow.js";', "const laneDeps={getStore,scope};", "registerFlowRoutes(app,laneDeps);", ""].join("\n");
+  const head = ['import {registerFlowRoutes} from "./routes/flow.js";', 'import {registerReadinessRoutes} from "./routes/readiness.js";', "const laneDeps={getStore,scope};",
+    "registerFlowRoutes(app,laneDeps);", "registerReadinessRoutes(app,laneDeps);", ""].join("\n");
+  // server.ts is protected in the real config/protected-paths.json; the embedded fixture lists it for these cases.
+  const prot = e => { e.protectedPaths.exactPaths.push(SRV); };
+  const withSrv = (contents) => mut(e => { prot(e); e.pr.changed_files++; e.diffFiles.push(F(SRV)); if (contents) e.fileContents = contents; });
+  const names = run(withSrv(null));
+  check("R1 protected server.ts with names only (no contents) -> BLOCK PROTECTED_PATH, riskTier FOUNDER (fail-closed)", names.decision === "BLOCK" && names.reasons.includes("PROTECTED_PATH")
+    && names.riskTier === "FOUNDER" && names.riskClasses.includes("PROTECTED_CONTENT_MISSING"), JSON.stringify(names));
+  const ok = run(withSrv({[SRV]: {base, head}}));
+  check("R2 server.ts route-registration append with SHA-bound contents -> MERGE, riskTier PREAUTHORIZED", ok.decision === "MERGE" && ok.riskTier === "PREAUTHORIZED"
+    && ok.riskClasses.includes("ROUTE_REGISTRATION_APPEND") && !ok.reasons.length, JSON.stringify(ok));
+  const bad = run(withSrv({[SRV]: {base, head: head.replace("registerReadinessRoutes(app,laneDeps);", "registerReadinessRoutes(app,{...laneDeps,x:()=>process.exit(1)});")}}));
+  check("R3 server.ts change outside the class grammar (deny token) -> BLOCK PROTECTED_PATH", bad.decision === "BLOCK" && bad.reasons.includes("PROTECTED_PATH") && bad.riskClasses.includes("PROTECTED_CLASS_MISMATCH"), JSON.stringify(bad));
+  const other = run(withSrv({"Apps/Control-Api/src/server.ts": {base, head}}));
+  check("R4 contents keyed by another spelling of the path do not count -> BLOCK", other.decision === "BLOCK" && other.reasons.includes("PROTECTED_PATH"), JSON.stringify(other));
+  const half = run(withSrv({[SRV]: {base, head: null}}));
+  check("R5 one side of the contents missing -> BLOCK (fail-closed)", half.decision === "BLOCK" && half.riskClasses.includes("PROTECTED_CONTENT_MISSING"), JSON.stringify(half));
+  const renamed = run(mut(e => { prot(e); e.pr.changed_files++; e.diffFiles.push(F(SRV, "renamed", "apps/control-api/src/old.ts")); e.fileContents = {[SRV]: {base, head}}; }));
+  check("R6 a pre-authorized target that is renamed (not modified in place) -> BLOCK", renamed.decision === "BLOCK" && renamed.reasons.includes("PROTECTED_PATH"), JSON.stringify(renamed));
+  const mixed = run(mut(e => { prot(e); e.pr.changed_files += 2; e.diffFiles.push(F(SRV), F("package.json")); e.fileContents = {[SRV]: {base, head}}; }));
+  check("R7 pre-authorized change plus a dependency change -> BLOCK CI_EXECUTED_PATH:npm-manifest only (the pre-authorized file adds nothing)", mixed.decision === "BLOCK"
+    && mixed.reasons.includes("CI_EXECUTED_PATH:npm-manifest") && !mixed.reasons.includes("PROTECTED_PATH") && mixed.riskTier === "FOUNDER", JSON.stringify(mixed));
+}
 // f. Ruleset.
 for (const t of ["deletion", "non_fast_forward", "pull_request", "required_status_checks"])
   blocks(mut(e => { e.rules = e.rules.filter(x => x.type !== t); }), `RULESET_MISSING:${t}`, {}, `N43 ruleset missing ${t}`);
@@ -227,6 +270,18 @@ blocks(null, "EVIDENCE_MALFORMED:root", {}, "N51 evidence null");
   check("V3 squash-like single parent -> MERGE_PARENTS_MISMATCH", sq.reasons.includes("MERGE_PARENTS_MISMATCH"), JSON.stringify(sq));
   const mv = verifyPostMerge({mergeCommitSha: M, mergeCommitParents: [BASE, HEAD], newBaseHead: OTHER, expectedBaseSha: BASE, expectedHeadSha: HEAD});
   check("V4 base moved past the merge commit -> BASE_HEAD_NOT_MERGE_COMMIT", mv.reasons.includes("BASE_HEAD_NOT_MERGE_COMMIT"), JSON.stringify(mv));
+  check("V1b an exact merge reports basis EXACT", ok.basis === "EXACT", JSON.stringify(ok));
+  // GitHub auto-merge chain: another PR merged first, so the first parent is a descendant of the evaluated base, and later merges moved the base on.
+  const pm = (o) => verifyPostMerge({mergeCommitSha: M, mergeCommitParents: [MOVED_BASE, HEAD], newBaseHead: M, expectedBaseSha: BASE, expectedHeadSha: HEAD, ...o});
+  const chain = pm({baseIsAncestor: true});
+  check("V5 auto-merge chain: first parent a proven descendant of the evaluated base -> VERIFIED, basis ANCESTRY_PROVEN", chain.decision === "VERIFIED" && chain.basis === "ANCESTRY_PROVEN", JSON.stringify(chain));
+  check("V5b the same chain without the ancestry proof -> MERGE_PARENTS_MISMATCH", pm({}).reasons.includes("MERGE_PARENTS_MISMATCH") && pm({baseIsAncestor: false}).decision === "MISMATCH");
+  const later = pm({baseIsAncestor: true, newBaseHead: OTHER, mergeOnFirstParent: true});
+  check("V5c later merges moved the base on, merge commit proven on its first-parent chain -> VERIFIED", later.decision === "VERIFIED" && later.basis === "ANCESTRY_PROVEN", JSON.stringify(later));
+  check("V5d base moved on without the first-parent proof -> BASE_HEAD_NOT_MERGE_COMMIT", pm({baseIsAncestor: true, newBaseHead: OTHER}).reasons.includes("BASE_HEAD_NOT_MERGE_COMMIT"));
+  check("V5e proofs never excuse a wrong second parent or a swapped merge", pm({baseIsAncestor: true, mergeCommitParents: [MOVED_BASE, OTHER]}).reasons.includes("MERGE_PARENTS_MISMATCH")
+    && pm({baseIsAncestor: true, mergeCommitParents: [HEAD, HEAD]}).reasons.includes("MERGE_PARENTS_MISMATCH") && pm({baseIsAncestor: true, mergeCommitParents: [MOVED_BASE]}).decision === "MISMATCH");
+  check("V5f proof flags must be booleans (\"true\" is malformed)", pm({baseIsAncestor: "true"}).reasons.includes("EVIDENCE_MALFORMED:baseIsAncestor") && pm({baseIsAncestor: true, mergeOnFirstParent: 1}).reasons.includes("EVIDENCE_MALFORMED:mergeOnFirstParent"));
 }
 // CLI: one JSON line, exit codes.
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "merge-gate-proof-"));

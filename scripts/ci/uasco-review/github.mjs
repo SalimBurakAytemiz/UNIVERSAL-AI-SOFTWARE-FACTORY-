@@ -1,5 +1,7 @@
 // //TR: Bu modül UASCO Independent Review için GitHub REST G/Ç katmanıdır: PR, diff, check-run, review, ruleset ve commit kanıtını toplar, CI'ın head SHA üzerinde bitmesini sınırlı süre bekler ve kontrolü yalnız reviewer App token'ı ile yazar; fetch enjekte edilebilir, token hiçbir çıktıya yazılmaz.
+import crypto from "node:crypto";
 import {REQUIRED_CONTEXTS} from "../../../docs/planning/merge-gate.mjs";
+import {CONTENT_CANDIDATES} from "../../../docs/planning/merge-risk.mjs";
 import {CHECK_NAME} from "./review-gate.mjs";
 
 const RETRY_STATUS = new Set([429, 500, 502, 503, 504]);
@@ -98,6 +100,30 @@ export async function waitForCi(gh, headSha, {prNumber = null, timeoutMs = 100 *
   }
 }
 
+// //TR: Önceden yetkilendirilmiş bir sınıfın adayı olan korunan dosyanın metni, contents API ile TAM base ve head SHA'sında okunur: boyut sınırı, tür, base64, uzunluk, git blob SHA'sı ve UTF-8 doğrulanır; herhangi bir sapma veya hata null'dır (içerik eksik = FOUNDER, fail-closed). Metin hiçbir çıktıya yazılmaz, yalnız sınıflandırıcıya verilir.
+export const MAX_CONTENT_BYTES = 1_000_000;
+export async function fileText(gh, filePath, sha) {
+  if (!SHA_RE.test(String(sha)) || typeof filePath !== "string" || !CONTENT_CANDIDATES.includes(filePath)) return null;
+  try {
+    const j = await gh.req("GET", `${r(gh)}/contents/${filePath.split("/").map(enc).join("/")}?ref=${sha}`);
+    if (j?.type !== "file" || j?.path !== filePath || j?.encoding !== "base64" || typeof j.content !== "string" || !Number.isSafeInteger(j.size) || j.size < 0 || j.size > MAX_CONTENT_BYTES) return null;
+    const buf = Buffer.from(j.content.replace(/\n/g, ""), "base64");
+    if (buf.length !== j.size) return null;
+    // The blob id GitHub reports must be the git hash of exactly these bytes.
+    if (j.sha !== crypto.createHash("sha1").update(`blob ${buf.length}\0`).update(buf).digest("hex")) return null;
+    return new TextDecoder("utf-8", {fatal: true, ignoreBOM: true}).decode(buf);
+  } catch { return null; }
+}
+// Base and head text of every modified candidate file, keyed by its exact filename: {filename: {base, head}} (null for what could not be read).
+export async function candidateContents(gh, diffFiles, baseSha, headSha) {
+  const out = {};
+  for (const f of Array.isArray(diffFiles) ? diffFiles : []) {
+    if (f?.status !== "modified" || f?.previous_filename || !CONTENT_CANDIDATES.includes(f?.filename) || Object.hasOwn(out, f.filename)) continue;
+    out[f.filename] = {base: await fileText(gh, f.filename, baseSha), head: await fileText(gh, f.filename, headSha)};
+  }
+  return out;
+}
+
 // Every input the deterministic gate needs, in the shape docs/planning/merge-gate.mjs evaluates.
 export async function collectEvidence(gh, prNumber, {protectedPaths, checkRuns}) {
   const pr = await gh.req("GET", `${r(gh)}/pulls/${prNumber}`);
@@ -114,6 +140,9 @@ export async function collectEvidence(gh, prNumber, {protectedPaths, checkRuns})
   const commitShas = commits.map(c => c?.sha).filter(x => typeof x === "string" && SHA_RE.test(x));
   // Each commit's tree (the commits listing carries it), so prior verdicts are looked up on exactly the commits with the reviewed content.
   const commitTrees = commits.filter(c => SHA_RE.test(String(c?.sha))).map(c => ({sha: c.sha, tree: SHA_RE.test(String(c?.commit?.tree?.sha)) ? c.commit.tree.sha : null}));
+  const files = diffFiles.map(f => ({filename: f.filename, status: f.status, ...(f.previous_filename ? {previous_filename: f.previous_filename} : {})}));
+  // Contents are read at the base tip read above (the SHA the verdict is bound to) and at the PR head: the classified change is exactly "base tip -> head".
+  const fileContents = await candidateContents(gh, files, baseRefObj?.object?.sha ?? null, pr.head?.sha ?? null);
   return {
     pr: {number: pr.number, state: pr.state, draft: pr.draft, merged: pr.merged, head: {sha: pr.head?.sha, ref: pr.head?.ref, repo: pr.head?.repo?.full_name ?? null},
       base: {ref: baseRef, sha: pr.base?.sha}, user: {login: pr.user?.login}, changed_files: pr.changed_files, commits: pr.commits},
@@ -121,7 +150,7 @@ export async function collectEvidence(gh, prNumber, {protectedPaths, checkRuns})
     checkRuns: checkRuns ?? await ciCheckRuns(gh, pr.head?.sha),
     reviews: reviews.map(x => ({id: x.id, user: {login: x.user?.login ?? null}, state: x.state, commit_id: x.commit_id, body: x.body ?? "", submitted_at: x.submitted_at})),
     issueComments: issueComments.map(x => ({body: x.body ?? "", user: {login: x.user?.login ?? null}})),
-    diffFiles: diffFiles.map(f => ({filename: f.filename, status: f.status, ...(f.previous_filename ? {previous_filename: f.previous_filename} : {})})),
+    diffFiles: files, fileContents,
     protectedPaths, rules, implementerSessions, commitShas, commitTrees,
   };
 }

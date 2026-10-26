@@ -1,7 +1,7 @@
 {
   "//TR": "Bu manifest normal feature build sırasında korunacak trust-root dosyalarının artifact-creation anındaki SHA-256 değerlerini taşır.",
   "schemaVersion": "1.0.0",
-  "generatedAt": "2026-10-26T04:29:01.964Z",
+  "generatedAt": "2026-10-26T06:27:08.284Z",
   "sealStatus": "SEALED",
   "files": [
     {
@@ -446,7 +446,7 @@
     },
     {
       "path": "config/protected-paths.json",
-      "sha256": "07ff492c061def10209a4a559f08c1e23e730acb5b53df58f97a45374ddf6b0e"
+      "sha256": "430e90cf40724ccb6ddbcc1553b52c45e585a9c4329c2e19e38811db781a5bca"
     },
     {
       "path": "config/reviewer-execution-policy.json",
@@ -465,8 +465,56 @@
       "sha256": "70980b61ef86dbda8d29cedf0a132c68629a36576f58cb345a288b6a83fa8d63"
     },
     {
+      "path": "core/authority/approval.ts",
+      "sha256": "5f75c8676309c6426e3c91fddc17a130256d853edfdaa1376e7309def29cbbe8"
+    },
+    {
+      "path": "core/authority/autonomous-authority.d.mts",
+      "sha256": "057dfbf64b9beb7d858f11f025753646f5950a5e1f35616d4bc6f20ec831c297"
+    },
+    {
+      "path": "core/authority/autonomous-authority.mjs",
+      "sha256": "f2d92dab85f2b6ef9d8acaa0fc7f1b797d214097beb09adf986311cc7e2831e1"
+    },
+    {
+      "path": "core/authority/protected-change-grammar.d.mts",
+      "sha256": "3205b0862a891076950fa64dd43a2d57ae03f5b6a18c83e38969831b7068253d"
+    },
+    {
+      "path": "core/authority/protected-change-grammar.mjs",
+      "sha256": "2e5af039525d436839808225fd61bb16675f238704a5e72d50f6ce905cbdeec3"
+    },
+    {
       "path": "docs/closure/MECHANICAL-CLOSURE-FIX-LEDGER.md",
       "sha256": "9ae3f016aa533f0f3a34d11e2e1ec1a0ed032dbc835e253b1b1f45881f797e84"
+    },
+    {
+      "path": "docs/planning/merge-gate.mjs",
+      "sha256": "c8bfc7c3c9712ae2bce7ba8c470b5de0acee08478b654d5bc3cac856b66f3c13"
+    },
+    {
+      "path": "docs/planning/merge-gate.proof.mjs",
+      "sha256": "dd7676ae8a69e6fceaf903394711ac42470d725a250c10d658b7a4b94aaba35c"
+    },
+    {
+      "path": "docs/planning/merge-risk.d.mts",
+      "sha256": "985cbb40c3efc19c554bbf4ff8e3c7ebf58f284480885222719ec04f0d5e6e7f"
+    },
+    {
+      "path": "docs/planning/merge-risk.mjs",
+      "sha256": "bf4538ac3a4699f0b4833cf0b054ade308573cbc15dbb9483b73cb1f356488bc"
+    },
+    {
+      "path": "docs/planning/merge-risk.proof.mjs",
+      "sha256": "091432397abeae2f62ea527e47973d3ddf632f63cb691b2f69527dc2a86bdec7"
+    },
+    {
+      "path": "docs/planning/pr-controller.d.mts",
+      "sha256": "8736c3bc2ee4a89baaa095f94af35526b650116dbe7c1e14c187d26a79885e6c"
+    },
+    {
+      "path": "docs/planning/pr-controller.mjs",
+      "sha256": "dbf1972d86f56884f0adc4e93156a3a738cc7082303194459d2d2e0847f5bef5"
     },
     {
       "path": "governance/accepted-debt.json",
@@ -1201,6 +1249,30 @@
       "sha256": "0a6d1d3e53e4e87e31451f03c2a456c1cf068633d89241ec4fe599e184ad7797"
     },
     {
+      "path": "scripts/ci/uasco-review/REVIEWER-PROMPT.md",
+      "sha256": "97e9cc0acb8afe9f6d3f89c63a9f3506f868bc3e32805d0bda5ec74c67899fed"
+    },
+    {
+      "path": "scripts/ci/uasco-review/github.mjs",
+      "sha256": "e927c4f100d4a17df80625b4b91ccec95cb829f14a3327281dc51c5078b76735"
+    },
+    {
+      "path": "scripts/ci/uasco-review/review-gate.mjs",
+      "sha256": "7d55f85c16cefa74aa65ae7f820fdfbd18d056bb4fa40c02bf175fcf066dde9b"
+    },
+    {
+      "path": "scripts/ci/uasco-review/review-gate.proof.mjs",
+      "sha256": "c4e3078ff860f14280f89a7ff6e9ca94d765eaf3438e678fa48bbc11fc470a0a"
+    },
+    {
+      "path": "scripts/ci/uasco-review/run.mjs",
+      "sha256": "0ce7f3d67345274eb6cb37199a94d29aef66070d06ed597377723bc2624f0d3f"
+    },
+    {
+      "path": "scripts/ci/uasco-review/verdict.schema.json",
+      "sha256": "404a2be6e816e3ef874b5616af62fe859a9f436aea43257eef2e7852080421ad"
+    },
+    {
       "path": "scripts/claude-builder-broker.mjs",
       "sha256": "f0cde83a4bad37e4e72aab0d67878fc2c3d892459183630712783ea89cbd6074"
     },
@@ -1491,6 +1563,26 @@
     {
       "path": "scripts/verify-trust-root.mjs",
       "sha256": "52ca7b3c2d1ecf4018241fae1ea90cfc31e673aafe4665140f2aa5339b817961"
+    },
+    {
+      "path": "tests/review-governance.test.ts",
+      "sha256": "383b453b03166f6c2b22dc87ddb3d6d938fe27ff6450568de68e6f2872917d25"
+    },
+    {
+      "path": "tests/support/autonomous-authority.cases.ts",
+      "sha256": "259016827f28cb516a32dfb46e2af53115fdd5b34c5e97d9b0e1464819c8042c"
+    },
+    {
+      "path": "tests/support/merge-risk.cases.ts",
+      "sha256": "8a95612ed73d1e4b396fa3d55a6157c4ca7e8787b6a47ff8a523cba5ddaadeed"
+    },
+    {
+      "path": "tests/support/merge-risk.fixtures.json",
+      "sha256": "f38f4915d39a22b74fb10b7bca4da130b6e562e48ee2ca9cdd778edd527eb08e"
+    },
+    {
+      "path": "tests/support/pr-controller.cases.ts",
+      "sha256": "74a59e633dcb44a11d311eed89c4b6c1598481cd7f907da02892f45000a3fc6f"
     },
     {
       "path": "tsconfig.json",

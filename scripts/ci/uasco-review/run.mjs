@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {fileURLToPath, pathToFileURL} from "node:url";
 import {client, collectEvidence, waitForCi, prDiff, diffPaths, sameChange, commitTree, priorNegativeVerdicts, currentHead, runApprovals, createCheck, getCheck, concludeCheck, approve} from "./github.mjs";
+import {classifyChange} from "../../../docs/planning/merge-risk.mjs";
 import {CHECK_NAME, preGate, decide, negativeVerdict, verdictIsNegative, carriesSecret, renderSummary, canonical, sha256, diagnoseReviewerOutput, REVIEWER_DIAGNOSTIC_KEYS,
   EXECUTION_FILE_MAX_BYTES} from "./review-gate.mjs";
 
@@ -56,8 +57,8 @@ async function priorNegative(gh, ev, headSha, tree, excludeId = null) {
   return prior.some(p => p.pending || p.sha === headSha || p.tree === tree);
 }
 
-// 1. scope: create the in-progress check on the exact head SHA and say whether Founder authority is needed (protected/CI-executed paths, or a re-review
-// after a negative verdict on the same content).
+// 1. scope: create the in-progress check on the exact head SHA and say whether Founder authority is needed (a FOUNDER-tier file: protected, CI-executed or
+// high-risk and not a content-verified pre-authorized class; or a re-review after a negative verdict on the same content).
 async function scope() {
   const gh = readGh(), n = prNumber();
   const ev = await collectEvidence(gh, n, {protectedPaths: protectedPaths(), checkRuns: []});
@@ -101,9 +102,14 @@ async function collect() {
   fs.mkdirSync(input, {recursive: true});
   fs.writeFileSync(path.join(input, "pr.diff"), diff.text);
   const ciLines = ev.checkRuns.map(c => `- ${c.name}: ${c.status}/${c.conclusion} on ${c.head_sha} (${c.workflowPath}, ${c.workflowRunEvent})`);
+  // Per-file risk codes for the reviewer (fixed codes; the same classifier the gate used, on the same SHA-bound contents).
+  const risk = classifyChange({files: ev.diffFiles.map(f => ({...f, baseText: ev.fileContents?.[f.filename]?.base ?? null, headText: ev.fileContents?.[f.filename]?.head ?? null})),
+    protectedPaths: ev.protectedPaths, headSha});
+  const riskOf = i => risk.files[i]?.code ?? "FILE_ENTRY_MALFORMED";
   fs.writeFileSync(path.join(input, "context.md"), [`# Review input for PR #${n}`, "", `- head: ${headSha}`, `- base: ${ev.currentBaseSha}`, `- changed files: ${ev.diffFiles.length}`,
-    `- diff truncated: ${diff.truncated}`, `- protected or CI-executed paths: ${pre.authority.length ? pre.authority.join(", ") : "none"}`, "", "## CI on this exact head", ...ciLines, "",
-    "## Changed files", ...ev.diffFiles.map(f => `- ${f.status}: ${f.filename}${f.previous_filename ? ` (from ${f.previous_filename})` : ""}`), ""].join("\n"));
+    `- diff truncated: ${diff.truncated}`, `- protected or CI-executed paths: ${pre.authority.length ? pre.authority.join(", ") : "none"}`,
+    `- risk tier: ${pre.riskTier} (ROUTINE and PREAUTHORIZED need no Founder; FOUNDER needs Founder authority)`, "", "## CI on this exact head", ...ciLines, "",
+    "## Changed files (status: path [risk code])", ...ev.diffFiles.map((f, i) => `- ${f.status}: ${f.filename}${f.previous_filename ? ` (from ${f.previous_filename})` : ""} [${riskOf(i)}]`), ""].join("\n"));
   const prompt = fs.readFileSync(path.join(HERE, "REVIEWER-PROMPT.md"), "utf8").replaceAll("{{HEAD_SHA}}", headSha).replaceAll("{{BASE_SHA}}", String(ev.currentBaseSha))
     .replaceAll("{{INPUT_DIR}}", path.relative(ROOT, input));
   fs.writeFileSync(path.join(input, "INSTRUCTIONS.md"), prompt);

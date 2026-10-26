@@ -16,3 +16,9 @@ describe("UASCO Independent Review gate",{timeout:180000},()=>{
 // //TR: A-Z üretim hattı kaydı + dispatcher entegrasyonu (gerçek LANES.json, gerçek dispatch.mjs, geçici git remote) bu kayıtlı dosyadan çalışır; korunan validation.json kaydı gerektirmez.
 import {registerProductionLaneCases} from "./support/production-lanes.cases.js";
 registerProductionLaneCases();
+
+// //TR: COORD-TRANSITION-AUTONOMY: risk sınıflandırıcısı (gerçek PR diff fikstürleri, merge-gate kanıtı ve mutasyon kanıtı dahil) ve PR denetleyicisinin kurtarma/devam senaryoları bu kayıtlı dosyadan çalışır; korunan validation.json kaydı gerektirmez.
+import {registerMergeRiskCases} from "./support/merge-risk.cases.js";
+registerMergeRiskCases();
+import {registerPrControllerCases} from "./support/pr-controller.cases.js";
+registerPrControllerCases();

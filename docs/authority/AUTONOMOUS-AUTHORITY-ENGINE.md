@@ -12,7 +12,7 @@
 |---|---|
 | `decide(request, ctx)` | `AUTO_AUTHORIZED_BY_POLICY` or `BLOCKED_BY_POLICY` with concrete reasons, bound to class/repo/branch/base/task/headSha/principal/files by `requestDigest` |
 | `verifyDecision(decision, request, ctx)` | **Recomputes** the decision from the sealed policy the verifier itself loaded. A decision object received from another session is never trusted, because a digest is not a signature |
-| `evaluateProtectedChange(...)` | Structural checks for the two narrow protected classes: `TEST_REGISTRATION_APPEND` and `TRUST_ROOT_RESEAL`, the latter recomputing hashes from the real file bytes. `decide`/`evaluateMerge` never accept decision objects: they take the **inputs** (`protectedChanges`: class, file, base/head text read from git at the evaluated SHA) and recompute. A reseal can only cover narrow-class targets that were themselves recomputed as AUTO |
+| `evaluateProtectedChange(...)` | Structural checks for the four narrow protected classes: `TEST_REGISTRATION_APPEND`, `TRUST_ROOT_RESEAL` (recomputing hashes from the real file bytes), `ROUTE_REGISTRATION_APPEND` and `DESKTOP_ALLOWLIST_APPEND` (text grammars in `core/authority/protected-change-grammar.mjs`). `decide`/`evaluateMerge` never accept decision objects: they take the **inputs** (`protectedChanges`: class, file, base/head text read from git at the evaluated SHA) and recompute. A reseal can only cover narrow-class targets that were themselves recomputed as AUTO |
 | `evaluateMerge(evidence, ctx)` | All merge conditions at once; any missing condition gives `BLOCKED` |
 | `evaluateRequiredChecks(...)` | One canonical "both CI contexts success on this SHA from the pinned app" check |
 | `loadSealedPolicy` / `policySealStatus` | The policy counts only if `config/autonomous-authority-policy.json` is listed in the SEALED trust-root manifest with matching bytes |
@@ -36,7 +36,7 @@
 The 15 routine classes are:
 `REQUIREMENT_ANALYSIS`, `ARCHITECTURE_DESIGN`, `SOURCE_CHANGE`, `TEST_CHANGE`, `FAILURE_REPAIR`, `BRANCH_CREATE`, `FEATURE_BRANCH_PUSH`, `PR_UPDATE`, `REVIEW_DISPATCH`, `CI_FAILURE_REPAIR`, `EVIDENCE_ARCHIVE`, `GOVERNED_MERGE`, `NEXT_TASK_CLAIM`, `TASK_RECOVERY`, `STATUS_REPORT`.
 
-Plus two narrow protected classes: `TEST_REGISTRATION_APPEND` (pure append of new, existing test files to the last tests shard) and `TRUST_ROOT_RESEAL` (hash updates only, for authorized files, computed from the real bytes).
+Plus four narrow protected classes: `TEST_REGISTRATION_APPEND` (new test files that exist at the head, added to the file arguments of existing `tests`/`tests-N` steps; every existing entry kept), `TRUST_ROOT_RESEAL` (hash updates only, for authorized files, computed from the real bytes), `ROUTE_REGISTRATION_APPEND` (purely additive route registrations in `apps/control-api/src/server.ts`) and `DESKTOP_ALLOWLIST_APPEND` (anchored path patterns appended inside the `apps/desktop/main.mjs` allow-list regions). The merge gate uses the same class decisions through `docs/planning/merge-risk.mjs` (COORD-TRANSITION-AUTONOMY), without the policy genesis; the policy file is still not sealed.
 
 Each grant is limited by:
 - role (BUILDER / REVIEWER / MAINTAINER / SUPERVISOR / DISPATCHER / REPORTER);

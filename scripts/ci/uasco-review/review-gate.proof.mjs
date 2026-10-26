@@ -1,6 +1,7 @@
 // //TR: Bu betik UASCO Independent Review için ağsız, bağımsız kanıttır: saf karar çekirdeğinin her fail-closed kuralını (eski SHA, yeni commit, CI kırmızı/beklemede/sahte kaynak, reviewer reddi, Founder yetkisi, sır sızıntısı, bozuk karar), workflow'un güven sınırlarını ve gerçek run.mjs aşamalarının yerel sahte GitHub API'ye karşı uçtan uca davranışını doğrular.
 // Run: node scripts/ci/uasco-review/review-gate.proof.mjs   (Node >= 22; no network; temp files only). Last line: "UASCO_REVIEW_PROOF: PASS n/n".
 import fs from "node:fs";
+import crypto from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import http from "node:http";
@@ -11,7 +12,7 @@ import {REQUIRED_CONTEXTS} from "../../../docs/planning/merge-gate.mjs";
 import {decide, preGate, validateVerdict, renderSummary, founderAuthorityOk, carriesSecret, negativeVerdict, verdictIsNegative, VERDICT_RESULTS, SEVERITIES, CLASSIFICATIONS, CHECK_KEYS, CHECK_NAME, FOUNDER_ENVIRONMENT,
   VERDICT_KEYS, FINDING_KEYS, canonical,
   diagnoseReviewerOutput, reviewerFailureCode, REVIEWER_DIAGNOSTIC_CODES, REVIEWER_DIAGNOSTIC_KEYS, REVIEWER_REMEDIES, EXECUTION_FILE_MAX_BYTES} from "./review-gate.mjs";
-import {client, waitForCi, ciCheckRuns, diffPaths, sameChange, prDiff, priorNegativeVerdicts} from "./github.mjs";
+import {client, waitForCi, ciCheckRuns, diffPaths, sameChange, prDiff, priorNegativeVerdicts, fileText, MAX_CONTENT_BYTES} from "./github.mjs";
 import {reviewerSchema, modelArg, apiSchema, API_UNSUPPORTED_KEYWORDS} from "./run.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -114,6 +115,46 @@ check("G30e a negative verdict refused only for its form (invisible character) i
 check("G30f an unreadable verdict placeholder fails and counts as negative", has(D({verdict: {rejected: "VERDICT_UNREADABLE", negative: true}}), "VERDICT_UNREADABLE")
   && negativeVerdict(D({verdict: {rejected: "VERDICT_UNREADABLE", negative: true}})) && !has(D({verdict: {rejected: "SOMETHING_ELSE", negative: true}}), "VERDICT_REJECTED_NEGATIVE"));
 check("G31 the decision record carries the head tree (it goes into the App-written external_id)", ok.headTree === TREE && D({ev: {headTree: "x"}}).headTree === null);
+
+// //TR: COORD-TRANSITION-AUTONOMY risk sınıfları: içerikten doğrulanan PREAUTHORIZED değişiklik Founder istemez ama yine CI ve CLEAN karar ister; FOUNDER sınıfı, eksik içerik ve önceki ret Founder ister; reviewer kimlik hatası asla CLEAN olmaz.
+// ---- Risk tiers (pure) ----
+const SRV = "apps/control-api/src/server.ts", MANIFEST = "config/trust-root-manifest.json", ROUTE = "apps/control-api/src/routes/widget-status.ts";
+const SRV_BASE = ['import {registerFlowRoutes} from "./routes/flow.js";', "const laneDeps={getStore,scope};", "registerFlowRoutes(app,laneDeps);", ""].join("\n");
+const SRV_HEAD = ['import {registerFlowRoutes} from "./routes/flow.js";', 'import {registerWidgetStatusRoutes} from "./routes/widget-status.js";', "const laneDeps={getStore,scope};",
+  "registerFlowRoutes(app,laneDeps);", "// //TR: widget durumu salt-okunur.", "registerWidgetStatusRoutes(app,laneDeps);", ""].join("\n");
+const H256 = t => crypto.createHash("sha256").update(Buffer.from(t, "utf8")).digest("hex");
+const manifest = (srv, at) => JSON.stringify({schemaVersion: "1.0.0", generatedAt: at, sealStatus: "SEALED", files: [{path: SRV, sha256: H256(srv)}]}, null, 2) + "\n";
+const PRE_FILES = [{filename: SRV, status: "modified"}, {filename: MANIFEST, status: "modified"}, {filename: ROUTE, status: "added"}];
+const PRE_CONTENTS = {[SRV]: {base: SRV_BASE, head: SRV_HEAD}, [MANIFEST]: {base: manifest(SRV_BASE, "t1"), head: manifest(SRV_HEAD, "t2")}};
+const PRE_PATHS = {exactPaths: ["config/protected-paths.json", SRV], protectedPrefixes: ["automation/lib/", "config/"]};
+const preEv = (o = {}) => ({diffFiles: PRE_FILES, fileContents: PRE_CONTENTS, protectedPaths: PRE_PATHS, pr: {...evidence().pr, changed_files: PRE_FILES.length}, ...o});
+const preOk = D({ev: preEv()});
+check("G50 PREAUTHORIZED-only PR (route registration + reseal of exactly that file, SHA-bound contents) with green CI and a CLEAN verdict => success without Founder approval",
+  preOk.conclusion === "success" && preOk.reasons.length === 0 && preOk.riskTier === "PREAUTHORIZED" && preGate(evidence(preEv())).authority.length === 0);
+check("G50b PREAUTHORIZED-only still needs the independent CLEAN verdict: no verdict => failure VERDICT_MISSING (and no Founder code)",
+  has(D({ev: preEv(), verdict: null}), "VERDICT_MISSING") && !has(D({ev: preEv(), verdict: null}), "FOUNDER_AUTHORITY_REQUIRED") && D({ev: preEv(), v: {result: "BLOCKED"}}).conclusion === "failure");
+check("G50c PREAUTHORIZED-only still needs CI green on the head", has(D({ev: preEv({checkRuns: [run_(UBU, {conclusion: "failure"}), run_(WIN)]})}), `CHECK_FAILED:${UBU}`));
+check("G50d PREAUTHORIZED-only with a reviewer auth failure (no verdict) => failure VERDICT_MISSING + REVIEWER_AUTH_REJECTED, never success",
+  D({ev: preEv(), verdict: null, diag: {code: "REVIEWER_AUTH_REJECTED", isError: true, turns: 1, durationMs: 305, modelUsed: false}}).conclusion === "failure"
+  && has(D({ev: preEv(), verdict: null, diag: {code: "REVIEWER_AUTH_REJECTED", isError: true, turns: 1, durationMs: 305, modelUsed: false}}), "REVIEWER_AUTH_REJECTED"));
+const sandboxWiring = preEv({fileContents: {...PRE_CONTENTS, [SRV]: {base: SRV_BASE, head: SRV_HEAD.replace("registerWidgetStatusRoutes(app,laneDeps);", "registerWidgetStatusRoutes(app,{...laneDeps,gate:()=>new ExecutionGate(null)});")}}});
+check("G51 FOUNDER tier (server.ts change outside the class: sandbox wiring) => FOUNDER_AUTHORITY_REQUIRED + PROTECTED_PATH; the Founder approval makes it pass",
+  has(D({ev: sandboxWiring}), "FOUNDER_AUTHORITY_REQUIRED") && has(D({ev: sandboxWiring}), "PROTECTED_PATH") && D({ev: sandboxWiring}).riskTier === "FOUNDER"
+  && D({ev: sandboxWiring, approvals: [approval()]}).conclusion === "success");
+check("G51b the reseal does not cover a file that is not itself authorized (FOUNDER-tier server.ts) => the manifest stays FOUNDER too", (() => {
+  const mixed = preEv({fileContents: {...PRE_CONTENTS, [SRV]: sandboxWiring.fileContents[SRV], [MANIFEST]: {base: manifest(SRV_BASE, "t1"), head: manifest(sandboxWiring.fileContents[SRV].head, "t2")}}});
+  return has(D({ev: mixed}), "FOUNDER_AUTHORITY_REQUIRED") && preGate(evidence(mixed)).authority.includes("PROTECTED_PATH"); })());
+check("G52 missing contents (names only, or one side null) => Founder (fail-closed)", has(D({ev: preEv({fileContents: undefined})}), "FOUNDER_AUTHORITY_REQUIRED")
+  && has(D({ev: preEv({fileContents: {...PRE_CONTENTS, [SRV]: {base: null, head: SRV_HEAD}}})}), "FOUNDER_AUTHORITY_REQUIRED") && D({ev: preEv({fileContents: undefined})}).riskTier === "FOUNDER");
+check("G53 the gate machinery is FOUNDER tier even where protectedPaths does not list it (merge-gate, classifier, review proof host)",
+  ["docs/planning/merge-gate.mjs", "docs/planning/merge-risk.mjs", "tests/review-governance.test.ts", "core/authority/autonomous-authority.mjs"].every(f =>
+    has(D({ev: {diffFiles: [{filename: f, status: "modified"}]}}), "FOUNDER_AUTHORITY_REQUIRED") && has(D({ev: {diffFiles: [{filename: f, status: "modified"}]}}), "HIGH_RISK_PATH")));
+check("G54 PREAUTHORIZED content but a prior negative verdict on the same content => Founder", has(D({ev: preEv({priorNegativeVerdict: true})}), "PRIOR_NEGATIVE_VERDICT")
+  && has(D({ev: preEv({priorNegativeVerdict: true})}), "FOUNDER_AUTHORITY_REQUIRED"));
+check("G55 the check summary states the risk tier as a fixed code", renderSummary(preOk).includes("Risk tier: `PREAUTHORIZED`") && renderSummary(D({ev: prot})).includes("Risk tier: `FOUNDER`")
+  && renderSummary(ok).includes("Risk tier: `ROUTINE`") && renderSummary({...ok, riskTier: "WHATEVER"}).includes("Risk tier: `FOUNDER`"));
+check("G56 a dependency change next to a pre-authorized one keeps Founder authority (CI-executed path)", has(D({ev: preEv({diffFiles: [...PRE_FILES, {filename: "package.json", status: "modified"}],
+  pr: {...evidence().pr, changed_files: PRE_FILES.length + 1}})}), "CI_EXECUTED_PATH:npm-manifest"));
 
 // //TR: Reviewer teşhisi senaryoları: her sabit kod sentetik yürütme kayıtlarından doğru sınıflanır; kayıt metnindeki sahte karar, PASS veya talimat sınıflandırmanın ötesinde hiçbir etki yapmaz ve hiçbir yere kopyalanmaz; okunamayan kayıt UNREADABLE olur; teşhis yalnız geçmeyen bir karara en sona bir neden ekler, hiçbir nedeni silmez, geçerli olumlu kararı değiştirmez ve asla success üretmez.
 // ---- Reviewer diagnosis (pure) ----
@@ -480,6 +521,11 @@ function mockGithub(state) {
         res.writeHead(200); return res.end(state.diff ?? "diff --git a/core/x.ts b/core/x.ts\nnew file mode 100644\n+export const x = 1;\n");
       }
       if (req.method === "GET" && p === `/repos/o/r/git/commits/${HEAD}`) return json(res, 200, {sha: HEAD, tree: {sha: TREE}});
+      if (req.method === "GET" && p.startsWith("/repos/o/r/contents/")) {
+        const rel = p.slice("/repos/o/r/contents/".length).split("/").map(decodeURIComponent).join("/"), c = state.contents?.[`${u.searchParams.get("ref")}:${rel}`];
+        if (c === undefined) return json(res, 404, {});
+        return json(res, 200, typeof c === "object" ? c : blobOf(rel, c));
+      }
       if (p === "/repos/o/r/git/ref/heads/v7%2Fintegration") return json(res, 200, {object: {sha: BASE}});
       if (p === "/repos/o/r/rules/branches/v7%2Fintegration") return json(res, 200, RULES);
       if (p === "/repos/o/r/pulls/7/files") return json(res, 200, list(state.files ?? [{filename: "core/x.ts", status: "added"}]));
@@ -503,13 +549,16 @@ function mockGithub(state) {
     });
   });
 }
+// The contents API shape for a text file: base64 content, its size and its git blob id.
+const blobOf = (rel, text) => { const b = Buffer.from(text, "utf8"); return {type: "file", path: rel, encoding: "base64", size: b.length, content: b.toString("base64"),
+  sha: crypto.createHash("sha1").update(`blob ${b.length}\0`).update(b).digest("hex")}; };
 const runPhase = (phase, envx, args = []) => new Promise(resolve => {
   const c = spawn(process.execPath, [path.join(HERE, "run.mjs"), phase, ...args], {env: {...process.env, ...envx}, stdio: ["ignore", "pipe", "pipe"]});
   let out = "", err = ""; c.stdout.on("data", d => out += d); c.stderr.on("data", d => err += d); c.on("close", code => resolve({code, out, err}));
 });
 async function e2e({ci, verdictObj, headAfterCollect = HEAD, headAtApprove = headAfterCollect, submitApproval = "false", skipDecision = false, prior = {}, runApprovals = [], diff, prNumber = "7", needsFounder,
-  files, prCommits, checkHead, rerun, commits, diagnostics}) {
-  const state = {log: [], checks: [], approvals: [], ci, phase: "scope", prior, runApprovals, diff, files, prCommits: prCommits ?? commits?.length, checkHead, commits};
+  files, prCommits, checkHead, rerun, commits, diagnostics, contents}) {
+  const state = {log: [], checks: [], approvals: [], ci, phase: "scope", prior, runApprovals, diff, files, prCommits: prCommits ?? commits?.length, checkHead, commits, contents};
   state.head = () => state.phase === "approve" ? headAtApprove : ["decide", "finish"].includes(state.phase) ? headAfterCollect : HEAD;
   const srv = mockGithub(state); await new Promise(r => srv.listen(0, "127.0.0.1", r));
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-review-"));
@@ -735,6 +784,62 @@ const green = [{name: UBU, status: "completed", conclusion: "success"}, {name: W
     && !dec(b1).reasons.includes("REVIEWER_OUTPUT_UNREADABLE") && !b1.concluded.output.summary.includes("Reviewer diagnosis") && b1.concluded.output.summary === b0.concluded?.output.summary
     && /^v2:1:/.test(b1.concluded.external_id ?? "") && b1.concluded.external_id === b0.concluded?.external_id);
   for (const x of [tmp, ...made.map(r => r.dir)]) fs.rmSync(x, {recursive: true, force: true});
+}
+// ---- End to end: risk tiers through the real phases (contents read from the mock contents API at the exact base and head SHAs) ----
+{
+  // The real config/protected-paths.json lists server.ts and the config/ prefix, so these files are protected for the run.
+  const realSrvBase = SRV_BASE, realSrvHead = SRV_HEAD;
+  const files = [{filename: SRV, status: "modified"}, {filename: ROUTE, status: "added"}, {filename: MANIFEST, status: "modified"}];
+  const sec = f => `diff --git a/${f.filename} b/${f.filename}\n${f.status === "added" ? "new file mode 100644\n" : ""}--- a/${f.filename}\n+++ b/${f.filename}\n@@ -1 +1 @@\n+x\n`;
+  const diff = files.map(sec).join("");
+  const cnt = (srvHead = realSrvHead) => ({[`${BASE}:${SRV}`]: realSrvBase, [`${HEAD}:${SRV}`]: srvHead, [`${BASE}:${MANIFEST}`]: manifest(realSrvBase, "t1"), [`${HEAD}:${MANIFEST}`]: manifest(srvHead, "t2")});
+  const made = [];
+  const okRun = await e2e({ci: green, verdictObj: verdict(), files, diff, contents: cnt()});
+  made.push(okRun);
+  const ctx = fs.readFileSync(path.join(okRun.dir, "review-input/context.md"), "utf8");
+  check("E22 PREAUTHORIZED-only PR end to end: scope says needs_founder=false, contents fetched at base and head, check concluded success with a CLEAN verdict",
+    /needs_founder=false/.test(okRun.out.scope.out) && okRun.concluded?.conclusion === "success" && okRun.state.log.some(x => x === `GET /repos/o/r/contents/${SRV}`)
+    && okRun.concluded.output.summary.includes("Risk tier: `PREAUTHORIZED`"));
+  check("E22b the reviewer sees each file's fixed risk code and the tier in context.md", ctx.includes(`- modified: ${SRV} [ROUTE_REGISTRATION_APPEND]`) && ctx.includes(`- modified: ${MANIFEST} [TRUST_ROOT_RESEAL]`)
+    && ctx.includes(`- added: ${ROUTE} [ROUTINE]`) && ctx.includes("- risk tier: PREAUTHORIZED"));
+  const missing = await e2e({ci: green, verdictObj: verdict(), files, diff, contents: {}});
+  made.push(missing);
+  check("E22c contents unavailable (404) => needs_founder=true and failure FOUNDER_AUTHORITY_REQUIRED (missing contents are FOUNDER)",
+    /needs_founder=true/.test(missing.out.scope.out) && missing.concluded?.conclusion === "failure" && missing.concluded.output.summary.includes("FOUNDER_AUTHORITY_REQUIRED"));
+  const forged = await e2e({ci: green, verdictObj: verdict(), files, diff, contents: {...cnt(), [`${HEAD}:${SRV}`]: {...blobOf(SRV, realSrvHead), sha: "0".repeat(40)}}});
+  made.push(forged);
+  check("E22d contents whose blob id does not match their bytes are refused => Founder", /needs_founder=true/.test(forged.out.scope.out) && forged.concluded?.conclusion === "failure");
+  const wired = await e2e({ci: green, verdictObj: verdict(), files, diff, contents: cnt(realSrvHead.replace("registerWidgetStatusRoutes(app,laneDeps);", "registerWidgetStatusRoutes(app,{...laneDeps,gate:()=>new ExecutionGate(null)});"))});
+  made.push(wired);
+  check("E22e a server.ts change outside the class grammar end to end => needs_founder=true, failure FOUNDER_AUTHORITY_REQUIRED; with the Founder's approval it passes",
+    /needs_founder=true/.test(wired.out.scope.out) && wired.concluded?.conclusion === "failure" && wired.concluded.output.summary.includes("FOUNDER_AUTHORITY_REQUIRED"));
+  const auth = await e2e({ci: green, verdictObj: null, files, diff, contents: cnt(), diagnostics: {code: "REVIEWER_AUTH_REJECTED", isError: true, turns: 1, durationMs: 305, modelUsed: false}});
+  made.push(auth);
+  check("E22f PREAUTHORIZED PR with a rejected reviewer credential => failure (VERDICT_MISSING, REVIEWER_AUTH_REJECTED), never success, no Founder needed",
+    /needs_founder=false/.test(auth.out.scope.out) && auth.concluded?.conclusion === "failure" && auth.concluded.output.summary.includes("REVIEWER_AUTH_REJECTED")
+    && auth.concluded.output.summary.includes("VERDICT_MISSING"));
+  const approved = await e2e({ci: green, verdictObj: verdict(), files, diff, contents: cnt(realSrvHead.replace("registerWidgetStatusRoutes(app,laneDeps);", "registerWidgetStatusRoutes(app,{...laneDeps,gate:()=>new ExecutionGate(null)});")),
+    runApprovals: [approval()]});
+  made.push(approved);
+  check("E22g the same FOUNDER-tier change with the Founder's environment approval => success", /needs_founder=true/.test(approved.out.scope.out) && approved.concluded?.conclusion === "success");
+  for (const x of made) fs.rmSync(x.dir, {recursive: true, force: true});
+}
+// fileText refuses anything but an exact, small, well-formed text blob of a candidate file.
+{
+  const srv = http.createServer((req, res) => { const u = new URL(req.url, "http://x"); const t = u.searchParams.get("t"); res.writeHead(200, {"content-type": "application/json"});
+    const good = blobOf(SRV, "abc");
+    const bodies = {good, dir: [{name: "x"}], path: {...good, path: "other.ts"}, size: {...good, size: MAX_CONTENT_BYTES + 1}, enc: {...good, encoding: "none", content: ""}, len: {...good, size: 2},
+      utf: (() => { const b = Buffer.from([0xff, 0xfe, 0x41]); return {type: "file", path: SRV, encoding: "base64", size: 3, content: b.toString("base64"), sha: crypto.createHash("sha1").update("blob 3\0").update(b).digest("hex")}; })()};
+    res.end(JSON.stringify(bodies[req.headers["x-case"] ?? t] ?? bodies[state_t] ?? good)); });
+  let state_t = "good";
+  await new Promise(r => srv.listen(0, "127.0.0.1", r));
+  const gh = client({token: "t", repo: "o/r", apiUrl: `http://127.0.0.1:${srv.address().port}`, retries: 0, sleep: async () => {}});
+  const results = {};
+  for (const t of ["good", "dir", "path", "size", "enc", "len", "utf"]) { state_t = t; results[t] = await fileText(gh, SRV, HEAD); }
+  const notCandidate = await fileText(gh, "core/x.ts", HEAD), badSha = await fileText(gh, SRV, "HEAD");
+  srv.close();
+  check("I10 fileText accepts only an exact file blob of a candidate path (path, size cap, base64, length, git blob id, strict UTF-8) at a 40-hex SHA",
+    results.good === "abc" && ["dir", "path", "size", "enc", "len", "utf"].every(t => results[t] === null) && notCandidate === null && badSha === null);
 }
 {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-review-"));

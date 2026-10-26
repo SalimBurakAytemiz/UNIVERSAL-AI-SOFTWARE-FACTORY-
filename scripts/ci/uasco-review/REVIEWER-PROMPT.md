@@ -30,7 +30,10 @@ You are the independent UASCO Reviewer. You did not write this change, and you a
      - was any assertion weakened, any test skipped or removed, or any timeout raised?
      - `tests: PASS` only when the evidence is adequate. Use `INSUFFICIENT` when it is not.
    - **CI evidence:** the CI results in `context.md` must be green on head `{{HEAD_SHA}}`. If they are not, `ciEvidence` is `FAIL`.
-   - **Scope:** changes outside the pull request's stated purpose, protected or CI-executed paths, or new dependencies are a `scope` FAIL unless clearly intended. Name them.
+   - **Scope:** changes outside the pull request's stated purpose, or new dependencies, are a `scope` FAIL unless clearly intended. Name them.
+     - `context.md` lists every changed file with a fixed risk code from the deterministic gate.
+     - A protected file marked `ROUTE_REGISTRATION_APPEND`, `DESKTOP_ALLOWLIST_APPEND`, `TEST_REGISTRATION_APPEND` or `TRUST_ROOT_RESEAL` is a change the Founder pre-authorized and the gate verified structurally (an added route registration, an added anchored desktop allow-list entry, an added test registration, or a reseal of exactly those files). It is not a `scope` FAIL by itself. Still review what it does: a registered route or an allowed path must be safe and covered by tests.
+     - Any other protected, CI-executed or high-risk path (risk tier `FOUNDER`) needs Founder authority, which the gate enforces separately. Flag it as a `scope` FAIL when the stated purpose does not explain it.
 4. **Classify findings.** `BLOCKER` means the change must not merge as is; `ADVISORY` means it may merge.
    - P0/P1 findings are always BLOCKER.
    - Give file, line (or null), a short title and concrete evidence from the diff.

@@ -5,28 +5,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
+import {PROTECTED_FLOOR, PROTECTED_FLOOR_EXACT, CI_EXECUTED_FLOOR, normPath, classifyChange, pathMatcher} from "./merge-risk.mjs";
 
 export const EXIT = {MERGE: 0, BLOCK: 2, INTERNAL_ERROR: 3};
 export const REQUIRED_CONTEXTS = Object.freeze(["validate (ubuntu-latest)", "validate (windows-latest)"]);
 export const CHECK_APP = "github-actions";
 export const DEFAULT_BASE_REF = "v7/integration";
 export const REQUIRED_RULES = Object.freeze(["deletion", "non_fast_forward", "pull_request", "required_status_checks"]);
-// Floor that always applies, so an evidence file whose protectedPaths was emptied or truncated cannot open these.
-export const PROTECTED_FLOOR = Object.freeze([".github/workflows/", "automation/lib/", "scripts/validate-", "scripts/run-validation.mjs", "config/", "prompts/"]);
-export const PROTECTED_FLOOR_EXACT = Object.freeze(["claude.md", "agents.md"]);
-// Files CI executes from the PR head that config/protected-paths.json does not protect: a PR could make validate pass vacuously through them.
-// Fail-closed until a Founder authority path exists for dependency/CI-script changes. [match, category, isPrefix]
-export const CI_EXECUTED_FLOOR = Object.freeze([
-  ["scripts/ensure-dependencies.mjs", "ensure-dependencies", false],
-  ["package.json", "npm-manifest", false],
-  ["package-lock.json", "npm-lockfile", false],
-  ["scripts/ci/", "ci-scripts", true],
-  ["npm-shrinkwrap.json", "npm-shrinkwrap", false],
-  [".npmrc", "npmrc", false],
-  // Already protected in config/protected-paths.json; repeated here as defence in depth because CI runs them.
-  ["scripts/secret-sanity.mjs", "secret-sanity", false],
-  ["scripts/bootstrap-kernel-selftest.mjs", "bootstrap-kernel-selftest", false],
-]);
+// //TR: Taban listeleri (PROTECTED_FLOOR, PROTECTED_FLOOR_EXACT, CI_EXECUTED_FLOOR), normPath ve dosya başına risk sınıflandırması merge-risk.mjs'tedir (tek kanonik eşleştirici); burada aynen yeniden dışa aktarılır.
+export {PROTECTED_FLOOR, PROTECTED_FLOOR_EXACT, CI_EXECUTED_FLOOR, normPath};
 // The required contexts are trusted only from this workflow file (any diff under .github/workflows/ is PROTECTED_PATH) and these run events.
 export const CI_WORKFLOW_PATH = ".github/workflows/ci.yml";
 export const CI_EVENTS = Object.freeze(["pull_request", "push", "workflow_dispatch"]);
@@ -53,14 +40,6 @@ const isObj = v => v !== null && typeof v === "object" && !Array.isArray(v);
 const isSha = v => isStr(v) && SHA_RE.test(v);
 const lc = s => s.toLowerCase();
 const timeOf = v => { if (!isStr(v)) return NaN; const t = Date.parse(v); return Number.isFinite(t) ? t : NaN; };
-
-// Normalise a repo path for protected-path matching: "\" -> "/", lower case, leading "./" or "/" dropped, "." and ".." segments resolved.
-export function normPath(p) {
-  if (!isStr(p) || p.trim() === "" || p.includes("\0")) return null;
-  const n = path.posix.normalize(p.replace(/\\/g, "/")).replace(/^(?:\.\/|\/)+/, "");
-  if (n === "" || n === "." || n === ".." || n.startsWith("../")) return null;
-  return lc(n);
-}
 
 // Parse the binding line of one review body. Lines inside code fences and quoted lines are never bindings.
 // Fail-closed: any other line mentioning verdict-binding must be exactly one well-formed line starting at column 0, else a fixed code.
@@ -176,7 +155,8 @@ function checkVerdict(ev, headSha, baseSha, allowed, r) {
   return ok ? last.login : null;
 }
 
-function checkPaths(ev, r) {
+// //TR: Korunan yollar artık dosya başına risk sınıfıyla değerlendirilir: yalnız FOUNDER sınıfındaki dosyalar PROTECTED_PATH / CI_EXECUTED_PATH:<cat> / HIGH_RISK_PATH üretir; içerikten doğrulanan PREAUTHORIZED dosyalar (fileContents ile) engellemez. Yalnız ad içeren kanıtta korunan her dosya bugünkü gibi FOUNDER'dır (içerik eksik = fail-closed).
+function checkPaths(ev, r, risk) {
   const pp = ev.protectedPaths;
   if (!isObj(pp) || !Array.isArray(pp.exactPaths) || !Array.isArray(pp.protectedPrefixes) || pp.exactPaths.length === 0 || pp.protectedPrefixes.length === 0
     || !pp.exactPaths.every(isStr) || !pp.protectedPrefixes.every(isStr)) { r.push("EVIDENCE_MALFORMED:protectedPaths"); return; }
@@ -188,9 +168,11 @@ function checkPaths(ev, r) {
   // Duplicates would let a padded list match the count while hiding a file: every normalised filename must be unique, and so must every
   // normalised previous_filename. (A filename may equal another entry's previous_filename: a rename plus a re-added file is legitimate.)
   const seenNew = new Set(), seenOld = new Set();
-  const exact = new Set([...PROTECTED_FLOOR_EXACT, ...pp.exactPaths.map(normPath).filter(Boolean)]);
-  const prefixes = [...PROTECTED_FLOOR, ...pp.protectedPrefixes].map(p => lc(p.replace(/\\/g, "/")).replace(/^(?:\.\/|\/)+/, "")).filter(Boolean);
-  const hit = n => exact.has(n) || prefixes.some(p => n.startsWith(p));
+  const m = pathMatcher(pp);
+  // Optional SHA-bound contents {filename: {base, head}} gathered by the caller at the exact base and head SHAs; anything else counts as missing.
+  const contents = isObj(ev.fileContents) ? ev.fileContents : {};
+  const textOf = (f, k) => { const c = isStr(f.filename) && Object.hasOwn(contents, f.filename) && isObj(contents[f.filename]) ? contents[f.filename][k] : null; return isStr(c) ? c : null; };
+  const valid = [];
   for (const f of ev.diffFiles) {
     if (!isObj(f) || !DIFF_STATUSES.includes(f.status)) { r.push("EVIDENCE_MALFORMED:diffFiles"); continue; }
     // Both sides of a rename/copy are checked: moving a protected file away is as much a change to it as editing it.
@@ -198,15 +180,26 @@ function checkPaths(ev, r) {
     if (f.status === "renamed" || f.status === "copied") names.push(f.previous_filename);
     else if (f.previous_filename !== undefined && f.previous_filename !== null) names.push(f.previous_filename);
     names.forEach((x, i) => { const n = normPath(x), seen = i === 0 ? seenNew : seenOld; if (n !== null) { if (seen.has(n)) r.push("DIFF_INCOMPLETE"); seen.add(n); } });
+    valid.push({f, names});
+  }
+  const res = classifyChange({files: valid.map(({f}) => ({filename: f.filename, status: f.status, ...(f.previous_filename !== undefined ? {previous_filename: f.previous_filename} : {}),
+    baseText: textOf(f, "base"), headText: textOf(f, "head")})), protectedPaths: pp, headSha: isObj(ev.pr) && isObj(ev.pr.head) ? ev.pr.head.sha : null,
+    headFiles: Array.isArray(ev.headFiles) ? ev.headFiles.filter(isStr) : []});
+  valid.forEach(({names}, i) => {
+    const tier = res.files[i]?.tier ?? "FOUNDER";
+    let coded = false;
     for (const x of names) {
       const n = normPath(x);
-      if (n === null) r.push("EVIDENCE_MALFORMED:diffFiles");
-      else {
-        if (hit(n)) r.push("PROTECTED_PATH");
-        for (const [m, cat, pre] of CI_EXECUTED_FLOOR) if (pre ? n.startsWith(m) : n === m) r.push(`CI_EXECUTED_PATH:${cat}`);
-      }
+      if (n === null) { r.push("EVIDENCE_MALFORMED:diffFiles"); coded = true; continue; }
+      if (tier !== "FOUNDER") continue;
+      if (m.protectedHit(n)) { r.push("PROTECTED_PATH"); coded = true; }
+      for (const cat of m.ciCategories(n)) { r.push(`CI_EXECUTED_PATH:${cat}`); coded = true; }
     }
-  }
+    // FOUNDER for a reason that is neither a protected nor a CI-executed name: the high-risk set, or a removed test file.
+    if (tier === "FOUNDER" && !coded) r.push("HIGH_RISK_PATH");
+  });
+  risk.tier = res.tier;
+  risk.classes = res.classes;
 }
 
 function checkRules(rules, mode, r) {
@@ -252,36 +245,43 @@ export function evaluateMergeGate(evidence, policy) {
     if (mode === "process" && author) allowed.add(author);
     if (headSha) checkCi(ev.checkRuns, headSha, r);
     const reviewer = headSha && baseSha ? checkVerdict(ev, headSha, baseSha, allowed, r) : (r.push("VERDICT_MISSING"), null);
-    checkPaths(ev, r);
+    const risk = {tier: "FOUNDER", classes: ["RISK_NOT_EVALUATED"]};
+    checkPaths(ev, r, risk);
     checkRules(ev.rules, mode, r);
     const independence = reviewer !== null && author !== null && lc(reviewer) !== author && pol.trusted.has(lc(reviewer)) ? "DISTINCT_ACCOUNT" : "SAME_ACCOUNT";
     if (mode === "strict" && independence === "SAME_ACCOUNT") r.push("REVIEWER_NOT_INDEPENDENT_IDENTITY");
     const reasons = [...new Set(r)];
     const decision = reasons.length ? "BLOCK" : "MERGE";
     const trust = decision !== "MERGE" ? "NONE" : independence === "DISTINCT_ACCOUNT" ? "DISTINCT_TRUSTED_ACCOUNT" : "PROCESS_ONLY_SAME_ACCOUNT";
-    return out(decision, headSha, baseSha, reasons, independence, trust, mode);
+    return out(decision, headSha, baseSha, reasons, independence, trust, mode, risk);
   } catch {
     return out("INTERNAL_ERROR", null, null, ["INTERNAL_ERROR"], "SAME_ACCOUNT", "NONE", mode);
   }
 }
 
-function out(decision, expectedHeadSha, expectedBaseSha, reasons, identityIndependence, trust, mode) {
-  return {decision, expectedHeadSha, expectedBaseSha, reasons, identityIndependence, trust, mode};
+// riskTier / riskClasses: the PR's risk tier (ROUTINE, PREAUTHORIZED, FOUNDER) and its fixed class codes; FOUNDER with RISK_NOT_EVALUATED whenever the paths were not classified.
+function out(decision, expectedHeadSha, expectedBaseSha, reasons, identityIndependence, trust, mode, risk = {tier: "FOUNDER", classes: ["RISK_NOT_EVALUATED"]}) {
+  return {decision, expectedHeadSha, expectedBaseSha, reasons, identityIndependence, trust, mode, riskTier: risk.tier, riskClasses: [...risk.classes]};
 }
 
 // After the merge API returned: the merge commit must have exactly [expectedBaseSha, expectedHeadSha] as parents and be the new base head.
+// //TR: GitHub auto-merge zinciri: başka PR'lar önce birleşince merge commit'in ilk ebeveyni beklenen base'in torunudur ve base ucu sonraki merge'lere ilerler. Bu yalnız çağıran
+// git ile kanıtladığında kabul edilir: baseIsAncestor:true (expectedBaseSha, parents[0]'ın atasıdır) ve mergeOnFirstParent:true (merge commit yeni base ucunun ilk-ebeveyn zincirindedir). İkinci ebeveyn her zaman tam olarak değerlendirilen head'dir.
 export function verifyPostMerge(x) {
   try {
     const r = [];
-    if (!isObj(x)) return {decision: "MISMATCH", reasons: ["EVIDENCE_MALFORMED:root"]};
-    const {mergeCommitSha, mergeCommitParents, newBaseHead, expectedBaseSha, expectedHeadSha} = x;
+    if (!isObj(x)) return {decision: "MISMATCH", reasons: ["EVIDENCE_MALFORMED:root"], basis: "NONE"};
+    const {mergeCommitSha, mergeCommitParents, newBaseHead, expectedBaseSha, expectedHeadSha, baseIsAncestor, mergeOnFirstParent} = x;
     for (const [k, v] of Object.entries({mergeCommitSha, newBaseHead, expectedBaseSha, expectedHeadSha})) if (!isSha(v)) r.push(`EVIDENCE_MALFORMED:${k}`);
+    for (const [k, v] of Object.entries({baseIsAncestor, mergeOnFirstParent})) if (v !== undefined && typeof v !== "boolean") r.push(`EVIDENCE_MALFORMED:${k}`);
+    let chained = false;
     if (!Array.isArray(mergeCommitParents) || !mergeCommitParents.every(isSha)) r.push("EVIDENCE_MALFORMED:mergeCommitParents");
-    else if (mergeCommitParents.length !== 2 || mergeCommitParents[0] !== expectedBaseSha || mergeCommitParents[1] !== expectedHeadSha) r.push("MERGE_PARENTS_MISMATCH");
-    if (isSha(newBaseHead) && isSha(mergeCommitSha) && newBaseHead !== mergeCommitSha) r.push("BASE_HEAD_NOT_MERGE_COMMIT");
-    return {decision: r.length ? "MISMATCH" : "VERIFIED", reasons: r};
+    else if (mergeCommitParents.length !== 2 || mergeCommitParents[1] !== expectedHeadSha || mergeCommitParents[0] === expectedHeadSha) r.push("MERGE_PARENTS_MISMATCH");
+    else if (mergeCommitParents[0] !== expectedBaseSha) { if (baseIsAncestor === true) chained = true; else r.push("MERGE_PARENTS_MISMATCH"); }
+    if (isSha(newBaseHead) && isSha(mergeCommitSha) && newBaseHead !== mergeCommitSha) { if (mergeOnFirstParent === true) chained = true; else r.push("BASE_HEAD_NOT_MERGE_COMMIT"); }
+    return {decision: r.length ? "MISMATCH" : "VERIFIED", reasons: r, basis: r.length ? "NONE" : chained ? "ANCESTRY_PROVEN" : "EXACT"};
   } catch {
-    return {decision: "MISMATCH", reasons: ["INTERNAL_ERROR"]};
+    return {decision: "MISMATCH", reasons: ["INTERNAL_ERROR"], basis: "NONE"};
   }
 }
 
@@ -297,7 +297,7 @@ export function runCli(argv) {
   }
   if (o["--post-merge"] !== undefined) {
     const j = readJson(o["--post-merge"]);
-    const res = j.err ? {decision: "MISMATCH", reasons: [`EVIDENCE_${j.err}`]} : verifyPostMerge(j.v);
+    const res = j.err ? {decision: "MISMATCH", reasons: [`EVIDENCE_${j.err}`], basis: "NONE"} : verifyPostMerge(j.v);
     return {exit: res.decision === "VERIFIED" ? EXIT.MERGE : EXIT.BLOCK, res};
   }
   const mode = o["--mode"] ?? "process";

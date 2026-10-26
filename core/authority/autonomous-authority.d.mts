@@ -6,6 +6,7 @@ export declare const MANIFEST_PATH: string;
 export declare const POLICY_SCHEMA_VERSION: string;
 export declare const ROUTINE_ACTION_CLASSES: readonly string[];
 export declare const PROTECTED_CHANGE_CLASSES: readonly string[];
+export declare const PROTECTED_CHANGE_TARGET: Readonly<Record<string, string>>;
 export declare const NEVER_AUTO_CLASSES: readonly string[];
 export declare const ROLES: readonly string[];
 export declare const POLICY_CORE_PATHS: readonly string[];
