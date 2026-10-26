@@ -875,6 +875,9 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
         const relaySh = f.files.get("/tmp/uasco-sbx-AbC123/ctl/relay.sh")!;
         expect(relaySh).toContain("/usr/bin/nsenter -U --preserve-credentials -n -t"); expect(relaySh).toContain("'/usr/bin/node' '/tmp/uasco-sbx-AbC123/ctl/relay.js'"); expect(relaySh).toContain("ns/net"); expect(relaySh).toContain("exit 97");
         expect(f.files.get("/tmp/uasco-sbx-AbC123/ctl/relay.js")).toContain("127.0.0.1");
+        // C-7: WSL relay boş ortam + no_new_privs/yetkisiz + seccomp sarmalayıcısıyla çalışır
+        expect(relaySh).toContain("exec /usr/bin/env -i /usr/bin/nsenter"); expect(relaySh).toContain("/usr/bin/setpriv --no-new-privs --bounding-set=-all --inh-caps=-all --ambient-caps=-all /usr/bin/perl '/tmp/uasco-sbx-AbC123/ctl/seccomp.pl' '/usr/bin/node' '/tmp/uasco-sbx-AbC123/ctl/relay.js'");
+        expect(f.files.get("/tmp/uasco-sbx-AbC123/ctl/seccomp.pl")).toContain("SECCOMP_INSTALL_FAILED");
         for (const c of f.calls) { const all = c.args.join(" "); expect(all).not.toContain(dir); expect(all).not.toMatch(/[A-Za-z]:\\/); }
         const mark = f.calls.length;
         child.emit("exit", 0, null);

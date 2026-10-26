@@ -290,7 +290,8 @@ export const relayScript = (S: string, node: string): string => [
   'case "$t" in ""|*[!0-9]*) exit 95;; esac',
   `[ "$(/usr/bin/awk '{sub(/^.*\\) /, ""); print $2}' "/proc/$p/stat")" = "$t" ] || exit 95`,
   `/usr/bin/tr '\\000' ' ' < "/proc/$t/cmdline" | /usr/bin/grep -qF -- ${shq(S)} || exit 95`,
-  `exec /usr/bin/nsenter -U --preserve-credentials -n -t "$p" ${shq(node)} ${shq(`${S}/ctl/relay.js`)} "$port"`
+  // C-7: relay boş ortamla, no_new_privs + tüm yetkiler bırakılmış ve AF_VSOCK/io_uring seccomp sarmalayıcısıyla çalışır (sarmalayıcı S/ctl/seccomp.pl olarak hazırlanır).
+  `exec /usr/bin/env -i /usr/bin/nsenter -U --preserve-credentials -n -t "$p" /usr/bin/setpriv --no-new-privs --bounding-set=-all --inh-caps=-all --ambient-caps=-all /usr/bin/perl ${shq(`${S}/ctl/seccomp.pl`)} ${shq(node)} ${shq(`${S}/ctl/relay.js`)} "$port"`
 ].join("\n") + "\n";
 
 export class WslUnshareSandboxProvider implements SandboxProvider {
@@ -435,7 +436,7 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
       if ((await this.wsl(["/bin/tar", "-x", "--no-same-owner", "--no-same-permissions", "-C", `${S}/work`], 120_000, tar)).exitCode !== 0) throw new Error("SANDBOX_REFUSED: COPY_IN_FAILED");
       const st = await this.stageSandbox(S, this.o.devMaxMs ?? 6 * 3600_000, wslEnv(opts.env as NodeJS.ProcessEnv), chk.command);
       if (st !== "OK") throw new Error(`SANDBOX_REFUSED: ${st}`);
-      if (!this.nodePath || !(await this.put(S, "relay.js", WSL_RELAY_JS)) || !(await this.put(S, "relay.sh", relayScript(S, this.nodePath)))) throw new Error("SANDBOX_REFUSED: STAGE_FAILED");
+      if (!this.nodePath || !(await this.put(S, "seccomp.pl", SECCOMP_PL + "\n")) || !(await this.put(S, "relay.js", WSL_RELAY_JS)) || !(await this.put(S, "relay.sh", relayScript(S, this.nodePath)))) throw new Error("SANDBOX_REFUSED: STAGE_FAILED");
     } catch (e) { await this.cleanup(S); throw e; }
     let child: SandboxChild;
     try { child = this.realSpawner()(["-d", this.distro ?? "", "--exec", "/bin/sh", `${S}/ctl/run.sh`], ["ignore", "pipe", "pipe"]) as SandboxChild; }

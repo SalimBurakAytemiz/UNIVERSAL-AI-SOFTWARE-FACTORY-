@@ -7,6 +7,7 @@ import {testExecutionGate, TEST_HOST_PASSTHROUGH_SANDBOX} from "./support/test-s
 import {ExecutionGate} from "../core/workos/execution-gate.js";
 import fs from "node:fs";
 import os from "node:os";
+import net from "node:net";
 import path from "node:path";
 import crypto from "node:crypto";
 import cp from "node:child_process";
@@ -361,7 +362,7 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
   it("with a provider bridge the product starts, the host reaches it ONLY on 127.0.0.1:<port> through the bridge, the run is tied to the delivery (runId + exact head), a wrong head is refused, and stop closes the bridge", async () => {
     const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
     const head = git(path.join(dataDir, "projects", p.projectId, "repo"), ["rev-parse", "HEAD"]).trim();
-    const net = await import("node:net");
+    // net: üst düzey import
     let innerPort = 0, bridgeCalls: number[] = [], closed = 0; const proxies = new Set<import("node:net").Socket>();
     const provider = {id: "FAKE_ISOLATED", network: "ISOLATED", async selfTest() { return {ok: true}; }, async run() { throw new Error("unused"); },
       spawn(c: string, a: string[], o: cp.SpawnOptions) { innerPort = Math.floor(30000 + Math.random() * 20000); return cp.spawn(c, a, {...o, env: {...(o.env as any), PORT: String(innerPort)}}); },
@@ -425,7 +426,7 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
 
   it("C-1: a RUNNING bridged product is stopped on the provider side and becomes BLOCKED (SANDBOX_UNVERIFIED) when the provider de-verifies; view masks the preview at once, the bridge closes, the process is gone and a new start is refused", async () => {
     const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
-    const net = await import("node:net");
+    // net: üst düzey import
     let innerPort = 0, closed = 0, verified = true, child: cp.ChildProcess | null = null; const proxies = new Set<import("node:net").Socket>();
     const provider = {id: "FAKE_ISOLATED", network: "ISOLATED", async selfTest() { return {ok: verified}; }, isVerified() { return verified; }, async run() { throw new Error("unused"); },
       spawn(c: string, a: string[], o: cp.SpawnOptions) { innerPort = Math.floor(30000 + Math.random() * 20000); child = cp.spawn(c, a, {...o, env: {...(o.env as any), PORT: String(innerPort)}}); return child; },
@@ -446,6 +447,23 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
       await expect(fetch(`http://127.0.0.1:${v.port}/`)).rejects.toBeTruthy();
       await expect(m.start(p)).rejects.toMatchObject({code: "SANDBOX_UNAVAILABLE"});
     } finally { await m.stopAll("CLEANUP"); }
+  }, T);
+
+  it.skipIf(process.platform !== "linux")("C-7: the Linux nsenter relay runs with an empty env, no_new_privs and an empty capability set (real nsenter into an unshared userns+netns holder; the relay 'node' is a probe script that prints what it runs with)", async () => {
+    const {startNsenterBridge} = await import("../core/workos/devrun-bridge.js");
+    const probeUserns = cp.spawnSync("unshare", ["-Urn", "true"]); if (probeUserns.status !== 0) return; // bu çekirdekte kullanıcı ad alanı yok: kanıtlanacak bir şey yok
+    const holder = cp.spawn("unshare", ["-Urn", "sleep", "30"], {stdio: "ignore"}); const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-c7-"));
+    const probe = path.join(dir, "probe.sh"); fs.writeFileSync(probe, "#!/bin/sh\ngrep -E '^(NoNewPrivs|CapInh|CapPrm|CapEff|CapBnd|CapAmb):' /proc/self/status\nenv\n", {mode: 0o755});
+    process.env.UASCO_C7_CANARY_SECRET = "must-not-leak";
+    try {
+      const port = await freeLoopbackPort();
+      const h = await startNsenterBridge(holder, port, {nsenterBinary: "/usr/bin/nsenter", nodeBinary: probe, isolationWaitMs: 3000});
+      const out = await new Promise<string>((res, rej) => { const c = net.connect(port, "127.0.0.1"); let b = ""; c.on("data", d => b += d); c.on("close", () => res(b)); c.on("error", rej); setTimeout(() => res(b), 8000); });
+      h.close();
+      expect(out, out).toMatch(/NoNewPrivs:\s+1/);
+      for (const k of ["CapInh", "CapPrm", "CapEff", "CapBnd", "CapAmb"]) expect(out, out).toMatch(new RegExp(`${k}:\\s+0000000000000000`));
+      expect(out).not.toContain("must-not-leak"); expect(out).not.toContain("UASCO_C7_CANARY_SECRET");
+    } finally { delete process.env.UASCO_C7_CANARY_SECRET; holder.kill("SIGKILL"); fs.rmSync(dir, {recursive: true, force: true}); }
   }, T);
 
   it("startNsenterBridge refuses a target that shares the host network namespace (it would expose host loopback), an exited/invalid pid and a bad port", async () => {
@@ -490,7 +508,7 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
   }, T);
   it("B-RUN-WIN-1: a provider with spawnAsync is used instead of spawn(); stop waits for the provider's Linux-side teardown; a stop that arrives while spawnAsync is still preparing kills the process it then returns", async () => {
     const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
-    const net = await import("node:net");
+    // net: üst düzey import
     let inner = 0, teardownDone = false, release: () => void = () => undefined, entered: () => void = () => undefined, slow = false, spawnCalled = 0, killedLate = false;
     const mkProvider = () => ({id: "FAKE_WSL_LIKE", network: "ISOLATED", async selfTest() { return {ok: true}; }, async run() { throw new Error("unused"); },
       spawn() { spawnCalled++; throw new Error("sync spawn must not be used"); },

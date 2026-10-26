@@ -26,6 +26,8 @@ export function providerNetwork(p: SandboxProvider): ProviderNetwork {
   return p.id === LINUX_ID || p.id === WSL_ID ? "ISOLATED" : "HOST";
 }
 
+// C-7: relay, hedef kullanıcı ad alanına girdikten sonra yetkileri bırakır (no_new_privs + boş bounding/inheritable/ambient); setpriv yoksa relay BAŞLAMAZ (fail-closed).
+const RELAY_DROP = ["/usr/bin/setpriv", "--no-new-privs", "--bounding-set=-all", "--inh-caps=-all", "--ambient-caps=-all", "--"] as const;
 export interface NsenterOptions { nsenterBinary?: string | null; nodeBinary?: string; maxConnections?: number; idleMs?: number; platform?: NodeJS.Platform; isolationWaitMs?: number }
 const RELAY = 'const n=require("node:net");const s=n.connect({host:"127.0.0.1",port:Number(process.argv[1])});process.stdin.pipe(s);s.pipe(process.stdout);s.on("error",()=>process.exit(1));s.on("close",()=>process.exit(0));process.stdin.on("end",()=>s.end());';
 function resolveNsenter(): string | null {
@@ -67,7 +69,7 @@ export async function startNsenterBridge(child: ChildProcess, port: number, o: N
     // PID yeniden kullanımı/çıkış: hedef canlı ve aynı ağ ad alanında değilse bağlantı reddedilir.
     if (live.size >= max || child.exitCode !== null || child.signalCode !== null || netNs(pid as number) !== target) { sock.destroy(); return; }
     live.add(sock); sock.setTimeout(idleMs, () => sock.destroy());
-    const r = cp.spawn(bin, ["-U", "--preserve-credentials", "-n", "-t", String(pid), "--", node, "-e", RELAY, String(port)], {shell: false, stdio: ["pipe", "pipe", "ignore"], windowsHide: true});
+    const r = cp.spawn(bin, ["-U", "--preserve-credentials", "-n", "-t", String(pid), "--", ...RELAY_DROP, node, "-e", RELAY, String(port)], {shell: false, stdio: ["pipe", "pipe", "ignore"], windowsHide: true, env: {PATH: "/usr/bin:/bin"}});
     kids.add(r);
     sock.pipe(r.stdin!); r.stdout!.pipe(sock);
     const end = () => { live.delete(sock); kids.delete(r); sock.destroy(); try { r.kill("SIGKILL"); } catch { /* çıkmış */ } };
