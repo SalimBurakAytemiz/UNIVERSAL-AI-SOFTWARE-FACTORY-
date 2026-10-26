@@ -134,6 +134,20 @@ describe("C-PAR-1 PAR-03: synchronous git in one run must not starve another run
   });
 });
 
+describe("C-PAR-1 follow-up: a reviewer that cannot start for a reason the Founder can fix BLOCKS the run (like a missing sign-in), it does not FAIL it", () => {
+  it("CLI missing / .cmd shim / unverified, changed or vanished launcher / expired sign-in -> BLOCKED with the exact code; a review that is invalid for its own reasons stays FAILED", { timeout: 180_000 }, async () => {
+    const rows: Array<[string, "BLOCKED" | "FAILED"]> = [["CLAUDE_PROFILE_LOGIN_REQUIRED", "BLOCKED"], ["CLAUDE_PROFILE_LOGIN_EXPIRED", "BLOCKED"], ["CLAUDE_CLI_NOT_FOUND", "BLOCKED"], ["CLAUDE_CLI_SHIM_UNSUPPORTED", "BLOCKED"],
+      ["PROVIDER_PROVENANCE_NOT_READY", "BLOCKED"], ["CLAUDE_PACKAGE_PROVENANCE_REQUIRED", "BLOCKED"], ["CLAUDE_LAUNCHER_PROVENANCE_CHANGED", "BLOCKED"], ["REVIEW_WORKSPACE_MODIFIED", "FAILED"], ["REVIEW_FAILED", "FAILED"]];
+    for (const [i, [code, want]] of rows.entries()) {
+      const c = setup(`rb${i}`), run = c.mkRun("A"), at = new Date().toISOString();
+      const pair: ExecutorPair = {...c.base, reviewer: {...c.base.reviewer, review: async () => ({verdict: "BLOCKED", findings: [], valid: false, invalidReason: code, exitCode: null, log: "x", argv: [], startedAt: at, endedAt: at, timedOut: false, aborted: false, transient: false})}};
+      await c.runner({executors: pair}).tick();
+      const after = c.store.engineGetRun(run.runId)!;
+      expect([code, after.status, after.reason, after.step]).toEqual([code, want, code, "REVIEW"]);
+    }
+  });
+});
+
 describe("C-PAR-1 PAR-05: the tick must not be gang-scheduled (a slot freed by a fast run is refilled while a slow run is still in flight)", () => {
   it("cap 2, production tick interval: C's implement starts within one tick (2 s) of A reaching AWAITING_APPROVAL while B is still in IMPLEMENT", { timeout: 120_000 }, async () => {
     const SLOW = 8000;

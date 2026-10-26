@@ -60,6 +60,8 @@ type Outcome =
   | {kind: "CANCEL"; reason: string};
 
 const RUN_ID = /^run_[0-9a-f]{24}$/;
+// //TR: Founder'ın kendisinin giderebileceği ön koşul retleri (oturum yok/süresi dolmuş, CLI yok/.cmd başlatıcı, başlatıcı kanıtı yok/değişmiş) run'ı BLOCKED yapar (düzeltilince devam edilebilir); incelemenin kendi geçersizliği (ör. REVIEW_WORKSPACE_MODIFIED, REVIEWER_IDENTITY_MISMATCH) FAILED kalır.
+export const FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;
 const SHA = /^[0-9a-f]{40}$/;
 const NEXT: Record<RunStep, RunStep | "FINISHED"> = {WORKSPACE: "IMPLEMENT", IMPLEMENT: "VERIFY", VERIFY: "SECURITY", SECURITY: "REVIEW", REVIEW: "REGRESSION", REGRESSION: "REPORT", REPORT: "FINISHED"};
 // Adım bittiğinde mission'ın gideceği durum (state machine allowlist'i store tarafından ayrıca uygulanır).
@@ -964,7 +966,7 @@ export class MissionRunner {
     // REL-FX: reviewer sağlayıcı kota/hız sınırına çarptıysa BLOCKED(PROVIDER_QUOTA/DISK_FULL), yeniden deneme bütçesi tüketilmez; SBX-8 geçersizlik dalından önce.
     if (limit) return limitBlock(limit);
     // SBX-8: adapter'ın geçersizlik nedeni (profil oturumu yok -> BLOCKED; çalışma alanı değişti -> FAILED) korunur; geçersiz review asla CLEAN değildir.
-    if (!r.valid) return r.transient ? {kind: "RETRY", reason: "REVIEW_TRANSIENT_FAILURE"} : {kind: "BLOCK", reason: (r.invalidReason ?? "REVIEW_FAILED").slice(0, 200), status: r.invalidReason?.startsWith("CLAUDE_PROFILE_") ? "BLOCKED" : "FAILED"};
+    if (!r.valid) return r.transient ? {kind: "RETRY", reason: "REVIEW_TRANSIENT_FAILURE"} : {kind: "BLOCK", reason: (r.invalidReason ?? "REVIEW_FAILED").slice(0, 200), status: FOUNDER_ACTIONABLE_REFUSAL.test(r.invalidReason ?? "") ? "BLOCKED" : "FAILED"};
     if (r.verdict === "CLEAN") return {kind: "DONE", next: "REGRESSION", data: {verdict: "CLEAN", reviewerIdentity: reviewer.identity, commitSha: run.headSha}};
     return {kind: "REMEDIATE", reason: "REVIEW_BLOCKED", data: {verdict: "BLOCKED", reviewerIdentity: reviewer.identity}, findings: r.findings.map(f => `${f.severity}: ${f.title}`)};
   }
