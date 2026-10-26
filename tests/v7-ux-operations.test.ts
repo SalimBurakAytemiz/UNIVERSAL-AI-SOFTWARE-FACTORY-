@@ -311,7 +311,7 @@ describe("Operations — GENUINE control-api read-models flow through mappers, d
     expect(pills(overallOf(r))).toContain("DONE");
     expect(overallOf(r).textContent).toContain("No issues recorded");
     // review #196: the "no issues" claim states its scope (Work OS sources only) and says the legacy supervisor records are not read
-    expect(overallOf(r).textContent).toMatch(/covers only those sources/); expect(overallOf(r).textContent).toMatch(/legacy supervisor.s retry and checkpoint records are not read here/);
+    expect(overallOf(r).textContent).toMatch(/covers only those sources/); expect(overallOf(r).textContent).toMatch(/legacy supervisor.s retry record is shown only in Control Tower and its checkpoint record is not shown in this app/); expect(overallOf(r).textContent).not.toMatch(/checkpoint[^.]*Control Tower\)/);
     const trv = await renderView(realGet(app), "tr", now); expect(overallOf(trv.root).textContent).toMatch(/yalnızca o kaynakları kapsar/);
     expect(byData(r, "opsEmpty", "clear")).toBeTruthy();
     expect(stepsOf(r).length).toBe(0);
@@ -667,9 +667,9 @@ describe("Operations — view honesty", () => {
     expect(field(first, "where")!.textContent).toContain("Existing control: Resume");
     const blocked = stepsOf(r).filter(n => n.dataset.step === "ATTENTION_ITEM");
     expect(all(blocked[0]).find(n => n.tagName === "H3")!.textContent).toBe("Mission blocked: Blocked mission");
-    expect(field(blocked[0], "detail")!.textContent).toBe("Next action: Review the mission. Waiting for 1 d 2 h. Reason: Review blocked.");
+    expect(field(blocked[0], "detail")!.textContent).toBe("Next action: Review the mission. Mission created 1 d 2 h ago (no status-change time is recorded). Reason: Review blocked."); // review #196 f: the duration for a blocked mission is measured from its creation, and the text says so (never "Waiting for")
     expect(all(blocked[1]).find(n => n.tagName === "H3")!.textContent).toBe("Task blocked: Blocked task");
-    expect(field(blocked[1], "detail")!.textContent).toBe("Next action: Unblock the task. Waiting for 3 h 0 min. Reason: Quota exhausted.");
+    expect(field(blocked[1], "detail")!.textContent).toBe("Next action: Unblock the task. Listed by the server for 3 h 0 min. Reason: Quota exhausted.");
     expect(field(blocked[1], "where")!.textContent).toContain("Open the Inbox");
     expect(blocked[1].dataset.stepControl).toBe("");
     expect(field(stepFor(r, "RUN_STALLED"), "detail")!.textContent).toContain("still has no final summary (display threshold 6 h 0 min)");
@@ -828,6 +828,21 @@ describe("Operations — view honesty", () => {
     expect(controlOf(r, "retry").textContent).toContain("not read by this screen"); expect(controlOf(r, "retry").textContent).toContain("Control Tower");
     expect(all(r).filter(n => n.tagName === "BUTTON").length).toBe(2);
   });
+  it("a retryable legacy /v1/founder-attention row changes nothing: it is not read, no Retry text or button appears, and the retry 'where' copy (en and tr, exact) points to no Retry in Control Tower or Inbox (review #192/#196 R196-1)", async () => {
+    const legacy = {blocked: [{packageId: "PKG-LEGACY-777", kind: "TIMEOUT", reason: "x", retryable: true}], retryableKinds: ["TIMEOUT"], schedulerVerification: "VERIFIED"};
+    const E = (await load("locales", "en.js")).default as Record<string, string>, T = (await load("locales", "tr.js")).default as Record<string, string>;
+    for (const [lang, L] of [["en", E], ["tr", T]] as const) {
+      const r = await renderView(serve({"/v1/founder-attention": legacy, "/v1/attention": attBody({blocked: [blockedRow()]})}), lang);
+      expect(r.calls).not.toContain("/v1/founder-attention");
+      const where = allData(controlOf(r.root, "retry"), "field", "where")[0];
+      expect(where.textContent).toBe(L["ops.control.where.retry"]); expect(where.textContent).toMatch(/SUPERVISOR_RETRY\.json/); expect(where.textContent).toContain("Control Tower");
+      const text = r.root.textContent;
+      expect(text).not.toMatch(/Retry in the blocked-package|blocked-package list|Control Tower or Inbox|PKG-LEGACY-777/i);
+      expect(text).not.toMatch(/engelli paket listesi|Gelen Kutusu veya Control Tower/i);
+      expect(all(r.root).filter(n => n.tagName === "BUTTON" && /retry|yeniden/i.test(n.textContent)).length).toBe(0);
+    }
+    expect(E["ops.control.where.retry"]).not.toMatch(/Retry in|Inbox/); expect(T["ops.control.where.retry"]).not.toMatch(/Gelen Kutusu/);
+  });
   it("honest empty states: no runs and no blocked work are readable zeros with explicit text (only when they were READ); a cut or partly unreadable list is never evidence that nothing is blocked", async () => {
     let r = (await renderView(serve({"/v1/runs": runsBody([])}))).root;
     expect(allData(r, "opsEmpty", "1").map(n => n.textContent)).toContain("No supervisor runs are recorded.");
@@ -880,6 +895,9 @@ describe("Operations — view honesty", () => {
     expect(all(blockedItems(ok.root)[0]).find(n => n.tagName === "H3")!.textContent).toBe("Mission X"); expect(all(blockedItems(ok.root)[1]).find(n => n.tagName === "H3")!.textContent).not.toMatch(/^(msn|tsk|run)_/);
     const items2 = blockedItems(kinds.root), m2 = items2.find(n => n.textContent.includes("Mission Y"))!, r2 = items2.find(n => n.textContent.includes("Run Z"))!;
     expect(lab(m2)).toContain("Mission created"); expect(lab(m2)).not.toContain("Blocked since"); expect(lab(r2)).toContain("Run last updated"); expect(lab(r2)).not.toContain("Blocked since");
+    const stepDetails = stepsOf(kinds.root).filter(n => n.dataset.step === "ATTENTION_ITEM").map(n => field(n, "detail")!.textContent);
+    expect(stepDetails.some(t => /Mission created .* ago \(no status-change time is recorded\)/.test(t))).toBe(true); expect(stepDetails.some(t => /Run last updated .* ago/.test(t))).toBe(true); expect(stepDetails.join(" ")).not.toMatch(/Waiting for/);
+    expect(stepsOf((await renderView(serve({"/v1/attention": attBody({blocked: [withSince, runRow]})}), "tr")).root).map(n => field(n, "detail")?.textContent ?? "").join(" ")).toMatch(/Mission .* önce oluşturuldu[\s\S]*Koşu en son .* önce güncellendi|Koşu en son .* önce güncellendi[\s\S]*Mission .* önce oluşturuldu/);
     const kinds_tr = await renderView(serve({"/v1/attention": attBody({blocked: [withSince, runRow]})}), "tr");
     expect(blockedItems(kinds_tr.root).map(lab).join(" ")).not.toContain("ops.field");
     expect(field(task, "reason")!.textContent).toBe("Quota exhausted");
@@ -1036,6 +1054,7 @@ describe("Operations — locale parity and key coverage", () => {
     for (const t of core.TIERS) { need.add(`ops.tier.${t}`); need.add(`ops.tierDesc.${t}`); }
     for (const s of core.SEVERITIES) need.add(`ops.severity.${s}`);
     for (const id of Object.values(core.STEP_IDS).flat() as string[]) { need.add(`ops.step.${id}.title`); need.add(`ops.step.${id}.detail`); }
+    for (const k of ["MISSION_BLOCKED", "RUN_NEEDS_DECISION"]) need.add(`ops.step.ATTENTION_ITEM.detail.${k}`); // per-kind basis of the "since" (review #196 f)
     for (const k of ["resume", "attention"]) need.add(`ops.step.where.${k}`);
     for (const c of ["stop", "resume", "retry"]) { need.add(`ops.control.${c}.title`); need.add(`ops.control.where.${c}`); }
     for (const k of ["unknown", "stop.active", "stop.inactive", "resume.relevant", "resume.notNeeded", "retry.noSource"]) need.add(`ops.control.state.${k}`);

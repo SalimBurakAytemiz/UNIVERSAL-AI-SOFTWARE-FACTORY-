@@ -169,7 +169,7 @@ function queuePanel(ctx,q){
     const tiers=q.groups.map(g=>{const t=tierSection(ctx,g,q,budget);budget-=t.shown;shownTotal+=t.shown;return t.node});
     // Mission listesi okunamadığında listelenen koşuların mission durumu bilinmez; bu AÇIKÇA söylenir (teslim kararı olup olmadığı iddia edilmez).
     const unknownStatus=q.items.some(i=>i.kind==="MISSION_STATUS_UNKNOWN");
-    body=[shownTotal<q.items.length?h(doc,"p",{class:"note",dataset:{note:"truncated"},text:ctx.t("queue.truncated",{shown:shownTotal,total:q.items.length})}):null,
+    body=[shownTotal<q.items.length?h(doc,"p",{class:"note",dataset:{note:"truncated"},text:q.complete?ctx.t("queue.truncated",{shown:shownTotal,total:q.items.length}):ctx.t("queue.truncatedIncomplete",{shown:shownTotal})}):null,
       unknownStatus?h(doc,"p",{class:"note",role:"status",dataset:{note:"mission-status-unknown"},text:ctx.t("queue.unknownStatus.note")}):null,...tiers];
   }
   return panel(ctx,{titleKey:"queue.list.title",id:"queue-list",className:"queue-section"},

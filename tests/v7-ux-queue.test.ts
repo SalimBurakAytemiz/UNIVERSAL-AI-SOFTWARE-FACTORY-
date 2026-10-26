@@ -233,7 +233,7 @@ describe("Queue — GENUINE control-api read-models flow through mappers, queue 
     const p = store.createProject({tenantId: "tA", orgId: "org1", name: "Only a project", environmentId: "env-dev", createdBy: RECORDER});
     store.createMission({tenantId: "tA", projectId: p.projectId, title: "Draft only", objective: "o", acceptanceCriteria: ["ac"], riskLevel: "R1", createdBy: RECORDER});
     const app = mkApp();
-    const {root} = await renderView(async p2 => (p2 === "/v1/attention" ? attentionBody([]) : getJson(app, p2)), "en", Date.now());
+    const {root} = await renderView(async p2 => getJson(app, p2), "en", Date.now()); // all three sources from the REAL server, including /v1/attention
     expect(itemsOf(root).length).toBe(0);
     expect(byData(root, "queueEmpty", "1")!.textContent).toContain("Nothing is awaiting human approval.");
     expect(kpiValue(root, "total")).toBe("0");
@@ -242,6 +242,25 @@ describe("Queue — GENUINE control-api read-models flow through mappers, queue 
     expect(allData(root, "tierEmpty").length).toBe(0);
     expect(allData(root, "queueTier").length).toBe(0);
     expect(surface(root)).not.toContain(FORBIDDEN);
+  });
+});
+
+describe("Queue (real server): a blocked mission arrives through the REAL /v1/attention route and is listed with an honest basis (review #196 g)", () => {
+  it("real MISSION_BLOCKED => BLOCKED_ITEM row from the real route; since = mission creation, no invented Waiting pill, no run row", async () => {
+    const store = new WorkOsStore(dataDir()), scope = {tenantId: "tA"};
+    const p = store.createProject({tenantId: "tA", orgId: "org1", name: "Blocked project", environmentId: "env-dev", createdBy: RECORDER});
+    const m = store.createMission({tenantId: "tA", projectId: p.projectId, title: "Really blocked mission", objective: "o", acceptanceCriteria: ["ac"], riskLevel: "R1", createdBy: RECORDER}).missionId;
+    for (const to of ["PREFLIGHT", "BLOCKED"]) store.transitionMission(scope, m, to as any, "go", RECORDER);
+    const app = mkApp();
+    const real = await getJson(app, "/v1/attention");
+    expect(real.attention.items.map((i: any) => [i.kind, i.missionId])).toEqual([["MISSION_BLOCKED", m]]); // the real route, not a fixture
+    const core = await load("queue-core.js");
+    const q = core.buildQueue({missions: core.mapQueueMissions(await getJson(app, "/v1/missions")), runs: core.mapQueueWorkRuns(await getJson(app, "/v1/work-runs")), attention: core.mapQueueAttention(real)}, Date.now() + H);
+    expect(q.complete).toBe(true); const row = q.items.find((i: any) => i.kind === "BLOCKED_ITEM");
+    expect(row).toMatchObject({key: `attention:MISSION_BLOCKED:${m}`, blockerKind: "MISSION_BLOCKED", basis: "MISSION_CREATED", missionTitle: "Really blocked mission", runId: null});
+    const {root} = await renderView(async p2 => getJson(app, p2), "en", Date.now() + H);
+    const li = itemFor(root, `attention:MISSION_BLOCKED:${m}`);
+    expect(li.textContent).toContain("Really blocked mission"); expect(li.textContent).toContain("Mission blocked"); expect(all(li).filter(n => "pill" in n.dataset).map(n => n.dataset.pill)).not.toContain("WAITING"); expect(field(li, "run")).toBeUndefined();
   });
 });
 
@@ -943,6 +962,15 @@ describe("LANE-A Queue on GET /v1/attention", () => {
     const n = byData(drop.root, "note", "attention-dropped")!; expect(n.dataset.dropped).toBe("1"); expect(n.textContent).toBe("1 item(s) from the server could not be read and are not listed.");
     const clean = await renderView(serve());
     expect(byData(clean.root, "note", "attention-truncated")).toBeUndefined(); expect(byData(clean.root, "note", "attention-dropped")).toBeUndefined();
+  });
+  it("a truncated attention list makes the queue incomplete: the row-cap note shows NO total taken from the cut list (no 'of 205'), in en and tr (review #196 d)", async () => {
+    const cut = attentionBody(Array.from({length: 200}, (_, i) => item({taskId: "tsk_" + String(i).padStart(24, "a")})), {truncated: true, counts: {...countsOf([]), TASK_BLOCKED: 250}});
+    for (const [lang, text] of [["en", "Showing the first 200 listed items (priority first, longest wait first within a priority). The queue is incomplete, so no total is available."], ["tr", "Listelenen öğelerin ilk 200 tanesi gösteriliyor (önce öncelik, öncelik içinde en uzun bekleyen önce). Kuyruk eksik olduğu için toplam yoktur."]] as const) {
+      const r = await renderView(serve({"/v1/attention": cut}), lang);
+      const n = byData(r.root, "note", "truncated")!; expect(n.textContent, lang).toBe(text); expect(n.textContent).not.toMatch(/of 20\d|205|öğenin ilk/);
+    }
+    const full = await renderView(serve({"/v1/attention": attentionBody(Array.from({length: 200}, (_, i) => item({taskId: "tsk_" + String(i).padStart(24, "a")})))}));
+    expect(byData(full.root, "note", "truncated")!.textContent).toMatch(/^Showing the first 200 of 2\d\d items/); // a complete queue still states its real total
   });
   it("a blocked item shows its mission status when the mission is known and never asserts one when the mission list is unreadable", async () => {
     const known = await renderView(serve());

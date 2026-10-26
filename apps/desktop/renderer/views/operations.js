@@ -110,6 +110,11 @@ function stepVars(ctx,s){
     threshold:dur(ctx,RUN_STALL_AFTER_MS),
     source:p.source?t(`ops.srcShort.${p.source}`):MISSING,state:p.state?t(`ops.state.${p.state}`):MISSING,verification:dash(p.verification),error:dash(p.error)};
 }
+// //TR: Dikkat öğesinin "süre"si türe göre farklı bir andan ölçülür (MISSION_BLOCKED: mission oluşturma, RUN_NEEDS_DECISION: koşunun son güncellemesi); metin bunu söyler, "bekliyor" denmez.
+function detailKey(ctx,s){
+  if(s.id==="ATTENTION_ITEM"&&s.params.kind){const k=`ops.step.ATTENTION_ITEM.detail.${s.params.kind}`;if(ctx.t(k)!==k)return k}
+  return `ops.step.${s.id}.detail`;
+}
 /** Adımın hangi MEVCUT denetimle ilgili olduğu (yeniden uygulanmaz): resume/retry denetimi ya da yeniden denemenin neden yapılamadığı. */
 function stepWhere(ctx,s){
   if(s.control==="resume")return ctx.t("ops.step.where.resume");
@@ -122,7 +127,7 @@ function stepCard(ctx,a,s,idx){
   return h(doc,"li",{class:"card ops-step",dataset:{step:s.id,stepSeverity:s.severity,stepKey:s.key,stepSource:s.source,stepControl:s.control??"",stepIndex:String(idx)}},
     h(doc,"h3",{text:ctx.t(`ops.step.${s.id}.title`,vars)}),
     h(doc,"p",{class:"ops-step-head panel-meta"},statePill(ctx,kind,{label:ctx.t(`ops.severity.${s.severity}`)})),
-    h(doc,"p",{class:"note",dataset:{field:"detail"},text:ctx.t(`ops.step.${s.id}.detail`,vars)}),
+    h(doc,"p",{class:"note",dataset:{field:"detail"},text:ctx.t(detailKey(ctx,s),vars)}),
     where?h(doc,"p",{class:"note",dataset:{field:"where"},text:where}):null);
 }
 function recoveryPanel(ctx,a){
