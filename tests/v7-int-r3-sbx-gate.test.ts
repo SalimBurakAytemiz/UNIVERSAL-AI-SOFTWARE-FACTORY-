@@ -759,7 +759,8 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
       } finally { fs.rmSync(dir, {recursive: true, force: true}); }
     });
 
-    it("the valid probe PE is written to WSL and the OUTER script really fails closed: unreadable/unknown binfmt entry = enabled; only a clean 'disabled' passes; a real PE exec on this host yields ENOEXEC (126)", async () => {
+    // OUTER_SCRIPT bir POSIX kabuğunda çalışır: /bin/sh olmayan ana makinede (windows-latest) anlamsızdır -> SKIP (PASS değil; neden yazdırılır). Kabuk varsa run() başlatma hatasını asla ayrıştırma hatası gibi göstermez.
+    it.skipIf(!fs.existsSync("/bin/sh"))("the valid probe PE is written to WSL and the OUTER script really fails closed: unreadable/unknown binfmt entry = enabled; only a clean 'disabled' passes; a real PE exec on this host yields ENOEXEC (126)", async () => {
       const {mod, f, p} = await mk(); await p.selfTest();
       const pe = mod.minimalPe(); expect(pe.subarray(0, 2).toString("latin1")).toBe("MZ"); expect(pe.subarray(pe.readUInt32LE(0x3c), pe.readUInt32LE(0x3c) + 4).toString("latin1")).toBe("PE\0\0"); expect(pe.length).toBeGreaterThan(0x200);
       const put = f.calls.find(c => c.args[3] === "/usr/bin/tee" && c.args[4].endsWith("/probe.exe"))!; expect(Buffer.isBuffer(put.input) && (put.input as Buffer).equals(pe)).toBe(true);
@@ -768,7 +769,7 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
       try {
         fs.writeFileSync(path.join(ctl, "probe.exe"), pe); fs.chmodSync(path.join(ctl, "probe.exe"), 0o755);
         fs.writeFileSync(path.join(ctl, "outer.sh"), mod.OUTER_SCRIPT.replaceAll("/proc/sys/fs/binfmt_misc", path.join(tmp, "bm")));
-        const run = () => cp.spawnSync("/bin/sh", [path.join(ctl, "outer.sh")], {encoding: "utf8"}).stdout;
+        const run = () => { const r = cp.spawnSync("/bin/sh", [path.join(ctl, "outer.sh")], {encoding: "utf8"}); expect(r.error, "spawnSync /bin/sh").toBeUndefined(); expect(typeof r.status, "spawnSync /bin/sh status").toBe("number"); return r.stdout; };
         expect(run()).toContain("INTEROP=absent");
         fs.mkdirSync(path.join(tmp, "bm")); fs.writeFileSync(path.join(tmp, "bm", "WSLInterop"), "disabled\n"); expect(run()).toContain("INTEROP=disabled");
         fs.writeFileSync(path.join(tmp, "bm", "WSLInterop"), "enabled\ninterpreter /init\n"); expect(run()).toContain("INTEROP=enabled");
@@ -1381,7 +1382,7 @@ describe("LANE-B Windows acceptance kit (injected fakes)", () => {
   it.skipIf(process.platform !== "linux")("C-4: INTEROP_SCRIPT (real sh, binfmt dir redirected) reports absent/disabled/enabled for WSLInterop and WSLInterop-late separately", async () => {
     const k = await load(); const d = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-bm-"));
     try {
-      const run = () => cp.spawnSync("/bin/sh", ["-s"], {input: k.INTEROP_SCRIPT.replaceAll("/proc/sys/fs/binfmt_misc", d), encoding: "utf8"}).stdout;
+      const run = () => { const r = cp.spawnSync("/bin/sh", ["-s"], {input: k.INTEROP_SCRIPT.replaceAll("/proc/sys/fs/binfmt_misc", d), encoding: "utf8"}); expect(r.error, "spawnSync /bin/sh").toBeUndefined(); expect(typeof r.status).toBe("number"); return r.stdout; };
       expect(run()).toBe("WSLInterop=absent\nWSLInterop-late=absent\nDONE=1\n");
       fs.writeFileSync(path.join(d, "WSLInterop"), "disabled\n"); fs.writeFileSync(path.join(d, "WSLInterop-late"), "enabled\ninterpreter /init\n");
       expect(run()).toBe("WSLInterop=disabled\nWSLInterop-late=enabled\nDONE=1\n");
