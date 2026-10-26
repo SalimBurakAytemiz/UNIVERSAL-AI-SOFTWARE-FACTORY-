@@ -453,17 +453,23 @@ async function runSteps() {
     const mid = await missionIdOf(), gated = mode.analysis === "GATED_4B", gatedProduct = mode.product === "GATED_4B";
     const reqs = (await serverGet("/__e2e/requests"))?.requests ?? [];
     const n = (method, re) => reqs.filter(r => r.method === method && re.test(r.url)).length;
+    // Pozitif kontrol (HER kipte): defter boş ya da yanlış kapsamlıysa aşağıdaki "0" sayıları boşuna geçerdi; yolculuğun kendi yazma istekleri defterde GÖRÜNMELİ.
+    const acceptRe = new RegExp(`^/v1/work-runs/${runId}/delivery/accept$`), runsRe = new RegExp(`^/v1/missions/${mid}/runs$`);
+    expectCount("2xx delivery accept requests (positive control: the ledger holds the journey's own writes)", reqs.filter(r => r.method === "POST" && acceptRe.test(r.url) && r.status >= 200 && r.status < 300).length, 1);
+    must(n("POST", runsRe) >= 1, `positive control: expected at least 1 run start request for the journey mission, got ${n("POST", runsRe)}`);
+    const approveRe = new RegExp(`^/v1/missions/${mid}/predev/artifacts/[^/]+/approve$`), startRe = new RegExp(`^/v1/work-runs/${runId}/product/start$`);
     expectCount("analysis step requests in the whole journey", n("POST", stepRe(mid)), gated ? 0 : stepsAfterStuck);
-    expectCount("approve requests in the whole journey", n("POST", new RegExp(`^/v1/missions/${mid}/predev/artifacts/[^/]+/approve$`)), gated ? 0 : 1);
+    expectCount("approve requests in the whole journey", n("POST", approveRe), gated ? 0 : 1);
     expectCount("analysis plan requests in the whole journey", n("POST", planRe(mid)), 0);
-    expectCount("product start requests in the whole journey", n("POST", new RegExp(`^/v1/work-runs/${runId}/product/start$`)), gatedProduct ? 0 : 1);
+    expectCount("product start requests in the whole journey", n("POST", startRe), gatedProduct ? 0 : 1);
     // Kontrol rotaları belirteçsiz/yanlış belirteçle 403, bilinmeyen görev tohumu 404 verir (sunucunun /v1/ kancası bu yolları kapsamaz).
     const raw = (p, init) => fetch(`http://127.0.0.1:${apiPort}${p}`, {...init, signal: AbortSignal.timeout(10000)}).then(r => r.status);
     const bad = [await raw("/__e2e/requests"), await raw("/__e2e/requests", {headers: {"x-uasco-control-token": "x".repeat(apiToken.length)}}), await raw("/__e2e/seed-stuck-artefact", {method: "POST", headers: {"content-type": "application/json"}, body: "{}"})];
     must(bad.every(c => c === 403), `the /__e2e control routes answered ${bad.join(",")} without a valid token (expected 403 each)`);
     const unknown = await raw("/__e2e/seed-stuck-artefact", {method: "POST", headers: {"content-type": "application/json", "x-uasco-control-token": apiToken}, body: JSON.stringify({missionId: "msn_" + "0".repeat(24)})});
     must(unknown === 404, `seeding an unknown mission answered ${unknown}, expected 404`);
-    return `analysis step ${n("POST", stepRe(mid))}, approve ${n("POST", new RegExp(`/predev/artifacts/[^/]+/approve$`))}, plan ${n("POST", planRe(mid))}, product start ${n("POST", new RegExp(`/product/start$`))} (journey mission only); control routes: 403 without a token, 404 for an unknown mission`;
+    const zeros = [gated ? "analysis step, approve" : null, "plan", gatedProduct ? "product start" : null].filter(Boolean);
+    return `journey mission/run only: analysis step ${n("POST", stepRe(mid))}, approve ${n("POST", approveRe)}, plan ${n("POST", planRe(mid))}, product start ${n("POST", startRe)}; positive control: 1 accepted delivery, ${n("POST", runsRe)} run start(s); control routes: 403 without a token, 404 for an unknown mission${gated || gatedProduct ? `; NOT evidence in this mode: the zeros for ${zeros.join(" / ")} (the desktop cannot send those requests while their routes are not admitted); plan == 0 is a negative guard that only a post-4b run can falsify` : "; plan == 0 is a negative guard (falsified only by a planted plan request)"}`;
   });
 }
 await main();
