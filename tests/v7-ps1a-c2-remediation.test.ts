@@ -451,7 +451,9 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
   // Gerçek ağ ad alanı: ip varsa (yoksa SKIP) sandbox-benzeri unshare --net içindeki sunucuya köprü 200 döner; köprü olmadan ana makineden erişilemez.
   it("REAL netns: a server inside a private user+net namespace is unreachable from the host directly and reachable ONLY through the nsenter bridge (skipped without ip/nsenter/unshare)", async ctx => {
     const have = (b: string) => cp.spawnSync("sh", ["-c", `command -v ${b}`]).status === 0;
-    if (process.platform !== "linux" || !have("ip") || !have("nsenter") || !have("unshare")) ctx.skip();
+    // Araç varlığı yetmez: GitHub ubuntu-24.04 gibi ana makineler kullanıcı ad alanını (AppArmor) engelleyebilir; gerçek yeteneği ayni komutla sına, yoksa SKIP (kesin neden yazdırılır).
+    const userns = process.platform === "linux" && have("unshare") ? cp.spawnSync("unshare", ["--user", "--map-root-user", "--net", "true"], {encoding: "utf8"}) : null;
+    if (process.platform !== "linux" || !have("ip") || !have("nsenter") || !userns || userns.status !== 0) { console.log(`REAL netns skipped: ${userns ? `unshare --user --map-root-user --net exit ${userns.status}: ${String(userns.stderr).trim().slice(0, 120)}` : "tools missing"}`); ctx.skip(); }
     const {startNsenterBridge} = await import("../core/workos/devrun-bridge.js");
     const inner = 20000 + Math.floor(Math.random() * 20000);
     const child = cp.spawn("unshare", ["--user", "--map-root-user", "--net", "--fork", "sh", "-c", `ip link set lo up && exec ${process.execPath} -e "require('http').createServer((q,r)=>r.end('inside')).listen(${inner},'127.0.0.1')"`], {stdio: "ignore", detached: true}); procs.push(child);
