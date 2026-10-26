@@ -25,3 +25,11 @@ The 17 tests live in the already-registered `tests/v7-core-predev-crew-coordinat
 - Windows/Electron: nothing executed.
 - The route wiring and the Desktop screens are not part of this package.
 - Mutants: `docs/lanes/LANE-C-flow-analysis-mutants.json` and `.mjs`.
+
+## Independent review fixes (#229 review: M-229-1, M-229-2, L1-L4)
+- M-229-1: `planFromApproved` (and so `createPlan`) runs the plan route's own `validatePlanCreate` on the draft body. A body the route would answer with 400 (a package listed twice in `dependsOn`, a list over 49) is refused with the new code `PLAN_INVALID` (detail = the validator's text) and nothing is persisted. `PlanDraftCode` gains `PLAN_INVALID` (the route should answer it like the other plan codes: 409).
+- M-229-2: `step()` is single-flight per mission (a module-level guard, because the route builds a new `AnalysisFlow` per request). A second concurrent call is answered `BLOCKED {blocker: "ANALYSIS_IN_PROGRESS"}` before any builder call; the guard is released on success, failure and throw. Lane B still adds the route-level lock shared with predev/produce.
+- L1: new optional dependency `stopped?: () => boolean` (Lane B passes `d.workosStopped`). It is asked before the paid call and again after it, before anything is recorded; a Global Stop answers `BLOCKED {blocker: "GLOBAL_STOP_ACTIVE"}` and records nothing.
+- L2: the paid builder call comes first and writes nothing: a failed step (`BUILDER_FAILED`, including no builder configured) no longer opens the pre-dev sequence or advances its phase. (A content `REJECTED` still opens the sequence, as before: the validators run inside the driver and nothing invalid is recorded.)
+- L3: if another actor recorded this phase's draft while our paid call ran, the answer is `AWAITING_APPROVAL` for that pending draft (fresh read), not `BUILDER_FAILED` for the stale phase.
+- L4: tests pin the plan gate and the actor attribution (the agent identity opens, advances and records; the actor given to `createPlan` owns the plan and its tasks). Mutants V1-V11 added (29 in total, all killed).

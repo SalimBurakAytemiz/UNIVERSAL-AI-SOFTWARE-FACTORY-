@@ -14,7 +14,7 @@ import {buildCrewPlan, bindingForKind, canAssignmentTransition, advanceAssignmen
 import {selectNextTask, ACTIVE_WINDOW_MS, type QueueTask, type Observed} from "../core/workos/task-selector.js";
 import {CrewCoordinator, CrewCoordinatorError, type ReworkDecider, type ReworkDecisionInput, type CrewStore} from "../core/workos/crew/coordinator.js";
 import {submitIntake} from "../core/workos/intake.js";
-import {submitPlan} from "../core/workos/plan.js";
+import {submitPlan, validatePlanCreate} from "../core/workos/plan.js";
 import {briefFromRecords} from "../core/workos/predev/brief.js";
 import {PREDEV_AGENT_ACTOR, PreDevBuilderError} from "../core/workos/predev/claude-builder.js";
 import {FIRST_DELIVERY_BINDINGS} from "../core/agents/first-delivery-bindings.js";
@@ -384,23 +384,24 @@ const SCOPE = {tenantId: "tA"};
 const READY: AnalysisReadiness = {ready: true, blockers: [], blocker: null, founderAction: null, profiles: null};
 const IDEA = "A small team task board with deadlines and reminders for freelancers who juggle several clients";
 
-function setup(builderOverride?: (kind: ArtifactKind, n: number) => string | Error | undefined, readiness: () => AnalysisReadiness = () => READY) {
+function setup(builderOverride?: (kind: ArtifactKind, n: number) => string | Error | undefined, readiness: () => AnalysisReadiness = () => READY, pause?: () => Promise<void> | undefined, flowExtra: {stopped?: () => boolean} = {}) {
   const store = new WorkOsStore(path.join(tmp, "data"));
   const {intake} = submitIntake({store, scope: SCOPE, orgId: "o1", actor: "FOUNDER_LOCAL"}, {idea: IDEA, projectType: "web", targetOS: ["web"]});
   const calls: Array<{kind: ArtifactKind; prompt: string; upstream: ArtifactKind[]}> = [];
   const builder: BuilderPort = {
     async produce(kind, rolePrompt, ctx) {
       calls.push({kind, prompt: rolePrompt, upstream: Object.keys(ctx.approvedUpstream) as ArtifactKind[]});
+      await pause?.();
       const o = builderOverride?.(kind, calls.filter(c => c.kind === kind).length);
       if (o instanceof Error) throw o;
       return o ?? JSON.stringify(TASKHUB_ARTIFACTS[kind]);
     }
   };
-  const flow = new AnalysisFlow({store, scope: SCOPE, builder, readiness});
+  const flow = new AnalysisFlow({store, scope: SCOPE, builder, readiness, ...flowExtra});
   const mission = store.getMission(SCOPE, intake.missionId)!, project = store.getProject(SCOPE, intake.projectId)!;
   const founder = new PreDevDriver({store, brief: briefFromRecords({project, mission}), builder});
   const approve = (artifactId: string, approver = "FOUNDER_LOCAL") => founder.approveAndAdvance(SCOPE, intake.missionId, artifactId, approver, ["ev-founder-review-1"]);
-  return {store, flow, calls, approve, founder, missionId: intake.missionId, projectId: intake.projectId, rm: () => store.preDevReadModel(SCOPE, intake.missionId)};
+  return {store, flow, calls, builder, approve, founder, missionId: intake.missionId, projectId: intake.projectId, rm: () => store.preDevReadModel(SCOPE, intake.missionId)};
 }
 
 describe("C-FLOW-ANALYSIS-1: intake -> analysis -> plan", () => {
@@ -478,6 +479,7 @@ describe("C-FLOW-ANALYSIS-1: intake -> analysis -> plan", () => {
     const r = await t.flow.step(t.missionId);
     expect(r).toEqual({status: "BUILDER_FAILED", kind: "BusinessAnalysis", code: "PREDEV_BUILDER_EXIT_NONZERO"}); // the detail never leaves
     expect(t.rm().artifacts.BusinessAnalysis.state).toBe("NOT_STARTED");
+    expect(t.rm(), "a failed step must not open the pre-dev sequence or advance its phase").toMatchObject({active: false, phase: "NOT_STARTED"}); // L2
     fail = false;
     expect((await t.flow.step(t.missionId)).status).toBe("DRAFT_READY");
   });
@@ -515,6 +517,92 @@ describe("C-FLOW-ANALYSIS-1: intake -> analysis -> plan", () => {
     const own: BuilderPort = {produce: async () => { throw new PreDevBuilderError("PREDEV_BUILDER_EXIT_NONZERO"); }};
     expect(await new AnalysisFlow({store: t.store, scope: SCOPE, builder: own, readiness: () => READY}).step(t.missionId)).toEqual({status: "BUILDER_FAILED", kind: "BusinessAnalysis", code: "PREDEV_BUILDER_EXIT_NONZERO"});
     expect(t.rm().artifacts.BusinessAnalysis.state).toBe("NOT_STARTED");
+    expect(t.rm(), "no builder configured: nothing is written, the sequence is not opened").toMatchObject({active: false, phase: "NOT_STARTED"}); // L2
+  });
+
+  const approveAll = async (t: ReturnType<typeof setup>) => { for (const _kind of ANALYSIS_KINDS) { const r = await t.flow.step(t.missionId) as {artifactId: string}; t.approve(r.artifactId); } };
+
+  it("M-229-1: an approved Plan whose dependsOn lists a package twice (or more than 49 times) is refused with PLAN_INVALID by planFromApproved AND createPlan, and nothing is persisted that the plan route would answer with 400; the untouched plan is exactly what the route's validator accepts", async () => {
+    const wps = (TASKHUB_ARTIFACTS.Plan as PlanContent).workPackages, withDeps = wps.find(w => w.dependsOn.length > 0)!;
+    for (const copies of [2, 60]) {
+      const t = setup(kind => kind === "Plan" ? JSON.stringify({...(TASKHUB_ARTIFACTS.Plan as object), workPackages: wps.map(w => w.id === withDeps.id ? {...w, dependsOn: Array.from({length: copies}, () => w.dependsOn[0])} : w)}) : undefined);
+      await approveAll(t);
+      const draft = t.flow.planFromApproved(t.missionId);
+      expect(draft, `copies=${copies}`).toMatchObject({ok: false, code: "PLAN_INVALID", detail: expect.stringContaining("dependsOn")});
+      expect(t.flow.createPlan(t.missionId, "FOUNDER_LOCAL"), `copies=${copies}`).toMatchObject({ok: false, code: "PLAN_INVALID"});
+      expect(t.store.listTasks(SCOPE, t.missionId)).toEqual([]);
+    }
+    const ok = setup(); await approveAll(ok);
+    const d = ok.flow.planFromApproved(ok.missionId);
+    expect(d.ok).toBe(true);
+    if (d.ok) expect(validatePlanCreate(d.body)).toEqual({ok: true});
+  });
+
+  it("M-229-2: two concurrent steps on one mission (the route builds a new flow per request) start ONE paid builder run; the second is answered BLOCKED ANALYSIS_IN_PROGRESS before any builder call, and the guard is released afterwards", async () => {
+    let release!: () => void; const gate = new Promise<void>(r => { release = r; });
+    let n = 0;
+    const t = setup(undefined, undefined, () => n++ === 0 ? gate : undefined);
+    const other = new AnalysisFlow({store: t.store, scope: SCOPE, builder: t.builder, readiness: () => READY}); // a second request's own flow object
+    const first = t.flow.step(t.missionId);
+    for (let i = 0; i < 200 && t.calls.length < 1; i++) await new Promise(r => setTimeout(r, 5));
+    expect(t.calls).toHaveLength(1);
+    const second = await other.step(t.missionId);
+    expect(second).toMatchObject({status: "BLOCKED", blocker: "ANALYSIS_IN_PROGRESS", blockers: ["ANALYSIS_IN_PROGRESS"]});
+    expect(t.calls, "the second call must not start a second paid builder run").toHaveLength(1);
+    release();
+    expect(await first).toMatchObject({status: "DRAFT_READY", kind: "BusinessAnalysis", version: 1});
+    expect(await other.step(t.missionId)).toMatchObject({status: "AWAITING_APPROVAL", kind: "BusinessAnalysis"}); // released: the draft is simply waiting now
+    expect(t.calls).toHaveLength(1);
+  });
+
+  it("L1: a Global Stop is honoured: set before the call -> no paid call at all; set DURING the paid call -> the draft is not recorded; both answer BLOCKED GLOBAL_STOP_ACTIVE and write nothing", async () => {
+    let stopped = true;
+    const t = setup(undefined, undefined, undefined, {stopped: () => stopped});
+    expect(await t.flow.step(t.missionId)).toMatchObject({status: "BLOCKED", blocker: "GLOBAL_STOP_ACTIVE", blockers: ["GLOBAL_STOP_ACTIVE"]});
+    expect(t.calls).toHaveLength(0);
+    stopped = false;
+    const during = setup(undefined, undefined, undefined, {stopped: () => stopped});
+    const builderRuns = during.calls;
+    const flow = new AnalysisFlow({store: during.store, scope: SCOPE, builder: {produce: async (k, p, c) => { const raw = await during.builder.produce(k, p, c); stopped = true; return raw; }}, readiness: () => READY, stopped: () => stopped});
+    expect(await flow.step(during.missionId)).toMatchObject({status: "BLOCKED", blocker: "GLOBAL_STOP_ACTIVE"});
+    expect(builderRuns).toHaveLength(1); // the paid call happened ...
+    expect(during.rm().artifacts.BusinessAnalysis.state).toBe("NOT_STARTED"); // ... but its output was not recorded
+    expect(during.rm()).toMatchObject({active: false, phase: "NOT_STARTED"});
+    stopped = false;
+    expect((await new AnalysisFlow({store: during.store, scope: SCOPE, builder: during.builder, readiness: () => READY, stopped: () => stopped}).step(during.missionId)).status).toBe("DRAFT_READY"); // cleared: works again
+  });
+
+  it("L3: when another actor recorded this phase's draft while our paid call ran (a lost race), the answer points at the pending approval, not BUILDER_FAILED for the wrong phase", async () => {
+    let t!: ReturnType<typeof setup>;
+    t = setup((kind, n) => {
+      if (kind === "BusinessAnalysis" && n === 1) { // the other actor: opens the sequence and records the draft first
+        const seq = t.store.openPreDevSequence(SCOPE, t.missionId, PREDEV_AGENT_ACTOR);
+        t.store.advancePreDevPhase(SCOPE, seq.preDevId, "BUSINESS_ANALYSIS", PREDEV_AGENT_ACTOR);
+        t.store.recordPreDevArtifact(SCOPE, seq.preDevId, {kind, authorRoleId: PRE_DEV_ROLE_MAP[kind][0], content: TASKHUB_ARTIFACTS[kind] as never}, PREDEV_AGENT_ACTOR);
+      }
+      return undefined;
+    });
+    const r = await t.flow.step(t.missionId);
+    const pending = t.rm().artifacts.BusinessAnalysis;
+    expect(pending.state).toBe("DRAFT");
+    expect(r).toMatchObject({status: "AWAITING_APPROVAL", kind: "BusinessAnalysis", artifactId: pending.artifactId, artifactState: "DRAFT"});
+  });
+
+  it("L4: the plan gate and the actor attribution: the agent identity records every draft, the actor given to createPlan owns the plan and its tasks, and nothing else is accepted silently", async () => {
+    const t = setup(); await approveAll(t);
+    for (const kind of ANALYSIS_KINDS) expect(t.store.getPreDevArtifact(SCOPE, t.rm().artifacts[kind].artifactId!)).toMatchObject({recordedBy: PREDEV_AGENT_ACTOR, approvedBy: "FOUNDER_LOCAL"});
+    // the sequence itself is opened and advanced to its first phase by the agent identity (never the Founder's); the Founder only approves
+    const events = fs.readFileSync(path.join(t.store.dataDir, "journal.jsonl"), "utf8").split("\n").filter(Boolean).map(l => JSON.parse(l) as {type: string; actor: string; payload: {to?: string}});
+    expect(events.filter(e => e.type === "PREDEV_SEQUENCE_OPENED").map(e => e.actor)).toEqual([PREDEV_AGENT_ACTOR]);
+    expect(events.filter(e => e.type === "PREDEV_PHASE_ADVANCED" && e.payload.to === "BUSINESS_ANALYSIS").map(e => e.actor)).toEqual([PREDEV_AGENT_ACTOR]);
+    expect(events.filter(e => e.type === "PREDEV_ARTIFACT_RECORDED").every(e => e.actor === PREDEV_AGENT_ACTOR)).toBe(true);
+    expect(t.flow.createPlan(t.missionId, "FOUNDER_ACTOR_X")).toMatchObject({ok: true, replayed: false});
+    const plans = fs.readFileSync(path.join(t.store.dataDir, "plans.jsonl"), "utf8");
+    expect(plans).toContain('"createdBy":"FOUNDER_ACTOR_X"');
+    expect(plans).not.toContain(PREDEV_AGENT_ACTOR);
+    const journal = fs.readFileSync(path.join(t.store.dataDir, "journal.jsonl"), "utf8").split("\n").filter(l => l.includes("TASK_CREATED") && l.includes(t.missionId)).map(l => JSON.parse(l) as {actor: string});
+    expect(journal.length).toBe(6);
+    expect(journal.every(e => e.actor === "FOUNDER_ACTOR_X")).toBe(true);
   });
 
   it("an unknown mission is a typed error, not a silent empty analysis", async () => {
@@ -531,8 +619,8 @@ describe("C-FLOW-ANALYSIS-1: intake -> analysis -> plan", () => {
 });
 
 describe("C-FLOW-ANALYSIS-1: readiness comes from the role bindings, the CLI, the launcher proof and BOTH Claude profiles", () => {
-  const FOUND: ClaudeCliStatus = {state: "FOUND", path: "/x/claude", kind: "EXECUTABLE", source: "PATH", pathDir: null, searched: [], founderAction: null};
-  const NOT_FOUND: ClaudeCliStatus = {state: "NOT_FOUND", path: null, kind: null, source: null, pathDir: null, searched: ["/a"], founderAction: "install claude"};
+  const FOUND: ClaudeCliStatus = {state: "FOUND", path: "/x/claude", kind: "EXECUTABLE", source: "PATH", pathDir: null, searchedCount: 0, founderAction: null};
+  const NOT_FOUND: ClaudeCliStatus = {state: "NOT_FOUND", path: null, kind: null, source: null, pathDir: null, searchedCount: 1, founderAction: "install claude"};
   const control = () => path.join(tmp, "control");
   const data = () => path.join(tmp, "data");
   const verify = () => {
@@ -615,7 +703,7 @@ const REPO = path.resolve(import.meta.dirname, ".."); // C-FLOW-ANALYSIS-2
 // runProcess, so timeouts, process-group kills, stdin, exit codes and the scratch directory are the production ones. No model, no network.
 // ---------------------------------------------------------------------------------------------------------------------------
 describe("C-FLOW-ANALYSIS-2: the Desktop analysis through the production builder and a fake Claude CLI process", () => {
-  const FOUND: ClaudeCliStatus = {state: "FOUND", path: process.execPath, kind: "EXECUTABLE", source: "PATH", pathDir: null, searched: [], founderAction: null};
+  const FOUND: ClaudeCliStatus = {state: "FOUND", path: process.execPath, kind: "EXECUTABLE", source: "PATH", pathDir: null, searchedCount: 0, founderAction: null};
   const T = {timeout: 120_000};
   type Scenario = {stdout?: string; stderr?: string; exit?: number; sleepMs?: number; touch?: boolean; echoSkeleton?: boolean};
   const envelope = (result: unknown, over: Record<string, unknown> = {}) => JSON.stringify({type: "result", subtype: "success", is_error: false, duration_ms: 1200, num_turns: 1, result, session_id: "s-1", total_cost_usd: 0.0123, ...over}) + "\n";
@@ -890,7 +978,7 @@ process.exit(s.exit ?? 0);
     const off = claudeAnalysisReadiness({...o, cli: FOUND, executorEnabled: false});
     expect(off).toMatchObject({ready: false, blocker: "EXECUTOR_NOT_ENABLED", blockers: ["EXECUTOR_NOT_ENABLED"]});
     expect(off.founderAction).toContain("Settings");
-    const noCli: ClaudeCliStatus = {state: "NOT_FOUND", path: null, kind: null, source: null, pathDir: null, searched: ["/a"], founderAction: "install claude"};
+    const noCli: ClaudeCliStatus = {state: "NOT_FOUND", path: null, kind: null, source: null, pathDir: null, searchedCount: 1, founderAction: "install claude"};
     const both = claudeAnalysisReadiness({controlRoot: path.join(tmp, "nothing-set-up"), profile: o.profile, cli: noCli, executorEnabled: false});
     expect(both.blocker).toBe("CLAUDE_CLI_NOT_FOUND"); // the executor can only be enabled once the CLI exists: it stays last
     expect(both.blockers[both.blockers.length - 1]).toBe("EXECUTOR_NOT_ENABLED");
