@@ -19,6 +19,8 @@ import {FakeExecutors} from "../core/workos/executors.js";
 import {ProjectStudio, StudioError} from "../core/workos/project-studio.js";
 import {canonicalPath, pathOverlapsDataDir, managedRepoCanonical} from "../core/workos/path-guard.js";
 import {killProcessTree, pidAlive, treeDescendants} from "../core/workos/devrun.js";
+// Ölü olması beklenen süreçler pid + başlangıç zamanı ile denetlenir (Windows pid yeniden kullanımı: çıplak pidAlive yeni ve ilgisiz bir süreci canlı sayabilir); kimlik süreç canlıyken, durdurmadan önce yakalanır.
+import {captureIdentity, sameProcessAlive} from "./support/pid-identity.js";
 import type {Project} from "../core/workos/types.js";
 
 const REPO = path.resolve(import.meta.dirname, "..");
@@ -278,9 +280,10 @@ describe("PS1A-C2-F1: canonical (8.3 / junction / UNC safe) path containment", (
     const v = await until(() => devrun(app, p.projectId), d => d.preview.state === "AVAILABLE");
     expect(v.preview.url).toBe(`http://127.0.0.1:${v.port}/`);
     expect((await httpGet(v.preview.url)).status).toBeLessThan(500);
+    const vId = await captureIdentity(v.pid);
     const st = await call(app, "POST", `/v1/projects/${p.projectId}/devrun/stop`, {});
     expect(st.json().devrun.status).toBe("STOPPED");
-    expect(pidAlive(v.pid)).toBe(false);
+    expect(await sameProcessAlive(vId)).toBe(false);
     const ex = await call(app, "POST", `/v1/projects/${p.projectId}/export`, {});
     expect(ex.statusCode, ex.body).toBe(201);
     expect(ex.json().export.secretScan.status).toBe("CLEAN");
@@ -314,32 +317,42 @@ describe("PS1A-C2-F2: a crashed dev process leaves no live descendants", () => {
     // Kontrol: ilgisiz süreç dokunulmadan kalmalı.
     const bystander = cp.spawn(process.execPath, ["-e", idleJs], {stdio: "ignore", windowsHide: true});
     pids.push(bystander.pid!);
+    const bystanderId = await captureIdentity(bystander.pid!);
     const s = await call(app, "POST", `/v1/projects/${p.projectId}/devrun/start`, {});
     expect(s.statusCode, s.body).toBe(200);
     await until(() => fs.existsSync(g1) && fs.existsSync(g2), x => x, 15_000);
     const gp1 = Number(fs.readFileSync(g1, "utf8")), gp2 = Number(fs.readFileSync(g2, "utf8"));
     pids.push(gp1, gp2);
+    // Kimlik okuması burada BAŞLAR ama beklenmez (Windows: powershell); kök 6 sn'de çöker, bu yüzden aşağıdaki canlılık denetimi geciktirilmez.
+    const ids1 = Promise.all([captureIdentity(s.json().devrun.pid), captureIdentity(gp1), captureIdentity(gp2)]);
     expect(pidAlive(gp1) && pidAlive(gp2)).toBe(true);
+    const [rootId, gp1Id, gp2Id] = await ids1;
     const c = await until(() => devrun(app, p.projectId), d => d.status === "CRASHED" && Boolean(d.treeCleanup), 60_000);
     expect(c).toMatchObject({status: "CRASHED", exitCode: 7, reason: "PROCESS_EXITED:7"});
     // Linux: süreç grubu + kaydedilmiş soy (setsid ile gruptan kaçan ayrık torunlar) ppid yürüyüşü; Windows: ppid yürüyüşü.
     expect(c.treeCleanup.method).toBe(WIN ? "PPID_WALK" : process.platform === "linux" ? "PROCESS_GROUP_PPID_WALK" : "PROCESS_GROUP");
     expect(c.treeCleanup.survivors).toBe(0); expect(c.treeCleanup.verification).toBe(WIN || process.platform === "linux" ? "VERIFIED" : "UNVERIFIED");
-    await until(() => !pidAlive(gp1) && !pidAlive(gp2), x => x, 10_000);
-    expect(pidAlive(gp1)).toBe(false);
-    expect(pidAlive(gp2)).toBe(false);
-    expect(pidAlive(c.pid)).toBe(false);
+    await until(async () => !(await sameProcessAlive(gp1Id)) && !(await sameProcessAlive(gp2Id)), x => x, 10_000);
+    expect(await sameProcessAlive(gp1Id)).toBe(false);
+    expect(await sameProcessAlive(gp2Id)).toBe(false);
+    expect(c.pid).toBe(rootId.pid);
+    expect(await sameProcessAlive(rootId)).toBe(false);
     expect(pidAlive(bystander.pid!)).toBe(true);
+    // Pozitif kontrol: kimlik karşılaştırması canlı süreci gerçekten aynı süreç olarak tanır (ölü denetimleri boşuna geçmez).
+    expect(await sameProcessAlive(bystanderId)).toBe(true);
     // Ağaç temizlendikten sonra yeniden başlatma normal çalışır.
     fs.rmSync(g1); fs.rmSync(g2);
     const r = await call(app, "POST", `/v1/projects/${p.projectId}/devrun/start`, {});
     expect(r.statusCode, r.body).toBe(200);
     await until(() => fs.existsSync(g1) && fs.existsSync(g2), x => x, 15_000);
     const gp3 = Number(fs.readFileSync(g1, "utf8")), gp4 = Number(fs.readFileSync(g2, "utf8")); pids.push(gp3, gp4);
+    // Okuma durdurmadan önce başlar, sonra beklenir: durdurma geciktirilmez (kök 6 sn'de çöker). Okuma anında süreç ölmüşse ya da pid okuma başladıktan sonra yeni bir sürece geçmişse kimlik null olur (çıplak denetim).
+    const ids2 = Promise.all([captureIdentity(gp3), captureIdentity(gp4)]);
     const stop = await call(app, "POST", `/v1/projects/${p.projectId}/devrun/stop`, {});
     expect(stop.json().devrun.status).toBe("STOPPED");
-    await until(() => !pidAlive(gp3) && !pidAlive(gp4), x => x, 10_000);
-    expect(pidAlive(gp3)).toBe(false);
-    expect(pidAlive(gp4)).toBe(false);
+    const [gp3Id, gp4Id] = await ids2;
+    await until(async () => !(await sameProcessAlive(gp3Id)) && !(await sameProcessAlive(gp4Id)), x => x, 10_000);
+    expect(await sameProcessAlive(gp3Id)).toBe(false);
+    expect(await sameProcessAlive(gp4Id)).toBe(false);
   }, T);
 });

@@ -17,6 +17,8 @@ import type {BuildServerOptions} from "../apps/control-api/src/server.js";
 import {WorkOsStore} from "../core/workos/store.js";
 import {ProjectStudio, StudioError} from "../core/workos/project-studio.js";
 import {DevRunManager, freeLoopbackPort, killProcessTree, pidAlive, processStartTime} from "../core/workos/devrun.js";
+// Ölü olması beklenen süreçler pid + başlangıç zamanı ile denetlenir (Windows pid yeniden kullanımı: çıplak pidAlive yeni ve ilgisiz bir süreci canlı sayabilir); kimlik süreç canlıyken, durdurmadan önce yakalanır.
+import {captureIdentity, sameProcessAlive} from "./support/pid-identity.js";
 import type {Project} from "../core/workos/types.js";
 
 const REPO = path.resolve(import.meta.dirname, "..");
@@ -125,9 +127,11 @@ describe("PS1A-C1-F2: stop/stopAll/GLOBAL_STOP while start is pending never leak
     const p = await createProject(app, {template: "web-node", devCommand: ["node", "-e", script]});
     const stopFile = path.join(tmp, "m-runtime", "GLOBAL_STOP.json"); fs.mkdirSync(path.dirname(stopFile), {recursive: true});
     let portHold: Promise<void> | null = null, timeHold: Promise<void> | null = null, entered: () => void = () => undefined;
+    // Başlangıç zamanı beklemesinde tutulan çocuğun pid'i (3. senaryoda kimliği durdurmadan önce yakalamak için).
+    let heldPid = 0;
     const m = new DevRunManager({executionGate: testExecutionGate(), studio: new ProjectStudio({dataDir, envPolicyFile: ENV_POLICY}), envPolicyFile: ENV_POLICY, globalStopFile: stopFile, stopPollMs: 100, probeIntervalMs: 100,
       freePort: async () => { if (portHold) { entered(); await portHold; } return freeLoopbackPort(); },
-      startTimeOf: async pid => { if (timeHold && pid !== process.pid) { entered(); await timeHold; } return processStartTime(pid); }});
+      startTimeOf: async pid => { if (timeHold && pid !== process.pid) { heldPid = pid; entered(); await timeHold; } return processStartTime(pid); }});
     const hold = () => { let open: () => void = () => undefined; const gate = new Promise<void>(r => { open = r; }); const reached = new Promise<void>(r => { entered = r; }); return {gate, open, reached}; };
     const stateFile = path.join(dataDir, "projects", p.projectId, "devrun", "state.json"), lockFile = path.join(dataDir, "projects", p.projectId, "devrun", "devrun.lock");
     try {
@@ -166,23 +170,26 @@ describe("PS1A-C1-F2: stop/stopAll/GLOBAL_STOP while start is pending never leak
       const h3 = hold(); timeHold = h3.gate;
       const pending3 = m.start(p);
       await h3.reached;
+      const heldId = await captureIdentity(heldPid);
       expect(await m.stopAll("GLOBAL_STOP_ACTIVE")).toEqual([p.projectId]);
       h3.open(); timeHold = null;
       const v3 = await pending3;
       expect(v3.status).toBe("STOPPED");
       const spawnedPid = v3.pid as number;
       expect(spawnedPid).toBeGreaterThan(0);
-      expect(pidAlive(spawnedPid)).toBe(false);
+      expect(spawnedPid).toBe(heldId.pid);
+      expect(await sameProcessAlive(heldId)).toBe(false);
       expect(m.isActive(p.projectId)).toBe(false);
       expect(fs.existsSync(lockFile)).toBe(false);
       // Pozitif kontrol: işaretçi mekanizması gerçekten çalışır (normal start çocuğu başlatır), kapanışta durur.
       fs.rmSync(marker, {force: true});
       const ok = await m.start(p);
       expect(ok.status).toBe("RUNNING");
+      const okId = await captureIdentity(ok.pid as number);
       for (let i = 0; i < 100 && !fs.existsSync(marker); i++) await sleep(100);
       expect(fs.existsSync(marker)).toBe(true);
       await m.close();
-      expect(pidAlive(ok.pid as number)).toBe(false);
+      expect(await sameProcessAlive(okId)).toBe(false);
     } finally { await m.close(); }
   }, T);
 });
@@ -213,7 +220,7 @@ describe("PS1A-C1-F3: the owning API process is identified by pid + start time",
     // q1: sahip pid'i canlı ama başlangıç zamanı farklı -> sahipsiz; orphan (pid+zaman eşleşir) sonlandırılır, ilgisiz süreç sonlandırılmaz, kilit devralınır.
     const v1 = await devrun(b.app, q1.projectId);
     expect(v1).toMatchObject({status: "STOPPED", reason: "RECOVERED_AFTER_API_RESTART:ORPHAN_KILLED", recovery: {result: "ORPHAN_KILLED", pid: orphan1}, preview: {url: null, state: "UNAVAILABLE"}});
-    expect(pidAlive(orphan1)).toBe(false);
+    expect(await sameProcessAlive({pid: orphan1, start: o1Start})).toBe(false);
     expect(pidAlive(unrelated)).toBe(true);
     expect(fs.existsSync(path.join(a.dataDir, "projects", q1.projectId, "devrun", "devrun.lock"))).toBe(false);
     const s1 = await call(b.app, "POST", `/v1/projects/${q1.projectId}/devrun/start`, {});
@@ -235,7 +242,7 @@ describe("PS1A-C1-F3: the owning API process is identified by pid + start time",
     expect(s2.json()).toEqual({error: "DEVRUN_LOCKED"});
     // Sahip gerçekten öldükten sonra kilit ölü pid olarak devralınır.
     killProcessTree(liveOwner);
-    for (let i = 0; i < 50 && pidAlive(liveOwner); i++) await sleep(100);
+    for (let i = 0; i < 50 && (await sameProcessAlive({pid: liveOwner, start: ownerStart})); i++) await sleep(100);
     const s3 = await call(b.app, "POST", `/v1/projects/${q2.projectId}/devrun/start`, {});
     expect(s3.statusCode, s3.body).toBe(200);
     await call(b.app, "POST", `/v1/projects/${q2.projectId}/devrun/stop`, {});
@@ -270,6 +277,7 @@ describe("B-DEVRUN-RESTART-SAFE: a stop that cannot confirm the exit never allow
       const v1 = await m.start(p);
       expect(v1.status).toBe("RUNNING"); expect(counter.spawns).toBe(1);
       const pid1 = v1.pid!;
+      const pid1Id = await captureIdentity(pid1);
       const err: unknown = await m.restart(p).then(() => null, e => e);
       expect(err).toBeInstanceOf(StudioError);
       expect(err).toMatchObject({code: "DEVRUN_STOP_TIMEOUT", status: 409});
@@ -285,7 +293,7 @@ describe("B-DEVRUN-RESTART-SAFE: a stop that cannot confirm the exit never allow
       expect(m.isActive(p.projectId)).toBe(false);
       const done = m.view(p);
       expect(done.status).toBe("STOPPED"); expect(done.reason).toBe("RESTART_REQUESTED"); expect("stopTimedOut" in done).toBe(false);
-      expect(pidAlive(pid1)).toBe(false); expect(counter.spawns).toBe(1);
+      expect(await sameProcessAlive(pid1Id)).toBe(false); expect(counter.spawns).toBe(1);
     } finally { await m.stopAll("CLEANUP"); await settle(m, p.projectId); }
   }, T);
 
@@ -313,8 +321,11 @@ describe("B-DEVRUN-RESTART-SAFE: a stop that cannot confirm the exit never allow
     const m = manager(dataDir, testExecutionGate());
     try {
       const v1 = await m.start(p); expect(v1.status).toBe("RUNNING");
+      const v1Id = await captureIdentity(v1.pid!);
+      // Pozitif kontrol: kimlik karşılaştırması canlı süreci gerçekten aynı süreç olarak tanır (ölü denetimleri boşuna geçmez).
+      expect(await sameProcessAlive(v1Id)).toBe(true);
       const v2 = await m.restart(p);
-      expect(v2.status).toBe("RUNNING"); expect(v2.pid).not.toBe(v1.pid); expect(pidAlive(v1.pid!)).toBe(false);
+      expect(v2.status).toBe("RUNNING"); expect(v2.pid).not.toBe(v1.pid); expect(await sameProcessAlive(v1Id)).toBe(false);
       expect("stopTimedOut" in v2).toBe(false);
       expect(await m.stop(p.projectId)).toBe(true);
       expect(m.view(p).status).toBe("STOPPED");
