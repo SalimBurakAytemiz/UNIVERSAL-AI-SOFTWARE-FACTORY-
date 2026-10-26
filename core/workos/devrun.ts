@@ -195,7 +195,7 @@ class Ring {
 }
 interface Active {
   state: DevRunState; child: cp.ChildProcess | null; stopping: boolean; stdout: Ring; stderr: Ring;
-  release: (() => void) | null; probeTimer: NodeJS.Timeout | null; flushTimer: NodeJS.Timeout | null; exited: Promise<void>; rootExited: Promise<void>; projectType: string | undefined;
+  release: (() => void) | null; probeTimer: NodeJS.Timeout | null; flushTimer: NodeJS.Timeout | null; exited: Promise<void>; rootExited: Promise<void>; teardown: Promise<void>; projectType: string | undefined;
   known: Map<number, number>; snapTimer: NodeJS.Timeout | null; bridge: BridgeHandle | null;
   provider: {isVerified?(): boolean} | null; blockedReason: string | null;
 }
@@ -361,7 +361,7 @@ export class DevRunManager {
     const st: DevRunState = {...this.blank(project), status: "STARTING", startedAt: new Date().toISOString(), argv: [...argv]};
     // C-8: teslim bağlantısı STARTING yer tutucusundan itibaren kayıtlıdır (ürün durdurma STARTING sırasında da çalışır).
     if (link) st.deliveryRunId = link.runId;
-    const a: Active = {state: st, child: null, stopping: false, stdout: new Ring(this.o.logRingBytes), stderr: new Ring(this.o.logRingBytes), release: null, probeTimer: null, flushTimer: null, exited: Promise.resolve(), rootExited: Promise.resolve(), projectType: project.projectType, known: new Map(), snapTimer: null, bridge: null, provider: null, blockedReason: null};
+    const a: Active = {state: st, child: null, stopping: false, stdout: new Ring(this.o.logRingBytes), stderr: new Ring(this.o.logRingBytes), release: null, probeTimer: null, flushTimer: null, exited: Promise.resolve(), rootExited: Promise.resolve(), teardown: Promise.resolve(), projectType: project.projectType, known: new Map(), snapTimer: null, bridge: null, provider: null, blockedReason: null};
     this.active.set(id, a);
     // PS1A-C1-F2: her await'ten sonra (özellikle spawn'dan hemen önce) stop/stopAll/GLOBAL_STOP ve harita sahipliği yeniden kontrol edilir.
     const aborted = () => a.stopping || this.active.get(id) !== a || this.stopActive() !== null;
@@ -400,7 +400,7 @@ export class DevRunManager {
       a.rootExited = new Promise<void>(resolve => { child.once("exit", () => resolve()); child.once("error", () => { if (child.pid === undefined) resolve(); }); });
       a.exited = new Promise<void>(resolve => {
         // PS1A-C2-F2: çıkış (çökme veya durdurma) sonrası kalan ağaç (ayrık torunlar dahil) temizlenmeden exited çözülmez.
-        child.once("exit", (code, signal) => { this.onExit(a, code, signal); void Promise.all([this.reapTree(a).catch(() => undefined), Promise.resolve(child.sandboxTeardown).catch(() => "TEARDOWN_ERROR")]).then(([, td]) => this.noteTeardown(a, td)).finally(resolve); });
+        child.once("exit", (code, signal) => { this.onExit(a, code, signal); a.teardown = Promise.resolve(child.sandboxTeardown).catch(() => "TEARDOWN_ERROR").then(td => this.noteTeardown(a, td)); void Promise.all([this.reapTree(a).catch(() => undefined), a.teardown]).finally(resolve); });
         child.once("error", () => { if (child.pid === undefined) { this.onExit(a, null, null, "DEVRUN_SPAWN_FAILED"); resolve(); } });
       });
       this.reaping.set(id, a.exited); void a.exited.finally(() => { if (this.reaping.get(id) === a.exited) this.reaping.delete(id); });
@@ -566,7 +566,8 @@ export class DevRunManager {
     // POSIX: kök ölünce yetimlerin ppid'si kaybolur; öldürmeden önce soy kaydedilir. Bekleme sonrası kök hâlâ çalışıyorsa öldürülür (toplanmış pid'e sinyal yok). Windows davranışı değişmez.
     if (running() && process.platform !== "win32" && PROCESS_LIST_SUPPORTED) await this.recordTree(a);
     if (running()) killProcessTree(a.child!.pid!);
-    const exited = await Promise.race([a.rootExited.then(() => true), sleep(this.o.stopWaitMs).then(() => false)]);
+    // Bütçe 1: kök çıkışı + sağlayıcının Linux-tarafı kapatması (stop bunları bekler). Bütçe 2 (ağaç temizliği, reapTree) arka planda sürer.
+    const exited = await Promise.race([a.rootExited.then(() => a.teardown).then(() => true), sleep(this.o.stopWaitMs).then(() => false)]);
     if (!exited) {
       // Süreç ağacının öldüğü doğrulanmadı: STOPPED yazılmaz, çalıştırma aktif kalır (kilit/port/pid sahipliği korunur) ve yeni bir başlatma reddedilir.
       a.state.stopTimedOut = true;
