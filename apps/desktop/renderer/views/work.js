@@ -7,8 +7,11 @@ import {formatTime,formatCount,MISSING,missionPillKind} from "../model.js";
 import {MISSION_STATUSES,MISSION_PATH,RISK_LEVELS,RUN_EXPERTS,RUN_EXPERT_NONE,allowedNext,requiresConfirm,canStartRun,buildMissionRequest,filterMissions,formatDateTime,deriveTaskInspector,deriveWorkTimeline,runReadiness,runReasonHintKey,runStepRows} from "../work-core.js";
 import {drafts,selection,trackers,field,listEditor,statusBlock,setStatus,recordPost,resetMissionDraft,focusResult} from "../forms.js";
 import {performTransition,startRun,actionStatusId} from "../work-actions.js";
+import {runLinkPanel} from "./run-link.js";
 import {notVerifiedBadge,runNotVerified,missionNotVerified,axisBadges} from "../m1a.js";
+import {testResultOf} from "../work-core.js";
 import {canOfferComplete} from "../delivery-core.js";
+import {runEngineBlock} from "./run-engine.js";
 import {BOARD_LAYOUTS,boardLayout,setBoardLayout,boardColumns} from "../kanban-core.js";
 
 const FORM="mission";
@@ -181,7 +184,19 @@ export function statusTimeline(ctx,status){
     }),
     offPath?h(doc,"li",{class:"step-current step-off",dataset:{step:status,state:"current"},"aria-current":"step"},h(doc,"span",{class:"step-mark","aria-hidden":"true",text:"●"}),h(doc,"span",{text:statusLabel(ctx,status)}),h(doc,"span",{class:"sr-only",text:` — ${ctx.t("work.timeline.offPath")}`})):null]);
 }
-export function runCard(ctx,run){
+/** //TR: A-FLOW-2: koşuya bağlı görevler; okuma doğrulanmadıysa "bağlı görev yok" denmez. linked: {res:api.runTasks sonucu,tasks:mission görevleri}. */
+function linkedTasksBlock(ctx,run,linked){
+  const doc=ctx.doc,res=linked.res;
+  let body;
+  if(res.state==="VERIFIED"){
+    const byId=new Map((Array.isArray(linked.tasks)?linked.tasks:[]).map(t=>[t.taskId,t]));
+    body=res.links.length
+      ?h(doc,"ul",{class:"run-linked-tasks"},res.links.map(l=>{const t=byId.get(l.taskId);return h(doc,"li",{dataset:{runLinkedTask:l.taskId}},h(doc,"span",{text:t?t.title:ctx.t("run.linked.unknownTask")})," ",t&&t.status?statusPill(ctx,t.status):null," ",h(doc,"span",{class:"mono",text:l.taskId}))}))
+      :h(doc,"p",{class:"note",role:"status",dataset:{runLinked:"none"},text:ctx.t("run.linked.none")});
+  }else body=h(doc,"p",{class:"note",role:"status",dataset:{runLinked:res.state==="UNAVAILABLE"?"unavailable":"error"},text:ctx.t(res.state==="UNAVAILABLE"?"run.linked.unavailable":"run.linked.error")});
+  return h(doc,"div",{class:"run-linked",dataset:{runLinkedFor:run.runId}},h(doc,"h6",{text:ctx.t("run.linked.title")}),body);
+}
+export function runCard(ctx,run,linked=null){
   const doc=ctx.doc,lang=ctx.i18n.lang,step=run.step?`${run.step.name??MISSING}${run.step.index!==null?` (${run.step.index}${run.step.total!==null?`/${run.step.total}`:""})`:""}`:MISSING;
   const ev=run.evidence.length?h(doc,"ul",{class:"evidence-links"},run.evidence.map(e=>h(doc,"li",{},
     e.evidenceId?h(doc,"button",{type:"button",class:"link-btn",dataset:{focusKey:`ev-${run.runId}-${e.evidenceId}`},on:{click:()=>{selection.evidenceId=e.evidenceId;ctx.navigate("assurance")}},text:`${e.kind??ctx.t("evidence.kindUnknown")} · ${e.evidenceId}`}):h(doc,"span",{text:e.kind??MISSING}),
@@ -207,6 +222,7 @@ export function runCard(ctx,run){
       h(doc,"dt",{text:ctx.t("run.lease")}),h(doc,"dd",{text:formatDateTime(run.leaseExpiresAt,lang)}),
       h(doc,"dt",{text:ctx.t("run.reviewer")}),h(doc,"dd",{text:run.reviewer?.identity??ctx.t("run.reviewerNone")}),
       h(doc,"dt",{text:ctx.t("run.verdict")}),h(doc,"dd",{text:run.reviewer?.verdict?statusLabel(ctx,run.reviewer.verdict):ctx.t("run.verdictNone")}),
+      ...testResultRow(ctx,run),
       // UI-111: sunucunun kaydettiği olgular; toplam/azami/kalan/geri sayım yok. Zamanlanmış yeniden deneme yalnız RETRY_SCHEDULED durumunda gösterilir (başka durumda retryAt eskimiş olabilir).
       h(doc,"dt",{text:ctx.t("run.retriesInStep")}),h(doc,"dd",{dataset:{runRetryCount:run.retryCount??""},text:formatCount(run.retryCount)}),
       h(doc,"dt",{text:ctx.t("run.remediationCycles")}),h(doc,"dd",{dataset:{runRemediationCycle:run.remediationCycle??""},text:formatCount(run.remediationCycle)}),
@@ -214,13 +230,26 @@ export function runCard(ctx,run){
       ...(run.status==="RETRY_SCHEDULED"?[h(doc,"dt",{text:ctx.t("run.retryScheduledFor")}),h(doc,"dd",{dataset:{runRetryAt:run.retryAt??""},text:formatDateTime(run.retryAt,lang)})]:[]),
       // SBX-GATE: BLOCKED/FAILED nedeni dürüstçe gösterilir; SANDBOX_UNAVAILABLE için kodun yanında açıklama vardır.
       ...(run.reason?[h(doc,"dt",{text:ctx.t("run.reason")}),h(doc,"dd",{dataset:{runReason:run.reason},text:run.reason==="SANDBOX_UNAVAILABLE"?`SANDBOX_UNAVAILABLE — ${ctx.t("run.reason.SANDBOX_UNAVAILABLE")}`:runReasonHintKey(run.reason)?`${run.reason} — ${ctx.t(runReasonHintKey(run.reason))}`:run.reason})]:[])),
-    h(doc,"h6",{text:ctx.t("run.checkpoints")}),cps,steps?h(doc,"h6",{text:ctx.t("run.steps.title")}):null,steps,h(doc,"h6",{text:ctx.t("run.evidence")}),ev);
+    linked?linkedTasksBlock(ctx,run,linked):null,h(doc,"h6",{text:ctx.t("run.checkpoints")}),cps,steps?h(doc,"h6",{text:ctx.t("run.steps.title")}):null,steps,h(doc,"h6",{text:ctx.t("run.evidence")}),ev);
 }
-function runsSection(ctx,runsRes,details){
+// //TR: A-FLOW-GAP-2: test sonucu satırı; sunucunun kuralından türeyen tür + kesin neden kodu. Genel NOT_VERIFIED rozeti (Founder kararı) değişmez, bu satır nedenini doğru söyler.
+function testResultRow(ctx,run){
+  const doc=ctx.doc,r=testResultOf(run);
+  let sentence;
+  if(r.kind==="UNKNOWN")sentence=ctx.t("run.test.UNKNOWN");
+  else if(r.kind==="EXECUTED_VERIFIED"||r.kind==="FAILED")sentence=`${ctx.t(`run.test.${r.kind}`)} (${r.reason})`;
+  else{
+    // //TR: Sunucu bazı nedenlere ayrıntı ekler (ör. TEST_SURFACE_BLOCKED:<ayrıntı>): metin ":" öncesindeki kodla çözülür, ayrıntı olduğu gibi parantezde gösterilir.
+    const head=r.reason.split(":")[0],key=`run.test.${r.kind}.${head}`,v=ctx.t(key);
+    sentence=v!==key?`${v} (${r.reason})`:`${ctx.t(`run.test.${r.kind}.generic`)} (${r.reason} — ${ctx.t("run.test.unrecognised")})`;
+  }
+  return [h(doc,"dt",{text:ctx.t("run.test.label")}),h(doc,"dd",{dataset:{runTestResult:r.kind,runTestReason:r.reason??""},text:sentence})];
+}
+function runsSection(ctx,runsRes,details,linkOf=()=>null){
   const doc=ctx.doc;
   if(runsRes.state!=="VERIFIED")return stateNote(ctx,runsRes.state,runsRes.state==="UNAVAILABLE"?"run.unavailable":undefined);
   if(!runsRes.items.length)return emptyNote(ctx,"run.none");
-  return h(doc,"ul",{class:"cards run-list"},runsRes.items.map(r=>runCard(ctx,details.get(r.runId)??r)));
+  return h(doc,"ul",{class:"cards run-list"},runsRes.items.map(r=>runCard(ctx,details.get(r.runId)??r,linkOf(r.runId))));
 }
 /** M1a c2: kabul bekleyen (AWAITING_APPROVAL) en son koşunun sunucu ayrıntısı (iki eksen + teslim görünümü); yoksa null. */
 export function awaitingRun(runsRes,details){
@@ -246,7 +275,7 @@ function readinessNote(ctx,r){
   return h(doc,"div",{class:"note",id:"run-readiness",role:"note",dataset:{runReadiness:r.blockers.length?"BLOCKERS":unknown?"UNKNOWN":"RECORDED",runBlockers:r.blockers.join(",")}},
     h(doc,"strong",{text:ctx.t("run.ready.title")}),h(doc,"ul",{},items.map(([k,t])=>h(doc,"li",{dataset:{readyItem:k},text:t}))));
 }
-function transitionControls(ctx,mission,awaiting,readiness=null){
+function transitionControls(ctx,mission,awaiting,readiness=null,engine=undefined){
   const doc=ctx.doc,all=allowedNext(mission.status),next=all.filter(to=>to!=="COMPLETE"||canOfferComplete(awaiting)),hidden=all.includes("COMPLETE")&&!next.includes("COMPLETE"),sid=actionStatusId(mission.missionId),busy=drafts.busy[sid]===true;
   const reasonField=field(ctx,{id:"tr-reason",labelKey:"work.transition.reason",value:drafts.reasons[mission.missionId]??"",onInput:v=>{drafts.reasons[mission.missionId]=v},hintKey:"work.transition.reasonHint"});
   const buttons=next.map(to=>h(doc,"button",{type:"button",class:`btn${requiresConfirm(to)?" btn-primary":""}`,id:`tr-${to}`,dataset:{focusKey:`tr-${to}`,to,confirm:requiresConfirm(to)?"true":"false"},disabled:busy,
@@ -261,7 +290,7 @@ function transitionControls(ctx,mission,awaiting,readiness=null){
   return h(doc,"div",{class:"transition-controls"},
     h(doc,"h4",{text:ctx.t("work.transition.title")}),
     next.length?h(doc,"div",{},reasonField,hidden?completeNotOffered(ctx,awaiting,`complete-na-${mission.missionId}`):null,h(doc,"div",{class:"btn-row",role:"group","aria-label":ctx.t("work.transition.title")},buttons),h(doc,"p",{class:"field-hint",text:ctx.t("work.transition.confirmNote")})):h(doc,"p",{class:"note",text:ctx.t("work.transition.terminal")}),
-    h(doc,"h4",{text:ctx.t("work.run.title")}),startable&&readiness?readinessNote(ctx,readiness):null,startable?expertField:null,h(doc,"div",{class:"btn-row"},runBtn),
+    h(doc,"h4",{text:ctx.t("work.run.title")}),startable&&readiness?readinessNote(ctx,readiness):null,startable&&engine!==undefined?runEngineBlock(ctx,engine):null,startable?expertField:null,h(doc,"div",{class:"btn-row"},runBtn),
     h(doc,"p",{class:"field-hint",id:"run-start-hint",text:ctx.t(startable?"work.run.hintOk":"work.run.hintNot")}),
     statusBlock(ctx,sid));
 }
@@ -319,7 +348,7 @@ function taskRunsFor(ctx,m,runsRes,taskRuns){
   const task=m.tasks.find(t=>t.taskId===taskRuns.taskId);
   return task?taskRunsPanel(ctx,{task,linked:taskRuns.res,runsRes}):null;
 }
-function detailPanel(ctx,detail,runsRes,runDetails,evRes,project=null,taskRuns=null){
+function detailPanel(ctx,detail,runsRes,runDetails,evRes,project=null,taskRuns=null,runLinks=new Map(),engine=undefined){
   const doc=ctx.doc;
   if(detail.state!=="VERIFIED")return panel(ctx,{titleKey:"work.detail",id:"work-detail"},stateNote(ctx,detail.state));
   const m=detail.mission;
@@ -333,9 +362,10 @@ function detailPanel(ctx,detail,runsRes,runDetails,evRes,project=null,taskRuns=n
     workTimeline(ctx,detail,runsRes),
     planFormPanel(ctx,m),
     h(doc,"h4",{text:ctx.t("work.timeline.title")}),statusTimeline(ctx,m.status),
-    transitionControls(ctx,m,awaitingRun(runsRes,runDetails),runReadiness({project,mission:m})),
+    transitionControls(ctx,m,awaitingRun(runsRes,runDetails),runReadiness({project,mission:m}),engine),
+    runLinkPanel(ctx,m),
     tl?[h(doc,"h4",{text:ctx.t("work.runtl.title")}),h(doc,"p",{class:"note",text:ctx.t("work.runtl.lead")}),tl]:null,
-    h(doc,"h4",{text:ctx.t("run.timeline")}),runsSection(ctx,runsRes,runDetails),
+    h(doc,"h4",{text:ctx.t("run.timeline")}),runsSection(ctx,runsRes,runDetails,id=>{const res=runLinks.get(id);return res?{res,tasks:detail.mission.tasks}:null}),
     h(doc,"h4",{text:ctx.t("work.evidence.title")}),h(doc,"p",{class:"note",text:ctx.t("work.evidence.lead")}),evidenceSection(ctx,evRes));
 }
 
@@ -352,8 +382,11 @@ export async function render(ctx){
     const [detail,runsRes,evRes]=await Promise.all([ctx.api.missionDetail(selection.missionId),ctx.api.workRuns({missionId:selection.missionId}),ctx.api.evidenceList({missionId:selection.missionId,limit:EVIDENCE_LIMIT})]);
     const runDetails=new Map();
     if(runsRes.state==="VERIFIED")await Promise.all([...new Set([...runsRes.items.slice(0,RUN_DETAIL_LIMIT),...runsRes.items.filter(r=>r.status==="AWAITING_APPROVAL")])].map(async r=>{const d=await ctx.api.workRunDetail(r.runId);if(d.state==="VERIFIED"&&d.run)runDetails.set(r.runId,d.run)}));
+    const engine=await ctx.api.executors();
+    const runLinks=new Map();
+    await Promise.all([...runDetails.keys()].map(async id=>{runLinks.set(id,await ctx.api.runTasks(id))}));
     const taskRuns=inspectedTask?.missionId===selection.missionId?{taskId:inspectedTask.taskId,res:await loadTaskRuns(ctx,inspectedTask.taskId)}:null;
-    detailNode=detailPanel(ctx,detail,runsRes,runDetails,evRes,detail.state==="VERIFIED"?(projects.find(p=>p.projectId===detail.mission.projectId)??null):null,taskRuns);
+    detailNode=detailPanel(ctx,detail,runsRes,runDetails,evRes,detail.state==="VERIFIED"?(projects.find(p=>p.projectId===detail.mission.projectId)??null):null,taskRuns,runLinks,engine);
   }
   // //TR: Premium başlık (hero): göz üstü etiket + başlık + alt başlık + dürüst kaynak çipi/kapsam. Mevcut h1#view-title korunur (odak hedefi).
   const header=h(doc,"div",{class:"hero"},

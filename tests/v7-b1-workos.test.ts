@@ -555,6 +555,9 @@ describe("LANE-B project intake", () => {
     expect(r.body).not.toContain(store.dataDir);
     const own = await post(app, {idea: IDEA + " own cmd", template: "web-node", testCommand: ["npm", "test"], idempotencyKey: "tpl2"});
     expect(store.getProject({tenantId: "tA"}, own.json().intake.projectId)!.testCommand).toEqual(["npm", "test"]);
+    // N3: Founder'ın verdiği projectType şablonun varsayılanını (web) YENER
+    const ownType = await post(app, {idea: IDEA + " own type", template: "web-node", projectType: "api", idempotencyKey: "tpl2b"});
+    expect(ownType.statusCode).toBe(201); expect(store.getProject({tenantId: "tA"}, ownType.json().intake.projectId)!.projectType).toBe("api");
   });
 
   it("without a template the intake project has no repository, so readiness reports REPOSITORY_NOT_CONFIGURED (the gap the template closes)", async () => {
@@ -2696,11 +2699,16 @@ describe("LANE-B P3 legacy reads: /v1/adapters, /v1/scheduler and the retry-bloc
 
   it.skipIf(process.platform === "win32")("/v1/scheduler rejects a symlinked state file without serving the target (symlinks skipped on Windows)", async () => {
     const {app, runtime} = mkApp();
-    const target = path.join(tmp, "sched-target.json"); fs.writeFileSync(target, JSON.stringify({marker: "SCHED-TARGET-MARKER"}));
-    fs.symlinkSync(target, path.join(runtime, "scheduler-state.json"));
+    // N1: hedef GEÇERLİ bir durum (şablonun kopyası) olmalı; geçersiz bir hedef zaten başka nedenle reddedilir ve sembolik bağ denetimini ölçmez.
+    const template = fs.readFileSync(path.join(process.cwd(), "roadmap/scheduler-state.template.json"), "utf8");
+    const sf = path.join(runtime, "scheduler-state.json");
+    fs.writeFileSync(sf, template);
+    expect((await get(app, "/v1/scheduler")).json()).toMatchObject({verification: "VERIFIED"}); // pozitif kontrol: aynı şablonun düz kopyası kabul edilir
+    fs.rmSync(sf);
+    const target = path.join(tmp, "sched-target.json"); fs.writeFileSync(target, template);
+    fs.symlinkSync(target, sf);
     const r = await get(app, "/v1/scheduler");
-    expect(r.json()).toMatchObject({status: "INVALID", verification: "REJECTED"});
-    expect(r.body).not.toContain("SCHED-TARGET-MARKER");
+    expect(r.json()).toMatchObject({status: "INVALID", verification: "REJECTED", detail: "CONTROL_PATH_SYMLINK_DENIED"});
     noLeak(r.body, "scheduler symlink");
   });
 
@@ -2711,10 +2719,10 @@ describe("LANE-B P3 legacy reads: /v1/adapters, /v1/scheduler and the retry-bloc
       expect(r.statusCode, JSON.stringify(body)).toBe(400);
       expect(r.json()).toEqual({error: "INVALID_PACKAGE_ID"});
     }
-    expect((await post(app, {packageId: "PKG-001"})).json()).toEqual({error: "SCHEDULER_NOT_INITIALIZED"});
+    const noState = await post(app, {packageId: "PKG-001"}); expect(noState.statusCode).toBe(409); expect(noState.json()).toEqual({error: "SCHEDULER_NOT_INITIALIZED"});
     const sf = path.join(runtime, "scheduler-state.json"); fs.writeFileSync(sf, "{not json");
     const before = fs.readFileSync(sf);
-    expect((await post(app, {packageId: "PKG-999"})).json()).toEqual({error: "PACKAGE_NOT_FOUND"});
+    const unknownPkg = await post(app, {packageId: "PKG-999"}); expect(unknownPkg.statusCode).toBe(404); expect(unknownPkg.json()).toEqual({error: "PACKAGE_NOT_FOUND"});
     const inv = await post(app, {packageId: "PKG-001"});
     expect(inv.statusCode).toBe(409);
     expect(inv.json().error).toBe("SCHEDULER_STATE_INVALID");
