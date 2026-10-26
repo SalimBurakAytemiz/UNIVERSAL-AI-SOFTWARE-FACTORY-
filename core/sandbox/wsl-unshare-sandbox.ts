@@ -324,8 +324,8 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
   private get platform(): NodeJS.Platform { return this.o.platform ?? process.platform; }
   /** Dağıtım adı: önce seçenek, sonra Founder'ın ortam değişkeni UASCO_WSL_DISTRO (VERİLMİŞ ama geçersizse ret: keşfe düşülmez), hiçbiri yoksa selfTest'te `wsl -l -v`'den KEŞFEDİLEN varsayılan v2 dağıtım. İstek gövdesi bunu seçemez. */
   private get distro(): string | undefined {
-    const given = this.o.distro ?? process.env.UASCO_WSL_DISTRO;
-    const d = given !== undefined && given !== "" ? given : this.discovered;
+    const given = this.o.distro !== undefined ? this.o.distro : (process.env.UASCO_WSL_DISTRO || undefined);
+    const d = given !== undefined ? given : this.discovered;
     return d && /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(d) ? d : undefined;
   }
   private discovered: string | undefined;
@@ -640,7 +640,7 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
     const st = await this.runner(["--status"], {timeoutMs: 20_000});
     if (st.spawnError) return no("WSL_EXE_MISSING");
     if (st.exitCode !== 0) return no("WSL_NOT_AVAILABLE");
-    if (this.distro === undefined && !(this.o.distro ?? process.env.UASCO_WSL_DISTRO)) {
+    if (this.o.distro === undefined && !process.env.UASCO_WSL_DISTRO) {
       // Girdisiz keşif: `wsl -l -v` çıktısındaki VARSAYILAN (*) dağıtım, WSL 2 ve docker/rancher/podman iç dağıtımı değilse. Seçilen ad yine selfTest'in tüm kanıtlarından geçmek zorundadır.
       const v = await this.runner(["-l", "-v"], {timeoutMs: 20_000});
       this.discovered = v.exitCode === 0 ? discoverDefaultDistro(decodeWslText(v.stdout)) ?? undefined : undefined;
