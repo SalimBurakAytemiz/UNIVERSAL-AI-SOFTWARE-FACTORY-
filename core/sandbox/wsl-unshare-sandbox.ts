@@ -255,6 +255,12 @@ const ABORT_PROBE_MS = 30_000, ABORT_AFTER_MS = 1000, ABORT_RETURN_BOUND_MS = 15
 const STDIN_PROBE = "read -r l; echo got=$l";
 
 /** Sandbox zincirini öldürür: kayıtlı timeout süreç grubuna YALNIZ hâlâ bizimse (cmdline S'yi içeriyorsa) SIGKILL; lider çıkmışsa pgid yeniden kullanılmış olabilir, grup öldürülmez (pid ad alanı çökünce zaten dağılır). Çıktı: PGID=<n|none>. */
+/** /proc/<pid>/stat içeriğinden süreç durumu harfi (comm parantezi içinde ')' olabilir: SON ')' sonrası). Ayrıştırılamazsa null. */
+export function procStatState(text: string): string | null {
+  const i = text.lastIndexOf(") ");
+  const c = i < 0 ? "" : text.charAt(i + 2);
+  return /^[A-Za-z]$/.test(c) ? c : null;
+}
 export const killScript = (S: string): string => [
   "#!/bin/sh",
   `S=${shq(S)}`,
@@ -340,13 +346,30 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
     return {pgid, bad: pk.exitCode !== 0 && pk.exitCode !== 1 ? "PKILL_FAILED" : null};
   }
   /** Temizlik: (1) ağacı öldür, (2) sürecin KALMADIĞINI doğrula (pgrep: yalnız çıkış 1 = yok; başka her kod = doğrulanamadı = hata; hem argv hem pgid ile), (3) chmod -R u+rwX + rm -rf, (4) dizinin gittiğini doğrula. Başarısızlık neden koduyla döner (yutulmaz). */
+  /** pgrep çıktısındaki pid'lerden en az biri zombi/ölü DEĞİLSE true. pid yoksa (ayrıştırılamadı) true: fail-closed. */
+  private async anyLive(pgrepOut: Buffer): Promise<boolean> {
+    const pids = utf8(pgrepOut).split(/\s+/).filter(x => /^[0-9]{1,9}$/.test(x));
+    if (pids.length === 0) return true;
+    for (const pid of pids) {
+      const st = await this.wsl(["/bin/cat", `/proc/${pid}/stat`], 15_000);
+      if (st.exitCode !== 0) continue; // süreç bu arada gitti
+      const state = procStatState(utf8(st.stdout));
+      if (state !== "Z" && state !== "X") return true;
+    }
+    return false;
+  }
   private async cleanup(S: string): Promise<string | null> {
     let bad: string | null = null;
     try {
       const k = await this.killTree(S); bad = k.bad;
       const gone = async (args: string[]): Promise<string | null> => {
         let rc: number | null = 0;
-        for (let i = 0; i < 5 && rc === 0; i++) { rc = (await this.wsl(["/usr/bin/pgrep", ...args], 15_000)).exitCode; if (rc === 0) await new Promise(r => setTimeout(r, 200)); }
+        for (let i = 0; i < 5 && rc === 0; i++) {
+          const r = await this.wsl(["/usr/bin/pgrep", ...args], 15_000); rc = r.exitCode;
+          // NEW-0: yetim zombiler (durum Z/X, ppid 1; PID 1 yetim toplamıyorsa kalır) canlı süreç değildir; pgrep onları da sayar. Okunamayan/ayrıştırılamayan durum canlı sayılır (fail-closed).
+          if (rc === 0 && !(await this.anyLive(r.stdout))) rc = 1;
+          if (rc === 0) await new Promise(res => setTimeout(res, 200));
+        }
         return rc === 1 ? null : rc === 0 ? "PROCESS_SURVIVED" : "PGREP_FAILED";
       };
       bad ??= await gone(["-f", "--", S]);
@@ -430,7 +453,7 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
       // Interop her başlatmada yeniden denetlenir (kernel-geneli kayıt çalışma zamanında açılabilir).
       const interop = await this.interopCheck(S);
       if (interop) {
-        if (interop === "INTEROP_ENABLED" || interop === "WSL_TOOLS_MISSING") { this.verified = false; this.probing = null; this.lastSelfTest = {ok: false, detail: interop}; }
+        if (interop === "INTEROP_ENABLED" || interop === "WSL_TOOLS_MISSING") { this.deverify(interop); }
         throw new Error(`SANDBOX_REFUSED: ${interop}`);
       }
       if ((await this.wsl(["/bin/tar", "-x", "--no-same-owner", "--no-same-permissions", "-C", `${S}/work`], 120_000, tar)).exitCode !== 0) throw new Error("SANDBOX_REFUSED: COPY_IN_FAILED");
@@ -444,7 +467,7 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
     let tornDown = false;
     child.sandboxScratch = S;
     child.sandboxTeardown = new Promise<string | null>(res => {
-      const go = () => { if (tornDown) return; tornDown = true; this.cleanup(S).then(bad => { if (bad) { this.verified = false; this.probing = null; this.lastSelfTest = {ok: false, detail: `CLEANUP_${bad}`}; } return bad; }, () => "CLEANUP_ERROR").then(res); };
+      const go = () => { if (tornDown) return; tornDown = true; this.cleanup(S).then(bad => { if (bad) { this.deverify(`CLEANUP_${bad}`); } return bad; }, () => "CLEANUP_ERROR").then(res); };
       child.once("exit", go); child.once("error", go);
     });
     this.live.set(child, {S});
@@ -455,7 +478,7 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
   async teardownScratch(S: string): Promise<string | null> {
     if (typeof S !== "string" || !SCRATCH_RE.test(S)) return "SCRATCH_PATH_INVALID";
     const bad = await this.cleanup(S);
-    if (bad) { this.verified = false; this.probing = null; this.lastSelfTest = {ok: false, detail: `CLEANUP_${bad}`}; }
+    if (bad) { this.deverify(`CLEANUP_${bad}`); }
     return bad;
   }
 
@@ -521,14 +544,14 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
     const bad = await this.cleanup(S);
     if (!bad) return res;
     // Temizlik başarısızlığı yutulmaz: sonuç başarısız sayılır ve sağlayıcı doğrulanmamış olur (yeniden selfTest gerekir).
-    this.verified = false; this.probing = null; this.lastSelfTest = {ok: false, detail: `CLEANUP_${bad}`};
+    this.deverify(`CLEANUP_${bad}`);
     return {...res, exitCode: res.exitCode === 0 ? 1 : res.exitCode, stderr: `${res.stderr}\n[sandbox] CLEANUP_FAILED: ${bad}\n`};
   }
   private async inside(S: string, argv: string[], opts: SandboxRunOptions, command: string[], tar: Buffer, skipped: number, startedAt: string, fail: (why: string) => ProcResult): Promise<ProcResult> {
     // Interop her koşuda yeniden denetlenir: kernel-geneli kayıt çalışma zamanında açılabilir; açıksa bu sağlayıcı artık DOĞRULANMAMIŞtır.
     const interop = await this.interopCheck(S);
     if (interop) {
-      if (interop === "INTEROP_ENABLED" || interop === "WSL_TOOLS_MISSING") { this.verified = false; this.probing = null; this.lastSelfTest = {ok: false, detail: interop}; }
+      if (interop === "INTEROP_ENABLED" || interop === "WSL_TOOLS_MISSING") { this.deverify(interop); }
       return fail(interop);
     }
     const x = await this.wsl(["/bin/tar", "-x", "--no-same-owner", "--no-same-permissions", "-C", `${S}/work`], 120_000, tar);
@@ -556,8 +579,13 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
     return {argv, exitCode, stdout: utf8(r.stdout), stderr: utf8(r.stderr) + note, startedAt, endedAt: now(), timedOut, aborted: r.aborted, spawnError: r.spawnError};
   }
 
+  /** NEW-1: her doğrulama kaybı dönemi (epoch) artırır; uçuştaki eski bir selfTest sonucu sonradan gelen bir doğrulama kaybını EZEMEZ. */
+  private epoch = 0;
+  private deverify(detail: string): void { this.epoch++; this.verified = false; this.probing = null; this.lastSelfTest = {ok: false, detail}; }
   selfTest(): Promise<{ok: boolean; detail?: string}> {
-    return this.probing ??= this.probe().then(r => { this.verified = r.ok; this.lastSelfTest = r; return r; }, () => { this.verified = false; this.lastSelfTest = {ok: false, detail: "SELFTEST_ERROR"}; return this.lastSelfTest; });
+    const e = this.epoch;
+    const stale = (): {ok: boolean; detail?: string} => ({ok: false, detail: "SELFTEST_SUPERSEDED"});
+    return this.probing ??= this.probe().then(r => { if (e !== this.epoch) return stale(); this.verified = r.ok; this.lastSelfTest = r; return r; }, () => { if (e !== this.epoch) return stale(); this.verified = false; this.lastSelfTest = {ok: false, detail: "SELFTEST_ERROR"}; return this.lastSelfTest; });
   }
   private async lifecycleProbes(S: string): Promise<`PROBE_${string}` | null> {
     const stage = async (timeoutMs: number, cmd: string, nproc?: number) => (await this.stageSandbox(S, timeoutMs, [], ["/bin/sh", "-c", cmd], nproc)) === "OK";

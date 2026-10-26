@@ -559,7 +559,7 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
   const ISO = {nsFlags: ["--user", "--map-root-user", "--net", "--pid", "--mount", "--fork", "--kill-child=SIGKILL"], setup: "set -eu\n# isolation setup (test double)\n", helperPath: "/usr/sbin:/usr/bin:/sbin:/bin"};
   const GOOD_PROBE = "MNT_C=absent\nDRVFS=0\nUNIX_PATH_SOCKETS=0\nWSL_RUNTIME_DIRS=absent\nRW_usr=ro\nRW_etc=ro\nRW_bin=ro\nWORK=writable\nNET_IFACES=0\nCAPS_DROPPED=ok\nNO_CTTY=ok\nNESTED_USERNS=blocked\nPID_NS_PRIVATE=ok\nVSOCK=blocked\nIO_URING=blocked\nSUPERVISOR=ok\nHOST_DIRS=hidden\nPROC_SYS_RO=ok\nHOST_CANARY=hidden\nDONE=1\n";
   interface Cfg { status?: number; spawnError?: boolean; distros?: string; version?: string; interop?: string | string[]; peRc?: number; peNoexec?: string; tools?: string; roots?: string[]; probe?: string; probeRc?: number; mktempFails?: boolean; runOut?: string; runRc?: number; runDelayMs?: number;
-    forkOut?: string; timeoutRc?: number; late?: boolean; stdinOut?: string; pkillRc?: number; pgrepAlive?: boolean; scratchRemains?: boolean; duOut?: string; truncated?: boolean; runBytes?: Buffer; outerRc?: number; reject?: boolean; nodePath?: string; noTarget?: boolean; abortIgnored?: boolean; pgrepRc?: number; pgidAlive?: boolean; rcFile?: string; duRc?: number; abortLate?: boolean; late2?: boolean; noPgid?: boolean; netns?: string; netnsRc?: number }
+    forkOut?: string; timeoutRc?: number; late?: boolean; stdinOut?: string; pkillRc?: number; pgrepAlive?: boolean; scratchRemains?: boolean; duOut?: string; truncated?: boolean; runBytes?: Buffer; outerRc?: number; reject?: boolean; nodePath?: string; noTarget?: boolean; abortIgnored?: boolean; pgrepRc?: number; pgidAlive?: boolean; rcFile?: string; duRc?: number; abortLate?: boolean; late2?: boolean; noPgid?: boolean; netns?: string; netnsRc?: number; pgrepOut?: string; statOut?: string }
   const u16 = (t: string) => Buffer.from("﻿" + t, "utf16le");
   const mkRunner = (cfg: Cfg = {}) => {
     const calls: {args: string[]; input?: Buffer | string}[] = []; const files = new Map<string, string>();
@@ -575,6 +575,7 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
       if (cmd[0] === "/usr/bin/mktemp") return cfg.mktempFails ? R(1) : R(0, "/tmp/uasco-sbx-AbC123\n");
       if (cmd[0] === "/bin/mkdir" || cmd[0] === "/bin/chmod" || cmd[0] === "/bin/kill" || cmd[0] === "/usr/bin/find" || cmd[0] === "/bin/rm") return R(0);
       if (cmd[0] === "/usr/bin/tee") { files.set(cmd[1], String(o.input)); return R(0); }
+      if (cmd[0] === "/bin/cat" && /^\/proc\/[0-9]+\/stat$/.test(cmd[1])) return cfg.statOut === undefined ? R(1) : R(0, cfg.statOut);
       if (cmd[0] === "/bin/cat") return R(0, cmd[1].endsWith("/rc") ? `${cfg.rcFile ?? "0"}\n` : "4242\n");
       if (cmd[0] === "/bin/sh" && cmd[1] === "-s") { files.set("SWEEP", String(o.input)); return R(0); }
       if (cmd[0] === "/bin/sh" && cmd[1].endsWith("/ctl/kill.sh")) return R(0, cfg.noPgid ? "PGID=none\n" : "PGID=4242\n");
@@ -583,7 +584,7 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
       if (cmd[0] === "/usr/bin/pkill") return R(cfg.pkillRc ?? 1);
       if (cmd[0] === "/usr/bin/readlink") return R(cfg.netnsRc ?? 0, cfg.netns ?? "net:[4026532999]\n");
       if (cmd[0] === "/usr/bin/pgrep" && cmd[1] === "-P") return cfg.noTarget ? R(1) : R(0, "777\n");
-      if (cmd[0] === "/usr/bin/pgrep" && cmd[1] === "-g") return R(cfg.pgidAlive ? 0 : 1);
+      if (cmd[0] === "/usr/bin/pgrep" && cmd[1] === "-g") return R(cfg.pgidAlive ? 0 : 1, cfg.pgrepOut ?? "");
       if (cmd[0] === "/usr/bin/pgrep") return R(cfg.pgrepAlive ? 0 : cfg.pgrepRc ?? 1);
       if (cmd[0] === "/usr/bin/test" && cmd[1] === "!") return R(cmd[3].endsWith("abort-late.txt") || cmd[3].endsWith("abort-late2.txt") ? (cfg.abortLate ? 1 : 0) : cmd[3].endsWith("late2.txt") ? (cfg.late2 ? 1 : 0) : cmd[3].endsWith("late.txt") ? (cfg.late ? 1 : 0) : (cfg.scratchRemains ? 1 : 0));
       if (cmd[0] === "/usr/bin/test") return R(cfg.roots ? (cfg.roots.includes(cmd[2]) ? 0 : 1) : (cmd[2] === "/srv" ? 0 : 1));
@@ -788,6 +789,37 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
     it("LC-6: untrusted test output is decoded as UTF-8 (a NUL byte cannot flip the stream to UTF-16 and corrupt the evidence)", async () => {
       const {p} = await mk({runBytes: Buffer.from("Tests  12 passed (12)\n\0\n")}); await p.selfTest(); const dir = ws();
       try { expect((await p.run(["node", "test.js"], {cwd: dir, env: {}, timeoutMs: 5000})).stdout).toBe("Tests  12 passed (12)\n\0\n"); } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+    });
+
+    it("NEW-0: orphaned zombies (state Z/X) in the process group are not survivors (teardown is clean) while a live member, unparseable state or no parsable pid stays PROCESS_SURVIVED (fail-closed); procStatState handles ')' inside comm", async () => {
+      const {procStatState} = await import("../core/sandbox/wsl-unshare-sandbox.js");
+      expect([procStatState("12 (sleep) Z 1 12 12 0"), procStatState("12 (a) b (c)) S 1 1 1"), procStatState("12 (x) X 1"), procStatState("junk"), procStatState("")]).toEqual(["Z", "S", "X", null, null]);
+      if (process.platform === "linux" && cp.spawnSync("sh", ["-c", "command -v perl pgrep"]).status === 0) {
+        // gerçek çekirdek: parent beklemeyen bir çocuk = zombi; /proc/<pid>/stat durumu gerçekten Z
+        const parent = cp.spawn("perl", ["-e", "if (!fork) { exit 0 } sleep 20"], {stdio: "ignore"});
+        try {
+          let kid = ""; for (let i = 0; i < 40 && !kid; i++) { await new Promise(r => setTimeout(r, 100)); kid = cp.spawnSync("pgrep", ["-P", String(parent.pid)], {encoding: "utf8"}).stdout.trim().split(/\s+/)[0]; }
+          expect(kid).toMatch(/^[0-9]+$/); expect(procStatState(fs.readFileSync(`/proc/${kid}/stat`, "utf8"))).toBe("Z");
+          expect(procStatState(fs.readFileSync(`/proc/${parent.pid}/stat`, "utf8"))).not.toBe("Z");
+        } finally { parent.kill("SIGKILL"); }
+      }
+      const S = "/tmp/uasco-sbx-AbC123";
+      const td = async (cfg: any) => (await mk({pgidAlive: true, ...cfg})).p.teardownScratch(S);
+      expect(await td({pgrepOut: "4243\n", statOut: "4243 (sleep) Z 1 4242 4242 0\n"})).toBeNull();
+      expect(await td({pgrepOut: "4243\n4244\n", statOut: "4243 (sleep) Z 1 4242 4242 0\n"})).toBeNull();
+      expect(await td({pgrepOut: "4243\n"})).toBeNull(); // stat okunamıyor: süreç bu arada gitti
+      expect(await td({pgrepOut: "4243\n", statOut: "4243 (sleep) S 1 4242 4242 0\n"})).toBe("PROCESS_SURVIVED");
+      expect(await td({pgrepOut: "4243\n", statOut: "garbage"})).toBe("PROCESS_SURVIVED");
+      expect(await td({pgrepOut: ""})).toBe("PROCESS_SURVIVED");
+    });
+
+    it("NEW-1: a selfTest that was in flight when the provider de-verified cannot bring verification back (verification epoch); a fresh selfTest afterwards can", async () => {
+      const {p} = await mk({runDelayMs: 250});
+      const inflight = p.selfTest();
+      await new Promise(r => setTimeout(r, 30)); (p as any).deverify("CLEANUP_PROCESS_SURVIVED");
+      expect(await inflight).toEqual({ok: false, detail: "SELFTEST_SUPERSEDED"}); expect(p.isVerified()).toBe(false);
+      expect(p.lastSelfTest).toEqual({ok: false, detail: "CLEANUP_PROCESS_SURVIVED"});
+      expect(await p.selfTest()).toEqual({ok: true}); expect(p.isVerified()).toBe(true);
     });
 
     it("LC-4/LC-3: cleanup failures are never swallowed - the run fails (exit 1 even if the test passed), the note names the code, and the provider de-verifies; pgrep errors fail CLOSED; survivors are looked up by pgid too; du/rc problems fail the run", async () => {
