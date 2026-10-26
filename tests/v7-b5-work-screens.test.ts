@@ -2551,3 +2551,237 @@ describe("LANE-A A-FLOW-3: the run step tells the truth about who does the work"
     expect(text(t.eng!)).toContain("Bloke");
   });
 });
+
+describe("LANE-A A-FLOW-GAP-2: the test-result step of a run says what really happened (executed / failed / not executed with its reason)", () => {
+  const HEAD = "a".repeat(40), RUNX = "run_" + "ab".repeat(12);
+  const ev = (kind: string, extra: any = {}) => ({evidenceId: "evd_" + "1".repeat(24), kind, commitSha: HEAD, exitCode: 0, step: "VERIFY", cycle: 0, ...extra});
+  const run = (evidence: any[] | undefined, over: any = {}) => ({runId: RUNX, missionId: MID, status: "AWAITING_APPROVAL", headSha: HEAD, ...(evidence === undefined ? {} : {evidence}), ...over});
+  const attested = (kind: string, extra: any = {}) => ev(kind, {sandboxProviderId: "linux-unshare-v2", ...extra});
+  const surface = (n: number | null, extra: any = {}) => ({kind: "TEST_SURFACE", commitSha: HEAD, testSurface: {executedTests: n, functionalAcceptance: "OK", modified: [], deleted: [], renamed: [], harness: [], weakened: [], ...extra}});
+  const card = async (x: any, lang = "en") => {
+    const c = await mkCtx({lang}); const core = await load(rend, "work-core.js"), work = await load(rend, "views", "work.js");
+    return {node: work.runCard(c.ctx, core.mapWorkRun(x)) as N, core};
+  };
+  const result = (n: N) => within(n).find(x => x.dataset.runTestResult) ?? null;
+  const within = (n: N): N[] => [n, ...n.children.flatMap(c => within(c))];
+  const CASES: Array<[string, any[] | undefined, string, string, string]> = [
+    // name, evidence, kind, reason, text it must contain
+    ["tests ran and failed", [attested("VERIFY_TESTS", {exitCode: 1}), attested("REGRESSION_TESTS")], "FAILED", "TESTS_FAILED", "ran and at least one exited with a non-zero code"],
+    ["regression failed", [attested("VERIFY_TESTS"), attested("REGRESSION_TESTS", {exitCode: 2})], "FAILED", "TESTS_FAILED", "FAILED"],
+    ["no verified sandbox", [ev("VERIFY_TESTS_NOT_EXECUTED"), ev("REGRESSION_TESTS_NOT_EXECUTED")], "NOT_EXECUTED", "SANDBOX_UNAVAILABLE", "No verified sandbox existed, so the tests were not run"],
+    ["run never reached the tests", [ev("EXECUTOR_RUN", {step: "IMPLEMENT"})], "NOT_EXECUTED", "TESTS_NOT_REACHED", "did not reach the test step"],
+    ["tests ran without a sandbox attestation", [ev("VERIFY_TESTS"), ev("REGRESSION_TESTS"), surface(4)], "NOT_VERIFIED", "SANDBOX_ATTESTATION_MISSING", "no sandbox attested it"],
+    ["zero tests executed", [attested("VERIFY_TESTS"), attested("REGRESSION_TESTS"), surface(0)], "NOT_VERIFIED", "ZERO_TESTS_EXECUTED", "executed zero tests"],
+    ["test count unknown", [attested("VERIFY_TESTS"), attested("REGRESSION_TESTS")], "NOT_VERIFIED", "EXECUTED_TEST_COUNT_UNKNOWN", "number of executed tests is not known"],
+    ["tests were changed", [attested("VERIFY_TESTS"), attested("REGRESSION_TESTS"), surface(5, {modified: ["a.test.js"]})], "NOT_VERIFIED", "TEST_CHANGES_REQUIRE_INDEPENDENT_VERIFICATION", "tests were changed"],
+    ["test surface blocked", [attested("VERIFY_TESTS"), attested("REGRESSION_TESTS"), surface(5, {functionalAcceptance: "BLOCKED"})], "NOT_VERIFIED", "TEST_SURFACE_BLOCKED", "test surface is blocked"],
+    ["everything proven", [attested("VERIFY_TESTS"), attested("REGRESSION_TESTS"), surface(7)], "EXECUTED_VERIFIED", "TESTS_EXECUTED_IN_VERIFIED_SANDBOX", "executed in a verified sandbox"],
+  ];
+  it("maps the recorded evidence to one test-result kind and reason (server rule), and a run without an evidence list is UNKNOWN, never 'not executed'", async () => {
+    const core = await load(rend, "work-core.js");
+    for (const [name, evidence, kind, reason] of CASES) expect(core.testResultOf(core.mapWorkRun(run(evidence))), name).toEqual({kind, reason});
+    expect(core.testResultOf(core.mapWorkRun(run(undefined)))).toEqual({kind: "UNKNOWN", reason: null}); // list entry without evidence: nothing is claimed
+    expect(core.testResultOf(core.mapWorkRun(run([], {headSha: undefined})))).toEqual({kind: "NOT_EXECUTED", reason: "NO_HEAD_COMMIT"});
+    for (const bad of [null, undefined, {}, {evidenceVerification: null}, {evidenceVerification: {state: 5, reason: "x"}}]) expect(core.testResultOf(bad as any), String(bad)).toEqual({kind: "UNKNOWN", reason: null});
+    expect(core.testResultOf({evidenceReported: true, evidenceVerification: {state: "NOT_VERIFIED", reason: "SOMETHING_NEW"}})).toEqual({kind: "NOT_VERIFIED", reason: "SOMETHING_NEW"});
+    expect(core.testResultOf({evidenceReported: true, evidenceVerification: {state: "WEIRD", reason: "X"}})).toEqual({kind: "UNKNOWN", reason: null});
+    for (const st of ["FAILED", "NOT_VERIFIED", "PRODUCT_VERIFIED"]) expect(core.testResultOf({evidenceReported: true, evidenceVerification: {state: st, reason: 5}}), st).toEqual({kind: "UNKNOWN", reason: null}); // a non-text reason is never trusted
+    expect(core.testResultOf({evidenceReported: false, evidenceVerification: {state: "FAILED", reason: "TESTS_FAILED"}})).toEqual({kind: "UNKNOWN", reason: null});
+  });
+  it("the run card shows the test result row with the exact reason code and a plain sentence for every case; the generic NOT_VERIFIED badge stays", async () => {
+    for (const [name, evidence, kind, reason, sentence] of CASES) {
+      const {node} = await card(run(evidence));
+      const r = result(node)!;
+      expect(r, name).not.toBeNull(); expect(r.dataset.runTestResult, name).toBe(kind); expect(r.dataset.runTestReason, name).toBe(reason);
+      expect(r.textContent, name).toContain(sentence); expect(r.textContent, name).toContain(`(${reason})`);
+      expect(within(node).some(x => x.dataset.m1aBadge === "run"), name).toBe(kind !== "EXECUTED_VERIFIED"); // the Founder-approved NOT_VERIFIED badge is unchanged
+    }
+    const mk = async (state: string, reason: string) => { const c = await mkCtx({lang: "en"}); const work = await load(rend, "views", "work.js"); return result(work.runCard(c.ctx, {runId: RUNX, status: "AWAITING_APPROVAL", evidenceReported: true, evidenceVerification: {state, reason}, evidence: [], checkpoints: [], reason: null, reviewer: null, step: null, role: null}) as N)!; };
+    expect((await mk("NOT_VERIFIED", "SOMETHING_NEW")).textContent).toBe("The result is NOT VERIFIED. (SOMETHING_NEW — reason not recognised)");
+    expect((await mk("NOT_VERIFIED", "NOT_EXECUTED:SOMETHING_NEW")).textContent).toBe("The tests were not executed. (SOMETHING_NEW — reason not recognised)");
+    const failed = result((await card(run(CASES[0][1]))).node)!;
+    expect(failed.textContent).not.toContain("sandbox not verified"); // a failed test run is never described as a sandbox problem
+  });
+  it("a card without an evidence list says the result is not reported; a failed run keeps both lines (reason and result) and nothing says 'passed' unless the rule holds", async () => {
+    const un = result((await card(run(undefined))).node)!;
+    expect(un.dataset.runTestResult).toBe("UNKNOWN"); expect(un.textContent).toContain("not reported for this run"); expect(un.textContent).not.toMatch(/not executed|passed|verified in/i);
+    const blocked = await card(run([ev("VERIFY_TESTS_NOT_EXECUTED"), ev("REGRESSION_TESTS_NOT_EXECUTED")], {status: "BLOCKED", reason: "SANDBOX_UNAVAILABLE"}));
+    expect(within(blocked.node).some(x => x.dataset.runReason === "SANDBOX_UNAVAILABLE")).toBe(true); expect(result(blocked.node)!.dataset.runTestResult).toBe("NOT_EXECUTED");
+    for (const [name, evidence, kind] of CASES) { if (kind !== "EXECUTED_VERIFIED") expect(result((await card(run(evidence))).node)!.textContent, name).not.toMatch(/\bpassed\b/i); }
+  });
+  it("is present in English and Turkish for every kind and reason", async () => {
+    const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
+    const keys = Object.keys(E).filter(k => k.startsWith("run.test."));
+    expect(keys.length).toBe(15);
+    for (const k of keys) { expect(T[k], k).toBeTruthy(); expect(E[k], k).not.toBe(k); }
+    const tn = result((await card(run(CASES[0][1]), "tr")).node)!;
+    expect(tn.textContent).toContain("BAŞARISIZ");
+  });
+});
+
+// //TR: LANE-A A-FLOW-GAP-2: Journey'nin uçtan uca sürülmesi. Durumlu sahte sunucu 7f6591c rotalarının şekillerini döndürür ve her GET/POST önce gerçek main.mjs allow-list'inden geçer (listede olmayan yol köprüde INVALID_API_PATH olur): böylece "GATED_4B" adımlar gerçekte olduğu gibi UNAVAILABLE görünür. Her adımın durumu tabloya yazılır ve test tabloyu sabitler.
+describe("LANE-A A-FLOW-GAP-2: the Journey end to end (stateful fake server, real main.mjs allow-lists, 7f6591c route shapes)", () => {
+  const H = (c: string) => c.repeat(24);
+  const IPRJ = `prj_${H("a")}`, IMSN = `msn_${H("b")}`, IITK = `itk_${H("c")}`, IRUN = `run_${H("d")}`, ITSK = (i: number) => `tsk_${String(i + 1).repeat(24)}`, HEAD = "e".repeat(40);
+  const IDEA = "Bir kitap kulübü uygulaması: üyeler kitap önerir ve oylar";
+  async function mkServer() {
+    const getOk = loadGet(), {desktopPostPathAllowed: postOk} = loadPost();
+    const boundary = await load(root, "automation", "lib", "control-boundary.mjs");
+    const S: any = {project: null, mission: null, intake: null, tasks: [] as any[], run: null, links: [] as any[], posts: [] as Array<{path: string; body: any}>, gets: [] as string[], blocked: [] as string[]};
+    const exec = {executors: [{id: "LOCAL_CLAUDE", state: "READY"}], active: {reason: "LOCAL_CLAUDE"}, sandbox: {state: "UNAVAILABLE", reason: "SANDBOX_UNAVAILABLE", detail: "NO_VERIFIED_PROVIDER", providerId: null},
+      claudeProfiles: {implementer: {state: "READY"}, reviewer: {state: "READY"}}};
+    const missionObj = () => S.mission && ({...S.mission});
+    const get = (p: string) => {
+      S.gets.push(p);
+      if (!(boundary.desktopGetPathAllowed(p) || getOk(p))) { S.blocked.push(`GET ${p}`); throw new Error("INVALID_API_PATH"); }
+      if (p === "/v1/projects") return {projects: S.project ? [S.project] : []};
+      if (p === "/v1/intakes") return {intakes: S.intake ? [S.intake] : []};
+      if (p === "/v1/missions") return {missions: S.mission ? [missionObj()] : []};
+      if (p.startsWith("/v1/missions?projectId=")) return {missions: S.mission ? [missionObj()] : []};
+      if (S.mission && p === `/v1/missions/${IMSN}`) return {mission: missionObj(), tasks: S.tasks};
+      if (p === "/v1/work-runs" || p === `/v1/work-runs?missionId=${IMSN}`) return {workRuns: S.run ? [S.run] : []};
+      if (S.run && p === `/v1/work-runs/${IRUN}`) return {workRun: S.run};
+      if (S.run && p === `/v1/work-runs/${IRUN}/tasks`) return {links: S.links};
+      if (p.startsWith("/v1/evidence")) return {evidence: []};
+      if (p === `/v1/projects/${IPRJ}/readiness`) return {readiness: {projectId: IPRJ, missionId: IMSN, ready: true, verifiable: S.tasks.length > 0, checks: [
+        {id: "MISSION", state: "OK", blocking: true, reason: null, nextAction: null}, {id: "RISK", state: "OK", blocking: true, reason: null, nextAction: null},
+        {id: "REPOSITORY", state: "OK", blocking: true, reason: null, nextAction: null}, {id: "TEST_COMMAND", state: "OK", blocking: false, reason: null, nextAction: null},
+        S.tasks.length ? {id: "PLAN", state: "OK", blocking: false, reason: null, nextAction: null} : {id: "PLAN", state: "BLOCKED", blocking: false, reason: "NO_PLANNED_TASKS", nextAction: "PLAN_MISSION"}]}};
+      if (p === `/v1/projects/${IPRJ}/flow`) return {flow: {projectId: IPRJ, stages: ["MISSION", "PLAN", "RUN", "REVIEW", "DELIVERY"].map(s => ({stage: s, state: s === "MISSION" || (s === "PLAN" && S.tasks.length) ? "DONE" : "NOT_STARTED", detail: null})), missionCount: 1, taskCount: S.tasks.length, latestRunId: S.run ? S.run.runId : null}};
+      if (p === "/v1/system/executors") return exec;
+      if (p === `/v1/deliveries?projectId=${IPRJ}`) return {deliveries: S.run ? [S.delivery()] : []};
+      throw new Error(`${p}: HTTP 404`);
+    };
+    S.delivery = () => ({runId: IRUN, missionId: IMSN, projectId: IPRJ, status: "AWAITING_APPROVAL", sourceCommit: HEAD, sourceGeneration: {state: "SOURCE_GENERATION_COMPLETE", reason: "SOURCE_EVIDENCE_FOR_HEAD", label: "SOURCE_GENERATION_COMPLETE"},
+      productVerification: {state: "NOT_VERIFIED", reason: "NOT_EXECUTED:SANDBOX_UNAVAILABLE", label: "NOT_VERIFIED"}, testsExecuted: false, accepted: null,
+      artifact: S.prepared ? {runId: IRUN, missionId: IMSN, sourceCommit: HEAD, treeSha: "3".repeat(40), exportArtifactHash: "f".repeat(64), artifactPath: `deliveries/${IRUN}/${"f".repeat(64)}.zip`} : null, fileState: S.prepared ? "VERIFIED" : null,
+      testChanges: {required: false, testSurfaceSha256: null, changed: {modified: [], deleted: [], renamed: [], harness: [], truncated: false}}, labels: {sourceGeneration: null, productVerification: null, sourceDelivery: null}});
+    const post = (p: string, b: any) => {
+      S.posts.push({path: p, body: b});
+      if (!postOk(p)) { S.blocked.push(`POST ${p}`); throw new Error("INVALID_API_PATH"); }
+      if (p === "/v1/intakes") {
+        S.project = {projectId: IPRJ, name: b.title ?? "Kitap Kulübü", tenantId: "t1", environmentId: "local", createdAt: "2026-10-26T05:00:00.000Z", repository: {path: "C:\\Projeler\\kitap"}};
+        S.mission = {missionId: IMSN, projectId: IPRJ, title: "Kitap Kulübü", objective: b.idea, acceptanceCriteria: ["Uygulama açılır"], riskLevel: "R1", status: "DRAFT", createdAt: "2026-10-26T05:00:00.000Z"};
+        S.intake = {intakeId: IITK, projectId: IPRJ, missionId: IMSN, title: "Kitap Kulübü", idea: b.idea, riskLevel: "R1", acceptanceCriteria: ["Uygulama açılır"], status: "CREATED", template: b.template,
+          sources: {title: "FOUNDER", acceptanceCriteria: "DEFAULT", riskLevel: "DEFAULT"}, createdAt: "2026-10-26T05:00:00.000Z"};
+        return {status: 201, body: {intake: S.intake}};
+      }
+      if (p === `/v1/missions/${IMSN}/plan`) { S.tasks = b.tasks.map((t: any, i: number) => ({taskId: ITSK(i), title: t.title, status: "PENDING"})); S.mission.status = "PLANNED"; return {status: 201, body: {tasks: S.tasks}}; }
+      if (p === `/v1/missions/${IMSN}/transition`) { S.mission.status = b.to; return {status: 200, body: {mission: missionObj()}}; }
+      if (p === `/v1/missions/${IMSN}/runs`) {
+        S.run = {runId: IRUN, missionId: IMSN, projectId: IPRJ, status: "AWAITING_APPROVAL", headSha: HEAD, step: "REVIEW", startedAt: "2026-10-26T05:10:00.000Z",
+          evidence: [{evidenceId: "evd_" + H("1"), kind: "VERIFY_TESTS_NOT_EXECUTED", commitSha: HEAD, exitCode: null, step: "VERIFY", cycle: 0}, {evidenceId: "evd_" + H("2"), kind: "REGRESSION_TESTS_NOT_EXECUTED", commitSha: HEAD, exitCode: null, step: "REGRESSION", cycle: 0}]};
+        return {status: 201, body: {run: {runId: IRUN, missionId: IMSN}, hostExecutionNotice: "none"}};
+      }
+      const link = /^\/v1\/tasks\/(tsk_[0-9a-f]{24})\/runs$/.exec(p);
+      if (link) { const l = {taskId: link[1], runId: b.runId, missionId: IMSN, tenantId: "t1", linkedAt: "2026-10-26T05:11:00.000Z", linkedBy: "FOUNDER_LOCAL"}; S.links.push(l); return {status: 201, body: {link: l}}; }
+      if (p === `/v1/work-runs/${IRUN}/delivery/prepare`) { S.prepared = true; return {status: 200, body: {artifact: {exportArtifactHash: "f".repeat(64)}}}; }
+      return {status: 404, body: {}};
+    };
+    return {S, get, post};
+  }
+  const type = (root: N, id: string, v: string) => { byId(root, id)!.value = v; byId(root, id)!.fire("input"); };
+  const sleep = () => new Promise(r => setTimeout(r, 0));
+  it("a path the desktop does not admit is UNAVAILABLE (not a generic error) for every read and every POST, and each blocked or unavailable step tells the Founder the one thing they can do", async () => {
+    const m = await load(rend, "model.js"), w = await load(rend, "work-core.js");
+    for (const msg of ["INVALID_API_PATH", "Error invoking remote method 'uasco:api-get': Error: INVALID_API_PATH", new Error("INVALID_API_PATH")]) expect(m.classifyFailure(msg), String(msg)).toEqual({state: "UNAVAILABLE", status: null});
+    expect(m.classifyFailure("HTTP 500")).toMatchObject({state: "ERROR"}); expect(m.classifyFailure("boom")).toEqual({state: "ERROR", status: null}); expect(m.classifyFailure("HTTP 404").state).toBe("UNAVAILABLE");
+    expect(w.describePostResult({thrown: true, state: "UNAVAILABLE", message: "INVALID_API_PATH"}).key).toBe("post.err.unavailable");
+    expect(w.describePostResult({thrown: true, state: "OFFLINE"}).key).toBe("post.err.offline"); expect(w.describePostResult({thrown: true, state: "ERROR"}).key).toBe("post.err.generic");
+    const srv = await mkServer(), c = await mkCtx({lang: "en", get: srv.get, post: srv.post});
+    const raw = await c.ctx.api.raw(`/v1/work-runs/${IRUN}/product`); expect(raw.state).toBe("UNAVAILABLE"); // a read the allow-list refuses
+    // product card: unavailable read -> one line and the Run tab button
+    srv.S.project = {projectId: IPRJ, name: "P", tenantId: "t1", environmentId: "local", createdAt: "2026-10-26T05:00:00.000Z"}; srv.S.mission = {missionId: IMSN, projectId: IPRJ, title: "M", status: "PLANNED", riskLevel: "R1", createdAt: "2026-10-26T05:00:00.000Z"};
+    srv.S.run = {runId: IRUN, missionId: IMSN, projectId: IPRJ, status: "AWAITING_APPROVAL", headSha: HEAD, startedAt: "2026-10-26T05:10:00.000Z", evidence: []};
+    const st = await load(rend, "studio-state.js"), ws = await load(rend, "views", "projects.js"); st.openProject(IPRJ, "overview");
+    const root = mount(c.doc, await ws.render(c.ctx)), prod = byId(root, "studio-ov-product")!;
+    expect(prod.textContent).toContain("not available to the desktop yet"); expect(byData(prod, "productNext", "RUN_TAB")[0].textContent).toContain("start the project's dev command from the Run tab");
+    byId(prod, "product-open-run")!.fire("click"); await sleep(); expect(st.studio.tab).toBe("run");
+    // analysis: a not-enabled step still shows the hand-plan way out, and the button only navigates to Tasks with the mission selected
+    const jv = await load(rend, "views", "journey.js"); forms.selection.missionId = IMSN;
+    const jr = mount(c.doc, await jv.render(c.ctx)); c.calls.navigate.length = 0; forms.selection.missionId = IMSN;
+    expect(byData(jr, "analysisHandPlan")[0].textContent).toContain("write the plan by hand in Tasks"); const before = srv.S.posts.length;
+    forms.selection.missionId = "msn_" + H("9"); byId(jr, "analysis-hand-plan")!.fire("click"); expect(c.calls.navigate).toEqual(["work"]); expect(forms.selection.missionId).toBe(IMSN); expect(srv.S.posts.length).toBe(before); // navigation only, nothing sent
+    // run card: NOT_EXECUTED because of the sandbox points to the setup check
+    const core = await load(rend, "work-core.js"), work = await load(rend, "views", "work.js");
+    const rc = work.runCard(c.ctx, core.mapWorkRun({...srv.S.run, evidence: [{evidenceId: "evd_" + H("1"), kind: "VERIFY_TESTS_NOT_EXECUTED", commitSha: HEAD}, {evidenceId: "evd_" + H("2"), kind: "REGRESSION_TESTS_NOT_EXECUTED", commitSha: HEAD}]}));
+    expect(byData(rc, "runTestResult")[0].textContent).toContain("See Settings > Ready to build?");
+  });
+  it("drives idea -> intake -> analysis -> plan -> mission/task -> run -> test result -> product -> delivery and records every step's status", async () => {
+    const srv = await mkServer(), table: Record<string, string> = {};
+    const c = await mkCtx({lang: "en", get: srv.get, post: srv.post, confirm: () => true});
+    const ctx = c.ctx;
+    const view = async (...p: string[]) => mount(c.doc, await (await load(rend, ...p)).render(ctx));
+    const intakeMod = await load(rend, "views", "intake.js"); intakeMod.resetIntakeAll();
+    const sel = forms.selection;
+    // 1) idea -> intake
+    let root = await view("views", "projects.js");
+    type(root, "intake-idea", IDEA); byId(root, "intake-form")!.fire("submit"); await sleep();
+    root = await view("views", "projects.js");
+    const card = byId(root, "intake-result")!;
+    expect(card.dataset.intakeId).toBe(IITK); expect(byId(root, "intake-readiness")!.dataset.runReadiness).toBe("READY"); // a run can start; only the non-blocking plan check is open
+    expect(byId(root, "intake-ready-go-PLAN_MISSION")).not.toBeNull(); expect(byId(root, "intake-open-mission")).not.toBeNull();
+    expect(srv.S.posts[0]).toMatchObject({path: "/v1/intakes", body: {idea: IDEA, template: "web-node"}});
+    table.INTAKE = "COMPLETE_IN_UI";
+    // 2) analysis: the Journey shows the section; the step POST is not allow-listed yet
+    byId(root, "intake-open-mission")!.fire("click"); expect(sel.missionId).toBe(IMSN);
+    root = await view("views", "journey.js");
+    expect(byId(root, "analysis-step")).not.toBeNull();
+    fire(byId(root, "analysis-step-submit")!);
+    async function fire(n: N) { n.fire("click"); await sleep(); }
+    await sleep();
+    root = await view("views", "journey.js");
+    expect(byId(root, "analysis-step-status")!.textContent).toContain("not enabled in this build"); expect(byId(root, "analysis-plan-submit")).toBeNull();
+    expect(srv.S.blocked).toContain(`POST /v1/missions/${IMSN}/analysis/step`);
+    table.ANALYSIS_DRAFTS = "GATED_4B"; table.PLAN_FROM_ANALYSIS = "GATED_4B";
+    // 3) the manual plan path in Work (POST /plan is allowed)
+    root = await view("views", "work.js");
+    expect(byId(root, "plan-form")).not.toBeNull();
+    type(root, "plan-title-0", "Giriş ekranı"); byId(root, "plan-add")!.fire("click"); type(root, "plan-title-1", "Oylama API"); type(root, "plan-deps-1", "1");
+    byId(root, "plan-form")!.fire("submit"); await sleep();
+    expect(srv.S.tasks.map((t: any) => t.title)).toEqual(["Giriş ekranı", "Oylama API"]);
+    table.PLAN_MANUAL = "COMPLETE_IN_UI";
+    // 4) mission/task: the planned mission lists its tasks and can start a run
+    root = await view("views", "work.js");
+    expect(text(root)).toContain("Giriş ekranı"); expect(text(root)).toContain("Oylama API"); expect(byId(root, "plan-form")).toBeNull();
+    expect(byId(root, "run-start")!.hasAttribute("disabled")).toBe(false);
+    table.MISSION_TASKS = "COMPLETE_IN_UI";
+    // 5) task run: start the run, then link the first task to it
+    byId(root, "run-start")!.fire("click"); await sleep(); await sleep();
+    expect(srv.S.run?.runId).toBe(IRUN);
+    root = await view("views", "work.js");
+    expect(byId(root, "run-link")).not.toBeNull();
+    const cb = byData(root, "runlinkTask", ITSK(0))[0]; cb.checked = true; cb.fire("change");
+    byId(root, "runlink-submit")!.fire("click"); await sleep(); await sleep();
+    expect(srv.S.posts.filter(p => p.path === `/v1/tasks/${ITSK(0)}/runs`)).toEqual([{path: `/v1/tasks/${ITSK(0)}/runs`, body: {runId: IRUN}}]);
+    expect(srv.S.links.map((l: any) => l.taskId)).toEqual([ITSK(0)]); // only the ticked task was linked
+    root = await view("views", "work.js");
+    expect(byData(root, "runLinkedFor", IRUN)[0].textContent).toContain("Giriş ekranı"); // the run card now lists the linked task
+    table.TASK_RUN = "COMPLETE_IN_UI";
+    // 6) test result: the run card says what happened to the tests
+    const tr = byData(root, "runTestResult")[0];
+    expect(tr.dataset.runTestResult).toBe("NOT_EXECUTED"); expect(tr.dataset.runTestReason).toBe("SANDBOX_UNAVAILABLE"); expect(tr.textContent).toContain("No verified sandbox existed");
+    table.TEST_RESULT = "COMPLETE_IN_UI";
+    // 7) running product: the run-scoped product route is not allow-listed yet -> honest UNAVAILABLE
+    c.calls.navigate.length = 0;
+    sel.missionId = IMSN;
+    const ws = await load(rend, "views", "projects.js"); const st = await load(rend, "studio-state.js"); st.openProject(IPRJ, "overview");
+    root = mount(c.doc, await ws.render(ctx));
+    const prod = byId(root, "studio-ov-product")!;
+    expect(prod.textContent).toContain("not available to the desktop yet"); expect(byId(root, "product-start")).toBeNull();
+    expect(srv.S.blocked).toContain(`GET /v1/work-runs/${IRUN}/product`);
+    table.RUNNING_PRODUCT = "GATED_4B";
+    // 8) delivery: prepare the delivery package (POST allowed) from the project's Delivery tab
+    st.openProject(IPRJ, "delivery");
+    root = mount(c.doc, await ws.render(ctx));
+    const prep = byId(root, `dl-prep-${IRUN}`);
+    expect(prep).not.toBeNull();
+    prep!.fire("click"); await sleep();
+    expect(srv.S.posts.map(p => p.path)).toContain(`/v1/work-runs/${IRUN}/delivery/prepare`);
+    expect(byId(mount(c.doc, await ws.render(ctx)), `dl-open-${IRUN}`)).not.toBeNull(); // the acceptance dialog can be opened
+    table.DELIVERY = "COMPLETE_IN_UI";
+    expect(table).toEqual({INTAKE: "COMPLETE_IN_UI", ANALYSIS_DRAFTS: "GATED_4B", PLAN_FROM_ANALYSIS: "GATED_4B", PLAN_MANUAL: "COMPLETE_IN_UI", MISSION_TASKS: "COMPLETE_IN_UI", TASK_RUN: "COMPLETE_IN_UI", TEST_RESULT: "COMPLETE_IN_UI", RUNNING_PRODUCT: "GATED_4B", DELIVERY: "COMPLETE_IN_UI"});
+    // everything the renderer asked for outside the allow-list is exactly the 4B set
+    expect([...new Set(srv.S.blocked)].sort()).toEqual([`GET /v1/work-runs/${IRUN}/product`, `POST /v1/missions/${IMSN}/analysis/step`].sort());
+  });
+});

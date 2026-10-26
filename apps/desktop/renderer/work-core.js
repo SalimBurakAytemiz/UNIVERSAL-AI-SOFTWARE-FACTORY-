@@ -396,7 +396,8 @@ const PRODUCT_409=new Set(["DEVRUN_SANDBOX_UNAVAILABLE","PRODUCT_RUN_NOT_DELIVER
 const SAFE_REASON_RE=/^[A-Z][A-Z0-9_]{0,63}(?::[A-Za-z0-9_.:-]{1,80})?$/;
 export function describePostResult(res){
   if(!res)return {ok:false,key:"post.err.generic",vars:{status:MISSING}};
-  if(res.thrown)return {ok:false,key:res.state==="OFFLINE"?"post.err.offline":"post.err.generic",vars:{status:MISSING}};
+  // //TR: A-FLOW-GAP-2: köprü allow-list'i yolu kabul etmediyse (state UNAVAILABLE) "genel hata" değil "bu sürümde açık değil" denir.
+  if(res.thrown)return {ok:false,key:res.state==="OFFLINE"?"post.err.offline":res.state==="UNAVAILABLE"?"post.err.unavailable":"post.err.generic",vars:{status:MISSING}};
   const s=res.status,err=typeof res.body?.error==="string"?res.body.error:"";
   if(s>=200&&s<300)return {ok:true,key:"post.ok",vars:{}};
   if(s===400)return {ok:false,key:"post.err.400",vars:{status:s}};
@@ -487,6 +488,15 @@ export function productVerificationOf(head,evidence){
   if(nonEmpty(surf.modified)||nonEmpty(surf.deleted)||nonEmpty(surf.renamed)||nonEmpty(surf.harness)||nonEmpty(surf.weakened))return pv("NOT_VERIFIED","TEST_CHANGES_REQUIRE_INDEPENDENT_VERIFICATION");
   return pv("PRODUCT_VERIFIED","TESTS_EXECUTED_IN_VERIFIED_SANDBOX");
 }
+/** //TR: LANE-A A-FLOW-GAP-2: test sonucu adımı. productVerificationOf kuralının sonucu tek bir türe çevrilir: PRODUCT_VERIFIED -> EXECUTED_VERIFIED; FAILED -> FAILED (testler koştu, çıkış kodu sıfır değil); NOT_VERIFIED + "NOT_EXECUTED:*" -> NOT_EXECUTED (neden: SANDBOX_UNAVAILABLE, TESTS_NOT_REACHED, NO_HEAD_COMMIT); diğer NOT_VERIFIED nedenleri -> NOT_VERIFIED (testler koştu ama sonuç doğrulanmadı ya da koştukları kesin değil). Koşu kaydında kanıt listesi hiç bildirilmediyse UNKNOWN: "çalıştırılmadı" asla kanıtsız söylenmez. */
+export function testResultOf(run){
+  const none={kind:"UNKNOWN",reason:null},v=run?.evidenceVerification;
+  if(!run||run.evidenceReported!==true||!isObj(v)||typeof v.state!=="string"||typeof v.reason!=="string")return none;
+  if(v.state==="PRODUCT_VERIFIED")return {kind:"EXECUTED_VERIFIED",reason:v.reason};
+  if(v.state==="FAILED")return {kind:"FAILED",reason:v.reason};
+  if(v.state!=="NOT_VERIFIED")return none;
+  return v.reason.startsWith("NOT_EXECUTED:")?{kind:"NOT_EXECUTED",reason:v.reason.slice("NOT_EXECUTED:".length)}:{kind:"NOT_VERIFIED",reason:v.reason};
+}
 /** Eşlenmiş koşu yalnız sunucunun kesin kuralıyla PRODUCT_VERIFIED ise true; tek başına testsExecuted asla yeterli değildir. */
 export const isProductVerified=run=>run?.evidenceVerification?.state==="PRODUCT_VERIFIED";
 export function mapWorkRun(x){
@@ -513,7 +523,7 @@ export function mapWorkRun(x){
     testsExecuted:arr(x.evidence,100).some(e=>isObj(e)&&(e.kind==="VERIFY_TESTS"||e.kind==="REGRESSION_TESTS")),
     testsNotExecuted:arr(x.evidence,100).some(e=>isObj(e)&&(e.kind==="VERIFY_TESTS_NOT_EXECUTED"||e.kind==="REGRESSION_TESTS_NOT_EXECUTED")),
     headSha:typeof x.headSha==="string"&&/^[0-9a-f]{40}$/.test(x.headSha)?x.headSha:null,
-    evidenceVerification:productVerificationOf(x.headSha,arr(x.evidence,100)),
+    evidenceVerification:productVerificationOf(x.headSha,arr(x.evidence,100)),evidenceReported:Array.isArray(x.evidence),
     evidence:mapRunEvidence(x.evidence),reviewer:identity||verdict?{identity,verdict}:null
   };
 }

@@ -34,7 +34,10 @@ export async function productCard(ctx,project,run){
   const doc=ctx.doc,id="studio-ov-product",lead=h(doc,"p",{class:"note",text:ctx.t("product.lead")});
   if(!run)return panel(ctx,{titleKey:"product.title",id},lead,h(doc,"p",{class:"note",dataset:{productDelivery:"NO_RUN"},text:ctx.t("product.noRun")}));
   const [prod,flowRes,exec]=await Promise.all([ctx.api.runProduct(run.runId),ctx.api.raw(flowPath(project.projectId)),ctx.api.executors()]);
-  if(prod.state!=="VERIFIED")return panel(ctx,{titleKey:"product.title",id},lead,stateNote(ctx,prod.state,prod.state==="UNAVAILABLE"?"product.unavailable":undefined));
+  if(prod.state!=="VERIFIED")return panel(ctx,{titleKey:"product.title",id},lead,stateNote(ctx,prod.state,prod.state==="UNAVAILABLE"?"product.unavailable":undefined),
+    // Okuma yoksa bile Founder'ın yapabileceği tek şey: proje çalıştır sekmesi (aynı doğrulanmış sandbox kapısı sunucuda geçerli).
+    h(doc,"p",{class:"note",dataset:{productNext:"RUN_TAB"},text:ctx.t("product.next.runTab")}),
+    h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn",id:"product-open-run",dataset:{focusKey:"product-open-run"},text:ctx.t("product.openRunTab"),on:{click:async()=>{setTab("run");await ctx.rerender()}}})));
   const flow=flowRes.ok?mapFlow(flowRes.data):{state:flowRes.state,flow:null},p=prod.product,r=p.run,offer=productOffer(p,flow.state==="VERIFIED"?flow.flow:null);
   const sb=exec&&exec.state==="VERIFIED"&&exec.sandbox?exec.sandbox.state:null,busy=drafts.busy[PRODUCT_FORM]===true;
   const body=[

@@ -104,6 +104,8 @@ export function analysisPanel(ctx,{missionId,exec}){
       on:{click:()=>{if(!drafts.busy[ANALYSIS_STEP_FORM])submitAnalysisStep(ctx,missionId)}}})),
     step?stepBlock(ctx,step,exec):h(doc,"p",{class:"note",dataset:{analysisStatus:"NONE"},text:ctx.t("analysis.none")}),
     statusBlock(ctx,ANALYSIS_STEP_FORM),
+    // Analiz adımı kullanılamıyorsa ya da beklenmedik biçimde bitiyorsa Founder planı elle yazabilir: düğme yalnız Görevler'e gider (orada gönderilen POST zaten kabul edilen /plan yoludur).
+    h(doc,"div",{class:"btn-row"},h(doc,"p",{class:"note",dataset:{analysisHandPlan:"1"},text:ctx.t("analysis.handPlan")}),h(doc,"button",{type:"button",class:"btn",id:"analysis-hand-plan",dataset:{focusKey:"analysis-hand-plan"},text:ctx.t("analysis.handPlan.open"),on:{click:()=>{selection.missionId=missionId;ctx.navigate("work")}}})),
     complete?h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn btn-primary",id:"analysis-plan-submit",dataset:{focusKey:"analysis-plan-submit"},disabled:busyP,text:ctx.t("analysis.plan.button"),
       on:{click:()=>{if(!drafts.busy[ANALYSIS_PLAN_FORM])submitAnalysisPlan(ctx,missionId)}}})):h(doc,"p",{class:"note",dataset:{analysisPlanGate:"CLOSED"},text:ctx.t("analysis.plan.gate")}),
     statusBlock(ctx,ANALYSIS_PLAN_FORM),

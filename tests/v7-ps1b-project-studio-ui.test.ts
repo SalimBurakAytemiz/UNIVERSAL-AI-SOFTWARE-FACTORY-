@@ -2784,7 +2784,7 @@ describe("LANE-A A-FLOW-4: running product after delivery (B-RUN-1 contract, run
     expect(d(423, {error: "GLOBAL_STOP_ACTIVE"}).key).toBe("post.err.423"); expect(d(403, {error: "ACTION_DENIED"}).key).toBe("post.err.auth");
     const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
     const keys = Object.keys(E).filter(k => k.startsWith("product.") || /^post\.err\.409\.(DEVRUN|PRODUCT)/.test(k));
-    expect(keys.length).toBe(39);
+    expect(keys.length).toBe(40);
     for (const k of keys) expect(T[k], k).toBeTruthy();
     for (const k of keys.filter(x => /^post\.err\.409\.(DEVRUN_SANDBOX|PRODUCT_RUN_NOT)/.test(x))) expect(E[k], k).toContain("{reason}");
   });

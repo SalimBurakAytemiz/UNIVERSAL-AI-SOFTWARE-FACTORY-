@@ -9,6 +9,7 @@ import {drafts,selection,trackers,field,listEditor,statusBlock,setStatus,recordP
 import {performTransition,startRun,actionStatusId} from "../work-actions.js";
 import {runLinkPanel} from "./run-link.js";
 import {notVerifiedBadge,runNotVerified,missionNotVerified,axisBadges} from "../m1a.js";
+import {testResultOf} from "../work-core.js";
 import {canOfferComplete} from "../delivery-core.js";
 import {runEngineBlock} from "./run-engine.js";
 import {BOARD_LAYOUTS,boardLayout,setBoardLayout,boardColumns} from "../kanban-core.js";
@@ -221,6 +222,7 @@ export function runCard(ctx,run,linked=null){
       h(doc,"dt",{text:ctx.t("run.lease")}),h(doc,"dd",{text:formatDateTime(run.leaseExpiresAt,lang)}),
       h(doc,"dt",{text:ctx.t("run.reviewer")}),h(doc,"dd",{text:run.reviewer?.identity??ctx.t("run.reviewerNone")}),
       h(doc,"dt",{text:ctx.t("run.verdict")}),h(doc,"dd",{text:run.reviewer?.verdict?statusLabel(ctx,run.reviewer.verdict):ctx.t("run.verdictNone")}),
+      ...testResultRow(ctx,run),
       // UI-111: sunucunun kaydettiği olgular; toplam/azami/kalan/geri sayım yok. Zamanlanmış yeniden deneme yalnız RETRY_SCHEDULED durumunda gösterilir (başka durumda retryAt eskimiş olabilir).
       h(doc,"dt",{text:ctx.t("run.retriesInStep")}),h(doc,"dd",{dataset:{runRetryCount:run.retryCount??""},text:formatCount(run.retryCount)}),
       h(doc,"dt",{text:ctx.t("run.remediationCycles")}),h(doc,"dd",{dataset:{runRemediationCycle:run.remediationCycle??""},text:formatCount(run.remediationCycle)}),
@@ -229,6 +231,18 @@ export function runCard(ctx,run,linked=null){
       // SBX-GATE: BLOCKED/FAILED nedeni dürüstçe gösterilir; SANDBOX_UNAVAILABLE için kodun yanında açıklama vardır.
       ...(run.reason?[h(doc,"dt",{text:ctx.t("run.reason")}),h(doc,"dd",{dataset:{runReason:run.reason},text:run.reason==="SANDBOX_UNAVAILABLE"?`SANDBOX_UNAVAILABLE — ${ctx.t("run.reason.SANDBOX_UNAVAILABLE")}`:runReasonHintKey(run.reason)?`${run.reason} — ${ctx.t(runReasonHintKey(run.reason))}`:run.reason})]:[])),
     linked?linkedTasksBlock(ctx,run,linked):null,h(doc,"h6",{text:ctx.t("run.checkpoints")}),cps,steps?h(doc,"h6",{text:ctx.t("run.steps.title")}):null,steps,h(doc,"h6",{text:ctx.t("run.evidence")}),ev);
+}
+// //TR: A-FLOW-GAP-2: test sonucu satırı; sunucunun kuralından türeyen tür + kesin neden kodu. Genel NOT_VERIFIED rozeti (Founder kararı) değişmez, bu satır nedenini doğru söyler.
+function testResultRow(ctx,run){
+  const doc=ctx.doc,r=testResultOf(run);
+  let sentence;
+  if(r.kind==="UNKNOWN")sentence=ctx.t("run.test.UNKNOWN");
+  else if(r.kind==="EXECUTED_VERIFIED"||r.kind==="FAILED")sentence=`${ctx.t(`run.test.${r.kind}`)} (${r.reason})`;
+  else{
+    const key=`run.test.${r.kind}.${r.reason}`,v=ctx.t(key);
+    sentence=v!==key?`${v} (${r.reason})`:`${ctx.t(`run.test.${r.kind}.generic`)} (${r.reason} — ${ctx.t("run.test.unrecognised")})`;
+  }
+  return [h(doc,"dt",{text:ctx.t("run.test.label")}),h(doc,"dd",{dataset:{runTestResult:r.kind,runTestReason:r.reason??""},text:sentence})];
 }
 function runsSection(ctx,runsRes,details,linkOf=()=>null){
   const doc=ctx.doc;
