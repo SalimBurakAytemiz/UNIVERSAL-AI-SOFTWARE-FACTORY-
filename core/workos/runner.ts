@@ -66,6 +66,8 @@ type Outcome =
   | {kind: "CANCEL"; reason: string};
 
 const RUN_ID = /^run_[0-9a-f]{24}$/;
+// //TR: Founder'ın kendisinin giderebileceği ön koşul retleri (oturum yok/süresi dolmuş, CLI yok/.cmd başlatıcı, başlatıcı kanıtı yok/değişmiş) run'ı BLOCKED yapar (düzeltilince devam edilebilir); adapter'ın bildirdiği başka her geçersizlik nedeni (gerçek örnekler, executors.ts: REVIEW_WORKSPACE_MODIFIED, REVIEW_WORKSPACE_NOT_CLEAN_BEFORE) FAILED kalır. Bu desen YALNIZCA adapter'ın invalidReason'ı içindir: REVIEWER_IDENTITY_MISMATCH (stepReview başı) ve REVIEWER_MUTATED_CLONE (klon değişti) bu dala hiç girmez, durum belirtmeden BLOCK döner ve BLOCKED olur; o davranış bu paketle DEĞİŞMEDİ.
+export const FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;
 // //TR: #224 tur 3: runner git çocuğunun sahiplik kaydı yazılamadı (geçici disk/rename hatası): executeStep bunu RETRY (OWNER_RECORD_WRITE_FAILED) yapar.
 class OwnerRecordError extends Error { constructor() { super("OWNER_RECORD_WRITE_FAILED"); } }
 // //TR: #224 tur 3 (HB-R3-2): adım abort sinyali bir runner git çocuğunu öldürdü; executeStep bunu CANCEL sonucuna çevirir (implementer'ın aborted yolu ile aynı).
@@ -1085,7 +1087,7 @@ export class MissionRunner {
     // REL-FX: reviewer sağlayıcı kota/hız sınırına çarptıysa BLOCKED(PROVIDER_QUOTA/DISK_FULL), yeniden deneme bütçesi tüketilmez; SBX-8 geçersizlik dalından önce.
     if (limit) return limitBlock(limit);
     // SBX-8: adapter'ın geçersizlik nedeni (profil oturumu yok -> BLOCKED; çalışma alanı değişti -> FAILED) korunur; geçersiz review asla CLEAN değildir.
-    if (!r.valid) return r.transient ? {kind: "RETRY", reason: "REVIEW_TRANSIENT_FAILURE"} : {kind: "BLOCK", reason: (r.invalidReason ?? "REVIEW_FAILED").slice(0, 200), status: r.invalidReason?.startsWith("CLAUDE_PROFILE_") ? "BLOCKED" : "FAILED"};
+    if (!r.valid) return r.transient ? {kind: "RETRY", reason: "REVIEW_TRANSIENT_FAILURE"} : {kind: "BLOCK", reason: (r.invalidReason ?? "REVIEW_FAILED").slice(0, 200), status: FOUNDER_ACTIONABLE_REFUSAL.test(r.invalidReason ?? "") ? "BLOCKED" : "FAILED"};
     if (r.verdict === "CLEAN") return {kind: "DONE", next: "REGRESSION", data: {verdict: "CLEAN", reviewerIdentity: reviewer.identity, commitSha: run.headSha}};
     return {kind: "REMEDIATE", reason: "REVIEW_BLOCKED", data: {verdict: "BLOCKED", reviewerIdentity: reviewer.identity}, findings: r.findings.map(f => `${f.severity}: ${f.title}`)};
   }
