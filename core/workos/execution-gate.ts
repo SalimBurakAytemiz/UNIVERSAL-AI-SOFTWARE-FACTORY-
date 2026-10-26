@@ -17,7 +17,10 @@ export interface SandboxProvider {
   selfTest(): Promise<{ok: boolean; detail?: string}>;
   run(argv: string[], opts: SandboxRunOptions): Promise<ProcResult>;
   spawn(command: string, args: string[], opts: SpawnOptions): ChildProcess;
+  /** İsteğe bağlı (B-RUN-WIN-1): hazırlığı eşzamansız olan sağlayıcılar (WSL: kopyalama + betik) için; varsa dev-run spawn() yerine bunu kullanır. Dönen süreç `sandboxTeardown` taşıyabilir: çıkıştan sonra Linux tarafı ağacı/dizini temizleyen söz. */
+  spawnAsync?(command: string, args: string[], opts: SpawnOptions): Promise<SandboxChild>;
 }
+export type SandboxChild = ChildProcess & {sandboxTeardown?: Promise<unknown>};
 export type SandboxDenialDetail = "NO_VERIFIED_PROVIDER" | "SELF_TEST_FAILED" | "SELF_TEST_ERROR";
 export type GateDecision =
   | {allowed: true; kind: ProjectExecutionKind; providerId: string; provider: SandboxProvider}

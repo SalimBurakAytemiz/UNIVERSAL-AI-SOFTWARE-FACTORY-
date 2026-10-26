@@ -17,6 +17,8 @@ import {LinuxUnshareSandboxProvider, LINUX_SANDBOX_ID, hostHasProcess, nodeToolc
 import {runProcess} from "../core/workos/executors.js";
 import net from "node:net";
 import cp from "node:child_process";
+import {EventEmitter} from "node:events";
+import {PassThrough} from "node:stream";
 import type {GateDecision, SandboxProvider} from "../core/workos/execution-gate.js";
 import {buildServer} from "../apps/control-api/src/server.js";
 import {deriveOutcomes} from "../core/workos/outcomes.js";
@@ -525,5 +527,534 @@ describe("LANE-C Linux unshare sandbox provider v2 (SandboxProvider contract)", 
       expect((await provider.run(["sh", "-c", "true"], {cwd: ws, env: undefined as any, timeoutMs: 5000})).stderr).toContain("ENV_REQUIRED");
       expect(() => provider.spawn("sh", ["-c", "true"], {cwd: ws})).toThrow("ENV_REQUIRED");
     } finally { fs.rmSync(ws, {recursive: true, force: true}); }
+  });
+});
+
+// //TR: LANE-B B-SBX-WIN-1: Windows için WSL2 tabanlı sandbox sağlayıcısı. Linux CI'da sahte bir wsl çalıştırıcısı enjekte edilir (her ret nedeni, argüman kurulumu, kopyalama, ortam/argv çevirisi, temizlik); GERÇEK WSL selfTest'i yalnız win32 + WSL + UASCO_WSL_DISTRO varsa çalışır, aksi halde SKIP olarak görünür ve ASLA PASS sayılmaz.
+describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on win32 with WSL)", () => {
+  const ISO = {nsFlags: ["--user", "--map-root-user", "--net", "--pid", "--mount", "--fork", "--kill-child=SIGKILL"], setup: "set -eu\n# isolation setup (test double)\n", helperPath: "/usr/sbin:/usr/bin:/sbin:/bin"};
+  const GOOD_PROBE = "MNT_C=absent\nDRVFS=0\nUNIX_PATH_SOCKETS=0\nWSL_RUNTIME_DIRS=absent\nRW_usr=ro\nRW_etc=ro\nRW_bin=ro\nWORK=writable\nNET_IFACES=0\nCAPS_DROPPED=ok\nNO_CTTY=ok\nNESTED_USERNS=blocked\nPID_NS_PRIVATE=ok\nDONE=1\n";
+  interface Cfg { status?: number; spawnError?: boolean; distros?: string; version?: string; interop?: string | string[]; peRc?: number; peNoexec?: string; tools?: string; roots?: string[]; probe?: string; probeRc?: number; mktempFails?: boolean; runOut?: string; runRc?: number; runDelayMs?: number;
+    forkOut?: string; timeoutRc?: number; late?: boolean; stdinOut?: string; pkillRc?: number; pgrepAlive?: boolean; scratchRemains?: boolean; duOut?: string; truncated?: boolean; runBytes?: Buffer; outerRc?: number; reject?: boolean; nodePath?: string; noTarget?: boolean }
+  const u16 = (t: string) => Buffer.from("﻿" + t, "utf16le");
+  const mkRunner = (cfg: Cfg = {}) => {
+    const calls: {args: string[]; input?: Buffer | string}[] = []; const files = new Map<string, string>();
+    let tarIn: Buffer | null = null, outerN = 0;
+    const runner = async (args: string[], o: {timeoutMs: number; input?: Buffer | string}) => {
+      calls.push({args, input: o.input});
+      if (cfg.reject && args[0] === "--status") throw new Error("boom");
+      const R = (exitCode: number | null, out = "", extra: Partial<{spawnError: boolean; timedOut: boolean; truncated: boolean}> = {}) => ({exitCode, stdout: Buffer.from(out), stderr: Buffer.alloc(0), timedOut: false, aborted: false, spawnError: false, ...extra});
+      if (args[0] === "--status") return cfg.spawnError ? R(null, "", {spawnError: true}) : R(cfg.status ?? 0);
+      if (args[0] === "-l" && args[1] === "-q") return {...R(0), stdout: u16(cfg.distros ?? "Ubuntu\r\nDebian\r\n")};
+      if (args[0] === "-l" && args[1] === "-v") return {...R(0), stdout: u16(cfg.version ?? "  NAME      STATE           VERSION\r\n* Ubuntu    Running         2\r\n  Debian    Stopped         2\r\n")};
+      const cmd = args.slice(3);   // ["-d", distro, "--exec", ...]
+      if (cmd[0] === "/usr/bin/mktemp") return cfg.mktempFails ? R(1) : R(0, "/tmp/uasco-sbx-AbC123\n");
+      if (cmd[0] === "/bin/mkdir" || cmd[0] === "/bin/chmod" || cmd[0] === "/bin/kill" || cmd[0] === "/usr/bin/find" || cmd[0] === "/bin/rm") return R(0);
+      if (cmd[0] === "/usr/bin/tee") { files.set(cmd[1], String(o.input)); return R(0); }
+      if (cmd[0] === "/bin/cat") return R(0, "4242\n");
+      if (cmd[0] === "/bin/tar") { tarIn = Buffer.from(o.input as Buffer); return R(0); }
+      if (cmd[0] === "/usr/bin/du") return R(0, cfg.duOut ?? "120\t/tmp/uasco-sbx-AbC123/work\n");
+      if (cmd[0] === "/usr/bin/pkill") return R(cfg.pkillRc ?? 1);
+      if (cmd[0] === "/usr/bin/pgrep" && cmd[1] === "-P") return cfg.noTarget ? R(1) : R(0, "777\n");
+      if (cmd[0] === "/usr/bin/pgrep") return R(cfg.pgrepAlive ? 0 : 1);
+      if (cmd[0] === "/usr/bin/test" && cmd[1] === "!") return R(cmd[3].endsWith("late.txt") ? (cfg.late ? 1 : 0) : (cfg.scratchRemains ? 1 : 0));
+      if (cmd[0] === "/usr/bin/test") return R(cfg.roots ? (cfg.roots.includes(cmd[2]) ? 0 : 1) : (cmd[2] === "/srv" ? 0 : 1));
+      if (cmd[0] === "/bin/sh" && cmd[1].endsWith("/ctl/outer.sh")) {
+        const seq = Array.isArray(cfg.interop) ? cfg.interop : [cfg.interop ?? "absent"]; const ip = seq[Math.min(outerN++, seq.length - 1)];
+        return R(cfg.outerRc ?? 0, `INTEROP=${ip}\nTOOLS=${cfg.tools ?? "ok"}\nPE_EXEC_RC=${cfg.peRc ?? 126}\nPE_ENOEXEC=${cfg.peNoexec ?? "yes"}\nNODE=${cfg.nodePath ?? "/usr/bin/node"}\nDONE=1\n`);
+      }
+      if (cmd[0] === "/bin/sh" && cmd[1].endsWith("/ctl/run.sh")) {
+        const sh = files.get(cmd[1]) ?? "";
+        if (sh.includes("MNT_C=")) return R(cfg.probeRc ?? 0, cfg.probe ?? GOOD_PROBE);
+        if (sh.includes("fail=$fail")) return R(0, cfg.forkOut ?? "ok=47 fail=103\n");
+        if (sh.includes("late.txt")) return R(cfg.timeoutRc ?? 137, "", {timedOut: (cfg.timeoutRc ?? 137) !== 0});
+        if (sh.includes("got=$l")) return R(0, cfg.stdinOut ?? `got=${String(o.input).trim()}\n`);
+        if (cfg.runDelayMs) await new Promise(r => setTimeout(r, cfg.runDelayMs));
+        return {...R(cfg.runRc ?? 0, cfg.runOut ?? "tests ok\n", {truncated: cfg.truncated}), stdout: cfg.runBytes ?? Buffer.from(cfg.runOut ?? "tests ok\n")};
+      }
+      return R(1);
+    };
+    return {runner, calls, files, tar: () => tarIn};
+  };
+  const mk = async (cfg: Cfg = {}, o: Record<string, unknown> = {}) => {
+    const mod = await import("../core/sandbox/wsl-unshare-sandbox.js"); const f = mkRunner(cfg);
+    return {mod, f, p: new mod.WslUnshareSandboxProvider({platform: "win32", distro: "Ubuntu", runner: f.runner as any, isolation: ISO, settleMs: 0, ...o})};
+  };
+  const ws = () => { const d = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-wsl-")); fs.writeFileSync(path.join(d, "test.js"), "console.log('t')\n"); fs.mkdirSync(path.join(d, "sub")); fs.writeFileSync(path.join(d, "sub", "a.txt"), "A"); return d; };
+
+  it("a fully isolated WSL passes selfTest; the gate authorizes; run copies the project in, runs inside the sandbox script and cleans up; no host path is ever passed to wsl.exe", async () => {
+    const {mod, f, p} = await mk(); const dir = ws();
+    try {
+      expect(await p.selfTest()).toEqual({ok: true});
+      const gate = new ExecutionGate(p as any);
+      const d = await gate.authorize("RUNNER_VERIFY_TESTS");
+      expect(d.allowed).toBe(true);
+      const r = await p.run([process.execPath, "test.js"], {cwd: dir, env: {PATH: "C:\\Windows", USERPROFILE: "C:\\Users\\x", FOO: "bar baz", BAD: "C:\\secret"}, timeoutMs: 20_000});
+      expect(r).toMatchObject({exitCode: 0, stdout: "tests ok\n", timedOut: false, spawnError: false});
+      const runSh = [...f.files.entries()].filter(([k]) => k.endsWith("run.sh")).map(([, v]) => v).pop()!;
+      expect(runSh).toContain("'--map-root-user'"); expect(runSh).toContain("/usr/bin/timeout --signal=KILL"); expect(runSh.split("\n")[1].startsWith("exec ")).toBe(false); expect(runSh).toContain("/ctl/pid"); expect(runSh).toContain("/ctl/rc"); expect(runSh).toContain("'FOO=bar baz'");
+      expect(runSh).not.toContain("USERPROFILE"); expect(runSh).not.toContain("C:\\\\"); expect(runSh).toContain("'node' 'test.js'"); expect(runSh).toContain("'/srv'");
+      for (const c of f.calls) { const all = c.args.join(" "); expect(all).not.toContain(dir); expect(all).not.toContain("/mnt/"); expect(all).not.toMatch(/[A-Za-z]:\\/); }
+      const tail = f.calls.slice(-7).map(c => c.args.slice(3).join(" "));
+      expect(tail).toEqual(["/bin/cat /tmp/uasco-sbx-AbC123/ctl/pid", "/bin/kill -KILL -- -4242", "/usr/bin/pkill -KILL -f -- /tmp/uasco-sbx-AbC123", "/usr/bin/pgrep -f -- /tmp/uasco-sbx-AbC123", "/bin/chmod -R u+rwX -- /tmp/uasco-sbx-AbC123", "/bin/rm -rf -- /tmp/uasco-sbx-AbC123", "/usr/bin/test ! -e /tmp/uasco-sbx-AbC123"]);
+      const tar = f.tar()!; expect(tar.length % 512).toBe(0);
+      const names = []; for (let o = 0; o + 512 <= tar.length && tar[o] !== 0; ) { const sz = parseInt(tar.subarray(o + 124, o + 135).toString().trim() || "0", 8); names.push(tar.subarray(o, o + 100).toString().replace(/\0.*$/, "")); o += 512 + Math.ceil(sz / 512) * 512; }
+      expect(names).toEqual(["sub/", "sub/a.txt", "test.js"]);
+    } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+  });
+
+  it.each([
+    ["PLATFORM_NOT_WIN32", {}, {platform: "linux"}],
+    ["WSL_EXE_MISSING", {spawnError: true}, {}],
+    ["WSL_NOT_AVAILABLE", {status: 1}, {}],
+    ["WSL_DISTRO_NOT_CONFIGURED", {}, {distro: ""}],
+    ["WSL_DISTRO_MISSING", {distros: "Debian\r\n"}, {}],
+    ["WSL_VERSION_NOT_2", {version: "  NAME STATE VERSION\r\n* Ubuntu Running 1\r\n"}, {}],
+    ["LINUX_ISOLATION_EXPORTS_MISSING", {}, {isolation: null}],
+    ["INTEROP_ENABLED", {interop: "enabled"}, {}],
+    ["INTEROP_ENABLED", {interop: "unknown"}, {}],
+    ["INTEROP_ENABLED", {peRc: 127}, {}],
+    ["INTEROP_ENABLED", {peRc: 0}, {}],
+    ["INTEROP_ENABLED", {peNoexec: "no"}, {}],
+    ["PROBE_PROCESS_LIMIT_NOT_ENFORCED", {forkOut: "ok=150 fail=0\n"}, {}],
+    ["PROBE_PROCESS_LIMIT_NOT_ENFORCED", {forkOut: "garbage"}, {}],
+    ["PROBE_TIMEOUT_NOT_ENFORCED", {timeoutRc: 0}, {}],
+    ["PROBE_TIMEOUT_TREE_SURVIVED", {late: true}, {}],
+    ["PROBE_TIMEOUT_TREE_SURVIVED", {pgrepAlive: true}, {}],
+    ["PROBE_STDIN_NOT_FORWARDED", {stdinOut: "nothing\n"}, {}],
+    ["WSL_TOOLS_MISSING", {tools: "missing"}, {}],
+    ["NO_NEW_ROOT_MOUNTPOINT", {roots: ["/mnt"]}, {}],
+    ["SCRATCH_CREATE_FAILED", {mktempFails: true}, {}],
+    ["PROBE_FAILED", {probeRc: 3}, {}]
+  ])("%s -> SANDBOX_UNAVAILABLE, nothing runs", async (reason, cfg, o) => {
+    const {f, p} = await mk(cfg as Cfg, o as any); const dir = ws();
+    try {
+      const st = await p.selfTest();
+      expect(st).toEqual({ok: false, detail: reason});
+      expect(p.lastSelfTest).toEqual(st);
+      const gate = new ExecutionGate(p as any);
+      expect((await gate.authorize("RUNNER_VERIFY_TESTS")).allowed).toBe(false);
+      const before = f.calls.length;
+      const r = await p.run(["node", "test.js"], {cwd: dir, env: {}, timeoutMs: 5000});
+      expect(r).toMatchObject({spawnError: true, exitCode: null}); expect(r.stderr).toContain("SANDBOX_NOT_VERIFIED");
+      expect(f.calls.length).toBe(before);
+      expect(() => p.spawn("node", ["x"], {cwd: dir, env: {}})).toThrow("SANDBOX_NOT_VERIFIED");
+    } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+  });
+
+  it.each([["MNT_C", "present"], ["DRVFS", "2"], ["UNIX_PATH_SOCKETS", "1"], ["CAPS_DROPPED", "no"], ["NO_CTTY", "no"], ["NESTED_USERNS", "allowed"], ["PID_NS_PRIVATE", "no"], ["WSL_RUNTIME_DIRS", "present"], ["RW_usr", "writable"], ["RW_etc", "writable"], ["RW_bin", "writable"], ["WORK", "ro"], ["NET_IFACES", "1"], ["DONE", "0"]])(
+    "the negative probe %s=%s makes the provider unavailable (PROBE_<KEY>), and a missing key does too", async (key, bad) => {
+      const probe = GOOD_PROBE.replace(new RegExp(`^${key}=.*$`, "m"), `${key}=${bad}`);
+      expect((await (await mk({probe})).p.selfTest())).toEqual({ok: false, detail: `PROBE_${key.toUpperCase()}`});
+      const missing = GOOD_PROBE.split("\n").filter(l => !l.startsWith(key + "=")).join("\n");
+      expect((await (await mk({probe: missing})).p.selfTest())).toEqual({ok: false, detail: `PROBE_${key.toUpperCase()}`});
+    });
+
+  it("run() translates the host node path, refuses other Windows paths and unsafe working directories, skips symlinks, and refuses oversized or unsafe-named projects", async () => {
+    const {mod, f, p} = await mk({}, {tarLimits: {maxFiles: 2, maxTotalBytes: 1 << 20, maxFileBytes: 1 << 20, maxDepth: 5}}); const dir = ws();
+    try {
+      await p.selfTest();
+      expect(mod.translateArgv([process.execPath, "a.js"])).toEqual(["node", "a.js"]);
+      expect(mod.translateArgv(["C:\\Tools\\node.exe", "a.js"])).toEqual(["node", "a.js"]);
+      expect(mod.translateArgv(["C:\\Tools\\evil.exe"])).toBeNull(); expect(mod.translateArgv([])).toBeNull(); expect(mod.translateArgv(["npm", "test"])).toEqual(["npm", "test"]);
+      const env = {};
+      expect((await p.run(["C:\\Tools\\evil.exe"], {cwd: dir, env, timeoutMs: 5000})).stderr).toContain("ARGV_INVALID_OR_HOST_PATH");
+      expect((await p.run(["node"], {cwd: path.parse(dir).root, env, timeoutMs: 5000})).stderr).toContain("CWD_NOT_ABSOLUTE_OR_ROOT");
+      expect((await p.run(["node"], {cwd: os.homedir(), env, timeoutMs: 5000})).stderr).toContain("CWD_IS_HOME_OR_ANCESTOR");
+      expect((await p.run(["node"], {cwd: path.join(dir, "missing"), env, timeoutMs: 5000})).stderr).toContain("CWD_MISSING");
+      expect((await p.run(["node"], {cwd: dir, env: undefined as any, timeoutMs: 5000})).stderr).toContain("ENV_REQUIRED");
+      fs.writeFileSync(path.join(dir, "b.txt"), "B");
+      expect((await p.run(["node"], {cwd: dir, env, timeoutMs: 5000})).stderr).toContain("COPY_TOO_MANY_FILES");
+      fs.rmSync(path.join(dir, "b.txt"));
+      if (process.platform !== "win32") {
+        fs.symlinkSync("/etc/passwd", path.join(dir, "link"));
+        const r = await p.run(["node", "test.js"], {cwd: dir, env, timeoutMs: 5000});
+        expect(r.exitCode).toBe(0); expect(r.stderr).toContain("1 symbolic link(s)/special file(s) were not copied");
+        expect(f.tar()!.toString("latin1")).not.toContain("passwd");
+        fs.writeFileSync(path.join(dir, "a:b.txt"), "x");
+        expect((await p.run(["node", "test.js"], {cwd: dir, env, timeoutMs: 5000})).stderr).toContain("COPY_UNSAFE_NAME");
+      }
+    } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+  });
+
+  it("a hung run is reported as timed out, a failing copy-in refuses, and the scratch directory is removed in every case", async () => {
+    const dir = ws();
+    try {
+      const slow = await mk({runDelayMs: 80, runRc: 137}); await slow.p.selfTest();
+      const t = await slow.p.run(["node", "test.js"], {cwd: dir, env: {}, timeoutMs: 50});
+      expect(t).toMatchObject({timedOut: true, exitCode: null});
+      expect(slow.f.calls.slice(-2)[0].args.slice(3)).toEqual(["/bin/rm", "-rf", "--", "/tmp/uasco-sbx-AbC123"]);
+      const ok = await mk({runRc: 1, runOut: ""}); await ok.p.selfTest();
+      expect((await ok.p.run(["node", "x"], {cwd: dir, env: {}, timeoutMs: 5000})).exitCode).toBe(1);
+      expect(ok.f.calls.slice(-2)[0].args.slice(3)).toEqual(["/bin/rm", "-rf", "--", "/tmp/uasco-sbx-AbC123"]);
+      expect(() => ok.p.spawn("node", [], {cwd: dir, env: {}})).toThrow("SPAWN_NOT_SUPPORTED_IN_WSL_V1");
+    } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+  });
+
+  it("shell quoting, env filtering and WSL text decoding are exact", async () => {
+    const {shq, wslEnv, decodeWslText} = await import("../core/sandbox/wsl-unshare-sandbox.js");
+    expect(shq("a b")).toBe("'a b'"); expect(shq("it's")).toBe("'it'\\''s'"); expect(shq("$(x);`y`")).toBe("'$(x);`y`'");
+    expect(wslEnv({PATH: "C:\\x", Path: "C:\\y", USERPROFILE: "C:\\u", A_B: "1", "bad-key": "x", NUL: "a\0b", NL: "a\nb", DRIVE: "x=C:\\z", OK: "yes sir", WSLENV: "x"})).toEqual(["A_B=1", "OK=yes sir"]);
+    expect(decodeWslText(Buffer.from("\uFEFFUbuntu\r\nDebian\r\n", "utf16le"))).toBe("Ubuntu\r\nDebian\r\n"); expect(decodeWslText(Buffer.from("abc"))).toBe("abc");
+  });
+
+  it("the default Linux isolation comes from the Linux provider module exports; until Lane C exports them the WSL provider refuses with LINUX_ISOLATION_EXPORTS_MISSING (never a fork of the script)", async () => {
+    const {linuxIsolationFromModule, WslUnshareSandboxProvider} = await import("../core/sandbox/wsl-unshare-sandbox.js");
+    expect(linuxIsolationFromModule({})).toBeNull(); expect(linuxIsolationFromModule({LINUX_SANDBOX_NS_FLAGS: ["--user"], LINUX_SANDBOX_SETUP: "x", LINUX_SANDBOX_HELPER_PATH: "/bin"})).not.toBeNull();
+    expect(linuxIsolationFromModule({LINUX_SANDBOX_NS_FLAGS: [1], LINUX_SANDBOX_SETUP: "x", LINUX_SANDBOX_HELPER_PATH: "/bin"})).toBeNull();
+    const f = mkRunner();
+    const st = await new WslUnshareSandboxProvider({platform: "win32", distro: "Ubuntu", runner: f.runner as any}).selfTest();
+    if (linuxIsolationFromModule() === null) expect(st).toEqual({ok: false, detail: "LINUX_ISOLATION_EXPORTS_MISSING"});
+    else expect(st.detail).not.toBe("LINUX_ISOLATION_EXPORTS_MISSING");
+  });
+
+  // //TR: B-SBX-WIN-2 (güvenlik incelemesi 4a80a18): her düzeltme için, düzeltme olmadan KIRILAN test.
+  describe("B-SBX-WIN-2 review fixes", () => {
+    it("WSL-INTEROP-STALE-SELFTEST: interop is re-checked on EVERY run; if it became active after selfTest the run is refused before anything is copied or executed and the provider becomes unverified", async () => {
+      const {f, p} = await mk({interop: ["absent", "enabled"]}); const dir = ws();
+      try {
+        expect(await p.selfTest()).toEqual({ok: true});
+        const before = f.calls.length;
+        const r = await p.run(["node", "test.js"], {cwd: dir, env: {}, timeoutMs: 5000});
+        expect(r).toMatchObject({spawnError: true, exitCode: null}); expect(r.stderr).toContain("INTEROP_ENABLED");
+        const after = f.calls.slice(before).map(c => c.args[3]);
+        expect(after).not.toContain("/bin/tar"); expect(f.files.get("/tmp/uasco-sbx-AbC123/ctl/run.sh")?.includes("test.js") ?? false).toBe(false);
+        expect(p.lastSelfTest).toEqual({ok: false, detail: "INTEROP_ENABLED"});
+        expect((await p.run(["node", "x"], {cwd: dir, env: {}, timeoutMs: 5000})).stderr).toContain("SANDBOX_NOT_VERIFIED");
+        expect((await new ExecutionGate(p as any).authorize("RUNNER_VERIFY_TESTS")).allowed).toBe(false);
+      } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+    });
+
+    it("the valid probe PE is written to WSL and the OUTER script really fails closed: unreadable/unknown binfmt entry = enabled; only a clean 'disabled' passes; a real PE exec on this host yields ENOEXEC (126)", async () => {
+      const {mod, f, p} = await mk(); await p.selfTest();
+      const pe = mod.minimalPe(); expect(pe.subarray(0, 2).toString("latin1")).toBe("MZ"); expect(pe.subarray(pe.readUInt32LE(0x3c), pe.readUInt32LE(0x3c) + 4).toString("latin1")).toBe("PE\0\0"); expect(pe.length).toBeGreaterThan(0x200);
+      const put = f.calls.find(c => c.args[3] === "/usr/bin/tee" && c.args[4].endsWith("/probe.exe"))!; expect(Buffer.isBuffer(put.input) && (put.input as Buffer).equals(pe)).toBe(true);
+      expect(f.calls.some(c => c.args[3] === "/bin/chmod" && c.args[4] === "+x")).toBe(true);
+      const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-binfmt-")); const ctl = path.join(tmp, "ctl"); fs.mkdirSync(ctl);
+      try {
+        fs.writeFileSync(path.join(ctl, "probe.exe"), pe); fs.chmodSync(path.join(ctl, "probe.exe"), 0o755);
+        fs.writeFileSync(path.join(ctl, "outer.sh"), mod.OUTER_SCRIPT.replaceAll("/proc/sys/fs/binfmt_misc", path.join(tmp, "bm")));
+        const run = () => cp.spawnSync("/bin/sh", [path.join(ctl, "outer.sh")], {encoding: "utf8"}).stdout;
+        expect(run()).toContain("INTEROP=absent");
+        fs.mkdirSync(path.join(tmp, "bm")); fs.writeFileSync(path.join(tmp, "bm", "WSLInterop"), "disabled\n"); expect(run()).toContain("INTEROP=disabled");
+        fs.writeFileSync(path.join(tmp, "bm", "WSLInterop"), "enabled\ninterpreter /init\n"); expect(run()).toContain("INTEROP=enabled");
+        fs.writeFileSync(path.join(tmp, "bm", "WSLInterop"), "weird\n"); expect(run()).toContain("INTEROP=enabled");
+        fs.rmSync(path.join(tmp, "bm", "WSLInterop")); fs.mkdirSync(path.join(tmp, "bm", "WSLInterop")); expect(run()).toContain("INTEROP=enabled");
+        const out = run(); expect(out).toContain("PE_EXEC_RC=126"); expect(out).toContain("PE_ENOEXEC=yes");
+      } finally { fs.rmSync(tmp, {recursive: true, force: true}); }
+    });
+
+    it("captured output is bounded (LC-2): BoundedCapture keeps at most the cap, keeps accepting (draining) afterwards and marks truncated; the real runner returns the capped buffer with truncated=true and the provider says so", async () => {
+      const {BoundedCapture, spawnWslRunner} = await import("../core/sandbox/wsl-unshare-sandbox.js");
+      const c = new BoundedCapture(10); c.push(Buffer.alloc(6, 97)); expect(c.truncated).toBe(false); c.push(Buffer.alloc(6, 98)); c.push(Buffer.alloc(1000, 99));
+      expect(c.buffer.length).toBe(10); expect(c.truncated).toBe(true); expect(c.buffer.toString()).toBe("aaaaaabbbb");
+      const r = await spawnWslRunner(process.execPath, 100, 1024)(["-e", "process.stdout.write('x'.repeat(300000));process.stderr.write('y'.repeat(2000))"], {timeoutMs: 20_000});
+      expect(r.exitCode).toBe(0); expect(r.stdout.length).toBe(1024); expect(r.stderr.length).toBe(1024); expect(r.truncated).toBe(true);
+      const {p} = await mk({truncated: true}); await p.selfTest(); const dir = ws();
+      try { expect((await p.run(["node", "test.js"], {cwd: dir, env: {}, timeoutMs: 5000})).stderr).toContain("output truncated"); } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+    });
+
+    it("LC-6: untrusted test output is decoded as UTF-8 (a NUL byte cannot flip the stream to UTF-16 and corrupt the evidence)", async () => {
+      const {p} = await mk({runBytes: Buffer.from("Tests  12 passed (12)\n\0\n")}); await p.selfTest(); const dir = ws();
+      try { expect((await p.run(["node", "test.js"], {cwd: dir, env: {}, timeoutMs: 5000})).stdout).toBe("Tests  12 passed (12)\n\0\n"); } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+    });
+
+    it("LC-4/LC-3: cleanup failures are reported, never swallowed (scratch not removed, process survived, pkill error); a /work over the size cap or of unknown size fails the run", async () => {
+      const dir = ws();
+      try {
+        for (const [cfg, code] of [[{scratchRemains: true}, "SCRATCH_NOT_REMOVED"], [{pgrepAlive: false, pkillRc: 2}, "PKILL_FAILED"]] as const) {
+          const m = await mk(cfg as Cfg); await m.p.selfTest(); // selfTest cleanup failures never change the verdict
+          if (!m.p.lastSelfTest?.ok) { expect(code).toBe("never"); }
+          expect((await m.p.run(["node", "test.js"], {cwd: dir, env: {}, timeoutMs: 5000})).stderr).toContain(`CLEANUP_FAILED: ${code}`);
+        }
+        const surv2 = await mk({pgrepAlive: true}); await surv2.p.selfTest();
+        expect(surv2.p.lastSelfTest).toEqual({ok: false, detail: "PROBE_TIMEOUT_TREE_SURVIVED"});
+        const big = await mk({duOut: "99999999\t/x\n"}); await big.p.selfTest();
+        const rb = await big.p.run(["node", "test.js"], {cwd: dir, env: {}, timeoutMs: 5000}); expect(rb.exitCode).toBe(1); expect(rb.stderr).toContain("WORK_SIZE_EXCEEDED_OR_UNKNOWN");
+        const unk = await mk({duOut: "du: error\n"}); await unk.p.selfTest();
+        expect((await unk.p.run(["node", "test.js"], {cwd: dir, env: {}, timeoutMs: 5000})).exitCode).toBe(1);
+      } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+    });
+
+    it("SELFTEST_ERROR: a probe that throws resolves {ok:false, SELFTEST_ERROR}, is recorded, and the gate refuses (pins the fail-closed branch)", async () => {
+      const {p} = await mk({reject: true});
+      expect(await p.selfTest()).toEqual({ok: false, detail: "SELFTEST_ERROR"}); expect(p.lastSelfTest).toEqual({ok: false, detail: "SELFTEST_ERROR"});
+      expect((await new ExecutionGate(p as any).authorize("RUNNER_VERIFY_TESTS")).allowed).toBe(false);
+    });
+
+    it("stale uasco-sbx-* scratch directories are swept at selfTest (find with chmod then rm, -mmin +20, depth 1)", async () => {
+      const {f, p} = await mk(); await p.selfTest();
+      const finds = f.calls.map(c => c.args.slice(3)).filter(a => a[0] === "/usr/bin/find");
+      expect(finds).toHaveLength(2); for (const a of finds) { expect(a).toContain("-maxdepth"); expect(a).toContain("uasco-sbx-??????"); expect(a).toContain("+20"); }
+      expect(finds[0]).toContain("/bin/chmod"); expect(finds[1]).toContain("/bin/rm");
+    });
+
+    it("NTFS hardlinks are not copied into WSL (LOW: host-file exfiltration via a link to a secret)", async () => {
+      if (process.platform === "win32") return;
+      const {buildTar} = await import("../core/sandbox/wsl-tar.js"); const dir = ws(), out = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-hl-"));
+      try {
+        fs.writeFileSync(path.join(out, "secret.txt"), "TOP-SECRET"); fs.linkSync(path.join(out, "secret.txt"), path.join(dir, "hard.txt"));
+        const t = buildTar(dir); expect(t.skippedLinks).toBe(1); expect(t.archive.toString("latin1")).not.toContain("TOP-SECRET"); expect(t.archive.toString("latin1")).not.toContain("hard.txt");
+      } finally { fs.rmSync(dir, {recursive: true, force: true}); fs.rmSync(out, {recursive: true, force: true}); }
+    });
+  });
+
+  // //TR: LANE-B B-RUN-WIN-1: Windows'ta çalışan ürün. spawnAsync = run() ile aynı izolasyon ama süreç çalışır kalır; köprü = Windows'ta YALNIZ 127.0.0.1 dinleyici + wsl.exe --exec stdio + WSL içi nsenter rölesi. Sahte wsl çalıştırıcı/başlatıcı ile her ret ve argüman kurulumu doğrulanır; gerçek WSL testi yalnız win32 + WSL'de çalışır (başka yerde SKIP, PASS sayılmaz). UNVERIFIED_WSL: gerçek wsl.exe/nsenter davranışı Founder koşusunu bekler.
+  describe("B-RUN-WIN-1 dev-run on WSL (spawnAsync + bridge)", () => {
+    const fakeChild = (pid: number | null = 5555) => {
+      const e = new EventEmitter() as any; e.pid = pid ?? undefined; e.exitCode = null; e.signalCode = null; e.stdout = new PassThrough(); e.stderr = new PassThrough(); e.stdin = null;
+      e.kill = () => { e.exitCode = 137; e.emit("exit", 137, null); e.emit("close", 137); return true; }; return e;
+    };
+    const mkS = async (cfg: Cfg = {}) => {
+      const spawned: {args: string[]; stdio: unknown; child: any}[] = [];
+      const spawner = (args: string[], stdio: unknown) => { const isRelay = args.includes("relay.sh") || String(args[args.length - 3]).endsWith("relay.sh"); const c: any = fakeChild(); if (isRelay) { c.stdin = new PassThrough(); c.stdout = c.stdin; } spawned.push({args, stdio, child: c}); return c; };
+      const m = await mk(cfg, {spawner}); await m.p.selfTest();
+      return {...m, spawned};
+    };
+    const sleepMs = (ms: number) => new Promise(r => setTimeout(r, ms));
+    const opts = (dir: string, env: any = {FOO: "bar"}) => ({cwd: dir, env, shell: false, stdio: ["ignore", "pipe", "pipe"]}) as any;
+
+    it("refusals: unverified, bad argv/env/cwd, unsafe project, scratch failure, copy failure - nothing is spawned and scratch is never left behind", async () => {
+      const dir = ws();
+      try {
+        const un = await mk({probeRc: 3}); await un.p.selfTest();
+        await expect(un.p.spawnAsync("node", ["server.js"], opts(dir))).rejects.toThrow("SANDBOX_NOT_VERIFIED");
+        const {p, f, spawned} = await mkS();
+        await expect(p.spawnAsync("C:\\Tools\\evil.exe", [], opts(dir))).rejects.toThrow("ARGV_INVALID_OR_HOST_PATH");
+        await expect(p.spawnAsync("node", [], {...opts(dir), env: undefined})).rejects.toThrow("ENV_REQUIRED");
+        await expect(p.spawnAsync("node", [], opts(path.parse(dir).root))).rejects.toThrow("CWD_NOT_ABSOLUTE_OR_ROOT");
+        await expect(p.spawnAsync("node", [], opts(path.join(dir, "missing")))).rejects.toThrow("CWD_MISSING");
+        await expect(p.spawnAsync("node", [], opts(os.homedir()))).rejects.toThrow("CWD_IS_HOME_OR_ANCESTOR");
+        expect(spawned).toHaveLength(0); expect(f.calls.some(c => c.args[3] === "/bin/tar")).toBe(false);
+      } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+      const dir2 = ws();
+      try {
+        const tarFail = await mk({}, {tarLimits: {maxFiles: 1, maxTotalBytes: 1 << 20, maxFileBytes: 1 << 20, maxDepth: 5}, spawner: () => { throw new Error("unexpected"); }}); await tarFail.p.selfTest();
+        await expect(tarFail.p.spawnAsync("node", ["server.js"], opts(dir2))).rejects.toThrow("COPY_TOO_MANY_FILES");
+      } finally { fs.rmSync(dir2, {recursive: true, force: true}); }
+    });
+
+    it("interop turned on after selfTest: spawnAsync refuses INTEROP_ENABLED before copying anything or spawning, cleans the scratch dir and un-verifies the provider", async () => {
+      const {p, f, spawned} = await mkS({interop: ["absent", "enabled"]}); const dir = ws();
+      try {
+        await expect(p.spawnAsync("node", ["server.js"], opts(dir))).rejects.toThrow("INTEROP_ENABLED");
+        expect(spawned).toHaveLength(0); expect(f.calls.some(c => c.args[3] === "/bin/tar")).toBe(false);
+        expect(f.calls.slice(-1)[0].args.slice(3)).toEqual(["/usr/bin/test", "!", "-e", "/tmp/uasco-sbx-AbC123"]);
+        expect(p.lastSelfTest).toEqual({ok: false, detail: "INTEROP_ENABLED"});
+        await expect(p.spawnAsync("node", [], opts(dir))).rejects.toThrow("SANDBOX_NOT_VERIFIED");
+      } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+    });
+
+    it("happy path: exact wsl.exe argv (no values, no host path), run.sh keeps the same isolation as run() with a bounded dev lifetime, relay files are staged, the child is returned, and on exit the Linux tree + scratch are torn down (pgid kill) before sandboxTeardown resolves", async () => {
+      const {p, f, spawned} = await mkS(); const dir = ws();
+      try {
+        expect(p.network).toBe("ISOLATED");
+        const child: any = await p.spawnAsync(process.execPath, ["server.js"], opts(dir, {FOO: "bar", PORT: "4321"}));
+        expect(spawned).toHaveLength(1); expect(spawned[0].args).toEqual(["-d", "Ubuntu", "--exec", "/bin/sh", "/tmp/uasco-sbx-AbC123/ctl/run.sh"]); expect(spawned[0].stdio).toEqual(["ignore", "pipe", "pipe"]);
+        const runSh = f.files.get("/tmp/uasco-sbx-AbC123/ctl/run.sh")!;
+        expect(runSh).toContain("'--map-root-user'"); expect(runSh).toContain("'PORT=4321'"); expect(runSh).toContain("'node' 'server.js'"); expect(runSh).toContain("--signal=KILL"); expect(runSh).toContain("21600"); expect(runSh).not.toContain("USERPROFILE");
+        const relaySh = f.files.get("/tmp/uasco-sbx-AbC123/ctl/relay.sh")!;
+        expect(relaySh).toContain("/usr/bin/nsenter -U --preserve-credentials -n -t"); expect(relaySh).toContain("'/usr/bin/node' '/tmp/uasco-sbx-AbC123/ctl/relay.js'"); expect(relaySh).toContain("ns/net"); expect(relaySh).toContain("exit 97");
+        expect(f.files.get("/tmp/uasco-sbx-AbC123/ctl/relay.js")).toContain("127.0.0.1");
+        for (const c of f.calls) { const all = c.args.join(" "); expect(all).not.toContain(dir); expect(all).not.toMatch(/[A-Za-z]:\\/); }
+        const mark = f.calls.length;
+        child.emit("exit", 0, null);
+        await child.sandboxTeardown;
+        expect(f.calls.slice(mark).map(c => c.args.slice(3).join(" "))).toEqual(["/bin/cat /tmp/uasco-sbx-AbC123/ctl/pid", "/bin/kill -KILL -- -4242", "/usr/bin/pkill -KILL -f -- /tmp/uasco-sbx-AbC123", "/usr/bin/pgrep -f -- /tmp/uasco-sbx-AbC123", "/bin/chmod -R u+rwX -- /tmp/uasco-sbx-AbC123", "/bin/rm -rf -- /tmp/uasco-sbx-AbC123", "/usr/bin/test ! -e /tmp/uasco-sbx-AbC123"]);
+        child.emit("error", new Error("again")); await child.sandboxTeardown; expect(f.calls.length).toBe(mark + 7); // teardown yalnız bir kez
+      } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+    });
+
+    it("a spawner that throws or yields no process cleans the scratch dir; sync spawn() stays unsupported", async () => {
+      const dir = ws();
+      try {
+        const t = await mk({}, {spawner: () => { throw new Error("no wsl"); }}); await t.p.selfTest();
+        await expect(t.p.spawnAsync("node", ["x"], opts(dir))).rejects.toThrow("SPAWN_FAILED");
+        expect(t.f.calls.slice(-1)[0].args.slice(3)).toEqual(["/usr/bin/test", "!", "-e", "/tmp/uasco-sbx-AbC123"]);
+        const np = await mk({}, {spawner: () => fakeChild(null)}); await np.p.selfTest();
+        const c: any = await np.p.spawnAsync("node", ["x"], opts(dir)); expect(c.pid).toBeUndefined();
+        const mark = np.f.calls.length; c.emit("error", new Error("spawn")); await c.sandboxTeardown; expect(np.f.calls.length).toBeGreaterThan(mark);
+        expect(() => np.p.spawn("node", ["x"], opts(dir))).toThrow("SPAWN_NOT_SUPPORTED_IN_WSL_V1");
+      } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+    });
+
+    it("bridge: binds ONLY 127.0.0.1, resolves the netns holder via pgrep -P, forwards each connection through a per-connection wsl.exe relay (fixed argv, numeric pid/port), caps connections, and close() tears down listener and relays", async () => {
+      const {p, spawned} = await mkS({}); const dir = ws();
+      const { freeLoopbackPort } = await import("../core/workos/devrun.js");
+      try {
+        const child: any = await p.spawnAsync("node", ["server.js"], opts(dir)); const before = spawned.length;
+        const port = await freeLoopbackPort();
+        await expect(p.bridge({} as any, port)).rejects.toThrow("BRIDGE_TARGET_UNKNOWN");
+        await expect(p.bridge(child, 0)).rejects.toThrow("BRIDGE_PORT_INVALID");
+        const h = await p.bridge(child, port); expect(h.port).toBe(port);
+        const c1 = net.connect(port, "127.0.0.1"); const got = await new Promise<string>((res, rej) => { c1.once("error", rej); c1.on("data", d => res(String(d))); c1.write("ping"); });
+        expect(got).toBe("ping");
+        expect(spawned.length).toBe(before + 1); expect(spawned[before].args).toEqual(["-d", "Ubuntu", "--exec", "/bin/sh", "/tmp/uasco-sbx-AbC123/ctl/relay.sh", "777", String(port)]); expect(spawned[before].stdio).toEqual(["pipe", "pipe", "ignore"]);
+        // yalnız loopback: 127.0.0.1 dışı adrese bağlanılamaz (IPv6 ::1 ve 0.0.0.0 dinleyici yok)
+        await expect(new Promise((res, rej) => { const s = net.connect(port, "::1"); s.once("connect", res); s.once("error", rej); })).rejects.toBeTruthy();
+        const ext = Object.values(os.networkInterfaces()).flat().find(i => i && i.family === "IPv4" && !i.internal)?.address;
+        if (ext) await expect(new Promise((res, rej) => { const s = net.connect(port, ext); s.once("connect", res); s.once("error", rej); })).rejects.toBeTruthy();
+        c1.destroy(); h.close();
+        await expect(new Promise((res, rej) => { const s = net.connect(port, "127.0.0.1"); s.once("connect", res); s.once("error", rej); })).rejects.toBeTruthy();
+      } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+    });
+
+    it("bridge refuses when no netns holder appears (BRIDGE_TARGET_MISSING) and caps concurrent connections", async () => {
+      const dir = ws();
+      try {
+        const none = await mk({noTarget: true}, {bridgeTargetWaitMs: 300, spawner: () => fakeChild()}); await none.p.selfTest();
+        const c: any = await none.p.spawnAsync("node", ["x"], opts(dir));
+        await expect(none.p.bridge(c, 40001)).rejects.toThrow("BRIDGE_TARGET_MISSING");
+        const { freeLoopbackPort } = await import("../core/workos/devrun.js");
+        const capped = await mkS({}); const cc: any = await capped.p.spawnAsync("node", ["x"], opts(dir));
+        const cp2 = await mk({}, {maxBridgeConnections: 1, spawner: (a: string[]) => { const x: any = fakeChild(); if (a.includes("/tmp/uasco-sbx-AbC123/ctl/relay.sh")) { x.stdin = new PassThrough(); x.stdout = x.stdin; } return x; }}); await cp2.p.selfTest();
+        const k: any = await cp2.p.spawnAsync("node", ["x"], opts(dir)); const port = await freeLoopbackPort(); const h = await cp2.p.bridge(k, port);
+        const a = net.connect(port, "127.0.0.1"); await new Promise(r => a.once("connect", r)); await sleepMs(50);
+        const b = net.connect(port, "127.0.0.1"); const closed = await new Promise<boolean>(r => { b.once("close", () => r(true)); setTimeout(() => r(false), 1000); });
+        expect(closed).toBe(true); a.destroy(); h.close(); void cc;
+      } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+    });
+
+    it("a Linux-side node that is relative or under /mnt (Windows node.exe) makes the provider unavailable; relayScript validates pid/port, refuses a shared netns and quotes the node path", async () => {
+      expect(await (await mk({nodePath: "/mnt/c/nodejs/node"})).p.selfTest()).toEqual({ok: false, detail: "WSL_TOOLS_MISSING"});
+      expect(await (await mk({nodePath: "node"})).p.selfTest()).toEqual({ok: false, detail: "WSL_TOOLS_MISSING"});
+      const {relayScript} = await import("../core/sandbox/wsl-unshare-sandbox.js");
+      const sh = relayScript("/tmp/uasco-sbx-AbC123", "/usr/bin/node");
+      expect(sh).toContain("exit 98"); expect(sh).toContain("exit 96"); expect(sh).toContain("exit 97");
+      // Gerçek sh ile: geçersiz pid -> 98, var olmayan pid -> 96, KENDİ ağ ad alanı (pid=$$) -> 97 (nsenter hiç çalışmaz)
+      const tmp2 = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-relay-")); const f = path.join(tmp2, "relay.sh");
+      try {
+        fs.writeFileSync(f, sh);
+        if (process.platform === "linux") {
+          const rc = (a: string[]) => cp.spawnSync("/bin/sh", [f, ...a]).status;
+          expect(rc(["x1", "80"])).toBe(98); expect(rc(["2999999", "80"])).toBe(96); expect(rc([String(process.pid), "80"])).toBe(97);
+        }
+      } finally { fs.rmSync(tmp2, {recursive: true, force: true}); }
+    });
+
+    const realWsl2 = process.platform === "win32" && !!process.env.UASCO_WSL_DISTRO && cp.spawnSync("wsl.exe", ["--status"], {windowsHide: true}).status === 0;
+    it.skipIf(!realWsl2)("REAL WSL (win32 + UASCO_WSL_DISTRO): the generated web-node product starts in the sandbox, the bridged 127.0.0.1 port answers 200, stop tears the Linux tree down (SKIPPED elsewhere, never counted as PASS)", async () => {
+      const {WslUnshareSandboxProvider} = await import("../core/sandbox/wsl-unshare-sandbox.js");
+      const {freeLoopbackPort} = await import("../core/workos/devrun.js");
+      const {renderTemplate} = await import("../core/workos/project-templates.js");
+      const p = new WslUnshareSandboxProvider(); const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-wsl-prod-"));
+      const spec = renderTemplate("web-node", "Acceptance App");
+      for (const [name, text] of Object.entries(spec.files)) { fs.mkdirSync(path.dirname(path.join(dir, name)), {recursive: true}); fs.writeFileSync(path.join(dir, name), text); }
+      const st = await p.selfTest(); expect(st, JSON.stringify(st)).toEqual({ok: true});
+      const port = await freeLoopbackPort();
+      const child = await p.spawnAsync(spec.devCommand![0], spec.devCommand!.slice(1), {cwd: dir, env: {PORT: String(port), HOST: "127.0.0.1"}, shell: false, stdio: ["ignore", "pipe", "pipe"]});
+      try {
+        const h = await p.bridge(child, port); let ok = 0;
+        for (let i = 0; i < 40 && !ok; i++) { try { const r = await fetch(`http://127.0.0.1:${port}/`); ok = r.status; } catch { await new Promise(r => setTimeout(r, 500)); } }
+        expect(ok).toBe(200); h.close();
+      } finally { if (child.pid) cp.spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], {windowsHide: true}); await child.sandboxTeardown; fs.rmSync(dir, {recursive: true, force: true}); }
+    });
+  });
+
+  const realWsl = process.platform === "win32" && !!process.env.UASCO_WSL_DISTRO && cp.spawnSync("wsl.exe", ["--status"], {windowsHide: true}).status === 0;
+  it.skipIf(!realWsl)("REAL WSL (win32 + UASCO_WSL_DISTRO): selfTest passes its negative probes and a node test runs inside the sandbox (SKIPPED elsewhere, never counted as PASS)", async () => {
+    const {WslUnshareSandboxProvider} = await import("../core/sandbox/wsl-unshare-sandbox.js");
+    const p = new WslUnshareSandboxProvider(); const dir = ws();
+    try {
+      const st = await p.selfTest(); expect(st, JSON.stringify(st)).toEqual({ok: true});
+      const r = await p.run(["node", "-e", "console.log(40+2)"], {cwd: dir, env: {}, timeoutMs: 60_000});
+      expect(r.stdout.trim()).toBe("42"); expect(r.exitCode).toBe(0);
+    } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+  });
+});
+
+// //TR: LANE-B B-ACCEPT-WIN-1: Founder'ın Windows kabul kiti (docs/acceptance/windows/founder-acceptance.mjs). Linux'ta sahte wsl/CLI/profil/vitest bağımlılıklarıyla ayrıştırma, her ön koşul reddi + tam düzeltme komutu, SKIP≠PASS, SHA'ya bağlı kanıt ve salt-okunur wsl çağrıları doğrulanır; gerçek koşu yalnız Founder'ın makinesindedir.
+describe("LANE-B Windows acceptance kit (injected fakes)", () => {
+  const u16 = (t: string) => Buffer.from("\uFEFF" + t, "utf16le");
+  const GOOD_CONF = "[interop]\nenabled=false\nappendWindowsPath=false\n";
+  type W = {code: number | null; stdout: Buffer};
+  const mkDeps = (o: Record<string, any> = {}) => {
+    const calls: string[][] = [];
+    const wsl = async (args: string[]): Promise<W> => {
+      calls.push(args);
+      const j = args.join(" ");
+      if (j === "--status") return {code: o.status ?? 0, stdout: Buffer.from("ok")};
+      if (j === "-l -q") return {code: 0, stdout: u16(o.distros ?? "Ubuntu\r\n")};
+      if (j === "-l -v") return {code: 0, stdout: u16(o.verbose ?? "  NAME STATE VERSION\r\n* Ubuntu Running 2\r\n")};
+      if (j.endsWith("/bin/cat /etc/wsl.conf")) return o.conf === null ? {code: 1, stdout: Buffer.alloc(0)} : {code: 0, stdout: Buffer.from(o.conf ?? GOOD_CONF)};
+      if (j.endsWith("/bin/cat /proc/sys/fs/binfmt_misc/WSLInterop")) return o.interopRt === "enabled" ? {code: 0, stdout: Buffer.from("enabled\ninterpreter /init\n")} : {code: 1, stdout: Buffer.alloc(0)};
+      if (j.endsWith("/usr/bin/env node --version")) return o.node === null ? {code: 127, stdout: Buffer.alloc(0)} : {code: 0, stdout: Buffer.from("v24.1.0\n")};
+      return {code: 1, stdout: Buffer.alloc(0)};
+    };
+    const prof = (state: string) => ({state, reason: state === "READY" ? undefined : state === "REFUSED" ? "PROFILE_PATH_INSIDE_GIT_WORKTREE" : "CLAUDE_PROFILE_LOGIN_REQUIRED", loginCommand: state === "LOGIN_REQUIRED" ? "$env:CLAUDE_CONFIG_DIR='C:\\x'; claude" : null});
+    let vitestRuns = 0;
+    const deps: any = {platform: o.platform ?? "win32", controlRoot: "C:\\data", wsl, now: () => "2026-10-31T10:00:00.000Z", scriptSha256: "s".repeat(64), testSha256: "t".repeat(64),
+      git: () => o.git ?? {headSha: "a".repeat(40), dirty: false},
+      detectClaudeCli: o.cli === null ? null : () => o.cli ?? {state: "FOUND", path: "C:\\Users\\f\\.local\\bin\\claude.exe"},
+      claudeProfileStatus: o.noProfiles ? null : (_r: string, role: string) => prof(o.profiles?.[role] ?? "READY"),
+      runVitest: async () => { vitestRuns++; return o.vitest ?? vitestOk(); }};
+    return {deps, calls, runs: () => vitestRuns};
+  };
+  const vitestOk = (st: Record<string, string> = {}) => ({testResults: [{assertionResults: [
+    {fullName: "x REAL WSL (win32 + UASCO_WSL_DISTRO): selfTest passes its negative probes and a node test runs inside the sandbox (SKIPPED elsewhere)", status: st.a ?? "passed", failureMessages: []},
+    {fullName: "x REAL WSL (win32 + UASCO_WSL_DISTRO): the generated web-node product starts in the sandbox, the bridged", status: st.b ?? "passed", failureMessages: []}]}]});
+  const byId = (r: any) => Object.fromEntries(r.checks.map((c: any) => [c.id, c]));
+  const load = () => import("../docs/acceptance/windows/founder-acceptance.mjs") as Promise<any>;
+
+  it("parsers: wsl.conf (defaults ON, sections, comments, case, other sections ignored), UTF-16 list output, verbose table", async () => {
+    const k = await load();
+    expect(k.parseWslConf(GOOD_CONF)).toMatchObject({interopEnabled: false, appendWindowsPath: false});
+    expect(k.parseWslConf("")).toMatchObject({interopEnabled: true, appendWindowsPath: true, interopExplicit: false});
+    expect(k.parseWslConf("[interop]\n enabled = FALSE  # x\nappendWindowsPath=False\n")).toMatchObject({interopEnabled: false, appendWindowsPath: false});
+    expect(k.parseWslConf("[boot]\nenabled=false\nappendWindowsPath=false\n")).toMatchObject({interopEnabled: true, appendWindowsPath: true});
+    expect(k.parseWslConf("[interop]\nenabled=false\n")).toMatchObject({interopEnabled: false, appendWindowsPath: true});
+    expect(k.parseWslConf("[interop]\nenabled=maybe\n")).toMatchObject({interopEnabled: true});
+    expect(k.parseWslList(k.decodeWslText(u16("Ubuntu\r\nDebian\r\n")))).toEqual(["Ubuntu", "Debian"]);
+    expect(k.parseWslVerbose("  NAME STATE VERSION\r\n* Ubuntu Running 2\r\n  Debian Stopped 1\r\n")).toEqual([{name: "Ubuntu", version: 2}, {name: "Debian", version: 1}]);
+  });
+
+  it("all good on Windows: every check PASS, ACCEPTED, bound to the git SHA, evidence hash is reproducible, and only READ-ONLY wsl commands were issued", async () => {
+    const k = await load(); const {deps, calls, runs} = mkDeps();
+    const r = await k.runAcceptance({distro: "Ubuntu"}, deps);
+    expect(r.verdict).toBe("ACCEPTED"); expect(r.fail).toBe(0); expect(r.skip).toBe(0); expect(r.pass).toBe(r.checks.length); expect(r.repo).toEqual({headSha: "a".repeat(40), shaSource: "GIT", dirty: false}); expect(runs()).toBe(1);
+    const {evidenceSha256, ...body} = r; expect(evidenceSha256).toBe(crypto.createHash("sha256").update(JSON.stringify(body)).digest("hex"));
+    const allowed = [/^--status$/, /^-l -q$/, /^-l -v$/, /^-d Ubuntu --exec \/bin\/cat \/etc\/wsl\.conf$/, /^-d Ubuntu --exec \/bin\/cat \/proc\/sys\/fs\/binfmt_misc\/WSLInterop$/, /^-d Ubuntu --exec \/usr\/bin\/env node --version$/];
+    for (const c of calls) expect(allowed.some(a => a.test(c.join(" "))), c.join(" ")).toBe(true);
+  });
+
+  it("each failed precondition is FAIL with the exact Founder fix command; the report never changes settings", async () => {
+    const k = await load();
+    const run = async (o: any) => byId(await k.runAcceptance({distro: "Ubuntu"}, mkDeps(o).deps));
+    expect((await run({status: 1})).WSL_EXE).toMatchObject({status: "FAIL", fix: expect.stringContaining("wsl --install")});
+    const nd = await run({distros: "Debian\r\n"}); expect(nd.WSL_DISTRO).toMatchObject({status: "FAIL", fix: "wsl --install -d Ubuntu"});
+    expect((await run({verbose: "  NAME STATE VERSION\r\n* Ubuntu Running 1\r\n"})).WSL_VERSION_2).toMatchObject({status: "FAIL", fix: "wsl --set-version Ubuntu 2"});
+    const cf = await run({conf: "[interop]\nenabled=true\n"}); expect(cf.WSL_CONF.status).toBe("FAIL"); expect(cf.WSL_CONF.detail).toContain("interop.enabled"); expect(cf.WSL_CONF.detail).toContain("appendWindowsPath"); expect(cf.WSL_CONF.fix).toContain("enabled=false"); expect(cf.WSL_CONF.fix).toContain("appendWindowsPath=false"); expect(cf.WSL_CONF.fix).toContain("wsl --shutdown");
+    expect((await run({conf: null})).WSL_CONF.status).toBe("FAIL");
+    expect((await run({interopRt: "enabled"})).WSL_INTEROP_RUNTIME).toMatchObject({status: "FAIL"});
+    expect((await run({node: null})).WSL_NODE).toMatchObject({status: "FAIL", fix: expect.stringContaining("apt-get install")});
+    expect((await run({cli: {state: "SHIM_UNSUPPORTED", path: "C:\\npm\\claude.cmd", founderAction: "Install the native Claude Code (claude.exe)"}})).CLAUDE_CLI).toMatchObject({status: "FAIL", fix: "Install the native Claude Code (claude.exe)"});
+    expect((await run({cli: {state: "NOT_FOUND", path: null, founderAction: null}})).CLAUDE_CLI.fix).toContain("claude.ai/install.ps1");
+    const pr = await run({profiles: {implementer: "LOGIN_REQUIRED", reviewer: "REFUSED"}});
+    expect(pr.CLAUDE_PROFILE_IMPLEMENTER).toMatchObject({status: "FAIL", fix: expect.stringContaining("CLAUDE_CONFIG_DIR")}); expect(pr.CLAUDE_PROFILE_REVIEWER.fix).toContain("--control-root");
+    const none = await k.runAcceptance({distro: null}, mkDeps().deps); expect(byId(none).WSL_DISTRO).toMatchObject({status: "FAIL"});
+  });
+
+  it("SKIP is never PASS: not-Windows, missing Lane C module, skipped vitest tests and unfound tests all prevent ACCEPTED; blocking WSL preconditions skip the tests without running vitest; unknown SHA prevents ACCEPTED", async () => {
+    const k = await load();
+    const lin = mkDeps({platform: "linux"}); const rl = await k.runAcceptance({distro: "Ubuntu"}, lin.deps);
+    expect(rl.verdict).toBe("NOT_ACCEPTED"); expect(lin.runs()).toBe(0); expect(lin.calls).toEqual([]); expect(byId(rl).WSL_SELFTEST_AND_RUN.status).toBe("SKIP"); expect(rl.pass).toBe(3);
+    const nocli = await k.runAcceptance({distro: "Ubuntu"}, mkDeps({cli: null}).deps); expect(byId(nocli).CLAUDE_CLI.status).toBe("SKIP"); expect(nocli.verdict).toBe("NOT_ACCEPTED"); expect(nocli.reasons).toContain("SKIP:CLAUDE_CLI");
+    const sk = await k.runAcceptance({distro: "Ubuntu"}, mkDeps({vitest: vitestOk({a: "skipped", b: "pending"})}).deps); expect(byId(sk).WSL_SELFTEST_AND_RUN.status).toBe("SKIP"); expect(byId(sk).WSL_PRODUCT_BRIDGE.status).toBe("SKIP"); expect(sk.verdict).toBe("NOT_ACCEPTED");
+    const nf = await k.runAcceptance({distro: "Ubuntu"}, mkDeps({vitest: {testResults: []}}).deps); expect(byId(nf).WSL_PRODUCT_BRIDGE).toMatchObject({status: "FAIL", detail: expect.stringContaining("TEST_NOT_FOUND")});
+    const fl = await k.runAcceptance({distro: "Ubuntu"}, mkDeps({vitest: vitestOk({b: "failed"})}).deps); expect(byId(fl).WSL_PRODUCT_BRIDGE.status).toBe("FAIL");
+    const blocked = mkDeps({distros: "Debian\r\n"}); const rb = await k.runAcceptance({distro: "Ubuntu"}, blocked.deps); expect(byId(rb).WSL_SELFTEST_AND_RUN.detail).toContain("PRECONDITION_FAILED: WSL_DISTRO"); expect(blocked.runs()).toBe(0);
+    const nosha = await k.runAcceptance({distro: "Ubuntu"}, mkDeps({git: {headSha: null, dirty: null}}).deps); expect(nosha.verdict).toBe("NOT_ACCEPTED"); expect(nosha.reasons).toEqual(["HEAD_SHA_UNKNOWN"]); expect(nosha.repo.shaSource).toBe("UNKNOWN");
+    const arg = await k.runAcceptance({distro: "Ubuntu", shaArg: "b".repeat(40)}, mkDeps({git: {headSha: null, dirty: null}}).deps); expect(arg.verdict).toBe("ACCEPTED"); expect(arg.repo).toMatchObject({shaSource: "ARGUMENT", headSha: "b".repeat(40)});
+  });
+
+  it("table: one line per check, the fix block, and the SKIP-is-never-PASS verdict line; argument parsing is strict", async () => {
+    const k = await load();
+    const r = await k.runAcceptance({distro: "Ubuntu"}, mkDeps({conf: "", vitest: vitestOk({b: "skipped"})}).deps); const t = k.renderTable(r);
+    expect(t).toContain("FAIL  WSL_CONF"); expect(t).toContain("WHAT TO DO"); expect(t).toContain("appendWindowsPath=false"); expect(t).toContain("RESULT: NOT_ACCEPTED"); expect(t).toContain("SKIP is never PASS"); expect(t.split("\n").filter((l: string) => /^(PASS|FAIL|SKIP) /.test(l))).toHaveLength(r.checks.length);
+    expect(k.parseArgs(["--distro", "Ubuntu", "--sha", "a".repeat(40)], {}).distro).toBe("Ubuntu");
+    expect(k.parseArgs(["--distro", "bad name"], {}).error).toBeTruthy(); expect(k.parseArgs(["--sha", "xyz"], {}).error).toBeTruthy(); expect(k.parseArgs(["--nope"], {}).error).toContain("unknown argument");
+    expect(k.parseArgs([], {UASCO_WSL_DISTRO: "Debian"}).distro).toBe("Debian");
+    const src = fs.readFileSync(path.join(import.meta.dirname, "..", "docs", "acceptance", "windows", "founder-acceptance.mjs"), "utf8");
+    expect(src).not.toMatch(/\bsetx\b|Set-ItemProperty|reg add|writeFileSync\([^)]*wsl\.conf/);
   });
 });
