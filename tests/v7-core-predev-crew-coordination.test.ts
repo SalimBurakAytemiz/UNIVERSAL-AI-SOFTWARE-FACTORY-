@@ -615,6 +615,104 @@ describe("C-FLOW-ANALYSIS-1: intake -> analysis -> plan", () => {
     expect(journal.every(e => e.actor === "FOUNDER_ACTOR_X")).toBe(true);
   });
 
+  // //TR: #229 yeniden-doğrulama F1 (MEDIUM, "ücretli çağrı önce" düzeltmesinin gerilemesi): bir artefakt APPROVED ama faz hiç ilerlemedi (onay yazıldı, ilerleme yazımı ENOSPC/çökmeyle kayboldu; driver.approveAndAdvance bu durumu sürdürmek için yazılmıştır). Eski sürüm ücretli çağrıdan ÖNCE sürücünün reddiyle 0 builder çağrısı yapardı; gerilemede sonraki tür için ücretli çağrı yapılıp çıktısı atılıyordu (BUILDER_FAILED).
+  const approveWithoutAdvance = (t: ReturnType<typeof setup>, artifactId: string) => {
+    const preDevId = t.rm().preDevId!, art = t.store.getPreDevArtifact(SCOPE, artifactId)!;
+    t.store.transitionPreDevArtifact(SCOPE, preDevId, artifactId, "SUBMITTED", {}, art.recordedBy);
+    t.store.transitionPreDevArtifact(SCOPE, preDevId, artifactId, "APPROVED", {evidenceRefs: ["ev-founder-review-1"]}, "FOUNDER_LOCAL");
+  };
+  it("F1: an artefact that is APPROVED while the phase never advanced (an interrupted approval) is answered BLOCKED ANALYSIS_PHASE_NOT_ADVANCED with NO paid call, on every call; the Founder's approval resumes the advance and the flow moves on", async () => {
+    const t = setup();
+    const stuck = async (kind: ArtifactKind, artifactId: string) => {
+      approveWithoutAdvance(t, artifactId);
+      expect(t.rm().artifacts[kind].state).toBe("APPROVED");
+      const phase = t.rm().phase, callsBefore = t.calls.length;
+      for (let n = 0; n < 2; n++) {
+        expect(await t.flow.step(t.missionId), `call ${n + 1} for ${kind}`).toMatchObject({status: "BLOCKED", blocker: "ANALYSIS_PHASE_NOT_ADVANCED", blockers: ["ANALYSIS_PHASE_NOT_ADVANCED"], founderAction: expect.stringContaining(kind)});
+        expect(t.calls, "a paid builder call was made for a state the driver would refuse anyway").toHaveLength(callsBefore);
+      }
+      expect(t.rm().phase, "nothing was advanced or recorded").toBe(phase);
+      t.approve(artifactId); // the resume path of approveAndAdvance: the artefact is already APPROVED, only the advance is pending
+      expect(t.rm().phase).not.toBe(phase);
+    };
+    const ba = await t.flow.step(t.missionId) as {artifactId: string};
+    await stuck("BusinessAnalysis", ba.artifactId); // first phase
+    const req = await t.flow.step(t.missionId);
+    expect(req).toMatchObject({status: "DRAFT_READY", kind: "Requirements"});
+    await stuck("Requirements", (req as {artifactId: string}).artifactId); // a later phase
+    expect(await t.flow.step(t.missionId)).toMatchObject({status: "DRAFT_READY", kind: "Plan"});
+    expect(t.calls.map(c => c.kind)).toEqual(["BusinessAnalysis", "Requirements", "Plan"]);
+  });
+
+  it("F2: the plan gate needs every kind APPROVED: a DRAFT, SUBMITTED or REJECTED Architecture is ANALYSIS_NOT_COMPLETE for planFromApproved AND createPlan and creates no task", async () => {
+    for (const state of ["DRAFT", "SUBMITTED", "REJECTED"] as const) {
+      const dir = path.join(tmp, `gate-${state}`); fs.mkdirSync(dir);
+      const keep = tmp; tmp = dir;
+      try {
+        const t = setup();
+        for (let i = 0; i < 3; i++) { const r = await t.flow.step(t.missionId) as {artifactId: string}; t.approve(r.artifactId); }
+        const arch = await t.flow.step(t.missionId) as {artifactId: string};
+        if (state === "SUBMITTED") t.store.transitionPreDevArtifact(SCOPE, t.rm().preDevId!, arch.artifactId, "SUBMITTED", {}, PREDEV_AGENT_ACTOR);
+        if (state === "REJECTED") t.founder.reject(SCOPE, t.missionId, arch.artifactId, "FOUNDER_LOCAL", "not good enough");
+        expect(t.rm().artifacts.Architecture.state).toBe(state);
+        expect(t.flow.planFromApproved(t.missionId), state).toEqual({ok: false, code: "ANALYSIS_NOT_COMPLETE", detail: "Architecture"});
+        expect(t.flow.createPlan(t.missionId, "FOUNDER_LOCAL"), state).toEqual({ok: false, code: "ANALYSIS_NOT_COMPLETE", detail: "Architecture"});
+        expect(t.store.listTasks(SCOPE, t.missionId), `${state}: no task may exist`).toEqual([]);
+      } finally { tmp = keep; }
+    }
+  });
+
+  it("F3 (X1/X2): a sequence that was opened but never advanced (the first progress write was lost: phase AUTHORIZED) is completed by the next step, which then produces the first draft; an already running sequence is not restarted", async () => {
+    const t = setup();
+    t.store.openPreDevSequence(SCOPE, t.missionId, PREDEV_AGENT_ACTOR);
+    expect(t.rm()).toMatchObject({active: true, phase: "AUTHORIZED"});
+    expect(await t.flow.step(t.missionId)).toMatchObject({status: "DRAFT_READY", kind: "BusinessAnalysis", version: 1});
+    expect(t.rm()).toMatchObject({active: true, phase: "BUSINESS_ANALYSIS"});
+    const events = fs.readFileSync(path.join(t.store.dataDir, "journal.jsonl"), "utf8").split("\n").filter(Boolean).map(l => JSON.parse(l) as {type: string});
+    expect(events.filter(e => e.type === "PREDEV_SEQUENCE_OPENED"), "the sequence is opened once").toHaveLength(1);
+    const draft = t.rm().artifacts.BusinessAnalysis.artifactId!;
+    t.approve(draft);
+    expect(await t.flow.step(t.missionId)).toMatchObject({status: "DRAFT_READY", kind: "Requirements"}); // a later phase: the sequence is not restarted
+    expect(fs.readFileSync(path.join(t.store.dataDir, "journal.jsonl"), "utf8").split("\n").filter(l => l.includes("PREDEV_SEQUENCE_OPENED") && l.includes(t.missionId))).toHaveLength(1);
+  });
+
+  it("F3 (X3): a builder failure in a LATER phase names that phase's kind, not the first one", async () => {
+    let fail = false;
+    const t = setup((kind) => (fail && kind === "Requirements") ? new PreDevBuilderError("PREDEV_BUILDER_TIMEOUT", "detail") : undefined);
+    const first = await t.flow.step(t.missionId) as {artifactId: string};
+    t.approve(first.artifactId);
+    fail = true;
+    expect(await t.flow.step(t.missionId)).toEqual({status: "BUILDER_FAILED", kind: "Requirements", code: "PREDEV_BUILDER_TIMEOUT"});
+  });
+
+  it("F3 (X4): the summary counts the acceptance criteria of functional AND non-functional requirements", async () => {
+    const t = setup(); await approveAll(t);
+    const reqs = TASKHUB_ARTIFACTS.Requirements as RequirementsContent;
+    const functional = reqs.functional.reduce((n, r) => n + r.acceptanceCriteria.length, 0), nonFunctional = reqs.nonFunctional.reduce((n, r) => n + r.acceptanceCriteria.length, 0);
+    expect(nonFunctional, "the fixture must have non-functional criteria for this test to mean something").toBeGreaterThan(0);
+    const draft = t.flow.planFromApproved(t.missionId);
+    expect(draft.ok && draft.summary.requirements).toEqual({functional: reqs.functional.length, nonFunctional: reqs.nonFunctional.length, acceptanceCriteria: functional + nonFunctional});
+  });
+
+  it("F3 (O2c): two flows started in the SAME tick (Promise.allSettled) on one mission run ONE paid builder call; the other answers ANALYSIS_IN_PROGRESS", async () => {
+    const t = setup(undefined, undefined, () => new Promise<void>(r => setTimeout(r, 20)));
+    const other = new AnalysisFlow({store: t.store, scope: SCOPE, builder: t.builder, readiness: () => READY});
+    const res = await Promise.allSettled([t.flow.step(t.missionId), other.step(t.missionId)]);
+    expect(res.every(r => r.status === "fulfilled")).toBe(true);
+    const out = res.map(r => (r as PromiseFulfilledResult<{status: string; blocker?: string}>).value);
+    expect(out.map(o => o.status).sort()).toEqual(["BLOCKED", "DRAFT_READY"]);
+    expect(out.find(o => o.status === "BLOCKED")).toMatchObject({blocker: "ANALYSIS_IN_PROGRESS"});
+    expect(t.calls).toHaveLength(1);
+  });
+
+  it("F3 (O3c): the single-flight guard is per MISSION: two different missions started in the same tick both produce", async () => {
+    const t = setup(undefined, undefined, () => new Promise<void>(r => setTimeout(r, 20)));
+    const second = submitIntake({store: t.store, scope: SCOPE, orgId: "o1", actor: "FOUNDER_LOCAL"}, {idea: "A second, unrelated idea: a recipe box for a family of five who share one kitchen", projectType: "web", targetOS: ["web"]});
+    const res = await Promise.all([t.flow.step(t.missionId), t.flow.step(second.intake.missionId)]);
+    expect(res.map(r => r.status)).toEqual(["DRAFT_READY", "DRAFT_READY"]);
+    expect(t.calls).toHaveLength(2);
+  });
+
   it("an unknown mission is a typed error, not a silent empty analysis", async () => {
     const t = setup();
     await expect(t.flow.step("msn_" + "0".repeat(24))).rejects.toMatchObject({code: "ANALYSIS_MISSION_NOT_FOUND"});
@@ -666,6 +764,15 @@ describe("C-FLOW-ANALYSIS-1: readiness comes from the role bindings, the CLI, th
     const r = ready({bindings: noArchitect});
     expect(r.ready).toBe(false);
     expect(r.blockers[0]).toBe(`ROLE_NOT_EXECUTABLE:ROLE_HAS_NO_BINDING:${PRE_DEV_ROLE_MAP.Architecture[0]}`);
+  });
+
+  it("F3 (X9): the Founder action is the FIRST blocker's own action, not a later one (an unbound role is listed before the missing CLI)", () => {
+    const noArchitect = FIRST_DELIVERY_BINDINGS.filter(b => b.roleId !== PRE_DEV_ROLE_MAP.Architecture[0]);
+    const r = ready({cli: NOT_FOUND, bindings: noArchitect});
+    expect(r.blockers[0]).toBe(`ROLE_NOT_EXECUTABLE:ROLE_HAS_NO_BINDING:${PRE_DEV_ROLE_MAP.Architecture[0]}`);
+    expect(r.blockers).toContain("CLAUDE_CLI_NOT_FOUND");
+    expect(r.founderAction, "the later (CLI) action must not replace the first blocker's").toContain(`The Architecture role (${PRE_DEV_ROLE_MAP.Architecture[0]})`);
+    expect(r.founderAction).not.toBe("install claude");
   });
 
   it("wired together: a not-ready real readiness BLOCKS the flow, and once the Founder has set everything up the same flow produces", async () => {

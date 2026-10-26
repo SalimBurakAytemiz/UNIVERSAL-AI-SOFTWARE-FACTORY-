@@ -56,7 +56,7 @@ const HEALTHY = {status: "HEALTHY", system: "UNIVERSAL-AI-SOFTWARE-COMPANY-OS", 
 const liveFix = (overrides: Record<string, any> = {}): Record<string, any> => ({
   "/health": HEALTHY,
   "/v1/control/status": {globalStop: {active: false, reason: null}},
-  "/v1/founder-attention": {blocked: []},
+  "/v1/attention": {attention: {items: [], counts: {RUN_AWAITING_APPROVAL: 0, MISSION_FOUNDER_ATTENTION: 0, RUN_NEEDS_DECISION: 0, MISSION_AUTHORIZATION_PENDING: 0, MISSION_BLOCKED: 0, TASK_BLOCKED: 0}, truncated: false, source: "WORKOS"}},
   "/v1/work-runs": {workRuns: [
     {runId: RUN, missionId: "msn_" + "ab".repeat(12), status: "RUNNING", startedAt: "2026-10-15T10:00:00.000Z", evidence: []},
     {runId: RUN2, missionId: "msn_" + "cd".repeat(12), status: "REVIEWING", startedAt: "2026-10-15T11:00:00.000Z", headSha: HEAD, evidence: fullEvidence()}
@@ -201,7 +201,7 @@ describe("UX WP-DELIVERY — routing + dictionary", () => {
     const delivery = await load("views", "delivery.js");
     const {ctx, calls} = await mkCtx(fromFix(liveFix()));
     await delivery.render(ctx);
-    expect([...new Set(calls)].sort()).toEqual(["/health", "/v1/control/status", "/v1/founder-attention", "/v1/work-runs"]);
+    expect([...new Set(calls)].sort()).toEqual(["/health", "/v1/attention", "/v1/control/status", "/v1/work-runs"]);
   });
 });
 

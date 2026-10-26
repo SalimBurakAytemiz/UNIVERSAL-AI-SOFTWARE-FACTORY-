@@ -92,12 +92,14 @@ const cockpitBody = (over: Record<string, any> = {}) => ({generatedAt: "2026-10-
   orchestrator: {state: "VERIFIED", asOf: "2026-10-16T05:30:00.000Z", packages: {total: 4, byStatus: {MERGED: 3, QUEUED: 1}}, source: "ORCHESTRATOR_STATE"},
   workforce: {state: "VERIFIED", registeredRoles: 363, registeredRolesAuthority: "LEGACY_REFERENCE_ONLY", canonicalRegisteredRoles: 255, targetRoles: 255, activeWorkerRuns: 1, source: "x"},
   legacy: {scheduler: {authority: false, note: "LEGACY_SNAPSHOT"}}, evidence: {state: "VERIFIED", total: 10, verified: 8, mismatch: 1, missing: 1, unverifiable: 0, sources: {workos: "AVAILABLE"}}, ...over});
-const attentionBody = (n = 2, over: Record<string, any> = {}) => ({blocked: Array.from({length: n}, (_, i) => ({packageId: `PKG-${i}`, kind: "REVIEW_PENDING_PROVIDER_QUOTA", retryable: false})), retryableKinds: [], schedulerVerification: "VERIFIED", ...over});
+const ATT_KINDS = ["RUN_AWAITING_APPROVAL", "MISSION_FOUNDER_ATTENTION", "RUN_NEEDS_DECISION", "MISSION_AUTHORIZATION_PENDING", "MISSION_BLOCKED", "TASK_BLOCKED"];
+const attentionBody = (n = 2, over: Record<string, any> = {}) => ({attention: {items: Array.from({length: n}, (_, i) => ({kind: "TASK_BLOCKED", nextAction: "UNBLOCK_TASK", projectId: "prj_" + "ab".repeat(12), missionId: "msn_" + "cd".repeat(12), runId: null, taskId: "tsk_" + String(i).padStart(24, "a"), title: `Task ${i}`, reason: null, since: null})),
+  counts: Object.fromEntries(ATT_KINDS.map(k => [k, k === "TASK_BLOCKED" ? n : 0])), truncated: false, source: "WORKOS", ...over}});
 const serve = (over: Record<string, any> = {}) => (p: string) => {
-  const m: Record<string, any> = {"/v1/cockpit": cockpitBody(), "/v1/missions": MISSIONS, "/v1/work-runs": RUNS, "/v1/founder-attention": attentionBody(), ...over};
+  const m: Record<string, any> = {"/v1/cockpit": cockpitBody(), "/v1/missions": MISSIONS, "/v1/work-runs": RUNS, "/v1/attention": attentionBody(), ...over};
   return p in m ? m[p] : fail(p);
 };
-const FOUR = ["/v1/cockpit", "/v1/founder-attention", "/v1/missions", "/v1/work-runs"];
+const FOUR = ["/v1/attention", "/v1/cockpit", "/v1/missions", "/v1/work-runs"];
 
 // ---------------- (1) GENUINE control-api -> mappers -> view ----------------
 const TOKEN = "t".repeat(32);
@@ -180,7 +182,7 @@ describe("Executive — GENUINE control-api read-models flow through mappers and
     const seeded = await seedRealStore();
     const app = mkApp();
     const core = await load("executive-core.js");
-    const raw = {cockpit: await getJson(app, "/v1/cockpit"), missions: await getJson(app, "/v1/missions"), runs: await getJson(app, "/v1/work-runs"), attention: await getJson(app, "/v1/founder-attention")};
+    const raw = {cockpit: await getJson(app, "/v1/cockpit"), missions: await getJson(app, "/v1/missions"), runs: await getJson(app, "/v1/work-runs"), attention: await getJson(app, "/v1/attention")}; // //TR: /v1/attention tabanda kayıtlıdır: dört kaynağın hepsi GERÇEK sunucudan gelir
     const cp = core.mapExecCockpit(raw.cockpit), ms = core.mapExecMissions(raw.missions), rn = core.mapExecWorkRuns(raw.runs), at = core.mapExecAttention(raw.attention);
     for (const r of [cp, ms, rn, at]) expect(r.state).toBe("VERIFIED");
     expect(cp.cockpit.projects).toEqual({state: "VERIFIED", count: 1});
@@ -192,7 +194,7 @@ describe("Executive — GENUINE control-api read-models flow through mappers and
     expect(cp.cockpit.workforce.registeredRoles).toBeNull();
     expect(cp.cockpit.workforce.activeWorkerRuns).toBe(1);
     expect(rn.runs).toMatchObject({total: 3, open: 1, awaiting: 1, ended: 1, prepared: 0, accepted: 0});
-    expect(at.attention.blocked).toBe(0);
+    expect(at.attention).toMatchObject({total: 2, truncated: false, dropped: 0}); // the real route counts the two seeded waiting records (REPORTING run + FOUNDER_ATTENTION mission)
 
     const expectedOrder = [...raw.runs.runs].sort((x: any, y: any) => Date.parse(y.updatedAt) - Date.parse(x.updatedAt)).map((r: any) => r.runId);
     expect(rn.runs.items.map((r: any) => r.runId)).toEqual(expectedOrder);
@@ -207,7 +209,7 @@ describe("Executive — GENUINE control-api read-models flow through mappers and
     expect(kpiValue(root, "missions")).toBe("4");
     expect(kpiValue(root, "runs")).toBe("3");
     expect(kpiValue(root, "deliveries")).toBe("0");
-    expect(kpiValue(root, "blocked")).toBe("0");
+    expect(kpiValue(root, "attention")).toBe("2");
     const a = rowFor(root, seeded.A);
     expect(a.dataset.status).toBe("AWAITING_APPROVAL");
     expect(a.dataset.verdict).toBe("CLEAN");
@@ -340,7 +342,7 @@ describe("Executive — only already-allow-listed read-only GETs are used (prote
     const imports = moduleSpecifiers({source: read("views", "executive.js")}).sort();
     // UI-003: tek ek içe aktarma Dönüş Özeti panelidir; onun tek (cihaz-içi) yazımı aşağıdaki ayrı testte sabitlenir.
     expect(imports).toEqual(["../components.js", "../executive-core.js", "../model.js", "../work-core.js", "./return-summary.js"]);
-    expect(moduleSpecifiers({source: read("executive-core.js")})).toEqual(["./work-core.js"]);
+    expect(moduleSpecifiers({source: read("executive-core.js")})).toEqual(["./attention-core.js", "./work-core.js"]);
     for (const m of ["execCockpit", "execMissions", "execWorkRuns", "execAttention"]) expect(read("views", "executive.js")).toContain(`api.${m}(`);
     // api.js: yalnız bu dört GET sabit yoldan okunur; yeni POST yolu eklenmez (tek apiPost çağrısı korunur).
     expect(read("api.js").match(/bridge\.apiPost\(/g)?.length).toBe(1);
@@ -348,13 +350,13 @@ describe("Executive — only already-allow-listed read-only GETs are used (prote
   it("the api layer requests exactly the four fixed paths, with no query string and no caller-chosen path", async () => {
     const {ctx, calls} = await mkCtx(serve());
     const core = await load("executive-core.js");
-    expect(core.EXECUTIVE_SOURCE_PATHS).toEqual({cockpit: "/v1/cockpit", missions: "/v1/missions", workRuns: "/v1/work-runs", attention: "/v1/founder-attention"});
+    expect(core.EXECUTIVE_SOURCE_PATHS).toEqual({cockpit: "/v1/cockpit", missions: "/v1/missions", workRuns: "/v1/work-runs", attention: "/v1/attention"});
     expect(core.EXECUTIVE_SOURCES).toEqual(["cockpit", "missions", "workRuns", "attention"]);
     expect((await ctx.api.execCockpit()).state).toBe("VERIFIED");
     expect((await ctx.api.execMissions()).state).toBe("VERIFIED");
     expect((await ctx.api.execWorkRuns()).state).toBe("VERIFIED");
     expect((await ctx.api.execAttention()).state).toBe("VERIFIED");
-    expect(calls).toEqual(["/v1/cockpit", "/v1/missions", "/v1/work-runs", "/v1/founder-attention"]);
+    expect(calls).toEqual(["/v1/cockpit", "/v1/missions", "/v1/work-runs", "/v1/attention"]);
     expect(ctx.api.execCockpit.length).toBe(0);
   });
   it("read failures are classified honestly by the api layer: OFFLINE / UNAVAILABLE / ERROR, and a malformed 200 is ERROR", async () => {
@@ -515,19 +517,22 @@ describe("Executive — pure mappers are fail-closed and never elevate state", (
     // Tek bozuk satır, diğer sağlam satırlarla birlikte bile tüm okumayı düşürür.
     expect(core.mapExecWorkRuns({runs: [runRow(RUN1, MSN1), runRow(RUN2, MSN2, {status: "DONE"})]}).state).toBe("ERROR");
   });
-  it("mapExecAttention counts blocked packages; a REJECTED scheduler verification is UNAVAILABLE (never zero); malformed is ERROR", async () => {
+  it("mapExecAttention takes the total from the server's validated counters (even when the list is cut); a malformed answer is ERROR (never zero); the retired scheduler fields mean nothing", async () => {
     const core = await load("executive-core.js");
-    expect(core.mapExecAttention(attentionBody(2))).toEqual({state: "VERIFIED", attention: {blocked: 2}});
-    expect(core.mapExecAttention(attentionBody(0))).toEqual({state: "VERIFIED", attention: {blocked: 0}});
-    expect(core.mapExecAttention({blocked: [], retryableKinds: [], schedulerVerification: "REJECTED", error: "x"})).toEqual({state: "UNAVAILABLE", attention: null});
-    for (const b of [null, undefined, [], {}, {blocked: "x"}, {blocked: [null]}, {blocked: [1, 2]}, {blocked: {}}]) expect(core.mapExecAttention(b).state, JSON.stringify(b)).toBe("ERROR");
+    expect(core.mapExecAttention(attentionBody(2))).toEqual({state: "VERIFIED", attention: {total: 2, counts: expect.objectContaining({TASK_BLOCKED: 2, RUN_AWAITING_APPROVAL: 0}), truncated: false, dropped: 0}});
+    expect(core.mapExecAttention(attentionBody(0)).attention).toMatchObject({total: 0, truncated: false, dropped: 0});
+    const cut = core.mapExecAttention(attentionBody(200, {counts: Object.fromEntries(ATT_KINDS.map(k => [k, k === "TASK_BLOCKED" ? 250 : 0])), truncated: true}));
+    expect(cut.attention).toMatchObject({total: 250, truncated: true});
+    const dropped = core.mapExecAttention(attentionBody(1, {items: [attentionBody(1).attention.items[0], {kind: "NEW"}], counts: Object.fromEntries(ATT_KINDS.map(k => [k, k === "TASK_BLOCKED" ? 4 : 0]))}));
+    expect(dropped.attention).toMatchObject({total: 4, dropped: 1});
+    for (const b of [null, undefined, [], {}, {blocked: []}, {blocked: [], retryableKinds: [], schedulerVerification: "VERIFIED"}, {attention: null}, attentionBody(0, {source: "SCHEDULER"}), attentionBody(0, {truncated: "no"}), attentionBody(0, {counts: {}}), attentionBody(3, {counts: Object.fromEntries(ATT_KINDS.map(k => [k, 0]))})]) expect(core.mapExecAttention(b), JSON.stringify(b)).toEqual({state: "ERROR", attention: null});
   });
   it("executiveSummary derives the headline figures only from readable sources; an unreadable source shows its honest state and a null value, never zero", async () => {
     const core = await load("executive-core.js");
     const good = {cockpit: core.mapExecCockpit(cockpitBody()), missions: core.mapExecMissions(MISSIONS), runs: core.mapExecWorkRuns(RUNS), attention: core.mapExecAttention(attentionBody(2))};
     const s = core.executiveSummary(good);
     const v = (k: string) => [s.kpis[k].state, s.kpis[k].value];
-    expect(Object.keys(s.kpis)).toEqual(["projects", "missions", "approvals", "evidence", "inProgress", "runs", "deliveries", "blocked"]);
+    expect(Object.keys(s.kpis)).toEqual(["projects", "missions", "approvals", "evidence", "inProgress", "runs", "deliveries", "attention"]);
     expect(v("projects")).toEqual(["VERIFIED", 3]);
     expect(v("missions")).toEqual(["VERIFIED", 3]);
     expect(v("approvals")).toEqual(["VERIFIED", 1]);
@@ -538,12 +543,12 @@ describe("Executive — pure mappers are fail-closed and never elevate state", (
     expect(s.kpis.runs.detail).toEqual({open: 1, awaiting: 1, ended: 1});
     expect(v("deliveries")).toEqual(["VERIFIED", 1]);
     expect(s.kpis.deliveries.detail).toEqual({prepared: 0, accepted: 1});
-    expect(v("blocked")).toEqual(["VERIFIED", 2]);
+    expect(v("attention")).toEqual(["VERIFIED", 2]);
     expect(s.kpis.projects.source).toBe("GET /v1/cockpit");
     expect(s.kpis.runs.source).toBe("GET /v1/work-runs");
     expect(s.platform).toMatchObject({failState: null, globalStop: {active: false}, orchestrator: {total: 4}, workforce: {registeredRoles: 255, activeWorkerRuns: 1}});
     const down = core.executiveSummary({cockpit: {state: "OFFLINE", cockpit: null}, missions: {state: "UNAVAILABLE", missions: null}, runs: {state: "ERROR", runs: null}, attention: {state: "WEIRD"}});
-    expect(Object.entries(down.kpis).map(([k, b]: any) => [k, b.state, b.value])).toEqual([["projects", "OFFLINE", null], ["missions", "OFFLINE", null], ["approvals", "OFFLINE", null], ["evidence", "OFFLINE", null], ["inProgress", "UNAVAILABLE", null], ["runs", "ERROR", null], ["deliveries", "ERROR", null], ["blocked", "ERROR", null]]);
+    expect(Object.entries(down.kpis).map(([k, b]: any) => [k, b.state, b.value])).toEqual([["projects", "OFFLINE", null], ["missions", "OFFLINE", null], ["approvals", "OFFLINE", null], ["evidence", "OFFLINE", null], ["inProgress", "UNAVAILABLE", null], ["runs", "ERROR", null], ["deliveries", "ERROR", null], ["attention", "ERROR", null]]);
     expect(down.platform).toEqual({globalStop: null, orchestrator: null, workforce: null, failState: "OFFLINE"});
     // Kokpit okundu ama alt blok UNAVAILABLE: gösterge o durumu taşır, değer null (0 değil).
     const part = core.executiveSummary({...good, cockpit: core.mapExecCockpit(cockpitBody({projects: {state: "UNAVAILABLE", count: null}}))});
@@ -560,7 +565,7 @@ describe("Executive — view honesty", () => {
     expect(calls.slice().sort()).toEqual(FOUR);
     expect(root.children.map(c => c.id || c.className)).toEqual(["hero", "executive-return", "executive-summary", "executive-ledger"]);
     expect(cls(root, "view-executive")).toBe(true);
-    expect(["projects", "missions", "inProgress", "runs", "approvals", "blocked", "deliveries", "evidence"].map(k => [k, kpiValue(root, k)])).toEqual([["projects", "3"], ["missions", "3"], ["inProgress", "2"], ["runs", "3"], ["approvals", "1"], ["blocked", "2"], ["deliveries", "1"], ["evidence", "8"]]);
+    expect(["projects", "missions", "inProgress", "runs", "approvals", "attention", "deliveries", "evidence"].map(k => [k, kpiValue(root, k)])).toEqual([["projects", "3"], ["missions", "3"], ["inProgress", "2"], ["runs", "3"], ["approvals", "1"], ["attention", "2"], ["deliveries", "1"], ["evidence", "8"]]);
     expect(kpi(root, "runs").textContent).toContain("1 open · 1 awaiting Founder decision · 1 ended.");
     expect(kpi(root, "evidence").textContent).toContain("of 10 evidence records are hash-verified · 1 mismatch · 1 missing · 0 unverifiable.");
     expect(kpi(root, "deliveries").textContent).toContain("0 prepared and awaiting acceptance, 1 accepted. Source only");
@@ -647,7 +652,7 @@ describe("Executive — view honesty", () => {
     const scenarios: Array<[string, (p: string) => any]> = [
       ["full", serve({"/v1/work-runs": full})], ["plain", serve()],
       ["offline", () => { throw new Error("fetch failed"); }], ["unavailable", () => fail("x", 404)], ["error", () => fail("x", 500)], ["malformed", () => ({nonsense: true})],
-      ["empty", serve({"/v1/work-runs": {runs: []}, "/v1/missions": {missions: []}, "/v1/founder-attention": attentionBody(0)})],
+      ["empty", serve({"/v1/work-runs": {runs: []}, "/v1/missions": {missions: []}, "/v1/attention": attentionBody(0)})],
       ["partial", (p: string) => (p === "/v1/work-runs" ? fail(p, 404) : serve({"/v1/cockpit": cockpitBody({workforce: {state: "UNAVAILABLE", registeredRoles: null, canonicalRegisteredRoles: null, activeWorkerRuns: null}})})(p))],
       ["stopped", serve({"/v1/cockpit": cockpitBody({globalStop: {active: true, reason: "FOUNDER_STOP"}})})]];
     for (const lang of ["en", "tr"]) for (const [name, fn] of scenarios) {
@@ -666,7 +671,7 @@ describe("Executive — view honesty", () => {
     for (const k of ["projects", "missions", "approvals", "evidence"]) { expect(kpiValue(r.root, k), k).toBe("—"); expect(kpi(r.root, k).dataset.state, k).toBe("OFFLINE"); }
     expect(kpiValue(r.root, "inProgress")).toBe("2");
     expect(kpiValue(r.root, "runs")).toBe("3");
-    expect(kpiValue(r.root, "blocked")).toBe("2");
+    expect(kpiValue(r.root, "attention")).toBe("2");
     expect(rows(r.root).length).toBe(3);
     expect(byData(r.root, "platform", "OFFLINE")).toBeTruthy();
     expect(srcItems(r.root).map(n => n.dataset.sourceState)).toEqual(["OFFLINE", "VERIFIED", "VERIFIED", "VERIFIED"]);
@@ -680,19 +685,19 @@ describe("Executive — view honesty", () => {
     expect(kpiValue(r.root, "deliveries")).toBe("—");
     expect(kpiValue(r.root, "projects")).toBe("3");
     // Founder dikkati düştü (500): ERROR; engelli göstergesi "—", 0 değil.
-    r = await renderView(p => (p === "/v1/founder-attention" ? fail(p, 500) : serve()(p)));
+    r = await renderView(p => (p === "/v1/attention" ? fail(p, 500) : serve()(p)));
     expect(allData(r.root, "executiveState").map(n => [n.dataset.source, n.dataset.executiveState])).toEqual([["attention", "ERROR"]]);
-    expect(kpiValue(r.root, "blocked")).toBe("—");
-    expect(kpi(r.root, "blocked").dataset.state).toBe("ERROR");
+    expect(kpiValue(r.root, "attention")).toBe("—");
+    expect(kpi(r.root, "attention").dataset.state).toBe("ERROR");
     // Mission listesi düştü: hat içi "—"; defter satırları mission KİMLİĞİYLE gösterilir, başlık uydurulmaz.
     r = await renderView(p => (p === "/v1/missions" ? fail(p, 404) : serve()(p)));
     expect(kpiValue(r.root, "inProgress")).toBe("—");
     expect(rowFor(r.root, RUN1).textContent).toContain(MSN1);
     expect(rowFor(r.root, RUN1).textContent).not.toContain("Alpha mission");
-    // Zamanlayıcı doğrulaması reddedildi: UNAVAILABLE (sıfır değil).
-    r = await renderView(serve({"/v1/founder-attention": {blocked: [], schedulerVerification: "REJECTED", error: "x"}}));
-    expect(byData(r.root, "executiveState", "UNAVAILABLE")).toBeTruthy();
-    expect(kpiValue(r.root, "blocked")).toBe("—");
+    // Sunucu yanıtı bozuksa (kaynak SCHEDULER, emekli biçim): ERROR, sıfır değil.
+    r = await renderView(serve({"/v1/attention": {blocked: [], retryableKinds: [], schedulerVerification: "VERIFIED"}}));
+    expect(kpi(r.root, "attention").dataset.state).toBe("ERROR");
+    expect(kpiValue(r.root, "attention")).toBe("—");
   });
   it("a malformed response is an ERROR for the WHOLE read: no partial ledger, no partial figures; other sources are unaffected", async () => {
     const badRuns = {runs: [runRow(RUN1, MSN1), runRow(RUN2, MSN2, {status: "DONE"})]};
@@ -712,17 +717,17 @@ describe("Executive — view honesty", () => {
   });
   it("when everything is unreadable no figure is shown at all (every KPI is — and the ledger is a state block)", async () => {
     const {root} = await renderView(() => { throw new Error("fetch failed"); });
-    for (const k of ["projects", "missions", "inProgress", "runs", "approvals", "blocked", "deliveries", "evidence"]) { expect(kpiValue(root, k), k).toBe("—"); expect(kpi(root, k).dataset.state, k).toBe("OFFLINE"); }
+    for (const k of ["projects", "missions", "inProgress", "runs", "approvals", "attention", "deliveries", "evidence"]) { expect(kpiValue(root, k), k).toBe("—"); expect(kpi(root, k).dataset.state, k).toBe("OFFLINE"); }
     expect(allData(root, "executiveState").map(n => n.dataset.source)).toEqual(["cockpit", "missions", "attention", "workRuns"]);
     expect(rows(root).length).toBe(0);
     expect(root.textContent).toContain("No data is shown or invented.");
     expect(root.textContent).not.toMatch(/\b0\b/);
   });
-  it("honest empty states: no runs / no missions / no blocked packages are readable zeros with explicit empty text", async () => {
-    const {root} = await renderView(serve({"/v1/work-runs": {runs: []}, "/v1/missions": {missions: []}, "/v1/founder-attention": attentionBody(0), "/v1/cockpit": cockpitBody({projects: {state: "VERIFIED", count: 0}, missions: {state: "VERIFIED", total: 0, byStatus: {}}, awaitingApproval: {state: "VERIFIED", items: []}})}));
+  it("honest empty states: no runs / no missions / no Founder-attention items are readable zeros with explicit empty text", async () => {
+    const {root} = await renderView(serve({"/v1/work-runs": {runs: []}, "/v1/missions": {missions: []}, "/v1/attention": attentionBody(0), "/v1/cockpit": cockpitBody({projects: {state: "VERIFIED", count: 0}, missions: {state: "VERIFIED", total: 0, byStatus: {}}, awaitingApproval: {state: "VERIFIED", items: []}})}));
     expect(kpiValue(root, "runs")).toBe("0");
     expect(kpiValue(root, "inProgress")).toBe("0");
-    expect(kpiValue(root, "blocked")).toBe("0");
+    expect(kpiValue(root, "attention")).toBe("0");
     expect(pills(kpi(root, "runs"))).toContain("EMPTY");
     expect(root.textContent).toContain("No work runs have been recorded yet.");
     expect(rows(root).length).toBe(0);
@@ -846,7 +851,7 @@ describe("Executive — locale parity and key coverage", () => {
     const need = new Set<string>();
     for (const m of src.matchAll(/(?:\bt\(|labelKey:|titleKey:|emptyNote\(ctx,)\s*"([a-zA-Z0-9_.]+)"/g)) need.add(m[1]);
     for (const m of src.matchAll(/"(executive\.[A-Za-z0-9_.]+)"/g)) need.add(m[1]);
-    for (const k of ["projects", "missions", "inProgress", "runs", "approvals", "blocked", "deliveries", "evidence"]) need.add(`executive.kpi.${k}`);
+    for (const k of ["projects", "missions", "inProgress", "runs", "approvals", "attention", "deliveries", "evidence"]) need.add(`executive.kpi.${k}`);
     for (const k of ["globalStop", "orchestrator", "roles", "workers"]) need.add(`executive.platform.${k}`);
     for (const k of core.EXECUTIVE_SOURCES) need.add(`executive.src.${k}`);
     for (const k of core.DELIVERY_STATES) need.add(`executive.delivery.${k}`);

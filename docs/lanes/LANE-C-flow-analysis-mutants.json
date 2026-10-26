@@ -1,5 +1,5 @@
 {
- "//TR": "C-FLOW-ANALYSIS-1 mutasyon listesi: her mutant tam metin değişikliğidir (dosyada tam 1 kez bulunmalı); docs/lanes/LANE-C-flow-analysis-mutants.mjs her birini uygular ve tests/v7-lane-c-flow-analysis.test.ts dosyasının BAŞARISIZ olmasını bekler.",
+ "//TR": "C-FLOW-ANALYSIS-1 mutasyon listesi: her mutant tam metin değişikliğidir (dosyada tam 1 kez bulunmalı); docs/lanes/LANE-C-flow-analysis-mutants.mjs her birini uygular ve tests/v7-lane-c-flow-analysis.test.ts dosyasının BAŞARISIZ olmasını bekler. Yeniden-doğrulama (F1-F3) için NA1-NA4, MA, X1-X4, X9, O2c, O3c eklendi (toplam 44).",
  "mutants": [
   {
    "id": "F1",
@@ -224,6 +224,90 @@
    "file": "core/workos/crew/analysis.ts",
    "old": "(b instanceof ClaudePreDevBuilder || \"shouldAbort\" in b)) b.shouldAbort",
    "new": "true) b.shouldAbort"
+  },
+  {
+   "id": "NA1",
+   "description": "F1: no phase check before the paid call (an approved-but-unadvanced artefact makes a wasted paid call again)",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "    const stuck = this.phaseNotAdvanced(rm);\n    if (stuck) return stuck;\n",
+   "new": ""
+  },
+  {
+   "id": "NA2",
+   "description": "F1: the phase check never blocks a mismatch (only compares when the kinds are equal)",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "if (current !== undefined && current === next) return null;",
+   "new": "if (current !== undefined) return null;"
+  },
+  {
+   "id": "NA3",
+   "description": "F1/X1: the AUTHORIZED phase is blocked by the phase check (the start recovery is never reached)",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "if (!rm.active || rm.phase === \"AUTHORIZED\") return null;",
+   "new": "if (!rm.active) return null;"
+  },
+  {
+   "id": "NA4",
+   "description": "F1: the Founder action does not name the artefact kind",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "`The ${current} artefact is already approved but",
+   "new": "`The artefact is already approved but"
+  },
+  {
+   "id": "MA",
+   "description": "F2: the plan gate only checks for NOT_STARTED (an unapproved Architecture DRAFT passes)",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "const missing = ANALYSIS_KINDS.filter(k => rm.artifacts[k].state !== \"APPROVED\");",
+   "new": "const missing = ANALYSIS_KINDS.filter(k => rm.artifacts[k].state === \"NOT_STARTED\");"
+  },
+  {
+   "id": "X1",
+   "description": "F3: a sequence that was opened but never advanced (AUTHORIZED) is not completed by the recorder",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "if (!now.active || now.phase === \"AUTHORIZED\") recorder.start(",
+   "new": "if (!now.active) recorder.start("
+  },
+  {
+   "id": "X2",
+   "description": "F3: the recorder never opens a missing sequence",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "if (!now.active || now.phase === \"AUTHORIZED\") recorder.start(",
+   "new": "if (now.phase === \"AUTHORIZED\") recorder.start("
+  },
+  {
+   "id": "X3",
+   "description": "F3: BUILDER_FAILED always names the first kind",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "if (e instanceof PreDevBuilderError) return {status: \"BUILDER_FAILED\", kind: phaseKind, code: e.code};",
+   "new": "if (e instanceof PreDevBuilderError) return {status: \"BUILDER_FAILED\", kind: ANALYSIS_KINDS[0]!, code: e.code};"
+  },
+  {
+   "id": "X4",
+   "description": "F3: the criteria count only covers functional requirements",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "acceptanceCriteria: [...requirements.functional, ...requirements.nonFunctional].reduce(",
+   "new": "acceptanceCriteria: [...requirements.functional].reduce("
+  },
+  {
+   "id": "X9",
+   "description": "F3: the Founder action is the LAST non-empty one",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "founderAction: actions.find(a => a) ?? null",
+   "new": "founderAction: [...actions].reverse().find(a => a) ?? null"
+  },
+  {
+   "id": "O2c",
+   "description": "F3: single-flight check and add are separated by an await (TOCTOU)",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "    if (IN_FLIGHT.has(key)) return blockedStep(\"ANALYSIS_IN_PROGRESS\", \"A draft for this mission is already being produced: wait for it to finish, then look at the pending draft.\");\n    IN_FLIGHT.add(key);",
+   "new": "    if (IN_FLIGHT.has(key)) return blockedStep(\"ANALYSIS_IN_PROGRESS\", \"A draft for this mission is already being produced: wait for it to finish, then look at the pending draft.\");\n    await Promise.resolve();\n    IN_FLIGHT.add(key);"
+  },
+  {
+   "id": "O3c",
+   "description": "F3: the single-flight key has no mission id",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "const key = `${this.d.store.dataDir}|${scope.tenantId}|${missionId}`;",
+   "new": "const key = `${this.d.store.dataDir}|${scope.tenantId}`;"
   }
  ]
 }

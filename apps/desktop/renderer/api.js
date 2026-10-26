@@ -1,7 +1,7 @@
 // //TR: Bu modül renderer veri erişiminin tek kapısıdır: yalnız preload köprüsü (window.uasco.apiGet / apiPost) üzerinden GET ve sabit allow-list'li JSON POST yapar, token'ı hiç görmez; sonuçları epoch'lu önbellekte tutar, aynı anda gelen istekleri birleştirir ve eski epoch yanıtlarını atar.
 import {classifyFailure,mapRolesPage,mapRoleCatalogPage,mapRoleDetail,mapCockpit,emptyCockpit,mapProjects,mapMissions,mapControlStatus,mapEvents,mapAttention} from "./model.js";
-import {MISSION_ID_RE,SAFE_ID_RE,mapMissionDetail,mapWorkRuns,mapWorkRunDetail,mapEvidenceList,mapEvidenceDetail} from "./work-core.js";
-import {devrunPath,filesPath,filePath,gitLogPath,gitDiffPath,exportsPath,exportItemPath,EXECUTORS_PATH,mapDevRun,mapFileList,mapFileContent,mapGitLog,mapGitDiff,mapExports,mapExecutors} from "./project-core.js";
+import {MISSION_ID_RE,SAFE_ID_RE,mapMissionDetail,mapWorkRuns,mapWorkRunDetail,runTasksPath,mapRunTasks,mapEvidenceList,mapEvidenceDetail} from "./work-core.js";
+import {runProductPath,mapRunProduct,devrunPath,filesPath,filePath,gitLogPath,gitDiffPath,exportsPath,exportItemPath,EXECUTORS_PATH,mapDevRun,mapFileList,mapFileContent,mapGitLog,mapGitDiff,mapExports,mapExecutors} from "./project-core.js";
 import {deliveriesPath,deliveryPath,mapDeliveries,mapDelivery} from "./delivery-core.js";
 import {COMPANY_KEYS,COMPANY_PATHS,COMPANY_MAPPERS,companyFailureState} from "./company-core.js";
 import {ACADEMY_PATH,mapAcademy} from "./academy-core.js";
@@ -18,6 +18,7 @@ import {SCHEDULER_PATH,mapScheduler} from "./scheduler-core.js";
 import {CAPABILITIES_PATH,ADAPTERS_PATH,FABRICS_PATH,mapCapabilities,mapAdapters,mapFabrics} from "./integrations-core.js";
 import {knowledgePath,mapKnowledge,provenancePath,mapProvenance,mapMemoryList} from "./knowledge-core.js";
 import {STATUS_SUMMARY_PATH,mapStatusSummary} from "./agent-factory-core.js";
+import {ATTENTION_PATH as WORKOS_ATTENTION_PATH,mapAttentionQueue,attentionAsBlocked} from "./attention-core.js";
 import {INSTALL_PATH,PHASE0_PATH,mapInstallReport,mapPhase0Report} from "./install-core.js";
 import {RUNS_PATH as AUDIT_RUNS_PATH,EVIDENCE_PATH as AUDIT_EVIDENCE_PATH,runEventsPath,mapAuditRuns,mapAuditEvents,mapAuditEvidence} from "./audit-core.js";
 
@@ -53,7 +54,13 @@ export function createApi({bridge,store,now=()=>Date.now()}){
     async projects(){const r=await get("/v1/projects");return r.ok?mapProjects(r.data):{state:r.state,items:[],message:r.message}},
     async missions(){const q=store.projectId?`/v1/missions?projectId=${store.projectId}`:"/v1/missions";const r=await get(q);return r.ok?mapMissions(r.data):{state:r.state,items:[],message:r.message}},
     async control(){const r=await get("/v1/control/status");return r.ok?mapControlStatus(r.data):{state:r.state,active:false,reason:null,message:r.message}},
-    async attention(){const r=await get("/v1/founder-attention");return r.ok?mapAttention(r.data):{state:r.state,blocked:[],message:r.message}},
+    // //TR: Founder dikkati artık GET /v1/attention'dan (yalnız Work OS kayıtları) okunur; emekli scheduler kaynağı /v1/founder-attention bu okumada KULLANILMAZ. Eski tüketiciler için blocked[] aynı öğelerden türetilir, tam kuyruk queue alanındadır. Ana süreç izin listesi girişi tabandadır (main.mjs EXTRA bloğu); yine de köprü yolu reddederse (INVALID_API_PATH) durum UNAVAILABLE'dır, öğe uydurulmaz.
+    async attention(){
+      const r=await get(WORKOS_ATTENTION_PATH);
+      if(!r.ok)return {state:/INVALID_API_PATH/.test(String(r.message??""))?"UNAVAILABLE":r.state,blocked:[],queue:null,message:r.message};
+      const m=mapAttentionQueue(r.data);
+      return m.state==="VERIFIED"?{state:"VERIFIED",blocked:m.queue.items.map(attentionAsBlocked),queue:m.queue}:{state:"ERROR",blocked:[],queue:null};
+    },
     async health(){const r=await get("/health");return r.ok?{state:"VERIFIED",data:r.data}:{state:r.state,data:null,message:r.message}},
     async runs(){const r=await get("/v1/runs");return r.ok?{state:"VERIFIED",runs:Array.isArray(r.data?.runs)?r.data.runs:[]}:{state:r.state,runs:[],message:r.message}},
     async runEvents(runId){
@@ -66,6 +73,8 @@ export function createApi({bridge,store,now=()=>Date.now()}){
       if(missionId!==undefined&&!MISSION_ID_RE.test(String(missionId)))return {state:"ERROR",items:[]};
       const r=await get(missionId?`/v1/work-runs?missionId=${missionId}`:"/v1/work-runs");return r.ok?mapWorkRuns(r.data):{state:r.state,items:[],message:r.message};
     },
+    // //TR: LANE-A A-FLOW-2: koşuya bağlı görevler (GET /v1/work-runs/:id/tasks); allow-list'te yoksa UNAVAILABLE (asla "bağ yok" değil).
+    async runTasks(runId){const p=runTasksPath(runId);if(!p)return {state:"ERROR",links:[]};const r=await get(p);return r.ok?mapRunTasks(r.data,runId):{state:/INVALID_API_PATH/.test(String(r.message??""))?"UNAVAILABLE":r.state,links:[],message:r.message}},
     async workRunDetail(id){if(!SAFE_ID_RE.test(String(id)))return {state:"ERROR",run:null};const r=await get(`/v1/work-runs/${id}`);return r.ok?mapWorkRunDetail(r.data):{state:r.state,run:null,message:r.message}},
     /** Sorgu parametreleri sabit sırada ve yalnız geçerli değerlerle kurulur (main allow-list ile aynı kurallar). */
     async evidenceList({missionId,runId,kind,cursor,limit}={}){
@@ -79,6 +88,7 @@ export function createApi({bridge,store,now=()=>Date.now()}){
     },
     async evidenceItem(id){if(!SAFE_ID_RE.test(String(id)))return {state:"ERROR",item:null};const r=await get(`/v1/evidence/${id}`);return r.ok?mapEvidenceDetail(r.data):{state:r.state,item:null,message:r.message}},
     // PS-1B Project Studio okumaları: yol kurucuları main allow-list ile aynı kurallıdır; geçersiz girdi istek üretmez, 404 dürüst UNAVAILABLE kalır.
+    async runProduct(runId,{force=false}={}){const p=runProductPath(runId);if(!p)return {state:"ERROR",product:null};const r=await get(p,{force});return r.ok?mapRunProduct(r.data,runId):{state:r.state,product:null,message:r.message}},
     async devrun(projectId,{force=false}={}){const p=devrunPath(projectId);if(!p)return {state:"ERROR",run:null};const r=await get(p,{force});return r.ok?mapDevRun(r.data):{state:r.state,run:null,message:r.message}},
     async projectFiles(projectId,rel=""){const p=filesPath(projectId,rel);if(!p)return {state:"ERROR",entries:[],truncated:false};const r=await get(p);return r.ok?mapFileList(r.data):{state:r.state,entries:[],truncated:false,message:r.message}},
     async projectFile(projectId,rel){const p=filePath(projectId,rel);if(!p)return {state:"ERROR",file:null};const r=await get(p);return r.ok?mapFileContent(r.data):{state:r.state,file:null,message:r.message}},
