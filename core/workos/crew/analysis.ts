@@ -38,6 +38,15 @@ export interface AnalysisReadiness {
 }
 export interface ClaudeAnalysisReadinessOptions {
   controlRoot: string; profile?: ClaudeProfileOptions; cli?: ClaudeCliStatus; bindings?: readonly RoleExecutionProfile[];
+  // //TR: Çağıran LOCAL_CLAUDE yürütücüsünün etkin olup olmadığını biliyorsa verir (false = etkin değil -> EXECUTOR_NOT_ENABLED engeli eklenir). Verilmezse AnalysisFlow.step aynı engeli üretim BuilderPort'unun varlığından türetir (route değişmeden çalışır).
+  executorEnabled?: boolean;
+}
+// //TR: CLI/başlatıcı/oturum hazır olsa bile yürütücü etkin değilse (executors.pair yok ya da FAKE: preDevBuilder sağlanmıyor) adım ücretli bir çağrıdan ÖNCE BLOCKED olur ve Founder ne yapacağını bilir; aksi halde route BUILDER_FAILED/PREDEV_DRIVER_BUILDER_NOT_CONFIGURED (502) verirdi. Engel, CLI/başlatıcı/oturum engellerinden SONRA gelir (yürütücü ancak CLI bulunup kanıtlanınca etkinleştirilebilir).
+export const EXECUTOR_NOT_ENABLED = "EXECUTOR_NOT_ENABLED";
+export const EXECUTOR_NOT_ENABLED_ACTION = "Local Claude is not enabled: open Settings, then Executors, and enable LOCAL_CLAUDE (UASCO verifies the Claude Code CLI when you enable it). Until then no analysis can be produced.";
+export function withExecutorBlocker(r: AnalysisReadiness, enabled: boolean): AnalysisReadiness {
+  if (enabled || r.blockers.includes(EXECUTOR_NOT_ENABLED)) return r;
+  return {...r, ready: false, blockers: [...r.blockers, EXECUTOR_NOT_ENABLED], blocker: r.blocker ?? EXECUTOR_NOT_ENABLED, founderAction: r.founderAction ?? EXECUTOR_NOT_ENABLED_ACTION};
 }
 // //TR: RoleExecutionProfile kapısı (dört analiz rolü bağlı ve yürütülebilir) + Claude CLI/başlatıcı kanıtı + İKİ Claude profilinin (implementer, reviewer) oturumu. Pre-dev üretimi reviewer rotasını kullanır; implementer profili akışın sonraki adımı içindir ve Founder tek seferde eksiksiz kurulum görsün diye burada da zorunludur.
 export function claudeAnalysisReadiness(o: ClaudeAnalysisReadinessOptions): AnalysisReadiness {
@@ -56,7 +65,8 @@ export function claudeAnalysisReadiness(o: ClaudeAnalysisReadinessOptions): Anal
     blockers.push(shared ? code : `${r}:${code}`);
     actions.push(i === 0 || !shared ? (profiles[r].founderAction ?? "") : "");
   }
-  return {ready: blockers.length === 0, blockers, blocker: blockers[0] ?? null, founderAction: actions.find(a => a) ?? null, profiles};
+  const base: AnalysisReadiness = {ready: blockers.length === 0, blockers, blocker: blockers[0] ?? null, founderAction: actions.find(a => a) ?? null, profiles};
+  return withExecutorBlocker(base, o.executorEnabled !== false);
 }
 
 // ---- Adım sonucu ----
@@ -123,7 +133,8 @@ export class AnalysisFlow {
     if (approved.length === ANALYSIS_KINDS.length) return {status: "COMPLETE", approved};
     const pending = ANALYSIS_KINDS.find(k => rm.artifacts[k].artifactId !== null && (rm.artifacts[k].state === "DRAFT" || rm.artifacts[k].state === "SUBMITTED"));
     if (pending) return {status: "AWAITING_APPROVAL", kind: pending, artifactId: rm.artifacts[pending].artifactId!, artifactState: rm.artifacts[pending].state as "DRAFT" | "SUBMITTED", next: "FOUNDER_APPROVAL"};
-    const readiness = this.d.readiness();
+    // //TR: Üretim BuilderPort'u yoksa (route NO_ANALYSIS_BUILDER verir) hazırlık ne derse desin BLOCKED (EXECUTOR_NOT_ENABLED); hiçbir şey açılmaz/kaydedilmez.
+    const readiness = withExecutorBlocker(this.d.readiness(), this.d.builder !== NO_ANALYSIS_BUILDER);
     if (!readiness.ready) return {status: "BLOCKED", blocker: readiness.blocker ?? "ANALYSIS_NOT_READY", blockers: readiness.blockers, founderAction: readiness.founderAction, readiness};
     if (!rm.active || rm.phase === "AUTHORIZED") driver.start(scope, missionId, PREDEV_AGENT_ACTOR); // dizi yoksa (veya ilk ilerleme yazımı yarım kaldıysa) açılır/tamamlanır; sonraki fazlarda dokunulmaz
     const phaseKind = ANALYSIS_KINDS.find(k => rm.artifacts[k].state !== "APPROVED")!;

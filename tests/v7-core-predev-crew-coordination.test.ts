@@ -24,7 +24,7 @@ import type {PlanContent, RequirementsContent} from "../core/workos/predev/types
 import type {ClaudeCliStatus} from "../core/workos/claude-profiles.js";
 import type {AnalysisReadiness} from "../core/workos/crew/analysis.js";
 import crypto from "node:crypto";
-import {LocalClaudeExecutors, reviewerArgv, runProcess} from "../core/workos/executors.js";
+import {FakeExecutors, LocalClaudeExecutors, reviewerArgv, runProcess} from "../core/workos/executors.js";
 import type {ProcOptions, ProcResult} from "../core/workos/executors.js";
 import {OUTPUT_SKELETONS, PLACEHOLDER_MARKER, composeRolePrompt} from "../core/workos/predev/role-prompts.js";
 import {validateArtifactContent} from "../core/workos/predev/validators.js";
@@ -506,10 +506,14 @@ describe("C-FLOW-ANALYSIS-1: intake -> analysis -> plan", () => {
     expect(t.store.getPreDevArtifact(SCOPE, (second as {artifactId: string}).artifactId)!.supersedes).toBe(first.artifactId);
   });
 
-  it("no production builder configured: a ready setup still answers with the exact code and records nothing", async () => {
+  // //TR: C-FLOW-ANALYSIS-2 (Lane B boşluğu): üretim BuilderPort'u yoksa artık BUILDER_FAILED/502 değil, ücretli çağrıdan ÖNCE BLOCKED (EXECUTOR_NOT_ENABLED) ve Founder eylemi döner. Başka bir builder aynı kodu kendisi fırlatırsa eski yol (BUILDER_FAILED) geçerlidir.
+  it("no production builder configured: a ready setup is BLOCKED (EXECUTOR_NOT_ENABLED, with a Founder action) and records nothing; a builder that throws NOT_CONFIGURED itself still maps to BUILDER_FAILED", async () => {
     const t = setup();
     const flow = new AnalysisFlow({store: t.store, scope: SCOPE, builder: NO_ANALYSIS_BUILDER, readiness: () => READY});
-    expect(await flow.step(t.missionId)).toEqual({status: "BUILDER_FAILED", kind: "BusinessAnalysis", code: "PREDEV_DRIVER_BUILDER_NOT_CONFIGURED"});
+    expect(await flow.step(t.missionId)).toMatchObject({status: "BLOCKED", blocker: "EXECUTOR_NOT_ENABLED", blockers: ["EXECUTOR_NOT_ENABLED"], founderAction: expect.stringContaining("LOCAL_CLAUDE")});
+    expect(t.rm()).toMatchObject({active: false, phase: "NOT_STARTED"});
+    const own: BuilderPort = {produce: async () => { throw new PreDevBuilderError("PREDEV_BUILDER_EXIT_NONZERO"); }};
+    expect(await new AnalysisFlow({store: t.store, scope: SCOPE, builder: own, readiness: () => READY}).step(t.missionId)).toEqual({status: "BUILDER_FAILED", kind: "BusinessAnalysis", code: "PREDEV_BUILDER_EXIT_NONZERO"});
     expect(t.rm().artifacts.BusinessAnalysis.state).toBe("NOT_STARTED");
   });
 
@@ -651,7 +655,7 @@ process.exit(s.exit ?? 0);
     const mission = store.getMission(SCOPE, intake.missionId)!, project = store.getProject(SCOPE, intake.projectId)!;
     const founder = new PreDevDriver({store, brief: briefFromRecords({project, mission}), builder});
     return {
-      control, store, flow, scenario, missionId: intake.missionId, builder: () => last, readiness,
+      control, store, flow, scenario, pair, missionId: intake.missionId, builder: () => last, readiness,
       spawns: (): Array<{kind: string; pid: number; argv: string[]; cwd: string; cfg: string; keys: string[]; prompt: number}> => fs.existsSync(logFile) ? fs.readFileSync(logFile, "utf8").split("\n").filter(Boolean).map(l => JSON.parse(l)) : [],
       rm: () => store.preDevReadModel(SCOPE, intake.missionId),
       approve: (artifactId: string) => founder.approveAndAdvance(SCOPE, intake.missionId, artifactId, "FOUNDER_LOCAL", ["ev-founder-review-1"])
@@ -849,6 +853,48 @@ process.exit(s.exit ?? 0);
     }
     const honest = setup(() => poison(c => { c.assumptions.push("Users fill in <<name>> fields and the word FILL appears in text"); }));
     expect((await honest.flow.step(honest.missionId)).status).toBe("DRAFT_READY");
+  });
+
+  it("EXECUTOR_NOT_ENABLED: readiness says ready but there is no production builder (no pair, or a FAKE pair) -> BLOCKED with a Founder action BEFORE any paid call and before anything is recorded; LOCAL_CLAUDE is unchanged", T, async () => {
+    const t = rig();
+    expect(t.readiness().ready).toBe(true); // CLI, launcher proof and both sign-ins are fine: only the executor is missing
+    // exactly how the analysis route composes the builder (apps/control-api/src/routes/analysis.ts, Lane B)
+    const compose = (pair: {preDevBuilder?: () => BuilderPort} | null): BuilderPort => pair?.preDevBuilder?.() ?? NO_ANALYSIS_BUILDER;
+    const fake = new FakeExecutors({implement: () => ({}), review: () => ({verdict: "CLEAN"})}).pair();
+    expect(fake.preDevBuilder).toBeUndefined();
+    for (const [name, builder] of [["no executors pair", compose(null)], ["FAKE pair", compose(fake)]] as const) {
+      const flow = new AnalysisFlow({store: t.store, scope: SCOPE, builder, readiness: t.readiness});
+      const r = await flow.step(t.missionId);
+      expect([name, r.status]).toEqual([name, "BLOCKED"]);
+      const b = r as Extract<typeof r, {status: "BLOCKED"}>;
+      expect([name, b.blocker, b.blockers]).toEqual([name, "EXECUTOR_NOT_ENABLED", ["EXECUTOR_NOT_ENABLED"]]);
+      expect(b.founderAction).toContain("LOCAL_CLAUDE");
+      expect(b.readiness.ready).toBe(false);
+      expect(t.rm()).toMatchObject({active: false, phase: "NOT_STARTED"}); // nothing opened, nothing recorded
+    }
+    expect(t.spawns()).toHaveLength(0);
+    // LOCAL_CLAUDE: the composed builder is the real one and the very same flow proceeds
+    const real = compose(t.pair());
+    expect(real).not.toBe(NO_ANALYSIS_BUILDER);
+    t.scenario({"*": {stdout: good("BusinessAnalysis")}});
+    const flow = new AnalysisFlow({store: t.store, scope: SCOPE, builder: real, readiness: t.readiness});
+    expect((await flow.step(t.missionId)).status).toBe("DRAFT_READY");
+    expect(t.spawns()).toHaveLength(1);
+  });
+
+  it("EXECUTOR_NOT_ENABLED in claudeAnalysisReadiness: executorEnabled=false adds the blocker AFTER the CLI/launcher/sign-in blockers; true or absent changes nothing", T, () => {
+    const t = rig();
+    const o = {controlRoot: t.control, profile: {forbiddenRoots: [path.join(tmp, "data")]}};
+    expect(claudeAnalysisReadiness({...o, cli: FOUND})).toMatchObject({ready: true, blockers: []});
+    expect(claudeAnalysisReadiness({...o, cli: FOUND, executorEnabled: true})).toMatchObject({ready: true, blockers: []});
+    const off = claudeAnalysisReadiness({...o, cli: FOUND, executorEnabled: false});
+    expect(off).toMatchObject({ready: false, blocker: "EXECUTOR_NOT_ENABLED", blockers: ["EXECUTOR_NOT_ENABLED"]});
+    expect(off.founderAction).toContain("Settings");
+    const noCli: ClaudeCliStatus = {state: "NOT_FOUND", path: null, kind: null, source: null, pathDir: null, searched: ["/a"], founderAction: "install claude"};
+    const both = claudeAnalysisReadiness({controlRoot: path.join(tmp, "nothing-set-up"), profile: o.profile, cli: noCli, executorEnabled: false});
+    expect(both.blocker).toBe("CLAUDE_CLI_NOT_FOUND"); // the executor can only be enabled once the CLI exists: it stays last
+    expect(both.blockers[both.blockers.length - 1]).toBe("EXECUTOR_NOT_ENABLED");
+    expect(both.founderAction).toBe("install claude");
   });
 });
 });

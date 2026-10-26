@@ -225,6 +225,34 @@
    "file": "core/workos/predev/role-prompts.ts",
    "old": "screens: [{id: \"SC1\", name: F(\"screen name\")}]",
    "new": "screens: [{id: \"SC1\", name: \"Home\"}]"
+  },
+  {
+   "id": "E1",
+   "description": "a missing production builder no longer blocks (BUILDER_FAILED/502 again)",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "const readiness = withExecutorBlocker(this.d.readiness(), this.d.builder !== NO_ANALYSIS_BUILDER);",
+   "new": "const readiness = this.d.readiness();"
+  },
+  {
+   "id": "E2",
+   "description": "claudeAnalysisReadiness ignores executorEnabled=false",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "return withExecutorBlocker(base, o.executorEnabled !== false);",
+   "new": "return base;"
+  },
+  {
+   "id": "E3",
+   "description": "the executor blocker comes FIRST instead of after the CLI/launcher/sign-in blockers",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "return {...r, ready: false, blockers: [...r.blockers, EXECUTOR_NOT_ENABLED], blocker: r.blocker ?? EXECUTOR_NOT_ENABLED, founderAction: r.founderAction ?? EXECUTOR_NOT_ENABLED_ACTION};",
+   "new": "return {...r, ready: false, blockers: [EXECUTOR_NOT_ENABLED, ...r.blockers], blocker: EXECUTOR_NOT_ENABLED, founderAction: EXECUTOR_NOT_ENABLED_ACTION};"
+  },
+  {
+   "id": "E4",
+   "description": "a ready flow with a REAL builder is blocked too (the check inverted)",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "this.d.builder !== NO_ANALYSIS_BUILDER);",
+   "new": "this.d.builder === NO_ANALYSIS_BUILDER);"
   }
  ]
 }
