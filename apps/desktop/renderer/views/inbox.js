@@ -8,6 +8,7 @@ import {notVerifiedBadge,runNotVerified} from "../m1a.js";
 import {canOfferComplete} from "../delivery-core.js";
 import {completeNotOffered} from "./work.js";
 import {deriveApprovalRequired} from "../approval-core.js";
+import {ATTENTION_KINDS} from "../attention-core.js";
 
 // //TR: Metin alanlarını güvenli biçimde sınırlar (API verisi asla sayı/HTML'e dönüştürülmez; boş/geçersiz => null, görünüm "—" veya dürüst durum gösterir).
 const str=(v,max=300)=>typeof v==="string"&&v.length?v.slice(0,max):null;
@@ -107,29 +108,31 @@ function alertsPanel(ctx,c){
   return panel(ctx,{titleKey:"inbox.alerts",id:"inbox-alerts",className:"inbox-section"},
     h(doc,"p",{class:"note",text:ctx.t("inbox.alerts.lead")}),body);
 }
-// //TR: Founder dikkati kuyruğu öğesi (SALT-OKUNUR premium kart): paket/faz + engel türü (ATTENTION rozeti + ham tür etiketi) + teknik yeniden-deneme bağlamı (rozet) + gerekçe + zaman. Hiçbir yazma denetimi yoktur; yeniden deneme eylemi yalnız aşağıdaki legacy panelde korunur.
+// //TR: Founder dikkat kuyruğu (GET /v1/attention, yalnız Work OS kayıtlarından türetilir; emekli scheduler kaynağı değil): SALT-OKUNUR. Altı tür AYRI sayaçtır, öğeler önem sırasıyla gösterilir ve her öğenin sonraki eylemi sunucunun bildirdiği değerdir. Atılan (okunamayan) öğeler ve kesilmiş liste açıkça söylenir; okunamayan kaynakta öğe uydurulmaz.
 function attentionItem(ctx,x){
   const doc=ctx.doc;
-  const pkg=str(x.packageId),phase=x.phase===0||typeof x.phase==="number"?String(x.phase):str(x.phase),kind=str(x.kind),reason=str(x.reason,1000),at=str(x.at),retryable=x.retryable===true;
-  const heading=pkg??(phase!=null?ctx.t("attention.phase",{n:phase}):ctx.t("inbox.attention.item.unknown"));
-  return h(doc,"li",{class:"card",dataset:{attentionItem:pkg??(phase!=null?`phase-${phase}`:"item"),retryable:retryable?"1":"0"}},
-    h(doc,"h3",{text:heading}),
-    h(doc,"p",{class:"panel-meta"},
-      kind?statePill(ctx,"ATTENTION",{label:kind}):statePill(ctx,"ATTENTION"),
-      badge(ctx,retryable?ctx.t("inbox.attention.retryable"):ctx.t("inbox.attention.notRetryable"),retryable?"":"badge-risk"),
-      pkg&&phase!=null?h(doc,"span",{class:"mono",text:ctx.t("inbox.attention.item.phase",{phase})}):null),
-    reason?h(doc,"p",{class:"note",text:ctx.t("inbox.attention.item.reason",{reason})}):null,
-    at?h(doc,"p",{class:"note mono",text:ctx.t("inbox.attention.item.when",{when:formatDateTime(at,ctx.i18n.lang)})}):null);
+  return h(doc,"li",{class:"card",dataset:{attentionItem:x.taskId??x.runId??x.missionId,attentionKind:x.kind,nextAction:x.nextAction}},
+    h(doc,"h3",{text:x.title}),
+    h(doc,"p",{class:"panel-meta"},statePill(ctx,"ATTENTION",{label:ctx.t(`attention.kind.${x.kind}`)}),
+      h(doc,"span",{class:"mono",text:x.missionId}),x.runId?h(doc,"span",{class:"mono",text:x.runId}):null,x.taskId?h(doc,"span",{class:"mono",text:x.taskId}):null),
+    h(doc,"p",{class:"note",dataset:{nextAction:x.nextAction}},h(doc,"strong",{text:ctx.t("attention.next")})," ",ctx.t(`attention.next.${x.nextAction}`)),
+    x.reason?h(doc,"p",{class:"note",text:ctx.t("inbox.attention.item.reason",{reason:x.reason})}):null,
+    x.since?h(doc,"p",{class:"note mono",text:ctx.t("attention.since",{when:formatDateTime(x.since,ctx.i18n.lang)})}):null);
 }
-// //TR: Founder dikkati kuyruğu paneli: GET /v1/founder-attention'dan SALT-OKUNUR; dürüst boş/UNAVAILABLE/OFFLINE/FAILED durumları, uydurma yok.
 function attentionPanel(ctx,att){
   const doc=ctx.doc;
   let body;
-  if(att.state!=="VERIFIED")body=stateNote(ctx,failKind(att.state),"inbox.attention.unavailable");
-  else if(!att.blocked.length)body=emptyNote(ctx,"inbox.attention.none");
-  else body=h(doc,"div",{},
-    h(doc,"p",{class:"panel-meta",dataset:{attentionCount:String(att.blocked.length)},role:"status"},statePill(ctx,"ATTENTION"),h(doc,"span",{text:ctx.t("inbox.attention.count",{n:att.blocked.length})})),
-    h(doc,"ul",{class:"cards"},att.blocked.slice(0,100).map(x=>attentionItem(ctx,x))));
+  if(att.state!=="VERIFIED"||!att.queue)body=stateNote(ctx,failKind(att.state),"inbox.attention.unavailable");
+  else if(!att.queue.items.length&&att.queue.dropped===0)body=emptyNote(ctx,"inbox.attention.none");
+  else{
+    const q=att.queue;
+    body=h(doc,"div",{},
+      h(doc,"p",{class:"panel-meta",dataset:{attentionCount:String(q.total),truncated:q.truncated?"1":"0",dropped:String(q.dropped)},role:"status"},statePill(ctx,"ATTENTION"),h(doc,"span",{text:ctx.t("inbox.attention.count",{n:q.total})})),
+      h(doc,"ul",{class:"inline-list",dataset:{attentionCounters:"1"}},ATTENTION_KINDS.map(k=>h(doc,"li",{dataset:{counter:k,value:String(q.counts[k])}},h(doc,"strong",{text:formatCount(q.counts[k])})," ",ctx.t(`attention.kind.${k}`)))),
+      q.truncated?h(doc,"p",{class:"note",dataset:{attentionTruncated:"1"},text:ctx.t("attention.truncated",{shown:formatCount(q.items.length),total:formatCount(q.total)})}):null,
+      q.dropped>0?h(doc,"p",{class:"note",dataset:{attentionDropped:String(q.dropped)},text:ctx.t("attention.dropped",{n:formatCount(q.dropped)})}):null,
+      q.items.length?h(doc,"ul",{class:"cards"},q.items.map(x=>attentionItem(ctx,x))):null);
+  }
   return panel(ctx,{titleKey:"inbox.attention",id:"inbox-attention-queue",className:"inbox-section"},
     h(doc,"p",{class:"note",text:ctx.t("inbox.attention.lead")}),body);
 }
