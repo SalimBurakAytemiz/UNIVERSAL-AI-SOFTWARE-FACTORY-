@@ -16,7 +16,7 @@ import {WorkOsError} from "./types.js";
 import type {RunEvidence, RunStatus, RunStep, SecurityStageSummary, WorkRun} from "./types.js";
 import {LEASED_RUN_STATUSES} from "./run-state.js";
 import {testCommandAllowed} from "./schemas.js";
-import {managedRepoCanonical, pathOverlapsDataDir} from "./path-guard.js";
+import {canonicalPath, managedRepoCanonical, pathOverlapsDataDir} from "./path-guard.js";
 import {redactSecrets, scanCommitMessagesForSecrets, scanDiffForSecrets} from "./secret-scan.js";
 // INT-R4: runProcess (REL-FX ana-makine test çalıştırıcısı) ARTIK kullanılmaz; yürütme yalnız execution-gate sağlayıcısı (gate.provider.run) üzerinden gider, ana makinede asla.
 import {assertIndependentExecutors} from "./executors.js";
@@ -116,11 +116,11 @@ export function repositoryPrecondition(project: {projectId: string; repository?:
 
 // //TR: PAR-03: runner-yerel EŞZAMANSIZ git. spawnGitSync ile aynı yalıtım (isolatedGitArgs/isolatedGitEnv: global/sistem config yok, boş hooksPath, kimlik/ssh değişkenleri düşer) ama olay döngüsünü bloklamaz: büyük bir klon sürerken diğer run'ların heartbeat'i akar. automation/lib/git-isolation.mjs (korumalı) değişmez.
 interface GitRun { status: number | null; stdout: string; stderr: string }
-function runGitAsync(cwd: string, args: string[], env: NodeJS.ProcessEnv, onSpawn?: (c: SpawnedChild) => void): Promise<GitRun> {
+function runGitAsync(cwd: string, args: string[], env: NodeJS.ProcessEnv, onSpawn?: (c: SpawnedChild) => void, o: {timeoutMs?: number} = {}): Promise<GitRun> {
   return new Promise(resolve => {
     try {
       const group = onSpawn !== undefined && process.platform !== "win32"; // yazar git çocuğu kendi grubunda başlar (devirde öldürülebilsin)
-      const child = cp.execFile("git", isolatedGitArgs(args), {cwd, env: isolatedGitEnv(env), encoding: "utf8", windowsHide: true, maxBuffer: 64 * 1024 * 1024, ...(group ? {detached: true} : {})}, (err, stdout, stderr) => {
+      const child = cp.execFile("git", isolatedGitArgs(args), {cwd, env: isolatedGitEnv(env), encoding: "utf8", windowsHide: true, maxBuffer: 64 * 1024 * 1024, ...(o.timeoutMs !== undefined ? {timeout: o.timeoutMs, killSignal: "SIGKILL" as const} : {}), ...(group ? {detached: true} : {})}, (err, stdout, stderr) => {
         const code = err ? (err as cp.ExecFileException).code : 0;
         resolve({status: typeof code === "number" ? code : null, stdout: String(stdout ?? ""), stderr: String(stderr ?? "") || (err?.message ?? "")});
       });
@@ -185,6 +185,72 @@ interface OwnedRun { leaseId: string; drive: Promise<void> | null; renewedAt: nu
 const LOOP_RESOLUTION_MS = 20;
 const STALL_SAMPLE_MS = 1_000;
 const STALL_MEMORY_MS = 5_000;
+
+export type RepositoryHead = {ok: true; baseSha: string} | {ok: false; reason: "REPOSITORY_NOT_WORKTREE_ROOT" | "REPOSITORY_HEAD_UNRESOLVED"};
+// //TR: Depo kökü ve HEAD kararı TEK saf fonksiyondur (runner WORKSPACE adımı çağırır; readiness.ts çağıracaktır: LANE-B-REQUEST, #218; sonuç çağıranın ortamına bağlı değildir). `git rev-parse` yukarı doğru keşfeder: düz bir alt dizin üst deponun HEAD'ini çözerdi. Bu yüzden: (1) süreç ortamından YALNIZ sabit bir izin listesi geçer (safeChildEnv'in alwaysAllow'u + TMPDIR; Windows'ta libuv, eksik HOMEDRIVE, HOMEPATH, LOGONSERVER, SYSTEMDRIVE, USERDOMAIN, USERNAME ve WINDIR'i ebeveynden kendisi doldurur: bunlar GIT_* ya da gizli değildir): GIT_* (GIT_DIR başka bir depoyu gösterebilir), SUDO_UID (git'in sahiplik kararını değiştirir) ve gizli değerler (API anahtarları) git'e ASLA ulaşmaz; repo-yerel config'in çalıştırabileceği bir komut sırları göremez, çağıran (runner/readiness) sonucu değiştiremez ve çok büyük ortam E2BIG üretmez; keşif GIT_CEILING_DIRECTORIES=<fiziksel üst dizin> ile yukarı çıkamaz, ancak ceiling'e GÜVENİLMEZ (':' içeren yol listeyi böler, göreli yol yok sayılır): kök kararı her kolda bağımsız kanıt ister, (2) kök: `.git` (dizin veya gitfile) src'nin kendisinde VAR ve `--show-toplevel` src'ye EŞİT; veya `--absolute-git-dir` == src/.git (core.bare/core.worktree ayarlı depolar dahil); veya çıplak depo (`--is-bare-repository` ve git dizini src'nin kendisi); karşılaştırma kanonik anahtarla (path-guard), `.git` dizininin kendisi kök değildir, (3) HEAD yalnız bir commit nesnesine çözülmelidir (`HEAD` ile `HEAD^{commit}` aynı 40-hex SHA; etiket nesnesi reddedilir). `ok:true` YALNIZ ceiling'li, GIT_*'siz sondajlardan türer; ceiling'siz sondaj yalnız iki red nedeni arasında seçer (REPOSITORY_NOT_WORKTREE_ROOT: başka bir deponun/.git'in içinde). Her sondaj `protocol.allow=never` ile çalışır (kısmi klonda eksik HEAD nesnesi için tembel fetch repo-yerel config'teki komutları çalıştırır/ağa çıkar), toplam süre sınırlıdır (varsayılan 10 sn, SIGKILL; okunamayan HEAD/config sunucuyu sonsuza dek bloke etmez) ve fonksiyon ASLA fırlatmaz (zararlı girdi = red). Nesne grafiğinin bütünlüğü doğrulanmaz: eksik tree/parent clone adımında WORKSPACE_CLONE_FAILED olur.
+const GIT_PROBE_ENV = new Set(["PATH", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "TEMP", "TMP", "TMPDIR", "SYSTEMROOT", "COMSPEC", "PATHEXT", "OS", "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE"]);
+function gitProbeEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {GIT_NO_LAZY_FETCH: "1"};
+  for (const [k, v] of Object.entries(process.env)) if (typeof v === "string" && !v.includes("\0") && GIT_PROBE_ENV.has(k.toUpperCase())) env[k] = v;
+  return env;
+}
+// //TR: Karar prosedürü TEK yerde (jeneratör): her `yield` bir git probu ister ve çıktısını (başarısızsa null) geri alır. Eşzamanlı sürücü (repositoryHead: readiness.ts, Lane B) ve eşzamansız sürücü (repositoryHeadAsync: runner) aynı prosedürü, aynı `-c protocol.allow=never` önekini, aynı tavanı (GIT_CEILING_DIRECTORIES) ve aynı son tarihi uygular; test iki sürücüyü aynı depo matrisinde karşılaştırır.
+interface HeadProbe { args: string[]; ceiling: boolean }
+function* headDecision(root: string): Generator<HeadProbe, RepositoryHead, string | null> {
+  const same = (p: string | null, to: string = root): boolean => { if (!p) return false; const a = canonicalPath(p), b = canonicalPath(to); return a.ok && b.ok && a.key === b.key; };
+  const own = path.join(root, ".git");
+  const isRoot = (fs.existsSync(own) && same(yield {args: ["rev-parse", "--show-toplevel"], ceiling: true})) || same(yield {args: ["rev-parse", "--absolute-git-dir"], ceiling: true}, own)
+    || ((yield {args: ["rev-parse", "--is-bare-repository"], ceiling: true}) === "true" && same(yield {args: ["rev-parse", "--absolute-git-dir"], ceiling: true}));
+  if (!isRoot) return {ok: false, reason: (yield {args: ["rev-parse", "--git-dir"], ceiling: false}) !== null ? "REPOSITORY_NOT_WORKTREE_ROOT" : "REPOSITORY_HEAD_UNRESOLVED"};
+  const ids = ((yield {args: ["rev-parse", "HEAD", "HEAD^{commit}"], ceiling: true}) ?? "").split("\n").map(x => x.trim());
+  return ids.length === 2 && SHA.test(ids[0]) && ids[0] === ids[1] ? {ok: true, baseSha: ids[0]} : {ok: false, reason: "REPOSITORY_HEAD_UNRESOLVED"};
+}
+const PROBE_REFUSED: RepositoryHead = {ok: false, reason: "REPOSITORY_HEAD_UNRESOLVED"};
+export function repositoryHead(src: string, opts: {timeoutMs?: number} = {}): RepositoryHead {
+  try {
+    const c = canonicalPath(src);
+    if (!c.ok) return PROBE_REFUSED;
+    const root = c.path, env = gitProbeEnv();
+    const deadline = Date.now() + (opts.timeoutMs ?? 10_000);
+    let exhausted = false;
+    const run = (p: HeadProbe): string | null => {
+      const left = deadline - Date.now();
+      if (exhausted || left <= 0) { exhausted = true; return null; }
+      try {
+        const r = spawnGitSync(root, ["-c", "protocol.allow=never", ...p.args], {env: p.ceiling ? {...env, GIT_CEILING_DIRECTORIES: path.dirname(root)} : env, maxBuffer: 1024 * 1024, timeout: left, killSignal: "SIGKILL"});
+        if (r.error) { exhausted = true; return null; }
+        return r.status === 0 ? String(r.stdout ?? "").replace(/\n$/, "") : null;
+      } catch { return null; }
+    };
+    const g = headDecision(root);
+    let step = g.next();
+    while (!step.done) step = g.next(run(step.value));
+    return step.value;
+  } catch { return PROBE_REFUSED; }
+}
+// //TR: Eşzamansız sürücü (runner WORKSPACE adımı): aynı karar, olay döngüsünü bloklamadan. runGitAsync spawnGitSync ile aynı yalıtımı (isolatedGitArgs/isolatedGitEnv) uygular; geçirilen ortam gitProbeEnv'dir (process.env değil, runner'ın safeChildEnv'i de değil), yani sonuç iki sürücüde ve her çağıranda aynıdır. Zaman aşımı ve spawn hatası = status null = süre tükendi (eşzamanlı sürücüdeki r.error ile aynı).
+export async function repositoryHeadAsync(src: string, opts: {timeoutMs?: number} = {}): Promise<RepositoryHead> {
+  try {
+    const c = canonicalPath(src);
+    if (!c.ok) return PROBE_REFUSED;
+    const root = c.path, env = gitProbeEnv();
+    const deadline = Date.now() + (opts.timeoutMs ?? 10_000);
+    let exhausted = false;
+    const run = async (p: HeadProbe): Promise<string | null> => {
+      const left = deadline - Date.now();
+      if (exhausted || left <= 0) { exhausted = true; return null; }
+      try {
+        const r = await runGitAsync(root, ["-c", "protocol.allow=never", ...p.args], p.ceiling ? {...env, GIT_CEILING_DIRECTORIES: path.dirname(root)} : env, undefined, {timeoutMs: left});
+        if (r.status === null) { exhausted = true; return null; }
+        return r.status === 0 ? r.stdout.replace(/\n$/, "") : null;
+      } catch { return null; }
+    };
+    const g = headDecision(root);
+    let step = g.next();
+    while (!step.done) step = g.next(await run(step.value));
+    return step.value;
+  } catch { return PROBE_REFUSED; }
+}
 
 export class MissionRunner {
   readonly engineId = `engine_${crypto.randomBytes(6).toString("hex")}`;
@@ -668,8 +734,10 @@ export class MissionRunner {
     const pre = repositoryPrecondition(project, this.o.dataDir);
     if (!pre.ok) return {kind: "BLOCK", reason: pre.reason};
     const src = pre.src;
-    const base = await this.gitOk(src, ["rev-parse", "--verify", "HEAD^{commit}"]);
-    if (!base || !SHA.test(base)) return {kind: "BLOCK", reason: "REPOSITORY_HEAD_UNRESOLVED"};
+    // //TR: PAR-03 + #218: depo kökü/HEAD kararı #218'in TEK karar prosedürüdür (headDecision); burada EŞZAMANSIZ sürücüyle çalışır, böylece bir depo probu sürerken diğer run'ların lease yenilemesi bloklanmaz. Ortam izin listesi (gitProbeEnv) sürücüden bağımsız aynıdır.
+    const repoHead = await repositoryHeadAsync(src);
+    if (!repoHead.ok) return {kind: "BLOCK", reason: repoHead.reason};
+    const base = repoHead.baseSha;
     const dir = this.runDir(run.runId), work = path.join(dir, "work"), branch = `uasco/run/${run.runId}`;
     fs.mkdirSync(dir, {recursive: true});
     this.writeOwner(run.runId, this.ownerRecord(run, leaseId));

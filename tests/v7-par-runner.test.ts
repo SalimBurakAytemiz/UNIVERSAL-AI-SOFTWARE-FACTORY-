@@ -9,31 +9,32 @@ import path from "node:path";
 import {testExecutionGate} from "./support/test-sandbox.js";
 import {spawnGitSync} from "../automation/lib/git-isolation.mjs";
 import {WorkOsStore} from "../core/workos/store.js";
-import {MissionRunner} from "../core/workos/runner.js";
+import {MissionRunner, repositoryHead, repositoryHeadAsync} from "../core/workos/runner.js";
+import type {RepositoryHead} from "../core/workos/runner.js";
 import type {RunnerOptions} from "../core/workos/runner.js";
 import {fakeSecurity} from "../core/workos/security-tools.js";
 import {FakeExecutors} from "../core/workos/executors.js";
 import type {ExecutorPair} from "../core/workos/executors.js";
 
 // //TR: "Yavaş git" modeli: eşleşen git çağrısı senkron spawnSync ile gelirse olay döngüsü BLOKLANIR (düzeltme öncesi runner), eşzamansız execFile ile gelirse yalnız sonucu gecikir (düzeltme sonrası runner). Gecikme süresi her iki yolda aynıdır; deterministik, shim/PATH gerekmez, Windows'ta da çalışır.
-const slow = vi.hoisted(() => ({rule: null as null | {ms: number; match: (cwd: string, args: string[]) => boolean}, hits: {sync: 0, async: 0}}));
-vi.mock("node:child_process", async importOriginal => {
-  const actual = await importOriginal<typeof import("node:child_process")>();
-  const isSlow = (cmd: unknown, args: unknown, opts: unknown) => cmd === "git" && slow.rule !== null && slow.rule.match(String((opts as {cwd?: unknown} | undefined)?.cwd ?? ""), Array.isArray(args) ? args.map(String) : []);
-  const spawnSync = ((...a: Parameters<typeof actual.spawnSync>) => {
+// //TR: C-PAR-1 (test birleştirme): modül mock'u (vi.mock) dosya genelindedir ve başka testlerin child_process'ini etkilerdi. Bu yüzden kaynakların kullandığı VARSAYILAN dışa aktarım nesnesinde (git-isolation.mjs ve runner.ts `import cp ...; cp.spawnSync/cp.execFile` ile çağırır) vi.spyOn kullanılır; casus yalnız bu dosyanın testlerinde kurulur ve her testten sonra geri alınır.
+const slow = {rule: null as null | {ms: number; match: (cwd: string, args: string[]) => boolean}, hits: {sync: 0, async: 0}};
+const realSpawnSync = cp.spawnSync, realExecFile = cp.execFile as (...x: unknown[]) => unknown;
+const isSlow = (cmd: unknown, args: unknown, opts: unknown) => cmd === "git" && slow.rule !== null && slow.rule.match(String((opts as {cwd?: unknown} | undefined)?.cwd ?? ""), Array.isArray(args) ? args.map(String) : []);
+function installSlowGit() {
+  vi.spyOn(cp, "spawnSync").mockImplementation(((...a: Parameters<typeof cp.spawnSync>) => {
     if (isSlow(a[0], a[1], a[2])) { slow.hits.sync += 1; for (const until = Date.now() + slow.rule!.ms; Date.now() < until;) { /* senkron git: olay döngüsü bloklanır */ } }
-    return actual.spawnSync(...a);
-  }) as typeof actual.spawnSync;
-  const execFile = ((...a: unknown[]) => {
+    return realSpawnSync(...a);
+  }) as typeof cp.spawnSync);
+  vi.spyOn(cp, "execFile").mockImplementation(((...a: unknown[]) => {
     const [cmd, args, opts, cb] = a as [string, string[], unknown, ((...r: unknown[]) => void) | undefined];
     if (typeof cb === "function" && isSlow(cmd, args, opts)) {
       slow.hits.async += 1; const ms = slow.rule!.ms;
-      return (actual.execFile as (...x: unknown[]) => unknown)(cmd, args, opts, (...r: unknown[]) => { setTimeout(() => cb(...r), ms); });
+      return realExecFile(cmd, args, opts, (...r: unknown[]) => { setTimeout(() => cb(...r), ms); });
     }
-    return (actual.execFile as (...x: unknown[]) => unknown)(...a);
-  }) as typeof actual.execFile;
-  return {...actual, spawnSync, execFile, default: {...actual, spawnSync, execFile}};
-});
+    return realExecFile(...a);
+  }) as typeof cp.execFile);
+}
 
 const REPO = path.resolve(import.meta.dirname, "..");
 const ENV_POLICY = path.join(REPO, "config", "environment-policy.json");
@@ -43,8 +44,8 @@ const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 const git = (cwd: string, args: string[]) => { const r = spawnGitSync(cwd, args); if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`); return String(r.stdout).trim(); };
 
 let tmp = "";
-beforeEach(() => { tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-par-")); slow.rule = null; slow.hits = {sync: 0, async: 0}; });
-afterEach(() => { slow.rule = null; try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* Windows: kapanan süreçler dosyayı kısa süre tutabilir */ } });
+beforeEach(() => { tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-par-")); slow.rule = null; slow.hits = {sync: 0, async: 0}; installSlowGit(); });
+afterEach(() => { slow.rule = null; vi.restoreAllMocks(); try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* Windows: kapanan süreçler dosyayı kısa süre tutabilir */ } });
 
 function setup(name = "s") {
   const root = path.join(tmp, name); fs.mkdirSync(root);
@@ -64,13 +65,14 @@ function setup(name = "s") {
     return store.createRun({tenantId: "tA", missionId: m.missionId, executor: {implementer: base.implementer.identity, reviewer: base.reviewer.identity}, createdBy: "FOUNDER_LOCAL"});
   };
   const runner = (extra: Partial<RunnerOptions> = {}) => new MissionRunner({executionGate: testExecutionGate(), store, dataDir, globalStopFile: path.join(runtime, "GLOBAL_STOP.json"), envPolicyFile: ENV_POLICY, executors: base, retryBackoffMs: [0, 0], leaseTtlMs: 60_000, security: fakeSecurity(path.join(root, "sec")).options, ...extra});
-  return {store, dataDir, base, mkRun, runner, status: (id: string) => store.engineGetRun(id)!.status};
+  return {store, dataDir, base, repo, mkRun, runner, status: (id: string) => store.engineGetRun(id)!.status};
 }
 const journal = (dataDir: string): Array<{type: string; payload: Record<string, unknown>}> => fs.readFileSync(path.join(dataDir, "journal.jsonl"), "utf8").split("\n").filter(Boolean).map(l => JSON.parse(l));
 const wrapImplementer = (base: ExecutorPair, implement: ExecutorPair["implementer"]["implement"]): ExecutorPair => ({...base, implementer: {...base.implementer, implement}});
 
 describe("C-PAR-1 PAR-03: synchronous git in one run must not starve another run's lease heartbeat (cap 2)", () => {
-  it("run A's slow git clone (3 s, TTL 2 s) leaves run B (long async implementer call) unfenced: no abort, no re-run", { timeout: 90_000 }, async () => {
+  // //TR: Aynı senaryo iki yavaş git noktası için: A'nın VERIFY tarama klonu ve A'nın WORKSPACE adımındaki depo kökü/HEAD probu (#218 ile birleşimde eşzamansız sürücü).
+  const slowGitLeavesBUnfenced = async (slowMatch: (A: {runId: string}, srcRepo: string) => (cwd: string, args: string[]) => boolean) => {
     const TTL = 2000, BLOCK = 3000;
     const c = setup(); const A = c.mkRun("A"), B = c.mkRun("B");
     const calls = {A: 0, B: 0, Baborted: 0};
@@ -86,7 +88,7 @@ describe("C-PAR-1 PAR-03: synchronous git in one run must not starve another run
       }
       return c.base.implementer.implement(w, spec, ctx);
     });
-    slow.rule = {ms: BLOCK, match: (cwd, args) => cwd.includes(A.runId) && args.includes("clone") && args.some(a => a.endsWith("scan-c0"))}; // A'nın VERIFY tarama klonu
+    slow.rule = {ms: BLOCK, match: slowMatch(A, c.repo)};
     const rep = await c.runner({maxConcurrentRuns: 2, leaseTtlMs: TTL, executors: pair}).tick();
     expect(slow.hits.sync + slow.hits.async, "the slow-git scenario really fired once").toBe(1);
     expect(rep.claimed.sort()).toEqual([A.runId, B.runId].sort());
@@ -94,6 +96,13 @@ describe("C-PAR-1 PAR-03: synchronous git in one run must not starve another run
     expect(calls.B).toBe(1);
     expect(calls.Baborted).toBe(0);
     expect([c.status(A.runId), c.status(B.runId)]).toEqual(["AWAITING_APPROVAL", "AWAITING_APPROVAL"]);
+  };
+  it("run A's slow git clone (3 s, TTL 2 s) leaves run B (long async implementer call) unfenced: no abort, no re-run", { timeout: 90_000 }, async () => {
+    await slowGitLeavesBUnfenced(A => (cwd, args) => cwd.includes(A.runId) && args.includes("clone") && args.some(a => a.endsWith("scan-c0"))); // A'nın VERIFY tarama klonu
+  });
+  it("run A's slow repository HEAD probe (3 s, TTL 2 s, WORKSPACE step) leaves run B unfenced too: the probe is asynchronous", { timeout: 90_000 }, async () => {
+    let fired = false; // yalnız İLK HEAD okuması yavaş (A'nınki); B'ninki ve sonraki adımlar hızlı
+    await slowGitLeavesBUnfenced((_A, srcRepo) => (cwd, args) => { const hit = !fired && cwd === fs.realpathSync(srcRepo) && args.includes("HEAD^{commit}") && args.includes("HEAD"); if (hit) fired = true; return hit; });
   });
 
   it("span() renews EVERY owned lease before and after a synchronous span (throttled to TTL/10, so the journal does not balloon)", { timeout: 60_000 }, async () => {
@@ -251,5 +260,78 @@ describe("C-PAR-1 PAR-04: after an engine crash the implementer child must not k
       expect(x.note).toMatch(/identity cannot be proven/);
       expect(alive()).toBe(true);
     } finally { try { if (process.platform === "win32") decoy.kill(); else process.kill(-decoy.pid!, "SIGKILL"); } catch { /* zaten bitmiş */ } }
+  });
+});
+
+// //TR: #218 (repositoryHead) + C-PAR-1 birleşimi: runner WORKSPACE adımı depo kökü/HEAD kararını artık EŞZAMANSIZ sürücüyle verir (olay döngüsünü bloklamaz); karar prosedürü (headDecision) tek yerde, iki sürücü aynı ortam izin listesini ve aynı tavanı kullanır. Bu testler iki sürücünün aynı cevabı verdiğini, host GIT_* değişkenlerinin hiçbirini görmediğini ve eşzamansız sürücünün döngüyü bloklamadığını kanıtlar.
+describe("C-PAR-1 + #218: the runner's repository HEAD probe is the same decision, asynchronous", () => {
+  const ID = ["-c", "user.name=Seed", "-c", "user.email=seed@local.invalid", "-c", "commit.gpgsign=false"];
+  const commit = (dir: string, name = "f.txt") => { fs.writeFileSync(path.join(dir, name), `${name}\n`); git(dir, ["add", "-A"]); git(dir, [...ID, "commit", "-q", "-m", `add ${name}`]); return git(dir, ["rev-parse", "HEAD"]); };
+  const repo = (dir: string, withCommit = true, file = "f.txt") => { fs.mkdirSync(dir, {recursive: true}); git(dir, ["init", "-q", "-b", "main"]); return withCommit ? commit(dir, file) : null; };
+  const both = async (dir: string, opts?: {timeoutMs?: number}): Promise<[RepositoryHead, RepositoryHead]> => [repositoryHead(dir, opts), await repositoryHeadAsync(dir, opts)];
+  const withEnv = async <R,>(vars: Record<string, string>, fn: () => Promise<R>): Promise<R> => {
+    const saved = Object.entries(process.env);
+    for (const [k, v] of Object.entries(vars)) process.env[k] = v;
+    try { return await fn(); } finally { for (const k of Object.keys(process.env)) delete process.env[k]; for (const [k, v] of saved) if (v !== undefined) process.env[k] = v; }
+  };
+  const UNRESOLVED: RepositoryHead = {ok: false, reason: "REPOSITORY_HEAD_UNRESOLVED"}, NOT_ROOT: RepositoryHead = {ok: false, reason: "REPOSITORY_NOT_WORKTREE_ROOT"};
+
+  it("both drivers give the same verdict on every repository shape, with and without planted GIT_* variables (a decoy repository never leaks in)", { timeout: 120_000 }, async () => {
+    const root = path.join(tmp, "root"), rootHead = repo(root)!;
+    const unborn = path.join(tmp, "unborn"); repo(unborn, false);
+    const sub = path.join(root, "pkg", "deep"); fs.mkdirSync(sub, {recursive: true});
+    const bareSrc = path.join(tmp, "bare-src"); repo(bareSrc); const bare = path.join(tmp, "bare.git"); git(tmp, ["clone", "-q", "--bare", bareSrc, bare]);
+    const wt = path.join(tmp, "wt"); git(root, ["worktree", "add", "-q", "-b", "wt", wt]);
+    const decoy = path.join(tmp, "decoy"), decoyHead = repo(decoy, true, "decoy-only.txt")!;
+    const shapes: Array<[string, string, RepositoryHead | null]> = [
+      ["repo root", root, {ok: true, baseSha: rootHead}], ["unborn HEAD", unborn, UNRESOLVED], ["plain subdirectory of a repository", sub, NOT_ROOT],
+      ["bare repository", bare, {ok: true, baseSha: git(bare, ["rev-parse", "HEAD"])}], ["linked worktree (gitfile)", wt, {ok: true, baseSha: rootHead}],
+      ["missing path", path.join(tmp, "nope"), UNRESOLVED], ["relative spelling of the root", path.relative(process.cwd(), root), {ok: true, baseSha: rootHead}], ["a directory that is no repository", fs.mkdtempSync(path.join(tmp, "plain-")), null]
+    ];
+    const planted: Array<[string, Record<string, string>]> = [["clean", {}], ["GIT_DIR", {GIT_DIR: path.join(decoy, ".git")}], ["GIT_DIR + GIT_WORK_TREE", {GIT_DIR: path.join(decoy, ".git"), GIT_WORK_TREE: decoy}], ["a ceiling covering everything", {GIT_CEILING_DIRECTORIES: path.parse(tmp).root}]];
+    for (const [label, dir, want] of shapes) for (const [env, vars] of planted) {
+      const [syncV, asyncV] = await withEnv(vars, () => both(dir));
+      expect([label, env, asyncV]).toEqual([label, env, syncV]);
+      if (want) expect([label, env, asyncV]).toEqual([label, env, want]);
+      else expect([label, env, asyncV.ok]).toEqual([label, env, false]);
+    }
+    expect(decoyHead).not.toBe(rootHead); // the decoy really has another HEAD, so a leaked GIT_DIR would have changed the verdicts above
+  });
+
+  it("the async probe is what the WORKSPACE step uses: a planted GIT_DIR in the engine's process cannot change the run's baseSha", { timeout: 90_000 }, async () => {
+    const c = setup("env-gd"), decoy = path.join(tmp, "decoy2"); repo(decoy, true, "decoy-only.txt");
+    const srcHead = git(c.repo, ["rev-parse", "HEAD"]);
+    const A = c.mkRun("A");
+    await withEnv({GIT_DIR: path.join(decoy, ".git")}, async () => { await c.runner().tick(); });
+    expect(c.status(A.runId)).toBe("AWAITING_APPROVAL");
+    expect(c.store.engineGetRun(A.runId)).toMatchObject({baseSha: srcHead});
+  });
+
+  it("the async driver keeps the event loop free while the probe's git calls are slow; the sync driver blocks it (same git, same delay)", { timeout: 60_000 }, async () => {
+    const root = path.join(tmp, "root"); const head = repo(root)!;
+    slow.rule = {ms: 300, match: (_cwd, args) => args.includes("rev-parse")};
+    let ticks = 0; const timer = setInterval(() => { ticks += 1; }, 25);
+    try {
+      const t0 = Date.now();
+      expect(await repositoryHeadAsync(root)).toEqual({ok: true, baseSha: head});
+      const asyncMs = Date.now() - t0;
+      expect(slow.hits.async).toBeGreaterThanOrEqual(2); // root proof (--show-toplevel) + the HEAD read
+      expect(slow.hits.sync).toBe(0);
+      expect(asyncMs).toBeGreaterThanOrEqual(550); // 2+ probes x 300 ms
+      expect(ticks).toBeGreaterThanOrEqual(Math.floor(asyncMs / 25 / 2)); // the loop kept ticking during the whole probe
+      ticks = 0; slow.hits = {sync: 0, async: 0};
+      expect(repositoryHead(root)).toEqual({ok: true, baseSha: head});
+      expect(slow.hits.sync).toBeGreaterThanOrEqual(2);
+      expect(slow.hits.async).toBe(0);
+      expect(ticks).toBe(0); // the sync driver held the loop for its whole duration
+    } finally { clearInterval(timer); }
+  });
+
+  it("the deadline is shared by the whole probe in both drivers: once it is spent, the rest of the decision is refused (never a guess)", { timeout: 60_000 }, async () => {
+    const root = path.join(tmp, "root"); repo(root);
+    slow.rule = {ms: 300, match: (_cwd, args) => args.includes("rev-parse")};
+    const [syncV, asyncV] = await both(root, {timeoutMs: 100});
+    expect(asyncV).toEqual(UNRESOLVED);
+    expect(syncV).toEqual(UNRESOLVED);
   });
 });
