@@ -1,4 +1,4 @@
-// //TR: Bu betik gerçek Electron masaüstü uygulamasını (Playwright _electron) geçici veri dizini ve FAKE yürütücü ile sürer: fikir -> intake (web-node) -> plan -> görev -> koşu -> teslim. Her adımda ekrandaki durum doğrulanır ve ekran görüntüsü alınır; GATED_4B adımlar dürüstçe "etkin değil" görünmelidir. Gerçek Claude ve ağ yoktur. Çıkış kodu: 0 = tüm planlı adımlar geçti (NOT_VERIFIED:GATED_4B olabilir), 1 = bir adım ya da başlatma başarısız, 3 = BLOCKED (yalnız HİÇBİR ŞEY başlatılmadan önce denetlenen ön koşul eksik: Playwright, Electron binary'si ya da ekran; PASS sayılmaz), 4 = --require-post-4b iken NOT_VERIFIED var. Batch 4b öncesi/sonrası: gerçek main.mjs allow-list'i uygulama içinden yoklanır (detect-routes). Kullanım: node scripts/e2e/desktop-journey.e2e.mjs [--out <dizin>] [--require-post-4b] (Linux başsız ortam: xvfb-run -a node ...).
+// //TR: Bu betik gerçek Electron masaüstü uygulamasını (Playwright _electron) geçici veri dizini ve FAKE yürütücü ile sürer: fikir -> intake (web-node) -> plan -> görev -> koşu -> teslim. Her adımda ekrandaki durum doğrulanır ve ekran görüntüsü alınır; GATED_4B adımlar dürüstçe "etkin değil" görünmelidir. Gerçek Claude ve ağ yoktur. Çıkış kodu: 0 = tüm planlı adımlar geçti (NOT_VERIFIED:GATED_4B olabilir), 1 = bir adım ya da başlatma başarısız, 3 = BLOCKED (yalnız HİÇBİR ŞEY başlatılmadan önce denetlenen ön koşul eksik: Playwright, Electron binary'si ya da ekran; PASS sayılmaz), 4 = --require-post-4b iken NOT_VERIFIED ya da NOT_EXECUTED (rotası bu masaüstü derlemesinde kayıtlı/izinli olmadığı için NEDENİYLE çalıştırılamayan) adım var. 20 planlı adım sabit paydadır; planlı ama hiç çalışmayan adım NOT_REACHED sayılır (sonuç FAIL:INCOMPLETE). Son adım (request-ledger) sunucunun istek günlüğünü TÜM yolculuk için sayar. Batch 4b öncesi/sonrası: gerçek main.mjs allow-list'i uygulama içinden yoklanır (detect-routes). Kullanım: node scripts/e2e/desktop-journey.e2e.mjs [--out <dizin>] [--require-post-4b] (Linux başsız ortam: xvfb-run -a node ...).
 import {spawn} from "node:child_process";
 import {createRequire} from "node:module";
 import crypto from "node:crypto";
@@ -17,9 +17,9 @@ fs.mkdirSync(shotsDir, {recursive: true});
 const dataRoot = fs.mkdtempSync(path.join(outDir, "data-"));
 
 // Planlı adımlar (sabit payda). kind: FUNCTIONAL = gerçek işlev sürülür; GATED_ASSERTED = 4b kapısına bağlı iddia (kapalıysa NOT_VERIFIED:GATED_4B); NOT_EXECUTED_ASSERTED = "çalıştırılmadı" durumunun dürüst gösterimi.
-const PLAN = [["first-run-dialog", "FUNCTIONAL"], ["detect-routes", "FUNCTIONAL"], ["setup-check", "FUNCTIONAL"], ["intake-idea", "FUNCTIONAL"], ["analysis", "GATED_ASSERTED"], ["plan-gate-closed", "FUNCTIONAL"], ["analysis-stuck-shown", "FUNCTIONAL"], ["reapprove-once", "FUNCTIONAL"], ["plan-task-by-hand", "FUNCTIONAL"],
+const PLAN = [["first-run-dialog", "FUNCTIONAL"], ["detect-routes", "FUNCTIONAL"], ["setup-check", "FUNCTIONAL"], ["intake-idea", "FUNCTIONAL"], ["analysis", "GATED_ASSERTED"], ["plan-gate-closed", "FUNCTIONAL"], ["analysis-stuck-shown", "GATED_ASSERTED"], ["reapprove-once", "GATED_ASSERTED"], ["plan-task-by-hand", "FUNCTIONAL"],
   ["authorize-mission", "FUNCTIONAL"], ["run-engine-truth", "FUNCTIONAL"], ["start-run", "FUNCTIONAL"], ["run-reaches-review", "FUNCTIONAL"], ["test-result-honest", "NOT_EXECUTED_ASSERTED"],
-  ["link-run-to-task", "FUNCTIONAL"], ["open-project-workspace", "FUNCTIONAL"], ["delivery-prepare", "FUNCTIONAL"], ["delivery-accept", "FUNCTIONAL"], ["product", "GATED_ASSERTED"]];
+  ["link-run-to-task", "FUNCTIONAL"], ["open-project-workspace", "FUNCTIONAL"], ["delivery-prepare", "FUNCTIONAL"], ["delivery-accept", "FUNCTIONAL"], ["product", "GATED_ASSERTED"], ["request-ledger", "FUNCTIONAL"]];
 const KIND = Object.fromEntries(PLAN);
 const steps = [];
 const mode = {analysis: "UNKNOWN", product: "UNKNOWN"}; // ADMITTED | GATED_4B (uygulamadaki gerçek allow-list'ten)
@@ -40,6 +40,7 @@ async function serverPost(p, body) {
 // //TR: Sunucunun kendi istek günlüğü (yalnız bu test arka ucunda): hangi POST'ların GERÇEKTEN gittiği buradan sayılır, ekrandaki metinden değil.
 const requestCount = async (method, re) => ((await serverGet("/__e2e/requests"))?.requests ?? []).filter(r => r.method === method && re.test(r.url)).length;
 // //TR: detect-routes olmayan bir kimlikle yoklama yapar; sayım yalnız bu yolculuğun GERÇEK görevine bakar.
+const expectCount = (what, got, want) => must(got === want, `expected exactly ${want} ${what}, got ${got}`); // sayı hatası gerçek sayıyı gösterir
 const stepRe = id => new RegExp(`^/v1/missions/${id}/analysis/step$`), planRe = id => new RegExp(`^/v1/missions/${id}/analysis/plan$`);
 const missionIdOf = async () => { const ms = (await serverGet(`/v1/missions?projectId=${projectId}`))?.missions ?? []; must(ms.length === 1, `expected one mission in the project, got ${ms.length}`); return ms[0].missionId; };
 const predevArtifacts = async missionId => Object.entries((await serverGet(`/v1/predev/${missionId}`))?.predev?.artifacts ?? {}).map(([kind, a]) => ({kind, state: a.state, version: a.version, artifactId: a.artifactId}));
@@ -51,11 +52,11 @@ async function serverGet(p) {
 }
 const report = (extra = {}) => {
   const done = new Set(steps.map(s => s.name));
-  const notExecuted = PLAN.filter(([n]) => !done.has(n)).map(([name, kind]) => ({name, kind, status: "NOT_EXECUTED"}));
-  const all = [...steps, ...notExecuted];
+  const notReached = PLAN.filter(([n]) => !done.has(n)).map(([name, kind]) => ({name, kind, status: "NOT_REACHED"})); // planlı ama HİÇ çalışmadı (önceki adım düştü)
+  const all = [...steps, ...notReached];
   const failed = steps.some(s => s.status === "FAIL") || startup !== null;
-  const counts = {PASS: all.filter(x => x.status === "PASS").length, NOT_VERIFIED: all.filter(x => x.status === "NOT_VERIFIED").length, FAIL: all.filter(x => x.status === "FAIL").length, NOT_EXECUTED: notExecuted.length, NOT_EXECUTED_WITH_REASON: steps.filter(x => x.status === "NOT_EXECUTED").length, planned: PLAN.length};
-  const result = extra.blocked ? `BLOCKED:${extra.blocked}` : failed ? "FAIL" : notExecuted.length === PLAN.length ? "NOT_RUN" : notExecuted.length ? "FAIL:INCOMPLETE" : counts.NOT_VERIFIED || counts.NOT_EXECUTED_WITH_REASON ? (requirePost4b ? "FAIL:NOT_VERIFIED_WITH_REQUIRE_POST_4B" : "PASS_WITH_NOT_VERIFIED") : "PASS";
+  const counts = {PASS: all.filter(x => x.status === "PASS").length, NOT_VERIFIED: all.filter(x => x.status === "NOT_VERIFIED").length, FAIL: all.filter(x => x.status === "FAIL").length, NOT_EXECUTED: all.filter(x => x.status === "NOT_EXECUTED").length, NOT_REACHED: notReached.length, planned: PLAN.length}; // NOT_EXECUTED = nedeniyle çalıştırılamayan adım (rota kayıtlı değil); NOT_REACHED = hiç çalışmayan; tablo ve sayılar aynı durum adlarını kullanır
+  const result = extra.blocked ? `BLOCKED:${extra.blocked}` : failed ? "FAIL" : notReached.length === PLAN.length ? "NOT_RUN" : notReached.length ? "FAIL:INCOMPLETE" : counts.NOT_VERIFIED || counts.NOT_EXECUTED ? (requirePost4b ? "FAIL:NOT_VERIFIED_WITH_REQUIRE_POST_4B" : "PASS_WITH_NOT_VERIFIED") : "PASS";
   const r = {platform: process.platform, node: process.version, outDir, ...meta, mode, counts, steps: all, startup, result, ...extra};
   fs.writeFileSync(path.join(outDir, "report.json"), JSON.stringify(r, null, 2));
   return r;
@@ -77,7 +78,9 @@ async function doCleanup() {
 }
 // //TR: Sinyal gelirse çıkış kodu her koşulda 130/143 olur (koşan adımın hatası yarışmaz); temizlik tamamlanmadan çıkılmaz.
 let sigExit = null;
-for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => { sigExit = sig === "SIGINT" ? 130 : 143; cleanup().finally(() => process.exit(sigExit)); });
+for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => { sigExit = sig === "SIGINT" ? 130 : 143; try { if (backend && backend.exitCode === null) backend.kill("SIGTERM"); } catch { /* yoksay */ } cleanup().finally(() => process.exit(sigExit)); }); // arka uç ÖNCE durdurulur, sonra uygulama beklenir
+// //TR: Her çıkış yolunda (hata, process.exit) arka uç hâlâ yaşıyorsa SIGKILL ve veri dizini senkron silinir: geride süreç ya da dizin kalmaz.
+process.on("exit", () => { try { if (backend && backend.exitCode === null && backend.signalCode === null) backend.kill("SIGKILL"); } catch { /* yoksay */ } try { fs.rmSync(dataRoot, {recursive: true, force: true}); } catch { /* yoksay */ } });
 
 // ---- ortam: Playwright (yeni bağımlılık eklenmez; ön kurulu playwright ya da playwright-core) ----
 function loadPlaywright() {
@@ -185,7 +188,7 @@ async function finish() {
   const r = report();
   await cleanup();
   const c = r.counts;
-  console.log(`RESULT ${r.result} (PASS ${c.PASS} / NOT_VERIFIED ${c.NOT_VERIFIED} / FAIL ${c.FAIL} / NOT_EXECUTED ${c.NOT_EXECUTED} / NOT_EXECUTED_WITH_REASON ${c.NOT_EXECUTED_WITH_REASON} of ${c.planned} planned; mode analysis=${mode.analysis} product=${mode.product}) out=${outDir}`);
+  console.log(`RESULT ${r.result} (PASS ${c.PASS} / NOT_VERIFIED ${c.NOT_VERIFIED} / FAIL ${c.FAIL} / NOT_EXECUTED ${c.NOT_EXECUTED} / NOT_REACHED ${c.NOT_REACHED} of ${c.planned} planned; mode analysis=${mode.analysis} product=${mode.product}) out=${outDir}`);
   process.exit(sigExit ?? (r.result === "PASS" || r.result === "PASS_WITH_NOT_VERIFIED" ? 0 : r.result.startsWith("FAIL:NOT_VERIFIED") ? 4 : 1));
 }
 
@@ -235,7 +238,7 @@ async function runSteps() {
     await go("#/journey"); await waitSel("#analysis-step-submit", 20000);
     // Yalnız GÖRÜNTÜLEMEK ücretli çağrı başlatmaz: Yolculuk çizildi, henüz hiçbir analiz adımı istenmedi.
     const jm = await missionIdOf();
-    must((await requestCount("POST", stepRe(jm))) === 0, "an analysis step was requested merely by viewing the Journey (a paid call would have started)");
+    expectCount("analysis step requests merely by viewing the Journey (a paid call would have started)", await requestCount("POST", stepRe(jm)), 0);
     await win.click("#analysis-step-submit");
     const noResult = () => win.evaluate(() => !document.querySelector("#analysis-step [data-analysis-status='DRAFT_READY'], #analysis-step [data-analysis-status='AWAITING_APPROVAL'], #analysis-step [data-analysis-status='COMPLETE'], #analysis-step [data-analysis-plan='CREATED']"));
     if (mode.analysis === "GATED_4B") {
@@ -253,7 +256,7 @@ async function runSteps() {
     must(blockers.every(b => /^([a-z]+:)?[A-Z][A-Z0-9_]*(:.+)?$/.test(b)), `blocker code not in the server's shape: ${blockers.join(",")}`);
     must(!(await win.evaluate(() => !!document.querySelector("#analysis-plan-submit"))), "'Create plan' is offered although the analysis is not COMPLETE");
     // Ücretli çağrı BAŞLAMADI: yalnız tıklanan tek istek gitti ve ön-geliştirme kaydında hiçbir artefakt üretilmedi (sunucunun kendi okuması).
-    must((await requestCount("POST", stepRe(await missionIdOf()))) === 1, "more than the one clicked analysis step reached the server");
+    expectCount("analysis step request after the one click", await requestCount("POST", stepRe(await missionIdOf())), 1);
     const pre = await predevArtifacts(await missionIdOf());
     must(pre.every(a => a.state === "NOT_STARTED"), `an artefact exists after a BLOCKED step (a paid call started?): ${JSON.stringify(pre)}`);
     return `server BLOCKED: ${blockers.join(" | ")}`;
@@ -263,8 +266,8 @@ async function runSteps() {
     must(await win.evaluate(() => !!document.querySelector('#analysis-step [data-analysis-plan-gate="CLOSED"]')), "the Create plan gate is not shown as CLOSED");
     must(await win.evaluate(() => !document.querySelector("#analysis-plan-submit")), "Create plan is offered although the analysis is not COMPLETE");
     must(await win.evaluate(() => !document.querySelector("#analysis-step [data-analysis-status='COMPLETE']")), "the analysis block claims COMPLETE");
-    must((await requestCount("POST", planRe(await missionIdOf()))) === 0, "a plan request reached the server before COMPLETE");
-    return "Create plan stays gated (no button, no plan request) until the analysis is COMPLETE";
+    expectCount("plan requests before COMPLETE", await requestCount("POST", planRe(await missionIdOf())), 0);
+    return mode.analysis === "GATED_4B" ? "the DOM gate is the PASS basis (no button, gate CLOSED, status not COMPLETE); 'no plan request' is NOT evidence here: the route is not admitted, so the desktop could not send one anyway" : "Create plan stays gated (no button, gate CLOSED, no plan request reached the server) until the analysis is COMPLETE";
   });
   let seeded = null, stuckMission = null, stepsAfterStuck = null;
   await step("analysis-stuck-shown", async () => {
@@ -283,9 +286,9 @@ async function runSteps() {
     must(await win.evaluate(() => !document.querySelector("#analysis-step [data-analysis-status='BUILDER_FAILED'], #analysis-step [data-analysis-status='REJECTED']")), "the stuck artefact is shown as a failure");
     must(await win.evaluate(() => !!document.querySelector("#analysis-reapprove-submit") && !!document.querySelector("#analysis-reapprove-evidence")), "no Re-approve button / evidence field");
     stepsAfterStuck = await requestCount("POST", stepRe(stuckMission));
-    must(stepsAfterStuck === stepsBefore + 1, `the stuck answer needed ${stepsAfterStuck - stepsBefore} step requests, expected exactly the one click`);
+    expectCount("analysis step request for the stuck answer (the one click)", stepsAfterStuck - stepsBefore, 1);
     must(JSON.stringify(await predevArtifacts(stuckMission)) === before, "the pre-development record changed while only showing the stuck artefact (a paid call started?)");
-    must((await requestCount("POST", /\/predev\/artifacts\/[^/]+\/approve$/)) === 0, "an approval was posted without the Founder pressing Re-approve");
+    expectCount("approvals before the Founder presses Re-approve", await requestCount("POST", /\/predev\/artifacts\/[^/]+\/approve$/), 0);
     return `${box.stuck} ${box.artifact} shown as a Founder action; no paid call, no approval posted`;
   });
   await step("reapprove-once", async () => {
@@ -293,17 +296,17 @@ async function runSteps() {
     const approve = /\/predev\/artifacts\/([^/]+)\/approve$/;
     await win.click("#analysis-reapprove-submit"); // no evidence typed: nothing may be posted
     await waitSel("#analysis-reapprove-status[data-result='invalid']", 10000);
-    must((await requestCount("POST", approve)) === 0, "Re-approve posted without Founder-typed evidence");
+    expectCount("approve requests without Founder-typed evidence", await requestCount("POST", approve), 0);
     await win.fill("#analysis-reapprove-evidence", "e2e-evidence-1");
     await win.click("#analysis-reapprove-submit", {clickCount: 2}); // a double click must still post exactly once
     await waitSel("#analysis-reapprove-status[data-result='ok']", 20000);
     const posted = ((await serverGet("/__e2e/requests"))?.requests ?? []).filter(r => r.method === "POST" && approve.test(r.url));
-    must(posted.length === 1, `Re-approve reached the server ${posted.length} times`);
+    expectCount("Re-approve request (a double click must post once)", posted.length, 1);
     must(posted[0].url === `/v1/missions/${stuckMission}/predev/artifacts/${seeded.artifactId}/approve` && posted[0].status >= 200 && posted[0].status < 300, `approve request: ${JSON.stringify(posted[0])}`);
     must(await win.evaluate(() => !document.querySelector("#analysis-step [data-analysis-stuck]")), "the stuck block is still shown after a successful Re-approve");
     const phase = (await serverGet(`/v1/predev/${stuckMission}`))?.predev?.phase;
     must(phase && phase !== seeded.phase, `the server's phase did not advance (still ${phase})`);
-    must((await requestCount("POST", stepRe(stuckMission))) === stepsAfterStuck, "Re-approve started an analysis step (a paid call) by itself");
+    expectCount("analysis step requests after Re-approve (it must not start one)", await requestCount("POST", stepRe(stuckMission)), stepsAfterStuck);
     return `approve posted once (${posted[0].status}); phase ${seeded.phase} -> ${phase}; no analysis step was started`;
   });
   await step("plan-task-by-hand", async () => {
@@ -427,13 +430,13 @@ async function runSteps() {
     // 4b sonrası: Start sunulur (kaynak üretimi tamam + teslim commit'i), sandbox yok => sunucunun kesin reddi; host'ta hiçbir şey başlamaz.
     await waitSel("#studio-ov-product #product-start", 20000);
     const startRe = new RegExp(`^/v1/work-runs/${runId}/product/start$`);
-    must((await requestCount("POST", startRe)) === 0, "a product start reached the server before the Founder pressed Start");
+    expectCount("product start requests before the Founder pressed Start", await requestCount("POST", startRe), 0);
     await win.click("#product-start"); await confirmDialog("start product");
     await waitSel("#product-run-status[data-result]", 20000);
     const ui = await win.evaluate(() => { const c = document.querySelector("#studio-ov-product"); return {result: document.querySelector("#product-run-status")?.dataset.result ?? null, state: c?.dataset.productState ?? null, reason: c?.querySelector("[data-product-reason]")?.dataset.productReason ?? null, url: !!c?.querySelector("[data-product-url]"), stop: !!document.querySelector("#product-stop")}; });
     // Sunucu: tek bir başlatma isteği gitti ve düz 409 SANDBOX_UNAVAILABLE ile reddedildi (doğrulanmış sandbox yok); ekran bunu BAŞARI olarak göstermez.
     const starts = ((await serverGet("/__e2e/requests"))?.requests ?? []).filter(r => r.method === "POST" && startRe.test(r.url));
-    must(starts.length === 1 && starts[0].status === 409, `the product start requests: ${JSON.stringify(starts)}`);
+    expectCount("product start request", starts.length, 1); must(starts[0].status === 409, `the product start was answered ${starts[0].status}, not 409`);
     const prod = (await serverGet(`/v1/work-runs/${runId}/product`))?.product;
     must(prod && prod.devrun?.status !== "RUNNING" && prod.devrun?.status !== "STARTING", `the server reports a running product: ${JSON.stringify(prod?.devrun)}`);
     must(ui.result === "error", `the refused start is shown as '${ui.result}' instead of an error`);
@@ -444,6 +447,23 @@ async function runSteps() {
     const ws = path.join(dataRoot, "workos", "projects", projectId, "devrun", "workspace");
     must(!fs.existsSync(ws), `a dev-run workspace was created on the host: ${ws}`);
     return `refused: ${reason}; card=${card.state}; no host workspace`;
+  });
+  await step("request-ledger", async () => {
+    // Yolculuk bittiğinde sunucunun kendi günlüğü sayılır: "başlatılmadı" iddiaları yalnız bir an için değil TÜM yolculuk için geçerli olmalı.
+    const mid = await missionIdOf(), gated = mode.analysis === "GATED_4B", gatedProduct = mode.product === "GATED_4B";
+    const reqs = (await serverGet("/__e2e/requests"))?.requests ?? [];
+    const n = (method, re) => reqs.filter(r => r.method === method && re.test(r.url)).length;
+    expectCount("analysis step requests in the whole journey", n("POST", stepRe(mid)), gated ? 0 : stepsAfterStuck);
+    expectCount("approve requests in the whole journey", n("POST", new RegExp(`^/v1/missions/${mid}/predev/artifacts/[^/]+/approve$`)), gated ? 0 : 1);
+    expectCount("analysis plan requests in the whole journey", n("POST", planRe(mid)), 0);
+    expectCount("product start requests in the whole journey", n("POST", new RegExp(`^/v1/work-runs/${runId}/product/start$`)), gatedProduct ? 0 : 1);
+    // Kontrol rotaları belirteçsiz/yanlış belirteçle 403, bilinmeyen görev tohumu 404 verir (sunucunun /v1/ kancası bu yolları kapsamaz).
+    const raw = (p, init) => fetch(`http://127.0.0.1:${apiPort}${p}`, {...init, signal: AbortSignal.timeout(10000)}).then(r => r.status);
+    const bad = [await raw("/__e2e/requests"), await raw("/__e2e/requests", {headers: {"x-uasco-control-token": "x".repeat(apiToken.length)}}), await raw("/__e2e/seed-stuck-artefact", {method: "POST", headers: {"content-type": "application/json"}, body: "{}"})];
+    must(bad.every(c => c === 403), `the /__e2e control routes answered ${bad.join(",")} without a valid token (expected 403 each)`);
+    const unknown = await raw("/__e2e/seed-stuck-artefact", {method: "POST", headers: {"content-type": "application/json", "x-uasco-control-token": apiToken}, body: JSON.stringify({missionId: "msn_" + "0".repeat(24)})});
+    must(unknown === 404, `seeding an unknown mission answered ${unknown}, expected 404`);
+    return `analysis step ${n("POST", stepRe(mid))}, approve ${n("POST", new RegExp(`/predev/artifacts/[^/]+/approve$`))}, plan ${n("POST", planRe(mid))}, product start ${n("POST", new RegExp(`/product/start$`))} (journey mission only); control routes: 403 without a token, 404 for an unknown mission`;
   });
 }
 await main();
