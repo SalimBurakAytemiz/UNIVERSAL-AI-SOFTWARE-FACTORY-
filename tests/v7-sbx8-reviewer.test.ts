@@ -189,7 +189,7 @@ describe("LANE-C pre-dev builder from the LOCAL_CLAUDE pair: reviewer-route auth
   it("logged-in reviewer profile: the reviewer argv, CLAUDE_CONFIG_DIR = reviewer profile (inherited value dropped), empty scratch cwd outside the repo, no paid API key passed", async () => {
     const control = controlRoot(), calls: Array<{argv: string[]; opts: ProcOptions; entries: string[]}> = [];
     login(control, "reviewer");
-    const run = async (argv: string[], opts: ProcOptions): Promise<ProcResult> => { calls.push({argv, opts, entries: fs.readdirSync(opts.cwd)}); const at = new Date().toISOString(); return {argv, exitCode: 0, stdout: '{"problem":"x"}\n', stderr: "", startedAt: at, endedAt: at, timedOut: false, aborted: false, spawnError: false}; };
+    const run = async (argv: string[], opts: ProcOptions): Promise<ProcResult> => { calls.push({argv, opts, entries: fs.readdirSync(opts.cwd)}); const at = new Date().toISOString(); return {argv, exitCode: 0, stdout: JSON.stringify({type: "result", subtype: "success", is_error: false, result: '{"problem":"x"}\n'}) + "\n", stderr: "", startedAt: at, endedAt: at, timedOut: false, aborted: false, spawnError: false}; }; // C-FLOW-ANALYSIS-2: the pre-dev builder asks for --output-format json: stdout is the CLI result envelope
     const prevCfg = process.env.CLAUDE_CONFIG_DIR, prevKey = process.env.ANTHROPIC_API_KEY;
     process.env.CLAUDE_CONFIG_DIR = path.join(tmp, "personal-like", ".claude"); process.env.ANTHROPIC_API_KEY = "sk-test-not-real";
     let out = "";
@@ -197,7 +197,8 @@ describe("LANE-C pre-dev builder from the LOCAL_CLAUDE pair: reviewer-route auth
     finally { if (prevCfg === undefined) delete process.env.CLAUDE_CONFIG_DIR; else process.env.CLAUDE_CONFIG_DIR = prevCfg; if (prevKey === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = prevKey; }
     expect(out).toBe('{"problem":"x"}');
     expect(calls).toHaveLength(1);
-    expect(calls[0].argv).toEqual(reviewerArgv(process.execPath));
+    expect(calls[0].argv).toEqual(reviewerArgv(process.execPath, "json")); // same tools and isolation flags as the reviewer, only the output format differs
+    expect(calls[0].argv.slice(0, -1)).toEqual(reviewerArgv(process.execPath).slice(0, -1));
     expect(calls[0].opts.input).toBe("the role prompt");
     expect(calls[0].opts.env.CLAUDE_CONFIG_DIR).toBe(claudeProfileDir(control, "reviewer"));
     expect(Object.keys(calls[0].opts.env).filter(k => k.toUpperCase() === "CLAUDE_CONFIG_DIR")).toEqual(["CLAUDE_CONFIG_DIR"]);
