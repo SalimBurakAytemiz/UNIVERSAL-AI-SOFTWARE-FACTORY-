@@ -11,6 +11,7 @@ import Fastify from "fastify";
 import {FIRST_DELIVERY_BINDINGS, STAGE_CONSUMERS} from "../core/agents/first-delivery-bindings.js";
 import {computeRoleStatusSummary, createEvidenceVerifier, runningRoleIdsFromRuns, roleLifecycle, TARGET_ROLE_COUNT} from "../core/agents/role-lifecycle.js";
 import {registerRoleStatusRoutes} from "../apps/control-api/src/routes/role-status.js";
+import {computeRoleReadiness, loadReadinessInputFromRepo, reconcileLegacyStatusSummary} from "../core/agents/readiness-audit.js";
 import {EvaluationStaging, EvaluationStagingError, EVALUATION_PROCEDURES, planFor, runRoleEvaluation, verdictOf} from "../core/competency/evaluation-pipeline.js";
 import type {EvaluationOutcome} from "../core/competency/evaluation-pipeline.js";
 import {GOLDEN_TESTS, sha256Json} from "../core/competency/evaluation-fixtures.js";
@@ -575,7 +576,7 @@ describe("LANE-C C1 role lifecycle computed only from evidence", () => {
     });
   });
 
-  it("running = AGENT_TRACE in an open (non-terminal) run for a registered role; terminal runs, unknown roles and other evidence do not count", () => {
+  it("running = AGENT_TRACE in an OPEN run (isOpenRun: not terminal and not AWAITING_APPROVAL) for a registered role; terminal runs, runs awaiting approval, unknown roles and other evidence do not count", () => {
     const known = new Set<string>(doc.roles.map((r: any) => r.roleId));
     const trace = (note: string, kind = "AGENT_TRACE") => ({kind, note, evidenceId: "e", step: "IMPLEMENT", cycle: 0, argv: [], startedAt: "", endedAt: "", exitCode: 0, logPath: null, logSha256: null} as any);
     const run = (status: string, ...ev: any[]) => ({status, evidence: ev} as any);
@@ -588,9 +589,9 @@ describe("LANE-C C1 role lifecycle computed only from evidence", () => {
       run("RUNNING", trace("agent=a6 role=UASCO-0043 state=COMPLETED", "IMPLEMENT")), // not an AGENT_TRACE
       run("RUNNING")
     ];
-    expect([...runningRoleIdsFromRuns(runs, known)].sort()).toEqual(["UASCO-0085", "UASCO-0252"]);
+    expect([...runningRoleIdsFromRuns(runs, known)].sort()).toEqual(["UASCO-0252"]); // AWAITING_APPROVAL ist isOpenRun degil (run-state.ts): eskiden UASCO-0085 de sayilirdi
     const sum = base({runs});
-    expect(sum.running).toBe(2);
+    expect(sum.running).toBe(1);
     expect(sum).toMatchObject({implemented: 8, tested: 0, certified: 0}); // running does not promote anything else
   });
 
@@ -600,7 +601,7 @@ describe("LANE-C C1 role lifecycle computed only from evidence", () => {
     const r = await app.inject({method: "GET", url: "/v1/roles/status-summary"});
     expect(r.statusCode).toBe(200);
     const body = r.json();
-    expect(Object.keys(body)).toEqual(["statusSummary"]);
+    expect(Object.keys(body).sort()).toEqual(["readiness", "reconciliation", "statusSummary", "statusSummaryStatus"]);
     expect(Object.keys(body.statusSummary).sort()).toEqual(["basis", "byGuild", "certified", "computedAt", "implemented", "registered", "running", "target", "tested"]);
     expect(body.statusSummary).toMatchObject({target: 599, registered: 599, implemented: 8, tested: 0, certified: 0, running: 0});
     expect(Object.keys(body.statusSummary.byGuild[0]).sort()).toEqual(["certified", "guildId", "implemented", "registered", "running", "tested"]);
@@ -609,6 +610,49 @@ describe("LANE-C C1 role lifecycle computed only from evidence", () => {
     await app.close();
     const empty = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-c1-empty-"));
     try { const a2 = Fastify(); registerRoleStatusRoutes(a2, deps(empty)); await a2.ready(); expect((await a2.inject({method: "GET", url: "/v1/roles/status-summary"})).statusCode).toBe(503); await a2.close(); } finally { fs.rmSync(empty, {recursive: true, force: true}); }
+  });
+
+  describe("B1 readiness on /v1/roles/status-summary (single source: core/agents/readiness-audit.ts)", () => {
+    const depsWith = (runs: any[] | null) => ({repoRoot: REPO, now: () => NOW, getStore: () => ({hasJournal: runs !== null, listRuns: () => runs ?? []}) as any, scope: {tenantId: "t"} as any, orgId: "o", actor: "a", audit: () => {}, workosStopped: () => false, workosPolicy: () => ({allowed: true}), workosFail: (reply: any) => reply.code(500).send({error: "X"})});
+    const get = async (runs: any[] | null) => { const app = Fastify(); registerRoleStatusRoutes(app, depsWith(runs)); await app.ready(); try { const r = await app.inject({method: "GET", url: "/v1/roles/status-summary"}); return {code: r.statusCode, raw: r.body, body: r.json()}; } finally { await app.close(); } };
+    const trace = (role: string) => ({kind: "AGENT_TRACE", note: `agent=a1 role=${role} state=COMPLETED`, evidenceId: "e", step: "IMPLEMENT", cycle: 0, argv: [], startedAt: "", endedAt: "", exitCode: 0, logPath: null, logSha256: null} as any);
+    const roleLayer = (body: any, roleId: string) => body.readiness.roles.find((r: any) => r.roleId === roleId).layers.RUNNING;
+
+    it("(a) journal ABSENT: RUNNING is UNKNOWN for all 599 and NOT measured; the legacy running is not presented as measured; TOOL_READY / stageWired stay UNKNOWN (nothing supplied)", async () => {
+      const {code, body} = await get(null); expect(code).toBe(200);
+      expect(body.statusSummaryStatus).toBe("DEPRECATED_LEGACY_PROJECTION");
+      expect(body.readiness.totals.RUNNING).toMatchObject({UNKNOWN: 599, TRUE: 0, measured: false, denominator: 599});
+      expect(body.readiness.inputs).toMatchObject({journal: "ABSENT", adapterReality: "NOT_SUPPLIED", reachableStages: "NOT_SUPPLIED"});
+      expect(body.reconciliation).toMatchObject({status: "DEPRECATED_LEGACY_PROJECTION", authority: "readiness", runningMeasured: false, implementedMeaning: "EXECUTABLE_CODE_PATH_INCLUDES_UNWIRED_STAGES", implementedStageWired: "UNKNOWN"});
+      expect(body.readiness.totals.TOOL_READY.UNKNOWN).toBeGreaterThan(0); expect(body.readiness.totals.TOOL_READY.measured).toBe(false);
+      expect(Object.keys(body)).not.toContain("running"); expect(body.readiness.roles.every((r: any) => r.layers.RUNNING.state === "UNKNOWN")).toBe(true);
+    });
+
+    it("(b) journal PRESENT: an open RUNNING run marks its role RUNNING (measured); an AWAITING_APPROVAL run does NOT (isOpenRun); the legacy running counter agrees", async () => {
+      const runs = [{status: "AWAITING_APPROVAL", evidence: [trace("UASCO-0085")]}, {status: "RUNNING", evidence: [trace("UASCO-0252")]}];
+      const {code, body} = await get(runs); expect(code).toBe(200);
+      expect(roleLayer(body, "UASCO-0085").state).toBe("FALSE"); expect(roleLayer(body, "UASCO-0252").state).toBe("TRUE");
+      expect(body.readiness.totals.RUNNING).toMatchObject({TRUE: 1, measured: true}); expect(body.reconciliation.runningMeasured).toBe(true);
+      expect(body.statusSummary.running).toBe(1); expect(body.reconciliation.consistent).toBe(true);
+    });
+
+    it("(c) the legacy statusSummary is byte-identical to computeRoleStatusSummary on the same inputs (journal absent and present)", async () => {
+      for (const runs of [null, [{status: "RUNNING", evidence: [trace("UASCO-0252")]}]] as const) {
+        const {body, raw} = await get(runs as any); expect(JSON.stringify(body.statusSummary)).toBe(JSON.stringify(base({runs: (runs ?? []) as any})));
+        expect(raw.includes(JSON.stringify(base({runs: (runs ?? []) as any})))).toBe(true);
+      }
+    });
+
+    it("(d) the route computes NO counter: readiness and reconciliation equal the core functions' output exactly, and the body has exactly the four agreed keys", async () => {
+      for (const runs of [null, [{status: "RUNNING", evidence: [trace("UASCO-0252")]}]] as const) {
+        const {body} = await get(runs as any);
+        const obs = runs === null ? {journal: "ABSENT" as const} : {journal: "PRESENT" as const, runs: runs as any};
+        const expected = computeRoleReadiness(loadReadinessInputFromRepo(REPO, {runs: obs, now: NOW}));
+        expect(body.readiness).toEqual(JSON.parse(JSON.stringify(expected)));
+        expect(body.reconciliation).toEqual(JSON.parse(JSON.stringify(reconcileLegacyStatusSummary(base({runs: (runs ?? []) as any}), expected))));
+        expect(Object.keys(body).sort()).toEqual(["readiness", "reconciliation", "statusSummary", "statusSummaryStatus"]);
+      }
+    });
   });
 });
 
