@@ -12,6 +12,7 @@ import {EvidenceIndex, EvidenceInputError, TAIL_BYTES} from "../core/evidence/in
 import type {EvidenceItem} from "../core/evidence/index.js";
 import {buildServer} from "../apps/control-api/src/server.js";
 
+import {NO_REAL_WSL_ON_WIN32} from "./support/test-sandbox.js";
 const T = 60_000;
 const TOKEN = "t".repeat(32);
 const hdr = {"x-uasco-control-token": TOKEN, host: "127.0.0.1:3210"};
@@ -69,7 +70,7 @@ function setup(tenantId = "tA"): Ctx {
 const index = (c: Ctx, tenantId = "tA", extra: Record<string, unknown> = {}) =>
   new EvidenceIndex({repoRoot: c.repo, dataDir: c.dataDir, scope: {tenantId}, store: () => new WorkOsStore(c.dataDir), includeRepositoryEvidence: true, ...extra});
 const server = (c: Ctx, tenantId = "tA", extra: Record<string, unknown> = {}) =>
-  buildServer({controlToken: TOKEN, runtime: c.runtime, repoRoot: c.repo, dataDir: c.dataDir, tenantId, port: 3210, logger: false, ...extra});
+  buildServer({...NO_REAL_WSL_ON_WIN32, controlToken: TOKEN, runtime: c.runtime, repoRoot: c.repo, dataDir: c.dataDir, tenantId, port: 3210, logger: false, ...extra});
 async function all(idx: EvidenceIndex, q: Record<string, unknown> = {}): Promise<EvidenceItem[]> {
   const out: EvidenceItem[] = [];
   let cursor: string | undefined;
@@ -438,7 +439,7 @@ describe("B10A API", () => {
   it("absent sources are UNAVAILABLE with null counts (no invented numbers)", { timeout: T }, async () => {
     const empty = path.join(tmp, "empty-repo"), emptyData = path.join(tmp, "empty-data");
     fs.mkdirSync(empty, {recursive: true}); fs.mkdirSync(emptyData, {recursive: true});
-    const app = buildServer({controlToken: TOKEN, runtime: path.join(tmp, "rt"), repoRoot: empty, dataDir: emptyData, tenantId: "tA", port: 3210, logger: false});
+    const app = buildServer({...NO_REAL_WSL_ON_WIN32, controlToken: TOKEN, runtime: path.join(tmp, "rt"), repoRoot: empty, dataDir: emptyData, tenantId: "tA", port: 3210, logger: false});
     const ck = (await app.inject({method: "GET", url: "/v1/cockpit", headers: hdr})).json();
     expect(ck.evidence).toEqual({state: "UNAVAILABLE", total: null, verified: null, mismatch: null, missing: null, unverifiable: null, sources: {workos: "UNAVAILABLE", review: "UNAVAILABLE", checkpoints: "UNAVAILABLE"}});
     const list = await app.inject({method: "GET", url: "/v1/evidence", headers: hdr});

@@ -26,6 +26,7 @@ import {TEST_HOST_PASSTHROUGH_SANDBOX, testExecutionGate} from "./support/test-s
 import {LINUX_SANDBOX_HELPER_PATH, LINUX_SANDBOX_NS_FLAGS, LINUX_SANDBOX_SETUP} from "../core/agents/linux-unshare-sandbox.js";
 import {LINUX_SANDBOX_LOOPBACK_PROBE, loopbackVerdict, netnsProblemOf, networkRouteProblem} from "../core/agents/linux-unshare-sandbox.js";
 
+import {NO_REAL_WSL_ON_WIN32} from "./support/test-sandbox.js";
 const REPO = path.resolve(import.meta.dirname, "..");
 const ENV_POLICY = path.join(REPO, "config", "environment-policy.json");
 const T = 180_000;
@@ -76,6 +77,15 @@ describe("SBX-GATE ExecutionGate: single decision point", () => {
     for (const k of PROJECT_EXECUTION_KINDS) expect(await g.authorize(k)).toEqual({allowed: false, kind: k, reason: SANDBOX_UNAVAILABLE, detail: "NO_VERIFIED_PROVIDER"});
     expect(await g.status()).toEqual({state: "UNAVAILABLE", reason: "SANDBOX_UNAVAILABLE", detail: "NO_VERIFIED_PROVIDER", providerId: null});
     await expect(g.authorize("HOST_SHELL" as never)).rejects.toThrow(/UNKNOWN_EXECUTION_KIND/);
+  });
+  it("a selfTest that does not answer is bounded: authorize()/status() return UNAVAILABLE SELFTEST_TIMEOUT (fail-closed, not a hang), the real probe keeps running and its result is picked up by the next call (not cached as a failure)", async () => {
+    let finish!: (r: {ok: boolean}) => void; let calls = 0;
+    const p = {id: "slow", selfTest: () => { calls++; return new Promise<{ok: boolean}>(r => { finish = r; }); }, run: async () => ({}) as never, spawn: () => ({}) as never};
+    const g = new ExecutionGate(p as never, {selfTestTimeoutMs: 150});
+    const t0 = Date.now(); expect(await g.authorize("STUDIO_DEVRUN")).toEqual({allowed: false, kind: "STUDIO_DEVRUN", reason: SANDBOX_UNAVAILABLE, detail: "SELFTEST_TIMEOUT"}); expect(Date.now() - t0).toBeLessThan(1500);
+    expect(await g.status()).toEqual({state: "UNAVAILABLE", reason: "SANDBOX_UNAVAILABLE", detail: "SELFTEST_TIMEOUT", providerId: null}); expect(calls, "the pending probe is reused, not restarted").toBe(1);
+    finish({ok: true}); await new Promise(r => setTimeout(r, 20));
+    expect(await g.authorize("STUDIO_DEVRUN")).toMatchObject({allowed: true, providerId: "slow"}); expect(calls).toBe(1);
   });
   it("treats malformed provider objects as no provider", async () => {
     for (const bad of [{}, {id: "x"}, {id: "", selfTest: async () => ({ok: true}), run: async () => null, spawn: () => null}, {id: "x", selfTest: async () => ({ok: true}), run: async () => null}, "WINDOWS_SANDBOX", 1, true])
@@ -169,7 +179,7 @@ describe("SBX-GATE control API (explicit no provider: sandbox null)", () => {
   const mk = (extra: Record<string, unknown> = {sandbox: null}) => {
     const runtime = path.join(tmp, "runtime"), dataDir = path.join(tmp, "data");
     fs.mkdirSync(runtime, {recursive: true});
-    const app = buildServer({controlToken: TOKEN, runtime, dataDir, repoRoot: REPO, port: 3210, logger: false, tenantId: "tA", ...extra});
+    const app = buildServer({...NO_REAL_WSL_ON_WIN32, controlToken: TOKEN, runtime, dataDir, repoRoot: REPO, port: 3210, logger: false, tenantId: "tA", ...extra});
     apps.push(app);
     return {app, dataDir};
   };

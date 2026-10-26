@@ -60,6 +60,8 @@ export interface DevRunOptions {
   bridgeOptions?: NsenterOptions;
   // C-9: yönetici genelinde eşzamanlı etkin dev-run üst sınırı (varsayılan 2); aşılırsa 409 DEVRUN_CAPACITY.
   maxConcurrent?: number;
+  // recover() sağlayıcı-taraflı scratch kapatmasını arka planda bu süre kadar dener (varsayılan 30 sn).
+  recoverTeardownMs?: number;
 }
 const NO_PREVIEW_TYPES = new Set(["desktop", "mobile", "native"]);
 const ACTIVE: ReadonlySet<DevRunStatus> = new Set(["STARTING", "RUNNING"]);
@@ -68,6 +70,7 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 const timed = <T>(p: Promise<T>, ms: number, onTimeout: T): Promise<T> => new Promise<T>(res => { const t = setTimeout(() => res(onTimeout), ms); p.then(v => { clearTimeout(t); res(v); }, () => { clearTimeout(t); res(onTimeout); }); });
 
 // Süreç kimliği: pid tek başına yeniden kullanılabilir; başlangıç zamanı ile birlikte doğrulanır (Windows: .NET Process.StartTime, Linux: /proc/<pid>/stat alan 22, diğer: ps lstart).
+let OWN_START_CACHE: Promise<string | null> | null = null;
 export async function processStartTime(pid: number): Promise<string | null> {
   if (!Number.isInteger(pid) || pid <= 0) return null;
   const run = (file: string, args: string[]) => new Promise<string | null>(resolve => {
@@ -224,7 +227,12 @@ export class DevRunManager {
   // Bu API sürecinin başlangıç zamanı (sahiplik kimliği); bir kez okunur.
   private selfStart: string | null = null;
   private selfStartP: Promise<string | null> | null = null;
-  private ownStartTime(): Promise<string | null> { return this.selfStartP ??= this.o.startTimeOf(process.pid).then(t => { this.selfStart = t; return t; }, () => null); }
+  // Bu sürecin başlangıç zamanı süreç ömrü boyunca sabittir: varsayılan okuyucu için süreç genelinde BİR kez okunur (Windows'ta PowerShell çağrısı sunucu başına yüzlerce ms-sn sürer ve onReady süresini yer).
+  private ownStartTime(): Promise<string | null> {
+    if (this.selfStartP) return this.selfStartP;
+    const read = this.o.startTimeOf === processStartTime ? (OWN_START_CACHE ??= processStartTime(process.pid).catch(() => null)) : this.o.startTimeOf(process.pid);
+    return this.selfStartP = read.then(t => { this.selfStart = t; return t; }, () => null);
+  }
   // PS1A-C1-F3: kaydın sahibi başka bir canlı API süreci mi? Aynı süreç (başka yönetici örneği) burada canlı sayılmaz (kilit ayrıca bakar).
   // pid ölü -> değil; pid canlı ama kayıtlı başlangıç zamanı farklı -> pid yeniden kullanılmış, değil; zaman yok/okunamıyor -> fail-closed canlı.
   private async ownerLive(st: DevRunState): Promise<boolean> {
@@ -659,10 +667,25 @@ export class DevRunManager {
     }, this.o.stopPollMs);
     this.stopTimer.unref?.();
   }
-  async close(): Promise<void> { this.closed = true; await this.stopAll("API_SHUTDOWN"); await timed(Promise.all([...this.reaping.values()]).then(() => undefined), this.o.stopWaitMs, undefined); if (this.stopTimer) clearInterval(this.stopTimer); this.stopTimer = null; }
+  async close(): Promise<void> { this.closed = true; await this.stopAll("API_SHUTDOWN"); await timed(Promise.all([...this.reaping.values()]).then(() => undefined), this.o.stopWaitMs, undefined); await timed(this.settleRecovery(), this.o.stopWaitMs, undefined); if (this.stopTimer) clearInterval(this.stopTimer); this.stopTimer = null; }
 
   // PS-AT-004: API yeniden başladığında STARTING/RUNNING kayıtları incelenir. Sahibi canlı başka bir API süreciyse dokunulmaz; değilse süreç sahipsizdir:
   // pid canlı ve başlangıç zamanı kayıtla birebir aynıysa süreç ağacı sonlandırılır, değilse (pid yeniden kullanılmış/doğrulanamıyor) ÖLDÜRÜLMEZ ve raporlanır.
+  // Sağlayıcıya dokunan kurtarma (authorize/selfTest, teardownScratch) başlangıcı bekletmez: arka plan görevi, sınırlı süre; sonuç kayda yazılır (temizse silinir, değilse STOP_INCOMPLETE:<kod>).
+  private readonly bgTasks = new Set<Promise<void>>();
+  private scheduleScratch(id: string, st: DevRunState): void {
+    const t = (async () => {
+      const td = await timed(this.recoverScratch(st), this.o.recoverTeardownMs ?? 30_000, {code: "TEARDOWN_TIMEOUT"});
+      const cur = this.readState(id); if (!cur || cur.sandboxScratch !== st.sandboxScratch || ACTIVE.has(cur.status)) return;
+      try {
+        if (!td.code) this.writeState({...cur, stopIncomplete: undefined, sandboxScratch: null, reason: cur.stopIncomplete ? "STOP_INCOMPLETE_RESOLVED" : cur.reason}, true);
+        else this.writeState({...cur, stopIncomplete: td.code, reason: `STOP_INCOMPLETE:${td.code}`}, true);
+      } catch { /* durum yazılamadı */ }
+    })().catch(() => undefined);
+    this.bgTasks.add(t); void t.finally(() => this.bgTasks.delete(t));
+  }
+  /** Arka plan kurtarma görevlerinin bitmesini bekler (testler ve kapanış). */
+  async settleRecovery(): Promise<void> { await Promise.all([...this.bgTasks]); }
   private async recoverScratch(st: DevRunState): Promise<{code: string | null}> {
     if (!st.sandboxScratch) return {code: null};
     let provider: {teardownScratch?: (s: string) => Promise<string | null>} | null = null;
@@ -684,8 +707,7 @@ export class DevRunManager {
       const st = this.readState(id);
       // C-5: önceki kapatma temiz bitmediyse (STOP_INCOMPLETE + scratch) sahip canlı değilse Linux tarafı yeniden denenir.
       if (st && !ACTIVE.has(st.status) && st.sandboxScratch && st.instanceId !== this.instanceId && !this.active.has(id) && st.ownerHost === os.hostname() && !(await this.ownerLive(st))) {
-        const td = await this.recoverScratch(st);
-        if (!td.code) { try { this.writeState({...st, stopIncomplete: undefined, sandboxScratch: null, reason: st.stopIncomplete ? "STOP_INCOMPLETE_RESOLVED" : st.reason}, true); } catch { /* durum yazılamadı */ } }
+        this.scheduleScratch(id, st); // sağlayıcıya dokunur: sunucu açılışını ASLA bekletmez (arka planda, sınırlı süre)
         continue;
       }
       if (!st || !ACTIVE.has(st.status) || st.instanceId === this.instanceId || this.active.has(id)) continue;
@@ -701,15 +723,16 @@ export class DevRunManager {
         else { killProcessTree(st.pid!); for (let i = 0; i < 50 && pidAlive(st.pid); i++) await sleep(100); result = pidAlive(st.pid) ? "ORPHAN_KILL_FAILED" : "ORPHAN_KILLED"; }
       }
       // C-5: sağlayıcı-taraflı scratch (WSL) Linux tarafında kapatılır; kapatılamazsa kayıt STOP_INCOMPLETE ile scratch'ı korur.
-      const td = await this.recoverScratch(st);
+      const pendingScratch = Boolean(st.sandboxScratch); // kapatma arka planda (scheduleScratch) denenir; sonuç kayda yazılır
       const rec: DevRunRecovery = {at: new Date().toISOString(), result, previousInstanceId: st.instanceId, pid: st.pid};
-      const next: DevRunState = {...st, status: result === "ORPHAN_KILL_FAILED" ? "CRASHED" : "STOPPED", reason: td.code ? `STOP_INCOMPLETE:${td.code}` : `RECOVERED_AFTER_API_RESTART:${result}`, ...(td.code ? {stopIncomplete: td.code, sandboxScratch: st.sandboxScratch ?? null} : {sandboxScratch: null}), endedAt: rec.at, instanceId: this.instanceId, ownerPid: process.pid, ownerHost: os.hostname(), ownerStartTime: self,
+      const next: DevRunState = {...st, status: result === "ORPHAN_KILL_FAILED" ? "CRASHED" : "STOPPED", reason: pendingScratch ? "STOP_INCOMPLETE:TEARDOWN_PENDING" : `RECOVERED_AFTER_API_RESTART:${result}`, ...(pendingScratch ? {stopIncomplete: "TEARDOWN_PENDING", sandboxScratch: st.sandboxScratch ?? null} : {sandboxScratch: null}), endedAt: rec.at, instanceId: this.instanceId, ownerPid: process.pid, ownerHost: os.hostname(), ownerStartTime: self,
         preview: {url: null, state: "UNAVAILABLE", lastProbeAt: st.preview?.lastProbeAt ?? null, reason: "NOT_RUNNING"}, recovery: rec};
       this.writeState(next, true);
       const lf = this.lockFile(id), ls = inspectProcessLock(lf) as {state: string; pid?: number; runId?: string | null};
       const reusedLock = ownerReused && ls.state === "ACTIVE" && ls.pid === st.ownerPid && ls.runId === st.instanceId;
       if (ls.state !== "ABSENT" && (ls.pid === process.pid || ls.state === "STALE_SAME_HOST_DEAD_PID" || reusedLock)) { try { fs.rmSync(lf, {force: true}); } catch { /* kilit */ } }
       this.o.audit("DEVRUN_ORPHAN_RECOVERED", {projectId: id, result, pid: st.pid});
+      if (pendingScratch) this.scheduleScratch(id, {...next, stopIncomplete: undefined});
       out.push({projectId: id, ...rec});
     }
     this.recoveries.push(...out);

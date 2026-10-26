@@ -12,6 +12,7 @@ import {sha256 as sha256Untyped} from "../automation/lib/atomic-json.mjs";
 import {WorkOsStore, defaultDataDir} from "../core/workos/store.js";
 import {buildServer} from "../apps/control-api/src/server.js";
 
+import {NO_REAL_WSL_ON_WIN32} from "./support/test-sandbox.js";
 const sha256 = sha256Untyped as (v: unknown) => string;
 const REPO = path.resolve(import.meta.dirname, "..");
 let tmp = "";
@@ -167,7 +168,7 @@ describe("B2 API hardening and cockpit", () => {
   const mkApp = (extra: Record<string, unknown> = {}) => {
     const repo = path.join(tmp, "repo"), runtime = path.join(repo, ".ai", "runtime");
     fs.mkdirSync(runtime, {recursive: true});
-    return {repo, runtime, app: buildServer({controlToken: token, runtime, repoRoot: repo, port: 3210, logger: false, ...extra})};
+    return {repo, runtime, app: buildServer({...NO_REAL_WSL_ON_WIN32, controlToken: token, runtime, repoRoot: repo, port: 3210, logger: false, ...extra})};
   };
   const project = {name: "API project", environmentId: "dev"};
   const mission = (projectId: string) => ({projectId, title: "M", objective: "obj", acceptanceCriteria: ["a"], riskLevel: "R2"});

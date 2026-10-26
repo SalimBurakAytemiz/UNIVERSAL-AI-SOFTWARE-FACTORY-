@@ -534,9 +534,30 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
     const rec = {...(m0 as any).blank(p), status: "STOPPED", reason: "STOP_REQUESTED", instanceId: "dev_dead", ownerPid: 2 ** 22 - 3, sandboxScratch: "/tmp/uasco-sbx-Tt0001", endedAt: new Date().toISOString()};
     fs.writeFileSync(f, JSON.stringify(rec));
     const m = manager(dataDir, new ExecutionGate(provider));
-    await m.recover(); expect(torn).toEqual(["/tmp/uasco-sbx-Tt0001"]); expect(JSON.parse(fs.readFileSync(f, "utf8")).sandboxScratch, "kept while the teardown is incomplete").toBe("/tmp/uasco-sbx-Tt0001");
-    code = null; await m.recover(); expect(torn).toHaveLength(2); const after = JSON.parse(fs.readFileSync(f, "utf8")); expect(after.sandboxScratch).toBeNull(); expect(after.reason).toBe("STOP_REQUESTED");
-    await m.recover(); expect(torn).toHaveLength(2);
+    await m.recover(); await m.settleRecovery(); expect(torn).toEqual(["/tmp/uasco-sbx-Tt0001"]); expect(JSON.parse(fs.readFileSync(f, "utf8")).sandboxScratch, "kept while the teardown is incomplete").toBe("/tmp/uasco-sbx-Tt0001");
+    code = null; await m.recover(); await m.settleRecovery(); expect(torn).toHaveLength(2); const after = JSON.parse(fs.readFileSync(f, "utf8")); expect(after.sandboxScratch).toBeNull(); expect(after.reason).toBe("STOP_INCOMPLETE_RESOLVED"); expect(after.stopIncomplete ?? null).toBeNull();
+    await m.recover(); await m.settleRecovery(); expect(torn).toHaveLength(2);
+  }, 30_000);
+
+  it("STARTUP: recover() never waits on the provider: a record whose scratch needs a Linux-side teardown is retried in the BACKGROUND (bounded by recoverTeardownMs), recover() resolves at once, the result lands in the record (STOP_INCOMPLETE:TEARDOWN_TIMEOUT when the provider hangs), and close() waits for it", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+    const f = path.join(dataDir, "projects", p.projectId, "devrun", "state.json"); fs.mkdirSync(path.dirname(f), {recursive: true});
+    let teardownCalls = 0; const provider = hostSpawn({teardownScratch() { teardownCalls++; return new Promise<string | null>(() => undefined); }}); // asla çözülmez (soğuk/asılı WSL)
+    const m0 = manager(dataDir, new ExecutionGate(provider));
+    fs.writeFileSync(f, JSON.stringify({...(m0 as any).blank(p), status: "STOPPED", reason: "STOP_REQUESTED", instanceId: "dev_dead", ownerPid: 2 ** 22 - 3, sandboxScratch: "/tmp/uasco-sbx-Bg0001", endedAt: new Date().toISOString()}));
+    const m = manager(dataDir, new ExecutionGate(provider), {recoverTeardownMs: 400, stopWaitMs: 2000});
+    const t0 = Date.now(); await m.recover(); expect(Date.now() - t0, "recover() must not wait for the provider").toBeLessThan(300);
+    await new Promise(r => setTimeout(r, 50)); expect(teardownCalls).toBe(1);
+    await m.close(); // arka plan görevini sınırlı bekler
+    expect(JSON.parse(fs.readFileSync(f, "utf8"))).toMatchObject({stopIncomplete: "TEARDOWN_TIMEOUT", sandboxScratch: "/tmp/uasco-sbx-Bg0001", reason: "STOP_INCOMPLETE:TEARDOWN_TIMEOUT"});
+  }, 30_000);
+
+  it("STARTUP: buildServer with a WSL provider whose runner never answers is ready within 2 s and never touches the runner while starting", async () => {
+    const { buildServer } = await import("../apps/control-api/src/server.js"); const { WslUnshareSandboxProvider } = await import("../core/sandbox/wsl-unshare-sandbox.js");
+    const calls: string[][] = []; const wsl = new WslUnshareSandboxProvider({platform: "win32", runner: args => { calls.push(args); return new Promise(() => undefined); }});
+    const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-rdy-"));
+    const srv = buildServer({controlToken: TOKEN, runtime: path.join(dir, "rt"), dataDir: path.join(dir, "data"), repoRoot: REPO, port: 3210, logger: false, tenantId: "tA", sandbox: wsl});
+    try { const t0 = Date.now(); await srv.ready(); expect(Date.now() - t0).toBeLessThan(2000); expect(calls).toEqual([]); } finally { await srv.close(); fs.rmSync(dir, {recursive: true, force: true}); }
   }, 30_000);
 
   it("D2: a refusal on top of an incomplete teardown keeps stopIncomplete + sandboxScratch (the next start retries the teardown or is refused 409); a post-spawn bridge failure with an incomplete teardown surfaces DEVRUN_STOP_INCOMPLETE", async () => {
@@ -622,9 +643,9 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
       expect(m.view(p)).toMatchObject({status: "STOPPED", reason: "STOP_INCOMPLETE:PROCESS_SURVIVED", stopIncomplete: "PROCESS_SURVIVED", sandboxScratch: "/tmp/uasco-sbx-AbC123"});
       const st = JSON.parse(fs.readFileSync(path.join(dataDir, "projects", p.projectId, "devrun", "state.json"), "utf8")); st.instanceId = "dev_dead"; st.ownerPid = 2 ** 22 - 3; fs.writeFileSync(path.join(dataDir, "projects", p.projectId, "devrun", "state.json"), JSON.stringify(st));
       const m2 = manager(dataDir, new ExecutionGate(provider));
-      await m2.recover(); expect(torn).toEqual(["/tmp/uasco-sbx-AbC123"]); expect(m2.view(p)).toMatchObject({stopIncomplete: "PROCESS_SURVIVED"});
-      code = null; await m2.recover(); expect(torn).toEqual(["/tmp/uasco-sbx-AbC123", "/tmp/uasco-sbx-AbC123"]); expect(m2.view(p).stopIncomplete).toBeUndefined(); expect(m2.view(p).sandboxScratch).toBeNull();
-      await m2.recover(); expect(torn.length).toBe(2);
+      await m2.recover(); await m2.settleRecovery(); expect(torn).toEqual(["/tmp/uasco-sbx-AbC123"]); expect(m2.view(p)).toMatchObject({stopIncomplete: "PROCESS_SURVIVED"});
+      code = null; await m2.recover(); await m2.settleRecovery(); expect(torn).toEqual(["/tmp/uasco-sbx-AbC123", "/tmp/uasco-sbx-AbC123"]); expect(m2.view(p).stopIncomplete).toBeUndefined(); expect(m2.view(p).sandboxScratch).toBeNull();
+      await m2.recover(); await m2.settleRecovery(); expect(torn.length).toBe(2);
       await m2.start(p); await m2.stop(p.projectId);
       for (let i = 0; i < 50 && m2.view(p).sandboxScratch !== null; i++) await new Promise(r => setTimeout(r, 100));
       expect(m2.view(p)).toMatchObject({status: "STOPPED", sandboxScratch: null}); expect(m2.view(p).stopIncomplete).toBeUndefined();

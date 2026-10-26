@@ -11,6 +11,7 @@ import {LegalDomain} from "../core/company/legal.js";
 import {buildServer} from "../apps/control-api/src/server.js";
 // @ts-expect-error TS7016: atomic-json.mjs tip bildirimi yok (test geçerli hash zincirli sahte journal satırı üretir)
 import {sha256 as sha256Untyped} from "../automation/lib/atomic-json.mjs";
+import {NO_REAL_WSL_ON_WIN32} from "./support/test-sandbox.js";
 // //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
 vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
@@ -30,7 +31,7 @@ const apps: App[] = [];
 afterEach(async () => { for (const a of apps.splice(0)) await a.close(); });
 function mkApp(tenantId = "tA", extra: Record<string, unknown> = {}): App {
   fs.mkdirSync(runtime(), {recursive: true});
-  const app = buildServer({controlToken: TOKEN, runtime: runtime(), dataDir: dataDir(), tenantId, port: 3210, logger: false, ...extra});
+  const app = buildServer({...NO_REAL_WSL_ON_WIN32, controlToken: TOKEN, runtime: runtime(), dataDir: dataDir(), tenantId, port: 3210, logger: false, ...extra});
   apps.push(app);
   return app;
 }

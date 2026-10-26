@@ -11,3 +11,5 @@ export const TEST_HOST_PASSTHROUGH_SANDBOX: SandboxProvider = {
   spawn: (command, args, o) => cp.spawn(command, args, o)
 };
 export const testExecutionGate = (): ExecutionGate => new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX);
+// Windows CI: varsayılan seçici WSL sağlayıcısını kurar; sandbox seçeneği vermeyen sunucu testleri GERÇEK wsl.exe başlatmasın diye win32'de sandbox: null enjekte edilir (diğer platformlarda boş: varsayılan davranış sınanır).
+export const NO_REAL_WSL_ON_WIN32: {sandbox?: null} = process.platform === "win32" ? {sandbox: null} : {};

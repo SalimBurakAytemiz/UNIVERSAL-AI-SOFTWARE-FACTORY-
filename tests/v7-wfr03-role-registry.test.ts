@@ -21,6 +21,7 @@ import type {ExecutorPair, FakeScript, ProcResult} from "../core/workos/executor
 import {ClaudePreDevBuilder} from "../core/workos/predev/claude-builder.js";
 import {TASKHUB_ARTIFACTS} from "../core/workos/predev/fixtures/taskhub/index.js";
 import {deriveRoleProfiles, buildDerivationInputs, NEVER_GRANTED, ROUTE_TOOL_ALLOWLIST, PERMISSION_READ, PERMISSION_WRITE_SCRATCH} from "../core/agents/role-profile-derivation.js";
+import {NO_REAL_WSL_ON_WIN32} from "./support/test-sandbox.js";
 // //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
 vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
@@ -388,7 +389,7 @@ describe("WFR-AT-004 and /v1/roles API", () => {
   const mk = () => {
     const runtime = path.join(tmp, `rt-${crypto.randomBytes(4).toString("hex")}`);
     fs.mkdirSync(runtime, {recursive: true});
-    return buildServer({controlToken: token, runtime, repoRoot: REPO, dataDir: path.join(runtime, "workos"), port: 3210, logger: false});
+    return buildServer({...NO_REAL_WSL_ON_WIN32, controlToken: token, runtime, repoRoot: REPO, dataDir: path.join(runtime, "workos"), port: 3210, logger: false});
   };
   const get = async (app: ReturnType<typeof buildServer>, url: string) => app.inject({method: "GET", url, headers: hdr});
 
@@ -479,7 +480,7 @@ describe("WFR-AT-004 and /v1/roles API", () => {
   it("returns 503 instead of invented counts when the registry is missing", async () => {
     const repo = path.join(tmp, "empty-repo"), runtime = path.join(repo, ".ai", "runtime");
     fs.mkdirSync(runtime, {recursive: true});
-    const app = buildServer({controlToken: token, runtime, repoRoot: repo, port: 3210, logger: false});
+    const app = buildServer({...NO_REAL_WSL_ON_WIN32, controlToken: token, runtime, repoRoot: repo, port: 3210, logger: false});
     expect((await get(app, "/v1/roles")).statusCode).toBe(503);
     expect((await get(app, "/v1/roles/UASCO-0001")).statusCode).toBe(503);
     await app.close();
