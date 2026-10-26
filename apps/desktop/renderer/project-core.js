@@ -189,14 +189,50 @@ export const buildEnableExecutorRequest=()=>({ok:true,path:ENABLE_LOCAL_CLAUDE_P
 /** Durumdan izinli eylemler; STOP her durumda görünür kalır (yalnız çalışmıyorsa devre dışı), başlatma yalnız STOPPED/CRASHED durumunda. */
 export function devRunActions(status){
   const live=status==="STARTING"||status==="RUNNING";
-  return {start:status==="STOPPED"||status==="CRASHED",stop:live,restart:live||status==="CRASHED"};
+  // //TR: LANE-A A-FLOW-4: BLOCKED (ör. sandbox yokken reddedilen başlatma) yeniden denenebilir: sunucu BLOCKED durumundan start kabul eder ve kapıyı her seferinde yeniden sorar; aksi halde sandbox sonradan hazır olsa bile başlatma sonsuza dek kapalı kalırdı.
+  return {start:status==="STOPPED"||status==="CRASHED"||status==="BLOCKED",stop:live,restart:live||status==="CRASHED"};
+}
+// ---------- Teslim edilen ürünün çalıştırılması (B-RUN-1: GET /v1/work-runs/:id/product, POST .../product/start|stop) ----------
+const WORK_RUN_ID_RE=/^run_[0-9a-f]{24}$/;
+export const runProductPath=id=>typeof id==="string"&&WORK_RUN_ID_RE.test(id)?`/v1/work-runs/${id}/product`:null;
+export function buildProductRequest({runId,action}){
+  const errors={};
+  if(typeof runId!=="string"||!WORK_RUN_ID_RE.test(runId))errors.runId="err.runInvalid";
+  if(action!=="start"&&action!=="stop")errors.action="studio.err.action";
+  return result(`/v1/work-runs/${runId}/product/${action}`,{},errors);
+}
+/** //TR: LANE-A A-FLOW-4 (B-RUN-1): ürün durumu SADECE koşuya bağlı rotadan okunur. Yanıt bu koşunun kimliğini taşımalı; teslim edilen commit yoksa null ya da 40 hex; tiedToThisRun yalnız deliveryRunId bu koşuysa doğru olabilir (çelişki = tüm okuma ERROR). */
+export function mapRunProduct(raw,runId){
+  const bad={state:"ERROR",product:null};
+  const x=isObj(raw)?raw.product:null;
+  if(!isObj(x)||x.runId!==runId||!WORK_RUN_ID_RE.test(String(runId)))return bad;
+  const head=x.deliveredHeadSha;
+  if(!(head===null||(typeof head==="string"&&COMMIT_RE.test(head)&&head.length===40)))return bad;
+  if(typeof x.tiedToThisRun!=="boolean")return bad;
+  const d=mapDevRun(isObj(x.devrun)?{devrun:x.devrun}:null);
+  if(d.state!=="VERIFIED")return bad;
+  if(x.tiedToThisRun!==(d.run.deliveryRunId===runId))return bad;
+  return {state:"VERIFIED",product:{runId,deliveredHeadSha:head,tiedToThisRun:x.tiedToThisRun,run:d.run}};
+}
+/** //TR: "Ürünü başlat" YALNIZ akışın DELIVERY aşaması sunucuda DONE, teslim edilen commit biliniyor ve durum başlatmaya izin veriyorsa; "Durdur" YALNIZ bu teslimin kendi çalışan ürünü için (başka teslimin ürününü bu düğme kapatmaz); yerel adres YALNIZ bu teslime bağlı, RUNNING, bridged=true ve önizleme AVAILABLE iken. DONE ürünün doğrulandığı anlamına gelmez. */
+export function productOffer(product,flow){
+  const stages=flow&&Array.isArray(flow.stages)?flow.stages:[];
+  const deliveryDone=stages.some(s=>s&&s.stage==="DELIVERY"&&s.state==="DONE");
+  const run=product.run,a=devRunActions(run.status),hasCommit=product.deliveredHeadSha!==null;
+  const otherRunning=!product.tiedToThisRun&&(run.status==="STARTING"||run.status==="RUNNING");
+  return {deliveryDone,hasCommit,otherRunning,
+    start:deliveryDone&&hasCommit&&!otherRunning&&a.start,
+    stop:product.tiedToThisRun&&a.stop,
+    open:product.tiedToThisRun&&run.status==="RUNNING"&&run.bridged===true&&previewOpenable(run)};
 }
 export function mapDevRun(raw){
   const r=isObj(raw)?(isObj(raw.devrun)?raw.devrun:raw):null;
   if(!r||!DEVRUN_STATES.includes(r.status))return {state:"ERROR",run:null};
   const pv=isObj(r.preview)?r.preview:{},url=typeof pv.url==="string"&&PREVIEW_URL_RE.test(pv.url)?pv.url:null,port=safeInt(r.port);
+  // //TR: LANE-A A-FLOW-4: BLOCKED/CRASHED nedeni (ör. SANDBOX_UNAVAILABLE) sunucunun kodu olarak taşınır; desen dışıysa null (uydurulmaz).
+  const reason=typeof r.reason==="string"&&r.reason.length<=160&&/^[A-Z][A-Z0-9_]{0,63}(?::[A-Za-z0-9_.:-]{1,80})?$/.test(r.reason)?r.reason:null;
   return {state:"VERIFIED",run:{
-    status:r.status,pid:safeInt(r.pid),startedAt:iso(r.startedAt),exitCode:safeInt(r.exitCode),port:port!==null&&port>=1&&port<=65535?port:null,
+    status:r.status,reason,deliveryRunId:typeof r.deliveryRunId==="string"&&/^run_[0-9a-f]{24}$/.test(r.deliveryRunId)?r.deliveryRunId:null,bridged:typeof r.bridged==="boolean"?r.bridged:null,pid:safeInt(r.pid),startedAt:iso(r.startedAt),exitCode:safeInt(r.exitCode),port:port!==null&&port>=1&&port<=65535?port:null,
     preview:{url,state:PREVIEW_STATES.includes(pv.state)?pv.state:"UNAVAILABLE",lastProbeAt:iso(pv.lastProbeAt)},
     logTail:redactTail(typeof r.logTail==="string"?r.logTail:Array.isArray(r.logTail)?r.logTail.filter(x=>typeof x==="string").join("\n"):"")
   }};
@@ -286,9 +322,45 @@ export function mapExecutors(raw){
   const items=list.slice(0,20).filter(isObj).map(x=>{
     const id=String(pick(x.id,x.executor,x.kind,x.name)??"").toUpperCase().replace(/-/g,"_");if(!/^[A-Z][A-Z0-9_]{0,39}$/.test(id))return null;
     const s=pick(x.state,x.status),state=typeof s==="string"&&/^[A-Z][A-Z0-9_]{0,39}$/.test(s)?s:null;
-    return {id,state,testOnly:id==="FAKE"||x.testOnly===true};
+    return {id,state,testOnly:id==="FAKE"||x.testOnly===true,cli:id==="LOCAL_CLAUDE"?mapCliStatus(x.cli):null,readiness:id==="LOCAL_CLAUDE"?mapRoleReadiness(x.readiness):null};
   }).filter(Boolean);
-  return {state:"VERIFIED",items,profiles:mapClaudeProfiles(raw.claudeProfiles),sandbox:mapSandbox(raw.sandbox)};
+  // //TR: LANE-A A-FLOW-3: `active.reason` sunucunun şu an KULLANDIĞI yürütücüdür (LOCAL_CLAUDE ya da EXECUTOR_NOT_CONFIGURED/EXECUTOR_UNKNOWN/...); desen dışı ya da yoksa null (uydurulmaz).
+  const ar=isObj(raw.active)&&typeof raw.active.reason==="string"&&/^[A-Z][A-Z0-9_]{0,63}$/.test(raw.active.reason)?raw.active.reason:null;
+  return {state:"VERIFIED",items,profiles:mapClaudeProfiles(raw.claudeProfiles),sandbox:mapSandbox(raw.sandbox),active:ar,readiness:(items.find(i=>i.id==="LOCAL_CLAUDE")??{}).readiness??null};
+}
+const BLOCKER_RE=/^[A-Z][A-Z0-9_]{0,63}(?::[A-Z][A-Z0-9_]{0,63})?$/;
+/** //TR: C-IMPL-WIN-1: LOCAL_CLAUDE.cli.state (FOUND | NOT_FOUND | SHIM_UNSUPPORTED); yol ve sunucunun serbest metni (founderAction) bilerek TAŞINMAZ. Bilinmeyen biçim null. */
+export function mapCliStatus(raw){
+  return isObj(raw)&&["FOUND","NOT_FOUND","SHIM_UNSUPPORTED"].includes(raw.state)?{state:raw.state}:null;
+}
+/** //TR: C-IMPL-WIN-1: LOCAL_CLAUDE.readiness.{implementer,reviewer} -> {ready,blockers[],profile,loginCommand}; `ready` YALNIZ blockers boşken doğru olabilir (çelişki = o rol null/bilinmiyor); engelleyici kodlar sabit desenli, serbest metin (founderAction/loginHint) taşınmaz. */
+export function mapRoleReadiness(raw){
+  if(!isObj(raw))return null;
+  const out={};
+  for(const role of CLAUDE_PROFILE_ROLES){
+    const p=raw[role];
+    if(!isObj(p)||typeof p.ready!=="boolean"||!Array.isArray(p.blockers)||p.blockers.length>8||!p.blockers.every(b=>typeof b==="string"&&BLOCKER_RE.test(b))||p.ready!==(p.blockers.length===0)){out[role]=null;continue}
+    const profile=typeof p.profile==="string"&&/^[A-Z][A-Z_]{0,39}$/.test(p.profile)?p.profile:null,cmd=p.loginCommand;
+    out[role]={ready:p.ready,blockers:[...p.blockers],profile,loginCommand:typeof cmd==="string"&&cmd.length<=2000&&!CONTROL_RE.test(cmd)&&cmd.startsWith("$env:CLAUDE_CONFIG_DIR='")?cmd:null};
+  }
+  return out;
+}
+/** //TR: LANE-A A-FLOW-3: koşu adımı için motor gerçeği. READY yalnız etkin yürütücü LOCAL_CLAUDE ve implementer+reviewer profilleri READY iken; etkin yürütücü başka ya da bir profil READY değilse BLOCKED (LOGIN_REQUIRED asla "çalışıyor" görünmez); okuma yok ya da eksikse UNKNOWN. Sandbox koşuyu engellemez, yalnız testlerin çalışıp çalışmayacağını söyler. Bu bir koşunun sürdüğünü ya da ürünün doğrulandığını ASLA söylemez. */
+export function engineVerdict(exec){
+  const none={kind:"UNKNOWN",active:null,implementer:null,reviewer:null,sandbox:null};
+  if(!isObj(exec)||exec.state!=="VERIFIED")return none;
+  const profs=Array.isArray(exec.profiles)?exec.profiles:[],prof=role=>profs.find(p=>p&&p.role===role)??null;
+  // //TR: C-IMPL-WIN-1: rol hazırlığı (CLI + başlatıcı kanıtı + oturum) varsa profil durumuna EK olarak değerlendirilir: ready=false her zaman BLOCKED'tır; hazırlık nesnesi VARKEN bir rolün okuması geçersizse o rol READY sayılmaz (bilinmiyor); profil READY olsa bile (örn. CLI yok) rol hazır sayılmaz.
+  const rd=isObj(exec.readiness)?exec.readiness:null,role=r=>{
+    const p=prof(r),x=rd&&isObj(rd[r])?rd[r]:null;
+    if(p===null&&x===null)return null;
+    return {role:r,state:p?p.state:(x?x.profile:null),reason:p?p.reason:null,loginCommand:(p&&p.loginCommand)||(x&&x.loginCommand)||null,ready:x?x.ready:null,blockers:x?x.blockers:null};
+  };
+  const implementer=role("implementer"),reviewer=role("reviewer"),active=typeof exec.active==="string"?exec.active:null,sandbox=isObj(exec.sandbox)?exec.sandbox:null;
+  const bad=p=>p!==null&&((p.state!==null&&p.state!=="READY")||p.ready===false),good=p=>p!==null&&p.state==="READY"&&p.ready!==false&&(rd===null||p.ready===true);
+  const blocked=(active!==null&&active!=="LOCAL_CLAUDE")||bad(implementer)||bad(reviewer);
+  const ready=active==="LOCAL_CLAUDE"&&good(implementer)&&good(reviewer);
+  return {kind:blocked?"BLOCKED":ready?"READY":"UNKNOWN",active,implementer,reviewer,sandbox};
 }
 /** M1a: GET /v1/system/executors sandbox -> {state,reason,detail,providerId}; bilinmeyen biçim null (Ayarlar "bilinmiyor" der, AVAILABLE uydurulmaz). */
 export function mapSandbox(raw){
@@ -347,6 +419,28 @@ export function mapFlow(raw){
   // //TR: taskRuns: sunucu alanı yoksa undefined (satır gösterilmez); null = bağ dosyası okunamadı (UNKNOWN); nesne geçerliyse (tasksWithRuns <= tasks) sayılar, aksi halde null.
   const tr=Object.hasOwn(f,"taskRuns")?(isObj(f.taskRuns)&&cnt(f.taskRuns.tasksWithRuns)!==null&&cnt(f.taskRuns.tasks)!==null&&f.taskRuns.tasksWithRuns<=f.taskRuns.tasks?{tasksWithRuns:f.taskRuns.tasksWithRuns,tasks:f.taskRuns.tasks}:null):undefined;
   return {state:"VERIFIED",flow:{projectId:f.projectId,stages,missionCount:cnt(f.missionCount),taskCount:cnt(f.taskCount),latestRunId:rid,taskRuns:tr}};
+}
+
+// ---------- Koşu hazırlığı (GET /v1/projects/:id/readiness) ----------
+// //TR: LANE-A A-FLOW-2: "ilk koşu neden başlamıyor?" yanıtı (MISSION, RISK, REPOSITORY, TEST_COMMAND, PLAN) sabit sırada ve sabit durum sözlüğüyle eşlenir. Çelişkili yanıt tüm okumayı ERROR yapar: `ready` yalnız tüm engelleyici kontroller OK iken, `verifiable` yalnız ready ve tüm kontroller OK iken doğru olabilir; OK kontrolün gerekçesi, BLOCKED kontrolün ise gerekçesi olmak zorundadır. Hiçbir olumlu durum uydurulmaz.
+export const READINESS_CHECKS=Object.freeze(["MISSION","RISK","REPOSITORY","TEST_COMMAND","PLAN"]);
+export const READINESS_STATES=Object.freeze(["OK","BLOCKED","UNKNOWN"]);
+const READINESS_CODE_RE=/^[A-Z][A-Z0-9_]{0,59}$/;
+export const readinessPath=id=>pid(id)?`/v1/projects/${id}/readiness`:null;
+export function mapRunReadiness(raw){
+  const bad={state:"ERROR",readiness:null};
+  const r=isObj(raw)?raw.readiness:null;
+  if(!isObj(r)||!pid(r.projectId)||!(r.missionId===null||/^msn_[0-9a-f]{24}$/.test(typeof r.missionId==="string"?r.missionId:""))||typeof r.ready!=="boolean"||typeof r.verifiable!=="boolean"||!Array.isArray(r.checks)||r.checks.length!==READINESS_CHECKS.length)return bad;
+  const checks=[];
+  for(const [i,c] of r.checks.entries()){
+    const code=v=>v===null||(typeof v==="string"&&READINESS_CODE_RE.test(v));
+    if(!isObj(c)||c.id!==READINESS_CHECKS[i]||!READINESS_STATES.includes(c.state)||typeof c.blocking!=="boolean"||!code(c.reason)||!code(c.nextAction))return bad;
+    if(c.state==="OK"?c.reason!==null:c.reason===null)return bad;
+    checks.push({id:c.id,state:c.state,blocking:c.blocking,reason:c.reason,nextAction:c.nextAction});
+  }
+  const ready=checks.filter(c=>c.blocking).every(c=>c.state==="OK"),verifiable=ready&&checks.every(c=>c.state==="OK");
+  if(r.ready!==ready||r.verifiable!==verifiable)return bad;
+  return {state:"VERIFIED",readiness:{projectId:r.projectId,missionId:r.missionId,ready,verifiable,checks}};
 }
 
 // //TR: LANE-A: Akış aşamasının `detail` kodunu okunur anlama eşler. Anlam YALNIZ aşama durumuyla (state) birlikte geçerlidir: sunucu ACTIVE mission aşamasına son mission'ın durumunu (ör. COMPLETE) yazabilir, bu yüzden "tüm mission'lar tamamlandı" yalnız state=DONE iken söylenir. Bilinen kod yanlış durumla gelirse çevrilmez (MISSION için yalnız düz durum etiketi, diğerleri ham ve "beklenmeyen" notuyla); bilinmeyen kod AYNEN ham ve "tanınmadı" notuyla gösterilir. Olumlu anlam eklenmez.
