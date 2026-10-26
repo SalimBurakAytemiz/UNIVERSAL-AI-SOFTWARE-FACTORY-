@@ -15,6 +15,7 @@ const fixKey=r=>{
   if(r.state==="PASS")return null;
   if(r.id==="CLI")return r.state==="UNKNOWN"?"setup.fix.UNKNOWN":r.reasons.some(c=>LAUNCHER.includes(c))?"setup.fix.CLI.launcher":"setup.fix.CLI.install";
   if(r.id==="IMPLEMENTER"||r.id==="REVIEWER")return r.state==="UNKNOWN"?"setup.fix.UNKNOWN":r.reasons.some(c=>c.startsWith("CLAUDE_PROFILE_REFUSED"))?"setup.fix.profile.refused":"setup.fix.profile.login";
+  if(r.id==="EXECUTOR")return r.state==="UNKNOWN"?"setup.fix.UNKNOWN":"setup.fix.EXECUTOR";
   if(r.id==="SANDBOX")return r.state==="UNKNOWN"?"setup.fix.UNKNOWN":"setup.fix.SANDBOX";
   return r.state==="BLOCKED"?"setup.fix.PRODUCT.blocked":"setup.fix.PRODUCT.untested";
 };
@@ -29,6 +30,7 @@ export function setupCheckPanel(ctx,exec){
       h(doc,"strong",{text:ctx.t(`setup.row.${r.id}`)})," ",badge(ctx,ctx.t(`setup.state.${r.state}`),KIND[r.state]),
       r.state==="PASS"&&r.providerId?h(doc,"span",{class:"note mono",dataset:{setupProvider:r.providerId},text:` ${r.providerId}`}):null,
       r.reasons.length?h(doc,"ul",{class:"note"},r.reasons.map(code=>h(doc,"li",{dataset:{setupReason:code},text:reasonText(ctx,code)}))):null,
+      r.note?h(doc,"p",{class:"note",dataset:{setupNote:r.note},text:ctx.t(`setup.note.${r.note}`)}):null,
       fk?h(doc,"p",{class:"note",dataset:{setupFix:fk},text:ctx.t(fk)}):null,
       r.login?h(doc,"p",{class:"note",text:ctx.t("exec.profile.loginHint")}):null,
       r.login?h(doc,"pre",{class:"code",dataset:{setupLogin:r.id}},h(doc,"code",{text:r.login})):null);
@@ -36,5 +38,6 @@ export function setupCheckPanel(ctx,exec){
   return panel(ctx,{titleKey:"setup.title",id},h(doc,"p",{class:"note",text:ctx.t("setup.lead")}),head,note,list,
     h(doc,"h3",{text:ctx.t("setup.kit.title")}),h(doc,"p",{class:"note",text:ctx.t("setup.kit.lead")}),
     h(doc,"pre",{class:"code",dataset:{setupKit:"1"}},h(doc,"code",{text:ACCEPTANCE_COMMAND})),
+    h(doc,"p",{class:"note",dataset:{setupKitPending:"1"},text:ctx.t("setup.kit.pending")}),
     h(doc,"p",{class:"note",text:ctx.t("setup.kit.note")}));
 }
