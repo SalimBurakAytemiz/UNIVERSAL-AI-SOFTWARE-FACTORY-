@@ -5,6 +5,7 @@ vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import {pathToFileURL} from "node:url";
 import crypto from "node:crypto";
 import cp from "node:child_process";
 import {WorkOsStore} from "../core/workos/store.js";
@@ -1903,7 +1904,7 @@ describe("LANE-C pre-dev produce route (fake process runner only)", () => {
   let PREDEV_AGENT_ACTOR = "";
   beforeEach(async () => { PREDEV_AGENT_ACTOR = (await import("../core/workos/predev/claude-builder.js")).PREDEV_AGENT_ACTOR; });
   const kindOf = (input: string) => /# ARTEFAKT TÜRÜ: (\w+)/.exec(input)?.[1] ?? "";
-  async function mkApp(o: {builder?: "none" | "null" | "fake"; stopped?: () => boolean; allowed?: boolean; tenantId?: string; run?: (kind: string, run: Run) => Promise<any> | any; profileOk?: boolean; storeOptions?: ConstructorParameters<typeof WorkOsStore>[1]; provider?: {on: boolean}} = {}) {
+  async function mkApp(o: {builder?: "none" | "null" | "fake"; stopped?: () => boolean; allowed?: boolean; tenantId?: string; run?: (kind: string, run: Run) => Promise<any> | any; profileOk?: boolean; storeOptions?: ConstructorParameters<typeof WorkOsStore>[1]; provider?: {on: boolean}; analysis?: {hold: Promise<void>; calls: string[]}} = {}) {
     const [{default: Fastify}, {registerPredevDecisionRoutes}, {WorkOsError}, {ClaudePreDevBuilder}, {reviewerArgv}, {TASKHUB_ARTIFACTS}] = await Promise.all([
       import("fastify"), import("../apps/control-api/src/routes/predev-decisions.js"), import("../core/workos/types.js"), import("../core/workos/predev/claude-builder.js"), import("../core/workos/executors.js"), import("../core/workos/predev/fixtures/taskhub/index.js")]);
     const app = Fastify({logger: false});
@@ -1921,6 +1922,12 @@ describe("LANE-C pre-dev produce route (fake process runner only)", () => {
     registerPredevDecisionRoutes(app, {getStore: () => store, scope: {tenantId: o.tenantId ?? "tA"}, orgId: "o1", actor: ACT, audit: (e: string, x?: any) => { audits.push({e, x}); }, workosStopped: o.stopped ?? (() => false),
       workosPolicy: (action: string, mid: string) => { policies.push(action); return o.allowed === false ? {allowed: false, reason: "NO"} : {allowed: true}; },
       workosFail: (r: any, e: any) => e?.code === "WORKOS_DISK_FULL" ? r.code(507).send({error: e.code}) : r.code(e instanceof WorkOsError ? 400 : 500).send({error: e?.code ?? "INTERNAL_ERROR"}), ...(preDevBuilder ? {preDevBuilder} : {})});
+    // R2: analiz adımı route'ları AYNI uygulamada kayıtlıdır (ortak ücretli-üretim kilidini route'lar arası sınamak için); akış yalnız çağrıyı sayar ve tutar.
+    if (o.analysis) {
+      const {registerAnalysisRoutes} = await import("../apps/control-api/src/routes/analysis.js"); const an = o.analysis;
+      registerAnalysisRoutes(app, {getStore: () => store, scope: {tenantId: o.tenantId ?? "tA"}, orgId: "o1", actor: ACT, audit: (e: string, x?: any) => { audits.push({e, x}); }, workosStopped: o.stopped ?? (() => false),
+        workosPolicy: () => ({allowed: true}), workosFail: (r: any) => r.code(500).send({error: "INTERNAL_ERROR"}), analysisFlow: () => ({step: async (id: string) => { an.calls.push(id); await an.hold; return {status: "AWAITING_APPROVAL", kind: "Plan"}; }}) as any});
+    }
     const p = store.createProject(proj()), m = store.createMission(msn(p.projectId));
     for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission(SC, m.missionId, to, "go", ACT);
     return {app, store, audits, policies, runs, providerCalls, m, p};
@@ -2112,6 +2119,23 @@ describe("LANE-C pre-dev produce route (fake process runner only)", () => {
     await post(t.app, `/v1/missions/${t.m.missionId}/predev/start`);
     await post(t.app, `/v1/missions/${t.m.missionId}/predev/produce`);
     expect(produced(t.audits)).toMatchObject([{outcome: "FAILED", reason: "PREDEV_BUILDER_TIMEOUT", phase: "BUSINESS_ANALYSIS"}]);
+  });
+
+  it("R2: predev produce and analysis step share ONE paid-production lock in both directions: a step during a produce and a produce during a step are 409 PREDEV_PRODUCE_IN_PROGRESS and start no builder run", async () => {
+    let releaseProduce!: () => void; const produceGate = new Promise<void>(r => { releaseProduce = r; });
+    let releaseStep!: () => void; const stepGate = new Promise<void>(r => { releaseStep = r; }); const calls: string[] = [];
+    const pending = {first: true};
+    const c = await mkApp({analysis: {hold: stepGate, calls}, run: async () => { if (pending.first) { pending.first = false; await produceGate; } return undefined; }}); const id = c.m.missionId;
+    await post(c.app, `/v1/missions/${id}/predev/start`);
+    const produce = post(c.app, `/v1/missions/${id}/predev/produce`);
+    for (let i = 0; i < 200 && c.runs.length < 1; i++) await new Promise(r => setTimeout(r, 10));
+    const step1 = await post(c.app, `/v1/missions/${id}/analysis/step`); expect([step1.statusCode, step1.json().error]).toEqual([409, "PREDEV_PRODUCE_IN_PROGRESS"]); expect(calls).toEqual([]);
+    releaseProduce(); expect((await produce).statusCode).toBe(201);
+    const step = post(c.app, `/v1/missions/${id}/analysis/step`);
+    for (let i = 0; i < 200 && calls.length < 1; i++) await new Promise(r => setTimeout(r, 10));
+    const runsBefore = c.runs.length;
+    const prod2 = await post(c.app, `/v1/missions/${id}/predev/produce`); expect([prod2.statusCode, prod2.json().error]).toEqual([409, "PREDEV_PRODUCE_IN_PROGRESS"]); expect(c.runs).toHaveLength(runsBefore);
+    releaseStep(); expect((await step).statusCode).toBe(200);
   });
 
   it("at most ONE produce at a time across ALL missions: the same mission is 409 PREDEV_PRODUCE_IN_PROGRESS, another mission is 409 PREDEV_PRODUCE_BUSY, neither starts a process; the slot is released afterwards (success and failure)", async () => {
@@ -2719,13 +2743,13 @@ describe("LANE-B product run routes (B-RUN-1)", () => {
 describe("LANE-B batch 4b: analysis routes and server registration", () => {
   const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
   const MSN = "msn_" + "a".repeat(24);
-  const mkApp = async (o: {stopped?: boolean; allowed?: boolean; step?: any; plan?: any; throwErr?: string} = {}) => {
+  const mkApp = async (o: {stopped?: boolean; allowed?: boolean; step?: any; plan?: any; throwErr?: string; hold?: Promise<void>; stopDuring?: boolean} = {}) => {
     const [{default: Fastify}, {registerAnalysisRoutes}, {AnalysisError}] = await Promise.all([import("fastify"), import("../apps/control-api/src/routes/analysis.js"), import("../core/workos/crew/analysis.js")]);
-    const app = Fastify({logger: false}); const audits: string[] = []; const calls: string[] = [];
+    const app = Fastify({logger: false}); const audits: string[] = []; const calls: string[] = []; let stopNow = false;
     app.addHook("onRequest", async (req, reply) => { if (req.headers["x-uasco-control-token"] !== token) return reply.code(403).send({error: "FORBIDDEN"}); });
-    const flow: any = {step: async (id: string) => { calls.push(`step:${id}`); if (o.throwErr) throw new AnalysisError(o.throwErr as any); return o.step ?? {status: "COMPLETE", approved: []}; },
+    const flow: any = {step: async (id: string) => { calls.push(`step:${id}`); if (o.hold) await o.hold; if (o.stopDuring) stopNow = true; if (o.throwErr) throw new AnalysisError(o.throwErr as any); return o.step ?? {status: "COMPLETE", approved: []}; },
       createPlan: (id: string, actor: string) => { calls.push(`plan:${id}:${actor}`); return o.plan ?? {ok: true, tasks: [], replayed: false, trace: [], summary: {}}; }};
-    registerAnalysisRoutes(app, {getStore: () => ({}) as any, scope: {tenantId: "tA"}, orgId: "o1", actor: "FOUNDER_LOCAL", audit: (e: string) => { audits.push(e); }, workosStopped: () => !!o.stopped,
+    registerAnalysisRoutes(app, {getStore: () => ({}) as any, scope: {tenantId: "tA"}, orgId: "o1", actor: "FOUNDER_LOCAL", audit: (e: string) => { audits.push(e); }, workosStopped: () => !!o.stopped || stopNow,
       workosPolicy: () => o.allowed === false ? {allowed: false, reason: "NO"} : {allowed: true}, workosFail: (r: any) => r.code(500).send({error: "INTERNAL_ERROR"}), analysisFlow: () => flow});
     return {app, calls, audits};
   };
@@ -2741,15 +2765,62 @@ describe("LANE-B batch 4b: analysis routes and server registration", () => {
     expect(m.calls.concat(st.calls, den.calls)).toEqual([]);
   });
 
-  it("step maps results: BLOCKED 409 (full step + ANALYSIS_BLOCKED), REJECTED/BUILDER_FAILED 502, DRAFT_READY/AWAITING_APPROVAL/COMPLETE 200; unknown mission 404; plan: success body, replay audited, ok:false codes 409", async () => {
+  it("step maps results: BLOCKED/REJECTED/BUILDER_FAILED answer 200 with the FULL step body (R1), DRAFT_READY/AWAITING_APPROVAL/COMPLETE 200; unknown mission 404; plan: success body, replay audited, ok:false codes 409", async () => {
     const blocked = {status: "BLOCKED", blocker: "CLAUDE_CLI_NOT_FOUND", blockers: ["CLAUDE_CLI_NOT_FOUND"], founderAction: "install", readiness: {ready: false}};
-    const b = await post((await mkApp({step: blocked})).app, `/v1/missions/${MSN}/analysis/step`); expect(b.statusCode).toBe(409); expect(b.json()).toMatchObject({status: "BLOCKED", error: "ANALYSIS_BLOCKED", blocker: "CLAUDE_CLI_NOT_FOUND"});
-    for (const s of [{status: "REJECTED", kind: "Plan", reason: "x"}, {status: "BUILDER_FAILED", kind: "Plan", code: "X"}]) expect((await post((await mkApp({step: s})).app, `/v1/missions/${MSN}/analysis/step`)).statusCode).toBe(502);
+    const b = await post((await mkApp({step: blocked})).app, `/v1/missions/${MSN}/analysis/step`); expect(b.statusCode).toBe(200); expect(b.json()).toEqual(blocked);
+    for (const s of [{status: "REJECTED", kind: "Plan", reason: "x"}, {status: "BUILDER_FAILED", kind: "Plan", code: "X"}]) { const r = await post((await mkApp({step: s})).app, `/v1/missions/${MSN}/analysis/step`); expect(r.statusCode).toBe(200); expect(r.json()).toEqual(s); }
     for (const s of [{status: "DRAFT_READY", kind: "Plan"}, {status: "AWAITING_APPROVAL", kind: "Plan"}, {status: "COMPLETE", approved: []}]) { const r = await post((await mkApp({step: s})).app, `/v1/missions/${MSN}/analysis/step`); expect(r.statusCode).toBe(200); expect(r.json().status).toBe(s.status); }
     expect((await post((await mkApp({throwErr: "ANALYSIS_MISSION_NOT_FOUND"})).app, `/v1/missions/${MSN}/analysis/step`)).json()).toEqual({error: "ANALYSIS_MISSION_NOT_FOUND"});
     const ok = await mkApp(); const p = await post(ok.app, `/v1/missions/${MSN}/analysis/plan`); expect(p.statusCode).toBe(200); expect(p.json()).toMatchObject({replayed: false}); expect(ok.calls).toEqual([`plan:${MSN}:FOUNDER_LOCAL`]); expect(ok.audits).toContain("WORKOS_ANALYSIS_PLAN");
     const rp = await mkApp({plan: {ok: true, tasks: [], replayed: true, trace: [], summary: {}}}); await post(rp.app, `/v1/missions/${MSN}/analysis/plan`); expect(rp.audits).toContain("WORKOS_IDEMPOTENT_REPLAY");
     const no = await post((await mkApp({plan: {ok: false, code: "ANALYSIS_NOT_COMPLETE", detail: "x"}})).app, `/v1/missions/${MSN}/analysis/plan`); expect(no.statusCode).toBe(409); expect(no.json()).toEqual({error: "ANALYSIS_NOT_COMPLETE"});
+  });
+
+  it("R1: every evaluated step survives the REAL Desktop sanitizePostBody (extracted from main.mjs) and the renderer's classifyAnalysisStep as STEP with the exact blocker/kind/code", async () => {
+    const src = fs.readFileSync(path.join(process.cwd(), "apps/desktop/main.mjs"), "utf8");
+    const grab = (name: string) => { const i = src.indexOf(`function ${name}(`); expect(i, name).toBeGreaterThan(-1); let depth = 0, j = src.indexOf("{", i); const start = i; for (; j < src.length; j++) { if (src[j] === "{") depth++; else if (src[j] === "}" && --depth === 0) break; } return src.slice(start, j + 1); };
+    const sanitize = new Function("token", `${grab("scrubText")}\n${grab("sanitizePostBody")}\nreturn sanitizePostBody;`)("tok") as (s: number, b: unknown) => unknown;
+    const {classifyAnalysisStep} = (await import(pathToFileURL(path.join(process.cwd(), "apps/desktop/renderer/analysis-core.js")).href)) as any;
+    const blocked = {status: "BLOCKED", blocker: "CLAUDE_CLI_NOT_FOUND", blockers: ["CLAUDE_CLI_NOT_FOUND", "CLAUDE_PROFILE_LOGIN_REQUIRED"], founderAction: "install", readiness: {ready: false}};
+    const viaBridge = async (step: any) => { const r = await post((await mkApp({step})).app, `/v1/missions/${MSN}/analysis/step`); return classifyAnalysisStep({status: r.statusCode, body: sanitize(r.statusCode, JSON.parse(r.body))}); };
+    const b = await viaBridge(blocked);
+    expect(b.kind).toBe("STEP"); expect(b.step).toMatchObject({status: "BLOCKED", blocker: "CLAUDE_CLI_NOT_FOUND", blockers: ["CLAUDE_CLI_NOT_FOUND", "CLAUDE_PROFILE_LOGIN_REQUIRED"]});
+    const rej = await viaBridge({status: "REJECTED", kind: "Plan", reason: "NOT_JSON"}); expect(rej.kind).toBe("STEP"); expect(rej.step).toMatchObject({status: "REJECTED", kind: "Plan"});
+    const bf = await viaBridge({status: "BUILDER_FAILED", kind: "Plan", code: "CLAUDE_TIMEOUT"}); expect(bf.kind).toBe("STEP"); expect(bf.step).toMatchObject({status: "BUILDER_FAILED", kind: "Plan", code: "CLAUDE_TIMEOUT"});
+    // Kanıt (eski davranış): 409 + tam gövde köprüde {error} 'a iner ve renderer bunu INVALID sayar; 200 şekli bu yüzden gereklidir.
+    expect(classifyAnalysisStep({status: 409, body: sanitize(409, {...blocked, error: "ANALYSIS_BLOCKED"})}).kind).toBe("INVALID");
+    // istek hataları değişmedi
+    expect((await post((await mkApp({stopped: true})).app, `/v1/missions/${MSN}/analysis/step`)).statusCode).toBe(423);
+  });
+
+  it("R2: two concurrent steps start ONE builder run (second = 409 PREDEV_PRODUCE_IN_PROGRESS, another mission = 409 PREDEV_PRODUCE_BUSY, both audited and refused before the flow); the lock is shared with predev produce and is released after success AND failure", async () => {
+    let release!: () => void; const hold = new Promise<void>(r => { release = r; });
+    const m = await mkApp({hold}); const MSN2 = "msn_" + "b".repeat(24);
+    const first = post(m.app, `/v1/missions/${MSN}/analysis/step`);
+    for (let i = 0; i < 200 && m.calls.length < 1; i++) await new Promise(r => setTimeout(r, 10));
+    const [second, other] = await Promise.all([post(m.app, `/v1/missions/${MSN}/analysis/step`), post(m.app, `/v1/missions/${MSN2}/analysis/step`)]);
+    expect([second.statusCode, second.json().error]).toEqual([409, "PREDEV_PRODUCE_IN_PROGRESS"]); expect([other.statusCode, other.json().error]).toEqual([409, "PREDEV_PRODUCE_BUSY"]);
+    expect(m.calls).toEqual([`step:${MSN}`]); // builder/flow reached exactly once
+    // paylaşılan kilit: predev produce aynı modülden alır
+    const {tryProduceLock} = await import("../apps/control-api/src/routes/produce-lock.js");
+    const asPredev = tryProduceLock(MSN); expect(asPredev).toEqual({ok: false, error: "PREDEV_PRODUCE_IN_PROGRESS"});
+    release(); expect((await first).statusCode).toBe(200);
+    expect(m.audits.filter(a => a === "WORKOS_ANALYSIS_STEP")).toHaveLength(3); // 1 çalışan + 2 reddedilen
+    const after = tryProduceLock(MSN); expect(after.ok).toBe(true); if (after.ok) after.release();
+    // tersi: predev produce sürerken analiz adımı akışa ULAŞMAZ
+    const held = tryProduceLock(MSN2); expect(held.ok).toBe(true);
+    const idle = await mkApp(); const blockedByPredev = await post(idle.app, `/v1/missions/${MSN}/analysis/step`);
+    expect([blockedByPredev.statusCode, blockedByPredev.json().error]).toEqual([409, "PREDEV_PRODUCE_BUSY"]); expect(idle.calls).toEqual([]);
+    if (held.ok) held.release();
+    // hata sonrası kilit serbest
+    const bad = await mkApp({throwErr: "ANALYSIS_MISSION_NOT_FOUND"}); expect((await post(bad.app, `/v1/missions/${MSN}/analysis/step`)).statusCode).toBe(404);
+    expect((await post(idle.app, `/v1/missions/${MSN}/analysis/step`)).statusCode).toBe(200);
+  });
+
+  it("R2: Global Stop arriving while the step runs is re-checked before DRAFT_READY is answered (423, audited); other statuses are unaffected", async () => {
+    const m = await mkApp({step: {status: "DRAFT_READY", kind: "Plan"}, stopDuring: true});
+    const r = await post(m.app, `/v1/missions/${MSN}/analysis/step`); expect([r.statusCode, r.json()]).toEqual([423, {error: "GLOBAL_STOP_ACTIVE"}]); expect(m.audits).toContain("WORKOS_ANALYSIS_STEP");
+    const ok = await mkApp({step: {status: "AWAITING_APPROVAL", kind: "Plan"}, stopDuring: true}); expect((await post(ok.app, `/v1/missions/${MSN}/analysis/step`)).statusCode).toBe(200);
   });
 });
 

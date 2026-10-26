@@ -1,6 +1,7 @@
 //TR: Bu dosya analiz adımı route'larını sağlar (POST /v1/missions/:id/analysis/step ve /analysis/plan): Lane C'nin AnalysisFlow'u üzerinde ince bir sarmalayıcı; Global Stop 423, politika 403, boş gövde, sıkı id; server.ts'e tek kayıt gerekir (docs/authority-requests/LANE-B-batch-4b.md).
 import AjvModule from "ajv";
 import {LANE_WRITE_BODY_LIMIT} from "./deps.js";
+import {tryProduceLock} from "./produce-lock.js";
 import type {RouteDeps} from "./deps.js";
 import {AnalysisError} from "../../../../core/workos/crew/analysis.js";
 import type {AnalysisFlow} from "../../../../core/workos/crew/analysis.js";
@@ -25,14 +26,19 @@ export function registerAnalysisRoutes(app: any, d: AnalysisRouteDeps): void {
     if (!emptyBody(body)) { reply.code(400).send({error: "INVALID_BODY"}); return false; }
     return true;
   };
-  // Adım: o anki analiz fazının taslağı. BLOCKED 409 (tam adım gövdesi + error), REJECTED/BUILDER_FAILED 502, diğerleri 200.
+  // Adım: o anki analiz fazının taslağı. Değerlendirilen her adım (BLOCKED / REJECTED / BUILDER_FAILED / DRAFT_READY / ...) 200 + TAM adım gövdesiyle döner: Desktop köprüsü (sanitizePostBody) >= 400 gövdelerinden yalnız error/code/reason/message bırakır, blocker(s)/kind/code kaybolurdu.
+  // İstek hataları aynı kalır (400, 403, 404, 423, 409 kilit). Ücretli üretim süreç genelinde tek kilitle sınırlıdır (predev produce ile ORTAK): ikinci eşzamanlı çağrı builder'a ulaşmadan 409.
   app.post("/v1/missions/:id/analysis/step", {bodyLimit: LANE_WRITE_BODY_LIMIT}, guard(async (req: any, reply: any) => {
     if (!gates(req, reply, "workos.analysis.step")) return reply;
-    const out = await d.analysisFlow().step(req.params.id);
-    d.audit("WORKOS_ANALYSIS_STEP", {actor: d.actor, missionId: req.params.id, status: out.status});
-    if (out.status === "BLOCKED") return reply.code(409).send({...out, error: "ANALYSIS_BLOCKED"});
-    if (out.status === "REJECTED" || out.status === "BUILDER_FAILED") return reply.code(502).send(out);
-    return out;
+    const lock = tryProduceLock(req.params.id);
+    if (!lock.ok) { d.audit("WORKOS_ANALYSIS_STEP", {actor: d.actor, missionId: req.params.id, status: "REFUSED", reason: lock.error}); return reply.code(409).send({error: lock.error}); }
+    try {
+      const out = await d.analysisFlow().step(req.params.id);
+      // Üretim sürerken Global Stop gelmiş olabilir: DRAFT_READY yanıtından ÖNCE yeniden denetlenir (taslak kaydedilmiş olsa da Founder'a "hazır" denmez).
+      if (out.status === "DRAFT_READY" && d.workosStopped()) { d.audit("WORKOS_ANALYSIS_STEP", {actor: d.actor, missionId: req.params.id, status: out.status, reason: "GLOBAL_STOP_ACTIVE"}); return reply.code(423).send({error: "GLOBAL_STOP_ACTIVE"}); }
+      d.audit("WORKOS_ANALYSIS_STEP", {actor: d.actor, missionId: req.params.id, status: out.status});
+      return out;
+    } finally { lock.release(); }
   }));
   // Plan: onaylı analizden görev planı (bir mission'a bir plan; aynı gövde idempotent).
   app.post("/v1/missions/:id/analysis/plan", {bodyLimit: LANE_WRITE_BODY_LIMIT}, guard(async (req: any, reply: any) => {
