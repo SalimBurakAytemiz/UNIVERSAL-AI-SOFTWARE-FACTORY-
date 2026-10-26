@@ -188,7 +188,8 @@ describe("SBX-GATE control API (explicit no provider: sandbox null)", () => {
   });
   it("M1a: a mission run passes VERIFY with NOT_EXECUTED SANDBOX_UNAVAILABLE and reaches AWAITING_APPROVAL through the API (FAKE executors, no sandbox)", { timeout: T }, async () => {
     const marker = path.join(tmp, "api-executed.flag"), c = setup(marker), f = fake();
-    const app = buildServer({controlToken: TOKEN, runtime: c.runtime, repoRoot: REPO, dataDir: c.dataDir, tenantId: "tA", port: 3210, logger: false, executors: f.pair(), runner: {enabled: true, intervalMs: 250, security: fakeSecurity(`${c.dataDir}-sec`).options}});
+    // "Sandbox yok" senaryosu ölçülür: anahtar verilmezse Linux'ta varsayılan sağlayıcı kurulur ve ortama göre testler gerçekten koşar; bu yüzden açıkça sandbox: null.
+    const app = buildServer({controlToken: TOKEN, runtime: c.runtime, repoRoot: REPO, dataDir: c.dataDir, tenantId: "tA", port: 3210, logger: false, sandbox: null, executors: f.pair(), runner: {enabled: true, intervalMs: 250, security: fakeSecurity(`${c.dataDir}-sec`).options}});
     apps.push(app);
     await app.ready();
     const started = await call(app, "POST", `/v1/missions/${c.missionId}/runs`, {idempotencyKey: "sbx-run-1"});

@@ -336,20 +336,23 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
     const {bridgeSupport, providerNetwork} = await import("../core/workos/devrun-bridge.js");
     expect(providerNetwork(TEST_HOST_PASSTHROUGH_SANDBOX)).toBe("HOST"); expect(bridgeSupport(TEST_HOST_PASSTHROUGH_SANDBOX)).toMatchObject({ok: true, start: null});
     const lin = (caps?: unknown) => ({id: "linux-unshare-v2", selfTest: async () => ({ok: true}), run: async () => ({}) as any, spawn: () => ({}) as any, ...(caps ? {capabilities: caps} : {})});
-    expect(bridgeSupport(lin())).toEqual({ok: false, reason: "SANDBOX_LOOPBACK_NOT_VERIFIED:NOT_REPORTED"});
-    expect(bridgeSupport(lin({loopback: false, loopbackReason: "LOOPBACK_TOOL_MISSING"}))).toEqual({ok: false, reason: "SANDBOX_LOOPBACK_NOT_VERIFIED:LOOPBACK_TOOL_MISSING"});
-    expect(bridgeSupport(lin({loopback: true}), {nsenterBinary: null})).toEqual({ok: false, reason: "NSENTER_MISSING"});
+    // Platform kapısı yeteneklerden ÖNCE gelir (üründe doğru); beklentiler çalıştıran işletim sistemine bağlı olmasın diye platform açıkça verilir (win32 -> BRIDGE_PLATFORM_NOT_LINUX, linux -> yetenek kodları).
+    const L = {platform: "linux" as const};
+    expect(bridgeSupport(lin(), {platform: "win32"})).toEqual({ok: false, reason: "BRIDGE_PLATFORM_NOT_LINUX"});
+    expect(bridgeSupport(lin(), L)).toEqual({ok: false, reason: "SANDBOX_LOOPBACK_NOT_VERIFIED:NOT_REPORTED"});
+    expect(bridgeSupport(lin({loopback: false, loopbackReason: "LOOPBACK_TOOL_MISSING"}), L)).toEqual({ok: false, reason: "SANDBOX_LOOPBACK_NOT_VERIFIED:LOOPBACK_TOOL_MISSING"});
+    expect(bridgeSupport(lin({loopback: true}), {...L, nsenterBinary: null})).toEqual({ok: false, reason: "NSENTER_MISSING"});
     expect(bridgeSupport(lin({loopback: true}), {nsenterBinary: "/usr/bin/nsenter", platform: "win32"})).toEqual({ok: false, reason: "BRIDGE_PLATFORM_NOT_LINUX"});
     expect(bridgeSupport(lin({loopback: true}), {nsenterBinary: "/usr/bin/nsenter", platform: "linux"})).toMatchObject({ok: true, network: "ISOLATED"});
-    expect(bridgeSupport({...lin(), id: "wsl-unshare-v1"} as any)).toEqual({ok: false, reason: "PROVIDER_HAS_NO_BRIDGE:wsl-unshare-v1"});
+    expect(bridgeSupport({...lin(), id: "wsl-unshare-v1"} as any, L)).toEqual({ok: false, reason: "PROVIDER_HAS_NO_BRIDGE:wsl-unshare-v1"});
     const own = async () => ({port: 1, close() {}});
-    expect(bridgeSupport({...lin(), bridge: own} as any)).toMatchObject({ok: true});
+    expect(bridgeSupport({...lin(), bridge: own} as any, L)).toMatchObject({ok: true});
   });
 
   it("an isolated provider without a usable bridge is refused with DEVRUN_SANDBOX_UNAVAILABLE + exact reason BEFORE anything is cloned or spawned; state is BLOCKED; an unverified provider keeps SANDBOX_UNAVAILABLE", async () => {
     const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
     const {provider, spawned} = fakeIsolated();
-    const m = manager(dataDir, new ExecutionGate(provider as any));
+    const m = manager(dataDir, new ExecutionGate(provider as any), {bridgeOptions: {platform: "linux"}});
     await expect(m.start(p)).rejects.toMatchObject({code: "DEVRUN_SANDBOX_UNAVAILABLE", status: 409, reason: "SANDBOX_LOOPBACK_NOT_VERIFIED:NOT_REPORTED"});
     expect(spawned).toEqual([]); expect(fs.existsSync(path.join(dataDir, "projects", p.projectId, "devrun", "workspace"))).toBe(false);
     const v = m.view(p); expect(v.status).toBe("BLOCKED"); expect(v.reason).toBe("DEVRUN_SANDBOX_UNAVAILABLE:SANDBOX_LOOPBACK_NOT_VERIFIED:NOT_REPORTED");
