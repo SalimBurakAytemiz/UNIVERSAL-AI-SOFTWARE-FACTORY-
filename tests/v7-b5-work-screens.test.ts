@@ -1037,7 +1037,8 @@ describe("B5 static safety, routes and wiring", () => {
     // V7-PKG-M1A-MODE: merge-tool sözleşmesi gereği M1a testleri de sona eklenir (m1a-*); B5 sırası ve tekilliği değişmez.
     // V7-CORE-PREDEV (FA-V2-PRODUCT): CORE pre-dev sözleşme testi de sona eklenir (core-predev-*). UX paketleri (ux-*) de sona eklenir; B5 sırası ve tekilliği değişmez.
     // MASTER-V2 C-RDY-1 (#260, R1 TEST_REGISTRATION_APPEND): rol hazırlık denetçisi testi (core-readiness-*) de sona eklenir; sıra ve tekillik kuralı aynen geçerlidir.
-    for (const later of step.command.slice(i + 1)) expect(later).toMatch(/^tests\/v7-(?:b([6-9]|\d{2,})[a-z]?|ps\d+[a-z]?|m1a|core-predev|core-readiness|ux)-[a-z0-9-]+\.test\.ts$/);
+    // MASTER-V2 C-CTX-1 (#265, R1 TEST_REGISTRATION_APPEND): rol bağlamı çözücüsü testi (core-role-*) de sona eklenir; sıra ve tekillik kuralı aynen geçerlidir.
+    for (const later of step.command.slice(i + 1)) expect(later).toMatch(/^tests\/v7-(?:b([6-9]|\d{2,})[a-z]?|ps\d+[a-z]?|m1a|core-predev|core-readiness|core-role|ux)-[a-z0-9-]+\.test\.ts$/);
     expect(step.command).toContain("tests/v7-b4-desktop-shell.test.ts");
     expect(step.command.filter((x: string) => x === "tests/v7-b5-work-screens.test.ts").length).toBe(1);
   });

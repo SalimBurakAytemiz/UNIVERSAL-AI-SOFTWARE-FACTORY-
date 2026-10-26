@@ -912,7 +912,8 @@ describe("PS-1B static safety and wiring", () => {
     expect(step.command.slice(j, j + 2)).toEqual(["tests/v7-ps1b-project-studio-ui.test.ts", "tests/v7-ps1b-relpath-canonical.test.ts"]);
     // V7-CORE-PREDEV (FA-V2-PRODUCT): CORE pre-dev sözleşme testi (core-predev-*) ve UX paketleri (ux-*) de sona eklenir; ps1b çiftinin sırası ve tekilliği değişmez.
     // MASTER-V2 C-RDY-1 (#260, R1 TEST_REGISTRATION_APPEND): rol hazırlık denetçisi testi (core-readiness-*) de sona eklenir; sıra ve tekillik kuralı aynen geçerlidir.
-    for (const later of step.command.slice(j + 2)) expect(later).toMatch(/^tests\/v7-(?:b([6-9]|\d{2,})[a-z]?|ps\d+[a-z]?|m1a|core-predev|core-readiness|ux)-[a-z0-9-]+\.test\.ts$/);
+    // MASTER-V2 C-CTX-1 (#265, R1 TEST_REGISTRATION_APPEND): rol bağlamı çözücüsü testi (core-role-*) de sona eklenir; sıra ve tekillik kuralı aynen geçerlidir.
+    for (const later of step.command.slice(j + 2)) expect(later).toMatch(/^tests\/v7-(?:b([6-9]|\d{2,})[a-z]?|ps\d+[a-z]?|m1a|core-predev|core-readiness|core-role|ux)-[a-z0-9-]+\.test\.ts$/);
     expect(step.command.filter((x: string) => x === "tests/v7-ps1b-project-studio-ui.test.ts").length).toBe(1);
     expect(step.command).toContain("tests/v7-b7-installer.test.ts");
   });
