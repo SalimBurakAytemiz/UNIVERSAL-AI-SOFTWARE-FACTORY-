@@ -1816,6 +1816,7 @@ describe("A-TEST-DIAG-1: a failing git step in the evaluation pipeline is diagno
     expect(straddle).toContain("[REDACTED:GITHUB_TOKEN"); // the marker itself may be clipped at 240, the secret may not survive
     expect(reasonOf(await evalWith(throwing("x")))).toBe("PROCEDURE_EXCEPTION:x");
     expect(reasonOf(await evalWith(throwing(new Error("a\n\n  b\tc"))))).toBe("PROCEDURE_EXCEPTION:a b c"); // whitespace is collapsed and trimmed
+    expect(reasonOf(await evalWith(throwing(new Error("  \n x \t\n"))))).toBe("PROCEDURE_EXCEPTION:x"); // trimmed at both ends
     // collapse comes first: a pattern split by a newline (a PEM header) still matches
     const pem = reasonOf(await evalWith(throwing(new Error("EXECUTOR_FAILED: " + "-".repeat(5) + "BEGIN RSA\nPRIVATE KEY" + "-".repeat(5)))));
     expect(pem).toContain("[REDACTED:PRIVATE_KEY]");
@@ -1840,6 +1841,8 @@ describe("A-TEST-DIAG-1: a failing git step in the evaluation pipeline is diagno
     expect(at).not.toContain("ss@"); expect(at).not.toContain("alice"); expect(at).toContain("https://[REDACTED]@host/");
     const glued = await reasonFor("fatal: _https://alice:pw@host/ denied"); // no word boundary before the scheme
     expect(glued).not.toContain("alice"); expect(glued).toContain("[REDACTED]@host/");
+    const pem = await reasonFor("fatal: " + "-".repeat(5) + "BEGIN RSA\nPRIVATE KEY" + "-".repeat(5)); // collapse first: a pattern split by a newline still matches
+    expect(pem).toContain("[REDACTED:PRIVATE_KEY]"); expect(pem).not.toContain("BEGIN RSA");
     // the same scrub on a WORKSPACE_SETUP_FAILED path (developer checkout -B)
     const ws = await reasonFor(`error: https://alice:${PASS}@git.example.com/r.git refused`, DEV, "-B");
     expect(ws).toMatch(/^WORKSPACE_SETUP_FAILED:checkout:exit=128:/);
