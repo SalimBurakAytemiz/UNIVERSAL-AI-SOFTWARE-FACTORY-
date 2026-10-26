@@ -1,4 +1,10 @@
 <!-- //TR: Lane A yetki talebi: proje koşu-hazırlık okuması GET /v1/projects/:id/readiness için main.mjs allow-list yaması ve server.ts kaydı / Lane A authority request: main.mjs GET allow-list entry and server.ts registration for run readiness -->
+> **STATUS: APPLIED in #225 @7f6591c.** Nothing is requested any more; the rest of this file is kept as the record of what was asked.
+> - `apps/desktop/main.mjs` @7f6591c: `PROJECT_READINESS_RE` line 64, in `FIRST_DELIVERY_GET_RES` line 65 (GET only).
+> - `apps/control-api/src/server.ts` @7f6591c: `registerReadinessRoutes(app,laneDeps)` line 263 (import line 72).
+> - Test pins @7f6591c: `tests/v7-b5-work-screens.test.ts` describe "COORD first-delivery Desktop allow-list (main.mjs)" line 1622: `GETS` (line 1627) contains `/v1/projects/${PRJ}/readiness`; near-miss and wrong-method checks at line 1636; `/readiness/x` is refused for GET and POST.
+> - Renderer side (this chain): `readinessPath` / `mapRunReadiness` in `project-core.js`, `views/run-readiness.js`; the path it requests is exactly `/v1/projects/prj_<24hex>/readiness` without query.
+
 # LANE-A-readiness-allowlist: allow `GET /v1/projects/prj_<24hex>/readiness` in the desktop (protected)
 
 Why: after the Desktop intake creates a project, the Founder must see whether the first run can start, or exactly why not (Lane B `GET /v1/projects/:id/readiness`, `apps/control-api/src/routes/readiness.ts`, contract in `LANE-B-run-readiness.md`). Two protected places block it today, so the renderer shows an honest `UNAVAILABLE` ("not available to the desktop yet… this does not mean the project is ready") and never a green state:

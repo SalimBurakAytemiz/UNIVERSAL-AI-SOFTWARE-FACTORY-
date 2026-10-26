@@ -3,11 +3,23 @@
 
 The Journey "Analysis" section (`apps/desktop/renderer/views/analysis-step.js`, `analysis-core.js`) posts only to the two routes that Lane C's `AnalysisFlow` (C-FLOW-ANALYSIS-1, `claude/lane-c-flow-analysis-1`, doc `docs/authority-requests/LANE-C-flow-analysis.md`) needs wired. The drafts are approved or rejected through the existing pre-dev decision routes (UI from PR #197), which #199 registers.
 
+> **STATUS: OPEN, batch 4b request.** Locations are exact for `origin/claude/coord-protected-wave-p1` @7f6591c.
+
 ## What the coordinator wave must add
 1. `apps/control-api/src/server.ts`: the two routes over `AnalysisFlow` (Lane C doc, "For the protected wave").
-2. `apps/desktop/main.mjs`, POST allow-list (`POST_ROUTE_RES`), two anchored patterns (empty body, no query):
+2. `apps/desktop/main.mjs` @7f6591c: `POST_ROUTE_RES` starts at line 159 and ends at line 168 with the pre-dev entries (`...\/predev\/start$/,/...\/predev\/artifacts\/pda_[0-9a-f]{24}\/(?:approve|reject)$/];`). Add one anchored pattern (empty body, no query) before the closing `];`:
 ```diff
-+/^\/v1\/missions\/msn_[0-9a-f]{24}\/analysis\/(?:step|plan)$/
+-  /^\/v1\/missions\/msn_[0-9a-f]{24}\/predev\/start$/,/^\/v1\/missions\/msn_[0-9a-f]{24}\/predev\/artifacts\/pda_[0-9a-f]{24}\/(?:approve|reject)$/];
++  /^\/v1\/missions\/msn_[0-9a-f]{24}\/predev\/start$/,/^\/v1\/missions\/msn_[0-9a-f]{24}\/predev\/artifacts\/pda_[0-9a-f]{24}\/(?:approve|reject)$/,
++  // COORD protected batch 4b (LANE-A A-FLOW-5 / LANE-C C-FLOW-ANALYSIS-1): analysis step (next phase draft) and plan (task plan from the approved analysis); empty body, same gates (Global Stop 423, policy 403).
++  /^\/v1\/missions\/msn_[0-9a-f]{24}\/analysis\/(?:step|plan)$/];
+```
+`apps/control-api/src/server.ts` @7f6591c: register the two Lane C routes next to the other mission routes (after `registerReadinessRoutes`, line 263 / before `registerTaskRoutes`) using the existing `laneDeps` (line 258).
+
+3. Test pins to add in `tests/v7-b5-work-screens.test.ts` @7f6591c, describe "COORD first-delivery Desktop allow-list (main.mjs)" (line 1622): extend `POSTS` (line 1628) with `` `/v1/missions/${MSN}/analysis/step` `` and `` `/v1/missions/${MSN}/analysis/plan` `` (this runs the near-miss table at line 1636 for both: query, trailing slash, uppercase, 23/25 hex, prefix, sub-path, encoding), and add to the "refuses ... wrong method" test:
+```ts
+for (const p of [`/v1/missions/${MSN}/analysis/step`, `/v1/missions/${MSN}/analysis/plan`]) expect(get(p), `GET ${p}`).toBe(false); // POST only
+for (const p of [`/v1/missions/${MSN}/analysis`, `/v1/missions/${MSN}/analysis/other`, `/v1/missions/${MSN}/analysis/step/x`]) { expect(get(p), p).toBe(false); expect(post(p), p).toBe(false); }
 ```
 No new GET path is needed: the Journey reads the existing `/v1/predev/:id`, `/v1/crew/:id` and (only after a BLOCKED answer) `/v1/system/executors`.
 
