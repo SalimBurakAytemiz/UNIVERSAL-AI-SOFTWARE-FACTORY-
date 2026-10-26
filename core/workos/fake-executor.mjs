@@ -18,6 +18,8 @@ if (d.grandchild && typeof d.grandchild.file === "string") {
   const code = `const fs = require("node:fs"); ${typeof g.pidFile === "string" ? `fs.writeFileSync(${JSON.stringify(g.pidFile)}, String(process.pid));` : ""} ${when}`;
   cp.spawn(process.execPath, ["-e", code], {detached: g.detached === true, stdio: "ignore", ...(typeof g.cwd === "string" ? {cwd: g.cwd} : {})}).unref();
 }
+// //TR: readyFile: yönerge OKUNDU ve bekleme başlıyor (testler yazarı ancak bundan sonra "park etmiş" sayar; yönerge gelmeden öldürülen üst süreç boş yönergeyle hemen çıkan bir yazar bırakırdı).
+if (typeof d.readyFile === "string") fs.writeFileSync(d.readyFile, String(process.pid));
 // //TR: waitFile: implementer o dosya belirene kadar (en çok sleepMs) bekler; yoksa sleepMs kadar uyur.
 if (typeof d.waitFile === "string") { for (const until = Date.now() + Math.min(Number(d.sleepMs) || 30_000, 120_000); !fs.existsSync(d.waitFile) && Date.now() < until;) await new Promise(r => setTimeout(r, 50)); }
 else if (Number.isInteger(d.sleepMs) && d.sleepMs > 0) await new Promise(r => setTimeout(r, Math.min(d.sleepMs, 120_000)));

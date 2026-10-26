@@ -12,7 +12,7 @@ import type {Ctx} from "./support/relfx.js";
 import path from "node:path";
 import os from "node:os";
 import cp from "node:child_process";
-import {ENGINE, ORPHAN_MS, REPO as PAR_REPO, git, groupLive, parHarness, procAlive, release, setup as parSetup, sleep, waitUntil} from "./support/par.js";
+import {ENGINE, ORPHAN_MS, REPO as PAR_REPO, git, groupLive, parHarness, procAlive, release, setup as parSetup, sleep, waitUntil, writerParked} from "./support/par.js";
 
 let tmp = "";
 beforeEach(() => { tmp = tmpRoot("uasco-relfx1-"); });
@@ -237,6 +237,7 @@ describe("C-PAR-1 PAR-04: after an engine crash the implementer child must not k
     const dir = path.join(tmp, "engine"); fs.mkdirSync(dir);
     const e1 = spawnEngine(dir, "1");
     expect(await Promise.race([waitFor(() => fs.existsSync(path.join(dir, "implementing.json")), 120_000), e1.closed.then(() => false)]), JSON.stringify(e1.text())).toBe(true);
+    expect(await writerParked(dir, e1.closed, 30_000), "the implementer must have read its directive and parked before the engine is killed").toBe(true);
     const { runId } = JSON.parse(fs.readFileSync(path.join(dir, "state.json"), "utf8")) as {runId: string};
     const ownerFile = path.join(dir, "data", "runs", runId, "workspace.owner.json");
     // //TR: düzeltilmiş motorda sahiplik kaydı çocuğun grubunu taşır (Linux dışında kimlik belirteci eşzamansız eklenir); düzeltme öncesi motorda kayıt hiç yoktur ve bekleme süresi dolar.
@@ -333,7 +334,8 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
   const crashEngine = async (dir: string, opts: Record<string, unknown> = {}) => {
     fs.mkdirSync(dir);
     const e1 = spawnEngine(dir, "1", opts);
-    expect(await Promise.race([waitFor(() => fs.existsSync(path.join(dir, "implementing.json")), 120_000), e1.closed.then(() => false)]), JSON.stringify(e1.text())).toBe(true); // motor 1 erken çıkarsa (içe aktarma hatası) 120 sn beklemeden stderr ile başarısız ol
+    expect(await Promise.race([waitFor(() => fs.existsSync(path.join(dir, "implementing.json")), 120_000), e1.closed.then(() => false)]), JSON.stringify(e1.text())).toBe(true);
+    expect(await writerParked(dir, e1.closed, 30_000), "the implementer must have read its directive and parked before the engine is killed").toBe(true); // motor 1 erken çıkarsa (içe aktarma hatası) 120 sn beklemeden stderr ile başarısız ol
     const {runId} = JSON.parse(fs.readFileSync(path.join(dir, "state.json"), "utf8")) as {runId: string};
     const ownerFile = path.join(dir, "data", "runs", runId, "workspace.owner.json");
     let pgid = 0;
@@ -348,7 +350,7 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
   };
   const recoveryNote = (dir: string, runId: string) => new WorkOsStore(path.join(dir, "data")).engineGetRun(runId)!.evidence.find(e => e.kind === "RECOVERY")?.note ?? "";
   // //TR: Başarısız bir onaylamanın nedeni okunabilsin diye durum özeti (yetim artık sabit bir pencereye değil release dosyasına bağlıdır).
-  const snap = (x: {dir: string; runId: string; pgid: number; killedAt: number; work: string; aliveBeforeKill?: boolean; membersBeforeKill?: number | null; aliveAfterKill?: boolean}, closedAfterMs: number) => () => { const r = new WorkOsStore(path.join(x.dir, "data")).engineGetRun(x.runId)!; return JSON.stringify({takeoverClosedMsAfterKill: closedAfterMs, writerAliveBeforeKill: x.aliveBeforeKill, writerMembersBeforeKill: x.membersBeforeKill, writerAliveAfterKill: x.aliveAfterKill, status: r.status, reason: r.reason, groupAlive: groupAlive(x.pgid), orphanFile: fs.existsSync(path.join(x.work, "ORPHAN.txt")), note: recoveryNote(x.dir, x.runId)}); };
+  const snap = (x: {dir: string; runId: string; pgid: number; killedAt: number; work: string; aliveBeforeKill?: boolean; membersBeforeKill?: number | null; aliveAfterKill?: boolean}, closedAfterMs: number) => () => { const r = new WorkOsStore(path.join(x.dir, "data")).engineGetRun(x.runId)!; return JSON.stringify({takeoverClosedMsAfterKill: closedAfterMs, writerAliveBeforeKill: x.aliveBeforeKill, writerMembersBeforeKill: x.membersBeforeKill, writerAliveAfterKill: x.aliveAfterKill, status: r.status, reason: r.reason, groupAlive: groupAlive(x.pgid), orphanFile: fs.existsSync(path.join(x.work, "ORPHAN.txt")), note: recoveryNote(x.dir, x.runId), cancelNote: r.evidence.find(e => e.kind === "CANCEL")?.note ?? null, head: (() => { try { return git(x.work, ["log", "--format=%s", "-3"]); } catch { return "n/a"; } })()}); };
 
   it("PAR04-GSTOP-NO-REAP: a GLOBAL_STOP that is active at takeover still stops the crashed engine's writer BEFORE the run is cancelled", { timeout: 180_000 }, async () => {
     const x = await crashEngine(path.join(tmp, "stop"));
@@ -411,6 +413,7 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
     const e1 = spawnEngine(dir, "1", {service: true}, 60_000);
     try { // servis kipindeki motor kendiliğinden çıkmaz: bir onaylama başarısız olursa bile motor ve yazar grubu burada öldürülür
       expect(await Promise.race([waitFor(() => fs.existsSync(path.join(dir, "implementing.json")), 120_000), e1.closed.then(() => false)]), JSON.stringify(e1.text())).toBe(true);
+    expect(await writerParked(dir, e1.closed, 30_000), "the implementer must have read its directive and parked before the engine is killed").toBe(true);
       const {runId} = JSON.parse(fs.readFileSync(path.join(dir, "state.json"), "utf8")) as {runId: string};
       const ownerFile = path.join(dir, "data", "runs", runId, "workspace.owner.json");
       let pgid = 0;

@@ -137,7 +137,7 @@ function toReview(r: ProcResult): ReviewResult {
 }
 
 // ---- FAKE adapter (yalnız testler; programatik enjeksiyonla seçilir, env ile seçilemez) ----
-export interface FakeImplementDirective { files?: Record<string, string>; exitCode?: number; noCommit?: boolean; message?: string; sleepMs?: number; waitFile?: string; stderr?: string; deleteFiles?: string[]; grandchild?: {file: string; delayMs: number; detached?: boolean; pidFile?: string; cwd?: string; waitFile?: string} }
+export interface FakeImplementDirective { files?: Record<string, string>; exitCode?: number; noCommit?: boolean; message?: string; sleepMs?: number; waitFile?: string; readyFile?: string; stderr?: string; deleteFiles?: string[]; grandchild?: {file: string; delayMs: number; detached?: boolean; pidFile?: string; cwd?: string; waitFile?: string} }
 export interface FakeReviewDirective { verdict?: "CLEAN" | "BLOCKED"; findings?: ReviewFinding[]; exitCode?: number; mutate?: boolean; raw?: string }
 export interface FakeScript {
   implement: (call: number, spec: MissionSpec) => FakeImplementDirective;

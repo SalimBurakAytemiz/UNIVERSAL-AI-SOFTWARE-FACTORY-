@@ -41,6 +41,8 @@ const TEST_SCRIPT = `import fs from "node:fs";\nprocess.exit(fs.existsSync("feat
 export const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 // //TR: Yetim implementer/torun, test "yazar öldürüldü" kanıtını verdikten SONRA <dir>/release dosyası yazılana kadar bekler (en çok ORPHAN_MS): sonuç sabit bir zaman penceresine değil, motor açılış hızından bağımsız bu sinyale bağlıdır. Yazar canlıysa dosya belirince ORPHAN*.txt yazar ve test bunu görür.
 export const ORPHAN_MS = 30_000;
+// //TR: Yazar GERÇEKTEN park etti mi (yönergeyi okudu, release bekliyor)? Motor 1 bundan önce öldürülürse yazar boş yönergeyle hemen çıkar ve "yazar durdurulmuş mu" sorusu anlamsızlaşır. Motor 1 erken çıkarsa false.
+export const writerParked = (dir: string, engineClosed: Promise<unknown>, ms = 120_000): Promise<boolean> => Promise.race([waitUntil(() => fs.existsSync(path.join(dir, "writer-ready")), ms), engineClosed.then(() => false)]);
 export const release = async (dir: string) => { fs.writeFileSync(path.join(dir, "release"), "1"); await sleep(1500); };
 export const git = (cwd: string, args: string[]) => { const r = spawnGitSync(cwd, args); if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`); return String(r.stdout).trim(); };
 
