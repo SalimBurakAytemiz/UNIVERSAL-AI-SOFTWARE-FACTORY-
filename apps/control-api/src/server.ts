@@ -71,6 +71,10 @@ import {registerRoleStatusRoutes} from "./routes/role-status.js";
 // //TR: COORD korumalı paket 4a (LANE-B-vertical-flow-wiring, LANE-B-run-readiness, LANE-B-run-summaries, LANE-A-readiness-allowlist): birleşmiş ama kayıtsız salt-okunur akış route'ları (proje koşu-hazırlığı ve hafif sayfalı koşu özeti).
 import {registerReadinessRoutes} from "./routes/readiness.js";
 import {registerRunSummaryRoutes} from "./routes/run-summaries.js";
+// //TR: COORD korumalı paket 4b (LANE-B B-RUN-1, LANE-B analysis routes, LANE-C analysis flow): teslim edilen ürünü yalnız doğrulanmış sandbox içinde çalıştıran start/stop/status route'ları ve analiz adımı/plan route'ları.
+import {registerProductRunRoutes} from "./routes/product-run.js";
+import {registerAnalysisRoutes} from "./routes/analysis.js";
+import {AnalysisFlow,NO_ANALYSIS_BUILDER,claudeAnalysisReadiness} from "../../../core/workos/crew/analysis.js";
 // //TR: COORD korumalı paket 4a (LANE-C-linux-sandbox-provider v2): ücretsiz Linux unshare sağlayıcısı yalnız linux'ta ExecutionGate'e verilir; öz-test geçmezse kapı SANDBOX_UNAVAILABLE kalır (ana makinede yürütme yok).
 import {LinuxUnshareSandboxProvider} from "../../../core/agents/linux-unshare-sandbox.js";
 import {bindingForFunction} from "../../../core/agents/first-delivery-bindings.js";
@@ -261,6 +265,9 @@ registerPlanRoutes(app,laneDeps);
 registerFlowRoutes(app,laneDeps);
 // //TR: COORD korumalı paket 4a (LANE-B-run-readiness): GET /v1/projects/:id/readiness salt-okunur, sorgusuz; ilk koşunun neden başlayamadığını runner'ın kendi önkoşul fonksiyonlarıyla söyler.
 registerReadinessRoutes(app,laneDeps);
+// //TR: COORD korumalı paket 4b: ürün çalıştırma (teslim kaydına bağlı, sandbox + tek port 127.0.0.1 köprüsü) ve analiz adımı; getDevRuns/getExecutors/getExecSetup/controlRoot aşağıda tanımlıdır, geçici ölü bölgeye (TDZ) düşmemek için hepsi istek anında tembel okunur.
+registerProductRunRoutes(app,{...laneDeps,devruns:()=>getDevRuns()});
+registerAnalysisRoutes(app,{...laneDeps,analysisFlow:()=>new AnalysisFlow({store:getStore(),scope,builder:getExecutors().pair?.preDevBuilder?.()??NO_ANALYSIS_BUILDER,readiness:()=>claudeAnalysisReadiness({controlRoot,profile:{forbiddenRoots:[getStore().dataDir]},cli:getExecSetup().cliStatus()})})});
 registerTaskRoutes(app,laneDeps);
 registerTaskRunRoutes(app,laneDeps);
 // //TR: COORD korumalı paket 4a (LANE-B-run-summaries): GET /v1/run-summaries salt-okunur, sayfalı, tenant kapsamlı koşu özeti (kanıt/checkpoint dizisi yok); eski /v1/work-runs değişmez.

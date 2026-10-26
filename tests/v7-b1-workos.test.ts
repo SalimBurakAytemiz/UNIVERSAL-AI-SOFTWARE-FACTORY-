@@ -2657,7 +2657,7 @@ describe("LANE-B product run routes (B-RUN-1)", () => {
   });
 });
 
-// //TR: LANE-B batch 4b: analiz adımı route'ları (sahte AnalysisFlow ile kapılar ve durum eşlemesi); server.ts kaydı korumalıdır (LANE-B-batch-4b.md, bekliyor).
+// //TR: LANE-B batch 4b: analiz adımı route'ları (sahte AnalysisFlow ile kapılar ve durum eşlemesi); server.ts kaydı COORD korumalı paket 4b ile yapılır (aşağıdaki buildServer testi).
 describe("LANE-B batch 4b: analysis routes and server registration", () => {
   const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
   const MSN = "msn_" + "a".repeat(24);
@@ -2692,5 +2692,19 @@ describe("LANE-B batch 4b: analysis routes and server registration", () => {
     const ok = await mkApp(); const p = await post(ok.app, `/v1/missions/${MSN}/analysis/plan`); expect(p.statusCode).toBe(200); expect(p.json()).toMatchObject({replayed: false}); expect(ok.calls).toEqual([`plan:${MSN}:FOUNDER_LOCAL`]); expect(ok.audits).toContain("WORKOS_ANALYSIS_PLAN");
     const rp = await mkApp({plan: {ok: true, tasks: [], replayed: true, trace: [], summary: {}}}); await post(rp.app, `/v1/missions/${MSN}/analysis/plan`); expect(rp.audits).toContain("WORKOS_IDEMPOTENT_REPLAY");
     const no = await post((await mkApp({plan: {ok: false, code: "ANALYSIS_NOT_COMPLETE", detail: "x"}})).app, `/v1/missions/${MSN}/analysis/plan`); expect(no.statusCode).toBe(409); expect(no.json()).toEqual({error: "ANALYSIS_NOT_COMPLETE"});
+  });
+  // //TR: COORD korumalı paket 4b: server.ts kaydı gerçek buildServer ile; ürün çalıştırma ve analiz route'larına ulaşılır, tembel bağımlılıklar geçici ölü bölgeye (TDZ) düşmez, restart route'u yoktur.
+  it("server.ts registration (buildServer): the product-run and analysis routes are reachable and the lazy dependencies do not hit the temporal dead zone", async () => {
+    const runtime = path.join(tmp, "runtime"); fs.mkdirSync(runtime, {recursive: true});
+    const app = buildServer({controlToken: token, runtime, dataDir: path.join(tmp, "data"), port: 3210, logger: false});
+    const call = (method: "GET" | "POST", url: string) => app.inject({method, url, headers: hdr, ...(method === "POST" ? {payload: {}} : {})});
+    const RUN = "run_" + "b".repeat(24);
+    expect((await call("GET", `/v1/work-runs/${RUN}/product`)).json()).toEqual({error: "RUN_NOT_FOUND"});
+    expect((await call("POST", `/v1/work-runs/${RUN}/product/start`)).json()).toEqual({error: "RUN_NOT_FOUND"});
+    expect((await call("POST", `/v1/work-runs/${RUN}/product/stop`)).json()).toEqual({error: "RUN_NOT_FOUND"});
+    expect((await call("POST", `/v1/work-runs/${RUN}/product/restart`)).statusCode).toBe(404);
+    expect((await call("POST", `/v1/missions/${MSN}/analysis/step`)).json()).toEqual({error: "ANALYSIS_MISSION_NOT_FOUND"});
+    expect((await call("POST", `/v1/missions/${MSN}/analysis/plan`)).statusCode).toBe(409);
+    await app.close();
   });
 });

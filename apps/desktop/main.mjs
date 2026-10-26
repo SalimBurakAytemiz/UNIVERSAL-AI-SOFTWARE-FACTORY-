@@ -62,7 +62,9 @@ const TASK_RUNS_RE=/^\/v1\/tasks\/tsk_[0-9a-f]{24}\/runs$/;
 // //TR: COORD korumalı paket 4a (LANE-B-vertical-flow-wiring B-FLOW-3, LANE-A-run-tasks-allowlist, LANE-A-readiness-allowlist): koşuya bağlı görevler (run_ + 24 hex) ve proje koşu-hazırlığı (prj_ + 24 hex) yalnız sorgusuz, çapalı tam eşleşmeyle GET olarak izinlenir; /tasks/reconcile POST'ta kalır, EXTRA_GET_ROUTES kümesi BÜYÜMEZ.
 const WORK_RUN_TASKS_RE=/^\/v1\/work-runs\/run_[0-9a-f]{24}\/tasks$/;
 const PROJECT_READINESS_RE=/^\/v1\/projects\/prj_[0-9a-f]{24}\/readiness$/;
-const FIRST_DELIVERY_GET_RES=[INTAKES_LIST_RE,INTAKE_DETAIL_RE,MISSION_TASKS_RE,PROJECT_FLOW_RE,TASK_DETAIL_RE,TASK_RUNS_RE,WORK_RUN_TASKS_RE,PROJECT_READINESS_RE];
+// //TR: COORD korumalı paket 4b (LANE-A-devrun-allowlist, LANE-B B-RUN-1): teslim edilen ürünün koşu durumu (run_ + 24 hex) yalnız sorgusuz, çapalı tam eşleşmeyle GET olarak izinlenir.
+const WORK_RUN_PRODUCT_RE=/^\/v1\/work-runs\/run_[0-9a-f]{24}\/product$/;
+const FIRST_DELIVERY_GET_RES=[INTAKES_LIST_RE,INTAKE_DETAIL_RE,MISSION_TASKS_RE,PROJECT_FLOW_RE,TASK_DETAIL_RE,TASK_RUNS_RE,WORK_RUN_TASKS_RE,PROJECT_READINESS_RE,WORK_RUN_PRODUCT_RE];
 // //TR: COORD protected batch 3 (LANE-B-memory-api, LANE-B-knowledge-api): proje belleği ve bilgi özeti salt-okunur okumaları çapalı desenlerle izinlenir: bellek kaydı mem_ + 6-12 rakam, current/health/provenance sorgusuz, bilgi özeti sorgusuz. Bellek listesi isteğe bağlı en çok üç anahtar alır, SABİT sırada (kind, tag, q) ve tekrarsız; kind sabit kümedendir, tag 1-64 ve q 1-200 karakterdir, değerler renderer ile aynı kanonik kodlayıcıyla (psEncodeRel) kodlanmış olmalı ve çözülmüş değer kontrol karakteri içeremez. Bellek yazma (POST) bu pakette izinlenmez.
 const MEMORY_GET_RES=[/^\/v1\/projects\/prj_[0-9a-f]{24}\/memory\/(?:current|health)$/,/^\/v1\/projects\/prj_[0-9a-f]{24}\/memory\/mem_[0-9]{6,12}(?:\/provenance)?$/,
   /^\/v1\/projects\/prj_[0-9a-f]{24}\/knowledge$/];
@@ -165,7 +167,9 @@ const POST_ROUTE_RES=[/^\/v1\/projects$/,/^\/v1\/missions$/,/^\/v1\/missions\/ms
   // COORD protected batch 3 (LANE-A reconcile button, LANE-B task outcomes): bir koşunun görev sonuçlarını Work OS journal'ından yeniden türet; gövde boş nesne, aynı kapılar (Global Stop 423, politika 403).
   /^\/v1\/work-runs\/run_[0-9a-f]{24}\/tasks\/reconcile$/,
   // COORD protected batch 3b (LANE-B-predev-decisions, LANE-A #197): pre-dev dizisini başlat ({}), bir taslağı onayla ({evidenceRefs}) veya reddet ({reason}); onaylayan her zaman sunucu aktörüdür, kapılar sunucuda (Global Stop 423, politika 403, sıkı gövde 400, bağımsız onaylayan/kanıt/faz sırası 409).
-  /^\/v1\/missions\/msn_[0-9a-f]{24}\/predev\/start$/,/^\/v1\/missions\/msn_[0-9a-f]{24}\/predev\/artifacts\/pda_[0-9a-f]{24}\/(?:approve|reject)$/];
+  /^\/v1\/missions\/msn_[0-9a-f]{24}\/predev\/start$/,/^\/v1\/missions\/msn_[0-9a-f]{24}\/predev\/artifacts\/pda_[0-9a-f]{24}\/(?:approve|reject)$/,
+  // COORD korumalı paket 4b (LANE-A-analysis-allowlist, LANE-A-devrun-allowlist): analiz adımını üret ya da onaylı plandan görevleri oluştur ({}); teslim edilen ürünü başlat/durdur ({}); yeniden başlatma (restart) izinlenmez. Kapılar sunucuda (Global Stop 423, politika 403, sıkı gövde 400, sandbox yoksa 409).
+  /^\/v1\/missions\/msn_[0-9a-f]{24}\/analysis\/(?:step|plan)$/,/^\/v1\/work-runs\/run_[0-9a-f]{24}\/product\/(?:start|stop)$/];
 function desktopPostPathAllowed(value){
   return typeof value==="string"&&value.length<=128&&POST_ROUTE_RES.some(re=>re.test(value));
 }

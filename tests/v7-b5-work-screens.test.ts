@@ -1651,6 +1651,25 @@ describe("COORD first-delivery Desktop allow-list (main.mjs)", () => {
     for (const p of ["/v1/run-summaries/", "/v1/run-summaries?x=1", "/v1/run-summaries?status=running", "/v1/run-summaries?projectId=prj_x", "/v1/run-summaries?limit=0", `/v1/run-summaries?projectId=${PRJ}&projectId=${PRJ}`, "/v1/run-summaries/run_x", "/v1//run-summaries"]) expect(get(p), p).toBe(false);
     expect(post("/v1/run-summaries")).toBe(false);
   });
+  // Batch 4b: the analysis step/plan writes, the delivered-product status read and its start/stop writes (no restart), exact shapes only.
+  it("batch 4b: admits the analysis step/plan and product start/stop writes and the product status read, nothing near them", () => {
+    const get = loadGet(), {desktopPostPathAllowed: post} = loadPost();
+    const G4 = [`/v1/work-runs/${RUNID}/product`], P4 = [`/v1/missions/${MSN}/analysis/step`, `/v1/missions/${MSN}/analysis/plan`, `/v1/work-runs/${RUNID}/product/start`, `/v1/work-runs/${RUNID}/product/stop`];
+    for (const p of G4) { expect(get(p), p).toBe(true); expect(post(p), `POST ${p}`).toBe(false); for (const m of nearMisses(p)) expect(get(m), m).toBe(false); }
+    for (const p of P4) { expect(post(p), p).toBe(true); expect(get(p), `GET ${p}`).toBe(false); for (const m of nearMisses(p)) expect(post(m), m).toBe(false); }
+    for (const p of [`/v1/work-runs/${RUNID}/product/restart`, `/v1/missions/${MSN}/analysis`, `/v1/missions/${MSN}/analysis/steps`, `/v1/missions/${MSN}/analysis/step/x`, `/v1/missions/${MSN}/analysis/plans`,
+      `/v1/projects/${PRJ}/analysis/step`, `/v1/missions/${PRJ}/analysis/step`, `/v1/work-runs/${RUNID}/products`, `/v1/work-runs/${RUNID}/product/start/x`, `/v1/work-runs/${MSN}/product/start`, `/v1/work-runs/${RUNID}/product/status`]) {
+      expect(get(p), p).toBe(false); expect(post(p), p).toBe(false);
+    }
+  });
+  it("batch 4b: server.ts imports and registers the product-run and analysis routes once, right after project readiness", () => {
+    const server = fs.readFileSync(path.join(root, "apps", "control-api", "src", "server.ts"), "utf8");
+    for (const [name, file] of [["registerProductRunRoutes", "product-run"], ["registerAnalysisRoutes", "analysis"]]) {
+      expect(server.match(new RegExp(`^import \\{${name}\\} from "\\./routes/${file}\\.js";$`, "gm"))?.length, name).toBe(1);
+      expect(server.match(new RegExp(`${name}\\(app,`, "g"))?.length, name).toBe(1);
+    }
+    expect(server).toMatch(/registerReadinessRoutes\(app,laneDeps\);\n\/\/ [^\n]*\nregisterProductRunRoutes\(app,\{\.\.\.laneDeps,devruns:\(\)=>getDevRuns\(\)\}\);\nregisterAnalysisRoutes\(app,\{\.\.\.laneDeps,analysisFlow:\(\)=>new AnalysisFlow\(/);
+  });
   it("server.ts registers the task-run link routes once, right after the task routes", () => {
     const server = fs.readFileSync(path.join(root, "apps", "control-api", "src", "server.ts"), "utf8");
     expect(server.match(/^import \{registerTaskRunRoutes\} from "\.\/routes\/task-runs\.js";$/gm)?.length).toBe(1);
