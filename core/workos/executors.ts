@@ -5,7 +5,7 @@ import crypto from "node:crypto";
 import cp from "node:child_process";
 import {fileURLToPath} from "node:url";
 import {safeChildEnv} from "../../automation/lib/env-policy.mjs";
-import {agentConfigInWorkspace, commitBuilderOutput, gitControlDigest} from "./builder-output.js";
+import {agentConfigInWorkspace, commitBuilderOutputAsync, gitControlDigest} from "./builder-output.js";
 import {spawnGitSync} from "../../automation/lib/git-isolation.mjs";
 import {CLAUDE_ISOLATION_FLAGS, claudeProfileForRun, withClaudeProfileEnv} from "./claude-profiles.js";
 import type {ClaudeProfileOptions} from "./claude-profiles.js";
@@ -31,7 +31,9 @@ export interface ProcResult {
 }
 // //TR: PAR-04: onSpawn, adapter her implementer/reviewer çocuğunu doğurduğu anda (eşzamanlı) çağrılır; pgid POSIX'te çocuğun yeni süreç grubudur (pgid = pid), Windows'ta null (pid çocuk ağacının köküdür). Fırlatırsa çocuk öldürülür ve spawn hatası sayılır: kayıtsız yazar bırakılmaz.
 export interface SpawnedChild { pid: number; pgid: number | null }
-export interface ExecContext { timeoutMs: number; shouldAbort?: () => boolean; onSpawn?: (child: SpawnedChild) => void }
+// //TR: writerEnv (TK-1): çocuğun ortamına EKLENİR (lease işareti: setsid ile gruptan kaçan torunlar da miras alır; devralan engine bunlarla tarar). span (HB-1): adapter'ın engine süreci içindeki KÜÇÜK senkron işleri (ör. .git özeti, çalışma alanı anlık görüntüsü) bu çağrıya sarar; runner bunu span()'a bağlar (diğer run'ların lease'i işten önce/sonra yenilenir).
+export interface ExecContext { timeoutMs: number; shouldAbort?: () => boolean; onSpawn?: (child: SpawnedChild) => void; writerEnv?: Record<string, string>; span?: <T>(fn: () => T) => T }
+const withWriterEnv = (env: NodeJS.ProcessEnv, ctx: ExecContext): NodeJS.ProcessEnv => ctx.writerEnv ? {...env, ...ctx.writerEnv} : env;
 // blockReason: adapter builder çıktısını commit etmeyi reddettiyse (ör. BUILDER_PRODUCED_NO_CHANGE) runner run'ı BLOCKED yapar.
 export interface ImplementResult { exitCode: number | null; commitSha?: string; blockReason?: string; log: string; argv: string[]; startedAt: string; endedAt: string; timedOut: boolean; aborted: boolean; transient: boolean }
 export interface ReviewFinding { severity: string; title: string }
@@ -133,7 +135,7 @@ function toReview(r: ProcResult): ReviewResult {
 }
 
 // ---- FAKE adapter (yalnız testler; programatik enjeksiyonla seçilir, env ile seçilemez) ----
-export interface FakeImplementDirective { files?: Record<string, string>; exitCode?: number; noCommit?: boolean; message?: string; sleepMs?: number; stderr?: string; deleteFiles?: string[] }
+export interface FakeImplementDirective { files?: Record<string, string>; exitCode?: number; noCommit?: boolean; message?: string; sleepMs?: number; stderr?: string; deleteFiles?: string[]; grandchild?: {file: string; delayMs: number; detached?: boolean; pidFile?: string; cwd?: string} }
 export interface FakeReviewDirective { verdict?: "CLEAN" | "BLOCKED"; findings?: ReviewFinding[]; exitCode?: number; mutate?: boolean; raw?: string }
 export interface FakeScript {
   implement: (call: number, spec: MissionSpec) => FakeImplementDirective;
@@ -153,7 +155,7 @@ export class FakeExecutors {
         identity: this.identities.implementer,
         async implement(workspace, spec, ctx) {
           const n = ++self.calls.implement;
-          const r = await runProcess([process.execPath, FAKE_EXECUTOR_SCRIPT, "implement", workspace], {cwd: workspace, env: env(), timeoutMs: ctx.timeoutMs, input: JSON.stringify(self.script.implement(n, spec)), shouldAbort: ctx.shouldAbort, newSession: true, onSpawn: ctx.onSpawn});
+          const r = await runProcess([process.execPath, FAKE_EXECUTOR_SCRIPT, "implement", workspace], {cwd: workspace, env: withWriterEnv(env(), ctx), timeoutMs: ctx.timeoutMs, input: JSON.stringify(self.script.implement(n, spec)), shouldAbort: ctx.shouldAbort, newSession: true, onSpawn: ctx.onSpawn});
           return {exitCode: r.exitCode, log: procLog(r), argv: r.argv, startedAt: r.startedAt, endedAt: r.endedAt, timedOut: r.timedOut, aborted: r.aborted, transient: r.timedOut || r.spawnError || r.exitCode === 75};
         }
       },
@@ -162,7 +164,7 @@ export class FakeExecutors {
         async review(cleanClone, spec, diff, ctx) {
           const n = ++self.calls.review;
           const directive = {...self.script.review(n, spec), diffSha256: crypto.createHash("sha256").update(diff).digest("hex")};
-          return toReview(await runProcess([process.execPath, FAKE_EXECUTOR_SCRIPT, "review", cleanClone], {cwd: cleanClone, env: env(), timeoutMs: ctx.timeoutMs, input: JSON.stringify(directive), shouldAbort: ctx.shouldAbort, newSession: true, onSpawn: ctx.onSpawn}));
+          return toReview(await runProcess([process.execPath, FAKE_EXECUTOR_SCRIPT, "review", cleanClone], {cwd: cleanClone, env: withWriterEnv(env(), ctx), timeoutMs: ctx.timeoutMs, input: JSON.stringify(directive), shouldAbort: ctx.shouldAbort, newSession: true, onSpawn: ctx.onSpawn}));
         }
       }
     };
@@ -208,21 +210,23 @@ export class EditOnlyImplementer implements ImplementerAdapter {
   constructor(readonly identity: string, private readonly envPolicyFile: string, private readonly makeProcess: (workspace: string, spec: MissionSpec) => EditOnlyProcess | {refuse: string}, private readonly transientExitCodes: number[] = []) {}
   async implement(workspace: string, spec: MissionSpec, ctx: ExecContext): Promise<ImplementResult> {
     const startSha = spec.startSha ?? "";
-    const before = gitControlDigest(workspace);
+    // //TR: HB-1: engine süreci içindeki küçük senkron işler (.git özeti, ajan yapılandırması taraması) runner'ın span'ına sarılır; engine commit'i EŞZAMANSIZdır (commitBuilderOutputAsync).
+    const sp: <T>(fn: () => T) => T = ctx.span ?? (fn => fn());
+    const before = sp(() => gitControlDigest(workspace));
     // SBX-8 (RV-INT-R3-C1-F1): çalışma alanında ajan yapılandırması (ör. yönetilmeyen depo yolundan gelen .claude/settings.json, .mcp.json) varsa builder hiç başlatılmaz.
-    const agentConfig = agentConfigInWorkspace(workspace, this.envPolicyFile);
+    const agentConfig = sp(() => agentConfigInWorkspace(workspace, this.envPolicyFile));
     const p = agentConfig === null ? {refuse: "WORKSPACE_AGENT_CONFIG_SCAN_FAILED"} : agentConfig.length ? {refuse: "WORKSPACE_CONTAINS_AGENT_CONFIG"} : this.makeProcess(workspace, spec);
     if ("refuse" in p) {
       const at = new Date().toISOString();
       const detail = agentConfig?.length ? `\nagent config in workspace:\n${agentConfig.slice(0, 100).map(f => `  ${f}`).join("\n")}` : "";
       return {exitCode: null, blockReason: p.refuse, log: `NOT_EXECUTED: ${p.refuse} (builder not started)${detail}\n`, argv: [], startedAt: at, endedAt: at, timedOut: false, aborted: false, transient: false};
     }
-    const po = {cwd: workspace, env: p.env, timeoutMs: ctx.timeoutMs, input: p.input, shouldAbort: ctx.shouldAbort, newSession: true, onSpawn: ctx.onSpawn};
+    const po = {cwd: workspace, env: withWriterEnv(p.env, ctx), timeoutMs: ctx.timeoutMs, input: p.input, shouldAbort: ctx.shouldAbort, newSession: true, onSpawn: ctx.onSpawn};
     const r = p.nodeScript ? await runNodeScript(p.argv[0], p.argv.slice(1), po) : await runProcess(p.argv, po);
     const base = {argv: r.argv, startedAt: r.startedAt, timedOut: r.timedOut, aborted: r.aborted, transient: r.timedOut || r.spawnError || (r.exitCode !== null && this.transientExitCodes.includes(r.exitCode))};
     if (r.exitCode !== 0 || r.aborted) return {...base, exitCode: r.exitCode, log: procLog(r), endedAt: r.endedAt};
     const subject = `uasco run ${spec.runId} cycle ${spec.cycle}: ${spec.title.replace(/[\r\n]+/g, " ").slice(0, 120)}`;
-    const c = commitBuilderOutput(workspace, {envPolicyFile: this.envPolicyFile, startSha, gitDigestBefore: before, message: `${subject}\n\nMission: ${spec.missionId}\nCommitted by the UASCO engine on behalf of ${this.identity} (edit-only builder).`});
+    const c = await commitBuilderOutputAsync(workspace, {envPolicyFile: this.envPolicyFile, startSha, gitDigestBefore: before, message: `${subject}\n\nMission: ${spec.missionId}\nCommitted by the UASCO engine on behalf of ${this.identity} (edit-only builder).`}, {span: sp, onSpawn: ctx.onSpawn});
     const log = `${procLog(r)}--- engine commit ---\n${c.log}`;
     return c.ok ? {...base, exitCode: 0, commitSha: c.commitSha, log, endedAt: new Date().toISOString()} : {...base, exitCode: 0, blockReason: c.reason, log, endedAt: new Date().toISOString()};
   }
@@ -317,11 +321,12 @@ export class LocalClaudeExecutors {
           const prof = claudeProfileForRun(self.controlRoot, "reviewer", self.opts.profile);
           if (!prof.ok) return {verdict: "BLOCKED", findings: [], valid: false, invalidReason: prof.reason, exitCode: null, log: `NOT_EXECUTED: ${prof.reason} (reviewer not started)\n`, argv, startedAt: at, endedAt: new Date().toISOString(), timedOut: false, aborted: false, transient: false};
           const envPolicyFile = path.join(self.repoRoot, "config", "environment-policy.json");
-          const before = reviewWorkspaceSnapshot(cleanClone, envPolicyFile);
-          const po: ProcOptions = {cwd: cleanClone, env: withClaudeProfileEnv(self.env(), prof.dir), timeoutMs: ctx.timeoutMs, input: reviewPrompt(spec, diff), shouldAbort: ctx.shouldAbort, newSession: true, onSpawn: ctx.onSpawn};
+          const sp: <T>(fn: () => T) => T = ctx.span ?? (fn => fn()); // HB-1: anlık görüntüdeki senkron git çağrıları runner span'ına sarılır
+          const before = sp(() => reviewWorkspaceSnapshot(cleanClone, envPolicyFile));
+          const po: ProcOptions = {cwd: cleanClone, env: withWriterEnv(withClaudeProfileEnv(self.env(), prof.dir), ctx), timeoutMs: ctx.timeoutMs, input: reviewPrompt(spec, diff), shouldAbort: ctx.shouldAbort, newSession: true, onSpawn: ctx.onSpawn};
           const r = toReview(await (self.opts.runReviewer ?? runProcess)(argv, po));
           // Review sonrası çalışma alanı bayt düzeyinde aynı olmalı; değilse review GEÇERSİZ (verdict ne olursa olsun CLEAN sayılmaz).
-          const changed = reviewWorkspaceChange(before, reviewWorkspaceSnapshot(cleanClone, envPolicyFile));
+          const changed = reviewWorkspaceChange(before, sp(() => reviewWorkspaceSnapshot(cleanClone, envPolicyFile)));
           if (changed) return {...r, verdict: "BLOCKED", findings: [], valid: false, invalidReason: changed, transient: false, log: `${r.log}REVIEW_INVALID: ${changed}\n`};
           return r;
         }

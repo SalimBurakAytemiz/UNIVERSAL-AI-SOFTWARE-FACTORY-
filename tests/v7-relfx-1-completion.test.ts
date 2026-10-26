@@ -9,6 +9,10 @@ import {completionEvidence, deriveOutcomes} from "../core/workos/outcomes.js";
 import type {RunEvidence, WorkRun} from "../core/workos/types.js";
 import {HDR, T, api, drive, journalEntries, journalText, missionOf, okScript, rewriteJournal, rmTmp, runOf, runner, setup, startRun, tmpRoot} from "./support/relfx.js";
 import type {Ctx} from "./support/relfx.js";
+import path from "node:path";
+import os from "node:os";
+import cp from "node:child_process";
+import {ENGINE, REPO as PAR_REPO, git, groupLive, parHarness, procAlive, setup as parSetup, sleep, waitUntil} from "./support/par.js";
 
 let tmp = "";
 beforeEach(() => { tmp = tmpRoot("uasco-relfx1-"); });
@@ -210,4 +214,341 @@ describe("REL-FX-1 evidence-bound COMPLETE (store + API)", () => {
     expect(view.outcomes.reasons.release).toBe("ACCEPTED_NOT_RELEASED");
     await app.close();
   });
+});
+
+// //TR: C-PAR-1 (test birleştirme): PAR-04 — engine çöktükten sonra implementer/reviewer/git çocuğu runs/<id>/work içine yazmaya devam edemez — ve #224 koordinatör incelemesinin yazar durdurma/kimlik/dayanıklılık düzeltmeleri. Heartbeat/planlama testleri tests-7'deki tests/v7-relfx-c3-remediation.test.ts'tedir (iki Windows adımı arasında bölünmüştür); ortak parçalar tests/support/par.ts'tedir. tests/v7-par-engine.mts vitest dosyası DEĞİL, bu testlerin iki ayrı süreçte çalıştırdığı yardımcıdır. Blok kendi tmp/yardımcılarını tanımlar.
+describe("LANE-C parallel runs: writer reaping (C-PAR-1 PAR-04, #224 review)", () => {
+  const par = parHarness();
+  let tmp = ""; beforeEach(() => { tmp = par.tmp(); });
+  const REPO = PAR_REPO;
+  const setup = (name?: string, seed?: Record<string, string>, clock?: () => number) => parSetup(tmp, name, seed, clock);
+describe("C-PAR-1 PAR-04: after an engine crash the implementer child must not keep writing into runs/<id>/work", () => {
+  const ORPHAN_MS = 8000, TTL = 1500;
+  const spawnEngine = (dir: string, phase: "1" | "2") => {
+    const child = cp.spawn(process.execPath, ["--import", "tsx", ENGINE, REPO, dir, phase, String(TTL), String(ORPHAN_MS)], {cwd: REPO, stdio: ["ignore", "pipe", "pipe"], windowsHide: true});
+    let out = "", err = "";
+    child.stdout.on("data", d => { out += String(d); }); child.stderr.on("data", d => { err += String(d); });
+    const closed = new Promise<number | null>(r => child.on("close", code => r(code)));
+    return {child, closed, text: () => ({out, err})};
+  };
+  const waitFor = async (pred: () => boolean, ms: number) => { for (const until = Date.now() + ms; Date.now() < until;) { if (pred()) return true; await sleep(50); } return false; };
+
+  it("a surviving implementer child is stopped at takeover: ORPHAN.txt absent, work HEAD == run.headSha, run completes", { timeout: 180_000 }, async () => {
+    const dir = path.join(tmp, "engine"); fs.mkdirSync(dir);
+    const e1 = spawnEngine(dir, "1");
+    expect(await waitFor(() => fs.existsSync(path.join(dir, "implementing.json")), 120_000), JSON.stringify(e1.text())).toBe(true);
+    const { runId } = JSON.parse(fs.readFileSync(path.join(dir, "state.json"), "utf8")) as {runId: string};
+    const ownerFile = path.join(dir, "data", "runs", runId, "workspace.owner.json");
+    // //TR: düzeltilmiş motorda sahiplik kaydı çocuğun grubunu taşır (Linux dışında kimlik belirteci eşzamansız eklenir); düzeltme öncesi motorda kayıt hiç yoktur ve bekleme süresi dolar.
+    await waitFor(() => { try { const o = JSON.parse(fs.readFileSync(ownerFile, "utf8")); return o.childPgid != null && (process.platform === "linux" || o.childStart != null); } catch { return false; } }, 10_000);
+    const killedAt = Date.now();
+    e1.child.kill("SIGKILL"); await e1.closed;
+    const e2 = spawnEngine(dir, "2");
+    expect(await e2.closed, JSON.stringify(e2.text())).toBe(0);
+    const rep = JSON.parse(e2.text().out.trim().split("\n").pop()!) as {recovered: string[]};
+    expect(rep.recovered).toEqual([runId]);
+    await sleep(Math.max(0, killedAt + ORPHAN_MS + 2000 - Date.now())); // yetim çocuk (hâlâ yaşıyorsa) uyanıp yazmış olurdu
+    const run = new WorkOsStore(path.join(dir, "data")).engineGetRun(runId)!;
+    const work = path.join(dir, "data", "runs", runId, "work");
+    expect(run.status).toBe("AWAITING_APPROVAL");
+    expect(fs.existsSync(path.join(work, "ORPHAN.txt"))).toBe(false);
+    expect(git(work, ["log", "--format=%s"]).split("\n")).not.toContain("orphan commit");
+    expect(git(work, ["rev-parse", "HEAD"])).toBe(run.headSha);
+  });
+
+  it("guardWorkspace fences a mutation when the owner record is missing, unreadable or belongs to another lease", () => {
+    const c = setup(); const r = c.mkRun("A"), mr = c.runner(), run = c.store.engineGetRun(r.runId)!;
+    const guard = (lease: string) => (mr as unknown as {guardWorkspace(run: unknown, leaseId: string): void}).guardWorkspace(run, lease);
+    const file = path.join(c.dataDir, "runs", r.runId, "workspace.owner.json");
+    expect(() => guard("lse_a")).toThrow(/WORKOS_LEASE_FENCED/); // no record
+    fs.mkdirSync(path.dirname(file), {recursive: true});
+    fs.writeFileSync(file, JSON.stringify({leaseId: "lse_a", engineId: "e", hostname: os.hostname(), pid: process.pid, childPgid: null, childStart: null, step: "IMPLEMENT", at: new Date().toISOString()}));
+    expect(() => guard("lse_a")).not.toThrow();
+    expect(() => guard("lse_b")).toThrow(/WORKOS_LEASE_FENCED/); // another engine's lease
+    fs.writeFileSync(file, "{not json");
+    expect(() => guard("lse_a")).toThrow(/WORKOS_LEASE_FENCED/); // unreadable: fail closed
+  });
+
+  it("VERIFY refuses a workspace whose HEAD is not the recorded headSha (WORKSPACE_DIVERGED) instead of silently repairing it", { timeout: 90_000 }, async () => {
+    const c = setup(); const r = c.mkRun("A");
+    const mr = c.runner({maxStepsPerTick: 2}); // WORKSPACE + IMPLEMENT only
+    await mr.tick();
+    expect(c.store.engineGetRun(r.runId)!.step).toBe("VERIFY");
+    const work = path.join(c.dataDir, "runs", r.runId, "work");
+    git(work, ["-c", "user.name=X", "-c", "user.email=x@x.invalid", "commit", "-q", "--allow-empty", "-m", "behind the engine's back"]);
+    await mr.tick();
+    const after = c.store.engineGetRun(r.runId)!;
+    expect([after.status, after.reason]).toEqual(["FAILED", "WORKSPACE_DIVERGED"]);
+  });
+
+  it("takeover is fail-closed when the previous writer cannot be established, and never signals a process whose identity does not match", { timeout: 120_000 }, async () => {
+    const c = setup();
+    const crashed = async (patch: Record<string, unknown>) => {
+      const r = c.mkRun(`R${Math.random()}`);
+      const first = c.runner({leaseTtlMs: 300, maxStepsPerTick: 0, executors: c.base});
+      expect((await first.tick()).claimed).toEqual([r.runId]); // LEASED, hiçbir adım çalışmadı
+      const file = path.join(c.dataDir, "runs", r.runId, "workspace.owner.json");
+      fs.mkdirSync(path.dirname(file), {recursive: true});
+      fs.writeFileSync(file, JSON.stringify({leaseId: "lse_gone", engineId: "engine_gone", hostname: os.hostname(), pid: 1, childPgid: null, childStart: null, step: "IMPLEMENT", at: new Date().toISOString(), ...patch}));
+      await sleep(450); // lease süresi doldu
+      const rep = await c.runner({executors: c.base}).tick(); // generous TTL: only the first runner's lease (300 ms) must expire; the takeover runner runs a whole pipeline and must not fence itself under CPU load
+      expect(rep.recovered).toEqual([r.runId]);
+      const run = c.store.engineGetRun(r.runId)!;
+      return {run, note: run.evidence.find(e => e.kind === "RECOVERY")?.note ?? ""};
+    };
+    const decoy = cp.spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {stdio: "ignore", windowsHide: true, ...(process.platform === "win32" ? {} : {detached: true})});
+    const alive = () => { try { process.kill(decoy.pid!, 0); return true; } catch { return false; } };
+    try {
+      let x = await crashed({childPgid: 4242424, childStart: "1", hostname: "other-host.invalid"});
+      expect([x.run.status, x.run.reason]).toEqual(["RECOVERY_FAILED", "RECOVERY_FAILED: WORKSPACE_WRITER_ALIVE"]);
+      expect(x.note).toMatch(/writer group 4242424 belongs to host other-host\.invalid/);
+      x = await crashed({childPgid: null, step: "IMPLEMENT", leaseId: "lse_gone"}); // kayıtlı çocuk yok: devir serbest
+      expect(x.run.status).toBe("AWAITING_APPROVAL");
+      x = await crashed({childPgid: decoy.pid, childStart: "not-the-start-time-of-this-process"}); // pid yeniden kullanılmış: ASLA sinyal gönderilmez
+      expect(x.run.status).toBe("AWAITING_APPROVAL");
+      expect(x.note).toMatch(/was reused by another process/);
+      expect(alive()).toBe(true);
+      x = await crashed({childPgid: decoy.pid, childStart: null}); // canlı grup, kimlik kanıtlanamıyor: fail-closed, öldürülmez
+      expect([x.run.status, x.run.reason]).toEqual(["RECOVERY_FAILED", "RECOVERY_FAILED: WORKSPACE_WRITER_ALIVE"]);
+      expect(x.note).toMatch(/identity cannot be proven/);
+      expect(alive()).toBe(true);
+    } finally { try { if (process.platform === "win32") decoy.kill(); else process.kill(-decoy.pid!, "SIGKILL"); } catch { /* zaten bitmiş */ } }
+  });
+});
+
+describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability", () => {
+  const wg = () => import("../core/workos/writer-guard.js").catch(() => null);
+  const ORPHAN_MS = 6000, TTL = 1500;
+  const spawnEngine = (dir: string, phase: "1" | "2", opts: Record<string, unknown> = {}, ttlOverride?: number) => {
+    const child = cp.spawn(process.execPath, ["--import", "tsx", ENGINE, REPO, dir, phase, String(ttlOverride ?? TTL), String(ORPHAN_MS), JSON.stringify(opts)], {cwd: REPO, stdio: ["ignore", "pipe", "pipe"], windowsHide: true});
+    let out = "", err = "";
+    child.stdout.on("data", d => { out += String(d); }); child.stderr.on("data", d => { err += String(d); });
+    const closed = new Promise<number | null>(r => child.on("close", code => r(code)));
+    return {child, closed, text: () => ({out, err})};
+  };
+  const waitFor = waitUntil, groupAlive = groupLive;
+  // Faz 1'i başlatır, implementer çocuğu uyurken motoru öldürür (SIGKILL); {dir, runId, pgid, killedAt} döner.
+  const crashEngine = async (dir: string, opts: Record<string, unknown> = {}) => {
+    fs.mkdirSync(dir);
+    const e1 = spawnEngine(dir, "1", opts);
+    expect(await waitFor(() => fs.existsSync(path.join(dir, "implementing.json")), 120_000), JSON.stringify(e1.text())).toBe(true);
+    const {runId} = JSON.parse(fs.readFileSync(path.join(dir, "state.json"), "utf8")) as {runId: string};
+    const ownerFile = path.join(dir, "data", "runs", runId, "workspace.owner.json");
+    let pgid = 0;
+    await waitFor(() => { try { const o = JSON.parse(fs.readFileSync(ownerFile, "utf8")); pgid = o.childPgid ?? 0; return o.childPgid != null && (process.platform === "linux" || o.childStart != null); } catch { return false; } }, 10_000);
+    if (opts.grandchild) expect(await waitFor(() => fs.existsSync(path.join(dir, `${String(opts.grandchild)}.pid`)), 10_000)).toBe(true); // torun doğdu ve pid'ini yazdı
+    const killedAt = Date.now();
+    e1.child.kill("SIGKILL"); await e1.closed;
+    return {dir, runId, pgid, killedAt, work: path.join(dir, "data", "runs", runId, "work")};
+  };
+  const afterOrphanWindow = (killedAt: number) => sleep(Math.max(0, killedAt + ORPHAN_MS + 2000 - Date.now())); // yetim (hâlâ yaşıyorsa) uyanıp yazmış olurdu
+  const recoveryNote = (dir: string, runId: string) => new WorkOsStore(path.join(dir, "data")).engineGetRun(runId)!.evidence.find(e => e.kind === "RECOVERY")?.note ?? "";
+
+  it("PAR04-GSTOP-NO-REAP: a GLOBAL_STOP that is active at takeover still stops the crashed engine's writer BEFORE the run is cancelled", { timeout: 180_000 }, async () => {
+    const x = await crashEngine(path.join(tmp, "stop"));
+    expect(x.pgid).toBeGreaterThan(1);
+    fs.writeFileSync(path.join(x.dir, "rt", "GLOBAL_STOP.json"), JSON.stringify({active: true, reason: "TEST_STOP", actor: "test"}));
+    const e2 = spawnEngine(x.dir, "2");
+    expect(await e2.closed, JSON.stringify(e2.text())).toBe(0);
+    await afterOrphanWindow(x.killedAt);
+    const run = new WorkOsStore(path.join(x.dir, "data")).engineGetRun(x.runId)!;
+    expect(run.status).toBe("CANCELLED");
+    expect(groupAlive(x.pgid)).toBe(false);
+    expect(fs.existsSync(path.join(x.work, "ORPHAN.txt"))).toBe(false);
+    expect(run.evidence.find(e => e.kind === "CANCEL")?.note ?? "").toMatch(/stopped writer group/);
+  });
+
+  it("TK-2 / PAR04-EXHAUSTED-NO-REAP: a takeover that exhausts the recovery budget still stops the writer; the reason stays RECOVERY_BUDGET_EXHAUSTED and the note names the stopped group", { timeout: 180_000 }, async () => {
+    const x = await crashEngine(path.join(tmp, "exhaust"));
+    const e2 = spawnEngine(x.dir, "2", {maxRecoveries: 0});
+    expect(await e2.closed, JSON.stringify(e2.text())).toBe(0);
+    await afterOrphanWindow(x.killedAt);
+    const run = new WorkOsStore(path.join(x.dir, "data")).engineGetRun(x.runId)!;
+    expect([run.status, run.reason]).toEqual(["RECOVERY_FAILED", "RECOVERY_BUDGET_EXHAUSTED"]);
+    expect(groupAlive(x.pgid)).toBe(false);
+    expect(fs.existsSync(path.join(x.work, "ORPHAN.txt"))).toBe(false);
+    expect(recoveryNote(x.dir, x.runId)).toMatch(/stopped writer group/);
+  });
+
+  it("TEST-PAR04-DEFENCES (M7): a descendant in the writer's process group is stopped too, not only the leader", { timeout: 180_000 }, async () => {
+    const x = await crashEngine(path.join(tmp, "grp"), {grandchild: "group"});
+    const gcPid = Number(fs.readFileSync(path.join(x.dir, "group.pid"), "utf8"));
+    expect(procAlive(gcPid)).toBe(true); // yetim torun çöken motordan sonra sürüyor
+    const e2 = spawnEngine(x.dir, "2", {grandchild: "group"});
+    expect(await e2.closed, JSON.stringify(e2.text())).toBe(0);
+    expect(await waitUntil(() => !procAlive(gcPid), 5000), "a group member survived the kill").toBe(true);
+    expect(fs.existsSync(path.join(x.work, "ORPHAN2.txt"))).toBe(false);
+    expect(new WorkOsStore(path.join(x.dir, "data")).engineGetRun(x.runId)!.status).toBe("AWAITING_APPROVAL");
+  });
+
+  it("TK-1: a descendant that called setsid (left the process group) AND works outside the run directory is found by the lease marker alone and stopped; the run delivers only the new engine's work", { timeout: 180_000 }, async () => {
+    const x = await crashEngine(path.join(tmp, "setsid"), {grandchild: "setsid"});
+    const gcPid = Number(fs.readFileSync(path.join(x.dir, "setsid.pid"), "utf8"));
+    expect(procAlive(gcPid)).toBe(true);
+    expect(groupLive(gcPid), "the detached descendant must be in its OWN group").toBe(true);
+    const e2 = spawnEngine(x.dir, "2");
+    expect(await e2.closed, JSON.stringify(e2.text())).toBe(0);
+    const run = new WorkOsStore(path.join(x.dir, "data")).engineGetRun(x.runId)!;
+    expect(procAlive(gcPid), "the detached descendant survived the takeover").toBe(false);
+    expect(fs.existsSync(path.join(x.work, "ORPHAN3.txt"))).toBe(false);
+    expect(run.status).toBe("AWAITING_APPROVAL");
+    expect(git(x.work, ["rev-parse", "HEAD"])).toBe(run.headSha);
+    if (process.platform === "linux") expect(recoveryNote(x.dir, x.runId)).toMatch(/swept \d+ detached writer process/);
+  });
+
+  it.skipIf(process.platform === "win32")("TK-5: SIGINT to the engine (service mode) kills the implementer group it started in its own session; the engine then dies of the signal", { timeout: 180_000 }, async () => {
+    const dir = path.join(tmp, "sigint"); fs.mkdirSync(dir);
+    const e1 = spawnEngine(dir, "1", {service: true}, 60_000);
+    expect(await waitFor(() => fs.existsSync(path.join(dir, "implementing.json")), 120_000), JSON.stringify(e1.text())).toBe(true);
+    const {runId} = JSON.parse(fs.readFileSync(path.join(dir, "state.json"), "utf8")) as {runId: string};
+    const ownerFile = path.join(dir, "data", "runs", runId, "workspace.owner.json");
+    let pgid = 0;
+    expect(await waitFor(() => { try { pgid = JSON.parse(fs.readFileSync(ownerFile, "utf8")).childPgid ?? 0; return pgid > 1; } catch { return false; } }, 10_000)).toBe(true);
+    const sentAt = Date.now();
+    e1.child.kill("SIGINT"); // yalnız motora (çocuk kendi oturumundadır: terminalin Ctrl+C'si ona ulaşmazdı)
+    const code = await Promise.race([e1.closed, sleep(15_000).then(() => "TIMEOUT" as const)]);
+    if (code === "TIMEOUT") e1.child.kill("SIGKILL");
+    expect(code, JSON.stringify(e1.text())).not.toBe("TIMEOUT");
+    expect(await waitFor(() => !groupAlive(pgid), 5_000), "the implementer group outlived the engine").toBe(true);
+    await sleep(Math.max(0, sentAt + ORPHAN_MS + 2000 - Date.now()));
+    expect(fs.existsSync(path.join(dir, "data", "runs", runId, "work", "ORPHAN.txt"))).toBe(false);
+  });
+
+  // ---- in-process: owner-record identity and durability ----
+  const crashedRun = async (c: ReturnType<typeof setup>, patch: Record<string, unknown>, o: {raw?: string; mtimeSec?: number; inRunDir?: (runDir: string) => void} = {}) => {
+    const r = c.mkRun(`R${Math.random()}`);
+    const first = c.runner({leaseTtlMs: 300, maxStepsPerTick: 0, executors: c.base});
+    expect((await first.tick()).claimed).toEqual([r.runId]); // LEASED, hiçbir adım çalışmadı
+    const file = path.join(c.dataDir, "runs", r.runId, "workspace.owner.json");
+    fs.mkdirSync(path.dirname(file), {recursive: true});
+    const boot = (await wg())?.bootId?.() ?? null;
+    fs.writeFileSync(file, o.raw ?? JSON.stringify({leaseId: "lse_gone", engineId: "engine_gone", hostname: os.hostname(), pid: 1, childPgid: null, childStart: null, step: "IMPLEMENT", at: new Date().toISOString(), bootId: boot, ...patch}));
+    if (o.mtimeSec !== undefined) fs.utimesSync(file, o.mtimeSec, o.mtimeSec);
+    o.inRunDir?.(path.dirname(file));
+    await sleep(450); // lease süresi doldu
+    const rep = await c.runner({executors: c.base}).tick(); // cömert TTL: yalnız ilk runner'ın lease'i (300 ms) dolmalı
+    expect(rep.recovered).toEqual([r.runId]);
+    const run = c.store.engineGetRun(r.runId)!;
+    return {run, note: run.evidence.find(e => e.kind === "RECOVERY")?.note ?? ""};
+  };
+  const sleeper = () => cp.spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {stdio: "ignore", windowsHide: true, ...(process.platform === "win32" ? {} : {detached: true})});
+  const isAlive = procAlive;
+  const killGroup = (pid: number) => { try { if (process.platform === "win32") process.kill(pid); else process.kill(-pid, "SIGKILL"); } catch { /* zaten bitmiş */ } };
+
+  it.skipIf(process.platform !== "linux")("TK-1 (cwd): a process whose working directory is inside the run directory is stopped at takeover even without a lease marker (the untracked VERIFY test process)", { timeout: 120_000 }, async () => {
+    const c = setup();
+    let decoy = null as cp.ChildProcess | null;
+    try {
+      const x = await crashedRun(c, {}, {inRunDir: runDir => { decoy = cp.spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {cwd: runDir, stdio: "ignore", detached: true}); }});
+      expect(x.run.status).toBe("AWAITING_APPROVAL");
+      expect(x.note).toMatch(/swept 1 detached writer process/);
+      expect(await waitUntil(() => !procAlive(decoy!.pid!), 5000), "the process working inside the run directory survived the takeover").toBe(true);
+    } finally { try { if (decoy?.pid) process.kill(-decoy.pid, "SIGKILL"); } catch { /* bitmiş */ } }
+  });
+
+  it("TK-3: a recorded pid that now belongs to another user's process (kill -> EPERM) is a REUSED pid when its start token differs: the takeover proceeds and nothing is signalled; an equal token stays fail-closed", { timeout: 120_000 }, async () => {
+    const c = setup(), decoy = sleeper();
+    const target = process.platform === "win32" ? decoy.pid! : -decoy.pid!;
+    const realKill = process.kill.bind(process), signalled: Array<[number, unknown]> = [];
+    const decoyAlive = () => { try { realKill(decoy.pid!, 0); return true; } catch { return false; } };
+    vi.spyOn(process, "kill").mockImplementation(((pid: number, signal?: string | number) => {
+      if (signal === 0 && pid === target) { const e = new Error("EPERM") as NodeJS.ErrnoException; e.code = "EPERM"; throw e; } // başka kullanıcının süreci
+      if (signal !== 0 && (pid === target || pid === decoy.pid)) signalled.push([pid, signal]);
+      return realKill(pid, signal as never);
+    }) as typeof process.kill);
+    try {
+      let x = await crashedRun(c, {childPgid: decoy.pid, childStart: "not-the-start-time-of-this-process"});
+      expect(x.run.status).toBe("AWAITING_APPROVAL");
+      expect(x.note).toMatch(/was reused by another process/);
+      expect(decoyAlive()).toBe(true);
+      expect(signalled).toEqual([]);
+      const token = await (await wg())?.startToken(decoy.pid!);
+      if (token) { // belirteç aynı + EPERM: grup bizim olabilir ama sinyal gönderemeyiz -> bilinmiyor -> fail-closed
+        x = await crashedRun(c, {childPgid: decoy.pid, childStart: token});
+        expect([x.run.status, x.run.reason]).toEqual(["RECOVERY_FAILED", "RECOVERY_FAILED: WORKSPACE_WRITER_ALIVE"]);
+        expect(signalled).toEqual([]);
+      }
+    } finally { killGroup(decoy.pid!); }
+  });
+
+  it("TK-4: a torn owner record is fail-closed in the same boot, but processes do not survive a reboot: a record older than the boot, or written in another boot, means no writer (and nothing is signalled)", { timeout: 120_000 }, async () => {
+    const c = setup(), decoy = sleeper();
+    try {
+      let x = await crashedRun(c, {}, {raw: "\0".repeat(256)}); // güç kesintisi sonrası NUL dolu dosya, ama bu önyüklemede yazılmış
+      expect([x.run.status, x.run.reason]).toEqual(["RECOVERY_FAILED", "RECOVERY_FAILED: WORKSPACE_WRITER_ALIVE"]);
+      expect(x.note).toMatch(/owner record invalid/);
+      x = await crashedRun(c, {}, {raw: "\0".repeat(256), mtimeSec: 1}); // dosya önyüklemeden ESKİ
+      expect(x.run.status).toBe("AWAITING_APPROVAL");
+      expect(x.note).toMatch(/before the current boot/);
+      const token = await (await wg())?.startToken(decoy.pid!);
+      x = await crashedRun(c, {childPgid: decoy.pid, childStart: token ?? "1", bootId: "linux:another-boot-id"}); // kimliği KANITLANMIŞ ama başka önyüklemeden
+      expect(x.run.status).toBe("AWAITING_APPROVAL");
+      expect(x.note).toMatch(/previous boot/);
+      expect(isAlive(decoy.pid!)).toBe(true);
+    } finally { killGroup(decoy.pid!); }
+  });
+
+  it("TK-4: the owner record cannot be written at a step start (transient disk/rename error) -> the step is RETRIED, not failed with ENGINE_ERROR", { timeout: 90_000 }, async () => {
+    const c = setup(), r = c.mkRun("A");
+    const mr = c.runner({maxStepsPerTick: 1});
+    await mr.tick(); // WORKSPACE
+    const file = path.join(c.dataDir, "runs", r.runId, "workspace.owner.json");
+    fs.rmSync(file, {force: true}); fs.rmSync(`${file}.prev`, {force: true}); fs.mkdirSync(file); // kayıt yerine dizin: yazı başarısız olur
+    await mr.tick(); // IMPLEMENT adım başı
+    const after = c.store.engineGetRun(r.runId)!;
+    expect([after.status, after.reason]).toEqual(["RETRY_SCHEDULED", "OWNER_RECORD_WRITE_FAILED"]);
+  });
+
+  it("TK-4: owner.json is written durably (atomic helper: a .prev copy of the previous record exists after the second write)", { timeout: 90_000 }, async () => {
+    const c = setup(), r = c.mkRun("A");
+    await c.runner({maxStepsPerTick: 2}).tick(); // WORKSPACE + IMPLEMENT: kayıt birden çok kez yeniden yazılır
+    const file = path.join(c.dataDir, "runs", r.runId, "workspace.owner.json");
+    expect(JSON.parse(fs.readFileSync(file, "utf8"))).toMatchObject({hostname: os.hostname()});
+    expect(fs.existsSync(`${file}.prev`), "fsync'li atomik yazıcı önceki kaydı .prev olarak tutar").toBe(true);
+    expect(JSON.parse(fs.readFileSync(file, "utf8"))).toHaveProperty("bootId");
+  });
+
+  it.skipIf(process.platform !== "linux")("TK-7: a leaderless group is killed only when its boot and its members' start times prove it is the recorded writer's; otherwise fail-closed and untouched", { timeout: 180_000 }, async () => {
+    const c = setup(), G = await wg();
+    const leaderless = async () => { // lider çıkar, üye (sleep) grupta kalır
+      const leader = cp.spawn("sh", ["-c", "sleep 60 & sleep 1.2; exit 0"], {stdio: "ignore", detached: true});
+      const token = G!.startTokenLinux(leader.pid!)!;
+      await new Promise<void>(r => leader.on("exit", () => r()));
+      await waitFor(() => (G!.groupMembers(leader.pid!) ?? []).length > 0, 3000);
+      return {pgid: leader.pid!, token};
+    };
+    const cleanup = (pgid: number) => { try { process.kill(-pgid, "SIGKILL"); } catch { /* bitmiş */ } };
+    let a = await leaderless();
+    try {
+      // (a) kayıtlı başlangıçtan ÖNCE başlamış bir üye: bu grup yazarın değil -> öldürülmez
+      let x = await crashedRun(c, {childPgid: a.pgid, childStart: String(Number(a.token) + 100_000_000)});
+      expect([x.run.status, x.run.reason]).toEqual(["RECOVERY_FAILED", "RECOVERY_FAILED: WORKSPACE_WRITER_ALIVE"]);
+      expect(G!.groupMembers(a.pgid)!.length).toBeGreaterThan(0);
+      // (b) önyükleme kimliği kayıtta yok (eski kayıt): kanıtlanamaz -> öldürülmez
+      x = await crashedRun(c, {childPgid: a.pgid, childStart: a.token, bootId: null});
+      expect([x.run.status, x.run.reason]).toEqual(["RECOVERY_FAILED", "RECOVERY_FAILED: WORKSPACE_WRITER_ALIVE"]);
+      expect(G!.groupMembers(a.pgid)!.length).toBeGreaterThan(0);
+      // (c) aynı önyükleme + üye lider başladıktan sonra başlamış: kanıtlandı -> öldürülür
+      x = await crashedRun(c, {childPgid: a.pgid, childStart: a.token});
+      expect(x.run.status).toBe("AWAITING_APPROVAL");
+      expect(x.note).toMatch(/stopped writer group/);
+      expect(await waitFor(() => (G!.groupMembers(a.pgid) ?? []).length === 0, 3000)).toBe(true);
+    } finally { cleanup(a.pgid); }
+  });
+
+  it("TK-6 / TK-8: the macOS/BSD identity command pins TZ/locale and uses an absolute ps; the Windows kill is ONE PowerShell call that re-checks the start time and refuses a non-numeric token", async () => {
+    const G = await wg();
+    const mac = G?.startTokenCommand?.("darwin", 4242);
+    expect(mac).toMatchObject({cmd: "/bin/ps", args: ["-o", "lstart=", "-p", "4242"], env: {TZ: "UTC0", LC_ALL: "C"}});
+    expect(G?.startTokenCommand?.("win32", 4242)?.cmd).toBe("powershell.exe");
+    const w = G?.windowsKillArgs?.(4242, "638000000000000000");
+    expect(w?.length).toBe(4);
+    expect(w?.[3]).toMatch(/Get-Process -Id 4242/);
+    expect(w?.[3]).toMatch(/Ticks -eq 638000000000000000/);
+    expect(w?.[3]).toMatch(/taskkill\.exe \/pid 4242 \/T \/F/);
+    expect(G?.windowsKillArgs?.(4242, "1; calc.exe")).toBeNull();
+    expect(G?.windowsKillArgs?.(4242, null)).toBeNull();
+    expect(G?.windowsKillArgs?.(1, "1")).toBeNull();
+  });
+});
 });
