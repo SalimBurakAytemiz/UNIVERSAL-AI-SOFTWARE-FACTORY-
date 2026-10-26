@@ -68,8 +68,8 @@
    "id": "L1",
    "description": "a changed launcher is accepted",
    "file": "core/workos/claude-profiles.ts",
-   "old": "return crypto.createHash(\"sha256\").update(bytes).digest(\"hex\") === prov.claude.launcherSha256 ? {ok: true, resolvedPath: resolved} :",
-   "new": "return true ? {ok: true, resolvedPath: resolved} :"
+   "old": "if (crypto.createHash(\"sha256\").update(bytes).digest(\"hex\") !== prov.claude.launcherSha256) return {ok: false, code: \"CLAUDE_LAUNCHER_PROVENANCE_CHANGED\"};",
+   "new": "if (false) return {ok: false, code: \"CLAUDE_LAUNCHER_PROVENANCE_CHANGED\"};"
   },
   {
    "id": "L2",
@@ -166,8 +166,8 @@
    "id": "X4",
    "description": "an expired sign-in is not recognised for the reviewer",
    "file": "core/workos/executors.ts",
-   "old": "if (!r.valid && !r.aborted && !r.timedOut && claudeAuthFailure(r.log)) r.invalidReason",
-   "new": "if (false) r.invalidReason"
+   "old": "if (!r.valid && !r.aborted && !r.timedOut && r.exitCode !== 0 && claudeAuthFailure(r.log)) {",
+   "new": "if (false) {"
   },
   {
    "id": "X5",
