@@ -1,4 +1,4 @@
-// //TR: Bu test B3a mission runner engine'ini gerçek geçici git deposu ve deterministik FAKE executor ile doğrular: mutlu yol (mission REPORTING + run AWAITING_APPROVAL + tam kanıt), test hatası/reviewer BLOCKED sınırlı remediation, diff'te secret, aynı kimlik reddi, GLOBAL_STOP, lease fencing, crash-resume, tenant izolasyonu, path traversal ve cockpit activeWorkerRuns. Gerçek sağlayıcı çağrılmaz.
+// //TR: Bu test B3a mission runner engine'ini gerçek geçici git deposu ve deterministik FAKE executor ile doğrular (1/2): çalıştırma durum tablosu, mutlu yol/remediation/tamper/kurtarma motoru, claim cap (virtual clock lease testleri dahil) ve kontrol API'si. TaskLimits, workspace arşiv/prune ve runner dışa aktarımları v7-b3a-runner-limits-archive.test.ts dosyasındadır (aynı yardımcılar kasıtlı olarak kopyalanmıştır: bölme mekanik kalsın, Windows'ta iki dosya paralel ~215 sn koşsun).
 import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
 // SBX-GATE (INT-R3): these tests exercise their own fixed test/dev commands; host execution is allowed only through the TEST-ONLY injected sandbox provider (production has none).
 import {testExecutionGate, TEST_HOST_PASSTHROUGH_SANDBOX} from "./support/test-sandbox.js";
@@ -15,7 +15,7 @@ import {MissionRunner} from "../core/workos/runner.js";
 import type {RunnerOptions} from "../core/workos/runner.js";
 import {fakeSecurity} from "../core/workos/security-tools.js";
 import {FakeExecutors, executorsFromEnv, parseReviewOutput} from "../core/workos/executors.js";
-import type {FakeScript, MissionSpec} from "../core/workos/executors.js";
+import type {ExecutorPair, FakeScript, MissionSpec} from "../core/workos/executors.js";
 import {RUN_STATUSES, TERMINAL_RUN_STATUSES, canRunTransition} from "../core/workos/run-state.js";
 import {scanDiffForSecrets, redactSecrets} from "../core/workos/secret-scan.js";
 import {buildServer} from "../apps/control-api/src/server.js";
@@ -47,12 +47,13 @@ function makeRepo(id: string): {repo: string; head: string} {
 const FAKE_AWS = ["AK", "IA", "Q7ZX3MPLW2RT5VB9"].join("");
 
 interface Ctx { store: WorkOsStore; dataDir: string; runtime: string; stopFile: string; repo: string; head: string; missionId: string; projectId: string }
-function setup(tenantId = "tA", opts: {url?: boolean; testCommand?: string[] | null} = {}): Ctx {
+function setup(tenantId = "tA", opts: {url?: boolean; testCommand?: string[] | null; clock?: {skewMs: number}; virtualClock?: {ms: number}} = {}): Ctx {
   const id = crypto.randomBytes(4).toString("hex");
   const {repo, head} = makeRepo(id);
   const dataDir = path.join(tmp, `data-${id}`), runtime = path.join(tmp, `runtime-${id}`);
   fs.mkdirSync(runtime, {recursive: true});
-  const store = new WorkOsStore(dataDir);
+  // //TR: virtualClock: store saati YALNIZ testin ilerlettiği sanal zamandır (gerçek süre/yavaş runner lease süresini etkilemez); clock: gerçek zaman + sabit kayma.
+  const store = new WorkOsStore(dataDir, opts.virtualClock ? {now: () => opts.virtualClock!.ms} : opts.clock ? {now: () => Date.now() + opts.clock!.skewMs} : {});
   const tc = opts.testCommand === null ? undefined : (opts.testCommand ?? ["node", "test.mjs"]);
   const p = store.createProject({tenantId, orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL", repository: opts.url ? {url: "https://example.invalid/r.git"} : {path: repo}, ...(tc ? {testCommand: tc} : {})});
   const m = store.createMission({tenantId, projectId: p.projectId, title: "Add feature", objective: "feature.txt must say ok", acceptanceCriteria: ["tests pass"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
@@ -71,6 +72,285 @@ const runOf = (c: Ctx, id: string, tenantId = "tA") => c.store.getRun({tenantId}
 const missionOf = (c: Ctx, tenantId = "tA") => c.store.getMission({tenantId}, c.missionId)!;
 const journal = (c: Ctx) => fs.readFileSync(path.join(c.dataDir, "journal.jsonl"), "utf8").split("\n").filter(Boolean).map(l => JSON.parse(l));
 const kinds = (r: WorkRun) => r.evidence.map(e => e.kind);
+
+import cp from "node:child_process";
+import {repositoryHead, repositoryPrecondition as repoPrecondition} from "../core/workos/runner.js"; // //TR: ayrı ad: #214 bölmesi üst import satırından repositoryPrecondition'ı çıkarır; bu blok o satıra bağlı kalmaz (her iki dizilimde derlenir)
+import type {RepositoryHead} from "../core/workos/runner.js";
+// //TR: LANE-C C-RUNNER-HEAD-PREDICATE: "HEAD çözülüyor mu VE yol work-tree kökü mü" kararı TEK saf fonksiyondur (repositoryHead; sonuç çağıranın ortamına bağlı değildir). Runner WORKSPACE adımı aynı fonksiyonu çağırır (readiness için Lane B isteği). `git rev-parse` yukarı doğru keşfettiği için düz bir alt dizin üst deponun HEAD'ini çözer; eski davranış `git clone <alt dizin>` hatasıyla yanıltıcı WORKSPACE_CLONE_FAILED verirdi. Testler her durumu gerçek git ile kurar; beklenen cevap bağımsız git çağrısından türetilir, her hile için önce "ham git bunu kabul eder/çalıştırır" önkoşulu doğrulanır.
+describe("LANE-C repository head predicate: repositoryHead (does HEAD resolve AND is the path the work-tree root; the runner uses the very same function)", () => {
+  const ID = ["-c", "user.name=Seed", "-c", "user.email=seed@local.invalid", "-c", "commit.gpgsign=false"];
+  const POSIX = process.platform !== "win32";
+  const mkd = (...p: string[]) => { const d = path.join(...p); fs.mkdirSync(d, {recursive: true}); return d; };
+  const headOf = (dir: string) => git(dir, ["rev-parse", "HEAD"]);
+  const commitIn = (dir: string, name = "f.txt") => { fs.writeFileSync(path.join(dir, name), `${name}\n`); git(dir, ["add", "-A"]); git(dir, [...ID, "commit", "-q", "-m", `add ${name} in ${path.basename(dir)}`]); return headOf(dir); }; // //TR: commit mesajı dizin adını içerir: aynı saniyedeki iki depo asla aynı SHA'yı üretmez (aksi halde "başka deponun HEAD'i" ayrımı sahte geçerdi)
+  const initRepo = (dir: string, withCommit: boolean): string | null => { fs.mkdirSync(dir, {recursive: true}); git(dir, ["init", "-q", "-b", "main"]); return withCommit ? commitIn(dir) : null; };
+  const cleanEnv = (): NodeJS.ProcessEnv => Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^GIT_/i.test(k)));
+  // //TR: Tek ortama bağlı beklenti: TMPDIR bir deponun içindeyse "hiçbir depo yok" dizini aslında bir deponun alt dizinidir; bu yüzden o şekil ayrı bir testte ve ortam uygun değilse GÖRÜNÜR biçimde atlanır.
+  const insideAnyRepo = (dir: string) => spawnGitSync(dir, ["rev-parse", "--git-dir"], {env: cleanEnv()}).status === 0;
+  const NOT_ROOT: RepositoryHead = {ok: false, reason: "REPOSITORY_NOT_WORKTREE_ROOT"}, UNRESOLVED: RepositoryHead = {ok: false, reason: "REPOSITORY_HEAD_UNRESOLVED"};
+  const okAt = (baseSha: string): RepositoryHead => ({ok: true, baseSha});
+  // //TR: process.env YALNIZ withEnv ile değişir. Windows'ta ortam adları büyük/küçük harfe duyarsızdır: GIT_DIR ve git_dir AYNI değişkendir; vi.stubEnv iki yazımı ayrı kaydedip geri yüklerken "özgün" değer olarak ekilmiş GIT_DIR'i geri koyabilir ve sonraki bütün git çağrıları (test yardımcısı git() dahil) silinmiş decoy deposuna gider. withEnv: ekilen her adı (her yazımıyla) siler, anlık görüntüde OLMAYAN her GIT_* adını siler ve özgün değerlerin TAMAMINI geri yazar.
+  const withEnv = <R,>(vars: Record<string, string>, fn: () => R): R => {
+    const saved = Object.entries(process.env);
+    for (const [k, v] of Object.entries(vars)) process.env[k] = v;
+    try {
+      const out = fn();
+      if (typeof (out as {then?: unknown} | null | undefined)?.then === "function") throw new Error("withEnv is synchronous: an async fn would run after the environment was restored");
+      return out;
+    } finally { // EXACT restore: wipe the whole environment (every spelling, every changed or deleted value) and rewrite the snapshot
+      for (const k of Object.keys(process.env)) delete process.env[k];
+      for (const [k, v] of saved) if (v !== undefined) process.env[k] = v;
+    }
+  };
+  // //TR: Bekçi: GIT_*, PATH ve SUDO_UID için ad=DEĞER dizgeleri (tam yazımıyla) her testten önce/sonra karşılaştırılır; değişen değer, silinen önceden-var GIT_* ve (Linux'ta) yeni bir yazım da yakalanır. Fark varsa geri yazılır VE o test adlarla bir kez düşer (sonraki testler zehirlenmez).
+  const WATCHED = /^(GIT_|PATH$|SUDO_UID$)/i;
+  const watchedEnv = () => Object.entries(process.env).filter(([k]) => WATCHED.test(k)).map(([k, v]) => `${k}=${v}`).sort();
+  let envBefore: string[] = [];
+  beforeEach(() => { envBefore = watchedEnv(); });
+  afterEach(() => {
+    const now = watchedEnv(), differing = [...new Set([...now.filter(e => !envBefore.includes(e)), ...envBefore.filter(e => !now.includes(e))].map(e => e.slice(0, e.indexOf("="))))];
+    if (differing.length > 0) {
+      for (const k of Object.keys(process.env)) if (WATCHED.test(k)) delete process.env[k];
+      for (const e of envBefore) process.env[e.slice(0, e.indexOf("="))] = e.slice(e.indexOf("=") + 1);
+    }
+    expect(differing).toEqual([]);
+  });
+  const rawToplevel = (dir: string) => spawnGitSync(dir, ["rev-parse", "--show-toplevel"], {env: cleanEnv()});
+  // //TR: Premise karşılaştırmaları ham dize değil DİZİN KİMLİĞİDİR: Windows'ta git eğik çizgili uzun adı (runneradmin) yazar, os.tmpdir() ise ters eğik çizgili 8.3 kısa adı (RUNNER~1) tutar; ikisi de realpath.native ile aynı kanonik yola iner (ürünün path-guard anahtarı ile aynı mantık).
+  const sameDir = (a: string, b: string) => { try { return fs.realpathSync.native(a) === fs.realpathSync.native(b); } catch { return false; } };
+
+  type Built = {dir: string; want: RepositoryHead};
+  const builders: Array<[string, () => Built]> = [
+    ["repo root with a commit: ok, baseSha is that repository's HEAD", () => { const d = mkd(tmp, "root"); return {dir: d, want: okAt(initRepo(d, true)!)}; }],
+    ["repo root with no commit (unborn HEAD): HEAD unresolved", () => { const d = mkd(tmp, "unborn"); initRepo(d, false); return {dir: d, want: UNRESOLVED}; }],
+    ["repo root whose branch points at a missing object: HEAD unresolved", () => { const d = mkd(tmp, "dangling"); initRepo(d, true); fs.writeFileSync(path.join(d, ".git", "refs", "heads", "main"), `${"a".repeat(40)}\n`); return {dir: d, want: UNRESOLVED}; }],
+    ["PLAIN SUBDIRECTORY inside a repo with commits (raw git resolves the PARENT's HEAD there): not the work-tree root", () => {
+      const parent = mkd(tmp, "parent"), parentHead = initRepo(parent, true)!, sub = mkd(parent, "pkg", "sub"); fs.writeFileSync(path.join(sub, "g.txt"), "g\n");
+      expect(git(sub, ["rev-parse", "--verify", "HEAD^{commit}"])).toBe(parentHead); // premise: the old inline check would have accepted this directory
+      for (const probe of [["rev-parse", "--git-dir"], ["rev-parse", "--show-toplevel"]]) expect(spawnGitSync(sub, probe, {env: cleanEnv()}).status).toBe(0); // premise: the CEILING-FREE probes resolve here; ok may never be derived from them
+      return {dir: sub, want: NOT_ROOT};
+    }],
+    ["plain subdirectory inside an UNBORN repo: not the work-tree root", () => { const parent = mkd(tmp, "uparent"); initRepo(parent, false); return {dir: mkd(parent, "sub"), want: NOT_ROOT}; }],
+    ["the .git directory of a repo with commits: not the work-tree root", () => { const d = mkd(tmp, "dotgit"); initRepo(d, true); return {dir: path.join(d, ".git"), want: NOT_ROOT}; }],
+    ["a directory inside .git (objects): not the work-tree root", () => { const d = mkd(tmp, "dotgit-objects"); initRepo(d, true); return {dir: path.join(d, ".git", "objects"), want: NOT_ROOT}; }],
+    ["bare repository with commits: ok (a bare repository is a valid clone source)", () => { const d = mkd(tmp, "bsrc"), bare = path.join(tmp, "bare.git"), h = initRepo(d, true)!; git(tmp, ["clone", "-q", "--bare", d, bare]); return {dir: bare, want: okAt(h)}; }],
+    ["a subdirectory inside a BARE repository (objects/): not the work-tree root", () => { const d = mkd(tmp, "bsub-src"), bare = path.join(tmp, "bsub.git"); initRepo(d, true); git(tmp, ["clone", "-q", "--bare", d, bare]); return {dir: path.join(bare, "objects"), want: NOT_ROOT}; }],
+    ["linked worktree root: ok, baseSha is the WORKTREE's HEAD, not the main checkout's", () => {
+      const main = mkd(tmp, "wmain"), wt = path.join(tmp, "wtree"); initRepo(main, true); git(main, ["worktree", "add", "-q", wt, "-b", "wtb"]);
+      const h = commitIn(wt, "w.txt"); expect(h).not.toBe(headOf(main)); return {dir: wt, want: okAt(h)};
+    }],
+    ["a repository whose .git is a FILE (gitfile, --separate-git-dir): ok", () => { const d = path.join(tmp, "gf-root"), gitDir = path.join(tmp, "gf-gitdir"); git(tmp, ["init", "-q", "-b", "main", `--separate-git-dir=${gitDir}`, d]); expect(fs.statSync(path.join(d, ".git")).isFile()).toBe(true); return {dir: d, want: okAt(commitIn(d))}; }],
+    ["a gitfile root whose config puts the work tree at a SAME-LENGTH sibling directory: refused (the comparison is by directory identity, not by length or prefix)", () => {
+      const d = path.join(tmp, "gw-root"), sib = mkd(tmp, "gw-rooX"), gitDir = path.join(tmp, "gw-gitdir"); git(tmp, ["init", "-q", "-b", "main", `--separate-git-dir=${gitDir}`, d]); commitIn(d);
+      git(d, ["config", "core.worktree", sib]); expect(path.basename(sib).length).toBe(path.basename(d).length); expect(sameDir(git(d, ["rev-parse", "--show-toplevel"]), sib)).toBe(true);
+      return {dir: d, want: NOT_ROOT};
+    }],
+    ["a gitfile root whose config puts the work tree at a DESCENDANT directory: refused (the comparison is by directory identity, not by prefix)", () => {
+      const d = path.join(tmp, "gd-root"), gitDir = path.join(tmp, "gd-gitdir"); git(tmp, ["init", "-q", "-b", "main", `--separate-git-dir=${gitDir}`, d]); commitIn(d);
+      const inner = mkd(d, "inner"); git(d, ["config", "core.worktree", inner]); expect(sameDir(git(d, ["rev-parse", "--show-toplevel"]), inner)).toBe(true);
+      return {dir: d, want: NOT_ROOT};
+    }],
+    ["a repository nested inside another repository: ok, baseSha is the INNER repository's HEAD", () => { const outer = mkd(tmp, "outer"), outerHead = initRepo(outer, true)!, inner = mkd(outer, "vendor", "inner"), innerHead = initRepo(inner, true)!; expect(innerHead).not.toBe(outerHead); return {dir: inner, want: okAt(innerHead)}; }],
+    ["a subdirectory of a repository whose config claims the child as its work tree (core.worktree): not the work-tree root", () => {
+      const parent = mkd(tmp, "cwparent"); initRepo(parent, true); const child = mkd(parent, "child"); git(parent, ["config", "core.worktree", child]);
+      expect(sameDir(rawToplevel(child).stdout.trim(), child)).toBe(true); // premise: raw git calls the child a work-tree root (the ceiling or the own-.git proof is what refuses it)
+      return {dir: child, want: NOT_ROOT};
+    }],
+    ["a repository with a .git directory but core.bare=true (git reports no work tree): still ok, the path contains its own .git and it cloned before", () => { const d = mkd(tmp, "corebare"), h = initRepo(d, true)!; git(d, ["config", "core.bare", "true"]); expect(rawToplevel(d).status).not.toBe(0); return {dir: d, want: okAt(h)}; }],
+    ["a repository whose OWN config puts the work tree elsewhere (core.worktree): still ok, the path contains its own .git and it cloned before", () => { const d = mkd(tmp, "cwelsewhere"), other = mkd(tmp, "cwother"), h = initRepo(d, true)!; git(d, ["config", "core.worktree", other]); expect(sameDir(git(d, ["rev-parse", "--show-toplevel"]), d)).toBe(false); return {dir: d, want: okAt(h)}; }],
+    ["detached HEAD at a commit: ok, baseSha is that commit", () => { const d = mkd(tmp, "detached"), first = initRepo(d, true)!; commitIn(d, "second.txt"); git(d, ["checkout", "-q", "--detach", first]); return {dir: d, want: okAt(first)}; }],
+    ["a tag checkout (detached) and a non-ASCII branch name: ok", () => { const d = mkd(tmp, "tagco"), h = initRepo(d, true)!; git(d, ["tag", "v1"]); git(d, ["checkout", "-q", "-b", "fé/ünï-çödé"]); git(d, ["checkout", "-q", "v1"]); return {dir: d, want: okAt(h)}; }],
+    ["HEAD holding an annotated TAG OBJECT id (not a commit): refused, the clone would fail", () => {
+      const d = mkd(tmp, "tagobj"), h = initRepo(d, true)!; git(d, [...ID, "tag", "-a", "-m", "t", "t1"]); const tagId = git(d, ["rev-parse", "t1"]);
+      fs.writeFileSync(path.join(d, ".git", "HEAD"), `${tagId}\n`); expect([git(d, ["rev-parse", "HEAD"]), git(d, ["rev-parse", "HEAD^{commit}"])]).toEqual([tagId, h]); // premise: HEAD^{commit} alone would accept it
+      return {dir: d, want: UNRESOLVED};
+    }]
+  ];
+
+  it("every repository shape gets exactly one answer: the work-tree root with a resolvable HEAD is ok, everything else is refused with a specific reason (real git, 20 shapes)", () => {
+    for (const [label, build] of builders) { const {dir, want} = build(); expect([label, repositoryHead(dir)]).toEqual([label, want]); }
+  });
+
+  it("a directory that is not a repository at all is HEAD unresolved (skipped, visibly, when TMPDIR lies inside a repository: then it is a subdirectory of one)", (ctx) => {
+    const d = mkd(tmp, "plain");
+    if (insideAnyRepo(d)) return ctx.skip();
+    expect(repositoryHead(d)).toEqual(UNRESOLVED);
+  });
+
+  it("a successful answer is a full 40-hex commit SHA and equals what plain git reports; the function is pure (the repository and process.env are untouched); non-canonical spellings of the root (dot-dot, trailing separator, relative) are the same directory", () => {
+    const d = mkd(tmp, "pure"), h = initRepo(d, true)!;
+    const listing = () => fs.readdirSync(d, {recursive: true}).map(String).sort(), head = () => fs.readFileSync(path.join(d, ".git", "HEAD"), "utf8"), index = () => fs.readFileSync(path.join(d, ".git", "index"));
+    const before = {listing: listing(), head: head(), index: index()}, env = {...process.env};
+    const r = repositoryHead(d);
+    expect(r).toEqual(okAt(h));
+    expect(r.ok && /^[0-9a-f]{40}$/.test(r.baseSha)).toBe(true);
+    expect({listing: listing(), head: head(), index: index()}).toEqual(before);
+    expect({...process.env}).toEqual(env);
+    for (const spelling of [`${d}${path.sep}.git${path.sep}..`, `${d}${path.sep}`, `${d}${path.sep}.`, path.relative(process.cwd(), d)]) expect([spelling, repositoryHead(spelling)]).toEqual([spelling, okAt(h)]);
+  });
+
+  it("an ancestor repository that claims a child directory as its work tree (core.worktree) never makes the child a root, however src is spelled: relative, dot-dot, symlinked, and a ':' in the parent directory name (which splits GIT_CEILING_DIRECTORIES and disables the ceiling)", () => {
+    const mk = (parentName: string) => { const parent = mkd(tmp, parentName); initRepo(parent, true); const child = mkd(parent, "child"); git(parent, ["config", "core.worktree", child]); expect(sameDir(rawToplevel(child).stdout.trim(), child)).toBe(true); return child; };
+    const child = mk("claim");
+    for (const spelling of [child, path.relative(process.cwd(), child), `${child}${path.sep}.`, `${child}${path.sep}x${path.sep}..`]) expect([spelling, repositoryHead(spelling)]).toEqual([spelling, NOT_ROOT]);
+    if (POSIX) {
+      const colon = mk("cw:parent"), link = path.join(tmp, "claim-link"); fs.symlinkSync(child, link, "dir");
+      expect(repositoryHead(colon)).toEqual(NOT_ROOT);
+      expect(repositoryHead(link)).toEqual(NOT_ROOT);
+      const cb = mkd(tmp, "co:lon-bare"), src0 = mkd(tmp, "co-lon-src"); initRepo(src0, true); git(tmp, ["clone", "-q", "--bare", src0, path.join(cb, "bare.git")]);
+      expect(repositoryHead(path.join(cb, "bare.git"))).toEqual(okAt(headOf(src0))); // the bare repository itself is a root even in a colon-named directory
+      expect(repositoryHead(path.join(cb, "bare.git", "objects"))).toEqual(NOT_ROOT); // a directory inside it is not, although is-bare says true there once the ceiling is disabled
+    }
+  });
+
+  it("hostile input never throws: a missing path, a file, an empty string, a NUL byte, a non-string, a 5000-character path and a directory with a garbage .git file are all refused as HEAD unresolved", () => {
+    const file = path.join(tmp, "a-file"); fs.writeFileSync(file, "x");
+    const garbage = mkd(tmp, "garbage"); fs.writeFileSync(path.join(garbage, ".git"), "this is not a gitfile\n");
+    const hostile: unknown[] = [path.join(tmp, "missing"), file, "", `${tmp}${path.sep}a\0b`, "\0", undefined, null, 5, {}, ["x"], path.join(tmp, "x".repeat(5000)), garbage];
+    for (const src of hostile) expect([String(src).slice(0, 30), repositoryHead(src as string)]).toEqual([String(src).slice(0, 30), UNRESOLVED]);
+  });
+
+  it("a SHA-256 repository is refused as HEAD unresolved: the runner's commit id check is the 40-hex SHA-1 form only (skipped when this git cannot create one)", (ctx) => {
+    const d = mkd(tmp, "sha256");
+    if (spawnGitSync(d, ["init", "-q", "-b", "main", "--object-format=sha256"]).status !== 0) return ctx.skip();
+    const h = commitIn(d);
+    expect(h).toMatch(/^[0-9a-f]{64}$/);
+    expect(repositoryHead(d)).toEqual(UNRESOLVED);
+  });
+
+  it.skipIf(!POSIX)("a symlink to a repo root is ok, a symlink to a plain subdirectory or to the .git directory is not the work-tree root (canonical comparison; POSIX only: NOT_VERIFIED on Windows)", () => {
+    const d = mkd(tmp, "slroot"), h = initRepo(d, true)!, sub = mkd(d, "pkg");
+    const link = (target: string, name: string) => { const l = path.join(tmp, name); fs.symlinkSync(target, l, "dir"); return l; };
+    expect(repositoryHead(link(d, "to-root"))).toEqual(okAt(h));
+    expect(repositoryHead(link(sub, "to-sub"))).toEqual(NOT_ROOT);
+    expect(repositoryHead(link(path.join(d, ".git"), "to-dotgit"))).toEqual(NOT_ROOT);
+  });
+
+  it.skipIf(!POSIX)("directory names git prints verbatim stay roots: trailing space/tab/NBSP/ideographic space, leading dash, quotes, non-ASCII (the path git prints is not trimmed; POSIX only: Windows strips trailing spaces from names)", () => {
+    for (const name of ["with space", "trailing ", "trailing  ", "trailing\t", "nbsp ", "ideo　", "-dash", "q'\"`$", "ünï-çödé"]) {
+      const d = mkd(tmp, "names", name), h = initRepo(d, true)!;
+      expect([name, repositoryHead(d)]).toEqual([name, okAt(h)]);
+    }
+    // a gitfile root is decided by the printed --show-toplevel alone (its git dir is elsewhere), so a trimmed path would refuse it
+    for (const [i, name] of ["gf trailing ", "gf trailing\t"].entries()) {
+      const d = path.join(tmp, "names-gf", name); fs.mkdirSync(path.dirname(d), {recursive: true}); git(tmp, ["init", "-q", "-b", "main", `--separate-git-dir=${path.join(tmp, `names-gd-${i}`)}`, d]);
+      const h = commitIn(d);
+      expect([name, repositoryHead(d)]).toEqual([name, okAt(h)]);
+    }
+  });
+
+  it("withEnv restores the process environment EXACTLY (a changed value, a deleted GIT_* and a re-spelled planting included) and refuses an async fn", () => {
+    const before = JSON.stringify(Object.entries(process.env).sort());
+    const seen = withEnv({GIT_CONFIG_COUNT: "9", git_ssl_cainfo: "evil", Git_Config_Count: "7", PATH: "/nonexistent"}, () => { delete process.env.GIT_TERMINAL_PROMPT; return Object.keys(process.env).length; });
+    expect(seen).toBeGreaterThan(0);
+    expect(JSON.stringify(Object.entries(process.env).sort())).toBe(before);
+    expect(() => withEnv({X_ASYNC: "1"}, async () => 1)).toThrow(/synchronous/);
+    expect(process.env.X_ASYNC).toBeUndefined();
+    expect(JSON.stringify(Object.entries(process.env).sort())).toBe(before);
+  });
+
+  const SENTINELS = ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_COMMON_DIR", "GIT_NAMESPACE", "GIT_PREFIX", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0", "GIT_NO_LAZY_FETCH", "git_dir"];
+  it("host GIT_* variables decide nothing: planted in process.env (any case; including GIT_CEILING_DIRECTORIES covering everything) they give the same answer as a clean env, for every key shape", () => {
+    const decoy = mkd(tmp, "decoy"), decoyHead = initRepo(decoy, true)!;
+    const decoyDir = path.join(decoy, ".git");
+    const value = (k: string) => /DIR$|OBJECT|NAMESPACE|PREFIX|COMMON/.test(k.toUpperCase()) ? decoyDir : /WORK_TREE/.test(k) ? decoy : /INDEX/.test(k) ? path.join(tmp, "nope.idx") : /PARAMETERS/.test(k) ? "'core.bare=true'" : /COUNT/.test(k) ? "1" : /KEY/.test(k) ? "core.bare" : /VALUE/.test(k) ? "true" : "0";
+    // //TR: Her GIT_* adı tek tek burada denenmez (Windows'ta her git süreci pahalı); ad ad kapsama aşağıdaki kayıt eden git shim testindedir (POSIX). Burada davranışı en çok değiştiren dört ortam ve dört şekil denenir.
+    const planted: Array<[string, Record<string, string>]> = [["GIT_DIR", {GIT_DIR: decoyDir}], ["GIT_DIR + GIT_WORK_TREE", {GIT_DIR: decoyDir, GIT_WORK_TREE: decoy}], ["mixed-case Git_Dir (the same variable as GIT_DIR on Windows)", {Git_Dir: decoyDir}], ["mixed-case Git_Dir + Git_Work_Tree", {Git_Dir: decoyDir, Git_Work_Tree: decoy}], ["GIT_CEILING_DIRECTORIES covering everything", {GIT_CEILING_DIRECTORIES: tmp}], ["all of them", {...Object.fromEntries(SENTINELS.map(k => [k, value(k)])), GIT_CEILING_DIRECTORIES: tmp}]];
+    const shapes = builders.filter(([label]) => /^(repo root with a commit|PLAIN SUBDIRECTORY|bare repository with commits|a subdirectory of a repository whose config claims)/.test(label)).map(([label, build]) => ({label, ...build()}));
+    expect(shapes.length).toBe(4);
+    for (const {label, dir, want} of shapes) for (const [name, vars] of planted) expect([label, name, withEnv(vars, () => repositoryHead(dir))]).toEqual([label, name, want]);
+    expect(watchedEnv()).toEqual(envBefore); // nothing planted is left behind: names AND values, exact spelling
+    const root = shapes[0];
+    expect(root.want.ok && root.want.baseSha !== decoyHead).toBe(true); // a repository with its own HEAD must never report the decoy's HEAD
+    expect(withEnv({GIT_DIR: decoyDir}, () => repositoryHead(mkd(tmp, "plain-with-git-dir")))).toEqual(insideAnyRepo(tmp) ? NOT_ROOT : UNRESOLVED); // a planted GIT_DIR cannot make a non-repository look like the decoy
+    expect(watchedEnv()).toEqual(envBefore);
+  });
+
+  it.skipIf(!POSIX)("every git probe runs with a scrubbed environment and the fixed safety flags: a recording git shim sees no GIT_* except the isolation's own and the ceiling (physical parent of src on the deciding probes, absent on the classification probe), always protocol.allow=never, only allow-listed variables (a secret-looking variable and SUDO_UID never reach git)", () => {
+    const d = mkd(tmp, "shim-root"); initRepo(d, true); const sub = mkd(d, "pkg");
+    const bin = mkd(tmp, "shim-bin"), log = path.join(tmp, "shim.log"), real = String(cp.spawnSync("sh", ["-c", "command -v git"], {encoding: "utf8"}).stdout).trim();
+    fs.writeFileSync(path.join(bin, "git"), `#!/bin/sh\n{ echo "ARGV $*"; env | sort | sed 's/^/ENV /'; echo END; } >> "${log}"\nexec "${real}" "$@"\n`, {mode: 0o755});
+    const run = (dir: string) => { fs.writeFileSync(log, ""); return withEnv({PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}`, GIT_DIR: path.join(d, "nope"), git_dir: path.join(d, "nope"), GIT_WORK_TREE: tmp, UASCO_SHIM_PASS: "yes", UASCO_FAKE_API_KEY: "sekret-value", SUDO_UID: "0"}, () => ({result: repositoryHead(dir), calls: fs.readFileSync(log, "utf8").split("END\n").filter(Boolean).map(c => ({argv: /ARGV (.*)/.exec(c)![1], env: Object.fromEntries(c.split("\n").filter(l => l.startsWith("ENV ")).map(l => l.slice(4)).map(l => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]))}))})); };
+    for (const [dir, expected, deciding] of [[d, okAt(headOf(d)), ["rev-parse --show-toplevel", "rev-parse HEAD HEAD^{commit}"]], [sub, NOT_ROOT, ["rev-parse --absolute-git-dir", "rev-parse --is-bare-repository", "rev-parse --git-dir"]]] as const) {
+      const {result, calls} = run(dir);
+      expect(result).toEqual(expected);
+      expect(calls.length).toBeGreaterThanOrEqual(deciding.length);
+      for (const c of calls) {
+        expect(c.argv).toContain("protocol.allow=never");
+        const gitVars = Object.keys(c.env).filter(k => /^git_/i.test(k)).sort();
+        expect(gitVars.filter(k => !["GIT_CEILING_DIRECTORIES", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM", "GIT_CONFIG_SYSTEM", "GIT_NO_LAZY_FETCH", "GIT_TERMINAL_PROMPT"].includes(k))).toEqual([]);
+        expect(c.env.GIT_NO_LAZY_FETCH).toBe("1");
+        expect(c.env.UASCO_SHIM_PASS).toBeUndefined(); // only the fixed allow-list reaches git: unrelated variables and secrets never do
+        expect(JSON.stringify(c.env)).not.toContain("sekret-value");
+        expect(c.env.PATH).toContain(bin); // the allow-listed PATH does (it is how the shim is found)
+        expect(c.env.SUDO_UID).toBeUndefined();
+        const classification = c.argv.endsWith("rev-parse --git-dir");
+        if (classification) expect(c.env.GIT_CEILING_DIRECTORIES).toBeUndefined(); else expect(c.env.GIT_CEILING_DIRECTORIES).toBe(path.dirname(dir));
+      }
+      for (const want of deciding) expect(calls.some(c => c.argv.endsWith(want))).toBe(true);
+    }
+  });
+
+  it.skipIf(!POSIX)("a repository that cannot be read promptly is refused within the total time budget, not forever: a FIFO as .git/HEAD blocks every probe; the budget is shared by all probes (not per probe)", () => {
+    const d = mkd(tmp, "fifo"); initRepo(d, true);
+    fs.rmSync(path.join(d, ".git", "HEAD")); expect(cp.spawnSync("mkfifo", [path.join(d, ".git", "HEAD")]).status).toBe(0);
+    const t0 = Date.now(), r = repositoryHead(d, {timeoutMs: 800}), elapsed = Date.now() - t0;
+    expect(r).toEqual(UNRESOLVED);
+    expect(elapsed).toBeGreaterThanOrEqual(700); // premise: git really blocked on the FIFO
+    expect(elapsed).toBeLessThan(2400); // one shared budget: several probes would each have blocked for the full 800 ms
+  });
+
+  it.skipIf(!POSIX)("a hostile repository config cannot make the probe run a host command or reach the network: a partial clone whose HEAD commit is missing would lazy-fetch over ssh and run core.sshCommand; the probe refuses instead and the marker is never written", () => {
+    const d = mkd(tmp, "promisor"), h = initRepo(d, true)!, marker = path.join(tmp, "ssh-ran.marker"), script = path.join(tmp, "evil-ssh.sh");
+    fs.writeFileSync(script, `#!/bin/sh\ntouch "${marker}"\nexit 1\n`, {mode: 0o755});
+    for (const [k, v] of [["core.repositoryformatversion", "1"], ["extensions.partialclone", "origin"], ["remote.origin.url", "ssh://example.invalid/r.git"], ["remote.origin.promisor", "true"], ["core.sshCommand", script]]) git(d, ["config", k, v]);
+    fs.rmSync(path.join(d, ".git", "objects", h.slice(0, 2), h.slice(2)), {force: true});
+    spawnGitSync(d, ["rev-parse", "--verify", "HEAD^{commit}"]); // premise: plain git DOES run the hostile command here
+    expect(fs.existsSync(marker)).toBe(true);
+    fs.rmSync(marker);
+    const packs = () => fs.readdirSync(path.join(d, ".git", "objects"), {recursive: true}).map(String).sort();
+    const before = packs();
+    expect(repositoryHead(d)).toEqual(UNRESOLVED);
+    expect(fs.existsSync(marker)).toBe(false);
+    expect(packs()).toEqual(before); // read-only: no lazy fetch wrote anything into the repository
+  });
+
+  it("the runner blocks with the function's reason BEFORE any clone or executor: a plain subdirectory of a repo is REPOSITORY_NOT_WORKTREE_ROOT (no WORKSPACE evidence, no baseSha, implementer never called), not a misleading WORKSPACE_CLONE_FAILED, also through a dot-dot spelling and for a tag-object HEAD; a usable root still runs to AWAITING_APPROVAL with the function's baseSha", { timeout: T }, async () => {
+    const shared = setup("tA"); // one seed repository and one store for every refused case
+    const mkCtx = (repositoryPath: string): {c: Ctx; fake: FakeExecutors} => {
+      const base = shared, dataDir = base.dataDir, store = base.store;
+      const p = store.createProject({tenantId: "tA", orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL", testCommand: ["node", "test.mjs"], repository: {path: repositoryPath}});
+      const m = store.createMission({tenantId: "tA", projectId: p.projectId, title: "t", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
+      for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
+      return {c: {...base, store, dataDir, missionId: m.missionId, projectId: p.projectId}, fake: new FakeExecutors(okScript())};
+    };
+    const parent = mkd(tmp, "rp"), sub = mkd(parent, "pkg", "sub"), unborn = mkd(tmp, "ru"), plain = mkd(tmp, "rplain"), tagobj = mkd(tmp, "rtag");
+    initRepo(parent, true); initRepo(unborn, false); fs.writeFileSync(path.join(sub, "x.txt"), "x\n");
+    initRepo(tagobj, true); git(tagobj, [...ID, "tag", "-a", "-m", "t", "t1"]); fs.writeFileSync(path.join(tagobj, ".git", "HEAD"), `${git(tagobj, ["rev-parse", "t1"])}\n`);
+    const claimParent = mkd(tmp, "rclaim"); initRepo(claimParent, true); const claimChild = mkd(claimParent, "child"); git(claimParent, ["config", "core.worktree", claimChild]);
+    const cases: Array<[string, string, string]> = [
+      ["plain subdirectory of a repo", sub, "REPOSITORY_NOT_WORKTREE_ROOT"], ["plain subdirectory spelled with dot-dot", `${sub}${path.sep}x${path.sep}..`, "REPOSITORY_NOT_WORKTREE_ROOT"], ["the .git directory", path.join(parent, ".git"), "REPOSITORY_NOT_WORKTREE_ROOT"],
+      ["ancestor that claims the child as its work tree", `${claimChild}${path.sep}x${path.sep}..`, "REPOSITORY_NOT_WORKTREE_ROOT"],
+      ["unborn repository", unborn, "REPOSITORY_HEAD_UNRESOLVED"], ["tag object in HEAD", tagobj, "REPOSITORY_HEAD_UNRESOLVED"], ["plain directory", plain, insideAnyRepo(plain) ? "REPOSITORY_NOT_WORKTREE_ROOT" : "REPOSITORY_HEAD_UNRESOLVED"]
+    ];
+    for (const [label, repo, reason] of cases) {
+      const {c, fake} = mkCtx(repo);
+      const pre = repoPrecondition(c.store.getProject({tenantId: "tA"}, c.projectId)!, c.dataDir);
+      expect([label, pre.ok && (repositoryHead(pre.src) as {reason?: string}).reason]).toEqual([label, reason]);
+      const r = start(c, fake);
+      await runner(c, fake).tick();
+      const run = runOf(c, r.runId);
+      expect([label, run.status, run.reason, fake.calls.implement, run.baseSha ?? null]).toEqual([label, "BLOCKED", reason, 0, null]);
+      expect([label, run.evidence.filter(e => e.kind === "WORKSPACE").length]).toEqual([label, 0]);
+    }
+    const ok = setup("tA"), okFake = new FakeExecutors(okScript());
+    const okPre = repoPrecondition(ok.store.getProject({tenantId: "tA"}, ok.projectId)!, ok.dataDir);
+    expect(okPre.ok && repositoryHead(okPre.src)).toEqual(okAt(ok.head));
+    const okRun = start(ok, okFake);
+    await runner(ok, okFake).tick();
+    expect(runOf(ok, okRun.runId)).toMatchObject({status: "AWAITING_APPROVAL", baseSha: ok.head});
+  });
+});
 
 describe("B3a run state table", () => {
   it("is an explicit allow-list: terminal states have no exits and illegal jumps are refused", () => {
@@ -456,6 +736,168 @@ describe("B3a mission runner engine", () => {
     expect(lc.pair?.kind).toBe("LOCAL_CLAUDE");
     expect(lc.pair?.implementer.identity).toBe("CLAUDE_BUILDER");
     expect(lc.pair?.reviewer.identity).toBe("CLAUDE_REVIEWER");
+  });
+});
+
+describe("LANE-C MissionRunner claim cap (maxConcurrentRuns)", () => {
+  const addMission = (c: Ctx, i: number) => {
+    const m = c.store.createMission({tenantId: "tA", projectId: c.projectId, title: `Add feature ${i}`, objective: "feature.txt must say ok", acceptanceCriteria: ["tests pass"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
+    for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) c.store.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
+    return m.missionId;
+  };
+  const queueRuns = (c: Ctx, pair: ExecutorPair, n: number) => [c.missionId, ...Array.from({length: n - 1}, (_, i) => addMission(c, i + 1))]
+    .map(missionId => c.store.createRun({tenantId: "tA", missionId, executor: {implementer: pair.implementer.identity, reviewer: pair.reviewer.identity}, createdBy: "FOUNDER_LOCAL"}));
+  // implementer sarmalayıcı: aynı anda içerideki çağrı sayısını izler; barrier>0 ise o kadar çağrı birlikte içeri girene kadar bekler (deterministik eşzamanlılık kanıtı, süre tahmini yok).
+  function tracked(pair: ExecutorPair, barrier = 0) {
+    const st = {active: 0, maxActive: 0, arrived: 0, barrierTimedOut: false}; let release!: () => void; const gate = new Promise<void>(r => { release = r; });
+    const implement = async (w: string, spec: MissionSpec, ctx: {timeoutMs: number; shouldAbort?: () => boolean}) => {
+      st.active += 1; st.maxActive = Math.max(st.maxActive, st.active); st.arrived += 1;
+      if (barrier > 0) { if (st.arrived >= barrier) release(); await Promise.race([gate, new Promise<void>(r => setTimeout(() => { st.barrierTimedOut = true; r(); }, 20_000))]); }
+      try { return await pair.implementer.implement(w, spec, ctx); } finally { st.active -= 1; }
+    };
+    return {st, pair: {...pair, implementer: {...pair.implementer, implement}} as ExecutorPair};
+  }
+
+  // //TR: Sanal saatli testlerde HİÇBİR bekleme sınırsız değildir: sanal saat donukken zamana bağlı bir yola (RETRY_SCHEDULED/retryAt, lease devri) girilirse tick ilerlemez. Sınır (gerçek süre) aşılırsa test, run durumu / adım / retryAt / leaseExpiresAt / sanal saat ile saniyeler içinde YÜKSEK SESLE düşer (600 s'lik adım zaman aşımı olarak değil); sınır gevşetilmez, test atlanmaz.
+  const runDiag = (c: Ctx, ids: string[], extra: Record<string, unknown> = {}) => JSON.stringify({...extra, runs: ids.map(id => { const r = c.store.engineGetRun(id); return r ? {id: id.slice(0, 12), status: r.status, step: r.step, retryCount: r.retryCount, retryAt: r.retryAt, leaseExpiresAt: r.leaseExpiresAt, hasLease: r.leaseId !== null, attempt: r.attempt} : null; })});
+  const boundedTick = async (mr: MissionRunner, c: Ctx, ids: string[], label: string, ctx: () => Record<string, unknown>, ms = 30_000) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`BOUNDED_TICK_TIMEOUT ${label}: no result after ${ms} ms of real time (virtual clock frozen?) ${runDiag(c, ids, ctx())}`)), ms); });
+    try { return await Promise.race([mr.tick(), timeout]); } finally { clearTimeout(timer); }
+  };
+  // run geçişlerini kaydeder: sanal saat donukken RETRY_SCHEDULED'a girilmemeli (girilirse retryAt sanal saatle geçmez).
+  const watchTransitions = (c: Ctx) => { const seen: string[] = [], orig = c.store.transitionRun.bind(c.store); c.store.transitionRun = (...a: Parameters<typeof orig>) => { seen.push(String(a[2])); return orig(...a); }; return seen; };
+
+  // //TR: Deterministik: lease süresi SANAL saate bağlıdır (store ve runner aynı saati kullanır); gerçek süre, yavaş senkron git adımları veya yüklü runner sonucu değiştirmez. r1'in "TTL'den uzun" çalışması, implementer içinde sanal saatin TTL'den küçük adımlarla ilerletilmesi ve lease'in her adımda RUNNER'IN KENDİ heartbeat'i (executeStep içindeki setInterval) tarafından yenilenmesi beklenerek kurulur (sınırlı gerçek bekleme; sanal zaman bekleme sırasında donuktur, yani bekleme lease'i yarıştıramaz). Test lease'i KENDİSİ yenilemez: heartbeat bozulursa test düşer.
+  it("default cap 1: a queued second run gets NO lease while the first runs longer than the lease TTL (virtual clock), so it is never fenced or recovered; the next tick claims it", { timeout: T }, async () => {
+    const TTL = 1000, clock = {ms: Date.UTC(2026, 9, 22, 12, 0, 0)};
+    const c = setup("tA", {virtualClock: clock}); const fake = new FakeExecutors(okScript()); const pair = fake.pair();
+    const [r1, r2] = queueRuns(c, pair, 2);
+    const seen: Array<{status: string; leaseId: string | null; attempt: number}> = [];
+    let virtualElapsed = 0, firstCall = true;
+    const hbRenewed: boolean[] = [];
+    let hbFailure = "";
+    const transitions = watchTransitions(c), vctx = () => ({virtualNow: new Date(clock.ms).toISOString(), virtualElapsed, hbRenewed, transitions: transitions.slice(-12)});
+    const longRunning: ExecutorPair = {...pair, implementer: {...pair.implementer, async implement(w, spec, ctx) {
+      if (!firstCall) return pair.implementer.implement(w, spec, ctx); // second tick: r2's own (normal) implementer call
+      firstCall = false;
+      for (let i = 0; i < 4; i++) { // 4 x 900 virtual ms = 3600 > 3 x TTL; after each step the RUNNER's own heartbeat must renew r1's lease (the test never renews it)
+        clock.ms += 900; virtualElapsed += 900;
+        // the clock only moves in this loop and nothing awaits between the increment and `want`, so every renewal after this line (heartbeat or step) writes exactly `want`; the bound only caps the wait (heartbeat period is TTL/3 real ms)
+        const want = new Date(clock.ms + TTL).toISOString(), deadline = Date.now() + 10_000;
+        while (c.store.engineGetRun(r1.runId)!.leaseExpiresAt !== want && Date.now() < deadline) await new Promise(r => setTimeout(r, 10));
+        hbRenewed.push(c.store.engineGetRun(r1.runId)!.leaseExpiresAt === want);
+        if (!hbRenewed[hbRenewed.length - 1]) { hbFailure = `heartbeat did not write ${want} within 10 s: ${runDiag(c, [r1.runId, r2.runId], vctx())}`; break; }
+        const x = runOf(c, r2.runId); seen.push({status: x.status, leaseId: x.leaseId, attempt: x.attempt});
+      }
+      return pair.implementer.implement(w, spec, ctx);
+    }}};
+    const mr = runner(c, fake, {leaseTtlMs: TTL, executors: longRunning, now: () => clock.ms});
+    const t1 = await boundedTick(mr, c, [r1.runId, r2.runId], "cap-1 tick 1", vctx);
+    expect(hbRenewed, hbFailure).toEqual([true, true, true, true]); // the runner's own heartbeat renewed the lease after every 900 virtual ms
+    expect(transitions, runDiag(c, [r1.runId, r2.runId], vctx())).not.toContain("RETRY_SCHEDULED"); // no time-based retry path while the virtual clock is frozen
+    expect(virtualElapsed).toBeGreaterThan(TTL * 3);
+    expect(t1.claimed).toEqual([r1.runId]);
+    expect(t1.deferred).toEqual([r2.runId]);
+    expect(t1.fenced).toEqual([]);
+    expect(t1.recovered).toEqual([]);
+    expect(seen).toEqual(Array(4).fill({status: "QUEUED", leaseId: null, attempt: 0})); // r2 held no lease at any point while r1 outlived the TTL
+    expect(runOf(c, r1.runId).status, runDiag(c, [r1.runId], vctx())).toBe("AWAITING_APPROVAL");
+    expect(runOf(c, r2.runId)).toMatchObject({status: "QUEUED", leaseId: null, attempt: 0});
+    expect(fake.calls.implement).toBe(1);
+    clock.ms += 5 * TTL; // virtual time passes between ticks: nothing of r2 can expire because r2 has no lease
+    const t2 = await boundedTick(mr, c, [r1.runId, r2.runId], "cap-1 tick 2", vctx);
+    expect(t2).toMatchObject({claimed: [r2.runId], deferred: [], fenced: [], recovered: []});
+    expect(runOf(c, r2.runId).status, runDiag(c, [r2.runId], vctx())).toBe("AWAITING_APPROVAL");
+    expect(fake.calls).toEqual({implement: 2, review: 2});
+    expect(transitions, runDiag(c, [r1.runId, r2.runId], vctx())).not.toContain("RETRY_SCHEDULED");
+  });
+
+  // //TR: renew() (adım başında ve uzun senkron işten önce) lease'i uzatır. TTL gerçek heartbeat aralığından (TTL/3 gerçek ms) çok uzun seçilir: heartbeat devreye giremez, lease'i YALNIZ renew() tutar. Her uzun çağrı TTL'nin 0.9'u kadar sanal zaman harcar (toplam 1.8 x TTL): renew() çağrıları olmasaydı lease dolar ve run fence edilirdi.
+  it("renew() keeps the lease alive across long synchronous work: two long calls of 0.9 x TTL each (1.8 x TTL in total, the heartbeat cannot fire) never fence the run (virtual clock)", { timeout: T }, async () => {
+    const TTL = 600_000, clock = {ms: Date.UTC(2026, 9, 22, 12, 0, 0)}, segment = 540_000;
+    const c = setup("tA", {virtualClock: clock}); const fake = new FakeExecutors(okScript()); const pair = fake.pair();
+    const [r1] = queueRuns(c, pair, 1);
+    let advanced = 0;
+    const slow: ExecutorPair = {...pair,
+      implementer: {...pair.implementer, async implement(w, spec, ctx) { clock.ms += segment; advanced += segment; return pair.implementer.implement(w, spec, ctx); }},
+      reviewer: {...pair.reviewer, async review(w, spec, diff, ctx) { clock.ms += segment; advanced += segment; return pair.reviewer.review(w, spec, diff, ctx); }}};
+    const transitions = watchTransitions(c), vctx = () => ({virtualNow: new Date(clock.ms).toISOString(), advanced, transitions: transitions.slice(-12)});
+    const t1 = await boundedTick(runner(c, fake, {leaseTtlMs: TTL, executors: slow, now: () => clock.ms}), c, [r1.runId], "liveness tick", vctx);
+    expect(advanced).toBe(2 * segment);
+    expect(t1, runDiag(c, [r1.runId], vctx())).toMatchObject({claimed: [r1.runId], fenced: [], recovered: []});
+    expect(runOf(c, r1.runId).status, runDiag(c, [r1.runId], vctx())).toBe("AWAITING_APPROVAL");
+    expect(fake.calls).toEqual({implement: 1, review: 1});
+    expect(transitions).not.toContain("RETRY_SCHEDULED");
+  });
+
+  // //TR: Lease, bir renew() çağrısı gelmeden önce dolmuşsa (uzun senkron iş) renew() WORKOS_LEASE_FENCED fırlatır ve paralı implementer çağrısı HİÇ yapılmaz. Sanal saat, IMPLEMENT adımındaki İKİNCİ renewRunLease çağrısında (workspace sıfırlamasından sonra, paralı executor çağrısından hemen önceki renew()) TTL'den fazla ilerletilir; heartbeat (TTL/3 gerçek ms) bu sürede çalışamaz.
+  it("renew() fences an already expired lease before the paid implementer call: the run is reported fenced, the implementer is never called, and the next tick takes the expired lease over and recovers the run to AWAITING_APPROVAL (virtual clock)", { timeout: T }, async () => {
+    const TTL = 600_000, clock = {ms: Date.UTC(2026, 9, 22, 12, 0, 0)};
+    const c = setup("tA", {virtualClock: clock}); const fake = new FakeExecutors(okScript()); const pair = fake.pair();
+    const [r1] = queueRuns(c, pair, 1);
+    const original = c.store.renewRunLease.bind(c.store);
+    let implementRenews = 0, jumped = 0;
+    c.store.renewRunLease = (runId, leaseId, ttlMs, actor) => {
+      // IMPLEMENT's renewals: 1st = step start (drive loop), 2nd = the renew() right after the workspace reset and right before the paid executor call
+      if (c.store.engineGetRun(runId)?.step === "IMPLEMENT" && ++implementRenews === 2) { jumped += 1; clock.ms += TTL + TTL / 2; } // the long synchronous work (git) that happened before this renew()
+      return original(runId, leaseId, ttlMs, actor);
+    };
+    const mr = runner(c, fake, {leaseTtlMs: TTL, executors: pair, now: () => clock.ms});
+    const vctx = () => ({virtualNow: new Date(clock.ms).toISOString(), jumped, implementRenews});
+    const t1 = await boundedTick(mr, c, [r1.runId], "fence tick", vctx);
+    expect(jumped, runDiag(c, [r1.runId], vctx())).toBe(1);
+    expect(t1, runDiag(c, [r1.runId], vctx())).toMatchObject({claimed: [r1.runId], fenced: [r1.runId], recovered: []});
+    expect(fake.calls).toEqual({implement: 0, review: 0}); // fenced BEFORE the paid call
+    // what the next tick sees (runner.ts: a leased, non-terminal run whose lease expiry is <= now is taken over)
+    const left = c.store.engineGetRun(r1.runId)!;
+    expect(left.status).toBe("RUNNING");
+    expect(left.step).toBe("IMPLEMENT");
+    expect(left.leaseId).not.toBeNull();
+    expect(Date.parse(left.leaseExpiresAt ?? "")).toBeLessThanOrEqual(clock.ms);
+    // the recovery path from exactly this state ("fenced right before the paid call"): taken over, workspace re-entered, implementer called ONCE, run reaches AWAITING_APPROVAL
+    const t2 = await boundedTick(mr, c, [r1.runId], "fence recovery tick", vctx);
+    expect(t2.recovered, runDiag(c, [r1.runId], vctx())).toEqual([r1.runId]);
+    expect(runOf(c, r1.runId).status, runDiag(c, [r1.runId], vctx())).toBe("AWAITING_APPROVAL");
+    expect(fake.calls).toEqual({implement: 1, review: 1});
+  });
+
+  it("cap 2: two queued runs really run together (both implementer calls in flight at once); a third waits; cap 1 never overlaps", { timeout: T }, async () => {
+    const c = setup(); const fake = new FakeExecutors(okScript()); const t = tracked(fake.pair(), 2);
+    const runs = queueRuns(c, t.pair, 3);
+    const t1 = await runner(c, fake, {maxConcurrentRuns: 2, executors: t.pair}).tick();
+    expect(t1.claimed).toHaveLength(2);
+    expect(t1.deferred).toEqual([runs[2].runId]);
+    expect(t.st.barrierTimedOut).toBe(false);
+    expect(t.st.maxActive).toBe(2);
+    expect(runs.slice(0, 2).map(r => runOf(c, r.runId).status)).toEqual(["AWAITING_APPROVAL", "AWAITING_APPROVAL"]);
+    expect(runOf(c, runs[2].runId).status).toBe("QUEUED");
+
+    const c1 = setup("tA"); const f1 = new FakeExecutors(okScript()); const t1b = tracked(f1.pair());
+    queueRuns(c1, t1b.pair, 2);
+    const runner1 = runner(c1, f1, {executors: t1b.pair});
+    await runner1.tick(); await runner1.tick();
+    expect(t1b.st.maxActive).toBe(1);
+    expect(f1.calls.implement).toBe(2);
+  });
+
+  it("stale-lease recovery respects the cap as well: with two expired leases and cap 1, one run is taken over and the other is deferred", { timeout: T }, async () => {
+    const clock = {skewMs: 0}; const c = setup("tA", {clock}); const fake = new FakeExecutors(okScript()); const pair = fake.pair();
+    const [r1, r2] = queueRuns(c, pair, 2);
+    const first = await runner(c, fake, {maxConcurrentRuns: 2, maxStepsPerTick: 0}).tick(); // both leased, no step executed
+    expect(first.claimed).toEqual([r1.runId, r2.runId]);
+    expect([runOf(c, r1.runId).status, runOf(c, r2.runId).status]).toEqual(["LEASED", "LEASED"]);
+    clock.skewMs = 3_600_000; // one hour later (store and runner clock): both leases are expired
+    const later = await runner(c, fake, {maxConcurrentRuns: 1, maxStepsPerTick: 0, now: () => Date.now() + clock.skewMs}).tick();
+    expect(later.recovered).toEqual([r1.runId]);
+    expect(later.deferred).toEqual([r2.runId]);
+  });
+
+  it("an invalid cap is a construction error (never silently 1); the default is 1", () => {
+    const c = setup(); const fake = new FakeExecutors(okScript());
+    for (const bad of [0, -1, 1.5, 17, Number.NaN, "2" as unknown as number]) expect(() => runner(c, fake, {maxConcurrentRuns: bad})).toThrow("RUNNER_MAX_CONCURRENT_RUNS_INVALID");
+    expect(() => runner(c, fake)).not.toThrow();
+    expect(() => runner(c, fake, {maxConcurrentRuns: 16})).not.toThrow();
   });
 });
 

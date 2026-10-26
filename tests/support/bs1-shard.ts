@@ -3,7 +3,8 @@ import cp from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-export type Bs1Shard="a"|"b"|"c"|"d"|"e"|"f";
+// //TR: COORD-PROTECTED-BS1D-SPLIT: g kabuğu d'den ayrılan ilk-çalıştırma-hatası (FRF) senaryosunu kendi doğrulama adımında (tests-bs1-g) çalıştırır; kabuk listesi validation.json'daki tests-bs1-<k> adımlarıyla birebir eşleşir.
+export type Bs1Shard="a"|"b"|"c"|"d"|"e"|"f"|"g";
 export const BS1_PARTITION:Record<Bs1Shard,string[][]>={
   // //TR: a kabuğunda boş zaman vardır (gerçek AUT1B senaryosu geçmişsiz CI checkout'ta dürüstçe atlanır); e kabuğunun en ağır gruplarından taşınan üç hafif senaryo (ölçülen ~22+26+41 sn) üçüncü paralel grup olarak burada çalışır. Senaryolar ve PASS koşulu aynıdır.
   a: [
@@ -25,9 +26,9 @@ export const BS1_PARTITION:Record<Bs1Shard,string[][]>={
      "bootstrap-refuses-unsafe-or-unverifiable-inputs-without-activating-anything"],
     ["entry-stops-the-old-tick-only-at-a-safe-point-or-at-once-in-the-release-lane"]
   ],
+  // //TR: d kabuğunda yalnız kayıt/geri-alma (REG) grubu kalır; ilk-çalıştırma-hatası (FRF) grubu Windows CI'da d adımının %71-83'ünü tuttuğu ve adım 600 sn sınırında öldürüldüğü için (2026-10-22: 3 zaman aşımı) g kabuğuna taşınmıştır. Senaryo, PASS koşulu ve 600 sn sınırı aynıdır.
   d: [
-    ["bootstrap-task-registration-succeeds-or-rolls-back-without-a-runnable-task"],
-    ["bootstrap-task-first-run-failure-stops-and-rolls-back-the-task"]
+    ["bootstrap-task-registration-succeeds-or-rolls-back-without-a-runnable-task"]
   ],
   // //TR: e kabuğu (7 senaryo) Windows CI ölçümüne göre dört paralel gruba bölünür: en ağır iki senaryo (entry-heals ~229 sn, kills-a-hung ~220 sn) tek başına bir grupta çalışır; hafif üç senaryo a kabuğuna taşınmıştır. Adım süresi en ağır grup + şablon kurulumu kadardır; checkBs1Partition her senaryonun tam bir kez atandığını doğrular.
   e: [
@@ -42,6 +43,10 @@ export const BS1_PARTITION:Record<Bs1Shard,string[][]>={
   f: [
     ["entry-generation-2-liveness-heartbeat-work-conserving-loop-dead-lease-and-single-instance"],
     ["bootstrap-task-upgrade-and-watchdog-rollback-never-re-enable-a-rolled-back-task"]
+  ],
+  // //TR: g kabuğu yalnız FRF senaryosunu çalıştırır (d'den taşındı; başka hiçbir senaryoyla aynı adımı paylaşmaz, böylece REG grubunun eşzamanlı yükü bu adıma binmez). checkBs1Partition senaryonun tam bir kez atandığını doğrular.
+  g: [
+    ["bootstrap-task-first-run-failure-stops-and-rolls-back-the-task"]
   ],
 };
 export const BS1_REAL_AUT1B_SCENARIO="entry-runs-the-tick-loop-timeout-cleanup-and-governed-upgrade-on-the-real-aut1b-plane";

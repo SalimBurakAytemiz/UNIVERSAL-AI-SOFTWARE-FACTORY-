@@ -1,7 +1,7 @@
 {
   "//TR": "Bu dosya UASCO Local Windows Test Worker test planıdır: config/validation.json içindeki HER canonical adım sırasıyla bir kez listelenir (sessiz kapsam azaltma yok). LOCAL_PRIMARY = ölçülen Windows süresi en az 60 sn olan ağır test adımları (yerelde Windows Sandbox içinde koşar); CLOUD_SMOKE = kısa adımlar (GitHub-hosted runner'larda kalır). Faz SHADOW: yerel sonuç yalnız danışma niteliğindedir; zorunlu GitHub kontrolleri değişmez ve her adımın yedeği GITHUB_HOSTED_WINDOWS'tur.",
   "schema": "uasco.local-test-plan/1",
-  "version": "2026-10-22.1",
+  "version": "2026-10-22.2",
   "phase": "SHADOW",
   "replacesRequiredCheck": false,
   "requiredChecksUnchanged": [
@@ -39,6 +39,7 @@
       ],
       "linuxJob": 290
     },
+    "bs1Split": "COORD-PROTECTED-BS1D-SPLIT: tests-bs1-d and tests-bs1-g are derived from the BS1_TIMING lines of the former tests-bs1-d in run 39362844293 (337.4 s step = template 28.2 s + group 2 306.4 s + 2.8 s step overhead; group 1 215.0 s ran in parallel): tests-bs1-d = template + group 1 (REG) + overhead = 246.0 s; tests-bs1-g = template + group 2 (FRF) + overhead = 337.4 s, an upper bound because it was measured while REG ran concurrently. Not yet measured as separate steps.",
     "localHost": "NOT_MEASURED: run node scripts/local-worker/probe.mjs on the Founder PC."
   },
   "steps": [
@@ -309,7 +310,7 @@
     {
       "id": "tests-bs1-d",
       "windows": "LOCAL_PRIMARY",
-      "measuredWindowsSec": 337.4,
+      "measuredWindowsSec": 246.0,
       "fallback": "GITHUB_HOSTED_WINDOWS"
     },
     {
@@ -322,6 +323,12 @@
       "id": "tests-bs1-f",
       "windows": "LOCAL_PRIMARY",
       "measuredWindowsSec": 231.4,
+      "fallback": "GITHUB_HOSTED_WINDOWS"
+    },
+    {
+      "id": "tests-bs1-g",
+      "windows": "LOCAL_PRIMARY",
+      "measuredWindowsSec": 337.4,
       "fallback": "GITHUB_HOSTED_WINDOWS"
     },
     {

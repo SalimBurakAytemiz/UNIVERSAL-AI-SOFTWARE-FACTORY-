@@ -26,6 +26,8 @@ export interface DevRunState {
   ownerStartTime?: string | null;
   startedAt: string | null; endedAt: string | null; exitCode: number | null; signal: string | null; port: number | null; argv: string[]; headSha: string | null;
   preview: DevRunPreview; recovery?: DevRunRecovery;
+  // B-DEVRUN-RESTART-SAFE: durdurma isteği çıkışı süre içinde göremedi; süreç ağacı hâlâ canlı olabilir. Çıkış gelince onExit bunu siler.
+  stopTimedOut?: true;
   // PS1A-C2-F2: süreç çıkışından sonra kalan süreç ağacı temizliği (Windows: ppid yürüyüşü + periyodik soy anlık görüntüsü; Linux: süreç grubu + kaydedilmiş soy (setsid'li torunlar dahil) ppid yürüyüşü; diğer POSIX: yalnız süreç grubu).
   treeCleanup?: {at: string; method: "PPID_WALK" | "PROCESS_GROUP" | "PROCESS_GROUP_PPID_WALK" | "UNAVAILABLE"; killed: number; survivors: number};
 }
@@ -37,6 +39,8 @@ export interface DevRunOptions {
   // Test enjeksiyonu: boş loopback port seçimi (varsayılan freeLoopbackPort); PS1A-C1-F2 yarışını deterministik kurmak için kullanılır.
   freePort?: () => Promise<number>;
   logRingBytes?: number; logTailBytes?: number; startWaitMs?: number; graceMs?: number; probeIntervalMs?: number; stopPollMs?: number;
+  // B-DEVRUN-RESTART-SAFE: stop() çıkışı en çok bu kadar bekler (varsayılan 15 sn); dolarsa süreç ağacı hâlâ canlı olabilir, çalıştırma STOPPED sayılmaz.
+  stopWaitMs?: number;
   // PS1A-C2-F2: Windows'ta çalışırken soy süreçlerin (pid + oluşturma zamanı) anlık görüntü aralığı; 0 kapatır.
   treeSnapshotMs?: number;
   // SBX-GATE: dev komutu proje kodudur; yalnız bu kapının izin verdiği doğrulanmış sandbox sağlayıcısında başlatılır. Tanımsız = sağlayıcı yok = 409 SANDBOX_UNAVAILABLE (süreç başlatılmaz).
@@ -189,7 +193,7 @@ export class DevRunManager {
   readonly recoveries: Array<{projectId: string} & DevRunRecovery> = [];
 
   constructor(opts: DevRunOptions) {
-    this.o = {audit: () => undefined, startTimeOf: processStartTime, freePort: freeLoopbackPort, logRingBytes: 256 * 1024, logTailBytes: 16 * 1024, startWaitMs: 15_000, graceMs: 1_000, probeIntervalMs: 500, stopPollMs: 500, treeSnapshotMs: 2_000, ...Object.fromEntries(Object.entries(opts).filter(([, v]) => v !== undefined))} as unknown as DevRunManager["o"];
+    this.o = {audit: () => undefined, startTimeOf: processStartTime, freePort: freeLoopbackPort, logRingBytes: 256 * 1024, logTailBytes: 16 * 1024, startWaitMs: 15_000, graceMs: 1_000, probeIntervalMs: 500, stopPollMs: 500, stopWaitMs: 15_000, treeSnapshotMs: 2_000, ...Object.fromEntries(Object.entries(opts).filter(([, v]) => v !== undefined))} as unknown as DevRunManager["o"];
     // SBX-GATE: yalnız gerçek bir ExecutionGate örneği kabul edilir; başka her değer sağlayıcısız kapıdır (fail-closed).
     if (!(this.o.executionGate instanceof ExecutionGate)) this.o.executionGate = new ExecutionGate(null);
   }
@@ -348,7 +352,7 @@ export class DevRunManager {
       st.pidStartTime = await this.o.startTimeOf(child.pid);
       // Spawn'dan sonraki await sırasında durdurma geldiyse: stop() çocuğu sonlandırır (a.child atanmıştır); bant dışı GLOBAL_STOP burada da uygulanır.
       if (aborted()) {
-        if (!a.stopping && this.active.get(id) === a) await this.stop(id, "GLOBAL_STOP_ACTIVE");
+        if (!a.stopping && this.active.get(id) === a) await this.stopDetailed(id, "GLOBAL_STOP_ACTIVE");
         else await Promise.race([a.exited, sleep(15_000)]);
         if (this.stopActive()) throw new StudioError("GLOBAL_STOP_ACTIVE", 423);
         return this.view(project);
@@ -473,6 +477,7 @@ export class DevRunManager {
   private onExit(a: Active, code: number | null, signal: NodeJS.Signals | null, reason?: string): void {
     const st = a.state;
     st.endedAt = new Date().toISOString(); st.exitCode = code; st.signal = signal ?? null;
+    delete st.stopTimedOut;
     st.status = a.stopping ? "STOPPED" : "CRASHED";
     st.reason = a.stopping ? (st.reason ?? "STOP_REQUESTED") : (reason ?? `PROCESS_EXITED${code !== null ? `:${code}` : signal ? `:${signal}` : ""}`);
     st.preview = {url: null, state: "UNAVAILABLE", lastProbeAt: st.preview.lastProbeAt, reason: "NOT_RUNNING"};
@@ -482,20 +487,34 @@ export class DevRunManager {
     this.o.audit(a.stopping ? "DEVRUN_STOPPED" : "DEVRUN_CRASHED", {projectId: st.projectId, exitCode: code, signal: signal ?? null, reason: st.reason});
   }
 
-  async stop(projectId: string, reason = "STOP_REQUESTED"): Promise<boolean> {
+  // Durdurma sonucu: NOT_ACTIVE (çalışan yok), STOPPED (çıkış görüldü), TIMEOUT (süre doldu, ağaç hâlâ canlı olabilir: çalıştırma aktif kalır, STOPPED yazılmaz).
+  async stopDetailed(projectId: string, reason = "STOP_REQUESTED"): Promise<"NOT_ACTIVE" | "STOPPED" | "TIMEOUT"> {
     const a = this.active.get(projectId);
-    if (!a) return false;
+    if (!a) return "NOT_ACTIVE";
     a.stopping = true; a.state.reason = reason;
     const running = () => Boolean(a.child?.pid && a.child.exitCode === null && a.child.signalCode === null);
     // POSIX: kök ölünce yetimlerin ppid'si kaybolur; öldürmeden önce soy kaydedilir. Bekleme sonrası kök hâlâ çalışıyorsa öldürülür (toplanmış pid'e sinyal yok). Windows davranışı değişmez.
     if (running() && process.platform !== "win32" && PROCESS_LIST_SUPPORTED) await this.recordTree(a);
     if (running()) killProcessTree(a.child!.pid!);
-    await Promise.race([a.exited, sleep(15_000)]);
+    const exited = await Promise.race([a.exited.then(() => true), sleep(this.o.stopWaitMs).then(() => false)]);
+    if (!exited) {
+      // Süreç ağacının öldüğü doğrulanmadı: STOPPED yazılmaz, çalıştırma aktif kalır (kilit/port/pid sahipliği korunur) ve yeni bir başlatma reddedilir.
+      a.state.stopTimedOut = true;
+      try { this.writeState(a.state); } catch { /* durum yazılamadı */ }
+      this.o.audit("DEVRUN_STOP_TIMEOUT", {projectId, pid: a.state.pid, waitedMs: this.o.stopWaitMs, reason});
+      return "TIMEOUT";
+    }
     if (this.active.get(projectId) === a) { this.onExit(a, a.child?.exitCode ?? null, null); }
-    return true;
+    return "STOPPED";
+  }
+  // Açık durdur çağrısı: zaman aşımında 409 DEVRUN_STOP_TIMEOUT (eski davranış "STOPPED" yalan söylüyordu); başka durumda eski boolean sözleşmesi.
+  async stop(projectId: string, reason = "STOP_REQUESTED"): Promise<boolean> {
+    const r = await this.stopDetailed(projectId, reason);
+    if (r === "TIMEOUT") throw new StudioError("DEVRUN_STOP_TIMEOUT", 409);
+    return r === "STOPPED";
   }
   async restart(project: Project): Promise<DevRunView> { await this.stop(project.projectId, "RESTART_REQUESTED"); return this.start(project); }
-  async stopAll(reason: string): Promise<string[]> { const ids = [...this.active.keys()]; await Promise.all(ids.map(id => this.stop(id, reason))); return ids; }
+  async stopAll(reason: string): Promise<string[]> { const ids = [...this.active.keys()]; await Promise.all(ids.map(id => this.stopDetailed(id, reason))); return ids; }
 
   private stopActive(): string | null { try { const s = globalStopState(this.o.globalStopFile); return s ? String(s.reason ?? "GLOBAL_STOP_ACTIVE") : null; } catch { return "GLOBAL_STOP_STATE_UNSAFE"; } }
   // Bant dışı GLOBAL_STOP (dosya) da izlenir: aktif dev-run varken periyodik kontrol, aktifse hepsi durdurulur.
