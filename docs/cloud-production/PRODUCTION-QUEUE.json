@@ -1791,8 +1791,8 @@
   },
   "integrationBoard": {
     "//TR": "Koordinatör entegrasyon panosu: her açık PR için gerçek engel ve bekleyen sorumlu. Ortak kök neden (base dependency gate) PR'a özgü hatalardan ayrı tutulur; #221/#225 birleşmeden tekrar CI tetiklenmez.",
-    "at": "2026-10-26T11:40:00Z",
-    "base": "335aead (v7/integration, after #236 and #235)",
+    "at": "2026-10-26T12:55:00Z",
+    "base": "95056c4 (v7/integration, after #240)",
     "sharedRootCause": {
       "id": "NONE_ACTIVE",
       "previous": "BASE_DEPENDENCY_GATE resolved by #225 (e2323d9)",
@@ -1830,23 +1830,37 @@
       {
         "pr": "231",
         "kind": "FOUNDER-TIER sandbox",
-        "state": "DRAFT @ad2fc4b (CI 5/5 green incl. Windows)",
-        "blocker": "3 reviews done (wbeqjgq2e, wy0uyd5qv, wlq9ddafp): consolidated fix list to Lane B (M1 start() takeover leak, M2 TOCTOU liveness, M3 one teardown per project, M4 orphan test, M5 D2 startedAt; S1 bare-name wsl.exe fallback, S2 distro binding, S3-S5, test/lifecycle LOWs); merge = Founder decision (R2) after real-WSL acceptance",
+        "state": "DRAFT @ae688dd (b417e6b fixes + S2d pin + base merge 335aead)",
+        "blocker": "delta review w49vvdnhq on b417e6b; CI had not run while the PR was conflicted (now merged base); merge = Founder decision (R2) after real-WSL acceptance",
         "owner": "LANE_B -> FOUNDER"
       },
       {
         "pr": "224",
         "kind": "LANE_C PAR runner",
-        "state": "DRAFT @d77d1e4",
-        "blocker": "round-3 review BLOCKERS (GA-MAXBUF-1 truncated diff with status 0 -> secret-scan bypass; PAR05 bound loosened; 4 LOW) + repair round 1 (Windows HB-1 fenced B, TK-2 crashEngine precondition) -> Lane C one push",
+        "state": "DRAFT @375e0d6 (CI 5/5 green)",
+        "blocker": "delta review BLOCKERS: crashEngine clean-dir retry hides intermittent pre-IMPLEMENT failures (founder retry rule); stopWithin in finally discards STOP_HUNG; undocumented 90->120 s timeouts; HB-1 rescale judged legitimate",
         "owner": "LANE_C"
       },
       {
         "pr": "237",
-        "kind": "LANE_C C-FLOW-ANALYSIS-2 (real Claude CLI content builder)",
-        "state": "DRAFT @fdf43b0",
-        "blocker": "review wb5spggwp running",
+        "kind": "LANE_C C-FLOW-ANALYSIS-2",
+        "state": "DRAFT @fdf43b0 (CI 5/5 green)",
+        "blocker": "review BLOCKER MEDIUM: golden-predev evaluation lacks the <<FILL guard (skeleton echo PASSES for BA/UxSpec) + LOWs; Lane C fixing",
         "owner": "LANE_C"
+      },
+      {
+        "pr": "238",
+        "kind": "LANE_A analysis order",
+        "state": "READY @7a2cae9, SHA-bound auto-merge armed 12:41:43Z",
+        "blocker": "review + 2 deltas clean; waits on Windows CI",
+        "owner": "LANE_A"
+      },
+      {
+        "pr": "239",
+        "kind": "LANE_A journey E2E-2",
+        "state": "DRAFT @8a28663",
+        "blocker": "review NO_BLOCKERS (E2E run here: base PASS 15/NV 2/NE 2, post-4b composition 19/19); Windows shards 1/3 red on pkg-aut2 590 s + b3a:145 120 s (not this diff; base green) -> one full re-run; base-level RCA wsrjuzc46",
+        "owner": "LANE_A"
       }
     ],
     "branchOnlyChains": {
@@ -2030,6 +2044,16 @@
         "review": "process-mode review webfhj7bn BLOCKERS (paid call for ineligible mission; Global Stop pre-gate unpinned) fixed in 3512413; delta w75pak1n1 NO_BLOCKERS (7 independent mutants killed)",
         "pushCi": "pending at 11:40Z (combined with #236 on base)",
         "riskTier": "ROUTINE (control-api routes not yet registered + tests + docs; 0 protected paths)"
+      },
+      {
+        "pr": 240,
+        "merge": "95056c4",
+        "by": "auto-merge (SHA-bound, armed by coordinator on 190e5ce at 12:44:19Z)",
+        "at": "2026-10-26T12:53:14Z",
+        "postMerge": "VERIFIED: parent1 335aead, parent2 = reviewed head 190e5ce, merge-tree 4608680 == merge tree",
+        "review": "process-mode review wf1b50818 NO_BLOCKERS (2 lenses; mutants killed); 3 LOWs to a later Lane B branch",
+        "pushCi": "pending at 12:55Z",
+        "riskTier": "ROUTINE (control-api routes + tests + docs; 0 protected paths)"
       }
     ],
     "wslProvider": {
