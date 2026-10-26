@@ -1238,7 +1238,9 @@ struct io_uring_cqe*c=(struct io_uring_cqe*)(cqp+p.cq_off.cqes);printf("socket-r
       await weak("nested userns allowed", i => ({...i, setup: i.setup.replace('echo 0 > /proc/sys/user/max_user_namespaces 2>/dev/null || true', "true")}), ["PROBE_NESTED_USERNS"]);
       await weak("host network shared", i => ({...i, nsFlags: i.nsFlags.filter(f => f !== "--net")}), ["PROBE_UNIX_PATH_SOCKETS", "PROBE_NET_IFACES"]);
       // root exec kullanıcısı: RLIMIT_NPROC muaf -> fail-closed
-      expect(await make(iso, true).selfTest()).toEqual({ok: false, detail: "PROBE_PROCESS_LIMIT_NOT_ENFORCED"});
+      // Gerçek root yalnız test süreci root iken vardır (non-root koşuda "asRoot" kullanıcı değiştirmez; sınır zaten uygulanır): kanıt root koşuda zorunlu.
+      if (process.getuid?.() === 0) expect(await make(iso, true).selfTest()).toEqual({ok: false, detail: "PROBE_PROCESS_LIMIT_NOT_ENFORCED"});
+      else expect(await make(iso, true).selfTest()).toEqual({ok: true});
       if (dropUid === undefined && process.getuid?.() === 0) return;
       const good = make(iso); const r = await good.selfTest(); expect(r, JSON.stringify(r)).toEqual({ok: true});
       // gerçek koşu: vsock sandbox içinde de engelli, rc geri okunur, temizlik sonrası kalıntı yok
