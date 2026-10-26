@@ -982,19 +982,22 @@ describe("LANE-B Windows acceptance kit (injected fakes)", () => {
       return {code: 1, stdout: Buffer.alloc(0)};
     };
     const prof = (state: string) => ({state, reason: state === "READY" ? undefined : state === "REFUSED" ? "PROFILE_PATH_INSIDE_GIT_WORKTREE" : "CLAUDE_PROFILE_LOGIN_REQUIRED", loginCommand: state === "LOGIN_REQUIRED" ? "$env:CLAUDE_CONFIG_DIR='C:\\x'; claude" : null});
-    let vitestRuns = 0;
+    let vitestRuns = 0; const vitestArgs: any[] = [], said: string[] = [];
     const deps: any = {platform: o.platform ?? "win32", controlRoot: "C:\\data", wsl, now: () => "2026-10-31T10:00:00.000Z", scriptSha256: "s".repeat(64), testSha256: "t".repeat(64),
       git: () => o.git ?? {headSha: "a".repeat(40), dirty: false},
       detectClaudeCli: o.cli === null ? null : () => o.cli ?? {state: "FOUND", path: "C:\\Users\\f\\.local\\bin\\claude.exe"},
       claudeProfileStatus: o.noProfiles ? null : (_r: string, role: string) => prof(o.profiles?.[role] ?? "READY"),
-      runVitest: async () => { vitestRuns++; return o.vitest ?? vitestOk(); }};
-    return {deps, calls, runs: () => vitestRuns};
+      say: (m: string) => said.push(m),
+      runVitest: async (_d: string, vo: any) => { vitestRuns++; vitestArgs.push(vo); return o.vitest ?? vitestOk(); }};
+    return {deps, calls, runs: () => vitestRuns, vitestArgs, said};
   };
-  const vitestOk = (st: Record<string, string> = {}, acc?: any) => ({testResults: [{assertionResults: [
+  const vitestOk = (st: Record<string, string> = {}, acc?: any, acc2?: any) => ({testResults: [{assertionResults: [
     {fullName: "x REAL WSL (win32 + UASCO_WSL_DISTRO): selfTest passes its negative probes and a node test runs inside the sandbox (SKIPPED elsewhere)", status: st.a ?? "passed", failureMessages: []},
     {fullName: "x REAL WSL (win32 + UASCO_WSL_DISTRO): the generated web-node product starts in the sandbox, the bridged", status: st.b ?? "passed", failureMessages: []},
-    {fullName: "x REAL WSL (win32 + UASCO_WSL_DISTRO): idea to running product - intake, plan, fake run", status: st.c ?? "passed", failureMessages: []}]}],
-    acceptResult: acc === undefined ? {row: "IDEA_TO_RUNNING_PRODUCT", steps: ["INTAKE_201", "STOPPED_PORT_CLOSED"], blocked: null, complete: true} : acc});
+    {fullName: "x REAL WSL (win32 + UASCO_WSL_DISTRO): idea to running product - intake, plan, fake run", status: st.c ?? "passed", failureMessages: []},
+    {fullName: "x REAL WSL (win32 + UASCO_WSL_DISTRO): idea to product with REAL Claude (opt-in only", status: st.d ?? "passed", failureMessages: []}]}],
+    acceptResults: {IDEA_TO_RUNNING_PRODUCT: acc === undefined ? {row: "IDEA_TO_RUNNING_PRODUCT", steps: ["INTAKE_201", "STOPPED_PORT_CLOSED"], blocked: null, complete: true} : acc,
+      IDEA_TO_PRODUCT_REAL_CLAUDE: acc2 === undefined ? {row: "IDEA_TO_PRODUCT_REAL_CLAUDE", steps: ["INTAKE_201", "RUN_AWAITING_APPROVAL_REAL_CODE_HEAD_NE_BASE", "STOPPED_PORT_CLOSED"], blocked: null, complete: true} : acc2}});
   const byId = (r: any) => Object.fromEntries(r.checks.map((c: any) => [c.id, c]));
   const load = () => import("../docs/acceptance/windows/founder-acceptance.mjs") as Promise<any>;
 
@@ -1012,7 +1015,7 @@ describe("LANE-B Windows acceptance kit (injected fakes)", () => {
 
   it("all good on Windows: every check PASS, ACCEPTED, bound to the git SHA, evidence hash is reproducible, and only READ-ONLY wsl commands were issued", async () => {
     const k = await load(); const {deps, calls, runs} = mkDeps();
-    const r = await k.runAcceptance({distro: "Ubuntu"}, deps);
+    const r = await k.runAcceptance({distro: "Ubuntu", withClaude: true}, deps);
     expect(r.verdict).toBe("ACCEPTED"); expect(r.fail).toBe(0); expect(r.skip).toBe(0); expect(r.pass).toBe(r.checks.length); expect(r.repo).toEqual({headSha: "a".repeat(40), shaSource: "GIT", dirty: false}); expect(runs()).toBe(1);
     const {evidenceSha256, ...body} = r; expect(evidenceSha256).toBe(crypto.createHash("sha256").update(JSON.stringify(body)).digest("hex"));
     const allowed = [/^--status$/, /^-l -q$/, /^-l -v$/, /^-d Ubuntu --exec \/bin\/cat \/etc\/wsl\.conf$/, /^-d Ubuntu --exec \/bin\/cat \/proc\/sys\/fs\/binfmt_misc\/WSLInterop$/, /^-d Ubuntu --exec \/usr\/bin\/env node --version$/];
@@ -1045,8 +1048,8 @@ describe("LANE-B Windows acceptance kit (injected fakes)", () => {
     const nf = await k.runAcceptance({distro: "Ubuntu"}, mkDeps({vitest: {testResults: []}}).deps); expect(byId(nf).WSL_PRODUCT_BRIDGE).toMatchObject({status: "FAIL", detail: expect.stringContaining("TEST_NOT_FOUND")});
     const fl = await k.runAcceptance({distro: "Ubuntu"}, mkDeps({vitest: vitestOk({b: "failed"})}).deps); expect(byId(fl).WSL_PRODUCT_BRIDGE.status).toBe("FAIL");
     const blocked = mkDeps({distros: "Debian\r\n"}); const rb = await k.runAcceptance({distro: "Ubuntu"}, blocked.deps); expect(byId(rb).WSL_SELFTEST_AND_RUN.detail).toContain("PRECONDITION_FAILED: WSL_DISTRO"); expect(blocked.runs()).toBe(0);
-    const nosha = await k.runAcceptance({distro: "Ubuntu"}, mkDeps({git: {headSha: null, dirty: null}}).deps); expect(nosha.verdict).toBe("NOT_ACCEPTED"); expect(nosha.reasons).toEqual(["HEAD_SHA_UNKNOWN"]); expect(nosha.repo.shaSource).toBe("UNKNOWN");
-    const arg = await k.runAcceptance({distro: "Ubuntu", shaArg: "b".repeat(40)}, mkDeps({git: {headSha: null, dirty: null}}).deps); expect(arg.verdict).toBe("ACCEPTED"); expect(arg.repo).toMatchObject({shaSource: "ARGUMENT", headSha: "b".repeat(40)});
+    const nosha = await k.runAcceptance({distro: "Ubuntu", withClaude: true}, mkDeps({git: {headSha: null, dirty: null}}).deps); expect(nosha.verdict).toBe("NOT_ACCEPTED"); expect(nosha.reasons).toEqual(["HEAD_SHA_UNKNOWN"]); expect(nosha.repo.shaSource).toBe("UNKNOWN");
+    const arg = await k.runAcceptance({distro: "Ubuntu", withClaude: true, shaArg: "b".repeat(40)}, mkDeps({git: {headSha: null, dirty: null}}).deps); expect(arg.verdict).toBe("ACCEPTED"); expect(arg.repo).toMatchObject({shaSource: "ARGUMENT", headSha: "b".repeat(40)});
   });
 
   it("IDEA_TO_RUNNING_PRODUCT row: PASS only with vitest passed AND the result file showing the port closed after stop; BLOCKED:<code> when the chain reported a blocker; no evidence / failure / not run are never PASS", async () => {
@@ -1065,6 +1068,27 @@ describe("LANE-B Windows acceptance kit (injected fakes)", () => {
     expect(rep.verdict).toBe("NOT_ACCEPTED"); expect(rep.reasons).toContain("BLOCKED:IDEA_TO_RUNNING_PRODUCT"); expect(rep.blocked).toBe(1);
     const t = k.renderTable(rep); expect(t).toContain("BLOCKED IDEA_TO_RUNNING_PRODUCT"); expect(t).toContain("BLOCKED:SANDBOX_UNAVAILABLE:SELF_TEST_FAILED"); expect(t).toContain("SKIP and BLOCKED are never PASS");
     const lin = await k.runAcceptance({distro: "Ubuntu"}, mkDeps({platform: "linux"}).deps); expect(byId(lin).IDEA_TO_RUNNING_PRODUCT).toMatchObject({status: "SKIP", detail: expect.stringContaining("NOT_WINDOWS")});
+  });
+
+  it("IDEA_TO_PRODUCT_REAL_CLAUDE row (--with-claude only): no flag = SKIP(OPT_IN_REQUIRED) and nothing is called; flag + failed preconditions = BLOCKED and still no Claude call; flag + all PASS = ONE announcement line and the run; result mapping never PASSes without evidence", async () => {
+    const k = await load(); const CL = "IDEA_TO_PRODUCT_REAL_CLAUDE";
+    const none = mkDeps(); const r0 = await k.runAcceptance({distro: "Ubuntu"}, none.deps);
+    expect(byId(r0)[CL]).toMatchObject({status: "SKIP", detail: expect.stringContaining("OPT_IN_REQUIRED")}); expect(none.vitestArgs).toEqual([{withClaude: false, timeoutMin: k.CLAUDE_TIMEOUT_MIN}]); expect(none.said).toEqual([]); expect(r0.verdict).toBe("NOT_ACCEPTED"); expect(r0.infraVerdict).toBe("INFRA_ACCEPTED"); expect(k.renderTable(r0)).toContain("NOT a statement that real generated code was verified"); expect(r0.reasons).toContain(`SKIP:${CL}`);
+    for (const [cfg, ids] of [[{cli: {state: "NOT_FOUND", path: null, founderAction: null}}, "CLAUDE_CLI"], [{profiles: {reviewer: "LOGIN_REQUIRED"}}, "CLAUDE_PROFILE_REVIEWER"], [{conf: "[interop]\nenabled=true\n"}, "WSL_CONF"], [{node: null}, "WSL_NODE"]] as const) {
+      const d = mkDeps(cfg as any); const r = await k.runAcceptance({distro: "Ubuntu", withClaude: true}, d.deps);
+      expect(byId(r)[CL], ids).toMatchObject({status: "BLOCKED", detail: `BLOCKED:PRECONDITION_FAILED:${ids}`}); expect(d.vitestArgs[0].withClaude).toBe(false); expect(d.said).toEqual([]); expect(r.reasons).toContain(`BLOCKED:${CL}`);
+    }
+    const dist = mkDeps({distros: "Debian\r\n"}); const rb = await k.runAcceptance({distro: "Ubuntu", withClaude: true}, dist.deps); expect(byId(rb)[CL].detail).toContain("BLOCKED:PRECONDITION_FAILED:WSL_DISTRO"); expect(dist.runs()).toBe(0);
+    const ok = mkDeps(); const r1 = await k.runAcceptance({distro: "Ubuntu", withClaude: true}, ok.deps);
+    expect(ok.said).toEqual([k.CLAUDE_ANNOUNCEMENT]); expect(k.CLAUDE_ANNOUNCEMENT).not.toContain("\n"); expect(k.CLAUDE_ANNOUNCEMENT).toContain("ONE real mission"); expect(ok.vitestArgs).toEqual([{withClaude: true, timeoutMin: k.CLAUDE_TIMEOUT_MIN}]);
+    expect(byId(r1)[CL]).toMatchObject({status: "PASS"}); expect(r1.verdict).toBe("ACCEPTED");
+    const go = async (v: any) => byId(await k.runAcceptance({distro: "Ubuntu", withClaude: true}, mkDeps({vitest: v}).deps))[CL];
+    expect(await go(vitestOk({}, undefined, null))).toMatchObject({status: "FAIL", detail: expect.stringContaining("NO_EVIDENCE")});
+    expect(await go(vitestOk({}, undefined, {steps: ["INTAKE_201"], blocked: null, complete: false}))).toMatchObject({status: "FAIL"});
+    expect(await go(vitestOk({d: "skipped"}, undefined, {steps: [], blocked: "implementer:CLAUDE_PROFILE_LOGIN_REQUIRED", complete: false}))).toMatchObject({status: "BLOCKED", detail: "BLOCKED:implementer:CLAUDE_PROFILE_LOGIN_REQUIRED"});
+    expect(await go(vitestOk({d: "failed"}))).toMatchObject({status: "FAIL"}); expect(await go(vitestOk({d: "skipped"}, undefined, null))).toMatchObject({status: "SKIP"});
+    const lin = mkDeps({platform: "linux"}); const rl = await k.runAcceptance({distro: "Ubuntu", withClaude: true}, lin.deps); expect(byId(rl)[CL].status).toBe("SKIP"); expect(lin.runs()).toBe(0);
+    expect(k.parseArgs(["--with-claude"], {}).withClaude).toBe(true); expect(k.parseArgs([], {}).withClaude).toBe(false);
   });
 
   it("table: one line per check, the fix block, and the SKIP-is-never-PASS verdict line; argument parsing is strict", async () => {

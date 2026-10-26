@@ -14,6 +14,7 @@ node docs/acceptance/windows/founder-acceptance.mjs --distro Ubuntu
 - `--distro`: WSL2 dağıtım adı (veya `UASCO_WSL_DISTRO` ortam değişkeni).
 - `--control-root`: uygulamanın veri klasörü (Claude profilleri orada aranır; git deposu içinde olamaz). Kurulu uygulama için bu klasörü verin.
 - `--sha <40 hex>`: yalnız git olmayan kurulu klasörde, derlemenin SHA'sı. Verilmezse kanıt SHA'ya bağlı olmaz ve sonuç KABUL EDİLMEZ olur.
+- `--with-claude`: isteğe bağlı gerçek-kod halkası (tek mission koşusu, kendi Claude profilleriniz; varsayılan kapalı).
 - `--out`: kanıt klasörü (varsayılan `artifacts/runtime/acceptance/`).
 - Önkoşul: Node 24+ ve `npm ci` yapılmış depo (kit hiçbir şey kurmaz).
 
@@ -38,6 +39,7 @@ node docs/acceptance/windows/founder-acceptance.mjs --distro Ubuntu
 - `--distro`: the WSL2 distro name (or the `UASCO_WSL_DISTRO` environment variable).
 - `--control-root`: the app's data folder (Claude profiles are looked up there; it must not be inside a git checkout). Pass it for an installed app.
 - `--sha <40 hex>`: only for an installed folder without git, the build SHA. Without it the evidence is not SHA-bound and the result is NOT_ACCEPTED.
+- `--with-claude`: optional real-code ring (ONE mission run with your own Claude profiles; off by default).
 - `--out`: evidence folder (default `artifacts/runtime/acceptance/`).
 - Requirements: Node 24+ and a checkout with `npm ci` done (the kit installs nothing).
 

@@ -17,7 +17,7 @@
 4. **Ortam değişkeni:** `setx UASCO_WSL_DISTRO Ubuntu`, yeni bir PowerShell açın.
 5. **Yerel Claude CLI** (`.cmd` kısayolu DEĞİL): PowerShell'de `irm https://claude.ai/install.ps1 | iex` (Anthropic'in güncel yönergesini kontrol edin); `claude.exe` yolda olmalı.
 6. **İki profil girişi** (implementer ve reviewer ayrı): uygulamanın/kit'in gösterdiği komutu yeni bir PowerShell'de çalıştırın: `$env:CLAUDE_CONFIG_DIR='<profil klasörü>'; claude`, içeride `/login`, giriş yapın, `/exit`. İki profil için ayrı ayrı.
-7. **Kit:** depo klasöründe (Node 24+, `npm ci` yapılmış): `node docs/acceptance/windows/founder-acceptance.mjs --distro Ubuntu` (kurulu uygulama için ek olarak `--control-root "<uygulama veri klasörü>"`).
+7. **Kit:** depo klasöründe (Node 24+, `npm ci` yapılmış): `node docs/acceptance/windows/founder-acceptance.mjs --distro Ubuntu` (kurulu uygulama için ek olarak `--control-root "<uygulama veri klasörü>"`). Gerçek koddan geçen tam kanıt için komuta `--with-claude` ekleyin (7. adımdaki ön koşullar PASS olmalı; bu, kendi Claude oturumunuzu kullanır).
 8. **Sonuç:** tablodaki her satır PASS / FAIL / SKIP. Hepsi PASS ve SHA biliniyorsa `ACCEPTED`. FAIL satırının altında yapmanız gereken tam komut yazar. SKIP asla PASS değildir. `artifacts/runtime/acceptance/*.json` dosyasını koordinatöre gönderin.
 
 | Satır | FAIL ise |
@@ -29,6 +29,7 @@
 | CLAUDE_PROFILE_* | adım 6 |
 | WSL_SELFTEST_AND_RUN | `selfTest` bir `PROBE_*` / `INTEROP_*` kodu verir; kodu koordinatöre gönderin (ör. `PROBE_PROCESS_LIMIT_NOT_ENFORCED` = root kullanıcı, `PROBE_VSOCK` = seccomp sarmalayıcısı çalışmadı) |
 | WSL_PRODUCT_BRIDGE | ürün başlamadı / köprü 200 vermedi; JSON dosyasını gönderin |
+| IDEA_TO_PRODUCT_REAL_CLAUDE | **Gerçek kod halkası (isteğe bağlı, yalnız `--with-claude` ile)**: kendi oturum açmış Claude profilleriniz (implementer yazar, reviewer inceler) ile TEK mission koşusu; API anahtarı ve yeni abonelik yok; sabit zaman aşımı (25 dk); yalnız geçici bir yönetilen depoyu değiştirir. Bayrak yoksa `SKIP(OPT_IN_REQUIRED)` ve hiçbir çağrı yapılmaz. Ön koşullardan biri FAIL ise `BLOCKED:PRECONDITION_FAILED:<satırlar>` ve yine hiçbir Claude çağrısı yapılmaz. Kit başlamadan önce tek satırda ne çalışacağını yazar. `ACCEPTED` bu satır PASS olmadan verilmez; bayraksız koşuda `INFRA_ACCEPTED` yalnız altyapıyı kanıtlar, gerçek kodu DEĞİL |
 | IDEA_TO_RUNNING_PRODUCT | **FİKİR → ÇALIŞAN ÜRÜN** zinciri (intake → plan → sahte koşu → testler WSL sandbox'ında → teslim → ürünü başlat → `127.0.0.1` HTTP 200 → durdur). `PASS` = zincir sonuna kadar koştu ve port kapandı. `BLOCKED:<kod>` = zincir bir önkoşulda durdu (ör. `SANDBOX_UNAVAILABLE:SELF_TEST_FAILED`, `DEVRUN_SANDBOX_UNAVAILABLE:...`); kodu okuyup ilgili adımı düzeltin, BLOCKED asla PASS değildir. `FAIL` = bir adım yanlış sonuç verdi; JSON'u gönderin |
 
 ## English
@@ -45,7 +46,7 @@
 4. **Environment variable:** `setx UASCO_WSL_DISTRO Ubuntu`, open a new PowerShell.
 5. **Native Claude CLI** (NOT a `.cmd` shim): in PowerShell `irm https://claude.ai/install.ps1 | iex` (check Anthropic's current instructions); `claude.exe` must be on the path.
 6. **Two profile logins** (implementer and reviewer are separate): run the command the app/kit shows in a new PowerShell: `$env:CLAUDE_CONFIG_DIR='<profile folder>'; claude`, type `/login` inside, sign in, `/exit`. Once per profile.
-7. **The kit:** in the repo folder (Node 24+, `npm ci` done): `node docs/acceptance/windows/founder-acceptance.mjs --distro Ubuntu` (for an installed app also `--control-root "<the app's data folder>"`).
+7. **The kit:** in the repo folder (Node 24+, `npm ci` done): `node docs/acceptance/windows/founder-acceptance.mjs --distro Ubuntu` (for an installed app also `--control-root "<the app's data folder>"`). For the proof with real generated code add `--with-claude` (all preconditions must PASS; it uses your own Claude session).
 8. **Result:** every row is PASS / FAIL / SKIP. All PASS with a known SHA gives `ACCEPTED`. Under each FAIL the exact command to run is printed. A SKIP is never a PASS. Send `artifacts/runtime/acceptance/*.json` to the coordinator.
 
 | Row | If FAIL |
@@ -57,4 +58,5 @@
 | CLAUDE_PROFILE_* | step 6 |
 | WSL_SELFTEST_AND_RUN | `selfTest` reports a `PROBE_*` / `INTEROP_*` code; send the code to the coordinator (for example `PROBE_PROCESS_LIMIT_NOT_ENFORCED` = root user, `PROBE_VSOCK` = the seccomp wrapper did not work) |
 | WSL_PRODUCT_BRIDGE | the product did not start / the bridge did not answer 200; send the JSON file |
+| IDEA_TO_PRODUCT_REAL_CLAUDE | **The real-code ring (optional, only with `--with-claude`)**: ONE mission run with your own logged-in Claude profiles (implementer writes, reviewer reviews); no API key, no new subscription; fixed timeout (25 min); it only changes a temporary managed repository. Without the flag it is `SKIP(OPT_IN_REQUIRED)` and nothing is called. If a precondition row FAILs it is `BLOCKED:PRECONDITION_FAILED:<rows>` and still no Claude call is made. The kit prints one line saying what will run before it starts. `ACCEPTED` needs this row to PASS; a run without the flag can only reach `INFRA_ACCEPTED`, which proves the infrastructure, NOT real code |
 | IDEA_TO_RUNNING_PRODUCT | the **IDEA → RUNNING PRODUCT** chain (intake → plan → fake run → tests in the WSL sandbox → delivery → product start → `127.0.0.1` HTTP 200 → stop). `PASS` = the chain ran to the end and the port closed. `BLOCKED:<code>` = the chain stopped at a precondition (for example `SANDBOX_UNAVAILABLE:SELF_TEST_FAILED`, `DEVRUN_SANDBOX_UNAVAILABLE:...`); read the code and fix that step; BLOCKED is never a PASS. `FAIL` = a step returned a wrong result; send the JSON |

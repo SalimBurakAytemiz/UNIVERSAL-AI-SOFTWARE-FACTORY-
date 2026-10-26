@@ -138,7 +138,10 @@ export function sha256File(f) { try { return crypto.createHash("sha256").update(
 export function verdictOf(checks, sha) {
   const fails = checks.filter(c => c.status === FAIL), skips = checks.filter(c => c.status === SKIP), blocks = checks.filter(c => c.status === BLOCKED);
   const reasons = [...fails.map(c => `FAIL:${c.id}`), ...blocks.map(c => `BLOCKED:${c.id}`), ...skips.map(c => `SKIP:${c.id}`), ...(sha ? [] : ["HEAD_SHA_UNKNOWN"])];
-  return {verdict: reasons.length === 0 ? "ACCEPTED" : "NOT_ACCEPTED", reasons, pass: checks.filter(c => c.status === PASS).length, fail: fails.length, skip: skips.length, blocked: blocks.length};
+  // Altyapı kararı: opt-in (gerçek Claude) satırı HARİÇ her şey PASS ise INFRA_ACCEPTED; bu "gerçek kod doğrulandı" DEMEK DEĞİLDİR (o satır ACCEPTED için gerekir).
+  const optInIds = new Set(REAL_TESTS.filter(r => r.optIn).map(r => r.id));
+  const infraBad = checks.filter(c => !optInIds.has(c.id) && c.status !== PASS).length + (sha ? 0 : 1);
+  return {verdict: reasons.length === 0 ? "ACCEPTED" : "NOT_ACCEPTED", infraVerdict: infraBad === 0 ? "INFRA_ACCEPTED" : "NOT_ACCEPTED", reasons, pass: checks.filter(c => c.status === PASS).length, fail: fails.length, skip: skips.length, blocked: blocks.length};
 }
 export function renderTable(report) {
   const w = Math.max(...report.checks.map(c => c.id.length), 8), lines = [];
@@ -147,6 +150,7 @@ export function renderTable(report) {
   const fixes = report.checks.filter(c => c.status === FAIL && c.fix);
   if (fixes.length) { lines.push("", "WHAT TO DO (this kit never changes your settings; run these yourself):"); for (const c of fixes) lines.push(`- ${c.id}:`, ...String(c.fix).split("\n").map(l => "    " + l)); }
   lines.push("", `RESULT: ${report.verdict}  (PASS ${report.pass}, FAIL ${report.fail}, BLOCKED ${report.blocked ?? 0}, SKIP ${report.skip}; SKIP and BLOCKED are never PASS)`);
+  lines.push(`Without the opt-in real-Claude row: ${report.infraVerdict} (this is NOT a statement that real generated code was verified; run with --with-claude for that)`);
   if (report.reasons.length) lines.push(`Not accepted because: ${report.reasons.join(", ")}`);
   return lines.join("\n");
 }
