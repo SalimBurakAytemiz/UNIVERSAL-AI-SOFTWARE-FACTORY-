@@ -1791,143 +1791,111 @@
   },
   "integrationBoard": {
     "//TR": "Koordinatör entegrasyon panosu: her açık PR için gerçek engel ve bekleyen sorumlu. Ortak kök neden (base dependency gate) PR'a özgü hatalardan ayrı tutulur; #221/#225 birleşmeden tekrar CI tetiklenmez.",
-    "at": "2026-10-26T04:36:00Z",
-    "base": "fe08022 (v7/integration)",
+    "at": "2026-10-26T05:15:00Z",
+    "base": "e2323d9 (v7/integration, #225 merged)",
     "sharedRootCause": {
       "id": "BASE_DEPENDENCY_GATE",
       "detail": "npm audit: electron high GHSA-jr5w-w6x2-84p9, undici high, fast-uri moderate (published after #220). Every PR fails dependency-supply-chain on Linux and Windows shard 1 for this reason only.",
       "fix": "#221 51c9ced (green on all required checks, run 40261485904); also contained in #225",
       "owner": "FOUNDER (dependency + protected-path merge)",
-      "ciPolicy": "no base-merge pushes or re-runs to any PR until #221 or #225 merges; then coordinator runs update-branch per PR"
+      "ciPolicy": "lifted: coordinator ran update-branch on #219/#222/#223/#218/#212 at 05:1xZ; drafts merge base on their next push",
+      "status": "RESOLVED by #225 merge e2323d9 (contains #221 51c9ced); all required checks green on 7f6591c (validate ubuntu + windows aggregator, installer)"
     },
     "prs": [
       {
-        "pr": 225,
-        "kind": "PROTECTED_WAVE",
-        "contains": [
-          221,
-          214,
-          211,
-          199,
-          "4fe01cf automation.json",
-          "d813d34+7f6591c batch 4a"
-        ],
-        "state": "READY, CI running",
-        "blocker": "Founder auto-merge (protected + deps)",
-        "owner": "FOUNDER"
+        "pr": 219,
+        "kind": "LANE_B",
+        "state": "READY, auto-merge ON, base merged",
+        "blocker": "CI on updated head",
+        "owner": "CI / COORDINATOR (watch)",
+        "review": "coordinator independent review NO_BLOCKERS (wkbc1hsll); LOW nits ride next code push"
       },
       {
-        "pr": 221,
-        "kind": "PROTECTED",
-        "state": "READY, green",
-        "blocker": "Founder auto-merge (protected lv1 harness + deps)",
-        "owner": "FOUNDER",
-        "note": "superseded by #225 if #225 merges first"
+        "pr": 222,
+        "kind": "LANE_B",
+        "state": "READY, auto-merge ON, base merged",
+        "blocker": "CI on updated head",
+        "owner": "CI / COORDINATOR (watch)",
+        "review": "NO_BLOCKERS (wkbc1hsll); LOW nits + intake-template doc TDZ form ride next code push"
       },
       {
-        "pr": 220,
-        "kind": "DEPS",
-        "state": "READY, red (older advisories + lv1)",
-        "blocker": "superseded by #221/#225",
-        "owner": "FOUNDER (close as merged-via)"
-      },
-      {
-        "pr": 214,
-        "kind": "PROTECTED",
-        "state": "READY, auto-merge ON",
-        "blocker": "BASE_DEPENDENCY_GATE; then base merge + trust-root reseal",
-        "owner": "COORDINATOR after #221; merged-via #225 otherwise"
-      },
-      {
-        "pr": 211,
-        "kind": "PROTECTED",
-        "state": "READY, auto-merge ON",
-        "blocker": "BASE_DEPENDENCY_GATE; then base merge + reseal",
-        "owner": "COORDINATOR after #221; merged-via #225 otherwise"
-      },
-      {
-        "pr": 199,
-        "kind": "PROTECTED",
-        "state": "READY, auto-merge ON",
-        "blocker": "BASE_DEPENDENCY_GATE; then base merge + reseal",
-        "owner": "COORDINATOR after #221; merged-via #225 otherwise"
+        "pr": 223,
+        "kind": "LANE_B docs",
+        "state": "READY, auto-merge ON, base merged",
+        "blocker": "CI on updated head",
+        "owner": "CI / COORDINATOR (watch)",
+        "review": "BLOCKERS c74e38b -> fixed c1c94c3, re-check NO_BLOCKERS (wiu22eij1)"
       },
       {
         "pr": 218,
         "kind": "LANE_C",
-        "state": "READY, auto-merge ON (04:34Z)",
-        "blocker": "BASE_DEPENDENCY_GATE; needs #214 in base for Windows tests-3 timing",
-        "owner": "COORDINATOR update-branch after #221+#214"
+        "state": "READY, auto-merge ON, base merged (#214 now in base)",
+        "blocker": "CI on updated head",
+        "owner": "CI / COORDINATOR (watch)"
       },
       {
         "pr": 212,
         "kind": "LANE_C",
-        "state": "READY, auto-merge ON (04:34Z)",
-        "blocker": "BASE_DEPENDENCY_GATE",
-        "owner": "COORDINATOR update-branch after #221",
-        "evidence": "coordinator verification: N1/N2/N3/N8 killed on b1984dc"
+        "state": "READY, auto-merge ON, base merged",
+        "blocker": "CI on updated head",
+        "owner": "CI / COORDINATOR (watch)",
+        "evidence": "N1/N2/N3/N8 killed on b1984dc"
       },
       {
         "pr": 224,
         "kind": "LANE_C",
         "state": "DRAFT",
-        "blocker": "BASE_DEPENDENCY_GATE + new test file needs shard registration (protected) unless moved into a registered file; coordinator review wm465zmxj running",
-        "owner": "LANE_C (move tests) / COORDINATOR (review, batch 4b)"
-      },
-      {
-        "pr": 219,
-        "kind": "LANE_B",
-        "state": "DRAFT",
-        "blocker": "BASE_DEPENDENCY_GATE; coordinator review wkbc1hsll running",
-        "owner": "COORDINATOR"
-      },
-      {
-        "pr": 222,
-        "kind": "LANE_B",
-        "state": "DRAFT",
-        "blocker": "BASE_DEPENDENCY_GATE; coordinator review wkbc1hsll running",
-        "owner": "COORDINATOR"
-      },
-      {
-        "pr": 223,
-        "kind": "LANE_B (docs)",
-        "state": "DRAFT",
-        "blocker": "BASE_DEPENDENCY_GATE; coordinator review wkbc1hsll running",
-        "owner": "COORDINATOR"
-      },
-      {
-        "pr": 196,
-        "kind": "LANE_A",
-        "state": "DRAFT",
-        "blocker": "depends on #199 (/v1/attention allow-list) + BASE_DEPENDENCY_GATE; test fixed 84a11c3",
-        "owner": "FOUNDER (#225/#199) then COORDINATOR update-branch"
+        "blocker": "review BLOCKERS (HB-1, GSTOP/exhausted reap, TK-3, TK-4) + tests into registered files",
+        "owner": "LANE_C fixes; COORDINATOR re-review"
       },
       {
         "pr": 197,
         "kind": "LANE_A",
         "state": "DRAFT",
-        "blocker": "depends on #199 + BASE_DEPENDENCY_GATE",
-        "owner": "FOUNDER (#225/#199) then COORDINATOR update-branch"
+        "blocker": "superseded by Lane A chain PR (contains 54b741c)",
+        "owner": "LANE_A / COORDINATOR (close when chain PR opens)"
+      },
+      {
+        "pr": 196,
+        "kind": "LANE_A",
+        "state": "DRAFT",
+        "blocker": "needs base merge + review",
+        "owner": "LANE_A"
       },
       {
         "pr": 192,
         "kind": "LANE_A",
         "state": "DRAFT",
-        "blocker": "BASE_DEPENDENCY_GATE; base merge pending",
-        "owner": "COORDINATOR update-branch after #221"
+        "blocker": "needs base merge + review",
+        "owner": "LANE_A"
       },
       {
         "pr": 66,
         "kind": "LEGACY",
-        "state": "DRAFT (2026-10-20)",
-        "blocker": "Founder decision FD-E2E-DESKTOP-66 (protected workflow)",
+        "state": "DRAFT",
+        "blocker": "Founder decision (FD-E2E-DESKTOP-66)",
         "owner": "FOUNDER"
       }
     ],
     "branchOnlyChains": {
-      "laneA": "1dda6fc (A-FLOW-1..4) + alignment commits + A-FLOW-5 → one PR when slots free",
-      "laneB": "B-RUN-1 b28ee7e (own PR); WSL chain d6dfbc1/154f8b9/55248fc branch-only until security re-review is clean (B-SBX-WIN-3)",
-      "laneC": "69abe2f+e0720b7 (sandbox exports+loopback), afe968a (CLI readiness), 08cb8ed (analysis), 2d8b7fc (reviewer BLOCKED, on #224) → PRs as slots free"
+      "laneA": "claude/lane-a-chain-on-p1 e560fe2 (intake-template, run-executor-truth, devrun-product+#197, analysis-step bec0d66, setup-check dc1da8d) -> one chain PR after A-SETUP-1 HIGH fix (CLAUDE_CLI_NOT_FOUND false PASS) + chain review",
+      "laneB": "B-RUN-1 b28ee7e + analysis routes 0e22e16 (claude/lane-b-analysis-routes) -> one PR when a slot frees; WSL chain 6bb4624 (B-SBX-WIN-3) branch-only until round-3 security re-review (wenjv35nw) is clean",
+      "laneC": "69abe2f+e0720b7 (sandbox exports+loopback), afe968a (CLI readiness), 08cb8ed (analysis flow), C-FLOW-ANALYSIS-2 (real BuilderPort + EXECUTOR_NOT_ENABLED readiness blocker) -> PRs as slots free",
+      "coordinator": "claude/coord-protected-batch-4b fee6cef (server.ts product-run + analysis registration; main.mjs analysis step/plan POST, product GET + start/stop POST; pins; reseal) stacked on 0e22e16 -> PR after its lane code merges; independent verify wccu7ed0a"
+    },
+    "mergedVia225": {
+      "merge": "e2323d9",
+      "contains": [
+        221,
+        214,
+        211,
+        199,
+        "4fe01cf automation.json",
+        "d813d34+7f6591c batch 4a"
+      ],
+      "closedOrSuperseded": [
+        220
+      ]
     }
   }
 }
