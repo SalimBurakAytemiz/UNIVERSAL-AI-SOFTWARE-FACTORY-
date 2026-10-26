@@ -462,6 +462,16 @@
       "ref": "wf_4bf8f7a8-154 (label true: server.ts:78/:313 DEFAULT_RUN_ROLE_ID=UASCO-0085, pinned by relfx-3 test; RUN_EXPERTS[0] mirror test; 267/267 + 178/178; 5 mutants killed; LOWs: stale work-core.js:369 comment, duplicate-role option wording)",
       "policy": "TEP-1",
       "at": "2026-10-26T20:22:02.107Z"
+    },
+    {
+      "pr": 260,
+      "sha": "81cea57ebb4e60149de32b589154732afcd284dd",
+      "kind": "delta",
+      "base": "1dd7597ac31657c6d778bf4feb1b6ab644fb0547",
+      "verdict": "NO_BLOCKERS_2LOW",
+      "ref": "wf_ab716acc-dd2 (M1 + L1-L6 addressed; 40/40 runner mutants + 5/6 hand mutants killed; real-registry honesty T1 holds; COORD 9abe30c whitelist-only; protected diff = tests-8 append + validation.json reseal (R1 PREAUTHORIZED); LOWs deferred: H1 journal-tag pin, loader empty technologies/sourceClasses/requiredProvenance/profiles)",
+      "policy": "TEP-1",
+      "at": "2026-10-26T20:35:57.788Z"
     }
   ],
   "tests": [],
