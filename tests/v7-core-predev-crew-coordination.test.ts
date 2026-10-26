@@ -582,6 +582,15 @@ describe("C-FLOW-ANALYSIS-1: intake -> analysis -> plan", () => {
     expect((await new AnalysisFlow({store: during.store, scope: SCOPE, builder: during.builder, readiness: () => READY, stopped: () => stopped}).step(during.missionId)).status).toBe("DRAFT_READY");
   });
 
+  // //TR: C-FLOW-ANALYSIS-2: paylaşılan no-builder sentinel'i artık BLOCKED EXECUTOR_NOT_ENABLED ile bu bağlantıya HİÇ ulaşmaz; "sentinel'e shouldAbort verilmez" iddiası burada, sentinel olmayan düz bir builder üzerinden sabitlenir (V14).
+  it("L1 (flow-2): a builder that is neither a ClaudePreDevBuilder nor exposes shouldAbort is never given one: the stop is wired only where it can abort a process", async () => {
+    const t = setup();
+    const plain = {produce: async (kind: ArtifactKind) => JSON.stringify(TASKHUB_ARTIFACTS[kind])} as BuilderPort;
+    const flow = new AnalysisFlow({store: t.store, scope: SCOPE, builder: plain, readiness: () => READY, stopped: () => false});
+    expect((await flow.step(t.missionId)).status).toBe("DRAFT_READY");
+    expect("shouldAbort" in plain, "the stop was wired onto a builder that cannot use it").toBe(false);
+  });
+
   it("L3: when another actor recorded this phase's draft while our paid call ran (a lost race), the answer points at the pending approval, not BUILDER_FAILED for the wrong phase", async () => {
     let t!: ReturnType<typeof setup>;
     t = setup((kind, n) => {
