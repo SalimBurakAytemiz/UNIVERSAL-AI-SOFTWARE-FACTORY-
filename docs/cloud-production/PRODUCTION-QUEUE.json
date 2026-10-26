@@ -1791,8 +1791,8 @@
   },
   "integrationBoard": {
     "//TR": "Koordinatör entegrasyon panosu: her açık PR için gerçek engel ve bekleyen sorumlu. Ortak kök neden (base dependency gate) PR'a özgü hatalardan ayrı tutulur; #221/#225 birleşmeden tekrar CI tetiklenmez.",
-    "at": "2026-10-26T12:55:00Z",
-    "base": "95056c4 (v7/integration, after #240)",
+    "at": "2026-10-26T13:06:00Z",
+    "base": "f663ee9 (v7/integration, after #238)",
     "sharedRootCause": {
       "id": "NONE_ACTIVE",
       "previous": "BASE_DEPENDENCY_GATE resolved by #225 (e2323d9)",
@@ -1831,7 +1831,7 @@
         "pr": "231",
         "kind": "FOUNDER-TIER sandbox",
         "state": "DRAFT @ae688dd (b417e6b fixes + S2d pin + base merge 335aead)",
-        "blocker": "delta review w49vvdnhq on b417e6b; CI had not run while the PR was conflicted (now merged base); merge = Founder decision (R2) after real-WSL acceptance",
+        "blocker": "CI on ae688dd: Windows shard 3 red at ps1a-c2:731 (S5 phase 2 uses real PowerShell start-time with ownerCheckMs 300 -> all time out); repair round 1 with Lane B; delta review w49vvdnhq running; merge = Founder decision (R2)",
         "owner": "LANE_B -> FOUNDER"
       },
       {
@@ -1849,13 +1849,6 @@
         "owner": "LANE_C"
       },
       {
-        "pr": "238",
-        "kind": "LANE_A analysis order",
-        "state": "READY @7a2cae9, SHA-bound auto-merge armed 12:41:43Z",
-        "blocker": "review + 2 deltas clean; waits on Windows CI",
-        "owner": "LANE_A"
-      },
-      {
         "pr": "239",
         "kind": "LANE_A journey E2E-2",
         "state": "DRAFT @8a28663",
@@ -1864,7 +1857,7 @@
       }
     ],
     "branchOnlyChains": {
-      "laneA": "A-ANALYSIS-STUCK-1 merged as #236 4e17857; next A-ANALYSIS-ORDER-1 (same-mission cross-form ordering + LOW pins) from the new base",
+      "laneA": "#238 A-ANALYSIS-ORDER-1 merged f663ee9; #239 A-JOURNEY-E2E-2 review NO_BLOCKERS, CI re-run pending; next E2E-3 LOWs after #239",
       "laneB": "#235 analysis routes merged 335aead; #231 consolidated fix list in work; next after #231: route LOWs (a)-(f) branch",
       "laneC": "#237 C-FLOW-ANALYSIS-2 draft under review; #224 review + repair push pending",
       "coordinator": "batch 4b rebuild wuqlg9lh1 on 335aead (analysis + product-run registration, allow-list, journey pin, reseal, R1/R2 classification); transition r5 wif331nql"
@@ -2054,6 +2047,16 @@
         "review": "process-mode review wf1b50818 NO_BLOCKERS (2 lenses; mutants killed); 3 LOWs to a later Lane B branch",
         "pushCi": "pending at 12:55Z",
         "riskTier": "ROUTINE (control-api routes + tests + docs; 0 protected paths)"
+      },
+      {
+        "pr": 238,
+        "merge": "f663ee9",
+        "by": "auto-merge (SHA-bound, armed by coordinator on 7a2cae9 at 12:41:43Z)",
+        "at": "2026-10-26T13:05:09Z",
+        "postMerge": "VERIFIED: parent1 95056c4, parent2 = reviewed head 7a2cae9, merge-tree e3ff612 == merge tree",
+        "review": "w015av2fi BLOCKERS (lock-release unpinned) fixed in 748f3a8; delta wdwmbj3bh NO_BLOCKERS + 2 own-diff LOWs fixed in 7a2cae9 (coordinator re-ran 254/254)",
+        "pushCi": "pending at 13:06Z",
+        "riskTier": "ROUTINE (renderer + locales + tests; 0 protected paths)"
       }
     ],
     "wslProvider": {
