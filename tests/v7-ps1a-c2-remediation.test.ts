@@ -577,7 +577,15 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
     } finally { code = null; await m.close().catch(() => undefined); }
   }, 30_000);
 
-  it("STARTUP: buildServer with a WSL provider whose runner never answers is ready within 2 s and never touches the runner while starting, EVEN with a persisted terminal record that carries a scratch and a dead owner: the record is marked TEARDOWN_PENDING at once (the background teardown waits for the provider)", async () => {
+  it("STARTUP: buildServer with a WSL provider whose runner never answers is ready within 2 s and never touches the runner while starting", async () => {
+    const { buildServer } = await import("../apps/control-api/src/server.js"); const { WslUnshareSandboxProvider } = await import("../core/sandbox/wsl-unshare-sandbox.js");
+    const calls: string[][] = []; const wsl = new WslUnshareSandboxProvider({platform: "win32", runner: args => { calls.push(args); return new Promise(() => undefined); }});
+    const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-rdy-"));
+    const srv = buildServer({controlToken: TOKEN, runtime: path.join(dir, "rt"), dataDir: path.join(dir, "data"), repoRoot: REPO, port: 3210, logger: false, tenantId: "tA", sandbox: wsl});
+    try { const t0 = Date.now(); await srv.ready(); expect(Date.now() - t0).toBeLessThan(2000); expect(calls).toEqual([]); } finally { await srv.close(); fs.rmSync(dir, {recursive: true, force: true}); }
+  }, 30_000);
+
+  it("STARTUP (seeded record): buildServer with a WSL provider whose runner never answers is ready within 2 s even with a persisted terminal record that carries a scratch and a dead owner: the record is marked TEARDOWN_PENDING at once; the runner is touched only by the BACKGROUND teardown that ready() never awaits (hence a separate test from the unseeded one above)", async () => {
     const { buildServer } = await import("../apps/control-api/src/server.js"); const { WslUnshareSandboxProvider } = await import("../core/sandbox/wsl-unshare-sandbox.js");
     const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-rdy-")); const dataDir = path.join(dir, "data");
     const seedApp = mk({dataDir}); const p = await createProject(seedApp.app, {template: "web-node"}); await seedApp.app.close();
@@ -606,8 +614,9 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
     const provider = hostSpawn({async teardownScratch(sc: string) { torn.push(sc); return code; }});
     const m0 = manager(dataDir, new ExecutionGate(provider));
     const f = seedRec(dataDir, p, deadRec(m0, p, {status: "RUNNING", pid: orphan, pidStartTime: ostart, startedAt: new Date().toISOString(), sandboxScratch: SCR, ...(viaTimeout ? {ownerPid: process.ppid, ownerStartTime: "OWNER-T0"} : {})}));
-    let answers = false; const startTimeOf = (pid: number) => pid === process.ppid ? (answers ? Promise.resolve("OWNER-T1") : new Promise<string | null>(() => undefined)) : processStartTime(pid);
-    const m = manager(dataDir, new ExecutionGate(provider), viaTimeout ? {ownerCheckMs: 300, startTimeOf} : {});
+    // Okuyucu ENJEKTE edilir (gerçek processStartTime Windows'ta PowerShell'dir ve ownerCheckMs 300'e sığmaz): yalnız sahip okuması (ppid) sonsuz bekler/değişir.
+    let answers = false; const startTimeOf = (pid: number) => pid === process.pid ? Promise.resolve("SELF") : pid === orphan ? Promise.resolve(ostart) : pid === process.ppid ? (answers ? Promise.resolve("OWNER-T1") : new Promise<string | null>(() => undefined)) : Promise.resolve(null);
+    const m = manager(dataDir, new ExecutionGate(provider), viaTimeout ? {ownerCheckMs: 300, startTimeOf} : {startTimeOf});
     try {
       if (viaTimeout) { expect(await m.recover()).toEqual([]); expect(readRec(f).status, "recover() leaves the record of an owner it could not check").toBe("RUNNING"); answers = true; }
       await expect(m.start(p)).rejects.toMatchObject({code: "DEVRUN_STOP_INCOMPLETE", status: 409, reason: "PROCESS_SURVIVED"});
@@ -630,7 +639,8 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
     const m0: any = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any)); const info = new Map<string, {pid: number; t: string | null; f: string}>();
     for (const p of ps) { const pid = idle(); const t = await processStartTime(pid); info.set(p.projectId, {pid, t, f: seedRec(dataDir, p, deadRec(m0, p, {status: "RUNNING", pid, pidStartTime: t, startedAt: new Date().toISOString()}))}); }
     const ownerT = await processStartTime(process.ppid); let swapped = ""; let first = "";
-    const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {audit: (e: string, d: any) => {
+    const byPid = new Map([...info.values()].map(v => [v.pid, v.t] as const));
+    const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {startTimeOf: (pid: number) => Promise.resolve(pid === process.pid ? "SELF" : pid === process.ppid ? ownerT : byPid.get(pid) ?? null), audit: (e: string, d: any) => {
       if (e !== "DEVRUN_ORPHAN_RECOVERED" || swapped) return; first = d.projectId; const other = ps.find(x => x.projectId !== d.projectId)!; swapped = other.projectId; const o = info.get(other.projectId)!;
       fs.writeFileSync(o.f, JSON.stringify({...m0.blank(other), instanceId: "dev_peer", ownerPid: process.ppid, ownerStartTime: ownerT, status: "RUNNING", pid: o.pid, pidStartTime: o.t, startedAt: new Date().toISOString()}));
     }});
@@ -747,18 +757,62 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
     } finally { ownStartTestHooks.setReader(null); await m1.close().catch(() => undefined); await m2?.close().catch(() => undefined); }
   }, 60_000);
 
-  it("S5 (Windows liveness): with the default reader on win32 recover() reads ALL candidate start times with ONE batched PowerShell call (not N parallel ones that time out together on a loaded host); a failed batch falls back to per-pid reads", async () => {
+  it("S5 (Windows liveness): with the default reader on win32 recover() reads ALL candidate start times with ONE batched PowerShell call; the batch answer is USED (a different start time -> ORPHAN_PID_MISMATCH_NOT_KILLED and the process stays alive; a pid missing from a successful answer is gone -> MISMATCH, not read again; the matching one is killed); a failed batch falls back to per-pid reads; a batch that never answers is bounded by ownerCheckMs and then falls back", async () => {
     const {app, dataDir} = mk(); const ps: Project[] = []; for (let i = 0; i < 3; i++) ps.push(await createProject(app, {template: "web-node"}));
     const m0: any = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any));
     const seed = async () => { const rows: {pid: number; t: string | null}[] = []; for (const p of ps) { const pid = idle(); const t = await processStartTime(pid); rows.push({pid, t}); seedRec(dataDir, p, deadRec(m0, p, {status: "RUNNING", pid, pidStartTime: t, startedAt: new Date().toISOString()})); } return rows; };
-    for (const failBatch of [false, true]) {
-      const rows = await seed(); const scripts: string[] = [];
-      const powershell = async (script: string) => { scripts.push(script); if (failBatch) return null; const ids = [...script.matchAll(/-Id ([\d,]+)/g)][0][1].split(",").map(Number); return (await Promise.all(ids.map(async id => `${id},${await processStartTime(id)}`))).join("\r\n"); };
-      const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {platform: "win32", powershell, ownerCheckMs: 5000});
-      const out = await m.recover(); expect(scripts, `failBatch=${failBatch}: exactly one batched call`).toHaveLength(1);
-      for (const r of rows) expect(scripts[0]).toContain(String(r.pid));
-      expect(out.map(x => x.result), `failBatch=${failBatch}`).toEqual(Array(3).fill("ORPHAN_KILLED")); for (const r of rows) expect(pidAlive(r.pid)).toBe(false);
+    for (const mode of ["answer", "failed", "hang"] as const) {
+      const rows = await seed(); const scripts: string[] = []; const ownerCheckMs = mode === "hang" ? 1500 : 5000;
+      const powershell = async (script: string) => {
+        scripts.push(script); if (mode === "failed") return null; if (mode === "hang") return new Promise<string | null>(() => undefined);
+        const ids = [...script.matchAll(/-Id ([\d,]+)/g)][0][1].split(",").map(Number);
+        const lines = await Promise.all(ids.map(async id => id === rows[1].pid ? null : `${id},${id === rows[0].pid ? "DIFFERENT-START-TIME" : await processStartTime(id)}`));
+        return lines.filter(Boolean).join("\r\n");
+      };
+      const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {platform: "win32", powershell, ownerCheckMs});
+      const t0 = Date.now(); const out = await m.recover(); const took = Date.now() - t0;
+      expect(scripts, `${mode}: exactly one batched call`).toHaveLength(1); for (const r of rows) expect(scripts[0]).toContain(String(r.pid));
+      const res = (p: Project) => out.find(x => x.projectId === p.projectId)?.result;
+      if (mode === "answer") {
+        expect([res(ps[0]), res(ps[1]), res(ps[2])]).toEqual(["ORPHAN_PID_MISMATCH_NOT_KILLED", "ORPHAN_PID_MISMATCH_NOT_KILLED", "ORPHAN_KILLED"]);
+        expect(pidAlive(rows[0].pid) && pidAlive(rows[1].pid), "mismatched / gone pids are not killed").toBe(true); expect(pidAlive(rows[2].pid)).toBe(false); killProcessTree(rows[0].pid); killProcessTree(rows[1].pid);
+      } else {
+        expect(out.map(x => x.result), mode).toEqual(Array(3).fill("ORPHAN_KILLED")); for (const r of rows) expect(pidAlive(r.pid)).toBe(false);
+        if (mode === "hang") expect(took, `a never-answering batch is bounded (${took} ms)`).toBeLessThan(ownerCheckMs + 4000);
+      }
     }
+  }, 90_000);
+
+  it("M-a: a record rewritten by a LIVE peer in the post-kill window (after the orphan was killed, before the record is written) is NOT taken over: no write, no lock removal, no result for it", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+    const orphan = idle(); const ostart = await processStartTime(orphan); const peerPid = idle(); const peerStart = await processStartTime(peerPid); const ownerT = await processStartTime(process.ppid);
+    const m0: any = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any)); const f = seedRec(dataDir, p, deadRec(m0, p, {status: "RUNNING", pid: orphan, pidStartTime: ostart, startedAt: new Date().toISOString()}));
+    const events: string[] = [];
+    // Kendi başlangıç zamanı okuması, yetim ÖLDÜRÜLDÜKTEN sonra döner ve tam o pencerede kaydı canlı bir eş olarak yeniden yazar.
+    const startTimeOf = async (pid: number) => { if (pid === process.pid) { while (pidAlive(orphan)) await sleep(10); fs.writeFileSync(f, JSON.stringify({...m0.blank(p), instanceId: "dev_peer", ownerPid: process.ppid, ownerStartTime: ownerT, status: "RUNNING", pid: peerPid, pidStartTime: peerStart, startedAt: new Date().toISOString()})); return "SELF"; } return pid === orphan ? ostart : pid === process.ppid ? ownerT : null; };
+    const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {startTimeOf, ownerCheckMs: 20_000, audit: (e: string) => events.push(e)});
+    const out = await m.recover();
+    expect(out).toEqual([]); expect(events).not.toContain("DEVRUN_ORPHAN_RECOVERED"); expect(readRec(f)).toMatchObject({instanceId: "dev_peer", status: "RUNNING", pid: peerPid}); expect(pidAlive(peerPid), "the peer's product survives").toBe(true);
+  }, 60_000);
+
+  it("M-b: the own start-time read is awaited ONCE before the loop: N orphan records with a never-answering read cost one budget, not N", async () => {
+    const {app, dataDir} = mk(); const ps: Project[] = []; for (let i = 0; i < 5; i++) ps.push(await createProject(app, {template: "web-node"}));
+    const m0: any = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any)); const files = ps.map(p => seedRec(dataDir, p, deadRec(m0, p, {status: "RUNNING", pid: null, startedAt: new Date().toISOString()})));
+    const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {ownerCheckMs: 400, startTimeOf: () => new Promise<string | null>(() => undefined)});
+    const t0 = Date.now(); const out = await m.recover(); const took = Date.now() - t0;
+    expect(out).toHaveLength(5); expect(took, `5 records took ${took} ms: one budget (~400), not 5 x 400`).toBeLessThan(1400); for (const f of files) expect(readRec(f).ownerStartTime).toBeNull();
+  }, 30_000);
+
+  it("F3 (reject paths): a reader that REJECTS once is not cached either (process-wide hook reader and a manager's own startTimeOf): the next read persists the real value", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"}); const f = path.join(dataDir, "projects", p.projectId, "devrun", "state.json");
+    let reads = 0; ownStartTestHooks.setReader(async () => { reads++; if (reads === 1) throw new Error("PS timeout"); return "T1"; });
+    const m1 = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any)); let m2: DevRunManager | undefined, m3: DevRunManager | undefined;
+    try {
+      await m1.start(p); expect(readRec(f).ownerStartTime, "rejected read: fail-closed null").toBeNull(); await m1.stop(p.projectId);
+      m2 = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any)); await m2.start(p); expect(readRec(f).ownerStartTime).toBe("T1"); expect(reads).toBe(2); await m2.stop(p.projectId);
+      let own = 0; m3 = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {startTimeOf: async (pid: number) => { if (pid !== process.pid) return processStartTime(pid); own++; if (own === 1) throw new Error("boom"); return "T2"; }});
+      expect(await (m3 as any).ownStartTime(), "own startTimeOf rejected once").toBeNull(); expect(await (m3 as any).ownStartTime(), "not pinned per manager").toBe("T2"); expect(own).toBe(2);
+    } finally { ownStartTestHooks.setReader(null); await m1.close().catch(() => undefined); await m2?.close().catch(() => undefined); await m3?.close().catch(() => undefined); }
   }, 60_000);
 
   it("S4: the own start-time read is bounded where the record is built (ownerCheckMs): a never-answering PowerShell read does not hold recover(); the record carries ownerStartTime null (fail-closed for readers)", async () => {

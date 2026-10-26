@@ -833,6 +833,8 @@ export class DevRunManager {
       const now = !live && ACTIVE.has(r.status) && r.pid && pidAlive(r.pid) ? await timed<string | null | typeof LOOKUP_TIMEOUT>(read(r.pid).catch(() => null), budget, LOOKUP_TIMEOUT) : undefined;
       return {key: keyOf(r), live, now};
     };
+    // M-b: kendi başlangıç zamanı döngüden ÖNCE BİR kez, tek bütçeyle beklenir (kayıt başına bütçe N x ownerCheckMs tutardı); null = okuyucular için fail-closed.
+    const self = await timed(selfP, budget, null);
     const verdicts = new Map<string, Verdict>();
     await Promise.all(ids.map(async id => { const r = this.readState(id); if (needsCheck(r)) verdicts.set(id, await check(r)); }));
     for (const id of ids) {
@@ -846,7 +848,7 @@ export class DevRunManager {
       // C-5: önceki kapatma temiz bitmediyse (STOP_INCOMPLETE + scratch) sahip canlı değilse Linux tarafı yeniden denenir.
       if (!ACTIVE.has(st.status) && st.sandboxScratch && st.ownerHost === os.hostname() && v?.live === false) {
         // Önce kalıcı işaret (API burada çökerse de kayıt dürüst): TEARDOWN_PENDING; kapatma arka planda (sunucu açılışını ASLA bekletmez).
-        try { this.writeState({...st, stopIncomplete: st.stopIncomplete ?? "TEARDOWN_PENDING", reason: st.stopIncomplete ? st.reason : "STOP_INCOMPLETE:TEARDOWN_PENDING"}, true); } catch { /* durum yazılamadı */ }
+        if (!this.casWrite(st, {...st, stopIncomplete: st.stopIncomplete ?? "TEARDOWN_PENDING", reason: st.stopIncomplete ? st.reason : "STOP_INCOMPLETE:TEARDOWN_PENDING"})) continue;
         this.scheduleScratch(id, st, st.reason ?? undefined);
         continue;
       }
@@ -861,10 +863,10 @@ export class DevRunManager {
       // C-5: sağlayıcı-taraflı scratch (WSL) Linux tarafında kapatılır; kapatılamazsa kayıt STOP_INCOMPLETE ile scratch'ı korur.
       const pendingScratch = Boolean(st.sandboxScratch); // kapatma arka planda (scheduleScratch) denenir; sonuç kayda yazılır
       const rec: DevRunRecovery = {at: new Date().toISOString(), result, previousInstanceId: st.instanceId, pid: st.pid};
-      const self = await timed(selfP, budget, null);
       const next: DevRunState = {...st, status: result === "ORPHAN_KILL_FAILED" ? "CRASHED" : "STOPPED", reason: pendingScratch ? "STOP_INCOMPLETE:TEARDOWN_PENDING" : `RECOVERED_AFTER_API_RESTART:${result}`, ...(pendingScratch ? {stopIncomplete: "TEARDOWN_PENDING", sandboxScratch: st.sandboxScratch ?? null} : {sandboxScratch: null, sandboxBinding: null}), endedAt: rec.at, instanceId: this.instanceId, ownerPid: process.pid, ownerHost: os.hostname(), ownerStartTime: self,
         preview: {url: null, state: "UNAVAILABLE", lastProbeAt: st.preview?.lastProbeAt ?? null, reason: "NOT_RUNNING"}, recovery: rec};
-      this.writeState(next, true);
+      // M-a: orphanKill'in bekleme döngüsü ve await'ler boyunca canlı bir eş bu kaydı yeniden yazmış olabilir: yalnız OKUNAN kayıt hâlâ aynıysa yazılır (aksi halde devralma, kilit silme, denetim ve zamanlama YOK).
+      if (!this.casWrite(st, next, true)) continue;
       const lf = this.lockFile(id), ls = inspectProcessLock(lf) as {state: string; pid?: number; runId?: string | null};
       const reusedLock = ownerReused && ls.state === "ACTIVE" && ls.pid === st.ownerPid && ls.runId === st.instanceId;
       if (ls.state !== "ABSENT" && (ls.pid === process.pid || ls.state === "STALE_SAME_HOST_DEAD_PID" || reusedLock)) { try { fs.rmSync(lf, {force: true}); } catch { /* kilit */ } }
