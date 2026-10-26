@@ -2643,50 +2643,87 @@ describe("LANE-A project knowledge panel", () => {
   });
 });
 
-describe("LANE-A A-FLOW-4: running product after delivery", () => {
-  const DR = `/v1/projects/${PID}/devrun`, FLOWP = `/v1/projects/${PID}/flow`, EXE = "/v1/system/executors";
-  const dr = (over: any = {}) => ({devrun: {status: "STOPPED", pid: null, port: null, preview: {state: "UNAVAILABLE", url: null}, logTail: "", ...over}});
-  const flow = (delivery = "DONE") => ({flow: {projectId: PID, stages: ["MISSION", "PLAN", "RUN", "REVIEW", "DELIVERY"].map(s => ({stage: s, state: s === "DELIVERY" ? delivery : "DONE", detail: null})), missionCount: 1, taskCount: 1, latestRunId: null}});
+describe("LANE-A A-FLOW-4: running product after delivery (B-RUN-1 contract, run-scoped routes)", () => {
+  const RUN = "run_" + "ab".repeat(12), OTHER = "run_" + "cd".repeat(12), HEAD = "e".repeat(40);
+  const PROD = `/v1/work-runs/${RUN}/product`, FLOWP = `/v1/projects/${PID}/flow`, EXE = "/v1/system/executors";
+  const runs = (runId = RUN) => ({"/v1/work-runs": {workRuns: [{runId, missionId: MID, status: "SUCCEEDED", startedAt: "2026-10-26T01:00:00.000Z"}]}, [`/v1/missions?projectId=${PID}`]: {missions: [{missionId: MID, projectId: PID, title: "G1", status: "REPORTING", riskLevel: "R1"}]}});
+  const dv = (over: any = {}) => ({status: "STOPPED", pid: null, port: null, preview: {state: "UNAVAILABLE", url: null}, logTail: "", deliveryRunId: null, bridged: null, ...over});
+  const prod = (devrun: any = dv(), over: any = {}) => ({product: {runId: RUN, deliveredHeadSha: HEAD, devrun, tiedToThisRun: devrun.deliveryRunId === RUN, ...over}});
+  const live = (over: any = {}) => dv({status: "RUNNING", port: 4123, pid: 77, deliveryRunId: RUN, bridged: true, preview: {state: "AVAILABLE", url: "http://127.0.0.1:4123/"}, ...over});
+  const flow = (delivery = "DONE") => ({flow: {projectId: PID, stages: ["MISSION", "PLAN", "RUN", "REVIEW", "DELIVERY"].map(x => ({stage: x, state: x === "DELIVERY" ? delivery : "DONE", detail: null})), missionCount: 1, taskCount: 1, latestRunId: null}});
   const exe = (sb: any = {state: "UNAVAILABLE", reason: "SANDBOX_UNAVAILABLE"}) => ({executors: [{id: "LOCAL_CLAUDE", state: "READY"}], active: {reason: "LOCAL_CLAUDE"}, sandbox: sb});
-  const open = (extra: Record<string, any>, o: any = {}) => openWs({lang: "en", get: projectsGet({[DR]: dr(), [FLOWP]: flow(), [EXE]: exe(), ...extra}), ...o});
+  const open = (extra: Record<string, any>, o: any = {}) => openWs({lang: "en", get: projectsGet({...runs(), [PROD]: prod(), [FLOWP]: flow(), [EXE]: exe(), ...extra}), ...o});
   const card = (root: N) => byId(root, "studio-ov-product")!;
-  it("maps the dev-run reason as a safe code and lets a BLOCKED start be retried (the server re-asks the sandbox gate)", async () => {
+  it("maps the run-scoped product strictly: this run's id, a 40-hex delivered commit or null, tiedToThisRun must agree with deliveryRunId, reason is a safe code", async () => {
     const c = await load(rend, "project-core.js");
-    expect(c.mapDevRun(dr({status: "BLOCKED", reason: "SANDBOX_UNAVAILABLE"})).run.reason).toBe("SANDBOX_UNAVAILABLE");
-    for (const bad of ["sandbox", "<x>", 5, null, "A".repeat(65), ""]) expect(c.mapDevRun(dr({status: "BLOCKED", reason: bad})).run.reason, String(bad)).toBeNull();
-    expect(c.mapDevRun(dr()).run.reason).toBeNull();
-    expect(c.devRunActions("BLOCKED")).toEqual({start: true, stop: false, restart: false});
-    const run = (status: string, extra: any = {}) => c.mapDevRun(dr({status, ...extra})).run;
-    const running = run("RUNNING", {port: 4123, preview: {state: "AVAILABLE", url: "http://127.0.0.1:4123/"}});
-    expect(c.productOffer(running, flow().flow)).toEqual({deliveryDone: true, start: false, stop: true, open: true});
-    expect(c.productOffer(run("STOPPED"), flow().flow)).toEqual({deliveryDone: true, start: true, stop: false, open: false});
-    expect(c.productOffer(run("STOPPED"), flow("ACTIVE").flow)).toMatchObject({deliveryDone: false, start: false});
-    expect(c.productOffer(run("BLOCKED"), flow().flow).start).toBe(true);
-    expect(c.productOffer(run("STOPPED"), null)).toMatchObject({deliveryDone: false, start: false});
-    expect(c.productOffer(running, null)).toMatchObject({start: false, stop: true}); // a live process can always be stopped
-    expect(c.productOffer(running, flow("BLOCKED").flow).stop).toBe(true);
+    expect(c.runProductPath(RUN)).toBe(PROD);
+    const api = await mkCtx({lang: "en", get: projectsGet({[PROD]: prod()})});
+    expect((await api.ctx.api.runProduct("run_zz")).state).toBe("ERROR"); expect(api.calls.get).toEqual([]); // a bad id sends nothing
+    expect((await api.ctx.api.runProduct(RUN)).state).toBe("VERIFIED"); expect(api.calls.get).toEqual([PROD]);
+    for (const bad of ["run_zz", "", undefined, null, `${RUN}/x`, `${RUN}?a=1`, [RUN], "RUN_" + "ab".repeat(12)]) expect(c.runProductPath(bad), String(bad)).toBeNull();
+    expect(c.buildProductRequest({runId: RUN, action: "start"})).toEqual({ok: true, path: `${PROD}/start`, body: {}});
+    expect(c.buildProductRequest({runId: RUN, action: "stop"}).path).toBe(`${PROD}/stop`);
+    for (const bad of [{runId: "run_zz", action: "start"}, {runId: RUN, action: "restart"}, {runId: RUN, action: "../x"}]) expect(c.buildProductRequest(bad).ok, JSON.stringify(bad)).toBe(false);
+    const ok = c.mapRunProduct(prod(live()), RUN);
+    expect(ok.state).toBe("VERIFIED"); expect(ok.product).toMatchObject({runId: RUN, deliveredHeadSha: HEAD, tiedToThisRun: true}); expect(ok.product.run).toMatchObject({status: "RUNNING", deliveryRunId: RUN, bridged: true});
+    expect(c.mapRunProduct(prod(dv(), {deliveredHeadSha: null}), RUN).product.deliveredHeadSha).toBeNull();
+    expect(c.mapRunProduct(prod(live({deliveryRunId: OTHER})), RUN).product.tiedToThisRun).toBe(false);
+    const bad: any[] = [null, {}, {product: null}, prod(dv(), {runId: OTHER}), prod(dv(), {deliveredHeadSha: "abc"}), prod(dv(), {deliveredHeadSha: "abcdef1"}), prod(dv(), {deliveredHeadSha: "a".repeat(41)}), prod(dv(), {deliveredHeadSha: "a".repeat(64)}), prod(dv(), {deliveredHeadSha: "E".repeat(40)}), prod(dv(), {deliveredHeadSha: undefined}), prod(dv(), {tiedToThisRun: "yes"}),
+      prod(live(), {tiedToThisRun: false}), prod(live({deliveryRunId: OTHER}), {tiedToThisRun: true}), prod(dv(), {tiedToThisRun: true}), prod(dv({status: "WEIRD"})), {product: {...prod().product, devrun: null}}, {product: {...prod().product, devrun: "x"}}];
+    for (const b of bad) expect(c.mapRunProduct(b, RUN).state, JSON.stringify(b)?.slice(0, 80)).toBe("ERROR");
+    const rs = (reason: any) => c.mapDevRun({devrun: dv({status: "BLOCKED", reason})}).run.reason;
+    expect(rs("DEVRUN_SANDBOX_UNAVAILABLE:PROVIDER_HAS_NO_BRIDGE:wsl-unshare-v1")).toBe("DEVRUN_SANDBOX_UNAVAILABLE:PROVIDER_HAS_NO_BRIDGE:wsl-unshare-v1");
+    expect(rs("DEVRUN_SANDBOX_UNAVAILABLE:SANDBOX_LOOPBACK_NOT_VERIFIED:NOT_REPORTED")).toBe("DEVRUN_SANDBOX_UNAVAILABLE:SANDBOX_LOOPBACK_NOT_VERIFIED:NOT_REPORTED");
+    for (const r of ["sandbox", "<x>", 5, null, "A".repeat(161), "", "DEVRUN:" + "a".repeat(100), "X:with space"]) expect(rs(r), String(r)).toBeNull();
+    expect(c.mapDevRun({devrun: dv({bridged: "yes", deliveryRunId: "run_zz"})}).run).toMatchObject({bridged: null, deliveryRunId: null});
   });
-  it("after delivery it offers Start; Start needs the existing confirmation, posts the fixed empty-body route once, and never claims the product is running", async () => {
-    const o = await open({}, {post: () => ({status: 200, body: dr({status: "STARTING"})}), confirm: () => true});
+  it("offers Start only after the server's DELIVERY stage is DONE, a delivered commit exists and no other delivery's product runs; Stop only for this delivery's own product", async () => {
+    const c = await load(rend, "project-core.js");
+    const P = (devrun: any, over: any = {}) => c.mapRunProduct(prod(devrun, over), RUN).product;
+    expect(c.productOffer(P(dv()), flow().flow)).toMatchObject({deliveryDone: true, hasCommit: true, start: true, stop: false, open: false});
+    expect(c.productOffer(P(dv({status: "BLOCKED", reason: "DEVRUN_SANDBOX_UNAVAILABLE:NSENTER_MISSING"})), flow().flow).start).toBe(true); // refused starts can be retried
+    expect(c.productOffer(P(dv()), flow("ACTIVE").flow)).toMatchObject({deliveryDone: false, start: false});
+    expect(c.productOffer(P(dv()), null)).toMatchObject({deliveryDone: false, start: false});
+    expect(c.productOffer(P(dv(), {deliveredHeadSha: null}), flow().flow)).toMatchObject({hasCommit: false, start: false});
+    expect(c.productOffer(P(live()), flow().flow)).toMatchObject({start: false, stop: true, open: true});
+    expect(c.productOffer(P(live()), null)).toMatchObject({stop: true}); // Stop never depends on the delivery read
+    const other = c.productOffer(P(live({deliveryRunId: OTHER})), flow().flow);
+    expect(other).toMatchObject({otherRunning: true, start: false, stop: false, open: false});
+    expect(c.productOffer(P(live({bridged: false})), flow().flow)).toMatchObject({stop: true, open: false});
+    expect(c.productOffer(P(live({bridged: null})), flow().flow).open).toBe(false);
+    for (const bad of [{preview: {state: "AVAILABLE", url: "http://evil.example/"}}, {preview: {state: "UNAVAILABLE", url: "http://127.0.0.1:4123/"}}, {port: 4999}, {preview: {state: "AVAILABLE", url: "http://127.0.0.1:4123/x"}}, {status: "STARTING"}])
+      expect(c.productOffer(P(live(bad)), flow().flow).open, JSON.stringify(bad)).toBe(false);
+    // another delivery's product that is still STARTING also blocks (and is flagged), not only a RUNNING one
+    expect(c.productOffer(P(dv({status: "STARTING", deliveryRunId: OTHER})), flow().flow)).toMatchObject({otherRunning: true, start: false, stop: false});
+    expect(c.productOffer(P(dv({status: "STOPPED", deliveryRunId: OTHER})), flow().flow)).toMatchObject({otherRunning: false, start: true});
+  });
+  it("reads only the run-scoped route for the latest run, offers Start after delivery, confirms, posts the fixed empty-body route once and re-reads; it never claims the product runs", async () => {
+    const o = await open({}, {post: () => ({status: 200, body: prod(dv({status: "STARTING", deliveryRunId: RUN, bridged: true}))}), confirm: () => true});
     const c = card(o.root);
-    expect(c.dataset.productState).toBe("STOPPED"); expect(c.dataset.productOffer).toBe("START");
+    expect(c.dataset.productRun).toBe(RUN); expect(c.dataset.productState).toBe("STOPPED"); expect(c.dataset.productOffer).toBe("START");
+    expect(o.calls.get).not.toContain(`/v1/projects/${PID}/devrun`); // the project dev-run route is no longer used by this card
     expect(byId(o.root, "product-stop")).toBeNull();
-    const reads = () => o.calls.get.filter((g: string) => g === DR).length, before = reads();
+    const reads = () => o.calls.get.filter((g: string) => g === PROD).length, before = reads();
     byId(o.root, "product-start")!.fire("click"); await tick(); await tick();
-    expect(reads()).toBe(before + 1); // the dev-run is re-read (forced) after the action, never assumed
-    expect(o.calls.confirm).toHaveLength(1); expect(o.calls.post).toEqual([{path: `${DR}/start`, body: {}}]);
+    expect(reads()).toBe(before + 1);
+    expect(o.calls.confirm).toHaveLength(1); expect(String(o.calls.confirm[0].body)).toContain("untrusted generated code"); expect(String(o.calls.confirm[0].body)).toContain("exactly one port");
+    expect(o.calls.post).toEqual([{path: `${PROD}/start`, body: {}}]);
     expect(forms.drafts.status["product-run"]).toMatchObject({ok: true, key: "product.done.start"});
     const shown = mount(o.doc, await projectsView.render(o.ctx));
     expect(text(byId(shown, "product-run-status")!)).toContain("not assumed to be running");
-    expect(text(card(shown))).not.toContain("Running product: running");
-    // declining the confirmation posts nothing
     forms.resetAllForms();
     const n = await open({}, {confirm: () => false});
     byId(n.root, "product-start")!.fire("click"); await tick();
     expect(n.calls.post).toEqual([]); expect(forms.drafts.status["product-run"]).toMatchObject({ok: false, key: "confirm.cancelled"});
   });
-  it("offers Start only when the DELIVERY stage is DONE on the server; otherwise it says why and starts nothing", async () => {
-    for (const [fl, tag] of [[flow("ACTIVE"), "NOT_DONE"], [flow("NOT_STARTED"), "NOT_DONE"], [flow("BLOCKED"), "NOT_DONE"], [undefined, "UNKNOWN"], [{flow: {projectId: PID, stages: []}}, "UNKNOWN"]] as const) {
+  it("tells why Start is not offered: no run, no delivered commit, delivery not DONE or unreadable; nothing is started", async () => {
+    const none = await open({"/v1/work-runs": {workRuns: []}});
+    expect(all(card(none.root)).find(n => n.dataset.productDelivery)!.dataset.productDelivery).toBe("NO_RUN"); expect(byId(none.root, "product-start")).toBeNull();
+    expect(none.calls.get.some((g: string) => g.endsWith("/product"))).toBe(false);
+    forms.resetAllForms();
+    const nc = await open({[PROD]: prod(dv(), {deliveredHeadSha: null})});
+    expect(all(card(nc.root)).some(n => n.dataset.productCommit === "NONE")).toBe(true); expect(byId(nc.root, "product-start")).toBeNull();
+    for (const [fl, tag] of [[flow("ACTIVE"), "NOT_DONE"], [flow("BLOCKED"), "NOT_DONE"], [undefined, "UNKNOWN"], [{flow: {projectId: PID, stages: []}}, "UNKNOWN"]] as const) {
       forms.resetAllForms();
       const o = await open({[FLOWP]: fl});
       expect(byId(o.root, "product-start"), tag).toBeNull();
@@ -2694,59 +2731,71 @@ describe("LANE-A A-FLOW-4: running product after delivery", () => {
       expect(card(o.root).dataset.productOffer).toBe("NONE");
     }
   });
-  it("shows the local address as text only when RUNNING with a loopback preview, and always offers Stop for a live process", async () => {
-    const live = (over: any = {}) => dr({status: "RUNNING", port: 4123, pid: 77, preview: {state: "AVAILABLE", url: "http://127.0.0.1:4123/"}, ...over});
-    const o = await open({[DR]: live(), [FLOWP]: flow("ACTIVE")}, {post: () => ({status: 200, body: dr()})});
+  it("shows the local address only for this delivery's RUNNING, bridged product; Stop posts the fixed route without confirmation; another delivery's product is neither shown nor stopped", async () => {
+    const o = await open({[PROD]: prod(live()), [FLOWP]: flow("ACTIVE")}, {post: () => ({status: 200, body: prod(dv())})});
     const url = all(card(o.root)).find(n => n.dataset.productUrl)!;
     expect(url.dataset.productUrl).toBe("http://127.0.0.1:4123/"); expect(text(url)).toContain("http://127.0.0.1:4123/");
     expect(byId(o.root, "product-start")).toBeNull(); expect(card(o.root).dataset.productOffer).toBe("STOP");
     byId(o.root, "product-stop")!.fire("click"); await tick(); await tick();
-    expect(o.calls.confirm).toHaveLength(0); expect(o.calls.post).toEqual([{path: `${DR}/stop`, body: {}}]);
+    expect(o.calls.confirm).toHaveLength(0); expect(o.calls.post).toEqual([{path: `${PROD}/stop`, body: {}}]);
     expect(forms.drafts.status["product-run"]).toMatchObject({ok: true, key: "product.done.stop"});
-    // state badge: RUNNING ok, STOPPED plain, BLOCKED/CRASHED risk
     const badgeCls = (root: N) => String(all(card(root)).find(n => String(n.className).split(" ").includes("badge"))!.className);
     expect(badgeCls(o.root)).toContain("badge-ok");
     forms.resetAllForms();
+    const oth = await open({[PROD]: prod(live({deliveryRunId: OTHER}))});
+    expect(all(card(oth.root)).some(n => n.dataset.productUrl)).toBe(false); expect(byId(oth.root, "product-stop")).toBeNull(); expect(byId(oth.root, "product-start")).toBeNull();
+    expect(all(card(oth.root)).some(n => n.dataset.productOther === "1")).toBe(true); expect(badgeCls(oth.root)).toContain("badge-risk");
+    forms.resetAllForms();
+    const nb = await open({[PROD]: prod(live({bridged: false}))});
+    expect(all(card(nb.root)).some(n => n.dataset.productUrl)).toBe(false); expect(text(card(nb.root))).toContain("not bridged to a local address"); expect(byId(nb.root, "product-stop")).not.toBeNull();
+    forms.resetAllForms();
+    const noUrl = await open({[PROD]: prod(live({preview: {state: "UNAVAILABLE", url: null}}))});
+    expect(text(card(noUrl.root))).toContain("No address yet"); expect(byId(noUrl.root, "product-stop")).not.toBeNull();
+    forms.resetAllForms();
     expect(badgeCls((await open({})).root)).not.toMatch(/badge-ok|badge-risk/);
-    forms.resetAllForms();
-    for (const st2 of ["BLOCKED", "CRASHED"]) expect(badgeCls((await open({[DR]: dr({status: st2, reason: "SANDBOX_UNAVAILABLE"})})).root), st2).toContain("badge-risk");
-    forms.resetAllForms();
-    for (const bad of [{preview: {state: "AVAILABLE", url: "http://evil.example/"}}, {preview: {state: "UNAVAILABLE", url: "http://127.0.0.1:4123/"}}, {port: 4999}, {preview: {state: "AVAILABLE", url: "http://127.0.0.1:4123/x"}}]) {
-      forms.resetAllForms();
-      const b = await open({[DR]: live(bad)});
-      expect(all(card(b.root)).some(n => n.dataset.productUrl), JSON.stringify(bad)).toBe(false);
-      expect(text(card(b.root))).toContain("No address yet");
-      expect(byId(b.root, "product-stop")).not.toBeNull();
-    }
   });
-  it("explains a BLOCKED/CRASHED start with the server's reason and tells the sandbox truth; unknown codes stay raw and flagged", async () => {
-    const b = await open({[DR]: dr({status: "BLOCKED", reason: "SANDBOX_UNAVAILABLE"})});
-    const r = all(card(b.root)).find(n => n.dataset.productReason)!;
-    expect(r.dataset.productReason).toBe("SANDBOX_UNAVAILABLE"); expect(text(r)).toContain("no verified sandbox exists");
-    expect(byId(b.root, "product-start")).not.toBeNull(); // retry is possible
-    expect(all(card(b.root)).find(n => n.dataset.productSandbox)!.dataset.productSandbox).toBe("UNAVAILABLE");
-    expect(text(card(b.root))).toContain("starting will be refused (SANDBOX_UNAVAILABLE)");
-    const b2 = await open({[DR]: dr({status: "BLOCKED", reason: "DEVRUN_SANDBOX_UNAVAILABLE"})});
-    expect(text(all(card(b2.root)).find(n => n.dataset.productReason)!)).toContain("no verified sandbox provider can host the product"); expect(text(card(b2.root))).not.toMatch(/run anyway|on the host/i);
-    const odd = await open({[DR]: dr({status: "CRASHED", reason: "BRAND_NEW_REASON"})});
-    expect(text(all(card(odd.root)).find(n => n.dataset.productReason)!)).toContain("BRAND_NEW_REASON (not recognised)");
-    const stopped = await open({[DR]: dr({status: "STOPPED", reason: "SANDBOX_UNAVAILABLE"})});
-    expect(all(card(stopped.root)).some(n => n.dataset.productReason)).toBe(false); // a reason is only shown for BLOCKED/CRASHED
-    const a = await open({[EXE]: exe({state: "AVAILABLE", providerId: "docker"})});
-    expect(all(card(a.root)).find(n => n.dataset.productSandbox)!.dataset.productSandbox).toBe("AVAILABLE");
-    const k = await open({[EXE]: undefined});
-    expect(all(card(k.root)).find(n => n.dataset.productSandbox)!.dataset.productSandbox).toBe("UNKNOWN");
+  it("renders the exact refusal: state reason with known detail codes translated, unknown codes raw and flagged, a reason only for BLOCKED/CRASHED; no run-on-host path", async () => {
+    const reasonOf = async (st: string, reason: string | null, lang = "en") => { const o = await openWs({lang, get: projectsGet({...runs(), [PROD]: prod(dv({status: st, reason})), [FLOWP]: flow(), [EXE]: exe()})}); return all(card(o.root)).find(n => n.dataset.productReason); };
+    const a = await reasonOf("BLOCKED", "DEVRUN_SANDBOX_UNAVAILABLE:PROVIDER_HAS_NO_BRIDGE:wsl-unshare-v1");
+    expect(a!.dataset.productReason).toBe("DEVRUN_SANDBOX_UNAVAILABLE:PROVIDER_HAS_NO_BRIDGE:wsl-unshare-v1");
+    expect(text(a!)).toContain("no verified sandbox provider can host the product"); expect(text(a!)).toContain("no bridge to a local address"); expect(text(a!)).toContain("(PROVIDER_HAS_NO_BRIDGE:wsl-unshare-v1)");
+    expect(text(a!)).not.toMatch(/run anyway|on the host/i);
+    expect(text((await reasonOf("BLOCKED", "DEVRUN_SANDBOX_UNAVAILABLE:SANDBOX_LOOPBACK_NOT_VERIFIED:NOT_REPORTED"))!)).toContain("did not prove it has a working loopback");
+    expect(text((await reasonOf("BLOCKED", "SANDBOX_UNAVAILABLE"))!)).toContain("no verified sandbox exists");
+    expect(text((await reasonOf("CRASHED", "BRAND_NEW_REASON"))!)).toContain("BRAND_NEW_REASON (not recognised)");
+    expect(text((await reasonOf("BLOCKED", "DEVRUN_SANDBOX_UNAVAILABLE:BRAND_NEW_DETAIL"))!)).toContain("(BRAND_NEW_DETAIL)");
+    expect(await reasonOf("STOPPED", "SANDBOX_UNAVAILABLE")).toBeUndefined();
+    expect(text((await reasonOf("BLOCKED", "DEVRUN_SANDBOX_UNAVAILABLE:NSENTER_MISSING", "tr"))!)).toContain("Başlatma reddedildi");
+    const o = await open({[EXE]: exe({state: "AVAILABLE", providerId: "docker"})}); const o_av = (x: any) => all(card(x.root)).find(n => n.dataset.productSandbox)!;
+    expect(all(card(o.root)).find(n => n.dataset.productSandbox)!.dataset.productSandbox).toBe("AVAILABLE");
+    const un = all(card((await open({[EXE]: exe()})).root)).find(n => n.dataset.productSandbox)!;
+    expect(un.dataset.productSandbox).toBe("UNAVAILABLE"); expect(text(un)).toContain("starting will be refused"); expect(text(un)).not.toContain("Sandbox available");
+    expect(text(o_av(o))).toContain("only inside the verified sandbox");
+    expect(all(card((await open({[EXE]: undefined})).root)).find(n => n.dataset.productSandbox)!.dataset.productSandbox).toBe("UNKNOWN");
   });
-  it("an unreadable dev-run is UNAVAILABLE with no state or buttons made up; the Run tab shortcut opens the Run tab; en/tr keys are in parity", async () => {
-    const o = await open({[DR]: undefined});
-    expect(card(o.root).dataset.productState).toBeUndefined(); expect(text(card(o.root))).toContain("not available to the desktop");
+  it("explains server refusals of start/stop with the exact reason in the post result (no raw server text), in en and tr", async () => {
+    const w = await load(rend, "work-core.js");
+    const d = (status: number, body: any) => w.describePostResult({status, body});
+    expect(d(409, {error: "DEVRUN_SANDBOX_UNAVAILABLE", reason: "PROVIDER_HAS_NO_BRIDGE:wsl-unshare-v1"})).toEqual({ok: false, key: "post.err.409.DEVRUN_SANDBOX_UNAVAILABLE", vars: {status: 409, reason: "PROVIDER_HAS_NO_BRIDGE:wsl-unshare-v1"}});
+    expect(d(409, {error: "PRODUCT_RUN_NOT_DELIVERABLE", reason: "NO_DELIVERED_COMMIT"}).vars.reason).toBe("NO_DELIVERED_COMMIT");
+    expect(d(409, {error: "PRODUCT_RUN_NOT_THIS_DELIVERY", reason: "RUNNING_FOR_OTHER_RUN"}).key).toBe("post.err.409.PRODUCT_RUN_NOT_THIS_DELIVERY");
+    for (const r of ["<script>", "has space", 5, undefined, "a".repeat(200)]) expect(d(409, {error: "DEVRUN_SANDBOX_UNAVAILABLE", reason: r}).vars.reason, String(r)).toBe("UNKNOWN");
+    expect(d(409, {error: "SANDBOX_UNAVAILABLE"})).toEqual({ok: false, key: "post.err.409.SANDBOX_UNAVAILABLE", vars: {status: 409}}); // the old gate refusal is unchanged
+    expect(d(423, {error: "GLOBAL_STOP_ACTIVE"}).key).toBe("post.err.423"); expect(d(403, {error: "ACTION_DENIED"}).key).toBe("post.err.auth");
+    const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
+    const keys = Object.keys(E).filter(k => k.startsWith("product.") || /^post\.err\.409\.(DEVRUN|PRODUCT)/.test(k));
+    expect(keys.length).toBe(39);
+    for (const k of keys) expect(T[k], k).toBeTruthy();
+    for (const k of keys.filter(x => /^post\.err\.409\.(DEVRUN_SANDBOX|PRODUCT_RUN_NOT)/.test(x))) expect(E[k], k).toContain("{reason}");
+  });
+  it("an unreadable product route is UNAVAILABLE (or an error) with no state, URL or buttons made up; the Run tab shortcut opens the Run tab", async () => {
+    const o = await open({[PROD]: undefined});
+    expect(card(o.root).dataset.productState).toBeUndefined(); expect(text(card(o.root))).toContain("not available to the desktop yet");
     expect(byId(o.root, "product-start")).toBeNull(); expect(byId(o.root, "product-stop")).toBeNull();
+    const err = await open({[PROD]: prod(dv(), {runId: OTHER})});
+    expect(card(err.root).dataset.productState).toBeUndefined(); expect(byId(err.root, "product-start")).toBeNull();
     const ok = await open({});
     byId(ok.root, "product-open-run")!.fire("click"); await tick();
     expect(st.studio.tab).toBe("run");
-    const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
-    const keys = Object.keys(E).filter(k => k.startsWith("product."));
-    expect(keys.length).toBe(21);
-    for (const k of keys) expect(T[k], k).toBeTruthy();
   });
 });

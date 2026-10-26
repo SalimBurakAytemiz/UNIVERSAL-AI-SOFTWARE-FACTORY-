@@ -55,10 +55,10 @@ async function overviewTab(ctx,project,projects){
   }
   const missionsPanel=panel(ctx,{titleKey:"studio.ov.missions",id:"studio-ov-missions"},mBody);
   // Son koşu, inceleme ve güvenlik durumu yalnız sunucunun bildirdiği alanlardan gösterilir; yoksa "bildirilmedi" denir.
-  let runBody,reviewBody,secBody;
+  let runBody,reviewBody,secBody,latestRun=null;
   if(rres.state!=="VERIFIED"||missions.state!=="VERIFIED"){const s=rres.state!=="VERIFIED"?rres.state:missions.state;runBody=stateNote(ctx,s);reviewBody=stateNote(ctx,s);secBody=stateNote(ctx,s)}
   else{
-    const run=latestRunFor(rres.items,missions.items.map(m=>m.missionId));
+    const run=latestRunFor(rres.items,missions.items.map(m=>m.missionId));latestRun=run;
     if(!run){runBody=emptyNote(ctx,"studio.ov.noRun");reviewBody=emptyNote(ctx,"studio.ov.noRun");secBody=emptyNote(ctx,"studio.ov.noRun")}
     else{
       runBody=h(doc,"dl",{class:"kv"},...fact(doc,ctx.t("workforce.live.run"),run.runId,"mono"),h(doc,"dt",{text:ctx.t("workforce.live.status")}),h(doc,"dd",{},statusPill(ctx,run.status),runNotVerified(run)?[" ",notVerifiedBadge(ctx,"run")]:null),...fact(doc,ctx.t("studio.ov.step"),run.step?.name??MISSING),...fact(doc,ctx.t("studio.ov.startedAt"),formatDateTime(run.startedAt,ctx.i18n.lang)));
@@ -71,7 +71,7 @@ async function overviewTab(ctx,project,projects){
       }
     }
   }
-  return h(doc,"div",{class:"studio-grid"},await flowPanel(ctx,id),await productCard(ctx,project),info,missionsPanel,panel(ctx,{titleKey:"studio.ov.lastRun",id:"studio-ov-run"},runBody),panel(ctx,{titleKey:"studio.ov.review",id:"studio-ov-review"},reviewBody),panel(ctx,{titleKey:"studio.ov.security",id:"studio-ov-security"},secBody),await knowledgePanel(ctx,id),importPanel(ctx,{projects,fixedId:id}));
+  return h(doc,"div",{class:"studio-grid"},await flowPanel(ctx,id),await productCard(ctx,project,latestRun),info,missionsPanel,panel(ctx,{titleKey:"studio.ov.lastRun",id:"studio-ov-run"},runBody),panel(ctx,{titleKey:"studio.ov.review",id:"studio-ov-review"},reviewBody),panel(ctx,{titleKey:"studio.ov.security",id:"studio-ov-security"},secBody),await knowledgePanel(ctx,id),importPanel(ctx,{projects,fixedId:id}));
 }
 
 // ---------- Çalıştır & Önizle ----------

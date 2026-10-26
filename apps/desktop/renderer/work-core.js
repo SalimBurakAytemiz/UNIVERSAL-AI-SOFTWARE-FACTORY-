@@ -391,6 +391,9 @@ function denialReason(raw){
   return /^[A-Z][A-Z0-9_]{1,63}$/.test(code)?code:"";
 }
 /** Köprü POST yanıtını {ok, key, vars} olarak sınıflar; key bir sözlük anahtarıdır (post.*). */
+// //TR: LANE-A A-FLOW-4 (B-RUN-1): ürün başlat/durdur reddi gövdesi {error:<kod>, reason?:<kesin neden>}; neden yalnız güvenli desenliyse aktarılır (ham metin gösterilmez).
+const PRODUCT_409=new Set(["DEVRUN_SANDBOX_UNAVAILABLE","PRODUCT_RUN_NOT_DELIVERABLE","PRODUCT_RUN_NOT_THIS_DELIVERY","DEVRUN_ALREADY_RUNNING","DEVRUN_BLOCKED","DEVRUN_LOCKED","DEVRUN_DELIVERY_HEAD_MISSING"]);
+const SAFE_REASON_RE=/^[A-Z][A-Z0-9_]{0,63}(?::[A-Za-z0-9_.:-]{1,80})?$/;
 export function describePostResult(res){
   if(!res)return {ok:false,key:"post.err.generic",vars:{status:MISSING}};
   if(res.thrown)return {ok:false,key:res.state==="OFFLINE"?"post.err.offline":"post.err.generic",vars:{status:MISSING}};
@@ -401,6 +404,7 @@ export function describePostResult(res){
   if(s===401||s===403)return {ok:false,key:"post.err.auth",vars:{status:s}};
   if(s===404||s===501)return {ok:false,key:"post.err.unavailable",vars:{status:s}};
   if(s===409&&err==="WORKOS_CONFLICT"&&KNOWN_COMPLETION_409.has(res.body?.reason))return {ok:false,key:`post.err.409.${res.body.reason}`,vars:{status:s}};
+  if(s===409&&PRODUCT_409.has(err)){const r=res.body?.reason;return {ok:false,key:`post.err.409.${err}`,vars:{status:s,reason:typeof r==="string"&&r.length<=160&&SAFE_REASON_RE.test(r)?r:"UNKNOWN"}}}
   if(s===409)return KNOWN_409.has(err)?{ok:false,key:`post.err.409.${err}`,vars:{status:s}}:{ok:false,key:"post.err.409",vars:{status:s}};
   if(s===423)return {ok:false,key:"post.err.423",vars:{status:s}};
   if(s===503)return {ok:false,key:"post.err.503",vars:{status:s}};

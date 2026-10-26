@@ -192,21 +192,47 @@ export function devRunActions(status){
   // //TR: LANE-A A-FLOW-4: BLOCKED (ör. sandbox yokken reddedilen başlatma) yeniden denenebilir: sunucu BLOCKED durumundan start kabul eder ve kapıyı her seferinde yeniden sorar; aksi halde sandbox sonradan hazır olsa bile başlatma sonsuza dek kapalı kalırdı.
   return {start:status==="STOPPED"||status==="CRASHED"||status==="BLOCKED",stop:live,restart:live||status==="CRASHED"};
 }
-/** //TR: LANE-A A-FLOW-4: teslimden sonra "Ürünü başlat" teklifi. Başlat YALNIZ akışın DELIVERY aşaması sunucuda DONE iken sunulur; durdurma canlı bir süreç için HER ZAMAN sunulur. DONE ürünün doğrulandığı anlamına gelmez. */
-export function productOffer(run,flow){
+// ---------- Teslim edilen ürünün çalıştırılması (B-RUN-1: GET /v1/work-runs/:id/product, POST .../product/start|stop) ----------
+const WORK_RUN_ID_RE=/^run_[0-9a-f]{24}$/;
+export const runProductPath=id=>typeof id==="string"&&WORK_RUN_ID_RE.test(id)?`/v1/work-runs/${id}/product`:null;
+export function buildProductRequest({runId,action}){
+  const errors={};
+  if(typeof runId!=="string"||!WORK_RUN_ID_RE.test(runId))errors.runId="err.runInvalid";
+  if(action!=="start"&&action!=="stop")errors.action="studio.err.action";
+  return result(`/v1/work-runs/${runId}/product/${action}`,{},errors);
+}
+/** //TR: LANE-A A-FLOW-4 (B-RUN-1): ürün durumu SADECE koşuya bağlı rotadan okunur. Yanıt bu koşunun kimliğini taşımalı; teslim edilen commit yoksa null ya da 40 hex; tiedToThisRun yalnız deliveryRunId bu koşuysa doğru olabilir (çelişki = tüm okuma ERROR). */
+export function mapRunProduct(raw,runId){
+  const bad={state:"ERROR",product:null};
+  const x=isObj(raw)?raw.product:null;
+  if(!isObj(x)||x.runId!==runId||!WORK_RUN_ID_RE.test(String(runId)))return bad;
+  const head=x.deliveredHeadSha;
+  if(!(head===null||(typeof head==="string"&&COMMIT_RE.test(head)&&head.length===40)))return bad;
+  if(typeof x.tiedToThisRun!=="boolean")return bad;
+  const d=mapDevRun(isObj(x.devrun)?{devrun:x.devrun}:null);
+  if(d.state!=="VERIFIED")return bad;
+  if(x.tiedToThisRun!==(d.run.deliveryRunId===runId))return bad;
+  return {state:"VERIFIED",product:{runId,deliveredHeadSha:head,tiedToThisRun:x.tiedToThisRun,run:d.run}};
+}
+/** //TR: "Ürünü başlat" YALNIZ akışın DELIVERY aşaması sunucuda DONE, teslim edilen commit biliniyor ve durum başlatmaya izin veriyorsa; "Durdur" YALNIZ bu teslimin kendi çalışan ürünü için (başka teslimin ürününü bu düğme kapatmaz); yerel adres YALNIZ bu teslime bağlı, RUNNING, bridged=true ve önizleme AVAILABLE iken. DONE ürünün doğrulandığı anlamına gelmez. */
+export function productOffer(product,flow){
   const stages=flow&&Array.isArray(flow.stages)?flow.stages:[];
   const deliveryDone=stages.some(s=>s&&s.stage==="DELIVERY"&&s.state==="DONE");
-  const a=devRunActions(run&&run.status);
-  return {deliveryDone,start:deliveryDone&&a.start,stop:a.stop,open:previewOpenable(run)};
+  const run=product.run,a=devRunActions(run.status),hasCommit=product.deliveredHeadSha!==null;
+  const otherRunning=!product.tiedToThisRun&&(run.status==="STARTING"||run.status==="RUNNING");
+  return {deliveryDone,hasCommit,otherRunning,
+    start:deliveryDone&&hasCommit&&!otherRunning&&a.start,
+    stop:product.tiedToThisRun&&a.stop,
+    open:product.tiedToThisRun&&run.status==="RUNNING"&&run.bridged===true&&previewOpenable(run)};
 }
 export function mapDevRun(raw){
   const r=isObj(raw)?(isObj(raw.devrun)?raw.devrun:raw):null;
   if(!r||!DEVRUN_STATES.includes(r.status))return {state:"ERROR",run:null};
   const pv=isObj(r.preview)?r.preview:{},url=typeof pv.url==="string"&&PREVIEW_URL_RE.test(pv.url)?pv.url:null,port=safeInt(r.port);
   // //TR: LANE-A A-FLOW-4: BLOCKED/CRASHED nedeni (ör. SANDBOX_UNAVAILABLE) sunucunun kodu olarak taşınır; desen dışıysa null (uydurulmaz).
-  const reason=typeof r.reason==="string"&&/^[A-Z][A-Z0-9_:]{0,63}$/.test(r.reason)?r.reason:null;
+  const reason=typeof r.reason==="string"&&r.reason.length<=160&&/^[A-Z][A-Z0-9_]{0,63}(?::[A-Za-z0-9_.:-]{1,80})?$/.test(r.reason)?r.reason:null;
   return {state:"VERIFIED",run:{
-    status:r.status,reason,pid:safeInt(r.pid),startedAt:iso(r.startedAt),exitCode:safeInt(r.exitCode),port:port!==null&&port>=1&&port<=65535?port:null,
+    status:r.status,reason,deliveryRunId:typeof r.deliveryRunId==="string"&&/^run_[0-9a-f]{24}$/.test(r.deliveryRunId)?r.deliveryRunId:null,bridged:typeof r.bridged==="boolean"?r.bridged:null,pid:safeInt(r.pid),startedAt:iso(r.startedAt),exitCode:safeInt(r.exitCode),port:port!==null&&port>=1&&port<=65535?port:null,
     preview:{url,state:PREVIEW_STATES.includes(pv.state)?pv.state:"UNAVAILABLE",lastProbeAt:iso(pv.lastProbeAt)},
     logTail:redactTail(typeof r.logTail==="string"?r.logTail:Array.isArray(r.logTail)?r.logTail.filter(x=>typeof x==="string").join("\n"):"")
   }};
