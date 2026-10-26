@@ -62,6 +62,8 @@ export interface DevRunOptions {
   maxConcurrent?: number;
   // recover() sağlayıcı-taraflı scratch kapatmasını arka planda bu süre kadar dener (varsayılan 30 sn).
   recoverTeardownMs?: number;
+  // recover(): sahip/pid başlangıç zamanı denetimi başına üst süre (varsayılan 4 sn; dolarsa canlı sayılır).
+  ownerCheckMs?: number;
 }
 const NO_PREVIEW_TYPES = new Set(["desktop", "mobile", "native"]);
 const ACTIVE: ReadonlySet<DevRunStatus> = new Set(["STARTING", "RUNNING"]);
@@ -376,7 +378,8 @@ export class DevRunManager {
     if (pending && !(await timed(pending.then(() => true), this.o.reapWaitMs ?? 60_000, false))) throw new StudioError("DEVRUN_STOP_PENDING", 409);
     // NEW-2: önceki çalıştırmanın sağlayıcı-taraflı kapatması temiz bitmediyse (STOP_INCOMPLETE) kayıt sessizce düşmez: önce Linux tarafı yeniden kapatılır; kapanmazsa yeni süreç BAŞLATILMAZ.
     const prevRun = this.readState(id);
-    if (prevRun?.stopIncomplete) {
+    // Bayrak olmasa bile (çökme/yarış) terminal bir kayıtta KAPATILMAMIŞ scratch varsa yeni süreç, tanıtıcıyı ezmeden önce onu kapatmak zorundadır.
+    if (prevRun && !ACTIVE.has(prevRun.status) && (prevRun.stopIncomplete || prevRun.sandboxScratch)) {
       const code = prevRun.sandboxScratch ? (await this.recoverScratchWith(prevRun, gate.provider)).code : null;
       if (code) throw new StudioError("DEVRUN_STOP_INCOMPLETE", 409, code);
       try { this.writeState({...prevRun, stopIncomplete: undefined, sandboxScratch: null, reason: "STOP_INCOMPLETE_RESOLVED"}, true); } catch { /* durum yazılamadı */ }
@@ -703,22 +706,29 @@ export class DevRunManager {
     try { ids = fs.readdirSync(root).filter(x => /^prj_[0-9a-f]{24}$/.test(x)); } catch { return []; }
     const out: Array<{projectId: string} & DevRunRecovery> = [];
     const self = await this.ownStartTime();
+    // Sahip-canlı denetimleri (Windows'ta PowerShell) PARALEL ve her biri sınırlı süreyle yapılır: süre dolarsa 'canlı' sayılır (fail-closed, kayda dokunulmaz). onReady'yi N kayıt x birkaç sn tutmaz.
+    const live = new Map<string, boolean>();
+    await Promise.all(ids.map(async id => {
+      const r = this.readState(id);
+      const needs = r && r.instanceId !== this.instanceId && r.ownerHost === os.hostname() && ((!ACTIVE.has(r.status) && r.sandboxScratch) || ACTIVE.has(r.status));
+      if (needs) live.set(id, await timed(this.ownerLive(r), this.o.ownerCheckMs ?? 4000, true));
+    }));
     for (const id of ids) {
       const st = this.readState(id);
       // C-5: önceki kapatma temiz bitmediyse (STOP_INCOMPLETE + scratch) sahip canlı değilse Linux tarafı yeniden denenir.
-      if (st && !ACTIVE.has(st.status) && st.sandboxScratch && st.instanceId !== this.instanceId && !this.active.has(id) && st.ownerHost === os.hostname() && !(await this.ownerLive(st))) {
+      if (st && !ACTIVE.has(st.status) && st.sandboxScratch && st.instanceId !== this.instanceId && !this.active.has(id) && st.ownerHost === os.hostname() && live.get(id) === false) {
         this.scheduleScratch(id, st); // sağlayıcıya dokunur: sunucu açılışını ASLA bekletmez (arka planda, sınırlı süre)
         continue;
       }
       if (!st || !ACTIVE.has(st.status) || st.instanceId === this.instanceId || this.active.has(id)) continue;
       if (st.ownerHost !== os.hostname()) continue;
       // PS1A-C1-F3: canlı başka API süreci yalnız pid + başlangıç zamanı eşleşirse; yeniden kullanılmış pid sahibi canlı saymaz.
-      if (await this.ownerLive(st)) continue;
+      if (live.get(id) !== false) continue;
       const ownerReused = st.ownerPid !== process.pid && pidAlive(st.ownerPid);
       let result: DevRunRecovery["result"];
       if (!pidAlive(st.pid)) result = "ORPHAN_ALREADY_EXITED";
       else {
-        const now = st.pid ? await this.o.startTimeOf(st.pid) : null;
+        const now = st.pid ? await timed(this.o.startTimeOf(st.pid), this.o.ownerCheckMs ?? 4000, null) : null;
         if (!now || !st.pidStartTime || now !== st.pidStartTime) result = "ORPHAN_PID_MISMATCH_NOT_KILLED";
         else { killProcessTree(st.pid!); for (let i = 0; i < 50 && pidAlive(st.pid); i++) await sleep(100); result = pidAlive(st.pid) ? "ORPHAN_KILL_FAILED" : "ORPHAN_KILLED"; }
       }

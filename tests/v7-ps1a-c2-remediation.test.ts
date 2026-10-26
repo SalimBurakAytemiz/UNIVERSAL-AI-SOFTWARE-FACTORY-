@@ -552,6 +552,30 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
     expect(JSON.parse(fs.readFileSync(f, "utf8"))).toMatchObject({stopIncomplete: "TEARDOWN_TIMEOUT", sandboxScratch: "/tmp/uasco-sbx-Bg0001", reason: "STOP_INCOMPLETE:TEARDOWN_TIMEOUT"});
   }, 30_000);
 
+  it("STARTUP: owner-liveness checks in recover() run in PARALLEL and are bounded (ownerCheckMs): N records whose owner start-time lookup never answers do not hold recover() for N x the lookup; an unanswered check counts as LIVE (record untouched)", async () => {
+    const {app, dataDir} = mk(); const ps = []; for (let i = 0; i < 5; i++) ps.push(await createProject(app, {template: "web-node"}));
+    const m0 = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any));
+    for (const p of ps) { const f = path.join(dataDir, "projects", p.projectId, "devrun", "state.json"); fs.mkdirSync(path.dirname(f), {recursive: true});
+      fs.writeFileSync(f, JSON.stringify({...(m0 as any).blank(p), status: "RUNNING", instanceId: "dev_other", ownerPid: process.ppid, ownerStartTime: "WILL-NEVER-ANSWER", pid: null, startedAt: new Date().toISOString()})); }
+    const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {ownerCheckMs: 400, startTimeOf: (pid: number) => pid === process.pid ? Promise.resolve("SELF") : new Promise<string | null>(() => undefined)});
+    const t0 = Date.now(); const out = await m.recover(); const took = Date.now() - t0;
+    expect(out).toEqual([]); expect(took, `5 hanging lookups took ${took} ms: must be parallel (~400 ms), not sequential (~2000 ms)`).toBeLessThan(1500);
+    for (const p of ps) expect(JSON.parse(fs.readFileSync(path.join(dataDir, "projects", p.projectId, "devrun", "state.json"), "utf8")).status).toBe("RUNNING");
+  }, 30_000);
+
+  it("a terminal record that still carries a sandboxScratch WITHOUT the stopIncomplete flag (crash/race) blocks the next start until the Linux side is closed (the handle is never overwritten)", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+    let code: string | null = "PROCESS_SURVIVED"; const torn: string[] = []; const provider = hostSpawn({async teardownScratch(sc: string) { torn.push(sc); return code; }});
+    const f = path.join(dataDir, "projects", p.projectId, "devrun", "state.json"); fs.mkdirSync(path.dirname(f), {recursive: true});
+    const m = manager(dataDir, new ExecutionGate(provider));
+    fs.writeFileSync(f, JSON.stringify({...(m as any).blank(p), status: "STOPPED", reason: "STOP_REQUESTED", instanceId: "dev_dead", ownerPid: 2 ** 22 - 3, sandboxScratch: "/tmp/uasco-sbx-Nf0001", endedAt: new Date().toISOString()}));
+    try {
+      await expect(m.start(p)).rejects.toMatchObject({code: "DEVRUN_STOP_INCOMPLETE", reason: "PROCESS_SURVIVED"}); expect(torn).toEqual(["/tmp/uasco-sbx-Nf0001"]);
+      expect(JSON.parse(fs.readFileSync(f, "utf8")).sandboxScratch).toBe("/tmp/uasco-sbx-Nf0001");
+      code = null; expect((await m.start(p)).status).toMatch(/RUNNING|STARTING/); expect(torn).toHaveLength(2);
+    } finally { code = null; await m.close().catch(() => undefined); }
+  }, 30_000);
+
   it("STARTUP: buildServer with a WSL provider whose runner never answers is ready within 2 s and never touches the runner while starting", async () => {
     const { buildServer } = await import("../apps/control-api/src/server.js"); const { WslUnshareSandboxProvider } = await import("../core/sandbox/wsl-unshare-sandbox.js");
     const calls: string[][] = []; const wsl = new WslUnshareSandboxProvider({platform: "win32", runner: args => { calls.push(args); return new Promise(() => undefined); }});
