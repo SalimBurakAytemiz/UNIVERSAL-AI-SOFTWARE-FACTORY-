@@ -991,7 +991,7 @@ describe("B3a control API", () => {
     await a.close(); await b.close();
   });
 
-  it("LANE-C: the REVIEW step of a role-assigned run goes through the bound reviewer role; a BLOCKED verdict is recorded in the trace; unbound reviewer role BLOCKS before any review call", { timeout: T }, async () => {
+  it("LANE-C: the REVIEW step of a role-assigned run goes through the bound reviewer role; a BLOCKED verdict is recorded in the trace", { timeout: T }, async () => {
     // BLOCKED verdict (remediation cycle 0) is recorded as a COMPLETED agent with verdict=BLOCKED
     const c = setup(); const fake = new FakeExecutors(okScript({review: call => ({verdict: call === 1 ? "BLOCKED" : "CLEAN", findings: call === 1 ? [{severity: "HIGH", title: "x"}] : []})}));
     const p = fake.pair();
@@ -1002,17 +1002,18 @@ describe("B3a control API", () => {
     expect(reviewTraces.length).toBeGreaterThanOrEqual(2);
     expect(reviewTraces[0].note).toContain("verdict=BLOCKED");
     expect(reviewTraces[reviewTraces.length - 1].note).toContain("verdict=CLEAN");
-    // an unbound/mismatched configured reviewer role BLOCKS before the reviewer adapter is called
-    for (const bad of ["UASCO-0085", "UASCO-0001"]) {
-      const c2 = setup(); const f2 = new FakeExecutors(okScript()); const p2 = f2.pair();
-      const cr = c2.store.createRun({tenantId: "tA", missionId: c2.missionId, roleId: "UASCO-0085", executor: {implementer: p2.implementer.identity, reviewer: p2.reviewer.identity}, createdBy: "FOUNDER_LOCAL"});
-      await runner(c2, f2, {reviewerRoleId: bad}).tick();
-      const r2 = runOf(c2, cr.runId);
-      expect(r2.status).toBe("BLOCKED");
-      expect(f2.calls.review).toBe(0);
-      expect(JSON.stringify(journal(c2))).toContain("ROLE_NOT_EXECUTABLE:");
-    }
-    // role-less runs: no AGENT_TRACE at all (unchanged behaviour)
+  });
+  // an unbound/mismatched configured reviewer role BLOCKS before the reviewer adapter is called
+  it.each(["UASCO-0085", "UASCO-0001"])("LANE-C: an unbound/mismatched configured reviewer role (%s) BLOCKS before any review call", { timeout: T }, async bad => {
+    const c2 = setup(); const f2 = new FakeExecutors(okScript()); const p2 = f2.pair();
+    const cr = c2.store.createRun({tenantId: "tA", missionId: c2.missionId, roleId: "UASCO-0085", executor: {implementer: p2.implementer.identity, reviewer: p2.reviewer.identity}, createdBy: "FOUNDER_LOCAL"});
+    await runner(c2, f2, {reviewerRoleId: bad}).tick();
+    const r2 = runOf(c2, cr.runId);
+    expect(r2.status).toBe("BLOCKED");
+    expect(f2.calls.review).toBe(0);
+    expect(JSON.stringify(journal(c2))).toContain("ROLE_NOT_EXECUTABLE:");
+  });
+  it("LANE-C: role-less runs write no AGENT_TRACE at all (unchanged behaviour)", { timeout: T }, async () => {
     const c3 = setup(); const f3 = new FakeExecutors(okScript()); const created3 = start(c3, f3);
     await runner(c3, f3).tick();
     expect(runOf(c3, created3.runId).evidence.some(e => e.kind === "AGENT_TRACE")).toBe(false);
