@@ -682,6 +682,19 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
     } finally { await m.close().catch(() => undefined); }
   }, 60_000);
 
+  it("S2: the provider's scratch binding is recorded with the scratch and handed back to teardownScratch (stop-incomplete retry and recover())", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"}); const BIND = {providerId: "wsl-unshare-v1", distro: "Ubuntu"};
+    const seen: unknown[] = []; let code: string | null = "PROCESS_SURVIVED";
+    const provider = hostSpawn({async spawnAsync(c: string, a: string[], o: cp.SpawnOptions) { const ch: any = cp.spawn(c, a, o); ch.sandboxScratch = "/tmp/uasco-sbx-Bn0001"; ch.sandboxBinding = BIND; ch.sandboxTeardown = new Promise(res => ch.once("exit", () => res(code))); return ch; },
+      async teardownScratch(_s: string, b?: unknown) { seen.push(b); return code; }});
+    const m = manager(dataDir, new ExecutionGate(provider)); const f = path.join(dataDir, "projects", p.projectId, "devrun", "state.json");
+    try {
+      await m.start(p); expect(readRec(f).sandboxBinding).toEqual(BIND); await expect(m.stop(p.projectId)).rejects.toMatchObject({code: "DEVRUN_STOP_INCOMPLETE"});
+      expect(readRec(f)).toMatchObject({sandboxScratch: "/tmp/uasco-sbx-Bn0001", sandboxBinding: BIND});
+      await expect(m.start(p)).rejects.toMatchObject({code: "DEVRUN_STOP_INCOMPLETE"}); expect(seen).toEqual([BIND]);
+    } finally { code = null; await m.close().catch(() => undefined); }
+  }, 60_000);
+
   it("D2 (gate refusal): a gate refusal on top of an incomplete teardown keeps stopIncomplete + sandboxScratch + startedAt", async () => {
     const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
     const m0: any = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any)); const started = new Date().toISOString();
