@@ -634,19 +634,21 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
     const t0 = Date.now(); await expect(m.start(p)).rejects.toMatchObject({code: "DEVRUN_LOCKED"}); expect(Date.now() - t0).toBeLessThan(5000);
   }, 30_000);
 
-  it("M2: the liveness verdict is bound to the record it was computed for: a record rewritten by a LIVE peer between the pre-check and the loop is not taken over (its product survives, its record is untouched)", async () => {
+  it("M2: the liveness verdict is bound to the record it was computed for: records rewritten by a LIVE peer between the pre-check and the loop (the start-time read of the orphan is the hook) are re-checked and NOT taken over (peer product alive, record untouched, no result)", async () => {
     const {app, dataDir} = mk(); const ps = [await createProject(app, {template: "web-node"}), await createProject(app, {template: "web-node"})];
-    const m0: any = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any)); const info = new Map<string, {pid: number; t: string | null; f: string}>();
-    for (const p of ps) { const pid = idle(); const t = await processStartTime(pid); info.set(p.projectId, {pid, t, f: seedRec(dataDir, p, deadRec(m0, p, {status: "RUNNING", pid, pidStartTime: t, startedAt: new Date().toISOString()}))}); }
-    const ownerT = await processStartTime(process.ppid); let swapped = ""; let first = "";
-    const byPid = new Map([...info.values()].map(v => [v.pid, v.t] as const));
-    const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {startTimeOf: (pid: number) => Promise.resolve(pid === process.pid ? "SELF" : pid === process.ppid ? ownerT : byPid.get(pid) ?? null), audit: (e: string, d: any) => {
-      if (e !== "DEVRUN_ORPHAN_RECOVERED" || swapped) return; first = d.projectId; const other = ps.find(x => x.projectId !== d.projectId)!; swapped = other.projectId; const o = info.get(other.projectId)!;
-      fs.writeFileSync(o.f, JSON.stringify({...m0.blank(other), instanceId: "dev_peer", ownerPid: process.ppid, ownerStartTime: ownerT, status: "RUNNING", pid: o.pid, pidStartTime: o.t, startedAt: new Date().toISOString()}));
-    }});
-    const out = await m.recover(); const o = info.get(swapped)!;
-    expect(out.map(x => x.projectId)).toEqual([first]); expect(pidAlive(o.pid), "the live peer's product survives").toBe(true);
-    expect(readRec(o.f)).toMatchObject({instanceId: "dev_peer", status: "RUNNING"}); expect(pidAlive(info.get(first)!.pid)).toBe(false);
+    const m0: any = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any)); const ownerT = await processStartTime(process.ppid);
+    const rows = [] as {project: Project; orphan: number; ot: string | null; peer: number; pt: string | null; f: string; swapped: boolean}[];
+    for (const p of ps) { const orphan = idle(), peer = idle(); const ot = await processStartTime(orphan), pt = await processStartTime(peer); rows.push({project: p, orphan, ot, peer, pt, f: seedRec(dataDir, p, deadRec(m0, p, {status: "RUNNING", pid: orphan, pidStartTime: ot, startedAt: new Date().toISOString()})), swapped: false}); }
+    // Ön denetimin başlangıç-zamanı okuması çağrıldığında (kayıt zaten okundu) kayıt canlı bir eş olarak yeniden yazılır: döngü okuduğunda kimlik uyuşmaz.
+    const startTimeOf = async (pid: number) => {
+      if (pid === process.pid) return "SELF"; if (pid === process.ppid) return ownerT;
+      const r = rows.find(x => x.orphan === pid); if (!r) return null;
+      if (!r.swapped) { r.swapped = true; fs.writeFileSync(r.f, JSON.stringify({...m0.blank(r.project), instanceId: "dev_peer", ownerPid: process.ppid, ownerStartTime: ownerT, status: "RUNNING", pid: r.peer, pidStartTime: r.pt, startedAt: new Date().toISOString()})); }
+      return r.ot;
+    };
+    const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {startTimeOf});
+    const out = await m.recover();
+    expect(out).toEqual([]); for (const r of rows) { expect(pidAlive(r.peer), "the live peer's product survives").toBe(true); expect(readRec(r.f)).toMatchObject({instanceId: "dev_peer", status: "RUNNING", pid: r.peer}); }
   }, 60_000);
 
   it("M3: scratch teardowns never overlap: repeated recover() calls schedule ONE teardown, a timed-out teardown keeps the slot (start refuses 409 DEVRUN_STOP_PENDING, no second call), a late success writes the final result, and recover() persists TEARDOWN_PENDING before scheduling", async () => {
