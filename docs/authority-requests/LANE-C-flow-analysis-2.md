@@ -37,4 +37,4 @@ All analysis-flow tests (C-FLOW-ANALYSIS-1: 17, C-FLOW-ANALYSIS-2: 9) are one se
 6. **Prompt budget:** the largest prompt (Architecture with all upstream) stays far below the 256 KiB builder limit for a one-idea project; a very large brief would be rejected `PREDEV_BUILDER_PROMPT_INVALID`.
 
 ## Mutants
-`docs/lanes/LANE-C-flow-analysis-2-mutants.json` / `.mjs` (32 mutants over the builder, driver guard, executor wiring and skeletons; baseline must be green; result recorded in the PR/branch report).
+`docs/lanes/LANE-C-flow-analysis-2-mutants.json` / `.mjs` (35 mutants over the builder, driver guard, executor wiring and skeletons; baseline must be green; result recorded in the PR/branch report).
