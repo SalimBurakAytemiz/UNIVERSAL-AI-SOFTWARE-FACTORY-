@@ -464,7 +464,8 @@
         "tests/v7-ux-posture.test.ts",
         "tests/v7-ux-matrix.test.ts",
         "tests/v7-ux-operations.test.ts",
-        "tests/v7-ux-install.test.ts"
+        "tests/v7-ux-install.test.ts",
+        "tests/v7-core-readiness-audit.test.ts"
       ],
       "requiresDependencies": true
     },
