@@ -145,7 +145,7 @@ export function analysisPanel(ctx,{missionId,exec}){
   return h(doc,"div",{class:"analysis-step",id:"analysis-step",role:"region","aria-label":ctx.t("analysis.title"),dataset:{analysisMission:missionId}},
     h(doc,"h3",{text:ctx.t("analysis.title")}),
     h(doc,"p",{class:"note",text:ctx.t("analysis.lead")}),
-    busyAny?h(doc,"p",{class:"note",id:"analysis-in-flight",tabindex:"-1",role:"status",dataset:{analysisBusy:"1",focusKey:"analysis-in-flight"},text:ctx.t("analysis.inFlight")}):null,
+    busyAny?h(doc,"p",{class:"note",id:"analysis-in-flight",tabindex:"-1",role:"status",dataset:{analysisBusy:"1",focusKey:"analysis-in-flight"},text:ctx.t("busy.missionWrite")}):null,
     h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn btn-primary",id:"analysis-step-submit",dataset:{focusKey:"analysis-step-submit"},disabled:busyS,text:ctx.t("analysis.step.button"),
       on:{click:()=>{if(!analysisBusy())submitAnalysisStep(ctx,missionId)}}})),
     step?stepBlock(ctx,step,exec,missionId):h(doc,"p",{class:"note",dataset:{analysisStatus:"NONE"},text:ctx.t("analysis.none")}),
