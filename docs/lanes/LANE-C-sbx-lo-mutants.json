@@ -68,8 +68,8 @@
    "id": "V6",
    "description": "node unavailable inside the sandbox is read as a verified probe",
    "file": "core/agents/linux-unshare-sandbox.ts",
-   "old": "if (!has(\"probe_started\")) return",
-   "new": "if (false) return"
+   "old": "if (!has(\"probe_started\")) {",
+   "new": "if (false) {"
   },
   {
    "id": "V7",
