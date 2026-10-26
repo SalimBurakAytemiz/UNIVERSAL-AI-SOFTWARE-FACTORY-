@@ -875,6 +875,9 @@ describe("Operations — view honesty", () => {
     const withSince = blockedRow({kind: "MISSION_BLOCKED", nextAction: "REVIEW_MISSION", taskId: null, reason: null, since: "2026-10-16T10:00:00.000Z", title: "Mission Y"});
     const runRow = blockedRow({kind: "RUN_NEEDS_DECISION", nextAction: "REVIEW_RUN", taskId: null, runId: "run_" + "ab".repeat(12), since: "2026-10-16T10:00:00.000Z", title: "Run Z"});
     const kinds = await renderView(serve({"/v1/attention": attBody({blocked: [withSince, runRow]})}), "en");
+    // the card heading is the server's own title (not its id): review #196 M12
+    for (const li of blockedItems(kinds.root)) { const h3 = all(li).find(n => n.tagName === "H3")!; expect(h3.textContent).toBe(li.textContent.includes("Mission Y") ? "Mission Y" : "Run Z"); }
+    expect(all(blockedItems(ok.root)[0]).find(n => n.tagName === "H3")!.textContent).toBe("Mission X"); expect(all(blockedItems(ok.root)[1]).find(n => n.tagName === "H3")!.textContent).not.toMatch(/^(msn|tsk|run)_/);
     const items2 = blockedItems(kinds.root), m2 = items2.find(n => n.textContent.includes("Mission Y"))!, r2 = items2.find(n => n.textContent.includes("Run Z"))!;
     expect(lab(m2)).toContain("Mission created"); expect(lab(m2)).not.toContain("Blocked since"); expect(lab(r2)).toContain("Run last updated"); expect(lab(r2)).not.toContain("Blocked since");
     const kinds_tr = await renderView(serve({"/v1/attention": attBody({blocked: [withSince, runRow]})}), "tr");
