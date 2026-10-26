@@ -1791,8 +1791,8 @@
   },
   "integrationBoard": {
     "//TR": "Koordinatör entegrasyon panosu: her açık PR için gerçek engel ve bekleyen sorumlu. Ortak kök neden (base dependency gate) PR'a özgü hatalardan ayrı tutulur; #221/#225 birleşmeden tekrar CI tetiklenmez.",
-    "at": "2026-10-26T08:24:00Z",
-    "base": "a14bd26 (v7/integration, after #192)",
+    "at": "2026-10-26T08:56:00Z",
+    "base": "7070714 (v7/integration, after #196)",
     "sharedRootCause": {
       "id": "NONE_ACTIVE",
       "previous": "BASE_DEPENDENCY_GATE resolved by #225 (e2323d9)",
@@ -1800,10 +1800,10 @@
     },
     "prs": [
       {
-        "pr": 196,
-        "kind": "LANE_A attention sections (stacked on #192)",
-        "state": "DRAFT @f287ccc",
-        "blocker": "delta re-check NO_BLOCKERS; conflicts with base in locales/en.js+tr.js after #232 -> Lane A base merge (union of keys), then coordinator merge-commit check -> Ready + auto-merge",
+        "pr": 233,
+        "kind": "LANE_A A-SETUP-FIX-1 (setup-check fix texts)",
+        "state": "DRAFT @87ac9f7",
+        "blocker": "review NO_BLOCKERS; 2 LOW regressions (F1 install-before-launcher fixKey order, F2 executorRow with stale LOCAL_CLAUDE) + F3 pins requested before merge",
         "owner": "LANE_A"
       },
       {
@@ -1824,7 +1824,7 @@
         "pr": 231,
         "kind": "FOUNDER-TIER sandbox (WSL provider + devrun + Lane C loopback)",
         "state": "DRAFT @9bdb026",
-        "blocker": "security delta reviews running (fa31c1d, 4cb9930); B-WSL-WIRE-1 server.ts one-liner + reseal pending; Founder decision required to merge",
+        "blocker": "delta security reviews done (isolation NO_BLOCKERS); 2 MEDIUM devrun (D1 stop during spawnAsync, D2 blank BLOCKED erases STOP_INCOMPLETE) + 14 LOW -> Lane B; B-WSL-WIRE-1 server.ts classified R2 (Founder, real-WSL acceptance) -> coordinator applies inside #231 after the fix push",
         "owner": "COORDINATOR -> FOUNDER"
       },
       {
@@ -1956,6 +1956,15 @@
         "at": "2026-10-26T08:22:05Z",
         "postMerge": "VERIFIED: parent1 ddcb371, parent2 = reviewed head 74a6bfc, merge-tree b370702 == merge tree",
         "review": "process-mode re-verify + delta re-check NO_BLOCKERS (wf_60c53ffd-c40)",
+        "riskTier": "ROUTINE (renderer + locales + tests)"
+      },
+      {
+        "pr": 196,
+        "merge": "7070714",
+        "by": "SalimBurakAytemiz (auto-merge, enabled by coordinator 08:33:19Z)",
+        "at": "2026-10-26T08:55:15Z",
+        "postMerge": "VERIFIED: parent1 a14bd26, parent2 = reviewed head 7097af4, merge-tree 18141a5 == merge tree",
+        "review": "delta re-check NO_BLOCKERS (wf_60c53ffd-c40) + coordinator merge-commit check (locale key-level 3-way union 3452/3452, non-locale == clean 3-way merge)",
         "riskTier": "ROUTINE (renderer + locales + tests)"
       }
     ],
