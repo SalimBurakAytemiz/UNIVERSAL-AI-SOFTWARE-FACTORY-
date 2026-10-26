@@ -12,7 +12,7 @@ const root = path.resolve(dir ?? ".");
 if (d.grandchild && typeof d.grandchild.file === "string") {
   const g = d.grandchild;
   const code = `const fs = require("node:fs"); ${typeof g.pidFile === "string" ? `fs.writeFileSync(${JSON.stringify(g.pidFile)}, String(process.pid));` : ""} setTimeout(() => { fs.writeFileSync(${JSON.stringify(g.file)}, "written by a descendant of the crashed engine's implementer\\n"); }, ${Number(g.delayMs) || 0});`;
-  cp.spawn(process.execPath, ["-e", code], {detached: g.detached === true, stdio: "ignore"}).unref();
+  cp.spawn(process.execPath, ["-e", code], {detached: g.detached === true, stdio: "ignore", ...(typeof g.cwd === "string" ? {cwd: g.cwd} : {})}).unref();
 }
 if (Number.isInteger(d.sleepMs) && d.sleepMs > 0) await new Promise(r => setTimeout(r, Math.min(d.sleepMs, 120_000)));
 const git = (args) => { const r = spawnGitSync(root, args); if (r.status !== 0) { console.error(`FAKE_GIT_FAILED ${args[0]}: ${r.stderr}`); process.exit(3); } return r.stdout.trim(); };

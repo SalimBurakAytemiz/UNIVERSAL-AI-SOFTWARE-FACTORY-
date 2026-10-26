@@ -365,12 +365,14 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
   it("STOP-NO-ABORT-NO-AWAIT: stop() aborts the in-flight implementer group, starts no new step, awaits the drives and leaves the run un-cancelled for the next engine", { timeout: 90_000 }, async () => {
     const c = setup(); const A = c.mkRun("A");
     const slowImpl = new FakeExecutors({implement: () => ({files: {"feature.txt": "ok\n"}, sleepMs: 20_000}), review: () => ({verdict: "CLEAN"})});
-    const mr = c.runner({executors: slowImpl.pair()});
+    const pair0 = slowImpl.pair();
+    let started = false; // yalnız implementer çocuğu gerçekten başladıktan sonra bakılır (öncesindeki kayıtlı grup kısa ömürlü bir git çocuğudur)
+    const mr = c.runner({executors: wrapImplementer(pair0, (w, spec, ctx) => { started = true; return pair0.implementer.implement(w, spec, ctx); })});
     mr.start(250);
     const work = () => path.join(c.dataDir, "runs", A.runId, "work");
     const ownerFile = path.join(c.dataDir, "runs", A.runId, "workspace.owner.json");
     let pgid = 0;
-    expect(await waitUntil(() => { try { pgid = JSON.parse(fs.readFileSync(ownerFile, "utf8")).childPgid ?? 0; return pgid > 1 && c.store.engineGetRun(A.runId)!.step === "IMPLEMENT"; } catch { return false; } }, 30_000)).toBe(true);
+    expect(await waitUntil(() => { try { pgid = JSON.parse(fs.readFileSync(ownerFile, "utf8")).childPgid ?? 0; return started && pgid > 1 && c.store.engineGetRun(A.runId)!.step === "IMPLEMENT"; } catch { return false; } }, 30_000)).toBe(true);
     const t0 = Date.now();
     const stopped = mr.stop();
     expect(stopped).toBeInstanceOf(Promise);
@@ -409,22 +411,24 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
     expect(at.startC, JSON.stringify(at)).toBeLessThan(at.endB);
   });
 
-  it("TEST-SELF-TAKEOVER (M9): a run whose drive is still in flight is never taken over by its own engine, even after another run's synchronous stall expired its lease", { timeout: 120_000 }, async () => {
-    const TTL = 1000;
-    const c = setup(); const A = c.mkRun("A"), B = c.mkRun("B");
-    let aInFlight = false, takeoverWhileInFlight = false, takeovers = 0, aCalls = 0;
-    const takeoverCount = () => journal(c.dataDir).filter(e => e.type === "RUN_LEASE" && e.payload.runId === A.runId && e.payload.kind === "TAKEOVER").length;
+  it("TEST-SELF-TAKEOVER (M9): a run whose drive is still in flight is never taken over by its own engine, even when its lease looks expired (a stall longer than the TTL)", { timeout: 120_000 }, async () => {
+    const clock = {t: Date.now()};
+    const c = setup("m9", {}, () => clock.t); const A = c.mkRun("A");
+    let started = false, release = false;
     const pair = wrapImplementer(c.base, async (w, spec, ctx) => {
-      if (spec.title === "B") { await sleep(400); for (const until = Date.now() + 1600; Date.now() < until;) { /* B: senkron stall > TTL */ } return c.base.implementer.implement(w, spec, ctx); }
-      aInFlight = true; aCalls += 1;
-      try { for (const until = Date.now() + 3500; Date.now() < until;) { await sleep(50); if (ctx.shouldAbort?.()) break; } return await c.base.implementer.implement(w, spec, ctx); } finally { aInFlight = false; }
+      started = true;
+      for (let i = 0; i < 400 && !release && !ctx.shouldAbort?.(); i++) await sleep(25);
+      return c.base.implementer.implement(w, spec, ctx);
     });
-    const mr = c.runner({maxConcurrentRuns: 2, leaseTtlMs: TTL, executors: pair});
-    mr.start(250);
-    // //TR: bayrak YALNIZ yeni bir TAKEOVER olayı, A'nın ilk çağrısı hâlâ sürerken yazılırsa kalkar (meşru sonraki devir, A'nın çağrısı bittikten sonradır).
-    const watcher = setInterval(() => { const n = takeoverCount(); if (n > takeovers) { if (aCalls === 1 && aInFlight) takeoverWhileInFlight = true; takeovers = n; } }, 20);
-    try { await sleep(7000); } finally { clearInterval(watcher); await mr.stop(); }
-    expect(takeoverWhileInFlight, "the engine took over a run whose own drive was still in flight").toBe(false);
+    const mr = c.runner({maxConcurrentRuns: 2, leaseTtlMs: 1000, now: () => clock.t, executors: pair});
+    const driving = mr.tick(); // A'nın sürüşü (implementer çağrısı) sürüyor
+    try {
+      expect(await waitUntil(() => started, 30_000)).toBe(true);
+      clock.t += 5_000; // A'nın lease'i hem store'a hem talep geçişine göre doldu (bir stall sonrası görünüm)
+      (mr as unknown as {pump(freshOnly: boolean): void}).pump(false); // servis kipi talep geçişi, sürüş SÜRERKEN
+      const takeovers = journal(c.dataDir).filter(e => e.type === "RUN_LEASE" && e.payload.runId === A.runId && e.payload.kind === "TAKEOVER");
+      expect(takeovers, "the engine took over a run whose own drive was still in flight").toEqual([]);
+    } finally { release = true; await driving; }
   });
 
   it("TEST-PAR04-DEFENCES (M11): if onSpawn throws (the writer cannot be recorded) the spawned child is killed, never left unrecorded", { timeout: 60_000 }, async () => {

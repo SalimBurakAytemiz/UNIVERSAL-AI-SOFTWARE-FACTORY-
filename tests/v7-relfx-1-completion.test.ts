@@ -381,7 +381,7 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
     expect(new WorkOsStore(path.join(x.dir, "data")).engineGetRun(x.runId)!.status).toBe("AWAITING_APPROVAL");
   });
 
-  it("TK-1: a descendant that called setsid (left the process group) is found by the lease marker and stopped; the run delivers only the new engine's work", { timeout: 180_000 }, async () => {
+  it("TK-1: a descendant that called setsid (left the process group) AND works outside the run directory is found by the lease marker alone and stopped; the run delivers only the new engine's work", { timeout: 180_000 }, async () => {
     const x = await crashEngine(path.join(tmp, "setsid"), {grandchild: "setsid"});
     const gcPid = Number(fs.readFileSync(path.join(x.dir, "setsid.pid"), "utf8"));
     expect(procAlive(gcPid)).toBe(true);

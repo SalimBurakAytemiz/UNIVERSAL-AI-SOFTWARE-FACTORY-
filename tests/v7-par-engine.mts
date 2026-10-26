@@ -28,7 +28,7 @@ if (PHASE === "1") {
   for (const to of ["PREFLIGHT", "AUTHORIZED"]) store.transitionMission({tenantId: "tA"}, m.missionId, to, "t", "FOUNDER_LOCAL");
   // motor 1'in implementer'ı: ORPHAN_MS uyur, sonra ORPHAN.txt yazıp commit eder (çöken motorun yetim çocuğu)
   const fake = new FakeExecutors({implement: (_n: number, spec: {runId: string}) => ({files: {"ORPHAN.txt": "written by the implementer of the crashed engine\n"}, sleepMs: Number(ORPHAN_MS), message: "orphan commit",
-    ...(OPTS.grandchild ? {grandchild: {file: path.join(dataDir, "runs", spec.runId, "work", OPTS.grandchild === "setsid" ? "ORPHAN3.txt" : "ORPHAN2.txt"), delayMs: 60_000, detached: OPTS.grandchild === "setsid", pidFile: path.join(DIR, `${OPTS.grandchild}.pid`)}} : {})}), review: () => ({verdict: "CLEAN"})});
+    ...(OPTS.grandchild ? {grandchild: {file: path.join(dataDir, "runs", spec.runId, "work", OPTS.grandchild === "setsid" ? "ORPHAN3.txt" : "ORPHAN2.txt"), delayMs: 60_000, detached: OPTS.grandchild === "setsid", pidFile: path.join(DIR, `${OPTS.grandchild}.pid`), ...(OPTS.grandchild === "setsid" ? {cwd: DIR} : {})}} : {})}), review: () => ({verdict: "CLEAN"})});
   const base = fake.pair();
   const run = store.createRun({tenantId: "tA", missionId: m.missionId, executor: {implementer: base.implementer.identity, reviewer: base.reviewer.identity}, createdBy: "FOUNDER_LOCAL"});
   fs.writeFileSync(state, JSON.stringify({runId: run.runId}));
