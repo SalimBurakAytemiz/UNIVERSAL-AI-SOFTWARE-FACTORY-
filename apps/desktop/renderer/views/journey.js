@@ -4,6 +4,7 @@ import {MISSING,formatTime} from "../model.js";
 import {selection} from "../forms.js";
 import {MISSION_ID_RE,PREDEV_KINDS,PHASE_KIND,PILL_FOR_STATE,downstreamOf} from "../journey-core.js";
 import {decisionsPanel} from "./predev-decisions.js";
+import {analysisPanel,analysisUi} from "./analysis-step.js";
 
 const PREDEV_SRC="/v1/predev/:missionId",CREW_SRC="/v1/crew/:missionId";
 const isLive=res=>res&&res.state==="VERIFIED";
@@ -113,7 +114,7 @@ function chainRail(ctx,pre,crew){
 }
 
 // ---- pre-dev fazları ----
-function predevPanel(ctx,pre,missionId){
+function predevPanel(ctx,pre,missionId,exec=null){
   const doc=ctx.doc;
   let body;
   if(!isLive(pre))body=stateBlock(ctx,pre,PREDEV_SRC);
@@ -134,7 +135,7 @@ function predevPanel(ctx,pre,missionId){
     body=[h(doc,"p",{class:"note",dataset:{phase:p.phase},text:ctx.t("journey.predev.phase",{phase:ctx.t(`journey.phase.${p.phase}`)})}),
       h(doc,"ol",{class:"journey-phases","aria-label":ctx.t("journey.predev.aria")},rows)];
   }
-  const sec=panel(ctx,{titleKey:"journey.predev.title",id:"journey-predev",className:"journey-section"},h(doc,"p",{class:"note",text:ctx.t("journey.predev.lead")}),body,decisionsPanel(ctx,{missionId,pre}));
+  const sec=panel(ctx,{titleKey:"journey.predev.title",id:"journey-predev",className:"journey-section"},h(doc,"p",{class:"note",text:ctx.t("journey.predev.lead")}),body,analysisPanel(ctx,{missionId,exec}),decisionsPanel(ctx,{missionId,pre}));
   sec.setAttribute("tabindex","-1");return sec;
 }
 
@@ -224,11 +225,13 @@ export async function render(ctx){
       h(doc,"h2",{class:"panel-title",id:"journey-none-t",text:ctx.t("journey.chain.title")}),emptyNote(ctx,isLive(mres)&&!mres.items.length?"journey.noMission.none":"journey.noMission")));
     return root;
   }
-  let pre,crew;
-  [pre,crew]=await Promise.all([
+  let pre,crew,exec=null;
+  [pre,crew,exec]=await Promise.all([
     Promise.resolve().then(()=>ctx.api.predev(id)).then(stateRes,()=>({state:"ERROR",predev:null})),
-    Promise.resolve().then(()=>ctx.api.crew(id)).then(stateRes,()=>({state:"ERROR",crew:null}))
+    Promise.resolve().then(()=>ctx.api.crew(id)).then(stateRes,()=>({state:"ERROR",crew:null})),
+    // Giriş komutu için yürütücü durumu YALNIZ analiz BLOCKED iken okunur (diğer durumlarda ek okuma yok).
+    analysisUi.missionId===id&&analysisUi.step&&analysisUi.step.status==="BLOCKED"?Promise.resolve().then(()=>ctx.api.executors()).catch(()=>null):null
   ]);
-  root.append(chainRail(ctx,pre,crew),predevPanel(ctx,pre,id),crewPanel(ctx,crew),devPanel(ctx,crew));
+  root.append(chainRail(ctx,pre,crew),predevPanel(ctx,pre,id,exec),crewPanel(ctx,crew),devPanel(ctx,crew));
   return root;
 }

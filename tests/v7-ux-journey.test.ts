@@ -921,3 +921,279 @@ describe("LANE-A pre-dev decisions — view (Journey)", () => {
     for (const k of ["form.field.evidenceRefs", "form.field.artifact", "form.field.mission"]) { expect(en[k], k).toBeTruthy(); expect(tr[k], k).toBeTruthy(); }
   });
 });
+
+describe("LANE-A A-FLOW-5 analysis step — pure core", () => {
+  const A1 = "pda_" + "ab".repeat(12);
+  const draft = (over: any = {}) => ({status: "DRAFT_READY", kind: "BusinessAnalysis", artifactId: A1, version: 1, roleId: "UASCO-0300", next: "FOUNDER_APPROVAL", ...over});
+  const await_ = (over: any = {}) => ({status: "AWAITING_APPROVAL", kind: "Requirements", artifactId: A1, artifactState: "DRAFT", next: "FOUNDER_APPROVAL", ...over});
+  const KINDS = ["BusinessAnalysis", "Requirements", "Plan", "Architecture"];
+  const complete = (over: any = {}) => ({status: "COMPLETE", approved: [...KINDS], ...over});
+  const blocked = (over: any = {}) => ({status: "BLOCKED", blocker: "CLAUDE_CLI_NOT_FOUND", blockers: ["CLAUDE_CLI_NOT_FOUND", "implementer:CLAUDE_PROFILE_LOGIN_REQUIRED"], founderAction: "free text", ...over});
+  it("builds the two fixed empty-body requests and refuses non-canonical mission ids", async () => {
+    const c = await load("analysis-core.js");
+    expect(c.buildAnalysisStepRequest({missionId: MSN})).toEqual({ok: true, path: `/v1/missions/${MSN}/analysis/step`, body: {}, errors: {}});
+    expect(c.buildAnalysisPlanRequest({missionId: MSN})).toEqual({ok: true, path: `/v1/missions/${MSN}/analysis/plan`, body: {}, errors: {}});
+    for (const bad of ["msn_zz", "", undefined, null, `${MSN}/x`, `${MSN}?a=1`, [MSN], "MSN_" + "ab".repeat(12)]) {
+      expect(c.analysisStepPath(bad), String(bad)).toBeNull(); expect(c.analysisPlanPath(bad), String(bad)).toBeNull();
+      expect(c.buildAnalysisStepRequest({missionId: bad})).toMatchObject({ok: false, path: null, body: null, errors: {mission: "analysis.err.mission"}});
+    }
+  });
+  it("maps every Lane C step strictly: allowed kinds only, canonical artifact ids, COMPLETE only with all four phases approved exactly once", async () => {
+    const c = await load("analysis-core.js");
+    expect(c.mapAnalysisStep(draft())).toEqual({status: "DRAFT_READY", kind: "BusinessAnalysis", artifactId: A1, version: 1, roleId: "UASCO-0300"});
+    expect(c.mapAnalysisStep(await_({artifactState: "SUBMITTED"}))).toEqual({status: "AWAITING_APPROVAL", kind: "Requirements", artifactId: A1, artifactState: "SUBMITTED"});
+    expect(c.mapAnalysisStep({status: "REJECTED", kind: "Plan", reason: "workPackages[0].id duplicate"})).toEqual({status: "REJECTED", kind: "Plan", reason: "workPackages[0].id duplicate"});
+    expect(c.mapAnalysisStep({status: "BUILDER_FAILED", kind: "Architecture", code: "PREDEV_DRIVER_BUILDER_NOT_CONFIGURED"})).toEqual({status: "BUILDER_FAILED", kind: "Architecture", code: "PREDEV_DRIVER_BUILDER_NOT_CONFIGURED"});
+    expect(c.mapAnalysisStep(complete({approved: [...KINDS].reverse()}))).toEqual({status: "COMPLETE", approved: KINDS}); // canonical order
+    expect(c.mapAnalysisStep(blocked())).toEqual({status: "BLOCKED", blocker: "CLAUDE_CLI_NOT_FOUND", blockers: ["CLAUDE_CLI_NOT_FOUND", "implementer:CLAUDE_PROFILE_LOGIN_REQUIRED"]}); // free text founderAction is never carried
+    expect(c.mapAnalysisStep(blocked({blocker: "ANALYSIS_NOT_READY", blockers: []})).blockers).toEqual([]);
+    const bad: any[] = [null, [], "COMPLETE", {}, {status: "DONE"}, {status: "complete"},
+      draft({kind: "UxSpec"}), draft({kind: undefined}), draft({artifactId: "pda_zz"}), draft({artifactId: [A1]}), draft({version: 0}), draft({version: 1.5}), draft({version: "1"}), draft({roleId: "bad role"}), draft({roleId: undefined}), draft({next: "NOTHING"}), draft({next: undefined}),
+      await_({artifactState: "APPROVED"}), await_({artifactId: "x"}), await_({kind: "Other"}), await_({next: undefined}),
+      {status: "REJECTED", kind: "Plan", reason: ""}, {status: "REJECTED", kind: "Plan", reason: "a\nb"}, {status: "REJECTED", kind: "Plan", reason: "x".repeat(301)}, {status: "REJECTED", kind: "Nope", reason: "r"},
+      {status: "BUILDER_FAILED", kind: "Plan", code: ""}, {status: "BUILDER_FAILED", kind: "Plan", code: "a\u0000b"}, {status: "BUILDER_FAILED", kind: "Plan", code: "x".repeat(121)}, {status: "BUILDER_FAILED", kind: "Plan"},
+      complete({approved: KINDS.slice(0, 3)}), complete({approved: [...KINDS, "UxSpec"]}), complete({approved: ["BusinessAnalysis", "BusinessAnalysis", "Plan", "Architecture"]}), complete({approved: ["BusinessAnalysis", "Requirements", "Plan", "UxSpec"]}), complete({approved: "all"}), complete({approved: undefined}),
+      blocked({blocker: ""}), blocked({blocker: undefined}), blocked({blockers: "x"}), blocked({blockers: [5]}), blocked({blockers: Array(21).fill("A")}), blocked({blocker: "OTHER"}), blocked({blockers: ["a\nb"], blocker: "a\nb"}),
+      blocked({blocker: "A", blockers: Array(21).fill("A")}), blocked({blocker: "A", blockers: ["A", 5]}), {status: "BUILDER_FAILED", kind: "Nope", code: "C"}, complete({approved: [...KINDS, "Plan"]})];
+    for (const b of bad) expect(c.mapAnalysisStep(b), JSON.stringify(b)?.slice(0, 80)).toBeNull();
+    expect(c.mapAnalysisStep(blocked({blocker: "A", blockers: Array(20).fill("A")})).blockers).toHaveLength(20); // 20 is the limit
+  });
+  it("classifies the HTTP answer with a consistency check between status and result: a blocked step is not a success and a 'complete' on an error status is invalid", async () => {
+    const c = await load("analysis-core.js");
+    const R = (status: number, body: any, extra: any = {}) => c.classifyAnalysisStep({status, body, ...extra});
+    for (const s of [draft(), await_(), complete()]) expect(R(200, s).kind).toBe("STEP");
+    expect(R(201, draft()).kind).toBe("STEP");
+    for (const st of [409, 500, 502, 403, 404]) { expect(R(st, complete()).kind, `COMPLETE ${st}`).toBe("INVALID"); expect(R(st, draft()).kind, `DRAFT ${st}`).toBe("INVALID"); expect(R(st, await_()).kind).toBe("INVALID"); }
+    expect(R(409, blocked())).toMatchObject({kind: "STEP", step: {status: "BLOCKED"}}); expect(R(200, blocked()).kind).toBe("STEP"); expect(R(502, blocked()).kind).toBe("INVALID"); expect(R(500, blocked()).kind).toBe("INVALID");
+    expect(R(409, {error: "ANALYSIS_BLOCKED", blocker: "CLAUDE_CLI_NOT_FOUND", blockers: ["CLAUDE_CLI_NOT_FOUND"], founderAction: "x"})).toMatchObject({kind: "STEP", step: {status: "BLOCKED", blockers: ["CLAUDE_CLI_NOT_FOUND"]}});
+    expect(R(409, {error: "ANALYSIS_BLOCKED", blocker: 5, blockers: []}).kind).toBe("INVALID"); expect(R(200, {error: "ANALYSIS_BLOCKED", blocker: "X", blockers: ["X"]}).kind).toBe("INVALID");
+    const rej = {status: "REJECTED", kind: "Plan", reason: "bad"}, bf = {status: "BUILDER_FAILED", kind: "Plan", code: "C"};
+    for (const b of [rej, bf]) { expect(R(502, b).kind).toBe("STEP"); expect(R(200, b).kind).toBe("STEP"); expect(R(409, b).kind).toBe("INVALID"); expect(R(500, b).kind).toBe("INVALID"); }
+    expect(R(200, {status: "COMPLETE"}).kind).toBe("INVALID"); expect(R(200, {foo: 1}).kind).toBe("INVALID"); expect(R(200, {}).kind).toBe("INVALID");
+    expect(R(423, {error: "GLOBAL_STOP_ACTIVE"}).kind).toBe("STOPPED"); expect(R(403, {error: "ACTION_DENIED"}).kind).toBe("DENIED");
+    expect(R(404, {error: "WORKOS_NOT_FOUND"}).kind).toBe("NOT_FOUND"); expect(R(404, {}).kind).toBe("NOT_ENABLED"); expect(R(501, {}).kind).toBe("NOT_ENABLED");
+    expect(R(500, {}).kind).toBe("FAILED"); expect(R(409, {error: "SOMETHING"}).kind).toBe("FAILED");
+    expect(c.classifyAnalysisStep(null).kind).toBe("FAILED");
+    expect(c.classifyAnalysisStep({thrown: true, message: "INVALID_API_PATH"}).kind).toBe("NOT_ENABLED"); expect(c.classifyAnalysisStep({thrown: true, message: "boom"}).kind).toBe("FAILED");
+  });
+  const trace = (i: number, over: any = {}) => ({index: i, workPackageId: `WP${i + 1}`, estimate: "S", satisfies: ["FR-1"], requirements: [{id: "FR-1", statement: "Users can sign in", acceptanceCriteria: ["Valid login works", "Invalid login is refused"]}], ...over});
+  const plan = (n = 2, over: any = {}) => ({tasks: Array.from({length: n}, (_, i) => ({taskId: "tsk_" + String(i).repeat(24)})), replayed: false, trace: Array.from({length: n}, (_, i) => trace(i)), summary: {}, ...over});
+  it("maps the created plan strictly (task count, traceability task -> requirement -> acceptance criteria) and classifies refusals by their exact code", async () => {
+    const c = await load("analysis-core.js");
+    const ok = c.mapAnalysisPlan(plan());
+    expect(ok).toMatchObject({taskCount: 2, replayed: false}); expect(ok.trace[0]).toEqual(trace(0));
+    expect(c.mapAnalysisPlan(plan(50)).taskCount).toBe(50);
+    const bad: any[] = [null, [], {}, plan(0), plan(51), plan(2, {replayed: "no"}), plan(2, {replayed: undefined}), plan(2, {trace: [trace(0)]}), plan(2, {trace: [trace(1), trace(0)]}), plan(2, {tasks: "x"}),
+      plan(1, {trace: [trace(0, {workPackageId: "bad id"})]}), plan(1, {trace: [trace(0, {estimate: ""})]}), plan(1, {trace: [trace(0, {satisfies: "FR-1"})]}), plan(1, {trace: [trace(0, {satisfies: [5]})]}),
+      plan(1, {trace: [trace(0, {requirements: [{id: "FR 1", statement: "s", acceptanceCriteria: []}]})]}), plan(1, {trace: [trace(0, {requirements: [{id: "FR-1", statement: "", acceptanceCriteria: []}]})]}),
+      plan(1, {trace: [trace(0, {requirements: [{id: "FR-1", statement: "s", acceptanceCriteria: [""]}]})]}), plan(1, {trace: [trace(0, {requirements: [{id: "FR-1", statement: "s", acceptanceCriteria: "x"}]})]}), plan(1, {trace: [null]}),
+      plan(1, {trace: [trace(0, {requirements: [{id: "FR-1", statement: "s", acceptanceCriteria: Array(21).fill("c")}]})]})];
+    expect(c.mapAnalysisPlan(plan(1, {trace: [trace(0, {requirements: [{id: "FR-1", statement: "s", acceptanceCriteria: Array(20).fill("c")}]})]})).trace[0].requirements[0].acceptanceCriteria).toHaveLength(20);
+    for (const b of bad) expect(c.mapAnalysisPlan(b), JSON.stringify(b)?.slice(0, 80)).toBeNull();
+    expect(c.mapAnalysisPlan(plan(1, {trace: [trace(0, {requirements: []})]})).trace[0].requirements).toEqual([]); // a task without a requirement is shown as such
+    const R = (status: number, body: any) => c.classifyAnalysisPlan({status, body});
+    expect(R(201, plan()).kind).toBe("PLAN"); expect(R(200, plan(2, {replayed: true})).plan.replayed).toBe(true); expect(R(200, {tasks: []}).kind).toBe("INVALID");
+    expect(R(409, {error: "ANALYSIS_NOT_COMPLETE"})).toEqual({kind: "REFUSED", code: "ANALYSIS_NOT_COMPLETE"}); expect(R(409, {code: "PLAN_CYCLE"})).toEqual({kind: "REFUSED", code: "PLAN_CYCLE"});
+    expect(R(409, {error: "plan cycle!"}).kind).toBe("FAILED"); expect(R(409, {}).kind).toBe("FAILED");
+    expect(R(423, {}).kind).toBe("STOPPED"); expect(R(403, {}).kind).toBe("DENIED"); expect(R(404, {error: "WORKOS_NOT_FOUND"}).kind).toBe("NOT_FOUND"); expect(R(404, {}).kind).toBe("NOT_ENABLED"); expect(R(500, {}).kind).toBe("FAILED");
+    expect(c.classifyAnalysisPlan({thrown: true, message: "INVALID_API_PATH"}).kind).toBe("NOT_ENABLED"); expect(c.classifyAnalysisPlan(null).kind).toBe("FAILED");
+    const k = (cl: any, res: any = {}, verb = "step") => c.analysisStatusKey(cl, res, verb);
+    expect(k({kind: "STEP", step: {status: "COMPLETE"}})).toMatchObject({ok: true, key: "analysis.step.COMPLETE"});
+    for (const st of ["BLOCKED", "REJECTED", "BUILDER_FAILED"]) expect(k({kind: "STEP", step: {status: st, kind: "Plan"}}).ok, st).toBe(false);
+    for (const st of ["DRAFT_READY", "AWAITING_APPROVAL"]) expect(k({kind: "STEP", step: {status: st, kind: "Plan"}}).ok, st).toBe(true);
+    expect(k({kind: "PLAN", plan: {replayed: false, taskCount: 3}}, {}, "plan")).toEqual({ok: true, key: "analysis.plan.created", vars: {n: "3"}});
+    expect(k({kind: "PLAN", plan: {replayed: true, taskCount: 3}}, {}, "plan").key).toBe("analysis.plan.replayed");
+    expect(k({kind: "REFUSED", code: "PLAN_CYCLE"}, {}, "plan")).toEqual({ok: false, key: "analysis.plan.refused", vars: {code: "PLAN_CYCLE"}});
+    expect(k({kind: "NOT_ENABLED"}).key).toBe("analysis.notEnabled"); expect(k({kind: "INVALID"}).key).toBe("analysis.invalid"); expect(k({kind: "STOPPED"}).key).toBe("post.err.423");
+  });
+});
+
+describe("LANE-A A-FLOW-5 analysis step — view (Journey)", () => {
+  const STEP = `/v1/missions/${MSN}/analysis/step`, PLAN = `/v1/missions/${MSN}/analysis/plan`, A1 = "pda_" + "ab".repeat(12);
+  const KINDS = ["BusinessAnalysis", "Requirements", "Plan", "Architecture"];
+  const CMD = "$env:CLAUDE_CONFIG_DIR='C:\\x\\implementer'; claude";
+  const exe = (over: any = {}) => ({executors: [{id: "LOCAL_CLAUDE", state: "READY"}], active: {reason: "LOCAL_CLAUDE"}, claudeProfiles: {implementer: {state: "LOGIN_REQUIRED", reason: "CLAUDE_PROFILE_LOGIN_REQUIRED", loginCommand: CMD}, reviewer: {state: "READY", loginCommand: null}}, ...over});
+  async function open(stepAnswer: any, extra: Record<string, any> = {}, planAnswer: any = {status: 404, body: {}}) {
+    const gets: string[] = [], served = serve({[`/v1/predev/${MSN}`]: DRAFT_PREDEV(), ...extra});
+    const pick = (a: any) => (typeof a === "function" ? a() : a);
+    const base = await mkDecisionCtx((p: string) => { gets.push(p); return served(p); }, (p: string) => { const a = p === STEP ? pick(stepAnswer) : p === PLAN ? pick(planAnswer) : {status: 404, body: {}}; if (a instanceof Error) throw a; return a; });
+    const an = await load("views", "analysis-step.js"); an.resetAnalysis(null); for (const f of ["analysis-step", "analysis-plan"]) { delete base.forms.drafts.status[f]; base.forms.drafts.busy[f] = false; }
+    const nav: string[] = []; base.ctx.navigate = (v: string) => { nav.push(v); };
+    return {...base, an, nav, gets, root: await renderJourney(base.ctx)};
+  }
+  const press = async (b: any, id: string) => { fire(byId(b.root, id)!, "click"); await new Promise(r => setTimeout(r, 0)); b.root = await renderJourney(b.ctx); return b.root; };
+  const block = (root: N) => byId(root, "analysis-step")!;
+  const stOf = (root: N, form = "analysis-step") => byId(root, `${form}-status`)!;
+  it("shows an Analyse button and a closed 'Create plan' gate before any step; pressing it posts {} once to the canonical path", async () => {
+    const b = await open({status: 200, body: {status: "DRAFT_READY", kind: "BusinessAnalysis", artifactId: A1, version: 1, roleId: "UASCO-0300", next: "FOUNDER_APPROVAL"}});
+    expect(byData(block(b.root), "analysisStatus")!.dataset.analysisStatus).toBe("NONE"); expect(byId(b.root, "analysis-plan-submit")).toBeUndefined();
+    expect(byData(block(b.root), "analysisPlanGate", "CLOSED")).toBeDefined(); expect(b.posts).toEqual([]);
+    expect(allData(b.root, "kind").length).toBeGreaterThan(0); // the existing pre-dev section is still rendered next to it
+    const after = await press(b, "analysis-step-submit");
+    expect(b.posts).toEqual([{path: STEP, body: {}}]); expect(b.rerenders()).toBe(1);
+    expect(byData(block(after), "analysisStatus")!.dataset.analysisStatus).toBe("DRAFT_READY");
+    expect(block(after).textContent).toContain("Draft ready: Business analysis"); expect(block(after).textContent).toContain("version 1"); expect(block(after).textContent).toContain("UASCO-0300");
+    expect(stOf(after).dataset.result).toBe("ok");
+    expect(byId(after, "analysis-plan-submit")).toBeUndefined();
+  });
+  it("never says 'Analysis complete' unless the step is COMPLETE; every other outcome is reported as it is", async () => {
+    const run = async (answer: any) => { const b = await open(answer); const r = await press(b, "analysis-step-submit"); return {b, r, text: block(r).textContent, st: stOf(r)}; };
+    const draft = await run({status: 200, body: {status: "DRAFT_READY", kind: "Requirements", artifactId: A1, version: 2, roleId: "UASCO-0301", next: "FOUNDER_APPROVAL"}});
+    const wait = await run({status: 200, body: {status: "AWAITING_APPROVAL", kind: "Plan", artifactId: A1, artifactState: "SUBMITTED", next: "FOUNDER_APPROVAL"}});
+    const rej = await run({status: 502, body: {status: "REJECTED", kind: "Architecture", reason: "components must not be empty"}});
+    const bf = await run({status: 502, body: {status: "BUILDER_FAILED", kind: "Plan", code: "PREDEV_DRIVER_BUILDER_NOT_CONFIGURED"}});
+    const blk = await run({status: 409, body: {status: "BLOCKED", blocker: "CLAUDE_CLI_NOT_FOUND", blockers: ["CLAUDE_CLI_NOT_FOUND"], founderAction: "x"}});
+    const done = await run({status: 200, body: {status: "COMPLETE", approved: KINDS}});
+    for (const x of [draft, wait, rej, bf, blk]) { expect(x.text).not.toContain("Analysis complete"); expect(byId(x.r, "analysis-plan-submit")).toBeUndefined(); }
+    expect(draft.st.dataset.result).toBe("ok"); expect(wait.st.dataset.result).toBe("ok");
+    for (const x of [rej, bf, blk]) expect(x.st.dataset.result, x.text).toBe("error");
+    expect(wait.text).toContain("waits for your decision"); expect(wait.text).toContain("No new analysis was started");
+    expect(rej.text).toContain("failed the validators and nothing was recorded: components must not be empty"); expect(bf.text).toContain("builder code PREDEV_DRIVER_BUILDER_NOT_CONFIGURED"); expect(bf.text).toContain("Nothing was recorded");
+    expect(done.text).toContain("Analysis complete: Business analysis, Requirements, Plan, Architecture are approved"); expect(done.st.dataset.result).toBe("ok");
+    expect(byId(done.r, "analysis-plan-submit")).toBeDefined(); expect(byData(block(done.r), "analysisPlanGate")).toBeUndefined();
+  });
+  it("BLOCKED lists the exact blockers in plain words, shows the Founder's own login command only as text, and reads executors only after a BLOCKED result", async () => {
+    const answer = {status: 409, body: {status: "BLOCKED", blocker: "CLAUDE_CLI_SHIM_UNSUPPORTED", blockers: ["CLAUDE_CLI_SHIM_UNSUPPORTED", "implementer:CLAUDE_PROFILE_LOGIN_REQUIRED", "reviewer:CLAUDE_PROFILE_REFUSED:SETTINGS_NOT_WRITTEN", "ROLE_NOT_EXECUTABLE:UASCO-0300 unbound", "BRAND_NEW"], founderAction: "Found C:\\Users\\x\\claude.cmd"}};
+    const seen: string[] = [];
+    const b = await open(answer, {"/v1/system/executors": exe()});
+    expect(b.posts).toEqual([]);
+    const getsBefore = () => seen.length;
+    void getsBefore;
+    const after = await press(b, "analysis-step-submit");
+    const blk = byData(block(after), "analysisStatus", "BLOCKED")!;
+    const items = allData(blk, "analysisBlocker").map(n => [n.dataset.analysisBlocker, n.textContent]);
+    expect(items.map(i => i[0])).toEqual(answer.body.blockers);
+    expect(items[0][1]).toContain("npm .cmd/.bat launcher");
+    expect(items[1][1]).toContain("Implementer profile: the UASCO Claude profile is not signed in");
+    expect(items[2][1]).toContain("Reviewer profile (read-only): the UASCO Claude profile folder was refused"); expect(items[2][1]).toContain("(SETTINGS_NOT_WRITTEN)");
+    expect(items[3][1]).toContain("not bound to an executable profile"); expect(items[3][1]).toContain("(UASCO-0300 unbound)");
+    expect(items[4][1]).toBe("BRAND_NEW (not recognised)");
+    expect(blk.textContent).not.toMatch(/claude\.cmd|C:\\Users/); // the server's free text and paths are never shown
+    const login = allData(blk, "analysisLogin");
+    expect(login.map(n => n.dataset.analysisLogin)).toEqual(["implementer"]); expect(login[0].textContent).toBe(CMD);
+    expect(all(blk).filter(n => n.tagName === "BUTTON").length).toBe(0); // text only, never executed by the renderer
+    expect(stOf(after).dataset.result).toBe("error");
+  });
+  it("BLOCKED without a readable login command says so instead of inventing one; the executors read is skipped when nothing is blocked", async () => {
+    const answer = {status: 409, body: {error: "ANALYSIS_BLOCKED", blocker: "implementer:CLAUDE_PROFILE_LOGIN_EXPIRED", blockers: ["implementer:CLAUDE_PROFILE_LOGIN_EXPIRED"]}};
+    const b = await open(answer); // /v1/system/executors is not served -> unreadable
+    const after = await press(b, "analysis-step-submit");
+    expect(allData(block(after), "analysisLogin").length).toBe(0); expect(byData(block(after), "analysisLoginMissing", "implementer")!.textContent).toContain("sign-in command for the Implementer profile is not available here");
+    expect(block(after).textContent).toContain("sign-in has expired");
+    // not blocked -> no executors read at all
+    let reads = 0;
+    const ok = await open({status: 200, body: {status: "AWAITING_APPROVAL", kind: "Plan", artifactId: A1, artifactState: "DRAFT", next: "FOUNDER_APPROVAL"}}, {"/v1/system/executors": () => { reads++; return exe(); }});
+    await press(ok, "analysis-step-submit"); expect(reads).toBe(0);
+  });
+  it("COMPLETE opens 'Create plan'; it posts {} once, shows the traceability and offers the plan in Tasks; a refusal is shown by its code and nothing is claimed", async () => {
+    const tr = (i: number) => ({index: i, workPackageId: `WP${i + 1}`, estimate: "M", satisfies: ["FR-1"], requirements: [{id: "FR-1", statement: "Users can sign in", acceptanceCriteria: ["Valid login works", "Invalid login is refused"]}]});
+    const created = {status: 201, body: {tasks: [{taskId: "tsk_" + "1".repeat(24)}, {taskId: "tsk_" + "2".repeat(24)}], replayed: false, trace: [tr(0), tr(1)], summary: {}}};
+    const b = await open({status: 200, body: {status: "COMPLETE", approved: KINDS}}, {}, created);
+    await press(b, "analysis-step-submit");
+    const r1 = await press(b, "analysis-plan-submit");
+    expect(b.posts.map(p => p.path)).toEqual([STEP, PLAN]); expect(b.posts[1].body).toEqual({});
+    const res = byId(r1, "analysis-plan-result")!;
+    expect(res.dataset.tasks).toBe("2"); expect(res.textContent).toContain("Plan created with 2 tasks"); expect(res.textContent).toContain("No run was started");
+    expect(allData(res, "traceTask").map(n => n.dataset.traceTask)).toEqual(["WP1", "WP2"]);
+    expect(allData(res, "traceCriterion").map(n => n.textContent)).toEqual(["Valid login works", "Invalid login is refused", "Valid login works", "Invalid login is refused"]);
+    expect(allData(res, "traceReq").length).toBe(2);
+    expect(stOf(r1, "analysis-plan").dataset.result).toBe("ok");
+    fire(byId(r1, "analysis-open-plan")!, "click"); expect(b.nav).toEqual(["work"]); expect(b.forms.selection.missionId).toBe(MSN);
+    // a refusal by code
+    const c = await open({status: 200, body: {status: "COMPLETE", approved: KINDS}}, {}, {status: 409, body: {error: "PLAN_ALREADY_EXISTS"}});
+    await press(c, "analysis-step-submit"); const r2 = await press(c, "analysis-plan-submit");
+    expect(stOf(r2, "analysis-plan").dataset.result).toBe("error"); expect(stOf(r2, "analysis-plan").textContent).toContain("PLAN_ALREADY_EXISTS");
+    expect(byId(r2, "analysis-plan-result")).toBeUndefined(); expect(byId(r2, "analysis-open-plan")).toBeUndefined();
+    // a malformed 2xx never claims a plan
+    const d = await open({status: 200, body: {status: "COMPLETE", approved: KINDS}}, {}, {status: 201, body: {tasks: [], replayed: false, trace: []}});
+    await press(d, "analysis-step-submit"); const r3 = await press(d, "analysis-plan-submit");
+    expect(stOf(r3, "analysis-plan").textContent).toContain("could not be read"); expect(byId(r3, "analysis-plan-result")).toBeUndefined();
+  });
+  it("sends no plan request unless this mission's step reported COMPLETE in this view, and forgets results when the mission changes", async () => {
+    const b = await open({status: 200, body: {status: "DRAFT_READY", kind: "Plan", artifactId: A1, version: 1, roleId: "UASCO-0300", next: "FOUNDER_APPROVAL"}});
+    const r = await b.an.submitAnalysisPlan(b.ctx, MSN);
+    expect(r).toEqual({ok: false, validation: true}); expect(b.posts).toEqual([]);
+    expect(b.forms.drafts.status["analysis-plan"]).toMatchObject({ok: false, key: "analysis.err.notComplete"});
+    await press(b, "analysis-step-submit");
+    expect(await b.an.submitAnalysisPlan(b.ctx, MSN)).toEqual({ok: false, validation: true}); expect(b.posts.map(p => p.path)).toEqual([STEP]); // DRAFT_READY is not COMPLETE
+    // switching mission wipes the shown result and any status
+    const other = "msn_" + "cd".repeat(12);
+    b.an.analysisPanel(b.ctx, {missionId: other, exec: null});
+    expect(b.an.analysisUi.missionId).toBe(other); expect(b.an.analysisUi.step).toBeNull(); expect(b.forms.drafts.status["analysis-step"]).toBeUndefined(); expect(b.forms.drafts.status["analysis-plan"]).toBeUndefined();
+    expect(await b.an.submitAnalysisPlan(b.ctx, MSN)).toEqual({ok: false, validation: true}); // the old mission's COMPLETE does not carry over
+  });
+  it("not enabled, a server error, an invalid answer and a Global Stop are each reported as such — never as a result", async () => {
+    const run = async (answer: any) => { const b = await open(answer); const r = await press(b, "analysis-step-submit"); return {r, st: stOf(r), text: block(r).textContent}; };
+    const none = await run(Object.assign(new Error("INVALID_API_PATH"), {})); expect(none.st.dataset.result).toBe("error"); expect(none.st.textContent).toContain("not enabled in this build"); expect(byData(none.r as any, "analysisStatus", "NONE")).toBeDefined();
+    const nf = await run({status: 404, body: {}}); expect(nf.st.textContent).toContain("not enabled in this build");
+    const err = await run({status: 500, body: {}}); expect(err.st.dataset.result).toBe("error"); expect(err.text).not.toContain("Draft ready");
+    const inv = await run({status: 200, body: {status: "COMPLETE", approved: ["Plan"]}}); expect(inv.st.textContent).toContain("could not be read"); expect(inv.text).not.toContain("Analysis complete");
+    const stop = await run({status: 423, body: {error: "GLOBAL_STOP_ACTIVE"}}); expect(stop.st.dataset.result).toBe("error");
+  });
+  it("a failed re-check clears the old result (no stale 'complete', the plan gate closes) while an already created plan stays shown", async () => {
+    const tr = { index: 0, workPackageId: "WP1", estimate: "S", satisfies: [], requirements: [] };
+    let n = 0;
+    const b = await open(() => (++n === 1 ? {status: 200, body: {status: "COMPLETE", approved: KINDS}} : {status: 500, body: {}}), {}, {status: 201, body: {tasks: [{taskId: "tsk_" + "1".repeat(24)}], replayed: false, trace: [tr], summary: {}}});
+    const a1 = await press(b, "analysis-step-submit"); expect(byId(a1, "analysis-plan-submit")).toBeDefined();
+    const a2 = await press(b, "analysis-plan-submit"); expect(byId(a2, "analysis-plan-result")).toBeDefined();
+    const a3 = await press(b, "analysis-step-submit");
+    expect(byData(block(a3), "analysisStatus")!.dataset.analysisStatus).toBe("NONE"); expect(block(a3).textContent).not.toContain("Analysis complete");
+    expect(byId(a3, "analysis-plan-submit")).toBeUndefined(); expect(stOf(a3).dataset.result).toBe("error");
+    expect(byId(a3, "analysis-plan-result")).toBeDefined(); // the earlier real plan is not erased by a failed re-check
+  });
+  it("plan view details: a task without requirements says so, a requirement without criteria has no empty list, a replay says the plan already existed, a later refusal keeps the plan shown, and Open sets the mission", async () => {
+    const reqNo = {index: 0, workPackageId: "WP1", estimate: "S", satisfies: [], requirements: []};
+    const reqNoCrit = {index: 1, workPackageId: "WP2", estimate: "M", satisfies: ["FR-2"], requirements: [{id: "FR-2", statement: "Admins can export", acceptanceCriteria: []}]};
+    let n = 0;
+    const b = await open({status: 200, body: {status: "COMPLETE", approved: KINDS}}, {}, () => (++n === 1 ? {status: 200, body: {tasks: [{taskId: "tsk_" + "1".repeat(24)}, {taskId: "tsk_" + "2".repeat(24)}], replayed: true, trace: [reqNo, reqNoCrit], summary: {}}} : {status: 409, body: {error: "PLAN_ALREADY_EXISTS"}}));
+    await press(b, "analysis-step-submit");
+    const r1 = await press(b, "analysis-plan-submit");
+    const res = byId(r1, "analysis-plan-result")!;
+    expect(res.textContent).toContain("The same plan already existed (2 tasks)"); expect(res.textContent).not.toContain("Plan created with");
+    const wp1 = allData(res, "traceTask", "WP1")[0], wp2 = allData(res, "traceTask", "WP2")[0];
+    expect(allData(wp1, "traceNone").length).toBe(1); expect(allData(wp1, "traceReq").length).toBe(0);
+    expect(allData(wp2, "traceNone").length).toBe(0); expect(allData(wp2, "traceReq").length).toBe(1);
+    expect(all(allData(wp2, "traceReq")[0]).filter(x => x.tagName === "UL").length).toBe(0); // no empty criteria list
+    const r2 = await press(b, "analysis-plan-submit");
+    expect(stOf(r2, "analysis-plan").dataset.result).toBe("error"); expect(byId(r2, "analysis-plan-result")).toBeDefined();
+    b.forms.selection.missionId = "msn_" + "ee".repeat(12);
+    fire(byId(r2, "analysis-open-plan")!, "click"); expect(b.forms.selection.missionId).toBe(MSN); expect(b.nav).toEqual(["work"]);
+  });
+  it("BLOCKED details: an empty blocker list still shows the single blocker, one login block per role even with two sign-in blockers, and the command may come from the per-role readiness reading", async () => {
+    const e1 = await open({status: 409, body: {status: "BLOCKED", blocker: "ANALYSIS_NOT_READY", blockers: [], founderAction: null}});
+    const r1 = await press(e1, "analysis-step-submit");
+    expect(allData(block(r1), "analysisBlocker").map(n => [n.dataset.analysisBlocker, n.textContent])).toEqual([["ANALYSIS_NOT_READY", "The analysis is not ready for an unspecified reason."]]);
+    const two = {status: 409, body: {status: "BLOCKED", blocker: "implementer:CLAUDE_PROFILE_LOGIN_REQUIRED", blockers: ["implementer:CLAUDE_PROFILE_LOGIN_REQUIRED", "implementer:CLAUDE_PROFILE_LOGIN_EXPIRED", "reviewer:CLAUDE_PROFILE_LOGIN_REQUIRED"]}};
+    const e2 = await open(two, {"/v1/system/executors": exe({claudeProfiles: {implementer: {state: "LOGIN_REQUIRED", loginCommand: CMD}, reviewer: {state: "LOGIN_REQUIRED", loginCommand: CMD.replace("implementer", "reviewer")}}})});
+    const r2 = await press(e2, "analysis-step-submit");
+    expect(allData(block(r2), "analysisLogin").map(n => n.dataset.analysisLogin)).toEqual(["implementer", "reviewer"]);
+    const ready = (r: string) => ({ready: false, blockers: ["CLAUDE_PROFILE_LOGIN_REQUIRED"], blocker: "CLAUDE_PROFILE_LOGIN_REQUIRED", profile: "LOGIN_REQUIRED", loginCommand: CMD.replace("implementer", r)});
+    const only = {executors: {LOCAL_CLAUDE: {state: "READY", readiness: {implementer: ready("implementer"), reviewer: ready("reviewer")}}, FAKE: {state: "TEST_ONLY"}}, active: {reason: "LOCAL_CLAUDE"}};
+    const e3 = await open(two, {"/v1/system/executors": only}); // no claudeProfiles at all
+    const r3 = await press(e3, "analysis-step-submit");
+    expect(allData(block(r3), "analysisLogin").map(n => [n.dataset.analysisLogin, n.textContent.includes("reviewer")])).toEqual([["implementer", false], ["reviewer", true]]);
+  });
+  it("reads the executors only for a BLOCKED result of the shown mission; a plan is never sent for another mission's COMPLETE", async () => {
+    const ok = await open({status: 200, body: {status: "AWAITING_APPROVAL", kind: "Plan", artifactId: A1, artifactState: "DRAFT", next: "FOUNDER_APPROVAL"}}, {"/v1/system/executors": exe()});
+    await press(ok, "analysis-step-submit"); expect(ok.gets.filter(g => g === "/v1/system/executors")).toEqual([]);
+    const bl = await open({status: 409, body: {status: "BLOCKED", blocker: "CLAUDE_CLI_NOT_FOUND", blockers: ["CLAUDE_CLI_NOT_FOUND"]}}, {"/v1/system/executors": exe()});
+    expect(bl.gets.filter(g => g === "/v1/system/executors")).toEqual([]);
+    await press(bl, "analysis-step-submit"); expect(bl.gets.filter(g => g === "/v1/system/executors").length).toBe(1);
+    const c = await open({status: 200, body: {status: "COMPLETE", approved: KINDS}});
+    await press(c, "analysis-step-submit");
+    const other = "msn_" + "cd".repeat(12);
+    expect(await c.an.submitAnalysisPlan(c.ctx, other)).toEqual({ok: false, validation: true}); // COMPLETE belongs to MSN, not to another mission
+    expect(c.posts.map(p => p.path)).toEqual([STEP]);
+    // a step run for another mission switches the view state to that mission, so the first mission's COMPLETE cannot be reused
+    await c.an.submitAnalysisStep(c.ctx, other); expect(c.an.analysisUi.missionId).toBe(other);
+    expect(await c.an.submitAnalysisPlan(c.ctx, MSN)).toEqual({ok: false, validation: true});
+  });
+  it("is present in English and Turkish with the same keys; no analysis text is a raw key", async () => {
+    const en = await load("locales", "en.js"), tr = await load("locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
+    const keys = Object.keys(E).filter(k => k.startsWith("analysis."));
+    expect(keys.length).toBe(35);
+    for (const k of keys) { expect(T[k], k).toBeTruthy(); expect(E[k], k).not.toBe(k); }
+    const b = await open({status: 200, body: {status: "COMPLETE", approved: KINDS}}); const r = await press(b, "analysis-step-submit");
+    expect(block(r).textContent).not.toMatch(/analysis\.[a-z]/);
+  });
+});
