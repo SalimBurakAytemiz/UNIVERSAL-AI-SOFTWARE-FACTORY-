@@ -933,13 +933,16 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
     });
 
     const realWsl2 = process.platform === "win32" && !!process.env.UASCO_WSL_DISTRO && cp.spawnSync("wsl.exe", ["--status"], {windowsHide: true}).status === 0;
-    it.skipIf(!realWsl2)("REAL WSL (win32 + UASCO_WSL_DISTRO): the web-node product starts in the sandbox, the bridged 127.0.0.1 port answers 200, stop tears the Linux tree down (SKIPPED elsewhere, never counted as PASS)", async () => {
+    it.skipIf(!realWsl2)("REAL WSL (win32 + UASCO_WSL_DISTRO): the generated web-node product starts in the sandbox, the bridged 127.0.0.1 port answers 200, stop tears the Linux tree down (SKIPPED elsewhere, never counted as PASS)", async () => {
       const {WslUnshareSandboxProvider} = await import("../core/sandbox/wsl-unshare-sandbox.js");
       const {freeLoopbackPort} = await import("../core/workos/devrun.js");
-      const p = new WslUnshareSandboxProvider(); const dir = ws(); fs.writeFileSync(path.join(dir, "server.js"), "require('http').createServer((q,r)=>r.end('ok')).listen(+process.env.PORT,'127.0.0.1')");
+      const {renderTemplate} = await import("../core/workos/project-templates.js");
+      const p = new WslUnshareSandboxProvider(); const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-wsl-prod-"));
+      const spec = renderTemplate("web-node", "Acceptance App");
+      for (const [name, text] of Object.entries(spec.files)) { fs.mkdirSync(path.dirname(path.join(dir, name)), {recursive: true}); fs.writeFileSync(path.join(dir, name), text); }
       const st = await p.selfTest(); expect(st, JSON.stringify(st)).toEqual({ok: true});
       const port = await freeLoopbackPort();
-      const child = await p.spawnAsync("node", ["server.js"], {cwd: dir, env: {PORT: String(port)}, shell: false, stdio: ["ignore", "pipe", "pipe"]});
+      const child = await p.spawnAsync(spec.devCommand![0], spec.devCommand!.slice(1), {cwd: dir, env: {PORT: String(port), HOST: "127.0.0.1"}, shell: false, stdio: ["ignore", "pipe", "pipe"]});
       try {
         const h = await p.bridge(child, port); let ok = 0;
         for (let i = 0; i < 40 && !ok; i++) { try { const r = await fetch(`http://127.0.0.1:${port}/`); ok = r.status; } catch { await new Promise(r => setTimeout(r, 500)); } }
@@ -957,5 +960,101 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
       const r = await p.run(["node", "-e", "console.log(40+2)"], {cwd: dir, env: {}, timeoutMs: 60_000});
       expect(r.stdout.trim()).toBe("42"); expect(r.exitCode).toBe(0);
     } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+  });
+});
+
+// //TR: LANE-B B-ACCEPT-WIN-1: Founder'ın Windows kabul kiti (docs/acceptance/windows/founder-acceptance.mjs). Linux'ta sahte wsl/CLI/profil/vitest bağımlılıklarıyla ayrıştırma, her ön koşul reddi + tam düzeltme komutu, SKIP≠PASS, SHA'ya bağlı kanıt ve salt-okunur wsl çağrıları doğrulanır; gerçek koşu yalnız Founder'ın makinesindedir.
+describe("LANE-B Windows acceptance kit (injected fakes)", () => {
+  const u16 = (t: string) => Buffer.from("\uFEFF" + t, "utf16le");
+  const GOOD_CONF = "[interop]\nenabled=false\nappendWindowsPath=false\n";
+  type W = {code: number | null; stdout: Buffer};
+  const mkDeps = (o: Record<string, any> = {}) => {
+    const calls: string[][] = [];
+    const wsl = async (args: string[]): Promise<W> => {
+      calls.push(args);
+      const j = args.join(" ");
+      if (j === "--status") return {code: o.status ?? 0, stdout: Buffer.from("ok")};
+      if (j === "-l -q") return {code: 0, stdout: u16(o.distros ?? "Ubuntu\r\n")};
+      if (j === "-l -v") return {code: 0, stdout: u16(o.verbose ?? "  NAME STATE VERSION\r\n* Ubuntu Running 2\r\n")};
+      if (j.endsWith("/bin/cat /etc/wsl.conf")) return o.conf === null ? {code: 1, stdout: Buffer.alloc(0)} : {code: 0, stdout: Buffer.from(o.conf ?? GOOD_CONF)};
+      if (j.endsWith("/bin/cat /proc/sys/fs/binfmt_misc/WSLInterop")) return o.interopRt === "enabled" ? {code: 0, stdout: Buffer.from("enabled\ninterpreter /init\n")} : {code: 1, stdout: Buffer.alloc(0)};
+      if (j.endsWith("/usr/bin/env node --version")) return o.node === null ? {code: 127, stdout: Buffer.alloc(0)} : {code: 0, stdout: Buffer.from("v24.1.0\n")};
+      return {code: 1, stdout: Buffer.alloc(0)};
+    };
+    const prof = (state: string) => ({state, reason: state === "READY" ? undefined : state === "REFUSED" ? "PROFILE_PATH_INSIDE_GIT_WORKTREE" : "CLAUDE_PROFILE_LOGIN_REQUIRED", loginCommand: state === "LOGIN_REQUIRED" ? "$env:CLAUDE_CONFIG_DIR='C:\\x'; claude" : null});
+    let vitestRuns = 0;
+    const deps: any = {platform: o.platform ?? "win32", controlRoot: "C:\\data", wsl, now: () => "2026-10-31T10:00:00.000Z", scriptSha256: "s".repeat(64), testSha256: "t".repeat(64),
+      git: () => o.git ?? {headSha: "a".repeat(40), dirty: false},
+      detectClaudeCli: o.cli === null ? null : () => o.cli ?? {state: "FOUND", path: "C:\\Users\\f\\.local\\bin\\claude.exe"},
+      claudeProfileStatus: o.noProfiles ? null : (_r: string, role: string) => prof(o.profiles?.[role] ?? "READY"),
+      runVitest: async () => { vitestRuns++; return o.vitest ?? vitestOk(); }};
+    return {deps, calls, runs: () => vitestRuns};
+  };
+  const vitestOk = (st: Record<string, string> = {}) => ({testResults: [{assertionResults: [
+    {fullName: "x REAL WSL (win32 + UASCO_WSL_DISTRO): selfTest passes its negative probes and a node test runs inside the sandbox (SKIPPED elsewhere)", status: st.a ?? "passed", failureMessages: []},
+    {fullName: "x REAL WSL (win32 + UASCO_WSL_DISTRO): the generated web-node product starts in the sandbox, the bridged", status: st.b ?? "passed", failureMessages: []}]}]});
+  const byId = (r: any) => Object.fromEntries(r.checks.map((c: any) => [c.id, c]));
+  const load = () => import("../docs/acceptance/windows/founder-acceptance.mjs") as Promise<any>;
+
+  it("parsers: wsl.conf (defaults ON, sections, comments, case, other sections ignored), UTF-16 list output, verbose table", async () => {
+    const k = await load();
+    expect(k.parseWslConf(GOOD_CONF)).toMatchObject({interopEnabled: false, appendWindowsPath: false});
+    expect(k.parseWslConf("")).toMatchObject({interopEnabled: true, appendWindowsPath: true, interopExplicit: false});
+    expect(k.parseWslConf("[interop]\n enabled = FALSE  # x\nappendWindowsPath=False\n")).toMatchObject({interopEnabled: false, appendWindowsPath: false});
+    expect(k.parseWslConf("[boot]\nenabled=false\nappendWindowsPath=false\n")).toMatchObject({interopEnabled: true, appendWindowsPath: true});
+    expect(k.parseWslConf("[interop]\nenabled=false\n")).toMatchObject({interopEnabled: false, appendWindowsPath: true});
+    expect(k.parseWslConf("[interop]\nenabled=maybe\n")).toMatchObject({interopEnabled: true});
+    expect(k.parseWslList(k.decodeWslText(u16("Ubuntu\r\nDebian\r\n")))).toEqual(["Ubuntu", "Debian"]);
+    expect(k.parseWslVerbose("  NAME STATE VERSION\r\n* Ubuntu Running 2\r\n  Debian Stopped 1\r\n")).toEqual([{name: "Ubuntu", version: 2}, {name: "Debian", version: 1}]);
+  });
+
+  it("all good on Windows: every check PASS, ACCEPTED, bound to the git SHA, evidence hash is reproducible, and only READ-ONLY wsl commands were issued", async () => {
+    const k = await load(); const {deps, calls, runs} = mkDeps();
+    const r = await k.runAcceptance({distro: "Ubuntu"}, deps);
+    expect(r.verdict).toBe("ACCEPTED"); expect(r.fail).toBe(0); expect(r.skip).toBe(0); expect(r.pass).toBe(r.checks.length); expect(r.repo).toEqual({headSha: "a".repeat(40), shaSource: "GIT", dirty: false}); expect(runs()).toBe(1);
+    const {evidenceSha256, ...body} = r; expect(evidenceSha256).toBe(crypto.createHash("sha256").update(JSON.stringify(body)).digest("hex"));
+    const allowed = [/^--status$/, /^-l -q$/, /^-l -v$/, /^-d Ubuntu --exec \/bin\/cat \/etc\/wsl\.conf$/, /^-d Ubuntu --exec \/bin\/cat \/proc\/sys\/fs\/binfmt_misc\/WSLInterop$/, /^-d Ubuntu --exec \/usr\/bin\/env node --version$/];
+    for (const c of calls) expect(allowed.some(a => a.test(c.join(" "))), c.join(" ")).toBe(true);
+  });
+
+  it("each failed precondition is FAIL with the exact Founder fix command; the report never changes settings", async () => {
+    const k = await load();
+    const run = async (o: any) => byId(await k.runAcceptance({distro: "Ubuntu"}, mkDeps(o).deps));
+    expect((await run({status: 1})).WSL_EXE).toMatchObject({status: "FAIL", fix: expect.stringContaining("wsl --install")});
+    const nd = await run({distros: "Debian\r\n"}); expect(nd.WSL_DISTRO).toMatchObject({status: "FAIL", fix: "wsl --install -d Ubuntu"});
+    expect((await run({verbose: "  NAME STATE VERSION\r\n* Ubuntu Running 1\r\n"})).WSL_VERSION_2).toMatchObject({status: "FAIL", fix: "wsl --set-version Ubuntu 2"});
+    const cf = await run({conf: "[interop]\nenabled=true\n"}); expect(cf.WSL_CONF.status).toBe("FAIL"); expect(cf.WSL_CONF.detail).toContain("interop.enabled"); expect(cf.WSL_CONF.detail).toContain("appendWindowsPath"); expect(cf.WSL_CONF.fix).toContain("enabled=false"); expect(cf.WSL_CONF.fix).toContain("appendWindowsPath=false"); expect(cf.WSL_CONF.fix).toContain("wsl --shutdown");
+    expect((await run({conf: null})).WSL_CONF.status).toBe("FAIL");
+    expect((await run({interopRt: "enabled"})).WSL_INTEROP_RUNTIME).toMatchObject({status: "FAIL"});
+    expect((await run({node: null})).WSL_NODE).toMatchObject({status: "FAIL", fix: expect.stringContaining("apt-get install")});
+    expect((await run({cli: {state: "SHIM_UNSUPPORTED", path: "C:\\npm\\claude.cmd", founderAction: "Install the native Claude Code (claude.exe)"}})).CLAUDE_CLI).toMatchObject({status: "FAIL", fix: "Install the native Claude Code (claude.exe)"});
+    expect((await run({cli: {state: "NOT_FOUND", path: null, founderAction: null}})).CLAUDE_CLI.fix).toContain("claude.ai/install.ps1");
+    const pr = await run({profiles: {implementer: "LOGIN_REQUIRED", reviewer: "REFUSED"}});
+    expect(pr.CLAUDE_PROFILE_IMPLEMENTER).toMatchObject({status: "FAIL", fix: expect.stringContaining("CLAUDE_CONFIG_DIR")}); expect(pr.CLAUDE_PROFILE_REVIEWER.fix).toContain("--control-root");
+    const none = await k.runAcceptance({distro: null}, mkDeps().deps); expect(byId(none).WSL_DISTRO).toMatchObject({status: "FAIL"});
+  });
+
+  it("SKIP is never PASS: not-Windows, missing Lane C module, skipped vitest tests and unfound tests all prevent ACCEPTED; blocking WSL preconditions skip the tests without running vitest; unknown SHA prevents ACCEPTED", async () => {
+    const k = await load();
+    const lin = mkDeps({platform: "linux"}); const rl = await k.runAcceptance({distro: "Ubuntu"}, lin.deps);
+    expect(rl.verdict).toBe("NOT_ACCEPTED"); expect(lin.runs()).toBe(0); expect(lin.calls).toEqual([]); expect(byId(rl).WSL_SELFTEST_AND_RUN.status).toBe("SKIP"); expect(rl.pass).toBe(3);
+    const nocli = await k.runAcceptance({distro: "Ubuntu"}, mkDeps({cli: null}).deps); expect(byId(nocli).CLAUDE_CLI.status).toBe("SKIP"); expect(nocli.verdict).toBe("NOT_ACCEPTED"); expect(nocli.reasons).toContain("SKIP:CLAUDE_CLI");
+    const sk = await k.runAcceptance({distro: "Ubuntu"}, mkDeps({vitest: vitestOk({a: "skipped", b: "pending"})}).deps); expect(byId(sk).WSL_SELFTEST_AND_RUN.status).toBe("SKIP"); expect(byId(sk).WSL_PRODUCT_BRIDGE.status).toBe("SKIP"); expect(sk.verdict).toBe("NOT_ACCEPTED");
+    const nf = await k.runAcceptance({distro: "Ubuntu"}, mkDeps({vitest: {testResults: []}}).deps); expect(byId(nf).WSL_PRODUCT_BRIDGE).toMatchObject({status: "FAIL", detail: expect.stringContaining("TEST_NOT_FOUND")});
+    const fl = await k.runAcceptance({distro: "Ubuntu"}, mkDeps({vitest: vitestOk({b: "failed"})}).deps); expect(byId(fl).WSL_PRODUCT_BRIDGE.status).toBe("FAIL");
+    const blocked = mkDeps({distros: "Debian\r\n"}); const rb = await k.runAcceptance({distro: "Ubuntu"}, blocked.deps); expect(byId(rb).WSL_SELFTEST_AND_RUN.detail).toContain("PRECONDITION_FAILED: WSL_DISTRO"); expect(blocked.runs()).toBe(0);
+    const nosha = await k.runAcceptance({distro: "Ubuntu"}, mkDeps({git: {headSha: null, dirty: null}}).deps); expect(nosha.verdict).toBe("NOT_ACCEPTED"); expect(nosha.reasons).toEqual(["HEAD_SHA_UNKNOWN"]); expect(nosha.repo.shaSource).toBe("UNKNOWN");
+    const arg = await k.runAcceptance({distro: "Ubuntu", shaArg: "b".repeat(40)}, mkDeps({git: {headSha: null, dirty: null}}).deps); expect(arg.verdict).toBe("ACCEPTED"); expect(arg.repo).toMatchObject({shaSource: "ARGUMENT", headSha: "b".repeat(40)});
+  });
+
+  it("table: one line per check, the fix block, and the SKIP-is-never-PASS verdict line; argument parsing is strict", async () => {
+    const k = await load();
+    const r = await k.runAcceptance({distro: "Ubuntu"}, mkDeps({conf: "", vitest: vitestOk({b: "skipped"})}).deps); const t = k.renderTable(r);
+    expect(t).toContain("FAIL  WSL_CONF"); expect(t).toContain("WHAT TO DO"); expect(t).toContain("appendWindowsPath=false"); expect(t).toContain("RESULT: NOT_ACCEPTED"); expect(t).toContain("SKIP is never PASS"); expect(t.split("\n").filter((l: string) => /^(PASS|FAIL|SKIP) /.test(l))).toHaveLength(r.checks.length);
+    expect(k.parseArgs(["--distro", "Ubuntu", "--sha", "a".repeat(40)], {}).distro).toBe("Ubuntu");
+    expect(k.parseArgs(["--distro", "bad name"], {}).error).toBeTruthy(); expect(k.parseArgs(["--sha", "xyz"], {}).error).toBeTruthy(); expect(k.parseArgs(["--nope"], {}).error).toContain("unknown argument");
+    expect(k.parseArgs([], {UASCO_WSL_DISTRO: "Debian"}).distro).toBe("Debian");
+    const src = fs.readFileSync(path.join(import.meta.dirname, "..", "docs", "acceptance", "windows", "founder-acceptance.mjs"), "utf8");
+    expect(src).not.toMatch(/\bsetx\b|Set-ItemProperty|reg add|writeFileSync\([^)]*wsl\.conf/);
   });
 });
