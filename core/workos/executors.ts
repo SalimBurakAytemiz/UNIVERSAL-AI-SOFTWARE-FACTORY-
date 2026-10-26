@@ -29,7 +29,9 @@ export interface ProcResult {
   argv: string[]; exitCode: number | null; stdout: string; stderr: string; startedAt: string; endedAt: string;
   timedOut: boolean; aborted: boolean; spawnError: boolean;
 }
-export interface ExecContext { timeoutMs: number; shouldAbort?: () => boolean }
+// //TR: PAR-04: onSpawn, adapter her implementer/reviewer çocuğunu doğurduğu anda (eşzamanlı) çağrılır; pgid POSIX'te çocuğun yeni süreç grubudur (pgid = pid), Windows'ta null (pid çocuk ağacının köküdür). Fırlatırsa çocuk öldürülür ve spawn hatası sayılır: kayıtsız yazar bırakılmaz.
+export interface SpawnedChild { pid: number; pgid: number | null }
+export interface ExecContext { timeoutMs: number; shouldAbort?: () => boolean; onSpawn?: (child: SpawnedChild) => void }
 // blockReason: adapter builder çıktısını commit etmeyi reddettiyse (ör. BUILDER_PRODUCED_NO_CHANGE) runner run'ı BLOCKED yapar.
 export interface ImplementResult { exitCode: number | null; commitSha?: string; blockReason?: string; log: string; argv: string[]; startedAt: string; endedAt: string; timedOut: boolean; aborted: boolean; transient: boolean }
 export interface ReviewFinding { severity: string; title: string }
@@ -59,7 +61,7 @@ function killTree(child: cp.ChildProcess, group = false): void {
     else child.kill("SIGKILL");
   } catch { /* süreç zaten bitmiş olabilir */ }
 }
-export interface ProcOptions { cwd: string; env: NodeJS.ProcessEnv; timeoutMs: number; input?: string; shouldAbort?: () => boolean; newSession?: boolean }
+export interface ProcOptions { cwd: string; env: NodeJS.ProcessEnv; timeoutMs: number; input?: string; shouldAbort?: () => boolean; newSession?: boolean; onSpawn?: (child: SpawnedChild) => void }
 // Shell kullanılmaz (argv dizisi); zaman aşımı ve abort (GLOBAL_STOP / lease kaybı) süreç ağacını sonlandırır.
 export function runProcess(argv: string[], opts: ProcOptions): Promise<ProcResult> {
   return runChild(argv, opts, () => cp.spawn(argv[0], argv.slice(1), {cwd: opts.cwd, env: opts.env, shell: false, windowsHide: true, stdio: ["pipe", "pipe", "pipe"], ...(opts.newSession && process.platform !== "win32" ? {detached: true} : {})}));
@@ -71,7 +73,7 @@ export function runProcess(argv: string[], opts: ProcOptions): Promise<ProcResul
  */
 export function runNodeScript(script: string, args: string[], opts: ProcOptions): Promise<ProcResult> {
   const argv = [process.execPath, script, ...args];
-  return runChild(argv, opts, () => cp.fork(script, args, {cwd: opts.cwd, env: opts.env, execArgv: [], windowsHide: true, stdio: ["pipe", "pipe", "pipe", "ipc"]} as cp.ForkOptions));
+  return runChild(argv, opts, () => cp.fork(script, args, {cwd: opts.cwd, env: opts.env, execArgv: [], windowsHide: true, stdio: ["pipe", "pipe", "pipe", "ipc"], ...(opts.newSession && process.platform !== "win32" ? {detached: true} : {})} as cp.ForkOptions));
 }
 function runChild(argv: string[], opts: ProcOptions, start: () => cp.ChildProcess): Promise<ProcResult> {
   return new Promise(resolve => {
@@ -89,6 +91,12 @@ function runChild(argv: string[], opts: ProcOptions, start: () => cp.ChildProces
       resolve({argv, exitCode: null, stdout, stderr, startedAt, endedAt: new Date().toISOString(), timedOut, aborted, spawnError}); return;
     }
     const group = opts.newSession === true && process.platform !== "win32";
+    if (opts.onSpawn && child.pid) {
+      try { opts.onSpawn({pid: child.pid, pgid: group ? child.pid : null}); } catch (e) {
+        spawnError = true; stderr = `SPAWN_RECORD_FAILED: ${(e as Error).message}`; settled = true; killTree(child, group);
+        resolve({argv, exitCode: null, stdout, stderr, startedAt, endedAt: new Date().toISOString(), timedOut, aborted, spawnError}); return;
+      }
+    }
     const timer = setTimeout(() => { timedOut = true; killTree(child, group); }, Math.max(1, opts.timeoutMs));
     const poll: NodeJS.Timeout | null = opts.shouldAbort ? setInterval(() => { if (opts.shouldAbort!()) { aborted = true; killTree(child, group); } }, 250) : null;
     child.stdout?.on("data", (d: Buffer) => { if (stdout.length < MAX_CAPTURE) stdout += d.toString("utf8"); });
@@ -145,7 +153,7 @@ export class FakeExecutors {
         identity: this.identities.implementer,
         async implement(workspace, spec, ctx) {
           const n = ++self.calls.implement;
-          const r = await runProcess([process.execPath, FAKE_EXECUTOR_SCRIPT, "implement", workspace], {cwd: workspace, env: env(), timeoutMs: ctx.timeoutMs, input: JSON.stringify(self.script.implement(n, spec)), shouldAbort: ctx.shouldAbort});
+          const r = await runProcess([process.execPath, FAKE_EXECUTOR_SCRIPT, "implement", workspace], {cwd: workspace, env: env(), timeoutMs: ctx.timeoutMs, input: JSON.stringify(self.script.implement(n, spec)), shouldAbort: ctx.shouldAbort, newSession: true, onSpawn: ctx.onSpawn});
           return {exitCode: r.exitCode, log: procLog(r), argv: r.argv, startedAt: r.startedAt, endedAt: r.endedAt, timedOut: r.timedOut, aborted: r.aborted, transient: r.timedOut || r.spawnError || r.exitCode === 75};
         }
       },
@@ -154,7 +162,7 @@ export class FakeExecutors {
         async review(cleanClone, spec, diff, ctx) {
           const n = ++self.calls.review;
           const directive = {...self.script.review(n, spec), diffSha256: crypto.createHash("sha256").update(diff).digest("hex")};
-          return toReview(await runProcess([process.execPath, FAKE_EXECUTOR_SCRIPT, "review", cleanClone], {cwd: cleanClone, env: env(), timeoutMs: ctx.timeoutMs, input: JSON.stringify(directive), shouldAbort: ctx.shouldAbort}));
+          return toReview(await runProcess([process.execPath, FAKE_EXECUTOR_SCRIPT, "review", cleanClone], {cwd: cleanClone, env: env(), timeoutMs: ctx.timeoutMs, input: JSON.stringify(directive), shouldAbort: ctx.shouldAbort, newSession: true, onSpawn: ctx.onSpawn}));
         }
       }
     };
@@ -209,7 +217,7 @@ export class EditOnlyImplementer implements ImplementerAdapter {
       const detail = agentConfig?.length ? `\nagent config in workspace:\n${agentConfig.slice(0, 100).map(f => `  ${f}`).join("\n")}` : "";
       return {exitCode: null, blockReason: p.refuse, log: `NOT_EXECUTED: ${p.refuse} (builder not started)${detail}\n`, argv: [], startedAt: at, endedAt: at, timedOut: false, aborted: false, transient: false};
     }
-    const po = {cwd: workspace, env: p.env, timeoutMs: ctx.timeoutMs, input: p.input, shouldAbort: ctx.shouldAbort};
+    const po = {cwd: workspace, env: p.env, timeoutMs: ctx.timeoutMs, input: p.input, shouldAbort: ctx.shouldAbort, newSession: true, onSpawn: ctx.onSpawn};
     const r = p.nodeScript ? await runNodeScript(p.argv[0], p.argv.slice(1), po) : await runProcess(p.argv, po);
     const base = {argv: r.argv, startedAt: r.startedAt, timedOut: r.timedOut, aborted: r.aborted, transient: r.timedOut || r.spawnError || (r.exitCode !== null && this.transientExitCodes.includes(r.exitCode))};
     if (r.exitCode !== 0 || r.aborted) return {...base, exitCode: r.exitCode, log: procLog(r), endedAt: r.endedAt};
@@ -310,7 +318,7 @@ export class LocalClaudeExecutors {
           if (!prof.ok) return {verdict: "BLOCKED", findings: [], valid: false, invalidReason: prof.reason, exitCode: null, log: `NOT_EXECUTED: ${prof.reason} (reviewer not started)\n`, argv, startedAt: at, endedAt: new Date().toISOString(), timedOut: false, aborted: false, transient: false};
           const envPolicyFile = path.join(self.repoRoot, "config", "environment-policy.json");
           const before = reviewWorkspaceSnapshot(cleanClone, envPolicyFile);
-          const po: ProcOptions = {cwd: cleanClone, env: withClaudeProfileEnv(self.env(), prof.dir), timeoutMs: ctx.timeoutMs, input: reviewPrompt(spec, diff), shouldAbort: ctx.shouldAbort};
+          const po: ProcOptions = {cwd: cleanClone, env: withClaudeProfileEnv(self.env(), prof.dir), timeoutMs: ctx.timeoutMs, input: reviewPrompt(spec, diff), shouldAbort: ctx.shouldAbort, newSession: true, onSpawn: ctx.onSpawn};
           const r = toReview(await (self.opts.runReviewer ?? runProcess)(argv, po));
           // Review sonrası çalışma alanı bayt düzeyinde aynı olmalı; değilse review GEÇERSİZ (verdict ne olursa olsun CLEAN sayılmaz).
           const changed = reviewWorkspaceChange(before, reviewWorkspaceSnapshot(cleanClone, envPolicyFile));
