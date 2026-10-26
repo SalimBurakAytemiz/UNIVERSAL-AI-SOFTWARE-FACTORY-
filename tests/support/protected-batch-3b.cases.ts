@@ -8,6 +8,7 @@ import {pathToFileURL} from "node:url";
 import {buildServer} from "../../apps/control-api/src/server.js";
 import {WorkOsStore} from "../../core/workos/store.js";
 import {PreDevDriver} from "../../core/workos/predev/driver.js";
+import {briefFromRecords} from "../../core/workos/predev/brief.js";
 import {TASKHUB_BRIEF} from "../../core/workos/predev/fixtures/taskhub-brief.js";
 import {TASKHUB_ARTIFACTS} from "../../core/workos/predev/fixtures/taskhub/index.js";
 
@@ -55,29 +56,45 @@ export function registerProtectedBatch3bCases() {
       const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "b3b-")), token = crypto.randomBytes(16).toString("hex"), SC = {tenantId: "local"};
       const hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210", "content-type": "application/json"};
       const runtime = path.join(tmp, "runtime"); fs.mkdirSync(runtime, {recursive: true});
-      const app = buildServer({controlToken: token, runtime, dataDir: path.join(tmp, "data"), port: 3210, logger: false});
-      const store = new WorkOsStore(path.join(tmp, "data"));
-      const p = store.createProject({tenantId: "local", orgId: "local", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL"});
-      const m = store.createMission({tenantId: "local", projectId: p.projectId, title: "T", objective: "O", acceptanceCriteria: ["c1"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
-      for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission(SC, m.missionId, to, "go", "FOUNDER_LOCAL");
-      const driver = new PreDevDriver({store, brief: TASKHUB_BRIEF, builder: {produce: async (kind: any) => JSON.stringify((TASKHUB_ARTIFACTS as any)[kind])}});
+      const dataDir = path.join(tmp, "data");
+      const app = buildServer({controlToken: token, runtime, dataDir, port: 3210, logger: false});
       const post = (url: string, body: unknown, headers: Record<string, string> = hdr) => app.inject({method: "POST", url, headers, payload: JSON.stringify(body)});
-      const draft = async () => { const out = await driver.produceCurrentPhase(SC, m.missionId, "agent-ba@local.invalid"); if (out.status !== "RECORDED") throw new Error(JSON.stringify(out)); return out.artifactId; };
-      const base = `/v1/missions/${m.missionId}/predev`;
-      expect((await post(`${base}/start`, {}, {host: "127.0.0.1:3210", "content-type": "application/json"})).statusCode).toBe(403); // token hook still guards
-      const s = await post(`${base}/start`, {});
-      expect([s.statusCode, s.json().predev?.phase], s.body).toEqual([201, "BUSINESS_ANALYSIS"]);
-      const a1 = await post(`${base}/artifacts/${await draft()}/approve`, {evidenceRefs: ["evd_taskhub_ba_signed"]});
-      expect([a1.statusCode, a1.json().predev?.phase], a1.body).toEqual([200, "REQUIREMENTS"]);
-      const rejected = await draft();
-      const r = await post(`${base}/artifacts/${rejected}/reject`, {reason: "Acceptance criteria are not testable"});
-      expect([r.statusCode, r.json().predev?.phase], r.body).toEqual([200, "REQUIREMENTS"]);
-      const noEvidence = await post(`${base}/artifacts/${rejected}/approve`, {});
-      expect(noEvidence.statusCode).toBe(400); // strict body: evidenceRefs is required
-      const a2 = await post(`${base}/artifacts/${await draft()}/approve`, {evidenceRefs: ["evd_taskhub_req_signed"]}); // the re-draft carries supersedes (#198)
-      expect([a2.statusCode, a2.json().predev?.phase], a2.body).toEqual([200, "PLANNING"]);
-      await app.close();
-      fs.rmSync(tmp, {recursive: true, force: true});
+      try {
+        // //TR: Kurulum sunucunun KENDİ rotalarından geçer (tek journal yazarı): ikinci bir WorkOsStore örneği her sunucu isteğinden sonra journal'ın baştan doğrulanıp yeniden oynatılmasına (ve snapshot yazımına) yol açar. Taslak üretimi için (builder bu pakette bir rota ile bağlı değil) TEK, tembel açılan sürücü deposu kullanılır.
+        const proj = await post("/v1/projects", {name: "P", environmentId: "dev"});
+        expect(proj.statusCode, proj.body).toBe(201);
+        const mis = await post("/v1/missions", {projectId: proj.json().project.projectId, title: "T", objective: "O", acceptanceCriteria: ["c1"], riskLevel: "R1"});
+        expect(mis.statusCode, mis.body).toBe(201);
+        const missionId: string = mis.json().mission.missionId;
+        // //TR: Pre-dev dizisi DRAFT durumundaki görev için de açıktır (PREDEV_OPEN_MISSION_STATUSES = DRAFT, PREFLIGHT, AUTHORIZED); PREFLIGHT/AUTHORIZED geçişleri bu rotaları sınamaz ve her biri doğrulamalı yükleme + 8 fsync demektir, bu yüzden yapılmaz.
+        expect(mis.json().mission.status).toBe("DRAFT");
+        let driver: PreDevDriver | null = null;
+        const draft = async () => {
+          if (!driver) { // opened once, after the route-made setup (one replay), and only for the three drafts
+            const store = new WorkOsStore(dataDir), mission = store.getMission(SC, missionId)!, project = store.getProject(SC, mission.projectId)!;
+            driver = new PreDevDriver({store, brief: briefFromRecords({project, mission}), builder: {produce: async (kind: any) => JSON.stringify((TASKHUB_ARTIFACTS as any)[kind])}});
+          }
+          const out = await driver.produceCurrentPhase(SC, missionId, "agent-ba@local.invalid"); if (out.status !== "RECORDED") throw new Error(JSON.stringify(out)); return out.artifactId;
+        };
+        const base = `/v1/missions/${missionId}/predev`;
+        expect((await post(`${base}/start`, {}, {host: "127.0.0.1:3210", "content-type": "application/json"})).statusCode).toBe(403); // token hook still guards
+        const s = await post(`${base}/start`, {});
+        expect([s.statusCode, s.json().predev?.phase], s.body).toEqual([201, "BUSINESS_ANALYSIS"]);
+        const a1 = await post(`${base}/artifacts/${await draft()}/approve`, {evidenceRefs: ["evd_taskhub_ba_signed"]});
+        expect([a1.statusCode, a1.json().predev?.phase], a1.body).toEqual([200, "REQUIREMENTS"]);
+        const rejected = await draft();
+        const r = await post(`${base}/artifacts/${rejected}/reject`, {reason: "Acceptance criteria are not testable"});
+        expect([r.statusCode, r.json().predev?.phase], r.body).toEqual([200, "REQUIREMENTS"]);
+        const noEvidence = await post(`${base}/artifacts/${rejected}/approve`, {});
+        expect(noEvidence.statusCode).toBe(400); // strict body: evidenceRefs is required
+        const a2 = await post(`${base}/artifacts/${await draft()}/approve`, {evidenceRefs: ["evd_taskhub_req_signed"]}); // the re-draft carries supersedes (#198)
+        expect([a2.statusCode, a2.json().predev?.phase], a2.body).toEqual([200, "PLANNING"]);
+        // //TR: Bu davada yönetilen proje dizini HİÇ oluşmaz: dev-run yöneticisinin başlangıç taraması (win32'de PowerShell süreç-başlangıç okuması) çalışacak bir şey bulamaz. Biri davayı projects/ oluşturan bir kuruluma çevirirse test bunu açıkça yakalar.
+        expect(fs.existsSync(path.join(dataDir, "projects")), "this case must not create <dataDir>/projects (no win32 process probe may run)").toBe(false);
+      } finally {
+        await app.close();
+        fs.rmSync(tmp, {recursive: true, force: true});
+      }
     });
 
     it("serves the role lifecycle summary from evidence with five independent counters, and the static path does not shadow role detail", async () => {
