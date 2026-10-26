@@ -337,20 +337,23 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
     const {bridgeSupport, providerNetwork} = await import("../core/workos/devrun-bridge.js");
     expect(providerNetwork(TEST_HOST_PASSTHROUGH_SANDBOX)).toBe("HOST"); expect(bridgeSupport(TEST_HOST_PASSTHROUGH_SANDBOX)).toMatchObject({ok: true, start: null});
     const lin = (caps?: unknown) => ({id: "linux-unshare-v2", selfTest: async () => ({ok: true}), run: async () => ({}) as any, spawn: () => ({}) as any, ...(caps ? {capabilities: caps} : {})});
-    expect(bridgeSupport(lin())).toEqual({ok: false, reason: "SANDBOX_LOOPBACK_NOT_VERIFIED:NOT_REPORTED"});
-    expect(bridgeSupport(lin({loopback: false, loopbackReason: "LOOPBACK_TOOL_MISSING"}))).toEqual({ok: false, reason: "SANDBOX_LOOPBACK_NOT_VERIFIED:LOOPBACK_TOOL_MISSING"});
-    expect(bridgeSupport(lin({loopback: true}), {nsenterBinary: null})).toEqual({ok: false, reason: "NSENTER_MISSING"});
+    // Platform kapısı yeteneklerden ÖNCE gelir (üründe doğru); beklentiler çalıştıran işletim sistemine bağlı olmasın diye platform açıkça verilir (win32 -> BRIDGE_PLATFORM_NOT_LINUX, linux -> yetenek kodları).
+    const L = {platform: "linux" as const};
+    expect(bridgeSupport(lin(), {platform: "win32"})).toEqual({ok: false, reason: "BRIDGE_PLATFORM_NOT_LINUX"});
+    expect(bridgeSupport(lin(), L)).toEqual({ok: false, reason: "SANDBOX_LOOPBACK_NOT_VERIFIED:NOT_REPORTED"});
+    expect(bridgeSupport(lin({loopback: false, loopbackReason: "LOOPBACK_TOOL_MISSING"}), L)).toEqual({ok: false, reason: "SANDBOX_LOOPBACK_NOT_VERIFIED:LOOPBACK_TOOL_MISSING"});
+    expect(bridgeSupport(lin({loopback: true}), {...L, nsenterBinary: null})).toEqual({ok: false, reason: "NSENTER_MISSING"});
     expect(bridgeSupport(lin({loopback: true}), {nsenterBinary: "/usr/bin/nsenter", platform: "win32"})).toEqual({ok: false, reason: "BRIDGE_PLATFORM_NOT_LINUX"});
     expect(bridgeSupport(lin({loopback: true}), {nsenterBinary: "/usr/bin/nsenter", platform: "linux"})).toMatchObject({ok: true, network: "ISOLATED"});
-    expect(bridgeSupport({...lin(), id: "wsl-unshare-v1"} as any)).toEqual({ok: false, reason: "PROVIDER_HAS_NO_BRIDGE:wsl-unshare-v1"});
+    expect(bridgeSupport({...lin(), id: "wsl-unshare-v1"} as any, L)).toEqual({ok: false, reason: "PROVIDER_HAS_NO_BRIDGE:wsl-unshare-v1"});
     const own = async () => ({port: 1, close() {}});
-    expect(bridgeSupport({...lin(), bridge: own} as any)).toMatchObject({ok: true});
+    expect(bridgeSupport({...lin(), bridge: own} as any, L)).toMatchObject({ok: true});
   });
 
   it("an isolated provider without a usable bridge is refused with DEVRUN_SANDBOX_UNAVAILABLE + exact reason BEFORE anything is cloned or spawned; state is BLOCKED; an unverified provider keeps SANDBOX_UNAVAILABLE", async () => {
     const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
     const {provider, spawned} = fakeIsolated();
-    const m = manager(dataDir, new ExecutionGate(provider as any));
+    const m = manager(dataDir, new ExecutionGate(provider as any), {bridgeOptions: {platform: "linux"}});
     await expect(m.start(p)).rejects.toMatchObject({code: "DEVRUN_SANDBOX_UNAVAILABLE", status: 409, reason: "SANDBOX_LOOPBACK_NOT_VERIFIED:NOT_REPORTED"});
     expect(spawned).toEqual([]); expect(fs.existsSync(path.join(dataDir, "projects", p.projectId, "devrun", "workspace"))).toBe(false);
     const v = m.view(p); expect(v.status).toBe("BLOCKED"); expect(v.reason).toBe("DEVRUN_SANDBOX_UNAVAILABLE:SANDBOX_LOOPBACK_NOT_VERIFIED:NOT_REPORTED");
@@ -406,6 +409,19 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
       expect(m2.view(p)).toMatchObject({status: "STOPPED", sandboxScratch: null}); expect(m2.view(p).stopIncomplete).toBeUndefined();
     } finally { await m.stopAll("CLEANUP"); }
   }, T);
+
+  it("STOP-409 (Windows stop timeout): stop returns STOPPED as soon as the root exits even when the tree reap is slow (reap is a separate background budget); a new start waits for that reap and is refused with 409 DEVRUN_STOP_PENDING if it takes too long", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+    const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {stopWaitMs: 1500, reapWaitMs: 300});
+    let reaps = 0; (m as any).reapTree = async () => { reaps++; await new Promise(r => setTimeout(r, 3000)); };
+    try {
+      await m.start(p);
+      const t0 = Date.now(); expect(await m.stop(p.projectId)).toBe(true); expect(Date.now() - t0, "stop must not wait for the slow reap").toBeLessThan(1400);
+      expect(m.view(p).status).toBe("STOPPED");
+      await expect(m.start(p)).rejects.toMatchObject({code: "DEVRUN_STOP_PENDING", status: 409});
+      (m as any).o.reapWaitMs = 10_000; const v = await m.start(p); expect(reaps).toBe(1); expect(v.status).toMatch(/RUNNING|STARTING/);
+    } finally { (m as any).reapTree = async () => undefined; await m.stopAll("CLEANUP"); }
+  }, 40_000);
 
   it("C-8: the delivery link is on the STARTING placeholder (product stop works during STARTING); C-9: the manager-wide cap refuses the next start with 409 DEVRUN_CAPACITY", async () => {
     const {app, dataDir} = mk(); const p1 = await createProject(app, {template: "web-node"}), p2 = await createProject(app, {template: "web-node"});
@@ -478,7 +494,9 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
   // Gerçek ağ ad alanı: ip varsa (yoksa SKIP) sandbox-benzeri unshare --net içindeki sunucuya köprü 200 döner; köprü olmadan ana makineden erişilemez.
   it("REAL netns: a server inside a private user+net namespace is unreachable from the host directly and reachable ONLY through the nsenter bridge (skipped without ip/nsenter/unshare)", async ctx => {
     const have = (b: string) => cp.spawnSync("sh", ["-c", `command -v ${b}`]).status === 0;
-    if (process.platform !== "linux" || !have("ip") || !have("nsenter") || !have("unshare")) ctx.skip();
+    // Araç varlığı yetmez: GitHub ubuntu-24.04 gibi ana makineler kullanıcı ad alanını (AppArmor) engelleyebilir; gerçek yeteneği ayni komutla sına, yoksa SKIP (kesin neden yazdırılır).
+    const userns = process.platform === "linux" && have("unshare") ? cp.spawnSync("unshare", ["--user", "--map-root-user", "--net", "true"], {encoding: "utf8"}) : null;
+    if (process.platform !== "linux" || !have("ip") || !have("nsenter") || !userns || userns.status !== 0) { console.log(`REAL netns skipped: ${userns ? `unshare --user --map-root-user --net exit ${userns.status}: ${String(userns.stderr).trim().slice(0, 120)}` : "tools missing"}`); ctx.skip(); }
     const {startNsenterBridge} = await import("../core/workos/devrun-bridge.js");
     const inner = 20000 + Math.floor(Math.random() * 20000);
     const child = cp.spawn("unshare", ["--user", "--map-root-user", "--net", "--fork", "sh", "-c", `ip link set lo up && exec ${process.execPath} -e "require('http').createServer((q,r)=>r.end('inside')).listen(${inner},'127.0.0.1')"`], {stdio: "ignore", detached: true}); procs.push(child);

@@ -48,6 +48,9 @@ export interface DevRunOptions {
   logRingBytes?: number; logTailBytes?: number; startWaitMs?: number; graceMs?: number; probeIntervalMs?: number; stopPollMs?: number;
   // B-DEVRUN-RESTART-SAFE: stop() çıkışı en çok bu kadar bekler (varsayılan 15 sn); dolarsa süreç ağacı hâlâ canlı olabilir, çalıştırma STOPPED sayılmaz.
   stopWaitMs?: number;
+  // Windows stop 409 düzeltmesi: kök çıkışı ile ağaç temizliği AYRI bütçelerdir. stop() kök çıkınca döner; ağaç temizliği arka planda biter (sonucu treeCleanup'ta görünür).
+  // Yeni start (restart dahil) eski ağaç TAMAMEN temizlenmeden süreç başlatmaz: en çok bu kadar bekler (varsayılan 60 sn), dolarsa 409 DEVRUN_STOP_PENDING.
+  reapWaitMs?: number;
   // PS1A-C2-F2: Windows'ta çalışırken soy süreçlerin (pid + oluşturma zamanı) anlık görüntü aralığı; 0 kapatır.
   treeSnapshotMs?: number;
   // SBX-GATE: dev komutu proje kodudur; yalnız bu kapının izin verdiği doğrulanmış sandbox sağlayıcısında başlatılır. Tanımsız = sağlayıcı yok = 409 SANDBOX_UNAVAILABLE (süreç başlatılmaz).
@@ -192,12 +195,13 @@ class Ring {
 }
 interface Active {
   state: DevRunState; child: cp.ChildProcess | null; stopping: boolean; stdout: Ring; stderr: Ring;
-  release: (() => void) | null; probeTimer: NodeJS.Timeout | null; flushTimer: NodeJS.Timeout | null; exited: Promise<void>; projectType: string | undefined;
+  release: (() => void) | null; probeTimer: NodeJS.Timeout | null; flushTimer: NodeJS.Timeout | null; exited: Promise<void>; rootExited: Promise<void>; projectType: string | undefined;
   known: Map<number, number>; snapTimer: NodeJS.Timeout | null; bridge: BridgeHandle | null;
   provider: {isVerified?(): boolean} | null; blockedReason: string | null;
 }
 
 export class DevRunManager {
+  private readonly reaping = new Map<string, Promise<void>>();
   readonly instanceId = `dev_${crypto.randomBytes(8).toString("hex")}`;
   private readonly active = new Map<string, Active>();
   private stopTimer: NodeJS.Timeout | null = null;
@@ -339,6 +343,9 @@ export class DevRunManager {
       this.o.audit("WORKOS_DEVRUN_REFUSED", {projectId: id, reason: "DEVRUN_SANDBOX_UNAVAILABLE", detail: bridge.reason});
       throw new StudioError("DEVRUN_SANDBOX_UNAVAILABLE", 409, bridge.reason);
     }
+    // Önceki çalıştırmanın ağaç temizliği (arka planda) bitmeden yeni süreç başlatılmaz.
+    const pending = this.reaping.get(id);
+    if (pending && !(await Promise.race([pending.then(() => true), sleep(this.o.reapWaitMs ?? 60_000).then(() => false)]))) throw new StudioError("DEVRUN_STOP_PENDING", 409);
     // Kapı beklemesinden sonra (await) eşzamanlı start ve GLOBAL_STOP yeniden kontrol edilir.
     if (this.isActive(id)) throw new StudioError("DEVRUN_ALREADY_RUNNING", 409);
     if (this.stopActive()) throw new StudioError("GLOBAL_STOP_ACTIVE", 423);
@@ -354,7 +361,7 @@ export class DevRunManager {
     const st: DevRunState = {...this.blank(project), status: "STARTING", startedAt: new Date().toISOString(), argv: [...argv]};
     // C-8: teslim bağlantısı STARTING yer tutucusundan itibaren kayıtlıdır (ürün durdurma STARTING sırasında da çalışır).
     if (link) st.deliveryRunId = link.runId;
-    const a: Active = {state: st, child: null, stopping: false, stdout: new Ring(this.o.logRingBytes), stderr: new Ring(this.o.logRingBytes), release: null, probeTimer: null, flushTimer: null, exited: Promise.resolve(), projectType: project.projectType, known: new Map(), snapTimer: null, bridge: null, provider: null, blockedReason: null};
+    const a: Active = {state: st, child: null, stopping: false, stdout: new Ring(this.o.logRingBytes), stderr: new Ring(this.o.logRingBytes), release: null, probeTimer: null, flushTimer: null, exited: Promise.resolve(), rootExited: Promise.resolve(), projectType: project.projectType, known: new Map(), snapTimer: null, bridge: null, provider: null, blockedReason: null};
     this.active.set(id, a);
     // PS1A-C1-F2: her await'ten sonra (özellikle spawn'dan hemen önce) stop/stopAll/GLOBAL_STOP ve harita sahipliği yeniden kontrol edilir.
     const aborted = () => a.stopping || this.active.get(id) !== a || this.stopActive() !== null;
@@ -390,11 +397,13 @@ export class DevRunManager {
       // B-RUN-WIN-1: eşzamansız hazırlık gerektiren sağlayıcı (WSL) spawnAsync sunar; yoksa eşzamanlı spawn.
       const child: SandboxChild = gate.provider.spawnAsync ? await gate.provider.spawnAsync(exe, argv.slice(1), spawnOpts) : gate.provider.spawn(exe, argv.slice(1), spawnOpts);
       a.child = child; a.provider = gate.provider; if (child.sandboxScratch) st.sandboxScratch = child.sandboxScratch;
+      a.rootExited = new Promise<void>(resolve => { child.once("exit", () => resolve()); child.once("error", () => { if (child.pid === undefined) resolve(); }); });
       a.exited = new Promise<void>(resolve => {
         // PS1A-C2-F2: çıkış (çökme veya durdurma) sonrası kalan ağaç (ayrık torunlar dahil) temizlenmeden exited çözülmez.
         child.once("exit", (code, signal) => { this.onExit(a, code, signal); void Promise.all([this.reapTree(a).catch(() => undefined), Promise.resolve(child.sandboxTeardown).catch(() => "TEARDOWN_ERROR")]).then(([, td]) => this.noteTeardown(a, td)).finally(resolve); });
         child.once("error", () => { if (child.pid === undefined) { this.onExit(a, null, null, "DEVRUN_SPAWN_FAILED"); resolve(); } });
       });
+      this.reaping.set(id, a.exited); void a.exited.finally(() => { if (this.reaping.get(id) === a.exited) this.reaping.delete(id); });
       child.stdout?.on("data", (b: Buffer) => { a.stdout.push(b); this.scheduleFlush(a); });
       child.stderr?.on("data", (b: Buffer) => { a.stderr.push(b); this.scheduleFlush(a); });
       if (child.pid === undefined) { await a.exited; return this.view(project); }
@@ -557,7 +566,7 @@ export class DevRunManager {
     // POSIX: kök ölünce yetimlerin ppid'si kaybolur; öldürmeden önce soy kaydedilir. Bekleme sonrası kök hâlâ çalışıyorsa öldürülür (toplanmış pid'e sinyal yok). Windows davranışı değişmez.
     if (running() && process.platform !== "win32" && PROCESS_LIST_SUPPORTED) await this.recordTree(a);
     if (running()) killProcessTree(a.child!.pid!);
-    const exited = await Promise.race([a.exited.then(() => true), sleep(this.o.stopWaitMs).then(() => false)]);
+    const exited = await Promise.race([a.rootExited.then(() => true), sleep(this.o.stopWaitMs).then(() => false)]);
     if (!exited) {
       // Süreç ağacının öldüğü doğrulanmadı: STOPPED yazılmaz, çalıştırma aktif kalır (kilit/port/pid sahipliği korunur) ve yeni bir başlatma reddedilir.
       a.state.stopTimedOut = true;
@@ -588,7 +597,7 @@ export class DevRunManager {
     }, this.o.stopPollMs);
     this.stopTimer.unref?.();
   }
-  async close(): Promise<void> { await this.stopAll("API_SHUTDOWN"); if (this.stopTimer) clearInterval(this.stopTimer); this.stopTimer = null; }
+  async close(): Promise<void> { await this.stopAll("API_SHUTDOWN"); await Promise.race([Promise.all([...this.reaping.values()]), sleep(this.o.stopWaitMs)]); if (this.stopTimer) clearInterval(this.stopTimer); this.stopTimer = null; }
 
   // PS-AT-004: API yeniden başladığında STARTING/RUNNING kayıtları incelenir. Sahibi canlı başka bir API süreciyse dokunulmaz; değilse süreç sahipsizdir:
   // pid canlı ve başlangıç zamanı kayıtla birebir aynıysa süreç ağacı sonlandırılır, değilse (pid yeniden kullanılmış/doğrulanamıyor) ÖLDÜRÜLMEZ ve raporlanır.
