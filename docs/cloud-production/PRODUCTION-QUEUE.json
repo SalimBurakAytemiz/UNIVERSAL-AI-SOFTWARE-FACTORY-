@@ -1791,8 +1791,8 @@
   },
   "integrationBoard": {
     "//TR": "Koordinatör entegrasyon panosu: her açık PR için gerçek engel ve bekleyen sorumlu. Ortak kök neden (base dependency gate) PR'a özgü hatalardan ayrı tutulur; #221/#225 birleşmeden tekrar CI tetiklenmez.",
-    "at": "2026-10-26T07:42:00Z",
-    "base": "fa8704c (v7/integration, after #230)",
+    "at": "2026-10-26T08:24:00Z",
+    "base": "a14bd26 (v7/integration, after #192)",
     "sharedRootCause": {
       "id": "NONE_ACTIVE",
       "previous": "BASE_DEPENDENCY_GATE resolved by #225 (e2323d9)",
@@ -1800,74 +1800,46 @@
     },
     "prs": [
       {
-        "pr": 226,
-        "kind": "LANE_A chain",
-        "state": "READY, auto-merge ON (07:39:07Z) @d98d1f6",
-        "blocker": "none: delta re-check NO_BLOCKERS (wf_47148b30-e49); waits on validate-windows-shard (3)",
-        "owner": "AUTO"
-      },
-      {
-        "pr": 227,
-        "kind": "LANE_B product-run (B-RUN-1)",
-        "state": "DRAFT @7a79e0f",
-        "blocker": "delta re-check wq7362wny running (stop-during-reap-wait MEDIUM fix); CI on 7a79e0f",
-        "owner": "COORDINATOR (re-check)"
-      },
-      {
-        "pr": 228,
-        "kind": "LANE_C CLI readiness",
-        "state": "DRAFT @37c7aef",
-        "blocker": "c1a2107 red: secret-sanity OPENAI_STYLE_KEY test stub (fix pushed?); delta re-check after green",
-        "owner": "LANE_C"
+        "pr": 196,
+        "kind": "LANE_A attention sections (stacked on #192)",
+        "state": "DRAFT @f287ccc",
+        "blocker": "delta re-check NO_BLOCKERS; conflicts with base in locales/en.js+tr.js after #232 -> Lane A base merge (union of keys), then coordinator merge-commit check -> Ready + auto-merge",
+        "owner": "LANE_A"
       },
       {
         "pr": 229,
-        "kind": "LANE_C AnalysisFlow (stacked on #228)",
-        "state": "DRAFT @a70c98e",
-        "blocker": "inherits #228 secret-sanity red; merge #228 fix in",
+        "kind": "LANE_C AnalysisFlow",
+        "state": "DRAFT @a635b6e (tree == e37311c)",
+        "blocker": "re-verify BLOCKERS: F1 MEDIUM verified (APPROVED-but-not-advanced phase triggers a discarded paid builder call every step(); regression from L2) + LOW F2/F3 survivors",
         "owner": "LANE_C"
       },
       {
         "pr": 224,
         "kind": "LANE_C PAR runner",
         "state": "DRAFT @705acae",
-        "blocker": "re-review wjh50snx6 (b8317d2) + Windows fixes in 705acae (TK-3 fail-open fixed); needs tests/v7-par-runner.test.ts registration in config/validation.json (R1 TEST_REGISTRATION_APPEND after transition PR)",
-        "owner": "LANE_C / COORDINATOR"
-      },
-      {
-        "pr": 192,
-        "kind": "LANE_A attention UI",
-        "state": "DRAFT @bbafa45",
-        "blocker": "re-verify wpufr3n4k running",
-        "owner": "COORDINATOR (re-verify)"
-      },
-      {
-        "pr": 196,
-        "kind": "LANE_A attention sections (stacked on #192)",
-        "state": "DRAFT @bb81da8",
-        "blocker": "re-verify wpufr3n4k (aa70558 + test-only bb81da8)",
-        "owner": "COORDINATOR (re-verify)"
+        "blocker": "round-3 re-review BLOCKERS: R2-10/SWEEP-2 cwd sweep after every IMPLEMENT SIGKILLs same-user processes; HB-R3-1 owner-record failure on runner git children is terminal; M9 pin vacuous under load",
+        "owner": "LANE_C"
       },
       {
         "pr": 231,
-        "kind": "LANE_B+C sandbox chain (FOUNDER tier)",
-        "state": "DRAFT @fa31c1d",
-        "blocker": "delta security review w0uu8mlsr running; merge after #227; FOUNDER decision required (sandbox code); LC-LO-01 pending from Lane C",
-        "owner": "COORDINATOR (review) / FOUNDER (merge)"
+        "kind": "FOUNDER-TIER sandbox (WSL provider + devrun + Lane C loopback)",
+        "state": "DRAFT @9bdb026",
+        "blocker": "security delta reviews running (fa31c1d, 4cb9930); B-WSL-WIRE-1 server.ts one-liner + reseal pending; Founder decision required to merge",
+        "owner": "COORDINATOR -> FOUNDER"
       },
       {
         "pr": 66,
-        "kind": "LEGACY",
-        "state": "DRAFT",
-        "blocker": "Founder decision",
+        "kind": "legacy E2E-DESKTOP",
+        "state": "DRAFT @ffeaf79",
+        "blocker": "held for Founder decision (protected workflow)",
         "owner": "FOUNDER"
       }
     ],
     "branchOnlyChains": {
-      "laneA": "claude/lane-a-win-e2e fb6f515/8e372a9 (Electron journey E2E; E2E-2 on 4b composition 5914edb: PASS 16 / NV 0 / FAIL 0, Linux xvfb only); claude/lane-a-analysis-busy 6ab5fc6 (PR after #226)",
-      "laneB": "claude/lane-b-analysis-routes 6bd6f30 (200-with-body steps, shared produce lock, stop->423 audit; PR after #229)",
-      "laneC": "sandbox LC-LO-01..03 on sbx-lo-1 (goes into #231); C-FLOW-ANALYSIS-2 after #229",
-      "coordinator": "claude/coord-protected-batch-4b fee6cef -> rebuild after #228/#229/#227/analysis-routes (adds AnalysisFlow stopped hook, #226 journey pin flip, M4 pin); claude/coord-transition-autonomy (reform, wgguxa5j0)"
+      "laneA": "claude/lane-a-win-e2e 5bd26b7 (Electron journey E2E; dba4270 review BLOCKERS B1-B9/L1-L11 fixed by Lane A, 10/10 local Linux xvfb runs PASS_WITH_NOT_VERIFIED; independent re-review wj1elg26x running; Windows NOT_EXECUTED); #232 merged d3ebcc1",
+      "laneB": "claude/lane-b-analysis-routes 6bd6f30 (200-with-body steps, shared produce lock, stop->423 audit; PR after #229 F1 fix); #231 sandbox in Founder tier",
+      "laneC": "#229 F1 fix + #224 round-3 fixes pending; C-FLOW-ANALYSIS-2 claude/lane-c-flow-analysis-2 76772d4 (after #229); #228 merged ddcb371",
+      "coordinator": "claude/coord-protected-batch-4b fee6cef -> rebuild after #229/analysis-routes (adds AnalysisFlow stopped hook, #226 journey pin flip, M4 pin); claude/coord-transition-autonomy (reform, wgguxa5j0) + CI speed plan (N=6 shards, draft gating, preflight needs, npm cache, selftest tmp cleanup; measured BEFORE p50 21.7 min)"
     },
     "mergedVia225": {
       "merge": "e2323d9",
@@ -1940,6 +1912,51 @@
         "review": "process-mode independent review NO_BLOCKERS (wf_5029db6e-7c8)",
         "pushCi": "run 40284676104 in progress; Windows Installer 40284676091 success",
         "riskTier": "ROUTINE (tests + doc only)"
+      },
+      {
+        "pr": 226,
+        "merge": "f1b6959",
+        "by": "SalimBurakAytemiz (auto-merge, enabled by coordinator 07:39:07Z)",
+        "at": "2026-10-26T07:41:52Z",
+        "postMerge": "VERIFIED: parent2 = reviewed head d98d1f6, 3-way merge-tree == merge tree",
+        "review": "process-mode independent review + delta re-check NO_BLOCKERS (wf_47148b30-e49)",
+        "riskTier": "ROUTINE (renderer + tests)"
+      },
+      {
+        "pr": 227,
+        "merge": "fa78f25",
+        "by": "SalimBurakAytemiz (coordinator direct merge, expectedHeadSha 7a79e0f; auto-merge refused: clean status)",
+        "at": "2026-10-26T07:55:46Z",
+        "postMerge": "VERIFIED: parent2 = reviewed head 7a79e0f, 3-way merge-tree == merge tree",
+        "review": "process-mode delta re-check NO_BLOCKERS (stop-during-reap-wait fix, mutant killed)",
+        "riskTier": "ROUTINE (core/workos devrun, no protected path)"
+      },
+      {
+        "pr": 232,
+        "merge": "d3ebcc1",
+        "by": "SalimBurakAytemiz (auto-merge, enabled by coordinator 08:07:13Z)",
+        "at": "2026-10-26T08:12:05Z",
+        "postMerge": "VERIFIED: parent1 fa78f25, parent2 = reviewed head 35c927f, merge-tree f9a0c8a == merge tree",
+        "review": "process-mode independent review NO_BLOCKERS, 15/15 mutants killed (wf_33567266-400)",
+        "riskTier": "ROUTINE (renderer + locales + tests)"
+      },
+      {
+        "pr": 228,
+        "merge": "ddcb371",
+        "by": "SalimBurakAytemiz (coordinator direct merge, expectedHeadSha 37c7aef; required checks green, auto-merge refused while optional Independent Review ran)",
+        "at": "2026-10-26T08:15:49Z",
+        "postMerge": "VERIFIED: parent1 d3ebcc1, parent2 = reviewed head 37c7aef, merge-tree 5d6bdc1 == merge tree",
+        "review": "process-mode re-verify NO_BLOCKERS, 21/23 mutants killed (wf_aaa6ef55-51f); 4 LOW carried to a later package",
+        "riskTier": "ROUTINE (core/workos readiness, no protected path)"
+      },
+      {
+        "pr": 192,
+        "merge": "a14bd26",
+        "by": "SalimBurakAytemiz (auto-merge, enabled by coordinator 08:16:09Z)",
+        "at": "2026-10-26T08:22:05Z",
+        "postMerge": "VERIFIED: parent1 ddcb371, parent2 = reviewed head 74a6bfc, merge-tree b370702 == merge tree",
+        "review": "process-mode re-verify + delta re-check NO_BLOCKERS (wf_60c53ffd-c40)",
+        "riskTier": "ROUTINE (renderer + locales + tests)"
       }
     ],
     "wslProvider": {
