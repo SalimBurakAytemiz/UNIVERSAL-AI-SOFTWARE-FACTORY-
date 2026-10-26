@@ -1,6 +1,6 @@
 // //TR: Bu dosya PRE_DEV fazını YÜRÜTÜLEBİLİR yapan PreDevDriver'ı tanımlar: bir faz, enjekte edilen bir BuilderPort'tan tipli bir artefakt içeriği İSTER, onu MEVCUT doğrulayıcılarla (yapı + izlenebilirlik) doğrular, başarıda DRAFT olarak journal'a kaydeder, başarısızlıkta dürüst bir REJECTED sonucu döner ve HİÇBİR durumda fazı ilerletmez. Submit/approve/reject MEVCUT onay mekanizmasını kullanır (onaylayan != kaydeden ve boş olmayan evidenceRefs). Driver ASLA model/ağ/shell çağırmaz ve dönen kodu ASLA yürütmez; yalnız yapısal içeriği doğrular ve kaydeder. Gerçek builder adaptörü runtime'da sağlanır; bu port enjeksiyonu driver'ı deterministik test edilebilir kılar.
 import {validateArtifactContent, type UpstreamContents} from "./validators.js";
-import {composeRolePrompt, getRolePrompt} from "./role-prompts.js";
+import {composeRolePrompt, getRolePrompt, PLACEHOLDER_MARKER} from "./role-prompts.js";
 import {PHASE_ARTIFACT_KIND, PRE_DEV_PHASE_TRANSITIONS} from "./types.js";
 import type {Scope} from "../types.js";
 import type {
@@ -72,6 +72,14 @@ export function toUpstreamContents(kind: ArtifactKind, approved: Partial<Record<
   return {};
 }
 
+// //TR: C-FLOW-ANALYSIS-2: yer tutucu işareti taşıyan HERHANGİ bir metin değeri (anahtarlar dahil) taslağı geçersiz kılar; iskeleti yankılayan çıktı doğrulayıcıdan geçse bile kaydedilmez.
+function hasPlaceholder(x: unknown): boolean {
+  if (typeof x === "string") return x.includes(PLACEHOLDER_MARKER);
+  if (Array.isArray(x)) return x.some(hasPlaceholder);
+  if (typeof x === "object" && x !== null) return Object.entries(x).some(([k, v]) => k.includes(PLACEHOLDER_MARKER) || hasPlaceholder(v));
+  return false;
+}
+
 export class PreDevDriverError extends Error {
   constructor(message: string) { super(message); this.name = "PreDevDriverError"; }
 }
@@ -123,6 +131,8 @@ export class PreDevDriver {
     let parsed: unknown;
     try { parsed = JSON.parse(raw); }
     catch { return {status: "REJECTED", kind, phase, reason: "PREDEV_DRIVER_INVALID_JSON"}; }
+
+    if (hasPlaceholder(parsed)) return {status: "REJECTED", kind, phase, reason: "PREDEV_DRIVER_PLACEHOLDER_VALUE"};
 
     const v = validateArtifactContent(kind, parsed, toUpstreamContents(kind, ctx.approvedUpstream));
     if (!v.ok) return {status: "REJECTED", kind, phase, reason: v.errors};
