@@ -44,3 +44,11 @@
 
 ## Evidence
 Tests: tests/v7-ps1a-c2-remediation.test.ts describe "LANE-B product run: provider bridge (B-RUN-1)" (fake-provider refusals, bridge happy path, tied delivery, netns guard, real netns bridge, real Linux provider) and tests/v7-b1-workos.test.ts describe "LANE-B product run routes (B-RUN-1)". The two REAL tests are SKIPPED unless `ip`+`nsenter` exist / selfTest passes with proven loopback; on this host they were verified once with a temporary `ip` stub and the patched provider from C-SBX-LO-1 (not committed).
+
+## Dev-run state and error codes added during hardening (C-1, C-8, C-9, stop/reap split, review)
+- `DEVRUN_CAPACITY` (409): manager-wide cap on concurrently active dev-runs (`maxConcurrent`, default 2).
+- `DEVRUN_STOP_PENDING` (409): a new start waited `reapWaitMs` (default 60 s) for the previous run's background tree reap and it did not finish. `stop()` returns once the ROOT process exited; the tree reap (host process listing / kills) is a separate background budget whose result appears in `treeCleanup`.
+- `DEVRUN_CLOSED` (409): the manager was closed (`close()`); no new product process starts after close, and a start that was waiting for the previous reap when `stop`/`stopAll`/`close` arrived is cancelled (it spawns nothing; stop/stopAll answer a STOPPED view, close answers this code).
+- State `BLOCKED` with `reason: "SANDBOX_UNVERIFIED"`: the provider reported `isVerified() !== true` (any non-`true` result counts as unverified) for a running product; the bridge is closed immediately, the preview is masked, the product is stopped (retried by the periodic check if the stop times out) and a new start is refused with `SANDBOX_UNAVAILABLE` / `SANDBOX_UNVERIFIED`; spawn is never called on an already de-verified provider.
+- `deliveryRunId` is set on the STARTING placeholder, so a product stop by run id works during STARTING.
+- `treeCleanup.survivors` is `null` and `treeCleanup.verification` is `"UNVERIFIED"` when the process list was unavailable (`PROCESS_GROUP`, `UNAVAILABLE`); only `PPID_WALK` / `PROCESS_GROUP_PPID_WALK` report a counted, `"VERIFIED"` result.
