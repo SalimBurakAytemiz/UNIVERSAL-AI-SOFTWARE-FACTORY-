@@ -452,6 +452,16 @@
       "ref": "wf_68a6ab11-69c (real adapter codes in runner.ts:69; REVIEW_WORKSPACE_NOT_CLEAN_BEFORE FAILED row real; PH17 description verified; RB3/RB5 killed; 61/61; LOW: CLAUDE_CLIENT_ERROR not named hypothetical in test comment - deferred, wording only)",
       "policy": "TEP-1",
       "at": "2026-10-26T20:21:03.885Z"
+    },
+    {
+      "pr": 261,
+      "sha": "2b226a1f2f86d5a1addbb3f3837ffe066e808556",
+      "kind": "full",
+      "base": null,
+      "verdict": "NO_BLOCKERS_2LOW",
+      "ref": "wf_4bf8f7a8-154 (label true: server.ts:78/:313 DEFAULT_RUN_ROLE_ID=UASCO-0085, pinned by relfx-3 test; RUN_EXPERTS[0] mirror test; 267/267 + 178/178; 5 mutants killed; LOWs: stale work-core.js:369 comment, duplicate-role option wording)",
+      "policy": "TEP-1",
+      "at": "2026-10-26T20:22:02.107Z"
     }
   ],
   "tests": [],
