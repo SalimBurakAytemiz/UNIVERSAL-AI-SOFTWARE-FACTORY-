@@ -21,11 +21,13 @@ export interface SandboxProvider {
   /** İsteğe bağlı: sağlayıcının şu anki doğrulanmış durumu; kapı her authorize()/status()'ta sorar (false ise önbellek geçersizdir). */
   isVerified?(): boolean;
   /** İsteğe bağlı (C-5): API yeniden başlatıldıktan sonra sahipsiz kalmış sağlayıcı-taraflı scratch'ı kapatır; null = temiz, aksi halde kod. */
-  teardownScratch?(scratch: string): Promise<string | null>;
+  teardownScratch?(scratch: string, binding?: SandboxBinding): Promise<string | null>;
   /** shouldAbort: çağıran (devrun) iptal edildiyse sağlayıcı hazırlığı yarıda keser ve süreç başlatmaz. */
   spawnAsync?(command: string, args: string[], opts: SpawnOptions & {shouldAbort?: () => boolean}): Promise<SandboxChild>;
 }
-export type SandboxChild = ChildProcess & {sandboxTeardown?: Promise<unknown>; sandboxScratch?: string};
+/** S2: scratch'ı kuran sağlayıcı + dağıtım (devrun kaydı bunu scratch ile birlikte saklar; temizlik yalnız aynı bağda yapılır). */
+export interface SandboxBinding { providerId: string; distro: string | null }
+export type SandboxChild = ChildProcess & {sandboxTeardown?: Promise<unknown>; sandboxScratch?: string; sandboxBinding?: SandboxBinding};
 export type SandboxDenialDetail = "NO_VERIFIED_PROVIDER" | "SELF_TEST_FAILED" | "SELF_TEST_ERROR" | "SELFTEST_TIMEOUT";
 export type GateDecision =
   | {allowed: true; kind: ProjectExecutionKind; providerId: string; provider: SandboxProvider}

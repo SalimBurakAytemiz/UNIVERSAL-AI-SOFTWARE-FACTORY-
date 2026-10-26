@@ -17,7 +17,7 @@ import {StudioError} from "./project-studio.js";
 import {ExecutionGate} from "./execution-gate.js";
 import {bridgeSupport} from "./devrun-bridge.js";
 import type {BridgeHandle, NsenterOptions} from "./devrun-bridge.js";
-import type {SandboxChild} from "./execution-gate.js";
+import type {SandboxChild, SandboxBinding} from "./execution-gate.js";
 import {systemExe} from "../sandbox/win-exe.js";
 
 export type DevRunStatus = "STOPPED" | "STARTING" | "RUNNING" | "CRASHED" | "BLOCKED";
@@ -36,6 +36,8 @@ export interface DevRunState {
   deliveryRunId?: string | null; bridged?: boolean;
   // C-5: sağlayıcı-taraflı scratch (WSL); API çökerse recover() bununla Linux tarafını kapatır. stopIncomplete: kapatma temiz bitmedi (sağlayıcı kodu).
   sandboxScratch?: string | null; stopIncomplete?: string;
+  // S2: scratch'ı kuran sağlayıcı + dağıtım; teardown yalnız aynı bağda yapılır (DISTRO_CHANGED sonrası yanlış dağıtımda "temiz" raporu yok).
+  sandboxBinding?: SandboxBinding | null;
   // PS1A-C2-F2: süreç çıkışından sonra kalan süreç ağacı temizliği (Windows: ppid yürüyüşü + periyodik soy anlık görüntüsü; Linux: süreç grubu + kaydedilmiş soy (setsid'li torunlar dahil) ppid yürüyüşü; diğer POSIX: yalnız süreç grubu).
   treeCleanup?: {at: string; method: "PPID_WALK" | "PROCESS_GROUP" | "PROCESS_GROUP_PPID_WALK" | "UNAVAILABLE"; killed: number; survivors: number | null; verification?: "VERIFIED" | "UNVERIFIED"};
 }
@@ -64,9 +66,14 @@ export interface DevRunOptions {
   recoverTeardownMs?: number;
   // recover(): sahip/pid başlangıç zamanı denetimi başına üst süre (varsayılan 4 sn; dolarsa canlı sayılır).
   ownerCheckMs?: number;
+  // Köprü kurulamadı / hazırlık hatasında öldürülen çocuğun çıkışını bekleme üst süresi (varsayılan 10 sn; test enjeksiyonu).
+  killWaitMs?: number;
 }
 const NO_PREVIEW_TYPES = new Set(["desktop", "mobile", "native"]);
 const ACTIVE: ReadonlySet<DevRunStatus> = new Set(["STARTING", "RUNNING"]);
+/** recover() sahip denetimi: bu pid için başlangıç zamanı okuması süresinde bitmedi (uyumsuzluk DEĞİL: kayıt dokunulmadan kalır, sonraki açılışta yeniden denenir). */
+const LOOKUP_TIMEOUT = Symbol("LOOKUP_TIMEOUT");
+const TEARDOWN_TIMED_OUT: {code: string | null} = {code: "TEARDOWN_TIMEOUT"};
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 /** Zaman aşımlı bekleme: sayaç HER durumda temizlenir (60/15 sn'lik tutamaklar kapanıştan sonra kalmaz). */
 const timed = <T>(p: Promise<T>, ms: number, onTimeout: T): Promise<T> => new Promise<T>(res => { const t = setTimeout(() => res(onTimeout), ms); p.then(v => { clearTimeout(t); res(v); }, () => { clearTimeout(t); res(onTimeout); }); });
@@ -212,6 +219,11 @@ interface Active {
 
 export class DevRunManager {
   private readonly reaping = new Map<string, Promise<void>>();
+  // M3: proje başına TEK sağlayıcı-taraflı scratch kapatması (WSL temizliği örtüşemez). Ham söz, ancak kendisi SONLANINCA silinir: zaman aşımına uğramış kapatma da yuvayı tutar.
+  private readonly recovering = new Map<string, Promise<{code: string | null}>>();
+  private readonly recoveryTasks = new Map<string, Promise<void>>();
+  // Aynı projede eşzamanlı ikinci start, herhangi bir sağlayıcı çağrısından ÖNCE reddedilir.
+  private readonly starting = new Set<string>();
   // Bekleyen (henüz yer tutucusu yazılmamış) start'ların iptali: stop/stopAll/close bu sayaçları artırır, start bekleme sonrası yeniden denetler; closed kapanıştan sonra yeni süreci engeller.
   private closed = false; private stopEpoch = 0; private readonly startGen = new Map<string, number>();
   readonly instanceId = `dev_${crypto.randomBytes(8).toString("hex")}`;
@@ -341,7 +353,8 @@ export class DevRunManager {
 
   // D2: reddedilen/engellenen bir başlatma önceki çalıştırmanın STOP_INCOMPLETE kaydını ve scratch tanıtıcısını SİLMEZ (sonraki start Linux tarafı kapatmayı yeniden dener).
   private keepIncomplete(cur: DevRunState | null): Partial<DevRunState> {
-    return cur ? {...(cur.stopIncomplete ? {stopIncomplete: cur.stopIncomplete} : {}), ...(cur.sandboxScratch ? {sandboxScratch: cur.sandboxScratch} : {})} : {};
+    // M5: scratch korunuyorsa startedAt de korunur: geç gelen teardown (noteTeardown/reapTree) kaydı startedAt ile eşler; null olursa stopIncomplete hiç kalıcılaşmazdı.
+    return cur ? {...(cur.stopIncomplete ? {stopIncomplete: cur.stopIncomplete} : {}), ...(cur.sandboxScratch ? {sandboxScratch: cur.sandboxScratch, startedAt: cur.startedAt, ...(cur.sandboxBinding ? {sandboxBinding: cur.sandboxBinding} : {})} : {})} : {};
   }
   private block(project: Project, reason: string): never {
     const cur = this.readState(project.projectId);
@@ -353,6 +366,12 @@ export class DevRunManager {
   async start(project: Project, link?: {runId: string; headSha: string}): Promise<DevRunView> {
     const id = project.projectId;
     if (this.closed) throw new StudioError("DEVRUN_CLOSED", 409);
+    if (this.starting.has(id) || this.isActive(id)) throw new StudioError("DEVRUN_ALREADY_RUNNING", 409);
+    this.starting.add(id);
+    try { return await this.startInner(project, link); } finally { this.starting.delete(id); }
+  }
+  private async startInner(project: Project, link?: {runId: string; headSha: string}): Promise<DevRunView> {
+    const id = project.projectId;
     const epoch0 = this.stopEpoch, gen0 = this.startGen.get(id) ?? 0;
     const cancelled = () => this.closed || this.stopEpoch !== epoch0 || (this.startGen.get(id) ?? 0) !== gen0;
     if (this.isActive(id)) throw new StudioError("DEVRUN_ALREADY_RUNNING", 409);
@@ -377,12 +396,16 @@ export class DevRunManager {
     const pending = this.reaping.get(id);
     if (pending && !(await timed(pending.then(() => true), this.o.reapWaitMs ?? 60_000, false))) throw new StudioError("DEVRUN_STOP_PENDING", 409);
     // NEW-2: önceki çalıştırmanın sağlayıcı-taraflı kapatması temiz bitmediyse (STOP_INCOMPLETE) kayıt sessizce düşmez: önce Linux tarafı yeniden kapatılır; kapanmazsa yeni süreç BAŞLATILMAZ.
+    // M3: arka planda süren (zaman aşımına uğramış olsa bile) kapatma BİTMEDEN ikinci bir kapatma başlatılmaz (örtüşme sahte hata + de-verify üretirdi).
+    const bg = this.recoveryTasks.get(id);
+    if (bg) await timed(bg, this.o.recoverTeardownMs ?? 30_000, undefined);
+    if (this.recovering.has(id)) throw new StudioError("DEVRUN_STOP_PENDING", 409);
     const prevRun = this.readState(id);
     // Bayrak olmasa bile (çökme/yarış) terminal bir kayıtta KAPATILMAMIŞ scratch varsa yeni süreç, tanıtıcıyı ezmeden önce onu kapatmak zorundadır.
     if (prevRun && !ACTIVE.has(prevRun.status) && (prevRun.stopIncomplete || prevRun.sandboxScratch)) {
-      const code = prevRun.sandboxScratch ? (await this.recoverScratchWith(prevRun, gate.provider)).code : null;
+      const code = prevRun.sandboxScratch ? (await this.runTeardown(id, prevRun, gate.provider)).code : null;
       if (code) throw new StudioError("DEVRUN_STOP_INCOMPLETE", 409, code);
-      try { this.writeState({...prevRun, stopIncomplete: undefined, sandboxScratch: null, reason: "STOP_INCOMPLETE_RESOLVED"}, true); } catch { /* durum yazılamadı */ }
+      this.casWrite(prevRun, {...prevRun, stopIncomplete: undefined, sandboxScratch: null, sandboxBinding: null, reason: "STOP_INCOMPLETE_RESOLVED"});
     }
     // Kapı beklemesinden sonra (await) eşzamanlı start ve GLOBAL_STOP yeniden kontrol edilir.
     if (this.isActive(id)) throw new StudioError("DEVRUN_ALREADY_RUNNING", 409);
@@ -412,8 +435,13 @@ export class DevRunManager {
       const persisted = this.readState(id);
       let staleOwner: {pid: number; instanceId: string} | null = null;
       if (persisted && persisted.instanceId !== this.instanceId && persisted.ownerPid !== process.pid) {
-        if (await this.ownerLive(persisted)) { if (ACTIVE.has(persisted.status)) throw new StudioError("DEVRUN_LOCKED", 409); }
-        else staleOwner = {pid: persisted.ownerPid, instanceId: persisted.instanceId};
+        // Sınırlı (recover() ile aynı bütçe): süre dolarsa canlı sayılır => DEVRUN_LOCKED; start() ve recover() aynı hükümde buluşur.
+        if (await timed(this.ownerLive(persisted), this.o.ownerCheckMs ?? 4000, true)) { if (ACTIVE.has(persisted.status)) throw new StudioError("DEVRUN_LOCKED", 409); }
+        else {
+          staleOwner = {pid: persisted.ownerPid, instanceId: persisted.instanceId};
+          // M1: ölü sahibin ETKİN kaydı devralınmadan önce recover() gibi sahipsiz süreç öldürülür ve scratch kapatılır; kapanmazsa yeni süreç BAŞLATILMAZ.
+          if (ACTIVE.has(persisted.status)) await this.reclaimDeadOwner(persisted, gate.provider);
+        }
       }
       if (aborted()) return await this.abortStart(project, a);
       a.release = this.takeLock(id, staleOwner);
@@ -441,7 +469,7 @@ export class DevRunManager {
       const spawnOpts = {cwd: ws, env, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] as ["ignore", "pipe", "pipe"], detached: process.platform !== "win32", shouldAbort: aborted};
       // B-RUN-WIN-1: eşzamansız hazırlık gerektiren sağlayıcı (WSL) spawnAsync sunar; yoksa eşzamanlı spawn.
       const child: SandboxChild = gate.provider.spawnAsync ? await gate.provider.spawnAsync(exe, argv.slice(1), spawnOpts) : gate.provider.spawn(exe, argv.slice(1), spawnOpts);
-      a.child = child; a.provider = gate.provider; if (child.sandboxScratch) st.sandboxScratch = child.sandboxScratch;
+      a.child = child; a.provider = gate.provider; if (child.sandboxScratch) { st.sandboxScratch = child.sandboxScratch; st.sandboxBinding = child.sandboxBinding ?? null; }
       a.rootExited = new Promise<void>(resolve => { child.once("exit", () => resolve()); child.once("error", () => { if (child.pid === undefined) resolve(); }); });
       a.exited = new Promise<void>(resolve => {
         // PS1A-C2-F2: çıkış (çökme veya durdurma) sonrası kalan ağaç (ayrık torunlar dahil) temizlenmeden exited çözülmez.
@@ -461,7 +489,7 @@ export class DevRunManager {
       // B-RUN-1: köprü (yalnız ağ-izole sağlayıcılarda): ana makine 127.0.0.1:port -> sandbox 127.0.0.1:port. Açılamazsa süreç durdurulur ve çalıştırma BLOCKED olur.
       if (bridge.start) {
         try { a.bridge = await bridge.start(child, st.port); st.bridged = true; }
-        catch (e) { a.stopping = true; killProcessTree(child.pid); await timed(a.exited, 10_000, undefined); throw new StudioError("DEVRUN_BLOCKED", 409, `DEVRUN_BRIDGE_FAILED:${e instanceof Error ? e.message.slice(0, 60) : "ERROR"}`); }
+        catch (e) { a.stopping = true; killProcessTree(child.pid); await timed(a.exited, this.o.killWaitMs ?? 10_000, undefined); throw new StudioError("DEVRUN_BLOCKED", 409, `DEVRUN_BRIDGE_FAILED:${e instanceof Error ? e.message.slice(0, 60) : "ERROR"}`); }
       }
       st.pidStartTime = await this.o.startTimeOf(child.pid);
       // Spawn'dan sonraki await sırasında durdurma geldiyse: stop() çocuğu sonlandırır (a.child atanmıştır); bant dışı GLOBAL_STOP burada da uygulanır.
@@ -488,14 +516,14 @@ export class DevRunManager {
       return this.view(project);
     } catch (e) {
       spawnDoneRef();
-      if (a.child && a.child.exitCode === null && a.child.pid) { a.stopping = true; killProcessTree(a.child.pid); await timed(a.exited, 10_000, undefined); }
+      if (a.child && a.child.exitCode === null && a.child.pid) { a.stopping = true; killProcessTree(a.child.pid); await timed(a.exited, this.o.killWaitMs ?? 10_000, undefined); }
       // D1/L4: sağlayıcı hazırlığı iptal/doğrulama kaybıyla yarıda kaldı ve scratch temizlenemediyse tanıtıcı KALICI yazılır (recover() Linux tarafını kapatır).
       const incompleteCode = (e as {cleanupCode?: unknown} | null)?.cleanupCode, scratch = (e as {sandboxScratch?: unknown} | null)?.sandboxScratch;
-      if (typeof incompleteCode === "string" && typeof scratch === "string") { a.state.stopIncomplete = incompleteCode; a.state.sandboxScratch = scratch; }
+      if (typeof incompleteCode === "string" && typeof scratch === "string") { a.state.stopIncomplete = incompleteCode; a.state.sandboxScratch = scratch; a.state.sandboxBinding = (e as {sandboxBinding?: SandboxBinding} | null)?.sandboxBinding ?? null; }
       this.cleanup(a);
       if (this.active.get(id) === a) this.active.delete(id);
       const inc = a.state.stopIncomplete ?? this.readState(id)?.stopIncomplete;
-      if (a.state.stopIncomplete && a.state.sandboxScratch) { try { this.writeState({...this.blank(project), status: "BLOCKED", reason: `STOP_INCOMPLETE:${a.state.stopIncomplete}`, endedAt: new Date().toISOString(), stopIncomplete: a.state.stopIncomplete, sandboxScratch: a.state.sandboxScratch}, true); } catch { /* durum yazılamadı */ } }
+      if (a.state.stopIncomplete && a.state.sandboxScratch) { try { this.writeState({...this.blank(project), status: "BLOCKED", reason: `STOP_INCOMPLETE:${a.state.stopIncomplete}`, endedAt: new Date().toISOString(), stopIncomplete: a.state.stopIncomplete, sandboxScratch: a.state.sandboxScratch, sandboxBinding: a.state.sandboxBinding ?? null, startedAt: a.state.startedAt}, true); } catch { /* durum yazılamadı */ } }
       if (e instanceof StudioError && e.code === "DEVRUN_BLOCKED") {
         try { this.block(project, e.reason ?? "DEVRUN_BLOCKED"); } catch (be) { if (inc) throw new StudioError("DEVRUN_STOP_INCOMPLETE", 409, inc); throw be; }
       }
@@ -631,7 +659,12 @@ export class DevRunManager {
     if (!a) return "NOT_ACTIVE";
     a.stopping = true; a.state.reason = reason;
     // D1: sandbox hâlâ kuruluyorsa 'STOPPED' denmez; kurulum (ve iptal edildiyse sökülme) beklenir, süre dolarsa TIMEOUT (stop 409 DEVRUN_STOP_TIMEOUT).
-    if (a.spawning && !(await timed(a.spawning.then(() => true), this.o.stopWaitMs, false))) return "TIMEOUT";
+    if (a.spawning && !(await timed(a.spawning.then(() => true), this.o.stopWaitMs, false))) {
+      a.state.stopTimedOut = true;
+      try { this.writeState(a.state); } catch { /* durum yazılamadı */ }
+      this.o.audit("DEVRUN_STOP_TIMEOUT", {projectId, pid: a.state.pid, waitedMs: this.o.stopWaitMs, reason});
+      return "TIMEOUT";
+    }
     const running = () => Boolean(a.child?.pid && a.child.exitCode === null && a.child.signalCode === null);
     // POSIX: kök ölünce yetimlerin ppid'si kaybolur; öldürmeden önce soy kaydedilir. Bekleme sonrası kök hâlâ çalışıyorsa öldürülür (toplanmış pid'e sinyal yok). Windows davranışı değişmez.
     if (running() && process.platform !== "win32" && PROCESS_LIST_SUPPORTED) await this.recordTree(a);
@@ -676,73 +709,131 @@ export class DevRunManager {
   // pid canlı ve başlangıç zamanı kayıtla birebir aynıysa süreç ağacı sonlandırılır, değilse (pid yeniden kullanılmış/doğrulanamıyor) ÖLDÜRÜLMEZ ve raporlanır.
   // Sağlayıcıya dokunan kurtarma (authorize/selfTest, teardownScratch) başlangıcı bekletmez: arka plan görevi, sınırlı süre; sonuç kayda yazılır (temizse silinir, değilse STOP_INCOMPLETE:<kod>).
   private readonly bgTasks = new Set<Promise<void>>();
-  private scheduleScratch(id: string, st: DevRunState): void {
-    const t = (async () => {
-      const td = await timed(this.recoverScratch(st), this.o.recoverTeardownMs ?? 30_000, {code: "TEARDOWN_TIMEOUT"});
+  // Karşılaştır-ve-yaz: kayıt, okunduğu andaki aynı kayıtsa (kimlik, startedAt, scratch; etkin değil) yazılır; yarışta kazananın kaydı eski bir kopyayla ezilmez.
+  private casWrite(prev: DevRunState, next: DevRunState, allowActive = false): boolean {
+    const cur = this.readState(prev.projectId);
+    if (!cur || cur.instanceId !== prev.instanceId || cur.startedAt !== prev.startedAt || cur.sandboxScratch !== prev.sandboxScratch || (!allowActive && ACTIVE.has(cur.status))) return false;
+    try { this.writeState(next, true); return true; } catch { return false; }
+  }
+  // M3: scratch kapatması proje başına tek yuvadan geçer; ham söz kendisi sonlanınca yuva boşalır. Dönen söz recoverTeardownMs ile sınırlıdır (dolarsa TEARDOWN_TIMEOUT, kapatma yuvayı tutmaya devam eder).
+  private runTeardown(id: string, st: DevRunState, provider?: {teardownScratch?: (s: string, binding?: SandboxBinding) => Promise<string | null>} | null): Promise<{code: string | null}> {
+    const raw = (provider !== undefined ? this.recoverScratchWith(st, provider) : this.recoverScratch(st)).catch(() => ({code: "TEARDOWN_ERROR" as string | null}));
+    this.recovering.set(id, raw);
+    const free = () => { if (this.recovering.get(id) === raw) this.recovering.delete(id); };
+    void raw.then(free, free);
+    return timed(raw, this.o.recoverTeardownMs ?? 30_000, TEARDOWN_TIMED_OUT);
+  }
+  private scheduleScratch(id: string, st: DevRunState, okReason?: string): void {
+    if (this.recovering.has(id)) return; // zaten bir kapatma sürüyor (tekrarlı recover() çağrıları kopya üretmez)
+    const apply = (td: {code: string | null}) => {
       const cur = this.readState(id); if (!cur || cur.sandboxScratch !== st.sandboxScratch || ACTIVE.has(cur.status)) return;
       try {
-        if (!td.code) this.writeState({...cur, stopIncomplete: undefined, sandboxScratch: null, reason: cur.stopIncomplete ? "STOP_INCOMPLETE_RESOLVED" : cur.reason}, true);
+        // Başarıda özgün neden korunur (RECOVERED_AFTER_API_RESTART:<sonuç> ya da engelli kaydın nedeni); yalnız stopIncomplete/sandboxScratch silinir.
+        const keep = okReason && !okReason.startsWith("STOP_INCOMPLETE") ? okReason : "STOP_INCOMPLETE_RESOLVED";
+        if (!td.code) this.writeState({...cur, stopIncomplete: undefined, sandboxScratch: null, sandboxBinding: null, reason: cur.stopIncomplete ? keep : cur.reason}, true);
         else this.writeState({...cur, stopIncomplete: td.code, reason: `STOP_INCOMPLETE:${td.code}`}, true);
       } catch { /* durum yazılamadı */ }
+    };
+    const t = (async () => {
+      const raw0 = this.runTeardown(id, st);
+      const td = await raw0;
+      apply(td);
+      // Zaman aşımından SONRA gelen başarı/hata da (aynı korumalarla) son sonucu yazar.
+      if (td === TEARDOWN_TIMED_OUT) { const late = this.recovering.get(id); if (late) void late.then(apply); }
     })().catch(() => undefined);
-    this.bgTasks.add(t); void t.finally(() => this.bgTasks.delete(t));
+    this.recoveryTasks.set(id, t);
+    this.bgTasks.add(t); void t.finally(() => { this.bgTasks.delete(t); if (this.recoveryTasks.get(id) === t) this.recoveryTasks.delete(id); });
   }
   /** Arka plan kurtarma görevlerinin bitmesini bekler (testler ve kapanış). */
   async settleRecovery(): Promise<void> { await Promise.all([...this.bgTasks]); }
   private async recoverScratch(st: DevRunState): Promise<{code: string | null}> {
     if (!st.sandboxScratch) return {code: null};
-    let provider: {teardownScratch?: (s: string) => Promise<string | null>} | null = null;
+    let provider: {teardownScratch?: (s: string, binding?: SandboxBinding) => Promise<string | null>} | null = null;
     try { const g = await this.o.executionGate?.authorize("STUDIO_DEVRUN"); provider = g && g.allowed ? g.provider : null; } catch { provider = null; }
     return this.recoverScratchWith(st, provider);
   }
-  private async recoverScratchWith(st: DevRunState, provider: {teardownScratch?: (s: string) => Promise<string | null>} | null): Promise<{code: string | null}> {
+  private async recoverScratchWith(st: DevRunState, provider: {teardownScratch?: (s: string, binding?: SandboxBinding) => Promise<string | null>} | null): Promise<{code: string | null}> {
     if (!st.sandboxScratch) return {code: null};
     if (!provider || typeof provider.teardownScratch !== "function") return {code: "SANDBOX_PROVIDER_UNAVAILABLE"};
-    try { return {code: await provider.teardownScratch(st.sandboxScratch)}; } catch { return {code: "TEARDOWN_ERROR"}; }
+    try { return {code: await provider.teardownScratch(st.sandboxScratch, st.sandboxBinding ?? undefined)}; } catch { return {code: "TEARDOWN_ERROR"}; }
+  }
+  // Sahipsiz ETKİN kaydın süreci: pid canlı ve başlangıç zamanı birebir aynıysa ağaç öldürülür. now: önceden okunmuş başlangıç zamanı (undefined: burada oku). LOOKUP_TIMEOUT: okuma süresinde bitmedi => null (kayıt dokunulmaz, sonra yeniden denenir).
+  private async orphanKill(st: DevRunState, now: string | null | typeof LOOKUP_TIMEOUT | undefined): Promise<DevRunRecovery["result"] | null> {
+    if (!pidAlive(st.pid)) return "ORPHAN_ALREADY_EXITED";
+    const t = now !== undefined ? now : st.pid ? await timed<string | null | typeof LOOKUP_TIMEOUT>(this.o.startTimeOf(st.pid).catch(() => null), this.o.ownerCheckMs ?? 4000, LOOKUP_TIMEOUT) : null;
+    if (t === LOOKUP_TIMEOUT) return null;
+    if (!t || !st.pidStartTime || t !== st.pidStartTime) return "ORPHAN_PID_MISMATCH_NOT_KILLED";
+    killProcessTree(st.pid!); for (let i = 0; i < 50 && pidAlive(st.pid); i++) await sleep(100);
+    return pidAlive(st.pid) ? "ORPHAN_KILL_FAILED" : "ORPHAN_KILLED";
+  }
+  // M1: start() ölü sahibin ETKİN kaydını devralırken recover() ile aynı işi yapar (sahipsiz süreç + scratch), kilidi almadan ÖNCE.
+  private async reclaimDeadOwner(persisted: DevRunState, provider: {teardownScratch?: (s: string, binding?: SandboxBinding) => Promise<string | null>} | null): Promise<void> {
+    const result = await this.orphanKill(persisted, undefined);
+    if (result === null) throw new StudioError("DEVRUN_LOCKED", 409); // sahipsiz sürecin kimliği okunamadı: devralınmaz (fail-closed)
+    if (result === "ORPHAN_KILL_FAILED") throw new StudioError("DEVRUN_STOP_INCOMPLETE", 409, "ORPHAN_KILL_FAILED");
+    if (!persisted.sandboxScratch) return;
+    const td = await this.runTeardown(persisted.projectId, persisted, provider);
+    if (!td.code) return;
+    const rec: DevRunRecovery = {at: new Date().toISOString(), result, previousInstanceId: persisted.instanceId, pid: persisted.pid};
+    this.casWrite(persisted, {...persisted, status: "STOPPED", reason: `STOP_INCOMPLETE:${td.code}`, stopIncomplete: td.code, endedAt: rec.at, instanceId: this.instanceId, ownerPid: process.pid, ownerHost: os.hostname(), ownerStartTime: this.selfStart,
+      preview: {url: null, state: "UNAVAILABLE", lastProbeAt: persisted.preview?.lastProbeAt ?? null, reason: "NOT_RUNNING"}, recovery: rec}, true);
+    throw new StudioError("DEVRUN_STOP_INCOMPLETE", 409, td.code);
   }
   async recover(): Promise<Array<{projectId: string} & DevRunRecovery>> {
     const root = path.join(this.o.studio.dataDir, "projects");
     let ids: string[] = [];
     try { ids = fs.readdirSync(root).filter(x => /^prj_[0-9a-f]{24}$/.test(x)); } catch { return []; }
     const out: Array<{projectId: string} & DevRunRecovery> = [];
-    const self = await this.ownStartTime();
-    // Sahip-canlı denetimleri (Windows'ta PowerShell) PARALEL ve her biri sınırlı süreyle yapılır: süre dolarsa 'canlı' sayılır (fail-closed, kayda dokunulmaz). onReady'yi N kayıt x birkaç sn tutmaz.
-    const live = new Map<string, boolean>();
-    await Promise.all(ids.map(async id => {
-      const r = this.readState(id);
-      const needs = r && r.instanceId !== this.instanceId && r.ownerHost === os.hostname() && ((!ACTIVE.has(r.status) && r.sandboxScratch) || ACTIVE.has(r.status));
-      if (needs) live.set(id, await timed(this.ownerLive(r), this.o.ownerCheckMs ?? 4000, true));
-    }));
+    const budget = this.o.ownerCheckMs ?? 4000;
+    // S4: kendi başlangıç zamanı okuması (Windows'ta PowerShell) hemen başlar; yalnız kayıt yazılırken SINIRLI beklenir (null = okuyucular için fail-closed).
+    const selfP = this.ownStartTime();
+    // M2: ön denetim hükmü, denetlendiği KAYDIN kimliğine bağlıdır; döngüde kayıt değiştiyse (canlı bir eş yeniden yazdı) hüküm kullanılmaz, sınırlı yeniden denetlenir.
+    const keyOf = (r: DevRunState) => [r.instanceId, r.ownerPid, r.ownerStartTime ?? "", r.startedAt ?? "", r.status, r.pid ?? "", r.sandboxScratch ?? ""].join("|");
+    const needsCheck = (r: DevRunState | null): r is DevRunState => Boolean(r && r.instanceId !== this.instanceId && r.ownerHost === os.hostname() && ((!ACTIVE.has(r.status) && r.sandboxScratch) || ACTIVE.has(r.status)));
+    type Verdict = {key: string; live: boolean; now?: string | null | typeof LOOKUP_TIMEOUT};
+    // Sahip-canlı denetimleri ve (sahip ölüyse) sahipsiz pid başlangıç zamanı okumaları PARALEL ve her biri sınırlı: süre dolarsa sahip 'canlı' sayılır (fail-closed, kayda dokunulmaz).
+    const check = async (r: DevRunState): Promise<Verdict> => {
+      const live = await timed(this.ownerLive(r), budget, true);
+      const now = !live && ACTIVE.has(r.status) && r.pid && pidAlive(r.pid) ? await timed<string | null | typeof LOOKUP_TIMEOUT>(this.o.startTimeOf(r.pid).catch(() => null), budget, LOOKUP_TIMEOUT) : undefined;
+      return {key: keyOf(r), live, now};
+    };
+    const verdicts = new Map<string, Verdict>();
+    await Promise.all(ids.map(async id => { const r = this.readState(id); if (needsCheck(r)) verdicts.set(id, await check(r)); }));
     for (const id of ids) {
-      const st = this.readState(id);
+      let st = this.readState(id);
+      if (!st || st.instanceId === this.instanceId || this.active.has(id)) continue;
+      let v: Verdict | undefined;
+      if (needsCheck(st)) {
+        v = verdicts.get(id);
+        if (!v || v.key !== keyOf(st)) { v = await check(st); const again = this.readState(id); if (!again || keyOf(again) !== v.key) continue; st = again; }
+      }
       // C-5: önceki kapatma temiz bitmediyse (STOP_INCOMPLETE + scratch) sahip canlı değilse Linux tarafı yeniden denenir.
-      if (st && !ACTIVE.has(st.status) && st.sandboxScratch && st.instanceId !== this.instanceId && !this.active.has(id) && st.ownerHost === os.hostname() && live.get(id) === false) {
-        this.scheduleScratch(id, st); // sağlayıcıya dokunur: sunucu açılışını ASLA bekletmez (arka planda, sınırlı süre)
+      if (!ACTIVE.has(st.status) && st.sandboxScratch && st.ownerHost === os.hostname() && v?.live === false) {
+        // Önce kalıcı işaret (API burada çökerse de kayıt dürüst): TEARDOWN_PENDING; kapatma arka planda (sunucu açılışını ASLA bekletmez).
+        try { this.writeState({...st, stopIncomplete: st.stopIncomplete ?? "TEARDOWN_PENDING", reason: st.stopIncomplete ? st.reason : "STOP_INCOMPLETE:TEARDOWN_PENDING"}, true); } catch { /* durum yazılamadı */ }
+        this.scheduleScratch(id, st, st.reason ?? undefined);
         continue;
       }
-      if (!st || !ACTIVE.has(st.status) || st.instanceId === this.instanceId || this.active.has(id)) continue;
+      if (!ACTIVE.has(st.status)) continue;
       if (st.ownerHost !== os.hostname()) continue;
       // PS1A-C1-F3: canlı başka API süreci yalnız pid + başlangıç zamanı eşleşirse; yeniden kullanılmış pid sahibi canlı saymaz.
-      if (live.get(id) !== false) continue;
+      if (!v || v.live !== false) continue;
       const ownerReused = st.ownerPid !== process.pid && pidAlive(st.ownerPid);
-      let result: DevRunRecovery["result"];
-      if (!pidAlive(st.pid)) result = "ORPHAN_ALREADY_EXITED";
-      else {
-        const now = st.pid ? await timed(this.o.startTimeOf(st.pid), this.o.ownerCheckMs ?? 4000, null) : null;
-        if (!now || !st.pidStartTime || now !== st.pidStartTime) result = "ORPHAN_PID_MISMATCH_NOT_KILLED";
-        else { killProcessTree(st.pid!); for (let i = 0; i < 50 && pidAlive(st.pid); i++) await sleep(100); result = pidAlive(st.pid) ? "ORPHAN_KILL_FAILED" : "ORPHAN_KILLED"; }
-      }
+      // S5: okuma ZAMAN AŞIMINA uğradıysa (uyumsuzluk değil) ACTIVE kayıt olduğu gibi kalır; sonraki açılışta yeniden denenir (ORPHAN_PID_MISMATCH_NOT_KILLED yazılsa sahipsiz süreç bir daha denenmezdi).
+      const result = await this.orphanKill(st, v.now);
+      if (result === null) continue;
       // C-5: sağlayıcı-taraflı scratch (WSL) Linux tarafında kapatılır; kapatılamazsa kayıt STOP_INCOMPLETE ile scratch'ı korur.
       const pendingScratch = Boolean(st.sandboxScratch); // kapatma arka planda (scheduleScratch) denenir; sonuç kayda yazılır
       const rec: DevRunRecovery = {at: new Date().toISOString(), result, previousInstanceId: st.instanceId, pid: st.pid};
-      const next: DevRunState = {...st, status: result === "ORPHAN_KILL_FAILED" ? "CRASHED" : "STOPPED", reason: pendingScratch ? "STOP_INCOMPLETE:TEARDOWN_PENDING" : `RECOVERED_AFTER_API_RESTART:${result}`, ...(pendingScratch ? {stopIncomplete: "TEARDOWN_PENDING", sandboxScratch: st.sandboxScratch ?? null} : {sandboxScratch: null}), endedAt: rec.at, instanceId: this.instanceId, ownerPid: process.pid, ownerHost: os.hostname(), ownerStartTime: self,
+      const self = await timed(selfP, budget, null);
+      const next: DevRunState = {...st, status: result === "ORPHAN_KILL_FAILED" ? "CRASHED" : "STOPPED", reason: pendingScratch ? "STOP_INCOMPLETE:TEARDOWN_PENDING" : `RECOVERED_AFTER_API_RESTART:${result}`, ...(pendingScratch ? {stopIncomplete: "TEARDOWN_PENDING", sandboxScratch: st.sandboxScratch ?? null} : {sandboxScratch: null, sandboxBinding: null}), endedAt: rec.at, instanceId: this.instanceId, ownerPid: process.pid, ownerHost: os.hostname(), ownerStartTime: self,
         preview: {url: null, state: "UNAVAILABLE", lastProbeAt: st.preview?.lastProbeAt ?? null, reason: "NOT_RUNNING"}, recovery: rec};
       this.writeState(next, true);
       const lf = this.lockFile(id), ls = inspectProcessLock(lf) as {state: string; pid?: number; runId?: string | null};
       const reusedLock = ownerReused && ls.state === "ACTIVE" && ls.pid === st.ownerPid && ls.runId === st.instanceId;
       if (ls.state !== "ABSENT" && (ls.pid === process.pid || ls.state === "STALE_SAME_HOST_DEAD_PID" || reusedLock)) { try { fs.rmSync(lf, {force: true}); } catch { /* kilit */ } }
       this.o.audit("DEVRUN_ORPHAN_RECOVERED", {projectId: id, result, pid: st.pid});
-      if (pendingScratch) this.scheduleScratch(id, {...next, stopIncomplete: undefined});
+      if (pendingScratch) this.scheduleScratch(id, {...next, stopIncomplete: undefined}, `RECOVERED_AFTER_API_RESTART:${result}`);
       out.push({projectId: id, ...rec});
     }
     this.recoveries.push(...out);

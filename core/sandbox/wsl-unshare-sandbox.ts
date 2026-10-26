@@ -38,6 +38,7 @@ export interface WslRunOptions { timeoutMs: number; input?: Buffer | string; sho
 export type WslRunner = (args: string[], o: WslRunOptions) => Promise<WslRunResult>;
 
 export interface WslSandboxOptions {
+  /** S1 (test): mutlak sistem yolu çözücü (varsayılan systemExe); null dönerse wsl.exe başlatılmaz. */ resolveExe?: (name: string) => string | null;
   wslBinary?: string; distro?: string; platform?: NodeJS.Platform; runner?: WslRunner; isolation?: LinuxIsolation | null;
   addressSpaceKb?: number; maxFileBlocks?: number; maxProcesses?: number; tarLimits?: TarLimits; killGraceMs?: number;
   /** Zaman aşımı sondasında "geç" işaretinin görünmesi için beklenen süre (ms); testlerde 0. */
@@ -339,7 +340,10 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
   private configuredDistro(): string | undefined { return this.o.distro !== undefined ? this.o.distro : process.env.UASCO_WSL_DISTRO; }
   /** L9: doğrulanmış dağıtımdan farklı bir yapılandırma görüldüyse doğrulama düşer (fail-closed). */
   private distroDrifted(): boolean { const c = this.configuredDistro(); return this.verifiedDistro !== undefined && c !== undefined && c !== this.verifiedDistro; }
-  private get runner(): WslRunner { return this.o.runner ??= spawnWslRunner(this.o.wslBinary ?? systemExe("wsl.exe"), this.o.killGraceMs); }
+  /** S1: wsl.exe yalnız MUTLAK sistem yolundan (bir kez çözülür); çözülemezse null: çıplak ad yedeği YOKTUR (libuv cwd/PATH'te '<ad>.exe' arardı: sahte bir exe sandbox DIŞINDA çalışırdı). */
+  private wslExeResolved: string | null | undefined;
+  private wslExe(): string | null { if (this.o.wslBinary !== undefined) return this.o.wslBinary; return this.wslExeResolved !== undefined ? this.wslExeResolved : (this.wslExeResolved = (this.o.resolveExe ?? systemExe)("wsl.exe")); }
+  private get runner(): WslRunner { return this.o.runner ??= spawnWslRunner(this.wslExe(), this.o.killGraceMs); }
   private get isolation(): LinuxIsolation | null { return this.o.isolation === undefined ? linuxIsolationFromModule() : this.o.isolation; }
 
   private wsl(args: string[], timeoutMs: number, input?: Buffer | string, shouldAbort?: () => boolean): Promise<WslRunResult> {
@@ -351,7 +355,7 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
   private nodePath: string | null = null;
   /** ISOLATED: sandbox kendi ağ ad alanındadır; dev-run ürünü yalnız bridge() ile erişilebilir. */
   readonly network = "ISOLATED" as const;
-  private readonly live = new WeakMap<object, {S: string}>();
+  private readonly live = new WeakMap<object, {S: string; distro: string | undefined}>();
 
   /** WSL tarafında geçici dizin: S (mktemp), S/work (proje kopyası, sandbox /work), S/ctl (betikler). Yalnız doğrudan exec; değer içeren argüman yok. */
   private async prepare(): Promise<string | null> {
@@ -367,7 +371,8 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
     return r.exitCode === 0;
   }
   /** Linux tarafı ağacı öldürme (abort'ta hemen, temizlikte yine): kill.sh (yalnız hâlâ bizim olan grup) + pkill. Dönen: kill.sh'in bildirdiği pgid (varsa) ve hata kodu. */
-  private async killTree(S: string): Promise<{pgid: string | null; bad: string | null}> {
+  private async killTree(S: string, bound?: string): Promise<{pgid: string | null; bad: string | null}> {
+    if (bound !== undefined && this.distro !== bound) return {pgid: null, bad: "SCRATCH_DISTRO_MISMATCH"};
     const k = await this.wsl(["/bin/sh", `${S}/ctl/kill.sh`], 15_000);
     const pgid = /^PGID=(\d+)$/m.exec(utf8(k.stdout))?.[1] ?? null;
     const pk = await this.wsl(["/usr/bin/pkill", "-KILL", "-f", "--", S], 15_000);
@@ -386,14 +391,18 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
       if (state !== "Z" && state !== "X") return true;
       // L2: lideri zombi ama başka iş parçacıkları (task) yaşayan çok iş parçacıklı süreç ölü sayılmaz.
       const tasks = await this.wsl(["/bin/ls", "-1", `/proc/${pid}/task`], 15_000);
-      if (tasks.exitCode === 0 && utf8(tasks.stdout).split(/\s+/).filter(x => /^[0-9]+$/.test(x) && x !== pid).length > 0) return true;
+      // S3: okunamayan görev listesi (zaman aşımı, spawnError, rc != 0) CANLI sayılır (L1 ile simetrik, fail-closed).
+      if (tasks.exitCode !== 0 || tasks.timedOut || tasks.spawnError) return true;
+      if (utf8(tasks.stdout).split(/\s+/).filter(x => /^[0-9]+$/.test(x) && x !== pid).length > 0) return true;
     }
     return false;
   }
-  private async cleanup(S: string): Promise<string | null> {
+  /** S2: bound verilmişse scratch'ı KURAN dağıtım budur; şimdiki dağıtım farklıysa (DISTRO_CHANGED sonrası) başka dağıtımda temizlik/öldürme yapılmaz ve temiz raporlanmaz. */
+  private async cleanup(S: string, bound?: string): Promise<string | null> {
+    if (bound !== undefined && this.distro !== bound) return "SCRATCH_DISTRO_MISMATCH";
     let bad: string | null = null;
     try {
-      const k = await this.killTree(S); bad = k.bad;
+      const k = await this.killTree(S, bound); bad = k.bad;
       const gone = async (args: string[]): Promise<string | null> => {
         let rc: number | null = 0;
         for (let i = 0; i < 5 && rc === 0; i++) {
@@ -461,17 +470,21 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
   }
 
   private realSpawner(): (args: string[], stdio: cp.StdioOptions) => cp.ChildProcess {
-    return this.o.spawner ?? ((args, stdio) => cp.spawn(this.o.wslBinary ?? systemExe("wsl.exe") ?? "wsl.exe-not-in-system32", args, {shell: false, windowsHide: true, stdio, env: {...process.env, WSL_UTF8: "1"}}));
+    return this.o.spawner ?? ((args, stdio) => {
+      const exe = this.wslExe();
+      if (exe === null) { this.deverify("WSL_EXE_MISSING"); throw new Error("SANDBOX_REFUSED: WSL_EXE_MISSING"); }
+      return cp.spawn(exe, args, {shell: false, windowsHide: true, stdio, env: {...process.env, WSL_UTF8: "1"}});
+    });
   }
   private killLocal(child: cp.ChildProcess): void {
     try { if (child.exitCode !== null || child.signalCode !== null) return; if (process.platform === "win32" && child.pid) { const tk = systemExe("taskkill.exe"); if (tk) cp.spawnSync(tk, ["/PID", String(child.pid), "/T", "/F"], {windowsHide: true}); else child.kill("SIGKILL"); } else child.kill("SIGKILL"); } catch { /* en iyi çaba */ }
   }
 
   /** shouldAbort ilk kez true döndüğünde Linux tarafı ağacı HEMEN (boru kapanışını beklemeden) öldürülür. */
-  private abortWith(S: string, should?: () => boolean): (() => boolean) | undefined {
+  private abortWith(S: string, should?: () => boolean, bound?: string): (() => boolean) | undefined {
     if (!should) return undefined;
     let issued = false;
-    return () => { const v = should(); if (v && !issued) { issued = true; void this.killTree(S).catch(() => undefined); } return v; };
+    return () => { const v = should(); if (v && !issued) { issued = true; void this.killTree(S, bound).catch(() => undefined); } return v; };
   }
   /** Dev-run için: run() ile AYNI izolasyon (kopyala-içeri + setup.sh + unshare/pivot_root), ama süreç çalışır bırakılır. Eşzamansız hazırlık gerektiği için spawn() yerine spawnAsync() kullanılır. Çıkışta (durdurma/çökme/abort) Linux tarafı timeout süreç grubu + dizin temizlenir (`sandboxTeardown`). */
   async spawnAsync(command: string, args: string[], opts: SpawnOptions & {shouldAbort?: () => boolean}): Promise<SandboxChild> {
@@ -484,10 +497,12 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
     const gone = (): string | null => (!this.verified || this.epoch !== ep || this.distroDrifted()) ? "SANDBOX_NOT_VERIFIED: de-verified during start" : opts.shouldAbort?.() === true ? "SANDBOX_REFUSED: ABORTED" : null;
     let tar: Buffer;
     try { tar = buildTar(opts.cwd as string, this.o.tarLimits).archive; } catch (e) { throw new Error(`SANDBOX_REFUSED: ${e instanceof TarError ? e.code : "COPY_FAILED"}`); }
+    const dist0 = this.distro; // S2: scratch'ı KURAN dağıtım; temizlik/öldürme/köprü yalnız bu dağıtımda yapılır
     const S = await this.prepare();
     if (!S) throw new Error("SANDBOX_REFUSED: SCRATCH_CREATE_FAILED");
+    const binding = {providerId: this.id, distro: dist0 ?? null};
     // Temizlik başarısızsa scratch tanıtıcısı hata üzerinde taşınır (çağıran kalıcı kaydeder; recover() Linux tarafını kapatır).
-    const fail = async (e: unknown): Promise<never> => { const bad = await this.cleanup(S); if (bad) { this.deverify(`CLEANUP_${bad}`); if (e && typeof e === "object") Object.assign(e, {sandboxScratch: S, cleanupCode: bad}); } throw e; };
+    const fail = async (e: unknown): Promise<never> => { const bad = await this.cleanup(S, dist0); if (bad) { this.deverify(`CLEANUP_${bad}`); if (e && typeof e === "object") Object.assign(e, {sandboxScratch: S, cleanupCode: bad, sandboxBinding: binding}); } throw e; };
     try {
       { const g = gone(); if (g) throw new Error(g); }
       // Interop her başlatmada yeniden denetlenir (kernel-geneli kayıt çalışma zamanında açılabilir).
@@ -509,19 +524,24 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
     try { child = this.realSpawner()(["-d", this.distro ?? "", "--exec", "/bin/sh", `${S}/ctl/run.sh`], ["ignore", "pipe", "pipe"]) as SandboxChild; }
     catch (e0) { return await fail(Object.assign(new Error("SANDBOX_REFUSED: SPAWN_FAILED"), {cause: e0})); }
     let tornDown = false;
-    child.sandboxScratch = S;
+    child.sandboxScratch = S; child.sandboxBinding = binding;
     child.sandboxTeardown = new Promise<string | null>(res => {
-      const go = () => { if (tornDown) return; tornDown = true; this.cleanup(S).then(bad => { if (bad) { this.deverify(`CLEANUP_${bad}`); } return bad; }, () => "CLEANUP_ERROR").then(res); };
+      const go = () => { if (tornDown) return; tornDown = true; this.cleanup(S, dist0).then(bad => { if (bad) { this.deverify(`CLEANUP_${bad}`); } return bad; }, () => "CLEANUP_ERROR").then(res); };
       child.once("exit", go); child.once("error", go);
     });
-    this.live.set(child, {S});
+    this.live.set(child, {S, distro: dist0});
     return child;
   }
 
   /** C-5: devrun kaydındaki scratch'ı (API yeniden başlatması sonrası) kapatır; yalnız bu sağlayıcının biçimindeki yol kabul edilir. null = temiz. Başarısız = sağlayıcı doğrulanmamış olur. */
-  async teardownScratch(S: string): Promise<string | null> {
+  async teardownScratch(S: string, binding?: {providerId: string; distro: string | null}): Promise<string | null> {
     if (typeof S !== "string" || !SCRATCH_RE.test(S)) return "SCRATCH_PATH_INVALID";
-    const bad = await this.cleanup(S);
+    // S2: kayıtlı bağ varsa sağlayıcı ve dağıtım eşleşmek zorundadır; eşleşmezse temizlik YAPILMAZ, temiz raporlanmaz (kayıt scratch'ı korur).
+    if (binding) {
+      if (binding.providerId !== this.id) return "SCRATCH_PROVIDER_MISMATCH";
+      if ((binding.distro ?? undefined) !== this.distro) return "SCRATCH_DISTRO_MISMATCH";
+    }
+    const bad = await this.cleanup(S, binding ? binding.distro ?? undefined : undefined);
     if (bad) { this.deverify(`CLEANUP_${bad}`); }
     return bad;
   }
@@ -530,6 +550,7 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
   async bridge(child: cp.ChildProcess, port: number): Promise<BridgeHandle> {
     const rec = this.live.get(child);
     if (!rec) throw new Error("BRIDGE_TARGET_UNKNOWN");
+    if (rec.distro !== this.distro) throw new Error("BRIDGE_DISTRO_MISMATCH"); // S2: köprü yalnız scratch'ı kuran dağıtımda
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("BRIDGE_PORT_INVALID");
     // Hedef: timeout sürecinin (pid dosyası) çocuğu olan unshare; ağ ad alanına o girer. Hazır olana dek kısa süre beklenir.
     let target: string | null = null;

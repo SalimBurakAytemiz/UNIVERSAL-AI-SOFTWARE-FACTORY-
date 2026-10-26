@@ -238,9 +238,8 @@ describe("SBX-GATE control API (explicit no provider: sandbox null)", () => {
 });
 describe("SBX-GATE control API (production default: no sandbox option)", () => {
   // //TR: Batch 4a: seçenek hiç verilmezse Linux'ta gerçek sağlayıcı denenir; selfTest geçmezse SANDBOX_UNAVAILABLE ve hiçbir şey başlatılmaz. Diğer platformlarda sağlayıcı yoktur.
-  it("Linux tries the real provider (never NO_VERIFIED_PROVIDER there); other platforms have none; an unverified provider still refuses dev-run with 409", { timeout: T }, async () => {
-    // win32: varsayılan seçici (LANE-B-wsl-wire.md uygulanınca) WSL sağlayıcısını kurar ve durum GERÇEK wsl.exe'yi çalıştırırdı; CI'da gerçek wsl.exe başlatılmaz. win32 seçimi seçici testleriyle (platform enjekte) sınanır.
-    if (process.platform === "win32") return;
+  it.skipIf(process.platform === "win32")("Linux tries the real provider (never NO_VERIFIED_PROVIDER there); other platforms have none; an unverified provider still refuses dev-run with 409", { timeout: T }, async () => {
+    // win32: varsayılan seçici WSL sağlayıcısını kurar ve durum GERÇEK wsl.exe'yi çalıştırırdı; CI'da gerçek wsl.exe başlatılmaz. win32 seçimi seçici testleriyle (platform enjekte) sınanır; burada SKIP görünür (sıfır doğrulamalı PASS değil).
     const runtime = path.join(tmp, "runtime"), dataDir = path.join(tmp, "data");
     fs.mkdirSync(runtime, {recursive: true});
     const app = buildServer({controlToken: TOKEN, runtime, dataDir, repoRoot: REPO, port: 3210, logger: false, tenantId: "tA"});
@@ -577,7 +576,7 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
   const ISO = {nsFlags: ["--user", "--map-root-user", "--net", "--pid", "--mount", "--fork", "--kill-child=SIGKILL"], setup: "set -eu\n# isolation setup (test double)\n", helperPath: "/usr/sbin:/usr/bin:/sbin:/bin"};
   const GOOD_PROBE = "netns=net:[4026532001]\nMNT_C=absent\nDRVFS=0\nUNIX_PATH_SOCKETS=0\nWSL_RUNTIME_DIRS=absent\nRW_usr=ro\nRW_etc=ro\nRW_bin=ro\nWORK=writable\nNET_IFACES=0\nCAPS_DROPPED=ok\nNO_CTTY=ok\nNESTED_USERNS=blocked\nPID_NS_PRIVATE=ok\nVSOCK=blocked\nIO_URING=blocked\nSUPERVISOR=ok\nHOST_DIRS=hidden\nPROC_SYS_RO=ok\nHOST_CANARY=hidden\nDONE=1\n";
   interface Cfg { status?: number; spawnError?: boolean; distros?: string; version?: string; interop?: string | string[]; peRc?: number; peNoexec?: string; tools?: string; roots?: string[]; probe?: string; probeRc?: number; mktempFails?: boolean; runOut?: string; runRc?: number; runDelayMs?: number;
-    forkOut?: string; timeoutRc?: number; late?: boolean; stdinOut?: string; pkillRc?: number; pgrepAlive?: boolean; scratchRemains?: boolean; duOut?: string; truncated?: boolean; runBytes?: Buffer; outerRc?: number; reject?: boolean; nodePath?: string; noTarget?: boolean; abortIgnored?: boolean; pgrepRc?: number; pgidAlive?: boolean; rcFile?: string; duRc?: number; abortLate?: boolean; late2?: boolean; noPgid?: boolean; netns?: string; netnsRc?: number; hostNetns?: string; hostNetnsRc?: number; pgrepOut?: string; statOut?: string; taskOut?: string; statRc?: number }
+    forkOut?: string; timeoutRc?: number; late?: boolean; stdinOut?: string; pkillRc?: number; pgrepAlive?: boolean; scratchRemains?: boolean; duOut?: string; truncated?: boolean; runBytes?: Buffer; outerRc?: number; reject?: boolean; nodePath?: string; noTarget?: boolean; abortIgnored?: boolean; pgrepRc?: number; pgidAlive?: boolean; rcFile?: string; taskRc?: number; taskTimedOut?: boolean; duRc?: number; abortLate?: boolean; late2?: boolean; noPgid?: boolean; netns?: string; netnsRc?: number; hostNetns?: string; hostNetnsRc?: number; pgrepOut?: string; statOut?: string; taskOut?: string; statRc?: number }
   const u16 = (t: string) => Buffer.from("﻿" + t, "utf16le");
   const mkRunner = (cfg: Cfg = {}) => {
     const calls: {args: string[]; input?: Buffer | string}[] = []; const files = new Map<string, string>();
@@ -594,7 +593,7 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
       if (cmd[0] === "/bin/mkdir" || cmd[0] === "/bin/chmod" || cmd[0] === "/bin/kill" || cmd[0] === "/usr/bin/find" || cmd[0] === "/bin/rm") return R(0);
       if (cmd[0] === "/usr/bin/tee") { files.set(cmd[1], String(o.input)); return R(0); }
       if (cmd[0] === "/bin/cat" && /^\/proc\/[0-9]+\/stat$/.test(cmd[1])) return cfg.statOut === undefined ? R(cfg.statRc ?? 1) : R(cfg.statRc ?? 0, cfg.statOut);
-      if (cmd[0] === "/bin/ls" && /^\/proc\/[0-9]+\/task$/.test(cmd[2] ?? "")) return R(0, cfg.taskOut ?? "");
+      if (cmd[0] === "/bin/ls" && /^\/proc\/[0-9]+\/task$/.test(cmd[2] ?? "")) return R(cfg.taskRc ?? 0, cfg.taskOut ?? "", cfg.taskTimedOut ? {timedOut: true} : {});
       if (cmd[0] === "/bin/cat") return R(0, cmd[1].endsWith("/rc") ? `${cfg.rcFile ?? "0"}\n` : "4242\n");
       if (cmd[0] === "/bin/sh" && cmd[1] === "-s") { files.set("SWEEP", String(o.input)); return R(0); }
       if (cmd[0] === "/bin/sh" && cmd[1].endsWith("/ctl/kill.sh")) return R(0, cfg.noPgid ? "PGID=none\n" : "PGID=4242\n");
@@ -885,6 +884,8 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
       expect(await td({pgrepOut: "4243\n"}), "unreadable stat is LIVE (fail-closed, L1)").toBe("PROCESS_SURVIVED");
       expect(await td({pgrepOut: "4243\n", statOut: "4243 (sleep) Z 1 4242 4242 0\n", statRc: 0, taskOut: "4243\n"})).toBeNull(); // yalnız lider görev: gerçek zombi
       expect(await td({pgrepOut: "4243\n", statOut: "4243 (srv) Z 1 4242 4242 0\n", taskOut: "4243\n4251\n"}), "zombie leader with a live thread (L2)").toBe("PROCESS_SURVIVED");
+      expect(await td({pgrepOut: "4243\n", statOut: "4243 (srv) Z 1 4242 4242 0\n", taskRc: 1}), "S3: unreadable task list is LIVE").toBe("PROCESS_SURVIVED");
+      expect(await td({pgrepOut: "4243\n", statOut: "4243 (srv) Z 1 4242 4242 0\n", taskTimedOut: true}), "S3: timed-out task list is LIVE").toBe("PROCESS_SURVIVED");
       expect(await td({pgrepOut: "4243\n", statOut: "4243 (sleep) S 1 4242 4242 0\n"})).toBe("PROCESS_SURVIVED");
       expect(await td({pgrepOut: "4243\n", statOut: "garbage"})).toBe("PROCESS_SURVIVED");
       expect(await td({pgrepOut: ""})).toBe("PROCESS_SURVIVED");
@@ -925,7 +926,7 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
       expect(systemExe("wsl.exe", {platform: "win32", env: {SystemRoot: "..\\evil"}, exists: ex(["C:\\Windows\\System32\\wsl.exe"])})).toBe("C:\\Windows\\System32\\wsl.exe"); // göreli SystemRoot yok sayılır
       expect(systemExe("..\\evil.exe", {platform: "win32", exists: () => true})).toBeNull(); expect(systemExe("wsl.exe", {platform: "linux"})).toBe("wsl.exe");
       const src = fs.readFileSync(path.join(REPO, "core", "sandbox", "wsl-unshare-sandbox.ts"), "utf8") + fs.readFileSync(path.join(REPO, "core", "workos", "devrun.ts"), "utf8");
-      expect(src).not.toMatch(/spawn(Sync)?\("taskkill"/); expect(src).not.toMatch(/\?\? "wsl\.exe"\)/); expect(src).toContain('systemExe("wsl.exe")');
+      expect(src).not.toMatch(/spawn(Sync)?\("taskkill"/); expect(src).not.toMatch(/\?\? "wsl\.exe"\)/); expect(src).toContain('("wsl.exe")'); expect(src).not.toContain("wsl.exe-not-in-system32");
     });
 
     it("L7: both probe scripts read the sandbox's REAL net namespace id; run in the HOST namespace the netns line equals the host id (SELFTEST_NETNS_SHARED), so a constant/fake netns line is caught", async () => {
@@ -940,7 +941,7 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
 
     it("L11/L12: select-provider.ts reads no environment, file system or config; docker/rancher/podman (incl. podman-machine-default) distros are never discovered", async () => {
       const src = fs.readFileSync(path.join(REPO, "core", "sandbox", "select-provider.ts"), "utf8").split("\n").filter(l => !l.trim().startsWith("//")).join("\n");
-      expect(src).not.toMatch(/process\.env|node:fs|\bfs\.|readFile|readdir|existsSync|config\/|\.json|process\.argv/);
+      expect(src).not.toMatch(/process\.env|node:fs|\bfs\.|readFile|readdir|existsSync|config\/|\.json|process\.argv|process\[|globalThis/);
       expect([...src.matchAll(/^import .* from "([^"]+)"/gm)].map(m => m[1])).toEqual(["../agents/linux-unshare-sandbox.js", "./wsl-unshare-sandbox.js", "../workos/execution-gate.js"]);
       const { discoverDefaultDistro } = await import("../core/sandbox/wsl-unshare-sandbox.js");
       for (const n of ["podman-machine-default", "podman", "docker-desktop", "docker-desktop-data", "rancher-desktop", "rancher-desktop-data"]) expect(discoverDefaultDistro(`  NAME  STATE  VERSION\r\n* ${n}   Running   2\r\n`), n).toBeNull();
@@ -997,8 +998,7 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
       expect(f.calls.some(c => c.args[3] === "/usr/bin/find")).toBe(false);
     });
 
-    it("NTFS hardlinks are not copied into WSL (LOW: host-file exfiltration via a link to a secret)", async () => {
-      if (process.platform === "win32") return;
+    it.skipIf(process.platform === "win32")("NTFS hardlinks are not copied into WSL (LOW: host-file exfiltration via a link to a secret)", async () => {
       const {buildTar} = await import("../core/sandbox/wsl-tar.js"); const dir = ws(), out = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-hl-"));
       try {
         fs.writeFileSync(path.join(out, "secret.txt"), "TOP-SECRET"); fs.linkSync(path.join(out, "secret.txt"), path.join(dir, "hard.txt"));
@@ -1186,6 +1186,67 @@ describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on
         { const cfg: any = {}; const {p} = await mk(cfg); await p.selfTest(); const c = spy(p); cfg.scratchRemains = true; await p.run(["node", "x"], {cwd: dir, env: {}, timeoutMs: 5000}); expect(c, "run cleanup").toContain("CLEANUP_SCRATCH_NOT_REMOVED"); }
         { const cfg: any = {}; const ch = fakeChild(null); const {p} = await mk(cfg, {spawner: () => ch}); await p.selfTest(); const c = spy(p); const k: any = await p.spawnAsync("node", ["x"], opts(dir)); cfg.scratchRemains = true; ch.emit("exit", 0, null); expect(await k.sandboxTeardown).toBe("SCRATCH_NOT_REMOVED"); expect(c, "teardown").toContain("CLEANUP_SCRATCH_NOT_REMOVED"); }
         { const cfg: any = {}; const {p} = await mk(cfg); await p.selfTest(); const c = spy(p); cfg.scratchRemains = true; expect(await p.teardownScratch("/tmp/uasco-sbx-AbC123")).toBe("SCRATCH_NOT_REMOVED"); expect(c, "teardownScratch").toContain("CLEANUP_SCRATCH_NOT_REMOVED"); expect(p.isVerified()).toBe(false); }
+      } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+    });
+
+    it("S1: wsl.exe resolves ONCE to an absolute system path; when it cannot be resolved the dev-run spawner refuses (WSL_EXE_MISSING, de-verify) - there is no bare-name fallback", async () => {
+      const dir = ws(); let resolved = 0;
+      try {
+        const {p} = await mk({}, {resolveExe: (n: string) => { resolved++; return n === "wsl.exe" ? null : n; }}); await p.selfTest();
+        for (let i = 0; i < 2; i++) expect(() => (p as any).realSpawner()(["-d", "Ubuntu", "--exec", "/bin/true"], ["ignore", "pipe", "pipe"])).toThrow("SANDBOX_REFUSED: WSL_EXE_MISSING");
+        expect(resolved, "resolved once and reused").toBe(1); expect(p.isVerified()).toBe(false);
+        const {p: q} = await mk({}, {resolveExe: () => null}); await q.selfTest();
+        const err: any = await q.spawnAsync("node", ["x"], opts(dir)).catch((e: unknown) => e); expect(String(err.message)).toContain("SPAWN_FAILED"); expect(String(err.cause?.message)).toContain("WSL_EXE_MISSING");
+        const src = fs.readFileSync(path.join(REPO, "core", "sandbox", "wsl-unshare-sandbox.ts"), "utf8"); expect(src).not.toContain("wsl.exe-not-in-system32");
+      } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+    });
+
+    it("S2: the scratch carries its provider + distro: the child reports the binding; teardownScratch refuses a different provider/distro (nothing is run, nothing reported clean, still verified); after a DISTRO drift the exit teardown and the bridge refuse instead of acting in the wrong distro", async () => {
+      const dir = ws();
+      try {
+        const {p, f} = await mk({}, {spawner: () => fakeChild(null)}); await p.selfTest();
+        const mkChild = async (pp: any) => { const c: any = await pp.spawnAsync("node", ["x"], opts(dir)); return c; };
+        const c: any = await mkChild(p); expect(c.sandboxBinding).toEqual({providerId: "wsl-unshare-v1", distro: "Ubuntu"});
+        const n0 = f.calls.length;
+        expect(await p.teardownScratch("/tmp/uasco-sbx-AbC123", {providerId: "wsl-unshare-v1", distro: "Debian"})).toBe("SCRATCH_DISTRO_MISMATCH");
+        expect(await p.teardownScratch("/tmp/uasco-sbx-AbC123", {providerId: "other", distro: "Ubuntu"})).toBe("SCRATCH_PROVIDER_MISMATCH");
+        expect(f.calls.length, "no wsl.exe call on a mismatch").toBe(n0); expect(p.isVerified()).toBe(true);
+        expect(await p.teardownScratch("/tmp/uasco-sbx-AbC123", {providerId: "wsl-unshare-v1", distro: "Ubuntu"})).toBeNull();
+        // drift: configuration points to another distro after the sandbox was created
+        const ch = fakeChild(null); const {p: q, f: fq} = await mk({}, {spawner: () => ch}); await q.selfTest();
+        const k: any = await q.spawnAsync("node", ["x"], opts(dir)); (q as any).o.distro = "Debian"; (q as any).deverify("DISTRO_CHANGED"); const n1 = fq.calls.length;
+        await expect(q.bridge(k, 40010)).rejects.toThrow("BRIDGE_DISTRO_MISMATCH");
+        ch.emit("exit", 0, null); expect(await k.sandboxTeardown).toBe("SCRATCH_DISTRO_MISMATCH"); expect(fq.calls.slice(n1).some(x => x.args[3] === "/bin/rm" || x.args[3] === "/usr/bin/pkill"), "no cleanup in the wrong distro").toBe(false);
+      } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+    });
+
+    it("F2/T3: a spawnAsync that is aborted after the copy-in with a scratch that cannot be removed rejects WITH {sandboxScratch, cleanupCode, sandboxBinding} and de-verifies through deverify() (epoch bump)", async () => {
+      const dir = ws();
+      try {
+        const cfg: any = {}; const {p} = await mk(cfg); await p.selfTest(); const calls: string[] = []; const od = (p as any).deverify.bind(p); (p as any).deverify = (d: string) => { calls.push(d); od(d); };
+        let abortNow = false; const orig = (p as any).wsl.bind(p); (p as any).wsl = async (args: string[], ...r: any[]) => { const res = await orig(args, ...r); if (args[0] === "/bin/tar") { abortNow = true; cfg.scratchRemains = true; } return res; };
+        const err: any = await p.spawnAsync("node", ["x"], {...opts(dir), shouldAbort: () => abortNow}).catch((e: unknown) => e);
+        expect(String(err.message)).toContain("SANDBOX_REFUSED: ABORTED"); expect(err).toMatchObject({sandboxScratch: "/tmp/uasco-sbx-AbC123", cleanupCode: "SCRATCH_NOT_REMOVED", sandboxBinding: {providerId: "wsl-unshare-v1", distro: "Ubuntu"}});
+        expect(calls).toContain("CLEANUP_SCRATCH_NOT_REMOVED"); expect(p.isVerified()).toBe(false);
+      } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+    });
+
+    it("N5/L9: every gone() check in spawnAsync is pinned: a de-verify, an epoch change (de-verify then re-verify), a distro drift or an abort after ANY preparation step stops it before the spawn", async () => {
+      const dir = ws();
+      try {
+        const points: {name: string; at: (a: string[]) => boolean}[] = [
+          {name: "after interop check", at: a => a[0] === "/bin/sh" && String(a[1]).endsWith("/ctl/outer.sh")},
+          {name: "after copy-in", at: a => a[0] === "/bin/tar"},
+          {name: "after staging", at: a => a[0] === "/usr/bin/tee" && String(a[1]).endsWith("/ctl/kill.sh")},
+          {name: "final pre-spawn", at: a => a[0] === "/usr/bin/tee" && String(a[1]).endsWith("/ctl/relay.sh")}];
+        for (const pt of points) for (const mode of ["deverify", "reverify", "drift", "abort"] as const) {
+          const spawned: string[][] = []; const {p} = await mk({}, {spawner: (a: string[]) => { spawned.push(a); return fakeChild(null); }}); await p.selfTest();
+          let abortNow = false, fired = false; const orig = (p as any).wsl.bind(p);
+          (p as any).wsl = async (args: string[], ...r: any[]) => { const res = await orig(args, ...r); if (!fired && pt.at(args)) { fired = true;
+            if (mode === "deverify") (p as any).deverify("X"); else if (mode === "reverify") { (p as any).deverify("X"); await p.selfTest(); } else if (mode === "drift") (p as any).o.distro = "Debian"; else abortNow = true; } return res; };
+          const err: any = await p.spawnAsync("node", ["x"], {...opts(dir), shouldAbort: () => abortNow}).catch((e: unknown) => e);
+          expect(fired, `${pt.name}/${mode} fired`).toBe(true); expect(String(err?.message), `${pt.name}/${mode}`).toMatch(mode === "abort" ? /ABORTED/ : /SANDBOX_NOT_VERIFIED/); expect(spawned, `${pt.name}/${mode}`).toEqual([]);
+        }
       } finally { fs.rmSync(dir, {recursive: true, force: true}); }
     });
 

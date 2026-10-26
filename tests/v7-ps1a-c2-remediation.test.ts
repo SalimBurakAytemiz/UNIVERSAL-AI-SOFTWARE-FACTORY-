@@ -385,6 +385,7 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
       const done = m.view(p); expect(done).toMatchObject({status: "BLOCKED", reason: "SANDBOX_UNVERIFIED"}); expect(closed).toBe(1);
       expect(child!.exitCode !== null || child!.signalCode !== null).toBe(true);
       await expect(fetch(`http://127.0.0.1:${v.port}/`)).rejects.toBeTruthy();
+      await expect(m.start(p)).rejects.toMatchObject({code: "SANDBOX_UNAVAILABLE"}); // de-verify sonrası yeni başlatma reddedilir
     } finally { await m.stopAll("CLEANUP"); }
   }, T);
 
@@ -545,7 +546,7 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
     let teardownCalls = 0; const provider = hostSpawn({teardownScratch() { teardownCalls++; return new Promise<string | null>(() => undefined); }}); // asla çözülmez (soğuk/asılı WSL)
     const m0 = manager(dataDir, new ExecutionGate(provider));
     fs.writeFileSync(f, JSON.stringify({...(m0 as any).blank(p), status: "STOPPED", reason: "STOP_REQUESTED", instanceId: "dev_dead", ownerPid: 2 ** 22 - 3, sandboxScratch: "/tmp/uasco-sbx-Bg0001", endedAt: new Date().toISOString()}));
-    const m = manager(dataDir, new ExecutionGate(provider), {recoverTeardownMs: 400, stopWaitMs: 2000});
+    const m = manager(dataDir, new ExecutionGate(provider), {recoverTeardownMs: 400, stopWaitMs: 2000, startTimeOf: async () => "T"}); // yalnız sağlayıcı beklemesi ölçülür (Windows'ta PowerShell okuması süreyi bozmasın)
     const t0 = Date.now(); await m.recover(); expect(Date.now() - t0, "recover() must not wait for the provider").toBeLessThan(300);
     await new Promise(r => setTimeout(r, 50)); expect(teardownCalls).toBe(1);
     await m.close(); // arka plan görevini sınırlı bekler
@@ -576,13 +577,188 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
     } finally { code = null; await m.close().catch(() => undefined); }
   }, 30_000);
 
-  it("STARTUP: buildServer with a WSL provider whose runner never answers is ready within 2 s and never touches the runner while starting", async () => {
+  it("STARTUP: buildServer with a WSL provider whose runner never answers is ready within 2 s and never touches the runner while starting, EVEN with a persisted terminal record that carries a scratch and a dead owner: the record is marked TEARDOWN_PENDING at once (the background teardown waits for the provider)", async () => {
     const { buildServer } = await import("../apps/control-api/src/server.js"); const { WslUnshareSandboxProvider } = await import("../core/sandbox/wsl-unshare-sandbox.js");
+    const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-rdy-")); const dataDir = path.join(dir, "data");
+    const seedApp = mk({dataDir}); const p = await createProject(seedApp.app, {template: "web-node"}); await seedApp.app.close();
+    const m0: any = new DevRunManager({studio: new ProjectStudio({dataDir, envPolicyFile: ENV_POLICY}), envPolicyFile: ENV_POLICY, globalStopFile: path.join(dir, "GS.json")});
+    const f = path.join(dataDir, "projects", p.projectId, "devrun", "state.json"); fs.mkdirSync(path.dirname(f), {recursive: true});
+    fs.writeFileSync(f, JSON.stringify({...m0.blank(p), status: "STOPPED", reason: "STOP_REQUESTED", instanceId: "dev_dead", ownerPid: 2 ** 22 - 3, sandboxScratch: "/tmp/uasco-sbx-St0001", endedAt: new Date().toISOString()}));
     const calls: string[][] = []; const wsl = new WslUnshareSandboxProvider({platform: "win32", runner: args => { calls.push(args); return new Promise(() => undefined); }});
-    const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-rdy-"));
-    const srv = buildServer({controlToken: TOKEN, runtime: path.join(dir, "rt"), dataDir: path.join(dir, "data"), repoRoot: REPO, port: 3210, logger: false, tenantId: "tA", sandbox: wsl});
-    try { const t0 = Date.now(); await srv.ready(); expect(Date.now() - t0).toBeLessThan(2000); expect(calls).toEqual([]); } finally { await srv.close(); fs.rmSync(dir, {recursive: true, force: true}); }
+    const srv = buildServer({controlToken: TOKEN, runtime: path.join(dir, "rt"), dataDir, repoRoot: REPO, port: 3210, logger: false, tenantId: "tA", sandbox: wsl });
+    try {
+      const t0 = Date.now(); await srv.ready(); expect(Date.now() - t0).toBeLessThan(2000);
+      expect(JSON.parse(fs.readFileSync(f, "utf8"))).toMatchObject({stopIncomplete: "TEARDOWN_PENDING", sandboxScratch: "/tmp/uasco-sbx-St0001"}); // arka plan görevi sağlayıcıyı bekler; kayıt baştan dürüst
+    } finally { await srv.close(); fs.rmSync(dir, {recursive: true, force: true}); }
+  }, 60_000);
+
+  // ---- #231 consolidated review: M1-M5, S4/S5, lifecycle ----
+  const deadRec = (m0: any, p: Project, over: Record<string, unknown> = {}) => ({...m0.blank(p), instanceId: "dev_dead", ownerPid: 2 ** 22 - 3, ...over});
+  const seedRec = (dataDir: string, p: Project, rec: unknown) => { const f = path.join(dataDir, "projects", p.projectId, "devrun", "state.json"); fs.mkdirSync(path.dirname(f), {recursive: true}); fs.writeFileSync(f, JSON.stringify(rec)); return f; };
+  const readRec = (f: string) => JSON.parse(fs.readFileSync(f, "utf8"));
+  const waitFor = async (cond: () => boolean, ms = 8000) => { for (let i = 0; i < ms / 50 && !cond(); i++) await sleep(50); return cond(); };
+  const SCR = "/tmp/uasco-sbx-M10001";
+
+  it.each([["P2: the owner died after recover() (dead pid)", false], ["P1 (regression): recover() counted the owner LIVE on a timeout, start() later sees it dead", true]])("M1 %s: start() taking over an ACTIVE record of a non-live owner kills the orphan pid and tears the scratch down BEFORE the new run; a failed teardown refuses 409 DEVRUN_STOP_INCOMPLETE and keeps the scratch", async (_n, viaTimeout) => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+    const orphan = idle(); const ostart = await processStartTime(orphan);
+    const torn: string[] = []; let code: string | null = "PROCESS_SURVIVED";
+    const provider = hostSpawn({async teardownScratch(sc: string) { torn.push(sc); return code; }});
+    const m0 = manager(dataDir, new ExecutionGate(provider));
+    const f = seedRec(dataDir, p, deadRec(m0, p, {status: "RUNNING", pid: orphan, pidStartTime: ostart, startedAt: new Date().toISOString(), sandboxScratch: SCR, ...(viaTimeout ? {ownerPid: process.ppid, ownerStartTime: "OWNER-T0"} : {})}));
+    let answers = false; const startTimeOf = (pid: number) => pid === process.ppid ? (answers ? Promise.resolve("OWNER-T1") : new Promise<string | null>(() => undefined)) : processStartTime(pid);
+    const m = manager(dataDir, new ExecutionGate(provider), viaTimeout ? {ownerCheckMs: 300, startTimeOf} : {});
+    try {
+      if (viaTimeout) { expect(await m.recover()).toEqual([]); expect(readRec(f).status, "recover() leaves the record of an owner it could not check").toBe("RUNNING"); answers = true; }
+      await expect(m.start(p)).rejects.toMatchObject({code: "DEVRUN_STOP_INCOMPLETE", status: 409, reason: "PROCESS_SURVIVED"});
+      expect(torn, "the scratch is torn down, not overwritten").toEqual([SCR]); expect(pidAlive(orphan), "the orphan dev process is killed").toBe(false);
+      expect(readRec(f)).toMatchObject({status: "STOPPED", stopIncomplete: "PROCESS_SURVIVED", sandboxScratch: SCR});
+      code = null; expect((await m.start(p)).status).toMatch(/RUNNING|STARTING/); expect(torn).toEqual([SCR, SCR]);
+    } finally { code = null; await m.close().catch(() => undefined); }
+  }, 60_000);
+
+  it("M1: start()'s owner check is bounded by ownerCheckMs (an unanswered lookup is LIVE => 409 DEVRUN_LOCKED), so start() and recover() reach the same verdict and never hang", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+    const m0 = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any));
+    seedRec(dataDir, p, deadRec(m0, p, {status: "RUNNING", ownerPid: process.ppid, ownerStartTime: "X", pid: null, startedAt: new Date().toISOString()}));
+    const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {ownerCheckMs: 300, startTimeOf: (pid: number) => pid === process.ppid ? new Promise<string | null>(() => undefined) : processStartTime(pid)});
+    const t0 = Date.now(); await expect(m.start(p)).rejects.toMatchObject({code: "DEVRUN_LOCKED"}); expect(Date.now() - t0).toBeLessThan(5000);
   }, 30_000);
+
+  it("M2: the liveness verdict is bound to the record it was computed for: a record rewritten by a LIVE peer between the pre-check and the loop is not taken over (its product survives, its record is untouched)", async () => {
+    const {app, dataDir} = mk(); const ps = [await createProject(app, {template: "web-node"}), await createProject(app, {template: "web-node"})];
+    const m0: any = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any)); const info = new Map<string, {pid: number; t: string | null; f: string}>();
+    for (const p of ps) { const pid = idle(); const t = await processStartTime(pid); info.set(p.projectId, {pid, t, f: seedRec(dataDir, p, deadRec(m0, p, {status: "RUNNING", pid, pidStartTime: t, startedAt: new Date().toISOString()}))}); }
+    const ownerT = await processStartTime(process.ppid); let swapped = ""; let first = "";
+    const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {audit: (e: string, d: any) => {
+      if (e !== "DEVRUN_ORPHAN_RECOVERED" || swapped) return; first = d.projectId; const other = ps.find(x => x.projectId !== d.projectId)!; swapped = other.projectId; const o = info.get(other.projectId)!;
+      fs.writeFileSync(o.f, JSON.stringify({...m0.blank(other), instanceId: "dev_peer", ownerPid: process.ppid, ownerStartTime: ownerT, status: "RUNNING", pid: o.pid, pidStartTime: o.t, startedAt: new Date().toISOString()}));
+    }});
+    const out = await m.recover(); const o = info.get(swapped)!;
+    expect(out.map(x => x.projectId)).toEqual([first]); expect(pidAlive(o.pid), "the live peer's product survives").toBe(true);
+    expect(readRec(o.f)).toMatchObject({instanceId: "dev_peer", status: "RUNNING"}); expect(pidAlive(info.get(first)!.pid)).toBe(false);
+  }, 60_000);
+
+  it("M3: scratch teardowns never overlap: repeated recover() calls schedule ONE teardown, a timed-out teardown keeps the slot (start refuses 409 DEVRUN_STOP_PENDING, no second call), a late success writes the final result, and recover() persists TEARDOWN_PENDING before scheduling", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+    let calls = 0, live = 0, maxLive = 0; let release!: (c: string | null) => void;
+    const provider = hostSpawn({teardownScratch() { calls++; live++; maxLive = Math.max(maxLive, live); const done = () => { live--; }; if (calls === 1) return new Promise<string | null>(r => { release = c => { done(); r(c); }; }); done(); return Promise.resolve(null); }});
+    const m0 = manager(dataDir, new ExecutionGate(provider)); const f = seedRec(dataDir, p, deadRec(m0, p, {status: "STOPPED", reason: "STOP_REQUESTED", sandboxScratch: SCR, endedAt: new Date().toISOString()}));
+    const m = manager(dataDir, new ExecutionGate(provider), {recoverTeardownMs: 300, stopWaitMs: 2000});
+    try {
+      await m.recover(); expect(readRec(f), "persisted BEFORE the background teardown finishes").toMatchObject({stopIncomplete: "TEARDOWN_PENDING", sandboxScratch: SCR});
+      await m.recover(); await sleep(50); expect(calls, "a repeated recover() adds no duplicate teardown").toBe(1);
+      await m.settleRecovery(); expect(readRec(f)).toMatchObject({stopIncomplete: "TEARDOWN_TIMEOUT"});
+      await expect(m.start(p)).rejects.toMatchObject({code: "DEVRUN_STOP_PENDING", status: 409}); expect(calls).toBe(1); expect(maxLive).toBe(1);
+      release(null); expect(await waitFor(() => readRec(f).sandboxScratch === null), "late success writes the final result").toBe(true); expect(readRec(f).stopIncomplete ?? null).toBeNull();
+      expect((await m.start(p)).status).toMatch(/RUNNING|STARTING/); expect(maxLive).toBe(1);
+    } finally { await m.close().catch(() => undefined); }
+  }, 60_000);
+
+  it("M4: the orphan branch (ACTIVE + scratch, dead owner) persists STOP_INCOMPLETE:TEARDOWN_PENDING with the scratch, runs the Linux teardown in the background and on success restores RECOVERED_AFTER_API_RESTART:<result> (stopIncomplete/scratch cleared)", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+    const torn: string[] = []; let release!: (c: string | null) => void;
+    const provider = hostSpawn({teardownScratch(sc: string) { torn.push(sc); return new Promise<string | null>(r => { release = r; }); }});
+    const m0 = manager(dataDir, new ExecutionGate(provider)); const f = seedRec(dataDir, p, deadRec(m0, p, {status: "RUNNING", pid: null, startedAt: new Date().toISOString(), sandboxScratch: SCR}));
+    const m = manager(dataDir, new ExecutionGate(provider));
+    await m.recover(); expect(readRec(f)).toMatchObject({status: "STOPPED", reason: "STOP_INCOMPLETE:TEARDOWN_PENDING", stopIncomplete: "TEARDOWN_PENDING", sandboxScratch: SCR});
+    expect(await waitFor(() => torn.length === 1), "the teardown is scheduled").toBe(true); expect(torn).toEqual([SCR]);
+    release(null); await m.settleRecovery(); const done = readRec(f);
+    expect(done).toMatchObject({status: "STOPPED", reason: "RECOVERED_AFTER_API_RESTART:ORPHAN_ALREADY_EXITED", sandboxScratch: null}); expect(done.stopIncomplete ?? null).toBeNull();
+  }, 30_000);
+
+  it("M5: a refusal (bridge failure) written while the child's teardown is still pending keeps startedAt, so a teardown that resolves LATE still persists stopIncomplete and the next start is refused/retried", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+    const torn: string[] = []; const provider = {...hostSpawn({
+      async spawnAsync(c: string, a: string[], o: cp.SpawnOptions) { const ch: any = cp.spawn(c, a, o); ch.sandboxScratch = "/tmp/uasco-sbx-M50001"; ch.sandboxTeardown = new Promise(res => ch.once("exit", () => setTimeout(() => res("PROCESS_SURVIVED"), 600))); return ch; },
+      async teardownScratch(sc: string) { torn.push(sc); return "PROCESS_SURVIVED"; }}), id: "FAKE_ISOLATED", network: "ISOLATED", async bridge() { throw new Error("BRIDGE_X"); }};
+    const m = manager(dataDir, new ExecutionGate(provider as any), {killWaitMs: 100});
+    const f = path.join(dataDir, "projects", p.projectId, "devrun", "state.json");
+    try {
+      await expect(m.start(p)).rejects.toMatchObject({code: "DEVRUN_BLOCKED"});
+      expect(await waitFor(() => readRec(f).stopIncomplete === "PROCESS_SURVIVED"), "late teardown result is persisted on the BLOCKED record").toBe(true);
+      expect(readRec(f)).toMatchObject({sandboxScratch: "/tmp/uasco-sbx-M50001"}); expect(readRec(f).startedAt).not.toBeNull();
+      await expect(m.start(p)).rejects.toMatchObject({code: "DEVRUN_STOP_INCOMPLETE"}); expect(torn).toEqual(["/tmp/uasco-sbx-M50001"]);
+    } finally { await m.close().catch(() => undefined); }
+  }, 60_000);
+
+  it("D2 (gate refusal): a gate refusal on top of an incomplete teardown keeps stopIncomplete + sandboxScratch + startedAt", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+    const m0: any = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any)); const started = new Date().toISOString();
+    const f = seedRec(dataDir, p, {...m0.blank(p), status: "STOPPED", reason: "STOP_INCOMPLETE:PROCESS_SURVIVED", stopIncomplete: "PROCESS_SURVIVED", sandboxScratch: SCR, startedAt: started, endedAt: started});
+    const bad = manager(dataDir, new ExecutionGate({...TEST_HOST_PASSTHROUGH_SANDBOX, selfTest: async () => ({ok: false, detail: "X"})} as any));
+    await expect(bad.start(p)).rejects.toMatchObject({code: "SANDBOX_UNAVAILABLE"});
+    expect(readRec(f)).toMatchObject({status: "BLOCKED", stopIncomplete: "PROCESS_SURVIVED", sandboxScratch: SCR, startedAt: started});
+  }, 30_000);
+
+  it("P3: a stop while spawnAsync prepares, with a provider that honours the abort but cannot clean its scratch (throws {sandboxScratch, cleanupCode}), persists BLOCKED + STOP_INCOMPLETE; the next start is refused 409 until the teardown succeeds", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+    let release!: () => void; const hold = new Promise<void>(r => { release = r; }); let calls = 0; let code: string | null = "SCRATCH_NOT_REMOVED"; const torn: string[] = [];
+    const provider = hostSpawn({async spawnAsync(_c: string, _a: string[], o: any) { calls++; await hold; if (o.shouldAbort?.()) throw Object.assign(new Error("SANDBOX_REFUSED: ABORTED"), {sandboxScratch: "/tmp/uasco-sbx-P30001", cleanupCode: "SCRATCH_NOT_REMOVED", sandboxBinding: {providerId: "wsl-unshare-v1", distro: "Ubuntu"}}); throw new Error("not aborted"); },
+      async teardownScratch(sc: string) { torn.push(sc); return code; }});
+    const m = manager(dataDir, new ExecutionGate(provider)); const f = path.join(dataDir, "projects", p.projectId, "devrun", "state.json");
+    try {
+      const started = m.start(p).catch((e: any) => e); expect(await waitFor(() => calls === 1)).toBe(true);
+      const stopped = m.stop(p.projectId, "USER").catch((e: any) => e); await sleep(50); release();
+      expect(await started).toMatchObject({code: "DEVRUN_STOP_INCOMPLETE", reason: "SCRATCH_NOT_REMOVED"}); await stopped;
+      expect(readRec(f)).toMatchObject({status: "BLOCKED", stopIncomplete: "SCRATCH_NOT_REMOVED", sandboxScratch: "/tmp/uasco-sbx-P30001", sandboxBinding: {providerId: "wsl-unshare-v1", distro: "Ubuntu"}});
+      await expect(m.start(p)).rejects.toMatchObject({code: "DEVRUN_STOP_INCOMPLETE", status: 409}); expect(torn).toEqual(["/tmp/uasco-sbx-P30001"]);
+    } finally { release(); code = null; await m.close().catch(() => undefined); }
+  }, 60_000);
+
+  it("S5: recover() orphan pid lookups run in PARALLEL and are bounded; a lookup TIMEOUT (not a mismatch) leaves the ACTIVE record untouched and the orphan alive so the next start-up retries it", async () => {
+    const {app, dataDir} = mk(); const ps = []; for (let i = 0; i < 5; i++) ps.push(await createProject(app, {template: "web-node"}));
+    const m0 = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any)); const rows: {pid: number; t: string | null; f: string}[] = [];
+    for (const p of ps) { const pid = idle(); const t = await processStartTime(pid); rows.push({pid, t, f: seedRec(dataDir, p, deadRec(m0, p, {status: "RUNNING", pid, pidStartTime: t, startedAt: new Date().toISOString()}))}); }
+    const hang = new Set(rows.map(r => r.pid)); let answer = false;
+    const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {ownerCheckMs: 300, startTimeOf: (pid: number) => hang.has(pid) && !answer ? new Promise<string | null>(() => undefined) : processStartTime(pid)});
+    const t0 = Date.now(); const out = await m.recover(); const took = Date.now() - t0;
+    expect(out).toEqual([]); expect(took, `5 hanging pid lookups took ${took} ms: parallel (~300) not sequential (~1500)`).toBeLessThan(1200);
+    for (const r of rows) { expect(readRec(r.f).status).toBe("RUNNING"); expect(pidAlive(r.pid)).toBe(true); }
+    answer = true; const again = await m.recover(); expect(again.map(x => x.result)).toEqual(Array(5).fill("ORPHAN_KILLED"));
+    for (const r of rows) expect(pidAlive(r.pid)).toBe(false);
+  }, 60_000);
+
+  it("S4: the own start-time read is bounded where the record is built (ownerCheckMs): a never-answering PowerShell read does not hold recover(); the record carries ownerStartTime null (fail-closed for readers)", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+    const m0 = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any)); const f = seedRec(dataDir, p, deadRec(m0, p, {status: "RUNNING", pid: null, startedAt: new Date().toISOString()}));
+    const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {ownerCheckMs: 300, startTimeOf: () => new Promise<string | null>(() => undefined)});
+    const t0 = Date.now(); const out = await m.recover(); expect(Date.now() - t0).toBeLessThan(2500); expect(out).toHaveLength(1); expect(readRec(f).ownerStartTime).toBeNull();
+  }, 30_000);
+
+  it("lifecycle: a concurrent start for the same project is refused DEVRUN_ALREADY_RUNNING before ANY provider call (one teardown, no duplicate), and the RESOLVED write is compare-and-set (a record changed meanwhile is not overwritten)", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+    let torn = 0; const provider = hostSpawn({async teardownScratch() { torn++; await sleep(300); return null; }});
+    const m0 = manager(dataDir, new ExecutionGate(provider)); const f = seedRec(dataDir, p, deadRec(m0, p, {status: "STOPPED", reason: "STOP_REQUESTED", sandboxScratch: SCR, endedAt: new Date().toISOString()}));
+    const m = manager(dataDir, new ExecutionGate(provider));
+    try {
+      const [a, b] = await Promise.allSettled([m.start(p), m.start(p)]);
+      expect([a.status, b.status].sort()).toEqual(["fulfilled", "rejected"]); expect((a.status === "rejected" ? a : (b as PromiseRejectedResult)).reason).toMatchObject({code: "DEVRUN_ALREADY_RUNNING"}); expect(torn).toBe(1);
+      const prev = readRec(f); fs.writeFileSync(f, JSON.stringify({...prev, startedAt: "2020-01-01T00:00:00.000Z", status: "STOPPED", status2: "winner"}));
+      expect((m as any).casWrite(prev, {...prev, reason: "STALE"}), "stale copy loses").toBe(false); expect(readRec(f).reason).not.toBe("STALE");
+    } finally { await m.close().catch(() => undefined); }
+  }, 60_000);
+
+  it("F4: a stop that times out waiting for spawnAsync persists stopTimedOut and audits DEVRUN_STOP_TIMEOUT", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"}); const events: string[] = [];
+    const h = heldSpawnAsync({honourAbort: true}); const m = manager(dataDir, new ExecutionGate(h.provider), {stopWaitMs: 300, audit: (e: string) => events.push(e)});
+    try {
+      const started = m.start(p).catch(() => undefined); expect(await waitFor(() => h.st.calls === 1)).toBe(true);
+      await expect(m.stop(p.projectId)).rejects.toMatchObject({code: "DEVRUN_STOP_TIMEOUT"});
+      expect(events).toContain("DEVRUN_STOP_TIMEOUT"); expect(readRec(path.join(dataDir, "projects", p.projectId, "devrun", "state.json")).stopTimedOut).toBe(true);
+      h.release(); await started;
+    } finally { h.release(); await m.close().catch(() => undefined); }
+  }, 60_000);
+
+  it("E: close() bounds the wait for a background teardown by stopWaitMs (a hung provider cannot hold shutdown for recoverTeardownMs); I: a provider whose teardown THROWS is contained (TEARDOWN_ERROR recorded, no unhandled rejection)", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"}); const p2 = await createProject(app, {template: "web-node"});
+    const hang = hostSpawn({teardownScratch: () => new Promise<string | null>(() => undefined)}); const boom = hostSpawn({teardownScratch: () => { throw new Error("boom"); }});
+    const m0 = manager(dataDir, new ExecutionGate(hang)); const rec = { status: "STOPPED", reason: "STOP_REQUESTED", sandboxScratch: SCR, endedAt: new Date().toISOString() };
+    seedRec(dataDir, p, deadRec(m0, p, rec)); const m = manager(dataDir, new ExecutionGate(hang), {recoverTeardownMs: 60_000, stopWaitMs: 400});
+    await m.recover(); const t0 = Date.now(); await m.close(); expect(Date.now() - t0, "close() must not wait for recoverTeardownMs").toBeLessThan(4000);
+    const f2 = seedRec(dataDir, p2, deadRec(m0, p2, rec)); const unhandled: unknown[] = []; const onU = (e: unknown) => unhandled.push(e); process.on("unhandledRejection", onU);
+    try { const mb = manager(dataDir, new ExecutionGate(boom)); await mb.recover(); await mb.settleRecovery(); await sleep(50); expect(readRec(f2)).toMatchObject({stopIncomplete: "TEARDOWN_ERROR"}); expect(unhandled).toEqual([]); } finally { process.off("unhandledRejection", onU); }
+  }, 60_000);
 
   it("D2: a refusal on top of an incomplete teardown keeps stopIncomplete + sandboxScratch (the next start retries the teardown or is refused 409); a post-spawn bridge failure with an incomplete teardown surfaces DEVRUN_STOP_INCOMPLETE", async () => {
     const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
