@@ -2122,6 +2122,15 @@
         "postMerge": "VERIFIED: parent1 3172c06, parent2 = reviewed head 5442efa, merge-tree == merge tree",
         "review": "coordinator R0 test-robustness (rmSync maxRetries/retryDelay on Windows-only pkg-r4 cleanup); no assertion or timeout change",
         "riskTier": "ROUTINE (test cleanup)"
+      },
+      {
+        "pr": 250,
+        "merge": "732eaf3",
+        "by": "coordinator SHA-bound merge (expectedHeadSha 25a3079; PR clean, auto-merge not applicable)",
+        "at": "2026-10-26T16:29:00Z",
+        "postMerge": "VERIFIED: parent1 b371ebd, parent2 = reviewed head 25a3079, merge-tree == merge tree",
+        "review": "wf_508a9b18 NO_BLOCKERS (2 lenses, 10/10 mutants; merge-compatible with #242 at 8c5e768: 325/325 on the merged tree)",
+        "riskTier": "ROUTINE (routes/analysis.ts + b1 test + doc; not trust-root protected)"
       }
     ],
     "wslProvider": {
