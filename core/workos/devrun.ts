@@ -51,6 +51,8 @@ export interface DevRunOptions {
   executionGate?: ExecutionGate;
   // B-RUN-1: köprü ayarları (test enjeksiyonu: nsenter yolu/null, bağlantı sınırı).
   bridgeOptions?: NsenterOptions;
+  // C-9: yönetici genelinde eşzamanlı etkin dev-run üst sınırı (varsayılan 2); aşılırsa 409 DEVRUN_CAPACITY.
+  maxConcurrent?: number;
 }
 const NO_PREVIEW_TYPES = new Set(["desktop", "mobile", "native"]);
 const ACTIVE: ReadonlySet<DevRunStatus> = new Set(["STARTING", "RUNNING"]);
@@ -322,7 +324,10 @@ export class DevRunManager {
     try { repo = this.o.studio.managedRepoRoot(project); }
     catch (e) { if (e instanceof StudioError && e.code === "REPOSITORY_NOT_CONFIGURED") return this.block(project, "REPOSITORY_NOT_CONFIGURED"); throw e; }
     // Yer tutucu: aynı süreçteki eşzamanlı ikinci start await'ten önce reddedilir.
+    if ([...this.active.values()].filter(x => ACTIVE.has(x.state.status)).length >= (this.o.maxConcurrent ?? 2)) throw new StudioError("DEVRUN_CAPACITY", 409);
     const st: DevRunState = {...this.blank(project), status: "STARTING", startedAt: new Date().toISOString(), argv: [...argv]};
+    // C-8: teslim bağlantısı STARTING yer tutucusundan itibaren kayıtlıdır (ürün durdurma STARTING sırasında da çalışır).
+    if (link) st.deliveryRunId = link.runId;
     const a: Active = {state: st, child: null, stopping: false, stdout: new Ring(this.o.logRingBytes), stderr: new Ring(this.o.logRingBytes), release: null, probeTimer: null, flushTimer: null, exited: Promise.resolve(), projectType: project.projectType, known: new Map(), snapTimer: null, bridge: null};
     this.active.set(id, a);
     // PS1A-C1-F2: her await'ten sonra (özellikle spawn'dan hemen önce) stop/stopAll/GLOBAL_STOP ve harita sahipliği yeniden kontrol edilir.

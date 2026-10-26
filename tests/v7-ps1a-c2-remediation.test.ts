@@ -358,6 +358,23 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
     expect(spawned).toEqual([]);
   }, T);
 
+  it("C-8: the delivery link is on the STARTING placeholder (product stop works during STARTING); C-9: the manager-wide cap refuses the next start with 409 DEVRUN_CAPACITY", async () => {
+    const {app, dataDir} = mk(); const p1 = await createProject(app, {template: "web-node"}), p2 = await createProject(app, {template: "web-node"});
+    let release: (n: number) => void = () => undefined, reached = false;
+    const gateP = new Promise<number>(r => { release = r; });
+    const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {maxConcurrent: 1, startTimeOf: async () => { reached = true; await new Promise(r => setTimeout(r, 400)); return null; }, freePort: async () => gateP});
+    const link = {runId: "run_" + "c".repeat(24), headSha: git(path.join(dataDir, "projects", p1.projectId, "repo"), ["rev-parse", "HEAD"]).trim()};
+    const first = m.start(p1, link);
+    try {
+      for (let i = 0; i < 100 && !reached; i++) await new Promise(r => setTimeout(r, 50));
+      expect(m.view(p1)).toMatchObject({status: "STARTING", deliveryRunId: link.runId});
+      await expect(m.start(p2)).rejects.toMatchObject({code: "DEVRUN_CAPACITY", status: 409});
+      release(await (await import("../core/workos/devrun.js")).freeLoopbackPort()); await first;
+      await expect(m.start(p2)).rejects.toMatchObject({code: "DEVRUN_CAPACITY"});
+      await m.stop(p1.projectId); expect((await m.start(p2)).status).toMatch(/RUNNING|STARTING/);
+    } finally { release(1); await first.catch(() => undefined); await m.stopAll("CLEANUP"); }
+  }, T);
+
   it("with a provider bridge the product starts, the host reaches it ONLY on 127.0.0.1:<port> through the bridge, the run is tied to the delivery (runId + exact head), a wrong head is refused, and stop closes the bridge", async () => {
     const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
     const head = git(path.join(dataDir, "projects", p.projectId, "repo"), ["rev-parse", "HEAD"]).trim();
