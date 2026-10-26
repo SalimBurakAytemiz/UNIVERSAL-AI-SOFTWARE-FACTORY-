@@ -61,13 +61,23 @@
       "ref": "wsrjuzc46-skeptic",
       "policy": "TEP-1",
       "at": "2026-10-26T14:10:14.586Z"
+    },
+    {
+      "pr": 245,
+      "sha": "d1dcd40c791dcc9806abb23ee5b9c61536197581",
+      "kind": "full",
+      "base": null,
+      "verdict": "NO_BLOCKERS",
+      "ref": "w2hvfisua",
+      "policy": "TEP-1",
+      "at": "2026-10-26T14:18:47.763Z"
     }
   ],
   "tests": [],
   "fingerprint": {
-    "value": "b0af6cf45cebcd4046ece2611a545efe51d498f95893a540635f6459eb91184f",
-    "at": "2026-10-26T14:06:04.167Z",
-    "base": "b59304189a8afb4fbaf550ac2c11fbc49554b5da",
-    "prs": 9
+    "value": "986dad14c942749a87f02b500f5dba2d54bfaa78c37775505c4e38f043a20d2a",
+    "at": "2026-10-26T14:43:28.890Z",
+    "base": "bf722b71fbf5177e4d4bd7071f819f085d4dd24b",
+    "prs": 7
   }
 }
