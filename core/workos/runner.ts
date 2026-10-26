@@ -287,10 +287,10 @@ export class MissionRunner {
   // Workspace/klon DEĞİŞTİREN git (clone/checkout/reset/clean): çocuk sahiplik kaydına yazılır, devirde implementer gibi durdurulur; kayıt yazılamazsa çocuk öldürülür (status null).
   // //TR: Git çocuğuna lease işareti verilir (TK-1) ve Windows'ta PowerShell kimlik çağrısı yapılmaz (identify=false; TK-8): kısa ömürlüdür, devirde hâlâ canlıysa fail-closed.
   // //TR: #224 tur 3 (HB-R3-1): çocuk doğunca sahiplik kaydı yazılamazsa (geçici disk/rename hatası) çocuk öldürülür ve sonuç `status: null`'dur; çağıranlar bunu KALICI "klon/sıfırlama başarısız" bloğu sayardı. Burada ayrılır: kayıt hatası OwnerRecordError (executeStep RETRY yapar, bütçe dahilinde); gerçek fence (başka lease kaydı devraldı) WORKOS_LEASE_FENCED olarak aynen fırlar.
-  // //TR: #224 tur 3 (HB-R3-2): adımın abort sinyali (Global Stop, stop(), kaybedilen lease) git çocuğuna da bağlanır; abort edilen çocuk öldürülür ve StepAbortedError executeStep'te CANCEL olur.
+  // //TR: #224 tur 3 (HB-R3-2): adımın abort sinyali (Global Stop, stop(), kaybedilen lease) UZUN git klonlarına bağlanır; abort edilen çocuk öldürülür (klon dizini adım yeniden girişinde silinir) ve StepAbortedError executeStep'te CANCEL olur.
   private async gitW(run: WorkRun, leaseId: string, cwd: string, args: string[]): Promise<GitRun> {
     let recordError: unknown = null;
-    const abort = this.owned.get(run.runId)?.abort ?? undefined;
+    const abort = args[0] === "clone" ? this.owned.get(run.runId)?.abort ?? undefined : undefined; // //TR: yalnız UZUN klonlar abort edilir; kısa checkout/reset/clean SIGKILL ile yarıda kesilirse .git/index.lock kalır ve sonraki devir WORKSPACE_RESET_FAILED ile terminal olurdu
     const r = await this.withChild(run, leaseId, onSpawn => this.git(cwd, args, onSpawn, writerEnvFor(run.runId, leaseId), abort), false, e => { recordError = e; });
     if (r.aborted) throw new StepAbortedError();
     if (recordError === null) return r;
@@ -822,6 +822,8 @@ export class MissionRunner {
     if (!start || !SHA.test(start) || !fs.existsSync(path.join(work, ".git"))) return {kind: "BLOCK", reason: "WORKSPACE_MISSING", status: "FAILED"};
     // //TR: PAR-04: sıfırlama workspace'i değiştirir; kayıt bu lease'e ait değilse (başka engine devraldı) hiçbir şey değiştirilmez. Beklenen HEAD yoktur: sıfırlamanın amacı HEAD'i start'a getirmektir.
     this.guardWorkspace(run, leaseId);
+    // //TR: SWEEP-5 (iç inceleme): bir YENİDEN DENEMEDE önceki denemenin SIGKILL'e rağmen ölmeyen artığı sıfırlama sırasında hâlâ yazıyor olabilir: sıfırlamadan ÖNCE yeniden taranır; hâlâ yaşıyorsa yine RETRY (bütçe dahilinde).
+    if (run.retryCount > 0 && !(await this.sweepOwnWriters(run, leaseId))) return {kind: "RETRY", reason: "WORKSPACE_WRITER_ALIVE"};
     for (const args of [["checkout", "-q", "-B", branch, start], ["reset", "-q", "--hard", start], ["clean", "-qfdx"]]) {
       if ((await this.gitWOk(run, leaseId, work, args)) === null) return {kind: "BLOCK", reason: "WORKSPACE_RESET_FAILED", status: "FAILED"};
     }

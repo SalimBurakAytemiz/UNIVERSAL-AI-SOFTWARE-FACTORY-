@@ -457,6 +457,7 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
   // //TR: #224 tur 3 (SWEEP-2): cwd kuralı yalnız run'ın work/ ve klon dizinlerine bakar, logs/ ve run kökü dışarıda kalır; denetim terminali olan süreç (Kurucu'nun kabuğu/editörü) hiç hedef değildir. Sahte kabuk: pty.fork ile kendi denetim terminalini alan `sleep`.
   const mkDecoy = (cwd: string) => { const d = cp.spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {cwd, stdio: "ignore", detached: true}); leaked.push(d.pid!); return d; };
   const ttyDecoy = async (cwd: string): Promise<number> => {
+    expect(cp.spawnSync("python3", ["-I", "-c", "import pty"]).status, "this test needs python3 with the pty module to give a decoy process a controlling terminal").toBe(0);
     const py = cp.spawn("python3", ["-I", "-c", "import os,pty,sys\npid,fd=pty.fork()\nif pid==0:\n    os.chdir(sys.argv[1]); os.execvp('sleep',['sleep','120'])\nprint(pid,flush=True); os.waitpid(pid,0)", cwd], {stdio: ["ignore", "pipe", "ignore"], detached: true});
     leaked.push(py.pid!);
     const pid = await new Promise<number>((res, rej) => { py.stdout!.once("data", b => res(Number(String(b).trim()))); py.once("error", rej); py.once("exit", () => rej(new Error("pty decoy exited"))); });
@@ -686,18 +687,36 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
   });
 
   // //TR: #224 tur 3 (SWEEP-5): geçici durdurma/tarama hatası terminal değildir. Hata modeli: sweepWriters'ın "survivors" döndürdüğü (öldürülen süreç henüz gitmedi) tarama; gerçek süreç SIGKILL'den kaçamaz, bu yüzden sonuç taklit edilir.
-  it.skipIf(process.platform !== "linux")("SWEEP-5 (#224 round 3): survivors of the sweep after the IMPLEMENTER are a RETRY (bounded by maxRetries), not a terminal FAILED; the retry runs the step again and finishes", { timeout: 120_000 }, async () => {
+  it.skipIf(process.platform !== "linux")("SWEEP-5 (#224 round 3): survivors of the sweep after the IMPLEMENTER are a RETRY: observed as RETRY_SCHEDULED, re-driven to completion when the backoff allows, and ending in FAILED ..._RETRY_EXHAUSTED (bounded by maxRetries) when the survivor never goes away", { timeout: 180_000 }, async () => {
     const G = (await wg())!;
-    const c = setup(); const r = c.mkRun("A");
-    let calls = 0;
-    const spy = vi.spyOn(G, "sweepWriters").mockImplementation((async (o: {includeCurrent?: boolean}) => { if (o.includeCurrent === true && ++calls === 1) return {killed: [], survivors: [4242]}; return {killed: [], survivors: []}; }) as typeof G.sweepWriters);
-    try {
-      await c.runner({executors: c.base, retryBackoffMs: [600_000]}).tick();
-      const mid = c.store.engineGetRun(r.runId)!;
-      expect([mid.status, mid.reason], "a surviving writer must be retried, not fail the run").toEqual(["RETRY_SCHEDULED", "WORKSPACE_WRITER_ALIVE"]);
-      expect(calls).toBe(1);
-      await c.runner({executors: c.base, retryBackoffMs: [0, 0]}).tick(); // yeniden deneme zamanı geldi (yeni runner: devralma yok, lease canlı)
-    } finally { spy.mockRestore(); }
+    const survivors = (until: number) => { let calls = 0; const spy = vi.spyOn(G, "sweepWriters").mockImplementation((async (o: {includeCurrent?: boolean}) => ({killed: [], survivors: o.includeCurrent === true && ++calls <= until ? [4242] : []})) as typeof G.sweepWriters); return {spy, calls: () => calls}; };
+    { // (1) the state right after the survivor: RETRY_SCHEDULED, not FAILED
+      const c = setup(); const r = c.mkRun("A"), s1 = survivors(1);
+      try {
+        await c.runner({executors: c.base, retryBackoffMs: [600_000]}).tick();
+        const mid = c.store.engineGetRun(r.runId)!;
+        expect([mid.status, mid.reason, mid.retryCount], "a surviving writer must be retried, not fail the run").toEqual(["RETRY_SCHEDULED", "WORKSPACE_WRITER_ALIVE", 1]);
+        expect(s1.calls()).toBe(1);
+      } finally { s1.spy.mockRestore(); }
+    }
+    { // (2) the retry is driven: with no backoff the same tick runs the step again (sweep called twice) and finishes
+      const c = setup("s2"); const r = c.mkRun("A"), s2 = survivors(1);
+      try {
+        await c.runner({executors: c.base, retryBackoffMs: [0, 0]}).tick();
+        expect(s2.calls(), "post-implementer sweep (survivor), pre-reset sweep of the retry, post-implementer sweep of the retry").toBe(3);
+        const run = c.store.engineGetRun(r.runId)!;
+        expect([run.status, run.retryCount], JSON.stringify(run.evidence.map(e => e.note))).toEqual(["AWAITING_APPROVAL", 0]);
+      } finally { s2.spy.mockRestore(); }
+    }
+    { // (3) a survivor that never goes away: terminal only when the retry budget (maxRetries 2) is spent
+      const c = setup("s3"); const r = c.mkRun("A"), s3 = survivors(1000);
+      try {
+        await c.runner({executors: c.base, retryBackoffMs: [0, 0]}).tick();
+        const run = c.store.engineGetRun(r.runId)!;
+        expect([run.status, run.reason], JSON.stringify(run.evidence.map(e => e.note))).toEqual(["FAILED", "WORKSPACE_WRITER_ALIVE_RETRY_EXHAUSTED"]);
+        expect(s3.calls(), "the first try's post sweep, then the pre-reset sweep of each of the maxRetries (2) retries").toBe(3);
+      } finally { s3.spy.mockRestore(); }
+    }
   });
 
   it.skipIf(process.platform !== "linux")("SWEEP-5 (#224 round 3): a TRANSIENT stop failure at takeover (the sweep still finds a survivor) leaves the run RECOVERING for the next takeover, which succeeds; with a persistent failure the recovery budget ends it (RECOVERY_BUDGET_EXHAUSTED), never earlier", { timeout: 180_000 }, async () => {
@@ -715,12 +734,12 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
     const c = setup(), r = await arrange(c);
     let spy = survivor();
     try {
-      await c.runner({leaseTtlMs: 300, executors: c.base}).tick(); // devir: tarama temiz değil
+      await c.runner({leaseTtlMs: 1000, executors: c.base}).tick(); // devir: tarama temiz değil
       let run = c.store.engineGetRun(r.runId)!;
       expect(run.status, `${run.status}/${run.reason}`).toBe("RECOVERING"); // terminal DEĞİL
       expect(run.evidence.find(e => e.kind === "RECOVERY")?.note ?? "").toMatch(/retrying at the next takeover/);
       spy.mockRestore(); // hata geçti
-      await sleep(450); // RECOVERING lease'i doldu
+      await sleep(1200); // RECOVERING lease'i doldu
       await c.runner({executors: c.base}).tick(); // ikinci devir: yazar yok, run sürer
       run = c.store.engineGetRun(r.runId)!;
       expect(run.status, JSON.stringify(run.evidence.map(e => e.note))).toBe("AWAITING_APPROVAL");
@@ -729,10 +748,10 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
     const c2 = setup("s2"), r2 = await arrange(c2);
     spy = survivor();
     try {
-      for (let i = 0; i < 6 && !["RECOVERY_FAILED", "AWAITING_APPROVAL"].includes(c2.store.engineGetRun(r2.runId)!.status); i++) { await c2.runner({leaseTtlMs: 300, executors: c2.base}).tick(); await sleep(450); }
+      for (let i = 0; i < 6 && !["RECOVERY_FAILED", "AWAITING_APPROVAL"].includes(c2.store.engineGetRun(r2.runId)!.status); i++) { await c2.runner({leaseTtlMs: 1000, executors: c2.base}).tick(); await sleep(1200); }
       const run = c2.store.engineGetRun(r2.runId)!;
       expect([run.status, run.reason], JSON.stringify(run.evidence.map(e => e.note))).toEqual(["RECOVERY_FAILED", "RECOVERY_BUDGET_EXHAUSTED"]);
-      expect(run.evidence.filter(e => e.kind === "RECOVERY").length, "one RECOVERY record per takeover, bounded by the budget").toBeLessThanOrEqual(4);
+      expect(run.evidence.filter(e => e.kind === "RECOVERY").map(e => e.exitCode), "one RECOVERY record per takeover: two transient retries (maxRecoveries 2), then the exhausted one").toEqual([1, 1, 1]);
     } finally { spy.mockRestore(); }
   });
 
@@ -823,8 +842,8 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
 
   it("SWEEP-4 (#224 round 3): the wait after the kill ends on GONE or on a CHANGED start token (the pid was reused by another process), and fails only when the same process is still alive at the deadline", async () => {
     const G = await wg();
-    const nap = async () => undefined;
-    const run = (states: string[], tokens: Array<string | null>, startedToken: string | null, waitMs = 60_000) => { let i = 0, j = 0; return G!.waitWriterGone(4242, startedToken, waitMs, {state: () => (states[Math.min(i++, states.length - 1)] ?? "GONE") as never, token: async () => tokens[Math.min(j++, tokens.length - 1)] ?? null, sleep: nap}); };
+    const nap = () => new Promise<void>(r => setTimeout(r, 1)); // a real macrotask turn: a regression fails after the (short) deadline, it never spins the worker
+    const run = (states: string[], tokens: Array<string | null>, startedToken: string | null, waitMs = 2_000) => { let i = 0, j = 0; return G!.waitWriterGone(4242, startedToken, waitMs, {state: () => (states[Math.min(i++, states.length - 1)] ?? "GONE") as never, token: async () => tokens[Math.min(j++, tokens.length - 1)] ?? null, sleep: nap}); };
     expect(await run(["ALIVE", "ALIVE", "GONE"], ["t1", "t1"], "t1")).toBe("GONE");
     expect(await run(["ALIVE", "ALIVE", "ALIVE"], ["t1", "t2"], "t1"), "the pid now belongs to another process").toBe("REUSED");
     expect(await run(["ALIVE"], [null], "t1", 30), "an unreadable token never ends the wait early").toBe("ALIVE");

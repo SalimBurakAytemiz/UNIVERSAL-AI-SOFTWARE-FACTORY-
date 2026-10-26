@@ -1,5 +1,5 @@
 {
- "//TR": "C-PAR-1 inceleme turu 1-3 (#224) mutasyon listesi: her mutant tam metin değişikliğidir (dosyada tam 1 kez bulunmalı; edits varsa hepsi). docs/lanes/LANE-C-par-review-mutants.mjs her birini uygular ve mutanta özgü testleri (testFile + -t filter) çalıştırır; taban çizgisi iki dosyanın tümüdür. Tur 3'te kod değişince EP1/LL1/SW3/R10a/R10b/R12 kalıpları onarıldı; B1-B6, H1-H3, S3a-b, W4a-d, F1-F5, X6a-b, A1-A4, C1-C2, T1, D1 eklendi. Windows'a özgü bağlantı (creationTicks/probe) Linux'ta çalıştırılamaz: saf karar fonksiyonları (accessDeniedVerdict, reusedPid, startedAfterRecord, waitWriterGone) mutantlıdır, `process.platform === \"win32\" ? probe : undefined` bağlantısı değil (Linux'ta eşdeğer).",
+ "//TR": "C-PAR-1 inceleme turu 1-3 (#224) mutasyon listesi: her mutant tam metin değişikliğidir (dosyada tam 1 kez bulunmalı; edits varsa hepsi). docs/lanes/LANE-C-par-review-mutants.mjs her birini uygular ve mutanta özgü testleri (testFile + -t filter) çalıştırır; taban çizgisi iki dosyanın tümüdür. Tur 3'te kod değişince EP1/LL1/SW3/R10a/R10b/R12 kalıpları onarıldı; B1-B6, H1-H3, S3a-b, W4a-d, F1-F5, X6a-b, A1-A4, C1-C2, T1, D1 eklendi. Windows'a özgü bağlantı (creationTicks/probe) Linux'ta çalıştırılamaz: saf karar fonksiyonları (accessDeniedVerdict, reusedPid, startedAfterRecord, waitWriterGone) mutantlıdır, `process.platform === \"win32\" ? probe : undefined` bağlantısı değil (Linux'ta eşdeğer). Tur 3 sonu: G1 (git çocuğu detached değil), K1-K2, F6 (yeniden denemede ön tarama), A5 eklendi (toplam 81).",
  "mutants": [
   {
    "id": "GS1",
@@ -582,8 +582,8 @@
    "file": "core/workos/runner.ts",
    "testFile": "tests/v7-relfx-1-completion.test.ts",
    "filter": "SWEEP-5",
-   "old": "return {kind: \"RETRY\", reason: \"WORKSPACE_WRITER_ALIVE\"};",
-   "new": "return {kind: \"BLOCK\", reason: \"WORKSPACE_WRITER_ALIVE\", status: \"FAILED\"};"
+   "old": "if (!(await this.sweepOwnWriters(run, leaseId))) return {kind: \"RETRY\", reason: \"WORKSPACE_WRITER_ALIVE\"};",
+   "new": "if (!(await this.sweepOwnWriters(run, leaseId))) return {kind: \"BLOCK\", reason: \"WORKSPACE_WRITER_ALIVE\", status: \"FAILED\"};"
   },
   {
    "id": "F4",
@@ -700,6 +700,51 @@
    "filter": "HB-2 \\(async rm",
    "old": "await fs.promises.rm(target, {recursive: true, force: true});",
    "new": "fs.rmSync(target, {recursive: true, force: true});"
+  },
+  {
+   "id": "G1",
+   "description": "PAR-04: the recorded git child is not detached (the pgid is not a real group: the execFile-era defect)",
+   "file": "core/workos/git-async.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "PAR-04 \\(#224 round 3\\)|HB-R3-2",
+   "old": "...(group ? {detached: true} : {})}",
+   "new": "}"
+  },
+  {
+   "id": "K1",
+   "description": "HB-R3-2: the abort does not kill the recorded group",
+   "file": "core/workos/git-async.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "HB-R3-2",
+   "old": "else if (group && child.pid) process.kill(-child.pid, \"SIGKILL\");",
+   "new": "else if (group && child.pid) { /* no kill */ }"
+  },
+  {
+   "id": "K2",
+   "description": "HB-R3-2: the abort poll is not cleared when the git child settles",
+   "file": "core/workos/git-async.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "HB-R3-2",
+   "old": "      if (poll) clearInterval(poll);\n",
+   "new": ""
+  },
+  {
+   "id": "F6",
+   "description": "SWEEP-5: a retry of IMPLEMENT does not sweep the previous attempt's survivor before the reset",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "SWEEP-5",
+   "old": "    if (run.retryCount > 0 && !(await this.sweepOwnWriters(run, leaseId))) return {kind: \"RETRY\", reason: \"WORKSPACE_WRITER_ALIVE\"};\n",
+   "new": ""
+  },
+  {
+   "id": "A5",
+   "description": "HB-R3-2: the abort signal reaches SHORT mutating git children too (checkout/reset/clean)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "HB-R3-2",
+   "old": "const abort = args[0] === \"clone\" ? this.owned.get(run.runId)?.abort ?? undefined : undefined;",
+   "new": "const abort = this.owned.get(run.runId)?.abort ?? undefined;"
   }
  ]
 }

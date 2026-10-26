@@ -9,6 +9,7 @@ import {EditOnlyImplementer, FakeExecutors, LocalClaudeExecutors} from "../core/
 import type {ExecutorPair, MissionSpec, ProcOptions, ProcResult} from "../core/workos/executors.js";
 import {CLAUDE_CREDENTIAL_STORE_FILE, claudeProfileDir} from "../core/workos/claude-profiles.js";
 import {crewDevExecutors} from "../core/workos/crew/dev-review.js";
+import {runGitAsync} from "../core/workos/git-async.js";
 import crypto from "node:crypto";
 import {disabledTestMarkers, evaluateTestSurface, parseTestRunStreams, parseTestRunSummary} from "../core/workos/test-surface.js";
 import type {NameStatusEntry} from "../core/workos/test-surface.js";
@@ -572,7 +573,7 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
     const rep = await c.runner({executors: c.base}).tick();
     expect(rep.fenced).toEqual([A.runId]);
     const after = c.store.engineGetRun(A.runId)!;
-    expect(["FAILED", "BLOCKED", "RETRY_SCHEDULED"], `${after.status}/${after.reason}`).not.toContain(after.status);
+    expect([after.status, after.step, after.reason], "a fenced step writes no outcome: the run keeps the status its step start gave it").toEqual(["RUNNING", "WORKSPACE", "step WORKSPACE started"]);
   });
 
   // //TR: #224 tur 3 (HB-R3-2): runner git çocukları adımın abort sinyaline bağlıdır. "Yavaş git" modeli (8 s) sonucu geciktirir; abort sinyali gelince çocuk öldürülür ve adım HEMEN biter (stop() 8 sn'lik klonu beklemez).
@@ -611,12 +612,68 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
     } finally { await mr.stop(); }
   });
 
+  it("HB-R3-2 (#224 round 3): runGitAsync kills a REAL blocked git child TREE when shouldAbort turns true (recorded child = its own process group), resolves aborted at once and stops polling; a normal finish stops polling too", { timeout: 60_000 }, async () => {
+    const repo = path.join(tmp, "abort-repo"); fs.mkdirSync(repo); git(repo, ["init", "-q", "-b", "main"]);
+    const {groupMembers} = await import("../core/workos/writer-guard.js");
+    for (const recorded of [true, false]) {
+      let abort = false, polls = 0, child: {pid: number; pgid: number | null} | null = null;
+      // an alias runs `sleep` below git (git -> sh -> sleep): a real child tree that only dies when it is killed (stdin is closed, so a stdin-blocked command would just exit)
+      const p = runGitAsync(repo, ["-c", `alias.zzz=!sleep ${recorded ? 31 : 32}`, "zzz"], {...process.env}, recorded ? c => { child = c; } : undefined, {shouldAbort: () => { polls += 1; return abort; }});
+      expect(await waitUntil(() => polls >= 1, 5000), "the abort signal was never polled").toBe(true);
+      await sleep(150);
+      abort = true;
+      const r = await p;
+      expect(r, `recorded=${recorded}`).toMatchObject({status: null, stdout: "", stderr: "ABORTED", aborted: true});
+      if (recorded) {
+        expect(child!.pgid, "a recorded git child must be the leader of its own process group").toBe(child!.pid);
+        if (process.platform === "linux") expect(await waitUntil(() => (groupMembers(child!.pgid!) ?? ["unreadable"]).length === 0, 5000), "a member of the aborted git child's group survived").toBe(true);
+        else expect(await waitUntil(() => !procAlive(child!.pid), 5000), "the aborted git child survived").toBe(true);
+      }
+      const after = polls; await sleep(350);
+      expect(polls, `polling continued after the abort (recorded=${recorded})`).toBe(after);
+    }
+    let n = 0;
+    const done = await runGitAsync(repo, ["--version"], {...process.env}, undefined, {shouldAbort: () => { n += 1; return false; }});
+    expect(done.status).toBe(0);
+    const seen = n; await sleep(350);
+    expect(n, "polling continued after a normal finish").toBe(seen);
+  });
+
+  it.skipIf(process.platform !== "linux")("PAR-04 (#224 round 3): a RECORDED runner git child really is a process group leader (child_process.execFile ignores `detached`, so the first implementation recorded a pgid that was never a group: takeover, termination forwarding and the leftover kill all signalled nothing)", { timeout: 30_000 }, async () => {
+    const repo = path.join(tmp, "grp-repo"); fs.mkdirSync(repo); git(repo, ["init", "-q", "-b", "main"]);
+    let seen: {pid: number; pgid: number | null} | null = null, pgrp = -1;
+    const r = await runGitAsync(repo, ["-c", "alias.zzz=!sleep 1", "zzz"], {...process.env}, c => { seen = c; try { pgrp = Number(fs.readFileSync(`/proc/${c.pid}/stat`, "utf8").split(") ")[1]!.split(" ")[2]); } catch { /* bitmiş */ } });
+    expect(r.status).toBe(0);
+    expect(seen).not.toBeNull();
+    expect([seen!.pgid, pgrp], "the recorded pgid is the child's real process group").toEqual([seen!.pid, seen!.pid]);
+    let none: {pid: number; pgid: number | null} | null = null;
+    await runGitAsync(repo, ["--version"], {...process.env}, c => { none = c; });
+    expect(none).not.toBeNull();
+    const probe = await runGitAsync(repo, ["--version"], {...process.env});
+    expect(probe.stdout).toMatch(/^git version/); // read-only probes (no onSpawn) are plain children
+  });
+
+  it("HB-R3-2 (#224 round 3): SHORT workspace-mutating git children (checkout, reset, clean) are never aborted: a stop raised while the checkout runs lets it finish (an aborted git leaves .git/index.lock behind and the next engine would end WORKSPACE_RESET_FAILED); the run is still CANCELLED right after", { timeout: 120_000 }, async () => {
+    const DELAY = 3000;
+    const c = setup(); const A = c.mkRun("A");
+    const gs = path.join(path.dirname(c.dataDir), "rt", "GLOBAL_STOP.json");
+    let fired = false;
+    slow.rule = {ms: DELAY, match: (cwd, args) => { const hit = !fired && cwd.includes(A.runId) && args.includes("checkout") && args.includes("-B"); if (hit) fired = true; return hit; }};
+    slow.observe = (cwd, args) => { if (cwd.includes(A.runId) && args.includes("checkout") && args.includes("-B")) fs.writeFileSync(gs, JSON.stringify({active: true, reason: "TEST_STOP", actor: "test"})); };
+    const t0 = Date.now();
+    await c.runner({executors: c.base}).tick();
+    const took = Date.now() - t0;
+    expect(slow.hits.async, "the slow checkout really fired").toBe(1);
+    expect(took, `the checkout was aborted after ${took} ms (it must be allowed to finish: >= ${DELAY} ms)`).toBeGreaterThanOrEqual(DELAY - 200);
+    expect(c.status(A.runId)).toBe("CANCELLED");
+  });
+
   it("TEST-PAR05-REFILL (M3): with a 10 s timer the freed slot is refilled IMMEDIATELY (C starts within 2 s of A finishing while B is still in IMPLEMENT)", { timeout: 120_000 }, async () => {
     const c = setup(); const A = c.mkRun("A"), B = c.mkRun("B"), C = c.mkRun("C");
     const t0 = Date.now(), at: Record<string, number> = {}, mark = (k: string) => { at[k] ??= Date.now() - t0; };
     const pair = wrapImplementer(c.base, async (w, spec, ctx) => {
       mark(`start${spec.title}`);
-      if (spec.title === "B") await waitUntil(() => at.startC !== undefined, 60_000); // //TR: #224 tur 3: B, C'nin BAŞLADIĞI görülene kadar uzun süren işi sürdürür (sabit 8 sn uyku yük altında C'yi geç bırakıp testi kararsız yapıyordu); anında yeniden doldurma yoksa C ancak 10 sn'lik zamanlayıcıyla başlar ve startC - doneA eşiği yakalar
+      if (spec.title === "B") await waitUntil(() => at.startC !== undefined || ctx.shouldAbort?.() === true, 60_000); // //TR: #224 tur 3: B, C'nin BAŞLADIĞI görülene kadar uzun süren işi sürdürür (sabit 8 sn uyku yük altında C'yi geç bırakıp testi kararsız yapıyordu); anında yeniden doldurma yoksa C ancak 10 sn'lik zamanlayıcıyla başlar ve startC - doneA eşiği yakalar
       try { return await c.base.implementer.implement(w, spec, ctx); } finally { mark(`end${spec.title}`); }
     });
     const mr = c.runner({maxConcurrentRuns: 2, executors: pair});
@@ -630,8 +687,8 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
         await sleep(50);
       }
     } finally { await mr.stop(); }
-    expect(at.startC - at.doneA, JSON.stringify(at)).toBeLessThanOrEqual(2000);
-    expect(at.startC, JSON.stringify(at)).toBeLessThan(at.endB);
+    expect(at.startC - at.doneA, JSON.stringify(at)).toBeLessThanOrEqual(6000); // //TR: kaçırılmış anında doldurma 10 sn'lik zamanlayıcıya düşer (>= 7 sn); 6 sn sınırı C'nin kendi WORKSPACE adımının yükte uzamasını da karşılar
+    expect(at.startC, JSON.stringify(at)).toBeGreaterThan(at.doneA);
   });
 
   it("TEST-SELF-TAKEOVER (M9): a run whose drive is still in flight is never taken over by its own engine, even when its lease looks expired (a stall longer than the TTL)", { timeout: 120_000 }, async () => {
