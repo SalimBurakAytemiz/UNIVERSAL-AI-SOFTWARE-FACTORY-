@@ -343,6 +343,8 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
   };
   const afterOrphanWindow = (killedAt: number) => sleep(Math.max(0, killedAt + ORPHAN_MS + 2000 - Date.now())); // yetim (hâlâ yaşıyorsa) uyanıp yazmış olurdu
   const recoveryNote = (dir: string, runId: string) => new WorkOsStore(path.join(dir, "data")).engineGetRun(runId)!.evidence.find(e => e.kind === "RECOVERY")?.note ?? "";
+  // //TR: Başarısız bir onaylamanın NEDENİ okunabilsin diye: çökme ile devir arasındaki süre ORPHAN_MS'e yaklaşırsa yetim çocuk kendiliğinden uyanıp yazmış olabilir (CPU'su aç bir makinede devralan süreç geç başlar); bu durum sahte bir "reap çalışmadı" gibi görünmesin.
+  const snap = (x: {dir: string; runId: string; pgid: number; killedAt: number; work: string}, closedAfterMs: number) => () => { const r = new WorkOsStore(path.join(x.dir, "data")).engineGetRun(x.runId)!; return JSON.stringify({takeoverClosedMsAfterKill: closedAfterMs, orphanWakesAtMs: ORPHAN_MS, status: r.status, reason: r.reason, groupAlive: groupAlive(x.pgid), orphanFile: fs.existsSync(path.join(x.work, "ORPHAN.txt")), note: recoveryNote(x.dir, x.runId)}); };
 
   it("PAR04-GSTOP-NO-REAP: a GLOBAL_STOP that is active at takeover still stops the crashed engine's writer BEFORE the run is cancelled", { timeout: 180_000 }, async () => {
     const x = await crashEngine(path.join(tmp, "stop"));
@@ -350,24 +352,26 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
     fs.writeFileSync(path.join(x.dir, "rt", "GLOBAL_STOP.json"), JSON.stringify({active: true, reason: "TEST_STOP", actor: "test"}));
     const e2 = spawnEngine(x.dir, "2");
     expect(await e2.closed, JSON.stringify(e2.text())).toBe(0);
+    const why = snap(x, Date.now() - x.killedAt);
     await afterOrphanWindow(x.killedAt);
     const run = new WorkOsStore(path.join(x.dir, "data")).engineGetRun(x.runId)!;
-    expect(run.status).toBe("CANCELLED");
-    expect(groupAlive(x.pgid)).toBe(false);
-    expect(fs.existsSync(path.join(x.work, "ORPHAN.txt"))).toBe(false);
-    expect(run.evidence.find(e => e.kind === "CANCEL")?.note ?? "").toMatch(/stopped writer group/);
+    expect(run.status, why()).toBe("CANCELLED");
+    expect(groupAlive(x.pgid), why()).toBe(false);
+    expect(fs.existsSync(path.join(x.work, "ORPHAN.txt")), why()).toBe(false);
+    expect(run.evidence.find(e => e.kind === "CANCEL")?.note ?? "", why()).toMatch(/stopped writer group/);
   });
 
   it("TK-2 / PAR04-EXHAUSTED-NO-REAP: a takeover that exhausts the recovery budget still stops the writer; the reason stays RECOVERY_BUDGET_EXHAUSTED and the note names the stopped group", { timeout: 180_000 }, async () => {
     const x = await crashEngine(path.join(tmp, "exhaust"));
     const e2 = spawnEngine(x.dir, "2", {maxRecoveries: 0});
     expect(await e2.closed, JSON.stringify(e2.text())).toBe(0);
+    const why = snap(x, Date.now() - x.killedAt);
     await afterOrphanWindow(x.killedAt);
     const run = new WorkOsStore(path.join(x.dir, "data")).engineGetRun(x.runId)!;
-    expect([run.status, run.reason]).toEqual(["RECOVERY_FAILED", "RECOVERY_BUDGET_EXHAUSTED"]);
-    expect(groupAlive(x.pgid)).toBe(false);
-    expect(fs.existsSync(path.join(x.work, "ORPHAN.txt"))).toBe(false);
-    expect(recoveryNote(x.dir, x.runId)).toMatch(/stopped writer group/);
+    expect([run.status, run.reason], why()).toEqual(["RECOVERY_FAILED", "RECOVERY_BUDGET_EXHAUSTED"]);
+    expect(groupAlive(x.pgid), why()).toBe(false);
+    expect(fs.existsSync(path.join(x.work, "ORPHAN.txt")), why()).toBe(false);
+    expect(recoveryNote(x.dir, x.runId), why()).toMatch(/stopped writer group/);
   });
 
   it("TEST-PAR04-DEFENCES (M7): a descendant in the writer's process group is stopped too, not only the leader", { timeout: 180_000 }, async () => {
