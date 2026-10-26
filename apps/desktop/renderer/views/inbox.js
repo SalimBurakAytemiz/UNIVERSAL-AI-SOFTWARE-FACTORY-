@@ -1,4 +1,4 @@
-// //TR: Bu görünüm Gelen Kutusu / Onaylar alanıdır (UX WP-INBOX-APPROVAL): Founder kararı bekleyen işler yalnız gerçek, allow-list'li okumalardan türetilir ve hiçbir veri uydurulmaz. Üç gerçek kaynak birleştirilir: (1) teslim/dikkat kararları mission + work-run verisinden (REPORTING + AWAITING_APPROVAL koşusu = teslim kararı; FOUNDER_ATTENTION_REQUIRED), karar yalnız kullanıcı tıklamasıyla ve yüksek riskli/geri alınamaz geçişte açık onay penceresiyle durum geçişi olarak gider (performTransition; kabul = COMPLETE yalnız PRODUCT_VERIFIED koşuda sunulur, ret gerekçeli), hiçbir şey otomatik onaylanmaz ve bu görünüm doğrudan POST yapmaz; (2) onay bekleyen mission listesi GET /v1/cockpit awaitingApproval bloğundan; (3) Founder dikkati kuyruğu GET /v1/founder-attention'dan (salt-okunur, paket/faz/engel türü/gerekçe/zaman/teknik-yeniden-deneme bağlamıyla) okunur. Uyarılar/bildirimler yalnız cockpit alerts bloğundan ve ACİL DURDUR durumundan gelir; sayı yoksa "—" ve ayrık dürüst durum (EMPTY/UNAVAILABLE/OFFLINE/FAILED) gösterilir. Legacy blocker listesi (yeniden deneme eylemiyle) değişmeden korunur. API verisi HTML olarak yorumlanmaz; yalnız h()/textContent kullanılır.
+// //TR: Bu görünüm Gelen Kutusu / Onaylar alanıdır (UX WP-INBOX-APPROVAL): Founder kararı bekleyen işler yalnız gerçek, allow-list'li okumalardan türetilir ve hiçbir veri uydurulmaz. Üç gerçek kaynak birleştirilir: (1) teslim/dikkat kararları mission + work-run verisinden (REPORTING + AWAITING_APPROVAL koşusu = teslim kararı; FOUNDER_ATTENTION_REQUIRED), karar yalnız kullanıcı tıklamasıyla ve yüksek riskli/geri alınamaz geçişte açık onay penceresiyle durum geçişi olarak gider (performTransition; kabul = COMPLETE yalnız PRODUCT_VERIFIED koşuda sunulur, ret gerekçeli), hiçbir şey otomatik onaylanmaz ve bu görünüm doğrudan POST yapmaz; (2) onay bekleyen mission listesi GET /v1/cockpit awaitingApproval bloğundan; (3) Founder dikkati kuyruğu GET /v1/attention'dan (salt-okunur; altı tür ayrı sayaç, önem sırası, her öğenin sonraki eylemi; kesik ya da okunamayan öğe asla boş/VERIFIED sayılmaz) okunur. Uyarılar/bildirimler yalnız cockpit alerts bloğundan ve ACİL DURDUR durumundan gelir; sayı yoksa "—" ve ayrık dürüst durum (EMPTY/UNAVAILABLE/OFFLINE/FAILED) gösterilir. Eski blocker listesi ve yeniden deneme eylemi artık YOKTUR: öğeler yalnız /v1/attention kuyruğunda bir kez gösterilir (yeniden deneme yetkisi hiçbir yerde verilmez). API verisi HTML olarak yorumlanmaz; yalnız h()/textContent kullanılır.
 import {h,panel,statePill,stateNote,emptyNote,chip,badge,statusPill,statusLabel} from "../components.js";
 import {deriveInbox,formatDateTime} from "../work-core.js";
 import {formatCount,MISSING} from "../model.js";
@@ -8,13 +8,15 @@ import {notVerifiedBadge,runNotVerified} from "../m1a.js";
 import {canOfferComplete} from "../delivery-core.js";
 import {completeNotOffered} from "./work.js";
 import {deriveApprovalRequired} from "../approval-core.js";
+import {ATTENTION_KINDS,attentionSummary} from "../attention-core.js";
+import {attentionNotes} from "./attention-notes.js";
 
 // //TR: Metin alanlarını güvenli biçimde sınırlar (API verisi asla sayı/HTML'e dönüştürülmez; boş/geçersiz => null, görünüm "—" veya dürüst durum gösterir).
 const str=(v,max=300)=>typeof v==="string"&&v.length?v.slice(0,max):null;
 // //TR: Okuma hatasının ayrık dürüst durumu (api katmanı classifyFailure ile OFFLINE/UNAVAILABLE/ERROR verir); uydurma yok.
 const failKind=state=>state==="OFFLINE"?"OFFLINE":state==="UNAVAILABLE"?"UNAVAILABLE":"FAILED";
-// //TR: Founder dikkati kuyruğunun ayrık durumu: canlı ve dolu => ATTENTION, canlı ve boş => VERIFIED, aksi halde dürüst hata durumu.
-function attentionKind(att){return att.state==="VERIFIED"?(att.blocked.length?"ATTENTION":"VERIFIED"):failKind(att.state)}
+// //TR: Founder dikkati kuyruğunun ayrık durumu (sunucu sayaçlarından): öğe var, kesilmiş ya da okunamayan öğe var => ATTENTION; canlı ve gerçekten boş => VERIFIED; aksi halde dürüst hata durumu.
+function attentionKind(att){const s=attentionSummary(att);return s.kind==="UNREADABLE"?failKind(att.state==="VERIFIED"?"ERROR":att.state):s.kind}
 // //TR: Karar kuyruğunun durumu mission + koşu okumasından türetilir; okuma başarısızsa dürüst hata durumu, boşsa VERIFIED, bekleyen karar varsa WAITING.
 function decisionsKind(missions,runs){
   if(missions.state!=="VERIFIED")return failKind(missions.state);
@@ -107,29 +109,30 @@ function alertsPanel(ctx,c){
   return panel(ctx,{titleKey:"inbox.alerts",id:"inbox-alerts",className:"inbox-section"},
     h(doc,"p",{class:"note",text:ctx.t("inbox.alerts.lead")}),body);
 }
-// //TR: Founder dikkati kuyruğu öğesi (SALT-OKUNUR premium kart): paket/faz + engel türü (ATTENTION rozeti + ham tür etiketi) + teknik yeniden-deneme bağlamı (rozet) + gerekçe + zaman. Hiçbir yazma denetimi yoktur; yeniden deneme eylemi yalnız aşağıdaki legacy panelde korunur.
+// //TR: Founder dikkat kuyruğu (GET /v1/attention, yalnız Work OS kayıtlarından türetilir; emekli scheduler kaynağı değil): SALT-OKUNUR. Altı tür AYRI sayaçtır, öğeler önem sırasıyla gösterilir ve her öğenin sonraki eylemi sunucunun bildirdiği değerdir. Atılan (okunamayan) öğeler ve kesilmiş liste açıkça söylenir; okunamayan kaynakta öğe uydurulmaz.
 function attentionItem(ctx,x){
   const doc=ctx.doc;
-  const pkg=str(x.packageId),phase=x.phase===0||typeof x.phase==="number"?String(x.phase):str(x.phase),kind=str(x.kind),reason=str(x.reason,1000),at=str(x.at),retryable=x.retryable===true;
-  const heading=pkg??(phase!=null?ctx.t("attention.phase",{n:phase}):ctx.t("inbox.attention.item.unknown"));
-  return h(doc,"li",{class:"card",dataset:{attentionItem:pkg??(phase!=null?`phase-${phase}`:"item"),retryable:retryable?"1":"0"}},
-    h(doc,"h3",{text:heading}),
-    h(doc,"p",{class:"panel-meta"},
-      kind?statePill(ctx,"ATTENTION",{label:kind}):statePill(ctx,"ATTENTION"),
-      badge(ctx,retryable?ctx.t("inbox.attention.retryable"):ctx.t("inbox.attention.notRetryable"),retryable?"":"badge-risk"),
-      pkg&&phase!=null?h(doc,"span",{class:"mono",text:ctx.t("inbox.attention.item.phase",{phase})}):null),
-    reason?h(doc,"p",{class:"note",text:ctx.t("inbox.attention.item.reason",{reason})}):null,
-    at?h(doc,"p",{class:"note mono",text:ctx.t("inbox.attention.item.when",{when:formatDateTime(at,ctx.i18n.lang)})}):null);
+  return h(doc,"li",{class:"card",dataset:{attentionItem:x.taskId??x.runId??x.missionId,attentionKind:x.kind,nextAction:x.nextAction}},
+    h(doc,"h3",{text:x.title}),
+    h(doc,"p",{class:"panel-meta"},statePill(ctx,"ATTENTION",{label:ctx.t(`attention.kind.${x.kind}`)}),
+      h(doc,"span",{class:"mono",text:x.missionId}),x.runId?h(doc,"span",{class:"mono",text:x.runId}):null,x.taskId?h(doc,"span",{class:"mono",text:x.taskId}):null),
+    h(doc,"p",{class:"note",dataset:{nextAction:x.nextAction}},h(doc,"strong",{text:ctx.t("attention.next")})," ",ctx.t(`attention.next.${x.nextAction}`)),
+    x.reason?h(doc,"p",{class:"note",text:ctx.t("inbox.attention.item.reason",{reason:x.reason})}):null,
+    x.since?h(doc,"p",{class:"note mono",text:ctx.t("attention.since",{when:formatDateTime(x.since,ctx.i18n.lang)})}):null);
 }
-// //TR: Founder dikkati kuyruğu paneli: GET /v1/founder-attention'dan SALT-OKUNUR; dürüst boş/UNAVAILABLE/OFFLINE/FAILED durumları, uydurma yok.
 function attentionPanel(ctx,att){
   const doc=ctx.doc;
   let body;
-  if(att.state!=="VERIFIED")body=stateNote(ctx,failKind(att.state),"inbox.attention.unavailable");
-  else if(!att.blocked.length)body=emptyNote(ctx,"inbox.attention.none");
-  else body=h(doc,"div",{},
-    h(doc,"p",{class:"panel-meta",dataset:{attentionCount:String(att.blocked.length)},role:"status"},statePill(ctx,"ATTENTION"),h(doc,"span",{text:ctx.t("inbox.attention.count",{n:att.blocked.length})})),
-    h(doc,"ul",{class:"cards"},att.blocked.slice(0,100).map(x=>attentionItem(ctx,x))));
+  if(att.state!=="VERIFIED"||!att.queue)body=stateNote(ctx,failKind(att.state),"inbox.attention.unavailable");
+  else if(!att.queue.items.length&&att.queue.dropped===0)body=emptyNote(ctx,"inbox.attention.none");
+  else{
+    const q=att.queue;
+    body=h(doc,"div",{},
+      h(doc,"p",{class:"panel-meta",dataset:{attentionCount:String(q.total),truncated:q.truncated?"1":"0",dropped:String(q.dropped)},role:"status"},statePill(ctx,"ATTENTION"),h(doc,"span",{text:ctx.t("inbox.attention.count",{n:q.total})})),
+      h(doc,"ul",{class:"inline-list",dataset:{attentionCounters:"1"}},ATTENTION_KINDS.map(k=>h(doc,"li",{dataset:{counter:k,value:String(q.counts[k])}},h(doc,"strong",{text:formatCount(q.counts[k])})," ",ctx.t(`attention.kind.${k}`)))),
+      ...attentionNotes(ctx,q),
+      q.items.length?h(doc,"ul",{class:"cards"},q.items.map(x=>attentionItem(ctx,x))):null);
+  }
   return panel(ctx,{titleKey:"inbox.attention",id:"inbox-attention-queue",className:"inbox-section"},
     h(doc,"p",{class:"note",text:ctx.t("inbox.attention.lead")}),body);
 }
@@ -179,7 +182,6 @@ export async function render(ctx){
   else if(!a.items.length)approvals=emptyNote(ctx,"inbox.empty");
   else approvals=h(doc,"ul",{class:"cards"},a.items.map(x=>h(doc,"li",{class:"card",id:`ap-card-${x.missionId}`,tabindex:"-1",dataset:{approval:x.missionId}},h(doc,"h3",{text:x.title??x.missionId}),badge(ctx,x.riskLevel??"—","badge-risk"),h(doc,"p",{class:"mono",text:x.missionId}),
     h(doc,"button",{type:"button",class:"btn",dataset:{focusKey:`ap-open-${x.missionId}`},id:`ap-open-${x.missionId}`,on:{click:()=>{selection.missionId=x.missionId;ctx.navigate("work")}},text:ctx.t("inbox.open")}))));
-  const legacy=h(doc,"div",{id:"inbox-attention"});ctx.renderAttention(legacy,att);
   // M1a c2: teslim kararı bekleyen koşuların ayrıntısı (iki eksen + teslim görünümü) yalnız sunucudan okunur.
   const runDetails=new Map();
   if(missions.state==="VERIFIED"&&runs.state==="VERIFIED")await Promise.all(deriveInbox(missions.items,runs.items).filter(it=>it.runId).slice(0,10).map(async it=>{const d=await ctx.api.workRunDetail(it.runId);if(d.state==="VERIFIED"&&d.run)runDetails.set(it.runId,d.run)}));
@@ -191,7 +193,6 @@ export async function render(ctx){
     panel(ctx,{titleKey:"inbox.decisions",id:"inbox-decisions",className:"inbox-section"},decisionsBody(ctx,missions,runs,runDetails)),
     requiredPanel(ctx,deriveApprovalRequired({cockpit:c,missions,runs})),
     panel(ctx,{titleKey:"inbox.approvals",id:"inbox-approvals",className:"inbox-section"},h(doc,"p",{class:"panel-meta"},chip(ctx,a)),approvals),
-    attentionPanel(ctx,att),
-    panel(ctx,{titleKey:"inbox.legacy",id:"inbox-legacy-p",className:"inbox-section"},h(doc,"p",{class:"note",text:ctx.t("inbox.legacyNote")}),legacy));
+    attentionPanel(ctx,att));
 }
 export {viewSkeleton as skeleton} from "../components.js";
