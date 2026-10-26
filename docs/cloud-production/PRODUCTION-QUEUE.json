@@ -1791,7 +1791,7 @@
   },
   "integrationBoard": {
     "//TR": "Koordinatör entegrasyon panosu: her açık PR için gerçek engel ve bekleyen sorumlu. Ortak kök neden (base dependency gate) PR'a özgü hatalardan ayrı tutulur; #221/#225 birleşmeden tekrar CI tetiklenmez.",
-    "at": "2026-10-26T19:46:25.835Z",
+    "at": "2026-10-26T20:32:00.287Z",
     "base": "f663ee9 (v7/integration, after #238)",
     "sharedRootCause": {
       "id": "NONE_ACTIVE",
@@ -2216,6 +2216,15 @@
         "review": "97c8800 full NO_BLOCKERS (correctness + windows lenses; 1 MEDIUM refuted)",
         "riskTier": "ROUTINE (ps1a tests + tests/support helper, unprotected)",
         "ci": "attempt 1: shard 1 relfx-c3:200 lease flake (not this PR) -> one full re-run green; shard 3 (ps1a, the fix) green on Windows both attempts"
+      },
+      {
+        "pr": 258,
+        "merge": "45d7292",
+        "by": "auto-merge (armed by coordinator on 559f33e after merge-gate OPEN)",
+        "at": "2026-10-26T20:31:40Z",
+        "postMerge": "VERIFIED: parent1 8c45845, parent2 = gated head 559f33e, merge-tree == merge tree",
+        "review": "689f49a full NO_BLOCKERS_1LOW -> 559f33e delta NO_BLOCKERS (A-PREDEV-BUSY-1 timing flake fixed: sync lock proof + kept dwell + bounded until; X1/X2/X4 killed; CI failure reproduced and fixed)",
+        "riskTier": "ROUTINE (tests/v7-ux-journey.test.ts only)"
       }
     ],
     "wslProvider": {
