@@ -19,7 +19,7 @@ import {briefFromRecords} from "../core/workos/predev/brief.js";
 import {PREDEV_AGENT_ACTOR, PreDevBuilderError} from "../core/workos/predev/claude-builder.js";
 import {FIRST_DELIVERY_BINDINGS} from "../core/agents/first-delivery-bindings.js";
 import {ensureClaudeProfile, claudeProfileDir} from "../core/workos/claude-profiles.js";
-import {ANALYSIS_KINDS, AnalysisFlow, NO_ANALYSIS_BUILDER, claudeAnalysisReadiness, tasksFromPlan} from "../core/workos/crew/analysis.js";
+import {ANALYSIS_KINDS, AnalysisFlow, AnalysisStoppedError, NO_ANALYSIS_BUILDER, claudeAnalysisReadiness, tasksFromPlan} from "../core/workos/crew/analysis.js";
 import type {PlanContent, RequirementsContent} from "../core/workos/predev/types.js";
 import type {ClaudeCliStatus} from "../core/workos/claude-profiles.js";
 import type {AnalysisReadiness} from "../core/workos/crew/analysis.js";
@@ -555,21 +555,31 @@ describe("C-FLOW-ANALYSIS-1: intake -> analysis -> plan", () => {
     expect(t.calls).toHaveLength(1);
   });
 
-  it("L1: a Global Stop is honoured: set before the call -> no paid call at all; set DURING the paid call -> the draft is not recorded; both answer BLOCKED GLOBAL_STOP_ACTIVE and write nothing", async () => {
+  it("L1: a Global Stop is honoured with the typed AnalysisStoppedError: set before the call -> no paid call; flipped DURING the call -> the builder's shouldAbort is wired to it and the draft is not recorded (an aborted run is a stop, not BUILDER_FAILED); nothing is written either way", async () => {
     let stopped = true;
     const t = setup(undefined, undefined, undefined, {stopped: () => stopped});
-    expect(await t.flow.step(t.missionId)).toMatchObject({status: "BLOCKED", blocker: "GLOBAL_STOP_ACTIVE", blockers: ["GLOBAL_STOP_ACTIVE"]});
+    await expect(t.flow.step(t.missionId)).rejects.toBeInstanceOf(AnalysisStoppedError);
     expect(t.calls).toHaveLength(0);
+    expect(t.rm()).toMatchObject({active: false, phase: "NOT_STARTED"});
     stopped = false;
-    const during = setup(undefined, undefined, undefined, {stopped: () => stopped});
-    const builderRuns = during.calls;
-    const flow = new AnalysisFlow({store: during.store, scope: SCOPE, builder: {produce: async (k, p, c) => { const raw = await during.builder.produce(k, p, c); stopped = true; return raw; }}, readiness: () => READY, stopped: () => stopped});
-    expect(await flow.step(during.missionId)).toMatchObject({status: "BLOCKED", blocker: "GLOBAL_STOP_ACTIVE"});
-    expect(builderRuns).toHaveLength(1); // the paid call happened ...
+    const during = setup();
+    const observed: boolean[] = [];
+    const fake: BuilderPort & {shouldAbort?: () => boolean} = {shouldAbort: undefined, async produce(k, p, c) { const raw = await during.builder.produce(k, p, c); stopped = true; observed.push(fake.shouldAbort?.() === true); return raw; }};
+    const flow = new AnalysisFlow({store: during.store, scope: SCOPE, builder: fake, readiness: () => READY, stopped: () => stopped});
+    await expect(flow.step(during.missionId)).rejects.toBeInstanceOf(AnalysisStoppedError);
+    expect(typeof fake.shouldAbort, "the builder must be wired to the stop").toBe("function");
+    expect(observed, "the builder's abort hook saw the stop during its run").toEqual([true]);
+    expect(during.calls).toHaveLength(1); // the paid call happened ...
     expect(during.rm().artifacts.BusinessAnalysis.state).toBe("NOT_STARTED"); // ... but its output was not recorded
     expect(during.rm()).toMatchObject({active: false, phase: "NOT_STARTED"});
+    await new AnalysisFlow({store: during.store, scope: SCOPE, builder: NO_ANALYSIS_BUILDER, readiness: () => READY, stopped: () => false}).step(during.missionId); // (the answer differs between the branches that do and do not know EXECUTOR_NOT_ENABLED; only the wiring matters here)
+    expect("shouldAbort" in NO_ANALYSIS_BUILDER, "the shared no-builder sentinel is never wired").toBe(false);
+    // an aborted builder (it throws once the stop is up) is a stop, not a builder failure
     stopped = false;
-    expect((await new AnalysisFlow({store: during.store, scope: SCOPE, builder: during.builder, readiness: () => READY, stopped: () => stopped}).step(during.missionId)).status).toBe("DRAFT_READY"); // cleared: works again
+    const aborted: BuilderPort = {async produce() { stopped = true; throw new PreDevBuilderError("PREDEV_BUILDER_EXIT_NONZERO", "killed by the stop"); }};
+    await expect(new AnalysisFlow({store: during.store, scope: SCOPE, builder: aborted, readiness: () => READY, stopped: () => stopped}).step(during.missionId)).rejects.toBeInstanceOf(AnalysisStoppedError);
+    stopped = false; // cleared: works again
+    expect((await new AnalysisFlow({store: during.store, scope: SCOPE, builder: during.builder, readiness: () => READY, stopped: () => stopped}).step(during.missionId)).status).toBe("DRAFT_READY");
   });
 
   it("L3: when another actor recorded this phase's draft while our paid call ran (a lost race), the answer points at the pending approval, not BUILDER_FAILED for the wrong phase", async () => {

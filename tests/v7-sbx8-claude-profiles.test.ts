@@ -509,7 +509,7 @@ describe("C-IMPL-WIN-1: the executors status the desktop shows", () => {
     const script = path.join(tmp, "app", "scripts", "capture-provider-provenance.mjs");
     fs.mkdirSync(path.dirname(script), {recursive: true});
     fs.writeFileSync(script, `import fs from "node:fs"; fs.writeFileSync(${JSON.stringify(seen)}, JSON.stringify(Object.keys(process.env)));\n`);
-    vi.stubEnv("ANTHROPIC_API_KEY", "sk-test-not-for-the-capture"); vi.stubEnv("UASCO_PROBE_SECRET", "x"); vi.stubEnv("GITHUB_TOKEN", "ghp_test");
+    vi.stubEnv("ANTHROPIC_API_KEY", "fake-provider-value"); vi.stubEnv("UASCO_PROBE_SECRET", "x"); vi.stubEnv("GITHUB_TOKEN", "fake-token-value");
     try { await s.setup.enableLocalClaude("FOUNDER"); } finally { vi.unstubAllEnvs(); }
     const keys = JSON.parse(fs.readFileSync(seen, "utf8")) as string[];
     expect(keys.length).toBeGreaterThan(0);

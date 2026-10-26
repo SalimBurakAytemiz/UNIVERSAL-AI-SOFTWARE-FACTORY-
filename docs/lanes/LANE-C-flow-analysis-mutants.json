@@ -152,14 +152,14 @@
    "id": "V4",
    "description": "L1: Global Stop is not checked before the paid call",
    "file": "core/workos/crew/analysis.ts",
-   "old": "    if (this.d.stopped?.()) return stopBlock();\n    const phaseKind =",
+   "old": "    if (this.d.stopped?.()) throw new AnalysisStoppedError();\n    const phaseKind =",
    "new": "    const phaseKind ="
   },
   {
    "id": "V5",
    "description": "L1: Global Stop is not checked after the paid call, before recording",
    "file": "core/workos/crew/analysis.ts",
-   "old": "    if (this.d.stopped?.()) return stopBlock();\n    // //TR: Kayıt mevcut",
+   "old": "    if (this.d.stopped?.()) throw new AnalysisStoppedError();\n    // //TR: Kayıt mevcut",
    "new": "    // //TR: Kayıt mevcut"
   },
   {
@@ -173,8 +173,8 @@
    "id": "V7",
    "description": "L2: the sequence is opened before the paid call (a failed step writes)",
    "file": "core/workos/crew/analysis.ts",
-   "old": "    let raw: string;\n    try {\n      const ctx = driver.buildMissionContext",
-   "new": "    let raw: string;\n    if (!rm.active || rm.phase === \"AUTHORIZED\") driver.start(scope, missionId, PREDEV_AGENT_ACTOR);\n    try {\n      const ctx = driver.buildMissionContext"
+   "old": "    let raw: string;\n    // //TR: builder shouldAbort",
+   "new": "    let raw: string;\n    if (!rm.active || rm.phase === \"AUTHORIZED\") driver.start(scope, missionId, PREDEV_AGENT_ACTOR);\n    // //TR: builder shouldAbort"
   },
   {
    "id": "V8",
@@ -203,6 +203,27 @@
    "file": "core/workos/crew/analysis.ts",
    "old": "if (wps.length > MAX_PLAN_TASKS) return",
    "new": "if (wps.length > MAX_PLAN_TASKS + 1) return"
+  },
+  {
+   "id": "V12",
+   "description": "L1: the builder's shouldAbort is not wired to the stop",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "b.shouldAbort = this.d.stopped;",
+   "new": "void b;"
+  },
+  {
+   "id": "V13",
+   "description": "L1: an aborted builder run is reported as BUILDER_FAILED instead of a stop",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "if (this.d.stopped?.()) throw new AnalysisStoppedError(); // abort edilen çağrı bir \"builder hatası\" değil, durdurmadır",
+   "new": ""
+  },
+  {
+   "id": "V14",
+   "description": "L1: every builder (also the shared no-builder sentinel) is wired to the stop",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "(b instanceof ClaudePreDevBuilder || \"shouldAbort\" in b)) b.shouldAbort",
+   "new": "true) b.shouldAbort"
   }
  ]
 }
