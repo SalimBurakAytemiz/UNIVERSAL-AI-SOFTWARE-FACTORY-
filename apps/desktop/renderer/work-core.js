@@ -345,7 +345,7 @@ export function runReadiness({project,mission}){
   return {repository,testCommand,blockers};
 }
 /** Bilinen koşu BLOK nedenleri -> açıklama anahtarı; bilinmeyen neden aynen ham kalır. SANDBOX_UNAVAILABLE'ın mevcut açıklaması korunur. */
-export const RUN_REASON_HINTS=Object.freeze(["REPOSITORY_NOT_CONFIGURED","TEST_COMMAND_NOT_CONFIGURED","REMOTE_REPO_NOT_SUPPORTED_YET","PROJECT_NOT_FOUND","MISSION_NOT_FOUND"]);
+export const RUN_REASON_HINTS=Object.freeze(["CLAUDE_PROFILE_LOGIN_REQUIRED","EXECUTOR_NOT_CONFIGURED","REPOSITORY_NOT_CONFIGURED","TEST_COMMAND_NOT_CONFIGURED","REMOTE_REPO_NOT_SUPPORTED_YET","PROJECT_NOT_FOUND","MISSION_NOT_FOUND"]);
 export const runReasonHintKey=reason=>typeof reason==="string"&&RUN_REASON_HINTS.includes(reason)?`run.reason.${reason}`:null;
 
 /** Durum geçişi isteği; yalnız durum makinesinin izin verdiği hedefler, yüksek riskli hedeflerde confirmed===true şart.

@@ -2357,3 +2357,115 @@ describe("LANE-A run card: tasks linked to the run", () => {
     expect(doc).toContain("RUN_TASKS_RE=/^\\/v1\\/work-runs\\/run_[0-9a-f]{24}\\/tasks$/");
   });
 });
+
+describe("LANE-A A-FLOW-3: the run step tells the truth about who does the work", () => {
+  const profile = (state: string, extra: any = {}) => ({state, ...(state === "LOGIN_REQUIRED" ? {reason: "CLAUDE_PROFILE_LOGIN_REQUIRED"} : {}), loginCommand: state === "READY" ? null : "$env:CLAUDE_CONFIG_DIR='C:\\x\\implementer'; claude", ...extra});
+  const execBody = (over: any = {}) => ({executors: [{id: "LOCAL_CLAUDE", state: "READY"}], active: {reason: "LOCAL_CLAUDE"}, sandbox: {state: "UNAVAILABLE", reason: "SANDBOX_UNAVAILABLE"},
+    claudeProfiles: {implementer: profile("READY"), reviewer: profile("READY")}, ...over});
+  const getFor = (exec: any, status = "AUTHORIZED") => (p: string) => {
+    if (p === "/v1/projects") return {projects: [project()]};
+    if (p === "/v1/missions") return {missions: [mission({status})]};
+    if (p === `/v1/missions/${MID}`) return {mission: mission({status}), tasks: []};
+    if (p === `/v1/work-runs?missionId=${MID}`) return {workRuns: []};
+    if (p === "/v1/system/executors") { if (exec instanceof Error) throw exec; return exec; }
+    return undefined;
+  };
+  async function render(exec: any, lang = "en", status = "AUTHORIZED") {
+    const m = await mkCtx({get: getFor(exec, status), lang});
+    forms.selection.missionId = MID;
+    const root = mount(m.doc, await (await load(rend, "views", "work.js")).render(m.ctx));
+    return {...m, root, eng: byId(root, "run-engine")};
+  }
+  it("derives READY only with LOCAL_CLAUDE active and both profiles READY; a profile that is not READY or another executor is BLOCKED; missing data is UNKNOWN, never READY", async () => {
+    const c = await load(rend, "project-core.js");
+    const v = (over: any = {}) => c.engineVerdict(c.mapExecutors(execBody(over))).kind;
+    expect(v()).toBe("READY");
+    expect(v({claudeProfiles: {implementer: profile("LOGIN_REQUIRED"), reviewer: profile("READY")}})).toBe("BLOCKED");
+    expect(v({claudeProfiles: {implementer: profile("READY"), reviewer: profile("REFUSED", {reason: "PROFILE_DIR_FORBIDDEN"})}})).toBe("BLOCKED");
+    expect(v({claudeProfiles: {implementer: profile("WHATEVER"), reviewer: profile("READY")}})).toBe("BLOCKED");
+    expect(v({active: {reason: "EXECUTOR_NOT_CONFIGURED"}})).toBe("BLOCKED");
+    expect(v({active: {reason: "LOCAL_CLAUDE"}, claudeProfiles: {implementer: profile("LOGIN_REQUIRED"), reviewer: profile("LOGIN_REQUIRED")}})).toBe("BLOCKED");
+    for (const o of [{active: undefined}, {active: {reason: "local-claude"}}, {active: {reason: 5}}, {active: "LOCAL_CLAUDE"}, {claudeProfiles: undefined}, {claudeProfiles: {error: "CLAUDE_PROFILE_STATUS_UNAVAILABLE"}},
+      {claudeProfiles: {implementer: profile("READY")}}, {claudeProfiles: {implementer: profile("READY"), reviewer: {state: "ready"}}}]) expect(v(o), JSON.stringify(o)).toBe("UNKNOWN");
+    for (const bad of [null, undefined, {state: "UNAVAILABLE", items: []}, {state: "ERROR", items: []}]) expect(c.engineVerdict(bad).kind).toBe("UNKNOWN");
+    // each missing profile alone keeps a READY partner from making the pair READY
+    expect(v({claudeProfiles: {reviewer: profile("READY")}})).toBe("UNKNOWN"); expect(v({claudeProfiles: {implementer: profile("READY")}})).toBe("UNKNOWN");
+    // a failed read never reads as READY even if the object carries ready-looking fields
+    const looksReady = c.mapExecutors(execBody());
+    for (const st of ["ERROR", "UNAVAILABLE", undefined]) expect(c.engineVerdict({...looksReady, state: st}).kind, String(st)).toBe("UNKNOWN");
+    expect(c.mapExecutors(execBody()).active).toBe("LOCAL_CLAUDE"); expect(c.mapExecutors(execBody({active: undefined})).active).toBeNull();
+  });
+  it("shows the engine block above the start button for a startable mission: READY says nothing is claimed to be running", async () => {
+    const o = await render(execBody());
+    expect(o.eng!.dataset.runEngine).toBe("READY");
+    expect(o.calls.get.filter((p: string) => p === "/v1/system/executors")).toHaveLength(1);
+    const head = all(o.eng!).find(n => n.dataset.engineHead)!;
+    expect(head.dataset.engineHead).toBe("READY"); expect(text(head)).toContain("does not mean a run is in progress");
+    expect(all(o.eng!).filter(n => n.dataset.engineProfile).map(n => [n.dataset.engineProfile, n.dataset.engineProfileState])).toEqual([["implementer", "READY"], ["reviewer", "READY"]]);
+    expect(text(all(o.eng!).find(n => n.dataset.engineActive)!)).toContain("Local Claude");
+    const order = all(o.root), iEng = order.indexOf(o.eng!), iBtn = order.findIndex(n => n.id === "run-start");
+    expect(iEng).toBeGreaterThan(-1); expect(iBtn).toBeGreaterThan(iEng); // the truth comes before the button
+    expect(all(o.eng!).some(n => n.dataset.engineLogin)).toBe(false);
+    expect(text(o.eng!)).toContain("does not say a run is in progress");
+  });
+  it("a blocked profile gets the risk badge, not the ok badge; and no engine block is offered for a mission that cannot start a run", async () => {
+    const b = await render(execBody({claudeProfiles: {implementer: profile("LOGIN_REQUIRED"), reviewer: profile("READY")}}));
+    const badge = (role: string) => String(all(all(b.eng!).find(n => n.dataset.engineProfile === role)!).find(n => String(n.className).split(" ").includes("badge"))!.className);
+    expect(badge("implementer")).toContain("badge-risk"); expect(badge("implementer")).not.toContain("badge-ok"); expect(badge("reviewer")).toContain("badge-ok");
+    const done = await render(execBody(), "en", "COMPLETE");
+    expect(done.eng).toBeNull(); expect(byId(done.root, "run-start")).not.toBeNull(); // the page itself still renders
+  });
+  it("LOGIN_REQUIRED is BLOCKED with the Founder's own login command as plain text, never READY, never running", async () => {
+    const o = await render(execBody({claudeProfiles: {implementer: profile("LOGIN_REQUIRED"), reviewer: profile("READY")}}));
+    expect(o.eng!.dataset.runEngine).toBe("BLOCKED");
+    const head = all(o.eng!).find(n => n.dataset.engineHead)!;
+    expect(text(head)).toContain("Nothing is running"); expect(text(head)).not.toContain("Ready:");
+    const impl = all(o.eng!).find(n => n.dataset.engineProfile === "implementer")!;
+    expect(impl.dataset.engineProfileState).toBe("LOGIN_REQUIRED"); expect(text(impl)).toContain("Sign-in required"); expect(text(impl)).toContain("UASCO never signs in for you");
+    const cmd = all(o.eng!).find(n => n.dataset.engineLogin === "implementer")!;
+    expect(text(cmd)).toContain("CLAUDE_CONFIG_DIR"); expect(all(o.eng!).some(n => n.dataset.engineLogin === "reviewer")).toBe(false);
+    expect(all(o.eng!).filter(n => n.tagName === "BUTTON").length).toBe(0); // the renderer never runs the command
+  });
+  it("shows REFUSED, a missing profile and a non-configured executor honestly", async () => {
+    const r = await render(execBody({claudeProfiles: {implementer: profile("READY"), reviewer: profile("REFUSED", {reason: "PROFILE_DIR_FORBIDDEN"})}}));
+    expect(r.eng!.dataset.runEngine).toBe("BLOCKED");
+    expect(text(all(r.eng!).find(n => n.dataset.engineProfile === "reviewer")!)).toContain("Refused");
+    const m = await render(execBody({claudeProfiles: {implementer: profile("READY")}}));
+    expect(m.eng!.dataset.runEngine).toBe("UNKNOWN");
+    const miss = all(m.eng!).find(n => n.dataset.engineProfile === "reviewer")!;
+    expect(miss.dataset.engineProfileState).toBe("MISSING"); expect(text(miss)).toContain("did not report this profile");
+    const n = await render(execBody({active: {reason: "EXECUTOR_NOT_CONFIGURED"}}));
+    expect(n.eng!.dataset.runEngine).toBe("BLOCKED"); expect(text(all(n.eng!).find(x => x.dataset.engineActive)!)).toContain("no executor is enabled");
+    const odd = await render(execBody({active: {reason: "BRAND_NEW"}}));
+    expect(text(all(odd.eng!).find(x => x.dataset.engineActive)!)).toContain("BRAND_NEW (not recognised)");
+  });
+  it("states the sandbox truth next to the engine: UNAVAILABLE means tests will be NOT_EXECUTED, AVAILABLE does not promise a pass, unknown says unknown", async () => {
+    const u = await render(execBody());
+    expect(u.eng!.dataset.engineSandbox).toBe("UNAVAILABLE");
+    const un = all(u.eng!).find(n => n.dataset.engineSandboxNote)!;
+    expect(un.dataset.engineSandboxNote).toBe("UNAVAILABLE"); expect(text(un)).toContain("NOT_EXECUTED"); expect(text(un)).toContain("SANDBOX_UNAVAILABLE");
+    const a = await render(execBody({sandbox: {state: "AVAILABLE", providerId: "docker"}}));
+    expect(text(all(a.eng!).find(n => n.dataset.engineSandboxNote)!)).toContain("still needs the run's own evidence");
+    const k = await render(execBody({sandbox: undefined}));
+    expect(all(k.eng!).find(n => n.dataset.engineSandboxNote)!.dataset.engineSandboxNote).toBe("UNKNOWN");
+  });
+  it("an unreadable executor status is UNKNOWN with an honest note (UNAVAILABLE vs error), and never a ready or blocked claim", async () => {
+    const off = await render(undefined);
+    expect(off.eng!.dataset.runEngine).toBe("UNKNOWN"); expect(text(off.eng!)).toContain("not available to the desktop"); expect(text(off.eng!)).not.toContain("Ready:");
+    expect(all(off.eng!).find(n => n.dataset.engineHead)!.dataset.engineHead).toBe("UNKNOWN"); expect(text(off.eng!)).toContain("nobody can say whether a run would be carried out");
+    expect(all(off.eng!).some(n => n.dataset.engineProfile)).toBe(false);
+    const err = await render(new Error("/v1/system/executors: HTTP 500"));
+    expect(err.eng!.dataset.runEngine).toBe("UNKNOWN"); expect(text(err.eng!)).not.toContain("not available to the desktop");
+  });
+  it("a blocked run reason from the server is explained for the two engine causes, in en and tr", async () => {
+    const c = await load(rend, "work-core.js");
+    expect(c.runReasonHintKey("CLAUDE_PROFILE_LOGIN_REQUIRED")).toBe("run.reason.CLAUDE_PROFILE_LOGIN_REQUIRED");
+    expect(c.runReasonHintKey("EXECUTOR_NOT_CONFIGURED")).toBe("run.reason.EXECUTOR_NOT_CONFIGURED");
+    const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
+    const keys = Object.keys(E).filter(k => k.startsWith("runengine.") || /^run\.reason\.(CLAUDE_PROFILE|EXECUTOR)/.test(k));
+    expect(keys.length).toBe(18);
+    for (const k of keys) expect(T[k], k).toBeTruthy();
+    const t = await render(execBody({claudeProfiles: {implementer: profile("LOGIN_REQUIRED"), reviewer: profile("READY")}}), "tr");
+    expect(text(t.eng!)).toContain("Bloke");
+  });
+});

@@ -10,6 +10,7 @@ import {performTransition,startRun,actionStatusId} from "../work-actions.js";
 import {runLinkPanel} from "./run-link.js";
 import {notVerifiedBadge,runNotVerified,missionNotVerified,axisBadges} from "../m1a.js";
 import {canOfferComplete} from "../delivery-core.js";
+import {runEngineBlock} from "./run-engine.js";
 import {BOARD_LAYOUTS,boardLayout,setBoardLayout,boardColumns} from "../kanban-core.js";
 
 const FORM="mission";
@@ -259,7 +260,7 @@ function readinessNote(ctx,r){
   return h(doc,"div",{class:"note",id:"run-readiness",role:"note",dataset:{runReadiness:r.blockers.length?"BLOCKERS":unknown?"UNKNOWN":"RECORDED",runBlockers:r.blockers.join(",")}},
     h(doc,"strong",{text:ctx.t("run.ready.title")}),h(doc,"ul",{},items.map(([k,t])=>h(doc,"li",{dataset:{readyItem:k},text:t}))));
 }
-function transitionControls(ctx,mission,awaiting,readiness=null){
+function transitionControls(ctx,mission,awaiting,readiness=null,engine=undefined){
   const doc=ctx.doc,all=allowedNext(mission.status),next=all.filter(to=>to!=="COMPLETE"||canOfferComplete(awaiting)),hidden=all.includes("COMPLETE")&&!next.includes("COMPLETE"),sid=actionStatusId(mission.missionId),busy=drafts.busy[sid]===true;
   const reasonField=field(ctx,{id:"tr-reason",labelKey:"work.transition.reason",value:drafts.reasons[mission.missionId]??"",onInput:v=>{drafts.reasons[mission.missionId]=v},hintKey:"work.transition.reasonHint"});
   const buttons=next.map(to=>h(doc,"button",{type:"button",class:`btn${requiresConfirm(to)?" btn-primary":""}`,id:`tr-${to}`,dataset:{focusKey:`tr-${to}`,to,confirm:requiresConfirm(to)?"true":"false"},disabled:busy,
@@ -274,7 +275,7 @@ function transitionControls(ctx,mission,awaiting,readiness=null){
   return h(doc,"div",{class:"transition-controls"},
     h(doc,"h4",{text:ctx.t("work.transition.title")}),
     next.length?h(doc,"div",{},reasonField,hidden?completeNotOffered(ctx,awaiting,`complete-na-${mission.missionId}`):null,h(doc,"div",{class:"btn-row",role:"group","aria-label":ctx.t("work.transition.title")},buttons),h(doc,"p",{class:"field-hint",text:ctx.t("work.transition.confirmNote")})):h(doc,"p",{class:"note",text:ctx.t("work.transition.terminal")}),
-    h(doc,"h4",{text:ctx.t("work.run.title")}),startable&&readiness?readinessNote(ctx,readiness):null,startable?expertField:null,h(doc,"div",{class:"btn-row"},runBtn),
+    h(doc,"h4",{text:ctx.t("work.run.title")}),startable&&readiness?readinessNote(ctx,readiness):null,startable&&engine!==undefined?runEngineBlock(ctx,engine):null,startable?expertField:null,h(doc,"div",{class:"btn-row"},runBtn),
     h(doc,"p",{class:"field-hint",id:"run-start-hint",text:ctx.t(startable?"work.run.hintOk":"work.run.hintNot")}),
     statusBlock(ctx,sid));
 }
@@ -332,7 +333,7 @@ function taskRunsFor(ctx,m,runsRes,taskRuns){
   const task=m.tasks.find(t=>t.taskId===taskRuns.taskId);
   return task?taskRunsPanel(ctx,{task,linked:taskRuns.res,runsRes}):null;
 }
-function detailPanel(ctx,detail,runsRes,runDetails,evRes,project=null,taskRuns=null,runLinks=new Map()){
+function detailPanel(ctx,detail,runsRes,runDetails,evRes,project=null,taskRuns=null,runLinks=new Map(),engine=undefined){
   const doc=ctx.doc;
   if(detail.state!=="VERIFIED")return panel(ctx,{titleKey:"work.detail",id:"work-detail"},stateNote(ctx,detail.state));
   const m=detail.mission;
@@ -346,7 +347,7 @@ function detailPanel(ctx,detail,runsRes,runDetails,evRes,project=null,taskRuns=n
     workTimeline(ctx,detail,runsRes),
     planFormPanel(ctx,m),
     h(doc,"h4",{text:ctx.t("work.timeline.title")}),statusTimeline(ctx,m.status),
-    transitionControls(ctx,m,awaitingRun(runsRes,runDetails),runReadiness({project,mission:m})),
+    transitionControls(ctx,m,awaitingRun(runsRes,runDetails),runReadiness({project,mission:m}),engine),
     runLinkPanel(ctx,m),
     tl?[h(doc,"h4",{text:ctx.t("work.runtl.title")}),h(doc,"p",{class:"note",text:ctx.t("work.runtl.lead")}),tl]:null,
     h(doc,"h4",{text:ctx.t("run.timeline")}),runsSection(ctx,runsRes,runDetails,id=>{const res=runLinks.get(id);return res?{res,tasks:detail.mission.tasks}:null}),
@@ -366,10 +367,11 @@ export async function render(ctx){
     const [detail,runsRes,evRes]=await Promise.all([ctx.api.missionDetail(selection.missionId),ctx.api.workRuns({missionId:selection.missionId}),ctx.api.evidenceList({missionId:selection.missionId,limit:EVIDENCE_LIMIT})]);
     const runDetails=new Map();
     if(runsRes.state==="VERIFIED")await Promise.all([...new Set([...runsRes.items.slice(0,RUN_DETAIL_LIMIT),...runsRes.items.filter(r=>r.status==="AWAITING_APPROVAL")])].map(async r=>{const d=await ctx.api.workRunDetail(r.runId);if(d.state==="VERIFIED"&&d.run)runDetails.set(r.runId,d.run)}));
+    const engine=await ctx.api.executors();
     const runLinks=new Map();
     await Promise.all([...runDetails.keys()].map(async id=>{runLinks.set(id,await ctx.api.runTasks(id))}));
     const taskRuns=inspectedTask?.missionId===selection.missionId?{taskId:inspectedTask.taskId,res:await loadTaskRuns(ctx,inspectedTask.taskId)}:null;
-    detailNode=detailPanel(ctx,detail,runsRes,runDetails,evRes,detail.state==="VERIFIED"?(projects.find(p=>p.projectId===detail.mission.projectId)??null):null,taskRuns,runLinks);
+    detailNode=detailPanel(ctx,detail,runsRes,runDetails,evRes,detail.state==="VERIFIED"?(projects.find(p=>p.projectId===detail.mission.projectId)??null):null,taskRuns,runLinks,engine);
   }
   // //TR: Premium başlık (hero): göz üstü etiket + başlık + alt başlık + dürüst kaynak çipi/kapsam. Mevcut h1#view-title korunur (odak hedefi).
   const header=h(doc,"div",{class:"hero"},

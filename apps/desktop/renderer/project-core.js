@@ -288,7 +288,20 @@ export function mapExecutors(raw){
     const s=pick(x.state,x.status),state=typeof s==="string"&&/^[A-Z][A-Z0-9_]{0,39}$/.test(s)?s:null;
     return {id,state,testOnly:id==="FAKE"||x.testOnly===true};
   }).filter(Boolean);
-  return {state:"VERIFIED",items,profiles:mapClaudeProfiles(raw.claudeProfiles),sandbox:mapSandbox(raw.sandbox)};
+  // //TR: LANE-A A-FLOW-3: `active.reason` sunucunun şu an KULLANDIĞI yürütücüdür (LOCAL_CLAUDE ya da EXECUTOR_NOT_CONFIGURED/EXECUTOR_UNKNOWN/...); desen dışı ya da yoksa null (uydurulmaz).
+  const ar=isObj(raw.active)&&typeof raw.active.reason==="string"&&/^[A-Z][A-Z0-9_]{0,63}$/.test(raw.active.reason)?raw.active.reason:null;
+  return {state:"VERIFIED",items,profiles:mapClaudeProfiles(raw.claudeProfiles),sandbox:mapSandbox(raw.sandbox),active:ar};
+}
+/** //TR: LANE-A A-FLOW-3: koşu adımı için motor gerçeği. READY yalnız etkin yürütücü LOCAL_CLAUDE ve implementer+reviewer profilleri READY iken; etkin yürütücü başka ya da bir profil READY değilse BLOCKED (LOGIN_REQUIRED asla "çalışıyor" görünmez); okuma yok ya da eksikse UNKNOWN. Sandbox koşuyu engellemez, yalnız testlerin çalışıp çalışmayacağını söyler. Bu bir koşunun sürdüğünü ya da ürünün doğrulandığını ASLA söylemez. */
+export function engineVerdict(exec){
+  const none={kind:"UNKNOWN",active:null,implementer:null,reviewer:null,sandbox:null};
+  if(!isObj(exec)||exec.state!=="VERIFIED")return none;
+  const profs=Array.isArray(exec.profiles)?exec.profiles:[],prof=role=>profs.find(p=>p&&p.role===role)??null;
+  const implementer=prof("implementer"),reviewer=prof("reviewer"),active=typeof exec.active==="string"?exec.active:null,sandbox=isObj(exec.sandbox)?exec.sandbox:null;
+  const bad=p=>p!==null&&p.state!==null&&p.state!=="READY",good=p=>p!==null&&p.state==="READY";
+  const blocked=(active!==null&&active!=="LOCAL_CLAUDE")||bad(implementer)||bad(reviewer);
+  const ready=active==="LOCAL_CLAUDE"&&good(implementer)&&good(reviewer);
+  return {kind:blocked?"BLOCKED":ready?"READY":"UNKNOWN",active,implementer,reviewer,sandbox};
 }
 /** M1a: GET /v1/system/executors sandbox -> {state,reason,detail,providerId}; bilinmeyen biçim null (Ayarlar "bilinmiyor" der, AVAILABLE uydurulmaz). */
 export function mapSandbox(raw){
