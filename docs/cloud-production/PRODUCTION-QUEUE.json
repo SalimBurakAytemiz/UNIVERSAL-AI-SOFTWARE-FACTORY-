@@ -2168,6 +2168,16 @@
         "postMerge": "VERIFIED: parent1 eab2dd8, parent2 = reviewed head 7d2ea8b, merge-tree == merge tree",
         "review": "last delta 68e175b->7d2ea8b NO_BLOCKERS (wf_99e1e802), CI re-run all green",
         "riskTier": "ROUTINE (Lane C par-1; no trust-root path)"
+      },
+      {
+        "pr": 252,
+        "merge": "5dd3614",
+        "by": "auto-merge (armed by coordinator on 85b29eb after merge-gate OPEN)",
+        "at": "2026-10-26T17:51:49Z",
+        "postMerge": "VERIFIED: parent1 e069c80, parent2 = gated head 85b29eb (base-merge of reviewed ad2b612), merge-tree == merge tree",
+        "review": "d0f3670 full NO_BLOCKERS (2 LOW) -> a2eb3d4 delta NO_BLOCKERS (5 LOW) -> ad2b612 round 3 NO_BLOCKERS (3 LOW deferred: guard bound 2-3 s optional, whitespace in userinfo pre-existing, PROCEDURE_EXCEPTION userinfo scrub) -> 85b29eb BASE_MERGE_ONLY",
+        "riskTier": "ROUTINE (core/competency diagnostics, unprotected)",
+        "followUps": "3 LOWs from wf_bd8c991a (round limit reached)"
       }
     ],
     "wslProvider": {
