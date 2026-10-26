@@ -2588,9 +2588,12 @@ describe("LANE-A A-FLOW-GAP-2: the test-result step of a run says what really ha
     ["test count unknown", dlv("NOT_VERIFIED", "EXECUTED_TEST_COUNT_UNKNOWN", true), "NOT_VERIFIED", "EXECUTED_TEST_COUNT_UNKNOWN", "number of executed tests is not known"],
     ["tests were changed", dlv("NOT_VERIFIED", "TEST_CHANGES_REQUIRE_INDEPENDENT_VERIFICATION", true), "NOT_VERIFIED", "TEST_CHANGES_REQUIRE_INDEPENDENT_VERIFICATION", "tests were changed"],
     ["test surface blocked", dlv("NOT_VERIFIED", "TEST_SURFACE_BLOCKED", true), "NOT_VERIFIED", "TEST_SURFACE_BLOCKED", "test surface is blocked"],
+    // the server appends a detail to some reasons (outcomes.ts): the text resolves on the code before ':' and the full reason stays visible
+    ["test surface blocked with the server's detail", dlv("NOT_VERIFIED", "TEST_SURFACE_BLOCKED:UNVERIFIED_ORACLE", true), "NOT_VERIFIED", "TEST_SURFACE_BLOCKED:UNVERIFIED_ORACLE", "test surface is blocked"],
     ["everything proven", dlv("PRODUCT_VERIFIED", "TESTS_EXECUTED_IN_VERIFIED_SANDBOX", true), "EXECUTED_VERIFIED", "TESTS_EXECUTED_IN_VERIFIED_SANDBOX", "executed in a verified sandbox"],
     // M2: the tests really ran (testsExecuted) although the run is stopped before the end; the server's NOT_EXECUTED:* wording must NOT turn into "not executed"
-    ["tests ran, server reason says not reached", dlv("NOT_VERIFIED", "NOT_EXECUTED:TESTS_NOT_REACHED", true), "NOT_VERIFIED", "TESTS_NOT_REACHED", "NOT VERIFIED"],
+    ["tests ran, server reason says not reached", dlv("NOT_VERIFIED", "NOT_EXECUTED:TESTS_NOT_REACHED", true), "NOT_VERIFIED", "TESTS_NOT_REACHED", "no complete test result for the final commit"],
+    ["tests recorded, server rule found no verified sandbox", dlv("NOT_VERIFIED", "NOT_EXECUTED:SANDBOX_UNAVAILABLE", true), "NOT_VERIFIED", "SANDBOX_UNAVAILABLE", "See Settings > Ready to build?"],
   ];
   it("shows the server's decision (delivery.productVerification + testsExecuted); a run without the server's delivery view is UNKNOWN, never 'not executed'", async () => {
     const core = await load(rend, "work-core.js");
@@ -2606,12 +2609,47 @@ describe("LANE-A A-FLOW-GAP-2: the test-result step of a run says what really ha
     for (const st of ["FAILED", "NOT_VERIFIED", "PRODUCT_VERIFIED"]) expect(core.testResultOf({delivery: {productVerification: {state: st, reason: 5}, testsExecuted: true}}), st).toEqual({kind: "UNKNOWN", reason: null}); // a non-text reason is never trusted
     expect(core.testResultOf({delivery: {productVerification: {state: "NOT_VERIFIED", reason: "SOMETHING_NEW"}, testsExecuted: false}})).toEqual({kind: "NOT_VERIFIED", reason: "SOMETHING_NEW"});
   });
+  // The client rule (productVerificationOf, from the recorded evidence) is still live for every list item without the server's delivery view: it drives isProductVerified, the NOT_VERIFIED badges (m1a.js) and the PRODUCT_VERIFIED pill (views/delivery.js). These evidence cases are kept next to the delivery-view cases above.
+  const evd = (kind: string, extra: any = {}) => ({evidenceId: "evd_" + "1".repeat(24), kind, commitSha: HEAD, exitCode: 0, step: "VERIFY", cycle: 0, ...extra});
+  const attested = (kind: string, extra: any = {}) => evd(kind, {sandboxProviderId: "linux-unshare-v2", ...extra});
+  const surface = (n: number | null, extra: any = {}) => ({kind: "TEST_SURFACE", commitSha: HEAD, testSurface: {executedTests: n, functionalAcceptance: "OK", modified: [], deleted: [], renamed: [], harness: [], weakened: [], ...extra}});
+  const EV_CASES: Array<[string, any[], string, string]> = [
+    // name, evidence, expected evidenceVerification.state, reason
+    ["tests ran and failed", [attested("VERIFY_TESTS", {exitCode: 1}), attested("REGRESSION_TESTS")], "FAILED", "TESTS_FAILED"],
+    ["regression failed", [attested("VERIFY_TESTS"), attested("REGRESSION_TESTS", {exitCode: 2})], "FAILED", "TESTS_FAILED"],
+    ["no verified sandbox", [evd("VERIFY_TESTS_NOT_EXECUTED"), evd("REGRESSION_TESTS_NOT_EXECUTED")], "NOT_VERIFIED", "NOT_EXECUTED:SANDBOX_UNAVAILABLE"],
+    ["run never reached the tests", [evd("EXECUTOR_RUN", {step: "IMPLEMENT"})], "NOT_VERIFIED", "NOT_EXECUTED:TESTS_NOT_REACHED"],
+    ["tests ran without a sandbox attestation", [evd("VERIFY_TESTS"), evd("REGRESSION_TESTS"), surface(4)], "NOT_VERIFIED", "SANDBOX_ATTESTATION_MISSING"],
+    ["zero tests executed", [attested("VERIFY_TESTS"), attested("REGRESSION_TESTS"), surface(0)], "NOT_VERIFIED", "ZERO_TESTS_EXECUTED"],
+    ["test count unknown", [attested("VERIFY_TESTS"), attested("REGRESSION_TESTS")], "NOT_VERIFIED", "EXECUTED_TEST_COUNT_UNKNOWN"],
+    ["tests were changed", [attested("VERIFY_TESTS"), attested("REGRESSION_TESTS"), surface(5, {modified: ["a.test.js"]})], "NOT_VERIFIED", "TEST_CHANGES_REQUIRE_INDEPENDENT_VERIFICATION"],
+    ["test surface blocked", [attested("VERIFY_TESTS"), attested("REGRESSION_TESTS"), surface(5, {functionalAcceptance: "BLOCKED"})], "NOT_VERIFIED", "TEST_SURFACE_BLOCKED"],
+    ["everything proven", [attested("VERIFY_TESTS"), attested("REGRESSION_TESTS"), surface(7)], "PRODUCT_VERIFIED", "TESTS_EXECUTED_IN_VERIFIED_SANDBOX"],
+  ];
+  it("the evidence rule for list items (no delivery view) is unchanged: every recorded-evidence case maps to the same state and reason, and only the proven case is PRODUCT_VERIFIED", async () => {
+    const core = await load(rend, "work-core.js");
+    for (const [name, evidence, state, reason] of EV_CASES) {
+      const w = core.mapWorkRun(run({evidence}));
+      expect(w.evidenceVerification, name).toMatchObject({state, reason}); expect(core.isProductVerified(w), name).toBe(state === "PRODUCT_VERIFIED");
+    }
+    expect(core.mapWorkRun(run({evidence: [], headSha: undefined})).evidenceVerification).toMatchObject({state: "NOT_VERIFIED", reason: "NOT_EXECUTED:NO_HEAD_COMMIT"});
+    // a regression run that failed on another commit does not count; a missing regression never verifies
+    expect(core.mapWorkRun(run({evidence: [attested("VERIFY_TESTS"), surface(7)]})).evidenceVerification.state).not.toBe("PRODUCT_VERIFIED");
+  });
+  it("list items without the delivery view keep the Founder-approved NOT_VERIFIED badge for every evidence case except the proven one", async () => {
+    const core = await load(rend, "work-core.js");
+    for (const [name, evidence, state] of EV_CASES) {
+      const {node} = await card(core.mapWorkRun(run({evidence})));
+      expect(within(node).some(x => x.dataset.m1aBadge === "run"), name).toBe(state !== "PRODUCT_VERIFIED");
+      expect(result(node)!.dataset.runTestResult, name).toBe("UNKNOWN"); // and no test result is claimed without the server's view
+    }
+  });
   it("the run card shows the test result row with the exact reason code and a plain sentence for every case; the generic NOT_VERIFIED badge stays", async () => {
     for (const [name, d, kind, reason, sentence] of CASES) {
       const {node} = await card(await detail(d));
       const r = result(node)!;
       expect(r, name).not.toBeNull(); expect(r.dataset.runTestResult, name).toBe(kind); expect(r.dataset.runTestReason, name).toBe(reason);
-      expect(r.textContent, name).toContain(sentence); expect(r.textContent, name).toContain(`(${reason}`);
+      expect(r.textContent, name).toContain(sentence); expect(r.textContent, name).toContain(`(${reason})`); expect(r.textContent, name).not.toContain("reason not recognised"); // every case above is a recognised reason, shown strictly as (REASON)
       expect(within(node).some(x => x.dataset.m1aBadge === "run"), name).toBe(kind !== "EXECUTED_VERIFIED"); // the Founder-approved NOT_VERIFIED badge is unchanged
     }
     const mk = async (state: string, reason: string, testsExecuted = false) => { const c = await mkCtx({lang: "en"}); const work = await load(rend, "views", "work.js"); return result(work.runCard(c.ctx, await detail(dlv(state, reason, testsExecuted))) as N)!; };
@@ -2634,7 +2672,7 @@ describe("LANE-A A-FLOW-GAP-2: the test-result step of a run says what really ha
   it("is present in English and Turkish for every kind and reason", async () => {
     const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
     const keys = Object.keys(E).filter(k => k.startsWith("run.test."));
-    expect(keys.length).toBe(15);
+    expect(keys.length).toBe(17);
     for (const k of keys) { expect(T[k], k).toBeTruthy(); expect(E[k], k).not.toBe(k); }
     const tn = result((await card(await detail(CASES[0][1]), "tr")).node)!;
     expect(tn.textContent).toContain("BAŞARISIZ");
