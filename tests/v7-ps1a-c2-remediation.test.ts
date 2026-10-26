@@ -424,4 +424,35 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
       const r = await fetch(`http://127.0.0.1:${v.port}/`); expect(r.status).toBe(200);
     } finally { await m.stopAll("CLEANUP"); }
   }, T);
+  it("B-RUN-WIN-1: a provider with spawnAsync is used instead of spawn(); stop waits for the provider's Linux-side teardown; a stop that arrives while spawnAsync is still preparing kills the process it then returns", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+    const net = await import("node:net");
+    let inner = 0, teardownDone = false, release: () => void = () => undefined, entered: () => void = () => undefined, slow = false, spawnCalled = 0, killedLate = false;
+    const mkProvider = () => ({id: "FAKE_WSL_LIKE", network: "ISOLATED", async selfTest() { return {ok: true}; }, async run() { throw new Error("unused"); },
+      spawn() { spawnCalled++; throw new Error("sync spawn must not be used"); },
+      async spawnAsync(c: string, a: string[], o: cp.SpawnOptions) {
+        if (slow) { entered(); await new Promise<void>(r => { release = r; }); }
+        inner = Math.floor(30000 + Math.random() * 20000);
+        const child: any = cp.spawn(c, a, {...o, env: {...(o.env as any), PORT: String(inner)}});
+        child.sandboxTeardown = new Promise<void>(res => child.once("exit", () => setTimeout(() => { teardownDone = true; if (slow) killedLate = true; res(); }, 300)));
+        return child;
+      },
+      async bridge(_c: cp.ChildProcess, port: number) { const srv = net.createServer(s => { const u = net.connect(inner, "127.0.0.1"); s.pipe(u); u.pipe(s); s.on("error", () => u.destroy()); u.on("error", () => s.destroy()); }); await new Promise<void>(r => srv.listen(port, "127.0.0.1", () => r())); return {port, close() { srv.close(); }}; }});
+    // 1) normal: start uses spawnAsync, stop resolves only after the teardown promise
+    const m = manager(dataDir, new ExecutionGate(mkProvider() as any), {startWaitMs: 3000, graceMs: 200});
+    try {
+      const v = await m.start(p); expect(spawnCalled).toBe(0); expect(v.bridged).toBe(true); expect(v.pid).toBeGreaterThan(0);
+      expect(teardownDone).toBe(false);
+      await m.stop(p.projectId); expect(teardownDone).toBe(true);
+    } finally { await m.stopAll("CLEANUP"); }
+    // 2) stop while spawnAsync is preparing
+    teardownDone = false; slow = true; const reached = new Promise<void>(r => { entered = r; });
+    const m2 = manager(dataDir, new ExecutionGate(mkProvider() as any), {startWaitMs: 3000, graceMs: 200});
+    try {
+      const starting = m2.start(p).catch(e => e); await reached;
+      const stopping = m2.stop(p.projectId); await sleep(100); release();
+      await Promise.race([starting, sleep(20_000)]); await stopping;
+      await sleep(800); expect(killedLate).toBe(true); expect(m2.view(p).status).toBe("STOPPED");
+    } finally { await m2.stopAll("CLEANUP"); }
+  }, T);
 });

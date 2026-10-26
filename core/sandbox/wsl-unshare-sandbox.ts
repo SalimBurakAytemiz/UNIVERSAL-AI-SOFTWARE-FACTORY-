@@ -2,10 +2,12 @@
 import cp from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
+import net from "node:net";
 import path from "node:path";
 import type {SpawnOptions} from "node:child_process";
 import type {ProcResult} from "../workos/executors.js";
-import type {SandboxProvider, SandboxRunOptions} from "../workos/execution-gate.js";
+import type {SandboxChild, SandboxProvider, SandboxRunOptions} from "../workos/execution-gate.js";
+import type {BridgeHandle} from "../workos/devrun-bridge.js";
 import * as linuxModule from "../agents/linux-unshare-sandbox.js";
 import {buildTar, TarError} from "./wsl-tar.js";
 import type {TarLimits} from "./wsl-tar.js";
@@ -37,6 +39,8 @@ export interface WslSandboxOptions {
   wslBinary?: string; distro?: string; platform?: NodeJS.Platform; runner?: WslRunner; isolation?: LinuxIsolation | null;
   addressSpaceKb?: number; maxFileBlocks?: number; maxProcesses?: number; tarLimits?: TarLimits; killGraceMs?: number;
   /** Zaman aşımı sondasında "geç" işaretinin görünmesi için beklenen süre (ms); testlerde 0. */
+  /** Dev-run çocuğu ve köprü bağlantıları için wsl.exe başlatıcısı (testlerde sahte). stdio: run için [ignore,pipe,pipe], röle için [pipe,pipe,ignore]. */ spawner?: (args: string[], stdio: cp.StdioOptions) => cp.ChildProcess;
+  /** Dev-run en uzun ömrü (ms; varsayılan 6 saat): timeout(SIGKILL) ile sınırlanır. */ devMaxMs?: number; maxBridgeConnections?: number; bridgeIdleMs?: number; bridgeTargetWaitMs?: number;
   settleMs?: number; /** Koşu sonrası /work için kb üst sınırı (aşılırsa koşu BAŞARISIZ sayılır ve not düşülür). */ maxWorkKb?: number;
 }
 
@@ -170,8 +174,9 @@ export const OUTER_SCRIPT = [
   "st=absent",
   String.raw`for p in /proc/sys/fs/binfmt_misc/WSLInterop /proc/sys/fs/binfmt_misc/WSLInterop-late; do if [ -e "$p" ]; then l=""; if read -r l < "$p" 2>/dev/null && [ "$l" = disabled ]; then [ "$st" = enabled ] || st=disabled; else st=enabled; fi; fi; done`,
   'echo "INTEROP=$st"',
-  String.raw`ok=ok; for t in unshare setpriv mount pivot_root awk sort grep ls timeout tar mktemp rm sh env tee mkdir bash chmod cat kill pkill pgrep prlimit find du sleep; do command -v "$t" >/dev/null 2>&1 || ok=missing; done; echo "TOOLS=$ok"`,
+  String.raw`ok=ok; for t in unshare setpriv mount pivot_root awk sort grep ls timeout tar mktemp rm sh env tee mkdir bash chmod cat kill pkill pgrep prlimit find du sleep nsenter readlink; do command -v "$t" >/dev/null 2>&1 || ok=missing; done; echo "TOOLS=$ok"`,
   String.raw`d=$(dirname "$0"); o=$(/bin/bash -c '"$0"' "$d/probe.exe" 2>&1 >/dev/null); rc=$?; echo "PE_EXEC_RC=$rc"; case "$o" in *"cannot execute binary file"*) echo "PE_ENOEXEC=yes";; *) echo "PE_ENOEXEC=no";; esac`,
+  'echo "NODE=$(command -v node 2>/dev/null)"',
   'echo "DONE=1"'
 ].join("\n") + "\n";
 
@@ -184,6 +189,18 @@ const FORK_PROBE = 'ok=0; fail=0; i=0; while [ $i -lt 150 ]; do if (sleep 25 &) 
 const TIMEOUT_PROBE_MS = 2000;
 const TIMEOUT_PROBE = 'trap "" TERM; ( trap "" TERM; sleep 5; : > /work/late.txt ) & sleep 60';
 const STDIN_PROBE = "read -r l; echo got=$l";
+
+/** WSL içi sabit röle: argv[2] portundaki 127.0.0.1'e bağlanır (sandbox ağ ad alanında çalışır). */
+export const WSL_RELAY_JS = 'const n=require("node:net");const s=n.connect({host:"127.0.0.1",port:Number(process.argv[2])});process.stdin.pipe(s);s.pipe(process.stdout);s.on("error",()=>process.exit(1));s.on("close",()=>process.exit(0));process.stdin.on("end",()=>s.end());\n';
+/** Sandbox DIŞINDA (WSL) çalışır: hedef pid'in ağ ad alanı bu sürecinkinden FARKLI olmalı (aynıysa nsenter WSL loopback'ine bağlanırdı); pid/port yalnız rakam. */
+export const relayScript = (S: string, node: string): string => [
+  "#!/bin/sh",
+  "p=$1; port=$2",
+  'case "$p$port" in *[!0-9]*|"") exit 98;; esac',
+  '[ -d "/proc/$p" ] || exit 96',
+  '[ "$(/usr/bin/readlink "/proc/$p/ns/net")" != "$(/usr/bin/readlink /proc/self/ns/net)" ] || exit 97',
+  `exec /usr/bin/nsenter -U --preserve-credentials -n -t "$p" ${shq(node)} ${shq(`${S}/ctl/relay.js`)} "$port"`
+].join("\n") + "\n";
 
 export class WslUnshareSandboxProvider implements SandboxProvider {
   readonly id = WSL_SANDBOX_ID;
@@ -202,6 +219,10 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
     return this.runner(["-d", d ?? "", "--exec", ...args], {timeoutMs, input, shouldAbort});
   }
   private newRoot = "/srv";
+  private nodePath: string | null = null;
+  /** ISOLATED: sandbox kendi ağ ad alanındadır; dev-run ürünü yalnız bridge() ile erişilebilir. */
+  readonly network = "ISOLATED" as const;
+  private readonly live = new WeakMap<object, {S: string}>();
 
   /** WSL tarafında geçici dizin: S (mktemp), S/work (proje kopyası, sandbox /work), S/ctl (betikler). Yalnız doğrudan exec; değer içeren argüman yok. */
   private async prepare(): Promise<string | null> {
@@ -264,6 +285,10 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
     if (outer.exitCode !== 0 || !/^DONE=1$/m.test(o)) return "PROBE_FAILED";
     if (!/^INTEROP=(absent|disabled)$/m.test(o) || !/^PE_EXEC_RC=126$/m.test(o) || !/^PE_ENOEXEC=yes$/m.test(o)) return "INTEROP_ENABLED";
     if (!/^TOOLS=ok$/m.test(o)) return "WSL_TOOLS_MISSING";
+    // Linux tarafı `node` MUTLAK ve /mnt dışında olmalı (Windows node.exe asla; dev-run röle betiği bu yolla çalışır).
+    const nm = /^NODE=(\/[A-Za-z0-9_.\/+-]{1,200})$/m.exec(o);
+    if (!nm || nm[1].startsWith("/mnt/")) return "WSL_TOOLS_MISSING";
+    this.nodePath = nm[1];
     return null;
   }
 
@@ -275,17 +300,96 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
     throw new Error(this.verified ? "SANDBOX_REFUSED: SPAWN_NOT_SUPPORTED_IN_WSL_V1" : "SANDBOX_NOT_VERIFIED: selfTest has not passed");
   }
 
+  private realSpawner(): (args: string[], stdio: cp.StdioOptions) => cp.ChildProcess {
+    return this.o.spawner ?? ((args, stdio) => cp.spawn(this.o.wslBinary ?? "wsl.exe", args, {shell: false, windowsHide: true, stdio, env: {...process.env, WSL_UTF8: "1"}}));
+  }
+  private killLocal(child: cp.ChildProcess): void {
+    try { if (child.exitCode !== null || child.signalCode !== null) return; if (process.platform === "win32" && child.pid) cp.spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], {windowsHide: true}); else child.kill("SIGKILL"); } catch { /* en iyi çaba */ }
+  }
+
+  /** Dev-run için: run() ile AYNI izolasyon (kopyala-içeri + setup.sh + unshare/pivot_root), ama süreç çalışır bırakılır. Eşzamansız hazırlık gerektiği için spawn() yerine spawnAsync() kullanılır. Çıkışta (durdurma/çökme/abort) Linux tarafı timeout süreç grubu + dizin temizlenir (`sandboxTeardown`). */
+  async spawnAsync(command: string, args: string[], opts: SpawnOptions): Promise<SandboxChild> {
+    if (!this.verified) throw new Error("SANDBOX_NOT_VERIFIED: selfTest has not passed");
+    const chk = this.checkInputs([command, ...args], opts.cwd, opts.env);
+    if ("why" in chk) throw new Error(`SANDBOX_REFUSED: ${chk.why}`);
+    let tar: Buffer;
+    try { tar = buildTar(opts.cwd as string, this.o.tarLimits).archive; } catch (e) { throw new Error(`SANDBOX_REFUSED: ${e instanceof TarError ? e.code : "COPY_FAILED"}`); }
+    const S = await this.prepare();
+    if (!S) throw new Error("SANDBOX_REFUSED: SCRATCH_CREATE_FAILED");
+    try {
+      // Interop her başlatmada yeniden denetlenir (kernel-geneli kayıt çalışma zamanında açılabilir).
+      const interop = await this.interopCheck(S);
+      if (interop) {
+        if (interop === "INTEROP_ENABLED" || interop === "WSL_TOOLS_MISSING") { this.verified = false; this.probing = null; this.lastSelfTest = {ok: false, detail: interop}; }
+        throw new Error(`SANDBOX_REFUSED: ${interop}`);
+      }
+      if ((await this.wsl(["/bin/tar", "-x", "--no-same-owner", "--no-same-permissions", "-C", `${S}/work`], 120_000, tar)).exitCode !== 0) throw new Error("SANDBOX_REFUSED: COPY_IN_FAILED");
+      const st = await this.stageSandbox(S, this.o.devMaxMs ?? 6 * 3600_000, wslEnv(opts.env as NodeJS.ProcessEnv), chk.command);
+      if (st !== "OK") throw new Error(`SANDBOX_REFUSED: ${st}`);
+      if (!this.nodePath || !(await this.put(S, "relay.js", WSL_RELAY_JS)) || !(await this.put(S, "relay.sh", relayScript(S, this.nodePath)))) throw new Error("SANDBOX_REFUSED: STAGE_FAILED");
+    } catch (e) { await this.cleanup(S); throw e; }
+    let child: SandboxChild;
+    try { child = this.realSpawner()(["-d", this.distro ?? "", "--exec", "/bin/sh", `${S}/ctl/run.sh`], ["ignore", "pipe", "pipe"]) as SandboxChild; }
+    catch { await this.cleanup(S); throw new Error("SANDBOX_REFUSED: SPAWN_FAILED"); }
+    let tornDown = false;
+    child.sandboxTeardown = new Promise<void>(res => {
+      const go = () => { if (tornDown) return; tornDown = true; this.cleanup(S).then(() => undefined, () => undefined).finally(res); };
+      child.once("exit", go); child.once("error", go);
+    });
+    this.live.set(child, {S});
+    return child;
+  }
+
+  /** Windows ana makinesinde YALNIZ 127.0.0.1:<port> dinler (0.0.0.0 ve WSL localhost yönlendirmesi YOK). Her bağlantı için `wsl.exe --exec /bin/sh relay.sh <pid> <port>` çalışır; stdio üzerinden WSL içindeki sabit röleye (nsenter -U -n) iletilir. Yalnız ana makine -> sandbox yönü vardır. */
+  async bridge(child: cp.ChildProcess, port: number): Promise<BridgeHandle> {
+    const rec = this.live.get(child);
+    if (!rec) throw new Error("BRIDGE_TARGET_UNKNOWN");
+    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("BRIDGE_PORT_INVALID");
+    // Hedef: timeout sürecinin (pid dosyası) çocuğu olan unshare; ağ ad alanına o girer. Hazır olana dek kısa süre beklenir.
+    let target: string | null = null;
+    for (let i = 0, n = Math.ceil((this.o.bridgeTargetWaitMs ?? 10_000) / 250); i < n && !target && child.exitCode === null; i++) {
+      const pidTxt = utf8((await this.wsl(["/bin/cat", `${rec.S}/ctl/pid`], 15_000)).stdout).trim();
+      if (/^[0-9]{1,9}$/.test(pidTxt)) {
+        const kids = utf8((await this.wsl(["/usr/bin/pgrep", "-P", pidTxt], 15_000)).stdout).trim().split(/\s+/).filter(x => /^[0-9]{1,9}$/.test(x));
+        if (kids.length > 0) target = kids[0];
+      }
+      if (!target) await new Promise(r => setTimeout(r, 250));
+    }
+    if (!target) throw new Error("BRIDGE_TARGET_MISSING");
+    const max = this.o.maxBridgeConnections ?? 32, idleMs = this.o.bridgeIdleMs ?? 120_000, spawner = this.realSpawner();
+    const live = new Set<net.Socket>(), kids = new Set<cp.ChildProcess>();
+    const server = net.createServer(sock => {
+      if (live.size >= max || child.exitCode !== null || child.signalCode !== null) { sock.destroy(); return; }
+      live.add(sock); sock.setTimeout(idleMs, () => sock.destroy());
+      const r = spawner(["-d", this.distro ?? "", "--exec", "/bin/sh", `${rec.S}/ctl/relay.sh`, target as string, String(port)], ["pipe", "pipe", "ignore"]);
+      kids.add(r);
+      const end = () => { live.delete(sock); kids.delete(r); sock.destroy(); this.killLocal(r); };
+      sock.on("close", end); sock.on("error", end); r.on("close", end); r.on("error", end);
+      r.stdin?.on("error", () => { /* erken kapanış */ }); r.stdout?.on("error", () => { /* erken kapanış */ });
+      if (r.stdin && r.stdout) { sock.pipe(r.stdin); r.stdout.pipe(sock); } else end();
+    });
+    await new Promise<void>((res, rej) => { server.once("error", rej); server.listen(port, "127.0.0.1", () => res()); });
+    return {port, close: () => { try { server.close(); } catch { /* kapalı */ } for (const s of live) s.destroy(); for (const k of kids) this.killLocal(k); live.clear(); kids.clear(); }};
+  }
+
+  /** run() ve spawnAsync() için ortak girdi denetimi: argv çevirisi, ortam zorunlu, cwd mutlak/kök değil/dizin/ev dizini veya atası değil. */
+  private checkInputs(argv: string[], cwd: unknown, env: unknown): {command: string[]} | {why: string} {
+    const command = translateArgv(argv);
+    if (!command) return {why: "ARGV_INVALID_OR_HOST_PATH"};
+    if (!env || typeof env !== "object") return {why: "ENV_REQUIRED"};
+    if (typeof cwd !== "string" || !path.isAbsolute(cwd) || path.parse(cwd).root === cwd) return {why: "CWD_NOT_ABSOLUTE_OR_ROOT"};
+    try { if (!fs.statSync(cwd).isDirectory()) return {why: "CWD_NOT_DIRECTORY"}; } catch { return {why: "CWD_MISSING"}; }
+    const home = os.homedir();
+    if (home && (path.resolve(cwd) === path.resolve(home) || path.resolve(home).startsWith(path.resolve(cwd) + path.sep))) return {why: "CWD_IS_HOME_OR_ANCESTOR"};
+    return {command};
+  }
   private async exec(argv: string[], opts: SandboxRunOptions): Promise<ProcResult> {
     const startedAt = now();
     const fail = (why: string): ProcResult => ({...refusal(argv ?? [], why), startedAt});
-    const command = translateArgv(argv);
-    if (!command) return fail("ARGV_INVALID_OR_HOST_PATH");
-    if (!opts.env || typeof opts.env !== "object") return fail("ENV_REQUIRED");
+    const chk = this.checkInputs(argv, opts.cwd, opts.env);
+    if ("why" in chk) return fail(chk.why);
+    const command = chk.command;
     const cwd = opts.cwd;
-    if (typeof cwd !== "string" || !path.isAbsolute(cwd) || path.parse(cwd).root === cwd) return fail("CWD_NOT_ABSOLUTE_OR_ROOT");
-    try { if (!fs.statSync(cwd).isDirectory()) return fail("CWD_NOT_DIRECTORY"); } catch { return fail("CWD_MISSING"); }
-    const home = os.homedir();
-    if (home && (path.resolve(cwd) === path.resolve(home) || path.resolve(home).startsWith(path.resolve(cwd) + path.sep))) return fail("CWD_IS_HOME_OR_ANCESTOR");
     let tar: Buffer, skipped = 0;
     try { const t = buildTar(cwd, this.o.tarLimits); tar = t.archive; skipped = t.skippedLinks; } catch (e) { return fail(e instanceof TarError ? e.code : "COPY_FAILED"); }
     const S = await this.prepare();

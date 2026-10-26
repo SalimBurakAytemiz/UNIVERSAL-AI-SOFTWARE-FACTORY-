@@ -17,6 +17,7 @@ import {StudioError} from "./project-studio.js";
 import {ExecutionGate} from "./execution-gate.js";
 import {bridgeSupport} from "./devrun-bridge.js";
 import type {BridgeHandle, NsenterOptions} from "./devrun-bridge.js";
+import type {SandboxChild} from "./execution-gate.js";
 
 export type DevRunStatus = "STOPPED" | "STARTING" | "RUNNING" | "CRASHED" | "BLOCKED";
 export interface DevRunPreview { url: string | null; state: "AVAILABLE" | "UNAVAILABLE"; lastProbeAt: string | null; reason?: string }
@@ -355,17 +356,21 @@ export class DevRunManager {
       const env = {...safeChildEnv(this.o.envPolicyFile, {provider: "DETERMINISTIC"}), PORT: String(st.port), HOST: "127.0.0.1"};
       const exe = argv[0] === "node" ? process.execPath : argv[0];
       // SBX-GATE: süreç ana makinede değil, kapının doğruladığı sağlayıcıda başlatılır.
-      const child = gate.provider.spawn(exe, argv.slice(1), {cwd: ws, env, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32"});
+      const spawnOpts = {cwd: ws, env, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] as ["ignore", "pipe", "pipe"], detached: process.platform !== "win32"};
+      // B-RUN-WIN-1: eşzamansız hazırlık gerektiren sağlayıcı (WSL) spawnAsync sunar; yoksa eşzamanlı spawn.
+      const child: SandboxChild = gate.provider.spawnAsync ? await gate.provider.spawnAsync(exe, argv.slice(1), spawnOpts) : gate.provider.spawn(exe, argv.slice(1), spawnOpts);
       a.child = child;
       a.exited = new Promise<void>(resolve => {
         // PS1A-C2-F2: çıkış (çökme veya durdurma) sonrası kalan ağaç (ayrık torunlar dahil) temizlenmeden exited çözülmez.
-        child.once("exit", (code, signal) => { this.onExit(a, code, signal); void this.reapTree(a).catch(() => undefined).finally(resolve); });
+        child.once("exit", (code, signal) => { this.onExit(a, code, signal); void Promise.all([this.reapTree(a).catch(() => undefined), Promise.resolve(child.sandboxTeardown).catch(() => undefined)]).finally(resolve); });
         child.once("error", () => { if (child.pid === undefined) { this.onExit(a, null, null, "DEVRUN_SPAWN_FAILED"); resolve(); } });
       });
       child.stdout?.on("data", (b: Buffer) => { a.stdout.push(b); this.scheduleFlush(a); });
       child.stderr?.on("data", (b: Buffer) => { a.stderr.push(b); this.scheduleFlush(a); });
       if (child.pid === undefined) { await a.exited; return this.view(project); }
       st.pid = child.pid;
+      // B-RUN-WIN-1: eşzamansız hazırlık sırasında (spawnAsync) stop/GLOBAL_STOP geldiyse yeni süreç hemen sonlandırılır (aşağıdaki aborted() denetimi çıkışı bekler).
+      if (a.stopping || this.stopActive() !== null) killProcessTree(child.pid);
       // B-RUN-1: köprü (yalnız ağ-izole sağlayıcılarda): ana makine 127.0.0.1:port -> sandbox 127.0.0.1:port. Açılamazsa süreç durdurulur ve çalıştırma BLOCKED olur.
       if (bridge.start) {
         try { a.bridge = await bridge.start(child, st.port); st.bridged = true; }
