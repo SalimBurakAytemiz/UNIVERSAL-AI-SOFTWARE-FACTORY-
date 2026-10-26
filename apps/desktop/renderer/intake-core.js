@@ -7,6 +7,8 @@ export const INTAKE_PROJECT_TYPES=Object.freeze(["web","api","library","cli","de
 export const INTAKE_OS=Object.freeze(["windows","macos","linux","web","android","ios"]);
 export const INTAKE_RISKS=Object.freeze(["R0","R1","R2","R3"]);
 export const INTAKE_SOURCES=Object.freeze(["FOUNDER","DEFAULT","DERIVED"]);
+// //TR: Sunucu şeması (core/workos/intake.ts) template: web-node | node-lib | empty; template verilirse sunucu yönetilen bir git deposu kurar (repository ile birlikte verilemez; bu formda repository alanı yoktur).
+export const INTAKE_TEMPLATES=Object.freeze(["web-node","node-lib","empty"]);
 const IDEA_MIN=10,IDEA_MAX=4000,TITLE_MAX=120,TECH_RE=/^[A-Za-z0-9.+#/ _-]+$/,KEY_RE=/^[A-Za-z0-9._-]{1,100}$/;
 const PROJECT_RE=/^prj_[0-9a-f]{24}$/,MISSION_RE=/^msn_[0-9a-f]{24}$/;
 const trim=v=>typeof v==="string"?v.trim():"";
@@ -18,7 +20,7 @@ const str=(x,max)=>typeof x==="string"&&x.length&&x.length<=max?x:null;
 
 /** Form girdisinden istek: yalnız girilen isteğe bağlı alanlar gövdeye girer (girilmeyen alanı sunucu varsayılanlar ve kaynağını DEFAULT/DERIVED işaretler). */
 export function buildIntakeRequest(input,{key}={}){
-  const errors={},idea=trim(input?.idea),title=trim(input?.title),type=trim(input?.projectType),risk=trim(input?.riskLevel);
+  const errors={},idea=trim(input?.idea),title=trim(input?.title),type=trim(input?.projectType),risk=trim(input?.riskLevel),tpl=trim(input?.template);
   if(idea.length<IDEA_MIN)errors.idea="intake.err.ideaShort";else if(idea.length>IDEA_MAX)errors.idea="intake.err.ideaLong";
   if(title.length>TITLE_MAX)errors.title="intake.err.titleLong";
   if(type&&!INTAKE_PROJECT_TYPES.includes(type))errors.projectType="intake.err.type";
@@ -29,6 +31,7 @@ export function buildIntakeRequest(input,{key}={}){
   const crit=(Array.isArray(input?.acceptanceCriteria)?input.acceptanceCriteria:[]).map(trim).filter(Boolean);
   if(crit.length>50||crit.some(c=>c.length>4000))errors.acceptanceCriteria="intake.err.criteria";
   if(risk&&!INTAKE_RISKS.includes(risk))errors.riskLevel="intake.err.risk";
+  if(tpl&&!INTAKE_TEMPLATES.includes(tpl))errors.template="intake.err.template";
   if(key!==undefined&&!KEY_RE.test(String(key)))errors.idempotencyKey="intake.err.key";
   const body={idea};
   if(title)body.title=title;
@@ -37,6 +40,7 @@ export function buildIntakeRequest(input,{key}={}){
   if(os.length)body.targetOS=[...os];
   if(crit.length)body.acceptanceCriteria=crit;
   if(risk)body.riskLevel=risk;
+  if(tpl)body.template=tpl;
   if(key!==undefined)body.idempotencyKey=String(key);
   // Köprü (POST_MAX_BODY_BYTES) ve sunucu (LANE_WRITE_BODY_LIMIT) 32 KB'ı aşan gövdeyi reddeder; sınır work-core.js MAX_BODY_BYTES ile aynıdır (testle köprü sabitine sabitlenmiştir).
   if(!Object.keys(errors).length&&bodyBytes(key===undefined?{...body,idempotencyKey:RESERVED_KEY}:body)>MAX_BODY_BYTES)errors.form="err.tooLarge";
@@ -50,9 +54,11 @@ export function mapIntake(x){
   if(idea===null||title===null||!INTAKE_RISKS.includes(x.riskLevel)||!Array.isArray(x.acceptanceCriteria)||x.acceptanceCriteria.length>50||x.acceptanceCriteria.some(c=>str(c,4000)===null))return null;
   const s=x.sources;
   if(!isObj(s)||!["title","acceptanceCriteria","riskLevel"].every(k=>INTAKE_SOURCES.includes(s[k])))return null;
+  // //TR: template yoksa null (eski sunucu / şablonsuz intake); VAR ama şemada değilse kayıt bozuktur (null), tanınmayan değer sessizce "şablonsuz" sayılmaz.
+  if(x.template!==undefined&&!INTAKE_TEMPLATES.includes(x.template))return null;
   const at=typeof x.createdAt==="string"&&!Number.isNaN(new Date(x.createdAt).getTime())?x.createdAt:null;
   return {intakeId:x.intakeId,projectId:x.projectId,missionId:x.missionId,idea,title,riskLevel:x.riskLevel,acceptanceCriteria:[...x.acceptanceCriteria],
-    projectType:INTAKE_PROJECT_TYPES.includes(x.projectType)?x.projectType:null,sources:{title:s.title,acceptanceCriteria:s.acceptanceCriteria,riskLevel:s.riskLevel},createdAt:at};
+    projectType:INTAKE_PROJECT_TYPES.includes(x.projectType)?x.projectType:null,template:x.template??null,sources:{title:s.title,acceptanceCriteria:s.acceptanceCriteria,riskLevel:s.riskLevel},createdAt:at};
 }
 /** GET /v1/intakes -> {state:"VERIFIED",items} | {state:"ERROR",items:[]}. */
 export function mapIntakes(raw){
