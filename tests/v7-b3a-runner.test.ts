@@ -759,11 +759,21 @@ describe("LANE-C MissionRunner claim cap (maxConcurrentRuns)", () => {
   }
 
   // //TR: Sanal saatli testlerde HİÇBİR bekleme sınırsız değildir: sanal saat donukken zamana bağlı bir yola (RETRY_SCHEDULED/retryAt, lease devri) girilirse tick ilerlemez. Sınır (gerçek süre) aşılırsa test, run durumu / adım / retryAt / leaseExpiresAt / sanal saat ile saniyeler içinde YÜKSEK SESLE düşer (600 s'lik adım zaman aşımı olarak değil); sınır gevşetilmez, test atlanmaz.
+  // //TR: Sınır bir İLERLEME-YOK sınırıdır, tick'in TOPLAM süre bütçesi DEĞİLDİR: bir tick bütün boru hattını (≈40 git/node çocuğu, ≈500 fsync) gerçek G/Ç ile koşar ve yavaş Windows runner'da 30 sn'yi meşru olarak aşabilir (sanal saat burada hiçbir şeyi bekletmez). Sayaç, izlenen run'ın durumu/adımı/checkpoint/kanıt/retry/leaseExpiresAt'i değişince ya da bir çocuk süreç başlayıp bitince yeniden kurulur (donuk saatte aynı değeri yazan lease yenilemesi ilerleme DEĞİLDİR); 30 sn hiçbiri olmazsa tick takılmıştır. Sınır aşılınca runner durdurulur: terk edilen tick sonraki teste taşmaz.
   const runDiag = (c: Ctx, ids: string[], extra: Record<string, unknown> = {}) => JSON.stringify({...extra, runs: ids.map(id => { const r = c.store.engineGetRun(id); return r ? {id: id.slice(0, 12), status: r.status, step: r.step, retryCount: r.retryCount, retryAt: r.retryAt, leaseExpiresAt: r.leaseExpiresAt, hasLease: r.leaseId !== null, attempt: r.attempt} : null; })});
   const boundedTick = async (mr: MissionRunner, c: Ctx, ids: string[], label: string, ctx: () => Record<string, unknown>, ms = 30_000) => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`BOUNDED_TICK_TIMEOUT ${label}: no result after ${ms} ms of real time (virtual clock frozen?) ${runDiag(c, ids, ctx())}`)), ms); });
-    try { return await Promise.race([mr.tick(), timeout]); } finally { clearTimeout(timer); }
+    const mark = () => JSON.stringify(ids.map(id => { const r = c.store.engineGetRun(id); return r ? [r.status, r.step, r.checkpoints.length, r.evidence.length, r.retryCount, r.retryAt, r.leaseExpiresAt] : null; }));
+    let seen = mark(), quietSince = Date.now(), poll: ReturnType<typeof setInterval> | undefined;
+    const touch = () => { quietSince = Date.now(); }, realSpawn = cp.spawn;
+    const spawnSpy = vi.spyOn(cp, "spawn").mockImplementation(((...a: unknown[]) => { const child = (realSpawn as (...x: unknown[]) => cp.ChildProcess).apply(cp, a); touch(); child.once("close", touch); return child; }) as typeof cp.spawn);
+    const stalled = new Promise<never>((_, reject) => { poll = setInterval(() => {
+      const now = mark();
+      if (now !== seen) { seen = now; touch(); return; }
+      if (Date.now() - quietSince >= ms) reject(new Error(`BOUNDED_TICK_TIMEOUT ${label}: no progress (run state or child process) for ${ms} ms of real time (virtual clock frozen?) ${runDiag(c, ids, ctx())}`));
+    }, 200); });
+    try { return await Promise.race([mr.tick(), stalled]); }
+    catch (e) { await Promise.race([mr.stop(), new Promise(r => setTimeout(r, 10_000))]); throw e; }
+    finally { clearInterval(poll); spawnSpy.mockRestore(); }
   };
   // run geçişlerini kaydeder: sanal saat donukken RETRY_SCHEDULED'a girilmemeli (girilirse retryAt sanal saatle geçmez).
   const watchTransitions = (c: Ctx) => { const seen: string[] = [], orig = c.store.transitionRun.bind(c.store); c.store.transitionRun = (...a: Parameters<typeof orig>) => { seen.push(String(a[2])); return orig(...a); }; return seen; };
