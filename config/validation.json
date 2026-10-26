@@ -351,6 +351,7 @@
         "node_modules/vitest/vitest.mjs",
         "run",
         "tests/v7-b3a-runner.test.ts",
+        "tests/v7-b3a-runner-limits-archive.test.ts",
         "tests/v7-b3a-recovery-budget.test.ts",
         "tests/v7-b3a-c3-builder-commit.test.ts"
       ],
