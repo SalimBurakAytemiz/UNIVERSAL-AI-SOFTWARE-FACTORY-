@@ -2055,8 +2055,18 @@
         "at": "2026-10-26T13:05:09Z",
         "postMerge": "VERIFIED: parent1 95056c4, parent2 = reviewed head 7a2cae9, merge-tree e3ff612 == merge tree",
         "review": "w015av2fi BLOCKERS (lock-release unpinned) fixed in 748f3a8; delta wdwmbj3bh NO_BLOCKERS + 2 own-diff LOWs fixed in 7a2cae9 (coordinator re-ran 254/254)",
-        "pushCi": "pending at 13:06Z",
+        "pushCi": "CI run 40327584728 in_progress at 13:31Z; Windows Installer 40327584620 success",
         "riskTier": "ROUTINE (renderer + locales + tests; 0 protected paths)"
+      },
+      {
+        "pr": 239,
+        "merge": "b593041",
+        "by": "coordinator SHA-bound merge (expectedHeadSha 8a28663; required checks validate ubuntu+windows green on that head after the one allowed full re-run 40318576590 attempt 2)",
+        "at": "2026-10-26T13:29:55Z",
+        "postMerge": "VERIFIED: parent1 f663ee9, parent2 = reviewed head 8a28663, merge-tree 87dbc1b == merge tree",
+        "review": "review-239 NO_BLOCKERS (3 lenses + adversarial verify); LOWs -> E2E-3 follow-up; optional UASCO Independent Review was in progress at merge",
+        "pushCi": "CI 40331086767 pending at 13:31Z",
+        "riskTier": "ROUTINE (scripts/e2e harness + fake backend; 0 protected paths)"
       }
     ],
     "wslProvider": {
