@@ -14,34 +14,76 @@
 The packaged backend (`packaged-entry.ts`) cannot take a FAKE executor (programmatic injection only), so a full journey with FAKE needs **dev mode** (`main.mjs` + the fake backend). The installed app keeps its launch/repair/uninstall test (`scripts/installer-install-test.mjs`). This request therefore adds a dev-mode step to the same job (Electron is already provisioned there).
 
 ## Diff for `.github/workflows/windows-installer.yml`
-Playwright is installed into a separate prefix so the reviewed-lock tree seal (`assertInstalledDependencyState`) and `package.json`/`package-lock.json` are untouched. Pin = the Playwright version used on Linux for this work (1.56.1).
+Independent review (dba4270) findings B4, B8, B9, L8, L10 are folded in. Design: the E2E gets **its own job** (deps + `provision-electron` only, so it does not wait for the installer build and install test), it is **not** `continue-on-error` (a failing E2E fails the job), Playwright is installed from an **integrity-pinned tarball** into a separate prefix (lockfiles and the dependency seal untouched), artifacts go through a **separate upload** (nothing is nested in `delivery/`, so `sha256sum -- *` is unaffected), and the summary is written before the exit code is applied.
 
 ```diff
-@@ pull_request.paths
-       - package-lock.json
-       - tsconfig.build.json
+@@ pull_request.paths (add)
 +      - scripts/e2e/**
-@@ steps (after "Real install / launch / repair / uninstall test", before "Collect delivery files")
++      - apps/desktop/**
++      - apps/control-api/src/**
++      - core/workos/**
++      - core/agents/**
+@@ jobs (new job, after `installer`; same action pins as the installer job)
++  desktop-e2e:
++    name: desktop journey E2E (windows-latest)
++    runs-on: windows-latest
++    timeout-minutes: 15
++    env:
++      CI: "true"
++    steps:
++      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
++        with:
++          persist-credentials: false
++      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
++        with:
++          node-version: 24
++          cache: npm
++      - run: node scripts/ensure-dependencies.mjs
++      - run: node scripts/provision-electron.mjs
++      - name: Install Playwright (pinned tarball, integrity-checked, outside the repo tree)
++        shell: bash
++        run: |
++          set -euo pipefail
++          mkdir -p "$RUNNER_TEMP/pw-pack" "$RUNNER_TEMP/pw"
++          (cd "$RUNNER_TEMP/pw-pack" && npm pack playwright-core@1.56.1 --json > pack.json)
++          got=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))[0].integrity)' "$RUNNER_TEMP/pw-pack/pack.json")
++          want=$(tr -d '\r\n' < scripts/e2e/playwright-core.integrity)
++          if [ "$got" != "$want" ]; then echo "::error::playwright-core integrity mismatch: got $got"; exit 1; fi
++          npm install --no-save --no-package-lock --ignore-scripts --prefix "$RUNNER_TEMP/pw" "$RUNNER_TEMP/pw-pack/playwright-core-1.56.1.tgz"
 +      - name: Desktop journey E2E (real Electron, FAKE executor, dev mode)
 +        shell: bash
 +        env:
 +          PLAYWRIGHT_MODULE_DIR: ${{ runner.temp }}/pw/node_modules
 +        run: |
 +          set -o pipefail
-+          npm install --no-save --no-package-lock --ignore-scripts --prefix "$RUNNER_TEMP/pw" playwright-core@1.56.1
 +          mkdir -p "$RUNNER_TEMP/e2e"
-+          node scripts/e2e/desktop-journey.e2e.mjs --out "$RUNNER_TEMP/e2e" 2>&1 | tee "$RUNNER_TEMP/e2e/E2E.log"
-+          { echo '### Desktop journey E2E'; grep -E '^(PASS|FAIL|BLOCKED|RESULT)' "$RUNNER_TEMP/e2e/E2E.log"; } >> "$GITHUB_STEP_SUMMARY"
-@@ "Collect delivery files"
-           for f in "$out"/UASCO-Setup-*.exe "$out/BUILD-SUMMARY.json" "$out/INSTALL-TEST-REPORT.json" "$out/INSTALL-TEST.log"; do
-             if [ -f "$f" ]; then cp "$f" "$RUNNER_TEMP/delivery/"; fi
-           done
-+          if [ -d "$RUNNER_TEMP/e2e" ]; then mkdir -p "$RUNNER_TEMP/delivery/e2e" && cp -r "$RUNNER_TEMP/e2e/report.json" "$RUNNER_TEMP/e2e/E2E.log" "$RUNNER_TEMP/e2e/screenshots" "$RUNNER_TEMP/delivery/e2e/" 2>/dev/null || true; fi
++          rc=0
++          node scripts/e2e/desktop-journey.e2e.mjs --out "$RUNNER_TEMP/e2e/run" 2>&1 | tee "$RUNNER_TEMP/e2e/E2E.log" || rc=${PIPESTATUS[0]}
++          result=$(sed -n 's/^RESULT \([^ ]*\).*/\1/p' "$RUNNER_TEMP/e2e/E2E.log" | tail -n 1)
++          {
++            echo '### Desktop journey E2E'
++            echo "exit=$rc result=${result:-NONE}"
++            echo '```'
++            grep -E '^(PASS|FAIL|NOT_VERIFIED|BLOCKED|RESULT)' "$RUNNER_TEMP/e2e/E2E.log" || true
++            echo '```'
++          } >> "$GITHUB_STEP_SUMMARY"
++          if [ "$rc" -ne 0 ]; then echo "::error::desktop journey E2E failed (exit $rc, result ${result:-NONE})"; exit "$rc"; fi
++          if [ "$result" != "PASS" ] && [ "$result" != "PASS_WITH_NOT_VERIFIED" ]; then echo "::error::desktop journey E2E result ${result:-NONE} is not a pass"; exit 1; fi
++      - name: Upload E2E report and screenshots
++        if: always()
++        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
++        with:
++          name: uasco-desktop-e2e-${{ github.run_id }}-${{ github.run_attempt }}
++          path: ${{ runner.temp }}/e2e
++          retention-days: 30
++          if-no-files-found: warn
 ```
 Notes for the coordinator:
-- The step fails the job on exit 1 and on exit 3 (BLOCKED is not a pass). If you want a burn-in period, add `continue-on-error: true` to the E2E step only, and remove it after a green Windows run.
-- `windows-latest` has an interactive desktop, so no `xvfb` is needed; on Linux CI use `xvfb-run -a node scripts/e2e/desktop-journey.e2e.mjs`.
-- `npm install --prefix` needs the registry (the E2E step is the only step that does); it is `--ignore-scripts`.
+- The installer job and its `Collect delivery files` step are NOT changed (no directory is added to `delivery/`, so `sha256sum -- *` keeps hashing regular files only and `SOURCE_SHA.txt` is still written).
+- `CI=true` makes the script accept only the sealed `provision-electron` binary (no `node_modules/electron` fallback) and `PLAYWRIGHT_MODULE_DIR` makes it load Playwright only from the integrity-checked prefix; both choices and the Playwright/Electron source and version are written to `report.json`.
+- Exit codes: `0` pass (also `PASS_WITH_NOT_VERIFIED` while 4b is gated), `1` a step or the startup failed, `3` BLOCKED (only a missing precondition checked before anything is started), `4` NOT_VERIFIED with `--require-post-4b`. Add `--require-post-4b` to the command once batch 4b is merged.
+- `scripts/e2e/playwright-core.integrity` holds the sha512 of the `playwright-core@1.56.1` tarball (`npm view playwright-core@1.56.1 dist.integrity`, equal to `npm pack` on this machine); bump both together.
+- Linux CI (not requested here) would run the same script under `xvfb-run -a`.
 
 ## Before / after batch 4b (A-WIN-E2E-2)
 The script probes the **real allow-list inside the running app** (`window.uasco.apiGet/apiPost` of a non-existent run/mission id; `INVALID_API_PATH` = not admitted, anything else = admitted; nothing is changed) in step `detect-routes` and records `mode` in `report.json`.

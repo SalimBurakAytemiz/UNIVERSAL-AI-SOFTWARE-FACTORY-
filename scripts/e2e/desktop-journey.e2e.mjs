@@ -1,4 +1,4 @@
-// //TR: Bu betik gerçek Electron masaüstü uygulamasını (Playwright _electron) geçici veri dizini ve FAKE yürütücü ile sürer: fikir -> intake (web-node) -> plan -> görev -> koşu -> teslim. Her adımda ekrandaki durum doğrulanır ve ekran görüntüsü alınır; GATED_4B adımlar dürüstçe "etkin değil" görünmelidir. Gerçek Claude ve ağ yoktur. Çıkış kodu: 0 = tüm adımlar geçti, 1 = bir adım başarısız, 3 = BLOCKED (ortam Electron'u başlatamıyor; PASS sayılmaz). Batch 4b öncesi/sonrası: gerçek main.mjs allow-list'i uygulama içinden yoklanır (detect-routes); analysis/product rotaları admit EDİLMEMİŞSE ilgili adım NOT_VERIFIED:GATED_4B kaydedilir (4b-sonrası iddianın PASS'ı sayılmaz), admit EDİLMİŞSE gerçek iddia çalışır; özet PASS / NOT_VERIFIED / FAIL ayrı sayılır. Kullanım: node scripts/e2e/desktop-journey.e2e.mjs [--out <dizin>] [--require-post-4b] (Linux başsız ortam: xvfb-run -a node ...).
+// //TR: Bu betik gerçek Electron masaüstü uygulamasını (Playwright _electron) geçici veri dizini ve FAKE yürütücü ile sürer: fikir -> intake (web-node) -> plan -> görev -> koşu -> teslim. Her adımda ekrandaki durum doğrulanır ve ekran görüntüsü alınır; GATED_4B adımlar dürüstçe "etkin değil" görünmelidir. Gerçek Claude ve ağ yoktur. Çıkış kodu: 0 = tüm planlı adımlar geçti (NOT_VERIFIED:GATED_4B olabilir), 1 = bir adım ya da başlatma başarısız, 3 = BLOCKED (yalnız HİÇBİR ŞEY başlatılmadan önce denetlenen ön koşul eksik: Playwright, Electron binary'si ya da ekran; PASS sayılmaz), 4 = --require-post-4b iken NOT_VERIFIED var. Batch 4b öncesi/sonrası: gerçek main.mjs allow-list'i uygulama içinden yoklanır (detect-routes). Kullanım: node scripts/e2e/desktop-journey.e2e.mjs [--out <dizin>] [--require-post-4b] (Linux başsız ortam: xvfb-run -a node ...).
 import {spawn} from "node:child_process";
 import {createRequire} from "node:module";
 import crypto from "node:crypto";
@@ -10,110 +10,155 @@ import {fileURLToPath, pathToFileURL} from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url)), repo = path.resolve(here, "..", "..");
 const argv = process.argv.slice(2), outArg = argv.indexOf("--out"), requirePost4b = argv.includes("--require-post-4b");
-const outDir = path.resolve(outArg >= 0 && argv[outArg + 1] ? argv[outArg + 1] : path.join(os.tmpdir(), `uasco-e2e-${Date.now()}`));
+const outDir = path.resolve(outArg >= 0 && argv[outArg + 1] ? argv[outArg + 1] : fs.mkdtempSync(path.join(os.tmpdir(), "uasco-e2e-")));
 const shotsDir = path.join(outDir, "screenshots"), dataRoot = path.join(outDir, "data");
 fs.mkdirSync(shotsDir, {recursive: true}); fs.mkdirSync(dataRoot, {recursive: true});
 
+// Planlı adımlar (sabit payda). kind: FUNCTIONAL = gerçek işlev sürülür; GATED_ASSERTED = 4b kapısına bağlı iddia (kapalıysa NOT_VERIFIED:GATED_4B); NOT_EXECUTED_ASSERTED = "çalıştırılmadı" durumunun dürüst gösterimi.
+const PLAN = [["first-run-dialog", "FUNCTIONAL"], ["detect-routes", "FUNCTIONAL"], ["setup-check", "FUNCTIONAL"], ["intake-idea", "FUNCTIONAL"], ["analysis", "GATED_ASSERTED"], ["plan-task-by-hand", "FUNCTIONAL"],
+  ["authorize-mission", "FUNCTIONAL"], ["run-engine-truth", "FUNCTIONAL"], ["start-run", "FUNCTIONAL"], ["run-reaches-review", "FUNCTIONAL"], ["test-result-honest", "NOT_EXECUTED_ASSERTED"],
+  ["link-run-to-task", "FUNCTIONAL"], ["open-project-workspace", "FUNCTIONAL"], ["delivery-prepare", "FUNCTIONAL"], ["delivery-accept", "FUNCTIONAL"], ["product", "GATED_ASSERTED"]];
+const KIND = Object.fromEntries(PLAN);
 const steps = [];
 const mode = {analysis: "UNKNOWN", product: "UNKNOWN"}; // ADMITTED | GATED_4B (uygulamadaki gerçek allow-list'ten)
-let projectId = null;
-let backend = null, app = null, win = null, backendLog = "";
+const meta = {playwright: null, electron: null, noSandbox: false};
+let projectId = null, sandboxRow = null;
+let backend = null, app = null, win = null, backendLog = "", cleaning = false;
 const report = (extra = {}) => {
-  const failed = steps.find(s => s.status === "FAIL");
-  const counts = {PASS: steps.filter(x => x.status === "PASS").length, NOT_VERIFIED: steps.filter(x => x.status === "NOT_VERIFIED").length, FAIL: steps.filter(x => x.status === "FAIL").length};
-  const result = extra.blocked ? `BLOCKED:${extra.blocked}` : failed ? "FAIL" : !steps.length ? "NOT_RUN" : counts.NOT_VERIFIED ? (requirePost4b ? "FAIL:NOT_VERIFIED_WITH_REQUIRE_POST_4B" : "PASS_WITH_NOT_VERIFIED") : "PASS";
-  const r = {platform: process.platform, node: process.version, outDir, mode, counts, steps, result, ...extra};
+  const done = new Set(steps.map(s => s.name));
+  const notExecuted = PLAN.filter(([n]) => !done.has(n)).map(([name, kind]) => ({name, kind, status: "NOT_EXECUTED"}));
+  const all = [...steps, ...notExecuted];
+  const failed = steps.some(s => s.status === "FAIL");
+  const counts = {PASS: all.filter(x => x.status === "PASS").length, NOT_VERIFIED: all.filter(x => x.status === "NOT_VERIFIED").length, FAIL: all.filter(x => x.status === "FAIL").length, NOT_EXECUTED: notExecuted.length, planned: PLAN.length};
+  const result = extra.blocked ? `BLOCKED:${extra.blocked}` : failed ? "FAIL" : notExecuted.length === PLAN.length ? "NOT_RUN" : notExecuted.length ? "FAIL:INCOMPLETE" : counts.NOT_VERIFIED ? (requirePost4b ? "FAIL:NOT_VERIFIED_WITH_REQUIRE_POST_4B" : "PASS_WITH_NOT_VERIFIED") : "PASS";
+  const r = {platform: process.platform, node: process.version, outDir, ...meta, mode, counts, steps: all, result, ...extra};
   fs.writeFileSync(path.join(outDir, "report.json"), JSON.stringify(r, null, 2));
   return r;
 };
-const blocked = async (code, detail) => {
-  console.log(`BLOCKED:${code} ${detail ?? ""}`.trim());
-  await cleanup(); report({blocked: code, detail: String(detail ?? "")});
-  process.exit(3);
-};
+// BLOCKED yalnız hiçbir şey başlatılmadan önce denetlenen ön koşullar için kullanılır.
+const blocked = (code, detail) => { console.log(`BLOCKED:${code} ${detail ?? ""}`.trim()); report({blocked: code, detail: String(detail ?? "")}); fs.rmSync(dataRoot, {recursive: true, force: true}); process.exit(3); };
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function cleanup() {
-  try { if (app) await app.close(); } catch { /* kapanışta hata yutulur */ }
-  try { if (backend && !backend.killed) { backend.kill("SIGTERM"); await new Promise(r => setTimeout(r, 500)); if (!backend.killed) backend.kill(); } } catch { /* yoksay */ }
+  if (cleaning) return; cleaning = true;
+  try { if (app) { const proc = app.process(); await Promise.race([app.close(), sleep(15000).then(() => { throw new Error("close timeout"); })]).catch(() => { try { proc.kill("SIGKILL"); } catch { /* yoksay */ } }); } } catch { /* kapanışta hata yutulur */ }
+  try {
+    if (backend && backend.exitCode === null && backend.signalCode === null) {
+      const exited = new Promise(r => backend.once("exit", r)); backend.kill("SIGTERM");
+      await Promise.race([exited, sleep(5000)]);
+      if (backend.exitCode === null && backend.signalCode === null) { backend.kill("SIGKILL"); await Promise.race([exited, sleep(2000)]); }
+    }
+  } catch { /* yoksay */ }
+  try { fs.rmSync(dataRoot, {recursive: true, force: true}); } catch { /* yoksay */ }
 }
+for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => { cleanup().finally(() => process.exit(sig === "SIGINT" ? 130 : 143)); });
 
 // ---- ortam: Playwright (yeni bağımlılık eklenmez; ön kurulu playwright ya da playwright-core) ----
 function loadPlaywright() {
-  const req = createRequire(import.meta.url);
-  const roots = [undefined, process.env.PLAYWRIGHT_MODULE_DIR, "/opt/node-tools/node_modules"].filter((x, i) => i === 0 || x);
+  const req = createRequire(import.meta.url), explicit = process.env.PLAYWRIGHT_MODULE_DIR;
+  // PLAYWRIGHT_MODULE_DIR verilmişse YALNIZ oradan yüklenir; /opt yedeği yalnız Linux'ta ve dizin verilmemişken.
+  const roots = explicit ? [explicit] : [undefined, ...(process.platform === "linux" ? ["/opt/node-tools/node_modules"] : [])];
   for (const root of roots) for (const name of ["playwright", "playwright-core"]) {
-    try { const m = root ? req(path.join(root, name)) : req(name); if (m && m._electron) return m; } catch { /* sıradaki */ }
+    try {
+      const file = root ? path.join(root, name) : name, m = req(file);
+      if (m && m._electron) { let version = null; try { version = req(`${file}/package.json`).version; } catch { /* yok */ } meta.playwright = {name, version, path: root ? file : req.resolve(name)}; return m; }
+    } catch { /* sıradaki */ }
   }
   return null;
 }
-// //TR: Repo'nun kendi Electron'u: önce mühürlü provision (scripts/provision-electron.mjs çıktısı, checksum doğrulamalı); yoksa node_modules/electron paketinin indirilmiş binary'si. Hiçbiri yoksa BLOCKED:ELECTRON_BINARY_MISSING (hiçbir şey sessizce indirilmez).
+// //TR: Repo'nun kendi Electron'u: önce mühürlü provision (scripts/provision-electron.mjs çıktısı, checksum doğrulamalı). Yedek: node_modules/electron/path.txt'in gösterdiği binary (require("electron") ÇALIŞTIRILMAZ: index.js eksik binary'yi mühür dışında indirebilir). CI'da (CI=true) yalnız provision kabul edilir. Hata ayrıntısı BLOCKED metnine girer.
 async function electronBinary() {
+  let provisionError = null;
   try {
     const m = await import(pathToFileURL(path.join(repo, "automation", "lib", "electron-provision.mjs")).href);
     const exe = await m.verifyProvisionedElectron(repo);
     const p = typeof exe === "string" ? exe : exe?.exePath ?? exe?.exe;
     if (typeof p === "string" && fs.existsSync(p)) return {path: p, source: "provisioned"};
-  } catch { /* sıradaki */ }
-  try { const p = createRequire(import.meta.url)("electron"); if (typeof p === "string" && fs.existsSync(p)) return {path: p, source: "node_modules/electron"}; } catch { /* yok */ }
-  return null;
+    provisionError = "provisioned path missing";
+  } catch (e) { provisionError = String(e?.message ?? e).split("\n")[0]; }
+  if (process.env.CI) return {error: `CI requires the provisioned Electron (scripts/provision-electron.mjs): ${provisionError}`};
+  try {
+    const pkgDir = path.join(repo, "node_modules", "electron"), rel = fs.readFileSync(path.join(pkgDir, "path.txt"), "utf8").trim();
+    const p = path.join(pkgDir, "dist", rel);
+    if (rel && fs.existsSync(p)) return {path: p, source: "node_modules/electron", provisionError};
+  } catch { /* yok */ }
+  return {error: `no Electron binary (provision error: ${provisionError}); run scripts/provision-electron.mjs`};
 }
 const freePort = () => new Promise((res, rej) => { const s = net.createServer(); s.on("error", rej); s.listen({host: "127.0.0.1", port: 0}, () => { const p = s.address().port; s.close(() => res(p)); }); });
+// Alt süreçlere yalnız gereken ortam geçer (GIT_*, *_TOKEN, proxy, NODE_OPTIONS vb. geçmez).
+const ENV_ALLOW = ["PATH", "Path", "SystemRoot", "SYSTEMROOT", "TEMP", "TMP", "TMPDIR", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "DISPLAY", "XAUTHORITY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "LANG", "LC_ALL", "ComSpec", "PATHEXT", "windir"];
+const childEnv = extra => ({...Object.fromEntries(ENV_ALLOW.filter(k => process.env[k] !== undefined).map(k => [k, process.env[k]])), ...extra});
 
 // ---- adım kaydı ----
-const T = {en: true};
 const mainText = async () => (await win.evaluate(() => document.querySelector("main")?.innerText ?? "")).replace(/\s+/g, " ");
-const shot = async name => { const f = `${String(steps.length + 1).padStart(2, "0")}-${name}.png`; try { await win.screenshot({path: path.join(shotsDir, f)}); return f; } catch { return null; } };
+const shot = async name => { const f = `${String(steps.length + 1).padStart(2, "0")}-${name}.png`; try { await win.screenshot({path: path.join(shotsDir, f), timeout: 10000}); return f; } catch { return null; } };
 class Check extends Error {}
 const must = (cond, msg) => { if (!cond) throw new Check(msg); };
 async function step(name, fn) {
-  const t0 = Date.now();
+  const t0 = Date.now(), kind = KIND[name];
   try {
     const out = await fn(), nv = out && typeof out === "object" ? out : null, detail = nv ? nv.detail : out, status = nv?.notVerified ? "NOT_VERIFIED" : "PASS";
-    steps.push({name, status, ...(nv?.notVerified ? {reason: nv.notVerified} : {}), ms: Date.now() - t0, detail: detail ?? null, screenshot: await shot(name)});
-    console.log(`${status}${nv?.notVerified ? `:${nv.notVerified}` : ""} ${name}${detail ? ` — ${detail}` : ""}`);
+    steps.push({name, kind, status, ...(nv?.notVerified ? {reason: nv.notVerified} : {}), ms: Date.now() - t0, detail: detail ?? null, screenshot: await shot(name)});
+    console.log(`${status}${nv?.notVerified ? `:${nv.notVerified}` : ""} ${name} [${kind}]${detail ? ` — ${detail}` : ""}`);
   } catch (e) {
     const screen = await mainText().catch(() => "").then(t => t.slice(0, 1200));
-    steps.push({name, status: "FAIL", ms: Date.now() - t0, detail: String(e?.message ?? e).slice(0, 600), screenText: screen, screenshot: await shot(`${name}-FAIL`)});
-    console.log(`FAIL ${name} — ${String(e?.message ?? e).slice(0, 300)}`);
+    steps.push({name, kind, status: "FAIL", ms: Date.now() - t0, detail: String(e?.message ?? e).slice(0, 600), screenText: screen, screenshot: await shot(`${name}-FAIL`)});
+    console.log(`FAIL ${name} [${kind}] — ${String(e?.message ?? e).slice(0, 300)}`);
     throw e;
   }
 }
-const waitText = (re, timeout = 15000, what = String(re)) => win.waitForFunction(src => new RegExp(src, "i").test((document.querySelector("main")?.innerText ?? "").replace(/\s+/g, " ")), re.source, {timeout}).catch(() => { throw new Check(`text not shown in time: ${what}`); });
+const waitText = (re, timeout = 15000, what = String(re), scope = "main") => win.waitForFunction(([src, sel]) => { const n = document.querySelector(sel); return !!n && new RegExp(src, "i").test((n.innerText ?? "").replace(/\s+/g, " ")); }, [re.source, scope], {timeout}).catch(() => { throw new Check(`text not shown in time: ${what}`); });
 const waitSel = (sel, timeout = 15000) => win.waitForSelector(sel, {timeout, state: "attached"}).catch(() => { throw new Check(`element not found: ${sel}`); });
-const go = async hash => { await win.evaluate(h => { location.hash = h; }, hash); await win.waitForTimeout(800); };
+const waitFn = (fn, arg, timeout, what) => win.waitForFunction(fn, arg, {timeout}).catch(() => { throw new Check(`not reached in time: ${what}`); });
+const go = async hash => { await win.evaluate(h => { location.hash = h; }, hash); await win.waitForSelector("main", {state: "attached", timeout: 15000}); await win.waitForTimeout(800); };
+// Onay penceresi: açık <dialog> (#confirmDialog[open]) beklenir, sonra onaylanır; pencere kapanana kadar beklenir.
+async function confirmDialog(what, required = true) {
+  const opened = await win.waitForSelector("#confirmDialog[open]", {timeout: required ? 10000 : 3000, state: "attached"}).then(() => true).catch(() => false);
+  if (!opened) { if (required) throw new Check(`confirm dialog did not open: ${what}`); return false; }
+  await win.click("#confirmOk"); await waitFn(() => !document.querySelector("#confirmDialog[open]"), null, 10000, `confirm dialog closed: ${what}`);
+  return true;
+}
 
 async function main() {
   const pw = loadPlaywright();
   if (!pw) return blocked("PLAYWRIGHT_MISSING", "no playwright/playwright-core with _electron found (set PLAYWRIGHT_MODULE_DIR)");
   const exe = await electronBinary();
-  if (!exe) return blocked("ELECTRON_BINARY_MISSING", "node_modules/electron has no downloaded binary (run: node node_modules/electron/install.js)");
+  if (exe.error) return blocked("ELECTRON_BINARY_MISSING", exe.error);
   if (process.platform === "linux" && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) return blocked("NO_DISPLAY", "no display; run under xvfb-run -a");
-  const port = await freePort(), token = crypto.randomBytes(24).toString("hex");
-  const env = {...process.env, CONTROL_API_PORT: String(port), UASCO_CONTROL_TOKEN: token, E2E_DATA_ROOT: dataRoot};
-  delete env.ELECTRON_RUN_AS_NODE;
-  backend = spawn(process.execPath, ["--import", "tsx", path.join("scripts", "e2e", "fake-backend.ts")], {cwd: repo, env, stdio: ["ignore", "pipe", "pipe"]});
-  backend.stdout.on("data", d => { backendLog += d; }); backend.stderr.on("data", d => { backendLog += d; });
-  console.log(`ENV platform=${process.platform} node=${process.version} electron=${exe.source}`);
-  const t0 = Date.now(); let ready = false;
-  while (Date.now() - t0 < 60000) { if (backendLog.includes("E2E_BACKEND_READY")) { ready = true; break; } if (backend.exitCode !== null) break; await new Promise(r => setTimeout(r, 200)); }
-  if (!ready) return blocked("BACKEND_NOT_STARTED", backendLog.slice(-300));
-  const args = [path.join("apps", "desktop", "main.mjs"), `--user-data-dir=${path.join(dataRoot, "electron-user-data")}`, ...(process.platform === "linux" ? ["--no-sandbox", "--disable-gpu"] : [])];
-  try { app = await pw._electron.launch({executablePath: exe.path, args, cwd: repo, env, timeout: 60000}); win = await app.firstWindow(); }
-  catch (e) { return blocked("ELECTRON_LAUNCH_FAILED", String(e?.message ?? e).split("\n")[0]); }
+  meta.electron = {source: exe.source, path: exe.path};
+  // Buradan sonra hiçbir hata BLOCKED sayılmaz: başlatma hataları FAIL (çıkış 1) olarak adımlara ve günlüğe yazılır.
+  const startupFail = async detail => { steps.push({name: "startup", kind: "FUNCTIONAL", status: "FAIL", detail: String(detail).slice(0, 1500), screenshot: null, backendLog: backendLog.slice(-1500)}); console.log(`FAIL startup — ${String(detail).slice(0, 400)}`); };
   try {
-    await win.evaluate(() => { localStorage.setItem("uasco.lang", "en"); }); await win.reload(); await win.waitForTimeout(1500);
-    await runSteps();
-  } catch { /* adım kaydı zaten yazıldı */ }
+    const port = await freePort(), token = crypto.randomBytes(24).toString("hex");
+    const env = childEnv({CONTROL_API_PORT: String(port), UASCO_CONTROL_TOKEN: token, E2E_DATA_ROOT: dataRoot});
+    backend = spawn(process.execPath, ["--import", "tsx", path.join("scripts", "e2e", "fake-backend.ts")], {cwd: repo, env, stdio: ["ignore", "pipe", "pipe"]});
+    backend.stdout.on("data", d => { backendLog += d; }); backend.stderr.on("data", d => { backendLog += d; });
+    console.log(`ENV platform=${process.platform} node=${process.version} electron=${exe.source} playwright=${meta.playwright.name}@${meta.playwright.version}`);
+    const t0 = Date.now(); let ready = false;
+    while (Date.now() - t0 < 60000) { if (backendLog.includes("E2E_BACKEND_READY")) { ready = true; break; } if (backend.exitCode !== null) break; await sleep(200); }
+    if (!ready) { await startupFail(`fake backend did not become ready (exit=${backend.exitCode}): ${backendLog.slice(-600)}`); return finish(); }
+    meta.noSandbox = process.platform === "linux" && (process.getuid?.() === 0 || process.env.E2E_NO_SANDBOX === "1");
+    const args = [path.join("apps", "desktop", "main.mjs"), `--user-data-dir=${path.join(dataRoot, "electron-user-data")}`, ...(meta.noSandbox ? ["--no-sandbox"] : []), ...(process.platform === "linux" ? ["--disable-gpu"] : [])];
+    app = await pw._electron.launch({executablePath: exe.path, args, cwd: repo, env: childEnv({CONTROL_API_PORT: String(port), UASCO_CONTROL_TOKEN: token}), timeout: 60000});
+    win = await app.firstWindow();
+    await win.waitForSelector("main", {state: "attached", timeout: 30000}); // gerçek belge yüklenmeden evaluate çağrılmaz
+    await win.evaluate(() => { localStorage.setItem("uasco.lang", "en"); }); await win.reload();
+    await win.waitForSelector("main", {state: "attached", timeout: 30000}); await win.waitForTimeout(1500);
+  } catch (e) { await startupFail(`${e?.message ?? e}\nbackend log tail: ${backendLog.slice(-600)}`); return finish(); }
+  try { await runSteps(); } catch { /* adım kaydı zaten yazıldı */ }
+  return finish();
+}
+async function finish() {
   const r = report();
   await cleanup();
-  console.log(`RESULT ${r.result} (PASS ${r.counts.PASS} / NOT_VERIFIED ${r.counts.NOT_VERIFIED} / FAIL ${r.counts.FAIL}; mode analysis=${mode.analysis} product=${mode.product}) out=${outDir}`);
+  const c = r.counts;
+  console.log(`RESULT ${r.result} (PASS ${c.PASS} / NOT_VERIFIED ${c.NOT_VERIFIED} / FAIL ${c.FAIL} / NOT_EXECUTED ${c.NOT_EXECUTED} of ${c.planned} planned; mode analysis=${mode.analysis} product=${mode.product}) out=${outDir}`);
   process.exit(r.result === "PASS" || r.result === "PASS_WITH_NOT_VERIFIED" ? 0 : r.result.startsWith("FAIL:NOT_VERIFIED") ? 4 : 1);
 }
 
 async function runSteps() {
   await step("first-run-dialog", async () => {
     await waitSel("#firstRunDialog");
-    await win.keyboard.press("Escape"); await win.waitForTimeout(400);
-    must(!(await win.evaluate(() => !!document.getElementById("firstRunDialog"))), "first-run dialog did not close");
+    await win.keyboard.press("Escape"); await waitFn(() => !document.getElementById("firstRunDialog"), null, 5000, "first-run dialog closed");
     return "wizard shown on first start and skipped (Esc)";
   });
   await step("detect-routes", async () => {
@@ -129,11 +174,13 @@ async function runSteps() {
     const ids = rows.map(r => r.split("=")[0]);
     must(["CLI", "EXECUTOR", "IMPLEMENTER", "REVIEWER", "SANDBOX", "PRODUCT"].every(x => ids.includes(x)), `setup rows incomplete: ${rows.join(",")}`);
     must(rows.every(r => /=(PASS|BLOCKED|UNKNOWN)$/.test(r)), `setup row with an invented state: ${rows.join(",")}`);
+    sandboxRow = (rows.find(r => r.startsWith("SANDBOX=")) ?? "").split("=")[1] ?? null;
     return rows.join(" ");
   });
   await step("intake-idea", async () => {
     await go("#/projects"); await waitSel("#intake-t"); await win.click("#intake-t");
-    must(await win.evaluate(() => document.querySelector("#intake-template")?.value === "web-node" || !document.querySelector("#intake-template") === false), "template select is not defaulted to web-node");
+    await waitSel("#intake-template");
+    must((await win.evaluate(() => document.querySelector("#intake-template").value)) === "web-node", "template select is not defaulted to web-node");
     await win.fill("#intake-idea", "A book club app: members suggest books and vote");
     await win.click("#intake-submit"); await waitSel("#intake-result");
     await waitText(/Created from your idea/, 20000, "intake result");
@@ -148,18 +195,18 @@ async function runSteps() {
     await win.click("#intake-open-mission"); await win.waitForTimeout(800);
     await go("#/journey"); await waitSel("#analysis-step-submit", 20000);
     await win.click("#analysis-step-submit");
-    const noResult = () => win.evaluate(() => !document.querySelector("[data-analysis-status='DRAFT_READY'],[data-analysis-status='AWAITING_APPROVAL'],[data-analysis-status='COMPLETE'],[data-analysis-plan='CREATED']"));
+    const noResult = () => win.evaluate(() => !document.querySelector("#analysis-step [data-analysis-status='DRAFT_READY'], #analysis-step [data-analysis-status='AWAITING_APPROVAL'], #analysis-step [data-analysis-status='COMPLETE'], #analysis-step [data-analysis-plan='CREATED']"));
     if (mode.analysis === "GATED_4B") {
-      await waitText(/not enabled/, 15000, "analysis step 'not enabled'");
+      await waitText(/not enabled/, 15000, "analysis step 'not enabled'", "#analysis-step");
       must(await noResult(), "analysis claims a result although the step is not admitted");
-      return {notVerified: "GATED_4B", detail: "honest 'not enabled' shown; the post-4b assertion (server BLOCKED readiness) was NOT run"};
+      return {notVerified: "GATED_4B", detail: "honest 'not enabled' shown in the analysis block; the post-4b assertion (server BLOCKED readiness) was NOT run"};
     }
     // 4b sonrası: sunucunun kesin BLOCKED hazırlığı (FAKE kurulum => analiz oluşturucusu / CLI hazır değil); asla taslak ya da tamam gösterilmez.
-    await win.waitForFunction(() => [...document.querySelectorAll("[data-analysis-status]")].some(n => n.dataset.analysisStatus !== "NONE"), null, {timeout: 30000}).catch(() => { throw new Check("analysis showed no answer in 30 s (status stayed NONE)"); });
-    const st = await win.evaluate(() => [...document.querySelectorAll("[data-analysis-status]")].map(n => n.dataset.analysisStatus).find(x => x !== "NONE"));
+    await waitFn(() => [...document.querySelectorAll("#analysis-step [data-analysis-status]")].some(n => n.dataset.analysisStatus !== "NONE"), null, 30000, "analysis answer (status stayed NONE)");
+    const st = await win.evaluate(() => [...document.querySelectorAll("#analysis-step [data-analysis-status]")].map(n => n.dataset.analysisStatus).find(x => x !== "NONE"));
     must(st === "BLOCKED", `analysis shows ${st} instead of the server's BLOCKED readiness`);
     must(await noResult(), "analysis shows a draft/complete result while the executor is FAKE");
-    const blockers = await win.evaluate(() => [...document.querySelectorAll("[data-analysis-blocker]")].map(n => n.dataset.analysisBlocker));
+    const blockers = await win.evaluate(() => [...document.querySelectorAll("#analysis-step [data-analysis-blocker]")].map(n => n.dataset.analysisBlocker));
     must(blockers.length > 0, "BLOCKED shows no blocker code");
     must(blockers.every(b => /^([a-z]+:)?[A-Z][A-Z0-9_]*(:.+)?$/.test(b)), `blocker code not in the server's shape: ${blockers.join(",")}`);
     must(!(await win.evaluate(() => !!document.querySelector("#analysis-plan-submit"))), "'Create plan' is offered although the analysis is not COMPLETE");
@@ -173,29 +220,32 @@ async function runSteps() {
     return "one task planned by hand (analysis is blocked or not enabled)";
   });
   await step("authorize-mission", async () => {
-    await win.click("#tr-PREFLIGHT"); await waitSel("#tr-AUTHORIZED", 20000);
-    await win.click("#tr-AUTHORIZED"); await waitSel("#confirmOk", 10000); await win.click("#confirmOk");
-    await waitText(/Authorized\b.{0,40}current status|current status.{0,60}Authorized/i, 20000, "mission Authorized");
-    return "Draft -> Preflight -> Authorized (confirmed)";
+    // Zaman çizelgesindeki ölçülebilir durum beklenir (sr-only metni değil): önce PREFLIGHT, onay penceresinden sonra AUTHORIZED "current".
+    const cur = s => `ol.status-timeline li[data-step="${s}"][data-state="current"]`;
+    await waitSel("#tr-PREFLIGHT", 20000); await win.click("#tr-PREFLIGHT"); await waitSel(cur("PREFLIGHT"), 20000);
+    await waitSel("#tr-AUTHORIZED", 20000); await win.click("#tr-AUTHORIZED"); await confirmDialog("authorize mission");
+    await waitSel(cur("AUTHORIZED"), 20000);
+    return "Draft -> Preflight -> Authorized (confirmed; timeline step is current)";
   });
   await step("run-engine-truth", async () => {
-    await waitSel("#run-start", 20000); await waitSel("[data-engine-head]", 20000);
+    await waitSel("#run-start:not([disabled])", 20000); await waitSel("[data-engine-head]", 20000);
     const head = await win.evaluate(() => document.querySelector("[data-engine-head]")?.dataset.engineHead ?? null);
     const active = await win.evaluate(() => document.querySelector("[data-engine-active]")?.dataset.engineActive ?? null);
     must(head !== null, "run engine block is not shown before Start run");
     must(["READY", "BLOCKED", "UNKNOWN"].includes(head), `run engine block shows an invented state: ${head}`);
     return `engine=${head} active=${active}`;
   });
-  let runId = null;
+  let runId = null, plannedTaskId = null;
   await step("start-run", async () => {
-    await win.click("#run-start");
-    await win.waitForTimeout(600); if (await win.isVisible("#confirmOk")) await win.click("#confirmOk");
+    await waitSel("#run-start:not([disabled])", 20000);
+    await win.click("#run-start"); await confirmDialog("start run", false);
     await waitSel("[data-run-status]", 30000);
     runId = await win.evaluate(() => document.querySelector("[data-run-status]").dataset.runId);
+    must(/^run_[0-9a-f]{24}$/.test(runId ?? ""), `unexpected run id: ${runId}`);
     return runId;
   });
   await step("run-reaches-review", async () => {
-    await win.waitForFunction(() => { const n = document.querySelector("[data-run-status]"); return n && ["AWAITING_APPROVAL", "FAILED", "BLOCKED", "SUCCEEDED", "CANCELLED"].includes(n.dataset.runStatus); }, null, {timeout: 120000}).catch(() => { throw new Check("run did not settle in 120 s"); });
+    await waitFn(() => { const n = document.querySelector("[data-run-status]"); return n && ["AWAITING_APPROVAL", "FAILED", "BLOCKED", "SUCCEEDED", "CANCELLED"].includes(n.dataset.runStatus); }, null, 120000, "run settled in 120 s");
     const st = await win.evaluate(() => document.querySelector("[data-run-status]").dataset.runStatus);
     must(st === "AWAITING_APPROVAL", `run ended as ${st} instead of AWAITING_APPROVAL (FAKE executor + CLEAN review)`);
     return `status=${st}`;
@@ -203,17 +253,29 @@ async function runSteps() {
   await step("test-result-honest", async () => {
     await waitSel("[data-run-test-result]", 20000);
     const r = await win.evaluate(() => { const n = document.querySelector("[data-run-test-result]"); return {kind: n.dataset.runTestResult, reason: n.dataset.runTestReason, text: n.textContent}; });
-    must(["EXECUTED_VERIFIED", "FAILED", "NOT_EXECUTED", "NOT_VERIFIED", "UNKNOWN"].includes(r.kind), `unknown result kind ${r.kind}`);
+    // Doğrulanmış sandbox yok (setup-check SANDBOX PASS değil) => TAM olarak NOT_EXECUTED:SANDBOX_UNAVAILABLE; başka kimse (EXECUTED_VERIFIED/UNKNOWN dahil) FAIL.
+    if (sandboxRow !== "PASS") must(r.kind === "NOT_EXECUTED" && r.reason === "SANDBOX_UNAVAILABLE", `without a verified sandbox the test row must be NOT_EXECUTED:SANDBOX_UNAVAILABLE, got ${r.kind}:${r.reason}`);
+    else must(["EXECUTED_VERIFIED", "NOT_EXECUTED", "NOT_VERIFIED", "FAILED"].includes(r.kind), `unexpected test result kind ${r.kind} with a verified sandbox`);
     if (r.kind !== "EXECUTED_VERIFIED") must(!/\bpassed\b/i.test(r.text), "a result that is not verified says 'passed'");
-    return `${r.kind}${r.reason ? ":" + r.reason : ""}`;
+    // Sunucunun kendi kararı ile çapraz kontrol (köprü GET /v1/work-runs/:id).
+    const srv = await win.evaluate(async id => { try { const d = await window.uasco.apiGet(`/v1/work-runs/${id}`); return {pv: d?.delivery?.productVerification ?? null, te: d?.delivery?.testsExecuted ?? null}; } catch (e) { return {error: String(e?.message ?? e)}; } }, runId);
+    must(!srv.error, `server read for the cross-check failed: ${srv.error}`);
+    if (sandboxRow !== "PASS") must(srv.pv?.state === "NOT_VERIFIED" && /^NOT_EXECUTED:SANDBOX_UNAVAILABLE$/.test(srv.pv?.reason ?? "") && srv.te === false, `server delivery view disagrees: ${JSON.stringify(srv)}`);
+    return `${r.kind}${r.reason ? ":" + r.reason : ""} (server: ${srv.pv?.state}/${srv.pv?.reason}, testsExecuted=${srv.te})`;
   });
   await step("link-run-to-task", async () => {
+    const panel = `[data-run-linked-for="${runId}"]`;
     await waitSel("#run-link input[type=checkbox]", 20000);
+    plannedTaskId = await win.evaluate(() => (document.querySelector("#run-link")?.innerText.match(/tsk_[0-9a-f]{24}/) ?? [null])[0]);
+    must(plannedTaskId, "run-link panel does not show the planned task id");
+    // Önceki durum: bu koşu henüz hiçbir göreve bağlı değildir (dürüst "bağlı görev yok").
+    await waitSel(panel, 20000);
+    must(await win.evaluate(sel => !document.querySelector(`${sel} [data-run-linked-task]`), panel), "the run is already linked to a task before the link was made");
     await win.locator("#run-link input[type=checkbox]").first().check();
     await win.click("#runlink-submit");
-    await waitText(/Add the book list page/, 15000, "linked task on the run card");
-    must(await win.evaluate(id => !!document.querySelector(`[data-run-linked-for="${id}"]`), runId), "run card does not list the linked task");
-    return "task linked to the run (POST /v1/tasks/:id/runs)";
+    await waitSel(`${panel} [data-run-linked-task="${plannedTaskId}"]`, 20000);
+    must(await win.evaluate(sel => !document.querySelector(`${sel} [data-run-linked="none"], ${sel} [data-run-linked="unavailable"], ${sel} [data-run-linked="error"]`), panel), "the run card still reports no/unavailable/error links after linking");
+    return `task ${plannedTaskId} linked to the run (POST /v1/tasks/:id/runs)`;
   });
   await step("open-project-workspace", async () => {
     await go("#/projects"); await win.getByRole("button", {name: "Open workspace"}).first().click();
@@ -224,33 +286,41 @@ async function runSteps() {
     await win.click("#studio-tab-delivery"); await waitSel(`[data-delivery-run="${runId}"]`, 20000);
     must((await win.evaluate(id => document.querySelector(`[data-delivery-run="${id}"]`).dataset.deliveryState, runId)) === "NOT_PREPARED", "delivery is not NOT_PREPARED before preparing");
     await win.click(`#dl-prep-${runId}`);
-    await win.waitForFunction(id => document.querySelector(`[data-delivery-run="${id}"]`)?.dataset.deliveryState === "PREPARED", runId, {timeout: 60000}).catch(() => { throw new Check("delivery did not become PREPARED"); });
+    await waitFn(id => document.querySelector(`[data-delivery-run="${id}"]`)?.dataset.deliveryState === "PREPARED", runId, 60000, "delivery PREPARED");
     return "export artifact prepared (POST /v1/work-runs/:id/delivery/prepare)";
   });
   await step("delivery-accept", async () => {
     const card = `[data-delivery-run="${runId}"]`;
-    const verification = await win.evaluate(sel => document.querySelector(sel).textContent, card);
-    must(/NOT_VERIFIED/.test(verification), "delivery card does not say NOT_VERIFIED although no test ran in a verified sandbox");
+    must(/NOT_VERIFIED/.test(await win.evaluate(sel => document.querySelector(sel).textContent, card)), "delivery card does not say NOT_VERIFIED although no test ran in a verified sandbox");
     await win.click(`#dl-open-${runId}`); await waitSel(`#dl-dialog-${runId}`, 10000);
+    // Doğrulanmamış ürünün kabulü için onay kutusu (ack-ne) VAR ve işaretli olmalıdır.
+    await waitSel(`#ack-ne-${runId}`, 5000);
     for (const cb of await win.locator(`#dl-dialog-${runId} input[type=checkbox]`).all()) await cb.check();
-    await win.click(`#dl-accept-${runId}`); await waitSel("#confirmOk", 10000); await win.waitForTimeout(300); await win.click("#confirmOk");
-    await win.waitForFunction(id => document.querySelector(`[data-delivery-run="${id}"]`)?.dataset.deliveryState === "ACCEPTED", runId, {timeout: 60000}).catch(() => { throw new Check("delivery did not become ACCEPTED"); });
-    return "source delivery accepted (still NOT_VERIFIED, acknowledged by the Founder)";
+    must(await win.evaluate(id => document.getElementById(`ack-ne-${id}`)?.checked === true, runId), "the NOT_VERIFIED acknowledgement (ack-ne) is not checked before accepting");
+    await win.click(`#dl-accept-${runId}`); await confirmDialog("accept delivery");
+    await waitFn(id => document.querySelector(`[data-delivery-run="${id}"]`)?.dataset.deliveryState === "ACCEPTED", runId, 60000, "delivery ACCEPTED");
+    must(/NOT_VERIFIED/.test(await win.evaluate(sel => document.querySelector(sel).textContent, card)), "after acceptance the delivery card no longer says NOT_VERIFIED");
+    await go("#/work"); await waitSel("ol.status-timeline", 20000);
+    must(await win.evaluate(() => !document.querySelector('ol.status-timeline li[data-step="COMPLETE"][data-state="current"]')), "accepting the source delivery completed the mission (it must not)");
+    return "source delivery accepted (NOT_VERIFIED acknowledged, still NOT_VERIFIED, mission not Complete)";
   });
   await step("product", async () => {
+    await go("#/projects");
+    if (!(await win.$("#studio-tab-overview"))) await win.getByRole("button", {name: "Open workspace"}).first().click(); // the studio of the project may already be open
+    await waitSel("#studio-tab-overview", 20000);
     await win.click("#studio-tab-overview"); await waitSel("#studio-ov-product", 20000);
     if (mode.product === "GATED_4B") {
-      await waitText(/not available to the desktop yet|not enabled/i, 20000, "product card 'not available' (GATED_4B)");
-      must(await win.evaluate(() => !document.querySelector("#product-start,#product-stop,[data-product-url]")), "product card offers Start/Stop/address although the product routes are not admitted");
-      return {notVerified: "GATED_4B", detail: "honest 'not available to the desktop yet' shown; the post-4b assertion (exact DEVRUN_SANDBOX_UNAVAILABLE refusal) was NOT run"};
+      await waitText(/not available to the desktop yet|not enabled/i, 20000, "product card 'not available' (GATED_4B)", "#studio-ov-product");
+      must(await win.evaluate(() => !document.querySelector("#studio-ov-product #product-start, #studio-ov-product #product-stop, #studio-ov-product [data-product-url]")), "product card offers Start/Stop/address although the product routes are not admitted");
+      return {notVerified: "GATED_4B", detail: "honest 'not available to the desktop yet' shown in the product card; the post-4b assertion (exact SANDBOX_UNAVAILABLE refusal) was NOT run"};
     }
     // 4b sonrası: Start sunulur (kaynak üretimi tamam + teslim commit'i), sandbox yok => sunucunun kesin reddi; host'ta hiçbir şey başlamaz.
-    await waitSel("#product-start", 20000);
-    await win.click("#product-start"); await waitSel("#confirmOk", 10000); await win.waitForTimeout(300); await win.click("#confirmOk");
+    await waitSel("#studio-ov-product #product-start", 20000);
+    await win.click("#product-start"); await confirmDialog("start product");
     await waitSel("#product-run-status", 20000);
-    await win.waitForFunction(() => /Refused \(/.test(document.querySelector("#product-run-status")?.innerText ?? ""), null, {timeout: 20000}).catch(() => { throw new Check("no refusal shown after Start"); });
+    await waitFn(() => /Refused \(/.test(document.querySelector("#product-run-status")?.innerText ?? ""), null, 20000, "refusal text after Start");
     const refusal = await win.evaluate(() => document.querySelector("#product-run-status").innerText.replace(/\s+/g, " "));
-    // Sunucunun kesin kodu gösterilir: DEVRUN_SANDBOX_UNAVAILABLE:<neden> (doğrulanmış sağlayıcı var, köprü yok) ya da düz SANDBOX_UNAVAILABLE (doğrulanmış sandbox yok; kapı önce reddeder). İkisi de "hiçbir şey host'ta başlamadı" demektir.
+    // Sunucunun kesin kodu gösterilir: DEVRUN_SANDBOX_UNAVAILABLE:<neden> (doğrulanmış sağlayıcı var, köprü yok) ya da düz SANDBOX_UNAVAILABLE (doğrulanmış sandbox yok; kapı önce reddeder).
     const reason = (refusal.match(/Refused \(((?:DEVRUN_)?SANDBOX_UNAVAILABLE[^)\s]*)\)/) ?? [null, null])[1];
     must(reason, `refusal does not show the server's sandbox refusal code: ${refusal.slice(0, 200)}`);
     const card = await win.evaluate(() => { const n = document.querySelector("#studio-ov-product"); return {state: n?.dataset.productState ?? null, url: !!n?.querySelector("[data-product-url]"), stop: !!document.querySelector("#product-stop")}; });
