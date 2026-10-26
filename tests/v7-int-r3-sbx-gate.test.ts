@@ -527,3 +527,169 @@ describe("LANE-C Linux unshare sandbox provider v2 (SandboxProvider contract)", 
     } finally { fs.rmSync(ws, {recursive: true, force: true}); }
   });
 });
+
+// //TR: LANE-B B-SBX-WIN-1: Windows için WSL2 tabanlı sandbox sağlayıcısı. Linux CI'da sahte bir wsl çalıştırıcısı enjekte edilir (her ret nedeni, argüman kurulumu, kopyalama, ortam/argv çevirisi, temizlik); GERÇEK WSL selfTest'i yalnız win32 + WSL + UASCO_WSL_DISTRO varsa çalışır, aksi halde SKIP olarak görünür ve ASLA PASS sayılmaz.
+describe("LANE-B WSL unshare sandbox provider (fake wsl runner; real WSL only on win32 with WSL)", () => {
+  const ISO = {nsFlags: ["--user", "--map-root-user", "--net", "--pid", "--mount", "--fork", "--kill-child=SIGKILL"], setup: "set -eu\n# isolation setup (test double)\n", helperPath: "/usr/sbin:/usr/bin:/sbin:/bin"};
+  const GOOD_PROBE = "MNT_C=absent\nDRVFS=0\nINTEROP_FILE=absent\nPE_EXEC_RC=126\nUNIX_PATH_SOCKETS=0\nWSL_RUNTIME_DIRS=absent\nRW_usr=ro\nRW_etc=ro\nRW_bin=ro\nWORK=writable\nNET_IFACES=0\nDONE=1\n";
+  interface Cfg { status?: number; spawnError?: boolean; distros?: string; version?: string; interop?: string; tools?: string; roots?: string[]; probe?: string; probeRc?: number; mktempFails?: boolean; runOut?: string; runRc?: number; runDelayMs?: number }
+  const u16 = (t: string) => Buffer.from("\uFEFF" + t, "utf16le");
+  const mkRunner = (cfg: Cfg = {}) => {
+    const calls: {args: string[]; input?: Buffer | string}[] = []; const files = new Map<string, string>();
+    let tarIn: Buffer | null = null;
+    const runner = async (args: string[], o: {timeoutMs: number; input?: Buffer | string}) => {
+      calls.push({args, input: o.input});
+      const R = (exitCode: number | null, out = "", extra: Partial<{spawnError: boolean; timedOut: boolean}> = {}) => ({exitCode, stdout: Buffer.from(out), stderr: Buffer.alloc(0), timedOut: false, aborted: false, spawnError: false, ...extra});
+      if (args[0] === "--status") return cfg.spawnError ? R(null, "", {spawnError: true}) : R(cfg.status ?? 0);
+      if (args[0] === "-l" && args[1] === "-q") return {...R(0), stdout: u16(cfg.distros ?? "Ubuntu\r\nDebian\r\n")};
+      if (args[0] === "-l" && args[1] === "-v") return {...R(0), stdout: u16(cfg.version ?? "  NAME      STATE           VERSION\r\n* Ubuntu    Running         2\r\n  Debian    Stopped         2\r\n")};
+      const cmd = args.slice(3);   // ["-d", distro, "--exec", ...]
+      if (cmd[0] === "/usr/bin/mktemp") return cfg.mktempFails ? R(1) : R(0, "/tmp/uasco-sbx-AbC123\n");
+      if (cmd[0] === "/bin/mkdir") return R(0);
+      if (cmd[0] === "/usr/bin/tee") { files.set(cmd[1], String(o.input)); return R(0); }
+      if (cmd[0] === "/bin/tar") { tarIn = Buffer.from(o.input as Buffer); return R(0); }
+      if (cmd[0] === "/usr/bin/test") return R(cfg.roots ? (cfg.roots.includes(cmd[2]) ? 0 : 1) : (cmd[2] === "/srv" ? 0 : 1));
+      if (cmd[0] === "/usr/bin/pkill" || cmd[0] === "/bin/rm") return R(0);
+      if (cmd[0] === "/bin/sh" && cmd[1].endsWith("/ctl/outer.sh")) return R(0, `INTEROP=${cfg.interop ?? "absent"}\nTOOLS=${cfg.tools ?? "ok"}\nDONE=1\n`);
+      if (cmd[0] === "/bin/sh" && cmd[1].endsWith("/ctl/run.sh")) {
+        if ((files.get(cmd[1]) ?? "").includes("MNT_C=")) return R(cfg.probeRc ?? 0, cfg.probe ?? GOOD_PROBE);
+        if (cfg.runDelayMs) await new Promise(r => setTimeout(r, cfg.runDelayMs));
+        return R(cfg.runRc ?? 0, cfg.runOut ?? "tests ok\n");
+      }
+      return R(1);
+    };
+    return {runner, calls, files, tar: () => tarIn};
+  };
+  const mk = async (cfg: Cfg = {}, o: Record<string, unknown> = {}) => {
+    const mod = await import("../core/sandbox/wsl-unshare-sandbox.js"); const f = mkRunner(cfg);
+    return {mod, f, p: new mod.WslUnshareSandboxProvider({platform: "win32", distro: "Ubuntu", runner: f.runner as any, isolation: ISO, ...o})};
+  };
+  const ws = () => { const d = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-wsl-")); fs.writeFileSync(path.join(d, "test.js"), "console.log('t')\n"); fs.mkdirSync(path.join(d, "sub")); fs.writeFileSync(path.join(d, "sub", "a.txt"), "A"); return d; };
+
+  it("a fully isolated WSL passes selfTest; the gate authorizes; run copies the project in, runs inside the sandbox script and cleans up; no host path is ever passed to wsl.exe", async () => {
+    const {mod, f, p} = await mk(); const dir = ws();
+    try {
+      expect(await p.selfTest()).toEqual({ok: true});
+      const gate = new ExecutionGate(p as any);
+      const d = await gate.authorize("RUNNER_VERIFY_TESTS");
+      expect(d.allowed).toBe(true);
+      const r = await p.run([process.execPath, "test.js"], {cwd: dir, env: {PATH: "C:\\Windows", USERPROFILE: "C:\\Users\\x", FOO: "bar baz", BAD: "C:\\secret"}, timeoutMs: 20_000});
+      expect(r).toMatchObject({exitCode: 0, stdout: "tests ok\n", timedOut: false, spawnError: false});
+      const runSh = [...f.files.entries()].filter(([k]) => k.endsWith("run.sh")).map(([, v]) => v).pop()!;
+      expect(runSh).toContain("'--map-root-user'"); expect(runSh).toContain("/usr/bin/timeout --signal=KILL"); expect(runSh).toContain("'FOO=bar baz'");
+      expect(runSh).not.toContain("USERPROFILE"); expect(runSh).not.toContain("C:\\\\"); expect(runSh).toContain("'node' 'test.js'"); expect(runSh).toContain("'/srv'");
+      for (const c of f.calls) { const all = c.args.join(" "); expect(all).not.toContain(dir); expect(all).not.toContain("/mnt/"); expect(all).not.toMatch(/[A-Za-z]:\\/); }
+      const last = f.calls.slice(-2).map(c => c.args.slice(3).join(" "));
+      expect(last[0]).toContain("/usr/bin/pkill"); expect(last[1]).toBe("/bin/rm -rf -- /tmp/uasco-sbx-AbC123");
+      const tar = f.tar()!; expect(tar.length % 512).toBe(0);
+      const names = []; for (let o = 0; o + 512 <= tar.length && tar[o] !== 0; ) { const sz = parseInt(tar.subarray(o + 124, o + 135).toString().trim() || "0", 8); names.push(tar.subarray(o, o + 100).toString().replace(/\0.*$/, "")); o += 512 + Math.ceil(sz / 512) * 512; }
+      expect(names).toEqual(["sub/", "sub/a.txt", "test.js"]);
+    } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+  });
+
+  it.each([
+    ["PLATFORM_NOT_WIN32", {}, {platform: "linux"}],
+    ["WSL_EXE_MISSING", {spawnError: true}, {}],
+    ["WSL_NOT_AVAILABLE", {status: 1}, {}],
+    ["WSL_DISTRO_NOT_CONFIGURED", {}, {distro: ""}],
+    ["WSL_DISTRO_MISSING", {distros: "Debian\r\n"}, {}],
+    ["WSL_VERSION_NOT_2", {version: "  NAME STATE VERSION\r\n* Ubuntu Running 1\r\n"}, {}],
+    ["LINUX_ISOLATION_EXPORTS_MISSING", {}, {isolation: null}],
+    ["INTEROP_ENABLED", {interop: "enabled"}, {}],
+    ["WSL_TOOLS_MISSING", {tools: "missing"}, {}],
+    ["NO_NEW_ROOT_MOUNTPOINT", {roots: ["/mnt"]}, {}],
+    ["SCRATCH_CREATE_FAILED", {mktempFails: true}, {}],
+    ["PROBE_FAILED", {probeRc: 3}, {}]
+  ])("%s -> SANDBOX_UNAVAILABLE, nothing runs", async (reason, cfg, o) => {
+    const {f, p} = await mk(cfg as Cfg, o as any); const dir = ws();
+    try {
+      const st = await p.selfTest();
+      expect(st).toEqual({ok: false, detail: reason});
+      expect(p.lastSelfTest).toEqual(st);
+      const gate = new ExecutionGate(p as any);
+      expect((await gate.authorize("RUNNER_VERIFY_TESTS")).allowed).toBe(false);
+      const before = f.calls.length;
+      const r = await p.run(["node", "test.js"], {cwd: dir, env: {}, timeoutMs: 5000});
+      expect(r).toMatchObject({spawnError: true, exitCode: null}); expect(r.stderr).toContain("SANDBOX_NOT_VERIFIED");
+      expect(f.calls.length).toBe(before);
+      expect(() => p.spawn("node", ["x"], {cwd: dir, env: {}})).toThrow("SANDBOX_NOT_VERIFIED");
+    } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+  });
+
+  it.each([["MNT_C", "present"], ["DRVFS", "2"], ["INTEROP_FILE", "present"], ["PE_EXEC_RC", "0"], ["UNIX_PATH_SOCKETS", "1"], ["WSL_RUNTIME_DIRS", "present"], ["RW_usr", "writable"], ["RW_etc", "writable"], ["RW_bin", "writable"], ["WORK", "ro"], ["NET_IFACES", "1"], ["DONE", "0"]])(
+    "the negative probe %s=%s makes the provider unavailable (PROBE_<KEY>), and a missing key does too", async (key, bad) => {
+      const probe = GOOD_PROBE.replace(new RegExp(`^${key}=.*$`, "m"), `${key}=${bad}`);
+      expect((await (await mk({probe})).p.selfTest())).toEqual({ok: false, detail: `PROBE_${key.toUpperCase()}`});
+      const missing = GOOD_PROBE.split("\n").filter(l => !l.startsWith(key + "=")).join("\n");
+      expect((await (await mk({probe: missing})).p.selfTest())).toEqual({ok: false, detail: `PROBE_${key.toUpperCase()}`});
+    });
+
+  it("run() translates the host node path, refuses other Windows paths and unsafe working directories, skips symlinks, and refuses oversized or unsafe-named projects", async () => {
+    const {mod, f, p} = await mk({}, {tarLimits: {maxFiles: 2, maxTotalBytes: 1 << 20, maxFileBytes: 1 << 20, maxDepth: 5}}); const dir = ws();
+    try {
+      await p.selfTest();
+      expect(mod.translateArgv([process.execPath, "a.js"])).toEqual(["node", "a.js"]);
+      expect(mod.translateArgv(["C:\\Tools\\node.exe", "a.js"])).toEqual(["node", "a.js"]);
+      expect(mod.translateArgv(["C:\\Tools\\evil.exe"])).toBeNull(); expect(mod.translateArgv([])).toBeNull(); expect(mod.translateArgv(["npm", "test"])).toEqual(["npm", "test"]);
+      const env = {};
+      expect((await p.run(["C:\\Tools\\evil.exe"], {cwd: dir, env, timeoutMs: 5000})).stderr).toContain("ARGV_INVALID_OR_HOST_PATH");
+      expect((await p.run(["node"], {cwd: path.parse(dir).root, env, timeoutMs: 5000})).stderr).toContain("CWD_NOT_ABSOLUTE_OR_ROOT");
+      expect((await p.run(["node"], {cwd: os.homedir(), env, timeoutMs: 5000})).stderr).toContain("CWD_IS_HOME_OR_ANCESTOR");
+      expect((await p.run(["node"], {cwd: path.join(dir, "missing"), env, timeoutMs: 5000})).stderr).toContain("CWD_MISSING");
+      expect((await p.run(["node"], {cwd: dir, env: undefined as any, timeoutMs: 5000})).stderr).toContain("ENV_REQUIRED");
+      fs.writeFileSync(path.join(dir, "b.txt"), "B");
+      expect((await p.run(["node"], {cwd: dir, env, timeoutMs: 5000})).stderr).toContain("COPY_TOO_MANY_FILES");
+      fs.rmSync(path.join(dir, "b.txt"));
+      if (process.platform !== "win32") {
+        fs.symlinkSync("/etc/passwd", path.join(dir, "link"));
+        const r = await p.run(["node", "test.js"], {cwd: dir, env, timeoutMs: 5000});
+        expect(r.exitCode).toBe(0); expect(r.stderr).toContain("1 symbolic link(s)/special file(s) were not copied");
+        expect(f.tar()!.toString("latin1")).not.toContain("passwd");
+        fs.writeFileSync(path.join(dir, "a:b.txt"), "x");
+        expect((await p.run(["node", "test.js"], {cwd: dir, env, timeoutMs: 5000})).stderr).toContain("COPY_UNSAFE_NAME");
+      }
+    } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+  });
+
+  it("a hung run is reported as timed out, a failing copy-in refuses, and the scratch directory is removed in every case", async () => {
+    const dir = ws();
+    try {
+      const slow = await mk({runDelayMs: 80, runRc: 137}); await slow.p.selfTest();
+      const t = await slow.p.run(["node", "test.js"], {cwd: dir, env: {}, timeoutMs: 50});
+      expect(t).toMatchObject({timedOut: true, exitCode: null});
+      expect(slow.f.calls.slice(-1)[0].args.slice(3)).toEqual(["/bin/rm", "-rf", "--", "/tmp/uasco-sbx-AbC123"]);
+      const ok = await mk({runRc: 1, runOut: ""}); await ok.p.selfTest();
+      expect((await ok.p.run(["node", "x"], {cwd: dir, env: {}, timeoutMs: 5000})).exitCode).toBe(1);
+      expect(ok.f.calls.slice(-1)[0].args.slice(3)).toEqual(["/bin/rm", "-rf", "--", "/tmp/uasco-sbx-AbC123"]);
+      expect(() => ok.p.spawn("node", [], {cwd: dir, env: {}})).toThrow("SPAWN_NOT_SUPPORTED_IN_WSL_V1");
+    } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+  });
+
+  it("shell quoting, env filtering and WSL text decoding are exact", async () => {
+    const {shq, wslEnv, decodeWslText} = await import("../core/sandbox/wsl-unshare-sandbox.js");
+    expect(shq("a b")).toBe("'a b'"); expect(shq("it's")).toBe("'it'\\''s'"); expect(shq("$(x);`y`")).toBe("'$(x);`y`'");
+    expect(wslEnv({PATH: "C:\\x", Path: "C:\\y", USERPROFILE: "C:\\u", A_B: "1", "bad-key": "x", NUL: "a\0b", NL: "a\nb", DRIVE: "x=C:\\z", OK: "yes sir", WSLENV: "x"})).toEqual(["A_B=1", "OK=yes sir"]);
+    expect(decodeWslText(Buffer.from("\uFEFFUbuntu\r\nDebian\r\n", "utf16le"))).toBe("Ubuntu\r\nDebian\r\n"); expect(decodeWslText(Buffer.from("abc"))).toBe("abc");
+  });
+
+  it("the default Linux isolation comes from the Linux provider module exports; until Lane C exports them the WSL provider refuses with LINUX_ISOLATION_EXPORTS_MISSING (never a fork of the script)", async () => {
+    const {linuxIsolationFromModule, WslUnshareSandboxProvider} = await import("../core/sandbox/wsl-unshare-sandbox.js");
+    expect(linuxIsolationFromModule({})).toBeNull(); expect(linuxIsolationFromModule({LINUX_SANDBOX_NS_FLAGS: ["--user"], LINUX_SANDBOX_SETUP: "x", LINUX_SANDBOX_HELPER_PATH: "/bin"})).not.toBeNull();
+    expect(linuxIsolationFromModule({LINUX_SANDBOX_NS_FLAGS: [1], LINUX_SANDBOX_SETUP: "x", LINUX_SANDBOX_HELPER_PATH: "/bin"})).toBeNull();
+    const f = mkRunner();
+    const st = await new WslUnshareSandboxProvider({platform: "win32", distro: "Ubuntu", runner: f.runner as any}).selfTest();
+    if (linuxIsolationFromModule() === null) expect(st).toEqual({ok: false, detail: "LINUX_ISOLATION_EXPORTS_MISSING"});
+    else expect(st.detail).not.toBe("LINUX_ISOLATION_EXPORTS_MISSING");
+  });
+
+  const realWsl = process.platform === "win32" && !!process.env.UASCO_WSL_DISTRO && cp.spawnSync("wsl.exe", ["--status"], {windowsHide: true}).status === 0;
+  it.skipIf(!realWsl)("REAL WSL (win32 + UASCO_WSL_DISTRO): selfTest passes its negative probes and a node test runs inside the sandbox (SKIPPED elsewhere, never counted as PASS)", async () => {
+    const {WslUnshareSandboxProvider} = await import("../core/sandbox/wsl-unshare-sandbox.js");
+    const p = new WslUnshareSandboxProvider(); const dir = ws();
+    try {
+      const st = await p.selfTest(); expect(st, JSON.stringify(st)).toEqual({ok: true});
+      const r = await p.run(["node", "-e", "console.log(40+2)"], {cwd: dir, env: {}, timeoutMs: 60_000});
+      expect(r.stdout.trim()).toBe("42"); expect(r.exitCode).toBe(0);
+    } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+  });
+});
