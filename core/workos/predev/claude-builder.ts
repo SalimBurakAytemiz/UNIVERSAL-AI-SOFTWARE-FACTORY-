@@ -58,8 +58,8 @@ export interface ClaudePreDevBuilderOptions { timeoutMs?: number; bindings?: rea
 
 const sha256 = (s: string) => crypto.createHash("sha256").update(s, "utf8").digest("hex");
 
-// //TR: Başarılı bir CLI sonuç zarfı: tek JSON nesnesi, type "result", is_error false, subtype "success", result metin. Başka her şey (dizi, akış olayları, düz metin) zarf DEĞİLDİR ve model çıktısı sayılmaz.
-type Envelope = {kind: "ok"; result: string} | {kind: "error"; text: string} | {kind: "invalid"};
+// //TR: Başarılı bir CLI sonuç zarfı: tek JSON nesnesi, type "result", is_error false, subtype "success", result metin. Başka her şey (dizi, akış olayları, düz metin, boolean olmayan is_error) zarf DEĞİLDİR ve model çıktısı sayılmaz. Ayrıştırılmış HER hata zarfı (is_error true ya da success dışı subtype) "error"dır; `auth` YALNIZ belgelenmiş oturum hatası zarfı için doğrudur: is_error true VE subtype "success" VE result metni satır başı oturum hatası (success dışı bir subtype'ın metni, ör. error_during_execution/error_max_turns, modelin ya da bir aracın ürettiği metin olabilir ve asla oturum kanıtı sayılmaz).
+type Envelope = {kind: "ok"; result: string} | {kind: "error"; text: string; auth: boolean} | {kind: "invalid"};
 function readEnvelope(stdout: string): Envelope {
   let o: unknown;
   try { o = JSON.parse(stdout); } catch { return {kind: "invalid"}; }
@@ -67,7 +67,7 @@ function readEnvelope(stdout: string): Envelope {
   const e = o as Record<string, unknown>;
   if (e.type !== "result" || typeof e.is_error !== "boolean") return {kind: "invalid"};
   const text = typeof e.result === "string" ? e.result : "";
-  if (e.is_error === true || e.subtype !== "success") return {kind: "error", text};
+  if (e.is_error === true || e.subtype !== "success") return {kind: "error", text, auth: e.is_error === true && e.subtype === "success" && claudeAuthFailure(text)};
   if (typeof e.result !== "string") return {kind: "invalid"};
   return {kind: "ok", result: e.result};
 }
@@ -133,11 +133,11 @@ export class ClaudePreDevBuilder implements BuilderPort {
       const rawOut = String(r.stdout ?? "").trim();
       const json = this.rt.outputFormat === "claude-json";
       const envl = json ? readEnvelope(rawOut) : null;
-      // //TR: Oturum yok/süresi dolmuş: CLI bunu çıkış kodu 1 + zarfın `result` metni (veya stderr) ile bildirir; genel EXIT_NONZERO yerine kesin neden.
-      if (json && (r.exitCode !== 0 || envl?.kind === "error") && claudeAuthFailure(`${envl?.kind === "error" ? envl.text : ""}\n${rawOut}\n${String(r.stderr ?? "")}`)) return fail("PREDEV_BUILDER_LOGIN_EXPIRED");
+      // //TR: #237 incelemesi: ayrıştırılmış HER hata zarfı çıkış kodundan bağımsız CLI_ERROR'dur (hız sınırı/API hataları dahil); yalnız belgelenmiş oturum zarfı (is_error true + subtype success + satır başı oturum hatası) LOGIN_EXPIRED'dır. Zarf olmayan bir süreç hatasında oturum yalnız STDERR'den (çıkış kodu != 0) çıkarılır; düz stdout metni ya da başka bir zarfın metni oturum kanıtı değildir. Metin kipinde (outputFormat yok) hiçbir oturum sınıflaması yapılmaz.
+      if (envl?.kind === "error") return fail(envl.auth ? "PREDEV_BUILDER_LOGIN_EXPIRED" : "PREDEV_BUILDER_CLI_ERROR");
+      if (json && r.exitCode !== 0 && claudeAuthFailure(String(r.stderr ?? ""))) return fail("PREDEV_BUILDER_LOGIN_EXPIRED");
       if (r.exitCode !== 0) return fail("PREDEV_BUILDER_EXIT_NONZERO");
       if (json && rawOut !== "" && envl!.kind === "invalid") return fail("PREDEV_BUILDER_ENVELOPE_INVALID");
-      if (envl?.kind === "error") return fail("PREDEV_BUILDER_CLI_ERROR");
       const out = envl?.kind === "ok" ? unwrapSingleFence(envl.result.trim()) : rawOut;
       if (out === "") return fail("PREDEV_BUILDER_EMPTY_OUTPUT");
       if (Buffer.byteLength(out, "utf8") > this.maxOutputBytes) return fail("PREDEV_BUILDER_OUTPUT_TOO_LARGE");

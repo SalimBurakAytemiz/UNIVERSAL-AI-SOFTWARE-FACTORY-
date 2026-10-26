@@ -1,51 +1,47 @@
 {
- "//TR": "C-FLOW-ANALYSIS-2 mutasyon listesi: her mutant tam metin değişikliğidir (dosyada tam 1 kez bulunmalı); docs/lanes/LANE-C-flow-analysis-2-mutants.mjs her birini uygular ve tests/v7-core-predev-crew-coordination.test.ts dosyasının (-t \"C-FLOW-ANALYSIS\" ile) BAŞARISIZ olmasını bekler. X7 (boş yanıtı zarf olarak okumak) denetimde HAYATTA KALDI: gereksiz koruma `rawOut !== \"\"` idi (sonraki denetim zaten aynı koruma ile aynı kodu verir); koruma üretim kodundan kaldırıldı ve mutant listeden çıkarıldı (davranış aynı).",
+ "//TR": "C-FLOW-ANALYSIS-2 mutasyon listesi: her mutant tam metin değişikliğidir (dosyada tam 1 kez bulunmalı); docs/lanes/LANE-C-flow-analysis-2-mutants.mjs her birini uygular ve tests/v7-core-predev-crew-coordination.test.ts dosyasının (-t \"C-FLOW-ANALYSIS\" ile) BAŞARISIZ olmasını bekler. X7 (boş yanıtı zarf olarak okumak) denetimde HAYATTA KALDI: gereksiz koruma `rawOut !== \"\"` idi (sonraki denetim zaten aynı koruma ile aynı kodu verir); koruma üretim kodundan kaldırıldı ve mutant listeden çıkarıldı (davranış aynı). #237 inceleme turu: yer tutucu koruması placeholder.ts'e taşındı (validateArtifactContent içinde paylaşılır): G2-G4/G6 yerine PH1-PH13; oturum sınıflaması yeniden yazıldı (A1-A7, X3, X13, X15, X16); yetkinlik değerlendirmesi EV1-EV4 (testFile/filter mutant başına verilebilir, varsayılan coordination dosyası + \"C-FLOW-ANALYSIS\"); yinelenen E1-E3 (executors.ts) EX1-EX3 olarak yeniden adlandırıldı. Toplam 52.",
  "mutants": [
   {
    "id": "A1",
-   "description": "login detection removed",
+   "description": "the documented auth envelope is no longer LOGIN_EXPIRED (it is reported as CLI_ERROR)",
    "file": "core/workos/predev/claude-builder.ts",
-   "old": "if (json && (r.exitCode !== 0 || envl?.kind === \"error\") && claudeAuthFailure(",
-   "new": "if (false && (r.exitCode !== 0 || envl?.kind === \"error\") && claudeAuthFailure("
+   "old": "if (envl?.kind === \"error\") return fail(envl.auth ? \"PREDEV_BUILDER_LOGIN_EXPIRED\" : \"PREDEV_BUILDER_CLI_ERROR\");",
+   "new": "if (envl?.kind === \"error\") return fail(\"PREDEV_BUILDER_CLI_ERROR\");"
   },
   {
    "id": "A2",
-   "description": "login detection only on a non-zero exit",
+   "description": "the stderr auth detection is removed",
    "file": "core/workos/predev/claude-builder.ts",
-   "old": "(r.exitCode !== 0 || envl?.kind === \"error\") && claudeAuthFailure",
-   "new": "(r.exitCode !== 0) && claudeAuthFailure"
+   "old": "if (json && r.exitCode !== 0 && claudeAuthFailure(String(r.stderr ?? \"\"))) return fail(\"PREDEV_BUILDER_LOGIN_EXPIRED\");",
+   "new": "if (false && r.exitCode !== 0 && claudeAuthFailure(String(r.stderr ?? \"\"))) return fail(\"PREDEV_BUILDER_LOGIN_EXPIRED\");"
   },
   {
    "id": "A3",
-   "description": "login detection ignores the envelope text",
+   "description": "the stderr auth detection also fires when the process exited 0",
    "file": "core/workos/predev/claude-builder.ts",
-   "old": "${envl?.kind === \"error\" ? envl.text : \"\"}\\n${rawOut}",
-   "new": "${\"\"}\\n${rawOut}"
+   "old": "if (json && r.exitCode !== 0 && claudeAuthFailure(String(r.stderr ?? \"\"))) return fail(\"PREDEV_BUILDER_LOGIN_EXPIRED\");",
+   "new": "if (json && claudeAuthFailure(String(r.stderr ?? \"\"))) return fail(\"PREDEV_BUILDER_LOGIN_EXPIRED\");"
   },
   {
    "id": "A4",
-   "description": "login detection ignores stderr",
+   "description": "the stderr auth detection also runs in text mode",
    "file": "core/workos/predev/claude-builder.ts",
-   "old": "\\n${String(r.stderr ?? \"\")}`)) return fail(\"PREDEV_BUILDER_LOGIN_EXPIRED\")",
-   "new": "`)) return fail(\"PREDEV_BUILDER_LOGIN_EXPIRED\")"
+   "old": "if (json && r.exitCode !== 0 && claudeAuthFailure(String(r.stderr ?? \"\"))) return fail(\"PREDEV_BUILDER_LOGIN_EXPIRED\");",
+   "new": "if (r.exitCode !== 0 && claudeAuthFailure(String(r.stderr ?? \"\"))) return fail(\"PREDEV_BUILDER_LOGIN_EXPIRED\");"
   },
   {
    "id": "A5",
-   "description": "login detection ignores plain stdout",
+   "description": "plain stdout text is read as an auth signal too",
    "file": "core/workos/predev/claude-builder.ts",
-   "old": "${envl?.kind === \"error\" ? envl.text : \"\"}\\n${rawOut}\\n",
-   "new": "${envl?.kind === \"error\" ? envl.text : \"\"}\\n\\n"
+   "old": "if (json && r.exitCode !== 0 && claudeAuthFailure(String(r.stderr ?? \"\"))) return fail(\"PREDEV_BUILDER_LOGIN_EXPIRED\");",
+   "new": "if (json && r.exitCode !== 0 && claudeAuthFailure(String(r.stderr ?? \"\") + \"\\n\" + rawOut)) return fail(\"PREDEV_BUILDER_LOGIN_EXPIRED\");"
   },
   {
    "id": "A6",
-   "description": "login detection also reads a SUCCESSFUL reply text",
+   "description": "the text of ANY error envelope is read as an auth signal",
    "file": "core/workos/predev/claude-builder.ts",
-   "edits": [
-    {
-     "old": "(r.exitCode !== 0 || envl?.kind === \"error\") && claudeAuthFailure(`${envl?.kind === \"error\" ? envl.text : \"\"}",
-     "new": "(true) && claudeAuthFailure(`${envl?.kind === \"error\" ? envl.text : envl?.kind === \"ok\" ? envl.result : \"\"}"
-    }
-   ]
+   "old": ", auth: e.is_error === true && e.subtype === \"success\" && claudeAuthFailure(text)}",
+   "new": ", auth: claudeAuthFailure(text)}"
   },
   {
    "id": "X1",
@@ -65,7 +61,7 @@
    "id": "X3",
    "description": "an error envelope is not an error",
    "file": "core/workos/predev/claude-builder.ts",
-   "old": "if (envl?.kind === \"error\") return fail(\"PREDEV_BUILDER_CLI_ERROR\");",
+   "old": "if (envl?.kind === \"error\") return fail(envl.auth ? \"PREDEV_BUILDER_LOGIN_EXPIRED\" : \"PREDEV_BUILDER_CLI_ERROR\");\n",
    "new": ""
   },
   {
@@ -132,27 +128,6 @@
    "new": "if (false) return"
   },
   {
-   "id": "G2",
-   "description": "the guard does not look inside arrays",
-   "file": "core/workos/predev/driver.ts",
-   "old": "if (Array.isArray(x)) return x.some(hasPlaceholder);",
-   "new": "if (Array.isArray(x)) return false;"
-  },
-  {
-   "id": "G3",
-   "description": "the guard does not look at object values",
-   "file": "core/workos/predev/driver.ts",
-   "old": "|| hasPlaceholder(v))",
-   "new": "|| false)"
-  },
-  {
-   "id": "G4",
-   "description": "the guard does not look at keys",
-   "file": "core/workos/predev/driver.ts",
-   "old": "k.includes(PLACEHOLDER_MARKER) || hasPlaceholder(v)",
-   "new": "hasPlaceholder(v)"
-  },
-  {
    "id": "G5",
    "description": "the guard runs after the shape validation",
    "file": "core/workos/predev/driver.ts",
@@ -164,28 +139,21 @@
    ]
   },
   {
-   "id": "G6",
-   "description": "the guard checks strings by equality, not containment",
-   "file": "core/workos/predev/driver.ts",
-   "old": "return x.includes(PLACEHOLDER_MARKER);",
-   "new": "return x === PLACEHOLDER_MARKER;"
-  },
-  {
-   "id": "E1",
+   "id": "EX1",
    "description": "the pre-dev builder asks for text output",
    "file": "core/workos/executors.ts",
    "old": "argv: l => reviewerArgv(l, \"json\"), outputFormat: \"claude-json\",",
    "new": "argv: l => reviewerArgv(l), outputFormat: \"claude-json\","
   },
   {
-   "id": "E2",
+   "id": "EX2",
    "description": "the pre-dev builder does not read the envelope",
    "file": "core/workos/executors.ts",
    "old": "argv: l => reviewerArgv(l, \"json\"), outputFormat: \"claude-json\",",
    "new": "argv: l => reviewerArgv(l, \"json\"),"
   },
   {
-   "id": "E3",
+   "id": "EX3",
    "description": "reviewerArgv ignores the requested format",
    "file": "core/workos/executors.ts",
    "old": "\"--output-format\", outputFormat];",
@@ -253,6 +221,162 @@
    "file": "core/workos/crew/analysis.ts",
    "old": "this.d.builder !== NO_ANALYSIS_BUILDER);",
    "new": "this.d.builder === NO_ANALYSIS_BUILDER);"
+  },
+  {
+   "id": "A7",
+   "description": "a non-success subtype with is_error true is read as an auth envelope",
+   "file": "core/workos/predev/claude-builder.ts",
+   "old": "auth: e.is_error === true && e.subtype === \"success\" && claudeAuthFailure(text)",
+   "new": "auth: e.is_error === true && claudeAuthFailure(text)"
+  },
+  {
+   "id": "X13",
+   "description": "an error envelope is only an error when the process exited 0 (the exit-1 rate-limit/API error is EXIT_NONZERO again)",
+   "file": "core/workos/predev/claude-builder.ts",
+   "old": "if (envl?.kind === \"error\") return fail(envl.auth ? \"PREDEV_BUILDER_LOGIN_EXPIRED\" : \"PREDEV_BUILDER_CLI_ERROR\");",
+   "new": "if (envl?.kind === \"error\" && r.exitCode === 0) return fail(envl.auth ? \"PREDEV_BUILDER_LOGIN_EXPIRED\" : \"PREDEV_BUILDER_CLI_ERROR\");"
+  },
+  {
+   "id": "X15",
+   "description": "a result envelope without a boolean is_error is accepted",
+   "file": "core/workos/predev/claude-builder.ts",
+   "old": "if (e.type !== \"result\" || typeof e.is_error !== \"boolean\") return {kind: \"invalid\"};",
+   "new": "if (e.type !== \"result\") return {kind: \"invalid\"};"
+  },
+  {
+   "id": "X16",
+   "description": "an envelope of another type is accepted",
+   "file": "core/workos/predev/claude-builder.ts",
+   "old": "if (e.type !== \"result\" || typeof e.is_error !== \"boolean\") return {kind: \"invalid\"};",
+   "new": "if (typeof e.is_error !== \"boolean\") return {kind: \"invalid\"};"
+  },
+  {
+   "id": "PH1",
+   "description": "the shared guard does not look inside arrays",
+   "file": "core/workos/predev/placeholder.ts",
+   "old": "if (Array.isArray(x)) { for (const v of x) stack.push([v, depth + 1]); continue; }",
+   "new": "if (Array.isArray(x)) continue;"
+  },
+  {
+   "id": "PH2",
+   "description": "the shared guard does not look at object values",
+   "file": "core/workos/predev/placeholder.ts",
+   "old": "if (containsPlaceholderMarker(k)) return \"PLACEHOLDER_VALUE\";\n      stack.push([v, depth + 1]);",
+   "new": "if (containsPlaceholderMarker(k)) return \"PLACEHOLDER_VALUE\";"
+  },
+  {
+   "id": "PH3",
+   "description": "the shared guard does not look at object keys",
+   "file": "core/workos/predev/placeholder.ts",
+   "old": "      if (containsPlaceholderMarker(k)) return \"PLACEHOLDER_VALUE\";\n",
+   "new": ""
+  },
+  {
+   "id": "PH4",
+   "description": "the shared guard matches a string only when it IS the marker",
+   "file": "core/workos/predev/placeholder.ts",
+   "old": "if (containsPlaceholderMarker(x)) return \"PLACEHOLDER_VALUE\"; continue; }",
+   "new": "if (x === PLACEHOLDER_MARKER) return \"PLACEHOLDER_VALUE\"; continue; }"
+  },
+  {
+   "id": "PH5",
+   "description": "no normalisation at all (full-width and zero-width variants pass)",
+   "file": "core/workos/predev/placeholder.ts",
+   "old": "s.normalize(\"NFKC\").replace(/\\p{Cf}/gu, \"\")",
+   "new": "s"
+  },
+  {
+   "id": "PH6",
+   "description": "format characters are not stripped (zero-width / soft hyphen / bidi / BOM variants pass)",
+   "file": "core/workos/predev/placeholder.ts",
+   "old": ".replace(/\\p{Cf}/gu, \"\")",
+   "new": ""
+  },
+  {
+   "id": "PH7",
+   "description": "no NFKC (full-width variant passes)",
+   "file": "core/workos/predev/placeholder.ts",
+   "old": "s.normalize(\"NFKC\").replace(",
+   "new": "s.replace("
+  },
+  {
+   "id": "PH8",
+   "description": "the marker match is case sensitive",
+   "file": "core/workos/predev/placeholder.ts",
+   "old": "/<\\s*<\\s*fill\\b/i",
+   "new": "/<\\s*<\\s*FILL\\b/"
+  },
+  {
+   "id": "PH9",
+   "description": "no spacing allowed inside the marker",
+   "file": "core/workos/predev/placeholder.ts",
+   "old": "/<\\s*<\\s*fill\\b/i",
+   "new": "/<<fill\\b/i"
+  },
+  {
+   "id": "PH10",
+   "description": "no word boundary after FILL (honest <<fillable>> / <<filling>> text is rejected)",
+   "file": "core/workos/predev/placeholder.ts",
+   "old": "/<\\s*<\\s*fill\\b/i",
+   "new": "/<\\s*<\\s*fill/i"
+  },
+  {
+   "id": "PH11",
+   "description": "no depth cap (a deeply nested reply is not a typed rejection)",
+   "file": "core/workos/predev/placeholder.ts",
+   "old": "    if (depth >= MAX_CONTENT_DEPTH) return \"CONTENT_TOO_DEEP\";\n",
+   "new": ""
+  },
+  {
+   "id": "PH12",
+   "description": "the depth cap is far too tight (honest artefacts are rejected)",
+   "file": "core/workos/predev/placeholder.ts",
+   "old": "export const MAX_CONTENT_DEPTH = 32;",
+   "new": "export const MAX_CONTENT_DEPTH = 2;"
+  },
+  {
+   "id": "PH13",
+   "description": "validateArtifactContent does not run the shared guard (reproduceSuperseding, the store write gate and the evaluation lose it)",
+   "file": "core/workos/predev/validators.ts",
+   "old": "  const problem = placeholderProblem(content);\n  if (problem !== null) return err(problem);\n",
+   "new": "",
+   "filter": "C-FLOW-ANALYSIS|rework reply"
+  },
+  {
+   "id": "EV1",
+   "description": "the evaluation has no no_placeholder check (a skeleton echo fails only inside validators_accept)",
+   "file": "core/competency/evaluation-pipeline.ts",
+   "testFile": "tests/v7-wfr03-role-registry.test.ts",
+   "filter": "golden mission through the PRODUCTION|golden-predev-v2|pre-dev primaries golden mission",
+   "old": "    checks.push({id: \"no_placeholder\", passed: placeholder === null, detail: placeholder === null ? \"no placeholder marker\" : placeholder});\n",
+   "new": ""
+  },
+  {
+   "id": "EV2",
+   "description": "the procedure keeps the v1 version id",
+   "file": "core/competency/evaluation-pipeline.ts",
+   "testFile": "tests/v7-wfr03-role-registry.test.ts",
+   "filter": "golden mission through the PRODUCTION|golden-predev-v2|pre-dev primaries golden mission",
+   "old": "version: \"golden-predev-v2\"",
+   "new": "version: \"golden-predev-v1\""
+  },
+  {
+   "id": "EV3",
+   "description": "the fixtureDigest does not cover the output skeletons (v1 and v2 evidence share a digest)",
+   "file": "core/competency/evaluation-pipeline.ts",
+   "testFile": "tests/v7-wfr03-role-registry.test.ts",
+   "filter": "golden mission through the PRODUCTION|golden-predev-v2|pre-dev primaries golden mission",
+   "old": ", outputSkeletons: OUTPUT_SKELETONS})",
+   "new": "})"
+  },
+  {
+   "id": "EV4",
+   "description": "a too-deep reply passes the no_placeholder check",
+   "file": "core/competency/evaluation-pipeline.ts",
+   "testFile": "tests/v7-wfr03-role-registry.test.ts",
+   "filter": "golden mission through the PRODUCTION|golden-predev-v2|pre-dev primaries golden mission",
+   "old": "passed: placeholder === null, detail",
+   "new": "passed: placeholder !== \"PLACEHOLDER_VALUE\", detail"
   }
  ]
 }

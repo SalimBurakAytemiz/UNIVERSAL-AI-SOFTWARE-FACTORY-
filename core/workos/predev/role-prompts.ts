@@ -1,5 +1,6 @@
 // //TR: Bu dosya ilk-sürüm pre-dev rollerinin prompt ŞABLONLARINI SALT VERİ (TypeScript string sabitleri) olarak tutar; prompts/ KORUNMUŞ önekine HİÇBİR dosya eklemez/değiştirmez (bu şablonlar runtime prompt dosyası değil, kod sabitidir). Her şablon bir CLAUDE_BUILDER'a YALNIZ o tür için tipli sözleşme şeklini üretmesini söyler; açık kurallarla: proje özetinde veya onaylı üst artefaktlarda OLMAYAN gerçekleri ASLA uydurma; izlenebilirlik alanlarını gerçek kimliklerle doldur; bilgi eksikse uydurmak yerine açık bir varsayım/açık-soru maddesi yaz. Şablonlar sır veya ağ adresi taşımaz; yan etkisi yoktur.
 import {PRE_DEV_ROLE_MAP} from "./types.js";
+import {PLACEHOLDER_MARKER} from "./placeholder.js";
 import type {ArtifactKind} from "./types.js";
 import type {MissionContext} from "./driver.js";
 
@@ -95,8 +96,8 @@ export const ROLE_PROMPTS: Readonly<Record<ArtifactKind, RolePromptTemplate>> = 
 
 export function getRolePrompt(kind: ArtifactKind): RolePromptTemplate { return ROLE_PROMPTS[kind]; }
 
-// //TR: C-FLOW-ANALYSIS-2: yer tutucu işareti. İskeletteki her yer tutucu değer bu işaretle başlar; model çıktısında KALAN herhangi bir işaret driver'da PREDEV_DRIVER_PLACEHOLDER_VALUE ile reddedilir (iskeleti olduğu gibi yankılayan çıktı sahte geçiş olamaz).
-export const PLACEHOLDER_MARKER = "<<FILL";
+// //TR: C-FLOW-ANALYSIS-2: yer tutucu işareti. İskeletteki her yer tutucu değer bu işaretle başlar; model çıktısında KALAN herhangi bir işaret (her büyük/küçük harf, boşluk ve Unicode varyantı) validateArtifactContent içindeki paylaşılan korumayla reddedilir (driver'da PREDEV_DRIVER_PLACEHOLDER_VALUE, store yazma kapısında/rework'te/yetkinlik değerlendirmesinde PLACEHOLDER_VALUE); iskeleti olduğu gibi yankılayan çıktı sahte geçiş olamaz.
+export {PLACEHOLDER_MARKER}; // //TR: işaretin tanımı ve koruma placeholder.ts'tedir (validateArtifactContent ile paylaşılır)
 const F = (hint: string) => `${PLACEHOLDER_MARKER}: ${hint}>>`;
 
 // //TR: Tür başına çıktı iskeleti: doğrulayıcıların (validators.ts exactKeys) kabul ettiği TAM anahtar kümesi ve iç içe şekil. Örnek id'ler (G1, FR1, S1, WP1...) yalnız biçimi gösterir; izlenebilirlik alanları yer tutucudur (modelin onaylı üst artefakttaki GERÇEK id'leri yazması gerekir). Test, iskeleti doldurup gerçek doğrulayıcılardan geçirerek anahtar kümesinin sapmadığını kanıtlar.

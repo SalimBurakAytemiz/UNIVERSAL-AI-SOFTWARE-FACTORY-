@@ -14,7 +14,8 @@ import {redactSecrets} from "../workos/secret-scan.js";
 import {disabledTestMarkers, evaluateTestSurface, parseNameStatusZ} from "../workos/test-surface.js";
 import {MAX_TEST_SOURCE_BYTES, analyzeAddTest, tokenize} from "./static-test-analysis.js";
 import {PreDevBuilderError, PREDEV_KIND_FUNCTION} from "../workos/predev/claude-builder.js";
-import {composeRolePrompt} from "../workos/predev/role-prompts.js";
+import {OUTPUT_SKELETONS, composeRolePrompt} from "../workos/predev/role-prompts.js";
+import {placeholderProblem} from "../workos/predev/placeholder.js";
 import {toUpstreamContents} from "../workos/predev/driver.js";
 import {validateArtifactContent} from "../workos/predev/validators.js";
 import {TASKHUB_BRIEF} from "../workos/predev/fixtures/taskhub-brief.js";
@@ -284,7 +285,7 @@ async function goldenReview(c: ProcCtx): Promise<ProcedureRun> {
   return {infra: null, checks, artifact: {cases}, identities};
 }
 
-// ---------------------------------------------------------------- procedure: golden-predev-v1 (beş pre-dev birincil rolü)
+// ---------------------------------------------------------------- procedure: golden-predev-v2 (beş pre-dev birincil rolü; v2 = istemler çıktı iskeleti taşır, yer tutucu işareti taşıyan çıktı FAILED)
 async function goldenPredev(c: ProcCtx, fn: FirstDeliveryFunction): Promise<ProcedureRun> {
   const kind = KIND_OF_FUNCTION[fn], identities: Record<string, string> = {};
   const builder = c.pair.preDevBuilder?.();
@@ -313,8 +314,13 @@ async function goldenPredev(c: ProcCtx, fn: FirstDeliveryFunction): Promise<Proc
   try { parsed = JSON.parse(out); } catch { parses = false; }
   checks.push({id: "json_parses", passed: parses, detail: parses ? `${Buffer.byteLength(out, "utf8")} bytes` : "output is not JSON"});
   if (parses) {
-    const v = validateArtifactContent(kind, parsed, toUpstreamContents(kind, approvedUpstream as never));
-    checks.push({id: "validators_accept", passed: v.ok, detail: v.ok ? "accepted" : String(v.errors).slice(0, 100)});
+    // //TR: #237 incelemesi (v2): istem çıktı iskeletiyle biter; iskeleti (ya da yer tutucu işaretinin herhangi bir varyantını) yankılayan yanıt şekil olarak geçerli olsa bile PASSED olamaz. Ayrı bir kontrol olarak kanıtta görünür; çok derin yanıt da burada (RangeError değil) başarısız kontrol olur. Doğrulayıcılar yalnız yer tutucusuz çıktıya sorulur.
+    const placeholder = placeholderProblem(parsed);
+    checks.push({id: "no_placeholder", passed: placeholder === null, detail: placeholder === null ? "no placeholder marker" : placeholder});
+    if (placeholder === null) {
+      const v = validateArtifactContent(kind, parsed, toUpstreamContents(kind, approvedUpstream as never));
+      checks.push({id: "validators_accept", passed: v.ok, detail: v.ok ? "accepted" : String(v.errors).slice(0, 100)});
+    }
   }
   return {infra: null, checks, artifact: {kind, outputSha256: sha256(out), output: clip(out, 100_000), briefLabel: TASKHUB_BRIEF.label}, identities};
 }
@@ -327,8 +333,8 @@ export const EVALUATION_PROCEDURES: readonly Procedure[] = [
   {id: "golden-tests", version: GOLDEN_TESTS_VERSION, fixtureDigest: FIXTURE_DIGESTS[GOLDEN_TESTS_VERSION], specKind: "ROLE_SPECIFIC_GOLDEN_MISSION", functions: ["tester"],
     covers: ["authors ONE new, scoped test file (at most 16 KiB) for a precise mission that states every threshold", "the file compiles (compile only, nothing is run) and, in the code tokens only (comments, strings, callbacks and dead code never count), declares require of ../src/add and node:assert at the top level and contains at least three top-level assertion statements assert.<strictEqual|equal|deepStrictEqual|deepEqual>(add(<n>, <n>), <n>) or assert[.ok](add(<n>, <n>) === <n>) with distinct operands covering a positive, a negative and a zero case", "every asserted value equals the true sum (statically computed from the literals)", "leaves existing tests, src and the harness untouched; no skipped/disabled tests, no top-level return, loop, conditional, function or class", "a closed grammar: the file consists ONLY of the two `const` require declarations, BEFORE the first assertion (a declaration after an assertion would throw a ReferenceError at run time), and qualifying top-level assert statements (optional plain-string message); every other top-level statement (reassignment, alias, Object/prototype tampering, process/eval/import, console, blocks, other requires) fails, so the file cannot rebind, neuter or exit its own assertions"],
     doesNotCover: ["that the tests pass or fail correctly: nothing is executed (no verified sandbox)", "defect-detection power (no mutation testing): the detection guarantee covers an add that SUBTRACTS (a - b) only; a file whose cases satisfy a * b == a + b (for example 2, 2, 4) also passes for a multiplying add", "tests in any other style (node:test callbacks, table-driven loops, destructured assert imports or an assert binding not named assert): they are FAILED against the precise mission text, not judged", "test design quality beyond the static checks"], run: c => goldenTests(c)},
-  {id: "golden-predev", version: "golden-predev-v1", fixtureDigest: sha256Json({brief: TASKHUB_BRIEF, artifacts: TASKHUB_ARTIFACTS}), specKind: "ROLE_SPECIFIC_GOLDEN_MISSION", functions: ["business-analyst", "requirements-engineer", "planner", "architect", "ux-designer"],
-    covers: ["produces JSON that the existing artifact validators accept for the TaskHub reference brief (shape and traceability to approved upstream)"], doesNotCover: ["content quality or correctness", "any customer project", "the TaskHub reference content is not a verified project"], run: (c, fn) => goldenPredev(c, fn)}
+  {id: "golden-predev", version: "golden-predev-v2", fixtureDigest: sha256Json({brief: TASKHUB_BRIEF, artifacts: TASKHUB_ARTIFACTS, outputSkeletons: OUTPUT_SKELETONS}), specKind: "ROLE_SPECIFIC_GOLDEN_MISSION", functions: ["business-analyst", "requirements-engineer", "planner", "architect", "ux-designer"],
+    covers: ["produces JSON that the existing artifact validators accept for the TaskHub reference brief (shape and traceability to approved upstream)", "the reply carries no output-skeleton placeholder marker (an echoed skeleton, in any case/spacing/Unicode variant, is FAILED even where its shape is valid)", "through the production JSON route (the builder removes ONE whole-reply code fence) a fenced reply is judged by its content; any text outside the fence, or a legacy text-mode fenced reply, is FAILED json_parses"], doesNotCover: ["content quality or correctness", "any customer project", "the TaskHub reference content is not a verified project", "evidence recorded under golden-predev-v1 (prompts without the output skeleton, no placeholder check) is a different procedure and a different fixtureDigest"], run: (c, fn) => goldenPredev(c, fn)}
 ];
 
 // ---------------------------------------------------------------- pipeline
