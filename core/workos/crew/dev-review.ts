@@ -110,7 +110,7 @@ function makeDevImplementer(identity: string, builder: DevBuilderPort, envPolicy
         return base(`BUILDER_WRITE_REFUSED: ${(e as Error).message}\n`, e instanceof CrewDevReviewError ? e.message : "CREW_DEV_WRITE_FAILED");
       }
       const subject = `uasco run ${spec.runId} cycle ${spec.cycle}: ${String(spec.title).replace(/[\r\n]+/g, " ").slice(0, 120)}`;
-      const c = await commitBuilderOutputAsync(workspace, {envPolicyFile, startSha, gitDigestBefore, message: `${subject}\n\nMission: ${spec.missionId}\nCommitted by the UASCO engine on behalf of ${identity} (crew development builder, edit-only).`}, {span: sp});
+      const c = await commitBuilderOutputAsync(workspace, {envPolicyFile, startSha, gitDigestBefore, message: `${subject}\n\nMission: ${spec.missionId}\nCommitted by the UASCO engine on behalf of ${identity} (crew development builder, edit-only).`}, {span: sp, onSpawn: ctx.onSpawn});
       return c.ok ? {...base(c.log), commitSha: c.commitSha} : base(c.log, c.reason);
     }
   };

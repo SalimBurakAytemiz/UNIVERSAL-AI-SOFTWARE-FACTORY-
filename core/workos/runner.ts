@@ -360,6 +360,7 @@ export class MissionRunner {
     const o = this.ownerOf(run.runId);
     if (!o || o.leaseId !== leaseId) throw new WorkOsError("WORKOS_LEASE_FENCED", run.runId);
     const pgid = c.pgid ?? c.pid;
+    if (o.childPgid !== null && o.childPgid !== pgid) untrackWriterGroup(o.childPgid); // aynı adımda art arda doğan çocuklar (implementer, sonra engine commit'inin git çocukları): önceki grup artık kayıtlı değil
     this.writeOwner(run.runId, {...o, childPgid: pgid, childStart: process.platform === "linux" ? startTokenLinux(c.pid) : null, at: new Date(this.o.now()).toISOString()});
     trackWriterGroup(pgid);
     if (process.platform !== "linux" && identify) void startToken(c.pid).then(t => { const cur = this.ownerOf(run.runId); if (t && cur && cur.leaseId === leaseId && cur.childPgid === pgid) this.writeOwner(run.runId, {...cur, childStart: t}); }).catch(() => undefined); // yazılamazsa kimlik belirteci eksik kalır: devirde fail-closed

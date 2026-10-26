@@ -5,6 +5,7 @@ import crypto from "node:crypto";
 import {spawnGitSync} from "../../automation/lib/git-isolation.mjs";
 import {safeChildEnv} from "../../automation/lib/env-policy.mjs";
 import {runGitAsync} from "./git-async.js";
+import type {SpawnedChild} from "./executors.js";
 import {agentConfigPattern} from "./agent-config-paths.js";
 
 export const BUILDER_GIT_IDENTITY = {name: "UASCO Builder (CLAUDE_BUILDER)", email: "builder@local.invalid"} as const;
@@ -141,11 +142,11 @@ export function commitBuilderOutput(workspace: string, opts: CommitOpts): Builde
   }
   return step.value;
 }
-// //TR: span: küçük senkron .git/yol denetimleri (gitControlDigest, forbiddenChange) çağıranın span'ına sarılır (runner: TÜM lease'ler önce/sonra yenilenir). onSpawn/extraEnv yok: engine commit'i yazar çocuk değildir, ama workspace'i değiştirir; sahiplik kaydı çağıran adım (IMPLEMENT) altındadır.
-export async function commitBuilderOutputAsync(workspace: string, opts: CommitOpts, o: {span?: <T>(fn: () => T) => T; extraEnv?: Record<string, string>} = {}): Promise<BuilderCommitResult> {
+// //TR: span: küçük senkron .git/yol denetimleri (gitControlDigest, forbiddenChange) çağıranın span'ına sarılır (runner: TÜM lease'ler önce/sonra yenilenir). onSpawn: engine commit'inin git çocukları da workspace'i DEĞİŞTİRİR; çağıranın onSpawn'ı (runner'ın yazar kaydı) her git çocuğu için çağrılır, böylece engine commit sırasında çökerse devralan bu çocuğu da durdurur.
+export async function commitBuilderOutputAsync(workspace: string, opts: CommitOpts, o: {span?: <T>(fn: () => T) => T; extraEnv?: Record<string, string>; onSpawn?: (c: SpawnedChild) => void} = {}): Promise<BuilderCommitResult> {
   const env = {...safeChildEnv(opts.envPolicyFile, {provider: "DETERMINISTIC"}), ...(o.extraEnv ?? {})};
   const g = commitSteps(workspace, opts, o.span ?? NO_SPAN);
   let step = g.next();
-  while (!step.done) step = g.next(await runGitAsync(workspace, [...HARDEN, ...step.value.args], env));
+  while (!step.done) step = g.next(await runGitAsync(workspace, [...HARDEN, ...step.value.args], env, o.onSpawn));
   return step.value;
 }

@@ -5,17 +5,14 @@ vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 import {spawnSync} from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import {FakeExecutors} from "../core/workos/executors.js";
+import {EditOnlyImplementer, FakeExecutors} from "../core/workos/executors.js";
+import type {ExecutorPair} from "../core/workos/executors.js";
 import {disabledTestMarkers, evaluateTestSurface, parseTestRunStreams, parseTestRunSummary} from "../core/workos/test-surface.js";
 import type {NameStatusEntry} from "../core/workos/test-surface.js";
 import {REPO, T, drive, okScript, rmTmp, runner, setup, startRun, tmpRoot} from "./support/relfx.js";
-import {testExecutionGate} from "./support/test-sandbox.js";
-import {spawnGitSync} from "../automation/lib/git-isolation.mjs";
-import {WorkOsStore} from "../core/workos/store.js";
-import {MissionRunner, repositoryHead, repositoryHeadAsync} from "../core/workos/runner.js";
-import {fakeSecurity} from "../core/workos/security-tools.js";
-import type {RunnerOptions, RepositoryHead} from "../core/workos/runner.js";
-import type {ExecutorPair} from "../core/workos/executors.js";
+import {repositoryHead, repositoryHeadAsync} from "../core/workos/runner.js";
+import type {RepositoryHead} from "../core/workos/runner.js";
+import {ENV_POLICY, REPO as PAR_REPO, git, groupLive, journal, parHarness, procAlive, setup as parSetup, slow, sleep, waitUntil, wrapImplementer} from "./support/par.js";
 import cp from "node:child_process";
 import os from "node:os";
 
@@ -161,62 +158,12 @@ describe("RV-RELFX-C2-004 harness detection: vite.config.* and package.json jest
   });
 });
 
-// //TR: C-PAR-1 (test birleştirme): MissionRunner maxConcurrentRuns >= 2 güvenliği (PAR-03/04/05) ve #218 depo-HEAD probunun eşzamansız sürücüsü testleri kayıtlı bir dosyaya taşındı (yeni test dosyası config/validation.json kaydı gerektirirdi). Blok kendi tmp/REPO/yardımcılarını tanımlar (dosyanın aynı adlı tanımlarını gölgeler); child_process casusları yalnız bu bloğun testlerinde kurulur ve geri alınır (modül mock'u kullanılmaz). tests/v7-par-engine.mts vitest dosyası DEĞİL, PAR-04 testinin çalıştırdığı yardımcıdır.
-describe("LANE-C parallel runs: C-PAR-1 (+ #218 head probe)", () => {
-// //TR: "Yavaş git" modeli: eşleşen git çağrısı senkron spawnSync ile gelirse olay döngüsü BLOKLANIR (düzeltme öncesi runner), eşzamansız execFile ile gelirse yalnız sonucu gecikir (düzeltme sonrası runner). Gecikme süresi her iki yolda aynıdır; deterministik, shim/PATH gerekmez, Windows'ta da çalışır.
-// //TR: C-PAR-1 (test birleştirme): modül mock'u (vi.mock) dosya genelindedir ve başka testlerin child_process'ini etkilerdi. Bu yüzden kaynakların kullandığı VARSAYILAN dışa aktarım nesnesinde (git-isolation.mjs ve runner.ts `import cp ...; cp.spawnSync/cp.execFile` ile çağırır) vi.spyOn kullanılır; casus yalnız bu dosyanın testlerinde kurulur ve her testten sonra geri alınır.
-const slow = {rule: null as null | {ms: number; match: (cwd: string, args: string[]) => boolean}, hits: {sync: 0, async: 0}};
-const realSpawnSync = cp.spawnSync, realExecFile = cp.execFile as (...x: unknown[]) => unknown;
-const isSlow = (cmd: unknown, args: unknown, opts: unknown) => cmd === "git" && slow.rule !== null && slow.rule.match(String((opts as {cwd?: unknown} | undefined)?.cwd ?? ""), Array.isArray(args) ? args.map(String) : []);
-function installSlowGit() {
-  vi.spyOn(cp, "spawnSync").mockImplementation(((...a: Parameters<typeof cp.spawnSync>) => {
-    if (isSlow(a[0], a[1], a[2])) { slow.hits.sync += 1; for (const until = Date.now() + slow.rule!.ms; Date.now() < until;) { /* senkron git: olay döngüsü bloklanır */ } }
-    return realSpawnSync(...a);
-  }) as typeof cp.spawnSync);
-  vi.spyOn(cp, "execFile").mockImplementation(((...a: unknown[]) => {
-    const [cmd, args, opts, cb] = a as [string, string[], unknown, ((...r: unknown[]) => void) | undefined];
-    if (typeof cb === "function" && isSlow(cmd, args, opts)) {
-      slow.hits.async += 1; const ms = slow.rule!.ms;
-      return realExecFile(cmd, args, opts, (...r: unknown[]) => { setTimeout(() => cb(...r), ms); });
-    }
-    return realExecFile(...a);
-  }) as typeof cp.execFile);
-}
-
-const REPO = path.resolve(import.meta.dirname, "..");
-const ENV_POLICY = path.join(REPO, "config", "environment-policy.json");
-const ENGINE = path.join(REPO, "tests", "v7-par-engine.mts");
-const TEST_SCRIPT = `import fs from "node:fs";\nprocess.exit(fs.existsSync("feature.txt") ? 0 : 1);\n`;
-const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
-const git = (cwd: string, args: string[]) => { const r = spawnGitSync(cwd, args); if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`); return String(r.stdout).trim(); };
-
-let tmp = "";
-beforeEach(() => { tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-par-")); slow.rule = null; slow.hits = {sync: 0, async: 0}; installSlowGit(); });
-afterEach(() => { slow.rule = null; vi.restoreAllMocks(); try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* Windows: kapanan süreçler dosyayı kısa süre tutabilir */ } });
-
-function setup(name = "s") {
-  const root = path.join(tmp, name); fs.mkdirSync(root);
-  const repo = path.join(root, "src"); fs.mkdirSync(repo);
-  git(repo, ["init", "-q", "-b", "main"]);
-  fs.writeFileSync(path.join(repo, "test.mjs"), TEST_SCRIPT);
-  git(repo, ["add", "-A"]);
-  git(repo, ["-c", "user.name=Seed", "-c", "user.email=seed@local.invalid", "commit", "-q", "-m", "seed"]);
-  const dataDir = path.join(root, "data"), runtime = path.join(root, "rt"); fs.mkdirSync(runtime);
-  const store = new WorkOsStore(dataDir);
-  const p = store.createProject({tenantId: "tA", orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL", repository: {path: repo}, testCommand: ["node", "test.mjs"]});
-  const fake = new FakeExecutors({implement: () => ({files: {"feature.txt": "ok\n"}}), review: () => ({verdict: "CLEAN"})});
-  const base = fake.pair();
-  const mkRun = (title: string) => {
-    const m = store.createMission({tenantId: "tA", projectId: p.projectId, title, objective: "feature.txt", acceptanceCriteria: ["tests pass"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
-    for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
-    return store.createRun({tenantId: "tA", missionId: m.missionId, executor: {implementer: base.implementer.identity, reviewer: base.reviewer.identity}, createdBy: "FOUNDER_LOCAL"});
-  };
-  const runner = (extra: Partial<RunnerOptions> = {}) => new MissionRunner({executionGate: testExecutionGate(), store, dataDir, globalStopFile: path.join(runtime, "GLOBAL_STOP.json"), envPolicyFile: ENV_POLICY, executors: base, retryBackoffMs: [0, 0], leaseTtlMs: 60_000, security: fakeSecurity(path.join(root, "sec")).options, ...extra});
-  return {store, dataDir, base, repo, mkRun, runner, status: (id: string) => store.engineGetRun(id)!.status};
-}
-const journal = (dataDir: string): Array<{type: string; payload: Record<string, unknown>}> => fs.readFileSync(path.join(dataDir, "journal.jsonl"), "utf8").split("\n").filter(Boolean).map(l => JSON.parse(l));
-const wrapImplementer = (base: ExecutorPair, implement: ExecutorPair["implementer"]["implement"]): ExecutorPair => ({...base, implementer: {...base.implementer, implement}});
-
+// //TR: C-PAR-1 (test birleştirme): MissionRunner maxConcurrentRuns >= 2 iken HEARTBEAT ve PLANLAMA güvenliği (PAR-03/05), #218 depo-HEAD probunun eşzamansız sürücüsü ve #224 koordinatör incelemesinin heartbeat/planlama düzeltmeleri. Ortak parçalar tests/support/par.ts'tedir. Yazar durdurma (PAR-04) testleri tests-6'daki tests/v7-relfx-1-completion.test.ts'e konuldu (iki Windows adımı arasında bölünmüştür). Blok kendi tmp/yardımcılarını tanımlar (dosyanın aynı adlı tanımlarını gölgeler); child_process casusları yalnız bu bloğun testlerinde kurulur ve geri alınır.
+describe("LANE-C parallel runs: heartbeat and scheduling (C-PAR-1 PAR-03/05, #218 head probe, #224 review)", () => {
+  const par = parHarness();
+  let tmp = ""; beforeEach(() => { tmp = par.tmp(); });
+  const REPO = PAR_REPO;
+  const setup = (name?: string, seed?: Record<string, string>, clock?: () => number) => parSetup(tmp, name, seed, clock);
 describe("C-PAR-1 PAR-03: synchronous git in one run must not starve another run's lease heartbeat (cap 2)", () => {
   // //TR: Aynı senaryo iki yavaş git noktası için: A'nın VERIFY tarama klonu ve A'nın WORKSPACE adımındaki depo kökü/HEAD probu (#218 ile birleşimde eşzamansız sürücü).
   const slowGitLeavesBUnfenced = async (slowMatch: (A: {runId: string}, srcRepo: string) => (cwd: string, args: string[]) => boolean) => {
@@ -290,126 +237,6 @@ describe("C-PAR-1 PAR-03: synchronous git in one run must not starve another run
   });
 });
 
-describe("C-PAR-1 PAR-05: the tick must not be gang-scheduled (a slot freed by a fast run is refilled while a slow run is still in flight)", () => {
-  it("cap 2, production tick interval: C's implement starts within one tick (2 s) of A reaching AWAITING_APPROVAL while B is still in IMPLEMENT", { timeout: 120_000 }, async () => {
-    const SLOW = 8000;
-    const c = setup(); const A = c.mkRun("A"), B = c.mkRun("B"), C = c.mkRun("C");
-    const t0 = Date.now(), at: Record<string, number> = {}, mark = (k: string) => { at[k] ??= Date.now() - t0; };
-    const pair = wrapImplementer(c.base, async (w, spec, ctx) => {
-      mark(`start${spec.title}`);
-      if (spec.title === "B") await sleep(SLOW);
-      try { return await c.base.implementer.implement(w, spec, ctx); } finally { mark(`end${spec.title}`); }
-    });
-    const mr = c.runner({maxConcurrentRuns: 2, executors: pair});
-    mr.start(); // üretim varsayılanı: 2000 ms
-    const ids: Record<string, string> = {A: A.runId, B: B.runId, C: C.runId};
-    try {
-      for (const deadline = Date.now() + 100_000; Date.now() < deadline;) {
-        for (const [t, id] of Object.entries(ids)) if (c.status(id) === "AWAITING_APPROVAL") mark(`done${t}`);
-        if (Object.keys(ids).every(t => at[`done${t}`] !== undefined)) break;
-        await sleep(50);
-      }
-    } finally { mr.stop(); }
-    expect(Object.keys(ids).map(t => c.status(ids[t]))).toEqual(["AWAITING_APPROVAL", "AWAITING_APPROVAL", "AWAITING_APPROVAL"]);
-    expect(at.startC - at.doneA, JSON.stringify(at)).toBeLessThanOrEqual(2000);
-    expect(at.startC, JSON.stringify(at)).toBeLessThan(at.endB);
-  });
-});
-
-describe("C-PAR-1 PAR-04: after an engine crash the implementer child must not keep writing into runs/<id>/work", () => {
-  const ORPHAN_MS = 8000, TTL = 1500;
-  const spawnEngine = (dir: string, phase: "1" | "2") => {
-    const child = cp.spawn(process.execPath, ["--import", "tsx", ENGINE, REPO, dir, phase, String(TTL), String(ORPHAN_MS)], {cwd: REPO, stdio: ["ignore", "pipe", "pipe"], windowsHide: true});
-    let out = "", err = "";
-    child.stdout.on("data", d => { out += String(d); }); child.stderr.on("data", d => { err += String(d); });
-    const closed = new Promise<number | null>(r => child.on("close", code => r(code)));
-    return {child, closed, text: () => ({out, err})};
-  };
-  const waitFor = async (pred: () => boolean, ms: number) => { for (const until = Date.now() + ms; Date.now() < until;) { if (pred()) return true; await sleep(50); } return false; };
-
-  it("a surviving implementer child is stopped at takeover: ORPHAN.txt absent, work HEAD == run.headSha, run completes", { timeout: 180_000 }, async () => {
-    const dir = path.join(tmp, "engine"); fs.mkdirSync(dir);
-    const e1 = spawnEngine(dir, "1");
-    expect(await waitFor(() => fs.existsSync(path.join(dir, "implementing.json")), 120_000), JSON.stringify(e1.text())).toBe(true);
-    const { runId } = JSON.parse(fs.readFileSync(path.join(dir, "state.json"), "utf8")) as {runId: string};
-    const ownerFile = path.join(dir, "data", "runs", runId, "workspace.owner.json");
-    // //TR: düzeltilmiş motorda sahiplik kaydı çocuğun grubunu taşır (Linux dışında kimlik belirteci eşzamansız eklenir); düzeltme öncesi motorda kayıt hiç yoktur ve bekleme süresi dolar.
-    await waitFor(() => { try { const o = JSON.parse(fs.readFileSync(ownerFile, "utf8")); return o.childPgid != null && (process.platform === "linux" || o.childStart != null); } catch { return false; } }, 10_000);
-    const killedAt = Date.now();
-    e1.child.kill("SIGKILL"); await e1.closed;
-    const e2 = spawnEngine(dir, "2");
-    expect(await e2.closed, JSON.stringify(e2.text())).toBe(0);
-    const rep = JSON.parse(e2.text().out.trim().split("\n").pop()!) as {recovered: string[]};
-    expect(rep.recovered).toEqual([runId]);
-    await sleep(Math.max(0, killedAt + ORPHAN_MS + 2000 - Date.now())); // yetim çocuk (hâlâ yaşıyorsa) uyanıp yazmış olurdu
-    const run = new WorkOsStore(path.join(dir, "data")).engineGetRun(runId)!;
-    const work = path.join(dir, "data", "runs", runId, "work");
-    expect(run.status).toBe("AWAITING_APPROVAL");
-    expect(fs.existsSync(path.join(work, "ORPHAN.txt"))).toBe(false);
-    expect(git(work, ["log", "--format=%s"]).split("\n")).not.toContain("orphan commit");
-    expect(git(work, ["rev-parse", "HEAD"])).toBe(run.headSha);
-  });
-
-  it("guardWorkspace fences a mutation when the owner record is missing, unreadable or belongs to another lease", () => {
-    const c = setup(); const r = c.mkRun("A"), mr = c.runner(), run = c.store.engineGetRun(r.runId)!;
-    const guard = (lease: string) => (mr as unknown as {guardWorkspace(run: unknown, leaseId: string): void}).guardWorkspace(run, lease);
-    const file = path.join(c.dataDir, "runs", r.runId, "workspace.owner.json");
-    expect(() => guard("lse_a")).toThrow(/WORKOS_LEASE_FENCED/); // no record
-    fs.mkdirSync(path.dirname(file), {recursive: true});
-    fs.writeFileSync(file, JSON.stringify({leaseId: "lse_a", engineId: "e", hostname: os.hostname(), pid: process.pid, childPgid: null, childStart: null, step: "IMPLEMENT", at: new Date().toISOString()}));
-    expect(() => guard("lse_a")).not.toThrow();
-    expect(() => guard("lse_b")).toThrow(/WORKOS_LEASE_FENCED/); // another engine's lease
-    fs.writeFileSync(file, "{not json");
-    expect(() => guard("lse_a")).toThrow(/WORKOS_LEASE_FENCED/); // unreadable: fail closed
-  });
-
-  it("VERIFY refuses a workspace whose HEAD is not the recorded headSha (WORKSPACE_DIVERGED) instead of silently repairing it", { timeout: 90_000 }, async () => {
-    const c = setup(); const r = c.mkRun("A");
-    const mr = c.runner({maxStepsPerTick: 2}); // WORKSPACE + IMPLEMENT only
-    await mr.tick();
-    expect(c.store.engineGetRun(r.runId)!.step).toBe("VERIFY");
-    const work = path.join(c.dataDir, "runs", r.runId, "work");
-    git(work, ["-c", "user.name=X", "-c", "user.email=x@x.invalid", "commit", "-q", "--allow-empty", "-m", "behind the engine's back"]);
-    await mr.tick();
-    const after = c.store.engineGetRun(r.runId)!;
-    expect([after.status, after.reason]).toEqual(["FAILED", "WORKSPACE_DIVERGED"]);
-  });
-
-  it("takeover is fail-closed when the previous writer cannot be established, and never signals a process whose identity does not match", { timeout: 120_000 }, async () => {
-    const c = setup();
-    const crashed = async (patch: Record<string, unknown>) => {
-      const r = c.mkRun(`R${Math.random()}`);
-      const first = c.runner({leaseTtlMs: 300, maxStepsPerTick: 0, executors: c.base});
-      expect((await first.tick()).claimed).toEqual([r.runId]); // LEASED, hiçbir adım çalışmadı
-      const file = path.join(c.dataDir, "runs", r.runId, "workspace.owner.json");
-      fs.mkdirSync(path.dirname(file), {recursive: true});
-      fs.writeFileSync(file, JSON.stringify({leaseId: "lse_gone", engineId: "engine_gone", hostname: os.hostname(), pid: 1, childPgid: null, childStart: null, step: "IMPLEMENT", at: new Date().toISOString(), ...patch}));
-      await sleep(450); // lease süresi doldu
-      const rep = await c.runner({executors: c.base}).tick(); // generous TTL: only the first runner's lease (300 ms) must expire; the takeover runner runs a whole pipeline and must not fence itself under CPU load
-      expect(rep.recovered).toEqual([r.runId]);
-      const run = c.store.engineGetRun(r.runId)!;
-      return {run, note: run.evidence.find(e => e.kind === "RECOVERY")?.note ?? ""};
-    };
-    const decoy = cp.spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {stdio: "ignore", windowsHide: true, ...(process.platform === "win32" ? {} : {detached: true})});
-    const alive = () => { try { process.kill(decoy.pid!, 0); return true; } catch { return false; } };
-    try {
-      let x = await crashed({childPgid: 4242424, childStart: "1", hostname: "other-host.invalid"});
-      expect([x.run.status, x.run.reason]).toEqual(["RECOVERY_FAILED", "RECOVERY_FAILED: WORKSPACE_WRITER_ALIVE"]);
-      expect(x.note).toMatch(/writer group 4242424 belongs to host other-host\.invalid/);
-      x = await crashed({childPgid: null, step: "IMPLEMENT", leaseId: "lse_gone"}); // kayıtlı çocuk yok: devir serbest
-      expect(x.run.status).toBe("AWAITING_APPROVAL");
-      x = await crashed({childPgid: decoy.pid, childStart: "not-the-start-time-of-this-process"}); // pid yeniden kullanılmış: ASLA sinyal gönderilmez
-      expect(x.run.status).toBe("AWAITING_APPROVAL");
-      expect(x.note).toMatch(/was reused by another process/);
-      expect(alive()).toBe(true);
-      x = await crashed({childPgid: decoy.pid, childStart: null}); // canlı grup, kimlik kanıtlanamıyor: fail-closed, öldürülmez
-      expect([x.run.status, x.run.reason]).toEqual(["RECOVERY_FAILED", "RECOVERY_FAILED: WORKSPACE_WRITER_ALIVE"]);
-      expect(x.note).toMatch(/identity cannot be proven/);
-      expect(alive()).toBe(true);
-    } finally { try { if (process.platform === "win32") decoy.kill(); else process.kill(-decoy.pid!, "SIGKILL"); } catch { /* zaten bitmiş */ } }
-  });
-});
-
 // //TR: #218 (repositoryHead) + C-PAR-1 birleşimi: runner WORKSPACE adımı depo kökü/HEAD kararını artık EŞZAMANSIZ sürücüyle verir (olay döngüsünü bloklamaz); karar prosedürü (headDecision) tek yerde, iki sürücü aynı ortam izin listesini ve aynı tavanı kullanır. Bu testler iki sürücünün aynı cevabı verdiğini, host GIT_* değişkenlerinin hiçbirini görmediğini ve eşzamansız sürücünün döngüyü bloklamadığını kanıtlar.
 describe("C-PAR-1 + #218: the runner's repository HEAD probe is the same decision, asynchronous", () => {
   const ID = ["-c", "user.name=Seed", "-c", "user.email=seed@local.invalid", "-c", "commit.gpgsign=false"];
@@ -480,6 +307,169 @@ describe("C-PAR-1 + #218: the runner's repository HEAD probe is the same decisio
     const [syncV, asyncV] = await both(root, {timeoutMs: 100});
     expect(asyncV).toEqual(UNRESOLVED);
     expect(syncV).toEqual(UNRESOLVED);
+  });
+});
+
+// //TR: #224 koordinatör incelemesi (REVIEW-0baa72f) düzeltmelerinin testleri. Her test, düzeltilmemiş runner'da (c0259b7) BAŞARISIZ olacak biçimde yazılmıştır (yeni modüller dinamik içe aktarılır ki dosya eski kodda da yüklensin). Motor tabanlı testler tests/v7-par-engine.mts'i iki ayrı süreçte çalıştırır ve birini SIGKILL/SIGINT ile durdurur.
+describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
+  it("HB-1: the production implementer path (EditOnlyImplementer + engine commit) does not starve another run's lease: a slow engine commit (3 s, TTL 2 s) leaves run B unfenced", { timeout: 120_000 }, async () => {
+    const TTL = 2000, BLOCK = 3000;
+    const c = setup(); const A = c.mkRun("A"), B = c.mkRun("B");
+    const script = (delayMs: number) => `setTimeout(() => require("node:fs").writeFileSync("feature.txt", "ok\\n"), ${delayMs});`;
+    // A: hemen yazar; B: uzun ücretli çağrı (eşzamansız süreç). Her ikisi de ÜRETİM yolundan geçer: EditOnlyImplementer + engine commit.
+    const impl = new EditOnlyImplementer("TEST_EDIT_ONLY", ENV_POLICY, (_ws, spec) => ({argv: [process.execPath, "-e", script(spec.title === "B" ? BLOCK + TTL : 0)], env: {PATH: process.env.PATH ?? ""}, input: ""}));
+    const pair: ExecutorPair = {...c.base, implementer: impl};
+    let fired = false;
+    slow.rule = {ms: BLOCK, match: (cwd, args) => { const hit = !fired && cwd.includes(A.runId) && args.includes("read-tree"); if (hit) fired = true; return hit; }}; // A'nın engine commit'i (indeks yeniden kurulumu)
+    const rep = await c.runner({maxConcurrentRuns: 2, leaseTtlMs: TTL, executors: pair}).tick();
+    expect(slow.hits.sync + slow.hits.async, "the slow engine-commit scenario really fired once").toBe(1);
+    expect(rep.claimed.sort()).toEqual([A.runId, B.runId].sort());
+    expect(rep.fenced).toEqual([]);
+    expect([c.status(A.runId), c.status(B.runId)]).toEqual(["AWAITING_APPROVAL", "AWAITING_APPROVAL"]);
+  });
+
+  it("HB-2: the per-file test-surface reads renew every owned lease before EACH `git show` (total 4+ s sync work, TTL 2 s, each call 0.7 s): run B stays unfenced", { timeout: 120_000 }, async () => {
+    const TTL = 2000;
+    const c = setup(); const A = c.mkRun("A"), B = c.mkRun("B");
+    const calls = {B: 0};
+    const pair = wrapImplementer(c.base, async (w, spec, ctx) => {
+      if (spec.title === "A") { // üç yeni test dosyası: test yüzeyi dosya başına bir `git show` okur
+        return new FakeExecutors({implement: () => ({files: {"feature.txt": "ok\n", "a1.test.mjs": "// a1\n", "a2.test.mjs": "// a2\n", "a3.test.mjs": "// a3\n"}}), review: () => ({verdict: "CLEAN"})}).pair().implementer.implement(w, spec, ctx);
+      }
+      calls.B += 1;
+      const startedAt = new Date().toISOString();
+      for (const until = Date.now() + 6500; Date.now() < until;) { await sleep(100); if (ctx.shouldAbort?.()) return {exitCode: null, log: "aborted", argv: ["fake-long"], startedAt, endedAt: new Date().toISOString(), timedOut: false, aborted: true, transient: false}; }
+      return c.base.implementer.implement(w, spec, ctx);
+    });
+    slow.rule = {ms: 700, match: (cwd, args) => cwd.includes(A.runId) && args.includes("show")};
+    const rep = await c.runner({maxConcurrentRuns: 2, leaseTtlMs: TTL, executors: pair}).tick();
+    expect(slow.hits.sync, "the sync `git show` loop really ran").toBeGreaterThanOrEqual(3);
+    expect(rep.fenced).toEqual([]);
+    expect(calls.B).toBe(1);
+    expect([c.status(A.runId), c.status(B.runId)], JSON.stringify([c.store.engineGetRun(A.runId)!.reason, c.store.engineGetRun(B.runId)!.reason])).toEqual(["AWAITING_APPROVAL", "AWAITING_APPROVAL"]);
+  });
+
+  it("HB-3: a stall right after the loop-delay window was reset is still seen (the drift sentinel does not depend on the histogram's dropped first sample)", { timeout: 60_000 }, async () => {
+    const c = setup(), mr = c.runner({leaseTtlMs: 1500}) as unknown as {startLoopMonitor(): void; stopLoopMonitor(): void; sampleLoop(): void; loopStalled(): boolean};
+    mr.startLoopMonitor();
+    try {
+      await sleep(250); // ilk örnekler kaydedildi
+      expect(mr.loopStalled()).toBe(false);
+      mr.sampleLoop(); // pencereyi sıfırlar: perf_hooks sıfırlama sonrası İLK örneği atar
+      for (const until = Date.now() + 700; Date.now() < until;) { /* 700 ms stall, eşik 250 ms */ }
+      await sleep(150);
+      expect(mr.loopStalled()).toBe(true);
+    } finally { mr.stopLoopMonitor(); }
+  });
+
+  it("STOP-NO-ABORT-NO-AWAIT: stop() aborts the in-flight implementer group, starts no new step, awaits the drives and leaves the run un-cancelled for the next engine", { timeout: 90_000 }, async () => {
+    const c = setup(); const A = c.mkRun("A");
+    const slowImpl = new FakeExecutors({implement: () => ({files: {"feature.txt": "ok\n"}, sleepMs: 20_000}), review: () => ({verdict: "CLEAN"})});
+    const mr = c.runner({executors: slowImpl.pair()});
+    mr.start(250);
+    const work = () => path.join(c.dataDir, "runs", A.runId, "work");
+    const ownerFile = path.join(c.dataDir, "runs", A.runId, "workspace.owner.json");
+    let pgid = 0;
+    expect(await waitUntil(() => { try { pgid = JSON.parse(fs.readFileSync(ownerFile, "utf8")).childPgid ?? 0; return pgid > 1 && c.store.engineGetRun(A.runId)!.step === "IMPLEMENT"; } catch { return false; } }, 30_000)).toBe(true);
+    const t0 = Date.now();
+    const stopped = mr.stop();
+    expect(stopped).toBeInstanceOf(Promise);
+    await stopped;
+    expect(Date.now() - t0).toBeLessThan(10_000);
+    expect(procAlive(pgid), "the implementer group outlived stop()").toBe(false);
+    const notCancelled = () => { const r = c.store.engineGetRun(A.runId)!; return [r.status, r.step]; };
+    expect(notCancelled()).toEqual(["RUNNING", "IMPLEMENT"]); // iptal EDİLMEDİ: lease dolunca sonraki engine devralır
+    await sleep(600);
+    expect(notCancelled()).toEqual(["RUNNING", "IMPLEMENT"]); // yeni adım başlamadı
+    expect(fs.existsSync(path.join(work(), "feature.txt"))).toBe(false);
+    expect(slowImpl.calls.implement, "a new implementer was started after stop()").toBe(1);
+  });
+
+  it("TEST-PAR05-REFILL (M3): with a 10 s timer the freed slot is refilled IMMEDIATELY (C starts within 2 s of A finishing while B is still in IMPLEMENT)", { timeout: 120_000 }, async () => {
+    const SLOW = 8000;
+    const c = setup(); const A = c.mkRun("A"), B = c.mkRun("B"), C = c.mkRun("C");
+    const t0 = Date.now(), at: Record<string, number> = {}, mark = (k: string) => { at[k] ??= Date.now() - t0; };
+    const pair = wrapImplementer(c.base, async (w, spec, ctx) => {
+      mark(`start${spec.title}`);
+      if (spec.title === "B") await sleep(SLOW);
+      try { return await c.base.implementer.implement(w, spec, ctx); } finally { mark(`end${spec.title}`); }
+    });
+    const mr = c.runner({maxConcurrentRuns: 2, executors: pair});
+    mr.start(10_000); // zamanlayıcı yavaş: yalnız iş-korumalı hemen doldurma C'yi zamanında başlatır
+    (mr as unknown as {pump(freshOnly: boolean): void}).pump(false);
+    const ids: Record<string, string> = {A: A.runId, B: B.runId, C: C.runId};
+    try {
+      for (const deadline = Date.now() + 100_000; Date.now() < deadline;) {
+        for (const [t, id] of Object.entries(ids)) if (c.status(id) === "AWAITING_APPROVAL") mark(`done${t}`);
+        if (at.doneA !== undefined && at.startC !== undefined) break;
+        await sleep(50);
+      }
+    } finally { await mr.stop(); }
+    expect(at.startC - at.doneA, JSON.stringify(at)).toBeLessThanOrEqual(2000);
+    expect(at.startC, JSON.stringify(at)).toBeLessThan(at.endB);
+  });
+
+  it("TEST-SELF-TAKEOVER (M9): a run whose drive is still in flight is never taken over by its own engine, even after another run's synchronous stall expired its lease", { timeout: 120_000 }, async () => {
+    const TTL = 1000;
+    const c = setup(); const A = c.mkRun("A"), B = c.mkRun("B");
+    let aInFlight = false, takeoverWhileInFlight = false, takeovers = 0, aCalls = 0;
+    const takeoverCount = () => journal(c.dataDir).filter(e => e.type === "RUN_LEASE" && e.payload.runId === A.runId && e.payload.kind === "TAKEOVER").length;
+    const pair = wrapImplementer(c.base, async (w, spec, ctx) => {
+      if (spec.title === "B") { await sleep(400); for (const until = Date.now() + 1600; Date.now() < until;) { /* B: senkron stall > TTL */ } return c.base.implementer.implement(w, spec, ctx); }
+      aInFlight = true; aCalls += 1;
+      try { for (const until = Date.now() + 3500; Date.now() < until;) { await sleep(50); if (ctx.shouldAbort?.()) break; } return await c.base.implementer.implement(w, spec, ctx); } finally { aInFlight = false; }
+    });
+    const mr = c.runner({maxConcurrentRuns: 2, leaseTtlMs: TTL, executors: pair});
+    mr.start(250);
+    // //TR: bayrak YALNIZ yeni bir TAKEOVER olayı, A'nın ilk çağrısı hâlâ sürerken yazılırsa kalkar (meşru sonraki devir, A'nın çağrısı bittikten sonradır).
+    const watcher = setInterval(() => { const n = takeoverCount(); if (n > takeovers) { if (aCalls === 1 && aInFlight) takeoverWhileInFlight = true; takeovers = n; } }, 20);
+    try { await sleep(7000); } finally { clearInterval(watcher); await mr.stop(); }
+    expect(takeoverWhileInFlight, "the engine took over a run whose own drive was still in flight").toBe(false);
+  });
+
+  it("TEST-PAR04-DEFENCES (M11): if onSpawn throws (the writer cannot be recorded) the spawned child is killed, never left unrecorded", { timeout: 60_000 }, async () => {
+    const {runProcess} = await import("../core/workos/executors.js");
+    let pid = 0;
+    const r = await runProcess([process.execPath, "-e", "setInterval(() => {}, 1000)"], {cwd: tmp, env: {PATH: process.env.PATH ?? ""}, timeoutMs: 30_000, newSession: process.platform !== "win32", onSpawn: c => { pid = c.pid; throw new Error("cannot record"); }});
+    expect(pid).toBeGreaterThan(1);
+    expect(r.spawnError).toBe(true);
+    expect(await waitUntil(() => !procAlive(pid), 5000), "the unrecorded child is still running").toBe(true);
+  });
+
+  it("TEST-PAR04-DEFENCES (M5): recordChild refuses a run whose owner record belongs to another lease (WORKOS_LEASE_FENCED) and leaves the record untouched", () => {
+    const c = setup(), r = c.mkRun("A"), mr = c.runner(), run = c.store.engineGetRun(r.runId)!;
+    const file = path.join(c.dataDir, "runs", r.runId, "workspace.owner.json");
+    fs.mkdirSync(path.dirname(file), {recursive: true});
+    const rec = JSON.stringify({leaseId: "lse_a", engineId: "e", hostname: os.hostname(), pid: process.pid, childPgid: null, childStart: null, step: "IMPLEMENT", at: new Date().toISOString(), bootId: null});
+    fs.writeFileSync(file, rec);
+    const recordChild = (lease: string) => (mr as unknown as {recordChild(run: unknown, lease: string, c: {pid: number; pgid: number | null}): void}).recordChild(run, lease, {pid: 4242, pgid: 4242});
+    expect(() => recordChild("lse_b")).toThrow(/WORKOS_LEASE_FENCED/);
+    expect(fs.readFileSync(file, "utf8")).toBe(rec);
+    expect(() => recordChild("lse_a")).not.toThrow();
+    expect(JSON.parse(fs.readFileSync(file, "utf8"))).toMatchObject({childPgid: 4242});
+  });
+
+  it("TEST-PAR04-DEFENCES (M10): when renewAllOwned fences run B, B's child is aborted by the `lost` flag at once, long before B's own heartbeat (TTL/3 = 20 s) could notice", { timeout: 120_000 }, async () => {
+    const TTL = 60_000, clock = {t: Date.now()};
+    const c = setup("m10", {}, () => clock.t); c.mkRun("A"); c.mkRun("B");
+    let bAbortedAt = 0, bPolling = false;
+    const pair = wrapImplementer(c.base, async (w, spec, ctx) => {
+      if (spec.title === "A") { // A: senkron aralıkta (span) saat TTL'den fazla ileri gider -> renewAllOwned B'yi (ve A'yı) fence eder
+        for (let i = 0; i < 200 && !bPolling; i++) await sleep(20);
+        (mr as unknown as {span<T>(fn: () => T): T}).span(() => { clock.t += TTL + 5_000; });
+        await sleep(300);
+        return c.base.implementer.implement(w, spec, ctx);
+      }
+      bPolling = true;
+      const startedAt = new Date().toISOString();
+      for (const until = Date.now() + 8_000; Date.now() < until;) { await sleep(25); if (ctx.shouldAbort?.()) { bAbortedAt = Date.now(); return {exitCode: null, log: "aborted", argv: ["fake-long"], startedAt, endedAt: new Date().toISOString(), timedOut: false, aborted: true, transient: false}; } }
+      return c.base.implementer.implement(w, spec, ctx);
+    });
+    const mr = c.runner({maxConcurrentRuns: 2, leaseTtlMs: TTL, now: () => clock.t, executors: pair});
+    const t0 = Date.now();
+    await mr.tick();
+    expect(bAbortedAt, "B's child was never aborted by the lost flag").toBeGreaterThan(0);
+    expect(bAbortedAt - t0).toBeLessThan(7_000); // B'nin kendi heartbeat'i (20 s) beklenseydi bu süre aşılırdı
   });
 });
 });

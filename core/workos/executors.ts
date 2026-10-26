@@ -135,7 +135,7 @@ function toReview(r: ProcResult): ReviewResult {
 }
 
 // ---- FAKE adapter (yalnız testler; programatik enjeksiyonla seçilir, env ile seçilemez) ----
-export interface FakeImplementDirective { files?: Record<string, string>; exitCode?: number; noCommit?: boolean; message?: string; sleepMs?: number; stderr?: string; deleteFiles?: string[] }
+export interface FakeImplementDirective { files?: Record<string, string>; exitCode?: number; noCommit?: boolean; message?: string; sleepMs?: number; stderr?: string; deleteFiles?: string[]; grandchild?: {file: string; delayMs: number; detached?: boolean; pidFile?: string} }
 export interface FakeReviewDirective { verdict?: "CLEAN" | "BLOCKED"; findings?: ReviewFinding[]; exitCode?: number; mutate?: boolean; raw?: string }
 export interface FakeScript {
   implement: (call: number, spec: MissionSpec) => FakeImplementDirective;
@@ -226,7 +226,7 @@ export class EditOnlyImplementer implements ImplementerAdapter {
     const base = {argv: r.argv, startedAt: r.startedAt, timedOut: r.timedOut, aborted: r.aborted, transient: r.timedOut || r.spawnError || (r.exitCode !== null && this.transientExitCodes.includes(r.exitCode))};
     if (r.exitCode !== 0 || r.aborted) return {...base, exitCode: r.exitCode, log: procLog(r), endedAt: r.endedAt};
     const subject = `uasco run ${spec.runId} cycle ${spec.cycle}: ${spec.title.replace(/[\r\n]+/g, " ").slice(0, 120)}`;
-    const c = await commitBuilderOutputAsync(workspace, {envPolicyFile: this.envPolicyFile, startSha, gitDigestBefore: before, message: `${subject}\n\nMission: ${spec.missionId}\nCommitted by the UASCO engine on behalf of ${this.identity} (edit-only builder).`}, {span: sp});
+    const c = await commitBuilderOutputAsync(workspace, {envPolicyFile: this.envPolicyFile, startSha, gitDigestBefore: before, message: `${subject}\n\nMission: ${spec.missionId}\nCommitted by the UASCO engine on behalf of ${this.identity} (edit-only builder).`}, {span: sp, onSpawn: ctx.onSpawn});
     const log = `${procLog(r)}--- engine commit ---\n${c.log}`;
     return c.ok ? {...base, exitCode: 0, commitSha: c.commitSha, log, endedAt: new Date().toISOString()} : {...base, exitCode: 0, blockReason: c.reason, log, endedAt: new Date().toISOString()};
   }
