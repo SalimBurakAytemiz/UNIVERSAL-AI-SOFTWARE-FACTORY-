@@ -13,7 +13,10 @@ const ajv = new Ajv({allErrors: true, strict: true});
 const emptyBody = ajv.compile({type: "object", additionalProperties: false} as const);
 const validMissionId = (x: unknown) => typeof x === "string" && /^msn_[0-9a-f]{24}$/.test(x);
 // //TR: Fabrika Global Stop denetimini (stopped) alır: akış çalışan ücretli çağrıyı durdurabilsin. Yeni ücretli çağrıyı başlatmayı ZATEN route ön kapısı (423) engeller; fabrika stopped'ı yok sayarsa yalnız çalışırken iptal kaybolur (tipi denetlemez).
-export interface AnalysisRouteDeps extends RouteDeps { analysisFlow: (stopped: () => boolean) => AnalysisFlow }
+// //TR: builderTrace (isteğe bağlı): fabrika, o isteğe ait builder'ın son çağrı özetini (ClaudePreDevBuilder.lastTrace; çağrı başına TAZE örnek) akışa ekleyebilir. Verilirse denetim predev/produce ile aynı alanları taşır ve builderRan kanıta dayanır; verilmezse builderRan bilinmez (null).
+export interface AnalysisBuilderTrace { roleId?: string | null; kind?: string | null; identity?: string | null; outputSha256?: string | null; exitCode?: number | null; durationMs?: number | null }
+export type AnalysisFlowWithTrace = AnalysisFlow & { builderTrace?: () => AnalysisBuilderTrace | null };
+export interface AnalysisRouteDeps extends RouteDeps { analysisFlow: (stopped: () => boolean) => AnalysisFlowWithTrace }
 
 export function registerAnalysisRoutes(app: any, d: AnalysisRouteDeps): void {
   const guard = (fn: (req: any, reply: any) => unknown) => async (req: any, reply: any) => {
@@ -45,21 +48,25 @@ export function registerAnalysisRoutes(app: any, d: AnalysisRouteDeps): void {
     if (!lock.ok) { d.audit("WORKOS_ANALYSIS_STEP", {actor: d.actor, missionId: id, status: "REFUSED", reason: lock.error}); return reply.code(409).send({error: lock.error}); }
     try {
       let out;
-      try { out = await d.analysisFlow(d.workosStopped).step(id); }
+      const flow = d.analysisFlow(d.workosStopped);
+      // Ücretli çağrı özeti (sır/istem yok): rol, tür, yürütücü kimliği, çıktı özeti, çıkış kodu, süre; builder hiç çağrılmadıysa boş.
+      const trace = (): AnalysisBuilderTrace | null => { try { return flow.builderTrace?.() ?? null; } catch { return null; } };
+      const tf = (): Record<string, unknown> => { const t = trace(); return t ? {roleId: t.roleId ?? null, artifactKind: t.kind ?? null, executor: t.identity ?? null, outputSha256: t.outputSha256 ?? null, exitCode: t.exitCode ?? null, durationMs: t.durationMs ?? null} : {}; };
+      try { out = await flow.step(id); }
       catch (e) {
         // Ücretli koşu sonrası fırlayan hata (ör. kayıt sırasında WORKOS_DISK_FULL) da denetlenir.
-        if (isStopped(e)) { d.audit("WORKOS_ANALYSIS_STEP", {actor: d.actor, missionId: id, status: "STOPPED", reason: "GLOBAL_STOP_ACTIVE"}); return reply.code(423).send({error: "GLOBAL_STOP_ACTIVE"}); }
-        // builderRan: step() yalnız ücretli çağrıdan SONRA (kayıt/depo) fırlatır; AnalysisError ücretli çağrıdan önceki istek hatasıdır. detail: WorkOsError "<kod>: <ayrıntı>" ayrıntısı (ör. koşu sırasında MISSION_NOT_PREDEV_ELIGIBLE), yalnız güvenli simge biçimindeyse.
+        if (isStopped(e)) { d.audit("WORKOS_ANALYSIS_STEP", {actor: d.actor, missionId: id, status: "STOPPED", reason: "GLOBAL_STOP_ACTIVE", ...tf()}); return reply.code(423).send({error: "GLOBAL_STOP_ACTIVE"}); }
+        // builderRan: kanıta dayanır. AnalysisError ücretli çağrıdan önceki istek hatasıdır (false); aksi halde builder izi varsa builder çağrılmıştır (izin yokluğu = hazırlık/kayıt öncesi fırlatma: false); iz kaynağı yoksa BİLİNMEZ (null). Eskiden her AnalysisError-dışı hata true yazılırdı. detail: WorkOsError "<kod>: <ayrıntı>" ayrıntısı (ör. koşu sırasında MISSION_NOT_PREDEV_ELIGIBLE), yalnız güvenli simge biçimindeyse.
         const code = String((e as {code?: unknown} | null)?.code ?? "INTERNAL_ERROR").slice(0, 64), msg = (e as {message?: unknown} | null)?.message;
         const detail = typeof msg === "string" && msg.startsWith(`${code}: `) && /^[A-Z0-9_]{1,64}$/.test(msg.slice(code.length + 2)) ? msg.slice(code.length + 2) : undefined;
-        d.audit("WORKOS_ANALYSIS_STEP", {actor: d.actor, missionId: id, status: "FAILED", reason: code, ...(detail ? {detail} : {}), builderRan: !(e instanceof AnalysisError)});
+        d.audit("WORKOS_ANALYSIS_STEP", {actor: d.actor, missionId: id, status: "FAILED", reason: code, ...(detail ? {detail} : {}), builderRan: e instanceof AnalysisError ? false : flow.builderTrace ? trace() !== null : null, ...tf()});
         throw e;
       }
       // Derinlemesine savunma: üretim sürerken Global Stop gelmiş olabilir; DRAFT_READY yanıtından ÖNCE yeniden denetlenir.
       // Taslak ZATEN kaydedildi: denetim bunu açıkça söyler (stoppedAfterRecord), yanıt yine 423.
-      if (out.status === "DRAFT_READY" && d.workosStopped()) { d.audit("WORKOS_ANALYSIS_STEP", {actor: d.actor, missionId: id, status: "STOPPED", reason: "GLOBAL_STOP_ACTIVE", stoppedAfterRecord: true, kind: out.kind, artifactId: out.artifactId, version: out.version}); return reply.code(423).send({error: "GLOBAL_STOP_ACTIVE"}); }
+      if (out.status === "DRAFT_READY" && d.workosStopped()) { d.audit("WORKOS_ANALYSIS_STEP", {actor: d.actor, missionId: id, status: "STOPPED", reason: "GLOBAL_STOP_ACTIVE", stoppedAfterRecord: true, kind: out.kind, artifactId: out.artifactId, version: out.version, ...tf()}); return reply.code(423).send({error: "GLOBAL_STOP_ACTIVE"}); }
       const x = out as Record<string, unknown>; // yalnız ayırt edici alanlar (gövde değil): ücretli adımın ne ürettiği/neden düştüğü denetimde görünür
-      d.audit("WORKOS_ANALYSIS_STEP", {actor: d.actor, missionId: id, status: out.status, ...(x.kind !== undefined ? {kind: x.kind} : {}), ...(x.artifactId !== undefined ? {artifactId: x.artifactId} : {}), ...(x.version !== undefined ? {version: x.version} : {}), ...(typeof x.code === "string" ? {code: x.code.slice(0, 120)} : {}), ...(typeof x.reason === "string" ? {reason: x.reason.slice(0, 200)} : {}), ...(typeof x.blocker === "string" ? {blocker: x.blocker.slice(0, 64)} : {})});
+      d.audit("WORKOS_ANALYSIS_STEP", {actor: d.actor, missionId: id, status: out.status, ...(x.kind !== undefined ? {kind: x.kind} : {}), ...(x.artifactId !== undefined ? {artifactId: x.artifactId} : {}), ...(x.version !== undefined ? {version: x.version} : {}), ...(typeof x.code === "string" ? {code: x.code.slice(0, 120)} : {}), ...(typeof x.reason === "string" ? {reason: x.reason.slice(0, 200)} : {}), ...(typeof x.blocker === "string" ? {blocker: x.blocker.slice(0, 64)} : {}), ...(typeof x.roleId === "string" ? {roleId: x.roleId} : {}), ...tf()});
       return out;
     } finally { lock.release(); }
   }));

@@ -1,6 +1,6 @@
 // //TR: Bu görünüm parçası Görevler > mission ayrıntısındaki "Görevleri planla" formudur (LANE-A first-delivery): Kurucu sıralı görev başlıkları ve isteğe bağlı bağımlılıkları (yalnız önceki satır numaraları) girer, POST /v1/missions/:id/plan ile kaydedilir. Görev ÜRETİLMEZ: yalnız kullanıcının yazdığı satırlar gönderilir; uç nokta masaüstü allow-list'inde yoksa sunucu/köprü reddi dürüstçe gösterilir. Plan görevleri çalıştırmaz; koşu ayrı eylemdir.
 import {h,panel} from "../components.js";
-import {drafts,statusBlock,setStatus,recordPost,focusResult} from "../forms.js";
+import {drafts,statusBlock,setStatus,recordPost,focusResult,settle,missionWriteBusy} from "../forms.js";
 import {buildPlanRequest,canPlan,PLAN_MAX_TASKS} from "../work-core.js";
 
 export const PLAN_FORM="mission-plan";
@@ -12,10 +12,13 @@ export function resetPlanDraft(missionId=null){planDraft.missionId=missionId;pla
 function scopePlanDraft(missionId){resetPlanDraft(missionId);delete drafts.status[PLAN_FORM]}
 
 export async function submitPlan(ctx,missionId){
+  if(missionWriteBusy())return {ok:false,busy:true}; // A-PREDEV-BUSY-1: analiz/pre-dev eylemi sürerken elle plan gönderilmez (aynı mission'ın görevlerini yazar)
   const req=buildPlanRequest({missionId,rows:planDraft.rows});
   if(!req.ok){setStatus(PLAN_FORM,{ok:false,errors:req.errors});drafts.status[PLAN_FORM].rowErrors=req.rowErrors;await ctx.rerender();focusResult(ctx,PLAN_FORM,KEYS);return {ok:false,validation:true}}
   drafts.busy[PLAN_FORM]=true;
-  let res;try{res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[PLAN_FORM]=false}
+  // //TR: kilit görünür olsun; yeniden çizim reddedilirse de kilit BIRAKILIR (try/finally); odak not bloğuna alınır.
+  let res;try{await ctx.rerender();settle(ctx,["id:plan-in-flight"]);res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[PLAN_FORM]=false}
+  if(planDraft.missionId!==missionId){await ctx.rerender();return {ok:false,stale:true,status:res?.status??null}} // istek sürerken başka mission seçildi: cevap onun taslağına/durumuna yazılmaz
   const ok=recordPost(PLAN_FORM,res,"plan.created",{n:String(req.body.tasks.length)});
   if(ok)resetPlanDraft(missionId);
   await ctx.refreshAll({force:true});focusResult(ctx,PLAN_FORM,KEYS);return {ok,status:res?.status??null};
@@ -42,8 +45,8 @@ export function planFormPanel(ctx,mission){
   };
   paint(null);
   const add=h(doc,"button",{type:"button",class:"btn",id:"plan-add",dataset:{focusKey:"plan-add"},disabled:rows.length>=PLAN_MAX_TASKS,text:ctx.t("plan.add"),on:{click:()=>{if(rows.length<PLAN_MAX_TASKS){rows.push({title:"",deps:""});paint(`plan-title-${rows.length-1}`)}}}});
-  const form=h(doc,"form",{id:"plan-form",novalidate:true,"aria-labelledby":"plan-t",on:{submit:e=>{e.preventDefault();if(!drafts.busy[PLAN_FORM])submitPlan(ctx,mission.missionId)}}},
-    h(doc,"p",{class:"note",text:ctx.t("plan.lead")}),list,h(doc,"div",{class:"btn-row"},add),statusBlock(ctx,PLAN_FORM),
-    h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"submit",class:"btn btn-primary",id:"plan-submit",dataset:{focusKey:"plan-submit"},disabled:drafts.busy[PLAN_FORM]===true,text:ctx.t("plan.submit")})));
+  const form=h(doc,"form",{id:"plan-form",novalidate:true,"aria-labelledby":"plan-t",on:{submit:e=>{e.preventDefault();if(!missionWriteBusy())submitPlan(ctx,mission.missionId)}}},
+    h(doc,"p",{class:"note",text:ctx.t("plan.lead")}),missionWriteBusy()?h(doc,"p",{class:"note",id:"plan-in-flight",tabindex:"-1",role:"status",dataset:{planBusy:"1",focusKey:"plan-in-flight"},text:ctx.t("busy.missionWrite")}):null,list,h(doc,"div",{class:"btn-row"},add),statusBlock(ctx,PLAN_FORM),
+    h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"submit",class:"btn btn-primary",id:"plan-submit",dataset:{focusKey:"plan-submit"},disabled:missionWriteBusy(),text:ctx.t("plan.submit")})));
   return panel(ctx,{titleKey:"plan.title",id:"mission-plan-panel"},form);
 }
