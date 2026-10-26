@@ -10,7 +10,9 @@ import {buildServer} from "../apps/control-api/src/server.js";
 import Fastify from "fastify";
 import {FIRST_DELIVERY_BINDINGS, STAGE_CONSUMERS} from "../core/agents/first-delivery-bindings.js";
 import {computeRoleStatusSummary, createEvidenceVerifier, runningRoleIdsFromRuns, roleLifecycle, TARGET_ROLE_COUNT} from "../core/agents/role-lifecycle.js";
-import {registerRoleStatusRoutes} from "../apps/control-api/src/routes/role-status.js";
+import {registerRoleStatusRoutes, resetReadinessInputCache} from "../apps/control-api/src/routes/role-status.js";
+import {RUN_STATUSES, isOpenRun} from "../core/workos/run-state.js";
+import {pathToFileURL} from "node:url";
 import {computeRoleReadiness, loadReadinessInputFromRepo, reconcileLegacyStatusSummary} from "../core/agents/readiness-audit.js";
 import {EvaluationStaging, EvaluationStagingError, EVALUATION_PROCEDURES, planFor, runRoleEvaluation, verdictOf} from "../core/competency/evaluation-pipeline.js";
 import type {EvaluationOutcome} from "../core/competency/evaluation-pipeline.js";
@@ -652,6 +654,81 @@ describe("LANE-C C1 role lifecycle computed only from evidence", () => {
         expect(body.reconciliation).toEqual(JSON.parse(JSON.stringify(reconcileLegacyStatusSummary(base({runs: (runs ?? []) as any}), expected))));
         expect(Object.keys(body).sort()).toEqual(["readiness", "reconciliation", "statusSummary", "statusSummaryStatus"]);
       }
+    });
+
+    // ---- #262 review package (H1 packaged layout, M1 isOpenRun table, M2 typed degrade, M3 cache, L1 mismatch, L2 pre-PR pin) ----
+    const stagePackaged = async () => {
+      const b: any = await import(pathToFileURL(path.join(REPO, "scripts", "build-installer.mjs")).href);
+      const stage = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-b1-stage-")); b.stageRuntimeFiles(REPO, stage); resetReadinessInputCache(); return stage;
+    };
+    const getAt = async (root: string, runs: any[] | null, extra: Record<string, unknown> = {}) => {
+      const audits: Array<[string, any]> = []; const app = Fastify();
+      registerRoleStatusRoutes(app, {...depsWith(runs), repoRoot: root, audit: (e: string, x: any) => audits.push([e, x]), ...extra} as any); await app.ready();
+      try { const r = await app.inject({method: "GET", url: "/v1/roles/status-summary"}); return {code: r.statusCode, body: r.json(), audits}; } finally { await app.close(); }
+    };
+
+    it("H1: the PACKAGED layout (installer-staged files only) answers 200 with a FULL readiness (599 measured as defined)", async () => {
+      const stage = await stagePackaged();
+      try {
+        const {code, body} = await getAt(stage, null); expect(code).toBe(200);
+        expect(body.readinessError).toBeUndefined(); expect(body.readiness).not.toBeNull();
+        expect(body.readiness.denominator).toBe(599); expect(body.readiness.totals.DEFINED.TRUE).toBe(599); expect(body.readiness.totals.RUNNING.UNKNOWN).toBe(599);
+        expect(body.readiness.totals.KNOWLEDGE_READY.measured).toBe(true);
+        const repoBody = (await getAt(REPO, null)).body; expect(body.readiness.digest).toBe(repoBody.readiness.digest); expect(JSON.stringify(body.statusSummary)).toBe(JSON.stringify(repoBody.statusSummary));
+      } finally { fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); }
+    });
+
+    it("H1/M2: a missing readiness input DEGRADES (200, legacy statusSummary byte-identical, readiness/reconciliation null, readinessError set, audit carries the code only); a programming error is NOT degraded (workosFail)", async () => {
+      const stage = await stagePackaged();
+      try {
+        const full = (await getAt(stage, null)).body.statusSummary;
+        fs.rmSync(path.join(stage, "registries", "skills-v2.json")); resetReadinessInputCache();
+        const d = await getAt(stage, null); expect(d.code).toBe(200);
+        expect(JSON.stringify(d.body.statusSummary)).toBe(JSON.stringify(full)); expect(d.body.statusSummaryStatus).toBe("DEPRECATED_LEGACY_PROJECTION");
+        expect(d.body).toMatchObject({readiness: null, reconciliation: null, readinessError: "ROLE_READINESS_UNAVAILABLE"}); expect(Object.keys(d.body).sort()).toEqual(["readiness", "readinessError", "reconciliation", "statusSummary", "statusSummaryStatus"]);
+        expect(d.audits).toEqual([["WORKOS_ROLE_READINESS_DEGRADED", {actor: "a", code: "READINESS_INPUT_UNAVAILABLE"}]]); expect(JSON.stringify(d.audits)).not.toContain("skills-v2");
+        // INVALID girdi (rol kaydı geçerli JSON ama bozuk yapı) da düşer
+        resetReadinessInputCache();
+        const inv = await getAt(REPO, null, {readinessCompute: () => { throw new Error("READINESS_INPUT_INVALID:DUPLICATE_X:y"); }}); expect(inv.body).toMatchObject({readiness: null, readinessError: "ROLE_READINESS_UNAVAILABLE"}); expect(inv.audits[0][1].code).toBe("READINESS_INPUT_INVALID");
+        // Programlama hatası: düşürülmez, workosFail (500), denetim yok
+        const bug = await getAt(REPO, null, {readinessCompute: () => { throw new TypeError("boom"); }}); expect(bug.code).toBe(500); expect(bug.body).toEqual({error: "X"}); expect(bug.audits).toEqual([]);
+      } finally { fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); }
+    });
+
+    it("M1: for EVERY run status the role is RUNNING exactly when isOpenRun(status) - lifecycle function and readiness layer", async () => {
+      const known = new Set<string>(doc.roles.map((r: any) => r.roleId));
+      for (const st of RUN_STATUSES) {
+        const runs = [{status: st, evidence: [trace("UASCO-0252")]}];
+        expect(runningRoleIdsFromRuns(runs as any, known).has("UASCO-0252"), st).toBe(isOpenRun(st));
+        const { body } = await getAt(REPO, runs); expect(roleLayer(body, "UASCO-0252").state, st).toBe(isOpenRun(st) ? "TRUE" : "FALSE");
+      }
+    });
+
+    it("M3: the static readiness input is loaded ONCE per root (no knowledge file re-read on the next request) and reloaded when an input file changes", async () => {
+      const stage = await stagePackaged();
+      const spy = vi.spyOn(fs, "readFileSync");
+      try {
+        const knowledgeReads = () => spy.mock.calls.filter(c => String(c[0]).includes(path.join("knowledge", "technologies"))).length;
+        await getAt(stage, null); const first = knowledgeReads(); expect(first).toBeGreaterThan(100);
+        await getAt(stage, null); expect(knowledgeReads(), "warm request re-reads nothing").toBe(first);
+        const reg = path.join(stage, "registries", "technologies.json"); const t = new Date(Date.now() + 5000); fs.utimesSync(reg, t, t);
+        await getAt(stage, null); expect(knowledgeReads(), "changed input -> reloaded").toBeGreaterThan(first);
+      } finally { spy.mockRestore(); fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); }
+    });
+
+    it("L1: a legacy/readiness MISMATCH reaches the client (consistent false + mismatch list) - the route never forces consistency", async () => {
+      const stage = await stagePackaged();
+      try {
+        const f = path.join(stage, "registries", "role-definitions.json"); const rd = JSON.parse(fs.readFileSync(f, "utf8")); rd.roles[0].guildId = "G-NOT-IN-REGISTRY"; fs.writeFileSync(f, JSON.stringify(rd)); resetReadinessInputCache();
+        const { code, body } = await getAt(stage, null); expect(code).toBe(200);
+        expect(body.reconciliation.consistent).toBe(false); expect(body.reconciliation.mismatches.length).toBeGreaterThan(0); expect(body.reconciliation.mismatches.join(",")).toContain("total.registered:599!=598");
+      } finally { fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); }
+    });
+
+    it("L2: the legacy statusSummary equals the output of the code BEFORE this change (digests generated at base 9ab1791 for a no-AWAITING input; basis.roleDefinitionsSha256 excluded; update only with a deliberate registry/binding change)", async () => {
+      const digest = (x: any) => { const c = JSON.parse(JSON.stringify(x)); delete c.basis.roleDefinitionsSha256; return crypto.createHash("sha256").update(JSON.stringify(c)).digest("hex"); };
+      expect(digest((await getAt(REPO, null)).body.statusSummary)).toBe("dac4d040b687f268199155d41c23ce30afdfcc201cdda61fd408783d687605ad");
+      expect(digest((await getAt(REPO, [{status: "RUNNING", evidence: [trace("UASCO-0252")]}])).body.statusSummary)).toBe("c0c81c3f7ae1ae0fa17c82f808610c0440b79a8eaa5214fda1d7668d92870ced");
     });
   });
 });

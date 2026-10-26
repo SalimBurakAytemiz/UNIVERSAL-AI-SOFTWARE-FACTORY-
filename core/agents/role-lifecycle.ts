@@ -72,7 +72,7 @@ export function roleLifecycle(role: LifecycleRole, catalog: readonly CatalogRole
   return {roleId: role.roleId, guildId: role.guildId, registered: true, implemented, tested, certified, running: ctx.runningRoleIds.has(role.roleId)};
 }
 
-/** Açık (terminal olmayan) bir run'daki AGENT_TRACE kanıtından rol kimlikleri; yalnız kayıtlı rol kimlikleri sayılır. */
+/** Açık bir run'daki AGENT_TRACE kanıtından rol kimlikleri; yalnız kayıtlı rol kimlikleri sayılır. "Açık" = run-state.isOpenRun: terminal DEĞİL ve AWAITING_APPROVAL DEĞİL (onay bekleyen run çalışan rol sayılmaz). */
 export function runningRoleIdsFromRuns(runs: readonly Pick<WorkRun, "status" | "evidence">[], knownRoleIds: ReadonlySet<string>): Set<string> {
   const out = new Set<string>();
   for (const r of runs) {

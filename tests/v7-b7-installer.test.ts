@@ -355,6 +355,18 @@ describe("INT-R3 D-M1-01 packaged app stages every runtime-read repo file", () =
       expect(buildScript).toContain("const stagedFiles = stageRuntimeFiles(root, stage);");
     } finally { fs.rmSync(stage, {recursive: true, force: true}); }
   });
+  it("B1: the staged tree alone is enough for the readiness loader (registries AND every knowledge/technologies/*.json are staged; the path-literal scan cannot see knowledge/)", async () => {
+    const b = await load("scripts", "build-installer.mjs"); const { loadReadinessInputFromRepo } = await import("../core/agents/readiness-audit.js");
+    const stage = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-stage-"));
+    try {
+      const files: string[] = b.stageRuntimeFiles(root, stage);
+      const knowledge = fs.readdirSync(path.join(root, "knowledge", "technologies")).filter(n => n.endsWith(".json"));
+      expect(files.filter(f => f.startsWith("knowledge/technologies/")).length).toBe(knowledge.length); expect(knowledge.length).toBeGreaterThan(100);
+      for (const rel of ["registries/skills-v2.json", "registries/technologies.json", "registries/technology-source-registry.json", "registries/role-execution-profiles.json"]) expect(b.STATIC_DATA_FILES).toContain(rel);
+      const input = loadReadinessInputFromRepo(stage, {runs: {journal: "ABSENT"}, now: new Date("2026-10-22T12:00:00.000Z")});
+      expect(input.roles).toHaveLength(599); expect(input.knowledgeProfiles.size).toBe(input.technologies.size);
+    } finally { fs.rmSync(stage, {recursive: true, force: true}); }
+  });
 });
 
 // ---------- INT-R3 D-M1-02: paketli provenance yakalama (node modu fork, kontrol kökü userData) ----------
