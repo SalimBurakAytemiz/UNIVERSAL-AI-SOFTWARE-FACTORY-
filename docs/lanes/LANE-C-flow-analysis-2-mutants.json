@@ -401,7 +401,7 @@
   },
   {
    "id": "PH17",
-   "description": "ALL combining marks are stripped (honest accented text such as Icelandic fill with an acute accent is rejected: the replay-sealing regression of the NFKD+\\p{M} version)",
+   "description": "after NFKC, ALL combining marks (\\p{M}: Mn, Mc, Me) are stripped as well: a visible mark inside the marker (decomposed U+0301/U+0338/U+20DD) is \"caught\" and honest text whose NFKC form is a mark right after `<<` (for example `<<´fill: y`, U+00B4 becomes space + U+0301) is rejected. It models only the mark-stripping half of the earlier NFKD+\\p{M} version: it keeps NFKC, so precomposed accented text such as `<<Fíll>> er stór` stays accepted either way (pinned by the honest list and the documented-limit loop)",
    "file": "core/workos/predev/placeholder.ts",
    "old": "/[\\p{Cf}\\p{Default_Ignorable_Code_Point}]/gu",
    "new": "/[\\p{Cf}\\p{Default_Ignorable_Code_Point}\\p{M}]/gu"
