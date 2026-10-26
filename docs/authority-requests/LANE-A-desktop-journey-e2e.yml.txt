@@ -1,9 +1,12 @@
 # //TR: Bu workflow gerçek Electron masaüstü uçtan uca testini (scripts/e2e/desktop-journey.e2e.mjs) Windows runner'da KENDİ dosyasında çalıştırır; 60 dakikalık kurulum işi (windows-installer.yml) bu yüzden renderer/control-api/workos PR'larında tetiklenmez. Zorunlu kontrol değildir; ci.yml değişmez. Bu dosya Lane A'nın TASLAĞIDIR: .github/workflows/desktop-journey-e2e.yml olarak koordinatör ekler (korumalı yol).
 name: Desktop Journey E2E
 on:
+  # //TR: push (v7/integration) kasıtlı olarak paths süzgeci OLMADAN çalışır: birleştirme sonrası kanarya (süzgeç kaçırsa bile her birleşmeden sonra bir kez koşar).
   push:
     branches: [v7/integration]
   pull_request:
+    # //TR: taslak (draft) PR Windows runner'ı harcamaz: ready_for_review ile başlar.
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - .github/workflows/desktop-journey-e2e.yml
       - scripts/e2e/**
@@ -13,6 +16,10 @@ on:
       - apps/desktop/**
       - apps/control-api/src/**
       - core/**
+      - registries/**
+      - config/**
+      - roadmap/review-packages.json
+      - tsconfig.json
       - package.json
       - package-lock.json
   workflow_dispatch:
@@ -24,6 +31,7 @@ concurrency:
 jobs:
   desktop-e2e:
     name: desktop journey E2E (windows-latest)
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft != true
     runs-on: windows-latest
     timeout-minutes: 15
     env:
