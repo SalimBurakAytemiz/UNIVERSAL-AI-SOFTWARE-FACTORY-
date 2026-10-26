@@ -1791,7 +1791,7 @@
   },
   "integrationBoard": {
     "//TR": "Koordinatör entegrasyon panosu: her açık PR için gerçek engel ve bekleyen sorumlu. Ortak kök neden (base dependency gate) PR'a özgü hatalardan ayrı tutulur; #221/#225 birleşmeden tekrar CI tetiklenmez.",
-    "at": "2026-10-26T19:44:06.322Z",
+    "at": "2026-10-26T19:46:25.835Z",
     "base": "f663ee9 (v7/integration, after #238)",
     "sharedRootCause": {
       "id": "NONE_ACTIVE",
@@ -2206,6 +2206,16 @@
         "postMerge": "VERIFIED: parent1 0ddb170, parent2 = gated head 4fa32fd, merge-tree == merge tree",
         "review": "661ebd0 full NO_BLOCKERS_4LOW (replay-compat real LOW) -> 4fa32fd delta NO_BLOCKERS_1LOW (exhaustive code-point check: 0 visible-text regressions vs base)",
         "riskTier": "ROUTINE (core/workos/predev/placeholder.ts guard, unprotected)"
+      },
+      {
+        "pr": 259,
+        "merge": "8c45845",
+        "by": "auto-merge (armed by coordinator on 97c8800 after merge-gate OPEN)",
+        "at": "2026-10-26T19:46:07Z",
+        "postMerge": "VERIFIED: parent1 56694bf, parent2 = gated head 97c8800, merge-tree == merge tree",
+        "review": "97c8800 full NO_BLOCKERS (correctness + windows lenses; 1 MEDIUM refuted)",
+        "riskTier": "ROUTINE (ps1a tests + tests/support helper, unprotected)",
+        "ci": "attempt 1: shard 1 relfx-c3:200 lease flake (not this PR) -> one full re-run green; shard 3 (ps1a, the fix) green on Windows both attempts"
       }
     ],
     "wslProvider": {
