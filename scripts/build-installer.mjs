@@ -43,7 +43,11 @@ export const PACKAGED_RUNTIME_READ_EXCLUSIONS = {
 /** Statik veri, config ve script dosyalarını sahne köküne aynı göreli yollarla kopyalar; kopyalanan listeyi döner. */
 export function stageRuntimeFiles(root, stage) {
   const files = [...DESKTOP_FILES, ...STATIC_DATA_FILES, ...RUNTIME_CONFIG_FILES, ...RUNTIME_SCRIPTS];
-  for (const dir of STATIC_DATA_DIRS) for (const n of fs.readdirSync(path.join(root, dir)).filter(x => x.endsWith(".json")).sort()) files.push(`${dir}/${n}`);
+  // Dizin girdileri YALNIZ düz dosya olabilir (copyDir ile aynı kural): lstat bir sembolik bağı ya da düz olmayan girdiyi reddeder; copyFileSync bağı izleyip depo dışı içeriği paketlerdi.
+  for (const dir of STATIC_DATA_DIRS) for (const n of fs.readdirSync(path.join(root, dir)).filter(x => x.endsWith(".json")).sort()) {
+    if (!fs.lstatSync(path.join(root, dir, n)).isFile()) throw new Error(`SYMLINK_DENIED:${dir}/${n}`);
+    files.push(`${dir}/${n}`);
+  }
   for (const f of files) { fs.mkdirSync(path.dirname(path.join(stage, f)), {recursive: true}); fs.copyFileSync(path.join(root, f), path.join(stage, f)); }
   return files;
 }

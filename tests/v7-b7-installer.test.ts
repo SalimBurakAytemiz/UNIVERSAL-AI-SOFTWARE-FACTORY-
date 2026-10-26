@@ -355,6 +355,15 @@ describe("INT-R3 D-M1-01 packaged app stages every runtime-read repo file", () =
       expect(buildScript).toContain("const stagedFiles = stageRuntimeFiles(root, stage);");
     } finally { fs.rmSync(stage, {recursive: true, force: true}); }
   });
+  // Windows'ta sembolik bağ oluşturmak ayrıcalık ister: bu test orada ATLANIR (gerekçe: ortam), sıfır doğrulamalı PASS sayılmaz.
+  it.skipIf(process.platform === "win32")("B1/L2: a symlinked (non-regular) entry in a staged data directory is refused with SYMLINK_DENIED; nothing outside the repo is copied", async () => {
+    const b = await load("scripts", "build-installer.mjs"); const copy = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-src-")), out = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-out-")), outside = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-outside-"));
+    try {
+      b.stageRuntimeFiles(root, copy); fs.writeFileSync(path.join(outside, "secret.json"), "{\"secret\":true}"); fs.symlinkSync(path.join(outside, "secret.json"), path.join(copy, "knowledge", "technologies", "zz-evil.json"));
+      expect(() => b.stageRuntimeFiles(copy, out)).toThrow("SYMLINK_DENIED:knowledge/technologies/zz-evil.json");
+      expect(fs.existsSync(path.join(out, "knowledge", "technologies", "zz-evil.json"))).toBe(false);
+    } finally { for (const d of [copy, out, outside]) fs.rmSync(d, {recursive: true, force: true}); }
+  });
   it("B1: the staged tree alone is enough for the readiness loader (registries AND every knowledge/technologies/*.json are staged; the path-literal scan cannot see knowledge/)", async () => {
     const b = await load("scripts", "build-installer.mjs"); const { loadReadinessInputFromRepo } = await import("../core/agents/readiness-audit.js");
     const stage = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-stage-"));

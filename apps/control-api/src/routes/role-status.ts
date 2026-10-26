@@ -5,25 +5,27 @@ import path from "node:path";
 import type {RouteDeps} from "./deps.js";
 import {FIRST_DELIVERY_BINDINGS} from "../../../../core/agents/first-delivery-bindings.js";
 import {computeRoleStatusSummary, createEvidenceVerifier} from "../../../../core/agents/role-lifecycle.js";
-import {computeRoleReadiness, loadReadinessInputFromRepo, reconcileLegacyStatusSummary} from "../../../../core/agents/readiness-audit.js";
+import {READINESS_INPUT_FILES, computeRoleReadiness, loadReadinessInputFromRepo, reconcileLegacyStatusSummary} from "../../../../core/agents/readiness-audit.js";
 import type {ReadinessInput} from "../../../../core/agents/readiness-audit.js";
 
 export const ROLE_REGISTRY_FILE_REL = path.join("registries", "role-definitions.json");
 
 // //TR: M3: readiness girdisinin DURAĞAN kısmı (kayıtlar + bilgi profilleri, ~420 dosya) süreç başına ve repoRoot başına bir kez yüklenir; her istekte yalnız çalışma gözlemi (runs) ve zaman yenilenir. Geçersiz kılma: girdi dosyalarının (boyut + mtime) parmak izi.
-const READINESS_STATIC_RELS = ["registries/role-definitions.json", "registries/skills-v2.json", "registries/technologies.json", "registries/technology-source-registry.json", "registries/role-execution-profiles.json"];
-const statKey = (root: string, rel: string): string => { try { const s = fs.statSync(path.join(root, rel)); return `${rel}|${s.size}|${s.mtimeMs}`; } catch { return `${rel}|absent`; } };
-const fingerprint = (root: string, slugs: readonly string[]): string => [...READINESS_STATIC_RELS, ...slugs.map(x => `knowledge/technologies/${x}.json`)].map(r => statKey(root, r)).join("\n");
+const statKey = (root: string, rel: string): string => { try { const st = fs.statSync(path.join(root, rel)); return `${rel}|${st.size}|${st.mtimeMs}`; } catch { return `${rel}|absent`; } };
+const fingerprint = (root: string, slugs: readonly string[]): string => [...READINESS_INPUT_FILES.registries, ...slugs.map(x => `${READINESS_INPUT_FILES.knowledgeDir}/${x}.json`)].map(r => statKey(root, r)).join("\n");
+// //TR: Bilinen sınırlama: boyut + mtime parmak izi, AYNI boyutta ve AYNI mtime ile yapılan bir içerik değişikliğini görmez (içerik özeti alınmaz); rol kaydı için sha çapraz denetimi (aşağıda) bu durumu yakalar.
+const slugsOnDisk = (root: string): string[] => { try { const t = JSON.parse(fs.readFileSync(path.join(root, "registries/technologies.json"), "utf8")); return Array.isArray(t?.technologies) ? t.technologies.map((x: any) => String(x?.slug)) : []; } catch { return []; } };
 const staticInputCache = new Map<string, {fp: string; slugs: string[]; input: ReadinessInput}>();
 /** Test kancası: önbelleği boşaltır. */
 export function resetReadinessInputCache(): void { staticInputCache.clear(); }
 function staticReadinessInput(root: string, now: Date): ReadinessInput {
   const hit = staticInputCache.get(root);
   if (hit && fingerprint(root, hit.slugs) === hit.fp) return hit.input;
-  const regBefore = fingerprint(root, []); // yükleme sırasında kayıtlar değiştiyse önbelleğe ALINMAZ (bayat girdi sabitlenmez)
+  // L3: TÜM girdi listesinin parmak izi yüklemeden ÖNCE alınır ve sonra karşılaştırılır; yükleme sırasında bir dosya değiştiyse sonuç önbelleğe ALINMAZ.
+  const slugs = slugsOnDisk(root), before = fingerprint(root, slugs);
   const input = loadReadinessInputFromRepo(root, {runs: {journal: "ABSENT"}, now});
-  const slugs = [...input.technologies.keys()];
-  if (fingerprint(root, []) === regBefore) staticInputCache.set(root, {fp: fingerprint(root, slugs), slugs, input});
+  const loaded = [...input.technologies.keys()];
+  if (loaded.length === slugs.length && loaded.every((x, k) => x === slugs[k]) && fingerprint(root, slugs) === before) staticInputCache.set(root, {fp: before, slugs, input});
   return input;
 }
 const READINESS_INPUT_ERROR = /^READINESS_INPUT_(UNAVAILABLE|INVALID):/;
@@ -49,7 +51,8 @@ export function registerRoleStatusRoutes(app: any, d: RouteDeps & {repoRoot: str
       const legacySha = legacyShaEarly;
       let readiness;
       try {
-        const input = {...staticReadinessInput(d.repoRoot, now), runs: observed, now};
+        // verify HER istekte yeni kurulur (kanıt kökü kuruluşta çözülür; sonradan yazılan kanıt bayat kalmasın); önbellekte yalnız durağan girdi.
+        const input = {...staticReadinessInput(d.repoRoot, now), verify: createEvidenceVerifier(d.repoRoot), runs: observed, now};
         // L4: kayıt iki kez okunur (eski sayaç + readiness); sha uyuşmazsa (okumalar arasında değişti) readiness kullanılamaz sayılır, sayı uydurulmaz.
         if (input.roleDefinitionsSha256 !== legacySha) throw new Error("READINESS_INPUT_INVALID:ROLE_DEFINITIONS_CHANGED");
         readiness = (d.readinessCompute ?? computeRoleReadiness)(input); // readinessCompute: yalnız test tohumu (üretimde verilmez)

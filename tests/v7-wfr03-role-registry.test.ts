@@ -13,6 +13,7 @@ import {computeRoleStatusSummary, createEvidenceVerifier, runningRoleIdsFromRuns
 import {registerRoleStatusRoutes, resetReadinessInputCache} from "../apps/control-api/src/routes/role-status.js";
 import {RUN_STATUSES, isOpenRun} from "../core/workos/run-state.js";
 import {pathToFileURL} from "node:url";
+import {READINESS_INPUT_FILES} from "../core/agents/readiness-audit.js";
 import {computeRoleReadiness, loadReadinessInputFromRepo, reconcileLegacyStatusSummary} from "../core/agents/readiness-audit.js";
 import {EvaluationStaging, EvaluationStagingError, EVALUATION_PROCEDURES, planFor, runRoleEvaluation, verdictOf} from "../core/competency/evaluation-pipeline.js";
 import type {EvaluationOutcome} from "../core/competency/evaluation-pipeline.js";
@@ -713,6 +714,68 @@ describe("LANE-C C1 role lifecycle computed only from evidence", () => {
         await getAt(stage, null); expect(knowledgeReads(), "warm request re-reads nothing").toBe(first);
         const reg = path.join(stage, "registries", "technologies.json"); const t = new Date(Date.now() + 5000); fs.utimesSync(reg, t, t);
         await getAt(stage, null); expect(knowledgeReads(), "changed input -> reloaded").toBeGreaterThan(first);
+      } finally { spy.mockRestore(); fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); }
+    });
+
+    // ---- #262 round 2 ----
+    it("R2-M1: the cache is invalidated by a change of EACH of the 5 loader inputs and of a knowledge profile; the input list is the loader's own exported constant", async () => {
+      expect([...READINESS_INPUT_FILES.registries]).toEqual(["registries/role-definitions.json", "registries/skills-v2.json", "registries/technologies.json", "registries/technology-source-registry.json", "registries/role-execution-profiles.json"]);
+      const stage = await stagePackaged(); const spy = vi.spyOn(fs, "readFileSync");
+      try {
+        const reads = () => spy.mock.calls.filter(c => String(c[0]).includes(path.join("knowledge", "technologies"))).length;
+        await getAt(stage, null); await getAt(stage, null); let last = reads();
+        const knowledge = fs.readdirSync(path.join(stage, "knowledge", "technologies")).filter(n => n.endsWith(".json")).sort()[0];
+        let bump = 10_000;
+        for (const rel of [...READINESS_INPUT_FILES.registries, `${READINESS_INPUT_FILES.knowledgeDir}/${knowledge}`]) {
+          const t = new Date(Date.now() + (bump += 10_000)); fs.utimesSync(path.join(stage, rel), t, t);
+          await getAt(stage, null); expect(reads(), `${rel} change -> reload`).toBeGreaterThan(last); last = reads();
+          await getAt(stage, null); expect(reads(), `${rel} warm again`).toBe(last);
+        }
+      } finally { spy.mockRestore(); fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); }
+    });
+
+    it("R2-L1: the evidence verifier is built PER REQUEST: evidence written after the first request is seen by the next one", async () => {
+      const stage = await stagePackaged(); const seen: Array<(ref: string, role: string, ev: string, verdict: string) => string | null> = [];
+      const capture = (input: any) => { seen.push(input.verify); return computeRoleReadiness(input); };
+      try {
+        await getAt(stage, null, {readinessCompute: capture});
+        const dir = path.join(stage, "audit", "evidence", "role-evaluations", "UASCO-0085"); fs.mkdirSync(dir, {recursive: true});
+        const art = Buffer.from("artifact"); fs.writeFileSync(path.join(dir, "art.txt"), art);
+        const ev = Buffer.from(JSON.stringify({roleId: "UASCO-0085", evaluationId: "EV-01", verdict: "PASSED", executorKind: "CLAUDE", artifactPath: "audit/evidence/role-evaluations/UASCO-0085/art.txt", artifactSha256: crypto.createHash("sha256").update(art).digest("hex")}));
+        fs.writeFileSync(path.join(dir, "EV-01.json"), ev); const ref = `audit/evidence/role-evaluations/UASCO-0085/EV-01.json#sha256=${crypto.createHash("sha256").update(ev).digest("hex")}`;
+        await getAt(stage, null, {readinessCompute: capture});
+        expect(seen[0](ref, "UASCO-0085", "EV-01", "PASSED"), "built before the evidence existed").toBe("file_missing");
+        expect(seen[1](ref, "UASCO-0085", "EV-01", "PASSED"), "built per request: sees the new evidence").toBeNull(); expect(seen[1]).not.toBe(seen[0]);
+      } finally { fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); }
+    });
+
+    it("R2-L4: the role-definitions sha cross-check degrades on a same-size/same-mtime edit, the degrade EVICTS the cache (next request is full again), and `now` is refreshed per request", async () => {
+      const stage = await stagePackaged(); const f = path.join(stage, "registries", "role-definitions.json");
+      try {
+        const round = new Date("2026-01-02T03:04:05.000Z"); fs.utimesSync(f, round, round); // tam milisaniye: aynı mtime yeniden kurulabilsin
+        const first = await getAt(stage, null); expect(first.body.readiness).not.toBeNull();
+        const orig = fs.readFileSync(f); const edited = Buffer.from(orig); const at = edited.indexOf(Buffer.from("UASCO-0001")); edited[at + 9] = edited[at + 9] === 0x31 ? 0x32 : 0x31; // same size, one digit
+        fs.writeFileSync(f, edited); fs.utimesSync(f, round, round);
+        const bad = await getAt(stage, null); expect(bad.code).toBe(200);
+        expect(bad.body).toMatchObject({readiness: null, reconciliation: null, readinessError: "ROLE_READINESS_UNAVAILABLE"}); expect(bad.audits[0][1]).toEqual({actor: "a", code: "READINESS_INPUT_INVALID"});
+        const again = await getAt(stage, null); expect(again.body.readiness, "eviction: reloaded from the changed file").not.toBeNull(); expect(again.body.readinessError).toBeUndefined();
+        // now: her istekte yenilenir
+        const nows = [new Date("2026-10-22T12:00:00.000Z"), new Date("2026-10-23T08:30:00.000Z")]; let k = 0;
+        const a = await getAt(stage, null, {now: () => nows[k++ % 2]}); const b = await getAt(stage, null, {now: () => nows[k++ % 2]});
+        expect([a.body.readiness.computedAt, b.body.readiness.computedAt]).toEqual(nows.map(x => x.toISOString()));
+      } finally { fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); }
+    });
+
+    it("R2-L3: a loader input that changes DURING the load is not cached (the full input-list fingerprint is taken before the load)", async () => {
+      const stage = await stagePackaged(); const real = fs.readFileSync; let touched = false; let t = 50_000_000;
+      const spy = vi.spyOn(fs, "readFileSync").mockImplementation(((p: any, ...r: any[]) => {
+        if (!touched && String(p).includes(path.join("knowledge", "technologies"))) { touched = true; const when = new Date(Date.now() + (t += 10_000)); fs.utimesSync(path.join(stage, "registries", "skills-v2.json"), when, when); }
+        return (real as any).call(fs, p, ...r);
+      }) as any);
+      try {
+        const reads = () => spy.mock.calls.filter(c => String(c[0]).includes(path.join("knowledge", "technologies"))).length;
+        await getAt(stage, null); const first = reads(); expect(touched).toBe(true);
+        await getAt(stage, null); expect(reads(), "changed during load -> not cached -> reloaded").toBeGreaterThan(first);
       } finally { spy.mockRestore(); fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); }
     });
 
