@@ -56,6 +56,8 @@ async function overviewTab(ctx,project,projects){
   const missionsPanel=panel(ctx,{titleKey:"studio.ov.missions",id:"studio-ov-missions"},mBody);
   // Son koşu, inceleme ve güvenlik durumu yalnız sunucunun bildirdiği alanlardan gösterilir; yoksa "bildirilmedi" denir.
   let runBody,reviewBody,secBody,latestRun=null;
+  // Koşu/mission okuması başarısızsa ürün kartı "koşu yok" DEMEZ: okuma durumunu gösterir.
+  const runsReadState=rres.state!=="VERIFIED"?rres.state:missions.state!=="VERIFIED"?missions.state:"VERIFIED";
   if(rres.state!=="VERIFIED"||missions.state!=="VERIFIED"){const s=rres.state!=="VERIFIED"?rres.state:missions.state;runBody=stateNote(ctx,s);reviewBody=stateNote(ctx,s);secBody=stateNote(ctx,s)}
   else{
     const run=latestRunFor(rres.items,missions.items.map(m=>m.missionId));latestRun=run;
@@ -71,7 +73,7 @@ async function overviewTab(ctx,project,projects){
       }
     }
   }
-  return h(doc,"div",{class:"studio-grid"},await flowPanel(ctx,id),await productCard(ctx,project,latestRun),info,missionsPanel,panel(ctx,{titleKey:"studio.ov.lastRun",id:"studio-ov-run"},runBody),panel(ctx,{titleKey:"studio.ov.review",id:"studio-ov-review"},reviewBody),panel(ctx,{titleKey:"studio.ov.security",id:"studio-ov-security"},secBody),await knowledgePanel(ctx,id),importPanel(ctx,{projects,fixedId:id}));
+  return h(doc,"div",{class:"studio-grid"},await flowPanel(ctx,id),await productCard(ctx,project,latestRun,runsReadState),info,missionsPanel,panel(ctx,{titleKey:"studio.ov.lastRun",id:"studio-ov-run"},runBody),panel(ctx,{titleKey:"studio.ov.review",id:"studio-ov-review"},reviewBody),panel(ctx,{titleKey:"studio.ov.security",id:"studio-ov-security"},secBody),await knowledgePanel(ctx,id),importPanel(ctx,{projects,fixedId:id}));
 }
 
 // ---------- Çalıştır & Önizle ----------

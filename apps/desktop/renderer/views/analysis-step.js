@@ -46,7 +46,7 @@ export async function submitAnalysisPlan(ctx,missionId){
 /** "rol:KOD" ya da "KOD:ayrıntı" -> okunur metin; bilinmeyen kod ham ve "tanınmadı" notuyla. */
 export function blockerText(ctx,code){
   const m=/^(implementer|reviewer):(.+)$/.exec(code),role=m?m[1]:null,c=m?m[2]:code,i=c.indexOf(":"),head=i<0?c:c.slice(0,i),detail=i<0?null:c.slice(i+1);
-  const v=tOr(ctx,`run.reason.${head}`,null)??tOr(ctx,`analysis.blocker.${head}`,null);
+  const v=tOr(ctx,`analysis.blocker.${head}`,null); // analize özgü metinler (koşu metinleri "koşu başlamadı" der, analiz için yanlıştır)
   const base=v===null?`${c} (${ctx.t("analysis.unrecognised")})`:detail?`${v} (${detail.slice(0,80)})`:v;
   return role?`${ctx.t(`exec.profile.role.${role}`)}: ${base}`:base;
 }
@@ -90,7 +90,9 @@ function planBlock(ctx,plan){
     h(doc,"ol",{"aria-label":ctx.t("analysis.trace.title"),class:"analysis-trace"},plan.trace.map(t=>h(doc,"li",{dataset:{traceTask:t.workPackageId}},
       h(doc,"strong",{class:"mono",text:t.workPackageId})," ",h(doc,"span",{class:"note",text:ctx.t("analysis.trace.estimate",{estimate:t.estimate})}),
       t.requirements.length?h(doc,"ul",{},t.requirements.map(r=>h(doc,"li",{dataset:{traceReq:r.id}},h(doc,"span",{class:"mono",text:r.id})," ",h(doc,"span",{text:r.statement}),
-        r.acceptanceCriteria.length?h(doc,"ul",{},r.acceptanceCriteria.map(c=>h(doc,"li",{dataset:{traceCriterion:"1"},text:c}))):null))):h(doc,"p",{class:"note",dataset:{traceNone:"1"},text:ctx.t("analysis.trace.none")})))));
+        r.acceptanceCriteria.length?h(doc,"ul",{},r.acceptanceCriteria.map(c=>h(doc,"li",{dataset:{traceCriterion:"1"},text:c}))):null,
+        r.hiddenCriteria>0?h(doc,"p",{class:"note",dataset:{traceHidden:"criteria"},text:ctx.t("analysis.trace.more",{n:String(r.hiddenCriteria)})}):null))):h(doc,"p",{class:"note",dataset:{traceNone:"1"},text:ctx.t("analysis.trace.none")}),
+      t.hiddenRequirements>0?h(doc,"p",{class:"note",dataset:{traceHidden:"requirements"},text:ctx.t("analysis.trace.more",{n:String(t.hiddenRequirements)})}):null))));
 }
 /** exec: ctx.api.executors() sonucu (giriş komutu için); null olabilir. */
 export function analysisPanel(ctx,{missionId,exec}){
@@ -104,6 +106,8 @@ export function analysisPanel(ctx,{missionId,exec}){
       on:{click:()=>{if(!drafts.busy[ANALYSIS_STEP_FORM])submitAnalysisStep(ctx,missionId)}}})),
     step?stepBlock(ctx,step,exec):h(doc,"p",{class:"note",dataset:{analysisStatus:"NONE"},text:ctx.t("analysis.none")}),
     statusBlock(ctx,ANALYSIS_STEP_FORM),
+    // Analiz adımı kullanılamıyorsa ya da beklenmedik biçimde bitiyorsa Founder planı elle yazabilir: düğme yalnız Görevler'e gider (orada gönderilen POST zaten kabul edilen /plan yoludur).
+    h(doc,"div",{class:"btn-row"},h(doc,"p",{class:"note",dataset:{analysisHandPlan:"1"},text:ctx.t("analysis.handPlan")}),h(doc,"button",{type:"button",class:"btn",id:"analysis-hand-plan",dataset:{focusKey:"analysis-hand-plan"},text:ctx.t("analysis.handPlan.open"),on:{click:()=>{selection.missionId=missionId;ctx.navigate("work")}}})),
     complete?h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn btn-primary",id:"analysis-plan-submit",dataset:{focusKey:"analysis-plan-submit"},disabled:busyP,text:ctx.t("analysis.plan.button"),
       on:{click:()=>{if(!drafts.busy[ANALYSIS_PLAN_FORM])submitAnalysisPlan(ctx,missionId)}}})):h(doc,"p",{class:"note",dataset:{analysisPlanGate:"CLOSED"},text:ctx.t("analysis.plan.gate")}),
     statusBlock(ctx,ANALYSIS_PLAN_FORM),

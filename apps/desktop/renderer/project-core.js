@@ -212,16 +212,24 @@ export function mapRunProduct(raw,runId){
   const d=mapDevRun(isObj(x.devrun)?{devrun:x.devrun}:null);
   if(d.state!=="VERIFIED")return bad;
   if(x.tiedToThisRun!==(d.run.deliveryRunId===runId))return bad;
-  return {state:"VERIFIED",product:{runId,deliveredHeadSha:head,tiedToThisRun:x.tiedToThisRun,run:d.run}};
+  // //TR: sunucu ürün kaydına `deliverable` ({ok:boolean, reason?:kod}) eklerse o okunur; biçim bozuksa tüm okuma ERROR (yarım güvenle başlatma sunulmaz). Yoksa null.
+  let deliverable=null;
+  if(Object.hasOwn(x,"deliverable")){
+    const dv=x.deliverable;
+    if(!isObj(dv)||typeof dv.ok!=="boolean"||!(dv.reason===undefined||dv.reason===null||(typeof dv.reason==="string"&&/^[A-Z][A-Z0-9_:]{0,79}$/.test(dv.reason))))return bad;
+    deliverable={ok:dv.ok,reason:typeof dv.reason==="string"?dv.reason:null};
+  }
+  return {state:"VERIFIED",product:{runId,deliveredHeadSha:head,tiedToThisRun:x.tiedToThisRun,deliverable,run:d.run}};
 }
-/** //TR: "Ürünü başlat" YALNIZ akışın DELIVERY aşaması sunucuda DONE, teslim edilen commit biliniyor ve durum başlatmaya izin veriyorsa; "Durdur" YALNIZ bu teslimin kendi çalışan ürünü için (başka teslimin ürününü bu düğme kapatmaz); yerel adres YALNIZ bu teslime bağlı, RUNNING, bridged=true ve önizleme AVAILABLE iken. DONE ürünün doğrulandığı anlamına gelmez. */
-export function productOffer(product,flow){
-  const stages=flow&&Array.isArray(flow.stages)?flow.stages:[];
-  const deliveryDone=stages.some(s=>s&&s.stage==="DELIVERY"&&s.state==="DONE");
+/** //TR: "Ürünü başlat" YALNIZ bu teslim ürünü çalıştırılabilirse sunulur. Koşul B-RUN-1 route'unun KENDİ koşuludur (routes/product-run.ts `deliverable`): kaynak üretimi SOURCE_GENERATION_COMPLETE ve 40 hex teslim commit'i. DELIVERY aşamasının DONE olması BEKLENMEZ: DONE yalnızca PRODUCT_VERIFIED demektir (flow.ts, outcomes.ts), oysa kabul edilmiş NOT_VERIFIED bir kaynak teslimi de çalıştırılabilir. Kaynak: ürün kaydındaki `deliverable` alanı varsa o ({ok:boolean}); yoksa sunucunun koşu teslim görünümü (delivery.sourceGeneration.state) + ürün kaydının deliveredHeadSha'sı. İkisi de okunamıyorsa başlatma sunulmaz (UNKNOWN). "Durdur" YALNIZ bu teslimin kendi çalışan ürünü için (başka teslimin ürününü bu düğme kapatmaz); yerel adres YALNIZ bu teslime bağlı, RUNNING, bridged=true ve önizleme AVAILABLE iken. Çalışıyor olmak ürünün doğrulandığı anlamına gelmez. */
+export function productOffer(product,delivery){
   const run=product.run,a=devRunActions(run.status),hasCommit=product.deliveredHeadSha!==null;
+  let deliverable=null; // true | false | null (bilinmiyor)
+  if(product.deliverable!==null&&product.deliverable!==undefined)deliverable=product.deliverable.ok===true&&hasCommit;
+  else if(delivery&&delivery.sourceGeneration&&typeof delivery.sourceGeneration.state==="string")deliverable=delivery.sourceGeneration.state==="SOURCE_GENERATION_COMPLETE"&&hasCommit;
   const otherRunning=!product.tiedToThisRun&&(run.status==="STARTING"||run.status==="RUNNING");
-  return {deliveryDone,hasCommit,otherRunning,
-    start:deliveryDone&&hasCommit&&!otherRunning&&a.start,
+  return {deliverable,hasCommit,otherRunning,
+    start:deliverable===true&&!otherRunning&&a.start,
     stop:product.tiedToThisRun&&a.stop,
     open:product.tiedToThisRun&&run.status==="RUNNING"&&run.bridged===true&&previewOpenable(run)};
 }
@@ -341,7 +349,7 @@ export function mapRoleReadiness(raw){
     const p=raw[role];
     if(!isObj(p)||typeof p.ready!=="boolean"||!Array.isArray(p.blockers)||p.blockers.length>8||!p.blockers.every(b=>typeof b==="string"&&BLOCKER_RE.test(b))||p.ready!==(p.blockers.length===0)){out[role]=null;continue}
     const profile=typeof p.profile==="string"&&/^[A-Z][A-Z_]{0,39}$/.test(p.profile)?p.profile:null,cmd=p.loginCommand;
-    out[role]={ready:p.ready,blockers:[...p.blockers],profile,loginCommand:typeof cmd==="string"&&cmd.length<=2000&&!CONTROL_RE.test(cmd)&&cmd.startsWith("$env:CLAUDE_CONFIG_DIR='")?cmd:null};
+    out[role]={ready:p.ready,blockers:[...p.blockers],profile,loginCommand:typeof cmd==="string"&&cmd.length<=2000&&!CONTROL_RE.test(cmd)&&cmd.startsWith("$env:CLAUDE_CONFIG_DIR='")?redactText(cmd):null};
   }
   return out;
 }
@@ -367,7 +375,7 @@ export function mapSandbox(raw){
   if(!isObj(raw))return null;
   const st=raw.state==="AVAILABLE"||raw.state==="UNAVAILABLE"?raw.state:null;if(!st)return null;
   const code=v=>typeof v==="string"&&/^[A-Z][A-Z0-9_]{0,63}$/.test(v)?v:null;
-  return {state:st,reason:code(raw.reason),detail:code(raw.detail),providerId:typeof raw.providerId==="string"&&/^[A-Za-z0-9_.:-]{1,64}$/.test(raw.providerId)?raw.providerId:null};
+  return {state:st,reason:code(raw.reason),detail:code(raw.detail),providerId:typeof raw.providerId==="string"&&/^[A-Za-z0-9_.:-]{1,64}$/.test(raw.providerId)&&redactText(raw.providerId)===raw.providerId?raw.providerId:null};
 }
 /** SBX-8 (D-SBX-11 b): GET /v1/system/executors claudeProfiles -> [{role,state,reason,loginCommand}]; yalnız implementer/reviewer, güvenli desenli durum/neden; giriş komutu yalnız metin olarak gösterilir (renderer asla çalıştırmaz). */
 export const CLAUDE_PROFILE_ROLES=["implementer","reviewer"];
@@ -378,7 +386,8 @@ export function mapClaudeProfiles(raw){
     const state=typeof p.state==="string"&&/^[A-Z][A-Z_]{0,39}$/.test(p.state)?p.state:null;
     const reason=typeof p.reason==="string"&&/^[A-Z][A-Z0-9_:]{0,119}$/.test(p.reason)?p.reason:null;
     const cmd=p.loginCommand;
-    const loginCommand=typeof cmd==="string"&&cmd.length<=2000&&!CONTROL_RE.test(cmd)&&cmd.startsWith("$env:CLAUDE_CONFIG_DIR='")?cmd:null;
+    // //TR: komut bilinçli olarak METİN gösterilir; yalnız anahtar/belirteç desenleri maskelenir.
+    const loginCommand=typeof cmd==="string"&&cmd.length<=2000&&!CONTROL_RE.test(cmd)&&cmd.startsWith("$env:CLAUDE_CONFIG_DIR='")?redactText(cmd):null;
     return {role,state,reason,loginCommand};
   }).filter(Boolean);
 }

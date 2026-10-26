@@ -1,4 +1,4 @@
-<!-- //TR: LANE-C yetki talebi: analiz adımının route'larla bağlanması (korumalı server.ts dalgası) ve yeni test dosyasının config/validation.json kaydı koordinatör işidir. -->
+<!-- //TR: LANE-C yetki talebi: analiz adımının route'larla bağlanması (korumalı server.ts dalgası) koordinatör işidir; testler kayıtlı bir dosyaya taşındı (config/validation.json kaydı gerekmez). -->
 # LANE-C authority request: C-FLOW-ANALYSIS-1, the analysis step of the 31 Oct Desktop flow
 
 ## What exists after this package (Lane C paths only)
@@ -17,11 +17,20 @@ Two thin routes over `AnalysisFlow` are the whole wiring (`apps/control-api/src/
 - `POST /v1/missions/:id/analysis/plan` -> `createPlan(id, actor)`; `ok:false` codes 409.
 Both can reuse the Desktop allow-list pattern of the other mission routes.
 
-## Registration (coordinator, protected `config/validation.json`)
-New file `tests/v7-lane-c-flow-analysis.test.ts` (17 tests, about 1 s, no process, no `platforms` filter). `tests/pkg-vs-validation-sharding.test.ts` is red until it is in one shard.
+## Tests (no registration needed)
+The 17 tests live in the already-registered `tests/v7-core-predev-crew-coordination.test.ts` (step `tests-8`), in the self-contained `LANE-C analysis flow: C-FLOW-ANALYSIS-1` describe at the end of the file (about 1 s, no process). The separate file `tests/v7-lane-c-flow-analysis.test.ts` was removed, so `tests/pkg-vs-validation-sharding.test.ts` stays green without a `config/validation.json` change.
 
 ## NOT_VERIFIED
 - No real Claude run here: the builder in the tests is a fake that returns the TaskHub fixtures, so the content quality of real BA/PO/architect output is not judged. The structure and traceability gates (the existing validators) are real.
 - Windows/Electron: nothing executed.
 - The route wiring and the Desktop screens are not part of this package.
 - Mutants: `docs/lanes/LANE-C-flow-analysis-mutants.json` and `.mjs`.
+
+## Independent review fixes (#229 review: M-229-1, M-229-2, L1-L4)
+- M-229-1: `planFromApproved` (and so `createPlan`) runs the plan route's own `validatePlanCreate` on the draft body. A body the route would answer with 400 (a package listed twice in `dependsOn`, a list over 49) is refused with the new code `PLAN_INVALID` (detail = the validator's text) and nothing is persisted. `PlanDraftCode` gains `PLAN_INVALID` (the route should answer it like the other plan codes: 409).
+- M-229-2: `step()` is single-flight per mission (a module-level guard, because the route builds a new `AnalysisFlow` per request). A second concurrent call is answered `BLOCKED {blocker: "ANALYSIS_IN_PROGRESS"}` before any builder call; the guard is released on success, failure and throw. Lane B still adds the route-level lock shared with predev/produce.
+- Re-verify F1 (MEDIUM, a regression of the "paid call first" change): when the pre-dev phase is not the next analysis kind (typically an artefact that is APPROVED while the phase never advanced after an ENOSPC/crash, the state `driver.approveAndAdvance` resumes), `step()` answers `BLOCKED {blocker: "ANALYSIS_PHASE_NOT_ADVANCED", founderAction: ...}` BEFORE any builder call (and before the readiness question), on every call, and writes nothing. The Founder's approval of that artefact resumes the advance; the next `step()` then produces the next kind. The BLOCKED answer also carries the structured `kind` and `artifactId` of the stuck artefact (only for this blocker), so Lane A can offer "re-approve" through `POST /v1/missions/:id/predev/artifacts/:artifactId/approve` without parsing the prose. The phase check runs BEFORE the readiness question (a stuck sequence is answered even when the setup is not ready; readiness is not asked). Lane B: map it like the other BLOCKED answers (it is not a builder failure and not a 5xx). F2/F3 pin the plan gate (every kind APPROVED), the AUTHORIZED recovery, the kind named by a later-phase BUILDER_FAILED, the criteria count, single-flight in the same tick and per mission, and the first Founder action.
+- L1 (contract agreed with the coordinator): optional dependency `stopped?: () => boolean` (the route passes `d.workosStopped`). When present it is wired to the builder's `shouldAbort` (`ClaudePreDevBuilder`, or any builder exposing that property; the shared `NO_ANALYSIS_BUILDER` is never touched), asked before the paid call and again after it, before anything is recorded. A Global Stop throws the typed `AnalysisStoppedError` (message `GLOBAL_STOP_ACTIVE`): nothing recorded, no sequence opened, no phase advanced; an aborted builder run (it throws once the stop is up) is a stop, not `BUILDER_FAILED`. The route maps `AnalysisStoppedError` to 423 `GLOBAL_STOP_ACTIVE`.
+- L2: the paid builder call comes first and writes nothing: a failed step (`BUILDER_FAILED`, including no builder configured) no longer opens the pre-dev sequence or advances its phase. (A content `REJECTED` still opens the sequence, as before: the validators run inside the driver and nothing invalid is recorded.)
+- L3: if another actor recorded this phase's draft while our paid call ran, the answer is `AWAITING_APPROVAL` for that pending draft (fresh read), not `BUILDER_FAILED` for the stale phase.
+- L4: tests pin the plan gate and the actor attribution (the agent identity opens, advances and records; the actor given to `createPlan` owns the plan and its tasks). Mutants V1-V11 added (29 in total, all killed).

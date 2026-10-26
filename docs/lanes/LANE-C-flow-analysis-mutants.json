@@ -1,5 +1,5 @@
 {
- "//TR": "C-FLOW-ANALYSIS-1 mutasyon listesi: her mutant tam metin değişikliğidir (dosyada tam 1 kez bulunmalı); docs/lanes/LANE-C-flow-analysis-mutants.mjs her birini uygular ve tests/v7-lane-c-flow-analysis.test.ts dosyasının BAŞARISIZ olmasını bekler.",
+ "//TR": "C-FLOW-ANALYSIS-1 mutasyon listesi: her mutant tam metin değişikliğidir (dosyada tam 1 kez bulunmalı); docs/lanes/LANE-C-flow-analysis-mutants.mjs her birini uygular ve tests/v7-lane-c-flow-analysis.test.ts dosyasının BAŞARISIZ olmasını bekler. Yeniden-doğrulama (F1-F3) için NA1-NA4, MA, X1-X4, X9, O2c, O3c eklendi (toplam 44). Delta kontrolü (L1-L3): NA5-NA7, X3b-X3d eklendi (toplam 50).",
  "mutants": [
   {
    "id": "F1",
@@ -26,15 +26,8 @@
    "id": "F4",
    "description": "the sequence is started on every step",
    "file": "core/workos/crew/analysis.ts",
-   "old": "if (!rm.active || rm.phase === \"AUTHORIZED\") driver.start(",
-   "new": "if (true) driver.start("
-  },
-  {
-   "id": "F5",
-   "description": "the draft is recorded under the Founder's identity",
-   "file": "core/workos/crew/analysis.ts",
-   "old": "const out = await driver.produceCurrentPhase(scope, missionId, PREDEV_AGENT_ACTOR);",
-   "new": "const out = await driver.produceCurrentPhase(scope, missionId, \"FOUNDER_LOCAL\");"
+   "old": "if (!now.active || now.phase === \"AUTHORIZED\") recorder.start(",
+   "new": "if (true) recorder.start("
   },
   {
    "id": "F6",
@@ -133,6 +126,238 @@
    "file": "core/workos/crew/analysis.ts",
    "old": "acceptanceCriteria: [...r.acceptanceCriteria]}] : []; })}));",
    "new": "acceptanceCriteria: []}] : []; })}));"
+  },
+  {
+   "id": "V1",
+   "description": "M-229-1: the plan draft is not validated by the plan route's validator",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "if (!valid.ok) return {ok: false, code: \"PLAN_INVALID\", detail: valid.errors.slice(0, 300)};",
+   "new": ""
+  },
+  {
+   "id": "V2",
+   "description": "M-229-2: no single-flight (a second concurrent step starts a second paid call)",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "if (IN_FLIGHT.has(key)) return blockedStep(",
+   "new": "if (false) return blockedStep("
+  },
+  {
+   "id": "V3",
+   "description": "M-229-2: the single-flight guard is never released",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "finally { IN_FLIGHT.delete(key); }",
+   "new": "finally { /* never released */ }"
+  },
+  {
+   "id": "V4",
+   "description": "L1: Global Stop is not checked before the paid call",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "    if (this.d.stopped?.()) throw new AnalysisStoppedError();\n    const phaseKind =",
+   "new": "    const phaseKind ="
+  },
+  {
+   "id": "V5",
+   "description": "L1: Global Stop is not checked after the paid call, before recording",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "    if (this.d.stopped?.()) throw new AnalysisStoppedError();\n    // //TR: Kayıt mevcut",
+   "new": "    // //TR: Kayıt mevcut"
+  },
+  {
+   "id": "V6",
+   "description": "L3: a lost race is reported as BUILDER_FAILED for the stale phase",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "return this.pendingStep(fresh) ?? {status: \"BUILDER_FAILED\", kind: ANALYSIS_KINDS.find(k => fresh.artifacts[k].state !== \"APPROVED\") ?? phaseKind, code: e.message.slice(0, 120)};",
+   "new": "return {status: \"BUILDER_FAILED\", kind: phaseKind, code: e.message.slice(0, 120)};"
+  },
+  {
+   "id": "V7",
+   "description": "L2: the sequence is opened before the paid call (a failed step writes)",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "    let raw: string;\n    // //TR: builder shouldAbort",
+   "new": "    let raw: string;\n    if (!rm.active || rm.phase === \"AUTHORIZED\") driver.start(scope, missionId, PREDEV_AGENT_ACTOR);\n    // //TR: builder shouldAbort"
+  },
+  {
+   "id": "V8",
+   "description": "L4: the draft is recorded under the Founder's identity (the recorder step)",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "const out = await recorder.produceCurrentPhase(scope, missionId, PREDEV_AGENT_ACTOR);",
+   "new": "const out = await recorder.produceCurrentPhase(scope, missionId, \"FOUNDER_LOCAL\");"
+  },
+  {
+   "id": "V9",
+   "description": "L4: the sequence is opened under the Founder's identity",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "recorder.start(scope, missionId, PREDEV_AGENT_ACTOR);",
+   "new": "recorder.start(scope, missionId, \"FOUNDER_LOCAL\");"
+  },
+  {
+   "id": "V10",
+   "description": "L4: createPlan ignores the actor it is given",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "const r = submitPlan(this.d.store, this.d.scope, actor, missionId, draft.body);",
+   "new": "const r = submitPlan(this.d.store, this.d.scope, \"WORKOS_RUNNER\", missionId, draft.body);"
+  },
+  {
+   "id": "V11",
+   "description": "L4: the plan gate allows 51 tasks (>= instead of >)",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "if (wps.length > MAX_PLAN_TASKS) return",
+   "new": "if (wps.length > MAX_PLAN_TASKS + 1) return"
+  },
+  {
+   "id": "V12",
+   "description": "L1: the builder's shouldAbort is not wired to the stop",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "b.shouldAbort = this.d.stopped;",
+   "new": "void b;"
+  },
+  {
+   "id": "V13",
+   "description": "L1: an aborted builder run is reported as BUILDER_FAILED instead of a stop",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "if (this.d.stopped?.()) throw new AnalysisStoppedError(); // abort edilen çağrı bir \"builder hatası\" değil, durdurmadır",
+   "new": ""
+  },
+  {
+   "id": "V14",
+   "description": "L1: every builder (also the shared no-builder sentinel) is wired to the stop",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "(b instanceof ClaudePreDevBuilder || \"shouldAbort\" in b)) b.shouldAbort",
+   "new": "true) b.shouldAbort"
+  },
+  {
+   "id": "NA1",
+   "description": "F1: no phase check before the paid call (an approved-but-unadvanced artefact makes a wasted paid call again)",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "    const stuck = this.phaseNotAdvanced(rm);\n    if (stuck) return stuck;\n",
+   "new": ""
+  },
+  {
+   "id": "NA2",
+   "description": "F1: the phase check never blocks a mismatch (only compares when the kinds are equal)",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "if (current !== undefined && current === next) return null;",
+   "new": "if (current !== undefined) return null;"
+  },
+  {
+   "id": "NA3",
+   "description": "F1/X1: the AUTHORIZED phase is blocked by the phase check (the start recovery is never reached)",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "if (!rm.active || rm.phase === \"AUTHORIZED\") return null;",
+   "new": "if (!rm.active) return null;"
+  },
+  {
+   "id": "NA4",
+   "description": "F1: the Founder action does not name the artefact kind",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "`The ${current} artefact is already approved but",
+   "new": "`The artefact is already approved but"
+  },
+  {
+   "id": "MA",
+   "description": "F2: the plan gate only checks for NOT_STARTED (an unapproved Architecture DRAFT passes)",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "const missing = ANALYSIS_KINDS.filter(k => rm.artifacts[k].state !== \"APPROVED\");",
+   "new": "const missing = ANALYSIS_KINDS.filter(k => rm.artifacts[k].state === \"NOT_STARTED\");"
+  },
+  {
+   "id": "X1",
+   "description": "F3: a sequence that was opened but never advanced (AUTHORIZED) is not completed by the recorder",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "if (!now.active || now.phase === \"AUTHORIZED\") recorder.start(",
+   "new": "if (!now.active) recorder.start("
+  },
+  {
+   "id": "X2",
+   "description": "F3: the recorder never opens a missing sequence",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "if (!now.active || now.phase === \"AUTHORIZED\") recorder.start(",
+   "new": "if (now.phase === \"AUTHORIZED\") recorder.start("
+  },
+  {
+   "id": "X3",
+   "description": "F3: BUILDER_FAILED always names the first kind",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "if (e instanceof PreDevBuilderError) return {status: \"BUILDER_FAILED\", kind: phaseKind, code: e.code};",
+   "new": "if (e instanceof PreDevBuilderError) return {status: \"BUILDER_FAILED\", kind: ANALYSIS_KINDS[0]!, code: e.code};"
+  },
+  {
+   "id": "X4",
+   "description": "F3: the criteria count only covers functional requirements",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "acceptanceCriteria: [...requirements.functional, ...requirements.nonFunctional].reduce(",
+   "new": "acceptanceCriteria: [...requirements.functional].reduce("
+  },
+  {
+   "id": "X9",
+   "description": "F3: the Founder action is the LAST non-empty one",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "founderAction: actions.find(a => a) ?? null",
+   "new": "founderAction: [...actions].reverse().find(a => a) ?? null"
+  },
+  {
+   "id": "O2c",
+   "description": "F3: single-flight check and add are separated by an await (TOCTOU)",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "    if (IN_FLIGHT.has(key)) return blockedStep(\"ANALYSIS_IN_PROGRESS\", \"A draft for this mission is already being produced: wait for it to finish, then look at the pending draft.\");\n    IN_FLIGHT.add(key);",
+   "new": "    if (IN_FLIGHT.has(key)) return blockedStep(\"ANALYSIS_IN_PROGRESS\", \"A draft for this mission is already being produced: wait for it to finish, then look at the pending draft.\");\n    await Promise.resolve();\n    IN_FLIGHT.add(key);"
+  },
+  {
+   "id": "O3c",
+   "description": "F3: the single-flight key has no mission id",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "const key = `${this.d.store.dataDir}|${scope.tenantId}|${missionId}`;",
+   "new": "const key = `${this.d.store.dataDir}|${scope.tenantId}`;"
+  },
+  {
+   "id": "NA5",
+   "description": "L1: the phase check runs AFTER the readiness question",
+   "file": "core/workos/crew/analysis.ts",
+   "edits": [
+    {
+     "old": "    const stuck = this.phaseNotAdvanced(rm);\n    if (stuck) return stuck;\n",
+     "new": ""
+    },
+    {
+     "old": "    if (this.d.stopped?.()) throw new AnalysisStoppedError();\n    const phaseKind =",
+     "new": "    const stuck = this.phaseNotAdvanced(rm);\n    if (stuck) return stuck;\n    if (this.d.stopped?.()) throw new AnalysisStoppedError();\n    const phaseKind ="
+    }
+   ]
+  },
+  {
+   "id": "X3b",
+   "description": "L2: a PreDevDriverError from the builder names the first kind",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "if (e instanceof PreDevDriverError) return {status: \"BUILDER_FAILED\", kind: phaseKind,",
+   "new": "if (e instanceof PreDevDriverError) return {status: \"BUILDER_FAILED\", kind: ANALYSIS_KINDS[0]!,"
+  },
+  {
+   "id": "X3c",
+   "description": "L2: the lost-race fallback names the first kind",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "kind: ANALYSIS_KINDS.find(k => fresh.artifacts[k].state !== \"APPROVED\") ?? phaseKind, code:",
+   "new": "kind: ANALYSIS_KINDS[0]!, code:"
+  },
+  {
+   "id": "X3d",
+   "description": "L2: the lost-race fallback names the stale phase kind",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "kind: ANALYSIS_KINDS.find(k => fresh.artifacts[k].state !== \"APPROVED\") ?? phaseKind, code:",
+   "new": "kind: phaseKind, code:"
+  },
+  {
+   "id": "NA6",
+   "description": "L3: the stuck answer carries no structured kind",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "{kind: current, artifactId: rm.artifacts[current].artifactId!}",
+   "new": "{artifactId: rm.artifacts[current].artifactId!}"
+  },
+  {
+   "id": "NA7",
+   "description": "L3: the stuck answer carries no structured artifactId",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "{kind: current, artifactId: rm.artifacts[current].artifactId!}",
+   "new": "{kind: current}"
   }
  ]
 }

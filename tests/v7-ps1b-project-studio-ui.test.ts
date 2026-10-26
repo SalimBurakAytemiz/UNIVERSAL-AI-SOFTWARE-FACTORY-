@@ -2645,14 +2645,17 @@ describe("LANE-A project knowledge panel", () => {
 
 describe("LANE-A A-FLOW-4: running product after delivery (B-RUN-1 contract, run-scoped routes)", () => {
   const RUN = "run_" + "ab".repeat(12), OTHER = "run_" + "cd".repeat(12), HEAD = "e".repeat(40);
-  const PROD = `/v1/work-runs/${RUN}/product`, FLOWP = `/v1/projects/${PID}/flow`, EXE = "/v1/system/executors";
+  const PROD = `/v1/work-runs/${RUN}/product`, EXE = "/v1/system/executors";
   const runs = (runId = RUN) => ({"/v1/work-runs": {workRuns: [{runId, missionId: MID, status: "SUCCEEDED", startedAt: "2026-10-26T01:00:00.000Z"}]}, [`/v1/missions?projectId=${PID}`]: {missions: [{missionId: MID, projectId: PID, title: "G1", status: "REPORTING", riskLevel: "R1"}]}});
   const dv = (over: any = {}) => ({status: "STOPPED", pid: null, port: null, preview: {state: "UNAVAILABLE", url: null}, logTail: "", deliveryRunId: null, bridged: null, ...over});
   const prod = (devrun: any = dv(), over: any = {}) => ({product: {runId: RUN, deliveredHeadSha: HEAD, devrun, tiedToThisRun: devrun.deliveryRunId === RUN, ...over}});
   const live = (over: any = {}) => dv({status: "RUNNING", port: 4123, pid: 77, deliveryRunId: RUN, bridged: true, preview: {state: "AVAILABLE", url: "http://127.0.0.1:4123/"}, ...over});
-  const flow = (delivery = "DONE") => ({flow: {projectId: PID, stages: ["MISSION", "PLAN", "RUN", "REVIEW", "DELIVERY"].map(x => ({stage: x, state: x === "DELIVERY" ? delivery : "DONE", detail: null})), missionCount: 1, taskCount: 1, latestRunId: null}});
+  // M3 (review #226): B-RUN-1 starts a product when the delivery's SOURCE GENERATION is complete and a 40-hex commit exists; the DELIVERY stage being DONE means PRODUCT_VERIFIED and is NOT required
+  const DETP = `/v1/work-runs/${RUN}`;
+  const sgv = (state = "SOURCE_GENERATION_COMPLETE") => ({runId: RUN, missionId: MID, status: "SUCCEEDED", sourceGeneration: {state, reason: null}, productVerification: {state: "NOT_VERIFIED", reason: "NOT_EXECUTED:SANDBOX_UNAVAILABLE"}, testsExecuted: false});
+  const det = (state = "SOURCE_GENERATION_COMPLETE") => ({workRun: {runId: RUN, missionId: MID, status: "SUCCEEDED"}, outcomes: null, delivery: sgv(state)});
   const exe = (sb: any = {state: "UNAVAILABLE", reason: "SANDBOX_UNAVAILABLE"}) => ({executors: [{id: "LOCAL_CLAUDE", state: "READY"}], active: {reason: "LOCAL_CLAUDE"}, sandbox: sb});
-  const open = (extra: Record<string, any>, o: any = {}) => openWs({lang: "en", get: projectsGet({...runs(), [PROD]: prod(), [FLOWP]: flow(), [EXE]: exe(), ...extra}), ...o});
+  const open = (extra: Record<string, any>, o: any = {}) => openWs({lang: "en", get: projectsGet({...runs(), [PROD]: prod(), [DETP]: det(), [EXE]: exe(), ...extra}), ...o});
   const card = (root: N) => byId(root, "studio-ov-product")!;
   it("maps the run-scoped product strictly: this run's id, a 40-hex delivered commit or null, tiedToThisRun must agree with deliveryRunId, reason is a safe code", async () => {
     const c = await load(rend, "project-core.js");
@@ -2677,25 +2680,32 @@ describe("LANE-A A-FLOW-4: running product after delivery (B-RUN-1 contract, run
     for (const r of ["sandbox", "<x>", 5, null, "A".repeat(161), "", "DEVRUN:" + "a".repeat(100), "X:with space"]) expect(rs(r), String(r)).toBeNull();
     expect(c.mapDevRun({devrun: dv({bridged: "yes", deliveryRunId: "run_zz"})}).run).toMatchObject({bridged: null, deliveryRunId: null});
   });
-  it("offers Start only after the server's DELIVERY stage is DONE, a delivered commit exists and no other delivery's product runs; Stop only for this delivery's own product", async () => {
+  it("offers Start by the route's own condition (source generation complete + a delivered commit, or the route's own `deliverable`), never by the DELIVERY stage; no other delivery's product may run; Stop only for this delivery's own product", async () => {
     const c = await load(rend, "project-core.js");
     const P = (devrun: any, over: any = {}) => c.mapRunProduct(prod(devrun, over), RUN).product;
-    expect(c.productOffer(P(dv()), flow().flow)).toMatchObject({deliveryDone: true, hasCommit: true, start: true, stop: false, open: false});
-    expect(c.productOffer(P(dv({status: "BLOCKED", reason: "DEVRUN_SANDBOX_UNAVAILABLE:NSENTER_MISSING"})), flow().flow).start).toBe(true); // refused starts can be retried
-    expect(c.productOffer(P(dv()), flow("ACTIVE").flow)).toMatchObject({deliveryDone: false, start: false});
-    expect(c.productOffer(P(dv()), null)).toMatchObject({deliveryDone: false, start: false});
-    expect(c.productOffer(P(dv(), {deliveredHeadSha: null}), flow().flow)).toMatchObject({hasCommit: false, start: false});
-    expect(c.productOffer(P(live()), flow().flow)).toMatchObject({start: false, stop: true, open: true});
+    const D = (state = "SOURCE_GENERATION_COMPLETE") => ({sourceGeneration: {state}});
+    expect(c.productOffer(P(dv()), D())).toMatchObject({deliverable: true, hasCommit: true, start: true, stop: false, open: false});
+    expect(c.productOffer(P(dv({status: "BLOCKED", reason: "DEVRUN_SANDBOX_UNAVAILABLE:NSENTER_MISSING"})), D()).start).toBe(true); // refused starts can be retried
+    for (const st of ["NOT_STARTED", "IN_PROGRESS", "BLOCKED", "FAILED"]) expect(c.productOffer(P(dv()), D(st)), st).toMatchObject({deliverable: false, start: false});
+    expect(c.productOffer(P(dv()), null)).toMatchObject({deliverable: null, start: false});
+    expect(c.productOffer(P(dv(), {deliveredHeadSha: null}), D())).toMatchObject({hasCommit: false, deliverable: false, start: false});
+    // M3: a delivery whose product is not verified yet (DELIVERY stage not DONE) can still be started; the route's own `deliverable` wins over the guess
+    expect(c.productOffer(P(dv(), {deliverable: {ok: true}}), null)).toMatchObject({deliverable: true, start: true});
+    expect(c.productOffer(P(dv(), {deliverable: {ok: false, reason: "SOURCE_GENERATION_NOT_COMPLETE"}}), D())).toMatchObject({deliverable: false, start: false});
+    expect(c.productOffer(P(dv(), {deliveredHeadSha: null, deliverable: {ok: true}}), D())).toMatchObject({deliverable: false, hasCommit: false, start: false}); // the route's own ok never starts a product without a delivered commit
+    expect(c.mapRunProduct(prod(dv(), {deliverable: {ok: "yes"}}), RUN).state).toBe("ERROR"); expect(c.mapRunProduct(prod(dv(), {deliverable: {ok: true, reason: "bad reason"}}), RUN).state).toBe("ERROR");
+    expect(c.productOffer(P(live()), D()).start).toBe(false);
+    expect(c.productOffer(P(live()), D())).toMatchObject({start: false, stop: true, open: true});
     expect(c.productOffer(P(live()), null)).toMatchObject({stop: true}); // Stop never depends on the delivery read
-    const other = c.productOffer(P(live({deliveryRunId: OTHER})), flow().flow);
+    const other = c.productOffer(P(live({deliveryRunId: OTHER})), D());
     expect(other).toMatchObject({otherRunning: true, start: false, stop: false, open: false});
-    expect(c.productOffer(P(live({bridged: false})), flow().flow)).toMatchObject({stop: true, open: false});
-    expect(c.productOffer(P(live({bridged: null})), flow().flow).open).toBe(false);
+    expect(c.productOffer(P(live({bridged: false})), D())).toMatchObject({stop: true, open: false});
+    expect(c.productOffer(P(live({bridged: null})), D()).open).toBe(false);
     for (const bad of [{preview: {state: "AVAILABLE", url: "http://evil.example/"}}, {preview: {state: "UNAVAILABLE", url: "http://127.0.0.1:4123/"}}, {port: 4999}, {preview: {state: "AVAILABLE", url: "http://127.0.0.1:4123/x"}}, {status: "STARTING"}])
-      expect(c.productOffer(P(live(bad)), flow().flow).open, JSON.stringify(bad)).toBe(false);
+      expect(c.productOffer(P(live(bad)), D()).open, JSON.stringify(bad)).toBe(false);
     // another delivery's product that is still STARTING also blocks (and is flagged), not only a RUNNING one
-    expect(c.productOffer(P(dv({status: "STARTING", deliveryRunId: OTHER})), flow().flow)).toMatchObject({otherRunning: true, start: false, stop: false});
-    expect(c.productOffer(P(dv({status: "STOPPED", deliveryRunId: OTHER})), flow().flow)).toMatchObject({otherRunning: false, start: true});
+    expect(c.productOffer(P(dv({status: "STARTING", deliveryRunId: OTHER})), D())).toMatchObject({otherRunning: true, start: false, stop: false});
+    expect(c.productOffer(P(dv({status: "STOPPED", deliveryRunId: OTHER})), D())).toMatchObject({otherRunning: false, start: true});
   });
   it("reads only the run-scoped route for the latest run, offers Start after delivery, confirms, posts the fixed empty-body route once and re-reads; it never claims the product runs", async () => {
     const o = await open({}, {post: () => ({status: 200, body: prod(dv({status: "STARTING", deliveryRunId: RUN, bridged: true}))}), confirm: () => true});
@@ -2716,23 +2726,34 @@ describe("LANE-A A-FLOW-4: running product after delivery (B-RUN-1 contract, run
     byId(n.root, "product-start")!.fire("click"); await tick();
     expect(n.calls.post).toEqual([]); expect(forms.drafts.status["product-run"]).toMatchObject({ok: false, key: "confirm.cancelled"});
   });
-  it("tells why Start is not offered: no run, no delivered commit, delivery not DONE or unreadable; nothing is started", async () => {
+  it("tells why Start is not offered: no run, no delivered commit, source generation not complete or unreadable; nothing is started. A run/mission read that failed is shown as such, never as 'no run'", async () => {
     const none = await open({"/v1/work-runs": {workRuns: []}});
     expect(all(card(none.root)).find(n => n.dataset.productDelivery)!.dataset.productDelivery).toBe("NO_RUN"); expect(byId(none.root, "product-start")).toBeNull();
     expect(none.calls.get.some((g: string) => g.endsWith("/product"))).toBe(false);
     forms.resetAllForms();
     const nc = await open({[PROD]: prod(dv(), {deliveredHeadSha: null})});
     expect(all(card(nc.root)).some(n => n.dataset.productCommit === "NONE")).toBe(true); expect(byId(nc.root, "product-start")).toBeNull();
-    for (const [fl, tag] of [[flow("ACTIVE"), "NOT_DONE"], [flow("BLOCKED"), "NOT_DONE"], [undefined, "UNKNOWN"], [{flow: {projectId: PID, stages: []}}, "UNKNOWN"]] as const) {
+    for (const [dt, tag] of [[det("IN_PROGRESS"), "NOT_DELIVERABLE"], [det("BLOCKED"), "NOT_DELIVERABLE"], [det("FAILED"), "NOT_DELIVERABLE"], [undefined, "UNKNOWN"], [{workRun: {runId: RUN, missionId: MID, status: "SUCCEEDED"}}, "UNKNOWN"]] as const) {
       forms.resetAllForms();
-      const o = await open({[FLOWP]: fl});
+      const o = await open({[DETP]: dt});
       expect(byId(o.root, "product-start"), tag).toBeNull();
       expect(all(card(o.root)).find(n => n.dataset.productDelivery)!.dataset.productDelivery).toBe(tag);
       expect(card(o.root).dataset.productOffer).toBe("NONE");
     }
+    // M3: the DELIVERY stage is irrelevant (a delivered, not yet verified product is startable)
+    forms.resetAllForms();
+    const sg = await open({[DETP]: det("SOURCE_GENERATION_COMPLETE"), [`/v1/projects/${PID}/flow`]: {flow: {projectId: PID, stages: [{stage: "DELIVERY", state: "ACTIVE", detail: null}]}}});
+    expect(byId(sg.root, "product-start")).not.toBeNull(); expect(card(sg.root).dataset.productOffer).toBe("START");
+    // M4 (review #226): a failed runs/missions read shows the read state, never "No run has been recorded"
+    for (const [get, st] of [[(p: string) => { if (p === "/v1/work-runs" || p.startsWith("/v1/work-runs?")) throw new Error("fetch failed"); return projectsGet({...runs()})(p); }, "OFFLINE"], [(p: string) => { if (p === "/v1/work-runs" || p.startsWith("/v1/work-runs?")) throw new Error("INVALID_API_PATH"); return projectsGet({...runs()})(p); }, "UNAVAILABLE"]] as const) {
+      forms.resetAllForms();
+      const f = await openWs({lang: "en", get}); const pd = all(card(f.root)).find(n => n.dataset.productDelivery)!;
+      expect(pd.dataset.productDelivery, st).toMatch(/^RUNS_/); expect(pd.dataset.productDelivery).not.toBe("NO_RUN"); expect(text(card(f.root))).not.toContain("No run has been recorded"); expect(byId(f.root, "product-start")).toBeNull();
+      expect(f.calls.get.some((g: string) => g.endsWith("/product"))).toBe(false);
+    }
   });
   it("shows the local address only for this delivery's RUNNING, bridged product; Stop posts the fixed route without confirmation; another delivery's product is neither shown nor stopped", async () => {
-    const o = await open({[PROD]: prod(live()), [FLOWP]: flow("ACTIVE")}, {post: () => ({status: 200, body: prod(dv())})});
+    const o = await open({[PROD]: prod(live()), [DETP]: det("IN_PROGRESS")}, {post: () => ({status: 200, body: prod(dv())})});
     const url = all(card(o.root)).find(n => n.dataset.productUrl)!;
     expect(url.dataset.productUrl).toBe("http://127.0.0.1:4123/"); expect(text(url)).toContain("http://127.0.0.1:4123/");
     expect(byId(o.root, "product-start")).toBeNull(); expect(card(o.root).dataset.productOffer).toBe("STOP");
@@ -2755,7 +2776,7 @@ describe("LANE-A A-FLOW-4: running product after delivery (B-RUN-1 contract, run
     expect(badgeCls((await open({})).root)).not.toMatch(/badge-ok|badge-risk/);
   });
   it("renders the exact refusal: state reason with known detail codes translated, unknown codes raw and flagged, a reason only for BLOCKED/CRASHED; no run-on-host path", async () => {
-    const reasonOf = async (st: string, reason: string | null, lang = "en") => { const o = await openWs({lang, get: projectsGet({...runs(), [PROD]: prod(dv({status: st, reason})), [FLOWP]: flow(), [EXE]: exe()})}); return all(card(o.root)).find(n => n.dataset.productReason); };
+    const reasonOf = async (st: string, reason: string | null, lang = "en") => { const o = await openWs({lang, get: projectsGet({...runs(), [PROD]: prod(dv({status: st, reason})), [DETP]: det(), [EXE]: exe()})}); return all(card(o.root)).find(n => n.dataset.productReason); };
     const a = await reasonOf("BLOCKED", "DEVRUN_SANDBOX_UNAVAILABLE:PROVIDER_HAS_NO_BRIDGE:wsl-unshare-v1");
     expect(a!.dataset.productReason).toBe("DEVRUN_SANDBOX_UNAVAILABLE:PROVIDER_HAS_NO_BRIDGE:wsl-unshare-v1");
     expect(text(a!)).toContain("no verified sandbox provider can host the product"); expect(text(a!)).toContain("no bridge to a local address"); expect(text(a!)).toContain("(PROVIDER_HAS_NO_BRIDGE:wsl-unshare-v1)");
@@ -2764,6 +2785,13 @@ describe("LANE-A A-FLOW-4: running product after delivery (B-RUN-1 contract, run
     expect(text((await reasonOf("BLOCKED", "SANDBOX_UNAVAILABLE"))!)).toContain("no verified sandbox exists");
     expect(text((await reasonOf("CRASHED", "BRAND_NEW_REASON"))!)).toContain("BRAND_NEW_REASON (not recognised)");
     expect(text((await reasonOf("BLOCKED", "DEVRUN_SANDBOX_UNAVAILABLE:BRAND_NEW_DETAIL"))!)).toContain("(BRAND_NEW_DETAIL)");
+    // LOW (review #226): the B-RUN-1 / devrun reasons have their own text, not "(not recognised)"
+    // the server also reports PROCESS_EXITED:<code|signal> (CRASHED) and SANDBOX_UNVERIFIED: recognised, with the detail shown as given
+    const px = (await reasonOf("CRASHED", "PROCESS_EXITED:SIGTERM"))!; expect(text(px)).toContain("exited by itself"); expect(text(px)).toContain("(SIGTERM)"); expect(text(px)).not.toContain("not recognised");
+    const su = (await reasonOf("BLOCKED", "SANDBOX_UNVERIFIED"))!; expect(text(su)).toContain("lost its verification"); expect(text(su)).toContain("running product was stopped"); expect(text(su)).not.toMatch(/was not started|could not be verified/); expect(text(su)).not.toContain("not recognised"); // the server uses it only to STOP an already running product (devrun checkProvider)
+    expect(text((await reasonOf("BLOCKED", "SANDBOX_UNVERIFIED", "tr"))!)).toContain("durduruldu");
+    expect(text((await reasonOf("CRASHED", "PROCESS_EXITED:1", "tr"))!)).toContain("sonlandı");
+    for (const r of ["DEVRUN_BRIDGE_FAILED", "DEVRUN_COMMAND_NOT_CONFIGURED", "DEVRUN_COMMAND_NOT_ALLOWED", "REPOSITORY_NOT_CONFIGURED", "DEVRUN_DELIVERY_HEAD_MISSING", "DEVRUN_SPAWN_FAILED"]) { const n = (await reasonOf("BLOCKED", r))!; expect(n.dataset.productReason, r).toBe(r); expect(text(n), r).not.toContain("not recognised"); expect(text(n), r).not.toContain("product.reason"); }
     expect(await reasonOf("STOPPED", "SANDBOX_UNAVAILABLE")).toBeUndefined();
     expect(text((await reasonOf("BLOCKED", "DEVRUN_SANDBOX_UNAVAILABLE:NSENTER_MISSING", "tr"))!)).toContain("Başlatma reddedildi");
     const o = await open({[EXE]: exe({state: "AVAILABLE", providerId: "docker"})}); const o_av = (x: any) => all(card(x.root)).find(n => n.dataset.productSandbox)!;
@@ -2784,7 +2812,10 @@ describe("LANE-A A-FLOW-4: running product after delivery (B-RUN-1 contract, run
     expect(d(423, {error: "GLOBAL_STOP_ACTIVE"}).key).toBe("post.err.423"); expect(d(403, {error: "ACTION_DENIED"}).key).toBe("post.err.auth");
     const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
     const keys = Object.keys(E).filter(k => k.startsWith("product.") || /^post\.err\.409\.(DEVRUN|PRODUCT)/.test(k));
-    expect(keys.length).toBe(39);
+    expect(keys.length).toBe(48);
+    // LOW (review #226): the keys the card can reach exist, and no key is left unreachable
+    for (const k of ["product.reason.DEVRUN_BRIDGE_FAILED", "product.reason.DEVRUN_COMMAND_NOT_CONFIGURED", "product.reason.DEVRUN_COMMAND_NOT_ALLOWED", "product.reason.REPOSITORY_NOT_CONFIGURED", "product.reason.DEVRUN_DELIVERY_HEAD_MISSING", "product.reason.DEVRUN_SPAWN_FAILED"]) expect(E[k], k).toBeTruthy();
+    for (const k of ["product.reason.DEVRUN_BLOCKED", "product.detail.DEVRUN_BRIDGE_FAILED", "product.notDelivered"]) expect(E[k], k).toBeUndefined();
     for (const k of keys) expect(T[k], k).toBeTruthy();
     for (const k of keys.filter(x => /^post\.err\.409\.(DEVRUN_SANDBOX|PRODUCT_RUN_NOT)/.test(x))) expect(E[k], k).toContain("{reason}");
   });
