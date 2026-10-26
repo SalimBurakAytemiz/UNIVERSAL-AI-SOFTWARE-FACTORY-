@@ -11,8 +11,10 @@ import {fileURLToPath, pathToFileURL} from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url)), repo = path.resolve(here, "..", "..");
 const argv = process.argv.slice(2), outArg = argv.indexOf("--out"), requirePost4b = argv.includes("--require-post-4b");
 const outDir = path.resolve(outArg >= 0 && argv[outArg + 1] ? argv[outArg + 1] : fs.mkdtempSync(path.join(os.tmpdir(), "uasco-e2e-")));
-const shotsDir = path.join(outDir, "screenshots"), dataRoot = path.join(outDir, "data");
-fs.mkdirSync(shotsDir, {recursive: true}); fs.mkdirSync(dataRoot, {recursive: true});
+const shotsDir = path.join(outDir, "screenshots");
+fs.mkdirSync(shotsDir, {recursive: true});
+// //TR: Veri dizini her zaman YENİ ve benzersizdir (--out altında mevcut bir "data" dizini asla silinmez).
+const dataRoot = fs.mkdtempSync(path.join(outDir, "data-"));
 
 // Planlı adımlar (sabit payda). kind: FUNCTIONAL = gerçek işlev sürülür; GATED_ASSERTED = 4b kapısına bağlı iddia (kapalıysa NOT_VERIFIED:GATED_4B); NOT_EXECUTED_ASSERTED = "çalıştırılmadı" durumunun dürüst gösterimi.
 const PLAN = [["first-run-dialog", "FUNCTIONAL"], ["detect-routes", "FUNCTIONAL"], ["setup-check", "FUNCTIONAL"], ["intake-idea", "FUNCTIONAL"], ["analysis", "GATED_ASSERTED"], ["plan-task-by-hand", "FUNCTIONAL"],
@@ -22,24 +24,25 @@ const KIND = Object.fromEntries(PLAN);
 const steps = [];
 const mode = {analysis: "UNKNOWN", product: "UNKNOWN"}; // ADMITTED | GATED_4B (uygulamadaki gerçek allow-list'ten)
 const meta = {playwright: null, electron: null, noSandbox: false};
-let projectId = null, sandboxRow = null;
-let backend = null, app = null, win = null, backendLog = "", cleaning = false;
+let projectId = null, missionId = null, sandboxRow = null, serverSandbox = null, startup = null; // startup: başlatma hatası PLAN dışıdır, ayrı raporlanır
+let backend = null, app = null, win = null, backendLog = "", mainLog = "", cleanupP = null;
+const tail = (s, n) => String(s).slice(-n);
 const report = (extra = {}) => {
   const done = new Set(steps.map(s => s.name));
   const notExecuted = PLAN.filter(([n]) => !done.has(n)).map(([name, kind]) => ({name, kind, status: "NOT_EXECUTED"}));
   const all = [...steps, ...notExecuted];
-  const failed = steps.some(s => s.status === "FAIL");
+  const failed = steps.some(s => s.status === "FAIL") || startup !== null;
   const counts = {PASS: all.filter(x => x.status === "PASS").length, NOT_VERIFIED: all.filter(x => x.status === "NOT_VERIFIED").length, FAIL: all.filter(x => x.status === "FAIL").length, NOT_EXECUTED: notExecuted.length, planned: PLAN.length};
   const result = extra.blocked ? `BLOCKED:${extra.blocked}` : failed ? "FAIL" : notExecuted.length === PLAN.length ? "NOT_RUN" : notExecuted.length ? "FAIL:INCOMPLETE" : counts.NOT_VERIFIED ? (requirePost4b ? "FAIL:NOT_VERIFIED_WITH_REQUIRE_POST_4B" : "PASS_WITH_NOT_VERIFIED") : "PASS";
-  const r = {platform: process.platform, node: process.version, outDir, ...meta, mode, counts, steps: all, result, ...extra};
+  const r = {platform: process.platform, node: process.version, outDir, ...meta, mode, counts, steps: all, startup, result, ...extra};
   fs.writeFileSync(path.join(outDir, "report.json"), JSON.stringify(r, null, 2));
   return r;
 };
 // BLOCKED yalnız hiçbir şey başlatılmadan önce denetlenen ön koşullar için kullanılır.
 const blocked = (code, detail) => { console.log(`BLOCKED:${code} ${detail ?? ""}`.trim()); report({blocked: code, detail: String(detail ?? "")}); fs.rmSync(dataRoot, {recursive: true, force: true}); process.exit(3); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-async function cleanup() {
-  if (cleaning) return; cleaning = true;
+const cleanup = () => (cleanupP ??= doCleanup()); // aynı süren temizlik her çağıranca beklenir (finish() ve sinyal birlikte)
+async function doCleanup() {
   try { if (app) { const proc = app.process(); await Promise.race([app.close(), sleep(15000).then(() => { throw new Error("close timeout"); })]).catch(() => { try { proc.kill("SIGKILL"); } catch { /* yoksay */ } }); } } catch { /* kapanışta hata yutulur */ }
   try {
     if (backend && backend.exitCode === null && backend.signalCode === null) {
@@ -50,7 +53,9 @@ async function cleanup() {
   } catch { /* yoksay */ }
   try { fs.rmSync(dataRoot, {recursive: true, force: true}); } catch { /* yoksay */ }
 }
-for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => { cleanup().finally(() => process.exit(sig === "SIGINT" ? 130 : 143)); });
+// //TR: Sinyal gelirse çıkış kodu her koşulda 130/143 olur (koşan adımın hatası yarışmaz); temizlik tamamlanmadan çıkılmaz.
+let sigExit = null;
+for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => { sigExit = sig === "SIGINT" ? 130 : 143; cleanup().finally(() => process.exit(sigExit)); });
 
 // ---- ortam: Playwright (yeni bağımlılık eklenmez; ön kurulu playwright ya da playwright-core) ----
 function loadPlaywright() {
@@ -72,7 +77,7 @@ async function electronBinary() {
     const m = await import(pathToFileURL(path.join(repo, "automation", "lib", "electron-provision.mjs")).href);
     const exe = await m.verifyProvisionedElectron(repo);
     const p = typeof exe === "string" ? exe : exe?.exePath ?? exe?.exe;
-    if (typeof p === "string" && fs.existsSync(p)) return {path: p, source: "provisioned"};
+    if (typeof p === "string" && fs.existsSync(p)) return {path: p, source: "provisioned", provisionError: null};
     provisionError = "provisioned path missing";
   } catch (e) { provisionError = String(e?.message ?? e).split("\n")[0]; }
   if (process.env.CI) return {error: `CI requires the provisioned Electron (scripts/provision-electron.mjs): ${provisionError}`};
@@ -100,7 +105,7 @@ async function step(name, fn) {
     steps.push({name, kind, status, ...(nv?.notVerified ? {reason: nv.notVerified} : {}), ms: Date.now() - t0, detail: detail ?? null, screenshot: await shot(name)});
     console.log(`${status}${nv?.notVerified ? `:${nv.notVerified}` : ""} ${name} [${kind}]${detail ? ` — ${detail}` : ""}`);
   } catch (e) {
-    const screen = await mainText().catch(() => "").then(t => t.slice(0, 1200));
+    const screen = await Promise.race([mainText(), sleep(5000).then(() => "")]).catch(() => "").then(t => t.slice(0, 1200));
     steps.push({name, kind, status: "FAIL", ms: Date.now() - t0, detail: String(e?.message ?? e).slice(0, 600), screenText: screen, screenshot: await shot(`${name}-FAIL`)});
     console.log(`FAIL ${name} [${kind}] — ${String(e?.message ?? e).slice(0, 300)}`);
     throw e;
@@ -124,9 +129,14 @@ async function main() {
   const exe = await electronBinary();
   if (exe.error) return blocked("ELECTRON_BINARY_MISSING", exe.error);
   if (process.platform === "linux" && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) return blocked("NO_DISPLAY", "no display; run under xvfb-run -a");
-  meta.electron = {source: exe.source, path: exe.path};
+  let electronVersion = null; try { electronVersion = fs.readFileSync(path.join(path.dirname(exe.path), "version"), "utf8").trim() || null; } catch { /* sürüm dosyası yok */ }
+  meta.electron = {source: exe.source, path: exe.path, version: electronVersion, provisionError: exe.provisionError ?? null};
   // Buradan sonra hiçbir hata BLOCKED sayılmaz: başlatma hataları FAIL (çıkış 1) olarak adımlara ve günlüğe yazılır.
-  const startupFail = async detail => { steps.push({name: "startup", kind: "FUNCTIONAL", status: "FAIL", detail: String(detail).slice(0, 1500), screenshot: null, backendLog: backendLog.slice(-1500)}); console.log(`FAIL startup — ${String(detail).slice(0, 400)}`); };
+  const startupFail = async detail => {
+    const clean = String(detail).replace(/\u001b\[[0-9;]*m/g, ""), errs = clean.split("\n").filter(l => /\[err\]/.test(l) && !/dbus|Debugger|For help/.test(l)).map(l => l.replace(/^\s*-\s*/, "").trim()).slice(-6);
+    startup = {status: "FAIL", detail: tail(clean, 1500), electronErrLines: errs, backendLog: tail(backendLog, 1500), electronLog: tail(mainLog, 1500)};
+    console.log(`FAIL startup (outside the ${PLAN.length} planned steps) — ${clean.split("\n")[0].slice(0, 200)}${errs.length ? ` | electron: ${errs.join(" / ").slice(0, 400)}` : ""}`);
+  };
   try {
     const port = await freePort(), token = crypto.randomBytes(24).toString("hex");
     const env = childEnv({CONTROL_API_PORT: String(port), UASCO_CONTROL_TOKEN: token, E2E_DATA_ROOT: dataRoot});
@@ -139,11 +149,12 @@ async function main() {
     meta.noSandbox = process.platform === "linux" && (process.getuid?.() === 0 || process.env.E2E_NO_SANDBOX === "1");
     const args = [path.join("apps", "desktop", "main.mjs"), `--user-data-dir=${path.join(dataRoot, "electron-user-data")}`, ...(meta.noSandbox ? ["--no-sandbox"] : []), ...(process.platform === "linux" ? ["--disable-gpu"] : [])];
     app = await pw._electron.launch({executablePath: exe.path, args, cwd: repo, env: childEnv({CONTROL_API_PORT: String(port), UASCO_CONTROL_TOKEN: token}), timeout: 60000});
+    for (const st of [app.process().stdout, app.process().stderr]) st?.on("data", d => { mainLog = tail(mainLog + d, 4000); }); // Electron ana süreç çıktısı (başlatma hatasında rapora girer)
     win = await app.firstWindow();
     await win.waitForSelector("main", {state: "attached", timeout: 30000}); // gerçek belge yüklenmeden evaluate çağrılmaz
     await win.evaluate(() => { localStorage.setItem("uasco.lang", "en"); }); await win.reload();
     await win.waitForSelector("main", {state: "attached", timeout: 30000}); await win.waitForTimeout(1500);
-  } catch (e) { await startupFail(`${e?.message ?? e}\nbackend log tail: ${backendLog.slice(-600)}`); return finish(); }
+  } catch (e) { await startupFail(`${e?.message ?? e}\nelectron main-process output tail: ${tail(mainLog, 800) || "(none)"}\nbackend log tail: ${tail(backendLog, 600)}`); return finish(); }
   try { await runSteps(); } catch { /* adım kaydı zaten yazıldı */ }
   return finish();
 }
@@ -152,7 +163,7 @@ async function finish() {
   await cleanup();
   const c = r.counts;
   console.log(`RESULT ${r.result} (PASS ${c.PASS} / NOT_VERIFIED ${c.NOT_VERIFIED} / FAIL ${c.FAIL} / NOT_EXECUTED ${c.NOT_EXECUTED} of ${c.planned} planned; mode analysis=${mode.analysis} product=${mode.product}) out=${outDir}`);
-  process.exit(r.result === "PASS" || r.result === "PASS_WITH_NOT_VERIFIED" ? 0 : r.result.startsWith("FAIL:NOT_VERIFIED") ? 4 : 1);
+  process.exit(sigExit ?? (r.result === "PASS" || r.result === "PASS_WITH_NOT_VERIFIED" ? 0 : r.result.startsWith("FAIL:NOT_VERIFIED") ? 4 : 1));
 }
 
 async function runSteps() {
@@ -175,7 +186,13 @@ async function runSteps() {
     must(["CLI", "EXECUTOR", "IMPLEMENTER", "REVIEWER", "SANDBOX", "PRODUCT"].every(x => ids.includes(x)), `setup rows incomplete: ${rows.join(",")}`);
     must(rows.every(r => /=(PASS|BLOCKED|UNKNOWN)$/.test(r)), `setup row with an invented state: ${rows.join(",")}`);
     sandboxRow = (rows.find(r => r.startsWith("SANDBOX=")) ?? "").split("=")[1] ?? null;
-    return rows.join(" ");
+    // SANDBOX satırı sunucunun kendi okumasıyla çapraz kontrol edilir (ekrandaki satır tek başına kanıt değildir).
+    const ex = await win.evaluate(async () => { try { const d = await window.uasco.apiGet("/v1/system/executors"); return {sb: d?.sandbox ?? null}; } catch (e) { return {error: String(e?.message ?? e).slice(0, 200)}; } });
+    must(!ex.error, `server read of /v1/system/executors failed: ${ex.error}`);
+    serverSandbox = ex.sb && typeof ex.sb.state === "string" ? ex.sb.state : null;
+    const want = serverSandbox === null ? "UNKNOWN" : serverSandbox === "AVAILABLE" ? "PASS" : "BLOCKED";
+    must(sandboxRow === want, `setup row SANDBOX=${sandboxRow} disagrees with the server's sandbox state ${serverSandbox} (expected ${want})`);
+    return `${rows.join(" ")} (server sandbox=${serverSandbox})`;
   });
   await step("intake-idea", async () => {
     await go("#/projects"); await waitSel("#intake-t"); await win.click("#intake-t");
@@ -225,7 +242,12 @@ async function runSteps() {
     await waitSel("#tr-PREFLIGHT", 20000); await win.click("#tr-PREFLIGHT"); await waitSel(cur("PREFLIGHT"), 20000);
     await waitSel("#tr-AUTHORIZED", 20000); await win.click("#tr-AUTHORIZED"); await confirmDialog("authorize mission");
     await waitSel(cur("AUTHORIZED"), 20000);
-    return "Draft -> Preflight -> Authorized (confirmed; timeline step is current)";
+    // Ekran değil sunucu: görev zamanı sonrasında görev kaydı GERÇEKTEN AUTHORIZED olmalı.
+    const m = await win.evaluate(async pid => { try { const l = await window.uasco.apiGet(`/v1/missions?projectId=${pid}`); const ms = Array.isArray(l?.missions) ? l.missions : []; if (ms.length !== 1) return {error: `expected one mission in the project, got ${ms.length}`}; const d = await window.uasco.apiGet(`/v1/missions/${ms[0].missionId}`); return {id: ms[0].missionId, status: d?.mission?.status ?? null}; } catch (e) { return {error: String(e?.message ?? e).slice(0, 200)}; } }, projectId);
+    must(!m.error, `server read of the mission failed: ${m.error}`);
+    must(m.status === "AUTHORIZED", `the server's mission status is ${m.status}, not AUTHORIZED`);
+    missionId = m.id;
+    return `Draft -> Preflight -> Authorized (confirmed; timeline current; server status ${m.status})`;
   });
   await step("run-engine-truth", async () => {
     await waitSel("#run-start:not([disabled])", 20000); await waitSel("[data-engine-head]", 20000);
@@ -253,15 +275,23 @@ async function runSteps() {
   await step("test-result-honest", async () => {
     await waitSel("[data-run-test-result]", 20000);
     const r = await win.evaluate(() => { const n = document.querySelector("[data-run-test-result]"); return {kind: n.dataset.runTestResult, reason: n.dataset.runTestReason, text: n.textContent}; });
-    // Doğrulanmış sandbox yok (setup-check SANDBOX PASS değil) => TAM olarak NOT_EXECUTED:SANDBOX_UNAVAILABLE; başka kimse (EXECUTED_VERIFIED/UNKNOWN dahil) FAIL.
-    if (sandboxRow !== "PASS") must(r.kind === "NOT_EXECUTED" && r.reason === "SANDBOX_UNAVAILABLE", `without a verified sandbox the test row must be NOT_EXECUTED:SANDBOX_UNAVAILABLE, got ${r.kind}:${r.reason}`);
-    else must(["EXECUTED_VERIFIED", "NOT_EXECUTED", "NOT_VERIFIED", "FAILED"].includes(r.kind), `unexpected test result kind ${r.kind} with a verified sandbox`);
-    if (r.kind !== "EXECUTED_VERIFIED") must(!/\bpassed\b/i.test(r.text), "a result that is not verified says 'passed'");
-    // Sunucunun kendi kararı ile çapraz kontrol (köprü GET /v1/work-runs/:id).
-    const srv = await win.evaluate(async id => { try { const d = await window.uasco.apiGet(`/v1/work-runs/${id}`); return {pv: d?.delivery?.productVerification ?? null, te: d?.delivery?.testsExecuted ?? null}; } catch (e) { return {error: String(e?.message ?? e)}; } }, runId);
+    // Beklenti SUNUCUDAN türetilir (köprü GET /v1/work-runs/:id); ekrandaki setup satırı ya da test satırı tek başına kanıt değildir. Her zaman okunur.
+    const srv = await win.evaluate(async id => { try { const d = await window.uasco.apiGet(`/v1/work-runs/${id}`); return {pv: d?.delivery?.productVerification ?? null, te: d?.delivery?.testsExecuted ?? null}; } catch (e) { return {error: String(e?.message ?? e).slice(0, 200)}; } }, runId);
     must(!srv.error, `server read for the cross-check failed: ${srv.error}`);
-    if (sandboxRow !== "PASS") must(srv.pv?.state === "NOT_VERIFIED" && /^NOT_EXECUTED:SANDBOX_UNAVAILABLE$/.test(srv.pv?.reason ?? "") && srv.te === false, `server delivery view disagrees: ${JSON.stringify(srv)}`);
-    return `${r.kind}${r.reason ? ":" + r.reason : ""} (server: ${srv.pv?.state}/${srv.pv?.reason}, testsExecuted=${srv.te})`;
+    const {pv, te} = srv;
+    must(pv && typeof pv.state === "string" && typeof pv.reason === "string" && typeof te === "boolean", `server delivery view has no usable productVerification/testsExecuted: ${JSON.stringify(srv)}`);
+    if (serverSandbox !== "AVAILABLE") must(te === false, `the server reports testsExecuted=${te} although no verified sandbox exists (sandbox=${serverSandbox})`);
+    let exp;
+    if (pv.state === "PRODUCT_VERIFIED") { must(te === true, "server says PRODUCT_VERIFIED but testsExecuted is not true"); exp = {kind: "EXECUTED_VERIFIED", reason: pv.reason}; }
+    else if (pv.state === "FAILED") { must(te === true, "server says FAILED but testsExecuted is not true"); exp = {kind: "FAILED", reason: pv.reason}; }
+    else if (pv.state === "NOT_VERIFIED") {
+      const n = pv.reason.startsWith("NOT_EXECUTED:");
+      must(n || te === true, `server says testsExecuted=false but the reason is not NOT_EXECUTED:*: ${pv.reason}`);
+      exp = n ? {kind: te ? "NOT_VERIFIED" : "NOT_EXECUTED", reason: pv.reason.slice("NOT_EXECUTED:".length)} : {kind: "NOT_VERIFIED", reason: pv.reason};
+    } else throw new Check(`server productVerification state ${pv.state} is not one the journey knows`);
+    must(r.kind === exp.kind && r.reason === exp.reason, `the test row shows ${r.kind}:${r.reason} but the server says ${exp.kind}:${exp.reason} (productVerification ${pv.state}/${pv.reason}, testsExecuted=${te})`);
+    if (r.kind !== "EXECUTED_VERIFIED") must(!/\bpassed\b/i.test(r.text), "a result that is not verified says 'passed'");
+    return `${r.kind}${r.reason ? ":" + r.reason : ""} (server: ${pv.state}/${pv.reason}, testsExecuted=${te})`;
   });
   await step("link-run-to-task", async () => {
     const panel = `[data-run-linked-for="${runId}"]`;

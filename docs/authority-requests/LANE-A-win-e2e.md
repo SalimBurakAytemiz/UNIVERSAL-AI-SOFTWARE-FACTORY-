@@ -1,88 +1,46 @@
 <!-- //TR: Lane A yetki talebi: gerçek Electron masaüstü uçtan uca testini (scripts/e2e/desktop-journey.e2e.mjs) Windows CI'da çalıştıran adımın taslağı; korumalı .github/workflows/windows-installer.yml bu yüzden yalnız diff olarak burada / Lane A authority request: draft of the Windows CI step for the real-Electron desktop journey E2E -->
-# LANE-A-win-e2e: run the desktop journey E2E on Windows CI (A-WIN-E2E-1)
+# LANE-A-win-e2e: run the desktop journey E2E on Windows CI in its own workflow (A-WIN-E2E-1)
 
-> **STATUS: OPEN (A-WIN-E2E-1 + A-WIN-E2E-2).** `.github/workflows/windows-installer.yml` is protected (FOUNDER class); this file carries the exact diff for the coordinator's transition package. Nothing here was applied.
+> **STATUS: OPEN (A-WIN-E2E-1 + A-WIN-E2E-2).** `.github/workflows/` is protected (FOUNDER class); the new workflow file is carried as a draft for the coordinator's transition package. Nothing here was applied.
 
-## What exists (branch `claude/lane-a-win-e2e`, stacked on #226 `bccc2bf` + base `badb009`)
+## What exists (branch `claude/lane-a-win-e2e`)
 - `scripts/e2e/fake-backend.ts`: the real Control API (`buildServer`) in a temp data dir, FAKE executor, runner on, **no sandbox injected** (no verified sandbox => tests are honestly NOT_EXECUTED; nothing runs project code on the host), real token, 127.0.0.1 only. No real Claude, no network.
-- `scripts/e2e/desktop-journey.e2e.mjs`: Playwright `_electron` drives the repo's Electron (`apps/desktop/main.mjs`, dev mode, isolated `--user-data-dir`). Steps (each asserts the on-screen state and takes a screenshot into `<out>/screenshots`, result in `<out>/report.json`):
-  1 first-run wizard shown and skipped; 2 Settings "Ready to build?" rows (PASS/BLOCKED/UNKNOWN only); 3 idea -> intake (web-node default, "no task planned, no run started"); 4 analysis step says "not enabled" (GATED_4B); 5 task planned by hand; 6 mission Draft -> Preflight -> Authorized (confirmed); 7 run engine truth block before Start run; 8 start run; 9 run reaches AWAITING_APPROVAL (FAKE executor, CLEAN review); 10 test-result row is one of the honest kinds, never "passed" unless verified; 11 run linked to the task; 12 project workspace; 13 delivery prepared; 14 delivery accepted (NOT_VERIFIED acknowledged); 15 product card "not available to the desktop yet" (GATED_4B).
-- Exit codes: `0` all steps passed, `1` a step failed, `3` BLOCKED (`BLOCKED:PLAYWRIGHT_MISSING | ELECTRON_BINARY_MISSING | NO_DISPLAY | BACKEND_NOT_STARTED | ELECTRON_LAUNCH_FAILED`). BLOCKED is never a pass.
-- Electron: `automation/lib/electron-provision.mjs` `verifyProvisionedElectron` (the sealed binary from `scripts/provision-electron.mjs`) first, then `node_modules/electron`. Playwright: not a repo dependency; the script finds `playwright`/`playwright-core` (or `PLAYWRIGHT_MODULE_DIR`).
+- `scripts/e2e/desktop-journey.e2e.mjs`: Playwright `_electron` drives the repo's Electron (`apps/desktop/main.mjs`, dev mode, isolated `--user-data-dir`). A fixed denominator of **16 planned steps**, each with a kind. Each step asserts the on-screen state, takes a screenshot into `<out>/screenshots`; the result is `<out>/report.json`. The temporary app data dir is a fresh `mkdtemp` `<out>/data-XXXXXX` (an existing `<out>/data` is never touched) and is removed on exit, also on SIGINT (130) / SIGTERM (143).
+
+| # | step | kind |
+|---|------|------|
+| 1 | first-run-dialog | FUNCTIONAL |
+| 2 | detect-routes (probes the real allow-list inside the app) | FUNCTIONAL |
+| 3 | setup-check (six rows; SANDBOX row cross-checked against the server's `/v1/system/executors`) | FUNCTIONAL |
+| 4 | intake-idea | FUNCTIONAL |
+| 5 | analysis | GATED_ASSERTED |
+| 6 | plan-task-by-hand | FUNCTIONAL |
+| 7 | authorize-mission (timeline AND the server's mission status AUTHORIZED) | FUNCTIONAL |
+| 8 | run-engine-truth | FUNCTIONAL |
+| 9 | start-run | FUNCTIONAL |
+| 10 | run-reaches-review | FUNCTIONAL |
+| 11 | test-result-honest (expectation derived from the server's `GET /v1/work-runs/:id`; the UI kind/reason must equal it) | NOT_EXECUTED_ASSERTED |
+| 12 | link-run-to-task | FUNCTIONAL |
+| 13 | open-project-workspace | FUNCTIONAL |
+| 14 | delivery-prepare | FUNCTIONAL |
+| 15 | delivery-accept (NOT_VERIFIED acknowledged) | FUNCTIONAL |
+| 16 | product | GATED_ASSERTED |
+
+- A startup failure (backend/Electron did not come up) is reported **separately** in `report.json` `startup` (backend log tail and Electron main-process stdout/stderr tail), not as a 17th step; it makes the result `FAIL` (exit 1).
+- Exit codes: `0` pass or `PASS_WITH_NOT_VERIFIED`, `1` a step or the startup failed, `3` BLOCKED (**only** `PLAYWRIGHT_MISSING`, `ELECTRON_BINARY_MISSING`, `NO_DISPLAY`: missing preconditions checked before anything is started), `4` NOT_VERIFIED with `--require-post-4b`. BLOCKED is never a pass.
+- Electron: `automation/lib/electron-provision.mjs` `verifyProvisionedElectron` (the sealed binary from `scripts/provision-electron.mjs`) first, then `node_modules/electron` (not with `CI=true`). `report.json` `electron` carries `source`, `path`, `version` (from `dist/version`, Electron 44.x here) and `provisionError`. Playwright is not a repo dependency; the script finds `playwright`/`playwright-core` (or `PLAYWRIGHT_MODULE_DIR`).
 
 ## Installed app vs dev mode
-The packaged backend (`packaged-entry.ts`) cannot take a FAKE executor (programmatic injection only), so a full journey with FAKE needs **dev mode** (`main.mjs` + the fake backend). The installed app keeps its launch/repair/uninstall test (`scripts/installer-install-test.mjs`). This request therefore adds a dev-mode step to the same job (Electron is already provisioned there).
+The packaged backend (`packaged-entry.ts`) cannot take a FAKE executor (programmatic injection only), so the full journey needs **dev mode** (`main.mjs` + the fake backend). The installed app keeps its launch/repair/uninstall test (`scripts/installer-install-test.mjs`, `windows-installer.yml`, unchanged). The journey therefore runs in **its own workflow file**, not in the installer's.
 
-## Diff for `.github/workflows/windows-installer.yml`
-Independent review (dba4270) findings B4, B8, B9, L8, L10 are folded in. Design: the E2E gets **its own job** (deps + `provision-electron` only, so it does not wait for the installer build and install test), it is **not** `continue-on-error` (a failing E2E fails the job), Playwright is installed from an **integrity-pinned tarball** into a separate prefix (lockfiles and the dependency seal untouched), artifacts go through a **separate upload** (nothing is nested in `delivery/`, so `sha256sum -- *` is unaffected), and the summary is written before the exit code is applied.
-
-```diff
-@@ pull_request.paths (add)
-+      - scripts/e2e/**
-+      - apps/desktop/**
-+      - apps/control-api/src/**
-+      - core/workos/**
-+      - core/agents/**
-@@ jobs (new job, after `installer`; same action pins as the installer job)
-+  desktop-e2e:
-+    name: desktop journey E2E (windows-latest)
-+    runs-on: windows-latest
-+    timeout-minutes: 15
-+    env:
-+      CI: "true"
-+    steps:
-+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-+        with:
-+          persist-credentials: false
-+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-+        with:
-+          node-version: 24
-+          cache: npm
-+      - run: node scripts/ensure-dependencies.mjs
-+      - run: node scripts/provision-electron.mjs
-+      - name: Install Playwright (pinned tarball, integrity-checked, outside the repo tree)
-+        shell: bash
-+        run: |
-+          set -euo pipefail
-+          mkdir -p "$RUNNER_TEMP/pw-pack" "$RUNNER_TEMP/pw"
-+          (cd "$RUNNER_TEMP/pw-pack" && npm pack playwright-core@1.56.1 --json > pack.json)
-+          got=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))[0].integrity)' "$RUNNER_TEMP/pw-pack/pack.json")
-+          want=$(tr -d '\r\n' < scripts/e2e/playwright-core.integrity)
-+          if [ "$got" != "$want" ]; then echo "::error::playwright-core integrity mismatch: got $got"; exit 1; fi
-+          npm install --no-save --no-package-lock --ignore-scripts --prefix "$RUNNER_TEMP/pw" "$RUNNER_TEMP/pw-pack/playwright-core-1.56.1.tgz"
-+      - name: Desktop journey E2E (real Electron, FAKE executor, dev mode)
-+        shell: bash
-+        env:
-+          PLAYWRIGHT_MODULE_DIR: ${{ runner.temp }}/pw/node_modules
-+        run: |
-+          set -o pipefail
-+          mkdir -p "$RUNNER_TEMP/e2e"
-+          rc=0
-+          node scripts/e2e/desktop-journey.e2e.mjs --out "$RUNNER_TEMP/e2e/run" 2>&1 | tee "$RUNNER_TEMP/e2e/E2E.log" || rc=${PIPESTATUS[0]}
-+          result=$(sed -n 's/^RESULT \([^ ]*\).*/\1/p' "$RUNNER_TEMP/e2e/E2E.log" | tail -n 1)
-+          {
-+            echo '### Desktop journey E2E'
-+            echo "exit=$rc result=${result:-NONE}"
-+            echo '```'
-+            grep -E '^(PASS|FAIL|NOT_VERIFIED|BLOCKED|RESULT)' "$RUNNER_TEMP/e2e/E2E.log" || true
-+            echo '```'
-+          } >> "$GITHUB_STEP_SUMMARY"
-+          if [ "$rc" -ne 0 ]; then echo "::error::desktop journey E2E failed (exit $rc, result ${result:-NONE})"; exit "$rc"; fi
-+          if [ "$result" != "PASS" ] && [ "$result" != "PASS_WITH_NOT_VERIFIED" ]; then echo "::error::desktop journey E2E result ${result:-NONE} is not a pass"; exit 1; fi
-+      - name: Upload E2E report and screenshots
-+        if: always()
-+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-+        with:
-+          name: uasco-desktop-e2e-${{ github.run_id }}-${{ github.run_attempt }}
-+          path: ${{ runner.temp }}/e2e
-+          retention-days: 30
-+          if-no-files-found: warn
-```
-Notes for the coordinator:
-- The installer job and its `Collect delivery files` step are NOT changed (no directory is added to `delivery/`, so `sha256sum -- *` keeps hashing regular files only and `SOURCE_SHA.txt` is still written).
-- `CI=true` makes the script accept only the sealed `provision-electron` binary (no `node_modules/electron` fallback) and `PLAYWRIGHT_MODULE_DIR` makes it load Playwright only from the integrity-checked prefix; both choices and the Playwright/Electron source and version are written to `report.json`.
-- Exit codes: `0` pass (also `PASS_WITH_NOT_VERIFIED` while 4b is gated), `1` a step or the startup failed, `3` BLOCKED (only a missing precondition checked before anything is started), `4` NOT_VERIFIED with `--require-post-4b`. Add `--require-post-4b` to the command once batch 4b is merged.
-- `scripts/e2e/playwright-core.integrity` holds the sha512 of the `playwright-core@1.56.1` tarball (`npm view playwright-core@1.56.1 dist.integrity`, equal to `npm pack` on this machine); bump both together.
+## New workflow file: `.github/workflows/desktop-journey-e2e.yml`
+Draft (exact content, ready to add): `docs/authority-requests/LANE-A-desktop-journey-e2e.yml.txt`. `windows-installer.yml` is **not changed at all** (the earlier idea of adding a job and 5 workflow-level path globs there is withdrawn: those globs would have run the 60-minute installer job on every renderer/control-api/workos PR).
+- Own `paths` filter: `scripts/e2e/**`, `scripts/ensure-dependencies.mjs`, `scripts/provision-electron.mjs`, `automation/lib/**`, `apps/desktop/**`, `apps/control-api/src/**`, `core/**`, `package.json`, `package-lock.json`, the workflow itself; also `push` on `v7/integration` and `workflow_dispatch`.
+- `permissions: contents: read`; concurrency group per PR/ref (older PR run is cancelled); `timeout-minutes: 15`; actions pinned to the same SHAs as `windows-installer.yml` (checkout `11bd7190...`, setup-node `49933ea5...`, upload-artifact `ea165f8d...`); `CI=true`.
+- Not `continue-on-error`: a failing E2E fails the job. Playwright is installed from an **integrity-pinned tarball** (`scripts/e2e/playwright-core.integrity`, sha512 of `playwright-core@1.56.1`) into a separate prefix; lockfiles and the dependency seal are untouched. The summary is written before the exit code is applied.
+- Artifact upload: `${{ runner.temp }}/e2e` **excluding** `${{ runner.temp }}/e2e/run/data-*` (the temporary app data dir is never uploaded).
+- `CI=true` makes the script accept only the sealed `provision-electron` binary and `PLAYWRIGHT_MODULE_DIR` makes it load Playwright only from the integrity-checked prefix.
+- Add `--require-post-4b` to the command once batch 4b is merged.
 - Linux CI (not requested here) would run the same script under `xvfb-run -a`.
 
 ## Before / after batch 4b (A-WIN-E2E-2)

@@ -1,0 +1,79 @@
+# //TR: Bu workflow gerçek Electron masaüstü uçtan uca testini (scripts/e2e/desktop-journey.e2e.mjs) Windows runner'da KENDİ dosyasında çalıştırır; 60 dakikalık kurulum işi (windows-installer.yml) bu yüzden renderer/control-api/workos PR'larında tetiklenmez. Zorunlu kontrol değildir; ci.yml değişmez. Bu dosya Lane A'nın TASLAĞIDIR: .github/workflows/desktop-journey-e2e.yml olarak koordinatör ekler (korumalı yol).
+name: Desktop Journey E2E
+on:
+  push:
+    branches: [v7/integration]
+  pull_request:
+    paths:
+      - .github/workflows/desktop-journey-e2e.yml
+      - scripts/e2e/**
+      - scripts/ensure-dependencies.mjs
+      - scripts/provision-electron.mjs
+      - automation/lib/**
+      - apps/desktop/**
+      - apps/control-api/src/**
+      - core/**
+      - package.json
+      - package-lock.json
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: desktop-journey-e2e-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  desktop-e2e:
+    name: desktop journey E2E (windows-latest)
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      CI: "true"
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: node scripts/ensure-dependencies.mjs
+      - run: node scripts/provision-electron.mjs
+      - name: Install Playwright (pinned tarball, integrity-checked, outside the repo tree)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/pw-pack" "$RUNNER_TEMP/pw"
+          (cd "$RUNNER_TEMP/pw-pack" && npm pack playwright-core@1.56.1 --json > pack.json)
+          got=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))[0].integrity)' "$RUNNER_TEMP/pw-pack/pack.json")
+          want=$(tr -d '\r\n' < scripts/e2e/playwright-core.integrity)
+          if [ "$got" != "$want" ]; then echo "::error::playwright-core integrity mismatch: got $got"; exit 1; fi
+          npm install --no-save --no-package-lock --ignore-scripts --prefix "$RUNNER_TEMP/pw" "$RUNNER_TEMP/pw-pack/playwright-core-1.56.1.tgz"
+      - name: Desktop journey E2E (real Electron, FAKE executor, dev mode)
+        shell: bash
+        env:
+          PLAYWRIGHT_MODULE_DIR: ${{ runner.temp }}/pw/node_modules
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/e2e"
+          rc=0
+          node scripts/e2e/desktop-journey.e2e.mjs --out "$RUNNER_TEMP/e2e/run" 2>&1 | tee "$RUNNER_TEMP/e2e/E2E.log" || rc=${PIPESTATUS[0]}
+          result=$(sed -n 's/^RESULT \([^ ]*\).*/\1/p' "$RUNNER_TEMP/e2e/E2E.log" | tail -n 1)
+          {
+            echo '### Desktop journey E2E'
+            echo "exit=$rc result=${result:-NONE}"
+            echo '```'
+            grep -E '^(PASS|FAIL|NOT_VERIFIED|BLOCKED|RESULT)' "$RUNNER_TEMP/e2e/E2E.log" || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$rc" -ne 0 ]; then echo "::error::desktop journey E2E failed (exit $rc, result ${result:-NONE})"; exit "$rc"; fi
+          if [ "$result" != "PASS" ] && [ "$result" != "PASS_WITH_NOT_VERIFIED" ]; then echo "::error::desktop journey E2E result ${result:-NONE} is not a pass"; exit 1; fi
+      - name: Upload E2E report and screenshots (the temporary app data dir is excluded)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: uasco-desktop-e2e-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/e2e
+            !${{ runner.temp }}/e2e/run/data-*
+          retention-days: 30
+          if-no-files-found: warn
