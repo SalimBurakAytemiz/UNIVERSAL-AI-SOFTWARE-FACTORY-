@@ -341,12 +341,14 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
     if (opts.grandchild) expect(await waitFor(() => fs.existsSync(path.join(dir, `${String(opts.grandchild)}.pid`)), 10_000)).toBe(true); // torun doğdu ve pid'ini yazdı
     const killedAt = Date.now();
     if (pgid > 1) leaked.push(pgid);
+    const aliveBeforeKill = groupAlive(pgid), membersBeforeKill = (await wg())?.groupMembers?.(pgid)?.length ?? null;
     e1.child.kill("SIGKILL"); await e1.closed;
-    return {dir, runId, pgid, killedAt, work: path.join(dir, "data", "runs", runId, "work")};
+    const aliveAfterKill = groupAlive(pgid);
+    return {dir, runId, pgid, killedAt, aliveBeforeKill, membersBeforeKill, aliveAfterKill, work: path.join(dir, "data", "runs", runId, "work")};
   };
   const recoveryNote = (dir: string, runId: string) => new WorkOsStore(path.join(dir, "data")).engineGetRun(runId)!.evidence.find(e => e.kind === "RECOVERY")?.note ?? "";
   // //TR: Başarısız bir onaylamanın nedeni okunabilsin diye durum özeti (yetim artık sabit bir pencereye değil release dosyasına bağlıdır).
-  const snap = (x: {dir: string; runId: string; pgid: number; killedAt: number; work: string}, closedAfterMs: number) => () => { const r = new WorkOsStore(path.join(x.dir, "data")).engineGetRun(x.runId)!; return JSON.stringify({takeoverClosedMsAfterKill: closedAfterMs, status: r.status, reason: r.reason, groupAlive: groupAlive(x.pgid), orphanFile: fs.existsSync(path.join(x.work, "ORPHAN.txt")), note: recoveryNote(x.dir, x.runId)}); };
+  const snap = (x: {dir: string; runId: string; pgid: number; killedAt: number; work: string; aliveBeforeKill?: boolean; membersBeforeKill?: number | null; aliveAfterKill?: boolean}, closedAfterMs: number) => () => { const r = new WorkOsStore(path.join(x.dir, "data")).engineGetRun(x.runId)!; return JSON.stringify({takeoverClosedMsAfterKill: closedAfterMs, writerAliveBeforeKill: x.aliveBeforeKill, writerMembersBeforeKill: x.membersBeforeKill, writerAliveAfterKill: x.aliveAfterKill, status: r.status, reason: r.reason, groupAlive: groupAlive(x.pgid), orphanFile: fs.existsSync(path.join(x.work, "ORPHAN.txt")), note: recoveryNote(x.dir, x.runId)}); };
 
   it("PAR04-GSTOP-NO-REAP: a GLOBAL_STOP that is active at takeover still stops the crashed engine's writer BEFORE the run is cancelled", { timeout: 180_000 }, async () => {
     const x = await crashEngine(path.join(tmp, "stop"));

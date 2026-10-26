@@ -387,7 +387,7 @@ export class MissionRunner {
     const alive = (note: string) => ({problem: "WORKSPACE_WRITER_ALIVE", note});
     if (prev.hostname !== os.hostname()) return alive(`writer group ${pgid} belongs to host ${prev.hostname.slice(0, 64)} and cannot be checked`);
     const st = writerState(pgid);
-    if (st === "GONE") return {problem: null, note: ""};
+    if (st === "GONE") return {problem: null, note: `writer group ${pgid} was already gone`}; // //TR: kanıt notu "durdurulacak yazar yoktu" der: yazarın devirden ÖNCE öldüğü (ya da hiç yaşamadığı) not'tan okunur
     if (st === "UNKNOWN") return alive(`writer group ${pgid} state unknown`);
     const now = await startToken(pgid);
     // //TR: TK-3: kimlik belirteci EPERM'den ÖNCE karşılaştırılır. Kayıtlı pid başka bir kullanıcının sürecine geçtiyse (kill -> EPERM) belirteç farklıdır: bizim yazarımız yoktur, devir fail-closed OLMAZ. Linux /proc/<pid>/stat dünya okunurdur.
