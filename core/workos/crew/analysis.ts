@@ -7,11 +7,12 @@ import type {ClaudeCliStatus, ClaudeProfileOptions, ClaudeProfileRole, ClaudeRol
 import {PREDEV_AGENT_ACTOR, PreDevBuilderError} from "../predev/claude-builder.js";
 import {briefFromRecords} from "../predev/brief.js";
 import {PreDevDriver, PreDevDriverError} from "../predev/driver.js";
+import {composeRolePrompt} from "../predev/role-prompts.js";
 import type {BuilderPort} from "../predev/driver.js";
 import type {ArchitectureContent, ArtifactKind, PlanContent, RequirementsContent, WorkPackage} from "../predev/types.js";
 import {PRE_DEV_ROLE_MAP} from "../predev/types.js";
 import {PREDEV_KIND_FUNCTION} from "../predev/claude-builder.js";
-import {PlanError, submitPlan} from "../plan.js";
+import {PlanError, submitPlan, validatePlanCreate} from "../plan.js";
 import type {PlanInput} from "../plan.js";
 import type {Scope, WorkTask} from "../types.js";
 import type {WorkOsStore} from "../store.js";
@@ -75,7 +76,7 @@ export interface AnalysisSummary {
   architecture: {components: string[]; techChoices: string[]};
   plan: {workPackages: number; milestones: number};
 }
-export type PlanDraftCode = "ANALYSIS_NOT_COMPLETE" | "PLAN_TOO_LARGE" | "PLAN_DEPENDENCY_UNKNOWN" | "PLAN_CYCLE";
+export type PlanDraftCode = "ANALYSIS_NOT_COMPLETE" | "PLAN_TOO_LARGE" | "PLAN_DEPENDENCY_UNKNOWN" | "PLAN_CYCLE" | "PLAN_INVALID";
 export type PlanDraft = {ok: true; body: PlanInput; trace: PlanTaskTrace[]; summary: AnalysisSummary} | {ok: false; code: PlanDraftCode; detail: string};
 
 // //TR: İş paketleri bağımlılık sırasına dizilir (kararlı: bağımlılığı hazır olan ilk paket özgün sırayla seçilir) çünkü plan.ts yalnız ÖNCEKİ görevlere bağımlılık kabul eder. Başlık "<iş paketi kimliği>: <başlık>" (en çok 200). Sessiz kesme/uydurma yok: 50'yi aşan, bilinmeyen bağımlılık veya döngü kesin kodla reddedilir.
@@ -102,39 +103,77 @@ export interface AnalysisDeps {
   store: WorkOsStore; scope: Scope; builder: BuilderPort;
   // Üretimden ÖNCE sorulur (ücretli iş yalnız hazırsa başlar); üretimde claudeAnalysisReadiness, testte enjekte edilir.
   readiness: () => AnalysisReadiness;
+  // //TR: Global Stop açık mı (route d.workosStopped'ı verir)? Ücretli çağrıdan ÖNCE ve çağrı BİTTİKTEN sonra, kayıttan önce sorulur: durdurma sırasında üretilen taslak kaydedilmez.
+  stopped?: () => boolean;
 }
+
+// //TR: Tek uçuş: route her istekte yeni bir AnalysisFlow kurar, bu yüzden koruma modül düzeyindedir (mission başına). İkinci eşzamanlı step() ücretli çağrı başlatmadan ANALYSIS_IN_PROGRESS ile cevaplanır; sürüş bitince (başarı, hata, fırlatma) bırakılır.
+const IN_FLIGHT = new Set<string>();
+const blockedStep = (code: string, founderAction: string): AnalysisStep => {
+  const readiness: AnalysisReadiness = {ready: false, blockers: [code], blocker: code, founderAction, profiles: null};
+  return {status: "BLOCKED", blocker: code, blockers: [code], founderAction, readiness};
+};
 
 export class AnalysisFlow {
   constructor(private readonly d: AnalysisDeps) {}
 
-  private driver(missionId: string): PreDevDriver {
+  private driver(missionId: string, builder: BuilderPort = this.d.builder): PreDevDriver {
     const mission = this.d.store.getMission(this.d.scope, missionId);
     if (!mission) throw new AnalysisError("ANALYSIS_MISSION_NOT_FOUND");
     const project = this.d.store.getProject(this.d.scope, mission.projectId);
     if (!project) throw new AnalysisError("ANALYSIS_PROJECT_NOT_FOUND");
-    return new PreDevDriver({store: this.d.store, brief: briefFromRecords({project, mission}), builder: this.d.builder});
+    return new PreDevDriver({store: this.d.store, brief: briefFromRecords({project, mission}), builder});
   }
 
-  // //TR: Bir adım = O ANKİ analiz fazının taslağını üretmek. Sıra: tamam mı? -> bekleyen taslak var mı (ücretli iş yok) -> hazır mı (değilse BLOCKED, hiçbir şey açılmaz/kaydedilmez) -> dizi aç/devam et -> üret -> mevcut doğrulayıcı kapısı -> DRAFT kaydı. Faz ilerlemesi yalnız Founder'ın bağımsız onayıyla olur (pre-dev karar route'ları).
+  // //TR: Bir adım = O ANKİ analiz fazının taslağını üretmek. Sıra: tamam mı? -> bekleyen taslak var mı (ücretli iş yok) -> başka bir adım sürüyor mu (tek uçuş) -> hazır mı (değilse BLOCKED) -> Global Stop mu -> ÜCRETLİ ÇAĞRI (hiçbir şey yazmaz) -> Global Stop mu (kayıttan önce) -> dizi aç/devam et -> mevcut doğrulayıcı kapısı -> DRAFT kaydı. Başarısız bir adım (builder hatası, yapılandırılmamış builder, Global Stop) HİÇBİR şey yazmaz: dizi açılmaz, faz ilerlemez. Faz ilerlemesi yalnız Founder'ın bağımsız onayıyla olur (pre-dev karar route'ları).
   async step(missionId: string): Promise<AnalysisStep> {
     const driver = this.driver(missionId), scope = this.d.scope;
     const rm = this.d.store.preDevReadModel(scope, missionId);
     const approved = ANALYSIS_KINDS.filter(k => rm.artifacts[k].state === "APPROVED");
     if (approved.length === ANALYSIS_KINDS.length) return {status: "COMPLETE", approved};
+    const waiting = this.pendingStep(rm);
+    if (waiting) return waiting;
+    const key = `${this.d.store.dataDir}|${scope.tenantId}|${missionId}`;
+    if (IN_FLIGHT.has(key)) return blockedStep("ANALYSIS_IN_PROGRESS", "A draft for this mission is already being produced: wait for it to finish, then look at the pending draft.");
+    IN_FLIGHT.add(key);
+    try { return await this.produceStep(driver, missionId, rm); } finally { IN_FLIGHT.delete(key); }
+  }
+
+  private pendingStep(rm: ReturnType<WorkOsStore["preDevReadModel"]>): AnalysisStep | null {
     const pending = ANALYSIS_KINDS.find(k => rm.artifacts[k].artifactId !== null && (rm.artifacts[k].state === "DRAFT" || rm.artifacts[k].state === "SUBMITTED"));
-    if (pending) return {status: "AWAITING_APPROVAL", kind: pending, artifactId: rm.artifacts[pending].artifactId!, artifactState: rm.artifacts[pending].state as "DRAFT" | "SUBMITTED", next: "FOUNDER_APPROVAL"};
+    return pending ? {status: "AWAITING_APPROVAL", kind: pending, artifactId: rm.artifacts[pending].artifactId!, artifactState: rm.artifacts[pending].state as "DRAFT" | "SUBMITTED", next: "FOUNDER_APPROVAL"} : null;
+  }
+
+  private async produceStep(driver: PreDevDriver, missionId: string, rm: ReturnType<WorkOsStore["preDevReadModel"]>): Promise<AnalysisStep> {
+    const scope = this.d.scope, stopBlock = () => blockedStep("GLOBAL_STOP_ACTIVE", "Global Stop is active: nothing was started or recorded. Clear the stop to continue.");
     const readiness = this.d.readiness();
     if (!readiness.ready) return {status: "BLOCKED", blocker: readiness.blocker ?? "ANALYSIS_NOT_READY", blockers: readiness.blockers, founderAction: readiness.founderAction, readiness};
-    if (!rm.active || rm.phase === "AUTHORIZED") driver.start(scope, missionId, PREDEV_AGENT_ACTOR); // dizi yoksa (veya ilk ilerleme yazımı yarım kaldıysa) açılır/tamamlanır; sonraki fazlarda dokunulmaz
+    if (this.d.stopped?.()) return stopBlock();
     const phaseKind = ANALYSIS_KINDS.find(k => rm.artifacts[k].state !== "APPROVED")!;
+    // //TR: Ücretli çağrı önce ve yazmadan yapılır; hata ya da Global Stop depoyu olduğu gibi bırakır.
+    let raw: string;
     try {
-      const out = await driver.produceCurrentPhase(scope, missionId, PREDEV_AGENT_ACTOR);
-      if (out.status === "REJECTED") return {status: "REJECTED", kind: out.kind, reason: out.reason};
-      return {status: "DRAFT_READY", kind: out.kind, artifactId: out.artifactId, version: out.version, roleId: PRE_DEV_ROLE_MAP[out.kind][0], next: "FOUNDER_APPROVAL"};
+      const ctx = driver.buildMissionContext(scope, missionId, phaseKind);
+      raw = await this.d.builder.produce(phaseKind, composeRolePrompt(phaseKind, ctx), ctx);
     } catch (e) {
       if (e instanceof PreDevBuilderError) return {status: "BUILDER_FAILED", kind: phaseKind, code: e.code};
       if (e instanceof PreDevDriverError) return {status: "BUILDER_FAILED", kind: phaseKind, code: e.message.slice(0, 120)};
       throw e;
+    }
+    if (this.d.stopped?.()) return stopBlock();
+    // //TR: Kayıt mevcut sürücüden geçer (doğrulayıcı kapısı, DRAFT, aynı kimlikler); içerik zaten ödenmiş olan çağrının çıktısıdır.
+    const recorder = this.driver(missionId, {produce: async () => raw});
+    try {
+      const now = this.d.store.preDevReadModel(scope, missionId); // ücretli çağrı sürerken başka biri dizi açmış/taslak yazmış olabilir
+      if (!now.active || now.phase === "AUTHORIZED") recorder.start(scope, missionId, PREDEV_AGENT_ACTOR); // dizi yoksa (veya ilk ilerleme yazımı yarım kaldıysa) açılır/tamamlanır; sonraki fazlarda dokunulmaz
+      const out = await recorder.produceCurrentPhase(scope, missionId, PREDEV_AGENT_ACTOR);
+      if (out.status === "REJECTED") return {status: "REJECTED", kind: out.kind, reason: out.reason};
+      return {status: "DRAFT_READY", kind: out.kind, artifactId: out.artifactId, version: out.version, roleId: PRE_DEV_ROLE_MAP[out.kind][0], next: "FOUNDER_APPROVAL"};
+    } catch (e) {
+      if (!(e instanceof PreDevDriverError)) throw e;
+      // //TR: Kayıp yarış: bayat faz için BUILDER_FAILED demek yerine GÜNCEL durumu okuyup bekleyen onayı gösterir.
+      const fresh = this.d.store.preDevReadModel(scope, missionId);
+      return this.pendingStep(fresh) ?? {status: "BUILDER_FAILED", kind: ANALYSIS_KINDS.find(k => fresh.artifacts[k].state !== "APPROVED") ?? phaseKind, code: e.message.slice(0, 120)};
     }
   }
 
@@ -148,6 +187,9 @@ export class AnalysisFlow {
     const plan = content<PlanContent>("Plan"), requirements = content<RequirementsContent>("Requirements"), architecture = content<ArchitectureContent>("Architecture");
     const t = tasksFromPlan(plan, requirements);
     if (!t.ok) return t;
+    // //TR: Çizelge POST /v1/missions/:id/plan'ın doğrulayıcısından (tekrarlı dependsOn, 49'dan uzun liste, ...) geçmeyen bir gövdeyi ASLA önermez/kaydetmez: route 400 verirdi ve görevler yine yazılmış olurdu.
+    const valid = validatePlanCreate(t.body);
+    if (!valid.ok) return {ok: false, code: "PLAN_INVALID", detail: valid.errors.slice(0, 300)};
     const summary: AnalysisSummary = {
       requirements: {functional: requirements.functional.length, nonFunctional: requirements.nonFunctional.length, acceptanceCriteria: [...requirements.functional, ...requirements.nonFunctional].reduce((n, r) => n + r.acceptanceCriteria.length, 0)},
       architecture: {components: architecture.components.map(c => c.name), techChoices: architecture.techChoices.map(c => c.choice)},
