@@ -2067,6 +2067,15 @@
         "review": "review-239 NO_BLOCKERS (3 lenses + adversarial verify); LOWs -> E2E-3 follow-up; optional UASCO Independent Review was in progress at merge",
         "pushCi": "CI 40331086767 pending at 13:31Z",
         "riskTier": "ROUTINE (scripts/e2e harness + fake backend; 0 protected paths)"
+      },
+      {
+        "pr": 243,
+        "merge": "75332fd",
+        "by": "coordinator SHA-bound merge (expectedHeadSha 3243b3c; required checks green on that head)",
+        "at": "2026-10-26T14:10:14.627Z",
+        "postMerge": "VERIFIED: parent1 b593041, parent2 = reviewed head 3243b3c, merge-tree == merge tree",
+        "review": "RCA skeptic (wsrjuzc46): M1-M11 killed; Windows per-test timing NOT measured (shard-level within noise)",
+        "riskTier": "ROUTINE (test-only, unprotected)"
       }
     ],
     "wslProvider": {
