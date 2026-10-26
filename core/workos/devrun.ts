@@ -68,6 +68,8 @@ export interface DevRunOptions {
   ownerCheckMs?: number;
   // Köprü kurulamadı / hazırlık hatasında öldürülen çocuğun çıkışını bekleme üst süresi (varsayılan 10 sn; test enjeksiyonu).
   killWaitMs?: number;
+  // Test enjeksiyonu: toplu başlangıç zamanı okuması için platform ve PowerShell çalıştırıcısı (varsayılan process.platform / powershell.exe).
+  platform?: NodeJS.Platform; powershell?: (script: string) => Promise<string | null>;
 }
 const NO_PREVIEW_TYPES = new Set(["desktop", "mobile", "native"]);
 const ACTIVE: ReadonlySet<DevRunStatus> = new Set(["STARTING", "RUNNING"]);
@@ -88,6 +90,21 @@ export async function processStartTime(pid: number): Promise<string | null> {
   if (process.platform === "win32") return run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `[System.Diagnostics.Process]::GetProcessById(${pid}).StartTime.ToUniversalTime().ToString('o')`]);
   if (process.platform === "linux") { try { const s = fs.readFileSync(`/proc/${pid}/stat`, "utf8"); return s.slice(s.lastIndexOf(")") + 2).split(" ")[19] ?? null; } catch { return null; } }
   return run("ps", ["-o", "lstart=", "-p", String(pid)]);
+}
+const runPowerShell = (script: string) => new Promise<string | null>(resolve => {
+  cp.execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {windowsHide: true, timeout: 15_000, encoding: "utf8"}, (err, out) => resolve(err ? null : String(out)));
+});
+/** Birden çok pid'in başlangıç zamanı. Windows'ta TEK PowerShell çağrısı (N paralel çağrı yüklü bir ana makinede hep zaman aşımına düşerdi); diğerlerinde tek tek. Çağrı başarısızsa BOŞ harita (çağıran tek tek okur); çağrı başarılıysa listede olmayan pid null (süreç yok). Biçim processStartTime ile aynıdır (UTC ISO 'o'). */
+export async function processStartTimes(pids: number[], o: {platform?: NodeJS.Platform; powershell?: (script: string) => Promise<string | null>} = {}): Promise<Map<number, string | null>> {
+  const ids = [...new Set(pids)].filter(n => Number.isInteger(n) && n > 0);
+  const out = new Map<number, string | null>();
+  if (!ids.length) return out;
+  if ((o.platform ?? process.platform) !== "win32") { await Promise.all(ids.map(async id => { out.set(id, await processStartTime(id).catch(() => null)); })); return out; }
+  const text = await (o.powershell ?? runPowerShell)(`Get-Process -Id ${ids.join(",")} -ErrorAction SilentlyContinue | ForEach-Object { '{0},{1}' -f $_.Id, $_.StartTime.ToUniversalTime().ToString('o') }`).catch(() => null);
+  if (text === null) return out;
+  for (const id of ids) out.set(id, null);
+  for (const line of text.split(/\r?\n/)) { const m = /^(\d+),(\S+)$/.exec(line.trim()); if (m && out.has(Number(m[1]))) out.set(Number(m[1]), m[2]); }
+  return out;
 }
 export function pidAlive(pid: number | null): boolean {
   if (!pid || !Number.isInteger(pid) || pid <= 0) return false;
@@ -249,12 +266,12 @@ export class DevRunManager {
   }
   // PS1A-C1-F3: kaydın sahibi başka bir canlı API süreci mi? Aynı süreç (başka yönetici örneği) burada canlı sayılmaz (kilit ayrıca bakar).
   // pid ölü -> değil; pid canlı ama kayıtlı başlangıç zamanı farklı -> pid yeniden kullanılmış, değil; zaman yok/okunamıyor -> fail-closed canlı.
-  private async ownerLive(st: DevRunState): Promise<boolean> {
+  private async ownerLive(st: DevRunState, read: (pid: number) => Promise<string | null> = pid => this.o.startTimeOf(pid)): Promise<boolean> {
     if (st.ownerPid === process.pid) return false;
     if (st.ownerHost !== os.hostname()) return true;
     if (!pidAlive(st.ownerPid)) return false;
     if (!st.ownerStartTime) return true;
-    const now = await this.o.startTimeOf(st.ownerPid).catch(() => null);
+    const now = await read(st.ownerPid).catch(() => null);
     return now === null ? true : now === st.ownerStartTime;
   }
   private dir(projectId: string): string { return path.join(this.o.studio.projectDir(projectId), "devrun"); }
@@ -791,10 +808,18 @@ export class DevRunManager {
     const keyOf = (r: DevRunState) => [r.instanceId, r.ownerPid, r.ownerStartTime ?? "", r.startedAt ?? "", r.status, r.pid ?? "", r.sandboxScratch ?? ""].join("|");
     const needsCheck = (r: DevRunState | null): r is DevRunState => Boolean(r && r.instanceId !== this.instanceId && r.ownerHost === os.hostname() && ((!ACTIVE.has(r.status) && r.sandboxScratch) || ACTIVE.has(r.status)));
     type Verdict = {key: string; live: boolean; now?: string | null | typeof LOOKUP_TIMEOUT};
+    // Varsayılan okuyucu + win32: tüm aday pid'ler (sahipler + sahipsiz süreçler) için TEK toplu PowerShell okuması (sınırlı); okunamayanlar tek tek okunur.
+    let batch = new Map<number, string | null>();
+    if (this.o.startTimeOf === processStartTime && (this.o.platform ?? process.platform) === "win32") {
+      const pids: number[] = [];
+      for (const id of ids) { const r = this.readState(id); if (needsCheck(r)) { if (r.ownerPid !== process.pid) pids.push(r.ownerPid); if (r.pid) pids.push(r.pid); } }
+      batch = await timed(processStartTimes(pids.filter(pidAlive), {platform: this.o.platform, powershell: this.o.powershell}), budget, new Map<number, string | null>());
+    }
+    const read = (pid: number): Promise<string | null> => batch.has(pid) ? Promise.resolve(batch.get(pid)!) : this.o.startTimeOf(pid);
     // Sahip-canlı denetimleri ve (sahip ölüyse) sahipsiz pid başlangıç zamanı okumaları PARALEL ve her biri sınırlı: süre dolarsa sahip 'canlı' sayılır (fail-closed, kayda dokunulmaz).
     const check = async (r: DevRunState): Promise<Verdict> => {
-      const live = await timed(this.ownerLive(r), budget, true);
-      const now = !live && ACTIVE.has(r.status) && r.pid && pidAlive(r.pid) ? await timed<string | null | typeof LOOKUP_TIMEOUT>(this.o.startTimeOf(r.pid).catch(() => null), budget, LOOKUP_TIMEOUT) : undefined;
+      const live = await timed(this.ownerLive(r, read), budget, true);
+      const now = !live && ACTIVE.has(r.status) && r.pid && pidAlive(r.pid) ? await timed<string | null | typeof LOOKUP_TIMEOUT>(read(r.pid).catch(() => null), budget, LOOKUP_TIMEOUT) : undefined;
       return {key: keyOf(r), live, now};
     };
     const verdicts = new Map<string, Verdict>();

@@ -723,13 +723,28 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
     const {app, dataDir} = mk(); const ps = []; for (let i = 0; i < 5; i++) ps.push(await createProject(app, {template: "web-node"}));
     const m0 = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any)); const rows: {pid: number; t: string | null; f: string}[] = [];
     for (const p of ps) { const pid = idle(); const t = await processStartTime(pid); rows.push({pid, t, f: seedRec(dataDir, p, deadRec(m0, p, {status: "RUNNING", pid, pidStartTime: t, startedAt: new Date().toISOString()}))}); }
-    const hang = new Set(rows.map(r => r.pid)); let answer = false;
-    const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {ownerCheckMs: 300, startTimeOf: (pid: number) => hang.has(pid) && !answer ? new Promise<string | null>(() => undefined) : processStartTime(pid)});
+    // Aşama 2 gerçek okuyucunun gecikmesine (Windows'ta PowerShell) BAĞLI değildir: hazır değerler döner; yalnız aşama 1 sonsuz bekler.
+    const hang = new Set(rows.map(r => r.pid)); const known = new Map(rows.map(r => [r.pid, r.t])); let answer = false;
+    const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {ownerCheckMs: 300, startTimeOf: (pid: number) => pid === process.pid ? Promise.resolve("SELF") : hang.has(pid) ? (answer ? Promise.resolve(known.get(pid) ?? null) : new Promise<string | null>(() => undefined)) : processStartTime(pid)});
     const t0 = Date.now(); const out = await m.recover(); const took = Date.now() - t0;
     expect(out).toEqual([]); expect(took, `5 hanging pid lookups took ${took} ms: parallel (~300) not sequential (~1500)`).toBeLessThan(1200);
     for (const r of rows) { expect(readRec(r.f).status).toBe("RUNNING"); expect(pidAlive(r.pid)).toBe(true); }
     answer = true; const again = await m.recover(); expect(again.map(x => x.result)).toEqual(Array(5).fill("ORPHAN_KILLED"));
     for (const r of rows) expect(pidAlive(r.pid)).toBe(false);
+  }, 60_000);
+
+  it("S5 (Windows liveness): with the default reader on win32 recover() reads ALL candidate start times with ONE batched PowerShell call (not N parallel ones that time out together on a loaded host); a failed batch falls back to per-pid reads", async () => {
+    const {app, dataDir} = mk(); const ps: Project[] = []; for (let i = 0; i < 3; i++) ps.push(await createProject(app, {template: "web-node"}));
+    const m0: any = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any));
+    const seed = async () => { const rows: {pid: number; t: string | null}[] = []; for (const p of ps) { const pid = idle(); const t = await processStartTime(pid); rows.push({pid, t}); seedRec(dataDir, p, deadRec(m0, p, {status: "RUNNING", pid, pidStartTime: t, startedAt: new Date().toISOString()})); } return rows; };
+    for (const failBatch of [false, true]) {
+      const rows = await seed(); const scripts: string[] = [];
+      const powershell = async (script: string) => { scripts.push(script); if (failBatch) return null; const ids = [...script.matchAll(/-Id ([\d,]+)/g)][0][1].split(",").map(Number); return (await Promise.all(ids.map(async id => `${id},${await processStartTime(id)}`))).join("\r\n"); };
+      const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {platform: "win32", powershell, ownerCheckMs: 5000});
+      const out = await m.recover(); expect(scripts, `failBatch=${failBatch}: exactly one batched call`).toHaveLength(1);
+      for (const r of rows) expect(scripts[0]).toContain(String(r.pid));
+      expect(out.map(x => x.result), `failBatch=${failBatch}`).toEqual(Array(3).fill("ORPHAN_KILLED")); for (const r of rows) expect(pidAlive(r.pid)).toBe(false);
+    }
   }, 60_000);
 
   it("S4: the own start-time read is bounded where the record is built (ownerCheckMs): a never-answering PowerShell read does not hold recover(); the record carries ownerStartTime null (fail-closed for readers)", async () => {
