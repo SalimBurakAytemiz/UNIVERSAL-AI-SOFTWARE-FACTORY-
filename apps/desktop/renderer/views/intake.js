@@ -60,7 +60,11 @@ export async function intakePanel(ctx){
   const doc=ctx.doc,st=drafts.status[INTAKE_FORM],errs=st?.errors??{},d=intakeDraft;
   const lr=await ctx.api.raw(INTAKES_PATH);
   const list=lr.ok?mapIntakes(lr.data):{state:lr.state,items:[]};
-  const readiness=intakeUi.last?await runReadinessBlock(ctx,intakeUi.last.projectId):null;
+  const last=intakeUi.last;
+  // Sonraki adım düğmeleri yalnız ekranda gerçekten var olan hedeflere gider: mission planı Görevler ekranında, depo bağlama proje çalışma alanında.
+  const readiness=last?await runReadinessBlock(ctx,last.projectId,{
+    PLAN_MISSION:r=>{selection.missionId=r.missionId;ctx.navigate("work")},
+    CONFIGURE_REPOSITORY:async()=>{ctx.selectProject(last.projectId);openProject(last.projectId);await ctx.rerender();settle(ctx,["id:view-title"])}}):null;
   const form=h(doc,"form",{id:"intake-form",novalidate:true,"aria-labelledby":"intake-t",on:{submit:e=>{e.preventDefault();if(!drafts.busy[INTAKE_FORM])submitIntake(ctx)}}},
     field(ctx,{id:"intake-idea",labelKey:"intake.idea",value:d.idea,onInput:v=>{d.idea=v},errorKey:errs.idea,required:true,multiline:true,hintKey:"intake.ideaHint"}),
     field(ctx,{id:"intake-template",labelKey:"form.field.template",value:d.template,onInput:v=>{d.template=v},errorKey:errs.template,hintKey:"intake.templateHint",options:[...INTAKE_TEMPLATES.map(v=>({value:v,label:ctx.t(`studio.template.${v}`)})),{value:"",label:ctx.t("intake.template.none")}]}),

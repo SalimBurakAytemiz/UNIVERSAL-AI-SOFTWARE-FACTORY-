@@ -1936,6 +1936,25 @@ describe("LANE-A project intake from an idea (fake DOM)", () => {
       const r = all(byId(unk.shown, "intake-readiness")!).find(n => n.dataset.readyCheck === "REPOSITORY")!;
       expect(text(r)).toContain("BRAND_NEW_REASON (not recognised)"); expect(text(r)).toContain("BRAND_NEW_ACTION (not recognised)");
     });
+    it("offers a button only for next steps that have a real destination, and it goes to the readiness mission, not a guessed one", async () => {
+      forms.resetAllForms();
+      const MSN2 = "msn_" + "dd".repeat(12);
+      const odd = blockedChecks(); odd[3] = chk("TEST_COMMAND", "BLOCKED", false, "TEST_COMMAND_MISSING", "SET_TEST_COMMAND");
+      const o = await submitted({rd: readiness({ready: false, verifiable: false, missionId: MSN2}, odd)});
+      const goIds = all(byId(o.shown, "intake-readiness")!).filter(n => n.id?.startsWith("intake-ready-go-")).map(n => n.id);
+      expect(goIds).toEqual(["intake-ready-go-CONFIGURE_REPOSITORY", "intake-ready-go-PLAN_MISSION"]); // SET_TEST_COMMAND has no screen yet: text only
+      expect(text(byId(o.shown, "intake-ready-go-PLAN_MISSION")!)).toBe("Open the mission in Tasks to plan it");
+      byId(o.shown, "intake-ready-go-PLAN_MISSION")!.fire("click");
+      expect(o.calls.navigate).toEqual(["work"]); expect(forms.selection.missionId).toBe(MSN2);
+      byId(o.shown, "intake-ready-go-CONFIGURE_REPOSITORY")!.fire("click"); await tick();
+      expect(o.calls.selected).toEqual([PID]);
+      (await load(rend, "studio-state.js")).resetStudio(); // the click opened the workspace; later tests start from the list
+      // no target mission -> no plan button; an OK check never gets one even if the server repeats a next step
+      forms.resetAllForms();
+      const nm = okChecks(); nm[0] = chk("MISSION", "BLOCKED", true, "NO_OPEN_MISSION", "CREATE_MISSION"); nm[4] = chk("PLAN", "UNKNOWN", false, "SOURCE_UNREADABLE", "PLAN_MISSION"); nm[2] = chk("REPOSITORY", "OK", true, null, "CONFIGURE_REPOSITORY");
+      const n = await submitted({rd: readiness({ready: false, verifiable: false, missionId: null}, nm)});
+      expect(all(byId(n.shown, "intake-readiness")!).some(x => x.id?.startsWith("intake-ready-go-"))).toBe(false);
+    });
     it("shows no readiness before an intake exists, and has a Turkish text for every code it can show", async () => {
       forms.resetAllForms();
       const f = await open({});

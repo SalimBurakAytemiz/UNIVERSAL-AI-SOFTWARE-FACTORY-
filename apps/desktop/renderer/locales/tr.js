@@ -1414,6 +1414,8 @@ export default {
   "runready.action.CONFIGURE_REPOSITORY":"Kod bağlayın (içe aktar) ya da projeyi şablondan oluşturun.",
   "runready.action.SET_TEST_COMMAND":"İzin verilen bir test komutu tanımlayın.",
   "runready.action.PLAN_MISSION":"Mission'ı planlayın.",
+  "runready.go.PLAN_MISSION":"Planlamak için mission'ı Görevler'de aç",
+  "runready.go.CONFIGURE_REPOSITORY":"Kod bağlamak için proje çalışma alanını aç",
   "intake.err.key":"Idempotency anahtarı geçersiz.",
   "form.field.idea":"Proje fikri",
   "flow.title":"İlk teslim akışı",

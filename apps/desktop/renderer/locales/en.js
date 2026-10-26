@@ -1414,6 +1414,8 @@ export default {
   "runready.action.CONFIGURE_REPOSITORY":"Attach code (import) or create the project from a template.",
   "runready.action.SET_TEST_COMMAND":"Set an allowed test command.",
   "runready.action.PLAN_MISSION":"Plan the mission.",
+  "runready.go.PLAN_MISSION":"Open the mission in Tasks to plan it",
+  "runready.go.CONFIGURE_REPOSITORY":"Open the project workspace to attach code",
   "intake.err.key":"The idempotency key is invalid.",
   "form.field.idea":"Project idea",
   "flow.title":"First delivery flow",

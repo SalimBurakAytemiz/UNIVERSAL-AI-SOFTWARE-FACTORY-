@@ -9,7 +9,8 @@ function codeText(ctx,prefix,code){
   const key=`${prefix}.${code}`,v=ctx.t(key);
   return v===key?`${code} (${ctx.t("runready.unrecognised")})`:v;
 }
-export async function runReadinessBlock(ctx,projectId){
+/** go: {SONRAKI_ADIM_KODU: async r=>void} (r = doğrulanmış hazırlık; PLAN_MISSION düğmesi yalnız hedef mission varken çıkar); yalnız burada tanımlı, hedefi gerçekten var olan adımlar için düğme çıkar (kod bilinmiyorsa ya da hedef yoksa düğme yoktur). */
+export async function runReadinessBlock(ctx,projectId,go={}){
   const doc=ctx.doc,path=readinessPath(projectId);
   const res=path?await ctx.api.raw(path):{ok:false,state:"ERROR"};
   let mapped=res.ok?mapRunReadiness(res.data):{state:res.state,readiness:null};
@@ -24,6 +25,7 @@ export async function runReadinessBlock(ctx,projectId){
       h(doc,"strong",{text:ctx.t(`runready.check.${c.id}`)})," ",badge(ctx,ctx.t(`runready.state.${c.state}`),KIND[c.state]),
       c.blocking?null:h(doc,"span",{class:"note",text:` ${ctx.t("runready.notBlocking")}`}),
       c.reason?h(doc,"p",{class:"note",dataset:{readyReason:c.reason},text:codeText(ctx,"runready.reason",c.reason)}):null,
-      c.nextAction?h(doc,"p",{class:"note",dataset:{readyNext:c.nextAction},text:`${ctx.t("runready.next")}: ${codeText(ctx,"runready.action",c.nextAction)}`}):null))),
+      c.nextAction?h(doc,"p",{class:"note",dataset:{readyNext:c.nextAction},text:`${ctx.t("runready.next")}: ${codeText(ctx,"runready.action",c.nextAction)}`}):null,
+      c.nextAction&&c.state!=="OK"&&typeof go[c.nextAction]==="function"&&(c.nextAction!=="PLAN_MISSION"||r.missionId!==null)?h(doc,"button",{type:"button",class:"btn",id:`intake-ready-go-${c.nextAction}`,dataset:{focusKey:`intake-ready-go-${c.nextAction}`},text:ctx.t(`runready.go.${c.nextAction}`),on:{click:()=>go[c.nextAction](r)}}):null))),
     h(doc,"p",{class:"note",text:ctx.t("runready.doneNote")}));
 }
