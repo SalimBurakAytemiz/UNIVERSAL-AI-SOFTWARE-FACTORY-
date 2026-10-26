@@ -313,6 +313,10 @@ describe("Operations — GENUINE control-api read-models flow through mappers, d
     // review #196: the "no issues" claim states its scope (Work OS sources only) and says the legacy supervisor records are not read
     expect(overallOf(r).textContent).toMatch(/covers only those sources/); expect(overallOf(r).textContent).toMatch(/legacy supervisor.s retry record is shown only in Control Tower and its checkpoint record is not shown in this app/); expect(overallOf(r).textContent).not.toMatch(/checkpoint[^.]*Control Tower\)/);
     const trv = await renderView(realGet(app), "tr", now); expect(overallOf(trv.root).textContent).toMatch(/yalnızca o kaynakları kapsar/);
+    // the whole tr scope text is pinned (review #196 LOW): retry record only in Control Tower, checkpoint record not shown in this app, nothing claimed about them
+    const trText = (await load("locales", "tr.js")).default["ops.tierDesc.NO_ISSUES_RECORDED"] as string;
+    expect(trText).toContain("eski supervisor'ın yeniden deneme kaydı yalnız Control Tower'da gösterilir"); expect(trText).toContain("kontrol noktası kaydı bu uygulamada gösterilmez"); expect(trText).toContain("onlar hakkında hiçbir şey iddia edilmez"); expect(trText).not.toMatch(/Control Tower'a bakın/);
+    expect(overallOf(trv.root).textContent).toContain(trText);
     expect(byData(r, "opsEmpty", "clear")).toBeTruthy();
     expect(stepsOf(r).length).toBe(0);
     expect(surface(r)).not.toContain(FORBIDDEN);
