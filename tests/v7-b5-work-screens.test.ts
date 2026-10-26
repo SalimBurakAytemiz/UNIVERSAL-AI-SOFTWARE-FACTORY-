@@ -2874,7 +2874,9 @@ describe("LANE-A A-PREDEV-BUSY-1: the hand plan shares the mission-write lock", 
     type(root, "plan-title-0", "A");
     forms.drafts.busy["analysis-step"] = true; // an analysis step is in flight
     const busyRoot = mount(doc, await view.render(ctx));
-    expect(byId(busyRoot, "plan-submit")!.attrs.get("disabled")).toBeDefined(); expect(byId(busyRoot, "plan-in-flight")!.textContent).toContain("Misyon verisini değiştiren başka bir istek sürüyor"); expect(byId(busyRoot, "plan-in-flight")!.attrs.get("tabindex")).toBe("-1"); // the focus target
+    expect(byId(busyRoot, "plan-submit")!.attrs.get("disabled")).toBeDefined(); expect(byId(busyRoot, "plan-in-flight")!.textContent).toContain("Mission verisini değiştiren başka bir istek sürüyor"); expect(byId(busyRoot, "plan-in-flight")!.attrs.get("tabindex")).toBe("-1"); // the focus target
+    // the note names no mission and no request kind (the lock is global), and uses the same word as the rest of the Turkish UI
+    expect(byId(busyRoot, "plan-in-flight")!.textContent).not.toMatch(/bu mission|misyon|analiz isteği|ön[- ]?geliştirme isteği|el planı/i);
     expect(await pf.submitPlan(ctx, MID)).toEqual({ok: false, busy: true}); byId(busyRoot, "plan-form")!.fire("submit"); await tick();
     expect(calls.post).toEqual([]);
     forms.drafts.busy["analysis-step"] = false;
