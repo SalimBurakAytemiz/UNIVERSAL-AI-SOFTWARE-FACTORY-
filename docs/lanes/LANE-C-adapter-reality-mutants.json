@@ -1,5 +1,5 @@
 {
- "//TR": "C-RDY-2a (Adapter Gerçeklik Haritası) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt `file` içinde TAM 1 kez geçen bir metni değiştirir; docs/lanes/LANE-C-adapter-reality-mutants.mjs hepsini tests/v7-core-readiness-adapter-reality.test.ts ile çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. M1-M5 dağıtım paketindeki zorunlu mutantlardır (M1 trivy REAL -> CI dürüstlüğü, M2 çağıran kontrolü atlanır, M3 çözümleyici kayıt implementation alanını okur, M4 ADAPTER_UNRESOLVED düşer, M5 yoklama varsayılanı READY); M6-M24 ek savunma mutantlarıdır.",
+ "//TR": "C-RDY-2a (Adapter Gerçeklik Haritası) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt `file` içinde TAM 1 kez geçen bir metni (ya da `edits` listesindeki her metni) değiştirir; docs/lanes/LANE-C-adapter-reality-mutants.mjs hepsini tests/v7-core-readiness-adapter-reality.test.ts ile çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. M1-M5 dağıtım paketindeki zorunlu mutantlardır (M1 trivy REAL -> CI dürüstlüğü, M2 çağıran kontrolü atlanır, M3 çözümleyici kayıt implementation alanını okur, M4 ADAPTER_UNRESOLVED düşer, M5 yoklama varsayılanı READY); M6-M24 ek savunma mutantlarıdır (M2/M8/M9/M12/M14/M21/M23 tarayıcı sonrası kodla yeniden yazıldı). R1, R4, R5, R9-R14, R16 #264 incelemesinin (TEP-1 tur 1) hayatta kalan mutantlarıdır (R9/R10 üretim dosyalarında yorum/dize anmalarını bırakıp KOD kullanımını değiştirir); R17-R44 onarımla gelen kodun (tarayıcı, sınıf kapsamlı üye, içe aktaran çözümü, eksiksizlik sayımı, github kaydı, CI sınıfları) mutantlarıdır.",
  "mutants": [
   {
    "id": "M1",
@@ -12,7 +12,7 @@
    "id": "M2",
    "description": "the production-caller check is skipped (a record with a fabricated or missing caller is code-backed)",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const callerOk = r.entrypoint === true || verifiedCallers >= 1;",
+   "old": "const callerOk = (r.entrypoint === true && r.mode === \"SCRIPT_LITERAL\") || verifiedCallers >= 1;",
    "new": "const callerOk = true;"
   },
   {
@@ -54,14 +54,14 @@
    "id": "M8",
    "description": "the named export is never checked (any existing module is enough)",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "else exportDeclared = declaresExport(source!, r.exportName) && (r.member === undefined || declaresMember(source!, r.member));",
+   "old": "else exportDeclared = exportIn(views, r.exportName) && (r.member === undefined || memberIn(views, r.exportName, r.member));",
    "new": "else exportDeclared = true;"
   },
   {
    "id": "M9",
    "description": "the class member (method) is never checked",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": " && (r.member === undefined || declaresMember(source!, r.member))",
+   "old": " && (r.member === undefined || memberIn(views, r.exportName, r.member))",
    "new": ""
   },
   {
@@ -82,8 +82,8 @@
    "id": "M12",
    "description": "commented-out imports count as production importers",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "re.test(withoutCommentLines(text))",
-   "new": "re.test(text)"
+   "old": "importSpecifiers(v.literal).some(sp => sp.startsWith(\".\")",
+   "new": "importSpecifiers(text).some(sp => sp.startsWith(\".\")"
   },
   {
    "id": "M13",
@@ -96,8 +96,8 @@
    "id": "M14",
    "description": "the text a caller must reference is not checked (any existing caller file verifies)",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "if (text !== null && text.includes(c.references)) verifiedCallers++;",
-   "new": "if (text !== null) verifiedCallers++;"
+   "old": "if (cv !== null && tokenRe(c.references).test(c.literal === true ? cv.literal : cv.code)) verifiedCallers++;",
+   "new": "if (cv !== null) verifiedCallers++;"
   },
   {
    "id": "M15",
@@ -145,7 +145,7 @@
    "id": "M21",
    "description": "a script entry only needs its literal to exist: the literal check is skipped",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "else if (r.mode === \"SCRIPT_LITERAL\") exportDeclared = source!.includes(r.exportName);",
+   "old": "else if (r.mode === \"SCRIPT_LITERAL\") exportDeclared = tokenRe(r.exportName).test(views.code);",
    "new": "else if (r.mode === \"SCRIPT_LITERAL\") exportDeclared = true;"
   },
   {
@@ -159,7 +159,7 @@
    "id": "M23",
    "description": "an entry-point script is no longer exempt from the caller requirement being met (entrypoint flag ignored)",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "r.entrypoint === true || verifiedCallers >= 1",
+   "old": "(r.entrypoint === true && r.mode === \"SCRIPT_LITERAL\") || verifiedCallers >= 1",
    "new": "verifiedCallers >= 1"
   },
   {
@@ -168,6 +168,280 @@
    "file": "core/capabilities/adapter-reality.ts",
    "old": "const unresolved = [...new Set(i.bindingAdapterIds)].filter(",
    "new": "const unresolved = [...i.bindingAdapterIds].filter("
+  },
+  {
+   "id": "R1",
+   "description": "the probe defaults to READY for every origin except BINDING (git/npm/node/claude-cli and the registry tools would read READY unobserved)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "i.probes?.get(r.adapterId) ?? \"NOT_OBSERVED\"",
+   "new": "i.probes?.get(r.adapterId) ?? (r.origin === \"BINDING\" ? \"NOT_OBSERVED\" : \"READY\")"
+  },
+  {
+   "id": "R16",
+   "description": "the probe defaults to READY for UNREGISTERED origins only (git/npm/node/claude-cli)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "i.probes?.get(r.adapterId) ?? \"NOT_OBSERVED\"",
+   "new": "i.probes?.get(r.adapterId) ?? (r.origin === \"UNREGISTERED\" ? \"READY\" : \"NOT_OBSERVED\")"
+  },
+  {
+   "id": "R4",
+   "description": "the code-backed ids are hard-coded instead of derived from the verifications",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const codeBacked = (id: string) => i.verifications.get(id)?.codePath === \"PRESENT\";",
+   "new": "const codeBacked = (id: string) => [\"ajv\", \"ajv-formats\", \"github\", \"gitleaks\", \"playwright\", \"trivy\", \"claude-cli\", \"git\", \"node\", \"npm\"].includes(id);"
+  },
+  {
+   "id": "R5",
+   "description": "workflows with the .yaml extension are ignored",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "filter(n => /\\.ya?ml$/.test(n))",
+   "new": "filter(n => /\\.yml$/.test(n))"
+  },
+  {
+   "id": "R9",
+   "description": "the only CODE use of claude-builder-broker.mjs in executors.ts is renamed (comment mentions remain): claude-cli must lose its production caller",
+   "file": "core/workos/executors.ts",
+   "old": "path.join(self.repoRoot, \"scripts\", \"claude-builder-broker.mjs\")",
+   "new": "path.join(self.repoRoot, \"scripts\", \"claude-builder-broker-x.mjs\")"
+  },
+  {
+   "id": "R10",
+   "description": "the code uses of _electron in the desktop journey harness are replaced (the comment and error-message mentions remain): playwright must lose its export literal",
+   "file": "scripts/e2e/desktop-journey.e2e.mjs",
+   "edits": [
+    {
+     "old": "if (m && m._electron)",
+     "new": "if (m && m.xelectron)"
+    },
+    {
+     "old": "pw._electron.launch(",
+     "new": "pw.xelectron.launch("
+    }
+   ]
+  },
+  {
+   "id": "R11",
+   "description": "entrypoint:true exempts any record from the production-caller requirement (an EXPORT library with no caller is code-backed)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(r.entrypoint === true && r.mode === \"SCRIPT_LITERAL\") || verifiedCallers >= 1",
+   "new": "r.entrypoint === true || verifiedCallers >= 1"
+  },
+  {
+   "id": "R12",
+   "description": "registry.defined ignores the status and counts every row",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "defined: i.registry.filter(r => r.status === \"REGISTERED\").length",
+   "new": "defined: i.registry.length"
+  },
+  {
+   "id": "R13",
+   "description": "the node_modules directory guard is removed from the production-source walk",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (e.name === \"node_modules\" || e.name === \"dist\" ||",
+   "new": "if (e.name === \"dist\" ||"
+  },
+  {
+   "id": "R14",
+   "description": "the MODULE_MISSING reason is dropped",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (!moduleExists) reasons.push(\"MODULE_MISSING\");",
+   "new": ""
+  },
+  {
+   "id": "R17",
+   "description": "line comments are not blanked by the scanner (a comment mention counts as code)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (c === \"/\" && d === \"/\") { while (i < n && src[i] !== \"\\n\") blank(src[i++]); continue; }",
+   "new": "if (c === \"/\" && d === \"/\") { while (i < n && src[i] !== \"\\n\") plain(src[i++]); continue; }"
+  },
+  {
+   "id": "R18",
+   "description": "string bodies are not blanked in the code view (a string mention counts as code)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const body = (c: string) => { code.push(nl(c));",
+   "new": "const body = (c: string) => { code.push(c);"
+  },
+  {
+   "id": "R19",
+   "description": "template expressions ${...} are treated as template text (a call inside them is invisible)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (c === \"$\" && d === \"{\") { plain(\"$\"); plain(\"{\"); i += 2;",
+   "new": "if (false) { plain(\"$\"); plain(\"{\"); i += 2;"
+  },
+  {
+   "id": "R20",
+   "description": "regex literals are never recognized (quotes inside a regex start a phantom string)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (c === \"/\" && regexAllowed()) {",
+   "new": "if (false) {"
+  },
+  {
+   "id": "R21",
+   "description": "an unterminated string at a line break no longer makes the source unparseable",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (src[i] === \"\\n\") return null; body(src[i++]); }",
+   "new": "if (src[i] === \"\\n\") break; body(src[i++]); }"
+  },
+  {
+   "id": "R22",
+   "description": "caller strings are matched against the literal view for every caller (a string mention counts)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "test(c.literal === true ? cv.literal : cv.code)",
+   "new": "test(cv.literal)"
+  },
+  {
+   "id": "R23",
+   "description": "export { f as g } counts the local name f instead of the exported name g",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if ((names[1] ?? names[0]).trim() === name) return true;",
+   "new": "if (names[0].trim() === name) return true;"
+  },
+  {
+   "id": "R24",
+   "description": "a class member is searched in the whole file instead of the declaring class",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const top = v === null ? null : classBodyTopLevel(v.code, className);",
+   "new": "const top = v === null ? null : v.code;"
+  },
+  {
+   "id": "R25",
+   "description": "nested class-body blocks are not blanked (a call inside a method body counts as a member)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "out += depth === 1 ? ch : nl(ch);",
+   "new": "out += ch;"
+  },
+  {
+   "id": "R26",
+   "description": "test files inside the production roots are scanned",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": " && !TEST_FILE.test(e.name)",
+   "new": ""
+  },
+  {
+   "id": "R27",
+   "description": "__tests__ directories are scanned",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": " || e.name === \"__tests__\") continue;",
+   "new": ") continue;"
+  },
+  {
+   "id": "R28",
+   "description": "an importer is any file whose specifier ends with the module base name (a ./resolver.js from another directory counts)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "stripExt(path.resolve(path.dirname(f), sp)) === target)) out.push(rel(repoRoot, f));\n  }\n  return out.sort();\n}\n// //TR: Bir paketi",
+   "new": "path.basename(sp).replace(/\\.\\w+$/, \"\") === base)) out.push(rel(repoRoot, f));\n  }\n  return out.sort();\n}\n// //TR: Bir paketi"
+  },
+  {
+   "id": "R29",
+   "description": "the importer prefilter looks for the full module path, so a same-directory ./resolver.js import is missed",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "!text.includes(base)",
+   "new": "!text.includes(probe.module)"
+  },
+  {
+   "id": "R30",
+   "description": "the ENTRYPOINT_NOT_A_SCRIPT reason is dropped",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (r.entrypoint === true && r.mode !== \"SCRIPT_LITERAL\") reasons.push(\"ENTRYPOINT_NOT_A_SCRIPT\");",
+   "new": ""
+  },
+  {
+   "id": "R31",
+   "description": "REAL_WHEN_CONFIGURED needs no workflow token",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (r.ciEvidence !== \"REAL\" && r.ciEvidence !== \"REAL_WHEN_CONFIGURED\") continue;",
+   "new": "if (r.ciEvidence !== \"REAL\") continue;"
+  },
+  {
+   "id": "R32",
+   "description": "YAML comment lines count as workflow evidence",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": ".filter((t): t is string => t !== null).map(withoutYamlComments);",
+   "new": ".filter((t): t is string => t !== null);"
+  },
+  {
+   "id": "R33",
+   "description": "github loses its production caller (the record stays but is no longer code-backed)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "callers: [caller(\"scripts/ci/uasco-review/run.mjs\", \"client(\")]",
+   "new": "callers: []"
+  },
+  {
+   "id": "R34",
+   "description": "github is claimed as ordinary REAL CI evidence",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "ciEvidence: \"REAL_WHEN_CONFIGURED\", ciTokens: [\"node scripts/ci/uasco-review/run.mjs scope\"]",
+   "new": "ciEvidence: \"REAL\", ciTokens: [\"node scripts/ci/uasco-review/run.mjs scope\"]"
+  },
+  {
+   "id": "R35",
+   "description": "github's CI token is not in any workflow",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "ciTokens: [\"node scripts/ci/uasco-review/run.mjs scope\"]",
+   "new": "ciTokens: [\"node scripts/ci/uasco-review/run.mjs nowhere\"]"
+  },
+  {
+   "id": "R36",
+   "description": "npm is demoted back to a runtime prerequisite although ci.yml runs ensure-dependencies",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "ciEvidence: \"REAL\", ciTokens: [\"node scripts/ensure-dependencies.mjs\"]",
+   "new": "ciEvidence: \"RUNTIME_PREREQUISITE\""
+  },
+  {
+   "id": "R37",
+   "description": "one real ajv importer (core/company/common.ts) is missing from the caller list",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "importer(\"core/company/common.ts\", \"ajv\"), ",
+   "new": ""
+  },
+  {
+   "id": "R38",
+   "description": "the census reads the code view, so tools named only in strings are invisible",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "for (const m of v.literal.matchAll(idRe))",
+   "new": "for (const m of v.code.matchAll(idRe))"
+  },
+  {
+   "id": "R39",
+   "description": "the census skips the command check",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "check(\"COMMAND\", census.commands, exclusions.commands);",
+   "new": ""
+  },
+  {
+   "id": "R40",
+   "description": "stale census exclusions are not reported",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "else if (!seen.has(k)) out.push(`${kind}_EXCLUSION_STALE:${k}`);",
+   "new": "else if (false) out.push(`${kind}_EXCLUSION_STALE:${k}`);"
+  },
+  {
+   "id": "R41",
+   "description": "an excluded registry id that also has a record is not reported",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (mapped.has(k)) out.push(`${kind}_EXCLUSION_ALSO_MAPPED:${k}`);",
+   "new": "if (false) out.push(`${kind}_EXCLUSION_ALSO_MAPPED:${k}`);"
+  },
+  {
+   "id": "R42",
+   "description": "unparseable production sources are silently skipped by the census",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (v === null) { unparseable.push(file); continue; }",
+   "new": "if (v === null) { continue; }"
+  },
+  {
+   "id": "R43",
+   "description": "the census also scans the module's own source",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (file === SELF_MODULE) continue;",
+   "new": ""
+  },
+  {
+   "id": "R44",
+   "description": "a census exclusion is renamed (spark becomes sparkx): the real mention is unmapped and the exclusion stale",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "spark: \"UI sparkline CSS class",
+   "new": "sparkx: \"UI sparkline CSS class"
   }
  ]
 }
