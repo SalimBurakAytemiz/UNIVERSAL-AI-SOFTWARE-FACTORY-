@@ -822,6 +822,25 @@ const green = [{name: UBU, status: "completed", conclusion: "success"}, {name: W
     runApprovals: [approval()]});
   made.push(approved);
   check("E22g the same FOUNDER-tier change with the Founder's environment approval => success", /needs_founder=true/.test(approved.out.scope.out) && approved.concluded?.conclusion === "success");
+  // Round 2: registering a test that already exists at the head (the PR does not add it, as in #214 a4fb2ee). collectEvidence proves its existence at the
+  // exact head SHA (contents API) and passes it as headFiles; without that proof the registration stays FOUNDER.
+  const VAL = "config/validation.json", NEWT = "tests/v7-existing.test.ts";
+  const valJson = tests => JSON.stringify({schemaVersion: 1, steps: [{id: "tests", command: ["npx", "vitest", "run", "tests/a.test.ts", ...tests]}]}, null, 2) + "\n";
+  const vFiles = [{filename: VAL, status: "modified"}], vDiff = vFiles.map(sec).join("");
+  const vCnt = {[`${BASE}:${VAL}`]: valJson([]), [`${HEAD}:${VAL}`]: valJson([NEWT])};
+  const atHead = await e2e({ci: green, verdictObj: verdict(), files: vFiles, diff: vDiff, contents: {...vCnt, [`${HEAD}:${NEWT}`]: "import {it} from \"vitest\";\n"}});
+  made.push(atHead);
+  const vCtx = fs.readFileSync(path.join(atHead.dir, "review-input/context.md"), "utf8");
+  check("E22h a registration of a test that exists at the head (not added by the PR) => contents lookup at the head SHA, needs_founder=false, success, [TEST_REGISTRATION_APPEND]",
+    /needs_founder=false/.test(atHead.out.scope.out) && atHead.concluded?.conclusion === "success" && atHead.state.log.some(x => x === `GET /repos/o/r/contents/${NEWT}`)
+    && vCtx.includes(`- modified: ${VAL} [TEST_REGISTRATION_APPEND]`));
+  const notAtHead = await e2e({ci: green, verdictObj: verdict(), files: vFiles, diff: vDiff, contents: vCnt});
+  made.push(notAtHead);
+  check("E22i the same registration whose test file is not at the head (404) => needs_founder=true, failure FOUNDER_AUTHORITY_REQUIRED",
+    /needs_founder=true/.test(notAtHead.out.scope.out) && notAtHead.concluded?.conclusion === "failure" && notAtHead.concluded.output.summary.includes("FOUNDER_AUTHORITY_REQUIRED"));
+  const dirAtHead = await e2e({ci: green, verdictObj: verdict(), files: vFiles, diff: vDiff, contents: {...vCnt, [`${HEAD}:${NEWT}`]: {type: "dir", path: NEWT, size: 0}}});
+  made.push(dirAtHead);
+  check("E22j a head entry that is not a file does not prove the test exists => Founder", /needs_founder=true/.test(dirAtHead.out.scope.out) && dirAtHead.concluded?.conclusion === "failure");
   for (const x of made) fs.rmSync(x.dir, {recursive: true, force: true});
 }
 // fileText refuses anything but an exact, small, well-formed text blob of a candidate file.

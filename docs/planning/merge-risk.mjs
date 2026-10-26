@@ -29,7 +29,9 @@ export const HIGH_RISK_EXACT = Object.freeze(["package.json", "package-lock.json
 export const HIGH_RISK_PREFIXES = Object.freeze([".github/", "scripts/ci/", "scripts/run-validation.mjs", "scripts/validate-", "automation/lib/", "config/", "prompts/", "core/authority/",
   "core/sandbox/", "tsconfig", "vitest.config.", "docs/planning/merge-gate.", "docs/planning/merge-risk.", "docs/planning/pr-controller.", "tests/support/merge-risk",
   "tests/support/pr-controller"]);
-export const HIGH_RISK_PATTERNS = Object.freeze([/^docs\/planning\/[^/]+\.proof\.mjs$/, /^tests\/support\/[^/]*authority[^/]*\.cases\.ts$/]);
+// //TR: core/, apps/, scripts/ veya automation/ altında dosya ya da dizin adında "sandbox" geçen her yol (yeni bir sandbox uygulaması, örneğin core/agents/wsl-sandbox.ts veya bir sandbox/ dizini) güvenlik sınırıdır ve FOUNDER'dır; tests/ ve docs/ altı değildir.
+export const HIGH_RISK_PATTERNS = Object.freeze([/^docs\/planning\/[^/]+\.proof\.mjs$/, /^tests\/support\/[^/]*authority[^/]*\.cases\.ts$/,
+  /^(?:core|apps|scripts|automation)\/.*sandbox/]);
 // A deleted (or renamed-away) test file is a test removal: always FOUNDER.
 export const TEST_FILE_PATTERN = /^tests\/(?:[^/]+\/)*[^/]+\.test\.ts$/;
 export const RISK_TIERS = Object.freeze(["ROUTINE", "PREAUTHORIZED", "FOUNDER"]);
@@ -107,7 +109,8 @@ export function classifyChange(input) {
       if (!ci && !high && !prot) return {file, tier: "ROUTINE", code: "ROUTINE"};
       // Content-verified classes: exactly the class's target file, modified in place (never added, removed, renamed or copied), never a CI-executed path.
       if (f.status === "modified" && !hasPrev && !ci && Object.hasOwn(PREAUTHORIZED_CLASSES, f.filename)) return {file, tier: "PENDING", code: PREAUTHORIZED_CLASSES[f.filename], entry: f};
-      return founder(file, ci ? "CI_EXECUTED_PATH" : high ? "HIGH_RISK_PATH" : "PROTECTED_PATH");
+      // The same precedence as merge-gate's reasons: CI-executed, then protected, then high-risk only (so context.md and the check summary name the same code).
+      return founder(file, ci ? "CI_EXECUTED_PATH" : prot ? "PROTECTED_PATH" : "HIGH_RISK_PATH");
     });
     const evaluate = (x, extra) => {
       const {entry} = x;

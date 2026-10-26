@@ -147,6 +147,8 @@
     "docs/planning/merge-risk.proof.mjs",
     "docs/planning/pr-controller.mjs",
     "docs/planning/pr-controller.d.mts",
+    "docs/planning/pr-controller.proof.mjs",
+    "docs/planning/merge-gate.d.mts",
     "tests/review-governance.test.ts",
     "tests/support/autonomous-authority.cases.ts",
     "tests/support/merge-risk.cases.ts",

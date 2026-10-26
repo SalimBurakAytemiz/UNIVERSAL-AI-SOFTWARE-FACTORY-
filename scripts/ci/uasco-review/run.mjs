@@ -104,7 +104,7 @@ async function collect() {
   const ciLines = ev.checkRuns.map(c => `- ${c.name}: ${c.status}/${c.conclusion} on ${c.head_sha} (${c.workflowPath}, ${c.workflowRunEvent})`);
   // Per-file risk codes for the reviewer (fixed codes; the same classifier the gate used, on the same SHA-bound contents).
   const risk = classifyChange({files: ev.diffFiles.map(f => ({...f, baseText: ev.fileContents?.[f.filename]?.base ?? null, headText: ev.fileContents?.[f.filename]?.head ?? null})),
-    protectedPaths: ev.protectedPaths, headSha});
+    protectedPaths: ev.protectedPaths, headSha, headFiles: Array.isArray(ev.headFiles) ? ev.headFiles : []});
   const riskOf = i => risk.files[i]?.code ?? "FILE_ENTRY_MALFORMED";
   fs.writeFileSync(path.join(input, "context.md"), [`# Review input for PR #${n}`, "", `- head: ${headSha}`, `- base: ${ev.currentBaseSha}`, `- changed files: ${ev.diffFiles.length}`,
     `- diff truncated: ${diff.truncated}`, `- protected or CI-executed paths: ${pre.authority.length ? pre.authority.join(", ") : "none"}`,

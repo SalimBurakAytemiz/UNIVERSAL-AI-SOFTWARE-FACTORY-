@@ -1,7 +1,7 @@
 {
   "//TR": "Bu manifest normal feature build sırasında korunacak trust-root dosyalarının artifact-creation anındaki SHA-256 değerlerini taşır.",
   "schemaVersion": "1.0.0",
-  "generatedAt": "2026-10-26T08:00:07.123Z",
+  "generatedAt": "2026-10-26T09:27:24.339Z",
   "sealStatus": "SEALED",
   "files": [
     {
@@ -446,7 +446,7 @@
     },
     {
       "path": "config/protected-paths.json",
-      "sha256": "d602e6a787b5a0e0c55b4618fc68e16a74b4ac4080d98474f950e6ce8893204d"
+      "sha256": "b090291098f931b9155cb17bcc615e48e580252d48910edfed7a44a9c5f4907a"
     },
     {
       "path": "config/reviewer-execution-policy.json",
@@ -478,15 +478,15 @@
     },
     {
       "path": "core/authority/protected-change-grammar.d.mts",
-      "sha256": "6840e9b8452cc5e99d5008c378262d876ecd7c3c7ed4c70087a69f43dfa9240d"
+      "sha256": "e6600a4345e3eb1e89e8ede14bcb8efbca131a1bd7a74fb0a4294f520ca186a2"
     },
     {
       "path": "core/authority/protected-change-grammar.mjs",
-      "sha256": "b501fe9e881ac42f0ed64e3105f23be90769df48f93b7df5980f8549913990c1"
+      "sha256": "b5196255704341201e846fb860524203ae274e0b2cc5be3d7f800aa005336cf4"
     },
     {
       "path": "docs/authority-requests/COORD-TRANSITION-AUTONOMY.md",
-      "sha256": "0755e455e6044e31840db0e863f262da1de191eb4698229fbefc6721896b1a98"
+      "sha256": "83ee03b602d51da2c02b2c9d42d8af59922d997a8db2361cd6f5bea2cd94191a"
     },
     {
       "path": "docs/closure/MECHANICAL-CLOSURE-FIX-LEDGER.md",
@@ -494,11 +494,15 @@
     },
     {
       "path": "docs/governance/UASCO-INDEPENDENT-REVIEW.md",
-      "sha256": "e99e08d628f96cc68587d8514926520bf842c6a40d0d7c3f963bdd72679bb893"
+      "sha256": "00aba6de1ef7094e21ef32e52a948c9487a227f606801faa4580b685b436ecc3"
     },
     {
       "path": "docs/planning/MERGE_GATE.md",
-      "sha256": "06b9c770f35f2edf74a63a9522091e9163304f522888ca76bf997ac50bd0b954"
+      "sha256": "e4d5c8714cdd995f68aac121758dfd8ef7b4cb2fdbbbc9c256ecbc85fab73110"
+    },
+    {
+      "path": "docs/planning/merge-gate.d.mts",
+      "sha256": "f3c5a07ada57954a645d845548d199b69002ce7c941fdb89ca9a75e9b44ff596"
     },
     {
       "path": "docs/planning/merge-gate.mjs",
@@ -514,19 +518,23 @@
     },
     {
       "path": "docs/planning/merge-risk.mjs",
-      "sha256": "61f093e13ff30722b4a61a262c72595d542133fbaf1350a623f3003b67f81c38"
+      "sha256": "8953d1093f7fa1d0be1c84d8812f51ae4fa1ea628a6bdc682533849ebab0182f"
     },
     {
       "path": "docs/planning/merge-risk.proof.mjs",
-      "sha256": "2fe8210ec097818742d14a220ea98f87d3953b4d046109d3f215deed8164546c"
+      "sha256": "7a02079d19dfb39a2182df43eca6d58f706c22d6610f3ba9d5c9e8603c50a611"
     },
     {
       "path": "docs/planning/pr-controller.d.mts",
-      "sha256": "db930ea6bb43f9eb021f48253601a9c98a2e69f2567e9c3cef102cfd6065c69a"
+      "sha256": "7c97718671b810ffa8f261a3d202412afc3c159ca9ff35f25b35773f4a384a80"
     },
     {
       "path": "docs/planning/pr-controller.mjs",
-      "sha256": "4a35204f74662629167f4923b77dec157cb7fe613b2ab062f60b9b0f0b1050e8"
+      "sha256": "429934044c03a10fca007e58fbb3f527c3decc00adfc01caad8e2c149f6f635f"
+    },
+    {
+      "path": "docs/planning/pr-controller.proof.mjs",
+      "sha256": "25fcb495fef82c16b13434b02996d6885824074e8ca98bd873dd167788e1f06d"
     },
     {
       "path": "governance/accepted-debt.json",
@@ -1266,7 +1274,7 @@
     },
     {
       "path": "scripts/ci/uasco-review/github.mjs",
-      "sha256": "15036b13e7b4e4cd8d1623188352c057eec5667c1982225346345916a726b53f"
+      "sha256": "7b728d75907e8bfc09933039c408ca94270268947f3bed265495040883c8cbc0"
     },
     {
       "path": "scripts/ci/uasco-review/review-gate.mjs",
@@ -1274,11 +1282,11 @@
     },
     {
       "path": "scripts/ci/uasco-review/review-gate.proof.mjs",
-      "sha256": "c4e3078ff860f14280f89a7ff6e9ca94d765eaf3438e678fa48bbc11fc470a0a"
+      "sha256": "a302d15692f0b3e33f0e956f4edf3f161d1dedf23ec594ec7b286a66cf5a0a37"
     },
     {
       "path": "scripts/ci/uasco-review/run.mjs",
-      "sha256": "0ce7f3d67345274eb6cb37199a94d29aef66070d06ed597377723bc2624f0d3f"
+      "sha256": "2ebd462d53b8e249c8bf946bffb0083dd25b01ee7a90923fd68b9c75f7b26eb3"
     },
     {
       "path": "scripts/ci/uasco-review/verdict.schema.json",
@@ -1586,7 +1594,7 @@
     },
     {
       "path": "tests/support/merge-risk.cases.ts",
-      "sha256": "07ccdab817acb8f12ca0c405b38ff6bbef0a5633f387fc356816766ed96634e7"
+      "sha256": "1c3070037b2379935c6384219c2e50ff3301c45c877d0379eb90398d6e9bf250"
     },
     {
       "path": "tests/support/merge-risk.fixtures.json",
@@ -1594,7 +1602,7 @@
     },
     {
       "path": "tests/support/pr-controller.cases.ts",
-      "sha256": "f8bed0163f6b1e59074faf87333b6e3951f1f943301007df921849aff80049f8"
+      "sha256": "6e9e143aacbb06c178253eab334f78d75e8143e78a8c2c9c73017cc440ec53a2"
     },
     {
       "path": "tsconfig.json",

@@ -124,6 +124,30 @@ export async function candidateContents(gh, diffFiles, baseSha, headSha) {
   return out;
 }
 
+// //TR: config/validation.json'a yeni kaydedilen ve PR'ın kendisinin eklemediği bir test dosyası (#214 a4fb2ee gibi) ancak TAM head SHA'sında var olduğu kanıtlanırsa TEST_REGISTRATION_APPEND sınıfına girer: her aday için contents API'si ?ref=<head> ile tek istek (yalnız tür ve yol okunur), en çok 20 aday; hata, eksik dosya veya fazla aday = listede yok (FOUNDER, fail-closed).
+export const MAX_HEAD_FILE_LOOKUPS = 20;
+const REGISTERED_TEST_RE = /^tests\/[a-z0-9.-]+\.test\.ts$/;
+export async function fileExistsAt(gh, filePath, sha) {
+  if (!SHA_RE.test(String(sha)) || typeof filePath !== "string" || !REGISTERED_TEST_RE.test(filePath)) return false;
+  try {
+    const j = await gh.req("GET", `${r(gh)}/contents/${filePath.split("/").map(enc).join("/")}?ref=${sha}`);
+    return j?.type === "file" && j?.path === filePath && Number.isSafeInteger(j.size) && j.size >= 0;
+  } catch { return false; }
+}
+// The test files newly registered in the head's config/validation.json (in no step of the base) that exist at the exact head SHA.
+export async function registeredTestsAtHead(gh, fileContents, headSha) {
+  const c = fileContents?.["config/validation.json"];
+  if (!c || typeof c.base !== "string" || typeof c.head !== "string" || !SHA_RE.test(String(headSha))) return [];
+  let b, h;
+  try { b = JSON.parse(c.base); h = JSON.parse(c.head); } catch { return []; }
+  const args = j => new Set((Array.isArray(j?.steps) ? j.steps : []).flatMap(st => (Array.isArray(st?.command) ? st.command : [])).filter(x => typeof x === "string" && REGISTERED_TEST_RE.test(x)));
+  const before = args(b), added = [...args(h)].filter(t => !before.has(t));
+  if (added.length > MAX_HEAD_FILE_LOOKUPS) return [];
+  const out = [];
+  for (const t of added) if (await fileExistsAt(gh, t, headSha)) out.push(t);
+  return out;
+}
+
 // Every input the deterministic gate needs, in the shape docs/planning/merge-gate.mjs evaluates.
 export async function collectEvidence(gh, prNumber, {protectedPaths, checkRuns}) {
   const pr = await gh.req("GET", `${r(gh)}/pulls/${prNumber}`);
@@ -143,6 +167,7 @@ export async function collectEvidence(gh, prNumber, {protectedPaths, checkRuns})
   const files = diffFiles.map(f => ({filename: f.filename, status: f.status, ...(f.previous_filename ? {previous_filename: f.previous_filename} : {})}));
   // Contents are read at the base tip read above (the SHA the verdict is bound to) and at the PR head: the classified change is exactly "base tip -> head".
   const fileContents = await candidateContents(gh, files, baseRefObj?.object?.sha ?? null, pr.head?.sha ?? null);
+  const headFiles = await registeredTestsAtHead(gh, fileContents, pr.head?.sha ?? null);
   return {
     pr: {number: pr.number, state: pr.state, draft: pr.draft, merged: pr.merged, head: {sha: pr.head?.sha, ref: pr.head?.ref, repo: pr.head?.repo?.full_name ?? null},
       base: {ref: baseRef, sha: pr.base?.sha}, user: {login: pr.user?.login}, changed_files: pr.changed_files, commits: pr.commits},
@@ -150,7 +175,7 @@ export async function collectEvidence(gh, prNumber, {protectedPaths, checkRuns})
     checkRuns: checkRuns ?? await ciCheckRuns(gh, pr.head?.sha),
     reviews: reviews.map(x => ({id: x.id, user: {login: x.user?.login ?? null}, state: x.state, commit_id: x.commit_id, body: x.body ?? "", submitted_at: x.submitted_at})),
     issueComments: issueComments.map(x => ({body: x.body ?? "", user: {login: x.user?.login ?? null}})),
-    diffFiles: files, fileContents,
+    diffFiles: files, fileContents, headFiles,
     protectedPaths, rules, implementerSessions, commitShas, commitTrees,
   };
 }

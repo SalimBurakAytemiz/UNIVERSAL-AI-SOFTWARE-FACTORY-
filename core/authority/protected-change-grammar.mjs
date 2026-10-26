@@ -135,6 +135,23 @@ export function insertedLines(baseLines, headLines) {
   return j === baseLines.length ? added : null;
 }
 
+// //TR: server.ts satır düzeyinde ancak hiçbir yapı satırlar arasına yayılmıyorsa güvenle okunur: satır sonunda hâlâ açık bir şablon dizgisi (${...} içinden iç içe olanlar dahil), sondaki "\\" satır devamı veya satırlar arasında açılan/kapanan blok yorum. Böyle bir aralığa eklenen satır dizgi veya yorum içeriği olur; bu yüzden base veya head'de böyle bir satır varsa dosya bu sınıf için okunamaz (fail-closed). Tam satır "//" yorumları kod değildir ve sayılmaz (önceki her satır temiz bittiği için gerçekten yorumdurlar).
+function templateOpenAtEnd(l) {
+  const st = [];
+  for (let i = 0; i < l.length; i++) {
+    const c = l[i], top = st.at(-1);
+    if (top === "`") {
+      if (c === "\\") i++;
+      else if (c === "`") st.pop();
+      else if (c === "$" && l[i + 1] === "{") { st.push(0); i++; }
+    } else if (c === "`") st.push("`");
+    else if (typeof top === "number") { if (c === "{") st[st.length - 1]++; else if (c === "}") { if (top === 0) st.pop(); else st[st.length - 1]--; } }
+  }
+  return st.length > 0;
+}
+const blockCommentSpans = l => { const o = l.lastIndexOf("/*"), c = l.indexOf("*/"); return (o >= 0 && !l.slice(o + 2).includes("*/")) || (c >= 0 && !l.slice(0, c).includes("/*")); };
+export const serverLineSpans = l => !l.trim().startsWith("//") && (templateOpenAtEnd(l) || l.endsWith("\\") || blockCommentSpans(l));
+
 /**
  * //TR: ROUTE_REGISTRATION_APPEND dil bilgisi (apps/control-api/src/server.ts): yalnız eklenen satırlar; her biri route içe aktarma, core'dan adlandırılmış içe aktarma,
  * registerXxxRoutes(app,laneDeps); veya registerXxxRoutes(app,{...laneDeps,<yeni anahtar>:()=><güvenli ifade>}); ya da yönergesiz "// " yorumu / boş satırdır. Kayıt satırları
@@ -144,6 +161,7 @@ export function insertedLines(baseLines, headLines) {
 export function routeRegistrationViolations(baseText, headText) {
   if (typeof baseText !== "string" || typeof headText !== "string") return ["CONTENT_MISSING"];
   const base = splitLines(baseText), head = splitLines(headText);
+  if ([...base, ...head].some(serverLineSpans)) return ["SERVER_UNREADABLE"];
   const added = insertedLines(base, head);
   if (added === null) return ["NOT_PURELY_ADDITIVE"];
   if (added.length === 0) return ["NO_CHANGE"];

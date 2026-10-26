@@ -9,5 +9,6 @@ export declare function lazyExpressionOk(expr: unknown): boolean;
 export declare function safeExpression(expr: unknown): boolean;
 export declare function insertedLines(baseLines: string[], headLines: string[]): number[] | null;
 export declare function pathRegexBodyOk(body: unknown): boolean;
+export declare function serverLineSpans(line: string): boolean;
 export declare function routeRegistrationViolations(baseText: unknown, headText: unknown): string[];
 export declare function desktopAllowlistViolations(baseText: unknown, headText: unknown): string[];

