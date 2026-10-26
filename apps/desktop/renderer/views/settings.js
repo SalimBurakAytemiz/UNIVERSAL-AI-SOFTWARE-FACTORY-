@@ -1,4 +1,5 @@
 // //TR: Bu görünüm Ayarlar alanıdır (UX WP-SETTINGS): referans-sınıf premium, yalnız gerçek veriye bağlı dürüst bölümler — (1) Claude bağlantı durumu (iki ayrı UASCO profili: uygulayıcı + salt-okunur denetçi; CONNECTED yalnız gerçek giriş sinyalinden, K-1; aksi NOT_CONNECTED/NOT_VERIFIED), (2) Otonomi/yönetişim politikası SALT-OKUNUR gösterimi (Global Stop otonomi anahtarı ve fail-closed yürütme kapısı gerçek sinyallerden; korumalı politika Founder yönetiminde, burada DÜZENLENEMEZ), (3) Uygulama/sürüm + güvenlik duruşu (imzasız geliştirme yapısı, fail-closed kapı). Ayrıca mevcut dil/kısayol/AI yürütücüleri/yerel kimlik panelleri korunur. WP2 token/bileşenleri yeniden kullanılır; yalnız h()/textContent; durum/politika değeri asla uydurulmaz; hiçbir korumalı/yönetilen dosyayı yazan kontrol yoktur.
+import {setupCheckPanel} from "./setup-check.js";
 import {h,panel,stateNote,emptyNote,badge,statePill} from "../components.js";
 import {LANGS} from "../i18n.js";
 import {PILL_KINDS} from "../model.js";
@@ -134,6 +135,7 @@ export async function render(ctx){
   const sandbox=exec&&exec.state==="VERIFIED"?exec.sandbox:null;
   const langs=h(doc,"div",{class:"btn-row",role:"group","aria-label":ctx.t("settings.language")},LANGS.map(l=>h(doc,"button",{type:"button",class:"btn",dataset:{lang:l},"aria-pressed":ctx.i18n.lang===l?"true":"false",on:{click:()=>ctx.i18n.setLang(l)},text:ctx.t(`lang.${l}`)})));
   return h(doc,"div",{class:"view"},h(doc,"h1",{id:"view-title",tabindex:"-1",text:ctx.t("area.settings.title")}),
+    setupCheckPanel(ctx,exec),
     connectionPanel(ctx,exec),
     await executorsPanel(ctx),
     await routingPanel(ctx),

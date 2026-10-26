@@ -584,3 +584,132 @@ describe("PQ-005 provider & model routing view (read-only)", () => {
     for (const k of keys) expect(T[k], k).toBeTruthy();
   });
 });
+
+describe("LANE-A A-SETUP-1: 'Ready to build?' setup check (read-only, only what the app reports)", () => {
+  const PROV = "PROVIDER_PROVENANCE_NOT_READY";
+  const CMD = (r: string) => `$env:CLAUDE_CONFIG_DIR='C:\\Users\\f\\.uasco\\${r}'; claude`;
+  const role = (blockers: string[] = [], profile = "READY", r = "implementer", extra: any = {}) => ({ready: blockers.length === 0, blockers, blocker: blockers[0] ?? null, founderAction: "Found C:\\x\\claude.cmd", profile, loginCommand: CMD(r), loginHint: "free", ...extra});
+  const body = (over: any = {}) => ({executors: {LOCAL_CLAUDE: {state: "READY", cli: {state: "FOUND", path: "C:\\x\\claude.exe", kind: "EXECUTABLE"}, readiness: {implementer: role([]), reviewer: role([], "READY", "reviewer")}}, FAKE: {state: "TEST_ONLY"}},
+    active: {reason: "LOCAL_CLAUDE"}, sandbox: {state: "AVAILABLE", reason: null, detail: null, providerId: "wsl-unshare-v1"}, claudeProfiles: {implementer: {state: "READY", loginCommand: CMD("implementer")}, reviewer: {state: "READY", loginCommand: CMD("reviewer")}}, ...over});
+  const lc = (over: any, rd: any = undefined) => ({executors: {LOCAL_CLAUDE: {state: "READY", ...over, ...(rd !== undefined ? {readiness: rd} : {})}, FAKE: {state: "TEST_ONLY"}}});
+  const mapped = async (b: any) => (await load("project-core.js")).mapExecutors(b);
+  const rowsOf = async (b: any) => Object.fromEntries((await load("setup-check-core.js")).buildSetupChecks(await mapped(b)).rows.map((r: any) => [r.id, r]));
+  it("shows PASS for the five rows only when the app reports each one (the product bridge stays UNKNOWN until a real start)", async () => {
+    const c = await load("setup-check-core.js");
+    const res = c.buildSetupChecks(await mapped(body()));
+    expect(res.rows.map((r: any) => [r.id, r.state])).toEqual([["CLI", "PASS"], ["IMPLEMENTER", "PASS"], ["REVIEWER", "PASS"], ["SANDBOX", "PASS"], ["PRODUCT", "UNKNOWN"]]);
+    expect(res).toMatchObject({pass: 4, blocked: 0, unknown: 1, kind: "UNKNOWN", readable: true});
+    expect(res.rows[3].providerId).toBe("wsl-unshare-v1"); expect(res.rows[4].reasons).toEqual(["BRIDGE_NOT_TESTED"]);
+    expect(c.SETUP_ROWS).toEqual(["CLI", "IMPLEMENTER", "REVIEWER", "SANDBOX", "PRODUCT"]);
+    expect(c.ACCEPTANCE_COMMAND).toBe("node docs/acceptance/windows/founder-acceptance.mjs --distro Ubuntu");
+    for (const bad of [null, undefined, {state: "UNAVAILABLE", items: []}, {state: "ERROR", items: []}]) {
+      const u = c.buildSetupChecks(bad);
+      expect(u.rows.map((r: any) => r.state)).toEqual(Array(5).fill("UNKNOWN")); expect(u).toMatchObject({readable: false, pass: 0, blocked: 0, unknown: 5, kind: "UNKNOWN"}); expect(u.rows[0].reasons).toEqual(["EXECUTOR_STATUS_UNREADABLE"]);
+    }
+  });
+  it("Claude CLI row: a .cmd shim and a missing CLI are BLOCKED, launcher-proof problems are BLOCKED with their exact codes, missing data is UNKNOWN, never PASS", async () => {
+    const cli = async (c: any, rd: any = { implementer: role([]), reviewer: role([], "READY", "reviewer") }) => (await rowsOf({...body(), ...lc({cli: c}, rd), active: {reason: "LOCAL_CLAUDE"}})).CLI;
+    expect(await cli({state: "SHIM_UNSUPPORTED"})).toMatchObject({state: "BLOCKED", reasons: ["CLAUDE_CLI_SHIM_UNSUPPORTED"]});
+    expect(await cli({state: "NOT_FOUND"})).toMatchObject({state: "BLOCKED", reasons: ["CLAUDE_CLI_NOT_FOUND"]});
+    expect(await cli(undefined)).toMatchObject({state: "UNKNOWN", reasons: ["CLI_STATUS_NOT_REPORTED"]});
+    expect(await cli({state: "WEIRD"})).toMatchObject({state: "UNKNOWN"});
+    expect(await cli({state: "FOUND"}, null)).toMatchObject({state: "UNKNOWN", reasons: ["LAUNCHER_PROOF_NOT_REPORTED"]});
+    expect(await cli({state: "FOUND"}, { implementer: role([]), reviewer: null })).toMatchObject({state: "UNKNOWN"}); // one role unreadable -> not PASS
+    expect(await cli({state: "FOUND"}, { implementer: null, reviewer: role([], "READY", "reviewer") })).toMatchObject({state: "UNKNOWN", reasons: ["LAUNCHER_PROOF_NOT_REPORTED"]});
+    expect(await cli({state: "FOUND"}, { implementer: role(["PROVIDER_PROVENANCE_NOT_READY"]), reviewer: role(["PROVIDER_PROVENANCE_NOT_READY"], "READY", "reviewer") })).toMatchObject({state: "BLOCKED", reasons: ["PROVIDER_PROVENANCE_NOT_READY"]});
+    expect(await cli({state: "FOUND"}, { implementer: role([]), reviewer: role(["CLAUDE_LAUNCHER_PROVENANCE_CHANGED"], "READY", "reviewer") })).toMatchObject({state: "BLOCKED", reasons: ["CLAUDE_LAUNCHER_PROVENANCE_CHANGED"]});
+    expect(await cli({state: "FOUND"}, { implementer: role(["CLAUDE_PACKAGE_PROVENANCE_REQUIRED"]), reviewer: role(["CLAUDE_LAUNCHER_PROVENANCE_CHANGED"], "READY", "reviewer") })).toMatchObject({reasons: ["CLAUDE_PACKAGE_PROVENANCE_REQUIRED", "CLAUDE_LAUNCHER_PROVENANCE_CHANGED"]});
+    expect((await cli({state: "FOUND"}, { implementer: role(["CLAUDE_PROFILE_LOGIN_REQUIRED"], "LOGIN_REQUIRED"), reviewer: role([], "READY", "reviewer") })).state).toBe("PASS"); // a sign-in problem is not a CLI problem
+  });
+  it("sign-in rows: READY is PASS, LOGIN_REQUIRED / expired / REFUSED are BLOCKED with the Founder's own command as text, unknown or missing data is UNKNOWN", async () => {
+    const r = async (impl: any, rev: any, prof: any = undefined) => rowsOf({...body(), ...lc({cli: {state: "FOUND"}}, {implementer: impl, reviewer: rev}), claudeProfiles: prof});
+    const ok = role([], "READY", "reviewer");
+    const a = await r(role(["CLAUDE_PROFILE_LOGIN_REQUIRED"], "LOGIN_REQUIRED"), ok, {implementer: {state: "LOGIN_REQUIRED", loginCommand: CMD("implementer")}, reviewer: {state: "READY", loginCommand: CMD("reviewer")}});
+    expect(a.IMPLEMENTER).toMatchObject({state: "BLOCKED", reasons: ["CLAUDE_PROFILE_LOGIN_REQUIRED"], login: CMD("implementer")}); expect(a.REVIEWER).toMatchObject({state: "PASS", login: null});
+    const b = await r(role([], "READY"), role(["CLAUDE_PROFILE_LOGIN_EXPIRED"], "READY", "reviewer"));
+    expect(b.REVIEWER).toMatchObject({state: "BLOCKED", reasons: ["CLAUDE_PROFILE_LOGIN_EXPIRED"], login: CMD("reviewer")}); expect(b.IMPLEMENTER.state).toBe("PASS");
+    const c = await r(role(["CLAUDE_PROFILE_REFUSED:SETTINGS_NOT_WRITTEN"], "REFUSED", "implementer", {loginCommand: null}), ok);
+    expect(c.IMPLEMENTER).toMatchObject({state: "BLOCKED", reasons: ["CLAUDE_PROFILE_REFUSED:SETTINGS_NOT_WRITTEN"], login: null});
+    const d = await r(role([], "REFUSED", "implementer", {loginCommand: null}), ok, {implementer: {state: "REFUSED", reason: "PROFILE_DIR_FORBIDDEN"}, reviewer: {state: "READY"}});
+    expect(d.IMPLEMENTER).toMatchObject({state: "BLOCKED", reasons: ["CLAUDE_PROFILE_REFUSED:PROFILE_DIR_FORBIDDEN"]});
+    const e = await r(role([], "SOMETHING"), ok); expect(e.IMPLEMENTER).toMatchObject({state: "BLOCKED", reasons: ["CLAUDE_PROFILE_STATE:SOMETHING"]});
+    const f = await rowsOf({...body(), claudeProfiles: undefined, executors: {LOCAL_CLAUDE: {state: "READY", cli: {state: "FOUND"}}, FAKE: {state: "TEST_ONLY"}}}); // neither profiles nor readiness
+    expect(f.IMPLEMENTER).toMatchObject({state: "UNKNOWN", reasons: ["PROFILE_STATUS_NOT_REPORTED"]}); expect(f.REVIEWER.state).toBe("UNKNOWN");
+    const g = await rowsOf({...body(), executors: {LOCAL_CLAUDE: {state: "READY", cli: {state: "FOUND"}}, FAKE: {state: "TEST_ONLY"}}, claudeProfiles: {implementer: {state: "lowercase"}, reviewer: {state: "READY"}}});
+    expect(g.IMPLEMENTER).toMatchObject({state: "UNKNOWN", reasons: ["PROFILE_STATE_UNRECOGNISED"]}); expect(g.REVIEWER.state).toBe("PASS");
+    const h = await rowsOf({...body(), executors: {LOCAL_CLAUDE: {state: "READY", cli: {state: "FOUND"}}, FAKE: {state: "TEST_ONLY"}}}); // profiles alone are enough for PASS
+    expect(h.IMPLEMENTER.state).toBe("PASS");
+    const lp = await rowsOf({...body(), executors: {LOCAL_CLAUDE: {state: "READY", cli: {state: "FOUND"}}, FAKE: {state: "TEST_ONLY"}}, claudeProfiles: {implementer: {state: "LOGIN_REQUIRED", loginCommand: CMD("implementer")}, reviewer: {state: "READY"}}}); // no readiness reading
+    expect(lp.IMPLEMENTER).toMatchObject({state: "BLOCKED", reasons: ["CLAUDE_PROFILE_LOGIN_REQUIRED"], login: CMD("implementer")});
+  });
+  it("sandbox and product rows: AVAILABLE passes with the provider, UNAVAILABLE is BLOCKED with the exact reason and detail and blocks the product, a missing report is UNKNOWN", async () => {
+    const un = await rowsOf(body({sandbox: {state: "UNAVAILABLE", reason: "SANDBOX_UNAVAILABLE", detail: "SELF_TEST_FAILED", providerId: null}}));
+    expect(un.SANDBOX).toMatchObject({state: "BLOCKED", reasons: ["SANDBOX_UNAVAILABLE", "SELF_TEST_FAILED"], providerId: null}); expect(un.PRODUCT).toMatchObject({state: "BLOCKED", reasons: ["SANDBOX_UNAVAILABLE"]});
+    const nodetail = await rowsOf(body({sandbox: {state: "UNAVAILABLE", reason: null, detail: null}})); expect(nodetail.SANDBOX.reasons).toEqual(["SANDBOX_UNAVAILABLE"]);
+    const none = await rowsOf(body({sandbox: undefined}));
+    expect(none.SANDBOX).toMatchObject({state: "UNKNOWN", reasons: ["SANDBOX_STATUS_NOT_REPORTED"]}); expect(none.PRODUCT).toMatchObject({state: "UNKNOWN", reasons: ["SANDBOX_STATUS_NOT_REPORTED"]});
+    const weird = await rowsOf(body({sandbox: {state: "MAYBE"}})); expect(weird.SANDBOX.state).toBe("UNKNOWN");
+    const mixed = (await load("setup-check-core.js")).buildSetupChecks(await mapped({...body({sandbox: {state: "UNAVAILABLE", reason: "SANDBOX_UNAVAILABLE", detail: "NO_VERIFIED_PROVIDER"}}), executors: {LOCAL_CLAUDE: {state: "READY"}, FAKE: {state: "TEST_ONLY"}}})); // CLI row unknown + sandbox blocked
+    expect(mixed.unknown).toBeGreaterThan(0); expect(mixed.blocked).toBeGreaterThan(0); expect(mixed.kind).toBe("BLOCKED"); // a blocked row outranks unknown ones
+    const all5 = (await load("setup-check-core.js")).buildSetupChecks(await mapped(body({sandbox: {state: "UNAVAILABLE", reason: "SANDBOX_UNAVAILABLE", detail: "NO_VERIFIED_PROVIDER"}}))); expect(all5).toMatchObject({blocked: 2, pass: 3, kind: "BLOCKED"});
+  });
+  const panelFor = async (b: any, lang = "en") => {
+    const {ctx} = await mkCtx({}, lang); const m = await load("views", "setup-check.js");
+    return (await m.setupCheckPanel(ctx, b === null ? null : await mapped(b))) as N;
+  };
+  const rowNode = (root: N, id: string) => within(root).find(n => n.dataset.setupRow === id)!;
+  it("renders the five rows with states and exact reasons in plain words, the Founder's login command only as text, the acceptance command as text, and never a button that runs something", async () => {
+    const root = await panelFor(body({executors: {LOCAL_CLAUDE: {state: "CLI_NOT_FOUND", cli: {state: "SHIM_UNSUPPORTED", path: "C:\\x\\claude.cmd"}, readiness: {implementer: role(["CLAUDE_CLI_SHIM_UNSUPPORTED", "CLAUDE_PROFILE_LOGIN_REQUIRED"], "LOGIN_REQUIRED"), reviewer: role(["CLAUDE_CLI_SHIM_UNSUPPORTED"], "READY", "reviewer")}}, FAKE: {state: "TEST_ONLY"}},
+      claudeProfiles: {implementer: {state: "LOGIN_REQUIRED", loginCommand: CMD("implementer")}, reviewer: {state: "READY", loginCommand: CMD("reviewer")}}, sandbox: {state: "UNAVAILABLE", reason: "SANDBOX_UNAVAILABLE", detail: "SELF_TEST_ERROR", providerId: null}}));
+    expect(root.id).toBe("settings-setup");
+    expect(within(root).filter(n => n.dataset.setupRow).map(n => [n.dataset.setupRow, n.dataset.setupState])).toEqual([["CLI", "BLOCKED"], ["IMPLEMENTER", "BLOCKED"], ["REVIEWER", "PASS"], ["SANDBOX", "BLOCKED"], ["PRODUCT", "BLOCKED"]]);
+    const head = within(root).find(n => n.dataset.setupKind)!;
+    expect(head.dataset).toMatchObject({setupKind: "BLOCKED", setupPass: "1", setupBlocked: "4", setupUnknown: "0"}); expect(text(head)).toContain("1 of 5 checks pass, 4 blocked, 0 unknown");
+    expect(text(rowNode(root, "CLI"))).toContain("npm .cmd/.bat launcher"); expect(text(rowNode(root, "CLI"))).toContain("Install the native Claude Code CLI");
+    expect(text(rowNode(root, "IMPLEMENTER"))).toContain("not signed in"); expect(text(rowNode(root, "IMPLEMENTER"))).toContain("Sign in yourself");
+    const login = within(root).filter(n => n.dataset.setupLogin); expect(login.map(n => n.dataset.setupLogin)).toEqual(["IMPLEMENTER"]); expect(text(login[0])).toBe(CMD("implementer"));
+    expect(text(rowNode(root, "SANDBOX"))).toContain("No verified sandbox exists"); expect(text(rowNode(root, "SANDBOX"))).toContain("self-test could not run"); expect(text(rowNode(root, "SANDBOX"))).toContain("WSL2");
+    expect(text(rowNode(root, "PRODUCT"))).toContain("cannot run without a verified sandbox");
+    const kit = within(root).find(n => n.dataset.setupKit)!; expect(text(kit)).toBe("node docs/acceptance/windows/founder-acceptance.mjs --distro Ubuntu"); expect(kit.tagName).toBe("PRE");
+    expect(within(root).filter(n => n.tagName === "BUTTON" || n.tagName === "A").length).toBe(0); // nothing here runs or changes anything
+    expect(text(rowNode(root, "IMPLEMENTER"))).toContain("To sign in, run this command"); expect(text(rowNode(root, "REVIEWER"))).not.toContain("To sign in");
+    const fixOf = (id: string) => within(rowNode(root, id)).find(n => n.dataset.setupFix)?.dataset.setupFix ?? null;
+    expect([fixOf("CLI"), fixOf("IMPLEMENTER"), fixOf("REVIEWER"), fixOf("SANDBOX"), fixOf("PRODUCT")]).toEqual(["setup.fix.CLI.install", "setup.fix.profile.login", null, "setup.fix.SANDBOX", "setup.fix.PRODUCT.blocked"]); // a PASS row has no fix text
+    const badgeCls = (id: string) => String(within(rowNode(root, id)).find(n => String(n.className).split(" ").includes("badge"))!.className);
+    expect(badgeCls("REVIEWER")).toContain("badge-ok"); expect(badgeCls("CLI")).toContain("badge-risk"); expect(badgeCls("CLI")).not.toContain("badge-ok"); expect(badgeCls("REVIEWER")).not.toContain("badge-risk");
+    const refused = await panelFor(body({executors: {LOCAL_CLAUDE: {state: "READY", cli: {state: "FOUND"}, readiness: {implementer: role(["CLAUDE_PROFILE_REFUSED:SETTINGS_NOT_WRITTEN"], "REFUSED", "implementer", {loginCommand: null}), reviewer: role([PROV], "READY", "reviewer")}}, FAKE: {state: "TEST_ONLY"}}, claudeProfiles: undefined, sandbox: undefined}));
+    expect(text(within(refused).find(n => n.dataset.setupReason === "CLAUDE_PROFILE_REFUSED:SETTINGS_NOT_WRITTEN")!)).toContain("(SETTINGS_NOT_WRITTEN)");
+    expect(within(rowNode(refused, "IMPLEMENTER")).find(n => n.dataset.setupFix)!.dataset.setupFix).toBe("setup.fix.profile.refused");
+    expect(within(rowNode(refused, "CLI")).find(n => n.dataset.setupFix)!.dataset.setupFix).toBe("setup.fix.CLI.launcher");
+    expect(within(rowNode(refused, "SANDBOX")).find(n => n.dataset.setupFix)!.dataset.setupFix).toBe("setup.fix.UNKNOWN");
+    expect(String(within(rowNode(refused, "SANDBOX")).find(n => String(n.className).split(" ").includes("badge"))!.className)).not.toMatch(/badge-ok|badge-risk/); // UNKNOWN is neutral
+    expect(text(root)).not.toMatch(/claude\.cmd|C:\\x/); // the server's paths and free text are never shown
+  });
+  it("an all-PASS reading says so without claiming a verified product; unknown and unreadable readings never show PASS; unknown reasons stay raw and flagged", async () => {
+    const pass = await panelFor(body({sandbox: {state: "AVAILABLE", providerId: "wsl-unshare-v1"}}));
+    const errCtx = await mkCtx({}, "en"); const err = (await (await load("views", "setup-check.js")).setupCheckPanel(errCtx.ctx, null)) as N; expect(text(err)).toContain("Error"); // no reading at all is also UNKNOWN, with the generic error note
+    expect(within(pass).find(n => n.dataset.setupKind)!.dataset.setupKind).toBe("UNKNOWN"); // the bridge is untested
+    expect(text(rowNode(pass, "SANDBOX"))).toContain("wsl-unshare-v1"); expect(text(rowNode(pass, "PRODUCT"))).toContain("Start the product after a delivery");
+    expect(within(pass).some(n => n.dataset.setupLogin)).toBe(false);
+    const c = await load("setup-check-core.js");
+    const offCtx = await mkCtx({}, "en");
+    const off = (await (await load("views", "setup-check.js")).setupCheckPanel(offCtx.ctx, {state: "UNAVAILABLE", items: []})) as N;
+    expect(within(off).find(n => n.dataset.setupKind)!.dataset.setupKind).toBe("UNKNOWN"); expect(within(off).every(n => !n.dataset.setupState || n.dataset.setupState === "UNKNOWN")).toBe(true);
+    expect(text(off)).toContain("not available to the desktop"); expect(text(rowNode(off, "CLI"))).toContain("could not be read");
+    const odd = await panelFor(body({sandbox: {state: "UNAVAILABLE", reason: "SANDBOX_UNAVAILABLE", detail: "BRAND_NEW_DETAIL"}}));
+    expect(text(within(odd).find(n => n.dataset.setupReason === "BRAND_NEW_DETAIL")!)).toBe("BRAND_NEW_DETAIL (not recognised)");
+  });
+  it("is the first block of Settings, reads no extra path, and has complete Turkish text", async () => {
+    const {ctx, calls} = await mkCtx({}, "en"); const v = await load("views", "settings.js");
+    const root = (await v.render(ctx, ROUTE)) as N;
+    const idx = (id: string) => all(root).findIndex(n => n.id === id);
+    expect(idx("settings-setup")).toBeGreaterThan(-1); expect(idx("settings-setup")).toBeLessThan(idx("settings-connection"));
+    expect(new Set(calls)).toEqual(new Set(["/health", "/v1/adapters", "/v1/capabilities", "/v1/control/status", "/v1/factory", "/v1/system/executors"]));
+    const en = await load("locales", "en.js"), tr = await load("locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
+    const keys = Object.keys(E).filter(k => k.startsWith("setup."));
+    expect(keys.length).toBe(38);
+    for (const k of keys) expect(T[k], k).toBeTruthy();
+    const trRoot = await panelFor(body(), "tr");
+    expect(text(rowNode(trRoot, "CLI"))).toContain("Claude CLI (yerel kurulum)"); expect(text(trRoot)).toContain("Windows kabul denetimi");
+  });
+});
