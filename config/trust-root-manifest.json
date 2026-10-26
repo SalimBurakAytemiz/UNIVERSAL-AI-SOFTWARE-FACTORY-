@@ -1,7 +1,7 @@
 {
   "//TR": "Bu manifest normal feature build sırasında korunacak trust-root dosyalarının artifact-creation anındaki SHA-256 değerlerini taşır.",
   "schemaVersion": "1.0.0",
-  "generatedAt": "2026-10-26T02:43:01.069Z",
+  "generatedAt": "2026-10-26T04:20:28.866Z",
   "sealStatus": "SEALED",
   "files": [
     {
@@ -66,11 +66,11 @@
     },
     {
       "path": "apps/control-api/src/server.ts",
-      "sha256": "8992a8193226455f52397dd8fb76ce845a480c0ed33075b29ebc01047331dbb2"
+      "sha256": "c9e11e4d7e697050e8d347c7518c52f95e1bb580086e83b12e04e6db27a1f876"
     },
     {
       "path": "apps/desktop/main.mjs",
-      "sha256": "187368dc2286d3090138a28348d7085ec488aed84e6342e28cfe9e93c98dc2c6"
+      "sha256": "2851b0d51dcb5e100e620248e6c8aa272cd67d425c4290fa00b86aca90aeb4ad"
     },
     {
       "path": "apps/desktop/preload.mjs",
@@ -398,7 +398,7 @@
     },
     {
       "path": "config/automation.json",
-      "sha256": "cd55df1e52bfcf99cbb28d44eb472d3cdbfd66bb4aa687958fceecb51ab692f7"
+      "sha256": "1f26b273ccbd8eb41615f4bcf4850913a53f593d69d4904746736a011d4633c0"
     },
     {
       "path": "config/builder-execution-policy.json",
@@ -462,7 +462,7 @@
     },
     {
       "path": "config/validation.json",
-      "sha256": "d117b62df80dc291a9770dc964117b6608f572902df69d360c462b44b88ae0d1"
+      "sha256": "70980b61ef86dbda8d29cedf0a132c68629a36576f58cb345a288b6a83fa8d63"
     },
     {
       "path": "docs/closure/MECHANICAL-CLOSURE-FIX-LEDGER.md",
@@ -1258,7 +1258,7 @@
     },
     {
       "path": "scripts/phase0-acceptance.mjs",
-      "sha256": "b1823e9613a78fffd5bda87e452eb9d63b916e911e8b47ae4dba47c288c51ace"
+      "sha256": "f9cf047f0ed385d5febd90259b338c7252b4f606f9db57cfa3a0299e46e12664"
     },
     {
       "path": "scripts/preflight.mjs",
