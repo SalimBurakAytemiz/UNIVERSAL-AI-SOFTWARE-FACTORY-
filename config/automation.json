@@ -5,6 +5,7 @@
   "maxReviewCycles": 2,
   "maxMilestonesPerRun": 4,
   "maxParallelLanes": 1,
+  "//TR_maxParallelLanes": "Bu alan emekli V6 supervisor içindir ve V7 çalışma zamanında okunmaz. V7 eşzamanlılığı MissionRunner.maxConcurrentRuns ile belirlenir; üretimde değer şu an 1'dir (PAR-01).",
   "timeoutMs": 900000,
   "validationCommand": [
     "node",
@@ -52,7 +53,7 @@
     "requireCleanControlTree": true,
     "reviewBeforeMerge": true,
     "pushBeforeReview": false,
-    "defaultBranch": "main",
+    "defaultBranch": "v7/integration",
     "runBranchPrefix": "uasco/run/",
     "mergeStrategy": "LOCAL_FF_THEN_PUSH_IF_REMOTE",
     "verifyRemoteShaAfterPush": true,
