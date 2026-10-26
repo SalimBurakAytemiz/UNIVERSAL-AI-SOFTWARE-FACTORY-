@@ -2528,6 +2528,109 @@ describe("LANE-B control /health (server half only; Electron main-process handsh
   });
 });
 
+// //TR: API-001 (AUD-004) regresyonu: kontrol token kapısı varsayılan olarak reddeder ve ham URL önekine bakmaz. Yönlendiricinin /v1 route'una çözdüğü yüzde-kodlu, büyük harfli, çift eğik çizgili, nokta parçalı yollar ve HEAD/OPTIONS token'sız 403 (token yoksa 503) alır, hiçbir handler'a ulaşmaz ve iz bırakmaz (GLOBAL_STOP yok, intake yok, denetim kaydı yok); aynı istekler token'la eskisi gibi çalışır. Yalnız ham yolu tam "/health" olan istek açıktır; Host denetimi önce gelir.
+describe("API-001 (AUD-004): the control token gate denies by default, whatever the raw path looks like", () => {
+  const TOKEN = "k".repeat(32), HOST = "127.0.0.1:3210", H = {host: HOST}, T = {host: HOST, "x-uasco-control-token": TOKEN}, WRONG = {host: HOST, "x-uasco-control-token": "w".repeat(32)};
+  // Every one of these reaches (or is near) a /v1 route; the first six are decoded/normalised by the router to the real route.
+  const ROUTED = ["/%76%31/", "/%761/", "/v%31/", "/./v1/", "/v1/../v1/", "/%2e/v1/"], UNROUTED = ["/%76%31%2F", "/%76%31%2f", "/V1/", "//v1/", "/v1%2F", "/v1%2f", "/%2Fv1/", "/v1//"];
+  const PREFIXES = ["/v1/", ...ROUTED, ...UNROUTED];
+  const mk = (controlToken?: string) => {
+    const runtime = path.join(tmp, "runtime"); fs.mkdirSync(runtime, {recursive: true});
+    const o: Parameters<typeof buildServer>[0] = {runtime, dataDir: path.join(tmp, "data"), port: 3210, logger: false}; if (controlToken !== undefined) o.controlToken = controlToken;
+    return {runtime, app: buildServer(o)};
+  };
+  const traceFree = async (app: any, runtime: string) => {
+    expect(fs.existsSync(path.join(runtime, "GLOBAL_STOP.json")), "GLOBAL_STOP.json").toBe(false);
+    expect(fs.readdirSync(runtime), "runtime dir (no audit line either)").toEqual([]);
+    expect((await app.inject({method: "GET", url: "/v1/intakes", headers: T})).json()).toEqual({intakes: []});
+    expect((await app.inject({method: "GET", url: "/v1/projects", headers: T})).json()).toEqual({projects: []});
+  };
+
+  it("GET, HEAD and OPTIONS on every encoded, case, slash or dot variant of a /v1 read are 403 without a token or with a wrong one; with the token they answer exactly like the canonical path", async () => {
+    const {app} = mk(TOKEN);
+    try {
+      for (const p of PREFIXES) for (const res of ["projects", "intakes", "control/status"]) for (const method of ["GET", "HEAD", "OPTIONS"] as const) for (const headers of [H, WRONG]) {
+        const r = await app.inject({method, url: p + res, headers});
+        expect(r.statusCode, `${method} ${p}${res}`).toBe(403);
+        if (method !== "HEAD") expect(r.json(), `${method} ${p}${res}`).toEqual({error: "FORBIDDEN"});
+      }
+      for (const p of ["/v1/", ...ROUTED]) { const r = await app.inject({method: "GET", url: p + "projects", headers: T}); expect([r.statusCode, r.json()], p).toEqual([200, {projects: []}]); expect((await app.inject({method: "HEAD", url: p + "projects", headers: T})).statusCode, p).toBe(200); }
+      for (const p of UNROUTED) { const r = await app.inject({method: "GET", url: p + "projects", headers: T}); expect([r.statusCode, r.json()], p).toEqual([404, {error: "NOT_FOUND"}]); }
+    } finally { await app.close(); }
+  });
+
+  it("writes through any variant (Global Stop, resume, intake, JSON or a simple text/plain body) are refused before any handler and leave no trace; the same writes with the token still work", async () => {
+    const {app, runtime} = mk(TOKEN);
+    try {
+      for (const p of PREFIXES) for (const res of ["control/stop", "control/resume", "intakes"]) for (const headers of [H, WRONG]) {
+        for (const [ct, payload] of [["application/json", JSON.stringify({idea: "An app that tracks my daily reading with a streak counter", reason: "x"})], ["text/plain", "x"]] as const) {
+          const r = await app.inject({method: "POST", url: p + res, headers: {...headers, "content-type": ct}, payload});
+          expect([r.statusCode, r.json()], `POST ${p}${res} ${ct}`).toEqual([403, {error: "FORBIDDEN"}]);
+        }
+      }
+      await traceFree(app, runtime);
+      const i = await app.inject({method: "POST", url: "/%76%31/intakes", headers: T, payload: {idea: "An app that tracks my daily reading with a streak counter"}}); expect(i.statusCode, i.body).toBe(201);
+      const s = await app.inject({method: "POST", url: "/%76%31/control/stop", headers: T, payload: {reason: "authorised"}}); expect(s.statusCode, s.body).toBe(200);
+      expect(fs.existsSync(path.join(runtime, "GLOBAL_STOP.json"))).toBe(true);
+    } finally { await app.close(); }
+  });
+
+  it("with no token configured (option unset or empty) every path except the exact /health answers 503 CONTROL_TOKEN_NOT_CONFIGURED and nothing is written; /health answers with a null proof", async () => {
+    const saved = process.env.UASCO_CONTROL_TOKEN; delete process.env.UASCO_CONTROL_TOKEN;
+    try {
+      for (const token of [undefined, ""]) {
+        const {app, runtime} = mk(token);
+        try {
+          for (const url of [...PREFIXES.map(p => p + "projects"), "/nope", "/", "/%68ealth", "/health/", "/HEALTH", "//health"]) for (const method of ["GET", "HEAD", "OPTIONS"] as const) {
+            const r = await app.inject({method, url, headers: T});
+            expect(r.statusCode, `${String(token)} ${method} ${url}`).toBe(503);
+            if (method !== "HEAD") expect(r.json()).toEqual({error: "CONTROL_TOKEN_NOT_CONFIGURED"});
+          }
+          for (const p of PREFIXES) for (const res of ["control/stop", "intakes"]) expect((await app.inject({method: "POST", url: p + res, headers: {...H, "content-type": "text/plain"}, payload: "x"})).statusCode, `${p}${res}`).toBe(503);
+          expect(fs.readdirSync(runtime)).toEqual([]);
+          const h = await app.inject({method: "GET", url: "/health?challenge=" + "ab".repeat(32), headers: H}); expect([h.statusCode, h.json().controlProof]).toEqual([200, null]);
+        } finally { await app.close(); }
+      }
+    } finally { if (saved === undefined) delete process.env.UASCO_CONTROL_TOKEN; else process.env.UASCO_CONTROL_TOKEN = saved; }
+  });
+
+  it("only the exact /health path is open (GET and HEAD; the challenge proof is unchanged); near-misses, other methods and unknown paths need the token; the Host pin is checked first", async () => {
+    const {app} = mk(TOKEN), {controlChallengeProof} = await import("../automation/lib/control-boundary.mjs"), CH = "cd".repeat(32);
+    try {
+      const h = await app.inject({method: "GET", url: `/health?challenge=${CH}`, headers: H}); expect(h.statusCode).toBe(200); expect(h.json().controlProof).toBe((controlChallengeProof as (t: string, c: string) => string | null)(TOKEN, CH));
+      expect((await app.inject({method: "HEAD", url: "/health", headers: H})).statusCode).toBe(200);
+      for (const [method, url] of [["POST", "/health"], ["OPTIONS", "/health"], ["GET", "/%68ealth"], ["GET", "/health/"], ["GET", "/healthz"], ["GET", "/health/x"], ["GET", "/HEALTH"], ["GET", "//health"], ["GET", "/health%3Fchallenge=x"], ["GET", "/nope"], ["GET", "/"]] as const) {
+        const r = await app.inject({method, url, headers: H}); expect([r.statusCode, r.json()], `${method} ${url}`).toEqual([403, {error: "FORBIDDEN"}]);
+      }
+      expect((await app.inject({method: "GET", url: "/nope", headers: T})).json()).toEqual({error: "NOT_FOUND"}); // the error contract is unchanged once authorised
+      for (const url of ["/%76%31/projects", "/v1/projects", "/health"]) expect((await app.inject({method: "GET", url, headers: {host: "evil.example:3210"}})).statusCode, url).toBe(421);
+      const none = mk(""); try { expect((await none.app.inject({method: "GET", url: "/%76%31/projects", headers: {host: "127.0.0.1:1"}})).statusCode).toBe(421); } finally { await none.app.close(); }
+    } finally { await app.close(); }
+  });
+
+  it("over a real loopback socket (raw, un-normalised request targets incl. absolute-form) no variant reaches a handler without the token", async () => {
+    const [{default: http}, {default: net}] = await Promise.all([import("node:http"), import("node:net")]);
+    const port = await new Promise<number>((resolve, reject) => { const s = net.createServer(); s.once("error", reject); s.listen(0, "127.0.0.1", () => { const p = (s.address() as {port: number}).port; s.close(() => resolve(p)); }); });
+    const runtime = path.join(tmp, "runtime"); fs.mkdirSync(runtime, {recursive: true});
+    const app = buildServer({controlToken: TOKEN, runtime, dataDir: path.join(tmp, "data"), port, logger: false});
+    await app.listen({host: "127.0.0.1", port});
+    const send = (target: string, method: string, headers: Record<string, string> = {}) => new Promise<number>((resolve, reject) => {
+      const q = http.request({host: "127.0.0.1", port, method, path: target, headers: {host: `127.0.0.1:${port}`, ...(method === "POST" ? {"content-type": "text/plain"} : {}), ...headers}}, res => { res.resume(); res.on("end", () => resolve(res.statusCode ?? 0)); });
+      q.on("error", reject); q.end(method === "POST" ? "x" : undefined);
+    });
+    try {
+      for (const p of [...PREFIXES, `http://127.0.0.1:${port}/v1/`, `http://127.0.0.1:${port}/%76%31/`]) {
+        for (const method of ["GET", "HEAD", "OPTIONS"]) expect(await send(p + "projects", method), `${method} ${p}projects`).toBe(403);
+        expect(await send(p + "control/stop", "POST"), `POST ${p}control/stop`).toBe(403);
+        expect(await send(p + "intakes", "POST"), `POST ${p}intakes`).toBe(403);
+      }
+      expect(fs.existsSync(path.join(runtime, "GLOBAL_STOP.json"))).toBe(false); expect(fs.readdirSync(runtime)).toEqual([]);
+      expect(await send("/%76%31/projects", "GET", {"x-uasco-control-token": TOKEN})).toBe(200);
+      expect(await send("/health", "GET")).toBe(200);
+    } finally { await app.close(); }
+  });
+});
+
 // //TR: LANE-B G-FB-008/084/085/086: eski supervisor koşu okumalarının (GET /v1/runs, /events, /logs, /logs/:name) yol güvenliği işlevsel testi. Symlink senaryoları Windows'ta ayrıcalık isteyebileceğinden win32'de atlanır (görünür skip); diğer her senaryo iki işletim sisteminde de koşar.
 describe("LANE-B legacy run reads: path safety of /v1/runs events and logs", () => {
   const token = "r".repeat(32), HOST = "127.0.0.1:3210";
@@ -2968,6 +3071,79 @@ describe("LANE-B batch 4b: analysis routes and server registration", () => {
       for (const u of [`/v1/missions/${mid}/analysis/step`, `/v1/missions/${mid}/analysis/plan`, `/v1/work-runs/${RUN}/product/start`, `/v1/work-runs/${RUN}/product/stop`]) { const r = await call("POST", u); expect([r.statusCode, r.json()], u).toEqual([423, {error: "GLOBAL_STOP_ACTIVE"}]); }
       expect((await call("GET", `/v1/work-runs/${RUN}/product`)).json()).toEqual({error: "RUN_NOT_FOUND"}); // reads are not gated
     } finally { await app.close(); }
+  });
+});
+
+// //TR: COORD korumalı paket 4b kablolaması davranışla (gerçek buildServer): gerçek bir koşunun ürün okuması devrun görünümü döner (503 DEVRUN_NOT_WIRED değil); analiz builder'ı üretim sırasında Global Stop açılırsa adım 423 olur ve pre-dev dizisi açılmaz; app.close (preClose -> closing) çalışan ücretli builder çağrısını durdurur, kapanış builder zaman aşımını beklemez ve taslak kaydedilmez.
+describe("COORD batch 4b wiring through buildServer (behaviour, not source pins)", () => {
+  const token = "w".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
+  const IDEA = "A small web app where I can track my daily reading with a streak counter";
+  // A ready analysis setup: verified launcher provenance, both UASCO Claude profiles signed in, the CLI found (no real CLI is ever run: the builder is injected).
+  const readySetup = async (controlRoot: string, dataDir: string) => {
+    const {ensureClaudeProfile, claudeProfileDir} = await import("../core/workos/claude-profiles.js");
+    const launcher = path.join(tmp, "launcher.bin"); fs.writeFileSync(launcher, "bytes");
+    fs.mkdirSync(path.join(controlRoot, ".ai", "runtime"), {recursive: true});
+    fs.writeFileSync(path.join(controlRoot, ".ai", "runtime", "PROVIDER_PROVENANCE.json"), JSON.stringify({final: "PASS", claude: {provenanceLevel: "STANDALONE_LAUNCHER", resolvedPath: launcher, launcherSha256: crypto.createHash("sha256").update("bytes").digest("hex")}}));
+    for (const role of ["implementer", "reviewer"] as const) { ensureClaudeProfile(controlRoot, role, {forbiddenRoots: [dataDir]}); fs.writeFileSync(path.join(claudeProfileDir(controlRoot, role), ".credentials.json"), ""); }
+    return launcher;
+  };
+  const mkSrv = async (preDevBuilder?: () => any) => {
+    const runtime = path.join(tmp, "runtime"), controlRoot = path.join(tmp, "control"), dataDir = path.join(tmp, "data"); fs.mkdirSync(runtime, {recursive: true}); fs.mkdirSync(controlRoot, {recursive: true});
+    const launcher = await readySetup(controlRoot, dataDir);
+    const pair: any = {...new FakeExecutors({implement: () => ({files: {"feature.txt": "ok\n"}}), review: () => ({verdict: "CLEAN"})}).pair(), ...(preDevBuilder ? {preDevBuilder} : {})};
+    const app = buildServer({controlToken: token, runtime, dataDir, controlRoot, port: 3210, logger: false, executors: pair, executorSetup: {findClaudeCli: () => launcher}});
+    const call = (method: "GET" | "POST", url: string, payload: unknown = {}) => app.inject({method, url, headers: hdr, ...(method === "POST" ? {payload: payload as any} : {})});
+    const intake = async () => { const i = await call("POST", "/v1/intakes", {idea: IDEA}); expect(i.statusCode, i.body).toBe(201); return i.json().intake.missionId as string; };
+    return {app, call, intake, runtime, dataDir, stopFile: path.join(runtime, "GLOBAL_STOP.json")};
+  };
+  const auditEvents = (runtime: string) => fs.existsSync(path.join(runtime, "control-api-events.jsonl")) ? fs.readFileSync(path.join(runtime, "control-api-events.jsonl"), "utf8").split("\n").filter(Boolean).map(l => JSON.parse(l)) : [];
+
+  it("GET product for a real run answers the devrun view (the manager is wired, not 503 DEVRUN_NOT_WIRED); start refuses an undelivered run with 409", async () => {
+    const s = await mkSrv();
+    try {
+      const mid = await s.intake();
+      for (const to of ["PREFLIGHT", "AUTHORIZED"]) { const t = await s.call("POST", `/v1/missions/${mid}/transition`, {to, reason: "test"}); expect(t.statusCode, t.body).toBe(200); }
+      const run = await s.call("POST", `/v1/missions/${mid}/runs`, {}); expect(run.statusCode, run.body).toBe(201);
+      const runId: string = run.json().run.runId;
+      const g = await s.call("GET", `/v1/work-runs/${runId}/product`); expect(g.statusCode, g.body).toBe(200);
+      const p = g.json().product;
+      expect(p).toMatchObject({runId, deliveredHeadSha: null, tiedToThisRun: false}); expect(typeof p.devrun?.status).toBe("string"); expect(g.body).not.toContain("DEVRUN_NOT_WIRED");
+      const st = await s.call("POST", `/v1/work-runs/${runId}/product/start`); expect([st.statusCode, st.json().error]).toEqual([409, "PRODUCT_RUN_NOT_DELIVERABLE"]);
+    } finally { await s.app.close(); }
+  });
+
+  it("a counting pre-dev builder that sees Global Stop activated during produce: the step is 423, the builder ran exactly once, nothing was recorded and no pre-dev sequence was opened", async () => {
+    const {TASKHUB_ARTIFACTS} = await import("../core/workos/predev/fixtures/taskhub/index.js");
+    let stopFile = "";
+    const builder = {calls: 0, kinds: [] as string[], async produce(kind: string) { this.calls++; this.kinds.push(kind); fs.writeFileSync(stopFile, JSON.stringify({active: true, reason: "test", actor: "TEST"})); return JSON.stringify((TASKHUB_ARTIFACTS as any)[kind]); }};
+    const s = await mkSrv(() => builder); stopFile = s.stopFile;
+    try {
+      const mid = await s.intake();
+      const r = await s.call("POST", `/v1/missions/${mid}/analysis/step`); expect([r.statusCode, r.json()]).toEqual([423, {error: "GLOBAL_STOP_ACTIVE"}]);
+      expect(builder.calls).toBe(1); expect(builder.kinds).toEqual(["BusinessAnalysis"]);
+      expect((await s.call("GET", `/v1/predev/${mid}`)).json().predev.active).toBe(false);
+      expect(auditEvents(s.runtime).filter(e => e.event === "WORKOS_ANALYSIS_STEP").map(e => e.details?.status ?? e.status)).toEqual(["STOPPED"]);
+      expect((await s.call("POST", `/v1/missions/${mid}/analysis/step`)).statusCode).toBe(423); expect(builder.calls).toBe(1); // still stopped: the builder is not called again
+    } finally { await s.app.close(); }
+  });
+
+  it("app.close during a running paid analysis call stops it through the closing flag (not the builder timeout): the step answers 423, the call was aborted while Global Stop was off, and nothing is recorded", async () => {
+    let started!: () => void; const isStarted = new Promise<void>(r => { started = r; });
+    const builder: {shouldAbort?: () => boolean; calls: number; sawAbort: boolean; produce: (kind: string) => Promise<string>} = {shouldAbort: undefined, calls: 0, sawAbort: false, async produce() {
+      this.calls++; started();
+      const t0 = Date.now();
+      while (Date.now() - t0 < 8000) { if (this.shouldAbort?.()) { this.sawAbort = true; throw new Error("ABORTED_BY_SHOULD_ABORT"); } await new Promise(r => setTimeout(r, 10)); }
+      return JSON.stringify({});
+    }};
+    const s = await mkSrv(() => builder);
+    const mid = await s.intake();
+    const pending = s.call("POST", `/v1/missions/${mid}/analysis/step`);
+    await isStarted;
+    expect(fs.existsSync(s.stopFile)).toBe(false); expect(builder.shouldAbort?.()).toBe(false);
+    const t0 = Date.now(); await Promise.all([s.app.close(), pending.then(r => { expect([r.statusCode, r.json()]).toEqual([423, {error: "GLOBAL_STOP_ACTIVE"}]); })]);
+    expect(Date.now() - t0).toBeLessThan(4000); expect(builder.calls).toBe(1); expect(builder.sawAbort).toBe(true); expect(fs.existsSync(s.stopFile)).toBe(false);
+    expect(new WorkOsStore(s.dataDir).preDevReadModel({tenantId: "local"}, mid).active).toBe(false);
+    expect(auditEvents(s.runtime).filter(e => e.event === "WORKOS_ANALYSIS_STEP").map(e => e.details?.status ?? e.status)).toEqual(["STOPPED"]);
   });
 });
 

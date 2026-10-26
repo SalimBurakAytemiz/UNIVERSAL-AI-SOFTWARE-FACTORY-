@@ -1673,8 +1673,12 @@ describe("COORD first-delivery Desktop allow-list (main.mjs)", () => {
       expect(server.match(new RegExp(`${name}\\(app,`, "g"))?.length, name).toBe(1);
     }
     expect(server.match(/^import \{AnalysisFlow,NO_ANALYSIS_BUILDER,claudeAnalysisReadiness\} from "\.\.\/\.\.\/\.\.\/core\/workos\/crew\/analysis\.js";$/gm)?.length).toBe(1);
-    // The flow is built per request with the route's own Global Stop check (stopped) and the existing executor pair's pre-dev builder; the late-declared accessors are read lazily.
-    expect(server).toMatch(/registerPredevDecisionRoutes\(app,laneDeps\);\n\/\/ [^\n]*\nregisterAnalysisRoutes\(app,\{\.\.\.laneDeps,analysisFlow:\(stopped\)=>new AnalysisFlow\(\{store:getStore\(\),scope,builder:getExecutors\(\)\.pair\?\.preDevBuilder\?\.\(\)\?\?NO_ANALYSIS_BUILDER,readiness:\(\)=>claudeAnalysisReadiness\(\{controlRoot,profile:\{forbiddenRoots:\[getStore\(\)\.dataDir\]\},cli:getExecSetup\(\)\.cliStatus\(\)\}\),stopped\}\)\}\);\n\/\/ [^\n]*\nregisterProductRunRoutes\(app,\{\.\.\.laneDeps,devruns:\(\)=>getDevRuns\(\)\}\);\nregisterRoleStatusRoutes\(app,/);
+    // The flow is built per request with the route's own Global Stop check (stopped) combined with the server's closing flag, and the existing executor pair's pre-dev builder; the late-declared accessors are read lazily.
+    // The closing flag is declared once, before the lane registrations, and only a preClose hook sets it (app.close stops a running paid analysis call instead of waiting for its timeout).
+    expect(server.match(/^let closing=false;app\.addHook\("preClose",async\(\)=>\{closing=true\}\);$/gm)?.length).toBe(1);
+    expect(server.match(/\bclosing\s*=(?!=)/g)?.length).toBe(2);
+    expect(server.indexOf("let closing=false;")).toBeLessThan(server.indexOf("registerIntakeRoutes(app,laneDeps);"));
+    expect(server).toMatch(/registerPredevDecisionRoutes\(app,laneDeps\);\n\/\/ [^\n]*\nregisterAnalysisRoutes\(app,\{\.\.\.laneDeps,analysisFlow:\(stopped\)=>new AnalysisFlow\(\{store:getStore\(\),scope,builder:getExecutors\(\)\.pair\?\.preDevBuilder\?\.\(\)\?\?NO_ANALYSIS_BUILDER,readiness:\(\)=>claudeAnalysisReadiness\(\{controlRoot,profile:\{forbiddenRoots:\[getStore\(\)\.dataDir\]\},cli:getExecSetup\(\)\.cliStatus\(\)\}\),stopped:\(\)=>closing\|\|stopped\(\)\}\)\}\);\n\/\/ [^\n]*\nregisterProductRunRoutes\(app,\{\.\.\.laneDeps,devruns:\(\)=>getDevRuns\(\)\}\);\nregisterRoleStatusRoutes\(app,/);
   });
   it("server.ts registers the task-run link routes once, right after the task routes", () => {
     const server = fs.readFileSync(path.join(root, "apps", "control-api", "src", "server.ts"), "utf8");
@@ -2791,6 +2795,9 @@ describe("LANE-A A-FLOW-GAP-2: the Journey end to end (stateful fake server, rea
     expect(w.describePostResult({thrown: true, state: "OFFLINE"}).key).toBe("post.err.offline"); expect(w.describePostResult({thrown: true, state: "ERROR"}).key).toBe("post.err.generic");
     const srv = await mkServer(), c = await mkCtx({lang: "en", get: srv.get, post: srv.post});
     const raw = await c.ctx.api.raw(`/v1/work-runs/${IRUN}/product`); expect(raw.state).toBe("UNAVAILABLE"); // after 4b the path is admitted; this fake server answers 404 for it (productRoute off), which is UNAVAILABLE too
+    // end-to-end allow-list refusal leg: a run-scoped product path the desktop does NOT admit never reaches the fake server; the bridge refuses it (INVALID_API_PATH) and the read is UNAVAILABLE
+    const refused = await c.ctx.api.raw(`/v1/work-runs/${IRUN}/product/status`); expect(refused.state).toBe("UNAVAILABLE");
+    expect(srv.S.blocked).toEqual([`GET /v1/work-runs/${IRUN}/product/status`]); // the admitted product read above was not blocked; only the refused one is
     // product card: unavailable read -> one line and the Run tab button
     srv.S.project = {projectId: IPRJ, name: "P", tenantId: "t1", environmentId: "local", createdAt: "2026-10-26T05:00:00.000Z"}; srv.S.mission = {missionId: IMSN, projectId: IPRJ, title: "M", status: "PLANNED", riskLevel: "R1", createdAt: "2026-10-26T05:00:00.000Z"};
     srv.S.run = {runId: IRUN, missionId: IMSN, projectId: IPRJ, status: "AWAITING_APPROVAL", headSha: HEAD, startedAt: "2026-10-26T05:10:00.000Z", evidence: []};

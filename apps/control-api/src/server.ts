@@ -122,11 +122,12 @@ function startSupervisorDetached(){
   try{const child=cp.spawn(shell,["-NoProfile","-ExecutionPolicy","Bypass","-File",script],{cwd:process.cwd(),detached:true,stdio:"ignore",windowsHide:true,env});child.unref();return {started:true,pid:child.pid}}catch(e){return {started:false,reason:String((e as Error).message)}}
 }
 
+// //TR: API-001 (AUD-004): kontrol token kapısı varsayılan olarak reddeder ve ham URL önekine bakmaz (yönlendirici yüzde-kodlu yolları aynı route'a çözer). Host denetimi önce gelir; token'sız açık TEK istek ham yolu tam "/health" olan ve /health route'una eşleşendir (HEAD dahil). Geri kalan her yol (kodlu, büyük harfli, çift eğik çizgili, bilinmeyen/404, OPTIONS) token ister: token yapılandırılmamışsa 503, eksik/yanlışsa 403.
 app.addHook("onRequest",async(req,reply)=>{
   if(!hostHeaderAllowed(req.headers.host,port))return reply.code(421).send({error:"CONTROL_HOST_REJECTED"});
-  const pathname=req.url.split("?",1)[0];if(pathname==="/health")return;
-  if(pathname.startsWith("/v1/")&&!controlToken)return reply.code(503).send({error:"CONTROL_TOKEN_NOT_CONFIGURED"});
-  if(pathname.startsWith("/v1/")&&!tokenOk(req))return reply.code(403).send({error:"FORBIDDEN"});
+  const pathname=req.url.split("?",1)[0];if(pathname==="/health"&&req.routeOptions?.url==="/health")return;
+  if(!controlToken)return reply.code(503).send({error:"CONTROL_TOKEN_NOT_CONFIGURED"});
+  if(!tokenOk(req))return reply.code(403).send({error:"FORBIDDEN"});
 });
 
 app.get<{Querystring:{challenge?:string}}>("/health",async(req)=>({status:"HEALTHY",system:"UNIVERSAL-AI-SOFTWARE-COMPANY-OS",bindHost:"127.0.0.1",port,time:new Date().toISOString(),controlProof:controlChallengeProof(controlToken,String(req.query?.challenge??""))}));
@@ -260,6 +261,8 @@ app.post<{Params:{id:string}}>("/v1/missions/:id/transition",wos(async(req,reply
 // //TR: COORD-FIRST-DELIVERY-WIRING (Founder onayı 2026-10-21): ilk teslim zinciri route modülleri (intake, plan, akış, görev durumu) aynı global token hook'u, aynı yazma kapısı sırası (Global Stop 423 -> politika 403 -> şema 400), aynı tenant kapsamı ve aynı audit ile kaydedilir; yazma gövdeleri masaüstü köprüsüyle aynı 32 KB sınırındadır (LANE_WRITE_BODY_LIMIT).
 // //TR: LANE-B-knowledge-api: kanıt dizini tembel sarmalayıcıyla geçer (evidenceIndex aşağıda tanımlıdır; yalnız istek anında, buildServer bittikten sonra çağrılır).
 const laneDeps={getStore,scope,orgId,actor,audit,workosStopped,workosPolicy,workosFail,evidenceIndex:()=>evidenceIndex()};
+// //TR: COORD korumalı paket 4b: kapanış (app.close -> preClose) çalışan ücretli analiz builder çağrısını da durdurur; closing bayrağı analiz akışına verilen Global Stop denetimiyle birleştirilir (stopped:()=>closing||stopped()), böylece kapanış builder zaman aşımını beklemez, adım 423 ile biter ve taslak kaydedilmez.
+let closing=false;app.addHook("preClose",async()=>{closing=true});
 registerIntakeRoutes(app,laneDeps);
 registerPlanRoutes(app,laneDeps);
 registerFlowRoutes(app,laneDeps);
@@ -274,7 +277,7 @@ registerKnowledgeRoutes(app,laneDeps);
 registerAttentionRoutes(app,laneDeps);
 registerPredevDecisionRoutes(app,laneDeps);
 // //TR: COORD korumalı paket 4b (LANE-B-batch-4b): analiz akışı her istekte route'un verdiği Global Stop denetimiyle (stopped) kurulur. Builder mevcut yürütücü çiftinin preDevBuilder'ıdır: ÜCRETLİ yerel Claude çağrısı yalnız Founder LOCAL_CLAUDE'u etkinleştirmiş, provenance geçerli ve hazırlık (rol bağı, CLI, iki profil oturumu) tamamken Founder'ın tıklamasıyla yapılır; aksi halde NO_ANALYSIS_BUILDER ya da ücretsiz BLOCKED. getExecutors/getExecSetup/controlRoot aşağıda tanımlıdır; geçici ölü bölgeye (TDZ) düşmemek için hepsi istek anında tembel okunur.
-registerAnalysisRoutes(app,{...laneDeps,analysisFlow:(stopped)=>new AnalysisFlow({store:getStore(),scope,builder:getExecutors().pair?.preDevBuilder?.()??NO_ANALYSIS_BUILDER,readiness:()=>claudeAnalysisReadiness({controlRoot,profile:{forbiddenRoots:[getStore().dataDir]},cli:getExecSetup().cliStatus()}),stopped})});
+registerAnalysisRoutes(app,{...laneDeps,analysisFlow:(stopped)=>new AnalysisFlow({store:getStore(),scope,builder:getExecutors().pair?.preDevBuilder?.()??NO_ANALYSIS_BUILDER,readiness:()=>claudeAnalysisReadiness({controlRoot,profile:{forbiddenRoots:[getStore().dataDir]},cli:getExecSetup().cliStatus()}),stopped:()=>closing||stopped()})});
 // //TR: COORD korumalı paket 4b (LANE-B-devrun-bridge B-RUN-1): ürün çalıştırma teslim kaydına bağlıdır (sandbox + tek port 127.0.0.1 köprüsü); getDevRuns aşağıda tanımlıdır ve istek anında tembel okunur. restart route'u yoktur.
 registerProductRunRoutes(app,{...laneDeps,devruns:()=>getDevRuns()});
 registerRoleStatusRoutes(app,{...laneDeps,repoRoot});
