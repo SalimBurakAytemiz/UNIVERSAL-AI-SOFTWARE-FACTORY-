@@ -9,8 +9,8 @@ import {briefFromRecords} from "../predev/brief.js";
 import {PreDevDriver, PreDevDriverError} from "../predev/driver.js";
 import {composeRolePrompt} from "../predev/role-prompts.js";
 import type {BuilderPort} from "../predev/driver.js";
-import type {ArchitectureContent, ArtifactKind, PlanContent, RequirementsContent, WorkPackage} from "../predev/types.js";
-import {PRE_DEV_ROLE_MAP} from "../predev/types.js";
+import type {ArchitectureContent, ArtifactKind, PlanContent, PreDevPhase, RequirementsContent, WorkPackage} from "../predev/types.js";
+import {PHASE_ARTIFACT_KIND, PRE_DEV_ROLE_MAP} from "../predev/types.js";
 import {PREDEV_KIND_FUNCTION} from "../predev/claude-builder.js";
 import {PlanError, submitPlan, validatePlanCreate} from "../plan.js";
 import type {PlanInput} from "../plan.js";
@@ -147,8 +147,22 @@ export class AnalysisFlow {
     return pending ? {status: "AWAITING_APPROVAL", kind: pending, artifactId: rm.artifacts[pending].artifactId!, artifactState: rm.artifacts[pending].state as "DRAFT" | "SUBMITTED", next: "FOUNDER_APPROVAL"} : null;
   }
 
+  // //TR: #229 yeniden-doğrulama F1: sürücü O ANKİ fazın türünü üretir (produceCurrentPhase). Faz, sıradaki analiz türüyle (ilk APPROVED olmayan) örtüşmüyorsa (tipik hâl: artefakt APPROVED yazıldı ama ilerleme yazımı ENOSPC/çökmeyle kayboldu; ya da dizi tutarsız) ücretli çağrı yapılsa çıktısı sürücüde atılırdı: ÜCRETLİ ÇAĞRIDAN ÖNCE tipli bir BLOCKED döner, hiçbir şey çağrılmaz/yazılmaz. Devam, Founder'ın onayıyla (approveAndAdvance'ın devam yolu) olur. Dizi hiç açılmamışsa ya da AUTHORIZED'daysa (start tamamlar) engel yoktur.
+  private phaseNotAdvanced(rm: ReturnType<WorkOsStore["preDevReadModel"]>): AnalysisStep | null {
+    if (!rm.active || rm.phase === "AUTHORIZED") return null;
+    const next = ANALYSIS_KINDS.find(k => rm.artifacts[k].state !== "APPROVED");
+    const current = PHASE_ARTIFACT_KIND[rm.phase as PreDevPhase];
+    if (current !== undefined && current === next) return null;
+    const approvedStuck = current !== undefined && rm.artifacts[current].state === "APPROVED";
+    return blockedStep("ANALYSIS_PHASE_NOT_ADVANCED", approvedStuck
+      ? `The ${current} artefact is already approved but the pre-dev phase (${rm.phase}) did not advance (an interrupted approval). Approve it again: the approval resumes the advance. No new draft is produced until then.`
+      : `The pre-dev phase (${rm.phase}) does not match the next analysis step (${next ?? "none"}). Nothing was produced; the sequence needs the Founder's attention before the analysis can continue.`);
+  }
+
   private async produceStep(driver: PreDevDriver, missionId: string, rm: ReturnType<WorkOsStore["preDevReadModel"]>): Promise<AnalysisStep> {
     const scope = this.d.scope;
+    const stuck = this.phaseNotAdvanced(rm);
+    if (stuck) return stuck;
     const readiness = this.d.readiness();
     if (!readiness.ready) return {status: "BLOCKED", blocker: readiness.blocker ?? "ANALYSIS_NOT_READY", blockers: readiness.blockers, founderAction: readiness.founderAction, readiness};
     if (this.d.stopped?.()) throw new AnalysisStoppedError();
