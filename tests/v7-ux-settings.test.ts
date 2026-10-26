@@ -1,9 +1,13 @@
 // //TR: Bu test UX WP-SETTINGS Ayarlar görünümünü (apps/desktop/renderer/views/settings.js) ve saf yardımcılarını doğrular: (1) Claude bağlantı durumu yalnız gerçek giriş sinyalinden türetilir — profil READY ise CONNECTED, LOGIN_REQUIRED/REFUSED ise NOT_CONNECTED, bilinmeyen/eksikse NOT_VERIFIED; gerçek giriş sinyali olmadan CONNECTED ASLA gösterilmez (K-1); arka uç yok/doğrulanmamışsa dürüst UNAVAILABLE ve hiçbir yerde "Connected" yazmaz. (2) Otonomi/yönetişim bölümü SALT-OKUNUR'dur: Global Stop otonomi anahtarı ve fail-closed yürütme kapısı gerçek sinyallerden gelir; korumalı politika yüzeye açılmaz, burada düzenlenemez ve bu bölümde HİÇBİR form kontrolü (input/select/textarea/button) yoktur — hiçbir yönetilen/korumalı dosya yazılmaz. (3) Uygulama/güvenlik duruşu /health kimliği + /v1/factory build alanlarından SIKI doğrulamayla okunur, uyumsuz değer "—" olur (uydurma yok). Ayarlar yalnız zaten allow-list'li GET'leri (/v1/system/executors, /v1/control/status, /health, /v1/factory) okur; yeni GET eklenmez (main.mjs EXTRA_GET_ROUTES değişmez). settings.conn/gov/app sözlüğü EN/TR'de birebirdir.
-import {describe, it, expect} from "vitest";
+import {describe, it, expect, afterAll} from "vitest";
 import fs from "node:fs";
+import os from "node:os";
+import crypto from "node:crypto";
 import path from "node:path";
 import {pathToFileURL} from "node:url";
 import {desktopGetPathAllowed} from "../automation/lib/control-boundary.mjs";
+import {claudeProfileDir, ensureClaudeProfile} from "../core/workos/claude-profiles.js";
+import {ExecutorSetup} from "../core/workos/executor-setup.js";
 
 const root = path.resolve(__dirname, "..");
 const rend = path.join(root, "apps", "desktop", "renderer");
@@ -768,9 +772,119 @@ describe("LANE-A A-SETUP-1: 'Ready to build?' setup check (read-only, only what 
     expect(new Set(calls)).toEqual(new Set(["/health", "/v1/adapters", "/v1/capabilities", "/v1/control/status", "/v1/factory", "/v1/system/executors"]));
     const en = await load("locales", "en.js"), tr = await load("locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
     const keys = Object.keys(E).filter(k => k.startsWith("setup."));
-    expect(keys.length).toBe(49); expect(E["setup.reason.PROVENANCE_MISSING"]).toBeTruthy();
+    expect(keys.length).toBe(52); expect(E["setup.reason.PROVENANCE_MISSING"]).toBeTruthy();
     for (const k of keys) expect(T[k], k).toBeTruthy();
     const trRoot = await panelFor(body(), "tr");
     expect(text(rowNode(trRoot, "CLI"))).toContain("Claude CLI (yerel kurulum)"); expect(text(trRoot)).toContain("Windows kabul denetimi");
+  });
+});
+
+// LANE-A A-SETUP-FIX-1: the CLI row only ever carries CLI/launcher codes. Every body here is a REAL ExecutorSetup.status() (JSON round-tripped like the wire) -> mapExecutors -> the setup-check panel.
+describe("LANE-A A-SETUP-FIX-1: EXECUTOR_NOT_ENABLED and package-provenance codes on the setup check's CLI row", () => {
+  const REPO = path.resolve(__dirname, "..");
+  const dirs: string[] = [];
+  const mkSetup = () => {
+    const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-setupfix-")); dirs.push(tmp);
+    const repoRoot = path.join(tmp, "app"), controlRoot = path.join(tmp, "control"), dataDir = path.join(tmp, "data");
+    fs.mkdirSync(path.join(repoRoot, "config"), {recursive: true}); fs.copyFileSync(path.join(REPO, "config", "environment-policy.json"), path.join(repoRoot, "config", "environment-policy.json"));
+    const files = ["C:\\n\\claude.exe"];
+    const setup = new ExecutorSetup({repoRoot, controlRoot, dataDir, envPolicyFile: path.join(repoRoot, "config", "environment-policy.json"), platform: "win32", env: {Path: "C:\\n", UserProfile: "C:\\Users\\f", AppData: "C:\\Users\\f\\AppData\\Roaming"}, isFile: (f: string) => files.includes(f)});
+    return {tmp, controlRoot, dataDir, setup};
+  };
+  const prov = (controlRoot: string, claude: any) => { fs.mkdirSync(path.join(controlRoot, ".ai", "runtime"), {recursive: true}); fs.writeFileSync(path.join(controlRoot, ".ai", "runtime", "PROVIDER_PROVENANCE.json"), JSON.stringify({final: "PASS", capturedAt: "2026-10-26T00:00:00.000Z", claude})); };
+  const sha = (f: string) => crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
+  const signIn = (controlRoot: string, dataDir: string, roles: Array<"implementer" | "reviewer">) => { for (const r of roles) { ensureClaudeProfile(controlRoot, r, {forbiddenRoots: [dataDir]}); fs.writeFileSync(path.join(claudeProfileDir(controlRoot, r), ".credentials.json"), ""); } };
+  const launcherOf = (tmp: string) => { const f = path.join(tmp, "claude-launcher.bin"); fs.writeFileSync(f, "x"); return f; };
+  const wire = (setup: ExecutorSetup, mutate?: (b: any) => void) => {
+    const b = JSON.parse(JSON.stringify({executors: setup.status(), active: {reason: "EXECUTOR_NOT_CONFIGURED"}, sandbox: {state: "AVAILABLE", reason: null, detail: null, providerId: "wsl-unshare-v1"}})); mutate?.(b); return b;
+  };
+  const mapped = async (b: any) => (await load("project-core.js")).mapExecutors(b);
+  const panelFor = async (b: any, lang = "en") => { const {ctx} = await mkCtx({}, lang); return (await (await load("views", "setup-check.js")).setupCheckPanel(ctx, await mapped(b))) as N; };
+  const rowNode = (root: N, id: string) => within(root).find(n => n.dataset.setupRow === id)!;
+  const reasonsOf = (root: N, id: string) => within(rowNode(root, id)).filter(n => n.dataset.setupReason).map(n => n.dataset.setupReason);
+  const fixOf = (root: N, id: string) => within(rowNode(root, id)).find(n => n.dataset.setupFix)?.dataset.setupFix ?? null;
+  const stateOf = (root: N, id: string) => rowNode(root, id).dataset.setupState;
+  afterAllCleanup();
+  function afterAllCleanup() { afterAll(() => { for (const d of dirs) fs.rmSync(d, {recursive: true, force: true}); }); }
+
+  it("A: CLI found + launcher verified + both roles signed in + executor NOT enabled -> CLI PASS; the executor blocker sits on the EXECUTOR row only, with the enable fix", async () => {
+    const {tmp, controlRoot, dataDir, setup} = mkSetup(); const l = launcherOf(tmp);
+    prov(controlRoot, {provenanceLevel: "STANDALONE_LAUNCHER", resolvedPath: l, launcherSha256: sha(l), version: "9.9.9"}); signIn(controlRoot, dataDir, ["implementer", "reviewer"]);
+    const b = wire(setup);
+    expect(b.executors.LOCAL_CLAUDE.readiness.implementer.blockers).toEqual(["EXECUTOR_NOT_ENABLED"]); // the real server shape that caused F1
+    const root = await panelFor(b);
+    expect(stateOf(root, "CLI")).toBe("PASS"); expect(reasonsOf(root, "CLI")).toEqual([]); expect(fixOf(root, "CLI")).toBeNull();
+    expect(text(rowNode(root, "CLI"))).not.toMatch(/Install the native|not enabled/);
+    expect(stateOf(root, "EXECUTOR")).toBe("BLOCKED"); expect(reasonsOf(root, "EXECUTOR")).toEqual(["EXECUTOR_NOT_ENABLED"]); expect(fixOf(root, "EXECUTOR")).toBe("setup.fix.EXECUTOR");
+    expect(text(rowNode(root, "EXECUTOR"))).toContain("Local Claude is not enabled"); expect(text(rowNode(root, "EXECUTOR"))).toContain("Press Enable");
+    expect(stateOf(root, "IMPLEMENTER")).toBe("PASS"); expect(stateOf(root, "REVIEWER")).toBe("PASS");
+    const tr = await panelFor(b, "tr"); expect(stateOf(tr, "CLI")).toBe("PASS"); expect(reasonsOf(tr, "EXECUTOR")).toEqual(["EXECUTOR_NOT_ENABLED"]);
+  });
+
+  it("A': the same with the reviewer not signed in -> CLI still PASS, REVIEWER carries its own sign-in blocker, EXECUTOR keeps the enable blocker", async () => {
+    const {tmp, controlRoot, dataDir, setup} = mkSetup(); const l = launcherOf(tmp);
+    prov(controlRoot, {provenanceLevel: "STANDALONE_LAUNCHER", resolvedPath: l, launcherSha256: sha(l), version: "9.9.9"}); signIn(controlRoot, dataDir, ["implementer"]);
+    const b = wire(setup);
+    expect(b.executors.LOCAL_CLAUDE.readiness.reviewer.blockers).toEqual(["CLAUDE_PROFILE_LOGIN_REQUIRED", "EXECUTOR_NOT_ENABLED"]);
+    const root = await panelFor(b);
+    expect([stateOf(root, "CLI"), stateOf(root, "EXECUTOR"), stateOf(root, "IMPLEMENTER"), stateOf(root, "REVIEWER")]).toEqual(["PASS", "BLOCKED", "PASS", "BLOCKED"]);
+    expect(reasonsOf(root, "CLI")).toEqual([]); expect(reasonsOf(root, "REVIEWER")).toEqual(["CLAUDE_PROFILE_LOGIN_REQUIRED"]); expect(reasonsOf(root, "EXECUTOR")).toEqual(["EXECUTOR_NOT_ENABLED"]);
+  });
+
+  it("B: CLAUDE_PACKAGE_PROVENANCE_CHANGED -> CLI BLOCKED with its own text and the launcher-family fix (never 'not recognised', never the install text), en + tr", async () => {
+    const {tmp, controlRoot, dataDir, setup} = mkSetup(); const l = launcherOf(tmp), pj = path.join(tmp, "package.json"); fs.writeFileSync(pj, "{}");
+    prov(controlRoot, {provenanceLevel: "FULL_PACKAGE", resolvedPath: l, launcherSha256: sha(l), packageJsonPath: pj, packageJsonSha256: "0".repeat(64), version: "9.9.9"}); signIn(controlRoot, dataDir, ["implementer", "reviewer"]);
+    const b = wire(setup);
+    expect(b.executors.LOCAL_CLAUDE.readiness.implementer.blockers).toEqual(["CLAUDE_PACKAGE_PROVENANCE_CHANGED", "EXECUTOR_NOT_ENABLED"]);
+    for (const lang of ["en", "tr"]) {
+      const root = await panelFor(b, lang), cli = rowNode(root, "CLI");
+      expect(stateOf(root, "CLI")).toBe("BLOCKED"); expect(reasonsOf(root, "CLI")).toEqual(["CLAUDE_PACKAGE_PROVENANCE_CHANGED"]); expect(fixOf(root, "CLI")).toBe("setup.fix.CLI.launcher");
+      expect(text(cli)).not.toMatch(/not recognised|tanınmadı/); expect(text(cli)).not.toMatch(/Install the native|yerel Claude Code CLI'yi kurun/);
+      expect(reasonsOf(root, "EXECUTOR")).toEqual(["EXECUTOR_NOT_ENABLED"]);
+      if (lang === "en") { expect(text(cli)).toContain("package changed after it was verified"); expect(text(cli)).toContain("Enable Local Claude"); }
+    }
+    expect(reasonsOf(await panelFor(wire(setup, x => { for (const r of ["implementer", "reviewer"]) x.executors.LOCAL_CLAUDE.readiness[r].blockers = ["CLAUDE_LAUNCHER_PROVENANCE_CHANGED", "EXECUTOR_NOT_ENABLED"]; })), "CLI")).toEqual(["CLAUDE_LAUNCHER_PROVENANCE_CHANGED"]); // the sibling code keeps the same family
+  });
+
+  it("C: an unknown CLI code stays honestly 'not recognised' but never gets the install fix (neutral fix text instead); the real install codes still do", async () => {
+    const {tmp, controlRoot, dataDir, setup} = mkSetup(); const l = launcherOf(tmp);
+    prov(controlRoot, {provenanceLevel: "STANDALONE_LAUNCHER", resolvedPath: l, launcherSha256: sha(l), version: "9.9.9"}); signIn(controlRoot, dataDir, ["implementer", "reviewer"]);
+    const unk = await panelFor(wire(setup, b => { b.executors.LOCAL_CLAUDE.readiness.implementer.blockers = ["BRAND_NEW_CLI_CODE", "EXECUTOR_NOT_ENABLED"]; b.executors.LOCAL_CLAUDE.readiness.implementer.blocker = "BRAND_NEW_CLI_CODE"; }));
+    expect(stateOf(unk, "CLI")).toBe("BLOCKED"); expect(reasonsOf(unk, "CLI")).toEqual(["BRAND_NEW_CLI_CODE"]); expect(fixOf(unk, "CLI")).toBe("setup.fix.CLI.unknownCode");
+    expect(text(within(unk).find(n => n.dataset.setupReason === "BRAND_NEW_CLI_CODE")!)).toBe("BRAND_NEW_CLI_CODE (not recognised)"); expect(text(rowNode(unk, "CLI"))).not.toContain("Install the native");
+    for (const code of ["PROVIDER_PROVENANCE_NOT_READY", "CLAUDE_PACKAGE_PROVENANCE_REQUIRED", "CLAUDE_LAUNCHER_PROVENANCE_CHANGED", "CLAUDE_PACKAGE_PROVENANCE_CHANGED"]) { // all four launcher-family codes get the launcher fix
+      const r = await panelFor(wire(setup, b => { for (const x of ["implementer", "reviewer"]) { b.executors.LOCAL_CLAUDE.readiness[x].blockers = [code, "EXECUTOR_NOT_ENABLED"]; b.executors.LOCAL_CLAUDE.readiness[x].blocker = code; } }));
+      expect(fixOf(r, "CLI"), code).toBe("setup.fix.CLI.launcher"); expect(reasonsOf(r, "CLI")).toEqual([code]);
+    }
+    for (const mix of [["CLAUDE_CLI_NOT_FOUND", "CLAUDE_PACKAGE_PROVENANCE_CHANGED"], ["CLAUDE_PACKAGE_PROVENANCE_CHANGED", "CLAUDE_CLI_SHIM_UNSUPPORTED"]]) { // 'enable again' cannot succeed without a CLI, so an install code wins over a launcher-family code
+      const r = await panelFor(wire(setup, b => { for (const x of ["implementer", "reviewer"]) { b.executors.LOCAL_CLAUDE.readiness[x].blockers = [...mix, "EXECUTOR_NOT_ENABLED"]; b.executors.LOCAL_CLAUDE.readiness[x].blocker = mix[0]; } }));
+      expect(fixOf(r, "CLI"), mix.join("+")).toBe("setup.fix.CLI.install"); expect(reasonsOf(r, "CLI")).toEqual(mix);
+    }
+    for (const code of ["CLAUDE_CLI_NOT_FOUND", "CLAUDE_CLI_SHIM_UNSUPPORTED"]) {
+      const r = await panelFor(wire(setup, b => { b.executors.LOCAL_CLAUDE.readiness.implementer.blockers = [code, "EXECUTOR_NOT_ENABLED"]; b.executors.LOCAL_CLAUDE.readiness.implementer.blocker = code; }));
+      expect(fixOf(r, "CLI")).toBe("setup.fix.CLI.install"); expect(reasonsOf(r, "CLI")).toEqual([code]);
+    }
+  });
+
+  it("a stale 'LOCAL_CLAUDE is active' reading never hides a role readiness that still says EXECUTOR_NOT_ENABLED; a clean readiness still passes", async () => {
+    const {tmp, controlRoot, dataDir, setup} = mkSetup(); const l = launcherOf(tmp);
+    prov(controlRoot, {provenanceLevel: "STANDALONE_LAUNCHER", resolvedPath: l, launcherSha256: sha(l), version: "9.9.9"}); signIn(controlRoot, dataDir, ["implementer", "reviewer"]);
+    const stale = await panelFor(wire(setup, b => { b.active = {reason: "LOCAL_CLAUDE"}; }));
+    expect(stateOf(stale, "EXECUTOR")).toBe("BLOCKED"); expect(reasonsOf(stale, "EXECUTOR")).toEqual(["EXECUTOR_NOT_ENABLED"]); expect(fixOf(stale, "EXECUTOR")).toBe("setup.fix.EXECUTOR"); expect(stateOf(stale, "CLI")).toBe("PASS");
+    const one = await panelFor(wire(setup, b => { b.active = {reason: "LOCAL_CLAUDE"}; const r = b.executors.LOCAL_CLAUDE.readiness.reviewer; r.blockers = []; r.blocker = null; r.ready = true; })); // only one role still says it
+    expect(stateOf(one, "EXECUTOR")).toBe("BLOCKED");
+    const other = await panelFor(wire(setup, b => { b.active = {reason: "LOCAL_CLAUDE"}; const r = b.executors.LOCAL_CLAUDE.readiness.implementer; r.blockers = []; r.blocker = null; r.ready = true; })); // ... or only the other one
+    expect(stateOf(other, "EXECUTOR")).toBe("BLOCKED");
+    const clean = await panelFor(wire(setup, b => { b.active = {reason: "LOCAL_CLAUDE"}; for (const x of ["implementer", "reviewer"]) { const r = b.executors.LOCAL_CLAUDE.readiness[x]; r.blockers = []; r.blocker = null; r.ready = true; } }));
+    expect(stateOf(clean, "EXECUTOR")).toBe("PASS"); expect(reasonsOf(clean, "EXECUTOR")).toEqual([]);
+  });
+
+  it("key coverage: every code the CLI row can show has en + tr reason text and every fix key it can pick exists in both locales", async () => {
+    const en = await load("locales", "en.js"), tr = await load("locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
+    for (const code of ["CLAUDE_CLI_NOT_FOUND", "CLAUDE_CLI_SHIM_UNSUPPORTED", "PROVIDER_PROVENANCE_NOT_READY", "CLAUDE_PACKAGE_PROVENANCE_REQUIRED", "CLAUDE_LAUNCHER_PROVENANCE_CHANGED", "CLAUDE_PACKAGE_PROVENANCE_CHANGED", "EXECUTOR_NOT_ENABLED"]) {
+      const k = E[`setup.reason.${code}`] ? `setup.reason.${code}` : `run.reason.${code}`; expect(E[k], `en ${code}`).toBeTruthy(); expect(T[k], `tr ${code}`).toBeTruthy();
+    }
+    for (const k of ["setup.fix.CLI.install", "setup.fix.CLI.launcher", "setup.fix.CLI.unknownCode", "setup.fix.EXECUTOR"]) { expect(E[k], k).toBeTruthy(); expect(T[k], k).toBeTruthy(); }
+    expect(E["setup.reason.CLAUDE_PACKAGE_PROVENANCE_CHANGED"]).toBeTruthy(); expect(T["setup.reason.CLAUDE_PACKAGE_PROVENANCE_CHANGED"]).toBeTruthy();
   });
 });
