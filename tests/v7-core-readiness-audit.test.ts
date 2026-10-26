@@ -28,7 +28,7 @@ const reasonsOf = (a: ReadinessAudit, layer: ReadinessLayer) => a.reasonCounts[l
 const roleOf = (a: ReadinessAudit, id: string): RoleReadiness => a.roles.find(r => r.roleId === id)!;
 const countOnly = (c: LayerCount) => ({TRUE: c.TRUE, FALSE: c.FALSE, UNKNOWN: c.UNKNOWN});
 
-// //TR: Her çıktının yapısal değişmezleri: nedenler sıralı/tekil ve YALNIZ TRUE iken boş, dört durum paydayı toplar, measured === (UNKNOWN === 0), özet 64 onaltılık.
+// //TR: Her çıktının yapısal değişmezleri: nedenler sıralı/tekil ve YALNIZ TRUE iken boş, dört durum paydayı toplar, measured === (payda > 0 && UNKNOWN === 0), özet 64 onaltılık.
 function expectWellFormed(a: ReadinessAudit): void {
   for (const r of a.roles) for (const l of READINESS_LAYERS) {
     const x = r.layers[l];
@@ -38,7 +38,7 @@ function expectWellFormed(a: ReadinessAudit): void {
   const checks: LayerCount[] = [...Object.values(a.totals), a.stageWired, ...[...a.byGuild, ...a.byCluster].flatMap(g => [...Object.values(g.layers), g.stageWired])];
   for (const c of checks) {
     expect(c.TRUE + c.FALSE + c.UNKNOWN + c.NOT_APPLICABLE).toBe(c.denominator);
-    expect(c.measured).toBe(c.UNKNOWN === 0);
+    expect(c.measured).toBe(c.denominator > 0 && c.UNKNOWN === 0);
   }
   expect(a.digest).toMatch(/^[0-9a-f]{64}$/);
 }
@@ -61,6 +61,8 @@ const fxInput = (roleOver: Record<string, unknown> = {}, over: Partial<Readiness
   knowledgeProfiles: new Map([["tech-a", [goodUnit()]]]), sourceProvenance: PROV, now: NOW, ...over
 });
 const only = (i: ReadinessInput) => computeRoleReadiness(i).roles[0];
+// //TR: Eski beş sayaç, denetimle AYNI girdi üzerinde (aynı roller, doğrulayıcı, now); uzlaştırma testleri için.
+const legacyOf = (i: ReadinessInput) => computeRoleStatusSummary({roles: i.roles, guildIds: i.guilds.map(g => g.guildId), roleDefinitionsSha256: i.roleDefinitionsSha256, bindings: i.bindings, verify: i.verify, runs: i.runs?.journal === "PRESENT" ? i.runs.runs : [], now: i.now});
 
 describe("C-RDY-1 readiness-audit", () => {
   // //TR: Kanıt ve yükleyici testleri geçici depo kökü kullanır (gerçek depoya yazılmaz).
@@ -98,7 +100,7 @@ describe("C-RDY-1 readiness-audit", () => {
     expect(a.proposedOnly).toEqual({source: "PROPOSED_DERIVED_NOT_RUNTIME", profiles: 599, withCandidateSkills: 197, withCandidateToolAdapters: 164});
     expect(a.anomalies).toBe(0);
     expect(a.inputs).toEqual({journal: "ABSENT", adapterReality: "NOT_SUPPLIED", reachableStages: "NOT_SUPPLIED", backendEnabled: "UNKNOWN",
-      roleDefinitionsSha256: sha(fs.readFileSync(path.join(REPO, "registries", "role-definitions.json"))), bindingsCount: 9, skillIds: 425, technologies: 415, knowledgeProfiles: 415});
+      roleDefinitionsSha256: sha(fs.readFileSync(path.join(REPO, "registries", "role-definitions.json"))), bindingsCount: 9, skillIds: 425, technologies: 415, knowledgeProfiles: 415, promotedTechnologyStatuses: "DEFAULT"});
     // //TR: Gerçek kayıtta PROFILED=0 ve KNOWLEDGE_READY=0 YAPISAL: kanonik requiredSkillIds boş, hiçbir teknoloji doğrulanmış durumda değil, hiçbir bilgi birimi araştırılmış değil.
     expect(PROMOTED_TECHNOLOGY_STATUSES.size).toBe(0);
     expect(a.computedAt).toBe(NOW.toISOString());
@@ -156,17 +158,18 @@ describe("C-RDY-1 readiness-audit", () => {
 
   const ROLE = "UASCO-0085";
   // //TR: Doğrulayıcı biçiminde kanıt dosyası + artefakt yazar; sabitlenmiş ref döner (verifier: bayt hash'i, rol dizininde artefakt, FAKE reddi).
-  const evidence = (root: string, role: string, extra: Record<string, unknown> = {}, wrongSha = false): string => {
+  const evidence = (root: string, role: string, extra: Record<string, unknown> = {}, wrongSha = false, evalId = "EV-01", verdict = "PASSED"): string => {
     const dir = path.join(root, "audit", "evidence", "role-evaluations", role); fs.mkdirSync(dir, {recursive: true});
-    const artifactRel = `audit/evidence/role-evaluations/${role}/EV-01.artifact.txt`, art = Buffer.from("artifact EV-01");
+    const artifactRel = `audit/evidence/role-evaluations/${role}/${evalId}.artifact.txt`, art = Buffer.from(`artifact ${evalId}`);
     fs.writeFileSync(path.join(root, artifactRel), art);
-    const body = Buffer.from(JSON.stringify({roleId: role, evaluationId: "EV-01", verdict: "PASSED", artifactPath: artifactRel, artifactSha256: sha(art), ...extra}));
-    const file = `audit/evidence/role-evaluations/${role}/EV-01.json`; fs.writeFileSync(path.join(root, file), body);
+    const body = Buffer.from(JSON.stringify({roleId: role, evaluationId: evalId, verdict, artifactPath: artifactRel, artifactSha256: sha(art), ...extra}));
+    const file = `audit/evidence/role-evaluations/${role}/${evalId}.json`; fs.writeFileSync(path.join(root, file), body);
     return `${file}#sha256=${wrongSha ? "0".repeat(64) : sha(body)}`;
   };
   const withSpecs = (role: string, specs: unknown[]) => realInput().roles.map(r => r.roleId === role ? {...r, evaluationSpecs: specs} : r) as ReadinessRole[];
   const spec1 = (ref: string | null, status = "PASSED") => [{evaluationId: "EV-01", status, evaluatorEvidenceRef: ref}, ...notExecuted().slice(1)];
-  const audit = (root: string, role: string, specs: unknown[]) => computeRoleReadiness(realInput({roles: withSpecs(role, specs), verify: createEvidenceVerifier(root)}));
+  const inputWith = (root: string, role: string, specs: unknown[], over: Partial<ReadinessInput> = {}) => realInput({roles: withSpecs(role, specs), verify: createEvidenceVerifier(root), ...over});
+  const audit = (root: string, role: string, specs: unknown[]) => computeRoleReadiness(inputWith(root, role, specs));
 
   it("evaluation evidence", () => {
     const root = fs.mkdtempSync(path.join(tmp, "r-"));
@@ -174,6 +177,13 @@ describe("C-RDY-1 readiness-audit", () => {
     expect(roleOf(good, ROLE).layers.EVALUATED).toEqual({state: "TRUE", reasons: []});
     expect(good.totals.EVALUATED.TRUE).toBe(1);
     expect(roleOf(good, ROLE).anomalies).toEqual([]);
+    // //TR: Bir spec'in doğrulanmış kanıtı INTERNALLY_CERTIFIED YAPMAZ (1/6 değil 6/6 + reviewer + süre gerekir) ve eski sayaçlarla uzlaşır: tested 1, certified 0.
+    expect(roleOf(good, ROLE).layers.INTERNALLY_CERTIFIED).toEqual({state: "FALSE", reasons: ["NOT_CERTIFIED_STATUS"]});
+    expect(good.totals.INTERNALLY_CERTIFIED.TRUE).toBe(0);
+    const goodInput = inputWith(root, ROLE, spec1(evidence(root, ROLE)));
+    const goodLegacy = legacyOf(goodInput);
+    expect(goodLegacy).toMatchObject({tested: 1, certified: 0});
+    expect(reconcileLegacyStatusSummary(goodLegacy, computeRoleReadiness(goodInput))).toMatchObject({consistent: true, mismatches: []});
     // //TR: FAKE etiketli kanıt (fake:true ve executorKind:FAKE) hash'i doğru olsa bile reddedilir.
     for (const extra of [{fake: true}, {executorKind: "FAKE"}]) {
       const root2 = fs.mkdtempSync(path.join(tmp, "f-"));
@@ -199,6 +209,53 @@ describe("C-RDY-1 readiness-audit", () => {
     expect(lo.anomalies).toEqual([{kind: "LAYER_ORDER", detail: "EVALUATED_TRUE_WITHOUT_EXECUTABLE"}]);
   });
 
+  it("internally certified: 6/6 verified evidence, reviewer approval and expiry against the injected now", () => {
+    const root = fs.mkdtempSync(path.join(tmp, "c-"));
+    const IDS = ["EV-01", "EV-02", "EV-03", "EV-04", "EV-05", "EV-06"];
+    const refs = IDS.map(id => evidence(root, ROLE, {}, false, id, "PASSED"));
+    const reviewer = evidence(root, ROLE, {}, false, "REVIEWER", "APPROVED");
+    const specs = IDS.map((id, n) => ({evaluationId: id, status: "PASSED", evaluatorEvidenceRef: refs[n]}));
+    const claim = (over: Record<string, unknown> = {}) => ({evaluationSpecs: specs, proficiencyStatus: "CERTIFIED", certifiedScope: {scope: "fixture"}, evaluatorEvidenceRefs: refs, reviewerEvidenceRef: reviewer, expiresAt: "2027-06-01T00:00:00Z", ...over});
+    const run = (over: Record<string, unknown> = {}, now = NOW, verify = createEvidenceVerifier(root)) => {
+      const i = realInput({roles: realInput().roles.map(r => r.roleId === ROLE ? {...r, ...claim(over)} : r) as ReadinessRole[], verify, now});
+      return {i, a: computeRoleReadiness(i)};
+    };
+    // //TR: TRUE yolu: 6/6 doğrulanmış PASSED + reviewer APPROVED + kapsam + kanıt listesi + süresi dolmamış; EVALUATED ve EXECUTABLE da TRUE, anomali yok, eski sayaçla uzlaşır (certified 1).
+    const ok = run();
+    expect(roleOf(ok.a, ROLE).layers).toMatchObject({EXECUTABLE: {state: "TRUE"}, EVALUATED: {state: "TRUE"}, INTERNALLY_CERTIFIED: {state: "TRUE", reasons: []}});
+    expect(roleOf(ok.a, ROLE).anomalies).toEqual([]);
+    expect(ok.a.totals.INTERNALLY_CERTIFIED.TRUE).toBe(1);
+    expect(legacyOf(ok.i)).toMatchObject({tested: 1, certified: 1});
+    expect(reconcileLegacyStatusSummary(legacyOf(ok.i), ok.a)).toMatchObject({consistent: true, mismatches: []});
+    expectWellFormed(ok.a);
+    // //TR: Süre ENJEKTE edilen now'a göre denetlenir (gerçek saate değil): geçmişte süresi dolmamış / gelecekte dolmuş, iki yönde de.
+    expect(roleOf(run({expiresAt: "2021-01-01T00:00:00Z"}, new Date("2020-06-01T00:00:00Z")).a, ROLE).layers.INTERNALLY_CERTIFIED).toEqual({state: "TRUE", reasons: []});
+    const expired = run({expiresAt: "2034-01-01T00:00:00Z"}, new Date("2035-01-01T00:00:00Z"));
+    expect(roleOf(expired.a, ROLE).layers.INTERNALLY_CERTIFIED).toEqual({state: "FALSE", reasons: ["CERTIFICATION_EVIDENCE_INVALID"]});
+    expect(roleOf(expired.a, ROLE).layers.EVALUATED.state).toBe("TRUE");
+    expect(expired.a.totals.INTERNALLY_CERTIFIED.TRUE).toBe(0);
+    expect(reconcileLegacyStatusSummary(legacyOf(expired.i), expired.a).consistent).toBe(true);
+    // //TR: CERTIFIED iddiası kanıtı aşıyorsa YALNIZ o anomali (EVALUATED TRUE olduğundan başka kural tetiklenmez): bu kural silinirse bu test ölür.
+    expect(roleOf(expired.a, ROLE).anomalies).toEqual([{kind: "REGISTRY_CLAIM_EXCEEDS_EVIDENCE", field: "proficiencyStatus", value: "CERTIFIED"}]);
+    const oneOfSix = run({evaluationSpecs: [specs[0], ...notExecuted().slice(1)]});
+    expect(roleOf(oneOfSix.a, ROLE).layers.EVALUATED.state).toBe("TRUE");
+    expect(roleOf(oneOfSix.a, ROLE).layers.INTERNALLY_CERTIFIED).toEqual({state: "FALSE", reasons: ["CERTIFICATION_EVIDENCE_INVALID"]});
+    expect(roleOf(oneOfSix.a, ROLE).anomalies).toEqual([{kind: "REGISTRY_CLAIM_EXCEEDS_EVIDENCE", field: "proficiencyStatus", value: "CERTIFIED"}]);
+    // //TR: Her eksik parça tek başına FALSE yapar: reviewer kanıtı yok/yanlış, 5 spec, kapsam yok, kanıt listesi boş, süre yok/dize değil, bir spec PASSED değil.
+    const broken: Array<[string, Record<string, unknown>]> = [
+      ["no reviewer evidence", {reviewerEvidenceRef: null}], ["reviewer ref names another verdict file", {reviewerEvidenceRef: refs[0]}], ["five specs", {evaluationSpecs: specs.slice(0, 5)}], ["no certifiedScope", {certifiedScope: null}],
+      ["empty evaluatorEvidenceRefs", {evaluatorEvidenceRefs: []}], ["no expiresAt", {expiresAt: null}], ["expiresAt not an ISO string", {expiresAt: 4102444800000}],
+      ["one spec FAILED", {evaluationSpecs: [...specs.slice(0, 5), {...specs[5], status: "FAILED"}]}], ["one spec without a ref", {evaluationSpecs: [...specs.slice(0, 5), {...specs[5], evaluatorEvidenceRef: null}]}]
+    ];
+    for (const [name, over] of broken) expect(roleOf(run(over).a, ROLE).layers.INTERNALLY_CERTIFIED, name).toEqual({state: "FALSE", reasons: ["CERTIFICATION_EVIDENCE_INVALID"]});
+    const fakeRoot = fs.mkdtempSync(path.join(tmp, "cf-"));
+    const fakeRefs = IDS.map(id => evidence(fakeRoot, ROLE, id === "EV-03" ? {executorKind: "FAKE"} : {}, false, id, "PASSED"));
+    const fake = run({evaluationSpecs: IDS.map((id, n) => ({evaluationId: id, status: "PASSED", evaluatorEvidenceRef: fakeRefs[n]})), evaluatorEvidenceRefs: fakeRefs, reviewerEvidenceRef: evidence(fakeRoot, ROLE, {}, false, "REVIEWER", "APPROVED")}, NOW, createEvidenceVerifier(fakeRoot));
+    expect(roleOf(fake.a, ROLE).layers.INTERNALLY_CERTIFIED).toEqual({state: "FALSE", reasons: ["CERTIFICATION_EVIDENCE_INVALID"]});
+    // //TR: Her şey tam ama proficiencyStatus CERTIFIED değilse neden NOT_CERTIFIED_STATUS'tur (CERTIFICATION_EVIDENCE_INVALID değil).
+    expect(roleOf(run({proficiencyStatus: "NOT_EVALUATED"}).a, ROLE).layers.INTERNALLY_CERTIFIED).toEqual({state: "FALSE", reasons: ["NOT_CERTIFIED_STATUS"]});
+  });
+
   it("running needs a journal", () => {
     const trace = (note: string) => ({kind: "AGENT_TRACE", note, evidenceId: "e", step: "IMPLEMENT", cycle: 0, argv: [], startedAt: "", endedAt: "", exitCode: 0, logPath: null, logSha256: null});
     const run = (status: string, ...ev: unknown[]) => ({status, evidence: ev} as never);
@@ -218,6 +275,14 @@ describe("C-RDY-1 readiness-audit", () => {
     const empty = computeRoleReadiness(realInput({runs: observe([])}));
     expect(countOnly(empty.totals.RUNNING)).toEqual({TRUE: 0, FALSE: 599, UNKNOWN: 0});
     expect(empty.totals.RUNNING.measured).toBe(true);
+    // //TR: AÇIKÇA PRESENT olmayan her günlük gözlemi UNKNOWN'dur: undefined, bilinmeyen değer, büyük/küçük harf farkı, runs dizisi olmayan PRESENT; hiçbiri ölçülmüş 0 raporlamaz.
+    for (const runs of [undefined, {}, {journal: "UNKNOWN"}, {journal: "present"}, {journal: "PRESENT"}, {journal: "PRESENT", runs: "none"}]) {
+      const a = computeRoleReadiness(realInput({runs: runs as never}));
+      expect(countOnly(a.totals.RUNNING), JSON.stringify(runs)).toEqual({TRUE: 0, FALSE: 0, UNKNOWN: 599});
+      expect(a.totals.RUNNING.measured, JSON.stringify(runs)).toBe(false);
+      expect(reasonsOf(a, "RUNNING"), JSON.stringify(runs)).toEqual({NO_RUN_JOURNAL: 599});
+      expect(a.inputs.journal, JSON.stringify(runs)).toBe("ABSENT");
+    }
     const absent = computeRoleReadiness(realInput({runs: {journal: "ABSENT"}}));
     expect(countOnly(absent.totals.RUNNING)).toEqual({TRUE: 0, FALSE: 0, UNKNOWN: 599});
     expect(absent.totals.RUNNING.measured).toBe(false);
@@ -328,7 +393,15 @@ describe("C-RDY-1 readiness-audit", () => {
     const g99 = computeRoleReadiness(fxInput({}, {guilds: [{guildId: "G01", clusterId: "CL01"}, {guildId: "G99", clusterId: "CL01"}]}));
     expect(g99.byGuild.map(x => x.id)).toEqual(["G01", "G99"]);
     expect(g99.byGuild[1]).toMatchObject({id: "G99", roles: 0, clusterId: "CL01"});
-    expect(g99.byGuild[1].layers.DEFINED).toEqual({TRUE: 0, FALSE: 0, UNKNOWN: 0, NOT_APPLICABLE: 0, denominator: 0, measured: true});
+    // //TR: Boş grup (payda 0) hiçbir şeyi ÖLÇMEMİŞTİR: measured false (koordinatör şartname değişikliği); tüm katmanlar ve aşama bağlantısı için geçerli.
+    expect(g99.byGuild[1].layers.DEFINED).toEqual({TRUE: 0, FALSE: 0, UNKNOWN: 0, NOT_APPLICABLE: 0, denominator: 0, measured: false});
+    for (const l of READINESS_LAYERS) expect(g99.byGuild[1].layers[l].measured, l).toBe(false);
+    expect(g99.byGuild[1].stageWired.measured).toBe(false);
+    expect(g99.byGuild[0].layers.DEFINED.measured).toBe(true);
+    const nobody = computeRoleReadiness(fxInput({}, {roles: []}));
+    expect(nobody.denominator).toBe(0);
+    for (const l of READINESS_LAYERS) expect(nobody.totals[l], l).toEqual({TRUE: 0, FALSE: 0, UNKNOWN: 0, NOT_APPLICABLE: 0, denominator: 0, measured: false});
+    expect(nobody.stageWired.measured).toBe(false);
     const stray = computeRoleReadiness(fxInput({guildId: "G77"}));
     expect(stray.byGuild.map(x => x.id)).toEqual(["G01", "G77"]);
     expect(stray.byGuild[1]).toMatchObject({id: "G77", roles: 1, clusterId: null});
@@ -343,6 +416,73 @@ describe("C-RDY-1 readiness-audit", () => {
     expect(computeRoleReadiness({...base, now: new Date("2030-01-01T00:00:00Z")}).computedAt).toBe("2030-01-01T00:00:00.000Z");
     expect(computeRoleReadiness({...base, roleDefinitionsSha256: "1".repeat(64)}).digest).not.toBe(a.digest);
     expect(computeRoleReadiness({...base, reachableStages: new Set(["IMPLEMENT"])}).digest).not.toBe(a.digest);
+  });
+
+  it("group rows match an independent oracle (per guild and per cluster)", () => {
+    const rd = (f: string) => JSON.parse(fs.readFileSync(path.join(REPO, "registries", f), "utf8"));
+    const roles = rd("role-definitions.json").roles as Array<{roleId: string; guildId: string; clusterId: string}>;
+    const profiles = rd("role-execution-profiles.json").profiles as ProposedProfileLike[];
+    const withSkills = new Set(profiles.filter(p => p.candidateSkills.value.length > 0).map(p => p.roleId));
+    const withAdapters = new Set(profiles.filter(p => p.candidateToolAdapterIds.value.length > 0).map(p => p.roleId));
+    const wired = new Set(["UASCO-0085", "UASCO-0252", "UASCO-0313"]);
+    const a = computeRoleReadiness(realInput({reachableStages: new Set(["IMPLEMENT", "REVIEW"])}));
+    type Pos = {guildId: string; clusterId: string};
+    for (const [rows, pick] of [[a.byGuild, (r: Pos) => r.guildId], [a.byCluster, (r: Pos) => r.clusterId]] as const) {
+      expect(rows.reduce((n, g) => n + g.roles, 0)).toBe(599);
+      for (const g of rows) {
+        const inGroup = roles.filter(r => pick(r) === g.id);
+        expect(g.roles, g.id).toBe(inGroup.length);
+        expect(g.proposedOnly, g.id).toEqual({withCandidateSkills: inGroup.filter(r => withSkills.has(r.roleId)).length, withCandidateToolAdapters: inGroup.filter(r => withAdapters.has(r.roleId)).length});
+        expect(g.layers.DEFINED.TRUE, g.id).toBe(inGroup.length);
+        expect(g.layers.EXECUTABLE.TRUE, g.id).toBe(inGroup.filter(r => EXECUTABLE_IDS.includes(r.roleId)).length);
+        expect(g.layers.TOOL_READY.UNKNOWN, g.id).toBe(inGroup.filter(r => BOUND.includes(r.roleId)).length);
+        expect(g.layers.RUNNING.UNKNOWN, g.id).toBe(inGroup.length);
+        expect(g.stageWired.TRUE, g.id).toBe(inGroup.filter(r => wired.has(r.roleId)).length);
+        expect(g.stageWired.FALSE, g.id).toBe(inGroup.length - inGroup.filter(r => wired.has(r.roleId)).length);
+        expect(g.layers.EVALUATED.FALSE, g.id).toBe(inGroup.length);
+      }
+    }
+    // //TR: Oracle gerçekten ayırt eder: adaylı roller loncalar/kümeler arasında dağılmıştır (hepsi aynı satırda değil) ve toplamla eşleşir.
+    expect(a.byGuild.filter(g => g.proposedOnly.withCandidateSkills > 0).length).toBeGreaterThan(5);
+    expect(a.byGuild.reduce((n, g) => n + g.proposedOnly.withCandidateSkills, 0)).toBe(197);
+    expect(a.byCluster.reduce((n, g) => n + g.proposedOnly.withCandidateToolAdapters, 0)).toBe(164);
+  });
+
+  it("duplicate guild, binding and proposed-profile keys are rejected, never first-wins", () => {
+    expect(() => computeRoleReadiness(fxInput({}, {guilds: [{guildId: "G01", clusterId: "CL01"}, {guildId: "G01", clusterId: "CL01"}]}))).toThrow("READINESS_INPUT_INVALID:DUPLICATE_GUILD_ID:G01");
+    expect(() => computeRoleReadiness(fxInput({}, {guilds: [{guildId: "G01", clusterId: "CL01"}, {guildId: "G01", clusterId: "CL02"}]}))).toThrow("READINESS_INPUT_INVALID:DUPLICATE_GUILD_ID:G01");
+    expect(() => computeRoleReadiness(realInput({bindings: [...FIRST_DELIVERY_BINDINGS, {...FIRST_DELIVERY_BINDINGS[0], adapters: []}]}))).toThrow("READINESS_INPUT_INVALID:DUPLICATE_BINDING_ROLE_ID:UASCO-0022");
+    const profile = (adapters: string[]): ProposedProfileLike => ({roleId: "UASCO-0001", candidateSkills: {value: []}, candidateToolAdapterIds: {value: adapters}});
+    expect(() => computeRoleReadiness(fxInput({}, {proposedProfiles: [profile(["a"]), profile([])]}))).toThrow("READINESS_INPUT_INVALID:DUPLICATE_PROPOSED_PROFILE_ROLE_ID:UASCO-0001");
+    // //TR: Yinelenen ROL kimliği hata değil bulgudur (DEFINED FALSE) ve özeti dizi sırasına bağlı değildir; yinelenmeyen girdide sıra özeti değiştirmez.
+    const a = fxRole({title: "A"}), b = fxRole({title: "B", evaluationSpecs: []});
+    const d1 = computeRoleReadiness({...fxInput(), roles: [a, b]}), d2 = computeRoleReadiness({...fxInput(), roles: [b, a]});
+    expect(d1.digest).toBe(d2.digest);
+    expect(d1.roles.map(r => r.layers.DEFINED.reasons)).toEqual([["DUPLICATE_ROLE_ID"], ["DUPLICATE_ROLE_ID"]]);
+    const g2 = {guilds: [{guildId: "G01", clusterId: "CL01"}, {guildId: "G02", clusterId: "CL01"}]};
+    expect(computeRoleReadiness(fxInput({}, g2)).digest).toBe(computeRoleReadiness(fxInput({}, {guilds: [...g2.guilds].reverse()})).digest);
+  });
+
+  it("a non-default promoted set is disclosed and never labelled AUTHORITATIVE", () => {
+    const tech = [{technologyId: "tech-a", status: "FIXTURE_VERIFIED"}];
+    const plain = computeRoleReadiness(fxInput({requiredTechnologies: tech}));
+    expect(plain.authority).toBe("AUTHORITATIVE_READINESS_MEASUREMENT");
+    expect(plain.inputs.promotedTechnologyStatuses).toBe("DEFAULT");
+    // //TR: Açıkça verilen ama varsayılanla AYNI (boş) küme varsayılan sayılır: etiket AUTHORITATIVE kalır.
+    for (const same of [new Set<string>(), new Set(PROMOTED_TECHNOLOGY_STATUSES)]) {
+      const a = computeRoleReadiness(fxInput({requiredTechnologies: tech}, {promotedTechnologyStatuses: same}));
+      expect(a.authority).toBe("AUTHORITATIVE_READINESS_MEASUREMENT");
+      expect(a.inputs.promotedTechnologyStatuses).toBe("DEFAULT");
+      expect(a.digest).toBe(plain.digest);
+    }
+    const over = computeRoleReadiness(fxInput({requiredTechnologies: tech}, {promotedTechnologyStatuses: new Set(["FIXTURE_VERIFIED", "ANOTHER"])}));
+    expect(over.authority).toBe("NON_AUTHORITATIVE_PROMOTED_STATUS_OVERRIDE");
+    expect(over.inputs.promotedTechnologyStatuses).toEqual(["ANOTHER", "FIXTURE_VERIFIED"]);
+    expect(over.roles[0].layers.PROFILED.state).toBe("TRUE");
+    expect(over.digest).not.toBe(plain.digest);
+    expect(computeRoleReadiness(fxInput({requiredTechnologies: tech}, {promotedTechnologyStatuses: new Set(["ANOTHER", "FIXTURE_VERIFIED"])})).digest).toBe(over.digest);
+    // //TR: Gerçek kayıtta üretim çağıranı küme vermez; bu yüzden sonuç AUTHORITATIVE'dir.
+    expect(computeRoleReadiness(realInput()).authority).toBe("AUTHORITATIVE_READINESS_MEASUREMENT");
   });
 
   it("tool readiness needs code and an observed probe", () => {
@@ -444,6 +584,10 @@ describe("C-RDY-1 readiness-audit", () => {
     expect(() => load(realLike)).toThrow("READINESS_INPUT_UNAVAILABLE:registries/skills-v2.json");
     for (const rel of Object.keys(MINI)) expect(() => load(mini("missing", f => { f[rel] = null; })), `missing ${rel}`).toThrow(`READINESS_INPUT_UNAVAILABLE:${rel}`);
     for (const rel of Object.keys(MINI)) expect(() => load(mini("garbage", f => { f[rel] = "{not json"; })), `unparsable ${rel}`).toThrow(`READINESS_INPUT_UNAVAILABLE:${rel}`);
+    // //TR: Boş roles/guilds/clusters/skills dizisi ölçüm değil bozuk girdidir (payda 0): tipli hatayla reddedilir, boş küme döndürülmez.
+    const roleDoc = (over: Record<string, unknown>) => JSON.stringify({...(MINI["registries/role-definitions.json"] as Record<string, unknown>), ...over});
+    for (const key of ["roles", "guilds", "clusters"]) expect(() => load(mini(`empty-${key}`, f => { f["registries/role-definitions.json"] = roleDoc({[key]: []}); })), key).toThrow("READINESS_INPUT_UNAVAILABLE:registries/role-definitions.json");
+    expect(() => load(mini("empty-skills", f => { f["registries/skills-v2.json"] = JSON.stringify({skills: []}); }))).toThrow("READINESS_INPUT_UNAVAILABLE:registries/skills-v2.json");
     // //TR: Şekli bozuk (dizi değil / alan eksik) dosya da fail-closed: boş veri ikame edilmez.
     expect(() => load(mini("shape1", f => { f["registries/skills-v2.json"] = JSON.stringify({skills: "none"}); }))).toThrow("READINESS_INPUT_UNAVAILABLE:registries/skills-v2.json");
     expect(() => load(mini("shape2", f => { f["registries/role-definitions.json"] = JSON.stringify({roles: [{roleId: "UASCO-0001"}], guilds: [], clusters: []}); }))).toThrow("READINESS_INPUT_UNAVAILABLE:registries/role-definitions.json");

@@ -27,7 +27,7 @@ export type ReadinessReason = DefinedReason | ProfiledReason | KnowledgeReason |
 
 // //TR: reasons sıralı ve tekilleştirilmiş; YALNIZ state === "TRUE" iken boştur.
 export interface LayerResult { state: LayerState; reasons: readonly ReadinessReason[] }
-// //TR: Dört durum payda'yı toplar; measured === (UNKNOWN === 0). Ölçülmemiş toplam asla 0 olarak sunulmamalıdır.
+// //TR: Dört durum payda'yı toplar; measured === (payda > 0 && UNKNOWN === 0): boş bir grup (payda 0) hiçbir şeyi ÖLÇMEMİŞTİR, ölçülmüş sıfır değildir (koordinatör şartname değişikliği, #260 incelemesi). Ölçülmemiş toplam asla 0 olarak sunulmamalıdır.
 export interface LayerCount { TRUE: number; FALSE: number; UNKNOWN: number; NOT_APPLICABLE: number; denominator: number; measured: boolean }
 export interface AdapterRealityEntry { adapterId: string; codePath: "PRESENT" | "ABSENT"; probe: "READY" | "FAILED" | "NOT_OBSERVED" }
 export interface KnowledgeUnitLike { facet: string; state: string; sourceRefs: readonly unknown[]; lastValidatedAt: string | null }
@@ -74,14 +74,15 @@ export interface ReadinessGroupRow {
   proposedOnly: {withCandidateSkills: number; withCandidateToolAdapters: number};
 }
 export interface ReadinessAudit {
-  schemaVersion: "1.0.0"; authority: "AUTHORITATIVE_READINESS_MEASUREMENT";
+  // //TR: authority YALNIZ varsayılan (boş) terfi kümesiyle AUTHORITATIVE'tir; promotedTechnologyStatuses varsayılandan farklıysa (yalnız testler) sonuç NON_AUTHORITATIVE_PROMOTED_STATUS_OVERRIDE etiketlenir ve inputs.promotedTechnologyStatuses kümeyi açıklar.
+  schemaVersion: "1.0.0"; authority: "AUTHORITATIVE_READINESS_MEASUREMENT" | "NON_AUTHORITATIVE_PROMOTED_STATUS_OVERRIDE";
   denominator: number;
   totals: Readonly<Record<ReadinessLayer, LayerCount>>; stageWired: LayerCount;
   byGuild: readonly ReadinessGroupRow[];
   byCluster: readonly ReadinessGroupRow[];
   reasonCounts: Readonly<Record<string, Readonly<Record<string, number>>>>;
   proposedOnly: {source: "PROPOSED_DERIVED_NOT_RUNTIME" | "ABSENT"; profiles: number; withCandidateSkills: number; withCandidateToolAdapters: number};
-  inputs: {journal: "PRESENT" | "ABSENT"; adapterReality: "SUPPLIED" | "NOT_SUPPLIED"; reachableStages: "SUPPLIED" | "NOT_SUPPLIED"; backendEnabled: "UNKNOWN";
+  inputs: {journal: "PRESENT" | "ABSENT"; promotedTechnologyStatuses: "DEFAULT" | readonly string[]; adapterReality: "SUPPLIED" | "NOT_SUPPLIED"; reachableStages: "SUPPLIED" | "NOT_SUPPLIED"; backendEnabled: "UNKNOWN";
            roleDefinitionsSha256: string; bindingsCount: number; skillIds: number; technologies: number; knowledgeProfiles: number};
   anomalies: number;
   roles: readonly RoleReadiness[];
@@ -124,7 +125,7 @@ function unitQualifies(u: KnowledgeUnitLike, p: ReadinessInput["sourceProvenance
 
 interface Ctx {
   i: ReadinessInput; guildCluster: Map<string, string>; idCount: Map<string, number>; bindingBy: Map<string, RoleExecutionProfile>;
-  proposedBy: Map<string, ProposedProfileLike>; promoted: ReadonlySet<string>; lifeCtx: LifecycleContext; runningIds: ReadonlySet<string>; consumed: ReadonlySet<string>;
+  journal: "PRESENT" | "ABSENT"; proposedBy: Map<string, ProposedProfileLike>; promoted: ReadonlySet<string>; lifeCtx: LifecycleContext; runningIds: ReadonlySet<string>; consumed: ReadonlySet<string>;
 }
 
 function definedLayer(r: ReadinessRole, c: Ctx): LayerResult {
@@ -214,9 +215,9 @@ function lifecycleLayers(r: ReadinessRole, c: Ctx): ExecutablePart {
   return {codePath, stageWired, consumingStages, evaluated, certified};
 }
 
-// //TR: Günlük yoksa RUNNING her rol için UNKNOWN'dur (0 değil); günlük varsa yalnız açık bir run'ın AGENT_TRACE'indeki rol TRUE olur.
+// //TR: Günlük AÇIKÇA PRESENT değilse (yok, undefined, bilinmeyen değer) RUNNING her rol için UNKNOWN'dur (ölçülmüş 0 değil); günlük varsa yalnız açık bir run'ın AGENT_TRACE'indeki rol TRUE olur.
 function runningLayer(r: ReadinessRole, c: Ctx): LayerResult {
-  if (c.i.runs.journal === "ABSENT") return result("UNKNOWN", ["NO_RUN_JOURNAL"]);
+  if (c.journal !== "PRESENT") return result("UNKNOWN", ["NO_RUN_JOURNAL"]);
   return c.runningIds.has(r.roleId) ? result("TRUE", []) : result("FALSE", ["NOT_IN_OPEN_RUN"]);
 }
 
@@ -238,7 +239,7 @@ function anomaliesOf(r: ReadinessRole, layers: Readonly<Record<ReadinessLayer, L
 const countOf = (xs: readonly LayerResult[]): LayerCount => {
   const n = {TRUE: 0, FALSE: 0, UNKNOWN: 0, NOT_APPLICABLE: 0};
   for (const x of xs) n[x.state]++;
-  return {...n, denominator: xs.length, measured: n.UNKNOWN === 0};
+  return {...n, denominator: xs.length, measured: xs.length > 0 && n.UNKNOWN === 0};
 };
 const layerCounts = (rs: readonly RoleReadiness[]): Readonly<Record<ReadinessLayer, LayerCount>> =>
   Object.fromEntries(READINESS_LAYERS.map(l => [l, countOf(rs.map(r => r.layers[l]))])) as Record<ReadinessLayer, LayerCount>;
@@ -251,21 +252,26 @@ function stable(v: unknown): string {
   return `{${Object.keys(o).sort().filter(k => o[k] !== undefined).map(k => `${JSON.stringify(k)}:${stable(o[k])}`).join(",")}}`;
 }
 
-const firstWins = <T>(xs: readonly T[], key: (x: T) => string): Map<string, T> => { const m = new Map<string, T>(); for (const x of xs) if (!m.has(key(x))) m.set(key(x), x); return m; };
+// //TR: Yinelenen anahtar bir GİRDİ HATASIDIR (READINESS_INPUT_INVALID:<kod>:<anahtar>): "ilk kazanır" çözümü özeti dizi sırasına bağımlı yapardı. Yinelenen ROL kimliği ise hata değil bulgudur (DEFINED: DUPLICATE_ROLE_ID).
+const uniqueBy = <T>(xs: readonly T[], key: (x: T) => string, code: string): Map<string, T> => { const m = new Map<string, T>(); for (const x of xs) { if (m.has(key(x))) throw new Error(`READINESS_INPUT_INVALID:${code}:${key(x)}`); m.set(key(x), x); } return m; };
 
 export function computeRoleReadiness(i: ReadinessInput): ReadinessAudit {
   const knownRoleIds = new Set(i.roles.map(r => r.roleId));
   const idCount = new Map<string, number>();
   for (const r of i.roles) idCount.set(r.roleId, (idCount.get(r.roleId) ?? 0) + 1);
   const guildCluster = new Map<string, string>();
-  for (const g of i.guilds) if (!guildCluster.has(g.guildId)) guildCluster.set(g.guildId, g.clusterId);
-  const runningIds = i.runs.journal === "PRESENT" ? runningRoleIdsFromRuns(i.runs.runs, knownRoleIds) : new Set<string>();
+  for (const [id, g] of uniqueBy(i.guilds, g => g.guildId, "DUPLICATE_GUILD_ID")) guildCluster.set(id, g.clusterId);
+  // //TR: Günlük YALNIZ açıkça PRESENT ve runs gerçek bir dizi ise gözlemdir; undefined, bilinmeyen değer veya runs'sız PRESENT ABSENT sayılır (RUNNING UNKNOWN).
+  const journal: "PRESENT" | "ABSENT" = i.runs?.journal === "PRESENT" && Array.isArray(i.runs.runs) ? "PRESENT" : "ABSENT";
+  const runningIds = i.runs?.journal === "PRESENT" && journal === "PRESENT" ? runningRoleIdsFromRuns(i.runs.runs, knownRoleIds) : new Set<string>();
   const c: Ctx = {
-    i, guildCluster, idCount, bindingBy: firstWins(i.bindings, b => b.roleId),
-    proposedBy: firstWins(i.proposedProfiles ?? [], p => p.roleId), promoted: i.promotedTechnologyStatuses ?? PROMOTED_TECHNOLOGY_STATUSES,
+    i, journal, guildCluster, idCount, bindingBy: uniqueBy(i.bindings, b => b.roleId, "DUPLICATE_BINDING_ROLE_ID"),
+    proposedBy: uniqueBy(i.proposedProfiles ?? [], p => p.roleId, "DUPLICATE_PROPOSED_PROFILE_ROLE_ID"), promoted: i.promotedTechnologyStatuses ?? PROMOTED_TECHNOLOGY_STATUSES,
     lifeCtx: {bindings: i.bindings, verify: i.verify, runningRoleIds: runningIds, nowMs: i.now.getTime()}, runningIds, consumed: consumedFunctions()
   };
   const computedAt = i.now.toISOString();
+  const promotedList = [...c.promoted].sort();
+  const promotedDefault = promotedList.length === PROMOTED_TECHNOLOGY_STATUSES.size && promotedList.every(x => PROMOTED_TECHNOLOGY_STATUSES.has(x));
 
   const perRole: RoleReadiness[] = i.roles.map(r => {
     const x = lifecycleLayers(r, c);
@@ -301,7 +307,7 @@ export function computeRoleReadiness(i: ReadinessInput): ReadinessAudit {
   tally("EXECUTABLE.stageWired", r => r.executable.stageWired);
 
   const body = {
-    schemaVersion: "1.0.0" as const, authority: "AUTHORITATIVE_READINESS_MEASUREMENT" as const,
+    schemaVersion: "1.0.0" as const, authority: (promotedDefault ? "AUTHORITATIVE_READINESS_MEASUREMENT" : "NON_AUTHORITATIVE_PROMOTED_STATUS_OVERRIDE") as ReadinessAudit["authority"],
     denominator: perRole.length, totals: layerCounts(perRole), stageWired: countOf(perRole.map(r => r.executable.stageWired)),
     byGuild, byCluster, reasonCounts,
     proposedOnly: {
@@ -309,7 +315,7 @@ export function computeRoleReadiness(i: ReadinessInput): ReadinessAudit {
       withCandidateSkills: perRole.filter(r => r.proposedOnly.candidateSkills > 0).length, withCandidateToolAdapters: perRole.filter(r => r.proposedOnly.candidateToolAdapterIds > 0).length
     },
     inputs: {
-      journal: i.runs.journal, adapterReality: i.adapterReality ? "SUPPLIED" as const : "NOT_SUPPLIED" as const, reachableStages: i.reachableStages ? "SUPPLIED" as const : "NOT_SUPPLIED" as const,
+      journal, promotedTechnologyStatuses: promotedDefault ? "DEFAULT" as const : promotedList, adapterReality: i.adapterReality ? "SUPPLIED" as const : "NOT_SUPPLIED" as const, reachableStages: i.reachableStages ? "SUPPLIED" as const : "NOT_SUPPLIED" as const,
       backendEnabled: "UNKNOWN" as const, roleDefinitionsSha256: i.roleDefinitionsSha256, bindingsCount: i.bindings.length, skillIds: i.skillIds.size, technologies: i.technologies.size, knowledgeProfiles: i.knowledgeProfiles.size
     },
     anomalies: perRole.reduce((n, r) => n + r.anomalies.length, 0), roles: perRole
@@ -327,19 +333,20 @@ function readDoc(repoRoot: string, rel: string): {raw: Buffer; doc: Record<strin
   if (!isObject(doc)) throw unavailable(rel);
   return {raw, doc};
 }
-const arrayOf = (doc: Record<string, unknown>, key: string, rel: string): unknown[] => { const v = doc[key]; if (!Array.isArray(v)) throw unavailable(rel); return v; };
+// //TR: nonEmpty=true: roles/guilds/clusters/skills BOŞ olamaz (boş bir kayıt ölçüm değil, bozuk girdidir; denetim paydası 0 olurdu).
+const arrayOf = (doc: Record<string, unknown>, key: string, rel: string, nonEmpty = false): unknown[] => { const v = doc[key]; if (!Array.isArray(v) || (nonEmpty && v.length === 0)) throw unavailable(rel); return v; };
 
 export function loadReadinessInputFromRepo(repoRoot: string, o: {runs: RunsObservation; adapterReality?: ReadonlyMap<string, AdapterRealityEntry>; reachableStages?: ReadonlySet<string>; now: Date}): ReadinessInput {
   const REL_ROLES = "registries/role-definitions.json", REL_SKILLS = "registries/skills-v2.json", REL_TECH = "registries/technologies.json", REL_SRC = "registries/technology-source-registry.json", REL_PROFILES = "registries/role-execution-profiles.json";
   const {raw, doc: rd} = readDoc(repoRoot, REL_ROLES);
-  const roles = arrayOf(rd, "roles", REL_ROLES), guilds = arrayOf(rd, "guilds", REL_ROLES), clusters = arrayOf(rd, "clusters", REL_ROLES);
+  const roles = arrayOf(rd, "roles", REL_ROLES, true), guilds = arrayOf(rd, "guilds", REL_ROLES, true), clusters = arrayOf(rd, "clusters", REL_ROLES, true);
   const strArr = (v: unknown) => Array.isArray(v) && v.every(x => typeof x === "string");
   for (const r of roles) if (!isObject(r) || typeof r.roleId !== "string" || typeof r.guildId !== "string" || typeof r.clusterId !== "string" || !strArr(r.requiredSkillIds) || !Array.isArray(r.knowledgeSourceRefs) || !Array.isArray(r.evaluationSpecs)
     || !Array.isArray(r.requiredTechnologies) || !r.requiredTechnologies.every(t => isObject(t) && typeof t.technologyId === "string" && typeof t.status === "string")) throw unavailable(REL_ROLES);
   for (const g of guilds) if (!isObject(g) || typeof g.guildId !== "string" || typeof g.clusterId !== "string") throw unavailable(REL_ROLES);
   for (const k of clusters) if (!isObject(k) || typeof k.clusterId !== "string") throw unavailable(REL_ROLES);
 
-  const skills = arrayOf(readDoc(repoRoot, REL_SKILLS).doc, "skills", REL_SKILLS);
+  const skills = arrayOf(readDoc(repoRoot, REL_SKILLS).doc, "skills", REL_SKILLS, true);
   for (const s of skills) if (!isObject(s) || typeof s.id !== "string") throw unavailable(REL_SKILLS);
   const techs = arrayOf(readDoc(repoRoot, REL_TECH).doc, "technologies", REL_TECH);
   for (const t of techs) if (!isObject(t) || typeof t.slug !== "string" || !SLUG.test(t.slug) || typeof t.status !== "string" || typeof t.knowledgeState !== "string") throw unavailable(REL_TECH);

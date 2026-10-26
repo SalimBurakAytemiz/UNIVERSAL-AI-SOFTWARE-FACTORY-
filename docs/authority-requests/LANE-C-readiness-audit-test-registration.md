@@ -25,7 +25,7 @@ Two protected changes, both in the Founder's `TEST_REGISTRATION_APPEND` / `TRUST
 
 The only new test file of this package, and the file to register:
 
-- `tests/v7-core-readiness-audit.test.ts` (one `describe("C-RDY-1 readiness-audit")`, 13 tests: T1-T11 under their dispatch names plus "defined: id shape, uniqueness, guild and cluster membership" and "loader maps the six inputs, binds the production bindings and never writes").
+- `tests/v7-core-readiness-audit.test.ts` (one `describe("C-RDY-1 readiness-audit")`: T1-T11 under their dispatch names plus extra tests added by the author and by the #260 review repair; the file name is the only registration key).
 
 It is not hosted in any other file on purpose (a test hidden in an unrelated registered file would dodge this review).
 
@@ -42,7 +42,8 @@ That hash is informational: it is only valid while `config/validation.json` on t
 ## Why it is safe to register
 
 - The test reads the checked-out registries and `knowledge/technologies/*.json` (415 files) read-only through `loadReadinessInputFromRepo` and writes only inside `fs.mkdtempSync(os.tmpdir())` directories that it removes; it spawns no process, opens no port and needs no network.
-- Linux measurement (4 CPU, Node 22): the whole file takes about 2.5 s, the slowest test about 0.3 s, so the default vitest timeouts are kept.
+- Linux measurement (4 CPU, Node 22): the whole file takes about 3-4 s, the slowest test well under 1 s, so the default vitest timeouts are kept.
+- Status: carried out by the coordinator in commits `1dd7597` (append + reseal) and `9abe30c` (order-guard whitelists); this note is kept as the record.
 - It depends on the registry numbers of `v7/integration` (599 roles, 51 guilds, 10 clusters, 415 technologies, 425 skills, `requiredSkillIds` empty for every role, no promoted technology status). A change to any of these is a deliberate measurement change and must update the T1 assertions in the same PR (the dispatch says to recount first).
 
 ## Not part of this request

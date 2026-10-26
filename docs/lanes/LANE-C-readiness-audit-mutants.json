@@ -1,5 +1,5 @@
 {
- "//TR": "C-RDY-1 (Rol Hazırlık Denetçisi) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt core/agents/readiness-audit.ts içinde TAM 1 kez geçen bir metni değiştirir; docs/lanes/LANE-C-readiness-audit-mutants.mjs hepsini tests/v7-core-readiness-audit.test.ts ile çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. M1-M13 koordinatör paketindeki zorunlu mutantlardır; M14-M25 ek savunma mutantlarıdır (DEFINED küme uyuşmazlığı, PROFILED teknoloji durumu, yoklama, kaynak sınıfı/tarih, EVALUATED nedeni, aşama NO_CODE_PATH, anomali, uzlaştırma alanları ve yükleyicinin fail-closed davranışı).",
+ "//TR": "C-RDY-1 (Rol Hazırlık Denetçisi) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt core/agents/readiness-audit.ts içinde TAM 1 kez geçen bir metni değiştirir; docs/lanes/LANE-C-readiness-audit-mutants.mjs hepsini tests/v7-core-readiness-audit.test.ts ile çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. M1-M13 koordinatör paketindeki zorunlu mutantlardır; M14-M25 ek savunma mutantlarıdır; X1-X15 #260 incelemesinin (BLOCKERS_MEDIUM) bulgularıdır (X1/X6 sertifika yolu, X2 CERTIFIED iddia anomalisi, X3/X4 satır bazlı toplamlar, X5/X15 terfi kümesi açıklaması, X7/X14 günlük gözlemi, X8/X9 boş payda ve boş kayıt, X10-X13 yinelenen anahtarlar).",
  "mutants": [
   {
    "id": "M1",
@@ -26,8 +26,8 @@
    "id": "M4",
    "description": "RUNNING is FALSE (measured zero) instead of UNKNOWN when the journal is ABSENT",
    "file": "core/agents/readiness-audit.ts",
-   "old": "if (c.i.runs.journal === \"ABSENT\") return result(\"UNKNOWN\", [\"NO_RUN_JOURNAL\"]);",
-   "new": "if (c.i.runs.journal === \"ABSENT\") return result(\"FALSE\", [\"NO_RUN_JOURNAL\"]);"
+   "old": "if (c.journal !== \"PRESENT\") return result(\"UNKNOWN\", [\"NO_RUN_JOURNAL\"]);",
+   "new": "if (c.journal !== \"PRESENT\") return result(\"FALSE\", [\"NO_RUN_JOURNAL\"]);"
   },
   {
    "id": "M5",
@@ -166,7 +166,7 @@
    "id": "M24",
    "description": "the loader substitutes an empty array for a missing/non-array registry field (fail-open)",
    "file": "core/agents/readiness-audit.ts",
-   "old": "if (!Array.isArray(v)) throw unavailable(rel); return v; };",
+   "old": "if (!Array.isArray(v) || (nonEmpty && v.length === 0)) throw unavailable(rel); return v; };",
    "new": "return Array.isArray(v) ? v : []; };"
   },
   {
@@ -175,6 +175,111 @@
    "file": "core/agents/readiness-audit.ts",
    "old": " || !SLUG.test(t.slug)",
    "new": ""
+  },
+  {
+   "id": "X1",
+   "description": "INTERNALLY_CERTIFIED is TRUE for a role that is only TESTED (certTrue = certified || tested)",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "const certTrue = lc.certified;",
+   "new": "const certTrue = lc.certified || lc.tested;"
+  },
+  {
+   "id": "X2",
+   "description": "the CERTIFIED-claim-exceeds-evidence anomaly is not raised",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "if (r.proficiencyStatus === \"CERTIFIED\" && !is(\"INTERNALLY_CERTIFIED\")) add(",
+   "new": "if (false) add("
+  },
+  {
+   "id": "X3",
+   "description": "per-row withCandidateSkills counts every role of the group",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "withCandidateSkills: group.filter(g => g.proposedOnly.candidateSkills > 0).length",
+   "new": "withCandidateSkills: group.filter(g => g.proposedOnly.candidateSkills >= 0).length"
+  },
+  {
+   "id": "X4",
+   "description": "per-row withCandidateToolAdapters counts roles with candidate SKILLS instead of candidate adapters",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "withCandidateToolAdapters: group.filter(g => g.proposedOnly.candidateToolAdapterIds > 0).length",
+   "new": "withCandidateToolAdapters: group.filter(g => g.proposedOnly.candidateSkills > 0).length"
+  },
+  {
+   "id": "X5",
+   "description": "the result is always labelled AUTHORITATIVE, even with a non-default promoted technology set",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "authority: (promotedDefault ? \"AUTHORITATIVE_READINESS_MEASUREMENT\" : \"NON_AUTHORITATIVE_PROMOTED_STATUS_OVERRIDE\") as ReadinessAudit[\"authority\"],",
+   "new": "authority: \"AUTHORITATIVE_READINESS_MEASUREMENT\" as ReadinessAudit[\"authority\"],"
+  },
+  {
+   "id": "X6",
+   "description": "the certificate expiry is checked against the real clock (Date.now()) instead of the injected now",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "nowMs: i.now.getTime()",
+   "new": "nowMs: Date.now()"
+  },
+  {
+   "id": "X7",
+   "description": "RUNNING reports a measured 0 for any journal value other than exactly ABSENT (undefined / unknown value)",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "if (c.journal !== \"PRESENT\") return result(\"UNKNOWN\", [\"NO_RUN_JOURNAL\"]);",
+   "new": "if (c.i.runs?.journal === \"ABSENT\") return result(\"UNKNOWN\", [\"NO_RUN_JOURNAL\"]);"
+  },
+  {
+   "id": "X8",
+   "description": "an empty group (denominator 0) is reported as measured",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "measured: xs.length > 0 && n.UNKNOWN === 0",
+   "new": "measured: n.UNKNOWN === 0"
+  },
+  {
+   "id": "X9",
+   "description": "the loader accepts an empty roles/guilds/clusters/skills array",
+   "file": "core/agents/readiness-audit.ts",
+   "old": " || (nonEmpty && v.length === 0)",
+   "new": ""
+  },
+  {
+   "id": "X10",
+   "description": "duplicate guild / binding / proposed-profile keys are first-wins again (the digest depends on array order)",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "if (m.has(key(x))) throw new Error(`READINESS_INPUT_INVALID:${code}:${key(x)}`); m.set(key(x), x); }",
+   "new": "if (!m.has(key(x))) m.set(key(x), x); }"
+  },
+  {
+   "id": "X11",
+   "description": "duplicate guilds are last-wins",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "uniqueBy(i.guilds, g => g.guildId, \"DUPLICATE_GUILD_ID\")",
+   "new": "new Map(i.guilds.map(g => [g.guildId, g] as const))"
+  },
+  {
+   "id": "X12",
+   "description": "duplicate bindings are last-wins",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "uniqueBy(i.bindings, b => b.roleId, \"DUPLICATE_BINDING_ROLE_ID\")",
+   "new": "new Map(i.bindings.map(b => [b.roleId, b] as const))"
+  },
+  {
+   "id": "X13",
+   "description": "duplicate proposed profiles are last-wins",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "uniqueBy(i.proposedProfiles ?? [], p => p.roleId, \"DUPLICATE_PROPOSED_PROFILE_ROLE_ID\")",
+   "new": "new Map((i.proposedProfiles ?? []).map(p => [p.roleId, p] as const))"
+  },
+  {
+   "id": "X14",
+   "description": "a PRESENT journal without a runs array is read as a measurement",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "i.runs?.journal === \"PRESENT\" && Array.isArray(i.runs.runs) ? \"PRESENT\" : \"ABSENT\"",
+   "new": "i.runs?.journal === \"PRESENT\" ? \"PRESENT\" : \"ABSENT\""
+  },
+  {
+   "id": "X15",
+   "description": "a non-default promoted technology set is not disclosed in inputs",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "promotedTechnologyStatuses: promotedDefault ? \"DEFAULT\" as const : promotedList,",
+   "new": "promotedTechnologyStatuses: \"DEFAULT\" as const,"
   }
  ]
 }
