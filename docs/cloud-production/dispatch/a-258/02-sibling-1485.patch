@@ -1,0 +1,14 @@
+diff --git a/tests/v7-ux-journey.test.ts b/tests/v7-ux-journey.test.ts
+index 0377c38..9f49bf1 100644
+--- a/tests/v7-ux-journey.test.ts
++++ b/tests/v7-ux-journey.test.ts
+@@ -1482,7 +1482,8 @@ describe("LANE-A A-ANALYSIS-STUCK-1: an approved artefact whose phase did not ad
+     const d = deferred(), b = await open(stuck(), () => d.p); await press(b, "analysis-step-submit"); setVal(b.root, "analysis-reapprove-evidence", "ev");
+     expect(byData(byId(b.root, "analysis-step")!, "analysisBusy")).toBeUndefined();
+     b.ctx.rerender = async () => { b.root = await renderJourney(b.ctx); }; // a real repaint, as in the app
+-    fire(byId(b.root, "analysis-reapprove-submit")!, "click"); await new Promise(r => setTimeout(r, 40)); // the click's own repaint only: NO extra manual repaint
++    fire(byId(b.root, "analysis-reapprove-submit")!, "click"); // the click's own repaint only: NO extra manual repaint; it is an IPC-backed module load in vitest, so wait (bounded) for it instead of a fixed timer
++    for (const end = Date.now() + 2000; byId(b.root, "analysis-step-submit")!.attrs.get("disabled") === undefined && Date.now() < end;) await new Promise(r => setTimeout(r, 5));
+     expect(byId(b.root, "analysis-step-submit")!.attrs.get("disabled")).toBeDefined(); expect(byId(b.root, "analysis-reapprove-submit")!.attrs.get("disabled")).toBeDefined();
+     expect(text(byData(byId(b.root, "analysis-step")!, "analysisBusy")!)).toContain("Another request that changes mission data is running");
+     const other = b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null}) as N; // mission B while A's request runs: the same conservative lock, but explained

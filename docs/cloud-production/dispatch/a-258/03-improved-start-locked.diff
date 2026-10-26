@@ -1,0 +1,16 @@
+--- fixed.ts	2026-10-26 19:58:17.818586662 +0000
++++ improved.ts	2026-10-26 19:58:17.833215318 +0000
+@@ -1709,11 +1709,11 @@
+ 
+   it("Start is locked too (an inactive pre-dev record) in both directions", async () => {
+     const d = deferred(), b = await open({[STEP]: () => d.p, [START]: OK_PREDEV}, inactivePredev());
+-    fire(byId(b.root, "analysis-step-submit")!, "click"); await until(() => dis(b, "predev-start-submit") !== undefined);
++    fire(byId(b.root, "analysis-step-submit")!, "click"); expect(b.forms.missionWriteBusy()).toBe(true); await settleMs(); await until(() => dis(b, "predev-start-submit") !== undefined);
+     expect(dis(b, "predev-start-submit")).toBeDefined(); expect(await b.dec.submitStart(b.ctx, MSN)).toEqual({ok: false, busy: true}); expect(b.calls[START] ?? 0).toBe(0);
+     d.res({status: 200, body: {status: "BLOCKED", blocker: "X", blockers: ["X"]}}); await settleMs();
+     const d2 = deferred(), r = await open({[STEP]: {status: 200, body: {status: "BLOCKED", blocker: "X", blockers: ["X"]}}, [START]: () => d2.p}, inactivePredev());
+-    fire(byId(r.root, "predev-start-submit")!, "click"); await until(() => dis(r, "analysis-step-submit") !== undefined);
++    fire(byId(r.root, "predev-start-submit")!, "click"); expect(r.forms.missionWriteBusy()).toBe(true); await settleMs(); await until(() => dis(r, "analysis-step-submit") !== undefined);
+     expect(dis(r, "analysis-step-submit")).toBeDefined(); expect(await r.an.submitAnalysisStep(r.ctx, MSN)).toEqual({ok: false, busy: true});
+     d2.res(OK_PREDEV); await settleMs();
+   });
