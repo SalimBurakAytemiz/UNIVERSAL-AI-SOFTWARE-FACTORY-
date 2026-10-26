@@ -2,6 +2,7 @@
 import type {WorkOsStore} from "../../../../core/workos/store.js";
 import type {Scope, ProjectTemplate} from "../../../../core/workos/types.js";
 import type {EvidencePage, EvidenceQuery} from "../../../../core/evidence/index.js";
+import type {DevRunManager} from "../../../../core/workos/devrun.js";
 
 // //TR: COORD-FIRST-DELIVERY-WIRING: modüler yazma route'larının gövde sınırı masaüstü köprüsünün POST sınırıyla (apps/desktop/main.mjs POST_MAX_BODY_BYTES) aynıdır; sunucunun genel 64 KB sınırı yalnız eski rotalar için kalır.
 export const LANE_WRITE_BODY_LIMIT = 32 * 1024;
@@ -17,4 +18,6 @@ export interface RouteDeps {
   // İsteğe bağlı: tek ProjectStudio örneği (server.ts getStudio). Verilmezse template isteyen route kendi örneğini kurar.
   studio?: () => {createTemplateRepository(projectId: string, template: ProjectTemplate, projectName: string): {path: string; discard: () => void}};
   evidenceIndex?: () => { list: (q?: EvidenceQuery) => Promise<EvidencePage> };
+  // İsteğe bağlı (B-RUN-1): dev-run yöneticisi; verilmezse ürün çalıştırma rotaları 503 DEVRUN_NOT_WIRED döner.
+  devruns?: () => Promise<DevRunManager>;
 }

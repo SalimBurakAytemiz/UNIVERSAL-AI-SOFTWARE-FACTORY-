@@ -324,7 +324,7 @@ describe("PS1A-C2-F2: a crashed dev process leaves no live descendants", () => {
     expect(c).toMatchObject({status: "CRASHED", exitCode: 7, reason: "PROCESS_EXITED:7"});
     // Linux: süreç grubu + kaydedilmiş soy (setsid ile gruptan kaçan ayrık torunlar) ppid yürüyüşü; Windows: ppid yürüyüşü.
     expect(c.treeCleanup.method).toBe(WIN ? "PPID_WALK" : process.platform === "linux" ? "PROCESS_GROUP_PPID_WALK" : "PROCESS_GROUP");
-    expect(c.treeCleanup.survivors).toBe(0);
+    expect(c.treeCleanup.survivors).toBe(0); expect(c.treeCleanup.verification).toBe(WIN || process.platform === "linux" ? "VERIFIED" : "UNVERIFIED");
     await until(() => !pidAlive(gp1) && !pidAlive(gp2), x => x, 10_000);
     expect(pidAlive(gp1)).toBe(false);
     expect(pidAlive(gp2)).toBe(false);
