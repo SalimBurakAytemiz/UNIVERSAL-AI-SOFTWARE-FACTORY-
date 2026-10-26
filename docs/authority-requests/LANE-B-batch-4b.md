@@ -3,12 +3,11 @@
 
 Protected file: `apps/control-api/src/server.ts`. Lane B provides text only; the coordinator applies it.
 
-Add next to the other `register*Routes(app, …)` calls (same `deps` object):
+Add next to the other `register*Routes(app, …)` calls, plus the two imports (`registerAnalysisRoutes` from `./routes/analysis.js`; `AnalysisFlow`, `NO_ANALYSIS_BUILDER`, `claudeAnalysisReadiness` from `core/workos/crew/analysis.js`). The coordinator-verified line (type-checks in server.ts scope):
 
 ```ts
-registerAnalysisRoutes(app, {...deps, analysisFlow: (stopped) => new AnalysisFlow({store: getStore(), scope, builder, readiness, stopped})});
+registerAnalysisRoutes(app,{...laneDeps,analysisFlow:(stopped)=>new AnalysisFlow({store:getStore(),scope,builder:getExecutors().pair?.preDevBuilder?.()??NO_ANALYSIS_BUILDER,readiness:()=>claudeAnalysisReadiness({controlRoot,profile:{forbiddenRoots:[getStore().dataDir]},cli:getExecSetup().cliStatus()}),stopped})})
 ```
 
-- `stopped` is REQUIRED: the route passes `workosStopped` into the factory, so the flow aborts the paid call and throws `AnalysisStoppedError` (mapped to 423 by `instanceof`). A factory that ignores `stopped` lets a paid run start under Global Stop; the route test pins that the hook reaches the flow.
-- `builder` / `readiness` are the same ones used for `predev/produce` (`ClaudePreDevBuilder`, `claudeAnalysisReadiness`).
-- The route holds the process-wide produce lock (shared with `predev/produce`) for the whole step; a mission that is not pre-dev eligible is refused 409 `MISSION_NOT_PREDEV_ELIGIBLE` before any builder call.
+- The route passes `workosStopped` into the factory as `stopped`. The route's own Global Stop pre-gate (423 before the flow is built) is what prevents a paid run from STARTING under Global Stop; `stopped` additionally lets the flow abort a paid call that is already running and map it to 423. A factory that ignores `stopped` still type-checks and only loses that mid-run abort (the route test pins that the hook reaches the flow, but nothing forces a factory to use it).
+- The route holds the process-wide produce lock (shared with `predev/produce`) for the whole step; a mission that is not pre-dev eligible (no active sequence and a non-open status) is refused 409 `MISSION_NOT_PREDEV_ELIGIBLE` before the lock and before any builder call.
