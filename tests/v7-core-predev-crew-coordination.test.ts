@@ -583,6 +583,11 @@ describe("C-FLOW-ANALYSIS-1: intake -> analysis -> plan", () => {
   it("L4: the plan gate and the actor attribution: the agent identity records every draft, the actor given to createPlan owns the plan and its tasks, and nothing else is accepted silently", async () => {
     const t = setup(); await approveAll(t);
     for (const kind of ANALYSIS_KINDS) expect(t.store.getPreDevArtifact(SCOPE, t.rm().artifacts[kind].artifactId!)).toMatchObject({recordedBy: PREDEV_AGENT_ACTOR, approvedBy: "FOUNDER_LOCAL"});
+    // the sequence itself is opened and advanced to its first phase by the agent identity (never the Founder's); the Founder only approves
+    const events = fs.readFileSync(path.join(t.store.dataDir, "journal.jsonl"), "utf8").split("\n").filter(Boolean).map(l => JSON.parse(l) as {type: string; actor: string; payload: {to?: string}});
+    expect(events.filter(e => e.type === "PREDEV_SEQUENCE_OPENED").map(e => e.actor)).toEqual([PREDEV_AGENT_ACTOR]);
+    expect(events.filter(e => e.type === "PREDEV_PHASE_ADVANCED" && e.payload.to === "BUSINESS_ANALYSIS").map(e => e.actor)).toEqual([PREDEV_AGENT_ACTOR]);
+    expect(events.filter(e => e.type === "PREDEV_ARTIFACT_RECORDED").every(e => e.actor === PREDEV_AGENT_ACTOR)).toBe(true);
     expect(t.flow.createPlan(t.missionId, "FOUNDER_ACTOR_X")).toMatchObject({ok: true, replayed: false});
     const plans = fs.readFileSync(path.join(t.store.dataDir, "plans.jsonl"), "utf8");
     expect(plans).toContain('"createdBy":"FOUNDER_ACTOR_X"');

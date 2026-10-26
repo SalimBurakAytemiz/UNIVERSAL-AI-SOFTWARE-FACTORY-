@@ -26,15 +26,8 @@
    "id": "F4",
    "description": "the sequence is started on every step",
    "file": "core/workos/crew/analysis.ts",
-   "old": "if (!rm.active || rm.phase === \"AUTHORIZED\") driver.start(",
-   "new": "if (true) driver.start("
-  },
-  {
-   "id": "F5",
-   "description": "the draft is recorded under the Founder's identity",
-   "file": "core/workos/crew/analysis.ts",
-   "old": "const out = await driver.produceCurrentPhase(scope, missionId, PREDEV_AGENT_ACTOR);",
-   "new": "const out = await driver.produceCurrentPhase(scope, missionId, \"FOUNDER_LOCAL\");"
+   "old": "if (!now.active || now.phase === \"AUTHORIZED\") recorder.start(",
+   "new": "if (true) recorder.start("
   },
   {
    "id": "F6",
