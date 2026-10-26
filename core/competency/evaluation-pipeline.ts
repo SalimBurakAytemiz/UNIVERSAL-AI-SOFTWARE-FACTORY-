@@ -147,8 +147,8 @@ const gitOut = (cwd: string, args: string[]): string | null => { const r = git(c
 type GitRes = {status: number | null; signal?: NodeJS.Signals | null; error?: Error; stderr?: unknown};
 const gitDetail = (r: GitRes): string => {
   const how = r.error ? `spawn=${(r.error as NodeJS.ErrnoException).code ?? "ERR"}` : r.signal ? `signal=${r.signal}` : `exit=${r.status}`;
-  const scrubbed = String(r.stderr ?? "").replace(/\b([a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/gi, "$1[REDACTED]@"); // URL userinfo (user:password@host) is cut before anything else
-  return `${how}:${redactSecrets(scrubbed).replace(/\s+/g, " ").trim().slice(0, 120)}`;
+  const scrubbed = String(r.stderr ?? "").replace(/([a-z][a-z0-9+.-]{0,31}:\/\/)[^\s/]+@/gi, "$1[REDACTED]@"); // URL userinfo (user:password@host, the password may hold '@'); linear: the scheme part is bounded
+  return `${how}:${redactSecrets(scrubbed.replace(/\s+/g, " ").trim()).slice(0, 120)}`; // collapse -> redact -> clip: collapsing first lets a pattern split by a newline match, clipping last never leaves a secret fragment
 };
 const setupFail = (step: string, r: GitRes): string => `WORKSPACE_SETUP_FAILED:${step}:${gitDetail(r)}`;
 function seedRepo(dir: string, files: Readonly<Record<string, string>>): string {
@@ -380,6 +380,9 @@ export function verdictOf(checks: readonly EvalCheck[]): "PASSED" | "FAILED" | n
   return checks.length === 0 ? null : checks.every(c => c.passed) ? "PASSED" : "FAILED";
 }
 
+// //TR: Fırlatılan değer yazdırılamıyorsa (null-prototipli nesne, toString'i fırlatan nesne) catch'in kendisi düşmemeli.
+const msgOf = (e: unknown): string => { try { return String((e as Error)?.message ?? e); } catch { return "UNPRINTABLE_THROW"; } };
+
 export async function runRoleEvaluation(deps: EvaluationDeps, roleId: string, evaluationId: string): Promise<EvaluationOutcome> {
   const plan = planFor(roleId, evaluationId, deps.bindings);
   if ("refused" in plan) return {status: "REFUSED", reason: plan.refused};
@@ -398,7 +401,7 @@ export async function runRoleEvaluation(deps: EvaluationDeps, roleId: string, ev
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-eval-"));
   let run: ProcedureRun;
   try { run = await procedure.run({pair: deps.pair, profile, timeoutMs, ...(deps.shouldAbort ? {shouldAbort: deps.shouldAbort} : {}), tmp}, profile.function); }
-  catch (e) { return {status: "NOT_EXECUTED", roleId, evaluationId, reason: `PROCEDURE_EXCEPTION:${redactSecrets(String((e as Error)?.message ?? e)).replace(/\s+/g, " ").trim().slice(0, 240)}`}; }
+  catch (e) { return {status: "NOT_EXECUTED", roleId, evaluationId, reason: `PROCEDURE_EXCEPTION:${redactSecrets(msgOf(e).replace(/\s+/g, " ").trim()).slice(0, 240)}`}; }
   finally { try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* geçici dizin en iyi çabayla silinir */ } }
   // //TR: Altyapı kaynaklı sonuç bir DEĞERLENDİRME SONUCU değildir: hiçbir kanıt yazılmaz (rol ne geçer ne kalır).
   if (run.infra !== null) return {status: "NOT_EXECUTED", roleId, evaluationId, reason: run.infra};

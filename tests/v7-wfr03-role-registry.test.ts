@@ -1814,18 +1814,49 @@ describe("A-TEST-DIAG-1: a failing git step in the evaluation pipeline is diagno
     const straddle = reasonOf(await evalWith(throwing(new Error("EXECUTOR_FAILED: " + "y".repeat(200) + " " + TOKEN))));
     expect(straddle).not.toMatch(/ghp_/);
     expect(straddle).toContain("[REDACTED:GITHUB_TOKEN"); // the marker itself may be clipped at 240, the secret may not survive
-    const plain = reasonOf(await evalWith(throwing("x")));
-    expect(plain).toMatch(/^PROCEDURE_EXCEPTION:/);
-    expect(plain).toContain("x");
+    expect(reasonOf(await evalWith(throwing("x")))).toBe("PROCEDURE_EXCEPTION:x");
+    expect(reasonOf(await evalWith(throwing(new Error("a\n\n  b\tc"))))).toBe("PROCEDURE_EXCEPTION:a b c"); // whitespace is collapsed and trimmed
+    // collapse comes first: a pattern split by a newline (a PEM header) still matches
+    const pem = reasonOf(await evalWith(throwing(new Error("EXECUTOR_FAILED: " + "-".repeat(5) + "BEGIN RSA\nPRIVATE KEY" + "-".repeat(5)))));
+    expect(pem).toContain("[REDACTED:PRIVATE_KEY]");
+    expect(pem).not.toContain("BEGIN RSA");
   });
 
-  it("git stderr never keeps URL userinfo (user:password@host), while the host stays", async () => {
+  it("a throw that cannot be printed (null-prototype object, a throwing toString) is NOT_EXECUTED with UNPRINTABLE_THROW", async () => {
+    const throwing = (err: unknown): ExecutorPair => new FakeExecutors({implement: () => { throw err; }, review: () => ({verdict: "CLEAN"})}).pair();
+    for (const bad of [Object.create(null), {toString() { throw new Error("no toString"); }}]) {
+      const o = await runRoleEvaluation({repoRoot: REPO, stagingRoot: path.join(fs.mkdtempSync(path.join(tmp, "diag-")), "staging"), pair: throwing(bad)}, DEV, "EV-01");
+      expect(reasonOf(o)).toBe("PROCEDURE_EXCEPTION:UNPRINTABLE_THROW");
+    }
+  });
+
+  it("git stderr never keeps URL userinfo (user:password@host), also when the password holds '@' or the scheme follows a word character, while the host stays", async () => {
     const PASS = "p" + "w0rd" + "Zq7";
-    const { out } = await run(DEV, "add", {status: 128, stderr: `fatal: unable to access 'https://alice:${PASS}@git.example.com/r.git/': denied`});
-    const reason = reasonOf(out);
-    expect(reason).not.toContain("alice");
-    expect(reason).not.toContain(PASS);
-    expect(reason).toContain("https://[REDACTED]@git.example.com/r.git/");
+    const reasonFor = async (stderr: string, role = DEV, sub = "add") => reasonOf((await run(role, sub, {status: 128, stderr})).out);
+    const plain = await reasonFor(`fatal: unable to access 'https://alice:${PASS}@git.example.com/r.git/': denied`);
+    expect(plain).not.toContain("alice"); expect(plain).not.toContain(PASS);
+    expect(plain).toContain("https://[REDACTED]@git.example.com/r.git/");
+    const at = await reasonFor("fatal: https://alice:p@ss@host/ denied");
+    expect(at).not.toContain("ss@"); expect(at).not.toContain("alice"); expect(at).toContain("https://[REDACTED]@host/");
+    const glued = await reasonFor("fatal: _https://alice:pw@host/ denied"); // no word boundary before the scheme
+    expect(glued).not.toContain("alice"); expect(glued).toContain("[REDACTED]@host/");
+    // the same scrub on a WORKSPACE_SETUP_FAILED path (developer checkout -B)
+    const ws = await reasonFor(`error: https://alice:${PASS}@git.example.com/r.git refused`, DEV, "-B");
+    expect(ws).toMatch(/^WORKSPACE_SETUP_FAILED:checkout:exit=128:/);
+    expect(ws).not.toContain("alice"); expect(ws).not.toContain(PASS); expect(ws).toContain("https://[REDACTED]@git.example.com/r.git");
+  });
+
+  it("scrubbing a 200k-character stderr stays linear (regression guard, not a timeout)", async () => {
+    const real = cp.spawnSync.bind(cp); let t0 = 0;
+    const spy = vi.spyOn(cp, "spawnSync").mockImplementation(((cmd: string, args: string[], opts: any) => {
+      if (cmd === "git" && Array.isArray(args) && args.includes("init")) { t0 = performance.now(); return {output: [], pid: 0, signal: null, status: 128, stdout: "", stderr: "a.".repeat(100000)} as any; }
+      return (real as any)(cmd, args, opts);
+    }) as any);
+    try {
+      const reason = reasonOf(await evaluate(DEV)); const ms = performance.now() - t0;
+      expect(reason).toMatch(/^PROCEDURE_EXCEPTION:GIT_SEED_FAILED:init:exit=128:a\.a\./);
+      expect(ms, `scrub + clip took ${ms.toFixed(0)} ms`).toBeLessThan(500);
+    } finally { spy.mockRestore(); }
   });
 });
 
