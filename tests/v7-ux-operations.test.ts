@@ -334,8 +334,11 @@ describe("Operations — only already-allow-listed read-only GETs are used (prot
     const boundary = await import(pathToFileURL(path.join(root, "automation", "lib", "control-boundary.mjs")).href);
     const allowed = (v: string) => boundary.desktopGetPathAllowed(v) || extra(v);
     for (const p of THREE) expect(allowed(p), p).toBe(true);
-    // Üçü de temel (control-boundary) izin listesindedir; EXTRA kümesine hiçbiri eklenmedi.
-    for (const p of THREE) expect(boundary.desktopGetPathAllowed(p), p).toBe(true);
+    // /v1/control/status ve /v1/runs temel (control-boundary) izin listesindedir. /v1/attention temelde YOKTUR: yalnız korunan B4 EXTRA bloğundaki tam eşleşmeyle (ATTENTION_GET_RE, protected batch 3b / #199) kabul edilir; bu test o bağımlılığı açıkça söyler, #199 olmadan ilk döngüde dürüstçe başarısız olur.
+    for (const p of THREE.filter(x => x !== "/v1/attention")) expect(boundary.desktopGetPathAllowed(p), p).toBe(true);
+    expect(boundary.desktopGetPathAllowed("/v1/attention")).toBe(false);
+    expect(extra("/v1/attention")).toBe(true);
+    for (const p of ["/v1/attention?x=1", "/v1/attention/", "/v1/attention/x"]) expect(allowed(p), p).toBe(false);
     for (const p of ["/v1/operations", "/v1/recovery", "/v1/ops", "/v1/control", "/v1/control/stop", "/v1/control/resume", "/v1/runs/", "/v1/runs?x=1", "/v1/control/status?x=1", "/v1/founder-attention?x=1"]) expect(allowed(p), p).toBe(false);
     const set = mainSrc.match(/const EXTRA_GET_ROUTES=new Set\(\[([^\]]*)\]\)/)![1];
     expect(set).toBe('"/v1/cockpit","/v1/projects","/v1/missions","/v1/work-runs","/v1/evidence","/v1/roles","/v1/company/accounts","/v1/company/contacts","/v1/company/opportunities","/v1/company/invoices","/v1/company/payments","/v1/company/contracts"');
