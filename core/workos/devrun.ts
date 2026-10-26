@@ -346,6 +346,13 @@ export class DevRunManager {
     // Önceki çalıştırmanın ağaç temizliği (arka planda) bitmeden yeni süreç başlatılmaz.
     const pending = this.reaping.get(id);
     if (pending && !(await Promise.race([pending.then(() => true), sleep(this.o.reapWaitMs ?? 60_000).then(() => false)]))) throw new StudioError("DEVRUN_STOP_PENDING", 409);
+    // NEW-2: önceki çalıştırmanın sağlayıcı-taraflı kapatması temiz bitmediyse (STOP_INCOMPLETE) kayıt sessizce düşmez: önce Linux tarafı yeniden kapatılır; kapanmazsa yeni süreç BAŞLATILMAZ.
+    const prevRun = this.readState(id);
+    if (prevRun?.stopIncomplete) {
+      const code = prevRun.sandboxScratch ? (await this.recoverScratchWith(prevRun, gate.provider)).code : null;
+      if (code) throw new StudioError("DEVRUN_STOP_INCOMPLETE", 409, code);
+      try { this.writeState({...prevRun, stopIncomplete: undefined, sandboxScratch: null, reason: "STOP_INCOMPLETE_RESOLVED"}, true); } catch { /* durum yazılamadı */ }
+    }
     // Kapı beklemesinden sonra (await) eşzamanlı start ve GLOBAL_STOP yeniden kontrol edilir.
     if (this.isActive(id)) throw new StudioError("DEVRUN_ALREADY_RUNNING", 409);
     if (this.stopActive()) throw new StudioError("GLOBAL_STOP_ACTIVE", 423);
@@ -408,6 +415,8 @@ export class DevRunManager {
       child.stderr?.on("data", (b: Buffer) => { a.stderr.push(b); this.scheduleFlush(a); });
       if (child.pid === undefined) { await a.exited; return this.view(project); }
       st.pid = child.pid;
+      // NEW-3: sağlayıcı-taraflı scratch, köprü kurulumundan ÖNCE kalıcı yazılır (API bu aralıkta çökerse recover() Linux tarafını kapatabilsin).
+      if (st.sandboxScratch && ACTIVE.has(st.status)) { try { this.writeState(st, true); } catch { /* durum yazılamadı */ } }
       // B-RUN-WIN-1: eşzamansız hazırlık sırasında (spawnAsync) stop/GLOBAL_STOP geldiyse yeni süreç hemen sonlandırılır (aşağıdaki aborted() denetimi çıkışı bekler).
       if (a.stopping || this.stopActive() !== null) killProcessTree(child.pid);
       // B-RUN-1: köprü (yalnız ağ-izole sağlayıcılarda): ana makine 127.0.0.1:port -> sandbox 127.0.0.1:port. Açılamazsa süreç durdurulur ve çalıştırma BLOCKED olur.
@@ -558,7 +567,7 @@ export class DevRunManager {
   }
 
   // Durdurma sonucu: NOT_ACTIVE (çalışan yok), STOPPED (çıkış görüldü), TIMEOUT (süre doldu, ağaç hâlâ canlı olabilir: çalıştırma aktif kalır, STOPPED yazılmaz).
-  async stopDetailed(projectId: string, reason = "STOP_REQUESTED"): Promise<"NOT_ACTIVE" | "STOPPED" | "TIMEOUT"> {
+  async stopDetailed(projectId: string, reason = "STOP_REQUESTED"): Promise<"NOT_ACTIVE" | "STOPPED" | "TIMEOUT" | "INCOMPLETE"> {
     const a = this.active.get(projectId);
     if (!a) return "NOT_ACTIVE";
     a.stopping = true; a.state.reason = reason;
@@ -576,12 +585,14 @@ export class DevRunManager {
       return "TIMEOUT";
     }
     if (this.active.get(projectId) === a) { this.onExit(a, a.child?.exitCode ?? null, null); }
-    return "STOPPED";
+    // NEW-2: sağlayıcı-taraflı kapatma temiz bitmediyse (STOP_INCOMPLETE:<kod>) süreç durdu ama Linux tarafı temiz DEĞİL: "STOPPED" denmez.
+    return a.state.stopIncomplete ? "INCOMPLETE" : "STOPPED";
   }
   // Açık durdur çağrısı: zaman aşımında 409 DEVRUN_STOP_TIMEOUT (eski davranış "STOPPED" yalan söylüyordu); başka durumda eski boolean sözleşmesi.
   async stop(projectId: string, reason = "STOP_REQUESTED"): Promise<boolean> {
     const r = await this.stopDetailed(projectId, reason);
     if (r === "TIMEOUT") throw new StudioError("DEVRUN_STOP_TIMEOUT", 409);
+    if (r === "INCOMPLETE") throw new StudioError("DEVRUN_STOP_INCOMPLETE", 409, this.readState(projectId)?.stopIncomplete ?? "TEARDOWN_INCOMPLETE");
     return r === "STOPPED";
   }
   async restart(project: Project): Promise<DevRunView> { await this.stop(project.projectId, "RESTART_REQUESTED"); return this.start(project); }
@@ -606,6 +617,10 @@ export class DevRunManager {
     if (!st.sandboxScratch) return {code: null};
     let provider: {teardownScratch?: (s: string) => Promise<string | null>} | null = null;
     try { const g = await this.o.executionGate?.authorize("STUDIO_DEVRUN"); provider = g && g.allowed ? g.provider : null; } catch { provider = null; }
+    return this.recoverScratchWith(st, provider);
+  }
+  private async recoverScratchWith(st: DevRunState, provider: {teardownScratch?: (s: string) => Promise<string | null>} | null): Promise<{code: string | null}> {
+    if (!st.sandboxScratch) return {code: null};
     if (!provider || typeof provider.teardownScratch !== "function") return {code: "SANDBOX_PROVIDER_UNAVAILABLE"};
     try { return {code: await provider.teardownScratch(st.sandboxScratch)}; } catch { return {code: "TEARDOWN_ERROR"}; }
   }

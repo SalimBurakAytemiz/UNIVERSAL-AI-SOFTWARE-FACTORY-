@@ -396,7 +396,9 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
       async teardownScratch(sc: string) { torn.push(sc); return code; }});
     const m = manager(dataDir, new ExecutionGate(provider));
     try {
-      await m.start(p); await m.stop(p.projectId);
+      await m.start(p);
+      // NEW-2: kapatma temiz bitmedi => stop 'STOPPED' DEMEZ (409 DEVRUN_STOP_INCOMPLETE + kod)
+      await expect(m.stop(p.projectId)).rejects.toMatchObject({code: "DEVRUN_STOP_INCOMPLETE", status: 409, reason: "PROCESS_SURVIVED"});
       for (let i = 0; i < 50 && m.view(p).reason !== "STOP_INCOMPLETE:PROCESS_SURVIVED"; i++) await new Promise(r => setTimeout(r, 100));
       expect(m.view(p)).toMatchObject({status: "STOPPED", reason: "STOP_INCOMPLETE:PROCESS_SURVIVED", stopIncomplete: "PROCESS_SURVIVED", sandboxScratch: "/tmp/uasco-sbx-AbC123"});
       const st = JSON.parse(fs.readFileSync(path.join(dataDir, "projects", p.projectId, "devrun", "state.json"), "utf8")); st.instanceId = "dev_dead"; st.ownerPid = 2 ** 22 - 3; fs.writeFileSync(path.join(dataDir, "projects", p.projectId, "devrun", "state.json"), JSON.stringify(st));
@@ -422,6 +424,37 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
       (m as any).o.reapWaitMs = 10_000; const v = await m.start(p); expect(reaps).toBe(1); expect(v.status).toMatch(/RUNNING|STARTING/);
     } finally { (m as any).reapTree = async () => undefined; await m.stopAll("CLEANUP"); }
   }, 40_000);
+
+  it("NEW-2: a new run for the same project is refused (409 DEVRUN_STOP_INCOMPLETE) while the previous provider teardown is incomplete - the record and scratch are not dropped; start retries the teardown first and proceeds only on a clean result", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+    let code: string | null = "PROCESS_SURVIVED"; const torn: string[] = [];
+    const provider = hostSpawn({async spawnAsync(c: string, a: string[], o: cp.SpawnOptions) { const ch: any = cp.spawn(c, a, o); ch.sandboxScratch = "/tmp/uasco-sbx-AbC123"; ch.sandboxTeardown = new Promise(res => ch.once("exit", () => res(code))); return ch; },
+      async teardownScratch(sc: string) { torn.push(sc); return code; }});
+    const m = manager(dataDir, new ExecutionGate(provider));
+    try {
+      await m.start(p); await expect(m.stop(p.projectId)).rejects.toMatchObject({code: "DEVRUN_STOP_INCOMPLETE"});
+      await expect(m.start(p)).rejects.toMatchObject({code: "DEVRUN_STOP_INCOMPLETE", status: 409, reason: "PROCESS_SURVIVED"});
+      expect(torn).toEqual(["/tmp/uasco-sbx-AbC123"]); expect(m.view(p)).toMatchObject({stopIncomplete: "PROCESS_SURVIVED", sandboxScratch: "/tmp/uasco-sbx-AbC123"}); // kayıt düşmedi
+      code = null; const v = await m.start(p); expect(torn).toHaveLength(2); expect(v.status).toMatch(/RUNNING|STARTING/);
+      expect(m.view(p).stopIncomplete).toBeUndefined();
+    } finally { code = null; await m.stopAll("CLEANUP"); }
+  }, T);
+
+  it("NEW-3: the provider scratch is persisted right after spawn, BEFORE the (slow) bridge setup finishes, so an API crash in that window still leaves recover() the Linux-side handle", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+    let startedBridge!: () => void; const bridging = new Promise<void>(r => { startedBridge = r; }); let finish!: () => void; const slow = new Promise<void>(r => { finish = r; });
+    const provider = {id: "FAKE_ISOLATED", network: "ISOLATED", async selfTest() { return {ok: true}; }, async run() { throw new Error("unused"); },
+      async spawnAsync(c: string, a: string[], o: cp.SpawnOptions) { const ch: any = cp.spawn(c, a, o); ch.sandboxScratch = "/tmp/uasco-sbx-Zz9Zz9"; return ch; },
+      spawn(): never { throw new Error("unused"); },
+      async bridge(_c: cp.ChildProcess, port: number) { startedBridge(); await slow; return {port, close() { /* kapalı */ }}; }};
+    const m = manager(dataDir, new ExecutionGate(provider as any));
+    const started = m.start(p).catch(e => e);
+    try {
+      await bridging;
+      const st = JSON.parse(fs.readFileSync(path.join(dataDir, "projects", p.projectId, "devrun", "state.json"), "utf8"));
+      expect(st).toMatchObject({status: "STARTING", sandboxScratch: "/tmp/uasco-sbx-Zz9Zz9"}); expect(st.pid).toBeGreaterThan(0);
+    } finally { finish(); await started; await m.stopAll("CLEANUP"); }
+  }, T);
 
   it("C-8: the delivery link is on the STARTING placeholder (product stop works during STARTING); C-9: the manager-wide cap refuses the next start with 409 DEVRUN_CAPACITY", async () => {
     const {app, dataDir} = mk(); const p1 = await createProject(app, {template: "web-node"}), p2 = await createProject(app, {template: "web-node"});
