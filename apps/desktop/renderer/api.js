@@ -47,8 +47,15 @@ export function createApi({bridge,store,now=()=>Date.now()}){
   }
   const stale=r=>r.epoch!==store.epoch;
   // //TR: Durum özeti ve hazırlık AYNI okumayı paylaşır: eşzamanlı iki çağrı tek bir in-flight söz verir (TTL'ye bağlı değil); okuma bitince serbest kalır, sonraki çağrı yine normal önbellek kuralına tabidir.
-  let statusInflight=null;
-  const readStatusSummary=()=>statusInflight??(statusInflight=get(STATUS_SUMMARY_PATH).finally(()=>{statusInflight=null}));
+  // //TR: Paylaşım yalnız AYNI epoch'ta ve önbellek girdisi hâlâ aynı sözse sürer: invalidate()/proje değişimi/başarılı yazma sonrası önbellek temizlenir ya da epoch artar, bu durumda yeni okuma başlar; okuma bitince (başarı ya da hata) paylaşım serbest kalır.
+  let statusRead=null;
+  const readStatusSummary=()=>{
+    const cur=store.cache.get(STATUS_SUMMARY_PATH);
+    if(statusRead!==null&&statusRead.epoch===store.epoch&&cur!==undefined&&cur.promise===statusRead.entry)return statusRead.p;
+    const p=get(STATUS_SUMMARY_PATH),rec={epoch:store.epoch,entry:store.cache.get(STATUS_SUMMARY_PATH)?.promise,p},release=()=>{if(statusRead===rec)statusRead=null};
+    statusRead=rec;p.then(release,release);
+    return p;
+  };
   // //TR: UX WP3: Company OS kaynaklarının son başarılı okuması; sonraki okuma başarısız olursa kayıtlar STALE (eski veri, zamanıyla) gösterilir, hiç başarılı okuma yoksa asla veri uydurulmaz.
   const companyLastGood=new Map();
   return {

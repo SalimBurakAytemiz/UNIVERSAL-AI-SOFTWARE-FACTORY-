@@ -76,6 +76,7 @@ export function mapReadiness(raw){
   // //TR: Üretici değişmezleri: çalıştırma günlüğü YOKSA RUNNING katmanı tamamen UNKNOWN'dır (TRUE 0, FALSE 0); erişilebilir aşamalar verilmediyse hiçbir rol "aşaması bağlı" olamaz (TRUE 0).
   const running=layers.find(l=>l.layer==="RUNNING");
   if(i.journal==="ABSENT"&&(running.TRUE!==0||running.FALSE!==0||running.NOT_APPLICABLE!==0||running.UNKNOWN!==den))return bad;
+  if(i.journal==="PRESENT"&&running.UNKNOWN!==0)return bad; // //TR: ters yön: günlük VARSA RUNNING ölçülmüş olmalıdır (measured = journal PRESENT)
   if(i.reachableStages==="NOT_SUPPLIED"&&stageWired.TRUE!==0)return bad;
   const computedAt=iso(r.computedAt);if(computedAt===null||typeof r.digest!=="string"||!SHA_RE.test(r.digest))return bad;
   if(c.status!==LEGACY_STATUS||c.authority!=="readiness"||typeof c.consistent!=="boolean"||typeof c.runningMeasured!=="boolean"||c.implementedMeaning!=="EXECUTABLE_CODE_PATH_INCLUDES_UNWIRED_STAGES")return bad;

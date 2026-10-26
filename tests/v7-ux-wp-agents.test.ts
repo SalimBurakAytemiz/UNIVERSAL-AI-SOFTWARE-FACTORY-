@@ -1175,9 +1175,20 @@ describe("LANE-A A1 role readiness panel (8 layers)", () => {
       ["readinessError next to a readiness object", edit(x => { x.readinessError = "ROLE_READINESS_UNAVAILABLE"; })],
       ["readiness null with an unknown readinessError", {...slim("ABSENT"), readiness: null, reconciliation: null, readinessError: "SOMETHING_ELSE"}],
       ["readiness null without readinessError", {...slim("ABSENT"), readiness: null, reconciliation: null}],
-      ["only reconciliation null", {...slim("ABSENT"), reconciliation: null, readinessError: "ROLE_READINESS_UNAVAILABLE"}]];
+      ["only reconciliation null", {...slim("ABSENT"), reconciliation: null, readinessError: "ROLE_READINESS_UNAVAILABLE"}],
+      ["only reconciliation null, no readinessError", {...slim("ABSENT"), reconciliation: null}],
+      ["readiness null with a reconciliation object", {...slim("ABSENT"), readiness: null}],
+      ["readiness null with a reconciliation object and the exact readinessError", {...slim("ABSENT"), readiness: null, readinessError: "ROLE_READINESS_UNAVAILABLE"}],
+      ["readiness undefined, reconciliation null, the exact readinessError", (() => { const x: any = {...slim("ABSENT"), reconciliation: null, readinessError: "ROLE_READINESS_UNAVAILABLE"}; delete x.readiness; return x; })()],
+      ["readinessError of the wrong type", {...slim("ABSENT"), readiness: null, reconciliation: null, readinessError: 503}],
+      ["journal PRESENT but RUNNING is unmeasured", edit(x => { Object.assign(x.readiness.totals.RUNNING, {TRUE: 0, FALSE: 598, UNKNOWN: 1, measured: false}); }, "PRESENT")],
+      ["proposed profiles one above the denominator", edit(x => { x.readiness.proposedOnly.profiles = 600; })],
+      ["proposed candidate skills one above the profiles (still below the denominator)", edit(x => { x.readiness.proposedOnly.profiles = 300; x.readiness.proposedOnly.withCandidateSkills = 301; })],
+      ["proposed candidate adapters one above the profiles (still below the denominator)", edit(x => { x.readiness.proposedOnly.profiles = 300; x.readiness.proposedOnly.withCandidateToolAdapters = 301; })]];
     for (const [name, bad] of bads) expect(c.mapReadiness(bad), name).toEqual(ERR);
     expect(c.mapReadiness({...slim("ABSENT"), readiness: null, reconciliation: null, readinessError: "ROLE_READINESS_UNAVAILABLE"})).toEqual({state: "UNAVAILABLE", readiness: null, reconciliation: null, reason: "ROLE_READINESS_UNAVAILABLE"}); // the #262 contract
+    for (const [k, v] of [["withCandidateSkills", 300], ["withCandidateToolAdapters", 300]] as const) expect(c.mapReadiness(edit(x => { x.readiness.proposedOnly.profiles = 300; x.readiness.proposedOnly[k] = v; })).state, `${k} == profiles is accepted`).toBe("VERIFIED");
+    expect(c.mapReadiness(edit(x => { x.readiness.proposedOnly.profiles = 599; })).state).toBe("VERIFIED"); // profiles == denominator is accepted
     expect(c.mapReadiness(fixture("ABSENT")).state).toBe("VERIFIED"); // the full audit (with roles/byGuild/byCluster) maps too; those arrays are never read
     expect(c.mapReadiness(edit(x => { x.readiness.roles = new Array(c.MAX_ROLES).fill(0); })).state).toBe("VERIFIED");
   });
@@ -1265,12 +1276,13 @@ describe("LANE-A A1 role readiness panel (8 layers)", () => {
     expect(byData(factory, "legacyProjection", "UNVERIFIED")).toHaveLength(1);
     const stat = byData(factory, "stat", "factory-running")[0];
     expect(stat.dataset.value).toBe("UNKNOWN");
-    expect(text(stat.children[0])).toBe("Unknown – no run journal");
+    // //TR: neden doğru olmalı: hazırlık okunamıyorsa günlüğün olup olmadığı bilinmez, bu yüzden "no run journal" DEĞİL "readiness unavailable" denir
+    expect(text(stat.children[0])).toBe("Unknown – readiness unavailable");
     expect(text(node)).not.toContain("4242");
     expect(text(node)).not.toContain("4343");
     expect(everything(node)).not.toContain("4242");
     expect(everything(node)).not.toContain("4343");
-    for (const row of byData(factory, "factoryGuild")) expect(text(row.children[5]), row.dataset.factoryGuild).toBe("Unknown – no run journal");
+    for (const row of byData(factory, "factoryGuild")) expect(text(row.children[5]), row.dataset.factoryGuild).toBe("Unknown – readiness unavailable");
     expect(byData(factory, "stat").filter(n => n.dataset.stat.startsWith("factory-")).map(n => [n.dataset.stat, n.dataset.value]).filter(([k]) => k !== "factory-running"))
       .toEqual([["factory-registered", "599"], ["factory-implemented", String(raw.statusSummary.implemented)], ["factory-tested", String(raw.statusSummary.tested)], ["factory-certified", String(raw.statusSummary.certified)]]);
     expect(text(byData(factory, "stat", "factory-implemented")[0])).toContain("code path (includes unwired stages)");
@@ -1305,6 +1317,7 @@ describe("LANE-A A1 role readiness panel (8 layers)", () => {
     expect(byData(panel, "readinessLayer")).toEqual([]);
     expect(byData(factory, "legacyProjection", "UNVERIFIED")).toHaveLength(1);
     expect(byData(factory, "stat", "factory-running")[0].dataset.value).toBe("UNKNOWN");
+    expect(text(byData(factory, "stat", "factory-running")[0].children[0])).toBe("Unknown – readiness unavailable");
     expect(everything(node)).not.toContain("4242");
     expect(everything(node)).not.toContain("4343");
   });
@@ -1345,28 +1358,41 @@ describe("LANE-A A1 role readiness panel (8 layers)", () => {
     expect(text(un.panel)).toBe([tr["workforce.ready.title"], tr["workforce.ready.lead"], text(comps.stateNote(un.ctx, (await un.ctx.api.rolesReadiness()).state)), tr["workforce.ready.unavailable"], "GET /v1/roles/status-summary"].join(""));
   });
 
-  it("reconciliation, authority, inputs and anomalies are rendered from the payload, not assumed", async () => {
+  it("reconciliation, authority, inputs and anomalies are rendered from the payload, not assumed (literal expectations, en and tr)", async () => {
+    // //TR: Beklenen metinler ŞABLONDAN türetilmez, birebir sabit yazılır (şablonu bozan mutantlar böylece ölür).
     const note = (f: N) => text(byData(f, "legacyProjection", "DEPRECATED_LEGACY_PROJECTION")[0]);
-    const en = (await load("locales", "en.js")).default as Record<string, string>;
+    const EN_HEAD = "The five counters below are a deprecated legacy projection; the 8 layers above are the only truth. ";
+    const TR_HEAD = "Aşağıdaki beş sayaç eski ve kullanımdan kalkan bir izdüşümdür; tek doğru yukarıdaki 8 katmandır. ";
     const absent = await page({roles: "ok", detail: true, statusSummary: slim("ABSENT")});
-    expect(note(absent.factory)).toBe(en["workforce.ready.legacy.noteUnmeasured"].replace("{consistent}", "yes").replace("{n}", "0"));
-    expect(note(absent.factory)).toContain("running is not measured");
-    expect(note(absent.factory)).not.toContain("Legacy and readiness are consistent");
+    expect(note(absent.factory)).toBe(EN_HEAD + "They are consistent with readiness on the measured layers: yes (0 mismatches); running is not measured, so it is not compared.");
+    expect(byData(absent.factory, "legacyProjection", "DEPRECATED_LEGACY_PROJECTION")[0].dataset.consistent).toBe("true");
     expect(text(byData(absent.panel, "readinessInputs")[0])).toBe("Inputs: run journal absent; adapter reality not supplied; reachable stages not supplied");
     expect(text(byData(absent.panel, "readinessAnomalies")[0])).toBe("Readiness anomalies: 0");
     expect(byData(absent.panel, "readinessAuthority")).toEqual([]);
     const present = await page({roles: "ok", detail: true, statusSummary: slim("PRESENT")});
-    expect(note(present.factory)).toBe(en["workforce.ready.legacy.note"].replace("{consistent}", "yes").replace("{n}", "0"));
+    expect(note(present.factory)).toBe(EN_HEAD + "Legacy and readiness are consistent: yes (0 mismatches).");
     // a payload that says otherwise: mismatches, supplied inputs, anomalies, a non-authoritative measurement
     const odd = slim("PRESENT");
     Object.assign(odd.reconciliation, {consistent: false, mismatches: ["total.implemented:8!=7", "total.tested:0!=1"], implementedStageWired: odd.readiness.stageWired.TRUE});
     Object.assign(odd.readiness.inputs, {adapterReality: "SUPPLIED", reachableStages: "SUPPLIED"});
     Object.assign(odd.readiness, {anomalies: 3, authority: "NON_AUTHORITATIVE_PROMOTED_STATUS_OVERRIDE"});
     const o = await page({roles: "ok", detail: true, statusSummary: odd});
-    expect(note(o.factory)).toBe(en["workforce.ready.legacy.note"].replace("{consistent}", "no").replace("{n}", "2"));
+    expect(note(o.factory)).toBe(EN_HEAD + "Legacy and readiness are consistent: no (2 mismatches).");
+    expect(byData(o.factory, "legacyProjection", "DEPRECATED_LEGACY_PROJECTION")[0].dataset.consistent).toBe("false");
     expect(text(byData(o.panel, "readinessInputs")[0])).toBe("Inputs: run journal present; adapter reality supplied; reachable stages supplied");
     expect(text(byData(o.panel, "readinessAnomalies")[0])).toBe("Readiness anomalies: 3");
-    expect(text(byData(o.panel, "readinessAuthority")[0])).toBe(en["workforce.ready.authority.NON_AUTHORITATIVE_PROMOTED_STATUS_OVERRIDE"]);
+    expect(text(byData(o.panel, "readinessAuthority")[0])).toBe("Non-authoritative: the promoted-status set was overridden.");
+    // the same disagreement with the run journal ABSENT (the unmeasured-running wording)
+    const oddAbsent = slim("ABSENT");
+    Object.assign(oddAbsent.reconciliation, {consistent: false, mismatches: ["total.implemented:8!=7", "total.tested:0!=1"]});
+    const oa = await page({roles: "ok", detail: true, statusSummary: oddAbsent});
+    expect(note(oa.factory)).toBe(EN_HEAD + "They are consistent with readiness on the measured layers: no (2 mismatches); running is not measured, so it is not compared.");
+    expect(byData(oa.factory, "legacyProjection", "DEPRECATED_LEGACY_PROJECTION")[0].dataset.consistent).toBe("false");
+    // Turkish, all four
+    expect(note((await page({roles: "ok", detail: true, statusSummary: oddAbsent}, "tr")).factory)).toBe(TR_HEAD + "Ölçülen katmanlarda hazırlıkla tutarlı: hayır (2 uyuşmazlık); çalışan ölçülmediği için karşılaştırılmaz.");
+    expect(note((await page({roles: "ok", detail: true, statusSummary: slim("ABSENT")}, "tr")).factory)).toBe(TR_HEAD + "Ölçülen katmanlarda hazırlıkla tutarlı: evet (0 uyuşmazlık); çalışan ölçülmediği için karşılaştırılmaz.");
+    expect(note((await page({roles: "ok", detail: true, statusSummary: odd}, "tr")).factory)).toBe(TR_HEAD + "Eski sayaçlar ile hazırlık tutarlı: hayır (2 uyuşmazlık).");
+    expect(note((await page({roles: "ok", detail: true, statusSummary: slim("PRESENT")}, "tr")).factory)).toBe(TR_HEAD + "Eski sayaçlar ile hazırlık tutarlı: evet (0 uyuşmazlık).");
   });
 
   it("the status summary and the readiness share ONE read by construction (not by the cache TTL)", async () => {
@@ -1376,6 +1402,78 @@ describe("LANE-A A1 role readiness panel (8 layers)", () => {
     const [a, b] = await Promise.all([api.rolesStatusSummary(), api.rolesReadiness()]);
     expect([a.state, b.state]).toEqual(["VERIFIED", "VERIFIED"]);
     expect(hits).toEqual(["/v1/roles/status-summary"]);
+  });
+
+  it("proposedOnly shows each count against ITS OWN base (profiles of the denominator, candidates of the profiles), en and tr", async () => {
+    const f = slim("ABSENT"); Object.assign(f.readiness.proposedOnly, {profiles: 300, withCandidateSkills: 197, withCandidateToolAdapters: 164});
+    const en = await page({roles: "ok", detail: true, statusSummary: f}), tr = await page({roles: "ok", detail: true, statusSummary: f}, "tr");
+    expect(text(byData(en.panel, "readinessProposed")[0])).toBe("Proposed profiles (not runtime)Proposed profiles: 300 of 599; with candidate skills: 197 of 300; with candidate tool adapters: 164 of 300. These are proposals only and are not counted in any layer.");
+    expect(text(byData(tr.panel, "readinessProposed")[0])).toBe("Önerilen profiller (çalışma zamanı değil)Önerilen profil: 300 / 599; aday becerisi olan: 197 / 300; aday araç bağdaştırıcısı olan: 164 / 300. Bunlar yalnız önerilerdir ve hiçbir katmanda sayılmaz.");
+  });
+
+  it("the Turkish unavailable state renders the reason line, the caption and the column headers; the English and Turkish table headers are pinned", async () => {
+    const tr = (await load("locales", "tr.js")).default as Record<string, string>, comps = await load("components.js");
+    const contract = {...slim("ABSENT"), readiness: null, reconciliation: null, readinessError: "ROLE_READINESS_UNAVAILABLE"};
+    const un = await page({roles: "ok", detail: true, statusSummary: contract}, "tr");
+    expect(text(un.panel)).toBe([tr["workforce.ready.title"], tr["workforce.ready.lead"], text(comps.stateNote(un.ctx, "UNAVAILABLE")), tr["workforce.ready.unavailable"], "Neden: ROLE_READINESS_UNAVAILABLE", "GET /v1/roles/status-summary"].join(""));
+    expect(text(byData(un.panel, "readinessReason")[0])).toBe("Neden: ROLE_READINESS_UNAVAILABLE");
+    const heads = (panel: N) => all(byId(panel, "wf-readiness-layers")!).filter(n => n.tagName === "TH" && n.attrs.get("scope") === "col").map(text);
+    const caption = (panel: N) => text(all(byId(panel, "wf-readiness-layers")!).filter(n => n.tagName === "CAPTION")[0]);
+    const ok = await page({roles: "ok", detail: true, statusSummary: slim("ABSENT")}, "tr"), okEn = await page({roles: "ok", detail: true, statusSummary: slim("ABSENT")});
+    expect(heads(ok.panel)).toEqual(["Katman", "Sayılar", "Ölçüm"]);
+    expect(caption(ok.panel)).toBe("8 katman + bağlı aşamalar");
+    expect(heads(okEn.panel)).toEqual(["Layer", "Counts", "Measurement"]);
+    expect(caption(okEn.panel)).toBe("8 layers + wired stages");
+    expect(text(rowOf(ok.panel, "DEFINED").children[2])).toBe("ölçüldü");
+  });
+
+  it("the running 'Unknown' carries a reason that is true: no run journal (readiness readable, journal absent) vs readiness unavailable (journal unknown), en and tr; a present journal shows the number", async () => {
+    const cell = (f: N) => text(byData(f, "stat", "factory-running")[0].children[0]);
+    const guild = (f: N) => byData(f, "factoryGuild").map(r => text(r.children[5]));
+    const absent = slim("ABSENT"), unavailable = {...slim("PRESENT"), readiness: null, reconciliation: null, readinessError: "ROLE_READINESS_UNAVAILABLE"}; // a journal EXISTS, readiness is unavailable
+    for (const [lang, noJournal, unavail] of [["en", "Unknown – no run journal", "Unknown – readiness unavailable"], ["tr", "Bilinmiyor – çalıştırma günlüğü yok", "Bilinmiyor – hazırlık okunamıyor"]] as const) {
+      const a = await page({roles: "ok", detail: true, statusSummary: absent}, lang), u = await page({roles: "ok", detail: true, statusSummary: unavailable}, lang);
+      expect(cell(a.factory), lang).toBe(noJournal);
+      expect(new Set(guild(a.factory)), lang).toEqual(new Set([noJournal]));
+      expect(cell(u.factory), lang).toBe(unavail);
+      expect(new Set(guild(u.factory)), lang).toEqual(new Set([unavail]));
+    }
+    const present = await page({roles: "ok", detail: true, statusSummary: slim("PRESENT")});
+    expect(cell(present.factory)).toBe("0");
+  });
+
+  it("the shared status read is released after completion and after a rejected read, and an invalidation or epoch change starts a fresh read", async () => {
+    const apiMod = await load("api.js"), st = await load("state.js");
+    const make = (answer: () => Promise<any>) => { let clock = 1_760_000_000_000; const hits: string[] = []; const store = st.createStore(null);
+      const api = apiMod.createApi({bridge: {apiGet: async (p: string) => { hits.push(p); return answer(); }}, store, now: () => (clock += 60_000)}); return {api, store, hits}; };
+    const slow = () => new Promise(r => setTimeout(() => r(slim("ABSENT")), 10));
+    // released after completion: a later (not concurrent) call reads again
+    const done = make(slow);
+    await Promise.all([done.api.rolesStatusSummary(), done.api.rolesReadiness()]);
+    expect(done.hits).toHaveLength(1);
+    await done.api.rolesReadiness();
+    expect(done.hits).toHaveLength(2);
+    // released after a rejected read (the bridge throws): the failure is a state, and the next call reads again
+    const failing = make(async () => { throw new Error("/v1/roles/status-summary: HTTP 503"); });
+    const [f1, f2] = await Promise.all([failing.api.rolesStatusSummary(), failing.api.rolesReadiness()]);
+    expect([f1.state === "VERIFIED", f2.state === "VERIFIED"]).toEqual([false, false]);
+    expect(failing.hits).toHaveLength(1);
+    await failing.api.rolesStatusSummary();
+    expect(failing.hits).toHaveLength(2);
+    // an invalidation (cache cleared, epoch bumped) while a read is in flight: the next call starts a fresh read
+    const inv = make(slow);
+    const first = inv.api.rolesStatusSummary();
+    inv.store.invalidate();
+    const second = inv.api.rolesReadiness();
+    await Promise.all([first, second]);
+    expect(inv.hits).toHaveLength(2);
+    // a cache clear alone (what a successful write does) also ends the sharing
+    const clr = make(slow);
+    const c1 = clr.api.rolesStatusSummary();
+    clr.store.cache.clear();
+    const c2 = clr.api.rolesReadiness();
+    await Promise.all([c1, c2]);
+    expect(clr.hits).toHaveLength(2);
   });
 
   it("en and tr have the same readiness keys with the same placeholders, and the Turkish panel says Bilinmiyor", async () => {

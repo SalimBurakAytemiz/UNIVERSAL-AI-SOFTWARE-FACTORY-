@@ -1206,6 +1206,7 @@ export default {
   "workforce.ready.counts.unmeasuredNa":"TRUE {t}, FALSE {f}, UNKNOWN {u}, uygulanamaz {na} / {n}",
   "workforce.ready.notMeasured":"tam ölçülmedi",
   "workforce.ready.runningUnknown":"Bilinmiyor – çalıştırma günlüğü yok",
+  "workforce.ready.runningUnknownUnavailable":"Bilinmiyor – hazırlık okunamıyor",
   "workforce.ready.runningUnknownCounts":"UNKNOWN {u} / {n}",
   "workforce.ready.inputs":"Girdiler: çalıştırma günlüğü {journal}; bağdaştırıcı gerçekliği {adapters}; erişilebilir aşamalar {stages}",
   "workforce.ready.input.PRESENT":"var",

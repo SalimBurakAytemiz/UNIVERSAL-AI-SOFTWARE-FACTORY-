@@ -12,21 +12,22 @@ import {FACTORY_COUNTERS,STATUS_SUMMARY_PATH} from "../agent-factory-core.js";
 
 // //TR: Ajan Fabrikası durumu (Founder direktifi 599 ajan): GET /v1/roles/status-summary'nin beş sayacı AYRI gösterilir (kayıtlı, uygulanmış, test edilmiş, sertifikalı, çalışan); toplanmaz, oranlanmaz, "599 kayıtlı" = "599 çalışan ajan" denmez. Okunamıyorsa sayı yerine durum notu gösterilir (0 uydurulmaz).
 function factoryStatusPanel(ctx,res,ready){
-  const doc=ctx.doc,id="wf-factory",rd=ready&&ready.state==="VERIFIED"?ready:null,runUnmeasured=rd===null||rd.reconciliation.runningMeasured===false;
+  const doc=ctx.doc,id="wf-factory",rd=ready&&ready.state==="VERIFIED"?ready:null,runUnmeasured=rd===null||rd.reconciliation.runningMeasured===false,
+    runUnknownText=ctx.t(rd===null?"workforce.ready.runningUnknownUnavailable":"workforce.ready.runningUnknown"); // //TR: neden doğru olmalı: hazırlık okunamıyorsa günlüğün olup olmadığı bilinmez
   const head=[h(doc,"p",{class:"note",text:ctx.t("workforce.factory.lead")}),h(doc,"p",{class:"note",role:"note",dataset:{semantics:"SEPARATE_COUNTERS"},text:ctx.t("workforce.factory.separate")})];
   if(!res||res.state!=="VERIFIED")return panel(ctx,{titleKey:"workforce.factory.title",id,className:"wf-factory"},...head,stateNote(ctx,res?.state??"ERROR"),h(doc,"p",{class:"note mono",text:`GET ${STATUS_SUMMARY_PATH}`}));
   const s=res.summary;
   // //TR: FAIL-CLOSED: hazırlık okunamıyorsa (ERROR/404/503/bozuk) runningMeasured belirlenemez ve ölçülmemiş sayılır; ayrıca günlük yoksa (runningMeasured=false) eski "çalışan" sayacı ASLA sayı olarak gösterilmez (Bilinmiyor). "Uygulanmış" etiketi her durumda kod yolu olduğunu (bağlanmamış aşamaları içerdiğini) söyler.
   const stat=(k,v)=>{
     const unknown=k==="running"&&runUnmeasured;
-    return h(doc,"div",{class:"wf-stat",dataset:{stat:`factory-${k}`,value:unknown?"UNKNOWN":String(v)}},h(doc,"span",{class:"wf-stat-num",text:unknown?ctx.t("workforce.ready.runningUnknown"):formatCount(v)}),
+    return h(doc,"div",{class:"wf-stat",dataset:{stat:`factory-${k}`,value:unknown?"UNKNOWN":String(v)}},h(doc,"span",{class:"wf-stat-num",text:unknown?runUnknownText:formatCount(v)}),
       h(doc,"span",{class:"wf-stat-label",text:ctx.t(k==="implemented"?"workforce.ready.legacy.implemented":`workforce.factory.${k}`)}));
   };
   const cols=["workforce.factory.guild",...FACTORY_COUNTERS.map(k=>k==="implemented"?"workforce.ready.legacy.implemented":`workforce.factory.${k}`)]; // //TR: "uygulanmış" başlığı da (sayaç nerede görünürse) kod yolu etiketini taşır
   const table=s.byGuild.length?h(doc,"div",{class:"table-wrap"},h(doc,"table",{class:"table",id:"wf-factory-guilds",dataset:{factoryTable:"guilds"}},
     h(doc,"caption",{class:"sr-only",text:ctx.t("workforce.factory.byGuild")}),
     h(doc,"thead",{},h(doc,"tr",{},cols.map(k=>h(doc,"th",{scope:"col",text:ctx.t(k)})))),
-    h(doc,"tbody",{},s.byGuild.map(g=>h(doc,"tr",{dataset:{factoryGuild:g.guildId}},h(doc,"td",{class:"mono",text:g.guildId}),FACTORY_COUNTERS.map(k=>h(doc,"td",{class:"num",text:k==="running"&&runUnmeasured?ctx.t("workforce.ready.runningUnknown"):formatCount(g[k])}))))))):emptyNote(ctx,"workforce.factory.noGuilds");
+    h(doc,"tbody",{},s.byGuild.map(g=>h(doc,"tr",{dataset:{factoryGuild:g.guildId}},h(doc,"td",{class:"mono",text:g.guildId}),FACTORY_COUNTERS.map(k=>h(doc,"td",{class:"num",text:k==="running"&&runUnmeasured?runUnknownText:formatCount(g[k])}))))))):emptyNote(ctx,"workforce.factory.noGuilds");
   const legacyNote=rd!==null
     ?h(doc,"p",{class:"note",role:"note",dataset:{legacyProjection:"DEPRECATED_LEGACY_PROJECTION",consistent:String(rd.reconciliation.consistent)},text:ctx.t(rd.reconciliation.runningMeasured?"workforce.ready.legacy.note":"workforce.ready.legacy.noteUnmeasured",{consistent:ctx.t(rd.reconciliation.consistent?"workforce.ready.legacy.yes":"workforce.ready.legacy.no"),n:formatCount(rd.reconciliation.mismatchCount)})})
     :h(doc,"p",{class:"note note-unknown",role:"note",dataset:{legacyProjection:"UNVERIFIED"},text:ctx.t("workforce.ready.legacy.unverified")});

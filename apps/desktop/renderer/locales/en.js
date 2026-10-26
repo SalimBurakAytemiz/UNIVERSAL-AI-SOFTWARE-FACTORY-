@@ -1206,6 +1206,7 @@ export default {
   "workforce.ready.counts.unmeasuredNa":"TRUE {t}, FALSE {f}, UNKNOWN {u}, not applicable {na} of {n}",
   "workforce.ready.notMeasured":"not fully measured",
   "workforce.ready.runningUnknown":"Unknown – no run journal",
+  "workforce.ready.runningUnknownUnavailable":"Unknown – readiness unavailable",
   "workforce.ready.runningUnknownCounts":"UNKNOWN {u} of {n}",
   "workforce.ready.inputs":"Inputs: run journal {journal}; adapter reality {adapters}; reachable stages {stages}",
   "workforce.ready.input.PRESENT":"present",
