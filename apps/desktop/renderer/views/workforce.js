@@ -22,13 +22,13 @@ function factoryStatusPanel(ctx,res,ready){
     return h(doc,"div",{class:"wf-stat",dataset:{stat:`factory-${k}`,value:unknown?"UNKNOWN":String(v)}},h(doc,"span",{class:"wf-stat-num",text:unknown?ctx.t("workforce.ready.runningUnknown"):formatCount(v)}),
       h(doc,"span",{class:"wf-stat-label",text:ctx.t(k==="implemented"?"workforce.ready.legacy.implemented":`workforce.factory.${k}`)}));
   };
-  const cols=["workforce.factory.guild",...FACTORY_COUNTERS.map(k=>`workforce.factory.${k}`)];
+  const cols=["workforce.factory.guild",...FACTORY_COUNTERS.map(k=>k==="implemented"?"workforce.ready.legacy.implemented":`workforce.factory.${k}`)]; // //TR: "uygulanmış" başlığı da (sayaç nerede görünürse) kod yolu etiketini taşır
   const table=s.byGuild.length?h(doc,"div",{class:"table-wrap"},h(doc,"table",{class:"table",id:"wf-factory-guilds",dataset:{factoryTable:"guilds"}},
     h(doc,"caption",{class:"sr-only",text:ctx.t("workforce.factory.byGuild")}),
     h(doc,"thead",{},h(doc,"tr",{},cols.map(k=>h(doc,"th",{scope:"col",text:ctx.t(k)})))),
     h(doc,"tbody",{},s.byGuild.map(g=>h(doc,"tr",{dataset:{factoryGuild:g.guildId}},h(doc,"td",{class:"mono",text:g.guildId}),FACTORY_COUNTERS.map(k=>h(doc,"td",{class:"num",text:k==="running"&&runUnmeasured?ctx.t("workforce.ready.runningUnknown"):formatCount(g[k])}))))))):emptyNote(ctx,"workforce.factory.noGuilds");
   const legacyNote=rd!==null
-    ?h(doc,"p",{class:"note",role:"note",dataset:{legacyProjection:"DEPRECATED_LEGACY_PROJECTION",consistent:String(rd.reconciliation.consistent)},text:ctx.t("workforce.ready.legacy.note",{consistent:ctx.t(rd.reconciliation.consistent?"workforce.ready.legacy.yes":"workforce.ready.legacy.no"),n:formatCount(rd.reconciliation.mismatchCount)})})
+    ?h(doc,"p",{class:"note",role:"note",dataset:{legacyProjection:"DEPRECATED_LEGACY_PROJECTION",consistent:String(rd.reconciliation.consistent)},text:ctx.t(rd.reconciliation.runningMeasured?"workforce.ready.legacy.note":"workforce.ready.legacy.noteUnmeasured",{consistent:ctx.t(rd.reconciliation.consistent?"workforce.ready.legacy.yes":"workforce.ready.legacy.no"),n:formatCount(rd.reconciliation.mismatchCount)})})
     :h(doc,"p",{class:"note note-unknown",role:"note",dataset:{legacyProjection:"UNVERIFIED"},text:ctx.t("workforce.ready.legacy.unverified")});
   return panel(ctx,{titleKey:"workforce.factory.title",id,className:"wf-factory"},...head,legacyNote,
     h(doc,"p",{class:"duo-sub",dataset:{factoryTarget:String(s.target)},text:ctx.t("workforce.factory.target",{n:formatCount(s.target)})}),
@@ -49,17 +49,20 @@ function readinessPanel(ctx,res){
   const doc=ctx.doc,id="wf-readiness";
   const head=[h(doc,"p",{class:"note",dataset:{semantics:"LAYERS_SEPARATE"},text:ctx.t("workforce.ready.lead")})];
   if(!res||res.state!=="VERIFIED")return panel(ctx,{titleKey:"workforce.ready.title",id,className:"wf-readiness"},...head,stateNote(ctx,res?.state??"ERROR"),
-    h(doc,"p",{class:"note note-unknown",role:"status",dataset:{readiness:"UNAVAILABLE"},text:ctx.t("workforce.ready.unavailable")}),h(doc,"p",{class:"note mono",text:`GET ${STATUS_SUMMARY_PATH}`}));
+    h(doc,"p",{class:"note note-unknown",role:"status",dataset:{readiness:"UNAVAILABLE"},text:ctx.t("workforce.ready.unavailable")}),
+    res?.reason?h(doc,"p",{class:"note mono",dataset:{readinessReason:res.reason},text:ctx.t("workforce.ready.reason",{code:res.reason})}):null,
+    h(doc,"p",{class:"note mono",text:`GET ${STATUS_SUMMARY_PATH}`}));
   const r=res.readiness,journal=r.inputs.journal;
   const row=(L,labelKey)=>{
     const unknownRunning=L.layer==="RUNNING"&&journal==="ABSENT";
     return h(doc,"tr",{dataset:{readinessLayer:L.layer,measured:String(L.measured)}},
       h(doc,"th",{scope:"row",text:ctx.t(labelKey)}),
       h(doc,"td",{class:"num",dataset:unknownRunning?{readinessUnknown:"1"}:{}},unknownRunning?[h(doc,"strong",{text:ctx.t("workforce.ready.runningUnknown")})," · "]:null,layerCountsText(ctx,L,journal)),
-      h(doc,"td",{},L.measured?null:h(doc,"span",{class:"note",text:ctx.t("workforce.ready.notMeasured")})));
+      h(doc,"td",{text:ctx.t(L.measured?"workforce.ready.measured":"workforce.ready.notMeasured")}));
   };
   const table=h(doc,"div",{class:"table-wrap"},h(doc,"table",{class:"table",id:"wf-readiness-layers",dataset:{readinessTable:"layers"}},
-    h(doc,"caption",{class:"sr-only",text:ctx.t("workforce.ready.title")}),
+    h(doc,"caption",{class:"sr-only",text:ctx.t("workforce.ready.table.caption")}),
+    h(doc,"thead",{},h(doc,"tr",{},["workforce.ready.table.layer","workforce.ready.table.count","workforce.ready.table.measured"].map(k=>h(doc,"th",{scope:"col",text:ctx.t(k)})))),
     h(doc,"tbody",{},[...r.layers.map(L=>row(L,`workforce.ready.layer.${L.layer}`)),row({layer:"STAGE_WIRED",...r.stageWired},"workforce.ready.stageWired")])));
   const p=r.proposedOnly;
   return panel(ctx,{titleKey:"workforce.ready.title",id,className:"wf-readiness"},...head,
@@ -68,7 +71,7 @@ function readinessPanel(ctx,res){
     h(doc,"p",{class:"note",dataset:{readinessInputs:"1"},text:ctx.t("workforce.ready.inputs",{journal:ctx.t(`workforce.ready.input.${journal}`),adapters:ctx.t(`workforce.ready.input.${r.inputs.adapterReality}`),stages:ctx.t(`workforce.ready.input.${r.inputs.reachableStages}`)})}),
     r.authority==="AUTHORITATIVE_READINESS_MEASUREMENT"?null:h(doc,"p",{class:"note note-error",role:"note",dataset:{readinessAuthority:r.authority},text:ctx.t(`workforce.ready.authority.${r.authority}`)}),
     p.source==="ABSENT"?null:h(doc,"div",{class:"card wf-proposed",dataset:{readinessProposed:"1"}},h(doc,"h3",{class:"wf-dist-title",text:ctx.t("workforce.ready.proposed.title")}),
-      h(doc,"p",{class:"note",text:ctx.t("workforce.ready.proposed.text",{p:formatCount(p.profiles),s:formatCount(p.withCandidateSkills),a:formatCount(p.withCandidateToolAdapters)})})),
+      h(doc,"p",{class:"note",text:ctx.t("workforce.ready.proposed.text",{p:formatCount(p.profiles),n:formatCount(r.denominator),s:formatCount(p.withCandidateSkills),a:formatCount(p.withCandidateToolAdapters)})})),
     h(doc,"p",{class:"note",dataset:{readinessAnomalies:String(r.anomalies)},text:ctx.t("workforce.ready.anomalies",{n:formatCount(r.anomalies)})}),
     h(doc,"p",{class:"note mono",dataset:{readinessBasis:"1"},text:ctx.t("workforce.ready.basis",{at:formatDateTime(r.computedAt,ctx.i18n.lang),sha:r.digest.slice(0,12)})}),
     h(doc,"p",{class:"note mono",text:`GET ${STATUS_SUMMARY_PATH}`}));

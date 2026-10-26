@@ -43,6 +43,7 @@ export const LAYER_STATES=Object.freeze(["TRUE","FALSE","UNKNOWN","NOT_APPLICABL
 export const MAX_ROLES=5000;
 export const MAX_MISMATCHES=2000;
 const LEGACY_STATUS="DEPRECATED_LEGACY_PROJECTION";
+export const READINESS_UNAVAILABLE_CODE="ROLE_READINESS_UNAVAILABLE";
 const AUTHORITIES=Object.freeze(["AUTHORITATIVE_READINESS_MEASUREMENT","NON_AUTHORITATIVE_PROMOTED_STATUS_OVERRIDE"]);
 function layerCount(x,den){
   if(!isObj(x)||x.denominator!==den||typeof x.measured!=="boolean")return null;
@@ -57,7 +58,9 @@ export function mapReadiness(raw){
   if(!isObj(raw))return bad;
   if(raw.statusSummaryStatus!==undefined&&raw.statusSummaryStatus!==LEGACY_STATUS)return bad;
   const r=raw.readiness,c=raw.reconciliation;
-  if(!isObj(r)||!isObj(c))return bad;
+  // //TR: #262 sözleşmesi: hazırlık girdileri yüklenemezse sunucu 200 + {readiness:null, reconciliation:null, readinessError:"ROLE_READINESS_UNAVAILABLE"} döner; bu bir HATA değil "kullanılamıyor" durumudur (sayı yok, neden var). Başka her null/readinessError birleşimi ERROR'dır.
+  if(r===null&&c===null&&raw.readinessError===READINESS_UNAVAILABLE_CODE)return {state:"UNAVAILABLE",readiness:null,reconciliation:null,reason:READINESS_UNAVAILABLE_CODE};
+  if(raw.readinessError!==undefined||!isObj(r)||!isObj(c))return bad;
   if(r.schemaVersion!=="1.0.0"||!AUTHORITIES.includes(r.authority)||!count(r.denominator)||!count(r.anomalies))return bad;
   for(const k of ["roles","byGuild","byCluster"])if(r[k]!==undefined&&(!Array.isArray(r[k])||r[k].length>(k==="roles"?MAX_ROLES:MAX_GUILDS)))return bad;
   const den=r.denominator;
@@ -67,8 +70,13 @@ export function mapReadiness(raw){
   const stageWired=layerCount(r.stageWired,den);if(stageWired===null)return bad;
   const p=r.proposedOnly;
   if(!isObj(p)||!["PROPOSED_DERIVED_NOT_RUNTIME","ABSENT"].includes(p.source)||!count(p.profiles)||!count(p.withCandidateSkills)||!count(p.withCandidateToolAdapters))return bad;
+  if(p.profiles>den||p.withCandidateSkills>p.profiles||p.withCandidateToolAdapters>p.profiles||(p.source==="ABSENT"&&p.profiles!==0))return bad; // //TR: öneri sayıları üretici değişmezleriyle sınırlıdır: profil <= payda, aday sayıları <= profil
   const i=r.inputs;
   if(!isObj(i)||!["PRESENT","ABSENT"].includes(i.journal)||!["SUPPLIED","NOT_SUPPLIED"].includes(i.adapterReality)||!["SUPPLIED","NOT_SUPPLIED"].includes(i.reachableStages))return bad;
+  // //TR: Üretici değişmezleri: çalıştırma günlüğü YOKSA RUNNING katmanı tamamen UNKNOWN'dır (TRUE 0, FALSE 0); erişilebilir aşamalar verilmediyse hiçbir rol "aşaması bağlı" olamaz (TRUE 0).
+  const running=layers.find(l=>l.layer==="RUNNING");
+  if(i.journal==="ABSENT"&&(running.TRUE!==0||running.FALSE!==0||running.NOT_APPLICABLE!==0||running.UNKNOWN!==den))return bad;
+  if(i.reachableStages==="NOT_SUPPLIED"&&stageWired.TRUE!==0)return bad;
   const computedAt=iso(r.computedAt);if(computedAt===null||typeof r.digest!=="string"||!SHA_RE.test(r.digest))return bad;
   if(c.status!==LEGACY_STATUS||c.authority!=="readiness"||typeof c.consistent!=="boolean"||typeof c.runningMeasured!=="boolean"||c.implementedMeaning!=="EXECUTABLE_CODE_PATH_INCLUDES_UNWIRED_STAGES")return bad;
   if(!Array.isArray(c.mismatches)||c.mismatches.length>MAX_MISMATCHES||c.mismatches.some(m=>typeof m!=="string"||m.length>200)||c.consistent!==(c.mismatches.length===0))return bad;
