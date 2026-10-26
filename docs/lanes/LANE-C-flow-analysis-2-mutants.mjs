@@ -13,7 +13,9 @@ if (git("status", "--porcelain", "--", ...files).stdout.trim() !== "") { console
 // //TR: #237 incelemesi: mutant başına isteğe bağlı testFile/filter (varsayılan: coordination dosyası + "C-FLOW-ANALYSIS"); taban çizgisi her ayrı (dosya, filtre) grubu için ÖNCE koşar ve yeşil olmalıdır; değilse her "KILLED" anlamsızdır, bu yüzden reddedilir.
 const DEFAULT_FILE = "tests/v7-core-predev-crew-coordination.test.ts", DEFAULT_FILTER = "C-FLOW-ANALYSIS";
 const groupOf = m => ({testFile: m.testFile ?? DEFAULT_FILE, filter: m.filter ?? DEFAULT_FILTER});
-const vitest = g => cp.spawnSync("npx", ["vitest", "run", g.testFile, "-t", g.filter], {cwd: root, encoding: "utf8", shell: process.platform === "win32", timeout: 900_000});
+// //TR: win32'de shell:true argümanları TIRNAKLAMAZ: `|` ve boşluk içeren bir -t süzgeci cmd.exe'de boru/ayrı argüman olur (taban çizgisi REFUSED). Bu yüzden win32'de süzgeç çift tırnak içinde verilir.
+const quoteFilter = f => process.platform === "win32" ? `"${f}"` : f;
+const vitest = g => cp.spawnSync("npx", ["vitest", "run", g.testFile, "-t", quoteFilter(g.filter)], {cwd: root, encoding: "utf8", shell: process.platform === "win32", timeout: 900_000});
 const summary = out => /Tests\s+([^\n]+)/.exec(out)?.[1]?.trim() ?? "no summary";
 const groups = [...new Map(mutants.filter(m => only.length === 0 || only.includes(m.id)).map(groupOf).map(g => [`${g.testFile}|${g.filter}`, g])).values()];
 for (const g of groups) {

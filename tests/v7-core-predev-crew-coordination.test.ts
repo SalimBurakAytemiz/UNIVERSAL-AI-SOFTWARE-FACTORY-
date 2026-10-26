@@ -1199,7 +1199,7 @@ process.exit(s.exit ?? 0);
       const ux = JSON.parse(JSON.stringify(TASKHUB_ARTIFACTS.UxSpec)); ux[Object.keys(ux)[0]!] = [text];
       expect([`${name} in a UxSpec`, validateArtifactContent("UxSpec", ux)]).toEqual([`${name} in a UxSpec`, {ok: false, errors: "PLACEHOLDER_VALUE"}]);
     }
-    for (const text of ["Users fill in <<name>> fields", "the FILL level", "<<fillable>> template", "<<filling>>", "fill << then", "a << b and fill", "<fill>", "<<", "FILL>>"]) {
+    for (const text of ["Users fill in <<name>> fields", "the FILL level", "<<fillable>> template", "<<filling>>", "fill << then", "a << b and fill", "<fill>", "<<", "FILL>>", "Pad ids with std::cout << fill('0')", "<<Fill-in form>>", "a < b << fill", "<<FILL-IN>> button", "<<fill in the blanks"]) {
       const c = ba(); c.goals[0].statement = text;
       expect([text, validateArtifactContent("BusinessAnalysis", c)]).toEqual([text, {ok: true}]);
     }

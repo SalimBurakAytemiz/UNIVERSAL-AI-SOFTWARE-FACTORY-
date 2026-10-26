@@ -1,5 +1,5 @@
 {
- "//TR": "C-FLOW-ANALYSIS-2 mutasyon listesi: her mutant tam metin değişikliğidir (dosyada tam 1 kez bulunmalı); docs/lanes/LANE-C-flow-analysis-2-mutants.mjs her birini uygular ve tests/v7-core-predev-crew-coordination.test.ts dosyasının (-t \"C-FLOW-ANALYSIS\" ile) BAŞARISIZ olmasını bekler. X7 (boş yanıtı zarf olarak okumak) denetimde HAYATTA KALDI: gereksiz koruma `rawOut !== \"\"` idi (sonraki denetim zaten aynı koruma ile aynı kodu verir); koruma üretim kodundan kaldırıldı ve mutant listeden çıkarıldı (davranış aynı). #237 inceleme turu: yer tutucu koruması placeholder.ts'e taşındı (validateArtifactContent içinde paylaşılır): G2-G4/G6 yerine PH1-PH13; oturum sınıflaması yeniden yazıldı (A1-A7, X3, X13, X15, X16); yetkinlik değerlendirmesi EV1-EV4 (testFile/filter mutant başına verilebilir, varsayılan coordination dosyası + \"C-FLOW-ANALYSIS\"); yinelenen E1-E3 (executors.ts) EX1-EX3 olarak yeniden adlandırıldı. Toplam 52.",
+ "//TR": "C-FLOW-ANALYSIS-2 mutasyon listesi: her mutant tam metin değişikliğidir (dosyada tam 1 kez bulunmalı); docs/lanes/LANE-C-flow-analysis-2-mutants.mjs her birini uygular ve tests/v7-core-predev-crew-coordination.test.ts dosyasının (-t \"C-FLOW-ANALYSIS\" ile) BAŞARISIZ olmasını bekler. X7 (boş yanıtı zarf olarak okumak) denetimde HAYATTA KALDI: gereksiz koruma `rawOut !== \"\"` idi (sonraki denetim zaten aynı koruma ile aynı kodu verir); koruma üretim kodundan kaldırıldı ve mutant listeden çıkarıldı (davranış aynı). #237 inceleme turu: yer tutucu koruması placeholder.ts'e taşındı (validateArtifactContent içinde paylaşılır): G2-G4/G6 yerine PH1-PH13; oturum sınıflaması yeniden yazıldı (A1-A7, X3, X13, X15, X16); yetkinlik değerlendirmesi EV1-EV4 (testFile/filter mutant başına verilebilir, varsayılan coordination dosyası + \"C-FLOW-ANALYSIS\"); yinelenen E1-E3 (executors.ts) EX1-EX3 olarak yeniden adlandırıldı. Toplam 54 (bağımsız inceleme sonrası: eşleşme deseni `<<FILL` + `:`/`>` olarak daraltıldı, PH8-PH10 güncellendi, PH14-PH15 eklendi).",
  "mutants": [
   {
    "id": "A1",
@@ -303,21 +303,21 @@
    "id": "PH8",
    "description": "the marker match is case sensitive",
    "file": "core/workos/predev/placeholder.ts",
-   "old": "/<\\s*<\\s*fill\\b/i",
-   "new": "/<\\s*<\\s*FILL\\b/"
+   "old": "/<\\s*<\\s*fill\\s*[:>]/i",
+   "new": "/<\\s*<\\s*FILL\\s*[:>]/"
   },
   {
    "id": "PH9",
    "description": "no spacing allowed inside the marker",
    "file": "core/workos/predev/placeholder.ts",
-   "old": "/<\\s*<\\s*fill\\b/i",
-   "new": "/<<fill\\b/i"
+   "old": "/<\\s*<\\s*fill\\s*[:>]/i",
+   "new": "/<<fill[:>]/i"
   },
   {
    "id": "PH10",
-   "description": "no word boundary after FILL (honest <<fillable>> / <<filling>> text is rejected)",
+   "description": "no terminator required after FILL (honest `<<Fill-in form>>` / `std::cout << fill(0)` text is rejected: the replay-sealing false positive of the broad pattern)",
    "file": "core/workos/predev/placeholder.ts",
-   "old": "/<\\s*<\\s*fill\\b/i",
+   "old": "/<\\s*<\\s*fill\\s*[:>]/i",
    "new": "/<\\s*<\\s*fill/i"
   },
   {
@@ -377,6 +377,20 @@
    "filter": "golden mission through the PRODUCTION|golden-predev-v2|pre-dev primaries golden mission",
    "old": "passed: placeholder === null, detail",
    "new": "passed: placeholder !== \"PLACEHOLDER_VALUE\", detail"
+  },
+  {
+   "id": "PH14",
+   "description": "only `<<FILL:` is recognised (the bare `<<FILL>>` passes)",
+   "file": "core/workos/predev/placeholder.ts",
+   "old": "/<\\s*<\\s*fill\\s*[:>]/i",
+   "new": "/<\\s*<\\s*fill\\s*:/i"
+  },
+  {
+   "id": "PH15",
+   "description": "only `<<FILL>`-style endings are recognised (`<<FILL: hint>>` passes)",
+   "file": "core/workos/predev/placeholder.ts",
+   "old": "/<\\s*<\\s*fill\\s*[:>]/i",
+   "new": "/<\\s*<\\s*fill\\s*>/i"
   }
  ]
 }
