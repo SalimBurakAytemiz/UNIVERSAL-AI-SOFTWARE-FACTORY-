@@ -11,8 +11,8 @@ import {checkTestShards,isTestShardId,logicalTestFiles,testShardSteps} from "./s
 const cfg=JSON.parse(fs.readFileSync("config/validation.json","utf8")),selftest=fs.readFileSync("scripts/bootstrap-autonomy-selftest.mjs","utf8");
 const vitestSteps=(cfg.steps as {id:string;command:string[]}[]).filter(s=>s.command.some(a=>a.includes("vitest")));
 const allTests=fs.readdirSync("tests").filter(f=>f.endsWith(".test.ts")).map(f=>"tests/"+f);
-// //TR: Yalnız bu yedi adım gerçekten Windows'a özgüdür (görev zamanlayıcı/PowerShell/Windows süreç ağacı); "platforms" başka hiçbir adıma eklenemez, böylece gerçek bir bulgu platform sorunu diye NOT_RUN'a çevrilemez.
-const WIN32_ONLY_STEPS=["tests-bs1-a","tests-bs1-b","tests-bs1-c","tests-bs1-d","tests-bs1-e","tests-bs1-f","tests-lv1"];
+// //TR: Yalnız bu sekiz adım gerçekten Windows'a özgüdür (görev zamanlayıcı/PowerShell/Windows süreç ağacı); "platforms" başka hiçbir adıma eklenemez, böylece gerçek bir bulgu platform sorunu diye NOT_RUN'a çevrilemez. tests-bs1-g, tests-bs1-d'den ayrılan FRF senaryosunun adımıdır (COORD-PROTECTED-BS1D-SPLIT).
+const WIN32_ONLY_STEPS=["tests-bs1-a","tests-bs1-b","tests-bs1-c","tests-bs1-d","tests-bs1-e","tests-bs1-f","tests-bs1-g","tests-lv1"];
 describe("validation test sharding coverage",()=>{
   it("runs every tests/*.test.ts file in exactly one vitest step",()=>{
     expect(vitestSteps.map(s=>s.id)).toContain("tests");
@@ -35,9 +35,11 @@ describe("validation test sharding coverage",()=>{
     for(const f of v7)expect(logical,`${f} must be listed in the logical tests list`).toContain(f);
   });
   // //TR: Kabuk eklemek kabul kapısını zayıflatamaz: phase0-acceptance her tests kabuğunu PASS olarak ister.
-  it("phase0 acceptance requires every tests shard to PASS",()=>{
+  it("phase0 acceptance requires every tests shard and every Windows-only shard to PASS",()=>{
     const acceptance=fs.readFileSync("scripts/phase0-acceptance.mjs","utf8");
     for(const s of testShardSteps(cfg))expect(acceptance,`${s.id} must be required by phase0-acceptance`).toContain(`"${s.id}"`);
+    // //TR: Windows'a özgü BS1/LV1 adımları da kabul kapısında PASS olarak istenir; bir senaryo yeni bir adıma taşındığında (ör. FRF -> tests-bs1-g) kabul kapsamı sessizce düşemez.
+    for(const id of WIN32_ONLY_STEPS)expect(acceptance,`${id} must be required by phase0-acceptance`).toContain(`"${id}"`);
   });
   it("the shard check rejects out-of-order, non-contiguous, platform-filtered, flagged or empty shards (mutation)",()=>{
     const v=(id:string,files:string[]=["tests/dlp.test.ts"],x:Record<string,unknown>={})=>({id,command:["node","node_modules/vitest/vitest.mjs","run",...files],requiresDependencies:true,...x});
@@ -57,6 +59,15 @@ describe("validation test sharding coverage",()=>{
     expect(checkBs1Partition(BS1_PARTITION,selftest)).toEqual([]);
     for(const k of Object.keys(BS1_PARTITION)){const f=`tests/pkg-bs1-autonomy-bootstrap-${k}.test.ts`;expect(allTests).toContain(f);expect(vitestSteps.find(s=>s.id===`tests-bs1-${k}`)?.command).toContain(f);expect(fs.readFileSync(f,"utf8")).toContain(`runBs1Shard("${k}")`)}
     expect(allTests).not.toContain("tests/pkg-bs1-autonomy-bootstrap.test.ts");
+  });
+  // //TR: COORD-PROTECTED-BS1D-SPLIT: Windows CI'da tests-bs1-d'nin %71-83'ünü tutan FRF senaryosu tek başına g kabuğunda çalışır ve REG senaryosuyla aynı adımı paylaşmaz; kabuk listesi validation.json'daki tests-bs1-<k> adımlarıyla ve Windows'a özgü adım listesiyle birebir eşleşir (fazla/eksik kabuk adımı yok; adımın Windows kabuğuna atanmasını tests/ci-validation-shards.test.ts denetler).
+  it("runs the first-run-failure scenario alone in shard g, apart from the registration scenario, and every BS1 step maps to a partition shard",()=>{
+    const frf="bootstrap-task-first-run-failure-stops-and-rolls-back-the-task",reg="bootstrap-task-registration-succeeds-or-rolls-back-without-a-runnable-task";
+    expect(BS1_PARTITION.g).toEqual([[frf]]);
+    expect(Object.entries(BS1_PARTITION).filter(([,gs])=>gs.flat().includes(frf)&&gs.flat().includes(reg)).map(([k])=>k),"FRF and REG never share a shard step").toEqual([]);
+    const bs1Steps=vitestSteps.filter(s=>s.id.startsWith("tests-bs1-")).map(s=>s.id.slice("tests-bs1-".length)).sort();
+    expect(bs1Steps,"every tests-bs1-<k> step has a BS1_PARTITION shard and vice versa").toEqual(Object.keys(BS1_PARTITION).sort());
+    expect(WIN32_ONLY_STEPS.filter(id=>id.startsWith("tests-bs1-")).map(id=>id.slice("tests-bs1-".length)).sort()).toEqual(Object.keys(BS1_PARTITION).sort());
   });
   it("the partition check fails when a scenario is unassigned, duplicated or stale (mutation)",()=>{
     expect(checkBs1Partition(BS1_PARTITION,selftest+'\nscenario("zz-new-unassigned-scenario",()=>{});')).toContain("scenario-not-assigned:zz-new-unassigned-scenario");
@@ -111,7 +122,7 @@ describe("validation test sharding coverage",()=>{
     expect(runner).toContain("}finally{if(tpl)fs.rmSync(tpl.dir,");
   });
   it("keeps the 600 s per-step limit unchanged",()=>{expect(fs.readFileSync("scripts/run-validation.mjs","utf8")).toContain("timeoutMs:600000")});
-  it("declares platforms on exactly the seven Windows-only shards, always as [\"win32\"], and on no other step",()=>{
+  it("declares platforms on exactly the eight Windows-only shards, always as [\"win32\"], and on no other step",()=>{
     const steps=cfg.steps as {id:string;platforms?:unknown}[],withPlatforms=steps.filter(s=>Object.prototype.hasOwnProperty.call(s,"platforms"));
     expect(withPlatforms.map(s=>s.id).sort(),"only the allowlisted Windows-only shards may be platform-filtered").toEqual([...WIN32_ONLY_STEPS].sort());
     for(const s of withPlatforms)expect(s.platforms,`${s.id} platforms`).toEqual(["win32"]);

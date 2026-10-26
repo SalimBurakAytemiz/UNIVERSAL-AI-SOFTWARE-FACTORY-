@@ -5,7 +5,7 @@ One worker that runs the heavy Windows test steps of one commit at a time on the
 
 | File | Role |
 |---|---|
-| `test-plan.json` | Every step of `config/validation.json`, in order. `LOCAL_PRIMARY` = the 15 test steps measured at 60 s or more on GitHub-hosted Windows; the other 33 stay `CLOUD_SMOKE`. Limits: 6144 MB sandbox, 2048 MB host reserve, host CPU at most 40 %, 20 GB free disk, 90 min per job, 600 s per step, 1 job at a time. |
+| `test-plan.json` | Every step of `config/validation.json`, in order. `LOCAL_PRIMARY` = the 16 test steps measured at 60 s or more on GitHub-hosted Windows; the other 33 stay `CLOUD_SMOKE`. Limits: 6144 MB sandbox, 2048 MB host reserve, host CPU at most 40 %, 20 GB free disk, 90 min per job, 600 s per step, 1 job at a time. |
 | `probe.mjs` | Read-only host measurement (Windows edition and build, CPU, virtualization, hypervisor, RAM, disk, SSD, Windows Sandbox readiness). Writes nothing, needs no admin. |
 | `core.mjs` | Plan coverage check, job validation, host acceptance (busy / RAM / CPU / disk / isolation), create-only lock, append-only ledger (a job is never run twice), crash recovery, protected-file drift check, sealed evidence, status payload. |
 | `sandbox.mjs` | `.wsb` builder (network, vGPU, clipboard, printer, audio/video input off; ProtectedClient on; only worker folders mapped, source read-only, only the output folder writable; profile and secret folders refused), sandbox entry scripts, bounded wait and kill. |
