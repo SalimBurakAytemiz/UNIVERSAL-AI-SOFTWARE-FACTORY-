@@ -1,0 +1,173 @@
+{
+ "//TR": "C-RDY-2a (Adapter Gerçeklik Haritası) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt `file` içinde TAM 1 kez geçen bir metni değiştirir; docs/lanes/LANE-C-adapter-reality-mutants.mjs hepsini tests/v7-core-readiness-adapter-reality.test.ts ile çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. M1-M5 dağıtım paketindeki zorunlu mutantlardır (M1 trivy REAL -> CI dürüstlüğü, M2 çağıran kontrolü atlanır, M3 çözümleyici kayıt implementation alanını okur, M4 ADAPTER_UNRESOLVED düşer, M5 yoklama varsayılanı READY); M6-M24 ek savunma mutantlarıdır.",
+ "mutants": [
+  {
+   "id": "M1",
+   "description": "trivy is marked ciEvidence REAL although no workflow references it",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "ciEvidence: \"FAKE_ONLY\", note: \"vulnerability scan wrapper; CI runs only the fake, never the real tool\"",
+   "new": "ciEvidence: \"REAL\", note: \"vulnerability scan wrapper; CI runs only the fake, never the real tool\""
+  },
+  {
+   "id": "M2",
+   "description": "the production-caller check is skipped (a record with a fabricated or missing caller is code-backed)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const callerOk = r.entrypoint === true || verifiedCallers >= 1;",
+   "new": "const callerOk = true;"
+  },
+  {
+   "id": "M3",
+   "description": "resolveCapabilityFromReality takes health from the registry implementation field instead of the reality map",
+   "file": "core/capabilities/resolver.ts",
+   "old": "return e !== undefined && e.codePath === \"PRESENT\" && e.probe === \"READY\" && t.capabilities.includes(capability);",
+   "new": "return e !== undefined && (t as {implementation?: string}).implementation === \"IMPLEMENTED\" && t.capabilities.includes(capability);"
+  },
+  {
+   "id": "M4",
+   "description": "ADAPTER_UNRESOLVED findings are silently dropped",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "for (const id of unresolved) findings.push({finding: \"ADAPTER_UNRESOLVED\", id, detail: \"binding adapter id has no reality-map record\"});",
+   "new": ""
+  },
+  {
+   "id": "M5",
+   "description": "the probe defaults to READY instead of NOT_OBSERVED",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "i.probes?.get(r.adapterId) ?? \"NOT_OBSERVED\"",
+   "new": "i.probes?.get(r.adapterId) ?? \"READY\""
+  },
+  {
+   "id": "M6",
+   "description": "a code-backed adapter that the registry calls NOT_IMPLEMENTED is not reported UNDER_REPORTED",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (!implemented) findings.push({finding: \"UNDER_REPORTED\"",
+   "new": "if (false) findings.push({finding: \"UNDER_REPORTED\""
+  },
+  {
+   "id": "M7",
+   "description": "the runs flag is ignored (a discovery-only tool such as semgrep counts as code-backed)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const codePath = r.runs && moduleExists && exportDeclared && callerOk ? \"PRESENT\" : \"ABSENT\";",
+   "new": "const codePath = moduleExists && exportDeclared && callerOk ? \"PRESENT\" : \"ABSENT\";"
+  },
+  {
+   "id": "M8",
+   "description": "the named export is never checked (any existing module is enough)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "else exportDeclared = declaresExport(source!, r.exportName) && (r.member === undefined || declaresMember(source!, r.member));",
+   "new": "else exportDeclared = true;"
+  },
+  {
+   "id": "M9",
+   "description": "the class member (method) is never checked",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": " && (r.member === undefined || declaresMember(source!, r.member))",
+   "new": ""
+  },
+  {
+   "id": "M10",
+   "description": "a module without any production importer is never reported DEAD_CODE",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (d.importers.length === 0) {",
+   "new": "if (false) {"
+  },
+  {
+   "id": "M11",
+   "description": "the production-importer scan also reads tests/ (a test import makes dead code look used)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const PRODUCTION_ROOTS = [\"apps\", \"core\", \"scripts\", \"automation\"];",
+   "new": "const PRODUCTION_ROOTS = [\"apps\", \"core\", \"scripts\", \"automation\", \"tests\"];"
+  },
+  {
+   "id": "M12",
+   "description": "commented-out imports count as production importers",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "re.test(withoutCommentLines(text))",
+   "new": "re.test(text)"
+  },
+  {
+   "id": "M13",
+   "description": "real tools that are missing from the registry are not reported UNREGISTERED_REAL",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (!row) { if (codeBacked(r.adapterId)) { unregisteredReal.push(r.adapterId);",
+   "new": "if (!row) { if (false) { unregisteredReal.push(r.adapterId);"
+  },
+  {
+   "id": "M14",
+   "description": "the text a caller must reference is not checked (any existing caller file verifies)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (text !== null && text.includes(c.references)) verifiedCallers++;",
+   "new": "if (text !== null) verifiedCallers++;"
+  },
+  {
+   "id": "M15",
+   "description": "the registry loader accepts an empty adapters array",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "rows.length === 0 || ",
+   "new": ""
+  },
+  {
+   "id": "M16",
+   "description": "duplicate reality-map ids are accepted (the second silently replaces the first)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (entries.has(r.adapterId)) throw new Error(`ADAPTER_REALITY_DUPLICATE_ID:${r.adapterId}`);",
+   "new": ""
+  },
+  {
+   "id": "M17",
+   "description": "a registry row that claims an implementation but is not in the map is not reported OVER_REPORTED",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "for (const row of i.registry) if (row.implementation !== \"NOT_IMPLEMENTED\" && !mapped.has(row.id)) findings.push(",
+   "new": "for (const row of i.registry) if (false) findings.push("
+  },
+  {
+   "id": "M18",
+   "description": "a mapped adapter that the registry calls implemented but has no verified code path is not reported OVER_REPORTED",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "} else if (implemented) findings.push({finding: \"OVER_REPORTED\"",
+   "new": "} else if (false) findings.push({finding: \"OVER_REPORTED\""
+  },
+  {
+   "id": "M19",
+   "description": "resolveCapabilityFromReality ignores the probe (code present is enough)",
+   "file": "core/capabilities/resolver.ts",
+   "old": "e.codePath === \"PRESENT\" && e.probe === \"READY\" && t.capabilities",
+   "new": "e.codePath === \"PRESENT\" && t.capabilities"
+  },
+  {
+   "id": "M20",
+   "description": "resolveCapabilityFromReality ignores the code path (a READY probe is enough)",
+   "file": "core/capabilities/resolver.ts",
+   "old": "e.codePath === \"PRESENT\" && e.probe === \"READY\" && t.capabilities",
+   "new": "e.probe === \"READY\" && t.capabilities"
+  },
+  {
+   "id": "M21",
+   "description": "a script entry only needs its literal to exist: the literal check is skipped",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "else if (r.mode === \"SCRIPT_LITERAL\") exportDeclared = source!.includes(r.exportName);",
+   "new": "else if (r.mode === \"SCRIPT_LITERAL\") exportDeclared = true;"
+  },
+  {
+   "id": "M22",
+   "description": "an npm package is assumed to exist (node_modules is not checked)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "moduleExists = readText(path.join(repoRoot, \"node_modules\", r.module, \"package.json\")) !== null;",
+   "new": "moduleExists = true;"
+  },
+  {
+   "id": "M23",
+   "description": "an entry-point script is no longer exempt from the caller requirement being met (entrypoint flag ignored)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "r.entrypoint === true || verifiedCallers >= 1",
+   "new": "verifiedCallers >= 1"
+  },
+  {
+   "id": "M24",
+   "description": "the binding adapter ids are not de-duplicated (one unresolved id is counted twice)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const unresolved = [...new Set(i.bindingAdapterIds)].filter(",
+   "new": "const unresolved = [...i.bindingAdapterIds].filter("
+  }
+ ]
+}
