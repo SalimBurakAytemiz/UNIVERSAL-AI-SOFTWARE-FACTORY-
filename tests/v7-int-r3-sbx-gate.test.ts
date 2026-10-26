@@ -96,7 +96,10 @@ describe("SBX-GATE ExecutionGate: single decision point", () => {
     expect(devrun).not.toMatch(/cp\.spawn\(exe/);
     expect(devrun).toContain("gate.provider.spawn(exe");
     // tek kayıt yolu: buildServer opts.sandbox (programatik); packaged/CLI girişleri sağlayıcı vermez, env okunmaz
-    expect(server).toContain("new ExecutionGate(opts.sandbox??null)");
+    expect(server).toContain("new ExecutionGate(\"sandbox\" in opts?(opts.sandbox??null):defaultSandboxProvider());");
+    // Batch 4a: the default provider is Linux-only, and a constructor throw degrades to "no provider" (never a startup crash).
+    expect(server).toContain("const defaultSandboxProvider=():SandboxProvider|null=>{if(process.platform!==\"linux\")return null;try{return new LinuxUnshareSandboxProvider()}catch{return null}};");
+    expect(code(server)).not.toMatch(/acceptUnenforcedProcessLimit/);
     expect(server).not.toMatch(/process\.env\.[A-Z_]*SANDBOX/);
     // packaged entry never passes a sandbox option (comments may mention it); no env var is read for one
     expect(code(entry)).not.toMatch(/\bsandbox\s*:/i);
@@ -156,8 +159,8 @@ describe("SBX-GATE runner: VERIFY without a verified sandbox", () => {
   });
 });
 
-describe("SBX-GATE control API (production wiring: no sandbox option)", () => {
-  const mk = (extra: Record<string, unknown> = {}) => {
+describe("SBX-GATE control API (explicit no provider: sandbox null)", () => {
+  const mk = (extra: Record<string, unknown> = {sandbox: null}) => {
     const runtime = path.join(tmp, "runtime"), dataDir = path.join(tmp, "data");
     fs.mkdirSync(runtime, {recursive: true});
     const app = buildServer({controlToken: TOKEN, runtime, dataDir, repoRoot: REPO, port: 3210, logger: false, tenantId: "tA", ...extra});
@@ -214,6 +217,26 @@ describe("SBX-GATE control API (production wiring: no sandbox option)", () => {
     expect(spawned[0].slice(1)).toEqual(["server.js"]);
     expect((await call(app, "POST", `/v1/projects/${pid}/devrun/stop`, {})).statusCode).toBe(200);
     expect(testExecutionGate()).toBeInstanceOf(ExecutionGate);
+  });
+});
+describe("SBX-GATE control API (production default: no sandbox option)", () => {
+  // //TR: Batch 4a: seçenek hiç verilmezse Linux'ta gerçek sağlayıcı denenir; selfTest geçmezse SANDBOX_UNAVAILABLE ve hiçbir şey başlatılmaz. Diğer platformlarda sağlayıcı yoktur.
+  it("Linux tries the real provider (never NO_VERIFIED_PROVIDER there); other platforms have none; an unverified provider still refuses dev-run with 409", { timeout: T }, async () => {
+    const runtime = path.join(tmp, "runtime"), dataDir = path.join(tmp, "data");
+    fs.mkdirSync(runtime, {recursive: true});
+    const app = buildServer({controlToken: TOKEN, runtime, dataDir, repoRoot: REPO, port: 3210, logger: false, tenantId: "tA"});
+    apps.push(app);
+    const sys = (await app.inject({method: "GET", url: "/v1/system/executors", headers: HDR})).json();
+    if (process.platform !== "linux") { expect(sys.sandbox).toEqual({state: "UNAVAILABLE", reason: "SANDBOX_UNAVAILABLE", detail: "NO_VERIFIED_PROVIDER", providerId: null}); return; }
+    if (sys.sandbox.state === "AVAILABLE") { expect(sys.sandbox.providerId).toBe("linux-unshare-v2"); return; }
+    expect(sys.sandbox.state).toBe("UNAVAILABLE");
+    expect(sys.sandbox.detail).not.toBe("NO_VERIFIED_PROVIDER");
+    const created = await app.inject({method: "POST", url: "/v1/projects", headers: HDR, payload: {name: "Shop", environmentId: "dev", template: "web-node", idempotencyKey: "sbx-default-1"}});
+    expect(created.statusCode).toBe(201);
+    const dev = await app.inject({method: "POST", url: `/v1/projects/${created.json().project.projectId}/devrun/start`, headers: HDR, payload: {}});
+    expect(dev.statusCode).toBe(409);
+    expect(dev.json().error).toBe("SANDBOX_UNAVAILABLE");
+    expect(dev.json().reason).not.toBe("NO_VERIFIED_PROVIDER");
   });
 });
 

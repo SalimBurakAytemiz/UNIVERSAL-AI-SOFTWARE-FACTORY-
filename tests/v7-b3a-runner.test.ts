@@ -1,4 +1,4 @@
-// //TR: Bu test B3a mission runner engine'ini gerçek geçici git deposu ve deterministik FAKE executor ile doğrular: mutlu yol (mission REPORTING + run AWAITING_APPROVAL + tam kanıt), test hatası/reviewer BLOCKED sınırlı remediation, diff'te secret, aynı kimlik reddi, GLOBAL_STOP, lease fencing, crash-resume, tenant izolasyonu, path traversal ve cockpit activeWorkerRuns. Gerçek sağlayıcı çağrılmaz.
+// //TR: Bu test B3a mission runner engine'ini gerçek geçici git deposu ve deterministik FAKE executor ile doğrular (1/2): çalıştırma durum tablosu, mutlu yol/remediation/tamper/kurtarma motoru, claim cap (virtual clock lease testleri dahil) ve kontrol API'si. TaskLimits, workspace arşiv/prune ve runner dışa aktarımları v7-b3a-runner-limits-archive.test.ts dosyasındadır (aynı yardımcılar kasıtlı olarak kopyalanmıştır: bölme mekanik kalsın, Windows'ta iki dosya paralel ~215 sn koşsun).
 import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
 // SBX-GATE (INT-R3): these tests exercise their own fixed test/dev commands; host execution is allowed only through the TEST-ONLY injected sandbox provider (production has none).
 import {testExecutionGate, TEST_HOST_PASSTHROUGH_SANDBOX} from "./support/test-sandbox.js";
@@ -11,17 +11,12 @@ import {sha256 as sha256Untyped} from "../automation/lib/atomic-json.mjs";
 import {spawnGitSync} from "../automation/lib/git-isolation.mjs";
 import {activateGlobalStop} from "../automation/lib/global-stop.mjs";
 import {WorkOsStore} from "../core/workos/store.js";
-import {MissionRunner, effectiveTestCommand, repositoryPrecondition} from "../core/workos/runner.js";
+import {MissionRunner} from "../core/workos/runner.js";
 import type {RunnerOptions} from "../core/workos/runner.js";
 import {fakeSecurity} from "../core/workos/security-tools.js";
 import {FakeExecutors, executorsFromEnv, parseReviewOutput} from "../core/workos/executors.js";
 import type {ExecutorPair, FakeScript, MissionSpec} from "../core/workos/executors.js";
 import {RUN_STATUSES, TERMINAL_RUN_STATUSES, canRunTransition} from "../core/workos/run-state.js";
-import {effectiveLimits} from "../core/agents/role-execution.js";
-import {ProjectStudio} from "../core/workos/project-studio.js";
-import {RunWorkspaceArchiver, retentionMsFromEnv, recordedCommitSet, hasSecretFinding, RUN_ARCHIVE_RECORD} from "../core/workos/run-archive.js";
-import type {ArchiveStudioPort, ArchiveStorePort} from "../core/workos/run-archive.js";
-import {FIRST_DELIVERY_BINDINGS} from "../core/agents/first-delivery-bindings.js";
 import {scanDiffForSecrets, redactSecrets} from "../core/workos/secret-scan.js";
 import {buildServer} from "../apps/control-api/src/server.js";
 import type {WorkRun} from "../core/workos/types.js";
@@ -77,6 +72,285 @@ const runOf = (c: Ctx, id: string, tenantId = "tA") => c.store.getRun({tenantId}
 const missionOf = (c: Ctx, tenantId = "tA") => c.store.getMission({tenantId}, c.missionId)!;
 const journal = (c: Ctx) => fs.readFileSync(path.join(c.dataDir, "journal.jsonl"), "utf8").split("\n").filter(Boolean).map(l => JSON.parse(l));
 const kinds = (r: WorkRun) => r.evidence.map(e => e.kind);
+
+import cp from "node:child_process";
+import {repositoryHead, repositoryPrecondition as repoPrecondition} from "../core/workos/runner.js"; // //TR: ayrı ad: #214 bölmesi üst import satırından repositoryPrecondition'ı çıkarır; bu blok o satıra bağlı kalmaz (her iki dizilimde derlenir)
+import type {RepositoryHead} from "../core/workos/runner.js";
+// //TR: LANE-C C-RUNNER-HEAD-PREDICATE: "HEAD çözülüyor mu VE yol work-tree kökü mü" kararı TEK saf fonksiyondur (repositoryHead; sonuç çağıranın ortamına bağlı değildir). Runner WORKSPACE adımı aynı fonksiyonu çağırır (readiness için Lane B isteği). `git rev-parse` yukarı doğru keşfettiği için düz bir alt dizin üst deponun HEAD'ini çözer; eski davranış `git clone <alt dizin>` hatasıyla yanıltıcı WORKSPACE_CLONE_FAILED verirdi. Testler her durumu gerçek git ile kurar; beklenen cevap bağımsız git çağrısından türetilir, her hile için önce "ham git bunu kabul eder/çalıştırır" önkoşulu doğrulanır.
+describe("LANE-C repository head predicate: repositoryHead (does HEAD resolve AND is the path the work-tree root; the runner uses the very same function)", () => {
+  const ID = ["-c", "user.name=Seed", "-c", "user.email=seed@local.invalid", "-c", "commit.gpgsign=false"];
+  const POSIX = process.platform !== "win32";
+  const mkd = (...p: string[]) => { const d = path.join(...p); fs.mkdirSync(d, {recursive: true}); return d; };
+  const headOf = (dir: string) => git(dir, ["rev-parse", "HEAD"]);
+  const commitIn = (dir: string, name = "f.txt") => { fs.writeFileSync(path.join(dir, name), `${name}\n`); git(dir, ["add", "-A"]); git(dir, [...ID, "commit", "-q", "-m", `add ${name} in ${path.basename(dir)}`]); return headOf(dir); }; // //TR: commit mesajı dizin adını içerir: aynı saniyedeki iki depo asla aynı SHA'yı üretmez (aksi halde "başka deponun HEAD'i" ayrımı sahte geçerdi)
+  const initRepo = (dir: string, withCommit: boolean): string | null => { fs.mkdirSync(dir, {recursive: true}); git(dir, ["init", "-q", "-b", "main"]); return withCommit ? commitIn(dir) : null; };
+  const cleanEnv = (): NodeJS.ProcessEnv => Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^GIT_/i.test(k)));
+  // //TR: Tek ortama bağlı beklenti: TMPDIR bir deponun içindeyse "hiçbir depo yok" dizini aslında bir deponun alt dizinidir; bu yüzden o şekil ayrı bir testte ve ortam uygun değilse GÖRÜNÜR biçimde atlanır.
+  const insideAnyRepo = (dir: string) => spawnGitSync(dir, ["rev-parse", "--git-dir"], {env: cleanEnv()}).status === 0;
+  const NOT_ROOT: RepositoryHead = {ok: false, reason: "REPOSITORY_NOT_WORKTREE_ROOT"}, UNRESOLVED: RepositoryHead = {ok: false, reason: "REPOSITORY_HEAD_UNRESOLVED"};
+  const okAt = (baseSha: string): RepositoryHead => ({ok: true, baseSha});
+  // //TR: process.env YALNIZ withEnv ile değişir. Windows'ta ortam adları büyük/küçük harfe duyarsızdır: GIT_DIR ve git_dir AYNI değişkendir; vi.stubEnv iki yazımı ayrı kaydedip geri yüklerken "özgün" değer olarak ekilmiş GIT_DIR'i geri koyabilir ve sonraki bütün git çağrıları (test yardımcısı git() dahil) silinmiş decoy deposuna gider. withEnv: ekilen her adı (her yazımıyla) siler, anlık görüntüde OLMAYAN her GIT_* adını siler ve özgün değerlerin TAMAMINI geri yazar.
+  const withEnv = <R,>(vars: Record<string, string>, fn: () => R): R => {
+    const saved = Object.entries(process.env);
+    for (const [k, v] of Object.entries(vars)) process.env[k] = v;
+    try {
+      const out = fn();
+      if (typeof (out as {then?: unknown} | null | undefined)?.then === "function") throw new Error("withEnv is synchronous: an async fn would run after the environment was restored");
+      return out;
+    } finally { // EXACT restore: wipe the whole environment (every spelling, every changed or deleted value) and rewrite the snapshot
+      for (const k of Object.keys(process.env)) delete process.env[k];
+      for (const [k, v] of saved) if (v !== undefined) process.env[k] = v;
+    }
+  };
+  // //TR: Bekçi: GIT_*, PATH ve SUDO_UID için ad=DEĞER dizgeleri (tam yazımıyla) her testten önce/sonra karşılaştırılır; değişen değer, silinen önceden-var GIT_* ve (Linux'ta) yeni bir yazım da yakalanır. Fark varsa geri yazılır VE o test adlarla bir kez düşer (sonraki testler zehirlenmez).
+  const WATCHED = /^(GIT_|PATH$|SUDO_UID$)/i;
+  const watchedEnv = () => Object.entries(process.env).filter(([k]) => WATCHED.test(k)).map(([k, v]) => `${k}=${v}`).sort();
+  let envBefore: string[] = [];
+  beforeEach(() => { envBefore = watchedEnv(); });
+  afterEach(() => {
+    const now = watchedEnv(), differing = [...new Set([...now.filter(e => !envBefore.includes(e)), ...envBefore.filter(e => !now.includes(e))].map(e => e.slice(0, e.indexOf("="))))];
+    if (differing.length > 0) {
+      for (const k of Object.keys(process.env)) if (WATCHED.test(k)) delete process.env[k];
+      for (const e of envBefore) process.env[e.slice(0, e.indexOf("="))] = e.slice(e.indexOf("=") + 1);
+    }
+    expect(differing).toEqual([]);
+  });
+  const rawToplevel = (dir: string) => spawnGitSync(dir, ["rev-parse", "--show-toplevel"], {env: cleanEnv()});
+  // //TR: Premise karşılaştırmaları ham dize değil DİZİN KİMLİĞİDİR: Windows'ta git eğik çizgili uzun adı (runneradmin) yazar, os.tmpdir() ise ters eğik çizgili 8.3 kısa adı (RUNNER~1) tutar; ikisi de realpath.native ile aynı kanonik yola iner (ürünün path-guard anahtarı ile aynı mantık).
+  const sameDir = (a: string, b: string) => { try { return fs.realpathSync.native(a) === fs.realpathSync.native(b); } catch { return false; } };
+
+  type Built = {dir: string; want: RepositoryHead};
+  const builders: Array<[string, () => Built]> = [
+    ["repo root with a commit: ok, baseSha is that repository's HEAD", () => { const d = mkd(tmp, "root"); return {dir: d, want: okAt(initRepo(d, true)!)}; }],
+    ["repo root with no commit (unborn HEAD): HEAD unresolved", () => { const d = mkd(tmp, "unborn"); initRepo(d, false); return {dir: d, want: UNRESOLVED}; }],
+    ["repo root whose branch points at a missing object: HEAD unresolved", () => { const d = mkd(tmp, "dangling"); initRepo(d, true); fs.writeFileSync(path.join(d, ".git", "refs", "heads", "main"), `${"a".repeat(40)}\n`); return {dir: d, want: UNRESOLVED}; }],
+    ["PLAIN SUBDIRECTORY inside a repo with commits (raw git resolves the PARENT's HEAD there): not the work-tree root", () => {
+      const parent = mkd(tmp, "parent"), parentHead = initRepo(parent, true)!, sub = mkd(parent, "pkg", "sub"); fs.writeFileSync(path.join(sub, "g.txt"), "g\n");
+      expect(git(sub, ["rev-parse", "--verify", "HEAD^{commit}"])).toBe(parentHead); // premise: the old inline check would have accepted this directory
+      for (const probe of [["rev-parse", "--git-dir"], ["rev-parse", "--show-toplevel"]]) expect(spawnGitSync(sub, probe, {env: cleanEnv()}).status).toBe(0); // premise: the CEILING-FREE probes resolve here; ok may never be derived from them
+      return {dir: sub, want: NOT_ROOT};
+    }],
+    ["plain subdirectory inside an UNBORN repo: not the work-tree root", () => { const parent = mkd(tmp, "uparent"); initRepo(parent, false); return {dir: mkd(parent, "sub"), want: NOT_ROOT}; }],
+    ["the .git directory of a repo with commits: not the work-tree root", () => { const d = mkd(tmp, "dotgit"); initRepo(d, true); return {dir: path.join(d, ".git"), want: NOT_ROOT}; }],
+    ["a directory inside .git (objects): not the work-tree root", () => { const d = mkd(tmp, "dotgit-objects"); initRepo(d, true); return {dir: path.join(d, ".git", "objects"), want: NOT_ROOT}; }],
+    ["bare repository with commits: ok (a bare repository is a valid clone source)", () => { const d = mkd(tmp, "bsrc"), bare = path.join(tmp, "bare.git"), h = initRepo(d, true)!; git(tmp, ["clone", "-q", "--bare", d, bare]); return {dir: bare, want: okAt(h)}; }],
+    ["a subdirectory inside a BARE repository (objects/): not the work-tree root", () => { const d = mkd(tmp, "bsub-src"), bare = path.join(tmp, "bsub.git"); initRepo(d, true); git(tmp, ["clone", "-q", "--bare", d, bare]); return {dir: path.join(bare, "objects"), want: NOT_ROOT}; }],
+    ["linked worktree root: ok, baseSha is the WORKTREE's HEAD, not the main checkout's", () => {
+      const main = mkd(tmp, "wmain"), wt = path.join(tmp, "wtree"); initRepo(main, true); git(main, ["worktree", "add", "-q", wt, "-b", "wtb"]);
+      const h = commitIn(wt, "w.txt"); expect(h).not.toBe(headOf(main)); return {dir: wt, want: okAt(h)};
+    }],
+    ["a repository whose .git is a FILE (gitfile, --separate-git-dir): ok", () => { const d = path.join(tmp, "gf-root"), gitDir = path.join(tmp, "gf-gitdir"); git(tmp, ["init", "-q", "-b", "main", `--separate-git-dir=${gitDir}`, d]); expect(fs.statSync(path.join(d, ".git")).isFile()).toBe(true); return {dir: d, want: okAt(commitIn(d))}; }],
+    ["a gitfile root whose config puts the work tree at a SAME-LENGTH sibling directory: refused (the comparison is by directory identity, not by length or prefix)", () => {
+      const d = path.join(tmp, "gw-root"), sib = mkd(tmp, "gw-rooX"), gitDir = path.join(tmp, "gw-gitdir"); git(tmp, ["init", "-q", "-b", "main", `--separate-git-dir=${gitDir}`, d]); commitIn(d);
+      git(d, ["config", "core.worktree", sib]); expect(path.basename(sib).length).toBe(path.basename(d).length); expect(sameDir(git(d, ["rev-parse", "--show-toplevel"]), sib)).toBe(true);
+      return {dir: d, want: NOT_ROOT};
+    }],
+    ["a gitfile root whose config puts the work tree at a DESCENDANT directory: refused (the comparison is by directory identity, not by prefix)", () => {
+      const d = path.join(tmp, "gd-root"), gitDir = path.join(tmp, "gd-gitdir"); git(tmp, ["init", "-q", "-b", "main", `--separate-git-dir=${gitDir}`, d]); commitIn(d);
+      const inner = mkd(d, "inner"); git(d, ["config", "core.worktree", inner]); expect(sameDir(git(d, ["rev-parse", "--show-toplevel"]), inner)).toBe(true);
+      return {dir: d, want: NOT_ROOT};
+    }],
+    ["a repository nested inside another repository: ok, baseSha is the INNER repository's HEAD", () => { const outer = mkd(tmp, "outer"), outerHead = initRepo(outer, true)!, inner = mkd(outer, "vendor", "inner"), innerHead = initRepo(inner, true)!; expect(innerHead).not.toBe(outerHead); return {dir: inner, want: okAt(innerHead)}; }],
+    ["a subdirectory of a repository whose config claims the child as its work tree (core.worktree): not the work-tree root", () => {
+      const parent = mkd(tmp, "cwparent"); initRepo(parent, true); const child = mkd(parent, "child"); git(parent, ["config", "core.worktree", child]);
+      expect(sameDir(rawToplevel(child).stdout.trim(), child)).toBe(true); // premise: raw git calls the child a work-tree root (the ceiling or the own-.git proof is what refuses it)
+      return {dir: child, want: NOT_ROOT};
+    }],
+    ["a repository with a .git directory but core.bare=true (git reports no work tree): still ok, the path contains its own .git and it cloned before", () => { const d = mkd(tmp, "corebare"), h = initRepo(d, true)!; git(d, ["config", "core.bare", "true"]); expect(rawToplevel(d).status).not.toBe(0); return {dir: d, want: okAt(h)}; }],
+    ["a repository whose OWN config puts the work tree elsewhere (core.worktree): still ok, the path contains its own .git and it cloned before", () => { const d = mkd(tmp, "cwelsewhere"), other = mkd(tmp, "cwother"), h = initRepo(d, true)!; git(d, ["config", "core.worktree", other]); expect(sameDir(git(d, ["rev-parse", "--show-toplevel"]), d)).toBe(false); return {dir: d, want: okAt(h)}; }],
+    ["detached HEAD at a commit: ok, baseSha is that commit", () => { const d = mkd(tmp, "detached"), first = initRepo(d, true)!; commitIn(d, "second.txt"); git(d, ["checkout", "-q", "--detach", first]); return {dir: d, want: okAt(first)}; }],
+    ["a tag checkout (detached) and a non-ASCII branch name: ok", () => { const d = mkd(tmp, "tagco"), h = initRepo(d, true)!; git(d, ["tag", "v1"]); git(d, ["checkout", "-q", "-b", "fé/ünï-çödé"]); git(d, ["checkout", "-q", "v1"]); return {dir: d, want: okAt(h)}; }],
+    ["HEAD holding an annotated TAG OBJECT id (not a commit): refused, the clone would fail", () => {
+      const d = mkd(tmp, "tagobj"), h = initRepo(d, true)!; git(d, [...ID, "tag", "-a", "-m", "t", "t1"]); const tagId = git(d, ["rev-parse", "t1"]);
+      fs.writeFileSync(path.join(d, ".git", "HEAD"), `${tagId}\n`); expect([git(d, ["rev-parse", "HEAD"]), git(d, ["rev-parse", "HEAD^{commit}"])]).toEqual([tagId, h]); // premise: HEAD^{commit} alone would accept it
+      return {dir: d, want: UNRESOLVED};
+    }]
+  ];
+
+  it("every repository shape gets exactly one answer: the work-tree root with a resolvable HEAD is ok, everything else is refused with a specific reason (real git, 20 shapes)", () => {
+    for (const [label, build] of builders) { const {dir, want} = build(); expect([label, repositoryHead(dir)]).toEqual([label, want]); }
+  });
+
+  it("a directory that is not a repository at all is HEAD unresolved (skipped, visibly, when TMPDIR lies inside a repository: then it is a subdirectory of one)", (ctx) => {
+    const d = mkd(tmp, "plain");
+    if (insideAnyRepo(d)) return ctx.skip();
+    expect(repositoryHead(d)).toEqual(UNRESOLVED);
+  });
+
+  it("a successful answer is a full 40-hex commit SHA and equals what plain git reports; the function is pure (the repository and process.env are untouched); non-canonical spellings of the root (dot-dot, trailing separator, relative) are the same directory", () => {
+    const d = mkd(tmp, "pure"), h = initRepo(d, true)!;
+    const listing = () => fs.readdirSync(d, {recursive: true}).map(String).sort(), head = () => fs.readFileSync(path.join(d, ".git", "HEAD"), "utf8"), index = () => fs.readFileSync(path.join(d, ".git", "index"));
+    const before = {listing: listing(), head: head(), index: index()}, env = {...process.env};
+    const r = repositoryHead(d);
+    expect(r).toEqual(okAt(h));
+    expect(r.ok && /^[0-9a-f]{40}$/.test(r.baseSha)).toBe(true);
+    expect({listing: listing(), head: head(), index: index()}).toEqual(before);
+    expect({...process.env}).toEqual(env);
+    for (const spelling of [`${d}${path.sep}.git${path.sep}..`, `${d}${path.sep}`, `${d}${path.sep}.`, path.relative(process.cwd(), d)]) expect([spelling, repositoryHead(spelling)]).toEqual([spelling, okAt(h)]);
+  });
+
+  it("an ancestor repository that claims a child directory as its work tree (core.worktree) never makes the child a root, however src is spelled: relative, dot-dot, symlinked, and a ':' in the parent directory name (which splits GIT_CEILING_DIRECTORIES and disables the ceiling)", () => {
+    const mk = (parentName: string) => { const parent = mkd(tmp, parentName); initRepo(parent, true); const child = mkd(parent, "child"); git(parent, ["config", "core.worktree", child]); expect(sameDir(rawToplevel(child).stdout.trim(), child)).toBe(true); return child; };
+    const child = mk("claim");
+    for (const spelling of [child, path.relative(process.cwd(), child), `${child}${path.sep}.`, `${child}${path.sep}x${path.sep}..`]) expect([spelling, repositoryHead(spelling)]).toEqual([spelling, NOT_ROOT]);
+    if (POSIX) {
+      const colon = mk("cw:parent"), link = path.join(tmp, "claim-link"); fs.symlinkSync(child, link, "dir");
+      expect(repositoryHead(colon)).toEqual(NOT_ROOT);
+      expect(repositoryHead(link)).toEqual(NOT_ROOT);
+      const cb = mkd(tmp, "co:lon-bare"), src0 = mkd(tmp, "co-lon-src"); initRepo(src0, true); git(tmp, ["clone", "-q", "--bare", src0, path.join(cb, "bare.git")]);
+      expect(repositoryHead(path.join(cb, "bare.git"))).toEqual(okAt(headOf(src0))); // the bare repository itself is a root even in a colon-named directory
+      expect(repositoryHead(path.join(cb, "bare.git", "objects"))).toEqual(NOT_ROOT); // a directory inside it is not, although is-bare says true there once the ceiling is disabled
+    }
+  });
+
+  it("hostile input never throws: a missing path, a file, an empty string, a NUL byte, a non-string, a 5000-character path and a directory with a garbage .git file are all refused as HEAD unresolved", () => {
+    const file = path.join(tmp, "a-file"); fs.writeFileSync(file, "x");
+    const garbage = mkd(tmp, "garbage"); fs.writeFileSync(path.join(garbage, ".git"), "this is not a gitfile\n");
+    const hostile: unknown[] = [path.join(tmp, "missing"), file, "", `${tmp}${path.sep}a\0b`, "\0", undefined, null, 5, {}, ["x"], path.join(tmp, "x".repeat(5000)), garbage];
+    for (const src of hostile) expect([String(src).slice(0, 30), repositoryHead(src as string)]).toEqual([String(src).slice(0, 30), UNRESOLVED]);
+  });
+
+  it("a SHA-256 repository is refused as HEAD unresolved: the runner's commit id check is the 40-hex SHA-1 form only (skipped when this git cannot create one)", (ctx) => {
+    const d = mkd(tmp, "sha256");
+    if (spawnGitSync(d, ["init", "-q", "-b", "main", "--object-format=sha256"]).status !== 0) return ctx.skip();
+    const h = commitIn(d);
+    expect(h).toMatch(/^[0-9a-f]{64}$/);
+    expect(repositoryHead(d)).toEqual(UNRESOLVED);
+  });
+
+  it.skipIf(!POSIX)("a symlink to a repo root is ok, a symlink to a plain subdirectory or to the .git directory is not the work-tree root (canonical comparison; POSIX only: NOT_VERIFIED on Windows)", () => {
+    const d = mkd(tmp, "slroot"), h = initRepo(d, true)!, sub = mkd(d, "pkg");
+    const link = (target: string, name: string) => { const l = path.join(tmp, name); fs.symlinkSync(target, l, "dir"); return l; };
+    expect(repositoryHead(link(d, "to-root"))).toEqual(okAt(h));
+    expect(repositoryHead(link(sub, "to-sub"))).toEqual(NOT_ROOT);
+    expect(repositoryHead(link(path.join(d, ".git"), "to-dotgit"))).toEqual(NOT_ROOT);
+  });
+
+  it.skipIf(!POSIX)("directory names git prints verbatim stay roots: trailing space/tab/NBSP/ideographic space, leading dash, quotes, non-ASCII (the path git prints is not trimmed; POSIX only: Windows strips trailing spaces from names)", () => {
+    for (const name of ["with space", "trailing ", "trailing  ", "trailing\t", "nbsp ", "ideo　", "-dash", "q'\"`$", "ünï-çödé"]) {
+      const d = mkd(tmp, "names", name), h = initRepo(d, true)!;
+      expect([name, repositoryHead(d)]).toEqual([name, okAt(h)]);
+    }
+    // a gitfile root is decided by the printed --show-toplevel alone (its git dir is elsewhere), so a trimmed path would refuse it
+    for (const [i, name] of ["gf trailing ", "gf trailing\t"].entries()) {
+      const d = path.join(tmp, "names-gf", name); fs.mkdirSync(path.dirname(d), {recursive: true}); git(tmp, ["init", "-q", "-b", "main", `--separate-git-dir=${path.join(tmp, `names-gd-${i}`)}`, d]);
+      const h = commitIn(d);
+      expect([name, repositoryHead(d)]).toEqual([name, okAt(h)]);
+    }
+  });
+
+  it("withEnv restores the process environment EXACTLY (a changed value, a deleted GIT_* and a re-spelled planting included) and refuses an async fn", () => {
+    const before = JSON.stringify(Object.entries(process.env).sort());
+    const seen = withEnv({GIT_CONFIG_COUNT: "9", git_ssl_cainfo: "evil", Git_Config_Count: "7", PATH: "/nonexistent"}, () => { delete process.env.GIT_TERMINAL_PROMPT; return Object.keys(process.env).length; });
+    expect(seen).toBeGreaterThan(0);
+    expect(JSON.stringify(Object.entries(process.env).sort())).toBe(before);
+    expect(() => withEnv({X_ASYNC: "1"}, async () => 1)).toThrow(/synchronous/);
+    expect(process.env.X_ASYNC).toBeUndefined();
+    expect(JSON.stringify(Object.entries(process.env).sort())).toBe(before);
+  });
+
+  const SENTINELS = ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_COMMON_DIR", "GIT_NAMESPACE", "GIT_PREFIX", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0", "GIT_NO_LAZY_FETCH", "git_dir"];
+  it("host GIT_* variables decide nothing: planted in process.env (any case; including GIT_CEILING_DIRECTORIES covering everything) they give the same answer as a clean env, for every key shape", () => {
+    const decoy = mkd(tmp, "decoy"), decoyHead = initRepo(decoy, true)!;
+    const decoyDir = path.join(decoy, ".git");
+    const value = (k: string) => /DIR$|OBJECT|NAMESPACE|PREFIX|COMMON/.test(k.toUpperCase()) ? decoyDir : /WORK_TREE/.test(k) ? decoy : /INDEX/.test(k) ? path.join(tmp, "nope.idx") : /PARAMETERS/.test(k) ? "'core.bare=true'" : /COUNT/.test(k) ? "1" : /KEY/.test(k) ? "core.bare" : /VALUE/.test(k) ? "true" : "0";
+    // //TR: Her GIT_* adı tek tek burada denenmez (Windows'ta her git süreci pahalı); ad ad kapsama aşağıdaki kayıt eden git shim testindedir (POSIX). Burada davranışı en çok değiştiren dört ortam ve dört şekil denenir.
+    const planted: Array<[string, Record<string, string>]> = [["GIT_DIR", {GIT_DIR: decoyDir}], ["GIT_DIR + GIT_WORK_TREE", {GIT_DIR: decoyDir, GIT_WORK_TREE: decoy}], ["mixed-case Git_Dir (the same variable as GIT_DIR on Windows)", {Git_Dir: decoyDir}], ["mixed-case Git_Dir + Git_Work_Tree", {Git_Dir: decoyDir, Git_Work_Tree: decoy}], ["GIT_CEILING_DIRECTORIES covering everything", {GIT_CEILING_DIRECTORIES: tmp}], ["all of them", {...Object.fromEntries(SENTINELS.map(k => [k, value(k)])), GIT_CEILING_DIRECTORIES: tmp}]];
+    const shapes = builders.filter(([label]) => /^(repo root with a commit|PLAIN SUBDIRECTORY|bare repository with commits|a subdirectory of a repository whose config claims)/.test(label)).map(([label, build]) => ({label, ...build()}));
+    expect(shapes.length).toBe(4);
+    for (const {label, dir, want} of shapes) for (const [name, vars] of planted) expect([label, name, withEnv(vars, () => repositoryHead(dir))]).toEqual([label, name, want]);
+    expect(watchedEnv()).toEqual(envBefore); // nothing planted is left behind: names AND values, exact spelling
+    const root = shapes[0];
+    expect(root.want.ok && root.want.baseSha !== decoyHead).toBe(true); // a repository with its own HEAD must never report the decoy's HEAD
+    expect(withEnv({GIT_DIR: decoyDir}, () => repositoryHead(mkd(tmp, "plain-with-git-dir")))).toEqual(insideAnyRepo(tmp) ? NOT_ROOT : UNRESOLVED); // a planted GIT_DIR cannot make a non-repository look like the decoy
+    expect(watchedEnv()).toEqual(envBefore);
+  });
+
+  it.skipIf(!POSIX)("every git probe runs with a scrubbed environment and the fixed safety flags: a recording git shim sees no GIT_* except the isolation's own and the ceiling (physical parent of src on the deciding probes, absent on the classification probe), always protocol.allow=never, only allow-listed variables (a secret-looking variable and SUDO_UID never reach git)", () => {
+    const d = mkd(tmp, "shim-root"); initRepo(d, true); const sub = mkd(d, "pkg");
+    const bin = mkd(tmp, "shim-bin"), log = path.join(tmp, "shim.log"), real = String(cp.spawnSync("sh", ["-c", "command -v git"], {encoding: "utf8"}).stdout).trim();
+    fs.writeFileSync(path.join(bin, "git"), `#!/bin/sh\n{ echo "ARGV $*"; env | sort | sed 's/^/ENV /'; echo END; } >> "${log}"\nexec "${real}" "$@"\n`, {mode: 0o755});
+    const run = (dir: string) => { fs.writeFileSync(log, ""); return withEnv({PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}`, GIT_DIR: path.join(d, "nope"), git_dir: path.join(d, "nope"), GIT_WORK_TREE: tmp, UASCO_SHIM_PASS: "yes", UASCO_FAKE_API_KEY: "sekret-value", SUDO_UID: "0"}, () => ({result: repositoryHead(dir), calls: fs.readFileSync(log, "utf8").split("END\n").filter(Boolean).map(c => ({argv: /ARGV (.*)/.exec(c)![1], env: Object.fromEntries(c.split("\n").filter(l => l.startsWith("ENV ")).map(l => l.slice(4)).map(l => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]))}))})); };
+    for (const [dir, expected, deciding] of [[d, okAt(headOf(d)), ["rev-parse --show-toplevel", "rev-parse HEAD HEAD^{commit}"]], [sub, NOT_ROOT, ["rev-parse --absolute-git-dir", "rev-parse --is-bare-repository", "rev-parse --git-dir"]]] as const) {
+      const {result, calls} = run(dir);
+      expect(result).toEqual(expected);
+      expect(calls.length).toBeGreaterThanOrEqual(deciding.length);
+      for (const c of calls) {
+        expect(c.argv).toContain("protocol.allow=never");
+        const gitVars = Object.keys(c.env).filter(k => /^git_/i.test(k)).sort();
+        expect(gitVars.filter(k => !["GIT_CEILING_DIRECTORIES", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM", "GIT_CONFIG_SYSTEM", "GIT_NO_LAZY_FETCH", "GIT_TERMINAL_PROMPT"].includes(k))).toEqual([]);
+        expect(c.env.GIT_NO_LAZY_FETCH).toBe("1");
+        expect(c.env.UASCO_SHIM_PASS).toBeUndefined(); // only the fixed allow-list reaches git: unrelated variables and secrets never do
+        expect(JSON.stringify(c.env)).not.toContain("sekret-value");
+        expect(c.env.PATH).toContain(bin); // the allow-listed PATH does (it is how the shim is found)
+        expect(c.env.SUDO_UID).toBeUndefined();
+        const classification = c.argv.endsWith("rev-parse --git-dir");
+        if (classification) expect(c.env.GIT_CEILING_DIRECTORIES).toBeUndefined(); else expect(c.env.GIT_CEILING_DIRECTORIES).toBe(path.dirname(dir));
+      }
+      for (const want of deciding) expect(calls.some(c => c.argv.endsWith(want))).toBe(true);
+    }
+  });
+
+  it.skipIf(!POSIX)("a repository that cannot be read promptly is refused within the total time budget, not forever: a FIFO as .git/HEAD blocks every probe; the budget is shared by all probes (not per probe)", () => {
+    const d = mkd(tmp, "fifo"); initRepo(d, true);
+    fs.rmSync(path.join(d, ".git", "HEAD")); expect(cp.spawnSync("mkfifo", [path.join(d, ".git", "HEAD")]).status).toBe(0);
+    const t0 = Date.now(), r = repositoryHead(d, {timeoutMs: 800}), elapsed = Date.now() - t0;
+    expect(r).toEqual(UNRESOLVED);
+    expect(elapsed).toBeGreaterThanOrEqual(700); // premise: git really blocked on the FIFO
+    expect(elapsed).toBeLessThan(2400); // one shared budget: several probes would each have blocked for the full 800 ms
+  });
+
+  it.skipIf(!POSIX)("a hostile repository config cannot make the probe run a host command or reach the network: a partial clone whose HEAD commit is missing would lazy-fetch over ssh and run core.sshCommand; the probe refuses instead and the marker is never written", () => {
+    const d = mkd(tmp, "promisor"), h = initRepo(d, true)!, marker = path.join(tmp, "ssh-ran.marker"), script = path.join(tmp, "evil-ssh.sh");
+    fs.writeFileSync(script, `#!/bin/sh\ntouch "${marker}"\nexit 1\n`, {mode: 0o755});
+    for (const [k, v] of [["core.repositoryformatversion", "1"], ["extensions.partialclone", "origin"], ["remote.origin.url", "ssh://example.invalid/r.git"], ["remote.origin.promisor", "true"], ["core.sshCommand", script]]) git(d, ["config", k, v]);
+    fs.rmSync(path.join(d, ".git", "objects", h.slice(0, 2), h.slice(2)), {force: true});
+    spawnGitSync(d, ["rev-parse", "--verify", "HEAD^{commit}"]); // premise: plain git DOES run the hostile command here
+    expect(fs.existsSync(marker)).toBe(true);
+    fs.rmSync(marker);
+    const packs = () => fs.readdirSync(path.join(d, ".git", "objects"), {recursive: true}).map(String).sort();
+    const before = packs();
+    expect(repositoryHead(d)).toEqual(UNRESOLVED);
+    expect(fs.existsSync(marker)).toBe(false);
+    expect(packs()).toEqual(before); // read-only: no lazy fetch wrote anything into the repository
+  });
+
+  it("the runner blocks with the function's reason BEFORE any clone or executor: a plain subdirectory of a repo is REPOSITORY_NOT_WORKTREE_ROOT (no WORKSPACE evidence, no baseSha, implementer never called), not a misleading WORKSPACE_CLONE_FAILED, also through a dot-dot spelling and for a tag-object HEAD; a usable root still runs to AWAITING_APPROVAL with the function's baseSha", { timeout: T }, async () => {
+    const shared = setup("tA"); // one seed repository and one store for every refused case
+    const mkCtx = (repositoryPath: string): {c: Ctx; fake: FakeExecutors} => {
+      const base = shared, dataDir = base.dataDir, store = base.store;
+      const p = store.createProject({tenantId: "tA", orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL", testCommand: ["node", "test.mjs"], repository: {path: repositoryPath}});
+      const m = store.createMission({tenantId: "tA", projectId: p.projectId, title: "t", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
+      for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
+      return {c: {...base, store, dataDir, missionId: m.missionId, projectId: p.projectId}, fake: new FakeExecutors(okScript())};
+    };
+    const parent = mkd(tmp, "rp"), sub = mkd(parent, "pkg", "sub"), unborn = mkd(tmp, "ru"), plain = mkd(tmp, "rplain"), tagobj = mkd(tmp, "rtag");
+    initRepo(parent, true); initRepo(unborn, false); fs.writeFileSync(path.join(sub, "x.txt"), "x\n");
+    initRepo(tagobj, true); git(tagobj, [...ID, "tag", "-a", "-m", "t", "t1"]); fs.writeFileSync(path.join(tagobj, ".git", "HEAD"), `${git(tagobj, ["rev-parse", "t1"])}\n`);
+    const claimParent = mkd(tmp, "rclaim"); initRepo(claimParent, true); const claimChild = mkd(claimParent, "child"); git(claimParent, ["config", "core.worktree", claimChild]);
+    const cases: Array<[string, string, string]> = [
+      ["plain subdirectory of a repo", sub, "REPOSITORY_NOT_WORKTREE_ROOT"], ["plain subdirectory spelled with dot-dot", `${sub}${path.sep}x${path.sep}..`, "REPOSITORY_NOT_WORKTREE_ROOT"], ["the .git directory", path.join(parent, ".git"), "REPOSITORY_NOT_WORKTREE_ROOT"],
+      ["ancestor that claims the child as its work tree", `${claimChild}${path.sep}x${path.sep}..`, "REPOSITORY_NOT_WORKTREE_ROOT"],
+      ["unborn repository", unborn, "REPOSITORY_HEAD_UNRESOLVED"], ["tag object in HEAD", tagobj, "REPOSITORY_HEAD_UNRESOLVED"], ["plain directory", plain, insideAnyRepo(plain) ? "REPOSITORY_NOT_WORKTREE_ROOT" : "REPOSITORY_HEAD_UNRESOLVED"]
+    ];
+    for (const [label, repo, reason] of cases) {
+      const {c, fake} = mkCtx(repo);
+      const pre = repoPrecondition(c.store.getProject({tenantId: "tA"}, c.projectId)!, c.dataDir);
+      expect([label, pre.ok && (repositoryHead(pre.src) as {reason?: string}).reason]).toEqual([label, reason]);
+      const r = start(c, fake);
+      await runner(c, fake).tick();
+      const run = runOf(c, r.runId);
+      expect([label, run.status, run.reason, fake.calls.implement, run.baseSha ?? null]).toEqual([label, "BLOCKED", reason, 0, null]);
+      expect([label, run.evidence.filter(e => e.kind === "WORKSPACE").length]).toEqual([label, 0]);
+    }
+    const ok = setup("tA"), okFake = new FakeExecutors(okScript());
+    const okPre = repoPrecondition(ok.store.getProject({tenantId: "tA"}, ok.projectId)!, ok.dataDir);
+    expect(okPre.ok && repositoryHead(okPre.src)).toEqual(okAt(ok.head));
+    const okRun = start(ok, okFake);
+    await runner(ok, okFake).tick();
+    expect(runOf(ok, okRun.runId)).toMatchObject({status: "AWAITING_APPROVAL", baseSha: ok.head});
+  });
+});
 
 describe("B3a run state table", () => {
   it("is an explicit allow-list: terminal states have no exits and illegal jumps are refused", () => {
@@ -799,471 +1073,5 @@ describe("B3a control API", () => {
     await new Promise(r => setTimeout(r, 600));
     expect((await off.inject({method: "GET", url: `/v1/work-runs/${r2.runId}`, headers: hdr})).json().run.status).toBe("QUEUED");
     await off.close();
-  });
-});
-
-describe("LANE-C bound role TaskLimits are enforced by the runner (never loosened, role-less runs unchanged)", () => {
-  const roleRun = (c: Ctx, fake: FakeExecutors, roleId: string | null) => { const p = fake.pair(); return c.store.createRun({tenantId: "tA", missionId: c.missionId, roleId, executor: {implementer: p.implementer.identity, reviewer: p.reviewer.identity}, createdBy: "FOUNDER_LOCAL"}); };
-  const manyFiles = (n: number, tag = "f") => Object.fromEntries(Array.from({length: n}, (_, i) => [`gen/${tag}-${i}.txt`, `${i}\n`]));
-  const seenTimeouts = (fake: FakeExecutors, seen: number[]) => { const p = fake.pair(); return {...p, implementer: {...p.implementer, implement: (w: string, s: MissionSpec, ctx: {timeoutMs: number; shouldAbort?: () => boolean}) => { seen.push(ctx.timeoutMs); return p.implementer.implement(w, s, ctx); }}}; };
-
-  it("effectiveLimits only tightens: lowest of run default and role limit; null limits change nothing", () => {
-    const l = {maxCycles: 2, timeoutMs: 3_600_000, maxFilesWritten: 100};
-    expect(effectiveLimits(null, {maxRemediations: 2, executorTimeoutMs: 7})).toEqual({maxRemediations: 2, executorTimeoutMs: 7, maxFilesWritten: null, cycleCapped: false});
-    expect(effectiveLimits(l, {maxRemediations: 2, executorTimeoutMs: 9_000_000})).toEqual({maxRemediations: 1, executorTimeoutMs: 3_600_000, maxFilesWritten: 100, cycleCapped: true});
-    expect(effectiveLimits(l, {maxRemediations: 0, executorTimeoutMs: 60_000})).toEqual({maxRemediations: 0, executorTimeoutMs: 60_000, maxFilesWritten: 100, cycleCapped: false});
-    expect(effectiveLimits({...l, maxCycles: 3}, {maxRemediations: 2, executorTimeoutMs: 1_000})).toMatchObject({maxRemediations: 2, cycleCapped: false});
-  });
-
-  it("the bound implementer limits equal the runner's 60 min executor default, so enforcement does not shorten real runs", () => {
-    for (const id of ["UASCO-0085", "UASCO-0313"]) expect(FIRST_DELIVERY_BINDINGS.find(b => b.roleId === id)!.limits.timeoutMs).toBe(60 * 60_000);
-  });
-
-  it("maxCycles: tester (2 cycles) is stopped after 1 remediation as TASK_LIMIT_MAX_CYCLES; developer (3) and role-less keep the run budget; a lower run budget is never raised", { timeout: T }, async () => {
-    const bad = () => new FakeExecutors(okScript({implement: () => ({files: {"feature.txt": "bad\n"}})}));
-    const cases: Array<[string | null, number, string, number]> = [
-      ["UASCO-0313", 2, "TESTS_FAILED_TASK_LIMIT_MAX_CYCLES_EXHAUSTED", 2],
-      ["UASCO-0085", 2, "TESTS_FAILED_REMEDIATION_EXHAUSTED", 3],
-      [null, 2, "TESTS_FAILED_REMEDIATION_EXHAUSTED", 3],
-      ["UASCO-0085", 0, "TESTS_FAILED_REMEDIATION_EXHAUSTED", 1],
-      ["UASCO-0313", 0, "TESTS_FAILED_REMEDIATION_EXHAUSTED", 1]
-    ];
-    for (const [roleId, maxRemediations, reason, implementCalls] of cases) {
-      const c = setup(); const fake = bad();
-      const r = roleRun(c, fake, roleId);
-      await runner(c, fake, {maxRemediations}).tick();
-      const run = runOf(c, r.runId);
-      expect([roleId, maxRemediations, run.status, run.reason, fake.calls.implement]).toEqual([roleId, maxRemediations, "BLOCKED", reason, implementCalls]);
-    }
-  });
-
-  it("timeoutMs: the executor gets min(run default, role limit): a role cannot raise a lower run timeout; role-less runs get the run default", { timeout: T }, async () => {
-    for (const [roleId, runTimeout, expected] of [["UASCO-0085", 9_000_000, 3_600_000], ["UASCO-0313", 9_000_000, 3_600_000], ["UASCO-0085", 60_000, 60_000], [null, 9_000_000, 9_000_000]] as const) {
-      const c = setup(); const fake = new FakeExecutors(okScript()); const seen: number[] = [];
-      const r = roleRun(c, fake, roleId);
-      await runner(c, fake, {executorTimeoutMs: runTimeout, executors: seenTimeouts(fake, seen)}).tick();
-      expect(runOf(c, r.runId).status).toBe("AWAITING_APPROVAL");
-      expect([roleId, runTimeout, seen]).toEqual([roleId, runTimeout, [expected]]);
-    }
-  });
-
-  it("REVIEW timeoutMs: bound security-reviewer gets min(run default, 60 min limit); a role cannot raise a lower run timeout; role-less runs get the run default; the reviewer stays read-only", { timeout: T }, async () => {
-    expect(FIRST_DELIVERY_BINDINGS.find(b => b.roleId === "UASCO-0252")!.limits).toEqual({maxCycles: 1, timeoutMs: 60 * 60_000, maxFilesWritten: 0});
-    for (const [roleId, runTimeout, expected] of [["UASCO-0085", 9_000_000, 3_600_000], ["UASCO-0085", 60_000, 60_000], [null, 9_000_000, 9_000_000]] as const) {
-      const c = setup(); const fake = new FakeExecutors(okScript()); const seen: number[] = [];
-      const p = fake.pair();
-      const executors = {...p, reviewer: {...p.reviewer, review: (clone: string, s: MissionSpec, d: string, ctx: {timeoutMs: number; shouldAbort?: () => boolean}) => { seen.push(ctx.timeoutMs); return p.reviewer.review(clone, s, d, ctx); }}};
-      const r = roleRun(c, fake, roleId);
-      await runner(c, fake, {executorTimeoutMs: runTimeout, executors}).tick();
-      expect(runOf(c, r.runId).status).toBe("AWAITING_APPROVAL");
-      expect([roleId, runTimeout, seen]).toEqual([roleId, runTimeout, [expected]]);
-    }
-  });
-
-  it("REVIEW maxCycles 1: a BLOCKED review is one pass per REVIEW step; the remediation loop stays bounded by the implementer's role limit", { timeout: T }, async () => {
-    const c = setup(); const fake = new FakeExecutors(okScript({review: () => ({verdict: "BLOCKED", findings: [{severity: "HIGH", title: "x"}]})}));
-    const r = roleRun(c, fake, "UASCO-0313");
-    await runner(c, fake, {maxRemediations: 5}).tick();
-    const run = runOf(c, r.runId);
-    // tester maxCycles 2 -> 1 remediation: 2 implement passes, exactly 1 review per pass
-    expect([run.status, fake.calls.implement, fake.calls.review]).toEqual(["BLOCKED", 2, 2]);
-  });
-
-  it("maxFilesWritten: exactly the limit passes, one more is BLOCKED before VERIFY/REVIEW; the count is cumulative from the base across remediation cycles; role-less runs have no file limit", { timeout: T }, async () => {
-    // tester limit = 100: feature.txt + 99 files = 100 passes, + 100 files = 101 is blocked
-    for (const [n, ok] of [[99, true], [100, false]] as const) {
-      const c = setup(); const fake = new FakeExecutors(okScript({implement: () => ({files: {"feature.txt": "ok\n", ...manyFiles(n)}})}));
-      const r = roleRun(c, fake, "UASCO-0313");
-      await runner(c, fake).tick();
-      const run = runOf(c, r.runId);
-      if (ok) expect(run.status).toBe("AWAITING_APPROVAL");
-      else {
-        expect(run.status).toBe("BLOCKED");
-        expect(run.reason).toBe("TASK_LIMIT_FILES_EXCEEDED:101>100");
-        expect(kinds(run)).toEqual(expect.arrayContaining(["IMPLEMENT", "AGENT_TRACE"]));
-        expect(kinds(run)).not.toContain("VERIFY_TESTS");
-        expect(fake.calls.review).toBe(0);
-        expect(missionOf(c).status).toBe("BLOCKED");
-      }
-    }
-    // cumulative: cycle 0 writes 60 files with a failing test, cycle 1 fixes it with 60 more -> 121 from the base > 100
-    const c = setup(); const fake = new FakeExecutors(okScript({implement: n => ({files: {"feature.txt": n === 1 ? "bad\n" : "ok\n", ...manyFiles(60, `c${n}`)}})}));
-    const r = roleRun(c, fake, "UASCO-0313");
-    await runner(c, fake).tick();
-    const run = runOf(c, r.runId);
-    expect([run.status, run.reason, fake.calls.implement]).toEqual(["BLOCKED", "TASK_LIMIT_FILES_EXCEEDED:121>100", 2]);
-    // role-less: no limit applies
-    const c2 = setup(); const fake2 = new FakeExecutors(okScript({implement: () => ({files: {"feature.txt": "ok\n", ...manyFiles(150)}})}));
-    const r2 = roleRun(c2, fake2, null);
-    await runner(c2, fake2).tick();
-    expect(runOf(c2, r2.runId).status).toBe("AWAITING_APPROVAL");
-  });
-});
-
-describe("LANE-C run workspace archive + prune (default OFF; archive first, verify, then prune after retention)", () => {
-  interface MCtx { store: WorkOsStore; studio: ProjectStudio; dataDir: string; stopFile: string; projectId: string; missionId: string }
-  const BASE_PROJECT = {tenantId: "tA", orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL", testCommand: ["node", "test.mjs"]};
-  function addMission(c: MCtx): string {
-    const m = c.store.createMission({tenantId: "tA", projectId: c.projectId, title: "Add feature", objective: "feature.txt must say ok", acceptanceCriteria: ["x"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
-    for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) c.store.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
-    return m.missionId;
-  }
-  function managedSetup(kind: "managed" | "external" = "managed"): MCtx {
-    const id = crypto.randomBytes(4).toString("hex");
-    const dataDir = path.join(tmp, `adata-${id}`), runtime = path.join(tmp, `art-${id}`);
-    fs.mkdirSync(runtime, {recursive: true});
-    const studio = new ProjectStudio({dataDir, envPolicyFile: ENV_POLICY});
-    const store = new WorkOsStore(dataDir);
-    const p = kind === "managed" ? store.createProject({...BASE_PROJECT, prepareManagedRepository: pid => studio.createTemplateRepository(pid, "empty", "P")}) : store.createProject({...BASE_PROJECT, repository: {path: makeRepo(id).repo}});
-    const c = {store, studio, dataDir, stopFile: path.join(runtime, "GLOBAL_STOP.json"), projectId: p.projectId, missionId: ""};
-    c.missionId = addMission(c);
-    return c;
-  }
-  interface RunOpts { implement?: (n: number) => {files: Record<string, string>}; review?: "CLEAN" | "BLOCKED"; roleId?: string; maxRemediations?: number; missionId?: string }
-  const okFiles = (extra: Record<string, string> = {}) => ({files: {"feature.txt": "ok\n", "test.mjs": "process.exit(0);\n", ...extra}});
-  async function runWith(c: MCtx, o: RunOpts = {}): Promise<WorkRun> {
-    const fake = new FakeExecutors(okScript({implement: o.implement ?? (() => okFiles()), review: () => (o.review ?? "BLOCKED") === "CLEAN" ? ({verdict: "CLEAN"}) : ({verdict: "BLOCKED", findings: [{severity: "P1", title: "x"}]})}));
-    const pr = fake.pair();
-    const created = c.store.createRun({tenantId: "tA", missionId: o.missionId ?? c.missionId, ...(o.roleId ? {roleId: o.roleId} : {}), executor: {implementer: pr.implementer.identity, reviewer: pr.reviewer.identity}, createdBy: "FOUNDER_LOCAL"});
-    await new MissionRunner({executionGate: testExecutionGate(), store: c.store, dataDir: c.dataDir, globalStopFile: c.stopFile, envPolicyFile: ENV_POLICY, executors: pr, retryBackoffMs: [0, 0], leaseTtlMs: 60_000, maxRemediations: o.maxRemediations ?? 0, security: fakeSecurity(`${c.dataDir}-sec`).options}).tick();
-    return c.store.getRun({tenantId: "tA"}, created.runId)!;
-  }
-  const blockedWithCommit = (c: MCtx) => runWith(c, {review: "BLOCKED"});
-  const runDir = (c: MCtx, r: WorkRun) => path.join(c.dataDir, "runs", r.runId);
-  const workDir = (c: MCtx, r: WorkRun) => path.join(runDir(c, r), "work");
-  const archiver = (c: MCtx, retentionMs: number, over: Partial<ConstructorParameters<typeof RunWorkspaceArchiver>[0]> = {}) => new RunWorkspaceArchiver({dataDir: c.dataDir, store: c.store, studio: c.studio, retentionMs, ...over});
-  const repoOf = (c: MCtx) => c.studio.managedRepoRoot(c.store.getProject({tenantId: "tA"}, c.projectId)!);
-  const refList = (c: MCtx) => git(repoOf(c), ["for-each-ref", "--format=%(refname) %(objectname)", "refs/uasco"]);
-  const projectOf = (c: MCtx) => c.store.getProject({tenantId: "tA"}, c.projectId)!;
-
-  it("a terminal managed run is archived (delivery ref + per-commit ref), every archive is verified, then derived clones and runs/<id>/work are removed; logs, security reports, record and the Studio git view survive", { timeout: T }, async () => {
-    const c = managedSetup(); const run = await blockedWithCommit(c);
-    expect(run.status).toBe("BLOCKED");
-    expect(run.headSha).toMatch(/^[0-9a-f]{40}$/);
-    expect(fs.existsSync(workDir(c, run))).toBe(true);
-    const clones = fs.readdirSync(runDir(c, run)).filter(n => /^(scan|review|security)-c\d+$/.test(n));
-    expect(clones.length).toBeGreaterThan(0); // the runner leaves full derived clones behind
-    const rep = archiver(c, 0).sweep();
-    expect(rep).toEqual({results: [{runId: run.runId, status: "PRUNED", archiveRef: `refs/uasco/runs/${run.runId}`}], deferred: 0});
-    expect(fs.existsSync(workDir(c, run))).toBe(false);
-    expect(fs.readdirSync(runDir(c, run)).filter(n => /^(scan|review|security)-c\d+$/.test(n))).toEqual([]);
-    expect(fs.existsSync(path.join(runDir(c, run), "logs"))).toBe(true); // evidence logs are never pruned
-    expect(fs.existsSync(path.join(runDir(c, run), "security"))).toBe(true); // security reports are never pruned
-    const sha = run.headSha!;
-    expect(refList(c).split("\n").sort()).toEqual([`refs/uasco/run-commits/${run.runId}/${sha} ${sha}`, `refs/uasco/runs/${run.runId} ${sha}`].sort());
-    expect(git(repoOf(c), ["show", `${sha}:feature.txt`])).toBe("ok"); // the commit's content is readable from the managed repo alone
-    const rec = JSON.parse(fs.readFileSync(path.join(runDir(c, run), RUN_ARCHIVE_RECORD), "utf8"));
-    const {digest, ...body} = rec;
-    expect(rec).toMatchObject({schemaVersion: 1, runId: run.runId, status: "BLOCKED", headSha: sha});
-    expect(rec.commits).toEqual([{sha, ref: `refs/uasco/run-commits/${run.runId}/${sha}`}, {sha, ref: `refs/uasco/runs/${run.runId}`}]);
-    expect(typeof rec.archivedAt).toBe("string"); expect(typeof rec.prunedAt).toBe("string");
-    expect(digest).toBe(crypto.createHash("sha256").update(JSON.stringify(body, null, 2)).digest("hex"));
-    expect(JSON.stringify(c.studio.gitLog(projectOf(c), [run], 5, run.runId))).toContain(sha); // the run's commits still resolve after the workspace is gone
-    expect(archiver(c, 0).sweep()).toEqual({results: [], deferred: 0}); // idempotent: nothing left to do
-  });
-
-  it("commits that only the run's evidence names are archived too (headSha is NOT the only commit): a file-limit block leaves headSha null and a failed second cycle leaves headSha behind", { timeout: T }, async () => {
-    const many = (n: number, tag: string) => Object.fromEntries(Array.from({length: n}, (_, i) => [`gen/${tag}-${i}.txt`, `${i}\n`]));
-    // (1) tester limit is 100 files: 101 files => BLOCKED TASK_LIMIT_FILES_EXCEEDED with headSha null, but IMPLEMENT evidence names the commit
-    const c1 = managedSetup(); const r1 = await runWith(c1, {roleId: "UASCO-0313", review: "CLEAN", implement: () => okFiles(many(100, "f"))});
-    expect([r1.status, r1.reason, r1.headSha]).toEqual(["BLOCKED", "TASK_LIMIT_FILES_EXCEEDED:102>100", null]);
-    const produced1 = recordedCommitSet(r1);
-    expect(produced1).toHaveLength(1);
-    expect(git(workDir(c1, r1), ["rev-parse", "HEAD"])).toBe(produced1[0]);
-    expect(() => git(repoOf(c1), ["cat-file", "-e", `${produced1[0]}^{commit}`])).toThrow(); // the commit exists ONLY in the workspace
-    expect(archiver(c1, 0).sweep().results.map(r => r.status)).toEqual(["PRUNED"]);
-    expect(fs.existsSync(workDir(c1, r1))).toBe(false);
-    expect(git(repoOf(c1), ["cat-file", "-t", produced1[0]])).toBe("commit"); // ... and now in the managed repo
-    expect(refList(c1)).toBe(`refs/uasco/run-commits/${r1.runId}/${produced1[0]} ${produced1[0]}`);
-    // (2) cycle 0 fails its tests (headSha = cycle-0 commit), cycle 1 is blocked by the cumulative file limit: both commits are in the evidence
-    const c2 = managedSetup(); const r2 = await runWith(c2, {roleId: "UASCO-0313", review: "CLEAN", maxRemediations: 2, implement: n => ({files: {"feature.txt": "ok\n", "test.mjs": n === 1 ? "process.exit(1);\n" : "process.exit(0);\n", ...many(60, `c${n}`)}})});
-    expect(r2.status).toBe("BLOCKED");
-    expect(r2.reason).toMatch(/^TASK_LIMIT_FILES_EXCEEDED/);
-    const set2 = recordedCommitSet(r2);
-    expect(set2).toHaveLength(2);
-    expect(git(workDir(c2, r2), ["rev-parse", "HEAD"])).toBe(set2[1] === r2.headSha ? set2[0] : set2[1]); // workspace HEAD is the newer commit, headSha is not
-    archiver(c2, 0).sweep();
-    expect(fs.existsSync(workDir(c2, r2))).toBe(false);
-    for (const sha of set2) expect(git(repoOf(c2), ["cat-file", "-t", sha])).toBe("commit");
-  });
-
-  it("retention: nothing is archived or removed before the retention period; after it the same run is pruned", { timeout: T }, async () => {
-    const c = managedSetup(); const run = await blockedWithCommit(c);
-    expect(archiver(c, 3_600_000).sweep().results).toEqual([{runId: run.runId, status: "KEPT_RETENTION"}]);
-    expect(fs.existsSync(workDir(c, run))).toBe(true);
-    expect(refList(c)).toBe(""); // not even archived yet
-    expect(archiver(c, 3_600_000, {now: () => Date.now() + 2 * 3_600_000}).sweep().results.map(r => r.status)).toEqual(["PRUNED"]);
-    expect(fs.existsSync(workDir(c, run))).toBe(false);
-  });
-
-  it("never touches a run that is still open, a user-owned repository, or a project that is unknown; a mixed project prunes only its terminal run", { timeout: T }, async () => {
-    const c = managedSetup();
-    const terminal = await blockedWithCommit(c);
-    const awaiting = await runWith(c, {review: "CLEAN", missionId: addMission(c)});
-    expect([terminal.status, awaiting.status]).toEqual(["BLOCKED", "AWAITING_APPROVAL"]);
-    const rep = archiver(c, 0).sweep();
-    expect(rep.results.sort((a, b) => a.runId.localeCompare(b.runId))).toEqual([{runId: terminal.runId, status: "PRUNED", archiveRef: `refs/uasco/runs/${terminal.runId}`}, {runId: awaiting.runId, status: "KEPT_NOT_TERMINAL", detail: "AWAITING_APPROVAL"}].sort((a, b) => a.runId.localeCompare(b.runId)));
-    expect(fs.existsSync(workDir(c, terminal))).toBe(false);
-    expect(fs.existsSync(workDir(c, awaiting))).toBe(true);
-    expect(refList(c)).not.toContain(awaiting.runId);
-    // a user-owned repository is never written and its workspace is never removed
-    const x = managedSetup("external"); const ext = await blockedWithCommit(x);
-    const userRepo = x.store.getProject({tenantId: "tA"}, x.projectId)!.repository!.path!;
-    const before = git(userRepo, ["for-each-ref"]) + git(userRepo, ["count-objects", "-v"]);
-    expect(archiver(x, 0).sweep().results).toEqual([{runId: ext.runId, status: "KEPT_NOT_MANAGED"}]);
-    expect(fs.existsSync(workDir(x, ext))).toBe(true);
-    expect(git(userRepo, ["for-each-ref"]) + git(userRepo, ["count-objects", "-v"])).toBe(before);
-    // unknown project (store returns nothing) keeps the workspace
-    const stubStore: ArchiveStorePort = {engineListRuns: () => [terminal], getProject: () => undefined};
-    fs.mkdirSync(workDir(c, terminal), {recursive: true});
-    expect(archiver(c, 0, {store: stubStore}).sweep().results).toEqual([{runId: terminal.runId, status: "KEPT_PROJECT_UNKNOWN"}]);
-    expect(fs.existsSync(workDir(c, terminal))).toBe(true);
-  });
-
-  it("only terminal statuses ever reach the archive/prune step: a table over every run status", { timeout: T }, async () => {
-    const c = managedSetup(); const base = await blockedWithCommit(c);
-    const { RUN_STATUSES, TERMINAL_RUN_STATUSES } = await import("../core/workos/run-state.js");
-    const calls: string[] = [];
-    const studio: ArchiveStudioPort = {managedRepoRoot: () => "/managed", archiveRunCommit: (_p, r) => { calls.push(r.runId); }, isRunCommitArchived: () => true};
-    const runs: WorkRun[] = RUN_STATUSES.map((status, i) => ({...base, runId: `run_${i.toString(16).padStart(24, "0")}`, status}));
-    for (const r of runs) fs.mkdirSync(path.join(c.dataDir, "runs", r.runId, "work"), {recursive: true});
-    const stub: ArchiveStorePort = {engineListRuns: () => runs, getProject: () => projectOf(c)};
-    const rep = new RunWorkspaceArchiver({dataDir: c.dataDir, store: stub, studio, retentionMs: 0, maxRunsPerSweep: 100}).sweep();
-    const terminalIds = runs.filter(r => TERMINAL_RUN_STATUSES.includes(r.status)).map(r => r.runId);
-    expect(terminalIds.length).toBeGreaterThan(3);
-    expect([...new Set(calls)].sort()).toEqual([...terminalIds].sort()); // archive is attempted for terminal runs only (two refs per run)
-    expect(calls).toHaveLength(terminalIds.length * 2);
-    for (const r of runs) {
-      const terminal = terminalIds.includes(r.runId);
-      expect([r.status, fs.existsSync(path.join(c.dataDir, "runs", r.runId, "work"))]).toEqual([r.status, !terminal]);
-    }
-    expect(rep.results.filter(r => r.status === "KEPT_NOT_TERMINAL")).toHaveLength(runs.length - terminalIds.length);
-  });
-
-  it("an archive that fails or cannot be verified keeps the workspace and writes no record; failures back off instead of being retried every sweep", { timeout: T }, async () => {
-    const c = managedSetup(); const run = await blockedWithCommit(c);
-    let archiveCalls = 0;
-    const failing: ArchiveStudioPort = {managedRepoRoot: p => c.studio.managedRepoRoot(p), archiveRunCommit: () => { archiveCalls += 1; throw Object.assign(new Error("boom"), {code: "DELIVERY_SOURCE_UNAVAILABLE"}); }, isRunCommitArchived: () => true};
-    let clock = Date.now();
-    const a = archiver(c, 0, {studio: failing, now: () => clock, retryBackoffMs: 60_000});
-    expect(a.sweep().results).toEqual([{runId: run.runId, status: "KEPT_ARCHIVE_FAILED", detail: "DELIVERY_SOURCE_UNAVAILABLE"}]);
-    expect(a.sweep().results).toEqual([{runId: run.runId, status: "KEPT_BACKOFF"}]);
-    expect(archiveCalls).toBe(1); // not retried inside the backoff window
-    clock += 61_000;
-    expect(a.sweep().results[0].status).toBe("KEPT_ARCHIVE_FAILED");
-    expect(archiveCalls).toBe(2);
-    const unverified: ArchiveStudioPort = {managedRepoRoot: p => c.studio.managedRepoRoot(p), archiveRunCommit: (p, r, s, ref) => c.studio.archiveRunCommit(p, r, s, ref), isRunCommitArchived: () => false};
-    expect(archiver(c, 0, {studio: unverified}).sweep().results.map(r => r.status)).toEqual(["KEPT_ARCHIVE_UNVERIFIED"]);
-    expect(fs.existsSync(workDir(c, run))).toBe(true);
-    expect(fs.existsSync(path.join(runDir(c, run), RUN_ARCHIVE_RECORD))).toBe(false);
-  });
-
-  it("the real verification (isRunCommitArchived) rejects: ref absent, ref at another commit, invalid sha/ref, wrong project, and a commit whose tree is missing from the managed repo", { timeout: T }, async () => {
-    const c = managedSetup(); const run = await blockedWithCommit(c); const sha = run.headSha!; const project = projectOf(c);
-    const ref = `refs/uasco/run-commits/${run.runId}/${sha}`;
-    expect(c.studio.isRunCommitArchived(project, run, sha, ref)).toBe(false); // ref absent
-    c.studio.archiveRunCommit(project, run, sha, ref);
-    expect(c.studio.isRunCommitArchived(project, run, sha, ref)).toBe(true);
-    const root = repoOf(c), head = git(root, ["rev-parse", "HEAD"]);
-    git(root, ["update-ref", ref, head]);
-    expect(c.studio.isRunCommitArchived(project, run, sha, ref)).toBe(false); // ref points at another commit
-    for (const bad of [{sha: "abc", ref}, {sha: "z".repeat(40), ref}, {sha, ref: "refs/heads/main"}, {sha, ref: `refs/uasco/run-commits/${run.runId}/${"0".repeat(40)}`}, {sha, ref: `refs/uasco/runs/other`}]) {
-      expect(c.studio.isRunCommitArchived(project, run, bad.sha, bad.ref)).toBe(false);
-      expect(() => c.studio.archiveRunCommit(project, run, bad.sha, bad.ref)).toThrow("ARCHIVE_SOURCE_UNAVAILABLE");
-    }
-    expect(c.studio.isRunCommitArchived(project, {...run, projectId: "prj_other"}, sha, ref)).toBe(false);
-    expect(() => c.studio.archiveRunCommit(project, {...run, projectId: "prj_other"}, sha, ref)).toThrow("ARCHIVE_SOURCE_UNAVAILABLE");
-    // a loose commit object whose tree does not exist: the ref resolves to it but connectivity fails
-    const orphan = String(spawnGitSync(root, ["hash-object", "-t", "commit", "-w", "--stdin", "--literally"], {input: `tree ${"1".repeat(40)}\nauthor A <a@x.invalid> 1 +0000\ncommitter A <a@x.invalid> 1 +0000\n\nm\n`}).stdout).trim();
-    expect(orphan).toMatch(/^[0-9a-f]{40}$/);
-    const oref = `refs/uasco/run-commits/${run.runId}/${orphan}`;
-    git(root, ["update-ref", oref, orphan]);
-    expect(c.studio.isRunCommitArchived(project, run, orphan, oref)).toBe(false);
-  });
-
-  it("a run with a secret finding is never archived and its workspace is never pruned (its objects must not reach later workspace clones)", { timeout: T }, async () => {
-    const c = managedSetup();
-    const key = ["AK", "IA", "Q7ZX3MPLW2RT5VB9"].join("");
-    const run = await runWith(c, {implement: () => okFiles({"secrets.env": `aws=${key}\n`})});
-    expect([run.status, run.reason]).toEqual(["BLOCKED", "SECRET_IN_DIFF"]);
-    expect(hasSecretFinding(run)).toBe(true);
-    expect(archiver(c, 0).sweep().results).toEqual([{runId: run.runId, status: "KEPT_SECRET_FINDING"}]);
-    expect(fs.existsSync(workDir(c, run))).toBe(true);
-    expect(refList(c)).toBe("");
-    expect(() => git(repoOf(c), ["cat-file", "-e", `${run.headSha}^{commit}`])).toThrow(); // the secret-bearing commit never entered the managed repo
-    expect(hasSecretFinding({...run, reason: "TESTS_FAILED", evidence: []})).toBe(false);
-    expect(hasSecretFinding({...run, reason: "X", evidence: [{...run.evidence[0], secretHits: [{kind: "AWS_ACCESS_KEY", file: "a", line: 1}]}]})).toBe(true);
-  });
-
-  it.skipIf(process.platform === "win32")("a work path or derived clone that is a symlink is never followed or removed (targets outside the run stay intact)", { timeout: T }, async () => {
-    const c = managedSetup(); const run = await blockedWithCommit(c);
-    const outside = path.join(tmp, `outside-${run.runId}`); fs.mkdirSync(outside); fs.writeFileSync(path.join(outside, "canary.txt"), "KEEP");
-    const w = workDir(c, run); fs.renameSync(w, `${w}-real`); fs.symlinkSync(outside, w);
-    expect(archiver(c, 0).sweep().results).toEqual([{runId: run.runId, status: "KEPT_UNSAFE_PATH"}]);
-    expect(fs.readFileSync(path.join(outside, "canary.txt"), "utf8")).toBe("KEEP");
-    expect(fs.lstatSync(w).isSymbolicLink()).toBe(true);
-    // a derived clone replaced by a symlink: the prune refuses before touching work
-    fs.unlinkSync(w); fs.renameSync(`${w}-real`, w);
-    const clone = fs.readdirSync(runDir(c, run)).find(n => /^scan-c\d+$/.test(n))!;
-    fs.rmSync(path.join(runDir(c, run), clone), {recursive: true, force: true}); fs.symlinkSync(outside, path.join(runDir(c, run), clone));
-    expect(archiver(c, 0).sweep().results.map(r => r.status)).toEqual(["KEPT_PRUNE_FAILED"]);
-    expect(fs.existsSync(w)).toBe(true);
-    expect(fs.readFileSync(path.join(outside, "canary.txt"), "utf8")).toBe("KEEP");
-  });
-
-  it("a terminal run whose evidence names no commit has nothing to archive: its workspace is pruned after retention and the record says so", { timeout: T }, async () => {
-    const c = managedSetup(); const run = await runWith(c, {roleId: "UASCO-0252"});
-    expect([run.status, run.headSha, recordedCommitSet(run)]).toEqual(["BLOCKED", null, []]);
-    expect(archiver(c, 0).sweep().results).toEqual([{runId: run.runId, status: "PRUNED_NO_COMMIT"}]);
-    expect(fs.existsSync(workDir(c, run))).toBe(false);
-    expect(refList(c)).toBe("");
-    expect(JSON.parse(fs.readFileSync(path.join(runDir(c, run), RUN_ARCHIVE_RECORD), "utf8"))).toMatchObject({headSha: null, commits: [], archivedAt: null});
-  });
-
-  it("a failure after the workspace was removed does not leave a wrong record or a wrong report: the sweep reports PRUNED and the next sweep finalizes the record; a store failure never throws", { timeout: T }, async () => {
-    const c = managedSetup(); const run = await blockedWithCommit(c);
-    let calls = 0, broken = true;
-    const now = () => { calls += 1; if (broken && calls === 3) throw new Error("clock failure after prune"); return Date.now() + 1000; }; // call 1 archivedAt, 2 retention check precedes; the third read is prunedAt
-    const a = archiver(c, 0, {now});
-    // calls: retention (1), archivedAt (2), prunedAt (3 -> throws after the workspace is gone)
-    const rep = a.sweep();
-    expect(rep.results.map(r => [r.status, r.detail])).toEqual([["PRUNED", "RECORD_FINALIZE_PENDING"]]);
-    expect(fs.existsSync(workDir(c, run))).toBe(false);
-    expect(JSON.parse(fs.readFileSync(path.join(runDir(c, run), RUN_ARCHIVE_RECORD), "utf8")).prunedAt).toBeNull();
-    broken = false;
-    expect(a.sweep().results).toEqual([{runId: run.runId, status: "RECORD_FINALIZED"}]);
-    expect(typeof JSON.parse(fs.readFileSync(path.join(runDir(c, run), RUN_ARCHIVE_RECORD), "utf8")).prunedAt).toBe("string");
-    expect(a.sweep().results).toEqual([]);
-    const throwing: ArchiveStorePort = {engineListRuns: () => { throw new Error("store tampered"); }, getProject: () => undefined};
-    expect(archiver(c, 0, {store: throwing}).sweep()).toEqual({results: [], deferred: 0, error: "STORE_UNAVAILABLE:store tampered"});
-  });
-
-  it("a sweep does bounded work: at most maxRunsPerSweep runs are archived/pruned per pass; the rest are deferred and picked up by the next pass", { timeout: T }, async () => {
-    const c = managedSetup();
-    const r1 = await blockedWithCommit(c); const r2 = await runWith(c, {review: "BLOCKED", missionId: addMission(c)});
-    const a = archiver(c, 0, {maxRunsPerSweep: 1});
-    const first = a.sweep();
-    expect(first.results.filter(r => r.status === "PRUNED")).toHaveLength(1);
-    expect(first.deferred).toBe(1);
-    const second = a.sweep();
-    expect(second.results.filter(r => r.status === "PRUNED")).toHaveLength(1);
-    expect(second.deferred).toBe(0);
-    for (const r of [r1, r2]) expect(fs.existsSync(workDir(c, r))).toBe(false);
-    expect(() => archiver(c, 0, {maxRunsPerSweep: 0})).toThrow("RUN_ARCHIVE_LIMITS_INVALID");
-  });
-
-  it("configuration is OFF unless UASCO_RUN_WORKSPACE_RETENTION_HOURS is an integer 1..8760; an invalid retention is a construction error", () => {
-    expect(retentionMsFromEnv({})).toEqual({enabled: false, reason: "NOT_CONFIGURED"});
-    expect(retentionMsFromEnv({UASCO_RUN_WORKSPACE_RETENTION_HOURS: ""})).toEqual({enabled: false, reason: "NOT_CONFIGURED"});
-    expect(retentionMsFromEnv({UASCO_RUN_WORKSPACE_RETENTION_HOURS: "24"})).toEqual({enabled: true, retentionMs: 24 * 3_600_000});
-    expect(retentionMsFromEnv({UASCO_RUN_WORKSPACE_RETENTION_HOURS: "8760"})).toEqual({enabled: true, retentionMs: 8760 * 3_600_000});
-    for (const bad of ["0", "-1", "1.5", "abc", "08", "8761", "99999", " 5", "5h"]) expect([bad, retentionMsFromEnv({UASCO_RUN_WORKSPACE_RETENTION_HOURS: bad})]).toEqual([bad, {enabled: false, reason: "INVALID"}]);
-    const c = managedSetup();
-    for (const bad of [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) expect(() => archiver(c, bad)).toThrow("RUN_ARCHIVE_RETENTION_INVALID");
-  });
-});
-
-// //TR: LANE-C C-RUNNER-EXPORTS: runner'ın test-komutu önceliği ve depo/workspace önkoşulu saf fonksiyonlardır (readiness aynı kuralı içe aktarır). Davranış değişmedi: runner aynı fonksiyonları aynı noktada çağırır; her neden kodu hem saf fonksiyonda hem run BLOCK nedeninde doğrulanır.
-describe("LANE-C runner exports: effectiveTestCommand and repositoryPrecondition (pure; the runner uses the very same functions)", () => {
-  const PID = "prj_" + "a".repeat(24), OTHER = "prj_" + "b".repeat(24);
-  const mkdir = (...p: string[]) => { const d = path.join(...p); fs.mkdirSync(d, {recursive: true}); return d; };
-
-  it("effectiveTestCommand: the mission's command beats the project's (?? not ||: an empty mission array still wins); a missing side falls through; both missing is undefined; inputs are never mutated or copied", () => {
-    const m = ["node", "m.mjs"], p = ["node", "p.mjs"];
-    const table: Array<[string, {testCommand?: string[]} | undefined, {testCommand?: string[]} | undefined, string[] | undefined]> = [
-      ["mission wins", {testCommand: m}, {testCommand: p}, m], ["mission only", {testCommand: m}, {}, m], ["project only", {}, {testCommand: p}, p],
-      ["project when mission command absent", {testCommand: undefined}, {testCommand: p}, p], ["project when mission undefined", undefined, {testCommand: p}, p],
-      ["mission when project undefined", {testCommand: m}, undefined, m], ["both empty objects", {}, {}, undefined], ["both undefined", undefined, undefined, undefined],
-      ["empty mission array still wins", {testCommand: []}, {testCommand: p}, []], ["empty project array is returned when mission has none", {}, {testCommand: []}, []]
-    ];
-    for (const [label, mi, pr, expected] of table) expect([label, effectiveTestCommand(mi, pr)]).toEqual([label, expected]);
-    expect(effectiveTestCommand({testCommand: m}, {testCommand: p})).toBe(m); // same reference: no copy
-    expect(m).toEqual(["node", "m.mjs"]); expect(p).toEqual(["node", "p.mjs"]);
-  });
-
-  it("repositoryPrecondition: every reason code, in the runner's order, plus both ok paths; it is pure (writes nothing under the data dir)", () => {
-    const dataDir = mkdir(tmp, "data"), outside = mkdir(tmp, "outside-repo"), managedDir = mkdir(dataDir, "projects", PID, "repo"), otherManaged = mkdir(dataDir, "projects", OTHER, "repo");
-    const file = path.join(tmp, "a-file.txt"); fs.writeFileSync(file, "x");
-    const before = fs.readdirSync(dataDir, {recursive: true}).map(String).sort();
-    // //TR: Windows'ta tmp yolu 8.3 kısa ad (RUNNER~1) olabilir; fonksiyon kanonik yolu döndürür, beklenen değer de gerçek yoldan (native) kurulur.
-    const real = (x: string) => fs.realpathSync.native(x);
-    const cases: Array<[string, Parameters<typeof repositoryPrecondition>[0], ReturnType<typeof repositoryPrecondition>]> = [
-      ["no repository at all", {projectId: PID}, {ok: false, reason: "REPOSITORY_NOT_CONFIGURED"}],
-      ["empty repository object", {projectId: PID, repository: {}}, {ok: false, reason: "REPOSITORY_NOT_CONFIGURED"}],
-      ["empty path, no url", {projectId: PID, repository: {path: ""}}, {ok: false, reason: "REPOSITORY_NOT_CONFIGURED"}],
-      ["url only", {projectId: PID, repository: {url: "https://example.invalid/r.git"}}, {ok: false, reason: "REMOTE_REPO_NOT_SUPPORTED_YET"}],
-      ["empty path with a url", {projectId: PID, repository: {path: "", url: "https://example.invalid/r.git"}}, {ok: false, reason: "REMOTE_REPO_NOT_SUPPORTED_YET"}],
-      ["managed flag but a foreign path", {projectId: PID, repository: {path: outside, managed: true}}, {ok: false, reason: "REPOSITORY_NOT_MANAGED"}],
-      ["managed flag pointing at another project's managed repo", {projectId: PID, repository: {path: otherManaged, managed: true}}, {ok: false, reason: "REPOSITORY_NOT_MANAGED"}],
-      ["managed flag with a malformed project id", {projectId: "prj_x", repository: {path: managedDir, managed: true}}, {ok: false, reason: "REPOSITORY_NOT_MANAGED"}],
-      ["unmanaged path inside the data dir", {projectId: PID, repository: {path: managedDir}}, {ok: false, reason: "REPOSITORY_PATH_FORBIDDEN"}],
-      ["unmanaged path that contains the data dir", {projectId: PID, repository: {path: tmp}}, {ok: false, reason: "REPOSITORY_PATH_FORBIDDEN"}],
-      ["unmanaged path equal to the data dir", {projectId: PID, repository: {path: dataDir}}, {ok: false, reason: "REPOSITORY_PATH_FORBIDDEN"}],
-      ["unmanaged path that does not exist", {projectId: PID, repository: {path: path.join(outside, "missing")}}, {ok: false, reason: "REPOSITORY_PATH_NOT_FOUND"}],
-      ["unmanaged path that is a file", {projectId: PID, repository: {path: file}}, {ok: false, reason: "REPOSITORY_PATH_NOT_FOUND"}],
-      ["managed repo whose directory is missing", {projectId: "prj_" + "c".repeat(24), repository: {path: path.join(dataDir, "projects", "prj_" + "c".repeat(24), "repo"), managed: true}}, {ok: false, reason: "REPOSITORY_PATH_NOT_FOUND"}],
-      ["ok: unmanaged directory outside the data dir", {projectId: PID, repository: {path: outside}}, {ok: true, src: real(outside)}],
-      ["ok: managed repo at its canonical place", {projectId: PID, repository: {path: managedDir, managed: true}}, {ok: true, src: real(managedDir)}],
-      ["ok: unmanaged path with dot-dot segments returns the CANONICAL src", {projectId: PID, repository: {path: `${outside}${path.sep}x${path.sep}..`}}, {ok: true, src: real(outside)}],
-      ["ok: managed path with dot-dot segments returns the CANONICAL src", {projectId: PID, repository: {path: `${managedDir}${path.sep}..${path.sep}repo`, managed: true}}, {ok: true, src: real(managedDir)}],
-      ["a url never overrides a usable path", {projectId: PID, repository: {path: outside, url: "https://example.invalid/r.git"}}, {ok: true, src: real(outside)}]
-    ];
-    for (const [label, project, expected] of cases) expect([label, repositoryPrecondition(project, dataDir)]).toEqual([label, expected]);
-    expect(fs.readdirSync(dataDir, {recursive: true}).map(String).sort()).toEqual(before);
-  });
-
-  it("the runner blocks a run with exactly the function's reason for each failure, before any executor starts; a usable repository goes on to IMPLEMENT", { timeout: T }, async () => {
-    const mkCtx = (repository: Record<string, unknown> | undefined): {c: Ctx; fake: FakeExecutors} => {
-      const base = setup("tA"), dataDir = path.join(tmp, `data-x-${crypto.randomBytes(3).toString("hex")}`);
-      const store = new WorkOsStore(dataDir);
-      const p = store.createProject({tenantId: "tA", orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL", testCommand: ["node", "test.mjs"], ...(repository ? {repository: repository as never} : {})});
-      const m = store.createMission({tenantId: "tA", projectId: p.projectId, title: "t", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
-      for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
-      return {c: {...base, store, dataDir, missionId: m.missionId, projectId: p.projectId}, fake: new FakeExecutors(okScript())};
-    };
-    const outside = fs.mkdtempSync(path.join(tmp, "plain-")), missing = path.join(outside, "missing");
-    const cases: Array<[string, Record<string, unknown> | undefined, string]> = [
-      ["no repository", undefined, "REPOSITORY_NOT_CONFIGURED"], ["url", {url: "https://example.invalid/r.git"}, "REMOTE_REPO_NOT_SUPPORTED_YET"],
-      ["managed flag, foreign path", {path: outside, managed: true}, "REPOSITORY_NOT_MANAGED"], ["missing directory", {path: missing}, "REPOSITORY_PATH_NOT_FOUND"]
-    ];
-    for (const [label, repository, reason] of cases) {
-      const {c, fake} = mkCtx(repository);
-      expect([label, repositoryPrecondition(c.store.getProject({tenantId: "tA"}, c.projectId)!, c.dataDir)]).toEqual([label, {ok: false, reason}]);
-      const r = start(c, fake);
-      await runner(c, fake).tick();
-      expect([label, runOf(c, r.runId).status, runOf(c, r.runId).reason, fake.calls.implement]).toEqual([label, "BLOCKED", reason, 0]);
-    }
-    // forbidden: the unmanaged path lies inside the run's own data dir
-    const f = mkCtx(undefined);
-    const inside = path.join(f.c.dataDir, "inside-repo"); fs.mkdirSync(inside, {recursive: true});
-    const fp = f.c.store.createProject({tenantId: "tA", orgId: "o1", name: "F", environmentId: "dev", createdBy: "FOUNDER_LOCAL", testCommand: ["node", "test.mjs"], repository: {path: inside}});
-    const fm = f.c.store.createMission({tenantId: "tA", projectId: fp.projectId, title: "t", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
-    for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) f.c.store.transitionMission({tenantId: "tA"}, fm.missionId, to, "test", "FOUNDER_LOCAL");
-    const fr = f.c.store.createRun({tenantId: "tA", missionId: fm.missionId, executor: {implementer: "FAKE_IMPLEMENTER", reviewer: "FAKE_REVIEWER"}, createdBy: "FOUNDER_LOCAL"});
-    await runner(f.c, f.fake).tick();
-    expect([f.c.store.getRun({tenantId: "tA"}, fr.runId)!.reason, f.fake.calls.implement]).toEqual(["REPOSITORY_PATH_FORBIDDEN", 0]);
-    // a usable repository passes the precondition and reaches the executor
-    const ok = setup("tA"), okFake = new FakeExecutors(okScript());
-    expect(repositoryPrecondition(ok.store.getProject({tenantId: "tA"}, ok.projectId)!, ok.dataDir)).toEqual({ok: true, src: fs.realpathSync.native(ok.repo)});
-    const okRun = start(ok, okFake);
-    await runner(ok, okFake).tick();
-    expect(okFake.calls.implement).toBeGreaterThanOrEqual(1);
-    expect(runOf(ok, okRun.runId).status).toBe("AWAITING_APPROVAL");
-  });
-
-  it("the runner verifies with the mission's testCommand when both are set, and with the project's when the mission has none", { timeout: T }, async () => {
-    const dataDir = path.join(tmp, `data-tc-${crypto.randomBytes(3).toString("hex")}`), { repo } = makeRepo(crypto.randomBytes(4).toString("hex"));
-    for (const [label, projectCmd, missionCmd, expected] of [["mission passes, project would fail", ["node", "never.mjs"], ["node", "test.mjs"], "AWAITING_APPROVAL"], ["mission would fail, project passes", ["node", "test.mjs"], ["node", "never.mjs"], "BLOCKED"], ["mission none, project passes", ["node", "test.mjs"], undefined, "AWAITING_APPROVAL"]] as const) {
-      const store = new WorkOsStore(path.join(dataDir, label.replace(/\W+/g, "-"))), runtime = path.join(tmp, `rt-${crypto.randomBytes(3).toString("hex")}`);
-      fs.mkdirSync(runtime, {recursive: true});
-      const p = store.createProject({tenantId: "tA", orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL", repository: {path: repo}, testCommand: [...projectCmd]});
-      const m = store.createMission({tenantId: "tA", projectId: p.projectId, title: "t", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL", ...(missionCmd ? {testCommand: [...missionCmd]} : {})});
-      for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
-      const c: Ctx = {store, dataDir: path.join(dataDir, label.replace(/\W+/g, "-")), runtime, stopFile: path.join(runtime, "GLOBAL_STOP.json"), repo, head: "", missionId: m.missionId, projectId: p.projectId};
-      const fake = new FakeExecutors(okScript());
-      const r = start(c, fake);
-      await runner(c, fake, {maxRemediations: 0}).tick();
-      expect([label, runOf(c, r.runId).status]).toEqual([label, expected]);
-    }
   });
 });

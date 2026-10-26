@@ -535,6 +535,64 @@ describe("LANE-B project intake", () => {
     expect((await post(app, {idea: IDEA, testCommand: ["npm", "run", "t"], idempotencyKey: "k9"})).statusCode).toBe(409);
     expect((await post(app, {idea: IDEA, testCommand: ["npm", "test"], repository: {url: "https://example.com/a.git"}, idempotencyKey: "k9"})).statusCode).toBe(409);
   });
+
+  it("intake with a template creates a managed git repository, template test/dev commands and project type; the first run is no longer blocked at REPOSITORY (readiness ready)", async () => {
+    const {app, store} = await mkApp();
+    const r = await post(app, {idea: IDEA, template: "web-node", idempotencyKey: "tpl1"});
+    expect(r.statusCode).toBe(201);
+    const rec = r.json().intake, p = store.getProject({tenantId: "tA"}, rec.projectId)!;
+    expect(rec.template).toBe("web-node");
+    expect(p.repository?.managed).toBe(true);
+    expect(fs.existsSync(path.join(p.repository!.path!, ".git"))).toBe(true);
+    expect(fs.existsSync(path.join(p.repository!.path!, "package.json"))).toBe(true);
+    expect(p).toMatchObject({template: "web-node", projectType: "web", testCommand: ["node", "test.js"], devCommand: ["node", "server.js"]});
+    const {repositoryPrecondition} = await import("../core/workos/runner.js");
+    expect(repositoryPrecondition(p, store.dataDir)).toMatchObject({ok: true});
+    const {deriveReadiness} = await import("../core/workos/readiness.js");
+    const rd = deriveReadiness(store, {tenantId: "tA"}, p.projectId)!;
+    expect(rd.ready).toBe(true);
+    expect(rd.checks.find(c => c.id === "REPOSITORY")!.state).toBe("OK");
+    expect(r.body).not.toContain(store.dataDir);
+    const own = await post(app, {idea: IDEA + " own cmd", template: "web-node", testCommand: ["npm", "test"], idempotencyKey: "tpl2"});
+    expect(store.getProject({tenantId: "tA"}, own.json().intake.projectId)!.testCommand).toEqual(["npm", "test"]);
+  });
+
+  it("without a template the intake project has no repository, so readiness reports REPOSITORY_NOT_CONFIGURED (the gap the template closes)", async () => {
+    const {app, store} = await mkApp();
+    const r = await post(app, {idea: IDEA, idempotencyKey: "tpl0"});
+    const {deriveReadiness} = await import("../core/workos/readiness.js");
+    const rd = deriveReadiness(store, {tenantId: "tA"}, r.json().intake.projectId)!;
+    expect(rd.ready).toBe(false);
+    expect(rd.checks.find(c => c.id === "REPOSITORY")).toMatchObject({state: "BLOCKED", reason: "REPOSITORY_NOT_CONFIGURED"});
+  });
+
+  it("template is validated (enum, exclusive with repository), replay is idempotent without a second repository, a different template conflicts", async () => {
+    const {app, store} = await mkApp();
+    expect((await post(app, {idea: IDEA, template: "nope"})).statusCode).toBe(400);
+    const both = await post(app, {idea: IDEA, template: "web-node", repository: {url: "https://example.com/a.git"}});
+    expect(both.statusCode).toBe(400);
+    expect(both.body).not.toContain("example.com");
+    const a = await post(app, {idea: IDEA, template: "node-lib", idempotencyKey: "tpl3"});
+    const b = await post(app, {idea: IDEA, template: "node-lib", idempotencyKey: "tpl3"});
+    expect([a.statusCode, b.statusCode]).toEqual([201, 200]);
+    expect(b.json().intake.projectId).toBe(a.json().intake.projectId);
+    expect(fs.readdirSync(path.join(store.dataDir, "projects"))).toHaveLength(1);
+    expect((await post(app, {idea: IDEA, template: "web-node", idempotencyKey: "tpl3"})).statusCode).toBe(409);
+    expect((await post(app, {idea: IDEA, idempotencyKey: "tpl3"})).statusCode).toBe(409);
+  });
+
+  it("a failing repository setup answers a fixed code and leaves no project, mission or intake behind", async () => {
+    const [{default: Fastify}, {registerIntakeRoutes}, {StudioError}] = await Promise.all([import("fastify"), import("../apps/control-api/src/routes/intake.js"), import("../core/workos/project-studio.js")]);
+    const app = Fastify({logger: false}), store = new WorkOsStore(path.join(tmp, "data"));
+    registerIntakeRoutes(app, {getStore: () => store, scope: {tenantId: "tA"}, orgId: "o1", actor: "FOUNDER_LOCAL", audit: () => {}, workosStopped: () => false, workosPolicy: () => ({allowed: true}), workosFail: (r: any) => r.code(500).send({error: "INTERNAL_ERROR"}),
+      studio: () => ({createTemplateRepository: () => { throw new StudioError("PROJECT_REPOSITORY_INIT_FAILED", 500); }})});
+    const r = await app.inject({method: "POST", url: "/v1/intakes", payload: {idea: IDEA, template: "web-node"}});
+    expect(r.statusCode).toBe(500);
+    expect(r.json()).toEqual({error: "PROJECT_REPOSITORY_INIT_FAILED"});
+    expect(store.listProjects({tenantId: "tA"})).toHaveLength(0);
+    expect(store.listMissions({tenantId: "tA"})).toHaveLength(0);
+    expect((await app.inject({method: "GET", url: "/v1/intakes"})).json().intakes).toHaveLength(0);
+  });
 });
 
 // //TR: LANE-B plan: mission görev planı (sıralı görevler + bağımlılıklar) route modülü ve kalıcılık testleri.
@@ -2654,5 +2712,77 @@ describe("LANE-B product run routes (B-RUN-1)", () => {
     const r = await post(other.app, other.run.runId, "stop"); expect(r.statusCode).toBe(409); expect(r.json()).toEqual({error: "PRODUCT_RUN_NOT_THIS_DELIVERY", reason: "RUNNING_FOR_OTHER_RUN"}); expect(other.calls).toEqual([]);
     expect((await other.app.inject({method: "GET", url: `/v1/work-runs/${other.run.runId}/product`, headers: hdr})).json().product.tiedToThisRun).toBe(false);
     const mine = await mkApp(); const own = await post(mine.app, mine.run.runId, "stop"); expect(own.statusCode).toBe(200); expect(mine.calls).toEqual([["stop", mine.run.projectId]]); expect(mine.audits).toContain("WORKOS_PRODUCT_STOP");
+  });
+});
+
+// //TR: LANE-B G-FB-011/073/076: GET /v1/adapters, GET /v1/scheduler ve POST /v1/control/retry-blocked (eski, emekli scheduler) HATA yolları. Geçerli (imzalı) scheduler durumu gerektiren VERIFIED / PACKAGE_NOT_BLOCKED / BLOCKER_NOT_TECHNICALLY_RETRYABLE / başarı yolları KASITLI olarak sınanmaz: durumu uydurmak gerekir ve başarı yolu ayrılmış bir supervisor süreci başlatır. Symlink senaryoları Windows'ta atlanır.
+describe("LANE-B P3 legacy reads: /v1/adapters, /v1/scheduler and the retry-blocked refusals", () => {
+  const token = "s".repeat(32), HOST = "127.0.0.1:3210";
+  const hdr = {"x-uasco-control-token": token, host: HOST};
+  const mkApp = () => {
+    const runtime = path.join(tmp, "runtime"); fs.mkdirSync(runtime, {recursive: true});
+    return {runtime, app: buildServer({controlToken: token, runtime, dataDir: path.join(tmp, "data"), port: 3210, logger: false})};
+  };
+  const get = (app: any, url: string, headers: any = hdr) => app.inject({method: "GET", url, headers});
+  const post = (app: any, body: unknown, headers: any = hdr) => app.inject({method: "POST", url: "/v1/control/retry-blocked", headers, payload: body as any});
+  const noLeak = (body: string, label: string) => { for (const bad of [tmp, token]) expect(body, `${label} ${bad}`).not.toContain(bad); };
+
+  it("/v1/adapters returns the registry file unchanged and needs the token", async () => {
+    const {app} = mkApp();
+    const r = await get(app, "/v1/adapters");
+    expect(r.statusCode).toBe(200);
+    expect(r.json()).toEqual(JSON.parse(fs.readFileSync(path.join(process.cwd(), "registries/tool-adapters.json"), "utf8")));
+    noLeak(r.body, "adapters");
+    for (const h of [{host: HOST}, {host: HOST, "x-uasco-control-token": "x".repeat(32)}]) expect((await get(app, "/v1/adapters", h)).statusCode).toBe(403);
+  });
+
+  it("/v1/scheduler answers NOT_INITIALIZED when absent and a fixed REJECTED answer for an unverifiable state file", async () => {
+    const {app, runtime} = mkApp();
+    expect((await get(app, "/v1/scheduler")).json()).toEqual({status: "NOT_INITIALIZED", verification: "PENDING"});
+    fs.writeFileSync(path.join(runtime, "scheduler-state.json"), "{not json");
+    const r = await get(app, "/v1/scheduler"), b = r.json();
+    expect(r.statusCode).toBe(200);
+    expect(b).toMatchObject({status: "INVALID", verification: "REJECTED", error: "SCHEDULER_STATE_INVALID"});
+    expect(typeof b.detail).toBe("string");
+    noLeak(r.body, "scheduler invalid");
+    for (const h of [{host: HOST}, {host: HOST, "x-uasco-control-token": "x".repeat(32)}]) expect((await get(app, "/v1/scheduler", h)).statusCode).toBe(403);
+  });
+
+  it.skipIf(process.platform === "win32")("/v1/scheduler rejects a symlinked state file without serving the target (symlinks skipped on Windows)", async () => {
+    const {app, runtime} = mkApp();
+    const target = path.join(tmp, "sched-target.json"); fs.writeFileSync(target, JSON.stringify({marker: "SCHED-TARGET-MARKER"}));
+    fs.symlinkSync(target, path.join(runtime, "scheduler-state.json"));
+    const r = await get(app, "/v1/scheduler");
+    expect(r.json()).toMatchObject({status: "INVALID", verification: "REJECTED"});
+    expect(r.body).not.toContain("SCHED-TARGET-MARKER");
+    noLeak(r.body, "scheduler symlink");
+  });
+
+  it("POST /v1/control/retry-blocked refuses before touching anything: bad package id 400, no state 409, unknown package 404, unverifiable state 409, token 403; nothing is written or started", async () => {
+    const {app, runtime} = mkApp();
+    for (const body of [{}, {packageId: ""}, {packageId: "PKG-1"}, {packageId: "PKG-0001"}, {packageId: "pkg-001"}, {packageId: "PKG-001; rm"}, {packageId: 1}]) {
+      const r = await post(app, body);
+      expect(r.statusCode, JSON.stringify(body)).toBe(400);
+      expect(r.json()).toEqual({error: "INVALID_PACKAGE_ID"});
+    }
+    expect((await post(app, {packageId: "PKG-001"})).json()).toEqual({error: "SCHEDULER_NOT_INITIALIZED"});
+    const sf = path.join(runtime, "scheduler-state.json"); fs.writeFileSync(sf, "{not json");
+    const before = fs.readFileSync(sf);
+    expect((await post(app, {packageId: "PKG-999"})).json()).toEqual({error: "PACKAGE_NOT_FOUND"});
+    const inv = await post(app, {packageId: "PKG-001"});
+    expect(inv.statusCode).toBe(409);
+    expect(inv.json().error).toBe("SCHEDULER_STATE_INVALID");
+    noLeak(inv.body, "retry invalid state");
+    expect(fs.readFileSync(sf).equals(before)).toBe(true);
+    expect(fs.readdirSync(runtime).sort()).toEqual(["scheduler-state.json"]);
+    for (const h of [{host: HOST}, {host: HOST, "x-uasco-control-token": "x".repeat(32)}]) expect((await post(app, {packageId: "PKG-001"}, h)).statusCode).toBe(403);
+  });
+
+  it.skipIf(process.platform === "win32")("POST /v1/control/retry-blocked refuses a symlinked state file with SCHEDULER_STATE_UNSAFE_PATH (symlinks skipped on Windows)", async () => {
+    const {app, runtime} = mkApp();
+    const target = path.join(tmp, "sched-target2.json"); fs.writeFileSync(target, "{}");
+    fs.symlinkSync(target, path.join(runtime, "scheduler-state.json"));
+    expect((await post(app, {packageId: "PKG-001"})).json()).toEqual({error: "SCHEDULER_STATE_UNSAFE_PATH"});
+    expect(fs.readFileSync(target, "utf8")).toBe("{}");
   });
 });
