@@ -173,8 +173,8 @@
    "id": "V7",
    "description": "L2: the sequence is opened before the paid call (a failed step writes)",
    "file": "core/workos/crew/analysis.ts",
-   "old": "    let raw: string;\n    try {\n      const ctx = driver.buildMissionContext",
-   "new": "    let raw: string;\n    if (!rm.active || rm.phase === \"AUTHORIZED\") driver.start(scope, missionId, PREDEV_AGENT_ACTOR);\n    try {\n      const ctx = driver.buildMissionContext"
+   "old": "    let raw: string;\n    // //TR: builder shouldAbort",
+   "new": "    let raw: string;\n    if (!rm.active || rm.phase === \"AUTHORIZED\") driver.start(scope, missionId, PREDEV_AGENT_ACTOR);\n    // //TR: builder shouldAbort"
   },
   {
    "id": "V8",
