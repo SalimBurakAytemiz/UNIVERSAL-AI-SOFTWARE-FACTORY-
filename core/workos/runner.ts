@@ -19,7 +19,7 @@ import {canonicalPath, managedRepoCanonical, pathOverlapsDataDir} from "./path-g
 import {runGitAsync} from "./git-async.js";
 import type {GitRun} from "./git-async.js";
 import {
-  OWNER_FILE, WRITER_KILL_WAIT_MS, accessDeniedVerdict, bootId, bootTimeMs, creationTicks, installTerminationForwarding, isTerminating, killWriterGroup, leaderlessGroupProof, readOwner, sameBoot, startToken, startTokenLinux, startedAfterRecord, sweepWriters, waitWriterGone,
+  OWNER_FILE, WRITER_KILL_WAIT_MS, accessDeniedVerdict, bootId, bootTimeMs, creationTicks, installTerminationForwarding, isTerminating, killWriterGroup, leaderlessGroupProof, readOwner, reusedPid, sameBoot, startToken, startTokenLinux, sweepWriters, waitWriterGone,
   trackWriterGroup, untrackWriterGroup, writeOwner, writerEnvFor, writerState
 } from "./writer-guard.js";
 import type {WorkspaceOwner} from "./writer-guard.js";
@@ -413,9 +413,8 @@ export class MissionRunner {
     if (st === "UNKNOWN") return alive(`writer group ${pgid} state unknown`);
     const now = await startToken(pgid);
     // //TR: TK-3: kimlik belirteci EPERM'den ÖNCE karşılaştırılır. Kayıtlı pid başka bir kullanıcının sürecine geçtiyse (kill -> EPERM) belirteç farklıdır: bizim yazarımız yoktur, devir fail-closed OLMAZ. Linux /proc/<pid>/stat dünya okunurdur.
-    if (prev.childStart !== null && now !== null && now !== prev.childStart) return {problem: null, note: `pid ${pgid} was reused by another process; no writer to stop`};
-    // //TR: SWEEP-4: kayıtta başlangıç belirteci yoksa (kısa ömürlü git çocuğu) bile, kayıt yazıldıktan SONRA başlamış canlı süreç kayıtlı yazar olamaz (Windows ticks / macOS lstart; Linux'ta belirteç her zaman kayıtlıdır).
-    if (prev.childStart === null && startedAfterRecord(process.platform, now, prev.at)) return {problem: null, note: `pid ${pgid} started after the owner record was written; it is not the recorded writer`};
+    // //TR: SWEEP-4: kayıtta başlangıç belirteci yoksa (kısa ömürlü git çocuğu) bile, kayıt yazıldıktan SONRA başlamış canlı süreç kayıtlı yazar olamaz (Windows ticks / macOS lstart; Linux'ta belirteç her zaman kayıtlıdır): karar reusedPid'de.
+    if (reusedPid(process.platform, prev, now)) return {problem: null, note: `pid ${pgid} was reused by another process; no writer to stop`};
     // //TR: Erişim reddi: karar accessDeniedVerdict'te (SWEEP-6: Windows'ta yalnız StartTime da okunamıyorsa VE bağımsız CIM oluşturma zamanı okunup kayıtlı başlangıçtan/kayıt anından farklıysa yazar yok; aksi halde fail-closed).
     if (st === "OTHER_USER") {
       const probe = process.platform === "win32" ? {creationTicks: await creationTicks(pgid), recordedStart: prev.childStart, recordAtIso: prev.at} : undefined;

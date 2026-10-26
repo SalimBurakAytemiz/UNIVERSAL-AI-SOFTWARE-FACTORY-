@@ -119,6 +119,12 @@ export function startedAfterRecord(platform: NodeJS.Platform, tokenNow: string |
   const started = tokenMs(platform, tokenNow), at = Date.parse(recordAtIso);
   return started !== null && Number.isFinite(at) && started > at + slackMs;
 }
+// //TR: pid yeniden kullanıldı mı? Kayıtlı başlangıç belirteci varsa EŞİT olmalı (TK-3); yoksa (kısa ömürlü git çocuğu) canlı sürecin başlangıcı kaydın yazıldığı andan SONRA olmamalı (SWEEP-4). Belirteç okunamıyorsa karar verilmez (false).
+export function reusedPid(platform: NodeJS.Platform, prev: Pick<WorkspaceOwner, "childStart" | "at">, tokenNow: string | null): boolean {
+  if (tokenNow === null) return false;
+  if (prev.childStart !== null) return tokenNow !== prev.childStart;
+  return startedAfterRecord(platform, tokenNow, prev.at);
+}
 // //TR: SWEEP-6: Windows'ta erişim reddi (EPERM) tek başına "bizim yazarımız değil" demez. Yalnız (a) Get-Process StartTime'ı da okunamıyorsa VE (b) bağımsız bir ikinci kaynaktan (Win32_Process.CreationDate, CIM) okunan oluşturma zamanı kayıtlı başlangıçtan (yoksa kaydın yazıldığı andan sonra) FARKLI ise yazar yoktur; ikinci kaynak da okunamıyorsa fail-closed (UNKNOWN). CIM mikrosaniye çözünürlüklüdür: kayıtlı belirteçle karşılaştırma toleranslıdır.
 const CREATION_TOLERANCE_MS = 2_000;
 export interface AccessDeniedProbe { creationTicks: string | null; recordedStart: string | null; recordAtIso: string }

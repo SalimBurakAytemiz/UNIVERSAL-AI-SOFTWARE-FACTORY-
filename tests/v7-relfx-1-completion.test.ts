@@ -736,6 +736,30 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
     } finally { spy.mockRestore(); }
   });
 
+  it.skipIf(process.platform !== "linux")("SWEEP-3 (#224 round 3): the leftover-group kill needs PROOF: a group member without this lease's marker (a process that scrubbed its environment, or one that is not ours) is left alone", { timeout: 120_000 }, async () => {
+    const c = setup(); const r = c.mkRun("A");
+    const pidFile = path.join(tmp, "rv-gc2.pid");
+    const reviewer: ExecutorPair["reviewer"] = {
+      identity: c.base.reviewer.identity,
+      review: async (_clone, _spec, _diff, ctx) => {
+        const env = {...process.env}; delete env.UASCO_WRITER_RUN; delete env.UASCO_WRITER_LEASE; // işaretsiz üye
+        const child = cp.spawn("/bin/sh", ["-c", `sleep 120 & echo $! > '${pidFile}'; exit 0`], {stdio: "ignore", detached: true, env});
+        ctx.onSpawn?.({pid: child.pid!, pgid: child.pid!});
+        await new Promise(res => child.once("exit", res));
+        const at = new Date().toISOString();
+        return {verdict: "CLEAN", findings: [], valid: true, exitCode: 0, log: "stub reviewer\n", argv: ["stub-reviewer"], startedAt: at, endedAt: at, timedOut: false, aborted: false, transient: false};
+      }
+    };
+    let gc = 0;
+    try {
+      await c.runner({executors: {...c.base, reviewer}}).tick();
+      expect(c.store.engineGetRun(r.runId)!.evidence.some(e => e.kind === "REVIEW"), "the review step did not run").toBe(true);
+      gc = Number(fs.readFileSync(pidFile, "utf8"));
+      await sleep(500);
+      expect(procAlive(gc), "an unmarked group member was killed without proof").toBe(true);
+    } finally { if (gc > 1) { try { process.kill(gc, "SIGKILL"); } catch { /* bitmiş */ } } }
+  });
+
   it("R2-11: a failed owner-record refresh at the end of the takeover does not block the emergency cancel: GLOBAL_STOP still ends the run CANCELLED (not FAILED with ENGINE_ERROR)", { timeout: 90_000 }, async () => {
     const c = setup(), r = c.mkRun("A");
     const first = c.runner({leaseTtlMs: 300, maxStepsPerTick: 0, executors: c.base});
@@ -788,6 +812,13 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
     expect(G!.startedAfterRecord("win32", null, at)).toBe(false);
     expect(G!.startedAfterRecord("linux", "999999999", at)).toBe(false);
     expect(G!.startedAfterRecord("win32", ticksOf(T0 + 60_000), "not-a-date")).toBe(false);
+    const rec = (childStart: string | null) => ({childStart, at});
+    expect(G!.reusedPid("linux", rec("100"), "101"), "recorded token differs").toBe(true);
+    expect(G!.reusedPid("linux", rec("100"), "100"), "recorded token equal: the writer").toBe(false);
+    expect(G!.reusedPid("win32", rec(null), ticksOf(T0 + 60_000)), "no recorded token, started after the record").toBe(true);
+    expect(G!.reusedPid("win32", rec(null), ticksOf(T0 - 60_000)), "no recorded token, started before the record").toBe(false);
+    expect(G!.reusedPid("linux", rec(null), "999999999"), "no recorded token on Linux: not decidable").toBe(false);
+    expect(G!.reusedPid("win32", rec("100"), null), "token unreadable: no decision").toBe(false);
   });
 
   it("SWEEP-4 (#224 round 3): the wait after the kill ends on GONE or on a CHANGED start token (the pid was reused by another process), and fails only when the same process is still alive at the deadline", async () => {
