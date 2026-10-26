@@ -209,6 +209,44 @@ describe("C-PAR-1 PAR-03: synchronous git in one run must not starve another run
     let fired = false; // yalnız İLK HEAD okuması yavaş (A'nınki); B'ninki ve sonraki adımlar hızlı
     await slowGitLeavesBUnfenced((_A, srcRepo) => (cwd, args) => { const here = canonicalPath(cwd), repo = canonicalPath(srcRepo); const hit = !fired && here.ok && repo.ok && here.key === repo.key && args.includes("HEAD^{commit}") && args.includes("HEAD"); if (hit) fired = true; return hit; }); // //TR: Windows CI: runner depo yolunu path-guard'ın kanonik biçimine (8.3 kısa adları açılmış, harf büyüklüğü katlanmış) çevirir; sabit `===` eşleşmeyip yavaş-git senaryosu hiç tetiklenmiyordu
   });
+  // //TR: RCA relfx-c3:200 (Windows shard 1, #259/#261): iki CI başarısızlığında yavaş git eşzamansızdı (hits=1; stall 7 s değil 3-4 s; cpuMs duvar süresinin çok altında, yani G/Ç beklemesi). Stall'ı, bir run'ın adım sınırında ARA VERMEDEN yaptığı senkron, dayanıklı journal yazıları zinciri (kanıt -> CHECKPOINTING -> checkpoint -> yenileme -> sonraki adım RUNNING) üretiyordu: yavaş diskte zincir TTL - heartbeat aralığını aşar ve öbür run'ın setInterval heartbeat'i hiç çalışamaz. Burada zincir deterministik kurulur: A'nın WORKSPACE kanıtından IMPLEMENT RUNNING geçişine kadarki 4 run yazısının HER BİRİ yazıldıktan sonra döngüyü 1.4 s bloklar (hiçbiri tek başına TTL'yi aşmaz; toplam 5.6 s > TTL 5 s). Düzeltmesiz runner'da B'nin lease'i zincir içinde dolar (fence); düzeltmeyle her runner yazısı önce heartbeat'i gecikmiş lease'leri yeniler.
+  it("run A's step-boundary journal-write chain (4 slow durable writes of 1.4 s, none above TTL 5 s, 5.6 s in total) leaves run B unfenced: every runner write first renews the overdue leases", { timeout: 90_000 }, async () => {
+    const TTL = HB_TTL, STALL = 1400, LONG = 8000;
+    const c = setup(); const A = c.mkRun("A"), B = c.mkRun("B");
+    const calls = {B: 0, Baborted: 0};
+    const pair = wrapImplementer(c.base, async (w, spec, ctx) => {
+      if (spec.title === "B" && ++calls.B === 1) { // run B: uzun eşzamansız çağrı; lease'i yalnız heartbeat'e (düzeltmeyle runner yazılarına da) bağlıdır
+        const startedAt = new Date().toISOString();
+        for (const until = Date.now() + LONG; Date.now() < until;) {
+          await sleep(100);
+          if (ctx.shouldAbort?.()) { calls.Baborted += 1; return {exitCode: null, log: "aborted", argv: ["fake-long"], startedAt, endedAt: new Date().toISOString(), timedOut: false, aborted: true, transient: false}; }
+        }
+      }
+      return c.base.implementer.implement(w, spec, ctx);
+    });
+    const chain = {open: false, closed: false, stalls: 0};
+    const block = () => { chain.stalls += 1; Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, STALL); }; // yavaş fsync gibi: CPU yakmadan döngüyü bloklar
+    const st = c.store as unknown as Record<"transitionRun" | "checkpointRun" | "addRunEvidence", (...a: unknown[]) => unknown>;
+    for (const name of ["transitionRun", "checkpointRun", "addRunEvidence"] as const) {
+      const real = st[name].bind(c.store);
+      vi.spyOn(st, name).mockImplementation((...a: unknown[]) => {
+        const r = real(...a);
+        if (a[0] !== A.runId || chain.closed) return r;
+        if (name === "addRunEvidence" && (a[2] as {kind?: string}).kind === "WORKSPACE") chain.open = true;
+        if (!chain.open) return r;
+        block();
+        if (name === "transitionRun" && a[3] === "step IMPLEMENT started") chain.closed = true;
+        return r;
+      });
+    }
+    const probe = stallProbe();
+    const rep = await c.runner({maxConcurrentRuns: 2, leaseTtlMs: TTL, executors: pair}).tick().finally(() => probe.stop());
+    expect([chain.closed, chain.stalls], "the slow write chain really ran once, end to end").toEqual([true, 4]);
+    expect(rep.claimed.sort()).toEqual([A.runId, B.runId].sort());
+    expect(rep.fenced, hbDiag(c, {A: A.runId, B: B.runId}, rep.fenced, probe, TTL)).toEqual([]);
+    expect([calls.B, calls.Baborted]).toEqual([1, 0]);
+    expect([c.status(A.runId), c.status(B.runId)]).toEqual(["AWAITING_APPROVAL", "AWAITING_APPROVAL"]);
+  });
 
   it("span() renews EVERY owned lease before and after a synchronous span (throttled to TTL/10, so the journal does not balloon)", { timeout: 60_000 }, async () => {
     const c = setup(); const A = c.mkRun("A"), B = c.mkRun("B"), clock = {t: Date.now()};
