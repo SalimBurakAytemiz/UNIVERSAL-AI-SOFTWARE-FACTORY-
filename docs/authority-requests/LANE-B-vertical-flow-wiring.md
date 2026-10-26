@@ -27,3 +27,17 @@ Registered in server.ts today: Attention, ErrorContract, Flow, Intake, Knowledge
 
 ## Evidence
 Registered set read from `grep -o "register[A-Za-z]*Routes(" apps/control-api/src/server.ts` on fe08022; route tests: `tests/v7-b1-workos.test.ts` blocks "LANE-B run readiness", "LANE-B run summaries", "LANE-B task outcome reconcile". Not verified here: the main.mjs patterns themselves (take them from the per-slug docs).
+
+## B-FLOW-3: verified on v7/integration (grep) and the exact desktop allow-list diff
+- `GET /v1/work-runs/:id/tasks` EXISTS (routes/task-runs.ts:27) and IS registered (server.ts:255 `registerTaskRunRoutes(app,laneDeps)`). Server side needs nothing.
+- main.mjs does NOT allow it: `WORK_RUN_DETAIL_RE` matches only `/v1/work-runs/<id>` and `DELIVERY_DETAIL_RE` only `/delivery`, so Lane A's run-card task list would be refused by `desktopExtraGetPathAllowed`. `/v1/projects/prj_*/readiness` and `/v1/run-summaries` are also absent.
+```diff
+ const TASK_RUNS_RE=/^\/v1\/tasks\/tsk_[0-9a-f]{24}\/runs$/;
++const WORK_RUN_TASKS_RE=/^\/v1\/work-runs\/run_[0-9a-f]{24}\/tasks$/;
++const PROJECT_READINESS_RE=/^\/v1\/projects\/prj_[0-9a-f]{24}\/readiness$/;
+-const FIRST_DELIVERY_GET_RES=[INTAKES_LIST_RE,INTAKE_DETAIL_RE,MISSION_TASKS_RE,PROJECT_FLOW_RE,TASK_DETAIL_RE,TASK_RUNS_RE];
++const FIRST_DELIVERY_GET_RES=[INTAKES_LIST_RE,INTAKE_DETAIL_RE,MISSION_TASKS_RE,PROJECT_FLOW_RE,TASK_DETAIL_RE,TASK_RUNS_RE,WORK_RUN_TASKS_RE,PROJECT_READINESS_RE];
+ // POST_ROUTE_RES (exact-anchored, empty body), add:
++/^\/v1\/work-runs\/run_[0-9a-f]{24}\/tasks\/reconcile$/
+```
+Run ids are `run_` + 24 hex (same shape as `DELIVERY_DETAIL_RE`). `/v1/run-summaries` needs `listQueryAllowed(value,"/v1/run-summaries",["projectId","missionId","status","limit","cursor"])` plus `QUERY_RULES` entries `projectId:/^prj_[0-9a-f]{24}$/` and `status:/^[A-Z][A-Z_]{0,39}$/` (`missionId`, `limit`, `cursor` rules already exist). Not executed here: main.mjs is protected; patterns untested against the desktop test.
