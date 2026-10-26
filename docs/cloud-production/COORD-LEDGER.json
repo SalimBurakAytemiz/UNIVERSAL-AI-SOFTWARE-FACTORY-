@@ -502,6 +502,16 @@
       "ref": "wf_6354c9da-ebd (3 lenses + 8 skeptics, none refuted): implemented label only on VERIFIED stat + header never; no-sum/hidden-running checks textContent-only; proposedOnly separation; unavailable zeros; sum>den accepted; NOT_APPLICABLE untested; tr render; ~12 LOW. b28fb5c (fail-closed running) to be reviewed as part of the round-1 delta",
       "policy": "TEP-1",
       "at": "2026-10-26T22:13:29.792Z"
+    },
+    {
+      "pr": 264,
+      "sha": "ad5971aed7f05fae6a4dc60169d2e9a17c93d816",
+      "kind": "full",
+      "base": null,
+      "verdict": "BLOCKERS_4MEDIUM",
+      "ref": "wf_6e9db67e-cb2 (2 lenses + 5 skeptics, none refuted): comment/string mentions count as callers + SCRIPT_LITERAL (R9/R10, latent over-report); github code-backed but unmapped (under-report, exact-5 claim wrong); NOT_OBSERVED default pinned only for bindings (R1/R16); entrypoint:true bypasses caller requirement (R11); ~13 LOW",
+      "policy": "TEP-1",
+      "at": "2026-10-26T22:28:34.443Z"
     }
   ],
   "tests": [],
