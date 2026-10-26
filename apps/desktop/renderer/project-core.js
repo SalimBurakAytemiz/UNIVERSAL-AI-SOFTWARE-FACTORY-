@@ -189,14 +189,24 @@ export const buildEnableExecutorRequest=()=>({ok:true,path:ENABLE_LOCAL_CLAUDE_P
 /** Durumdan izinli eylemler; STOP her durumda görünür kalır (yalnız çalışmıyorsa devre dışı), başlatma yalnız STOPPED/CRASHED durumunda. */
 export function devRunActions(status){
   const live=status==="STARTING"||status==="RUNNING";
-  return {start:status==="STOPPED"||status==="CRASHED",stop:live,restart:live||status==="CRASHED"};
+  // //TR: LANE-A A-FLOW-4: BLOCKED (ör. sandbox yokken reddedilen başlatma) yeniden denenebilir: sunucu BLOCKED durumundan start kabul eder ve kapıyı her seferinde yeniden sorar; aksi halde sandbox sonradan hazır olsa bile başlatma sonsuza dek kapalı kalırdı.
+  return {start:status==="STOPPED"||status==="CRASHED"||status==="BLOCKED",stop:live,restart:live||status==="CRASHED"};
+}
+/** //TR: LANE-A A-FLOW-4: teslimden sonra "Ürünü başlat" teklifi. Başlat YALNIZ akışın DELIVERY aşaması sunucuda DONE iken sunulur; durdurma canlı bir süreç için HER ZAMAN sunulur. DONE ürünün doğrulandığı anlamına gelmez. */
+export function productOffer(run,flow){
+  const stages=flow&&Array.isArray(flow.stages)?flow.stages:[];
+  const deliveryDone=stages.some(s=>s&&s.stage==="DELIVERY"&&s.state==="DONE");
+  const a=devRunActions(run&&run.status);
+  return {deliveryDone,start:deliveryDone&&a.start,stop:a.stop,open:previewOpenable(run)};
 }
 export function mapDevRun(raw){
   const r=isObj(raw)?(isObj(raw.devrun)?raw.devrun:raw):null;
   if(!r||!DEVRUN_STATES.includes(r.status))return {state:"ERROR",run:null};
   const pv=isObj(r.preview)?r.preview:{},url=typeof pv.url==="string"&&PREVIEW_URL_RE.test(pv.url)?pv.url:null,port=safeInt(r.port);
+  // //TR: LANE-A A-FLOW-4: BLOCKED/CRASHED nedeni (ör. SANDBOX_UNAVAILABLE) sunucunun kodu olarak taşınır; desen dışıysa null (uydurulmaz).
+  const reason=typeof r.reason==="string"&&/^[A-Z][A-Z0-9_:]{0,63}$/.test(r.reason)?r.reason:null;
   return {state:"VERIFIED",run:{
-    status:r.status,pid:safeInt(r.pid),startedAt:iso(r.startedAt),exitCode:safeInt(r.exitCode),port:port!==null&&port>=1&&port<=65535?port:null,
+    status:r.status,reason,pid:safeInt(r.pid),startedAt:iso(r.startedAt),exitCode:safeInt(r.exitCode),port:port!==null&&port>=1&&port<=65535?port:null,
     preview:{url,state:PREVIEW_STATES.includes(pv.state)?pv.state:"UNAVAILABLE",lastProbeAt:iso(pv.lastProbeAt)},
     logTail:redactTail(typeof r.logTail==="string"?r.logTail:Array.isArray(r.logTail)?r.logTail.filter(x=>typeof x==="string").join("\n"):"")
   }};
