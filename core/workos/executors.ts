@@ -315,7 +315,8 @@ export class LocalClaudeExecutors {
           const po: ProcOptions = {cwd: cleanClone, env: withClaudeProfileEnv(self.env(), prof.dir), timeoutMs: ctx.timeoutMs, input: reviewPrompt(spec, diff), shouldAbort: ctx.shouldAbort};
           const r = toReview(await (self.opts.runReviewer ?? runProcess)(argv, po));
           // C-IMPL-WIN-1: oturum süresi dolmuş (kimlik dosyası var ama CLI giriş istiyor): genel REVIEW_FAILED değil, kesin neden.
-          if (!r.valid && !r.aborted && !r.timedOut && claudeAuthFailure(r.log)) r.invalidReason = "CLAUDE_PROFILE_LOGIN_EXPIRED";
+          // //TR: yalnız BAŞARISIZ çıkışta (uygulayıcıyla aynı kural): çıkış 0 iken güvenilmeyen çıktıdan (alıntı/prompt injection) "oturum doldu" sonucu çıkarılmaz; ve süresi dolmuş oturum yeniden DENENMEZ (çıkış 75 geçici sayılsa bile).
+          if (!r.valid && !r.aborted && !r.timedOut && r.exitCode !== 0 && claudeAuthFailure(r.log)) { r.invalidReason = "CLAUDE_PROFILE_LOGIN_EXPIRED"; r.transient = false; }
           // Review sonrası çalışma alanı bayt düzeyinde aynı olmalı; değilse review GEÇERSİZ (verdict ne olursa olsun CLEAN sayılmaz).
           const changed = reviewWorkspaceChange(before, reviewWorkspaceSnapshot(cleanClone, envPolicyFile));
           if (changed) return {...r, verdict: "BLOCKED", findings: [], valid: false, invalidReason: changed, transient: false, log: `${r.log}REVIEW_INVALID: ${changed}\n`};
