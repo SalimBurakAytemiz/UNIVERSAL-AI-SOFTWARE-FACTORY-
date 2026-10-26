@@ -1071,7 +1071,8 @@ describe("LANE-A Agent Factory status panel", () => {
   it("renders five separate counters, the target, a by-guild table and the basis; nothing is summed", async () => {
     const node = await render(await (await load("agent-factory-core.js")).mapStatusSummary(sum()));
     const stats = byData(node, "stat").filter(n => n.dataset.stat.startsWith("factory-"));
-    expect(stats.map(n => [n.dataset.stat, n.dataset.value])).toEqual([["factory-registered", "599"], ["factory-implemented", "40"], ["factory-tested", "12"], ["factory-certified", "3"], ["factory-running", "0"]]);
+    // //TR: A1 (koordinatör kararı, FAIL-CLOSED): hazırlık okunamadığı için runningMeasured belirlenemez; "çalışan" sayacı sayı olarak gösterilmez (eski beklenti "0" idi). Diğer dört sayaç değişmedi.
+    expect(stats.map(n => [n.dataset.stat, n.dataset.value])).toEqual([["factory-registered", "599"], ["factory-implemented", "40"], ["factory-tested", "12"], ["factory-certified", "3"], ["factory-running", "UNKNOWN"]]);
     expect(byData(node, "factoryTarget")[0].dataset.factoryTarget).toBe("599");
     expect(byData(node, "factoryGuild").map(n => n.dataset.factoryGuild)).toEqual(["alpha", "zeta"]);
     expect(text(byData(node, "factoryBasis")[0])).toContain("abababababab…"); expect(text(byData(node, "factoryBasis")[0])).not.toContain(SHA);
@@ -1225,6 +1226,22 @@ describe("LANE-A A1 role readiness panel (8 layers)", () => {
       if (name.startsWith("malformed")) expect(byData(factory, "legacyProjection", "UNVERIFIED"), name).toHaveLength(1);
       if (!name.startsWith("malformed")) expect(byData(factory, "stat").filter(n => n.dataset.stat.startsWith("factory-")), name).toEqual([]); // the legacy block is unreadable too: no figures at all
     }
+  });
+
+  it("readiness unavailable (malformed, with a valid legacy block): fail-closed, the legacy running count is Unknown in the stat and in every by-guild cell, the other four counters stay", async () => {
+    const raw = slim("PRESENT"); raw.readiness.totals.RUNNING.measured = false; // malformed readiness => ERROR, so runningMeasured cannot be established
+    raw.statusSummary.running = 4242; raw.statusSummary.byGuild[0].running = 4343;
+    const {factory, node} = await page({roles: "ok", detail: true, statusSummary: raw});
+    expect(byData(factory, "legacyProjection", "UNVERIFIED")).toHaveLength(1);
+    const stat = byData(factory, "stat", "factory-running")[0];
+    expect(stat.dataset.value).toBe("UNKNOWN");
+    expect(text(stat.children[0])).toBe("Unknown – no run journal");
+    expect(text(node)).not.toContain("4242");
+    expect(text(node)).not.toContain("4343");
+    for (const row of byData(factory, "factoryGuild")) expect(text(row.children[5]), row.dataset.factoryGuild).toBe("Unknown – no run journal");
+    expect(byData(factory, "stat").filter(n => n.dataset.stat.startsWith("factory-")).map(n => [n.dataset.stat, n.dataset.value]).filter(([k]) => k !== "factory-running"))
+      .toEqual([["factory-registered", "599"], ["factory-implemented", String(raw.statusSummary.implemented)], ["factory-tested", String(raw.statusSummary.tested)], ["factory-certified", String(raw.statusSummary.certified)]]);
+    expect(text(byData(factory, "stat", "factory-implemented")[0])).toContain("code path (includes unwired stages)");
   });
 
   it("proposed profiles are shown in their own box, outside the layer table, and only when the audit has them", async () => {
