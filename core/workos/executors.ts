@@ -7,7 +7,7 @@ import {fileURLToPath} from "node:url";
 import {safeChildEnv} from "../../automation/lib/env-policy.mjs";
 import {agentConfigInWorkspace, commitBuilderOutput, gitControlDigest} from "./builder-output.js";
 import {spawnGitSync} from "../../automation/lib/git-isolation.mjs";
-import {CLAUDE_ISOLATION_FLAGS, claudeProfileForRun, withClaudeProfileEnv} from "./claude-profiles.js";
+import {CLAUDE_ISOLATION_FLAGS, claudeAuthFailure, claudeLauncherCheck, claudeProfileForRun, withClaudeProfileEnv} from "./claude-profiles.js";
 import type {ClaudeProfileOptions} from "./claude-profiles.js";
 import {ClaudePreDevBuilder} from "./predev/claude-builder.js";
 
@@ -212,6 +212,8 @@ export class EditOnlyImplementer implements ImplementerAdapter {
     const po = {cwd: workspace, env: p.env, timeoutMs: ctx.timeoutMs, input: p.input, shouldAbort: ctx.shouldAbort};
     const r = p.nodeScript ? await runNodeScript(p.argv[0], p.argv.slice(1), po) : await runProcess(p.argv, po);
     const base = {argv: r.argv, startedAt: r.startedAt, timedOut: r.timedOut, aborted: r.aborted, transient: r.timedOut || r.spawnError || (r.exitCode !== null && this.transientExitCodes.includes(r.exitCode))};
+    // C-IMPL-WIN-1: kimlik dosyası var ama CLI oturum istiyor (süresi dolmuş): beklemeden/yeniden denemeden kesin neden (Founder kendi giriş komutunu yeniden çalıştırır).
+    if (r.exitCode !== 0 && !r.aborted && !r.timedOut && claudeAuthFailure(procLog(r))) return {...base, transient: false, exitCode: r.exitCode, blockReason: "CLAUDE_PROFILE_LOGIN_EXPIRED", log: procLog(r), endedAt: r.endedAt};
     if (r.exitCode !== 0 || r.aborted) return {...base, exitCode: r.exitCode, log: procLog(r), endedAt: r.endedAt};
     const subject = `uasco run ${spec.runId} cycle ${spec.cycle}: ${spec.title.replace(/[\r\n]+/g, " ").slice(0, 120)}`;
     const c = commitBuilderOutput(workspace, {envPolicyFile: this.envPolicyFile, startSha, gitDigestBefore: before, message: `${subject}\n\nMission: ${spec.missionId}\nCommitted by the UASCO engine on behalf of ${this.identity} (edit-only builder).`});
@@ -274,14 +276,11 @@ export class LocalClaudeExecutors {
     return {...safeChildEnv(path.join(this.repoRoot, "config", "environment-policy.json"), {provider: "ANTHROPIC", allowPaidApi: automation.allowPaidApi === true}), UASCO_CONTROL_ROOT: this.controlRoot};
   }
   // Reviewer için claude-builder-broker.mjs ile aynı provenance kuralları: PASS + launcher sha256 eşleşmesi zorunlu.
+  // //TR: C-IMPL-WIN-1: kural claudeLauncherCheck'te tek yerde; hata iletisi makine-okunur koddur (PROVIDER_PROVENANCE_NOT_READY | CLAUDE_PACKAGE_PROVENANCE_REQUIRED | CLAUDE_CLI_NOT_FOUND | CLAUDE_LAUNCHER_PROVENANCE_CHANGED).
   private verifiedLauncher(): string {
-    const prov = readJson(path.join(this.controlRoot, ".ai", "runtime", "PROVIDER_PROVENANCE.json"));
-    if (prov.final !== "PASS") throw new Error("PROVIDER_PROVENANCE_NOT_READY");
-    const level = prov.claude?.provenanceLevel;
-    if (level !== "FULL_PACKAGE" && level !== "STANDALONE_LAUNCHER") throw new Error("CLAUDE_PACKAGE_PROVENANCE_REQUIRED");
-    const sha = crypto.createHash("sha256").update(fs.readFileSync(prov.claude.resolvedPath)).digest("hex");
-    if (!prov.claude.launcherSha256 || sha !== prov.claude.launcherSha256) throw new Error("CLAUDE_LAUNCHER_PROVENANCE_CHANGED");
-    return prov.claude.resolvedPath as string;
+    const c = claudeLauncherCheck(this.controlRoot);
+    if (!c.ok) throw new Error(c.code);
+    return c.resolvedPath;
   }
   pair(): ExecutorPair {
     const self = this;
@@ -293,6 +292,9 @@ export class LocalClaudeExecutors {
         (_workspace, spec) => {
           const prof = claudeProfileForRun(self.controlRoot, "implementer", self.opts.profile);
           if (!prof.ok) return {refuse: prof.reason};
+          // C-IMPL-WIN-1: CLI/başlatıcı kanıtı yoksa broker HİÇ başlatılmaz (asılı kalma/genel hata yok): kesin neden BLOCKED olarak run'a yazılır.
+          const lc = claudeLauncherCheck(self.controlRoot);
+          if (!lc.ok) return {refuse: lc.code};
           syncBrokerControlConfig(self.repoRoot, self.controlRoot);
           return {argv: [path.join(self.repoRoot, "scripts", "claude-builder-broker.mjs")], nodeScript: true, env: withClaudeProfileEnv(self.env(), prof.dir), input: implementPrompt(spec)};
         }),
@@ -302,7 +304,7 @@ export class LocalClaudeExecutors {
           let launcher: string;
           const at = new Date().toISOString();
           try { launcher = self.verifiedLauncher(); } catch (e) {
-            return {verdict: "BLOCKED", findings: [], valid: false, exitCode: null, log: `PROVENANCE_REFUSED: ${(e as Error).message}\n`, argv: ["claude"], startedAt: at, endedAt: new Date().toISOString(), timedOut: false, aborted: false, transient: false};
+            return {verdict: "BLOCKED", findings: [], valid: false, invalidReason: (e as Error).message.slice(0, 200), exitCode: null, log: `PROVENANCE_REFUSED: ${(e as Error).message}\n`, argv: ["claude"], startedAt: at, endedAt: new Date().toISOString(), timedOut: false, aborted: false, transient: false};
           }
           const argv = reviewerArgv(launcher);
           // SBX-8: ayrı, salt-okunur reviewer profili; oturum açılmamışsa review geçersizdir (asla CLEAN değil), kişisel profile geri düşülmez.
@@ -312,6 +314,9 @@ export class LocalClaudeExecutors {
           const before = reviewWorkspaceSnapshot(cleanClone, envPolicyFile);
           const po: ProcOptions = {cwd: cleanClone, env: withClaudeProfileEnv(self.env(), prof.dir), timeoutMs: ctx.timeoutMs, input: reviewPrompt(spec, diff), shouldAbort: ctx.shouldAbort};
           const r = toReview(await (self.opts.runReviewer ?? runProcess)(argv, po));
+          // C-IMPL-WIN-1: oturum süresi dolmuş (kimlik dosyası var ama CLI giriş istiyor): genel REVIEW_FAILED değil, kesin neden.
+          // //TR: yalnız BAŞARISIZ çıkışta (uygulayıcıyla aynı kural): çıkış 0 iken güvenilmeyen çıktıdan (alıntı/prompt injection) "oturum doldu" sonucu çıkarılmaz; ve süresi dolmuş oturum yeniden DENENMEZ (çıkış 75 geçici sayılsa bile).
+          if (!r.valid && !r.aborted && !r.timedOut && r.exitCode !== 0 && claudeAuthFailure(r.log)) { r.invalidReason = "CLAUDE_PROFILE_LOGIN_EXPIRED"; r.transient = false; }
           // Review sonrası çalışma alanı bayt düzeyinde aynı olmalı; değilse review GEÇERSİZ (verdict ne olursa olsun CLEAN sayılmaz).
           const changed = reviewWorkspaceChange(before, reviewWorkspaceSnapshot(cleanClone, envPolicyFile));
           if (changed) return {...r, verdict: "BLOCKED", findings: [], valid: false, invalidReason: changed, transient: false, log: `${r.log}REVIEW_INVALID: ${changed}\n`};

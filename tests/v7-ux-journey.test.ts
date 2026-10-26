@@ -1177,6 +1177,22 @@ describe("LANE-A A-FLOW-5 analysis step — view (Journey)", () => {
     b.forms.selection.missionId = "msn_" + "ee".repeat(12);
     fire(byId(r2, "analysis-open-plan")!, "click"); expect(b.forms.selection.missionId).toBe(MSN); expect(b.nav).toEqual(["work"]);
   });
+  it("the shared production lock (409 PREDEV_PRODUCE_IN_PROGRESS / PREDEV_PRODUCE_BUSY) is its own state with its own text, not the generic idempotency conflict; nothing is claimed as produced", async () => {
+    const c = await load("analysis-core.js");
+    const R = (error: string) => c.classifyAnalysisStep({status: 409, body: {error}});
+    expect(R("PREDEV_PRODUCE_IN_PROGRESS")).toEqual({kind: "BUSY", scope: "SAME"}); expect(R("PREDEV_PRODUCE_BUSY")).toEqual({kind: "BUSY", scope: "OTHER"});
+    expect(c.classifyAnalysisStep({status: 500, body: {error: "PREDEV_PRODUCE_BUSY"}}).kind).toBe("FAILED"); expect(c.classifyAnalysisStep({status: 409, body: {error: "SOMETHING_ELSE"}}).kind).toBe("FAILED"); // only the two codes, only on 409
+    expect(c.classifyAnalysisStep({status: 200, body: {error: "PREDEV_PRODUCE_BUSY"}}).kind).toBe("INVALID");
+    expect(c.analysisStatusKey({kind: "BUSY", scope: "SAME"}, {}, "step")).toEqual({ok: false, key: "analysis.busy.SAME", vars: {}}); expect(c.analysisStatusKey({kind: "BUSY", scope: "OTHER"}, {}, "step")).toEqual({ok: false, key: "analysis.busy.OTHER", vars: {}});
+    const E = (await load("locales", "en.js")).default as Record<string, string>, T = (await load("locales", "tr.js")).default as Record<string, string>;
+    for (const k of ["analysis.busy.SAME", "analysis.busy.OTHER"]) { expect(E[k], k).toMatch(/already being produced/); expect(T[k], k).toBeTruthy(); expect(T[k]).not.toBe(E[k]); expect(E[k]).not.toMatch(/idempotency/i); }
+    for (const [error, text] of [["PREDEV_PRODUCE_IN_PROGRESS", "for this mission"], ["PREDEV_PRODUCE_BUSY", "for another mission"]]) {
+      const b = await open({status: 409, body: {error}});
+      const after = await press(b, "analysis-step-submit");
+      expect(stOf(after).textContent).toContain(text); expect(stOf(after).textContent).not.toMatch(/Conflict|idempotency/i); expect(stOf(after).dataset.result).toBe("error");
+      expect(byData(block(after), "analysisStatus", "NONE")).toBeDefined(); expect(allData(after, "analysisBlocker").length).toBe(0); expect(byId(after, "analysis-plan-submit")).toBeUndefined();
+    }
+  });
   it("a plan larger than the display caps says how much is not shown (criteria and requirements), in en and tr; nothing is silently cut", async () => {
     const crit = Array.from({length: 250}, (_, i) => `criterion ${i}`), reqs = Array.from({length: 205}, (_, i) => ({id: `FR-${i}`, statement: "s", acceptanceCriteria: i === 0 ? crit : []}));
     const big = {index: 0, workPackageId: "WP1", estimate: "S", satisfies: [], requirements: reqs};
@@ -1223,7 +1239,7 @@ describe("LANE-A A-FLOW-5 analysis step — view (Journey)", () => {
   it("is present in English and Turkish with the same keys; no analysis text is a raw key", async () => {
     const en = await load("locales", "en.js"), tr = await load("locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
     const keys = Object.keys(E).filter(k => k.startsWith("analysis."));
-    expect(keys.length).toBe(48);
+    expect(keys.length).toBe(50);
     for (const h of ["CLAUDE_CLI_NOT_FOUND", "CLAUDE_CLI_SHIM_UNSUPPORTED", "PROVIDER_PROVENANCE_NOT_READY", "CLAUDE_PACKAGE_PROVENANCE_REQUIRED", "CLAUDE_LAUNCHER_PROVENANCE_CHANGED", "CLAUDE_PROFILE_LOGIN_REQUIRED", "CLAUDE_PROFILE_LOGIN_EXPIRED", "CLAUDE_PROFILE_REFUSED", "PROVENANCE_MISSING"]) expect(E[`analysis.blocker.${h}`], h).toBeTruthy();
     for (const k of keys) { expect(T[k], k).toBeTruthy(); expect(E[k], k).not.toBe(k); }
     const b = await open({status: 200, body: {status: "COMPLETE", approved: KINDS}}); const r = await press(b, "analysis-step-submit");
