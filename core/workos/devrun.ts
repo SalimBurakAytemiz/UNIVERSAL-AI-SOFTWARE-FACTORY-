@@ -683,9 +683,9 @@ export class DevRunManager {
     for (const id of ids) {
       const st = this.readState(id);
       // C-5: önceki kapatma temiz bitmediyse (STOP_INCOMPLETE + scratch) sahip canlı değilse Linux tarafı yeniden denenir.
-      if (st && !ACTIVE.has(st.status) && st.stopIncomplete && st.sandboxScratch && !this.active.has(id) && st.ownerHost === os.hostname() && !(await this.ownerLive(st))) {
+      if (st && !ACTIVE.has(st.status) && st.sandboxScratch && st.instanceId !== this.instanceId && !this.active.has(id) && st.ownerHost === os.hostname() && !(await this.ownerLive(st))) {
         const td = await this.recoverScratch(st);
-        if (!td.code) { try { this.writeState({...st, stopIncomplete: undefined, sandboxScratch: null, reason: "STOP_INCOMPLETE_RESOLVED"}, true); } catch { /* durum yazılamadı */ } }
+        if (!td.code) { try { this.writeState({...st, stopIncomplete: undefined, sandboxScratch: null, reason: st.stopIncomplete ? "STOP_INCOMPLETE_RESOLVED" : st.reason}, true); } catch { /* durum yazılamadı */ } }
         continue;
       }
       if (!st || !ACTIVE.has(st.status) || st.instanceId === this.instanceId || this.active.has(id)) continue;

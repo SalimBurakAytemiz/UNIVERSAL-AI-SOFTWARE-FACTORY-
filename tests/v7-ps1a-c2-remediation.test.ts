@@ -523,6 +523,20 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
     } finally { await m.close().catch(() => undefined); }
   }, 60_000);
 
+  it("L4: recover() also closes the Linux side of a TERMINAL record that still carries a sandboxScratch (no stopIncomplete flag, e.g. a crash or a stop that raced spawnAsync) and clears it only on a clean teardown", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+    let code: string | null = "PROCESS_SURVIVED"; const torn: string[] = [];
+    const provider = hostSpawn({async teardownScratch(sc: string) { torn.push(sc); return code; }});
+    const f = path.join(dataDir, "projects", p.projectId, "devrun", "state.json"); fs.mkdirSync(path.dirname(f), {recursive: true});
+    const m0 = manager(dataDir, new ExecutionGate(provider));
+    const rec = {...(m0 as any).blank(p), status: "STOPPED", reason: "STOP_REQUESTED", instanceId: "dev_dead", ownerPid: 2 ** 22 - 3, sandboxScratch: "/tmp/uasco-sbx-Tt0001", endedAt: new Date().toISOString()};
+    fs.writeFileSync(f, JSON.stringify(rec));
+    const m = manager(dataDir, new ExecutionGate(provider));
+    await m.recover(); expect(torn).toEqual(["/tmp/uasco-sbx-Tt0001"]); expect(JSON.parse(fs.readFileSync(f, "utf8")).sandboxScratch, "kept while the teardown is incomplete").toBe("/tmp/uasco-sbx-Tt0001");
+    code = null; await m.recover(); expect(torn).toHaveLength(2); const after = JSON.parse(fs.readFileSync(f, "utf8")); expect(after.sandboxScratch).toBeNull(); expect(after.reason).toBe("STOP_REQUESTED");
+    await m.recover(); expect(torn).toHaveLength(2);
+  }, 30_000);
+
   it("D2: a refusal on top of an incomplete teardown keeps stopIncomplete + sandboxScratch (the next start retries the teardown or is refused 409); a post-spawn bridge failure with an incomplete teardown surfaces DEVRUN_STOP_INCOMPLETE", async () => {
     const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
     let code: string | null = "PROCESS_SURVIVED"; const {provider, st, release} = heldSpawnAsync({honourAbort: true, teardownCode: () => code}); release();
