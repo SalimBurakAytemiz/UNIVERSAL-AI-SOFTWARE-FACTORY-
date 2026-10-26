@@ -393,13 +393,13 @@ export class MissionRunner {
     if (o && o.leaseId === leaseId && o.childPgid !== null) this.writeOwner(run.runId, {...o, childPgid: null, childStart: null});
   }
   // Çocuk bitince grup kaydı temizlenir; adapter fırlatsa bile.
-  // //TR: #224 tur 3 (SWEEP-3): lider çıktığında grupta canlı üye kaldıysa (aynı grupta kalan arka plan torunu) kayıt silinmeden ÖNCE öldürülür; implementer'dan sonra ayrıca lease işaretiyle taranır (sweepOwnWriters) ama REVIEWER ve git çocuklarının sonrasında tarama yoktur. Yalnız Linux ve yalnız KANITLI üyelere: hepsi kayıtlı liderden sonra başlamış ve en az biri bu lease'in işaretini taşımalı (leaderlessGroupProof); aksi halde dokunulmaz (pgid yeniden kullanılmış olabilir). Diğer POSIX'te /proc yok: bilinen kalıntı.
+  // //TR: #224 tur 3 (SWEEP-3): lider çıktığında grupta canlı üye kaldıysa (aynı grupta kalan arka plan torunu) kayıt silinmeden ÖNCE öldürülür; implementer'dan sonra ayrıca lease işaretiyle taranır (sweepOwnWriters) ama REVIEWER ve git çocuklarının sonrasında tarama yoktur. Önce ucuz yoklama (grup yoksa /proc taranmaz). Yalnız Linux ve yalnız KANITLI üyelere: hepsi kayıtlı liderden sonra başlamış ve en az biri bu lease'in işaretini taşımalı (leaderlessGroupProof); aksi halde dokunulmaz (pgid yeniden kullanılmış olabilir). Diğer POSIX'te /proc yok: bilinen kalıntı.
   private async withChild<T>(run: WorkRun, leaseId: string, call: (onSpawn: (c: SpawnedChild) => void) => Promise<T>, identify = true, onRecordError?: (e: unknown) => void): Promise<T> {
     let pgid: number | null = null, started: string | null = null;
     try { return await call(c => { try { started = this.recordChild(run, leaseId, c, identify); } catch (e) { onRecordError?.(e); throw e; } pgid = c.pgid ?? c.pid; }); } finally {
       if (pgid !== null) {
         untrackWriterGroup(pgid);
-        if (process.platform === "linux" && started !== null && leaderlessGroupProof(pgid, this.ownerRecord(run, leaseId, {childPgid: pgid, childStart: started})).ok) { try { process.kill(-pgid, "SIGKILL"); } catch { /* grup zaten bitmiş */ } }
+        if (process.platform === "linux" && started !== null && writerState(pgid) === "ALIVE" && leaderlessGroupProof(pgid, this.ownerRecord(run, leaseId, {childPgid: pgid, childStart: started})).ok) { try { process.kill(-pgid, "SIGKILL"); } catch { /* grup zaten bitmiş */ } }
       }
       try { this.clearChild(run, leaseId); } catch { /* sonraki devir kaydı okur */ }
     }

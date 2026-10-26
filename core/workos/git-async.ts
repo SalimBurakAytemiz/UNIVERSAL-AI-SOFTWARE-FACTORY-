@@ -26,8 +26,9 @@ export function runGitAsync(cwd: string, args: string[], env: NodeJS.ProcessEnv,
       // //TR: #224 tur 3 (HB-R3-2): shouldAbort (Global Stop, stop(), kaybedilen lease) yoklanır; true olursa çocuk öldürülür ve `aborted` ile hemen dönülür. Yoksa uzun bir klon stop()'u klon süresi kadar bekletirdi.
       if (o.shouldAbort && child.pid) {
         const shouldAbort = o.shouldAbort;
-        const check = () => { if (!shouldAbort()) return false; kill(); settle({status: null, stdout: "", stderr: "ABORTED", aborted: true}); return true; };
-        if (!check()) { poll = setInterval(check, 100); poll.unref?.(); }
+        // //TR: İlk yoklama da zamanlayıcıdandır (hemen değil): abort baştan açıksa bile her çocuk bir makro-görev sonra bırakılır; aksi halde art arda abort edilen adımlar olay döngüsünü hiç bırakmadan dönerdi.
+        poll = setInterval(() => { if (!shouldAbort()) return; kill(); settle({status: null, stdout: "", stderr: "ABORTED", aborted: true}); }, 100);
+        poll.unref?.();
       }
     } catch (e) { settle({status: null, stdout: "", stderr: (e as Error).message}); }
   });

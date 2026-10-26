@@ -623,12 +623,12 @@
   },
   {
    "id": "A1",
-   "description": "HB-R3-2: the abort signal is not polled after the spawn",
+   "description": "HB-R3-2: the abort signal is never polled after the spawn",
    "file": "core/workos/git-async.ts",
    "testFile": "tests/v7-relfx-c3-remediation.test.ts",
    "filter": "HB-R3-2",
-   "old": "if (!check()) { poll = setInterval(check, 100); poll.unref?.(); }",
-   "new": "check();"
+   "old": "poll = setInterval(() => { if (!shouldAbort()) return; kill(); settle({status: null, stdout: \"\", stderr: \"ABORTED\", aborted: true}); }, 100);\n        poll.unref?.();",
+   "new": ""
   },
   {
    "id": "A2",

@@ -105,6 +105,9 @@ Every blocking finding was reproduced first (the new test failed on the unfixed 
 Residuals after round 3
 - Windows/macOS paths (SWEEP-4/6 wiring, `creationTicks`, the Windows kill) are pure-function tested and reasoned, not run on those platforms; the group-leftover kill (SWEEP-3) and the setsid sweep are Linux-only.
 - The cwd rule still exists at takeover for the unmarked VERIFY test process, now limited to `work/` and the clone directories and to processes without a controlling terminal; a same-user background process (no terminal) whose cwd is inside `work/` is still killed at a takeover.
+- A VERIFY test process that inherits the engine's controlling terminal (an engine started from an interactive shell, test process not in its own session) is skipped by the cwd rule: the terminal skip cannot tell it from the Founder's shell. A service-mode engine has no terminal, so this only affects interactive runs; the lease marker (not the cwd rule) is what finds marked descendants.
+- SWEEP-3 checks the process group of the LAST child recorded in a `withChild` call (for the implementer path that is the last engine-commit git child, whose group is normally empty); leftovers of the implementer itself are removed by the lease-marker sweep that follows it. Linux only.
+- `withChild` now scans `/proc` once per finished child that still has live group members (cheap `kill(-pgid, 0)` first), a few ms on a busy host.
 - SWEEP-5: a transient stop failure at takeover costs one lease TTL (the run waits RECOVERING until its lease expires) per retry.
 - `git` children the runner starts only to READ (`gitOk`, `git`) do not take the abort signal; they are short.
 
