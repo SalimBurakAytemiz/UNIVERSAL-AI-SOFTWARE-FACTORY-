@@ -3184,6 +3184,23 @@ describe("COORD batch 4b wiring through buildServer (behaviour, not source pins)
     } finally { await s.app.close(); }
   });
 
+  it("the analysis audit carries the paid-call summary of THIS request's builder (builderTrace is wired in buildServer): DRAFT_READY records executor, kind, exit code and output hash; a failure after the call records builderRan true", async () => {
+    const {TASKHUB_ARTIFACTS} = await import("../core/workos/predev/fixtures/taskhub/index.js");
+    let made = 0, fail = false;
+    const mk = () => { made++; const n = made; return {lastTrace: null as any, async produce(kind: string) { this.lastTrace = {roleId: "analyst", kind, identity: `claude-cli@wired-${n}`, outputSha256: "a".repeat(64), exitCode: 0, durationMs: 7}; if (fail) throw Object.assign(new Error("WORKOS_DISK_FULL"), {code: "WORKOS_DISK_FULL"}); return JSON.stringify((TASKHUB_ARTIFACTS as any)[kind]); }}; };
+    const s = await mkSrv(mk);
+    try {
+      const mid = await s.intake();
+      const r = await s.call("POST", `/v1/missions/${mid}/analysis/step`); expect(r.statusCode, r.body).toBe(200); expect(r.json().status).toBe("DRAFT_READY");
+      const ok = auditEvents(s.runtime).filter(e => e.event === "WORKOS_ANALYSIS_STEP").map(e => e.details ?? e);
+      expect(ok.at(-1)).toMatchObject({status: "DRAFT_READY", executor: `claude-cli@wired-${made}`, artifactKind: "BusinessAnalysis", roleId: "analyst", exitCode: 0, outputSha256: "a".repeat(64), durationMs: 7});
+      const other = await s.intake(); fail = true;
+      const f = await s.call("POST", `/v1/missions/${other}/analysis/step`); expect(f.statusCode, f.body).not.toBe(200);
+      const failed = auditEvents(s.runtime).filter(e => e.event === "WORKOS_ANALYSIS_STEP").map(e => e.details ?? e).at(-1);
+      expect(failed).toMatchObject({status: "FAILED", builderRan: true, executor: `claude-cli@wired-${made}`});
+    } finally { await s.app.close(); }
+  });
+
   it("a counting pre-dev builder that sees Global Stop activated during produce: the step is 423, the builder ran exactly once, nothing was recorded and no pre-dev sequence was opened", async () => {
     const {TASKHUB_ARTIFACTS} = await import("../core/workos/predev/fixtures/taskhub/index.js");
     let stopFile = "";

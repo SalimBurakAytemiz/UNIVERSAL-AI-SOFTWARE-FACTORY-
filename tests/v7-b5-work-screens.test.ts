@@ -1673,12 +1673,12 @@ describe("COORD first-delivery Desktop allow-list (main.mjs)", () => {
       expect(server.match(new RegExp(`${name}\\(app,`, "g"))?.length, name).toBe(1);
     }
     expect(server.match(/^import \{AnalysisFlow,NO_ANALYSIS_BUILDER,claudeAnalysisReadiness\} from "\.\.\/\.\.\/\.\.\/core\/workos\/crew\/analysis\.js";$/gm)?.length).toBe(1);
-    // The flow is built per request with the route's own Global Stop check (stopped) combined with the server's closing flag, and the existing executor pair's pre-dev builder; the late-declared accessors are read lazily.
+    // The flow is built per request with the route's own Global Stop check (stopped) combined with the server's closing flag, and the existing executor pair's pre-dev builder; the late-declared accessors are read lazily. builderTrace reads that same per-request builder's lastTrace (null without a builder), so the audit's builderRan is evidence-based.
     // The closing flag is declared once, before the lane registrations, and only a preClose hook sets it (app.close stops a running paid analysis call instead of waiting for its timeout).
     expect(server.match(/^let closing=false;app\.addHook\("preClose",async\(\)=>\{closing=true\}\);$/gm)?.length).toBe(1);
     expect(server.match(/\bclosing\s*=(?!=)/g)?.length).toBe(2);
     expect(server.indexOf("let closing=false;")).toBeLessThan(server.indexOf("registerIntakeRoutes(app,laneDeps);"));
-    expect(server).toMatch(/registerPredevDecisionRoutes\(app,laneDeps\);\n\/\/ [^\n]*\nregisterAnalysisRoutes\(app,\{\.\.\.laneDeps,analysisFlow:\(stopped\)=>new AnalysisFlow\(\{store:getStore\(\),scope,builder:getExecutors\(\)\.pair\?\.preDevBuilder\?\.\(\)\?\?NO_ANALYSIS_BUILDER,readiness:\(\)=>claudeAnalysisReadiness\(\{controlRoot,profile:\{forbiddenRoots:\[getStore\(\)\.dataDir\]\},cli:getExecSetup\(\)\.cliStatus\(\)\}\),stopped:\(\)=>closing\|\|stopped\(\)\}\)\}\);\n\/\/ [^\n]*\nregisterProductRunRoutes\(app,\{\.\.\.laneDeps,devruns:\(\)=>getDevRuns\(\)\}\);\nregisterRoleStatusRoutes\(app,/);
+    expect(server).toMatch(/registerPredevDecisionRoutes\(app,laneDeps\);\n\/\/ [^\n]*\nregisterAnalysisRoutes\(app,\{\.\.\.laneDeps,analysisFlow:\(stopped\)=>\{const c=getExecutors\(\)\.pair\?\.preDevBuilder\?\.\(\)\?\?null;return Object\.assign\(new AnalysisFlow\(\{store:getStore\(\),scope,builder:c\?\?NO_ANALYSIS_BUILDER,readiness:\(\)=>claudeAnalysisReadiness\(\{controlRoot,profile:\{forbiddenRoots:\[getStore\(\)\.dataDir\]\},cli:getExecSetup\(\)\.cliStatus\(\)\}\),stopped:\(\)=>closing\|\|stopped\(\)\}\),\{builderTrace:\(\)=>c\?\.lastTrace\?\?null\}\);\}\}\);\n\/\/ [^\n]*\nregisterProductRunRoutes\(app,\{\.\.\.laneDeps,devruns:\(\)=>getDevRuns\(\)\}\);\nregisterRoleStatusRoutes\(app,/);
   });
   it("server.ts registers the task-run link routes once, right after the task routes", () => {
     const server = fs.readFileSync(path.join(root, "apps", "control-api", "src", "server.ts"), "utf8");
