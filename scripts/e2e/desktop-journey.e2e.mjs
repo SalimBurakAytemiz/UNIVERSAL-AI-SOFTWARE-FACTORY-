@@ -414,7 +414,7 @@ async function runSteps() {
     must(await statusOf() === "IN_PROGRESS", `the server's task status is ${await statusOf()} after a refused confirmation`);
     // Done, confirmed
     await win.click("#taskst-DONE"); await confirmDialog("mark task done");
-    await waitFn(() => !document.querySelector("#taskst-DONE") && !!document.querySelector("#task-status [data-taskst-note='terminal']"), null, 20000, "the Done task shows the terminal note and no more status buttons");
+    await waitFn(() => !document.querySelector("#task-status [data-task-to]") && !!document.querySelector("#task-status [data-taskst-note='terminal']"), null, 20000, "the Done task shows the terminal note and no status button at all (a done task is not reopened)");
     must(await statusOf() === "DONE", `the server's task status is ${await statusOf()}, not DONE`);
     expectCount("transition requests after Done (start + done)", await requestCount("POST", transitionRe), before + 2);
     const posted = ((await serverGet("/__e2e/requests"))?.requests ?? []).filter(r => r.method === "POST" && transitionRe.test(r.url));
