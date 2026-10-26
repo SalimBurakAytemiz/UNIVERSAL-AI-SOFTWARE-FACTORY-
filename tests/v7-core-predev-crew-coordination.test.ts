@@ -1182,14 +1182,17 @@ process.exit(s.exit ?? 0);
   });
 
   // //TR: #237 inceleme (MEDIUM + LOW): koruma validateArtifactContent'in İÇİNDEDİR (apply.ts yazma kapısı, CrewCoordinator.reproduceSuperseding ve yetkinlik değerlendirmesi de alır); büyük/küçük harf, boşluk, Unicode varyantlarına karşı normalize eder (NFKC + biçim karakterlerini at) ve çok derin yanıt RangeError değil tipli bir ret olur.
-  it("the placeholder guard is part of validateArtifactContent (every caller gets it) and is not bypassed by case, spacing or Unicode variants; honest look-alikes pass; a deeply nested reply is a typed rejection, never a RangeError", T, async () => {
+  it("the placeholder guard is part of validateArtifactContent (every caller gets it) and is not bypassed by case, spacing, Unicode format characters, combining marks or decomposed letters; honest look-alikes pass (cross-script confusables are a documented limit); a deeply nested reply is a typed rejection, never a RangeError", T, async () => {
     const ba = () => JSON.parse(JSON.stringify(TASKHUB_ARTIFACTS.BusinessAnalysis));
     const variants: Array<[string, string]> = [
       ["marker", `${PLACEHOLDER_MARKER}: x>>`], ["lower case", "<<fill: x>>"], ["mixed case", "<<FiLl: x>>"], ["bare", "<<FILL>>"], ["bare lower case", "<<fill>>"],
       ["space after the chevrons", "<< FILL: x>>"], ["newline after the chevrons", "<<\nFILL: x>>"], ["tab", "<<\tfill>>"], ["space between the chevrons", "< < FILL: x>>"],
       ["full-width characters", "＜＜ＦＩＬＬ: x>>"], ["zero-width space inside", "<<F\u200BILL: x>>"], ["zero-width joiner between the chevrons", "<\u200D<FILL: x>>"],
       ["soft hyphen inside", "<<FI\u00ADLL: x>>"], ["right-to-left override before FILL", "<<\u202EFILL: x>>"], ["byte order mark", "<<\uFEFFFILL>>"],
-      ["inside a longer text", "see the template <<FILL: x>> for details"]
+      ["inside a longer text", "see the template <<FILL: x>> for details"],
+      // //TR: #237 LOW takibi: birleştirici işaretler (\p{M}) ve ayrışık harfler de normalleştirmede atılır
+      ["combining acute on the F", "<<F\u0301ILL: x>>"], ["precomposed dotted capital I", "<<F\u0130LL: x>>"], ["precomposed accented I", "<<F\u00CCLL>>"],
+      ["variation selector after the last L", "<<FILL\uFE0F: x>>"], ["combining long solidus overlay", "<<F\u0338ILL>>"], ["several marks stacked", "<<F\u0301\u0323ILL: x>>"]
     ];
     for (const [name, text] of variants) {
       const asValue = ba(); asValue.goals[0].statement = text;
@@ -1199,9 +1202,14 @@ process.exit(s.exit ?? 0);
       const ux = JSON.parse(JSON.stringify(TASKHUB_ARTIFACTS.UxSpec)); ux[Object.keys(ux)[0]!] = [text];
       expect([`${name} in a UxSpec`, validateArtifactContent("UxSpec", ux)]).toEqual([`${name} in a UxSpec`, {ok: false, errors: "PLACEHOLDER_VALUE"}]);
     }
-    for (const text of ["Users fill in <<name>> fields", "the FILL level", "<<fillable>> template", "<<filling>>", "fill << then", "a << b and fill", "<fill>", "<<", "FILL>>", "Pad ids with std::cout << fill('0')", "<<Fill-in form>>", "a < b << fill", "<<FILL-IN>> button", "<<fill in the blanks"]) {
+    for (const text of ["Users fill in <<name>> fields", "the FILL level", "<<fillable>> template", "<<filling>>", "fill << then", "a << b and fill", "<fill>", "<<", "FILL>>", "Pad ids with std::cout << fill('0')", "<<Fill-in form>>", "a < b << fill", "<<FILL-IN>> button", "<<fill in the blanks", "Café déjà vu <<naïve>> façade"]) {
       const c = ba(); c.goals[0].statement = text;
       expect([text, validateArtifactContent("BusinessAnalysis", c)]).toEqual([text, {ok: true}]);
+    }
+    // //TR: BELGELENMİŞ SINIR (not ve davranış ayrışmasın diye sabitlenir): betikler arası benzer görünen harfler (Kiril І, Yunan Ι) TANINMAZ; koruma tembel bir iskelet yankısına karşıdır, kasıtlı gizlemeye karşı değildir.
+    for (const text of ["<<F\u0406LL: x>>", "<<F\u0399LL>>"]) {
+      const c = ba(); c.goals[0].statement = text;
+      expect([`documented limit: ${text}`, validateArtifactContent("BusinessAnalysis", c)]).toEqual([`documented limit: ${text}`, {ok: true}]);
     }
     // the skeletons themselves can never pass any kind (including the two whose shape is valid verbatim)
     for (const kind of ["BusinessAnalysis", "UxSpec"] as const) expect(validateArtifactContent(kind, OUTPUT_SKELETONS[kind])).toEqual({ok: false, errors: "PLACEHOLDER_VALUE"});
