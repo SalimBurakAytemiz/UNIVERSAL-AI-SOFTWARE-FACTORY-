@@ -2751,9 +2751,9 @@ describe("LANE-A A-FLOW-GAP-2: the Journey end to end (stateful fake server, rea
     expect(srv.S.run?.runId).toBe(IRUN);
     root = await view("views", "work.js");
     expect(byId(root, "run-link")).not.toBeNull();
-    const cb = byData(root, "runlinkTask", ITSK(0))[0]; cb.checked = true; cb.fire("change");
+    const cb: any = byData(root, "runlinkTask", ITSK(0))[0]; cb.checked = true; cb.fire("change");
     byId(root, "runlink-submit")!.fire("click"); await sleep(); await sleep();
-    expect(srv.S.posts.filter(p => p.path === `/v1/tasks/${ITSK(0)}/runs`)).toEqual([{path: `/v1/tasks/${ITSK(0)}/runs`, body: {runId: IRUN}}]);
+    expect(srv.S.posts.filter((p: {path: string}) => p.path === `/v1/tasks/${ITSK(0)}/runs`)).toEqual([{path: `/v1/tasks/${ITSK(0)}/runs`, body: {runId: IRUN}}]);
     expect(srv.S.links.map((l: any) => l.taskId)).toEqual([ITSK(0)]); // only the ticked task was linked
     root = await view("views", "work.js");
     expect(byData(root, "runLinkedFor", IRUN)[0].textContent).toContain("Giriş ekranı"); // the run card now lists the linked task
@@ -2777,7 +2777,7 @@ describe("LANE-A A-FLOW-GAP-2: the Journey end to end (stateful fake server, rea
     const prep = byId(root, `dl-prep-${IRUN}`);
     expect(prep).not.toBeNull();
     prep!.fire("click"); await sleep();
-    expect(srv.S.posts.map(p => p.path)).toContain(`/v1/work-runs/${IRUN}/delivery/prepare`);
+    expect(srv.S.posts.map((p: {path: string}) => p.path)).toContain(`/v1/work-runs/${IRUN}/delivery/prepare`);
     expect(byId(mount(c.doc, await ws.render(ctx)), `dl-open-${IRUN}`)).not.toBeNull(); // the acceptance dialog can be opened
     table.DELIVERY = "COMPLETE_IN_UI";
     expect(table).toEqual({INTAKE: "COMPLETE_IN_UI", ANALYSIS_DRAFTS: "GATED_4B", PLAN_FROM_ANALYSIS: "GATED_4B", PLAN_MANUAL: "COMPLETE_IN_UI", MISSION_TASKS: "COMPLETE_IN_UI", TASK_RUN: "COMPLETE_IN_UI", TEST_RESULT: "COMPLETE_IN_UI", RUNNING_PRODUCT: "GATED_4B", DELIVERY: "COMPLETE_IN_UI"});
