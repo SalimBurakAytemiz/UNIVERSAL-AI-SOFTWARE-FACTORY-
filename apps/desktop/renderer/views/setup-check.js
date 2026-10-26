@@ -13,13 +13,15 @@ export function reasonText(ctx,code){
 }
 const fixKey=r=>{
   if(r.state==="PASS")return null;
-  if(r.id==="CLI")return r.state==="UNKNOWN"?"setup.fix.UNKNOWN":r.reasons.some(c=>LAUNCHER.includes(c))?"setup.fix.CLI.launcher":"setup.fix.CLI.install";
+  if(r.id==="CLI")return r.state==="UNKNOWN"?"setup.fix.UNKNOWN":r.reasons.some(c=>INSTALL.includes(c))?"setup.fix.CLI.install":r.reasons.some(c=>LAUNCHER.includes(c))?"setup.fix.CLI.launcher":"setup.fix.CLI.unknownCode";
   if(r.id==="IMPLEMENTER"||r.id==="REVIEWER")return r.state==="UNKNOWN"?"setup.fix.UNKNOWN":r.reasons.some(c=>c.startsWith("CLAUDE_PROFILE_REFUSED"))?"setup.fix.profile.refused":"setup.fix.profile.login";
   if(r.id==="EXECUTOR")return r.state==="UNKNOWN"?"setup.fix.UNKNOWN":"setup.fix.EXECUTOR";
   if(r.id==="SANDBOX")return r.state==="UNKNOWN"?"setup.fix.UNKNOWN":"setup.fix.SANDBOX";
   return r.state==="BLOCKED"?"setup.fix.PRODUCT.blocked":"setup.fix.PRODUCT.untested";
 };
-const LAUNCHER=["PROVIDER_PROVENANCE_NOT_READY","CLAUDE_PACKAGE_PROVENANCE_REQUIRED","CLAUDE_LAUNCHER_PROVENANCE_CHANGED"];
+const LAUNCHER=["PROVIDER_PROVENANCE_NOT_READY","CLAUDE_PACKAGE_PROVENANCE_REQUIRED","CLAUDE_LAUNCHER_PROVENANCE_CHANGED","CLAUDE_PACKAGE_PROVENANCE_CHANGED"];
+// //TR: "CLI'yi kur" düzeltmesi yalnız CLI'nin gerçekten bulunamadığı/kısayol olduğu kodlara verilir ve başlatıcı düzeltmesinden ÖNCE bakılır (CLI yokken "yeniden etkinleştir" başarılamaz); bilinmeyen kod kurulum metni almaz.
+const INSTALL=["CLAUDE_CLI_NOT_FOUND","CLAUDE_CLI_SHIM_UNSUPPORTED"];
 export function setupCheckPanel(ctx,exec){
   const doc=ctx.doc,c=buildSetupChecks(exec),id="settings-setup";
   const head=h(doc,"p",{class:"note",role:"status",dataset:{setupKind:c.kind,setupPass:String(c.pass),setupBlocked:String(c.blocked),setupUnknown:String(c.unknown)},text:ctx.t(`setup.head.${c.kind}`,{pass:String(c.pass),total:String(c.rows.length),blocked:String(c.blocked),unknown:String(c.unknown)})});

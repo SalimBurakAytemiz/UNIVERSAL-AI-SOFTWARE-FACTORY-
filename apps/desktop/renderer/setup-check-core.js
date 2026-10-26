@@ -9,7 +9,8 @@ const row=(id,state,reasons=[],extra={})=>({id,state,reasons,login:null,provider
 function cliRow(exec){
   const lc=local(exec),cli=lc?lc.cli:null,rd=exec.readiness;
   const roles=rd?[rd.implementer,rd.reviewer].filter(Boolean):[];
-  const blockers=[...new Set(roles.flatMap(r=>r.blockers.filter(b=>!b.startsWith("CLAUDE_PROFILE_"))))];
+  // //TR: Rol engelleyicilerinden yalnız CLI/başlatıcıya ait olanlar CLI satırına girer: oturum kodları (CLAUDE_PROFILE_*) oturum satırlarına, EXECUTOR_NOT_ENABLED (sunucu bunu her rolün sonuna ekler) YÜRÜTÜCÜ satırına aittir.
+  const blockers=[...new Set(roles.flatMap(r=>r.blockers.filter(b=>!b.startsWith("CLAUDE_PROFILE_")&&b!=="EXECUTOR_NOT_ENABLED")))];
   if(blockers.length)return row("CLI","BLOCKED",blockers);
   if(roles.length===2)return row("CLI","PASS",[],{note:cli&&(cli.state==="NOT_FOUND"||cli.state==="SHIM_UNSUPPORTED")?cli.state:null});
   if(cli&&cli.state==="NOT_FOUND")return row("CLI","BLOCKED",["CLAUDE_CLI_NOT_FOUND"]);
@@ -20,7 +21,8 @@ function cliRow(exec){
 // //TR: Yürütücü satırı: sunucunun KULLANDIĞI yürütücü (active.reason) ya da LOCAL_CLAUDE.state; Local Claude etkin değilse (EXECUTOR_NOT_CONFIGURED / NOT_CONFIGURED) motor çalışmaz: BLOCKED EXECUTOR_NOT_ENABLED.
 function executorRow(exec){
   const lc=local(exec),active=typeof exec.active==="string"?exec.active:null,st=lc?lc.state:null;
-  if(active==="LOCAL_CLAUDE")return row("EXECUTOR","PASS");
+  // //TR: Bayat önbellekte active LOCAL_CLAUDE görünse bile bir rolün hazırlığı hâlâ EXECUTOR_NOT_ENABLED diyorsa PASS verilmez.
+  if(active==="LOCAL_CLAUDE"){const rd=exec.readiness;return rd&&[rd.implementer,rd.reviewer].some(r=>r&&r.blockers.includes("EXECUTOR_NOT_ENABLED"))?row("EXECUTOR","BLOCKED",["EXECUTOR_NOT_ENABLED"]):row("EXECUTOR","PASS")}
   if(active!==null)return row("EXECUTOR","BLOCKED",[active==="EXECUTOR_NOT_CONFIGURED"?"EXECUTOR_NOT_ENABLED":active]);
   if(st===null)return row("EXECUTOR","UNKNOWN",["EXECUTOR_STATUS_NOT_REPORTED"]);
   if(st==="READY")return row("EXECUTOR","UNKNOWN",["ACTIVE_EXECUTOR_NOT_REPORTED"]);

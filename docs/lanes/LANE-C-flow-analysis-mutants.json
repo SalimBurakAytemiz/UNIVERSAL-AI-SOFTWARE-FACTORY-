@@ -1,5 +1,5 @@
 {
- "//TR": "C-FLOW-ANALYSIS-1 mutasyon listesi: her mutant tam metin değişikliğidir (dosyada tam 1 kez bulunmalı); docs/lanes/LANE-C-flow-analysis-mutants.mjs her birini uygular ve tests/v7-lane-c-flow-analysis.test.ts dosyasının BAŞARISIZ olmasını bekler. Yeniden-doğrulama (F1-F3) için NA1-NA4, MA, X1-X4, X9, O2c, O3c eklendi (toplam 44).",
+ "//TR": "C-FLOW-ANALYSIS-1 mutasyon listesi: her mutant tam metin değişikliğidir (dosyada tam 1 kez bulunmalı); docs/lanes/LANE-C-flow-analysis-mutants.mjs her birini uygular ve tests/v7-lane-c-flow-analysis.test.ts dosyasının BAŞARISIZ olmasını bekler. Yeniden-doğrulama (F1-F3) için NA1-NA4, MA, X1-X4, X9, O2c, O3c eklendi (toplam 44). Delta kontrolü (L1-L3): NA5-NA7, X3b-X3d eklendi (toplam 50).",
  "mutants": [
   {
    "id": "F1",
@@ -308,6 +308,56 @@
    "file": "core/workos/crew/analysis.ts",
    "old": "const key = `${this.d.store.dataDir}|${scope.tenantId}|${missionId}`;",
    "new": "const key = `${this.d.store.dataDir}|${scope.tenantId}`;"
+  },
+  {
+   "id": "NA5",
+   "description": "L1: the phase check runs AFTER the readiness question",
+   "file": "core/workos/crew/analysis.ts",
+   "edits": [
+    {
+     "old": "    const stuck = this.phaseNotAdvanced(rm);\n    if (stuck) return stuck;\n",
+     "new": ""
+    },
+    {
+     "old": "    if (this.d.stopped?.()) throw new AnalysisStoppedError();\n    const phaseKind =",
+     "new": "    const stuck = this.phaseNotAdvanced(rm);\n    if (stuck) return stuck;\n    if (this.d.stopped?.()) throw new AnalysisStoppedError();\n    const phaseKind ="
+    }
+   ]
+  },
+  {
+   "id": "X3b",
+   "description": "L2: a PreDevDriverError from the builder names the first kind",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "if (e instanceof PreDevDriverError) return {status: \"BUILDER_FAILED\", kind: phaseKind,",
+   "new": "if (e instanceof PreDevDriverError) return {status: \"BUILDER_FAILED\", kind: ANALYSIS_KINDS[0]!,"
+  },
+  {
+   "id": "X3c",
+   "description": "L2: the lost-race fallback names the first kind",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "kind: ANALYSIS_KINDS.find(k => fresh.artifacts[k].state !== \"APPROVED\") ?? phaseKind, code:",
+   "new": "kind: ANALYSIS_KINDS[0]!, code:"
+  },
+  {
+   "id": "X3d",
+   "description": "L2: the lost-race fallback names the stale phase kind",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "kind: ANALYSIS_KINDS.find(k => fresh.artifacts[k].state !== \"APPROVED\") ?? phaseKind, code:",
+   "new": "kind: phaseKind, code:"
+  },
+  {
+   "id": "NA6",
+   "description": "L3: the stuck answer carries no structured kind",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "{kind: current, artifactId: rm.artifacts[current].artifactId!}",
+   "new": "{artifactId: rm.artifacts[current].artifactId!}"
+  },
+  {
+   "id": "NA7",
+   "description": "L3: the stuck answer carries no structured artifactId",
+   "file": "core/workos/crew/analysis.ts",
+   "old": "{kind: current, artifactId: rm.artifacts[current].artifactId!}",
+   "new": "{kind: current}"
   }
  ]
 }
