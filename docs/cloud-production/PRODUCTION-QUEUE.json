@@ -1791,55 +1791,69 @@
   },
   "integrationBoard": {
     "//TR": "Koordinatör entegrasyon panosu: her açık PR için gerçek engel ve bekleyen sorumlu. Ortak kök neden (base dependency gate) PR'a özgü hatalardan ayrı tutulur; #221/#225 birleşmeden tekrar CI tetiklenmez.",
-    "at": "2026-10-26T05:50:00Z",
-    "base": "b77abe1 (v7/integration)",
+    "at": "2026-10-26T07:42:00Z",
+    "base": "fa8704c (v7/integration, after #230)",
     "sharedRootCause": {
       "id": "NONE_ACTIVE",
       "previous": "BASE_DEPENDENCY_GATE resolved by #225 (e2323d9)",
-      "watch": "Windows shard failures on e2323d9 push and #223 under diagnosis"
+      "watch": "none: badb009 push CI success (run 40279405426); fa8704c push CI running"
     },
     "prs": [
       {
-        "pr": 223,
-        "kind": "LANE_B docs",
-        "state": "READY, auto-merge ON",
-        "blocker": "validate-windows-shard (3) red on 555c2c6: tests/v7-int-r3-sbx-gate.test.ts:216 expected 409 to be 200 (docs-only PR => base/Windows issue; diagnosis running)",
-        "owner": "COORDINATOR"
-      },
-      {
         "pr": 226,
         "kind": "LANE_A chain",
-        "state": "DRAFT, CI running",
-        "blocker": "independent chain review w6vswhvtl",
-        "owner": "COORDINATOR (review) / LANE_A (fixes)"
+        "state": "READY, auto-merge ON (07:39:07Z) @d98d1f6",
+        "blocker": "none: delta re-check NO_BLOCKERS (wf_47148b30-e49); waits on validate-windows-shard (3)",
+        "owner": "AUTO"
       },
       {
         "pr": 227,
         "kind": "LANE_B product-run (B-RUN-1)",
-        "state": "DRAFT",
-        "blocker": "round-3 security findings C-1/C-8/C-9 fixes from Lane B; registration via batch 4b",
-        "owner": "LANE_B"
+        "state": "DRAFT @7a79e0f",
+        "blocker": "delta re-check wq7362wny running (stop-during-reap-wait MEDIUM fix); CI on 7a79e0f",
+        "owner": "COORDINATOR (re-check)"
       },
       {
-        "pr": 224,
-        "kind": "LANE_C",
-        "state": "DRAFT",
-        "blocker": "review BLOCKERS fixes in progress (18 findings)",
+        "pr": 228,
+        "kind": "LANE_C CLI readiness",
+        "state": "DRAFT @37c7aef",
+        "blocker": "c1a2107 red: secret-sanity OPENAI_STYLE_KEY test stub (fix pushed?); delta re-check after green",
         "owner": "LANE_C"
       },
       {
-        "pr": 196,
-        "kind": "LANE_A",
-        "state": "DRAFT",
-        "blocker": "needs base merge + review",
-        "owner": "LANE_A"
+        "pr": 229,
+        "kind": "LANE_C AnalysisFlow (stacked on #228)",
+        "state": "DRAFT @a70c98e",
+        "blocker": "inherits #228 secret-sanity red; merge #228 fix in",
+        "owner": "LANE_C"
+      },
+      {
+        "pr": 224,
+        "kind": "LANE_C PAR runner",
+        "state": "DRAFT @705acae",
+        "blocker": "re-review wjh50snx6 (b8317d2) + Windows fixes in 705acae (TK-3 fail-open fixed); needs tests/v7-par-runner.test.ts registration in config/validation.json (R1 TEST_REGISTRATION_APPEND after transition PR)",
+        "owner": "LANE_C / COORDINATOR"
       },
       {
         "pr": 192,
-        "kind": "LANE_A",
-        "state": "DRAFT",
-        "blocker": "needs base merge + review",
-        "owner": "LANE_A"
+        "kind": "LANE_A attention UI",
+        "state": "DRAFT @bbafa45",
+        "blocker": "re-verify wpufr3n4k running",
+        "owner": "COORDINATOR (re-verify)"
+      },
+      {
+        "pr": 196,
+        "kind": "LANE_A attention sections (stacked on #192)",
+        "state": "DRAFT @bb81da8",
+        "blocker": "re-verify wpufr3n4k (aa70558 + test-only bb81da8)",
+        "owner": "COORDINATOR (re-verify)"
+      },
+      {
+        "pr": 231,
+        "kind": "LANE_B+C sandbox chain (FOUNDER tier)",
+        "state": "DRAFT @fa31c1d",
+        "blocker": "delta security review w0uu8mlsr running; merge after #227; FOUNDER decision required (sandbox code); LC-LO-01 pending from Lane C",
+        "owner": "COORDINATOR (review) / FOUNDER (merge)"
       },
       {
         "pr": 66,
@@ -1850,10 +1864,10 @@
       }
     ],
     "branchOnlyChains": {
-      "laneA": "claude/lane-a-chain-on-p1 e560fe2 (intake-template, run-executor-truth, devrun-product+#197, analysis-step bec0d66, setup-check dc1da8d) -> one chain PR after A-SETUP-1 HIGH fix (CLAUDE_CLI_NOT_FOUND false PASS) + chain review",
-      "laneB": "B-RUN-1 b28ee7e + analysis routes 0e22e16 (claude/lane-b-analysis-routes) -> one PR when a slot frees; WSL chain 6bb4624 (B-SBX-WIN-3) branch-only until round-3 security re-review (wenjv35nw) is clean",
-      "laneC": "69abe2f+e0720b7 (sandbox exports+loopback), afe968a (CLI readiness), 08cb8ed (analysis flow), C-FLOW-ANALYSIS-2 (real BuilderPort + EXECUTOR_NOT_ENABLED readiness blocker) -> PRs as slots free",
-      "coordinator": "claude/coord-protected-batch-4b fee6cef (server.ts product-run + analysis registration; main.mjs analysis step/plan POST, product GET + start/stop POST; pins; reseal) stacked on 0e22e16 -> PR after its lane code merges; independent verify wccu7ed0a"
+      "laneA": "claude/lane-a-win-e2e fb6f515/8e372a9 (Electron journey E2E; E2E-2 on 4b composition 5914edb: PASS 16 / NV 0 / FAIL 0, Linux xvfb only); claude/lane-a-analysis-busy 6ab5fc6 (PR after #226)",
+      "laneB": "claude/lane-b-analysis-routes 6bd6f30 (200-with-body steps, shared produce lock, stop->423 audit; PR after #229)",
+      "laneC": "sandbox LC-LO-01..03 on sbx-lo-1 (goes into #231); C-FLOW-ANALYSIS-2 after #229",
+      "coordinator": "claude/coord-protected-batch-4b fee6cef -> rebuild after #228/#229/#227/analysis-routes (adds AnalysisFlow stopped hook, #226 journey pin flip, M4 pin); claude/coord-transition-autonomy (reform, wgguxa5j0)"
     },
     "mergedVia225": {
       "merge": "e2323d9",
@@ -1891,7 +1905,7 @@
         "by": "auto-merge",
         "at": "2026-10-26T05:35:34Z",
         "postMerge": "VERIFIED (base advanced by #218 between test and merge; push CI is the combined check)",
-        "pushCi": "run 40275049728 in progress"
+        "pushCi": "run 40275049728 success"
       },
       {
         "pr": 212,
@@ -1907,12 +1921,31 @@
         "by": "auto-merge",
         "at": "2026-10-26T05:41:13Z",
         "postMerge": "VERIFIED",
-        "pushCi": "run 40275559844 pending"
+        "pushCi": "run 40275559844 success"
+      },
+      {
+        "pr": 223,
+        "merge": "badb009",
+        "by": "SalimBurakAytemiz (auto-merge)",
+        "at": "2026-10-26T06:22:07Z",
+        "postMerge": "VERIFIED",
+        "pushCi": "run 40279405426 success; Windows Installer 40279405538 success (artifact uasco-windows-installer-40279405538-1, INSTALLER_CREATED only, unsigned, not published)"
+      },
+      {
+        "pr": 230,
+        "merge": "fa8704c",
+        "by": "SalimBurakAytemiz (auto-merge, enabled by coordinator 07:05:00Z)",
+        "at": "2026-10-26T07:15:19Z",
+        "postMerge": "VERIFIED: parent1 badb009, parent2 = reviewed head 03ddb9b, tree == PR head",
+        "review": "process-mode independent review NO_BLOCKERS (wf_5029db6e-7c8)",
+        "pushCi": "run 40284676104 in progress; Windows Installer 40284676091 success",
+        "riskTier": "ROUTINE (tests + doc only)"
       }
     ],
     "wslProvider": {
-      "review": "round 3 BLOCKERS (io_uring AF_VSOCK HIGH, adversarially confirmed) evidence claude/coord-par-repros fa87522",
-      "owner": "LANE_B B-SBX-WIN-4"
+      "review": "round 4 on c106641 NO_BLOCKERS (3 lenses; io_uring AF_VSOCK HIGH fixed, reproduced closed); evidence claude/coord-par-repros e79bc74; round-4 fixes aed4313; PR #231",
+      "owner": "LANE_B",
+      "status": "REVIEWED (process-mode); UNVERIFIED_WSL on a real host"
     },
     "reform": {
       "transitionBranch": "claude/coord-transition-autonomy (building, wgguxa5j0)",
