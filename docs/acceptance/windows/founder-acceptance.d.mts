@@ -9,7 +9,10 @@ export function parseWslVerbose(text: string): Array<{name: string; version: num
 export function parseWslConf(text: string): {interopEnabled: boolean; appendWindowsPath: boolean; interopExplicit: boolean; appendExplicit: boolean};
 export function wslConfFixCommands(distro: string): string;
 export function preflight(distro: string | null, deps: any): Promise<any[]>;
-export function mapVitestJson(json: unknown, acceptResult?: any): any[];
+export const CLAUDE_TIMEOUT_MIN: number;
+export const CLAUDE_PRECONDITIONS: string[];
+export const CLAUDE_ANNOUNCEMENT: string;
+export function mapVitestJson(json: unknown, acceptResults?: any): any[];
 export function verdictOf(checks: any[], sha: string | null): any;
 export function renderTable(report: any): string;
 export function runAcceptance(o: any, deps: any): Promise<any>;

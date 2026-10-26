@@ -3,6 +3,7 @@ import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
 // //TR: Bu dosyadaki gerçek G/Ç'li testler (disk, alt süreç, HTTP, git) yoğun GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #55 Windows CI: v7-b2-workos-hardening ilk testi 5 sn'de zaman aşımına uğradı). Yalnız varsayılan süre bütçesi; açık test başı süreler önceliklidir, hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
 vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import cp from "node:child_process";
 import crypto from "node:crypto";
@@ -491,7 +492,7 @@ describe("LANE-B first-delivery backend E2E (intake template -> plan -> run -> V
 
 // //TR: LANE-B B-E2E-REAL-1: GERÇEK buildServer (varsayılan LinuxUnshareSandboxProvider) ile uçtan uca arka uç zinciri: intake(web-node) -> yönetilen depo -> plan -> görev -> FAKE implementer ile koşu -> testler sandbox içinde -> teslim -> POST /product/start -> 127.0.0.1 köprüsünden 200 -> stop -> port kapalı. Sandbox/loopback bu ortamda yoksa her adımda dürüst ret doğrulanır, BLOCKED kodu yazdırılır ve test ATLANIR (PASS sayılmaz).
 describe("LANE-B real-sandbox backend E2E (B-E2E-REAL-1)", () => {
-  async function chain(serverSandbox: "DEFAULT" | null | import("../core/workos/execution-gate.js").SandboxProvider, runProvider: () => import("../core/workos/execution-gate.js").SandboxProvider, label: string) {
+  async function chain(serverSandbox: "DEFAULT" | null | import("../core/workos/execution-gate.js").SandboxProvider, runProvider: () => import("../core/workos/execution-gate.js").SandboxProvider, label: string, exec?: {pair: import("../core/workos/executors.js").ExecutorPair; marker: string | null}) {
     const dataDir = path.join(tmp, `data-real-${label}`), runtime = path.join(tmp, `runtime-real-${label}`); fs.mkdirSync(runtime, {recursive: true});
     const c0 = {tmp, runtime, dataDir, tenantId: "tA"} as Ctx;
     // DEFAULT: buildServer'a HİÇ sandbox anahtarı verilmez (api() her zaman verir); sunucu kendi varsayılan LinuxUnshareSandboxProvider'ını kurar.
@@ -516,13 +517,13 @@ describe("LANE-B real-sandbox backend E2E (B-E2E-REAL-1)", () => {
     // 3. authorize + run with the fake implementer (no Claude, nothing paid); VERIFY goes through the REAL provider (or honestly NOT_EXECUTED)
     for (const to of ["PREFLIGHT", "AUTHORIZED"]) expect((await post(`/v1/missions/${missionId}/transition`, {to, reason: "go"})).statusCode).toBe(200);
     const page = '<!doctype html><html><head><meta charset="utf-8"><title>Reading streak</title></head><body><h1>Reading streak</h1><p>Read today to keep your streak.</p></body></html>\n';
-    const fake = new FakeExecutors(okScript({implement: () => ({files: {"public/index.html": page}})})), pair = fake.pair(), store = new WorkOsStore(dataDir);
+    const fake = new FakeExecutors(okScript({implement: () => ({files: {"public/index.html": page}})})), pair = exec?.pair ?? fake.pair(), store = new WorkOsStore(dataDir);
     const run0 = store.createRun({tenantId: "tA", missionId, executor: {implementer: pair.implementer.identity, reviewer: pair.reviewer.identity}, createdBy: "FOUNDER_LOCAL"});
     expect((await post(`/v1/tasks/${tasks[0].taskId}/runs`, {runId: run0.runId})).statusCode).toBeLessThan(300);
     const provider = runProvider(), st = await provider.selfTest();
     const c = {tmp, store, dataDir, runtime, stopFile: path.join(runtime, "GLOBAL_STOP.json"), repo: "", head: "", missionId, projectId, tenantId: "tA"} as Ctx;
-    const run = await drive(c, runner(c, fake, {executionGate: new ExecutionGate(provider)}), run0.runId);
-    expect(run.status, run.reason ?? "").toBe("AWAITING_APPROVAL"); expect(run.headSha).toBeTruthy(); expect(run.headSha).not.toBe(run.baseSha); steps.push("RUN_AWAITING_APPROVAL");
+    const run = await drive(c, runner(c, exec ? ({pair: () => pair} as any) : fake, {executionGate: new ExecutionGate(provider)}), run0.runId);
+    expect(run.status, run.reason ?? "").toBe("AWAITING_APPROVAL"); expect(run.headSha).toBeTruthy(); expect(run.headSha).not.toBe(run.baseSha); steps.push(exec ? "RUN_AWAITING_APPROVAL_REAL_CODE_HEAD_NE_BASE" : "RUN_AWAITING_APPROVAL");
     const delivery = (await get(`/v1/work-runs/${run.runId}/delivery`)).json().delivery;
     expect(delivery).toMatchObject({runId: run.runId, sourceCommit: run.headSha, sourceGeneration: {state: "SOURCE_GENERATION_COMPLETE"}});
     if (st.ok) {
@@ -556,14 +557,14 @@ describe("LANE-B real-sandbox backend E2E (B-E2E-REAL-1)", () => {
     const pr = start.json().product; expect(pr).toMatchObject({runId: run.runId, deliveredHeadSha: run.headSha, tiedToThisRun: true, devrun: {status: "RUNNING", bridged: true, deliveryRunId: run.runId, headSha: run.headSha}}); expect(pr.devrun.preview.state).toBe("AVAILABLE"); steps.push("PRODUCT_STARTED_BRIDGED");
     const stat = (await get(`/v1/work-runs/${run.runId}/product`)); expect(stat.statusCode).toBe(200); expect(stat.json().product).toMatchObject({tiedToThisRun: true, devrun: {status: "RUNNING"}}); steps.push("PRODUCT_STATUS_RUNNING");
     const port = pr.devrun.port as number; const res = await fetch(`http://127.0.0.1:${port}/`);
-    expect(res.status).toBe(200); expect(await res.text()).toContain("Reading streak"); steps.push("HTTP_200_DELIVERED_PAGE_VIA_127.0.0.1_BRIDGE");
+    expect(res.status).toBe(200); const body = await res.text(); if (!exec) expect(body).toContain("Reading streak"); else if (exec.marker) expect(body).toContain(exec.marker); steps.push("HTTP_200_DELIVERED_PAGE_VIA_127.0.0.1_BRIDGE");
     const stop = await post(`/v1/work-runs/${run.runId}/product/stop`, {}); expect(stop.statusCode, stop.body).toBe(200); expect(stop.json().product.devrun.status).toBe("STOPPED");
     await expect(fetch(`http://127.0.0.1:${port}/`)).rejects.toBeTruthy(); steps.push("STOPPED_PORT_CLOSED");
     return {steps, blocked: null};
   }
 
   /** Kabul kiti (founder-acceptance.mjs) için: UASCO_ACCEPT_RESULT_FILE verilmişse zincir sonucu (adımlar, BLOCKED kodu) oraya yazılır. */
-  const writeAcceptResult = (r: {steps: string[]; blocked: string | null}, row: string) => { const f = process.env.UASCO_ACCEPT_RESULT_FILE; if (f) { try { fs.writeFileSync(f, JSON.stringify({row, steps: r.steps, blocked: r.blocked, complete: r.steps.includes("STOPPED_PORT_CLOSED")})); } catch { /* kanıt dosyası yazılamadı */ } } };
+  const writeAcceptResult = (r: {steps: string[]; blocked: string | null}, row: string) => { const f0 = process.env.UASCO_ACCEPT_RESULT_FILE, f = f0 ? `${f0}.${row}.json` : ""; if (f) { try { fs.writeFileSync(f, JSON.stringify({row, steps: r.steps, blocked: r.blocked, complete: r.steps.includes("STOPPED_PORT_CLOSED")})); } catch { /* kanıt dosyası yazılamadı */ } } };
 
   it("REAL: buildServer's default Linux provider runs the whole chain; where the sandbox or its loopback is not available every step asserts the exact refusal, the BLOCKED code is printed and the test is SKIPPED (never PASS)", { timeout: T }, async ctx => {
     const {LinuxUnshareSandboxProvider} = await import("../core/agents/linux-unshare-sandbox.js");
@@ -630,5 +631,124 @@ describe("LANE-B real-sandbox backend E2E (B-E2E-REAL-1)", () => {
     console.log(`B-ACCEPT-E2E-1 stand-in steps: ${r.steps.join(" > ")}`); writeAcceptResult(r, "IDEA_TO_RUNNING_PRODUCT_STANDIN");
     if (r.blocked) return blockedWith(r.blocked);
     expect(r.steps).toContain("STOPPED_PORT_CLOSED");
+  });
+
+  // ---- B-ACCEPT-CLAUDE-1: "gerçek kod" halkası (YALNIZ açık bayrakla); testlerde ve CI'da gerçek Claude CLI ASLA çalışmaz, stand-in launcher kullanılır ----
+  const REPO_ROOT = path.resolve(import.meta.dirname, "..");
+  /** Başlamadan ÖNCE tek karar: ilk engel kodu ya da null. Hiçbir süreç başlatmaz, hiçbir şey yazmaz. */
+  async function claudeRealReadiness(controlRoot: string): Promise<string | null> {
+    const {LocalClaudeExecutors} = await import("../core/workos/executors.js");
+    try { new LocalClaudeExecutors(REPO_ROOT, controlRoot); } catch { return "EXECUTOR_CONFIG_INVALID"; }
+    let prov: any = null;
+    try { prov = JSON.parse(fs.readFileSync(path.join(controlRoot, ".ai", "runtime", "PROVIDER_PROVENANCE.json"), "utf8")); } catch { /* yok */ }
+    if (!prov || prov.final !== "PASS") return "PROVIDER_PROVENANCE_NOT_READY";
+    const lvl = prov.claude?.provenanceLevel; if (lvl !== "FULL_PACKAGE" && lvl !== "STANDALONE_LAUNCHER") return "CLAUDE_PACKAGE_PROVENANCE_REQUIRED";
+    const lp = String(prov.claude?.resolvedPath ?? ""); if (/\.(cmd|bat)$/i.test(lp)) return "CLAUDE_CLI_SHIM_UNSUPPORTED";
+    let sha = ""; try { sha = crypto.createHash("sha256").update(fs.readFileSync(lp)).digest("hex"); } catch { return "CLAUDE_CLI_NOT_FOUND"; }
+    if (!prov.claude?.launcherSha256 || sha !== prov.claude.launcherSha256) return "CLAUDE_LAUNCHER_PROVENANCE_CHANGED";
+    const {claudeProfileStatus} = await import("../core/workos/claude-profiles.js");
+    for (const role of ["implementer", "reviewer"] as const) { const ps = claudeProfileStatus(controlRoot, role); if (ps.state !== "READY") return `${role}:${ps.reason ?? ps.state}`; }
+    return null;
+  }
+  /** Tek mission koşusu: hazırlık BLOCKED ise HİÇBİR çağrı yapılmaz (ne Claude ne sandbox ne sunucu); değilse zincir gerçek LOCAL_CLAUDE çiftiyle koşar. */
+  async function realClaudeRow(o: {controlRoot: string; provider: import("../core/workos/execution-gate.js").SandboxProvider; label: string; marker: string | null}) {
+    const blocker = await claudeRealReadiness(o.controlRoot);
+    if (blocker) return {steps: [] as string[], blocked: blocker as string | null};
+    const st = await o.provider.selfTest();
+    if (!st.ok) return {steps: [] as string[], blocked: `SANDBOX_UNAVAILABLE:${st.detail ?? "SELF_TEST_FAILED"}` as string | null};
+    const {LocalClaudeExecutors} = await import("../core/workos/executors.js");
+    const pair = new LocalClaudeExecutors(REPO_ROOT, o.controlRoot, {profile: {forbiddenRoots: [tmp]}}).pair();
+    return chain(o.provider, () => o.provider, o.label, {pair, marker: o.marker});
+  }
+  /** Stand-in "claude" launcher (YALNIZ Linux): --version yazar, implementer çağrısında çalışma alanında public/index.html üretir, reviewer çağrısında CLEAN döner; her çağrı invocations.log'a eklenir. */
+  function standInControl(base: string, o: {implementerLogin: boolean} = {implementerLogin: true}) {
+    const control = path.join(base, "control"), bin = path.join(base, "bin"); fs.mkdirSync(path.join(control, "config"), {recursive: true}); fs.mkdirSync(path.join(control, ".ai", "runtime"), {recursive: true}); fs.mkdirSync(bin, {recursive: true});
+    for (const f of ["automation.json", "environment-policy.json", "builder-execution-policy.json", "execution-backends.json"]) fs.copyFileSync(path.join(REPO_ROOT, "config", f), path.join(control, "config", f));
+    const launcher = path.join(bin, "claude"), log = path.join(bin, "invocations.log");
+    fs.writeFileSync(launcher, `#!${process.execPath}
+const fs=require("fs"),path=require("path");const a=process.argv.slice(2);
+if(a[0]==="--version"){console.log("9.9.9-standin");process.exit(0)}
+fs.appendFileSync(path.join(${JSON.stringify(bin)},"invocations.log"),JSON.stringify({cwd:process.cwd(),tools:a[a.indexOf("--tools")+1]||""})+"\\n");
+fs.readFileSync(0,"utf8");
+const tools=a[a.indexOf("--tools")+1]||"";
+if(/Edit|Write/.test(tools)){fs.mkdirSync("public",{recursive:true});fs.writeFileSync("public/index.html",${JSON.stringify('<!doctype html><html><head><meta charset="utf-8"><title>Reading streak</title></head><body><h1>Reading streak</h1><p>Read today to keep your streak.</p></body></html>\n')});console.log("implemented")}
+else console.log(JSON.stringify({verdict:"CLEAN",findings:[]}));
+`, {mode: 0o755});
+    fs.writeFileSync(path.join(control, ".ai", "runtime", "PROVIDER_PROVENANCE.json"), JSON.stringify({final: "PASS", capturedAt: "2026-10-26T00:00:00.000Z", claude: {provenanceLevel: "STANDALONE_LAUNCHER", resolvedPath: launcher, launcherSha256: crypto.createHash("sha256").update(fs.readFileSync(launcher)).digest("hex"), version: "9.9.9-standin", packageJsonPath: "NOT_APPLICABLE_STANDALONE_LAUNCHER", packageJsonSha256: "NOT_APPLICABLE_STANDALONE_LAUNCHER"}}));
+    return {control, launcher, log, async ready(): Promise<void> {
+      const {ensureClaudeProfile, CLAUDE_CREDENTIAL_STORE_FILE} = await import("../core/workos/claude-profiles.js");
+      for (const role of ["implementer", "reviewer"] as const) { const ps = ensureClaudeProfile(control, role); if (role !== "implementer" || o.implementerLogin) fs.writeFileSync(path.join(ps.dir, CLAUDE_CREDENTIAL_STORE_FILE), ""); }
+    }};
+  }
+
+  it("B-ACCEPT-CLAUDE-1 readiness BLOCKED -> ZERO spawn: no login / shim / changed launcher / missing provenance give the exact code and nothing is started (no claude, no sandbox call, no data dir)", { timeout: T }, async () => {
+    if (process.platform === "win32") return;
+    const base = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-accl-")); let selfTests = 0;
+    const provider: any = {id: "P", selfTest: async () => { selfTests++; return {ok: true}; }, run: async () => { throw new Error("must not run"); }, spawn: () => { throw new Error("must not spawn"); }};
+    try {
+      const s1 = standInControl(path.join(base, "a"), {implementerLogin: false}); await s1.ready();
+      const r1 = await realClaudeRow({controlRoot: s1.control, provider, label: "z1", marker: null}); expect(r1).toEqual({steps: [], blocked: "implementer:CLAUDE_PROFILE_LOGIN_REQUIRED"});
+      const s2 = standInControl(path.join(base, "b")); await s2.ready(); fs.appendFileSync(s2.launcher, "// changed\n");
+      expect((await realClaudeRow({controlRoot: s2.control, provider, label: "z2", marker: null})).blocked).toBe("CLAUDE_LAUNCHER_PROVENANCE_CHANGED");
+      const s3 = standInControl(path.join(base, "c")); await s3.ready(); const prov = JSON.parse(fs.readFileSync(path.join(s3.control, ".ai", "runtime", "PROVIDER_PROVENANCE.json"), "utf8")); fs.copyFileSync(s3.launcher, `${s3.launcher}.cmd`); prov.claude.resolvedPath = `${s3.launcher}.cmd`; fs.writeFileSync(path.join(s3.control, ".ai", "runtime", "PROVIDER_PROVENANCE.json"), JSON.stringify(prov));
+      expect((await realClaudeRow({controlRoot: s3.control, provider, label: "z3", marker: null})).blocked).toBe("CLAUDE_CLI_SHIM_UNSUPPORTED");
+      const s4 = standInControl(path.join(base, "d")); await s4.ready(); fs.rmSync(path.join(s4.control, ".ai", "runtime", "PROVIDER_PROVENANCE.json"));
+      expect((await realClaudeRow({controlRoot: s4.control, provider, label: "z4", marker: null})).blocked).toBe("PROVIDER_PROVENANCE_NOT_READY");
+      for (const s of [s1, s2, s3, s4]) expect(fs.existsSync(s.log), "claude launcher must never be invoked").toBe(false);
+      expect(selfTests).toBe(0); // sandbox bile sorulmaz
+      for (const l of ["z1", "z2", "z3", "z4"]) expect(fs.existsSync(path.join(tmp, `data-real-${l}`))).toBe(false); // sunucu/veri dizini oluşmaz
+      expect((await realClaudeRow({controlRoot: path.join(base, "nowhere"), provider, label: "z5", marker: null})).blocked).toMatch(/^(EXECUTOR_CONFIG_INVALID|PROVIDER_PROVENANCE_NOT_READY)$/);
+    } finally { fs.rmSync(base, {recursive: true, force: true}); }
+  });
+
+  // Gerçek koşu (yalnız win32 + WSL + UASCO_WSL_DISTRO + açık bayrak UASCO_ACCEPT_WITH_CLAUDE=1; kit --with-claude ile verir). Bayrak yoksa SKIP(OPT_IN_REQUIRED): HİÇBİR çağrı yapılmaz.
+  it.skipIf(!realWsl)("REAL WSL (win32 + UASCO_WSL_DISTRO): idea to product with REAL Claude (opt-in only: one mission run with the Founder's logged-in LOCAL_CLAUDE profiles)", { timeout: (Number(process.env.UASCO_ACCEPT_CLAUDE_TIMEOUT_MIN) || 25) * 60_000 + 5 * 60_000 }, async ctx => {
+    if (process.env.UASCO_ACCEPT_WITH_CLAUDE !== "1") { console.log("B-ACCEPT-CLAUDE-1 SKIP: OPT_IN_REQUIRED"); return ctx.skip(); }
+    const {WslUnshareSandboxProvider} = await import("../core/sandbox/wsl-unshare-sandbox.js");
+    console.log("B-ACCEPT-CLAUDE-1: ONE real mission run with your logged-in LOCAL_CLAUDE profiles (no API key, no new subscription)");
+    const r = await realClaudeRow({controlRoot: process.env.UASCO_CONTROL_ROOT || REPO_ROOT, provider: new WslUnshareSandboxProvider(), label: "claude-real", marker: null});
+    console.log(`B-ACCEPT-CLAUDE-1 steps: ${r.steps.join(" > ")}`); writeAcceptResult(r, "IDEA_TO_PRODUCT_REAL_CLAUDE");
+    if (r.blocked) { console.log(`B-ACCEPT-CLAUDE-1 BLOCKED: ${r.blocked}`); ctx.skip(); }
+    expect(r.steps).toContain("STOPPED_PORT_CLOSED");
+  });
+
+  // Aynı gerçek-kod zinciri, stand-in claude launcher + WSL stand-in sağlayıcısıyla (Linux): gerçek CLI hiçbir testte çalışmaz. Eksik önkoşul BLOCKED koduyla ATLANIR.
+  it("real-code chain with a STAND-IN claude CLI and the WSL provider stand-in (Linux): real LocalClaudeExecutors, real broker, profiles and provenance gates; the stand-in edits a file and returns success", { timeout: 20 * 60_000 }, async ctx => {
+    const mod = await import("../core/sandbox/wsl-unshare-sandbox.js"); const iso = mod.linuxIsolationFromModule();
+    const blockedWith = (code: string): never => { console.log(`B-ACCEPT-CLAUDE-1 stand-in BLOCKED: ${code}`); return ctx.skip() as never; };
+    if (process.platform !== "linux") return blockedWith("NOT_LINUX");
+    if (!iso) return blockedWith("LINUX_ISOLATION_EXPORTS_MISSING");
+    const uid = typeof process.getuid === "function" && process.getuid() === 0 ? 65534 : undefined;
+    if (uid !== undefined) return blockedWith("RUNNING_AS_ROOT_NO_NONROOT_EXEC_USER");
+    if (cp.spawnSync("sh", ["-c", "command -v unshare setpriv perl nsenter"]).status !== 0) return blockedWith("LINUX_TOOLS_MISSING");
+    const nodeRoot = path.dirname(path.dirname(fs.realpathSync(process.execPath))), nodeInUsr = /^\/(usr|bin|sbin)\//.test(fs.realpathSync(process.execPath));
+    if (!nodeInUsr && typeof (new mod.WslUnshareSandboxProvider({} as any) as any).isVerified !== "function") return blockedWith("NODE_NOT_UNDER_USR_AND_NO_EXTRA_ROOTS_OPTION");
+    const PATHS = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+    const exec = (cmd: string[], stdio: cp.StdioOptions) => cp.spawn(cmd[0], cmd.slice(1), {cwd: "/", env: {PATH: `${nodeRoot}/bin:${PATHS}`, HOME: "/tmp", LANG: "C"}, stdio});
+    const runner = async (args: string[], o: {timeoutMs: number; input?: Buffer | string; shouldAbort?: () => boolean}) => {
+      const R = (exitCode: number | null, out: Buffer | string = "", extra: any = {}) => ({exitCode, stdout: Buffer.from(out), stderr: Buffer.alloc(0), timedOut: false, aborted: false, spawnError: false, ...extra});
+      if (args[0] === "--status") return R(0);
+      if (args[0] === "-l" && args[1] === "-q") return R(0, Buffer.from("﻿Ubuntu\r\n", "utf16le"));
+      if (args[0] === "-l" && args[1] === "-v") return R(0, Buffer.from("﻿  NAME STATE VERSION\r\n* Ubuntu Running 2\r\n", "utf16le"));
+      return await new Promise<any>(resolve => {
+        const c = exec(args.slice(3), ["pipe", "pipe", "pipe"]); const out: Buffer[] = []; let aborted = false, timedOut = false, done = false;
+        c.stdout!.on("data", d => out.push(d)); c.stderr!.on("data", () => undefined); c.stdin!.on("error", () => undefined);
+        const fin = (code: number | null) => { if (done) return; done = true; clearInterval(poll); clearTimeout(t); resolve(R(code, Buffer.concat(out), {aborted, timedOut})); };
+        const poll = setInterval(() => { if (o.shouldAbort?.()) { aborted = true; try { c.kill("SIGKILL"); } catch { /* çıkmış */ } setTimeout(() => fin(null), 200); } }, 50);
+        const t = setTimeout(() => { timedOut = true; try { c.kill("SIGKILL"); } catch { /* çıkmış */ } setTimeout(() => fin(null), 200); }, o.timeoutMs + 3000);
+        c.on("error", () => fin(null)); c.on("close", code => fin(code));
+        if (o.input !== undefined) c.stdin!.end(o.input); else c.stdin!.end();
+      });
+    };
+    const wsl = new mod.WslUnshareSandboxProvider({platform: "win32", distro: "Ubuntu", runner: runner as any, isolation: iso, ...(nodeInUsr ? {} : {extraReadOnlyRoots: [nodeRoot]}), spawner: (args: string[], stdio: cp.StdioOptions) => exec(args.slice(3), stdio)} as any);
+    const base = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-accl-")); const sc = standInControl(base); await sc.ready();
+    try {
+      const r = await realClaudeRow({controlRoot: sc.control, provider: wsl, label: "claude-standin", marker: "Reading streak"});
+      console.log(`B-ACCEPT-CLAUDE-1 stand-in steps: ${r.steps.join(" > ")}`);
+      if (r.blocked) return blockedWith(r.blocked);
+      expect(r.steps).toContain("RUN_AWAITING_APPROVAL_REAL_CODE_HEAD_NE_BASE"); expect(r.steps).toContain("STOPPED_PORT_CLOSED");
+      const calls = fs.readFileSync(sc.log, "utf8").trim().split("\n").map(l => JSON.parse(l)); // gerçek broker yoluyla stand-in launcher çağrıldı: implementer (Edit/Write) + reviewer (salt-okunur)
+      expect(calls.some(c => /Edit/.test(c.tools))).toBe(true); expect(calls.some(c => !/Edit/.test(c.tools))).toBe(true);
+    } finally { fs.rmSync(base, {recursive: true, force: true}); }
   });
 });

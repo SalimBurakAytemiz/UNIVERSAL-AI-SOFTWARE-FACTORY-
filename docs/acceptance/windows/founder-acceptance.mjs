@@ -15,7 +15,9 @@ export const REAL_TESTS = [
   {id: "WSL_SELFTEST_AND_RUN", title: "WSL provider selfTest (all negative probes) + a node test runs inside the sandbox", match: /REAL WSL \(win32 \+ UASCO_WSL_DISTRO\): selfTest passes its negative probes/},
   {id: "WSL_PRODUCT_BRIDGE", title: "Generated web-node product via spawnAsync + bridged 127.0.0.1 port answers 200, stop tears down", match: /REAL WSL \(win32 \+ UASCO_WSL_DISTRO\): the generated web-node product/},
   // FİKİR -> ÇALIŞAN ÜRÜN: intake -> plan -> FAKE run -> testler WSL sandbox'ında -> teslim -> product start -> 127.0.0.1 HTTP 200 -> stop. Sonuç PASS / FAIL / BLOCKED:<kod>; test koşmadıysa asla PASS değil.
-  {id: "IDEA_TO_RUNNING_PRODUCT", title: "Idea to running product on the WSL sandbox (intake, plan, fake run, tests in WSL, delivery, product start, 127.0.0.1 HTTP 200, stop)", match: /REAL WSL \(win32 \+ UASCO_WSL_DISTRO\): idea to running product/, accept: true}
+  {id: "IDEA_TO_RUNNING_PRODUCT", title: "Idea to running product on the WSL sandbox (intake, plan, fake run, tests in WSL, delivery, product start, 127.0.0.1 HTTP 200, stop)", match: /REAL WSL \(win32 \+ UASCO_WSL_DISTRO\): idea to running product/, accept: true},
+  // GERÇEK KOD halkası: yalnız --with-claude ile. Founder'ın kendi oturum açmış LOCAL_CLAUDE profilleri (implementer yazar, reviewer inceler); API anahtarı ve yeni abonelik yok; en çok 1 mission koşusu; sabit zaman aşımı. Ön koşul BLOCKED ise hiçbir Claude çağrısı yapılmaz.
+  {id: "IDEA_TO_PRODUCT_REAL_CLAUDE", title: "Idea to product with REAL Claude (opt-in: one mission run with your logged-in LOCAL_CLAUDE profiles, tests and product in the WSL sandbox)", match: /REAL WSL \(win32 \+ UASCO_WSL_DISTRO\): idea to product with REAL Claude/, accept: true, optIn: "claude"}
 ];
 
 /** wsl.exe yönetim çıktısı UTF-16LE gelebilir. */
@@ -111,10 +113,14 @@ export async function preflight(distro, deps) {
 }
 
 /** vitest --reporter=json çıktısı -> gerçek-WSL testlerinin durumları. Bulunamayan = FAIL (asla PASS); skipped/pending = SKIP. */
-export function mapVitestJson(json, acceptResult = null) {
+export const CLAUDE_TIMEOUT_MIN = 25;
+export const CLAUDE_PRECONDITIONS = ["WSL_EXE", "WSL_DISTRO", "WSL_VERSION_2", "WSL_CONF", "WSL_INTEROP_RUNTIME", "WSL_NODE", "CLAUDE_CLI", "CLAUDE_PROFILE_IMPLEMENTER", "CLAUDE_PROFILE_REVIEWER"];
+export const CLAUDE_ANNOUNCEMENT = `About to run ONE real mission with your logged-in LOCAL_CLAUDE profiles (implementer writes, reviewer reviews; your Claude subscription, no API key, no new subscription; fixed timeout ${CLAUDE_TIMEOUT_MIN} min). It changes only a temporary managed repository; the tests and the product run in the WSL sandbox.`;
+export function mapVitestJson(json, acceptResults = null) {
   const tests = [];
   for (const f of json?.testResults ?? []) for (const a of f.assertionResults ?? []) tests.push({name: String(a.fullName ?? a.title ?? ""), status: a.status, msg: (a.failureMessages ?? []).join(" ").slice(0, 300)});
   return REAL_TESTS.map(rt => {
+    const acceptResult = acceptResults?.[rt.id] ?? null;
     const t = tests.find(x => rt.match.test(x.name));
     if (!t) return status(rt.id, rt.title, FAIL, "TEST_NOT_FOUND in vitest output (wrong checkout?)", "git pull, then npm ci, then run this kit again");
     if (t.status === "passed") {
@@ -149,9 +155,20 @@ export async function runAcceptance(o, deps) {
   const distro = o.distro ?? null;
   const checks = await preflight(distro, deps);
   const blocking = checks.filter(c => ["WSL_EXE", "WSL_DISTRO", "WSL_VERSION_2"].includes(c.id) && c.status !== PASS);
-  if (deps.platform !== "win32") for (const rt of REAL_TESTS) checks.push(status(rt.id, rt.title, SKIP, `NOT_WINDOWS (platform=${deps.platform})`));
-  else if (blocking.length) for (const rt of REAL_TESTS) checks.push(status(rt.id, rt.title, SKIP, `PRECONDITION_FAILED: ${blocking.map(c => c.id).join(", ")} (fix those first)`));
-  else { const vit = await deps.runVitest(distro); checks.push(...mapVitestJson(vit, vit?.acceptResult ?? null)); }
+  if (deps.platform !== "win32") for (const rt of REAL_TESTS) checks.push(status(rt.id, rt.title, SKIP, rt.optIn && o.withClaude !== true ? "OPT_IN_REQUIRED (and NOT_WINDOWS)" : `NOT_WINDOWS (platform=${deps.platform})`));
+  else if (blocking.length) for (const rt of REAL_TESTS) checks.push(rt.optIn && o.withClaude !== true ? status(rt.id, rt.title, SKIP, "OPT_IN_REQUIRED (run with --with-claude; nothing is called without it)") : rt.optIn ? status(rt.id, rt.title, BLOCKED, `BLOCKED:PRECONDITION_FAILED:${blocking.map(c => c.id).join("+")}`, "fix the failed rows above first; no Claude call was made") : status(rt.id, rt.title, SKIP, `PRECONDITION_FAILED: ${blocking.map(c => c.id).join(", ")} (fix those first)`));
+  else {
+    // --with-claude: gerçek Claude satırı yalnız açık bayrakla VE tüm ön koşullar PASS iken koşar; aksi halde hiçbir Claude çağrısı yapılmaz.
+    const claudeBlockers = CLAUDE_PRECONDITIONS.filter(id => checks.find(c => c.id === id)?.status !== PASS);
+    const claudeRun = o.withClaude === true && claudeBlockers.length === 0;
+    if (claudeRun) (deps.say ?? console.log)(CLAUDE_ANNOUNCEMENT);
+    const vit = await deps.runVitest(distro, {withClaude: claudeRun, timeoutMin: CLAUDE_TIMEOUT_MIN});
+    const mapped = mapVitestJson(vit, vit?.acceptResults ?? null);
+    checks.push(...mapped.map(c => c.id !== "IDEA_TO_PRODUCT_REAL_CLAUDE" ? c
+      : o.withClaude !== true ? status(c.id, c.title, SKIP, "OPT_IN_REQUIRED (run with --with-claude; nothing is called without it)")
+      : claudeBlockers.length ? status(c.id, c.title, BLOCKED, `BLOCKED:PRECONDITION_FAILED:${claudeBlockers.join("+")}`, "fix the failed rows above first; no Claude call was made")
+      : c));
+  }
   const git = deps.git();
   const sha = git.headSha ?? o.shaArg ?? null;
   const v = verdictOf(checks, sha);
@@ -173,16 +190,17 @@ function realDeps(opts) {
     },
     now: () => new Date().toISOString(),
     scriptSha256: sha256File(fileURLToPath(import.meta.url)), testSha256: sha256File(path.join(repo, TEST_FILE)), deliveryTestSha256: sha256File(path.join(repo, DELIVERY_TEST_FILE)),
-    runVitest: distro => new Promise(res => {
+    runVitest: (distro, vo = {}) => new Promise(res => {
       const entry = path.join(repo, "node_modules", "vitest", "vitest.mjs");
       if (!fs.existsSync(entry)) { res({testResults: []}); return; }
       const outFile = path.join(os.tmpdir(), `uasco-accept-${process.pid}-${Date.now()}.json`), resFile = path.join(os.tmpdir(), `uasco-accept-res-${process.pid}-${Date.now()}.json`);
-      const c = cp.spawn(process.execPath, [entry, "run", TEST_FILE, DELIVERY_TEST_FILE, "-t", "REAL WSL", "--reporter=json", `--outputFile=${outFile}`], {cwd: repo, shell: false, windowsHide: true, stdio: ["ignore", "inherit", "inherit"], env: {...process.env, UASCO_WSL_DISTRO: distro, UASCO_ACCEPT_RESULT_FILE: resFile}});
-      const t = setTimeout(() => { try { c.kill(); } catch { /* çıkmış */ } }, 20 * 60_000); t.unref();
+      const c = cp.spawn(process.execPath, [entry, "run", TEST_FILE, DELIVERY_TEST_FILE, "-t", "REAL WSL", "--reporter=json", `--outputFile=${outFile}`], {cwd: repo, shell: false, windowsHide: true, stdio: ["ignore", "inherit", "inherit"], env: {...process.env, UASCO_WSL_DISTRO: distro, UASCO_ACCEPT_RESULT_FILE: resFile, UASCO_CONTROL_ROOT: opts.controlRoot, ...(vo.withClaude ? {UASCO_ACCEPT_WITH_CLAUDE: "1", UASCO_ACCEPT_CLAUDE_TIMEOUT_MIN: String(vo.timeoutMin ?? CLAUDE_TIMEOUT_MIN)} : {UASCO_ACCEPT_WITH_CLAUDE: ""})}});
+      const t = setTimeout(() => { try { c.kill(); } catch { /* çıkmış */ } }, (20 + (vo.withClaude ? (vo.timeoutMin ?? CLAUDE_TIMEOUT_MIN) : 0)) * 60_000); t.unref();
       c.on("close", () => {
-        let acceptResult = null; try { acceptResult = JSON.parse(fs.readFileSync(resFile, "utf8")); } catch { /* sonuç dosyası yok */ }
-        try { res({...JSON.parse(fs.readFileSync(outFile, "utf8")), acceptResult}); } catch { res({testResults: [], acceptResult}); }
-        for (const f of [outFile, resFile]) { try { fs.rmSync(f, {force: true}); } catch { /* temizlik */ } }
+        const acceptResults = {}; const files = [outFile];
+        for (const rt of REAL_TESTS.filter(x => x.accept)) { const f = `${resFile}.${rt.id}.json`; files.push(f); try { acceptResults[rt.id] = JSON.parse(fs.readFileSync(f, "utf8")); } catch { /* sonuç dosyası yok */ } }
+        try { res({...JSON.parse(fs.readFileSync(outFile, "utf8")), acceptResults}); } catch { res({testResults: [], acceptResults}); }
+        for (const f of files) { try { fs.rmSync(f, {force: true}); } catch { /* temizlik */ } }
       });
       c.on("error", () => res({testResults: []}));
     })
@@ -190,11 +208,11 @@ function realDeps(opts) {
 }
 
 export function parseArgs(argv, env = process.env) {
-  const o = {repo: DEFAULT_REPO, distro: env.UASCO_WSL_DISTRO ?? null, controlRoot: env.UASCO_CONTROL_ROOT ?? null, out: null, shaArg: null};
+  const o = {repo: DEFAULT_REPO, distro: env.UASCO_WSL_DISTRO ?? null, controlRoot: env.UASCO_CONTROL_ROOT ?? null, out: null, shaArg: null, withClaude: false};
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i], next = () => argv[++i];
     if (a === "--repo") o.repo = path.resolve(next() ?? ""); else if (a === "--distro") o.distro = next() ?? null; else if (a === "--control-root") o.controlRoot = path.resolve(next() ?? "");
-    else if (a === "--out") o.out = path.resolve(next() ?? ""); else if (a === "--sha") o.shaArg = next() ?? null; else return {error: `unknown argument: ${a}`};
+    else if (a === "--out") o.out = path.resolve(next() ?? ""); else if (a === "--sha") o.shaArg = next() ?? null; else if (a === "--with-claude") o.withClaude = true; else return {error: `unknown argument: ${a}`};
   }
   if (o.distro !== null && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(o.distro)) return {error: "invalid --distro"};
   if (o.shaArg !== null && !/^[0-9a-f]{40}$/.test(o.shaArg)) return {error: "--sha must be 40 hex chars"};
@@ -204,7 +222,7 @@ export function parseArgs(argv, env = process.env) {
 
 async function main() {
   const o = parseArgs(process.argv.slice(2));
-  if (o.error) { console.error(`${o.error}\nusage: node founder-acceptance.mjs [--distro Ubuntu] [--repo <dir>] [--control-root <dir>] [--out <dir>] [--sha <40hex>]`); process.exit(2); }
+  if (o.error) { console.error(`${o.error}\nusage: node founder-acceptance.mjs [--with-claude] [--distro Ubuntu] [--repo <dir>] [--control-root <dir>] [--out <dir>] [--sha <40hex>]`); process.exit(2); }
   const deps = realDeps(o);
   try {
     const prof = await import(pathToFileURL(path.join(o.repo, "core", "workos", "claude-profiles.ts")).href);
