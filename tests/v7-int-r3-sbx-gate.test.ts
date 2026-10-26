@@ -213,7 +213,7 @@ describe("SBX-GATE control API (explicit no provider: sandbox null)", () => {
     expect(r.json().devrun.status).not.toBe("BLOCKED");
     expect(spawned).toHaveLength(1);
     expect(spawned[0].slice(1)).toEqual(["server.js"]);
-    expect((await call(app, "POST", `/v1/projects/${pid}/devrun/stop`, {})).statusCode).toBe(200);
+    { const stop = await call(app, "POST", `/v1/projects/${pid}/devrun/stop`, {}); expect(stop.statusCode, String(stop.body)).toBe(200); }
     expect(testExecutionGate()).toBeInstanceOf(ExecutionGate);
   });
 });
