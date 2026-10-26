@@ -5,6 +5,7 @@ vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 import fs from "node:fs";
 import {WorkOsStore} from "../core/workos/store.js";
 import {FakeExecutors} from "../core/workos/executors.js";
+import type {ExecutorPair} from "../core/workos/executors.js";
 import {completionEvidence, deriveOutcomes} from "../core/workos/outcomes.js";
 import type {RunEvidence, WorkRun} from "../core/workos/types.js";
 import {HDR, T, api, drive, journalEntries, journalText, missionOf, okScript, rewriteJournal, rmTmp, runOf, runner, setup, startRun, tmpRoot} from "./support/relfx.js";
@@ -453,15 +454,53 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
   const isAlive = procAlive;
   const killGroup = (pid: number) => { try { if (process.platform === "win32") process.kill(pid); else process.kill(-pid, "SIGKILL"); } catch { /* zaten bitmiş */ } };
 
-  it.skipIf(process.platform !== "linux")("TK-1 (cwd): a process whose working directory is inside the run directory is stopped at takeover even without a lease marker (the untracked VERIFY test process)", { timeout: 120_000 }, async () => {
+  // //TR: #224 tur 3 (SWEEP-2): cwd kuralı yalnız run'ın work/ ve klon dizinlerine bakar, logs/ ve run kökü dışarıda kalır; denetim terminali olan süreç (Kurucu'nun kabuğu/editörü) hiç hedef değildir. Sahte kabuk: pty.fork ile kendi denetim terminalini alan `sleep`.
+  const mkDecoy = (cwd: string) => { const d = cp.spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {cwd, stdio: "ignore", detached: true}); leaked.push(d.pid!); return d; };
+  const ttyDecoy = async (cwd: string): Promise<number> => {
+    const py = cp.spawn("python3", ["-I", "-c", "import os,pty,sys\npid,fd=pty.fork()\nif pid==0:\n    os.chdir(sys.argv[1]); os.execvp('sleep',['sleep','120'])\nprint(pid,flush=True); os.waitpid(pid,0)", cwd], {stdio: ["ignore", "pipe", "ignore"], detached: true});
+    leaked.push(py.pid!);
+    const pid = await new Promise<number>((res, rej) => { py.stdout!.once("data", b => res(Number(String(b).trim()))); py.once("error", rej); py.once("exit", () => rej(new Error("pty decoy exited"))); });
+    leaked.push(pid);
+    expect(await waitFor(() => { try { return Number(fs.readFileSync(`/proc/${pid}/stat`, "utf8").split(") ")[1].split(" ")[4]) !== 0 && fs.readlinkSync(`/proc/${pid}/cwd`) === fs.realpathSync(cwd); } catch { return false; } }, 10_000), "the terminal decoy never got its controlling terminal").toBe(true);
+    return pid;
+  };
+
+  it.skipIf(process.platform !== "linux")("TK-1 (cwd): at takeover a process working inside the run's work/ or a clone directory is stopped even without a lease marker (the untracked VERIFY test process); one working in logs/ or the run root, or one with a controlling terminal, is not touched (#224 round 3, SWEEP-2)", { timeout: 120_000 }, async () => {
     const c = setup();
-    let decoy = null as cp.ChildProcess | null;
-    try {
-      const x = await crashedRun(c, {}, {inRunDir: runDir => { decoy = cp.spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {cwd: runDir, stdio: "ignore", detached: true}); }});
-      expect(x.run.status).toBe("AWAITING_APPROVAL");
-      expect(x.note).toMatch(/swept 1 detached writer process/);
-      expect(await waitUntil(() => !procAlive(decoy!.pid!), 5000), "the process working inside the run directory survived the takeover").toBe(true);
-    } finally { try { if (decoy?.pid) process.kill(-decoy.pid, "SIGKILL"); } catch { /* bitmiş */ } }
+    const d = {} as Record<"work" | "clone" | "logs" | "root", cp.ChildProcess>;
+    const x = await crashedRun(c, {}, {inRunDir: runDir => {
+      for (const sub of ["work", "review-c0", "logs"]) fs.mkdirSync(path.join(runDir, sub), {recursive: true});
+      d.work = mkDecoy(path.join(runDir, "work")); d.clone = mkDecoy(path.join(runDir, "review-c0")); d.logs = mkDecoy(path.join(runDir, "logs")); d.root = mkDecoy(runDir);
+    }});
+    expect(x.run.status).toBe("AWAITING_APPROVAL");
+    expect(x.note).toMatch(/swept 2 detached writer process/);
+    expect(await waitFor(() => !procAlive(d.work.pid!) && !procAlive(d.clone.pid!), 5000), "a process working inside work/ or a clone directory survived the takeover").toBe(true);
+    expect([procAlive(d.logs.pid!), procAlive(d.root.pid!)], "a process working in logs/ or the run root was killed by the takeover sweep").toEqual([true, true]);
+  });
+
+  it.skipIf(process.platform !== "linux")("SWEEP-2 (#224 round 3): the cwd rule never reaches a process with a controlling terminal (the Founder's shell or editor), even inside work/", { timeout: 60_000 }, async () => {
+    const G = await wg();
+    const run = path.join(tmp, "runs", "run_x"), work = path.join(run, "work");
+    fs.mkdirSync(work, {recursive: true});
+    const plain = mkDecoy(work), tty = await ttyDecoy(work);
+    expect(await waitFor(() => { try { return fs.readlinkSync(`/proc/${plain.pid}/cwd`) === fs.realpathSync(work); } catch { return false; } }, 10_000)).toBe(true);
+    const hits = G!.findLeaseWriters({runDir: run, runId: "run_x", currentLeaseId: "lse_now"});
+    expect(hits).toContain(plain.pid);
+    expect(hits, "a process with a controlling terminal is matched by cwd").not.toContain(tty);
+  });
+
+  it.skipIf(process.platform !== "linux")("SWEEP-2 (#224 round 3): byCwd:false matches by lease marker only: nothing whose cwd is in the run directory is a hit, a marked process still is", { timeout: 60_000 }, async () => {
+    const G = await wg();
+    const run = path.join(tmp, "runs", "run_x"), work = path.join(run, "work");
+    fs.mkdirSync(work, {recursive: true});
+    const plain = mkDecoy(work);
+    const marked = cp.spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {cwd: tmp, stdio: "ignore", detached: true, env: {...process.env, UASCO_WRITER_RUN: "run_x", UASCO_WRITER_LEASE: "lse_now"}});
+    leaked.push(marked.pid!);
+    expect(await waitFor(() => { try { return fs.readlinkSync(`/proc/${plain.pid}/cwd`) === fs.realpathSync(work) && fs.readFileSync(`/proc/${marked.pid}/environ`, "latin1").includes("UASCO_WRITER_RUN=run_x"); } catch { return false; } }, 10_000)).toBe(true);
+    const own = G!.findLeaseWriters({runDir: run, runId: "run_x", currentLeaseId: "lse_now", includeCurrent: true, byCwd: false});
+    expect(own).toContain(marked.pid);
+    expect(own, "byCwd:false still matched by cwd").not.toContain(plain.pid);
+    expect(G!.findLeaseWriters({runDir: run, runId: "run_x", currentLeaseId: "lse_now", includeCurrent: true})).toContain(plain.pid);
   });
 
   it("TK-3: a recorded pid that now belongs to another user's process (kill -> EPERM) is a REUSED pid when its start token differs: the takeover proceeds and nothing is signalled; an equal token stays fail-closed", { timeout: 120_000 }, async () => {
@@ -515,6 +554,14 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
     await mr.tick(); // IMPLEMENT adım başı
     const after = c.store.engineGetRun(r.runId)!;
     expect([after.status, after.reason]).toEqual(["RETRY_SCHEDULED", "OWNER_RECORD_WRITE_FAILED"]);
+  });
+
+  it("TK-4 (#224 round 3): the owner record cannot be written at the WORKSPACE step itself (a directory sits at workspace.owner.json before the first tick) -> RETRY_SCHEDULED OWNER_RECORD_WRITE_FAILED, not a terminal failure", { timeout: 90_000 }, async () => {
+    const c = setup(), r = c.mkRun("A");
+    fs.mkdirSync(path.join(c.dataDir, "runs", r.runId, "workspace.owner.json"), {recursive: true}); // kayıt yerine dizin: ilk adımdaki yazı başarısız olur
+    await c.runner({maxStepsPerTick: 1, retryBackoffMs: [600_000]}).tick();
+    const after = c.store.engineGetRun(r.runId)!;
+    expect([after.status, after.reason, after.step]).toEqual(["RETRY_SCHEDULED", "OWNER_RECORD_WRITE_FAILED", "WORKSPACE"]);
   });
 
   it("TK-4: owner.json is written durably (atomic helper: a .prev copy of the previous record exists after the second write)", { timeout: 90_000 }, async () => {
@@ -571,16 +618,16 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
     expect(stuck.survivors).toEqual([7]);
   });
 
-  it.skipIf(process.platform !== "linux")("R2-9: an unmarked process whose cwd is inside the run directory is found even when the configured run directory goes through a symlink; a sibling directory with the same prefix is not", async () => {
+  it.skipIf(process.platform !== "linux")("R2-9: an unmarked process whose cwd is inside the run directory's work/ is found even when the configured run directory goes through a symlink; a sibling directory with the same prefix is not", async () => {
     const G = await wg();
-    const real = path.join(tmp, "real"), run = path.join(real, "run_x"), sibling = path.join(real, "run_x_other");
-    fs.mkdirSync(run, {recursive: true}); fs.mkdirSync(sibling, {recursive: true});
+    const real = path.join(tmp, "real"), run = path.join(real, "run_x"), sibling = path.join(real, "run_x_other"), runWork = path.join(run, "work"), siblingWork = path.join(sibling, "work");
+    fs.mkdirSync(runWork, {recursive: true}); fs.mkdirSync(siblingWork, {recursive: true});
     const link = path.join(tmp, "link"); fs.symlinkSync(real, link, "dir");
     const spawn = (cwd: string) => cp.spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {cwd, stdio: "ignore", detached: true});
-    const inside = spawn(run), outside = spawn(sibling);
+    const inside = spawn(runWork), outside = spawn(siblingWork);
     leaked.push(inside.pid!, outside.pid!);
     try {
-      expect(await waitFor(() => { try { return fs.readlinkSync(`/proc/${inside.pid}/cwd`) === run && fs.readlinkSync(`/proc/${outside.pid}/cwd`) === sibling; } catch { return false; } }, 10_000)).toBe(true);
+      expect(await waitFor(() => { try { return fs.readlinkSync(`/proc/${inside.pid}/cwd`) === runWork && fs.readlinkSync(`/proc/${outside.pid}/cwd`) === siblingWork; } catch { return false; } }, 10_000)).toBe(true);
       const hits = G!.findLeaseWriters({runDir: path.join(link, "run_x"), runId: "run_x", currentLeaseId: "lse_now"});
       expect(hits).toContain(inside.pid);
       expect(hits).not.toContain(outside.pid);
@@ -598,6 +645,95 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
       expect(gc).toBeGreaterThan(1);
       expect(await waitFor(() => !procAlive(gc), 3000), "the detached descendant of the timed-out implementer is still running").toBe(true);
     } finally { if (gc > 1) { try { process.kill(gc, "SIGKILL"); } catch { /* bitmiş */ } } }
+  });
+
+  it.skipIf(process.platform !== "linux")("SWEEP-2 (#224 round 3): a NORMAL implementer (no takeover) is followed by a sweep that matches by lease marker only: unrelated same-user processes working in the run directory (logs/, work/, the run root) survive the step", { timeout: 120_000 }, async () => {
+    const c = setup(); const r = c.mkRun("A");
+    const d: cp.ChildProcess[] = [];
+    const fake = new FakeExecutors({implement: () => {
+      const runDir = path.join(c.dataDir, "runs", r.runId);
+      for (const sub of ["work", "logs"]) fs.mkdirSync(path.join(runDir, sub), {recursive: true});
+      for (const cwd of [path.join(runDir, "work"), path.join(runDir, "logs"), runDir]) d.push(mkDecoy(cwd));
+      return {files: {"feature.txt": "ok\n"}};
+    }, review: () => ({verdict: "CLEAN"})});
+    await c.runner({executors: fake.pair(), maxStepsPerTick: 2}).tick(); // WORKSPACE + IMPLEMENT
+    expect(d).toHaveLength(3);
+    expect(c.store.engineGetRun(r.runId)!.evidence.some(e => e.kind === "IMPLEMENT"), "the implement step did not finish").toBe(true);
+    expect(d.map(x => procAlive(x.pid!)), "a bystander working in the run directory was killed by the post-implementer sweep").toEqual([true, true, true]);
+  });
+
+  it.skipIf(process.platform !== "linux")("SWEEP-3 (#224 round 3): a REVIEWER whose leader exits but leaves a descendant in the same process group (no implementer sweep follows a reviewer) has that group killed when the child ends", { timeout: 120_000 }, async () => {
+    const c = setup(); const r = c.mkRun("A");
+    const pidFile = path.join(tmp, "rv-gc.pid");
+    const reviewer: ExecutorPair["reviewer"] = {
+      identity: c.base.reviewer.identity,
+      review: async (_clone, _spec, _diff, ctx) => {
+        const child = cp.spawn("/bin/sh", ["-c", `sleep 120 & echo $! > '${pidFile}'; exit 0`], {stdio: "ignore", detached: true, env: {...process.env, ...(ctx.writerEnv ?? {})}});
+        ctx.onSpawn?.({pid: child.pid!, pgid: child.pid!});
+        await new Promise(res => child.once("exit", res));
+        const at = new Date().toISOString();
+        return {verdict: "CLEAN", findings: [], valid: true, exitCode: 0, log: "stub reviewer\n", argv: ["stub-reviewer"], startedAt: at, endedAt: at, timedOut: false, aborted: false, transient: false};
+      }
+    };
+    let gc = 0;
+    try {
+      await c.runner({executors: {...c.base, reviewer}}).tick();
+      expect(c.store.engineGetRun(r.runId)!.evidence.some(e => e.kind === "REVIEW"), "the review step did not run").toBe(true);
+      gc = Number(fs.readFileSync(pidFile, "utf8"));
+      expect(gc).toBeGreaterThan(1);
+      expect(await waitFor(() => !procAlive(gc), 3000), "the reviewer's leftover group member is still running after the reviewer ended").toBe(true);
+    } finally { if (gc > 1) { try { process.kill(gc, "SIGKILL"); } catch { /* bitmiş */ } } }
+  });
+
+  // //TR: #224 tur 3 (SWEEP-5): geçici durdurma/tarama hatası terminal değildir. Hata modeli: sweepWriters'ın "survivors" döndürdüğü (öldürülen süreç henüz gitmedi) tarama; gerçek süreç SIGKILL'den kaçamaz, bu yüzden sonuç taklit edilir.
+  it.skipIf(process.platform !== "linux")("SWEEP-5 (#224 round 3): survivors of the sweep after the IMPLEMENTER are a RETRY (bounded by maxRetries), not a terminal FAILED; the retry runs the step again and finishes", { timeout: 120_000 }, async () => {
+    const G = (await wg())!;
+    const c = setup(); const r = c.mkRun("A");
+    let calls = 0;
+    const spy = vi.spyOn(G, "sweepWriters").mockImplementation((async (o: {includeCurrent?: boolean}) => { if (o.includeCurrent === true && ++calls === 1) return {killed: [], survivors: [4242]}; return {killed: [], survivors: []}; }) as typeof G.sweepWriters);
+    try {
+      await c.runner({executors: c.base, retryBackoffMs: [600_000]}).tick();
+      const mid = c.store.engineGetRun(r.runId)!;
+      expect([mid.status, mid.reason], "a surviving writer must be retried, not fail the run").toEqual(["RETRY_SCHEDULED", "WORKSPACE_WRITER_ALIVE"]);
+      expect(calls).toBe(1);
+      await c.runner({executors: c.base, retryBackoffMs: [0, 0]}).tick(); // yeniden deneme zamanı geldi (yeni runner: devralma yok, lease canlı)
+    } finally { spy.mockRestore(); }
+  });
+
+  it.skipIf(process.platform !== "linux")("SWEEP-5 (#224 round 3): a TRANSIENT stop failure at takeover (the sweep still finds a survivor) leaves the run RECOVERING for the next takeover, which succeeds; with a persistent failure the recovery budget ends it (RECOVERY_BUDGET_EXHAUSTED), never earlier", { timeout: 180_000 }, async () => {
+    const G = (await wg())!;
+    const arrange = async (c: ReturnType<typeof setup>) => {
+      const r = c.mkRun(`R${Math.random()}`);
+      expect((await c.runner({leaseTtlMs: 300, maxStepsPerTick: 0, executors: c.base}).tick()).claimed).toEqual([r.runId]);
+      const file = path.join(c.dataDir, "runs", r.runId, "workspace.owner.json");
+      fs.mkdirSync(path.dirname(file), {recursive: true});
+      fs.writeFileSync(file, JSON.stringify({leaseId: "lse_gone", engineId: "engine_gone", hostname: os.hostname(), pid: 1, childPgid: null, childStart: null, step: "IMPLEMENT", at: new Date().toISOString(), bootId: G.bootId?.() ?? null}));
+      await sleep(450);
+      return r;
+    };
+    const survivor = () => vi.spyOn(G, "sweepWriters").mockImplementation((async (o: {includeCurrent?: boolean}) => (o.includeCurrent === true ? {killed: [], survivors: []} : {killed: [], survivors: [4242]})) as typeof G.sweepWriters);
+    const c = setup(), r = await arrange(c);
+    let spy = survivor();
+    try {
+      await c.runner({leaseTtlMs: 300, executors: c.base}).tick(); // devir: tarama temiz değil
+      let run = c.store.engineGetRun(r.runId)!;
+      expect(run.status, `${run.status}/${run.reason}`).toBe("RECOVERING"); // terminal DEĞİL
+      expect(run.evidence.find(e => e.kind === "RECOVERY")?.note ?? "").toMatch(/retrying at the next takeover/);
+      spy.mockRestore(); // hata geçti
+      await sleep(450); // RECOVERING lease'i doldu
+      await c.runner({executors: c.base}).tick(); // ikinci devir: yazar yok, run sürer
+      run = c.store.engineGetRun(r.runId)!;
+      expect(run.status, JSON.stringify(run.evidence.map(e => e.note))).toBe("AWAITING_APPROVAL");
+      expect(run.evidence.filter(e => e.kind === "RECOVERY").map(e => e.exitCode), "first takeover recorded the transient failure, second one was clean").toEqual([1, 0]);
+    } finally { spy.mockRestore(); }
+    const c2 = setup("s2"), r2 = await arrange(c2);
+    spy = survivor();
+    try {
+      for (let i = 0; i < 6 && !["RECOVERY_FAILED", "AWAITING_APPROVAL"].includes(c2.store.engineGetRun(r2.runId)!.status); i++) { await c2.runner({leaseTtlMs: 300, executors: c2.base}).tick(); await sleep(450); }
+      const run = c2.store.engineGetRun(r2.runId)!;
+      expect([run.status, run.reason], JSON.stringify(run.evidence.map(e => e.note))).toEqual(["RECOVERY_FAILED", "RECOVERY_BUDGET_EXHAUSTED"]);
+      expect(run.evidence.filter(e => e.kind === "RECOVERY").length, "one RECOVERY record per takeover, bounded by the budget").toBeLessThanOrEqual(4);
+    } finally { spy.mockRestore(); }
   });
 
   it("R2-11: a failed owner-record refresh at the end of the takeover does not block the emergency cancel: GLOBAL_STOP still ends the run CANCELLED (not FAILED with ENGINE_ERROR)", { timeout: 90_000 }, async () => {
@@ -620,11 +756,61 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
     expect([run.status, run.reason], JSON.stringify(run.evidence.map(e => e.note))).toEqual(["CANCELLED", "GLOBAL_STOP_ACTIVE: TEST_STOP"]);
   });
 
-  it("R2-12 (Windows CI finding): an access-denied pid is 'not our writer' ONLY when its start time is unreadable too; a readable token (the recorded writer we merely cannot signal) stays fail-closed on every platform", async () => {
+  // //TR: #224 tur 3: .NET ticks (100 ns, 0001-01-01'den) üretici
+  const ticksOf = (ms: number) => String(BigInt(ms) * 10000n + 621355968000000000n);
+  it("R2-12 + SWEEP-6 (#224 round 3): an access-denied pid is 'not our writer' ONLY when its StartTime is unreadable AND an independent creation time (CIM) is readable and differs from the record; any other combination stays fail-closed on every platform", async () => {
     const G = await wg();
-    expect(G!.accessDeniedVerdict("win32", null)).toBe("NOT_OUR_WRITER"); // elevated/SYSTEM process: StartTime is access-denied as well
-    expect(G!.accessDeniedVerdict("win32", "638000000000000000")).toBe("UNKNOWN"); // token readable (and, checked by the caller, equal to the record): fail-closed (this was the fail-open found on windows-latest)
-    for (const platform of ["linux", "darwin"] as const) { expect(G!.accessDeniedVerdict(platform, null)).toBe("UNKNOWN"); expect(G!.accessDeniedVerdict(platform, "123")).toBe("UNKNOWN"); }
+    const T0 = Date.UTC(2026, 9, 26, 8, 0, 0), at = new Date(T0).toISOString();
+    const probe = (creationMs: number | null, recordedMs: number | null) => ({creationTicks: creationMs === null ? null : ticksOf(creationMs), recordedStart: recordedMs === null ? null : ticksOf(recordedMs), recordAtIso: at});
+    expect(G!.accessDeniedVerdict("win32", null), "no second source: fail-closed (the first version of this rule trusted an unreadable StartTime alone)").toBe("UNKNOWN");
+    expect(G!.accessDeniedVerdict("win32", null, probe(null, T0)), "creation time unreadable too").toBe("UNKNOWN");
+    expect(G!.accessDeniedVerdict("win32", null, probe(T0 + 60_000, T0)), "created a minute after the recorded start").toBe("NOT_OUR_WRITER");
+    expect(G!.accessDeniedVerdict("win32", null, probe(T0 - 60_000, T0)), "created a minute before the recorded start").toBe("NOT_OUR_WRITER");
+    expect(G!.accessDeniedVerdict("win32", null, probe(T0 + 1_000, T0)), "within the CIM tolerance of the recorded start: it may well be the writer").toBe("UNKNOWN");
+    expect(G!.accessDeniedVerdict("win32", null, probe(T0 + 60_000, null)), "no recorded start: created long after the record was written").toBe("NOT_OUR_WRITER");
+    expect(G!.accessDeniedVerdict("win32", null, probe(T0 - 60_000, null)), "no recorded start: created before the record was written (could be the writer)").toBe("UNKNOWN");
+    expect(G!.accessDeniedVerdict("win32", "638000000000000000", probe(T0 + 60_000, T0)), "StartTime readable (equal to the record, checked by the caller): fail-closed (the windows-latest fail-open)").toBe("UNKNOWN");
+    for (const platform of ["linux", "darwin"] as const) { expect(G!.accessDeniedVerdict(platform, null, probe(T0 + 60_000, T0))).toBe("UNKNOWN"); expect(G!.accessDeniedVerdict(platform, "123")).toBe("UNKNOWN"); }
+  });
+
+  it("SWEEP-4 (#224 round 3): a live pid that started AFTER the owner record was written is a reused pid even when the record has no start token (Windows ticks / macOS lstart); Linux tokens are not compared", async () => {
+    const G = await wg();
+    const T0 = Date.UTC(2026, 9, 26, 8, 0, 0), at = new Date(T0).toISOString();
+    expect(G!.tokenMs("win32", ticksOf(T0))).toBe(T0);
+    expect(G!.tokenMs("win32", "1; calc.exe")).toBeNull();
+    expect(G!.tokenMs("darwin", "Mon Oct 26 08:00:00 2026")).toBe(T0);
+    expect(G!.tokenMs("darwin", "not a date")).toBeNull();
+    expect(G!.tokenMs("linux", "123456")).toBeNull();
+    expect(G!.startedAfterRecord("win32", ticksOf(T0 + 60_000), at)).toBe(true);
+    expect(G!.startedAfterRecord("win32", ticksOf(T0 + 1_000), at), "within the clock slack").toBe(false);
+    expect(G!.startedAfterRecord("win32", ticksOf(T0 - 60_000), at), "started before the record: may be the writer").toBe(false);
+    expect(G!.startedAfterRecord("darwin", "Mon Oct 26 08:01:00 2026", at)).toBe(true);
+    expect(G!.startedAfterRecord("win32", null, at)).toBe(false);
+    expect(G!.startedAfterRecord("linux", "999999999", at)).toBe(false);
+    expect(G!.startedAfterRecord("win32", ticksOf(T0 + 60_000), "not-a-date")).toBe(false);
+  });
+
+  it("SWEEP-4 (#224 round 3): the wait after the kill ends on GONE or on a CHANGED start token (the pid was reused by another process), and fails only when the same process is still alive at the deadline", async () => {
+    const G = await wg();
+    const nap = async () => undefined;
+    const run = (states: string[], tokens: Array<string | null>, startedToken: string | null, waitMs = 60_000) => { let i = 0, j = 0; return G!.waitWriterGone(4242, startedToken, waitMs, {state: () => (states[Math.min(i++, states.length - 1)] ?? "GONE") as never, token: async () => tokens[Math.min(j++, tokens.length - 1)] ?? null, sleep: nap}); };
+    expect(await run(["ALIVE", "ALIVE", "GONE"], ["t1", "t1"], "t1")).toBe("GONE");
+    expect(await run(["ALIVE", "ALIVE", "ALIVE"], ["t1", "t2"], "t1"), "the pid now belongs to another process").toBe("REUSED");
+    expect(await run(["ALIVE"], [null], "t1", 30), "an unreadable token never ends the wait early").toBe("ALIVE");
+    expect(await run(["ALIVE"], ["t1"], "t1", 30), "the same process is still alive at the deadline").toBe("ALIVE");
+    expect(await run(["ALIVE"], ["t2"], null, 30), "no token to compare with: only GONE ends it").toBe("ALIVE");
+  });
+
+  it("SWEEP-6 (#224 round 3): the Windows creation-time probe is one fixed CIM query for a numeric pid and refuses anything else", async () => {
+    const G = await wg();
+    const c = G!.creationTicksCommand(4242);
+    expect(c?.cmd).toBe("powershell.exe");
+    expect(c?.args[3]).toMatch(/Get-CimInstance Win32_Process -Filter "ProcessId=4242"/);
+    expect(c?.args[3]).toMatch(/CreationDate\.ToUniversalTime\(\)\.Ticks/);
+    expect(G!.creationTicksCommand(1)).toBeNull();
+    expect(G!.creationTicksCommand(Number.NaN)).toBeNull();
+    expect(G!.creationTicksCommand(4242.5)).toBeNull();
+    if (process.platform !== "win32") expect(await G!.creationTicks(4242), "not Windows: no probe").toBeNull();
   });
 
   it("TK-6 / TK-8: the macOS/BSD identity command pins TZ/locale and uses an absolute ps; the Windows kill is ONE PowerShell call that re-checks the start time and refuses a non-numeric token", async () => {
