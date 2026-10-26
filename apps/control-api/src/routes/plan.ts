@@ -4,7 +4,7 @@ import type {RouteDeps} from "./deps.js";
 import {submitPlan, validatePlanCreate, PlanError} from "../../../../core/workos/plan.js";
 
 const validMissionId = (x: unknown) => typeof x === "string" && /^msn_[0-9a-f]{24}$/.test(x);
-const STATUS: Record<string, number> = {PLAN_ALREADY_EXISTS: 409, MISSION_NOT_PLANNABLE: 409, PLAN_MISSION_NOT_FOUND: 404, PLAN_STORE_CORRUPT: 503};
+export const STATUS: Record<string, number> = {PLAN_ALREADY_EXISTS: 409, MISSION_NOT_PLANNABLE: 409, PLAN_MISSION_NOT_FOUND: 404, PLAN_STORE_CORRUPT: 503};
 
 export function registerPlanRoutes(app: any, d: RouteDeps): void {
   const guard = (fn: (req: any, reply: any) => unknown) => async (req: any, reply: any) => {
