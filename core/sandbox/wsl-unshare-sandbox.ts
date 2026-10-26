@@ -433,12 +433,21 @@ export class WslUnshareSandboxProvider implements SandboxProvider {
     try { child = this.realSpawner()(["-d", this.distro ?? "", "--exec", "/bin/sh", `${S}/ctl/run.sh`], ["ignore", "pipe", "pipe"]) as SandboxChild; }
     catch { await this.cleanup(S); throw new Error("SANDBOX_REFUSED: SPAWN_FAILED"); }
     let tornDown = false;
-    child.sandboxTeardown = new Promise<void>(res => {
-      const go = () => { if (tornDown) return; tornDown = true; this.cleanup(S).then(bad => { if (bad) { this.verified = false; this.probing = null; this.lastSelfTest = {ok: false, detail: `CLEANUP_${bad}`}; } }, () => undefined).finally(res); };
+    child.sandboxScratch = S;
+    child.sandboxTeardown = new Promise<string | null>(res => {
+      const go = () => { if (tornDown) return; tornDown = true; this.cleanup(S).then(bad => { if (bad) { this.verified = false; this.probing = null; this.lastSelfTest = {ok: false, detail: `CLEANUP_${bad}`}; } return bad; }, () => "CLEANUP_ERROR").then(res); };
       child.once("exit", go); child.once("error", go);
     });
     this.live.set(child, {S});
     return child;
+  }
+
+  /** C-5: devrun kaydındaki scratch'ı (API yeniden başlatması sonrası) kapatır; yalnız bu sağlayıcının biçimindeki yol kabul edilir. null = temiz. Başarısız = sağlayıcı doğrulanmamış olur. */
+  async teardownScratch(S: string): Promise<string | null> {
+    if (typeof S !== "string" || !SCRATCH_RE.test(S)) return "SCRATCH_PATH_INVALID";
+    const bad = await this.cleanup(S);
+    if (bad) { this.verified = false; this.probing = null; this.lastSelfTest = {ok: false, detail: `CLEANUP_${bad}`}; }
+    return bad;
   }
 
   /** Windows ana makinesinde YALNIZ 127.0.0.1:<port> dinler (0.0.0.0 ve WSL localhost yönlendirmesi YOK). Her bağlantı için `wsl.exe --exec /bin/sh relay.sh <pid> <port>` çalışır; stdio üzerinden WSL içindeki sabit röleye (nsenter -U -n) iletilir. Yalnız ana makine -> sandbox yönü vardır. */

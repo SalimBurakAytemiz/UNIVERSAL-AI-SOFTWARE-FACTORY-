@@ -384,6 +384,45 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
     } finally { await m.stopAll("CLEANUP"); }
   }, T);
 
+  const hostSpawn = (o: Record<string, unknown>) => ({...TEST_HOST_PASSTHROUGH_SANDBOX, ...o}) as any;
+  it("C-5: a provider teardown code is recorded as STOP_INCOMPLETE:<code> with the scratch kept in the state; recover() retries the Linux-side teardown (teardownScratch) once the owner is dead and clears the record only on a clean result; a clean teardown drops the scratch", async () => {
+    const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
+    let code: string | null = "PROCESS_SURVIVED"; const torn: string[] = [];
+    const provider = hostSpawn({async spawnAsync(c: string, a: string[], o: cp.SpawnOptions) { const ch: any = cp.spawn(c, a, o); ch.sandboxScratch = "/tmp/uasco-sbx-AbC123"; ch.sandboxTeardown = new Promise(res => ch.once("exit", () => res(code))); return ch; },
+      async teardownScratch(sc: string) { torn.push(sc); return code; }});
+    const m = manager(dataDir, new ExecutionGate(provider));
+    try {
+      await m.start(p); await m.stop(p.projectId);
+      for (let i = 0; i < 50 && m.view(p).reason !== "STOP_INCOMPLETE:PROCESS_SURVIVED"; i++) await new Promise(r => setTimeout(r, 100));
+      expect(m.view(p)).toMatchObject({status: "STOPPED", reason: "STOP_INCOMPLETE:PROCESS_SURVIVED", stopIncomplete: "PROCESS_SURVIVED", sandboxScratch: "/tmp/uasco-sbx-AbC123"});
+      const st = JSON.parse(fs.readFileSync(path.join(dataDir, "projects", p.projectId, "devrun", "state.json"), "utf8")); st.instanceId = "dev_dead"; st.ownerPid = 2 ** 22 - 3; fs.writeFileSync(path.join(dataDir, "projects", p.projectId, "devrun", "state.json"), JSON.stringify(st));
+      const m2 = manager(dataDir, new ExecutionGate(provider));
+      await m2.recover(); expect(torn).toEqual(["/tmp/uasco-sbx-AbC123"]); expect(m2.view(p)).toMatchObject({stopIncomplete: "PROCESS_SURVIVED"});
+      code = null; await m2.recover(); expect(torn).toEqual(["/tmp/uasco-sbx-AbC123", "/tmp/uasco-sbx-AbC123"]); expect(m2.view(p).stopIncomplete).toBeUndefined(); expect(m2.view(p).sandboxScratch).toBeNull();
+      await m2.recover(); expect(torn.length).toBe(2);
+      await m2.start(p); await m2.stop(p.projectId);
+      for (let i = 0; i < 50 && m2.view(p).sandboxScratch !== null; i++) await new Promise(r => setTimeout(r, 100));
+      expect(m2.view(p)).toMatchObject({status: "STOPPED", sandboxScratch: null}); expect(m2.view(p).stopIncomplete).toBeUndefined();
+    } finally { await m.stopAll("CLEANUP"); }
+  }, T);
+
+  it("C-8: the delivery link is on the STARTING placeholder (product stop works during STARTING); C-9: the manager-wide cap refuses the next start with 409 DEVRUN_CAPACITY", async () => {
+    const {app, dataDir} = mk(); const p1 = await createProject(app, {template: "web-node"}), p2 = await createProject(app, {template: "web-node"});
+    let release: (n: number) => void = () => undefined, reached = false;
+    const gateP = new Promise<number>(r => { release = r; });
+    const m = manager(dataDir, new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX as any), {maxConcurrent: 1, startTimeOf: async () => { reached = true; await new Promise(r => setTimeout(r, 400)); return null; }, freePort: async () => gateP});
+    const link = {runId: "run_" + "c".repeat(24), headSha: git(path.join(dataDir, "projects", p1.projectId, "repo"), ["rev-parse", "HEAD"]).trim()};
+    const first = m.start(p1, link);
+    try {
+      for (let i = 0; i < 100 && !reached; i++) await new Promise(r => setTimeout(r, 50));
+      expect(m.view(p1)).toMatchObject({status: "STARTING", deliveryRunId: link.runId});
+      await expect(m.start(p2)).rejects.toMatchObject({code: "DEVRUN_CAPACITY", status: 409});
+      release(await (await import("../core/workos/devrun.js")).freeLoopbackPort()); await first;
+      await expect(m.start(p2)).rejects.toMatchObject({code: "DEVRUN_CAPACITY"});
+      await m.stop(p1.projectId); expect((await m.start(p2)).status).toMatch(/RUNNING|STARTING/);
+    } finally { release(1); await first.catch(() => undefined); await m.stopAll("CLEANUP"); }
+  }, T);
+
   it("C-1: a RUNNING bridged product is stopped on the provider side and becomes BLOCKED (SANDBOX_UNVERIFIED) when the provider de-verifies; view masks the preview at once, the bridge closes, the process is gone and a new start is refused", async () => {
     const {app, dataDir} = mk(); const p = await createProject(app, {template: "web-node"});
     const net = await import("node:net");

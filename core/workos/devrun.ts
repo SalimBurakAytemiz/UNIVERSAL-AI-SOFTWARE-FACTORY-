@@ -33,6 +33,8 @@ export interface DevRunState {
   stopTimedOut?: true;
   // B-RUN-1: ürün bir teslim kaydına (work-run) bağlı başlatıldıysa o koşunun kimliği; headSha teslim edilen commit'tir. bridged: ürün portu yalnız sağlayıcı köprüsüyle (127.0.0.1) ana makineye açılır.
   deliveryRunId?: string | null; bridged?: boolean;
+  // C-5: sağlayıcı-taraflı scratch (WSL); API çökerse recover() bununla Linux tarafını kapatır. stopIncomplete: kapatma temiz bitmedi (sağlayıcı kodu).
+  sandboxScratch?: string | null; stopIncomplete?: string;
   // PS1A-C2-F2: süreç çıkışından sonra kalan süreç ağacı temizliği (Windows: ppid yürüyüşü + periyodik soy anlık görüntüsü; Linux: süreç grubu + kaydedilmiş soy (setsid'li torunlar dahil) ppid yürüyüşü; diğer POSIX: yalnız süreç grubu).
   treeCleanup?: {at: string; method: "PPID_WALK" | "PROCESS_GROUP" | "PROCESS_GROUP_PPID_WALK" | "UNAVAILABLE"; killed: number; survivors: number};
 }
@@ -52,6 +54,8 @@ export interface DevRunOptions {
   executionGate?: ExecutionGate;
   // B-RUN-1: köprü ayarları (test enjeksiyonu: nsenter yolu/null, bağlantı sınırı).
   bridgeOptions?: NsenterOptions;
+  // C-9: yönetici genelinde eşzamanlı etkin dev-run üst sınırı (varsayılan 2); aşılırsa 409 DEVRUN_CAPACITY.
+  maxConcurrent?: number;
 }
 const NO_PREVIEW_TYPES = new Set(["desktop", "mobile", "native"]);
 const ACTIVE: ReadonlySet<DevRunStatus> = new Set(["STARTING", "RUNNING"]);
@@ -269,6 +273,15 @@ export class DevRunManager {
     const preview: DevRunPreview = a?.blockedReason ? {url: null, state: "UNAVAILABLE", lastProbeAt: pub.preview?.lastProbeAt ?? null, reason: a.blockedReason} : !a && pub.preview?.state === "AVAILABLE" ? {url: null, state: "UNAVAILABLE", lastProbeAt: pub.preview.lastProbeAt ?? null, reason: "NOT_OWNED_BY_THIS_INSTANCE"} : {...pub.preview};
     return {...pub, argv: [...pub.argv], preview, logTail: this.readLogs(project.projectId, a)};
   }
+  // C-5: sağlayıcı-taraflı kapatma temiz bitmediyse (kod döndü) kayıt STOP_INCOMPLETE:<kod> taşır; scratch kaydı recover() için saklanır, temizse silinir.
+  private noteTeardown(a: Active, td: unknown): void {
+    const st = a.state;
+    if (typeof td === "string" && td) { st.stopIncomplete = td; st.reason = `STOP_INCOMPLETE:${td}`; this.o.audit("DEVRUN_STOP_INCOMPLETE", {projectId: st.projectId, code: td}); }
+    else if (st.sandboxScratch && td === null) st.sandboxScratch = null;
+    else return;
+    const cur = this.readState(st.projectId);
+    if (!this.active.has(st.projectId) && cur && cur.instanceId === this.instanceId && cur.startedAt === st.startedAt && !ACTIVE.has(cur.status)) { try { this.writeState({...cur, reason: st.reason, stopIncomplete: st.stopIncomplete, sandboxScratch: st.sandboxScratch ?? null}); } catch { /* durum yazılamadı */ } }
+  }
   // C-1: sağlayıcı kendini doğrulanmamış yaptıysa (isVerified() false) çalışan ürün çalışır/köprülü/200 kalamaz: sağlayıcı tarafında kapatılır ve BLOCKED yazılır.
   private checkProvider(a: Active): void {
     if (a.blockedReason || !ACTIVE.has(a.state.status) || typeof a.provider?.isVerified !== "function") return;
@@ -337,7 +350,10 @@ export class DevRunManager {
     try { repo = this.o.studio.managedRepoRoot(project); }
     catch (e) { if (e instanceof StudioError && e.code === "REPOSITORY_NOT_CONFIGURED") return this.block(project, "REPOSITORY_NOT_CONFIGURED"); throw e; }
     // Yer tutucu: aynı süreçteki eşzamanlı ikinci start await'ten önce reddedilir.
+    if ([...this.active.values()].filter(x => ACTIVE.has(x.state.status)).length >= (this.o.maxConcurrent ?? 2)) throw new StudioError("DEVRUN_CAPACITY", 409);
     const st: DevRunState = {...this.blank(project), status: "STARTING", startedAt: new Date().toISOString(), argv: [...argv]};
+    // C-8: teslim bağlantısı STARTING yer tutucusundan itibaren kayıtlıdır (ürün durdurma STARTING sırasında da çalışır).
+    if (link) st.deliveryRunId = link.runId;
     const a: Active = {state: st, child: null, stopping: false, stdout: new Ring(this.o.logRingBytes), stderr: new Ring(this.o.logRingBytes), release: null, probeTimer: null, flushTimer: null, exited: Promise.resolve(), projectType: project.projectType, known: new Map(), snapTimer: null, bridge: null, provider: null, blockedReason: null};
     this.active.set(id, a);
     // PS1A-C1-F2: her await'ten sonra (özellikle spawn'dan hemen önce) stop/stopAll/GLOBAL_STOP ve harita sahipliği yeniden kontrol edilir.
@@ -373,10 +389,10 @@ export class DevRunManager {
       const spawnOpts = {cwd: ws, env, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] as ["ignore", "pipe", "pipe"], detached: process.platform !== "win32"};
       // B-RUN-WIN-1: eşzamansız hazırlık gerektiren sağlayıcı (WSL) spawnAsync sunar; yoksa eşzamanlı spawn.
       const child: SandboxChild = gate.provider.spawnAsync ? await gate.provider.spawnAsync(exe, argv.slice(1), spawnOpts) : gate.provider.spawn(exe, argv.slice(1), spawnOpts);
-      a.child = child; a.provider = gate.provider;
+      a.child = child; a.provider = gate.provider; if (child.sandboxScratch) st.sandboxScratch = child.sandboxScratch;
       a.exited = new Promise<void>(resolve => {
         // PS1A-C2-F2: çıkış (çökme veya durdurma) sonrası kalan ağaç (ayrık torunlar dahil) temizlenmeden exited çözülmez.
-        child.once("exit", (code, signal) => { this.onExit(a, code, signal); void Promise.all([this.reapTree(a).catch(() => undefined), Promise.resolve(child.sandboxTeardown).catch(() => undefined)]).finally(resolve); });
+        child.once("exit", (code, signal) => { this.onExit(a, code, signal); void Promise.all([this.reapTree(a).catch(() => undefined), Promise.resolve(child.sandboxTeardown).catch(() => "TEARDOWN_ERROR")]).then(([, td]) => this.noteTeardown(a, td)).finally(resolve); });
         child.once("error", () => { if (child.pid === undefined) { this.onExit(a, null, null, "DEVRUN_SPAWN_FAILED"); resolve(); } });
       });
       child.stdout?.on("data", (b: Buffer) => { a.stdout.push(b); this.scheduleFlush(a); });
@@ -576,6 +592,13 @@ export class DevRunManager {
 
   // PS-AT-004: API yeniden başladığında STARTING/RUNNING kayıtları incelenir. Sahibi canlı başka bir API süreciyse dokunulmaz; değilse süreç sahipsizdir:
   // pid canlı ve başlangıç zamanı kayıtla birebir aynıysa süreç ağacı sonlandırılır, değilse (pid yeniden kullanılmış/doğrulanamıyor) ÖLDÜRÜLMEZ ve raporlanır.
+  private async recoverScratch(st: DevRunState): Promise<{code: string | null}> {
+    if (!st.sandboxScratch) return {code: null};
+    let provider: {teardownScratch?: (s: string) => Promise<string | null>} | null = null;
+    try { const g = await this.o.executionGate?.authorize("STUDIO_DEVRUN"); provider = g && g.allowed ? g.provider : null; } catch { provider = null; }
+    if (!provider || typeof provider.teardownScratch !== "function") return {code: "SANDBOX_PROVIDER_UNAVAILABLE"};
+    try { return {code: await provider.teardownScratch(st.sandboxScratch)}; } catch { return {code: "TEARDOWN_ERROR"}; }
+  }
   async recover(): Promise<Array<{projectId: string} & DevRunRecovery>> {
     const root = path.join(this.o.studio.dataDir, "projects");
     let ids: string[] = [];
@@ -584,6 +607,12 @@ export class DevRunManager {
     const self = await this.ownStartTime();
     for (const id of ids) {
       const st = this.readState(id);
+      // C-5: önceki kapatma temiz bitmediyse (STOP_INCOMPLETE + scratch) sahip canlı değilse Linux tarafı yeniden denenir.
+      if (st && !ACTIVE.has(st.status) && st.stopIncomplete && st.sandboxScratch && !this.active.has(id) && st.ownerHost === os.hostname() && !(await this.ownerLive(st))) {
+        const td = await this.recoverScratch(st);
+        if (!td.code) { try { this.writeState({...st, stopIncomplete: undefined, sandboxScratch: null, reason: "STOP_INCOMPLETE_RESOLVED"}, true); } catch { /* durum yazılamadı */ } }
+        continue;
+      }
       if (!st || !ACTIVE.has(st.status) || st.instanceId === this.instanceId || this.active.has(id)) continue;
       if (st.ownerHost !== os.hostname()) continue;
       // PS1A-C1-F3: canlı başka API süreci yalnız pid + başlangıç zamanı eşleşirse; yeniden kullanılmış pid sahibi canlı saymaz.
@@ -596,8 +625,10 @@ export class DevRunManager {
         if (!now || !st.pidStartTime || now !== st.pidStartTime) result = "ORPHAN_PID_MISMATCH_NOT_KILLED";
         else { killProcessTree(st.pid!); for (let i = 0; i < 50 && pidAlive(st.pid); i++) await sleep(100); result = pidAlive(st.pid) ? "ORPHAN_KILL_FAILED" : "ORPHAN_KILLED"; }
       }
+      // C-5: sağlayıcı-taraflı scratch (WSL) Linux tarafında kapatılır; kapatılamazsa kayıt STOP_INCOMPLETE ile scratch'ı korur.
+      const td = await this.recoverScratch(st);
       const rec: DevRunRecovery = {at: new Date().toISOString(), result, previousInstanceId: st.instanceId, pid: st.pid};
-      const next: DevRunState = {...st, status: result === "ORPHAN_KILL_FAILED" ? "CRASHED" : "STOPPED", reason: `RECOVERED_AFTER_API_RESTART:${result}`, endedAt: rec.at, instanceId: this.instanceId, ownerPid: process.pid, ownerHost: os.hostname(), ownerStartTime: self,
+      const next: DevRunState = {...st, status: result === "ORPHAN_KILL_FAILED" ? "CRASHED" : "STOPPED", reason: td.code ? `STOP_INCOMPLETE:${td.code}` : `RECOVERED_AFTER_API_RESTART:${result}`, ...(td.code ? {stopIncomplete: td.code, sandboxScratch: st.sandboxScratch ?? null} : {sandboxScratch: null}), endedAt: rec.at, instanceId: this.instanceId, ownerPid: process.pid, ownerHost: os.hostname(), ownerStartTime: self,
         preview: {url: null, state: "UNAVAILABLE", lastProbeAt: st.preview?.lastProbeAt ?? null, reason: "NOT_RUNNING"}, recovery: rec};
       this.writeState(next, true);
       const lf = this.lockFile(id), ls = inspectProcessLock(lf) as {state: string; pid?: number; runId?: string | null};

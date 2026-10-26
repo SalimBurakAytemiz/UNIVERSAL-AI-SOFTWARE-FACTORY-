@@ -20,9 +20,11 @@ export interface SandboxProvider {
   /** İsteğe bağlı (B-RUN-WIN-1): hazırlığı eşzamansız olan sağlayıcılar (WSL: kopyalama + betik) için; varsa dev-run spawn() yerine bunu kullanır. Dönen süreç `sandboxTeardown` taşıyabilir: çıkıştan sonra Linux tarafı ağacı/dizini temizleyen söz. */
   /** İsteğe bağlı: sağlayıcının şu anki doğrulanmış durumu; kapı her authorize()/status()'ta sorar (false ise önbellek geçersizdir). */
   isVerified?(): boolean;
+  /** İsteğe bağlı (C-5): API yeniden başlatıldıktan sonra sahipsiz kalmış sağlayıcı-taraflı scratch'ı kapatır; null = temiz, aksi halde kod. */
+  teardownScratch?(scratch: string): Promise<string | null>;
   spawnAsync?(command: string, args: string[], opts: SpawnOptions): Promise<SandboxChild>;
 }
-export type SandboxChild = ChildProcess & {sandboxTeardown?: Promise<unknown>};
+export type SandboxChild = ChildProcess & {sandboxTeardown?: Promise<unknown>; sandboxScratch?: string};
 export type SandboxDenialDetail = "NO_VERIFIED_PROVIDER" | "SELF_TEST_FAILED" | "SELF_TEST_ERROR";
 export type GateDecision =
   | {allowed: true; kind: ProjectExecutionKind; providerId: string; provider: SandboxProvider}
