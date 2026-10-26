@@ -132,7 +132,7 @@ export class ClaudePreDevBuilder implements BuilderPort {
       if (entries.length > 0) return fail("PREDEV_BUILDER_SCRATCH_MODIFIED", `${entries.length} entries`);
       const rawOut = String(r.stdout ?? "").trim();
       const json = this.rt.outputFormat === "claude-json";
-      const envl = json && rawOut !== "" ? readEnvelope(rawOut) : null;
+      const envl = json ? readEnvelope(rawOut) : null;
       // //TR: Oturum yok/süresi dolmuş: CLI bunu çıkış kodu 1 + zarfın `result` metni (veya stderr) ile bildirir; genel EXIT_NONZERO yerine kesin neden.
       if (json && (r.exitCode !== 0 || envl?.kind === "error") && claudeAuthFailure(`${envl?.kind === "error" ? envl.text : ""}\n${rawOut}\n${String(r.stderr ?? "")}`)) return fail("PREDEV_BUILDER_LOGIN_EXPIRED");
       if (r.exitCode !== 0) return fail("PREDEV_BUILDER_EXIT_NONZERO");

@@ -1,5 +1,5 @@
 {
- "//TR": "C-FLOW-ANALYSIS-2 mutasyon listesi: her mutant tam metin değişikliğidir (dosyada tam 1 kez bulunmalı); docs/lanes/LANE-C-flow-analysis-2-mutants.mjs her birini uygular ve tests/v7-lane-c-flow-analysis.test.ts dosyasının BAŞARISIZ olmasını bekler.",
+ "//TR": "C-FLOW-ANALYSIS-2 mutasyon listesi: her mutant tam metin değişikliğidir (dosyada tam 1 kez bulunmalı); docs/lanes/LANE-C-flow-analysis-2-mutants.mjs her birini uygular ve tests/v7-lane-c-flow-analysis.test.ts dosyasının BAŞARISIZ olmasını bekler. X7 (boş yanıtı zarf olarak okumak) denetimde HAYATTA KALDI: gereksiz koruma `rawOut !== \"\"` idi (sonraki denetim zaten aynı koruma ile aynı kodu verir); koruma üretim kodundan kaldırıldı ve mutant listeden çıkarıldı (davranış aynı).",
  "mutants": [
   {
    "id": "A1",
@@ -88,13 +88,6 @@
    "file": "core/workos/predev/claude-builder.ts",
    "old": "if (typeof e.result !== \"string\") return {kind: \"invalid\"};\n  return {kind: \"ok\", result: e.result};",
    "new": "return {kind: \"ok\", result: e.result as string};"
-  },
-  {
-   "id": "X7",
-   "description": "an empty reply is read as an envelope (wrong code)",
-   "file": "core/workos/predev/claude-builder.ts",
-   "old": "const envl = json && rawOut !== \"\" ? readEnvelope(rawOut) : null;",
-   "new": "const envl = json ? readEnvelope(rawOut) : null;"
   },
   {
    "id": "X8",

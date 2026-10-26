@@ -477,6 +477,9 @@ process.exit(s.exit ?? 0);
       expect([k, prompt.endsWith(JSON.stringify(OUTPUT_SKELETONS[k], null, 2))]).toEqual([k, true]);
       expect([k, JSON.stringify(OUTPUT_SKELETONS[k]).includes(PLACEHOLDER_MARKER)]).toEqual([k, true]);
     }
+    // every text leaf of a skeleton is a placeholder; the only literal strings are the example ids (id / workPackageIds): in particular the traceability slots (tracesTo, satisfies, covers) and every name/statement are placeholders
+    const leaves = (x: unknown, key = "", out: Array<[string, string]> = []): Array<[string, string]> => { if (typeof x === "string") out.push([key, x]); else if (Array.isArray(x)) x.forEach(v => leaves(v, key, out)); else if (x && typeof x === "object") Object.entries(x).forEach(([k, v]) => leaves(v, k, out)); return out; };
+    for (const k of Object.keys(OUTPUT_SKELETONS) as ArtifactKind[]) for (const [key, val] of leaves(OUTPUT_SKELETONS[k])) if (!val.includes(PLACEHOLDER_MARKER)) expect([k, key, val.length > 0 && ["id", "workPackageIds"].includes(key)]).toEqual([k, key, true]);
     // the traceability slots are placeholders: copying the skeleton cannot satisfy the real chain
     expect(validateArtifactContent("Requirements", OUTPUT_SKELETONS.Requirements, {businessAnalysis: filled.BusinessAnalysis})).toEqual({ok: false, errors: "REQ_TRACEABILITY_BROKEN"});
   });
