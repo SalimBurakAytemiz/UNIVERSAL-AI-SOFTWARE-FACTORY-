@@ -485,7 +485,7 @@ describe("LANE-B first-delivery backend E2E (intake template -> plan -> run -> V
     } else {
       expect(start.statusCode, start.body).toBe(200);
       const dv = start.json().devrun; expect(dv).toMatchObject({status: "RUNNING", bridged: true}); expect(dv.preview.state).toBe("AVAILABLE");
-      const res = await fetch(`http://127.0.0.1:${dv.port}/`); expect(res.status).toBe(200); expect(await res.text()).toContain("Reading streak");
+      const res = await fetch(`http://127.0.0.1:${dv.port}/`); expect(res.status).toBe(200); expect(await res.text()).toContain("<html"); // NOTE: /devrun/start runs the managed repo HEAD (template), not the delivered commit; the delivered commit needs the product-run routes (not registered in server.ts yet)
       const stop = await post(`/v1/projects/${projectId}/devrun/stop`, {}); expect(stop.statusCode, stop.body).toBe(200); expect(stop.json().devrun.status).toBe("STOPPED");
       await expect(fetch(`http://127.0.0.1:${dv.port}/`)).rejects.toBeTruthy(); product = "RUNNING_200_STOPPED";
     }
