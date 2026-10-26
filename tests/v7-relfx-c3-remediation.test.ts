@@ -625,7 +625,9 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
       const r = await p;
       expect(r, `recorded=${recorded}`).toMatchObject({status: null, stdout: "", stderr: "ABORTED", aborted: true});
       if (recorded) {
-        expect(child!.pgid, "a recorded git child must be the leader of its own process group").toBe(child!.pid);
+        // //TR: Windows'ta süreç grubu yoktur (pgid null; ağaç taskkill /T ile öldürülür): lider iddiası yalnız POSIX'te
+        if (process.platform === "win32") expect(child!.pgid, "no process groups on Windows").toBeNull();
+        else expect(child!.pgid, "a recorded git child must be the leader of its own process group").toBe(child!.pid);
         if (process.platform === "linux") expect(await waitUntil(() => (groupMembers(child!.pgid!) ?? ["unreadable"]).length === 0, 5000), "a member of the aborted git child's group survived").toBe(true);
         else expect(await waitUntil(() => !procAlive(child!.pid), 5000), "the aborted git child survived").toBe(true);
       }
