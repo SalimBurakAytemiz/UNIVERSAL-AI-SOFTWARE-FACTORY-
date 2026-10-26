@@ -115,7 +115,8 @@ export function killWriterGroup(pgid: number, expectedStart: string | null): Pro
   return Promise.resolve();
 }
 
-// //TR: Lider yok ama grup canlı (Linux): bir grup kimliği üyeleri yaşadıkça yeniden kullanılmaz, ancak yeniden başlatma sonrası ya da grup dağılıp kimlik yeniden alınmışsa bu grup BAŞKASININ olabilir (çift çatallanmış bir daemon). Öldürmeden önce: aynı önyükleme VE her canlı üye lider sürecin kaydedilmiş başlangıcından SONRA başlamış olmalı; aksi halde fail-closed.
+// //TR: Lider yok ama grup canlı (Linux): bir grup kimliği üyeleri yaşadıkça yeniden kullanılmaz, ancak grup dağılıp kimlik yeniden alınmışsa (pid sarması, aynı önyükleme kimliğiyle yeni pid alanı) bu grup BAŞKASININ olabilir (çift çatallanmış bir daemon): böyle bir grubun üyeleri de kaydedilen liderden SONRA başlamıştır, yani başlangıç zamanı tek başına ayırt etmez. Öldürmeden önce: aynı önyükleme, her canlı üye kayıtlı liderden sonra başlamış VE en az bir üyenin ortamı kaydın lease işaretini (UASCO_WRITER_LEASE=<önceki lease>) taşımalı; işaret rastgele bir lease kimliğidir, yabancı bir grup taşıyamaz. Aksi halde fail-closed.
+const envHas = (pid: number, entry: string): boolean => { try { return fs.readFileSync(`/proc/${pid}/environ`, "latin1").split("\0").includes(entry); } catch { return false; } };
 export function leaderlessGroupProof(pgid: number, prev: WorkspaceOwner): {ok: true} | {ok: false; why: string} {
   if (prev.bootId === null || !sameBoot(prev.bootId, bootId())) return {ok: false, why: `writer group ${pgid} has no leader and its boot cannot be proven the same`};
   const childStart = Number(prev.childStart);
@@ -123,14 +124,20 @@ export function leaderlessGroupProof(pgid: number, prev: WorkspaceOwner): {ok: t
   const members = groupMembers(pgid);
   if (members === null) return {ok: false, why: `writer group ${pgid} members cannot be read`};
   if (members.some(m => !Number.isSafeInteger(m.start) || m.start < childStart)) return {ok: false, why: `writer group ${pgid} has a member older than the recorded writer`};
+  const mark = `${WRITER_ENV_LEASE}=${prev.leaseId}`;
+  if (!members.some(m => envHas(m.pid, mark))) return {ok: false, why: `writer group ${pgid} has no leader and no member carries the recorded lease marker`};
   return {ok: true};
 }
 
 // ---- setsid ile kaçan torunlar (Linux) ----
 // //TR: Süreç grubu öldürmesi setsid/çift çatal ile gruptan ayrılan torunu yakalamaz. Çocukların ortamındaki lease işareti torunlara geçer: bu run'ın EKSİ lease'lerinden birinin işaretini taşıyan veya çalışma dizini run dizininin altında olan her süreç (kendimiz hariç) öldürülür ve ölmesi beklenir. Okunamayan (başka kullanıcı) süreç bizim değildir. Windows'ta eşdeğeri bir Job nesnesidir (yok): bu bilinen bir kalıntıdır.
-export function findLeaseWriters(o: {runDir: string; runId: string; currentLeaseId: string}): number[] {
+export interface SweepTarget { runDir: string; runId: string; currentLeaseId: string; includeCurrent?: boolean }
+// //TR: R2: readlink(/proc/<pid>/cwd) kanonik yolu verir; runDir sembolik bir bileşen içeriyorsa (sembolik ev dizini, bağlama takma adı) sözcüksel karşılaştırma hiç eşleşmez ve işaretsiz süreçler taramadan kaçardı: runDir kanonikleştirilir. includeCurrent: ENGİNİN KENDİ lease'inin işaretini taşıyan artıklar da (implementer bitti ya da öldürüldü ama torunu kaldı) hedeftir; devirde yalnız ESKİ lease'ler hedeftir.
+const canonicalDir = (dir: string): string => { try { return fs.realpathSync(dir); } catch { return dir; } };
+export function findLeaseWriters(o: SweepTarget): number[] {
   if (process.platform !== "linux") return [];
   const hits: number[] = [];
+  const dirs = [...new Set([o.runDir, canonicalDir(o.runDir)])];
   const marker = `${WRITER_ENV_RUN}=${o.runId}`, current = `${WRITER_ENV_LEASE}=${o.currentLeaseId}`, leasePrefix = `${WRITER_ENV_LEASE}=`;
   let names: string[];
   try { names = fs.readdirSync("/proc"); } catch { return hits; }
@@ -144,21 +151,27 @@ export function findLeaseWriters(o: {runDir: string; runId: string; currentLease
     let hit = false;
     try {
       const vars = fs.readFileSync(`/proc/${name}/environ`, "latin1").split("\0");
-      if (vars.includes(marker)) { const lease = vars.find(v => v.startsWith(leasePrefix)); hit = lease !== current; }
+      if (vars.includes(marker)) { const lease = vars.find(v => v.startsWith(leasePrefix)); hit = o.includeCurrent === true || lease !== current; }
     } catch { /* başka kullanıcı: bizim yazarımız değil */ }
     if (!hit) {
-      try { const cwd = fs.readlinkSync(`/proc/${name}/cwd`); hit = cwd === o.runDir || cwd.startsWith(o.runDir + path.sep); } catch { /* okunamadı */ }
+      try { const cwd = fs.readlinkSync(`/proc/${name}/cwd`); hit = dirs.some(d => cwd === d || cwd.startsWith(d + path.sep)); } catch { /* okunamadı */ }
     }
     if (hit) hits.push(pid);
   }
   return hits;
 }
-export async function sweepWriters(o: {runDir: string; runId: string; currentLeaseId: string}, waitMs = WRITER_KILL_WAIT_MS): Promise<{killed: number[]; survivors: number[]}> {
-  const killed = findLeaseWriters(o);
-  for (const pid of killed) { try { process.kill(pid, "SIGKILL"); } catch { /* zaten bitmiş */ } }
-  let survivors = killed.length ? findLeaseWriters(o) : [];
-  for (const until = Date.now() + waitMs; survivors.length > 0 && Date.now() < until;) { await new Promise<void>(r => setTimeout(r, 50)); survivors = findLeaseWriters(o); }
-  return {killed, survivors};
+// //TR: R2: tarama tek seferlik değildir: öldürülen bir sürecin son anlarında çatalladığı (veya hâlâ çatallayan) torunlar ilk görüntüde yoktur. Temiz bir tarama görülene kadar (ya da süre dolana kadar) her turda bulunanların HEPSİNE yeniden SIGKILL gider; süre dolarsa kalanlar `survivors` olur ve çağıran fail-closed davranır. deps yalnız testler içindir (belirleyici tarama dizisi).
+export async function sweepWriters(o: SweepTarget, waitMs = WRITER_KILL_WAIT_MS, deps: {find?: (t: SweepTarget) => number[]; kill?: (pid: number) => void} = {}): Promise<{killed: number[]; survivors: number[]}> {
+  const find = deps.find ?? findLeaseWriters, kill = deps.kill ?? ((pid: number) => { try { process.kill(pid, "SIGKILL"); } catch { /* zaten bitmiş */ } });
+  const killed = new Set<number>();
+  let hits = find(o);
+  for (const until = Date.now() + waitMs; hits.length > 0;) {
+    for (const pid of hits) { killed.add(pid); kill(pid); }
+    if (Date.now() >= until) break;
+    await new Promise<void>(r => setTimeout(r, 50));
+    hits = find(o);
+  }
+  return {killed: [...killed], survivors: hits};
 }
 
 // ---- süreç sonlanırken kayıtlı grupların öldürülmesi (TK-5) ----
@@ -170,12 +183,16 @@ export const trackedWriterGroups = (): number[] => [...liveGroups];
 export function killTrackedGroups(): void { for (const g of liveGroups) { try { process.kill(-g, "SIGKILL"); } catch { /* grup zaten bitmiş */ } } }
 let forwardRefs = 0;
 const forwardHandlers = new Map<NodeJS.Signals, () => void>();
+// //TR: R2: süreç sonlanıyor işareti (sinyal ya da exit). Başka bir dinleyici varsa süreç kapanış mantığını sürdürür ve sürüşler birkaç ms daha yaşar: yazar gruplarının ÖLDÜRÜLMÜŞ olması o adımın hatası DEĞİLDİR. Runner bu işareti görünce başarısız/engelli/yeniden-dene sonuçlarını KAYDETMEZ (run kilitli kalır, sonraki engine devralır).
+let terminating = false;
+export const isTerminating = (): boolean => terminating;
+const onProcessExit = (): void => { terminating = true; killTrackedGroups(); };
 export function installTerminationForwarding(): () => void {
   if (process.platform === "win32") return () => undefined;
   if (forwardRefs++ === 0) {
-    process.on("exit", killTrackedGroups);
+    process.on("exit", onProcessExit);
     for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
-      const h = () => { killTrackedGroups(); if (process.listenerCount(sig) <= 1) { process.removeListener(sig, h); try { process.kill(process.pid, sig); } catch { /* sonlanamadı */ } } };
+      const h = () => { terminating = true; killTrackedGroups(); if (process.listenerCount(sig) <= 1) { process.removeListener(sig, h); try { process.kill(process.pid, sig); } catch { /* sonlanamadı */ } } };
       forwardHandlers.set(sig, h); process.on(sig, h);
     }
   }
@@ -183,6 +200,6 @@ export function installTerminationForwarding(): () => void {
   return () => {
     if (released) return;
     released = true;
-    if (--forwardRefs === 0) { process.removeListener("exit", killTrackedGroups); for (const [sig, h] of forwardHandlers) process.removeListener(sig, h); forwardHandlers.clear(); }
+    if (--forwardRefs === 0) { process.removeListener("exit", onProcessExit); for (const [sig, h] of forwardHandlers) process.removeListener(sig, h); forwardHandlers.clear(); terminating = false; }
   };
 }

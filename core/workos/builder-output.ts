@@ -44,7 +44,7 @@ export function agentConfigInWorkspace(workspace: string, envPolicyFile: string)
 
 export type BuilderCommitResult =
   | {ok: true; commitSha: string; changed: string[]; log: string}
-  | {ok: false; reason: string; changed: string[]; log: string};
+  | {ok: false; reason: string; changed: string[]; log: string; transient?: boolean};
 
 // `git status --porcelain=v1 -z` girdilerinden yol listesi (rename/copy kaydının ikinci alanı da yoldur).
 function parseStatusZ(out: string): string[] {
@@ -84,12 +84,14 @@ interface GitReq { args: string[] }
 interface GitRes { status: number | null; stdout: string; stderr: string }
 function* commitSteps(workspace: string, opts: {startSha: string; gitDigestBefore: string | null; message: string}, span: <T>(fn: () => T) => T): Generator<GitReq, BuilderCommitResult, GitRes> {
   const lines: string[] = [];
+  let recordFailed = false; // //TR: R2: yazar kaydı yazılamadığı için öldürülen git çocuğu (SPAWN_RECORD_FAILED) geçici bir diskhatasıdır: sonuç kalıcı BUILDER_* bloğu DEĞİL, yeniden denemedir.
   const git = function* (args: string[]): Generator<GitReq, {ok: boolean; out: string}, GitRes> {
     const r = yield {args};
+    if (r.status === null && String(r.stderr ?? "").startsWith("SPAWN_RECORD_FAILED")) recordFailed = true;
     lines.push(`$ git ${args.join(" ")}\n[exit=${r.status}]${r.status === 0 ? "" : `\n${String(r.stderr ?? "").slice(0, 2000)}`}`);
     return {ok: r.status === 0, out: String(r.stdout ?? "")};
   };
-  const fail = (reason: string, changed: string[] = []): BuilderCommitResult => ({ok: false, reason, changed, log: `${lines.join("\n")}\nBUILDER_COMMIT_REFUSED ${reason}\n`});
+  const fail = (reason: string, changed: string[] = []): BuilderCommitResult => ({ok: false, reason, changed, log: `${lines.join("\n")}\nBUILDER_COMMIT_REFUSED ${reason}\n`, ...(recordFailed ? {transient: true} : {})});
   if (!SHA.test(opts.startSha)) return fail("BUILDER_START_SHA_INVALID");
   // Builder'ın .git'e dokunması (config, HEAD, refs, info/attributes, hooks) engine git çağrısından ÖNCE yakalanır.
   const after = span(() => gitControlDigest(workspace));

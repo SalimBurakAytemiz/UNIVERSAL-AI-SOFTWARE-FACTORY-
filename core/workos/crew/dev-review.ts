@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import {agentConfigInWorkspace, commitBuilderOutputAsync, gitControlDigest} from "../builder-output.js";
+import {shortChildren} from "../executors.js";
 import {sourceGenerationOf} from "../outcomes.js";
 import {assertRoleExecutes} from "../../agents/first-delivery-bindings.js";
 import type {ProjectStudio} from "../project-studio.js";
@@ -110,7 +111,8 @@ function makeDevImplementer(identity: string, builder: DevBuilderPort, envPolicy
         return base(`BUILDER_WRITE_REFUSED: ${(e as Error).message}\n`, e instanceof CrewDevReviewError ? e.message : "CREW_DEV_WRITE_FAILED");
       }
       const subject = `uasco run ${spec.runId} cycle ${spec.cycle}: ${String(spec.title).replace(/[\r\n]+/g, " ").slice(0, 120)}`;
-      const c = await commitBuilderOutputAsync(workspace, {envPolicyFile, startSha, gitDigestBefore, message: `${subject}\n\nMission: ${spec.missionId}\nCommitted by the UASCO engine on behalf of ${identity} (crew development builder, edit-only).`}, {span: sp, onSpawn: ctx.onSpawn});
+      const c = await commitBuilderOutputAsync(workspace, {envPolicyFile, startSha, gitDigestBefore, message: `${subject}\n\nMission: ${spec.missionId}\nCommitted by the UASCO engine on behalf of ${identity} (crew development builder, edit-only).`}, {span: sp, extraEnv: ctx.writerEnv, onSpawn: shortChildren(ctx.onSpawn)});
+      if (!c.ok && c.transient) return {...base(c.log), exitCode: null, transient: true}; // yazar kaydı yazılamadı: geçici, yeniden denenir
       return c.ok ? {...base(c.log), commitSha: c.commitSha} : base(c.log, c.reason);
     }
   };

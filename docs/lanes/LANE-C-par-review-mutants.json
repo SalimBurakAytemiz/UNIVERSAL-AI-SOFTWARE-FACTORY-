@@ -305,6 +305,123 @@
    "filter": "M7",
    "old": "try { process.kill(-pgid, \"SIGKILL\"); } catch { /* grup zaten bitmiş olabilir */ }\n  return Promise.resolve();",
    "new": "try { process.kill(pgid, \"SIGKILL\"); } catch { /* grup zaten bitmiş olabilir */ }\n  return Promise.resolve();"
+  },
+  {
+   "id": "R1",
+   "description": "R2-1: stop() releases the exit/signal hooks immediately (before the drives settled)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "R2-1",
+   "old": "const off = this.forwardOff; this.forwardOff = null;",
+   "new": "const off = null; this.forwardOff?.(); this.forwardOff = null;"
+  },
+  {
+   "id": "R2",
+   "description": "R2-2: the signal handler does not mark the process as terminating",
+   "file": "core/workos/writer-guard.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "R2-2",
+   "old": "const h = () => { terminating = true; killTrackedGroups();",
+   "new": "const h = () => { killTrackedGroups();"
+  },
+  {
+   "id": "R2b",
+   "description": "R2-2: a halted engine still records FAILED/BLOCKED/RETRY outcomes of killed children",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "R2-2",
+   "old": "if (this.halted(epoch) && out.kind !== \"DONE\" && out.kind !== \"REMEDIATE\" && !(out.kind === \"CANCEL\" && this.stopActive() !== null)) return;",
+   "new": ""
+  },
+  {
+   "id": "R3",
+   "description": "R2-3: halted() ignores the stop epoch (stop() then start() resets the abort)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "R2-3",
+   "old": "return this.stopping || isTerminating() || this.stopEpoch !== epoch;",
+   "new": "return this.stopping || isTerminating();"
+  },
+  {
+   "id": "R4",
+   "description": "R2-4: an owner-record failure in the engine commit is a permanent BUILDER_* block again",
+   "file": "core/workos/builder-output.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "R2-4/5",
+   "old": "if (r.status === null && String(r.stderr ?? \"\").startsWith(\"SPAWN_RECORD_FAILED\")) recordFailed = true;",
+   "new": ""
+  },
+  {
+   "id": "R5a",
+   "description": "R2-5: the engine commit's git children get no lease marker",
+   "file": "core/workos/executors.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "R2-4/5",
+   "old": "{span: sp, extraEnv: ctx.writerEnv, onSpawn: shortChildren(ctx.onSpawn)}",
+   "new": "{span: sp, onSpawn: shortChildren(ctx.onSpawn)}"
+  },
+  {
+   "id": "R5b",
+   "description": "R2-5: the engine commit's git children are not reported as short-lived",
+   "file": "core/workos/executors.ts",
+   "testFile": "tests/v7-relfx-c3-remediation.test.ts",
+   "filter": "R2-4/5",
+   "old": "onSpawn && (c => onSpawn({...c, short: true}));",
+   "new": "onSpawn;"
+  },
+  {
+   "id": "R7",
+   "description": "R2-7: a leaderless group is killed without the lease-marker proof",
+   "file": "core/workos/writer-guard.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "TK-7",
+   "old": "if (!members.some(m => envHas(m.pid, mark))) return {ok: false, why: `writer group ${pgid} has no leader and no member carries the recorded lease marker`};",
+   "new": ""
+  },
+  {
+   "id": "R8",
+   "description": "R2-8: the sweep signals each process only once",
+   "file": "core/workos/writer-guard.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "R2-8",
+   "old": "for (const pid of hits) { killed.add(pid); kill(pid); }",
+   "new": "for (const pid of hits) { if (!killed.has(pid)) kill(pid); killed.add(pid); }"
+  },
+  {
+   "id": "R9",
+   "description": "R2-9: the run directory is compared lexically (a symlinked data directory disables the cwd sweep)",
+   "file": "core/workos/writer-guard.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "R2-9",
+   "old": "const dirs = [...new Set([o.runDir, canonicalDir(o.runDir)])];",
+   "new": "const dirs = [o.runDir];"
+  },
+  {
+   "id": "R10a",
+   "description": "R2-10: no sweep of the step's own lease marker after the implementer (timeout/abort/retry paths)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "R2-10",
+   "old": "    if (!(await this.sweepOwnWriters(run, leaseId))) return {kind: \"BLOCK\", reason: \"WORKSPACE_WRITER_ALIVE\", status: \"FAILED\"};\n    const head = await this.gitOk(work, [\"rev-parse\", \"HEAD\"]);",
+   "new": "    const head = await this.gitOk(work, [\"rev-parse\", \"HEAD\"]);"
+  },
+  {
+   "id": "R10b",
+   "description": "R2-10: the own-lease sweep ignores the current lease's marker (takeover semantics)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "R2-10",
+   "old": "currentLeaseId: leaseId, includeCurrent: true}",
+   "new": "currentLeaseId: leaseId}"
+  },
+  {
+   "id": "R11",
+   "description": "R2-11: the owner-record refresh at the end of the takeover is unguarded (a write failure blocks the emergency cancel)",
+   "file": "core/workos/runner.ts",
+   "testFile": "tests/v7-relfx-1-completion.test.ts",
+   "filter": "R2-11",
+   "old": "try { this.writeOwner(run.runId, this.ownerRecord(run, leaseId)); } catch { note = `${note ? `${note}; ` : \"\"}owner record not refreshed`; }",
+   "new": "this.writeOwner(run.runId, this.ownerRecord(run, leaseId));"
   }
  ]
 }

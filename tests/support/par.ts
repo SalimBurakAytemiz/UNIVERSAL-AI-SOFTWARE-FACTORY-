@@ -15,7 +15,7 @@ import type {ExecutorPair} from "../../core/workos/executors.js";
 
 // //TR: "Yavaş git" modeli: eşleşen git çağrısı senkron spawnSync ile gelirse olay döngüsü BLOKLANIR (düzeltme öncesi runner), eşzamansız execFile ile gelirse yalnız sonucu gecikir (düzeltme sonrası runner). Gecikme süresi her iki yolda aynıdır; deterministik, shim/PATH gerekmez, Windows'ta da çalışır.
 // //TR: C-PAR-1 (test birleştirme): modül mock'u (vi.mock) dosya genelindedir ve başka testlerin child_process'ini etkilerdi. Bu yüzden kaynakların kullandığı VARSAYILAN dışa aktarım nesnesinde (git-isolation.mjs ve runner.ts `import cp ...; cp.spawnSync/cp.execFile` ile çağırır) vi.spyOn kullanılır; casus yalnız bu dosyanın testlerinde kurulur ve her testten sonra geri alınır.
-export const slow = {rule: null as null | {ms: number; match: (cwd: string, args: string[]) => boolean}, hits: {sync: 0, async: 0}};
+export const slow = {rule: null as null | {ms: number; match: (cwd: string, args: string[]) => boolean}, hits: {sync: 0, async: 0}, observe: null as null | ((cwd: string, args: string[], env: NodeJS.ProcessEnv) => void)}; // observe: her git çağrısını (senkron/eşzamansız) gözler; çocuğun ortamını denetleyen testler için
 const realSpawnSync = cp.spawnSync, realExecFile = cp.execFile as (...x: unknown[]) => unknown;
 const isSlow = (cmd: unknown, args: unknown, opts: unknown) => cmd === "git" && slow.rule !== null && slow.rule.match(String((opts as {cwd?: unknown} | undefined)?.cwd ?? ""), Array.isArray(args) ? args.map(String) : []);
 export function installSlowGit() {
@@ -25,6 +25,7 @@ export function installSlowGit() {
   }) as typeof cp.spawnSync);
   vi.spyOn(cp, "execFile").mockImplementation(((...a: unknown[]) => {
     const [cmd, args, opts, cb] = a as [string, string[], unknown, ((...r: unknown[]) => void) | undefined];
+    if (cmd === "git") slow.observe?.(String((opts as {cwd?: unknown} | undefined)?.cwd ?? ""), Array.isArray(args) ? args.map(String) : [], ((opts as {env?: NodeJS.ProcessEnv} | undefined)?.env) ?? {});
     if (typeof cb === "function" && isSlow(cmd, args, opts)) {
       slow.hits.async += 1; const ms = slow.rule!.ms;
       return realExecFile(cmd, args, opts, (...r: unknown[]) => { setTimeout(() => cb(...r), ms); });
@@ -38,13 +39,16 @@ export const ENV_POLICY = path.join(REPO, "config", "environment-policy.json");
 export const ENGINE = path.join(REPO, "tests", "v7-par-engine.mts");
 const TEST_SCRIPT = `import fs from "node:fs";\nprocess.exit(fs.existsSync("feature.txt") ? 0 : 1);\n`;
 export const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+// //TR: Yetim implementer/torun, test "yazar öldürüldü" kanıtını verdikten SONRA <dir>/release dosyası yazılana kadar bekler (en çok ORPHAN_MS): sonuç sabit bir zaman penceresine değil, motor açılış hızından bağımsız bu sinyale bağlıdır. Yazar canlıysa dosya belirince ORPHAN*.txt yazar ve test bunu görür.
+export const ORPHAN_MS = 30_000;
+export const release = async (dir: string) => { fs.writeFileSync(path.join(dir, "release"), "1"); await sleep(1500); };
 export const git = (cwd: string, args: string[]) => { const r = spawnGitSync(cwd, args); if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`); return String(r.stdout).trim(); };
 
 // //TR: Her kullanan describe içinde BİR KEZ çağrılır: o describe'ın testleri için tmp dizini + "yavaş git" casusları kurulur ve her testten sonra geri alınır (modül mock'u yok; başka dosyaların child_process'i etkilenmez).
 export function parHarness(): {tmp: () => string} {
   let tmp = "";
-  beforeEach(() => { tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-par-")); slow.rule = null; slow.hits = {sync: 0, async: 0}; installSlowGit(); });
-  afterEach(() => { slow.rule = null; vi.restoreAllMocks(); try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* Windows: kapanan süreçler dosyayı kısa süre tutabilir */ } });
+  beforeEach(() => { tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-par-")); slow.rule = null; slow.observe = null; slow.hits = {sync: 0, async: 0}; installSlowGit(); });
+  afterEach(() => { slow.rule = null; slow.observe = null; vi.restoreAllMocks(); try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* Windows: kapanan süreçler dosyayı kısa süre tutabilir */ } });
   return {tmp: () => tmp};
 }
 
