@@ -1799,5 +1799,33 @@ describe("A-TEST-DIAG-1: a failing git step in the evaluation pipeline is diagno
     const spy = vi.spyOn(cp, "spawnSync").mockImplementation(((cmd: string, args: string[], opts: any) => { if (cmd === "git") throw new Error("E".repeat(500)); return (real as any)(cmd, args, opts); }) as any);
     try { expect(reasonOf(await evaluate(DEV))).toBe(`PROCEDURE_EXCEPTION:${"E".repeat(240)}`); } finally { spy.mockRestore(); }
   });
+
+  // //TR: Redakte önce, kırpma sonra: kırpma bir gizli anahtarı ortadan keserse redaksiyon artık eşleşemezdi. Error olmayan fırlatma (`throw "x"`) TypeError değil NOT_EXECUTED verir.
+  it("PROCEDURE_EXCEPTION redacts before it clips, and a non-Error throw is still NOT_EXECUTED", async () => {
+    const throwing = (err: unknown): ExecutorPair => new FakeExecutors({implement: () => { throw err; }, review: () => ({verdict: "CLEAN"})}).pair();
+    const evalWith = (pair: ExecutorPair) => runRoleEvaluation({repoRoot: REPO, stagingRoot: path.join(fs.mkdtempSync(path.join(tmp, "diag-")), "staging"), pair}, DEV, "EV-01");
+    const TOKEN = "ghp_" + "a1B2c3D4e5".repeat(3) + "Zz9Yx8"; // 36 alphanumerics, assembled at run time
+    const reason = reasonOf(await evalWith(throwing(new Error("EXECUTOR_FAILED: " + "y".repeat(90) + " Bearer " + TOKEN))));
+    expect(reason).not.toContain(TOKEN);
+    expect(reason).not.toMatch(/ghp_/);
+    expect(reason).toContain("[REDACTED:GITHUB_TOKEN]");
+    expect(reason.length).toBeLessThanOrEqual("PROCEDURE_EXCEPTION:".length + 240);
+    // the token straddles the 240 cut: clipping first would leave an unmatched ghp_ fragment
+    const straddle = reasonOf(await evalWith(throwing(new Error("EXECUTOR_FAILED: " + "y".repeat(200) + " " + TOKEN))));
+    expect(straddle).not.toMatch(/ghp_/);
+    expect(straddle).toContain("[REDACTED:GITHUB_TOKEN"); // the marker itself may be clipped at 240, the secret may not survive
+    const plain = reasonOf(await evalWith(throwing("x")));
+    expect(plain).toMatch(/^PROCEDURE_EXCEPTION:/);
+    expect(plain).toContain("x");
+  });
+
+  it("git stderr never keeps URL userinfo (user:password@host), while the host stays", async () => {
+    const PASS = "p" + "w0rd" + "Zq7";
+    const { out } = await run(DEV, "add", {status: 128, stderr: `fatal: unable to access 'https://alice:${PASS}@git.example.com/r.git/': denied`});
+    const reason = reasonOf(out);
+    expect(reason).not.toContain("alice");
+    expect(reason).not.toContain(PASS);
+    expect(reason).toContain("https://[REDACTED]@git.example.com/r.git/");
+  });
 });
 

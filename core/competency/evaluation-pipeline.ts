@@ -147,7 +147,8 @@ const gitOut = (cwd: string, args: string[]): string | null => { const r = git(c
 type GitRes = {status: number | null; signal?: NodeJS.Signals | null; error?: Error; stderr?: unknown};
 const gitDetail = (r: GitRes): string => {
   const how = r.error ? `spawn=${(r.error as NodeJS.ErrnoException).code ?? "ERR"}` : r.signal ? `signal=${r.signal}` : `exit=${r.status}`;
-  return `${how}:${redactSecrets(String(r.stderr ?? "")).replace(/\s+/g, " ").trim().slice(0, 120)}`;
+  const scrubbed = String(r.stderr ?? "").replace(/\b([a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/gi, "$1[REDACTED]@"); // URL userinfo (user:password@host) is cut before anything else
+  return `${how}:${redactSecrets(scrubbed).replace(/\s+/g, " ").trim().slice(0, 120)}`;
 };
 const setupFail = (step: string, r: GitRes): string => `WORKSPACE_SETUP_FAILED:${step}:${gitDetail(r)}`;
 function seedRepo(dir: string, files: Readonly<Record<string, string>>): string {
@@ -397,7 +398,7 @@ export async function runRoleEvaluation(deps: EvaluationDeps, roleId: string, ev
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-eval-"));
   let run: ProcedureRun;
   try { run = await procedure.run({pair: deps.pair, profile, timeoutMs, ...(deps.shouldAbort ? {shouldAbort: deps.shouldAbort} : {}), tmp}, profile.function); }
-  catch (e) { return {status: "NOT_EXECUTED", roleId, evaluationId, reason: `PROCEDURE_EXCEPTION:${(e as Error).message.slice(0, 240)}`}; }
+  catch (e) { return {status: "NOT_EXECUTED", roleId, evaluationId, reason: `PROCEDURE_EXCEPTION:${redactSecrets(String((e as Error)?.message ?? e)).replace(/\s+/g, " ").trim().slice(0, 240)}`}; }
   finally { try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* geçici dizin en iyi çabayla silinir */ } }
   // //TR: Altyapı kaynaklı sonuç bir DEĞERLENDİRME SONUCU değildir: hiçbir kanıt yazılmaz (rol ne geçer ne kalır).
   if (run.infra !== null) return {status: "NOT_EXECUTED", roleId, evaluationId, reason: run.infra};
