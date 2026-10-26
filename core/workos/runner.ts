@@ -392,14 +392,15 @@ export class MissionRunner {
     const now = await startToken(pgid);
     // //TR: TK-3: kimlik belirteci EPERM'den ÖNCE karşılaştırılır. Kayıtlı pid başka bir kullanıcının sürecine geçtiyse (kill -> EPERM) belirteç farklıdır: bizim yazarımız yoktur, devir fail-closed OLMAZ. Linux /proc/<pid>/stat dünya okunurdur.
     if (prev.childStart !== null && now !== null && now !== prev.childStart) return {problem: null, note: `pid ${pgid} was reused by another process; no writer to stop`};
-    if (st === "OTHER_USER") return alive(`writer group ${pgid} state unknown`);
+    // //TR: R2 (Windows): bizim yazarımız aynı kullanıcının çocuğudur ve açılabilir; OpenProcess erişim reddi (EPERM) kaydedilen pid'in artık başka bir (yükseltilmiş/SYSTEM) sürece ait olduğunu kanıtlar. Linux'ta kimlik belirteci zaten yukarıda karşılaştırıldı; orada belirteç okunamıyorsa fail-closed kalır.
+    if (st === "OTHER_USER") return process.platform === "win32" ? {problem: null, note: `pid ${pgid} is not accessible to this user; it cannot be the recorded writer`} : alive(`writer group ${pgid} state unknown`);
     if (prev.childStart === null || (now === null && process.platform !== "linux")) return alive(`writer group ${pgid} is alive but its identity cannot be proven`);
     // Lider yok ama grup canlı (Linux): TK-7: aynı önyükleme + her üye lider kaydından sonra başlamış olmalı.
     if (now === null) { const proof = leaderlessGroupProof(pgid, prev); if (!proof.ok) return alive(proof.why); }
     await killWriterGroup(pgid, prev.childStart);
     for (const until = Date.now() + WRITER_KILL_WAIT_MS; writerState(pgid) !== "GONE" && Date.now() < until;) await sleep(50);
     if (writerState(pgid) !== "GONE") return alive(`writer group ${pgid} survived the kill`);
-    return {problem: null, note: `stopped writer group ${pgid} of engine ${prev.engineId}`};
+    return {problem: null, note: `stopped writer group ${pgid} of engine ${prev.engineId}${process.platform === "linux" ? "" : "; descendants that left the process group are not swept on this platform"}`};
   }
   // Devir: önceki lease'in yazarı (varsa) ölmeden workspace'e dokunulmaz. (1) Kayıt: yırtık/okunamayan kayıt önyüklemeden ESKİYSE yazar yok (TK-4), değilse fail-closed; farklı önyükleme = yazar yok. (2) Kayıtlı grup: aynı makinede canlıysa ve kimliği kanıtlanırsa öldürülür ve ölmesi beklenir (TK-3/7). (3) TK-1: grubu terk eden (setsid) torunlar lease işaretiyle/çalışma dizinine göre taranır ve öldürülür; biri bile ölmezse fail-closed. Not yazılır: yalnız tarama temizse "stopped".
   private async reapPriorWriter(run: WorkRun, leaseId: string): Promise<{problem: string | null; note: string}> {
