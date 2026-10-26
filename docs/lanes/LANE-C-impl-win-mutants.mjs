@@ -1,4 +1,4 @@
-// //TR: C-IMPL-WIN-1 mutasyon denetimi: LANE-C-impl-win-mutants.json içindeki her mutantı (tam metin değiştirme, dosyada tam 1 kez bulunmalı) uygular, tests/v7-lane-c-claude-readiness.test.ts dosyasını çalıştırır ve KILLED/SURVIVED yazar. Kullanım: node docs/lanes/LANE-C-impl-win-mutants.mjs [id ...]. Mutasyona uğrayan dosyalarda commit edilmemiş değişiklik varsa reddeder (önce commit).
+// //TR: C-IMPL-WIN-1 mutasyon denetimi: LANE-C-impl-win-mutants.json içindeki her mutantı (tam metin değiştirme, dosyada tam 1 kez bulunmalı) uygular, tests/v7-sbx8-claude-profiles.test.ts dosyasını (-t "C-IMPL-WIN-1" ile) çalıştırır ve KILLED/SURVIVED yazar. Kullanım: node docs/lanes/LANE-C-impl-win-mutants.mjs [id ...]. Mutasyona uğrayan dosyalarda commit edilmemiş değişiklik varsa reddeder (önce commit).
 import fs from "node:fs";
 import path from "node:path";
 import cp from "node:child_process";
@@ -11,7 +11,7 @@ const git = (...a) => cp.spawnSync("git", a, {cwd: root, encoding: "utf8"});
 const files = [...new Set(mutants.map(m => m.file))];
 if (git("status", "--porcelain", "--", ...files).stdout.trim() !== "") { console.error("REFUSED: the mutated files have uncommitted changes"); process.exit(2); }
 // //TR: Taban çizgisi: mutasyonsuz grup ÖNCE koşar; yeşil değilse (hata, çökme, zaman aşımı) her "KILLED" anlamsızdır, bu yüzden reddedilir.
-const runGroup = () => cp.spawnSync("npx", ["vitest", "run", "tests/v7-lane-c-claude-readiness.test.ts"], {cwd: root, encoding: "utf8", shell: process.platform === "win32", timeout: 900_000});
+const runGroup = () => cp.spawnSync("npx", ["vitest", "run", "tests/v7-sbx8-claude-profiles.test.ts", "-t", "C-IMPL-WIN-1"], {cwd: root, encoding: "utf8", shell: process.platform === "win32", timeout: 900_000});
 const base = runGroup(), baseOut = String(base.stdout) + String(base.stderr);
 if (base.status !== 0) { console.error(`REFUSED: the unmutated baseline is not green (exit ${base.status}): ${/Tests\s+([^\n]+)/.exec(baseOut)?.[1]?.trim() ?? "no summary"}`); process.exit(2); }
 console.log(`BASELINE green: ${/Tests\s+([^\n]+)/.exec(baseOut)?.[1]?.trim()}`);
@@ -23,7 +23,7 @@ for (const m of mutants) {
   fs.writeFileSync(file, edits.reduce((acc, e) => acc.replace(e.old, () => e.new), src));
   try {
     const t0 = Date.now();
-    const r = cp.spawnSync("npx", ["vitest", "run", "tests/v7-lane-c-claude-readiness.test.ts"], {cwd: root, encoding: "utf8", shell: process.platform === "win32", timeout: 900_000});
+    const r = cp.spawnSync("npx", ["vitest", "run", "tests/v7-sbx8-claude-profiles.test.ts", "-t", "C-IMPL-WIN-1"], {cwd: root, encoding: "utf8", shell: process.platform === "win32", timeout: 900_000});
     const out = String(r.stdout) + String(r.stderr), tests = /Tests\s+([^\n]+)/.exec(out)?.[1]?.trim() ?? "no summary";
     const killed = r.status !== 0;
     if (!killed) survived++;

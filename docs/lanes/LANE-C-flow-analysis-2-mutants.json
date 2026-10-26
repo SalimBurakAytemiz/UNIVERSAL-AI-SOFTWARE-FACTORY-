@@ -1,5 +1,5 @@
 {
- "//TR": "C-FLOW-ANALYSIS-2 mutasyon listesi: her mutant tam metin değişikliğidir (dosyada tam 1 kez bulunmalı); docs/lanes/LANE-C-flow-analysis-2-mutants.mjs her birini uygular ve tests/v7-lane-c-flow-analysis.test.ts dosyasının BAŞARISIZ olmasını bekler. X7 (boş yanıtı zarf olarak okumak) denetimde HAYATTA KALDI: gereksiz koruma `rawOut !== \"\"` idi (sonraki denetim zaten aynı koruma ile aynı kodu verir); koruma üretim kodundan kaldırıldı ve mutant listeden çıkarıldı (davranış aynı).",
+ "//TR": "C-FLOW-ANALYSIS-2 mutasyon listesi: her mutant tam metin değişikliğidir (dosyada tam 1 kez bulunmalı); docs/lanes/LANE-C-flow-analysis-2-mutants.mjs her birini uygular ve tests/v7-core-predev-crew-coordination.test.ts dosyasının (-t \"C-FLOW-ANALYSIS\" ile) BAŞARISIZ olmasını bekler. X7 (boş yanıtı zarf olarak okumak) denetimde HAYATTA KALDI: gereksiz koruma `rawOut !== \"\"` idi (sonraki denetim zaten aynı koruma ile aynı kodu verir); koruma üretim kodundan kaldırıldı ve mutant listeden çıkarıldı (davranış aynı).",
  "mutants": [
   {
    "id": "A1",

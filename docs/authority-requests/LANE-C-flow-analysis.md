@@ -1,4 +1,4 @@
-<!-- //TR: LANE-C yetki talebi: analiz adımının route'larla bağlanması (korumalı server.ts dalgası) ve yeni test dosyasının config/validation.json kaydı koordinatör işidir. -->
+<!-- //TR: LANE-C yetki talebi: analiz adımının route'larla bağlanması (korumalı server.ts dalgası) koordinatör işidir; testler kayıtlı bir dosyaya taşındı (config/validation.json kaydı gerekmez). -->
 # LANE-C authority request: C-FLOW-ANALYSIS-1, the analysis step of the 31 Oct Desktop flow
 
 ## What exists after this package (Lane C paths only)
@@ -17,8 +17,8 @@ Two thin routes over `AnalysisFlow` are the whole wiring (`apps/control-api/src/
 - `POST /v1/missions/:id/analysis/plan` -> `createPlan(id, actor)`; `ok:false` codes 409.
 Both can reuse the Desktop allow-list pattern of the other mission routes.
 
-## Registration (coordinator, protected `config/validation.json`)
-New file `tests/v7-lane-c-flow-analysis.test.ts` (17 tests, about 1 s, no process, no `platforms` filter). `tests/pkg-vs-validation-sharding.test.ts` is red until it is in one shard.
+## Tests (no registration needed)
+The 17 tests live in the already-registered `tests/v7-core-predev-crew-coordination.test.ts` (step `tests-8`), in the self-contained `LANE-C analysis flow: C-FLOW-ANALYSIS-1` describe at the end of the file (about 1 s, no process). The separate file `tests/v7-lane-c-flow-analysis.test.ts` was removed, so `tests/pkg-vs-validation-sharding.test.ts` stays green without a `config/validation.json` change.
 
 ## NOT_VERIFIED
 - No real Claude run here: the builder in the tests is a fake that returns the TaskHub fixtures, so the content quality of real BA/PO/architect output is not judged. The structure and traceability gates (the existing validators) are real.

@@ -1,4 +1,4 @@
-<!-- //TR: LANE-C yetki talebi: C-FLOW-ANALYSIS-2 yalnız Lane C yollarını ve bir mevcut testin sözleşme güncellemesini değiştirir; test dosyası kaydı ve route bağlantısı koordinatör işidir. -->
+<!-- //TR: LANE-C yetki talebi: C-FLOW-ANALYSIS-2 yalnız Lane C yollarını ve bir mevcut testin sözleşme güncellemesini değiştirir; route bağlantısı koordinatör işidir (testler kayıtlı bir dosyada, kayıt gerekmez). -->
 # LANE-C authority request: C-FLOW-ANALYSIS-2, real analysis content through the Claude CLI
 
 ## Question asked: does a production BuilderPort backed by LocalClaudeExecutors with the pre-dev role profiles exist and is it wired?
@@ -16,10 +16,10 @@ Yes. `ClaudePreDevBuilder` (`core/workos/predev/claude-builder.ts`) is what `Loc
 `tests/v7-sbx8-reviewer.test.ts` ("logged-in reviewer profile ...", the pre-dev builder case): the fake process now returns a result envelope, and the argv expectation is `reviewerArgv(execPath, "json")` plus an explicit assertion that everything except the last token equals the reviewer argv. Every other assertion in that test (profile dir, no API key, empty scratch outside the repo) is unchanged.
 
 ## Files
-`core/workos/predev/claude-builder.ts`, `core/workos/predev/driver.ts`, `core/workos/predev/role-prompts.ts`, `core/workos/executors.ts` (`reviewerArgv` optional parameter, `preDevBuilder` wiring), `core/workos/crew/analysis.ts` (founder action for an expired sign-in), `tests/v7-lane-c-flow-analysis.test.ts` (now 26+ tests), `tests/v7-sbx8-reviewer.test.ts` (above), `docs/lanes/LANE-C-flow-analysis-2-mutants.{json,mjs}`.
+`core/workos/predev/claude-builder.ts`, `core/workos/predev/driver.ts`, `core/workos/predev/role-prompts.ts`, `core/workos/executors.ts` (`reviewerArgv` optional parameter, `preDevBuilder` wiring), `core/workos/crew/analysis.ts` (founder action for an expired sign-in), `tests/v7-core-predev-crew-coordination.test.ts` (the analysis-flow describe, now 26 tests), `tests/v7-sbx8-reviewer.test.ts` (above), `docs/lanes/LANE-C-flow-analysis-2-mutants.{json,mjs}`.
 
-## Registration (coordinator, protected `config/validation.json`)
-Still the one file from C-FLOW-ANALYSIS-1: `tests/v7-lane-c-flow-analysis.test.ts`. It grew from 17 to 26+ tests and now starts about 25 real node child processes (a fake `claude`); about 30 s on Linux, expect more on Windows. Put it in a shard with room (not `tests-3` before #214). The 60 s `sleepMs` case is killed by the production timeout path after 1.5 s; the file has per-test timeouts of 120 s.
+## Tests (no registration needed)
+All analysis-flow tests (C-FLOW-ANALYSIS-1: 17, C-FLOW-ANALYSIS-2: 9) are one self-contained describe, `LANE-C analysis flow: C-FLOW-ANALYSIS-1/2`, at the end of the already-registered `tests/v7-core-predev-crew-coordination.test.ts` (step `tests-8`). The C-FLOW-ANALYSIS-2 part starts about 25 real node child processes (a fake `claude`) and takes about 30 s on Linux; expect more on Windows (tests-8 measured 136 s on Windows in run 40261485904, so it stays far below the 600 s step limit). No new test file exists, so `tests/pkg-vs-validation-sharding.test.ts` needs no `config/validation.json` change.
 
 ## The fake CLI (what "fake CLI process" means here)
 `runReviewer` (existing programmatic test injection of `LocalClaudeExecutors`) is pointed at a wrapper that calls the REAL `runProcess` with `[node, fake-claude.mjs, ...argv]`. The script reads the prompt from stdin, logs argv / cwd / pid / `CLAUDE_CONFIG_DIR` / any API-key env names, then replies per a scenario file (envelope, plain text, stderr, exit code, sleep, stray file in its cwd, echo of the skeleton). So spawn, stdin, stdout/stderr capture, exit codes, timeout kill (the pid is checked dead), scratch cleanup and env are the production ones; only the model is missing.
