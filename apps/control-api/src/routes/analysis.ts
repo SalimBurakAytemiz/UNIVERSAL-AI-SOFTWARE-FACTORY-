@@ -3,7 +3,7 @@ import AjvModule from "ajv";
 import {LANE_WRITE_BODY_LIMIT} from "./deps.js";
 import {tryProduceLock} from "./produce-lock.js";
 import type {RouteDeps} from "./deps.js";
-import {AnalysisError} from "../../../../core/workos/crew/analysis.js";
+import {AnalysisError, AnalysisStoppedError} from "../../../../core/workos/crew/analysis.js";
 import type {AnalysisFlow} from "../../../../core/workos/crew/analysis.js";
 
 const Ajv = AjvModule.default;
@@ -28,8 +28,8 @@ export function registerAnalysisRoutes(app: any, d: AnalysisRouteDeps): void {
   };
   // Adım: o anki analiz fazının taslağı. Değerlendirilen her adım (BLOCKED / REJECTED / BUILDER_FAILED / DRAFT_READY / ...) 200 + TAM adım gövdesiyle döner: Desktop köprüsü (sanitizePostBody) >= 400 gövdelerinden yalnız error/code/reason/message bırakır, blocker(s)/kind/code kaybolurdu.
   // İstek hataları aynı kalır (400, 403, 404, 423, 409 kilit). Ücretli üretim süreç genelinde tek kilitle sınırlıdır (predev produce ile ORTAK): ikinci eşzamanlı çağrı builder'a ulaşmadan 409.
-  // Global Stop, akış tarafından (AnalysisDeps.stopped -> AnalysisStoppedError) veya yanıttan önceki yeniden denetimle yakalanır; ikisi de 423 + STOPPED denetimi.
-  const isStopped = (e: unknown): boolean => (e as {name?: string} | null)?.name === "AnalysisStoppedError";
+  // Global Stop, akış tarafından (AnalysisDeps.stopped -> AnalysisStoppedError) veya yanıttan önceki yeniden denetimle yakalanır; ikisi de 423 + STOPPED denetimi. Tür ile eşlenir (instanceof), ileti metniyle DEĞİL.
+  const isStopped = (e: unknown): boolean => e instanceof AnalysisStoppedError;
   app.post("/v1/missions/:id/analysis/step", {bodyLimit: LANE_WRITE_BODY_LIMIT}, guard(async (req: any, reply: any) => {
     if (!gates(req, reply, "workos.analysis.step")) return reply;
     const id: string = req.params.id;

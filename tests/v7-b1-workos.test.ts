@@ -2755,14 +2755,14 @@ describe("LANE-B product run routes (B-RUN-1)", () => {
 describe("LANE-B batch 4b: analysis routes and server registration", () => {
   const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
   const MSN = "msn_" + "a".repeat(24);
-  const mkApp = async (o: {stopped?: boolean; allowed?: boolean; step?: any; plan?: any; throwErr?: string; hold?: Promise<void>; stopDuring?: boolean; noMission?: boolean; throwObj?: any} = {}) => {
+  const mkApp = async (o: {stopped?: boolean; allowed?: boolean; step?: any; plan?: any; throwErr?: string; hold?: Promise<void>; stopDuring?: boolean; noMission?: boolean; throwObj?: any; flow?: any; store?: any} = {}) => {
     const [{default: Fastify}, {registerAnalysisRoutes}, {AnalysisError}] = await Promise.all([import("fastify"), import("../apps/control-api/src/routes/analysis.js"), import("../core/workos/crew/analysis.js")]);
     const app = Fastify({logger: false}); const audits: string[] = []; const auditLog: any[] = []; const calls: string[] = []; let stopNow = false;
     app.addHook("onRequest", async (req, reply) => { if (req.headers["x-uasco-control-token"] !== token) return reply.code(403).send({error: "FORBIDDEN"}); });
     const flow: any = {step: async (id: string) => { calls.push(`step:${id}`); if (o.hold) await o.hold; if (o.stopDuring) stopNow = true; if (o.throwObj) throw o.throwObj; if (o.throwErr) throw new AnalysisError(o.throwErr as any); return o.step ?? {status: "COMPLETE", approved: []}; },
       createPlan: (id: string, actor: string) => { calls.push(`plan:${id}:${actor}`); return o.plan ?? {ok: true, tasks: [], replayed: false, trace: [], summary: {}}; }};
-    registerAnalysisRoutes(app, {getStore: () => ({getMission: () => (o.noMission ? undefined : {})}) as any, scope: {tenantId: "tA"}, orgId: "o1", actor: "FOUNDER_LOCAL", audit: (e: string, x?: any) => { audits.push(e); auditLog.push({e, ...x}); }, workosStopped: () => !!o.stopped || stopNow,
-      workosPolicy: () => o.allowed === false ? {allowed: false, reason: "NO"} : {allowed: true}, workosFail: (r: any) => r.code(500).send({error: "INTERNAL_ERROR"}), analysisFlow: () => flow});
+    registerAnalysisRoutes(app, {getStore: () => (o.store ?? {getMission: () => (o.noMission ? undefined : {})}) as any, scope: {tenantId: "tA"}, orgId: "o1", actor: "FOUNDER_LOCAL", audit: (e: string, x?: any) => { audits.push(e); auditLog.push({e, ...x}); }, workosStopped: () => !!o.stopped || stopNow,
+      workosPolicy: () => o.allowed === false ? {allowed: false, reason: "NO"} : {allowed: true}, workosFail: (r: any) => r.code(500).send({error: "INTERNAL_ERROR"}), analysisFlow: () => o.flow ?? flow});
     return {app, calls, audits, auditLog};
   };
   const post = (app: any, url: string, payload: any = {}, headers: any = hdr) => app.inject({method: "POST", url, headers, payload});
@@ -2840,7 +2840,7 @@ describe("LANE-B batch 4b: analysis routes and server registration", () => {
   });
 
   it("review MED/LOW-2/3: the flow's AnalysisStoppedError is 423 + a STOPPED audit with its reason; a paid run followed by a thrown error is audited FAILED with the code; same-tick concurrent steps: exactly one reaches the flow and the refusal is audited REFUSED with its reason", async () => {
-    class AnalysisStoppedError extends Error { constructor() { super("stopped"); this.name = "AnalysisStoppedError"; } }
+    const {AnalysisStoppedError} = await import("../core/workos/crew/analysis.js");
     const st = await mkApp({throwObj: new AnalysisStoppedError()}); const r = await post(st.app, `/v1/missions/${MSN}/analysis/step`);
     expect([r.statusCode, r.json()]).toEqual([423, {error: "GLOBAL_STOP_ACTIVE"}]); expect(st.auditLog).toContainEqual(expect.objectContaining({e: "WORKOS_ANALYSIS_STEP", missionId: MSN, status: "STOPPED", reason: "GLOBAL_STOP_ACTIVE"}));
     const bad = await mkApp({throwObj: Object.assign(new Error("disk"), {code: "WORKOS_DISK_FULL"})}); const f = await post(bad.app, `/v1/missions/${MSN}/analysis/step`);
@@ -2852,6 +2852,29 @@ describe("LANE-B batch 4b: analysis routes and server registration", () => {
     release(); const [x, y] = await both;
     expect([x.statusCode, y.statusCode].sort()).toEqual([200, 409]); expect(c.calls).toEqual([`step:${MSN}`]);
     expect(c.auditLog.filter(a => a.e === "WORKOS_ANALYSIS_STEP" && a.status === "REFUSED")).toEqual([expect.objectContaining({reason: "PREDEV_PRODUCE_IN_PROGRESS", missionId: MSN})]);
+  });
+
+  it("B-ANALYSIS-ROUTES-1: Global Stop maps by instanceof (real flow `stopped` hook -> 423 + STOPPED audit); a plain Error with the same message/name is NOT 423; BLOCKED keeps kind/artifactId; plan codes 409", async () => {
+    const {AnalysisFlow, AnalysisStoppedError} = await import("../core/workos/crew/analysis.js");
+    const {submitIntake} = await import("../core/workos/intake.js");
+    const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-ar-"));
+    try {
+      const store = new WorkOsStore(path.join(dir, "data")); const scope = {tenantId: "tA"};
+      const {intake} = submitIntake({store, scope, orgId: "o1", actor: "FOUNDER_LOCAL"}, {idea: "A small team task board with deadlines and reminders for freelancers who juggle several clients", projectType: "web", targetOS: ["web"]});
+      const builder: any = {produce: async () => "{}"}; const ready = {ready: true, blockers: [], blocker: null, founderAction: null, profiles: null};
+      let stop = false; const flow = new AnalysisFlow({store, scope, builder, readiness: () => ready, stopped: () => stop} as any);
+      stop = true; const url = `/v1/missions/${intake.missionId}/analysis/step`;
+      const r = await post((await mkApp({store, flow})).app, url); expect([r.statusCode, r.json()]).toEqual([423, {error: "GLOBAL_STOP_ACTIVE"}]);
+      const m = await mkApp({store, flow}); await post(m.app, url); expect(m.auditLog).toContainEqual(expect.objectContaining({e: "WORKOS_ANALYSIS_STEP", status: "STOPPED", reason: "GLOBAL_STOP_ACTIVE"}));
+    } finally { try { fs.rmSync(dir, {recursive: true, force: true}); } catch { /* Windows */ } }
+    expect(new AnalysisStoppedError().message).toBe("GLOBAL_STOP_ACTIVE");
+    const look = new Error("GLOBAL_STOP_ACTIVE"); look.name = "AnalysisStoppedError"; (look as any).code = "X";
+    const l = await mkApp({throwObj: look}); expect((await post(l.app, `/v1/missions/${MSN}/analysis/step`)).statusCode).toBe(500); expect(l.auditLog).toContainEqual(expect.objectContaining({status: "FAILED"}));
+    for (const code of ["ANALYSIS_PHASE_NOT_ADVANCED", "ANALYSIS_IN_PROGRESS"]) {
+      const body = {status: "BLOCKED", blocker: code, blockers: [code], founderAction: "x", kind: "Plan", artifactId: "art_1"};
+      const b = await post((await mkApp({step: body})).app, `/v1/missions/${MSN}/analysis/step`); expect([b.statusCode, b.json()]).toEqual([200, body]);
+    }
+    for (const code of ["PLAN_INVALID", "ANALYSIS_NOT_COMPLETE"]) { const p = await post((await mkApp({plan: {ok: false, code, detail: "x"}})).app, `/v1/missions/${MSN}/analysis/plan`); expect([p.statusCode, p.json()]).toEqual([409, {error: code}]); }
   });
 
   it("R2: Global Stop arriving while the step runs is re-checked before DRAFT_READY is answered (423, audited); other statuses are unaffected", async () => {
