@@ -1,0 +1,131 @@
+{
+ "//TR": "C-SBX-LO-1 mutasyon listesi: her mutant tam metin değişikliğidir (dosyada tam 1 kez bulunmalı); docs/lanes/LANE-C-sbx-lo-mutants.mjs her birini uygular ve tests/v7-lane-c-linux-sandbox-exports.test.ts -t C-SBX-LO-1 grubunun BAŞARISIZ olmasını bekler. Kök kullanıcıda ve `ip` yokken stub testleri de koşar (L1 L2 L5 C2 için gerekli). L5 (ip'yi yetenekler bırakıldıktan sonraya taşımak) L1 ile, C2 (selfTest tek sefer çalıştığı için başlangıç sıfırlaması) eşdeğer, V9 (başlık satırı) bu makinede boş route dosyasında eşdeğer olduğundan listede yoktur.",
+ "mutants": [
+  {
+   "id": "L1",
+   "description": "lo is never brought up",
+   "file": "core/agents/linux-unshare-sandbox.ts",
+   "old": "  'if [ -n \"$IPB\" ]; then \"$IPB\" link set lo up 2>/dev/null || true; fi',",
+   "new": "  'true',"
+  },
+  {
+   "id": "L2",
+   "description": "a failing ip aborts the namespace setup (|| true dropped)",
+   "file": "core/agents/linux-unshare-sandbox.ts",
+   "old": "\"$IPB\" link set lo up 2>/dev/null || true; fi",
+   "new": "\"$IPB\" link set lo up 2>/dev/null; fi"
+  },
+  {
+   "id": "L3",
+   "description": "ip resolved through the caller's PATH in the privileged phase",
+   "file": "core/agents/linux-unshare-sandbox.ts",
+   "old": "IPB=$(command -v ip 2>/dev/null) || IPB=\"\"",
+   "new": "IPB=$(PATH=\"$CALLER_PATH\" command -v ip 2>/dev/null) || IPB=\"\""
+  },
+  {
+   "id": "L4",
+   "description": "a python fallback for ip",
+   "file": "core/agents/linux-unshare-sandbox.ts",
+   "old": "IPB=$(command -v ip 2>/dev/null) || IPB=\"\"",
+   "new": "IPB=$(command -v ip 2>/dev/null) || IPB=$(command -v python3 2>/dev/null) || IPB=\"\""
+  },
+  {
+   "id": "V1",
+   "description": "a connection that reached the host loopback listener is not a failure",
+   "file": "core/agents/linux-unshare-sandbox.ts",
+   "old": "if (i.hostConnections > 0) return {ok: false, detail: \"SELFTEST_HOST_LOOPBACK_REACHED\"};",
+   "new": ""
+  },
+  {
+   "id": "V2",
+   "description": "outbound_connected is not a failure",
+   "file": "core/agents/linux-unshare-sandbox.ts",
+   "old": "if (has(\"outbound_connected\")) return {ok: false, detail: \"SELFTEST_OUTBOUND_CONNECT_SUCCEEDED\"};",
+   "new": ""
+  },
+  {
+   "id": "V3",
+   "description": "a probe that died before its outbound verdict passes",
+   "file": "core/agents/linux-unshare-sandbox.ts",
+   "old": "if (!has(\"outbound_blocked\")) return {ok: false, detail: \"SELFTEST_OUTBOUND_NOT_VERIFIED\"};",
+   "new": ""
+  },
+  {
+   "id": "V4",
+   "description": "a missing loopback fails even without ip",
+   "file": "core/agents/linux-unshare-sandbox.ts",
+   "old": "if (i.ipPresent && !lo) return",
+   "new": "if (!lo) return"
+  },
+  {
+   "id": "V5",
+   "description": "a missing loopback never fails, even with ip",
+   "file": "core/agents/linux-unshare-sandbox.ts",
+   "old": "if (i.ipPresent && !lo) return",
+   "new": "if (false && !lo) return"
+  },
+  {
+   "id": "V6",
+   "description": "node unavailable inside the sandbox is read as a verified probe",
+   "file": "core/agents/linux-unshare-sandbox.ts",
+   "old": "if (!has(\"probe_started\")) return",
+   "new": "if (false) return"
+  },
+  {
+   "id": "V7",
+   "description": "tokens match anywhere in the output instead of whole lines",
+   "file": "core/agents/linux-unshare-sandbox.ts",
+   "old": "const has = (t: string) => i.stdout.split(\"\\n\").some(l => l.trim() === t);",
+   "new": "const has = (t: string) => i.stdout.includes(t);"
+  },
+  {
+   "id": "V8",
+   "description": "an existing route to the outside is accepted",
+   "file": "core/agents/linux-unshare-sandbox.ts",
+   "old": "return isoStdout.split(\"\\n\").some(l => l.trim() === \"no_route_out\") ? null : \"SELFTEST_ROUTE_OUT_EXISTS\";",
+   "new": "return null;"
+  },
+  {
+   "id": "P1",
+   "description": "the probe forgets the 8.8.8.8 target",
+   "file": "core/agents/linux-unshare-sandbox.ts",
+   "old": ", [\"8.8.8.8\", 53]",
+   "new": ""
+  },
+  {
+   "id": "P2",
+   "description": "the probe forgets the 93.184.216.34 target",
+   "file": "core/agents/linux-unshare-sandbox.ts",
+   "old": ", [\"93.184.216.34\", 80]",
+   "new": ""
+  },
+  {
+   "id": "P3",
+   "description": "the probe forgets the host-loopback port target",
+   "file": "core/agents/linux-unshare-sandbox.ts",
+   "old": "  if (Number.isInteger(hostPort) && hostPort > 0) targets.push([\"127.0.0.1\", hostPort]);",
+   "new": ""
+  },
+  {
+   "id": "P4",
+   "description": "the probe calls any reply loopback_ok",
+   "file": "core/agents/linux-unshare-sandbox.ts",
+   "old": "r(got === \"pong\")",
+   "new": "r(true)"
+  },
+  {
+   "id": "P5",
+   "description": "the probe reports blocked whatever happened",
+   "file": "core/agents/linux-unshare-sandbox.ts",
+   "old": "r.some(Boolean) ? \"outbound_connected\" : \"outbound_blocked\"",
+   "new": "\"outbound_blocked\""
+  },
+  {
+   "id": "C1",
+   "description": "the provider claims loopback although the probe failed (caps always true)",
+   "file": "core/agents/linux-unshare-sandbox.ts",
+   "old": "proven = verdict.capabilities;",
+   "new": "proven = {loopback: true, loopbackReason: null};"
+  }
+ ]
+}
