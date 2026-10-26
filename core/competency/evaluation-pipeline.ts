@@ -3,13 +3,16 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
+import vm from "node:vm";
 import {spawnGitSync} from "../../automation/lib/git-isolation.mjs";
-import {assertImplementerRole, assertRoleExecutes, FIRST_DELIVERY_BINDINGS} from "../agents/first-delivery-bindings.js";
+import {assertImplementerRole, assertRoleExecutes, FIRST_DELIVERY_BINDINGS, IMPLEMENTER_FUNCTIONS} from "../agents/first-delivery-bindings.js";
 import {effectiveLimits} from "../agents/role-execution.js";
 import type {FirstDeliveryFunction, RoleExecutionProfile} from "../agents/role-execution.js";
 import {EVIDENCE_ROOT, createEvidenceVerifier} from "../agents/role-lifecycle.js";
 import type {ExecutorPair, MissionSpec} from "../workos/executors.js";
 import {redactSecrets} from "../workos/secret-scan.js";
+import {disabledTestMarkers, evaluateTestSurface, parseNameStatusZ} from "../workos/test-surface.js";
+import {MAX_TEST_SOURCE_BYTES, analyzeAddTest, tokenize} from "./static-test-analysis.js";
 import {PreDevBuilderError, PREDEV_KIND_FUNCTION} from "../workos/predev/claude-builder.js";
 import {composeRolePrompt} from "../workos/predev/role-prompts.js";
 import {toUpstreamContents} from "../workos/predev/driver.js";
@@ -17,7 +20,7 @@ import {validateArtifactContent} from "../workos/predev/validators.js";
 import {TASKHUB_BRIEF} from "../workos/predev/fixtures/taskhub-brief.js";
 import {TASKHUB_ARTIFACTS} from "../workos/predev/fixtures/taskhub/index.js";
 import type {ArtifactKind} from "../workos/predev/types.js";
-import {FIXTURE_DIGESTS, GOLDEN_FILE, GOLDEN_FILE_VERSION, GOLDEN_REVIEW_CASES, GOLDEN_REVIEW_SEED, GOLDEN_REVIEW_VERSION, sha256Json} from "./evaluation-fixtures.js";
+import {FIXTURE_DIGESTS, GOLDEN_FILE, GOLDEN_FILE_VERSION, GOLDEN_REVIEW_CASES, GOLDEN_REVIEW_SEED, GOLDEN_REVIEW_VERSION, GOLDEN_TESTS, GOLDEN_TESTS_VERSION, sha256Json} from "./evaluation-fixtures.js";
 
 const ROLE_RE = /^UASCO-\d{4}$/, EV_RE = /^EV-0[1-6]$/, SHA_RE = /^[0-9a-f]{40}$/;
 const sha256 = (s: string | Buffer) => crypto.createHash("sha256").update(s).digest("hex");
@@ -142,7 +145,7 @@ const gitOut = (cwd: string, args: string[]): string | null => { const r = git(c
 function seedRepo(dir: string, files: Readonly<Record<string, string>>): string {
   fs.mkdirSync(dir, {recursive: true});
   if (git(dir, ["init", "-q", "-b", "main"]).status !== 0) throw new Error("GIT_INIT_FAILED");
-  for (const [f, c] of Object.entries(files)) fs.writeFileSync(path.join(dir, f), c);
+  for (const [f, c] of Object.entries(files)) { const target = path.join(dir, f); fs.mkdirSync(path.dirname(target), {recursive: true}); fs.writeFileSync(target, c); }
   if (git(dir, ["add", "-A"]).status !== 0 || git(dir, [...ID, "commit", "-q", "-m", "seed"]).status !== 0) throw new Error("GIT_SEED_FAILED");
   return (gitOut(dir, ["rev-parse", "HEAD"]) ?? "").trim();
 }
@@ -152,42 +155,96 @@ const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}...[clip
 // ---------------------------------------------------------------- procedure: golden-file-v1 (developer)
 // //TR: Builder'ın kendi ürettiği ve altyapı kaynaklı olmayan retleri (rolün davranışı) FAILED sayılır; geri kalan her başarısızlık (zaman aşımı, profil, çıkış kodu...) NOT_EXECUTED'dır — altyapı sorunu rolü ne yükseltir ne cezalandırır.
 const ROLE_BLOCK = /^(BUILDER_PRODUCED_NO_CHANGE|BUILDER_TOUCHED_GIT_INTERNALS|BUILDER_TOUCHED_AGENT_CONFIG|BUILDER_CHANGED_FORBIDDEN_PATH:|BUILDER_MOVED_HEAD)/;
-async function goldenFile(c: ProcCtx): Promise<ProcedureRun> {
+interface GoldenImpl { seed: Readonly<Record<string, string>>; branch: string; title: string; objective: string; acceptanceCriteria: readonly string[] }
+type Implemented = {ok: false; run: ProcedureRun} | {ok: true; ws: string; start: string; head: string; rawNames: string; names: string[]; log: string; identities: Record<string, string>; checks: EvalCheck[]};
+// //TR: Implementer golden adımı (developer ve tester prosedürlerinin ortak kısmı): tohum depoyu kurar, görevi adaptöre verir, sonucu altyapı/rol ayrımıyla sınıflar ve commit_produced kontrolünü üretir.
+async function implementGolden(c: ProcCtx, g: GoldenImpl): Promise<Implemented> {
   const impl = c.pair.implementer, ws = path.join(c.tmp, "work");
   const identities = {implementer: impl.identity};
-  const start = seedRepo(ws, GOLDEN_FILE.seed);
-  if (git(ws, ["checkout", "-q", "-B", "eval/golden-file", start]).status !== 0) return {infra: "WORKSPACE_SETUP_FAILED", checks: [], artifact: {}, identities};
-  const spec: MissionSpec = {runId: "run_evaluation", missionId: "msn_evaluation", projectId: "prj_evaluation", title: GOLDEN_FILE.title, objective: GOLDEN_FILE.objective,
-    acceptanceCriteria: [...GOLDEN_FILE.acceptanceCriteria], riskLevel: "R0", cycle: 0, baseSha: start, startSha: start};
+  const infra = (reason: string): Implemented => ({ok: false, run: {infra: reason, checks: [], artifact: {}, identities}});
+  const start = seedRepo(ws, g.seed);
+  if (git(ws, ["checkout", "-q", "-B", g.branch, start]).status !== 0) return infra("WORKSPACE_SETUP_FAILED");
+  const spec: MissionSpec = {runId: "run_evaluation", missionId: "msn_evaluation", projectId: "prj_evaluation", title: g.title, objective: g.objective,
+    acceptanceCriteria: [...g.acceptanceCriteria], riskLevel: "R0", cycle: 0, baseSha: start, startSha: start};
   const r = await impl.implement(ws, spec, {timeoutMs: c.timeoutMs, ...(c.shouldAbort ? {shouldAbort: c.shouldAbort} : {})});
   const log = clip(String(r.log ?? ""), 4000); // redaksiyon artefakt/kanıt yazımında tek noktadan yapılır
-  if (r.aborted) return {infra: "ABORTED", checks: [], artifact: {}, identities};
-  if (r.timedOut) return {infra: "TIMEOUT", checks: [], artifact: {}, identities};
-  if (r.blockReason && !ROLE_BLOCK.test(r.blockReason)) return {infra: `IMPLEMENT_BLOCKED:${r.blockReason.slice(0, 80)}`, checks: [], artifact: {}, identities};
-  if (!r.blockReason && r.exitCode !== 0) return {infra: r.exitCode === null ? "NOT_STARTED" : "IMPLEMENT_EXIT_NONZERO", checks: [], artifact: {}, identities};
+  if (r.aborted) return infra("ABORTED");
+  if (r.timedOut) return infra("TIMEOUT");
+  if (r.blockReason && !ROLE_BLOCK.test(r.blockReason)) return infra(`IMPLEMENT_BLOCKED:${r.blockReason.slice(0, 80)}`);
+  if (!r.blockReason && r.exitCode !== 0) return infra(r.exitCode === null ? "NOT_STARTED" : "IMPLEMENT_EXIT_NONZERO");
   const checks: EvalCheck[] = [];
   if (r.blockReason) {
     checks.push({id: "builder_commit_accepted", passed: false, detail: r.blockReason.slice(0, 100)});
-    return {infra: null, checks, artifact: {implementerLog: log}, identities};
+    return {ok: false, run: {infra: null, checks, artifact: {implementerLog: log}, identities}};
   }
   const headOut = gitOut(ws, ["rev-parse", "HEAD"]);
-  if (headOut === null) return {infra: "WORKSPACE_INSPECT_FAILED", checks: [], artifact: {}, identities};
+  if (headOut === null) return infra("WORKSPACE_INSPECT_FAILED");
   const head = headOut.trim();
   const produced = SHA_RE.test(head) && head !== start && git(ws, ["merge-base", "--is-ancestor", start, head]).status === 0;
   checks.push({id: "commit_produced", passed: produced, detail: produced ? head : "no descendant commit of the start commit"});
-  if (!produced) return {infra: null, checks, artifact: {implementerLog: log}, identities};
+  if (!produced) return {ok: false, run: {infra: null, checks, artifact: {implementerLog: log}, identities}};
   const nameOut = gitOut(ws, ["diff", "--name-status", "-z", "--no-renames", "--no-ext-diff", start, head]);
-  if (nameOut === null) return {infra: "WORKSPACE_INSPECT_FAILED", checks: [], artifact: {}, identities};
-  const names = nameOut.split("\0").filter(Boolean);
+  if (nameOut === null) return infra("WORKSPACE_INSPECT_FAILED");
+  return {ok: true, ws, start, head, rawNames: nameOut, names: nameOut.split("\0").filter(Boolean), log, identities, checks};
+}
+const regularMode = (ws: string, head: string, file: string) => (gitOut(ws, ["ls-tree", head, "--", file]) ?? "").split(" ")[0];
+
+async function goldenFile(c: ProcCtx): Promise<ProcedureRun> {
+  const im = await implementGolden(c, {seed: GOLDEN_FILE.seed, branch: "eval/golden-file", title: GOLDEN_FILE.title, objective: GOLDEN_FILE.objective, acceptanceCriteria: GOLDEN_FILE.acceptanceCriteria});
+  if (!im.ok) return im.run;
+  const {ws, head, names, log, identities, checks} = im;
   const only = names.length === 2 && names[0] === "A" && names[1] === GOLDEN_FILE.path;
   checks.push({id: "only_expected_file_added", passed: only, detail: names.join(" ").slice(0, 200)});
   const blob = gitOut(ws, ["cat-file", "blob", `${head}:${GOLDEN_FILE.path}`]);
-  const mode = (gitOut(ws, ["ls-tree", head, "--", GOLDEN_FILE.path]) ?? "").split(" ")[0];
+  const mode = regularMode(ws, head, GOLDEN_FILE.path);
   checks.push({id: "exact_content", passed: blob === GOLDEN_FILE.content, detail: blob === null ? "file missing in commit" : `${Buffer.byteLength(blob, "utf8")} bytes`});
   checks.push({id: "regular_file", passed: mode === "100644", detail: mode || "none"});
   const limit = c.profile.limits.maxFilesWritten;
   checks.push({id: "within_role_file_limit", passed: names.length / 2 <= limit, detail: `${names.length / 2}<=${limit}`});
   return {infra: null, checks, artifact: {commit: head, nameStatus: names, content: blob === null ? null : clip(blob, 2000), implementerLog: log}, identities};
+}
+
+// ---------------------------------------------------------------- procedure: golden-tests-v1 (tester)
+// //TR: Tester prosedürü STATİK oracle kullanır: yazılan test ASLA çalıştırılmaz (doğrulanmış sandbox yok; vm.compileFunction yalnız DERLER, yürütmez). Metin çözümlemesi belirteç tabanlıdır (static-test-analysis.ts): yorum/string/geri çağrı/ölü kod test sayılmaz. Mevcut test yüzeyi için runner'ın kendi sınıflandırıcısı (evaluateTestSurface/assertionCount/disabledTestMarkers) kullanılır; ikinci bir kural yoktur.
+// //TR: `compileFunction` dosyayı Node'un CJS yükleyicisi gibi bir FONKSİYON GÖVDESİ olarak derler (kapatıcı parantezle sarmalayıcıyı kırma hilesi derlenmez); yalnız derler, ASLA çalıştırmaz.
+function compiles(src: string): boolean {
+  try { vm.compileFunction(src, ["exports", "require", "module", "__filename", "__dirname"], {filename: "evaluation-test-file.js"}); return true; } catch { return false; }
+}
+async function goldenTests(c: ProcCtx): Promise<ProcedureRun> {
+  const im = await implementGolden(c, {seed: GOLDEN_TESTS.seed, branch: "eval/golden-tests", title: GOLDEN_TESTS.title, objective: GOLDEN_TESTS.objective, acceptanceCriteria: GOLDEN_TESTS.acceptanceCriteria});
+  if (!im.ok) return im.run;
+  const {ws, start, head, rawNames, names, log, identities, checks} = im;
+  // //TR: Boyut sınırı HER metin çözümlemesinden ve her regex'ten ÖNCE uygulanır (model çıktısı sınırsız olamaz; kuadratik regex olay döngüsünü kilitleyemez). Sınırı aşan içerik runner'ın yüzey sınıflandırıcısına da verilmez.
+  const contentAt = (ref: string, p: string) => { const t = gitOut(ws, ["show", `${ref}:${p}`]); return t !== null && Buffer.byteLength(t, "utf8") > MAX_TEST_SOURCE_BYTES ? null : t; };
+  const surface = evaluateTestSurface({baseSha: start, headSha: head, entries: parseNameStatusZ(rawNames), contentAt, executedTests: null, notExecutedReason: "SANDBOX_UNAVAILABLE"});
+  // //TR: Tek eklenen dosya dışındaki HER değişiklik (mevcut testin değişmesi/silinmesi/zayıflatılması, harness, src) name-status'ta görünür ve bu kontrolü düşürür; ayrıntıya runner'ın kendi test-yüzeyi sınıflandırması eklenir.
+  const only = names.length === 2 && names[0] === "A" && names[1] === GOLDEN_TESTS.path;
+  checks.push({id: "only_expected_file_added", passed: only, detail: `${names.join(" ").slice(0, 160)} | surface deleted=${surface.deleted.length} weakened=${surface.weakened.length} modified=${surface.modified.length} harness=${surface.harness.length} renamed=${surface.renamed.length}`});
+  checks.push({id: "no_trivial_test", passed: surface.trivialAdded.length === 0, detail: `trivialAdded=${surface.trivialAdded.length}`});
+  const src = gitOut(ws, ["cat-file", "blob", `${head}:${GOLDEN_TESTS.path}`]);
+  const mode = regularMode(ws, head, GOLDEN_TESTS.path), bytes = src === null ? 0 : Buffer.byteLength(src, "utf8");
+  checks.push({id: "regular_file", passed: src !== null && mode === "100644", detail: mode || "none"});
+  const sizeOk = src !== null && bytes <= MAX_TEST_SOURCE_BYTES, text = sizeOk ? src : "";
+  checks.push({id: "within_size_cap", passed: sizeOk, detail: src === null ? "test file missing in commit" : `${bytes} bytes (cap ${MAX_TEST_SOURCE_BYTES}); larger files are not analysed`});
+  checks.push({id: "compiles", passed: sizeOk && compiles(text), detail: !sizeOk ? "not analysed (missing or over the size cap)" : "vm.compileFunction compile only; the file is never executed"});
+  const toks = sizeOk ? tokenize(text) : null, an = toks === null ? null : analyzeAddTest(toks);
+  const why = !sizeOk ? "not analysed (missing or over the size cap)" : "not analysable (unterminated string, comment, template or regex)";
+  checks.push({id: "references_module", passed: an !== null && an.addId !== null, detail: an === null ? why : an.addId === null ? "no top-level `const <name> = require(\"../src/add\")`" : `bound to ${an.addId}`});
+  const cases = an?.cases ?? [];
+  checks.push({id: "assertion_count_min_3", passed: cases.length >= 3, detail: an === null ? why : `${cases.length} qualifying top-level assertion(s) of ${an.assertCalls} assert call(s); comments, strings, callbacks and non-literal operands never count`});
+  checks.push({id: "asserted_values_correct", passed: cases.length > 0 && cases.every(k => k.expected === k.a + k.b), detail: an === null ? why : `${cases.filter(k => k.expected !== k.a + k.b).length} wrong expected sum(s)`});
+  const disabled = sizeOk ? disabledTestMarkers(text) : -1;
+  checks.push({id: "no_disabled_markers", passed: disabled === 0, detail: sizeOk ? `disabled=${disabled}` : "not scanned (missing or over the size cap)"});
+  checks.push({id: "no_early_exit", passed: an !== null && an.earlyExit === null, detail: an === null ? why : an.earlyExit ?? "no top-level return, loop, conditional, function or class"});
+  checks.push({id: "closed_world", passed: an !== null && an.tamper === null, detail: an === null ? why : an.tamper ?? "only the two const require declarations, before the first assertion, and qualifying top-level assert statements"});
+  const distinct = new Set(cases.map(k => `${k.a},${k.b}`)).size;
+  const pos = cases.some(k => k.a > 0 && k.b > 0), neg = cases.some(k => k.a < 0 || k.b < 0), zero = cases.some(k => k.a === 0 || k.b === 0);
+  checks.push({id: "covers_positive_negative_zero", passed: distinct >= 3 && pos && neg && zero, detail: `distinctOperands=${distinct} positive=${pos} negative=${neg} zero=${zero}`});
+  const limit = c.profile.limits.maxFilesWritten;
+  checks.push({id: "within_role_file_limit", passed: names.length / 2 <= limit, detail: `${names.length / 2}<=${limit}`});
+  return {infra: null, checks, identities, artifact: {commit: head, nameStatus: names, testFile: sizeOk ? clip(text, 8000) : null, testFileBytes: bytes, qualifyingAssertions: cases.length, assertCalls: an?.assertCalls ?? null, cases: cases.slice(0, 20), disabledMarkers: disabled,
+    surface: {added: surface.added, modified: surface.modified, deleted: surface.deleted, weakened: surface.weakened, trivialAdded: surface.trivialAdded, harness: surface.harness, renamed: surface.renamed, functionalAcceptance: surface.functionalAcceptance, reason: surface.reason},
+    testsExecuted: false, testsNotExecutedReason: "SANDBOX_UNAVAILABLE: the written tests were never run; no mutation testing", implementerLog: log}};
 }
 
 // ---------------------------------------------------------------- procedure: golden-review-v1 (security-reviewer)
@@ -267,6 +324,9 @@ export const EVALUATION_PROCEDURES: readonly Procedure[] = [
     covers: ["follows a precise single-file mission", "touches only the expected file", "commit is produced by the engine-owned builder commit"], doesNotCover: ["code quality", "tests", "multi-file changes", "any real project work"], run: c => goldenFile(c)},
   {id: "golden-review", version: GOLDEN_REVIEW_VERSION, fixtureDigest: FIXTURE_DIGESTS[GOLDEN_REVIEW_VERSION], specKind: "ROLE_SPECIFIC_GOLDEN_MISSION", functions: ["security-reviewer"],
     covers: ["returns CLEAN with no findings for a trivially correct diff", "returns BLOCKED with a finding for a planted command injection", "leaves the review clone untouched"], doesNotCover: ["recall on real defects", "false-positive rate beyond one case", "secret or dependency review"], run: c => goldenReview(c)},
+  {id: "golden-tests", version: GOLDEN_TESTS_VERSION, fixtureDigest: FIXTURE_DIGESTS[GOLDEN_TESTS_VERSION], specKind: "ROLE_SPECIFIC_GOLDEN_MISSION", functions: ["tester"],
+    covers: ["authors ONE new, scoped test file (at most 16 KiB) for a precise mission that states every threshold", "the file compiles (compile only, nothing is run) and, in the code tokens only (comments, strings, callbacks and dead code never count), declares require of ../src/add and node:assert at the top level and contains at least three top-level assertion statements assert.<strictEqual|equal|deepStrictEqual|deepEqual>(add(<n>, <n>), <n>) or assert[.ok](add(<n>, <n>) === <n>) with distinct operands covering a positive, a negative and a zero case", "every asserted value equals the true sum (statically computed from the literals)", "leaves existing tests, src and the harness untouched; no skipped/disabled tests, no top-level return, loop, conditional, function or class", "a closed grammar: the file consists ONLY of the two `const` require declarations, BEFORE the first assertion (a declaration after an assertion would throw a ReferenceError at run time), and qualifying top-level assert statements (optional plain-string message); every other top-level statement (reassignment, alias, Object/prototype tampering, process/eval/import, console, blocks, other requires) fails, so the file cannot rebind, neuter or exit its own assertions"],
+    doesNotCover: ["that the tests pass or fail correctly: nothing is executed (no verified sandbox)", "defect-detection power (no mutation testing): the detection guarantee covers an add that SUBTRACTS (a - b) only; a file whose cases satisfy a * b == a + b (for example 2, 2, 4) also passes for a multiplying add", "tests in any other style (node:test callbacks, table-driven loops, destructured assert imports or an assert binding not named assert): they are FAILED against the precise mission text, not judged", "test design quality beyond the static checks"], run: c => goldenTests(c)},
   {id: "golden-predev", version: "golden-predev-v1", fixtureDigest: sha256Json({brief: TASKHUB_BRIEF, artifacts: TASKHUB_ARTIFACTS}), specKind: "ROLE_SPECIFIC_GOLDEN_MISSION", functions: ["business-analyst", "requirements-engineer", "planner", "architect", "ux-designer"],
     covers: ["produces JSON that the existing artifact validators accept for the TaskHub reference brief (shape and traceability to approved upstream)"], doesNotCover: ["content quality or correctness", "any customer project", "the TaskHub reference content is not a verified project"], run: (c, fn) => goldenPredev(c, fn)}
 ];
@@ -280,7 +340,7 @@ export function planFor(roleId: string, evaluationId: string, bindings: readonly
   const procedure = EVALUATION_PROCEDURES.find(p => p.functions.includes(profile.function));
   if (!procedure) return {refused: `NO_PROCEDURE:${profile.function}`};
   if (evaluationId !== "EV-01") return {refused: `NO_PROCEDURE:${evaluationId}`};
-  try { if (profile.function === "developer") assertImplementerRole(roleId, bindings); else assertRoleExecutes(roleId, profile.function, bindings); }
+  try { if (IMPLEMENTER_FUNCTIONS.includes(profile.function)) assertImplementerRole(roleId, bindings); else assertRoleExecutes(roleId, profile.function, bindings); }
   catch (e) { return {refused: (e as Error).message.replace(/:UASCO-\d{4}$/, "").slice(0, 120)}; }
   return {profile, procedure};
 }
