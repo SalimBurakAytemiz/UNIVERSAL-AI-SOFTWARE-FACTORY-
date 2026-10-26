@@ -29,7 +29,7 @@ export async function executorsPanel(ctx){
   if(res.state!=="VERIFIED")body=stateNote(ctx,res.state);
   else if(!res.items.length)body=emptyNote(ctx,"exec.none");
   else body=h(doc,"ul",{class:"cards exec-list"},res.items.map(e=>{
-    const nameKey=`exec.name.${e.id}`,name=ctx.t(nameKey)===nameKey?e.id:ctx.t(nameKey),hintKey=`exec.hint.${e.state}`,hint=e.state&&ctx.t(hintKey)!==hintKey?ctx.t(hintKey):null;
+    const nameKey=`exec.name.${e.id}`,name=ctx.t(nameKey)===nameKey?e.id:ctx.t(nameKey),hintKey=e.state==="CLI_NOT_FOUND"&&e.cli&&e.cli.state==="SHIM_UNSUPPORTED"?"exec.hint.CLI_SHIM_UNSUPPORTED":`exec.hint.${e.state}`,hint=e.state&&ctx.t(hintKey)!==hintKey?ctx.t(hintKey):null;
     return h(doc,"li",{class:"card",dataset:{executor:e.id,state:e.state??"UNKNOWN"}},
       h(doc,"h3",{text:name}),
       h(doc,"p",{},badge(ctx,stateLabel(ctx,e),e.state==="READY"?"badge-ok":"badge-risk"),e.testOnly?h(doc,"span",{}," ",badge(ctx,ctx.t("exec.testOnly"))):null),

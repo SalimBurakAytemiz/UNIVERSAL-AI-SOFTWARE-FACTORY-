@@ -251,6 +251,9 @@ describe("B5 form request builders", () => {
     expect(d(400).key).toBe("post.err.400");
     expect(d(404).key).toBe("post.err.unavailable");
     expect(d(500).key).toBe("post.err.generic");
+    // LOW (review #226): #222 PROJECT_REPOSITORY_INIT_FAILED (HTTP 500) has its own text, in en and tr
+    expect(d(500, "PROJECT_REPOSITORY_INIT_FAILED")).toMatchObject({ok: false, key: "post.err.500.PROJECT_REPOSITORY_INIT_FAILED"});
+    expect(en["post.err.500.PROJECT_REPOSITORY_INIT_FAILED"]).toMatch(/repository/i); expect(tr["post.err.500.PROJECT_REPOSITORY_INIT_FAILED"]).toMatch(/depo/i);
     expect(c.describePostResult({thrown: true, state: "OFFLINE"}).key).toBe("post.err.offline");
     expect(c.describePostResult({thrown: true, state: "ERROR"}).key).toBe("post.err.generic");
     expect(c.describePostResult(null).ok).toBe(false);
@@ -2012,5 +2015,833 @@ describe("LANE-A run steps table", () => {
     const keys = Object.keys(E).filter(k => k.startsWith("run.steps."));
     expect(keys.length).toBe(12);
     for (const k of keys) expect(T[k], k).toBeTruthy();
+  });
+});
+
+// //TR: LANE-A A-RUN-TASK-LINK: koşu BAŞARIYLA başlatıldıktan sonra "koşuyu görevlere bağla" adımı. Görevleri yalnız Founder seçer (hepsi işaretsiz), DONE görevler sunulmaz, işaretli her görev için mevcut POST /v1/tasks/:id/runs {runId} çağrılır, görev başına sonuç ve kısmi başarısızlık görünür kalır; işaretli görev yoksa istek yoktur.
+describe("LANE-A run -> task link step", () => {
+  const tick = () => new Promise(r => setTimeout(r, 0));
+  const RID = "run_" + "ef".repeat(12), T = (c: string) => "tsk_" + c.repeat(24);
+  const TASKS = [{taskId: T("1"), title: "Plan A", status: "PENDING"}, {taskId: T("2"), title: "Plan B", status: "IN_PROGRESS"}, {taskId: T("3"), title: "Plan C", status: "DONE"}, {taskId: T("4"), title: "Plan D", status: "BLOCKED"}];
+  const linkPath = (t: string) => `/v1/tasks/${t}/runs`, startPath = `/v1/missions/${MID}/runs`;
+  const getFor = (tasks: any[] = TASKS, status = "AUTHORIZED") => (p: string) => {
+    if (p === "/v1/projects") return {projects: [project()]};
+    if (p === "/v1/missions") return {missions: [mission({status})]};
+    if (p === `/v1/missions/${MID}`) return {mission: mission({status}), tasks};
+    if (p.startsWith("/v1/work-runs")) return {workRuns: []};
+    if (p.startsWith("/v1/evidence")) return {evidence: []};
+    return undefined;
+  };
+  const started = (over: any = {}) => ({status: 201, body: {run: {runId: RID, missionId: MID, ...over}, hostExecutionNotice: {}}});
+  const link = (taskId: string, status = 201, runId = RID) => ({status, body: {link: {taskId, runId, missionId: MID}}});
+  const refuse = (error: string, status = 409) => ({status, body: {error}});
+  const cbId = (t: string) => `runlink-cb-${t}`;
+  async function open(post: (p: string, b: any) => any, tasks: any[] = TASKS, lang = "en") {
+    const m = await mkCtx({get: getFor(tasks), post, lang});
+    forms.selection.missionId = MID;
+    const view = await load(rend, "views", "work.js");
+    const render = async () => mount(m.doc, await view.render(m.ctx));
+    const o: any = {...m, view, render, root: await render()};
+    o.start = async () => { byId(o.root, "run-start")!.fire("click"); await tick(); o.root = await render(); return o.root; };
+    return o;
+  }
+  const check = (root: N, ...ids: string[]) => { for (const id of ids) byId(root, cbId(id))!.fire("change", {target: {checked: true}}); };
+  const submit = async (o: any) => { byId(o.root, "runlink-submit")!.fire("click"); await tick(); o.root = await o.render(); return o.root; };
+
+  it("parses a started run only from a 2xx body whose run id fits the schema and whose mission matches", async () => {
+    const c = await load(rend, "work-core.js");
+    expect(c.parseStartedRun(started(), MID)).toBe(RID);
+    expect(c.parseStartedRun({status: 200, body: started().body}, MID)).toBe(RID);
+    for (const bad of [null, undefined, {thrown: true, state: "OFFLINE"}, {status: 409, body: started().body}, {status: 202, body: {}}, {status: 201, body: {run: {runId: "run_zz", missionId: MID}}}, {status: 201, body: {run: {runId: RID, missionId: MID2}}},
+      {status: 201, body: {run: {runId: RID}}}, {status: 201, body: {run: null}}, {status: 201, body: []}, {status: "201", body: started().body}, {status: 201, body: {run: {runId: [RID], missionId: MID}}}, {status: 300, body: started().body}, {thrown: true, status: 201, body: started().body}]) expect(c.parseStartedRun(bad, MID), JSON.stringify(bad)).toBeNull();
+  });
+  it("offers only open tasks with valid ids: DONE tasks and bad ids are never listed; an unreadable status is shown as such, not guessed", async () => {
+    const c = await load(rend, "work-core.js");
+    expect(c.linkableTasks(TASKS).map((t: any) => t.taskId)).toEqual([T("1"), T("2"), T("4")]);
+    expect(c.linkableTasks([...TASKS, {taskId: "tsk_bad", title: "x", status: "PENDING"}, null, {title: "no id"}, {taskId: T("5"), title: 5, status: 7}])).toHaveLength(4);
+    expect(c.linkableTasks([{taskId: T("5"), title: 5, status: 7}])).toEqual([{taskId: T("5"), title: "—", status: "—"}]);
+    expect(c.linkableTasks(null)).toEqual([]);
+    expect(c.linkableTasks([{taskId: T("3"), title: "x", status: "DONE"}])).toEqual([]);
+  });
+  it("classifies each link answer; the server's error code is carried verbatim and nothing is claimed on a mismatched or malformed answer", async () => {
+    const c = await load(rend, "work-core.js"), cls = (res: any) => c.classifyLinkResult(res, T("1"), RID);
+    expect(cls(link(T("1"), 201))).toEqual({kind: "LINKED"});
+    expect(cls(link(T("1"), 200))).toEqual({kind: "ALREADY_LINKED"});
+    for (const bad of [link(T("2"), 201), link(T("1"), 201, "run_" + "00".repeat(12)), {status: 201, body: {}}, {status: 200, body: {link: null}}, {status: 201, body: {link: []}}]) expect(cls(bad), JSON.stringify(bad)).toEqual({kind: "INVALID"});
+    expect(cls(refuse("TASK_NOT_LINKABLE"))).toEqual({kind: "REFUSED", code: "TASK_NOT_LINKABLE", status: 409});
+    expect(cls(refuse("RUN_MISSION_MISMATCH"))).toEqual({kind: "REFUSED", code: "RUN_MISSION_MISMATCH", status: 409});
+    expect(cls(refuse("TASK_NOT_FOUND", 404))).toEqual({kind: "REFUSED", code: "TASK_NOT_FOUND", status: 404});
+    expect(cls(refuse("LINK_STORE_CORRUPT", 503))).toEqual({kind: "REFUSED", code: "LINK_STORE_CORRUPT", status: 503});
+    expect(cls(refuse("INVALID_BODY", 400))).toEqual({kind: "REFUSED", code: "INVALID_BODY", status: 400});
+    expect(cls({status: 403, body: {error: "ACTION_DENIED"}})).toMatchObject({kind: "FAILED"}); // neden okunamıyorsa REFUSED/DENIED uydurulmaz
+    expect(cls({status: 403, body: {error: "ACTION_DENIED", reason: "bad reason!"}})).toMatchObject({kind: "FAILED"});
+    expect(cls({status: 403, body: {error: "FORBIDDEN"}})).toEqual({kind: "REFUSED", code: "FORBIDDEN", status: 403});
+    expect(cls({status: 423, body: {error: "GLOBAL_STOP_ACTIVE"}})).toEqual({kind: "STOPPED"});
+    expect(cls({status: 403, body: {error: "ACTION_DENIED", reason: "NO_POLICY"}})).toEqual({kind: "DENIED", reason: "NO_POLICY"});
+    expect(cls({thrown: true, state: "ERROR", message: "INVALID_API_PATH"})).toEqual({kind: "NOT_ENABLED"});
+    for (const res of [null, {thrown: true, state: "OFFLINE", message: "fetch failed"}, {status: 500, body: {}}, {status: 409, body: {error: "<b>x</b>"}}, {status: 409, body: {error: "lower_case"}}, {status: 404, body: {}}])
+      expect(cls(res), JSON.stringify(res)).toMatchObject({kind: "FAILED"});
+  });
+  it("after a SUCCESSFUL start the step appears with every open task UNCHECKED, DONE tasks absent, and nothing is sent until the Founder acts", async () => {
+    const o = await open(p => p === startPath ? started() : undefined as any);
+    expect(byId(o.root, "run-link")).toBeNull(); // başlatmadan önce yok
+    await o.start();
+    const panel = byId(o.root, "run-link")!;
+    expect(panel.dataset.runId).toBe(RID);
+    expect(text(byData(panel, "runlink", "lead")[0])).toContain(RID);
+    expect(byData(panel, "runlinkItem").map(n => n.dataset.runlinkItem)).toEqual([T("1"), T("2"), T("4")]);
+    for (const t of [T("1"), T("2"), T("4")]) expect(byId(o.root, cbId(t))!.hasAttribute("checked"), t).toBe(false);
+    expect(byId(o.root, cbId(T("3")))).toBeNull();
+    expect(text(panel)).not.toContain("Plan C");
+    expect(o.calls.post).toEqual([{path: startPath, body: {roleId: "UASCO-0085"}}]);
+  });
+  it("a failed start offers no link step", async () => {
+    for (const answer of [{status: 409, body: {error: "EXECUTOR_NOT_CONFIGURED"}}, {status: 423, body: {error: "GLOBAL_STOP_ACTIVE"}}]) {
+      forms.resetAllForms();
+      const o = await open(() => answer); await o.start();
+      expect(byId(o.root, "run-link")).toBeNull();
+    }
+  });
+  it("nothing checked: pressing the button sends NO request and says so", async () => {
+    const o = await open(p => p === startPath ? started() : undefined as any); await o.start();
+    await submit(o);
+    expect(o.calls.post).toHaveLength(1); // yalnız koşu başlatma
+    expect(forms.drafts.status[`runlink-${MID}`]).toMatchObject({ok: false, key: "runlink.noneChecked"});
+    expect(text(byId(o.root, `runlink-${MID}-status`)!)).toBe("Nothing is checked, so nothing was sent.");
+  });
+  it("checked tasks are linked one by one with exactly {runId} on the existing endpoint; results are shown per task and the summary counts them", async () => {
+    const o = await open((p, b) => p === startPath ? started() : p === linkPath(T("1")) ? link(T("1"), 201) : p === linkPath(T("4")) ? link(T("4"), 200) : undefined as any); await o.start();
+    check(o.root, T("1"), T("4"));
+    await submit(o);
+    expect(o.calls.post).toEqual([{path: startPath, body: {roleId: "UASCO-0085"}}, {path: linkPath(T("1")), body: {runId: RID}}, {path: linkPath(T("4")), body: {runId: RID}}]);
+    const res = (t: string) => byData(o.root, "runlinkItem", t)[0];
+    expect(res(T("1")).dataset.runlinkState).toBe("LINKED"); expect(text(res(T("1")))).toContain("Linked.");
+    expect(res(T("4")).dataset.runlinkState).toBe("ALREADY_LINKED"); expect(text(res(T("4")))).toContain("Already linked");
+    expect(res(T("2")).dataset.runlinkState).toBe("IDLE");
+    expect(text(byData(o.root, "runlink", "summary")[0])).toBe("2 linked, 0 not linked.");
+    expect(byId(o.root, cbId(T("1")))!.hasAttribute("disabled")).toBe(true); // bağlanan görev kilitli
+    expect(byId(o.root, cbId(T("2")))!.hasAttribute("disabled")).toBe(false);
+  });
+  it("a partial failure stays visible with the server's code; a later click retries ONLY the failed tasks (never the linked ones) and nothing is retried automatically", async () => {
+    let fail4 = true;
+    const o = await open((p) => p === startPath ? started() : p === linkPath(T("1")) ? link(T("1"), 201) : p === linkPath(T("2")) ? refuse("TASK_NOT_LINKABLE") : p === linkPath(T("4")) ? (fail4 ? refuse("TASK_NOT_FOUND", 404) : link(T("4"), 201)) : undefined as any); await o.start();
+    check(o.root, T("1"), T("2"), T("4"));
+    await submit(o);
+    expect(o.calls.post.map((c: any) => c.path)).toEqual([startPath, linkPath(T("1")), linkPath(T("2")), linkPath(T("4"))]); // her görev bir kez
+    const item = (t: string) => byData(o.root, "runlinkItem", t)[0];
+    expect(item(T("1")).dataset.runlinkState).toBe("LINKED");
+    expect(item(T("2")).dataset.runlinkState).toBe("REFUSED"); expect(text(item(T("2")))).toContain("Refused by the server: TASK_NOT_LINKABLE (HTTP 409). Not linked.");
+    expect(item(T("4")).dataset.runlinkState).toBe("REFUSED"); expect(text(item(T("4")))).toContain("TASK_NOT_FOUND (HTTP 404)");
+    expect(text(byData(o.root, "runlink", "summary")[0])).toBe("1 linked, 2 not linked.");
+    expect(byData(o.root, "runlinkResult", "REFUSED").every(n => n.attrs.get("role") === "status")).toBe(true);
+    // Hâlâ işaretli olan başarısızlar yalnız Founder yeniden bastığında denenir; T1 yeniden gönderilmez.
+    fail4 = false;
+    await submit(o);
+    expect(o.calls.post.slice(4).map((c: any) => c.path)).toEqual([linkPath(T("2")), linkPath(T("4"))]);
+    expect(item(T("4")).dataset.runlinkState).toBe("LINKED");
+    expect(item(T("2")).dataset.runlinkState).toBe("REFUSED");
+    expect(text(byData(o.root, "runlink", "summary")[0])).toBe("2 linked, 1 not linked.");
+  });
+  it("a Global Stop, a missing allow-list entry or a transport failure halts the batch: the remaining checked tasks are reported as NOT attempted, not as failures or successes", async () => {
+    const cases: Array<[string, any]> = [["STOPPED", {status: 423, body: {error: "GLOBAL_STOP_ACTIVE"}}], ["NOT_ENABLED", "THROW_INVALID"], ["FAILED", "THROW_OFFLINE"]];
+    for (const [kind, answer] of cases) {
+      forms.resetAllForms();
+      const post = (p: string) => { if (p === startPath) return started(); if (p === linkPath(T("1"))) return link(T("1"), 201); if (answer === "THROW_INVALID") throw new Error("INVALID_API_PATH"); if (answer === "THROW_OFFLINE") throw new Error("fetch failed"); return answer; };
+      const o = await open(post); await o.start();
+      check(o.root, T("1"), T("2"), T("4"));
+      await submit(o);
+      expect(o.calls.post.map((c: any) => c.path), kind).toEqual([startPath, linkPath(T("1")), linkPath(T("2"))]); // T4 hiç gönderilmedi
+      const item = (t: string) => byData(o.root, "runlinkItem", t)[0];
+      expect(item(T("1")).dataset.runlinkState, kind).toBe("LINKED");
+      expect(item(T("2")).dataset.runlinkState, kind).toBe(kind);
+      expect(item(T("4")).dataset.runlinkState, kind).toBe("NOT_ATTEMPTED");
+      expect(text(item(T("4"))), kind).toContain("Not attempted");
+      expect(text(byData(o.root, "runlink", "summary")[0]), kind).toBe("1 linked, 2 not linked.");
+    }
+  });
+  it("unchecking removes a task from the batch; a task the server reported as already linked is not sent again; a new press clears the previous message", async () => {
+    const o = await open((p) => p === startPath ? started() : p === linkPath(T("1")) ? link(T("1"), 200) : p === linkPath(T("2")) ? link(T("2"), 201) : undefined as any); await o.start();
+    check(o.root, T("1"), T("2"));
+    byId(o.root, cbId(T("2")))!.fire("change", {target: {checked: false}}); // geri alındı
+    await submit(o);
+    expect(o.calls.post.map((c: any) => c.path)).toEqual([startPath, linkPath(T("1"))]);
+    expect(byData(o.root, "runlinkItem", T("1"))[0].dataset.runlinkState).toBe("ALREADY_LINKED");
+    expect(byData(o.root, "runlinkItem", T("2"))[0].dataset.runlinkState).toBe("IDLE");
+    check(o.root, T("2"));
+    byId(o.root, "runlink-submit")!.fire("click"); await tick(); o.root = await o.render();
+    expect(o.calls.post.map((c: any) => c.path)).toEqual([startPath, linkPath(T("1")), linkPath(T("2"))]); // T1 yeniden gönderilmedi
+    // Eski "işaretli görev yok" iletisi yeni bir basışta silinir.
+    forms.resetAllForms();
+    const n = await open(p => p === startPath ? started() : p === linkPath(T("1")) ? link(T("1"), 201) : undefined as any); await n.start();
+    await submit(n);
+    expect(forms.drafts.status[`runlink-${MID}`].key).toBe("runlink.noneChecked");
+    check(n.root, T("1")); await submit(n);
+    expect(forms.drafts.status[`runlink-${MID}`]).toBeUndefined();
+    expect(text(byId(n.root, `runlink-${MID}-status`)!)).toBe("");
+  });
+  it("submitRunLinks refuses to act for a mission or run it was not offered for (no request)", async () => {
+    const act = await load(rend, "work-actions.js");
+    const o = await open(p => p === startPath ? started() : undefined as any); await o.start();
+    check(o.root, T("1"));
+    const other = {missionId: MID2, tasks: TASKS};
+    expect(await act.submitRunLinks(o.ctx, other)).toEqual({ok: false, validation: true});
+    forms.drafts.runLink.runId = null;
+    expect(await act.submitRunLinks(o.ctx, {missionId: MID, tasks: TASKS})).toEqual({ok: false, validation: true});
+    expect(o.calls.post).toHaveLength(1);
+  });
+  it("while a batch is in flight the buttons are disabled and extra clicks send nothing", async () => {
+    let release: (v: any) => void = () => {};
+    const o = await open((p) => p === startPath ? started() : new Promise(r => { release = r; }) as any); await o.start();
+    check(o.root, T("1"));
+    const submitBtn = byId(o.root, "runlink-submit")!, closeBtn = byId(o.root, "runlink-close")!;
+    submitBtn.fire("click"); await tick();
+    submitBtn.fire("click"); submitBtn.fire("click"); closeBtn.fire("click"); await tick();
+    expect(o.calls.post.map((c: any) => c.path)).toEqual([startPath, linkPath(T("1"))]);
+    expect(forms.drafts.runLink.runId).toBe(RID); // kapatma istemi yutuldu
+    o.root = await o.render();
+    expect(byId(o.root, "runlink-submit")!.hasAttribute("disabled")).toBe(true);
+    expect(byId(o.root, "runlink-close")!.hasAttribute("disabled")).toBe(true);
+    release(link(T("1"), 201)); await tick(); await tick();
+    o.root = await o.render();
+    expect(byData(o.root, "runlinkItem", T("1"))[0].dataset.runlinkState).toBe("LINKED");
+    expect(byId(o.root, "runlink-submit")!.hasAttribute("disabled")).toBe(false);
+  });
+  it("a start whose answer carries no readable run id for this mission offers NO link step and says why; no link request is possible", async () => {
+    for (const answer of [{status: 202, body: {}}, started({runId: "run_zz"}), started({missionId: MID2})]) {
+      forms.resetAllForms();
+      const o = await open(() => answer); await o.start();
+      expect(byData(o.root, "runlink", "unreadable")).toHaveLength(1);
+      expect(text(byData(o.root, "runlink", "unreadable")[0])).toContain("no readable run id");
+      expect(byId(o.root, "runlink-submit")).toBeNull();
+      expect(byData(o.root, "runlinkItem")).toHaveLength(0);
+      expect(o.calls.post).toHaveLength(1);
+    }
+  });
+  it("a replayed start (200) offers the step too; a mission with only DONE tasks says there is nothing to link and offers no checkbox", async () => {
+    forms.resetAllForms();
+    const a = await open(() => ({status: 200, body: started().body})); await a.start();
+    expect(byData(a.root, "runlinkItem")).toHaveLength(3);
+    forms.resetAllForms();
+    const b = await open(() => started(), [{taskId: T("3"), title: "Plan C", status: "DONE"}]); await b.start();
+    expect(text(byData(b.root, "runlink", "none")[0])).toBe("This mission has no open tasks (not DONE) to link.");
+    expect(byData(b.root, "runlinkItem")).toHaveLength(0);
+    expect(byId(b.root, "runlink-submit")).toBeNull();
+    forms.resetAllForms();
+    const c = await open(() => started(), []); await c.start();
+    expect(byData(c.root, "runlink", "none")).toHaveLength(1);
+  });
+  it("closing the step sends nothing and removes it; the step belongs to the mission it was started for", async () => {
+    const o = await open(p => p === startPath ? started() : undefined as any); await o.start();
+    check(o.root, T("1"));
+    byId(o.root, "runlink-close")!.fire("click"); await tick(); o.root = await o.render();
+    expect(byId(o.root, "run-link")).toBeNull();
+    expect(o.calls.post).toHaveLength(1);
+    forms.drafts.runLink = {missionId: MID2, runId: RID, checked: {}, results: {}};
+    o.root = await o.render();
+    expect(byId(o.root, "run-link")).toBeNull(); // başka mission için teklif bu mission'da çizilmez
+  });
+  it("DENIED, INVALID and server text are shown as text: the server's reason and code are never interpreted as markup", async () => {
+    const o = await open((p) => p === startPath ? started() : p === linkPath(T("1")) ? {status: 403, body: {error: "ACTION_DENIED", reason: "POLICY_NOPE"}} : p === linkPath(T("2")) ? link(T("2"), 201, "run_" + "00".repeat(12)) : p === linkPath(T("4")) ? refuse("SOME_NEW_CODE") : undefined as any); await o.start();
+    check(o.root, T("1"), T("2"), T("4"));
+    await submit(o);
+    const item = (t: string) => byData(o.root, "runlinkItem", t)[0];
+    expect(text(item(T("1")))).toContain("Denied by policy: POLICY_NOPE. Not linked.");
+    expect(item(T("2")).dataset.runlinkState).toBe("INVALID");
+    expect(text(item(T("4")))).toContain("SOME_NEW_CODE (HTTP 409)");
+    expect(all(o.root).some(n => ["SCRIPT", "IMG", "IFRAME"].includes(n.tagName))).toBe(false);
+  });
+  it("renders in Turkish without raw keys, and every runlink.* key exists in EN and TR with identical placeholders and none is dead", async () => {
+    const o = await open(p => p === startPath ? started() : p === linkPath(T("1")) ? refuse("TASK_NOT_LINKABLE") : undefined as any, TASKS, "tr"); await o.start();
+    check(o.root, T("1")); await submit(o);
+    expect(text(byId(o.root, "run-link")!)).not.toMatch(/runlink\.|\{[a-zA-Z]+\}/);
+    expect(text(byId(o.root, "run-link")!)).toContain("Bu koşuyu görevlere bağla");
+    const en = (await load(rend, "locales", "en.js")).default, tr = (await load(rend, "locales", "tr.js")).default;
+    const have = (d: any) => Object.keys(d).filter(k => k.startsWith("runlink.")).sort();
+    expect(have(en)).toEqual(have(tr));
+    const ph = (s: string) => (s.match(/\{\w+\}/g) ?? []).sort().join();
+    for (const k of have(en)) { expect(tr[k], k).toBeTruthy(); expect(ph(tr[k]), k).toBe(ph(en[k])); }
+    const src = read(rend, "views", "run-link.js");
+    const need = new Set<string>([...src.matchAll(/"(runlink\.[A-Za-z.]+)"/g)].map(m => m[1]));
+    for (const k of ["NOT_ATTEMPTED", "LINKED", "ALREADY_LINKED", "REFUSED", "DENIED", "STOPPED", "NOT_ENABLED", "INVALID"]) need.add(`runlink.result.${k}`);
+    for (const m of read(rend, "work-actions.js").matchAll(/"(runlink\.[A-Za-z.]+)"/g)) need.add(m[1]);
+    expect(have(en).filter(k => !need.has(k))).toEqual([]);
+    expect([...need].filter(k => !(k in en))).toEqual([]);
+  });
+  it("the step writes only through ctx.api.post to the existing link path with the run id as the only body field; no bridge, storage, HTML sinks or new endpoints", async () => {
+    const view = read(rend, "views", "run-link.js"), act = read(rend, "work-actions.js");
+    expect(view).not.toMatch(/\.post\(|\bbridge\b|apiPost|apiGet|\bfetch\(|innerHTML|outerHTML|insertAdjacentHTML|\beval\(|localStorage|sessionStorage/);
+    expect(act.match(/ctx\.api\.post\(/g)).toHaveLength(3); // geçiş, koşu başlatma, görev bağı
+    const c = await load(rend, "work-core.js");
+    expect(c.buildLinkRunRequest({taskId: T("1"), runId: RID, taskStatus: "PENDING"})).toEqual({ok: true, path: linkPath(T("1")), body: {runId: RID}, errors: {}});
+    expect(c.buildLinkRunRequest({taskId: T("3"), runId: RID, taskStatus: "DONE"}).ok).toBe(false);
+  });
+});
+
+// //TR: LANE-A A-FLOW-2: Görevler > koşu kartı "Bu koşuya bağlı görevler" (GET /v1/work-runs/:id/tasks). Okuma doğrulanmadıysa (allow-list yok / sunucu hatası / bozuk yanıt) "bağlı görev yok" ASLA söylenmez; bağlar görev başlıklarıyla ve durumlarıyla gösterilir.
+describe("LANE-A run card: tasks linked to the run", () => {
+  const R24 = "run_" + "ab".repeat(12), TID = (c: string) => "tsk_" + c.repeat(24), tasksPath = `/v1/work-runs/${R24}/tasks`;
+  const TASKS = [{taskId: TID("1"), title: "Plan A", status: "PENDING"}, {taskId: TID("2"), title: "<b>Plan B</b>", status: "DONE"}];
+  const getFor = (linkBody: any) => (p: string) => {
+    if (p === "/v1/projects") return {projects: [project()]};
+    if (p === "/v1/missions") return {missions: [mission()]};
+    if (p === `/v1/missions/${MID}`) return {mission: mission(), tasks: TASKS};
+    if (p === `/v1/work-runs?missionId=${MID}`) return {workRuns: [{runId: R24, missionId: MID, status: "RUNNING"}]};
+    if (p === `/v1/work-runs/${R24}`) return {workRun: {runId: R24, missionId: MID, status: "RUNNING"}};
+    if (p === tasksPath) { if (linkBody instanceof Error) throw linkBody; return linkBody; }
+    return undefined;
+  };
+  const link = (taskId: string, over: any = {}) => ({taskId, runId: R24, missionId: MID, tenantId: "t", linkedAt: "2026-10-26T01:00:00.000Z", linkedBy: "FOUNDER_LOCAL", ...over});
+  async function render(linkBody: any, lang = "en") {
+    const m = await mkCtx({get: getFor(linkBody), lang});
+    forms.selection.missionId = MID;
+    const root = mount(m.doc, await (await load(rend, "views", "work.js")).render(m.ctx));
+    return {...m, root, block: byData(root, "runLinkedFor", R24)[0]};
+  }
+  it("maps the answer strictly: only links of THIS run with canonical ids and unique tasks; one bad row makes the whole read an error", async () => {
+    const c = await load(rend, "work-core.js");
+    expect(c.runTasksPath(R24)).toBe(tasksPath);
+    for (const bad of ["", "run_zz", "run_0123456789ab", R24 + "/x", R24 + "?a=1", "RUN_" + "ab".repeat(12), undefined, null, 5, [R24]]) expect(c.runTasksPath(bad), String(bad)).toBeNull();
+    expect(c.mapRunTasks({links: [link(TID("1")), link(TID("2"), {linkedAt: "garbage"})]}, R24)).toEqual({state: "VERIFIED", links: [
+      {taskId: TID("1"), runId: R24, missionId: MID, linkedAt: "2026-10-26T01:00:00.000Z"}, {taskId: TID("2"), runId: R24, missionId: MID, linkedAt: null}]});
+    expect(c.mapRunTasks({links: []}, R24)).toEqual({state: "VERIFIED", links: []});
+    const many = (n: number) => ({links: Array.from({length: n}, (_, i) => link("tsk_" + i.toString(16).padStart(24, "0")))});
+    expect(c.mapRunTasks(many(500), R24).links).toHaveLength(500);
+    expect(c.mapRunTasks(many(501), R24)).toEqual({state: "ERROR", links: []});
+    for (const bad of [null, undefined, [], "x", {}, {links: "x"}, {links: {}}, {links: [null]}, {links: [link("tsk_zz")]}, {links: [link(TID("1"), {runId: "run_" + "cd".repeat(12)})]}, {links: [link(TID("1"), {missionId: "msn_zz"})]},
+      {links: [link(TID("1")), link(TID("1"))]}, {links: [link([TID("1")] as any)]}])
+      expect(c.mapRunTasks(bad, R24), JSON.stringify(bad)?.slice(0, 60)).toEqual({state: "ERROR", links: []});
+  });
+  it("the api reads exactly the canonical path once per detailed run; a missing allow-list entry is UNAVAILABLE, a server error is the client's state, a bad id sends nothing", async () => {
+    const ok = await mkCtx({get: getFor({links: [link(TID("1"))]})});
+    expect((await ok.ctx.api.runTasks(R24)).state).toBe("VERIFIED");
+    expect(ok.calls.get).toEqual([tasksPath]);
+    for (const bad of ["run_zz", "", undefined]) expect((await ok.ctx.api.runTasks(bad)).state, String(bad)).toBe("ERROR");
+    expect(ok.calls.get).toHaveLength(1);
+    expect((await (await mkCtx({get: getFor(new Error("INVALID_API_PATH"))})).ctx.api.runTasks(R24)).state).toBe("UNAVAILABLE");
+    expect((await (await mkCtx({get: getFor(new Error(`${tasksPath}: HTTP 500`))})).ctx.api.runTasks(R24)).state).toBe("ERROR");
+    expect((await (await mkCtx({get: getFor({links: "x"})})).ctx.api.runTasks(R24)).state).toBe("ERROR");
+  });
+  it("shows the linked tasks with the mission's task title and status; a task missing from the mission list is named as such; markup is text", async () => {
+    const r = await render({links: [link(TID("1")), link(TID("2")), link(TID("3"))]});
+    const items = byData(r.block, "runLinkedTask");
+    expect(items.map(n => n.dataset.runLinkedTask)).toEqual([TID("1"), TID("2"), TID("3")]);
+    expect(text(items[0])).toContain("Plan A"); expect(text(items[0])).toContain(TID("1"));
+    expect(all(items[0]).some(n => n.dataset.status === "PENDING")).toBe(true); // durum rozeti
+    expect(all(items[2]).some(n => "status" in n.dataset)).toBe(false); // listede olmayan görev için durum uydurulmaz
+    expect(text(items[1])).toContain("<b>Plan B</b>");
+    expect(text(items[2])).toContain("Task not in this mission's list");
+    expect(all(r.root).some(n => n.tagName === "B")).toBe(false);
+    expect(text(byData(r.block, "runLinked", "none")[0] ?? r.block)).not.toContain("No task is linked");
+    expect(r.calls.get.filter((p: string) => p === tasksPath)).toHaveLength(1);
+    expect(r.calls.post).toEqual([]);
+  });
+  it("an empty verified read says no task is linked; an unreadable one NEVER says so (not enabled / server error / malformed answer)", async () => {
+    const none = await render({links: []});
+    expect(byData(none.block, "runLinked", "none")).toHaveLength(1);
+    expect(text(none.block)).toContain("No task is linked to this run");
+    for (const [body, kind] of [[new Error("INVALID_API_PATH"), "unavailable"], [new Error(`${tasksPath}: HTTP 404`), "unavailable"], [new Error(`${tasksPath}: HTTP 500`), "error"], [{links: [{}]}, "error"], [{nope: 1}, "error"]] as Array<[any, string]>) {
+      const r = await render(body);
+      expect(byData(r.block, "runLinked").map(n => n.dataset.runLinked), String(body?.message ?? JSON.stringify(body))).toEqual([kind]);
+      expect(text(r.block)).not.toContain("No task is linked");
+      expect(byData(r.block, "runLinkedTask")).toHaveLength(0);
+    }
+  });
+  it("a run whose id cannot name a link (not run_ + 24 hex) is shown as unreadable and sends no tasks request", async () => {
+    const m = await mkCtx({get: p => p === `/v1/work-runs?missionId=${MID}` ? {workRuns: [{runId: "run_0123456789ab", missionId: MID, status: "RUNNING"}]} : p === "/v1/work-runs/run_0123456789ab" ? {workRun: {runId: "run_0123456789ab", missionId: MID, status: "RUNNING"}} : getFor({links: []})(p)});
+    forms.selection.missionId = MID;
+    const root = mount(m.doc, await (await load(rend, "views", "work.js")).render(m.ctx));
+    expect(byData(root, "runLinked").map(n => n.dataset.runLinked)).toEqual(["error"]);
+    expect(m.calls.get.some((p: string) => p.endsWith("/tasks"))).toBe(false);
+  });
+  it("renders in Turkish without raw keys; every run.linked.* key exists in EN and TR and none is dead", async () => {
+    const r = await render({links: [link(TID("1"))]}, "tr");
+    expect(text(r.block)).toContain("Bu koşuya bağlı görevler");
+    expect(text(r.block)).not.toMatch(/run\.linked\.|\{[a-zA-Z]+\}/);
+    const en = (await load(rend, "locales", "en.js")).default, tr = (await load(rend, "locales", "tr.js")).default;
+    const have = (d: any) => Object.keys(d).filter(k => k.startsWith("run.linked.")).sort();
+    expect(have(en)).toEqual(have(tr));
+    const used = new Set([...read(rend, "views", "work.js").matchAll(/"(run\.linked\.[A-Za-z]+)"/g)].map(m => m[1]));
+    expect(have(en).filter(k => !used.has(k))).toEqual([]);
+    expect([...used].filter(k => !(k in en) || !(k in tr))).toEqual([]);
+  });
+  it("the read adds no write path: the new api accessor only GETs, and the protected allow-list change is requested in docs/authority-requests, not made", () => {
+    expect(read(rend, "api.js")).toMatch(/async runTasks\(runId\)\{const p=runTasksPath\(runId\);if\(!p\)return \{state:"ERROR",links:\[\]\};const r=await get\(p\)/);
+    const doc = fs.readFileSync(path.join(root, "docs", "authority-requests", "LANE-A-run-tasks-allowlist.md"), "utf8");
+    expect(doc).toContain("RUN_TASKS_RE=/^\\/v1\\/work-runs\\/run_[0-9a-f]{24}\\/tasks$/");
+  });
+});
+
+describe("LANE-A A-FLOW-3: the run step tells the truth about who does the work", () => {
+  const profile = (state: string, extra: any = {}) => ({state, ...(state === "LOGIN_REQUIRED" ? {reason: "CLAUDE_PROFILE_LOGIN_REQUIRED"} : {}), loginCommand: state === "READY" ? null : "$env:CLAUDE_CONFIG_DIR='C:\\x\\implementer'; claude", ...extra});
+  const execBody = (over: any = {}) => ({executors: [{id: "LOCAL_CLAUDE", state: "READY"}], active: {reason: "LOCAL_CLAUDE"}, sandbox: {state: "UNAVAILABLE", reason: "SANDBOX_UNAVAILABLE"},
+    claudeProfiles: {implementer: profile("READY"), reviewer: profile("READY")}, ...over});
+  const getFor = (exec: any, status = "AUTHORIZED") => (p: string) => {
+    if (p === "/v1/projects") return {projects: [project()]};
+    if (p === "/v1/missions") return {missions: [mission({status})]};
+    if (p === `/v1/missions/${MID}`) return {mission: mission({status}), tasks: []};
+    if (p === `/v1/work-runs?missionId=${MID}`) return {workRuns: []};
+    if (p === "/v1/system/executors") { if (exec instanceof Error) throw exec; return exec; }
+    return undefined;
+  };
+  async function render(exec: any, lang = "en", status = "AUTHORIZED") {
+    const m = await mkCtx({get: getFor(exec, status), lang});
+    forms.selection.missionId = MID;
+    const root = mount(m.doc, await (await load(rend, "views", "work.js")).render(m.ctx));
+    return {...m, root, eng: byId(root, "run-engine")};
+  }
+  it("derives READY only with LOCAL_CLAUDE active and both profiles READY; a profile that is not READY or another executor is BLOCKED; missing data is UNKNOWN, never READY", async () => {
+    const c = await load(rend, "project-core.js");
+    const v = (over: any = {}) => c.engineVerdict(c.mapExecutors(execBody(over))).kind;
+    expect(v()).toBe("READY");
+    expect(v({claudeProfiles: {implementer: profile("LOGIN_REQUIRED"), reviewer: profile("READY")}})).toBe("BLOCKED");
+    expect(v({claudeProfiles: {implementer: profile("READY"), reviewer: profile("REFUSED", {reason: "PROFILE_DIR_FORBIDDEN"})}})).toBe("BLOCKED");
+    expect(v({claudeProfiles: {implementer: profile("WHATEVER"), reviewer: profile("READY")}})).toBe("BLOCKED");
+    expect(v({active: {reason: "EXECUTOR_NOT_CONFIGURED"}})).toBe("BLOCKED");
+    expect(v({active: {reason: "LOCAL_CLAUDE"}, claudeProfiles: {implementer: profile("LOGIN_REQUIRED"), reviewer: profile("LOGIN_REQUIRED")}})).toBe("BLOCKED");
+    for (const o of [{active: undefined}, {active: {reason: "local-claude"}}, {active: {reason: 5}}, {active: "LOCAL_CLAUDE"}, {claudeProfiles: undefined}, {claudeProfiles: {error: "CLAUDE_PROFILE_STATUS_UNAVAILABLE"}},
+      {claudeProfiles: {implementer: profile("READY")}}, {claudeProfiles: {implementer: profile("READY"), reviewer: {state: "ready"}}}]) expect(v(o), JSON.stringify(o)).toBe("UNKNOWN");
+    for (const bad of [null, undefined, {state: "UNAVAILABLE", items: []}, {state: "ERROR", items: []}]) expect(c.engineVerdict(bad).kind).toBe("UNKNOWN");
+    // each missing profile alone keeps a READY partner from making the pair READY
+    expect(v({claudeProfiles: {reviewer: profile("READY")}})).toBe("UNKNOWN"); expect(v({claudeProfiles: {implementer: profile("READY")}})).toBe("UNKNOWN");
+    // a failed read never reads as READY even if the object carries ready-looking fields
+    const looksReady = c.mapExecutors(execBody());
+    for (const st of ["ERROR", "UNAVAILABLE", undefined]) expect(c.engineVerdict({...looksReady, state: st}).kind, String(st)).toBe("UNKNOWN");
+    expect(c.mapExecutors(execBody()).active).toBe("LOCAL_CLAUDE"); expect(c.mapExecutors(execBody({active: undefined})).active).toBeNull();
+  });
+  it("shows the engine block above the start button for a startable mission: READY says nothing is claimed to be running", async () => {
+    const o = await render(execBody());
+    expect(o.eng!.dataset.runEngine).toBe("READY");
+    expect(o.calls.get.filter((p: string) => p === "/v1/system/executors")).toHaveLength(1);
+    const head = all(o.eng!).find(n => n.dataset.engineHead)!;
+    expect(head.dataset.engineHead).toBe("READY"); expect(text(head)).toContain("does not mean a run is in progress");
+    expect(all(o.eng!).filter(n => n.dataset.engineProfile).map(n => [n.dataset.engineProfile, n.dataset.engineProfileState])).toEqual([["implementer", "READY"], ["reviewer", "READY"]]);
+    expect(text(all(o.eng!).find(n => n.dataset.engineActive)!)).toContain("Local Claude");
+    const order = all(o.root), iEng = order.indexOf(o.eng!), iBtn = order.findIndex(n => n.id === "run-start");
+    expect(iEng).toBeGreaterThan(-1); expect(iBtn).toBeGreaterThan(iEng); // the truth comes before the button
+    expect(all(o.eng!).some(n => n.dataset.engineLogin)).toBe(false);
+    expect(text(o.eng!)).toContain("does not say a run is in progress");
+  });
+  it("a blocked profile gets the risk badge, not the ok badge; and no engine block is offered for a mission that cannot start a run", async () => {
+    const b = await render(execBody({claudeProfiles: {implementer: profile("LOGIN_REQUIRED"), reviewer: profile("READY")}}));
+    const badge = (role: string) => String(all(all(b.eng!).find(n => n.dataset.engineProfile === role)!).find(n => String(n.className).split(" ").includes("badge"))!.className);
+    expect(badge("implementer")).toContain("badge-risk"); expect(badge("implementer")).not.toContain("badge-ok"); expect(badge("reviewer")).toContain("badge-ok");
+    const done = await render(execBody(), "en", "COMPLETE");
+    expect(done.eng).toBeNull(); expect(byId(done.root, "run-start")).not.toBeNull(); // the page itself still renders
+  });
+  it("LOGIN_REQUIRED is BLOCKED with the Founder's own login command as plain text, never READY, never running", async () => {
+    const o = await render(execBody({claudeProfiles: {implementer: profile("LOGIN_REQUIRED"), reviewer: profile("READY")}}));
+    expect(o.eng!.dataset.runEngine).toBe("BLOCKED");
+    const head = all(o.eng!).find(n => n.dataset.engineHead)!;
+    expect(text(head)).toContain("Nothing is running"); expect(text(head)).not.toContain("Ready:");
+    const impl = all(o.eng!).find(n => n.dataset.engineProfile === "implementer")!;
+    expect(impl.dataset.engineProfileState).toBe("LOGIN_REQUIRED"); expect(text(impl)).toContain("Sign-in required"); expect(text(impl)).toContain("UASCO never signs in for you");
+    const cmd = all(o.eng!).find(n => n.dataset.engineLogin === "implementer")!;
+    expect(text(cmd)).toContain("CLAUDE_CONFIG_DIR"); expect(all(o.eng!).some(n => n.dataset.engineLogin === "reviewer")).toBe(false);
+    expect(all(o.eng!).filter(n => n.tagName === "BUTTON").length).toBe(0); // the renderer never runs the command
+  });
+  it("shows REFUSED, a missing profile and a non-configured executor honestly", async () => {
+    const r = await render(execBody({claudeProfiles: {implementer: profile("READY"), reviewer: profile("REFUSED", {reason: "PROFILE_DIR_FORBIDDEN"})}}));
+    expect(r.eng!.dataset.runEngine).toBe("BLOCKED");
+    expect(text(all(r.eng!).find(n => n.dataset.engineProfile === "reviewer")!)).toContain("Refused");
+    const m = await render(execBody({claudeProfiles: {implementer: profile("READY")}}));
+    expect(m.eng!.dataset.runEngine).toBe("UNKNOWN");
+    const miss = all(m.eng!).find(n => n.dataset.engineProfile === "reviewer")!;
+    expect(miss.dataset.engineProfileState).toBe("MISSING"); expect(text(miss)).toContain("did not report this profile");
+    const n = await render(execBody({active: {reason: "EXECUTOR_NOT_CONFIGURED"}}));
+    expect(n.eng!.dataset.runEngine).toBe("BLOCKED"); expect(text(all(n.eng!).find(x => x.dataset.engineActive)!)).toContain("no executor is enabled");
+    // LOW (review #226): the server's own PROVENANCE_MISSING has its text, not "(not recognised)"
+    const pm = await render(execBody({active: {reason: "PROVENANCE_MISSING"}}));
+    expect(pm.eng!.dataset.runEngine).toBe("BLOCKED"); expect(text(all(pm.eng!).find(x => x.dataset.engineActive)!)).toContain("provenance evidence is missing"); expect(text(all(pm.eng!).find(x => x.dataset.engineActive)!)).not.toContain("not recognised");
+    const odd = await render(execBody({active: {reason: "BRAND_NEW"}}));
+    expect(text(all(odd.eng!).find(x => x.dataset.engineActive)!)).toContain("BRAND_NEW (not recognised)");
+  });
+  it("states the sandbox truth next to the engine: UNAVAILABLE means tests will be NOT_EXECUTED, AVAILABLE does not promise a pass, unknown says unknown", async () => {
+    const u = await render(execBody());
+    expect(u.eng!.dataset.engineSandbox).toBe("UNAVAILABLE");
+    const un = all(u.eng!).find(n => n.dataset.engineSandboxNote)!;
+    expect(un.dataset.engineSandboxNote).toBe("UNAVAILABLE"); expect(text(un)).toContain("NOT_EXECUTED"); expect(text(un)).toContain("SANDBOX_UNAVAILABLE");
+    const a = await render(execBody({sandbox: {state: "AVAILABLE", providerId: "docker"}}));
+    expect(text(all(a.eng!).find(n => n.dataset.engineSandboxNote)!)).toContain("still needs the run's own evidence");
+    const k = await render(execBody({sandbox: undefined}));
+    expect(all(k.eng!).find(n => n.dataset.engineSandboxNote)!.dataset.engineSandboxNote).toBe("UNKNOWN");
+  });
+  it("an unreadable executor status is UNKNOWN with an honest note (UNAVAILABLE vs error), and never a ready or blocked claim", async () => {
+    const off = await render(undefined);
+    expect(off.eng!.dataset.runEngine).toBe("UNKNOWN"); expect(text(off.eng!)).toContain("not available to the desktop"); expect(text(off.eng!)).not.toContain("Ready:");
+    expect(all(off.eng!).find(n => n.dataset.engineHead)!.dataset.engineHead).toBe("UNKNOWN"); expect(text(off.eng!)).toContain("nobody can say whether a run would be carried out");
+    expect(all(off.eng!).some(n => n.dataset.engineProfile)).toBe(false);
+    const err = await render(new Error("/v1/system/executors: HTTP 500"));
+    expect(err.eng!.dataset.runEngine).toBe("UNKNOWN"); expect(text(err.eng!)).not.toContain("not available to the desktop");
+  });
+  it("C-IMPL-WIN-1: maps cli and per-role readiness strictly; ready must equal 'no blockers', free text and paths are never carried", async () => {
+    const c = await load(rend, "project-core.js");
+    const rd = (over: any = {}) => ({ready: false, blockers: ["CLAUDE_CLI_SHIM_UNSUPPORTED"], blocker: "CLAUDE_CLI_SHIM_UNSUPPORTED", founderAction: "Found C:\\Users\\x\\claude.cmd", profile: "READY", loginCommand: null, loginHint: "free text", ...over});
+    const map = (r: any, cli: any = {state: "SHIM_UNSUPPORTED", path: "C:\\x\\claude.cmd"}) => c.mapExecutors({executors: {LOCAL_CLAUDE: {state: "CLI_NOT_FOUND", cli, readiness: r}, FAKE: {state: "TEST_ONLY"}}});
+    const m = map({implementer: rd(), reviewer: rd({ready: true, blockers: [], blocker: null})});
+    expect(m.items.find((i: any) => i.id === "LOCAL_CLAUDE").cli).toEqual({state: "SHIM_UNSUPPORTED"});
+    expect(m.readiness.implementer).toEqual({ready: false, blockers: ["CLAUDE_CLI_SHIM_UNSUPPORTED"], profile: "READY", loginCommand: null});
+    expect(m.readiness.reviewer.ready).toBe(true);
+    expect(JSON.stringify(m)).not.toMatch(/claude\.cmd|free text|founderAction/);
+    for (const bad of [rd({ready: true}), rd({blockers: [], ready: false}), rd({blockers: "x"}), rd({blockers: ["bad code"]}), rd({blockers: [5]}), rd({blockers: Array(9).fill("CLAUDE_CLI_NOT_FOUND")}), rd({ready: "yes"}), null, 5])
+      expect(map({implementer: bad, reviewer: rd()}).readiness.implementer, JSON.stringify(bad)).toBeNull();
+    expect(map({implementer: rd({blockers: ["CLAUDE_PROFILE_REFUSED:SETTINGS_NOT_WRITTEN"]}), reviewer: rd()}).readiness.implementer.blockers).toEqual(["CLAUDE_PROFILE_REFUSED:SETTINGS_NOT_WRITTEN"]);
+    for (const cli of [{state: "MAYBE"}, null, "FOUND"]) expect(map({}, cli).items[0].cli, String(cli)).toBeNull();
+    expect(map(undefined).readiness).toBeNull(); expect(c.mapExecutors({executors: [{id: "FAKE", state: "READY"}]}).readiness).toBeNull();
+  });
+  it("C-IMPL-WIN-1: a role with ready=false is BLOCKED even when its profile is READY; ready roles stay READY; a conflicting role reading is unknown, not READY", async () => {
+    const c = await load(rend, "project-core.js");
+    const rd = (ready: boolean, blockers: string[] = ready ? [] : ["CLAUDE_CLI_NOT_FOUND"]) => ({ready, blockers, blocker: blockers[0] ?? null, profile: "READY", loginCommand: null});
+    const kind = (readiness: any, over: any = {}) => c.engineVerdict(c.mapExecutors(execBody({readiness: undefined, executors: {LOCAL_CLAUDE: {state: "READY", readiness}, FAKE: {state: "TEST_ONLY"}}, ...over}))).kind;
+    expect(kind({implementer: rd(true), reviewer: rd(true)})).toBe("READY");
+    expect(kind({implementer: rd(false), reviewer: rd(true)})).toBe("BLOCKED");
+    expect(kind({implementer: rd(true), reviewer: rd(false, ["CLAUDE_LAUNCHER_PROVENANCE_CHANGED"])})).toBe("BLOCKED");
+    expect(kind(undefined)).toBe("READY"); // older server without readiness: the profile reading alone decides, as before
+    expect(kind({implementer: {...rd(true), ready: false}, reviewer: rd(true)})).toBe("UNKNOWN"); // contradictory role reading is dropped, never trusted as ready
+  });
+  it("C-IMPL-WIN-1: the engine block lists each blocker in plain words (no server free text, no path), shows the login command only when a sign-in is the blocker, and flags a not-ready role with a READY profile", async () => {
+    const mk = (r: any, p: any = profile("READY")) => execBody({claudeProfiles: {implementer: p, reviewer: profile("READY")}, executors: {LOCAL_CLAUDE: {state: "READY", readiness: r}, FAKE: {state: "TEST_ONLY"}}});
+    const role = (blockers: string[], extra: any = {}) => ({ready: blockers.length === 0, blockers, blocker: blockers[0] ?? null, founderAction: "Found C:\\Users\\x\\claude.cmd", profile: "READY", loginCommand: null, ...extra});
+    const o = await render(mk({implementer: role(["CLAUDE_CLI_SHIM_UNSUPPORTED", "PROVIDER_PROVENANCE_NOT_READY"]), reviewer: role([])}));
+    expect(o.eng!.dataset.runEngine).toBe("BLOCKED");
+    const impl = all(o.eng!).find(n => n.dataset.engineProfile === "implementer")!;
+    expect(impl.dataset.engineProfileState).toBe("READY"); expect(impl.dataset.engineRoleReady).toBe("false");
+    const bcls = String(all(impl).find(n => String(n.className).split(" ").includes("badge"))!.className);
+    expect(bcls).toContain("badge-risk"); expect(bcls).not.toContain("badge-ok"); // a signed-in profile is not "ok" while the CLI is not usable
+    expect(text(impl)).toContain("(not ready)"); expect(text(impl)).toContain("npm .cmd/.bat launcher"); expect(text(impl)).toContain("provenance evidence has not been captured");
+    expect(all(impl).filter(n => n.dataset.engineBlocker).map(n => n.dataset.engineBlocker)).toEqual(["CLAUDE_CLI_SHIM_UNSUPPORTED", "PROVIDER_PROVENANCE_NOT_READY"]);
+    expect(text(o.eng!)).not.toMatch(/claude\.cmd|C:\\/);
+    const rv = all(o.eng!).find(n => n.dataset.engineProfile === "reviewer")!;
+    expect(rv.dataset.engineRoleReady).toBe("true"); expect(all(rv).some(n => n.dataset.engineBlocker)).toBe(false);
+    const cmd = "$env:CLAUDE_CONFIG_DIR='C:\\x\\implementer'; claude";
+    const exp = await render(mk({implementer: role(["CLAUDE_PROFILE_LOGIN_EXPIRED"], {loginCommand: cmd}), reviewer: role([])}, profile("READY", {loginCommand: cmd})));
+    expect(all(exp.eng!).find(n => n.dataset.engineLogin === "implementer")).toBeTruthy(); expect(text(exp.eng!)).toContain("sign-in has expired");
+    const ready = await render(mk({implementer: role([], {loginCommand: cmd}), reviewer: role([])}, profile("READY", {loginCommand: cmd})));
+    expect(ready.eng!.dataset.runEngine).toBe("READY"); expect(all(ready.eng!).some(n => n.dataset.engineLogin)).toBe(false); // the server always sends a command; READY never shows it
+    expect(text(ready.eng!)).not.toContain("To sign in"); expect(text(ready.eng!)).not.toContain("CLAUDE_CONFIG_DIR");
+    // an older/limited server may send readiness without claudeProfiles: the readiness reading carries the profile state and the login command
+    const only = async (impl: any) => render({...mk({implementer: impl, reviewer: role([])}), claudeProfiles: undefined});
+    const loginOnly = await only(role(["CLAUDE_PROFILE_LOGIN_REQUIRED"], {profile: "LOGIN_REQUIRED", loginCommand: cmd}));
+    expect(loginOnly.eng!.dataset.runEngine).toBe("BLOCKED");
+    expect(all(loginOnly.eng!).find(n => n.dataset.engineProfile === "implementer")!.dataset.engineProfileState).toBe("LOGIN_REQUIRED");
+    expect(text(all(loginOnly.eng!).find(n => n.dataset.engineLogin === "implementer")!)).toContain("CLAUDE_CONFIG_DIR");
+    const readyOnly = await only(role([]));
+    expect(all(readyOnly.eng!).find(n => n.dataset.engineProfile === "implementer")!.dataset.engineProfileState).toBe("READY");
+    expect(readyOnly.eng!.dataset.runEngine).toBe("READY"); // both roles are READY by their readiness reading alone
+    const refused = await render(mk({implementer: role(["CLAUDE_PROFILE_REFUSED:SETTINGS_NOT_WRITTEN"], {profile: "REFUSED"}), reviewer: role([])}));
+    expect(text(all(refused.eng!).find(n => n.dataset.engineBlocker === "CLAUDE_PROFILE_REFUSED:SETTINGS_NOT_WRITTEN")!)).toContain("(SETTINGS_NOT_WRITTEN)");
+    const unk = await render(mk({implementer: role(["BRAND_NEW_BLOCKER"]), reviewer: role([])}));
+    expect(text(all(unk.eng!).find(n => n.dataset.engineBlocker === "BRAND_NEW_BLOCKER")!)).toContain("BRAND_NEW_BLOCKER (not recognised)");
+  });
+  it("C-IMPL-WIN-1: Settings explains a .cmd/.bat shim specifically, and a plain missing CLI keeps the old text", async () => {
+    const hint = async (cli: any) => {
+      const m = await mkCtx({lang: "en", get: (p: string) => p === "/v1/system/executors" ? {executors: {LOCAL_CLAUDE: {state: "CLI_NOT_FOUND", cli}, FAKE: {state: "TEST_ONLY"}}} : undefined});
+      const root = mount(m.doc, await (await load(rend, "views", "executors-panel.js")).executorsPanel(m.ctx));
+      return text(all(root).find(n => n.dataset.executor === "LOCAL_CLAUDE")!);
+    };
+    expect(await hint({state: "SHIM_UNSUPPORTED"})).toContain("npm .cmd/.bat launcher");
+    expect(await hint({state: "NOT_FOUND"})).toContain("was not found on this computer");
+    const readyShim = await mkCtx({lang: "en", get: (p: string) => p === "/v1/system/executors" ? {executors: {LOCAL_CLAUDE: {state: "READY", cli: {state: "SHIM_UNSUPPORTED"}}, FAKE: {state: "TEST_ONLY"}}} : undefined});
+    expect(text(all(mount(readyShim.doc, await (await load(rend, "views", "executors-panel.js")).executorsPanel(readyShim.ctx))).find(n => n.dataset.executor === "LOCAL_CLAUDE")!)).not.toContain("npm .cmd/.bat"); // the shim text belongs to a missing CLI only
+    expect(await hint(undefined)).toContain("was not found on this computer");
+    expect(await hint({state: "SHIM_UNSUPPORTED"})).not.toContain("was not found on this computer");
+  });
+  it("a blocked run reason from the server is explained for the two engine causes, in en and tr", async () => {
+    const c = await load(rend, "work-core.js");
+    expect(c.runReasonHintKey("CLAUDE_PROFILE_LOGIN_REQUIRED")).toBe("run.reason.CLAUDE_PROFILE_LOGIN_REQUIRED");
+    expect(c.runReasonHintKey("EXECUTOR_NOT_CONFIGURED")).toBe("run.reason.EXECUTOR_NOT_CONFIGURED");
+    // LOW (review #226): "CODE:detail" reasons (e.g. CLAUDE_PROFILE_REFUSED:<reason>) are explained by their code; PROVENANCE_MISSING has its own text
+    expect(c.runReasonHintKey("CLAUDE_PROFILE_REFUSED:SETTINGS_NOT_WRITTEN")).toBe("run.reason.CLAUDE_PROFILE_REFUSED");
+    expect(c.runReasonHintKey("PROVENANCE_MISSING")).toBe("run.reason.PROVENANCE_MISSING"); expect(c.runReasonHintKey("SOMETHING_ELSE:X")).toBeNull();
+    const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
+    const keys = Object.keys(E).filter(k => k.startsWith("runengine.") || /^run\.reason\.(CLAUDE|CLI_|PROVIDER|EXECUTOR)/.test(k) || k === "runengine.role.notReady");
+    expect(keys.length).toBe(28);
+    for (const k of keys) expect(T[k], k).toBeTruthy();
+    // LOW (review #226): a refused profile with its detail (CLAUDE_PROFILE_REFUSED:<reason>) shows the code's explanation, not the bare code
+    const wk = await load(rend, "views", "work.js"), mc = await mkCtx({lang: "en"});
+    const rcard = wk.runCard(mc.ctx, {runId: "run_" + "ab".repeat(12), missionId: MID, status: "BLOCKED", reason: "CLAUDE_PROFILE_REFUSED:SETTINGS_NOT_WRITTEN", evidence: [], checkpoints: [], reviewer: null, step: null, role: null, evidenceVerification: null}) as N;
+    const rr = byData(rcard, "runReason")[0]; expect(rr.dataset.runReason).toBe("CLAUDE_PROFILE_REFUSED:SETTINGS_NOT_WRITTEN"); expect(rr.textContent).toContain(E["run.reason.CLAUDE_PROFILE_REFUSED"]);
+    const t = await render(execBody({claudeProfiles: {implementer: profile("LOGIN_REQUIRED"), reviewer: profile("READY")}}), "tr");
+    expect(text(t.eng!)).toContain("Bloke");
+  });
+});
+
+describe("LANE-A A-FLOW-GAP-2: the test-result step of a run says what really happened (executed / failed / not executed with its reason)", () => {
+  // M2 (review #226): the row shows the SERVER's decision (GET /v1/work-runs/:id -> delivery.productVerification + testsExecuted); the client never recomputes it from the (truncated) evidence list.
+  const HEAD = "a".repeat(40), RUNX = "run_" + "ab".repeat(12);
+  const run = (over: any = {}) => ({runId: RUNX, missionId: MID, status: "AWAITING_APPROVAL", headSha: HEAD, ...over});
+  const dlv = (state: string, reason: string, testsExecuted: boolean) => ({runId: RUNX, missionId: MID, status: "AWAITING_APPROVAL", sourceGeneration: {state: "SOURCE_GENERATION_COMPLETE", reason: null}, productVerification: {state, reason}, testsExecuted});
+  const detail = async (delivery: any, over: any = {}) => { const core = await load(rend, "work-core.js"); return core.mapWorkRunDetail({run: run(over), delivery, outcomes: null}).run; };
+  const card = async (x: any, lang = "en") => {
+    const c = await mkCtx({lang}); const core = await load(rend, "work-core.js"), work = await load(rend, "views", "work.js");
+    return {node: work.runCard(c.ctx, x) as N, core};
+  };
+  const result = (n: N) => within(n).find(x => x.dataset.runTestResult) ?? null;
+  const within = (n: N): N[] => [n, ...n.children.flatMap(c => within(c))];
+  const CASES: Array<[string, any, string, string, string]> = [
+    // name, server delivery view, kind, reason, text it must contain
+    ["tests ran and failed", dlv("FAILED", "TESTS_FAILED", true), "FAILED", "TESTS_FAILED", "ran and at least one exited with a non-zero code"],
+    ["no verified sandbox", dlv("NOT_VERIFIED", "NOT_EXECUTED:SANDBOX_UNAVAILABLE", false), "NOT_EXECUTED", "SANDBOX_UNAVAILABLE", "No verified sandbox existed, so the tests were not run"],
+    ["run never reached the tests", dlv("NOT_VERIFIED", "NOT_EXECUTED:TESTS_NOT_REACHED", false), "NOT_EXECUTED", "TESTS_NOT_REACHED", "did not reach the test step"],
+    ["no commit", dlv("NOT_VERIFIED", "NOT_EXECUTED:NO_HEAD_COMMIT", false), "NOT_EXECUTED", "NO_HEAD_COMMIT", "produced no commit"],
+    ["tests ran without a sandbox attestation", dlv("NOT_VERIFIED", "SANDBOX_ATTESTATION_MISSING", true), "NOT_VERIFIED", "SANDBOX_ATTESTATION_MISSING", "no sandbox attested it"],
+    ["zero tests executed", dlv("NOT_VERIFIED", "ZERO_TESTS_EXECUTED", true), "NOT_VERIFIED", "ZERO_TESTS_EXECUTED", "executed zero tests"],
+    ["test count unknown", dlv("NOT_VERIFIED", "EXECUTED_TEST_COUNT_UNKNOWN", true), "NOT_VERIFIED", "EXECUTED_TEST_COUNT_UNKNOWN", "number of executed tests is not known"],
+    ["tests were changed", dlv("NOT_VERIFIED", "TEST_CHANGES_REQUIRE_INDEPENDENT_VERIFICATION", true), "NOT_VERIFIED", "TEST_CHANGES_REQUIRE_INDEPENDENT_VERIFICATION", "tests were changed"],
+    ["test surface blocked", dlv("NOT_VERIFIED", "TEST_SURFACE_BLOCKED", true), "NOT_VERIFIED", "TEST_SURFACE_BLOCKED", "test surface is blocked"],
+    // the server appends a detail to some reasons (outcomes.ts): the text resolves on the code before ':' and the full reason stays visible
+    ["test surface blocked with the server's detail", dlv("NOT_VERIFIED", "TEST_SURFACE_BLOCKED:UNVERIFIED_ORACLE", true), "NOT_VERIFIED", "TEST_SURFACE_BLOCKED:UNVERIFIED_ORACLE", "test surface is blocked"],
+    ["everything proven", dlv("PRODUCT_VERIFIED", "TESTS_EXECUTED_IN_VERIFIED_SANDBOX", true), "EXECUTED_VERIFIED", "TESTS_EXECUTED_IN_VERIFIED_SANDBOX", "executed in a verified sandbox"],
+    // M2: the tests really ran (testsExecuted) although the run is stopped before the end; the server's NOT_EXECUTED:* wording must NOT turn into "not executed"
+    ["tests ran, server reason says not reached", dlv("NOT_VERIFIED", "NOT_EXECUTED:TESTS_NOT_REACHED", true), "NOT_VERIFIED", "TESTS_NOT_REACHED", "no complete test result for the final commit"],
+    ["tests recorded, server rule found no verified sandbox", dlv("NOT_VERIFIED", "NOT_EXECUTED:SANDBOX_UNAVAILABLE", true), "NOT_VERIFIED", "SANDBOX_UNAVAILABLE", "See Settings > Ready to build?"],
+  ];
+  it("shows the server's decision (delivery.productVerification + testsExecuted); a run without the server's delivery view is UNKNOWN, never 'not executed'", async () => {
+    const core = await load(rend, "work-core.js");
+    for (const [name, d, kind, reason] of CASES) expect(core.testResultOf(await detail(d)), name).toEqual({kind, reason});
+    expect(core.testResultOf(core.mapWorkRun(run()))).toEqual({kind: "UNKNOWN", reason: null}); // list entry without the delivery view: nothing is claimed
+    expect(core.testResultOf(await detail(undefined))).toEqual({kind: "UNKNOWN", reason: null});
+    // M2: the evidence list is NOT consulted (the server looks at all evidence, the list is cut at 100)
+    const withEvidence = core.mapWorkRun(run({evidence: [{evidenceId: "evd_" + "1".repeat(24), kind: "VERIFY_TESTS_NOT_EXECUTED", commitSha: HEAD, exitCode: 0, step: "VERIFY", cycle: 0}]}));
+    expect(core.testResultOf(withEvidence)).toEqual({kind: "UNKNOWN", reason: null});
+    const ranButEvidenceCut = await detail(dlv("PRODUCT_VERIFIED", "TESTS_EXECUTED_IN_VERIFIED_SANDBOX", true), {evidence: []});
+    expect(core.testResultOf(ranButEvidenceCut)).toEqual({kind: "EXECUTED_VERIFIED", reason: "TESTS_EXECUTED_IN_VERIFIED_SANDBOX"});
+    for (const bad of [null, undefined, {}, {delivery: null}, {delivery: {productVerification: null}}, {delivery: {productVerification: {state: 5, reason: "x"}}}, {delivery: {productVerification: {state: "WEIRD", reason: "X"}}}]) expect(core.testResultOf(bad as any), String(bad)).toEqual({kind: "UNKNOWN", reason: null});
+    for (const st of ["FAILED", "NOT_VERIFIED", "PRODUCT_VERIFIED"]) expect(core.testResultOf({delivery: {productVerification: {state: st, reason: 5}, testsExecuted: true}}), st).toEqual({kind: "UNKNOWN", reason: null}); // a non-text reason is never trusted
+    expect(core.testResultOf({delivery: {productVerification: {state: "NOT_VERIFIED", reason: "SOMETHING_NEW"}, testsExecuted: false}})).toEqual({kind: "NOT_VERIFIED", reason: "SOMETHING_NEW"});
+  });
+  // The client rule (productVerificationOf, from the recorded evidence) is still live for every list item without the server's delivery view: it drives isProductVerified, the NOT_VERIFIED badges (m1a.js) and the PRODUCT_VERIFIED pill (views/delivery.js). These evidence cases are kept next to the delivery-view cases above.
+  const evd = (kind: string, extra: any = {}) => ({evidenceId: "evd_" + "1".repeat(24), kind, commitSha: HEAD, exitCode: 0, step: "VERIFY", cycle: 0, ...extra});
+  const attested = (kind: string, extra: any = {}) => evd(kind, {sandboxProviderId: "linux-unshare-v2", ...extra});
+  const surface = (n: number | null, extra: any = {}) => ({kind: "TEST_SURFACE", commitSha: HEAD, testSurface: {executedTests: n, functionalAcceptance: "OK", modified: [], deleted: [], renamed: [], harness: [], weakened: [], ...extra}});
+  const EV_CASES: Array<[string, any[], string, string]> = [
+    // name, evidence, expected evidenceVerification.state, reason
+    ["tests ran and failed", [attested("VERIFY_TESTS", {exitCode: 1}), attested("REGRESSION_TESTS")], "FAILED", "TESTS_FAILED"],
+    ["regression failed", [attested("VERIFY_TESTS"), attested("REGRESSION_TESTS", {exitCode: 2})], "FAILED", "TESTS_FAILED"],
+    ["no verified sandbox", [evd("VERIFY_TESTS_NOT_EXECUTED"), evd("REGRESSION_TESTS_NOT_EXECUTED")], "NOT_VERIFIED", "NOT_EXECUTED:SANDBOX_UNAVAILABLE"],
+    ["run never reached the tests", [evd("EXECUTOR_RUN", {step: "IMPLEMENT"})], "NOT_VERIFIED", "NOT_EXECUTED:TESTS_NOT_REACHED"],
+    ["tests ran without a sandbox attestation", [evd("VERIFY_TESTS"), evd("REGRESSION_TESTS"), surface(4)], "NOT_VERIFIED", "SANDBOX_ATTESTATION_MISSING"],
+    ["zero tests executed", [attested("VERIFY_TESTS"), attested("REGRESSION_TESTS"), surface(0)], "NOT_VERIFIED", "ZERO_TESTS_EXECUTED"],
+    ["test count unknown", [attested("VERIFY_TESTS"), attested("REGRESSION_TESTS")], "NOT_VERIFIED", "EXECUTED_TEST_COUNT_UNKNOWN"],
+    ["tests were changed", [attested("VERIFY_TESTS"), attested("REGRESSION_TESTS"), surface(5, {modified: ["a.test.js"]})], "NOT_VERIFIED", "TEST_CHANGES_REQUIRE_INDEPENDENT_VERIFICATION"],
+    ["test surface blocked", [attested("VERIFY_TESTS"), attested("REGRESSION_TESTS"), surface(5, {functionalAcceptance: "BLOCKED"})], "NOT_VERIFIED", "TEST_SURFACE_BLOCKED"],
+    ["everything proven", [attested("VERIFY_TESTS"), attested("REGRESSION_TESTS"), surface(7)], "PRODUCT_VERIFIED", "TESTS_EXECUTED_IN_VERIFIED_SANDBOX"],
+  ];
+  it("the evidence rule for list items (no delivery view) is unchanged: every recorded-evidence case maps to the same state and reason, and only the proven case is PRODUCT_VERIFIED", async () => {
+    const core = await load(rend, "work-core.js");
+    for (const [name, evidence, state, reason] of EV_CASES) {
+      const w = core.mapWorkRun(run({evidence}));
+      expect(w.evidenceVerification, name).toMatchObject({state, reason}); expect(core.isProductVerified(w), name).toBe(state === "PRODUCT_VERIFIED");
+    }
+    expect(core.mapWorkRun(run({evidence: [], headSha: undefined})).evidenceVerification).toMatchObject({state: "NOT_VERIFIED", reason: "NOT_EXECUTED:NO_HEAD_COMMIT"});
+    // a regression run that failed on another commit does not count; a missing regression never verifies
+    expect(core.mapWorkRun(run({evidence: [attested("VERIFY_TESTS"), surface(7)]})).evidenceVerification.state).not.toBe("PRODUCT_VERIFIED");
+  });
+  it("list items without the delivery view keep the Founder-approved NOT_VERIFIED badge for every evidence case except the proven one", async () => {
+    const core = await load(rend, "work-core.js");
+    for (const [name, evidence, state] of EV_CASES) {
+      const {node} = await card(core.mapWorkRun(run({evidence})));
+      expect(within(node).some(x => x.dataset.m1aBadge === "run"), name).toBe(state !== "PRODUCT_VERIFIED");
+      expect(result(node)!.dataset.runTestResult, name).toBe("UNKNOWN"); // and no test result is claimed without the server's view
+    }
+  });
+  it("the run card shows the test result row with the exact reason code and a plain sentence for every case; the generic NOT_VERIFIED badge stays", async () => {
+    for (const [name, d, kind, reason, sentence] of CASES) {
+      const {node} = await card(await detail(d));
+      const r = result(node)!;
+      expect(r, name).not.toBeNull(); expect(r.dataset.runTestResult, name).toBe(kind); expect(r.dataset.runTestReason, name).toBe(reason);
+      expect(r.textContent, name).toContain(sentence); expect(r.textContent, name).toContain(`(${reason})`); expect(r.textContent, name).not.toContain("reason not recognised"); // every case above is a recognised reason, shown strictly as (REASON)
+      expect(within(node).some(x => x.dataset.m1aBadge === "run"), name).toBe(kind !== "EXECUTED_VERIFIED"); // the Founder-approved NOT_VERIFIED badge is unchanged
+    }
+    const mk = async (state: string, reason: string, testsExecuted = false) => { const c = await mkCtx({lang: "en"}); const work = await load(rend, "views", "work.js"); return result(work.runCard(c.ctx, await detail(dlv(state, reason, testsExecuted))) as N)!; };
+    expect((await mk("NOT_VERIFIED", "SOMETHING_NEW")).textContent).toBe("The result is NOT VERIFIED. (SOMETHING_NEW — reason not recognised)");
+    expect((await mk("NOT_VERIFIED", "NOT_EXECUTED:SOMETHING_NEW")).textContent).toBe("The tests were not executed. (SOMETHING_NEW — reason not recognised)");
+    const failed = result((await card(await detail(CASES[0][1]))).node)!;
+    expect(failed.textContent).not.toContain("sandbox not verified"); // a failed test run is never described as a sandbox problem
+  });
+  it("a card without the server's delivery view says the result is not reported; a failed run keeps both lines (reason and result) and nothing says 'passed' unless the rule holds", async () => {
+    const core = await load(rend, "work-core.js");
+    const un = result((await card(core.mapWorkRun(run()))).node)!;
+    expect(un.dataset.runTestResult).toBe("UNKNOWN"); expect(un.textContent).toContain("not reported for this run"); expect(un.textContent).not.toMatch(/not executed|passed|verified in/i);
+    const blocked = await card(await detail(dlv("NOT_VERIFIED", "NOT_EXECUTED:SANDBOX_UNAVAILABLE", false), {status: "BLOCKED", reason: "SANDBOX_UNAVAILABLE"}));
+    expect(within(blocked.node).some(x => x.dataset.runReason === "SANDBOX_UNAVAILABLE")).toBe(true); expect(result(blocked.node)!.dataset.runTestResult).toBe("NOT_EXECUTED");
+    // M2: a run BLOCKED at REVIEW (reviewer login required) after the tests really ran is not shown as "NOT EXECUTED"
+    const atReview = await card(await detail(dlv("NOT_VERIFIED", "NOT_EXECUTED:TESTS_NOT_REACHED", true), {status: "BLOCKED", reason: "CLAUDE_PROFILE_LOGIN_REQUIRED"}));
+    expect(result(atReview.node)!.dataset.runTestResult).toBe("NOT_VERIFIED"); expect(result(atReview.node)!.textContent).not.toMatch(/were not executed|did not reach the test step|NOT EXECUTED/);
+    for (const [name, d, kind] of CASES) { if (kind !== "EXECUTED_VERIFIED") expect(result((await card(await detail(d))).node)!.textContent, name).not.toMatch(/\bpassed\b/i); }
+  });
+  it("is present in English and Turkish for every kind and reason", async () => {
+    const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
+    const keys = Object.keys(E).filter(k => k.startsWith("run.test."));
+    expect(keys.length).toBe(17);
+    for (const k of keys) { expect(T[k], k).toBeTruthy(); expect(E[k], k).not.toBe(k); }
+    const tn = result((await card(await detail(CASES[0][1]), "tr")).node)!;
+    expect(tn.textContent).toContain("BAŞARISIZ");
+  });
+});
+
+// //TR: LANE-A A-FLOW-GAP-2: Journey'nin uçtan uca sürülmesi. Durumlu sahte sunucu 7f6591c rotalarının şekillerini döndürür ve her GET/POST önce gerçek main.mjs allow-list'inden geçer (listede olmayan yol köprüde INVALID_API_PATH olur): böylece "GATED_4B" adımlar gerçekte olduğu gibi UNAVAILABLE görünür. Her adımın durumu tabloya yazılır ve test tabloyu sabitler.
+describe("LANE-A A-FLOW-GAP-2: the Journey end to end (stateful fake server, real main.mjs allow-lists, 7f6591c route shapes)", () => {
+  const H = (c: string) => c.repeat(24);
+  const IPRJ = `prj_${H("a")}`, IMSN = `msn_${H("b")}`, IITK = `itk_${H("c")}`, IRUN = `run_${H("d")}`, ITSK = (i: number) => `tsk_${String(i + 1).repeat(24)}`, HEAD = "e".repeat(40);
+  const IDEA = "Bir kitap kulübü uygulaması: üyeler kitap önerir ve oylar";
+  async function mkServer() {
+    const getOk = loadGet(), {desktopPostPathAllowed: postOk} = loadPost();
+    const boundary = await load(root, "automation", "lib", "control-boundary.mjs");
+    const S: any = {project: null, mission: null, intake: null, tasks: [] as any[], run: null, links: [] as any[], posts: [] as Array<{path: string; body: any}>, gets: [] as string[], blocked: [] as string[]};
+    const exec = {executors: [{id: "LOCAL_CLAUDE", state: "READY"}], active: {reason: "LOCAL_CLAUDE"}, sandbox: {state: "UNAVAILABLE", reason: "SANDBOX_UNAVAILABLE", detail: "NO_VERIFIED_PROVIDER", providerId: null},
+      claudeProfiles: {implementer: {state: "READY"}, reviewer: {state: "READY"}}};
+    const missionObj = () => S.mission && ({...S.mission});
+    const get = (p: string) => {
+      S.gets.push(p);
+      if (!(boundary.desktopGetPathAllowed(p) || getOk(p))) { S.blocked.push(`GET ${p}`); throw new Error("INVALID_API_PATH"); }
+      if (p === "/v1/projects") return {projects: S.project ? [S.project] : []};
+      if (p === "/v1/intakes") return {intakes: S.intake ? [S.intake] : []};
+      if (p === "/v1/missions") return {missions: S.mission ? [missionObj()] : []};
+      if (p.startsWith("/v1/missions?projectId=")) return {missions: S.mission ? [missionObj()] : []};
+      if (S.mission && p === `/v1/missions/${IMSN}`) return {mission: missionObj(), tasks: S.tasks};
+      if (p === "/v1/work-runs" || p === `/v1/work-runs?missionId=${IMSN}`) return {workRuns: S.run ? [S.run] : []};
+      if (S.run && p === `/v1/work-runs/${IRUN}`) return {workRun: S.run, outcomes: null, delivery: S.delivery()}; // the server also returns its delivery view (productVerification + testsExecuted)
+      if (S.run && p === `/v1/work-runs/${IRUN}/tasks`) return {links: S.links};
+      if (p.startsWith("/v1/evidence")) return {evidence: []};
+      if (p === `/v1/projects/${IPRJ}/readiness`) return {readiness: {projectId: IPRJ, missionId: IMSN, ready: true, verifiable: S.tasks.length > 0, checks: [
+        {id: "MISSION", state: "OK", blocking: true, reason: null, nextAction: null}, {id: "RISK", state: "OK", blocking: true, reason: null, nextAction: null},
+        {id: "REPOSITORY", state: "OK", blocking: true, reason: null, nextAction: null}, {id: "TEST_COMMAND", state: "OK", blocking: false, reason: null, nextAction: null},
+        S.tasks.length ? {id: "PLAN", state: "OK", blocking: false, reason: null, nextAction: null} : {id: "PLAN", state: "BLOCKED", blocking: false, reason: "NO_PLANNED_TASKS", nextAction: "PLAN_MISSION"}]}};
+      if (p === `/v1/projects/${IPRJ}/flow`) return {flow: {projectId: IPRJ, stages: ["MISSION", "PLAN", "RUN", "REVIEW", "DELIVERY"].map(s => ({stage: s, state: s === "MISSION" || (s === "PLAN" && S.tasks.length) ? "DONE" : "NOT_STARTED", detail: null})), missionCount: 1, taskCount: S.tasks.length, latestRunId: S.run ? S.run.runId : null}};
+      if (p === "/v1/system/executors") return exec;
+      if (p === `/v1/deliveries?projectId=${IPRJ}`) return {deliveries: S.run ? [S.delivery()] : []};
+      throw new Error(`${p}: HTTP 404`);
+    };
+    S.delivery = () => ({runId: IRUN, missionId: IMSN, projectId: IPRJ, status: "AWAITING_APPROVAL", sourceCommit: HEAD, sourceGeneration: {state: "SOURCE_GENERATION_COMPLETE", reason: "SOURCE_EVIDENCE_FOR_HEAD", label: "SOURCE_GENERATION_COMPLETE"},
+      productVerification: {state: "NOT_VERIFIED", reason: "NOT_EXECUTED:SANDBOX_UNAVAILABLE", label: "NOT_VERIFIED"}, testsExecuted: false, accepted: null,
+      artifact: S.prepared ? {runId: IRUN, missionId: IMSN, sourceCommit: HEAD, treeSha: "3".repeat(40), exportArtifactHash: "f".repeat(64), artifactPath: `deliveries/${IRUN}/${"f".repeat(64)}.zip`} : null, fileState: S.prepared ? "VERIFIED" : null,
+      testChanges: {required: false, testSurfaceSha256: null, changed: {modified: [], deleted: [], renamed: [], harness: [], truncated: false}}, labels: {sourceGeneration: null, productVerification: null, sourceDelivery: null}});
+    const post = (p: string, b: any) => {
+      S.posts.push({path: p, body: b});
+      if (!postOk(p)) { S.blocked.push(`POST ${p}`); throw new Error("INVALID_API_PATH"); }
+      if (p === "/v1/intakes") {
+        S.project = {projectId: IPRJ, name: b.title ?? "Kitap Kulübü", tenantId: "t1", environmentId: "local", createdAt: "2026-10-26T05:00:00.000Z", repository: {path: "C:\\Projeler\\kitap"}};
+        S.mission = {missionId: IMSN, projectId: IPRJ, title: "Kitap Kulübü", objective: b.idea, acceptanceCriteria: ["Uygulama açılır"], riskLevel: "R1", status: "DRAFT", createdAt: "2026-10-26T05:00:00.000Z"};
+        S.intake = {intakeId: IITK, projectId: IPRJ, missionId: IMSN, title: "Kitap Kulübü", idea: b.idea, riskLevel: "R1", acceptanceCriteria: ["Uygulama açılır"], status: "CREATED", template: b.template,
+          sources: {title: "FOUNDER", acceptanceCriteria: "DEFAULT", riskLevel: "DEFAULT"}, createdAt: "2026-10-26T05:00:00.000Z"};
+        return {status: 201, body: {intake: S.intake}};
+      }
+      if (p === `/v1/missions/${IMSN}/plan`) { S.tasks = b.tasks.map((t: any, i: number) => ({taskId: ITSK(i), title: t.title, status: "PENDING"})); S.mission.status = "PLANNED"; return {status: 201, body: {tasks: S.tasks}}; }
+      if (p === `/v1/missions/${IMSN}/transition`) { S.mission.status = b.to; return {status: 200, body: {mission: missionObj()}}; }
+      if (p === `/v1/missions/${IMSN}/runs`) {
+        S.run = {runId: IRUN, missionId: IMSN, projectId: IPRJ, status: "AWAITING_APPROVAL", headSha: HEAD, step: "REVIEW", startedAt: "2026-10-26T05:10:00.000Z",
+          evidence: [{evidenceId: "evd_" + H("1"), kind: "VERIFY_TESTS_NOT_EXECUTED", commitSha: HEAD, exitCode: null, step: "VERIFY", cycle: 0}, {evidenceId: "evd_" + H("2"), kind: "REGRESSION_TESTS_NOT_EXECUTED", commitSha: HEAD, exitCode: null, step: "REGRESSION", cycle: 0}]};
+        return {status: 201, body: {run: {runId: IRUN, missionId: IMSN}, hostExecutionNotice: "none"}};
+      }
+      const link = /^\/v1\/tasks\/(tsk_[0-9a-f]{24})\/runs$/.exec(p);
+      if (link) { const l = {taskId: link[1], runId: b.runId, missionId: IMSN, tenantId: "t1", linkedAt: "2026-10-26T05:11:00.000Z", linkedBy: "FOUNDER_LOCAL"}; S.links.push(l); return {status: 201, body: {link: l}}; }
+      if (p === `/v1/work-runs/${IRUN}/delivery/prepare`) { S.prepared = true; return {status: 200, body: {artifact: {exportArtifactHash: "f".repeat(64)}}}; }
+      return {status: 404, body: {}};
+    };
+    return {S, get, post};
+  }
+  const type = (root: N, id: string, v: string) => { byId(root, id)!.value = v; byId(root, id)!.fire("input"); };
+  const sleep = () => new Promise(r => setTimeout(r, 0));
+  it("a path the desktop does not admit is UNAVAILABLE (not a generic error) for every read and every POST, and each blocked or unavailable step tells the Founder the one thing they can do", async () => {
+    const m = await load(rend, "model.js"), w = await load(rend, "work-core.js");
+    for (const msg of ["INVALID_API_PATH", "Error invoking remote method 'uasco:api-get': Error: INVALID_API_PATH", new Error("INVALID_API_PATH")]) expect(m.classifyFailure(msg), String(msg)).toEqual({state: "UNAVAILABLE", status: null});
+    expect(m.classifyFailure("HTTP 500")).toMatchObject({state: "ERROR"}); expect(m.classifyFailure("boom")).toEqual({state: "ERROR", status: null}); expect(m.classifyFailure("HTTP 404").state).toBe("UNAVAILABLE");
+    expect(w.describePostResult({thrown: true, state: "UNAVAILABLE", message: "INVALID_API_PATH"}).key).toBe("post.err.unavailable");
+    expect(w.describePostResult({thrown: true, state: "OFFLINE"}).key).toBe("post.err.offline"); expect(w.describePostResult({thrown: true, state: "ERROR"}).key).toBe("post.err.generic");
+    const srv = await mkServer(), c = await mkCtx({lang: "en", get: srv.get, post: srv.post});
+    const raw = await c.ctx.api.raw(`/v1/work-runs/${IRUN}/product`); expect(raw.state).toBe("UNAVAILABLE"); // a read the allow-list refuses
+    // product card: unavailable read -> one line and the Run tab button
+    srv.S.project = {projectId: IPRJ, name: "P", tenantId: "t1", environmentId: "local", createdAt: "2026-10-26T05:00:00.000Z"}; srv.S.mission = {missionId: IMSN, projectId: IPRJ, title: "M", status: "PLANNED", riskLevel: "R1", createdAt: "2026-10-26T05:00:00.000Z"};
+    srv.S.run = {runId: IRUN, missionId: IMSN, projectId: IPRJ, status: "AWAITING_APPROVAL", headSha: HEAD, startedAt: "2026-10-26T05:10:00.000Z", evidence: []};
+    const st = await load(rend, "studio-state.js"), ws = await load(rend, "views", "projects.js"); st.openProject(IPRJ, "overview");
+    const root = mount(c.doc, await ws.render(c.ctx)), prod = byId(root, "studio-ov-product")!;
+    expect(prod.textContent).toContain("not available to the desktop yet"); expect(byData(prod, "productNext", "RUN_TAB")[0].textContent).toContain("start the project's dev command from the Run tab");
+    byId(prod, "product-open-run")!.fire("click"); await sleep(); expect(st.studio.tab).toBe("run");
+    // analysis: a not-enabled step still shows the hand-plan way out, and the button only navigates to Tasks with the mission selected
+    const jv = await load(rend, "views", "journey.js"); forms.selection.missionId = IMSN;
+    const jr = mount(c.doc, await jv.render(c.ctx)); c.calls.navigate.length = 0; forms.selection.missionId = IMSN;
+    expect(byData(jr, "analysisHandPlan")[0].textContent).toContain("write the plan by hand in Tasks"); const before = srv.S.posts.length;
+    forms.selection.missionId = "msn_" + H("9"); byId(jr, "analysis-hand-plan")!.fire("click"); expect(c.calls.navigate).toEqual(["work"]); expect(forms.selection.missionId).toBe(IMSN); expect(srv.S.posts.length).toBe(before); // navigation only, nothing sent
+    // run card: NOT_EXECUTED because of the sandbox points to the setup check
+    const core = await load(rend, "work-core.js"), work = await load(rend, "views", "work.js");
+    const rc = work.runCard(c.ctx, core.mapWorkRunDetail({workRun: srv.S.run, outcomes: null, delivery: srv.S.delivery()}).run);
+    expect(byData(rc, "runTestResult")[0].textContent).toContain("See Settings > Ready to build?");
+  });
+  it("drives idea -> intake -> analysis -> plan -> mission/task -> run -> test result -> product -> delivery and records every step's status", async () => {
+    const srv = await mkServer(), table: Record<string, string> = {};
+    const c = await mkCtx({lang: "en", get: srv.get, post: srv.post, confirm: () => true});
+    const ctx = c.ctx;
+    const view = async (...p: string[]) => mount(c.doc, await (await load(rend, ...p)).render(ctx));
+    const intakeMod = await load(rend, "views", "intake.js"); intakeMod.resetIntakeAll();
+    const sel = forms.selection;
+    // 1) idea -> intake
+    let root = await view("views", "projects.js");
+    type(root, "intake-idea", IDEA); byId(root, "intake-form")!.fire("submit"); await sleep();
+    root = await view("views", "projects.js");
+    const card = byId(root, "intake-result")!;
+    expect(card.dataset.intakeId).toBe(IITK); expect(byId(root, "intake-readiness")!.dataset.runReadiness).toBe("READY"); // a run can start; only the non-blocking plan check is open
+    expect(byId(root, "intake-ready-go-PLAN_MISSION")).not.toBeNull(); expect(byId(root, "intake-open-mission")).not.toBeNull();
+    expect(srv.S.posts[0]).toMatchObject({path: "/v1/intakes", body: {idea: IDEA, template: "web-node"}});
+    table.INTAKE = "COMPLETE_IN_UI";
+    // 2) analysis: the Journey shows the section; the step POST is not allow-listed yet
+    byId(root, "intake-open-mission")!.fire("click"); expect(sel.missionId).toBe(IMSN);
+    root = await view("views", "journey.js");
+    expect(byId(root, "analysis-step")).not.toBeNull();
+    fire(byId(root, "analysis-step-submit")!);
+    async function fire(n: N) { n.fire("click"); await sleep(); }
+    await sleep();
+    root = await view("views", "journey.js");
+    expect(byId(root, "analysis-step-status")!.textContent).toContain("not enabled in this build"); expect(byId(root, "analysis-plan-submit")).toBeNull();
+    expect(srv.S.blocked).toContain(`POST /v1/missions/${IMSN}/analysis/step`);
+    table.ANALYSIS_DRAFTS = "GATED_4B"; table.PLAN_FROM_ANALYSIS = "GATED_4B";
+    // 3) the manual plan path in Work (POST /plan is allowed)
+    root = await view("views", "work.js");
+    expect(byId(root, "plan-form")).not.toBeNull();
+    type(root, "plan-title-0", "Giriş ekranı"); byId(root, "plan-add")!.fire("click"); type(root, "plan-title-1", "Oylama API"); type(root, "plan-deps-1", "1");
+    byId(root, "plan-form")!.fire("submit"); await sleep();
+    expect(srv.S.tasks.map((t: any) => t.title)).toEqual(["Giriş ekranı", "Oylama API"]);
+    table.PLAN_MANUAL = "COMPLETE_IN_UI";
+    // 4) mission/task: the planned mission lists its tasks and can start a run
+    root = await view("views", "work.js");
+    expect(text(root)).toContain("Giriş ekranı"); expect(text(root)).toContain("Oylama API"); expect(byId(root, "plan-form")).toBeNull();
+    expect(byId(root, "run-start")!.hasAttribute("disabled")).toBe(false);
+    table.MISSION_TASKS = "COMPLETE_IN_UI";
+    // 5) task run: start the run, then link the first task to it
+    byId(root, "run-start")!.fire("click"); await sleep(); await sleep();
+    expect(srv.S.run?.runId).toBe(IRUN);
+    root = await view("views", "work.js");
+    expect(byId(root, "run-link")).not.toBeNull();
+    const cb: any = byData(root, "runlinkTask", ITSK(0))[0]; cb.checked = true; cb.fire("change");
+    byId(root, "runlink-submit")!.fire("click"); await sleep(); await sleep();
+    expect(srv.S.posts.filter((p: {path: string}) => p.path === `/v1/tasks/${ITSK(0)}/runs`)).toEqual([{path: `/v1/tasks/${ITSK(0)}/runs`, body: {runId: IRUN}}]);
+    expect(srv.S.links.map((l: any) => l.taskId)).toEqual([ITSK(0)]); // only the ticked task was linked
+    root = await view("views", "work.js");
+    expect(byData(root, "runLinkedFor", IRUN)[0].textContent).toContain("Giriş ekranı"); // the run card now lists the linked task
+    table.TASK_RUN = "COMPLETE_IN_UI";
+    // 6) test result: the run card says what happened to the tests
+    const tr = byData(root, "runTestResult")[0];
+    expect(tr.dataset.runTestResult).toBe("NOT_EXECUTED"); expect(tr.dataset.runTestReason).toBe("SANDBOX_UNAVAILABLE"); expect(tr.textContent).toContain("No verified sandbox existed");
+    table.TEST_RESULT = "COMPLETE_IN_UI";
+    // 7) running product: the run-scoped product route is not allow-listed yet -> honest UNAVAILABLE
+    c.calls.navigate.length = 0;
+    sel.missionId = IMSN;
+    const ws = await load(rend, "views", "projects.js"); const st = await load(rend, "studio-state.js"); st.openProject(IPRJ, "overview");
+    root = mount(c.doc, await ws.render(ctx));
+    const prod = byId(root, "studio-ov-product")!;
+    expect(prod.textContent).toContain("not available to the desktop yet"); expect(byId(root, "product-start")).toBeNull();
+    expect(srv.S.blocked).toContain(`GET /v1/work-runs/${IRUN}/product`);
+    table.RUNNING_PRODUCT = "GATED_4B";
+    // 8) delivery: prepare the delivery package (POST allowed) from the project's Delivery tab
+    st.openProject(IPRJ, "delivery");
+    root = mount(c.doc, await ws.render(ctx));
+    const prep = byId(root, `dl-prep-${IRUN}`);
+    expect(prep).not.toBeNull();
+    prep!.fire("click"); await sleep();
+    expect(srv.S.posts.map((p: {path: string}) => p.path)).toContain(`/v1/work-runs/${IRUN}/delivery/prepare`);
+    expect(byId(mount(c.doc, await ws.render(ctx)), `dl-open-${IRUN}`)).not.toBeNull(); // the acceptance dialog can be opened
+    table.DELIVERY = "COMPLETE_IN_UI";
+    expect(table).toEqual({INTAKE: "COMPLETE_IN_UI", ANALYSIS_DRAFTS: "GATED_4B", PLAN_FROM_ANALYSIS: "GATED_4B", PLAN_MANUAL: "COMPLETE_IN_UI", MISSION_TASKS: "COMPLETE_IN_UI", TASK_RUN: "COMPLETE_IN_UI", TEST_RESULT: "COMPLETE_IN_UI", RUNNING_PRODUCT: "GATED_4B", DELIVERY: "COMPLETE_IN_UI"});
+    // everything the renderer asked for outside the allow-list is exactly the 4B set
+    expect([...new Set(srv.S.blocked)].sort()).toEqual([`GET /v1/work-runs/${IRUN}/product`, `POST /v1/missions/${IMSN}/analysis/step`].sort());
   });
 });
