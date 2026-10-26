@@ -372,6 +372,16 @@
       "ref": "wf_48da0905-b01 (266/266; 3 mutants re-killed; merge-tree clean with #255 + base; LOW: run-card 'none' state not asserted, deferred to Lane A next push)",
       "policy": "TEP-1",
       "at": "2026-10-26T18:30:56.181Z"
+    },
+    {
+      "pr": 259,
+      "sha": "97c88003f8552f159149dc6b2f66e70546629611",
+      "kind": "full",
+      "base": null,
+      "verdict": "NO_BLOCKERS",
+      "ref": "wf_8713b7da-8ab (correctness+windows lenses; 1 MEDIUM refuted by skeptic; M1/M2/M3 mutants; expect counts never decrease)",
+      "policy": "TEP-1",
+      "at": "2026-10-26T18:56:01.492Z"
     }
   ],
   "tests": [],
