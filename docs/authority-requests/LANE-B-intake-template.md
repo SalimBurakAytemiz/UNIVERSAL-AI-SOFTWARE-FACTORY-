@@ -11,9 +11,9 @@ No registration change is needed (`registerIntakeRoutes` is already in server.ts
 Without it the route builds its own `ProjectStudio` with the same `dataDir` and `config/environment-policy.json` (resolved from the working directory, like `repoRoot` default). To share the server's single instance:
 ```diff
 -const laneDeps={ ... };
-+const laneDeps={ ..., studio:getStudio };
++const laneDeps={ ..., studio:()=>getStudio() };
 ```
-(`studio?: () => {createTemplateRepository(...)}` is an optional field of `RouteDeps`; `getStudio` already matches it.)
+(`studio?: () => {createTemplateRepository(...)}` is an optional field of `RouteDeps`. Pass a closure, `studio:()=>getStudio()`, not the bare `getStudio`: `laneDeps` is built before `getStudio` is initialised, so the bare reference is a TDZ error (TS2448/TS2454).)
 
 ## Evidence
 `npx vitest run tests/v7-b1-workos.test.ts`: 120 passed (+4 in "LANE-B project intake"). Mutations: base intake.ts (3 of the 4 new tests fail), managed-repo wiring removed (3 fail), template testCommand default ignored (1), exclusivity dropped (1), template left out of the idempotency digest (1), StudioError mapping removed (1) — all killed.
