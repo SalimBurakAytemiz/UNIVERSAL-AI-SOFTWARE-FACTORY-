@@ -2457,13 +2457,85 @@ describe("LANE-A A-FLOW-3: the run step tells the truth about who does the work"
     const err = await render(new Error("/v1/system/executors: HTTP 500"));
     expect(err.eng!.dataset.runEngine).toBe("UNKNOWN"); expect(text(err.eng!)).not.toContain("not available to the desktop");
   });
+  it("C-IMPL-WIN-1: maps cli and per-role readiness strictly; ready must equal 'no blockers', free text and paths are never carried", async () => {
+    const c = await load(rend, "project-core.js");
+    const rd = (over: any = {}) => ({ready: false, blockers: ["CLAUDE_CLI_SHIM_UNSUPPORTED"], blocker: "CLAUDE_CLI_SHIM_UNSUPPORTED", founderAction: "Found C:\\Users\\x\\claude.cmd", profile: "READY", loginCommand: null, loginHint: "free text", ...over});
+    const map = (r: any, cli: any = {state: "SHIM_UNSUPPORTED", path: "C:\\x\\claude.cmd"}) => c.mapExecutors({executors: {LOCAL_CLAUDE: {state: "CLI_NOT_FOUND", cli, readiness: r}, FAKE: {state: "TEST_ONLY"}}});
+    const m = map({implementer: rd(), reviewer: rd({ready: true, blockers: [], blocker: null})});
+    expect(m.items.find((i: any) => i.id === "LOCAL_CLAUDE").cli).toEqual({state: "SHIM_UNSUPPORTED"});
+    expect(m.readiness.implementer).toEqual({ready: false, blockers: ["CLAUDE_CLI_SHIM_UNSUPPORTED"], profile: "READY", loginCommand: null});
+    expect(m.readiness.reviewer.ready).toBe(true);
+    expect(JSON.stringify(m)).not.toMatch(/claude\.cmd|free text|founderAction/);
+    for (const bad of [rd({ready: true}), rd({blockers: [], ready: false}), rd({blockers: "x"}), rd({blockers: ["bad code"]}), rd({blockers: [5]}), rd({blockers: Array(9).fill("CLAUDE_CLI_NOT_FOUND")}), rd({ready: "yes"}), null, 5])
+      expect(map({implementer: bad, reviewer: rd()}).readiness.implementer, JSON.stringify(bad)).toBeNull();
+    expect(map({implementer: rd({blockers: ["CLAUDE_PROFILE_REFUSED:SETTINGS_NOT_WRITTEN"]}), reviewer: rd()}).readiness.implementer.blockers).toEqual(["CLAUDE_PROFILE_REFUSED:SETTINGS_NOT_WRITTEN"]);
+    for (const cli of [{state: "MAYBE"}, null, "FOUND"]) expect(map({}, cli).items[0].cli, String(cli)).toBeNull();
+    expect(map(undefined).readiness).toBeNull(); expect(c.mapExecutors({executors: [{id: "FAKE", state: "READY"}]}).readiness).toBeNull();
+  });
+  it("C-IMPL-WIN-1: a role with ready=false is BLOCKED even when its profile is READY; ready roles stay READY; a conflicting role reading is unknown, not READY", async () => {
+    const c = await load(rend, "project-core.js");
+    const rd = (ready: boolean, blockers: string[] = ready ? [] : ["CLAUDE_CLI_NOT_FOUND"]) => ({ready, blockers, blocker: blockers[0] ?? null, profile: "READY", loginCommand: null});
+    const kind = (readiness: any, over: any = {}) => c.engineVerdict(c.mapExecutors(execBody({readiness: undefined, executors: {LOCAL_CLAUDE: {state: "READY", readiness}, FAKE: {state: "TEST_ONLY"}}, ...over}))).kind;
+    expect(kind({implementer: rd(true), reviewer: rd(true)})).toBe("READY");
+    expect(kind({implementer: rd(false), reviewer: rd(true)})).toBe("BLOCKED");
+    expect(kind({implementer: rd(true), reviewer: rd(false, ["CLAUDE_LAUNCHER_PROVENANCE_CHANGED"])})).toBe("BLOCKED");
+    expect(kind(undefined)).toBe("READY"); // older server without readiness: the profile reading alone decides, as before
+    expect(kind({implementer: {...rd(true), ready: false}, reviewer: rd(true)})).toBe("UNKNOWN"); // contradictory role reading is dropped, never trusted as ready
+  });
+  it("C-IMPL-WIN-1: the engine block lists each blocker in plain words (no server free text, no path), shows the login command only when a sign-in is the blocker, and flags a not-ready role with a READY profile", async () => {
+    const mk = (r: any, p: any = profile("READY")) => execBody({claudeProfiles: {implementer: p, reviewer: profile("READY")}, executors: {LOCAL_CLAUDE: {state: "READY", readiness: r}, FAKE: {state: "TEST_ONLY"}}});
+    const role = (blockers: string[], extra: any = {}) => ({ready: blockers.length === 0, blockers, blocker: blockers[0] ?? null, founderAction: "Found C:\\Users\\x\\claude.cmd", profile: "READY", loginCommand: null, ...extra});
+    const o = await render(mk({implementer: role(["CLAUDE_CLI_SHIM_UNSUPPORTED", "PROVIDER_PROVENANCE_NOT_READY"]), reviewer: role([])}));
+    expect(o.eng!.dataset.runEngine).toBe("BLOCKED");
+    const impl = all(o.eng!).find(n => n.dataset.engineProfile === "implementer")!;
+    expect(impl.dataset.engineProfileState).toBe("READY"); expect(impl.dataset.engineRoleReady).toBe("false");
+    const bcls = String(all(impl).find(n => String(n.className).split(" ").includes("badge"))!.className);
+    expect(bcls).toContain("badge-risk"); expect(bcls).not.toContain("badge-ok"); // a signed-in profile is not "ok" while the CLI is not usable
+    expect(text(impl)).toContain("(not ready)"); expect(text(impl)).toContain("npm .cmd/.bat launcher"); expect(text(impl)).toContain("provenance evidence has not been captured");
+    expect(all(impl).filter(n => n.dataset.engineBlocker).map(n => n.dataset.engineBlocker)).toEqual(["CLAUDE_CLI_SHIM_UNSUPPORTED", "PROVIDER_PROVENANCE_NOT_READY"]);
+    expect(text(o.eng!)).not.toMatch(/claude\.cmd|C:\\/);
+    const rv = all(o.eng!).find(n => n.dataset.engineProfile === "reviewer")!;
+    expect(rv.dataset.engineRoleReady).toBe("true"); expect(all(rv).some(n => n.dataset.engineBlocker)).toBe(false);
+    const cmd = "$env:CLAUDE_CONFIG_DIR='C:\\x\\implementer'; claude";
+    const exp = await render(mk({implementer: role(["CLAUDE_PROFILE_LOGIN_EXPIRED"], {loginCommand: cmd}), reviewer: role([])}, profile("READY", {loginCommand: cmd})));
+    expect(all(exp.eng!).find(n => n.dataset.engineLogin === "implementer")).toBeTruthy(); expect(text(exp.eng!)).toContain("sign-in has expired");
+    const ready = await render(mk({implementer: role([], {loginCommand: cmd}), reviewer: role([])}, profile("READY", {loginCommand: cmd})));
+    expect(ready.eng!.dataset.runEngine).toBe("READY"); expect(all(ready.eng!).some(n => n.dataset.engineLogin)).toBe(false); // the server always sends a command; READY never shows it
+    expect(text(ready.eng!)).not.toContain("To sign in"); expect(text(ready.eng!)).not.toContain("CLAUDE_CONFIG_DIR");
+    // an older/limited server may send readiness without claudeProfiles: the readiness reading carries the profile state and the login command
+    const only = async (impl: any) => render({...mk({implementer: impl, reviewer: role([])}), claudeProfiles: undefined});
+    const loginOnly = await only(role(["CLAUDE_PROFILE_LOGIN_REQUIRED"], {profile: "LOGIN_REQUIRED", loginCommand: cmd}));
+    expect(loginOnly.eng!.dataset.runEngine).toBe("BLOCKED");
+    expect(all(loginOnly.eng!).find(n => n.dataset.engineProfile === "implementer")!.dataset.engineProfileState).toBe("LOGIN_REQUIRED");
+    expect(text(all(loginOnly.eng!).find(n => n.dataset.engineLogin === "implementer")!)).toContain("CLAUDE_CONFIG_DIR");
+    const readyOnly = await only(role([]));
+    expect(all(readyOnly.eng!).find(n => n.dataset.engineProfile === "implementer")!.dataset.engineProfileState).toBe("READY");
+    expect(readyOnly.eng!.dataset.runEngine).toBe("READY"); // both roles are READY by their readiness reading alone
+    const refused = await render(mk({implementer: role(["CLAUDE_PROFILE_REFUSED:SETTINGS_NOT_WRITTEN"], {profile: "REFUSED"}), reviewer: role([])}));
+    expect(text(all(refused.eng!).find(n => n.dataset.engineBlocker === "CLAUDE_PROFILE_REFUSED:SETTINGS_NOT_WRITTEN")!)).toContain("(SETTINGS_NOT_WRITTEN)");
+    const unk = await render(mk({implementer: role(["BRAND_NEW_BLOCKER"]), reviewer: role([])}));
+    expect(text(all(unk.eng!).find(n => n.dataset.engineBlocker === "BRAND_NEW_BLOCKER")!)).toContain("BRAND_NEW_BLOCKER (not recognised)");
+  });
+  it("C-IMPL-WIN-1: Settings explains a .cmd/.bat shim specifically, and a plain missing CLI keeps the old text", async () => {
+    const hint = async (cli: any) => {
+      const m = await mkCtx({lang: "en", get: (p: string) => p === "/v1/system/executors" ? {executors: {LOCAL_CLAUDE: {state: "CLI_NOT_FOUND", cli}, FAKE: {state: "TEST_ONLY"}}} : undefined});
+      const root = mount(m.doc, await (await load(rend, "views", "executors-panel.js")).executorsPanel(m.ctx));
+      return text(all(root).find(n => n.dataset.executor === "LOCAL_CLAUDE")!);
+    };
+    expect(await hint({state: "SHIM_UNSUPPORTED"})).toContain("npm .cmd/.bat launcher");
+    expect(await hint({state: "NOT_FOUND"})).toContain("was not found on this computer");
+    const readyShim = await mkCtx({lang: "en", get: (p: string) => p === "/v1/system/executors" ? {executors: {LOCAL_CLAUDE: {state: "READY", cli: {state: "SHIM_UNSUPPORTED"}}, FAKE: {state: "TEST_ONLY"}}} : undefined});
+    expect(text(all(mount(readyShim.doc, await (await load(rend, "views", "executors-panel.js")).executorsPanel(readyShim.ctx))).find(n => n.dataset.executor === "LOCAL_CLAUDE")!)).not.toContain("npm .cmd/.bat"); // the shim text belongs to a missing CLI only
+    expect(await hint(undefined)).toContain("was not found on this computer");
+    expect(await hint({state: "SHIM_UNSUPPORTED"})).not.toContain("was not found on this computer");
+  });
   it("a blocked run reason from the server is explained for the two engine causes, in en and tr", async () => {
     const c = await load(rend, "work-core.js");
     expect(c.runReasonHintKey("CLAUDE_PROFILE_LOGIN_REQUIRED")).toBe("run.reason.CLAUDE_PROFILE_LOGIN_REQUIRED");
     expect(c.runReasonHintKey("EXECUTOR_NOT_CONFIGURED")).toBe("run.reason.EXECUTOR_NOT_CONFIGURED");
     const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
-    const keys = Object.keys(E).filter(k => k.startsWith("runengine.") || /^run\.reason\.(CLAUDE_PROFILE|EXECUTOR)/.test(k));
-    expect(keys.length).toBe(18);
+    const keys = Object.keys(E).filter(k => k.startsWith("runengine.") || /^run\.reason\.(CLAUDE|CLI_|PROVIDER|EXECUTOR)/.test(k) || k === "runengine.role.notReady");
+    expect(keys.length).toBe(27);
     for (const k of keys) expect(T[k], k).toBeTruthy();
     const t = await render(execBody({claudeProfiles: {implementer: profile("LOGIN_REQUIRED"), reviewer: profile("READY")}}), "tr");
     expect(text(t.eng!)).toContain("Bloke");

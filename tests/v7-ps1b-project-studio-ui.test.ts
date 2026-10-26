@@ -363,7 +363,7 @@ describe("PS-1B preview gate, dev-run actions and mappers", () => {
     expect(core.formatBytes(2048)).toBe("2.0 KB");
     expect(core.formatBytes(-1)).toBe("—");
     const exe = core.mapExecutors({executors: [{id: "LOCAL_CLAUDE", state: "NOT_CONFIGURED"}, {id: "fake", state: "READY"}, {id: "weird!", state: "READY"}, {id: "LOCAL_CLAUDE", state: "has space"}]});
-    expect(exe.items).toEqual([{id: "LOCAL_CLAUDE", state: "NOT_CONFIGURED", testOnly: false}, {id: "FAKE", state: "READY", testOnly: true}, {id: "LOCAL_CLAUDE", state: null, testOnly: false}]);
+    expect(exe.items).toEqual([{id: "LOCAL_CLAUDE", state: "NOT_CONFIGURED", testOnly: false, cli: null, readiness: null}, {id: "FAKE", state: "READY", testOnly: true, cli: null, readiness: null}, {id: "LOCAL_CLAUDE", state: null, testOnly: false, cli: null, readiness: null}]); // cli/readiness only exist for LOCAL_CLAUDE and are null unless the server sends a valid shape
     expect(core.mapExecutors({executors: {LOCAL_CLAUDE: {state: "READY"}, FAKE: "READY"}}).items.map((e: any) => [e.id, e.state])).toEqual([["LOCAL_CLAUDE", "READY"], ["FAKE", "READY"]]);
     expect(core.canEnableExecutor({id: "LOCAL_CLAUDE", state: "NOT_CONFIGURED", testOnly: false})).toBe(true);
     for (const s of ["READY", "PROVENANCE_MISSING", "CLI_NOT_FOUND", null]) expect(core.canEnableExecutor({id: "LOCAL_CLAUDE", state: s, testOnly: false}), String(s)).toBe(false);

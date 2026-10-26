@@ -296,19 +296,42 @@ export function mapExecutors(raw){
   const items=list.slice(0,20).filter(isObj).map(x=>{
     const id=String(pick(x.id,x.executor,x.kind,x.name)??"").toUpperCase().replace(/-/g,"_");if(!/^[A-Z][A-Z0-9_]{0,39}$/.test(id))return null;
     const s=pick(x.state,x.status),state=typeof s==="string"&&/^[A-Z][A-Z0-9_]{0,39}$/.test(s)?s:null;
-    return {id,state,testOnly:id==="FAKE"||x.testOnly===true};
+    return {id,state,testOnly:id==="FAKE"||x.testOnly===true,cli:id==="LOCAL_CLAUDE"?mapCliStatus(x.cli):null,readiness:id==="LOCAL_CLAUDE"?mapRoleReadiness(x.readiness):null};
   }).filter(Boolean);
   // //TR: LANE-A A-FLOW-3: `active.reason` sunucunun şu an KULLANDIĞI yürütücüdür (LOCAL_CLAUDE ya da EXECUTOR_NOT_CONFIGURED/EXECUTOR_UNKNOWN/...); desen dışı ya da yoksa null (uydurulmaz).
   const ar=isObj(raw.active)&&typeof raw.active.reason==="string"&&/^[A-Z][A-Z0-9_]{0,63}$/.test(raw.active.reason)?raw.active.reason:null;
-  return {state:"VERIFIED",items,profiles:mapClaudeProfiles(raw.claudeProfiles),sandbox:mapSandbox(raw.sandbox),active:ar};
+  return {state:"VERIFIED",items,profiles:mapClaudeProfiles(raw.claudeProfiles),sandbox:mapSandbox(raw.sandbox),active:ar,readiness:(items.find(i=>i.id==="LOCAL_CLAUDE")??{}).readiness??null};
+}
+const BLOCKER_RE=/^[A-Z][A-Z0-9_]{0,63}(?::[A-Z][A-Z0-9_]{0,63})?$/;
+/** //TR: C-IMPL-WIN-1: LOCAL_CLAUDE.cli.state (FOUND | NOT_FOUND | SHIM_UNSUPPORTED); yol ve sunucunun serbest metni (founderAction) bilerek TAŞINMAZ. Bilinmeyen biçim null. */
+export function mapCliStatus(raw){
+  return isObj(raw)&&["FOUND","NOT_FOUND","SHIM_UNSUPPORTED"].includes(raw.state)?{state:raw.state}:null;
+}
+/** //TR: C-IMPL-WIN-1: LOCAL_CLAUDE.readiness.{implementer,reviewer} -> {ready,blockers[],profile,loginCommand}; `ready` YALNIZ blockers boşken doğru olabilir (çelişki = o rol null/bilinmiyor); engelleyici kodlar sabit desenli, serbest metin (founderAction/loginHint) taşınmaz. */
+export function mapRoleReadiness(raw){
+  if(!isObj(raw))return null;
+  const out={};
+  for(const role of CLAUDE_PROFILE_ROLES){
+    const p=raw[role];
+    if(!isObj(p)||typeof p.ready!=="boolean"||!Array.isArray(p.blockers)||p.blockers.length>8||!p.blockers.every(b=>typeof b==="string"&&BLOCKER_RE.test(b))||p.ready!==(p.blockers.length===0)){out[role]=null;continue}
+    const profile=typeof p.profile==="string"&&/^[A-Z][A-Z_]{0,39}$/.test(p.profile)?p.profile:null,cmd=p.loginCommand;
+    out[role]={ready:p.ready,blockers:[...p.blockers],profile,loginCommand:typeof cmd==="string"&&cmd.length<=2000&&!CONTROL_RE.test(cmd)&&cmd.startsWith("$env:CLAUDE_CONFIG_DIR='")?cmd:null};
+  }
+  return out;
 }
 /** //TR: LANE-A A-FLOW-3: koşu adımı için motor gerçeği. READY yalnız etkin yürütücü LOCAL_CLAUDE ve implementer+reviewer profilleri READY iken; etkin yürütücü başka ya da bir profil READY değilse BLOCKED (LOGIN_REQUIRED asla "çalışıyor" görünmez); okuma yok ya da eksikse UNKNOWN. Sandbox koşuyu engellemez, yalnız testlerin çalışıp çalışmayacağını söyler. Bu bir koşunun sürdüğünü ya da ürünün doğrulandığını ASLA söylemez. */
 export function engineVerdict(exec){
   const none={kind:"UNKNOWN",active:null,implementer:null,reviewer:null,sandbox:null};
   if(!isObj(exec)||exec.state!=="VERIFIED")return none;
   const profs=Array.isArray(exec.profiles)?exec.profiles:[],prof=role=>profs.find(p=>p&&p.role===role)??null;
-  const implementer=prof("implementer"),reviewer=prof("reviewer"),active=typeof exec.active==="string"?exec.active:null,sandbox=isObj(exec.sandbox)?exec.sandbox:null;
-  const bad=p=>p!==null&&p.state!==null&&p.state!=="READY",good=p=>p!==null&&p.state==="READY";
+  // //TR: C-IMPL-WIN-1: rol hazırlığı (CLI + başlatıcı kanıtı + oturum) varsa profil durumuna EK olarak değerlendirilir: ready=false her zaman BLOCKED'tır; hazırlık nesnesi VARKEN bir rolün okuması geçersizse o rol READY sayılmaz (bilinmiyor); profil READY olsa bile (örn. CLI yok) rol hazır sayılmaz.
+  const rd=isObj(exec.readiness)?exec.readiness:null,role=r=>{
+    const p=prof(r),x=rd&&isObj(rd[r])?rd[r]:null;
+    if(p===null&&x===null)return null;
+    return {role:r,state:p?p.state:(x?x.profile:null),reason:p?p.reason:null,loginCommand:(p&&p.loginCommand)||(x&&x.loginCommand)||null,ready:x?x.ready:null,blockers:x?x.blockers:null};
+  };
+  const implementer=role("implementer"),reviewer=role("reviewer"),active=typeof exec.active==="string"?exec.active:null,sandbox=isObj(exec.sandbox)?exec.sandbox:null;
+  const bad=p=>p!==null&&((p.state!==null&&p.state!=="READY")||p.ready===false),good=p=>p!==null&&p.state==="READY"&&p.ready!==false&&(rd===null||p.ready===true);
   const blocked=(active!==null&&active!=="LOCAL_CLAUDE")||bad(implementer)||bad(reviewer);
   const ready=active==="LOCAL_CLAUDE"&&good(implementer)&&good(reviewer);
   return {kind:blocked?"BLOCKED":ready?"READY":"UNKNOWN",active,implementer,reviewer,sandbox};
