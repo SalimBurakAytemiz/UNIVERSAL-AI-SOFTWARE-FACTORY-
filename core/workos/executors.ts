@@ -252,8 +252,9 @@ export function syncBrokerControlConfig(appRoot: string, controlRoot: string): v
 // SBX-8 reviewer: yalnız okuma araçları; yazma/komut/ağ/alt ajan/skill/MCP araçları yasak; builder broker'ıyla aynı yalıtım bayrakları.
 export const REVIEWER_TOOLS = ["Read", "Grep", "Glob"] as const;
 export const REVIEWER_DISALLOWED_TOOLS = ["Edit", "Write", "MultiEdit", "Bash", "PowerShell", "NotebookEdit", "WebFetch", "WebSearch", "Agent", "Task", "Skill", "mcp__*"] as const;
-export function reviewerArgv(launcher: string): string[] {
-  return [launcher, "-p", "--permission-mode", "dontAsk", "--tools", REVIEWER_TOOLS.join(","), "--disallowedTools", REVIEWER_DISALLOWED_TOOLS.join(","), ...CLAUDE_ISOLATION_FLAGS, "--output-format", "text"];
+// //TR: C-FLOW-ANALYSIS-2: outputFormat yalnız çıktı biçimini değiştirir ("json" = tek sonuç zarfı: is_error/subtype/result); araç ve yalıtım bayrakları AYNIDIR. Pre-dev üretimi "json" ister, böylece oturum/CLI hatası düz metinden tahmin edilmez.
+export function reviewerArgv(launcher: string, outputFormat: "text" | "json" = "text"): string[] {
+  return [launcher, "-p", "--permission-mode", "dontAsk", "--tools", REVIEWER_TOOLS.join(","), "--disallowedTools", REVIEWER_DISALLOWED_TOOLS.join(","), ...CLAUDE_ISOLATION_FLAGS, "--output-format", outputFormat];
 }
 const REVIEW_GIT_HARDEN = ["-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false"];
 export interface ReviewWorkspaceSnapshot { head: string | null; status: string | null; gitDigest: string | null }
@@ -343,7 +344,7 @@ export class LocalClaudeExecutors {
       preDevBuilder: () => new ClaudePreDevBuilder({
         identity: self.reviewerIdentity, launcher: () => self.verifiedLauncher(),
         profile: () => { const p = claudeProfileForRun(self.controlRoot, "reviewer", self.opts.profile); return p.ok ? {ok: true, dir: p.dir} : {ok: false, reason: p.reason}; },
-        env: dir => withClaudeProfileEnv(self.env(), dir), argv: reviewerArgv, run: self.opts.runReviewer ?? runProcess
+        env: dir => withClaudeProfileEnv(self.env(), dir), argv: l => reviewerArgv(l, "json"), outputFormat: "claude-json", run: self.opts.runReviewer ?? runProcess
       })
     };
   }

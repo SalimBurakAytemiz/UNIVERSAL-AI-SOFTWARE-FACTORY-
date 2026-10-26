@@ -5,7 +5,7 @@
 
 ## What exists (branch `claude/lane-a-win-e2e`)
 - `scripts/e2e/fake-backend.ts`: the real Control API (`buildServer`) in a temp data dir, FAKE executor, runner on, **no sandbox injected** (no verified sandbox => tests are honestly NOT_EXECUTED; nothing runs project code on the host), real token, 127.0.0.1 only. No real Claude, no network.
-- `scripts/e2e/desktop-journey.e2e.mjs`: Playwright `_electron` drives the repo's Electron (`apps/desktop/main.mjs`, dev mode, isolated `--user-data-dir`). A fixed denominator of **16 planned steps**, each with a kind. Each step asserts the on-screen state, takes a screenshot into `<out>/screenshots`; the result is `<out>/report.json`. The temporary app data dir is a fresh `mkdtemp` `<out>/data-XXXXXX` (an existing `<out>/data` is never touched) and is removed on exit, also on SIGINT (130) / SIGTERM (143).
+- `scripts/e2e/desktop-journey.e2e.mjs`: Playwright `_electron` drives the repo's Electron (`apps/desktop/main.mjs`, dev mode, isolated `--user-data-dir`). A fixed denominator of **20 planned steps**, each with a kind (`FUNCTIONAL`, `GATED_ASSERTED` = depends on the batch 4b routes, `NOT_EXECUTED_ASSERTED` = the honest "not executed" display). Each step asserts the on-screen state, takes a screenshot into `<out>/screenshots`; the result is `<out>/report.json`. The temporary app data dir is a fresh `mkdtemp` `<out>/data-XXXXXX` (an existing `<out>/data` is never touched) and is removed on exit, also on SIGINT (130) / SIGTERM (143).
 
 | # | step | kind |
 |---|------|------|
@@ -13,21 +13,25 @@
 | 2 | detect-routes (probes the real allow-list inside the app) | FUNCTIONAL |
 | 3 | setup-check (six rows; SANDBOX row cross-checked against the server's `/v1/system/executors`) | FUNCTIONAL |
 | 4 | intake-idea | FUNCTIONAL |
-| 5 | analysis | GATED_ASSERTED |
-| 6 | plan-task-by-hand | FUNCTIONAL |
-| 7 | authorize-mission (timeline AND the server's mission status AUTHORIZED) | FUNCTIONAL |
-| 8 | run-engine-truth | FUNCTIONAL |
-| 9 | start-run | FUNCTIONAL |
-| 10 | run-reaches-review | FUNCTIONAL |
-| 11 | test-result-honest (expectation derived from the server's `GET /v1/work-runs/:id`; the UI kind/reason must equal it) | NOT_EXECUTED_ASSERTED |
-| 12 | link-run-to-task | FUNCTIONAL |
-| 13 | open-project-workspace | FUNCTIONAL |
-| 14 | delivery-prepare | FUNCTIONAL |
-| 15 | delivery-accept (NOT_VERIFIED acknowledged) | FUNCTIONAL |
-| 16 | product | GATED_ASSERTED |
+| 5 | analysis (viewing sends no step request, one click sends exactly one; BLOCKED shows the real readiness blockers; no artefact is produced) | GATED_ASSERTED |
+| 6 | plan-gate-closed (no Create plan button, gate CLOSED, status not COMPLETE; the "no plan request" half is evidence only when the route is admitted) | FUNCTIONAL |
+| 7 | analysis-stuck-shown (seeded interrupted approval: data-* kind and artifact id equal the server's, one blocker `ANALYSIS_PHASE_NOT_ADVANCED`, not a failure state, no extra step request, record unchanged) | GATED_ASSERTED |
+| 8 | reapprove-once (empty evidence posts nothing; typed evidence + double click = exactly one approve; the server's phase advances; no analysis step is started) | GATED_ASSERTED |
+| 9 | plan-task-by-hand | FUNCTIONAL |
+| 10 | authorize-mission (timeline AND the server's mission status AUTHORIZED) | FUNCTIONAL |
+| 11 | run-engine-truth | FUNCTIONAL |
+| 12 | start-run | FUNCTIONAL |
+| 13 | run-reaches-review | FUNCTIONAL |
+| 14 | test-result-honest (expectation derived from the server's `GET /v1/work-runs/:id`; the UI kind/reason must equal it) | NOT_EXECUTED_ASSERTED |
+| 15 | link-run-to-task | FUNCTIONAL |
+| 16 | open-project-workspace | FUNCTIONAL |
+| 17 | delivery-prepare (card productVerification state and reason equal the work-run's) | FUNCTIONAL |
+| 18 | delivery-accept (NOT_VERIFIED acknowledged) | FUNCTIONAL |
+| 19 | product (one start request, server 409, card error, reason `SANDBOX_UNAVAILABLE`, no running product) | GATED_ASSERTED |
+| 20 | request-ledger (the server's own request log for the whole journey: analysis step == clicks, approve == 1, analysis plan == 0, product start == 1; the `/__e2e` routes answer 403 without a valid token and 404 for an unknown mission) | FUNCTIONAL |
 
-- A startup failure (backend/Electron did not come up) is reported **separately** in `report.json` `startup` (backend log tail and Electron main-process stdout/stderr tail), not as a 17th step; it makes the result `FAIL` (exit 1).
-- Exit codes: `0` pass or `PASS_WITH_NOT_VERIFIED`, `1` a step or the startup failed, `3` BLOCKED (**only** `PLAYWRIGHT_MISSING`, `ELECTRON_BINARY_MISSING`, `NO_DISPLAY`: missing preconditions checked before anything is started), `4` NOT_VERIFIED with `--require-post-4b`. BLOCKED is never a pass.
+- A startup failure (backend/Electron did not come up) is reported **separately** in `report.json` `startup` (backend log tail and Electron main-process stdout/stderr tail), not as a 21st step; it makes the result `FAIL` (exit 1).
+- Exit codes: `0` pass or `PASS_WITH_NOT_VERIFIED`, `1` a step or the startup failed, `3` BLOCKED (**only** `PLAYWRIGHT_MISSING`, `ELECTRON_BINARY_MISSING`, `NO_DISPLAY`: missing preconditions checked before anything is started), `4` NOT_VERIFIED **or NOT_EXECUTED** with `--require-post-4b`. BLOCKED is never a pass. A step that cannot run because its route is not admitted by this desktop build is `NOT_EXECUTED:GATED_4B` (never PASS); a planned step that never ran because an earlier step failed is `NOT_REACHED` (result `FAIL:INCOMPLETE`). `report.json` counts use the same names: `PASS`, `NOT_VERIFIED`, `NOT_EXECUTED`, `NOT_REACHED`, `FAIL`.
 - Electron: `automation/lib/electron-provision.mjs` `verifyProvisionedElectron` (the sealed binary from `scripts/provision-electron.mjs`) first, then `node_modules/electron` (not with `CI=true`). `report.json` `electron` carries `source`, `path`, `version` (from `dist/version`, Electron 44.x here) and `provisionError`. Playwright is not a repo dependency; the script finds `playwright`/`playwright-core` (or `PLAYWRIGHT_MODULE_DIR`).
 
 ## Installed app vs dev mode
@@ -48,9 +52,9 @@ Draft (exact content, ready to add): `docs/authority-requests/LANE-A-desktop-jou
 
 ## Before / after batch 4b (A-WIN-E2E-2)
 The script probes the **real allow-list inside the running app** (`window.uasco.apiGet/apiPost` of a non-existent run/mission id; `INVALID_API_PATH` = not admitted, anything else = admitted; nothing is changed) in step `detect-routes` and records `mode` in `report.json`.
-- Not admitted: steps `analysis` and `product` check the honest "not enabled / not available to the desktop yet" display and are recorded as **NOT_VERIFIED:GATED_4B** (never PASS of the post-4b assertion).
+- Not admitted: steps `analysis` and `product` check the honest "not enabled / not available to the desktop yet" display and are recorded as **NOT_VERIFIED:GATED_4B** (never PASS of the post-4b assertion); `analysis-stuck-shown` and `reapprove-once` are `NOT_EXECUTED:GATED_4B`; `plan-gate-closed` passes on its DOM half only (its "no plan request" half cannot fail in this mode and is not evidence).
 - Admitted: `analysis` must show the server's exact BLOCKED readiness (`data-analysis-blocker` codes; never a draft/complete/plan, no "Create plan"); `product` must offer Start, show the server's exact sandbox refusal after confirmation, keep the card out of RUNNING/STARTING, show no address/Stop, and no dev-run workspace may exist on the host.
-- Summary counts PASS / NOT_VERIFIED / FAIL separately; result `PASS`, `PASS_WITH_NOT_VERIFIED` (exit 0), `FAIL` (exit 1), `BLOCKED:<code>` (exit 3); `--require-post-4b` turns any NOT_VERIFIED into a failure (exit 4): use it once 4b is merged.
+- Summary counts PASS / NOT_VERIFIED / NOT_EXECUTED / NOT_REACHED / FAIL separately; result `PASS`, `PASS_WITH_NOT_VERIFIED` (exit 0), `FAIL` (exit 1), `BLOCKED:<code>` (exit 3); `--require-post-4b` turns any NOT_VERIFIED or NOT_EXECUTED into a failure (exit 4): use it once 4b is merged.
 
 > **SUPERSEDED (coordinator decision).** The sanitizer change below is NOT requested any more: Lane B changes `routes/analysis.ts` so every evaluated step (BLOCKED / REJECTED / BUILDER_FAILED / ...) answers **200** with the full step body, which `classifyAnalysisStep` already accepts. No protected change is needed. The evidence is kept as is. After Lane B pushes the route fix, re-run the journey on the composition WITHOUT the main.mjs patch (expected PASS 16 / NOT_VERIFIED 0 / FAIL 0).
 > **4b pin flip:** `docs/authority-requests/LANE-A-4b-journey-pin.diff` is the exact diff for `tests/v7-b5-work-screens.test.ts` (the "A-FLOW-GAP-2 Journey end to end" pin) for the 4b commit; verified 165/165 on the composition without the main.mjs patch (4b + lane-b + lane-c; fake server answers analysis step 200 BLOCKED, product start 409 SANDBOX_UNAVAILABLE).

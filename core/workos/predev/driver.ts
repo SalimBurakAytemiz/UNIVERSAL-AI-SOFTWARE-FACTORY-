@@ -1,6 +1,7 @@
 // //TR: Bu dosya PRE_DEV fazını YÜRÜTÜLEBİLİR yapan PreDevDriver'ı tanımlar: bir faz, enjekte edilen bir BuilderPort'tan tipli bir artefakt içeriği İSTER, onu MEVCUT doğrulayıcılarla (yapı + izlenebilirlik) doğrular, başarıda DRAFT olarak journal'a kaydeder, başarısızlıkta dürüst bir REJECTED sonucu döner ve HİÇBİR durumda fazı ilerletmez. Submit/approve/reject MEVCUT onay mekanizmasını kullanır (onaylayan != kaydeden ve boş olmayan evidenceRefs). Driver ASLA model/ağ/shell çağırmaz ve dönen kodu ASLA yürütmez; yalnız yapısal içeriği doğrular ve kaydeder. Gerçek builder adaptörü runtime'da sağlanır; bu port enjeksiyonu driver'ı deterministik test edilebilir kılar.
 import {validateArtifactContent, type UpstreamContents} from "./validators.js";
 import {composeRolePrompt, getRolePrompt} from "./role-prompts.js";
+import {hasPlaceholder} from "./placeholder.js";
 import {PHASE_ARTIFACT_KIND, PRE_DEV_PHASE_TRANSITIONS} from "./types.js";
 import type {Scope} from "../types.js";
 import type {
@@ -123,6 +124,9 @@ export class PreDevDriver {
     let parsed: unknown;
     try { parsed = JSON.parse(raw); }
     catch { return {status: "REJECTED", kind, phase, reason: "PREDEV_DRIVER_INVALID_JSON"}; }
+
+    // //TR: C-FLOW-ANALYSIS-2: yer tutucu işareti (her varyantı, anahtarlar dahil) taşıyan içerik kaydedilmez; aynı koruma validateArtifactContent içinde de vardır, burada yalnız sabit sürücü kodu için önce sorulur (çok derin içerik doğrulayıcıdan CONTENT_TOO_DEEP ile döner).
+    if (hasPlaceholder(parsed)) return {status: "REJECTED", kind, phase, reason: "PREDEV_DRIVER_PLACEHOLDER_VALUE"};
 
     const v = validateArtifactContent(kind, parsed, toUpstreamContents(kind, ctx.approvedUpstream));
     if (!v.ok) return {status: "REJECTED", kind, phase, reason: v.errors};

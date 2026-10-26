@@ -1,4 +1,5 @@
 // //TR: Bu dosya pre-dev artefakt içeriklerinin SAF doğrulayıcılarını sağlar: yalnız yapı (biçim) ve izlenebilirlik (referential integrity) denetlenir; doğrulayıcılar içeriği ASLA uydurmaz, varsayılan/örnek veri üretmez ve dosya sistemine dokunmaz. Hata mesajları sabit kodlardır (değer/yol/PII taşımaz).
+import {placeholderProblem} from "./placeholder.js";
 import type {
   ArchitectureContent, ArtifactContent, ArtifactKind, BusinessAnalysisContent, Component, Goal, Milestone,
   PlanContent, Requirement, RequirementsContent, ScopeItem, TechChoice, UxSpecContent, WorkPackage
@@ -132,6 +133,9 @@ const validatePlanShape = (c: unknown): Validation => {
 // //TR: Tek giriş noktası: artefakt türüne göre içerik doğrulaması. İzlenebilirlik gerektiren türler üst içeriklerini ister (yoksa doğrulama başarısızdır; eksik üst veri uydurulmaz).
 export interface UpstreamContents { businessAnalysis?: BusinessAnalysisContent; requirements?: RequirementsContent; plan?: PlanContent }
 export function validateArtifactContent(kind: ArtifactKind, content: unknown, upstream: UpstreamContents = {}): Validation {
+  // //TR: #237 incelemesi: yer tutucu koruması BURADADIR (her çağıran alır: driver, store yazma kapısı/apply.ts, CrewCoordinator rework, yetkinlik değerlendirmesi) ve şekil denetiminden ÖNCE çalışır; iskeleti (ya da işaretin herhangi bir varyantını) yankılayan içerik şekil olarak geçerli olsa bile kabul edilmez. Çok derin içerik tipli bir retle (CONTENT_TOO_DEEP) reddedilir.
+  const problem = placeholderProblem(content);
+  if (problem !== null) return err(problem);
   switch (kind) {
     case "BusinessAnalysis": return validateBusinessAnalysis(content);
     case "Requirements": return upstream.businessAnalysis ? validateRequirements(content, upstream.businessAnalysis) : err("REQ_BA_MISSING");
