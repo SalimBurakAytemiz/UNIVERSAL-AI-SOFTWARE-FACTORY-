@@ -442,6 +442,16 @@
       "ref": "wf_d7a25fc3-1be (9 sites follow sync-proof+dwell+bounded-until; 0 expects removed; X1/X2/X4 mutants killed by block; CI failure reproduced at 60ms on old, 100/100 on new; run-card LOW closed)",
       "policy": "TEP-1",
       "at": "2026-10-26T20:19:03.528Z"
+    },
+    {
+      "pr": 256,
+      "sha": "23b8a112c9a0afeb69639c5a11824b95b913b1fa",
+      "kind": "delta",
+      "base": "71131ed400e35cfa24f2d86f8dc22e3ac5ba1fc9",
+      "verdict": "NO_BLOCKERS_1LOW",
+      "ref": "wf_68a6ab11-69c (real adapter codes in runner.ts:69; REVIEW_WORKSPACE_NOT_CLEAN_BEFORE FAILED row real; PH17 description verified; RB3/RB5 killed; 61/61; LOW: CLAUDE_CLIENT_ERROR not named hypothetical in test comment - deferred, wording only)",
+      "policy": "TEP-1",
+      "at": "2026-10-26T20:21:03.885Z"
     }
   ],
   "tests": [],
