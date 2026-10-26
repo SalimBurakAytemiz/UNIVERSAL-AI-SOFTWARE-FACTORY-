@@ -82,8 +82,8 @@ const DEFAULT_RUN_ROLE_ID=bindingForFunction("developer").roleId;
 // //TR: PS-1A: controlRoot provenance/ayar kontrol köküdür (paketli: userData, geliştirme: repo); studio/executorSetup yalnız test enjeksiyonudur (sahte provenance yakalayıcı, CLI keşfi, dev-run zamanlamaları, ZIP sınırları).
 export interface BuildServerOptions{controlToken?:string;runtime?:string;port?:number;dataDir?:string;repoRoot?:string;tenantId?:string;orgId?:string;actor?:string;policyContext?:Partial<ActionPolicyContext>;logger?:boolean;executors?:ExecutorPair;runner?:{enabled?:boolean;intervalMs?:number}&Partial<Pick<RunnerOptions,"leaseTtlMs"|"maxRemediations"|"maxRetries"|"retryBackoffMs"|"testTimeoutMs"|"executorTimeoutMs"|"security">>;
   controlRoot?:string;studio?:{zipLimits?:Partial<ZipLimits>;devrun?:Partial<Pick<DevRunOptions,"startTimeOf"|"startWaitMs"|"graceMs"|"probeIntervalMs"|"stopPollMs"|"logRingBytes"|"logTailBytes"|"treeSnapshotMs">>};executorSetup?:Pick<ExecutorSetupOptions,"captureProvenance"|"findClaudeCli">;
-  // //TR: SBX-GATE: sandbox yalnız programatik test enjeksiyonudur (testlerdeki sahte sağlayıcı); env/config/journal/API gövdesi/masaüstü ayarı sağlayıcı kaydedemez. Verilmezse proje kodu yürütmesi her zaman SANDBOX_UNAVAILABLE ile reddedilir.
-  sandbox?:SandboxProvider;workosStoreOptions?:WorkOsStoreOptions}
+  // //TR: SBX-GATE: sandbox yalnız programatik test enjeksiyonudur (testlerdeki sahte sağlayıcı); env/config/journal/API gövdesi/masaüstü ayarı sağlayıcı kaydedemez. Seçenek hiç verilmezse Linux'ta varsayılan LinuxUnshareSandboxProvider denenir; selfTest geçmeden hiçbir proje kodu yürütülmez (SANDBOX_UNAVAILABLE). Açıkça null/undefined verilirse sağlayıcı yoktur ve yürütme her zaman SANDBOX_UNAVAILABLE ile reddedilir.
+  sandbox?:SandboxProvider|null;workosStoreOptions?:WorkOsStoreOptions}
 export function buildServer(opts:BuildServerOptions={}){
 const app=Fastify({logger:opts.logger??true,requestIdHeader:"x-request-id",genReqId:()=>crypto.randomUUID(),bodyLimit:64*1024,frameworkErrors});
 // //TR: LANE-B-error-contract: Fastify'nin kendi ürettiği hatalar (bozuk JSON, içerik türü, gövde sınırı, bilinmeyen rota) sabit {error:"KOD"} gövdesine çevrilir; route düzeyindeki yanıtlar değişmez.
@@ -287,7 +287,7 @@ let workRunner:MissionRunner|null=null;
 // //TR: SBX-GATE (FD-REL-1-REJECT-HOST-EXEC-2026-10-15): runner testleri ve Studio dev-run için tek karar noktası; sağlayıcı opts.sandbox (test) ile gelir.
 // //TR: COORD korumalı paket 4a (LANE-C-linux-sandbox-provider v2): opts.sandbox yoksa yalnız linux'ta LinuxUnshareSandboxProvider varsayılan seçenekleriyle kurulur (env/config/gövde sağlayıcı seçemez). Kurucu hata atarsa null döner (NO_VERIFIED_PROVIDER, sunucu açılışı çökmez); acceptUnenforcedProcessLimit bilerek VERİLMEZ, root gözetmende öz-test geçmez ve kapı SANDBOX_UNAVAILABLE kalır (fail-closed).
 const defaultSandboxProvider=():SandboxProvider|null=>{if(process.platform!=="linux")return null;try{return new LinuxUnshareSandboxProvider()}catch{return null}};
-const executionGate=new ExecutionGate(opts.sandbox??defaultSandboxProvider());
+const executionGate=new ExecutionGate("sandbox" in opts?(opts.sandbox??null):defaultSandboxProvider());
 function getRunner(){
   if(workRunner)return workRunner;
   const ex=getExecutors();if(!ex.pair)return null;
