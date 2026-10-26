@@ -1,0 +1,58 @@
+{
+  "//TR": "Kayıt defteri sayılarının küçük kopyası (registries/*.json counts); iddiadır, kanıt değildir.",
+  "roleDefs": {
+    "counts": {
+      "roles": 599,
+      "guilds": 51,
+      "clusters": 10,
+      "evaluationSpecs": 3594,
+      "evaluationSpecsExecuted": 0,
+      "runtimeReady": 0,
+      "certified": 0,
+      "legacyAgents": 363,
+      "legacyAliases": {
+        "total": 443,
+        "byStatus": {
+          "EXACT_ID": 0,
+          "SEMANTIC_VERIFIED": 214,
+          "SUSPECTED": 61,
+          "CONFLICT": 133,
+          "MISSING_SOURCE": 0,
+          "REJECTED": 35,
+          "UNMAPPED": 0
+        }
+      },
+      "legacyUnmapped": 88,
+      "gapIds": 4843
+    },
+    "guilds": 51,
+    "clusters": 10,
+    "roles": 599
+  },
+  "profiles": {
+    "counts": {
+      "roles": 599,
+      "byRoute": {
+        "CLAUDE_IMPLEMENTER": 157,
+        "CLAUDE_REVIEWER": 441,
+        "DETERMINISTIC_STUDIO": 1
+      },
+      "boundRoles": 9,
+      "withSemanticVerifiedLegacyEvidence": 197,
+      "withCandidateSkills": 197,
+      "withCandidateToolAdapters": 164,
+      "withKnowledgeSources": 599,
+      "withLegacyMappedReviewChain": 161,
+      "gapIdsWritten": 1275
+    }
+  },
+  "adapters": {
+    "count": 194,
+    "byStatus": {
+      "REGISTERED": 194
+    },
+    "byImplementation": {
+      "NOT_IMPLEMENTED": 194
+    }
+  }
+}

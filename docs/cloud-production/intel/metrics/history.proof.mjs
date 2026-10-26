@@ -1,0 +1,30 @@
+//TR: P4 anlık görüntü farkı kanıtı (ağsız): snapA -> snapB tam olarak beklenen eklenen/çıkarılan/değişen kümeleri ve metrik farklarını verir; bir görüntünün kendisiyle veya yeniden sıralanmış kopyasıyla farkı boştur; trend eksik günleri MISSING işaretler.
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { diffSnapshots, trend } from './history.mjs';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+let passed = 0, failed = 0;
+const check = (name, ok) => { if (ok) { passed++; console.log(`PASS ${name}`); } else { failed++; console.log(`FAIL ${name}`); } };
+const A = JSON.parse(fs.readFileSync(path.join(HERE, '..', 'fixtures', 'snapA.json'), 'utf8'));
+const B = JSON.parse(fs.readFileSync(path.join(HERE, '..', 'fixtures', 'snapB.json'), 'utf8'));
+const d = diffSnapshots(A, B);
+check('added = [X-4]', JSON.stringify(d.addedItems) === '["X-4"]');
+check('removed = [X-3]', JSON.stringify(d.removedItems) === '["X-3"]');
+check('changed = [X-1, X-2]', JSON.stringify(d.changedItems.map((c) => c.id)) === '["X-1","X-2"]');
+const x1 = d.changedItems.find((c) => c.id === 'X-1').changes.map((c) => c.field);
+check('X-1 changes: status, reconClass, substeps.coded/integrated, links', ['status', 'reconClass', 'substeps.coded', 'substeps.integrated', 'links'].every((f) => x1.includes(f)) && !x1.includes('scope'));
+check('X-2 changes: links only', JSON.stringify(d.changedItems.find((c) => c.id === 'X-2').changes.map((c) => c.field)) === '["links"]');
+check('metric deltas: integrated +1, unknown -1, liveBaseline unchanged', d.metricDeltas.integrated.delta === 1 && d.metricDeltas.unknown.delta === -1 && !('liveBaseline' in d.metricDeltas));
+const e = diffSnapshots(A, A);
+check('self diff is empty', e.addedItems.length === 0 && e.removedItems.length === 0 && e.changedItems.length === 0 && Object.keys(e.metricDeltas).length === 0);
+const Ar = { items: [...A.items].reverse().map((x) => ({ ...x, links: [...x.links].reverse() })), metrics: Object.fromEntries(Object.entries(A.metrics).reverse()) };
+const r = diffSnapshots(A, Ar);
+check('diff against a reordered copy is empty', r.counts.added + r.counts.removed + r.counts.changed + r.counts.metricDeltas === 0);
+const t = trend([{ date: '2026-10-26', semantics: 'legacy-v0', generatedAt: 'a' }, { date: '2026-10-28', semantics: 'intel-1', generatedAt: 'b' }], '2026-10-29', 30);
+check('trend marks missing days as MISSING', JSON.stringify(t.map((p) => p.state === 'MISSING' ? 'M' : p.semantics)) === JSON.stringify(['legacy-v0', 'M', 'intel-1', 'M']));
+const t2 = trend([{ date: '2026-10-28', semantics: 'intel-1', generatedAt: 'a', v: 1 }, { date: '2026-10-28', semantics: 'intel-1', generatedAt: 'b', v: 2 }], '2026-10-28', 30);
+check('trend keeps the latest point per day', t2.length === 1 && t2[0].v === 2);
+console.log(`SUMMARY: ${passed} passed, ${failed} failed`);
+process.exitCode = failed ? 1 : 0;

@@ -1,0 +1,8 @@
+{
+  "//TR": "Kapsam kuralları: 19 Ekim oct31_impact alanı -> MVP/DEFERRED/FULL. Sonradan eklenen kalemler yalnız kural veya overlay ile MVP olur; aksi halde FULL.",
+  "schemaVersion": "1.0.0",
+  "oct31Map": { "AT_RISK": "MVP", "NOT_DELIVERABLE": "DEFERRED", "NONE": "FULL" },
+  "addedItemRules": [],
+  "addedDefault": "FULL",
+  "milestones": { "MVP": "T-M2-OCT31", "WAVE0_PREFIX": "C-", "WAVE0": "MASTER_V2_WAVE0" }
+}

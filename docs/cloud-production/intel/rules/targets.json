@@ -1,0 +1,33 @@
+{
+  "//TR": "Beyan edilmiş tüm hedef tarihler kaynağıyla birlikte (aşılmış veya geçersiz kalmış olsalar bile) saklanır. Durum her çalıştırmada şimdiye göre hesaplanır: PENDING, PASSED_WITHOUT_ACCEPTANCE_EVIDENCE, MET_WITH_EVIDENCE, SUPERSEDED. Her kaynak satırı 'match' metniyle doğrulanır; eşleşmezse DQ kaydı düşer.",
+  "schemaVersion": "1.0.0",
+  "targets": [
+    { "id": "T-M0", "label": "M0: ilk kurulabilir, çalışan .exe", "quantiles": [
+        { "q": "P50", "date": "2026-10-15", "time": "12:00", "source": { "path": "docs/planning/UASCO_DESKTOP_DELIVERY_ETA_2026-10-15.md", "ref": "9dbb708", "line": 9, "match": "P50 15 Oct 12:00 TSİ" } },
+        { "q": "P80", "date": "2026-10-15", "time": "17:00", "source": { "path": "docs/planning/UASCO_DESKTOP_DELIVERY_ETA_2026-10-15.md", "ref": "9dbb708", "line": 75, "match": "15 Oct ~16:00–17:00" } },
+        { "q": "P95", "date": "2026-10-16", "time": "14:00", "source": { "path": "docs/planning/UASCO_DESKTOP_DELIVERY_ETA_2026-10-15.md", "ref": "9dbb708", "line": 76, "match": "16 Oct ~12:00–14:00" } } ],
+      "confidence": "STATED", "statedAt": "2026-10-15T01:30:00Z", "acceptanceKey": "M0_INSTALLABLE_EXE", "supersededBy": null },
+    { "id": "T-M1", "label": "M1: gerçek yazılım geliştirilebilen ilk Desktop", "quantiles": [
+        { "q": "P50", "date": "2026-10-16", "time": "12:00", "source": { "path": "docs/planning/UASCO_DESKTOP_DELIVERY_ETA_2026-10-15.md", "ref": "9dbb708", "line": 10, "match": "P50 16 Oct ~12:00 TSİ" } },
+        { "q": "P80", "date": "2026-10-16", "time": "22:00", "source": { "path": "docs/planning/UASCO_DESKTOP_DELIVERY_ETA_2026-10-15.md", "ref": "9dbb708", "line": 10, "match": "P80 16 Oct ~22:00" } },
+        { "q": "P95", "date": "2026-10-18", "time": null, "source": { "path": "docs/planning/UASCO_DESKTOP_DELIVERY_ETA_2026-10-15.md", "ref": "9dbb708", "line": 10, "match": "P95 18 Oct" } } ],
+      "confidence": "STATED", "statedAt": "2026-10-15T01:30:00Z", "acceptanceKey": "M1_FIRST_USABLE_DESKTOP", "supersededBy": null },
+    { "id": "T-M2", "label": "M2: operasyonel Desktop", "quantiles": [
+        { "q": "P50", "date": "2026-10-31", "time": null, "source": { "path": "docs/planning/UASCO_DESKTOP_DELIVERY_ETA_2026-10-15.md", "ref": "9dbb708", "line": 11, "match": "P50 ~31 Oct (low confidence)" } },
+        { "q": "P80", "date": "2026-11-12", "time": null, "source": { "path": "docs/planning/UASCO_DESKTOP_DELIVERY_ETA_2026-10-15.md", "ref": "9dbb708", "line": 134, "match": "~10–12 Nov" } } ],
+      "confidence": "LOW", "statedAt": "2026-10-15T01:30:00Z", "acceptanceKey": "M2_OPERATIONAL_DESKTOP", "supersededBy": null },
+    { "id": "T-M3", "label": "M3: tam hedef (216 konu + 599 rol)", "quantiles": [
+        { "q": "P50", "date": null, "time": null, "range": { "from": "2027-01-01", "to": "2027-03-31" }, "source": { "path": "docs/planning/UASCO_DESKTOP_DELIVERY_ETA_2026-10-15.md", "ref": "9dbb708", "line": 12, "match": "P50 UNKNOWN; realistic range Jan–Mar 2027" } } ],
+      "confidence": "UNKNOWN", "statedAt": "2026-10-15T01:30:00Z", "acceptanceKey": "M3_FULL_TARGET", "supersededBy": null },
+    { "id": "T-OCT31-MVP", "label": "31 Ekim MVP hedefi (M2 'operational Desktop')", "quantiles": [
+        { "q": "TARGET", "date": "2026-10-31", "time": null, "source": { "path": "docs/inventory/2026-10-19/PRODUCTION_PLAN_TO_OCT31.md", "ref": "v7", "line": 5, "match": "The Oct-31 target is the M2 \"operational Desktop\" milestone" } } ],
+      "confidence": "LOW", "statedAt": "2026-10-19T05:00:48Z", "acceptanceKey": "M2_OPERATIONAL_DESKTOP", "supersededBy": null },
+    { "id": "A-TRACKB-1-6", "label": "Varsayım: Track B kararları 1-6 yaklaşık 2026-10-22'ye kadar", "kind": "ASSUMPTION", "quantiles": [
+        { "q": "ASSUMED_BY", "date": "2026-10-22", "time": null, "source": { "path": "docs/inventory/2026-10-19/PRODUCTION_PLAN_TO_OCT31.md", "ref": "v7", "line": 59, "match": "It assumes Track B decisions 1-6 land by about 2026-10-22" } } ],
+      "confidence": "LOW", "statedAt": "2026-10-19T05:00:48Z", "acceptanceKey": "TRACK_B_DECISIONS_1_6", "supersededBy": null }
+  ],
+  "reviewedCandidates": [],
+  "flags": [
+    { "id": "ETA_DOC_DATE_MISMATCH", "text": "UASCO_DESKTOP_DELIVERY_ETA_2026-10-15.md 9dbb708 commit tarihi dokümanın 'Prepared: 2026-10-15' satırından önce", "check": { "ref": "9dbb708", "path": "docs/planning/UASCO_DESKTOP_DELIVERY_ETA_2026-10-15.md", "line": 3, "match": "Prepared:** 2026-10-15" } }
+  ]
+}

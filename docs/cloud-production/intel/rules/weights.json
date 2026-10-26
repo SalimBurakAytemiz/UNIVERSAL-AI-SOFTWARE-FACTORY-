@@ -1,0 +1,9 @@
+{
+  "//TR": "Ağırlık modeli: roadmap/critical-path.json weightModel değerine bağlanır. Çalışma süresi verisi yokken her kalem ve her alt adım eşit (1) ağırlıktadır; bilinmeyen model eşit ağırlığa kapalı düşer ve DQ uyarısı üretir.",
+  "schemaVersion": "1.0.0",
+  "models": {
+    "UNIT_WEIGHT_UNTIL_RUNTIME_DURATION_DATA_EXISTS": { "item": 1, "substep": 1, "note": "every item and every substep weighs 1; the 19-Oct effort S/M/L/XL is an analyst estimate and is not used as a weight" }
+  },
+  "fallback": "UNIT_WEIGHT_UNTIL_RUNTIME_DURATION_DATA_EXISTS",
+  "devProgressSubsteps": ["coded", "integrated", "tested"]
+}

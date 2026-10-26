@@ -1,0 +1,1234 @@
+{
+  "//TR": "C-RDY-1 computeRoleReadiness örnek çıktısı (gerçek ölçümden kırpıldı: rol başına dizi yok, 3 lonca satırı). Ajan fabrikası birim testleri içindir.",
+  "state": "MEASURED",
+  "source": "core/agents/readiness-audit.ts@459205c computeRoleReadiness (PR #260)",
+  "audit": {
+    "schemaVersion": "1.0.0",
+    "authority": "AUTHORITATIVE_READINESS_MEASUREMENT",
+    "denominator": 599,
+    "totals": {
+      "DEFINED": {
+        "TRUE": 599,
+        "FALSE": 0,
+        "UNKNOWN": 0,
+        "NOT_APPLICABLE": 0,
+        "denominator": 599,
+        "measured": true
+      },
+      "PROFILED": {
+        "TRUE": 0,
+        "FALSE": 599,
+        "UNKNOWN": 0,
+        "NOT_APPLICABLE": 0,
+        "denominator": 599,
+        "measured": true
+      },
+      "KNOWLEDGE_READY": {
+        "TRUE": 0,
+        "FALSE": 599,
+        "UNKNOWN": 0,
+        "NOT_APPLICABLE": 0,
+        "denominator": 599,
+        "measured": true
+      },
+      "TOOL_READY": {
+        "TRUE": 0,
+        "FALSE": 590,
+        "UNKNOWN": 9,
+        "NOT_APPLICABLE": 0,
+        "denominator": 599,
+        "measured": false
+      },
+      "EXECUTABLE": {
+        "TRUE": 8,
+        "FALSE": 591,
+        "UNKNOWN": 0,
+        "NOT_APPLICABLE": 0,
+        "denominator": 599,
+        "measured": true
+      },
+      "EVALUATED": {
+        "TRUE": 0,
+        "FALSE": 599,
+        "UNKNOWN": 0,
+        "NOT_APPLICABLE": 0,
+        "denominator": 599,
+        "measured": true
+      },
+      "INTERNALLY_CERTIFIED": {
+        "TRUE": 0,
+        "FALSE": 599,
+        "UNKNOWN": 0,
+        "NOT_APPLICABLE": 0,
+        "denominator": 599,
+        "measured": true
+      },
+      "RUNNING": {
+        "TRUE": 0,
+        "FALSE": 0,
+        "UNKNOWN": 599,
+        "NOT_APPLICABLE": 0,
+        "denominator": 599,
+        "measured": false
+      }
+    },
+    "stageWired": {
+      "TRUE": 0,
+      "FALSE": 591,
+      "UNKNOWN": 8,
+      "NOT_APPLICABLE": 0,
+      "denominator": 599,
+      "measured": false
+    },
+    "byGuild": [
+      {
+        "id": "G01",
+        "kind": "GUILD",
+        "clusterId": "CL01",
+        "roles": 8,
+        "layers": {
+          "DEFINED": {
+            "TRUE": 8,
+            "FALSE": 0,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 8,
+            "measured": true
+          },
+          "PROFILED": {
+            "TRUE": 0,
+            "FALSE": 8,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 8,
+            "measured": true
+          },
+          "KNOWLEDGE_READY": {
+            "TRUE": 0,
+            "FALSE": 8,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 8,
+            "measured": true
+          },
+          "TOOL_READY": {
+            "TRUE": 0,
+            "FALSE": 8,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 8,
+            "measured": true
+          },
+          "EXECUTABLE": {
+            "TRUE": 0,
+            "FALSE": 8,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 8,
+            "measured": true
+          },
+          "EVALUATED": {
+            "TRUE": 0,
+            "FALSE": 8,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 8,
+            "measured": true
+          },
+          "INTERNALLY_CERTIFIED": {
+            "TRUE": 0,
+            "FALSE": 8,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 8,
+            "measured": true
+          },
+          "RUNNING": {
+            "TRUE": 0,
+            "FALSE": 0,
+            "UNKNOWN": 8,
+            "NOT_APPLICABLE": 0,
+            "denominator": 8,
+            "measured": false
+          }
+        },
+        "stageWired": {
+          "TRUE": 0,
+          "FALSE": 8,
+          "UNKNOWN": 0,
+          "NOT_APPLICABLE": 0,
+          "denominator": 8,
+          "measured": true
+        },
+        "proposedOnly": {
+          "withCandidateSkills": 1,
+          "withCandidateToolAdapters": 0
+        }
+      },
+      {
+        "id": "G02",
+        "kind": "GUILD",
+        "clusterId": "CL01",
+        "roles": 9,
+        "layers": {
+          "DEFINED": {
+            "TRUE": 9,
+            "FALSE": 0,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 9,
+            "measured": true
+          },
+          "PROFILED": {
+            "TRUE": 0,
+            "FALSE": 9,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 9,
+            "measured": true
+          },
+          "KNOWLEDGE_READY": {
+            "TRUE": 0,
+            "FALSE": 9,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 9,
+            "measured": true
+          },
+          "TOOL_READY": {
+            "TRUE": 0,
+            "FALSE": 9,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 9,
+            "measured": true
+          },
+          "EXECUTABLE": {
+            "TRUE": 0,
+            "FALSE": 9,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 9,
+            "measured": true
+          },
+          "EVALUATED": {
+            "TRUE": 0,
+            "FALSE": 9,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 9,
+            "measured": true
+          },
+          "INTERNALLY_CERTIFIED": {
+            "TRUE": 0,
+            "FALSE": 9,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 9,
+            "measured": true
+          },
+          "RUNNING": {
+            "TRUE": 0,
+            "FALSE": 0,
+            "UNKNOWN": 9,
+            "NOT_APPLICABLE": 0,
+            "denominator": 9,
+            "measured": false
+          }
+        },
+        "stageWired": {
+          "TRUE": 0,
+          "FALSE": 9,
+          "UNKNOWN": 0,
+          "NOT_APPLICABLE": 0,
+          "denominator": 9,
+          "measured": true
+        },
+        "proposedOnly": {
+          "withCandidateSkills": 0,
+          "withCandidateToolAdapters": 0
+        }
+      },
+      {
+        "id": "G03",
+        "kind": "GUILD",
+        "clusterId": "CL01",
+        "roles": 13,
+        "layers": {
+          "DEFINED": {
+            "TRUE": 13,
+            "FALSE": 0,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 13,
+            "measured": true
+          },
+          "PROFILED": {
+            "TRUE": 0,
+            "FALSE": 13,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 13,
+            "measured": true
+          },
+          "KNOWLEDGE_READY": {
+            "TRUE": 0,
+            "FALSE": 13,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 13,
+            "measured": true
+          },
+          "TOOL_READY": {
+            "TRUE": 0,
+            "FALSE": 10,
+            "UNKNOWN": 3,
+            "NOT_APPLICABLE": 0,
+            "denominator": 13,
+            "measured": false
+          },
+          "EXECUTABLE": {
+            "TRUE": 3,
+            "FALSE": 10,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 13,
+            "measured": true
+          },
+          "EVALUATED": {
+            "TRUE": 0,
+            "FALSE": 13,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 13,
+            "measured": true
+          },
+          "INTERNALLY_CERTIFIED": {
+            "TRUE": 0,
+            "FALSE": 13,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 13,
+            "measured": true
+          },
+          "RUNNING": {
+            "TRUE": 0,
+            "FALSE": 0,
+            "UNKNOWN": 13,
+            "NOT_APPLICABLE": 0,
+            "denominator": 13,
+            "measured": false
+          }
+        },
+        "stageWired": {
+          "TRUE": 0,
+          "FALSE": 10,
+          "UNKNOWN": 3,
+          "NOT_APPLICABLE": 0,
+          "denominator": 13,
+          "measured": false
+        },
+        "proposedOnly": {
+          "withCandidateSkills": 8,
+          "withCandidateToolAdapters": 2
+        }
+      }
+    ],
+    "byCluster": [
+      {
+        "id": "CL01",
+        "kind": "CLUSTER",
+        "clusterId": null,
+        "roles": 41,
+        "layers": {
+          "DEFINED": {
+            "TRUE": 41,
+            "FALSE": 0,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 41,
+            "measured": true
+          },
+          "PROFILED": {
+            "TRUE": 0,
+            "FALSE": 41,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 41,
+            "measured": true
+          },
+          "KNOWLEDGE_READY": {
+            "TRUE": 0,
+            "FALSE": 41,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 41,
+            "measured": true
+          },
+          "TOOL_READY": {
+            "TRUE": 0,
+            "FALSE": 37,
+            "UNKNOWN": 4,
+            "NOT_APPLICABLE": 0,
+            "denominator": 41,
+            "measured": false
+          },
+          "EXECUTABLE": {
+            "TRUE": 4,
+            "FALSE": 37,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 41,
+            "measured": true
+          },
+          "EVALUATED": {
+            "TRUE": 0,
+            "FALSE": 41,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 41,
+            "measured": true
+          },
+          "INTERNALLY_CERTIFIED": {
+            "TRUE": 0,
+            "FALSE": 41,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 41,
+            "measured": true
+          },
+          "RUNNING": {
+            "TRUE": 0,
+            "FALSE": 0,
+            "UNKNOWN": 41,
+            "NOT_APPLICABLE": 0,
+            "denominator": 41,
+            "measured": false
+          }
+        },
+        "stageWired": {
+          "TRUE": 0,
+          "FALSE": 37,
+          "UNKNOWN": 4,
+          "NOT_APPLICABLE": 0,
+          "denominator": 41,
+          "measured": false
+        },
+        "proposedOnly": {
+          "withCandidateSkills": 15,
+          "withCandidateToolAdapters": 4
+        }
+      },
+      {
+        "id": "CL02",
+        "kind": "CLUSTER",
+        "clusterId": null,
+        "roles": 98,
+        "layers": {
+          "DEFINED": {
+            "TRUE": 98,
+            "FALSE": 0,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 98,
+            "measured": true
+          },
+          "PROFILED": {
+            "TRUE": 0,
+            "FALSE": 98,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 98,
+            "measured": true
+          },
+          "KNOWLEDGE_READY": {
+            "TRUE": 0,
+            "FALSE": 98,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 98,
+            "measured": true
+          },
+          "TOOL_READY": {
+            "TRUE": 0,
+            "FALSE": 96,
+            "UNKNOWN": 2,
+            "NOT_APPLICABLE": 0,
+            "denominator": 98,
+            "measured": false
+          },
+          "EXECUTABLE": {
+            "TRUE": 2,
+            "FALSE": 96,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 98,
+            "measured": true
+          },
+          "EVALUATED": {
+            "TRUE": 0,
+            "FALSE": 98,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 98,
+            "measured": true
+          },
+          "INTERNALLY_CERTIFIED": {
+            "TRUE": 0,
+            "FALSE": 98,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 98,
+            "measured": true
+          },
+          "RUNNING": {
+            "TRUE": 0,
+            "FALSE": 0,
+            "UNKNOWN": 98,
+            "NOT_APPLICABLE": 0,
+            "denominator": 98,
+            "measured": false
+          }
+        },
+        "stageWired": {
+          "TRUE": 0,
+          "FALSE": 96,
+          "UNKNOWN": 2,
+          "NOT_APPLICABLE": 0,
+          "denominator": 98,
+          "measured": false
+        },
+        "proposedOnly": {
+          "withCandidateSkills": 30,
+          "withCandidateToolAdapters": 30
+        }
+      },
+      {
+        "id": "CL03",
+        "kind": "CLUSTER",
+        "clusterId": null,
+        "roles": 73,
+        "layers": {
+          "DEFINED": {
+            "TRUE": 73,
+            "FALSE": 0,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 73,
+            "measured": true
+          },
+          "PROFILED": {
+            "TRUE": 0,
+            "FALSE": 73,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 73,
+            "measured": true
+          },
+          "KNOWLEDGE_READY": {
+            "TRUE": 0,
+            "FALSE": 73,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 73,
+            "measured": true
+          },
+          "TOOL_READY": {
+            "TRUE": 0,
+            "FALSE": 73,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 73,
+            "measured": true
+          },
+          "EXECUTABLE": {
+            "TRUE": 0,
+            "FALSE": 73,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 73,
+            "measured": true
+          },
+          "EVALUATED": {
+            "TRUE": 0,
+            "FALSE": 73,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 73,
+            "measured": true
+          },
+          "INTERNALLY_CERTIFIED": {
+            "TRUE": 0,
+            "FALSE": 73,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 73,
+            "measured": true
+          },
+          "RUNNING": {
+            "TRUE": 0,
+            "FALSE": 0,
+            "UNKNOWN": 73,
+            "NOT_APPLICABLE": 0,
+            "denominator": 73,
+            "measured": false
+          }
+        },
+        "stageWired": {
+          "TRUE": 0,
+          "FALSE": 73,
+          "UNKNOWN": 0,
+          "NOT_APPLICABLE": 0,
+          "denominator": 73,
+          "measured": true
+        },
+        "proposedOnly": {
+          "withCandidateSkills": 13,
+          "withCandidateToolAdapters": 13
+        }
+      },
+      {
+        "id": "CL04",
+        "kind": "CLUSTER",
+        "clusterId": null,
+        "roles": 49,
+        "layers": {
+          "DEFINED": {
+            "TRUE": 49,
+            "FALSE": 0,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 49,
+            "measured": true
+          },
+          "PROFILED": {
+            "TRUE": 0,
+            "FALSE": 49,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 49,
+            "measured": true
+          },
+          "KNOWLEDGE_READY": {
+            "TRUE": 0,
+            "FALSE": 49,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 49,
+            "measured": true
+          },
+          "TOOL_READY": {
+            "TRUE": 0,
+            "FALSE": 48,
+            "UNKNOWN": 1,
+            "NOT_APPLICABLE": 0,
+            "denominator": 49,
+            "measured": false
+          },
+          "EXECUTABLE": {
+            "TRUE": 0,
+            "FALSE": 49,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 49,
+            "measured": true
+          },
+          "EVALUATED": {
+            "TRUE": 0,
+            "FALSE": 49,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 49,
+            "measured": true
+          },
+          "INTERNALLY_CERTIFIED": {
+            "TRUE": 0,
+            "FALSE": 49,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 49,
+            "measured": true
+          },
+          "RUNNING": {
+            "TRUE": 0,
+            "FALSE": 0,
+            "UNKNOWN": 49,
+            "NOT_APPLICABLE": 0,
+            "denominator": 49,
+            "measured": false
+          }
+        },
+        "stageWired": {
+          "TRUE": 0,
+          "FALSE": 49,
+          "UNKNOWN": 0,
+          "NOT_APPLICABLE": 0,
+          "denominator": 49,
+          "measured": true
+        },
+        "proposedOnly": {
+          "withCandidateSkills": 12,
+          "withCandidateToolAdapters": 12
+        }
+      },
+      {
+        "id": "CL05",
+        "kind": "CLUSTER",
+        "clusterId": null,
+        "roles": 90,
+        "layers": {
+          "DEFINED": {
+            "TRUE": 90,
+            "FALSE": 0,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 90,
+            "measured": true
+          },
+          "PROFILED": {
+            "TRUE": 0,
+            "FALSE": 90,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 90,
+            "measured": true
+          },
+          "KNOWLEDGE_READY": {
+            "TRUE": 0,
+            "FALSE": 90,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 90,
+            "measured": true
+          },
+          "TOOL_READY": {
+            "TRUE": 0,
+            "FALSE": 88,
+            "UNKNOWN": 2,
+            "NOT_APPLICABLE": 0,
+            "denominator": 90,
+            "measured": false
+          },
+          "EXECUTABLE": {
+            "TRUE": 2,
+            "FALSE": 88,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 90,
+            "measured": true
+          },
+          "EVALUATED": {
+            "TRUE": 0,
+            "FALSE": 90,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 90,
+            "measured": true
+          },
+          "INTERNALLY_CERTIFIED": {
+            "TRUE": 0,
+            "FALSE": 90,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 90,
+            "measured": true
+          },
+          "RUNNING": {
+            "TRUE": 0,
+            "FALSE": 0,
+            "UNKNOWN": 90,
+            "NOT_APPLICABLE": 0,
+            "denominator": 90,
+            "measured": false
+          }
+        },
+        "stageWired": {
+          "TRUE": 0,
+          "FALSE": 88,
+          "UNKNOWN": 2,
+          "NOT_APPLICABLE": 0,
+          "denominator": 90,
+          "measured": false
+        },
+        "proposedOnly": {
+          "withCandidateSkills": 35,
+          "withCandidateToolAdapters": 33
+        }
+      },
+      {
+        "id": "CL06",
+        "kind": "CLUSTER",
+        "clusterId": null,
+        "roles": 59,
+        "layers": {
+          "DEFINED": {
+            "TRUE": 59,
+            "FALSE": 0,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 59,
+            "measured": true
+          },
+          "PROFILED": {
+            "TRUE": 0,
+            "FALSE": 59,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 59,
+            "measured": true
+          },
+          "KNOWLEDGE_READY": {
+            "TRUE": 0,
+            "FALSE": 59,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 59,
+            "measured": true
+          },
+          "TOOL_READY": {
+            "TRUE": 0,
+            "FALSE": 59,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 59,
+            "measured": true
+          },
+          "EXECUTABLE": {
+            "TRUE": 0,
+            "FALSE": 59,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 59,
+            "measured": true
+          },
+          "EVALUATED": {
+            "TRUE": 0,
+            "FALSE": 59,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 59,
+            "measured": true
+          },
+          "INTERNALLY_CERTIFIED": {
+            "TRUE": 0,
+            "FALSE": 59,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 59,
+            "measured": true
+          },
+          "RUNNING": {
+            "TRUE": 0,
+            "FALSE": 0,
+            "UNKNOWN": 59,
+            "NOT_APPLICABLE": 0,
+            "denominator": 59,
+            "measured": false
+          }
+        },
+        "stageWired": {
+          "TRUE": 0,
+          "FALSE": 59,
+          "UNKNOWN": 0,
+          "NOT_APPLICABLE": 0,
+          "denominator": 59,
+          "measured": true
+        },
+        "proposedOnly": {
+          "withCandidateSkills": 45,
+          "withCandidateToolAdapters": 45
+        }
+      },
+      {
+        "id": "CL07",
+        "kind": "CLUSTER",
+        "clusterId": null,
+        "roles": 53,
+        "layers": {
+          "DEFINED": {
+            "TRUE": 53,
+            "FALSE": 0,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 53,
+            "measured": true
+          },
+          "PROFILED": {
+            "TRUE": 0,
+            "FALSE": 53,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 53,
+            "measured": true
+          },
+          "KNOWLEDGE_READY": {
+            "TRUE": 0,
+            "FALSE": 53,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 53,
+            "measured": true
+          },
+          "TOOL_READY": {
+            "TRUE": 0,
+            "FALSE": 53,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 53,
+            "measured": true
+          },
+          "EXECUTABLE": {
+            "TRUE": 0,
+            "FALSE": 53,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 53,
+            "measured": true
+          },
+          "EVALUATED": {
+            "TRUE": 0,
+            "FALSE": 53,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 53,
+            "measured": true
+          },
+          "INTERNALLY_CERTIFIED": {
+            "TRUE": 0,
+            "FALSE": 53,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 53,
+            "measured": true
+          },
+          "RUNNING": {
+            "TRUE": 0,
+            "FALSE": 0,
+            "UNKNOWN": 53,
+            "NOT_APPLICABLE": 0,
+            "denominator": 53,
+            "measured": false
+          }
+        },
+        "stageWired": {
+          "TRUE": 0,
+          "FALSE": 53,
+          "UNKNOWN": 0,
+          "NOT_APPLICABLE": 0,
+          "denominator": 53,
+          "measured": true
+        },
+        "proposedOnly": {
+          "withCandidateSkills": 13,
+          "withCandidateToolAdapters": 9
+        }
+      },
+      {
+        "id": "CL08",
+        "kind": "CLUSTER",
+        "clusterId": null,
+        "roles": 65,
+        "layers": {
+          "DEFINED": {
+            "TRUE": 65,
+            "FALSE": 0,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 65,
+            "measured": true
+          },
+          "PROFILED": {
+            "TRUE": 0,
+            "FALSE": 65,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 65,
+            "measured": true
+          },
+          "KNOWLEDGE_READY": {
+            "TRUE": 0,
+            "FALSE": 65,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 65,
+            "measured": true
+          },
+          "TOOL_READY": {
+            "TRUE": 0,
+            "FALSE": 65,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 65,
+            "measured": true
+          },
+          "EXECUTABLE": {
+            "TRUE": 0,
+            "FALSE": 65,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 65,
+            "measured": true
+          },
+          "EVALUATED": {
+            "TRUE": 0,
+            "FALSE": 65,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 65,
+            "measured": true
+          },
+          "INTERNALLY_CERTIFIED": {
+            "TRUE": 0,
+            "FALSE": 65,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 65,
+            "measured": true
+          },
+          "RUNNING": {
+            "TRUE": 0,
+            "FALSE": 0,
+            "UNKNOWN": 65,
+            "NOT_APPLICABLE": 0,
+            "denominator": 65,
+            "measured": false
+          }
+        },
+        "stageWired": {
+          "TRUE": 0,
+          "FALSE": 65,
+          "UNKNOWN": 0,
+          "NOT_APPLICABLE": 0,
+          "denominator": 65,
+          "measured": true
+        },
+        "proposedOnly": {
+          "withCandidateSkills": 7,
+          "withCandidateToolAdapters": 7
+        }
+      },
+      {
+        "id": "CL09",
+        "kind": "CLUSTER",
+        "clusterId": null,
+        "roles": 55,
+        "layers": {
+          "DEFINED": {
+            "TRUE": 55,
+            "FALSE": 0,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 55,
+            "measured": true
+          },
+          "PROFILED": {
+            "TRUE": 0,
+            "FALSE": 55,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 55,
+            "measured": true
+          },
+          "KNOWLEDGE_READY": {
+            "TRUE": 0,
+            "FALSE": 55,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 55,
+            "measured": true
+          },
+          "TOOL_READY": {
+            "TRUE": 0,
+            "FALSE": 55,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 55,
+            "measured": true
+          },
+          "EXECUTABLE": {
+            "TRUE": 0,
+            "FALSE": 55,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 55,
+            "measured": true
+          },
+          "EVALUATED": {
+            "TRUE": 0,
+            "FALSE": 55,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 55,
+            "measured": true
+          },
+          "INTERNALLY_CERTIFIED": {
+            "TRUE": 0,
+            "FALSE": 55,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 55,
+            "measured": true
+          },
+          "RUNNING": {
+            "TRUE": 0,
+            "FALSE": 0,
+            "UNKNOWN": 55,
+            "NOT_APPLICABLE": 0,
+            "denominator": 55,
+            "measured": false
+          }
+        },
+        "stageWired": {
+          "TRUE": 0,
+          "FALSE": 55,
+          "UNKNOWN": 0,
+          "NOT_APPLICABLE": 0,
+          "denominator": 55,
+          "measured": true
+        },
+        "proposedOnly": {
+          "withCandidateSkills": 26,
+          "withCandidateToolAdapters": 10
+        }
+      },
+      {
+        "id": "CL10",
+        "kind": "CLUSTER",
+        "clusterId": null,
+        "roles": 16,
+        "layers": {
+          "DEFINED": {
+            "TRUE": 16,
+            "FALSE": 0,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 16,
+            "measured": true
+          },
+          "PROFILED": {
+            "TRUE": 0,
+            "FALSE": 16,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 16,
+            "measured": true
+          },
+          "KNOWLEDGE_READY": {
+            "TRUE": 0,
+            "FALSE": 16,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 16,
+            "measured": true
+          },
+          "TOOL_READY": {
+            "TRUE": 0,
+            "FALSE": 16,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 16,
+            "measured": true
+          },
+          "EXECUTABLE": {
+            "TRUE": 0,
+            "FALSE": 16,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 16,
+            "measured": true
+          },
+          "EVALUATED": {
+            "TRUE": 0,
+            "FALSE": 16,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 16,
+            "measured": true
+          },
+          "INTERNALLY_CERTIFIED": {
+            "TRUE": 0,
+            "FALSE": 16,
+            "UNKNOWN": 0,
+            "NOT_APPLICABLE": 0,
+            "denominator": 16,
+            "measured": true
+          },
+          "RUNNING": {
+            "TRUE": 0,
+            "FALSE": 0,
+            "UNKNOWN": 16,
+            "NOT_APPLICABLE": 0,
+            "denominator": 16,
+            "measured": false
+          }
+        },
+        "stageWired": {
+          "TRUE": 0,
+          "FALSE": 16,
+          "UNKNOWN": 0,
+          "NOT_APPLICABLE": 0,
+          "denominator": 16,
+          "measured": true
+        },
+        "proposedOnly": {
+          "withCandidateSkills": 1,
+          "withCandidateToolAdapters": 1
+        }
+      }
+    ],
+    "reasonCounts": {
+      "DEFINED": {},
+      "PROFILED": {
+        "NO_CANONICAL_SKILLS": 599,
+        "TECHNOLOGY_STATUS_NOT_PROMOTED": 599
+      },
+      "KNOWLEDGE_READY": {
+        "NO_RESEARCHED_SOURCED_UNIT": 599,
+        "ROLE_KNOWLEDGE_SOURCE_REFS_EMPTY": 599
+      },
+      "TOOL_READY": {
+        "ROLE_HAS_NO_BINDING": 590,
+        "ADAPTER_REALITY_NOT_SUPPLIED": 9
+      },
+      "EXECUTABLE": {
+        "ROLE_HAS_NO_BINDING": 590,
+        "ROUTE_NOT_PRODUCTION_EXECUTOR": 1,
+        "STAGE_NOT_CONSUMED": 1
+      },
+      "EVALUATED": {
+        "NO_SPEC_EXECUTED": 599
+      },
+      "INTERNALLY_CERTIFIED": {
+        "NOT_CERTIFIED_STATUS": 599
+      },
+      "RUNNING": {
+        "NO_RUN_JOURNAL": 599
+      },
+      "EXECUTABLE.stageWired": {
+        "NO_CODE_PATH": 591,
+        "REACHABLE_STAGES_NOT_SUPPLIED": 8
+      }
+    },
+    "proposedOnly": {
+      "source": "PROPOSED_DERIVED_NOT_RUNTIME",
+      "profiles": 599,
+      "withCandidateSkills": 197,
+      "withCandidateToolAdapters": 164
+    },
+    "inputs": {
+      "journal": "ABSENT",
+      "promotedTechnologyStatuses": "DEFAULT",
+      "adapterReality": "NOT_SUPPLIED",
+      "reachableStages": "NOT_SUPPLIED",
+      "backendEnabled": "UNKNOWN",
+      "roleDefinitionsSha256": "aaaac2dd2f58d967448e96358a70b9635f42079f5c52da046cea12570f979b0a",
+      "bindingsCount": 9,
+      "skillIds": 425,
+      "technologies": 415,
+      "knowledgeProfiles": 415
+    },
+    "anomalies": 0,
+    "computedAt": "2026-10-26T21:50:00.000Z",
+    "digest": "189d1c67214e24adf23f37502fa497afab1df2b7036cace92b4ae076f8ca89a7"
+  }
+}

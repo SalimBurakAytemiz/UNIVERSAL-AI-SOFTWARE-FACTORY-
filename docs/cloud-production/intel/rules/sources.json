@@ -1,0 +1,56 @@
+{
+  "//TR": "Motorun okuduğu kaynakların tek listesi: sabitlenmiş 19 Ekim envanter blob'ları, roadmap dosyaları, koordinatör kayıtları, kayıt defterleri ve tarih/hedef taraması için kontrol edilen kaynak kümesi (SRCSET-DATES-v1).",
+  "schemaVersion": "1.0.0",
+  "inventory": {
+    "jsonPath": "docs/inventory/2026-10-19/master-work-inventory.json",
+    "jsonBlob": "3240cf32ef34c54701fd3649a78c0e9f5f2cbcb3",
+    "csvPath": "docs/inventory/2026-10-19/master-work-inventory.csv",
+    "csvBlob": "bb712197a68c54b36cb06552e6250ee620da0dc0",
+    "dependencyMapPath": "docs/inventory/2026-10-19/dependency-map.json"
+  },
+  "roadmap": {
+    "graph": "roadmap/dependency-graph.json",
+    "contractsDir": "roadmap/contracts",
+    "waves": "roadmap/build-waves.json",
+    "criticalPath": "roadmap/critical-path.json",
+    "lanes": "roadmap/parallel-lanes.json",
+    "packages": "roadmap/review-packages.json",
+    "schedulerTemplate": "roadmap/scheduler-state.template.json",
+    "roadmapMd": "ROADMAP.md"
+  },
+  "coordinator": {
+    "queue": "docs/cloud-production/PRODUCTION-QUEUE.json",
+    "ledger": "docs/cloud-production/COORD-LEDGER.json",
+    "dispatchDir": "docs/cloud-production/dispatch"
+  },
+  "backlog": "docs/planning/BACKLOG_CHECKPOINT.json",
+  "lanesJson": "docs/planning/LANES.json",
+  "protectedPaths": "config/protected-paths.json",
+  "registries": {
+    "roleDefinitions": "registries/role-definitions.json",
+    "profiles": "registries/role-execution-profiles.json",
+    "toolAdapters": "registries/tool-adapters.json"
+  },
+  "routeSourceDir": "apps/control-api/src",
+  "ipcFileGlob": "apps/desktop",
+  "readinessArchivePaths": ["core", "registries", "knowledge"],
+  "attestationNamePattern": "phase-(\\d{3})-review-attestation\\.json$",
+  "wave0Input": "inputs/wave0-baseline.json",
+  "datesSourceSet": {
+    "id": "SRCSET-DATES-v1",
+    "v7": ["roadmap/dependency-graph.json", "roadmap/contracts/phase-000.json..phase-148.json", "roadmap/build-waves.json", "roadmap/critical-path.json", "roadmap/parallel-lanes.json", "roadmap/review-packages.json", "roadmap/scheduler-state.template.json", "ROADMAP.md", ".ai/MASTER_STATE.json", ".ai/CURRENT_MILESTONE.md", "docs/inventory/2026-10-19/*", "docs/inventory/2026-10-19/PRODUCTION_PLAN_TO_OCT31.md"],
+    "pinned": [{ "path": "docs/planning/UASCO_DESKTOP_DELIVERY_ETA_2026-10-15.md", "ref": "9dbb708" }],
+    "queue": ["docs/cloud-production/PRODUCTION-QUEUE.json", "docs/cloud-production/COORD-LEDGER.json", "docs/cloud-production/dispatch/*"],
+    "reports": ["docs/cloud-production/reports/<date>/HEARTBEAT-*.md", "docs/cloud-production/reports/PRODUCTION-LOG.md", "docs/cloud-production/reports/daily/*"]
+  },
+  "dateFieldCandidates": ["plannedStart", "plannedEnd", "start", "end", "due", "deadline", "targetDate", "eta", "startDate", "endDate"],
+  "targetScanFiles": [
+    { "ref": "v7", "path": "docs/inventory/2026-10-19/PRODUCTION_PLAN_TO_OCT31.md" },
+    { "ref": "v7", "path": ".ai/CURRENT_MILESTONE.md" },
+    { "ref": "v7", "path": "ROADMAP.md" },
+    { "ref": "9dbb708", "path": "docs/planning/UASCO_DESKTOP_DELIVERY_ETA_2026-10-15.md" },
+    { "ref": "queue", "path": "docs/cloud-production/PRODUCTION-QUEUE.json" },
+    { "ref": "reports", "path": "docs/cloud-production/reports/PRODUCTION-LOG.md" }
+  ],
+  "targetKeywordRegex": "ETA|target|deadline|hedef|teslim|milestone|\\bM[0-3]\\b|P50|P80|P95"
+}

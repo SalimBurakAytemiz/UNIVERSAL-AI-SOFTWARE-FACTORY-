@@ -1,0 +1,21 @@
+{
+  "//TR": "Ajan fabrikası (bölüm E) kaynakları ve eşlemeleri: hazırlık katmanları C-RDY-1 computeRoleReadiness ölçümünden gelir; kayıt defteri iddiaları ayrı sütunda 'kanıt değil' etiketiyle gösterilir. Resolver durumu git ls-tree ve onu import eden testlerden türetilir.",
+  "schemaVersion": "1.0.0",
+  "layers": ["DEFINED", "PROFILED", "KNOWLEDGE_READY", "TOOL_READY", "EXECUTABLE", "EVALUATED", "INTERNALLY_CERTIFIED", "RUNNING"],
+  "founderColumns": [
+    { "column": "defined", "layer": "DEFINED" },
+    { "column": "profiled", "layer": "PROFILED", "note": "599/599 FALSE while PROMOTED_TECHNOLOGY_STATUSES is empty (structural; pending FD-1 and FD-9)" },
+    { "column": "executable", "layer": "EXECUTABLE" },
+    { "column": "tested", "layer": null, "note": "C-RDY-1 has no such layer; planned source C-RDY-2a/2b" },
+    { "column": "evaluated", "layer": "EVALUATED" },
+    { "column": "certified", "layer": "INTERNALLY_CERTIFIED" }
+  ],
+  "resolvers": [
+    { "id": "CAPABILITY_RESOLVER", "path": "core/capabilities/resolver.ts", "symbol": "resolveCapability" },
+    { "id": "ROLE_EXECUTION_RESOLVER", "path": "core/agents/role-execution.ts", "symbol": "resolveRoleExecution" },
+    { "id": "ROLE_CONTEXT_RESOLVER", "path": "core/agents/role-context.ts", "symbol": "resolveRoleContext", "wave0Package": "C-CTX-1" }
+  ],
+  "testDir": "tests",
+  "readinessModule": "core/agents/readiness-audit.ts",
+  "readinessPr": 260
+}

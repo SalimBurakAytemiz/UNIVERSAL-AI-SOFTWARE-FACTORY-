@@ -1,0 +1,166 @@
+{
+  "//TR": "31 Ekim MVP zinciri: 9 adım, her biri kanıt yüklemleriyle. DONE yalnız kabul kanıtıyla olur; BLOCKED açık engelleyici PR veya açık karar varsa; IN_PROGRESS açık ilgili PR varsa; IMPLEMENTED_NOT_VERIFIED uygulama yüklemlerinin hepsi kanıtlıysa; aksi halde NOT_STARTED. Adım referansları v0 raporundaki (2026-10-26) mvp[] kayıtlarından alındı.",
+  "schemaVersion": "1.0.0",
+  "steps": [
+    {
+      "id": "DESKTOP_INSTALLER",
+      "label": "Desktop (installer, ilk açılış)",
+      "implementedWhen": [
+        {
+          "workflowSuccess": {
+            "name": "Windows Installer",
+            "branch": "v7/integration",
+            "event": "push"
+          }
+        }
+      ],
+      "openItems": [
+        {
+          "id": "WIN-JOURNEY-E2E",
+          "openWhilePathAbsent": ".github/workflows/desktop-journey-e2e.yml"
+        },
+        {
+          "id": "SIGNING",
+          "text": "Founder publisher credential"
+        }
+      ],
+      "acceptanceKey": "MVP_DESKTOP_INSTALLER"
+    },
+    {
+      "id": "IDEA_INTAKE",
+      "label": "Fikir alma (idea intake)",
+      "implementedWhen": [
+        {
+          "prMerged": [
+            255
+          ]
+        }
+      ],
+      "openItems": [],
+      "acceptanceKey": "MVP_IDEA_INTAKE"
+    },
+    {
+      "id": "ANALYSIS",
+      "label": "Analiz",
+      "implementedWhen": [
+        {
+          "prMerged": [
+            229
+          ]
+        }
+      ],
+      "openItems": [
+        {
+          "id": "#242",
+          "openWhilePrOpen": 242
+        }
+      ],
+      "acceptanceKey": "MVP_ANALYSIS"
+    },
+    {
+      "id": "REAL_CLAUDE_EXECUTION",
+      "label": "Gerçek Claude yürütmesi",
+      "implementedWhen": [],
+      "blockedWhen": [
+        {
+          "prOpen": [
+            231
+          ]
+        },
+        {
+          "decisionTextOpen": "UASCO-AUD-005"
+        }
+      ],
+      "openItems": [
+        {
+          "id": "#231",
+          "openWhilePrOpen": 231
+        },
+        {
+          "id": "UASCO-AUD-005",
+          "text": "sandbox substrate (Founder)"
+        }
+      ],
+      "acceptanceKey": "MVP_REAL_CLAUDE_EXECUTION"
+    },
+    {
+      "id": "REAL_CODE",
+      "label": "Gerçek kod",
+      "implementedWhen": [],
+      "blockedWhen": [
+        {
+          "stepBlocked": "REAL_CLAUDE_EXECUTION"
+        }
+      ],
+      "openItems": [],
+      "acceptanceKey": "MVP_REAL_CODE"
+    },
+    {
+      "id": "TESTS",
+      "label": "Testler",
+      "implementedWhen": [
+        {
+          "prMerged": [
+            253
+          ]
+        }
+      ],
+      "openItems": [],
+      "acceptanceKey": "MVP_TESTS"
+    },
+    {
+      "id": "REVIEW",
+      "label": "İnceleme (review)",
+      "implementedWhen": [
+        {
+          "prMerged": [
+            256
+          ]
+        }
+      ],
+      "inProgressWhen": [
+        {
+          "prOpen": [
+            256
+          ]
+        }
+      ],
+      "openItems": [],
+      "acceptanceKey": "MVP_REVIEW"
+    },
+    {
+      "id": "GITHUB_DELIVERY",
+      "label": "GitHub teslimi",
+      "implementedWhen": [
+        {
+          "prMerged": [
+            143
+          ]
+        }
+      ],
+      "openItems": [
+        {
+          "id": "REAL-DELIVERY-RUN",
+          "text": "kayıtlı gerçek GitHub teslimi yok"
+        }
+      ],
+      "acceptanceKey": "MVP_GITHUB_DELIVERY"
+    },
+    {
+      "id": "WORKING_DELIVERABLE",
+      "label": "Çalışan teslimat",
+      "implementedWhen": [
+        {
+          "itemsAccepted": 1
+        }
+      ],
+      "openItems": [
+        {
+          "id": "FIRST-PRODUCT-ACCEPTANCE",
+          "text": "PRODUCT_VERIFIED kalem yok"
+        }
+      ],
+      "acceptanceKey": "MVP_WORKING_DELIVERABLE"
+    }
+  ]
+}

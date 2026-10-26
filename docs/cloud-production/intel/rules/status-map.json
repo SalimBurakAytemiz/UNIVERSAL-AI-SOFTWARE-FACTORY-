@@ -1,0 +1,36 @@
+{
+  "//TR": "Durum eşlemeleri veri olarak: 19 Ekim durumu -> kanonik (v0 MAP, donduruldu), kuyruk/backlog/teslimat durumları -> kanonik. Kanıtsız ilerleme iddiaları (progressClaim) UNKNOWN'a düşer; ilerleme olmadığını söyleyen kayıtlar korunur ama STALE işaretlenir.",
+  "schemaVersion": "1.0.0",
+  "canonicalStatuses": ["COMPLETED_AND_VERIFIED", "MERGED_NOT_VERIFIED", "IMPLEMENTED_NOT_MERGED", "FOUNDER_ACTION_REQUIRED", "BLOCKED", "IN_PROGRESS", "QUEUED", "NOT_STARTED", "UNKNOWN", "OBSOLETE"],
+  "baselineV0Map": {
+    "AUTHORITY_REQUIRED": "FOUNDER_ACTION_REQUIRED", "BLOCKED": "BLOCKED", "NOT_STARTED": "NOT_STARTED", "DESIGN_ONLY": "NOT_STARTED",
+    "IN_PROGRESS": "IN_PROGRESS", "OBSOLETE": "OBSOLETE", "DUPLICATE": "DUPLICATE", "INTEGRATED_NOT_VERIFIED": "MERGED_NOT_VERIFIED",
+    "MERGED_NOT_INTEGRATED": "MERGED_NOT_VERIFIED", "IMPLEMENTED_NOT_TESTED": "IMPLEMENTED_NOT_MERGED", "PENDING_CI": "UNKNOWN", "PENDING_REVIEW": "UNKNOWN"
+  },
+  "baselineMergedClaim": ["INTEGRATED_NOT_VERIFIED", "MERGED_NOT_INTEGRATED"],
+  "baselineNonProgress": ["AUTHORITY_REQUIRED", "NOT_STARTED", "DESIGN_ONLY", "BLOCKED"],
+  "baselineProgressClaim": ["IN_PROGRESS", "IMPLEMENTED_NOT_TESTED", "PENDING_CI", "PENDING_REVIEW"],
+  "queueMap": {
+    "QUEUED": "QUEUED", "WAITING_BASE": "QUEUED", "REPAIR_QUEUED": "QUEUED",
+    "CLAIMED": "IN_PROGRESS", "IN_PROGRESS": "IN_PROGRESS",
+    "CODE_IMPLEMENTED": "IMPLEMENTED_NOT_MERGED", "TESTED": "IMPLEMENTED_NOT_MERGED",
+    "INTEGRATED": "MERGED_NOT_VERIFIED", "PRODUCT_ACCEPTED": "COMPLETED_AND_VERIFIED",
+    "BLOCKED": "BLOCKED", "FOUNDER_QUEUE": "FOUNDER_ACTION_REQUIRED", "REVIEW_REJECTED": "IN_PROGRESS"
+  },
+  "queueNeedsEvidence": { "INTEGRATED": "PR_MERGE", "PRODUCT_ACCEPTED": "ACCEPTANCE", "CODE_IMPLEMENTED": "PR_OR_BRANCH", "TESTED": "PR_OR_BRANCH" },
+  "queueBlockedStates": ["BLOCKED", "FOUNDER_QUEUE", "REVIEW_REJECTED"],
+  "queueFinalStates": ["INTEGRATED", "PRODUCT_ACCEPTED"],
+  "backlogMap": { "READY": "QUEUED", "AUTHORITY_REQUIRED": "FOUNDER_ACTION_REQUIRED", "BLOCKED": "BLOCKED", "DRAFT_NOT_READY": "NOT_STARTED" },
+  "backlogStatusOnly": ["DONE", "COMPLETED", "IN_REVIEW"],
+  "deliverableTestedStates": ["TESTED", "TESTED_BRANCH_ONLY", "VERIFIED", "BUILDER_REPORTED"],
+  "deliverableAuthorityStates": ["AUTHORITY_REQUEST"],
+  "deliverableInProgressStates": ["IN_PROGRESS"],
+  "progressClaim": ["MERGED_NOT_VERIFIED", "IMPLEMENTED_NOT_MERGED", "IN_PROGRESS", "COMPLETED_AND_VERIFIED"],
+  "executorMap": [
+    { "re": "^\\s*Founder", "value": "FOUNDER" },
+    { "re": "implementer|builder", "value": "CLOUD_IMPLEMENTER" },
+    { "re": "supervisor|verifier", "value": "SUPERVISOR" },
+    { "re": "runner|\\bCI\\b", "value": "CI" }
+  ],
+  "fakeExecutorMarkers": ["FAKE", "FakeExecutors", "FAKE executor"]
+}

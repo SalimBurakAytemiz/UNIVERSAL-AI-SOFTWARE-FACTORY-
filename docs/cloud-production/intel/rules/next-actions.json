@@ -1,0 +1,21 @@
+{
+  "//TR": "Yarının yürütme planı (bölüm H) için deterministik sıralama ve eylem metni şablonları. Sıra: kritik yol, MVP zinciri kapı sırası, öncelik P0..P3, önce engelsiz, sonra id.",
+  "schemaVersion": "1.0.0",
+  "order": ["criticalPath", "mvpGate", "priority", "blockerFree", "id"],
+  "priorityOrder": ["P0", "P1", "P2", "P3"],
+  "lanes": ["A", "B", "C", "COORD"],
+  "templates": {
+    "MERGED_NOT_VERIFIED": "{id}: entegre (PR {prs}); gerçek çalıştırma ve ürün kabul kanıtı üret",
+    "IMPLEMENTED_NOT_MERGED": "{id}: açık PR/dal {prs}; CI + bağımsız inceleme + merge-gate",
+    "FOUNDER_ACTION_REQUIRED": "{id}: Founder kararı gerekli ({decision})",
+    "BLOCKED": "{id}: engeli kaldır ({blockers})",
+    "IN_PROGRESS": "{id}: devam eden işi tamamla ({prs})",
+    "QUEUED": "{id}: lane {lane} sıradaki görev olarak al",
+    "NOT_STARTED": "{id}: kapsam/tasarım paketi hazırla",
+    "UNKNOWN": "{id}: kanıt topla ({missing})",
+    "COMPLETED_AND_VERIFIED": "{id}: tamamlandı (kabul kanıtı var)",
+    "OBSOLETE": "{id}: kapsam dışı"
+  },
+  "verificationLane": { "id": "VERIFY", "template": "{id}: kabul kontrolü (MERGED_NOT_VERIFIED, MVP) — PR {prs}", "topN": 10 },
+  "decisionTemplate": "{id}: Founder kararı, {ageHours} saattir açık: {text}"
+}

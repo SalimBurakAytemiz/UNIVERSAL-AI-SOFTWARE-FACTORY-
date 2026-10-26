@@ -1,0 +1,5 @@
+{
+  "//TR": "Koordinatörün elle uzlaştırma kararları (tek elle girdi). Her kayıt itemId, action (LINK|UNLINK|SCOPE|DEPARTMENT|OBSOLETE|ALIAS|ACCEPTANCE|DECISION_STATE), value, reason, by, at ve gerektiğinde evidenceRef taşır. Gerekçesi/yazarı/zamanı eksik kayıt reddedilir; ACCEPTANCE yalnız var olan ve FAKE yürütücüye ait olmayan bir git blob'u/commit'i gösterirse kabul edilir. Reddedilenler bölüm J'de listelenir.",
+  "schemaVersion": "1.0.0",
+  "entries": []
+}

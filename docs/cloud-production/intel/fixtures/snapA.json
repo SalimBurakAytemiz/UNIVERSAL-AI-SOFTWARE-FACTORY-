@@ -1,0 +1,9 @@
+{
+  "//TR": "Geçmiş farkı kanıtı (P4) için anlık görüntü A; snapB ile bilinen farklar: X-3 çıkarıldı, X-4 eklendi, X-1 durum + integrated değişti, X-2 bağlantı sayısı değişti, metrik integrated 1->2, unknown 2->1.",
+  "items": [
+    { "id": "X-1", "status": "UNKNOWN", "reconClass": "STATUS_ONLY_UNVERIFIED", "scope": "MVP", "department": "DESKTOP_UX", "substeps": { "coded": "UNKNOWN", "integrated": "UNKNOWN", "tested": "UNKNOWN", "runtimeVerified": "FALSE", "accepted": "FALSE" }, "links": [] },
+    { "id": "X-2", "status": "MERGED_NOT_VERIFIED", "reconClass": "EXPLICIT_PR_MERGED_ALL", "scope": "FULL", "department": "BACKEND_API", "substeps": { "coded": "TRUE", "integrated": "TRUE", "tested": "TRUE", "runtimeVerified": "FALSE", "accepted": "FALSE" }, "links": ["L-a"] },
+    { "id": "X-3", "status": "NOT_STARTED", "reconClass": "STALE_NO_EVIDENCE_NONPROGRESS", "scope": "FULL", "department": "UNASSIGNED", "substeps": { "coded": "FALSE", "integrated": "FALSE", "tested": "FALSE", "runtimeVerified": "FALSE", "accepted": "FALSE" }, "links": [] }
+  ],
+  "metrics": { "integrated": 1, "unknown": 2, "liveBaseline": 3 }
+}

@@ -1,0 +1,833 @@
+{
+  "//TR": "v0 reports/local/UASCO_REMAINING_WORK.json (2026-10-26T20:05:49Z) anahtar yolları ve tipleri; Intel V1 raporu bunların hepsini aynı tiple korumalıdır (byStatus altındaki dinamik durum anahtarları hariç).",
+  "source": {
+    "generatedAt": "2026-10-26T20:05:49.328Z",
+    "fingerprint": "b0dc9a800c1c62d7e4f28e6889bb62ffafcab20f463b4c1c90717137e677f93b"
+  },
+  "keyPaths": [
+    {
+      "path": "generatedAt",
+      "type": "string"
+    },
+    {
+      "path": "generatedAtTRT",
+      "type": "string"
+    },
+    {
+      "path": "fingerprint",
+      "type": "string"
+    },
+    {
+      "path": "inputs",
+      "type": "object"
+    },
+    {
+      "path": "inputs.baseSha",
+      "type": "string"
+    },
+    {
+      "path": "inputs.queueSha",
+      "type": "string"
+    },
+    {
+      "path": "inputs.inventoryBlob",
+      "type": "string"
+    },
+    {
+      "path": "inputs.wave0",
+      "type": "string"
+    },
+    {
+      "path": "githubCalls",
+      "type": "number"
+    },
+    {
+      "path": "totals",
+      "type": "object"
+    },
+    {
+      "path": "totals.note",
+      "type": "string"
+    },
+    {
+      "path": "totals.allWorkDimensions",
+      "type": "object"
+    },
+    {
+      "path": "totals.allWorkDimensions.rows",
+      "type": "number"
+    },
+    {
+      "path": "totals.allWorkDimensions.unique",
+      "type": "number"
+    },
+    {
+      "path": "totals.allWorkDimensions.live",
+      "type": "number"
+    },
+    {
+      "path": "totals.allWorkDimensions.byStatus",
+      "type": "object"
+    },
+    {
+      "path": "totals.allWorkDimensions.verifiedCompleted",
+      "type": "number"
+    },
+    {
+      "path": "totals.allWorkDimensions.remainingIncludingVerification",
+      "type": "number"
+    },
+    {
+      "path": "totals.allWorkDimensions.mergedNotVerified",
+      "type": "number"
+    },
+    {
+      "path": "totals.allWorkDimensions.stale",
+      "type": "number"
+    },
+    {
+      "path": "totals.allWorkDimensions.mvpScope_AT_RISK",
+      "type": "number"
+    },
+    {
+      "path": "totals.allWorkDimensions.deferrable_NOT_DELIVERABLE_or_NONE",
+      "type": "number"
+    },
+    {
+      "path": "totals.uniqueTasks_PT",
+      "type": "object"
+    },
+    {
+      "path": "totals.uniqueTasks_PT.rows",
+      "type": "number"
+    },
+    {
+      "path": "totals.uniqueTasks_PT.unique",
+      "type": "number"
+    },
+    {
+      "path": "totals.uniqueTasks_PT.live",
+      "type": "number"
+    },
+    {
+      "path": "totals.uniqueTasks_PT.byStatus",
+      "type": "object"
+    },
+    {
+      "path": "totals.uniqueTasks_PT.verifiedCompleted",
+      "type": "number"
+    },
+    {
+      "path": "totals.uniqueTasks_PT.remainingIncludingVerification",
+      "type": "number"
+    },
+    {
+      "path": "totals.uniqueTasks_PT.mergedNotVerified",
+      "type": "number"
+    },
+    {
+      "path": "totals.uniqueTasks_PT.stale",
+      "type": "number"
+    },
+    {
+      "path": "totals.uniqueTasks_PT.mvpScope_AT_RISK",
+      "type": "number"
+    },
+    {
+      "path": "totals.uniqueTasks_PT.deferrable_NOT_DELIVERABLE_or_NONE",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension",
+      "type": "object"
+    },
+    {
+      "path": "totals.byDimension.screens",
+      "type": "object"
+    },
+    {
+      "path": "totals.byDimension.screens.rows",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.screens.unique",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.screens.live",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.screens.byStatus",
+      "type": "object"
+    },
+    {
+      "path": "totals.byDimension.screens.verifiedCompleted",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.screens.remainingIncludingVerification",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.screens.mergedNotVerified",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.screens.stale",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.screens.mvpScope_AT_RISK",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.screens.deferrable_NOT_DELIVERABLE_or_NONE",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.workspaces",
+      "type": "object"
+    },
+    {
+      "path": "totals.byDimension.workspaces.rows",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.workspaces.unique",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.workspaces.live",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.workspaces.byStatus",
+      "type": "object"
+    },
+    {
+      "path": "totals.byDimension.workspaces.verifiedCompleted",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.workspaces.remainingIncludingVerification",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.workspaces.mergedNotVerified",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.workspaces.stale",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.workspaces.mvpScope_AT_RISK",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.workspaces.deferrable_NOT_DELIVERABLE_or_NONE",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.ux-decisions",
+      "type": "object"
+    },
+    {
+      "path": "totals.byDimension.ux-decisions.rows",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.ux-decisions.unique",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.ux-decisions.live",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.ux-decisions.byStatus",
+      "type": "object"
+    },
+    {
+      "path": "totals.byDimension.ux-decisions.verifiedCompleted",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.ux-decisions.remainingIncludingVerification",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.ux-decisions.mergedNotVerified",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.ux-decisions.stale",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.ux-decisions.mvpScope_AT_RISK",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.ux-decisions.deferrable_NOT_DELIVERABLE_or_NONE",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.phases",
+      "type": "object"
+    },
+    {
+      "path": "totals.byDimension.phases.rows",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.phases.unique",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.phases.live",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.phases.byStatus",
+      "type": "object"
+    },
+    {
+      "path": "totals.byDimension.phases.verifiedCompleted",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.phases.remainingIncludingVerification",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.phases.mergedNotVerified",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.phases.stale",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.phases.mvpScope_AT_RISK",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.phases.deferrable_NOT_DELIVERABLE_or_NONE",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.labs",
+      "type": "object"
+    },
+    {
+      "path": "totals.byDimension.labs.rows",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.labs.unique",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.labs.live",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.labs.byStatus",
+      "type": "object"
+    },
+    {
+      "path": "totals.byDimension.labs.verifiedCompleted",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.labs.remainingIncludingVerification",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.labs.mergedNotVerified",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.labs.stale",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.labs.mvpScope_AT_RISK",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.labs.deferrable_NOT_DELIVERABLE_or_NONE",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.endpoints",
+      "type": "object"
+    },
+    {
+      "path": "totals.byDimension.endpoints.rows",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.endpoints.unique",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.endpoints.live",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.endpoints.byStatus",
+      "type": "object"
+    },
+    {
+      "path": "totals.byDimension.endpoints.verifiedCompleted",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.endpoints.remainingIncludingVerification",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.endpoints.mergedNotVerified",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.endpoints.stale",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.endpoints.mvpScope_AT_RISK",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.endpoints.deferrable_NOT_DELIVERABLE_or_NONE",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.data-persistence",
+      "type": "object"
+    },
+    {
+      "path": "totals.byDimension.data-persistence.rows",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.data-persistence.unique",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.data-persistence.live",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.data-persistence.byStatus",
+      "type": "object"
+    },
+    {
+      "path": "totals.byDimension.data-persistence.verifiedCompleted",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.data-persistence.remainingIncludingVerification",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.data-persistence.mergedNotVerified",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.data-persistence.stale",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.data-persistence.mvpScope_AT_RISK",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.data-persistence.deferrable_NOT_DELIVERABLE_or_NONE",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.tasks",
+      "type": "object"
+    },
+    {
+      "path": "totals.byDimension.tasks.rows",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.tasks.unique",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.tasks.live",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.tasks.byStatus",
+      "type": "object"
+    },
+    {
+      "path": "totals.byDimension.tasks.verifiedCompleted",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.tasks.remainingIncludingVerification",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.tasks.mergedNotVerified",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.tasks.stale",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.tasks.mvpScope_AT_RISK",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.tasks.deferrable_NOT_DELIVERABLE_or_NONE",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.requirement-sets",
+      "type": "object"
+    },
+    {
+      "path": "totals.byDimension.requirement-sets.rows",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.requirement-sets.unique",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.requirement-sets.live",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.requirement-sets.byStatus",
+      "type": "object"
+    },
+    {
+      "path": "totals.byDimension.requirement-sets.verifiedCompleted",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.requirement-sets.remainingIncludingVerification",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.requirement-sets.mergedNotVerified",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.requirement-sets.stale",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.requirement-sets.mvpScope_AT_RISK",
+      "type": "number"
+    },
+    {
+      "path": "totals.byDimension.requirement-sets.deferrable_NOT_DELIVERABLE_or_NONE",
+      "type": "number"
+    },
+    {
+      "path": "totals.VERIFIED_REMAINING",
+      "type": "string"
+    },
+    {
+      "path": "totals.KNOWN_OPEN_WORK",
+      "type": "object"
+    },
+    {
+      "path": "totals.KNOWN_OPEN_WORK.openPrs",
+      "type": "number"
+    },
+    {
+      "path": "totals.KNOWN_OPEN_WORK.coordinatorWave0Packages",
+      "type": "number"
+    },
+    {
+      "path": "totals.KNOWN_OPEN_WORK.mvpCriticalItems",
+      "type": "number"
+    },
+    {
+      "path": "totals.UNRECONCILED_WORK",
+      "type": "number"
+    },
+    {
+      "path": "totals.VERIFICATION_PENDING_MERGED",
+      "type": "number"
+    },
+    {
+      "path": "lanes",
+      "type": "array"
+    },
+    {
+      "path": "lanes[].lane",
+      "type": "string"
+    },
+    {
+      "path": "lanes[].mergedPrs",
+      "type": "number"
+    },
+    {
+      "path": "lanes[].openPrs",
+      "type": "array"
+    },
+    {
+      "path": "lanes[].ciFailed",
+      "type": "array"
+    },
+    {
+      "path": "lanes[].founder",
+      "type": "array"
+    },
+    {
+      "path": "openPrs",
+      "type": "array"
+    },
+    {
+      "path": "openPrs[].number",
+      "type": "number"
+    },
+    {
+      "path": "openPrs[].lane",
+      "type": "string"
+    },
+    {
+      "path": "openPrs[].title",
+      "type": "string"
+    },
+    {
+      "path": "openPrs[].head",
+      "type": "string"
+    },
+    {
+      "path": "openPrs[].draft",
+      "type": "boolean"
+    },
+    {
+      "path": "openPrs[].autoMerge",
+      "type": "boolean"
+    },
+    {
+      "path": "openPrs[].ci",
+      "type": "string"
+    },
+    {
+      "path": "openPrs[].ubuntu",
+      "type": "string"
+    },
+    {
+      "path": "openPrs[].windows",
+      "type": "string"
+    },
+    {
+      "path": "openPrs[].protectedFiles",
+      "type": "number"
+    },
+    {
+      "path": "openPrs[].founder",
+      "type": "boolean"
+    },
+    {
+      "path": "openPrs[].url",
+      "type": "string"
+    },
+    {
+      "path": "mvp",
+      "type": "array"
+    },
+    {
+      "path": "mvp[].step",
+      "type": "string"
+    },
+    {
+      "path": "mvp[].status",
+      "type": "string"
+    },
+    {
+      "path": "mvp[].evidence",
+      "type": "string"
+    },
+    {
+      "path": "mvp[].open",
+      "type": "array"
+    },
+    {
+      "path": "mvpCritical",
+      "type": "array"
+    },
+    {
+      "path": "fullScope",
+      "type": "object"
+    },
+    {
+      "path": "fullScope.canonicalRoles",
+      "type": "number"
+    },
+    {
+      "path": "fullScope.guilds",
+      "type": "number"
+    },
+    {
+      "path": "fullScope.executableRoles_bound",
+      "type": "number"
+    },
+    {
+      "path": "fullScope.runningRoles",
+      "type": "string"
+    },
+    {
+      "path": "fullScope.certifiedRoles",
+      "type": "number"
+    },
+    {
+      "path": "fullScope.evaluationSpecs",
+      "type": "number"
+    },
+    {
+      "path": "fullScope.evaluationSpecsExecuted",
+      "type": "number"
+    },
+    {
+      "path": "fullScope.gapIds",
+      "type": "number"
+    },
+    {
+      "path": "fullScope.toolAdapters",
+      "type": "number"
+    },
+    {
+      "path": "fullScope.toolAdaptersImplemented_perWave0",
+      "type": "number"
+    },
+    {
+      "path": "fullScope.resolvers",
+      "type": "string"
+    },
+    {
+      "path": "fullScope.continuousLearning",
+      "type": "string"
+    },
+    {
+      "path": "fullScope.wave0PackagesPlanned",
+      "type": "number"
+    },
+    {
+      "path": "coverage",
+      "type": "object"
+    },
+    {
+      "path": "coverage.mvpStepsDone",
+      "type": "string"
+    },
+    {
+      "path": "coverage.roleProfileCoverage_bound",
+      "type": "number"
+    },
+    {
+      "path": "coverage.roleCandidateSkills_proposed",
+      "type": "number"
+    },
+    {
+      "path": "coverage.toolExecutionCoverage",
+      "type": "number"
+    },
+    {
+      "path": "coverage.evaluationCoverage",
+      "type": "number"
+    },
+    {
+      "path": "coverage.desktopFunctionalAcceptance",
+      "type": "string"
+    },
+    {
+      "path": "oct31Risk",
+      "type": "string"
+    },
+    {
+      "path": "eta",
+      "type": "string"
+    },
+    {
+      "path": "founder",
+      "type": "array"
+    },
+    {
+      "path": "founder[].pr",
+      "type": "number"
+    },
+    {
+      "path": "founder[].ci",
+      "type": "string"
+    },
+    {
+      "path": "founder[].protectedFiles",
+      "type": "number"
+    },
+    {
+      "path": "founder[].action",
+      "type": "string"
+    },
+    {
+      "path": "founder[].url",
+      "type": "string"
+    },
+    {
+      "path": "founderQueueRecords",
+      "type": "number"
+    },
+    {
+      "path": "ledger",
+      "type": "object"
+    },
+    {
+      "path": "ledger.reviews",
+      "type": "number"
+    },
+    {
+      "path": "ledger.prs",
+      "type": "number"
+    },
+    {
+      "path": "mergesRecordedToday",
+      "type": "number"
+    },
+    {
+      "path": "lastPush",
+      "type": "object"
+    },
+    {
+      "path": "lastPush.ci",
+      "type": "string"
+    },
+    {
+      "path": "lastPush.installer",
+      "type": "string"
+    },
+    {
+      "path": "wave0Packages",
+      "type": "array"
+    },
+    {
+      "path": "wave0Packages[].id",
+      "type": "string"
+    },
+    {
+      "path": "wave0Packages[].priority",
+      "type": "string"
+    },
+    {
+      "path": "wave0Packages[].title",
+      "type": "string"
+    }
+  ]
+}

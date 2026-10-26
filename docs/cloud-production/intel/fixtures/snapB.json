@@ -1,0 +1,9 @@
+{
+  "//TR": "Geçmiş farkı kanıtı (P4) için anlık görüntü B (snapA'ya göre bilinen farklar için snapA.json //TR satırına bakın).",
+  "items": [
+    { "id": "X-2", "status": "MERGED_NOT_VERIFIED", "reconClass": "EXPLICIT_PR_MERGED_ALL", "scope": "FULL", "department": "BACKEND_API", "substeps": { "coded": "TRUE", "integrated": "TRUE", "tested": "TRUE", "runtimeVerified": "FALSE", "accepted": "FALSE" }, "links": ["L-a", "L-b"] },
+    { "id": "X-1", "status": "MERGED_NOT_VERIFIED", "reconClass": "CORROBORATED_BY_PR", "scope": "MVP", "department": "DESKTOP_UX", "substeps": { "coded": "TRUE", "integrated": "TRUE", "tested": "UNKNOWN", "runtimeVerified": "FALSE", "accepted": "FALSE" }, "links": ["L-c"] },
+    { "id": "X-4", "status": "QUEUED", "reconClass": "ADDED_QUEUE", "scope": "FULL", "department": "UNASSIGNED", "substeps": { "coded": "FALSE", "integrated": "FALSE", "tested": "FALSE", "runtimeVerified": "FALSE", "accepted": "FALSE" }, "links": [] }
+  ],
+  "metrics": { "integrated": 2, "unknown": 1, "liveBaseline": 3 }
+}

@@ -1,0 +1,408 @@
+{
+  "//TR": "BL-2026-10-26 v0 çapası için PR #1..#50 durumları (state, merged_at, merge_commit_sha, base) ve merge commit v7/integration atası mı. Kaynak: GitHub pulls?state=all, 2026-10-26 (bu PRlar kapalı; durumları değişmez).",
+  "schemaVersion": "1.0.0",
+  "fetchedAt": "2026-10-26T21:50:00.000Z",
+  "v7Sha": "459205ca73890760015662bdbc7e4ee9b920bf86",
+  "prs": [
+    {
+      "number": 1,
+      "state": "closed",
+      "mergedAt": "2026-10-17T07:38:40Z",
+      "mergeCommitSha": "da2285cce544ba6d46ac21a1b3a86f2a633f8984",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 2,
+      "state": "closed",
+      "mergedAt": "2026-10-17T07:17:49Z",
+      "mergeCommitSha": "e8ec4421fc2d3f5e6c5d43d33c21ddc2d2217ff6",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 3,
+      "state": "closed",
+      "mergedAt": "2026-10-17T09:53:35Z",
+      "mergeCommitSha": "25ddda5e8b47f9b82c453863f182efb2025441ef",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 4,
+      "state": "closed",
+      "mergedAt": "2026-10-17T11:50:23Z",
+      "mergeCommitSha": "232d2b4bbeb4006d88b43d694ee932215155c5c4",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 5,
+      "state": "closed",
+      "mergedAt": "2026-10-17T16:17:05Z",
+      "mergeCommitSha": "5cb44cdf1717ddeaba04526c18ccbb4bbfca0d32",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 6,
+      "state": "closed",
+      "mergedAt": "2026-10-17T17:27:33Z",
+      "mergeCommitSha": "a5e2a68c4c31fbfa71346992650d4deb91a4d791",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 7,
+      "state": "closed",
+      "mergedAt": "2026-10-17T19:02:15Z",
+      "mergeCommitSha": "cd4b104e3e2f0d133d879cb47f67f99531a638f0",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 8,
+      "state": "closed",
+      "mergedAt": null,
+      "mergeCommitSha": null,
+      "base": "v7/integration",
+      "mergeCommitInV7": false
+    },
+    {
+      "number": 9,
+      "state": "closed",
+      "mergedAt": "2026-10-18T04:38:25Z",
+      "mergeCommitSha": "55bcede305b9651fbafc0020d66bc8edc7160042",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 10,
+      "state": "closed",
+      "mergedAt": "2026-10-18T05:09:33Z",
+      "mergeCommitSha": "e12dbdd69c7b0c34dc71209be9d003e0125a17c0",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 11,
+      "state": "closed",
+      "mergedAt": null,
+      "mergeCommitSha": "40e062d47efdbad0ed857346bcefc446a3538ecb",
+      "base": "v7/integration",
+      "mergeCommitInV7": false
+    },
+    {
+      "number": 12,
+      "state": "closed",
+      "mergedAt": "2026-10-19T20:49:24Z",
+      "mergeCommitSha": "d38f87c8b785034c5a82695acb633855099d68fc",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 13,
+      "state": "closed",
+      "mergedAt": null,
+      "mergeCommitSha": "d4f6a13b5a71157b0cac96c34a5f6c3c1c5edf62",
+      "base": "v7/integration",
+      "mergeCommitInV7": false
+    },
+    {
+      "number": 14,
+      "state": "closed",
+      "mergedAt": null,
+      "mergeCommitSha": "34b679c92d1fe7ffbf26d4eb4c67ad1feeff74d7",
+      "base": "v7/integration",
+      "mergeCommitInV7": false
+    },
+    {
+      "number": 15,
+      "state": "closed",
+      "mergedAt": "2026-10-20T09:10:08Z",
+      "mergeCommitSha": "0ac765f7a9db59981d88d75fe31228d5ebfbc1ec",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 16,
+      "state": "closed",
+      "mergedAt": "2026-10-19T16:55:29Z",
+      "mergeCommitSha": "708738a5369bbc4b7e4fcd449d8cf54cc9d5c4fc",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 17,
+      "state": "closed",
+      "mergedAt": "2026-10-19T19:54:35Z",
+      "mergeCommitSha": "1128c15c8a2448bb5334f03d5da308230033f437",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 18,
+      "state": "closed",
+      "mergedAt": "2026-10-19T15:04:57Z",
+      "mergeCommitSha": "5bf4c1c3516c001c9078562084ddff05b732897e",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 19,
+      "state": "closed",
+      "mergedAt": "2026-10-19T22:48:26Z",
+      "mergeCommitSha": "d2ba4f07825a3b66ae5d69f0493a7583bf4f6775",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 20,
+      "state": "closed",
+      "mergedAt": "2026-10-20T01:51:49Z",
+      "mergeCommitSha": "052077a3c8fc5708a3f545d38b1413259dc23e1e",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 21,
+      "state": "closed",
+      "mergedAt": "2026-10-19T22:48:25Z",
+      "mergeCommitSha": "d2ba4f07825a3b66ae5d69f0493a7583bf4f6775",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 22,
+      "state": "closed",
+      "mergedAt": "2026-10-20T01:51:49Z",
+      "mergeCommitSha": "052077a3c8fc5708a3f545d38b1413259dc23e1e",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 23,
+      "state": "closed",
+      "mergedAt": null,
+      "mergeCommitSha": null,
+      "base": "v7/integration",
+      "mergeCommitInV7": false
+    },
+    {
+      "number": 24,
+      "state": "closed",
+      "mergedAt": "2026-10-19T22:48:25Z",
+      "mergeCommitSha": "d2ba4f07825a3b66ae5d69f0493a7583bf4f6775",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 25,
+      "state": "closed",
+      "mergedAt": "2026-10-19T22:48:25Z",
+      "mergeCommitSha": "d2ba4f07825a3b66ae5d69f0493a7583bf4f6775",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 26,
+      "state": "closed",
+      "mergedAt": "2026-10-19T22:48:25Z",
+      "mergeCommitSha": "d2ba4f07825a3b66ae5d69f0493a7583bf4f6775",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 27,
+      "state": "closed",
+      "mergedAt": "2026-10-20T01:51:48Z",
+      "mergeCommitSha": "052077a3c8fc5708a3f545d38b1413259dc23e1e",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 28,
+      "state": "closed",
+      "mergedAt": null,
+      "mergeCommitSha": null,
+      "base": "v7/integration",
+      "mergeCommitInV7": false
+    },
+    {
+      "number": 29,
+      "state": "closed",
+      "mergedAt": "2026-10-19T17:41:33Z",
+      "mergeCommitSha": "1372526357e736fa198ff6ae4c4120e125f80a12",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 30,
+      "state": "closed",
+      "mergedAt": null,
+      "mergeCommitSha": "8f6e2296b0e13978f260399964b0a412eea84961",
+      "base": "v7/integration",
+      "mergeCommitInV7": false
+    },
+    {
+      "number": 31,
+      "state": "closed",
+      "mergedAt": "2026-10-20T09:10:08Z",
+      "mergeCommitSha": "0ac765f7a9db59981d88d75fe31228d5ebfbc1ec",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 32,
+      "state": "closed",
+      "mergedAt": null,
+      "mergeCommitSha": null,
+      "base": "v7/integration",
+      "mergeCommitInV7": false
+    },
+    {
+      "number": 33,
+      "state": "closed",
+      "mergedAt": null,
+      "mergeCommitSha": null,
+      "base": "v7/integration",
+      "mergeCommitInV7": false
+    },
+    {
+      "number": 34,
+      "state": "closed",
+      "mergedAt": "2026-10-19T22:48:25Z",
+      "mergeCommitSha": "d2ba4f07825a3b66ae5d69f0493a7583bf4f6775",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 35,
+      "state": "closed",
+      "mergedAt": "2026-10-19T22:48:26Z",
+      "mergeCommitSha": "d2ba4f07825a3b66ae5d69f0493a7583bf4f6775",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 36,
+      "state": "closed",
+      "mergedAt": "2026-10-19T22:48:25Z",
+      "mergeCommitSha": "d2ba4f07825a3b66ae5d69f0493a7583bf4f6775",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 37,
+      "state": "closed",
+      "mergedAt": "2026-10-19T22:48:25Z",
+      "mergeCommitSha": "d2ba4f07825a3b66ae5d69f0493a7583bf4f6775",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 38,
+      "state": "closed",
+      "mergedAt": "2026-10-19T22:48:25Z",
+      "mergeCommitSha": "d2ba4f07825a3b66ae5d69f0493a7583bf4f6775",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 39,
+      "state": "closed",
+      "mergedAt": "2026-10-20T01:51:48Z",
+      "mergeCommitSha": "052077a3c8fc5708a3f545d38b1413259dc23e1e",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 40,
+      "state": "closed",
+      "mergedAt": "2026-10-19T22:48:25Z",
+      "mergeCommitSha": "d2ba4f07825a3b66ae5d69f0493a7583bf4f6775",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 41,
+      "state": "closed",
+      "mergedAt": "2026-10-19T22:48:25Z",
+      "mergeCommitSha": "d2ba4f07825a3b66ae5d69f0493a7583bf4f6775",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 42,
+      "state": "closed",
+      "mergedAt": "2026-10-19T22:48:25Z",
+      "mergeCommitSha": "d2ba4f07825a3b66ae5d69f0493a7583bf4f6775",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 43,
+      "state": "closed",
+      "mergedAt": "2026-10-19T22:48:25Z",
+      "mergeCommitSha": "d2ba4f07825a3b66ae5d69f0493a7583bf4f6775",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 44,
+      "state": "closed",
+      "mergedAt": "2026-10-20T01:51:48Z",
+      "mergeCommitSha": "052077a3c8fc5708a3f545d38b1413259dc23e1e",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 45,
+      "state": "closed",
+      "mergedAt": "2026-10-19T22:48:25Z",
+      "mergeCommitSha": "d2ba4f07825a3b66ae5d69f0493a7583bf4f6775",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 46,
+      "state": "closed",
+      "mergedAt": null,
+      "mergeCommitSha": null,
+      "base": "v7/integration",
+      "mergeCommitInV7": false
+    },
+    {
+      "number": 47,
+      "state": "closed",
+      "mergedAt": "2026-10-19T22:48:25Z",
+      "mergeCommitSha": "d2ba4f07825a3b66ae5d69f0493a7583bf4f6775",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 48,
+      "state": "closed",
+      "mergedAt": "2026-10-20T01:51:48Z",
+      "mergeCommitSha": "052077a3c8fc5708a3f545d38b1413259dc23e1e",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 49,
+      "state": "closed",
+      "mergedAt": "2026-10-19T12:14:43Z",
+      "mergeCommitSha": "0034ef419d429d275996300a10dd942602692494",
+      "base": "v7/integration",
+      "mergeCommitInV7": true
+    },
+    {
+      "number": 50,
+      "state": "closed",
+      "mergedAt": null,
+      "mergeCommitSha": "d76546dc60ebb5815fbc87aa8fc93f4297798565",
+      "base": "v7/integration",
+      "mergeCommitInV7": false
+    }
+  ]
+}

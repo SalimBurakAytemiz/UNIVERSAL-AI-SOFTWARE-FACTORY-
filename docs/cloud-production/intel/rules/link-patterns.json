@@ -1,0 +1,113 @@
+{
+  "//TR": "Kimlik bağlama kuralları: hangi önekler kimliktir, hangi alanlar taranır ve hangi bağ gücü hangi sınıfa yeterlidir. Gövde (body) metninde geçen kimlik yalnız 19 Ekim'de zaten 'merge edildi' denen satırları DÜŞÜK güvenle destekler; ilerleme iddiası olmayan satırı yükseltmez.",
+  "schemaVersion": "1.0.0",
+  "idPrefixes": [
+    "UI",
+    "WS-SC",
+    "UX-DEC",
+    "PH",
+    "F-LAB",
+    "G-EP",
+    "I-DP",
+    "PT",
+    "BL-REQ",
+    "PQ",
+    "MOB",
+    "C-*",
+    "FD",
+    "FQ"
+  ],
+  "literalIdPrefixes": [
+    "BL-REQ-"
+  ],
+  "fieldsSearched": {
+    "pr": [
+      "title",
+      "head.ref",
+      "body"
+    ],
+    "commit": [
+      "subject",
+      "body"
+    ],
+    "coordinator": [
+      "queue",
+      "ledger",
+      "dispatch"
+    ]
+  },
+  "strengths": [
+    "EXPLICIT",
+    "ID_IN_TITLE",
+    "ID_IN_BRANCH",
+    "ID_IN_BODY",
+    "ID_IN_COMMIT_MESSAGE",
+    "ROUTE_LITERAL_AT_HEAD",
+    "IPC_CHANNEL_LITERAL_AT_HEAD",
+    "OVERLAY"
+  ],
+  "strengthPolicy": {
+    "corroborateMergedClaim": [
+      "EXPLICIT_QUEUE",
+      "ID_IN_TITLE",
+      "ID_IN_BRANCH",
+      "ID_IN_BODY",
+      "ID_IN_COMMIT_MESSAGE",
+      "ROUTE_LITERAL_AT_HEAD",
+      "IPC_CHANNEL_LITERAL_AT_HEAD"
+    ],
+    "relinkNonClaim": [
+      "EXPLICIT",
+      "ID_IN_TITLE",
+      "ID_IN_BRANCH",
+      "OVERLAY"
+    ],
+    "addedItemEvidence": [
+      "EXPLICIT",
+      "ID_IN_TITLE",
+      "ID_IN_BRANCH",
+      "OVERLAY"
+    ],
+    "candidateOnly": [
+      "ID_IN_BODY",
+      "ID_IN_COMMIT_MESSAGE"
+    ],
+    "supportingOnly": [
+      "QUEUE_TEXT",
+      "LEDGER_TEXT",
+      "DISPATCH_TEXT"
+    ],
+    "confidence": {
+      "EXPLICIT": "HIGH",
+      "ID_IN_TITLE": "HIGH",
+      "ID_IN_BRANCH": "HIGH",
+      "ID_IN_BODY": "LOW",
+      "ID_IN_COMMIT_MESSAGE": "MEDIUM",
+      "ROUTE_LITERAL_AT_HEAD": "MEDIUM",
+      "IPC_CHANNEL_LITERAL_AT_HEAD": "MEDIUM",
+      "OVERLAY": "MEDIUM"
+    }
+  },
+  "laneBranchRules": [
+    {
+      "re": "lane-a",
+      "lane": "A"
+    },
+    {
+      "re": "lane-b",
+      "lane": "B"
+    },
+    {
+      "re": "lane-c",
+      "lane": "C"
+    },
+    {
+      "re": "coord",
+      "lane": "COORD"
+    }
+  ],
+  "routeRegistrationRegex": "\\.(get|post|put|delete|patch)\\b[^(\"'`]{0,400}?\\(\\s*([\"'`])(\\/[^\"'`\\s]*)\\2",
+  "ipcRegistrationRegex": "ipcMain\\.(?:handle|on)\\(\\s*([\"'`])([^\"'`]+)\\1",
+  "endpointTitleRegex": "^(GET|POST|PUT|DELETE|PATCH)\\s+(\\S+)",
+  "ipcTitleRegex": "^IPC\\s+(\\S+)"
+}
