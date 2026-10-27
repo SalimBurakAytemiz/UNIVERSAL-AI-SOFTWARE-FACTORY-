@@ -1763,7 +1763,7 @@ export default {
   "studio.import.q.col.sha":"SHA-256 (ilk 12)",
   "studio.import.q.more":"Karantinaya alınan {count} dosyanın {shown} tanesi gösteriliyor; tam liste sunucunun sakladığı kanıt manifestindedir.",
   "studio.import.q.moreTruncated":"Karantinaya alınan {count} dosyanın {shown} tanesi gösteriliyor; yalnız ilk {recorded} yol kayıtlıdır, kalan {rest} dosyanın adı saklanmaz.",
-  "studio.import.q.undisplayable":"Kayıtlı {n} yol gösterilemiyor (çok uzun veya kontrol karakteri içeriyor); yukarıda sayıldı ama listelenmedi.",
+  "studio.import.q.undisplayable":"Kayıtlı {n} yol gösterilemiyor (çok uzun veya kontrol ya da gizli biçimlendirme karakteri içeriyor); yukarıda sayıldı ama listelenmedi.",
   "studio.import.noDialog":"Bu ortamda dosya seçme penceresi kullanılamıyor.",
   "studio.import.dialogFailed":"Dosya seçme penceresi açılamadı veya yol reddedildi.",
   "studio.import.err.rejected":"Sunucu içe aktarmayı reddetti (HTTP {status}, IMPORT_REJECTED); neden kodu bildirilmedi.",
