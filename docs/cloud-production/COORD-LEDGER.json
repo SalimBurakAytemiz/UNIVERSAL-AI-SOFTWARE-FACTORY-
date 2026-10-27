@@ -762,6 +762,16 @@
       "ref": "wf_3c3f1adc-ab5 (planted proof: hook stops abandoned runner; b3a 50/50 x4; LOWs: double stop window, resumed body after hook, no committed pin of the hook (needs nested vitest))",
       "policy": "TEP-1",
       "at": "2026-10-27T02:18:12.453Z"
+    },
+    {
+      "pr": 268,
+      "sha": "f68f2d7e9d4ff2a1058871272fa1218f1c6af9fc",
+      "kind": "delta",
+      "base": "89c611447af39163cf3c5bca9bfe70fb8bd65b63",
+      "verdict": "BASE_MERGE_ONLY",
+      "ref": "COORD base merge e5cae0d (#267 watchdog); diff vs v7/integration = #268 docs only (LANE-A-P0-REMAINDER-AUDIT.{md,json}); prior r3 delta NO_BLOCKERS_1LOW at 89c6114",
+      "policy": "TEP-1",
+      "at": "2026-10-27T02:19:18.420Z"
     }
   ],
   "tests": [],
