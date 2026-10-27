@@ -1,4 +1,4 @@
-//TR: Saf olmayan git kenarı: tüm okumalar bir kez çözülmüş SHA'lar üzerinden `git show/cat-file` ile yapılır; çalışma ağacına asla dokunulmaz ve yazılmaz (yayın hariç, o publish.mjs'dedir).
+//TR: Saf olmayan git kenarı: tüm okumalar bir kez çözülmüş SHA'lar üzerinden `git show/cat-file` ile yapılır (v7'ye merge edilmiş PR'ların ve commit'lerin değişen dosya listeleri dahil; ağ yoktur); çalışma ağacına asla dokunulmaz ve yazılmaz (yayın hariç, o publish.mjs'dedir).
 import { execFileSync, spawnSync } from 'node:child_process';
 
 const MAXBUF = 1 << 30;
@@ -113,6 +113,39 @@ export function commitDates(repo, fullShas) {
     const r = gitTry(repo, ['show', '-s', '--format=%H %cI', ...chunk]);
     if (!r.ok) continue;
     for (const l of r.out.split('\n').filter(Boolean)) { const [sha, at] = l.split(' '); if (/^[0-9a-f]{40}$/.test(sha)) out[sha] = toIso(at); }
+  }
+  return out;
+}
+// Changed files of a PR merged into v7/integration, from local git only (no network): DIRECT_MERGE when its merge commit's second parent is
+// the PR head (merge-base(first parent, head)..head, GitHub's own view); VIA_WAVE when the head is an ancestor of the merge commit GitHub
+// names (a wave merge: merge-base(first parent, head)..head, a superset when the PR was stacked, which can only make it NOT docs-only).
+// Any other shape (fast-forward / rebase / squash commit, missing objects) -> null (file list UNKNOWN; never a partial list).
+export function mergedPrFiles(repo, pr) {
+  const m = pr.mergeCommitSha, h = pr.headSha;
+  if (!/^[0-9a-f]{40}$/.test(String(m || '')) || !/^[0-9a-f]{40}$/.test(String(h || ''))) return null;
+  const pp = gitTry(repo, ['rev-list', '--parents', '-n1', m]);
+  if (!pp.ok) return null;
+  const par = pp.out.trim().split(' ').slice(1);
+  if (par.length !== 2) return null;
+  let method = null;
+  if (par[1] === h) method = 'DIRECT_MERGE';
+  else if (gitTry(repo, ['merge-base', '--is-ancestor', h, m]).status === 0) method = 'VIA_WAVE';
+  else return null;
+  const d = gitTry(repo, ['diff', '--name-only', '--no-renames', '-z', `${par[0]}...${h}`]);
+  if (!d.ok) return null;
+  return { method, files: [...new Set(d.out.split('\0').filter(Boolean))].sort() };
+}
+// Changed files of every commit reachable from ref (one git call; a merge commit lists its diff against the first parent, i.e. what the
+// merge brought in): sha -> sorted file list. Used by the docs-only test of commit-message mentions; a failed call -> {} (every list UNKNOWN).
+export function commitFileLists(repo, ref) {
+  const r = gitTry(repo, ['log', '--name-only', '--no-renames', '--diff-merges=first-parent', '-z', '--format=%x1e%H', ref]);
+  if (!r.ok) return {};
+  const out = {};
+  for (const chunk of r.out.split('\x1e')) {
+    const i = chunk.indexOf('\0');
+    const sha = (i < 0 ? chunk : chunk.slice(0, i)).trim();
+    if (!/^[0-9a-f]{40}$/.test(sha)) continue;
+    out[sha] = [...new Set((i < 0 ? '' : chunk.slice(i + 1)).replace(/^\n/, '').split('\0').filter(Boolean))].sort();
   }
   return out;
 }

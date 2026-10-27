@@ -1,7 +1,7 @@
-//TR: Saf olmayan toplama kenarı: git ve GitHub'dan tek bir girdi paketi (inputs bundle) kurar; GitHub tazeliği kaynak başına (pulls, runs, check-runs, timing/jobs, dosyalar, merged_by) tutulur ve başarısız her çağrı o kaynağı PARTIAL yapar, tüm çağrılar başarısızsa önbellekten veri sunulduysa STALE_CACHE, sunulmadıysa UNAVAILABLE; hata metni kaynağın kendi çağrısından alınır; önbellek sınırlıdır (yalnız kullanılan ETag/pickaxe/check kayıtları). Saf çekirdek yalnız bu paketi görür; aynı paket + aynı saat => bayt bayt aynı çıktı. Önbellek (cache.json) ETag'leri, imleçleri, değişmez check/timing/job kayıtlarını ve pickaxe sonuçlarını taşır.
+//TR: Saf olmayan toplama kenarı: git ve GitHub'dan tek bir girdi paketi (inputs bundle) kurar (v7'ye merge edilmiş PR'ların ve v7 commit'lerinin değişen dosya listeleri yerel git'ten, API çağrısı olmadan: belge-yalnız testi için); GitHub tazeliği kaynak başına (pulls, runs, check-runs, timing/jobs, dosyalar, merged_by) tutulur ve başarısız her çağrı o kaynağı PARTIAL yapar, tüm çağrılar başarısızsa önbellekten veri sunulduysa STALE_CACHE, sunulmadıysa UNAVAILABLE; hata metni kaynağın kendi çağrısından alınır; önbellek sınırlıdır (yalnız kullanılan ETag/pickaxe/check kayıtları). Saf çekirdek yalnız bu paketi görür; aynı paket + aynı saat => bayt bayt aynı çıktı. Önbellek (cache.json) ETag'leri, imleçleri, değişmez check/timing/job kayıtlarını ve pickaxe sonuçlarını taşır.
 import fs from 'node:fs';
 import path from 'node:path';
-import { git, gitTry, resolveRefs, showText, showJson, catBlob, blobId, lsTree, readBlobs, revList, logCommits, pickaxeFirst, fileHistory, resolveCommits, commitDates, objectId } from './git.mjs';
+import { git, gitTry, resolveRefs, showText, showJson, catBlob, blobId, lsTree, readBlobs, revList, logCommits, pickaxeFirst, fileHistory, resolveCommits, commitDates, objectId, mergedPrFiles, commitFileLists } from './git.mjs';
 import { createGithub, pool } from './github.mjs';
 import { findTsx, readinessKey, runReadiness, validateAudit, SANDBOX_VERSION } from './readiness-runner.mjs';
 import { sha256, digestOf, cmp } from '../core/canonical-json.mjs';
@@ -141,6 +141,8 @@ export async function gatherInputs({ repo, engineDir, outDir, nowIso, rules, ove
   // ---- v7 code facts
   const reachable = revList(repo, v7);
   const commits = logCommits(repo, v7).map((c) => ({ sha: c.sha, at: c.at, subject: c.subject, body: c.body.slice(0, 4000) }));
+  // per-commit changed files (merges: against the first parent), for the docs-only test of commit-message mentions
+  const commitFiles = commitFileLists(repo, v7);
   cache.lastScannedCommit = v7;
   const routeFiles = tree.filter((e) => e.path.startsWith(`${S.routeSourceDir}/`) && /\.(ts|mjs|js)$/.test(e.path)).map((e) => e.path).sort(cmp);
   const ipcFiles = tree.filter((e) => e.path.startsWith(`${S.ipcFileGlob}/`) && !e.path.slice(S.ipcFileGlob.length + 1).includes('/') && /\.mjs$/.test(e.path)).map((e) => e.path).sort(cmp);
@@ -261,6 +263,18 @@ export async function gatherInputs({ repo, engineDir, outDir, nowIso, rules, ove
   const prFiles = Object.fromEntries(openPrs.filter((p) => cache.prFiles[`${p.number}@${p.headSha}`]).map((p) => [p.number, cache.prFiles[`${p.number}@${p.headSha}`]]));
   for (const k of Object.keys(cache.prFiles)) { const [n, x] = k.split('@'); if (!openPrs.some((p) => String(p.number) === n && p.headSha === x)) delete cache.prFiles[k]; }
   sources.prFiles = srcState('open-PR files', { attempted: needF.length, failed: failedF, note: failedF ? `${failedF} open PR(s) without a file list: protectedFiles/founder flag UNKNOWN for them` : null, errors: ownErrors() });
+  // changed files of PRs merged into v7/integration, from local git (no API call; immutable per merge/head sha, cached): the docs-only test
+  // (rules/link-patterns.json docsOnlyPr). A merge shape git cannot resolve exactly stays absent (file list UNKNOWN).
+  const reachSet = new Set(reachable);
+  cache.mergedPrFiles = cache.mergedPrFiles || {};
+  const mergedFiles = {}, keepMF = new Set();
+  for (const p of pulls.filter((x) => x.mergedAt && x.mergeCommitSha && reachSet.has(x.mergeCommitSha)).sort((a, b) => a.number - b.number)) {
+    const k = `${p.number}@${p.mergeCommitSha}@${p.headSha}`; keepMF.add(k);
+    // only resolved lists are cached: an unresolved shape (or a missing object) is retried next run and stays UNKNOWN meanwhile
+    if (!cache.mergedPrFiles[k]) { const r = mergedPrFiles(repo, p); if (r) cache.mergedPrFiles[k] = r; }
+    if (cache.mergedPrFiles[k]) mergedFiles[p.number] = cache.mergedPrFiles[k];
+  }
+  for (const k of Object.keys(cache.mergedPrFiles)) if (!keepMF.has(k)) delete cache.mergedPrFiles[k];
 
   cache.mergedBy = cache.mergedBy || {};
   const needMB = pulls.filter((p) => p.mergedAt && cache.mergedBy[p.number] === undefined).sort((a, b) => cmp(b.mergedAt, a.mergedAt)).slice(0, C.maxMergedByCalls);
@@ -313,7 +327,7 @@ export async function gatherInputs({ repo, engineDir, outDir, nowIso, rules, ove
     dependencyMap, roadmap,
     coordinator: { queue, ledger, dispatch, queueHistory, decisionFirstSeen },
     backlog, lanesJson, protectedPaths, wave0: wave0Raw, registries, resolvers, pathsPresent,
-    v7: { reachable, commits, routes: routesU, ipc: ipcU, literalIntro, shortMap, headDates },
+    v7: { reachable, commits, routes: routesU, ipc: ipcU, literalIntro, shortMap, headDates, mergedPrFiles: mergedFiles, commitFiles },
     github, readiness, texts, pinnedCommits,
     prior: priorSnapshots || [],
   };

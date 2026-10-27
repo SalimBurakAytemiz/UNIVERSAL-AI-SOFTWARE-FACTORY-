@@ -1,4 +1,4 @@
-//TR: Ağ koruması (NODE_OPTIONS=--import ile ön yüklenir; ürün kodu için asıl sınır readiness-runner'daki ad alanı kum havuzudur, bu koruma derinlemesine savunmadır): Node içinden her TCP/UDP/TLS/HTTP/DNS/fetch/WebSocket bağlantısını, ham soket/süreç bağlamalarını (process.binding tcp_wrap/pipe_wrap/process_wrap/spawn_sync, dlopen) ve izinsiz alt süreci (curl, sh, ...) INTEL_NET_BLOCKED hatasıyla durdurur. Yalnız gerçek yolu (realpath) os.tmpdir() altındaki unix soketleri (tsx IPC) ve yalnız process.execPath (koruma, NODE_OPTIONS ve kip ortamına ZORLA yazılarak devralınır; fork execPath'i de denetlenir) izinlidir. Node alt sürecinde korumadan ÖNCE kod çalıştırabilecek ön yükleme bayrakları (-r/--require/--import/--loader/--experimental-loader) argv ve fork execArgv'de yalnız korumanın kendisini (veya içeriği aynı kopyasını) ya da izinli ikili dizini altındaki dosyayı (tsx preflight/loader), NODE_OPTIONS'ta yalnız korumayı gösterebilir; NODE_OPTIONS node'un kendi ayrıştırmasıyla (yalnız çift tırnak) VE tırnaklar atılmış düz metin olarak iki kez taranır (tek tırnak hilesi reddedilir); --env-file/--env-file-if-exists, yapılandırma dosyası ve snapshot bayrakları her yerde reddedilir; göreli/çıplak belirteç reddedilir. İzin verilen her alt sürecin ortamından LD_*/DYLD_* silinir; node alt sürecinin NODE_OPTIONS'u yalnız koruma importudur, diğer alt süreçlerde yalnız koruma importları kalır. process.execve ve process.dlopen her kipte yasaktır. Kipler: strict (hazırlık ölçümü: ek olarak yalnız INTEL_NET_GUARD_ALLOW_BIN_DIR altındaki esbuild ikilisi; Worker ve yerel eklenti yasak) ve proof (kanıtlar: git yalnız GIT_ALLOW_PROTOCOL=file ile, tar, ad alanı kum havuzu için unshare).
+//TR: Ağ koruması (NODE_OPTIONS=--import ile ön yüklenir; ürün kodu için asıl sınır readiness-runner'daki ad alanı kum havuzudur, bu koruma derinlemesine savunmadır): Node içinden her TCP/UDP/TLS/HTTP/DNS/fetch/WebSocket bağlantısını, ham soket/süreç bağlamalarını (process.binding tcp_wrap/pipe_wrap/process_wrap/spawn_sync, dlopen) ve izinsiz alt süreci (curl, sh, ...) INTEL_NET_BLOCKED hatasıyla durdurur. Yalnız gerçek yolu (realpath) os.tmpdir() altındaki unix soketleri (tsx IPC) ve yalnız process.execPath (koruma, NODE_OPTIONS ve kip ortamına ZORLA yazılarak devralınır; fork execPath'i de denetlenir) izinlidir. Node alt sürecinde korumadan ÖNCE kod çalıştırabilecek ön yükleme bayrakları (-r/--require/--import/--loader/--experimental-loader) argv ve fork execArgv'de yalnız korumanın kendisini (veya içeriği aynı kopyasını) ya da izinli ikili dizini altındaki dosyayı (tsx preflight/loader), NODE_OPTIONS'ta yalnız korumayı gösterebilir; NODE_OPTIONS node'un kendi ayrıştırmasıyla (yalnız çift tırnak) VE tırnaklar atılmış düz metin olarak iki kez taranır (tek tırnak hilesi reddedilir); --env-file/--env-file-if-exists, yapılandırma dosyası, snapshot ve OpenSSL yapılandırma bayrakları (--openssl-config, --openssl-shared-config) her yerde reddedilir; göreli/çıplak belirteç reddedilir. İzin verilen her alt sürecin ortamından LD_*/DYLD_* ve OPENSSL_CONF/OPENSSL_ENGINES/OPENSSL_MODULES silinir; node alt sürecinin NODE_OPTIONS'u yalnız koruma importudur, diğer alt süreçlerde yalnız koruma importları kalır. process.execve ve process.dlopen her kipte yasaktır. Kipler: strict (hazırlık ölçümü: ek olarak yalnız INTEL_NET_GUARD_ALLOW_BIN_DIR altındaki esbuild ikilisi; Worker ve yerel eklenti yasak) ve proof (kanıtlar: git yalnız GIT_ALLOW_PROTOCOL=file ile, tar, ad alanı kum havuzu için unshare).
 import net from 'node:net';
 import tls from 'node:tls';
 import http from 'node:http';
@@ -88,8 +88,9 @@ const BAD_NODE_FLAG = /^--(?:expose[-_]internals|allow[-_]natives[-_]syntax)(?:=
 // preloads run before (a --require preload even before) the guard's own --import: only the guard itself or a file under the allowed bin dir
 // (tsx's preflight.cjs / loader.mjs) may be preloaded; a relative or bare specifier cannot be checked and is refused
 const PRELOAD_FLAG = /^(?:-r|--require|--import|--loader|--experimental-loader)(?:=([\s\S]*))?$/;
-// flags that load code or environment (NODE_OPTIONS included) from a file before or instead of the guard: refused everywhere
-const FILE_FLAG = /^--(?:env-file(?:-if-exists)?|experimental-(?:default-)?config-file|snapshot-blob)(?:=|$)/;
+// flags that load code or environment (NODE_OPTIONS included) from a file before or instead of the guard: refused everywhere; an OpenSSL
+// configuration file can load an engine / provider shared object into the child before any JS runs (--openssl-config, --openssl-shared-config)
+const FILE_FLAG = /^--(?:env-file(?:-if-exists)?|experimental-(?:default-)?config-file|snapshot-blob|openssl-(?:shared-)?config)(?:=|$)/;
 const ALLOW_BIN_REAL = ALLOW_BIN_DIR ? real(ALLOW_BIN_DIR) || ALLOW_BIN_DIR : null;
 const specFile = (spec) => { let f = String(spec ?? ''); if (f.startsWith('file:')) { try { f = fileURLToPath(f); } catch { return null; } } return path.isAbsolute(f) ? real(f) : null; };
 // the guard itself, or a byte-identical copy of it (the readiness sandbox preloads a read-only copy)
@@ -124,11 +125,14 @@ const nodeOptTokens = (s) => {
 const flatTokens = (s) => String(s ?? '').replace(/["'\\]/g, ' ').split(/\s+/).filter(Boolean);
 const optionsPreload = (s) => badPreload(nodeOptTokens(s), false) || badPreload(flatTokens(s), false);
 const guardImports = (s) => { const t = nodeOptTokens(s), out = []; for (let i = 0; i < t.length; i++) { const m = /^--import(?:=([\s\S]*))?$/.exec(t[i]); if (m) { const v = m[1] !== undefined ? m[1] : t[++i]; if (isGuard(v)) out.push(`--import ${v}`); } } return out; };
-// every allowed child: no LD_*/DYLD_* (dynamic-loader preloads) and no foreign NODE_OPTIONS; a node child gets exactly the guard import,
-// any other child keeps only guard imports already there (the sandbox launcher passes the guard copy to the node inside it)
+// every allowed child: no LD_*/DYLD_* (dynamic-loader preloads), no OPENSSL_CONF / OPENSSL_ENGINES / OPENSSL_MODULES (an OpenSSL config
+// file or engine / provider directory can load a shared object into the child before any JS runs) and no foreign NODE_OPTIONS; a node child
+// gets exactly the guard import, any other child keeps only guard imports already there (the sandbox launcher passes the guard copy to the node inside it)
+const OPENSSL_ENV = /^OPENSSL_(?:CONF|ENGINES|MODULES)$/i;
 const childEnv = (env, node) => {
   const e = { ...(env || process.env) };
   for (const k of Object.keys(e)) if (/^(?:LD_|DYLD_)/i.test(k)) delete e[k];
+  for (const k of Object.keys(e)) if (OPENSSL_ENV.test(k)) delete e[k];
   const bp = optionsPreload(e.NODE_OPTIONS);
   if (bp) throw fail(`${node ? 'node child' : 'child'} NODE_OPTIONS preload ${bp}`);
   if (node) e.NODE_OPTIONS = `--import ${GUARD_URL}`;

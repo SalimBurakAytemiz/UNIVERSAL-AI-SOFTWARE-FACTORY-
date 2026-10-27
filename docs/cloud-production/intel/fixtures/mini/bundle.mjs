@@ -81,6 +81,13 @@ export const ROWS = [
   ['UI-044', 'Shared PR row B', 'INTEGRATED_NOT_VERIFIED', '#61 (open)', 'AT_RISK', 'x', 'UI-044'],
   ['UI-045', 'Map-assigned row of a title/map conflict PR', 'INTEGRATED_NOT_VERIFIED', '#60', 'AT_RISK', 'x', 'UI-045'],
   ['UI-046', 'Title-named row of a title/map conflict PR', 'PENDING_CI', 'none', 'AT_RISK', 'x', 'UI-046'],
+  // intel-1.5 docs-only rule (K12): a merged-claim row named only in a DOCS_ONLY PR body and a docs-only commit (G-EP-001 / UI-005 shape),
+  // a no-claim row named by a DOCS_ONLY PR title, a merged-claim row named in a code PR body (control); Founder view (K7c): a stale
+  // AUTHORITY_REQUIRED row whose own backlog record is BLOCKED, owned by FOUNDER and needs new authority (UI-004 shape, P0)
+  ['UI-048', 'Endpoint evidence target (docs-only PR body + docs-only commit, merged claim)', 'INTEGRATED_NOT_VERIFIED', 'none', 'AT_RISK', 'x', 'UI-048'],
+  ['UI-049', 'Wiring target named by a docs-only PR title (no progress claim)', 'DESIGN_ONLY', 'none', 'AT_RISK', 'x', 'UI-049'],
+  ['UI-050', 'Merged claim named in a code PR body (control)', 'INTEGRATED_NOT_VERIFIED', 'none', 'AT_RISK', 'x', 'UI-050'],
+  ['UI-051', 'Founder command center (UI-004 shape)', 'AUTHORITY_REQUIRED', 'none', 'AT_RISK', 'x', 'UI-051'],
   ['E-ROLE-UASCO-0001', 'Role (not a work item)', 'DESIGN_ONLY', 'none', 'NONE', 'roles', 'x'],
 ];
 
@@ -138,8 +145,19 @@ export function miniBundle() {
     merged(59, '2026-10-21T10:00:00Z', { title: 'UI-042: workforce identity card', headRef: 'claude/ui-042', createdAt: '2026-10-20T08:00:00Z' }),
     merged(60, '2026-10-19T12:30:00Z', { title: 'L-TOWER UI-046: stage timeline', headRef: 'claude/l-tower-ui046', createdAt: '2026-10-18T12:00:00Z' }),
     merged(61, '2026-10-19T13:30:00Z', { title: 'Shared wiring (functional)', headRef: 'claude/shared-wiring', createdAt: '2026-10-18T13:00:00Z' }),
+    // intel-1.5 docs-only rule (K12): file lists in v7.mergedPrFiles below
+    merged(62, '2026-10-21T01:58:47Z', { title: 'LANE-B: endpoint evidence map (docs only)', headRef: 'claude/lane-b-endpoint-evidence-1', createdAt: '2026-10-21T01:26:00Z', bodyTokens: ['UI-048'] }),
+    merged(63, '2026-10-21T03:00:00Z', { title: 'UI-049: wiring list (docs)', headRef: 'claude/ui-049-wiring-docs', createdAt: '2026-10-21T02:00:00Z' }),
+    merged(64, '2026-10-21T04:00:00Z', { title: 'MOB-40: mobile threat model (docs only)', headRef: 'claude/mob-40', createdAt: '2026-10-21T03:30:00Z' }),
+    merged(65, '2026-10-21T05:00:00Z', { title: 'wave 65 (code)', headRef: 'claude/wave-65', createdAt: '2026-10-21T04:30:00Z', bodyTokens: ['UI-050'] }),
+    merged(66, '2026-10-21T06:00:00Z', { title: 'CP-DISPATCH-X: dispatcher', headRef: 'claude/cp-dispatch-x', createdAt: '2026-10-21T05:30:00Z' }),
   ];
   const mergedHeads = pulls.filter((p) => p.mergedAt);
+  // changed files (v7.mergedPrFiles): code by default; bookkeeping / docs PRs list docs; #11 (UI-004's body-only PR) has NO list (UNKNOWN)
+  const DOCS = { 50: ['docs/planning/BACKLOG_CHECKPOINT.json'], 51: ['docs/mobile/THREAT-MODEL.md'], 52: ['docs/planning/BACKLOG_CHECKPOINT.json'], 53: ['docs/planning/BACKLOG_CHECKPOINT.json'],
+    62: ['docs/lanes/LANE-B-ENDPOINT-EVIDENCE.json', 'docs/lanes/LANE-B-ENDPOINT-EVIDENCE.md'], 63: ['docs/authority-requests/UI-049-wiring.md'], 64: ['docs/mobile/THREAT-MODEL-40.md'],
+    66: ['docs/planning/dispatch.mjs', 'docs/planning/dispatch.proof.mjs'] };
+  const mergedPrFiles = Object.fromEntries(mergedHeads.filter((p) => p.number !== 11).map((p) => [p.number, { method: 'DIRECT_MERGE', files: DOCS[p.number] || [`apps/desktop/renderer/views/pr-${p.number}.js`] }]));
   const commits = [{ sha: S('c-ui005'), at: '2026-10-15T00:00:00Z', subject: 'fix UI-005 crash', body: '' }, { sha: S('c-route'), at: '2026-09-23T00:00:00Z', subject: 'control api', body: '' },
     // M1 (round 2): bookkeeping commits that only mention ids never set a start; an item's own commit (subject head names it) does
     { sha: S('c-plan'), at: '2026-10-16T04:58:36Z', subject: 'planning: register MOB-11 as non-READY', body: '' },
@@ -148,12 +166,16 @@ export function miniBundle() {
     { sha: S('c-own'), at: '2026-10-17T03:00:00Z', subject: 'UI-028: closure checklist core', body: '' },
     // round 3: a coded item's own dispatch claim; an unattributed implementing commit that names its screens only in the body
     { sha: S('c-claim'), at: '2026-10-20T07:49:13Z', subject: 'dispatch-claim: MOB-12', body: '' },
-    { sha: S('c-ux'), at: '2026-10-16T02:37:50Z', subject: 'v7 ux-projects: premium portfolio', body: 'Covers screens UI-040 (journey strip) and UI-041 (command matrix)' }];
+    { sha: S('c-ux'), at: '2026-10-16T02:37:50Z', subject: 'v7 ux-projects: premium portfolio', body: 'Covers screens UI-040 (journey strip) and UI-041 (command matrix)' },
+    // K12: a commit of the docs-only PR #62 whose message names UI-048 (0db05ce shape: 'docs(lanes): ... Docs only.')
+    { sha: S('c-docs'), at: '2026-10-21T01:12:59Z', subject: 'docs(lanes): endpoint evidence repair (UI-048 consistency)', body: 'Docs only.' }];
   const reachable = [...mergedHeads.map((p) => p.mergeCommitSha), ...commits.map((c) => c.sha), S('head-lane-a-x')];
+  // per-commit changed files (v7.commitFiles): code by default, the K12 docs commit lists docs only; c-ui005 (UI-005's integrating commit) has NO list
+  const commitFiles = Object.fromEntries(commits.filter((c) => c.sha !== S('c-ui005')).map((c) => [c.sha, c.sha === S('c-docs') ? ['docs/lanes/LANE-B-ENDPOINT-EVIDENCE.md'] : ['apps/desktop/renderer/app.js']]));
   const checks = {};
   checks[S('head1')] = [{ name: 'validate (ubuntu-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-18T01:00:00Z', completedAt: '2026-10-18T01:20:00Z' }, { name: 'validate (windows-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-18T01:00:00Z', completedAt: '2026-10-18T01:40:00Z' }];
   checks[S('head8')] = [{ name: 'validate (ubuntu-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-18T01:00:00Z', completedAt: null }, { name: 'validate (windows-latest)', status: 'completed', conclusion: 'failure', startedAt: '2026-10-18T01:00:00Z', completedAt: null }];
-  for (const n of [6, 43, 44]) checks[S(`head${n}`)] = [{ name: 'validate (ubuntu-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-18T01:00:00Z', completedAt: '2026-10-18T01:20:00Z' }, { name: 'validate (windows-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-18T01:00:00Z', completedAt: '2026-10-18T01:40:00Z' }];
+  for (const n of [6, 43, 44, 62, 63, 65]) checks[S(`head${n}`)] = [{ name: 'validate (ubuntu-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-18T01:00:00Z', completedAt: '2026-10-18T01:20:00Z' }, { name: 'validate (windows-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-18T01:00:00Z', completedAt: '2026-10-18T01:40:00Z' }];
   // #58 (another item's test+states PR) failed on Windows; the row's own #59 is green
   checks[S('head58')] = [{ name: 'validate (ubuntu-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-19T01:00:00Z', completedAt: '2026-10-19T01:20:00Z' }, { name: 'validate (windows-latest)', status: 'completed', conclusion: 'failure', startedAt: '2026-10-19T01:00:00Z', completedAt: '2026-10-19T01:40:00Z' }];
   checks[S('head59')] = [{ name: 'validate (ubuntu-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-21T01:00:00Z', completedAt: '2026-10-21T01:20:00Z' }, { name: 'validate (windows-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-21T01:00:00Z', completedAt: '2026-10-21T01:40:00Z' }];
@@ -174,6 +196,7 @@ export function miniBundle() {
       { id: 'PQ-002', source: 'UASCO-AUD-129 (P3)', title: 'Tower test', status: 'CLAIMED', lane: 'A', startedAt: '2026-10-26T12:00:00Z' },
       { id: 'PQ-003', source: 'UASCO-AUD-065', title: 'Accepted by record only', status: 'PRODUCT_ACCEPTED', lane: 'A' },
       { id: 'PQ-009', source: 'CI root cause', title: 'vite bump', status: 'INTEGRATED', pr: '25', lane: 'C' },
+      { id: 'FD-QUEUE-X', source: 'Founder-owned blocker', title: 'Queue copy of FD-QUEUE-X', status: 'BLOCKED', owner: 'lane-a', lane: 'A' },
     ],
     founderQueue: [{ id: 'FQ-PQ-009', priority: '0', kind: 'FOUNDER_ONLY', action: 'Merge #25 (lockfile-only fix).' }, { item: 'Raise the 2-builder cap', why: 'explicit Founder limit' }, { item: 'UASCO-AUD-005 sandbox substrate decision', why: 'hardware' }],
     integrationQueue: { founderDecisions: ['D1 (blocks everything): repair review secrets; affects UI-007.', 'D2: merge permission for #20, after review.'] },
@@ -203,6 +226,13 @@ export function miniBundle() {
     { id: 'RESEAL-X', title: 'Trust-root reseal', status: 'BLOCKED', owner: 'LOCAL', requiresNewAuthority: true, dependsOn: [] },
     { id: 'LOCAL-BLOCKED-X', title: 'Locally blocked task', status: 'BLOCKED', owner: 'LOCAL', requiresNewAuthority: false, dependsOn: [] },
     { id: 'MOB-12', title: 'Mobile threat model', status: 'DONE', owner: 'CLOUD', dependsOn: [] },
+    // K12: a documentation deliverable (its backlog files are all docs) and coordinator code under docs/ (NOT documentation)
+    { id: 'MOB-40', title: 'Mobile threat model (phase 0)', status: 'DONE', owner: 'CLOUD', files: ['docs/mobile/THREAT-MODEL-40.md'], dependsOn: [] },
+    { id: 'CP-DISPATCH-X', title: 'Dispatcher', status: 'DONE', owner: 'CLOUD', files: ['docs/planning/dispatch.mjs', 'docs/planning/dispatch.proof.mjs'], dependsOn: [] },
+    // K7c / K7b: UI-004 shape (19-Oct AUTHORITY_REQUIRED row, own backlog record BLOCKED + FOUNDER + new authority, P0) and a BLOCKED item whose
+    // queue owner (lane-a) precedes its FOUNDER backlog owner
+    { id: 'UI-051', title: 'Founder command center', status: 'BLOCKED', owner: 'FOUNDER', priority: 'P0', requiresNewAuthority: true, dependsOn: [] },
+    { id: 'FD-QUEUE-X', title: 'Founder-owned blocker with a lane queue task', status: 'BLOCKED', owner: 'FOUNDER', requiresNewAuthority: false, dependsOn: [] },
   ] };
   const wave0 = { packages: [{ id: 'C-RDY-1', priority: 'P0', order: 1, title: 'Role Readiness Auditor', dependsOn: [] }, { id: 'C-CTX-1', priority: 'P0', order: 2, title: 'Role Context Resolver', dependsOn: ['C-RDY-1'] }], founderDecisions: ['FD-1 Legacy alias approval: decide canonical skills; blocks C-BIND-1.'] };
   const contracts = [0, 1, 2, 3, 4].map((n) => ({ phase: n, title: ROWS.find((r) => r[0] === `PH-${String(n).padStart(3, '0')}`)[1], domain: ['TRUST_CORE', 'TRUST_CORE', 'SPECIALIZED_DOMAIN', 'EXECUTION', 'BUSINESS_COMMUNICATION'][n], state: 'PLANNED', dependsOn: n ? [n - 1] : [], riskLevel: 2, reviewProfile: 'STANDARD', review: ['independent Codex package review'], requiredArtifacts: [] }));
@@ -225,7 +255,7 @@ export function miniBundle() {
     registries: { roleDefs: { counts: { roles: 3, guilds: 1, clusters: 1, evaluationSpecs: 6, evaluationSpecsExecuted: 0, certified: 0, gapIds: 0 }, guilds: 1, clusters: 1, roles: 3 }, profiles: { counts: { boundRoles: 1, withCandidateSkills: 1 } }, adapters: { count: 2, byStatus: { REGISTERED: 2 }, byImplementation: { NOT_IMPLEMENTED: 2 } } },
     resolvers: [{ id: 'CAPABILITY_RESOLVER', path: 'core/capabilities/resolver.ts', symbol: 'resolveCapability', present: true, introducedBy: { sha: S('c-route'), at: '2026-09-23T00:00:00Z' }, tests: [], wave0Package: null }, { id: 'ROLE_CONTEXT_RESOLVER', path: 'core/agents/role-context.ts', symbol: 'resolveRoleContext', present: false, introducedBy: null, tests: [], wave0Package: 'C-CTX-1' }],
     pathsPresent: { '.github/workflows/desktop-journey-e2e.yml': false },
-    v7: { reachable, commits, routes: [{ method: 'GET', path: '/health', quote: '"', file: 'apps/control-api/src/server.ts' }], ipc: [{ channel: 'uasco:stop', quote: '"', file: 'apps/desktop/main.mjs' }],
+    v7: { reachable, commits, mergedPrFiles, commitFiles, routes: [{ method: 'GET', path: '/health', quote: '"', file: 'apps/control-api/src/server.ts' }], ipc: [{ channel: 'uasco:stop', quote: '"', file: 'apps/desktop/main.mjs' }],
       literalIntro: { 'ROUTE GET /health': { sha: S('c-route'), at: '2026-09-23T00:00:00Z' }, 'IPC uasco:stop': { sha: S('c-route'), at: '2026-09-23T00:00:00Z' } }, shortMap, headDates },
     github: { pulls, runs, checks, timings: { 1001: { runDurationMs: 1500000 } }, jobs: {}, runDetail: { timing24hCandidates: 1, timingFetched: 1, jobs7dCandidates: 1, jobsFetched: 0 }, prFiles: { 30: ['.github/workflows/ci.yml'] }, mergedBy: {}, freshness: { state: 'FRESH', asOf: NOW, error: null }, calls: 0, notModified: 0, rateRemaining: null, startAnchor: '2026-10-18T00:00:00Z', errors: [] },
     readiness: { state: 'UNAVAILABLE', reason: 'READINESS_RUNTIME_UNAVAILABLE' },

@@ -1,5 +1,5 @@
 {
-  "//TR": "Kimlik bağlama kuralları: hangi önekler kimliktir, hangi alanlar taranır ve hangi bağ gücü hangi sınıfa yeterlidir. Gövde (body) metninde geçen kimlik yalnız 19 Ekim'de zaten 'merge edildi' denen satırları DÜŞÜK güvenle destekler; 19 Ekim 'prs' alanındaki WEAK referans (aralık, iç içe, rol notlu, başka kaleme ait veya kimlik kapısından geçmeyen) hiçbir basamakta kanıt değildir (PR sahiplik kuralı: inventoryPrs.otherItemRule); ilerleme iddiası olmayan satırı yükseltmez. Rakamla bitmeyen kimlikler (L-WORKFORCE, CI-GREEN, PKG-LEASE1) PR başlığında ve dalında tam kimlik olarak eşleşir. 19 Ekim notu başka bilinen kalemi adlandırıyorsa ('#25 (UI-050 ...)' ya da dal biçiminde 'claude/l-assurance-ui049') veya PR'ın kendi başlığı/dalı bu satırı değil başka bir kalemi adlandırıyorsa PR o kalemindir (WEAK other-item; 19 Ekim prToWorkItems bu satırı o PR'a atıyorsa hariç) ve böyle bir referans hiçbir iddiayı desteklemez. Kayıt tutma PR'ları (başlığı backlog:/planning:/write-back/'(backlog only)' ile başlayan ya da kimliği yalnız 'UI-132 DONE' gibi durum ibaresinde anan) hiçbir zaman kanıt değildir: coded/integrated/başlangıç/lane vermez (BOOKKEEPING_PR). Gerçek başlangıç için commit yalnız kodlanmış kalemin konu başında kimliği adlandıran kendi commit'idir (ownCommitStart; backlog/planlama kayıt commit'leri hariç).",
+  "//TR": "Kimlik bağlama kuralları: hangi önekler kimliktir, hangi alanlar taranır ve hangi bağ gücü hangi sınıfa yeterlidir. Gövde (body) metninde geçen kimlik yalnız 19 Ekim'de zaten 'merge edildi' denen satırları DÜŞÜK güvenle destekler; 19 Ekim 'prs' alanındaki WEAK referans (aralık, iç içe, rol notlu, başka kaleme ait veya kimlik kapısından geçmeyen) hiçbir basamakta kanıt değildir (PR sahiplik kuralı: inventoryPrs.otherItemRule); ilerleme iddiası olmayan satırı yükseltmez. Rakamla bitmeyen kimlikler (L-WORKFORCE, CI-GREEN, PKG-LEASE1) PR başlığında ve dalında tam kimlik olarak eşleşir. 19 Ekim notu başka bilinen kalemi adlandırıyorsa ('#25 (UI-050 ...)' ya da dal biçiminde 'claude/l-assurance-ui049') veya PR'ın kendi başlığı/dalı bu satırı değil başka bir kalemi adlandırıyorsa PR o kalemindir (WEAK other-item; 19 Ekim prToWorkItems bu satırı o PR'a atıyorsa hariç) ve böyle bir referans hiçbir iddiayı desteklemez. Kayıt tutma PR'ları (başlığı backlog:/planning:/write-back/'(backlog only)' ile başlayan ya da kimliği yalnız 'UI-132 DONE' gibi durum ibaresinde anan) hiçbir zaman kanıt değildir: coded/integrated/başlangıç/lane vermez (BOOKKEEPING_PR). Gerçek başlangıç için commit yalnız kodlanmış kalemin konu başında kimliği adlandıran kendi commit'idir (ownCommitStart; backlog/planlama kayıt commit'leri hariç). Yalnız belge değiştiren PR (DOCS_ONLY: değişen her dosya docs/** veya reports/** altında belge/kanıt uzantılı ya da *.md) gövdesindeki anma hiçbir satırı entegre, test edilmiş, kodlanmış veya tarihli yapmaz (DOCS_ONLY_WEAK 'docs-only-body', en çok WEAK destek); başlığı/dalı satırı adlandırsa da yalnız satırın kendi teslimi belge ise (backlog kaydının files listesinin tamamı belge, kayıt type'ı belge türü ya da files listesi yokken başlık belge teslimi) OWN kalır, değilse WEAK'tir; dosya listesi bilinmeyen PR bugünkü kuralla kalır ve satırın missingEvidence'ına yazılır.",
   "schemaVersion": "1.0.0",
   "idPrefixes": [
     "UI",
@@ -47,7 +47,10 @@
       "range",
       "nested",
       "role:<annotation>",
-      "no-id-match"
+      "no-id-match",
+      "docs-only-body",
+      "docs-only-title",
+      "docs-only-branch"
     ],
     "weakPolicy": "INVENTORY_WEAK: never evidence: never enters integratedBy, integratedPrs, strongPrs, coded, tested/CI, actual start, lastMergedAt, lane or owner; on a status-only merged claim the merged non-other-item WEAK PRs are listed as corroboratingWeakPrs (corroboration only); never upgrades any row"
   },
@@ -64,6 +67,37 @@
     "wholeTitleFlags": "i",
     "statusClauseRegex": "((?:[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)+(?:\\.\\.\\d+)?)(?:\\s*[/,]\\s*[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)+(?:\\.\\.\\d+)?)*)\\s+(?:DONE|READY|non-READY)\\b",
     "note": "whole title bookkeeping (head word Backlog / write-back, or planning: / plan: / queue: / ledger: / reports: / docs(planning): with the colon, or '(backlog only)' anywhere): every title and branch link of the PR; otherwise an id named only in a status clause ('backlog #76 (UI-132 DONE, batch 3)', '#81 UI-032/UI-026 DONE write-back') is bookkeeping for that id while ids named elsewhere in the title (wave members '#78 UI-047 + #79 UI-201') stay ID_IN_TITLE. Code PRs titled COORD: / LANE-A: / MOB-1: ... (docs only) are not bookkeeping"
+  },
+  "docsOnlyPr": {
+    "appliesTo": "PR title / branch / body links (ID_IN_TITLE / ID_IN_BRANCH / ID_IN_BODY) and the PR_NAMES_ITEM gate of 19-Oct inventory references; record, overlay and 19-Oct ITEM_TITLE_NAMES_PR / STATUS19_CLAIMS_MERGED attributions are unchanged",
+    "fileLists": "merged into v7/integration: inputs.v7.mergedPrFiles from local git (DIRECT_MERGE: merge-base(first parent, head)..head of the merge commit whose second parent is the head; VIA_WAVE: the head is an ancestor of the wave merge commit GitHub names, merge-base(first parent, head)..head, a superset for stacked PRs, which can only make a PR NOT docs-only); open: inputs.github.prFiles (GitHub files API); any other shape (fast-forward / rebase / squash commit, closed unmerged, merged outside v7, failed fetch): UNKNOWN",
+    "docFileRegex": "^(?:docs|reports)/.+\\.(?:md|markdown|json|txt|csv|png|svg|jpe?g)$|\\.md$",
+    "docFileFlags": "i",
+    "docFileNote": "documentation / report / evidence files: *.md anywhere, and docs/** or reports/** files with a document or data extension (the lane evidence / audit JSON under docs/lanes is one); code under docs/ (docs/planning/*.mjs, docs/cloud-production/*.mjs, the intel engine) is NOT documentation, so coordinator code PRs (CP-CI, CP-MERGE-GATE, CP-DISPATCH-*) are never DOCS_ONLY",
+    "docsOnlyTest": "DOCS_ONLY(P) when P's file list is known, non-empty and every file matches docFileRegex; NOT_DOCS_ONLY when it is known and some file does not; UNKNOWN otherwise",
+    "body": "a body mention in a DOCS_ONLY PR is DOCS_ONLY_WEAK with source 'docs-only-body' for every row: never integrated, tested, coded, CI-credited, a start or lastMergedAt; on a status-only merged claim the merged PR is listed in corroboratingWeakPrs (evidenceClass CORROBORATED_BY_WEAK_REF, integrated UNKNOWN), otherwise it is a candidate link docs-only:#N",
+    "titleBranch": "a DOCS_ONLY PR whose title / branch names the row keeps ID_IN_TITLE / ID_IN_BRANCH (OWN, marked docsOnly on the link) only when the row's own deliverable is documentation (docDeliverable); otherwise DOCS_ONLY_WEAK with source 'docs-only-title' / 'docs-only-branch'",
+    "docDeliverable": {
+      "backlogFiles": "the row's own BACKLOG record (relation SELF or MERGED; a RELATED record describes another entry) lists files and every file matches docFileRegex (live: MOB-1..MOB-9, docs/mobile/*.md); a files list with any other file means a code deliverable, whatever the title says",
+      "types": [
+        "DOC",
+        "DOCS",
+        "DOCUMENTATION",
+        "AUDIT",
+        "SPEC",
+        "MAP",
+        "ADR",
+        "RESEARCH"
+      ],
+      "typesNote": "the row's own BACKLOG record type (live types: UI, TEST, BACKEND; none is a document type)",
+      "titleRegex": "\\b(?:docs only|documentation|audit|specifications?|spec|ADR|threat model|evidence map|traceability map)\\b",
+      "titleFlags": "i",
+      "titleNote": "only when no own BACKLOG record lists files: the row title names a document deliverable (strict list; 'design', 'contract', 'checklist', 'map' alone are not enough because screen and code rows use them)"
+    },
+    "gate": "PR_NAMES_ITEM passes through a DOCS_ONLY PR only by its title / branch and only for a docDeliverable row; otherwise the next gate applies (ITEM_TITLE_NAMES_PR, STATUS19_CLAIMS_MERGED) and, when none passes, the reference is WEAK 'docs-only-body' / 'docs-only-title' / 'docs-only-branch'",
+    "unknownFiles": "file list UNKNOWN: the pre-docs-only rule applies unchanged (no silent upgrade or downgrade) and, when that link is used as evidence (integratedBy, an open or merged strong PR that makes the row coded, IMPLEMENTED_NOT_MERGED or dates its start), the row's missingEvidence names the PR",
+    "strength": "DOCS_ONLY_WEAK",
+    "live": "#271 'LANE-B: endpoint evidence map ... docs only' and #268 'LANE-A A-P0-AUDIT ... docs only' (docs/lanes/*.md + *.json) no longer integrate G-EP-001/008/010/013/019/077 and UI-005/008/009/010/022/115/124/134; #223 'LANE-B: single wiring list ... (docs)' no longer integrates the code deliverable LANE-B-flow through its branch slug"
   },
   "fieldsSearched": {
     "pr": [
@@ -91,7 +125,8 @@
     "ROUTE_LITERAL_AT_HEAD",
     "IPC_CHANNEL_LITERAL_AT_HEAD",
     "OVERLAY",
-    "BOOKKEEPING_PR"
+    "BOOKKEEPING_PR",
+    "DOCS_ONLY_WEAK"
   ],
   "strengthPolicy": {
     "corroborateMergedClaim": [
@@ -118,11 +153,13 @@
     "candidateOnly": [
       "ID_IN_BODY",
       "ID_IN_COMMIT_MESSAGE",
-      "INVENTORY_WEAK"
+      "INVENTORY_WEAK",
+      "DOCS_ONLY_WEAK"
     ],
     "neverEvidence": [
       "BOOKKEEPING_PR",
-      "INVENTORY_WEAK"
+      "INVENTORY_WEAK",
+      "DOCS_ONLY_WEAK"
     ],
     "supportingOnly": [
       "QUEUE_TEXT",
@@ -139,7 +176,8 @@
       "IPC_CHANNEL_LITERAL_AT_HEAD": "MEDIUM",
       "OVERLAY": "MEDIUM",
       "INVENTORY_WEAK": "NONE",
-      "BOOKKEEPING_PR": "NONE"
+      "BOOKKEEPING_PR": "NONE",
+      "DOCS_ONLY_WEAK": "NONE"
     }
   },
   "laneBranchRules": [

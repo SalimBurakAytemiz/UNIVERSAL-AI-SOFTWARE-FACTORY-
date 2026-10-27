@@ -24,9 +24,12 @@ import { diffSnapshots, trend } from '../metrics/history.mjs';
 // intel-1.4: one PR ownership rule (title/branch/body, 19-Oct prToWorkItems map, coordinator record/overlay) for every PR -> row
 // attribution: OTHER_ITEM refs are WEAK in every form, SHARED PRs count for each owner, title/map conflicts cap confidence at MEDIUM;
 // WEAK refs never enter integratedBy (no WEAK corroboration of merged claims); MERGED_NOT_VERIFIED action text lists only integrating
-// PRs; Founder view lists BLOCKED items owned by FOUNDER or needing new authority.
+// PRs; Founder view lists BLOCKED items owned by FOUNDER or needing new authority. intel-1.5: a DOCS_ONLY PR (every changed file is
+// documentation / report / evidence) never makes a row coded, integrated, tested, dated or CI-credited through its body, nor through its
+// title / branch unless the row's own deliverable is documentation (WEAK corroboration at most); the Founder view also lists
+// FOUNDER_ACTION_REQUIRED items with a BLOCKED Founder / new-authority record.
 // Points of another semantics never feed velocity.
-export const SEMANTICS = 'intel-1.4';
+export const SEMANTICS = 'intel-1.5';
 const START_SOURCES = ['inventory.prs EXPLICIT PR (merged or open)', 'queue/deliverable/coordinatorBuild record PR (merged or open)', 'overlay LINK PR (merged or open)', 'PR title/branch naming the id (merged or open; backlog write-back/planning/READY-marking PRs excluded)',
   "own v7 commit of a coded item (subject head names the id; backlog/planning/queue/ledger bookkeeping commits excluded)", 'v7 commit accepted as the integrating evidence of the item', 'coordinator record head of a coded item (in v7/integration or on its own branch, labelled)'];
 
@@ -75,7 +78,7 @@ export function buildAll(inputs, rules, overlayRaw, meta, nowIsoRaw) {
   const supportTexts = [['queue:PRODUCTION-QUEUE.json', coordinator.queueText], ['ledger:COORD-LEDGER.json', coordinator.ledgerText], ...Object.entries(coordinator.dispatchTexts).sort((a, b) => cmp(a[0], b[0])).map(([k, v]) => [`dispatch:${k}`, v])];
   const links = buildLinks(identity.items, { pulls, commits: inputs.v7.commits, routes: inputs.v7.routes, ipc: inputs.v7.ipc, literalIntro: inputs.v7.literalIntro, reachable, shortMap, headDates,
     resolver: identity.resolver, ledgerReviews: coordinator.ledgerReviews, supportTexts, overlayLinks: overlay.accepted.filter((o) => o.action === 'LINK'), linkPatterns: LP, v7sha: inputs.meta.refs.v7.sha, statusMap: SM,
-    prToWorkItems: inputs.inventory.json?.prToWorkItems || {} });
+    prToWorkItems: inputs.inventory.json?.prToWorkItems || {}, mergedPrFiles: inputs.v7.mergedPrFiles || {}, openPrFiles: inputs.github.prFiles || {}, commitFiles: inputs.v7.commitFiles || null });
   const unlinks = new Set(overlay.accepted.filter((o) => o.action === 'UNLINK').map((o) => `${o.itemId}|${o.value}`));
   const linksByItem = new Map();
   for (const l of links) { if (unlinks.has(`${l.itemId}|${l.ref}`)) continue; if (!linksByItem.has(l.itemId)) linksByItem.set(l.itemId, []); linksByItem.get(l.itemId).push(l); }
@@ -231,6 +234,9 @@ export function buildAll(inputs, rules, overlayRaw, meta, nowIsoRaw) {
   const productivity = computeProductivity({ pulls, runs: inputs.github.runs, timings: inputs.github.timings, jobs: inputs.github.jobs, runDetail: inputs.github.runDetail, queueHistory: coordinator.queueHistory, decisions, integrationBoard: coordinator.integrationBoard, nowIso, startIso: inputs.github.startAnchor, secondAnchor: coordinator.productionLanesStartedAt, config: C, statusMap: SM });
 
   // ---- plan (section H)
+  // a record of the item that is BLOCKED and owned by FOUNDER or needs new authority (Founder view of FOUNDER_ACTION_REQUIRED items)
+  const recordsById = new Map(identity.items.map((it) => [it.id, it.records]));
+  const founderRecordBlocked = (id) => (recordsById.get(id) || []).some((r) => r.status === 'BLOCKED' && (r.owner === 'FOUNDER' || r.requiresNewAuthority === true));
   const cpSet = new Set(roadmap.criticalPath.phaseIds);
   const prIdx = (p) => { const i = rules['next-actions'].priorityOrder.indexOf(p); return i < 0 ? 9 : i; };
   const planKey = (a, b) => (cpSet.has(a.roadmapPhase) ? 0 : 1) - (cpSet.has(b.roadmapPhase) ? 0 : 1) || (a.scope === 'MVP' ? 0 : 1) - (b.scope === 'MVP' ? 0 : 1) || prIdx(a.priority) - prIdx(b.priority) || (a.blockers.length ? 1 : 0) - (b.blockers.length ? 1 : 0) || cmp(a.id, b.id);
@@ -240,9 +246,11 @@ export function buildAll(inputs, rules, overlayRaw, meta, nowIsoRaw) {
     lanes: rules['next-actions'].lanes.map((L) => ({ lane: L, items: live.filter((x) => x.lane === L && actionable.includes(x.status)).sort(planKey).slice(0, C.planTopNPerLane).map((x) => ({ id: x.id, status: x.status, scope: x.scope, priority: x.priority, criticalPath: cpSet.has(x.roadmapPhase), blockers: x.blockers.length, action: x.nextAction })) })),
     verification: mvp.filter((x) => x.status === 'MERGED_NOT_VERIFIED').sort(planKey).slice(0, rules['next-actions'].verificationLane.topN).map((x) => ({ id: x.id, action: fill(rules['next-actions'].verificationLane.template, { id: x.id, prs: prText(x.integratedPrs, x.corroboratingWeakPrs) }) })),
     verificationTotal: mvp.filter((x) => x.status === 'MERGED_NOT_VERIFIED').length,
-    // Founder queue view: every BLOCKED item owned by FOUNDER (item or record owner) or whose record needs new authority, P0 first
-    founderBlocked: live.filter((x) => x.status === 'BLOCKED' && (x.owner === 'FOUNDER' || x.founderOwned || x.requiresNewAuthority)).sort((a, b) => prIdx(a.recordPriority || a.priority) - prIdx(b.recordPriority || b.priority) || cmp(a.id, b.id))
-      .map((x) => ({ id: x.id, priority: x.recordPriority || x.priority || null, owner: x.owner, requiresNewAuthority: x.requiresNewAuthority, scope: x.scope, blockers: x.blockers, title: String(x.title || '').slice(0, 120), action: fill(rules['next-actions'].founderBlockedTemplate || '{id}: Founder engeli ({blockers})', { id: x.id, blockers: x.blockers.join(', ') || 'BLOCKED' }) })),
+    // Founder queue view: every BLOCKED item owned by FOUNDER (item or record owner) or whose record needs new authority, and every
+    // FOUNDER_ACTION_REQUIRED item whose own record is BLOCKED with owner FOUNDER or new authority (live: UI-004 P0); P0 first
+    founderBlocked: live.filter((x) => (x.status === 'BLOCKED' && (x.owner === 'FOUNDER' || x.founderOwned || x.requiresNewAuthority)) || (x.status === 'FOUNDER_ACTION_REQUIRED' && founderRecordBlocked(x.id)))
+      .sort((a, b) => prIdx(a.recordPriority || a.priority) - prIdx(b.recordPriority || b.priority) || cmp(a.id, b.id))
+      .map((x) => ({ id: x.id, status: x.status, priority: x.recordPriority || x.priority || null, owner: x.owner, requiresNewAuthority: x.requiresNewAuthority, scope: x.scope, blockers: x.blockers, title: String(x.title || '').slice(0, 120), action: fill(rules['next-actions'].founderBlockedTemplate || '{id}: Founder engeli ({blockers})', { id: x.id, blockers: x.blockers.join(', ') || 'BLOCKED' }) })),
     founderDecisions: decisions.filter((d) => d.state === 'OPEN').sort((a, b) => (b.ageHours ?? -1) - (a.ageHours ?? -1) || natCmp(a.id, b.id)).map((d) => ({ id: d.id, ageHours: d.ageHours, action: fill(rules['next-actions'].decisionTemplate, { id: d.id, ageHours: d.ageHours ?? 'UNKNOWN', text: d.text.slice(0, 140) }) })),
   };
 

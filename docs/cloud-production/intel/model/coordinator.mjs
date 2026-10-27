@@ -48,7 +48,8 @@ export function loadCoordinator({ queue, ledger, dispatch, wave0, backlog, lanes
   const wave0Packages = [...(wave0?.packages || [])].sort((a, b) => cmp(String(a.id), String(b.id))).map((p) => ({ id: p.id, priority: p.priority ?? null, order: p.order ?? null, title: String(p.title ?? ''), dependsOn: Array.isArray(p.dependsOn) ? p.dependsOn.map(String) : [], mvp: p.mvp === true }));
   const wave0FounderDecisions = (wave0?.founderDecisions || []).map((d) => { const m = /^(FD-\d+)\b/.exec(d); return m ? { id: m[1], text: d } : null; }).filter(Boolean);
   const ib = q.integrationBoard || {};
-  const backlogTasks = [...(backlog?.tasks || [])].sort((a, b) => cmp(String(a.id), String(b.id))).map((t) => ({ id: t.id, title: String(t.title ?? ''), status: t.status, owner: t.owner ?? null, dependsOn: t.dependsOn || [], notes: String(t.notes ?? ''), package: t.package ?? null, priority: t.priority ?? null, requiresNewAuthority: t.requiresNewAuthority === true }));
+  const backlogTasks = [...(backlog?.tasks || [])].sort((a, b) => cmp(String(a.id), String(b.id))).map((t) => ({ id: t.id, title: String(t.title ?? ''), status: t.status, owner: t.owner ?? null, dependsOn: t.dependsOn || [], notes: String(t.notes ?? ''), package: t.package ?? null, priority: t.priority ?? null, requiresNewAuthority: t.requiresNewAuthority === true,
+    files: Array.isArray(t.files) ? t.files.map(String).sort(cmp) : null, type: t.type ? String(t.type) : null }));
   return {
     queueTasks, deliverables, coordinatorBuild, founderQueue, integrationDecisions, wave0Packages, wave0FounderDecisions,
     autoMergeEvidence: (q.autoMergeEvidence || []).map((x) => ({ pr: prNum(x.pr), mergeCommit: x.mergeCommit ?? null, mergedAt: x.mergedAt ?? null })),

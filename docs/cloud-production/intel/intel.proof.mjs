@@ -1,4 +1,4 @@
-//TR: UASCO Intel V1 toplu kanıt betiği (node docs/cloud-production/intel/intel.proof.mjs). Ağ yoktur: betik kendini ağ korumasıyla (lib/net-guard.mjs, proof kipi: her node sürecine NODE_OPTIONS ile ön yüklenir; git yalnız file protokolü) ve izin listeli ortamla (token/sır yok, iki harf düzeninde ölü vekil, GIT_CONFIG_GLOBAL=/dev/null, imzasız commit) yeniden çalıştırır; GitHub kaynağı enjekte edilir ve çağrı sayısı 0 doğrulanır. Kapsam: alt kanıtlar (P3 P4 P5 P6 P10 P11 + ağ koruması lib/net-guard.proof.mjs) + P1 determinizm, P2 taban uzlaştırması (gerçek 19 Ekim blob'u), P7 tazelik/hız (ETag, kaynak başına tazelik, parmak izi, git ref tazeliği), P8 guard/zaman, P9 eski anahtar sürekliliği, P12 mutantlar (K1-K11 koordinatör listesi dahil; P12g: koruma mutantları korumasız 0. aşamadan, her biri yalnız kendi mutant korumasıyla ön yüklenmiş alt kanıtla çalışır, çünkü korumalı bir süreç başka bir korumanın ön yüklenmesine izin vermez), P13 ürün kodu kum havuzu (ortam, ağ, koruma atlatma, /proc, ana makine dosya sistemi ve soket sondaları; kum havuzu yoksa çalıştırmama; çıktı şeması), P14 sınırlı arşiv.
+//TR: UASCO Intel V1 toplu kanıt betiği (node docs/cloud-production/intel/intel.proof.mjs). Ağ yoktur: betik kendini ağ korumasıyla (lib/net-guard.mjs, proof kipi: her node sürecine NODE_OPTIONS ile ön yüklenir; git yalnız file protokolü) ve izin listeli ortamla (token/sır yok, iki harf düzeninde ölü vekil, GIT_CONFIG_GLOBAL=/dev/null, imzasız commit) yeniden çalıştırır; GitHub kaynağı enjekte edilir ve çağrı sayısı 0 doğrulanır. Kapsam: alt kanıtlar (P3 P4 P5 P6 P10 P11 + ağ koruması lib/net-guard.proof.mjs) + P1 determinizm, P2 taban uzlaştırması (gerçek 19 Ekim blob'u), P7 tazelik/hız (ETag, kaynak başına tazelik, parmak izi, git ref tazeliği), P8 guard/zaman, P9 eski anahtar sürekliliği, P12 mutantlar (K1-K12 koordinatör listesi dahil: K12 yalnız belge değiştiren PR/commit kuralı, K7b/K7c Founder görünümü; P12g: koruma mutantları korumasız 0. aşamadan, her biri yalnız kendi mutant korumasıyla ön yüklenmiş alt kanıtla çalışır, çünkü korumalı bir süreç başka bir korumanın ön yüklenmesine izin vermez; K13: OPENSSL_* ortamı, --openssl-config bayrakları ve strict kipte Worker), P13 ürün kodu kum havuzu (unix soketleri TMPDIR uzunluğundan bağımsız kısa bir dizinde) (ortam, ağ, koruma atlatma, /proc, ana makine dosya sistemi ve soket sondaları; kum havuzu yoksa çalıştırmama; çıktı şeması), P14 sınırlı arşiv.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -40,6 +40,9 @@ const GUARD_MUT = [
   { name: 'K9: LD_*/DYLD_* passed to allowed children', apply: (s) => s.replace("  for (const k of Object.keys(e)) if (/^(?:LD_|DYLD_)/i.test(k)) delete e[k];\n", '') },
   { name: 'K10: process.execve allowed', apply: (s) => s.replace("if (typeof process.execve === 'function') process.execve = blockFn('process.execve');", '') },
   { name: 'K10: process.dlopen blocked in strict mode only (03ed064)', apply: (s) => s.replace("process.dlopen = blockFn('process.dlopen');", "if (MODE === 'strict') process.dlopen = blockFn('process.dlopen');") },
+  { name: 'K13: OPENSSL_CONF / OPENSSL_ENGINES / OPENSSL_MODULES passed to allowed children (56e1791)', apply: (s) => s.replace("  for (const k of Object.keys(e)) if (OPENSSL_ENV.test(k)) delete e[k];\n", '') },
+  { name: 'K13: --openssl-config / --openssl-shared-config not refused (56e1791)', apply: (s) => s.replace('|snapshot-blob|openssl-(?:shared-)?config)(?:=|$)/;', '|snapshot-blob)(?:=|$)/;') },
+  { name: 'K13: worker_threads.Worker allowed in strict mode (strict block deleted)', apply: (s) => s.replace("if (MODE === 'strict') wt.Worker = class { constructor() { throw fail('worker_threads.Worker'); } };", '') },
 ];
 function guardMutants(onlyKey) {
   if (onlyKey && onlyKey !== 'P12') return { passed: 0, failed: 0, lines: [] };
@@ -81,6 +84,10 @@ if (process.env.INTEL_NET_GUARD_ACTIVE !== 'proof') {
 }
 const { rules } = loadRules(HERE);
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'intel-proof-'));
+// unix socket paths are limited to ~107 bytes: P13's sockets live in a short unique dir (a fixed '/tmp/ip-XXXXXX' prefix when /tmp is
+// writable, else under os.tmpdir()), removed at the end, so a long TMPDIR cannot break the proof
+let sockBase = null;
+const shortSockDir = () => { for (const d of ['/tmp', os.tmpdir()]) { try { return fs.realpathSync(fs.mkdtempSync(path.join(d, 'ip-'))); } catch { /* next candidate */ } } return tmp; };
 const outputs = (bundle) => {
   const o = buildOutputs({ inputs: bundle.inputs, rules, overlay: bundle.overlay, meta: bundle.meta, nowIso: new Date(bundle.nowIso).toISOString() });
   return { m: o.model, json: o.files['UASCO_REMAINING_WORK.json'], md: o.files['UASCO_REMAINING_WORK.md'], inv: o.files['UASCO_WORK_INVENTORY.json'], csv: o.files['UASCO_WORK_INVENTORY.csv'] };
@@ -277,12 +284,14 @@ try {
 
   // ---- P13 product-code sandbox: the readiness runner gives v7 code no secrets and no network (fails on 4fe58dd: env leaked, connect reached)
   if (want('P13')) {
+    sockBase = shortSockDir();
     // host-side observers: a TCP listener, a unix socket outside every sandbox dir, a root-only secret file and an escape-marker path
     let hits = 0, sockHits = 0;
     const srv = net.createServer((c) => { hits++; c.destroy(); });
     await new Promise((r) => srv.listen(0, '127.0.0.1', r));
     const port = srv.address().port;
-    const hostSock = path.join(tmp, 'host.sock');
+    const hostSock = path.join(sockBase, 'host.sock');
+    check(`P13 the unix sockets live in a short dir (${hostSock.length}-byte socket path <= 100) whatever TMPDIR is (os.tmpdir() ${os.tmpdir().length} bytes) (56e1791: under TMPDIR, EINVAL / ENAMETOOLONG with a long TMPDIR)`, hostSock.length <= 100 && path.join(sockBase, 'gu-inner', 'link.sock').length <= 100);
     const usrv = net.createServer((c) => { sockHits++; c.destroy(); });
     await new Promise((r) => usrv.listen(hostSock, r));
     const secretFile = path.join(tmp, 'root-only-secret'); fs.writeFileSync(secretFile, 'proof-fake-secret-file\n', { mode: 0o600 });
@@ -382,8 +391,8 @@ export const computeRoleReadiness = () => ({ schemaVersion: '0.0.1', authority: 
     for (const k of Object.keys(FAKE)) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; }
     // guard unit cases (no sandbox): strict guard in a child whose TMPDIR is an inner dir; a symlink there to an outer socket is refused,
     // a real socket inside works (tsx IPC), and the env/fork/binding/fake-node bypasses fail (fails on 4e1a897: path.resolve, env kept, fork passed through)
-    const inner = path.join(tmp, 'gu-inner'); fs.mkdirSync(inner);
-    const outerSock = path.join(tmp, 'gu-outer.sock'), innerSock = path.join(inner, 'in.sock');
+    const inner = path.join(sockBase, 'gu-inner'); fs.mkdirSync(inner);
+    const outerSock = path.join(sockBase, 'gu-outer.sock'), innerSock = path.join(inner, 'in.sock');
     let outerHits = 0, innerHits = 0, tcpHits = 0;
     const os2 = net.createServer((c) => { outerHits++; c.destroy(); }); await new Promise((r) => os2.listen(outerSock, r));
     const is2 = net.createServer((c) => { innerHits++; c.destroy(); }); await new Promise((r) => is2.listen(innerSock, r));
@@ -433,6 +442,7 @@ console.log(JSON.stringify(o));`;
     // audit schema: numbers / enums / ids / hex / timestamps only
     const okA = { schemaVersion: '1.0.0', authority: 'AUTHORITATIVE_READINESS_MEASUREMENT', denominator: 2, totals: { DEFINED: { TRUE: 2, FALSE: 0, UNKNOWN: 0, NOT_APPLICABLE: 0, denominator: 2, measured: true } }, stageWired: { TRUE: 0, FALSE: 2, UNKNOWN: 0, NOT_APPLICABLE: 0, denominator: 2, measured: false }, byGuild: [{ id: 'G01', kind: 'GUILD', clusterId: 'CL01', roles: 2, layers: {}, proposedOnly: { withCandidateSkills: 1 } }], byCluster: [], reasonCounts: { 'EXECUTABLE.stageWired': { NO_CODE_PATH: 2 } }, proposedOnly: { source: 'PROPOSED_DERIVED_NOT_RUNTIME', profiles: 2 }, inputs: { journal: 'ABSENT', roleDefinitionsSha256: 'a'.repeat(64), skillIds: 3 }, anomalies: 0, computedAt: '2026-10-26T23:32:07.997Z', digest: 'b'.repeat(64) };
     const vA = validateAudit(okA), vB = validateAudit({ ...okA, inputs: { ...okA.inputs, journal: 'ghp_ABC def' } }), vC = validateAudit({ ...okA, extra: 1 }), vD = validateAudit({ ...okA, reasonCounts: { 'x y': { A: 1 } } });
+    if (sockBase !== tmp) { fs.rmSync(sockBase, { recursive: true, force: true }); sockBase = null; }
     check('R2 audit schema keeps a well-formed audit and rejects free text, unknown keys and invalid keys', vA.ok && JSON.stringify(vA.audit.inputs) === JSON.stringify(okA.inputs) && !vB.ok && !vC.ok && !vD.ok && !JSON.stringify(vB.errors).includes('ghp_'));
   }
 
@@ -528,7 +538,7 @@ console.log(JSON.stringify(o));`;
       // ---- coordinator checklist K1-K7, K11 (intel-1.4 PR ownership rule, Founder view, action text); K8-K10 run as P12g from stage 0
       { name: "K1: the map's 'lists only other items' direction ignored (a test+states PR of a PT row counts EXPLICIT for a UI row)", file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('const all = new Set([...e.tb, ...e.body, ...e.map, ...e.rec]);', 'const all = new Set([...e.tb, ...e.body, ...(e.map.has(x) ? e.map : []), ...e.rec]);') },
       { name: 'K2: OTHER_ITEM refs kept in strongPrs / ownStartPrs', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('const strongPrs = [...(it.baseline ? inv : []),', "const strongPrs = [...(it.baseline ? [...inv, ...invWeak.filter((l) => l.source.startsWith('inventory.prs:other-item:'))] : []),") },
-      { name: 'K3: a SHARED PR treated as OTHER_ITEM for each owner (under-report)', file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('    if (!all.has(x)) return all.size ?', '    if (!all.has(x) || others.length) return all.size ?') },
+      { name: 'K3: a SHARED PR treated as OTHER_ITEM for each owner (under-report)', file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("    if (!all.has(x)) return { kind: 'OTHER_ITEM', others, conflict: null };", "    if (!all.has(x) || others.length) return { kind: 'OTHER_ITEM', others, conflict: null };") },
       { name: 'K4: an UNASSIGNED PR that passes STATUS19_CLAIMS_MERGED demoted to WEAK (under-report)', file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("return o.kind === 'OTHER_ITEM' ? o.others.join(',') : null; };", "return o.kind === 'OTHER_ITEM' ? o.others.join(',') : o.kind === 'UNASSIGNED' ? 'UNASSIGNED' : null; };") },
       { name: 'K5: title/map conflict resolved as OTHER_ITEM for the map-listed row (title wins)', file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('const all = new Set([...e.tb, ...e.body, ...e.map, ...e.rec]);', 'const all = new Set([...e.tb, ...e.body, ...(e.tb.size ? [] : e.map), ...e.rec]);') },
       { name: 'K5: title/map conflict kept at HIGH confidence', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("if (ownershipNotes.length && confidence === 'HIGH') confidence = 'MEDIUM';", '') },
@@ -538,6 +548,18 @@ console.log(JSON.stringify(o));`;
       { name: "K11: an OTHER_ITEM ref also attributed as EXPLICIT (double count of another item's PR)", file: 'model/links.mjs', proof: 'metrics/metrics.proof.mjs', apply: (s) => s.replace("else weak.set(r.n, r.reason); }", "else { weak.set(r.n, r.reason); if (/^other-item:/.test(r.reason)) explicit.set(r.n, 'inventory.prs[OTHER_ITEM]'); } }") },
       { name: 'K11: the reconciliation partition drops a class (sums no longer match the baseline)', file: 'model/pipeline.mjs', proof: 'metrics/metrics.proof.mjs', apply: (s) => s.replace("const rcls = RECON_CLASSES.filter((c) => !c.startsWith('EXCLUDED') && !c.startsWith('ADDED'));", "const rcls = RECON_CLASSES.filter((c) => !c.startsWith('EXCLUDED') && !c.startsWith('ADDED') && c !== 'STATUS_ONLY_UNVERIFIED');") },
       { name: "K-BK: a whole-title bookkeeping PR's body mention corroborates a merged claim again", file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('        if (isBk(n, it.id, field)) add(', "        if (field !== 'body' && isBk(n, it.id, field)) add(") },
+      // ---- intel-1.5 follow-up: K12 docs-only rule, K7b / K7c Founder view (K13 guard mutants run as P12g from stage 0)
+      { name: "K12: a DOCS_ONLY PR's body mention integrates again (kept as ID_IN_BODY)", file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("else if (docsOnly(n) === true && (field === 'body' || !dd)) add(", "else if (docsOnly(n) === true && field !== 'body' && !dd) add(") },
+      { name: "K12: a DOCS_ONLY commit's message integrates / dates a code row again", file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("if (d === true && !dd) add({ itemId: it.id, kind: 'COMMIT'", "if (false) add({ itemId: it.id, kind: 'COMMIT'") },
+      { name: "K12: a DOCS_ONLY PR's title / branch counts for a code row", file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("else if (docsOnly(n) === true && (field === 'body' || !dd)) add(", "else if (docsOnly(n) === true && field === 'body') add(") },
+      { name: 'K12: the documentation-deliverable exception dropped (under-report of MOB-* docs rows)', file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('const dd = docDeliverable(it);', 'const dd = null;') },
+      { name: 'K12: coordinator code under docs/ counted as documentation (docs/** whatever the extension)', file: 'rules/link-patterns.json', proof: 'model/status.proof.mjs', apply: (s) => s.replace('/.+\\\\.(?:md|markdown|json|txt|csv|png|svg|jpe?g)$|', '/|') },
+      { name: 'K12: an UNKNOWN file list silently treated as DOCS_ONLY (silent downgrade)', file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('const f = filesOf(n); return f === null ? null :', 'const f = filesOf(n); return f === null ? true :') },
+      { name: 'K12: an UNKNOWN file list the row relies on is not recorded in missingEvidence', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('  if (filesUnknown.length) missing.push(', '  if (false) missing.push(') },
+      { name: "K12: a DOCS_ONLY PR's mention not even listed as WEAK corroboration", file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('...docsWeak].filter((l) => integratedPr(pr(l)));', '].filter((l) => integratedPr(pr(l)));') },
+      { name: 'K7b: Founder view on the owner field only (founderOwned dropped: a lane queue owner hides the FOUNDER backlog owner)', file: 'model/pipeline.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("(x.owner === 'FOUNDER' || x.founderOwned || x.requiresNewAuthority)", "(x.owner === 'FOUNDER' || x.requiresNewAuthority)") },
+      { name: 'K7c: FOUNDER_ACTION_REQUIRED items with a BLOCKED Founder record excluded from the Founder view (live UI-004 P0)', file: 'model/pipeline.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace(" || (x.status === 'FOUNDER_ACTION_REQUIRED' && founderRecordBlocked(x.id))", '') },
+      { name: 'K7c: Founder view table without the status column (FOUNDER_ACTION_REQUIRED shown as BLOCKED)', file: 'render/report-md.mjs', proof: 'render/render.proof.mjs', apply: (s) => s.replace("FB.map((x) => [x.id, x.status || 'BLOCKED', x.priority", "FB.map((x) => [x.id, 'BLOCKED', x.priority") },
       { name: 'count status-only merged claims as integrated', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("else { reconClass = 'STATUS_ONLY_UNVERIFIED'; confidence = 'LOW';", "else { reconClass = 'STATUS_ONLY_UNVERIFIED'; integratedBy = inv.length ? inv : [{ kind: 'COMMIT', ref: 'x', strength: 'X' }]; confidence = 'LOW';") },
     ];
     for (const mu of MUT) {
@@ -552,6 +574,7 @@ console.log(JSON.stringify(o));`;
   }
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
+  if (sockBase && sockBase !== tmp) fs.rmSync(sockBase, { recursive: true, force: true });
   for (const f of fs.readdirSync(HERE).filter((n) => n.startsWith('.intel-escape-marker-'))) fs.rmSync(path.join(HERE, f), { force: true });
 }
 console.log(`SUMMARY: ${passed} passed, ${failed} failed`);

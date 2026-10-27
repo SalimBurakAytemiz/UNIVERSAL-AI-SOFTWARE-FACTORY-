@@ -1,4 +1,4 @@
-//TR: Kanıt merdiveni (coded -> integrated -> tested -> runtimeVerified -> accepted) ve durum önceliği. 19 Ekim 'prs' metni yalnız EXPLICIT referanslarla sınıf belirler; PR sahiplik kuralı (model/links.mjs): integratedBy, integratedPrs, strongPrs, gerçek başlangıç, lastMergedAt, tested/CI ve coded'a yalnız kalemin KENDİ (OWN/SHARED) PR'ı veya kapıdan geçen UNASSIGNED PR girer; OTHER_ITEM ve WEAK referanslar hiçbir basamağa girmez (merge iddialı satırda yalnız corroboratingWeakPrs olarak listelenir, kanıt değildir); başlık/harita çatışmalı PR'a dayanan kalemin güveni en çok MEDIUM'dur ve ownershipNotes taşır; kayıt tutma PR'ı (BOOKKEEPING_PR: backlog write-back, planlama, READY işaretleme) ve kayıt tutma commit'i hiçbir basamakta kanıt değildir; kısmen merge edilmiş EXPLICIT PR kümesi önce bağımsız kanıtla (kayıt/overlay/başlık/dal PR'ı, v7'deki kayıt başı, merge iddiasında commit/route) aranır, yoksa integrated=PARTIAL'dır. Gerçek başlangıç yalnız kalemin kendi kanıtından: güçlü PR (kayıt tutma PR'ları hariç), kodlanmış kalemin konu başı kimliği adlandıran kendi commit'i (backlog/planlama kayıt commit'leri hariç), kanıt merdiveninin entegrasyon kanıtı olarak kabul ettiği commit ve kodlanmış kalemin kayıt başı. runtimeVerified ölçüm kaynağı olmadığı için NOT_MEASURED'dır. İlk doğru kural kazanır: OBSOLETE, COMPLETED_AND_VERIFIED (çözümlenen kabul kanıtı), MERGED_NOT_VERIFIED (v7 atası merge/commit/route kanıtı), IMPLEMENTED_NOT_MERGED, FOUNDER_ACTION_REQUIRED, BLOCKED, IN_PROGRESS (taze talep), QUEUED, NOT_STARTED, UNKNOWN. JSON durum alanları, FAKE yürütücü, installer CI, backlog DONE ve sözleşme state'i ASLA kanıt değildir; kanıtsız ilerleme iddiası UNKNOWN olur ve missingEvidence taşır.
+//TR: Kanıt merdiveni (coded -> integrated -> tested -> runtimeVerified -> accepted) ve durum önceliği. 19 Ekim 'prs' metni yalnız EXPLICIT referanslarla sınıf belirler; PR sahiplik kuralı (model/links.mjs): integratedBy, integratedPrs, strongPrs, gerçek başlangıç, lastMergedAt, tested/CI ve coded'a yalnız kalemin KENDİ (OWN/SHARED) PR'ı veya kapıdan geçen UNASSIGNED PR girer; OTHER_ITEM ve WEAK referanslar hiçbir basamağa girmez (merge iddialı satırda yalnız corroboratingWeakPrs olarak listelenir, kanıt değildir); başlık/harita çatışmalı PR'a dayanan kalemin güveni en çok MEDIUM'dur ve ownershipNotes taşır; kayıt tutma PR'ı (BOOKKEEPING_PR: backlog write-back, planlama, READY işaretleme) ve kayıt tutma commit'i hiçbir basamakta kanıt değildir; yalnız belge değiştiren PR/commit anması (DOCS_ONLY_WEAK) hiçbir basamakta kanıt değildir, merge iddialı satırda en çok corroboratingWeakPrs olarak listelenir ve missingEvidence'a yazılır; dosya listesi bilinmeyen ve satırın dayandığı PR/commit missingEvidence'da adlandırılır; kısmen merge edilmiş EXPLICIT PR kümesi önce bağımsız kanıtla (kayıt/overlay/başlık/dal PR'ı, v7'deki kayıt başı, merge iddiasında commit/route) aranır, yoksa integrated=PARTIAL'dır. Gerçek başlangıç yalnız kalemin kendi kanıtından: güçlü PR (kayıt tutma PR'ları hariç), kodlanmış kalemin konu başı kimliği adlandıran kendi commit'i (backlog/planlama kayıt commit'leri hariç), kanıt merdiveninin entegrasyon kanıtı olarak kabul ettiği commit ve kodlanmış kalemin kayıt başı. runtimeVerified ölçüm kaynağı olmadığı için NOT_MEASURED'dır. İlk doğru kural kazanır: OBSOLETE, COMPLETED_AND_VERIFIED (çözümlenen kabul kanıtı), MERGED_NOT_VERIFIED (v7 atası merge/commit/route kanıtı), IMPLEMENTED_NOT_MERGED, FOUNDER_ACTION_REQUIRED, BLOCKED, IN_PROGRESS (taze talep), QUEUED, NOT_STARTED, UNKNOWN. JSON durum alanları, FAKE yürütücü, installer CI, backlog DONE ve sözleşme state'i ASLA kanıt değildir; kanıtsız ilerleme iddiası UNKNOWN olur ve missingEvidence taşır.
 import { uniqSorted, cmp } from '../core/canonical-json.mjs';
 import { baselineClass, classOfPrs } from './baseline.mjs';
 import { toMs } from '../core/time.mjs';
@@ -18,8 +18,13 @@ export function deriveItem(it, links, ctx) {
   const isOpen = (p) => !!p && p.state === 'open';
   const inv = prL.filter((l) => l.strength === 'EXPLICIT' && l.source.startsWith('inventory.prs'));
   const invWeak = prL.filter((l) => l.strength === 'INVENTORY_WEAK');
+  // a DOCS_ONLY PR's body (or its title / branch for a row whose deliverable is not documentation): never evidence, WEAK corroboration at most
+  const docsWeak = prL.filter((l) => l.strength === 'DOCS_ONLY_WEAK');
+  const docsWeakC = links.filter((l) => l.kind === 'COMMIT' && l.strength === 'DOCS_ONLY_WEAK');
+  const weakWhy = (l) => (l.strength === 'INVENTORY_WEAK' ? l.source.slice('inventory.prs:'.length) : l.source);
+  const weakList = (ls, label) => (ls.length ? `; ${label} ${uniqSorted(ls.map((l) => `#${l.pr} (${weakWhy(l)})`)).join(', ')} are corroboration only, never evidence` : '');
   // merged WEAK references that are not another item's PR: listed on a status-only merged claim as corroboration only (never evidence)
-  const weakCorr = invWeak.filter((l) => !l.source.startsWith('inventory.prs:other-item:') && integratedPr(pr(l)));
+  const weakCorr = [...invWeak.filter((l) => !l.source.startsWith('inventory.prs:other-item:')), ...docsWeak].filter((l) => integratedPr(pr(l)));
   const recExplicit = prL.filter((l) => l.strength === 'EXPLICIT' && /(^|\+)(queue_task|deliverable|coordinator_build):/.test(l.source));
   const overlayL = prL.filter((l) => l.strength === 'OVERLAY');
   const tb = prL.filter((l) => l.strength === 'ID_IN_TITLE' || l.strength === 'ID_IN_BRANCH');
@@ -73,7 +78,7 @@ export function deriveItem(it, links, ctx) {
     else if (headLinks.length) { reconClass = 'CORROBORATED_BY_COMMIT'; integratedBy = headLinks; matchKind = 'RECORD_HEAD'; confidence = 'MEDIUM'; }
     else if (commitMsg.length) { reconClass = 'CORROBORATED_BY_COMMIT'; integratedBy = commitMsg; matchKind = 'COMMIT_MESSAGE'; confidence = 'MEDIUM'; }
     else if (literal.length) { reconClass = 'CORROBORATED_BY_COMMIT'; integratedBy = literal; matchKind = literal[0].strength === 'ROUTE_LITERAL_AT_HEAD' ? 'ROUTE_LITERAL' : 'IPC_LITERAL'; confidence = 'MEDIUM'; }
-    else { reconClass = 'STATUS_ONLY_UNVERIFIED'; confidence = 'LOW'; missing.push(`no PR/commit/route evidence for ${id}; the 19-Oct status ${it.baseline.status19 === 'INTEGRATED_NOT_VERIFIED' ? 'INV' : 'MNI'} is a status field, not evidence${weakCorr.length ? `; WEAK 19-Oct reference(s) ${weakCorr.map((l) => `#${l.pr} (${l.source.slice('inventory.prs:'.length)})`).join(', ')} are corroboration only, never evidence` : ''}`); }
+    else { reconClass = 'STATUS_ONLY_UNVERIFIED'; confidence = 'LOW'; missing.push(`no PR/commit/route evidence for ${id}; the 19-Oct status ${it.baseline.status19 === 'INTEGRATED_NOT_VERIFIED' ? 'INV' : 'MNI'} is a status field, not evidence${weakList(weakCorr.filter((l) => l.strength === 'INVENTORY_WEAK'), 'WEAK 19-Oct reference(s)')}${weakList(weakCorr.filter((l) => l.strength === 'DOCS_ONLY_WEAK'), 'docs-only PR mention(s)')}`); }
   } else {
     const relink = [...recExplicit, ...overlayL, ...tb];
     const rm = pick(relink, integratedPr), ro = pick(relink, isOpen);
@@ -179,7 +184,7 @@ export function deriveItem(it, links, ctx) {
   else if (queueStates.includes('BLOCKED') || backlogStates.includes('BLOCKED') || ebc === 'STALE_BLOCKED') { status = 'BLOCKED'; rule = 6; }
   else if (claimFresh) { status = 'IN_PROGRESS'; rule = 7; }
   else if (queueStates.some((s) => ['QUEUED', 'WAITING_BASE', 'REPAIR_QUEUED'].includes(s)) || backlogStates.includes('READY') || (isW0 && !dispatchedWave0.has(id))) { status = 'QUEUED'; rule = 8; }
-  else if ((ebc === 'STALE_NOT_STARTED' || (backlogStates.includes('DRAFT_NOT_READY') && !progressClaimNoEvidence)) && !prL.some((l) => !['ID_IN_BODY', 'INVENTORY_WEAK', 'BOOKKEEPING_PR'].includes(l.strength))) { status = 'NOT_STARTED'; rule = 9; }
+  else if ((ebc === 'STALE_NOT_STARTED' || (backlogStates.includes('DRAFT_NOT_READY') && !progressClaimNoEvidence)) && !prL.some((l) => !['ID_IN_BODY', 'INVENTORY_WEAK', 'BOOKKEEPING_PR', 'DOCS_ONLY_WEAK'].includes(l.strength))) { status = 'NOT_STARTED'; rule = 9; }
   else { status = 'UNKNOWN'; rule = 10; }
   if (status === 'UNKNOWN') {
     if (reconClass === 'PR_CLOSED_UNMERGED_ONLY') missing.push(`linked PR(s) ${inv.map((l) => l.ref).join(',')} closed without merge; no merged or open PR, commit or route evidence for ${id}`);
@@ -196,6 +201,11 @@ export function deriveItem(it, links, ctx) {
   // own evidence that the item itself started: merged or open strong PRs (never closed-unmerged, never WEAK refs); for a CODED item only:
   // its own v7 commits (subject head names the id, bookkeeping subjects such as backlog:/planning: excluded) and its coordinator record heads
   const ownStartPrs = strongPrs.filter((l) => { const p = pr(l); return !!(p && (p.mergedAt || p.state === 'open')); }).map(pr);
+  // docs-only rule: a DOCS_ONLY PR mention is never evidence (named when the row has no integration evidence); a PR whose file list is
+  // UNKNOWN keeps the pre-docs-only rule and is named when the row relies on it (integratedBy, or a merged / open strong PR)
+  if (live && (docsWeak.length || docsWeakC.length) && integ !== T) missing.push(`docs-only mention(s) ${uniqSorted([...docsWeak.map((l) => `PR #${l.pr} (${l.source})`), ...docsWeakC.map((l) => `commit ${l.ref.slice(0, 7)} (${l.source})`)]).join(', ')}: every changed file is documentation / report / evidence, so they are never evidence that ${id} is coded, integrated, tested or started`);
+  const filesUnknown = live ? uniqSorted([...integratedBy.filter((l) => l.kind === 'PR'), ...strongPrs.filter((l) => { const p = pr(l); return !!(p && (p.mergedAt || p.state === 'open')); })].filter((l) => l.prFiles === 'UNKNOWN').map((l) => l.pr)) : [];
+  if (filesUnknown.length) missing.push(`docs-only check not run: file list of PR ${filesUnknown.map((n) => `#${n}`).join(',')} UNKNOWN (only merges into v7/integration that git resolves exactly and open PRs have file lists); its own title/branch/body link to ${id} is kept under the pre-docs-only rule, not verified as code`);
   // a commit the ladder accepted as this item's integrating evidence (CORROBORATED_BY_COMMIT via the message) dates it as well
   const integMsg = new Set(integCommits.filter((l) => l.strength === 'ID_IN_COMMIT_MESSAGE').map((l) => l.ref));
   const ownStartCommits = coded !== T ? [] : [
@@ -205,6 +215,9 @@ export function deriveItem(it, links, ctx) {
   // subject): never a start (no per-commit file list proves they implement it), reported so a later own start reads as an upper bound
   const bkTitle = bookkeepingPr ? new RegExp(bookkeepingPr.wholeTitleRegex, bookkeepingPr.wholeTitleFlags || '') : null;
   const ownStartRefs = new Set(ownStartCommits.map((l) => l.ref));
+  // a commit-message mention the row relies on (integrating commit or own start) whose commit file list is UNKNOWN: named, rule unchanged
+  const cFilesUnknown = live ? uniqSorted([...integCommits, ...commitMsg.filter((l) => ownStartRefs.has(l.ref))].filter((l) => l.commitFiles === 'UNKNOWN').map((l) => l.ref.slice(0, 7))) : [];
+  if (cFilesUnknown.length) missing.push(`docs-only check not run: file list of v7 commit ${cFilesUnknown.join(',')} UNKNOWN; its message mention of ${id} is kept under the pre-docs-only rule, not verified as code`);
   const namesNoItem = (sj) => !!resolver && !resolver.resolveText(sj).length && !resolver.resolveLiteral(sj, 'title').length;
   const earlierMentions = coded !== T ? [] : commitMsg.filter((l) => { const sj = commitSubjects.get(l.ref) || ''; return l.at && !ownStartRefs.has(l.ref) && !/^Merge /.test(sj) && !(bkTitle && bkTitle.test(sj)) && namesNoItem(sj); }).map((l) => ({ ref: l.ref, at: l.at }));
   const commitEvidence = integCommits.length ? { sha7: /^[0-9a-f]{40}$/.test(integCommits[0].ref) ? integCommits[0].ref.slice(0, 7) : integCommits[0].ref, at: integCommits[0].at, matchKind } : null;
@@ -215,7 +228,7 @@ export function deriveItem(it, links, ctx) {
     integratedPrs: uniqSorted(integPrs.map((p) => p.number)), corroboratingWeakPrs: statusOnlyWeak ? uniqSorted(weakCorr.map((l) => l.pr)) : [], mergeCommits: uniqSorted(integPrs.map((p) => p.mergeCommitSha.slice(0, 7))), mergedAt: uniqSorted(integPrs.map((p) => p.mergedAt)),
     commitEvidence, supportingRefs: uniqSorted(supporting.map((l) => l.ref)),
     candidateLinks: uniqSorted([...(ebc !== 'STALE_STATUS_SAYS_MERGED' ? pick(body, (p) => p && p.mergedAt).map((l) => `body:#${l.pr}`) : []), ...(!['CORROBORATED_BY_COMMIT'].includes(reconClass) && !integrated ? commitMsgAll.map((l) => `commit:${l.ref.slice(0, 7)}`) : []),
-      ...pick(invWeak, (p) => p && p.mergedAt).filter((l) => !integratedBy.includes(l)).map((l) => `inventory-weak:#${l.pr}`), ...bookkeeping.map((l) => `bookkeeping:#${l.pr}`)]),
+      ...pick(invWeak, (p) => p && p.mergedAt).filter((l) => !integratedBy.includes(l)).map((l) => `inventory-weak:#${l.pr}`), ...bookkeeping.map((l) => `bookkeeping:#${l.pr}`), ...docsWeak.map((l) => `docs-only:#${l.pr}`), ...docsWeakC.map((l) => `docs-only-commit:${l.ref.slice(0, 7)}`)]),
     weakInventoryRefs: invWeak.map((l) => `#${l.pr} ${l.source.slice('inventory.prs:'.length)}`).sort(),
     ownStart: { prs: ownStartPrs.map((p) => ({ number: p.number, createdAt: p.createdAt })), commits: ownStartCommits.map((l) => ({ ref: l.ref, at: l.at, strength: l.strength })), earlierMentions },
     evidence: evidence.sort((a, b) => cmp(a.kind, b.kind) || cmp(String(a.ref), String(b.ref)) || cmp(a.strength || '', b.strength || '')),

@@ -1,4 +1,4 @@
-//TR: Ağ koruması alt kanıtı (ağsız; node lib/net-guard.proof.mjs): yanındaki lib/net-guard.mjs ile ön yüklenmiş bir sonda süreci (strict ve proof kipleri) korumadan önce kod çalıştırma yollarını dener. K8: NODE_OPTIONS içinde tek tırnakla gizlenmiş --require (node tek tırnağı gruplamaz), bütünüyle tek tırnaklı, tırnaklı yol, çift tırnakla bölünmüş bayrak, argv / fork execArgv / NODE_OPTIONS --env-file(-if-exists) -> hepsi INTEL_NET_BLOCKED ve ön yükleme hiç çalışmaz; korumanın kendisi kabul edilir ve node alt sürecinin NODE_OPTIONS'u yalnız koruma importudur. K9: izin verilen node ve (strict) esbuild alt süreçlerine LD_*/DYLD_* ve yabancı NODE_OPTIONS geçmez. K10: process.execve ve process.dlopen her iki kipte engellidir. intel.proof.mjs bu dosyayı alt kanıt olarak çalıştırır ve P12g'de her koruma mutantında kendi korumasıyla yeniden çalıştırır.
+//TR: Ağ koruması alt kanıtı (ağsız; node lib/net-guard.proof.mjs): yanındaki lib/net-guard.mjs ile ön yüklenmiş bir sonda süreci (strict ve proof kipleri) korumadan önce kod çalıştırma yollarını dener. K13: --openssl-config / --openssl-shared-config argv, NODE_OPTIONS ve fork execArgv'de reddedilir; OPENSSL_CONF/OPENSSL_ENGINES/OPENSSL_MODULES izin verilen hiçbir alt sürece geçmez; strict kipte Worker yasaktır (proof kipinde serbesttir). K8: NODE_OPTIONS içinde tek tırnakla gizlenmiş --require (node tek tırnağı gruplamaz), bütünüyle tek tırnaklı, tırnaklı yol, çift tırnakla bölünmüş bayrak, argv / fork execArgv / NODE_OPTIONS --env-file(-if-exists) -> hepsi INTEL_NET_BLOCKED ve ön yükleme hiç çalışmaz; korumanın kendisi kabul edilir ve node alt sürecinin NODE_OPTIONS'u yalnız koruma importudur. K9: izin verilen node ve (strict) esbuild alt süreçlerine LD_*/DYLD_* ve yabancı NODE_OPTIONS geçmez. K10: process.execve ve process.dlopen her iki kipte engellidir. intel.proof.mjs bu dosyayı alt kanıt olarak çalıştırır ve P12g'de her koruma mutantında kendi korumasıyla yeniden çalıştırır.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -18,6 +18,8 @@ try {
   const mark = path.join(tmp, 'pre.mark');
   const pre = path.join(tmp, 'pre.cjs');
   fs.writeFileSync(pre, `require('fs').appendFileSync(${J(mark)}, 'PRELOAD_RAN\\n');\n`);
+  const cnf = path.join(tmp, 'ossl.cnf');
+  fs.writeFileSync(cnf, '# harmless OpenSSL config (K13: never loaded by a guarded child)\n');
   const envFile = path.join(tmp, 'pre.env');
   fs.writeFileSync(envFile, `NODE_OPTIONS=--require ${pre}\n`);
   fs.writeFileSync(path.join(tmp, 'noop.mjs'), '');
@@ -28,7 +30,7 @@ const o = { active: process.env.INTEL_NET_GUARD_ACTIVE || 'none' };
 // K10 process-image replacement runs alone (when it is not blocked this process becomes /bin/sh and prints EXECVE_RAN)
 if (process.argv[2] === 'execve') { try { process.execve('/bin/sh', ['/bin/sh', '-c', 'echo EXECVE_RAN'], { PATH: process.env.PATH }); o.execve = 'RAN'; } catch (e) { o.execve = C(e); } console.log(JSON.stringify(o)); process.exit(0); }
 const sp = (args, env) => { try { const r = cp.spawnSync(process.execPath, args, { env: { PATH: process.env.PATH, ...(env || {}) }, encoding: 'utf8', timeout: 8000 }); return 'SPAWNED:' + String(r.stdout || '').trim().slice(0, 300); } catch (e) { return C(e); } };
-const PRE = ${J(pre)}, ENVF = ${J(envFile)}, GUARD = ${J(GUARD_URL)};
+const PRE = ${J(pre)}, ENVF = ${J(envFile)}, GUARD = ${J(GUARD_URL)}, CNF = ${J(cnf)};
 // K8: NODE_OPTIONS preloads hidden by quoting (node groups only double quotes), and env-file indirection
 o.k8singleInside = sp(['-e', '0'], { NODE_OPTIONS: "--title='a --require " + PRE + " b'" });
 o.k8singleWhole = sp(['-e', '0'], { NODE_OPTIONS: "'--require " + PRE + "'" });
@@ -43,6 +45,15 @@ o.k8guardOnly = sp(['-e', 'console.log(process.env.NODE_OPTIONS)'], { NODE_OPTIO
 // K9: no dynamic-loader preload reaches an allowed child
 o.k9node = sp(['-e', 'console.log(JSON.stringify({ ld: Object.keys(process.env).filter((k) => /^(LD_|DYLD_)/i.test(k)), no: process.env.NODE_OPTIONS }))'], { LD_PRELOAD: '/nonexistent/intel-ld.so', LD_LIBRARY_PATH: ${J(tmp)}, DYLD_INSERT_LIBRARIES: '/nonexistent/x.dylib' });
 o.k9bin = (() => { if (o.active !== 'strict') return 'SKIPPED'; try { const r = cp.spawnSync(${J(fakeEsbuild)}, [], { env: { PATH: process.env.PATH, LD_PRELOAD: '/nonexistent/intel-ld.so', LD_AUDIT: '/nonexistent/a.so', DYLD_INSERT_LIBRARIES: '/x', NODE_OPTIONS: '--max-old-space-size=64 --import ' + GUARD }, encoding: 'utf8', timeout: 8000 }); return String(r.stdout || '').split('\\n').filter((l) => /^(LD_|DYLD_|NODE_OPTIONS=)/i.test(l)).join(';') || 'CLEAN'; } catch (e) { return C(e); } })();
+// K13: OpenSSL configuration (it can load an engine / provider shared object before any JS runs): flags refused, env stripped
+o.k13cfgArgv = sp(['--openssl-config=' + CNF, '-e', '0']);
+o.k13sharedArgv = sp(['--openssl-shared-config', '-e', '0']);
+o.k13cfgOptions = sp(['-e', '0'], { NODE_OPTIONS: '--openssl-config=' + CNF });
+o.k13forkCfg = await new Promise((res) => { try { const ch = cp.fork(${J(path.join(tmp, 'noop.mjs'))}, [], { execArgv: ['--openssl-config=' + CNF], stdio: 'ignore' }); ch.on('exit', () => res('RAN')); ch.on('error', (e) => res(C(e))); } catch (e) { res(C(e)); } });
+o.k13env = sp(['-e', 'console.log(JSON.stringify(Object.keys(process.env).filter((k) => /^OPENSSL_/i.test(k))))'], { OPENSSL_CONF: CNF, OPENSSL_ENGINES: ${J(tmp)}, OPENSSL_MODULES: ${J(tmp)} });
+o.k13bin = (() => { if (o.active !== 'strict') return 'SKIPPED'; try { const r = cp.spawnSync(${J(fakeEsbuild)}, [], { env: { PATH: process.env.PATH, OPENSSL_CONF: CNF, OPENSSL_ENGINES: '/x', OPENSSL_MODULES: '/x' }, encoding: 'utf8', timeout: 8000 }); return String(r.stdout || '').split('\\n').filter((l) => /^OPENSSL_/i.test(l)).join(';') || 'CLEAN'; } catch (e) { return C(e); } })();
+// K13: strict mode forbids worker threads (they do not run the --import guard preload)
+o.k13worker = await (async () => { try { const { Worker } = await import('node:worker_threads'); const w = new Worker('0', { eval: true }); await new Promise((r) => w.on('exit', r)); return 'CREATED'; } catch (e) { return C(e); } })();
 // K10: native addon loading
 o.dlopen = (() => { try { process.dlopen({ exports: {} }, ${J(path.join(tmp, 'x.node'))}); return 'LOADED'; } catch (e) { return C(e); } })();
 console.log(JSON.stringify(o));
@@ -65,6 +76,11 @@ console.log(JSON.stringify(o));
     if (mode === 'strict') check(`K9 strict: an allowed non-node child (esbuild under the bin dir) gets no LD_*/DYLD_* and only the guard import in NODE_OPTIONS (${o?.k9bin})`, !!o && (o.k9bin === 'CLEAN' || o.k9bin === `NODE_OPTIONS=--import ${GUARD_URL}`));
     check(`K10 ${mode}: process.execve is blocked (${ex.o ? ex.o.execve : `no JSON: ${String(ex.raw).slice(0, 40)}`}) (03ed064: the probe became /bin/sh, EXECVE_RAN)`, !!ex.o && ex.o.active === mode && ex.o.execve === 'INTEL_NET_BLOCKED');
     check(`K10 ${mode}: process.dlopen is blocked (${o?.dlopen}) (03ed064: blocked in strict only; proof mode reached the loader)`, B('dlopen'));
+    check(`K13 ${mode}: OpenSSL config flags are refused (argv --openssl-config ${o?.k13cfgArgv}, --openssl-shared-config ${o?.k13sharedArgv}, NODE_OPTIONS ${o?.k13cfgOptions}, fork execArgv ${o?.k13forkCfg}) (56e1791: SPAWNED / RAN)`, ['k13cfgArgv', 'k13sharedArgv', 'k13cfgOptions', 'k13forkCfg'].every(B));
+    check(`K13 ${mode}: OPENSSL_CONF / OPENSSL_ENGINES / OPENSSL_MODULES never reach an allowed node child (${o?.k13env}) (56e1791: all three passed)`, !!o && o.k13env === 'SPAWNED:[]');
+    if (mode === 'strict') check(`K13 strict: an allowed non-node child (esbuild under the bin dir) gets no OPENSSL_* (${o?.k13bin}) (56e1791: OPENSSL_CONF passed)`, !!o && o.k13bin === 'CLEAN');
+    if (mode === 'strict') check(`K13 strict: worker_threads.Worker is blocked (${o?.k13worker}) (a mutant without the strict block creates the worker)`, B('k13worker'));
+    else check(`K13 proof: worker threads stay available in proof mode (${o?.k13worker}) (control: the strict block is mode-specific)`, !!o && o.k13worker === 'CREATED');
   }
   const ran = fs.existsSync(mark) ? fs.readFileSync(mark, 'utf8').trim().split('\n').length : 0;
   check(`K8 no refused preload ever ran (marker lines ${ran})`, ran === 0);

@@ -91,7 +91,7 @@ export function buildIdentity({ baseline, roadmap, coordinator, dependencyMap, o
   // 2) backlog (docs/planning/BACKLOG_CHECKPOINT.json)
   for (const t of coordinator.backlogTasks) {
     relateOrAdd(t.id, t.id, 'BACKLOG', (cid) => newItem(cid, { title: t.title, description: t.notes || null, dimension: 'backlog', origin: 'BACKLOG', owner: t.owner }),
-      { kind: 'BACKLOG', ref: t.id, status: t.status, owner: t.owner, dependsOn: t.dependsOn, priority: t.priority ?? null, requiresNewAuthority: t.requiresNewAuthority === true, reason: `backlog id ${t.id} not in the 19-Oct inventory` });
+      { kind: 'BACKLOG', ref: t.id, status: t.status, owner: t.owner, dependsOn: t.dependsOn, priority: t.priority ?? null, requiresNewAuthority: t.requiresNewAuthority === true, files: t.files ?? null, type: t.type ?? null, reason: `backlog id ${t.id} not in the 19-Oct inventory` });
   }
   // 3) Wave 0 packages
   for (const p of coordinator.wave0Packages) {

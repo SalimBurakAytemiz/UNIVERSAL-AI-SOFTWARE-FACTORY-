@@ -141,7 +141,8 @@ export function parseInventoryPrs(text, P) {
 // assign the PR to another known item (otherItemOf(n, annotation) -> that item's id or null) AND the gate holds (PR title/branch/body
 // names the item, the item's own 19-Oct title names the PR, or the 19-Oct status already claims merged/integrated); otherwise WEAK with the
 // first reason found ('other-item:<ID>' when the annotation names another item). Unknown PR numbers are dropped.
-export function inventoryPrRefs(row, prMap, P, gate, otherItemOf = () => null, ownerOf = () => null) {
+// gateMiss(n): why a candidate that passed no gate is WEAK when the reason is more specific than 'no-id-match' (a DOCS_ONLY PR's text)
+export function inventoryPrRefs(row, prMap, P, gate, otherItemOf = () => null, ownerOf = () => null, gateMiss = () => null) {
   const byN = new Map();
   for (const r of parseInventoryPrs(row.prs, P)) { if (!prMap.has(r.n)) continue; if (!byN.has(r.n)) byN.set(r.n, []); byN.get(r.n).push(r); }
   const out = [];
@@ -155,7 +156,7 @@ export function inventoryPrRefs(row, prMap, P, gate, otherItemOf = () => null, o
     if (cand && g) out.push({ n, strength: 'EXPLICIT', gate: g, reason: null });
     else {
       const r0 = rs.find((r) => r.form === 'RANGE') || rs.find((r) => r.nested) || rs.find((r) => r.role) || rs[0];
-      const reason = cand ? 'no-id-match' : other ? `other-item:${other}` : r0.form === 'RANGE' ? `range ${r0.range}` : r0.nested ? 'nested' : `role:${r0.role}`;
+      const reason = cand ? gateMiss(n) || 'no-id-match' : other ? `other-item:${other}` : r0.form === 'RANGE' ? `range ${r0.range}` : r0.nested ? 'nested' : `role:${r0.role}`;
       out.push({ n, strength: 'WEAK', gate: null, reason });
     }
   }

@@ -1,4 +1,4 @@
-//TR: P10 çıktı kanıtı (ağsız): MD başlıkları A–J tam bu sırada; runtime NOT_MEASURED, FULL/FULL_ONLY ayrımı, hedef aralıkları, installer istisnası, PARTIAL satırı ve MVP payda gerekçesi panoda; çapa sayılar JSON alanlarına eşit; CSV sabit sütun sırasıyla JSON kalemlerine geri dönüşür; //TR ilk satırları/ilk anahtarları mevcut; CSV'de yorum satırı yok. K7: Founder kuyruğu A (sayı + ilk 5'te P0), G (tablo) ve H (eylem) bölümlerinde görünür.
+//TR: P10 çıktı kanıtı (ağsız): MD başlıkları A–J tam bu sırada; runtime NOT_MEASURED, FULL/FULL_ONLY ayrımı, hedef aralıkları, installer istisnası, PARTIAL satırı ve MVP payda gerekçesi panoda; çapa sayılar JSON alanlarına eşit; CSV sabit sütun sırasıyla JSON kalemlerine geri dönüşür; //TR ilk satırları/ilk anahtarları mevcut; CSV'de yorum satırı yok. K7/K7c: Founder kuyruğu (BLOCKED ve kaydı BLOCKED olan FOUNDER_ACTION_REQUIRED kalemler) A (sayı + ilk 5'te P0), G (durumlu tablo) ve H (eylem) bölümlerinde görünür.
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { miniBundle } from '../fixtures/mini/bundle.mjs';
@@ -45,9 +45,18 @@ check('R2 inventory JSON carries corroboratingWeakPrs (WEAK-only corroboration l
 {
   const secOf = (letter) => { const a = md.indexOf(`## ${letter}. `); const b = md.indexOf('\n## ', a + 4); return md.slice(a, b < 0 ? undefined : b); };
   const A = secOf('A'), G = secOf('G'), H = secOf('H');
-  check("K7 MD Founder view: section A counts 3 Founder blockers and lists DESIGN-EVIDENCE-X P0 among the first five; section G has a row for each of DESIGN-EVIDENCE-X / FD-SIGN-X / RESEAL-X; section H lists their actions; LOCAL-BLOCKED-X is in none (03ed064: absent)",
-    /Founder engelleri \(BLOCKED; sahibi FOUNDER veya yeni yetki gerekli\):\*\* 3 \(DESIGN-EVIDENCE-X P0, FD-SIGN-X, RESEAL-X\)/.test(A) && /^  - DESIGN-EVIDENCE-X: BLOCKED, sahibi FOUNDER, yeni yetki gerekli/m.test(A)
-    && ['DESIGN-EVIDENCE-X', 'FD-SIGN-X', 'RESEAL-X'].every((id) => new RegExp(`^\\| ${id} \\|`, 'm').test(G) && new RegExp(`^- ${id}: Founder engeli`, 'm').test(H)) && !/LOCAL-BLOCKED-X/.test(A + G + H.replace(/\*\*Lane[\s\S]*?\*\*Doğrulama/, '')) && Array.isArray(r.plan.founderBlocked) && !!r.fieldSemantics['plan.founderBlocked']);
+  const FBIDS = ['DESIGN-EVIDENCE-X', 'UI-051', 'UI-007', 'FD-QUEUE-X', 'FD-SIGN-X', 'RESEAL-X'];
+  check("K7/K7c MD Founder view: section A counts 6 Founder blockers (DESIGN-EVIDENCE-X P0, UI-051 P0, UI-007 P1, FD-QUEUE-X, FD-SIGN-X, RESEAL-X) and lists DESIGN-EVIDENCE-X (BLOCKED) and UI-051 (FOUNDER_ACTION_REQUIRED) among the first five; section G has a row with the status for each; section H lists their actions; LOCAL-BLOCKED-X is in none (03ed064: absent; 56e1791: 4 BLOCKED items, UI-051 / UI-007 absent)",
+    /Founder engelleri \(BLOCKED ya da kaydı BLOCKED olan FOUNDER_ACTION_REQUIRED; sahibi FOUNDER veya yeni yetki gerekli\):\*\* 6 \(DESIGN-EVIDENCE-X P0, UI-051 P0, UI-007 P1, FD-QUEUE-X, FD-SIGN-X, RESEAL-X\)/.test(A) && /^  - DESIGN-EVIDENCE-X: BLOCKED, sahibi FOUNDER, yeni yetki gerekli/m.test(A) && /^  - UI-051: FOUNDER_ACTION_REQUIRED, sahibi FOUNDER, yeni yetki gerekli/m.test(A)
+    && FBIDS.every((id) => new RegExp(`^\\| ${id} \\| (BLOCKED|FOUNDER_ACTION_REQUIRED) \\|`, 'm').test(G) && new RegExp(`^- ${id}: Founder engeli`, 'm').test(H)) && /^\| UI-051 \| FOUNDER_ACTION_REQUIRED \| P0 \|/m.test(G) && !/LOCAL-BLOCKED-X/.test(A + G + H.replace(/\*\*Lane[\s\S]*?\*\*Doğrulama/, '')) && Array.isArray(r.plan.founderBlocked) && r.plan.founderBlocked.map((x) => x.id).join() === FBIDS.join() && !!r.fieldSemantics['plan.founderBlocked']);
+}
+// K12 (intel-1.5): the docs-only rule is documented and visible: UI-048's DOCS_ONLY #62 is a corroborating WEAK PR in the CSV, never an
+// integrated PR (56e1791: integratedPrs #62)
+{
+  const u48 = rows0().find((c) => c[0] === 'UI-048');
+  check("K12 field docs name the docs-only rule (integrated: never a DOCS_ONLY PR's body; links[].docsOnly / links[].prFiles; docs-only candidate links) and the CSV row of UI-048 lists #62 as corroboratingWeakPrs only (prs empty, integrated UNKNOWN, no lastMergedAt)",
+    /never a DOCS_ONLY PR's body/.test(r.fieldSemantics['items[].substeps.integrated']) && !!r.fieldSemantics['links[].docsOnly'] && !!r.fieldSemantics['links[].prFiles'] && /docs-only:#N/.test(r.fieldSemantics['items[].candidateLinks'] || '')
+      && !!u48 && u48[CSV_COLUMNS.indexOf('corroboratingWeakPrs')] === '#62' && u48[CSV_COLUMNS.indexOf('prs')] === '' && u48[CSV_COLUMNS.indexOf('integrated')] === 'UNKNOWN' && u48[CSV_COLUMNS.indexOf('lastMergedAt')] === '');
 }
 // LOW label fixes (each fails on 4fe58dd)
 check('LOW runtime row shows NOT_MEASURED, never 0/n (%0)', /^\| Runtime doğrulandı \(runtimeVerificationRatio\) \| NOT_MEASURED/.test(row('Runtime doğrulandı') || '') && !/\| 0\/\d+ \(%0\)/.test(row('Runtime doğrulandı') || ''));

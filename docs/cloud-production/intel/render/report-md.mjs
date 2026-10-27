@@ -63,9 +63,9 @@ export function renderMarkdown(r, { listCap = 40 } = {}) {
   L.push(`- **31 Ekim riski:** ${r.oct31Risk}. **ETA:** ${r.eta} (${r.metrics.eta.mvpAcceptance.reason || r.metrics.eta.mvpAcceptance.state}).`);
   const chainBlocks = r.metrics.mvpChain.filter((s) => s.status === 'BLOCKED').map((s) => ({ id: `MVP:${s.id}`, text: `${s.step} BLOCKED — ${s.evidence}${s.open.length ? `; açık: ${s.open.join('; ')}` : ''}` }));
   const FB = r.plan.founderBlocked || [];
-  const topBlock = [...chainBlocks, ...FB.filter((x) => x.priority === 'P0').map((x) => ({ id: x.id, text: `BLOCKED, sahibi ${x.owner || '—'}${x.requiresNewAuthority ? ', yeni yetki gerekli' : ''}: ${x.title}` })), ...r.plan.founderDecisions.map((d) => ({ id: d.id, ageHours: d.ageHours, text: r.decisions.find((x) => x.id === d.id).text }))].slice(0, 5);
+  const topBlock = [...chainBlocks, ...FB.filter((x) => x.priority === 'P0').map((x) => ({ id: x.id, text: `${x.status || 'BLOCKED'}, sahibi ${x.owner || '—'}${x.requiresNewAuthority ? ', yeni yetki gerekli' : ''}: ${x.title}` })), ...r.plan.founderDecisions.map((d) => ({ id: d.id, ageHours: d.ageHours, text: r.decisions.find((x) => x.id === d.id).text }))].slice(0, 5);
   L.push(`- **Bekleyen Founder kararları:** ${r.decisions.filter((d) => d.state === 'OPEN').length} açık (kanıtla çözülmüş ${r.decisions.filter((d) => d.state === 'RESOLVED_BY_EVIDENCE').length}).`);
-  L.push(`- **Founder engelleri (BLOCKED; sahibi FOUNDER veya yeni yetki gerekli):** ${FB.length}${FB.length ? ` (${FB.slice(0, 8).map((x) => `${x.id}${x.priority ? ` ${x.priority}` : ''}`).join(', ')}${FB.length > 8 ? ', …' : ''})` : ''}.`);
+  L.push(`- **Founder engelleri (BLOCKED ya da kaydı BLOCKED olan FOUNDER_ACTION_REQUIRED; sahibi FOUNDER veya yeni yetki gerekli):** ${FB.length}${FB.length ? ` (${FB.slice(0, 8).map((x) => `${x.id}${x.priority ? ` ${x.priority}` : ''}`).join(', ')}${FB.length > 8 ? ', …' : ''})` : ''}.`);
   L.push('- **İlk 5 engel (önce BLOCKED MVP adımları, sonra P0 Founder engelleri, sonra en eski açık Founder kararı):**');
   for (const d of topBlock) L.push(`  - ${d.id}${d.ageHours !== undefined ? ` (${N(d.ageHours ?? 'UNKNOWN')} sa)` : ''}: ${esc(d.text.slice(0, 160))}`);
   L.push(`- **Tazelik:** v7 \`${sha7(fr.v7.sha)}\` @${fr.v7.at} (${fr.v7.state}); kuyruk \`${sha7(fr.queue.sha)}\` @${fr.queue.at} (${fr.queue.state}); GitHub ${gh.state}${Object.values(gh.sources || {}).some((x) => x.state !== 'FRESH') ? ` (${Object.values(gh.sources).filter((x) => x.state !== 'FRESH').map((x) => `${x.source} ${x.state}`).join(', ')})` : ''} (${gh.calls} çağrı, kalan kota ${gh.rateRemaining ?? 'UNKNOWN'}); hazırlık ölçümü ${fr.readiness.state}.`, '');
@@ -161,8 +161,8 @@ export function renderMarkdown(r, { listCap = 40 } = {}) {
   // ---- G
   L.push(SECTION_HEADINGS[6], '');
   L.push(table(['PR', 'Lane', 'CI', 'Korumalı dosya', 'Founder', 'Yapılacak'], r.openPrs.map((p) => [`#${p.number}`, p.lane, `${p.ci} (u ${p.ubuntu}, w ${p.windows})${p.ciSource === 'STALE_CACHE' ? ` [önbellek, as of ${p.ciAsOf}]` : ''}`, p.protectedFilesKnown === false ? 'UNKNOWN (dosya listesi alınamadı)' : p.protectedFiles, p.founder === true ? 'evet' : p.founder === 'UNKNOWN' ? 'UNKNOWN (dosya listesi yok)' : 'hayır', (r.founder.find((f) => f.pr === p.number) || (r.founderFilesUnknown || []).find((f) => f.pr === p.number) || {}).action || '—'])), '');
-  L.push('**Founder kuyruğu: BLOCKED kalemler (sahibi FOUNDER veya yeni yetki gerekli; P0 önce):**', '');
-  L.push(FB.length ? table(['Kalem', 'Öncelik', 'Sahip', 'Yeni yetki', 'Kapsam', 'Engel', 'Başlık'], FB.map((x) => [x.id, x.priority || '—', x.owner || '—', x.requiresNewAuthority ? 'evet' : 'hayır', x.scope, x.blockers.join(', ') || '—', x.title])) : '- Founder sahipli BLOCKED kalem yok.', '');
+  L.push('**Founder kuyruğu: BLOCKED kalemler ve kaydı BLOCKED olan FOUNDER_ACTION_REQUIRED kalemler (sahibi FOUNDER veya yeni yetki gerekli; P0 önce):**', '');
+  L.push(FB.length ? table(['Kalem', 'Durum', 'Öncelik', 'Sahip', 'Yeni yetki', 'Kapsam', 'Engel', 'Başlık'], FB.map((x) => [x.id, x.status || 'BLOCKED', x.priority || '—', x.owner || '—', x.requiresNewAuthority ? 'evet' : 'hayır', x.scope, x.blockers.join(', ') || '—', x.title])) : '- Founder sahipli BLOCKED kalem yok.', '');
   L.push(table(['Karar', 'Kaynak', 'Durum', 'İlk görülme', 'Yaş (sa)', 'Çözüm kanıtı', 'Metin'], r.decisions.map((d) => [d.id + (d.synthesized ? ' (türetilmiş id)' : ''), d.source.replace('PRODUCTION-QUEUE.json ', 'queue '), d.state + (d.stale ? ' (STALE)' : ''), d.firstSeenAt ? `${d.firstSeenAt.slice(0, 16)} ${d.firstSeenCommit}` : 'UNKNOWN', N(d.ageHours ?? 'UNKNOWN'), d.resolution || (d.refsAllFinal ? 'tüm referans PR kapalı (karar metni kanıtla eşleşmedi)' : '—'), d.text.slice(0, 160)])), '');
 
   // ---- H
@@ -174,7 +174,7 @@ export function renderMarkdown(r, { listCap = 40 } = {}) {
   }
   L.push(`**Doğrulama hattı** (MERGED_NOT_VERIFIED MVP kalemleri için kabul kontrolü; toplam ${r.plan.verificationTotal}, ilk ${r.plan.verification.length}):`, '');
   for (const v of r.plan.verification) L.push(`- ${v.action}`);
-  L.push('', '**Founder engelleri (BLOCKED; sahibi FOUNDER veya yeni yetki gerekli; P0 önce):**', '');
+  L.push('', '**Founder engelleri (BLOCKED ya da kaydı BLOCKED olan FOUNDER_ACTION_REQUIRED; sahibi FOUNDER veya yeni yetki gerekli; P0 önce):**', '');
   for (const x of (r.plan.founderBlocked || []).slice(0, listCap)) L.push(`- ${esc(x.action)}`);
   if (!(r.plan.founderBlocked || []).length) L.push('- yok');
   L.push('', '**Founder kararları (en eski önce):**', '');
