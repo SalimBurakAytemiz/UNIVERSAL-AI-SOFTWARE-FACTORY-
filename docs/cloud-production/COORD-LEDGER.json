@@ -622,13 +622,23 @@
       "ref": "wf_b82f8abc-0a9 (2 lenses + skeptics): R12/R26 made-up knowledgeState for non-tech-a refs survives (all registry rows SEED_PROFILE); R19 optional cut order vs registryId (unregistered refs cut first) survives; LOWs R06 digest/truncation, R15 default cap, R14 fixed-point boundary, R13 optional registryId, reviewChain.origin unconstrained; round-1 M1-M4/L1-L9 otherwise FIXED",
       "policy": "TEP-1",
       "at": "2026-10-27T00:42:53.230Z"
+    },
+    {
+      "pr": 268,
+      "sha": "43f9e5484c1675428ab684a82c0a42afcdb47fee",
+      "kind": "full",
+      "base": null,
+      "verdict": "BLOCKERS_1HIGH_3MEDIUM",
+      "ref": "wf_6d388e17-b52 (2 lenses + skeptics): HIGH UI-011 analysis step/plan counted covered but desktop POST allow-list + server registration absent (b5 test asserts blocked; authority request batch 4b = #242 Founder); MEDIUM UI-007 vs UI-124 inconsistent class for untested stop-confirm path; MEDIUM #46 ported via #170 (3a52348 ancestor) misreported UNKNOWN, UI-010 CSV ref wrong; MEDIUM UI-005/UI-115 follow-up file lists miss ROUTES pin tests; 8 LOW",
+      "policy": "TEP-1",
+      "at": "2026-10-27T01:06:11.294Z"
     }
   ],
   "tests": [],
   "fingerprint": {
-    "value": "4216c2dfcede113da18ae3b876549074930552dd437997c84845869938a4aea0",
-    "at": "2026-10-26T23:42:10.639Z",
+    "value": "e0fd76828668157b811449bd469bc169f00dab720fe8d36d605491eda9d6f57d",
+    "at": "2026-10-27T00:44:40.002Z",
     "base": "459205ca73890760015662bdbc7e4ee9b920bf86",
-    "prs": 11
+    "prs": 12
   }
 }
