@@ -1,5 +1,5 @@
 {
- "//TR": "C-RDY-2a (Adapter Gerçeklik Haritası) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt `file` içinde TAM 1 kez geçen bir metni (ya da `edits` listesindeki her metni) değiştirir; docs/lanes/LANE-C-adapter-reality-mutants.mjs hepsini tests/v7-core-readiness-adapter-reality.test.ts ile çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. M1-M5 dağıtım paketindeki zorunlu mutantlardır (M1 trivy REAL -> CI dürüstlüğü, M2 çağıran kontrolü atlanır, M3 çözümleyici kayıt implementation alanını okur, M4 ADAPTER_UNRESOLVED düşer, M5 yoklama varsayılanı READY); M6-M24 ek savunma mutantlarıdır (M2/M8/M9/M12/M14/M21/M23 tarayıcı sonrası kodla yeniden yazıldı). R1, R4, R5, R9-R14, R16 #264 incelemesinin (TEP-1 tur 1) hayatta kalan mutantlarıdır (R9/R10 üretim dosyalarında yorum/dize anmalarını bırakıp KOD kullanımını değiştirir); R17-R44 onarımla gelen kodun (tarayıcı, sınıf kapsamlı üye, içe aktaran çözümü, eksiksizlik sayımı, github kaydı, CI sınıfları) mutantlarıdır. G1, G2, G4, N8, N11, N12, N13, N14, N28 #264 turu-2 incelemesinin (86f6587) hayatta kalan mutantlarıdır; P1-P8 (çağıran yolu kısıtı), S1-S5 (bölme/regex ayrımı ve Unicode), Q1-Q4 (sınıf üyesi sınırları), O1-O4 (omniroute kaydı) tur-2 koduna aittir.",
+ "//TR": "C-RDY-2a (Adapter Gerçeklik Haritası) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt `file` içinde TAM 1 kez geçen bir metni (ya da `edits` listesindeki her metni) değiştirir; docs/lanes/LANE-C-adapter-reality-mutants.mjs hepsini tests/v7-core-readiness-adapter-reality.test.ts ile çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. M1-M5 dağıtım paketindeki zorunlu mutantlardır (M1 trivy REAL -> CI dürüstlüğü, M2 çağıran kontrolü atlanır, M3 çözümleyici kayıt implementation alanını okur, M4 ADAPTER_UNRESOLVED düşer, M5 yoklama varsayılanı READY); M6-M24 ek savunma mutantlarıdır (M2/M8/M9/M12/M14/M21/M23 tarayıcı sonrası kodla yeniden yazıldı). R1, R4, R5, R9-R14, R16 #264 incelemesinin (TEP-1 tur 1) hayatta kalan mutantlarıdır (R9/R10 üretim dosyalarında yorum/dize anmalarını bırakıp KOD kullanımını değiştirir); R17-R44 onarımla gelen kodun (tarayıcı, sınıf kapsamlı üye, içe aktaran çözümü, eksiksizlik sayımı, github kaydı, CI sınıfları) mutantlarıdır. G1, G2, G4, N8, N11, N12, N13, N14, N28 #264 turu-2 incelemesinin (86f6587) hayatta kalan mutantlarıdır; P1-P8 (çağıran yolu kısıtı), S1-S5 (bölme/regex ayrımı ve Unicode), Q2-Q4 (sınıf üyesi sınırları), O1-O4 (omniroute kaydı) tur-2 koduna aittir.",
  "mutants": [
   {
    "id": "M1",
@@ -596,13 +596,6 @@
    "file": "core/capabilities/adapter-reality.ts",
    "old": "${/[\\p{L}\\p{N}_$]$/u.test(t) ? \"(?![\\\\p{L}\\\\p{N}_$])\" : \"\"}",
    "new": "${/[\\p{L}\\p{N}_$]$/u.test(t) ? \"(?![\\\\w$])\" : \"\"}"
-  },
-  {
-   "id": "Q1",
-   "description": "parenthesis/bracket nesting is not tracked in the class body (a multi-line initializer argument counts as a member)",
-   "file": "core/capabilities/adapter-reality.ts",
-   "old": "if (ch === \"(\" || ch === \"[\") nest++;",
-   "new": ""
   },
   {
    "id": "Q2",

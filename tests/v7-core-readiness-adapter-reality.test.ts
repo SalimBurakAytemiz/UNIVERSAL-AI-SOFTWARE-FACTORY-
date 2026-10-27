@@ -172,13 +172,18 @@ describe("C-RDY-2a adapter-reality", () => {
     expect(scriptLit("const _electronUnused = 1;\n")).toMatchObject({exportDeclared: false, codePath: "ABSENT"});
     expect(scriptLit("const x_electron = 1;\n")).toMatchObject({exportDeclared: false, codePath: "ABSENT"});
     expect(scriptLit("const app = pw._electron.launch({});\n")).toMatchObject({exportDeclared: true, codePath: "PRESENT"});
+    // //TR: Sözcük sınırı Unicode'dur: `café` içindeki `caf` ve `éx` içindeki `x` bir ad olarak eşleşmez.
+    const unicodeLit = (name: string, body: string) => verifyRecord(rec({mode: "SCRIPT_LITERAL", module: "scripts/e2e/desktop-journey.e2e.mjs", exportName: name, entrypoint: true, callers: []}), fx({"scripts/e2e/desktop-journey.e2e.mjs": body}));
+    expect(unicodeLit("caf", "const café = 1;\n")).toMatchObject({exportDeclared: false, codePath: "ABSENT"});
+    expect(unicodeLit("x", "const éx = 1;\n")).toMatchObject({exportDeclared: false, codePath: "ABSENT"});
+    expect(unicodeLit("café", "const café = 1;\n")).toMatchObject({exportDeclared: true, codePath: "PRESENT"});
     expect(verifyRecord(rec(), fx({"core/workos/security-tools.ts": "function runGitleaksLegacy(){}\nexport {runGitleaksLegacy};\n", "core/workos/runner.ts": "await runGitleaks(dir);\n"}))).toMatchObject({exportDeclared: false, codePath: "ABSENT"});
     expect(verifyRecord(rec(), fx({"core/workos/security-tools.ts": "export function runGitleaksLegacy() {}\n", "core/workos/runner.ts": "await runGitleaks(dir);\n"}))).toMatchObject({exportDeclared: false, codePath: "ABSENT"});
     // //TR: Bildirilen çağıran yalnız ÜRETİM yolu olabilir: testler, docs, __tests__, node_modules, kaynak olmayan dosya, kök dışı/mutlak/normalleşmemiş yol bir çağıran SAYILMAZ (dosyada çağrı olsa bile).
     const call = "await runGitleaks(dir);\n";
     const pathRoot = fx({"core/workos/security-tools.ts": "export function runGitleaks() {}\n", "core/workos/runner.ts": call, "tests/x.test.ts": call, "core/x.test.ts": call, "core/__tests__/x.ts": call, "docs/x.ts": call, "core/node_modules/x.ts": call, "core/workos/runner.md": call, "core/abs.ts": call});
     fs.writeFileSync(path.join(path.dirname(pathRoot), "outside.ts"), call);
-    for (const bad of ["tests/x.test.ts", "core/x.test.ts", "core/__tests__/x.ts", "docs/x.ts", "core/node_modules/x.ts", "core/workos/runner.md", "../outside.ts", path.join(pathRoot, "core/abs.ts"), "core/../core/workos/runner.ts", "core\\workos\\runner.ts", ""]) {
+    for (const bad of ["tests/x.test.ts", "core/x.test.ts", "core/__tests__/x.ts", "docs/x.ts", "core/node_modules/x.ts", "core/workos/runner.md", "../outside.ts", path.join(pathRoot, "core/abs.ts"), "core/../core/workos/runner.ts", "core/./workos/runner.ts", "core//workos/runner.ts", "core\\workos\\runner.ts", ""]) {
       expect(verifyRecord(rec({callers: [{file: bad, references: "runGitleaks("}]}), pathRoot), JSON.stringify(bad)).toMatchObject({verifiedCallers: 0, failedCallers: [`${bad}:runGitleaks(`], codePath: "ABSENT", reasons: ["CALLER_NOT_PRODUCTION", "NO_PRODUCTION_CALLER"]});
     }
     expect(verifyRecord(rec({callers: [{file: "core/workos/runner.ts", references: "runGitleaks("}, {file: "tests/x.test.ts", references: "runGitleaks("}]}), pathRoot)).toMatchObject({verifiedCallers: 1, codePath: "PRESENT", reasons: ["CALLER_NOT_PRODUCTION"]});

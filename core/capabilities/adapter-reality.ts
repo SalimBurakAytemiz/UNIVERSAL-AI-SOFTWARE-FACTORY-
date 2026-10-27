@@ -134,21 +134,19 @@ function exportIn(v: CodeViews | null, name: string): boolean {
   }
   return false;
 }
-// //TR: Sınıf gövdesinin YALNIZ en üst düzey (süslü derinlik 1, parantez/köşeli parantez içi DEĞİL) metni; iç içe bloklar (kapanışları bir `;` sınırı olarak kalır), argüman listeleri ve çok satırlı alan başlatıcıları boşaltılır, böylece gövdedeki çağrılar üye bildirimi sanılmaz. Sınıf başlığı satır başında aranır (`const x = class K` ya da yorum/dize içindeki `class K` değil).
+// //TR: Sınıf gövdesinin YALNIZ en üst düzey (süslü derinlik 1) metni; iç içe bloklar boşaltılır ve kapanışları bir `;` sınırı olarak kalır; çok satırlı alan başlatıcılarının devam satırları üye sayılmaz çünkü üye bildirimi bir önceki bildirimin sonundan sonra başlamalıdır (memberIn). Böylece gövdedeki çağrılar üye bildirimi sanılmaz. Sınıf başlığı satır başında aranır (`const x = class K` ya da yorum/dize içindeki `class K` değil).
 function classBodyTopLevel(code: string, className: string): string | null {
   const m = new RegExp(`^[ \\t]*(?:export\\s+(?:default\\s+)?)?(?:declare\\s+)?(?:abstract\\s+)?class\\s+${escapeRe(className)}(?![\\w$])`, "m").exec(code);
   if (m === null) return null;
   const open = code.indexOf("{", m.index + m[0].length);
   if (open < 0) return null;
-  let depth = 0, nest = 0, out = "";
+  let depth = 0, out = "";
   for (let i = open; i < code.length; i++) {
     const ch = code[i];
     if (ch === "{") { depth++; out += " "; continue; }
     if (ch === "}") { depth--; if (depth === 0) return out; out += depth === 1 ? ";" : " "; continue; }
     if (depth !== 1) { out += nl(ch); continue; }
-    if (ch === ")" || ch === "]") nest = Math.max(0, nest - 1);
-    out += nest === 0 ? ch : nl(ch);
-    if (ch === "(" || ch === "[") nest++;
+    out += ch;
   }
   return null;
 }
