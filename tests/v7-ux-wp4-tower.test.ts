@@ -231,6 +231,26 @@ describe("UX WP4 feed and markup units", () => {
     expect(feed.globalStopSource({data: {globalStop: {known: false, active: false}}}, {state: "ERROR"})).toBeNull();
   });
 
+  // //TR: A-273-LOWS: koşu listesi 500\'de kesildiyse (sunucu en eski koşuları önce verir) kule kampüsü kesin etkin-koşu sayısı veya kesin 0 göstermez; runs null = UNAVAILABLE.
+  it("a run list cut at the 500-run cap makes the campus runs UNAVAILABLE (null), never an exact active count or a definite 0", async () => {
+    const feed = await load("control-tower", "feed.js"), work = await load("work-core.js");
+    const roles = {state: "VERIFIED", items: [{roleId: "UASCO-0001", guildId: "G01", clusterId: "CL01"}]};
+    const cockpit = {data: {globalStop: {known: true, active: false, reason: null}}};
+    const mk = (i: number, status: string) => ({runId: "run_" + i.toString(16).padStart(24, "0"), missionId: "msn_" + "ab12".repeat(6), status, role: "UASCO-0001"});
+    const cut = work.mapWorkRuns({workRuns: [...Array.from({length: 500}, (_, i) => mk(i, "SUCCEEDED")), mk(900, "RUNNING"), mk(901, "RUNNING")]});
+    expect(cut.truncated).toBe(true);
+    expect(feed.runsFromWorkRuns(cut, roles)).toBeNull();
+    const model = (await load("control-tower", "model.js")).buildCampusModel(feed.buildCampusInput({cockpit, roles, workRuns: cut}));
+    expect(model.totals.activeRuns).toBeNull();
+    const exact = work.mapWorkRuns({workRuns: [...Array.from({length: 498}, (_, i) => mk(i, "SUCCEEDED")), mk(900, "RUNNING"), mk(901, "RUNNING")]});
+    expect(exact.truncated).toBeUndefined();
+    expect(feed.runsFromWorkRuns(exact, roles)).toHaveLength(500);
+    const okModel = (await load("control-tower", "model.js")).buildCampusModel(feed.buildCampusInput({cockpit, roles, workRuns: exact}));
+    expect(okModel.totals.activeRuns).toBe(2);
+    const zero = work.mapWorkRuns({workRuns: Array.from({length: 3}, (_, i) => mk(i, "SUCCEEDED"))});
+    expect((await load("control-tower", "model.js")).buildCampusModel(feed.buildCampusInput({cockpit, roles, workRuns: zero})).totals.activeRuns).toBe(0);
+  });
+
   it("converts only the escaped campus markup to DOM and rejects scripts, event handlers, links and unbalanced input", async () => {
     const {markupToNodes} = await load("control-tower", "markup.js");
     const doc = new D();
