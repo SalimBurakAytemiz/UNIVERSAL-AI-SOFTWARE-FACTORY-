@@ -1752,7 +1752,7 @@ export default {
   "studio.import.q.col.sha":"SHA-256 (first 12)",
   "studio.import.q.more":"Showing {shown} of {count} quarantined files; the full list is in the evidence manifest stored by the server.",
   "studio.import.q.moreTruncated":"Showing {shown} of {count} quarantined files; only the first {recorded} paths are recorded and the other {rest} are not retained by name.",
-  "studio.import.q.undisplayable":"{n} recorded path(s) cannot be displayed (too long or containing control characters); they are counted above but not listed.",
+  "studio.import.q.undisplayable":"{n} recorded path(s) cannot be displayed (too long or containing control or hidden formatting characters); they are counted above but not listed.",
   "studio.import.noDialog":"The file dialog is not available in this environment.",
   "studio.import.dialogFailed":"The file dialog could not be opened or the path was rejected.",
   "studio.import.err.rejected":"The server rejected the import (HTTP {status}, IMPORT_REJECTED); no reason code was reported.",

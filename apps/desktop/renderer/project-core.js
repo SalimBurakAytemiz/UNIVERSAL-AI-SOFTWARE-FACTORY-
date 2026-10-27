@@ -175,7 +175,7 @@ export const QUARANTINE_MAX_FILES=500;
 export const QUARANTINE_FILES_SHOWN=20;
 const SHA40_RE=/^[0-9a-f]{40}([0-9a-f]{24})?$/,SHA256_RE=/^[0-9a-f]{64}$/;
 const QUARANTINE_KINDS=Object.freeze(["file","symlink","other"]);
-const cleanText=(x,max)=>typeof x==="string"&&x.length>0&&x.length<=max&&!/[\u0000-\u001f\u007f]/.test(x);
+const cleanText=(x,max)=>typeof x==="string"&&x.length>0&&x.length<=max&&!/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/.test(x);
 export function mapImportQuarantine(res){
   const unknown={state:"UNKNOWN"};
   const b=res&&!res.thrown&&isObj(res.body)?res.body:null,imp=b&&isObj(b.import)?b.import:null;

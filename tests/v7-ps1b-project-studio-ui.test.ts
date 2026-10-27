@@ -2883,6 +2883,7 @@ describe("LANE-A A-UI125-1 import success shows the agent configuration quaranti
   });
 
   it("UNKNOWN (the answer has no readable import block, or the evidence is malformed): never a plain success, never partial figures", async () => {
+    // //TR: A-UI125-1 round-1 (#269): bu tablodan "dosya yolunda kontrol karakteri => UNKNOWN" girdisi bilerek çıkarıldı; yol artık listelenmez ama SAYILIR (QUARANTINED + undisplayable) ve kanıtı "L5"/"L3" testlerinde sabitlenmiştir. Desen ve storedUnder içindeki kontrol karakterleri hâlâ UNKNOWN'dur (aşağıdaki iki girdi).
     const bads: Array<[string, any]> = [["empty body", {}], ["no import block", {project: {projectId: PID}}], ["import not an object", {import: "x"}],
       ["import without kind", {import: {headSha: HEAD}}], ["import with a bad headSha", {import: {kind: "git", headSha: "xyz"}}],
       ["count mismatching the files", body(quarantine([fileOf("CLAUDE.md")], {count: 2}))], ["count above the listed files with a consistent truncated flag (the server truncates only above 500)", body(quarantine([fileOf("CLAUDE.md"), fileOf("a/CLAUDE.md")], {count: 3, truncated: true}))], ["more files listed than counted", body(quarantine([fileOf("CLAUDE.md"), fileOf("a/CLAUDE.md")], {count: 1}))], ["count zero", body(quarantine([], {count: 0}))],
@@ -3083,6 +3084,7 @@ describe("LANE-A A-UI125-1 import success shows the agent configuration quaranti
     }
   });
 
+  // //TR: A-269-LOWS: q.undisplayable metni C1/bidi/biçimlendirme karakterlerini de kapsayacak şekilde genişletildi; bu testteki üç sabit metin (en/tr) buna göre güncellendi, başka assertion değişmedi.
   it("L5: one repo-controlled undisplayable path (too long, TAB, newline) keeps the real quarantine count and commit, is counted but not listed, and is never NONE or a wrong-cause UNKNOWN", async () => {
     const r = await imp(() => ({status: 200, body: body(quarantine([fileOf("CLAUDE.md"), fileOf("evil\tname/CLAUDE.md"), fileOf("x".repeat(1030))]))}));
     expect(forms.drafts.status["studio-import"]).toMatchObject({ok: true, key: "studio.import.doneQuarantined", vars: {count: 3}});
@@ -3090,14 +3092,81 @@ describe("LANE-A A-UI125-1 import success shows the agent configuration quaranti
     expect(b.dataset.quarantine).toBe("QUARANTINED");
     expect(text(all(b).find(n => n.dataset.quarantineNote === "quarantined")!)).toBe("3 agent configuration file(s) were quarantined at commit a1b2c3d4e5f6 and are not in the managed repository. Evidence is stored under projects/<projectId>/quarantine/agent-config/<sha256>.");
     expect(all(b).filter(n => "quarantineFile" in n.dataset).map(n => n.dataset.quarantineFile)).toEqual(["CLAUDE.md"]);
-    expect(text(all(b).find(n => "quarantineUndisplayable" in n.dataset)!)).toBe("2 recorded path(s) cannot be displayed (too long or containing control characters); they are counted above but not listed.");
+    expect(text(all(b).find(n => "quarantineUndisplayable" in n.dataset)!)).toBe("2 recorded path(s) cannot be displayed (too long or containing control or hidden formatting characters); they are counted above but not listed.");
     expect(all(b).filter(n => "quarantineMore" in n.dataset)).toEqual([]);
     const tr = await imp(() => ({status: 200, body: body(quarantine([fileOf("CLAUDE.md"), fileOf("evil\nname/CLAUDE.md")]))}), "tr");
-    expect(text(all(block(tr.root)!).find(n => "quarantineUndisplayable" in n.dataset)!)).toBe("Kayıtlı 1 yol gösterilemiyor (çok uzun veya kontrol karakteri içeriyor); yukarıda sayıldı ama listelenmedi.");
+    expect(text(all(block(tr.root)!).find(n => "quarantineUndisplayable" in n.dataset)!)).toBe("Kayıtlı 1 yol gösterilemiyor (çok uzun veya kontrol ya da gizli biçimlendirme karakteri içeriyor); yukarıda sayıldı ama listelenmedi.");
     const allBad = await imp(() => ({status: 200, body: body(quarantine([fileOf("a\nb")]))}));
     expect(block(allBad.root)?.dataset.quarantine).toBe("QUARANTINED");
     expect(byId(block(allBad.root)!, "studio-import-quarantine-files")).toBeNull();
     expect(forms.drafts.status["studio-import"]).toMatchObject({key: "studio.import.doneQuarantined", vars: {count: 1}});
+  });
+
+  // ---- A-269-LOWS (COORD ledger, #269 review LOWs) ----
+  it("D28/D29: the noDialog, dialogFailed and validation statuses carry the project id, and a workspace panel shows only its own project's status", async () => {
+    const PID_B = "prj_" + "cd34".repeat(6);
+    const two = projectsGet({"/v1/projects": {projects: [project(), project({projectId: PID_B, name: "Dükkan"})]}});
+    const noNative = await mkCtx({get: two, lang: "en"});
+    st.openProject(PID, "overview");
+    let root = mount(noNative.doc, await projectsView.render(noNative.ctx));
+    byId(root, "studio-import-pick")!.fire("click"); await tick();
+    expect(forms.drafts.status["studio-import"]).toMatchObject({ok: false, key: "studio.import.noDialog", projectId: PID});
+    root = mount(noNative.doc, await projectsView.render(noNative.ctx));
+    expect(text(byId(root, "studio-import-status")!)).toContain("The file dialog is not available");
+    st.openProject(PID_B, "overview");
+    expect(text(byId(mount(noNative.doc, await projectsView.render(noNative.ctx)), "studio-import-status")!)).toBe("");
+    forms.resetAllForms(); st.resetStudio();
+    const broken = await mkCtx({get: two, lang: "en", native: {pickImportPath: async () => { throw new Error("boom"); }}});
+    st.openProject(PID, "overview");
+    root = mount(broken.doc, await projectsView.render(broken.ctx));
+    byId(root, "studio-import-pick")!.fire("click"); await tick();
+    expect(forms.drafts.status["studio-import"]).toMatchObject({ok: false, key: "studio.import.dialogFailed", projectId: PID});
+    st.openProject(PID_B, "overview");
+    expect(text(byId(mount(broken.doc, await projectsView.render(broken.ctx)), "studio-import-status")!)).toBe("");
+    forms.resetAllForms(); st.resetStudio();
+    const val = await mkCtx({get: two, lang: "en", native});
+    st.openProject(PID, "overview");
+    root = mount(val.doc, await projectsView.render(val.ctx));
+    byId(root, "studio-import-form")!.fire("submit"); await tick();
+    expect(val.calls.post).toEqual([]);
+    expect(forms.drafts.status["studio-import"]).toMatchObject({ok: false, projectId: PID});
+    expect(Object.keys(forms.drafts.status["studio-import"].errors).length).toBeGreaterThan(0);
+    root = mount(val.doc, await projectsView.render(val.ctx));
+    expect(text(byId(root, "studio-import-status")!)).not.toBe("");
+    st.openProject(PID_B, "overview");
+    expect(text(byId(mount(val.doc, await projectsView.render(val.ctx)), "studio-import-status")!)).toBe("");
+  });
+
+  it("D23: a file entry whose path is not a string (or is empty) is UNKNOWN, never a listed or counted file", async () => {
+    const pc = await load(rend, "project-core.js");
+    for (const bad of [7, null, undefined, {}, ["CLAUDE.md"], true, ""]) {
+      const f: any = {...fileOf("CLAUDE.md"), path: bad};
+      expect(pc.mapImportQuarantine({status: 200, body: body(quarantine([f]))}), JSON.stringify(bad) ?? "undefined").toEqual({state: "UNKNOWN"});
+    }
+    const noPath: any = fileOf("CLAUDE.md"); delete noPath.path;
+    expect(pc.mapImportQuarantine({status: 200, body: body(quarantine([noPath]))})).toEqual({state: "UNKNOWN"});
+  });
+
+  it("C1 controls and bidi/format characters in a path are counted but not listed; in a pattern or storedUnder they are UNKNOWN; neighbouring printable characters stay listed", async () => {
+    const pc = await load(rend, "project-core.js");
+    const map = (files: any[], over: Record<string, any> = {}) => pc.mapImportQuarantine({status: 200, body: body(quarantine(files, over))});
+    const hidden = ["\u0080", "\u0085", "\u009f", "​", "‎", "‏", "‪", "‭", "‮", "⁦", "⁧", "⁩"];
+    for (const c of hidden) {
+      const m = map([fileOf("CLAUDE.md"), fileOf(`ev${c}il/CLAUDE.md`)]);
+      expect(m, JSON.stringify(c)).toMatchObject({state: "QUARANTINED", count: 2, recorded: 2, undisplayable: 1});
+      expect(m.files.map((f: any) => f.path), JSON.stringify(c)).toEqual(["CLAUDE.md"]);
+      expect(map([fileOf("CLAUDE.md", {pattern: `p${c}q`})]), JSON.stringify(c)).toEqual({state: "UNKNOWN"});
+      expect(map([fileOf("CLAUDE.md")], {storedUnder: `a${c}b`}), JSON.stringify(c)).toEqual({state: "UNKNOWN"});
+    }
+    const shown = [" ", "¡", "é", " ", "‐", " ", "⁠", "⁥", "⁪", "あ"];
+    for (const c of shown) {
+      const m = map([fileOf(`ok${c}name/CLAUDE.md`)]);
+      expect(m, JSON.stringify(c)).toMatchObject({state: "QUARANTINED", undisplayable: 0});
+      expect(m.files.map((f: any) => f.path), JSON.stringify(c)).toEqual([`ok${c}name/CLAUDE.md`]);
+    }
+    const r = await imp(() => ({status: 200, body: body(quarantine([fileOf("a‮b/CLAUDE.md")]))}));
+    expect(all(block(r.root)!).filter(n => "quarantineFile" in n.dataset)).toEqual([]);
+    expect(text(all(block(r.root)!).find(n => "quarantineUndisplayable" in n.dataset)!)).toBe("1 recorded path(s) cannot be displayed (too long or containing control or hidden formatting characters); they are counted above but not listed.");
   });
 
   it("Turkish renders the same three outcomes, and the en/tr keys have the same placeholders", async () => {
