@@ -2246,6 +2246,16 @@
         "masterV2": "C-RDY-1 Role Readiness Auditor = Master V2 package 1 DONE (merged, not product-accepted)"
       },
       {
+        "pr": 285,
+        "merge": "8894a2f",
+        "by": "coordinator direct merge, expectedHeadSha e3b80c7 (required checks green on e3b80c7, run 40488320361)",
+        "at": "2026-10-27T11:05:00Z",
+        "postMerge": "VERIFIED: parent1 6d83469, parent2 = gated head e3b80c7, merge tree 5809deb == probe tree tested locally (ux-journey + b5 287/287, checkout clean after run)",
+        "review": "full BLOCKERS_1MEDIUM_5LOW (9046fd0) -> delta NO_BLOCKERS_7LOW (e3b80c7: R1-R6 + #286 L1-L3 fixed); 7 LOWs -> A-285-LOWS",
+        "riskTier": "R0 ROUTINE (tests + evidence doc + renderer text/JSDoc)",
+        "masterV2": "A-UI011-EVIDENCE-1: analysis + run-the-product steps reach the real control-api routes (Linux evidence, free states only)"
+      },
+      {
         "pr": 276,
         "merge": "6d83469",
         "by": "coordinator direct merge, expectedHeadSha 82e4f26 (required checks green on 82e4f26, run 40487533960)",
