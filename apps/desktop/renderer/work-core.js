@@ -366,7 +366,7 @@ export function buildTransitionRequest({missionId,from,to,reason,confirmed,ackno
   const body={to,reason:r||`${from} -> ${to} (UASCO Desktop)`};
   return result(`/v1/missions/${missionId}/transition`,body,errors);
 }
-// //TR: COORD-RUN-EXPERT: core/agents/first-delivery-bindings.ts içindeki developer bağlamalarının aynası (rol TANIMI; çalışan ajan veya sertifika DEĞİL). Seçilen roleId koşu gövdesine yazılır ve sunucuda runner kapısı (assertRoleExecutes(roleId,"developer")) onu yeniden denetler; burada listede olmayan rol hiç gönderilmez. "" = rol atanmadan (eski davranış).
+// //TR: COORD-RUN-EXPERT: core/agents/first-delivery-bindings.ts içindeki developer bağlamalarının aynası (rol TANIMI; çalışan ajan veya sertifika DEĞİL). Seçilen roleId koşu gövdesine yazılır ve sunucuda runner kapısı (assertRoleExecutes(roleId,"developer")) onu yeniden denetler; burada listede olmayan rol hiç gönderilmez. "" = gövdede roleId yok; sunucu varsayılan developer rolünü (UASCO-0085) atar, yani bir rol YİNE yürür.
 export const RUN_EXPERTS=Object.freeze([Object.freeze({roleId:"UASCO-0085",function:"developer",capabilities:Object.freeze(["source-generation","backend-implementation"])})]);
 export const RUN_EXPERT_NONE="";
 export const isRunExpert=id=>RUN_EXPERTS.some(e=>e.roleId===id);
