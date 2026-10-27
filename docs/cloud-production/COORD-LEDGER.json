@@ -942,6 +942,16 @@
       "ref": "coord-base-merge-db3dc93-reseal",
       "policy": "TEP-1",
       "at": "2026-10-27T05:07:05.632Z"
+    },
+    {
+      "pr": 278,
+      "sha": "865f1daee993c97b7f64ce2dfbb2f8b01ed94002",
+      "kind": "delta",
+      "base": "0620b70",
+      "verdict": "BLOCKERS_1MEDIUM_round1",
+      "ref": "wf_4a5a13a0-b74",
+      "policy": "TEP-1",
+      "at": "2026-10-27T05:19:55.313Z"
     }
   ],
   "tests": [],
