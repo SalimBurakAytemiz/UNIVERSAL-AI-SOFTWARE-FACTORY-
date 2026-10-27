@@ -1,0 +1,649 @@
+{
+ "//TR": "C-PAR03-DIAG-1 (relfx-c3:200 PAR-03 Windows fence tanılaması: store yazı aşamaları, stallProbe boşlukları, fenceTrace, hbDiag) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt `file` içinde TAM 1 kez geçen bir metni değiştirir; docs/lanes/LANE-C-par03-diag-mutants.mjs hepsini tests/v7-relfx-c3-remediation.test.ts içindeki \"C-PAR03-DIAG-1\" testleriyle çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. D1-D27 core/workos/store.ts ölçümü (D28 yoktur: write() yeniden girişli değildir, iç içe çerçeve kodu kaldırıldı), D29-D44 tests/support/par.ts, D45-D55 hbDiag iletisi ve prob başlatma sırasıdır, D56 fenceTrace'in sarmaladığı yöntemi çağırmamasıdır. L1-L37: LOCK_TIMEOUT tanısı (kim tuttu, bekleme, delete-pending şüphesi), tanı metni ve par motorunun stderr çıktısı.",
+ "mutants": [
+  {
+   "id": "D1",
+   "description": "lockAcquisitions counts twice",
+   "file": "core/workos/store.ts",
+   "old": "d.lockAcquisitions += 1;",
+   "new": "d.lockAcquisitions += 2;"
+  },
+  {
+   "id": "D2",
+   "description": "withLock retries are not totalled",
+   "file": "core/workos/store.ts",
+   "old": "d.lockRetries += retries;",
+   "new": "d.lockRetries += 0;"
+  },
+  {
+   "id": "D3",
+   "description": "lock wait is not totalled",
+   "file": "core/workos/store.ts",
+   "old": "d.lockWaitMsTotal += waitMs;",
+   "new": "d.lockWaitMsTotal += 0;"
+  },
+  {
+   "id": "D4",
+   "description": "the maximum lock wait becomes a minimum",
+   "file": "core/workos/store.ts",
+   "old": "d.lockWaitMsMax = Math.max(d.lockWaitMsMax, waitMs);",
+   "new": "d.lockWaitMsMax = Math.min(d.lockWaitMsMax, waitMs);"
+  },
+  {
+   "id": "D5",
+   "description": "the lock wait of the current write is not recorded",
+   "file": "core/workos/store.ts",
+   "old": "this.frame.lockWaitMs += waitMs; this.frame.lockRetries += retries;",
+   "new": "this.frame.lockRetries += retries;"
+  },
+  {
+   "id": "D6",
+   "description": "the retries of the current write are not recorded",
+   "file": "core/workos/store.ts",
+   "old": "this.frame.lockWaitMs += waitMs; this.frame.lockRetries += retries;",
+   "new": "this.frame.lockWaitMs += waitMs;"
+  },
+  {
+   "id": "D7",
+   "description": "the LOCK_TIMEOUT path records no lock wait",
+   "file": "core/workos/store.ts",
+   "old": "          this.noteLock(performance.now() - lockStart, retries);\n          const info = this.probeLockTimeout(",
+   "new": "          const info = this.probeLockTimeout("
+  },
+  {
+   "id": "D8",
+   "description": "retries are not counted",
+   "file": "core/workos/store.ts",
+   "old": "        retries += 1;\n",
+   "new": ""
+  },
+  {
+   "id": "D9",
+   "description": "a successful acquisition records no lock wait",
+   "file": "core/workos/store.ts",
+   "old": "    this.noteLock(performance.now() - lockStart, retries);\n    try { return fn(); } finally {",
+   "new": "    try { return fn(); } finally {"
+  },
+  {
+   "id": "D10",
+   "description": "the lock release time is not recorded",
+   "file": "core/workos/store.ts",
+   "old": "if (this.frame) this.frame.releaseMs += performance.now() - releaseStart;",
+   "new": "if (this.frame) this.frame.releaseMs += 0;"
+  },
+  {
+   "id": "D11",
+   "description": "the reload time is always zero",
+   "file": "core/workos/store.ts",
+   "old": "frame.reloadMs = performance.now() - reloadStart - (frame.snapshotMs - snapshotBefore);",
+   "new": "frame.reloadMs = 0;"
+  },
+  {
+   "id": "D12",
+   "description": "the snapshot rewrite inside the reload is not subtracted from the reload time",
+   "file": "core/workos/store.ts",
+   "old": "frame.reloadMs = performance.now() - reloadStart - (frame.snapshotMs - snapshotBefore);",
+   "new": "frame.reloadMs = performance.now() - reloadStart;"
+  },
+  {
+   "id": "D13",
+   "description": "the snapshot time is not recorded",
+   "file": "core/workos/store.ts",
+   "old": "this.frame.snapshotMs += performance.now() - snapshotStart; this.frame.snapshotWrites += 1;",
+   "new": "this.frame.snapshotWrites += 1;"
+  },
+  {
+   "id": "D14",
+   "description": "the snapshot rewrites are not counted",
+   "file": "core/workos/store.ts",
+   "old": "this.frame.snapshotMs += performance.now() - snapshotStart; this.frame.snapshotWrites += 1;",
+   "new": "this.frame.snapshotMs += performance.now() - snapshotStart;"
+  },
+  {
+   "id": "D15",
+   "description": "the journal time is not recorded",
+   "file": "core/workos/store.ts",
+   "old": "this.frame.journalMs += journalEnd - journalStart;",
+   "new": "this.frame.journalMs += 0;"
+  },
+  {
+   "id": "D16",
+   "description": "the journal type is not recorded",
+   "file": "core/workos/store.ts",
+   "old": "this.frame.type = this.frame.type === \"\" || this.frame.type === type ? type : `${this.frame.type}+${type}`;",
+   "new": "this.frame.type = \"\";"
+  },
+  {
+   "id": "D17",
+   "description": "the ring keeps 63 writes",
+   "file": "core/workos/store.ts",
+   "old": "const WRITE_RING = 64;",
+   "new": "const WRITE_RING = 63;"
+  },
+  {
+   "id": "D18",
+   "description": "the ring keeps 65 writes",
+   "file": "core/workos/store.ts",
+   "old": "const WRITE_RING = 64;",
+   "new": "const WRITE_RING = 65;"
+  },
+  {
+   "id": "D19",
+   "description": "the ring is never trimmed",
+   "file": "core/workos/store.ts",
+   "old": "if (d.recent.length > WRITE_RING) d.recent.shift();",
+   "new": ""
+  },
+  {
+   "id": "D20",
+   "description": "the slowest write is the latest one",
+   "file": "core/workos/store.ts",
+   "old": "if (d.slowest === null || t.totalMs > d.slowest.totalMs) d.slowest = t;",
+   "new": "d.slowest = t;"
+  },
+  {
+   "id": "D21",
+   "description": "the slowest write is the fastest one",
+   "file": "core/workos/store.ts",
+   "old": "t.totalMs > d.slowest.totalMs",
+   "new": "t.totalMs < d.slowest.totalMs"
+  },
+  {
+   "id": "D22",
+   "description": "the write counter counts twice",
+   "file": "core/workos/store.ts",
+   "old": "d.writes += 1;",
+   "new": "d.writes += 2;"
+  },
+  {
+   "id": "D23",
+   "description": "writeStats hands out the live slowest record",
+   "file": "core/workos/store.ts",
+   "old": "slowest: d.slowest === null ? null : {...d.slowest}",
+   "new": "slowest: d.slowest"
+  },
+  {
+   "id": "D24",
+   "description": "writeStats hands out the live ring",
+   "file": "core/workos/store.ts",
+   "old": "recent: d.recent.map(r => ({...r}))",
+   "new": "recent: d.recent"
+  },
+  {
+   "id": "D25",
+   "description": "the write start (wall clock) is not recorded",
+   "file": "core/workos/store.ts",
+   "old": "const frame: StoreWriteTiming = {type: \"\", startedAtWall: Date.now(),",
+   "new": "const frame: StoreWriteTiming = {type: \"\", startedAtWall: 0,"
+  },
+  {
+   "id": "D26",
+   "description": "the write start (performance clock) is not recorded",
+   "file": "core/workos/store.ts",
+   "old": "startedAtWall: Date.now(), startedAtPerf: performance.now(), totalMs: 0,",
+   "new": "startedAtWall: Date.now(), startedAtPerf: 0, totalMs: 0,"
+  },
+  {
+   "id": "D27",
+   "description": "the write total is not recorded",
+   "file": "core/workos/store.ts",
+   "old": "this.noteWrite(frame, performance.now() - frame.startedAtPerf);",
+   "new": "this.noteWrite(frame, 0);"
+  },
+  {
+   "id": "D29",
+   "description": "the probe keeps two gaps",
+   "file": "tests/support/par.ts",
+   "old": "if (gaps.length > 3) gaps.length = 3;",
+   "new": "if (gaps.length > 3) gaps.length = 2;"
+  },
+  {
+   "id": "D30",
+   "description": "the probe keeps four gaps",
+   "file": "tests/support/par.ts",
+   "old": "if (gaps.length > 3) gaps.length = 3;",
+   "new": "if (gaps.length > 3) gaps.length = 4;"
+  },
+  {
+   "id": "D31",
+   "description": "the gaps are sorted ascending",
+   "file": "tests/support/par.ts",
+   "old": "gaps.sort((a, b) => b.gapMs - a.gapMs);",
+   "new": "gaps.sort((a, b) => a.gapMs - b.gapMs);"
+  },
+  {
+   "id": "D32",
+   "description": "the gap start (wall clock) is the end of the gap",
+   "file": "tests/support/par.ts",
+   "old": "startWall: Math.round(wall - (n - last))",
+   "new": "startWall: Math.round(wall)"
+  },
+  {
+   "id": "D33",
+   "description": "the drift is not relative to the probe start",
+   "file": "tests/support/par.ts",
+   "old": "driftMs: Math.round(wall - n - drift0)",
+   "new": "driftMs: Math.round(wall - n)"
+  },
+  {
+   "id": "D34",
+   "description": "the gap start (performance clock) is the end of the gap",
+   "file": "tests/support/par.ts",
+   "old": "startPerf: Math.round(last)",
+   "new": "startPerf: Math.round(n)"
+  },
+  {
+   "id": "D35",
+   "description": "sub-millisecond jitter counts as a gap",
+   "file": "tests/support/par.ts",
+   "old": "if (gap >= 1) {",
+   "new": "if (gap > -1) {"
+  },
+  {
+   "id": "D36",
+   "description": "topGaps hands out the live records",
+   "file": "tests/support/par.ts",
+   "old": "topGaps: (): StallGap[] => gaps.map(g => ({...g})),",
+   "new": "topGaps: (): StallGap[] => gaps,"
+  },
+  {
+   "id": "D37",
+   "description": "fenceTrace does not count calls",
+   "file": "tests/support/par.ts",
+   "old": "      calls += 1;\n",
+   "new": ""
+  },
+  {
+   "id": "D38",
+   "description": "fenceTrace records every error",
+   "file": "tests/support/par.ts",
+   "old": "if ((e as {code?: unknown})?.code === \"WORKOS_LEASE_FENCED\") hits.push(",
+   "new": "if (true) hits.push("
+  },
+  {
+   "id": "D39",
+   "description": "fenceTrace swallows the error",
+   "file": "tests/support/par.ts",
+   "old": "        throw e;\n      }\n    };",
+   "new": "        return undefined;\n      }\n    };"
+  },
+  {
+   "id": "D40",
+   "description": "fenceTrace names the wrong run",
+   "file": "tests/support/par.ts",
+   "old": "hits.push({call: name, runId: String(a[0]),",
+   "new": "hits.push({call: name, runId: String(a[1]),"
+  },
+  {
+   "id": "D41",
+   "description": "fenceTrace drops the transition detail",
+   "file": "tests/support/par.ts",
+   "old": "note: name === \"transitionRun\" ? `to=${String(a[2])} reason=${String(a[3])}`",
+   "new": "note: name === \"transitionRun\" ? \"\""
+  },
+  {
+   "id": "D42",
+   "description": "fenceTrace does not trace renewRunLease",
+   "file": "tests/support/par.ts",
+   "old": "const FENCE_CALLS = [\"acquireRunLease\", \"renewRunLease\", ",
+   "new": "const FENCE_CALLS = [\"acquireRunLease\", "
+  },
+  {
+   "id": "D43",
+   "description": "leaseTimeline mixes in other runs",
+   "file": "tests/support/par.ts",
+   "old": "e.type === \"RUN_LEASE\" && e.payload.runId === runId",
+   "new": "e.type === \"RUN_LEASE\""
+  },
+  {
+   "id": "D44",
+   "description": "leaseTimeline mixes in other journal entry types",
+   "file": "tests/support/par.ts",
+   "old": "e.type === \"RUN_LEASE\" && e.payload.runId === runId",
+   "new": "e.payload.runId === runId"
+  },
+  {
+   "id": "D45",
+   "description": "hbDiag puts the fence limit at TTL",
+   "file": "tests/v7-relfx-c3-remediation.test.ts",
+   "old": "limit = Math.round(ttl - ttl / 3)",
+   "new": "limit = Math.round(ttl)"
+  },
+  {
+   "id": "D46",
+   "description": "hbDiag puts the fence limit at TTL - 1 s",
+   "file": "tests/v7-relfx-c3-remediation.test.ts",
+   "old": "limit = Math.round(ttl - ttl / 3)",
+   "new": "limit = Math.round(ttl - 1000)"
+  },
+  {
+   "id": "D47",
+   "description": "hbDiag treats a stall exactly at the limit as below it",
+   "file": "tests/v7-relfx-c3-remediation.test.ts",
+   "old": "probe.maxStallMs() >= limit ? \"AT OR ABOVE\" : \"BELOW\"",
+   "new": "probe.maxStallMs() > limit ? \"AT OR ABOVE\" : \"BELOW\""
+  },
+  {
+   "id": "D48",
+   "description": "hbDiag keeps the old interpretation (below TTL)",
+   "file": "tests/v7-relfx-c3-remediation.test.ts",
+   "old": "a fence with a stall below TTL - TTL/3 (${limit} ms) is a real lease gap",
+   "new": "a fence with a stall below TTL (${ttl} ms) is a real lease gap"
+  },
+  {
+   "id": "D49",
+   "description": "hbDiag shows the wrong heartbeat",
+   "file": "tests/v7-relfx-c3-remediation.test.ts",
+   "old": "const hb = Math.max(50, Math.floor(ttl / 3))",
+   "new": "const hb = Math.max(50, Math.floor(ttl / 2))"
+  },
+  {
+   "id": "D50",
+   "description": "hbDiag counts lateness from zero",
+   "file": "tests/v7-relfx-c3-remediation.test.ts",
+   "old": "(late ${Math.max(0, s.interval - hb)})",
+   "new": "(late ${Math.max(0, s.interval)})"
+  },
+  {
+   "id": "D51",
+   "description": "hbDiag lists a write that only touches the gap start",
+   "file": "tests/v7-relfx-c3-remediation.test.ts",
+   "old": "w.startedAtPerf < g.startPerf + g.gapMs && w.startedAtPerf + w.totalMs > g.startPerf",
+   "new": "w.startedAtPerf <= g.startPerf + g.gapMs && w.startedAtPerf + w.totalMs >= g.startPerf"
+  },
+  {
+   "id": "D52",
+   "description": "hbDiag lists every write",
+   "file": "tests/v7-relfx-c3-remediation.test.ts",
+   "old": "w.startedAtPerf < g.startPerf + g.gapMs && w.startedAtPerf + w.totalMs > g.startPerf",
+   "new": "true"
+  },
+  {
+   "id": "D53",
+   "description": "hbDiag hides the fence-throwing call",
+   "file": "tests/v7-relfx-c3-remediation.test.ts",
+   "old": "`FENCED thrown by: ${hits.length === 0 ? \"(no traced call threw FENCED)\" : hits.map(",
+   "new": "`FENCED thrown by: ${hits.length === 0 ? \"(no traced call threw FENCED)\" : [].map("
+  },
+  {
+   "id": "D54",
+   "description": "hbDiag swallows diagnostics failures silently",
+   "file": "tests/v7-relfx-c3-remediation.test.ts",
+   "old": "} catch (e) { return `${head}\\n(diagnostics failed: ${e instanceof Error ? e.message : String(e)})`; }",
+   "new": "} catch (e) { return head; }"
+  },
+  {
+   "id": "D55",
+   "description": "the stall probe is started before the runner is constructed again",
+   "file": "tests/v7-relfx-c3-remediation.test.ts",
+   "old": "    const mr = c.runner({maxConcurrentRuns: 2, leaseTtlMs: TTL, executors: pair});\n    const probe = stallProbe(); // //TR: C-PAR03-DIAG-1: prob runner kurulduktan SONRA başlar (constructor'ın spawnSync + node.exe sha256'sı Linux'ta ~0,9 s, Windows'ta daha fazlasını ekler ve ilk boşluk olarak görünürdü)\n    const rep = await mr.tick().finally(() => probe.stop());\n    expect(slow.hits.sync + slow.hits.async, \"the slow-git scenario really fired once\")",
+   "new": "    const probe = stallProbe();\n    const mr = c.runner({maxConcurrentRuns: 2, leaseTtlMs: TTL, executors: pair});\n    const rep = await mr.tick().finally(() => probe.stop());\n    expect(slow.hits.sync + slow.hits.async, \"the slow-git scenario really fired once\")"
+  },
+  {
+   "id": "D56",
+   "description": "fenceTrace does not call the method it wraps",
+   "file": "tests/support/par.ts",
+   "old": "try { return real.apply(store, a); } catch (e) {",
+   "new": "try { return undefined; } catch (e) {"
+  },
+  {
+   "id": "L1",
+   "description": "a LOCK_TIMEOUT is not counted",
+   "file": "core/workos/store.ts",
+   "old": "this.diag.lockTimeouts += 1;",
+   "new": "this.diag.lockTimeouts += 0;"
+  },
+  {
+   "id": "L2",
+   "description": "the last LOCK_TIMEOUT is not kept",
+   "file": "core/workos/store.ts",
+   "old": "this.diag.lastLockTimeout = info;",
+   "new": ""
+  },
+  {
+   "id": "L3",
+   "description": "the thrown LOCK_TIMEOUT carries no diagnostic",
+   "file": "core/workos/store.ts",
+   "old": "Object.defineProperty(timeout, \"diagnostic\", {value: info, enumerable: false});",
+   "new": ""
+  },
+  {
+   "id": "L4",
+   "description": "the diagnostic property is enumerable",
+   "file": "core/workos/store.ts",
+   "old": "{value: info, enumerable: false}",
+   "new": "{value: info, enumerable: true}"
+  },
+  {
+   "id": "L5",
+   "description": "acquire failures are not counted",
+   "file": "core/workos/store.ts",
+   "old": "failures.set(failureKey, (failures.get(failureKey) ?? 0) + 1);",
+   "new": ""
+  },
+  {
+   "id": "L6",
+   "description": "acquire failures are counted twice",
+   "file": "core/workos/store.ts",
+   "old": "failures.set(failureKey, (failures.get(failureKey) ?? 0) + 1);",
+   "new": "failures.set(failureKey, (failures.get(failureKey) ?? 0) + 2);"
+  },
+  {
+   "id": "L7",
+   "description": "every acquire failure is filed under (other)",
+   "file": "core/workos/store.ts",
+   "old": "failures.has(failure) || failures.size < 8 ? failure : \"(other)\"",
+   "new": "failures.size < 0 ? failure : \"(other)\""
+  },
+  {
+   "id": "L8",
+   "description": "the waiter's wait is not recorded",
+   "file": "core/workos/store.ts",
+   "old": "waitedMs: ms1(performance.now() - lockStart), retries,",
+   "new": "waitedMs: 0, retries,"
+  },
+  {
+   "id": "L9",
+   "description": "the waiter's retries are not recorded",
+   "file": "core/workos/store.ts",
+   "old": "waitedMs: ms1(performance.now() - lockStart), retries,",
+   "new": "waitedMs: ms1(performance.now() - lockStart), retries: 0,"
+  },
+  {
+   "id": "L10",
+   "description": "the limit is not recorded",
+   "file": "core/workos/store.ts",
+   "old": "retries, limitMs: LOCK_WAIT_MS,",
+   "new": "retries, limitMs: 0,"
+  },
+  {
+   "id": "L11",
+   "description": "the holder pid is not recorded",
+   "file": "core/workos/store.ts",
+   "old": "h.pid = typeof doc.pid === \"number\" ? doc.pid : null;",
+   "new": "h.pid = null;"
+  },
+  {
+   "id": "L12",
+   "description": "the holder is never this process",
+   "file": "core/workos/store.ts",
+   "old": "h.ownPid = h.pid === process.pid && h.hostname === os.hostname();",
+   "new": "h.ownPid = false;"
+  },
+  {
+   "id": "L13",
+   "description": "a lock of another host is not recognised",
+   "file": "core/workos/store.ts",
+   "old": "if (h.hostname !== null && h.hostname !== os.hostname()) h.state = \"OTHER_HOST\";",
+   "new": "if (false) h.state = \"OTHER_HOST\";"
+  },
+  {
+   "id": "L14",
+   "description": "the holder liveness is not recorded",
+   "file": "core/workos/store.ts",
+   "old": "h.pidAlive = true; h.state = \"ACTIVE\";",
+   "new": "h.pidAlive = null; h.state = \"ACTIVE\";"
+  },
+  {
+   "id": "L15",
+   "description": "a dead holder pid is not recognised",
+   "file": "core/workos/store.ts",
+   "old": "if (code(e) === \"ESRCH\") {",
+   "new": "if (false) {"
+  },
+  {
+   "id": "L16",
+   "description": "an unsignalable holder pid counts as alive",
+   "file": "core/workos/store.ts",
+   "old": "else { h.pidAlive = null; h.state = \"PRESENT\"; }",
+   "new": "else { h.pidAlive = true; h.state = \"PRESENT\"; }"
+  },
+  {
+   "id": "L17",
+   "description": "the holder start is not recorded",
+   "file": "core/workos/store.ts",
+   "old": "h.startedAt = typeof doc.startedAt === \"string\" ? doc.startedAt : null; h.ageMs = Number.isFinite(started) ? Math.round(now - started) : null;",
+   "new": "h.startedAt = null; h.ageMs = null;"
+  },
+  {
+   "id": "L18",
+   "description": "the holder age is wrong",
+   "file": "core/workos/store.ts",
+   "old": "Math.round(now - started)",
+   "new": "Math.round(started - now)"
+  },
+  {
+   "id": "L19",
+   "description": "EPERM is not a delete-pending hint",
+   "file": "core/workos/store.ts",
+   "old": "if (c === \"EPERM\" || c === \"EBUSY\" || c === \"EACCES\")",
+   "new": "if (c === \"EBUSY\" || c === \"EACCES\")"
+  },
+  {
+   "id": "L20",
+   "description": "EBUSY is not a delete-pending hint",
+   "file": "core/workos/store.ts",
+   "old": "if (c === \"EPERM\" || c === \"EBUSY\" || c === \"EACCES\")",
+   "new": "if (c === \"EPERM\" || c === \"EACCES\")"
+  },
+  {
+   "id": "L21",
+   "description": "EACCES is not a delete-pending hint",
+   "file": "core/workos/store.ts",
+   "old": "if (c === \"EPERM\" || c === \"EBUSY\" || c === \"EACCES\")",
+   "new": "if (c === \"EPERM\" || c === \"EBUSY\")"
+  },
+  {
+   "id": "L22",
+   "description": "delete-pending is always suspected",
+   "file": "core/workos/store.ts",
+   "old": "info.deletePendingSuspected = info.suspicion.length > 0;",
+   "new": "info.deletePendingSuspected = true;"
+  },
+  {
+   "id": "L23",
+   "description": "delete-pending is never suspected",
+   "file": "core/workos/store.ts",
+   "old": "info.deletePendingSuspected = info.suspicion.length > 0;",
+   "new": "info.deletePendingSuspected = false;"
+  },
+  {
+   "id": "L24",
+   "description": "an unreadable acquire state is not noted",
+   "file": "core/workos/store.ts",
+   "old": "if (/state=UNREADABLE/.test(info.lastError.message)) info.suspicion.push(\"ACQUIRE_STATE_UNREADABLE\");",
+   "new": ""
+  },
+  {
+   "id": "L25",
+   "description": "an unparseable lock file is not noted",
+   "file": "core/workos/store.ts",
+   "old": "if (info.holder.state === \"UNPARSEABLE\") info.suspicion.push(\"LOCK_FILE_UNPARSEABLE\");",
+   "new": ""
+  },
+  {
+   "id": "L26",
+   "description": "a vanished lock file is reported as a stat error",
+   "file": "core/workos/store.ts",
+   "old": "state: code(e) === \"ENOENT\" ? \"ABSENT\" : \"STAT_ERROR\"",
+   "new": "state: \"STAT_ERROR\""
+  },
+  {
+   "id": "L27",
+   "description": "a vanished holder file is reported as unreadable",
+   "file": "core/workos/store.ts",
+   "old": "info.holder.state = code(e) === \"ENOENT\" ? \"ABSENT\" : e instanceof SyntaxError ? \"UNPARSEABLE\" : \"UNREADABLE\";",
+   "new": "info.holder.state = e instanceof SyntaxError ? \"UNPARSEABLE\" : \"UNREADABLE\";"
+  },
+  {
+   "id": "L28",
+   "description": "a garbage lock file is reported as unreadable",
+   "file": "core/workos/store.ts",
+   "old": "e instanceof SyntaxError ? \"UNPARSEABLE\" : \"UNREADABLE\"",
+   "new": "\"UNREADABLE\""
+  },
+  {
+   "id": "L29",
+   "description": "the lock file size is not recorded",
+   "file": "core/workos/store.ts",
+   "old": "sizeBytes: st.size, mtimeAgeMs: Math.round(now - st.mtimeMs)",
+   "new": "sizeBytes: null, mtimeAgeMs: Math.round(now - st.mtimeMs)"
+  },
+  {
+   "id": "L30",
+   "description": "the lock file age is not recorded",
+   "file": "core/workos/store.ts",
+   "old": "sizeBytes: st.size, mtimeAgeMs: Math.round(now - st.mtimeMs)",
+   "new": "sizeBytes: st.size, mtimeAgeMs: null"
+  },
+  {
+   "id": "L31",
+   "description": "the open probe never reports a failure",
+   "file": "core/workos/store.ts",
+   "old": "info.open = {ok: false, code: code(e)};",
+   "new": "info.open = {ok: true, code: null};"
+  },
+  {
+   "id": "L32",
+   "description": "the diagnostic text hides that the holder is this process",
+   "file": "tests/support/lock-diag.ts",
+   "old": "${h.ownPid ? \" (THIS process)\" : \"\"}",
+   "new": ""
+  },
+  {
+   "id": "L33",
+   "description": "the diagnostic text hides the holder liveness",
+   "file": "tests/support/lock-diag.ts",
+   "old": "alive=${h.pidAlive ?? \"?\"}",
+   "new": ""
+  },
+  {
+   "id": "L34",
+   "description": "the diagnostic text hides the open failure",
+   "file": "tests/support/lock-diag.ts",
+   "old": "open ${t.open.ok ? \"ok\" : `FAILED/${t.open.code ?? \"?\"}`}",
+   "new": "open ok"
+  },
+  {
+   "id": "L35",
+   "description": "the diagnostic text hides the suspicion list",
+   "file": "tests/support/lock-diag.ts",
+   "old": "${t.suspicion.length > 0 ? ` [${t.suspicion.join(\", \")}]` : \"\"}",
+   "new": ""
+  },
+  {
+   "id": "L36",
+   "description": "the engine does not print its store diagnostics",
+   "file": "tests/v7-par-engine.mts",
+   "old": "process.stderr.write(`PAR_ENGINE_STORE_DIAG store#${k}: ${lockDiagText(st.writeStats())}\\n`);",
+   "new": ""
+  },
+  {
+   "id": "L37",
+   "description": "the engine swallows the original error",
+   "file": "tests/v7-par-engine.mts",
+   "old": "  throw e;\n}",
+   "new": "  process.exitCode = 0;\n}"
+  }
+ ]
+}

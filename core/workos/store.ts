@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import os from "node:os";
 // //TR: automation/lib korumalı olduğundan atomic-json.mjs için .d.mts eklenemez; yeniden kullanılan helper dar bir yerel tiple bağlanır, kopyalanmaz.
 // @ts-expect-error TS7016: atomic-json.mjs tip bildirimi yok
 import {sha256 as sha256Untyped, writeJsonAtomic as writeJsonAtomicUntyped} from "../../automation/lib/atomic-json.mjs";
@@ -32,6 +33,20 @@ import {RISK_REFUSAL, riskAdmitted} from "./risk-admission.js";
 const sha256 = sha256Untyped as (value: unknown) => string;
 const writeJsonAtomic = writeJsonAtomicUntyped as (file: string, value: unknown) => void;
 const LOCK_WAIT_MS = 10_000;
+// //TR: C-PAR03-DIAG-1 (YALNIZ ölçüm; davranış, kilit, journal, snapshot ve zaman aşımı değişmez): Windows CI'da relfx-c3:200 PAR-03 fence'inin ENGELLEYEN ÇAĞRISI bilinmiyor. Her store yazısının süresi aşamalara bölünür (kilit bekleme + yeniden deneme sayısı, yeniden yükleme/doğrulama, journal ekleme+fsync, snapshot yeniden yazımları (süresi ve sayısı; yükleme VE ekleme birer yazım yapar, süre hangi aşamada olursa olsun snapshotMs'ye yazılır, reloadMs'den çıkarılır), kilit bırakma) ve test başarısızlık iletisi bunları, `performance.now()` ile aynı saatte, stallProbe boşluklarıyla eşleştirebilsin diye başlangıç zamanlarıyla birlikte yazar. Salt okunur: `writeStats()` kopya döndürür; halka tamponu en çok WRITE_RING yazı tutar.
+export interface StoreWriteTiming { type: string; startedAtWall: number; startedAtPerf: number; totalMs: number; lockWaitMs: number; lockRetries: number; reloadMs: number; journalMs: number; snapshotMs: number; snapshotWrites: number; releaseMs: number }
+// //TR: C-PAR03-DIAG-1 (LOCK_TIMEOUT): Windows CI'da par motoru `WORKOS_UNAVAILABLE: LOCK_TIMEOUT` ile öldü (relfx-1-completion PAR04-GSTOP-NO-REAP). Zaman aşımı anında YALNIZ OKUMA yapan yoklamalar kaydedilir (dosya silinmez, kilit çalınmaz): kim tuttu (pid/ana bilgisayar/runId/başlangıç/yaş/canlılık), bekleyen ne kadar bekledi, kilit dosyası var mı, açılabiliyor mu ve silinme-bekliyor (delete-pending) şüphesi: stat/open/read ya da kilit edinme hatasında EPERM/EBUSY/EACCES ya da "state=UNREADABLE". Edinme hataları ileti başına sayılır (aynı sahip mi, sahip mi değişiyor?). Hata iletisi/kodu DEĞİŞMEZ; ayrıntı `diagnostic` (numaralandırılamaz) özelliği ve `writeStats().lastLockTimeout` ile görünür.
+export interface LockTimeoutInfo {
+  atWall: number; atPerf: number; waitedMs: number; retries: number; limitMs: number;
+  lastError: {code: string | null; message: string}; failures: Record<string, number>;
+  file: {state: "PRESENT" | "ABSENT" | "STAT_ERROR"; code: string | null; sizeBytes: number | null; mtimeAgeMs: number | null};
+  open: {ok: boolean; code: string | null};
+  holder: {state: "ACTIVE" | "DEAD_PID" | "OTHER_HOST" | "PRESENT" | "ABSENT" | "UNPARSEABLE" | "UNREADABLE"; code: string | null; pid: number | null; hostname: string | null; runId: string | null; lockId: string | null; startedAt: string | null; ageMs: number | null; pidAlive: boolean | null; ownPid: boolean};
+  deletePendingSuspected: boolean; suspicion: string[];
+}
+export interface StoreWriteStats { writes: number; lockAcquisitions: number; lockRetries: number; lockWaitMsTotal: number; lockWaitMsMax: number; lockTimeouts: number; lastLockTimeout: LockTimeoutInfo | null; slowest: StoreWriteTiming | null; recent: StoreWriteTiming[] }
+const WRITE_RING = 64;
+const ms1 = (n: number): number => Math.round(n * 10) / 10;
 const GENESIS = "0".repeat(64);
 const newId = (prefix: string) => `${prefix}_${crypto.randomBytes(12).toString("hex")}`;
 export const newTraceId = () => newId("trc");
@@ -111,6 +126,50 @@ const clone = <T>(x: T): T => structuredClone(x);
 
 export class WorkOsStore {
   readonly dataDir: string; readonly journalFile: string; readonly snapshotFile: string; readonly lockFile: string;
+  // //TR: C-PAR03-DIAG-1: yalnız ölçüm durumu (bkz. StoreWriteStats); iş mantığı bunlara bağlı DEĞİLDİR.
+  private diag = {writes: 0, lockAcquisitions: 0, lockRetries: 0, lockWaitMsTotal: 0, lockWaitMsMax: 0, lockTimeouts: 0, lastLockTimeout: null as LockTimeoutInfo | null, slowest: null as StoreWriteTiming | null, recent: [] as StoreWriteTiming[]};
+  private frame: StoreWriteTiming | null = null;
+  writeStats(): StoreWriteStats {
+    const d = this.diag;
+    return {writes: d.writes, lockAcquisitions: d.lockAcquisitions, lockRetries: d.lockRetries, lockWaitMsTotal: ms1(d.lockWaitMsTotal), lockWaitMsMax: ms1(d.lockWaitMsMax), lockTimeouts: d.lockTimeouts, lastLockTimeout: d.lastLockTimeout === null ? null : structuredClone(d.lastLockTimeout), slowest: d.slowest === null ? null : {...d.slowest}, recent: d.recent.map(r => ({...r}))};
+  }
+  // //TR: salt okunur yoklamalar (bkz. LockTimeoutInfo); her biri ayrı try/catch'tedir, hiçbiri fırlatmaz ve hiçbiri dosyayı değiştirmez/silmez.
+  private probeLockTimeout(lockStart: number, retries: number, failures: Map<string, number>, last: unknown): LockTimeoutInfo {
+    const code = (e: unknown): string | null => { const c = (e as NodeJS.ErrnoException | undefined)?.code; return typeof c === "string" ? c : null; };
+    const now = Date.now();
+    const info: LockTimeoutInfo = {atWall: now, atPerf: ms1(performance.now()), waitedMs: ms1(performance.now() - lockStart), retries, limitMs: LOCK_WAIT_MS,
+      lastError: {code: code(last), message: String((last as Error | undefined)?.message ?? last).slice(0, 200)}, failures: Object.fromEntries(failures),
+      file: {state: "ABSENT", code: null, sizeBytes: null, mtimeAgeMs: null}, open: {ok: false, code: null},
+      holder: {state: "UNREADABLE", code: null, pid: null, hostname: null, runId: null, lockId: null, startedAt: null, ageMs: null, pidAlive: null, ownPid: false}, deletePendingSuspected: false, suspicion: []};
+    try { const st = fs.statSync(this.lockFile); info.file = {state: "PRESENT", code: null, sizeBytes: st.size, mtimeAgeMs: Math.round(now - st.mtimeMs)}; } catch (e) { info.file = {state: code(e) === "ENOENT" ? "ABSENT" : "STAT_ERROR", code: code(e), sizeBytes: null, mtimeAgeMs: null}; }
+    try { fs.closeSync(fs.openSync(this.lockFile, "r")); info.open = {ok: true, code: null}; } catch (e) { info.open = {ok: false, code: code(e)}; }
+    try {
+      const doc = JSON.parse(fs.readFileSync(this.lockFile, "utf8")) as {pid?: unknown; hostname?: unknown; runId?: unknown; lockId?: unknown; startedAt?: unknown};
+      const h = info.holder, started = typeof doc.startedAt === "string" ? Date.parse(doc.startedAt) : NaN;
+      h.pid = typeof doc.pid === "number" ? doc.pid : null; h.hostname = typeof doc.hostname === "string" ? doc.hostname : null; h.runId = typeof doc.runId === "string" ? doc.runId : null; h.lockId = typeof doc.lockId === "string" ? doc.lockId : null;
+      h.startedAt = typeof doc.startedAt === "string" ? doc.startedAt : null; h.ageMs = Number.isFinite(started) ? Math.round(now - started) : null; h.ownPid = h.pid === process.pid && h.hostname === os.hostname();
+      if (h.hostname !== null && h.hostname !== os.hostname()) h.state = "OTHER_HOST";
+      else if (h.pid === null) h.state = "PRESENT";
+      else { try { process.kill(h.pid, 0); h.pidAlive = true; h.state = "ACTIVE"; } catch (e) { if (code(e) === "ESRCH") { h.pidAlive = false; h.state = "DEAD_PID"; } else { h.pidAlive = null; h.state = "PRESENT"; } } }
+    } catch (e) { info.holder.code = code(e); info.holder.state = code(e) === "ENOENT" ? "ABSENT" : e instanceof SyntaxError ? "UNPARSEABLE" : "UNREADABLE"; }
+    for (const [label, c] of [["STAT", info.file.code], ["OPEN", info.open.code], ["READ", info.holder.code], ["ACQUIRE", info.lastError.code]] as const) if (c === "EPERM" || c === "EBUSY" || c === "EACCES") info.suspicion.push(`${label}_${c}`);
+    info.deletePendingSuspected = info.suspicion.length > 0;
+    if (/state=UNREADABLE/.test(info.lastError.message)) info.suspicion.push("ACQUIRE_STATE_UNREADABLE");
+    if (info.holder.state === "UNPARSEABLE") info.suspicion.push("LOCK_FILE_UNPARSEABLE");
+    return info;
+  }
+  private noteLock(waitMs: number, retries: number): void {
+    const d = this.diag;
+    d.lockAcquisitions += 1; d.lockRetries += retries; d.lockWaitMsTotal += waitMs; d.lockWaitMsMax = Math.max(d.lockWaitMsMax, waitMs);
+    if (this.frame) { this.frame.lockWaitMs += waitMs; this.frame.lockRetries += retries; }
+  }
+  private noteWrite(f: StoreWriteTiming, totalMs: number): void {
+    const t: StoreWriteTiming = {type: f.type === "" ? "?" : f.type, startedAtWall: f.startedAtWall, startedAtPerf: ms1(f.startedAtPerf), totalMs: ms1(totalMs), lockWaitMs: ms1(f.lockWaitMs), lockRetries: f.lockRetries, reloadMs: ms1(f.reloadMs), journalMs: ms1(f.journalMs), snapshotMs: ms1(f.snapshotMs), snapshotWrites: f.snapshotWrites, releaseMs: ms1(f.releaseMs)};
+    const d = this.diag;
+    d.writes += 1;
+    if (d.slowest === null || t.totalMs > d.slowest.totalMs) d.slowest = t;
+    d.recent.push(t); if (d.recent.length > WRITE_RING) d.recent.shift();
+  }
   private state: State = emptyState();
   private tamperReason: string | null = null;
   // F-B1-002: IO/format hataları da fail-closed bayrağı kurar; guard() okuma ve yazmayı reddeder.
@@ -154,13 +213,27 @@ export class WorkOsStore {
   private withLock<T>(fn: () => T): T {
     const runId = `workos-${process.pid}-${crypto.randomBytes(4).toString("hex")}`;
     const deadline = Date.now() + LOCK_WAIT_MS; let release: (() => void) | null = null;
+    const lockStart = performance.now(); let retries = 0; const failures = new Map<string, number>();
     for (;;) {
-      try { release = acquireProcessLock(this.lockFile, runId); break; } catch {
-        if (Date.now() >= deadline) throw new WorkOsError("WORKOS_UNAVAILABLE", "LOCK_TIMEOUT");
+      try { release = acquireProcessLock(this.lockFile, runId); break; } catch (acquireError) {
+        // //TR: C-PAR03-DIAG-1: her başarısız edinme ileti başına sayılır (en çok 8 ileti; fazlası "(other)"); davranış değişmez.
+        const failure = `${(acquireError as NodeJS.ErrnoException | undefined)?.code ?? "-"}: ${String((acquireError as Error | undefined)?.message ?? acquireError).slice(0, 160)}`;
+        const failureKey = failures.has(failure) || failures.size < 8 ? failure : "(other)";
+        failures.set(failureKey, (failures.get(failureKey) ?? 0) + 1);
+        if (Date.now() >= deadline) {
+          this.noteLock(performance.now() - lockStart, retries);
+          const info = this.probeLockTimeout(lockStart, retries, failures, acquireError);
+          this.diag.lockTimeouts += 1; this.diag.lastLockTimeout = info;
+          const timeout = new WorkOsError("WORKOS_UNAVAILABLE", "LOCK_TIMEOUT");
+          Object.defineProperty(timeout, "diagnostic", {value: info, enumerable: false});
+          throw timeout;
+        }
+        retries += 1;
         sleepSync(15);
       }
     }
-    try { return fn(); } finally { try { release?.(); } catch { /* lock sahipliği değişmişse yazma zaten tamamlandı */ } }
+    this.noteLock(performance.now() - lockStart, retries);
+    try { return fn(); } finally { const releaseStart = performance.now(); try { release?.(); } catch { /* lock sahipliği değişmişse yazma zaten tamamlandı */ } if (this.frame) this.frame.releaseMs += performance.now() - releaseStart; }
   }
   private fail(e: unknown): void {
     this.sig = null; this.tornTail = null;
@@ -262,7 +335,10 @@ export class WorkOsStore {
     if (snap.lastHash !== expected) throw tampered("SNAPSHOT_HASH_NOT_IN_JOURNAL");
   }
   // Snapshot türetilmiştir: yazılamaması (ör. disk dolu) journal'ı veya okumaları bozmaz; sonraki yüklemede yeniden yazılır.
-  private writeSnapshotBestEffort(): void { try { this.writeSnapshot(); } catch { /* türetilmiş dosya */ } }
+  private writeSnapshotBestEffort(): void {
+    const snapshotStart = performance.now();
+    try { this.writeSnapshot(); } catch { /* türetilmiş dosya */ } finally { if (this.frame) { this.frame.snapshotMs += performance.now() - snapshotStart; this.frame.snapshotWrites += 1; } }
+  }
   private writeSnapshot(): void {
     writeJsonAtomic(this.snapshotFile, {"//TR": "Bu snapshot journal.jsonl dosyasından türetilir; otorite journal'dır, bu dosya silinip yeniden üretilebilir.", schemaVersion: "1.0.0", ...this.state});
   }
@@ -450,13 +526,18 @@ export class WorkOsStore {
   private readGuard(): void { this.refresh(); this.guard(); }
   // Her yazı lock altında disk yeniden doğrulanarak yapılır: başka örnek/süreç yazdıysa onun yazıları görülür, bozuk disk fail-closed.
   private write<T>(fn: () => T): T {
-    return this.withLock(() => { this.load(); this.guard(true); return fn(); });
+    const frame: StoreWriteTiming = {type: "", startedAtWall: Date.now(), startedAtPerf: performance.now(), totalMs: 0, lockWaitMs: 0, lockRetries: 0, reloadMs: 0, journalMs: 0, snapshotMs: 0, snapshotWrites: 0, releaseMs: 0};
+    this.frame = frame; // //TR: write() yeniden girişli DEĞİLDİR (iç içe çağrı süreç kilidinde 10 sn takılır), bu yüzden çerçeve tek ve bitince sıfırlanır
+    try {
+      return this.withLock(() => { const reloadStart = performance.now(), snapshotBefore = frame.snapshotMs; try { this.load(); } finally { frame.reloadMs = performance.now() - reloadStart - (frame.snapshotMs - snapshotBefore); } this.guard(true); return fn(); });
+    } finally { this.frame = null; this.noteWrite(frame, performance.now() - frame.startedAtPerf); }
   }
   // WFR04A-C1-F3: at verilirse (academy ön-denemesinde kullanılan zaman) aynen yazılır; ön-deneme ile diske yazılan girdi aynı zamanı taşır.
   private append(type: JournalType, actor: string, payload: Record<string, unknown>, at?: string): JournalEntry {
     const body = {seq: this.state.lastSeq + 1, prevHash: this.state.lastHash, type, actor, at: at ?? new Date().toISOString(), payload};
     const entry: JournalEntry = {...body, hash: entryHash(body)};
     const line = Buffer.from(JSON.stringify(entry) + "\n", "utf8");
+    const journalStart = performance.now();
     fs.mkdirSync(this.dataDir, {recursive: true});
     const fd = fs.openSync(this.journalFile, "a");
     try {
@@ -474,9 +555,14 @@ export class WorkOsStore {
         throw code === "ENOSPC" || code === "EDQUOT" || code === "ESHORTWRITE" ? new WorkOsError("WORKOS_DISK_FULL", "JOURNAL_APPEND") : new WorkOsError("WORKOS_UNAVAILABLE", "JOURNAL_APPEND_FAILED");
       }
     } finally { fs.closeSync(fd); }
+    const journalEnd = performance.now();
     this.apply(this.state, entry);
     this.sig = this.signature();
     this.writeSnapshotBestEffort();
+    if (this.frame) {
+      this.frame.type = this.frame.type === "" || this.frame.type === type ? type : `${this.frame.type}+${type}`;
+      this.frame.journalMs += journalEnd - journalStart;
+    }
     return entry;
   }
   // F-B1-001/005: aynı tenant+kind+key için önceki varlık döner; yük özeti farklıysa çakışma hatası.
