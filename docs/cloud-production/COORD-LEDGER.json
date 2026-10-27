@@ -852,6 +852,26 @@
       "ref": "wf_a15b21e3-2c9 (2 lenses + skeptic, not refuted): sync repositoryHead (spawnSync) in GET readiness freezes the control-api process (runner, Global Stop) up to 3 s per request, requests queue (4 GETs -> 12 s); use repositoryHeadAsync; 32 fixtures readiness==runner; LOWs wall-clock UNKNOWN, Windows tree-kill (sync), comment overstates isolation (repo-local include.path read), UI text for new reasons missing, tmpdir-dependent test, N7/N8 survivors",
       "policy": "TEP-1",
       "at": "2026-10-27T03:39:55.027Z"
+    },
+    {
+      "pr": 242,
+      "sha": "5815714796f5cfe7a7ec1eb1157696cc9892c4f7",
+      "kind": "delta",
+      "base": "53726f350b47cbd8ac904abd82eb419c5bcdc8ee",
+      "verdict": "BASE_MERGE_ONLY",
+      "ref": "COORD base merge 39dfe92, no conflict, trust-root PASS (no reseal), b1+b5+b4+wfr03 515/515",
+      "policy": "TEP-1",
+      "at": "2026-10-27T03:46:13.361Z"
+    },
+    {
+      "pr": 265,
+      "sha": "d45c47b7ddf008da8ff1de28d10127608fe29bcb",
+      "kind": "delta",
+      "base": "e9f12b973214891e7d9c453c6f80015b5b4c721a",
+      "verdict": "BLOCKERS_1MEDIUM_round2",
+      "ref": "wf_0dbbe2ce-a28: round-1 MEDIUM1/2 + LOWs FIXED, 599-role output byte-identical, 224/224 catalogue killed; MEDIUM allow-list tests miss suffix + later rows (Y-N12/Y-N15/Y-N14 survive -> stronger reviewChain.origin label); LOWs unregistered optional cut first (slug order), gapId types unchecked, R06 partial (aliases/skills records), resolveAll default cap unpinned, allow-list array mutable (freeze)",
+      "policy": "TEP-1",
+      "at": "2026-10-27T03:46:13.405Z"
     }
   ],
   "tests": [],
