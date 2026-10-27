@@ -2246,6 +2246,16 @@
         "masterV2": "C-RDY-1 Role Readiness Auditor = Master V2 package 1 DONE (merged, not product-accepted)"
       },
       {
+        "pr": 284,
+        "merge": "4d79cb7",
+        "by": "coordinator direct merge, expectedHeadSha ec7caca (required checks green on ec7caca)",
+        "at": "2026-10-27T08:50:25Z",
+        "postMerge": "VERIFIED: parent1 ac9dfb9, parent2 = gated head ec7caca, merge tree cecacde == probe tree tested locally (27 locale-dependent files 1590/1590)",
+        "review": "full NO_BLOCKERS_4LOW (ec7caca)",
+        "riskTier": "R0 ROUTINE (renderer + locales + tests + docs)",
+        "masterV2": "A-281-LOWS: cut run list shown as cut in tower and task-runs panel"
+      },
+      {
         "pr": 280,
         "merge": "ac9dfb9",
         "by": "coordinator direct merge, expectedHeadSha c0c3899 (required checks green on c0c3899)",
