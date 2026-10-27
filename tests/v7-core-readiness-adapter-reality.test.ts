@@ -492,7 +492,7 @@ describe("C-RDY-2a adapter-reality", () => {
     expect(g3.code).toBe("                   \nconst k = \" \";");
     expect(g3.literal).toBe("                   \nconst k = \"v\";");
     // //TR: Satır sayısı ve CR/LF çok satırlı yorum, dize ve şablonda KORUNUR (kod görünümü kaynakla aynı uzunlukta ve aynı satır dizilimindedir).
-    const multi = "a /* x\ny */ b\r\n`p\nq` + \"s\\\nt\";\r\n";
+    const multi = "a /* x\r\ny */ b\r\n`p\r\nq\nr` + \"s\\\r\nt\";\r\n";
     const mv = codeViews(multi)!;
     for (const view of [mv.code, mv.literal]) {
       expect(view).toHaveLength(multi.length);
@@ -582,10 +582,10 @@ describe("C-RDY-2a adapter-reality", () => {
 
   it("importer scan details: extensions, test flavours, self import, hidden directories, word boundaries, unparseable files, bare specifiers", () => {
     const probe = DEAD_CODE_PROBES[0];
-    const imp = "import {resolveCapability} from \"../capabilities/resolver.js\";\n";
+    const imp = "import {resolveCapability} from \"./capabilities/resolver.js\";\n";
     const root = fx({
       "core/capabilities/resolver.ts": "import {x} from \"./resolver.js\";\nexport function resolveCapability() {}\n",
-      "core/.git/hook.ts": imp,
+      "core/.git/hook.ts": "import {resolveCapability} from \"../capabilities/resolver.js\";\n",
       "core/m1.mts": "import {resolveCapability} from \"./capabilities/resolver.js\";\n",
       "core/bare.ts": "import {resolveCapability} from \"./capabilities/resolver\";\n",
       "core/t1.test.js": imp, "core/t2.test.mjs": imp, "core/t3.test.cjs": imp, "core/t4.test.mts": imp,
@@ -601,14 +601,14 @@ describe("C-RDY-2a adapter-reality", () => {
 
   it("census details: spawn family, word boundaries, regex metacharacters, case, de-duplication, sorting, exclusion reasons", () => {
     const root = fx({
-      "core/a.ts": "execFile(\"tool-ef\", []); execFileSync('Tool.EXE', []); spawn( \"sp-tool\", []); spawnSync(`ss-tool`, []); const myspawn = (x, y) => 0; myspawn(\"not-a-cmd\", []);\nconst m1 = \"acme-tool\"; const m2 = \"acme-tool\"; const dots = \"aXb\"; const lower = \"mixed-case\";\n",
       "core/b.ts": "const m = \"acme-tool\"; const exact = \"a.b\";\n",
-      "core/z-broken.ts": "const x = \"open\n", "core/a-broken.ts": "const y = \"open\n"
+      "core/a.ts": "execFile(\"tool-ef\", []); execFileSync('Tool.EXE', []); spawn( \"sp-tool\", []); spawnSync(`ss-tool`, []); const myspawn = (x, y) => 0; myspawn(\"not-a-cmd\", []);\nconst m1 = \"acme-tool\"; const m2 = \"acme-tool\"; const dots = \"aXb\"; const lower = \"mixed-case\";\n",
+      "core/z-broken.ts": "const x = \"open\n", "automation/m-broken.mjs": "const w = \"open\n", "core/a-broken.ts": "const y = \"open\n"
     });
     const c = censusProduction(root, ["acme-tool", "a.b", "Mixed-Case"]);
     expect([...c.registryIds.entries()]).toEqual([["acme-tool", ["core/a.ts", "core/b.ts"]], ["Mixed-Case", ["core/a.ts"]], ["a.b", ["core/b.ts"]]]);
     expect([...c.commands.entries()]).toEqual([["tool-ef", ["core/a.ts"]], ["Tool.EXE", ["core/a.ts"]], ["sp-tool", ["core/a.ts"]], ["ss-tool", ["core/a.ts"]]]);
-    expect(c.unparseable).toEqual(["core/a-broken.ts", "core/z-broken.ts"]);
+    expect(c.unparseable).toEqual(["automation/m-broken.mjs", "core/a-broken.ts", "core/z-broken.ts"]);
     const none = {registryIds: {}, commands: {}};
     expect(censusProblems({...c, unparseable: []}, [], none).filter(p => p.startsWith("REGISTRY_ID_UNMAPPED:acme-tool"))).toEqual(["REGISTRY_ID_UNMAPPED:acme-tool:core/a.ts"]);
     // //TR: Eşlenmiş ama görülmeyen bir kimlik için dışlama yalnız ALSO_MAPPED verir (STALE değil); boş gerekçe UNMAPPED değil WITHOUT_REASON verir.
@@ -617,11 +617,9 @@ describe("C-RDY-2a adapter-reality", () => {
   });
 
   it("workflow and registry readers: indented YAML comments, name order, every adapter row is validated", () => {
-    const wfRoot = fx({".github/workflows/b.yml": "- run: echo B-MARK\n", ".github/workflows/a.yaml": "jobs:\n    # node tools/indented.mjs\n  x: A-MARK\n"});
+    const wfRoot = fx({".github/workflows/c.yml": "- run: echo C-MARK\n", ".github/workflows/a.yaml": "jobs:\n    #node tools/indented.mjs\n  x: A-MARK\n", ".github/workflows/e.yml": "- run: echo E-MARK\n", ".github/workflows/b.yml": "- run: echo B-MARK\n", ".github/workflows/d.yaml": "- run: echo D-MARK\n"});
     const wf = readWorkflowTexts(wfRoot);
-    expect(wf).toHaveLength(2);
-    expect(wf[0]).toContain("A-MARK");
-    expect(wf[1]).toContain("B-MARK");
+    expect(wf.map(t => /([A-E])-MARK/.exec(t)![1])).toEqual(["A", "B", "C", "D", "E"]);
     expect(wf[0]).not.toContain("indented.mjs");
     const good = {id: "a", category: "C", status: "REGISTERED", implementation: "NOT_IMPLEMENTED"};
     const load = (rows: unknown[]) => { const r = fx({"registries/tool-adapters.json": JSON.stringify({adapters: rows})}); return () => loadRegistryAdapters(r); };

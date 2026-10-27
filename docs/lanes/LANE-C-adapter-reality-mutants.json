@@ -279,8 +279,8 @@
    "id": "R21",
    "description": "an unterminated string at a line break no longer makes the source unparseable",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "if (src[i] === \"\\n\") return null; body(src[i++]); }",
-   "new": "if (src[i] === \"\\n\") break; body(src[i++]); }"
+   "old": "if (src[i] === \"\\n\") return null;\n        body(src[i++]);",
+   "new": "if (src[i] === \"\\n\") break;\n        body(src[i++]);"
   },
   {
    "id": "R22",
@@ -1177,6 +1177,20 @@
    "file": "core/capabilities/adapter-reality.ts",
    "old": "ciTokens: [\"node scripts/ci/uasco-review/run.mjs scope\"]",
    "new": "ciTokens: [\"node scripts/run-validation.mjs\"]"
+  },
+  {
+   "id": "L-sort",
+   "description": "directory entries are no longer sorted by name (traversal follows the OS order)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "for (const e of [...entries].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {",
+   "new": "for (const e of entries) {"
+  },
+  {
+   "id": "L-crlf",
+   "description": "a backslash + CRLF line continuation inside a string no longer consumes the LF (the string looks unterminated)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (e === \"\\r\" && src[i] === \"\\n\") body(src[i++]);",
+   "new": ""
   }
  ]
 }

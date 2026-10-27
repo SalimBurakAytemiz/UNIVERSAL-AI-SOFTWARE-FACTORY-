@@ -105,7 +105,12 @@ export function codeViews(src: string): CodeViews | null {
     if (c === "/" && d === "*") { const end = src.indexOf("*/", i + 2); if (end < 0) return null; for (; i < end + 2; i++) blank(src[i]); continue; }
     if (c === "\"" || c === "'") {
       plain(c); i++;
-      while (i < n && src[i] !== c) { if (src[i] === "\\") { body(src[i++]); if (i < n) body(src[i++]); continue; } if (src[i] === "\n") return null; body(src[i++]); }
+      // //TR: Kaçışlı satır sonu (satır devamı) dizeyi bitirmez; CRLF kaynaklarda `\\` + CR + LF üçlüsü birlikte tüketilir.
+      while (i < n && src[i] !== c) {
+        if (src[i] === "\\") { body(src[i++]); if (i < n) { const e = src[i++]; body(e); if (e === "\r" && src[i] === "\n") body(src[i++]); } continue; }
+        if (src[i] === "\n") return null;
+        body(src[i++]);
+      }
       if (i >= n) return null;
       plain(c); i++; continue;
     }
