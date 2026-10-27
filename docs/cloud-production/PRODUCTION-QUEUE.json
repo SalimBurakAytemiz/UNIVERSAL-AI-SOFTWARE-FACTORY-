@@ -2246,6 +2246,16 @@
         "masterV2": "C-RDY-1 Role Readiness Auditor = Master V2 package 1 DONE (merged, not product-accepted)"
       },
       {
+        "pr": 266,
+        "merge": "b974406",
+        "by": "coordinator direct merge, SHA-bound to 5e17b79 (required checks green; optional Independent Review pending made mergeable_state unstable, so auto-merge could not be armed)",
+        "at": "2026-10-27T01:17:17Z",
+        "postMerge": "VERIFIED: parent1 459205c, parent2 = gated head 5e17b79, merge-tree == merge tree ea4eea3",
+        "review": "254779c full BLOCKERS 2 MEDIUM -> 5e17b79 delta NO_BLOCKERS_6LOW (wf_7a53b7d1-c41); LOW follow-ups N3/N7/N8 pins, acquire/takeover hook",
+        "riskTier": "R0 ROUTINE (core/workos/runner.ts lease renew-before-write + tests; no protected path)",
+        "masterV2": "Windows lease-fence flake family (relfx-c3:200, relfx-1 PAR-04) product fix (merged, not product-accepted)"
+      },
+      {
         "pr": 261,
         "merge": "459205c",
         "by": "auto-merge (armed by coordinator on 2b226a1 after merge-gate OPEN)",
