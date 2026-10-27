@@ -335,6 +335,10 @@ describe("B-DEVRUN-RESTART-SAFE: a stop that cannot confirm the exit never allow
 });
 
 // //TR: LANE-B B-RUN-1: teslim edilen ürünün çalıştırılması. Ağ-izole sağlayıcıda ürün yalnız sağlayıcı köprüsüyle (127.0.0.1, tek port) açılır; köprü/loopback yoksa kesin DEVRUN_SANDBOX_UNAVAILABLE ve HİÇBİR süreç başlamaz. Gerçek Linux sağlayıcılı test yalnız selfTest + loopback + nsenter varsa çalışır, aksi halde SKIP görünür (PASS sayılmaz).
+// //TR: köprü testlerinde iç port işletim sisteminin verdiği boş loopback porttur ve yöneticinin dış portundan (env PORT) farklıdır; 30000-50000 aralığından rastgele seçilen port Windows'ta dolu ya da rezerve olabiliyordu ve ürün EADDRINUSE/EACCES ile çıkıp CRASHED oluyordu (ps1a-c2:517, run 40438609961)
+const innerPortPair = async (): Promise<[number, number]> => { const a = await freeLoopbackPort(); let b = await freeLoopbackPort(); while (b === a) b = await freeLoopbackPort(); return [a, b]; };
+const innerPortFor = (o: cp.SpawnOptions, [a, b]: [number, number]): number => Number((o.env as Record<string, string> | undefined)?.PORT) === a ? b : a;
+
 describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
   const manager = (dataDir: string, gate: ExecutionGate, o: Record<string, unknown> = {}) => new DevRunManager({executionGate: gate, studio: new ProjectStudio({dataDir, envPolicyFile: ENV_POLICY}), envPolicyFile: ENV_POLICY,
     globalStopFile: path.join(tmp, "m-runtime", "GLOBAL_STOP.json"), stopPollMs: 100, probeIntervalMs: 100, ...o});
@@ -377,8 +381,9 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
     // net: üst düzey import
     const net = await import("node:net");
     let innerPort = 0, closed = 0, verified = true, child: cp.ChildProcess | null = null; const proxies = new Set<import("node:net").Socket>();
+    const ports = await innerPortPair();
     const provider = {id: "FAKE_ISOLATED", network: "ISOLATED", async selfTest() { return {ok: verified}; }, isVerified() { return verified; }, async run() { throw new Error("unused"); },
-      spawn(c: string, a: string[], o: cp.SpawnOptions) { innerPort = Math.floor(30000 + Math.random() * 20000); child = cp.spawn(c, a, {...o, env: {...(o.env as any), PORT: String(innerPort)}}); return child; },
+      spawn(c: string, a: string[], o: cp.SpawnOptions) { innerPort = innerPortFor(o, ports); child = cp.spawn(c, a, {...o, env: {...(o.env as any), PORT: String(innerPort)}}); return child; },
       async bridge(_c: cp.ChildProcess, port: number) {
         const srv = net.createServer(s => { const u = net.connect(innerPort, "127.0.0.1"); proxies.add(s); s.pipe(u); u.pipe(s); s.on("error", () => u.destroy()); u.on("error", () => s.destroy()); });
         await new Promise<void>(r => srv.listen(port, "127.0.0.1", () => r()));
@@ -502,8 +507,9 @@ describe("LANE-B product run: provider bridge (B-RUN-1)", () => {
     const head = git(path.join(dataDir, "projects", p.projectId, "repo"), ["rev-parse", "HEAD"]).trim();
     const net = await import("node:net");
     let innerPort = 0, bridgeCalls: number[] = [], closed = 0; const proxies = new Set<import("node:net").Socket>();
+    const ports = await innerPortPair();
     const provider = {id: "FAKE_ISOLATED", network: "ISOLATED", async selfTest() { return {ok: true}; }, async run() { throw new Error("unused"); },
-      spawn(c: string, a: string[], o: cp.SpawnOptions) { innerPort = Math.floor(30000 + Math.random() * 20000); return cp.spawn(c, a, {...o, env: {...(o.env as any), PORT: String(innerPort)}}); },
+      spawn(c: string, a: string[], o: cp.SpawnOptions) { innerPort = innerPortFor(o, ports); return cp.spawn(c, a, {...o, env: {...(o.env as any), PORT: String(innerPort)}}); },
       async bridge(_child: cp.ChildProcess, port: number) {
         bridgeCalls.push(port);
         const srv = net.createServer(s => { const u = net.connect(innerPort, "127.0.0.1"); proxies.add(s); s.pipe(u); u.pipe(s); s.on("error", () => u.destroy()); u.on("error", () => s.destroy()); });

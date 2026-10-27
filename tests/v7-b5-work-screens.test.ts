@@ -1586,7 +1586,7 @@ describe("COORD run expert selection", () => {
     expect(() => fdb.assertRoleExecutes(tester.roleId, "developer")).toThrow(/BINDING_ROLE_MISMATCH/);
     expect(c.isRunExpert(tester.roleId)).toBe(false);
   });
-  it("builds {roleId} only for a listed expert, {} without a role, and refuses any other role", async () => {
+  it("builds {roleId} only for a listed expert, {} (the server then assigns the default developer role UASCO-0085) without one, and refuses any other role", async () => {
     const c = await load(rend, "work-core.js"), run = (roleId?: string) => c.buildRunRequest({missionId: MID, status: "PLANNED", roleId});
     expect(run("UASCO-0085")).toEqual({ok: true, path: `/v1/missions/${MID}/runs`, body: {roleId: "UASCO-0085"}});
     expect(run("")).toEqual({ok: true, path: `/v1/missions/${MID}/runs`, body: {}});
@@ -1616,7 +1616,7 @@ describe("COORD run expert selection", () => {
     expect(byId(r3, "run-expert")).toBeNull();
   });
   it("the option that sends no roleId is labelled with the role the server then assigns (UASCO-0085, default), never as 'none', and still posts {}", async () => {
-    for (const [lang, want] of [["en", ["UASCO-0085 · developer", "Developer UASCO-0085 (default)"]], ["tr", ["UASCO-0085 · geliştirici", "Geliştirici UASCO-0085 (varsayılan)"]]] as const) {
+    for (const [lang, want] of [["en", ["UASCO-0085 · developer", "Server default (Developer UASCO-0085)"]], ["tr", ["UASCO-0085 · geliştirici", "Sunucu varsayılanı (Geliştirici UASCO-0085)"]]] as const) {
       forms.resetAllForms();
       const {ctx, doc, calls} = await mkCtx({lang, get: getFor("AUTHORIZED"), post: () => ({status: 202, body: {}})});
       const view = await load(rend, "views", "work.js");

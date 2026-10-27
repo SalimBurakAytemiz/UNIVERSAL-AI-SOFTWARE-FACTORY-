@@ -766,6 +766,41 @@ describe("LANE-C C1 role lifecycle computed only from evidence", () => {
       } finally { fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); }
     });
 
+    it("F5: the slug list comes from the registry ON DISK - a technology added there joins the cache fingerprint (its profile change reloads) and a slug dropped from it leaves the fingerprint (its profile change no longer reloads)", async () => {
+      const stage = await stagePackaged(); const spy = vi.spyOn(fs, "readFileSync");
+      try {
+        const reg = path.join(stage, "registries", "technologies.json"), kdir = path.join(stage, "knowledge", "technologies");
+        const doc = JSON.parse(fs.readFileSync(reg, "utf8")); const drop = String(doc.technologies[doc.technologies.length - 1].slug);
+        const reads = () => spy.mock.calls.filter(c => String(c[0]).includes(path.join("knowledge", "technologies"))).length;
+        let bump = 200_000; const touch = (f: string) => { const t = new Date(Date.now() + (bump += 10_000)); fs.utimesSync(f, t, t); };
+        await getAt(stage, null); await getAt(stage, null); let last = reads();
+        touch(path.join(kdir, `${drop}.json`)); await getAt(stage, null);
+        expect(reads(), "a listed slug's profile is in the fingerprint").toBeGreaterThan(last); last = reads(); await getAt(stage, null); expect(reads()).toBe(last);
+        doc.technologies = doc.technologies.slice(0, -1); fs.writeFileSync(reg, JSON.stringify(doc)); touch(reg);
+        await getAt(stage, null); last = reads(); await getAt(stage, null); expect(reads(), "warm after the registry changed").toBe(last);
+        touch(path.join(kdir, `${drop}.json`)); await getAt(stage, null);
+        expect(reads(), "the dropped slug is no longer fingerprinted").toBe(last);
+      } finally { spy.mockRestore(); fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); }
+    });
+
+    it("F5b: a technology ADDED to the registry on disk joins the cache fingerprint - the next request reloads, and a later change of ITS profile reloads again", async () => {
+      const stage = await stagePackaged(); const spy = vi.spyOn(fs, "readFileSync");
+      try {
+        const reg = path.join(stage, "registries", "technologies.json"), kdir = path.join(stage, "knowledge", "technologies");
+        const doc = JSON.parse(fs.readFileSync(reg, "utf8")); const base = doc.technologies[doc.technologies.length - 1], slug = "zz-added-technology";
+        const reads = () => spy.mock.calls.filter(c => String(c[0]).includes(path.join("knowledge", "technologies"))).length;
+        let bump = 400_000; const touch = (f: string) => { const t = new Date(Date.now() + (bump += 10_000)); fs.utimesSync(f, t, t); };
+        await getAt(stage, null); await getAt(stage, null); let last = reads();
+        const prof = JSON.parse(fs.readFileSync(path.join(kdir, `${base.slug}.json`), "utf8")); if ("slug" in prof) prof.slug = slug;
+        fs.writeFileSync(path.join(kdir, `${slug}.json`), JSON.stringify(prof)); doc.technologies.push({...base, slug}); fs.writeFileSync(reg, JSON.stringify(doc)); touch(reg);
+        const added = await getAt(stage, null); expect(reads(), "registry gained a slug -> reloaded").toBeGreaterThan(last); last = reads();
+        expect(added.code, JSON.stringify(added.body).slice(0, 200)).toBe(200);
+        await getAt(stage, null); expect(reads(), "warm after the add").toBe(last);
+        touch(path.join(kdir, `${slug}.json`)); await getAt(stage, null);
+        expect(reads(), "the ADDED slug's profile is in the fingerprint").toBeGreaterThan(last);
+      } finally { spy.mockRestore(); fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); }
+    });
+
     it("F1: a knowledge profile that was ALREADY read changes DURING the load -> not cached (the next request reloads); registry-only guards with an after-load fingerprint fail here", async () => {
       const stage = await stagePackaged(); const real = fs.readFileSync; const kdir = path.join("knowledge", "technologies"); const seenK: string[] = []; let t = 70_000_000;
       const spy = vi.spyOn(fs, "readFileSync").mockImplementation(((p: any, ...r: any[]) => {

@@ -17,7 +17,7 @@ import {DOMAINS_PATH,mapDomains} from "./domains-core.js";
 import {SCHEDULER_PATH,mapScheduler} from "./scheduler-core.js";
 import {CAPABILITIES_PATH,ADAPTERS_PATH,FABRICS_PATH,mapCapabilities,mapAdapters,mapFabrics} from "./integrations-core.js";
 import {knowledgePath,mapKnowledge,provenancePath,mapProvenance,mapMemoryList} from "./knowledge-core.js";
-import {STATUS_SUMMARY_PATH,mapStatusSummary} from "./agent-factory-core.js";
+import {STATUS_SUMMARY_PATH,mapStatusSummary,mapReadiness} from "./agent-factory-core.js";
 import {ATTENTION_PATH as WORKOS_ATTENTION_PATH,mapAttentionQueue,attentionAsBlocked} from "./attention-core.js";
 import {INSTALL_PATH,PHASE0_PATH,mapInstallReport,mapPhase0Report} from "./install-core.js";
 import {RUNS_PATH as AUDIT_RUNS_PATH,EVIDENCE_PATH as AUDIT_EVIDENCE_PATH,runEventsPath,mapAuditRuns,mapAuditEvents,mapAuditEvidence} from "./audit-core.js";
@@ -46,6 +46,16 @@ export function createApi({bridge,store,now=()=>Date.now()}){
     }catch(e){return {ok:false,thrown:true,...classifyFailure(e),message:String(e&&e.message!==undefined?e.message:e).slice(0,300)}}
   }
   const stale=r=>r.epoch!==store.epoch;
+  // //TR: Durum özeti ve hazırlık AYNI okumayı paylaşır: eşzamanlı iki çağrı tek bir in-flight söz verir (TTL'ye bağlı değil); okuma bitince serbest kalır, sonraki çağrı yine normal önbellek kuralına tabidir.
+  // //TR: Paylaşım yalnız AYNI epoch'ta ve önbellek girdisi hâlâ aynı sözse sürer: invalidate()/proje değişimi/başarılı yazma sonrası önbellek temizlenir ya da epoch artar, bu durumda yeni okuma başlar; okuma bitince (başarı ya da hata) paylaşım serbest kalır.
+  let statusRead=null;
+  const readStatusSummary=()=>{
+    const cur=store.cache.get(STATUS_SUMMARY_PATH);
+    if(statusRead!==null&&statusRead.epoch===store.epoch&&cur!==undefined&&cur.promise===statusRead.entry)return statusRead.p;
+    const p=get(STATUS_SUMMARY_PATH),rec={epoch:store.epoch,entry:store.cache.get(STATUS_SUMMARY_PATH)?.promise,p},release=()=>{if(statusRead===rec)statusRead=null};
+    statusRead=rec;p.then(release,release);
+    return p;
+  };
   // //TR: UX WP3: Company OS kaynaklarının son başarılı okuması; sonraki okuma başarısız olursa kayıtlar STALE (eski veri, zamanıyla) gösterilir, hiç başarılı okuma yoksa asla veri uydurulmaz.
   const companyLastGood=new Map();
   return {
@@ -200,7 +210,9 @@ export function createApi({bridge,store,now=()=>Date.now()}){
     async integrationsAdapters(){const r=await get(ADAPTERS_PATH);return r.ok?mapAdapters(r.data):{state:r.state,registry:null,message:r.message}},
     async integrationsFabrics(){const r=await get(FABRICS_PATH);return r.ok?mapFabrics(r.data):{state:r.state,registry:null,message:r.message}},
     // //TR: Ajan Fabrikası durum özeti (GET /v1/roles/status-summary, sorgu dizesi ve POST yok); beş sayaç ayrı tutulur. Ana süreç izin listesi girişi koordinatörün korumalı grubundadır; o gelene kadar okuma UNAVAILABLE döner ve hiçbir sayı uydurulmaz.
-    async rolesStatusSummary(){const r=await get(STATUS_SUMMARY_PATH);return r.ok?mapStatusSummary(r.data):{state:r.state,summary:null,message:r.message}},
+    async rolesStatusSummary(){const r=await readStatusSummary();return r.ok?mapStatusSummary(r.data):{state:r.state,summary:null,message:r.message}},
+    // //TR: Aynı GET /v1/roles/status-summary yanıtının hazırlık (readiness) bölümü; aynı yol önbellekten gelir (ikinci HTTP isteği yok). Okunamıyorsa (404/503 ROLE_READINESS_UNAVAILABLE/çevrimdışı) sayı yoktur, durum vardır.
+    async rolesReadiness(){const r=await readStatusSummary();return r.ok?mapReadiness(r.data):{state:r.state,readiness:null,reconciliation:null,message:r.message}},
     // //TR: FA-V2-PRODUCT (UI-BUILD-SCHEDULER): Derleme Zamanlayıcı salt-okunur okuması (GET /v1/scheduler, sorgu dizesi ve POST yok); yol automation/lib/control-boundary.mjs desktopGetPathAllowed listesinde zaten vardır (yeni uç nokta yok). Başarılıysa scheduler-core eşleyicisiyle fail-closed sanitize edilir.
     async scheduler(){const r=await get(SCHEDULER_PATH);return r.ok?mapScheduler(r.data):{state:r.state,scheduler:null,message:r.message}},
     // //TR: Proje bilgi özeti (GET /v1/projects/:id/knowledge, sorgu dizesi ve POST yok); Ana süreç izin listesi girişi koordinatörün korumalı grubundadır: köprü yolu reddederse (INVALID_API_PATH) durum UNAVAILABLE'dır, hiçbir sayı uydurulmaz.
