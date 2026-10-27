@@ -652,6 +652,16 @@
       "ref": "fced816 = merge of 459205c + #266 254779c into 94ffb5e (no #262 file changed); #266 reviewed + merged b974406 (5e17b79 NO_BLOCKERS_6LOW); #262 own content = 94ffb5e final checklist NO_BLOCKERS_3LOW; CI fced816 all green incl installer",
       "policy": "TEP-1",
       "at": "2026-10-27T01:18:06.087Z"
+    },
+    {
+      "pr": 268,
+      "sha": "0db05ced60fde3c9fcd78dcb75de24df298ea784",
+      "kind": "delta",
+      "base": "43f9e5484c1675428ab684a82c0a42afcdb47fee",
+      "verdict": "BLOCKERS_2MEDIUM_round1",
+      "ref": "wf_e95f2783-b88 (2 lenses + skeptics): HIGH UI-011 + #46/#170 FIXED; MEDIUM UI-124 g still carries the stop-confirm test inside the authority-gated M task (distinct task count 10 not 9); MEDIUM ROUTES frozen-scope list misses tests/v7-ux-install.test.ts:607 (at(-1)==settings) + conditional factory pins; LOW UI-124 delta count inflated by a pointer item",
+      "policy": "TEP-1",
+      "at": "2026-10-27T01:25:32.650Z"
     }
   ],
   "tests": [],
