@@ -2246,6 +2246,16 @@
         "masterV2": "C-RDY-1 Role Readiness Auditor = Master V2 package 1 DONE (merged, not product-accepted)"
       },
       {
+        "pr": 278,
+        "merge": "9d08a2c",
+        "by": "coordinator direct merge, expectedHeadSha e9093b1 (required checks green on e9093b1 after 1 full re-run: attempt-1 shard-2 red was the base-wide store LOCK_TIMEOUT in relfx-1-completion:459)",
+        "at": "2026-10-27T06:45:09Z",
+        "postMerge": "VERIFIED: parent1 1426004, parent2 = gated head e9093b1, merge tree 0e15524 == probe tree tested locally (27 locale-dependent files 1581/1581)",
+        "review": "full BLOCKERS_1MEDIUM (0620b70) -> delta r1 BLOCKERS_1MEDIUM (865f1da) -> delta r2 NO_BLOCKERS coord inline (45bbee4) -> coord base merge e9093b1 (import union)",
+        "riskTier": "R0 ROUTINE (renderer + tests + docs)",
+        "masterV2": "A-UI026-1: task inspector Run link row shows the task linked runs (newest 5 + governing, ownership-checked)"
+      },
+      {
         "pr": 277,
         "merge": "1426004",
         "by": "coordinator direct merge, expectedHeadSha d9e9889 (required checks green on d9e9889)",
