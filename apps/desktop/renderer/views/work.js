@@ -304,7 +304,7 @@ function runLinkCell(ctx,res,unk){
     hidden>0?h(doc,"p",{class:"note",dataset:{runLinkMore:String(hidden)},text:ctx.t("work.task.runLink.more",{n:hidden})}):null,
     h(doc,"ul",{class:"task-runlink-list"},shown.map((l,k)=>h(doc,"li",{dataset:{taskRunLink:l.runId,taskRunLinkGoverning:follow[k].governing?"1":"0"}},h(doc,"span",{class:"mono",text:l.runId})," ",l.status?statusPill(ctx,l.status):h(doc,"span",{class:"task-unknown",text:ctx.t("work.task.unknown")})))));
 }
-// //TR: UI-026 (A-UI026-1): "Koşu bağı" satırı, hemen altındaki görev-koşu panelinin okuduğu GET /v1/tasks/:id/runs sonucundan beslenir (ikinci okuma yok). Okuma VERIFIED değilse UNKNOWN kalır; VERIFIED ve boşsa "bağlı koşu yok"; yoksa en çok RUNLINK_SHOWN koşu kimliği + durum (kalanı "+N daha").
+// //TR: UI-026 (A-UI026-1): "Koşu bağı" satırı, hemen altındaki görev-koşu panelinin okuduğu GET /v1/tasks/:id/runs sonucundan beslenir (ikinci okuma yok). Okuma VERIFIED değilse UNKNOWN kalır; VERIFIED ve boşsa "bağlı koşu yok"; yoksa en YENİ RUNLINK_SHOWN koşu kimliği + durum (yönetici koşu son bağlanandır ve her zaman görünür; eski bağlar "+N daha eski" notuyla sayılır).
 export const RUNLINK_SHOWN=5;
 /** //TR: UI-026 görev denetçisi (salt okunur): seçili görevin mission okumasından gelen alanlarını ve (A-UI026-1) görev-koşu panelinin okuduğu GET /v1/tasks/:id/runs sonucundan "Koşu bağı" satırını gösterir; eksik alan UNKNOWN, okuma canlı değilse UNKNOWN durum notu. Hiçbir POST/depolama yoktur; seçim yalnız bellekte tutulur. */
 export function taskInspector(ctx,detail,runsRes,missionId,taskRuns=null){

@@ -1759,6 +1759,7 @@ describe("LANE-A task run link", () => {
     const o = await open({linked: {runs: [link(R1), {link: link(R2).link, run: null}]}, missionRuns: [R1, R2]});
     expect(field(o.root).dataset.taskRunLinks).toBe("linked");
     expect(byData(field(o.root), "taskRunLink").map(n => n.dataset.taskRunLink)).toEqual([R1, R2]);
+    expect(byData(field(o.root), "taskRunLink").map(n => n.dataset.taskRunLinkGoverning)).toEqual(["0", "1"]);
     const rows = byData(field(o.root), "taskRunLink");
     expect(text(rows[0])).toContain("Running");
     expect(text(rows[1])).toContain("UNKNOWN"); expect(text(rows[1])).not.toContain("Running");
@@ -1789,6 +1790,15 @@ describe("LANE-A task run link", () => {
     const exact = await open({linked: {runs: ids7.slice(0, 5).map(id => link(id))}, missionRuns: ids7});
     expect(byData(byData(exact.root, "taskField", "runLink")[0], "runLinkMore")).toEqual([]);
     expect(byData(byData(exact.root, "taskField", "runLink")[0], "taskRunLink").map(n => n.dataset.taskRunLink)).toEqual(ids7.slice(0, 5));
+    expect(byData(byData(exact.root, "taskField", "runLink")[0], "taskRunLink").map(n => n.dataset.taskRunLinkGoverning)).toEqual(["0", "0", "0", "0", "1"]);
+    for (const n of [3, 4]) {
+      const few = await open({linked: {runs: ids7.slice(0, n).map(id => link(id))}, missionRuns: ids7});
+      const c = byData(few.root, "taskField", "runLink")[0];
+      expect(byData(c, "taskRunLink").map(x => x.dataset.taskRunLink), `${n} links`).toEqual(ids7.slice(0, n));
+      expect(byData(c, "taskRunLink").map(x => x.dataset.taskRunLinkGoverning), `${n} links`).toEqual([...Array(n - 1).fill("0"), "1"]);
+      expect(byData(c, "runLinkMore"), `${n} links`).toEqual([]);
+      expect(text(c), `${n} links`).not.toContain("older");
+    }
     const en = (await load(rend, "locales", "en.js")).default as Record<string, string>, tr = (await load(rend, "locales", "tr.js")).default as Record<string, string>;
     expect(en["work.task.runLink.none"]).toBe("No run is linked to this task.");
     expect(tr["work.task.runLink.none"]).toBe("Bu göreve bağlı koşu yok.");
@@ -1805,6 +1815,8 @@ describe("LANE-A task run link", () => {
     mount(o.doc, await o.view.render(o.ctx));
     expect(count() - before).toBe(1);
     expect(byId(o.root, "task-runs")).not.toBeNull();
+    // //TR: #278 round 2: round-1 sırasında kaldırılan ASSERTION geri konuldu (yeni sayım testinin yanında ikisi de durur): inspector satırı BAŞKA bir /v1/tasks/ yolunu da okumaz.
+    expect([...new Set(o.calls.get.filter(p => p.startsWith("/v1/tasks/")))]).toEqual([`/v1/tasks/${T1}/runs`]);
   });
   it("mapTaskRuns with the requested task and mission: a link for another task or another mission turns the whole read into ERROR (the row shows UNKNOWN, no foreign run)", async () => {
     const c = await load(rend, "work-core.js");
