@@ -1,4 +1,4 @@
-//TR: Kanıt merdiveni (coded -> integrated -> tested -> runtimeVerified -> accepted) ve durum önceliği. 19 Ekim 'prs' metni yalnız EXPLICIT referanslarla sınıf belirler (WEAK referans yalnız 'merge edildi' iddialı satırı DÜŞÜK güvenle ve YALNIZ integrated için destekler: tested, CI koşuları, merge tarihi ve integratedPrs başka kalemin PR'ından alınmaz); kısmen merge edilmiş EXPLICIT PR kümesi önce bağımsız kanıtla (kayıt/overlay/başlık/dal PR'ı, v7'deki kayıt başı, merge iddiasında commit/route) aranır, yoksa integrated=PARTIAL'dır. Gerçek başlangıç yalnız kalemin kendi kanıtından: güçlü PR, kodlanmış kalemin konu başı kimliği adlandıran kendi commit'i (backlog/planlama kayıt commit'leri hariç) ve kodlanmış kalemin kayıt başı. runtimeVerified ölçüm kaynağı olmadığı için NOT_MEASURED'dır. İlk doğru kural kazanır: OBSOLETE, COMPLETED_AND_VERIFIED (çözümlenen kabul kanıtı), MERGED_NOT_VERIFIED (v7 atası merge/commit/route kanıtı), IMPLEMENTED_NOT_MERGED, FOUNDER_ACTION_REQUIRED, BLOCKED, IN_PROGRESS (taze talep), QUEUED, NOT_STARTED, UNKNOWN. JSON durum alanları, FAKE yürütücü, installer CI, backlog DONE ve sözleşme state'i ASLA kanıt değildir; kanıtsız ilerleme iddiası UNKNOWN olur ve missingEvidence taşır.
+//TR: Kanıt merdiveni (coded -> integrated -> tested -> runtimeVerified -> accepted) ve durum önceliği. 19 Ekim 'prs' metni yalnız EXPLICIT referanslarla sınıf belirler (WEAK referans yalnız 'merge edildi' iddialı satırı DÜŞÜK güvenle ve YALNIZ integrated için destekler: tested, CI koşuları, merge tarihi ve integratedPrs başka kalemin PR'ından alınmaz; başka kaleme atanmış (other-item) referans hiçbir iddiayı desteklemez); kayıt tutma PR'ı (BOOKKEEPING_PR: backlog write-back, planlama, READY işaretleme) ve kayıt tutma commit'i hiçbir basamakta kanıt değildir; kısmen merge edilmiş EXPLICIT PR kümesi önce bağımsız kanıtla (kayıt/overlay/başlık/dal PR'ı, v7'deki kayıt başı, merge iddiasında commit/route) aranır, yoksa integrated=PARTIAL'dır. Gerçek başlangıç yalnız kalemin kendi kanıtından: güçlü PR (kayıt tutma PR'ları hariç), kodlanmış kalemin konu başı kimliği adlandıran kendi commit'i (backlog/planlama kayıt commit'leri hariç), kanıt merdiveninin entegrasyon kanıtı olarak kabul ettiği commit ve kodlanmış kalemin kayıt başı. runtimeVerified ölçüm kaynağı olmadığı için NOT_MEASURED'dır. İlk doğru kural kazanır: OBSOLETE, COMPLETED_AND_VERIFIED (çözümlenen kabul kanıtı), MERGED_NOT_VERIFIED (v7 atası merge/commit/route kanıtı), IMPLEMENTED_NOT_MERGED, FOUNDER_ACTION_REQUIRED, BLOCKED, IN_PROGRESS (taze talep), QUEUED, NOT_STARTED, UNKNOWN. JSON durum alanları, FAKE yürütücü, installer CI, backlog DONE ve sözleşme state'i ASLA kanıt değildir; kanıtsız ilerleme iddiası UNKNOWN olur ve missingEvidence taşır.
 import { uniqSorted, cmp } from '../core/canonical-json.mjs';
 import { baselineClass, classOfPrs } from './baseline.mjs';
 import { toMs } from '../core/time.mjs';
@@ -9,7 +9,7 @@ export const RECON_CLASSES = ['EXPLICIT_PR_MERGED_ALL', 'EXPLICIT_PR_MERGED_PART
 const T = 'TRUE', F = 'FALSE', U = 'UNKNOWN';
 
 export function deriveItem(it, links, ctx) {
-  const { pulls, reachable, checks, runsBySha, statusMap: SM, decisionsByItem, nowIso, staleHours, acceptance, requiredChecks, dispatchedWave0, commitSubjects = new Map(), resolver = null, ownCommit = null } = ctx;
+  const { pulls, reachable, checks, runsBySha, statusMap: SM, decisionsByItem, nowIso, staleHours, acceptance, requiredChecks, dispatchedWave0, commitSubjects = new Map(), resolver = null, ownCommit = null, bookkeepingPr = null } = ctx;
   const id = it.id;
   const prL = links.filter((l) => l.kind === 'PR');
   const pr = (l) => pulls.get(l.pr);
@@ -22,7 +22,11 @@ export function deriveItem(it, links, ctx) {
   const overlayL = prL.filter((l) => l.strength === 'OVERLAY');
   const tb = prL.filter((l) => l.strength === 'ID_IN_TITLE' || l.strength === 'ID_IN_BRANCH');
   const body = prL.filter((l) => l.strength === 'ID_IN_BODY');
-  const commitMsg = links.filter((l) => l.kind === 'COMMIT' && l.strength === 'ID_IN_COMMIT_MESSAGE');
+  const isBkCommit = (l) => !!(ownCommit && new RegExp(ownCommit.bookkeepingSubjectRegex, 'i').test(commitSubjects.get(l.ref) || ''));
+  // a backlog/planning/queue/ledger bookkeeping commit only records the item: never integration or start evidence
+  const commitMsgAll = links.filter((l) => l.kind === 'COMMIT' && l.strength === 'ID_IN_COMMIT_MESSAGE');
+  const commitMsg = commitMsgAll.filter((l) => !isBkCommit(l));
+  const bookkeeping = prL.filter((l) => l.strength === 'BOOKKEEPING_PR');
   const headLinks = links.filter((l) => l.kind === 'COMMIT' && l.strength === 'EXPLICIT');
   const literal = links.filter((l) => l.kind === 'COMMIT' && (l.strength === 'ROUTE_LITERAL_AT_HEAD' || l.strength === 'IPC_CHANNEL_LITERAL_AT_HEAD'));
   const supporting = links.filter((l) => l.kind === 'COORD_RECORD' && /_TEXT$/.test(l.strength));
@@ -59,7 +63,8 @@ export function deriveItem(it, links, ctx) {
     else { reconClass = 'EXPLICIT_PR_MERGED_PARTIAL'; integratedBy = invM; matchKind = 'EXPLICIT'; confidence = 'HIGH'; partial = true; }
   } else if (ebc === 'PR_OPEN') { reconClass = 'EXPLICIT_PR_OPEN'; confidence = 'HIGH'; }
   else if (ebc === 'STALE_STATUS_SAYS_MERGED') {
-    const s1 = pick([...recExplicit, ...overlayL], integratedPr), s2 = pick(tb, integratedPr), s2b = pick(body, integratedPr), sw = pick(invWeak, integratedPr);
+    // a WEAK reference the 19-Oct text assigns to another item is that item's PR: it corroborates nothing here
+    const s1 = pick([...recExplicit, ...overlayL], integratedPr), s2 = pick(tb, integratedPr), s2b = pick(body, integratedPr), sw = pick(invWeak.filter((l) => !l.source.startsWith('inventory.prs:other-item:')), integratedPr);
     if (s1.length) { reconClass = 'CORROBORATED_BY_PR'; integratedBy = s1; matchKind = 'EXPLICIT_QUEUE_OR_DELIVERABLE'; confidence = 'HIGH'; }
     else if (s2.length) { reconClass = 'CORROBORATED_BY_PR'; integratedBy = s2; matchKind = s2.some((l) => l.strength === 'ID_IN_TITLE') ? 'TITLE' : 'BRANCH'; confidence = 'HIGH'; }
     else if (s2b.length) { reconClass = 'CORROBORATED_BY_PR'; integratedBy = s2b; matchKind = 'BODY'; confidence = 'LOW'; }
@@ -170,7 +175,7 @@ export function deriveItem(it, links, ctx) {
   else if (queueStates.includes('BLOCKED') || backlogStates.includes('BLOCKED') || ebc === 'STALE_BLOCKED') { status = 'BLOCKED'; rule = 6; }
   else if (claimFresh) { status = 'IN_PROGRESS'; rule = 7; }
   else if (queueStates.some((s) => ['QUEUED', 'WAITING_BASE', 'REPAIR_QUEUED'].includes(s)) || backlogStates.includes('READY') || (isW0 && !dispatchedWave0.has(id))) { status = 'QUEUED'; rule = 8; }
-  else if ((ebc === 'STALE_NOT_STARTED' || (backlogStates.includes('DRAFT_NOT_READY') && !progressClaimNoEvidence)) && !prL.some((l) => l.strength !== 'ID_IN_BODY' && l.strength !== 'INVENTORY_WEAK')) { status = 'NOT_STARTED'; rule = 9; }
+  else if ((ebc === 'STALE_NOT_STARTED' || (backlogStates.includes('DRAFT_NOT_READY') && !progressClaimNoEvidence)) && !prL.some((l) => !['ID_IN_BODY', 'INVENTORY_WEAK', 'BOOKKEEPING_PR'].includes(l.strength))) { status = 'NOT_STARTED'; rule = 9; }
   else { status = 'UNKNOWN'; rule = 10; }
   if (status === 'UNKNOWN') {
     if (reconClass === 'PR_CLOSED_UNMERGED_ONLY') missing.push(`linked PR(s) ${inv.map((l) => l.ref).join(',')} closed without merge; no merged or open PR, commit or route evidence for ${id}`);
@@ -187,20 +192,28 @@ export function deriveItem(it, links, ctx) {
   // own evidence that the item itself started: merged or open strong PRs (never closed-unmerged, never WEAK refs); for a CODED item only:
   // its own v7 commits (subject head names the id, bookkeeping subjects such as backlog:/planning: excluded) and its coordinator record heads
   const ownStartPrs = strongPrs.filter((l) => { const p = pr(l); return !!(p && (p.mergedAt || p.state === 'open')); }).map(pr);
+  // a commit the ladder accepted as this item's integrating evidence (CORROBORATED_BY_COMMIT via the message) dates it as well
+  const integMsg = new Set(integCommits.filter((l) => l.strength === 'ID_IN_COMMIT_MESSAGE').map((l) => l.ref));
   const ownStartCommits = coded !== T ? [] : [
-    ...commitMsg.filter((l) => l.at && isOwnCommit(commitSubjects.get(l.ref), id, resolver, ownCommit)).map((l) => ({ ref: l.ref, at: l.at, strength: 'OWN_COMMIT (subject head names the id)' })),
+    ...commitMsg.filter((l) => l.at && (integMsg.has(l.ref) || isOwnCommit(commitSubjects.get(l.ref), id, resolver, ownCommit))).map((l) => ({ ref: l.ref, at: l.at, strength: integMsg.has(l.ref) && !isOwnCommit(commitSubjects.get(l.ref), id, resolver, ownCommit) ? 'INTEGRATING_COMMIT (accepted integration evidence)' : 'OWN_COMMIT (subject head names the id)' })),
     ...recs.filter((r) => r.headFull && r.headAt).map((r) => ({ ref: r.headFull, at: r.headAt, strength: `RECORD_HEAD ${r.kind}:${r.ref} ${reachable.has(r.headFull) ? 'in v7/integration' : 'on its branch (not in v7/integration)'}` }))];
+  // earlier unattributed v7 commits that name the id only in the message body (the subject names no known item; no merge or bookkeeping
+  // subject): never a start (no per-commit file list proves they implement it), reported so a later own start reads as an upper bound
+  const bkTitle = bookkeepingPr ? new RegExp(bookkeepingPr.wholeTitleRegex, bookkeepingPr.wholeTitleFlags || '') : null;
+  const ownStartRefs = new Set(ownStartCommits.map((l) => l.ref));
+  const namesNoItem = (sj) => !!resolver && !resolver.resolveText(sj).length && !resolver.resolveLiteral(sj, 'title').length;
+  const earlierMentions = coded !== T ? [] : commitMsg.filter((l) => { const sj = commitSubjects.get(l.ref) || ''; return l.at && !ownStartRefs.has(l.ref) && !/^Merge /.test(sj) && !(bkTitle && bkTitle.test(sj)) && namesNoItem(sj); }).map((l) => ({ ref: l.ref, at: l.at }));
   const commitEvidence = integCommits.length ? { sha7: /^[0-9a-f]{40}$/.test(integCommits[0].ref) ? integCommits[0].ref.slice(0, 7) : integCommits[0].ref, at: integCommits[0].at, matchKind } : null;
   return {
     status, rule, reconClass, baselineClass: bc, evidenceBaselineClass: ebc, matchKind,
-    evidenceClass: !live ? 'EXCLUDED' : partial ? 'PARTIAL_PR_MERGE' : integratedBy.some((l) => l.kind === 'PR') ? 'EVIDENCED_BY_PR' : integCommits.length ? 'EVIDENCED_BY_COMMIT' : strongOpen.length ? 'OPEN_PR_ONLY' : (status === 'UNKNOWN' || progressClaimNoEvidence) ? 'STATUS_ONLY_UNVERIFIED' : 'NO_PROGRESS_CLAIM',
+    evidenceClass: !live ? 'EXCLUDED' : partial ? 'PARTIAL_PR_MERGE' : weakOnly ? 'CORROBORATED_BY_WEAK_REF' : integratedBy.some((l) => l.kind === 'PR') ? 'EVIDENCED_BY_PR' : integCommits.length ? 'EVIDENCED_BY_COMMIT' : strongOpen.length ? 'OPEN_PR_ONLY' : (status === 'UNKNOWN' || progressClaimNoEvidence) ? 'STATUS_ONLY_UNVERIFIED' : 'NO_PROGRESS_CLAIM',
     substeps: { coded, integrated: integ, tested, runtimeVerified, accepted },
     integratedPrs: uniqSorted(integPrs.map((p) => p.number)), corroboratingWeakPrs: weakOnly ? uniqSorted(integratedBy.map((l) => l.pr)) : [], mergeCommits: uniqSorted(integPrs.map((p) => p.mergeCommitSha.slice(0, 7))), mergedAt: uniqSorted(integPrs.map((p) => p.mergedAt)),
     commitEvidence, supportingRefs: uniqSorted(supporting.map((l) => l.ref)),
-    candidateLinks: uniqSorted([...(ebc !== 'STALE_STATUS_SAYS_MERGED' ? pick(body, (p) => p && p.mergedAt).map((l) => `body:#${l.pr}`) : []), ...(!['CORROBORATED_BY_COMMIT'].includes(reconClass) && !integrated ? commitMsg.map((l) => `commit:${l.ref.slice(0, 7)}`) : []),
-      ...pick(invWeak, (p) => p && p.mergedAt).filter((l) => !integratedBy.includes(l)).map((l) => `inventory-weak:#${l.pr}`)]),
+    candidateLinks: uniqSorted([...(ebc !== 'STALE_STATUS_SAYS_MERGED' ? pick(body, (p) => p && p.mergedAt).map((l) => `body:#${l.pr}`) : []), ...(!['CORROBORATED_BY_COMMIT'].includes(reconClass) && !integrated ? commitMsgAll.map((l) => `commit:${l.ref.slice(0, 7)}`) : []),
+      ...pick(invWeak, (p) => p && p.mergedAt).filter((l) => !integratedBy.includes(l)).map((l) => `inventory-weak:#${l.pr}`), ...bookkeeping.map((l) => `bookkeeping:#${l.pr}`)]),
     weakInventoryRefs: invWeak.map((l) => `#${l.pr} ${l.source.slice('inventory.prs:'.length)}`).sort(),
-    ownStart: { prs: ownStartPrs.map((p) => ({ number: p.number, createdAt: p.createdAt })), commits: ownStartCommits.map((l) => ({ ref: l.ref, at: l.at, strength: l.strength })) },
+    ownStart: { prs: ownStartPrs.map((p) => ({ number: p.number, createdAt: p.createdAt })), commits: ownStartCommits.map((l) => ({ ref: l.ref, at: l.at, strength: l.strength })), earlierMentions },
     evidence: evidence.sort((a, b) => cmp(a.kind, b.kind) || cmp(String(a.ref), String(b.ref)) || cmp(a.strength || '', b.strength || '')),
     missingEvidence: uniqSorted(missing), blockers: uniqSorted(blockers), confidence, stale,
     openPrs: uniqSorted(strongOpen.map((l) => l.pr)),

@@ -1,13 +1,20 @@
-//TR: Kalem -> kanıt bağlantıları: PR (EXPLICIT: 19 Ekim 'prs' alanında notsuz tekil, başka bilinen kalemi adlandırmayan ve kimlik kapısından geçen referans; INVENTORY_WEAK: aralık/iç içe/rol notlu/başka kaleme atanmış/kapıdan geçmeyen; başlıkta / dalda (rakamla bitmeyen kimlikler tam eşleşmeyle) / gövdede kimlik), commit (v7 commit mesajında kimlik; kayıtlı dal başının v7 atası olması), HEAD'de route/IPC literal'i (pickaxe ile ilk getiren commit), koordinatör kayıtları, ledger incelemeleri ve destekleyici metin anmaları. Bağlar (itemId, kind, ref) ile sıralanır.
+//TR: Kalem -> kanıt bağlantıları: PR (EXPLICIT: 19 Ekim 'prs' alanında notsuz tekil, başka bilinen kalemi adlandırmayan ve kimlik kapısından geçen referans; INVENTORY_WEAK: aralık/iç içe/rol notlu/başka kaleme atanmış (not veya PR'ın kendi başlığı/dalı başka kalemi adlandırıyor; 'ui049' gibi dal biçimi dahil)/kapıdan geçmeyen; başlıkta / dalda (rakamla bitmeyen kimlikler tam eşleşmeyle) / gövdede kimlik; kayıt tutma PR'ı (backlog:/write-back/'(backlog only)' başlığı ya da 'UI-132 DONE' gibi durum ibaresi) BOOKKEEPING_PR olur ve kanıt değildir), commit (v7 commit mesajında kimlik; kayıtlı dal başının v7 atası olması), HEAD'de route/IPC literal'i (pickaxe ile ilk getiren commit), koordinatör kayıtları, ledger incelemeleri ve destekleyici metin anmaları. Bağlar (itemId, kind, ref) ile sıralanır.
 import { sha256, cmp } from '../core/canonical-json.mjs';
 import { inventoryPrRefs } from './baseline.mjs';
+import { isLiteralId } from '../core/ids.mjs';
 
 export const linkId = (l) => `L-${sha256(`${l.itemId}|${l.kind}|${l.ref}|${l.strength}|${l.source}`).slice(0, 12)}`;
 
 export function buildLinks(items, ctx) {
-  const { pulls, commits, routes, ipc, literalIntro, reachable, shortMap, headDates, resolver, ledgerReviews, supportTexts, overlayLinks, linkPatterns, v7sha, statusMap } = ctx;
+  const { pulls, commits, routes, ipc, literalIntro, reachable, shortMap, headDates, resolver, ledgerReviews, supportTexts, overlayLinks, linkPatterns, v7sha, statusMap, prToWorkItems = {} } = ctx;
   const IP = linkPatterns.inventoryPrs;
   const titlePrRe = new RegExp(IP.itemTitleNamesPrRegex, 'g');
+  // branch-slug ids ('claude/l-assurance-ui049', 'feature/ui074-providers') -> canonical form before resolving (other-item test only)
+  const deslug = (t) => (IP.slugIdRegex ? String(t ?? '').replace(new RegExp(IP.slugIdRegex, 'gi'), (_, p, d) => `${p.toUpperCase()}-${d}`) : String(t ?? ''));
+  const BK = linkPatterns.bookkeepingPr || null;
+  const bkWhole = BK ? new RegExp(BK.wholeTitleRegex, BK.wholeTitleFlags || '') : null;
+  const bkClause = BK ? new RegExp(BK.statusClauseRegex, 'g') : null;
+  const titleIds = (t) => [...new Set([...resolver.resolveText(t), ...resolver.resolveLiteral(t, 'title')])];
   const out = [];
   const add = (l) => { l.id = linkId(l); out.push(l); };
   const prAt = (p) => p.mergedAt || p.createdAt || null;
@@ -15,13 +22,28 @@ export function buildLinks(items, ctx) {
   // inverted indexes: item id -> PR mentions by field
   const byTitle = new Map(), byBranch = new Map(), byBody = new Map();
   const push = (m, k, v) => { if (!m.has(k)) m.set(k, []); m.get(k).push(v); };
+  const prOwnIds = new Map();   // PR -> ids its own title/branch names (branch slugs included): whose PR it is
+  const prHeadIds = new Map();  // PR -> ids named in its title head (before the first ': '): the PR's own subject, used to label other-item refs
+  const bkIds = new Map();      // PR -> ids for which its title/branch links are bookkeeping (whole title, or named only in a status clause)
   for (const p of pulls.values()) {
     for (const id of resolver.resolveText(p.title)) push(byTitle, id, p.number);
     for (const id of resolver.resolveText(p.headRef || '')) push(byBranch, id, p.number);
     for (const id of resolver.resolveLiteral(p.title, 'title')) push(byTitle, id, p.number);
     for (const id of resolver.resolveLiteral(p.headRef || '', 'branch')) push(byBranch, id, p.number);
     for (const id of resolver.resolveTokens(p.bodyTokens)) push(byBody, id, p.number);
+    prOwnIds.set(p.number, new Set([...titleIds(p.title), ...resolver.resolveText(deslug(p.headRef || '')), ...resolver.resolveLiteral(p.headRef || '', 'branch')]));
+    const ti = String(p.title || '').indexOf(': ');
+    prHeadIds.set(p.number, ti > 0 ? titleIds(String(p.title).slice(0, ti)) : []);
+    if (BK) {
+      const t = String(p.title || '');
+      if (bkWhole.test(t)) bkIds.set(p.number, 'ALL');
+      else {
+        const clauses = [...t.matchAll(bkClause)].map((m) => m[0]);
+        if (clauses.length) { const rest = clauses.reduce((a, c) => a.split(c).join(' '), t); const keep = new Set(titleIds(rest)); bkIds.set(p.number, new Set(titleIds(clauses.join(' ')).filter((id) => !keep.has(id)))); }
+      }
+    }
   }
+  const isBk = (n, id, field) => { const b = bkIds.get(n); return b === 'ALL' || (field === 'title' && !!b && b.has(id)); };
   const byCommit = new Map();
   for (const c of commits) for (const id of resolver.resolveText(`${c.subject}\n${c.body}`)) push(byCommit, id, c);
   const support = new Map();
@@ -39,9 +61,19 @@ export function buildLinks(items, ctx) {
       const titlePrs = new Set([...String(it.baseline.title || '').matchAll(titlePrRe)].map((m) => Number(m[1])));
       const claimsMerged = statusMap.baselineMergedClaim.includes(it.baseline.status19);
       const gate = (n) => (names(byTitle, n) || names(byBranch, n) || names(byBody, n) ? 'PR_NAMES_ITEM' : titlePrs.has(n) ? 'ITEM_TITLE_NAMES_PR' : claimsMerged ? 'STATUS19_CLAIMS_MERGED' : null);
-      // an annotation naming another known item ('#25 (UI-050 evidence lineage)') assigns the PR to that item, unless the PR's own
-      // title or branch names this row; then it is never EXPLICIT for this row, whatever its 19-Oct status claims
-      const otherItemOf = (n, ann) => { if (!ann || names(byTitle, n) || names(byBranch, n)) return null; const ids = resolver.resolveText(ann); return ids.length && !ids.includes(it.id) ? ids[0] : null; };
+      // the PR belongs to another item when it is not this row's (its own title/branch, branch slugs included, does not name the row and the
+      // 19-Oct prToWorkItems map does not assign it to the row) and the annotation names another known item ('#25 (UI-050 evidence lineage)',
+      // slug form 'claude/l-assurance-ui049') or the PR's own title/branch names another known item; then it is never EXPLICIT for this row
+      const otherItemOf = (n, ann) => {
+        const own = prOwnIds.get(n) || new Set();
+        if (own.has(it.id) || (prToWorkItems[`#${n}`] || []).includes(it.id)) return null;
+        const ids = resolver.resolveText(deslug(ann));
+        if (ids.includes(it.id)) return null;
+        if (ids.length) return ids[0];
+        const head = prHeadIds.get(n) || [];
+        const ownOther = [...(head.length ? head : own)].sort((a, b) => (isLiteralId(a) ? 1 : 0) - (isLiteralId(b) ? 1 : 0) || cmp(a, b));   // title head, numbered id first (UI-051, not L-ASSURANCE)
+        return ownOther.length ? ownOther[0] : null;
+      };
       for (const r of inventoryPrRefs(it.baseline, pulls, IP, gate, otherItemOf)) { if (r.strength === 'EXPLICIT') explicit.set(r.n, `inventory.prs[${r.gate}]`); else weak.set(r.n, r.reason); }
     }
     for (const r of it.records) if (r.pr && pulls.has(r.pr)) { const src = `${r.kind.toLowerCase()}:${r.ref}.pr`; if (!explicit.has(r.pr) || explicit.get(r.pr).startsWith('inventory.prs')) explicit.set(r.pr, explicit.has(r.pr) ? `${explicit.get(r.pr)}+${src}` : src); }
@@ -49,7 +81,13 @@ export function buildLinks(items, ctx) {
     for (const [n, why] of [...weak.entries()].sort((a, b) => a[0] - b[0])) if (!explicit.has(n)) add({ itemId: it.id, kind: 'PR', ref: `#${n}`, pr: n, strength: 'INVENTORY_WEAK', source: `inventory.prs:${why}`, at: prAt(pulls.get(n)) });
     for (const o of overlayLinks.filter((x) => x.itemId === it.id)) { const n = Number(String(o.value).replace('#', '')); if (pulls.has(n)) add({ itemId: it.id, kind: 'PR', ref: `#${n}`, pr: n, strength: 'OVERLAY', source: `overlay:${o.by}`, at: prAt(pulls.get(n)) }); }
     for (const [m, strength] of [[byTitle, 'ID_IN_TITLE'], [byBranch, 'ID_IN_BRANCH'], [byBody, 'ID_IN_BODY']]) {
-      for (const n of [...new Set(m.get(it.id) || [])].sort((a, b) => a - b)) add({ itemId: it.id, kind: 'PR', ref: `#${n}`, pr: n, strength, source: strength === 'ID_IN_BODY' ? 'pr.body' : strength === 'ID_IN_TITLE' ? 'pr.title' : 'pr.head.ref', at: prAt(pulls.get(n)) });
+      const field = strength === 'ID_IN_TITLE' ? 'title' : strength === 'ID_IN_BRANCH' ? 'branch' : 'body';
+      for (const n of [...new Set(m.get(it.id) || [])].sort((a, b) => a - b)) {
+        const src = field === 'body' ? 'pr.body' : field === 'title' ? 'pr.title' : 'pr.head.ref';
+        // a backlog write-back / planning / READY-marking PR only records the item: never evidence that it was coded, integrated or started
+        if (field !== 'body' && isBk(n, it.id, field)) add({ itemId: it.id, kind: 'PR', ref: `#${n}`, pr: n, strength: 'BOOKKEEPING_PR', source: `${src} (bookkeeping: ${bkIds.get(n) === 'ALL' ? 'title' : 'status clause'})`, at: prAt(pulls.get(n)) });
+        else add({ itemId: it.id, kind: 'PR', ref: `#${n}`, pr: n, strength, source: src, at: prAt(pulls.get(n)) });
+      }
     }
     for (const c of [...new Map((byCommit.get(it.id) || []).map((c) => [c.sha, c])).values()].sort((a, b) => cmp(a.at, b.at) || cmp(a.sha, b.sha))) add({ itemId: it.id, kind: 'COMMIT', ref: c.sha, strength: 'ID_IN_COMMIT_MESSAGE', source: 'v7 commit message', at: c.at });
     for (const r of it.records) {

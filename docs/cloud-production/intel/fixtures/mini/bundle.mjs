@@ -57,6 +57,20 @@ export const ROWS = [
   ['UI-029', 'Evidence lineage', 'INTEGRATED_NOT_VERIFIED', '#43', 'AT_RISK', 'x', 'UI-029'],
   ['UI-030', 'Per-run test report', 'INTEGRATED_NOT_VERIFIED', '#44', 'AT_RISK', 'x', 'UI-030'],
   ['UI-031', 'Capture/Evidence Bus (PRs of other items)', 'INTEGRATED_NOT_VERIFIED', '#43 (UI-029 evidence lineage, open); #44 (UI-030 per-run test report, open)', 'AT_RISK', 'x', 'UI-031'],
+  // round 3: other items' PRs cited in branch-slug form (UI-148 shape: #46's own title names no item, only the slug assigns it), a plain
+  // reference whose PR title names another item (UI-133 shape), the 19-Oct prToWorkItems map assigning that PR to the row (control), a
+  // PARTIAL set whose closed PR is another item's (UI-137 shape), a body-only integrating commit (UI-011 shape) and an unattributed
+  // commit before the item's own PR (UI-205 shape)
+  ['UI-032', 'Review decision records (PRs of other items, slug form)', 'INTEGRATED_NOT_VERIFIED', '#45 claude/l-assurance-ui033 (open); #46 claude/l-assurance-ui034 (open)', 'AT_RISK', 'x', 'UI-032'],
+  ['UI-033', 'Reviews panel', 'PENDING_CI', '#45[OPEN@abc1234: re-review, not CLEAN]', 'AT_RISK', 'x', 'UI-033'],
+  ['UI-034', 'Evidence graph', 'PENDING_CI', 'none', 'AT_RISK', 'x', 'UI-034'],
+  ['UI-035', 'Agent identity card (plain reference to another item PR)', 'INTEGRATED_NOT_VERIFIED', '#47 claude/test-states-workforce (open); #48 (open)', 'AT_RISK', 'x', 'UI-035'],
+  ['UI-036', 'Role taxonomy', 'PENDING_CI', '#48', 'AT_RISK', 'x', 'UI-036'],
+  ['UI-037', 'Workforce view (19-Oct map assigns #48 to it)', 'INTEGRATED_NOT_VERIFIED', '#48 (open)', 'AT_RISK', 'x', 'UI-037'],
+  ['UI-038', 'Checkpoint resume (closed PR of another item)', 'INTEGRATED_NOT_VERIFIED', '#47 claude/test-states-workforce (open); #49 claude/l-tower-trace-ui039 (open)', 'AT_RISK', 'x', 'UI-038'],
+  ['UI-039', 'Trace waterfall', 'PENDING_CI', '#49', 'AT_RISK', 'x', 'UI-039'],
+  ['UI-040', 'Journey strip (body-only integrating commit)', 'INTEGRATED_NOT_VERIFIED', 'none', 'AT_RISK', 'x', 'UI-040'],
+  ['UI-041', 'Command matrix (own PR after an unattributed commit)', 'INTEGRATED_NOT_VERIFIED', '#57', 'AT_RISK', 'x', 'UI-041'],
   ['E-ROLE-UASCO-0001', 'Role (not a work item)', 'DESIGN_ONLY', 'none', 'NONE', 'roles', 'x'],
 ];
 
@@ -96,6 +110,19 @@ export function miniBundle() {
     merged(42, '2026-10-20T01:00:56Z', { title: 'UI-028: read-only closure checklist', headRef: 'claude/ui-028' }),
     merged(43, '2026-10-18T20:00:00Z', { title: 'L-ASSURANCE UI-029: evidence lineage', headRef: 'claude/l-assurance-lineage', createdAt: '2026-10-18T16:03:05Z' }),
     merged(44, '2026-10-18T21:00:00Z', { title: 'L-ASSURANCE UI-030: per-run test report', headRef: 'claude/l-assurance-report', createdAt: '2026-10-18T16:05:00Z' }),
+    // round 3: PRs of other items cited by 19-Oct rows; #46 names its item nowhere itself (only UI-032's slug annotation assigns it to UI-034)
+    merged(45, '2026-10-19T22:48:25Z', { title: 'L-ASSURANCE UI-033: reviews panel', headRef: 'claude/l-assurance-ui033', createdAt: '2026-10-18T16:02:59Z' }),
+    merged(46, '2026-10-19T22:48:25Z', { title: 'L-ASSURANCE: evidence lineage (stacked)', headRef: 'claude/l-assurance-lineage-2', createdAt: '2026-10-18T16:03:05Z' }),
+    merged(47, '2026-10-19T14:30:00Z', { title: 'test+states: workforce', headRef: 'claude/test-states-workforce', createdAt: '2026-10-19T00:36:54Z' }),
+    merged(48, '2026-10-19T14:40:00Z', { title: 'L-WORKFORCE UI-036: role taxonomy', headRef: 'claude/l-workforce-ui036', createdAt: '2026-10-18T15:55:05Z' }),
+    pr(49, { title: 'L-TOWER-TRACE UI-039: stage timeline', headRef: 'claude/l-tower-trace-ui039', createdAt: '2026-10-18T15:58:00Z' }),
+    // round 3: bookkeeping PRs (backlog write-back / READY marking / a wave naming an id only in a 'DONE' status clause) and the items' own work
+    merged(50, '2026-10-20T05:50:27Z', { title: 'Backlog write-back 5: UI-024 DONE + UI-010 non-READY + P0 DESIGN-EVIDENCE-X + D-2026-10-20-MOBILE (MOB-12..31 non-READY)', headRef: 'claude/backlog-writeback-5', createdAt: '2026-10-20T04:59:08Z' }),
+    merged(51, '2026-10-20T10:54:56Z', { title: 'MOB-12: threat model (docs only)', headRef: 'claude/mob-12', createdAt: '2026-10-20T07:54:44Z' }),
+    merged(52, '2026-10-20T16:30:22Z', { title: 'Integration wave B13: batch-5 desktop READY tasks + SEC-X follow-up (backlog only)', headRef: 'claude/integration-wave-b13', createdAt: '2026-10-20T15:10:13Z' }),
+    merged(53, '2026-10-20T01:51:48Z', { title: 'Backlog: UI-028 DONE write-back + batch 3 (UI-029)', headRef: 'claude/backlog-batch-3', createdAt: '2026-10-20T01:20:00Z' }),
+    merged(54, '2026-10-20T01:51:49Z', { title: 'Integration wave B2: #42 UI-024 + backlog #53 (UI-028 DONE, batch 3)', headRef: 'claude/integration-wave-b2', createdAt: '2026-10-20T01:30:00Z' }),
+    merged(57, '2026-10-17T16:17:05Z', { title: 'UI-041: command matrix follow-up', headRef: 'claude/ui-041', createdAt: '2026-10-17T16:10:07Z' }),
   ];
   const mergedHeads = pulls.filter((p) => p.mergedAt);
   const commits = [{ sha: S('c-ui005'), at: '2026-10-15T00:00:00Z', subject: 'fix UI-005 crash', body: '' }, { sha: S('c-route'), at: '2026-09-23T00:00:00Z', subject: 'control api', body: '' },
@@ -103,7 +130,10 @@ export function miniBundle() {
     { sha: S('c-plan'), at: '2026-10-16T04:58:36Z', subject: 'planning: register MOB-11 as non-READY', body: '' },
     { sha: S('c-backlog'), at: '2026-10-16T05:14:33Z', subject: 'backlog: makes UI-024 READY (docs only)', body: '' },
     { sha: S('c-spec'), at: '2026-10-16T06:00:00Z', subject: 'MOB-6: screen specs (design only)', body: 'covers the UI-024 screen' },
-    { sha: S('c-own'), at: '2026-10-17T03:00:00Z', subject: 'UI-028: closure checklist core', body: '' }];
+    { sha: S('c-own'), at: '2026-10-17T03:00:00Z', subject: 'UI-028: closure checklist core', body: '' },
+    // round 3: a coded item's own dispatch claim; an unattributed implementing commit that names its screens only in the body
+    { sha: S('c-claim'), at: '2026-10-20T07:49:13Z', subject: 'dispatch-claim: MOB-12', body: '' },
+    { sha: S('c-ux'), at: '2026-10-16T02:37:50Z', subject: 'v7 ux-projects: premium portfolio', body: 'Covers screens UI-040 (journey strip) and UI-041 (command matrix)' }];
   const reachable = [...mergedHeads.map((p) => p.mergeCommitSha), ...commits.map((c) => c.sha), S('head-lane-a-x')];
   const checks = {};
   checks[S('head1')] = [{ name: 'validate (ubuntu-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-18T01:00:00Z', completedAt: '2026-10-18T01:20:00Z' }, { name: 'validate (windows-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-18T01:00:00Z', completedAt: '2026-10-18T01:40:00Z' }];
@@ -148,6 +178,9 @@ export function miniBundle() {
     { id: 'CI-GREEN', title: 'CI green', status: 'DONE', owner: 'CLOUD', dependsOn: [] },
     { id: 'PKG-LEASE1', title: 'Lease package', status: 'DONE', owner: 'CLOUD', dependsOn: [] },
     { id: 'SEC-IMPORT-GUARD', title: 'Import guard', status: 'DONE', owner: 'CLOUD', dependsOn: [] },
+    // round 3: a Founder blocker registered by a write-back PR (DESIGN-EVIDENCE-UNAVAILABLE shape); an item whose first title link is that PR (MOB-1 shape)
+    { id: 'DESIGN-EVIDENCE-X', title: 'P0 blocker: approved design reference package not available', status: 'BLOCKED', owner: 'FOUNDER', dependsOn: [] },
+    { id: 'MOB-12', title: 'Mobile threat model', status: 'DONE', owner: 'CLOUD', dependsOn: [] },
   ] };
   const wave0 = { packages: [{ id: 'C-RDY-1', priority: 'P0', order: 1, title: 'Role Readiness Auditor', dependsOn: [] }, { id: 'C-CTX-1', priority: 'P0', order: 2, title: 'Role Context Resolver', dependsOn: ['C-RDY-1'] }], founderDecisions: ['FD-1 Legacy alias approval: decide canonical skills; blocks C-BIND-1.'] };
   const contracts = [0, 1, 2, 3, 4].map((n) => ({ phase: n, title: ROWS.find((r) => r[0] === `PH-${String(n).padStart(3, '0')}`)[1], domain: ['TRUST_CORE', 'TRUST_CORE', 'SPECIALIZED_DOMAIN', 'EXECUTION', 'BUSINESS_COMMUNICATION'][n], state: 'PLANNED', dependsOn: n ? [n - 1] : [], riskLevel: 2, reviewProfile: 'STANDARD', review: ['independent Codex package review'], requiredArtifacts: [] }));
@@ -160,7 +193,7 @@ export function miniBundle() {
   const inputs = {
     schema: 'intel-inputs-1',
     meta: { refs: { v7: { sha: S('v7'), at: '2026-10-26T21:10:18Z' }, queue: { sha: S('queue'), at: '2026-10-26T21:00:00Z' }, reports: { sha: S('reports'), at: '2026-10-26T21:14:41Z' } }, inventoryBlob: S('inv'), csvBlob: S('csv'), inventoryBlobAtHead: S('inv'), cacheFrom: 'fixture' },
-    inventory: { json: { items }, csvText: csv },
+    inventory: { json: { items, prToWorkItems: { '#48': ['UI-036', 'UI-037'] } }, csvText: csv },
     dependencyMap: { keystones: { 'K-CI': { resolvedBy: ['PT-001'] } }, edges: [{ from: 'PT-001', to: 'K-CI', type: 'depends-on' }] },
     roadmap,
     coordinator: { queue, ledger: { reviews: [{ pr: 24, sha: S('head24'), kind: 'full', verdict: 'NO_BLOCKERS', at: '2026-10-26T20:00:00Z' }] }, dispatch: { 'docs/cloud-production/dispatch/C-RDY-1.md': 'C-RDY-1 dispatch text' }, queueHistory: [

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { miniBundle, S } from './fixtures/mini/bundle.mjs';
 import { loadRules } from './lib/gather.mjs';
 import { createGithub } from './lib/github.mjs';
@@ -347,6 +347,12 @@ export const computeRoleReadiness = () => ({ schemaVersion: '0.0.1', authority: 
     const ts2 = net.createServer((c) => { tcpHits++; c.destroy(); }); await new Promise((r) => ts2.listen(0, '127.0.0.1', r));
     const tport = ts2.address().port;
     fs.symlinkSync(outerSock, path.join(inner, 'link.sock'));
+    // R3: preloads that would run before the guard (a --require preload runs even before NODE_OPTIONS --import): each one tries a TCP connect
+    // and writes a marker; only a preload under the allowed bin dir (tsx's preflight/loader) may run (fails on f0f537c: the preloads ran, guard inactive)
+    const guBin = path.join(tmp, 'gu-bin'); fs.mkdirSync(guBin);
+    const preFile = path.join(inner, 'pre.cjs'), preMark = path.join(tmp, 'gu-pre.mark'), okFile = path.join(guBin, 'ok.cjs'), okMark = path.join(tmp, 'gu-ok.mark');
+    fs.writeFileSync(preFile, `require('fs').appendFileSync(${J(preMark)}, 'RAN:' + (process.env.INTEL_NET_GUARD_ACTIVE || 'none') + '\\n'); try { const s = require('net').connect(PORT_PLACEHOLDER, '127.0.0.1'); s.on('error', () => {}); s.on('connect', () => s.destroy()); } catch {}\n`);
+    fs.writeFileSync(okFile, `require('fs').appendFileSync(${J(okMark)}, 'OK\\n');\n`);
     const gsrc = `import net from 'node:net'; import cp from 'node:child_process'; import fs from 'node:fs'; import path from 'node:path';
 const C = (e) => String((e && (e.code || e.name)) || e);
 const conn = (o) => new Promise((res) => { try { const s = net.connect(o); s.on('connect', () => { s.destroy(); res('CONNECTED'); }); s.on('error', (e) => res(C(e))); setTimeout(() => res('TIMEOUT'), 1500); } catch (e) { res(C(e)); } });
@@ -358,14 +364,29 @@ o.fork = await new Promise((res) => { try { const ch = cp.fork('http://127.0.0.1
 o.binding = (() => { try { process.binding('tcp_wrap'); return 'BINDING_AVAILABLE'; } catch (e) { return C(e); } })();
 o.fakeNode = (() => { try { const f = path.join(${J(inner)}, 'node'); fs.writeFileSync(f, '#!/bin/sh\\necho RAN\\n', { mode: 0o755 }); return (cp.spawnSync(f, [], { encoding: 'utf8' }).stdout || '').trim() || 'NO_OUTPUT'; } catch (e) { return C(e); } })();
 o.internals = (() => { try { cp.spawnSync(process.execPath, ['--expose-internals', '-e', '0']); return 'RAN'; } catch (e) { return C(e); } })();
+const sp = (args, env) => { try { cp.spawnSync(process.execPath, args, { env: { PATH: process.env.PATH, ...(env || {}) }, encoding: 'utf8', timeout: 5000 }); return 'SPAWNED'; } catch (e) { return C(e); } };
+o.preArgv = sp(['--require', ${J(preFile)}, '-e', '0']);
+o.preShort = sp(['-r', ${J(preFile)}, '-e', '0']);
+o.preEnv = sp(['-e', '0'], { NODE_OPTIONS: '--require ' + ${J(preFile)} });
+o.preImport = sp(['--import=' + ${J(pathToFileURL(preFile).href)}, '-e', '0']);
+o.preRel = sp(['--require', './pre.cjs', '-e', '0']);
+o.preFork = await new Promise((res) => { try { const ch = cp.fork(${J(path.join(inner, 'noop.mjs'))}, [], { execArgv: ['--require', ${J(preFile)}], stdio: 'ignore' }); ch.on('exit', () => res('RAN')); ch.on('error', (e) => res(C(e))); } catch (e) { res(C(e)); } });
+o.preAllowed = sp(['--require', ${J(okFile)}, '-e', '0']);
+await new Promise((r) => setTimeout(r, 300));
 console.log(JSON.stringify(o));`;
+    fs.writeFileSync(preFile, fs.readFileSync(preFile, 'utf8').replace('PORT_PLACEHOLDER', String(tport)));
+    fs.writeFileSync(path.join(inner, 'noop.mjs'), '');
     const gfile = path.join(tmp, 'guard-unit.mjs'); fs.writeFileSync(gfile, gsrc);
-    const gr = spawnSync(process.execPath, [gfile], { encoding: 'utf8', env: { PATH: NOENV.PATH, TMPDIR: inner, NODE_OPTIONS: `--import ${new URL('./lib/net-guard.mjs', import.meta.url).href}`, INTEL_NET_GUARD: 'strict' }, timeout: 20000 });
+    const gr = spawnSync(process.execPath, [gfile], { encoding: 'utf8', cwd: inner, env: { PATH: NOENV.PATH, TMPDIR: inner, NODE_OPTIONS: `--import ${new URL('./lib/net-guard.mjs', import.meta.url).href}`, INTEL_NET_GUARD: 'strict', INTEL_NET_GUARD_ALLOW_BIN_DIR: guBin }, timeout: 30000 });
     let gu = null; try { gu = JSON.parse(String(gr.stdout).trim().split('\n').pop()); } catch { gu = null; }
     await new Promise((r) => setTimeout(r, 200));
     os2.close(); is2.close(); ts2.close();
     check(`R2 guard: a tmpdir symlink to an outer unix socket is refused by realpath (${gu?.link}, outer hits ${outerHits}); a real tmpdir socket still connects (${gu?.inner}, inner hits ${innerHits}; guard ${gu?.active}) (fails on 4e1a897: CONNECTED)`, !!gu && gu.active === 'strict' && gu.link === 'INTEL_NET_BLOCKED' && outerHits === 0 && gu.inner === 'CONNECTED' && innerHits === 1);
     check(`R2 guard: node child with a caller env (${gu?.child}), fork execPath=curl (${gu?.fork}), process.binding tcp_wrap (${gu?.binding}), a file named node (${gu?.fakeNode}), --expose-internals (${gu?.internals}) are all blocked; TCP listener hits ${tcpHits}`, !!gu && gu.child === 'INTEL_NET_BLOCKED' && gu.fork === 'INTEL_NET_BLOCKED' && gu.binding === 'INTEL_NET_BLOCKED' && gu.fakeNode === 'INTEL_NET_BLOCKED' && gu.internals === 'INTEL_NET_BLOCKED' && tcpHits === 0);
+    const preRan = fs.existsSync(preMark) ? fs.readFileSync(preMark, 'utf8').trim().split('\n') : [];
+    check(`R3 guard: node children cannot preload code ahead of the guard: --require (${gu?.preArgv}), -r (${gu?.preShort}), caller NODE_OPTIONS --require (${gu?.preEnv}), --import= file URL (${gu?.preImport}), a relative specifier (${gu?.preRel}) and fork execArgv --require (${gu?.preFork}) are blocked; preload runs ${preRan.length} (${preRan.join(',') || 'none'}), TCP hits ${tcpHits} (f0f537c: preloads ran with the guard inactive)`,
+      !!gu && ['preArgv', 'preShort', 'preEnv', 'preImport', 'preRel', 'preFork'].every((k) => gu[k] === 'INTEL_NET_BLOCKED') && preRan.length === 0 && tcpHits === 0);
+    check(`R3 guard control: a preload under the allowed bin dir (tsx preflight/loader shape) still runs (${gu?.preAllowed}, marker ${fs.existsSync(okMark) ? 'written' : 'missing'})`, !!gu && gu.preAllowed === 'SPAWNED' && fs.existsSync(okMark));
     // audit schema: numbers / enums / ids / hex / timestamps only
     const okA = { schemaVersion: '1.0.0', authority: 'AUTHORITATIVE_READINESS_MEASUREMENT', denominator: 2, totals: { DEFINED: { TRUE: 2, FALSE: 0, UNKNOWN: 0, NOT_APPLICABLE: 0, denominator: 2, measured: true } }, stageWired: { TRUE: 0, FALSE: 2, UNKNOWN: 0, NOT_APPLICABLE: 0, denominator: 2, measured: false }, byGuild: [{ id: 'G01', kind: 'GUILD', clusterId: 'CL01', roles: 2, layers: {}, proposedOnly: { withCandidateSkills: 1 } }], byCluster: [], reasonCounts: { 'EXECUTABLE.stageWired': { NO_CODE_PATH: 2 } }, proposedOnly: { source: 'PROPOSED_DERIVED_NOT_RUNTIME', profiles: 2 }, inputs: { journal: 'ABSENT', roleDefinitionsSha256: 'a'.repeat(64), skillIds: 3 }, anomalies: 0, computedAt: '2026-10-26T23:32:07.997Z', digest: 'b'.repeat(64) };
     const vA = validateAudit(okA), vB = validateAudit({ ...okA, inputs: { ...okA.inputs, journal: 'ghp_ABC def' } }), vC = validateAudit({ ...okA, extra: 1 }), vD = validateAudit({ ...okA, reasonCounts: { 'x y': { A: 1 } } });
@@ -443,10 +464,21 @@ console.log(JSON.stringify(o));`;
       { name: 'count DUPLICATE rows as live', file: 'model/identity.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("if (r.status19 === 'DUPLICATE' || r.status19 === 'OBSOLETE') { it.excluded", "if (r.status19 === 'OBSOLETE') { it.excluded") },
       { name: 'add body-only promotion for non-claim rows', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('const relink = [...recExplicit, ...overlayL, ...tb];', 'const relink = [...recExplicit, ...overlayL, ...tb, ...body];') },
       { name: 'drop the UNASSIGNED fallback', file: 'model/departments.mjs', proof: 'model/departments.proof.mjs', apply: (s) => s.replace("return { department: 'UNASSIGNED', ruleId: 'FALLBACK' };", "return { department: 'DESKTOP_UX', ruleId: 'FALLBACK' };") },
-      { name: 'R2-M1: any commit naming the id sets the start (bookkeeping commits included)', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('l.at && isOwnCommit(commitSubjects.get(l.ref), id, resolver, ownCommit)', 'l.at') },
+      { name: 'R2-M1: any commit naming the id sets the start (bookkeeping commits included)', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('l.at && (integMsg.has(l.ref) || isOwnCommit(commitSubjects.get(l.ref), id, resolver, ownCommit))', 'l.at') },
       { name: 'R2-M1: start commits for items that are not coded', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('const ownStartCommits = coded !== T ? [] : [', 'const ownStartCommits = [') },
       { name: 'R2-H1: PARTIAL short-circuits independent evidence', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('const s1 = pick([...recExplicit, ...overlayL], integratedPr), s2 = pick(tb, integratedPr);\n    const plus', 'const s1 = [], s2 = [];\n    const plus') },
-      { name: 'R2-H1: ignore annotations that name another item', file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('return ids.length && !ids.includes(it.id) ? ids[0] : null;', 'return null;') },
+      { name: 'R2-H1: ignore annotations that name another item', file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('        if (ids.length) return ids[0];', '        if (false) return ids[0];') },
+      { name: 'R3-M1: no slug normalisation of 19-Oct annotations (claude/l-assurance-ui034 names nothing)', file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('const ids = resolver.resolveText(deslug(ann));', 'const ids = resolver.resolveText(ann);') },
+      { name: "R3-M1: a PR whose own title names another item is not other-item", file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('return ownOther.length ? ownOther[0] : null;', 'return null;') },
+      { name: 'R3-M1: ignore the 19-Oct prToWorkItems assignment', file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace(" || (prToWorkItems[`#${n}`] || []).includes(it.id)", '') },
+      { name: 'R3-M2: bookkeeping PR titles count as ID_IN_TITLE evidence again', file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("if (field !== 'body' && isBk(n, it.id, field))", 'if (false)') },
+      { name: "R3-M2: ignore 'DONE' status clauses in wave titles", file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("return b === 'ALL' || (field === 'title' && !!b && b.has(id));", "return b === 'ALL';") },
+      { name: 'R3-L1: other-item references corroborate a merged claim again', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("sw = pick(invWeak.filter((l) => !l.source.startsWith('inventory.prs:other-item:')), integratedPr)", 'sw = pick(invWeak, integratedPr)') },
+      { name: 'R3-L2: WEAK-only rows reported as EVIDENCED_BY_PR', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("weakOnly ? 'CORROBORATED_BY_WEAK_REF' : ", '') },
+      { name: 'R3-L2: D.2 hides the WEAK PRs of a WEAK-only row', file: 'render/report-md.mjs', proof: 'render/render.proof.mjs', apply: (s) => s.replace("x.prs.map((n) => `#${n}`).join(', ') || ((x.weakPrs || []).length ?", "x.prs.map((n) => `#${n}`).join(', ') || ((x.weakPrs || []).length && false ?") },
+      { name: 'R3-L3: the integrating commit does not date the start', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('(integMsg.has(l.ref) || isOwnCommit(', '(isOwnCommit(') },
+      { name: 'R3-L3: bookkeeping head word ends at \\b (matches before -)', file: 'rules/link-patterns.json', proof: 'model/status.proof.mjs', apply: (s) => s.replace('|dispatch)(?![-\\\\w])', '|dispatch)\\\\b') },
+      { name: 'R3-L3: no earlierMention for an unattributed earlier commit', file: 'model/pipeline.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('const earlierMention = em ?', 'const earlierMention = false ?') },
       { name: 'R2-LOW: WEAK corroboration credits tested / CI / merge dates', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('const integPrs = weakOnly ? [] :', 'const integPrs =') },
       { name: 'R2-LOW: runtimeVerified back to a measured FALSE', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("const runtimeVerified = live ? 'NOT_MEASURED' : U;", 'const runtimeVerified = live ? F : U;') },
       { name: 'R2-LOW: open PR without a file list shown as founder false', file: 'render/report-json.mjs', proof: 'render/render.proof.mjs', apply: (s) => s.replace(": filesKnown ? false : 'UNKNOWN';", ': false;') },

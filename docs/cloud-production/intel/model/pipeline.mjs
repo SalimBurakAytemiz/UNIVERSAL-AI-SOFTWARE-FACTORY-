@@ -19,10 +19,12 @@ import { diffSnapshots, trend } from '../metrics/history.mjs';
 // Model semantics version of the trend point / snapshot. intel-1.1: typed 19-Oct prs references (EXPLICIT vs WEAK), PARTIAL integration,
 // own-evidence actual start, MVP scope for added items by explicit source. intel-1.2: PARTIAL yields to independent integrating evidence,
 // 19-Oct annotations naming another item are WEAK, WEAK corroboration sets integrated only, own-commit start (bookkeeping commits excluded,
-// coded items only), runtimeVerified NOT_MEASURED per item. Points of another semantics never feed velocity.
-export const SEMANTICS = 'intel-1.2';
-const START_SOURCES = ['inventory.prs EXPLICIT PR (merged or open)', 'queue/deliverable/coordinatorBuild record PR (merged or open)', 'overlay LINK PR (merged or open)', 'PR title/branch naming the id (merged or open)',
-  "own v7 commit of a coded item (subject head names the id; backlog/planning/queue/ledger bookkeeping commits excluded)", 'coordinator record head of a coded item (in v7/integration or on its own branch, labelled)'];
+// coded items only), runtimeVerified NOT_MEASURED per item. intel-1.3: bookkeeping PRs (write-back / planning / READY marking) are never
+// evidence, slug-form and PR-title other-item references are WEAK and corroborate nothing, the integrating commit dates the start.
+// Points of another semantics never feed velocity.
+export const SEMANTICS = 'intel-1.3';
+const START_SOURCES = ['inventory.prs EXPLICIT PR (merged or open)', 'queue/deliverable/coordinatorBuild record PR (merged or open)', 'overlay LINK PR (merged or open)', 'PR title/branch naming the id (merged or open; backlog write-back/planning/READY-marking PRs excluded)',
+  "own v7 commit of a coded item (subject head names the id; backlog/planning/queue/ledger bookkeeping commits excluded)", 'v7 commit accepted as the integrating evidence of the item', 'coordinator record head of a coded item (in v7/integration or on its own branch, labelled)'];
 
 export function validateOverlay(raw, refs) {
   const accepted = [], rejected = [];
@@ -45,6 +47,8 @@ export function validateOverlay(raw, refs) {
 
 const normExecutor = (raw, map) => { if (!raw) return null; for (const m of map) if (new RegExp(m.re, 'i').test(raw)) return m.value; return 'UNKNOWN'; };
 const laneOfBranch = (ref, rules) => { for (const r of rules) if (new RegExp(r.re).test(ref || '')) return r.lane; return null; };
+// PR list for action text: the item's own PRs, else (WEAK-only corroboration) the cited 19-Oct references, labelled and capped
+const prText = (own, weak = [], cap = 5) => (own.length ? own.map((n) => `#${n}`).join(',') : weak.length ? `yalnız WEAK 19 Ekim ref. ${weak.slice(0, cap).map((n) => `#${n}`).join(',')}${weak.length > cap ? `,… (+${weak.length - cap})` : ''}` : '');
 const fill = (tpl, o) => tpl.replace(/\{(\w+)\}/g, (_, k) => (o[k] === undefined || o[k] === null || o[k] === '' ? '—' : String(o[k])));
 
 export function buildAll(inputs, rules, overlayRaw, meta, nowIsoRaw) {
@@ -64,7 +68,8 @@ export function buildAll(inputs, rules, overlayRaw, meta, nowIsoRaw) {
   for (const it of identity.items) for (const r of it.records) { r.headFull = r.head ? shortMap[r.head] ?? null : null; r.headAt = r.headFull ? headDates[r.headFull] ?? null : null; }
   const supportTexts = [['queue:PRODUCTION-QUEUE.json', coordinator.queueText], ['ledger:COORD-LEDGER.json', coordinator.ledgerText], ...Object.entries(coordinator.dispatchTexts).sort((a, b) => cmp(a[0], b[0])).map(([k, v]) => [`dispatch:${k}`, v])];
   const links = buildLinks(identity.items, { pulls, commits: inputs.v7.commits, routes: inputs.v7.routes, ipc: inputs.v7.ipc, literalIntro: inputs.v7.literalIntro, reachable, shortMap, headDates,
-    resolver: identity.resolver, ledgerReviews: coordinator.ledgerReviews, supportTexts, overlayLinks: overlay.accepted.filter((o) => o.action === 'LINK'), linkPatterns: LP, v7sha: inputs.meta.refs.v7.sha, statusMap: SM });
+    resolver: identity.resolver, ledgerReviews: coordinator.ledgerReviews, supportTexts, overlayLinks: overlay.accepted.filter((o) => o.action === 'LINK'), linkPatterns: LP, v7sha: inputs.meta.refs.v7.sha, statusMap: SM,
+    prToWorkItems: inputs.inventory.json?.prToWorkItems || {} });
   const unlinks = new Set(overlay.accepted.filter((o) => o.action === 'UNLINK').map((o) => `${o.itemId}|${o.value}`));
   const linksByItem = new Map();
   for (const l of links) { if (unlinks.has(`${l.itemId}|${l.ref}`)) continue; if (!linksByItem.has(l.itemId)) linksByItem.set(l.itemId, []); linksByItem.get(l.itemId).push(l); }
@@ -77,7 +82,7 @@ export function buildAll(inputs, rules, overlayRaw, meta, nowIsoRaw) {
   const dispatchedWave0 = new Set(Object.keys(coordinator.dispatchTexts).map((p) => (/dispatch\/([^/]+)\.md$/.exec(p) || [])[1]).filter(Boolean));
   const commitSubjects = new Map(inputs.v7.commits.map((c) => [c.sha, c.subject]));
   const ctx = { pulls, reachable, checks: inputs.github.checks, runsBySha, statusMap: SM, decisionsByItem, nowIso, staleHours: C.staleInProgressHours, acceptance, requiredChecks: C.requiredChecks, dispatchedWave0,
-    commitSubjects, resolver: identity.resolver, ownCommit: LP.ownCommitStart };
+    commitSubjects, resolver: identity.resolver, ownCommit: LP.ownCommitStart, bookkeepingPr: LP.bookkeepingPr || null };
 
   // ---- per item
   const compiled = compileRules(rules.departments);
@@ -106,19 +111,22 @@ export function buildAll(inputs, rules, overlayRaw, meta, nowIsoRaw) {
     // actual start: earliest evidence that the item itself started (own merged/open PR; for a coded item its own commit or record head); never a closed-unmerged PR, a WEAK reference or a bookkeeping commit
     const startCands = [...d.ownStart.prs.map((p) => ({ at: p.createdAt, src: `PR #${p.number} createdAt` })), ...d.ownStart.commits.map((c) => ({ at: c.at, src: `commit ${/^[0-9a-f]{40}$/.test(c.ref) ? c.ref.slice(0, 7) : c.ref} (${c.strength})` }))].filter((c) => Number.isFinite(toMs(c.at))).map((c) => ({ ...c, at: new Date(toMs(c.at)).toISOString().replace('.000Z', 'Z') })).sort((a, b) => toMs(a.at) - toMs(b.at) || cmp(a.src, b.src));
     const start = startCands[0]?.at || null;
+    // a v7 commit that names the id before the own start (not the item's own: subject head names another item or none) -> the start is an upper bound
+    const em = d.ownStart.earlierMentions.filter((c) => Number.isFinite(toMs(c.at)) && (!start || toMs(c.at) < toMs(start))).sort((a, b) => toMs(a.at) - toMs(b.at) || cmp(a.ref, b.ref))[0];
+    const earlierMention = em ? { commit: em.ref.slice(0, 7), at: new Date(toMs(em.at)).toISOString().replace('.000Z', 'Z'), note: `an unattributed v7 commit (its subject names no item) names ${it.id} in its message before ${start ? 'this start' : 'any own evidence'}; without a per-commit file list it is not taken as the item's own, so the real start may be earlier` } : null;
     const integratedMerged = d.integratedPrs.map((n) => pulls.get(n).mergedAt);
     const lastMergedAt = integratedMerged.sort(cmp).slice(-1)[0] || null;
     const firstPrCreated = d.ownStart.prs.map((p) => p.createdAt).sort(cmp)[0] || null;
     const openDec = (decisionsByItem.get(it.id) || []).filter((x) => x.state === 'OPEN');
     const ciRuns = uniqSorted(d.integratedPrs.flatMap((n) => inputs.github.runs.filter((r) => r.name === C.ciWorkflowName && r.headSha === pulls.get(n).headSha).map((r) => r.id)));
-    const nextAction = fill(T[d.status] || T.UNKNOWN, { id: it.id, prs: d.linkedPrs.map((n) => `#${n}`).join(','), decision: openDec[0]?.id || d.blockers[0] || 'kayıt', blockers: d.blockers.join(', '), lane, missing: (d.missingEvidence[0] || '').slice(0, 120) });
+    const nextAction = fill(T[d.status] || T.UNKNOWN, { id: it.id, prs: prText(d.linkedPrs, d.corroboratingWeakPrs), decision: openDec[0]?.id || d.blockers[0] || 'kayıt', blockers: d.blockers.join(', '), lane, missing: (d.missingEvidence[0] || '').slice(0, 120) });
     return {
       id: it.id, title: it.title, description: it.description, dimension: it.dimension, origin: it.origin, department, departmentRule: ruleId,
       roadmapPhase: it.roadmapPhase, relatedPhases: it.relatedPhases, wave: ph ? ph.wave : null, period: ph ? ph.period : null,
       milestone: scope === 'MVP' ? rules.scope.milestones.MVP : it.origin === 'WAVE0' ? rules.scope.milestones.WAVE0 : null, scope, scopeRule, scopeReason,
       owner, lane, executor: normExecutor(execRaw, SM.executorMap), dependsOn: it.dependsOn,
       planned: { start: null, end: null, sourcesChecked: rules.sources.datesSourceSet.id },
-      actual: { start, startState: start ? 'KNOWN' : 'UNKNOWN', startSource: startCands[0]?.src ?? null, startSourcesChecked: start ? null : START_SOURCES, lastMergedAt, done: d.substeps.accepted === 'TRUE' ? (acceptance.get(it.id)?.at ?? null) : null },
+      actual: { start, startState: start ? 'KNOWN' : 'UNKNOWN', startSource: startCands[0]?.src ?? null, startSourcesChecked: start ? null : START_SOURCES, earlierMention, lastMergedAt, done: d.substeps.accepted === 'TRUE' ? (acceptance.get(it.id)?.at ?? null) : null },
       status: d.status, statusRule: d.rule, reconClass: d.reconClass, baselineClass: d.baselineClass, evidenceBaselineClass: d.evidenceBaselineClass, evidenceClass: d.evidenceClass, matchKind: d.matchKind, weakInventoryRefs: d.weakInventoryRefs,
       substeps: d.substeps, evidence: d.evidence, links: ls.map((l) => l.id).sort(cmp), blockers: d.blockers, founderDecision: openDec[0]?.id ?? null, nextAction,
       sizeEstimate: it.effort ? `${it.effort} (analyst estimate, 19-Oct)` : null,
@@ -167,7 +175,8 @@ export function buildAll(inputs, rules, overlayRaw, meta, nowIsoRaw) {
   const currentPartition = rcls.map((c) => ({ reconClass: c, full: base.filter((x) => x.reconClass === c).length, mvp: baseMvp.filter((x) => x.reconClass === c).length }));
   const matrix = (xs) => Object.fromEntries(bcls.map((b) => [b, Object.fromEntries(rcls.map((r) => [r, xs.filter((x) => x.baselineClass === b && x.reconClass === r).length]).filter(([, n]) => n))]).filter(([, o]) => Object.keys(o).length));
   const r323 = base.filter((x) => v0Mnv.has(x.id)).map((x) => ({ id: x.id, dimension: x.dimension, scope: x.scope, baselineClass: x.baselineClass, evidenceClass: x.evidenceClass, reconClass: x.reconClass, status: x.status,
-    prs: x.integratedPrs.length ? x.integratedPrs : x.prs, mergeCommits: x.mergeCommits, mergedAt: x.mergedAt, commitEvidence: x.commitEvidence, missingEvidence: x.evidenceClass === 'STATUS_ONLY_UNVERIFIED' ? x.missingEvidence : [] }));
+    prs: x.integratedPrs.length ? x.integratedPrs : x.prs, weakPrs: x.corroboratingWeakPrs, mergeCommits: x.mergeCommits, mergedAt: x.mergedAt, commitEvidence: x.commitEvidence,
+    missingEvidence: ['STATUS_ONLY_UNVERIFIED', 'CORROBORATED_BY_WEAK_REF'].includes(x.evidenceClass) ? x.missingEvidence : [] }));
   const ov = (set) => ({ full: base.filter((x) => set(x)).length, mvp: baseMvp.filter((x) => set(x)).length });
   const overlap = { both: ov((x) => v0Mnv.has(x.id) && v0Unrec.has(x.id)), a323only: ov((x) => v0Mnv.has(x.id) && !v0Unrec.has(x.id)), a536only: ov((x) => !v0Mnv.has(x.id) && v0Unrec.has(x.id)), neither: ov((x) => !v0Mnv.has(x.id) && !v0Unrec.has(x.id)) };
   const statusEvents = base.filter((x) => legacyById.get(x.id) && legacyById.get(x.id).now !== x.status).map((x) => ({ id: x.id, v0: legacyById.get(x.id).now, now: x.status, reconClass: x.reconClass })).sort((a, b) => cmp(a.id, b.id));
@@ -222,7 +231,7 @@ export function buildAll(inputs, rules, overlayRaw, meta, nowIsoRaw) {
   const plan = {
     order: rules['next-actions'].order, builderCap: coordinator.capacity, topNPerLane: C.planTopNPerLane,
     lanes: rules['next-actions'].lanes.map((L) => ({ lane: L, items: live.filter((x) => x.lane === L && actionable.includes(x.status)).sort(planKey).slice(0, C.planTopNPerLane).map((x) => ({ id: x.id, status: x.status, scope: x.scope, priority: x.priority, criticalPath: cpSet.has(x.roadmapPhase), blockers: x.blockers.length, action: x.nextAction })) })),
-    verification: mvp.filter((x) => x.status === 'MERGED_NOT_VERIFIED').sort(planKey).slice(0, rules['next-actions'].verificationLane.topN).map((x) => ({ id: x.id, action: fill(rules['next-actions'].verificationLane.template, { id: x.id, prs: x.integratedPrs.map((n) => `#${n}`).join(',') }) })),
+    verification: mvp.filter((x) => x.status === 'MERGED_NOT_VERIFIED').sort(planKey).slice(0, rules['next-actions'].verificationLane.topN).map((x) => ({ id: x.id, action: fill(rules['next-actions'].verificationLane.template, { id: x.id, prs: prText(x.integratedPrs, x.corroboratingWeakPrs) }) })),
     verificationTotal: mvp.filter((x) => x.status === 'MERGED_NOT_VERIFIED').length,
     founderDecisions: decisions.filter((d) => d.state === 'OPEN').sort((a, b) => (b.ageHours ?? -1) - (a.ageHours ?? -1) || natCmp(a.id, b.id)).map((d) => ({ id: d.id, ageHours: d.ageHours, action: fill(rules['next-actions'].decisionTemplate, { id: d.id, ageHours: d.ageHours ?? 'UNKNOWN', text: d.text.slice(0, 140) }) })),
   };

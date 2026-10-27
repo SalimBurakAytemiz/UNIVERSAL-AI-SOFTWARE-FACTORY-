@@ -3,7 +3,7 @@ import { toCsv } from '../core/csv.mjs';
 import { cmp } from '../core/canonical-json.mjs';
 
 export const CSV_COLUMNS = ['id', 'title', 'dimension', 'origin', 'department', 'departmentRule', 'roadmapPhase', 'wave', 'milestone', 'scope', 'owner', 'lane', 'executor', 'dependsOn', 'plannedStart', 'plannedEnd', 'actualStart', 'lastMergedAt', 'actualDone',
-  'status', 'reconClass', 'baselineClass', 'evidenceClass', 'coded', 'integrated', 'tested', 'runtimeVerified', 'accepted', 'prs', 'mergeCommits', 'commits', 'ciRuns', 'blockers', 'founderDecision', 'nextAction', 'sizeEstimate', 'measuredDurationHours', 'cost', 'confidence', 'stale', 'missingEvidence', 'description'];
+  'status', 'reconClass', 'baselineClass', 'evidenceClass', 'coded', 'integrated', 'tested', 'runtimeVerified', 'accepted', 'prs', 'corroboratingWeakPrs', 'mergeCommits', 'commits', 'ciRuns', 'blockers', 'founderDecision', 'nextAction', 'sizeEstimate', 'measuredDurationHours', 'cost', 'confidence', 'stale', 'missingEvidence', 'description'];
 
 export function inventoryItem(x) {
   return {
@@ -30,7 +30,7 @@ export function inventoryCsv(model) {
   const rows = [...model.items].sort((a, b) => cmp(a.id, b.id)).map((x) => ({
     ...x, dependsOn: [...x.dependsOn].sort(cmp), plannedStart: x.planned.start ?? 'UNKNOWN', plannedEnd: x.planned.end ?? 'UNKNOWN', actualStart: x.actual.start ?? 'UNKNOWN', lastMergedAt: x.actual.lastMergedAt, actualDone: x.actual.done,
     coded: x.substeps.coded, integrated: x.substeps.integrated, tested: x.substeps.tested, runtimeVerified: x.substeps.runtimeVerified, accepted: x.substeps.accepted,
-    prs: x.prs.map((n) => `#${n}`), mergeCommits: [...x.mergeCommits].sort(cmp), commits: [...x.commits].sort(cmp), ciRuns: x.ciRuns.map(String), blockers: [...x.blockers].sort(cmp), missingEvidence: [...x.missingEvidence].sort(cmp),
+    prs: x.prs.map((n) => `#${n}`), corroboratingWeakPrs: (x.corroboratingWeakPrs || []).map((n) => `#${n}`), mergeCommits: [...x.mergeCommits].sort(cmp), commits: [...x.commits].sort(cmp), ciRuns: x.ciRuns.map(String), blockers: [...x.blockers].sort(cmp), missingEvidence: [...x.missingEvidence].sort(cmp),
     stale: x.stale ? 'true' : 'false', description: x.description ? String(x.description).replace(/\r?\n/g, ' ') : '',
   }));
   return toCsv(rows, CSV_COLUMNS);

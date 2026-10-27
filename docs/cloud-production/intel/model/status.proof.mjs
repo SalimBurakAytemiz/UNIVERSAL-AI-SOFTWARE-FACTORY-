@@ -6,6 +6,7 @@ import { loadRules } from '../lib/gather.mjs';
 import { buildAll } from './pipeline.mjs';
 import { knownIdScan, literalIdScan } from '../core/ids.mjs';
 import { parseInventoryPrs, inventoryPrRefs } from './baseline.mjs';
+import { isOwnCommit } from './status.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 let passed = 0, failed = 0;
@@ -82,9 +83,54 @@ check('R2-H1 control: UI-002 (#2 merged, #3 closed, no independent evidence) sta
 // H1 residual: an annotation naming another known item assigns the PR to that item, even on a merged-claim row
 check('R2-H1 UI-031 (merged claim) cites #43 (UI-029 ...) and #44 (UI-030 ...): WEAK other-item, never EXPLICIT/HIGH, start not from #43 createdAt (4e1a897: EXPLICIT_PR_MERGED_ALL / HIGH / 2026-10-18T16:03:05Z)', (X('UI-031').weakInventoryRefs || []).join() === '#43 other-item:UI-029,#44 other-item:UI-030' && rc('UI-031') !== 'EXPLICIT_PR_MERGED_ALL' && X('UI-031').confidence === 'LOW' && X('UI-031').actual.start === null && !m.links.some((l) => l.itemId === 'UI-031' && l.kind === 'PR' && l.strength === 'EXPLICIT') && m.links.some((l) => l.itemId === 'UI-029' && l.ref === '#43' && l.strength === 'EXPLICIT'));
 // LOW: WEAK corroboration sets integrated only (no tested, CI runs, merge dates or integratedPrs from other items' PRs)
-check('R2-LOW WEAK-only corroboration (UI-025 #6 consumer, UI-031 #43/#44): integrated TRUE, tested UNKNOWN, integratedPrs/ciRuns/lastMergedAt empty, PRs listed as corroboratingWeakPrs (4e1a897: tested TRUE, integratedPrs [6])', ['UI-025', 'UI-031'].every((id) => sub(id).integrated === 'TRUE' && sub(id).tested === 'UNKNOWN' && X(id).integratedPrs.length === 0 && X(id).ciRuns.length === 0 && X(id).actual.lastMergedAt === null && X(id).corroboratingWeakPrs.length > 0 && X(id).matchKind === 'INVENTORY_TEXT_WEAK' && X(id).missingEvidence.some((x) => /WEAK 19-Oct reference/.test(x))) && X('UI-025').corroboratingWeakPrs.join() === '6');
+check('R2-LOW WEAK-only corroboration (UI-025 #6 consumer; UI-031 is covered by R3-L1): integrated TRUE, tested UNKNOWN, integratedPrs/ciRuns/lastMergedAt empty, PRs listed as corroboratingWeakPrs (4e1a897: tested TRUE, integratedPrs [6])', ['UI-025'].every((id) => sub(id).integrated === 'TRUE' && sub(id).tested === 'UNKNOWN' && X(id).integratedPrs.length === 0 && X(id).ciRuns.length === 0 && X(id).actual.lastMergedAt === null && X(id).corroboratingWeakPrs.length > 0 && X(id).matchKind === 'INVENTORY_TEXT_WEAK' && X(id).missingEvidence.some((x) => /WEAK 19-Oct reference/.test(x))) && X('UI-025').corroboratingWeakPrs.join() === '6');
 // LOW: runtime is NOT_MEASURED per item and in the substep tally (no measured FALSE)
 check('R2-LOW every live item has runtimeVerified NOT_MEASURED and the tally has no FALSE (4e1a897: FALSE on every item)', m.items.filter((x) => x.status !== 'OBSOLETE').every((x) => x.substeps.runtimeVerified === 'NOT_MEASURED') && m.metrics.full.substeps.runtimeVerified.NOT_MEASURED === m.metrics.full.n && m.metrics.full.substeps.runtimeVerified.FALSE === 0 && m.metrics.mvp.substeps.runtimeVerified.FALSE === 0);
+
+// ---- R3 (round-3 review of f0f537c): each check below fails on f0f537c and passes after the fix
+const L = (id, ref) => m.links.filter((l) => l.itemId === id && l.ref === ref).map((l) => l.strength).sort().join();
+// M1: other items' PRs cited in branch-slug form, or whose own title/branch names another item, are WEAK other-item (never EXPLICIT/HIGH, never a start)
+check("R3-M1 UI-032 cites '#45 claude/l-assurance-ui033' and '#46 claude/l-assurance-ui034' (slug form; #46's own title names no item): WEAK other-item:UI-033 / other-item:UI-034, STATUS_ONLY_UNVERIFIED, integrated UNKNOWN, start UNKNOWN (f0f537c: EXPLICIT_PR_MERGED_ALL / HIGH / start 2026-10-18T16:02:59Z)",
+  (X('UI-032').weakInventoryRefs || []).join() === '#45 other-item:UI-033,#46 other-item:UI-034' && rc('UI-032') === 'STATUS_ONLY_UNVERIFIED' && sub('UI-032').integrated === 'UNKNOWN' && X('UI-032').actual.start === null && X('UI-032').integratedPrs.length === 0 && !m.links.some((l) => l.itemId === 'UI-032' && l.kind === 'PR' && l.strength === 'EXPLICIT'));
+check("R3-M1 UI-035 cites a plain '#48 (open)' whose own title 'L-WORKFORCE UI-036: ...' names another item: WEAK other-item:UI-036; integrated by its own #47 only, start #47 createdAt (f0f537c: integratedPrs [47,48], start 'PR #48 createdAt' 2026-10-18T15:55:05Z)",
+  (X('UI-035').weakInventoryRefs || []).join() === '#48 other-item:UI-036' && X('UI-035').integratedPrs.join() === '47' && X('UI-035').actual.start === '2026-10-19T00:36:54Z' && X('UI-035').actual.startSource === 'PR #47 createdAt' && L('UI-036', '#48').includes('EXPLICIT'));
+check('R3-M1 control: the 19-Oct prToWorkItems map assigns #48 to UI-037, so it stays EXPLICIT there (MERGED_NOT_VERIFIED, integratedPrs [48]) although the PR title names UI-036',
+  L('UI-037', '#48') === 'EXPLICIT' && st('UI-037') === 'MERGED_NOT_VERIFIED' && X('UI-037').integratedPrs.join() === '48' && !(X('UI-037').weakInventoryRefs || []).length);
+check("R3-M1 UI-038 (#47 merged, #49 closed 'L-TOWER-TRACE UI-039' cited as claude/l-tower-trace-ui039): #49 is UI-039's, not a missing part of UI-038 -> EXPLICIT_PR_MERGED_ALL via #47 (f0f537c: EXPLICIT_PR_MERGED_PARTIAL / UNKNOWN)",
+  (X('UI-038').weakInventoryRefs || []).join() === '#49 other-item:UI-039' && rc('UI-038') === 'EXPLICIT_PR_MERGED_ALL' && sub('UI-038').integrated === 'TRUE' && X('UI-038').integratedPrs.join() === '47');
+// M2 + M3: a bookkeeping PR (backlog write-back / planning / READY marking / '(backlog only)' / id only in a 'DONE' status clause) is never evidence
+check("R3-M3 Founder blocker DESIGN-EVIDENCE-X named only by 'Backlog write-back 5: ... + P0 DESIGN-EVIDENCE-X + ...' (#50): BLOCKED (rule 6), coded/integrated FALSE, start UNKNOWN, #50 BOOKKEEPING_PR listed as a candidate (f0f537c: MERGED_NOT_VERIFIED / HIGH / TITLE / integratedPrs [50])",
+  st('DESIGN-EVIDENCE-X') === 'BLOCKED' && X('DESIGN-EVIDENCE-X').statusRule === 6 && sub('DESIGN-EVIDENCE-X').coded === 'FALSE' && sub('DESIGN-EVIDENCE-X').integrated === 'FALSE' && X('DESIGN-EVIDENCE-X').integratedPrs.length === 0 && X('DESIGN-EVIDENCE-X').actual.start === null && L('DESIGN-EVIDENCE-X', '#50') === 'BOOKKEEPING_PR' && X('DESIGN-EVIDENCE-X').candidateLinks.includes('bookkeeping:#50') && X('DESIGN-EVIDENCE-X').blockers.some((b) => /BLOCKED/.test(b)));
+check("R3-M2 MOB-12 starts at its own dispatch-claim commit (07:49:13Z), not at the earlier write-back PR #50 'MOB-12..31 non-READY' (f0f537c: 'PR #50 createdAt' 04:59:08Z); integratedPrs [51] only",
+  X('MOB-12').actual.start === '2026-10-20T07:49:13Z' && /OWN_COMMIT/.test(X('MOB-12').actual.startSource || '') && X('MOB-12').integratedPrs.join() === '51' && L('MOB-12', '#50') === 'BOOKKEEPING_PR');
+check("R3-M2 SEC-X (backlog READY) named by 'Integration wave B13: batch-5 desktop READY tasks + SEC-X follow-up (backlog only)' stays QUEUED (f0f537c: MERGED_NOT_VERIFIED via #52)",
+  st('SEC-X') === 'QUEUED' && sub('SEC-X').integrated === 'FALSE' && L('SEC-X', '#52') === 'BOOKKEEPING_PR' && X('SEC-X').actual.start === null);
+check("R3-M2 UI-028: 'Backlog: UI-028 DONE write-back' (#53) and the wave naming it only in 'backlog #53 (UI-028 DONE, batch 3)' (#54) are bookkeeping: integratedPrs [40,42], lastMergedAt = own #42 2026-10-20T01:00:56Z (f0f537c: [40,42,53,54], 01:51:49Z)",
+  X('UI-028').integratedPrs.join() === '40,42' && X('UI-028').actual.lastMergedAt === '2026-10-20T01:00:56Z' && L('UI-028', '#53') === 'BOOKKEEPING_PR' && L('UI-028', '#54') === 'BOOKKEEPING_PR');
+check("R3-M2 control: a wave member named outside the status clause stays ID_IN_TITLE ('#42 UI-024' in #54); a write-back naming UI-010 'non-READY' no longer vetoes NOT_STARTED",
+  L('UI-024', '#54') === 'ID_IN_TITLE' && st('UI-010') === 'NOT_STARTED' && L('UI-010', '#50') === 'BOOKKEEPING_PR');
+// LOW status:69: a reference assigned to another item corroborates nothing (PH-045 shape)
+check("R3-L1 UI-031 (merged claim) whose only refs are #43/#44 of UI-029/UI-030: STATUS_ONLY_UNVERIFIED, coded/integrated UNKNOWN, no corroboratingWeakPrs (f0f537c: CORROBORATED_BY_PR / INVENTORY_TEXT_WEAK / integrated TRUE)",
+  rc('UI-031') === 'STATUS_ONLY_UNVERIFIED' && sub('UI-031').integrated === 'UNKNOWN' && sub('UI-031').coded === 'UNKNOWN' && X('UI-031').corroboratingWeakPrs.length === 0 && st('UI-031') === 'UNKNOWN' && X('UI-031').missingEvidence.some((x) => /other-item:UI-029/.test(x)));
+// LOW pipeline:170: WEAK-only rows are visible as such (evidenceClass, r323 row with the WEAK PRs and the reason)
+{
+  const r = m.reconciliation.r323.find((x) => x.id === 'UI-025');
+  check("R3-L2 WEAK-only UI-025: evidenceClass CORROBORATED_BY_WEAK_REF (not EVIDENCED_BY_PR); its r323 row carries weakPrs [6] and the WEAK reason; nextAction names the WEAK ref (f0f537c: EVIDENCED_BY_PR, prs [], missingEvidence [], 'PR —')",
+    X('UI-025').evidenceClass === 'CORROBORATED_BY_WEAK_REF' && !!r && r.evidenceClass === 'CORROBORATED_BY_WEAK_REF' && (r.weakPrs || []).join() === '6' && r.missingEvidence.some((x) => /WEAK 19-Oct reference/.test(x)) && /WEAK 19 Ekim ref\. #6/.test(X('UI-025').nextAction));
+}
+// LOW status:218: the commit the ladder accepts as integrating evidence dates the start; an unattributed earlier commit is reported; head word ends the token
+check("R3-L3 UI-040 integrated only by the body-only commit 'v7 ux-projects: ...' (Covers ... UI-040): start 2026-10-16T02:37:50Z from that INTEGRATING_COMMIT (f0f537c: start UNKNOWN)",
+  rc('UI-040') === 'CORROBORATED_BY_COMMIT' && X('UI-040').actual.start === '2026-10-16T02:37:50Z' && /INTEGRATING_COMMIT/.test(X('UI-040').actual.startSource || ''));
+check("R3-L3 UI-041 starts at its own PR #57 (2026-10-17T16:10:07Z) and reports the earlier unattributed commit naming it (earlierMention 2026-10-16T02:37:50Z) instead of using it (f0f537c: no earlierMention)",
+  X('UI-041').actual.start === '2026-10-17T16:10:07Z' && X('UI-041').actual.earlierMention?.at === '2026-10-16T02:37:50Z' && /^[0-9a-f]{7}$/.test(X('UI-041').actual.earlierMention?.commit || '') && X('UI-024').actual.earlierMention === null);
+{
+  const lit = (ids) => ({ resolveText: (t) => ids.filter((i) => String(t).includes(i)) });
+  const R = rules['link-patterns'].ownCommitStart;
+  check("R3-L3 bookkeeping head word ends the token: 'COORD-INTEGRATION-L1: ...' and 'LANE-A: ...' subjects are own commits; 'coord: ...', 'dispatch: ...' and 'backlog: ...' are not; 'dispatch-claim: MOB-1' is (f0f537c: COORD-/LANE- rejected)",
+    isOwnCommit('COORD-INTEGRATION-L1: cross-lane wiring', 'COORD-INTEGRATION-L1', lit(['COORD-INTEGRATION-L1']), R) && isOwnCommit('LANE-A: task status UI', 'LANE-A', lit(['LANE-A']), R)
+    && !isOwnCommit('coord: ledger review for COORD-INTEGRATION-L1', 'COORD-INTEGRATION-L1', lit(['COORD-INTEGRATION-L1']), R) && !isOwnCommit('dispatch: MOB-1 claimed', 'MOB-1', lit(['MOB-1']), R)
+    && !isOwnCommit('backlog: MOB-1 READY', 'MOB-1', lit(['MOB-1']), R) && isOwnCommit('dispatch-claim: MOB-1', 'MOB-1', lit(['MOB-1']), R));
+}
 
 // ---- M2: exact-id match for ids without trailing digits (PR title / branch)
 check('M2 L-WORKFORCE linked to #26 by exact id in the title (ID_IN_TITLE) and is MERGED_NOT_VERIFIED', st('L-WORKFORCE') === 'MERGED_NOT_VERIFIED' && m.links.some((l) => l.itemId === 'L-WORKFORCE' && l.ref === '#26' && l.strength === 'ID_IN_TITLE'));

@@ -1,4 +1,4 @@
-//TR: Ağ koruması (NODE_OPTIONS=--import ile ön yüklenir; ürün kodu için asıl sınır readiness-runner'daki ad alanı kum havuzudur, bu koruma derinlemesine savunmadır): Node içinden her TCP/UDP/TLS/HTTP/DNS/fetch/WebSocket bağlantısını, ham soket/süreç bağlamalarını (process.binding tcp_wrap/pipe_wrap/process_wrap/spawn_sync, dlopen) ve izinsiz alt süreci (curl, sh, ...) INTEL_NET_BLOCKED hatasıyla durdurur. Yalnız gerçek yolu (realpath) os.tmpdir() altındaki unix soketleri (tsx IPC) ve yalnız process.execPath (koruma, NODE_OPTIONS ve kip ortamına ZORLA yazılarak devralınır; fork execPath'i de denetlenir) izinlidir. Kipler: strict (hazırlık ölçümü: ek olarak yalnız INTEL_NET_GUARD_ALLOW_BIN_DIR altındaki esbuild ikilisi; Worker ve yerel eklenti yasak) ve proof (kanıtlar: git yalnız GIT_ALLOW_PROTOCOL=file ile, tar, ad alanı kum havuzu için unshare).
+//TR: Ağ koruması (NODE_OPTIONS=--import ile ön yüklenir; ürün kodu için asıl sınır readiness-runner'daki ad alanı kum havuzudur, bu koruma derinlemesine savunmadır): Node içinden her TCP/UDP/TLS/HTTP/DNS/fetch/WebSocket bağlantısını, ham soket/süreç bağlamalarını (process.binding tcp_wrap/pipe_wrap/process_wrap/spawn_sync, dlopen) ve izinsiz alt süreci (curl, sh, ...) INTEL_NET_BLOCKED hatasıyla durdurur. Yalnız gerçek yolu (realpath) os.tmpdir() altındaki unix soketleri (tsx IPC) ve yalnız process.execPath (koruma, NODE_OPTIONS ve kip ortamına ZORLA yazılarak devralınır; fork execPath'i de denetlenir) izinlidir. Node alt sürecinde korumadan ÖNCE kod çalıştırabilecek ön yükleme bayrakları (-r/--require/--import/--loader/--experimental-loader; argv, fork execArgv ve çağıranın NODE_OPTIONS'u) yalnız korumanın kendisini veya izinli ikili dizini altındaki dosyayı (tsx preflight/loader) gösterebilir; göreli/çıplak belirteç reddedilir. Kipler: strict (hazırlık ölçümü: ek olarak yalnız INTEL_NET_GUARD_ALLOW_BIN_DIR altındaki esbuild ikilisi; Worker ve yerel eklenti yasak) ve proof (kanıtlar: git yalnız GIT_ALLOW_PROTOCOL=file ile, tar, ad alanı kum havuzu için unshare).
 import net from 'node:net';
 import tls from 'node:tls';
 import http from 'node:http';
@@ -12,6 +12,7 @@ import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
+import { fileURLToPath } from 'node:url';
 
 export const NET_BLOCKED = 'INTEL_NET_BLOCKED';
 const MODE = process.env.INTEL_NET_GUARD === 'proof' ? 'proof' : 'strict';
@@ -22,6 +23,7 @@ const TMP = real(os.tmpdir()) || path.resolve(os.tmpdir());
 // a unix socket is local only when its REAL path (symlinks resolved) is under the temp dir: a symlink in tmpdir to a host socket is refused
 const localSocket = (p) => { if (typeof p !== 'string' || !p.length || p.startsWith('\0')) return false; const r = real(p); return !!r && r.startsWith(TMP + path.sep); };
 const GUARD_URL = import.meta.url;
+const GUARD_REAL = real(fileURLToPath(GUARD_URL));
 const EXEC_REAL = real(process.execPath);
 
 // ---- sockets: only unix sockets under the temp dir (tsx IPC); every host:port connect throws before any packet is sent
@@ -78,10 +80,33 @@ const allowed = (file) => {
   return !!(r && b === 'esbuild' && r.startsWith(ALLOW_BIN_DIR + path.sep));
 };
 const BAD_NODE_FLAG = /^--(?:expose[-_]internals|allow[-_]natives[-_]syntax)(?:=|$)/;
+// preloads run before (a --require preload even before) the guard's own --import: only the guard itself or a file under the allowed bin dir
+// (tsx's preflight.cjs / loader.mjs) may be preloaded; a relative or bare specifier cannot be checked and is refused
+const PRELOAD_FLAG = /^(?:-r|--require|--import|--loader|--experimental-loader)(?:=([\s\S]*))?$/;
+const ALLOW_BIN_REAL = ALLOW_BIN_DIR ? real(ALLOW_BIN_DIR) || ALLOW_BIN_DIR : null;
+const preloadOk = (spec) => {
+  let f = String(spec ?? '');
+  if (f.startsWith('file:')) { try { f = fileURLToPath(f); } catch { return false; } }
+  if (!path.isAbsolute(f)) return false;
+  const r = real(f);
+  return !!r && (r === GUARD_REAL || (!!ALLOW_BIN_REAL && r.startsWith(ALLOW_BIN_REAL + path.sep)));
+};
+const badPreload = (tokens) => {
+  for (let i = 0; i < tokens.length; i++) {
+    const t = String(tokens[i]), m = PRELOAD_FLAG.exec(t);
+    if (!m) continue;
+    const flag = t.split('=')[0], v = m[1] !== undefined ? m[1] : tokens[++i];
+    if (!preloadOk(v)) return `${flag} ${path.basename(String(v ?? ''))}`;
+  }
+  return null;
+};
+const optTokens = (s) => (String(s || '').match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || []).map((t) => t.replace(/"([^"]*)"|'([^']*)'/g, '$1$2'));
 const guardEnv = (env) => {
   const e = { ...(env || process.env) };
   const imp = `--import ${GUARD_URL}`;
   const no = String(e.NODE_OPTIONS || '');
+  const bp = badPreload(optTokens(no));
+  if (bp) throw fail(`node child NODE_OPTIONS preload ${bp}`);
   e.NODE_OPTIONS = no.includes(imp) ? no : `${imp}${no ? ` ${no}` : ''}`;
   // a child may tighten proof -> strict, never loosen strict -> proof; under strict the allowed bin dir is the parent's
   e.INTEL_NET_GUARD = MODE === 'strict' || e.INTEL_NET_GUARD === 'strict' ? 'strict' : 'proof';
@@ -103,6 +128,8 @@ const guardCp = (name, orig, shell = false) => function guardedChild(file, ...re
   if (isNode(file)) {
     const argv = Array.isArray(rest[0]) ? rest[0] : [];
     if (argv.some((a) => BAD_NODE_FLAG.test(String(a)))) throw fail(`child_process.${name} node ${argv.find((a) => BAD_NODE_FLAG.test(String(a)))}`);
+    const bp = badPreload(argv);
+    if (bp) throw fail(`child_process.${name} node preload ${bp}`);
     withOpts(rest, (o) => ({ ...o, env: guardEnv(o.env) }));
   } else if (path.basename(String(file)) === 'git') withOpts(rest, (o) => ({ ...o, env: { ...(o.env || process.env), GIT_ALLOW_PROTOCOL: 'file' } }));
   return orig.call(this, file, ...rest);
@@ -114,7 +141,7 @@ cp.execFileSync = guardCp('execFileSync', cp.execFileSync);
 cp.exec = guardCp('exec', cp.exec, true);
 cp.execSync = guardCp('execSync', cp.execSync, true);
 const origFork = cp.fork;
-// fork: execPath must be this node binary, execArgv may not expose internals, and the guard env is forced
+// fork: execPath must be this node binary, execArgv may not expose internals or preload foreign code, and the guard env is forced
 cp.fork = function guardedFork(modulePath, ...rest) {
   const oi = rest.findIndex((x) => x && typeof x === 'object' && !Array.isArray(x));
   const o = oi >= 0 ? rest[oi] : {};
@@ -122,6 +149,8 @@ cp.fork = function guardedFork(modulePath, ...rest) {
   if (o.shell) throw fail('child_process.fork with shell');
   const xa = Array.isArray(o.execArgv) ? o.execArgv : process.execArgv;
   if (xa.some((a) => BAD_NODE_FLAG.test(String(a)))) throw fail('child_process.fork execArgv');
+  const bp = badPreload(xa);
+  if (bp) throw fail(`child_process.fork execArgv preload ${bp}`);
   withOpts(rest, (x) => ({ ...x, execPath: process.execPath, env: guardEnv(x.env) }));
   return origFork.call(this, modulePath, ...rest);
 };

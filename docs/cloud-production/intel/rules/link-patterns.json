@@ -1,5 +1,5 @@
 {
-  "//TR": "Kimlik bağlama kuralları: hangi önekler kimliktir, hangi alanlar taranır ve hangi bağ gücü hangi sınıfa yeterlidir. Gövde (body) metninde geçen kimlik ve 19 Ekim 'prs' alanındaki WEAK referans (aralık, iç içe, rol notlu veya kimlik kapısından geçmeyen) yalnız 19 Ekim'de zaten 'merge edildi' denen satırları DÜŞÜK güvenle destekler; ilerleme iddiası olmayan satırı yükseltmez. Rakamla bitmeyen kimlikler (L-WORKFORCE, CI-GREEN, PKG-LEASE1) PR başlığında ve dalında tam kimlik olarak eşleşir. 19 Ekim notu başka bilinen kalemi adlandırıyorsa ('#25 (UI-050 ...)') PR o kalemindir (WEAK other-item). Gerçek başlangıç için commit yalnız kodlanmış kalemin konu başında kimliği adlandıran kendi commit'idir (ownCommitStart; backlog/planlama kayıt commit'leri hariç).",
+  "//TR": "Kimlik bağlama kuralları: hangi önekler kimliktir, hangi alanlar taranır ve hangi bağ gücü hangi sınıfa yeterlidir. Gövde (body) metninde geçen kimlik ve 19 Ekim 'prs' alanındaki WEAK referans (aralık, iç içe, rol notlu veya kimlik kapısından geçmeyen) yalnız 19 Ekim'de zaten 'merge edildi' denen satırları DÜŞÜK güvenle destekler; ilerleme iddiası olmayan satırı yükseltmez. Rakamla bitmeyen kimlikler (L-WORKFORCE, CI-GREEN, PKG-LEASE1) PR başlığında ve dalında tam kimlik olarak eşleşir. 19 Ekim notu başka bilinen kalemi adlandırıyorsa ('#25 (UI-050 ...)' ya da dal biçiminde 'claude/l-assurance-ui049') veya PR'ın kendi başlığı/dalı bu satırı değil başka bir kalemi adlandırıyorsa PR o kalemindir (WEAK other-item; 19 Ekim prToWorkItems bu satırı o PR'a atıyorsa hariç) ve böyle bir referans hiçbir iddiayı desteklemez. Kayıt tutma PR'ları (başlığı backlog:/planning:/write-back/'(backlog only)' ile başlayan ya da kimliği yalnız 'UI-132 DONE' gibi durum ibaresinde anan) hiçbir zaman kanıt değildir: coded/integrated/başlangıç/lane vermez (BOOKKEEPING_PR). Gerçek başlangıç için commit yalnız kodlanmış kalemin konu başında kimliği adlandıran kendi commit'idir (ownCommitStart; backlog/planlama kayıt commit'leri hariç).",
   "schemaVersion": "1.0.0",
   "idPrefixes": [
     "UI",
@@ -36,6 +36,8 @@
     "groupSeparatorRegex": "^[\\s,+/&]*(?:and\\s*)?$",
     "maxRangeSpan": 100,
     "itemTitleNamesPrRegex": "\\bPR\\s*#(\\d{1,5})\\b",
+    "slugIdRegex": "(?<![A-Za-z0-9])(UI|PH|PT|PQ|MOB)(\\d{3})(?![0-9])",
+    "otherItemRule": "a SINGLE reference is WEAK 'other-item:<ID>' when the PR is not this row's (its own title/branch, branch slugs such as ui049 included, does not name the row and the 19-Oct prToWorkItems map does not assign the PR to the row) and either the annotation names another known item (slug forms such as 'claude/l-assurance-ui049' normalised by slugIdRegex) or the PR's own title/branch names another known item; an other-item reference never corroborates a merged claim (it is listed in weakInventoryRefs only)",
     "explicitGates": {
       "PR_NAMES_ITEM": "the PR title, head branch or body names the item id (resolver, incl. aliases and literal ids)",
       "ITEM_TITLE_NAMES_PR": "the item's own 19-Oct title names the PR ('PR #N')",
@@ -47,13 +49,21 @@
       "role:<annotation>",
       "no-id-match"
     ],
-    "weakPolicy": "INVENTORY_WEAK: LOW confidence; corroborates only rows whose 19-Oct status claims merged (after every stronger source); never upgrades a row without a merged claim; never sets coded, actual start, lane or owner"
+    "weakPolicy": "INVENTORY_WEAK: LOW confidence; corroborates only rows whose 19-Oct status claims merged (after every stronger source; never an other-item reference); never upgrades a row without a merged claim; never sets coded, actual start, lane or owner by itself (a WEAK-corroborated merged claim is integrated at LOW confidence, and coded follows integrated)"
   },
   "ownCommitStart": {
     "appliesTo": "actual.start from a v7 commit (ID_IN_COMMIT_MESSAGE link) of an item whose coded substep is TRUE",
     "subjectHead": "subject up to the first ': ' plus the next word (else the first three words); the id must be named there (resolver, aliases included)",
-    "bookkeepingSubjectRegex": "^(?:backlog|planning|plan|queue|ledger|reports?|writeback|board|lanes?|registry|inventory|status|coord(?:inator)?|dispatch(?!-claim))\\b",
-    "note": "a commit that only mentions the id elsewhere (body, a list in a planning/backlog edit, another item's design spec) never sets a start; dispatch-claim:<id> commits of a coded item count"
+    "bookkeepingSubjectRegex": "^(?:backlog|planning|plan|queue|ledger|reports?|write-?back|board|lanes?|registry|inventory|status|coord(?:inator)?|dispatch)(?![-\\w])",
+    "note": "a commit that only mentions the id elsewhere (body, a list in a planning/backlog edit, another item's design spec) never sets a start; dispatch-claim:<id> commits of a coded item count; the head word must end the token, so COORD-INTEGRATION-L1: / LANE-A: / status-board: subjects are not bookkeeping",
+    "integrationCommit": "a v7 commit that the evidence ladder itself accepts as the item's integrating evidence (CORROBORATED_BY_COMMIT via the commit message, e.g. 2a1e7be for UI-011) also dates its start, whatever its subject head says"
+  },
+  "bookkeepingPr": {
+    "appliesTo": "PR title/branch links (ID_IN_TITLE / ID_IN_BRANCH): such a link becomes BOOKKEEPING_PR, which is never evidence (no coded, integrated, tested, actual start, lane, owner or NOT_STARTED veto) and is listed in candidateLinks as bookkeeping:#N",
+    "wholeTitleRegex": "^(?:docs\\((?:planning|backlog|inventory|queue|ledger)\\):|(?:planning|plan|queue|ledger|reports?):|backlog(?![-\\w])|write-?back(?![-\\w]))|\\(backlog only\\)",
+    "wholeTitleFlags": "i",
+    "statusClauseRegex": "((?:[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)+(?:\\.\\.\\d+)?)(?:\\s*[/,]\\s*[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)+(?:\\.\\.\\d+)?)*)\\s+(?:DONE|READY|non-READY)\\b",
+    "note": "whole title bookkeeping (head word Backlog / write-back, or planning: / plan: / queue: / ledger: / reports: / docs(planning): with the colon, or '(backlog only)' anywhere): every title and branch link of the PR; otherwise an id named only in a status clause ('backlog #76 (UI-132 DONE, batch 3)', '#81 UI-032/UI-026 DONE write-back') is bookkeeping for that id while ids named elsewhere in the title (wave members '#78 UI-047 + #79 UI-201') stay ID_IN_TITLE. Code PRs titled COORD: / LANE-A: / MOB-1: ... (docs only) are not bookkeeping"
   },
   "fieldsSearched": {
     "pr": [
@@ -80,7 +90,8 @@
     "ID_IN_COMMIT_MESSAGE",
     "ROUTE_LITERAL_AT_HEAD",
     "IPC_CHANNEL_LITERAL_AT_HEAD",
-    "OVERLAY"
+    "OVERLAY",
+    "BOOKKEEPING_PR"
   ],
   "strengthPolicy": {
     "corroborateMergedClaim": [
@@ -110,6 +121,9 @@
       "ID_IN_COMMIT_MESSAGE",
       "INVENTORY_WEAK"
     ],
+    "neverEvidence": [
+      "BOOKKEEPING_PR"
+    ],
     "supportingOnly": [
       "QUEUE_TEXT",
       "LEDGER_TEXT",
@@ -124,7 +138,8 @@
       "ROUTE_LITERAL_AT_HEAD": "MEDIUM",
       "IPC_CHANNEL_LITERAL_AT_HEAD": "MEDIUM",
       "OVERLAY": "MEDIUM",
-      "INVENTORY_WEAK": "LOW"
+      "INVENTORY_WEAK": "LOW",
+      "BOOKKEEPING_PR": "NONE"
     }
   },
   "laneBranchRules": [

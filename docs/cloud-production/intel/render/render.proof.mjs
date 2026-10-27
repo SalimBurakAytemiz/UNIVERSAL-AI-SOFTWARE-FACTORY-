@@ -24,6 +24,7 @@ check('MD has headings A-J exactly in order', JSON.stringify(heads) === JSON.str
 check('MD first line is the //TR comment', md.split('\n')[0] === '<!-- //TR: UASCO günlük proje istihbarat raporu (deterministik, tek kaynak) -->');
 check('MD executive summary (A) comes first', md.indexOf(SECTION_HEADINGS[0]) < md.indexOf(SECTION_HEADINGS[1]));
 const row = (label) => md.split('\n').find((l) => l.startsWith(`| ${label}`));
+const rows0 = () => parseCsv(inventoryCsv(m)).slice(1);
 const inv = inventoryJson(m, { inputsShort: {} });
 check('anchor: live denominators equal JSON metrics (FULL liveNow, FULL 19-Oct, MVP liveNow, MVP 19-Oct)', row('Canlı iş (payda)') === `| Canlı iş (payda) | ${r.metrics.full.n} | ${r.metrics.baseline741.n} | ${r.metrics.mvp.n} | ${r.metrics.mvpBaseline.n} |`);
 // R2 LOW: an open PR without a file list is founder UNKNOWN (never 'hayır' / 0); a known file list keeps the legacy boolean/number (fails on 4e1a897)
@@ -31,6 +32,14 @@ const op5 = r.openPrs.find((p) => p.number === 5), op30 = r.openPrs.find((p) => 
 check('R2 open PR #5 without a file list: founder UNKNOWN, protectedFiles null, MD row UNKNOWN (4e1a897: founder false / 0 / hayır)', !!op5 && op5.protectedFilesKnown === false && op5.founder === 'UNKNOWN' && op5.protectedFiles === null && /^\| #5 \|.*\| UNKNOWN \(dosya listesi alınamadı\) \| UNKNOWN \(dosya listesi yok\) \|/m.test(md) && !r.founder.some((f) => f.pr === 5) && r.founderFilesUnknown.some((f) => f.pr === 5 && /file list UNKNOWN/.test(f.action)));
 check('R2 open PR #30 with a known protected file keeps the legacy types (founder true, protectedFiles 1)', !!op30 && op30.founder === true && op30.protectedFiles === 1 && op30.protectedFilesKnown === true);
 check('R2 inventory JSON carries corroboratingWeakPrs (WEAK-only corroboration listed apart from integratedPrs)', (inv.items.find((x) => x.id === 'UI-025') || {}).corroboratingWeakPrs?.join() === '6' && (inv.items.find((x) => x.id === 'UI-025') || {}).integratedPrs?.length === 0);
+// R3 LOW (fails on f0f537c): a WEAK-only row is visible as such in the 323 table, the CSV and the JSON docs; bookkeeping PRs are named in the docs
+{
+  const d2 = md.split('\n').find((l) => l.startsWith('| UI-025 | screens |'));
+  const cr = rows0().find((c) => c[0] === 'UI-025');
+  check("R3 D.2 row of the WEAK-only UI-025 shows CORROBORATED_BY_WEAK_REF, 'WEAK: #6' and the WEAK reason (f0f537c: EVIDENCED_BY_PR | — | ... | —)", !!d2 && d2.includes('| CORROBORATED_BY_WEAK_REF | WEAK: #6 |') && /WEAK 19-Oct reference/.test(d2));
+  check("R3 CSV has a corroboratingWeakPrs column: '#6' for UI-025, empty for an EXPLICIT row (UI-001)", CSV_COLUMNS.includes('corroboratingWeakPrs') && !!cr && cr[CSV_COLUMNS.indexOf('corroboratingWeakPrs')] === '#6' && rows0().find((c) => c[0] === 'UI-001')[CSV_COLUMNS.indexOf('corroboratingWeakPrs')] === '');
+  check('R3 JSON field docs name bookkeeping PRs and other-item references (integrated) and document actual.earlierMention; the ratio reason excludes both', /BOOKKEEPING_PR/.test(r.fieldSemantics['items[].substeps.integrated']) && /assigns to another item never corroborates/.test(r.fieldSemantics['items[].substeps.integrated']) && !!r.fieldSemantics['items[].actual.earlierMention'] && /never a reference assigned to another item/.test(r.metrics.ratios3.codeIntegrationRatio.reason) && /bookkeeping PR or commit/.test(r.metrics.ratios3.codeIntegrationRatio.reason));
+}
 // LOW label fixes (each fails on 4fe58dd)
 check('LOW runtime row shows NOT_MEASURED, never 0/n (%0)', /^\| Runtime doğrulandı \(runtimeVerificationRatio\) \| NOT_MEASURED/.test(row('Runtime doğrulandı') || '') && !/\| 0\/\d+ \(%0\)/.test(row('Runtime doğrulandı') || ''));
 check("LOW 'FULL' has one meaning: the scope subset is FULL_ONLY (31 Ekim view and inventory scope)", md.includes('Ertelenebilir (DEFERRED + FULL_ONLY; 19 Ekim tabanı)') && !md.includes('(DEFERRED + FULL)') && inv.items.every((x) => x.scope !== 'FULL'));
