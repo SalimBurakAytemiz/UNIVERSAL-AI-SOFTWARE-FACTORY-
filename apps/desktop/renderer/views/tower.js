@@ -53,7 +53,7 @@ export async function render(ctx){
     const nodes=logs.ok?(logs.data.logs??[]).map(x=>h(doc,"button",{type:"button",class:"btn",on:{click:async()=>{const y=await api.raw(`/v1/runs/${encodeURIComponent(runId)}/logs/${encodeURIComponent(x.name)}`);logText.textContent=y.ok?(y.data.truncated?`${ctx.t("tower.truncated")}\n`:"")+y.data.text:ctx.t(`state.${y.state}`)}},text:`${x.name} (${ctx.t("tower.bytes",{n:x.size})})`})):[];
     logButtons.replaceChildren(...(nodes.length?nodes:[logs.ok?doc.createTextNode(ctx.t("tower.noLogs")):stateNote(ctx,logs.state)]));
   }
-  const runList=runs.runs.slice(0,20).map(x=>h(doc,"button",{type:"button",class:"btn",on:{click:()=>loadRun(x.runId)},text:`${x.runId} · ${statusLabel(ctx,x.summary?.status??x.manifest?.status??"RUNNING")}`}));
+  const runList=runs.runs.slice(0,20).map(x=>h(doc,"button",{type:"button",class:"btn",on:{click:()=>loadRun(x.runId)},text:`${x.runId} · ${statusLabel(ctx,x.summary?.status??x.manifest?.status??MISSING)}`}));
   // //TR: Kuyrukta öğe yok ama sunucu okunamayan öğe saydıysa "bekleyen yok" denmez; kesik/okunamayan notları paneli tamamlar.
   const attention=h(doc,"div",{id:"attention"}),attSum=attentionSummary(att);
   if(attSum.kind==="ATTENTION"&&att.blocked.length===0)attention.append(h(doc,"p",{class:"note",text:ctx.t("attention.unreadable")}));else ctx.renderAttention(attention,att);
