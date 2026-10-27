@@ -14,11 +14,11 @@ export function runBucket(status){
 
 /**
  * Koşuları kovalara böler: canlı işçi durumları (RUN_LIVE_STATES sırasıyla), sonra "kuyrukta (henüz çalışmıyor)", sonra "durum bilinmiyor". Kart sınırı MAX_FLEET_CARDS; canlı kovalar önce yer alır.
- * -> {total, live, queued, unknown, shown, truncated, groups:[{status,bucket,count,items}]}; count kovanın gerçek (sınırsız) sayısı, items gösterilen kartlardır; live yalnız canlı işçi sayısıdır.
+ * -> {total, live, queued, unknown, other, shown, truncated, groups:[{status,bucket,count,items}]}; count kovanın gerçek (sınırsız) sayısı, items gösterilen kartlardır; live yalnız canlı işçi sayısıdır.
  */
 export function fleetGroups(runs,max=MAX_FLEET_CARDS){
   const valid=Array.isArray(runs)?runs.filter(r=>r&&typeof r==="object"):[];
-  const live=liveRuns(valid),queued=queuedRuns(valid),unknown=valid.filter(r=>runBucket(r.status)===FLEET_BUCKETS.UNKNOWN);
+  const live=liveRuns(valid),queued=queuedRuns(valid),unknown=valid.filter(r=>runBucket(r.status)===FLEET_BUCKETS.UNKNOWN),other=valid.filter(r=>runBucket(r.status)===FLEET_BUCKETS.OTHER).length;
   let room=Math.max(0,Math.trunc(max)),shown=0;
   const groups=[];
   const add=(status,bucket,all)=>{
@@ -30,7 +30,7 @@ export function fleetGroups(runs,max=MAX_FLEET_CARDS){
   add(RUN_QUEUED_STATE,FLEET_BUCKETS.QUEUED,queued);
   add(FLEET_BUCKETS.UNKNOWN,FLEET_BUCKETS.UNKNOWN,unknown);
   const total=live.length+queued.length+unknown.length;
-  return {total,live:live.length,queued:queued.length,unknown:unknown.length,shown,truncated:shown<total,groups};
+  return {total,live:live.length,queued:queued.length,unknown:unknown.length,other,shown,truncated:shown<total,groups};
 }
 
 /** Kart alanları: yalnız veride gerçekten olan değerler; yoksa null (arayüz UNKNOWN/— gösterir, uydurma yok). */

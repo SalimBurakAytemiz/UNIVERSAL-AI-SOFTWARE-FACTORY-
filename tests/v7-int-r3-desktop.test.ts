@@ -90,6 +90,14 @@ describe("INT-R3 D-M1-07 canonical role counts in the desktop", () => {
     const fact = all(r).find(n => n.dataset.fact === "tower.agents")!;
     expect(fact.textContent).toContain("599 registered · 0 certified · 363 legacy reference");
   });
+  // //TR: A-RUNSTATE-1 (#273 LOW): durum bilgisi olmayan bir koşu kule listesinde "Çalışıyor/Running" diye görünmez; durum "—" olur.
+  it("control tower run list shows a run without any status as '—', never as Running", async () => {
+    const {ctx, doc} = await mkCtx(p => (p === "/v1/runs" ? {runs: [{runId: "run_a1"}, {runId: "run_b2", summary: {status: "FAILED"}}, {runId: "run_c3", manifest: {status: "RUNNING"}}]} : p === "/v1/agents" ? AGENTS : undefined));
+    const view = await load(rend, "views", "tower.js");
+    const r = mount(doc, await view.render(ctx));
+    const btns = all(r).filter(n => n.tagName === "BUTTON" && n.textContent.startsWith("run_")).map(n => n.textContent);
+    expect(btns).toEqual(["run_a1 · —", "run_b2 · Failed", "run_c3 · Running"]);
+  });
   it("home cockpit tile renders the canonical registered count", async () => {
     const m = await load(rend, "model.js");
     const c = m.mapCockpit(COCKPIT);

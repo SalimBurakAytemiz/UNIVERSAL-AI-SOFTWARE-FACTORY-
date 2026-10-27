@@ -575,9 +575,9 @@ describe("test+states workforce: unique DOM ids (regression: duplicate wf-detail
   });
 });
 
-describe("UI-030 active worker fleet grid (live runs only, UNKNOWN stays UNKNOWN)", () => {
+describe("UI-030 worker fleet grid (live / queued / unknown buckets, UNKNOWN stays UNKNOWN)", () => {
   const run = (i: number, status: string, extra: any = {}) => ({runId: `run-${String(i).padStart(4, "0")}`, status, ...extra});
-  async function fleetCtx(feed: "ok" | "off" | "err", runs: any[] = []) {
+  async function fleetCtx(feed: "ok" | "off" | "err", runs: any[] = [], lang: "en" | "tr" = "en") {
     const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js");
     const doc = new D(), store = st.createStore(null), navigated: string[] = [];
     const bridge = {apiGet: async (p: string) => {
@@ -586,10 +586,10 @@ describe("UI-030 active worker fleet grid (live runs only, UNKNOWN stays UNKNOWN
       if (p === "/v1/work-runs") { if (feed === "off") throw new Error("Failed to fetch"); if (feed === "err") return {workRuns: "bad"}; return {workRuns: runs}; }
       throw new Error(`${p}: HTTP 404`);
     }};
-    const t = (k: string, v?: any) => i18n.translate("en", k, v);
-    const ctx: any = {doc, store, api: apiMod.createApi({bridge, store}), i18n: {lang: "en", t}, t, navigate: (id: string) => navigated.push(id), rerender: () => {}, settleFocus: () => {}, principal: "FOUNDER_LOCAL"};
+    const t = (k: string, v?: any) => i18n.translate(lang, k, v);
+    const ctx: any = {doc, store, api: apiMod.createApi({bridge, store}), i18n: {lang, t}, t, navigate: (id: string) => navigated.push(id), rerender: () => {}, settleFocus: () => {}, principal: "FOUNDER_LOCAL"};
     const view = await load("views", "workforce.js"); view.resetWorkforceView();
-    return {node: (await view.render(ctx, ROUTE)) as N, navigated};
+    return {node: (await view.render(ctx, ROUTE)) as N, navigated, ctx, view};
   }
   const fleetNode = (n: N) => byId(n, "wf-fleet")!;
 
@@ -640,8 +640,8 @@ describe("UI-030 active worker fleet grid (live runs only, UNKNOWN stays UNKNOWN
     expect(byData(fleetNode(few.node), "truncated").length).toBe(0);
     const many = await fleetCtx("ok", Array.from({length: 60}, (_, i) => run(i, "RUNNING")));
     const note = byData(fleetNode(many.node), "truncated"); expect(note.length).toBe(1);
-    // //TR: A-RUNSTATE-1: not artık canlı + kuyruk + bilinmeyen kartların toplamını söyler, hepsine "canlı" demez.
-    expect(text(note[0])).toBe("Showing 50 of 60 runs.");
+    // //TR: A-RUNSTATE-1 (#273 LOW): not artık canlı + kuyruk + bilinmeyen kartları adlandırır; diğer durumlar (yeniden deneme vb.) "tüm koşular" gibi okunmaz.
+    expect(text(note[0])).toBe("Showing 50 of 60 live, queued and unknown-status runs.");
     expect(byTag(fleetNode(many.node), "li").length).toBe(50);
   });
   it("read failure replaces the grid with the honest state note, never a 0; empty gives an explicit note", async () => {
@@ -710,7 +710,8 @@ describe("UI-030 active worker fleet grid (live runs only, UNKNOWN stays UNKNOWN
     expect(byTag(region, "h3").map(text)).toEqual(["Running (50)", "Queued, not running yet (3)"]);
     expect(byTag(region, "ul").length).toBe(1);
     expect(byTag(region, "li").length).toBe(50);
-    expect(text(byData(region, "truncated", "1")[0])).toBe("Showing 50 of 53 runs.");
+    // //TR: #273 LOW: not canlı + kuyruk + bilinmeyen kartları adlandırır.
+    expect(text(byData(region, "truncated", "1")[0])).toBe("Showing 50 of 53 live, queued and unknown-status runs.");
   });
   it("renders QUEUED and unknown-status runs in their own labelled buckets with a summary; the Live runs table lists only live workers", async () => {
     const {node} = await fleetCtx("ok", [run(1, "RUNNING"), run(2, "CHECKPOINTING"), run(3, "QUEUED"), run(4, "STARTING"), run(5, "SUCCEEDED")]);
@@ -757,6 +758,178 @@ describe("UI-030 active worker fleet grid (live runs only, UNKNOWN stays UNKNOWN
       expect(text(row)).not.toContain(leased.leaseExpiresAt as string);
     } finally { fs.rmSync(dir, {recursive: true, force: true}); }
   });
+  // ---- #273 round-1 repair (COORD ledger d540bc9) ----
+  const mkRealRuns = () => {
+    const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-rs1-"));
+    const store = new WorkOsStore(path.join(dir, "data"));
+    const prj = store.createProject({tenantId: "tA", orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL"});
+    const msn = store.createMission({tenantId: "tA", projectId: prj.projectId, title: "T", objective: "O", acceptanceCriteria: ["c1"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
+    for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission({tenantId: "tA"}, msn.missionId, to, "go", "FOUNDER_LOCAL");
+    const queued = store.createRun({tenantId: "tA", missionId: msn.missionId, executor: {implementer: "a", reviewer: "b"}, createdBy: "FOUNDER_LOCAL"});
+    const leased = store.acquireRunLease(queued.runId, 60_000, "FOUNDER_LOCAL");
+    return {runs: store.listRuns({tenantId: "tA"}), leased, cleanup: () => fs.rmSync(dir, {recursive: true, force: true})};
+  };
+  const pillTexts = (n: N) => byTag(n, "li").map(li => [li.dataset.fleetRunId, li.dataset.bucket, text(all(li).find(x => x.className.split(" ").includes("pill"))!)]);
+
+  it("M1/M6 heartbeat: the REAL-shape Live-runs row and the opened detail panel show UNKNOWN, never the lease expiry or the start time under 'Last heartbeat' (en and tr)", async () => {
+    const real = mkRealRuns();
+    try {
+      const lease = real.leased.leaseExpiresAt as string, created = real.leased.createdAt as string;
+      expect(typeof lease).toBe("string"); expect(typeof created).toBe("string");
+      const work = await load("work-core.js");
+      for (const lang of ["en", "tr"] as const) {
+        const fmtLease = work.formatDateTime(lease, lang), fmtCreated = work.formatDateTime(created, lang);
+        expect(fmtLease).not.toBe("—");
+        const {node, ctx, view} = await fleetCtx("ok", real.runs, lang);
+        const row = byTag(byId(node, "wf-live")!, "tr").find(tr => tr.dataset.runId === real.leased.runId)!;
+        const cells = byTag(row, "td").map(text);
+        expect(cells[3], lang).toBe("—");
+        expect(text(row), lang).not.toContain(fmtLease);
+        expect(text(row), lang).not.toContain(fmtCreated);
+        byId(node, `wf-fleet-detail-${real.leased.runId}`)!.fire("click");
+        const open = (await view.render(ctx, ROUTE)) as N;
+        const panel = byData(open, "fleetDetailFor");
+        expect(panel.length, lang).toBe(1);
+        const dds = byTag(panel[0], "dd").map(text);
+        expect(dds[3], lang).toBe(lang === "en" ? "UNKNOWN" : "BİLİNMİYOR");
+        expect(text(panel[0]), lang).not.toContain(fmtLease);
+        expect(text(panel[0]), lang).not.toContain(fmtCreated);
+        expect(text(fleetNode(open)), lang).not.toContain(fmtLease);
+      }
+    } finally { real.cleanup(); }
+  });
+
+  it("M2: the fleet region label and lead name all three buckets (en and tr, exact text)", async () => {
+    const en = await fleetCtx("ok", [run(1, "RUNNING"), run(2, "QUEUED")]);
+    const regionEn = all(fleetNode(en.node)).find(n => n.attrs.get("role") === "region")!;
+    expect(regionEn.attrs.get("aria-label")).toBe("Worker runs by bucket: live, queued (not running yet) and unknown status");
+    expect(text(byTag(regionEn, "p")[0])).toBe("One card per live, queued or unknown-status work run. Only runs in a server worker-active status count as live; queued runs are not running yet and unknown-status runs are never counted as live. A role or heartbeat missing from the data stays UNKNOWN; the role catalog is not live agents.");
+    const tr = await fleetCtx("ok", [run(1, "RUNNING"), run(2, "QUEUED")], "tr");
+    const regionTr = all(fleetNode(tr.node)).find(n => n.attrs.get("role") === "region")!;
+    expect(regionTr.attrs.get("aria-label")).toBe("Kovaya göre işçi koşuları: canlı, kuyrukta (henüz çalışmıyor) ve durumu bilinmeyen");
+    expect(text(byTag(regionTr, "p")[0])).toBe("Her canlı, kuyruktaki veya durumu bilinmeyen iş koşusu için bir kart. Yalnız sunucunun işçi-aktif durumundaki koşular canlı sayılır; kuyruktakiler henüz çalışmıyor, durumu bilinmeyenler asla canlı sayılmaz. Veride olmayan rol veya kalp atışı BİLİNMİYOR kalır; rol kataloğu canlı ajan değildir.");
+  });
+
+  it("M3: a run list cut at the 500 cap (the server lists the oldest first) never yields definite counts or 'none': 502 runs with the live/queued ones dropped", async () => {
+    const work = await load("work-core.js");
+    expect(work.WORK_RUNS_CAP).toBe(500);
+    const cut = [...Array.from({length: 500}, (_, i) => run(i, "SUCCEEDED")), run(900, "RUNNING"), run(901, "QUEUED")];
+    const m = work.mapWorkRuns({workRuns: cut});
+    expect(m.truncated).toBe(true);
+    expect(m.items.length).toBe(500);
+    expect(m.items.some((r: any) => r.status === "RUNNING")).toBe(false);
+    const exact = work.mapWorkRuns({workRuns: cut.slice(0, 500)});
+    expect(exact.truncated).toBeUndefined();
+    expect(Object.keys(exact)).toEqual(["state", "items"]);
+    const {node} = await fleetCtx("ok", cut);
+    const fleet = fleetNode(node), live = byId(node, "wf-live")!;
+    expect(byData(fleet, "listTruncated", "1").length).toBe(1);
+    expect(byData(live, "listTruncated", "1").length).toBe(1);
+    expect(text(fleet)).not.toContain("There are no live work runs");
+    expect(text(live)).not.toContain("There are no live runs right now");
+    expect(byData(fleet, "fleetSummary").length).toBe(0);
+    expect(text(byData(fleet, "listTruncated", "1")[0])).toBe("Only the first 500 runs were read, so newer live or queued runs may be missing. Counts and \"none\" cannot be stated here; treat them as UNKNOWN.");
+    // visible live runs are still listed, but the summary line is replaced by the cut note
+    const some = await fleetCtx("ok", [...Array.from({length: 499}, (_, i) => run(i, "SUCCEEDED")), run(900, "RUNNING"), run(901, "SUCCEEDED")]);
+    expect(byData(fleetNode(some.node), "listTruncated", "1").length).toBe(1);
+    expect(byData(fleetNode(some.node), "fleetSummary").length).toBe(0);
+    expect(byTag(fleetNode(some.node), "li").map(li => li.dataset.fleetRunId)).toEqual(["run-0900"]);
+    expect(byData(byId(some.node, "wf-live")!, "listTruncated", "1").length).toBe(1);
+    expect(byTag(byId(some.node, "wf-live")!, "tr").map(tr => tr.dataset.runId).filter(Boolean)).toEqual(["run-0900"]);
+    const fine = await fleetCtx("ok", [run(1, "SUCCEEDED")]);
+    expect(byData(fine.node, "listTruncated").length).toBe(0);
+    expect(text(fleetNode(fine.node))).toContain("There are no live work runs");
+    const tr = await fleetCtx("ok", cut, "tr");
+    expect(text(byData(fleetNode(tr.node), "listTruncated", "1")[0])).toBe("Yalnız ilk 500 koşu okundu, bu yüzden daha yeni canlı veya kuyruktaki koşular eksik olabilir. Sayılar ve \"yok\" burada söylenemez; BİLİNMİYOR sayın.");
+  });
+
+  it("M5: liveRuns/queuedRuns are checked against EVERY server RunStatus (only ACTIVE_WORKER_STATUSES are live, only QUEUED is queued)", async () => {
+    const work = await load("work-core.js");
+    const runs = [...SERVER_RUN_STATUSES, "STARTING", "REVIEWING", "COMPLETED", "—"].map((s, i) => ({runId: `run_${i}_000000`, status: s}));
+    expect(work.liveRuns(runs).map((r: any) => r.status).sort()).toEqual([...ACTIVE_WORKER_STATUSES].sort());
+    expect(work.queuedRuns(runs).map((r: any) => r.status)).toEqual(["QUEUED"]);
+    for (const st of SERVER_RUN_STATUSES) {
+      const one = [{runId: "run_x_000000", status: st}];
+      expect(work.liveRuns(one).length, `live ${st}`).toBe((ACTIVE_WORKER_STATUSES as readonly string[]).includes(st) ? 1 : 0);
+      expect(work.queuedRuns(one).length, `queued ${st}`).toBe(st === "QUEUED" ? 1 : 0);
+    }
+    for (const st of ["RECOVERING", "CREATED", "HANDOFF_PENDING", "RETRY_SCHEDULED", "DEGRADED", "CANCELLING", "AWAITING_APPROVAL"]) {
+      expect(work.liveRuns([{status: st}]), st).toEqual([]);
+      expect(work.queuedRuns([{status: st}]), st).toEqual([]);
+    }
+  });
+
+  it("M7: a fleet holding only QUEUED, only UNKNOWN or a mix renders its buckets and summary and never the 'no live runs' note", async () => {
+    const q = await fleetCtx("ok", [run(1, "QUEUED"), run(2, "QUEUED")]);
+    const fq = fleetNode(q.node);
+    expect(byTag(fq, "h3").map(text)).toEqual(["Queued, not running yet (2)"]);
+    expect(text(byData(fq, "fleetSummary", "1")[0])).toBe("0 live, 2 queued (not running yet), 0 with an unknown status.");
+    expect(text(fq)).not.toContain("There are no live work runs");
+    expect(byTag(fq, "li").length).toBe(2);
+    const u = await fleetCtx("ok", [run(1, "STARTING")]);
+    const fu = fleetNode(u.node);
+    expect(byTag(fu, "h3").map(text)).toEqual(["Unknown status (1)"]);
+    expect(text(byData(fu, "fleetSummary", "1")[0])).toBe("0 live, 0 queued (not running yet), 1 with an unknown status.");
+    expect(text(fu)).not.toContain("There are no live work runs");
+    const mix = await fleetCtx("ok", [run(1, "STARTING"), run(2, "QUEUED"), run(3, "REVIEWING")]);
+    const fm = fleetNode(mix.node);
+    expect(byTag(fm, "h3").map(text)).toEqual(["Queued, not running yet (1)", "Unknown status (2)"]);
+    expect(text(byData(fm, "fleetSummary", "1")[0])).toBe("0 live, 1 queued (not running yet), 2 with an unknown status.");
+    expect(byData(fm, "fleetSummary").length).toBe(1);
+    expect(text(byId(mix.node, "wf-live")!)).toContain("There are no live runs right now");
+  });
+
+  it("M8: every card carries its bucket and a pill that matches its own status (no 'Running' pill on queued or unknown cards)", async () => {
+    const {node} = await fleetCtx("ok", [run(1, "RUNNING"), run(2, "CHECKPOINTING"), run(3, "QUEUED"), run(4, "STARTING"), run(5, "FOO_BAR")]);
+    expect(pillTexts(fleetNode(node))).toEqual([
+      ["run-0001", "LIVE", "Running"], ["run-0002", "LIVE", "Checkpointing"], ["run-0003", "QUEUED", "Queued"], ["run-0004", "UNKNOWN", "Starting"], ["run-0005", "UNKNOWN", "FOO_BAR"]]);
+    expect(byData(fleetNode(node), "kind", "LIVE").length).toBe(2);
+    const unk = byData(fleetNode(node), "kind", "UNKNOWN")[0], que = byData(fleetNode(node), "kind", "QUEUED")[0];
+    expect(byTag(unk, "li").map(li => li.dataset.status)).toEqual(["STARTING", "FOO_BAR"]);
+    expect(byTag(que, "li").map(li => li.dataset.status)).toEqual(["QUEUED"]);
+  });
+
+  it("M9: the Turkish text of the new keys is pinned exactly (titles, notes, summary, showing note, other note, CHECKPOINTING)", async () => {
+    const {node} = await fleetCtx("ok", [run(1, "RUNNING"), run(2, "CHECKPOINTING"), run(3, "QUEUED"), run(4, "STARTING"), run(5, "RETRY_SCHEDULED")], "tr");
+    const f = fleetNode(node);
+    expect(byTag(f, "h3").map(text)).toEqual(["Çalışıyor (1)", "Kontrol noktası alınıyor (1)", "Kuyrukta, henüz çalışmıyor (1)", "Durum bilinmiyor (1)"]);
+    expect(text(byData(f, "bucketNote", "QUEUED")[0])).toBe("Bir işçi bekliyor; bunlar canlı işçi değildir.");
+    expect(text(byData(f, "bucketNote", "UNKNOWN")[0])).toBe("Durum bu sürümün tanıdığı bir durum değil; asla canlı sayılmaz.");
+    expect(text(byData(f, "fleetSummary", "1")[0])).toBe("2 canlı, 1 kuyrukta (henüz çalışmıyor), 1 durumu bilinmiyor.");
+    expect(text(byData(f, "fleetOther", "1")[0])).toBe("Başka durumlarda (örneğin yeniden deneme planlı, kurtarılıyor veya onay bekliyor) 1 koşu daha var; filo ızgarasında gösterilmiyor.");
+    expect(pillTexts(f).map(x => x[2])).toEqual(["Çalışıyor", "Kontrol noktası alınıyor", "Kuyrukta", "Başlıyor"]);
+    const many = await fleetCtx("ok", Array.from({length: 60}, (_, i) => run(i, "RUNNING")), "tr");
+    expect(text(byData(fleetNode(many.node), "truncated", "1")[0])).toBe("Canlı, kuyruktaki ve durumu bilinmeyen 60 koşunun 50 tanesi gösteriliyor.");
+    const en = (await load("locales", "en.js")).default as Record<string, string>;
+    expect(en["mstatus.CHECKPOINTING"]).toBe("Checkpointing");
+  });
+
+  it("LOW: known non-live, non-terminal runs (retry scheduled, recovering, awaiting approval ...) are counted in an explicit 'other' note, not silently dropped; en text pinned", async () => {
+    const core = await load("fleet-core.js");
+    const g = core.fleetGroups([run(1, "RUNNING"), run(2, "RETRY_SCHEDULED"), run(3, "RECOVERING"), run(4, "AWAITING_APPROVAL"), run(5, "SUCCEEDED")]);
+    expect(g.other).toBe(4);
+    expect(g.total).toBe(1);
+    const {node} = await fleetCtx("ok", [run(1, "RUNNING"), run(2, "RETRY_SCHEDULED"), run(3, "RECOVERING")]);
+    expect(text(byData(fleetNode(node), "fleetOther", "2")[0])).toBe("2 more run(s) are in other states (for example retry scheduled, recovering or awaiting approval) and are not shown in the fleet grid.");
+    const none = await fleetCtx("ok", [run(1, "RUNNING")]);
+    expect(byData(fleetNode(none.node), "fleetOther").length).toBe(0);
+  });
+
+  it("LOW: data-fleet-summary appears exactly once, and fleetGroups sends non-string statuses to UNKNOWN (never live)", async () => {
+    const {node} = await fleetCtx("ok", [run(1, "RUNNING"), run(2, "QUEUED")]);
+    expect(byData(node, "fleetSummary").length).toBe(1);
+    const core = await load("fleet-core.js");
+    const sneaky = [run(1, 7 as any), run(2, {toString: () => "RUNNING"} as any), run(3, ["RUNNING"] as any), run(4, null as any), run(5, undefined as any), run(6, true as any)];
+    const g = core.fleetGroups(sneaky);
+    expect(g.live).toBe(0); expect(g.queued).toBe(0); expect(g.unknown).toBe(6);
+    expect(g.groups.map((x: any) => [x.status, x.bucket, x.count])).toEqual([["UNKNOWN", "UNKNOWN", 6]]);
+  });
+
+  it("LOW: the control-tower LIVE_STATUSES literal copy equals the server ACTIVE_WORKER_STATUSES", async () => {
+    const tower = await load("control-tower", "locales.js");
+    expect([...tower.LIVE_STATUSES]).toEqual([...ACTIVE_WORKER_STATUSES]);
+  });
+
   it("workforce.fleet.* keys are identical in EN and TR with the same placeholders", async () => {
     const tr = (await load("locales", "tr.js")).default as Record<string, string>, en = (await load("locales", "en.js")).default as Record<string, string>;
     const keys = (d: Record<string, string>) => Object.keys(d).filter(k => k.startsWith("workforce.fleet.")).sort();
@@ -778,7 +951,7 @@ describe("UI-030 fleet card does not collide with live-run rows", () => {
 
 describe("UI-032 worker detail panel from the fleet grid (run-level only, UNKNOWN stays UNKNOWN)", () => {
   const run = (i: number, status: string, extra: any = {}) => ({runId: `run-${String(i).padStart(4, "0")}`, status, ...extra});
-  it("fleetDetail resolves only live runs and always reports telemetry as null", async () => {
+  it("fleetDetail resolves only runs the grid shows (terminal runs are absent) and always reports telemetry as null", async () => {
     const core = await load("fleet-core.js");
     const runs = [run(1, "RUNNING", {role: "ROLE.X"}), run(2, "SUCCEEDED")];
     // //TR: A-RUNSTATE-1: ayrıntı kovayı da bildirir (bucket).

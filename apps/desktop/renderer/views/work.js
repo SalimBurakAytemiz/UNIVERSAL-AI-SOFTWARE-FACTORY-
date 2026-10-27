@@ -4,7 +4,7 @@ import {taskStatusControls} from "./task-status.js";
 import {taskRunsPanel,loadTaskRuns} from "./task-runs.js";
 import {h,panel,stateNote,emptyNote,chip,statusPill,statusLabel,badge,verificationChip,kpiTile,statePill,missionPill,timelineItem} from "../components.js";
 import {formatTime,formatCount,MISSING,missionPillKind} from "../model.js";
-import {MISSION_STATUSES,MISSION_PATH,RISK_LEVELS,RUN_EXPERTS,RUN_EXPERT_NONE,allowedNext,requiresConfirm,canStartRun,buildMissionRequest,filterMissions,formatDateTime,deriveTaskInspector,deriveWorkTimeline,runReadiness,runReasonHintKey,runStepRows} from "../work-core.js";
+import {MISSION_STATUSES,MISSION_PATH,RISK_LEVELS,RUN_EXPERTS,RUN_EXPERT_NONE,allowedNext,requiresConfirm,canStartRun,buildMissionRequest,filterMissions,formatDateTime,deriveTaskInspector,deriveWorkTimeline,runReadiness,runReasonHintKey,runStepRows,liveRuns} from "../work-core.js";
 import {drafts,selection,trackers,field,listEditor,statusBlock,setStatus,recordPost,resetMissionDraft,focusResult} from "../forms.js";
 import {performTransition,startRun,actionStatusId} from "../work-actions.js";
 import {runLinkPanel} from "./run-link.js";
@@ -30,7 +30,8 @@ const blockOf=(res,value,source)=>({state:res?.state??"ERROR",value:LIVE(res)?va
 
 /** //TR: Görev/koşu özeti KPI satırı — hepsi gerçek okumalardan: toplam mission, etkin koşu (ACTIVE kategorisi), Kurucu dikkati bekleyen mission (ATTENTION+BLOCKED) ve gerçekten doğrulanmış koşu (yalnız test-yürütme kanıtı olan; FD-REL-1). Hiçbir sayı uydurulmaz. */
 function summaryTiles(ctx,miss,runs){
-  const activeRuns=LIVE(runs)?runs.items.filter(r=>missionPillKind(r.status)==="ACTIVE").length:null;
+  // //TR: A-RUNSTATE-1 (#273 M4): "etkin koşu" sunucunun aktif-işçi kümesidir (liveRuns); eski missionPillKind(ACTIVE) STARTING/REVIEWING'i sayıp CHECKPOINTING'i saymıyordu.
+  const activeRuns=LIVE(runs)?liveRuns(runs.items).length:null;
   const attention=LIVE(miss)?miss.items.filter(m=>{const k=missionPillKind(m.status);return k==="ATTENTION"||k==="BLOCKED"}).length:null;
   const verifiedRuns=LIVE(runs)?runs.items.filter(r=>r&&r.testsExecuted===true).length:null;
   return h(ctx.doc,"div",{class:"kpi-row",role:"group","aria-label":ctx.t("work.kpiGroup")},

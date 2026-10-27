@@ -407,7 +407,8 @@ describe("B5 i18n", () => {
     for (const s of ["current", "done", "todo"]) need.add(`work.timeline.${s}`);
     for (const st of core.MISSION_STATUSES) need.add(`mstatus.${st}`);
     // //TR: A-RUNSTATE-1: RUN_ACTIVE_STATES yerine RUN_LIVE_STATES + QUEUED (CHECKPOINTING için mstatus anahtarı eklendi).
-    for (const st of [...core.RUN_LIVE_STATES, core.RUN_QUEUED_STATE, "AWAITING_APPROVAL", "FAILED", "CANCELLED", "STOPPED"]) need.add(`mstatus.${st}`);
+    // //TR: #273 LOW: eski RUN_ACTIVE_STATES mstatus.STARTING'i zorunlu kılıyordu; STARTING dev-run durumu olarak kullanılmaya devam ettiği için anahtar burada açıkça zorunlu tutulur.
+    for (const st of [...core.RUN_LIVE_STATES, core.RUN_QUEUED_STATE, "STARTING", "AWAITING_APPROVAL", "FAILED", "CANCELLED", "STOPPED"]) need.add(`mstatus.${st}`);
     // form.field.* her doğrulama alanı için
     const fields = new Set<string>();
     const collect = (r: any) => { for (const f of Object.keys(r.errors ?? {})) fields.add(f); };

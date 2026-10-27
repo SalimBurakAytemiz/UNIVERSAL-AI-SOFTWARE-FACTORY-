@@ -3,7 +3,7 @@
 // //TR: DÜRÜST ROL ANLAMI (FD-NIHAI): 599 kayıt rol TANIMLARI kataloğudur; 599 canlı/aktif ajan DEĞİLDİR ve sertifikalı işçi DEĞİLDİR. runtimeStatus (UNKNOWN) ve proficiencyStatus (NOT_EVALUATED / 0 sertifikalı) dürüst ve belirgin gösterilir; asla N aktif ajan / N sertifikalı işçi / canlı ajan etkinliği ima edilmez. API verisi HTML olarak yorumlanmaz (yalnız h()/textContent).
 import {h,panel,chip,stateNote,emptyNote,statusPill,statusLabel,statePill,miniBars} from "../components.js";
 import {formatCount,MISSING} from "../model.js";
-import {liveRuns,formatDateTime} from "../work-core.js";
+import {liveRuns,formatDateTime,WORK_RUNS_CAP} from "../work-core.js";
 import {selection} from "../forms.js";
 import {notVerifiedBadge,runNotVerified} from "../m1a.js";
 import {buildTaxonomy} from "../workforce-taxonomy-core.js";
@@ -84,12 +84,15 @@ const fleetSel={runId:null};
 export function resetWorkforceView(){fleetSel.runId=null;catState.cluster="ALL";catState.guild="ALL";catState.q="";catState.roleId=null;catState.page=0}
 const DISPLAY_LIMIT=150;
 
+function runsTruncatedNote(ctx){return h(ctx.doc,"p",{class:"note",dataset:{listTruncated:"1"},text:ctx.t("workforce.runs.truncated",{max:String(WORK_RUNS_CAP)})})}
 function liveRunsBody(ctx,runs){
   const doc=ctx.doc;
   if(runs.state!=="VERIFIED")return stateNote(ctx,runs.state,runs.state==="UNAVAILABLE"?"run.unavailable":undefined);
   const live=liveRuns(runs.items);
-  if(!live.length)return emptyNote(ctx,"workforce.live.none");
-  return h(doc,"div",{class:"table-wrap"},h(doc,"table",{class:"table"},
+  // //TR: A-RUNSTATE-1 (#273 M3): liste 500'de kesildiyse (en yeni koşular eksik olabilir) "canlı koşu yok" denmez; kesik notu gösterilir.
+  const cut=runs.truncated===true?runsTruncatedNote(ctx):null;
+  if(!live.length)return cut??emptyNote(ctx,"workforce.live.none");
+  return h(doc,"div",{class:"table-wrap"},cut,h(doc,"table",{class:"table"},
     h(doc,"caption",{class:"sr-only",text:ctx.t("workforce.live.caption")}),
     h(doc,"thead",{},h(doc,"tr",{},["workforce.live.run","workforce.live.role","workforce.live.status","workforce.live.heartbeat","workforce.live.mission"].map(k=>h(doc,"th",{scope:"col",text:ctx.t(k)})))),
     h(doc,"tbody",{},live.map(r=>h(doc,"tr",{dataset:{runId:r.runId}},
@@ -124,12 +127,13 @@ function groupTitle(ctx,g){
 function fleetBody(ctx,runs){
   const doc=ctx.doc;
   if(runs.state!=="VERIFIED")return stateNote(ctx,runs.state,runs.state==="UNAVAILABLE"?"run.unavailable":undefined);
-  const f=fleetGroups(runs.items);
-  if(!f.total)return emptyNote(ctx,"workforce.fleet.none");
+  const f=fleetGroups(runs.items),cut=runs.truncated===true;
+  // //TR: A-RUNSTATE-1 (#273 M3): kesik listede özet sayıları ve "canlı koşu yok" notu kesin söylenmez; yalnız görünen koşular kartlanır ve kesik notu gösterilir.
+  if(!f.total)return cut?runsTruncatedNote(ctx):emptyNote(ctx,"workforce.fleet.none");
   const unknown=()=>h(doc,"span",{class:"wf-fleet-unknown",dataset:{unknown:"1"},text:ctx.t("workforce.fleet.unknown")});
   const card=run=>{
     const c=fleetCard(run);
-    return h(doc,"li",{class:"wf-fleet-card",dataset:{fleetRunId:c.runId,status:c.status}},
+    return h(doc,"li",{class:"wf-fleet-card",dataset:{fleetRunId:c.runId,status:c.status,bucket:c.bucket}},
       h(doc,"span",{class:"mono wf-fleet-id",text:c.runId}),statusPill(ctx,c.status),runNotVerified(run)?notVerifiedBadge(ctx,"run"):null,
       h(doc,"dl",{class:"wf-fleet-kv"},
         h(doc,"div",{},h(doc,"dt",{text:ctx.t("workforce.fleet.role")}),h(doc,"dd",{},c.role?h(doc,"span",{text:c.role}):unknown())),
@@ -140,7 +144,8 @@ function fleetBody(ctx,runs){
   };
   return h(doc,"div",{class:"wf-fleet",role:"region","aria-label":ctx.t("workforce.fleet.label")},
     h(doc,"p",{class:"note",text:ctx.t("workforce.fleet.lead")}),
-    h(doc,"p",{class:"note",dataset:{fleetSummary:"1"},text:ctx.t("workforce.fleet.summary",{live:String(f.live),queued:String(f.queued),unknown:String(f.unknown)})}),
+    cut?runsTruncatedNote(ctx):h(doc,"p",{class:"note",dataset:{fleetSummary:"1"},text:ctx.t("workforce.fleet.summary",{live:String(f.live),queued:String(f.queued),unknown:String(f.unknown)})}),
+    !cut&&f.other>0?h(doc,"p",{class:"note",dataset:{fleetOther:String(f.other)},text:ctx.t("workforce.fleet.other",{n:String(f.other)})}):null,
     f.groups.map(g=>{const title=groupTitle(ctx,g);return h(doc,"section",{class:"wf-fleet-group",dataset:{bucket:g.status,kind:g.bucket},"aria-label":title},
       h(doc,"h3",{class:"wf-fleet-h",text:title}),
       g.bucket==="LIVE"?null:h(doc,"p",{class:"note",dataset:{bucketNote:g.bucket},text:ctx.t(g.bucket==="QUEUED"?"workforce.fleet.queued.note":"workforce.fleet.unknown.note")}),

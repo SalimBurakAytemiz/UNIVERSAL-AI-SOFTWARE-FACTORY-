@@ -538,10 +538,12 @@ export function mapWorkRun(x){
     evidence:mapRunEvidence(x.evidence),reviewer:identity||verdict?{identity,verdict}:null
   };
 }
+export const WORK_RUNS_CAP=500;
 export function mapWorkRuns(raw){
   if(!isObj(raw))return {state:"ERROR",items:[]};
   const list=pick(raw.workRuns,raw.runs,raw.items);if(!Array.isArray(list))return {state:"ERROR",items:[]};
-  return {state:"VERIFIED",items:list.slice(0,500).map(mapWorkRun).filter(Boolean)};
+  // //TR: A-RUNSTATE-1 (#273 M3): sunucu en eski koşuları önce döndürür; 500'ü aşan listede en yeni (canlı/kuyruk) koşular kesilir. truncated:true yalnız kesildiğinde eklenir; filo/canlı paneller bu durumda kesin sayı veya "yok" demez.
+  return {state:"VERIFIED",items:list.slice(0,WORK_RUNS_CAP).map(mapWorkRun).filter(Boolean),...(list.length>WORK_RUNS_CAP?{truncated:true}:{})};
 }
 export function mapWorkRunDetail(raw){
   const inner=isObj(raw)?pick(raw.workRun,raw.run,raw):null,run=mapWorkRun(inner);

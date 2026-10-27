@@ -3,6 +3,7 @@ import {describe, it, expect, beforeEach} from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import {pathToFileURL} from "node:url";
+import {ACTIVE_WORKER_STATUSES, RUN_STATUSES as SERVER_RUN_STATUSES} from "../core/workos/run-state.js";
 
 const rend = path.resolve(__dirname, "..", "apps", "desktop", "renderer");
 const load = async (...p: string[]): Promise<any> => import(pathToFileURL(path.join(rend, ...p)).href);
@@ -94,6 +95,18 @@ describe("UX WP-WORKOS honest states (no data)", () => {
     for (const bad of FORBIDDEN) expect(root.textContent, bad).not.toContain(bad);
   });
 
+  // //TR: A-RUNSTATE-1 (#273 M4): #/work "Etkin koşu" KPI'sı sunucunun her RunStatus'u için doğrulanır: yalnız ACTIVE_WORKER_STATUSES sayılır; STARTING/REVIEWING (RunStatus değil) sayılmaz, CHECKPOINTING sayılır.
+  it("the Active runs KPI counts exactly the server worker-active statuses, checked over every server status", async () => {
+    const view = await load("views", "work.js");
+    const statuses = [...SERVER_RUN_STATUSES, "STARTING", "REVIEWING", "COMPLETED"];
+    for (const st of statuses) {
+      const {ctx} = await mkCtx(fromFix({...FULL, "/v1/work-runs": {workRuns: [{runId: "run_k1_000000", status: st}]}}));
+      const root = await view.render(ctx);
+      expect(kpiValue(root, "wk-active"), st).toBe((ACTIVE_WORKER_STATUSES as readonly string[]).includes(st) ? "1" : "0");
+    }
+    const {ctx} = await mkCtx(fromFix({...FULL, "/v1/work-runs": {workRuns: statuses.map((st, i) => ({runId: `run_k${i}_000000`, status: st}))}}));
+    expect(kpiValue(await view.render(ctx), "wk-active")).toBe(String(ACTIVE_WORKER_STATUSES.length));
+  });
   it("marks OFFLINE separately from UNAVAILABLE", async () => {
     const view = await load("views", "work.js");
     const {ctx} = await mkCtx(() => { throw new Error("fetch failed"); });
@@ -111,7 +124,8 @@ describe("UX WP-WORKOS with real data", () => {
     expect(calls).toContain("/v1/missions");
     expect(calls).toContain("/v1/work-runs");
     expect(kpiValue(root, "wk-missions")).toBe("6");
-    expect(kpiValue(root, "wk-active")).toBe("2"); // RUNNING + STARTING, COMPLETE sayılmaz
+    // //TR: A-RUNSTATE-1 (#273 M4): kanıtlanmış yanlış pin düzeltildi; "etkin koşu" sunucunun aktif-işçi kümesidir. STARTING bir RunStatus değil (sayılmaz), COMPLETE sayılmaz; yalnız RUNNING canlıdır.
+    expect(kpiValue(root, "wk-active")).toBe("1");
     expect(kpiValue(root, "wk-attention")).toBe("2"); // BLOCKED + FOUNDER_ATTENTION_REQUIRED
     expect(kpiValue(root, "wk-verified")).toBe("1"); // yalnız VERIFY_TESTS kanıtı olan koşu
     for (const id of ["wk-missions", "wk-active", "wk-attention"]) expect(pills(kpi(root, id)), id).toEqual(["VERIFIED"]);
