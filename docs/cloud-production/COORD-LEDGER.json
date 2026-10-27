@@ -1182,6 +1182,16 @@
       "ref": "wf_e3e85809-772",
       "policy": "TEP-1",
       "at": "2026-10-27T10:47:32.634Z"
+    },
+    {
+      "pr": 282,
+      "sha": "658095e17245f0b4b12ab0300d53205260303c58",
+      "kind": "delta",
+      "base": "d641841aec3856986b8961bd83077396e82fa1c0",
+      "verdict": "BLOCKERS_1MEDIUM_2LOW_ring_overclaims_not_a_store_write",
+      "ref": "wf_65dfb426-0e0",
+      "policy": "TEP-1",
+      "at": "2026-10-27T10:54:00.463Z"
     }
   ],
   "tests": [],
