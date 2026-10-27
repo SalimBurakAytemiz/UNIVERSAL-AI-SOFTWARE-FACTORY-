@@ -175,7 +175,9 @@ export const QUARANTINE_MAX_FILES=500;
 export const QUARANTINE_FILES_SHOWN=20;
 const SHA40_RE=/^[0-9a-f]{40}([0-9a-f]{24})?$/,SHA256_RE=/^[0-9a-f]{64}$/;
 const QUARANTINE_KINDS=Object.freeze(["file","symlink","other"]);
-const cleanText=(x,max)=>typeof x==="string"&&x.length>0&&x.length<=max&&!/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/.test(x);
+// //TR: Görüntülenen bir yol/desen/saklama yeri, depo yazarının kontrol edebildiği metindir. Kontrol (Cc: C0, DEL, C1), biçim (Cf: bidi, sıfır genişlik, etiketler, FEFF, 00AD), vekil (Cs), satır/paragraf ayırıcı (Zl/Zp) ve Default_Ignorable karakterler (034F, FE0F, 3164 ...) GÖRÜNMEZ ya da satırı bozar; ".claude/settings\u2060.json" gerçeğinden ayırt edilemezdi. Ayrıca bir tabanda 8'den fazla yığılmış birleştirici işaret de gösterilmez.
+const HIDDEN_CHARS_RE=/[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}]/u,STACKED_MARKS_RE=/\p{M}{9,}/u;
+const cleanText=(x,max)=>typeof x==="string"&&x.length>0&&x.length<=max&&!HIDDEN_CHARS_RE.test(x)&&!STACKED_MARKS_RE.test(x);
 export function mapImportQuarantine(res){
   const unknown={state:"UNKNOWN"};
   const b=res&&!res.thrown&&isObj(res.body)?res.body:null,imp=b&&isObj(b.import)?b.import:null;

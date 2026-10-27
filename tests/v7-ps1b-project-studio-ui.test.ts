@@ -3084,7 +3084,7 @@ describe("LANE-A A-UI125-1 import success shows the agent configuration quaranti
     }
   });
 
-  // //TR: A-269-LOWS: q.undisplayable metni C1/bidi/biçimlendirme karakterlerini de kapsayacak şekilde genişletildi; bu testteki üç sabit metin (en/tr) buna göre güncellendi, başka assertion değişmedi.
+  // //TR: A-269-LOWS: q.undisplayable metni C1/bidi/biçimlendirme karakterlerini de kapsayacak şekilde genişletildi; L5 testindeki iki sabit metin (en/tr) buna göre güncellendi; C1/bidi testindeki metin yenidir; başka assertion değişmedi.
   it("L5: one repo-controlled undisplayable path (too long, TAB, newline) keeps the real quarantine count and commit, is counted but not listed, and is never NONE or a wrong-cause UNKNOWN", async () => {
     const r = await imp(() => ({status: 200, body: body(quarantine([fileOf("CLAUDE.md"), fileOf("evil\tname/CLAUDE.md"), fileOf("x".repeat(1030))]))}));
     expect(forms.drafts.status["studio-import"]).toMatchObject({ok: true, key: "studio.import.doneQuarantined", vars: {count: 3}});
@@ -3147,24 +3147,34 @@ describe("LANE-A A-UI125-1 import success shows the agent configuration quaranti
     expect(pc.mapImportQuarantine({status: 200, body: body(quarantine([noPath]))})).toEqual({state: "UNKNOWN"});
   });
 
-  it("C1 controls and bidi/format characters in a path are counted but not listed; in a pattern or storedUnder they are UNKNOWN; neighbouring printable characters stay listed", async () => {
+  it("hidden characters in a path are counted but not listed (every class: C1, bidi/format, zero-width, line/paragraph separators, BOM, soft hyphen, default-ignorables, tags, lone surrogate); in a pattern or storedUnder they are UNKNOWN; printable neighbours stay listed", async () => {
     const pc = await load(rend, "project-core.js");
     const map = (files: any[], over: Record<string, any> = {}) => pc.mapImportQuarantine({status: 200, body: body(quarantine(files, over))});
-    const hidden = ["\u0080", "\u0085", "\u009f", "​", "‎", "‏", "‪", "‭", "‮", "⁦", "⁧", "⁩"];
+    // //TR: #277 LOW(a): U+2060, U+2065 ve U+206A önceden "yazdırılabilir komşu" listesindeydi; Cf/Default_Ignorable (görünmez) oldukları için GİZLİ listeye taşındı. Bu bir sıkılaştırmadır, assertion gevşetilmedi.
+    const hidden = ["\u0080", "\u0085", "\u009f", "\u00ad", "\u061c", "\u180e", "\u200b", "\u200c", "\u200d", "\u200e", "\u200f", "\u2028", "\u2029", "\u202a", "\u202b", "\u202c", "\u202d", "\u202e",
+      "\u2060", "\u2064", "\u2065", "\u2066", "\u2067", "\u2068", "\u2069", "\u206a", "\u206f", "\ufeff", "\ufff9", "\ufffb", "\u034f", "\ufe0f", "\u3164", "\u115f", "\u{e0001}", "\u{e007f}", "\ud800"];
+    const label = (c: string) => "U+" + (c.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, "0");
     for (const c of hidden) {
       const m = map([fileOf("CLAUDE.md"), fileOf(`ev${c}il/CLAUDE.md`)]);
-      expect(m, JSON.stringify(c)).toMatchObject({state: "QUARANTINED", count: 2, recorded: 2, undisplayable: 1});
-      expect(m.files.map((f: any) => f.path), JSON.stringify(c)).toEqual(["CLAUDE.md"]);
-      expect(map([fileOf("CLAUDE.md", {pattern: `p${c}q`})]), JSON.stringify(c)).toEqual({state: "UNKNOWN"});
-      expect(map([fileOf("CLAUDE.md")], {storedUnder: `a${c}b`}), JSON.stringify(c)).toEqual({state: "UNKNOWN"});
+      expect(m, label(c)).toMatchObject({state: "QUARANTINED", count: 2, recorded: 2, undisplayable: 1});
+      expect(m.files.map((f: any) => f.path), label(c)).toEqual(["CLAUDE.md"]);
+      expect(map([fileOf("CLAUDE.md", {pattern: `p${c}q`})]), label(c)).toEqual({state: "UNKNOWN"});
+      expect(map([fileOf("CLAUDE.md")], {storedUnder: `a${c}b`}), label(c)).toEqual({state: "UNKNOWN"});
     }
-    const shown = [" ", "¡", "é", " ", "‐", " ", "⁠", "⁥", "⁪", "あ"];
+    const shown = ["~", "\u00a0", "\u00a1", "\u00ac", "\u00ae", "\u00b7", "\u00e9", "\u200a", "\u2010", "\u2027", "\u202f", "\u205f", "\u2070", "\ufffc", "\u3042", "\u0301"];
     for (const c of shown) {
       const m = map([fileOf(`ok${c}name/CLAUDE.md`)]);
-      expect(m, JSON.stringify(c)).toMatchObject({state: "QUARANTINED", undisplayable: 0});
-      expect(m.files.map((f: any) => f.path), JSON.stringify(c)).toEqual([`ok${c}name/CLAUDE.md`]);
+      expect(m, label(c)).toMatchObject({state: "QUARANTINED", undisplayable: 0});
+      expect(m.files.map((f: any) => f.path), label(c)).toEqual([`ok${c}name/CLAUDE.md`]);
     }
-    const r = await imp(() => ({status: 200, body: body(quarantine([fileOf("a‮b/CLAUDE.md")]))}));
+    // lookalike: the invisible character makes the name differ from the real one while rendering identically, so it must not be listed
+    expect(map([fileOf(".claude/settings\u2060.json")]).files).toEqual([]);
+    expect(map([fileOf(".claude/settings.json")]).files.map((f: any) => f.path)).toEqual([".claude/settings.json"]);
+    // stacked combining marks: at most 8 on one base are listed, 9 or more are counted but not listed
+    expect(map([fileOf("a" + "\u0301".repeat(8))]).files).toHaveLength(1);
+    expect(map([fileOf("a" + "\u0301".repeat(9))])).toMatchObject({state: "QUARANTINED", undisplayable: 1, files: []});
+    expect(map([fileOf("CLAUDE.md", {pattern: "a" + "\u0301".repeat(9)})])).toEqual({state: "UNKNOWN"});
+    const r = await imp(() => ({status: 200, body: body(quarantine([fileOf("a\u202eb/CLAUDE.md")]))}));
     expect(all(block(r.root)!).filter(n => "quarantineFile" in n.dataset)).toEqual([]);
     expect(text(all(block(r.root)!).find(n => "quarantineUndisplayable" in n.dataset)!)).toBe("1 recorded path(s) cannot be displayed (too long or containing control or hidden formatting characters); they are counted above but not listed.");
   });
