@@ -24,7 +24,7 @@ import {ENV_POLICY, REPO as PAR_REPO, descendantPids, fenceTrace, git, groupLive
 import cp from "node:child_process";
 import os from "node:os";
 import {EventEmitter} from "node:events";
-import {acquireProcessLock} from "../automation/lib/process-lock.mjs";
+import {acquireProcessLock, inspectProcessLock} from "../automation/lib/process-lock.mjs";
 
 let tmp = "";
 beforeEach(() => { tmp = tmpRoot("uasco-relfxc3-"); });
@@ -233,27 +233,71 @@ describe("C-PAR03-DIAG-1: the next Windows PAR-03 failure names the blocking pha
     expect(full.recent.every((w, k, all) => k === 0 || w.startedAtPerf >= all[k - 1].startedAtPerf)).toBe(true);
   });
 
-  // //TR: Aşama ataması: her aşamaya (yeniden yükleme, journal ekleme, snapshot, kilit bırakma) 150 ms'lik senkron bir gecikme verilince YALNIZ o aşamanın alanı ~150 ms olur, ötekiler 100 ms'in altında kalır ve toplam en az o kadardır; böylece alanlar birbirine karışmaz/sıfırlanmaz. Gecikme gerçek dosya işlemlerinde (casus) verilir, davranış değişmez.
-  it("store.writeStats() attributes a slow phase to its own field only: reload, journal, snapshot and lock release", () => {
+  // //TR: Aşama ataması iki testle sabitlenir. (1) SANAL SAAT (kesin, disk hızından bağımsız): performance.now() yalnız enjekte edilen gecikmeyle ilerleyen sabit bir saate bağlanır (gecikme = saati ilerlet), gerçek dosya işlemleri (casus) gecikmeyi verir ve davranış değişmez; gecikmeli aşamanın alanı TAM gecikmenin katıdır, ötekiler TAM 0'dır. Journal aşamasının SINIRLARI da sınanır: gecikme journal'ın openSync/fstatSync/fsyncSync/closeSync çağrılarına ayrı ayrı verilir (journalMs bunların hepsini taşımalıdır). (2) GERÇEK SAAT, FARKSAL: büyük bir gecikme (1000 ms) verilir; gecikmeli aşama en az 0,9 x gecikme kadar sürer (busy-wait bir TABANDIR, yük yalnız ekleyebilir) ve ötekiler, gecikmesiz taban yazılarının EN KÜÇÜĞÜNE göre 0,5 x gecikmeden az değişir; sınırlar eklenen gecikmenin ORANIDIR, sabit milisaniye değildir (yüklü bir Windows koşucusunda gecikmesiz bir aşama 170 ms sürmüştü).
+  const PHASES = ["lockWaitMs", "reloadMs", "journalMs", "snapshotMs", "releaseMs"] as const;
+  // //TR: Bir yazıda bir gecikmenin kaç kez tetiklendiği: snapshot yükleme VE ekleme sırasında olmak üzere 2 kez yeniden yazılır, ötekiler 1 kez.
+  const PHASE_TIMES: Record<string, number> = {reloadMs: 1, journalMs: 1, snapshotMs: 2, releaseMs: 1};
+  type PhaseFn = "readFileSync" | "writeSync" | "renameSync" | "rmSync" | "openSync" | "fstatSync" | "fsyncSync" | "closeSync";
+  type PhaseCase = [phase: typeof PHASES[number], fn: PhaseFn, when: (...a: unknown[]) => boolean];
+  const phaseCases = (c: ReturnType<typeof setup>): PhaseCase[] => [
+    ["reloadMs", "readFileSync", (...a) => a[0] === c.store.journalFile],
+    ["journalMs", "writeSync", (...a) => Buffer.isBuffer(a[1]) && a[1].toString("utf8").includes('"type":"RUN_LEASE"')],
+    ["snapshotMs", "renameSync", (...a) => String(a[1]).endsWith("snapshot.json")],
+    ["releaseMs", "rmSync", (...a) => a[0] === c.store.lockFile]
+  ];
+  // //TR: Journal aşamasının sınırı: journal tanıtıcısına (openSync(journal, "a") ile açılan) yapılan open/fstat/fsync/close çağrıları; tanıtıcı numaraları geri dönüştürüldüğü için close'ta kümeden silinir.
+  const journalBoundaryCases = (c: ReturnType<typeof setup>, fds: Set<unknown>): PhaseCase[] => [
+    ["journalMs", "openSync", (...a) => a[0] === c.store.journalFile && a[1] === "a"],
+    ["journalMs", "fstatSync", (...a) => fds.has(a[0])],
+    ["journalMs", "fsyncSync", (...a) => fds.has(a[0])],
+    ["journalMs", "closeSync", (...a) => fds.has(a[0])]
+  ];
+  const fsx = fs as unknown as Record<string, (...a: unknown[]) => unknown>;
+  const injectDelay = (c: ReturnType<typeof setup>, fds: Set<unknown>, fn: PhaseFn, when: (...a: unknown[]) => boolean, delay: () => void): (() => void) => {
+    const spies: Array<{mockRestore: () => void}> = [], real = fsx[fn].bind(fs);
+    if (fn === "fstatSync" || fn === "fsyncSync" || fn === "closeSync") {
+      const realOpen = fsx.openSync.bind(fs);
+      spies.push(vi.spyOn(fsx, "openSync").mockImplementation((...a: unknown[]) => { const fd = realOpen(...a); if (a[0] === c.store.journalFile && a[1] === "a") fds.add(fd); return fd; }));
+    }
+    if (fn !== "closeSync") {
+      const realClose = fsx.closeSync.bind(fs);
+      spies.push(vi.spyOn(fsx, "closeSync").mockImplementation((...a: unknown[]) => { try { return realClose(...a); } finally { fds.delete(a[0]); } }));
+    }
+    spies.push(vi.spyOn(fsx, fn).mockImplementation((...a: unknown[]) => { if (when(...a)) delay(); try { return real(...a); } finally { if (fn === "closeSync") fds.delete(a[0]); } }));
+    return () => { for (const sp of spies.reverse()) sp.mockRestore(); };
+  };
+  it("store.writeStats() attributes a slow phase to its own field only, exactly on a virtual clock: reload, journal (every syscall of it), snapshot and lock release", () => {
+    const c = setup("diag-phases-exact"); const A = c.mkRun("A"); const lease = c.store.acquireRunLease(A.runId, 5000, "diag");
+    const DELAY = 150, fds = new Set<unknown>();
+    for (const [phase, fn, when] of [...phaseCases(c), ...journalBoundaryCases(c, fds)]) {
+      let vclock = 5_000_000;
+      fds.clear();
+      const restore = injectDelay(c, fds, fn, when, () => { vclock += DELAY; });
+      const clock = vi.spyOn(performance, "now").mockImplementation(() => vclock);
+      try { c.store.renewRunLease(A.runId, lease.leaseId!, 5000, "diag"); } finally { clock.mockRestore(); restore(); }
+      const w = c.store.writeStats().recent.at(-1)!, label = phase + "/" + fn;
+      expect(w.type, label).toBe("RUN_LEASE");
+      for (const field of PHASES) expect(w[field], label + ": " + field).toBe(field === phase ? DELAY * PHASE_TIMES[phase] : 0);
+      expect([w.totalMs, w.snapshotWrites, w.lockRetries], label + ": total, snapshot rewrites, retries").toEqual([DELAY * PHASE_TIMES[phase], 2, 0]);
+    }
+  });
+
+  it("store.writeStats() attributes a slow phase to its own field only, differentially on the real clock: bounds are ratios of the injected delay", { timeout: 60_000 }, () => {
     const c = setup("diag-phases"); const A = c.mkRun("A"); const lease = c.store.acquireRunLease(A.runId, 5000, "diag");
+    const DELAY = 1000, fds = new Set<unknown>();
     const busy = (ms: number) => { for (const until = performance.now() + ms; performance.now() < until;) { /* senkron gecikme */ } };
-    const fsx = fs as unknown as Record<string, (...a: unknown[]) => unknown>;
-    const cases: Array<[phase: "reloadMs" | "journalMs" | "snapshotMs" | "releaseMs", fn: "readFileSync" | "writeSync" | "renameSync" | "rmSync", when: (...a: unknown[]) => boolean]> = [
-      ["reloadMs", "readFileSync", (...a) => a[0] === c.store.journalFile],
-      ["journalMs", "writeSync", (...a) => Buffer.isBuffer(a[1]) && a[1].toString("utf8").includes('"type":"RUN_LEASE"')],
-      ["snapshotMs", "renameSync", (...a) => String(a[1]).endsWith("snapshot.json")],
-      ["releaseMs", "rmSync", (...a) => a[0] === c.store.lockFile]
-    ];
-    for (const [phase, fn, when] of cases) {
-      const real = fsx[fn].bind(fs);
-      const spy = vi.spyOn(fsx, fn).mockImplementation((...a: unknown[]) => { if (when(...a)) busy(150); return real(...a); });
-      try { c.store.renewRunLease(A.runId, lease.leaseId!, 5000, "diag"); } finally { spy.mockRestore(); }
-      const w = c.store.writeStats().recent.at(-1)!;
+    const write = () => { c.store.renewRunLease(A.runId, lease.leaseId!, 5000, "diag"); return {...c.store.writeStats().recent.at(-1)!}; };
+    for (const [phase, fn, when] of phaseCases(c)) {
+      const base = {totalMs: Infinity, lockWaitMs: Infinity, reloadMs: Infinity, journalMs: Infinity, snapshotMs: Infinity, releaseMs: Infinity};
+      for (let i = 0; i < 3; i++) { const b = write(); for (const k of Object.keys(base) as Array<keyof typeof base>) base[k] = Math.min(base[k], b[k]); }
+      const restore = injectDelay(c, fds, fn, when, () => busy(DELAY));
+      let w: StoreWriteTiming;
+      try { w = write(); } finally { restore(); }
       expect(w.type, phase).toBe("RUN_LEASE");
-      expect(w[phase], `${phase} carries the delay`).toBeGreaterThanOrEqual(145);
-      expect(w.totalMs, `${phase}: the total covers the delay`).toBeGreaterThanOrEqual(145);
-      for (const other of ["lockWaitMs", "reloadMs", "journalMs", "snapshotMs", "releaseMs"] as const) if (other !== phase) expect(w[other], `${phase} delay must not leak into ${other}`).toBeLessThan(100);
-      expect(c.store.writeStats().slowest!.totalMs, `${phase}: the slowest write is at least this one`).toBeGreaterThanOrEqual(w.totalMs);
+      expect(w[phase], phase + " carries at least 0.9 x the injected delay as often as it fires (a busy wait is a floor: load can only add)").toBeGreaterThanOrEqual(0.9 * DELAY * PHASE_TIMES[phase]);
+      expect(w.totalMs, phase + ": the total covers the injected delay").toBeGreaterThanOrEqual(0.9 * DELAY * PHASE_TIMES[phase]);
+      for (const other of PHASES) if (other !== phase) expect(Math.abs(w[other] - base[other]), phase + " delay must not leak into (or be subtracted from) " + other).toBeLessThan(0.5 * DELAY);
+      expect(c.store.writeStats().slowest!.totalMs, phase + ": the slowest write is at least this one").toBeGreaterThanOrEqual(w.totalMs);
     }
   });
 
@@ -269,6 +313,7 @@ describe("C-PAR03-DIAG-1: the next Windows PAR-03 failure names the blocking pha
     const retried = during.lockRetries - before.lockRetries;
     expect(retried).toBeGreaterThanOrEqual(1);
     expect(retried).toBeLessThanOrEqual(10);
+    expect([during.lockAcquisitions - before.lockAcquisitions, during.lockTimeouts - before.lockTimeouts], "a timed-out wait is a timeout, not an acquisition").toEqual([0, 1]);
     expect(during.lockWaitMsTotal - before.lockWaitMsTotal).toBeGreaterThanOrEqual(10 * retried);
     expect(during.lockWaitMsMax).toBeGreaterThanOrEqual(10 * retried);
     const failed = during.recent[during.recent.length - 1];
@@ -279,7 +324,32 @@ describe("C-PAR03-DIAG-1: the next Windows PAR-03 failure names the blocking pha
     expect(ok.leaseId).toBeTruthy();
     const after = c.store.writeStats();
     expect([after.lockRetries, after.writes]).toEqual([during.lockRetries, during.writes + 1]);
+    expect([after.lockAcquisitions - during.lockAcquisitions, after.lockTimeouts - during.lockTimeouts], "the next write is one acquisition and no timeout").toEqual([1, 0]);
     expect(after.recent[after.recent.length - 1].type).toBe("RUN_LEASE");
+  });
+
+  // //TR: Çekişmeli ama BAŞARILI kilit edinmesi: kilit dosyası ilk 3 denemede canlı bir sahibe gösterilir (okuma casusu), 4. denemede dosya okunamaz ve silinir, 5. deneme edinir. O yazının çerçevesi ve toplamlar 4 denemeyi ve en az 4 x 10 ms beklemeyi taşır, kilit edinmesi 1 artar ve zaman aşımı OLMAZ (gerçek bekleme, deneme başına 15 ms uyku).
+  it("store.writeStats() attributes the retries and the wait of a contended but successful lock acquisition to that write, as one acquisition and no timeout", () => {
+    const c = setup("diag-lock-ok"); const A = c.mkRun("A");
+    fs.writeFileSync(c.store.lockFile, "{}");
+    const before = c.store.writeStats(), realRead = fsx.readFileSync.bind(fs); let reads = 0;
+    const read = vi.spyOn(fsx, "readFileSync").mockImplementation((...a: unknown[]) => {
+      if (a[0] !== c.store.lockFile) return realRead(...a);
+      reads += 1;
+      if (reads <= 3) return JSON.stringify({pid: process.pid, hostname: os.hostname(), runId: "busy", lockId: "lk", startedAt: new Date().toISOString()});
+      fs.rmSync(c.store.lockFile, {force: true});
+      throw Object.assign(new Error("ENOENT: simulated"), {code: "ENOENT"});
+    });
+    let ok: ReturnType<typeof c.store.acquireRunLease>;
+    try { ok = c.store.acquireRunLease(A.runId, 5000, "diag"); } finally { read.mockRestore(); }
+    expect(ok.leaseId).toBeTruthy();
+    expect(fs.existsSync(c.store.lockFile), "the write released its lock").toBe(false);
+    const after = c.store.writeStats(), w = after.recent.at(-1)!;
+    expect(w.type).toBe("RUN_LEASE");
+    expect([w.lockRetries, after.lockRetries - before.lockRetries, after.lockAcquisitions - before.lockAcquisitions, after.lockTimeouts - before.lockTimeouts]).toEqual([4, 4, 1, 0]);
+    expect(w.lockWaitMs, "the write's own lock wait").toBeGreaterThanOrEqual(40);
+    expect(after.lockWaitMsTotal - before.lockWaitMsTotal, "the total lock wait").toBeGreaterThanOrEqual(40);
+    expect(after.lockWaitMsMax, "the longest lock wait").toBeGreaterThanOrEqual(40);
   });
 
   // //TR: LOCK_TIMEOUT tanısı (Windows CI: par motoru `WORKOS_UNAVAILABLE: LOCK_TIMEOUT` ile öldü): zaman aşımı anında kim tuttu (pid/runId/başlangıç/yaş/canlılık), bekleyen ne kadar bekledi (deneme sayısıyla), dosya durumu, açılabilirlik ve delete-pending şüphesi (EPERM/EBUSY/EACCES ya da okunamayan kilit) kaydedilir; hata iletisi/kodu DEĞİŞMEZ, ayrıntı numaralandırılamaz `diagnostic` özelliğinde ve writeStats().lastLockTimeout'tadır. Date.now kısa süreliğine ileri atılır; 10 sn'lik zaman aşımı sabiti DEĞİŞMEZ.
@@ -346,6 +416,49 @@ describe("C-PAR03-DIAG-1: the next Windows PAR-03 failure names the blocking pha
         expect([t.deletePendingSuspected, t.suspicion]).toEqual([false, []]);
         expect(c.store.writeStats().lockTimeouts).toBe(2);
       } finally { fs.rmSync(c.store.lockFile, {force: true}); }
+    });
+
+    // //TR: Geçerlilik kuralı automation/lib/process-lock.mjs inspectProcessLock ile AYNIDIR (acquire'ın reddettiği kilit dosyası ACTIVE/OTHER_HOST diye etiketlenmez): boş/eksik ana bilgisayar adı, pozitif tamsayı olmayan pid ya da nesne olmayan belge INVALID'dir. Her örnek kanonik kararla (inspectProcessLock) AYNI testte karşılaştırılır; geçerli belgeler durumlarını korur.
+    it("a lock document that process-lock.mjs rejects as INVALID (empty or missing host, pid not a positive integer, not an object) is reported INVALID; valid documents keep ACTIVE and OTHER_HOST", () => {
+      const c = setup("diag-lt-invalid"); const A = c.mkRun("A");
+      const host = os.hostname();
+      const invalid: Array<[label: string, doc: unknown]> = [
+        ["empty host", {pid: process.pid, hostname: "", runId: "r"}], ["missing host", {pid: process.pid, runId: "r"}], ["null host", {pid: process.pid, hostname: null, runId: "r"}],
+        ["pid 0", {pid: 0, hostname: host, runId: "r"}], ["negative pid", {pid: -5, hostname: host, runId: "r"}], ["fractional pid", {pid: 1.5, hostname: host, runId: "r"}], ["string pid", {pid: String(process.pid), hostname: host, runId: "r"}], ["missing pid", {hostname: host, runId: "r"}], ["null pid", {pid: null, hostname: host, runId: "r"}],
+        ["other host with pid 0", {pid: 0, hostname: "other-host", runId: "r"}], ["other host with fractional pid", {pid: 2.5, hostname: "other-host", runId: "r"}], ["empty object", {}], ["JSON null", null], ["JSON number", 7], ["JSON array", []], ["JSON string", "x"]
+      ];
+      const probe = (doc: unknown) => { fs.writeFileSync(c.store.lockFile, JSON.stringify(doc)); try { const t = (lockTimeout(c, A.runId), c.store.writeStats().lastLockTimeout!); return {t, canonical: inspectProcessLock(c.store.lockFile).state as string}; } finally { fs.rmSync(c.store.lockFile, {force: true}); } };
+      for (const [label, doc] of invalid) {
+        const {t, canonical} = probe(doc);
+        expect([label, t.holder.state, canonical, t.lastError.message, t.suspicion, t.deletePendingSuspected, t.holder.pidAlive]).toEqual([label, "INVALID", "INVALID", "SUPERVISOR_LOCK_FAIL_CLOSED state=INVALID", [], false, null]);
+      }
+      const zero = probe({pid: 0, hostname: host, runId: "r"});
+      expect(zero.t.holder).toMatchObject({state: "INVALID", pid: 0, hostname: host, runId: "r"});
+      expect(lockDiagText(c.store.writeStats())).toContain(`holder INVALID pid=0 alive=? runId=r host=${host}`);
+      const valid = [["other host", {pid: 4242, hostname: "other-host", runId: "r"}, "OTHER_HOST"], ["live pid on this host", {pid: process.pid, hostname: host, runId: "r"}, "ACTIVE"], ["numeric host (truthy: process-lock.mjs calls it another host)", {pid: process.pid, hostname: 5, runId: "r"}, "OTHER_HOST"]] as const;
+      for (const [label, doc, state] of valid) { const {t, canonical} = probe(doc); expect([label, t.holder.state, canonical], label).toEqual([label, state, state]); }
+      expect(c.store.writeStats().lockTimeouts).toBe(invalid.length + 1 + valid.length);
+    });
+
+    // //TR: Edinme hatası haritası en çok 8 FARKLI ileti tutar; fazlası "(other)" altına sayılır, tutulan bir iletinin tekrarı kendi anahtarında kalır. İletiler, kilit dosyasının her denemede farklı bir runId taşıması (okuma casusu) ile üretilir; Date.now, 14 okumadan (14 deneme) sonra ileri atılır; zaman aşımı sabiti DEĞİŞMEZ.
+    it("the acquire-failure map keeps at most 8 distinct messages, files the rest under (other) and keeps counting repeats of a kept message", () => {
+      const c = setup("diag-lt-cap"); const A = c.mkRun("A");
+      const holder = acquireProcessLock(c.store.lockFile, "diag-cap");
+      const fsx = fs as unknown as Record<string, (...a: unknown[]) => unknown>;
+      const realRead = fsx.readFileSync.bind(fs), order = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 8, 9]; let n = 0;
+      const read = vi.spyOn(fsx, "readFileSync").mockImplementation((...a: unknown[]) => {
+        if (a[0] !== c.store.lockFile) return realRead(...a);
+        return JSON.stringify({pid: process.pid, hostname: os.hostname(), runId: "cap" + order[Math.min(n++, order.length - 1)], lockId: "lk", startedAt: new Date().toISOString()});
+      });
+      const realNow = Date.now.bind(Date);
+      const now = vi.spyOn(Date, "now").mockImplementation(() => realNow() + (n >= order.length ? 60_000 : 0));
+      try { expect(() => c.store.acquireRunLease(A.runId, 5000, "diag")).toThrow(/LOCK_TIMEOUT/); } finally { now.mockRestore(); read.mockRestore(); holder(); }
+      const t = c.store.writeStats().lastLockTimeout!;
+      const key = (id: number) => `-: SUPERVISOR_ALREADY_RUNNING pid=${process.pid} runId=cap${id}`;
+      expect([t.retries, attempts(t.failures)]).toEqual([order.length - 1, order.length]);
+      expect(Object.keys(t.failures)).toHaveLength(9);
+      expect(t.failures).toEqual({[key(0)]: 2, [key(1)]: 2, [key(2)]: 1, [key(3)]: 1, [key(4)]: 1, [key(5)]: 1, [key(6)]: 1, [key(7)]: 1, "(other)": 4});
+      expect(lockDiagText(c.store.writeStats())).toContain(String.raw`"(other)":4`);
     });
 
     it("EPERM/EBUSY/EACCES on open, stat or read of the lock file are reported as delete-pending suspicion with the exact code and place", () => {
@@ -525,7 +638,7 @@ describe("C-PAR03-DIAG-1: the next Windows PAR-03 failure names the blocking pha
     expect(msg).toContain("FENCED thrown by: renewRunLease(A) perf=");
     expect(msg).toContain("[traced store calls: ");
     expect(msg).toMatch(/store: writes=\d+ lockAcquisitions=\d+ lockRetries=0 lockWaitMsTotal=[\d.]+ lockWaitMsMax=[\d.]+ slowest=\S+ [\d.]+ms@perf=[\d.]+ \(lock [\d.]+\/0 retries, reload [\d.]+, journal [\d.]+, snapshot [\d.]+x\d+, release [\d.]+\)/);
-    expect(msg).toMatch(/writes overlapping gap #1: RUN_LEASE [\d.]+ms@perf=[\d.]+ \(lock/);
+    expect(msg, "some listed gap overlaps the injected RUN_LEASE write (an unrelated runner pause may be gap #1)").toMatch(/writes overlapping gap #\d: RUN_LEASE [\d.]+ms@perf=[\d.]+ \(lock/);
     const stub = (ms: number) => ({maxStallMs: () => ms, cpuMs: () => 0, wallMs: () => 0, topGaps: () => []});
     expect(hbDiag(c, {A: A.runId}, [], stub(4000), 5000)).toContain("is AT OR ABOVE 3333 ms");
     expect(hbDiag(c, {A: A.runId}, [], stub(3000), 5000)).toContain("is BELOW 3333 ms");

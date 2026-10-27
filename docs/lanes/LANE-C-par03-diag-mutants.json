@@ -1,5 +1,5 @@
 {
- "//TR": "C-PAR03-DIAG-1 (relfx-c3:200 PAR-03 Windows fence tanılaması: store yazı aşamaları, stallProbe boşlukları, fenceTrace, hbDiag) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt `file` içinde TAM 1 kez geçen bir metni değiştirir; docs/lanes/LANE-C-par03-diag-mutants.mjs hepsini tests/v7-relfx-c3-remediation.test.ts içindeki \"C-PAR03-DIAG-1\" testleriyle çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. D1-D27 core/workos/store.ts ölçümü (D28 yoktur: write() yeniden girişli değildir, iç içe çerçeve kodu kaldırıldı), D29-D44 tests/support/par.ts, D45-D55 hbDiag iletisi ve prob başlatma sırasıdır, D56 fenceTrace'in sarmaladığı yöntemi çağırmamasıdır. L1-L37: LOCK_TIMEOUT tanısı (kim tuttu, bekleme, delete-pending şüphesi), tanı metni ve par motorunun stderr çıktısı.",
+ "//TR": "C-PAR03-DIAG-1 (relfx-c3:200 PAR-03 Windows fence tanılaması: store yazı aşamaları, stallProbe boşlukları, fenceTrace, hbDiag) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt `file` içinde TAM 1 kez geçen bir metni değiştirir; docs/lanes/LANE-C-par03-diag-mutants.mjs hepsini tests/v7-relfx-c3-remediation.test.ts içindeki \"C-PAR03-DIAG-1\" testleriyle çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. D1-D27 core/workos/store.ts ölçümü (D28 yoktur: write() yeniden girişli değildir, iç içe çerçeve kodu kaldırıldı), D29-D44 tests/support/par.ts, D45-D55 hbDiag iletisi ve prob başlatma sırasıdır, D56 fenceTrace'in sarmaladığı yöntemi çağırmamasıdır. L1-L37: LOCK_TIMEOUT tanısı (kim tuttu, bekleme, delete-pending şüphesi), tanı metni ve par motorunun stderr çıktısı. Onarım turu 1 (#282, koordinatör 08:45Z): A1-A7 aşama atamasının sızıntıları (journal/snapshot/kilit bırakma/yeniden yükleme yanlış alana yazılır; her biri HEM sanal saat (kesin) testiyle HEM gerçek saat farksal testiyle (600 ms gecikme, tabana göre 0,9 x ve 0,5 x oranları) TEK BAŞINA öldürülür), V1-V8 kilit belgesinin process-lock.mjs geçerlilik kuralıyla INVALID olması, B1-B5 edinme ve zaman aşımının ayrı sayılması (B4/B5: çekişmeli ama BAŞARILI edinmenin bekleme/denemesi), J1-J2 journal aşamasının sınırları (open ve close), K1-K4 edinme hatası haritasının 8 anahtar sınırı; D7/D9/L13 yeni kod konumlarına yeniden yönlendirildi (aynı davranış).",
  "mutants": [
   {
    "id": "D1",
@@ -47,7 +47,7 @@
    "id": "D7",
    "description": "the LOCK_TIMEOUT path records no lock wait",
    "file": "core/workos/store.ts",
-   "old": "          this.noteLock(performance.now() - lockStart, retries);\n          const info = this.probeLockTimeout(",
+   "old": "          this.noteLock(performance.now() - lockStart, retries, false);\n          const info = this.probeLockTimeout(",
    "new": "          const info = this.probeLockTimeout("
   },
   {
@@ -61,7 +61,7 @@
    "id": "D9",
    "description": "a successful acquisition records no lock wait",
    "file": "core/workos/store.ts",
-   "old": "    this.noteLock(performance.now() - lockStart, retries);\n    try { return fn(); } finally {",
+   "old": "    this.noteLock(performance.now() - lockStart, retries, true);\n    try { return fn(); } finally {",
    "new": "    try { return fn(); } finally {"
   },
   {
@@ -474,8 +474,8 @@
    "id": "L13",
    "description": "a lock of another host is not recognised",
    "file": "core/workos/store.ts",
-   "old": "if (h.hostname !== null && h.hostname !== os.hostname()) h.state = \"OTHER_HOST\";",
-   "new": "if (false) h.state = \"OTHER_HOST\";"
+   "old": "else if (doc.hostname !== os.hostname()) h.state = \"OTHER_HOST\";",
+   "new": "else if (false) h.state = \"OTHER_HOST\";"
   },
   {
    "id": "L14",
@@ -644,6 +644,204 @@
    "file": "tests/v7-par-engine.mts",
    "old": "  throw e;\n}",
    "new": "  process.exitCode = 0;\n}"
+  },
+  {
+   "id": "A1",
+   "description": "the snapshot rewrite is charged to the journal phase (the journal end is taken after the snapshot)",
+   "file": "core/workos/store.ts",
+   "edits": [
+    {
+     "old": "    const journalEnd = performance.now();\n    this.apply(this.state, entry);\n    this.sig = this.signature();\n    this.writeSnapshotBestEffort();",
+     "new": "    this.apply(this.state, entry);\n    this.sig = this.signature();\n    this.writeSnapshotBestEffort();\n    const journalEnd = performance.now();"
+    }
+   ]
+  },
+  {
+   "id": "A2",
+   "description": "the lock release time is charged to the lock wait",
+   "file": "core/workos/store.ts",
+   "old": "if (this.frame) this.frame.releaseMs += performance.now() - releaseStart;",
+   "new": "if (this.frame) this.frame.lockWaitMs += performance.now() - releaseStart;"
+  },
+  {
+   "id": "A3",
+   "description": "the lock release time is charged to the snapshot phase",
+   "file": "core/workos/store.ts",
+   "old": "if (this.frame) this.frame.releaseMs += performance.now() - releaseStart;",
+   "new": "if (this.frame) this.frame.snapshotMs += performance.now() - releaseStart;"
+  },
+  {
+   "id": "A4",
+   "description": "the journal time is charged to the snapshot phase",
+   "file": "core/workos/store.ts",
+   "old": "this.frame.journalMs += journalEnd - journalStart;",
+   "new": "this.frame.snapshotMs += journalEnd - journalStart;"
+  },
+  {
+   "id": "A5",
+   "description": "the reload time is charged to the journal phase",
+   "file": "core/workos/store.ts",
+   "old": "frame.reloadMs = performance.now() - reloadStart - (frame.snapshotMs - snapshotBefore);",
+   "new": "frame.journalMs = performance.now() - reloadStart - (frame.snapshotMs - snapshotBefore);"
+  },
+  {
+   "id": "A6",
+   "description": "the snapshot rewrite inside the reload is subtracted twice",
+   "file": "core/workos/store.ts",
+   "old": "frame.reloadMs = performance.now() - reloadStart - (frame.snapshotMs - snapshotBefore);",
+   "new": "frame.reloadMs = performance.now() - reloadStart - 2 * (frame.snapshotMs - snapshotBefore);"
+  },
+  {
+   "id": "A7",
+   "description": "only the last snapshot rewrite is timed (the time is assigned, not added)",
+   "file": "core/workos/store.ts",
+   "old": "this.frame.snapshotMs += performance.now() - snapshotStart;",
+   "new": "this.frame.snapshotMs = performance.now() - snapshotStart;"
+  },
+  {
+   "id": "V1",
+   "description": "an empty or missing host name is not INVALID",
+   "file": "core/workos/store.ts",
+   "old": "if (!doc.hostname || !Number.isInteger(pid) || pid <= 0) h.state = \"INVALID\";",
+   "new": "if (!Number.isInteger(pid) || pid <= 0) h.state = \"INVALID\";"
+  },
+  {
+   "id": "V2",
+   "description": "a pid that is not an integer is not INVALID",
+   "file": "core/workos/store.ts",
+   "old": "if (!doc.hostname || !Number.isInteger(pid) || pid <= 0) h.state = \"INVALID\";",
+   "new": "if (!doc.hostname || pid <= 0) h.state = \"INVALID\";"
+  },
+  {
+   "id": "V3",
+   "description": "pid 0 is not INVALID",
+   "file": "core/workos/store.ts",
+   "old": "if (!doc.hostname || !Number.isInteger(pid) || pid <= 0) h.state = \"INVALID\";",
+   "new": "if (!doc.hostname || !Number.isInteger(pid) || pid < 0) h.state = \"INVALID\";"
+  },
+  {
+   "id": "V4",
+   "description": "a negative pid is not INVALID",
+   "file": "core/workos/store.ts",
+   "old": "if (!doc.hostname || !Number.isInteger(pid) || pid <= 0) h.state = \"INVALID\";",
+   "new": "if (!doc.hostname || !Number.isInteger(pid) || pid === 0) h.state = \"INVALID\";"
+  },
+  {
+   "id": "V5",
+   "description": "another host's lock is judged before its validity (other host with pid 0 is OTHER_HOST)",
+   "file": "core/workos/store.ts",
+   "edits": [
+    {
+     "old": "if (!doc.hostname || !Number.isInteger(pid) || pid <= 0) h.state = \"INVALID\";\n      else if (doc.hostname !== os.hostname()) h.state = \"OTHER_HOST\";",
+     "new": "if (doc.hostname && doc.hostname !== os.hostname()) h.state = \"OTHER_HOST\";\n      else if (!doc.hostname || !Number.isInteger(pid) || pid <= 0) h.state = \"INVALID\";"
+    }
+   ]
+  },
+  {
+   "id": "V6",
+   "description": "a lock document that is not an object (null) is unreadable instead of INVALID",
+   "file": "core/workos/store.ts",
+   "old": "(typeof raw === \"object\" && raw !== null ? raw : {})",
+   "new": "raw"
+  },
+  {
+   "id": "V7",
+   "description": "the host check uses the string-only host (a numeric host name is INVALID, process-lock.mjs calls it another host)",
+   "file": "core/workos/store.ts",
+   "old": "if (!doc.hostname || !Number.isInteger(pid) || pid <= 0) h.state = \"INVALID\";",
+   "new": "if (!h.hostname || !Number.isInteger(pid) || pid <= 0) h.state = \"INVALID\";"
+  },
+  {
+   "id": "V8",
+   "description": "an invalid lock is labelled PRESENT",
+   "file": "core/workos/store.ts",
+   "old": "h.state = \"INVALID\";",
+   "new": "h.state = \"PRESENT\";"
+  },
+  {
+   "id": "B1",
+   "description": "a timed-out wait counts as an acquisition",
+   "file": "core/workos/store.ts",
+   "old": "if (acquired) d.lockAcquisitions += 1;",
+   "new": "d.lockAcquisitions += 1;"
+  },
+  {
+   "id": "B2",
+   "description": "the LOCK_TIMEOUT path reports an acquisition",
+   "file": "core/workos/store.ts",
+   "old": "this.noteLock(performance.now() - lockStart, retries, false);",
+   "new": "this.noteLock(performance.now() - lockStart, retries, true);"
+  },
+  {
+   "id": "B3",
+   "description": "a successful wait is never counted as an acquisition",
+   "file": "core/workos/store.ts",
+   "old": "this.noteLock(performance.now() - lockStart, retries, true);",
+   "new": "this.noteLock(performance.now() - lockStart, retries, false);"
+  },
+  {
+   "id": "K1",
+   "description": "the acquire-failure map keeps 7 distinct messages",
+   "file": "core/workos/store.ts",
+   "old": "failures.has(failure) || failures.size < 8 ? failure",
+   "new": "failures.has(failure) || failures.size < 7 ? failure"
+  },
+  {
+   "id": "K2",
+   "description": "the acquire-failure map keeps 9 distinct messages",
+   "file": "core/workos/store.ts",
+   "old": "failures.has(failure) || failures.size < 8 ? failure",
+   "new": "failures.has(failure) || failures.size < 9 ? failure"
+  },
+  {
+   "id": "K3",
+   "description": "a repeat of a kept message after the cap is filed under (other)",
+   "file": "core/workos/store.ts",
+   "old": "failures.has(failure) || failures.size < 8 ? failure",
+   "new": "failures.size < 8 ? failure"
+  },
+  {
+   "id": "K4",
+   "description": "the overflow bucket is renamed",
+   "file": "core/workos/store.ts",
+   "old": "? failure : \"(other)\"",
+   "new": "? failure : \"(rest)\""
+  },
+  {
+   "id": "B4",
+   "description": "a successful (contended) acquisition records no wait",
+   "file": "core/workos/store.ts",
+   "old": "this.noteLock(performance.now() - lockStart, retries, true);",
+   "new": "this.noteLock(0, retries, true);"
+  },
+  {
+   "id": "B5",
+   "description": "a successful (contended) acquisition records no retries",
+   "file": "core/workos/store.ts",
+   "old": "this.noteLock(performance.now() - lockStart, retries, true);",
+   "new": "this.noteLock(performance.now() - lockStart, 0, true);"
+  },
+  {
+   "id": "J1",
+   "description": "the journal phase starts after the journal file is opened (a slow open belongs to no phase)",
+   "file": "core/workos/store.ts",
+   "edits": [
+    {
+     "old": "    const journalStart = performance.now();\n    fs.mkdirSync(this.dataDir, {recursive: true});\n    const fd = fs.openSync(this.journalFile, \"a\");",
+     "new": "    fs.mkdirSync(this.dataDir, {recursive: true});\n    const fd = fs.openSync(this.journalFile, \"a\");\n    const journalStart = performance.now();"
+    }
+   ]
+  },
+  {
+   "id": "J2",
+   "description": "the journal phase ends before the journal file is closed (a slow close belongs to no phase)",
+   "file": "core/workos/store.ts",
+   "edits": [
+    {
+     "old": "    } finally { fs.closeSync(fd); }\n    const journalEnd = performance.now();",
+     "new": "    } finally { /* closed after the phase ends */ }\n    const journalEnd = performance.now();\n    fs.closeSync(fd);"
+    }
+   ]
   }
  ]
 }

@@ -41,7 +41,7 @@ export interface LockTimeoutInfo {
   lastError: {code: string | null; message: string}; failures: Record<string, number>;
   file: {state: "PRESENT" | "ABSENT" | "STAT_ERROR"; code: string | null; sizeBytes: number | null; mtimeAgeMs: number | null};
   open: {ok: boolean; code: string | null};
-  holder: {state: "ACTIVE" | "DEAD_PID" | "OTHER_HOST" | "PRESENT" | "ABSENT" | "UNPARSEABLE" | "UNREADABLE"; code: string | null; pid: number | null; hostname: string | null; runId: string | null; lockId: string | null; startedAt: string | null; ageMs: number | null; pidAlive: boolean | null; ownPid: boolean};
+  holder: {state: "ACTIVE" | "DEAD_PID" | "OTHER_HOST" | "INVALID" | "PRESENT" | "ABSENT" | "UNPARSEABLE" | "UNREADABLE"; code: string | null; pid: number | null; hostname: string | null; runId: string | null; lockId: string | null; startedAt: string | null; ageMs: number | null; pidAlive: boolean | null; ownPid: boolean};
   deletePendingSuspected: boolean; suspicion: string[];
 }
 export interface StoreWriteStats { writes: number; lockAcquisitions: number; lockRetries: number; lockWaitMsTotal: number; lockWaitMsMax: number; lockTimeouts: number; lastLockTimeout: LockTimeoutInfo | null; slowest: StoreWriteTiming | null; recent: StoreWriteTiming[] }
@@ -144,13 +144,16 @@ export class WorkOsStore {
     try { const st = fs.statSync(this.lockFile); info.file = {state: "PRESENT", code: null, sizeBytes: st.size, mtimeAgeMs: Math.round(now - st.mtimeMs)}; } catch (e) { info.file = {state: code(e) === "ENOENT" ? "ABSENT" : "STAT_ERROR", code: code(e), sizeBytes: null, mtimeAgeMs: null}; }
     try { fs.closeSync(fs.openSync(this.lockFile, "r")); info.open = {ok: true, code: null}; } catch (e) { info.open = {ok: false, code: code(e)}; }
     try {
-      const doc = JSON.parse(fs.readFileSync(this.lockFile, "utf8")) as {pid?: unknown; hostname?: unknown; runId?: unknown; lockId?: unknown; startedAt?: unknown};
+      const raw: unknown = JSON.parse(fs.readFileSync(this.lockFile, "utf8"));
+      const doc = (typeof raw === "object" && raw !== null ? raw : {}) as {pid?: unknown; hostname?: unknown; runId?: unknown; lockId?: unknown; startedAt?: unknown};
       const h = info.holder, started = typeof doc.startedAt === "string" ? Date.parse(doc.startedAt) : NaN;
       h.pid = typeof doc.pid === "number" ? doc.pid : null; h.hostname = typeof doc.hostname === "string" ? doc.hostname : null; h.runId = typeof doc.runId === "string" ? doc.runId : null; h.lockId = typeof doc.lockId === "string" ? doc.lockId : null;
       h.startedAt = typeof doc.startedAt === "string" ? doc.startedAt : null; h.ageMs = Number.isFinite(started) ? Math.round(now - started) : null; h.ownPid = h.pid === process.pid && h.hostname === os.hostname();
-      if (h.hostname !== null && h.hostname !== os.hostname()) h.state = "OTHER_HOST";
-      else if (h.pid === null) h.state = "PRESENT";
-      else { try { process.kill(h.pid, 0); h.pidAlive = true; h.state = "ACTIVE"; } catch (e) { if (code(e) === "ESRCH") { h.pidAlive = false; h.state = "DEAD_PID"; } else { h.pidAlive = null; h.state = "PRESENT"; } } }
+      // //TR: automation/lib/process-lock.mjs inspectProcessLock ile AYNI geçerlilik kuralı: boş olmayan ana bilgisayar adı VE pozitif tamsayı pid yoksa kilit INVALID'dir (acquire onu `SUPERVISOR_LOCK_FAIL_CLOSED state=INVALID` ile reddeder); önce bu, sonra başka ana bilgisayar, sonra pid canlılığı.
+      const pid = doc.pid as number;
+      if (!doc.hostname || !Number.isInteger(pid) || pid <= 0) h.state = "INVALID";
+      else if (doc.hostname !== os.hostname()) h.state = "OTHER_HOST";
+      else { try { process.kill(pid, 0); h.pidAlive = true; h.state = "ACTIVE"; } catch (e) { if (code(e) === "ESRCH") { h.pidAlive = false; h.state = "DEAD_PID"; } else { h.pidAlive = null; h.state = "PRESENT"; } } }
     } catch (e) { info.holder.code = code(e); info.holder.state = code(e) === "ENOENT" ? "ABSENT" : e instanceof SyntaxError ? "UNPARSEABLE" : "UNREADABLE"; }
     for (const [label, c] of [["STAT", info.file.code], ["OPEN", info.open.code], ["READ", info.holder.code], ["ACQUIRE", info.lastError.code]] as const) if (c === "EPERM" || c === "EBUSY" || c === "EACCES") info.suspicion.push(`${label}_${c}`);
     info.deletePendingSuspected = info.suspicion.length > 0;
@@ -158,9 +161,11 @@ export class WorkOsStore {
     if (info.holder.state === "UNPARSEABLE") info.suspicion.push("LOCK_FILE_UNPARSEABLE");
     return info;
   }
-  private noteLock(waitMs: number, retries: number): void {
+  // //TR: lockAcquisitions YALNIZ başarılı edinmeleri sayar; zaman aşımına uğrayan bekleme lockTimeouts'a girer (deneme ve bekleme toplamları ikisini de içerir).
+  private noteLock(waitMs: number, retries: number, acquired: boolean): void {
     const d = this.diag;
-    d.lockAcquisitions += 1; d.lockRetries += retries; d.lockWaitMsTotal += waitMs; d.lockWaitMsMax = Math.max(d.lockWaitMsMax, waitMs);
+    if (acquired) d.lockAcquisitions += 1;
+    d.lockRetries += retries; d.lockWaitMsTotal += waitMs; d.lockWaitMsMax = Math.max(d.lockWaitMsMax, waitMs);
     if (this.frame) { this.frame.lockWaitMs += waitMs; this.frame.lockRetries += retries; }
   }
   private noteWrite(f: StoreWriteTiming, totalMs: number): void {
@@ -221,7 +226,7 @@ export class WorkOsStore {
         const failureKey = failures.has(failure) || failures.size < 8 ? failure : "(other)";
         failures.set(failureKey, (failures.get(failureKey) ?? 0) + 1);
         if (Date.now() >= deadline) {
-          this.noteLock(performance.now() - lockStart, retries);
+          this.noteLock(performance.now() - lockStart, retries, false);
           const info = this.probeLockTimeout(lockStart, retries, failures, acquireError);
           this.diag.lockTimeouts += 1; this.diag.lastLockTimeout = info;
           const timeout = new WorkOsError("WORKOS_UNAVAILABLE", "LOCK_TIMEOUT");
@@ -232,7 +237,7 @@ export class WorkOsStore {
         sleepSync(15);
       }
     }
-    this.noteLock(performance.now() - lockStart, retries);
+    this.noteLock(performance.now() - lockStart, retries, true);
     try { return fn(); } finally { const releaseStart = performance.now(); try { release?.(); } catch { /* lock sahipliği değişmişse yazma zaten tamamlandı */ } if (this.frame) this.frame.releaseMs += performance.now() - releaseStart; }
   }
   private fail(e: unknown): void {
