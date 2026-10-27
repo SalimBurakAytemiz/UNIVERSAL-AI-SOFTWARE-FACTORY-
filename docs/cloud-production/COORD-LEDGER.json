@@ -1042,6 +1042,16 @@
       "ref": "coord inline: diff ae2f3a9..c0c3899 = 4 locale strings reworded to the reviewer's truthful wording (all causes named; ROOT move-out fix) + the same 4 pins updated + tr fallback pin added + TR note; no code change",
       "policy": "TEP-1",
       "at": "2026-10-27T07:56:37.718Z"
+    },
+    {
+      "pr": 276,
+      "sha": "8fca680627119d0563c70c0def8ee44b4b3d803c",
+      "kind": "delta",
+      "base": "69b463b",
+      "verdict": "BLOCKERS_1MEDIUM_ROUND_LIMIT_process_leak",
+      "ref": "wf_3373ed7f-68e: hardTimeout sets detached (setsid) for every HEAD probe; the probe group is never tracked (TK-5), so a hung git survives Ctrl+C/SIGHUP/engine termination (reproduced with include.path FIFO); strategy change: bounded Lane B push + coordinator checklist",
+      "policy": "TEP-1",
+      "at": "2026-10-27T08:04:33.821Z"
     }
   ],
   "tests": [],
