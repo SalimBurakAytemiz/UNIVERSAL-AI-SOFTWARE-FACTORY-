@@ -1002,13 +1002,43 @@
       "ref": "wf_4ca46212-a57: M1 member-rule regression (keyword/~ continuation -> false PRESENT), M2 MAP fail-closed claim false (combining mark/astral/ZWNJ/x !/ -> string content scanned as code -> false PRESENT); real map 22 records byte-identical; strategy change: bounded Lane C push + coordinator mutant checklist",
       "policy": "TEP-1",
       "at": "2026-10-27T07:09:19.921Z"
+    },
+    {
+      "pr": 280,
+      "sha": "ae2f3a9d95953ec53a12b4e0491942ed82292131",
+      "kind": "full",
+      "base": null,
+      "verdict": "BLOCKERS_1MEDIUM",
+      "ref": "wf_908e1b03-21c:280",
+      "policy": "TEP-1",
+      "at": "2026-10-27T07:49:37.778Z"
+    },
+    {
+      "pr": 281,
+      "sha": "4e44010a2a34594e1c17e1467f851c552d0c3914",
+      "kind": "full",
+      "base": null,
+      "verdict": "NO_BLOCKERS_4LOW",
+      "ref": "wf_908e1b03-21c:281",
+      "policy": "TEP-1",
+      "at": "2026-10-27T07:49:37.825Z"
+    },
+    {
+      "pr": 279,
+      "sha": "2f1067920f60295c6349af205909bfc08ef0b8cd",
+      "kind": "full",
+      "base": null,
+      "verdict": "NO_BLOCKERS_3LOW",
+      "ref": "wf_908e1b03-21c:279",
+      "policy": "TEP-1",
+      "at": "2026-10-27T07:49:37.870Z"
     }
   ],
   "tests": [],
   "fingerprint": {
-    "value": "e1852f34eac0d94df0d5797c7023b3228f7894c51c1b5c91f8bd2827ec88ad3d",
-    "at": "2026-10-27T04:42:09.099Z",
-    "base": "779c840b71f46737a56a785ece4ee29d32b4b803",
-    "prs": 10
+    "value": "a8007d041e65cb50ce4fdb08b82c9df3488a6744061863c929225384aec567b7",
+    "at": "2026-10-27T07:42:50.671Z",
+    "base": "231f9e32a818234b8c4811d78cea27c581b2a20c",
+    "prs": 11
   }
 }
