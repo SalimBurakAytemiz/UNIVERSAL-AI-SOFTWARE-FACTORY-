@@ -65,31 +65,54 @@ const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 // //TR: Kaynak tarayıcısı (modül ÇALIŞTIRILMAZ, yan etki yok). İki görünüm üretir, ikisi de kaynakla AYNI uzunlukta ve aynı satır sayısındadır: code = yorumlar ve dize/şablon/regex İÇERİKLERİ boşluğa çevrilmiş (tırnaklar kalır); literal = yorumlar boşluğa çevrilmiş, dize içerikleri korunmuş ama içlerindeki tırnak karakterleri \u0001 yapılmış (başka bir dizenin içindeki `from "x"` gerçek bir içe aktarma gibi eşleşemez). Dize/şablon/yorum/regex kapanmadan biterse null döner: sınıflandırılamayan kaynak hiçbir şeyi KANITLAMAZ.
 export interface CodeViews { code: string; literal: string }
 const nl = (c: string) => (c === "\n" || c === "\r" ? c : " ");
-const IDENT_CHAR = /[\p{L}\p{N}_$]/u;
+// //TR: Tanımlayıcı karakteri (ID_Continue yaklaşığı): harf, sayı, birleşen işaret (\p{M}), bağlayıcı noktalama (\p{Pc}, `_` dahil), `$` ve ZWNJ/ZWJ (U+200C/U+200D). Test, TEK kod noktasına uygulanır; UTF-16 yedek çiftleri (astral tanımlayıcılar) identStart ile birleştirilir.
+const IDENT_CHAR = /[\p{L}\p{N}\p{M}\p{Pc}_$\u200C\u200D]/u;
+// //TR: `arr[k]` bir tanımlayıcı karakterin SON UTF-16 birimiyse o karakterin başlangıç dizinini döndürür (yedek çift: k-1), değilse -1. Dizi de dize de olabilir.
+const identStart = (arr: ArrayLike<string>, k: number): number => {
+  if (k < 0) return -1;
+  const u = arr[k];
+  if (u >= "\uDC00" && u <= "\uDFFF" && arr[k - 1] >= "\uD800" && arr[k - 1] <= "\uDBFF") return IDENT_CHAR.test(arr[k - 1] + u) ? k - 1 : -1;
+  return IDENT_CHAR.test(u) ? k : -1;
+};
+// //TR: `arr[k]` ile biten tanımlayıcı sözcüğün başlangıç dizini (k bir tanımlayıcı karakterse), değilse -1.
+const wordStart = (arr: ArrayLike<string>, k: number): number => {
+  let first = identStart(arr, k);
+  if (first < 0) return -1;
+  for (;;) { if (first === 0) return 0; const prev = identStart(arr, first - 1); if (prev < 0) return first; first = prev; }
+};
+// //TR: Sözcük, bir `.`/`?.` ile geliyorsa (nesne.new) özellik adıdır, anahtar sözcük değildir.
+const afterDot = (arr: ArrayLike<string>, start: number): boolean => { let q = start - 1; while (q >= 0 && /\s/.test(arr[q])) q--; return q >= 0 && arr[q] === "."; };
 const REGEX_KEYWORDS = new Set(["return", "typeof", "case", "in", "of", "delete", "void", "throw", "new", "else", "do", "yield", "await", "instanceof"]);
 export function codeViews(src: string): CodeViews | null {
   const n = src.length, code: string[] = [], lit: string[] = [];
   const body = (c: string) => { code.push(nl(c)); lit.push(c === "\"" || c === "'" || c === "`" ? "\u0001" : c); };
   const plain = (c: string) => { code.push(c); lit.push(c); };
   const blank = (c: string) => { code.push(nl(c)); lit.push(nl(c)); };
-  // //TR: `/` bölme mi regex mi? Öncesindeki anlamlı karaktere bakılır: tanımlayıcı (Unicode dahil) bir anahtar sözcükse (return, typeof ...) ve `.` ile gelen bir özellik adı DEĞİLSE regex; `)` `]` dize kapanışı, art arda `++`/`--` ve bir tanımlayıcıya/`)`/`]`'ye bitişik TS `!` (a! / b) bölmedir; diğer noktalama regex başlatır.
+  // //TR: `/` bölme mi regex mi? Öncesindeki anlamlı karaktere bakılır: tanımlayıcı (Unicode, birleşen işaret ve astral dahil) bir anahtar sözcükse (return, typeof ...) ve `.` ile gelen bir özellik adı DEĞİLSE regex; `)` `]` dize kapanışı ve art arda `++`/`--` bölmedir; `if/while/for/with (...)` BAŞLIĞININ `)`'si bölme DEĞİL regex başlatır; TS `!`: bir tanımlayıcıdan (anahtar sözcük değilse), `)` ya da `]`'den sonra (aynı satırda boşlukla ayrılmış olsa da: `x !/ 2`) sonek non-null'dır ve `/` bölmedir, başka her yerde önek NOT'tur (`= !/a/.test(y)`) ve `/` regex'tir; diğer noktalama regex başlatır. Bilinen sınır (PRESENT yönü): bir blok `}` sonrası satır başındaki regex bölme sayılır.
+  const wordBefore = (k: number): {word: string; start: number} | null => { const st = wordStart(code, k); return st < 0 ? null : {word: code.slice(st, k + 1).join(""), start: st}; };
   const regexAllowed = (): boolean => {
     let k = code.length - 1;
     while (k >= 0 && /\s/.test(code[k])) k--;
     if (k < 0) return true;
     const p = code[k];
-    if (IDENT_CHAR.test(p)) {
-      let j = k;
-      while (j >= 0 && IDENT_CHAR.test(code[j])) j--;
-      let q = j;
-      while (q >= 0 && /\s/.test(code[q])) q--;
-      if (q >= 0 && code[q] === ".") return false;
-      return REGEX_KEYWORDS.has(code.slice(j + 1, k + 1).join(""));
-    }
+    const w = wordBefore(k);
+    if (w !== null) return !afterDot(code, w.start) && REGEX_KEYWORDS.has(w.word);
     if ((p === "+" || p === "-") && code[k - 1] === p) return false;
-    if (p === "!" && k > 0 && (IDENT_CHAR.test(code[k - 1]) || code[k - 1] === ")" || code[k - 1] === "]")) return false;
-    return !(p === ")" || p === "]" || p === "\"" || p === "'" || p === "`");
+    if (p === "!") {
+      let q = k - 1;
+      while (q >= 0 && (code[q] === " " || code[q] === "\t")) q--;
+      if (code[q] === ")" || code[q] === "]") return false;
+      const before = wordBefore(q);
+      if (before === null) return true;
+      return !afterDot(code, before.start) && REGEX_KEYWORDS.has(before.word);
+    }
+    if (p === ")") return k === controlClose;
+    return !(p === "]" || p === "\"" || p === "'" || p === "`");
   };
+  // //TR: `(` açılışında önceki sözcük if/while/for/with ise o parantez bir kontrol BAŞLIĞIDIR; kapanışının kod dizinini `controlClose` tutar.
+  const parens: boolean[] = [];
+  let controlClose = -1;
+  const controlHeader = (): boolean => { let k = code.length - 1; while (k >= 0 && /\s/.test(code[k])) k--; const w = wordBefore(k); return w !== null && !afterDot(code, w.start) && (w.word === "if" || w.word === "while" || w.word === "for" || w.word === "with"); };
   const frames: number[] = [];
   let depth = 0, inTpl = false, i = 0;
   if (src.startsWith("#!")) while (i < n && src[i] !== "\n") blank(src[i++]);
@@ -120,6 +143,8 @@ export function codeViews(src: string): CodeViews | null {
       for (; j < n && src[j] !== "\n"; j++) { const e = src[j]; if (e === "\\") { j++; continue; } if (e === "[") cls = true; else if (e === "]") cls = false; else if (e === "/" && !cls) { ok = true; break; } }
       if (ok) { plain("/"); for (let k = i + 1; k < j; k++) body(src[k]); plain("/"); i = j + 1; continue; }
     }
+    if (c === "(") parens.push(controlHeader());
+    else if (c === ")") { if (parens.pop() === true) controlClose = code.length; }
     if (c === "{") depth++;
     else if (c === "}") { if (depth === 0 && frames.length > 0) { plain("}"); depth = frames.pop()!; inTpl = true; i++; continue; } depth--; }
     plain(c); i++;
@@ -160,17 +185,42 @@ export function declaresMember(source: string, className: string, member: string
 function memberIn(v: CodeViews | null, className: string, member: string): boolean {
   const top = v === null ? null : classBodyTopLevel(v.code, className);
   if (top === null) return false;
-  // //TR: Üye bildirimi bir DEVAM satırı değilse sayılır: önceki anlamlı karakter bir devam işaretiyse (`= ( , [ ? : + - * / % & | ^ . <` ya da `=>`; art arda `++`/`--` sonek olduğundan devam DEĞİL) satır bir önceki ifadenin devamıdır (`x =\n pair(a)`); diğer her durumda (`{ } ; ) ]`, ASI ile biten alan `x = 1`, çıplak dekoratör `@dec`, tipli alan `m: Map<string, number>`) yeni bir bildirim başlar. Bilinen sınır (ABSENT yönü): düzenli ifade değişmezi (`/a/`) ile biten alandan sonraki üye gözden kaçar.
+  // //TR: Üye bildirimi bir DEVAM satırı değilse sayılır (bkz. memberContinues): `x =\n pair(a)`, `reviewer = new\n pair(cfg)`, `x = a >\n pair()` gibi satırlar bir önceki ifadenin devamıdır; `{ } ; ) ]`, ASI ile biten alan `x = 1`, çıplak dekoratör `@dec`, tipli alan `m: Map<string, number>` ve sonek non-null `x = y!` yeni bir bildirim başlatır. Bilinen sınırlar (ABSENT yönü): düzenli ifade değişmezi (`/a/`) ile biten alandan sonraki üye, adı `new`/`in`/`as` gibi bir anahtar sözcük olan alandan (`static new`) sonraki üye, satıra bölünmüş genel tip (`Map<\n string>`) ve işlev tipli alan (`cb: () => Map<A, B>`) gözden kaçar.
   const re = new RegExp(`^[ \\t]*(?:(?:private|public|protected|static|readonly)\\s+)*(?:async\\s+)?${escapeRe(member)}\\s*[(<]`, "gm");
   for (const m of top.matchAll(re)) {
     let k = m.index! - 1;
     while (k >= 0 && /\s/.test(top[k])) k--;
-    if (k < 0) return true;
-    const p = top[k];
-    const continues = ((p === "+" || p === "-") ? top[k - 1] !== p : "=(,[?:*/%&|^.<".includes(p)) || (p === ">" && top[k - 1] === "=");
-    if (!continues) return true;
+    if (k < 0 || !memberContinues(top, k)) return true;
   }
   return false;
+}
+// //TR: Önceki anlamlı karakter (dizin k) bir ifadeyi SÜRDÜRÜR mu? İşleçler `= ( , [ ? : * / % & | ^ . < ~` ve `=>`; tek `+`/`-` (art arda `++`/`--` sonektir, devam DEĞİL); `>`/`>>`/`>>>` karşılaştırma ya da kaydırmadır, YALNIZ bir `:` tip açıklamasından sonra açılan `<`'yi kapatıyorsa (`m: Map<string, number>`) bildirim sonudur; `!` önek NOT ise (işleç, `(`, `,`, `=` ya da satır başından sonra, ya da `await !`) devamdır, tanımlayıcı/`)`/`]` sonrası sonek non-null ise değildir; sözcük işleçleri new, typeof, void, delete, in, instanceof, await, yield, as, satisfies, keyof (bir `.`'dan sonra gelen özellik adı OLMADIKÇA: `obj.new`); `void` bir tip açıklamasında (`cb: () => void`) tiptir, devam değildir.
+const CONTINUATION_WORDS: ReadonlySet<string> = new Set(["new", "typeof", "void", "delete", "in", "instanceof", "await", "yield", "as", "satisfies", "keyof"]);
+function memberContinues(top: string, k: number): boolean {
+  const p = top[k];
+  if (p === "+" || p === "-") return top[k - 1] !== p;
+  if ("=(,[?:*/%&|^.<~".includes(p)) return true;
+  if (p === ">") return top[k - 1] === "=" || !closesTypeAngle(top, k);
+  if (p === "!") {
+    let q = k - 1;
+    while (q >= 0 && (top[q] === " " || top[q] === "\t")) q--;
+    if (top[q] === ")" || top[q] === "]") return false;
+    const st = wordStart(top, q);
+    return st < 0 || (CONTINUATION_WORDS.has(top.slice(st, q + 1)) && !afterDot(top, st));
+  }
+  const st = wordStart(top, k);
+  if (st < 0) return false;
+  const word = top.slice(st, k + 1);
+  if (!CONTINUATION_WORDS.has(word) || afterDot(top, st)) return false;
+  if (word === "void") { const before = top.slice(top.lastIndexOf("\n", st) + 1, st).replace(/=>/g, "  "); if (/^[^=]*:[^=]*$/.test(before)) return false; }
+  return true;
+}
+// //TR: Satırın son `>` karakteri, bir `:` tip açıklamasından sonra açılan bir `<`'yi mi kapatıyor? Satır başından son `>`'ye kadar `<`/`>` yığını kurulur (`=>` sayılmaz); son `>`'nin kapattığı `<`'den önce `:` ile yalnız tip karakterleri (harf, sayı, `_ $ . | & [ ]`, boşluk) gelmelidir (`=` ya da başka işleç varsa bir ifadedir). Yeterli `<` yoksa dizin undefined olur, `slice` tüm satırı alır ve satır `>` ile bittiği için düzenli ifade eşleşmez (false: devam).
+function closesTypeAngle(top: string, k: number): boolean {
+  const line = top.slice(top.lastIndexOf("\n", k) + 1, k + 1);
+  const stack: number[] = [];
+  for (let i = 0; i < line.length - 1; i++) { if (line[i] === "<") stack.push(i); else if (line[i] === ">" && line[i - 1] !== "=") stack.pop(); }
+  return /:[\s\p{L}\p{N}_$.|&[\]]*$/u.test(line.slice(0, stack[stack.length - 1]));
 }
 
 // //TR: Bir kaydı doğrular: modül var, dışa aktarım (ve varsa üye) bildirilmiş, bildirilen çağıranlar o ifadeyi KODDA (yorum/dize dışında) gerçekten anıyor. codePath PRESENT YALNIZ çalıştıran (runs) bir kayıt için, modül+dışa aktarım doğrulanmış VE (SCRIPT_LITERAL giriş betiği ya da en az bir üretim çağıranı doğrulanmış) ise. Kaynak sınıflandırılamazsa (kapanmamış dize/yorum) hiçbir şey doğrulanmaz.
@@ -252,19 +302,21 @@ const SOURCE_EXT = /\.(?:ts|mts|mjs|cjs|js)$/;
 // //TR: Test destek dosyaları üretim kodu DEĞİLDİR (büyük/küçük harfe duyarsız): `*.test.*`, `*.spec.*`, `*-selftest.*`, `fake-*`; dizinler: node_modules, dist, __tests__, __mocks__, fixtures, fixture, tests, test. Üretim köklerinin içinde de taranmaz.
 const TEST_FILE = /\.(?:test|spec)\.[cm]?[jt]s$|-selftest\.[cm]?[jt]s$|^fake-/i;
 const isTestSupportName = (name: string) => TEST_FILE.test(name);
+// //TR: Üretim tarafından İÇE AKTARILAN veri dizinleri (core/competency/evaluation-pipeline.ts `core/workos/predev/fixtures/**` içe aktarır) ad kuralı `fixtures` olsa da üretim kaynağı taramasında (sayım, içe aktaran taramaları) YÜRÜNÜR; aksi hâlde sayım bu kaynakları görmezdi (eksik raporlama). Çağıran yolu kuralı (isProductionPath) değişmez.
+const WALKED_DATA_DIRS: ReadonlySet<string> = new Set(["core/workos/predev/fixtures"]);
 const EXCLUDED_DIRS: ReadonlySet<string> = new Set(["node_modules", "dist", "__tests__", "__mocks__", "fixtures", "fixture", "tests", "test"]);
-function listSources(dir: string, out: string[] = []): string[] {
+function listSources(dir: string, repoRoot: string, out: string[] = []): string[] {
   let entries: fs.Dirent[];
   try { entries = fs.readdirSync(dir, {withFileTypes: true}); } catch { return out; }
   // //TR: Dizin girdileri ada göre sıralanır (işletim sistemi sırasından bağımsız, belirli çıktı ve ileti).
   for (const e of [...entries].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
-    if (e.name === ".git" || EXCLUDED_DIRS.has(e.name.toLowerCase())) continue;
     const p = path.join(dir, e.name);
-    if (e.isDirectory()) listSources(p, out); else if (e.isFile() && SOURCE_EXT.test(e.name) && !isTestSupportName(e.name)) out.push(p);
+    if (e.name === ".git" || (EXCLUDED_DIRS.has(e.name.toLowerCase()) && !WALKED_DATA_DIRS.has(rel(repoRoot, p)))) continue;
+    if (e.isDirectory()) listSources(p, repoRoot, out); else if (e.isFile() && SOURCE_EXT.test(e.name) && !isTestSupportName(e.name)) out.push(p);
   }
   return out;
 }
-const productionFiles = (repoRoot: string): string[] => PRODUCTION_ROOTS.flatMap(root => listSources(path.join(repoRoot, root)));
+const productionFiles = (repoRoot: string): string[] => PRODUCTION_ROOTS.flatMap(root => listSources(path.join(repoRoot, root), repoRoot));
 const rel = (repoRoot: string, f: string) => path.relative(repoRoot, f).split(path.sep).join("/");
 // //TR: İçe aktarma belirteçleri (from "x", import("x"), import "x", require("x")) literal görünümünden okunur: yorumdaki ve başka bir dizenin içindeki belirteç sayılmaz.
 const importSpecifiers = (literal: string): string[] => [...literal.matchAll(/(?:\bfrom|\bimport|\brequire)\s*\(?\s*(["'])([^"'\n]+)\1/g)].map(m => m[2]);

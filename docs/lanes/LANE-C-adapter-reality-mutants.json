@@ -447,8 +447,8 @@
    "id": "G1",
    "description": "regex literals are never recognized after a keyword (return /a\"b/ opens a phantom string)",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "return REGEX_KEYWORDS.has(code.slice(j + 1, k + 1).join(\"\"));",
-   "new": "return false;"
+   "old": "if (w !== null) return !afterDot(code, w.start) && REGEX_KEYWORDS.has(w.word);",
+   "new": "if (w !== null) return false;"
   },
   {
    "id": "G2",
@@ -459,9 +459,9 @@
   },
   {
    "id": "G4",
-   "description": "a regex is allowed after ) and ] (division is misread as a regex)",
+   "description": "a regex is allowed after ] (division is misread as a regex)",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "return !(p === \")\" || p === \"]\" || p === \"\\\"\" || p === \"'\" || p === \"`\");",
+   "old": "return !(p === \"]\" || p === \"\\\"\" || p === \"'\" || p === \"`\");",
    "new": "return !(p === \"\\\"\" || p === \"'\" || p === \"`\");"
   },
   {
@@ -571,23 +571,23 @@
   },
   {
    "id": "S2",
-   "description": "a TS non-null ! before / is read as a regex start",
+   "description": "a TS non-null ! after ) or ] is read as a regex start (spaced or not)",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "if (p === \"!\" && k > 0 && (IDENT_CHAR.test(code[k - 1]) || code[k - 1] === \")\" || code[k - 1] === \"]\")) return false;",
+   "old": "if (code[q] === \")\" || code[q] === \"]\") return false;",
    "new": ""
   },
   {
    "id": "S3",
    "description": "a keyword used as a property name (obj.return / 2) is read as a keyword",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "if (q >= 0 && code[q] === \".\") return false;",
-   "new": ""
+   "old": "if (w !== null) return !afterDot(code, w.start) && REGEX_KEYWORDS.has(w.word);",
+   "new": "if (w !== null) return REGEX_KEYWORDS.has(w.word);"
   },
   {
    "id": "S4",
    "description": "identifier characters are ASCII only (non-ASCII identifiers are punctuation)",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const IDENT_CHAR = /[\\p{L}\\p{N}_$]/u;",
+   "old": "const IDENT_CHAR = /[\\p{L}\\p{N}\\p{M}\\p{Pc}_$\\u200C\\u200D]/u;",
    "new": "const IDENT_CHAR = /[\\w$]/u;"
   },
   {
@@ -608,7 +608,7 @@
    "id": "Q3",
    "description": "member declarations need no continuation check (continuation lines count)",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "if (!continues) return true;",
+   "old": "if (k < 0 || !memberContinues(top, k)) return true;",
    "new": "return true;"
   },
   {
@@ -678,8 +678,8 @@
    "id": "HV-S08",
    "description": "regexAllowed skips only plain spaces back to the previous token",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "while (k >= 0 && /\\s/.test(code[k])) k--;",
-   "new": "while (k >= 0 && / /.test(code[k])) k--;"
+   "old": "let k = code.length - 1;\n    while (k >= 0 && /\\s/.test(code[k])) k--;",
+   "new": "let k = code.length - 1;\n    while (k >= 0 && / /.test(code[k])) k--;"
   },
   {
    "id": "HV-S09",
@@ -951,8 +951,8 @@
    "id": "HV-X02",
    "description": ".git directory no longer skipped",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "if (e.name === \".git\" || EXCLUDED_DIRS.has(e.name.toLowerCase())) continue;",
-   "new": "if (EXCLUDED_DIRS.has(e.name.toLowerCase())) continue;"
+   "old": "if (e.name === \".git\" || (",
+   "new": "if (("
   },
   {
    "id": "HV-X05",
@@ -1455,36 +1455,36 @@
    "id": "D7",
    "description": "digits no longer end an operand (86400/3600 starts a regex)",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const IDENT_CHAR = /[\\p{L}\\p{N}_$]/u;",
-   "new": "const IDENT_CHAR = /[\\p{L}_$]/u;"
+   "old": "const IDENT_CHAR = /[\\p{L}\\p{N}\\p{M}\\p{Pc}_$\\u200C\\u200D]/u;",
+   "new": "const IDENT_CHAR = /[\\p{L}\\p{M}\\p{Pc}_$\\u200C\\u200D]/u;"
   },
   {
    "id": "Z-I1",
    "description": "letters no longer end an operand",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const IDENT_CHAR = /[\\p{L}\\p{N}_$]/u;",
-   "new": "const IDENT_CHAR = /[\\p{N}_$]/u;"
+   "old": "const IDENT_CHAR = /[\\p{L}\\p{N}\\p{M}\\p{Pc}_$\\u200C\\u200D]/u;",
+   "new": "const IDENT_CHAR = /[\\p{N}\\p{M}\\p{Pc}_$\\u200C\\u200D]/u;"
   },
   {
    "id": "Z-I2",
-   "description": "underscore no longer ends an operand",
+   "description": "underscore (and every connector punctuation) no longer ends an operand",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const IDENT_CHAR = /[\\p{L}\\p{N}_$]/u;",
-   "new": "const IDENT_CHAR = /[\\p{L}\\p{N}$]/u;"
+   "old": "const IDENT_CHAR = /[\\p{L}\\p{N}\\p{M}\\p{Pc}_$\\u200C\\u200D]/u;",
+   "new": "const IDENT_CHAR = /[\\p{L}\\p{N}\\p{M}$\\u200C\\u200D]/u;"
   },
   {
    "id": "Z-I3",
    "description": "dollar sign no longer ends an operand",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const IDENT_CHAR = /[\\p{L}\\p{N}_$]/u;",
-   "new": "const IDENT_CHAR = /[\\p{L}\\p{N}_]/u;"
+   "old": "const IDENT_CHAR = /[\\p{L}\\p{N}\\p{M}\\p{Pc}_$\\u200C\\u200D]/u;",
+   "new": "const IDENT_CHAR = /[\\p{L}\\p{N}\\p{M}\\p{Pc}_\\u200C\\u200D]/u;"
   },
   {
    "id": "Z-I4",
    "description": "only ASCII digits end an operand",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const IDENT_CHAR = /[\\p{L}\\p{N}_$]/u;",
-   "new": "const IDENT_CHAR = /[\\p{L}0-9_$]/u;"
+   "old": "const IDENT_CHAR = /[\\p{L}\\p{N}\\p{M}\\p{Pc}_$\\u200C\\u200D]/u;",
+   "new": "const IDENT_CHAR = /[\\p{L}0-9\\p{M}\\p{Pc}_$\\u200C\\u200D]/u;"
   },
   {
    "id": "R1-N13b",
@@ -1574,148 +1574,148 @@
    "id": "Z-C01",
    "description": "member continuation rule no longer treats '=' as a continuation",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
-   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+   "old": "if (\"=(,[?:*/%&|^.<~\".includes(p)) return true;",
+   "new": "if (\"(,[?:*/%&|^.<~\".includes(p)) return true;"
   },
   {
    "id": "Z-C02",
    "description": "member continuation rule no longer treats '(' as a continuation",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
-   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+   "old": "if (\"=(,[?:*/%&|^.<~\".includes(p)) return true;",
+   "new": "if \"=(,[?:*/%&|^.<~\".includes(p)) return true;"
   },
   {
    "id": "Z-C03",
    "description": "member continuation rule no longer treats ',' as a continuation",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
-   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=([?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+   "old": "if (\"=(,[?:*/%&|^.<~\".includes(p)) return true;",
+   "new": "if (\"=([?:*/%&|^.<~\".includes(p)) return true;"
   },
   {
    "id": "Z-C04",
    "description": "member continuation rule no longer treats '[' as a continuation",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
-   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+   "old": "if (\"=(,[?:*/%&|^.<~\".includes(p)) return true;",
+   "new": "if (\"=(,?:*/%&|^.<~\".includes(p)) return true;"
   },
   {
    "id": "Z-C05",
    "description": "member continuation rule no longer treats '?' as a continuation",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
-   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+   "old": "if (\"=(,[?:*/%&|^.<~\".includes(p)) return true;",
+   "new": "if (\"=(,[:*/%&|^.<~\".includes(p)) return true;"
   },
   {
    "id": "Z-C06",
    "description": "member continuation rule no longer treats ':' as a continuation",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
-   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+   "old": "if (\"=(,[?:*/%&|^.<~\".includes(p)) return true;",
+   "new": "if (\"=(,[?*/%&|^.<~\".includes(p)) return true;"
   },
   {
    "id": "Z-C07",
    "description": "member continuation rule no longer treats '*' as a continuation",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
-   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+   "old": "if (\"=(,[?:*/%&|^.<~\".includes(p)) return true;",
+   "new": "if (\"=(,[?:/%&|^.<~\".includes(p)) return true;"
   },
   {
    "id": "Z-C08",
    "description": "member continuation rule no longer treats '/' as a continuation",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
-   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+   "old": "if (\"=(,[?:*/%&|^.<~\".includes(p)) return true;",
+   "new": "if (\"=(,[?:*%&|^.<~\".includes(p)) return true;"
   },
   {
    "id": "Z-C09",
    "description": "member continuation rule no longer treats '%' as a continuation",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
-   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+   "old": "if (\"=(,[?:*/%&|^.<~\".includes(p)) return true;",
+   "new": "if (\"=(,[?:*/&|^.<~\".includes(p)) return true;"
   },
   {
    "id": "Z-C10",
    "description": "member continuation rule no longer treats '&' as a continuation",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
-   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+   "old": "if (\"=(,[?:*/%&|^.<~\".includes(p)) return true;",
+   "new": "if (\"=(,[?:*/%|^.<~\".includes(p)) return true;"
   },
   {
    "id": "Z-C11",
    "description": "member continuation rule no longer treats '|' as a continuation",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
-   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+   "old": "if (\"=(,[?:*/%&|^.<~\".includes(p)) return true;",
+   "new": "if (\"=(,[?:*/%&^.<~\".includes(p)) return true;"
   },
   {
    "id": "Z-C12",
    "description": "member continuation rule no longer treats '^' as a continuation",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
-   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+   "old": "if (\"=(,[?:*/%&|^.<~\".includes(p)) return true;",
+   "new": "if (\"=(,[?:*/%&|.<~\".includes(p)) return true;"
   },
   {
    "id": "Z-C13",
    "description": "member continuation rule no longer treats '.' as a continuation",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
-   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+   "old": "if (\"=(,[?:*/%&|^.<~\".includes(p)) return true;",
+   "new": "if (\"=(,[?:*/%&|^<~\".includes(p)) return true;"
   },
   {
    "id": "Z-C14",
    "description": "member continuation rule no longer treats '<' as a continuation",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
-   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+   "old": "if (\"=(,[?:*/%&|^.<~\".includes(p)) return true;",
+   "new": "if (\"=(,[?:*/%&|^.~\".includes(p)) return true;"
   },
   {
    "id": "Z-C16",
    "description": "a doubled +/- (postfix ++/--) is still a continuation",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
-   "new": "const continues = ((p === \"+\" || p === \"-\") ? true : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+   "old": "if (p === \"+\" || p === \"-\") return top[k - 1] !== p;",
+   "new": "if (p === \"+\" || p === \"-\") return true;"
   },
   {
    "id": "Z-C17",
    "description": "a lone +/- is not a continuation",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
-   "new": "const continues = ((p === \"+\" || p === \"-\") ? false : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+   "old": "if (p === \"+\" || p === \"-\") return top[k - 1] !== p;",
+   "new": "if (p === \"+\" || p === \"-\") return false;"
   },
   {
    "id": "Z-C18",
    "description": "a minus is not a continuation",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
-   "new": "const continues = ((p === \"+\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+   "old": "if (p === \"+\" || p === \"-\") return top[k - 1] !== p;",
+   "new": "if (p === \"+\") return top[k - 1] !== p;"
   },
   {
    "id": "Z-C19",
    "description": "a plus is not a continuation",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
-   "new": "const continues = ((p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+   "old": "if (p === \"+\" || p === \"-\") return top[k - 1] !== p;",
+   "new": "if (p === \"-\") return top[k - 1] !== p;"
   },
   {
    "id": "Z-C20",
    "description": "=> is not a continuation",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
-   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p));"
+   "old": "if (p === \">\") return top[k - 1] === \"=\" || !closesTypeAngle(top, k);",
+   "new": "if (p === \">\") return !closesTypeAngle(top, k);"
   },
   {
    "id": "Z-C21",
    "description": "every > is a continuation (generic type ends)",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
-   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\");"
+   "old": "if (p === \">\") return top[k - 1] === \"=\" || !closesTypeAngle(top, k);",
+   "new": "if (p === \">\") return true;"
   },
   {
    "id": "Z-C22",
    "description": "the first member of a class body is rejected",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "if (k < 0) return true;\n    const p = top[k];",
-   "new": "if (k < 0) return false;\n    const p = top[k];"
+   "old": "if (k < 0 || !memberContinues(top, k)) return true;",
+   "new": "if (k < 0) return false;\n    if (!memberContinues(top, k)) return true;"
   },
   {
    "id": "Z-D1",
@@ -1728,21 +1728,21 @@
    "id": "Z-D2",
    "description": ")! is not a TS non-null (x)! / y starts a regex",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": " || code[k - 1] === \")\" || code[k - 1] === \"]\"))",
-   "new": " || code[k - 1] === \"]\"))"
+   "old": "if (code[q] === \")\" || code[q] === \"]\") return false;",
+   "new": "if (code[q] === \"]\") return false;"
   },
   {
    "id": "Z-D3",
    "description": "]! is not a TS non-null (a[0]! / y starts a regex)",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": " || code[k - 1] === \")\" || code[k - 1] === \"]\"))",
-   "new": " || code[k - 1] === \")\"))"
+   "old": "if (code[q] === \")\" || code[q] === \"]\") return false;",
+   "new": "if (code[q] === \")\") return false;"
   },
   {
    "id": "Z-D4",
    "description": "whitespace before a dot is not skipped (a .return / y is the keyword)",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "while (q >= 0 && /\\s/.test(code[q])) q--;",
+   "old": "while (q >= 0 && /\\s/.test(arr[q])) q--;",
    "new": ""
   },
   {
@@ -1938,8 +1938,8 @@
    "id": "H3-A1-34",
    "description": "independent hunt (round 3), fixture(s) a1.scanFakeDir,a1.scanTestDirName",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "EXCLUDED_DIRS.has(e.name.toLowerCase())) continue;",
-   "new": "EXCLUDED_DIRS.has(e.name.toLowerCase()) || isTestSupportName(e.name)) continue;"
+   "old": "(EXCLUDED_DIRS.has(e.name.toLowerCase()) && !WALKED_DATA_DIRS",
+   "new": "((EXCLUDED_DIRS.has(e.name.toLowerCase()) || isTestSupportName(e.name)) && !WALKED_DATA_DIRS"
   },
   {
    "id": "H3-A1-36",
@@ -2029,8 +2029,8 @@
    "id": "H3-A2-10",
    "description": "independent hunt (round 3), fixture(s) a2.firstContThenReal",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "if (!continues) return true;",
-   "new": "if (!continues) return true; else break;"
+   "old": "if (k < 0 || !memberContinues(top, k)) return true;",
+   "new": "if (k < 0 || !memberContinues(top, k)) return true; else break;"
   },
   {
    "id": "H3-A2-12",
@@ -2078,8 +2078,8 @@
    "id": "H3-A2-21",
    "description": "independent hunt (round 3), fixture(s) a2.nonNullThenMember",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "\"=(,[?:*/%&|^.<\".includes(p)",
-   "new": "\"=(,[?:*/%&|^.<!\".includes(p)"
+   "old": "\"=(,[?:*/%&|^.<~\".includes(p)",
+   "new": "\"=(,[?:*/%&|^.<~!\".includes(p)"
   },
   {
    "id": "H3-A3-01",
@@ -2190,8 +2190,8 @@
    "id": "H3-A4-01",
    "description": "independent hunt (round 3), fixture(s) a4.kwStartReturn,a4.kw.typeof,a4.kw.case,a4.kw.in,a4.kw.of,a4.kw.delete,a4.kw.vo",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "while (j >= 0 && IDENT_CHAR.test(code[j])) j--;",
-   "new": "while (j > 0 && IDENT_CHAR.test(code[j])) j--;"
+   "old": "if (first === 0) return 0;",
+   "new": "if (first === 0) return -1;"
   },
   {
    "id": "H3-A4-16",
@@ -2204,29 +2204,29 @@
    "id": "H3-A4-17",
    "description": "independent hunt (round 3), fixture(s) a4.upperKw,a4.Return",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "return REGEX_KEYWORDS.has(code.slice(j + 1, k + 1).join(\"\"));",
-   "new": "return REGEX_KEYWORDS.has(code.slice(j + 1, k + 1).join(\"\").toLowerCase());"
+   "old": "REGEX_KEYWORDS.has(w.word)",
+   "new": "REGEX_KEYWORDS.has(w.word.toLowerCase())"
   },
   {
    "id": "H3-A4-18",
    "description": "independent hunt (round 3), fixture(s) a4.dotStart",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "if (q >= 0 && code[q] === \".\") return false;",
-   "new": "if (q > 0 && code[q] === \".\") return false;"
+   "old": "return q >= 0 && arr[q] === \".\";",
+   "new": "return q > 0 && arr[q] === \".\";"
   },
   {
    "id": "H3-A4-19",
    "description": "independent hunt (round 3), fixture(s) a4.bangStart",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "if (p === \"!\" && k > 0 && (",
-   "new": "if (p === \"!\" && k >= 0 && ("
+   "old": "if (before === null) return true;",
+   "new": "if (before === null) return false;"
   },
   {
    "id": "H3-A4-20",
    "description": "independent hunt (round 3), fixture(s) a4.bangStart",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "if (p === \"!\" && k > 0 && (",
-   "new": "if (p === \"!\" && ("
+   "old": "while (q >= 0 && (code[q] === \" \" || code[q] === \"\\t\")) q--;",
+   "new": "while (q >= 0 && code[q] === \" \") q--;"
   },
   {
    "id": "H3-A4-21",
@@ -2246,8 +2246,8 @@
    "id": "H3-A4-23",
    "description": "independent hunt (round 3), fixture(s) a4.unicodeBang",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "(IDENT_CHAR.test(code[k - 1]) ||",
-   "new": "(/[\\w$]/.test(code[k - 1]) ||"
+   "old": "return IDENT_CHAR.test(u) ? k : -1;",
+   "new": "return /[\\w$]/.test(u) ? k : -1;"
   },
   {
    "id": "H3-K-typeof",
@@ -2344,22 +2344,22 @@
    "id": "H3-U-ID-Nd",
    "description": "independent hunt (round 3), fixture(s) a4.superNo,a4.romanDiv",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const IDENT_CHAR = /[\\p{L}\\p{N}_$]/u;",
-   "new": "const IDENT_CHAR = /[\\p{L}\\p{Nd}_$]/u;"
+   "old": "const IDENT_CHAR = /[\\p{L}\\p{N}\\p{M}\\p{Pc}_$\\u200C\\u200D]/u;",
+   "new": "const IDENT_CHAR = /[\\p{L}\\p{Nd}\\p{M}\\p{Pc}_$\\u200C\\u200D]/u;"
   },
   {
    "id": "H3-U-ID-Ll",
    "description": "independent hunt (round 3), fixture(s) a4.upperIdentDiv,a4.cjkIdentDiv",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const IDENT_CHAR = /[\\p{L}\\p{N}_$]/u;",
-   "new": "const IDENT_CHAR = /[\\p{Ll}\\p{N}_$]/u;"
+   "old": "const IDENT_CHAR = /[\\p{L}\\p{N}\\p{M}\\p{Pc}_$\\u200C\\u200D]/u;",
+   "new": "const IDENT_CHAR = /[\\p{Ll}\\p{N}\\p{M}\\p{Pc}_$\\u200C\\u200D]/u;"
   },
   {
    "id": "H3-U-ID-LuLl",
    "description": "independent hunt (round 3), fixture(s) a4.cjkIdentDiv",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const IDENT_CHAR = /[\\p{L}\\p{N}_$]/u;",
-   "new": "const IDENT_CHAR = /[\\p{Lu}\\p{Ll}\\p{N}_$]/u;"
+   "old": "const IDENT_CHAR = /[\\p{L}\\p{N}\\p{M}\\p{Pc}_$\\u200C\\u200D]/u;",
+   "new": "const IDENT_CHAR = /[\\p{Lu}\\p{Ll}\\p{N}\\p{M}\\p{Pc}_$\\u200C\\u200D]/u;"
   },
   {
    "id": "H3-U-LB-Nd",
@@ -2519,29 +2519,29 @@
    "id": "H3-A4-28",
    "description": "independent hunt (round 3), fixture(s) a4.nlAfterDot,a4.nbspDot",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "while (q >= 0 && /\\s/.test(code[q])) q--;",
-   "new": "while (q >= 0 && /[ \\t]/.test(code[q])) q--;"
+   "old": "while (q >= 0 && /\\s/.test(arr[q])) q--;",
+   "new": "while (q >= 0 && /[ \\t]/.test(arr[q])) q--;"
   },
   {
    "id": "H3-A4-29",
    "description": "independent hunt (round 3), fixture(s) a4.crDiv,a4.crDivIdent,a4.nbspDiv",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "while (k >= 0 && /\\s/.test(code[k])) k--;",
-   "new": "while (k >= 0 && /[ \\t\\n]/.test(code[k])) k--;"
+   "old": "let k = code.length - 1;\n    while (k >= 0 && /\\s/.test(code[k])) k--;",
+   "new": "let k = code.length - 1;\n    while (k >= 0 && /[ \\t\\n]/.test(code[k])) k--;"
   },
   {
    "id": "H3-A4-30",
    "description": "independent hunt (round 3), fixture(s) a4.nbspDiv",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "while (k >= 0 && /\\s/.test(code[k])) k--;",
-   "new": "while (k >= 0 && /[ \\t\\r\\n]/.test(code[k])) k--;"
+   "old": "let k = code.length - 1;\n    while (k >= 0 && /\\s/.test(code[k])) k--;",
+   "new": "let k = code.length - 1;\n    while (k >= 0 && /[ \\t\\r\\n]/.test(code[k])) k--;"
   },
   {
    "id": "H3-A4-31",
    "description": "independent hunt (round 3), fixture(s) a4.nbspDot",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "while (q >= 0 && /\\s/.test(code[q])) q--;",
-   "new": "while (q >= 0 && /[ \\t\\r\\n]/.test(code[q])) q--;"
+   "old": "while (q >= 0 && /\\s/.test(arr[q])) q--;",
+   "new": "while (q >= 0 && /[ \\t\\r\\n]/.test(arr[q])) q--;"
   },
   {
    "id": "H3-E-star",
@@ -2619,6 +2619,524 @@
    "file": "core/capabilities/adapter-reality.ts",
    "old": "/[.*+?^${}()|[\\]\\\\]/g",
    "new": "/[.*+?^${}()|[\\]]/g"
+  },
+  {
+   "id": "Z-C15",
+   "description": "member continuation rule no longer treats '~' as a continuation",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (\"=(,[?:*/%&|^.<~\".includes(p)) return true;",
+   "new": "if (\"=(,[?:*/%&|^.<\".includes(p)) return true;"
+  },
+  {
+   "id": "F-W01",
+   "description": "the continuation word 'new' is removed (a line ending in it starts a new member)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"new\", \"typeof\", \"void\", \"delete\", \"in\", \"instanceof\", \"await\", \"yield\", \"as\", \"satisfies\", \"keyof\"])",
+   "new": "new Set([\"typeof\", \"void\", \"delete\", \"in\", \"instanceof\", \"await\", \"yield\", \"as\", \"satisfies\", \"keyof\"])"
+  },
+  {
+   "id": "F-W02",
+   "description": "the continuation word 'typeof' is removed (a line ending in it starts a new member)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"new\", \"typeof\", \"void\", \"delete\", \"in\", \"instanceof\", \"await\", \"yield\", \"as\", \"satisfies\", \"keyof\"])",
+   "new": "new Set([\"new\", \"void\", \"delete\", \"in\", \"instanceof\", \"await\", \"yield\", \"as\", \"satisfies\", \"keyof\"])"
+  },
+  {
+   "id": "F-W03",
+   "description": "the continuation word 'void' is removed (a line ending in it starts a new member)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"new\", \"typeof\", \"void\", \"delete\", \"in\", \"instanceof\", \"await\", \"yield\", \"as\", \"satisfies\", \"keyof\"])",
+   "new": "new Set([\"new\", \"typeof\", \"delete\", \"in\", \"instanceof\", \"await\", \"yield\", \"as\", \"satisfies\", \"keyof\"])"
+  },
+  {
+   "id": "F-W04",
+   "description": "the continuation word 'delete' is removed (a line ending in it starts a new member)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"new\", \"typeof\", \"void\", \"delete\", \"in\", \"instanceof\", \"await\", \"yield\", \"as\", \"satisfies\", \"keyof\"])",
+   "new": "new Set([\"new\", \"typeof\", \"void\", \"in\", \"instanceof\", \"await\", \"yield\", \"as\", \"satisfies\", \"keyof\"])"
+  },
+  {
+   "id": "F-W05",
+   "description": "the continuation word 'in' is removed (a line ending in it starts a new member)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"new\", \"typeof\", \"void\", \"delete\", \"in\", \"instanceof\", \"await\", \"yield\", \"as\", \"satisfies\", \"keyof\"])",
+   "new": "new Set([\"new\", \"typeof\", \"void\", \"delete\", \"instanceof\", \"await\", \"yield\", \"as\", \"satisfies\", \"keyof\"])"
+  },
+  {
+   "id": "F-W06",
+   "description": "the continuation word 'instanceof' is removed (a line ending in it starts a new member)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"new\", \"typeof\", \"void\", \"delete\", \"in\", \"instanceof\", \"await\", \"yield\", \"as\", \"satisfies\", \"keyof\"])",
+   "new": "new Set([\"new\", \"typeof\", \"void\", \"delete\", \"in\", \"await\", \"yield\", \"as\", \"satisfies\", \"keyof\"])"
+  },
+  {
+   "id": "F-W07",
+   "description": "the continuation word 'await' is removed (a line ending in it starts a new member)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"new\", \"typeof\", \"void\", \"delete\", \"in\", \"instanceof\", \"await\", \"yield\", \"as\", \"satisfies\", \"keyof\"])",
+   "new": "new Set([\"new\", \"typeof\", \"void\", \"delete\", \"in\", \"instanceof\", \"yield\", \"as\", \"satisfies\", \"keyof\"])"
+  },
+  {
+   "id": "F-W08",
+   "description": "the continuation word 'yield' is removed (a line ending in it starts a new member)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"new\", \"typeof\", \"void\", \"delete\", \"in\", \"instanceof\", \"await\", \"yield\", \"as\", \"satisfies\", \"keyof\"])",
+   "new": "new Set([\"new\", \"typeof\", \"void\", \"delete\", \"in\", \"instanceof\", \"await\", \"as\", \"satisfies\", \"keyof\"])"
+  },
+  {
+   "id": "F-W09",
+   "description": "the continuation word 'as' is removed (a line ending in it starts a new member)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"new\", \"typeof\", \"void\", \"delete\", \"in\", \"instanceof\", \"await\", \"yield\", \"as\", \"satisfies\", \"keyof\"])",
+   "new": "new Set([\"new\", \"typeof\", \"void\", \"delete\", \"in\", \"instanceof\", \"await\", \"yield\", \"satisfies\", \"keyof\"])"
+  },
+  {
+   "id": "F-W10",
+   "description": "the continuation word 'satisfies' is removed (a line ending in it starts a new member)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"new\", \"typeof\", \"void\", \"delete\", \"in\", \"instanceof\", \"await\", \"yield\", \"as\", \"satisfies\", \"keyof\"])",
+   "new": "new Set([\"new\", \"typeof\", \"void\", \"delete\", \"in\", \"instanceof\", \"await\", \"yield\", \"as\", \"keyof\"])"
+  },
+  {
+   "id": "F-W11",
+   "description": "the continuation word 'keyof' is removed (a line ending in it starts a new member)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"new\", \"typeof\", \"void\", \"delete\", \"in\", \"instanceof\", \"await\", \"yield\", \"as\", \"satisfies\", \"keyof\"])",
+   "new": "new Set([\"new\", \"typeof\", \"void\", \"delete\", \"in\", \"instanceof\", \"await\", \"yield\", \"as\", \"satisfies\"])"
+  },
+  {
+   "id": "F-A01",
+   "description": "a continuation word used as a property name (obj.new) still continues",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (!CONTINUATION_WORDS.has(word) || afterDot(top, st)) return false;",
+   "new": "if (!CONTINUATION_WORDS.has(word)) return false;"
+  },
+  {
+   "id": "F-A02",
+   "description": "a postfix ! after a property named like a continuation word (obj.new!) is read as a prefix NOT",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "&& !afterDot(top, st));",
+   "new": ");"
+  },
+  {
+   "id": "F-A03",
+   "description": "a ! after an operator (= !) is a postfix non-null (member boundary)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "return st < 0 || (CONTINUATION_WORDS",
+   "new": "return (CONTINUATION_WORDS"
+  },
+  {
+   "id": "F-A04",
+   "description": "a )! or ]! in a member declaration is read as a prefix NOT",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (top[q] === \")\" || top[q] === \"]\") return false;",
+   "new": ""
+  },
+  {
+   "id": "F-A05",
+   "description": "a )! in a member declaration is read as a prefix NOT",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (top[q] === \")\" || top[q] === \"]\") return false;",
+   "new": "if (top[q] === \"]\") return false;"
+  },
+  {
+   "id": "F-A06",
+   "description": "a ]! in a member declaration is read as a prefix NOT",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (top[q] === \")\" || top[q] === \"]\") return false;",
+   "new": "if (top[q] === \")\") return false;"
+  },
+  {
+   "id": "F-A07",
+   "description": "spaces before a member-line ! are not skipped (x = a ! then pair())",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "while (q >= 0 && (top[q] === \" \" || top[q] === \"\\t\")) q--;",
+   "new": "while (q >= 0 && top[q] === \"\\t\") q--;"
+  },
+  {
+   "id": "F-A08",
+   "description": "tabs before a member-line ! are not skipped (x = a<TAB>! then pair())",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "while (q >= 0 && (top[q] === \" \" || top[q] === \"\\t\")) q--;",
+   "new": "while (q >= 0 && top[q] === \" \") q--;"
+  },
+  {
+   "id": "F-V01",
+   "description": "void as a type annotation (cb: () => void) is treated as a continuation",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (word === \"void\") {",
+   "new": "if (word === \"never\") {"
+  },
+  {
+   "id": "F-V02",
+   "description": "the arrow of a function type is not blanked before the void type test",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": ".replace(/=>/g, \"  \")",
+   "new": ""
+  },
+  {
+   "id": "F-V03",
+   "description": "the void type test looks at the whole preceding text, not its own line",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "top.slice(top.lastIndexOf(\"\\n\", st) + 1, st)",
+   "new": "top.slice(0, st)"
+  },
+  {
+   "id": "F-V04",
+   "description": "the void type test needs no colon (foo(void is a type)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/^[^=]*:[^=]*$/",
+   "new": "/^[^=]*$/"
+  },
+  {
+   "id": "F-V05",
+   "description": "the void type test accepts anything but = before the colon-less tail only",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/^[^=]*:[^=]*$/",
+   "new": "/^[^=]*:$/"
+  },
+  {
+   "id": "F-V06",
+   "description": "the void type test is not anchored (a ternary x ? a : void is a type)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/^[^=]*:[^=]*$/",
+   "new": "/:[^=]*$/"
+  },
+  {
+   "id": "F-G01",
+   "description": "closesTypeAngle is inverted",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "|| !closesTypeAngle(top, k);",
+   "new": "|| closesTypeAngle(top, k);"
+  },
+  {
+   "id": "F-G02",
+   "description": "closesTypeAngle looks at the whole preceding text, not its own line",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "top.slice(top.lastIndexOf(\"\\n\", k) + 1, k + 1)",
+   "new": "top.slice(0, k + 1)"
+  },
+  {
+   "id": "F-G05",
+   "description": "a < is never pushed on the angle stack",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (line[i] === \"<\") stack.push(i);",
+   "new": "if (false) stack.push(i);"
+  },
+  {
+   "id": "F-G06",
+   "description": "the > of an arrow (=>) pops the angle stack",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "line[i] === \">\" && line[i - 1] !== \"=\"",
+   "new": "line[i] === \">\""
+  },
+  {
+   "id": "F-G07",
+   "description": "the last > is also scanned as an opener/closer (it pops its own opener)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "i < line.length - 1;",
+   "new": "i < line.length;"
+  },
+  {
+   "id": "F-G08",
+   "description": "a closing > never pops the angle stack (inner generics)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "else if (line[i] === \">\" && line[i - 1] !== \"=\") stack.pop();",
+   "new": "else if (false) stack.pop();"
+  },
+  {
+   "id": "F-G09",
+   "description": "the type-annotation test no longer accepts colon",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/:[\\s\\p{L}\\p{N}_$.|&[\\]]*$/u",
+   "new": "/[\\s\\p{L}\\p{N}_$.|&[\\]]*$/u"
+  },
+  {
+   "id": "F-G10",
+   "description": "the type-annotation test no longer accepts space",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/:[\\s\\p{L}\\p{N}_$.|&[\\]]*$/u",
+   "new": "/:[\\p{L}\\p{N}_$.|&[\\]]*$/u"
+  },
+  {
+   "id": "F-G11",
+   "description": "the type-annotation test no longer accepts letters",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/:[\\s\\p{L}\\p{N}_$.|&[\\]]*$/u",
+   "new": "/:[\\s\\p{N}_$.|&[\\]]*$/u"
+  },
+  {
+   "id": "F-G12",
+   "description": "the type-annotation test no longer accepts digits",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/:[\\s\\p{L}\\p{N}_$.|&[\\]]*$/u",
+   "new": "/:[\\s\\p{L}_$.|&[\\]]*$/u"
+  },
+  {
+   "id": "F-G13",
+   "description": "the type-annotation test no longer accepts underscore",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/:[\\s\\p{L}\\p{N}_$.|&[\\]]*$/u",
+   "new": "/:[\\s\\p{L}\\p{N}$.|&[\\]]*$/u"
+  },
+  {
+   "id": "F-G14",
+   "description": "the type-annotation test no longer accepts dollar",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/:[\\s\\p{L}\\p{N}_$.|&[\\]]*$/u",
+   "new": "/:[\\s\\p{L}\\p{N}_.|&[\\]]*$/u"
+  },
+  {
+   "id": "F-G15",
+   "description": "the type-annotation test no longer accepts dot",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/:[\\s\\p{L}\\p{N}_$.|&[\\]]*$/u",
+   "new": "/:[\\s\\p{L}\\p{N}_$|&[\\]]*$/u"
+  },
+  {
+   "id": "F-G16",
+   "description": "the type-annotation test no longer accepts pipe",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/:[\\s\\p{L}\\p{N}_$.|&[\\]]*$/u",
+   "new": "/:[\\s\\p{L}\\p{N}_$.&[\\]]*$/u"
+  },
+  {
+   "id": "F-G17",
+   "description": "the type-annotation test no longer accepts ampersand",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/:[\\s\\p{L}\\p{N}_$.|&[\\]]*$/u",
+   "new": "/:[\\s\\p{L}\\p{N}_$.|[\\]]*$/u"
+  },
+  {
+   "id": "F-G18",
+   "description": "the type-annotation test no longer accepts lbracket",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/:[\\s\\p{L}\\p{N}_$.|&[\\]]*$/u",
+   "new": "/:[\\s\\p{L}\\p{N}_$.|&\\]]*$/u"
+  },
+  {
+   "id": "F-G19",
+   "description": "the type-annotation test no longer accepts rbracket",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/:[\\s\\p{L}\\p{N}_$.|&[\\]]*$/u",
+   "new": "/:[\\s\\p{L}\\p{N}_$.|&[]*$/u"
+  },
+  {
+   "id": "F-R01",
+   "description": "a regex is allowed after any ) (division after a call is misread)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (p === \")\") return k === controlClose;",
+   "new": "if (p === \")\") return true;"
+  },
+  {
+   "id": "F-R02",
+   "description": "a ) never ends a control header (if (a) /re/ is a division)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (p === \")\") return k === controlClose;",
+   "new": "if (p === \")\") return false;"
+  },
+  {
+   "id": "F-R03",
+   "description": "the control-header close test is inverted",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (p === \")\") return k === controlClose;",
+   "new": "if (p === \")\") return k !== controlClose;"
+  },
+  {
+   "id": "F-R04",
+   "description": "a ! after any word starts a regex",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "return !afterDot(code, before.start) && REGEX_KEYWORDS.has(before.word);",
+   "new": "return true;"
+  },
+  {
+   "id": "F-R05",
+   "description": "a ! after any word is a postfix non-null",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "return !afterDot(code, before.start) && REGEX_KEYWORDS.has(before.word);",
+   "new": "return false;"
+  },
+  {
+   "id": "F-R06",
+   "description": "a ! after a keyword used as a property name (a.return !/ 2) starts a regex",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "return !afterDot(code, before.start) && REGEX_KEYWORDS.has(before.word);",
+   "new": "return REGEX_KEYWORDS.has(before.word);"
+  },
+  {
+   "id": "F-R07",
+   "description": "the ! branch of regexAllowed is skipped",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "    if (p === \"!\") {",
+   "new": "    if (p === \"!\" && false) {"
+  },
+  {
+   "id": "F-C01",
+   "description": "if ( is not a control header",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "return w !== null && !afterDot(code, w.start) && (w.word === \"if\" || w.word === \"while\" || w.word === \"for\" || w.word === \"with\");",
+   "new": "return w !== null && !afterDot(code, w.start) && (w.word === \"while\" || w.word === \"for\" || w.word === \"with\");"
+  },
+  {
+   "id": "F-C02",
+   "description": "while ( is not a control header",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "return w !== null && !afterDot(code, w.start) && (w.word === \"if\" || w.word === \"while\" || w.word === \"for\" || w.word === \"with\");",
+   "new": "return w !== null && !afterDot(code, w.start) && (w.word === \"if\" || w.word === \"for\" || w.word === \"with\");"
+  },
+  {
+   "id": "F-C03",
+   "description": "for ( is not a control header",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "return w !== null && !afterDot(code, w.start) && (w.word === \"if\" || w.word === \"while\" || w.word === \"for\" || w.word === \"with\");",
+   "new": "return w !== null && !afterDot(code, w.start) && (w.word === \"if\" || w.word === \"while\" || w.word === \"with\");"
+  },
+  {
+   "id": "F-C04",
+   "description": "with ( is not a control header",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "return w !== null && !afterDot(code, w.start) && (w.word === \"if\" || w.word === \"while\" || w.word === \"for\" || w.word === \"with\");",
+   "new": "return w !== null && !afterDot(code, w.start) && (w.word === \"if\" || w.word === \"while\" || w.word === \"for\");"
+  },
+  {
+   "id": "F-C05",
+   "description": "obj.if ( counts as a control header",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "return w !== null && !afterDot(code, w.start) && (w.word === \"if\" || w.word === \"while\" || w.word === \"for\" || w.word === \"with\");",
+   "new": "return w !== null && (w.word === \"if\" || w.word === \"while\" || w.word === \"for\" || w.word === \"with\");"
+  },
+  {
+   "id": "F-C06",
+   "description": "no paren is ever a control header",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "parens.push(controlHeader());",
+   "new": "parens.push(false);"
+  },
+  {
+   "id": "F-C07",
+   "description": "every paren is a control header",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "parens.push(controlHeader());",
+   "new": "parens.push(true);"
+  },
+  {
+   "id": "F-C08",
+   "description": "the control-close index is one too large",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "controlClose = code.length;",
+   "new": "controlClose = code.length + 1;"
+  },
+  {
+   "id": "F-C09",
+   "description": "the control-close index is one too small",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "controlClose = code.length;",
+   "new": "controlClose = code.length - 1;"
+  },
+  {
+   "id": "F-C10",
+   "description": "the control-close test is inverted when a paren pops",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (parens.pop() === true)",
+   "new": "if (parens.pop() !== true)"
+  },
+  {
+   "id": "F-S01",
+   "description": "UTF-16 surrogate pairs are never joined (astral identifier characters)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (u >= \"\\uDC00\" && u <= \"\\uDFFF\" && arr[k - 1] >= \"\\uD800\" && arr[k - 1] <= \"\\uDBFF\") return",
+   "new": "if (false) return"
+  },
+  {
+   "id": "F-S03",
+   "description": "only the low surrogate is tested for an astral identifier character",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "IDENT_CHAR.test(arr[k - 1] + u)",
+   "new": "IDENT_CHAR.test(u)"
+  },
+  {
+   "id": "F-S05",
+   "description": "a non-identifier character is treated as a word start",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (first < 0) return -1;",
+   "new": "if (first < 0) return 0;"
+  },
+  {
+   "id": "F-S06",
+   "description": "the word walk stops one character short of the source start",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (prev < 0) return first;",
+   "new": "if (prev <= 0) return first;"
+  },
+  {
+   "id": "F-S07",
+   "description": "wordBefore drops the last character of the word",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "code.slice(st, k + 1).join(\"\")",
+   "new": "code.slice(st, k).join(\"\")"
+  },
+  {
+   "id": "F-S08",
+   "description": "a word that starts at index 0 is not a word",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "return st < 0 ? null :",
+   "new": "return st <= 0 ? null :"
+  },
+  {
+   "id": "F-S09",
+   "description": "a property dot is any punctuation",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "return q >= 0 && arr[q] === \".\";",
+   "new": "return q >= 0 && arr[q] === \",\";"
+  },
+  {
+   "id": "F-X01",
+   "description": "the predev fixtures exemption is gone (production-imported data is not walked)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(EXCLUDED_DIRS.has(e.name.toLowerCase()) && !WALKED_DATA_DIRS.has(rel(repoRoot, p)))",
+   "new": "EXCLUDED_DIRS.has(e.name.toLowerCase())"
+  },
+  {
+   "id": "F-X02",
+   "description": "the walked data directory set is empty",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"core/workos/predev/fixtures\"])",
+   "new": "new Set<string>()"
+  },
+  {
+   "id": "F-X03",
+   "description": "the walked data directory path has a trailing slash (never matches)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"core/workos/predev/fixtures\"])",
+   "new": "new Set([\"core/workos/predev/fixtures/\"])"
+  },
+  {
+   "id": "F-X04",
+   "description": "the exemption compares the parent directory, not the entry",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "WALKED_DATA_DIRS.has(rel(repoRoot, p))",
+   "new": "WALKED_DATA_DIRS.has(rel(repoRoot, dir))"
+  },
+  {
+   "id": "F-X05",
+   "description": "every excluded directory is walked (the exemption is unconditional)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "WALKED_DATA_DIRS.has(rel(repoRoot, p))",
+   "new": "WALKED_DATA_DIRS.has(\"core/workos/predev/fixtures\")"
+  },
+  {
+   "id": "F-X06",
+   "description": "the exemption path match is case insensitive",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "WALKED_DATA_DIRS.has(rel(repoRoot, p))",
+   "new": "WALKED_DATA_DIRS.has(rel(repoRoot, p).toLowerCase())"
+  },
+  {
+   "id": "F-X07",
+   "description": "the census walk lower-cases nothing (Tests/DIST at depth are walked)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "EXCLUDED_DIRS.has(e.name.toLowerCase())",
+   "new": "EXCLUDED_DIRS.has(e.name)"
   }
  ]
 }

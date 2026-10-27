@@ -749,6 +749,58 @@ describe("C-RDY-2a adapter-reality", () => {
     ] as Array<[string, string[]]>) expect(calls(text), text).toEqual(expected);
   });
 
+  it("final TEP-1 fix: word operators, ~, >, >> and prefix ! continue a member expression; marks, astral and ZWNJ identifiers, spaced ! and control-header regexes are scanned right; walk and path edges", () => {
+    // //TR: M1 (L3 gerilemesi): önceki satır bir sözcük işleciyle (new, typeof, void, delete, in, instanceof, await, as, yield, satisfies, keyof), önek `~`/`!` ya da karşılaştırma/kaydırma `>`/`>>`/`>>>` ile bitiyorsa sonraki `pair(` bir ÜYE değildir: yöntem yokken dışa aktarım ABSENT (EXPORT_NOT_DECLARED). Olumlu kontroller PRESENT kalır: `m: Map<string, number>`, `x = y!`, `obj.new`, tip açıklamasındaki `void`, boşluklu sonek `!`, iç içe genel tipler, `?.new`.
+    const memberRec = (body: string) => verifyRecord(rec({module: "core/workos/x.ts", exportName: "LocalClaudeExecutors", member: "pair", callers: [{file: "core/workos/runner.ts", references: "new LocalClaudeExecutors("}]}), fx({"core/workos/x.ts": body, "core/workos/runner.ts": "const e = new LocalClaudeExecutors();\n"}));
+    const decl = (first: string, second = "pair(cfg);") => `export class LocalClaudeExecutors {\n  ${first}\n    ${second}\n}`;
+    const ABSENT = {exportDeclared: false, codePath: "ABSENT", reasons: ["EXPORT_NOT_DECLARED"]};
+    const endings = ["new", "typeof", "void", "delete", "this.n in", "this.n instanceof", "await", "as", "~", "this.n >", "this.n >>", "this.n >>>", "!", "a + !", "yield", "satisfies", "keyof", "await !", "foo(a,", "x ? a :", "this.a < this.b >", "x ? a : void", "x = c ? a : b\n  q < z >"];
+    for (const ending of endings) expect(memberRec(decl(`reviewer = ${ending}`)), ending).toMatchObject(ABSENT);
+    // //TR: `void` bir tip açıklaması DEĞİLSE (`:` yok, `=` yok) devamdır.
+    for (const first of ["foo(void", "m: Foo<(a) =>"]) expect(memberRec(decl(first)), first).toMatchObject(ABSENT);
+    const PRESENT = {exportDeclared: true, codePath: "PRESENT", reasons: []};
+    const controls = ["m: Map<string, number>", "x = y!", "x = obj.new", "x = a !", "cb: () => void", "m: Array<Map<string, number>>", "m: Promise<Map<string, Array<number>>>", "m: Foo.Bar<string>", "x = a?.new", "x = obj\n    .typeof", "x = (a)!", "x = arr[0]!", "x = new Map<string, number>()", "x = a >= b", "x = i++", "@dec", "x: number;", "x = obj.new!", "x = a\t!", "x = 1;\n  cb: () => void", "m: Map2<string>", "m: My_Map<string>", "m: $Map<string>", "m: A | Map<string>", "m: A & Map<string>", "m: Foo[] | Map<string>", "m: Map<Array<string>, number>", "m: Foo<(a: string) => void>"];
+    for (const first of controls) expect(memberRec(decl(first, "pair() {}")), first).toMatchObject(PRESENT);
+    // //TR: M2: birleşen işaret, astral tanımlayıcı, sondaki ZWNJ ve boşluklu `x !/ 2` bölmedir; dizenin içindeki metin KOD sayılmaz (runGitleaks( çağıran DEĞİLDİR). İşaretsiz kontrol ve gerçek çağrı korunur.
+    const runner = (body: string) => fx({"core/workos/security-tools.ts": "export function runGitleaks() {}\n", "core/workos/runner.ts": body});
+    const NOT_FOUND = {verifiedCallers: 0, codePath: "ABSENT", reasons: ["CALLER_NOT_FOUND", "NO_PRODUCTION_CALLER"]};
+    const str = "const s = \"/ runGitleaks(dir) /\";\n";
+    const misreads = [`const x\u0301 = 4;\nconst q = x\u0301 / 2; ${str}`, `const \u{1D465} = 4;\nconst q = \u{1D465} / 2; ${str}`, `const x\u200C = 4;\nconst q = x\u200C / 2; ${str}`, `const x = 4;\nconst q = x !/ 2; ${str}`, `const x = 4;\nconst q = x / 2; ${str}`,
+      `const x\u200D = 4;\nconst q = x\u200D / 2; ${str}`, `const x\u0903 = 4;\nconst q = x\u0903 / 2; ${str}`, `const x\u203F = 4;\nconst q = x\u203F / 2; ${str}`, `const x\u{1D7CE} = 4;\nconst q = x\u{1D7CE} / 2; ${str}`, `const x\u{1D165} = 4;\nconst q = x\u{1D165} / 2; ${str}`, `const x\u{E0100} = 4;\nconst q = x\u{E0100} / 2; ${str}`,
+      `const x = 4;\nconst q = x\t!/ 2; ${str}`, `const x = 4;\nconst q = (x) !/ 2; ${str}`, `const x = [4];\nconst q = x[0] !/ 2; ${str}`, `const o = {a: 4};\nconst q = o.return !/ 2; ${str}`];
+    for (const body of misreads) expect(verifyRecord(rec(), runner(body)), JSON.stringify(body)).toMatchObject(NOT_FOUND);
+    expect(verifyRecord(rec(), runner(`const x\u0301 = 4;\nconst q = x\u0301 / 2;\nawait runGitleaks(dir);\n`))).toMatchObject({verifiedCallers: 1, codePath: "PRESENT"});
+    const calls = (text: string) => { const v = codeViews(text); return v === null ? null : [...v.code.matchAll(/call\((\w+)\)/g)].map(m => m[1]); };
+    for (const [text, expected] of [
+      ["const q = x\u203F / call(pc) / 2;", ["pc"]], ["const q = x\u0903 / call(mc) / 2;", ["mc"]], ["const q = x\u200D / call(zwj) / 2;", ["zwj"]], ["const q = x\u{1D7CE} / call(ad) / 2;", ["ad"]], ["const q = \u{1D465} / call(al) / 2;", ["al"]], ["const q = x\u{1D165} / call(am) / 2;", ["am"]],
+      ["const q = x ! / call(sp2) / 2;", ["sp2"]], ["const q = x\t!/ call(sp3) / 2;", ["sp3"]], ["const q = (a) !/ call(sp4) / 2;", ["sp4"]], ["const q = arr[0] !/ call(sp5) / 2;", ["sp5"]], ["const q = a.return !/ call(pr) / 2;", ["pr"]],
+      ["const t = x\n!/a\"b/.test(y);\ncall(nl1);", ["nl1"]], ["function f(x) { return !/a\"b/.test(x); }\ncall(kw1);", ["kw1"]], ["const w = a || !/a\"b/.test(y);\ncall(pf);", ["pf"]],
+      ["if (a) /a\"b/.test(x);\ncall(c1);", ["c1"]], ["while (a) /a\"b/.test(x);\ncall(c2);", ["c2"]], ["for (;;) /a\"b/.test(x);\ncall(c3);", ["c3"]], ["if (f(a)) /a\"b/.test(x);\ncall(c4);", ["c4"]], ["with (a) /a\"b/.test(x);\ncall(c5);", ["c5"]], ["else if (a)\n/a\"b/.test(x);\ncall(c6);", ["c6"]],
+      ["const q = foo(a) / call(d1) / 2;", ["d1"]], ["const q = obj.if(a) / call(d2) / 2;", ["d2"]], ["const q = (x) / call(d3) / 2;", ["d3"]], ["if (a) b; const q = (x) / call(d4) / 2;", ["d4"]], ["switch (a) {}\nconst q = f(a) / call(d5) / 2;", ["d5"]], ["xreturn / call(st) / 2;", ["st"]]
+    ] as Array<[string, string[]]>) expect(calls(text), text).toEqual(expected);
+    expect(verifyRecord(rec(), runner("if (a) /runGitleaks(dir)/.test(s);\n"))).toMatchObject(NOT_FOUND);
+    // //TR: LOW (a): üretimin içe aktardığı veri dizini core/workos/predev/fixtures taranır (sayım ve içe aktaran taramaları); başka `fixtures` dizinleri (ve büyük/küçük harf farklı yol) hâlâ taranmaz. Çağıran yolu kuralı değişmez (fixtures altı çağıran DEĞİLDİR).
+    const impl = (up: number) => `import {resolveCapability} from "${"../".repeat(up)}capabilities/resolver.js";\n`;
+    const impRoot = (f: string, up: number) => findProductionImporters(fx({"core/capabilities/resolver.ts": "export function resolveCapability() {}\n", [f]: impl(up)}), DEAD_CODE_PROBES[0]);
+    expect(impRoot("core/workos/predev/fixtures/taskhub/x.ts", 4)).toEqual(["core/workos/predev/fixtures/taskhub/x.ts"]);
+    expect(impRoot("core/workos/predev/fixtures/y.ts", 3)).toEqual(["core/workos/predev/fixtures/y.ts"]);
+    for (const [f, up] of [["core/workos/other/fixtures/x.ts", 3], ["core/predev/fixtures/x.ts", 2], ["core/workos/predev/Fixtures/x.ts", 3], ["core/workos/predev/fixture/x.ts", 3], ["core/workos/fixtures/predev/x.ts", 3]] as const) expect(impRoot(f, up), f).toEqual([]);
+    const idHit = (files: string[]) => { const m = censusProduction(fx(Object.fromEntries(files.map(f => [f, "const x = \"acme-tool\";\n"]))), ["acme-tool"]).registryIds.get("acme-tool"); return m === undefined ? [] : [...m]; };
+    expect(idHit(["core/workos/predev/fixtures/taskhub/f.ts", "core/workos/other/fixtures/g.ts"])).toEqual(["core/workos/predev/fixtures/taskhub/f.ts"]);
+    expect(verifyRecord(rec({callers: [{file: "core/workos/predev/fixtures/x.ts", references: "runGitleaks("}]}), fx({"core/workos/security-tools.ts": "export function runGitleaks() {}\n", "core/workos/predev/fixtures/x.ts": "await runGitleaks(dir);\n"}))).toMatchObject({verifiedCallers: 0, reasons: ["CALLER_NOT_PRODUCTION", "NO_PRODUCTION_CALLER"]});
+    // //TR: LOW (b): sayım yürüyüşü test/destek dizinlerini HER derinlikte dışlar (tests, test, __tests__, __mocks__, fixtures, fixture, node_modules, dist, büyük/küçük harf) ve test destek adlı dosyaları; derindeki gerçek dosya sayılır.
+    const deep = "core/a/b/c";
+    const skipped = ["tests", "test", "__tests__", "__mocks__", "fixtures", "fixture", "Tests", "TESTS", "node_modules", "dist", "DIST"].map(d => `${deep}/${d}/t.ts`);
+    expect(idHit([`${deep}/real.ts`, ...skipped, `${deep}/x.test.ts`, `${deep}/y-selftest.mjs`, `${deep}/fake-z.mjs`, `${deep}/w.spec.ts`])).toEqual([`${deep}/real.ts`]);
+    expect(idHit([`${deep}/contest/t.ts`, `${deep}/tests.ts`, `${deep}/my-fake-tool.mjs`])).toEqual([`${deep}/contest/t.ts`, `${deep}/my-fake-tool.mjs`, `${deep}/tests.ts`]);
+    // //TR: LOW (c)/(d): `export default abstract class` başlığı üyeyi bulur; çağıran yolunun kenar durumları (kök tek başına, sondaki eğik çizgi, ./ öneki, büyük harfli uzantı, boşluklu ad, ters eğik çizgi/sürücü/mutlak yol, NUL) üretim DEĞİLDİR; derin ve noktalı adlı kaynak dosyalar üretimdir.
+    expect(declaresMember("export default abstract class K {\n  pair() {}\n}", "K", "pair")).toBe(true);
+    expect(declaresMember("export default abstract class K {\n  pair() {}\n}", "K", "other")).toBe(false);
+    const edge = (file: string) => verifyRecord(rec({callers: [{file, references: "runGitleaks("}]}), fx({"core/workos/security-tools.ts": "export function runGitleaks() {}\n", "core/a.ts": "await runGitleaks(dir);\n", "scripts/a.mjs": "await runGitleaks(dir);\n", "apps/a/b/c/d/e.js": "await runGitleaks(dir);\n", "automation/lib/x.cjs": "await runGitleaks(dir);\n", "core/a.b.c.ts": "await runGitleaks(dir);\n", "core/a b.ts": "await runGitleaks(dir);\n"})).verifiedCallers;
+    for (const bad of ["core", "core/", "./core/a.ts", "core/a.ts/", "core/a.TS", "core/a.json", "core/a.ts ", " core/a.ts", "/core/a.ts", "C:/core/a.ts", "C:\\core\\a.ts", "\\core\\a.ts", "core\\a.ts", "core/a\u0000.ts", "core//a.ts", "core/./a.ts", "core/b/../a.ts", "../core/a.ts", "core/..", "Core/a.ts", "SCRIPTS/a.mjs"]) expect(edge(bad), JSON.stringify(bad)).toBe(0);
+    for (const good of ["core/a.ts", "scripts/a.mjs", "apps/a/b/c/d/e.js", "automation/lib/x.cjs", "core/a.b.c.ts", "core/a b.ts"]) expect(edge(good), good).toBe(1);
+  });
+
   it("registry loader fails closed", () => {
     const rel = "registries/tool-adapters.json";
     const root = (body: string | null) => { const r = fs.mkdtempSync(path.join(tmp, "reg-")); if (body !== null) { fs.mkdirSync(path.join(r, "registries")); fs.writeFileSync(path.join(r, rel), body); } return r; };
