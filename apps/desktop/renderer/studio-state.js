@@ -15,6 +15,10 @@ const freshIdea=()=>({title:"",objective:"",criteria:[""],riskLevel:"R1",mission
 export const ideaDraft=freshIdea();
 export function resetIdea(){Object.assign(ideaDraft,freshIdea());studioTrackers.idea.reset()}
 export const studioUi={wizardOpen:false,importOpen:false};
+// //TR: Son içe aktarmanın karantina sonucu (mapImportQuarantine çıktısı); yalnız bellekte, yeni içe aktarma başlayınca silinir.
+export const importOutcome={projectId:null,quarantine:null};
+export function setImportOutcome(projectId,quarantine){importOutcome.projectId=projectId;importOutcome.quarantine=quarantine}
+export function clearImportOutcome(){importOutcome.projectId=null;importOutcome.quarantine=null}
 
 /** Çalışma alanını açar; proje değişince dosya/diff konumu sıfırlanır. */
 export function openProject(id,tab="overview"){
@@ -25,4 +29,4 @@ export function closeProject(){studio.projectId=null;studio.tab="overview";studi
 export function setTab(tab){if(STUDIO_TABS.includes(tab))studio.tab=tab}
 export function resetWizard(){Object.assign(wizard,freshWizard());studioTrackers.wizard.reset()}
 export function resetImport(){Object.assign(importDraft,freshImport())}
-export function resetStudio(){Object.assign(studio,freshStudio());resetWizard();resetIdea();resetImport();studioUi.wizardOpen=false;studioUi.importOpen=false}
+export function resetStudio(){Object.assign(studio,freshStudio());resetWizard();resetIdea();resetImport();clearImportOutcome();studioUi.wizardOpen=false;studioUi.importOpen=false}

@@ -5,6 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
+import {pathToFileURL} from "node:url";
 import {spawnGitSync} from "../automation/lib/git-isolation.mjs";
 import {AGENT_CONFIG_PATTERNS, agentConfigPattern} from "../core/workos/agent-config-paths.js";
 import {AGENT_CONFIG_QUARANTINE_COMMIT, ProjectStudio} from "../core/workos/project-studio.js";
@@ -133,6 +134,40 @@ describe("SBX-8 E: Studio import quarantines agent config", () => {
     const repo = path.join(dataDir, "projects", pid, "repo");
     expect(git(repo, ["rev-parse", "HEAD"])).toBe(r.json().import.headSha);
     expect(fs.existsSync(path.join(repo, "CLAUDE.md"))).toBe(false);
+  });
+  // //TR: Sözleşme testi (A-UI125-1): masaüstü renderer'ın mapImportQuarantine eşleyicisi GERÇEK sunucu yanıtını okur; sunucu şekli değişirse (alan adı, sayı, kesme kuralı) bu test düşer, renderer sessizce "bilinmiyor"a düşmez.
+  it("API -> renderer contract: the desktop mapper reads the REAL import answer (quarantined git and ZIP import, and a clean import)", { timeout: T }, async () => {
+    const mapper = (await import(pathToFileURL(path.join(REPO, "apps", "desktop", "renderer", "project-core.js")).href)).mapImportQuarantine;
+    const runtime = path.join(tmp, "runtime"), dataDir = path.join(tmp, "api-data");
+    fs.mkdirSync(runtime, {recursive: true});
+    const app = buildServer({controlToken: TOKEN, runtime, dataDir, repoRoot: REPO, controlRoot: path.join(tmp, "control"), port: 3210, logger: false, tenantId: "tA"});
+    apps.push(app);
+    const call = async (method: "GET" | "POST", url: string, payload?: unknown) => { const r = await app.inject({method, url, headers: HDR, ...(payload !== undefined ? {payload: payload as object} : {})}); return {status: r.statusCode, body: r.json()}; };
+    const projectId = async (key: string) => { const c = await call("POST", "/v1/projects", {name: key, environmentId: "dev", idempotencyKey: key}); expect(c.status, JSON.stringify(c.body)).toBe(201); return c.body.project.projectId as string; };
+    // quarantined git import
+    const quarantined = await call("POST", `/v1/projects/${await projectId("sbx8-c1")}/import`, {kind: "git", path: (() => { const src = path.join(tmp, "source"); fs.mkdirSync(src, {recursive: true}); git(src, ["init", "-q", "-b", "main"]); for (const [rel, data] of Object.entries({...SAMPLES, ...KEEP})) { fs.mkdirSync(path.dirname(path.join(src, rel)), {recursive: true}); fs.writeFileSync(path.join(src, rel), data); } git(src, ["add", "-A"]); git(src, ["-c", "user.name=Seed", "-c", "user.email=seed@local.invalid", "commit", "-q", "-m", "seed"]); return src; })()});
+    expect(quarantined.status, JSON.stringify(quarantined.body)).toBe(200);
+    const mq = mapper(quarantined);
+    expect(mq.state).toBe("QUARANTINED");
+    expect(mq.count).toBe(Object.keys(SAMPLES).length);
+    expect(mq.files.map((f: {path: string}) => f.path).sort()).toEqual(Object.keys(SAMPLES).sort());
+    expect(mq.headSha).toBe(quarantined.body.import.headSha);
+    expect(mq.truncated).toBe(false);
+    expect(mq.storedUnder).toBe(quarantined.body.import.agentConfigQuarantine.storedUnder);
+    // quarantined ZIP import
+    const zipFile = path.join(tmp, "z.zip");
+    fs.writeFileSync(zipFile, writeZip(Object.entries({...SAMPLES, ...KEEP}).map(([rel, data]) => ({name: `proj/${rel}`, data}))));
+    const zipped = await call("POST", `/v1/projects/${await projectId("sbx8-c2")}/import`, {kind: "zip", path: zipFile});
+    expect(zipped.status, JSON.stringify(zipped.body)).toBe(200);
+    expect(mapper(zipped)).toMatchObject({state: "QUARANTINED", count: Object.keys(SAMPLES).length});
+    // clean git import: the server sends no quarantine field, and the mapper says NONE (not UNKNOWN)
+    const clean = path.join(tmp, "clean"); fs.mkdirSync(clean, {recursive: true}); git(clean, ["init", "-q", "-b", "main"]);
+    for (const [rel, data] of Object.entries(KEEP)) { fs.mkdirSync(path.dirname(path.join(clean, rel)), {recursive: true}); fs.writeFileSync(path.join(clean, rel), data); }
+    git(clean, ["add", "-A"]); git(clean, ["-c", "user.name=Seed", "-c", "user.email=seed@local.invalid", "commit", "-q", "-m", "seed"]);
+    const cleanRes = await call("POST", `/v1/projects/${await projectId("sbx8-c3")}/import`, {kind: "git", path: clean});
+    expect(cleanRes.status, JSON.stringify(cleanRes.body)).toBe(200);
+    expect(cleanRes.body.import).not.toHaveProperty("agentConfigQuarantine");
+    expect(mapper(cleanRes)).toEqual({state: "NONE", headSha: cleanRes.body.import.headSha});
   });
 });
 
