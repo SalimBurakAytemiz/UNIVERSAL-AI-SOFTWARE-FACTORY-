@@ -1283,10 +1283,10 @@ describe("UI-028 role catalogue paging (renderer-only, honest ranges)", () => {
     byData(node, "roleBtn")[0].fire("click");
     node = (await v.render(ctx, ROUTE)) as N;
     click(node, "wf-cat-next"); node = (await v.render(ctx, ROUTE)) as N;
-    const okPath = /^(\/v1\/cockpit|\/v1\/agents|\/v1\/work-runs|\/v1\/roles\?limit=100|\/v1\/roles\?limit=100&cursor=UASCO-\d{4}|\/v1\/roles\/UASCO-\d{4}|\/v1\/roles\/status-summary|\/v1\/adapters)$/; // //TR: A2a Araçlar paneli tek yeni salt-okunur yol ekler (GET /v1/adapters, main.mjs GET izin listesinde zaten var); sayfalama hâlâ yeni yol/sorgu anahtarı eklemez.
+    const okPath = /^(\/v1\/cockpit|\/v1\/agents|\/v1\/work-runs|\/v1\/roles\?limit=100|\/v1\/roles\?limit=100&cursor=UASCO-\d{4}|\/v1\/roles\/UASCO-\d{4}|\/v1\/roles\/status-summary)$/;
     for (const p of calls) { expect(p, p).toMatch(okPath); expect(p).not.toMatch(/page|offset/i); }
     const src = fs.readFileSync(path.join(rend, "views", "workforce.js"), "utf8");
-    expect([...new Set([...src.matchAll(/ctx\.api\.(\w+)/g)].map(m => m[1]))].sort()).toEqual(["agentCount", "cockpit", "integrationsAdapters", "roleCatalog", "roleDetail", "rolesReadiness", "rolesStatusSummary", "workRuns"]); // rolesReadiness reads the same /v1/roles/status-summary path (cached, no new route)
+    expect([...new Set([...src.matchAll(/ctx\.api\.(\w+)/g)].map(m => m[1]))].sort()).toEqual(["agentCount", "cockpit", "roleCatalog", "roleDetail", "rolesReadiness", "rolesStatusSummary", "workRuns"]); // rolesReadiness reads the same /v1/roles/status-summary path (cached, no new route)
     expect(src).not.toMatch(/apiPost|window\.uasco|localStorage|sessionStorage|Math\.random|innerHTML/);
     expect(src).not.toContain("workforce.cat.filter.more");
     v.resetWorkforceView();
@@ -1889,24 +1889,23 @@ describe("LANE-A A2a Tools panel (TOOL_READY only; not measured is never zero; n
   };
   const cache = {SUPPLIED: null as any, NOT_SUPPLIED: null as any};
   const summary = (k: "SUPPLIED" | "NOT_SUPPLIED") => structuredClone(cache[k] ??= summaryFor(k));
-  const registry = () => JSON.parse(fs.readFileSync(path.join(REPO, "registries", "tool-adapters.json"), "utf8"));
-  type Feed2 = {adapters?: unknown; summary?: unknown};
+  type Feed2 = {summary?: unknown};
   async function mkTools(feed: Feed2, lang = "en") {
     const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js"), tp = await load("views", "tools-panel.js");
     const doc = new D(), store = st.createStore(null), calls: string[] = [];
     const bridge = {apiGet: async (p: string) => {
       calls.push(p);
-      if (p === "/v1/adapters") { if ("adapters" in feed) { if (feed.adapters instanceof Error) throw feed.adapters; return feed.adapters; } return registry(); }
       if (p === "/v1/roles/status-summary") { const v = "summary" in feed ? feed.summary : summary("SUPPLIED"); if (v instanceof Error) throw v; return v; }
       throw new Error(`${p}: HTTP 404`);
     }};
     const api = apiMod.createApi({bridge, store}), t = (k: string, v?: any) => i18n.translate(lang, k, v);
     const ctx: any = {doc, store, api, i18n: {lang, t}, t, navigate: () => {}, rerender: () => {}, settleFocus: () => {}, principal: "FOUNDER_LOCAL"};
-    const panel = tp.toolsPanel(ctx, {adapters: await api.integrationsAdapters(), ready: await api.rolesReadiness()}) as N;
+    const panel = tp.toolsPanel(ctx, {ready: await api.rolesReadiness()}) as N;
     return {ctx, panel, calls, api};
   }
   const everything = (n: N): string => [n, ...all(n)].map(x => [x._text, x.className, ...x.attrs.values(), ...Object.values(x.dataset)].join("\u0001")).join("\u0002");
   const edit = (k: "SUPPLIED" | "NOT_SUPPLIED", f: (x: any) => void) => { const x = summary(k); f(x); return x; };
+  const hasZeroCount = (hay: string) => /(?<![0-9.,])0(?![0-9])/.test(hay);
 
   it("the real SUPPLIED payload: TOOL_READY is never TRUE without a probe, and the server's reason codes are the only reasons shown", async () => {
     const f = summary("SUPPLIED"), c = await load("agent-factory-core.js");
@@ -1946,7 +1945,7 @@ describe("LANE-A A2a Tools panel (TOOL_READY only; not measured is never zero; n
 
   it("SUPPLIED panel (en): each count carries its denominator, the reasons come from the server with plain texts, the probe sentence is shown, the catalogue count is labelled not verified, and nothing is summed or called installed", async () => {
     const {panel, calls} = await mkTools({});
-    expect(calls.sort()).toEqual(["/v1/adapters", "/v1/roles/status-summary"]);
+    expect(calls).toEqual(["/v1/roles/status-summary"]);
     const f = summary("SUPPLIED"), tool = f.readiness.totals.TOOL_READY;
     expect(byData(panel, "toolsReadiness")[0].dataset.toolsReadiness).toBe("MEASURED");
     expect(byData(panel, "toolsReadiness")[0].dataset.denominator).toBe("599");
@@ -1959,9 +1958,7 @@ describe("LANE-A A2a Tools panel (TOOL_READY only; not measured is never zero; n
     const probeItem = byData(panel, "toolsReason", "PROBE_NOT_OBSERVED")[0];
     expect(text(probeItem)).toContain("9 of 599 roles"); expect(text(byData(panel, "toolsReason", "ROLE_HAS_NO_BINDING")[0])).toContain("The role has no tool binding: 590 of 599 roles");
     expect(text(probeItem)).toContain("A bound adapter's code is checked, but no live probe has run");
-    expect(byData(panel, "toolsCatalogue")[0].dataset.toolsCatalogue).toBe("194");
-    expect(text(byData(panel, "toolsFact", "catalogue")[0])).toContain("Registered in the catalogue (not verified)");
-    expect(text(byData(panel, "toolsFact", "catalogue")[0])).toContain("are claims by the catalogue, not evidence");
+    expect(byData(panel, "toolsCatalogue")).toEqual([]); // the catalogue count is not part of A2a
     // no sums, no percentages, no per-adapter claims
     expect(text(panel)).not.toMatch(/%|percent/i);
     expect(text(panel)).not.toMatch(/install|kurul/i);
@@ -1972,31 +1969,23 @@ describe("LANE-A A2a Tools panel (TOOL_READY only; not measured is never zero; n
     expect(text(byData(panel, "toolsFact", "toolReady")[0])).not.toMatch(/total|sum|combined/i); // the three counts are shown one by one, never added up
   });
 
-  it("NOT_SUPPLIED (packaged build): 'not measured in this app' with no TOOL_READY count, no reason and no zero; the catalogue count stays real", async () => {
+  it("NOT_SUPPLIED (packaged build): 'not measured in this app' with no TOOL_READY count, no reason and no zero", async () => {
     const {panel} = await mkTools({summary: summary("NOT_SUPPLIED")});
     expect(byData(panel, "toolsReadiness")[0].dataset.toolsReadiness).toBe("NOT_MEASURED");
     expect(text(byData(panel, "toolsReadiness")[0])).toBe("Not measured in this app (packaged build): adapter reality is not supplied here. This is not zero and not \"not ready\".");
-    for (const k of ["toolsState", "toolsReason", "toolsReasons", "toolsWhy", "toolsFact"]) {
-      if (k === "toolsFact") expect(byData(panel, k).map(n => n.dataset.toolsFact)).toEqual(["catalogue"]); else expect(byData(panel, k), k).toEqual([]);
-    }
-    expect(byData(panel, "toolsCatalogue")[0].dataset.toolsCatalogue).toBe("194");
+    for (const k of ["toolsState", "toolsReason", "toolsReasons", "toolsWhy", "toolsFact"]) expect(byData(panel, k), k).toEqual([]);
     expect(text(panel)).not.toMatch(/install|kurul/i);
     expect(/(?<![0-9.,])0(?![0-9])/.test(text(byData(panel, "toolsReadiness")[0]))).toBe(false);
   });
 
-  it("readiness unreadable or unavailable: tool readiness is unknown (never zero); the catalogue count is independent, and an unreadable catalogue is UNKNOWN, not 194 or 0", async () => {
+  it("readiness unreadable or unavailable: tool readiness is unknown (never zero), with no count", async () => {
     for (const sum of [new Error("/v1/roles/status-summary: HTTP 404"), new Error("fetch failed"), {...summary("SUPPLIED"), readiness: null, reconciliation: null, readinessError: "ROLE_READINESS_UNAVAILABLE"}]) {
       const {panel} = await mkTools({summary: sum});
       expect(byData(panel, "toolsReadiness")[0].dataset.toolsReadiness).toBe("UNAVAILABLE");
       expect(text(byData(panel, "toolsReadiness")[0])).toBe("Tool readiness could not be read, so it is unknown (not zero).");
       expect(byData(panel, "toolsState")).toEqual([]);
-      expect(byData(panel, "toolsCatalogue")[0].dataset.toolsCatalogue).toBe("194");
+      expect(hasZeroCount(text(panel))).toBe(false);
     }
-    const bad = await mkTools({adapters: new Error("/v1/adapters: HTTP 503")});
-    expect(byData(bad.panel, "toolsCatalogue")[0].dataset.toolsCatalogue).toBe("UNKNOWN");
-    expect(everything(byData(bad.panel, "toolsFact", "catalogue")[0])).not.toContain("194");
-    expect(text(byData(bad.panel, "toolsFact", "catalogue")[0])).toContain("registered count is unknown (not zero)");
-    expect(byData(bad.panel, "toolsReadiness")[0].dataset.toolsReadiness).toBe("MEASURED"); // readiness is still shown
   });
 
   it("an unknown reason code gets the honest fallback (code kept, not hidden); a payload without reasonCounts says the reasons are unknown; a NOT_APPLICABLE count is shown only when there is one", async () => {
@@ -2016,13 +2005,12 @@ describe("LANE-A A2a Tools panel (TOOL_READY only; not measured is never zero; n
     const tr = await mkTools({}, "tr");
     expect(text(byData(tr.panel, "toolsState", "TRUE")[0])).toMatch(/^TRUE: 599 içinde \d+$/);
     expect(text(byData(tr.panel, "toolsWhy", "PROBE_NOT_OBSERVED")[0])).toBe("Bağlı adaptörü olan roller için adaptör kodu denetleniyor ama hiçbir canlı probe çalışmadı, bu yüzden TOOL_READY: TRUE olamazlar.");
-    expect(text(byData(tr.panel, "toolsFact", "catalogue")[0])).toContain("Katalogda kayıtlı (doğrulanmadı)");
     expect(text(tr.panel)).not.toMatch(/install|kurul/i);
     const nm = await mkTools({summary: summary("NOT_SUPPLIED")}, "tr");
     expect(text(byData(nm.panel, "toolsReadiness")[0])).toContain("Bu uygulamada ölçülmedi (paketli derleme)");
     const E = (await load("locales", "en.js")).default as Record<string, string>, T = (await load("locales", "tr.js")).default as Record<string, string>;
     const keys = Object.keys(E).filter(k => k.startsWith("tools."));
-    expect(keys.length).toBe(25);
+    expect(keys.length).toBe(21);
     expect(Object.keys(T).filter(k => k.startsWith("tools.")).sort()).toEqual([...keys].sort());
     const ph = (v: string) => [...v.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort().join(",");
     for (const k of keys) { expect(E[k].length, k).toBeGreaterThan(0); expect(T[k].length, k).toBeGreaterThan(0); expect(ph(T[k]), k).toBe(ph(E[k])); expect(E[k], k).not.toMatch(/install/i); expect(T[k], k).not.toMatch(/kurul/i); }
@@ -2030,18 +2018,16 @@ describe("LANE-A A2a Tools panel (TOOL_READY only; not measured is never zero; n
     for (const code of serverCodes) { expect(E[`tools.reason.${code}`], code).toBeTruthy(); expect(T[`tools.reason.${code}`], code).toBeTruthy(); }
     const src = fs.readFileSync(path.join(rend, "views", "tools-panel.js"), "utf8");
     for (const m of src.matchAll(/ctx\.t\("(tools\.[A-Za-z.]+)"/g)) expect(E[m[1]], m[1]).toBeDefined();
-    expect(src).not.toMatch(/adapters\/reality|ADAPTER_REALITY_PATH/); // A2b is deferred: no proposed route is read
+    expect(src).not.toMatch(/adapters\/reality|ADAPTER_REALITY_PATH|integrationsAdapters|ADAPTERS_PATH/); // A2b is deferred: no adapter route or catalogue call
   });
 
-  it("the Workforce view mounts the panel between the readiness panel and the factory panel and reads only the two existing GET paths", async () => {
+  it("the Workforce view mounts the panel between the readiness panel and the factory panel and reads no new GET path", async () => {
     const m = await mkCtx({roles: "ok", detail: true, statusSummary: summary("SUPPLIED")}, "en");
     const out = await renderWf(m.ctx), ids = all(out.node).filter(n => n.tagName === "SECTION").map(n => n.id);
     expect(ids.indexOf("wf-tools")).toBeGreaterThan(ids.indexOf("wf-readiness"));
     expect(ids.indexOf("wf-tools")).toBeLessThan(ids.indexOf("wf-factory"));
     const panel = byId(out.node, "wf-tools")!;
-    expect(byData(panel, "toolsCatalogue")[0].dataset.toolsCatalogue).toBe("UNKNOWN"); // /v1/adapters is a 404 in this bridge
     expect(byData(panel, "toolsReadiness")[0].dataset.toolsReadiness).toBe("MEASURED");
-    expect(m.calls.filter(p => p.includes("adapters"))).toEqual(["/v1/adapters"]);
-    expect(m.calls.some(p => p.includes("reality"))).toBe(false);
+    expect(m.calls.some(p => p.includes("adapters"))).toBe(false);
   });
 });

@@ -1,20 +1,11 @@
-// //TR: A2a Araçlar paneli (AI İş Gücü görünümünde): yalnız mevcut eşlenmiş hazırlıktan (GET /v1/roles/status-summary: readiness.totals.TOOL_READY, readiness.inputs.adapterReality, sunucunun gönderdiği TOOL_READY neden kodları) ve katalog sayısından (GET /v1/adapters, main.mjs GET izin listesinde zaten var) beslenir. Yeni uç nokta yok, korumalı dosya yok. Her sayının yanında payda gösterilir; toplam, yüzde ya da veride olmayan araç sayısı YOKTUR. adapterReality NOT_SUPPLIED ise "bu uygulamada ölçülmedi" denir (sıfır ya da "hazır değil" değil, sayı da gösterilmez). Probe olmadan hiçbir yerde "kurulu" ya da "hazır" yazılmaz. Adaptör başına satırlar (kod destekli, CI kanıtı, probe, UNDER_REPORTED/DEAD_CODE) A2b'dir: bir Lane B rota uzantısı bekler, burada YOKTUR.
+// //TR: A2a Araçlar paneli (AI İş Gücü görünümünde): yalnız mevcut eşlenmiş hazırlıktan (GET /v1/roles/status-summary: readiness.totals.TOOL_READY, readiness.inputs.adapterReality, sunucunun gönderdiği TOOL_READY neden kodları) beslenir. Yeni uç nokta ve yeni api çağrısı yok, korumalı dosya yok (katalog sayısı satırı bu paketin dışındadır). Her sayının yanında payda gösterilir; toplam, yüzde ya da veride olmayan araç sayısı YOKTUR. adapterReality NOT_SUPPLIED ise "bu uygulamada ölçülmedi" denir (sıfır ya da "hazır değil" değil, sayı da gösterilmez). Probe olmadan hiçbir yerde "kurulu" ya da "hazır" yazılmaz. Adaptör başına satırlar (kod destekli, CI kanıtı, probe, UNDER_REPORTED/DEAD_CODE) A2b'dir: bir Lane B rota uzantısı bekler, burada YOKTUR.
 import {h,panel,stateNote} from "../components.js";
 import {formatCount} from "../model.js";
-import {ADAPTERS_PATH} from "../integrations-core.js";
 import {STATUS_SUMMARY_PATH} from "../agent-factory-core.js";
 
 const KNOWN_REASONS=Object.freeze(["ROLE_HAS_NO_BINDING","ADAPTERS_MISSING","ADAPTER_UNRESOLVED","ADAPTER_CODE_ABSENT","PROBE_FAILED","PROBE_NOT_OBSERVED","ADAPTER_REALITY_NOT_SUPPLIED"]);
 const COUNT_STATES=Object.freeze(["TRUE","FALSE","UNKNOWN","NOT_APPLICABLE"]);
 
-function catalogueRow(ctx,adapters){
-  const doc=ctx.doc;
-  if(!adapters||adapters.state!=="VERIFIED")return h(doc,"div",{class:"tools-fact",dataset:{toolsFact:"catalogue"}},h(doc,"h3",{class:"wf-dist-title",text:ctx.t("tools.catalogue.label")}),
-    stateNote(ctx,adapters?.state??"ERROR"),h(doc,"p",{class:"note note-unknown",dataset:{toolsCatalogue:"UNKNOWN"},text:ctx.t("tools.catalogue.unread")}));
-  const n=adapters.registry.count;
-  return h(doc,"div",{class:"tools-fact",dataset:{toolsFact:"catalogue"}},h(doc,"h3",{class:"wf-dist-title",text:ctx.t("tools.catalogue.label")}),
-    h(doc,"p",{class:"kpi-value",dataset:{toolsCatalogue:String(n)},text:formatCount(n)}),h(doc,"p",{class:"note",text:ctx.t("tools.catalogue.note")}));
-}
 function reasonRows(ctx,r,tool){
   const doc=ctx.doc,den=formatCount(r.denominator),list=r.toolReasons;
   if(list===null)return h(doc,"p",{class:"note note-unknown",dataset:{toolsReasons:"UNKNOWN"},text:ctx.t("tools.reasons.none")});
@@ -25,11 +16,11 @@ function reasonRows(ctx,r,tool){
       " ",h(doc,"span",{class:"mono",text:x.code}));
   }));
 }
-/** Araçlar paneli: adapters = api.integrationsAdapters() sonucu, ready = api.rolesReadiness() sonucu. */
-export function toolsPanel(ctx,{adapters,ready}){
+/** Araçlar paneli: ready = api.rolesReadiness() sonucu. */
+export function toolsPanel(ctx,{ready}){
   const doc=ctx.doc,id="wf-tools";
-  const head=[h(doc,"p",{class:"note",dataset:{semantics:"TOOL_READY_ONLY"},text:ctx.t("tools.lead")}),catalogueRow(ctx,adapters)];
-  const src=h(doc,"p",{class:"note mono",text:`GET ${STATUS_SUMMARY_PATH} · GET ${ADAPTERS_PATH}`});
+  const head=[h(doc,"p",{class:"note",dataset:{semantics:"TOOL_READY_ONLY"},text:ctx.t("tools.lead")})];
+  const src=h(doc,"p",{class:"note mono",text:`GET ${STATUS_SUMMARY_PATH}`});
   if(!ready||ready.state!=="VERIFIED")return panel(ctx,{titleKey:"tools.title",id,className:"wf-tools"},...head,stateNote(ctx,ready?.state??"ERROR"),
     h(doc,"p",{class:"note note-unknown",role:"status",dataset:{toolsReadiness:"UNAVAILABLE"},text:ctx.t("tools.notRead")}),src);
   const r=ready.readiness;
