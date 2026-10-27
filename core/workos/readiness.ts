@@ -3,7 +3,7 @@ import type {Scope, WorkMission as Mission, Project} from "./types.js";
 import type {WorkOsStore} from "./store.js";
 import {riskAdmitted, RISK_REFUSAL} from "./risk-admission.js";
 import {testCommandAllowed} from "./schemas.js";
-import {effectiveTestCommand, repositoryPrecondition} from "./runner.js";
+import {effectiveTestCommand, repositoryPrecondition, repositoryHead} from "./runner.js";
 
 export type ReadinessState = "OK" | "BLOCKED" | "UNKNOWN";
 export type ReadinessCheckId = "MISSION" | "RISK" | "REPOSITORY" | "TEST_COMMAND" | "PLAN";
@@ -19,10 +19,14 @@ const ok = (id: ReadinessCheckId, blocking = true): ReadinessCheck => ({id, stat
 const bad = (id: ReadinessCheckId, reason: string, nextAction: string, blocking = true): ReadinessCheck => ({id, state: "BLOCKED", blocking, reason, nextAction});
 const unknown = (id: ReadinessCheckId, blocking = true): ReadinessCheck => ({id, state: "UNKNOWN", blocking, reason: "SOURCE_UNREADABLE", nextAction: null});
 
-// runner.ts ile AYNI saf fonksiyon (repositoryPrecondition); yol veya URL asla döndürülmez.
+// runner.ts ile AYNI saf fonksiyonlar (repositoryPrecondition, ardından repositoryHead: depo kökü ve HEAD kararı, #218); runner WORKSPACE adımı aynı kararla BLOCK eder, readiness artık "OK" deyip sonra BLOCK etmez. Yol veya URL asla döndürülmez. Sınırlı sorgu: 3 s.
 function repositoryCheck(project: Project, dataDir: string): ReadinessCheck {
-  try { const r = repositoryPrecondition(project, dataDir); return r.ok ? ok("REPOSITORY") : bad("REPOSITORY", r.reason, "CONFIGURE_REPOSITORY"); }
-  catch { return unknown("REPOSITORY"); }
+  try {
+    const r = repositoryPrecondition(project, dataDir);
+    if (!r.ok) return bad("REPOSITORY", r.reason, "CONFIGURE_REPOSITORY");
+    const h = repositoryHead(r.src, {timeoutMs: 3000});
+    return h.ok ? ok("REPOSITORY") : bad("REPOSITORY", h.reason, "CONFIGURE_REPOSITORY");
+  } catch { return unknown("REPOSITORY"); }
 }
 
 export function deriveReadiness(store: WorkOsStore, scope: Scope, projectId: string): ProjectReadiness | undefined {

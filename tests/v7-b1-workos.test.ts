@@ -2338,6 +2338,14 @@ describe("LANE-B run readiness", () => {
   const proj = (s: WorkOsStore, extra: any = {}) => s.createProject({tenantId: "tA", orgId: "o1", name: "p" + Math.random(), environmentId: "local", createdBy: "FOUNDER_LOCAL", ...extra});
   const msn = (s: WorkOsStore, projectId: string, extra: any = {}) => s.createMission({tenantId: "tA", projectId, title: "m", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL", ...extra});
   const rd = async (app: any, id: string) => (await app.inject({method: "GET", url: `/v1/projects/${id}/readiness`, headers: hdr}));
+  // Gerçek git deposu (kök + bir commit): runner'ın WORKSPACE adımı ile readiness'in kabul ettiği tek biçim.
+  const gitRepo = (dir: string, commit = true) => {
+    fs.mkdirSync(dir, {recursive: true});
+    const g = (args: string[]) => { const r = spawnGitSync(dir, args); if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`); };
+    g(["init", "-q", "-b", "main"]);
+    if (commit) { fs.writeFileSync(path.join(dir, "f.txt"), "x"); g(["add", "-A"]); g(["-c", "user.name=Seed", "-c", "user.email=seed@local.invalid", "commit", "-q", "-m", "seed"]); }
+    return dir;
+  };
   const by = (r: any) => Object.fromEntries(r.json().readiness.checks.map((c: any) => [c.id, c]));
 
   it("fresh project: no mission, no repository, no test command are reported with fixed codes and next actions; nothing is invented", async () => {
@@ -2355,7 +2363,7 @@ describe("LANE-B run readiness", () => {
 
   it("ready only when every blocking check is OK; verifiable additionally needs test command and plan; mission test command overrides the project's", async () => {
     const {app, store} = await mk();
-    const repoDir = path.join(tmp, "readiness-repo"); fs.mkdirSync(repoDir, {recursive: true});
+    const repoDir = gitRepo(path.join(tmp, "readiness-repo"));
     const p = proj(store, {repository: {path: repoDir}});
     const m = msn(store, p.projectId);
     let r = await rd(app, p.projectId);
@@ -2417,7 +2425,7 @@ describe("LANE-B run readiness", () => {
   it("readiness REPOSITORY answers are exactly the runner's own repositoryPrecondition reasons for all five BLOCK cases", async () => {
     const {repositoryPrecondition} = await import("../core/workos/runner.js");
     const {app, store} = await mk();
-    const dataDir = path.join(tmp, "data"), okDir = path.join(tmp, "readiness-parity-ok"); fs.mkdirSync(okDir, {recursive: true});
+    const dataDir = path.join(tmp, "data"), okDir = gitRepo(path.join(tmp, "readiness-parity-ok"));
     const cases: [string, any, string | null][] = [
       ["none", undefined, "REPOSITORY_NOT_CONFIGURED"],
       ["url only", {url: "https://example.com/a.git"}, "REMOTE_REPO_NOT_SUPPORTED_YET"],
@@ -2447,14 +2455,28 @@ describe("LANE-B run readiness", () => {
     expect(flag({}, {})).toBe("MISSING");
   });
 
-  it("KNOWN LIMIT (pinned): an existing directory that is not a git repository reads as REPOSITORY OK; the runner later BLOCKs it with REPOSITORY_HEAD_UNRESOLVED", async () => {
+  it("an existing directory that is NOT a git repository is BLOCKED with the runner's own HEAD reason (was the pinned KNOWN LIMIT: it read OK and the runner later BLOCKed it)", async () => {
     const {app, store} = await mk();
     const dir = path.join(tmp, "readiness-not-git"); fs.mkdirSync(dir, {recursive: true});
     const p = proj(store, {repository: {path: dir}});
     msn(store, p.projectId);
     const r = await rd(app, p.projectId);
-    expect(by(r).REPOSITORY.state).toBe("OK");
-    expect(r.json().readiness.ready).toBe(true);
+    expect(by(r).REPOSITORY).toMatchObject({state: "BLOCKED", reason: "REPOSITORY_HEAD_UNRESOLVED", nextAction: "CONFIGURE_REPOSITORY", blocking: true});
+    expect(r.json().readiness.ready).toBe(false);
+    expect(r.body).not.toContain("readiness-not-git");
+  });
+
+  it("readiness REPOSITORY follows repositoryHead for git shapes: a root with a commit is OK, a repo without a commit is HEAD_UNRESOLVED, a sub-directory of a repo is NOT_WORKTREE_ROOT; same decision as the runner's", async () => {
+    const {repositoryHead} = await import("../core/workos/runner.js");
+    const {app, store} = await mk();
+    const root = gitRepo(path.join(tmp, "readiness-git-root")), empty = gitRepo(path.join(tmp, "readiness-git-empty"), false), sub = path.join(root, "pkg"); fs.mkdirSync(sub);
+    const cases: [string, string, string | null][] = [["root with commit", root, null], ["no commit", empty, "REPOSITORY_HEAD_UNRESOLVED"], ["sub-directory", sub, "REPOSITORY_NOT_WORKTREE_ROOT"]];
+    for (const [name, dir, want] of cases) {
+      const p = proj(store, {repository: {path: dir}}); msn(store, p.projectId);
+      const h = repositoryHead(dir), got = by(await rd(app, p.projectId)).REPOSITORY;
+      expect(h.ok ? null : h.reason, name).toBe(want);
+      expect([got.state, got.reason], name).toEqual(want ? ["BLOCKED", want] : ["OK", null]);
+    }
   });
 });
 
