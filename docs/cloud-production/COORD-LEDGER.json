@@ -1112,6 +1112,16 @@
       "ref": "coord base merge ad37b37",
       "policy": "TEP-1",
       "at": "2026-10-27T08:44:16.049Z"
+    },
+    {
+      "pr": 279,
+      "sha": "a8813be15d3b46345109fab5083e2b6710408c5b",
+      "kind": "delta",
+      "base": "2f1067920f60295c6349af205909bfc08ef0b8cd",
+      "verdict": "BASE_MERGE_ONLY_MAP_union_base_first",
+      "ref": "coord-verify-merge-tree-diff-MAP-only",
+      "policy": "TEP-1",
+      "at": "2026-10-27T08:54:45.030Z"
     }
   ],
   "tests": [],
