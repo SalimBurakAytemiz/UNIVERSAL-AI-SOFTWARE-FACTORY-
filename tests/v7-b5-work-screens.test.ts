@@ -1042,7 +1042,8 @@ describe("B5 static safety, routes and wiring", () => {
     // V7-PKG-M1A-MODE: merge-tool sözleşmesi gereği M1a testleri de sona eklenir (m1a-*); B5 sırası ve tekilliği değişmez.
     // V7-CORE-PREDEV (FA-V2-PRODUCT): CORE pre-dev sözleşme testi de sona eklenir (core-predev-*). UX paketleri (ux-*) de sona eklenir; B5 sırası ve tekilliği değişmez.
     // MASTER-V2 C-RDY-1 (#260, R1 TEST_REGISTRATION_APPEND): rol hazırlık denetçisi testi (core-readiness-*) de sona eklenir; sıra ve tekillik kuralı aynen geçerlidir.
-    for (const later of step.command.slice(i + 1)) expect(later).toMatch(/^tests\/v7-(?:b([6-9]|\d{2,})[a-z]?|ps\d+[a-z]?|m1a|core-predev|core-readiness|ux)-[a-z0-9-]+\.test\.ts$/);
+    // MASTER-V2 C-CTX-1 (#265, R1 TEST_REGISTRATION_APPEND): rol bağlamı çözücüsü testi (core-role-*) de sona eklenir; sıra ve tekillik kuralı aynen geçerlidir.
+    for (const later of step.command.slice(i + 1)) expect(later).toMatch(/^tests\/v7-(?:b([6-9]|\d{2,})[a-z]?|ps\d+[a-z]?|m1a|core-predev|core-readiness|core-role|ux)-[a-z0-9-]+\.test\.ts$/);
     expect(step.command).toContain("tests/v7-b4-desktop-shell.test.ts");
     expect(step.command.filter((x: string) => x === "tests/v7-b5-work-screens.test.ts").length).toBe(1);
   });
@@ -1783,6 +1784,123 @@ describe("LANE-A task run link", () => {
     expect(rows.map(n => n.dataset.taskRun)).toEqual([R1, R2]);
     expect(text(rows[0])).toContain("Running"); expect(text(rows[0])).not.toContain("not readable");
     expect(text(rows[1])).toContain("run record not readable"); expect(text(rows[1])).not.toContain("Running");
+  });
+  // //TR: A-UI026-1: denetçideki "Koşu bağı" satırı artık hemen altındaki görev-koşu panelinin okuduğu GET /v1/tasks/:id/runs sonucundan beslenir; okunamayan/geçersiz yanıt UNKNOWN kalır.
+  it("UI-026 inspector 'Run link' row lists the task's linked runs from the same read as the task-runs panel, says 'no run linked' when the read is empty, and stays UNKNOWN when it cannot be read", async () => {
+    const field = (root: N) => byData(root, "taskField", "runLink")[0];
+    const o = await open({linked: {runs: [link(R1), {link: link(R2).link, run: null}]}, missionRuns: [R1, R2]});
+    expect(field(o.root).dataset.taskRunLinks).toBe("linked");
+    expect(byData(field(o.root), "taskRunLink").map(n => n.dataset.taskRunLink)).toEqual([R1, R2]);
+    expect(byData(field(o.root), "taskRunLink").map(n => n.dataset.taskRunLinkGoverning)).toEqual(["0", "1"]);
+    const rows = byData(field(o.root), "taskRunLink");
+    expect(text(rows[0])).toContain("Running");
+    expect(text(rows[1])).toContain("UNKNOWN"); expect(text(rows[1])).not.toContain("Running");
+    expect(o.calls.post).toEqual([]);
+    const none = await open({linked: {runs: []}});
+    expect(field(none.root).dataset.taskRunLinks).toBe("none");
+    expect(text(field(none.root))).toBe("No run is linked to this task.");
+    for (const bad of [undefined, {runs: "x"}, {runs: [{link: null}]}]) {
+      const u = await open({linked: bad});
+      expect(text(field(u.root)), JSON.stringify(bad) ?? "undefined").toBe("UNKNOWN");
+      expect(field(u.root).dataset.taskRunLinks).toBeUndefined();
+      expect(byData(field(u.root), "taskRunLink")).toEqual([]);
+    }
+  });
+  const ids7 = Array.from({length: 7}, (_, i) => "run_" + (i + 1).toString(16).padStart(2, "0").repeat(12));
+  it("UI-026 inspector 'Run link' row shows the NEWEST 5 links (the governing run, the last one linked, is always shown and marked), with an exact '+N older' note and pinned en/tr texts", async () => {
+    const o = await open({linked: {runs: ids7.map(id => link(id))}, missionRuns: ids7});
+    const cell = byData(o.root, "taskField", "runLink")[0];
+    const li = byData(cell, "taskRunLink");
+    expect(li.map(n => n.dataset.taskRunLink)).toEqual(ids7.slice(2));
+    expect(li.map(n => n.dataset.taskRunLinkGoverning)).toEqual(["0", "0", "0", "0", "1"]);
+    expect(text(byData(cell, "runLinkMore", "2")[0])).toBe("+2 older linked run(s) not shown; see the task runs panel below.");
+    const six = await open({linked: {runs: ids7.slice(0, 6).map(id => link(id))}, missionRuns: ids7});
+    const cell6 = byData(six.root, "taskField", "runLink")[0];
+    expect(byData(cell6, "taskRunLink").map(n => n.dataset.taskRunLink)).toEqual(ids7.slice(1, 6));
+    expect(text(byData(cell6, "runLinkMore", "1")[0])).toBe("+1 older linked run(s) not shown; see the task runs panel below.");
+    expect(byData(cell6, "taskRunLink").slice(-1)[0].dataset.taskRunLinkGoverning).toBe("1");
+    const exact = await open({linked: {runs: ids7.slice(0, 5).map(id => link(id))}, missionRuns: ids7});
+    expect(byData(byData(exact.root, "taskField", "runLink")[0], "runLinkMore")).toEqual([]);
+    expect(byData(byData(exact.root, "taskField", "runLink")[0], "taskRunLink").map(n => n.dataset.taskRunLink)).toEqual(ids7.slice(0, 5));
+    expect(byData(byData(exact.root, "taskField", "runLink")[0], "taskRunLink").map(n => n.dataset.taskRunLinkGoverning)).toEqual(["0", "0", "0", "0", "1"]);
+    for (const n of [3, 4]) {
+      const few = await open({linked: {runs: ids7.slice(0, n).map(id => link(id))}, missionRuns: ids7});
+      const c = byData(few.root, "taskField", "runLink")[0];
+      expect(byData(c, "taskRunLink").map(x => x.dataset.taskRunLink), `${n} links`).toEqual(ids7.slice(0, n));
+      expect(byData(c, "taskRunLink").map(x => x.dataset.taskRunLinkGoverning), `${n} links`).toEqual([...Array(n - 1).fill("0"), "1"]);
+      expect(byData(c, "runLinkMore"), `${n} links`).toEqual([]);
+      expect(text(c), `${n} links`).not.toContain("older");
+    }
+    const en = (await load(rend, "locales", "en.js")).default as Record<string, string>, tr = (await load(rend, "locales", "tr.js")).default as Record<string, string>;
+    expect(en["work.task.runLink.none"]).toBe("No run is linked to this task.");
+    expect(tr["work.task.runLink.none"]).toBe("Bu göreve bağlı koşu yok.");
+    expect(en["work.task.runLink.more"]).toBe("+{n} older linked run(s) not shown; see the task runs panel below.");
+    expect(tr["work.task.runLink.more"]).toBe("+{n} daha eski bağlı koşu gösterilmiyor; aşağıdaki görev koşuları panelinde.");
+    expect(en["work.task.lead"]).toBe("Read-only. Shows what the mission read provides and, for the Run link row, the task's linked runs (the same read as the task runs panel below); anything the API does not report is shown as UNKNOWN, never guessed.");
+    expect(tr["work.task.lead"]).toBe("Salt okunur. Mission okumasının verdiğini ve \"Koşu bağı\" satırı için görevin bağlı koşularını (aşağıdaki görev koşuları panelinin okuması) gösterir; API'nin bildirmediği her şey UNKNOWN olarak gösterilir, uydurulmaz.");
+  });
+  it("the inspector row adds NO read of its own: one GET /v1/tasks/:id/runs per render, the same one the panel uses", async () => {
+    const o = await open({linked: {runs: [link(R1)]}, missionRuns: [R1]});
+    const count = () => o.calls.get.filter(p => p === `/v1/tasks/${T1}/runs`).length;
+    o.ctx.store.cache.clear(); // the api serves repeat reads from a TTL cache; clear it so the count below is the reads of ONE render
+    const before = count();
+    mount(o.doc, await o.view.render(o.ctx));
+    expect(count() - before).toBe(1);
+    expect(byId(o.root, "task-runs")).not.toBeNull();
+    // //TR: #278 round 2: round-1 sırasında kaldırılan ASSERTION geri konuldu (yeni sayım testinin yanında ikisi de durur): inspector satırı BAŞKA bir /v1/tasks/ yolunu da okumaz.
+    expect([...new Set(o.calls.get.filter(p => p.startsWith("/v1/tasks/")))]).toEqual([`/v1/tasks/${T1}/runs`]);
+  });
+  it("mapTaskRuns with the requested task and mission: a link for another task or another mission turns the whole read into ERROR (the row shows UNKNOWN, no foreign run)", async () => {
+    const c = await load(rend, "work-core.js");
+    const T2 = "tsk_" + "b2".repeat(12), MID2 = "msn_" + "cd34".repeat(6);
+    expect(c.mapTaskRuns({runs: [link(R1)]}, T1, MID).state).toBe("VERIFIED");
+    expect(c.mapTaskRuns({runs: [link(R1), link(R2, {taskId: T2})]}, T1, MID)).toEqual({state: "ERROR", items: []});
+    expect(c.mapTaskRuns({runs: [link(R1), link(R2, {missionId: MID2})]}, T1, MID)).toEqual({state: "ERROR", items: []});
+    expect(c.mapTaskRuns({runs: [link(R1, {taskId: T2})]}, T1)).toEqual({state: "ERROR", items: []});
+    expect(c.mapTaskRuns({runs: [link(R1, {missionId: MID2})]}, T1, undefined).state).toBe("VERIFIED"); // no mission requested: unchanged one-argument behaviour
+    expect(c.mapTaskRuns({runs: [link(R1, {taskId: T2})]}).state).toBe("VERIFIED");
+    const o = await open({linked: {runs: [link(R1), link(R2, {taskId: T2})]}, missionRuns: [R1, R2]});
+    const cell = byData(o.root, "taskField", "runLink")[0];
+    expect(text(cell)).toBe("UNKNOWN");
+    expect(byData(cell, "taskRunLink")).toEqual([]);
+    const other = await open({linked: {runs: [link(R1, {missionId: "msn_" + "cd34".repeat(6)})]}, missionRuns: [R1]});
+    expect(text(byData(other.root, "taskField", "runLink")[0])).toBe("UNKNOWN");
+  });
+  it("a late answer for the PREVIOUSLY selected task is never shown for the newly selected one (task switched while the link read was in flight)", async () => {
+    const T2 = "tsk_" + "b2".repeat(12);
+    let release: (v: any) => void = () => {};
+    const slow = new Promise<any>(r => { release = r; });
+    let hold = false; // the module keeps the inspected task between tests, so the first render must not wait on the slow read
+    const get = (p: string) => {
+      if (p === "/v1/projects") return {projects: [project()]};
+      if (p === "/v1/missions") return {missions: [mission({status: "EXECUTING"})]};
+      if (p === `/v1/missions/${MID}`) return {mission: mission({status: "EXECUTING"}), tasks: [{taskId: T1, title: "Giriş", status: "PENDING", dependsOn: []}, {taskId: T2, title: "Çıkış", status: "PENDING", dependsOn: []}]};
+      if (p === `/v1/tasks/${T1}/runs`) return hold ? slow : {runs: []};
+      if (p === `/v1/tasks/${T2}/runs`) return {runs: []};
+      if (p.startsWith("/v1/work-runs")) return {workRuns: runs([R1])};
+      if (p.startsWith("/v1/evidence")) return {evidence: []};
+      return undefined;
+    };
+    const c = await mkCtx({get, lang: "en"});
+    forms.selection.missionId = MID;
+    const view = await load(rend, "views", "work.js"), tr = await load(rend, "views", "task-runs.js");
+    tr.resetTaskRunsDraft(null);
+    let first = mount(c.doc, await view.render(c.ctx));
+    for (const b of all(first).filter(n => "taskInspect" in n.dataset && n.attrs.get("aria-pressed") === "true")) b.fire("click"); // close any task left open by an earlier test
+    first = mount(c.doc, await view.render(c.ctx)); // fresh handlers: nothing selected now
+    hold = true;
+    byData(first, "taskInspect", T1)[0].fire("click");
+    const pendingRender = view.render(c.ctx); // starts: T1 selected, its link read is pending
+    for (let i = 0; i < 6; i++) await tick();
+    byData(first, "taskInspect", T2)[0].fire("click"); // the Founder selects T2 meanwhile
+    release({runs: [link(R1)]});
+    const root = mount(c.doc, (await pendingRender) as N);
+    const cell = byData(root, "taskField", "runLink")[0];
+    expect(byData(root, "taskField", "taskId")[0].textContent).toBe(T2);
+    expect(text(cell)).toBe("UNKNOWN");
+    expect(cell.dataset.taskRunLinks).toBeUndefined();
+    expect(byData(root, "taskRunLink")).toEqual([]);
+    expect(text(root)).not.toContain(R1 + " Running");
   });
   const RES = (over: any = {}) => ({taskId: T1, from: "IN_PROGRESS", to: "DONE", action: "TRANSITIONED", reason: null, ...over});
   const RECON = (results: any[], over: any = {}) => ({runId: R1, runStatus: "SUCCEEDED", results, ...over});
