@@ -1,5 +1,5 @@
 {
- "//TR": "C-CTX-1 (Rol Bağlamı Çözümleyicisi) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt core/agents/role-context.ts içinde TAM 1 kez geçen bir metni değiştirir; docs/lanes/LANE-C-role-context-mutants.mjs hepsini tests/v7-core-role-context.test.ts ile çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. M1-M4 dağıtım paketindeki zorunlu mutantlardır (M1 önerilen beceri kanonike karışır, M2 çözülemeyen teknoloji düşer, M3 SUSPECTED/CONFLICT takma adlarından da çözülür, M4 özet kanonik metni dışlar); M5-M20 ek savunma mutantlarıdır (doğrulanmış durum uydurma, durum yükseltme, bayt sınırı ve kesme sırası, yinelenen kimlik, SK2 süzgeçleri, boşluk kimlikleri, yükleyicinin kapalı başarısızlığı). X5-X9, N13, N16, N26, N27 ve C1-C40, #265 incelemesinin (TEP-1 tur 1) korumalı-alan, etiket, kısaltma kaydı, parite, maxBytes, son biçim bayt, varsayılan sınır ve özet kapsamı boşluklarını kapatan mutantlardır (M8/M19 yeni bayt ölçümüne göre yeniden yazıldı). H-* mutantları, bağımsız bir mutant avcısının (100 deneme) bulduğu ve sözleşme ayrıntıları testi ile alan düzeyinde yükleyici tablosunun öldürdüğü hayatta kalanlardır (kod noktası sıralaması, tekrarların korunması, null varsayılanlar, büyük/küçük harf duyarlılığı, kopyalama, seçenek iletimi, yükleyici alan denetimleri); S17/T04/T05/T07/T08 bilerek sabitlenmedi (boş dize boşluk kimliği, yinelenen girdi, tür olarak imkansız eksik durum).",
+ "//TR": "C-CTX-1 (Rol Bağlamı Çözümleyicisi) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt core/agents/role-context.ts içinde TAM 1 kez geçen bir metni değiştirir; docs/lanes/LANE-C-role-context-mutants.mjs hepsini tests/v7-core-role-context.test.ts ile çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. M1-M4 dağıtım paketindeki zorunlu mutantlardır (M1 önerilen beceri kanonike karışır, M2 çözülemeyen teknoloji düşer, M3 SUSPECTED/CONFLICT takma adlarından da çözülür, M4 özet kanonik metni dışlar); M5-M20 ek savunma mutantlarıdır (doğrulanmış durum uydurma, durum yükseltme, bayt sınırı ve kesme sırası, yinelenen kimlik, SK2 süzgeçleri, boşluk kimlikleri, yükleyicinin kapalı başarısızlığı). X5-X9, N13, N16, N26, N27 ve C1-C40, #265 incelemesinin (TEP-1 tur 1) korumalı-alan, etiket, kısaltma kaydı, parite, maxBytes, son biçim bayt, varsayılan sınır ve özet kapsamı boşluklarını kapatan mutantlardır (M8/M19 yeni bayt ölçümüne göre yeniden yazıldı). H-* mutantları, bağımsız bir mutant avcısının (100 deneme) bulduğu ve sözleşme ayrıntıları testi ile alan düzeyinde yükleyici tablosunun öldürdüğü hayatta kalanlardır (kod noktası sıralaması, tekrarların korunması, null varsayılanlar, büyük/küçük harf duyarlılığı, kopyalama, seçenek iletimi, yükleyici alan denetimleri); S17/T04/T05/T07/T08 bilerek sabitlenmedi (boş dize boşluk kimliği, yinelenen girdi, tür olarak imkansız eksik durum). R6, R12-R17, R19-R22, R26-R27 #265 tur-2 incelemesinin (e36b9d0) hayatta kalan mutantları ve komşularıdır (kayıt satırı değerlerinin aynen taşınması, isteğe bağlı sıra, özetin kısaltma kaydı kapsaması, varsayılan sınırın tam değeri, bytes sabit noktası, profil durum izin listesi).",
  "mutants": [
   {
    "id": "M1",
@@ -1001,6 +1001,97 @@
    "file": "core/agents/role-context.ts",
    "old": " && typeof a.legacyId === \"string\" && typeof a.status === \"string\")",
    "new": " && typeof a.legacyId === \"string\")"
+  },
+  {
+   "id": "R12",
+   "description": "OPTIONAL refs get a hard-coded knowledgeState SEED_PROFILE instead of their own registry row",
+   "file": "core/agents/role-context.ts",
+   "old": "knowledgeState: reg?.knowledgeState ?? null};",
+   "new": "knowledgeState: reg ? (requirement === \"OPTIONAL\" ? \"SEED_PROFILE\" : reg.knowledgeState) : null};"
+  },
+  {
+   "id": "R26",
+   "description": "every required ref except the first gets a hard-coded knowledgeState",
+   "file": "core/agents/role-context.ts",
+   "old": "const required = role.requiredTechnologies.map(t => tech(t, \"REQUIRED\")).sort(bySlug);",
+   "new": "const required = role.requiredTechnologies.map(t => tech(t, \"REQUIRED\")).sort(bySlug).map((t, k) => (k === 0 ? t : {...t, knowledgeState: \"SEED_PROFILE\"}));"
+  },
+  {
+   "id": "R13",
+   "description": "OPTIONAL refs get a guessed TECH-<SLUG> registry id instead of the row id",
+   "file": "core/agents/role-context.ts",
+   "old": "registryId: reg?.id ?? null,",
+   "new": "registryId: reg ? (requirement === \"OPTIONAL\" ? `TECH-${t.technologyId.toUpperCase()}` : reg.id) : null,"
+  },
+  {
+   "id": "R27",
+   "description": "the registry status of a registered ref is a hard-coded REGISTERED",
+   "file": "core/agents/role-context.ts",
+   "old": "registryStatus: reg?.status ?? null,",
+   "new": "registryStatus: reg ? \"REGISTERED\" : null,"
+  },
+  {
+   "id": "R19",
+   "description": "unregistered optional refs are moved behind the registered ones (the halving cuts the warning first)",
+   "file": "core/agents/role-context.ts",
+   "old": "const optional = role.optionalTechnologies.map(t => tech(t, \"OPTIONAL\")).sort(bySlug);",
+   "new": "const optional = role.optionalTechnologies.map(t => tech(t, \"OPTIONAL\")).sort(bySlug).sort((a, b) => (a.registryId === null ? 1 : 0) - (b.registryId === null ? 1 : 0));"
+  },
+  {
+   "id": "R20",
+   "description": "optional refs are not sorted by slug (input order)",
+   "file": "core/agents/role-context.ts",
+   "old": "const optional = role.optionalTechnologies.map(t => tech(t, \"OPTIONAL\")).sort(bySlug);",
+   "new": "const optional = role.optionalTechnologies.map(t => tech(t, \"OPTIONAL\"));"
+  },
+  {
+   "id": "R06",
+   "description": "the digest sees only the field names of the truncation records, not kept/total",
+   "file": "core/agents/role-context.ts",
+   "old": "const digest = sha256(stable(body));",
+   "new": "const digest = sha256(stable({...body, truncation: body.truncation.map(t => t.field)}));"
+  },
+  {
+   "id": "R15",
+   "description": "the default cap is silently looser than the constant (26 112)",
+   "file": "core/agents/role-context.ts",
+   "old": "const maxBytes = o.maxBytes ?? ROLE_CONTEXT_DEFAULT_MAX_BYTES;",
+   "new": "const maxBytes = o.maxBytes ?? 26_112;"
+  },
+  {
+   "id": "R16",
+   "description": "the default cap is silently tighter than the constant (24 000)",
+   "file": "core/agents/role-context.ts",
+   "old": "const maxBytes = o.maxBytes ?? ROLE_CONTEXT_DEFAULT_MAX_BYTES;",
+   "new": "const maxBytes = o.maxBytes ?? 24_000;"
+  },
+  {
+   "id": "R14",
+   "description": "the bytes fixed point uses the digits of the base instead of its own digits (wrong across 9 999 / 10 000)",
+   "file": "core/agents/role-context.ts",
+   "old": "for (let digits = 1; ; digits++) { const x = base + digits; if (String(x).length === digits) return x; }",
+   "new": "return base + String(base).length;"
+  },
+  {
+   "id": "R17",
+   "description": "the bytes fixed point returns the larger consistent value",
+   "file": "core/agents/role-context.ts",
+   "old": "for (let digits = 1; ; digits++) { const x = base + digits; if (String(x).length === digits) return x; }",
+   "new": "for (let digits = 8; digits > 0; digits--) { const x = base + digits; if (String(x).length === digits) return x; } return base;"
+  },
+  {
+   "id": "R21",
+   "description": "the loader accepts any review chain status (a stronger label would propagate)",
+   "file": "core/agents/role-context.ts",
+   "old": "!ROLE_CONTEXT_PROFILE_STATUSES.includes(p.reviewChain.status as string)",
+   "new": "typeof p.reviewChain.status !== \"string\""
+  },
+  {
+   "id": "R22",
+   "description": "the allowed profile statuses also contain CERTIFIED",
+   "file": "core/agents/role-context.ts",
+   "old": "export const ROLE_CONTEXT_PROFILE_STATUSES: readonly string[] = [\"PROPOSED_DERIVED\"];",
+   "new": "export const ROLE_CONTEXT_PROFILE_STATUSES: readonly string[] = [\"PROPOSED_DERIVED\", \"CERTIFIED\"];"
   }
  ]
 }
