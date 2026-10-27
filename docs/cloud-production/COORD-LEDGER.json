@@ -992,6 +992,16 @@
       "ref": "wf_84378496-176: all round-2 items FIXED; production correct; resolveAll over 599 real roles byte-identical to d45c47b; remaining NW-12/13/20 (bad-status fixtures only minimal rows) reclassified LOW by the skeptic at ROUND LIMIT (test gap, no over-report at this head) -> follow-up C-CTX-1-LOWS",
       "policy": "TEP-1",
       "at": "2026-10-27T06:42:28.844Z"
+    },
+    {
+      "pr": 264,
+      "sha": "4dc0268b74b34389b10f10995ee2074bc36b82bb",
+      "kind": "delta",
+      "base": "ae8ff39",
+      "verdict": "BLOCKERS_2MEDIUM_ROUND_LIMIT_overreport_latent",
+      "ref": "wf_4ca46212-a57: M1 member-rule regression (keyword/~ continuation -> false PRESENT), M2 MAP fail-closed claim false (combining mark/astral/ZWNJ/x !/ -> string content scanned as code -> false PRESENT); real map 22 records byte-identical; strategy change: bounded Lane C push + coordinator mutant checklist",
+      "policy": "TEP-1",
+      "at": "2026-10-27T07:09:19.921Z"
     }
   ],
   "tests": [],
