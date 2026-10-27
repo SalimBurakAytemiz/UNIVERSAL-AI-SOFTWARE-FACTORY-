@@ -88,18 +88,50 @@ export const stopWithin = async (p: Promise<unknown>, ms = 15_000): Promise<"OK"
   let t: NodeJS.Timeout | undefined;
   try { return await Promise.race([p.then(() => "OK" as const), new Promise<"STOP_HUNG">(r => { t = setTimeout(() => r("STOP_HUNG"), ms); })]); } finally { clearTimeout(t); }
 };
-// //TR: #224 tur 3 (Windows HB-1 onarımı): lease testlerinde olay döngüsü gecikmesini ÖLÇER (50 ms'lik bir zamanlayıcının en büyük sapması) ve harcanan CPU süresini (process.cpuUsage) kaydeder. Başarısızlık iletisine eklenir. Yorum kuralı: TTL'yi aşan bir gecikme, aksi KANITLANMADIKÇA bir gerilemedir. Bu testlerin koruduğu gerileme, olay döngüsünü bloklayan senkron bekleme/iştir: böyle bir bekleme CPU'yu YAKAR ya da bloklar ve duvar süresi boyunca döngü akmaz, yani cpuMs duvar süresine yakındır (senkron iş) ya da döngü tamamen durur; bu bir "marj" değildir. Süreç CPU'dan yoksun kaldıysa cpuMs duvar süresinin çok altındadır ve bu AYRICA gösterilmelidir; tek başına sorunu "marj" yapmaz. Gecikme TTL'nin altında olduğu hâlde bir run fence edildiyse sorun gerçek bir lease boşluğudur.
+// //TR: #224 tur 3 (Windows HB-1 onarımı): lease testlerinde olay döngüsü gecikmesini ÖLÇER (50 ms'lik bir zamanlayıcının en büyük sapması) ve harcanan CPU süresini (process.cpuUsage) kaydeder. Başarısızlık iletisine eklenir. Yorum kuralı: TTL'yi aşan bir gecikme, aksi KANITLANMADIKÇA bir gerilemedir. Bu testlerin koruduğu gerileme, olay döngüsünü bloklayan senkron bekleme/iştir: böyle bir bekleme CPU'yu YAKAR ya da bloklar ve duvar süresi boyunca döngü akmaz, yani cpuMs duvar süresine yakındır (senkron iş) ya da döngü tamamen durur; bu bir "marj" değildir. Süreç CPU'dan yoksun kaldıysa cpuMs duvar süresinin çok altındadır ve bu AYRICA gösterilmelidir; tek başına sorunu "marj" yapmaz. Yorum (C-PAR03-DIAG-1, düzeltildi): sağlıklı bir run, TEK bir ana iş parçacığı bloğu TTL − TTL/3'e (TTL 5 s iken 3,33 s) ulaştığında fence edilir, çünkü süresi dolmuş lease yenilenmez (heartbeat TTL/3'te bir çalışır; blok son yenilemeden en çok TTL/3 sonra başlar). Bu yüzden TTL − TTL/3'ün ALTINDAKİ bir döngü gecikmesiyle olan fence gerçek bir lease boşluğudur; ondan büyük bir gecikme, engelleyen çağrı adlandırılana kadar (bkz. topGaps, fenceTrace ve store.writeStats) bir bloktur, "marj" ya da lease mantığı hatası diye yorumlanmaz.
+// //TR: C-PAR03-DIAG-1: en büyük 3 boşluk, başlangıçlarıyla (Date.now ve performance.now) ve `Date.now() - performance.now()` kaymasıyla (probun başındaki değere göre) kaydedilir; lease süresi duvar saatine (Date.now) bağlıdır, bu yüzden duvar saati sıçraması da (kayma) bir stall gibi fence üretebilir ve ayırt edilmelidir. Store yazılarının `startedAtPerf` değeri aynı saattedir (performance.now), böylece bir boşluk hangi yazıların içine düştüğüyle eşleştirilebilir.
+export interface StallGap { gapMs: number; startPerf: number; startWall: number; driftMs: number }
 export const stallProbe = (tickMs = 50) => {
   let last = performance.now(), max = 0;
-  const t0 = performance.now(), cpu0 = process.cpuUsage();
-  const t = setInterval(() => { const n = performance.now(); max = Math.max(max, n - last - tickMs); last = n; }, tickMs);
+  const gaps: StallGap[] = [];
+  const t0 = performance.now(), cpu0 = process.cpuUsage(), drift0 = Date.now() - performance.now();
+  const t = setInterval(() => {
+    const n = performance.now(), wall = Date.now(), gap = n - last - tickMs;
+    max = Math.max(max, gap);
+    if (gap >= 1) { gaps.push({gapMs: Math.round(gap), startPerf: Math.round(last), startWall: Math.round(wall - (n - last)), driftMs: Math.round(wall - n - drift0)}); gaps.sort((a, b) => b.gapMs - a.gapMs); if (gaps.length > 3) gaps.length = 3; }
+    last = n;
+  }, tickMs);
   return {
+    topGaps: (): StallGap[] => gaps.map(g => ({...g})),
     maxStallMs: () => Math.round(max),
     cpuMs: () => { const u = process.cpuUsage(cpu0); return Math.round((u.user + u.system) / 1000); },
     wallMs: () => Math.round(performance.now() - t0),
     stop: () => clearInterval(t)
   };
 };
+// //TR: C-PAR03-DIAG-1: FENCED'i HANGİ store çağrısının fırlattığını kaydeder (heartbeat'in `catch { lost = true }`'u hatayı yutar, bu yüzden aksi hâlde hiç görünmez). Geçişli casus: davranışı değiştirmez, hatayı aynen yeniden fırlatır; installSlowGit gibi her testten sonra vi.restoreAllMocks ile geri alınır. Zamanlar performance.now ve Date.now (stallProbe ile aynı saatler).
+export interface FenceHit { call: string; runId: string; note: string; atPerf: number; atWall: number }
+const FENCE_CALLS = ["acquireRunLease", "renewRunLease", "takeoverRunLease", "transitionRun", "checkpointRun", "addRunEvidence"] as const;
+export function fenceTrace(store: object): {hits: () => FenceHit[]; calls: () => number} {
+  const hits: FenceHit[] = []; let calls = 0;
+  for (const name of FENCE_CALLS) {
+    const target = store as Record<string, (...a: unknown[]) => unknown>;
+    const real = target[name].bind(store);
+    vi.spyOn(target, name).mockImplementation((...a: unknown[]) => {
+      calls += 1;
+      try { return real(...a); } catch (e) {
+        if ((e as {code?: unknown})?.code === "WORKOS_LEASE_FENCED") hits.push({call: name, runId: String(a[0]), note: name === "transitionRun" ? `to=${String(a[2])} reason=${String(a[3])}` : name === "checkpointRun" ? `step=${String((a[2] as {step?: unknown})?.step)}` : name === "addRunEvidence" ? `kind=${String((a[2] as {kind?: unknown})?.kind)}` : "", atPerf: Math.round(performance.now()), atWall: Date.now()});
+        throw e;
+      }
+    });
+  }
+  return {hits: () => hits.map(h => ({...h})), calls: () => calls};
+}
+// //TR: C-PAR03-DIAG-1: bir run'ın journal'daki RUN_LEASE olayları (ACQUIRE/RENEW/TAKEOVER) zaman sırasıyla: gerçek saat `at` (journal girdisinin yazıldığı an) ve lease bitişi. Yenilemeler arası aralık ile TTL/3 heartbeat periyodunun farkı "gecikme"dir.
+export function leaseTimeline(dataDir: string, runId: string): Array<{kind: string; atMs: number; expiresMs: number}> {
+  return fs.readFileSync(path.join(dataDir, "journal.jsonl"), "utf8").split("\n").filter(Boolean).map(l => JSON.parse(l) as {type: string; at: string; payload: {runId?: string; kind?: string; leaseExpiresAt?: string}})
+    .filter(e => e.type === "RUN_LEASE" && e.payload.runId === runId).map(e => ({kind: String(e.payload.kind), atMs: Date.parse(e.at), expiresMs: Date.parse(String(e.payload.leaseExpiresAt))}));
+}
 // //TR: #224 tur 3 (coordinator delta review, 2 tur): stop() sonucu `finally` içinde YUTULMAZ. Gövde çalışır, sonra (her durumda) cleanup ve sınırlı stop yapılır; gövde hatası BİRİNCİL kalır ve aynı anda oluşan diğer sorunlar (cleanup fırlattı, stop() reddedildi, stop() asıldı) onun iletisine EKLENİR; gövde başarılıysa bu sorunların kendisi başarısızlıktır. Böylece asılı/reddedilen bir stop() testi geçirmez ve gövdenin gerçek hatasını da örtmez.
 export const withFinalStop = async (stop: () => Promise<unknown>, body: () => Promise<void> | void, cleanup?: () => void, stopMs = 15_000): Promise<void> => {
   const text = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0, 300);

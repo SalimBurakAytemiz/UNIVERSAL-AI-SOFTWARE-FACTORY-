@@ -32,6 +32,11 @@ import {RISK_REFUSAL, riskAdmitted} from "./risk-admission.js";
 const sha256 = sha256Untyped as (value: unknown) => string;
 const writeJsonAtomic = writeJsonAtomicUntyped as (file: string, value: unknown) => void;
 const LOCK_WAIT_MS = 10_000;
+// //TR: C-PAR03-DIAG-1 (YALNIZ ölçüm; davranış, kilit, journal, snapshot ve zaman aşımı değişmez): Windows CI'da relfx-c3:200 PAR-03 fence'inin ENGELLEYEN ÇAĞRISI bilinmiyor. Her store yazısının süresi aşamalara bölünür (kilit bekleme + yeniden deneme sayısı, yeniden yükleme/doğrulama, journal ekleme+fsync, snapshot yeniden yazımları (süresi ve sayısı; yükleme VE ekleme birer yazım yapar, süre hangi aşamada olursa olsun snapshotMs'ye yazılır, reloadMs'den çıkarılır), kilit bırakma) ve test başarısızlık iletisi bunları, `performance.now()` ile aynı saatte, stallProbe boşluklarıyla eşleştirebilsin diye başlangıç zamanlarıyla birlikte yazar. Salt okunur: `writeStats()` kopya döndürür; halka tamponu en çok WRITE_RING yazı tutar.
+export interface StoreWriteTiming { type: string; startedAtWall: number; startedAtPerf: number; totalMs: number; lockWaitMs: number; lockRetries: number; reloadMs: number; journalMs: number; snapshotMs: number; snapshotWrites: number; releaseMs: number }
+export interface StoreWriteStats { writes: number; lockAcquisitions: number; lockRetries: number; lockWaitMsTotal: number; lockWaitMsMax: number; slowest: StoreWriteTiming | null; recent: StoreWriteTiming[] }
+const WRITE_RING = 64;
+const ms1 = (n: number): number => Math.round(n * 10) / 10;
 const GENESIS = "0".repeat(64);
 const newId = (prefix: string) => `${prefix}_${crypto.randomBytes(12).toString("hex")}`;
 export const newTraceId = () => newId("trc");
@@ -111,6 +116,25 @@ const clone = <T>(x: T): T => structuredClone(x);
 
 export class WorkOsStore {
   readonly dataDir: string; readonly journalFile: string; readonly snapshotFile: string; readonly lockFile: string;
+  // //TR: C-PAR03-DIAG-1: yalnız ölçüm durumu (bkz. StoreWriteStats); iş mantığı bunlara bağlı DEĞİLDİR.
+  private diag = {writes: 0, lockAcquisitions: 0, lockRetries: 0, lockWaitMsTotal: 0, lockWaitMsMax: 0, slowest: null as StoreWriteTiming | null, recent: [] as StoreWriteTiming[]};
+  private frame: StoreWriteTiming | null = null;
+  writeStats(): StoreWriteStats {
+    const d = this.diag;
+    return {writes: d.writes, lockAcquisitions: d.lockAcquisitions, lockRetries: d.lockRetries, lockWaitMsTotal: ms1(d.lockWaitMsTotal), lockWaitMsMax: ms1(d.lockWaitMsMax), slowest: d.slowest === null ? null : {...d.slowest}, recent: d.recent.map(r => ({...r}))};
+  }
+  private noteLock(waitMs: number, retries: number): void {
+    const d = this.diag;
+    d.lockAcquisitions += 1; d.lockRetries += retries; d.lockWaitMsTotal += waitMs; d.lockWaitMsMax = Math.max(d.lockWaitMsMax, waitMs);
+    if (this.frame) { this.frame.lockWaitMs += waitMs; this.frame.lockRetries += retries; }
+  }
+  private noteWrite(f: StoreWriteTiming, totalMs: number): void {
+    const t: StoreWriteTiming = {type: f.type === "" ? "?" : f.type, startedAtWall: f.startedAtWall, startedAtPerf: ms1(f.startedAtPerf), totalMs: ms1(totalMs), lockWaitMs: ms1(f.lockWaitMs), lockRetries: f.lockRetries, reloadMs: ms1(f.reloadMs), journalMs: ms1(f.journalMs), snapshotMs: ms1(f.snapshotMs), snapshotWrites: f.snapshotWrites, releaseMs: ms1(f.releaseMs)};
+    const d = this.diag;
+    d.writes += 1;
+    if (d.slowest === null || t.totalMs > d.slowest.totalMs) d.slowest = t;
+    d.recent.push(t); if (d.recent.length > WRITE_RING) d.recent.shift();
+  }
   private state: State = emptyState();
   private tamperReason: string | null = null;
   // F-B1-002: IO/format hataları da fail-closed bayrağı kurar; guard() okuma ve yazmayı reddeder.
@@ -154,13 +178,16 @@ export class WorkOsStore {
   private withLock<T>(fn: () => T): T {
     const runId = `workos-${process.pid}-${crypto.randomBytes(4).toString("hex")}`;
     const deadline = Date.now() + LOCK_WAIT_MS; let release: (() => void) | null = null;
+    const lockStart = performance.now(); let retries = 0;
     for (;;) {
       try { release = acquireProcessLock(this.lockFile, runId); break; } catch {
-        if (Date.now() >= deadline) throw new WorkOsError("WORKOS_UNAVAILABLE", "LOCK_TIMEOUT");
+        if (Date.now() >= deadline) { this.noteLock(performance.now() - lockStart, retries); throw new WorkOsError("WORKOS_UNAVAILABLE", "LOCK_TIMEOUT"); }
+        retries += 1;
         sleepSync(15);
       }
     }
-    try { return fn(); } finally { try { release?.(); } catch { /* lock sahipliği değişmişse yazma zaten tamamlandı */ } }
+    this.noteLock(performance.now() - lockStart, retries);
+    try { return fn(); } finally { const releaseStart = performance.now(); try { release?.(); } catch { /* lock sahipliği değişmişse yazma zaten tamamlandı */ } if (this.frame) this.frame.releaseMs += performance.now() - releaseStart; }
   }
   private fail(e: unknown): void {
     this.sig = null; this.tornTail = null;
@@ -262,7 +289,10 @@ export class WorkOsStore {
     if (snap.lastHash !== expected) throw tampered("SNAPSHOT_HASH_NOT_IN_JOURNAL");
   }
   // Snapshot türetilmiştir: yazılamaması (ör. disk dolu) journal'ı veya okumaları bozmaz; sonraki yüklemede yeniden yazılır.
-  private writeSnapshotBestEffort(): void { try { this.writeSnapshot(); } catch { /* türetilmiş dosya */ } }
+  private writeSnapshotBestEffort(): void {
+    const snapshotStart = performance.now();
+    try { this.writeSnapshot(); } catch { /* türetilmiş dosya */ } finally { if (this.frame) { this.frame.snapshotMs += performance.now() - snapshotStart; this.frame.snapshotWrites += 1; } }
+  }
   private writeSnapshot(): void {
     writeJsonAtomic(this.snapshotFile, {"//TR": "Bu snapshot journal.jsonl dosyasından türetilir; otorite journal'dır, bu dosya silinip yeniden üretilebilir.", schemaVersion: "1.0.0", ...this.state});
   }
@@ -450,13 +480,18 @@ export class WorkOsStore {
   private readGuard(): void { this.refresh(); this.guard(); }
   // Her yazı lock altında disk yeniden doğrulanarak yapılır: başka örnek/süreç yazdıysa onun yazıları görülür, bozuk disk fail-closed.
   private write<T>(fn: () => T): T {
-    return this.withLock(() => { this.load(); this.guard(true); return fn(); });
+    const frame: StoreWriteTiming = {type: "", startedAtWall: Date.now(), startedAtPerf: performance.now(), totalMs: 0, lockWaitMs: 0, lockRetries: 0, reloadMs: 0, journalMs: 0, snapshotMs: 0, snapshotWrites: 0, releaseMs: 0};
+    const outer = this.frame; this.frame = frame;
+    try {
+      return this.withLock(() => { const reloadStart = performance.now(), snapshotBefore = frame.snapshotMs; try { this.load(); } finally { frame.reloadMs = performance.now() - reloadStart - (frame.snapshotMs - snapshotBefore); } this.guard(true); return fn(); });
+    } finally { this.frame = outer; this.noteWrite(frame, performance.now() - frame.startedAtPerf); }
   }
   // WFR04A-C1-F3: at verilirse (academy ön-denemesinde kullanılan zaman) aynen yazılır; ön-deneme ile diske yazılan girdi aynı zamanı taşır.
   private append(type: JournalType, actor: string, payload: Record<string, unknown>, at?: string): JournalEntry {
     const body = {seq: this.state.lastSeq + 1, prevHash: this.state.lastHash, type, actor, at: at ?? new Date().toISOString(), payload};
     const entry: JournalEntry = {...body, hash: entryHash(body)};
     const line = Buffer.from(JSON.stringify(entry) + "\n", "utf8");
+    const journalStart = performance.now();
     fs.mkdirSync(this.dataDir, {recursive: true});
     const fd = fs.openSync(this.journalFile, "a");
     try {
@@ -474,9 +509,14 @@ export class WorkOsStore {
         throw code === "ENOSPC" || code === "EDQUOT" || code === "ESHORTWRITE" ? new WorkOsError("WORKOS_DISK_FULL", "JOURNAL_APPEND") : new WorkOsError("WORKOS_UNAVAILABLE", "JOURNAL_APPEND_FAILED");
       }
     } finally { fs.closeSync(fd); }
+    const journalEnd = performance.now();
     this.apply(this.state, entry);
     this.sig = this.signature();
     this.writeSnapshotBestEffort();
+    if (this.frame) {
+      this.frame.type = this.frame.type === "" || this.frame.type === type ? type : `${this.frame.type}+${type}`;
+      this.frame.journalMs += journalEnd - journalStart;
+    }
     return entry;
   }
   // F-B1-001/005: aynı tenant+kind+key için önceki varlık döner; yük özeti farklıysa çakışma hatası.
