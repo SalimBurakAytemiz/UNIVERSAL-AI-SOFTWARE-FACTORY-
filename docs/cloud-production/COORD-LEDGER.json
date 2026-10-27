@@ -972,6 +972,16 @@
       "ref": "coord base merge db3dc93; only conflict = work-core.js import line, resolved as union (liveRuns + taskFollowsRun)",
       "policy": "TEP-1",
       "at": "2026-10-27T05:25:19.639Z"
+    },
+    {
+      "pr": 277,
+      "sha": "d9e988927a3dc914c7dbe594457d2d0ae6f09db6",
+      "kind": "delta",
+      "base": "c60cf63",
+      "verdict": "NO_BLOCKERS_5LOW",
+      "ref": "wf_499d31b6-709",
+      "policy": "TEP-1",
+      "at": "2026-10-27T05:28:50.877Z"
     }
   ],
   "tests": [],
