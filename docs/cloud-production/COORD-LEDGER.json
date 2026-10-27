@@ -842,6 +842,16 @@
       "ref": "COORD base merge d0b3cf5; only conflict docs/lanes/LANE-C-MAP.md (base C-RDY-1 wording kept + PR C-CTX-1 bullet); role-context 24/24, b5+ps1b+ci-validation-shards 422/422, trust-root PASS",
       "policy": "TEP-1",
       "at": "2026-10-27T03:24:26.285Z"
+    },
+    {
+      "pr": 276,
+      "sha": "4b623487d8773ca7faf474c30869d106c34b6b5c",
+      "kind": "full",
+      "base": null,
+      "verdict": "BLOCKERS_1MEDIUM",
+      "ref": "wf_a15b21e3-2c9 (2 lenses + skeptic, not refuted): sync repositoryHead (spawnSync) in GET readiness freezes the control-api process (runner, Global Stop) up to 3 s per request, requests queue (4 GETs -> 12 s); use repositoryHeadAsync; 32 fixtures readiness==runner; LOWs wall-clock UNKNOWN, Windows tree-kill (sync), comment overstates isolation (repo-local include.path read), UI text for new reasons missing, tmpdir-dependent test, N7/N8 survivors",
+      "policy": "TEP-1",
+      "at": "2026-10-27T03:39:55.027Z"
     }
   ],
   "tests": [],
