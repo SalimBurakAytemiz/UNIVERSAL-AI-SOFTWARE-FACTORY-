@@ -752,6 +752,16 @@
       "ref": "wf_89b3b5ff-915 (lenses + 5 skeptics, none refuted): quarantine outcome filed under project selected at response time (pid re-read after await); q.more claims full list in manifest though server keeps <=500; status line global, not project-scoped; tr q.unknown/q.more/q.title survivors; title/caption 'scan clean' survivors; 8 LOW (main.mjs scrub = protected, Founder)",
       "policy": "TEP-1",
       "at": "2026-10-27T02:05:51.020Z"
+    },
+    {
+      "pr": 267,
+      "sha": "747a08488eb5114a4d5aa3b327e5a55a9e55e17a",
+      "kind": "delta",
+      "base": "6ca888f",
+      "verdict": "NO_BLOCKERS_3LOW",
+      "ref": "wf_3c3f1adc-ab5 (planted proof: hook stops abandoned runner; b3a 50/50 x4; LOWs: double stop window, resumed body after hook, no committed pin of the hook (needs nested vitest))",
+      "policy": "TEP-1",
+      "at": "2026-10-27T02:18:12.453Z"
     }
   ],
   "tests": [],
