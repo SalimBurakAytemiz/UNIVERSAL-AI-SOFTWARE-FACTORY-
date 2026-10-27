@@ -1132,6 +1132,16 @@
       "ref": "coord-bffd776-tree-identical-trust-root-PASS-b3a-50-fsmon-2",
       "policy": "TEP-1",
       "at": "2026-10-27T09:17:44.296Z"
+    },
+    {
+      "pr": 285,
+      "sha": "9046fd09d73eb28e35aa023404f415ea9987e92f",
+      "kind": "full",
+      "base": null,
+      "verdict": "BLOCKERS_1MEDIUM_5LOW_doc_overclaims_local_claude_checks",
+      "ref": "wf_4e4c044c-230",
+      "policy": "TEP-1",
+      "at": "2026-10-27T09:18:56.892Z"
     }
   ],
   "tests": [],
