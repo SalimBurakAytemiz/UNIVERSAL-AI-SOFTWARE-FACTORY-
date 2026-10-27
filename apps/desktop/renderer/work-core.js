@@ -204,13 +204,15 @@ export function buildTaskTransitionRequest({task,tasks,missionStatus,to,reason})
 // //TR: LANE-A: Koşu bir mission'a açılır; hangi görevi yürüttüğü bu bağla kaydedilir. GET {runs:[{link:{taskId,runId,missionId,linkedAt,...},run|null}]}; POST gövdesi yalnız {runId}. Bozuk kayıt tüm okumayı ERROR yapar; koşu kaydı yoksa durum null kalır (uydurulmaz).
 export const RUN_ID_RE=/^run_[0-9a-f]{24}$/;
 export const taskRunsPath=id=>TASK_ID_RE.test(String(id))?`/v1/tasks/${id}/runs`:null;
-export function mapTaskRuns(raw){
+// //TR: taskId/missionId verilirse her bağ BU göreve ve BU mission'a ait olmalı; başka göreve/mission'a ait bir bağ tüm okumayı ERROR yapar (denetçi satırı UNKNOWN kalır, yabancı koşu gösterilmez).
+export function mapTaskRuns(raw,taskId,missionId){
   const bad={state:"ERROR",items:[]};
   const list=isObj(raw)?raw.runs:null;if(!Array.isArray(list)||list.length>500)return bad;
   const items=[];
   for(const x of list){
     const l=isObj(x)?x.link:null;
     if(!isObj(l)||!TASK_ID_RE.test(String(l.taskId))||!RUN_ID_RE.test(String(l.runId))||!MISSION_ID_RE.test(String(l.missionId)))return bad;
+    if((taskId!==undefined&&l.taskId!==taskId)||(missionId!==undefined&&l.missionId!==missionId))return bad;
     items.push({taskId:l.taskId,runId:l.runId,missionId:l.missionId,linkedAt:iso(l.linkedAt),status:isObj(x.run)?statusStr(x.run.status):null});
   }
   return {state:"VERIFIED",items};
@@ -615,7 +617,8 @@ export function deriveTaskInspector(detailRes,runsRes,taskId){
   if(detailRes?.state!=="VERIFIED"||!detailRes.mission)return {state:"UNKNOWN",task:null};
   const m=detailRes.mission,t=(m.tasks??[]).find(x=>x.taskId===taskId);
   if(!t)return {state:"EMPTY",task:null};
-  const runsKnown=runsRes?.state==="VERIFIED"&&Array.isArray(runsRes.items),byStatus={};
+  // //TR: A-273-LOWS: mission koşu listesi 500'de kesildiyse (truncated) koşu sayısı kesin söylenemez; runs.known=false -> arayüz UNKNOWN gösterir.
+  const runsKnown=runsRes?.state==="VERIFIED"&&Array.isArray(runsRes.items)&&runsRes.truncated!==true,byStatus={};
   if(runsKnown)for(const r of runsRes.items)byStatus[r.status]=(byStatus[r.status]??0)+1;
   return {state:"VERIFIED",task:{taskId:t.taskId,title:t.title,status:t.status,missionId:m.missionId,missionTitle:m.title,missionStatus:m.status,riskLevel:m.riskLevel,
     // //TR: COORD-TASK-UI: bağımlılıklar yalnız okumada dependsOn dizisi varsa gösterilir (başlık/durum aynı mission'ın görevlerinden); yoksa alan UNKNOWN kalır.
