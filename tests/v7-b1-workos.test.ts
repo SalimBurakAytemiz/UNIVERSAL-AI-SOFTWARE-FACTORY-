@@ -550,7 +550,7 @@ describe("LANE-B project intake", () => {
     const {repositoryPrecondition} = await import("../core/workos/runner.js");
     expect(repositoryPrecondition(p, store.dataDir)).toMatchObject({ok: true});
     const {deriveReadiness} = await import("../core/workos/readiness.js");
-    const rd = deriveReadiness(store, {tenantId: "tA"}, p.projectId)!;
+    const rd = (await deriveReadiness(store, {tenantId: "tA"}, p.projectId))!;
     expect(rd.ready).toBe(true);
     expect(rd.checks.find(c => c.id === "REPOSITORY")!.state).toBe("OK");
     expect(r.body).not.toContain(store.dataDir);
@@ -565,7 +565,7 @@ describe("LANE-B project intake", () => {
     const {app, store} = await mkApp();
     const r = await post(app, {idea: IDEA, idempotencyKey: "tpl0"});
     const {deriveReadiness} = await import("../core/workos/readiness.js");
-    const rd = deriveReadiness(store, {tenantId: "tA"}, r.json().intake.projectId)!;
+    const rd = (await deriveReadiness(store, {tenantId: "tA"}, r.json().intake.projectId))!;
     expect(rd.ready).toBe(false);
     expect(rd.checks.find(c => c.id === "REPOSITORY")).toMatchObject({state: "BLOCKED", reason: "REPOSITORY_NOT_CONFIGURED"});
   });
@@ -2445,6 +2445,28 @@ describe("LANE-B run readiness", () => {
     }
   });
 
+  it("a MANAGED repository (canonical <dataDir>/projects/<id>/repo) gets the same HEAD decision: a plain managed folder is BLOCKED, a git root with a commit is OK", async () => {
+    const {app, store} = await mk();
+    for (const [name, asGit, want] of [["plain", false, "REPOSITORY_HEAD_UNRESOLVED"], ["git", true, null]] as const) {
+      const p = proj(store); msn(store, p.projectId);
+      const repo = path.join(store.dataDir, "projects", p.projectId, "repo");
+      if (asGit) gitRepo(repo); else fs.mkdirSync(repo, {recursive: true});
+      store.setProjectRepository({tenantId: "tA"}, p.projectId, {path: repo, managed: true}, "FOUNDER_LOCAL", {kind: "git", headSha: "0".repeat(40)});
+      const got = by(await rd(app, p.projectId)).REPOSITORY;
+      expect([got.state, got.reason], name).toEqual(want ? ["BLOCKED", want] : ["OK", null]);
+    }
+  });
+
+  it("an unexpected error while deciding (the repository path cannot be stat-ed) is UNKNOWN, never OK", async () => {
+    const {app, store} = await mk(); const dir = path.join(tmp, "readiness-throws"); fs.mkdirSync(dir, {recursive: true});
+    const p = proj(store, {repository: {path: dir}}); msn(store, p.projectId);
+    const real = fs.statSync, spy = vi.spyOn(fs, "statSync").mockImplementation(((q: any, ...r: any[]) => { if (String(q).includes("readiness-throws")) throw Object.assign(new Error("EACCES"), {code: "EACCES"}); return (real as any).call(fs, q, ...r); }) as any);
+    try {
+      const c = by(await rd(app, p.projectId)).REPOSITORY;
+      expect([c.state, c.reason]).toEqual(["UNKNOWN", "SOURCE_UNREADABLE"]);
+    } finally { spy.mockRestore(); }
+  });
+
   describe.skipIf(process.platform === "win32")("readiness REPOSITORY with a broken git (fake git on PATH; the probe is bounded)", () => {
     const withFakeGit = async (script: string | null, fn: (dir: string) => Promise<void>) => {
       const bin = fs.mkdtempSync(path.join(tmp, "readiness-fakegit-")), oldPath = process.env.PATH;
@@ -2480,6 +2502,23 @@ describe("LANE-B run readiness", () => {
         expect(ms).toBeLessThan(READINESS_REPO_PROBE_MS + 1500);
       });
     });
+    it("a hanging git does NOT block the process: while the readiness GET waits, an unrelated route answers fast and timers keep firing (the async driver)", async () => {
+      await withFakeGit("#!/bin/sh\nexec /bin/sleep 30\n", async () => {
+        const {app, store} = await mk(); const dir = path.join(tmp, "readiness-nonblocking"); fs.mkdirSync(dir, {recursive: true});
+        app.get("/ping", async () => ({pong: true}));
+        const p = proj(store, {repository: {path: dir}}); msn(store, p.projectId);
+        let ticks = 0; const timer = setInterval(() => { ticks++; }, 50);
+        try {
+          const slow = rd(app, p.projectId), t0 = Date.now();
+          await new Promise(r => setTimeout(r, 300));
+          const pt0 = Date.now(), pong = await app.inject({method: "GET", url: "/ping", headers: hdr}), pingMs = Date.now() - pt0;
+          expect(pong.statusCode).toBe(200); expect(pingMs, "an unrelated route answers while git hangs").toBeLessThan(500);
+          expect(ticks, "timers keep firing during the probe").toBeGreaterThanOrEqual(4);
+          const r = await slow; expect(Date.now() - t0).toBeGreaterThanOrEqual(2500);
+          expect(by(r).REPOSITORY.state).toBe("UNKNOWN");
+        } finally { clearInterval(timer); }
+      });
+    });
   });
 
   it("flow testCommand follows mission-over-project: a command on either level alone is CONFIGURED, neither is MISSING", async () => {
@@ -2499,7 +2538,9 @@ describe("LANE-B run readiness", () => {
     const p = proj(store, {repository: {path: dir}});
     msn(store, p.projectId);
     const r = await rd(app, p.projectId);
-    expect(by(r).REPOSITORY).toMatchObject({state: "BLOCKED", reason: "REPOSITORY_HEAD_UNRESOLVED", nextAction: "CONFIGURE_REPOSITORY", blocking: true});
+    // tmpdir bir git çalışma ağacının İÇİNDEYSE düz klasör o deponun alt dizinidir: runner'ın kendi sözlüğüyle NOT_WORKTREE_ROOT (hâlâ BLOCKED, asla OK).
+    const inside = spawnGitSync(dir, ["rev-parse", "--git-dir"], {env: Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^GIT_/i.test(k)))}).status === 0;
+    expect(by(r).REPOSITORY).toMatchObject({state: "BLOCKED", reason: inside ? "REPOSITORY_NOT_WORKTREE_ROOT" : "REPOSITORY_HEAD_UNRESOLVED", nextAction: "CONFIGURE_REPOSITORY", blocking: true});
     expect(r.json().readiness.ready).toBe(false);
     expect(r.body).not.toContain("readiness-not-git");
   });
