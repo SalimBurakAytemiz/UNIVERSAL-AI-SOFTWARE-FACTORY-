@@ -1222,6 +1222,16 @@
       "ref": "wf_b1441dc1-74b",
       "policy": "TEP-1",
       "at": "2026-10-27T11:33:50.825Z"
+    },
+    {
+      "pr": 288,
+      "sha": "73fa26e897c74f95cca6f525abe5c398b504fa91",
+      "kind": "full",
+      "base": null,
+      "verdict": "BLOCKERS_2MEDIUM_14LOW_every_some_untested_RUNNING_state_unpinned",
+      "ref": "wf_f87532ab-845",
+      "policy": "TEP-1",
+      "at": "2026-10-27T11:42:10.892Z"
     }
   ],
   "tests": [],
