@@ -11,22 +11,70 @@ import {fleetGroups,fleetCard,fleetDetail} from "../fleet-core.js";
 import {FACTORY_COUNTERS,STATUS_SUMMARY_PATH} from "../agent-factory-core.js";
 
 // //TR: Ajan Fabrikası durumu (Founder direktifi 599 ajan): GET /v1/roles/status-summary'nin beş sayacı AYRI gösterilir (kayıtlı, uygulanmış, test edilmiş, sertifikalı, çalışan); toplanmaz, oranlanmaz, "599 kayıtlı" = "599 çalışan ajan" denmez. Okunamıyorsa sayı yerine durum notu gösterilir (0 uydurulmaz).
-function factoryStatusPanel(ctx,res){
-  const doc=ctx.doc,id="wf-factory";
+function factoryStatusPanel(ctx,res,ready){
+  const doc=ctx.doc,id="wf-factory",rd=ready&&ready.state==="VERIFIED"?ready:null,runUnmeasured=rd===null||rd.reconciliation.runningMeasured===false,
+    runUnknownText=ctx.t(rd===null?"workforce.ready.runningUnknownUnavailable":"workforce.ready.runningUnknown"); // //TR: neden doğru olmalı: hazırlık okunamıyorsa günlüğün olup olmadığı bilinmez
   const head=[h(doc,"p",{class:"note",text:ctx.t("workforce.factory.lead")}),h(doc,"p",{class:"note",role:"note",dataset:{semantics:"SEPARATE_COUNTERS"},text:ctx.t("workforce.factory.separate")})];
   if(!res||res.state!=="VERIFIED")return panel(ctx,{titleKey:"workforce.factory.title",id,className:"wf-factory"},...head,stateNote(ctx,res?.state??"ERROR"),h(doc,"p",{class:"note mono",text:`GET ${STATUS_SUMMARY_PATH}`}));
   const s=res.summary;
-  const stat=(k,v)=>h(doc,"div",{class:"wf-stat",dataset:{stat:`factory-${k}`,value:String(v)}},h(doc,"span",{class:"wf-stat-num",text:formatCount(v)}),h(doc,"span",{class:"wf-stat-label",text:ctx.t(`workforce.factory.${k}`)}));
-  const cols=["workforce.factory.guild",...FACTORY_COUNTERS.map(k=>`workforce.factory.${k}`)];
+  // //TR: FAIL-CLOSED: hazırlık okunamıyorsa (ERROR/404/503/bozuk) runningMeasured belirlenemez ve ölçülmemiş sayılır; ayrıca günlük yoksa (runningMeasured=false) eski "çalışan" sayacı ASLA sayı olarak gösterilmez (Bilinmiyor). "Uygulanmış" etiketi her durumda kod yolu olduğunu (bağlanmamış aşamaları içerdiğini) söyler.
+  const stat=(k,v)=>{
+    const unknown=k==="running"&&runUnmeasured;
+    return h(doc,"div",{class:"wf-stat",dataset:{stat:`factory-${k}`,value:unknown?"UNKNOWN":String(v)}},h(doc,"span",{class:"wf-stat-num",text:unknown?runUnknownText:formatCount(v)}),
+      h(doc,"span",{class:"wf-stat-label",text:ctx.t(k==="implemented"?"workforce.ready.legacy.implemented":`workforce.factory.${k}`)}));
+  };
+  const cols=["workforce.factory.guild",...FACTORY_COUNTERS.map(k=>k==="implemented"?"workforce.ready.legacy.implemented":`workforce.factory.${k}`)]; // //TR: "uygulanmış" başlığı da (sayaç nerede görünürse) kod yolu etiketini taşır
   const table=s.byGuild.length?h(doc,"div",{class:"table-wrap"},h(doc,"table",{class:"table",id:"wf-factory-guilds",dataset:{factoryTable:"guilds"}},
     h(doc,"caption",{class:"sr-only",text:ctx.t("workforce.factory.byGuild")}),
     h(doc,"thead",{},h(doc,"tr",{},cols.map(k=>h(doc,"th",{scope:"col",text:ctx.t(k)})))),
-    h(doc,"tbody",{},s.byGuild.map(g=>h(doc,"tr",{dataset:{factoryGuild:g.guildId}},h(doc,"td",{class:"mono",text:g.guildId}),FACTORY_COUNTERS.map(k=>h(doc,"td",{class:"num",text:formatCount(g[k])}))))))):emptyNote(ctx,"workforce.factory.noGuilds");
-  return panel(ctx,{titleKey:"workforce.factory.title",id,className:"wf-factory"},...head,
+    h(doc,"tbody",{},s.byGuild.map(g=>h(doc,"tr",{dataset:{factoryGuild:g.guildId}},h(doc,"td",{class:"mono",text:g.guildId}),FACTORY_COUNTERS.map(k=>h(doc,"td",{class:"num",text:k==="running"&&runUnmeasured?runUnknownText:formatCount(g[k])}))))))):emptyNote(ctx,"workforce.factory.noGuilds");
+  const legacyNote=rd!==null
+    ?h(doc,"p",{class:"note",role:"note",dataset:{legacyProjection:"DEPRECATED_LEGACY_PROJECTION",consistent:String(rd.reconciliation.consistent)},text:ctx.t(rd.reconciliation.runningMeasured?"workforce.ready.legacy.note":"workforce.ready.legacy.noteUnmeasured",{consistent:ctx.t(rd.reconciliation.consistent?"workforce.ready.legacy.yes":"workforce.ready.legacy.no"),n:formatCount(rd.reconciliation.mismatchCount)})})
+    :h(doc,"p",{class:"note note-unknown",role:"note",dataset:{legacyProjection:"UNVERIFIED"},text:ctx.t("workforce.ready.legacy.unverified")});
+  return panel(ctx,{titleKey:"workforce.factory.title",id,className:"wf-factory"},...head,legacyNote,
     h(doc,"p",{class:"duo-sub",dataset:{factoryTarget:String(s.target)},text:ctx.t("workforce.factory.target",{n:formatCount(s.target)})}),
     h(doc,"div",{class:"wf-stats",role:"group","aria-label":ctx.t("workforce.factory.statsLabel")},FACTORY_COUNTERS.map(k=>stat(k,s[k]))),
     h(doc,"h3",{class:"wf-dist-title",text:ctx.t("workforce.factory.byGuild")}),table,
     h(doc,"p",{class:"note mono",dataset:{factoryBasis:"1"},text:ctx.t("workforce.factory.basis",{at:formatDateTime(s.computedAt,ctx.i18n.lang),sha:s.basis.roleDefinitionsSha256.slice(0,12),n:formatCount(s.basis.bindingsCount)})}),
+    h(doc,"p",{class:"note mono",text:`GET ${STATUS_SUMMARY_PATH}`}));
+}
+
+// //TR: Rol hazırlığı (8 katman): TEK doğru kaynak. Her katman AYRI satırdır; sayılar paydasıyla birlikte gösterilir ("TRUE k, FALSE f / n"), ölçülemeyen katman "TRUE k, UNKNOWN u / n" der (asla çıplak 0), çalıştırma günlüğü yokken RUNNING "Bilinmiyor – çalıştırma günlüğü yok" der ve TRUE sayısı gösterilmez. Katmanlar toplanmaz, yüzdeye çevrilmez; önerilen (proposedOnly) profiller ayrı kutudadır. Okunamıyorsa sayı yerine durum notu gösterilir (0 uydurulmaz).
+function layerCountsText(ctx,L,journal){
+  const v={t:formatCount(L.TRUE),f:formatCount(L.FALSE),u:formatCount(L.UNKNOWN),na:formatCount(L.NOT_APPLICABLE),n:formatCount(L.denominator)};
+  if(L.layer==="RUNNING"&&journal==="ABSENT")return ctx.t("workforce.ready.runningUnknownCounts",v);
+  if(L.measured)return ctx.t(L.NOT_APPLICABLE>0?"workforce.ready.counts.measuredNa":"workforce.ready.counts.measured",v);
+  return ctx.t(L.NOT_APPLICABLE>0?"workforce.ready.counts.unmeasuredNa":L.FALSE>0?"workforce.ready.counts.unmeasuredFalse":"workforce.ready.counts.unmeasured",v);
+}
+function readinessPanel(ctx,res){
+  const doc=ctx.doc,id="wf-readiness";
+  const head=[h(doc,"p",{class:"note",dataset:{semantics:"LAYERS_SEPARATE"},text:ctx.t("workforce.ready.lead")})];
+  if(!res||res.state!=="VERIFIED")return panel(ctx,{titleKey:"workforce.ready.title",id,className:"wf-readiness"},...head,stateNote(ctx,res?.state??"ERROR"),
+    h(doc,"p",{class:"note note-unknown",role:"status",dataset:{readiness:"UNAVAILABLE"},text:ctx.t("workforce.ready.unavailable")}),
+    res?.reason?h(doc,"p",{class:"note mono",dataset:{readinessReason:res.reason},text:ctx.t("workforce.ready.reason",{code:res.reason})}):null,
+    h(doc,"p",{class:"note mono",text:`GET ${STATUS_SUMMARY_PATH}`}));
+  const r=res.readiness,journal=r.inputs.journal;
+  const row=(L,labelKey)=>{
+    const unknownRunning=L.layer==="RUNNING"&&journal==="ABSENT";
+    return h(doc,"tr",{dataset:{readinessLayer:L.layer,measured:String(L.measured)}},
+      h(doc,"th",{scope:"row",text:ctx.t(labelKey)}),
+      h(doc,"td",{class:"num",dataset:unknownRunning?{readinessUnknown:"1"}:{}},unknownRunning?[h(doc,"strong",{text:ctx.t("workforce.ready.runningUnknown")})," · "]:null,layerCountsText(ctx,L,journal)),
+      h(doc,"td",{text:ctx.t(L.measured?"workforce.ready.measured":"workforce.ready.notMeasured")}));
+  };
+  const table=h(doc,"div",{class:"table-wrap"},h(doc,"table",{class:"table",id:"wf-readiness-layers",dataset:{readinessTable:"layers"}},
+    h(doc,"caption",{class:"sr-only",text:ctx.t("workforce.ready.table.caption")}),
+    h(doc,"thead",{},h(doc,"tr",{},["workforce.ready.table.layer","workforce.ready.table.count","workforce.ready.table.measured"].map(k=>h(doc,"th",{scope:"col",text:ctx.t(k)})))),
+    h(doc,"tbody",{},[...r.layers.map(L=>row(L,`workforce.ready.layer.${L.layer}`)),row({layer:"STAGE_WIRED",...r.stageWired},"workforce.ready.stageWired")])));
+  const p=r.proposedOnly;
+  return panel(ctx,{titleKey:"workforce.ready.title",id,className:"wf-readiness"},...head,
+    h(doc,"p",{class:"duo-sub",dataset:{readinessDenominator:String(r.denominator)},text:ctx.t("workforce.ready.denominator",{n:formatCount(r.denominator)})}),
+    table,
+    h(doc,"p",{class:"note",dataset:{readinessInputs:"1"},text:ctx.t("workforce.ready.inputs",{journal:ctx.t(`workforce.ready.input.${journal}`),adapters:ctx.t(`workforce.ready.input.${r.inputs.adapterReality}`),stages:ctx.t(`workforce.ready.input.${r.inputs.reachableStages}`)})}),
+    r.authority==="AUTHORITATIVE_READINESS_MEASUREMENT"?null:h(doc,"p",{class:"note note-error",role:"note",dataset:{readinessAuthority:r.authority},text:ctx.t(`workforce.ready.authority.${r.authority}`)}),
+    p.source==="ABSENT"?null:h(doc,"div",{class:"card wf-proposed",dataset:{readinessProposed:"1"}},h(doc,"h3",{class:"wf-dist-title",text:ctx.t("workforce.ready.proposed.title")}),
+      h(doc,"p",{class:"note",text:ctx.t("workforce.ready.proposed.text",{p:formatCount(p.profiles),n:formatCount(r.denominator),s:formatCount(p.withCandidateSkills),a:formatCount(p.withCandidateToolAdapters)})})),
+    h(doc,"p",{class:"note",dataset:{readinessAnomalies:String(r.anomalies)},text:ctx.t("workforce.ready.anomalies",{n:formatCount(r.anomalies)})}),
+    h(doc,"p",{class:"note mono",dataset:{readinessBasis:"1"},text:ctx.t("workforce.ready.basis",{at:formatDateTime(r.computedAt,ctx.i18n.lang),sha:r.digest.slice(0,12)})}),
     h(doc,"p",{class:"note mono",text:`GET ${STATUS_SUMMARY_PATH}`}));
 }
 
@@ -274,7 +322,7 @@ function catalogSection(ctx,catalog,detail,agents){
 }
 
 export async function render(ctx,route){
-  const doc=ctx.doc,[cockpit,agents,runs,catalog,factory]=await Promise.all([ctx.api.cockpit(),ctx.api.agentCount(),ctx.api.workRuns(),ctx.api.roleCatalog(),ctx.api.rolesStatusSummary()]),w=cockpit.data.workforce;
+  const doc=ctx.doc,[cockpit,agents,runs,catalog,factory,ready]=await Promise.all([ctx.api.cockpit(),ctx.api.agentCount(),ctx.api.workRuns(),ctx.api.roleCatalog(),ctx.api.rolesStatusSummary(),ctx.api.rolesReadiness()]),w=cockpit.data.workforce;
   // //TR: INT-R3 D-M1-07: kayıtlı rol = kanonik sayı (GET /v1/agents registeredRoles, yoksa cockpit kanonik sayısı); sertifikalı sayı ayrı, eski kayıt yalnız LEGACY_REFERENCE_ONLY notu olarak.
   const registered=agents.registeredRoles!==null?agents.registeredRoles:w.registeredRoles;
   const regBlock=agents.registeredRoles!==null?{state:"VERIFIED",value:agents.registeredRoles}:w;
@@ -294,7 +342,8 @@ export async function render(ctx,route){
         h(doc,"p",{class:"kpi-value",text:formatCount(w.activeWorkerRuns)}),h(doc,"p",{class:"duo-sub",text:ctx.t("workforce.activeNote")}),chip(ctx,activeBlock))),
     panel(ctx,{titleKey:"workforce.fleet.title",id:"wf-fleet"},fleetBody(ctx,runs)),
     panel(ctx,{titleKey:"workforce.live.title",id:"wf-live"},liveRunsBody(ctx,runs)),
-    factoryStatusPanel(ctx,factory),
+    readinessPanel(ctx,ready),
+    factoryStatusPanel(ctx,factory,ready),
     ...catalogSection(ctx,catalog,detail,agents));
 }
 export {viewSkeleton as skeleton} from "../components.js";

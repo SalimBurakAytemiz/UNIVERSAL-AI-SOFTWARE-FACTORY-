@@ -42,16 +42,27 @@ export function interpretProbe(raw, {now = Date.now()} = {}) {
     sandbox: {available: reasons.length === 0, editionOk, featureEnabled: sandboxExe === true, virtualization: virt, reasons}, fingerprint};
 }
 
-export function probeHost({run = spawnSync, now = Date.now()} = {}) {
-  if (process.platform !== "win32") {
-    return {schema: "uasco.local-host-probe/1", platform: process.platform, readOnly: true, probedAt: new Date(now).toISOString(), supported: false,
+// //TR: Teşhis: başarısız probe KENDİ mekanizmasını adlandırır (zaman aşımı / başlatma hatası / sıfır olmayan çıkış / JSON değil / nesne değil). stderrTail içindeki GUID desenleri sansürlenir ve stdout İÇERİĞİ asla yansıtılmaz (kısmi stdout machineGuid taşıyabilir). Sınırlar ve PowerShell metni değişmez.
+const GUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32}/gi; // kelime sınırı YOK: yapışık metin içindeki GUID de sansürlenir (fazla sansür zararsızdır)
+export const redactGuids = (text) => String(text ?? "").replace(GUID, "<GUID>");
+const isPlainObject = (x) => x !== null && typeof x === "object" && !Array.isArray(x);
+
+export function probeHost({run = spawnSync, now = Date.now(), platform = process.platform} = {}) {
+  if (platform !== "win32") {
+    return {schema: "uasco.local-host-probe/1", platform, readOnly: true, probedAt: new Date(now).toISOString(), supported: false,
       reasons: ["PLATFORM_NOT_WINDOWS"], cpu: {name: os.cpus()[0]?.model ?? null, logical: os.cpus().length}, memory: {totalMB: Math.round(os.totalmem() / 2 ** 20), freeMB: Math.round(os.freemem() / 2 ** 20)},
       sandbox: {available: false, reasons: ["PLATFORM_NOT_WINDOWS"]}, fingerprint: null};
   }
-  const r = run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", PS], {encoding: "utf8", timeout: 60000, windowsHide: true});
-  let raw;
-  try { raw = JSON.parse(String(r.stdout).trim()); } catch { return {schema: "uasco.local-host-probe/1", platform: "win32", readOnly: true, supported: false, reasons: ["PROBE_FAILED"], sandbox: {available: false, reasons: ["PROBE_FAILED"]}, fingerprint: null}; }
-  return {...interpretProbe(raw, {now}), supported: true};
+  const t0 = Date.now();
+  const r = run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", PS], {encoding: "utf8", timeout: 60000, windowsHide: true}) ?? {};
+  const durationMs = Date.now() - t0;
+  let parsed = {ok: false, value: undefined};
+  try { parsed = {ok: true, value: JSON.parse(String(r.stdout).trim())}; } catch { /* sınıflandırılır */ }
+  // Başarı bugünkü gibidir: stdout düz, null olmayan, dizi olmayan bir nesneye ayrışır (sıfır olmayan çıkış tek başına reddetmez).
+  if (parsed.ok && isPlainObject(parsed.value)) return {...interpretProbe(parsed.value, {now}), supported: true};
+  const why = r.error?.code === "ETIMEDOUT" ? "PROBE_TIMEOUT" : r.error ? "PROBE_SPAWN_FAILED" : r.status !== 0 ? "PROBE_EXIT_NONZERO" : !parsed.ok ? "PROBE_OUTPUT_NOT_JSON" : "PROBE_OUTPUT_NOT_OBJECT";
+  return {schema: "uasco.local-host-probe/1", platform: "win32", readOnly: true, supported: false, reasons: ["PROBE_FAILED", why], sandbox: {available: false, reasons: ["PROBE_FAILED"]}, fingerprint: null,
+    probeError: {code: r.error?.code ?? null, status: r.status ?? null, signal: r.signal ?? null, durationMs, stdoutBytes: Buffer.byteLength(String(r.stdout ?? "")), stderrTail: redactGuids(r.stderr).slice(-400)}};
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) process.stdout.write(JSON.stringify(probeHost()) + "\n");
