@@ -662,6 +662,26 @@
       "ref": "wf_e95f2783-b88 (2 lenses + skeptics): HIGH UI-011 + #46/#170 FIXED; MEDIUM UI-124 g still carries the stop-confirm test inside the authority-gated M task (distinct task count 10 not 9); MEDIUM ROUTES frozen-scope list misses tests/v7-ux-install.test.ts:607 (at(-1)==settings) + conditional factory pins; LOW UI-124 delta count inflated by a pointer item",
       "policy": "TEP-1",
       "at": "2026-10-27T01:25:32.650Z"
+    },
+    {
+      "pr": 267,
+      "sha": "6ca888fd6310a7cd89793bbf98c49fa0943297b2",
+      "kind": "delta",
+      "base": "9e2ca42de1ce939e276f98b20eb73664712e74ab",
+      "verdict": "NO_BLOCKERS_1LOW",
+      "ref": "wf_2931126b-736 (2 lenses): spy-leak MEDIUM FIXED (planted repro recursion at 9e2ca42, none at 6ca888f; onTestFinished runs on timeout in vitest 4.1.11/4.1.12); barrier timer 97773c4 FIXED (fake-timer + real 21 s proofs, real timeout still flags); LOW regression: after a vitest test timeout the onTestFinished cleanup stops the watchdog so the abandoned runner is never stopped",
+      "policy": "TEP-1",
+      "at": "2026-10-27T01:33:23.784Z"
+    },
+    {
+      "pr": 263,
+      "sha": "dae48c048ce222d6791c23a8698621ed8573c6ac",
+      "kind": "delta",
+      "base": "39d476bb02267f1e1a4ce0c479d391e46e6dcdca",
+      "verdict": "BASE_MERGE_ONLY_plus_port",
+      "ref": "fd3df93 = cherry-pick of COORD 97773c4 (reviewed in #267 delta wf_2931126b-736: FIXED); dae48c0 = base merge 902ba66 (#266 + #262, both reviewed+merged), no #263 file changed; local 618/618; #263 own content 39d476b final checklist NO_BLOCKERS_1LOW",
+      "policy": "TEP-1",
+      "at": "2026-10-27T01:33:24.067Z"
     }
   ],
   "tests": [],
