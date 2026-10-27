@@ -2246,6 +2246,16 @@
         "masterV2": "C-RDY-1 Role Readiness Auditor = Master V2 package 1 DONE (merged, not product-accepted)"
       },
       {
+        "pr": 276,
+        "merge": "6d83469",
+        "by": "coordinator direct merge, expectedHeadSha 82e4f26 (required checks green on 82e4f26, run 40487533960)",
+        "at": "2026-10-27T10:56:30Z",
+        "postMerge": "VERIFIED: parent1 401a4d2, parent2 = gated head 82e4f26, merge tree 4969bb6 == probe tree tested locally (b7-installer + b1-workos 213/213; no file overlap with #286)",
+        "review": "r3 delta BLOCKERS_1MEDIUM at ROUND_LIMIT -> bounded push 669b12f NO_BLOCKERS (coordinator mutants C1/C2/C4) -> BASE_MERGE_ONLY 82e4f26 (runner.ts union HEAD_GIT_HARDEN + hardTimeout)",
+        "riskTier": "R0 ROUTINE (readiness REPOSITORY check + git-async hardTimeout + tests)",
+        "masterV2": "B-NEXT-1: readiness REPOSITORY check applies repositoryHead"
+      },
+      {
         "pr": 286,
         "merge": "401a4d2",
         "by": "coordinator direct merge, expectedHeadSha 945c68a (required checks green on 945c68a, run 40477985910 attempt 2; attempt 1 relfx-c3:200 PAR-03 = base-wide Windows timing, comment 6438475494)",
