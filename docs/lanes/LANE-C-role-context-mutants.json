@@ -1,5 +1,5 @@
 {
- "//TR": "C-CTX-1 (Rol Bağlamı Çözümleyicisi) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt core/agents/role-context.ts içinde TAM 1 kez geçen bir metni değiştirir; docs/lanes/LANE-C-role-context-mutants.mjs hepsini tests/v7-core-role-context.test.ts ile çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. M1-M4 dağıtım paketindeki zorunlu mutantlardır (M1 önerilen beceri kanonike karışır, M2 çözülemeyen teknoloji düşer, M3 SUSPECTED/CONFLICT takma adlarından da çözülür, M4 özet kanonik metni dışlar); M5-M20 ek savunma mutantlarıdır (doğrulanmış durum uydurma, durum yükseltme, bayt sınırı ve kesme sırası, yinelenen kimlik, SK2 süzgeçleri, boşluk kimlikleri, yükleyicinin kapalı başarısızlığı).",
+ "//TR": "C-CTX-1 (Rol Bağlamı Çözümleyicisi) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt core/agents/role-context.ts içinde TAM 1 kez geçen bir metni değiştirir; docs/lanes/LANE-C-role-context-mutants.mjs hepsini tests/v7-core-role-context.test.ts ile çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. M1-M4 dağıtım paketindeki zorunlu mutantlardır (M1 önerilen beceri kanonike karışır, M2 çözülemeyen teknoloji düşer, M3 SUSPECTED/CONFLICT takma adlarından da çözülür, M4 özet kanonik metni dışlar); M5-M20 ek savunma mutantlarıdır (doğrulanmış durum uydurma, durum yükseltme, bayt sınırı ve kesme sırası, yinelenen kimlik, SK2 süzgeçleri, boşluk kimlikleri, yükleyicinin kapalı başarısızlığı). X5-X9, N13, N16, N26, N27 ve C1-C40, #265 incelemesinin (TEP-1 tur 1) korumalı-alan, etiket, kısaltma kaydı, parite, maxBytes, son biçim bayt, varsayılan sınır ve özet kapsamı boşluklarını kapatan mutantlardır (M8/M19 yeni bayt ölçümüne göre yeniden yazıldı). H-* mutantları, bağımsız bir mutant avcısının (100 deneme) bulduğu ve sözleşme ayrıntıları testi ile alan düzeyinde yükleyici tablosunun öldürdüğü hayatta kalanlardır (kod noktası sıralaması, tekrarların korunması, null varsayılanlar, büyük/küçük harf duyarlılığı, kopyalama, seçenek iletimi, yükleyici alan denetimleri); S17/T04/T05/T07/T08 bilerek sabitlenmedi (boş dize boşluk kimliği, yinelenen girdi, tür olarak imkansız eksik durum).",
  "mutants": [
   {
    "id": "M1",
@@ -54,7 +54,7 @@
    "id": "M8",
    "description": "the byte cap is never enforced",
    "file": "core/agents/role-context.ts",
-   "old": "while (size(body) > maxBytes) {",
+   "old": "while (finalSize(body) > maxBytes) {",
    "new": "while (false) {"
   },
   {
@@ -131,8 +131,8 @@
    "id": "M19",
    "description": "the byte size counts characters instead of UTF-8 bytes",
    "file": "core/agents/role-context.ts",
-   "old": "Buffer.byteLength(stable(c), \"utf8\")",
-   "new": "stable(c).length"
+   "old": "Buffer.byteLength(stable({...body, bytes: 0, digest: DIGEST_PLACEHOLDER}), \"utf8\")",
+   "new": "stable({...body, bytes: 0, digest: DIGEST_PLACEHOLDER}).length"
   },
   {
    "id": "M20",
@@ -140,6 +140,867 @@
    "file": "core/agents/role-context.ts",
    "old": "else return {status: \"NOT_RESOLVED\", roleId, reason: \"ROLE_CONTEXT_EXCEEDS_BYTE_CAP\"};",
    "new": "else break;"
+  },
+  {
+   "id": "X5",
+   "description": "required technologies are dropped once the optional technologies reach 0",
+   "file": "core/agents/role-context.ts",
+   "old": "technologies: [...required, ...optional.slice(0, keepOptional)],",
+   "new": "technologies: [...(keepOptional === 0 && optional.length > 0 ? [] : required), ...optional.slice(0, keepOptional)],"
+  },
+  {
+   "id": "N16",
+   "description": "one required technology is dropped once the aliases are cut",
+   "file": "core/agents/role-context.ts",
+   "old": "technologies: [...required, ...optional.slice(0, keepOptional)],",
+   "new": "technologies: [...(keepAliases < aliases.length ? required.slice(1) : required), ...optional.slice(0, keepOptional)],"
+  },
+  {
+   "id": "X6",
+   "description": "canonical skills are dropped once the aliases are cut",
+   "file": "core/agents/role-context.ts",
+   "old": "skills: {canonical, canonicalNotInSk2:",
+   "new": "skills: {canonical: keepAliases < aliases.length ? [] : canonical, canonicalNotInSk2:"
+  },
+  {
+   "id": "X7",
+   "description": "the review chain is dropped once the aliases are cut",
+   "file": "core/agents/role-context.ts",
+   "old": "reviewChain: profile ? {origin: profile.reviewChain.status,",
+   "new": "reviewChain: profile && keepAliases === aliases.length ? {origin: profile.reviewChain.status,"
+  },
+  {
+   "id": "X8",
+   "description": "the gap ids are cleared once the aliases are cut",
+   "file": "core/agents/role-context.ts",
+   "old": "    binding, gapIds,\n",
+   "new": "    binding, gapIds: keepAliases < aliases.length ? [] : gapIds,\n"
+  },
+  {
+   "id": "X9",
+   "description": "the binding is downgraded to NOT_EXECUTABLE once the aliases are cut",
+   "file": "core/agents/role-context.ts",
+   "old": "    binding, gapIds,\n",
+   "new": "    binding: keepAliases < aliases.length ? {...binding, resolverLabel: \"NOT_EXECUTABLE\" as const} : binding, gapIds,\n"
+  },
+  {
+   "id": "N13",
+   "description": "optional technologies get knowledgeState VERIFIED (fabricated labels)",
+   "file": "core/agents/role-context.ts",
+   "old": "knowledgeState: reg?.knowledgeState ?? null};",
+   "new": "knowledgeState: requirement === \"OPTIONAL\" && reg ? \"VERIFIED\" : (reg?.knowledgeState ?? null)};"
+  },
+  {
+   "id": "N26",
+   "description": "an unregistered technology name gets registryStatus REGISTERED",
+   "file": "core/agents/role-context.ts",
+   "old": "registryStatus: reg?.status ?? null,",
+   "new": "registryStatus: reg?.status ?? \"REGISTERED\","
+  },
+  {
+   "id": "N27",
+   "description": "an unregistered technology name gets knowledgeState SEED_PROFILE",
+   "file": "core/agents/role-context.ts",
+   "old": "knowledgeState: reg?.knowledgeState ?? null};",
+   "new": "knowledgeState: reg?.knowledgeState ?? \"SEED_PROFILE\"};"
+  },
+  {
+   "id": "C1",
+   "description": "the cut of optional technologies is not recorded in truncation",
+   "file": "core/agents/role-context.ts",
+   "old": "...(keepOptional < optional.length ? [{field: \"technologies.optional\" as const, kept: keepOptional, total: optional.length}] : []),",
+   "new": "...[],"
+  },
+  {
+   "id": "C2",
+   "description": "the cut of aliases is not recorded in truncation",
+   "file": "core/agents/role-context.ts",
+   "old": "...(keepAliases < aliases.length ? [{field: \"aliases\" as const, kept: keepAliases, total: aliases.length}] : [])",
+   "new": "...[]"
+  },
+  {
+   "id": "C3",
+   "description": "the cut of proposed skills is not recorded in truncation",
+   "file": "core/agents/role-context.ts",
+   "old": "...(keepProposed < proposedAll.length ? [{field: \"skills.proposed\" as const, kept: keepProposed, total: proposedAll.length}] : []),",
+   "new": "...[],"
+  },
+  {
+   "id": "C4",
+   "description": "the recorded kept count of optional technologies is off by one",
+   "file": "core/agents/role-context.ts",
+   "old": "kept: keepOptional, total: optional.length",
+   "new": "kept: keepOptional + 1, total: optional.length"
+  },
+  {
+   "id": "C5",
+   "description": "the recorded total of aliases is wrong",
+   "file": "core/agents/role-context.ts",
+   "old": "kept: keepAliases, total: aliases.length",
+   "new": "kept: keepAliases, total: aliases.length + 1"
+  },
+  {
+   "id": "C6",
+   "description": "the proposed skills are copied from the profile file instead of re-derived (whenever a profile exists)",
+   "file": "core/agents/role-context.ts",
+   "old": "proposed: proposedAll.slice(0, keepProposed), proposedOrigin",
+   "new": "proposed: (profile ? profile.candidateSkills.value.map(skillId => ({skillId, status: \"PROPOSED_DERIVED\" as const, viaLegacyIds: [] as string[]})) : proposedAll).slice(0, keepProposed), proposedOrigin"
+  },
+  {
+   "id": "C7",
+   "description": "NaN and infinite maxBytes are accepted (the cap fails open)",
+   "file": "core/agents/role-context.ts",
+   "old": "if (typeof maxBytes !== \"number\" || !Number.isFinite(maxBytes) || maxBytes <= 0) throw",
+   "new": "if (typeof maxBytes !== \"number\" || maxBytes <= 0) throw"
+  },
+  {
+   "id": "C8",
+   "description": "a zero maxBytes is accepted",
+   "file": "core/agents/role-context.ts",
+   "old": "|| maxBytes <= 0) throw",
+   "new": "|| maxBytes < 0) throw"
+  },
+  {
+   "id": "C9",
+   "description": "resolveAllRoleContexts does not validate maxBytes itself (an empty catalog never throws)",
+   "file": "core/agents/role-context.ts",
+   "old": "  checkMaxBytes(o);\n  return uniqSorted",
+   "new": "  return uniqSorted"
+  },
+  {
+   "id": "C10",
+   "description": "maxBytes is validated only after the role lookup (an unknown role never throws)",
+   "file": "core/agents/role-context.ts",
+   "old": "const maxBytes = checkMaxBytes(o);\n  const matches = i.roles.filter(r => r.roleId === roleId);\n  if (matches.length === 0) return {status: \"NOT_RESOLVED\", roleId, reason: \"ROLE_NOT_IN_CATALOG\"};",
+   "new": "const matches = i.roles.filter(r => r.roleId === roleId);\n  if (matches.length === 0) return {status: \"NOT_RESOLVED\", roleId, reason: \"ROLE_NOT_IN_CATALOG\"};\n  const maxBytes = checkMaxBytes(o);"
+  },
+  {
+   "id": "C11",
+   "description": "a string maxBytes is accepted",
+   "file": "core/agents/role-context.ts",
+   "old": "typeof maxBytes !== \"number\" || !Number.isFinite(maxBytes)",
+   "new": "!Number.isFinite(Number(maxBytes))"
+  },
+  {
+   "id": "C12",
+   "description": "the reported size measures the body only (no bytes/digest fields)",
+   "file": "core/agents/role-context.ts",
+   "old": "const base = Buffer.byteLength(stable({...body, bytes: 0, digest: DIGEST_PLACEHOLDER}), \"utf8\") - 1;",
+   "new": "const base = Buffer.byteLength(stable(body), \"utf8\") - 1;"
+  },
+  {
+   "id": "C13",
+   "description": "the cap loop measures the body only while the reported size is the final form",
+   "file": "core/agents/role-context.ts",
+   "old": "while (finalSize(body) > maxBytes) {",
+   "new": "while (Buffer.byteLength(stable(body), \"utf8\") > maxBytes) {"
+  },
+  {
+   "id": "C14",
+   "description": "the bytes field does not count its own digits (fixed point ignored)",
+   "file": "core/agents/role-context.ts",
+   "old": "if (String(x).length === digits) return x;",
+   "new": "return x;"
+  },
+  {
+   "id": "C15",
+   "description": "the review chain origin is hard-coded instead of taken from the profile's own status",
+   "file": "core/agents/role-context.ts",
+   "old": "origin: profile.reviewChain.status,",
+   "new": "origin: \"PROPOSED_DERIVED\","
+  },
+  {
+   "id": "C16",
+   "description": "the review chain gap id is dropped",
+   "file": "core/agents/role-context.ts",
+   "old": "value: [...profile.reviewChain.value], gapId: profile.reviewChain.gapId}",
+   "new": "value: [...profile.reviewChain.value], gapId: null}"
+  },
+  {
+   "id": "C17",
+   "description": "the canonical lifecycle is upgraded under the CANONICAL label",
+   "file": "core/agents/role-context.ts",
+   "old": "lifecycle: role.lifecycle ?? null",
+   "new": "lifecycle: \"CERTIFIED\""
+  },
+  {
+   "id": "C18",
+   "description": "the canonical priority is rewritten",
+   "file": "core/agents/role-context.ts",
+   "old": "priority: role.priority ?? null",
+   "new": "priority: \"P0\""
+  },
+  {
+   "id": "C19",
+   "description": "the canonical skill origin label is wrong",
+   "file": "core/agents/role-context.ts",
+   "old": ".map(skillId => ({skillId, origin: \"CANONICAL_ROLE_REGISTRY\" as const}))",
+   "new": ".map(skillId => ({skillId, origin: \"PROPOSED_DERIVED\" as never}))"
+  },
+  {
+   "id": "C20",
+   "description": "the EXECUTABLE binding origin label is wrong",
+   "file": "core/agents/role-context.ts",
+   "old": "{origin: \"CODE_BINDING_TABLE\", resolverLabel: \"EXECUTABLE\"",
+   "new": "{origin: \"CANONICAL_ROLE_REGISTRY\" as never, resolverLabel: \"EXECUTABLE\""
+  },
+  {
+   "id": "C21",
+   "description": "the NOT_EXECUTABLE binding origin label is wrong",
+   "file": "core/agents/role-context.ts",
+   "old": "{origin: \"CODE_BINDING_TABLE\", resolverLabel: \"NOT_EXECUTABLE\"",
+   "new": "{origin: \"CANONICAL_ROLE_REGISTRY\" as never, resolverLabel: \"NOT_EXECUTABLE\""
+  },
+  {
+   "id": "C22",
+   "description": "optional technologies are decremented by one instead of halved",
+   "file": "core/agents/role-context.ts",
+   "old": "else if (ko > 0) ko = shrink(ko);",
+   "new": "else if (ko > 0) ko = ko - 1;"
+  },
+  {
+   "id": "C23",
+   "description": "aliases are decremented by one instead of halved",
+   "file": "core/agents/role-context.ts",
+   "old": "else if (ka > 0) ka = shrink(ka);",
+   "new": "else if (ka > 0) ka = ka - 1;"
+  },
+  {
+   "id": "C24",
+   "description": "aliases are cut before the optional technologies",
+   "file": "core/agents/role-context.ts",
+   "old": "else if (ko > 0) ko = shrink(ko); else if (ka > 0) ka = shrink(ka);",
+   "new": "else if (ka > 0) ka = shrink(ka); else if (ko > 0) ko = shrink(ko);"
+  },
+  {
+   "id": "C25",
+   "description": "proposed skills are decremented by one instead of halved",
+   "file": "core/agents/role-context.ts",
+   "old": "if (kp > 0) kp = shrink(kp);",
+   "new": "if (kp > 0) kp = kp - 1;"
+  },
+  {
+   "id": "C26",
+   "description": "the default cap constant is raised so far that it never applies",
+   "file": "core/agents/role-context.ts",
+   "old": "export const ROLE_CONTEXT_DEFAULT_MAX_BYTES = 24_576;",
+   "new": "export const ROLE_CONTEXT_DEFAULT_MAX_BYTES = 1_000_000;"
+  },
+  {
+   "id": "C27",
+   "description": "the default cap is not applied when no maxBytes is given",
+   "file": "core/agents/role-context.ts",
+   "old": "const maxBytes = o.maxBytes ?? ROLE_CONTEXT_DEFAULT_MAX_BYTES;",
+   "new": "const maxBytes = o.maxBytes ?? Number.MAX_SAFE_INTEGER;"
+  },
+  {
+   "id": "C28",
+   "description": "the digest excludes technologies",
+   "file": "core/agents/role-context.ts",
+   "old": "const digest = sha256(stable(body));",
+   "new": "const digest = sha256(stable({...body, technologies: undefined}));"
+  },
+  {
+   "id": "C29",
+   "description": "the digest excludes skills",
+   "file": "core/agents/role-context.ts",
+   "old": "const digest = sha256(stable(body));",
+   "new": "const digest = sha256(stable({...body, skills: undefined}));"
+  },
+  {
+   "id": "C30",
+   "description": "the digest excludes aliases",
+   "file": "core/agents/role-context.ts",
+   "old": "const digest = sha256(stable(body));",
+   "new": "const digest = sha256(stable({...body, aliases: undefined}));"
+  },
+  {
+   "id": "C31",
+   "description": "the digest excludes reviewChain",
+   "file": "core/agents/role-context.ts",
+   "old": "const digest = sha256(stable(body));",
+   "new": "const digest = sha256(stable({...body, reviewChain: undefined}));"
+  },
+  {
+   "id": "C32",
+   "description": "the digest excludes binding",
+   "file": "core/agents/role-context.ts",
+   "old": "const digest = sha256(stable(body));",
+   "new": "const digest = sha256(stable({...body, binding: undefined}));"
+  },
+  {
+   "id": "C33",
+   "description": "the digest excludes truncation",
+   "file": "core/agents/role-context.ts",
+   "old": "const digest = sha256(stable(body));",
+   "new": "const digest = sha256(stable({...body, truncation: undefined}));"
+  },
+  {
+   "id": "C34",
+   "description": "the digest excludes gapIds",
+   "file": "core/agents/role-context.ts",
+   "old": "const digest = sha256(stable(body));",
+   "new": "const digest = sha256(stable({...body, gapIds: undefined}));"
+  },
+  {
+   "id": "C35",
+   "description": "the digest excludes schemaVersion",
+   "file": "core/agents/role-context.ts",
+   "old": "const digest = sha256(stable(body));",
+   "new": "const digest = sha256(stable({...body, schemaVersion: undefined}));"
+  },
+  {
+   "id": "C36",
+   "description": "the digest excludes verifiedKnowledge",
+   "file": "core/agents/role-context.ts",
+   "old": "const digest = sha256(stable(body));",
+   "new": "const digest = sha256(stable({...body, verifiedKnowledge: undefined}));"
+  },
+  {
+   "id": "C37",
+   "description": "the digest excludes the role id",
+   "file": "core/agents/role-context.ts",
+   "old": "const digest = sha256(stable(body));",
+   "new": "const digest = sha256(stable({...body, roleId: undefined}));"
+  },
+  {
+   "id": "C38",
+   "description": "the digest covers the final bytes field (it must be the body only: bytes is derived)",
+   "file": "core/agents/role-context.ts",
+   "old": "const digest = sha256(stable(body));",
+   "new": "const digest = sha256(stable({...body, bytes}));"
+  },
+  {
+   "id": "C39",
+   "description": "a registered technology takes the knowledgeState of the first registry row (not its own)",
+   "file": "core/agents/role-context.ts",
+   "old": "knowledgeState: reg?.knowledgeState ?? null};",
+   "new": "knowledgeState: reg ? \"SEED_PROFILE\" : null};"
+  },
+  {
+   "id": "C40",
+   "description": "a registered technology's registryId is nulled",
+   "file": "core/agents/role-context.ts",
+   "old": "registryId: reg?.id ?? null,",
+   "new": "registryId: null,"
+  },
+  {
+   "id": "H-S01",
+   "description": "optional technologies are no longer sorted by slug",
+   "file": "core/agents/role-context.ts",
+   "old": "const optional = role.optionalTechnologies.map(t => tech(t, \"OPTIONAL\")).sort(bySlug);",
+   "new": "const optional = role.optionalTechnologies.map(t => tech(t, \"OPTIONAL\"));"
+  },
+  {
+   "id": "H-S03",
+   "description": "canonical skill ids are no longer de-duplicated",
+   "file": "core/agents/role-context.ts",
+   "old": "const canonicalIds = uniqSorted(role.requiredSkillIds);",
+   "new": "const canonicalIds = [...role.requiredSkillIds].sort();"
+  },
+  {
+   "id": "H-S04",
+   "description": "canonical skill ids are no longer sorted",
+   "file": "core/agents/role-context.ts",
+   "old": "const canonicalIds = uniqSorted(role.requiredSkillIds);",
+   "new": "const canonicalIds = [...new Set(role.requiredSkillIds)];"
+  },
+  {
+   "id": "H-S06",
+   "description": "resolveAll no longer sorts role ids",
+   "file": "core/agents/role-context.ts",
+   "old": "return uniqSorted(i.roles.map(r => r.roleId)).map(id => resolveRoleContext(i, id, o));",
+   "new": "return [...new Set(i.roles.map(r => r.roleId))].map(id => resolveRoleContext(i, id, o));"
+  },
+  {
+   "id": "H-S07",
+   "description": "resolveAll no longer de-duplicates role ids (duplicate result emitted twice)",
+   "file": "core/agents/role-context.ts",
+   "old": "return uniqSorted(i.roles.map(r => r.roleId)).map(id => resolveRoleContext(i, id, o));",
+   "new": "return i.roles.map(r => r.roleId).sort().map(id => resolveRoleContext(i, id, o));"
+  },
+  {
+   "id": "H-S08",
+   "description": "resolveAll drops the options (maxBytes ignored for the batch)",
+   "file": "core/agents/role-context.ts",
+   "old": ".map(id => resolveRoleContext(i, id, o));",
+   "new": ".map(id => resolveRoleContext(i, id));"
+  },
+  {
+   "id": "H-S09",
+   "description": "schema version bumped silently",
+   "file": "core/agents/role-context.ts",
+   "old": "export const ROLE_CONTEXT_SCHEMA_VERSION = \"1.0.0\";",
+   "new": "export const ROLE_CONTEXT_SCHEMA_VERSION = \"2.0.0\";"
+  },
+  {
+   "id": "H-S10",
+   "description": "missing guild name defaults to empty string instead of null",
+   "file": "core/agents/role-context.ts",
+   "old": "guildName: guild?.name ?? null",
+   "new": "guildName: guild?.name ?? \"\""
+  },
+  {
+   "id": "H-S11",
+   "description": "missing priority defaults to P0 instead of null",
+   "file": "core/agents/role-context.ts",
+   "old": "priority: role.priority ?? null",
+   "new": "priority: role.priority ?? \"P0\""
+  },
+  {
+   "id": "H-S12",
+   "description": "missing lifecycle defaults to TARGET instead of null",
+   "file": "core/agents/role-context.ts",
+   "old": "lifecycle: role.lifecycle ?? null",
+   "new": "lifecycle: role.lifecycle ?? \"TARGET\""
+  },
+  {
+   "id": "H-S13",
+   "description": "missing alias legacyTitle defaults to empty string",
+   "file": "core/agents/role-context.ts",
+   "old": "legacyTitle: a.legacyTitle ?? null",
+   "new": "legacyTitle: a.legacyTitle ?? \"\""
+  },
+  {
+   "id": "H-S14",
+   "description": "missing alias approval defaults to PROPOSED instead of null",
+   "file": "core/agents/role-context.ts",
+   "old": "approval: a.approval ?? null",
+   "new": "approval: a.approval ?? \"PROPOSED\""
+  },
+  {
+   "id": "H-S15",
+   "description": "maxBytes below 1 (e.g. 0.5) is rejected instead of typed over-cap",
+   "file": "core/agents/role-context.ts",
+   "old": "|| maxBytes <= 0) throw",
+   "new": "|| maxBytes < 1) throw"
+  },
+  {
+   "id": "H-S16",
+   "description": "gap id filter admits any non-null value (undefined gapId leaks)",
+   "file": "core/agents/role-context.ts",
+   "old": "typeof g === \"string\"",
+   "new": "g !== null"
+  },
+  {
+   "id": "H-S18",
+   "description": "technology registry lookup is case-insensitive",
+   "file": "core/agents/role-context.ts",
+   "old": "const reg = i.technologies.get(t.technologyId);",
+   "new": "const reg = i.technologies.get(t.technologyId.toLowerCase());"
+  },
+  {
+   "id": "H-S19",
+   "description": "alias status match is case-insensitive",
+   "file": "core/agents/role-context.ts",
+   "old": "if (a.status !== \"SEMANTIC_VERIFIED\") continue;",
+   "new": "if (a.status.toUpperCase() !== \"SEMANTIC_VERIFIED\") continue;"
+  },
+  {
+   "id": "H-S20",
+   "description": "technology sort uses localeCompare",
+   "file": "core/agents/role-context.ts",
+   "old": "(a.technologyId < b.technologyId ? -1 : a.technologyId > b.technologyId ? 1 : 0);",
+   "new": "a.technologyId.localeCompare(b.technologyId);"
+  },
+  {
+   "id": "H-S21",
+   "description": "alias sort uses localeCompare",
+   "file": "core/agents/role-context.ts",
+   "old": ".sort((a, b) => (a.legacyId < b.legacyId ? -1 : a.legacyId > b.legacyId ? 1 : 0))",
+   "new": ".sort((a, b) => a.legacyId.localeCompare(b.legacyId))"
+  },
+  {
+   "id": "H-S24",
+   "description": "loader isObject accepts null",
+   "file": "core/agents/role-context.ts",
+   "old": "typeof v === \"object\" && v !== null && !Array.isArray(v)",
+   "new": "typeof v === \"object\" && !Array.isArray(v)"
+  },
+  {
+   "id": "H-S25",
+   "description": "loader readArray no longer checks the key is an array",
+   "file": "core/agents/role-context.ts",
+   "old": "|| !Array.isArray(doc[key]) ||",
+   "new": "||"
+  },
+  {
+   "id": "H-S26",
+   "description": "loader readArray no longer checks the document is an object",
+   "file": "core/agents/role-context.ts",
+   "old": "if (!isObject(doc) || !Array.isArray",
+   "new": "if (!Array.isArray"
+  },
+  {
+   "id": "H-S27",
+   "description": "strArr accepts arrays of non-strings",
+   "file": "core/agents/role-context.ts",
+   "old": "Array.isArray(v) && v.every(x => typeof x === \"string\")",
+   "new": "Array.isArray(v)"
+  },
+  {
+   "id": "H-S28",
+   "description": "techRefs no longer requires a string status",
+   "file": "core/agents/role-context.ts",
+   "old": " && typeof t.status === \"string\"",
+   "new": ""
+  },
+  {
+   "id": "H-S29",
+   "description": "techRefs no longer requires a string technologyId",
+   "file": "core/agents/role-context.ts",
+   "old": "isObject(t) && typeof t.technologyId === \"string\" && ",
+   "new": "isObject(t) && "
+  },
+  {
+   "id": "H-S30",
+   "description": "skills-v2 row shape check deleted",
+   "file": "core/agents/role-context.ts",
+   "old": "for (const s of skills) if (!isObject(s) || typeof s.id !== \"string\") throw unavailable(REL_SKILLS);",
+   "new": ""
+  },
+  {
+   "id": "H-S31",
+   "description": "skills-v2 row shape error names the wrong file",
+   "file": "core/agents/role-context.ts",
+   "old": "typeof s.id !== \"string\") throw unavailable(REL_SKILLS)",
+   "new": "typeof s.id !== \"string\") throw unavailable(REL_TECH)"
+  },
+  {
+   "id": "H-S32",
+   "description": "technologies row shape check deleted",
+   "file": "core/agents/role-context.ts",
+   "old": "for (const t of techs) if (!isObject(t) || typeof t.id !== \"string\" || typeof t.slug !== \"string\" || typeof t.status !== \"string\" || typeof t.knowledgeState !== \"string\") throw unavailable(REL_TECH);",
+   "new": ""
+  },
+  {
+   "id": "H-S33",
+   "description": "technologies knowledgeState no longer required in loader",
+   "file": "core/agents/role-context.ts",
+   "old": " || typeof t.knowledgeState !== \"string\") throw unavailable(REL_TECH)",
+   "new": ") throw unavailable(REL_TECH)"
+  },
+  {
+   "id": "H-S34",
+   "description": "matrix row shape check deleted",
+   "file": "core/agents/role-context.ts",
+   "old": "for (const a of matrix) if (!isObject(a) || typeof a.agentId !== \"string\" || !strArr(a.requiredSkillIds)) throw unavailable(REL_MATRIX);",
+   "new": ""
+  },
+  {
+   "id": "H-S35",
+   "description": "matrix row shape error names the wrong file",
+   "file": "core/agents/role-context.ts",
+   "old": "throw unavailable(REL_MATRIX)",
+   "new": "throw unavailable(REL_SKILLS)"
+  },
+  {
+   "id": "H-S36",
+   "description": "guild row shape check deleted",
+   "file": "core/agents/role-context.ts",
+   "old": "for (const g of guilds) if (!isObject(g) || typeof g.guildId !== \"string\" || typeof g.clusterId !== \"string\") throw unavailable(REGISTRY);",
+   "new": ""
+  },
+  {
+   "id": "H-S37",
+   "description": "role legacyAliases shape check deleted",
+   "file": "core/agents/role-context.ts",
+   "old": "\n    || !Array.isArray(r.legacyAliases) || !r.legacyAliases.every(a => isObject(a) && typeof a.legacyId === \"string\" && typeof a.status === \"string\")) throw unavailable(REGISTRY);",
+   "new": ") throw unavailable(REGISTRY);"
+  },
+  {
+   "id": "H-S38",
+   "description": "role title no longer required in loader",
+   "file": "core/agents/role-context.ts",
+   "old": "typeof r.title !== \"string\" || ",
+   "new": ""
+  },
+  {
+   "id": "H-S39",
+   "description": "role gapIds no longer required in loader",
+   "file": "core/agents/role-context.ts",
+   "old": " || !strArr(r.gapIds)",
+   "new": ""
+  },
+  {
+   "id": "H-S40",
+   "description": "role requiredSkillIds no longer required in loader",
+   "file": "core/agents/role-context.ts",
+   "old": "\n    || !strArr(r.requiredSkillIds) || ",
+   "new": "\n    || "
+  },
+  {
+   "id": "H-S41",
+   "description": "role optionalTechnologies no longer validated in loader",
+   "file": "core/agents/role-context.ts",
+   "old": " || !techRefs(r.optionalTechnologies)",
+   "new": ""
+  },
+  {
+   "id": "H-S42",
+   "description": "profile candidateSkills no longer validated in loader",
+   "file": "core/agents/role-context.ts",
+   "old": " || !isObject(p.candidateSkills) || !strArr(p.candidateSkills.value)",
+   "new": ""
+  },
+  {
+   "id": "H-S43",
+   "description": "profile reviewChain.value no longer validated in loader",
+   "file": "core/agents/role-context.ts",
+   "old": " || !strArr(p.reviewChain.value)",
+   "new": ""
+  },
+  {
+   "id": "H-S44",
+   "description": "adapters array of the binding is aliased not copied",
+   "file": "core/agents/role-context.ts",
+   "old": "adapters: [...res.profile.adapters]",
+   "new": "adapters: res.profile.adapters as string[]"
+  },
+  {
+   "id": "H-S45",
+   "description": "canonical responsibilities aliased not copied",
+   "file": "core/agents/role-context.ts",
+   "old": "responsibilities: [...role.responsibilities]",
+   "new": "responsibilities: role.responsibilities as string[]"
+  },
+  {
+   "id": "H-S47",
+   "description": "legacy skill lookup no longer defaults to empty (missing matrix row throws)",
+   "file": "core/agents/role-context.ts",
+   "old": "for (const s of i.legacySkills.get(a.legacyId) ?? [])",
+   "new": "for (const s of i.legacySkills.get(a.legacyId)!)"
+  },
+  {
+   "id": "H-T01",
+   "description": "role id lookup is case-insensitive",
+   "file": "core/agents/role-context.ts",
+   "old": "i.roles.filter(r => r.roleId === roleId)",
+   "new": "i.roles.filter(r => r.roleId.toLowerCase() === roleId.toLowerCase())"
+  },
+  {
+   "id": "H-T02",
+   "description": "role id lookup trims the requested id",
+   "file": "core/agents/role-context.ts",
+   "old": "i.roles.filter(r => r.roleId === roleId)",
+   "new": "i.roles.filter(r => r.roleId === roleId.trim())"
+  },
+  {
+   "id": "H-T03",
+   "description": "fractional maxBytes is rounded up (cap loosened)",
+   "file": "core/agents/role-context.ts",
+   "old": "\n  return maxBytes;\n",
+   "new": "\n  return Math.ceil(maxBytes);\n"
+  },
+  {
+   "id": "H-T06",
+   "description": "aliases are sorted in place (input mutated)",
+   "file": "core/agents/role-context.ts",
+   "old": "const aliases = [...role.legacyAliases].sort(",
+   "new": "const aliases = (role.legacyAliases as ContextAlias[]).sort("
+  },
+  {
+   "id": "H-T10",
+   "description": "review chain value aliased not copied",
+   "file": "core/agents/role-context.ts",
+   "old": "value: [...profile.reviewChain.value]",
+   "new": "value: profile.reviewChain.value as string[]"
+  },
+  {
+   "id": "H-T11",
+   "description": "unknown guild falls back to the first guild",
+   "file": "core/agents/role-context.ts",
+   "old": "const guild = i.guilds.find(g => g.guildId === role.guildId);",
+   "new": "const guild = i.guilds.find(g => g.guildId === role.guildId) ?? i.guilds[0];"
+  },
+  {
+   "id": "H-T12",
+   "description": "loader profile reviewChain object check deleted",
+   "file": "core/agents/role-context.ts",
+   "old": " || !isObject(p.reviewChain)",
+   "new": ""
+  },
+  {
+   "id": "H-T23",
+   "description": "canonical forbiddenActions deduplicated",
+   "file": "core/agents/role-context.ts",
+   "old": "forbiddenActions: [...role.forbiddenActions]",
+   "new": "forbiddenActions: [...new Set(role.forbiddenActions)]"
+  },
+  {
+   "id": "H-T24",
+   "description": "responsibilities deduplicated",
+   "file": "core/agents/role-context.ts",
+   "old": "responsibilities: [...role.responsibilities]",
+   "new": "responsibilities: [...new Set(role.responsibilities)]"
+  },
+  {
+   "id": "H-U01",
+   "description": "alias legacyTitle null-normalisation dropped (undefined leaks)",
+   "file": "core/agents/role-context.ts",
+   "old": "legacyTitle: a.legacyTitle ?? null",
+   "new": "legacyTitle: a.legacyTitle as string"
+  },
+  {
+   "id": "H-U02",
+   "description": "alias approval null-normalisation dropped (undefined leaks)",
+   "file": "core/agents/role-context.ts",
+   "old": "approval: a.approval ?? null",
+   "new": "approval: a.approval as string"
+  },
+  {
+   "id": "H-U03",
+   "description": "priority null-normalisation dropped",
+   "file": "core/agents/role-context.ts",
+   "old": "priority: role.priority ?? null",
+   "new": "priority: role.priority as string"
+  },
+  {
+   "id": "H-U04",
+   "description": "lifecycle null-normalisation dropped",
+   "file": "core/agents/role-context.ts",
+   "old": "lifecycle: role.lifecycle ?? null",
+   "new": "lifecycle: role.lifecycle as string"
+  },
+  {
+   "id": "H-U05",
+   "description": "guildName null-normalisation dropped",
+   "file": "core/agents/role-context.ts",
+   "old": "guildName: guild?.name ?? null",
+   "new": "guildName: guild?.name as string"
+  },
+  {
+   "id": "H-U06",
+   "description": "optional technologies that also appear as required are hidden",
+   "file": "core/agents/role-context.ts",
+   "old": "const optional = role.optionalTechnologies.map(t => tech(t, \"OPTIONAL\")).sort(bySlug);",
+   "new": "const optional = role.optionalTechnologies.filter(t => !role.requiredTechnologies.some(r => r.technologyId === t.technologyId)).map(t => tech(t, \"OPTIONAL\")).sort(bySlug);"
+  },
+  {
+   "id": "H-U07",
+   "description": "duplicate required technology references are collapsed",
+   "file": "core/agents/role-context.ts",
+   "old": "const required = role.requiredTechnologies.map(t => tech(t, \"REQUIRED\")).sort(bySlug);",
+   "new": "const required = [...new Map(role.requiredTechnologies.map(t => [t.technologyId, t] as const)).values()].map(t => tech(t, \"REQUIRED\")).sort(bySlug);"
+  },
+  {
+   "id": "H-U08",
+   "description": "empty review chain value is reported as no review chain",
+   "file": "core/agents/role-context.ts",
+   "old": "reviewChain: profile ? {origin",
+   "new": "reviewChain: profile && profile.reviewChain.value.length > 0 ? {origin"
+  },
+  {
+   "id": "H-U09",
+   "description": "loader role roleId no longer required",
+   "file": "core/agents/role-context.ts",
+   "old": "!isObject(r) || typeof r.roleId !== \"string\" || ",
+   "new": "!isObject(r) || "
+  },
+  {
+   "id": "H-U10",
+   "description": "loader role guildId no longer required",
+   "file": "core/agents/role-context.ts",
+   "old": " || typeof r.guildId !== \"string\"",
+   "new": ""
+  },
+  {
+   "id": "H-U11",
+   "description": "loader role clusterId no longer required",
+   "file": "core/agents/role-context.ts",
+   "old": " || typeof r.clusterId !== \"string\"",
+   "new": ""
+  },
+  {
+   "id": "H-U12",
+   "description": "loader role responsibilities no longer required",
+   "file": "core/agents/role-context.ts",
+   "old": " || !strArr(r.responsibilities)",
+   "new": ""
+  },
+  {
+   "id": "H-U13",
+   "description": "loader role forbiddenActions no longer required",
+   "file": "core/agents/role-context.ts",
+   "old": " || !strArr(r.forbiddenActions)",
+   "new": ""
+  },
+  {
+   "id": "H-U14",
+   "description": "loader role specializationBoundaries no longer required",
+   "file": "core/agents/role-context.ts",
+   "old": " || !strArr(r.specializationBoundaries)",
+   "new": ""
+  },
+  {
+   "id": "H-U15",
+   "description": "loader role requiredTechnologies no longer validated",
+   "file": "core/agents/role-context.ts",
+   "old": " || !techRefs(r.requiredTechnologies)",
+   "new": ""
+  },
+  {
+   "id": "H-U16",
+   "description": "loader profile roleId no longer required",
+   "file": "core/agents/role-context.ts",
+   "old": "!isObject(p) || typeof p.roleId !== \"string\" || ",
+   "new": "!isObject(p) || "
+  },
+  {
+   "id": "H-U18",
+   "description": "loader guild clusterId no longer required",
+   "file": "core/agents/role-context.ts",
+   "old": " || typeof g.clusterId !== \"string\") throw unavailable(REGISTRY)",
+   "new": ") throw unavailable(REGISTRY)"
+  },
+  {
+   "id": "H-U19",
+   "description": "loader matrix agentId no longer required",
+   "file": "core/agents/role-context.ts",
+   "old": "!isObject(a) || typeof a.agentId !== \"string\" || !strArr(a.requiredSkillIds)) throw unavailable(REL_MATRIX)",
+   "new": "!isObject(a) || !strArr(a.requiredSkillIds)) throw unavailable(REL_MATRIX)"
+  },
+  {
+   "id": "H-U20",
+   "description": "loader matrix requiredSkillIds no longer required",
+   "file": "core/agents/role-context.ts",
+   "old": " || !strArr(a.requiredSkillIds)) throw unavailable(REL_MATRIX)",
+   "new": ") throw unavailable(REL_MATRIX)"
+  },
+  {
+   "id": "H-U21",
+   "description": "loader technologies slug no longer required",
+   "file": "core/agents/role-context.ts",
+   "old": " || typeof t.slug !== \"string\"",
+   "new": ""
+  },
+  {
+   "id": "H-U22",
+   "description": "loader technologies id no longer required",
+   "file": "core/agents/role-context.ts",
+   "old": "typeof t.id !== \"string\" || ",
+   "new": ""
+  },
+  {
+   "id": "H-U23",
+   "description": "loader technologies status no longer required",
+   "file": "core/agents/role-context.ts",
+   "old": " || typeof t.status !== \"string\" || typeof t.knowledgeState",
+   "new": "  || typeof t.knowledgeState"
+  },
+  {
+   "id": "H-U24",
+   "description": "loader alias legacyId no longer required",
+   "file": "core/agents/role-context.ts",
+   "old": "isObject(a) && typeof a.legacyId === \"string\" && typeof a.status === \"string\"",
+   "new": "isObject(a) && typeof a.status === \"string\""
+  },
+  {
+   "id": "H-U25",
+   "description": "loader alias status no longer required",
+   "file": "core/agents/role-context.ts",
+   "old": " && typeof a.legacyId === \"string\" && typeof a.status === \"string\")",
+   "new": " && typeof a.legacyId === \"string\")"
   }
  ]
 }
