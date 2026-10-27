@@ -1092,6 +1092,26 @@
       "ref": "wf_6b9c167d-7a8",
       "policy": "TEP-1",
       "at": "2026-10-27T08:41:29.748Z"
+    },
+    {
+      "pr": 264,
+      "sha": "071ac9f3f908d6e3cc2701d59d51980fba7f2b19",
+      "kind": "delta",
+      "base": "4dc0268b74b34389b10f10995ee2074bc36b82bb",
+      "verdict": "NO_BLOCKERS_COORD_CHECKLIST_bounded_push",
+      "ref": "coord checklist on 071ac9f: 12 M1 continuation endings ABSENT (were PRESENT at 4dc0268), 3 controls PRESENT, 4 M2 slash-misread fixtures ABSENT (were PRESENT), plain control ABSENT, real caller PRESENT, real map digest identical (efa32dbe0682f096) old vs new; adapter-reality + readiness-audit 40/40",
+      "policy": "TEP-1",
+      "at": "2026-10-27T08:44:16.000Z"
+    },
+    {
+      "pr": 264,
+      "sha": "09a926f77c65314a75ecdf481fc1e37d93273bbd",
+      "kind": "delta",
+      "base": "071ac9f3f908d6e3cc2701d59d51980fba7f2b19",
+      "verdict": "BASE_MERGE_ONLY_validation_union_MAP_order_reseal",
+      "ref": "coord base merge ad37b37",
+      "policy": "TEP-1",
+      "at": "2026-10-27T08:44:16.049Z"
     }
   ],
   "tests": [],
