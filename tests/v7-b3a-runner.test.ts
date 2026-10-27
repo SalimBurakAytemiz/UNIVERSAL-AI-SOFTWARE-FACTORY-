@@ -752,7 +752,7 @@ describe("LANE-C MissionRunner claim cap (maxConcurrentRuns)", () => {
     const st = {active: 0, maxActive: 0, arrived: 0, barrierTimedOut: false}; let release!: () => void; const gate = new Promise<void>(r => { release = r; });
     const implement = async (w: string, spec: MissionSpec, ctx: {timeoutMs: number; shouldAbort?: () => boolean}) => {
       st.active += 1; st.maxActive = Math.max(st.maxActive, st.active); st.arrived += 1;
-      if (barrier > 0) { if (st.arrived >= barrier) release(); await Promise.race([gate, new Promise<void>(r => setTimeout(() => { st.barrierTimedOut = true; r(); }, 20_000))]); }
+      if (barrier > 0) { if (st.arrived >= barrier) release(); let timer: ReturnType<typeof setTimeout> | undefined; await Promise.race([gate, new Promise<void>(r => { timer = setTimeout(() => { st.barrierTimedOut = true; r(); }, 20_000); })]); clearTimeout(timer); } // //TR: kapı açılınca zamanlayıcı iptal edilir: aksi halde kapı zamanında açılsa bile tick 20 sn'yi aşınca (yavaş Windows) bayrak yanlışlıkla true olurdu
       try { return await pair.implementer.implement(w, spec, ctx); } finally { st.active -= 1; }
     };
     return {st, pair: {...pair, implementer: {...pair.implementer, implement}} as ExecutorPair};
