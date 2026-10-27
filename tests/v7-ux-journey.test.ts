@@ -1041,6 +1041,83 @@ describe("LANE-A A-FLOW-5 analysis step — view (Journey)", () => {
   const press = async (b: any, id: string) => { fire(byId(b.root, id)!, "click"); await new Promise(r => setTimeout(r, 0)); b.root = await renderJourney(b.ctx); return b.root; };
   const block = (root: N) => byId(root, "analysis-step")!;
   const stOf = (root: N, form = "analysis-step") => byId(root, `${form}-status`)!;
+  // //TR: A-ANALYSIS-L10N (F1): analiz rotasının/çekirdeğin döndürebildiği HER engel kodunun en/tr metni vardır; kod listesi GERÇEK kaynak dosyalardan (claude-profiles.ts, analysis.ts, first-delivery-bindings.ts) çıkarılır, elle yazılmaz; yeni bir kod eklenir ve metni yoksa bu test düşer.
+  it("F1: every blocker code the analysis route and core can return has an English and a Turkish text (no '(not recognised)'), the list is read from the real sources, and EXECUTOR_NOT_ENABLED shows its text through the real block", async () => {
+    const src = (f: string) => fs.readFileSync(path.join(__dirname, "..", f), "utf8");
+    const cp = src("core/workos/claude-profiles.ts"), an = src("core/workos/crew/analysis.ts"), fdb = src("core/agents/first-delivery-bindings.ts");
+    const codes = new Set<string>();
+    // //TR: L1: tarama tek satıra güvenmez; LauncherCheck tipi birden çok satıra sarılabilir, analysis.ts doğrudan {status:"BLOCKED", blocker:"X"} döndürebilir ve claudeRoleReadiness önek taşımayan bir kodu blockers.push ile ekleyebilir.
+    const launcherFrom = cp.indexOf("export type LauncherCheck ="), launcherTo = cp.indexOf("export function claudeLauncherCheck(");
+    if (launcherFrom < 0 || launcherTo < launcherFrom) throw new Error("missing LauncherCheck type");
+    for (const m of cp.slice(launcherFrom, launcherTo).matchAll(/"([A-Z][A-Z0-9_]+)"/g)) codes.add(m[1]);
+    const body = cp.slice(cp.indexOf("export function claudeRoleReadiness("), cp.indexOf("// //TR: Claude CLI yazdırma kipinde"));
+    for (const m of body.matchAll(/\b((?:CLAUDE|PROVIDER|CLI)_[A-Z_]+)\b/g)) codes.add(m[1]);
+    for (const m of an.matchAll(/blockedStep\("([A-Z_]+)"/g)) codes.add(m[1]);
+    for (const m of an.matchAll(/status:\s*"BLOCKED",\s*blocker:\s*"([A-Z][A-Z0-9_]+)"/g)) codes.add(m[1]); // a direct BLOCKED return that bypasses blockedStep
+    for (const src2 of [body, an]) for (const push of src2.matchAll(/\bblockers\.push\(([^;]*?)\);/g)) for (const m of push[1].matchAll(/(?:^|(?<!\?)\?\s*|(?<![?:\w$]):\s*)["`]([A-Z][A-Z0-9_]+)(?=["`:])/g)) codes.add(m[1]); // an unprefixed code pushed onto blockers
+    for (const m of an.matchAll(/\?\? "([A-Z_]+)"/g)) codes.add(m[1]);
+    const { EXECUTOR_NOT_ENABLED } = await import("../core/workos/crew/analysis.js"); codes.add(EXECUTOR_NOT_ENABLED);
+    if (/ROLE_NOT_EXECUTABLE/.test(fdb)) codes.add("ROLE_NOT_EXECUTABLE");
+    for (const known of ["CLAUDE_CLI_NOT_FOUND", "CLAUDE_CLI_SHIM_UNSUPPORTED", "PROVIDER_PROVENANCE_NOT_READY", "CLAUDE_PACKAGE_PROVENANCE_REQUIRED", "CLAUDE_LAUNCHER_PROVENANCE_CHANGED", "CLAUDE_PACKAGE_PROVENANCE_CHANGED", "CLAUDE_PROFILE_LOGIN_REQUIRED", "CLAUDE_PROFILE_REFUSED", "ANALYSIS_IN_PROGRESS", "ANALYSIS_PHASE_NOT_ADVANCED", "ANALYSIS_NOT_READY", "EXECUTOR_NOT_ENABLED", "ROLE_NOT_EXECUTABLE"]) expect(codes.has(known), `source scan lost ${known}`).toBe(true);
+    const an2 = await load("views", "analysis-step.js"), i18n = await load("i18n.js");
+    const E = (await load("locales", "en.js")).default as Record<string, string>, T = (await load("locales", "tr.js")).default as Record<string, string>;
+    for (const [lang, dict] of [["en", E], ["tr", T]] as const) {
+      const ctx = { t: (k: string, v?: any) => i18n.translate(lang, k, v) };
+      for (const code of [...codes].sort()) {
+        const variants = code.startsWith("CLAUDE_PROFILE_") ? [code, `implementer:${code}`, `reviewer:${code}`, ...(code === "CLAUDE_PROFILE_REFUSED" ? [`implementer:${code}:PROFILE_PATH_INSIDE_GIT_WORKTREE`] : [])] : [code, ...(code === "ROLE_NOT_EXECUTABLE" ? ["ROLE_NOT_EXECUTABLE:ROLE_HAS_NO_BINDING:UASCO-0001"] : [])];
+        for (const v of variants) {
+          const t = an2.blockerText(ctx, v);
+          expect(t, `${lang} ${v}`).not.toMatch(/not recognised|tanınmadı/);
+          expect(t, `${lang} ${v}`).not.toBe(v);
+        }
+        expect(dict[`analysis.blocker.${code}`], `${lang} analysis.blocker.${code}`).toBeTruthy();
+      }
+    }
+    expect(E["analysis.blocker.EXECUTOR_NOT_ENABLED"]).toBe("Local Claude is not enabled, so no draft can be produced. Open Settings, then AI Executors, and enable Local Claude.");
+    expect(T["analysis.blocker.EXECUTOR_NOT_ENABLED"]).toBe("Local Claude etkin değil, bu yüzden taslak üretilemez. Ayarlar > AI Yürütücüleri bölümünden Local Claude'u etkinleştirin.");
+    expect(E["analysis.blocker.ANALYSIS_IN_PROGRESS"]).toBe("A draft for this mission is already being produced. Wait for it to finish, then look at the pending draft.");
+    expect(T["analysis.blocker.ANALYSIS_IN_PROGRESS"]).toBe("Bu mission için bir taslak zaten üretiliyor. Bitmesini bekleyin, sonra bekleyen taslağa bakın.");
+    expect(E["analysis.blocker.CLAUDE_PACKAGE_PROVENANCE_CHANGED"]).toBe("The installed Claude Code package changed after it was verified. Enable Local Claude again to verify the new install.");
+    expect(T["analysis.blocker.CLAUDE_PACKAGE_PROVENANCE_CHANGED"]).toBe("Kurulu Claude Code paketi doğrulandıktan sonra değişti. Yeni kurulumu doğrulamak için Local Claude'u yeniden etkinleştirin.");
+    // through the real block: the route's own free BLOCKED (no builder) ends with EXECUTOR_NOT_ENABLED
+    const b = await open({status: 200, body: {status: "BLOCKED", blocker: "PROVIDER_PROVENANCE_NOT_READY", blockers: ["PROVIDER_PROVENANCE_NOT_READY", "EXECUTOR_NOT_ENABLED"], founderAction: "free text"}});
+    const after = await press(b, "analysis-step-submit");
+    const rows = allData(block(after), "analysisBlocker");
+    expect(rows.map(n => n.dataset.analysisBlocker)).toEqual(["PROVIDER_PROVENANCE_NOT_READY", "EXECUTOR_NOT_ENABLED"]);
+    expect(rows[1].textContent).toBe("Local Claude is not enabled, so no draft can be produced. Open Settings, then AI Executors, and enable Local Claude.");
+    expect(block(after).textContent).not.toContain("not recognised");
+  });
+
+  // //TR: A-ANALYSIS-L10N (F2): 409 WORKOS_CONFLICT + reason köprüden geçer ve görünümde SEBEP metniyle gösterilir; genel "idempotency anahtarı" metni değil.
+  it("F2: a 409 WORKOS_CONFLICT with a reason (MISSION_NOT_PREDEV_ELIGIBLE) is its own state with the truthful text, an unknown reason still shows the code, and a 409 without a valid reason stays the generic conflict", async () => {
+    const c = await load("analysis-core.js");
+    const R = (status: number, body: any) => c.classifyAnalysisStep({status, body});
+    expect(R(409, {error: "WORKOS_CONFLICT", reason: "MISSION_NOT_PREDEV_ELIGIBLE"})).toEqual({kind: "CONFLICT", reason: "MISSION_NOT_PREDEV_ELIGIBLE"});
+    expect(R(409, {error: "WORKOS_CONFLICT", reason: "SOMETHING_NEW"})).toEqual({kind: "CONFLICT", reason: "SOMETHING_NEW"});
+    for (const bad of [{error: "WORKOS_CONFLICT"}, {error: "WORKOS_CONFLICT", reason: "lower case"}, {error: "WORKOS_CONFLICT", reason: 5}, {error: "WORKOS_CONFLICT", reason: "A".repeat(65)}, {error: "OTHER", reason: "MISSION_NOT_PREDEV_ELIGIBLE"}]) expect(R(409, bad).kind, JSON.stringify(bad)).toBe("FAILED");
+    for (const st of [200, 400, 404, 500, 502]) expect(R(st, {error: "WORKOS_CONFLICT", reason: "MISSION_NOT_PREDEV_ELIGIBLE"}).kind, `status ${st}`).not.toBe("CONFLICT");
+    expect(c.analysisStatusKey({kind: "CONFLICT", reason: "MISSION_NOT_PREDEV_ELIGIBLE"}, {}, "step")).toEqual({ok: false, key: "analysis.conflict.MISSION_NOT_PREDEV_ELIGIBLE", vars: {}});
+    expect(c.analysisStatusKey({kind: "CONFLICT", reason: "SOMETHING_NEW"}, {}, "step")).toEqual({ok: false, key: "analysis.conflict.other", vars: {reason: "SOMETHING_NEW"}});
+    expect(c.ANALYSIS_CONFLICT_REASONS).toEqual(["MISSION_NOT_PREDEV_ELIGIBLE"]);
+    const E = (await load("locales", "en.js")).default as Record<string, string>, T = (await load("locales", "tr.js")).default as Record<string, string>;
+    expect(E["analysis.conflict.MISSION_NOT_PREDEV_ELIGIBLE"]).toBe("This mission is no longer open for the pre-development analysis (for example a run has already started). Nothing was recorded.");
+    expect(T["analysis.conflict.MISSION_NOT_PREDEV_ELIGIBLE"]).toBe("Bu mission artık ön geliştirme analizine açık değil (örneğin bir koşu zaten başladı). Hiçbir şey kaydedilmedi.");
+    expect(E["analysis.conflict.other"]).toBe("The server refused the analysis step because of a conflict ({reason}). Nothing was recorded.");
+    expect(T["analysis.conflict.other"]).toBe("Sunucu analiz adımını bir çakışma nedeniyle reddetti ({reason}). Hiçbir şey kaydedilmedi.");
+    for (const k of ["analysis.conflict.MISSION_NOT_PREDEV_ELIGIBLE", "analysis.conflict.other"]) expect(E[k]).not.toMatch(/idempotency/i);
+    // //TR: L2: çakışma geç yolda builder.produce SONRASI da gelebilir (recorder.start -> openPreDevSequence); bu yüzden metin "hiçbir şey üretilmedi" ya da iş/maliyet olmadığı iddiasını TAŞIMAZ, yalnız "kaydedilmedi" der.
+    for (const k of ["analysis.conflict.MISSION_NOT_PREDEV_ELIGIBLE", "analysis.conflict.other"]) { expect(E[k]).not.toMatch(/produced|no cost|free of charge/i); expect(T[k]).not.toMatch(/üretil|maliyet/i); expect(E[k]).toContain("Nothing was recorded."); expect(T[k]).toContain("Hiçbir şey kaydedilmedi."); }
+    // through the real block, with the body exactly as the desktop bridge delivers it
+    const b = await open({status: 409, body: {error: "WORKOS_CONFLICT", reason: "MISSION_NOT_PREDEV_ELIGIBLE"}});
+    const after = await press(b, "analysis-step-submit");
+    expect(stOf(after).textContent).toBe("This mission is no longer open for the pre-development analysis (for example a run has already started). Nothing was recorded.");
+    expect(stOf(after).dataset.result).toBe("error");
+    expect(byId(after, "analysis-plan-submit")).toBeUndefined();
+    const u = await open({status: 409, body: {error: "WORKOS_CONFLICT", reason: "SOMETHING_NEW"}});
+    expect(stOf(await press(u, "analysis-step-submit")).textContent).toBe("The server refused the analysis step because of a conflict (SOMETHING_NEW). Nothing was recorded.");
+    const g = await open({status: 409, body: {error: "WORKOS_CONFLICT"}});
+    expect(stOf(await press(g, "analysis-step-submit")).textContent).toMatch(/^Conflict \(HTTP 409\)/);
+  });
   it("shows an Analyse button and a closed 'Create plan' gate before any step; pressing it posts {} once to the canonical path", async () => {
     const b = await open({status: 200, body: {status: "DRAFT_READY", kind: "BusinessAnalysis", artifactId: A1, version: 1, roleId: "UASCO-0300", next: "FOUNDER_APPROVAL"}});
     expect(byData(block(b.root), "analysisStatus")!.dataset.analysisStatus).toBe("NONE"); expect(byId(b.root, "analysis-plan-submit")).toBeUndefined();
@@ -1239,7 +1316,8 @@ describe("LANE-A A-FLOW-5 analysis step — view (Journey)", () => {
   it("is present in English and Turkish with the same keys; no analysis text is a raw key", async () => {
     const en = await load("locales", "en.js"), tr = await load("locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
     const keys = Object.keys(E).filter(k => k.startsWith("analysis."));
-    expect(keys.length).toBe(58);
+    // //TR: A-ANALYSIS-L10N: 5 yeni anahtar (analysis.blocker.EXECUTOR_NOT_ENABLED/ANALYSIS_IN_PROGRESS/CLAUDE_PACKAGE_PROVENANCE_CHANGED, analysis.conflict.MISSION_NOT_PREDEV_ELIGIBLE/other); sayı 58 -> 63.
+    expect(keys.length).toBe(63);
     for (const h of ["CLAUDE_CLI_NOT_FOUND", "CLAUDE_CLI_SHIM_UNSUPPORTED", "PROVIDER_PROVENANCE_NOT_READY", "CLAUDE_PACKAGE_PROVENANCE_REQUIRED", "CLAUDE_LAUNCHER_PROVENANCE_CHANGED", "CLAUDE_PROFILE_LOGIN_REQUIRED", "CLAUDE_PROFILE_LOGIN_EXPIRED", "CLAUDE_PROFILE_REFUSED", "PROVENANCE_MISSING"]) expect(E[`analysis.blocker.${h}`], h).toBeTruthy();
     for (const k of keys) { expect(T[k], k).toBeTruthy(); expect(E[k], k).not.toBe(k); }
     const b = await open({status: 200, body: {status: "COMPLETE", approved: KINDS}}); const r = await press(b, "analysis-step-submit");
@@ -1908,5 +1986,227 @@ describe("LANE-A A-FLOW-TASK-1: the task status step of the first-delivery flow 
     expect(byId(rendered, "task-status-status")!.dataset.result).toBe("error"); // the view shows a failure
     expect(text(byId(rendered, "task-status")!)).not.toContain("moved to Pending");
     expect(s.calls.refresh).toBe(refresh0 + 1);
+  });
+});
+
+// //TR: A-UI011-EVIDENCE-1 (yalnız kanıt + test, yeni özellik yok): COORD protected batch 4b (#242) analiz ve ürün-çalıştırma rotalarını server.ts'e kaydetti ve main.mjs'de izinledi. Bu blok masaüstü render katmanının (GERÇEK görünümler + GERÇEK api.js + main.mjs izin listesi ve hata gövdesi temizleyici) bu rotalara GERÇEK bir control-api üzerinden ulaştığını Linux'ta kanıtlar. ÜCRETLİ Claude çağrısı YAPILMAZ: LOCAL_CLAUDE hiçbir zaman etkinleştirilmez (yalnız ücretsiz BLOCKED/409 durumları); gerçek bir analiz, Windows ve gerçek Electron çalıştırılmaz (NOT_EXECUTED).
+describe("LANE-A A-UI011-EVIDENCE-1: the analysis step and the run-the-product step against the REAL control-api (free states only, LOCAL_CLAUDE stays off)", () => {
+  const block = (name: string) => { const m = new RegExp(`// ${name}-BEGIN\\n([\\s\\S]*?)// ${name}-END`).exec(mainSrc); if (!m) throw new Error(`missing ${name}`); return m[1]; };
+  const postGates = new Function(`${block("B5-POST-ALLOWLIST")}\nreturn {desktopPostPathAllowed, desktopPostBodyCheck};`)() as {desktopPostPathAllowed: (v: unknown) => boolean; desktopPostBodyCheck: (b: unknown) => {ok: boolean; text?: string; error?: string}};
+  const postAllowed = postGates.desktopPostPathAllowed;
+  const getAllowed = new Function(`${block("B4-ALLOWLIST")}\nreturn desktopExtraGetPathAllowed;`)() as (v: unknown) => boolean;
+  // apps/desktop/main.mjs:321 admits a GET when desktopGetPathAllowed (automation/lib/control-boundary.mjs) OR desktopExtraGetPathAllowed holds
+  let baseGetAllowed: (v: unknown) => boolean = () => false;
+  // main.mjs's own error-body scrubber, exactly as the desktop bridge applies it before the renderer sees a POST answer
+  const scrubFrom = mainSrc.indexOf("function scrubText("), scrubTo = mainSrc.indexOf("async function apiPost(");
+  if (scrubFrom < 0) throw new Error("missing function scrubText("); if (scrubTo < 0) throw new Error("missing async function apiPost(");
+  const scrubSrc = mainSrc.slice(scrubFrom, scrubTo);
+  const sanitizePostBody = new Function("token", `${scrubSrc}\nreturn sanitizePostBody;`)(TOKEN) as (status: number, parsed: unknown) => unknown;
+  const text = (n: N) => n.textContent;
+  const tick = () => new Promise(r => setTimeout(r, 0));
+
+  // //TR: Sunucu ana makinenin ortamından UASCO_WORKOS_EXECUTOR / UASCO_WORKOS_RUNNER / UASCO_CONTROL_ROOT okur; bu blok bunları siler (afterEach'te geri koyar), controlRoot'u geçici dizine ve runner'ı kapalıya sabitler ve checkout içindeki claude-profiles'a hiçbir şey yazılmadığını sabitler.
+  const ENV_KEYS = ["UASCO_WORKOS_EXECUTOR", "UASCO_WORKOS_RUNNER", "UASCO_CONTROL_ROOT"];
+  const savedEnv: Record<string, string | undefined> = {};
+  const checkoutProfiles = () => { const p = path.join(process.cwd(), "claude-profiles"); return fs.existsSync(p) ? fs.readdirSync(p, {recursive: true}).map(String).sort() : null; };
+  let profilesBefore: string[] | null = null;
+  const controlRoot = () => path.join(tmp, "control");
+  beforeEach(async () => {
+    for (const k of ENV_KEYS) { savedEnv[k] = process.env[k]; delete process.env[k]; }
+    profilesBefore = checkoutProfiles();
+    baseGetAllowed = (await import("../automation/lib/control-boundary.mjs")).desktopGetPathAllowed as (v: unknown) => boolean;
+  });
+  afterEach(() => { for (const k of ENV_KEYS) { if (savedEnv[k] === undefined) delete process.env[k]; else process.env[k] = savedEnv[k]; } });
+
+  async function setup(executors?: unknown) {
+    fs.mkdirSync(runtime(), {recursive: true}); fs.mkdirSync(controlRoot(), {recursive: true});
+    const store = new WorkOsStore(dataDir()), scope = {tenantId: "tA"};
+    const project = store.createProject({tenantId: "tA", orgId: "org1", name: "Evidence", environmentId: "env-dev", createdBy: RECORDER});
+    const open = store.createMission({tenantId: "tA", projectId: project.projectId, title: "Open mission", objective: "obj", acceptanceCriteria: ["ac"], riskLevel: "R0", createdBy: RECORDER});
+    const exec = store.createMission({tenantId: "tA", projectId: project.projectId, title: "Executing mission", objective: "obj", acceptanceCriteria: ["ac"], riskLevel: "R0", createdBy: RECORDER});
+    for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission(scope, exec.missionId, to, to, RECORDER);
+    const run = store.createRun({tenantId: "tA", missionId: exec.missionId, executor: {implementer: "a", reviewer: "b"}, createdBy: RECORDER});
+    const app = buildServer({controlToken: TOKEN, runtime: runtime(), dataDir: dataDir(), tenantId: "tA", port: 3210, logger: false, controlRoot: controlRoot(), runner: {enabled: false}, ...(executors ? {executors: executors as never} : {})}); apps.push(app);
+    const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js"), forms = await load("forms.js");
+    forms.resetAllForms();
+    const doc = new D(), cache = st.createStore(null);
+    const calls = {post: [] as Array<{path: string; status: number; wire: any; seen: any}>, confirm: [] as any[], get: [] as string[]};
+    const bridge = {
+      apiGet: async (p: string) => { calls.get.push(p); if (!baseGetAllowed(p) && !getAllowed(p)) throw new Error("INVALID_API_PATH"); const r = await app.inject({method: "GET", url: p, headers: hdr}); if (r.statusCode !== 200) throw new Error(`${p}: HTTP ${r.statusCode}`); return r.json(); },
+      apiPost: async (p: string, b: unknown) => {
+        if (!postAllowed(p)) throw new Error("INVALID_API_PATH");
+        const prepared = postGates.desktopPostBodyCheck(b); if (!prepared.ok) throw new Error(prepared.error);
+        const r = await app.inject({method: "POST", url: p, headers: {...hdr, "content-type": "application/json"}, payload: prepared.text});
+        let wire: any = null; try { wire = r.json(); } catch { /* non-json */ }
+        const seen = sanitizePostBody(r.statusCode, wire);
+        calls.post.push({path: p, status: r.statusCode, wire, seen}); return {status: r.statusCode, body: seen};
+      }
+    };
+    const api = apiMod.createApi({bridge, store: cache});
+    const t = (k: string, v?: any) => i18n.translate("en", k, v);
+    const ctx: any = {doc, store: cache, api, i18n: {lang: "en", t}, t, navigate: () => {}, rerender: async () => { cache.clear?.(); cache.cache?.clear?.(); }, refreshAll: async () => { cache.cache?.clear?.(); },
+      confirm: async (o: any) => { calls.confirm.push(o); return true; }, selectProject() {}, renderAttention() {}, principal: "FOUNDER_LOCAL", settleFocus: () => {}};
+    const executorsOf = async () => getJson(app, "/v1/system/executors");
+    return {app, ctx, doc, calls, forms, project, open, exec, run, executorsOf, profilesBefore: profilesBefore, controlRoot: controlRoot()};
+  }
+
+  const blockerCodes = (root: N) => allData(root, "analysisBlocker").map(n => n.dataset.analysisBlocker);
+  async function analyseOnce(s: Awaited<ReturnType<typeof setup>>, missionId: string) {
+    const an = await load("views", "analysis-step.js");
+    an.resetAnalysis(missionId);
+    const result = await an.submitAnalysisStep(s.ctx, missionId);
+    const panel = an.analysisPanel(s.ctx, {missionId, exec: await s.ctx.api.executors()}) as N;
+    s.doc.body.replaceChildren(panel);
+    return {an, result, panel, post: s.calls.post.at(-1)!};
+  }
+  // The free BLOCKED answer: the same renderer state whether no executor is configured at all or an executor pair without a pre-development builder is installed (both give the route NO_ANALYSIS_BUILDER).
+  function expectFreeBlocked(s: Awaited<ReturnType<typeof setup>>, r: Awaited<ReturnType<typeof analyseOnce>>, missionId: string) {
+    expect(r.post.path).toBe(`/v1/missions/${missionId}/analysis/step`);
+    expect(r.post.status).toBe(200);
+    expect(r.post.wire.status).toBe("BLOCKED");
+    expect(Array.isArray(r.post.wire.blockers) && r.post.wire.blockers.length >= 1).toBe(true);
+    expect(r.post.wire.blockers.at(-1)).toBe("EXECUTOR_NOT_ENABLED"); // the route appends this when there is no builder, whatever else the machine reports
+    expect(r.post.wire.blocker).toBe(r.post.wire.blockers[0]);
+    expect(r.result).toEqual({ok: false, kind: "STEP", status: 200});
+    expect(byData(r.panel, "analysisStatus", "BLOCKED")).toBeDefined();
+    expect(blockerCodes(r.panel)).toEqual(r.post.wire.blockers);
+    expect(text(r.panel)).toContain("Blocked: the analysis cannot start until these are fixed. Nothing was produced or recorded.");
+    expect(text(r.panel)).not.toContain("not enabled in this build");
+    expect(byId(r.panel, "analysis-plan-submit")).toBeUndefined(); // Create plan stays closed
+    expect(byData(r.panel, "analysisPlanGate", "CLOSED")).toBeDefined();
+    expect(text(byData(r.panel, "analysisHandPlan")!)).toContain("write the plan by hand in Tasks"); // the free way out
+  }
+  async function expectLocalClaudeStillOff(s: Awaited<ReturnType<typeof setup>>, before: any) {
+    const after = await s.executorsOf();
+    expect(after.executors.LOCAL_CLAUDE.enabled).toBe(false);
+    expect(after.active).toEqual(before.active); // the active executor did not change
+    expect(s.calls.post.map(x => x.path).filter(p => p.includes("/executors/"))).toEqual([]); // the enable route is never called
+    expect(s.calls.post.every(x => x.status !== 201)).toBe(true);
+    // the runner stayed off: the QUEUED run created by setup was never leased, and nothing was written under the checkout
+    expect((await getJson(s.app, `/v1/work-runs/${s.run.runId}`)).run.status).toBe("QUEUED");
+    expect(checkoutProfiles()).toEqual(s.profilesBefore);
+  }
+  // LOCAL_CLAUDE is off BEFORE the step under test runs; the returned snapshot is what expectLocalClaudeStillOff compares against
+  async function localClaudeOffBefore(s: Awaited<ReturnType<typeof setup>>) {
+    const before = await s.executorsOf();
+    expect(before.executors.LOCAL_CLAUDE.enabled).toBe(false);
+    return before;
+  }
+
+  it("NO_ANALYSIS_BUILDER, no executor configured and LOCAL_CLAUDE disabled: the real route answers a FREE 200 BLOCKED and the view shows the exact blockers; nothing is produced, LOCAL_CLAUDE stays off", async () => {
+    const s = await setup();
+    const before = await s.executorsOf();
+    expect(before.executors.LOCAL_CLAUDE.enabled).toBe(false);
+    expect(before.active).toEqual({reason: "EXECUTOR_NOT_CONFIGURED"});
+    const r = await analyseOnce(s, s.open.missionId);
+    expectFreeBlocked(s, r, s.open.missionId);
+    // The desktop bridge's own scrubber leaves the code-only blockers untouched but REALLY rewrites the host path the server puts in readiness.profiles.*.loginCommand (main.mjs scrubText -> "[path]"): seen differs from wire.
+    expect(r.post.seen.blockers).toEqual(r.post.wire.blockers);
+    const wireLogin = r.post.wire.readiness.profiles.implementer.loginCommand as string, seenLogin = r.post.seen.readiness.profiles.implementer.loginCommand as string;
+    expect(wireLogin).toContain(s.controlRoot);
+    expect(seenLogin).not.toContain(s.controlRoot);
+    expect(seenLogin).toContain("[path]");
+    expect(r.post.seen).not.toEqual(r.post.wire);
+    // FINDING F1 (fixed by #286): analysis.blocker.EXECUTOR_NOT_ENABLED now exists, so the last blocker shows its translated text and no "not recognised" note.
+    const last = allData(r.panel, "analysisBlocker").at(-1)!;
+    expect(last.dataset.analysisBlocker).toBe("EXECUTOR_NOT_ENABLED");
+    expect(text(last)).toContain("Local Claude is not enabled, so no draft can be produced. Open Settings, then AI Executors, and enable Local Claude.");
+    expect(text(last)).not.toContain("not recognised");
+    expect(allData(r.panel, "analysisBlocker").length).toBe(r.post.wire.blockers.length);
+    await expectLocalClaudeStillOff(s, before);
+    const pd = (await getJson(s.app, `/v1/predev/${s.open.missionId}`)).predev; // nothing was recorded by the free BLOCKED step
+    expect([pd.active, pd.phase, pd.preDevId]).toEqual([false, "NOT_STARTED", null]);
+    expect(Object.values(pd.artifacts as Record<string, any>).every((x: any) => x.state === "NOT_STARTED" && x.artifactId === null)).toBe(true);
+  });
+
+  it("NO_ANALYSIS_BUILDER with an installed executor pair that has no pre-development builder (the fake pair): the same free BLOCKED, the active executor is the pair, LOCAL_CLAUDE stays off", async () => {
+    const {FakeExecutors} = await import("../core/workos/executors.js");
+    const fake = new FakeExecutors({implement: () => ({files: {"feature.txt": "x\n"}, message: "fake"}), review: () => ({verdict: "CLEAN"})});
+    const s = await setup(fake.pair());
+    const before = await s.executorsOf();
+    expect(before.executors.LOCAL_CLAUDE.enabled).toBe(false);
+    expect(before.active.reason).not.toBe("EXECUTOR_NOT_CONFIGURED");
+    expect(before.active.reason).not.toBe("LOCAL_CLAUDE");
+    const r = await analyseOnce(s, s.open.missionId);
+    expectFreeBlocked(s, r, s.open.missionId);
+    await expectLocalClaudeStillOff(s, before);
+  });
+
+  it("the analysis plan route is reached with the exact refusal: Create plan before COMPLETE is a 409 ANALYSIS_NOT_COMPLETE the view classifies as a refusal; a mission that is no longer open for pre-development is a 409 WORKOS_CONFLICT (FINDING F2, fixed by #286: shown as its own CONFLICT text)", async () => {
+    const s = await setup();
+    const before = await localClaudeOffBefore(s);
+    const core = await load("analysis-core.js");
+    const pres = await s.ctx.api.post(core.analysisPlanPath(s.open.missionId), {});
+    expect(pres).toEqual({ok: false, status: 409, body: {error: "ANALYSIS_NOT_COMPLETE"}});
+    expect(core.classifyAnalysisPlan(pres)).toEqual({kind: "REFUSED", code: "ANALYSIS_NOT_COMPLETE"});
+    expect(core.analysisStatusKey(core.classifyAnalysisPlan(pres), pres, "plan")).toEqual({ok: false, key: "analysis.plan.refused", vars: {code: "ANALYSIS_NOT_COMPLETE"}});
+    // An unknown mission id is a 404 from the route (WORKOS_NOT_FOUND), classified as not found.
+    const nf = await s.ctx.api.post(core.analysisStepPath("msn_" + "0".repeat(24)), {});
+    expect(nf.status).toBe(404); expect(core.classifyAnalysisStep(nf).kind).toBe("NOT_FOUND");
+    // FINDING F2 (fixed by #286): the route says WHY (reason MISSION_NOT_PREDEV_ELIGIBLE), the bridge keeps it, and classifyAnalysisStep now returns CONFLICT with that reason, so the view shows its own text (no idempotency wording).
+    const an = await load("views", "analysis-step.js");
+    an.resetAnalysis(s.exec.missionId);
+    const r = await an.submitAnalysisStep(s.ctx, s.exec.missionId);
+    const post = s.calls.post.at(-1)!;
+    expect(post.status).toBe(409); expect(post.seen).toEqual({error: "WORKOS_CONFLICT", reason: "MISSION_NOT_PREDEV_ELIGIBLE"});
+    expect(r).toMatchObject({ok: false, kind: "CONFLICT", status: 409});
+    s.doc.body.replaceChildren(an.analysisPanel(s.ctx, {missionId: s.exec.missionId, exec: null}) as N);
+    expect(text(byId(s.doc.body, "analysis-step-status")!)).toBe("This mission is no longer open for the pre-development analysis (for example a run has already started). Nothing was recorded.");
+    await expectLocalClaudeStillOff(s, before);
+  });
+
+  it("run-the-product on a run that has no product: the real GET shape is accepted, the card offers neither start nor stop, Start (called directly) is the exact 409 PRODUCT_RUN_NOT_DELIVERABLE with reason NOT_STARTED:QUEUED, Stop is an idempotent 200, and LOCAL_CLAUDE stays off", async () => {
+    const s = await setup();
+    const before = await localClaudeOffBefore(s);
+    const pc = await load("views", "product-card.js"), core = await load("project-core.js");
+    // the desktop allow-lists admit exactly these paths
+    expect(getAllowed(core.runProductPath(s.run.runId))).toBe(true);
+    for (const a of ["start", "stop"]) expect(postAllowed(`/v1/work-runs/${s.run.runId}/product/${a}`)).toBe(true);
+    expect(getAllowed(core.runProductPath(s.run.runId) + "?x=1")).toBe(false);
+    // real GET -> renderer mapper (no mock of the route)
+    const prod = await s.ctx.api.runProduct(s.run.runId);
+    expect(prod.state).toBe("VERIFIED");
+    expect(prod.product).toMatchObject({runId: s.run.runId, deliveredHeadSha: null, tiedToThisRun: false, deliverable: null});
+    expect(prod.product.run).toMatchObject({status: "STOPPED", deliveryRunId: null, reason: null});
+    // the card for that run
+    const project = (await s.ctx.api.projects()).items[0], runs = (await s.ctx.api.workRuns({missionId: s.exec.missionId})).items;
+    const card = await pc.productCard(s.ctx, project, runs.find((r: any) => r.runId === s.run.runId)); s.doc.body.replaceChildren(card);
+    expect([card.dataset.productState, card.dataset.productOffer, card.dataset.productRun]).toEqual(["STOPPED", "NONE", s.run.runId]);
+    expect(byId(card, "product-start")).toBeUndefined(); expect(byId(card, "product-stop")).toBeUndefined();
+    expect(byData(card, "productCommit", "NONE")).toBeDefined();
+    expect(text(byData(card, "productDelivery", "NOT_DELIVERABLE")!)).toBe("This run cannot be started as a product: its source generation is not complete or it has no delivered commit (NOT_STARTED). Nothing is started from here.");
+    // Start, driven directly through the real route and the real bridge scrubber: the exact refusal and its reason
+    const started = await pc.productAction(s.ctx, project, s.run.runId, "start");
+    expect(started).toEqual({ok: false, status: 409});
+    const startPost = s.calls.post.at(-1)!;
+    expect(startPost.path).toBe(`/v1/work-runs/${s.run.runId}/product/start`);
+    expect(startPost.seen).toEqual({error: "PRODUCT_RUN_NOT_DELIVERABLE", reason: "NOT_STARTED:QUEUED"});
+    expect(s.forms.drafts.status["product-run"]).toEqual({ok: false, key: "post.err.409.PRODUCT_RUN_NOT_DELIVERABLE", vars: {status: 409, reason: "NOT_STARTED:QUEUED"}, errors: null});
+    expect(s.ctx.t("post.err.409.PRODUCT_RUN_NOT_DELIVERABLE", {reason: "NOT_STARTED:QUEUED"})).toBe("Refused (PRODUCT_RUN_NOT_DELIVERABLE, reason NOT_STARTED:QUEUED): this run has no delivered source commit, so there is no product to start.");
+    expect(s.calls.confirm).toHaveLength(1); // the Founder confirmed the start; the server still refused
+    // Stop: idempotent 200, nothing was running
+    const stopped = await pc.productAction(s.ctx, project, s.run.runId, "stop");
+    expect(stopped).toEqual({ok: true, status: 200});
+    expect(s.forms.drafts.status["product-run"]).toEqual({ok: true, key: "product.done.stop", vars: {}, errors: null});
+    expect(s.calls.post.at(-1)!.seen.product).toMatchObject({runId: s.run.runId, tiedToThisRun: false, devrun: {status: "STOPPED"}});
+    expect((await getJson(s.app, `/v1/projects/${s.project.projectId}/devrun`)).devrun.status).toBe("STOPPED"); // no dev-run was started
+    await expectLocalClaudeStillOff(s, before);
+  });
+
+  it("the bad-shape and bad-state edges of the product routes also reach the view honestly: unknown run is a 404 the card does not turn into a product; a malformed run id never reaches the server", async () => {
+    const s = await setup();
+    const before = await localClaudeOffBefore(s);
+    const pc = await load("views", "product-card.js"), core = await load("project-core.js");
+    expect(core.runProductPath("run_zz")).toBeNull();
+    expect(core.buildProductRequest({runId: "run_zz", action: "start"}).ok).toBe(false);
+    const project = (await s.ctx.api.projects()).items[0];
+    const bad = await pc.productAction(s.ctx, project, "run_zz", "start");
+    expect(bad).toEqual({ok: false, validation: true});
+    expect(s.calls.post).toEqual([]); // nothing was sent
+    const ghost = "run_" + "0".repeat(24);
+    const res = await s.ctx.api.post(`/v1/work-runs/${ghost}/product/stop`, {});
+    expect(res).toEqual({ok: false, status: 404, body: {error: "RUN_NOT_FOUND"}});
+    expect((await s.ctx.api.runProduct(ghost)).state).not.toBe("VERIFIED");
+    await expectLocalClaudeStillOff(s, before);
   });
 });

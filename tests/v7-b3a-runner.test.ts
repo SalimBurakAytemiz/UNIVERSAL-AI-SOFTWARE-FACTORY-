@@ -277,6 +277,7 @@ describe("LANE-C repository head predicate: repositoryHead (does HEAD resolve AN
       expect(calls.length).toBeGreaterThanOrEqual(deciding.length);
       for (const c of calls) {
         expect(c.argv).toContain("protocol.allow=never");
+        expect(c.argv).toContain("-c core.fsmonitor=false -c core.untrackedCache=false"); // //TR: C-GIT-FSMON-1: depo yerel fsmonitor/untrackedCache ayarı hiçbir probta etkin olamaz (komut satırı -c önceliklidir)
         const gitVars = Object.keys(c.env).filter(k => /^git_/i.test(k)).sort();
         expect(gitVars.filter(k => !["GIT_CEILING_DIRECTORIES", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM", "GIT_CONFIG_SYSTEM", "GIT_NO_LAZY_FETCH", "GIT_TERMINAL_PROMPT"].includes(k))).toEqual([]);
         expect(c.env.GIT_NO_LAZY_FETCH).toBe("1");

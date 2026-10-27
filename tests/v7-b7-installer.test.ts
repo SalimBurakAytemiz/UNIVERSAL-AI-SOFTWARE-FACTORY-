@@ -356,7 +356,8 @@ describe("INT-R3 D-M1-01 packaged app stages every runtime-read repo file", () =
     } finally { fs.rmSync(stage, {recursive: true, force: true}); }
   });
   // Sembolik bağ oluşturulamayan ana makinede (EPERM/EACCES/ENOSYS/UNKNOWN) test atlanır (tests/v7-b10a-evidence.test.ts deseni); izin veren ana makinelerde (Windows dahil) çalışır.
-  const symlinkRuns = {started: 0, linked: 0};
+  const symlinkRuns = {started: 0, linked: 0, modes: [] as string[]};
+  const began = (mode: string) => { symlinkRuns.started++; symlinkRuns.modes.push(mode); };
   const linkOrSkip = (ctx: { skip: () => void }, target: string, link: string, type: "file" | "dir"): boolean => {
     try { fs.symlinkSync(target, link, type); return true; } catch (e) {
       if (["EPERM", "EACCES", "ENOSYS", "UNKNOWN"].includes((e as NodeJS.ErrnoException).code ?? "")) { console.warn("SKIPPED: symlink creation not permitted on this host"); ctx.skip(); return false; }
@@ -364,7 +365,7 @@ describe("INT-R3 D-M1-01 packaged app stages every runtime-read repo file", () =
     }
   };
   it("B1/L2: a symlinked (non-regular) entry in a staged data directory is refused with SYMLINK_DENIED; nothing outside the repo is copied", async ctx => {
-    symlinkRuns.started++;
+    began("L2");
     const b = await load("scripts", "build-installer.mjs"); const copy = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-src-")), out = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-out-")), outside = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-outside-"));
     try {
       b.stageRuntimeFiles(root, copy); fs.writeFileSync(path.join(outside, "secret.json"), "{\"secret\":true}");
@@ -379,7 +380,7 @@ describe("INT-R3 D-M1-01 packaged app stages every runtime-read repo file", () =
     try {
     fs.writeFileSync(path.join(outside, "evil.json"), "{\"secret\":true}");
     for (const mode of ["dir", "parent"] as const) {
-      symlinkRuns.started++;
+      began(`F3:${mode}`);
       const copy = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-src-")), out = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-out-"));
       try {
         b.stageRuntimeFiles(root, copy);
@@ -393,7 +394,7 @@ describe("INT-R3 D-M1-01 packaged app stages every runtime-read repo file", () =
     } finally { fs.rmSync(outside, {recursive: true, force: true}); }
   });
   it("B1/X1: a repo root reached THROUGH a symlink stages normally (the containment check compares against realpath(root)); a data dir that escapes it is still refused", async ctx => {
-    symlinkRuns.started++;
+    began("X1");
     const b = await load("scripts", "build-installer.mjs"); const real = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-real-")), link = path.join(os.tmpdir(), `uasco-b1-rootlink-${process.pid}-${Date.now()}`), out = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-out-")), out2 = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-out-")), outside = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-outside-"));
     try {
       b.stageRuntimeFiles(root, real);
@@ -408,7 +409,7 @@ describe("INT-R3 D-M1-01 packaged app stages every runtime-read repo file", () =
     } finally { fs.rmSync(link, {force: true}); for (const d of [real, out, out2, outside]) fs.rmSync(d, {recursive: true, force: true}); }
   });
   it("B1/X1b: a repo root BELOW a symlinked parent folder stages normally (realpath, not a one-level readlink, resolves the root); an escaping data dir is still refused", async ctx => {
-    symlinkRuns.started++;
+    began("X1b");
     const b = await load("scripts", "build-installer.mjs"); const holder = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-holder-")), out = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-out-")), out2 = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-out-")), outside = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-outside-")), parentLink = path.join(os.tmpdir(), `uasco-b1-parentlink-${process.pid}-${Date.now()}`);
     try {
       const repo = path.join(holder, "repo"); fs.mkdirSync(repo); b.stageRuntimeFiles(root, repo);
@@ -423,19 +424,27 @@ describe("INT-R3 D-M1-01 packaged app stages every runtime-read repo file", () =
       expect(() => b.stageRuntimeFiles(viaLink, out2)).toThrow("SYMLINK_DENIED:knowledge/technologies");
     } finally { fs.rmSync(parentLink, {force: true}); for (const d of [holder, out, out2, outside]) fs.rmSync(d, {recursive: true, force: true}); }
   });
-  it("B1/T4: linkOrSkip on a host that forbids symlinks WARNS and SKIPS (never a silent pass); other errors are rethrown", () => {
-    const eperm = vi.spyOn(fs, "symlinkSync").mockImplementation((() => { throw Object.assign(new Error("EPERM"), {code: "EPERM"}); }) as any), warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("B1/T4: linkOrSkip on a host that forbids symlinks WARNS and SKIPS for every forbidden code (never a silent pass); other errors are rethrown WITHOUT a warning; the link is created with (target, link, type)", () => {
+    const fail = (code: string) => (() => { throw Object.assign(new Error(code), {code}); }) as any;
+    const sym = vi.spyOn(fs, "symlinkSync").mockImplementation(fail("EPERM")), warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
-      const ctx = {skip: vi.fn()};
-      expect(linkOrSkip(ctx, "t", "l", "dir")).toBe(false); expect(ctx.skip).toHaveBeenCalledTimes(1); expect(warn).toHaveBeenCalledTimes(1);
-      eperm.mockImplementation((() => { throw Object.assign(new Error("EEXIST"), {code: "EEXIST"}); }) as any);
-      expect(() => linkOrSkip(ctx, "t", "l", "dir")).toThrow("EEXIST"); expect(ctx.skip).toHaveBeenCalledTimes(1);
-      eperm.mockImplementation((() => undefined) as any);
-      expect(linkOrSkip(ctx, "t", "l", "file")).toBe(true); expect(ctx.skip).toHaveBeenCalledTimes(1);
-    } finally { eperm.mockRestore(); warn.mockRestore(); }
+      const ctx = {skip: vi.fn()}; let n = 0;
+      for (const code of ["EPERM", "EACCES", "ENOSYS", "UNKNOWN"]) {
+        sym.mockImplementation(fail(code)); n++;
+        expect(linkOrSkip(ctx, "t", "l", "dir"), code).toBe(false); expect(ctx.skip, code).toHaveBeenCalledTimes(n); expect(warn, code).toHaveBeenCalledTimes(n);
+      }
+      sym.mockImplementation(fail("EEXIST"));
+      expect(() => linkOrSkip(ctx, "t", "l", "dir")).toThrow("EEXIST"); expect(ctx.skip).toHaveBeenCalledTimes(n); expect(warn, "a non-forbidden error never warns").toHaveBeenCalledTimes(n);
+      sym.mockReset(); sym.mockImplementation((() => undefined) as any);
+      expect(linkOrSkip(ctx, "tgt", "lnk", "file")).toBe(true); expect(ctx.skip).toHaveBeenCalledTimes(n); expect(sym).toHaveBeenCalledWith("tgt", "lnk", "file");
+      expect(linkOrSkip(ctx, "tgt2", "lnk2", "dir")).toBe(true); expect(sym).toHaveBeenLastCalledWith("tgt2", "lnk2", "dir");
+    } finally { sym.mockRestore(); warn.mockRestore(); }
   });
   it("B1/F4: the symlink tests above really RAN on a host that allows symlinks (an unconditional skip would otherwise pass silently); skipped only where the host refuses symlinks or the tests were filtered out", async ctx => {
     if (symlinkRuns.started === 0) { ctx.skip(); return; }
+    // Hepsi seçiliyse (filtrelenmemiş) çalışan mod listesi TAM olmalı: F3'ü tek moda indirmek ('parent' modu LSTAT_ONLY kapsama mutantını tek başına öldürür) sessizce geçmesin.
+    const selected = (ctx.task.suite?.tasks ?? []).filter(t => /^B1\/(L2|F3|X1b?):/.test(t.name) && t.mode === "run");
+    if (selected.length === 4) expect([...symlinkRuns.modes].sort()).toEqual(["F3:dir", "F3:parent", "L2", "X1", "X1b"]);
     const probe = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-probe-"));
     try { try { fs.symlinkSync(probe, path.join(probe, "l"), "dir"); } catch (e) { if (["EPERM", "EACCES", "ENOSYS", "UNKNOWN"].includes((e as NodeJS.ErrnoException).code ?? "")) { console.warn("SKIPPED: symlink creation not permitted on this host"); ctx.skip(); return; } throw e; }
       expect(symlinkRuns.linked, "every symlink test that started must have created its link and run its assertions").toBe(symlinkRuns.started);

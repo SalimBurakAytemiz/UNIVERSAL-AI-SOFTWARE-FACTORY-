@@ -1,0 +1,117 @@
+{
+ "//TR": "C-GIT-FSMON-1 (rev-parse head probe sürücülerinde core.fsmonitor=false ve core.untrackedCache=false) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt `file` içinde TAM 1 kez geçen bir metni değiştirir; docs/lanes/LANE-C-git-fsmon-mutants.mjs hepsini tests/v7-relfx-c3-remediation.test.ts içindeki \"C-GIT-FSMON-1\" testleriyle çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. F1-F10 paylaşılan HEAD_GIT_HARDEN listesinin (eksik/ters/boş/yanlış değerli/fazla bayrak), F11-F16 iki sürücünün bağlantısının (eski önek, alt komuttan SONRA, bayraksız) mutantlarıdır.",
+ "mutants": [
+  {
+   "id": "F1",
+   "description": "the shared flag list loses core.fsmonitor=false",
+   "file": "core/workos/runner.ts",
+   "old": "const HEAD_GIT_HARDEN: readonly string[] = [\"-c\", \"protocol.allow=never\", \"-c\", \"core.fsmonitor=false\", \"-c\", \"core.untrackedCache=false\"];",
+   "new": "const HEAD_GIT_HARDEN: readonly string[] = [\"-c\", \"protocol.allow=never\", \"-c\", \"core.untrackedCache=false\"];"
+  },
+  {
+   "id": "F2",
+   "description": "the shared flag list loses core.untrackedCache=false",
+   "file": "core/workos/runner.ts",
+   "old": "const HEAD_GIT_HARDEN: readonly string[] = [\"-c\", \"protocol.allow=never\", \"-c\", \"core.fsmonitor=false\", \"-c\", \"core.untrackedCache=false\"];",
+   "new": "const HEAD_GIT_HARDEN: readonly string[] = [\"-c\", \"protocol.allow=never\", \"-c\", \"core.fsmonitor=false\"];"
+  },
+  {
+   "id": "F3",
+   "description": "the shared flag list loses protocol.allow=never",
+   "file": "core/workos/runner.ts",
+   "old": "const HEAD_GIT_HARDEN: readonly string[] = [\"-c\", \"protocol.allow=never\", \"-c\", \"core.fsmonitor=false\", \"-c\", \"core.untrackedCache=false\"];",
+   "new": "const HEAD_GIT_HARDEN: readonly string[] = [\"-c\", \"core.fsmonitor=false\", \"-c\", \"core.untrackedCache=false\"];"
+  },
+  {
+   "id": "F4",
+   "description": "the shared flag list is empty",
+   "file": "core/workos/runner.ts",
+   "old": "const HEAD_GIT_HARDEN: readonly string[] = [\"-c\", \"protocol.allow=never\", \"-c\", \"core.fsmonitor=false\", \"-c\", \"core.untrackedCache=false\"];",
+   "new": "const HEAD_GIT_HARDEN: readonly string[] = [];"
+  },
+  {
+   "id": "F5",
+   "description": "core.fsmonitor is switched on instead of off",
+   "file": "core/workos/runner.ts",
+   "old": "const HEAD_GIT_HARDEN: readonly string[] = [\"-c\", \"protocol.allow=never\", \"-c\", \"core.fsmonitor=false\", \"-c\", \"core.untrackedCache=false\"];",
+   "new": "const HEAD_GIT_HARDEN: readonly string[] = [\"-c\", \"protocol.allow=never\", \"-c\", \"core.fsmonitor=true\", \"-c\", \"core.untrackedCache=false\"];"
+  },
+  {
+   "id": "F6",
+   "description": "core.untrackedCache is switched on instead of off",
+   "file": "core/workos/runner.ts",
+   "old": "const HEAD_GIT_HARDEN: readonly string[] = [\"-c\", \"protocol.allow=never\", \"-c\", \"core.fsmonitor=false\", \"-c\", \"core.untrackedCache=false\"];",
+   "new": "const HEAD_GIT_HARDEN: readonly string[] = [\"-c\", \"protocol.allow=never\", \"-c\", \"core.fsmonitor=false\", \"-c\", \"core.untrackedCache=true\"];"
+  },
+  {
+   "id": "F7",
+   "description": "core.fsmonitor is set to an empty value",
+   "file": "core/workos/runner.ts",
+   "old": "const HEAD_GIT_HARDEN: readonly string[] = [\"-c\", \"protocol.allow=never\", \"-c\", \"core.fsmonitor=false\", \"-c\", \"core.untrackedCache=false\"];",
+   "new": "const HEAD_GIT_HARDEN: readonly string[] = [\"-c\", \"protocol.allow=never\", \"-c\", \"core.fsmonitor=\", \"-c\", \"core.untrackedCache=false\"];"
+  },
+  {
+   "id": "F8",
+   "description": "a -c marker is missing before core.fsmonitor=false",
+   "file": "core/workos/runner.ts",
+   "old": "const HEAD_GIT_HARDEN: readonly string[] = [\"-c\", \"protocol.allow=never\", \"-c\", \"core.fsmonitor=false\", \"-c\", \"core.untrackedCache=false\"];",
+   "new": "const HEAD_GIT_HARDEN: readonly string[] = [\"-c\", \"protocol.allow=never\", \"core.fsmonitor=false\", \"-c\", \"core.untrackedCache=false\"];"
+  },
+  {
+   "id": "F9",
+   "description": "the order of the flags changes",
+   "file": "core/workos/runner.ts",
+   "old": "const HEAD_GIT_HARDEN: readonly string[] = [\"-c\", \"protocol.allow=never\", \"-c\", \"core.fsmonitor=false\", \"-c\", \"core.untrackedCache=false\"];",
+   "new": "const HEAD_GIT_HARDEN: readonly string[] = [\"-c\", \"core.untrackedCache=false\", \"-c\", \"core.fsmonitor=false\", \"-c\", \"protocol.allow=never\"];"
+  },
+  {
+   "id": "F10",
+   "description": "the shared flag list gains an extra setting",
+   "file": "core/workos/runner.ts",
+   "old": "const HEAD_GIT_HARDEN: readonly string[] = [\"-c\", \"protocol.allow=never\", \"-c\", \"core.fsmonitor=false\", \"-c\", \"core.untrackedCache=false\"];",
+   "new": "const HEAD_GIT_HARDEN: readonly string[] = [\"-c\", \"protocol.allow=never\", \"-c\", \"core.fsmonitor=false\", \"-c\", \"core.untrackedCache=false\", \"-c\", \"core.hooksPath=/dev/null\"];"
+  },
+  {
+   "id": "F11",
+   "description": "the synchronous driver keeps only the old protocol flag",
+   "file": "core/workos/runner.ts",
+   "old": "spawnGitSync(root, [...HEAD_GIT_HARDEN, ...p.args],",
+   "new": "spawnGitSync(root, [\"-c\", \"protocol.allow=never\", ...p.args],"
+  },
+  {
+   "id": "F12",
+   "description": "the asynchronous driver keeps only the old protocol flag",
+   "file": "core/workos/runner.ts",
+   "old": "runGitAsync(root, [...HEAD_GIT_HARDEN, ...p.args],",
+   "new": "runGitAsync(root, [\"-c\", \"protocol.allow=never\", ...p.args],"
+  },
+  {
+   "id": "F13",
+   "description": "the synchronous driver puts the flags after the subcommand",
+   "file": "core/workos/runner.ts",
+   "old": "spawnGitSync(root, [...HEAD_GIT_HARDEN, ...p.args],",
+   "new": "spawnGitSync(root, [...p.args, ...HEAD_GIT_HARDEN],"
+  },
+  {
+   "id": "F14",
+   "description": "the asynchronous driver puts the flags after the subcommand",
+   "file": "core/workos/runner.ts",
+   "old": "runGitAsync(root, [...HEAD_GIT_HARDEN, ...p.args],",
+   "new": "runGitAsync(root, [...p.args, ...HEAD_GIT_HARDEN],"
+  },
+  {
+   "id": "F15",
+   "description": "the synchronous driver passes no flags",
+   "file": "core/workos/runner.ts",
+   "old": "spawnGitSync(root, [...HEAD_GIT_HARDEN, ...p.args],",
+   "new": "spawnGitSync(root, [...p.args],"
+  },
+  {
+   "id": "F16",
+   "description": "the asynchronous driver passes no flags",
+   "file": "core/workos/runner.ts",
+   "old": "runGitAsync(root, [...HEAD_GIT_HARDEN, ...p.args],",
+   "new": "runGitAsync(root, [...p.args],"
+  }
+ ]
+}

@@ -9,7 +9,7 @@ const MAX_BUFFER = 64 * 1024 * 1024;
 
 // //TR: `cp.spawn` varsayılan dışa aktarım nesnesinden çağrılır (testler "yavaş git" modelini bu nesne üzerinde vi.spyOn ile kurar). #224 tur 3: önceki sürüm `cp.execFile(..., {detached: true})` kullanıyordu; execFile `detached` seçeneğini YOK SAYAR (yalnız cwd/env/uid/gid/shell/signal/windowsHide'ı spawn'a iletir), yani yazar git çocuğu hiçbir zaman kendi süreç grubunda başlamadı ve kayıtlı pgid var olmayan bir gruptu (devir/abort/çıkış öldürmeleri ESRCH ile sessizce boşa giderdi). Burada spawn kullanılır (detached gerçekten uygulanır) ve execFile'ın çıktı toplama/maxBuffer/zaman aşımı davranışı korunur.
 // onSpawn: çocuk doğar doğmaz (eşzamanlı) yazar kaydı; fırlatırsa çocuk öldürülür ve status null döner (kayıtsız yazar bırakılmaz). timeoutMs: süre dolarsa SIGKILL, status null. shouldAbort: 100 ms'de bir yoklanır; true olursa çocuk (Windows'ta ağaç) öldürülür ve `aborted` ile hemen dönülür.
-export function runGitAsync(cwd: string, args: string[], env: NodeJS.ProcessEnv, onSpawn?: (c: SpawnedChild) => void, o: {timeoutMs?: number; shouldAbort?: () => boolean} = {}): Promise<GitRun> {
+export function runGitAsync(cwd: string, args: string[], env: NodeJS.ProcessEnv, onSpawn?: (c: SpawnedChild) => void, o: {timeoutMs?: number; shouldAbort?: () => boolean; hardTimeout?: boolean} = {}): Promise<GitRun> {
   return new Promise(resolve => {
     let poll: NodeJS.Timeout | null = null, timer: NodeJS.Timeout | null = null, done = false;
     const settle = (r: GitRun) => {
@@ -49,7 +49,9 @@ export function runGitAsync(cwd: string, args: string[], env: NodeJS.ProcessEnv,
         const stdout = Buffer.concat(outChunks).toString("utf8"), stderr = Buffer.concat(errChunks).toString("utf8");
         settle({status: typeof code === "number" ? code : null, stdout, stderr: stderr || (signal ? `terminated by ${signal}` : "")});
       });
-      if (o.timeoutMs !== undefined) timer = setTimeout(kill, o.timeoutMs);
+      // //TR: hardTimeout (HEAD probe: readiness ve runner WORKSPACE, B-NEXT-1): çocuk AYRI oturuma/gruba ALINMAZ (terminalin Ctrl+C/SIGHUP'ı ona ulaşır; kimse bir probe grubunu izlemez). Süre dolunca YALNIZ doğrudan çocuk SIGKILL ile öldürülür (win32: ağaç, taskkill), stdout/stderr yok edilir (arabellek büyümesi durur) ve 'close' BEKLENMEDEN status null ile dönülür. Bilinen sınır: `setsid` ile kaçmış bir torun öldürülmez; yalnız bütçeyi artık tutamaz.
+      const hardStop = () => { kill(); try { child.stdout?.destroy(); child.stderr?.destroy(); } catch { /* en iyi çaba */ } settle({status: null, stdout: "", stderr: "TIMEOUT"}); };
+      if (o.timeoutMs !== undefined) timer = setTimeout(o.hardTimeout === true ? hardStop : kill, o.timeoutMs);
       if (onSpawn && child.pid) {
         try { onSpawn({pid: child.pid, pgid: group ? child.pid : null}); } catch (e) {
           kill();

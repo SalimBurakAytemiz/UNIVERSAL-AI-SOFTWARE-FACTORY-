@@ -143,15 +143,17 @@ const RENEWING_WRITES: ReadonlySet<PropertyKey> = new Set(["transitionRun", "che
 const BOOT_GRACE_MS = 2_000;
 
 export type RepositoryHead = {ok: true; baseSha: string} | {ok: false; reason: "REPOSITORY_NOT_WORKTREE_ROOT" | "REPOSITORY_HEAD_UNRESOLVED"};
-// //TR: Depo kökü ve HEAD kararı TEK saf fonksiyondur (runner WORKSPACE adımı çağırır; readiness.ts çağıracaktır: LANE-B-REQUEST, #218; sonuç çağıranın ortamına bağlı değildir). `git rev-parse` yukarı doğru keşfeder: düz bir alt dizin üst deponun HEAD'ini çözerdi. Bu yüzden: (1) süreç ortamından YALNIZ sabit bir izin listesi geçer (safeChildEnv'in alwaysAllow'u + TMPDIR; Windows'ta libuv, eksik HOMEDRIVE, HOMEPATH, LOGONSERVER, SYSTEMDRIVE, USERDOMAIN, USERNAME ve WINDIR'i ebeveynden kendisi doldurur: bunlar GIT_* ya da gizli değildir): GIT_* (GIT_DIR başka bir depoyu gösterebilir), SUDO_UID (git'in sahiplik kararını değiştirir) ve gizli değerler (API anahtarları) git'e ASLA ulaşmaz; repo-yerel config'in çalıştırabileceği bir komut sırları göremez, çağıran (runner/readiness) sonucu değiştiremez ve çok büyük ortam E2BIG üretmez; keşif GIT_CEILING_DIRECTORIES=<fiziksel üst dizin> ile yukarı çıkamaz, ancak ceiling'e GÜVENİLMEZ (':' içeren yol listeyi böler, göreli yol yok sayılır): kök kararı her kolda bağımsız kanıt ister, (2) kök: `.git` (dizin veya gitfile) src'nin kendisinde VAR ve `--show-toplevel` src'ye EŞİT; veya `--absolute-git-dir` == src/.git (core.bare/core.worktree ayarlı depolar dahil); veya çıplak depo (`--is-bare-repository` ve git dizini src'nin kendisi); karşılaştırma kanonik anahtarla (path-guard), `.git` dizininin kendisi kök değildir, (3) HEAD yalnız bir commit nesnesine çözülmelidir (`HEAD` ile `HEAD^{commit}` aynı 40-hex SHA; etiket nesnesi reddedilir). `ok:true` YALNIZ ceiling'li, GIT_*'siz sondajlardan türer; ceiling'siz sondaj yalnız iki red nedeni arasında seçer (REPOSITORY_NOT_WORKTREE_ROOT: başka bir deponun/.git'in içinde). Her sondaj `protocol.allow=never` ile çalışır (kısmi klonda eksik HEAD nesnesi için tembel fetch repo-yerel config'teki komutları çalıştırır/ağa çıkar), toplam süre sınırlıdır (varsayılan 10 sn, SIGKILL; okunamayan HEAD/config sunucuyu sonsuza dek bloke etmez) ve fonksiyon ASLA fırlatmaz (zararlı girdi = red). Nesne grafiğinin bütünlüğü doğrulanmaz: eksik tree/parent clone adımında WORKSPACE_CLONE_FAILED olur.
+// //TR: Depo kökü ve HEAD kararı TEK saf fonksiyondur (runner WORKSPACE adımı çağırır; readiness.ts de repositoryHeadAsync ile çağırır: LANE-B-REQUEST, #218 / B-NEXT-1; sonuç çağıranın ortamına bağlı değildir). `git rev-parse` yukarı doğru keşfeder: düz bir alt dizin üst deponun HEAD'ini çözerdi. Bu yüzden: (1) süreç ortamından YALNIZ sabit bir izin listesi geçer (safeChildEnv'in alwaysAllow'u + TMPDIR; Windows'ta libuv, eksik HOMEDRIVE, HOMEPATH, LOGONSERVER, SYSTEMDRIVE, USERDOMAIN, USERNAME ve WINDIR'i ebeveynden kendisi doldurur: bunlar GIT_* ya da gizli değildir): GIT_* (GIT_DIR başka bir depoyu gösterebilir), SUDO_UID (git'in sahiplik kararını değiştirir) ve gizli değerler (API anahtarları) git'e ASLA ulaşmaz; repo-yerel config'in çalıştırabileceği bir komut sırları göremez, çağıran (runner/readiness) sonucu değiştiremez ve çok büyük ortam E2BIG üretmez; keşif GIT_CEILING_DIRECTORIES=<fiziksel üst dizin> ile yukarı çıkamaz, ancak ceiling'e GÜVENİLMEZ (':' içeren yol listeyi böler, göreli yol yok sayılır): kök kararı her kolda bağımsız kanıt ister, (2) kök: `.git` (dizin veya gitfile) src'nin kendisinde VAR ve `--show-toplevel` src'ye EŞİT; veya `--absolute-git-dir` == src/.git (core.bare/core.worktree ayarlı depolar dahil); veya çıplak depo (`--is-bare-repository` ve git dizini src'nin kendisi); karşılaştırma kanonik anahtarla (path-guard), `.git` dizininin kendisi kök değildir, (3) HEAD yalnız bir commit nesnesine çözülmelidir (`HEAD` ile `HEAD^{commit}` aynı 40-hex SHA; etiket nesnesi reddedilir). `ok:true` YALNIZ ceiling'li, GIT_*'siz sondajlardan türer; ceiling'siz sondaj yalnız iki red nedeni arasında seçer (REPOSITORY_NOT_WORKTREE_ROOT: başka bir deponun/.git'in içinde). Her sondaj `protocol.allow=never` ile çalışır (kısmi klonda eksik HEAD nesnesi için tembel fetch repo-yerel config'teki komutları çalıştırır/ağa çıkar), toplam süre sınırlıdır (varsayılan 10 sn, SIGKILL; okunamayan HEAD/config sunucuyu sonsuza dek bloke etmez) ve fonksiyon ASLA fırlatmaz (zararlı girdi = red). Nesne grafiğinin bütünlüğü doğrulanmaz: eksik tree/parent clone adımında WORKSPACE_CLONE_FAILED olur.
 const GIT_PROBE_ENV = new Set(["PATH", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "TEMP", "TMP", "TMPDIR", "SYSTEMROOT", "COMSPEC", "PATHEXT", "OS", "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE"]);
 function gitProbeEnv(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {GIT_NO_LAZY_FETCH: "1"};
   for (const [k, v] of Object.entries(process.env)) if (typeof v === "string" && !v.includes("\0") && GIT_PROBE_ENV.has(k.toUpperCase())) env[k] = v;
   return env;
 }
-// //TR: Karar prosedürü TEK yerde (jeneratör): her `yield` bir git probu ister ve çıktısını (başarısızsa null) geri alır. Eşzamanlı sürücü (repositoryHead: readiness.ts, Lane B) ve eşzamansız sürücü (repositoryHeadAsync: runner) aynı prosedürü, aynı `-c protocol.allow=never` önekini, aynı tavanı (GIT_CEILING_DIRECTORIES) ve aynı son tarihi uygular; test iki sürücüyü aynı depo matrisinde karşılaştırır.
+// //TR: Karar prosedürü TEK yerde (jeneratör): her `yield` bir git probu ister ve çıktısını (başarısızsa null) geri alır. Eşzamanlı sürücü (repositoryHead: salt kullanım/testler; readiness.ts de runner de artık EŞZAMANSIZ sürücüyü kullanır) ve eşzamansız sürücü (repositoryHeadAsync: runner WORKSPACE adımı ve readiness.ts) aynı prosedürü, aynı HEAD_GIT_HARDEN önekini (`-c protocol.allow=never -c core.fsmonitor=false -c core.untrackedCache=false`), aynı tavanı (GIT_CEILING_DIRECTORIES) ve aynı son tarihi uygular; test iki sürücüyü aynı depo matrisinde karşılaştırır.
 interface HeadProbe { args: string[]; ceiling: boolean }
+// //TR: C-GIT-FSMON-1: iki sürücünün TEK sabit güvenlik önek listesi (komut satırı `-c` depo yerel .git/config'in önüne geçer): protokol kapalı; çalıştırılabilir bir `core.fsmonitor` betiği ve `core.untrackedCache` kapalı, böylece kullanıcının seçtiği (düşman olabilecek) bir klasörün .git/config'i git probundan bir betik çalıştıramaz. `rev-parse` bugün fsmonitor başlatmaz (indeksi yenileyen status/diff/ls-files/update-index başlatır); bu önek yine de her proba konur ki ileride eklenecek bir alt komut da aynı güvenceyle çalışsın.
+const HEAD_GIT_HARDEN: readonly string[] = ["-c", "protocol.allow=never", "-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false"];
 function* headDecision(root: string): Generator<HeadProbe, RepositoryHead, string | null> {
   const same = (p: string | null, to: string = root): boolean => { if (!p) return false; const a = canonicalPath(p), b = canonicalPath(to); return a.ok && b.ok && a.key === b.key; };
   const own = path.join(root, ".git");
@@ -167,13 +169,13 @@ export function repositoryHead(src: string, opts: {timeoutMs?: number} = {}): Re
     const c = canonicalPath(src);
     if (!c.ok) return PROBE_REFUSED;
     const root = c.path, env = gitProbeEnv();
-    const deadline = Date.now() + (opts.timeoutMs ?? 10_000);
+    const deadline = performance.now() + (opts.timeoutMs ?? 10_000);
     let exhausted = false;
     const run = (p: HeadProbe): string | null => {
-      const left = deadline - Date.now();
+      const left = Math.ceil(deadline - performance.now());
       if (exhausted || left <= 0) { exhausted = true; return null; }
       try {
-        const r = spawnGitSync(root, ["-c", "protocol.allow=never", ...p.args], {env: p.ceiling ? {...env, GIT_CEILING_DIRECTORIES: path.dirname(root)} : env, maxBuffer: 1024 * 1024, timeout: left, killSignal: "SIGKILL"});
+        const r = spawnGitSync(root, [...HEAD_GIT_HARDEN, ...p.args], {env: p.ceiling ? {...env, GIT_CEILING_DIRECTORIES: path.dirname(root)} : env, maxBuffer: 1024 * 1024, timeout: left, killSignal: "SIGKILL"});
         if (r.error) { exhausted = true; return null; }
         return r.status === 0 ? String(r.stdout ?? "").replace(/\n$/, "") : null;
       } catch { return null; }
@@ -190,13 +192,13 @@ export async function repositoryHeadAsync(src: string, opts: {timeoutMs?: number
     const c = canonicalPath(src);
     if (!c.ok) return PROBE_REFUSED;
     const root = c.path, env = gitProbeEnv();
-    const deadline = Date.now() + (opts.timeoutMs ?? 10_000);
+    const deadline = performance.now() + (opts.timeoutMs ?? 10_000);
     let exhausted = false;
     const run = async (p: HeadProbe): Promise<string | null> => {
-      const left = deadline - Date.now();
+      const left = Math.ceil(deadline - performance.now());
       if (exhausted || left <= 0) { exhausted = true; return null; }
       try {
-        const r = await runGitAsync(root, ["-c", "protocol.allow=never", ...p.args], p.ceiling ? {...env, GIT_CEILING_DIRECTORIES: path.dirname(root)} : env, undefined, {timeoutMs: left});
+        const r = await runGitAsync(root, [...HEAD_GIT_HARDEN, ...p.args], p.ceiling ? {...env, GIT_CEILING_DIRECTORIES: path.dirname(root)} : env, undefined, {timeoutMs: left, hardTimeout: true});
         if (r.status === null) { exhausted = true; return null; }
         return r.status === 0 ? r.stdout.replace(/\n$/, "") : null;
       } catch { return null; }

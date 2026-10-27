@@ -139,7 +139,7 @@
   "GET /v1/intakes": "GET and POST share this path: renderer literals are attributed by path, not by method",
   "POST /v1/intakes": "GET and POST share this path: renderer literals are attributed by path, not by method",
   "GET /v1/projects/:id/memory": "GET and POST share this path: renderer literals are attributed by path, not by method",
-  "POST /v1/projects/:id/memory": "renderer matches are GET list builders (renderer/api.js:222, renderer/knowledge-core.js:115); no POST caller",
+  "POST /v1/projects/:id/memory": "renderer matches are GET list builders (renderer/api.js:234, renderer/knowledge-core.js:115); no POST caller",
   "GET /v1/tasks/:id/runs": "GET and POST share this path: renderer literals are attributed by path, not by method",
   "POST /v1/tasks/:id/runs": "GET and POST share this path: renderer literals are attributed by path, not by method"
  },

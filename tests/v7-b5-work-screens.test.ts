@@ -1788,6 +1788,16 @@ describe("LANE-A task run link", () => {
     expect(tr["taskruns.runsCut"]).toBe("Mission'ın koşu listesi {n} koşudan sonra kesildi; hangi koşuların bu göreve henüz bağlı olmadığı söylenemez, bağlanacak koşu sunulmuyor.");
     expect(en["taskruns.runsCut"]).toBe("The mission's run list was cut after {n} runs, so it cannot be said which runs are not yet linked to this task; none are offered for linking.");
   });
+  // //TR: #284 incelemesi: kesik not metnindeki N, okunan GEÇERLİ koşu sayısıdır (items.length); N != 500 fikstürüyle sabitlenir.
+  it("task-runs panel: the 'cut after N runs' number is the count of valid records read (items.length), not 500", async () => {
+    const rid = (i: number) => "run_" + i.toString(16).padStart(24, "0");
+    const ids = [...Array.from({length: 497}, (_, i) => rid(i)), "bad id one", "bad id two", "bad id three", rid(900), rid(901)];
+    expect(ids.length).toBe(502);
+    const o = await open({linked: {runs: []}, missionRuns: ids});
+    const note = byData(o.root, "taskrunsNote")[0];
+    expect(note.dataset.taskrunsNote).toBe("runsCut");
+    expect(text(note)).toBe("The mission's run list was cut after 497 runs, so it cannot be said which runs are not yet linked to this task; none are offered for linking.");
+  });
   it("maps the link read strictly and offers only unlinked, canonical, unique runs", async () => {
     const c = await load(rend, "work-core.js");
     const ok = c.mapTaskRuns({runs: [link(R1), {link: link(R2).link, run: null}]});

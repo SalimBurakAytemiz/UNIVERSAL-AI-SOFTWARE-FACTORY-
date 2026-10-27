@@ -8,7 +8,7 @@ export function registerReadinessRoutes(app: any, d: RouteDeps): void {
     if (typeof req.query === "object" && req.query && Object.keys(req.query).length > 0) return reply.code(400).send({error: "INVALID_QUERY"});
     if (!/^prj_[0-9a-f]{24}$/.test(String(req.params.id))) return reply.code(400).send({error: "INVALID_PROJECT_ID"});
     try {
-      const r = deriveReadiness(d.getStore(), d.scope, req.params.id);
+      const r = await deriveReadiness(d.getStore(), d.scope, req.params.id);
       return r ? {readiness: r} : reply.code(404).send({error: "WORKOS_NOT_FOUND"});
     } catch (e) { return d.workosFail(reply, e); }
   });
