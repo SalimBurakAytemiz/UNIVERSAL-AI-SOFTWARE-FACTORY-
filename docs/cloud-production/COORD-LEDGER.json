@@ -742,6 +742,16 @@
       "ref": "wf_77a53e3e-d3c: 167/167; X1 + F5 mutants killed (X1 new coverage); only removed line moved into finally; LOWs: F5 title vs added-slug (NM4 survives), X1 symlinked-parent root (XM2 survives), F4 canary partial F3 skip, linkOrSkip return-false-without-skip survives",
       "policy": "TEP-1",
       "at": "2026-10-27T01:56:40.894Z"
+    },
+    {
+      "pr": 269,
+      "sha": "8f0f273e25922e888f703f1e744f06eb580ca3e7",
+      "kind": "full",
+      "base": null,
+      "verdict": "BLOCKERS_5MEDIUM",
+      "ref": "wf_89b3b5ff-915 (lenses + 5 skeptics, none refuted): quarantine outcome filed under project selected at response time (pid re-read after await); q.more claims full list in manifest though server keeps <=500; status line global, not project-scoped; tr q.unknown/q.more/q.title survivors; title/caption 'scan clean' survivors; 8 LOW (main.mjs scrub = protected, Founder)",
+      "policy": "TEP-1",
+      "at": "2026-10-27T02:05:51.020Z"
     }
   ],
   "tests": [],
