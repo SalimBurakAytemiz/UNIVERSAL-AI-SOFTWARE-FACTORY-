@@ -612,6 +612,16 @@
       "ref": "wf_6ca4414b-fc7 (3 lenses + skeptics): chain test real-time dependent (can fail with fix on slow disk); dropping one RENEWING_WRITES method survives; LOWs: RECOVERING lease renewed by hook (SWEEP-5 intent), throttle/lost unpinned, proxy no set trap, acquire/takeover not hooked; fixed in 5e17b79",
       "policy": "TEP-1",
       "at": "2026-10-27T00:29:52.835Z"
+    },
+    {
+      "pr": 265,
+      "sha": "e9f12b973214891e7d9c453c6f80015b5b4c721a",
+      "kind": "delta",
+      "base": "c7a33f8415bd8ec8f292262417ab7ed7c118e83b",
+      "verdict": "BLOCKERS_2MEDIUM_round1",
+      "ref": "wf_b82f8abc-0a9 (2 lenses + skeptics): R12/R26 made-up knowledgeState for non-tech-a refs survives (all registry rows SEED_PROFILE); R19 optional cut order vs registryId (unregistered refs cut first) survives; LOWs R06 digest/truncation, R15 default cap, R14 fixed-point boundary, R13 optional registryId, reviewChain.origin unconstrained; round-1 M1-M4/L1-L9 otherwise FIXED",
+      "policy": "TEP-1",
+      "at": "2026-10-27T00:42:53.230Z"
     }
   ],
   "tests": [],
