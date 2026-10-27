@@ -552,13 +552,43 @@
       "ref": "wf_7785a594-09c (2 lenses + 2 skeptics): production code correct; MEDIUM R2-L3 test passes on old route (N6 survives); MEDIUM no test pins loader reads ONLY READINESS_INPUT_FILES (N2d survives); security LOW symlinked STATIC_DATA_DIRS dir followed; LOWs skipIf(win32) blanket, slugsOnDisk literal path. Strategy change: one bounded final push verified by coordinator mutant checklist (N6, N2d, symlinked dir), no open-ended round 4",
       "policy": "TEP-1",
       "at": "2026-10-26T23:24:53.314Z"
+    },
+    {
+      "pr": 262,
+      "sha": "94ffb5e21dea5791e3b94cd2fa4892524b74c05c",
+      "kind": "delta",
+      "base": "17f96c799b70a4e7173d1f5d1ffa0b0bc7bf44c1",
+      "verdict": "NO_BLOCKERS_3LOW_final_checklist",
+      "ref": "wf_dd05266c-eff coordinator mutant checklist (ROUND_LIMIT bounded push): scope F1-F5 only; N6/N2d/SYMDIR/SKIPALL/F5/X3 KILLED, 348/348 baseline; LOWs: X1 realpath(root) unpinned (over-refusal, not bypass), F5 no own test, B1/F3 temp dir not in finally -> Lane B follow-up",
+      "policy": "TEP-1",
+      "at": "2026-10-27T00:01:40.206Z"
+    },
+    {
+      "pr": 264,
+      "sha": "54430beb86ae780b4c25cd32b664933d13028f29",
+      "kind": "delta",
+      "base": "ad5971aed7f05fae6a4dc60169d2e9a17c93d816",
+      "verdict": "BLOCKERS_8MEDIUM_round1",
+      "ref": "wf_88315038-901 (2 lenses + skeptics): omniroute census exclusion hides real client code (wrong reason); scanner branches G1/G2/G4 untested; surviving mutants N8/N11/N12/N13/N14/N28; round-1 M1-M4 + L1-L11 FIXED",
+      "policy": "TEP-1",
+      "at": "2026-10-27T00:01:40.268Z"
+    },
+    {
+      "pr": 267,
+      "sha": "9e2ca42de1ce939e276f98b20eb73664712e74ab",
+      "kind": "full",
+      "base": null,
+      "verdict": "BLOCKERS_1MEDIUM_spy_leak",
+      "ref": "wf_dceca550-cc5 (3 lenses + verify): cp.spawn spy leaks when vitest timeout fires first -> next boundedTick recurses; fixed in f98d467 (REAL_SPAWN at describe scope + onTestFinished cleanup)",
+      "policy": "TEP-1",
+      "at": "2026-10-27T00:01:40.310Z"
     }
   ],
   "tests": [],
   "fingerprint": {
-    "value": "2817d98bf99a16359fc2390e8486146ab3695f43df13d340e62fc81db6a9fdae",
-    "at": "2026-10-26T22:42:02.267Z",
+    "value": "4216c2dfcede113da18ae3b876549074930552dd437997c84845869938a4aea0",
+    "at": "2026-10-26T23:42:10.639Z",
     "base": "459205ca73890760015662bdbc7e4ee9b920bf86",
-    "prs": 9
+    "prs": 11
   }
 }
