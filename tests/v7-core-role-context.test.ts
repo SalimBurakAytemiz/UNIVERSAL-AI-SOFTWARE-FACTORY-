@@ -661,7 +661,7 @@ describe("C-CTX-1 role-context", () => {
     expect(c.technologies).toEqual([label("tech-a", "REQUIRED"), label("tech-b", "REQUIRED"), label("tech-c", "REQUIRED"), label("ghost-opt", "OPTIONAL"), label("opt-x", "OPTIONAL"), label("opt-y", "OPTIONAL")]);
     expect(c.technologies.map(t => t.knowledgeState)).toEqual(["SEED_PROFILE", "STALE", "REVIEW_PENDING", null, "STALE-OPT", "SEED_PROFILE"]);
     expect(c.technologies.map(t => t.registryId)).toEqual(["TECH-A", "ID-B-ODD", "TECH-C", null, "OPT-X-ODD", "TECH-OPT-Y"]);
-    // //TR: Sıralama slug sırasıdır ve kayıtsız ad (ghost-opt) yerinde kalır, sona itilmez: yarılama onu İLK kesmez. Zengin fixture'ın tam sırası sabit bir listedir; kısaltılmış her durumda ghost-opt ilk isteğe bağlıdır.
+    // //TR: Sıralama slug sırasıdır ve kayıtsız ad (ghost-opt) yerinde kalır, sona itilmez. Yarılama listenin ÖNEKİNİ korur ve kuyruğunu keser: ilk sıradaki ghost-opt bu yüzden isteğe bağlılar arasında SON kesilendir (yalnız isteğe bağlı liste sıfırlanınca kaybolur), ilk kesilen DEĞİLDİR. Zengin fixture'ın tam sırası sabit bir listedir; kısaltılmış her durumda (liste boş değilse) ghost-opt ilk isteğe bağlıdır.
     const rich = checkChain(richInput(), "UASCO-0001");
     expect(rich.full.technologies.map(t => t.technologyId)).toEqual(["tech-a", "tech-b", "ghost-opt", ...OPT_SLUGS]);
     rich.states.forEach((st, k) => {
@@ -767,6 +767,49 @@ describe("C-CTX-1 role-context", () => {
     expect(fresh("UASCO-0001", hugeInput, {maxBytes: null as unknown as number}).digest).toBe(fresh("UASCO-0001", hugeInput).digest);
   });
 
+  it("golden digests: truncated contexts pin the exact bytes, truncation records and digest (skills.proposed and aliases)", () => {
+    // //TR: Tur 3 (R06): zengin fixture'ın kısaltma zincirinden seçilen durumlar (yalnız önerilen yarıya inmiş, önerilen sıfır, takma adlar kısmen kesilmiş, takma adlar sıfır) için bayt sayısı, kısaltma kayıtları ve özet SABİT değerlerdir; kayıt alan adı, kept/total ya da sıra değişirse özet değişir.
+    const walk = checkChain(richInput(), "UASCO-0001");
+    expect(walk.states).toHaveLength(15);
+    const golden = (k: number) => [walk.states[k].bytes, walk.states[k].truncation, walk.states[k].digest];
+    expect(golden(1), "proposed halved (6 of 12)").toEqual([10476, [{field: "skills.proposed", kept: 6, total: 12}], "2587cab7bfd1b9a784a2b4fc20606c19740ef096d7aca9763b114f65d1b03ac8"]);
+    expect(golden(4), "proposed zero").toEqual([10033, [{field: "skills.proposed", kept: 0, total: 12}], "e12cb742646e12f4a9f5d5838f1f274230abbf0a4e09e2d479fb0815f48edb04"]);
+    expect(golden(5), "proposed zero, optional halved (20 of 41)").toEqual([6433, [{field: "skills.proposed", kept: 0, total: 12}, {field: "technologies.optional", kept: 20, total: 41}], "41485a662ed393bc6d99c7ce77f91214dbe1f546cf2b576870c7badb01512657"]);
+    expect(golden(11), "aliases partial (4 of 9)").toEqual([2277, [{field: "skills.proposed", kept: 0, total: 12}, {field: "technologies.optional", kept: 0, total: 41}, {field: "aliases", kept: 4, total: 9}], "e8b58759e44567a4bee9cbd0c6b9676a0a6c05db484871b60f25ee1399f358b5"]);
+    expect(golden(14), "aliases zero (floor)").toEqual([1669, [{field: "skills.proposed", kept: 0, total: 12}, {field: "technologies.optional", kept: 0, total: 41}, {field: "aliases", kept: 0, total: 9}], "d52a0e6567e398c6fdaa40f81f46d054110ab01da06ded7668e2b474c2ffedc6"]);
+  });
+
+  it("resolveAll applies the exact default cap and forwards explicit caps", () => {
+    // //TR: Tur 3: varsayılan sınır TAM 24 576'dır (resolveAll'da da): listesi olmayan bir rol tam 24 576 bayta getirilince çözülür, bir bayt fazlası tipli retle sonuçlanır; açık maxBytes aynı sınırı iletir (24 575 reddeder, 26 112 gevşetir).
+    const plain = (pad: number) => fxInput({responsibilities: ["R1", "p".repeat(pad)]});
+    const base = fresh("UASCO-0001", plain(0), {maxBytes: 10_000_000}).bytes;
+    // //TR: bytes kendi hanelerini sayar: taban 4 haneli, hedef 5 haneli olduğundan dolgu tam sayıya hesapla DEĞİL, ölçerek bulunur (24 576 bayta ulaşan en büyük dolgu).
+    let need = ROLE_CONTEXT_DEFAULT_MAX_BYTES - base;
+    while (fresh("UASCO-0001", plain(need), {maxBytes: 10_000_000}).bytes > ROLE_CONTEXT_DEFAULT_MAX_BYTES) need--;
+    expect(base).toBeLessThan(10_000);
+    expect(fresh("UASCO-0001", plain(need), {maxBytes: 10_000_000}).bytes).toBe(24_576);
+    expect(fresh("UASCO-0001", plain(need + 1), {maxBytes: 10_000_000}).bytes).toBe(24_577);
+    const refused = [{status: "NOT_RESOLVED", roleId: "UASCO-0001", reason: "ROLE_CONTEXT_EXCEEDS_BYTE_CAP"}];
+    const fit = (r: RoleContextResult[]) => r.map(x => (x.status === "RESOLVED" ? [x.context.bytes, x.context.truncation.length] : x));
+    expect(fit(resolveAllRoleContexts(plain(need)))).toEqual([[24_576, 0]]);
+    expect(resolveAllRoleContexts(plain(need + 1))).toEqual(refused);
+    expect(fit(resolveAllRoleContexts(plain(need), {}))).toEqual([[24_576, 0]]);
+    expect(resolveAllRoleContexts(plain(need + 1), {})).toEqual(refused);
+    expect(fit(resolveAllRoleContexts(plain(need), {maxBytes: 24_576}))).toEqual([[24_576, 0]]);
+    expect(resolveAllRoleContexts(plain(need), {maxBytes: 24_575})).toEqual(refused);
+    expect(fit(resolveAllRoleContexts(plain(need + 1), {maxBytes: 26_112}))).toEqual([[24_577, 0]]);
+    // //TR: Kısaltılabilir listeli rol: tam sığan hâl kısaltılmaz, bir bayt fazlası varsayılanla kısaltılır ve sınırı aşmaz; 26 112 sınırı kısaltmaz.
+    const many = Array.from({length: 110}, (_, k) => `many-${String(k).padStart(3, "0")}`);
+    const padded = (pad: number) => richInput({responsibilities: ["R1", "p".repeat(pad)], optionalTechnologies: many.map(technologyId => ({technologyId, status: "CANDIDATE_NOT_VERIFIED"}))}, {technologies: new Map([["tech-a", techRow("tech-a")], ["tech-b", techRow("tech-b")], ...many.map(slug => [slug, techRow(slug)] as const)])});
+    const pbase = fresh("UASCO-0001", padded(0), {maxBytes: 10_000_000}).bytes;
+    const pneed = ROLE_CONTEXT_DEFAULT_MAX_BYTES - pbase;
+    expect(fit(resolveAllRoleContexts(padded(pneed)))).toEqual([[24_576, 0]]);
+    const over = resolveAllRoleContexts(padded(pneed + 1))[0];
+    expect(over.status).toBe("RESOLVED");
+    if (over.status === "RESOLVED") { expect(over.context.truncation.length).toBeGreaterThan(0); expect(over.context.bytes).toBeLessThanOrEqual(24_576); }
+    expect(fit(resolveAllRoleContexts(padded(pneed + 1), {maxBytes: 26_112}))).toEqual([[24_577, 0]]);
+  });
+
   it("the input loader fails closed and never writes", () => {
     const MINI: Record<string, unknown> = {
       "registries/role-definitions.json": {roles: [{roleId: "UASCO-0001", title: "T", guildId: "G01", clusterId: "CL01", responsibilities: ["r"], forbiddenActions: ["f"], specializationBoundaries: ["b"], requiredSkillIds: [],
@@ -833,5 +876,31 @@ describe("C-CTX-1 role-context", () => {
     expect(cases).toHaveLength(59);
     for (const [rel, name, edit] of cases) expect(() => loadRoleContextInputFromRepo(mini("field", f => { f[rel] = JSON.stringify(edit(doc(rel))); })), `${rel}: ${name}`).toThrowError(new RegExp(`^ROLE_CONTEXT_INPUT_UNAVAILABLE:${rel.replace(/\./g, "\\.")}$`));
     expect(() => loadRoleContextInputFromRepo(mini("dupx", f => { f["registries/technologies.json"] = JSON.stringify({technologies: [{id: "TECH-A", slug: "tech-a", status: "REGISTERED", knowledgeState: "S"}, {id: "TECH-B", slug: "tech-a", status: "REGISTERED", knowledgeState: "S"}]}); }))).toThrowError(/^ROLE_CONTEXT_INPUT_INVALID:DUPLICATE_TECHNOLOGY_SLUG:tech-a$/);
+
+    // //TR: Tur 3 (son TEP-1): durum izin listesi TAM eşitliktir ve HER satırda uygulanır: sonekli (`PROPOSED_DERIVED_CERTIFIED`), sonunda/başında boşluklu, satır sonlu, küçük harfli, boş, kısmi ve `CERTIFIED` durumlar reddedilir; geçerli satırlardan sonra gelen 2. (ya da ilk/ortadaki/son) kusurlu satır da reddedilir. Liste dondurulmuştur: push/atama/uzunluk değişikliği hata verir ve listeyi genişletmez.
+    const prof = (roleId: string, status: string) => ({roleId, reviewChain: {value: [], gapId: null, status}, candidateSkills: {value: [], gapId: null}});
+    const statusCases: Array<[string, unknown[]]> = [];
+    for (const bad of ["PROPOSED_DERIVED_CERTIFIED", "PROPOSED_DERIVED ", " PROPOSED_DERIVED", "PROPOSED_DERIVED\n", "proposed_derived", "CERTIFIED", "", "PROPOSED"]) statusCases.push([`single ${JSON.stringify(bad)}`, [prof("UASCO-0001", bad)]]);
+    statusCases.push(["row 2 of 2", [prof("UASCO-0001", "PROPOSED_DERIVED"), prof("UASCO-0002", "CERTIFIED")]]);
+    statusCases.push(["row 1 of 2", [prof("UASCO-0001", "CERTIFIED"), prof("UASCO-0002", "PROPOSED_DERIVED")]]);
+    statusCases.push(["middle of 3", [prof("UASCO-0001", "PROPOSED_DERIVED"), prof("UASCO-0002", "PROPOSED_DERIVED_CERTIFIED"), prof("UASCO-0003", "PROPOSED_DERIVED")]]);
+    statusCases.push(["last of 3 with a trailing space", [prof("UASCO-0001", "PROPOSED_DERIVED"), prof("UASCO-0002", "PROPOSED_DERIVED"), prof("UASCO-0003", "PROPOSED_DERIVED ")]]);
+    expect(statusCases).toHaveLength(12);
+    const prRe = new RegExp(`^ROLE_CONTEXT_INPUT_UNAVAILABLE:${PR.replace(/\./g, "\\.")}$`);
+    for (const [name, profiles] of statusCases) expect(() => loadRoleContextInputFromRepo(mini("status", f => { f[PR] = JSON.stringify({profiles}); })), name).toThrowError(prRe);
+    expect(loadRoleContextInputFromRepo(mini("status-ok", f => { f[PR] = JSON.stringify({profiles: [prof("UASCO-0001", "PROPOSED_DERIVED"), prof("UASCO-0002", "PROPOSED_DERIVED"), prof("UASCO-0003", "PROPOSED_DERIVED")]}); })).profiles).toHaveLength(3);
+    expect(Object.isFrozen(ROLE_CONTEXT_PROFILE_STATUSES)).toBe(true);
+    expect(() => (ROLE_CONTEXT_PROFILE_STATUSES as string[]).push("CERTIFIED")).toThrow(TypeError);
+    expect(() => { (ROLE_CONTEXT_PROFILE_STATUSES as string[])[0] = "CERTIFIED"; }).toThrow(TypeError);
+    expect(() => { (ROLE_CONTEXT_PROFILE_STATUSES as string[]).length = 0; }).toThrow(TypeError);
+    expect([...ROLE_CONTEXT_PROFILE_STATUSES]).toEqual(["PROPOSED_DERIVED"]);
+    expect(() => loadRoleContextInputFromRepo(mini("frozen", f => { f[PR] = JSON.stringify({profiles: [prof("UASCO-0001", "CERTIFIED")]}); }))).toThrowError(prRe);
+    // //TR: Tur 3: profil boşluk kimlikleri (reviewChain.gapId ve candidateSkills.gapId) `string | null` olmalıdır; sayı, boolean, nesne, dizi ve EKSİK alan DOĞRU dosya adıyla kapalı başarısızlıktır (iki alan da ayrı ayrı); boş dize ve dize geçerlidir.
+    const gapProfile = (site: "reviewChain" | "candidateSkills", gapId: unknown) => { const row: any = prof("UASCO-0001", "PROPOSED_DERIVED"); if (gapId === undefined) delete row[site].gapId; else row[site].gapId = gapId; return row; };
+    const gapCases: Array<[string, unknown]> = [];
+    for (const site of ["reviewChain", "candidateSkills"] as const) for (const bad of [5, true, {}, [], ["G"], undefined]) gapCases.push([`${site}.gapId ${bad === undefined ? "missing" : JSON.stringify(bad)}`, gapProfile(site, bad)]);
+    expect(gapCases).toHaveLength(12);
+    for (const [name, row] of gapCases) expect(() => loadRoleContextInputFromRepo(mini("gap", f => { f[PR] = JSON.stringify({profiles: [row]}); })), name).toThrowError(prRe);
+    for (const site of ["reviewChain", "candidateSkills"] as const) for (const good of [null, "", "WFR-GAP-X"]) expect(loadRoleContextInputFromRepo(mini("gap-ok", f => { f[PR] = JSON.stringify({profiles: [gapProfile(site, good)]}); })).profiles, `${site} ${JSON.stringify(good)}`).toHaveLength(1);
   });
 });

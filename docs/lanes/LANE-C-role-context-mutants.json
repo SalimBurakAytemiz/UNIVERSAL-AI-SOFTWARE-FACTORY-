@@ -1,5 +1,5 @@
 {
- "//TR": "C-CTX-1 (Rol Bağlamı Çözümleyicisi) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt core/agents/role-context.ts içinde TAM 1 kez geçen bir metni değiştirir; docs/lanes/LANE-C-role-context-mutants.mjs hepsini tests/v7-core-role-context.test.ts ile çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. M1-M4 dağıtım paketindeki zorunlu mutantlardır (M1 önerilen beceri kanonike karışır, M2 çözülemeyen teknoloji düşer, M3 SUSPECTED/CONFLICT takma adlarından da çözülür, M4 özet kanonik metni dışlar); M5-M20 ek savunma mutantlarıdır (doğrulanmış durum uydurma, durum yükseltme, bayt sınırı ve kesme sırası, yinelenen kimlik, SK2 süzgeçleri, boşluk kimlikleri, yükleyicinin kapalı başarısızlığı). X5-X9, N13, N16, N26, N27 ve C1-C40, #265 incelemesinin (TEP-1 tur 1) korumalı-alan, etiket, kısaltma kaydı, parite, maxBytes, son biçim bayt, varsayılan sınır ve özet kapsamı boşluklarını kapatan mutantlardır (M8/M19 yeni bayt ölçümüne göre yeniden yazıldı). H-* mutantları, bağımsız bir mutant avcısının (100 deneme) bulduğu ve sözleşme ayrıntıları testi ile alan düzeyinde yükleyici tablosunun öldürdüğü hayatta kalanlardır (kod noktası sıralaması, tekrarların korunması, null varsayılanlar, büyük/küçük harf duyarlılığı, kopyalama, seçenek iletimi, yükleyici alan denetimleri); S17/T04/T05/T07/T08 bilerek sabitlenmedi (boş dize boşluk kimliği, yinelenen girdi, tür olarak imkansız eksik durum). R6, R12-R17, R19-R22, R26-R27 #265 tur-2 incelemesinin (e36b9d0) hayatta kalan mutantları ve komşularıdır (kayıt satırı değerlerinin aynen taşınması, isteğe bağlı sıra, özetin kısaltma kaydı kapsaması, varsayılan sınırın tam değeri, bytes sabit noktası, profil durum izin listesi). HW-* mutantları, ikinci bağımsız mutant avcısının (115 deneme) bulduğu hayatta kalanlardır; bağımsız şartname farkı (240 tohumlu girdi + 599 gerçek rol), kusurlu bağlama şekilleri ve ek yükleyici durumlarıyla öldürülür.",
+ "//TR": "C-CTX-1 (Rol Bağlamı Çözümleyicisi) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt core/agents/role-context.ts içinde TAM 1 kez geçen bir metni değiştirir; docs/lanes/LANE-C-role-context-mutants.mjs hepsini tests/v7-core-role-context.test.ts ile çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. M1-M4 dağıtım paketindeki zorunlu mutantlardır (M1 önerilen beceri kanonike karışır, M2 çözülemeyen teknoloji düşer, M3 SUSPECTED/CONFLICT takma adlarından da çözülür, M4 özet kanonik metni dışlar); M5-M20 ek savunma mutantlarıdır (doğrulanmış durum uydurma, durum yükseltme, bayt sınırı ve kesme sırası, yinelenen kimlik, SK2 süzgeçleri, boşluk kimlikleri, yükleyicinin kapalı başarısızlığı). X5-X9, N13, N16, N26, N27 ve C1-C40, #265 incelemesinin (TEP-1 tur 1) korumalı-alan, etiket, kısaltma kaydı, parite, maxBytes, son biçim bayt, varsayılan sınır ve özet kapsamı boşluklarını kapatan mutantlardır (M8/M19 yeni bayt ölçümüne göre yeniden yazıldı). H-* mutantları, bağımsız bir mutant avcısının (100 deneme) bulduğu ve sözleşme ayrıntıları testi ile alan düzeyinde yükleyici tablosunun öldürdüğü hayatta kalanlardır (kod noktası sıralaması, tekrarların korunması, null varsayılanlar, büyük/küçük harf duyarlılığı, kopyalama, seçenek iletimi, yükleyici alan denetimleri); S17/T04/T05/T07/T08 bilerek sabitlenmedi (boş dize boşluk kimliği, yinelenen girdi, tür olarak imkansız eksik durum). R6, R12-R17, R19-R22, R26-R27 #265 tur-2 incelemesinin (e36b9d0) hayatta kalan mutantları ve komşularıdır (kayıt satırı değerlerinin aynen taşınması, isteğe bağlı sıra, özetin kısaltma kaydı kapsaması, varsayılan sınırın tam değeri, bytes sabit noktası, profil durum izin listesi). HW-* mutantları, ikinci bağımsız mutant avcısının (115 deneme) bulduğu hayatta kalanlardır; bağımsız şartname farkı (240 tohumlu girdi + 599 gerçek rol), kusurlu bağlama şekilleri ve ek yükleyici durumlarıyla öldürülür. Tur 3 (son TEP-1 turu): Y-N12/Y-N14/Y3-N14b-d (durum izin listesi: önek, sağ/iki yan kırpma, büyük harf, içerir), Y-N15/Y3-N15b/c (yalnız ilk/son satır, ikinci satır atlanır), Y3-F1 (liste dondurulmaz), Y3-G1..G9 (boşluk kimliği türü), Y3-D1..D7 (özet kısaltma kayıtlarını görmez), Y-N21/Y-N22/Y3-C3..C5 (varsayılan sınır tam 24 576, resolveAll seçenekleri) koordinatör Y-* mutantlarının eşdeğer yeniden yazımlarıdır.",
  "mutants": [
   {
    "id": "M1",
@@ -1090,8 +1090,8 @@
    "id": "R22",
    "description": "the allowed profile statuses also contain CERTIFIED",
    "file": "core/agents/role-context.ts",
-   "old": "export const ROLE_CONTEXT_PROFILE_STATUSES: readonly string[] = [\"PROPOSED_DERIVED\"];",
-   "new": "export const ROLE_CONTEXT_PROFILE_STATUSES: readonly string[] = [\"PROPOSED_DERIVED\", \"CERTIFIED\"];"
+   "old": "readonly string[] = Object.freeze([\"PROPOSED_DERIVED\"]);",
+   "new": "readonly string[] = Object.freeze([\"PROPOSED_DERIVED\", \"CERTIFIED\"]);"
   },
   {
    "id": "HW-A01",
@@ -1568,6 +1568,216 @@
    "file": "core/agents/role-context.ts",
    "old": "throw new Error(`ROLE_CONTEXT_INPUT_INVALID:${code}:${key(x)}`)",
    "new": "throw new Error(`ROLE_CONTEXT_INPUT_INVALID:${code}:${key(x)}:FIRST_WINS`)"
+  },
+  {
+   "id": "Y-N12",
+   "description": "the profile status allow-list matches by prefix (PROPOSED_DERIVED_CERTIFIED passes)",
+   "file": "core/agents/role-context.ts",
+   "old": "!ROLE_CONTEXT_PROFILE_STATUSES.includes(p.reviewChain.status as string)",
+   "new": "!ROLE_CONTEXT_PROFILE_STATUSES.some(s => (p.reviewChain.status as string).startsWith(s))"
+  },
+  {
+   "id": "Y-N14",
+   "description": "the profile status is right-trimmed before the allow-list check (trailing space passes)",
+   "file": "core/agents/role-context.ts",
+   "old": "!ROLE_CONTEXT_PROFILE_STATUSES.includes(p.reviewChain.status as string)",
+   "new": "!ROLE_CONTEXT_PROFILE_STATUSES.includes((p.reviewChain.status as string).trimEnd())"
+  },
+  {
+   "id": "Y3-N14b",
+   "description": "the profile status is trimmed on both sides before the check (leading space passes)",
+   "file": "core/agents/role-context.ts",
+   "old": "!ROLE_CONTEXT_PROFILE_STATUSES.includes(p.reviewChain.status as string)",
+   "new": "!ROLE_CONTEXT_PROFILE_STATUSES.includes((p.reviewChain.status as string).trim())"
+  },
+  {
+   "id": "Y3-N14c",
+   "description": "the profile status is upper-cased before the check (lower case passes)",
+   "file": "core/agents/role-context.ts",
+   "old": "!ROLE_CONTEXT_PROFILE_STATUSES.includes(p.reviewChain.status as string)",
+   "new": "!ROLE_CONTEXT_PROFILE_STATUSES.includes((p.reviewChain.status as string).toUpperCase())"
+  },
+  {
+   "id": "Y3-N14d",
+   "description": "any status that contains PROPOSED_DERIVED passes",
+   "file": "core/agents/role-context.ts",
+   "old": "!ROLE_CONTEXT_PROFILE_STATUSES.includes(p.reviewChain.status as string)",
+   "new": "!(p.reviewChain.status as string).includes(ROLE_CONTEXT_PROFILE_STATUSES[0])"
+  },
+  {
+   "id": "Y-N15",
+   "description": "only the first profile row is validated",
+   "file": "core/agents/role-context.ts",
+   "old": "for (const p of profiles) if (!isObject(p)",
+   "new": "for (const p of profiles.slice(0, 1)) if (!isObject(p)"
+  },
+  {
+   "id": "Y3-N15b",
+   "description": "only the last profile row is validated",
+   "file": "core/agents/role-context.ts",
+   "old": "for (const p of profiles) if (!isObject(p)",
+   "new": "for (const p of profiles.slice(-1)) if (!isObject(p)"
+  },
+  {
+   "id": "Y3-N15c",
+   "description": "the second profile row is not validated",
+   "file": "core/agents/role-context.ts",
+   "old": "for (const p of profiles) if (!isObject(p)",
+   "new": "for (const p of profiles.filter((_, k) => k !== 1)) if (!isObject(p)"
+  },
+  {
+   "id": "Y3-F1",
+   "description": "the profile status allow-list is not frozen",
+   "file": "core/agents/role-context.ts",
+   "old": "Object.freeze([\"PROPOSED_DERIVED\"])",
+   "new": "[\"PROPOSED_DERIVED\"]"
+  },
+  {
+   "id": "Y3-G1",
+   "description": "gapRef: every gap id value is accepted",
+   "file": "core/agents/role-context.ts",
+   "old": "const gapRef = (v: unknown): boolean => v === null || typeof v === \"string\";",
+   "new": "const gapRef = (v: unknown): boolean => true;"
+  },
+  {
+   "id": "Y3-G2",
+   "description": "gapRef: a null gap id is refused",
+   "file": "core/agents/role-context.ts",
+   "old": "const gapRef = (v: unknown): boolean => v === null || typeof v === \"string\";",
+   "new": "const gapRef = (v: unknown): boolean => typeof v === \"string\";"
+  },
+  {
+   "id": "Y3-G3",
+   "description": "gapRef: a string gap id is refused",
+   "file": "core/agents/role-context.ts",
+   "old": "const gapRef = (v: unknown): boolean => v === null || typeof v === \"string\";",
+   "new": "const gapRef = (v: unknown): boolean => v === null;"
+  },
+  {
+   "id": "Y3-G4",
+   "description": "gapRef: a missing gap id is accepted",
+   "file": "core/agents/role-context.ts",
+   "old": "const gapRef = (v: unknown): boolean => v === null || typeof v === \"string\";",
+   "new": "const gapRef = (v: unknown): boolean => v === null || v === undefined || typeof v === \"string\";"
+  },
+  {
+   "id": "Y3-G5",
+   "description": "gapRef: a number gap id is accepted",
+   "file": "core/agents/role-context.ts",
+   "old": "const gapRef = (v: unknown): boolean => v === null || typeof v === \"string\";",
+   "new": "const gapRef = (v: unknown): boolean => v === null || typeof v === \"string\" || typeof v === \"number\";"
+  },
+  {
+   "id": "Y3-G6",
+   "description": "gapRef: an array gap id is accepted",
+   "file": "core/agents/role-context.ts",
+   "old": "const gapRef = (v: unknown): boolean => v === null || typeof v === \"string\";",
+   "new": "const gapRef = (v: unknown): boolean => v === null || typeof v === \"string\" || Array.isArray(v);"
+  },
+  {
+   "id": "Y3-G7",
+   "description": "gapRef: an object gap id is accepted",
+   "file": "core/agents/role-context.ts",
+   "old": "const gapRef = (v: unknown): boolean => v === null || typeof v === \"string\";",
+   "new": "const gapRef = (v: unknown): boolean => v === null || typeof v === \"string\" || typeof v === \"object\";"
+  },
+  {
+   "id": "Y3-G8",
+   "description": "reviewChain.gapId is not validated by the loader",
+   "file": "core/agents/role-context.ts",
+   "old": " || !gapRef(p.reviewChain.gapId)",
+   "new": ""
+  },
+  {
+   "id": "Y3-G9",
+   "description": "candidateSkills.gapId is not validated by the loader",
+   "file": "core/agents/role-context.ts",
+   "old": " || !gapRef(p.candidateSkills.gapId)",
+   "new": ""
+  },
+  {
+   "id": "Y3-D1",
+   "description": "the digest ignores the aliases truncation record",
+   "file": "core/agents/role-context.ts",
+   "old": "const digest = sha256(stable(body));",
+   "new": "const digest = sha256(stable({...body, truncation: body.truncation.filter(r => r.field !== \"aliases\")}));"
+  },
+  {
+   "id": "Y3-D2",
+   "description": "the digest ignores the skills.proposed truncation record",
+   "file": "core/agents/role-context.ts",
+   "old": "const digest = sha256(stable(body));",
+   "new": "const digest = sha256(stable({...body, truncation: body.truncation.filter(r => r.field !== \"skills.proposed\")}));"
+  },
+  {
+   "id": "Y3-D3",
+   "description": "the digest ignores the technologies.optional truncation record",
+   "file": "core/agents/role-context.ts",
+   "old": "const digest = sha256(stable(body));",
+   "new": "const digest = sha256(stable({...body, truncation: body.truncation.filter(r => r.field !== \"technologies.optional\")}));"
+  },
+  {
+   "id": "Y3-D4",
+   "description": "the digest ignores the kept count of every truncation record",
+   "file": "core/agents/role-context.ts",
+   "old": "const digest = sha256(stable(body));",
+   "new": "const digest = sha256(stable({...body, truncation: body.truncation.map(r => ({field: r.field, total: r.total}))}));"
+  },
+  {
+   "id": "Y3-D5",
+   "description": "the digest ignores the total count of every truncation record",
+   "file": "core/agents/role-context.ts",
+   "old": "const digest = sha256(stable(body));",
+   "new": "const digest = sha256(stable({...body, truncation: body.truncation.map(r => ({field: r.field, kept: r.kept}))}));"
+  },
+  {
+   "id": "Y3-D6",
+   "description": "the digest ignores the field name of every truncation record",
+   "file": "core/agents/role-context.ts",
+   "old": "const digest = sha256(stable(body));",
+   "new": "const digest = sha256(stable({...body, truncation: body.truncation.map(r => ({kept: r.kept, total: r.total}))}));"
+  },
+  {
+   "id": "Y3-D7",
+   "description": "the digest sees the truncation records in reverse order",
+   "file": "core/agents/role-context.ts",
+   "old": "const digest = sha256(stable(body));",
+   "new": "const digest = sha256(stable({...body, truncation: [...body.truncation].reverse()}));"
+  },
+  {
+   "id": "Y-N21",
+   "description": "the default byte cap is one byte larger",
+   "file": "core/agents/role-context.ts",
+   "old": "ROLE_CONTEXT_DEFAULT_MAX_BYTES = 24_576;",
+   "new": "ROLE_CONTEXT_DEFAULT_MAX_BYTES = 24_577;"
+  },
+  {
+   "id": "Y-N22",
+   "description": "the default byte cap is one byte smaller",
+   "file": "core/agents/role-context.ts",
+   "old": "ROLE_CONTEXT_DEFAULT_MAX_BYTES = 24_576;",
+   "new": "ROLE_CONTEXT_DEFAULT_MAX_BYTES = 24_575;"
+  },
+  {
+   "id": "Y3-C3",
+   "description": "resolveAll defaults to a looser cap of its own",
+   "file": "core/agents/role-context.ts",
+   "old": "export function resolveAllRoleContexts(i: RoleContextInput, o: {maxBytes?: number} = {}): RoleContextResult[] {",
+   "new": "export function resolveAllRoleContexts(i: RoleContextInput, o: {maxBytes?: number} = {maxBytes: 26_112}): RoleContextResult[] {"
+  },
+  {
+   "id": "Y3-C4",
+   "description": "resolveAll does not forward its options to the roles",
+   "file": "core/agents/role-context.ts",
+   "old": ".map(id => resolveRoleContext(i, id, o));",
+   "new": ".map(id => resolveRoleContext(i, id));"
+  },
+  {
+   "id": "Y3-C5",
+   "description": "resolveAll forwards an empty options object",
+   "file": "core/agents/role-context.ts",
+   "old": ".map(id => resolveRoleContext(i, id, o));",
+   "new": ".map(id => resolveRoleContext(i, id, {}));"
   }
  ]
 }
