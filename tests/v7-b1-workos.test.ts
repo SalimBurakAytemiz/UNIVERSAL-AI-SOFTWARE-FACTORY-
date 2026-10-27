@@ -2488,7 +2488,7 @@ describe("LANE-B run readiness", () => {
     const spy = vi.spyOn(store, "getProject").mockImplementation((() => { throw new Error("boom"); }) as any);
     try {
       const r = await rd(app, p.projectId);
-      expect(r.statusCode).toBe(500); expect(r.json()).not.toHaveProperty("readiness"); expect(r.json()).toHaveProperty("error");
+      expect(r.statusCode).toBe(500); expect(r.json()).toEqual({error: "INTERNAL_ERROR"});
     } finally { spy.mockRestore(); }
   });
 
@@ -2540,21 +2540,70 @@ describe("LANE-B run readiness", () => {
           expect(pong.statusCode).toBe(200); expect(pingMs, "an unrelated route answers while git hangs").toBeLessThan(500);
           const r = await slow; expect(Date.now() - t0).toBeGreaterThanOrEqual(2500);
           await new Promise(r2 => setTimeout(r2, 60));
-          expect(maxGap, "no event-loop freeze at any point of the 3 s probe").toBeLessThan(500);
+          expect(maxGap, "no event-loop freeze at any point of the 3 s probe (a ~450 ms sync freeze is caught too)").toBeLessThan(300);
           expect(by(r).REPOSITORY.state).toBe("UNKNOWN");
         } finally { clearInterval(timer); }
       });
     });
-    it("on timeout the whole git process GROUP is killed (a forked grandchild holding the pipe cannot swallow the budget) and the answer is UNKNOWN within the bound", async () => {
+    it("on timeout the DIRECT git child is killed and the answer is UNKNOWN within the bound; a forked grandchild is a documented known limit (it is not killed, it just cannot hold the budget)", async () => {
       const pf = path.join(tmp, "readiness-gc-pids.txt"); fs.rmSync(pf, {force: true});
       await withFakeGit(`#!/bin/sh\necho $$ >> ${pf}\n/bin/sleep 30 &\necho $! >> ${pf}\nwait\n`, async () => {
-        const {c, ms} = await check("readiness-grandchild");
-        expect([c.state, c.reason]).toEqual(["UNKNOWN", "SOURCE_UNREADABLE"]); expect(ms).toBeLessThan(3000 + 1500);
-        const pids = fs.readFileSync(pf, "utf8").trim().split("\n").map(Number); expect(pids.length).toBeGreaterThanOrEqual(2);
-        const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
-        for (let n = 0; n < 40 && pids.some(alive); n++) await new Promise(r => setTimeout(r, 50));
-        expect(pids.map(alive), "the git process and its grandchild are gone after the probe").toEqual(pids.map(() => false));
+        let pids: number[] = [];
+        try {
+          const {c, ms} = await check("readiness-grandchild");
+          expect([c.state, c.reason]).toEqual(["UNKNOWN", "SOURCE_UNREADABLE"]); expect(ms).toBeLessThan(3000 + 1500);
+          pids = fs.readFileSync(pf, "utf8").trim().split("\n").map(Number); expect(pids.length).toBeGreaterThanOrEqual(2);
+          const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+          for (let n = 0; n < 40 && alive(pids[0]); n++) await new Promise(r => setTimeout(r, 50));
+          expect(alive(pids[0]), "the direct git child is gone after the probe").toBe(false);
+        } finally { for (const pid of pids.slice(1)) { try { process.kill(pid, "SIGKILL"); } catch { /* weg */ } } }
       });
+    });
+    it.skipIf(!fs.existsSync("/proc/self/stat"))("C1: the HEAD-probe git child stays in the CALLER's process group (not detached/setsid), so terminal and group signals reach it", async () => {
+      const pf = path.join(tmp, "readiness-pgid.txt"); fs.rmSync(pf, {force: true});
+      const pgrpOf = (pid: number) => Number(fs.readFileSync(`/proc/${pid}/stat`, "utf8").replace(/^.*\) /, "").split(" ")[2]);
+      await withFakeGit(`#!/bin/sh\necho $$ > ${pf}\nexec /bin/sleep 30\n`, async () => {
+        const slow = check("readiness-pgid");
+        let pid = NaN; for (let n = 0; n < 60 && !Number.isFinite(pid); n++) { await new Promise(r => setTimeout(r, 50)); try { pid = Number(fs.readFileSync(pf, "utf8").trim()); } catch { pid = NaN; } if (!pid) pid = NaN; }
+        expect(Number.isFinite(pid)).toBe(true);
+        expect(pgrpOf(pid), "git child pgid equals this process's pgid").toBe(pgrpOf(process.pid));
+        await slow;
+      });
+    });
+    it("C2: a group SIGINT to a process that is running a hung HEAD probe leaves no git alive (a real terminal Ctrl+C / group signal reaches the probe)", async () => {
+      const pf = path.join(tmp, "readiness-sigint-pid.txt"), script = path.join(tmp, "readiness-sigint-parent.mts"); fs.rmSync(pf, {force: true});
+      fs.writeFileSync(script, `import {repositoryHeadAsync} from ${JSON.stringify(pathToFileURL(path.resolve(__dirname, "..", "core", "workos", "runner.ts")).href)};\nconsole.log("probing");\nawait repositoryHeadAsync(process.argv[2], {timeoutMs: 20000});\nconsole.log("done");\n`);
+      const bin = fs.mkdtempSync(path.join(tmp, "readiness-sigint-bin-")), work = path.join(tmp, "readiness-sigint-work"); fs.mkdirSync(work, {recursive: true});
+      fs.writeFileSync(path.join(bin, "git"), `#!/bin/sh\necho $$ > ${pf}\nexec /bin/sleep 30\n`, {mode: 0o755});
+      const parent = cp.spawn(process.execPath, ["--import", "tsx", script, work], {cwd: path.resolve(__dirname, ".."), env: {...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`}, detached: true, stdio: "ignore"});
+      const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+      let gitPid = NaN;
+      try {
+        for (let n = 0; n < 200 && !Number.isFinite(gitPid); n++) { await new Promise(r => setTimeout(r, 50)); try { gitPid = Number(fs.readFileSync(pf, "utf8").trim()); } catch { gitPid = NaN; } if (!gitPid) gitPid = NaN; }
+        expect(Number.isFinite(gitPid) && alive(gitPid), "the probe git is running").toBe(true);
+        process.kill(-parent.pid!, "SIGINT");
+        for (let n = 0; n < 40 && alive(gitPid); n++) await new Promise(r => setTimeout(r, 50));
+        expect(alive(gitPid), "no git left alive 2 s after the group SIGINT").toBe(false);
+      } finally { try { process.kill(-parent.pid!, "SIGKILL"); } catch { /* weg */ } if (Number.isFinite(gitPid)) { try { process.kill(gitPid, "SIGKILL"); } catch { /* weg */ } } fs.rmSync(bin, {recursive: true, force: true}); }
+    });
+    it("C4: after a timeout the stdout/stderr streams are DESTROYED (no more buffering) and the call settles at the bound without 'close'", async () => {
+      const { runGitAsync } = await import("../core/workos/git-async.js"); const realSpawn = cp.spawn; let kid: any = null;
+      const sp = vi.spyOn(cp, "spawn").mockImplementation(((...a: any[]) => { kid = (realSpawn as any).apply(cp, a); return kid; }) as any);
+      try {
+        await withFakeGit("#!/bin/sh\nwhile true; do echo xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; /bin/sleep 0.05; done\n", async bin => {
+          const t0 = Date.now(), r = await runGitAsync(tmp, ["rev-parse"], {PATH: bin}, undefined, {timeoutMs: 400, hardTimeout: true});
+          expect([r.status, r.stdout]).toEqual([null, ""]); expect(Date.now() - t0).toBeLessThan(1500);
+          expect([kid.stdout.destroyed, kid.stderr.destroyed], "streams destroyed").toEqual([true, true]);
+        });
+      } finally { sp.mockRestore(); }
+    });
+    it("the classification of a failed probe uses the MONOTONIC clock: a forward wall-clock step during a FAST failure does not turn it into UNKNOWN", async () => {
+      const {app, store} = await mk(); const dir = path.join(tmp, "readiness-classify-clock"); fs.mkdirSync(dir, {recursive: true});
+      const p = proj(store, {repository: {path: dir}}); msn(store, p.projectId);
+      const real = Date.now, realSpawn = cp.spawn; let stepped = false;
+      const spy = vi.spyOn(Date, "now").mockImplementation(() => real() + (stepped ? 3_600_000 : 0));
+      const sp = vi.spyOn(cp, "spawn").mockImplementation(((...a: any[]) => { stepped = true; return (realSpawn as any).apply(cp, a); }) as any);
+      try { const c = by(await rd(app, p.projectId)).REPOSITORY; expect(stepped).toBe(true); expect([c.state, c.reason]).toEqual(["BLOCKED", "REPOSITORY_HEAD_UNRESOLVED"]); } finally { sp.mockRestore(); spy.mockRestore(); }
     });
     it.skipIf(!fs.existsSync("/usr/bin/setsid"))("the budget holds even when a grandchild ESCAPED the process group (setsid) and keeps the pipe open: the answer settles at the bound without waiting for 'close'", async () => {
       const pf = path.join(tmp, "readiness-escaped-pids.txt"); fs.rmSync(pf, {force: true});
@@ -2569,6 +2618,26 @@ describe("LANE-B run readiness", () => {
       await withFakeGit("#!/bin/sh\n/bin/sleep 0.4\nexit 128\n", async () => {
         const {c, ms} = await check("readiness-slowfail");
         expect([c.state, c.reason]).toEqual(["BLOCKED", "REPOSITORY_HEAD_UNRESOLVED"]); expect(ms).toBeGreaterThanOrEqual(350); expect(ms).toBeLessThan(2900);
+      });
+    });
+    it("a slow but FINITE git failure of about 2.5 s in total stays BLOCKED with the runner's reason (only an exhausted budget is UNKNOWN)", async () => {
+      await withFakeGit("#!/bin/sh\n/bin/sleep 0.85\nexit 128\n", async () => {
+        const {c, ms} = await check("readiness-slowfail-long");
+        expect([c.state, c.reason]).toEqual(["BLOCKED", "REPOSITORY_HEAD_UNRESOLVED"]); expect(ms).toBeGreaterThanOrEqual(2000); expect(ms).toBeLessThan(2900);
+      });
+    });
+    it("single-flight isolation and eviction: DIFFERENT repositories are probed separately, and a finished probe is not cached (the next read probes again)", async () => {
+      const log = path.join(tmp, "readiness-sf2-log.txt"); fs.rmSync(log, {force: true});
+      await withFakeGit(`#!/bin/sh\necho x >> ${log}\n/bin/sleep 0.3\nexit 128\n`, async () => {
+        const {app, store} = await mk();
+        const mkp = (name: string) => { const d = path.join(tmp, name); fs.mkdirSync(d, {recursive: true}); const p = proj(store, {repository: {path: d}}); msn(store, p.projectId); return p.projectId; };
+        const a1 = mkp("readiness-sf2-a"), b1 = mkp("readiness-sf2-b");
+        const count = () => (fs.existsSync(log) ? fs.readFileSync(log, "utf8").trim().split("\n").filter(Boolean).length : 0);
+        await rd(app, a1); const single = count(); expect(single).toBeGreaterThan(0); fs.rmSync(log, {force: true});
+        await Promise.all([rd(app, a1), rd(app, b1)]);
+        expect(count(), "two different repositories = two probes").toBe(2 * single); fs.rmSync(log, {force: true});
+        await rd(app, a1); await rd(app, a1);
+        expect(count(), "a finished (failed) probe is evicted: every sequential read probes again").toBe(2 * single);
       });
     });
     it("parallel readiness reads of the SAME repository share one probe (single-flight): N GETs do not spawn N times the git children", async () => {

@@ -20,7 +20,7 @@ export function runGitAsync(cwd: string, args: string[], env: NodeJS.ProcessEnv,
       resolve(r);
     };
     try {
-      const group = (onSpawn !== undefined || o.hardTimeout === true) && process.platform !== "win32"; // yazar git çocuğu kendi süreç grubunda başlar (devirde öldürülebilsin)
+      const group = onSpawn !== undefined && process.platform !== "win32"; // yazar git çocuğu kendi süreç grubunda başlar (devirde öldürülebilsin)
       const child = cp.spawn("git", isolatedGitArgs(args), {cwd, env: isolatedGitEnv(env), windowsHide: true, stdio: ["pipe", "pipe", "pipe"], ...(group ? {detached: true} : {})});
       // //TR: Windows'ta `git` bir sarmalayıcıdır (alt süreçleri ve git-remote-*/index-pack yardımcıları vardır): yalnız kök pid'i öldürmek yardımcıları çalışır bırakırdı; implementer'ın killTree'si gibi taskkill /T /F ile AĞAÇ öldürülür. POSIX'te süreç grubu (onSpawn varsa) ya da çocuk.
       const kill = () => {
@@ -49,8 +49,9 @@ export function runGitAsync(cwd: string, args: string[], env: NodeJS.ProcessEnv,
         const stdout = Buffer.concat(outChunks).toString("utf8"), stderr = Buffer.concat(errChunks).toString("utf8");
         settle({status: typeof code === "number" ? code : null, stdout, stderr: stderr || (signal ? `terminated by ${signal}` : "")});
       });
-      // //TR: hardTimeout (readiness probe, B-NEXT-1): süre dolunca çocuk (POSIX: tüm süreç grubu) öldürülür VE 'close' BEKLENMEDEN status null ile dönülür; boru tutan bir torun 'close'u geciktirip bütçeyi yutamaz.
-      if (o.timeoutMs !== undefined) timer = setTimeout(o.hardTimeout === true ? () => { kill(); settle({status: null, stdout: "", stderr: "TIMEOUT"}); } : kill, o.timeoutMs);
+      // //TR: hardTimeout (HEAD probe: readiness ve runner WORKSPACE, B-NEXT-1): çocuk AYRI oturuma/gruba ALINMAZ (terminalin Ctrl+C/SIGHUP'ı ona ulaşır; kimse bir probe grubunu izlemez). Süre dolunca YALNIZ doğrudan çocuk SIGKILL ile öldürülür (win32: ağaç, taskkill), stdout/stderr yok edilir (arabellek büyümesi durur) ve 'close' BEKLENMEDEN status null ile dönülür. Bilinen sınır: `setsid` ile kaçmış bir torun öldürülmez; yalnız bütçeyi artık tutamaz.
+      const hardStop = () => { kill(); try { child.stdout?.destroy(); child.stderr?.destroy(); } catch { /* en iyi çaba */ } settle({status: null, stdout: "", stderr: "TIMEOUT"}); };
+      if (o.timeoutMs !== undefined) timer = setTimeout(o.hardTimeout === true ? hardStop : kill, o.timeoutMs);
       if (onSpawn && child.pid) {
         try { onSpawn({pid: child.pid, pgid: group ? child.pid : null}); } catch (e) {
           kill();
