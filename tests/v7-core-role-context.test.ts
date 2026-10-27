@@ -87,7 +87,7 @@ function fuzzInput(seed: number): RoleContextInput {
   const r = rng(seed);
   const pick = <T,>(xs: readonly T[]): T => xs[Math.floor(r() * xs.length)];
   const some = <T,>(xs: readonly T[], max: number): T[] => Array.from({length: Math.floor(r() * (max + 1))}, () => pick(xs));
-  const SK = ["SK2-A", "SK2-B", "SK2-C", "SK2-a", "SK2-b"], SK_OUT = ["SK2-OUT-1", "SK2-OUT-2"], LEG = ["001", "002", "003", "B1", "a1", "NOROW"];
+  const SK = ["SK2-A", "SK2-B", "SK2-C", "SK2-a", "SK2-b"], SK_OUT = ["SK2-OUT-1", "SK2-OUT-2", "sk2-c", "SK2-A "], LEG = ["001", "002", "003", "B1", "a1", "NOROW", " 001", "b1"];
   const REG = ["tech-a", "tech-b", "tech-c", "Tech-D", "opt-x"], GHOST = ["ghost-1", "ghost-2", "TECH-A", " tech-a", "tech-a "], STAT = ["CANDIDATE_NOT_VERIFIED", "candidate_not_verified", "", "OTHER_STATUS"];
   const rows = new Map(REG.map(slug => [slug, {id: pick(["TECH-A", "ID-ODD", "", "TECH-X"]), status: pick(["REGISTERED", "DEPRECATED", "", "BETA"]), knowledgeState: pick(["SEED_PROFILE", "STALE", "", "REVIEW"])}] as const));
   const refs = () => some([...REG, ...GHOST], 6).map(technologyId => ({technologyId, status: pick(STAT)}));
@@ -98,14 +98,14 @@ function fuzzInput(seed: number): RoleContextInput {
     responsibilities: some(["R1", "R1", "r2"], 3), forbiddenActions: some(["F1", "f1"], 3), specializationBoundaries: some(["B1", "B1"], 3),
     requiredSkillIds: some([...SK, ...SK_OUT], 6), requiredTechnologies: refs(), optionalTechnologies: refs(), legacyAliases: aliases, gapIds: some(["G-1", "G-2", "g-3", ""], 4)
   });
-  const profileOf = (roleId: string): ContextProfileLike => ({roleId, reviewChain: {value: some(["UASCO-0002", "UASCO-0003", "uasco-0001", "UASCO-0002"], 4), gapId: pick([null, undefined as unknown as null, "", "GAP-R"]), status: pick(["PROPOSED_DERIVED", "OTHER_STATUS"])}, candidateSkills: {value: [], gapId: pick([null, undefined as unknown as null, "", "GAP-C"])}});
-  const profiles = pick<ContextProfileLike[]>([[], [profileOf("UASCO-0001")], [profileOf("UASCO-0002")], [profileOf("UASCO-0002"), profileOf("UASCO-0001")]]);
+  const profileOf = (roleId: string): ContextProfileLike => ({roleId, reviewChain: {value: some(["UASCO-0002", "UASCO-0003", "uasco-0001", "UASCO-0002"], 4), gapId: pick([null, undefined as unknown as null, "", "GAP-R"]), status: pick(["PROPOSED_DERIVED", "OTHER_STATUS", "other_status"])}, candidateSkills: {value: [], gapId: pick([null, undefined as unknown as null, "", "GAP-C"])}});
+  const profiles = pick<ContextProfileLike[]>([[], [profileOf("UASCO-0001")], [profileOf("UASCO-0002")], [profileOf("UASCO-0002"), profileOf("UASCO-0001")], [profileOf("uasco-0001"), profileOf("UASCO-0001 ")], [profileOf("uasco-0001"), profileOf("UASCO-0001")]]);
   const rekeyed = FIRST_DELIVERY_BINDINGS.map(b => ({...b, roleId: "UASCO-0001"}));
   const defect = pick(DEFECTS);
   const bindings = pick<typeof rekeyed>([[], [{...DEV_BINDING, roleId: "UASCO-0001"}], [pick(rekeyed)], [{...defect[1](DEV_BINDING), roleId: "UASCO-0001"}], [{...DEV_BINDING, roleId: "UASCO-0001", adapters: ["workos-runner", "local-claude-implementer", "workos-runner"]}]]);
   return {
-    roles: [role], guilds: [{guildId: "G01 ", name: "Decoy", clusterId: "CL01"}, ...(r() < 0.8 ? [{guildId, ...(r() < 0.7 ? {name: pick(["Guild One", ""])} : {}), clusterId: "CL01"}] : [])],
-    skillIds: new Set(SK), technologies: rows, legacySkills: new Map(LEG.filter(id => id !== "NOROW").map(id => [id, some([...SK, ...SK_OUT], 4)] as const)), profiles, bindings
+    roles: [role], guilds: [{guildId: "G01 ", name: "Decoy", clusterId: "CL01"}, {guildId: pick(["g01", "G01", "G99"]), name: "Decoy2", clusterId: "CL99"}, ...(r() < 0.8 ? [{guildId, ...(r() < 0.7 ? {name: pick(["Guild One", ""])} : {}), clusterId: pick(["CL01", "CL99"])}] : [])].filter((g, k, all) => all.findIndex(x => x.guildId === g.guildId) === k),
+    skillIds: new Set(SK), technologies: rows, legacySkills: new Map(LEG.filter(id => id !== "NOROW" && id !== " 001").map(id => [id, some([...SK, ...SK_OUT], 4)] as const)), profiles, bindings
   };
 }
 const deepFreeze = <T>(v: T): T => { if (v !== null && typeof v === "object" && !(v instanceof Map) && !(v instanceof Set)) { Object.freeze(v); for (const x of Object.values(v)) deepFreeze(x); } return v; };
@@ -747,6 +747,14 @@ describe("C-CTX-1 role-context", () => {
       expect(c.binding, name).toEqual({origin: "CODE_BINDING_TABLE", resolverLabel: "NOT_EXECUTABLE", reason, function: null, providerRoute: null, adapters: [], note: "RESOLVER_LABEL_NOT_THE_READINESS_EXECUTABLE_LAYER"});
     }
     for (const b of FIRST_DELIVERY_BINDINGS) expect(ALL_BY_ID.get(b.roleId)!.binding, b.roleId).toEqual({origin: "CODE_BINDING_TABLE", resolverLabel: "EXECUTABLE", reason: null, function: b.function, providerRoute: b.providerRoute, adapters: [...b.adapters], note: "RESOLVER_LABEL_NOT_THE_READINESS_EXECUTABLE_LAYER"});
+    // //TR: Yinelenen lonca/profil satırlarında İLK eşleşme kazanır (yükleyici yinelenenleri zaten reddeder; çözümleyici belirli davranır): lonca adı ve inceleme zinciri ilk satırdan gelir.
+    const dupGuild = fresh("UASCO-0001", fxInput({}, {guilds: [{guildId: "G01", name: "First", clusterId: "CL01"}, {guildId: "G01", name: "Second", clusterId: "CL01"}]}));
+    expect(dupGuild.canonical.guildName).toBe("First");
+    const prof = (value: string[]): ContextProfileLike => ({roleId: "UASCO-0001", reviewChain: {value, gapId: null, status: "PROPOSED_DERIVED"}, candidateSkills: {value: [], gapId: null}});
+    expect(fresh("UASCO-0001", fxInput({}, {profiles: [prof(["UASCO-0002"]), prof(["UASCO-0003"])]})).reviewChain!.value).toEqual(["UASCO-0002"]);
+    // //TR: Hata iletileri TAM metindir (sonuna ek yazı eklenemez).
+    expect(() => resolveRoleContext(input(), "UASCO-0085", {maxBytes: Number.NaN})).toThrowError(/^ROLE_CONTEXT_INPUT_INVALID:MAX_BYTES:NaN$/);
+    expect(() => resolveRoleContext(input(), "UASCO-0085", {maxBytes: -5})).toThrowError(/^ROLE_CONTEXT_INPUT_INVALID:MAX_BYTES:-5$/);
     // //TR: Bağlamayı girdi belirler: global tablodaki bir rol, girdide bağlama yoksa NOT_EXECUTABLE'dır.
     expect(fresh("UASCO-0085", {...input(), bindings: []}).binding).toMatchObject({resolverLabel: "NOT_EXECUTABLE", reason: "ROLE_HAS_NO_BINDING", function: null});
     // //TR: Listeleri zaten boş ama kanonik metni sınırı aşan rol: sessiz kırpma yok, tipli ret (kısaltılacak bir şey kalmadı).
@@ -823,6 +831,7 @@ describe("C-CTX-1 role-context", () => {
       [PR, "reviewChain.value missing", d => { delete d.profiles[0].reviewChain.value; return d; }], [PR, "reviewChain.value not strings", d => { d.profiles[0].reviewChain.value = [1]; return d; }], [PR, "reviewChain.status not a string", d => { d.profiles[0].reviewChain.status = 1; return d; }], [PR, "reviewChain.status outside the allowed values", d => { d.profiles[0].reviewChain.status = "CERTIFIED"; return d; }], [PR, "reviewChain.status prefix of the allowed value", d => { d.profiles[0].reviewChain.status = "PROPOSED"; return d; }], [PR, "reviewChain.status lower case", d => { d.profiles[0].reviewChain.status = "proposed_derived"; return d; }], [PR, "reviewChain.status padded", d => { d.profiles[0].reviewChain.status = " PROPOSED_DERIVED"; return d; }],
       [PR, "candidateSkills missing", d => { delete d.profiles[0].candidateSkills; return d; }], [PR, "candidateSkills not an object", d => { d.profiles[0].candidateSkills = "x"; return d; }], [PR, "candidateSkills.value missing", d => { delete d.profiles[0].candidateSkills.value; return d; }], [PR, "candidateSkills.value not strings", d => { d.profiles[0].candidateSkills.value = [1]; return d; }]);
     expect(cases).toHaveLength(59);
-    for (const [rel, name, edit] of cases) expect(() => loadRoleContextInputFromRepo(mini("field", f => { f[rel] = JSON.stringify(edit(doc(rel))); })), `${rel}: ${name}`).toThrow(`ROLE_CONTEXT_INPUT_UNAVAILABLE:${rel}`);
+    for (const [rel, name, edit] of cases) expect(() => loadRoleContextInputFromRepo(mini("field", f => { f[rel] = JSON.stringify(edit(doc(rel))); })), `${rel}: ${name}`).toThrowError(new RegExp(`^ROLE_CONTEXT_INPUT_UNAVAILABLE:${rel.replace(/\./g, "\\.")}$`));
+    expect(() => loadRoleContextInputFromRepo(mini("dupx", f => { f["registries/technologies.json"] = JSON.stringify({technologies: [{id: "TECH-A", slug: "tech-a", status: "REGISTERED", knowledgeState: "S"}, {id: "TECH-B", slug: "tech-a", status: "REGISTERED", knowledgeState: "S"}]}); }))).toThrowError(/^ROLE_CONTEXT_INPUT_INVALID:DUPLICATE_TECHNOLOGY_SLUG:tech-a$/);
   });
 });
