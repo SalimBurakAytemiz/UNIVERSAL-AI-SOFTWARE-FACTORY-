@@ -1,5 +1,5 @@
 {
- "//TR": "C-CTX-1 (Rol Bağlamı Çözümleyicisi) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt core/agents/role-context.ts içinde TAM 1 kez geçen bir metni değiştirir; docs/lanes/LANE-C-role-context-mutants.mjs hepsini tests/v7-core-role-context.test.ts ile çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. M1-M4 dağıtım paketindeki zorunlu mutantlardır (M1 önerilen beceri kanonike karışır, M2 çözülemeyen teknoloji düşer, M3 SUSPECTED/CONFLICT takma adlarından da çözülür, M4 özet kanonik metni dışlar); M5-M20 ek savunma mutantlarıdır (doğrulanmış durum uydurma, durum yükseltme, bayt sınırı ve kesme sırası, yinelenen kimlik, SK2 süzgeçleri, boşluk kimlikleri, yükleyicinin kapalı başarısızlığı). X5-X9, N13, N16, N26, N27 ve C1-C40, #265 incelemesinin (TEP-1 tur 1) korumalı-alan, etiket, kısaltma kaydı, parite, maxBytes, son biçim bayt, varsayılan sınır ve özet kapsamı boşluklarını kapatan mutantlardır (M8/M19 yeni bayt ölçümüne göre yeniden yazıldı). H-* mutantları, bağımsız bir mutant avcısının (100 deneme) bulduğu ve sözleşme ayrıntıları testi ile alan düzeyinde yükleyici tablosunun öldürdüğü hayatta kalanlardır (kod noktası sıralaması, tekrarların korunması, null varsayılanlar, büyük/küçük harf duyarlılığı, kopyalama, seçenek iletimi, yükleyici alan denetimleri); S17/T04/T05/T07/T08 bilerek sabitlenmedi (boş dize boşluk kimliği, yinelenen girdi, tür olarak imkansız eksik durum). R6, R12-R17, R19-R22, R26-R27 #265 tur-2 incelemesinin (e36b9d0) hayatta kalan mutantları ve komşularıdır (kayıt satırı değerlerinin aynen taşınması, isteğe bağlı sıra, özetin kısaltma kaydı kapsaması, varsayılan sınırın tam değeri, bytes sabit noktası, profil durum izin listesi).",
+ "//TR": "C-CTX-1 (Rol Bağlamı Çözümleyicisi) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt core/agents/role-context.ts içinde TAM 1 kez geçen bir metni değiştirir; docs/lanes/LANE-C-role-context-mutants.mjs hepsini tests/v7-core-role-context.test.ts ile çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. M1-M4 dağıtım paketindeki zorunlu mutantlardır (M1 önerilen beceri kanonike karışır, M2 çözülemeyen teknoloji düşer, M3 SUSPECTED/CONFLICT takma adlarından da çözülür, M4 özet kanonik metni dışlar); M5-M20 ek savunma mutantlarıdır (doğrulanmış durum uydurma, durum yükseltme, bayt sınırı ve kesme sırası, yinelenen kimlik, SK2 süzgeçleri, boşluk kimlikleri, yükleyicinin kapalı başarısızlığı). X5-X9, N13, N16, N26, N27 ve C1-C40, #265 incelemesinin (TEP-1 tur 1) korumalı-alan, etiket, kısaltma kaydı, parite, maxBytes, son biçim bayt, varsayılan sınır ve özet kapsamı boşluklarını kapatan mutantlardır (M8/M19 yeni bayt ölçümüne göre yeniden yazıldı). H-* mutantları, bağımsız bir mutant avcısının (100 deneme) bulduğu ve sözleşme ayrıntıları testi ile alan düzeyinde yükleyici tablosunun öldürdüğü hayatta kalanlardır (kod noktası sıralaması, tekrarların korunması, null varsayılanlar, büyük/küçük harf duyarlılığı, kopyalama, seçenek iletimi, yükleyici alan denetimleri); S17/T04/T05/T07/T08 bilerek sabitlenmedi (boş dize boşluk kimliği, yinelenen girdi, tür olarak imkansız eksik durum). R6, R12-R17, R19-R22, R26-R27 #265 tur-2 incelemesinin (e36b9d0) hayatta kalan mutantları ve komşularıdır (kayıt satırı değerlerinin aynen taşınması, isteğe bağlı sıra, özetin kısaltma kaydı kapsaması, varsayılan sınırın tam değeri, bytes sabit noktası, profil durum izin listesi). HW-* mutantları, ikinci bağımsız mutant avcısının (115 deneme) bulduğu hayatta kalanlardır; bağımsız şartname farkı (240 tohumlu girdi + 599 gerçek rol), kusurlu bağlama şekilleri ve ek yükleyici durumlarıyla öldürülür.",
  "mutants": [
   {
    "id": "M1",
@@ -1092,6 +1092,482 @@
    "file": "core/agents/role-context.ts",
    "old": "export const ROLE_CONTEXT_PROFILE_STATUSES: readonly string[] = [\"PROPOSED_DERIVED\"];",
    "new": "export const ROLE_CONTEXT_PROFILE_STATUSES: readonly string[] = [\"PROPOSED_DERIVED\", \"CERTIFIED\"];"
+  },
+  {
+   "id": "HW-A01",
+   "description": "OPTIONAL registered technology refs get a hard-coded status CANDIDATE_NOT_VERIFIED instead of the role's own status (REQUIRED refs still pass through).",
+   "file": "core/agents/role-context.ts",
+   "old": "status: reg ? t.status : NAME_NOT_VERIFIED",
+   "new": "status: reg ? (requirement === \"OPTIONAL\" ? \"CANDIDATE_NOT_VERIFIED\" : t.status) : NAME_NOT_VERIFIED"
+  },
+  {
+   "id": "HW-D02",
+   "description": "A role with NO profile loses its own role.gapIds (only profile gaps are merged, and only when a profile exists).",
+   "file": "core/agents/role-context.ts",
+   "old": "const gapIds = uniqSorted([...role.gapIds, ...(profile ? [profile.reviewChain.gapId, profile.candidateSkills.gapId].filter((g): g is string => typeof g === \"string\") : [])]);",
+   "new": "const gapIds = uniqSorted(profile ? [...role.gapIds, profile.reviewChain.gapId, profile.candidateSkills.gapId].filter((g): g is string => typeof g === \"string\") : []);"
+  },
+  {
+   "id": "HW-A16",
+   "description": "Profile lookup falls back to profiles[0] when the role has no profile.",
+   "file": "core/agents/role-context.ts",
+   "old": "const profile = i.profiles.find(p => p.roleId === role.roleId);",
+   "new": "const profile = i.profiles.find(p => p.roleId === role.roleId) ?? i.profiles[0];"
+  },
+  {
+   "id": "HW-C16",
+   "description": "Input bindings are merged with the global FIRST_DELIVERY_BINDINGS, so the input table no longer fully decides EXECUTABLE.",
+   "file": "core/agents/role-context.ts",
+   "old": "const res = resolveRoleExecution(role.roleId, i.roles, i.bindings);",
+   "new": "const res = resolveRoleExecution(role.roleId, i.roles, [...i.bindings, ...FIRST_DELIVERY_BINDINGS]);"
+  },
+  {
+   "id": "HW-C17",
+   "description": "A context whose lists are all already empty but whose canonical text exceeds the cap is returned RESOLVED instead of ROLE_CONTEXT_EXCEEDS_BYTE_CAP.",
+   "file": "core/agents/role-context.ts",
+   "old": "while (finalSize(body) > maxBytes) {",
+   "new": "while (finalSize(body) > maxBytes && proposedAll.length + optional.length + aliases.length > 0) {"
+  },
+  {
+   "id": "HW-C08",
+   "description": "resolveAllRoleContexts silently uses a different default cap (1_000_000) when no maxBytes is given.",
+   "file": "core/agents/role-context.ts",
+   "old": ".map(id => resolveRoleContext(i, id, o));",
+   "new": ".map(id => resolveRoleContext(i, id, {maxBytes: o.maxBytes ?? 1_000_000}));"
+  },
+  {
+   "id": "HW-C04",
+   "description": "NOT_EXECUTABLE binding collapses every reason except ADAPTERS_MISSING into ROLE_HAS_NO_BINDING.",
+   "file": "core/agents/role-context.ts",
+   "old": "reason: res.reason, function: null",
+   "new": "reason: res.reason === \"ADAPTERS_MISSING\" ? \"ADAPTERS_MISSING\" : \"ROLE_HAS_NO_BINDING\", function: null"
+  },
+  {
+   "id": "HW-D01",
+   "description": "NOT_EXECUTABLE binding object gains an extra field (detail) not present in the typed shape.",
+   "file": "core/agents/role-context.ts",
+   "old": "reason: res.reason, function: null,",
+   "new": "reason: res.reason, detail: res.detail ?? null, function: null,"
+  },
+  {
+   "id": "HW-G01",
+   "description": "A defective (NOT_EXECUTABLE but bound) binding leaks the binding function into the context.",
+   "file": "core/agents/role-context.ts",
+   "old": "reason: res.reason, function: null, providerRoute: null, adapters: [], note",
+   "new": "reason: res.reason, function: i.bindings.find(b => b.roleId === role.roleId)?.function ?? null, providerRoute: null, adapters: [], note"
+  },
+  {
+   "id": "HW-G02",
+   "description": "A defective (NOT_EXECUTABLE but bound) binding leaks providerRoute into the context.",
+   "file": "core/agents/role-context.ts",
+   "old": "reason: res.reason, function: null, providerRoute: null, adapters: [], note",
+   "new": "reason: res.reason, function: null, providerRoute: i.bindings.find(b => b.roleId === role.roleId)?.providerRoute ?? null, adapters: [], note"
+  },
+  {
+   "id": "HW-G03",
+   "description": "A defective (NOT_EXECUTABLE but bound) binding leaks its adapters into the context.",
+   "file": "core/agents/role-context.ts",
+   "old": "reason: res.reason, function: null, providerRoute: null, adapters: [], note",
+   "new": "reason: res.reason, function: null, providerRoute: null, adapters: [...(i.bindings.find(b => b.roleId === role.roleId)?.adapters ?? [])], note"
+  },
+  {
+   "id": "HW-C11",
+   "description": "EXECUTABLE binding function has hyphens rewritten (business-analyst -> business_analyst).",
+   "file": "core/agents/role-context.ts",
+   "old": "function: res.profile.function,",
+   "new": "function: res.profile.function.replace(\"-\", \"_\"),"
+  },
+  {
+   "id": "HW-A14",
+   "description": "binding.adapters is sorted instead of kept in table order.",
+   "file": "core/agents/role-context.ts",
+   "old": "adapters: [...res.profile.adapters]",
+   "new": "adapters: [...res.profile.adapters].sort()"
+  },
+  {
+   "id": "HW-A15",
+   "description": "binding.adapters is de-duplicated.",
+   "file": "core/agents/role-context.ts",
+   "old": "adapters: [...res.profile.adapters]",
+   "new": "adapters: [...new Set(res.profile.adapters)]"
+  },
+  {
+   "id": "HW-A12",
+   "description": "reviewChain.value is sorted instead of keeping profile order.",
+   "file": "core/agents/role-context.ts",
+   "old": "value: [...profile.reviewChain.value]",
+   "new": "value: [...profile.reviewChain.value].sort()"
+  },
+  {
+   "id": "HW-A13",
+   "description": "reviewChain.value is de-duplicated.",
+   "file": "core/agents/role-context.ts",
+   "old": "value: [...profile.reviewChain.value]",
+   "new": "value: [...new Set(profile.reviewChain.value)]"
+  },
+  {
+   "id": "HW-A08",
+   "description": "specializationBoundaries are de-duplicated (responsibilities and forbiddenActions are pinned against this, this list is not).",
+   "file": "core/agents/role-context.ts",
+   "old": "specializationBoundaries: [...role.specializationBoundaries]}",
+   "new": "specializationBoundaries: [...new Set(role.specializationBoundaries)]}"
+  },
+  {
+   "id": "HW-A07",
+   "description": "canonicalNotInSk2 is built from the raw requiredSkillIds (not sorted, not de-duplicated).",
+   "file": "core/agents/role-context.ts",
+   "old": "canonicalNotInSk2: canonicalIds.filter(s => !i.skillIds.has(s))",
+   "new": "canonicalNotInSk2: role.requiredSkillIds.filter(s => !i.skillIds.has(s))"
+  },
+  {
+   "id": "HW-A44",
+   "description": "Aliases with the same legacyId are collapsed (last wins) before listing.",
+   "file": "core/agents/role-context.ts",
+   "old": "const aliases = [...role.legacyAliases].sort(",
+   "new": "const aliases = [...new Map(role.legacyAliases.map(a => [a.legacyId, a] as const)).values()].sort("
+  },
+  {
+   "id": "HW-A45",
+   "description": "Optional technology refs with a repeated technologyId are collapsed.",
+   "file": "core/agents/role-context.ts",
+   "old": "const optional = role.optionalTechnologies.map(t => tech(t, \"OPTIONAL\")).sort(bySlug);",
+   "new": "const optional = [...new Map(role.optionalTechnologies.map(t => [t.technologyId, t] as const)).values()].map(t => tech(t, \"OPTIONAL\")).sort(bySlug);"
+  },
+  {
+   "id": "HW-A19",
+   "description": "bySlug comparator returns -1 instead of 0 for equal ids, which reverses the order of duplicate technology refs.",
+   "file": "core/agents/role-context.ts",
+   "old": "a.technologyId > b.technologyId ? 1 : 0)",
+   "new": "a.technologyId > b.technologyId ? 1 : -1)"
+  },
+  {
+   "id": "HW-A20",
+   "description": "Alias comparator returns -1 instead of 0 for equal legacyId, reversing the order of aliases with the same id.",
+   "file": "core/agents/role-context.ts",
+   "old": "a.legacyId > b.legacyId ? 1 : 0)",
+   "new": "a.legacyId > b.legacyId ? 1 : -1)"
+  },
+  {
+   "id": "HW-E01",
+   "description": "Unregistered optional refs are stable-partitioned to the FRONT of the optional list (after the slug sort).",
+   "file": "core/agents/role-context.ts",
+   "old": "const optional = role.optionalTechnologies.map(t => tech(t, \"OPTIONAL\")).sort(bySlug);",
+   "new": "const optional = role.optionalTechnologies.map(t => tech(t, \"OPTIONAL\")).sort(bySlug).sort((a, b) => (a.registryId === null ? 0 : 1) - (b.registryId === null ? 0 : 1));"
+  },
+  {
+   "id": "HW-E02",
+   "description": "Unregistered REQUIRED refs are stable-partitioned to the front of the required list.",
+   "file": "core/agents/role-context.ts",
+   "old": "const required = role.requiredTechnologies.map(t => tech(t, \"REQUIRED\")).sort(bySlug);",
+   "new": "const required = role.requiredTechnologies.map(t => tech(t, \"REQUIRED\")).sort(bySlug).sort((a, b) => (a.registryId === null ? 0 : 1) - (b.registryId === null ? 0 : 1));"
+  },
+  {
+   "id": "HW-E03",
+   "description": "SEMANTIC_VERIFIED aliases are sorted ahead of the other aliases (after the legacyId sort).",
+   "file": "core/agents/role-context.ts",
+   "old": ": 0)).map(a => ({",
+   "new": ": 0)).sort((x, y) => Number(y.status === \"SEMANTIC_VERIFIED\") - Number(x.status === \"SEMANTIC_VERIFIED\")).map(a => ({"
+  },
+  {
+   "id": "HW-A21",
+   "description": "usedForProposedSkills additionally requires a legacy matrix row for the alias.",
+   "file": "core/agents/role-context.ts",
+   "old": "usedForProposedSkills: a.status === \"SEMANTIC_VERIFIED\"",
+   "new": "usedForProposedSkills: a.status === \"SEMANTIC_VERIFIED\" && i.legacySkills.has(a.legacyId)"
+  },
+  {
+   "id": "HW-C07",
+   "description": "usedForProposedSkills means 'actually contributed a proposed skill' instead of 'is SEMANTIC_VERIFIED'.",
+   "file": "core/agents/role-context.ts",
+   "old": "usedForProposedSkills: a.status === \"SEMANTIC_VERIFIED\"",
+   "new": "usedForProposedSkills: [...via.values()].some(set => set.has(a.legacyId))"
+  },
+  {
+   "id": "HW-D07",
+   "description": "Only the first SEMANTIC_VERIFIED alias (input order) is flagged usedForProposedSkills.",
+   "file": "core/agents/role-context.ts",
+   "old": "usedForProposedSkills: a.status === \"SEMANTIC_VERIFIED\"",
+   "new": "usedForProposedSkills: a.status === \"SEMANTIC_VERIFIED\" && a.legacyId === role.legacyAliases.find(x => x.status === \"SEMANTIC_VERIFIED\")?.legacyId"
+  },
+  {
+   "id": "HW-A32",
+   "description": "usedForProposedSkills uses a prefix match on status (startsWith SEMANTIC).",
+   "file": "core/agents/role-context.ts",
+   "old": "usedForProposedSkills: a.status === \"SEMANTIC_VERIFIED\"",
+   "new": "usedForProposedSkills: a.status.startsWith(\"SEMANTIC\")"
+  },
+  {
+   "id": "HW-C05",
+   "description": "Proposed skills additionally skip aliases whose approval is REJECTED.",
+   "file": "core/agents/role-context.ts",
+   "old": "if (a.status !== \"SEMANTIC_VERIFIED\") continue;",
+   "new": "if (a.status !== \"SEMANTIC_VERIFIED\" || a.approval === \"REJECTED\") continue;"
+  },
+  {
+   "id": "HW-C06",
+   "description": "Proposed skills additionally require an approval value on the alias.",
+   "file": "core/agents/role-context.ts",
+   "old": "if (a.status !== \"SEMANTIC_VERIFIED\") continue;",
+   "new": "if (a.status !== \"SEMANTIC_VERIFIED\" || a.approval == null) continue;"
+  },
+  {
+   "id": "HW-A33",
+   "description": "Alias status match uses includes() instead of equality.",
+   "file": "core/agents/role-context.ts",
+   "old": "if (a.status !== \"SEMANTIC_VERIFIED\") continue;",
+   "new": "if (!a.status.includes(\"SEMANTIC_VERIFIED\")) continue;"
+  },
+  {
+   "id": "HW-A46",
+   "description": "Loader accepts any reviewChain.status starting with PROPOSED (not only the exact allow-list).",
+   "file": "core/agents/role-context.ts",
+   "old": "!ROLE_CONTEXT_PROFILE_STATUSES.includes(p.reviewChain.status as string)",
+   "new": "!(typeof p.reviewChain.status === \"string\" && p.reviewChain.status.startsWith(\"PROPOSED\"))"
+  },
+  {
+   "id": "HW-C14",
+   "description": "Profile gap ids (review chain and candidate skills) are dropped when the profile review chain is empty.",
+   "file": "core/agents/role-context.ts",
+   "old": "...(profile ? [profile.reviewChain.gapId",
+   "new": "...(profile && profile.reviewChain.value.length > 0 ? [profile.reviewChain.gapId"
+  },
+  {
+   "id": "HW-A04",
+   "description": "uniqSorted (gapIds, canonical ids, viaLegacyIds, role ids) sorts with localeCompare instead of code-point order.",
+   "file": "core/agents/role-context.ts",
+   "old": "[...new Set(xs)].sort()",
+   "new": "[...new Set(xs)].sort((a, b) => a.localeCompare(b))"
+  },
+  {
+   "id": "HW-A17",
+   "description": "Profile lookup takes the LAST matching profile (findLast) instead of the first.",
+   "file": "core/agents/role-context.ts",
+   "old": "const profile = i.profiles.find(p => p.roleId === role.roleId);",
+   "new": "const profile = i.profiles.findLast(p => p.roleId === role.roleId);"
+  },
+  {
+   "id": "HW-A18",
+   "description": "Guild lookup takes the LAST matching guild (findLast).",
+   "file": "core/agents/role-context.ts",
+   "old": "const guild = i.guilds.find(g => g.guildId === role.guildId);",
+   "new": "const guild = i.guilds.findLast(g => g.guildId === role.guildId);"
+  },
+  {
+   "id": "HW-C23",
+   "description": "Guild lookup additionally requires the guild clusterId to equal the role clusterId.",
+   "file": "core/agents/role-context.ts",
+   "old": "const guild = i.guilds.find(g => g.guildId === role.guildId);",
+   "new": "const guild = i.guilds.find(g => g.guildId === role.guildId && g.clusterId === role.clusterId);"
+  },
+  {
+   "id": "HW-D05",
+   "description": "Guild lookup is case-insensitive.",
+   "file": "core/agents/role-context.ts",
+   "old": "const guild = i.guilds.find(g => g.guildId === role.guildId);",
+   "new": "const guild = i.guilds.find(g => g.guildId.toLowerCase() === role.guildId.toLowerCase());"
+  },
+  {
+   "id": "HW-D06",
+   "description": "Profile lookup is case-insensitive.",
+   "file": "core/agents/role-context.ts",
+   "old": "const profile = i.profiles.find(p => p.roleId === role.roleId);",
+   "new": "const profile = i.profiles.find(p => p.roleId.toLowerCase() === role.roleId.toLowerCase());"
+  },
+  {
+   "id": "HW-A34",
+   "description": "guildName falls back to the guild id when the guild row has no name.",
+   "file": "core/agents/role-context.ts",
+   "old": "guildName: guild?.name ?? null",
+   "new": "guildName: guild?.name ?? guild?.guildId ?? null"
+  },
+  {
+   "id": "HW-A35",
+   "description": "priority falls back to lifecycle when missing.",
+   "file": "core/agents/role-context.ts",
+   "old": "priority: role.priority ?? null",
+   "new": "priority: role.priority ?? role.lifecycle ?? null"
+  },
+  {
+   "id": "HW-A36",
+   "description": "lifecycle falls back to priority when missing.",
+   "file": "core/agents/role-context.ts",
+   "old": "lifecycle: role.lifecycle ?? null",
+   "new": "lifecycle: role.lifecycle ?? role.priority ?? null"
+  },
+  {
+   "id": "HW-A37",
+   "description": "alias approval falls back to legacyTitle when missing.",
+   "file": "core/agents/role-context.ts",
+   "old": "approval: a.approval ?? null",
+   "new": "approval: a.approval ?? a.legacyTitle ?? null"
+  },
+  {
+   "id": "HW-A38",
+   "description": "alias legacyTitle falls back to approval when missing.",
+   "file": "core/agents/role-context.ts",
+   "old": "legacyTitle: a.legacyTitle ?? null",
+   "new": "legacyTitle: a.legacyTitle ?? a.approval ?? null"
+  },
+  {
+   "id": "HW-A30",
+   "description": "stable() no longer omits undefined-valued keys, so digest and bytes disagree with JSON.stringify and the documented spec.",
+   "file": "core/agents/role-context.ts",
+   "old": ".filter(k => o[k] !== undefined)",
+   "new": ""
+  },
+  {
+   "id": "HW-A31",
+   "description": "maxBytes: null is rejected instead of falling back to the default (?? replaced by === undefined).",
+   "file": "core/agents/role-context.ts",
+   "old": "const maxBytes = o.maxBytes ?? ROLE_CONTEXT_DEFAULT_MAX_BYTES;",
+   "new": "const maxBytes = o.maxBytes === undefined ? ROLE_CONTEXT_DEFAULT_MAX_BYTES : o.maxBytes;"
+  },
+  {
+   "id": "HW-A22",
+   "description": "registryId uses || so an empty-string registry id becomes null.",
+   "file": "core/agents/role-context.ts",
+   "old": "registryId: reg?.id ?? null",
+   "new": "registryId: reg?.id || null"
+  },
+  {
+   "id": "HW-A23",
+   "description": "registryStatus uses || so an empty-string registry status becomes null.",
+   "file": "core/agents/role-context.ts",
+   "old": "registryStatus: reg?.status ?? null",
+   "new": "registryStatus: reg?.status || null"
+  },
+  {
+   "id": "HW-A24",
+   "description": "knowledgeState uses || so an empty-string knowledge state becomes null.",
+   "file": "core/agents/role-context.ts",
+   "old": "knowledgeState: reg?.knowledgeState ?? null}",
+   "new": "knowledgeState: reg?.knowledgeState || null}"
+  },
+  {
+   "id": "HW-A25",
+   "description": "priority uses || so an empty-string priority becomes null.",
+   "file": "core/agents/role-context.ts",
+   "old": "priority: role.priority ?? null",
+   "new": "priority: role.priority || null"
+  },
+  {
+   "id": "HW-A26",
+   "description": "lifecycle uses || so an empty-string lifecycle becomes null.",
+   "file": "core/agents/role-context.ts",
+   "old": "lifecycle: role.lifecycle ?? null",
+   "new": "lifecycle: role.lifecycle || null"
+  },
+  {
+   "id": "HW-A27",
+   "description": "guildName uses || so an empty-string guild name becomes null.",
+   "file": "core/agents/role-context.ts",
+   "old": "guildName: guild?.name ?? null",
+   "new": "guildName: guild?.name || null"
+  },
+  {
+   "id": "HW-A28",
+   "description": "alias legacyTitle uses || so an empty-string title becomes null.",
+   "file": "core/agents/role-context.ts",
+   "old": "legacyTitle: a.legacyTitle ?? null",
+   "new": "legacyTitle: a.legacyTitle || null"
+  },
+  {
+   "id": "HW-A29",
+   "description": "alias approval uses || so an empty-string approval becomes null.",
+   "file": "core/agents/role-context.ts",
+   "old": "approval: a.approval ?? null",
+   "new": "approval: a.approval || null"
+  },
+  {
+   "id": "HW-D18",
+   "description": "A registry row with an empty-string id is treated as unregistered for the status (status becomes NAME_NOT_VERIFIED_IN_REGISTRY).",
+   "file": "core/agents/role-context.ts",
+   "old": "registryId: reg?.id ?? null, status: reg ? t.status : NAME_NOT_VERIFIED",
+   "new": "registryId: reg?.id ?? null, status: reg?.id ? t.status : NAME_NOT_VERIFIED"
+  },
+  {
+   "id": "HW-C09",
+   "description": "alias legacyTitle is upper-cased.",
+   "file": "core/agents/role-context.ts",
+   "old": "legacyTitle: a.legacyTitle ?? null",
+   "new": "legacyTitle: a.legacyTitle?.toUpperCase() ?? null"
+  },
+  {
+   "id": "HW-C18",
+   "description": "alias status is upper-cased in the output.",
+   "file": "core/agents/role-context.ts",
+   "old": "status: a.status, approval",
+   "new": "status: a.status.toUpperCase(), approval"
+  },
+  {
+   "id": "HW-C19",
+   "description": "The role's own technology status is upper-cased in the output.",
+   "file": "core/agents/role-context.ts",
+   "old": "status: reg ? t.status : NAME_NOT_VERIFIED",
+   "new": "status: reg ? t.status.toUpperCase() : NAME_NOT_VERIFIED"
+  },
+  {
+   "id": "HW-C21",
+   "description": "reviewChain.origin is upper-cased.",
+   "file": "core/agents/role-context.ts",
+   "old": "reviewChain: profile ? {origin: profile.reviewChain.status,",
+   "new": "reviewChain: profile ? {origin: profile.reviewChain.status.toUpperCase(),"
+  },
+  {
+   "id": "HW-A39",
+   "description": "Technology registry lookup trims the technologyId.",
+   "file": "core/agents/role-context.ts",
+   "old": "const reg = i.technologies.get(t.technologyId);",
+   "new": "const reg = i.technologies.get(t.technologyId.trim());"
+  },
+  {
+   "id": "HW-A40",
+   "description": "Legacy matrix lookup trims the alias legacyId.",
+   "file": "core/agents/role-context.ts",
+   "old": "for (const s of i.legacySkills.get(a.legacyId) ?? [])",
+   "new": "for (const s of i.legacySkills.get(a.legacyId.trim()) ?? [])"
+  },
+  {
+   "id": "HW-A41",
+   "description": "Alias status match trims whitespace before comparing to SEMANTIC_VERIFIED.",
+   "file": "core/agents/role-context.ts",
+   "old": "if (a.status !== \"SEMANTIC_VERIFIED\") continue;",
+   "new": "if (a.status.trim() !== \"SEMANTIC_VERIFIED\") continue;"
+  },
+  {
+   "id": "HW-A42",
+   "description": "Proposed-skill SK2 membership check is case-insensitive (upper-cases the legacy skill id).",
+   "file": "core/agents/role-context.ts",
+   "old": "if (i.skillIds.has(s) && !canonicalSet.has(s)) via.set",
+   "new": "if (i.skillIds.has(s.toUpperCase()) && !canonicalSet.has(s)) via.set"
+  },
+  {
+   "id": "HW-A43",
+   "description": "Canonical SK2 membership check is case-insensitive.",
+   "file": "core/agents/role-context.ts",
+   "old": "canonicalIds.filter(s => i.skillIds.has(s)).map",
+   "new": "canonicalIds.filter(s => i.skillIds.has(s.toUpperCase())).map"
+  },
+  {
+   "id": "HW-A48",
+   "description": "The MAX_BYTES error message gains a suffix.",
+   "file": "core/agents/role-context.ts",
+   "old": "throw new Error(`ROLE_CONTEXT_INPUT_INVALID:MAX_BYTES:${String(maxBytes)}`)",
+   "new": "throw new Error(`ROLE_CONTEXT_INPUT_INVALID:MAX_BYTES:${String(maxBytes)} (must be positive)`)"
+  },
+  {
+   "id": "HW-A49",
+   "description": "The loader UNAVAILABLE error message gains a suffix.",
+   "file": "core/agents/role-context.ts",
+   "old": "const unavailable = (rel: string): Error => new Error(`ROLE_CONTEXT_INPUT_UNAVAILABLE:${rel}`);",
+   "new": "const unavailable = (rel: string): Error => new Error(`ROLE_CONTEXT_INPUT_UNAVAILABLE:${rel}:EMPTY_OR_MALFORMED`);"
+  },
+  {
+   "id": "HW-A50",
+   "description": "The duplicate-key error message gains a suffix after the key.",
+   "file": "core/agents/role-context.ts",
+   "old": "throw new Error(`ROLE_CONTEXT_INPUT_INVALID:${code}:${key(x)}`)",
+   "new": "throw new Error(`ROLE_CONTEXT_INPUT_INVALID:${code}:${key(x)}:FIRST_WINS`)"
   }
  ]
 }
