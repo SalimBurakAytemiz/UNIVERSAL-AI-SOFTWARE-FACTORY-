@@ -1,5 +1,5 @@
 // //TR: UASCO Local Windows Test Worker testleri: plan kapsamı (48 canonical adımın tamamı), iş/ana makine kabul kuralları, tekil claim (iki süreç yarışı), tekrar önleme, çökme kurtarma, zaman aşımı, korumalı dosya kayması reddi, kanıt özeti/kurcalama tespiti, yalıtım yapılandırması ve en az yetkili status yükü. Uçtan uca akış gerçek git deposu, gerçek arşiv/çıkarma ve gerçek run-steps.mjs ile çalışır; yalnız Windows Sandbox başlatıcısı test dublörüdür (gerçek sandbox yalnız Founder PC'sinde doğrulanabilir). Kayıtlı bir test dosyasından çağrılır.
-import {describe, it, expect} from "vitest";
+import {describe, it, expect, vi} from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -169,7 +169,49 @@ export function registerLocalWorkerCases() {
       const here = probeHost();
       expect(here.readOnly).toBe(true);
       if (process.platform !== "win32") expect([here.supported, here.sandbox.available]).toEqual([false, false]);
-      else expect(typeof here.memory?.totalMB).toBe("number");
+      else expect(typeof here.memory?.totalMB, JSON.stringify({reasons: here.reasons, probeError: here.probeError})).toBe("number");
+    });
+  });
+
+  describe("local Windows test worker: probe failures name their mechanism (deterministic, injected run, platform win32)", () => {
+    const GUID_A = "0f8fad5b-d9cb-469f-a165-70867728950e", GUID_B = "7C9E6679742540DE944BE07FC1F90AE7";
+    const probe = (r: any) => probeHost({run: () => r, platform: "win32", now: 1_700_000_000_000});
+    const failureCases: Array<[string, any, string, Record<string, unknown>]> = [
+      ["timeout", {error: Object.assign(new Error("spawnSync powershell.exe ETIMEDOUT"), {code: "ETIMEDOUT"}), status: null, signal: "SIGTERM", stdout: "", stderr: ""}, "PROBE_TIMEOUT", {code: "ETIMEDOUT", status: null, signal: "SIGTERM"}],
+      ["spawn failure with stdout undefined", {error: Object.assign(new Error("spawn powershell.exe ENOENT"), {code: "ENOENT"}), status: null, stdout: undefined, stderr: undefined}, "PROBE_SPAWN_FAILED", {code: "ENOENT", stdoutBytes: 0}],
+      ["non-zero exit, empty stdout", {status: 3221225794, signal: null, stdout: "", stderr: `fatal ${GUID_A} {${GUID_B}}`}, "PROBE_EXIT_NONZERO", {status: 3221225794, stdoutBytes: 0}],
+      ["non-JSON line", {status: 0, stdout: `warning: machine ${GUID_A}\n`, stderr: ""}, "PROBE_OUTPUT_NOT_JSON", {status: 0}],
+      ["null", {status: 0, stdout: "null\n", stderr: ""}, "PROBE_OUTPUT_NOT_OBJECT", {}],
+      ["array", {status: 0, stdout: "[1,2]", stderr: ""}, "PROBE_OUTPUT_NOT_OBJECT", {}],
+      ["number", {status: 0, stdout: "42", stderr: ""}, "PROBE_OUTPUT_NOT_OBJECT", {}]
+    ];
+    it.each(failureCases)("%s -> supported:false with the specific reason, bounded probeError, no raw GUID anywhere", (_n, r, why, probeError) => {
+      const p = probe(r);
+      expect([p.supported, p.reasons, p.sandbox, p.fingerprint]).toEqual([false, ["PROBE_FAILED", why], {available: false, reasons: ["PROBE_FAILED"]}, null]);
+      expect(p.probeError).toMatchObject(probeError); expect(typeof p.probeError.durationMs).toBe("number");
+      const json = JSON.stringify(p); expect(json).not.toContain(GUID_A); expect(json).not.toContain(GUID_B); expect(json.toLowerCase()).not.toContain(GUID_B.toLowerCase());
+    });
+    it("stderrTail keeps the last 400 characters AFTER redaction (a GUID that straddles the 400-char cut cannot leak a fragment) and never carries stdout", () => {
+      // GUID_A'nın ilk 16 karakteri kesim noktasının DIŞINDA kalır: önce kırpılıp sonra sansürlenseydi 20 karakterlik bir parça sızardı.
+      const stderr = "x".repeat(50) + GUID_A + "y".repeat(400 - 20) + "tail"; const p = probe({status: 1, stdout: `partial ${GUID_A}`, stderr});
+      expect(p.probeError.stderrTail.length).toBeLessThanOrEqual(400); expect(p.probeError.stderrTail).toContain("<GUID>"); expect(p.probeError.stdoutBytes).toBe(`partial ${GUID_A}`.length);
+      expect(JSON.stringify(p)).not.toContain("partial"); for (const part of [GUID_A.slice(0, 20), GUID_A.slice(-20), GUID_A.slice(-12)]) expect(JSON.stringify(p), part).not.toContain(part);
+      const p2 = probe({status: 1, stdout: "", stderr: "z".repeat(450) + `{${GUID_B}}`}); expect(p2.probeError.stderrTail.length).toBeLessThanOrEqual(400); expect(JSON.stringify(p2).toLowerCase()).not.toContain(GUID_B.slice(-12).toLowerCase());
+    });
+    it("durationMs is the measured time around the spawn", () => {
+      const clock = vi.spyOn(Date, "now").mockReturnValueOnce(1_000).mockReturnValueOnce(1_750);
+      try { expect(probe({status: 1, stdout: "", stderr: ""}).probeError.durationMs).toBe(750); } finally { clock.mockRestore(); }
+    });
+    it("a valid object stays supported with its numeric memory - also with a non-zero exit (no new failure mode)", () => {
+      const raw = {os: {editionId: "Professional", build: "26100"}, cpu: {name: "x", logical: 8}, hypervisorPresent: true, memory: {totalMB: 16304, freeMB: 9800}, sandboxExe: true, machineGuid: GUID_A};
+      for (const status of [0, 1]) {
+        const p = probe({status, stdout: JSON.stringify(raw), stderr: ""});
+        expect([p.supported, typeof p.memory.totalMB, p.probeError, JSON.stringify(p).includes(GUID_A)]).toEqual([true, "number", undefined, false]);
+      }
+    });
+    it("a failure-free timing is measured around the unchanged 60 s spawn (the timeout is NOT raised)", () => {
+      let opts: any; probeHost({run: (_c: string, _a: string[], o: any) => { opts = o; return {status: 0, stdout: "{}"}; }, platform: "win32"});
+      expect(opts.timeout).toBe(60000);
     });
   });
 
