@@ -1768,6 +1768,26 @@ describe("LANE-A task run link", () => {
     const few = await open({linked: {runs: []}, missionRuns: [R1, R2, R3]});
     expect(text(field(few.root))).toBe("3 run(s) linked to the mission (not to this task)");
   });
+  // //TR: A-281-LOWS: mission koşu listesi 500\'de kesildiyse görev-koşu paneli "bağlı olmayan koşu yok" demez; hangi koşuların bağlı olmadığı söylenemez ve bağlama için koşu sunulmaz.
+  it("task-runs panel: a mission run list cut at the 500-run cap never claims 'no run that is not linked'; it says the unlinked runs cannot be determined and offers none (en/tr pinned)", async () => {
+    const rid = (i: number) => "run_" + i.toString(16).padStart(24, "0");
+    const note = (root: N) => byData(root, "taskrunsNote")[0];
+    const cut = await open({linked: {runs: []}, missionRuns: Array.from({length: 502}, (_, i) => rid(i))});
+    expect(note(cut.root).dataset.taskrunsNote).toBe("runsCut");
+    expect(text(note(cut.root))).toBe("The mission's run list was cut after 500 runs, so it cannot be said which runs are not yet linked to this task; none are offered for linking.");
+    expect(text(byId(cut.root, "task-runs")!)).not.toContain("no run that is not linked");
+    expect(byId(cut.root, "taskruns-run")).toBeNull();
+    expect(byId(cut.root, "taskruns-submit")).toBeNull();
+    const exact = await open({linked: {runs: []}, missionRuns: Array.from({length: 500}, (_, i) => rid(i))});
+    expect(note(exact.root)).toBeUndefined();
+    expect(byId(exact.root, "taskruns-run")).not.toBeNull();
+    const allLinked = await open({linked: {runs: [link(R1)]}, missionRuns: [R1]});
+    expect(note(allLinked.root).dataset.taskrunsNote).toBe("noUnlinked");
+    expect(text(note(allLinked.root))).toBe("This mission has no run that is not linked to this task yet. Start a run first.");
+    const en = (await load(rend, "locales", "en.js")).default as Record<string, string>, tr = (await load(rend, "locales", "tr.js")).default as Record<string, string>;
+    expect(tr["taskruns.runsCut"]).toBe("Mission'ın koşu listesi {n} koşudan sonra kesildi; hangi koşuların bu göreve henüz bağlı olmadığı söylenemez, bağlanacak koşu sunulmuyor.");
+    expect(en["taskruns.runsCut"]).toBe("The mission's run list was cut after {n} runs, so it cannot be said which runs are not yet linked to this task; none are offered for linking.");
+  });
   it("maps the link read strictly and offers only unlinked, canonical, unique runs", async () => {
     const c = await load(rend, "work-core.js");
     const ok = c.mapTaskRuns({runs: [link(R1), {link: link(R2).link, run: null}]});
@@ -2056,7 +2076,8 @@ describe("LANE-A task run link", () => {
     const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js");
     const E = en.default ?? en.EN ?? en, T = tr.default ?? tr.TR ?? tr;
     const keys = Object.keys(E).filter(k => k.startsWith("taskruns.") || k.startsWith("flow.taskRuns"));
-    expect(keys.length).toBe(33);
+    // //TR: A-281-LOWS: yeni anahtar taskruns.runsCut eklendi; sayı 33 -> 34.
+    expect(keys.length).toBe(34);
     for (const k of keys) expect(T[k], k).toBeTruthy();
   });
 });
