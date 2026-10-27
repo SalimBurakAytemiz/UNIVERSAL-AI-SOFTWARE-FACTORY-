@@ -1082,6 +1082,16 @@
       "ref": "wf_f7f9a1c7-d48:a277",
       "policy": "TEP-1",
       "at": "2026-10-27T08:30:16.459Z"
+    },
+    {
+      "pr": 284,
+      "sha": "ec7caca1a968c2c5682bdbe054b3fcd311156965",
+      "kind": "full",
+      "base": null,
+      "verdict": "NO_BLOCKERS_4LOW",
+      "ref": "wf_6b9c167d-7a8",
+      "policy": "TEP-1",
+      "at": "2026-10-27T08:41:29.748Z"
     }
   ],
   "tests": [],
