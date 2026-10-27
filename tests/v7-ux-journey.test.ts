@@ -1041,6 +1041,76 @@ describe("LANE-A A-FLOW-5 analysis step — view (Journey)", () => {
   const press = async (b: any, id: string) => { fire(byId(b.root, id)!, "click"); await new Promise(r => setTimeout(r, 0)); b.root = await renderJourney(b.ctx); return b.root; };
   const block = (root: N) => byId(root, "analysis-step")!;
   const stOf = (root: N, form = "analysis-step") => byId(root, `${form}-status`)!;
+  // //TR: A-ANALYSIS-L10N (F1): analiz rotasının/çekirdeğin döndürebildiği HER engel kodunun en/tr metni vardır; kod listesi GERÇEK kaynak dosyalardan (claude-profiles.ts, analysis.ts, first-delivery-bindings.ts) çıkarılır, elle yazılmaz; yeni bir kod eklenir ve metni yoksa bu test düşer.
+  it("F1: every blocker code the analysis route and core can return has an English and a Turkish text (no '(not recognised)'), the list is read from the real sources, and EXECUTOR_NOT_ENABLED shows its text through the real block", async () => {
+    const src = (f: string) => fs.readFileSync(path.join(__dirname, "..", f), "utf8");
+    const cp = src("core/workos/claude-profiles.ts"), an = src("core/workos/crew/analysis.ts"), fdb = src("core/agents/first-delivery-bindings.ts");
+    const codes = new Set<string>();
+    for (const m of /export type LauncherCheck = [^\n]*/.exec(cp)![0].matchAll(/"([A-Z][A-Z0-9_]+)"/g)) codes.add(m[1]);
+    const body = cp.slice(cp.indexOf("export function claudeRoleReadiness("), cp.indexOf("// //TR: Claude CLI yazdırma kipinde"));
+    for (const m of body.matchAll(/\b((?:CLAUDE|PROVIDER|CLI)_[A-Z_]+)\b/g)) codes.add(m[1]);
+    for (const m of an.matchAll(/blockedStep\("([A-Z_]+)"/g)) codes.add(m[1]);
+    for (const m of an.matchAll(/\?\? "([A-Z_]+)"/g)) codes.add(m[1]);
+    const { EXECUTOR_NOT_ENABLED } = await import("../core/workos/crew/analysis.js"); codes.add(EXECUTOR_NOT_ENABLED);
+    if (/ROLE_NOT_EXECUTABLE/.test(fdb)) codes.add("ROLE_NOT_EXECUTABLE");
+    for (const known of ["CLAUDE_CLI_NOT_FOUND", "CLAUDE_CLI_SHIM_UNSUPPORTED", "PROVIDER_PROVENANCE_NOT_READY", "CLAUDE_PACKAGE_PROVENANCE_REQUIRED", "CLAUDE_LAUNCHER_PROVENANCE_CHANGED", "CLAUDE_PACKAGE_PROVENANCE_CHANGED", "CLAUDE_PROFILE_LOGIN_REQUIRED", "CLAUDE_PROFILE_REFUSED", "ANALYSIS_IN_PROGRESS", "ANALYSIS_PHASE_NOT_ADVANCED", "ANALYSIS_NOT_READY", "EXECUTOR_NOT_ENABLED", "ROLE_NOT_EXECUTABLE"]) expect(codes.has(known), `source scan lost ${known}`).toBe(true);
+    const an2 = await load("views", "analysis-step.js"), i18n = await load("i18n.js");
+    const E = (await load("locales", "en.js")).default as Record<string, string>, T = (await load("locales", "tr.js")).default as Record<string, string>;
+    for (const [lang, dict] of [["en", E], ["tr", T]] as const) {
+      const ctx = { t: (k: string, v?: any) => i18n.translate(lang, k, v) };
+      for (const code of [...codes].sort()) {
+        const variants = code.startsWith("CLAUDE_PROFILE_") ? [code, `implementer:${code}`, `reviewer:${code}`, ...(code === "CLAUDE_PROFILE_REFUSED" ? [`implementer:${code}:PROFILE_PATH_INSIDE_GIT_WORKTREE`] : [])] : [code, ...(code === "ROLE_NOT_EXECUTABLE" ? ["ROLE_NOT_EXECUTABLE:ROLE_HAS_NO_BINDING:UASCO-0001"] : [])];
+        for (const v of variants) {
+          const t = an2.blockerText(ctx, v);
+          expect(t, `${lang} ${v}`).not.toMatch(/not recognised|tanınmadı/);
+          expect(t, `${lang} ${v}`).not.toBe(v);
+        }
+        expect(dict[`analysis.blocker.${code}`], `${lang} analysis.blocker.${code}`).toBeTruthy();
+      }
+    }
+    expect(E["analysis.blocker.EXECUTOR_NOT_ENABLED"]).toBe("Local Claude is not enabled, so no draft can be produced. Open Settings, then Executors, and enable Local Claude.");
+    expect(T["analysis.blocker.EXECUTOR_NOT_ENABLED"]).toBe("Local Claude etkin değil, bu yüzden taslak üretilemez. Ayarlar > Yürütücüler bölümünden Local Claude'u etkinleştirin.");
+    expect(E["analysis.blocker.ANALYSIS_IN_PROGRESS"]).toBe("A draft for this mission is already being produced. Wait for it to finish, then look at the pending draft.");
+    expect(T["analysis.blocker.ANALYSIS_IN_PROGRESS"]).toBe("Bu mission için bir taslak zaten üretiliyor. Bitmesini bekleyin, sonra bekleyen taslağa bakın.");
+    expect(E["analysis.blocker.CLAUDE_PACKAGE_PROVENANCE_CHANGED"]).toBe("The installed Claude Code package changed after it was verified. Enable Local Claude again to verify the new install.");
+    expect(T["analysis.blocker.CLAUDE_PACKAGE_PROVENANCE_CHANGED"]).toBe("Kurulu Claude Code paketi doğrulandıktan sonra değişti. Yeni kurulumu doğrulamak için Local Claude'u yeniden etkinleştirin.");
+    // through the real block: the route's own free BLOCKED (no builder) ends with EXECUTOR_NOT_ENABLED
+    const b = await open({status: 200, body: {status: "BLOCKED", blocker: "PROVIDER_PROVENANCE_NOT_READY", blockers: ["PROVIDER_PROVENANCE_NOT_READY", "EXECUTOR_NOT_ENABLED"], founderAction: "free text"}});
+    const after = await press(b, "analysis-step-submit");
+    const rows = allData(block(after), "analysisBlocker");
+    expect(rows.map(n => n.dataset.analysisBlocker)).toEqual(["PROVIDER_PROVENANCE_NOT_READY", "EXECUTOR_NOT_ENABLED"]);
+    expect(rows[1].textContent).toBe("Local Claude is not enabled, so no draft can be produced. Open Settings, then Executors, and enable Local Claude.");
+    expect(block(after).textContent).not.toContain("not recognised");
+  });
+
+  // //TR: A-ANALYSIS-L10N (F2): 409 WORKOS_CONFLICT + reason köprüden geçer ve görünümde SEBEP metniyle gösterilir; genel "idempotency anahtarı" metni değil.
+  it("F2: a 409 WORKOS_CONFLICT with a reason (MISSION_NOT_PREDEV_ELIGIBLE) is its own state with the truthful text, an unknown reason still shows the code, and a 409 without a valid reason stays the generic conflict", async () => {
+    const c = await load("analysis-core.js");
+    const R = (status: number, body: any) => c.classifyAnalysisStep({status, body});
+    expect(R(409, {error: "WORKOS_CONFLICT", reason: "MISSION_NOT_PREDEV_ELIGIBLE"})).toEqual({kind: "CONFLICT", reason: "MISSION_NOT_PREDEV_ELIGIBLE"});
+    expect(R(409, {error: "WORKOS_CONFLICT", reason: "SOMETHING_NEW"})).toEqual({kind: "CONFLICT", reason: "SOMETHING_NEW"});
+    for (const bad of [{error: "WORKOS_CONFLICT"}, {error: "WORKOS_CONFLICT", reason: "lower case"}, {error: "WORKOS_CONFLICT", reason: 5}, {error: "WORKOS_CONFLICT", reason: "A".repeat(65)}, {error: "OTHER", reason: "MISSION_NOT_PREDEV_ELIGIBLE"}]) expect(R(409, bad).kind, JSON.stringify(bad)).toBe("FAILED");
+    for (const st of [200, 400, 404, 500, 502]) expect(R(st, {error: "WORKOS_CONFLICT", reason: "MISSION_NOT_PREDEV_ELIGIBLE"}).kind, `status ${st}`).not.toBe("CONFLICT");
+    expect(c.analysisStatusKey({kind: "CONFLICT", reason: "MISSION_NOT_PREDEV_ELIGIBLE"}, {}, "step")).toEqual({ok: false, key: "analysis.conflict.MISSION_NOT_PREDEV_ELIGIBLE", vars: {}});
+    expect(c.analysisStatusKey({kind: "CONFLICT", reason: "SOMETHING_NEW"}, {}, "step")).toEqual({ok: false, key: "analysis.conflict.other", vars: {reason: "SOMETHING_NEW"}});
+    expect(c.ANALYSIS_CONFLICT_REASONS).toEqual(["MISSION_NOT_PREDEV_ELIGIBLE"]);
+    const E = (await load("locales", "en.js")).default as Record<string, string>, T = (await load("locales", "tr.js")).default as Record<string, string>;
+    expect(E["analysis.conflict.MISSION_NOT_PREDEV_ELIGIBLE"]).toBe("This mission is no longer open for the pre-development analysis (for example a run has already started). Nothing was produced.");
+    expect(T["analysis.conflict.MISSION_NOT_PREDEV_ELIGIBLE"]).toBe("Bu mission artık ön geliştirme analizine açık değil (örneğin bir koşu zaten başladı). Hiçbir şey üretilmedi.");
+    expect(E["analysis.conflict.other"]).toBe("The server refused the analysis step because of a conflict ({reason}). Nothing was produced.");
+    expect(T["analysis.conflict.other"]).toBe("Sunucu analiz adımını bir çakışma nedeniyle reddetti ({reason}). Hiçbir şey üretilmedi.");
+    for (const k of ["analysis.conflict.MISSION_NOT_PREDEV_ELIGIBLE", "analysis.conflict.other"]) expect(E[k]).not.toMatch(/idempotency/i);
+    // through the real block, with the body exactly as the desktop bridge delivers it
+    const b = await open({status: 409, body: {error: "WORKOS_CONFLICT", reason: "MISSION_NOT_PREDEV_ELIGIBLE"}});
+    const after = await press(b, "analysis-step-submit");
+    expect(stOf(after).textContent).toBe("This mission is no longer open for the pre-development analysis (for example a run has already started). Nothing was produced.");
+    expect(stOf(after).dataset.result).toBe("error");
+    expect(byId(after, "analysis-plan-submit")).toBeUndefined();
+    const u = await open({status: 409, body: {error: "WORKOS_CONFLICT", reason: "SOMETHING_NEW"}});
+    expect(stOf(await press(u, "analysis-step-submit")).textContent).toBe("The server refused the analysis step because of a conflict (SOMETHING_NEW). Nothing was produced.");
+    const g = await open({status: 409, body: {error: "WORKOS_CONFLICT"}});
+    expect(stOf(await press(g, "analysis-step-submit")).textContent).toMatch(/^Conflict \(HTTP 409\)/);
+  });
   it("shows an Analyse button and a closed 'Create plan' gate before any step; pressing it posts {} once to the canonical path", async () => {
     const b = await open({status: 200, body: {status: "DRAFT_READY", kind: "BusinessAnalysis", artifactId: A1, version: 1, roleId: "UASCO-0300", next: "FOUNDER_APPROVAL"}});
     expect(byData(block(b.root), "analysisStatus")!.dataset.analysisStatus).toBe("NONE"); expect(byId(b.root, "analysis-plan-submit")).toBeUndefined();
@@ -1239,7 +1309,8 @@ describe("LANE-A A-FLOW-5 analysis step — view (Journey)", () => {
   it("is present in English and Turkish with the same keys; no analysis text is a raw key", async () => {
     const en = await load("locales", "en.js"), tr = await load("locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
     const keys = Object.keys(E).filter(k => k.startsWith("analysis."));
-    expect(keys.length).toBe(58);
+    // //TR: A-ANALYSIS-L10N: 5 yeni anahtar (analysis.blocker.EXECUTOR_NOT_ENABLED/ANALYSIS_IN_PROGRESS/CLAUDE_PACKAGE_PROVENANCE_CHANGED, analysis.conflict.MISSION_NOT_PREDEV_ELIGIBLE/other); sayı 58 -> 63.
+    expect(keys.length).toBe(63);
     for (const h of ["CLAUDE_CLI_NOT_FOUND", "CLAUDE_CLI_SHIM_UNSUPPORTED", "PROVIDER_PROVENANCE_NOT_READY", "CLAUDE_PACKAGE_PROVENANCE_REQUIRED", "CLAUDE_LAUNCHER_PROVENANCE_CHANGED", "CLAUDE_PROFILE_LOGIN_REQUIRED", "CLAUDE_PROFILE_LOGIN_EXPIRED", "CLAUDE_PROFILE_REFUSED", "PROVENANCE_MISSING"]) expect(E[`analysis.blocker.${h}`], h).toBeTruthy();
     for (const k of keys) { expect(T[k], k).toBeTruthy(); expect(E[k], k).not.toBe(k); }
     const b = await open({status: 200, body: {status: "COMPLETE", approved: KINDS}}); const r = await press(b, "analysis-step-submit");
