@@ -137,6 +137,8 @@ const LOOP_RESOLUTION_MS = 20;
 const STALL_SAMPLE_MS = 1_000;
 const STALL_MEMORY_MS = 5_000;
 const DRIFT_TICK_MS = 50;
+// //TR: PAR-03 (RCA relfx-c3:200): runner'ın run YAZILARI; her birinden önce sahip olunan bütün lease'ler yenilenir (constructor'daki store sarmalayıcısı). renewRunLease bilerek yoktur (özyineleme olmaz).
+const RENEWING_WRITES: ReadonlySet<PropertyKey> = new Set(["transitionRun", "checkpointRun", "addRunEvidence"]);
 // //TR: Okunamayan/yırtık sahiplik kaydı, dosya önyüklemeden bu kadar ESKİYSE "yazar yok" sayılır (süreçler yeniden başlatmadan sağ çıkmaz; saat sapması payı).
 const BOOT_GRACE_MS = 2_000;
 
@@ -238,6 +240,14 @@ export class MissionRunner {
     if (!Number.isInteger(this.o.maxConcurrentRuns) || this.o.maxConcurrentRuns < 1 || this.o.maxConcurrentRuns > 16) throw new Error("RUNNER_MAX_CONCURRENT_RUNS_INVALID");
     // SBX-GATE: yalnız gerçek bir ExecutionGate örneği kabul edilir; başka her değer (eksik, düz nesne) sağlayıcısız kapıdır (fail-closed).
     if (!(this.o.executionGate instanceof ExecutionGate)) this.o.executionGate = new ExecutionGate(null);
+    // //TR: PAR-03 (RCA relfx-c3:200, Windows shard 1 #259/#261): her journal YAZISI kendisi olay döngüsünü bloklayan senkron, dayanıklı bir aralıktır (kilit dosyası + journal'ın tamamının yeniden okunup doğrulanması + iki snapshot yazımı + fsync'ler). Adım sınırında bir run bunları ARA VERMEDEN art arda yapar (kanıt -> CHECKPOINTING -> checkpoint -> yenileme -> sonraki adım RUNNING); yavaş diskte (Windows CI) bu zincir TTL - heartbeat aralığını aşar ve öbür, sağlıklı run'ın setInterval heartbeat'i hiç çalışamadan lease'i dolar: gerçek bir fence (sahte "kayıp"). span() ile aynı kural: runner'ın her run yazısından ÖNCE, heartbeat'i gecikmiş (son yenilemesi bir heartbeat periyodundan, TTL/3, eski) sahip olunan BÜTÜN lease'ler yenilenir; döngü akıyorsa heartbeat zaten yeniler ve kanca ek yazı üretmez. Fence kuralı değişmez: süresi dolmuş lease yine yenilenemez ve yazının kendisi fencedRun ile reddedilir.
+    const store = this.o.store;
+    this.o.store = new Proxy(store, {get: (t, p) => {
+      const v: unknown = Reflect.get(t, p, t);
+      if (typeof v !== "function") return v;
+      if (!RENEWING_WRITES.has(p)) return (v as (...x: unknown[]) => unknown).bind(t);
+      return (...a: unknown[]) => { this.renewAllOwned(this.heartbeatMs()); return (Reflect.get(t, p, t) as (...x: unknown[]) => unknown).apply(t, a); };
+    }});
     // Araçlar motor başlangıcında bir kez çözülür (PATH -> mutlak yol, sürüm, sha256); her çalıştırmadan önce ikili dosya yeniden doğrulanır.
     this.loopDelay = opts.loopDelayP99Ms;
     this.securityOpts = opts.security ?? {};
@@ -309,8 +319,9 @@ export class MissionRunner {
     if (o && o.leaseId === leaseId) o.renewedAt = this.o.now();
   }
   // //TR: PAR-03: olay döngüsünü bloklayan her senkron aralıktan (dizin silme, büyük diff taraması, küçük senkron git) ÖNCE ve SONRA sahip olunan BÜTÜN lease'ler yenilenir (bir run'ın senkron işi diğerinin heartbeat'ini aç bırakamaz). Yakın zamanda yenilenmiş lease atlanır (journal şişmez); fence edilen run işaretlenir ve adımı kısa sürede durur.
-  private renewAllOwned(): void {
-    const t = this.o.now(), min = this.o.leaseTtlMs / 10;
+  // //TR: min: span() için TTL/10; run yazısı kancası için heartbeat periyodu (yalnız heartbeat'i GECİKMİŞ lease yenilenir: yavaş diskte her yazıdan önce bütün lease'leri yeniden yazmak zinciri katlar).
+  private renewAllOwned(min = this.o.leaseTtlMs / 10): void {
+    const t = this.o.now();
     for (const [runId, o] of this.owned) {
       if (o.lost || t - o.renewedAt < min) continue;
       try { this.renew(runId, o.leaseId); } catch (e) { if (e instanceof WorkOsError && e.code === "WORKOS_LEASE_FENCED") o.lost = true; }
@@ -320,6 +331,7 @@ export class MissionRunner {
     this.renewAllOwned();
     try { return fn(); } finally { this.renewAllOwned(); }
   }
+  private heartbeatMs(): number { return Math.max(50, Math.floor(this.o.leaseTtlMs / 3)); }
   private own(runId: string, leaseId: string, recovered = false): void { this.owned.set(runId, {leaseId, drive: null, renewedAt: this.o.now(), lost: false, recovered, reap: null, abort: null}); }
 
   // //TR: PAR-03: olay döngüsü gecikmesi (p99) lease TTL/6'yı aşıyorsa İKİNCİ (ve sonraki) run için lease alınmaz; zaten stall olan döngüde yeni lease'in heartbeat'i aç kalır. Pencere her okumada sıfırlanır; tick() adımlama kipinde (kilit tick başına alınır) pencere boştur.
@@ -606,6 +618,8 @@ export class MissionRunner {
       }
     }
     const note = `takeover attempt ${run.attempt}; resume step ${run.step} cycle ${run.remediationCycle}; completed checkpoints ${run.checkpoints.length}; recovery ${recoveries} of budget ${this.o.maxRecoveries}${writer ? `; writer ${writer}` : ""}${problems.length ? `; problems ${problems.join(",")}` : ""}${retryLater ? "; transient writer stop failure: retrying at the next takeover (bounded by the recovery budget)" : ""}`;
+    // //TR: SWEEP-5: geri bırakılacak run sahiplikten bu son RECOVERY yazısından ÖNCE çıkarılır; yazı kancası (renew-before-write) ve başka run'ın span()'i bu lease'i yenileyip sonraki devri geciktiremez.
+    if (retryLater) this.owned.delete(run.runId);
     this.o.store.addRunEvidence(run.runId, leaseId, {step: "RECOVERY", cycle: run.remediationCycle, kind: "RECOVERY", argv: [], startedAt: at, endedAt: at, exitCode: problems.length || retryLater ? 1 : 0, logPath: null, logSha256: null, note}, this.o.actor);
     if (retryLater) return false; // //TR: SWEEP-5: run RECOVERING kalır, lease yenilenmez; dolunca sonraki devir yazarı yeniden durdurmayı dener (her devir recovery bütçesinden yer): terminal yalnız bütçe tükenince (RECOVERY_BUDGET_EXHAUSTED)
     if (!problems.length) return true;
@@ -628,7 +642,7 @@ export class MissionRunner {
     if (entry) entry.lost = false; // işaret adım başınadır: önceki adımın geçici heartbeat hatası sonraki adımları zehirlemez (gerçek fence zaten bir sonraki renew'da yakalanır)
     let lost = false;
     // Heartbeat: uzun adımlarda lease yenilenir; yenileme fence edilirse süreç durdurulur ve sonraki yazı reddedilir.
-    const hb = setInterval(() => { try { this.renew(run.runId, leaseId); } catch { lost = true; if (entry) entry.lost = true; } }, Math.max(50, Math.floor(this.o.leaseTtlMs / 3)));
+    const hb = setInterval(() => { try { this.renew(run.runId, leaseId); } catch { lost = true; if (entry) entry.lost = true; } }, this.heartbeatMs());
     let out: Outcome;
     const epoch = this.stopEpoch;
     // //TR: #224 tur 3 (HB-R3-1): adım içindeki bir runner git çocuğunun sahiplik kaydı yazılamadıysa (OwnerRecordError) sonuç kalıcı FAILED/BLOCKED değil RETRY'dir (TK-4 ile aynı kural, bütçe dahilinde). HB-R3-2: abort edilen git çocuğu (StepAbortedError) implementer'ın aborted yolu gibi CANCEL'dır.

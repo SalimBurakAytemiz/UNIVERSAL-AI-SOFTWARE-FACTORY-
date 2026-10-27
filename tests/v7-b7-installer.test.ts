@@ -355,6 +355,77 @@ describe("INT-R3 D-M1-01 packaged app stages every runtime-read repo file", () =
       expect(buildScript).toContain("const stagedFiles = stageRuntimeFiles(root, stage);");
     } finally { fs.rmSync(stage, {recursive: true, force: true}); }
   });
+  // Sembolik bağ oluşturulamayan ana makinede (EPERM/EACCES/ENOSYS/UNKNOWN) test atlanır (tests/v7-b10a-evidence.test.ts deseni); izin veren ana makinelerde (Windows dahil) çalışır.
+  const symlinkRuns = {started: 0, linked: 0};
+  const linkOrSkip = (ctx: { skip: () => void }, target: string, link: string, type: "file" | "dir"): boolean => {
+    try { fs.symlinkSync(target, link, type); return true; } catch (e) {
+      if (["EPERM", "EACCES", "ENOSYS", "UNKNOWN"].includes((e as NodeJS.ErrnoException).code ?? "")) { console.warn("SKIPPED: symlink creation not permitted on this host"); ctx.skip(); return false; }
+      throw e;
+    }
+  };
+  it("B1/L2: a symlinked (non-regular) entry in a staged data directory is refused with SYMLINK_DENIED; nothing outside the repo is copied", async ctx => {
+    symlinkRuns.started++;
+    const b = await load("scripts", "build-installer.mjs"); const copy = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-src-")), out = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-out-")), outside = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-outside-"));
+    try {
+      b.stageRuntimeFiles(root, copy); fs.writeFileSync(path.join(outside, "secret.json"), "{\"secret\":true}");
+      if (!linkOrSkip(ctx, path.join(outside, "secret.json"), path.join(copy, "knowledge", "technologies", "zz-evil.json"), "file")) return;
+      symlinkRuns.linked++;
+      expect(() => b.stageRuntimeFiles(copy, out)).toThrow("SYMLINK_DENIED:knowledge/technologies/zz-evil.json");
+      expect(fs.existsSync(path.join(out, "knowledge", "technologies", "zz-evil.json"))).toBe(false);
+    } finally { for (const d of [copy, out, outside]) fs.rmSync(d, {recursive: true, force: true}); }
+  });
+  it("B1/F3: a staged data DIRECTORY that is itself a symlink (or lives below a symlinked parent) is refused with SYMLINK_DENIED; its outside files are not copied", async ctx => {
+    symlinkRuns.started++; let counted = false;
+    const b = await load("scripts", "build-installer.mjs"); const outside = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-outside-"));
+    try {
+    fs.writeFileSync(path.join(outside, "evil.json"), "{\"secret\":true}");
+    for (const mode of ["dir", "parent"] as const) {
+      const copy = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-src-")), out = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-out-"));
+      try {
+        b.stageRuntimeFiles(root, copy);
+        if (mode === "dir") { fs.rmSync(path.join(copy, "knowledge", "technologies"), {recursive: true, force: true}); if (!linkOrSkip(ctx, outside, path.join(copy, "knowledge", "technologies"), "dir")) return; }
+        else { const real = path.join(copy, "knowledge-real"); fs.renameSync(path.join(copy, "knowledge"), real); fs.mkdirSync(path.join(outside, "k"), {recursive: true}); fs.cpSync(path.join(real, "technologies"), path.join(outside, "k", "technologies"), {recursive: true}); if (!linkOrSkip(ctx, path.join(outside, "k"), path.join(copy, "knowledge"), "dir")) return; }
+        if (!counted) { counted = true; symlinkRuns.linked++; }
+        expect(() => b.stageRuntimeFiles(copy, out), mode).toThrow("SYMLINK_DENIED:knowledge/technologies");
+        expect(fs.existsSync(path.join(out, "knowledge")), mode).toBe(false);
+      } finally { for (const d of [copy, out]) fs.rmSync(d, {recursive: true, force: true}); }
+    }
+    } finally { fs.rmSync(outside, {recursive: true, force: true}); }
+  });
+  it("B1/X1: a repo root reached THROUGH a symlink stages normally (the containment check compares against realpath(root)); a data dir that escapes it is still refused", async ctx => {
+    symlinkRuns.started++;
+    const b = await load("scripts", "build-installer.mjs"); const real = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-real-")), link = path.join(os.tmpdir(), `uasco-b1-rootlink-${process.pid}-${Date.now()}`), out = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-out-")), out2 = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-out-")), outside = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-outside-"));
+    try {
+      b.stageRuntimeFiles(root, real);
+      if (!linkOrSkip(ctx, real, link, "dir")) return;
+      symlinkRuns.linked++;
+      const files: string[] = b.stageRuntimeFiles(link, out);
+      expect(files).toEqual(expect.arrayContaining(["registries/technologies.json"]));
+      expect(fs.readdirSync(path.join(out, "knowledge", "technologies")).length).toBeGreaterThan(100);
+      fs.rmSync(path.join(real, "knowledge", "technologies"), {recursive: true, force: true}); fs.writeFileSync(path.join(outside, "evil.json"), "{}");
+      fs.symlinkSync(outside, path.join(real, "knowledge", "technologies"), "dir");
+      expect(() => b.stageRuntimeFiles(link, out2)).toThrow("SYMLINK_DENIED:knowledge/technologies");
+    } finally { fs.rmSync(link, {force: true}); for (const d of [real, out, out2, outside]) fs.rmSync(d, {recursive: true, force: true}); }
+  });
+  it("B1/F4: the symlink tests above really RAN on a host that allows symlinks (an unconditional skip would otherwise pass silently); skipped only where the host refuses symlinks or the tests were filtered out", async ctx => {
+    if (symlinkRuns.started === 0) { ctx.skip(); return; }
+    const probe = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-probe-"));
+    try { try { fs.symlinkSync(probe, path.join(probe, "l"), "dir"); } catch (e) { if (["EPERM", "EACCES", "ENOSYS", "UNKNOWN"].includes((e as NodeJS.ErrnoException).code ?? "")) { console.warn("SKIPPED: symlink creation not permitted on this host"); ctx.skip(); return; } throw e; }
+      expect(symlinkRuns.linked, "every symlink test that started must have created its link and run its assertions").toBe(symlinkRuns.started);
+    } finally { fs.rmSync(probe, {recursive: true, force: true}); }
+  });
+  it("B1: the staged tree alone is enough for the readiness loader (registries AND every knowledge/technologies/*.json are staged; the path-literal scan cannot see knowledge/)", async () => {
+    const b = await load("scripts", "build-installer.mjs"); const { loadReadinessInputFromRepo } = await import("../core/agents/readiness-audit.js");
+    const stage = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-stage-"));
+    try {
+      const files: string[] = b.stageRuntimeFiles(root, stage);
+      const knowledge = fs.readdirSync(path.join(root, "knowledge", "technologies")).filter(n => n.endsWith(".json"));
+      expect(files.filter(f => f.startsWith("knowledge/technologies/")).length).toBe(knowledge.length); expect(knowledge.length).toBeGreaterThan(100);
+      for (const rel of ["registries/skills-v2.json", "registries/technologies.json", "registries/technology-source-registry.json", "registries/role-execution-profiles.json"]) expect(b.STATIC_DATA_FILES).toContain(rel);
+      const input = loadReadinessInputFromRepo(stage, {runs: {journal: "ABSENT"}, now: new Date("2026-10-22T12:00:00.000Z")});
+      expect(input.roles).toHaveLength(599); expect(input.knowledgeProfiles.size).toBe(input.technologies.size);
+    } finally { fs.rmSync(stage, {recursive: true, force: true}); }
+  });
 });
 
 // ---------- INT-R3 D-M1-02: paketli provenance yakalama (node modu fork, kontrol kökü userData) ----------
