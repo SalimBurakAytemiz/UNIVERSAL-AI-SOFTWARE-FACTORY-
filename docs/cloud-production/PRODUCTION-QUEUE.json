@@ -2246,6 +2246,16 @@
         "masterV2": "C-RDY-1 Role Readiness Auditor = Master V2 package 1 DONE (merged, not product-accepted)"
       },
       {
+        "pr": 265,
+        "merge": "231f9e3",
+        "by": "coordinator direct merge, expectedHeadSha 80d14a9 (required checks green on 80d14a9)",
+        "at": "2026-10-27T06:46:19Z",
+        "postMerge": "VERIFIED: parent1 9d08a2c, parent2 = gated head 80d14a9, merge tree a2f0252 == probe tree tested locally (role-context + b5 + ps1b + ci-validation-shards 459/459, verify-trust-root PASS)",
+        "review": "full -> r1 -> r2 BLOCKERS_1MEDIUM (d45c47b) -> r3 final NO_BLOCKERS at ROUND LIMIT, 4 LOW test gaps (0f8b453) -> coord base merges 956065f/80d14a9 (BASE_MERGE_ONLY, reseal)",
+        "riskTier": "R0 + R1 TEST_REGISTRATION_APPEND/TRUST_ROOT_RESEAL",
+        "masterV2": "C-CTX-1: Role Context Resolver (typed, provenance-labelled, byte-capped; 599 roles RESOLVED, origin PROPOSED_DERIVED only)"
+      },
+      {
         "pr": 278,
         "merge": "9d08a2c",
         "by": "coordinator direct merge, expectedHeadSha e9093b1 (required checks green on e9093b1 after 1 full re-run: attempt-1 shard-2 red was the base-wide store LOCK_TIMEOUT in relfx-1-completion:459)",
