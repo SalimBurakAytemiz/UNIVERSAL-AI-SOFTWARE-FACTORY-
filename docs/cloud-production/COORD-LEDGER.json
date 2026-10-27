@@ -1122,6 +1122,16 @@
       "ref": "coord-verify-merge-tree-diff-MAP-only",
       "policy": "TEP-1",
       "at": "2026-10-27T08:54:45.030Z"
+    },
+    {
+      "pr": 279,
+      "sha": "db25124097673a3f7143a7df133199bd0dbd1ed6",
+      "kind": "delta",
+      "base": "a8813be15d3b46345109fab5083e2b6710408c5b",
+      "verdict": "BASE_MERGE_ONLY_MAP_union_after_264_tree_eq_coord_merge",
+      "ref": "coord-bffd776-tree-identical-trust-root-PASS-b3a-50-fsmon-2",
+      "policy": "TEP-1",
+      "at": "2026-10-27T09:17:44.296Z"
     }
   ],
   "tests": [],
