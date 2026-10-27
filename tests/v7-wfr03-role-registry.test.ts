@@ -906,11 +906,13 @@ describe("LANE-C C1 role lifecycle computed only from evidence", () => {
         try { const x = await app.inject({method: "GET", url: "/v1/roles/UASCO-0001/context"}); expect(x.statusCode).toBe(500); expect(x.json()).toEqual({error: "X"}); } finally { await app.close(); }
       } finally { fs.rmSync(dir, {recursive: true, force: true}); }
     });
-    it("B2: PACKAGED layout finding: the installer does not stage registries/agent-skill-matrix.json, so the route honestly answers 503 ROLE_CONTEXT_INPUT_UNAVAILABLE there", async () => {
+    it("B2: on a real installer stage the registries the route reads are ALL staged and the route answers 200 RESOLVED, equal to the dev-tree answer; without the matrix on the stage it is still a typed 503 (never an empty context)", async () => {
       const stage = await stagePackaged();
       try {
-        for (const f of ["role-definitions", "skills-v2", "technologies", "role-execution-profiles"]) expect(fs.existsSync(path.join(stage, "registries", `${f}.json`)), f).toBe(true);
-        expect(fs.existsSync(path.join(stage, "registries/agent-skill-matrix.json"))).toBe(false);
+        for (const f of ["role-definitions", "skills-v2", "technologies", "role-execution-profiles", "agent-skill-matrix"]) expect(fs.existsSync(path.join(stage, "registries", `${f}.json`)), f).toBe(true);
+        const ok = await ctxAt(stage, "UASCO-0001"); expect(ok.code).toBe(200); expect(ok.body.status).toBe("RESOLVED");
+        expect(ok.body).toEqual((await ctxAt(REPO, "UASCO-0001")).body);
+        fs.rmSync(path.join(stage, "registries/agent-skill-matrix.json"));
         const r = await ctxAt(stage, "UASCO-0001"); expect([r.code, r.body]).toEqual([503, {error: "ROLE_CONTEXT_INPUT_UNAVAILABLE"}]);
       } finally { fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); }
     });
