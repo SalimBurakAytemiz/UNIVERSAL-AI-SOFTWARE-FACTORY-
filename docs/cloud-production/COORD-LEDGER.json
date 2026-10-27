@@ -712,6 +712,36 @@
       "ref": "wf_89ef6c6a-d45: both MEDIUMs + all LOWs closed (+26/-0 tests only); N2/N2b/N25/N7/N27/N18 + slice/t0/windowsHide/-NonInteractive + 5 extra mutants KILLED; 69/69; 64fc2d8 = COORD 97773c4 port (reviewed in #267 delta)",
       "policy": "TEP-1",
       "at": "2026-10-27T01:45:30.340Z"
+    },
+    {
+      "pr": 268,
+      "sha": "89c611447af39163cf3c5bca9bfe70fb8bd65b63",
+      "kind": "delta",
+      "base": "0db05ced60fde3c9fcd78dcb75de24df298ea784",
+      "verdict": "NO_BLOCKERS_1LOW",
+      "ref": "wf_77a53e3e-d3c round 3: both round-2 MEDIUMs FIXED (UI-124 g / count 10; ROUTES pins exact incl install:607); LOW: b4:74 FACTORY_AREA_ORDER pin does not break on factory:true alone",
+      "policy": "TEP-1",
+      "at": "2026-10-27T01:56:40.785Z"
+    },
+    {
+      "pr": 271,
+      "sha": "1fab2d338657c2d1cfa4742b9f3b81876012af93",
+      "kind": "full",
+      "base": null,
+      "verdict": "NO_BLOCKERS_3LOW",
+      "ref": "wf_77a53e3e-d3c: 108 routes re-enumerated = JSON set; 99/4/0/5 confirmed; NOT_REGISTERED analysis+product-run confirmed (server.ts + main.mjs + control-boundary matchers); LOWs: predev approve/reject renderer caller NONE wrong, G-EP-068 caller points at status-summary literal, role-status row stale after 902ba66",
+      "policy": "TEP-1",
+      "at": "2026-10-27T01:56:40.839Z"
+    },
+    {
+      "pr": 272,
+      "sha": "853271c42a9ba46ddfb5c0aedb5a8ac126ac8e65",
+      "kind": "full",
+      "base": null,
+      "verdict": "NO_BLOCKERS_4LOW",
+      "ref": "wf_77a53e3e-d3c: 167/167; X1 + F5 mutants killed (X1 new coverage); only removed line moved into finally; LOWs: F5 title vs added-slug (NM4 survives), X1 symlinked-parent root (XM2 survives), F4 canary partial F3 skip, linkOrSkip return-false-without-skip survives",
+      "policy": "TEP-1",
+      "at": "2026-10-27T01:56:40.894Z"
     }
   ],
   "tests": [],
