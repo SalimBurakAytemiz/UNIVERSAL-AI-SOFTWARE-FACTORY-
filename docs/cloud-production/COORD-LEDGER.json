@@ -1162,6 +1162,16 @@
       "ref": "coord-merge-tree-diff-runner-ts-2-hunks-union",
       "policy": "TEP-1",
       "at": "2026-10-27T10:19:42.520Z"
+    },
+    {
+      "pr": 287,
+      "sha": "e6943c05198b890cf1ac287e81eaeab5236b84e0",
+      "kind": "full",
+      "base": null,
+      "verdict": "BLOCKERS_COORD_cache_staleness_overreport_path_plus_6LOW",
+      "ref": "wf_51c26afc-346",
+      "policy": "TEP-1",
+      "at": "2026-10-27T10:24:57.389Z"
     }
   ],
   "tests": [],
