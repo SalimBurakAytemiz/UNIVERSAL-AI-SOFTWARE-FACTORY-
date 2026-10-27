@@ -2,7 +2,8 @@
 // //TR: GATE GERÇEĞİ: Bu katman hiçbir kapıyı zayıflatmaz. Bağımsız review (reviewer.identity != implementer.identity) store/runner tarafından zorlanır; test/güvenlik kapıları gerçek runner'dadır; teslim yalnız run SOURCE_GENERATION_COMPLETE (AWAITING_APPROVAL + gerekli kanıt zinciri) olduğunda hazırlanır. Hiçbir mission PRODUCT_VERIFIED'a ulaşmaz ve execution-gate üretilen kodu çalıştırmak için ASLA çağrılmaz (sandbox yok). Ledger yalnız gerçek kaydedilmiş journal olaylarından (run evidence/checkpoints + teslim kaydı) türetilir; uydurma aktivite yoktur.
 import fs from "node:fs";
 import path from "node:path";
-import {agentConfigInWorkspace, commitBuilderOutput, gitControlDigest} from "../builder-output.js";
+import {agentConfigInWorkspace, commitBuilderOutputAsync, gitControlDigest} from "../builder-output.js";
+import {shortChildren} from "../executors.js";
 import {sourceGenerationOf} from "../outcomes.js";
 import {assertRoleExecutes} from "../../agents/first-delivery-bindings.js";
 import type {ProjectStudio} from "../project-studio.js";
@@ -83,15 +84,16 @@ function safeWorkspacePath(workspace: string, rel: string): string {
 function makeDevImplementer(identity: string, builder: DevBuilderPort, envPolicyFile: string): ImplementerAdapter {
   return {
     identity,
-    async implement(workspace: string, spec: MissionSpec, _ctx: ExecContext): Promise<ImplementResult> {
+    async implement(workspace: string, spec: MissionSpec, ctx: ExecContext): Promise<ImplementResult> {
       const startedAt = new Date().toISOString();
+      const sp: <T>(fn: () => T) => T = ctx.span ?? (fn => fn()); // HB-1: küçük senkron .git/yol işleri runner span'ına sarılır, engine commit'i eşzamansızdır
       const startSha = spec.startSha ?? "";
       const base = (log: string, blockReason?: string): ImplementResult =>
         ({exitCode: 0, ...(blockReason ? {blockReason} : {}), log, argv: ["crew-dev-builder", identity], startedAt, endedAt: new Date().toISOString(), timedOut: false, aborted: false, transient: false});
-      const agentConfig = agentConfigInWorkspace(workspace, envPolicyFile);
+      const agentConfig = sp(() => agentConfigInWorkspace(workspace, envPolicyFile));
       if (agentConfig === null) return base("NOT_EXECUTED: WORKSPACE_AGENT_CONFIG_SCAN_FAILED (builder not started)\n", "WORKSPACE_AGENT_CONFIG_SCAN_FAILED");
       if (agentConfig.length) return base(`NOT_EXECUTED: WORKSPACE_CONTAINS_AGENT_CONFIG (builder not started)\n${agentConfig.slice(0, 50).map(f => `  ${f}`).join("\n")}\n`, "WORKSPACE_CONTAINS_AGENT_CONFIG");
-      const gitDigestBefore = gitControlDigest(workspace);
+      const gitDigestBefore = sp(() => gitControlDigest(workspace));
       let out: DevBuildOutput;
       try {
         out = await builder.build({attempt: spec.cycle, missionId: spec.missionId, runId: spec.runId, startSha, ...(spec.remediation ? {rework: {reason: spec.remediation.reason, findings: spec.remediation.findings}} : {})});
@@ -109,7 +111,8 @@ function makeDevImplementer(identity: string, builder: DevBuilderPort, envPolicy
         return base(`BUILDER_WRITE_REFUSED: ${(e as Error).message}\n`, e instanceof CrewDevReviewError ? e.message : "CREW_DEV_WRITE_FAILED");
       }
       const subject = `uasco run ${spec.runId} cycle ${spec.cycle}: ${String(spec.title).replace(/[\r\n]+/g, " ").slice(0, 120)}`;
-      const c = commitBuilderOutput(workspace, {envPolicyFile, startSha, gitDigestBefore, message: `${subject}\n\nMission: ${spec.missionId}\nCommitted by the UASCO engine on behalf of ${identity} (crew development builder, edit-only).`});
+      const c = await commitBuilderOutputAsync(workspace, {envPolicyFile, startSha, gitDigestBefore, message: `${subject}\n\nMission: ${spec.missionId}\nCommitted by the UASCO engine on behalf of ${identity} (crew development builder, edit-only).`}, {span: sp, extraEnv: ctx.writerEnv, onSpawn: shortChildren(ctx.onSpawn)});
+      if (!c.ok && c.transient) return {...base(c.log), exitCode: null, transient: true}; // yazar kaydı yazılamadı: geçici, yeniden denenir
       return c.ok ? {...base(c.log), commitSha: c.commitSha} : base(c.log, c.reason);
     }
   };

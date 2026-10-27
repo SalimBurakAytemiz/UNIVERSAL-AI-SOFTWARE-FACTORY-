@@ -10,7 +10,11 @@ import {buildServer} from "../apps/control-api/src/server.js";
 import Fastify from "fastify";
 import {FIRST_DELIVERY_BINDINGS, STAGE_CONSUMERS} from "../core/agents/first-delivery-bindings.js";
 import {computeRoleStatusSummary, createEvidenceVerifier, runningRoleIdsFromRuns, roleLifecycle, TARGET_ROLE_COUNT} from "../core/agents/role-lifecycle.js";
-import {registerRoleStatusRoutes} from "../apps/control-api/src/routes/role-status.js";
+import {registerRoleStatusRoutes, resetReadinessInputCache} from "../apps/control-api/src/routes/role-status.js";
+import {RUN_STATUSES, isOpenRun} from "../core/workos/run-state.js";
+import {pathToFileURL} from "node:url";
+import {READINESS_INPUT_FILES} from "../core/agents/readiness-audit.js";
+import {computeRoleReadiness, loadReadinessInputFromRepo, reconcileLegacyStatusSummary} from "../core/agents/readiness-audit.js";
 import {EvaluationStaging, EvaluationStagingError, EVALUATION_PROCEDURES, planFor, runRoleEvaluation, verdictOf} from "../core/competency/evaluation-pipeline.js";
 import type {EvaluationOutcome} from "../core/competency/evaluation-pipeline.js";
 import {GOLDEN_TESTS, sha256Json} from "../core/competency/evaluation-fixtures.js";
@@ -575,7 +579,7 @@ describe("LANE-C C1 role lifecycle computed only from evidence", () => {
     });
   });
 
-  it("running = AGENT_TRACE in an open (non-terminal) run for a registered role; terminal runs, unknown roles and other evidence do not count", () => {
+  it("running = AGENT_TRACE in an OPEN run (isOpenRun: not terminal and not AWAITING_APPROVAL) for a registered role; terminal runs, runs awaiting approval, unknown roles and other evidence do not count", () => {
     const known = new Set<string>(doc.roles.map((r: any) => r.roleId));
     const trace = (note: string, kind = "AGENT_TRACE") => ({kind, note, evidenceId: "e", step: "IMPLEMENT", cycle: 0, argv: [], startedAt: "", endedAt: "", exitCode: 0, logPath: null, logSha256: null} as any);
     const run = (status: string, ...ev: any[]) => ({status, evidence: ev} as any);
@@ -588,9 +592,9 @@ describe("LANE-C C1 role lifecycle computed only from evidence", () => {
       run("RUNNING", trace("agent=a6 role=UASCO-0043 state=COMPLETED", "IMPLEMENT")), // not an AGENT_TRACE
       run("RUNNING")
     ];
-    expect([...runningRoleIdsFromRuns(runs, known)].sort()).toEqual(["UASCO-0085", "UASCO-0252"]);
+    expect([...runningRoleIdsFromRuns(runs, known)].sort()).toEqual(["UASCO-0252"]); // AWAITING_APPROVAL ist isOpenRun degil (run-state.ts): eskiden UASCO-0085 de sayilirdi
     const sum = base({runs});
-    expect(sum.running).toBe(2);
+    expect(sum.running).toBe(1);
     expect(sum).toMatchObject({implemented: 8, tested: 0, certified: 0}); // running does not promote anything else
   });
 
@@ -600,7 +604,7 @@ describe("LANE-C C1 role lifecycle computed only from evidence", () => {
     const r = await app.inject({method: "GET", url: "/v1/roles/status-summary"});
     expect(r.statusCode).toBe(200);
     const body = r.json();
-    expect(Object.keys(body)).toEqual(["statusSummary"]);
+    expect(Object.keys(body).sort()).toEqual(["readiness", "reconciliation", "statusSummary", "statusSummaryStatus"]);
     expect(Object.keys(body.statusSummary).sort()).toEqual(["basis", "byGuild", "certified", "computedAt", "implemented", "registered", "running", "target", "tested"]);
     expect(body.statusSummary).toMatchObject({target: 599, registered: 599, implemented: 8, tested: 0, certified: 0, running: 0});
     expect(Object.keys(body.statusSummary.byGuild[0]).sort()).toEqual(["certified", "guildId", "implemented", "registered", "running", "tested"]);
@@ -609,6 +613,210 @@ describe("LANE-C C1 role lifecycle computed only from evidence", () => {
     await app.close();
     const empty = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-c1-empty-"));
     try { const a2 = Fastify(); registerRoleStatusRoutes(a2, deps(empty)); await a2.ready(); expect((await a2.inject({method: "GET", url: "/v1/roles/status-summary"})).statusCode).toBe(503); await a2.close(); } finally { fs.rmSync(empty, {recursive: true, force: true}); }
+  });
+
+  describe("B1 readiness on /v1/roles/status-summary (single source: core/agents/readiness-audit.ts)", () => {
+    const depsWith = (runs: any[] | null) => ({repoRoot: REPO, now: () => NOW, getStore: () => ({hasJournal: runs !== null, listRuns: () => runs ?? []}) as any, scope: {tenantId: "t"} as any, orgId: "o", actor: "a", audit: () => {}, workosStopped: () => false, workosPolicy: () => ({allowed: true}), workosFail: (reply: any) => reply.code(500).send({error: "X"})});
+    const get = async (runs: any[] | null) => { const app = Fastify(); registerRoleStatusRoutes(app, depsWith(runs)); await app.ready(); try { const r = await app.inject({method: "GET", url: "/v1/roles/status-summary"}); return {code: r.statusCode, raw: r.body, body: r.json()}; } finally { await app.close(); } };
+    const trace = (role: string) => ({kind: "AGENT_TRACE", note: `agent=a1 role=${role} state=COMPLETED`, evidenceId: "e", step: "IMPLEMENT", cycle: 0, argv: [], startedAt: "", endedAt: "", exitCode: 0, logPath: null, logSha256: null} as any);
+    const roleLayer = (body: any, roleId: string) => body.readiness.roles.find((r: any) => r.roleId === roleId).layers.RUNNING;
+
+    it("(a) journal ABSENT: RUNNING is UNKNOWN for all 599 and NOT measured; the legacy running is not presented as measured; TOOL_READY / stageWired stay UNKNOWN (nothing supplied)", async () => {
+      const {code, body} = await get(null); expect(code).toBe(200);
+      expect(body.statusSummaryStatus).toBe("DEPRECATED_LEGACY_PROJECTION");
+      expect(body.readiness.totals.RUNNING).toMatchObject({UNKNOWN: 599, TRUE: 0, measured: false, denominator: 599});
+      expect(body.readiness.inputs).toMatchObject({journal: "ABSENT", adapterReality: "NOT_SUPPLIED", reachableStages: "NOT_SUPPLIED"});
+      expect(body.reconciliation).toMatchObject({status: "DEPRECATED_LEGACY_PROJECTION", authority: "readiness", runningMeasured: false, implementedMeaning: "EXECUTABLE_CODE_PATH_INCLUDES_UNWIRED_STAGES", implementedStageWired: "UNKNOWN"});
+      expect(body.readiness.totals.TOOL_READY.UNKNOWN).toBeGreaterThan(0); expect(body.readiness.totals.TOOL_READY.measured).toBe(false);
+      expect(Object.keys(body)).not.toContain("running"); expect(body.readiness.roles.every((r: any) => r.layers.RUNNING.state === "UNKNOWN")).toBe(true);
+    });
+
+    it("(b) journal PRESENT: an open RUNNING run marks its role RUNNING (measured); an AWAITING_APPROVAL run does NOT (isOpenRun); the legacy running counter agrees", async () => {
+      const runs = [{status: "AWAITING_APPROVAL", evidence: [trace("UASCO-0085")]}, {status: "RUNNING", evidence: [trace("UASCO-0252")]}];
+      const {code, body} = await get(runs); expect(code).toBe(200);
+      expect(roleLayer(body, "UASCO-0085").state).toBe("FALSE"); expect(roleLayer(body, "UASCO-0252").state).toBe("TRUE");
+      expect(body.readiness.totals.RUNNING).toMatchObject({TRUE: 1, measured: true}); expect(body.reconciliation.runningMeasured).toBe(true);
+      expect(body.statusSummary.running).toBe(1); expect(body.reconciliation.consistent).toBe(true);
+    });
+
+    it("(c) the legacy statusSummary is byte-identical to computeRoleStatusSummary on the same inputs (journal absent and present)", async () => {
+      for (const runs of [null, [{status: "RUNNING", evidence: [trace("UASCO-0252")]}]] as const) {
+        const {body, raw} = await get(runs as any); expect(JSON.stringify(body.statusSummary)).toBe(JSON.stringify(base({runs: (runs ?? []) as any})));
+        expect(raw.includes(JSON.stringify(base({runs: (runs ?? []) as any})))).toBe(true);
+      }
+    });
+
+    it("(d) the route computes NO counter: readiness and reconciliation equal the core functions' output exactly, and the body has exactly the four agreed keys", async () => {
+      for (const runs of [null, [{status: "RUNNING", evidence: [trace("UASCO-0252")]}]] as const) {
+        const {body} = await get(runs as any);
+        const obs = runs === null ? {journal: "ABSENT" as const} : {journal: "PRESENT" as const, runs: runs as any};
+        const expected = computeRoleReadiness(loadReadinessInputFromRepo(REPO, {runs: obs, now: NOW}));
+        expect(body.readiness).toEqual(JSON.parse(JSON.stringify(expected)));
+        expect(body.reconciliation).toEqual(JSON.parse(JSON.stringify(reconcileLegacyStatusSummary(base({runs: (runs ?? []) as any}), expected))));
+        expect(Object.keys(body).sort()).toEqual(["readiness", "reconciliation", "statusSummary", "statusSummaryStatus"]);
+      }
+    });
+
+    // ---- #262 review package (H1 packaged layout, M1 isOpenRun table, M2 typed degrade, M3 cache, L1 mismatch, L2 pre-PR pin) ----
+    const stagePackaged = async () => {
+      const b: any = await import(pathToFileURL(path.join(REPO, "scripts", "build-installer.mjs")).href);
+      const stage = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-b1-stage-")); b.stageRuntimeFiles(REPO, stage); resetReadinessInputCache(); return stage;
+    };
+    const getAt = async (root: string, runs: any[] | null, extra: Record<string, unknown> = {}) => {
+      const audits: Array<[string, any]> = []; const app = Fastify();
+      registerRoleStatusRoutes(app, {...depsWith(runs), repoRoot: root, audit: (e: string, x: any) => audits.push([e, x]), ...extra} as any); await app.ready();
+      try { const r = await app.inject({method: "GET", url: "/v1/roles/status-summary"}); return {code: r.statusCode, body: r.json(), audits}; } finally { await app.close(); }
+    };
+
+    it("H1: the PACKAGED layout (installer-staged files only) answers 200 with a FULL readiness (599 measured as defined)", async () => {
+      const stage = await stagePackaged();
+      try {
+        const {code, body} = await getAt(stage, null); expect(code).toBe(200);
+        expect(body.readinessError).toBeUndefined(); expect(body.readiness).not.toBeNull();
+        expect(body.readiness.denominator).toBe(599); expect(body.readiness.totals.DEFINED.TRUE).toBe(599); expect(body.readiness.totals.RUNNING.UNKNOWN).toBe(599);
+        expect(body.readiness.totals.KNOWLEDGE_READY.measured).toBe(true);
+        const repoBody = (await getAt(REPO, null)).body; expect(body.readiness.digest).toBe(repoBody.readiness.digest); expect(JSON.stringify(body.statusSummary)).toBe(JSON.stringify(repoBody.statusSummary));
+      } finally { fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); }
+    });
+
+    it("H1/M2: a missing readiness input DEGRADES (200, legacy statusSummary byte-identical, readiness/reconciliation null, readinessError set, audit carries the code only); a programming error is NOT degraded (workosFail)", async () => {
+      const stage = await stagePackaged();
+      try {
+        const full = (await getAt(stage, null)).body.statusSummary;
+        fs.rmSync(path.join(stage, "registries", "skills-v2.json")); resetReadinessInputCache();
+        const d = await getAt(stage, null); expect(d.code).toBe(200);
+        expect(JSON.stringify(d.body.statusSummary)).toBe(JSON.stringify(full)); expect(d.body.statusSummaryStatus).toBe("DEPRECATED_LEGACY_PROJECTION");
+        expect(d.body).toMatchObject({readiness: null, reconciliation: null, readinessError: "ROLE_READINESS_UNAVAILABLE"}); expect(Object.keys(d.body).sort()).toEqual(["readiness", "readinessError", "reconciliation", "statusSummary", "statusSummaryStatus"]);
+        expect(d.audits).toEqual([["WORKOS_ROLE_READINESS_DEGRADED", {actor: "a", code: "READINESS_INPUT_UNAVAILABLE"}]]); expect(JSON.stringify(d.audits)).not.toContain("skills-v2");
+        // INVALID girdi (rol kaydı geçerli JSON ama bozuk yapı) da düşer
+        resetReadinessInputCache();
+        const inv = await getAt(REPO, null, {readinessCompute: () => { throw new Error("READINESS_INPUT_INVALID:DUPLICATE_X:y"); }}); expect(inv.body).toMatchObject({readiness: null, readinessError: "ROLE_READINESS_UNAVAILABLE"}); expect(inv.audits[0][1].code).toBe("READINESS_INPUT_INVALID");
+        // Programlama hatası: düşürülmez, workosFail (500), denetim yok
+        const bug = await getAt(REPO, null, {readinessCompute: () => { throw new TypeError("boom"); }}); expect(bug.code).toBe(500); expect(bug.body).toEqual({error: "X"}); expect(bug.audits).toEqual([]);
+      } finally { fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); }
+    });
+
+    it("M1: for EVERY run status the role is RUNNING exactly when isOpenRun(status) - lifecycle function and readiness layer", async () => {
+      const known = new Set<string>(doc.roles.map((r: any) => r.roleId));
+      for (const st of RUN_STATUSES) {
+        const runs = [{status: st, evidence: [trace("UASCO-0252")]}];
+        expect(runningRoleIdsFromRuns(runs as any, known).has("UASCO-0252"), st).toBe(isOpenRun(st));
+        const { body } = await getAt(REPO, runs); expect(roleLayer(body, "UASCO-0252").state, st).toBe(isOpenRun(st) ? "TRUE" : "FALSE");
+      }
+    });
+
+    it("M3: the static readiness input is loaded ONCE per root (no knowledge file re-read on the next request) and reloaded when an input file changes", async () => {
+      const stage = await stagePackaged();
+      const spy = vi.spyOn(fs, "readFileSync");
+      try {
+        const knowledgeReads = () => spy.mock.calls.filter(c => String(c[0]).includes(path.join("knowledge", "technologies"))).length;
+        await getAt(stage, null); const first = knowledgeReads(); expect(first).toBeGreaterThan(100);
+        await getAt(stage, null); expect(knowledgeReads(), "warm request re-reads nothing").toBe(first);
+        const reg = path.join(stage, "registries", "technologies.json"); const t = new Date(Date.now() + 5000); fs.utimesSync(reg, t, t);
+        await getAt(stage, null); expect(knowledgeReads(), "changed input -> reloaded").toBeGreaterThan(first);
+      } finally { spy.mockRestore(); fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); }
+    });
+
+    // ---- #262 round 2 ----
+    it("R2-M1: the cache is invalidated by a change of EACH of the 5 loader inputs and of a knowledge profile; the input list is the loader's own exported constant", async () => {
+      expect([...READINESS_INPUT_FILES.registries]).toEqual(["registries/role-definitions.json", "registries/skills-v2.json", "registries/technologies.json", "registries/technology-source-registry.json", "registries/role-execution-profiles.json"]);
+      const stage = await stagePackaged(); const spy = vi.spyOn(fs, "readFileSync");
+      try {
+        const reads = () => spy.mock.calls.filter(c => String(c[0]).includes(path.join("knowledge", "technologies"))).length;
+        await getAt(stage, null); await getAt(stage, null); let last = reads();
+        const knowledge = fs.readdirSync(path.join(stage, "knowledge", "technologies")).filter(n => n.endsWith(".json")).sort()[0];
+        let bump = 10_000;
+        for (const rel of [...READINESS_INPUT_FILES.registries, `${READINESS_INPUT_FILES.knowledgeDir}/${knowledge}`]) {
+          const t = new Date(Date.now() + (bump += 10_000)); fs.utimesSync(path.join(stage, rel), t, t);
+          await getAt(stage, null); expect(reads(), `${rel} change -> reload`).toBeGreaterThan(last); last = reads();
+          await getAt(stage, null); expect(reads(), `${rel} warm again`).toBe(last);
+        }
+      } finally { spy.mockRestore(); fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); }
+    });
+
+    it("R2-L1: the evidence verifier is built PER REQUEST: evidence written after the first request is seen by the next one", async () => {
+      const stage = await stagePackaged(); const seen: Array<(ref: string, role: string, ev: string, verdict: string) => string | null> = [];
+      const capture = (input: any) => { seen.push(input.verify); return computeRoleReadiness(input); };
+      try {
+        await getAt(stage, null, {readinessCompute: capture});
+        const dir = path.join(stage, "audit", "evidence", "role-evaluations", "UASCO-0085"); fs.mkdirSync(dir, {recursive: true});
+        const art = Buffer.from("artifact"); fs.writeFileSync(path.join(dir, "art.txt"), art);
+        const ev = Buffer.from(JSON.stringify({roleId: "UASCO-0085", evaluationId: "EV-01", verdict: "PASSED", executorKind: "CLAUDE", artifactPath: "audit/evidence/role-evaluations/UASCO-0085/art.txt", artifactSha256: crypto.createHash("sha256").update(art).digest("hex")}));
+        fs.writeFileSync(path.join(dir, "EV-01.json"), ev); const ref = `audit/evidence/role-evaluations/UASCO-0085/EV-01.json#sha256=${crypto.createHash("sha256").update(ev).digest("hex")}`;
+        await getAt(stage, null, {readinessCompute: capture});
+        expect(seen[0](ref, "UASCO-0085", "EV-01", "PASSED"), "built before the evidence existed").toBe("file_missing");
+        expect(seen[1](ref, "UASCO-0085", "EV-01", "PASSED"), "built per request: sees the new evidence").toBeNull(); expect(seen[1]).not.toBe(seen[0]);
+      } finally { fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); }
+    });
+
+    it("R2-L4: the role-definitions sha cross-check degrades on a same-size/same-mtime edit, the degrade EVICTS the cache (next request is full again), and `now` is refreshed per request", async () => {
+      const stage = await stagePackaged(); const f = path.join(stage, "registries", "role-definitions.json");
+      try {
+        const round = new Date("2026-01-02T03:04:05.000Z"); fs.utimesSync(f, round, round); // tam milisaniye: aynı mtime yeniden kurulabilsin
+        const first = await getAt(stage, null); expect(first.body.readiness).not.toBeNull();
+        const orig = fs.readFileSync(f); const edited = Buffer.from(orig); const at = edited.indexOf(Buffer.from("UASCO-0001")); edited[at + 9] = edited[at + 9] === 0x31 ? 0x32 : 0x31; // same size, one digit
+        fs.writeFileSync(f, edited); fs.utimesSync(f, round, round);
+        const bad = await getAt(stage, null); expect(bad.code).toBe(200);
+        expect(bad.body).toMatchObject({readiness: null, reconciliation: null, readinessError: "ROLE_READINESS_UNAVAILABLE"}); expect(bad.audits[0][1]).toEqual({actor: "a", code: "READINESS_INPUT_INVALID"});
+        const again = await getAt(stage, null); expect(again.body.readiness, "eviction: reloaded from the changed file").not.toBeNull(); expect(again.body.readinessError).toBeUndefined();
+        // now: her istekte yenilenir
+        const nows = [new Date("2026-10-22T12:00:00.000Z"), new Date("2026-10-23T08:30:00.000Z")]; let k = 0;
+        const a = await getAt(stage, null, {now: () => nows[k++ % 2]}); const b = await getAt(stage, null, {now: () => nows[k++ % 2]});
+        expect([a.body.readiness.computedAt, b.body.readiness.computedAt]).toEqual(nows.map(x => x.toISOString()));
+      } finally { fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); }
+    });
+
+    it("F1: a knowledge profile that was ALREADY read changes DURING the load -> not cached (the next request reloads); registry-only guards with an after-load fingerprint fail here", async () => {
+      const stage = await stagePackaged(); const real = fs.readFileSync; const kdir = path.join("knowledge", "technologies"); const seenK: string[] = []; let t = 70_000_000;
+      const spy = vi.spyOn(fs, "readFileSync").mockImplementation(((p: any, ...r: any[]) => {
+        const sp = String(p);
+        if (sp.includes(kdir) && seenK.length < 2 && !seenK.includes(sp)) { seenK.push(sp); if (seenK.length === 2) { const when = new Date(Date.now() + (t += 10_000)); fs.utimesSync(seenK[0], when, when); } }
+        return (real as any).call(fs, p, ...r);
+      }) as any);
+      try {
+        const reads = () => spy.mock.calls.filter(c => String(c[0]).includes(kdir)).length;
+        await getAt(stage, null); const first = reads(); expect(seenK.length).toBe(2);
+        await getAt(stage, null); expect(reads(), "an already-read knowledge file changed during the load -> reloaded").toBeGreaterThan(first);
+      } finally { spy.mockRestore(); fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); }
+    });
+
+    it("F2: the loader reads ONLY the exported input list (the 5 registries and knowledge/<slug>.json) - an unlisted read would make the cache fingerprint blind to it", async () => {
+      const spy = vi.spyOn(fs, "readFileSync"); resetReadinessInputCache();
+      try {
+        loadReadinessInputFromRepo(REPO, {runs: {journal: "ABSENT"}, now: NOW});
+        const rels = [...new Set(spy.mock.calls.map(c => String(c[0])).filter(x => x.startsWith(REPO)).map(x => path.relative(REPO, x).split(path.sep).join("/")))];
+        const allowed = new Set<string>(READINESS_INPUT_FILES.registries); const bad = rels.filter(r => !allowed.has(r) && !new RegExp(`^${READINESS_INPUT_FILES.knowledgeDir}/[a-z0-9][a-z0-9.-]*\\.json$`).test(r));
+        expect(bad).toEqual([]); expect(rels.filter(r => allowed.has(r)).length).toBe(READINESS_INPUT_FILES.registries.length); expect(rels.length).toBeGreaterThan(100);
+      } finally { spy.mockRestore(); }
+    });
+
+    it("R2-L3: a loader input that changes DURING the load is not cached (the full input-list fingerprint is taken before the load)", async () => {
+      const stage = await stagePackaged(); const real = fs.readFileSync; let touched = false; let t = 50_000_000;
+      const spy = vi.spyOn(fs, "readFileSync").mockImplementation(((p: any, ...r: any[]) => {
+        if (!touched && String(p).includes(path.join("knowledge", "technologies"))) { touched = true; const when = new Date(Date.now() + (t += 10_000)); fs.utimesSync(path.join(stage, "registries", "skills-v2.json"), when, when); }
+        return (real as any).call(fs, p, ...r);
+      }) as any);
+      try {
+        const reads = () => spy.mock.calls.filter(c => String(c[0]).includes(path.join("knowledge", "technologies"))).length;
+        await getAt(stage, null); const first = reads(); expect(touched).toBe(true);
+        await getAt(stage, null); expect(reads(), "changed during load -> not cached -> reloaded").toBeGreaterThan(first);
+      } finally { spy.mockRestore(); fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); }
+    });
+
+    it("L1: a legacy/readiness MISMATCH reaches the client (consistent false + mismatch list) - the route never forces consistency", async () => {
+      const stage = await stagePackaged();
+      try {
+        const f = path.join(stage, "registries", "role-definitions.json"); const rd = JSON.parse(fs.readFileSync(f, "utf8")); rd.roles[0].guildId = "G-NOT-IN-REGISTRY"; fs.writeFileSync(f, JSON.stringify(rd)); resetReadinessInputCache();
+        const { code, body } = await getAt(stage, null); expect(code).toBe(200);
+        expect(body.reconciliation.consistent).toBe(false); expect(body.reconciliation.mismatches.length).toBeGreaterThan(0); expect(body.reconciliation.mismatches.join(",")).toContain("total.registered:599!=598");
+      } finally { fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); }
+    });
+
+    it("L2: the legacy statusSummary equals the output of the code BEFORE this change (digests generated at base 9ab1791 for a no-AWAITING input; basis.roleDefinitionsSha256 excluded; update only with a deliberate registry/binding change)", async () => {
+      const digest = (x: any) => { const c = JSON.parse(JSON.stringify(x)); delete c.basis.roleDefinitionsSha256; return crypto.createHash("sha256").update(JSON.stringify(c)).digest("hex"); };
+      expect(digest((await getAt(REPO, null)).body.statusSummary)).toBe("dac4d040b687f268199155d41c23ce30afdfcc201cdda61fd408783d687605ad");
+      expect(digest((await getAt(REPO, [{status: "RUNNING", evidence: [trace("UASCO-0252")]}])).body.statusSummary)).toBe("c0c81c3f7ae1ae0fa17c82f808610c0440b79a8eaa5214fda1d7668d92870ced");
+    });
   });
 });
 
@@ -1749,3 +1957,118 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     });
   });
 });
+
+// //TR: A-TEST-DIAG-1: git adımı başarısız olduğunda neden görünür olur (adım, çıkış kodu/sinyal/başlatma hatası, redakte stderr); sonuç yine NOT_EXECUTED'dır (altyapı rolü ne yükseltir ne cezalandırır), yeniden deneme ya da süre değişikliği yoktur. Gerçek git çalışır; yalnız seçilen alt komutun sonucu uydurulur (cp.spawnSync gölgesi).
+describe("A-TEST-DIAG-1: a failing git step in the evaluation pipeline is diagnosable (NOT_EXECUTED, no retry)", () => {
+  const DEV = "UASCO-0085", REVIEWER = "UASCO-0252";
+  const fakePair = (): ExecutorPair => new FakeExecutors({implement: () => ({files: {"greeting.txt": "hello\n"}}), review: n => (n === 1 ? {verdict: "CLEAN"} : {verdict: "BLOCKED", findings: [{severity: "HIGH", title: "command injection via unsanitised ref"}]})}).pair();
+  const evaluate = (role: string): Promise<EvaluationOutcome> => runRoleEvaluation({repoRoot: REPO, stagingRoot: path.join(fs.mkdtempSync(path.join(tmp, "diag-")), "staging"), pair: fakePair()}, role, "EV-01");
+  // The token is assembled at run time so the repository never contains a secret-looking literal.
+  const SECRET = "AKIA" + "ABCDEFGHIJKLMNOP";
+  type Fail = {status: number | null; signal?: string | null; error?: {code: string}; stderr?: string};
+  // Real git runs, except the Nth call whose argv contains `sub`, which returns `fail`. Returns the call counter.
+  const shim = (sub: string, fail: Fail, nth = 1) => {
+    const real = cp.spawnSync.bind(cp); let seen = 0;
+    const spy = vi.spyOn(cp, "spawnSync").mockImplementation(((cmd: string, args: string[], opts: any) => {
+      if (cmd === "git" && Array.isArray(args) && args.includes(sub) && ++seen === nth) return {output: [], pid: 0, signal: null, stdout: "", stderr: "", ...fail} as any;
+      return (real as any)(cmd, args, opts);
+    }) as any);
+    return {spy, hits: () => spy.mock.calls.filter(c => c[0] === "git" && Array.isArray(c[1]) && (c[1] as string[]).includes(sub)).length};
+  };
+  const run = async (role: string, sub: string, fail: Fail, nth = 1) => { const s = shim(sub, fail, nth); try { return {out: await evaluate(role), hits: s.hits()}; } finally { s.spy.mockRestore(); } };
+  const reasonOf = (o: EvaluationOutcome): string => { expect(o.status).toBe("NOT_EXECUTED"); return (o as {reason: string}).reason; };
+
+  it("seedRepo names the failed step and the result: init / add / commit with exit=N, and the stderr is redacted, whitespace-collapsed and at most 120 characters", async () => {
+    for (const step of ["init", "add", "commit"]) {
+      const { out, hits } = await run(DEV, step, {status: 128, stderr: `fatal:   could not\nwrite  ${SECRET}  ${"x".repeat(300)}`});
+      const reason = reasonOf(out);
+      expect(reason, step).toMatch(new RegExp(`^PROCEDURE_EXCEPTION:GIT_SEED_FAILED:${step}:exit=128:fatal: could not write \\[REDACTED:AWS_ACCESS_KEY\\] x+$`));
+      expect(reason, step).not.toContain(SECRET);
+      expect(reason.split(`${step}:exit=128:`)[1].length, `${step}: stderr part at most 120`).toBeLessThanOrEqual(120);
+      expect(hits, `${step}: the git step ran exactly once (no retry)`).toBe(1);
+    }
+    expect(reasonOf((await run(DEV, "add", {status: null, signal: "SIGKILL"})).out)).toBe("PROCEDURE_EXCEPTION:GIT_SEED_FAILED:add:signal=SIGKILL:");
+    expect(reasonOf((await run(DEV, "commit", {status: null, error: {code: "ENOENT"}})).out)).toBe("PROCEDURE_EXCEPTION:GIT_SEED_FAILED:commit:spawn=ENOENT:");
+  });
+
+  it("the workspace-setup paths keep the WORKSPACE_SETUP_FAILED prefix and add the step and result: developer checkout; reviewer add / commit / diff / clone / detach", async () => {
+    const dev = await run(DEV, "-B", {status: 1, stderr: `error: ${SECRET}  refused`});
+    expect(reasonOf(dev.out)).toBe("WORKSPACE_SETUP_FAILED:checkout:exit=1:error: [REDACTED:AWS_ACCESS_KEY] refused"); expect(dev.hits).toBe(1);
+    // the reviewer procedure seeds first (its own add/commit succeed); the SECOND add / commit is the case change
+    for (const [sub, step, nth] of [["add", "add", 2], ["commit", "commit", 2], ["diff", "diff", 1], ["clone", "clone", 1], ["--detach", "checkout", 1]] as const) {
+      const { out, hits } = await run(REVIEWER, sub, {status: 128, stderr: `fatal: ${step} failed ${SECRET}`}, nth);
+      expect(reasonOf(out), step).toBe(`WORKSPACE_SETUP_FAILED:${step}:exit=128:fatal: ${step} failed [REDACTED:AWS_ACCESS_KEY]`);
+      expect(hits, `${step}: no retry`).toBe(nth);
+    }
+  });
+
+  it("PROCEDURE_EXCEPTION keeps up to 240 characters of the message (it was cut at 80)", async () => {
+    const real = cp.spawnSync.bind(cp);
+    const spy = vi.spyOn(cp, "spawnSync").mockImplementation(((cmd: string, args: string[], opts: any) => { if (cmd === "git") throw new Error("E".repeat(500)); return (real as any)(cmd, args, opts); }) as any);
+    try { expect(reasonOf(await evaluate(DEV))).toBe(`PROCEDURE_EXCEPTION:${"E".repeat(240)}`); } finally { spy.mockRestore(); }
+  });
+
+  // //TR: Redakte önce, kırpma sonra: kırpma bir gizli anahtarı ortadan keserse redaksiyon artık eşleşemezdi. Error olmayan fırlatma (`throw "x"`) TypeError değil NOT_EXECUTED verir.
+  it("PROCEDURE_EXCEPTION redacts before it clips, and a non-Error throw is still NOT_EXECUTED", async () => {
+    const throwing = (err: unknown): ExecutorPair => new FakeExecutors({implement: () => { throw err; }, review: () => ({verdict: "CLEAN"})}).pair();
+    const evalWith = (pair: ExecutorPair) => runRoleEvaluation({repoRoot: REPO, stagingRoot: path.join(fs.mkdtempSync(path.join(tmp, "diag-")), "staging"), pair}, DEV, "EV-01");
+    const TOKEN = "ghp_" + "a1B2c3D4e5".repeat(3) + "Zz9Yx8"; // 36 alphanumerics, assembled at run time
+    const reason = reasonOf(await evalWith(throwing(new Error("EXECUTOR_FAILED: " + "y".repeat(90) + " Bearer " + TOKEN))));
+    expect(reason).not.toContain(TOKEN);
+    expect(reason).not.toMatch(/ghp_/);
+    expect(reason).toContain("[REDACTED:GITHUB_TOKEN]");
+    expect(reason.length).toBeLessThanOrEqual("PROCEDURE_EXCEPTION:".length + 240);
+    // the token straddles the 240 cut: clipping first would leave an unmatched ghp_ fragment
+    const straddle = reasonOf(await evalWith(throwing(new Error("EXECUTOR_FAILED: " + "y".repeat(200) + " " + TOKEN))));
+    expect(straddle).not.toMatch(/ghp_/);
+    expect(straddle).toContain("[REDACTED:GITHUB_TOKEN"); // the marker itself may be clipped at 240, the secret may not survive
+    expect(reasonOf(await evalWith(throwing("x")))).toBe("PROCEDURE_EXCEPTION:x");
+    expect(reasonOf(await evalWith(throwing(new Error("a\n\n  b\tc"))))).toBe("PROCEDURE_EXCEPTION:a b c"); // whitespace is collapsed and trimmed
+    expect(reasonOf(await evalWith(throwing(new Error("  \n x \t\n"))))).toBe("PROCEDURE_EXCEPTION:x"); // trimmed at both ends
+    // collapse comes first: a pattern split by a newline (a PEM header) still matches
+    const pem = reasonOf(await evalWith(throwing(new Error("EXECUTOR_FAILED: " + "-".repeat(5) + "BEGIN RSA\nPRIVATE KEY" + "-".repeat(5)))));
+    expect(pem).toContain("[REDACTED:PRIVATE_KEY]");
+    expect(pem).not.toContain("BEGIN RSA");
+  });
+
+  it("a throw that cannot be printed (null-prototype object, a throwing toString) is NOT_EXECUTED with UNPRINTABLE_THROW", async () => {
+    const throwing = (err: unknown): ExecutorPair => new FakeExecutors({implement: () => { throw err; }, review: () => ({verdict: "CLEAN"})}).pair();
+    for (const bad of [Object.create(null), {toString() { throw new Error("no toString"); }}]) {
+      const o = await runRoleEvaluation({repoRoot: REPO, stagingRoot: path.join(fs.mkdtempSync(path.join(tmp, "diag-")), "staging"), pair: throwing(bad)}, DEV, "EV-01");
+      expect(reasonOf(o)).toBe("PROCEDURE_EXCEPTION:UNPRINTABLE_THROW");
+    }
+  });
+
+  it("git stderr never keeps URL userinfo (user:password@host), also when the password holds '@' or the scheme follows a word character, while the host stays", async () => {
+    const PASS = "p" + "w0rd" + "Zq7";
+    const reasonFor = async (stderr: string, role = DEV, sub = "add") => reasonOf((await run(role, sub, {status: 128, stderr})).out);
+    const plain = await reasonFor(`fatal: unable to access 'https://alice:${PASS}@git.example.com/r.git/': denied`);
+    expect(plain).not.toContain("alice"); expect(plain).not.toContain(PASS);
+    expect(plain).toContain("https://[REDACTED]@git.example.com/r.git/");
+    const at = await reasonFor("fatal: https://alice:p@ss@host/ denied");
+    expect(at).not.toContain("ss@"); expect(at).not.toContain("alice"); expect(at).toContain("https://[REDACTED]@host/");
+    const glued = await reasonFor("fatal: _https://alice:pw@host/ denied"); // no word boundary before the scheme
+    expect(glued).not.toContain("alice"); expect(glued).toContain("[REDACTED]@host/");
+    const pem = await reasonFor("fatal: " + "-".repeat(5) + "BEGIN RSA\nPRIVATE KEY" + "-".repeat(5), DEV, "-B"); // setup path (the seed path is redacted a second time by the catch); collapse first: a pattern split by a newline still matches
+    expect(pem).toContain("[REDACTED:PRIVATE_KEY]"); expect(pem).not.toContain("BEGIN RSA");
+    expect(await reasonFor("\n error: refused \n", DEV, "-B")).toBe("WORKSPACE_SETUP_FAILED:checkout:exit=128:error: refused"); // real git ends stderr with a newline: trimmed
+    // the same scrub on a WORKSPACE_SETUP_FAILED path (developer checkout -B)
+    const ws = await reasonFor(`error: https://alice:${PASS}@git.example.com/r.git refused`, DEV, "-B");
+    expect(ws).toMatch(/^WORKSPACE_SETUP_FAILED:checkout:exit=128:/);
+    expect(ws).not.toContain("alice"); expect(ws).not.toContain(PASS); expect(ws).toContain("https://[REDACTED]@git.example.com/r.git");
+  });
+
+  it("scrubbing a 200k-character stderr stays linear (regression guard, not a timeout)", async () => {
+    const real = cp.spawnSync.bind(cp); let t0 = 0;
+    const spy = vi.spyOn(cp, "spawnSync").mockImplementation(((cmd: string, args: string[], opts: any) => {
+      if (cmd === "git" && Array.isArray(args) && args.includes("init")) { t0 = performance.now(); return {output: [], pid: 0, signal: null, status: 128, stdout: "", stderr: "a.".repeat(100000)} as any; }
+      return (real as any)(cmd, args, opts);
+    }) as any);
+    try {
+      const reason = reasonOf(await evaluate(DEV)); const ms = performance.now() - t0;
+      expect(reason).toMatch(/^PROCEDURE_EXCEPTION:GIT_SEED_FAILED:init:exit=128:a\.a\./);
+      expect(ms, `scrub + clip took ${ms.toFixed(0)} ms`).toBeLessThan(500);
+    } finally { spy.mockRestore(); }
+  });
+});
+

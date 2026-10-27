@@ -1,5 +1,5 @@
 {
- "//TR": "C-FLOW-ANALYSIS-2 mutasyon listesi: her mutant tam metin değişikliğidir (dosyada tam 1 kez bulunmalı); docs/lanes/LANE-C-flow-analysis-2-mutants.mjs her birini uygular ve tests/v7-core-predev-crew-coordination.test.ts dosyasının (-t \"C-FLOW-ANALYSIS\" ile) BAŞARISIZ olmasını bekler. X7 (boş yanıtı zarf olarak okumak) denetimde HAYATTA KALDI: gereksiz koruma `rawOut !== \"\"` idi (sonraki denetim zaten aynı koruma ile aynı kodu verir); koruma üretim kodundan kaldırıldı ve mutant listeden çıkarıldı (davranış aynı). #237 inceleme turu: yer tutucu koruması placeholder.ts'e taşındı (validateArtifactContent içinde paylaşılır): G2-G4/G6 yerine PH1-PH13; oturum sınıflaması yeniden yazıldı (A1-A7, X3, X13, X15, X16); yetkinlik değerlendirmesi EV1-EV4 (testFile/filter mutant başına verilebilir, varsayılan coordination dosyası + \"C-FLOW-ANALYSIS\"); yinelenen E1-E3 (executors.ts) EX1-EX3 olarak yeniden adlandırıldı. Toplam 54 (bağımsız inceleme sonrası: eşleşme deseni `<<FILL` + `:`/`>` olarak daraltıldı, PH8-PH10 güncellendi, PH14-PH15 eklendi).",
+ "//TR": "C-FLOW-ANALYSIS-2 mutasyon listesi: her mutant tam metin değişikliğidir (dosyada tam 1 kez bulunmalı); docs/lanes/LANE-C-flow-analysis-2-mutants.mjs her birini uygular ve tests/v7-core-predev-crew-coordination.test.ts dosyasının (-t \"C-FLOW-ANALYSIS\" ile) BAŞARISIZ olmasını bekler. X7 (boş yanıtı zarf olarak okumak) denetimde HAYATTA KALDI: gereksiz koruma `rawOut !== \"\"` idi (sonraki denetim zaten aynı koruma ile aynı kodu verir); koruma üretim kodundan kaldırıldı ve mutant listeden çıkarıldı (davranış aynı). #237 inceleme turu: yer tutucu koruması placeholder.ts'e taşındı (validateArtifactContent içinde paylaşılır): G2-G4/G6 yerine PH1-PH13; oturum sınıflaması yeniden yazıldı (A1-A7, X3, X13, X15, X16); yetkinlik değerlendirmesi EV1-EV4 (testFile/filter mutant başına verilebilir, varsayılan coordination dosyası + \"C-FLOW-ANALYSIS\"); yinelenen E1-E3 (executors.ts) EX1-EX3 olarak yeniden adlandırıldı. Toplam 54 (bağımsız inceleme sonrası: eşleşme deseni `<<FILL` + `:`/`>` olarak daraltıldı, PH8-PH10 güncellendi, PH14-PH15 eklendi).; #237 LOW takibi: normalise NFKD + \\p{M}\\p{Cf} oldu (PH5-PH7 güncellendi, PH16-PH17 eklendi; toplam 56).; #257 onarımı: normalise NFKC + yalnız görünmez karakterler ([\\p{Cf}\\p{Default_Ignorable_Code_Point}]) oldu (NFKD+\\p{M} yeniden oynatmada aksanlı dürüst metni reddediyordu); PH5-PH7, PH16-PH17 yeniden tanımlandı, PH18-PH19 eklendi (toplam 58).",
  "mutants": [
   {
    "id": "A1",
@@ -280,16 +280,16 @@
   },
   {
    "id": "PH5",
-   "description": "no normalisation at all (full-width and zero-width variants pass)",
+   "description": "no normalisation at all (full-width and invisible-character variants pass)",
    "file": "core/workos/predev/placeholder.ts",
-   "old": "s.normalize(\"NFKC\").replace(/\\p{Cf}/gu, \"\")",
+   "old": "s.normalize(\"NFKC\").replace(/[\\p{Cf}\\p{Default_Ignorable_Code_Point}]/gu, \"\")",
    "new": "s"
   },
   {
    "id": "PH6",
-   "description": "format characters are not stripped (zero-width / soft hyphen / bidi / BOM variants pass)",
+   "description": "invisible characters are not stripped (zero-width / soft hyphen / bidi / BOM / variation-selector / grapheme-joiner variants pass)",
    "file": "core/workos/predev/placeholder.ts",
-   "old": ".replace(/\\p{Cf}/gu, \"\")",
+   "old": ".replace(/[\\p{Cf}\\p{Default_Ignorable_Code_Point}]/gu, \"\")",
    "new": ""
   },
   {
@@ -391,6 +391,34 @@
    "file": "core/workos/predev/placeholder.ts",
    "old": "/<\\s*<\\s*fill\\s*[:>]/i",
    "new": "/<\\s*<\\s*fill\\s*>/i"
+  },
+  {
+   "id": "PH16",
+   "description": "default-ignorable code points (variation selectors, grapheme joiner, fillers) are not stripped, only format characters",
+   "file": "core/workos/predev/placeholder.ts",
+   "old": "/[\\p{Cf}\\p{Default_Ignorable_Code_Point}]/gu",
+   "new": "/\\p{Cf}/gu"
+  },
+  {
+   "id": "PH17",
+   "description": "after NFKC, ALL combining marks (\\p{M}: Mn, Mc, Me) are stripped as well: a visible mark inside the marker (decomposed U+0301/U+0338/U+20DD) is \"caught\" and honest text whose NFKC form is a mark right after `<<` (for example `<<´fill: y`, U+00B4 becomes space + U+0301) is rejected. It models only the mark-stripping half of the earlier NFKD+\\p{M} version: it keeps NFKC, so precomposed accented text such as `<<Fíll>> er stór` stays accepted either way (pinned by the honest list and the documented-limit loop)",
+   "file": "core/workos/predev/placeholder.ts",
+   "old": "/[\\p{Cf}\\p{Default_Ignorable_Code_Point}]/gu",
+   "new": "/[\\p{Cf}\\p{Default_Ignorable_Code_Point}\\p{M}]/gu"
+  },
+  {
+   "id": "PH18",
+   "description": "spacing combining marks (Mc) are stripped (a visible Devanagari vowel sign inside FILL is \"caught\", honest text with Mc is rejected)",
+   "file": "core/workos/predev/placeholder.ts",
+   "old": "/[\\p{Cf}\\p{Default_Ignorable_Code_Point}]/gu",
+   "new": "/[\\p{Cf}\\p{Default_Ignorable_Code_Point}\\p{Mc}]/gu"
+  },
+  {
+   "id": "PH19",
+   "description": "enclosing marks (Me) are stripped",
+   "file": "core/workos/predev/placeholder.ts",
+   "old": "/[\\p{Cf}\\p{Default_Ignorable_Code_Point}]/gu",
+   "new": "/[\\p{Cf}\\p{Default_Ignorable_Code_Point}\\p{Me}]/gu"
   }
  ]
 }

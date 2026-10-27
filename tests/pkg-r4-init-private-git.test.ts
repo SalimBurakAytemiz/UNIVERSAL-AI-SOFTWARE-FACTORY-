@@ -18,15 +18,15 @@ function runInit(repo:string,remote:string,allowUnverified:boolean){const r=cp.s
 describe.skipIf(!win)("init-private-git.ps1 on Windows PowerShell 5.1 (PHASE0-F4)",{timeout:300000},()=>{
   it("the host reproduces the defect: the original redirected probe is terminating under Stop (negative control)",()=>{const w=workspace();try{expect(git(w.repo,"init","-q").status).toBe(0);
     const r=cp.spawnSync(ps,["-NoProfile","-NonInteractive","-Command",`$ErrorActionPreference='Stop';if($PSVersionTable.PSVersion.Major -ne 5){'NOT_WINDOWS_POWERSHELL_5';exit 3};try{git -C '${w.repo}' remote get-url origin 2>$null;'NOT_TERMINATING'}catch{'TERMINATING:'+$_.FullyQualifiedErrorId}`],{encoding:"utf8",windowsHide:true,timeout:60000,env:isolatedGitEnv(childEnv())});
-    expect(r.stdout,r.stderr).toContain("TERMINATING:NativeCommandError")}finally{fs.rmSync(w.t,{recursive:true,force:true})}});
+    expect(r.stdout,r.stderr).toContain("TERMINATING:NativeCommandError")}finally{fs.rmSync(w.t,{recursive:true,force:true,maxRetries:10,retryDelay:200})}});
   it("initializes, pushes to a new origin and verifies the remote SHA; a second run takes the set-url path",()=>{const w=workspace();try{
     const r=runInit(w.repo,w.remote,true);expect(r.status,r.out).toBe(0);expect(r.out).toContain("GIT_INIT: PASS (REMOTE_UNVERIFIED)");expect(r.out).not.toContain("NativeCommandError");
     const head=git(w.repo,"rev-parse","HEAD").stdout.trim();expect(head).toMatch(/^[0-9a-f]{40}$/);expect(git(w.remote,"rev-parse","refs/heads/main").stdout.trim()).toBe(head);
     const status=JSON.parse(fs.readFileSync(path.join(w.repo,".ai","runtime","REMOTE_STATUS.json"),"utf8"));expect(status.visibility).toBe("REMOTE_UNVERIFIED");expect(status.head).toBe(head);
-    const again=runInit(w.repo,w.remote,true);expect(again.status,again.out).toBe(0);expect(again.out).not.toContain("NativeCommandError");expect(git(w.repo,"remote","get-url","origin").stdout.trim()).toBe(w.remote);expect(git(w.remote,"rev-parse","refs/heads/main").stdout.trim()).toBe(head)}finally{fs.rmSync(w.t,{recursive:true,force:true})}});
+    const again=runInit(w.repo,w.remote,true);expect(again.status,again.out).toBe(0);expect(again.out).not.toContain("NativeCommandError");expect(git(w.repo,"remote","get-url","origin").stdout.trim()).toBe(w.remote);expect(git(w.remote,"rev-parse","refs/heads/main").stdout.trim()).toBe(head)}finally{fs.rmSync(w.t,{recursive:true,force:true,maxRetries:10,retryDelay:200})}});
   it("refuses to push to an unverified remote without the explicit override",()=>{const w=workspace();try{
     const r=runInit(w.repo,w.remote,false);expect(r.status).not.toBe(0);expect(r.out).toContain("Remote privacy could not be verified");expect(r.out).not.toContain("NativeCommandError");
-    expect(git(w.remote,"rev-parse","--verify","-q","refs/heads/main").status).not.toBe(0)}finally{fs.rmSync(w.t,{recursive:true,force:true})}});
+    expect(git(w.remote,"rev-parse","--verify","-q","refs/heads/main").status).not.toBe(0)}finally{fs.rmSync(w.t,{recursive:true,force:true,maxRetries:10,retryDelay:200})}});
   it("keeps both native probes scoped and exit-code checked",()=>{const src=fs.readFileSync("scripts/init-private-git.ps1","utf8");
     expect(src).toContain('try{Invoke-UascoGit remote get-url origin 2>$null|Out-Null;$originExists=($LASTEXITCODE -eq 0)}finally{$ErrorActionPreference=$eapBefore}');
     expect(src).toContain('try{$ghOut=gh repo view --json visibility,url 2>$null;$ghExit=$LASTEXITCODE}finally{$ErrorActionPreference=$eapBefore}');expect(src).toContain('if($ghExit -ne 0){throw "gh repo view failed with exit code $ghExit"}');

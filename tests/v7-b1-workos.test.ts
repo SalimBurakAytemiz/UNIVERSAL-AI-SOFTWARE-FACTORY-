@@ -3075,11 +3075,11 @@ describe("LANE-B batch 4b: analysis routes and server registration", () => {
     expect((await run({step: async () => { throw boom; }, builderTrace: () => TRACE})).audit[0]).toMatchObject({status: "FAILED", reason: "WORKOS_DISK_FULL", builderRan: true, roleId: "analyst", artifactKind: "Requirements", executor: "claude-cli@test", exitCode: 0, durationMs: 1234});
     expect((await run({step: async () => { throw boom; }, builderTrace: () => null})).audit[0], "throw before the paid call").toMatchObject({status: "FAILED", builderRan: false});
     expect((await run({step: async () => { throw boom; }})).audit[0], "no trace source: unknown").toMatchObject({status: "FAILED", builderRan: null});
-    expect((await run({step: async () => { throw new AnalysisError("ANALYSIS_MISSION_NOT_FOUND"); }, builderTrace: () => TRACE})).audit[0], "request error is never a paid failure").toMatchObject({builderRan: false});
+    expect((await run({step: async () => { throw new AnalysisError("ANALYSIS_MISSION_NOT_FOUND"); }, builderTrace: () => null})).audit[0], "request error without a trace is never a paid failure").toMatchObject({builderRan: false});
     const ok = await run({step: async () => ({status: "DRAFT_READY", kind: "Requirements", artifactId: "art_1", version: 1, roleId: "analyst", next: "FOUNDER_APPROVAL"}), builderTrace: () => TRACE});
     expect(ok.audit[0]).toMatchObject({status: "DRAFT_READY", kind: "Requirements", artifactId: "art_1", version: 1, roleId: "analyst", artifactKind: "Requirements", executor: "claude-cli@test", outputSha256: TRACE.outputSha256, exitCode: 0, durationMs: 1234});
     expect(JSON.stringify(ok.audit), "no prompt / model text in the audit").not.toMatch(/SECRET PROMPT|RAW MODEL TEXT/);
-    const stopped = await run({step: async () => ({status: "DRAFT_READY", kind: "Requirements", artifactId: "art_1", version: 1, roleId: "analyst", next: "FOUNDER_APPROVAL"}), builderTrace: () => TRACE}); expect(stopped.audit[0].executor).toBe("claude-cli@test");
+    const drafted = await run({step: async () => ({status: "DRAFT_READY", kind: "Requirements", artifactId: "art_1", version: 1, roleId: "analyst", next: "FOUNDER_APPROVAL"}), builderTrace: () => TRACE}); expect(drafted.audit[0].executor).toBe("claude-cli@test");
     const throwing = await run({step: async () => ({status: "BUILDER_FAILED", kind: "Requirements", code: "X"}), builderTrace: () => { throw new Error("trace boom"); }}); expect([throwing.r.statusCode, throwing.audit[0].status]).toEqual([200, "BUILDER_FAILED"]);
   });
 
@@ -3111,6 +3111,29 @@ describe("LANE-B batch 4b: analysis routes and server registration", () => {
       expect([r.statusCode, r.json(), m.calls]).toEqual([409, {error: "PREDEV_PRODUCE_BUSY"}, []]); expect(m.auditLog).toContainEqual(expect.objectContaining({status: "REFUSED", reason: "PREDEV_PRODUCE_BUSY"}));
     } finally { if (held.ok) held.release(); }
     const free = await mkApp({step: {status: "AWAITING_APPROVAL", kind: "Plan", artifactId: "art_1", artifactState: "DRAFT", next: "FOUNDER_APPROVAL"}}); expect((await post(free.app, `/v1/missions/${MSN}/analysis/step`)).statusCode).toBe(200);
+  });
+
+  it("B-ANALYSIS-LOWS-4 (1)-(3): builderRan checks the EVIDENCE first (trace -> true even for AnalysisError; no trace: AnalysisError / empty source -> false; no source or a source that throws -> null); both STOPPED audits carry the trace fields (the draft-recorded recheck and the flow's AnalysisStoppedError); a throwing factory still leaves a FAILED audit", async () => {
+    const {AnalysisError, AnalysisStoppedError} = await import("../core/workos/crew/analysis.js"); const url = `/v1/missions/${MSN}/analysis/step`;
+    const TRACE = {roleId: "analyst", kind: "Requirements", identity: "claude-cli@test", outputSha256: "cd".repeat(32), exitCode: 0, durationMs: 77};
+    const FIELDS = {roleId: "analyst", artifactKind: "Requirements", executor: "claude-cli@test", outputSha256: TRACE.outputSha256, exitCode: 0, durationMs: 77};
+    const failed = async (flow: any) => { const m = await mkApp({flow}); await post(m.app, url); return m.auditLog.find(a => a.e === "WORKOS_ANALYSIS_STEP" && a.status === "FAILED"); };
+    const aerr = () => new AnalysisError("ANALYSIS_MISSION_NOT_FOUND"), boom = () => Object.assign(new Error("WORKOS_DISK_FULL"), {code: "WORKOS_DISK_FULL"});
+    expect(await failed({step: async () => { throw aerr(); }, builderTrace: () => TRACE}), "evidence beats the error class").toMatchObject({builderRan: true});
+    expect(await failed({step: async () => { throw aerr(); }, builderTrace: () => null})).toMatchObject({builderRan: false});
+    expect(await failed({step: async () => { throw boom(); }, builderTrace: () => null}), "empty trace source").toMatchObject({builderRan: false});
+    expect(await failed({step: async () => { throw boom(); }, builderTrace: () => { throw new Error("trace boom"); }}), "source threw").toMatchObject({builderRan: null});
+    expect(await failed({step: async () => { throw boom(); }}), "no source").toMatchObject({builderRan: null});
+    // (3) fabrika fırlatırsa da FAILED denetimi (builder hiç çağrılmadı: false) ve 5xx
+    const fm = await mkApp({flow: () => { throw Object.assign(new Error("factory boom"), {code: "FACTORY_BROKEN"}); }}); const fr = await post(fm.app, url);
+    expect(fr.statusCode).toBeGreaterThanOrEqual(500); expect(fm.auditLog).toContainEqual(expect.objectContaining({e: "WORKOS_ANALYSIS_STEP", status: "FAILED", reason: "FACTORY_BROKEN", builderRan: false})); expect(fm.calls).toEqual([]);
+    // (2) STOPPED #1: taslak kaydedildikten sonra Global Stop gelir (gerçekten durur) - izin alanları + stoppedAfterRecord
+    let trip = () => {}; const after = await mkApp({flow: {step: async () => { trip(); return {status: "DRAFT_READY", kind: "Requirements", artifactId: "art_1", version: 2, roleId: "analyst", next: "FOUNDER_APPROVAL"}; }, builderTrace: () => TRACE}}); trip = after.setStop;
+    const ar = await post(after.app, url); expect([ar.statusCode, ar.json()]).toEqual([423, {error: "GLOBAL_STOP_ACTIVE"}]);
+    expect(after.auditLog.find(a => a.status === "STOPPED")).toMatchObject({reason: "GLOBAL_STOP_ACTIVE", stoppedAfterRecord: true, kind: "Requirements", artifactId: "art_1", version: 2, ...FIELDS});
+    // (2) STOPPED #2: akış AnalysisStoppedError fırlatır (ücretli çağrı iptal edildi) - izin alanları, stoppedAfterRecord YOK
+    const thrown = await mkApp({flow: {step: async () => { throw new AnalysisStoppedError(); }, builderTrace: () => TRACE}}); const tr = await post(thrown.app, url); expect(tr.statusCode).toBe(423);
+    const stoppedAudit = thrown.auditLog.find(a => a.status === "STOPPED"); expect(stoppedAudit).toMatchObject({reason: "GLOBAL_STOP_ACTIVE", ...FIELDS}); expect(stoppedAudit).not.toHaveProperty("stoppedAfterRecord");
   });
 
   it("R2: Global Stop arriving while the step runs is re-checked before DRAFT_READY is answered (423, audited); other statuses are unaffected", async () => {

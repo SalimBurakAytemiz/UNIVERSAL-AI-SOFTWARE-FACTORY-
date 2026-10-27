@@ -285,7 +285,7 @@ function transitionControls(ctx,mission,awaiting,readiness=null,engine=undefined
   // //TR: COORD-RUN-EXPERT: koşuyu yürütecek uzman geliştirici rolü (varsayılan ilk-teslim developer bağlaması); seçim yalnız bellekte, mission başına tutulur.
   const expert=drafts.runExpert[mission.missionId]??RUN_EXPERTS[0].roleId;
   const expertField=field(ctx,{id:"run-expert",labelKey:"work.run.expert",value:expert,onInput:v=>{drafts.runExpert[mission.missionId]=v},hintKey:"work.run.expertHint",
-    options:[...RUN_EXPERTS.map(e=>({value:e.roleId,label:ctx.t("work.run.expertOpt",{roleId:e.roleId,fn:ctx.t(`work.run.fn.${e.function}`)})})),{value:RUN_EXPERT_NONE,label:ctx.t("work.run.expertNone")}]});
+    options:[...RUN_EXPERTS.map(e=>({value:e.roleId,label:ctx.t("work.run.expertOpt",{roleId:e.roleId,fn:ctx.t(`work.run.fn.${e.function}`)})})),{value:RUN_EXPERT_NONE,label:ctx.t("work.run.expertDefault",{roleId:RUN_EXPERTS[0].roleId})}]});
   const runBtn=h(doc,"button",{type:"button",class:"btn btn-primary",id:"run-start",dataset:{focusKey:"run-start"},disabled:!startable||busy,"aria-describedby":"run-start-hint",on:{click:()=>startRun(ctx,{missionId:mission.missionId,status:mission.status,roleId:drafts.runExpert[mission.missionId]??RUN_EXPERTS[0].roleId})},text:ctx.t("work.run.start")});
   return h(doc,"div",{class:"transition-controls"},
     h(doc,"h4",{text:ctx.t("work.transition.title")}),

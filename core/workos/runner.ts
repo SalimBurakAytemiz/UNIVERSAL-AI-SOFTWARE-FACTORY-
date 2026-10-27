@@ -2,6 +2,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import os from "node:os";
+import {monitorEventLoopDelay, performance} from "node:perf_hooks";
+import type {IntervalHistogram} from "node:perf_hooks";
 import {acquireProcessLock} from "../../automation/lib/process-lock.mjs";
 import {globalStopState} from "../../automation/lib/global-stop.mjs";
 import {safeChildEnv} from "../../automation/lib/env-policy.mjs";
@@ -13,6 +16,13 @@ import type {RunEvidence, RunStatus, RunStep, SecurityStageSummary, WorkRun} fro
 import {LEASED_RUN_STATUSES} from "./run-state.js";
 import {testCommandAllowed} from "./schemas.js";
 import {canonicalPath, managedRepoCanonical, pathOverlapsDataDir} from "./path-guard.js";
+import {runGitAsync} from "./git-async.js";
+import type {GitRun} from "./git-async.js";
+import {
+  OWNER_FILE, WRITER_KILL_WAIT_MS, accessDeniedVerdict, bootId, bootTimeMs, creationTicks, installTerminationForwarding, isTerminating, killWriterGroup, leaderlessGroupProof, readOwner, reusedPid, sameBoot, startToken, startTokenLinux, sweepWriters, waitWriterGone,
+  trackWriterGroup, untrackWriterGroup, writeOwner, writerEnvFor, writerState
+} from "./writer-guard.js";
+import type {WorkspaceOwner} from "./writer-guard.js";
 import {redactSecrets, scanCommitMessagesForSecrets, scanDiffForSecrets} from "./secret-scan.js";
 // INT-R4: runProcess (REL-FX ana-makine test çalıştırıcısı) ARTIK kullanılmaz; yürütme yalnız execution-gate sağlayıcısı (gate.provider.run) üzerinden gider, ana makinede asla.
 import {assertIndependentExecutors} from "./executors.js";
@@ -29,7 +39,7 @@ import type {ReviewerTestSurface} from "./executors.js";
 // //TR: REL-FX-4: sağlayıcı kota/hız sınırı sınıflandırması korumalı master sınıflandırıcıyla yapılır (kopyalanmaz); tip bildirimi olmadığı için dar yerel tiple bağlanır.
 // @ts-expect-error TS7016: failure-classifier.mjs tip bildirimi yok
 import {classifyFailure as classifyFailureUntyped} from "../../automation/lib/failure-classifier.mjs";
-import type {ExecutorPair, MissionSpec, ProcResult} from "./executors.js";
+import type {ExecutorPair, MissionSpec, ProcResult, SpawnedChild} from "./executors.js";
 import {DEFAULT_MAX_REPORT_BYTES, DEFAULT_MAX_TRIVY_DB_AGE_MS, DEFAULT_SECURITY_TIMEOUT_MS, buildAddedLineStream, defaultTrivyCacheDir, discoverSecurityTools, evaluateSecurityPolicy, gitRangeProblem, mergeGitleaksPasses, runGitleaks, runGitleaksAddedLines, runTrivy, toolInfo, verifyTool} from "./security-tools.js";
 import type {GitleaksResult, PolicyInput, ResolvedTool, SecurityOptions, SecurityToolset} from "./security-tools.js";
 
@@ -43,6 +53,8 @@ export interface RunnerOptions {
   security?: SecurityOptions;
   // SBX-GATE: proje test komutları yalnız bu kapının izin verdiği doğrulanmış sandbox sağlayıcısında çalışır; tanımsız = sağlayıcı yok = VERIFY/REGRESSION NOT_EXECUTED (SANDBOX_UNAVAILABLE, M1a: run statik güvenlik + bağımsız review ile sürer).
   executionGate?: ExecutionGate;
+  // PAR-03: olay döngüsü gecikmesinin (p99, ms; çözünürlük payı düşülmüş) programatik kaynağı; tanımsız = perf_hooks monitorEventLoopDelay. Yalnız test enjeksiyonudur.
+  loopDelayP99Ms?: () => number;
 }
 export interface TickReport { skipped?: "BUSY" | "LOCKED"; recovered: string[]; claimed: string[]; cancelled: string[]; fenced: string[]; advanced: string[]; deferred: string[] }
 
@@ -54,6 +66,12 @@ type Outcome =
   | {kind: "CANCEL"; reason: string};
 
 const RUN_ID = /^run_[0-9a-f]{24}$/;
+// //TR: Founder'ın kendisinin giderebileceği ön koşul retleri (oturum yok/süresi dolmuş, CLI yok/.cmd başlatıcı, başlatıcı kanıtı yok/değişmiş) run'ı BLOCKED yapar (düzeltilince devam edilebilir); adapter'ın bildirdiği başka her geçersizlik nedeni (gerçek örnekler, executors.ts: REVIEW_WORKSPACE_MODIFIED, REVIEW_WORKSPACE_NOT_CLEAN_BEFORE) FAILED kalır. Bu desen YALNIZCA adapter'ın invalidReason'ı içindir: REVIEWER_IDENTITY_MISMATCH (stepReview başı) ve REVIEWER_MUTATED_CLONE (klon değişti) bu dala hiç girmez, durum belirtmeden BLOCK döner ve BLOCKED olur; o davranış bu paketle DEĞİŞMEDİ.
+export const FOUNDER_ACTIONABLE_REFUSAL = /^(?:CLAUDE_PROFILE_|CLAUDE_CLI_|CLAUDE_PACKAGE_PROVENANCE_|CLAUDE_LAUNCHER_PROVENANCE_|PROVIDER_PROVENANCE_)/;
+// //TR: #224 tur 3: runner git çocuğunun sahiplik kaydı yazılamadı (geçici disk/rename hatası): executeStep bunu RETRY (OWNER_RECORD_WRITE_FAILED) yapar.
+class OwnerRecordError extends Error { constructor() { super("OWNER_RECORD_WRITE_FAILED"); } }
+// //TR: #224 tur 3 (HB-R3-2): adım abort sinyali bir runner git çocuğunu öldürdü; executeStep bunu CANCEL sonucuna çevirir (implementer'ın aborted yolu ile aynı).
+class StepAbortedError extends Error { constructor() { super("STEP_ABORTED"); } }
 const SHA = /^[0-9a-f]{40}$/;
 const NEXT: Record<RunStep, RunStep | "FINISHED"> = {WORKSPACE: "IMPLEMENT", IMPLEMENT: "VERIFY", VERIFY: "SECURITY", SECURITY: "REVIEW", REVIEW: "REGRESSION", REGRESSION: "REPORT", REPORT: "FINISHED"};
 // Adım bittiğinde mission'ın gideceği durum (state machine allowlist'i store tarafından ayrıca uygulanır).
@@ -108,46 +126,108 @@ export function repositoryPrecondition(project: {projectId: string; repository?:
   return {ok: true, src};
 }
 
+export type {WorkspaceOwner} from "./writer-guard.js";
+
+// //TR: recovered: bu lease devralma ile alındı (önceki lease'in yazarı durdurulmadan workspace'e dokunulmaz, cancel dahil); reap: durdurma sonucu (sürüşün ilk adımında bir kez hesaplanır).
+const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+// //TR: #224 tur 3 (SWEEP-5): transient=true geçici bir durdurma/tarama hatasıdır (öldürülen süreç henüz gitmedi, /proc okunamadı): devir RECOVERY_FAILED YAPMAZ, bir sonraki devirde (bütçe dahilinde) yeniden dener.
+interface ReapResult { problem: string | null; note: string; transient?: true }
+interface OwnedRun { leaseId: string; drive: Promise<void> | null; renewedAt: number; lost: boolean; recovered: boolean; reap: ReapResult | null; abort: (() => boolean) | null }
+const LOOP_RESOLUTION_MS = 20;
+const STALL_SAMPLE_MS = 1_000;
+const STALL_MEMORY_MS = 5_000;
+const DRIFT_TICK_MS = 50;
+// //TR: PAR-03 (RCA relfx-c3:200): runner'ın run YAZILARI; her birinden önce sahip olunan bütün lease'ler yenilenir (constructor'daki store sarmalayıcısı). renewRunLease bilerek yoktur (özyineleme olmaz).
+const RENEWING_WRITES: ReadonlySet<PropertyKey> = new Set(["transitionRun", "checkpointRun", "addRunEvidence"]);
+// //TR: Okunamayan/yırtık sahiplik kaydı, dosya önyüklemeden bu kadar ESKİYSE "yazar yok" sayılır (süreçler yeniden başlatmadan sağ çıkmaz; saat sapması payı).
+const BOOT_GRACE_MS = 2_000;
+
 export type RepositoryHead = {ok: true; baseSha: string} | {ok: false; reason: "REPOSITORY_NOT_WORKTREE_ROOT" | "REPOSITORY_HEAD_UNRESOLVED"};
 // //TR: Depo kökü ve HEAD kararı TEK saf fonksiyondur (runner WORKSPACE adımı çağırır; readiness.ts çağıracaktır: LANE-B-REQUEST, #218; sonuç çağıranın ortamına bağlı değildir). `git rev-parse` yukarı doğru keşfeder: düz bir alt dizin üst deponun HEAD'ini çözerdi. Bu yüzden: (1) süreç ortamından YALNIZ sabit bir izin listesi geçer (safeChildEnv'in alwaysAllow'u + TMPDIR; Windows'ta libuv, eksik HOMEDRIVE, HOMEPATH, LOGONSERVER, SYSTEMDRIVE, USERDOMAIN, USERNAME ve WINDIR'i ebeveynden kendisi doldurur: bunlar GIT_* ya da gizli değildir): GIT_* (GIT_DIR başka bir depoyu gösterebilir), SUDO_UID (git'in sahiplik kararını değiştirir) ve gizli değerler (API anahtarları) git'e ASLA ulaşmaz; repo-yerel config'in çalıştırabileceği bir komut sırları göremez, çağıran (runner/readiness) sonucu değiştiremez ve çok büyük ortam E2BIG üretmez; keşif GIT_CEILING_DIRECTORIES=<fiziksel üst dizin> ile yukarı çıkamaz, ancak ceiling'e GÜVENİLMEZ (':' içeren yol listeyi böler, göreli yol yok sayılır): kök kararı her kolda bağımsız kanıt ister, (2) kök: `.git` (dizin veya gitfile) src'nin kendisinde VAR ve `--show-toplevel` src'ye EŞİT; veya `--absolute-git-dir` == src/.git (core.bare/core.worktree ayarlı depolar dahil); veya çıplak depo (`--is-bare-repository` ve git dizini src'nin kendisi); karşılaştırma kanonik anahtarla (path-guard), `.git` dizininin kendisi kök değildir, (3) HEAD yalnız bir commit nesnesine çözülmelidir (`HEAD` ile `HEAD^{commit}` aynı 40-hex SHA; etiket nesnesi reddedilir). `ok:true` YALNIZ ceiling'li, GIT_*'siz sondajlardan türer; ceiling'siz sondaj yalnız iki red nedeni arasında seçer (REPOSITORY_NOT_WORKTREE_ROOT: başka bir deponun/.git'in içinde). Her sondaj `protocol.allow=never` ile çalışır (kısmi klonda eksik HEAD nesnesi için tembel fetch repo-yerel config'teki komutları çalıştırır/ağa çıkar), toplam süre sınırlıdır (varsayılan 10 sn, SIGKILL; okunamayan HEAD/config sunucuyu sonsuza dek bloke etmez) ve fonksiyon ASLA fırlatmaz (zararlı girdi = red). Nesne grafiğinin bütünlüğü doğrulanmaz: eksik tree/parent clone adımında WORKSPACE_CLONE_FAILED olur.
 const GIT_PROBE_ENV = new Set(["PATH", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "TEMP", "TMP", "TMPDIR", "SYSTEMROOT", "COMSPEC", "PATHEXT", "OS", "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE"]);
+function gitProbeEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {GIT_NO_LAZY_FETCH: "1"};
+  for (const [k, v] of Object.entries(process.env)) if (typeof v === "string" && !v.includes("\0") && GIT_PROBE_ENV.has(k.toUpperCase())) env[k] = v;
+  return env;
+}
+// //TR: Karar prosedürü TEK yerde (jeneratör): her `yield` bir git probu ister ve çıktısını (başarısızsa null) geri alır. Eşzamanlı sürücü (repositoryHead: readiness.ts, Lane B) ve eşzamansız sürücü (repositoryHeadAsync: runner) aynı prosedürü, aynı `-c protocol.allow=never` önekini, aynı tavanı (GIT_CEILING_DIRECTORIES) ve aynı son tarihi uygular; test iki sürücüyü aynı depo matrisinde karşılaştırır.
+interface HeadProbe { args: string[]; ceiling: boolean }
+function* headDecision(root: string): Generator<HeadProbe, RepositoryHead, string | null> {
+  const same = (p: string | null, to: string = root): boolean => { if (!p) return false; const a = canonicalPath(p), b = canonicalPath(to); return a.ok && b.ok && a.key === b.key; };
+  const own = path.join(root, ".git");
+  const isRoot = (fs.existsSync(own) && same(yield {args: ["rev-parse", "--show-toplevel"], ceiling: true})) || same(yield {args: ["rev-parse", "--absolute-git-dir"], ceiling: true}, own)
+    || ((yield {args: ["rev-parse", "--is-bare-repository"], ceiling: true}) === "true" && same(yield {args: ["rev-parse", "--absolute-git-dir"], ceiling: true}));
+  if (!isRoot) return {ok: false, reason: (yield {args: ["rev-parse", "--git-dir"], ceiling: false}) !== null ? "REPOSITORY_NOT_WORKTREE_ROOT" : "REPOSITORY_HEAD_UNRESOLVED"};
+  const ids = ((yield {args: ["rev-parse", "HEAD", "HEAD^{commit}"], ceiling: true}) ?? "").split("\n").map(x => x.trim());
+  return ids.length === 2 && SHA.test(ids[0]) && ids[0] === ids[1] ? {ok: true, baseSha: ids[0]} : {ok: false, reason: "REPOSITORY_HEAD_UNRESOLVED"};
+}
+const PROBE_REFUSED: RepositoryHead = {ok: false, reason: "REPOSITORY_HEAD_UNRESOLVED"};
 export function repositoryHead(src: string, opts: {timeoutMs?: number} = {}): RepositoryHead {
-  const refuse: RepositoryHead = {ok: false, reason: "REPOSITORY_HEAD_UNRESOLVED"};
   try {
     const c = canonicalPath(src);
-    if (!c.ok) return refuse;
-    const root = c.path;
-    const env: NodeJS.ProcessEnv = {GIT_NO_LAZY_FETCH: "1"};
-    for (const [k, v] of Object.entries(process.env)) if (typeof v === "string" && !v.includes("\0") && GIT_PROBE_ENV.has(k.toUpperCase())) env[k] = v;
+    if (!c.ok) return PROBE_REFUSED;
+    const root = c.path, env = gitProbeEnv();
     const deadline = Date.now() + (opts.timeoutMs ?? 10_000);
     let exhausted = false;
-    const probe = (args: string[], ceiling: boolean): string | null => {
+    const run = (p: HeadProbe): string | null => {
       const left = deadline - Date.now();
       if (exhausted || left <= 0) { exhausted = true; return null; }
       try {
-        const r = spawnGitSync(root, ["-c", "protocol.allow=never", ...args], {env: ceiling ? {...env, GIT_CEILING_DIRECTORIES: path.dirname(root)} : env, maxBuffer: 1024 * 1024, timeout: left, killSignal: "SIGKILL"});
+        const r = spawnGitSync(root, ["-c", "protocol.allow=never", ...p.args], {env: p.ceiling ? {...env, GIT_CEILING_DIRECTORIES: path.dirname(root)} : env, maxBuffer: 1024 * 1024, timeout: left, killSignal: "SIGKILL"});
         if (r.error) { exhausted = true; return null; }
         return r.status === 0 ? String(r.stdout ?? "").replace(/\n$/, "") : null;
       } catch { return null; }
     };
-    const same = (p: string | null, to: string = root): boolean => { if (!p) return false; const a = canonicalPath(p), b = canonicalPath(to); return a.ok && b.ok && a.key === b.key; };
-    const own = path.join(root, ".git");
-    const isRoot = (fs.existsSync(own) && same(probe(["rev-parse", "--show-toplevel"], true))) || same(probe(["rev-parse", "--absolute-git-dir"], true), own)
-      || (probe(["rev-parse", "--is-bare-repository"], true) === "true" && same(probe(["rev-parse", "--absolute-git-dir"], true)));
-    if (!isRoot) return {ok: false, reason: probe(["rev-parse", "--git-dir"], false) !== null ? "REPOSITORY_NOT_WORKTREE_ROOT" : "REPOSITORY_HEAD_UNRESOLVED"};
-    const ids = (probe(["rev-parse", "HEAD", "HEAD^{commit}"], true) ?? "").split("\n").map(x => x.trim());
-    return ids.length === 2 && SHA.test(ids[0]) && ids[0] === ids[1] ? {ok: true, baseSha: ids[0]} : refuse;
-  } catch { return refuse; }
+    const g = headDecision(root);
+    let step = g.next();
+    while (!step.done) step = g.next(run(step.value));
+    return step.value;
+  } catch { return PROBE_REFUSED; }
+}
+// //TR: Eşzamansız sürücü (runner WORKSPACE adımı): aynı karar, olay döngüsünü bloklamadan. runGitAsync spawnGitSync ile aynı yalıtımı (isolatedGitArgs/isolatedGitEnv) uygular; geçirilen ortam gitProbeEnv'dir (process.env değil, runner'ın safeChildEnv'i de değil), yani sonuç iki sürücüde ve her çağıranda aynıdır. Zaman aşımı ve spawn hatası = status null = süre tükendi (eşzamanlı sürücüdeki r.error ile aynı).
+export async function repositoryHeadAsync(src: string, opts: {timeoutMs?: number} = {}): Promise<RepositoryHead> {
+  try {
+    const c = canonicalPath(src);
+    if (!c.ok) return PROBE_REFUSED;
+    const root = c.path, env = gitProbeEnv();
+    const deadline = Date.now() + (opts.timeoutMs ?? 10_000);
+    let exhausted = false;
+    const run = async (p: HeadProbe): Promise<string | null> => {
+      const left = deadline - Date.now();
+      if (exhausted || left <= 0) { exhausted = true; return null; }
+      try {
+        const r = await runGitAsync(root, ["-c", "protocol.allow=never", ...p.args], p.ceiling ? {...env, GIT_CEILING_DIRECTORIES: path.dirname(root)} : env, undefined, {timeoutMs: left});
+        if (r.status === null) { exhausted = true; return null; }
+        return r.status === 0 ? r.stdout.replace(/\n$/, "") : null;
+      } catch { return null; }
+    };
+    const g = headDecision(root);
+    let step = g.next();
+    while (!step.done) step = g.next(await run(step.value));
+    return step.value;
+  } catch { return PROBE_REFUSED; }
 }
 
 export class MissionRunner {
   readonly engineId = `engine_${crypto.randomBytes(6).toString("hex")}`;
   private readonly o: Required<Omit<RunnerOptions, "now">> & {now: () => number};
-  private readonly owned = new Map<string, string>();
+  private readonly owned = new Map<string, OwnedRun>();
   readonly securityTools: SecurityToolset;
   private readonly securityOpts: SecurityOptions;
   private busy = false;
   private timer: NodeJS.Timeout | null = null;
+  // //TR: Süreç kilidi engine'in sahip olduğu run'ların sürüşü boyunca tutulur (sürüş tick'ten ayrıldığı için tick sonunda bırakılamaz); son sürüş bitince bırakılır.
+  private lockRelease: (() => void) | null = null;
+  private loopHist: IntervalHistogram | null = null;
+  private stallSampler: NodeJS.Timeout | null = null;
+  private driftSampler: NodeJS.Timeout | null = null;
+  private stallAt = 0;
+  // //TR: stop() sonrası sürüşler yeni ücretli adım başlatmaz ve çalışan çocukları durdurur; run terminal İPTAL edilmez (sonraki engine devralır).
+  private stopping = false;
+  private stopEpoch = 0; // //TR: R2: her stop() bir tur sayar; stop()->start() sırasında bitmemiş bir sürüş hâlâ "durduruldu" sayılır (stopping bayrağı start() ile sıfırlanır, tur sayısı sıfırlanmaz)
+  private forwardOff: (() => void) | null = null;
+  private readonly boot = bootId();
+  private readonly loopDelay: (() => number) | undefined;
 
   constructor(opts: RunnerOptions) {
     assertIndependentExecutors(opts.executors);
@@ -160,18 +240,43 @@ export class MissionRunner {
     if (!Number.isInteger(this.o.maxConcurrentRuns) || this.o.maxConcurrentRuns < 1 || this.o.maxConcurrentRuns > 16) throw new Error("RUNNER_MAX_CONCURRENT_RUNS_INVALID");
     // SBX-GATE: yalnız gerçek bir ExecutionGate örneği kabul edilir; başka her değer (eksik, düz nesne) sağlayıcısız kapıdır (fail-closed).
     if (!(this.o.executionGate instanceof ExecutionGate)) this.o.executionGate = new ExecutionGate(null);
+    // //TR: PAR-03 (RCA relfx-c3:200, Windows shard 1 #259/#261): her journal YAZISI kendisi olay döngüsünü bloklayan senkron, dayanıklı bir aralıktır (kilit dosyası + journal'ın tamamının yeniden okunup doğrulanması + iki snapshot yazımı + fsync'ler). Adım sınırında bir run bunları ARA VERMEDEN art arda yapar (kanıt -> CHECKPOINTING -> checkpoint -> yenileme -> sonraki adım RUNNING); yavaş diskte (Windows CI) bu zincir TTL - heartbeat aralığını aşar ve öbür, sağlıklı run'ın setInterval heartbeat'i hiç çalışamadan lease'i dolar: gerçek bir fence (sahte "kayıp"). span() ile aynı kural: runner'ın her run yazısından ÖNCE, heartbeat'i gecikmiş (son yenilemesi bir heartbeat periyodundan, TTL/3, eski) sahip olunan BÜTÜN lease'ler yenilenir; döngü akıyorsa heartbeat zaten yeniler ve kanca ek yazı üretmez. Fence kuralı değişmez: süresi dolmuş lease yine yenilenemez ve yazının kendisi fencedRun ile reddedilir.
+    const store = this.o.store;
+    this.o.store = new Proxy(store, {get: (t, p) => {
+      const v: unknown = Reflect.get(t, p, t);
+      if (typeof v !== "function") return v;
+      if (!RENEWING_WRITES.has(p)) return (v as (...x: unknown[]) => unknown).bind(t);
+      return (...a: unknown[]) => { this.renewAllOwned(this.heartbeatMs()); return (Reflect.get(t, p, t) as (...x: unknown[]) => unknown).apply(t, a); };
+    }});
     // Araçlar motor başlangıcında bir kez çözülür (PATH -> mutlak yol, sürüm, sha256); her çalıştırmadan önce ikili dosya yeniden doğrulanır.
+    this.loopDelay = opts.loopDelayP99Ms;
     this.securityOpts = opts.security ?? {};
     this.securityTools = discoverSecurityTools(this.securityOpts, safeChildEnv(opts.envPolicyFile, {provider: "DETERMINISTIC"}));
   }
 
-  // In-process zamanlayıcı (control API): single-flight; tick içindeki süreç kilidi ikinci bir süreç/engine'i dışarıda tutar.
+  // In-process zamanlayıcı (control API): talep bölümü tek uçuşludur ve sürüşleri BEKLEMEZ (PAR-05); süreç kilidi ikinci bir süreç/engine'i dışarıda tutar.
   start(intervalMs = 2_000): void {
     if (this.timer) return;
-    this.timer = setInterval(() => { void this.tick().catch(() => undefined); }, Math.max(250, intervalMs));
+    this.stopping = false;
+    this.forwardOff ??= installTerminationForwarding(); // TK-5: engine sonlanırken kayıtlı yazar grupları da öldürülür (çocuk kendi oturumundadır; terminalin Ctrl+C'si ona ulaşmaz)
+    this.timer = setInterval(() => this.pump(false), Math.max(250, intervalMs));
     this.timer.unref?.();
   }
-  stop(): void { if (this.timer) clearInterval(this.timer); this.timer = null; }
+  // //TR: stop() sürüşleri DURDURUR ve bekletir: yeni adım başlamaz, çalışan çocuk grupları öldürülür (shouldAbort), dönen söz tüm sürüşler bitince çözülür (onClose beklenebilir). Eski çağıranlar dönüş değerini yok sayabilir.
+  stop(): Promise<void> {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+    // //TR: R2: sonlanma kancaları (exit/SIGINT/SIGTERM/SIGHUP) sürüşler bitene kadar TAKILI kalır: çağıran dönen sözü beklemeyip hemen process.exit yaparsa (server.ts onClose) yazar grupları exit kancasıyla öldürülür.
+    const off = this.forwardOff; this.forwardOff = null;
+    const epoch = ++this.stopEpoch;
+    this.stopping = true;
+    const drives = [...this.owned.values()].map(o => o.drive).filter((d): d is Promise<void> => d !== null);
+    return Promise.allSettled(drives).then(() => { off?.(); if (this.timer === null && this.stopEpoch === epoch) this.stopping = false; });
+  }
+  // //TR: R2: motor durduruldu mu (stop() çağrıldı, süreç sonlanıyor ya da bu adım/sürüş başladığından beri bir stop() geçti)? start() stopping'i sıfırlasa bile tur sayısı farklıysa o sürüş durdurulmuş sayılır.
+  private halted(epoch: number): boolean { return this.stopping || isTerminating() || this.stopEpoch !== epoch; }
+  // //TR: İptal nedeni: GLOBAL_STOP, motor kapanışı (run iptal EDİLMEZ) ya da lease kaybı.
+  private cancelReason(): string { return this.stopActive() ?? (this.stopping ? "ENGINE_STOPPING" : "LEASE_LOST"); }
 
   private stopActive(): string | null {
     try { const s = globalStopState(this.o.globalStopFile); return s ? String(s.reason ?? "GLOBAL_STOP_ACTIVE") : null; } catch { return "GLOBAL_STOP_STATE_UNSAFE"; }
@@ -182,57 +287,262 @@ export class MissionRunner {
     if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) throw new WorkOsError("WORKOS_INVALID_INPUT", "runId");
     return dir;
   }
-  private rmUnderRun(runId: string, target: string): void {
+  // //TR: HB-2: büyük klon dizinlerinin silinmesi olay döngüsünü bloklamaz (eşzamansız rm); Windows'ta antivirüs/dizin kilidi altında dakikalar sürebilir.
+  private async rmUnderRun(runId: string, target: string): Promise<void> {
     const rel = path.relative(this.runDir(runId), target);
     if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) throw new Error("RUN_PATH_ESCAPE");
-    fs.rmSync(target, {recursive: true, force: true});
+    await fs.promises.rm(target, {recursive: true, force: true});
   }
-  private git(cwd: string, args: string[]) { return spawnGitSync(cwd, args, {env: safeChildEnv(this.o.envPolicyFile, {provider: "DETERMINISTIC"}), maxBuffer: 64 * 1024 * 1024}); }
-  private gitOk(cwd: string, args: string[]): string | null { const r = this.git(cwd, args); return r.status === 0 ? String(r.stdout ?? "").trim() : null; }
-  // Heartbeat setInterval'i senkron git işi sırasında çalışamaz: uzun senkron işlerden sonra lease açıkça yenilenir. Süresi dolmuşsa WORKOS_LEASE_FENCED fırlar ve adım yan etkili/ücretli işe geçmeden durur.
-  private renew(runId: string, leaseId: string): void { this.o.store.renewRunLease(runId, leaseId, this.o.leaseTtlMs, this.o.actor); }
+  private gitEnv() { return safeChildEnv(this.o.envPolicyFile, {provider: "DETERMINISTIC"}); }
+  // //TR: PAR-03: workspace/klon/diff git işleri EŞZAMANSIZdır (olay döngüsü akar); gitSync yalnız eşzamanlı geri çağrı gerektiren küçük okumalarda (test yüzeyi dosya içeriği, aralık denetimi) ve span() içinde kullanılır.
+  private git(cwd: string, args: string[], onSpawn?: (c: SpawnedChild) => void, extraEnv?: Record<string, string>, shouldAbort?: () => boolean): Promise<GitRun> { return runGitAsync(cwd, args, extraEnv ? {...this.gitEnv(), ...extraEnv} : this.gitEnv(), onSpawn, shouldAbort ? {shouldAbort} : {}); }
+  // Workspace/klon DEĞİŞTİREN git (clone/checkout/reset/clean): çocuk sahiplik kaydına yazılır, devirde implementer gibi durdurulur; kayıt yazılamazsa çocuk öldürülür (status null).
+  // //TR: Git çocuğuna lease işareti verilir (TK-1) ve Windows'ta PowerShell kimlik çağrısı yapılmaz (identify=false; TK-8): kısa ömürlüdür, devirde hâlâ canlıysa fail-closed.
+  // //TR: #224 tur 3 (HB-R3-1): çocuk doğunca sahiplik kaydı yazılamazsa (geçici disk/rename hatası) çocuk öldürülür ve sonuç `status: null`'dur; çağıranlar bunu KALICI "klon/sıfırlama başarısız" bloğu sayardı. Burada ayrılır: kayıt hatası OwnerRecordError (executeStep RETRY yapar, bütçe dahilinde); gerçek fence (başka lease kaydı devraldı) WORKOS_LEASE_FENCED olarak aynen fırlar.
+  // //TR: #224 tur 3 (HB-R3-2): adımın abort sinyali (Global Stop, stop(), kaybedilen lease) UZUN git klonlarına bağlanır; abort edilen çocuk öldürülür (klon dizini adım yeniden girişinde silinir) ve StepAbortedError executeStep'te CANCEL olur.
+  private async gitW(run: WorkRun, leaseId: string, cwd: string, args: string[]): Promise<GitRun> {
+    let recordError: unknown = null;
+    const abort = args[0] === "clone" ? this.owned.get(run.runId)?.abort ?? undefined : undefined; // //TR: yalnız UZUN klonlar abort edilir; kısa checkout/reset/clean SIGKILL ile yarıda kesilirse .git/index.lock kalır ve sonraki devir WORKSPACE_RESET_FAILED ile terminal olurdu
+    const r = await this.withChild(run, leaseId, onSpawn => this.git(cwd, args, onSpawn, writerEnvFor(run.runId, leaseId), abort), false, e => { recordError = e; });
+    if (r.aborted) throw new StepAbortedError();
+    if (recordError === null) return r;
+    if (recordError instanceof WorkOsError && recordError.code === "WORKOS_LEASE_FENCED") throw recordError;
+    throw new OwnerRecordError();
+  }
+  private async gitWOk(run: WorkRun, leaseId: string, cwd: string, args: string[]): Promise<string | null> { const r = await this.gitW(run, leaseId, cwd, args); return r.status === 0 ? r.stdout.trim() : null; }
+  private async gitOk(cwd: string, args: string[]): Promise<string | null> { const r = await this.git(cwd, args); return r.status === 0 ? r.stdout.trim() : null; }
+  private gitSync(cwd: string, args: string[]) { return spawnGitSync(cwd, args, {env: this.gitEnv(), maxBuffer: 64 * 1024 * 1024}); }
+  // Heartbeat setInterval'i senkron iş sırasında çalışamaz: uzun senkron işlerden sonra lease açıkça yenilenir. Süresi dolmuşsa WORKOS_LEASE_FENCED fırlar ve adım yan etkili/ücretli işe geçmeden durur.
+  private renew(runId: string, leaseId: string): void {
+    this.o.store.renewRunLease(runId, leaseId, this.o.leaseTtlMs, this.o.actor);
+    const o = this.owned.get(runId);
+    if (o && o.leaseId === leaseId) o.renewedAt = this.o.now();
+  }
+  // //TR: PAR-03: olay döngüsünü bloklayan her senkron aralıktan (dizin silme, büyük diff taraması, küçük senkron git) ÖNCE ve SONRA sahip olunan BÜTÜN lease'ler yenilenir (bir run'ın senkron işi diğerinin heartbeat'ini aç bırakamaz). Yakın zamanda yenilenmiş lease atlanır (journal şişmez); fence edilen run işaretlenir ve adımı kısa sürede durur.
+  // //TR: min: span() için TTL/10; run yazısı kancası için heartbeat periyodu (yalnız heartbeat'i GECİKMİŞ lease yenilenir: yavaş diskte her yazıdan önce bütün lease'leri yeniden yazmak zinciri katlar).
+  private renewAllOwned(min = this.o.leaseTtlMs / 10): void {
+    const t = this.o.now();
+    for (const [runId, o] of this.owned) {
+      if (o.lost || t - o.renewedAt < min) continue;
+      try { this.renew(runId, o.leaseId); } catch (e) { if (e instanceof WorkOsError && e.code === "WORKOS_LEASE_FENCED") o.lost = true; }
+    }
+  }
+  private span<T>(fn: () => T): T {
+    this.renewAllOwned();
+    try { return fn(); } finally { this.renewAllOwned(); }
+  }
+  private heartbeatMs(): number { return Math.max(50, Math.floor(this.o.leaseTtlMs / 3)); }
+  private own(runId: string, leaseId: string, recovered = false): void { this.owned.set(runId, {leaseId, drive: null, renewedAt: this.o.now(), lost: false, recovered, reap: null, abort: null}); }
 
+  // //TR: PAR-03: olay döngüsü gecikmesi (p99) lease TTL/6'yı aşıyorsa İKİNCİ (ve sonraki) run için lease alınmaz; zaten stall olan döngüde yeni lease'in heartbeat'i aç kalır. Pencere her okumada sıfırlanır; tick() adımlama kipinde (kilit tick başına alınır) pencere boştur.
+  private startLoopMonitor(): void {
+    if (this.loopDelay) return;
+    this.loopHist ??= monitorEventLoopDelay({resolution: LOOP_RESOLUTION_MS});
+    this.loopHist.reset(); this.loopHist.enable();
+    this.stallAt = 0;
+    this.stallSampler = setInterval(() => this.sampleLoop(), STALL_SAMPLE_MS);
+    this.stallSampler.unref?.();
+    // //TR: HB-3: perf_hooks histogramı reset() sonrası ilk örneği atar; bir JS zamanlayıcısı stall'dan sonra ELD zamanlayıcısından ÖNCE çalışırsa (ve sampleLoop reset ederse) stall hiç kaydedilmezdi. Sürüklenme nöbetçisi her stall'dan sonra, zamanlayıcı sırası ne olursa olsun çalışır ve beklenen 50 ms'yi aşan gecikmeyi doğrudan ölçer.
+    let last = performance.now();
+    this.driftSampler = setInterval(() => { const n = performance.now(), drift = n - last - DRIFT_TICK_MS; last = n; if (drift > this.o.leaseTtlMs / 6) this.stallAt = Date.now(); }, DRIFT_TICK_MS);
+    this.driftSampler.unref?.();
+  }
+  private stopLoopMonitor(): void {
+    this.loopHist?.disable();
+    if (this.stallSampler) clearInterval(this.stallSampler);
+    if (this.driftSampler) clearInterval(this.driftSampler);
+    this.stallSampler = null; this.driftSampler = null;
+  }
+  // //TR: Pencere KISADIR (1 sn): uzun ömürlü tek bir histogramda tek bir stall p99'a gömülürdü. perf_hooks reset() sonrası ilk örneği atar (pencere başındaki ~20 ms'lik stall kaçabilir; bu kapı derinlemesine savunmadır, asıl koruma async git + renewAllOwned). Her pencerenin p99'u (çözünürlük payı düşülmüş) TTL/6'yı aşarsa son stall zamanı kaydedilir ve STALL_MEMORY_MS boyunca yeni lease verilmez.
+  private sampleLoop(): void {
+    const h = this.loopHist;
+    if (!h || h.count === 0) return;
+    const ms = Math.max(0, h.percentile(99) / 1e6 - LOOP_RESOLUTION_MS);
+    h.reset();
+    if (ms > this.o.leaseTtlMs / 6) this.stallAt = Date.now();
+  }
+  private loopStalled(): boolean {
+    if (this.loopDelay) return this.loopDelay() > this.o.leaseTtlMs / 6;
+    this.sampleLoop();
+    return this.stallAt > 0 && Date.now() - this.stallAt < STALL_MEMORY_MS;
+  }
+  private releaseLockIfIdle(): void {
+    if (!this.lockRelease) return;
+    for (const o of this.owned.values()) if (o.drive) return;
+    const release = this.lockRelease;
+    this.lockRelease = null; this.stopLoopMonitor();
+    try { release(); } catch { /* kilit sahipliği değiştiyse yazılar zaten fence edilir */ }
+  }
+
+  // ---- PAR-04: workspace sahiplik kaydı (mekanizma: writer-guard.ts) ----
+  private ownerPath(runId: string): string { return path.join(this.runDir(runId), OWNER_FILE); }
+  private ownerOf(runId: string): WorkspaceOwner | null {
+    const r = readOwner(this.ownerPath(runId));
+    return r.kind === "OK" ? r.rec : null;
+  }
+  // Atomik + dayanıklı: fsync'li geçici dosya, .prev kopyası, rename (başarısızsa kopya), dizin fsync (TK-4).
+  private writeOwner(runId: string, rec: WorkspaceOwner): void { writeOwner(this.ownerPath(runId), rec); }
+  private ownerRecord(run: WorkRun, leaseId: string, extra: Partial<WorkspaceOwner> = {}): WorkspaceOwner {
+    return {leaseId, engineId: this.engineId, hostname: os.hostname(), pid: process.pid, childPgid: null, childStart: null, step: run.step, at: new Date(this.o.now()).toISOString(), bootId: this.boot, ...extra};
+  }
+  // Workspace'i DEĞİŞTİREN her git işleminden önce kayıt bu lease'e ait olmalı; değilse başka bir engine devralmıştır: hiçbir şey yazılmaz (WORKOS_LEASE_FENCED).
+  private guardWorkspace(run: WorkRun, leaseId: string): void {
+    const o = this.ownerOf(run.runId);
+    if (!o || o.leaseId !== leaseId) throw new WorkOsError("WORKOS_LEASE_FENCED", run.runId);
+  }
+  // Çocuk doğar doğmaz (eşzamanlı) süreç grubu kayda yazılır; yazılamazsa executors.ts çocuğu öldürür: kayıtsız yazar bırakılmaz. identify=false: kısa ömürlü git çocukları için Windows'ta PowerShell kimlik çağrısı YAPILMAZ (childStart null kalır; devirde hâlâ canlıysa kimlik kanıtlanamadığından fail-closed).
+  private recordChild(run: WorkRun, leaseId: string, c: SpawnedChild, identify = true): string | null {
+    const o = this.ownerOf(run.runId);
+    if (!o || o.leaseId !== leaseId) throw new WorkOsError("WORKOS_LEASE_FENCED", run.runId);
+    const pgid = c.pgid ?? c.pid;
+    if (o.childPgid !== null && o.childPgid !== pgid) untrackWriterGroup(o.childPgid); // aynı adımda art arda doğan çocuklar (implementer, sonra engine commit'inin git çocukları): önceki grup artık kayıtlı değil
+    const childStart = process.platform === "linux" ? startTokenLinux(c.pid) : null;
+    this.writeOwner(run.runId, {...o, childPgid: pgid, childStart, at: new Date(this.o.now()).toISOString()});
+    trackWriterGroup(pgid);
+    if (process.platform !== "linux" && identify && c.short !== true) void startToken(c.pid).then(t => { const cur = this.ownerOf(run.runId); if (t && cur && cur.leaseId === leaseId && cur.childPgid === pgid) this.writeOwner(run.runId, {...cur, childStart: t}); }).catch(() => undefined); // yazılamazsa kimlik belirteci eksik kalır: devirde fail-closed
+    return childStart;
+  }
+  private clearChild(run: WorkRun, leaseId: string): void {
+    const o = this.ownerOf(run.runId);
+    if (o && o.leaseId === leaseId && o.childPgid !== null) this.writeOwner(run.runId, {...o, childPgid: null, childStart: null});
+  }
+  // Çocuk bitince grup kaydı temizlenir; adapter fırlatsa bile.
+  // //TR: #224 tur 3 (SWEEP-3): lider çıktığında grupta canlı üye kaldıysa (aynı grupta kalan arka plan torunu) kayıt silinmeden ÖNCE öldürülür; implementer'dan sonra ayrıca lease işaretiyle taranır (sweepOwnWriters) ama REVIEWER ve git çocuklarının sonrasında tarama yoktur. Önce ucuz yoklama (grup yoksa /proc taranmaz). Yalnız Linux ve yalnız KANITLI üyelere: hepsi kayıtlı liderden sonra başlamış ve en az biri bu lease'in işaretini taşımalı (leaderlessGroupProof); aksi halde dokunulmaz (pgid yeniden kullanılmış olabilir). Diğer POSIX'te /proc yok: bilinen kalıntı.
+  private async withChild<T>(run: WorkRun, leaseId: string, call: (onSpawn: (c: SpawnedChild) => void) => Promise<T>, identify = true, onRecordError?: (e: unknown) => void): Promise<T> {
+    let pgid: number | null = null, started: string | null = null;
+    try { return await call(c => { try { started = this.recordChild(run, leaseId, c, identify); } catch (e) { onRecordError?.(e); throw e; } pgid = c.pgid ?? c.pid; }); } finally {
+      if (pgid !== null) {
+        untrackWriterGroup(pgid);
+        if (process.platform === "linux" && started !== null && writerState(pgid) === "ALIVE" && leaderlessGroupProof(pgid, this.ownerRecord(run, leaseId, {childPgid: pgid, childStart: started})).ok) { try { process.kill(-pgid, "SIGKILL"); } catch { /* grup zaten bitmiş */ } }
+      }
+      try { this.clearChild(run, leaseId); } catch { /* sonraki devir kaydı okur */ }
+    }
+  }
+  // Kaydedilmiş yazar grubunu durdurur (kimliği kanıtlanırsa): ölü -> sorun yok; kimlik belirteci farklı -> pid yeniden kullanılmış, öldürülecek yazar yok; kanıtlanamıyorsa fail-closed.
+  private async stopRecordedGroup(prev: WorkspaceOwner, pgid: number): Promise<ReapResult> {
+    const alive = (note: string, transient = false): ReapResult => ({problem: "WORKSPACE_WRITER_ALIVE", note, ...(transient ? {transient: true as const} : {})});
+    if (prev.hostname !== os.hostname()) return alive(`writer group ${pgid} belongs to host ${prev.hostname.slice(0, 64)} and cannot be checked`);
+    const st = writerState(pgid);
+    if (st === "GONE") return {problem: null, note: `writer group ${pgid} was already gone`}; // //TR: kanıt notu "durdurulacak yazar yoktu" der: yazarın devirden ÖNCE öldüğü (ya da hiç yaşamadığı) not'tan okunur
+    if (st === "UNKNOWN") return alive(`writer group ${pgid} state unknown`);
+    const now = await startToken(pgid);
+    // //TR: TK-3: kimlik belirteci EPERM'den ÖNCE karşılaştırılır. Kayıtlı pid başka bir kullanıcının sürecine geçtiyse (kill -> EPERM) belirteç farklıdır: bizim yazarımız yoktur, devir fail-closed OLMAZ. Linux /proc/<pid>/stat dünya okunurdur.
+    // //TR: SWEEP-4: kayıtta başlangıç belirteci yoksa (kısa ömürlü git çocuğu) bile, kayıt yazıldıktan SONRA başlamış canlı süreç kayıtlı yazar olamaz (Windows ticks / macOS lstart; Linux'ta belirteç her zaman kayıtlıdır): karar reusedPid'de.
+    if (reusedPid(process.platform, prev, now)) return {problem: null, note: `pid ${pgid} was reused by another process; no writer to stop`};
+    // //TR: Erişim reddi: karar accessDeniedVerdict'te (SWEEP-6: Windows'ta yalnız StartTime da okunamıyorsa VE bağımsız CIM oluşturma zamanı okunup kayıtlı başlangıçtan/kayıt anından farklıysa yazar yok; aksi halde fail-closed).
+    if (st === "OTHER_USER") {
+      const probe = process.platform === "win32" ? {creationTicks: await creationTicks(pgid), recordedStart: prev.childStart, recordAtIso: prev.at} : undefined;
+      return accessDeniedVerdict(process.platform, now, probe) === "NOT_OUR_WRITER" ? {problem: null, note: `pid ${pgid} is not accessible to this user, its start time is unreadable and its creation time differs from the recorded writer; it cannot be the recorded writer`} : alive(`writer group ${pgid} state unknown`);
+    }
+    if (prev.childStart === null || (now === null && process.platform !== "linux")) return alive(`writer group ${pgid} is alive but its identity cannot be proven`);
+    // Lider yok ama grup canlı (Linux): TK-7: aynı önyükleme + her üye lider kaydından sonra başlamış olmalı.
+    if (now === null) { const proof = leaderlessGroupProof(pgid, prev); if (!proof.ok) return alive(proof.why, proof.transient === true); }
+    await killWriterGroup(pgid, prev.childStart);
+    const gone = await waitWriterGone(pgid, now ?? prev.childStart);
+    if (gone === "REUSED") return {problem: null, note: `writer group ${pgid} ended and its pid was reused by another process; nothing further to stop`};
+    if (gone === "ALIVE") return alive(`writer group ${pgid} survived the kill`, true);
+    return {problem: null, note: `stopped writer group ${pgid} of engine ${prev.engineId}${process.platform === "linux" ? "" : "; descendants that left the process group are not swept on this platform"}`};
+  }
+  // Devir: önceki lease'in yazarı (varsa) ölmeden workspace'e dokunulmaz. (1) Kayıt: yırtık/okunamayan kayıt önyüklemeden ESKİYSE yazar yok (TK-4), değilse fail-closed; farklı önyükleme = yazar yok. (2) Kayıtlı grup: aynı makinede canlıysa ve kimliği kanıtlanırsa öldürülür ve ölmesi beklenir (TK-3/7). (3) TK-1: grubu terk eden (setsid) torunlar lease işaretiyle/çalışma dizinine göre taranır ve öldürülür; biri bile ölmezse fail-closed. Not yazılır: yalnız tarama temizse "stopped".
+  private async reapPriorWriter(run: WorkRun, leaseId: string): Promise<ReapResult> {
+    const alive = (note: string, transient = false): ReapResult => ({problem: "WORKSPACE_WRITER_ALIVE", note, ...(transient ? {transient: true as const} : {})});
+    const rec = readOwner(this.ownerPath(run.runId));
+    let note = "", previousBoot = false;
+    if (rec.kind === "INVALID") {
+      if (rec.mtimeMs !== null && rec.mtimeMs + BOOT_GRACE_MS < bootTimeMs()) { note = "owner record from before the current boot ignored"; previousBoot = true; }
+      else return alive(rec.why);
+    } else if (rec.kind === "OK") {
+      const prev = rec.rec;
+      if (prev.bootId !== null && this.boot !== null && !sameBoot(prev.bootId, this.boot)) { note = "previous boot: no earlier writer can be alive"; previousBoot = true; }
+      else if (prev.childPgid !== null) {
+        const g = await this.stopRecordedGroup(prev, prev.childPgid);
+        if (g.problem) return g;
+        note = g.note;
+      }
+    }
+    if (!previousBoot && process.platform === "linux") {
+      const sw = await sweepWriters({runDir: this.runDir(run.runId), runId: run.runId, currentLeaseId: leaseId});
+      if (sw.survivors.length) return alive(`${sw.survivors.length} detached writer process(es) of an earlier lease survived the sweep`, true);
+      if (sw.killed.length) note = `${note ? `${note}; ` : ""}swept ${sw.killed.length} detached writer process(es)`;
+    }
+    this.renew(run.runId, leaseId);
+    // //TR: R2: kayıt yenilenemezse (geçici disk/rename hatası) devir bundan ETKİLENMEZ: iptal ve bütçe-tükendi kararları bu yazıya bağlı olmamalı; sonraki adımın başındaki yazı (hatası RETRY) kaydı yeniler.
+    try { this.writeOwner(run.runId, this.ownerRecord(run, leaseId)); } catch { note = `${note ? `${note}; ` : ""}owner record not refreshed`; }
+    return {problem: null, note};
+  }
+  // //TR: R2: implementer çocuğu bittiğinde (başarı, hata, abort, zaman aşımı fark etmez) bu lease'in işaretini taşıyan artıklar (setsid ile gruptan kaçan torunlar) öldürülür; cwd ile eşleşme YOKTUR (byCwd:false: Kurucu'nun run dizininde çalışan kabuğu/editörü hedef olamaz, #224 tur 3 SWEEP-2): yoksa sonraki deneme/adım onlar yazarken başlar ve engine commit'i onların dosyasını da alırdı. Yalnız Linux (diğerlerinde eşdeğeri yoktur: bilinen kalıntı).
+  private async sweepOwnWriters(run: WorkRun, leaseId: string): Promise<boolean> {
+    if (process.platform !== "linux") return true;
+    const sw = await sweepWriters({runDir: this.runDir(run.runId), runId: run.runId, currentLeaseId: leaseId, includeCurrent: true, byCwd: false}, 2_000);
+    return sw.survivors.length === 0;
+  }
+
+  // //TR: tick() deterministik adımlama sözleşmesidir (testler/araçlar): talep + sahip olunan run'ları sür + BU çağrının başlattığı sürüşlerin bitmesini bekle; tick içinde yeniden doldurma yoktur. Servis kipi (start) beklemez: pump().
   async tick(): Promise<TickReport> {
     const rep: TickReport = {recovered: [], claimed: [], cancelled: [], fenced: [], advanced: [], deferred: []};
     if (this.busy) return {...rep, skipped: "BUSY"};
     this.busy = true;
-    let release: (() => void) | null = null;
     try {
-      try { release = acquireProcessLock(path.join(this.o.dataDir, "runner.lock"), this.engineId); } catch { return {...rep, skipped: "LOCKED"}; }
+      const drives = this.claimAndDrive(rep, false);
+      if (drives === "LOCKED") return {...rep, skipped: "LOCKED"};
+      await Promise.all(drives);
+      return rep;
+    } finally { this.busy = false; }
+  }
+  // PAR-05: servis kipi geçişi; sürüşleri beklemez. freshOnly=true: bir sürüş bitince boşalan yuvayı hemen doldurur (yalnız yeni talep edilen run'ları sürer; bekleyen sahip olunanlar zamanlayıcıyla yeniden sürülür).
+  private pump(freshOnly: boolean): void {
+    try { this.claimAndDrive({recovered: [], claimed: [], cancelled: [], fenced: [], advanced: [], deferred: []}, freshOnly); } catch { /* sonraki geçiş yeniden dener */ }
+  }
+  // Talep bölümü SENKRONDUR (await yok): tek uçuşludur; sürüşler sahip olunan kaydında (owned) tutulur ve beklenmez.
+  private claimAndDrive(rep: TickReport, freshOnly: boolean): Promise<void>[] | "LOCKED" {
+    if (!this.lockRelease) {
+      try { this.lockRelease = acquireProcessLock(path.join(this.o.dataDir, "runner.lock"), this.engineId); } catch { return "LOCKED"; }
+      this.startLoopMonitor();
+    }
+    const drives: Promise<void>[] = [], fresh = new Set<string>();
+    try {
       const store = this.o.store, stop = this.stopActive();
+      let stalled: boolean | null = null;
+      const full = () => this.owned.size >= this.o.maxConcurrentRuns || (this.owned.size >= 1 && (stalled ??= this.loopStalled()));
       for (const run of store.engineListRuns()) {
+        if (this.owned.get(run.runId)?.drive) continue; // sürüşü süren run'a dokunulmaz: kendi heartbeat'i yönetir, kendi kendini devralma yok
         try {
           if (run.status === "CREATED" || run.status === "QUEUED") {
             if (stop) { this.cancelUnleased(run, stop); rep.cancelled.push(run.runId); continue; }
-            // //TR: Sahiplik sınırı: sınır doluysa run'a lease ALINMAZ (sırasını beklerken lease'i yenilenmeden dolup sahte fence/recovery yaşamasın); QUEUED kalır, sonraki tick alır.
-            if (this.owned.size >= this.o.maxConcurrentRuns) { rep.deferred.push(run.runId); continue; }
+            // //TR: Sahiplik sınırı: sınır doluysa run'a lease ALINMAZ (sırasını beklerken lease'i yenilenmeden dolup sahte fence/recovery yaşamasın); QUEUED kalır, sonraki geçiş alır.
+            if (full()) { rep.deferred.push(run.runId); continue; }
             const queued = run.status === "CREATED" ? store.transitionRun(run.runId, null, "QUEUED", "queued for runner", this.o.actor) : run;
             const leased = store.acquireRunLease(queued.runId, this.o.leaseTtlMs, this.o.actor);
-            this.owned.set(run.runId, leased.leaseId!); rep.claimed.push(run.runId);
+            this.own(run.runId, leased.leaseId!); rep.claimed.push(run.runId); fresh.add(run.runId);
           } else if (LEASED_RUN_STATUSES.includes(run.status) && run.leaseId && Date.parse(run.leaseExpiresAt ?? "") <= this.o.now()) {
-            if (this.owned.size >= this.o.maxConcurrentRuns) { rep.deferred.push(run.runId); continue; }
+            if (full()) { rep.deferred.push(run.runId); continue; }
             // Süresi dolmuş lease: crash/askıda kalma -> devral, RECOVERING (yeni leaseId eski sahibi fence eder).
             const taken = store.takeoverRunLease(run.runId, this.o.leaseTtlMs, this.o.actor);
-            this.owned.set(run.runId, taken.leaseId!); rep.recovered.push(run.runId);
+            this.own(run.runId, taken.leaseId!, true); rep.recovered.push(run.runId); fresh.add(run.runId);
           }
         } catch (e) { if (e instanceof WorkOsError && e.code === "WORKOS_LEASE_FENCED") { rep.fenced.push(run.runId); continue; } throw e; }
       }
       // //TR: Sahip olunan run'lar (en çok maxConcurrentRuns) birlikte sürülür; sınır 1 iken davranış eski sıralı akışla aynıdır.
-      await Promise.all([...this.owned].map(async ([runId, leaseId]) => {
-        try {
-          const r = await this.drive(runId, leaseId);
-          if (r === "CANCELLED") rep.cancelled.push(runId); else if (r) rep.advanced.push(runId);
-        } catch (e) {
-          this.owned.delete(runId);
-          if (e instanceof WorkOsError && e.code === "WORKOS_LEASE_FENCED") { rep.fenced.push(runId); return; }
-          this.failClosed(runId, leaseId, e);
-        }
-      }));
-      return rep;
-    } finally {
-      try { release?.(); } catch { /* kilit sahipliği değiştiyse yazılar zaten fence edilir */ }
-      this.busy = false;
-    }
+      for (const [runId, o] of this.owned) if (o.drive === null && (!freshOnly || fresh.has(runId))) { o.drive = this.runDrive(runId, o.leaseId, rep); drives.push(o.drive); }
+      return drives;
+    } finally { this.releaseLockIfIdle(); }
+  }
+  private runDrive(runId: string, leaseId: string, rep: TickReport): Promise<void> {
+    return (async () => {
+      try {
+        const r = await this.drive(runId, leaseId);
+        if (r === "CANCELLED") rep.cancelled.push(runId); else if (r) rep.advanced.push(runId);
+      } catch (e) {
+        this.owned.delete(runId);
+        if (e instanceof WorkOsError && e.code === "WORKOS_LEASE_FENCED") rep.fenced.push(runId); else this.failClosed(runId, leaseId, e);
+      } finally {
+        // yuva serbest: run hâlâ bizdeyse (retry bekleme/adım sınırı) sonraki geçiş yeniden sürer; değilse owned'dan zaten düşmüştür
+        const o = this.owned.get(runId);
+        if (o && o.leaseId === leaseId) o.drive = null;
+        this.releaseLockIfIdle();
+        if (this.timer && this.owned.size < this.o.maxConcurrentRuns) setImmediate(() => { if (this.timer) this.pump(true); }); // stop() sonrası yeniden doldurma yok
+      }
+    })();
   }
 
   // Beklenmeyen engine hatası: run FAILED, mission BLOCKED (sessiz devam yok). Fence edilmişse hiçbir şey yazılmaz.
@@ -250,25 +560,29 @@ export class MissionRunner {
     s.transitionRun(run.runId, null, "CANCELLING", `GLOBAL_STOP_ACTIVE: ${reason}`, this.o.actor);
     s.transitionRun(run.runId, null, "CANCELLED", `GLOBAL_STOP_ACTIVE: ${reason}`, this.o.actor, {mission: {to: "BLOCKED", reason: `GLOBAL_STOP_ACTIVE: ${reason}`}});
   }
-  private cancelLeased(run: WorkRun, leaseId: string, reason: string): void {
+  private cancelLeased(run: WorkRun, leaseId: string, reason: string, writerNote = ""): void {
     const s = this.o.store, at = new Date(this.o.now()).toISOString(), why = `GLOBAL_STOP_ACTIVE: ${reason}`;
     if (run.status !== "CANCELLING") s.transitionRun(run.runId, leaseId, "CANCELLING", why, this.o.actor);
-    s.addRunEvidence(run.runId, leaseId, {step: "CANCEL", cycle: run.remediationCycle, kind: "CANCEL", argv: [], startedAt: at, endedAt: at, exitCode: null, logPath: null, logSha256: null, note: why.slice(0, 500)}, this.o.actor);
+    s.addRunEvidence(run.runId, leaseId, {step: "CANCEL", cycle: run.remediationCycle, kind: "CANCEL", argv: [], startedAt: at, endedAt: at, exitCode: null, logPath: null, logSha256: null, note: `${why}${writerNote ? `; writer ${writerNote}` : ""}`.slice(0, 500)}, this.o.actor);
     s.transitionRun(run.runId, leaseId, "CANCELLED", why, this.o.actor, {mission: {to: "BLOCKED", reason: why}});
     this.owned.delete(run.runId);
   }
 
   private async drive(runId: string, leaseId: string): Promise<"CANCELLED" | boolean> {
-    const s = this.o.store;
+    const s = this.o.store, epoch = this.stopEpoch;
     let steps = 0;
     for (;;) {
       const run = s.engineGetRun(runId);
       if (!run || run.leaseId !== leaseId || !LEASED_RUN_STATUSES.includes(run.status)) { this.owned.delete(runId); return steps > 0; }
+      // //TR: PAR04-GSTOP-NO-REAP / TK-2: devralınan run'ın önceki yazarı HER yolda (iptal, GLOBAL_STOP, bütçe tükenmesi, normal devam) workspace'e dokunulmadan ve run terminal olmadan ÖNCE durdurulur; sonuç sürüşün ilk iterasyonunda bir kez hesaplanır. Yazar ölmese bile iptal yine yapılır (not'a yazılır).
+      const own = this.owned.get(runId);
+      if (own && own.recovered && own.reap === null) own.reap = await this.reapPriorWriter(run, leaseId);
+      if (this.halted(epoch)) { this.owned.delete(runId); return steps > 0; } // motor kapanıyor: yeni adım yok, run bırakılır (lease dolunca sonraki engine devralır)
       const stop = this.stopActive();
-      if (stop || run.status === "CANCELLING") { this.cancelLeased(run, leaseId, stop ?? run.reason ?? "CANCEL_REQUESTED"); return "CANCELLED"; }
-      if (run.status === "RETRY_SCHEDULED" && Date.parse(run.retryAt ?? "") > this.o.now()) { s.renewRunLease(runId, leaseId, this.o.leaseTtlMs, this.o.actor); return steps > 0; }
-      if (steps >= this.o.maxStepsPerTick) { s.renewRunLease(runId, leaseId, this.o.leaseTtlMs, this.o.actor); return steps > 0; }
-      if (run.status === "RECOVERING" && !this.recoverCheck(run, leaseId)) { this.owned.delete(runId); return true; }
+      if (stop || run.status === "CANCELLING") { const w = own?.reap; this.cancelLeased(run, leaseId, stop ?? run.reason ?? "CANCEL_REQUESTED", w ? `${w.problem ? `${w.problem}: ` : ""}${w.note}`.replace(/: $/, "") : ""); return "CANCELLED"; }
+      if (run.status === "RETRY_SCHEDULED" && Date.parse(run.retryAt ?? "") > this.o.now()) { this.renew(runId, leaseId); return steps > 0; }
+      if (steps >= this.o.maxStepsPerTick) { this.renew(runId, leaseId); return steps > 0; }
+      if (run.status === "RECOVERING" && !(await this.recoverCheck(run, leaseId, own?.reap ?? null))) { this.owned.delete(runId); return true; }
       this.renew(runId, leaseId); // her adımın başında (yani adımlar arasında da) lease yenilenir
       await this.executeStep(run, leaseId);
       steps += 1;
@@ -278,25 +592,36 @@ export class MissionRunner {
   // Crash-resume: son tamamlanmış checkpoint'ten devam; workspace/commit tutarsızsa RECOVERY_FAILED + kanıt (tahmin yok).
   // Recovery bütçesi: son checkpoint'ten beri yapılan devralma sayısı = attempt - son checkpoint'teki attempt (checkpoint yoksa ilk lease = 1). Her TAKEOVER attempt'i journal'da artırır,
   // bu yüzden recovery kanıtı yazılamasa bile sayım ilerler. maxRecoveries aşılırsa adım tekrar edilmez: RECOVERY_FAILED + mission BLOCKED (RECOVERY_BUDGET_EXHAUSTED).
-  private recoverCheck(run: WorkRun, leaseId: string): boolean {
+  private async recoverCheck(run: WorkRun, leaseId: string, reap: ReapResult | null): Promise<boolean> {
     const at = new Date(this.o.now()).toISOString();
     const work = path.join(this.runDir(run.runId), "work");
     const problems: string[] = [];
+    let retryLater = false; // //TR: SWEEP-5: geçici durdurma/tarama hatası: terminal değil, sonraki devirde yeniden
     const last = run.checkpoints[run.checkpoints.length - 1];
     const baseline = last && typeof last.data.attempt === "number" && Number.isSafeInteger(last.data.attempt) ? last.data.attempt : 1;
     const recoveries = run.attempt - baseline;
     const exhausted = recoveries > this.o.maxRecoveries;
+    // //TR: PAR-04: önceki lease'in yazar çocuğu ölmeden (veya durumu bilinmeden) workspace'e bakılmaz/dokunulmaz. Durdurma drive()'ın başında YAPILMIŞTIR (bütçe tükenmiş devirde de: TK-2); burada yalnız sonucu okunur.
+    const w = reap ?? {problem: null, note: ""};
+    const writer = w.problem ? `${w.problem}: ${w.note}` : w.note;
     if (exhausted) problems.push("RECOVERY_BUDGET_EXHAUSTED");
-    else if (run.step !== "WORKSPACE") {
-      if (!run.baseSha || !SHA.test(run.baseSha) || !fs.existsSync(path.join(work, ".git"))) problems.push("WORKSPACE_MISSING");
-      else {
-        if (this.gitOk(work, ["cat-file", "-e", `${run.baseSha}^{commit}`]) === null) problems.push("BASE_COMMIT_MISSING");
-        const needsHead = run.step !== "IMPLEMENT";
-        if (needsHead && (!run.headSha || this.gitOk(work, ["cat-file", "-e", `${run.headSha}^{commit}`]) === null)) problems.push("HEAD_COMMIT_MISSING");
+    else {
+      if (w.problem && reap?.transient === true) retryLater = true; // bütçe tükenince (exhausted) terminal: yukarıdaki dal
+      else if (w.problem) problems.push(w.problem);
+      else if (run.step !== "WORKSPACE") {
+        if (!run.baseSha || !SHA.test(run.baseSha) || !fs.existsSync(path.join(work, ".git"))) problems.push("WORKSPACE_MISSING");
+        else {
+          if ((await this.gitOk(work, ["cat-file", "-e", `${run.baseSha}^{commit}`])) === null) problems.push("BASE_COMMIT_MISSING");
+          const needsHead = run.step !== "IMPLEMENT";
+          if (needsHead && (!run.headSha || (await this.gitOk(work, ["cat-file", "-e", `${run.headSha}^{commit}`])) === null)) problems.push("HEAD_COMMIT_MISSING");
+        }
       }
     }
-    const note = `takeover attempt ${run.attempt}; resume step ${run.step} cycle ${run.remediationCycle}; completed checkpoints ${run.checkpoints.length}; recovery ${recoveries} of budget ${this.o.maxRecoveries}${problems.length ? `; problems ${problems.join(",")}` : ""}`;
-    this.o.store.addRunEvidence(run.runId, leaseId, {step: "RECOVERY", cycle: run.remediationCycle, kind: "RECOVERY", argv: [], startedAt: at, endedAt: at, exitCode: problems.length ? 1 : 0, logPath: null, logSha256: null, note}, this.o.actor);
+    const note = `takeover attempt ${run.attempt}; resume step ${run.step} cycle ${run.remediationCycle}; completed checkpoints ${run.checkpoints.length}; recovery ${recoveries} of budget ${this.o.maxRecoveries}${writer ? `; writer ${writer}` : ""}${problems.length ? `; problems ${problems.join(",")}` : ""}${retryLater ? "; transient writer stop failure: retrying at the next takeover (bounded by the recovery budget)" : ""}`;
+    // //TR: SWEEP-5: geri bırakılacak run sahiplikten bu son RECOVERY yazısından ÖNCE çıkarılır; yazı kancası (renew-before-write) ve başka run'ın span()'i bu lease'i yenileyip sonraki devri geciktiremez.
+    if (retryLater) this.owned.delete(run.runId);
+    this.o.store.addRunEvidence(run.runId, leaseId, {step: "RECOVERY", cycle: run.remediationCycle, kind: "RECOVERY", argv: [], startedAt: at, endedAt: at, exitCode: problems.length || retryLater ? 1 : 0, logPath: null, logSha256: null, note}, this.o.actor);
+    if (retryLater) return false; // //TR: SWEEP-5: run RECOVERING kalır, lease yenilenmez; dolunca sonraki devir yazarı yeniden durdurmayı dener (her devir recovery bütçesinden yer): terminal yalnız bütçe tükenince (RECOVERY_BUDGET_EXHAUSTED)
     if (!problems.length) return true;
     const reason = exhausted ? "RECOVERY_BUDGET_EXHAUSTED" : `RECOVERY_FAILED: ${problems.join(",")}`;
     this.o.store.transitionRun(run.runId, leaseId, "RECOVERY_FAILED", reason, this.o.actor, {mission: {to: "BLOCKED", reason}});
@@ -308,11 +633,30 @@ export class MissionRunner {
     const startMission: RunWriteOptions["mission"] = step === "IMPLEMENT" && run.remediationCycle === 0 ? {to: "EXECUTING", reason: `run ${run.runId} implementing`} : undefined;
     let cur = run;
     if (cur.status !== want) cur = s.transitionRun(run.runId, leaseId, want, `step ${step} started`, this.o.actor, {mission: startMission});
+    // //TR: PAR-04: adım başında (lease doğrulandıktan sonra) workspace sahiplik kaydı bu lease için atomik yazılır. WORKSPACE adımında kayıt, run dizinini açan stepWorkspace'te (risk/depo kabulünden SONRA) yazılır: reddedilen run'ın dizini hiç oluşmaz (REL-FX-3).
+    // //TR: TK-4: kayıt yazılamazsa (geçici Windows rename EPERM, disk) adım ENGINE_ERROR ile ölmez: RETRY (bütçe dahilinde) olur.
+    if (step !== "WORKSPACE") {
+      try { this.writeOwner(run.runId, this.ownerRecord(cur, leaseId)); } catch { await this.applyOutcome(cur, leaseId, {kind: "RETRY", reason: "OWNER_RECORD_WRITE_FAILED"}); return; }
+    }
+    const entry = this.owned.get(run.runId);
+    if (entry) entry.lost = false; // işaret adım başınadır: önceki adımın geçici heartbeat hatası sonraki adımları zehirlemez (gerçek fence zaten bir sonraki renew'da yakalanır)
     let lost = false;
     // Heartbeat: uzun adımlarda lease yenilenir; yenileme fence edilirse süreç durdurulur ve sonraki yazı reddedilir.
-    const hb = setInterval(() => { try { s.renewRunLease(run.runId, leaseId, this.o.leaseTtlMs, this.o.actor); } catch { lost = true; } }, Math.max(50, Math.floor(this.o.leaseTtlMs / 3)));
+    const hb = setInterval(() => { try { this.renew(run.runId, leaseId); } catch { lost = true; if (entry) entry.lost = true; } }, this.heartbeatMs());
     let out: Outcome;
-    try { out = await this.performStep(cur, leaseId, () => lost || this.stopActive() !== null); } finally { clearInterval(hb); }
+    const epoch = this.stopEpoch;
+    // //TR: #224 tur 3 (HB-R3-1): adım içindeki bir runner git çocuğunun sahiplik kaydı yazılamadıysa (OwnerRecordError) sonuç kalıcı FAILED/BLOCKED değil RETRY'dir (TK-4 ile aynı kural, bütçe dahilinde). HB-R3-2: abort edilen git çocuğu (StepAbortedError) implementer'ın aborted yolu gibi CANCEL'dır.
+    const abort = () => lost || entry?.lost === true || this.halted(epoch) || this.stopActive() !== null;
+    if (entry) entry.abort = abort;
+    try { out = await this.performStep(cur, leaseId, abort); }
+    catch (e) {
+      if (e instanceof OwnerRecordError) out = {kind: "RETRY", reason: "OWNER_RECORD_WRITE_FAILED"};
+      else if (e instanceof StepAbortedError) out = {kind: "CANCEL", reason: this.cancelReason()};
+      else throw e;
+    }
+    finally { clearInterval(hb); if (entry && entry.abort === abort) entry.abort = null; }
+    // //TR: R2: motor durdurulurken (stop(), SIGTERM/SIGINT/SIGHUP, exit) çocuk bizim tarafımızdan öldürülmüş olabilir: bu "başarısız" bir adım DEĞİLDİR. Tamamlanmış sonuçlar (DONE, REMEDIATE) ve GLOBAL_STOP iptali işlenir; başarısızlık/engel/yeniden-dene/lease-kaybı iptali kaydedilmez, run kilitli kalır ve sonraki engine devralır (terminal FAILED/CANCELLED olmaz).
+    if (this.halted(epoch) && out.kind !== "DONE" && out.kind !== "REMEDIATE" && !(out.kind === "CANCEL" && this.stopActive() !== null)) return;
     await this.applyOutcome(cur, leaseId, out);
   }
 
@@ -357,6 +701,7 @@ export class MissionRunner {
         return;
       }
       case "CANCEL": {
+        if (out.reason === "ENGINE_STOPPING") return; // motor kapanıyor: run iptal edilmez, lease dolunca sonraki engine devralır
         const cur = s.engineGetRun(id);
         if (cur && cur.leaseId === leaseId) this.cancelLeased(cur, leaseId, out.reason);
         return;
@@ -406,6 +751,7 @@ export class MissionRunner {
     return argv[0] === "node" ? [process.execPath, ...argv.slice(1)] : [...argv];
   }
   // SBX-GATE: test komutu proje kodudur; yalnız kapının verdiği sağlayıcıda (sandbox) çalışır, ana makinede asla.
+  // //TR: PAR-04 SINIRI: VERIFY test süreci (cwd = work) workspace yazarı olarak İZLENMEZ; SandboxRunOptions'ta onSpawn yoktur (execution-gate.ts ve sağlayıcılar Lane C dosyası değil). Çözüm talebi: docs/authority-requests/LANE-C-par-tests.md "Residual".
   private runTests(gate: Extract<GateDecision, {allowed: true}>, argv: string[], cwd: string, abort: () => boolean): Promise<ProcResult> {
     return gate.provider.run(argv, {cwd, env: safeChildEnv(this.o.envPolicyFile, {provider: "DETERMINISTIC"}), timeoutMs: this.o.testTimeoutMs, shouldAbort: abort});
   }
@@ -438,7 +784,7 @@ export class MissionRunner {
   }
 
   // İzole workspace: proje deposunun yerel yolundan --no-hardlinks klon, HEAD base SHA olarak kaydedilir, run branch'i açılır. Yeniden girişte sıfırdan kurulur.
-  private stepWorkspace(run: WorkRun, leaseId: string): Outcome {
+  private async stepWorkspace(run: WorkRun, leaseId: string): Promise<Outcome> {
     // REL-FX-3 derinlemesine savunma: journal'a enjekte edilmiş run bile R3/R4 mission için klon veya alt süreç başlatamaz; düzey yalnız mission kaydından okunur.
     const mission = this.o.store.getMission({tenantId: run.tenantId}, run.missionId);
     if (!mission) return {kind: "BLOCK", reason: "MISSION_NOT_FOUND"};
@@ -453,16 +799,19 @@ export class MissionRunner {
     const pre = repositoryPrecondition(project, this.o.dataDir);
     if (!pre.ok) return {kind: "BLOCK", reason: pre.reason};
     const src = pre.src;
-    const repoHead = repositoryHead(src);
+    // //TR: PAR-03 + #218: depo kökü/HEAD kararı #218'in TEK karar prosedürüdür (headDecision); burada EŞZAMANSIZ sürücüyle çalışır, böylece bir depo probu sürerken diğer run'ların lease yenilemesi bloklanmaz. Ortam izin listesi (gitProbeEnv) sürücüden bağımsız aynıdır.
+    const repoHead = await repositoryHeadAsync(src);
     if (!repoHead.ok) return {kind: "BLOCK", reason: repoHead.reason};
     const base = repoHead.baseSha;
     const dir = this.runDir(run.runId), work = path.join(dir, "work"), branch = `uasco/run/${run.runId}`;
     fs.mkdirSync(dir, {recursive: true});
-    this.rmUnderRun(run.runId, work);
+    try { this.writeOwner(run.runId, this.ownerRecord(run, leaseId)); } catch { return {kind: "RETRY", reason: "OWNER_RECORD_WRITE_FAILED"}; } // TK-4
+    this.guardWorkspace(run, leaseId);
+    await this.rmUnderRun(run.runId, work);
     const startedAt = new Date().toISOString();
-    const clone = this.git(dir, ["clone", "--no-hardlinks", "--quiet", src, work]);
-    const co = clone.status === 0 ? this.git(work, ["checkout", "-q", "-B", branch, base]) : null;
-    const head = co?.status === 0 ? this.gitOk(work, ["rev-parse", "HEAD"]) : null;
+    const clone = await this.gitW(run, leaseId, dir, ["clone", "--no-hardlinks", "--quiet", src, work]);
+    const co = clone.status === 0 ? await this.gitW(run, leaseId, work, ["checkout", "-q", "-B", branch, base]) : null;
+    const head = co?.status === 0 ? await this.gitOk(work, ["rev-parse", "HEAD"]) : null;
     this.renew(run.runId, leaseId);
     const log = this.writeLog(run, "workspace", `$ git clone --no-hardlinks ${src} <run>/work\n${clone.stdout ?? ""}${clone.stderr ?? ""}\n$ git checkout -B ${branch} ${base}\n${co?.stdout ?? ""}${co?.stderr ?? ""}\nHEAD=${head}\n`);
     const ok = head === base;
@@ -487,14 +836,19 @@ export class MissionRunner {
     const work = path.join(this.runDir(run.runId), "work"), branch = run.workBranch ?? `uasco/run/${run.runId}`;
     const start = run.remediationCycle === 0 ? run.baseSha : (run.headSha ?? run.baseSha);
     if (!start || !SHA.test(start) || !fs.existsSync(path.join(work, ".git"))) return {kind: "BLOCK", reason: "WORKSPACE_MISSING", status: "FAILED"};
+    // //TR: PAR-04: sıfırlama workspace'i değiştirir; kayıt bu lease'e ait değilse (başka engine devraldı) hiçbir şey değiştirilmez. Beklenen HEAD yoktur: sıfırlamanın amacı HEAD'i start'a getirmektir.
+    this.guardWorkspace(run, leaseId);
+    // //TR: SWEEP-5 (iç inceleme): bir YENİDEN DENEMEDE önceki denemenin SIGKILL'e rağmen ölmeyen artığı sıfırlama sırasında hâlâ yazıyor olabilir: sıfırlamadan ÖNCE yeniden taranır; hâlâ yaşıyorsa yine RETRY (bütçe dahilinde).
+    if (run.retryCount > 0 && !(await this.sweepOwnWriters(run, leaseId))) return {kind: "RETRY", reason: "WORKSPACE_WRITER_ALIVE"};
     for (const args of [["checkout", "-q", "-B", branch, start], ["reset", "-q", "--hard", start], ["clean", "-qfdx"]]) {
-      if (this.gitOk(work, args) === null) return {kind: "BLOCK", reason: "WORKSPACE_RESET_FAILED", status: "FAILED"};
+      if ((await this.gitWOk(run, leaseId, work, args)) === null) return {kind: "BLOCK", reason: "WORKSPACE_RESET_FAILED", status: "FAILED"};
     }
     this.renew(run.runId, leaseId);
     const spec: MissionSpec = {...this.missionSpec(run), startSha: start};
     const lim = this.limitsOf(run);
-    const r = await this.o.executors.implementer.implement(work, spec, {timeoutMs: lim.executorTimeoutMs, shouldAbort: abort});
-    const head = this.gitOk(work, ["rev-parse", "HEAD"]);
+    const r = await this.withChild(run, leaseId, onSpawn => this.o.executors.implementer.implement(work, spec, {timeoutMs: lim.executorTimeoutMs, shouldAbort: abort, onSpawn, writerEnv: writerEnvFor(run.runId, leaseId), span: fn => this.span(fn)}));
+    if (!(await this.sweepOwnWriters(run, leaseId))) return {kind: "RETRY", reason: "WORKSPACE_WRITER_ALIVE"}; // //TR: SWEEP-5: SIGKILL sonrası 2 sn içinde ölmeyen artık geçici olabilir: yeniden deneme (bütçe dahilinde; adım yeniden girişte workspace sıfırlanır); terminal yalnız retry bütçesi tükenince
+    const head = await this.gitOk(work, ["rev-parse", "HEAD"]);
     const log = this.writeLog(run, "implement", r.log);
     const produced = r.exitCode === 0 && !r.blockReason && head && SHA.test(head) && head !== start ? head : undefined;
     const limit = r.exitCode !== 0 && !r.aborted && !r.timedOut ? executorLimit(r.exitCode, r.log) : null;
@@ -502,7 +856,7 @@ export class MissionRunner {
       ...(limit ? {note: limitNote(limit)} : r.blockReason ? {note: r.blockReason.slice(0, 200)} : {})});
     // //TR: Rol atanmış run için izlenebilir ajan kaydı (ayrıntı: recordAgentTrace).
     if (run.roleId !== null) this.recordAgentTrace(run, leaseId, assertImplementerRole(run.roleId), r.aborted ? "ABORTED" : produced ? "COMPLETED" : "FAILED", r, this.o.executors.implementer.identity, "");
-    if (r.aborted) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
+    if (r.aborted) return {kind: "CANCEL", reason: this.cancelReason()};
     // REL-FX-4: sağlayıcı kota/hız sınırı kör retry ile bütçe tüketmez: run BLOCKED(PROVIDER_QUOTA), retryCount değişmez; disk dolu/kotası BLOCKED(DISK_FULL).
     if (limit) return limitBlock(limit);
     // Edit-only builder çıktısını engine commit etmeyi reddettiyse (değişiklik yok, .git/workspace dışı değişiklik) veya builder hiç başlatılmadıysa (SBX-8: profil oturumu yok) run BLOCKED olur.
@@ -511,13 +865,13 @@ export class MissionRunner {
     if (r.exitCode !== 0) return r.transient ? {kind: "RETRY", reason: "IMPLEMENT_TRANSIENT_FAILURE"} : {kind: "BLOCK", reason: "IMPLEMENT_FAILED", status: "FAILED"};
     if (!produced) return {kind: "BLOCK", reason: "NO_COMMIT_PRODUCED", status: "FAILED"};
     if (r.commitSha !== undefined && r.commitSha !== produced) return {kind: "BLOCK", reason: "IMPLEMENT_COMMIT_MISMATCH", status: "FAILED"};
-    if (this.git(work, ["merge-base", "--is-ancestor", start, produced]).status !== 0) return {kind: "BLOCK", reason: "IMPLEMENT_HISTORY_REWRITTEN", status: "FAILED"};
+    if ((await this.git(work, ["merge-base", "--is-ancestor", start, produced])).status !== 0) return {kind: "BLOCK", reason: "IMPLEMENT_HISTORY_REWRITTEN", status: "FAILED"};
     // //TR: Rol limiti maxFilesWritten: run'ın BASE'e göre değiştirdiği dosya sayısı (döngüler toplamı) sınırı aşarsa VERIFY'a geçilmez. Sayım okunamazsa fail-closed (limit doğrulanamaz).
     if (lim.maxFilesWritten !== null) {
       const base = run.baseSha ?? start;
-      const names = this.git(work, ["-c", `core.attributesFile=${this.emptyAttributes(run)}`, "-c", "core.fsmonitor=false", "diff", "--name-only", "-z", "--no-renames", "--no-ext-diff", base, produced]);
+      const names = await this.git(work, ["-c", `core.attributesFile=${this.emptyAttributes(run)}`, "-c", "core.fsmonitor=false", "diff", "--name-only", "-z", "--no-renames", "--no-ext-diff", base, produced]);
       if (names.status !== 0) return {kind: "BLOCK", reason: "TASK_LIMIT_FILES_UNVERIFIABLE", status: "FAILED"};
-      const files = String(names.stdout ?? "").split("\0").filter(Boolean).length;
+      const files = names.stdout.split("\0").filter(Boolean).length;
       if (files > lim.maxFilesWritten) return {kind: "BLOCK", reason: `TASK_LIMIT_FILES_EXCEEDED:${files}>${lim.maxFilesWritten}`};
     }
     return {kind: "DONE", next: "VERIFY", data: {commitSha: produced, startSha: start}, patch: {headSha: produced}};
@@ -530,44 +884,44 @@ export class MissionRunner {
     fs.writeFileSync(f, "");
     return f;
   }
-  private diff(run: WorkRun, cwd: string, base: string, head: string): string | null {
-    const r = this.git(cwd, ["-c", `core.attributesFile=${this.emptyAttributes(run)}`, "-c", "core.fsmonitor=false", "diff", "--no-color", "--no-ext-diff", "--no-textconv", "--text", "--no-renames", "--src-prefix=a/", "--dst-prefix=b/", base, head]);
-    return r.status === 0 ? String(r.stdout ?? "") : null;
+  private async diff(run: WorkRun, cwd: string, base: string, head: string): Promise<string | null> {
+    const r = await this.git(cwd, ["-c", `core.attributesFile=${this.emptyAttributes(run)}`, "-c", "core.fsmonitor=false", "diff", "--no-color", "--no-ext-diff", "--no-textconv", "--text", "--no-renames", "--src-prefix=a/", "--dst-prefix=b/", base, head]);
+    return r.status === 0 ? r.stdout : null;
   }
   // B3C-C2-F1: gitleaks git geçişinin gördüğü yamaların aynısı (--text --no-textconv --no-ext-diff, merge'ler first-parent'a göre), boş attributes ile; yalnız eklenen satırlar akışını kurmak için.
-  private patchLog(run: WorkRun, cwd: string, base: string, head: string): string | null {
-    const r = this.git(cwd, ["-c", `core.attributesFile=${this.emptyAttributes(run)}`, "-c", "core.fsmonitor=false", "log", "-p", "--no-color", "--no-ext-diff", "--no-textconv", "--text", "--no-renames", "--diff-merges=first-parent",
+  private async patchLog(run: WorkRun, cwd: string, base: string, head: string): Promise<string | null> {
+    const r = await this.git(cwd, ["-c", `core.attributesFile=${this.emptyAttributes(run)}`, "-c", "core.fsmonitor=false", "log", "-p", "--no-color", "--no-ext-diff", "--no-textconv", "--text", "--no-renames", "--diff-merges=first-parent",
       "--no-show-signature", "--src-prefix=a/", "--dst-prefix=b/", "--format=commit %H", `${base}..${head}`]);
-    return r.status === 0 ? String(r.stdout ?? "") : null;
+    return r.status === 0 ? r.stdout : null;
   }
-  private commitMessages(run: WorkRun, cwd: string, base: string, head: string): string | null {
-    const r = this.git(cwd, ["-c", `core.attributesFile=${this.emptyAttributes(run)}`, "-c", "core.fsmonitor=false", "log", "--no-color", "--no-show-signature", "--format=commit %H%n%B", `${base}..${head}`]);
-    return r.status === 0 ? String(r.stdout ?? "") : null;
+  private async commitMessages(run: WorkRun, cwd: string, base: string, head: string): Promise<string | null> {
+    const r = await this.git(cwd, ["-c", `core.attributesFile=${this.emptyAttributes(run)}`, "-c", "core.fsmonitor=false", "log", "--no-color", "--no-show-signature", "--format=commit %H%n%B", `${base}..${head}`]);
+    return r.status === 0 ? r.stdout : null;
   }
 
   // VERIFY: önce diff secret taraması (hit -> BLOCKED, testler hiç çalışmaz), sonra allowlist'teki argv test komutu safeChildEnv + timeout ile.
   private async stepVerify(run: WorkRun, leaseId: string, abort: () => boolean): Promise<Outcome> {
     const work = path.join(this.runDir(run.runId), "work");
     if (!run.baseSha || !run.headSha) return {kind: "BLOCK", reason: "HEAD_COMMIT_MISSING", status: "FAILED"};
-    if (this.gitOk(work, ["rev-parse", "HEAD"]) !== run.headSha) {
-      if (this.gitOk(work, ["checkout", "-q", "-B", run.workBranch ?? `uasco/run/${run.runId}`, run.headSha]) === null) return {kind: "BLOCK", reason: "WORKSPACE_DIVERGED", status: "FAILED"};
-    }
+    // //TR: PAR-04: workspace'i değiştirmeden önce kayıt bu lease'e ait olmalı VE HEAD kayıtlı headSha olmalı; sahipsiz bir yazar HEAD'i oynattıysa onarılmaz, fail-closed (eski "checkout -B" onarımı kaldırıldı).
+    this.guardWorkspace(run, leaseId);
+    if ((await this.gitOk(work, ["rev-parse", "HEAD"])) !== run.headSha) return {kind: "BLOCK", reason: "WORKSPACE_DIVERGED", status: "FAILED"};
     const startedAt = new Date().toISOString();
     // Tarama implementer workspace'inde değil, üretilen commit'in taze klonunda yapılır (workspace .git/config textconv'u etkisizdir).
-    const scanClone = this.freshClone(run, `scan-c${run.remediationCycle}`);
+    const scanClone = await this.freshClone(run, leaseId, `scan-c${run.remediationCycle}`);
     if (!scanClone) return {kind: "BLOCK", reason: "SCAN_CLONE_FAILED", status: "FAILED"};
-    const diff = this.diff(run, scanClone, run.baseSha, run.headSha);
-    const messages = this.commitMessages(run, scanClone, run.baseSha, run.headSha);
+    const diff = await this.diff(run, scanClone, run.baseSha, run.headSha);
+    const messages = await this.commitMessages(run, scanClone, run.baseSha, run.headSha);
     if (diff === null || messages === null) return {kind: "BLOCK", reason: "DIFF_UNAVAILABLE", status: "FAILED"};
     this.renew(run.runId, leaseId);
-    const hits = [...scanDiffForSecrets(diff), ...scanCommitMessagesForSecrets(messages)];
+    const hits = this.span(() => [...scanDiffForSecrets(diff), ...scanCommitMessagesForSecrets(messages)]);
     const scanLog = this.writeLog(run, "secret-scan", `secret scan ${run.baseSha}..${run.headSha} (fresh clone, --text --no-textconv --no-ext-diff, empty attributes; diff + commit messages): ${hits.length} hit(s)\n${hits.map(h => `${h.kind} ${h.file}:${h.line}`).join("\n")}\n`);
     this.evidence(run, leaseId, {kind: "SECRET_SCAN", argv: ["git", "diff", "--text", "--no-textconv", "--no-ext-diff", run.baseSha, run.headSha], startedAt, endedAt: new Date().toISOString(), exitCode: hits.length ? 1 : 0, ...scanLog, baseSha: run.baseSha, commitSha: run.headSha, secretHits: hits.slice(0, 100)});
     if (hits.length) return {kind: "BLOCK", reason: "SECRET_IN_DIFF"};
     // REL-FX-2: test yüzeyi de aynı taze klonda base..head name-status ile alınır (implementer workspace'i/config'i etkisizdir).
-    const ns = this.git(scanClone, ["-c", `core.attributesFile=${this.emptyAttributes(run)}`, "-c", "core.fsmonitor=false", "diff", "--name-status", "-z", "--find-renames", "--no-ext-diff", "--no-textconv", run.baseSha, run.headSha]);
+    const ns = await this.git(scanClone, ["-c", `core.attributesFile=${this.emptyAttributes(run)}`, "-c", "core.fsmonitor=false", "diff", "--name-status", "-z", "--find-renames", "--no-ext-diff", "--no-textconv", run.baseSha, run.headSha]);
     if (ns.status !== 0) return {kind: "BLOCK", reason: "DIFF_UNAVAILABLE", status: "FAILED"};
-    const touched = parseNameStatusZ(String(ns.stdout ?? ""));
+    const touched = parseNameStatusZ(ns.stdout);
     const argv = this.testArgv(run);
     if (!argv) return {kind: "BLOCK", reason: "TEST_COMMAND_NOT_CONFIGURED"};
     const base = run.baseSha, head = run.headSha;
@@ -583,7 +937,7 @@ export class MissionRunner {
     const r = await this.runTests(gate, argv, work, abort);
     // M1a c2: kanıt, kapı kararındaki doğrulanmış sağlayıcının kimliğini taşır (PRODUCT_VERIFIED için sandbox tanığı; kapı semantiği değişmez).
     this.procEvidence(run, leaseId, "VERIFY_TESTS", r, {commitSha: run.headSha, sandboxProviderId: gate.providerId});
-    if (r.aborted) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
+    if (r.aborted) return {kind: "CANCEL", reason: this.cancelReason()};
     if (r.spawnError) return {kind: "BLOCK", reason: "TEST_COMMAND_SPAWN_FAILED"};
     // RV-RELFX-C2-002: stdout ve stderr akış kuralına göre ayrı okunur (birleştirilip son satır seçilmez; stderr'e basılan sahte özet gerçeğini ezemez, çelişki UNKNOWN). executedTests yalnız doğrulanmış sandbox içindeki gerçek koşudan gelir.
     const testRun = parseTestRunStreams(String(r.stdout ?? ""), String(r.stderr ?? ""));
@@ -594,8 +948,9 @@ export class MissionRunner {
   // REL-FX-2 + INT-R4: TEST_SURFACE statik git analizidir (taze klonda base..head name-status + değişen test dosyası metni) ve SBX kapısından bağımsız kaydedilir. executedTests/functionalAcceptance gerçek koşu yalnız doğrulanmış sandbox içinde olduğunda (testRun != null) dolar; yürütme bloklandığında testRun=null ve sayı uydurulmaz (UNKNOWN/BLOCKED).
   private recordTestSurface(run: WorkRun, leaseId: string, base: string, head: string, touched: NameStatusEntry[], scanClone: string, testRun: TestRunSummary | null, notExecutedReason?: "SANDBOX_UNAVAILABLE"): void {
     const surfaceStart = new Date().toISOString();
-    const contentAt = (ref: string, p: string): string | null => { const x = this.git(scanClone, ["show", `${ref}:${p}`]); return x.status === 0 ? String(x.stdout ?? "") : null; };
-    const surface = evaluateTestSurface({baseSha: base, headSha: head, entries: touched, contentAt, executedTests: testRun?.executed ?? null, testRun, testCommand: this.rawTestCommand(run), ...(notExecutedReason ? {notExecutedReason} : {})});
+    // //TR: HB-2: her dosya için ayrı senkron `git show`; toplam süre span'ın 0.9 x TTL sınırını aşabileceğinden HER çağrıdan önce TÜM lease'ler yenilenir (TTL/10'a kısıtlı, ucuz).
+    const contentAt = (ref: string, p: string): string | null => { this.renewAllOwned(); const x = this.gitSync(scanClone, ["show", `${ref}:${p}`]); return x.status === 0 ? String(x.stdout ?? "") : null; };
+    const surface = this.span(() => evaluateTestSurface({baseSha: base, headSha: head, entries: touched, contentAt, executedTests: testRun?.executed ?? null, testRun, testCommand: this.rawTestCommand(run), ...(notExecutedReason ? {notExecutedReason} : {})}));
     this.renew(run.runId, leaseId);
     // Her kanıt gibi TEST_SURFACE de log dosyası + sha256 taşır (tam sınıflama JSON'u; dosya içeriği yazılmaz).
     const surfaceLog = this.writeLog(run, "test-surface", `${JSON.stringify(surface, null, 2)}\n`);
@@ -604,11 +959,11 @@ export class MissionRunner {
   }
 
   // Bare taze klon (çalışma ağacı yok): gitleaks yalnız git geçmişini okur; repodaki .gitleaksignore / .gitleaks.toml okunabilecek bir yer bulunmaz.
-  private bareClone(run: WorkRun, name: string): string | null {
+  private async bareClone(run: WorkRun, leaseId: string, name: string): Promise<string | null> {
     const work = path.join(this.runDir(run.runId), "work"), dir = path.join(this.runDir(run.runId), name);
-    this.rmUnderRun(run.runId, dir);
-    if (this.git(this.runDir(run.runId), ["clone", "--no-hardlinks", "--quiet", "--bare", work, dir]).status !== 0) return null;
-    for (const sha of [run.baseSha, run.headSha]) if (!sha || this.gitOk(dir, ["cat-file", "-e", `${sha}^{commit}`]) === null) return null;
+    await this.rmUnderRun(run.runId, dir);
+    if ((await this.gitW(run, leaseId, this.runDir(run.runId), ["clone", "--no-hardlinks", "--quiet", "--bare", work, dir])).status !== 0) return null;
+    for (const sha of [run.baseSha, run.headSha]) if (!sha || (await this.gitOk(dir, ["cat-file", "-e", `${sha}^{commit}`])) === null) return null;
     return dir;
   }
 
@@ -620,12 +975,12 @@ export class MissionRunner {
     const startedAt = new Date().toISOString();
     const secDir = path.join(this.runDir(run.runId), "security"), tag = `c${run.remediationCycle}-a${run.attempt}`;
     fs.mkdirSync(secDir, {recursive: true});
-    const clone = this.freshClone(run, `security-c${run.remediationCycle}`);
+    const clone = await this.freshClone(run, leaseId, `security-c${run.remediationCycle}`);
     if (!clone) return {kind: "BLOCK", reason: "SECURITY_CLONE_FAILED", status: "FAILED"};
-    const diff = this.diff(run, clone, base, head), messages = this.commitMessages(run, clone, base, head);
+    const diff = await this.diff(run, clone, base, head), messages = await this.commitMessages(run, clone, base, head);
     if (diff === null || messages === null) return {kind: "BLOCK", reason: "DIFF_UNAVAILABLE", status: "FAILED"};
     this.renew(run.runId, leaseId);
-    const builtinHits = scanDiffForSecrets(diff).length + scanCommitMessagesForSecrets(messages).length;
+    const builtinHits = this.span(() => scanDiffForSecrets(diff).length + scanCommitMessagesForSecrets(messages).length);
     const env = safeChildEnv(this.o.envPolicyFile, {provider: "DETERMINISTIC"});
     const so = this.securityOpts, ctx = {env, timeoutMs: so.timeoutMs ?? DEFAULT_SECURITY_TIMEOUT_MS, maxReportBytes: so.maxReportBytes ?? DEFAULT_MAX_REPORT_BYTES, abort};
     const logs: Record<string, {logPath: string | null; logSha256: string | null}> = {};
@@ -635,13 +990,13 @@ export class MissionRunner {
     // ---- gitleaks ----
     const gt = this.securityTools.gitleaks;
     let gitleaks: PolicyInput["gitleaks"] = {status: "NOT_INSTALLED", reason: "TOOL_NOT_INSTALLED", count: 0, items: [], rawReportSha256: null};
-    const gProblem = problem(gt);
+    const gProblem = this.span(() => problem(gt));
     if (gt.status !== "NOT_INSTALLED" && gProblem) gitleaks = {status: "ERROR", reason: gProblem, count: 0, items: [], rawReportSha256: null};
     else if (gt.status === "INSTALLED") {
-      const bare = this.bareClone(run, `security-gl-c${run.remediationCycle}.git`);
+      const bare = await this.bareClone(run, leaseId, `security-gl-c${run.remediationCycle}.git`);
       if (!bare) return {kind: "BLOCK", reason: "SECURITY_CLONE_FAILED", status: "FAILED"};
       // B3C-C2-F2: aralık gitleaks'ten önce doğrulanır (gitleaks iç git hatasında exit 0 + "[]" verebilir); sorun varsa tarayıcı hiç çalışmaz, sonuç SECURITY_TOOL_ERROR olur.
-      const rangeProblem = gitRangeProblem(args => this.git(bare, args), base, head);
+      const rangeProblem = this.span(() => gitRangeProblem(args => { this.renewAllOwned(); return this.gitSync(bare, args); }, base, head));
       if (rangeProblem) gitleaks = {status: "ERROR", reason: rangeProblem, count: 0, items: [], rawReportSha256: null};
       else {
         const cwd = path.join(secDir, "gitleaks-cwd"), configFile = path.join(secDir, "gitleaks.toml"), ignoreFile = path.join(secDir, "gitleaks.ignore");
@@ -650,18 +1005,18 @@ export class MissionRunner {
         fs.writeFileSync(ignoreFile, "");
         const g = await runGitleaks(gt, {bareRepo: bare, base, head, configFile, ignoreFile, reportFile: path.join(secDir, `gitleaks-raw-${tag}.json`), cwd}, ctx);
         logs.gitleaks = this.procEvidence(run, leaseId, "SECURITY_GITLEAKS", g.proc, {commitSha: head, baseSha: base, note: `gitleaks ${gt.version ?? ""}: ${g.status}${g.reason ? ` ${g.reason}` : ""} findings=${g.count}`.slice(0, 300)});
-        if (g.proc.aborted || abort()) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
+        if (g.proc.aborted || abort()) return {kind: "CANCEL", reason: this.cancelReason()};
         if (g.transient) return {kind: "RETRY", reason: "SECURITY_TOOL_TRANSIENT_FAILURE"};
         // B3C-C2-F1: varsayılan global YOL allowlist'i (node_modules/, kilit dosyaları, *.png ...) git geçişinde kapatılamaz; eklenen satırlar yolsuz stdin geçişiyle yeniden taranır.
         let added: GitleaksResult | null = null, addedProblem: string | null = null;
         if (g.status !== "ERROR") {
-          const patch = this.patchLog(run, bare, base, head);
+          const patch = await this.patchLog(run, bare, base, head);
           this.renew(run.runId, leaseId);
           if (patch === null) addedProblem = "ADDED_LINES_UNAVAILABLE";
           else {
             added = await runGitleaksAddedLines(gt, {stream: buildAddedLineStream(patch), configFile, ignoreFile, reportFile: path.join(secDir, `gitleaks-raw-added-${tag}.json`), cwd}, ctx);
             logs.gitleaksAddedLines = this.procEvidence(run, leaseId, "SECURITY_GITLEAKS_ADDED_LINES", added.proc, {commitSha: head, baseSha: base, note: `gitleaks ${gt.version ?? ""} added-lines (stdin, no path allowlist): ${added.status}${added.reason ? ` ${added.reason}` : ""} findings=${added.count}`.slice(0, 300)});
-            if (added.proc.aborted || abort()) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
+            if (added.proc.aborted || abort()) return {kind: "CANCEL", reason: this.cancelReason()};
             if (added.transient) return {kind: "RETRY", reason: "SECURITY_TOOL_TRANSIENT_FAILURE"};
           }
         }
@@ -672,7 +1027,7 @@ export class MissionRunner {
     // ---- trivy (çevrimdışı; DB indirilmez) ----
     const tt = this.securityTools.trivy;
     let trivy: PolicyInput["trivy"] = {status: "NOT_INSTALLED", reason: "TOOL_NOT_INSTALLED", counts: {}, blocking: 0, findings: [], truncated: false, rawReportSha256: null};
-    const tProblem = problem(tt);
+    const tProblem = this.span(() => problem(tt));
     if (tt.status !== "NOT_INSTALLED" && tProblem) trivy = {...trivy, status: "ERROR", reason: tProblem};
     else if (tt.status === "INSTALLED") {
       const cwd = path.join(secDir, "trivy-cwd");
@@ -680,12 +1035,12 @@ export class MissionRunner {
       const r = await runTrivy(tt, {target: clone, cacheDir: so.trivyCacheDir ?? defaultTrivyCacheDir(), reportFile: path.join(secDir, `trivy-${tag}.json`), cwd, nowMs: (so.now ?? Date.now)(), maxDbAgeMs: so.maxTrivyDbAgeMs ?? DEFAULT_MAX_TRIVY_DB_AGE_MS}, ctx);
       if (r.proc) {
         logs.trivy = this.procEvidence(run, leaseId, "SECURITY_TRIVY", r.proc, {commitSha: head, baseSha: base, note: `trivy ${tt.version ?? ""}: ${r.status}${r.reason ? ` ${r.reason}` : ""} db=${r.dbState} blocking=${r.blocking}`.slice(0, 300)});
-        if (r.proc.aborted || abort()) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
+        if (r.proc.aborted || abort()) return {kind: "CANCEL", reason: this.cancelReason()};
         if (r.transient) return {kind: "RETRY", reason: "SECURITY_TOOL_TRANSIENT_FAILURE"};
       }
       trivy = {status: r.status, ...(r.reason ? {reason: r.reason} : {}), dbState: r.dbState, counts: r.counts, blocking: r.blocking, findings: r.findings, truncated: r.truncated, rawReportSha256: r.rawReportSha256};
     }
-    if (abort()) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
+    if (abort()) return {kind: "CANCEL", reason: this.cancelReason()};
 
     const tools = this.securityTools;
     const summary = evaluateSecurityPolicy({baseSha: base, headSha: head, cycle: run.remediationCycle, tools: [toolInfo(tools.gitleaks), toolInfo(tools.trivy), toolInfo(tools.semgrep)], builtinHits, gitleaks, trivy, semgrep: toolInfo(tools.semgrep)});
@@ -701,12 +1056,12 @@ export class MissionRunner {
     return {kind: "DONE", next: "REVIEW", data: {security: summary.status, gaps: summary.gaps, scaCounts: summary.sca.counts, reportPath: rel, reportSha256: sha256(bytes)}};
   }
 
-  private freshClone(run: WorkRun, name = `review-c${run.remediationCycle}`): string | null {
+  private async freshClone(run: WorkRun, leaseId: string, name = `review-c${run.remediationCycle}`): Promise<string | null> {
     const work = path.join(this.runDir(run.runId), "work"), dir = path.join(this.runDir(run.runId), name);
-    this.rmUnderRun(run.runId, dir);
-    if (this.git(this.runDir(run.runId), ["clone", "--no-hardlinks", "--quiet", work, dir]).status !== 0) return null;
-    if (this.gitOk(dir, ["checkout", "-q", "--detach", run.headSha!]) === null) return null;
-    return this.gitOk(dir, ["rev-parse", "HEAD"]) === run.headSha ? dir : null;
+    await this.rmUnderRun(run.runId, dir);
+    if ((await this.gitW(run, leaseId, this.runDir(run.runId), ["clone", "--no-hardlinks", "--quiet", work, dir])).status !== 0) return null;
+    if ((await this.gitWOk(run, leaseId, dir, ["checkout", "-q", "--detach", run.headSha!])) === null) return null;
+    return (await this.gitOk(dir, ["rev-parse", "HEAD"])) === run.headSha ? dir : null;
   }
 
   // REVIEW: farklı kimlikli reviewer, üretilen commit'in taze temiz klonunda salt-okunur çalışır; klon değişirse fail-closed BLOCKED.
@@ -719,9 +1074,9 @@ export class MissionRunner {
       try { reviewerProfile = assertRoleExecutes(this.o.reviewerRoleId ?? bindingForFunction("security-reviewer").roleId, "security-reviewer"); } catch (e) { return {kind: "BLOCK", reason: (e as Error).message.slice(0, 200)}; }
     }
     if (!run.baseSha || !run.headSha) return {kind: "BLOCK", reason: "HEAD_COMMIT_MISSING", status: "FAILED"};
-    const clone = this.freshClone(run);
+    const clone = await this.freshClone(run, leaseId);
     if (!clone) return {kind: "BLOCK", reason: "REVIEW_CLONE_FAILED", status: "FAILED"};
-    const diff = this.diff(run, clone, run.baseSha, run.headSha);
+    const diff = await this.diff(run, clone, run.baseSha, run.headSha);
     if (diff === null) return {kind: "BLOCK", reason: "DIFF_UNAVAILABLE", status: "FAILED"};
     this.renew(run.runId, leaseId);
     const testSurface = this.reviewerTestSurface(run);
@@ -729,8 +1084,8 @@ export class MissionRunner {
     const testExecution = this.testsNotExecuted(run) ? {executed: false as const, reason: "SANDBOX_UNAVAILABLE" as const} : undefined;
     // //TR: Rol atanmış run'da reviewer zaman aşımı = min(run varsayılanı, bağlı security-reviewer limiti); profil run varsayılanını yalnız SIKILAŞTIRIR. (maxFilesWritten 0 aşağıdaki untouched-clone kapısıdır; maxCycles 1 = bu adımda tek review geçişi.) Rolsüz run değişmez.
     const reviewTimeoutMs = reviewerProfile ? effectiveLimits(reviewerProfile.limits, {maxRemediations: this.o.maxRemediations, executorTimeoutMs: this.o.executorTimeoutMs}).executorTimeoutMs : this.o.executorTimeoutMs;
-    const r = await reviewer.review(clone, {...this.missionSpec(run), ...(testSurface ? {testSurface} : {}), ...(testExecution ? {testExecution} : {})}, diff, {timeoutMs: reviewTimeoutMs, shouldAbort: abort});
-    const untouched = this.gitOk(clone, ["rev-parse", "HEAD"]) === run.headSha && this.gitOk(clone, ["status", "--porcelain", "--untracked-files=all"]) === "";
+    const r = await this.withChild(run, leaseId, onSpawn => reviewer.review(clone, {...this.missionSpec(run), ...(testSurface ? {testSurface} : {}), ...(testExecution ? {testExecution} : {})}, diff, {timeoutMs: reviewTimeoutMs, shouldAbort: abort, onSpawn, writerEnv: writerEnvFor(run.runId, leaseId), span: fn => this.span(fn)}));
+    const untouched = (await this.gitOk(clone, ["rev-parse", "HEAD"])) === run.headSha && (await this.gitOk(clone, ["status", "--porcelain", "--untracked-files=all"])) === "";
     const log = this.writeLog(run, "review", r.log);
     const limit = !r.valid && !r.aborted && !r.timedOut ? executorLimit(r.exitCode, r.log) : null;
     // INT-R4 kompozisyon: REVIEW kanıt notu SBX-8 anlambilimini birebir korur (çalışma alanı değişti -> REVIEW_CLONE_MUTATED; geçersiz -> REVIEW_INVALID <neden>), REL-FX provider kota/hız sınırı notunu (limitNote) ekler. Test yüzeyi reviewer'a ayrıca verilir (reviewer.review) ve VERIFY'de ayrı TEST_SURFACE kanıtı olarak kaydedilir; notta tekrarlanmaz.
@@ -741,19 +1096,19 @@ export class MissionRunner {
     this.evidence(run, leaseId, {kind: "REVIEW", argv: r.argv, startedAt: r.startedAt, endedAt: r.endedAt, exitCode: r.exitCode, timedOut: r.timedOut, ...log, commitSha: run.headSha,
       reviewerIdentity: reviewer.identity, executorIdentity: run.executor.implementer, ...(r.valid ? {verdict: r.verdict, findingsCount: r.findings.length} : {}), ...(reviewNote ? {note: reviewNote} : {})});
     if (reviewerProfile) this.recordAgentTrace(run, leaseId, reviewerProfile, r.aborted ? "ABORTED" : r.valid && untouched ? "COMPLETED" : "FAILED", r, reviewer.identity, r.valid ? ` verdict=${r.verdict}` : " verdict=INVALID");
-    if (r.aborted) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
+    if (r.aborted) return {kind: "CANCEL", reason: this.cancelReason()};
     if (!untouched) return {kind: "BLOCK", reason: "REVIEWER_MUTATED_CLONE"};
     // REL-FX: reviewer sağlayıcı kota/hız sınırına çarptıysa BLOCKED(PROVIDER_QUOTA/DISK_FULL), yeniden deneme bütçesi tüketilmez; SBX-8 geçersizlik dalından önce.
     if (limit) return limitBlock(limit);
     // SBX-8: adapter'ın geçersizlik nedeni (profil oturumu yok -> BLOCKED; çalışma alanı değişti -> FAILED) korunur; geçersiz review asla CLEAN değildir.
-    if (!r.valid) return r.transient ? {kind: "RETRY", reason: "REVIEW_TRANSIENT_FAILURE"} : {kind: "BLOCK", reason: (r.invalidReason ?? "REVIEW_FAILED").slice(0, 200), status: r.invalidReason?.startsWith("CLAUDE_PROFILE_") ? "BLOCKED" : "FAILED"};
+    if (!r.valid) return r.transient ? {kind: "RETRY", reason: "REVIEW_TRANSIENT_FAILURE"} : {kind: "BLOCK", reason: (r.invalidReason ?? "REVIEW_FAILED").slice(0, 200), status: FOUNDER_ACTIONABLE_REFUSAL.test(r.invalidReason ?? "") ? "BLOCKED" : "FAILED"};
     if (r.verdict === "CLEAN") return {kind: "DONE", next: "REGRESSION", data: {verdict: "CLEAN", reviewerIdentity: reviewer.identity, commitSha: run.headSha}};
     return {kind: "REMEDIATE", reason: "REVIEW_BLOCKED", data: {verdict: "BLOCKED", reviewerIdentity: reviewer.identity}, findings: r.findings.map(f => `${f.severity}: ${f.title}`)};
   }
 
   // REGRESSION: test komutu reviewer'ın gördüğü commit'in yeni ve temiz bir klonunda yeniden çalışır (yalnız commit'lenmiş içerik).
   private async stepRegression(run: WorkRun, leaseId: string, abort: () => boolean): Promise<Outcome> {
-    const clone = this.freshClone(run);
+    const clone = await this.freshClone(run, leaseId);
     if (!clone) return {kind: "BLOCK", reason: "REGRESSION_CLONE_FAILED", status: "FAILED"};
     this.renew(run.runId, leaseId);
     const argv = this.testArgv(run);
@@ -763,7 +1118,7 @@ export class MissionRunner {
     if (!gate.allowed) { this.sandboxNotExecuted(run, leaseId, "REGRESSION_TESTS", argv, gate); return {kind: "DONE", next: "REPORT", data: {tests: "NOT_EXECUTED", testsReason: gate.reason}}; }
     const r = await this.runTests(gate, argv, clone, abort);
     this.procEvidence(run, leaseId, "REGRESSION_TESTS", r, {commitSha: run.headSha ?? undefined, sandboxProviderId: gate.providerId});
-    if (r.aborted) return {kind: "CANCEL", reason: this.stopActive() ?? "LEASE_LOST"};
+    if (r.aborted) return {kind: "CANCEL", reason: this.cancelReason()};
     if (r.spawnError) return {kind: "BLOCK", reason: "TEST_COMMAND_SPAWN_FAILED"};
     if (r.exitCode === 0) return {kind: "DONE", next: "REPORT", data: {tests: "PASSED"}};
     return {kind: "REMEDIATE", reason: "REGRESSION_FAILED", data: {tests: "FAILED", exitCode: r.exitCode}, findings: [`regression test command exited ${r.exitCode}`]};

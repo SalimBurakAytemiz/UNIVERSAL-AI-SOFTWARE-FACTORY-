@@ -5,7 +5,7 @@ import path from "node:path";
 import {resolveRoleExecution} from "./role-execution.js";
 import type {CatalogRoleLike, ProviderRoute, RoleExecutionProfile} from "./role-execution.js";
 import {STAGE_CONSUMERS} from "./first-delivery-bindings.js";
-import {TERMINAL_RUN_STATUSES} from "../workos/run-state.js";
+import {isOpenRun} from "../workos/run-state.js";
 import type {WorkRun} from "../workos/types.js";
 
 export const TARGET_ROLE_COUNT = 599;
@@ -52,7 +52,10 @@ export interface RoleLifecycle { roleId: string; guildId: string; registered: tr
 export interface LifecycleContext {
   bindings: readonly RoleExecutionProfile[]; verify: EvidenceVerifier; runningRoleIds: ReadonlySet<string>; nowMs: number;
 }
-const consumedFunctions = (): ReadonlySet<string> => new Set(Object.values(STAGE_CONSUMERS).flat());
+// //TR: C-RDY-1: readiness-audit.ts aynı tüketilen-fonksiyon kümesini kullanır (tek doğruluk kaynağı); davranış değişmedi, yalnız dışa açıldı.
+export const consumedFunctions = (): ReadonlySet<string> => new Set(Object.values(STAGE_CONSUMERS).flat());
+// //TR: C-RDY-1: run günlüğü gözlemi. ABSENT = günlük yok (running ÖLÇÜLEMEZ, 0 değildir); PRESENT = günlük var ve runs gerçek listedir (boş liste ölçülmüş sıfırdır).
+export type RunsObservation = {journal: "PRESENT"; runs: readonly Pick<WorkRun, "status" | "evidence">[]} | {journal: "ABSENT"};
 
 export function roleLifecycle(role: LifecycleRole, catalog: readonly CatalogRoleLike[], ctx: LifecycleContext): RoleLifecycle {
   const res = resolveRoleExecution(role.roleId, catalog, ctx.bindings);
@@ -69,11 +72,12 @@ export function roleLifecycle(role: LifecycleRole, catalog: readonly CatalogRole
   return {roleId: role.roleId, guildId: role.guildId, registered: true, implemented, tested, certified, running: ctx.runningRoleIds.has(role.roleId)};
 }
 
-/** Açık (terminal olmayan) bir run'daki AGENT_TRACE kanıtından rol kimlikleri; yalnız kayıtlı rol kimlikleri sayılır. */
+/** Açık bir run'daki AGENT_TRACE kanıtından rol kimlikleri; yalnız kayıtlı rol kimlikleri sayılır. "Açık" = run-state.isOpenRun: terminal DEĞİL ve AWAITING_APPROVAL DEĞİL (onay bekleyen run çalışan rol sayılmaz). */
 export function runningRoleIdsFromRuns(runs: readonly Pick<WorkRun, "status" | "evidence">[], knownRoleIds: ReadonlySet<string>): Set<string> {
   const out = new Set<string>();
   for (const r of runs) {
-    if (TERMINAL_RUN_STATUSES.includes(r.status)) continue;
+    // Tek kaynak: run-state.isOpenRun (terminal DEĞİL ve AWAITING_APPROVAL DEĞİL). Onay bekleyen run çalışan bir rol sayılmaz.
+    if (!isOpenRun(r.status)) continue;
     for (const e of r.evidence) {
       if (e.kind !== "AGENT_TRACE") continue;
       const m = /(?:^|\s)role=(UASCO-\d{4})(?:\s|$)/.exec(String(e.note ?? ""));
@@ -90,6 +94,9 @@ export interface RoleStatusSummary {
 }
 export interface SummaryInput { roles: readonly LifecycleRole[]; guildIds: readonly string[]; roleDefinitionsSha256: string; bindings: readonly RoleExecutionProfile[]; verify: EvidenceVerifier; runs: readonly Pick<WorkRun, "status" | "evidence">[]; now: Date }
 
+/**
+ * @deprecated Legacy 5-counter projection kept for the existing renderer contract (apps/desktop/renderer/agent-factory-core.js:20-41 requires integer counters). The authoritative measurement is computeRoleReadiness in ./readiness-audit.ts. running=0 with an absent journal is not a measurement.
+ */
 export function computeRoleStatusSummary(i: SummaryInput): RoleStatusSummary {
   const known = new Set(i.roles.map(r => r.roleId));
   const ctx: LifecycleContext = {bindings: i.bindings, verify: i.verify, runningRoleIds: runningRoleIdsFromRuns(i.runs, known), nowMs: i.now.getTime()};
