@@ -2246,6 +2246,16 @@
         "masterV2": "C-RDY-1 Role Readiness Auditor = Master V2 package 1 DONE (merged, not product-accepted)"
       },
       {
+        "pr": 287,
+        "merge": "5e8fc50",
+        "by": "coordinator direct merge, expectedHeadSha 43a0be5 (required checks green on 43a0be5, run 40489436964; installer (windows-latest) green = INSTALLER_CREATED only, not INSTALL_VERIFIED)",
+        "at": "2026-10-27T11:09:00Z",
+        "postMerge": "VERIFIED: parent1 8894a2f, parent2 = gated head 43a0be5, merge tree 7043fe9 == probe tree tested locally (b7-installer + wfr03 181/181)",
+        "review": "full 0H/0M/7L + COORD-required P1 (reproduced stale over-report) (e6943c0) -> delta NO_BLOCKERS_4LOW (43a0be5: P1-P4 fixed); 4 LOWs -> Lane B B2 branch",
+        "riskTier": "R1 (route + 5 installer exclusions approved by COORD)",
+        "masterV2": "B-ADAPTER (B1 adapterReality): role-status supplies adapterReality from a verified source tree"
+      },
+      {
         "pr": 285,
         "merge": "8894a2f",
         "by": "coordinator direct merge, expectedHeadSha e3b80c7 (required checks green on e3b80c7, run 40488320361)",
