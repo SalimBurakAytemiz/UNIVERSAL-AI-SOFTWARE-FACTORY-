@@ -702,6 +702,16 @@
       "ref": "53726f3 = base merge 902ba66 into 8c5e768; only conflict config/trust-root-manifest.json regenerated (verify PASS); no #242 file content changed; local b1 157 + b5 172 + b4 52 + wfr03 132 pass; FOUNDER decision still required (protected main.mjs + server.ts)",
       "policy": "TEP-1",
       "at": "2026-10-27T01:43:15.099Z"
+    },
+    {
+      "pr": 270,
+      "sha": "e31ff27610950a10c6d0aa11532b663d78b3277d",
+      "kind": "delta",
+      "base": "83589666798305a3aca313c0d494b81b4cacabb5",
+      "verdict": "NO_BLOCKERS",
+      "ref": "wf_89ef6c6a-d45: both MEDIUMs + all LOWs closed (+26/-0 tests only); N2/N2b/N25/N7/N27/N18 + slice/t0/windowsHide/-NonInteractive + 5 extra mutants KILLED; 69/69; 64fc2d8 = COORD 97773c4 port (reviewed in #267 delta)",
+      "policy": "TEP-1",
+      "at": "2026-10-27T01:45:30.340Z"
     }
   ],
   "tests": [],
