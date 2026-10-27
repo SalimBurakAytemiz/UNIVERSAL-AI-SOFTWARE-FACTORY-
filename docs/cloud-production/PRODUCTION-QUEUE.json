@@ -2246,6 +2246,16 @@
         "masterV2": "C-RDY-1 Role Readiness Auditor = Master V2 package 1 DONE (merged, not product-accepted)"
       },
       {
+        "pr": 275,
+        "merge": "39dfe92",
+        "by": "coordinator direct merge, expectedHeadSha 57556ca (required checks green on 57556ca)",
+        "at": "2026-10-27T03:43:00Z",
+        "postMerge": "VERIFIED: parent1 d0b3cf5, parent2 = gated head 57556ca, merge-tree == merge tree 5d50e3e",
+        "review": "full BLOCKERS_1MEDIUM (3b3e9ac) -> delta NO_BLOCKERS_1LOW (57556ca)",
+        "riskTier": "R0 ROUTINE (tests only: relfx-c3 PAR05-REFILL, ps1a-c2 bridge inner port)",
+        "masterV2": "Windows load-flake fixes: PAR05-REFILL lease/drive bounds + ps1a-c2:517 OS-assigned inner port (merged)"
+      },
+      {
         "pr": 269,
         "merge": "d0b3cf5",
         "by": "coordinator direct merge, expectedHeadSha 74714e6 (required checks green on 74714e6)",
