@@ -1,5 +1,5 @@
 {
- "//TR": "C-PAR03-DIAG-1 (relfx-c3:200 PAR-03 Windows fence tanılaması: store yazı aşamaları, stallProbe boşlukları, fenceTrace, hbDiag) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt `file` içinde TAM 1 kez geçen bir metni değiştirir; docs/lanes/LANE-C-par03-diag-mutants.mjs hepsini tests/v7-relfx-c3-remediation.test.ts içindeki \"C-PAR03-DIAG-1\" testleriyle çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. D1-D27 core/workos/store.ts ölçümü (D28 yoktur: write() yeniden girişli değildir, iç içe çerçeve kodu kaldırıldı), D29-D44 tests/support/par.ts, D45-D55 hbDiag iletisi ve prob başlatma sırasıdır, D56 fenceTrace'in sarmaladığı yöntemi çağırmamasıdır.",
+ "//TR": "C-PAR03-DIAG-1 (relfx-c3:200 PAR-03 Windows fence tanılaması: store yazı aşamaları, stallProbe boşlukları, fenceTrace, hbDiag) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt `file` içinde TAM 1 kez geçen bir metni değiştirir; docs/lanes/LANE-C-par03-diag-mutants.mjs hepsini tests/v7-relfx-c3-remediation.test.ts içindeki \"C-PAR03-DIAG-1\" testleriyle çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. D1-D27 core/workos/store.ts ölçümü (D28 yoktur: write() yeniden girişli değildir, iç içe çerçeve kodu kaldırıldı), D29-D44 tests/support/par.ts, D45-D55 hbDiag iletisi ve prob başlatma sırasıdır, D56 fenceTrace'in sarmaladığı yöntemi çağırmamasıdır. L1-L37: LOCK_TIMEOUT tanısı (kim tuttu, bekleme, delete-pending şüphesi), tanı metni ve par motorunun stderr çıktısı.",
  "mutants": [
   {
    "id": "D1",
@@ -47,8 +47,8 @@
    "id": "D7",
    "description": "the LOCK_TIMEOUT path records no lock wait",
    "file": "core/workos/store.ts",
-   "old": "{ this.noteLock(performance.now() - lockStart, retries); throw new WorkOsError(\"WORKOS_UNAVAILABLE\", \"LOCK_TIMEOUT\"); }",
-   "new": "{ throw new WorkOsError(\"WORKOS_UNAVAILABLE\", \"LOCK_TIMEOUT\"); }"
+   "old": "          this.noteLock(performance.now() - lockStart, retries);\n          const info = this.probeLockTimeout(",
+   "new": "          const info = this.probeLockTimeout("
   },
   {
    "id": "D8",
@@ -385,6 +385,265 @@
    "file": "tests/support/par.ts",
    "old": "try { return real.apply(store, a); } catch (e) {",
    "new": "try { return undefined; } catch (e) {"
+  },
+  {
+   "id": "L1",
+   "description": "a LOCK_TIMEOUT is not counted",
+   "file": "core/workos/store.ts",
+   "old": "this.diag.lockTimeouts += 1;",
+   "new": "this.diag.lockTimeouts += 0;"
+  },
+  {
+   "id": "L2",
+   "description": "the last LOCK_TIMEOUT is not kept",
+   "file": "core/workos/store.ts",
+   "old": "this.diag.lastLockTimeout = info;",
+   "new": ""
+  },
+  {
+   "id": "L3",
+   "description": "the thrown LOCK_TIMEOUT carries no diagnostic",
+   "file": "core/workos/store.ts",
+   "old": "Object.defineProperty(timeout, \"diagnostic\", {value: info, enumerable: false});",
+   "new": ""
+  },
+  {
+   "id": "L4",
+   "description": "the diagnostic property is enumerable",
+   "file": "core/workos/store.ts",
+   "old": "{value: info, enumerable: false}",
+   "new": "{value: info, enumerable: true}"
+  },
+  {
+   "id": "L5",
+   "description": "acquire failures are not counted",
+   "file": "core/workos/store.ts",
+   "old": "failures.set(failureKey, (failures.get(failureKey) ?? 0) + 1);",
+   "new": ""
+  },
+  {
+   "id": "L6",
+   "description": "acquire failures are counted twice",
+   "file": "core/workos/store.ts",
+   "old": "failures.set(failureKey, (failures.get(failureKey) ?? 0) + 1);",
+   "new": "failures.set(failureKey, (failures.get(failureKey) ?? 0) + 2);"
+  },
+  {
+   "id": "L7",
+   "description": "every acquire failure is filed under (other)",
+   "file": "core/workos/store.ts",
+   "old": "failures.has(failure) || failures.size < 8 ? failure : \"(other)\"",
+   "new": "failures.size < 0 ? failure : \"(other)\""
+  },
+  {
+   "id": "L8",
+   "description": "the waiter's wait is not recorded",
+   "file": "core/workos/store.ts",
+   "old": "waitedMs: ms1(performance.now() - lockStart), retries,",
+   "new": "waitedMs: 0, retries,"
+  },
+  {
+   "id": "L9",
+   "description": "the waiter's retries are not recorded",
+   "file": "core/workos/store.ts",
+   "old": "waitedMs: ms1(performance.now() - lockStart), retries,",
+   "new": "waitedMs: ms1(performance.now() - lockStart), retries: 0,"
+  },
+  {
+   "id": "L10",
+   "description": "the limit is not recorded",
+   "file": "core/workos/store.ts",
+   "old": "retries, limitMs: LOCK_WAIT_MS,",
+   "new": "retries, limitMs: 0,"
+  },
+  {
+   "id": "L11",
+   "description": "the holder pid is not recorded",
+   "file": "core/workos/store.ts",
+   "old": "h.pid = typeof doc.pid === \"number\" ? doc.pid : null;",
+   "new": "h.pid = null;"
+  },
+  {
+   "id": "L12",
+   "description": "the holder is never this process",
+   "file": "core/workos/store.ts",
+   "old": "h.ownPid = h.pid === process.pid && h.hostname === os.hostname();",
+   "new": "h.ownPid = false;"
+  },
+  {
+   "id": "L13",
+   "description": "a lock of another host is not recognised",
+   "file": "core/workos/store.ts",
+   "old": "if (h.hostname !== null && h.hostname !== os.hostname()) h.state = \"OTHER_HOST\";",
+   "new": "if (false) h.state = \"OTHER_HOST\";"
+  },
+  {
+   "id": "L14",
+   "description": "the holder liveness is not recorded",
+   "file": "core/workos/store.ts",
+   "old": "h.pidAlive = true; h.state = \"ACTIVE\";",
+   "new": "h.pidAlive = null; h.state = \"ACTIVE\";"
+  },
+  {
+   "id": "L15",
+   "description": "a dead holder pid is not recognised",
+   "file": "core/workos/store.ts",
+   "old": "if (code(e) === \"ESRCH\") {",
+   "new": "if (false) {"
+  },
+  {
+   "id": "L16",
+   "description": "an unsignalable holder pid counts as alive",
+   "file": "core/workos/store.ts",
+   "old": "else { h.pidAlive = null; h.state = \"PRESENT\"; }",
+   "new": "else { h.pidAlive = true; h.state = \"PRESENT\"; }"
+  },
+  {
+   "id": "L17",
+   "description": "the holder start is not recorded",
+   "file": "core/workos/store.ts",
+   "old": "h.startedAt = typeof doc.startedAt === \"string\" ? doc.startedAt : null; h.ageMs = Number.isFinite(started) ? Math.round(now - started) : null;",
+   "new": "h.startedAt = null; h.ageMs = null;"
+  },
+  {
+   "id": "L18",
+   "description": "the holder age is wrong",
+   "file": "core/workos/store.ts",
+   "old": "Math.round(now - started)",
+   "new": "Math.round(started - now)"
+  },
+  {
+   "id": "L19",
+   "description": "EPERM is not a delete-pending hint",
+   "file": "core/workos/store.ts",
+   "old": "if (c === \"EPERM\" || c === \"EBUSY\" || c === \"EACCES\")",
+   "new": "if (c === \"EBUSY\" || c === \"EACCES\")"
+  },
+  {
+   "id": "L20",
+   "description": "EBUSY is not a delete-pending hint",
+   "file": "core/workos/store.ts",
+   "old": "if (c === \"EPERM\" || c === \"EBUSY\" || c === \"EACCES\")",
+   "new": "if (c === \"EPERM\" || c === \"EACCES\")"
+  },
+  {
+   "id": "L21",
+   "description": "EACCES is not a delete-pending hint",
+   "file": "core/workos/store.ts",
+   "old": "if (c === \"EPERM\" || c === \"EBUSY\" || c === \"EACCES\")",
+   "new": "if (c === \"EPERM\" || c === \"EBUSY\")"
+  },
+  {
+   "id": "L22",
+   "description": "delete-pending is always suspected",
+   "file": "core/workos/store.ts",
+   "old": "info.deletePendingSuspected = info.suspicion.length > 0;",
+   "new": "info.deletePendingSuspected = true;"
+  },
+  {
+   "id": "L23",
+   "description": "delete-pending is never suspected",
+   "file": "core/workos/store.ts",
+   "old": "info.deletePendingSuspected = info.suspicion.length > 0;",
+   "new": "info.deletePendingSuspected = false;"
+  },
+  {
+   "id": "L24",
+   "description": "an unreadable acquire state is not noted",
+   "file": "core/workos/store.ts",
+   "old": "if (/state=UNREADABLE/.test(info.lastError.message)) info.suspicion.push(\"ACQUIRE_STATE_UNREADABLE\");",
+   "new": ""
+  },
+  {
+   "id": "L25",
+   "description": "an unparseable lock file is not noted",
+   "file": "core/workos/store.ts",
+   "old": "if (info.holder.state === \"UNPARSEABLE\") info.suspicion.push(\"LOCK_FILE_UNPARSEABLE\");",
+   "new": ""
+  },
+  {
+   "id": "L26",
+   "description": "a vanished lock file is reported as a stat error",
+   "file": "core/workos/store.ts",
+   "old": "state: code(e) === \"ENOENT\" ? \"ABSENT\" : \"STAT_ERROR\"",
+   "new": "state: \"STAT_ERROR\""
+  },
+  {
+   "id": "L27",
+   "description": "a vanished holder file is reported as unreadable",
+   "file": "core/workos/store.ts",
+   "old": "info.holder.state = code(e) === \"ENOENT\" ? \"ABSENT\" : e instanceof SyntaxError ? \"UNPARSEABLE\" : \"UNREADABLE\";",
+   "new": "info.holder.state = e instanceof SyntaxError ? \"UNPARSEABLE\" : \"UNREADABLE\";"
+  },
+  {
+   "id": "L28",
+   "description": "a garbage lock file is reported as unreadable",
+   "file": "core/workos/store.ts",
+   "old": "e instanceof SyntaxError ? \"UNPARSEABLE\" : \"UNREADABLE\"",
+   "new": "\"UNREADABLE\""
+  },
+  {
+   "id": "L29",
+   "description": "the lock file size is not recorded",
+   "file": "core/workos/store.ts",
+   "old": "sizeBytes: st.size, mtimeAgeMs: Math.round(now - st.mtimeMs)",
+   "new": "sizeBytes: null, mtimeAgeMs: Math.round(now - st.mtimeMs)"
+  },
+  {
+   "id": "L30",
+   "description": "the lock file age is not recorded",
+   "file": "core/workos/store.ts",
+   "old": "sizeBytes: st.size, mtimeAgeMs: Math.round(now - st.mtimeMs)",
+   "new": "sizeBytes: st.size, mtimeAgeMs: null"
+  },
+  {
+   "id": "L31",
+   "description": "the open probe never reports a failure",
+   "file": "core/workos/store.ts",
+   "old": "info.open = {ok: false, code: code(e)};",
+   "new": "info.open = {ok: true, code: null};"
+  },
+  {
+   "id": "L32",
+   "description": "the diagnostic text hides that the holder is this process",
+   "file": "tests/support/lock-diag.ts",
+   "old": "${h.ownPid ? \" (THIS process)\" : \"\"}",
+   "new": ""
+  },
+  {
+   "id": "L33",
+   "description": "the diagnostic text hides the holder liveness",
+   "file": "tests/support/lock-diag.ts",
+   "old": "alive=${h.pidAlive ?? \"?\"}",
+   "new": ""
+  },
+  {
+   "id": "L34",
+   "description": "the diagnostic text hides the open failure",
+   "file": "tests/support/lock-diag.ts",
+   "old": "open ${t.open.ok ? \"ok\" : `FAILED/${t.open.code ?? \"?\"}`}",
+   "new": "open ok"
+  },
+  {
+   "id": "L35",
+   "description": "the diagnostic text hides the suspicion list",
+   "file": "tests/support/lock-diag.ts",
+   "old": "${t.suspicion.length > 0 ? ` [${t.suspicion.join(\", \")}]` : \"\"}",
+   "new": ""
+  },
+  {
+   "id": "L36",
+   "description": "the engine does not print its store diagnostics",
+   "file": "tests/v7-par-engine.mts",
+   "old": "process.stderr.write(`PAR_ENGINE_STORE_DIAG store#${k}: ${lockDiagText(st.writeStats())}\\n`);",
+   "new": ""
+  },
+  {
+   "id": "L37",
+   "description": "the engine swallows the original error",
+   "file": "tests/v7-par-engine.mts",
+   "old": "  throw e;\n}",
+   "new": "  process.exitCode = 0;\n}"
   }
  ]
 }

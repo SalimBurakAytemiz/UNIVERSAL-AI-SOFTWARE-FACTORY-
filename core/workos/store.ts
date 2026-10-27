@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import os from "node:os";
 // //TR: automation/lib korumalı olduğundan atomic-json.mjs için .d.mts eklenemez; yeniden kullanılan helper dar bir yerel tiple bağlanır, kopyalanmaz.
 // @ts-expect-error TS7016: atomic-json.mjs tip bildirimi yok
 import {sha256 as sha256Untyped, writeJsonAtomic as writeJsonAtomicUntyped} from "../../automation/lib/atomic-json.mjs";
@@ -34,7 +35,16 @@ const writeJsonAtomic = writeJsonAtomicUntyped as (file: string, value: unknown)
 const LOCK_WAIT_MS = 10_000;
 // //TR: C-PAR03-DIAG-1 (YALNIZ ölçüm; davranış, kilit, journal, snapshot ve zaman aşımı değişmez): Windows CI'da relfx-c3:200 PAR-03 fence'inin ENGELLEYEN ÇAĞRISI bilinmiyor. Her store yazısının süresi aşamalara bölünür (kilit bekleme + yeniden deneme sayısı, yeniden yükleme/doğrulama, journal ekleme+fsync, snapshot yeniden yazımları (süresi ve sayısı; yükleme VE ekleme birer yazım yapar, süre hangi aşamada olursa olsun snapshotMs'ye yazılır, reloadMs'den çıkarılır), kilit bırakma) ve test başarısızlık iletisi bunları, `performance.now()` ile aynı saatte, stallProbe boşluklarıyla eşleştirebilsin diye başlangıç zamanlarıyla birlikte yazar. Salt okunur: `writeStats()` kopya döndürür; halka tamponu en çok WRITE_RING yazı tutar.
 export interface StoreWriteTiming { type: string; startedAtWall: number; startedAtPerf: number; totalMs: number; lockWaitMs: number; lockRetries: number; reloadMs: number; journalMs: number; snapshotMs: number; snapshotWrites: number; releaseMs: number }
-export interface StoreWriteStats { writes: number; lockAcquisitions: number; lockRetries: number; lockWaitMsTotal: number; lockWaitMsMax: number; slowest: StoreWriteTiming | null; recent: StoreWriteTiming[] }
+// //TR: C-PAR03-DIAG-1 (LOCK_TIMEOUT): Windows CI'da par motoru `WORKOS_UNAVAILABLE: LOCK_TIMEOUT` ile öldü (relfx-1-completion PAR04-GSTOP-NO-REAP). Zaman aşımı anında YALNIZ OKUMA yapan yoklamalar kaydedilir (dosya silinmez, kilit çalınmaz): kim tuttu (pid/ana bilgisayar/runId/başlangıç/yaş/canlılık), bekleyen ne kadar bekledi, kilit dosyası var mı, açılabiliyor mu ve silinme-bekliyor (delete-pending) şüphesi: stat/open/read ya da kilit edinme hatasında EPERM/EBUSY/EACCES ya da "state=UNREADABLE". Edinme hataları ileti başına sayılır (aynı sahip mi, sahip mi değişiyor?). Hata iletisi/kodu DEĞİŞMEZ; ayrıntı `diagnostic` (numaralandırılamaz) özelliği ve `writeStats().lastLockTimeout` ile görünür.
+export interface LockTimeoutInfo {
+  atWall: number; atPerf: number; waitedMs: number; retries: number; limitMs: number;
+  lastError: {code: string | null; message: string}; failures: Record<string, number>;
+  file: {state: "PRESENT" | "ABSENT" | "STAT_ERROR"; code: string | null; sizeBytes: number | null; mtimeAgeMs: number | null};
+  open: {ok: boolean; code: string | null};
+  holder: {state: "ACTIVE" | "DEAD_PID" | "OTHER_HOST" | "PRESENT" | "ABSENT" | "UNPARSEABLE" | "UNREADABLE"; code: string | null; pid: number | null; hostname: string | null; runId: string | null; lockId: string | null; startedAt: string | null; ageMs: number | null; pidAlive: boolean | null; ownPid: boolean};
+  deletePendingSuspected: boolean; suspicion: string[];
+}
+export interface StoreWriteStats { writes: number; lockAcquisitions: number; lockRetries: number; lockWaitMsTotal: number; lockWaitMsMax: number; lockTimeouts: number; lastLockTimeout: LockTimeoutInfo | null; slowest: StoreWriteTiming | null; recent: StoreWriteTiming[] }
 const WRITE_RING = 64;
 const ms1 = (n: number): number => Math.round(n * 10) / 10;
 const GENESIS = "0".repeat(64);
@@ -117,11 +127,36 @@ const clone = <T>(x: T): T => structuredClone(x);
 export class WorkOsStore {
   readonly dataDir: string; readonly journalFile: string; readonly snapshotFile: string; readonly lockFile: string;
   // //TR: C-PAR03-DIAG-1: yalnız ölçüm durumu (bkz. StoreWriteStats); iş mantığı bunlara bağlı DEĞİLDİR.
-  private diag = {writes: 0, lockAcquisitions: 0, lockRetries: 0, lockWaitMsTotal: 0, lockWaitMsMax: 0, slowest: null as StoreWriteTiming | null, recent: [] as StoreWriteTiming[]};
+  private diag = {writes: 0, lockAcquisitions: 0, lockRetries: 0, lockWaitMsTotal: 0, lockWaitMsMax: 0, lockTimeouts: 0, lastLockTimeout: null as LockTimeoutInfo | null, slowest: null as StoreWriteTiming | null, recent: [] as StoreWriteTiming[]};
   private frame: StoreWriteTiming | null = null;
   writeStats(): StoreWriteStats {
     const d = this.diag;
-    return {writes: d.writes, lockAcquisitions: d.lockAcquisitions, lockRetries: d.lockRetries, lockWaitMsTotal: ms1(d.lockWaitMsTotal), lockWaitMsMax: ms1(d.lockWaitMsMax), slowest: d.slowest === null ? null : {...d.slowest}, recent: d.recent.map(r => ({...r}))};
+    return {writes: d.writes, lockAcquisitions: d.lockAcquisitions, lockRetries: d.lockRetries, lockWaitMsTotal: ms1(d.lockWaitMsTotal), lockWaitMsMax: ms1(d.lockWaitMsMax), lockTimeouts: d.lockTimeouts, lastLockTimeout: d.lastLockTimeout === null ? null : structuredClone(d.lastLockTimeout), slowest: d.slowest === null ? null : {...d.slowest}, recent: d.recent.map(r => ({...r}))};
+  }
+  // //TR: salt okunur yoklamalar (bkz. LockTimeoutInfo); her biri ayrı try/catch'tedir, hiçbiri fırlatmaz ve hiçbiri dosyayı değiştirmez/silmez.
+  private probeLockTimeout(lockStart: number, retries: number, failures: Map<string, number>, last: unknown): LockTimeoutInfo {
+    const code = (e: unknown): string | null => { const c = (e as NodeJS.ErrnoException | undefined)?.code; return typeof c === "string" ? c : null; };
+    const now = Date.now();
+    const info: LockTimeoutInfo = {atWall: now, atPerf: ms1(performance.now()), waitedMs: ms1(performance.now() - lockStart), retries, limitMs: LOCK_WAIT_MS,
+      lastError: {code: code(last), message: String((last as Error | undefined)?.message ?? last).slice(0, 200)}, failures: Object.fromEntries(failures),
+      file: {state: "ABSENT", code: null, sizeBytes: null, mtimeAgeMs: null}, open: {ok: false, code: null},
+      holder: {state: "UNREADABLE", code: null, pid: null, hostname: null, runId: null, lockId: null, startedAt: null, ageMs: null, pidAlive: null, ownPid: false}, deletePendingSuspected: false, suspicion: []};
+    try { const st = fs.statSync(this.lockFile); info.file = {state: "PRESENT", code: null, sizeBytes: st.size, mtimeAgeMs: Math.round(now - st.mtimeMs)}; } catch (e) { info.file = {state: code(e) === "ENOENT" ? "ABSENT" : "STAT_ERROR", code: code(e), sizeBytes: null, mtimeAgeMs: null}; }
+    try { fs.closeSync(fs.openSync(this.lockFile, "r")); info.open = {ok: true, code: null}; } catch (e) { info.open = {ok: false, code: code(e)}; }
+    try {
+      const doc = JSON.parse(fs.readFileSync(this.lockFile, "utf8")) as {pid?: unknown; hostname?: unknown; runId?: unknown; lockId?: unknown; startedAt?: unknown};
+      const h = info.holder, started = typeof doc.startedAt === "string" ? Date.parse(doc.startedAt) : NaN;
+      h.pid = typeof doc.pid === "number" ? doc.pid : null; h.hostname = typeof doc.hostname === "string" ? doc.hostname : null; h.runId = typeof doc.runId === "string" ? doc.runId : null; h.lockId = typeof doc.lockId === "string" ? doc.lockId : null;
+      h.startedAt = typeof doc.startedAt === "string" ? doc.startedAt : null; h.ageMs = Number.isFinite(started) ? Math.round(now - started) : null; h.ownPid = h.pid === process.pid && h.hostname === os.hostname();
+      if (h.hostname !== null && h.hostname !== os.hostname()) h.state = "OTHER_HOST";
+      else if (h.pid === null) h.state = "PRESENT";
+      else { try { process.kill(h.pid, 0); h.pidAlive = true; h.state = "ACTIVE"; } catch (e) { if (code(e) === "ESRCH") { h.pidAlive = false; h.state = "DEAD_PID"; } else { h.pidAlive = null; h.state = "PRESENT"; } } }
+    } catch (e) { info.holder.code = code(e); info.holder.state = code(e) === "ENOENT" ? "ABSENT" : e instanceof SyntaxError ? "UNPARSEABLE" : "UNREADABLE"; }
+    for (const [label, c] of [["STAT", info.file.code], ["OPEN", info.open.code], ["READ", info.holder.code], ["ACQUIRE", info.lastError.code]] as const) if (c === "EPERM" || c === "EBUSY" || c === "EACCES") info.suspicion.push(`${label}_${c}`);
+    info.deletePendingSuspected = info.suspicion.length > 0;
+    if (/state=UNREADABLE/.test(info.lastError.message)) info.suspicion.push("ACQUIRE_STATE_UNREADABLE");
+    if (info.holder.state === "UNPARSEABLE") info.suspicion.push("LOCK_FILE_UNPARSEABLE");
+    return info;
   }
   private noteLock(waitMs: number, retries: number): void {
     const d = this.diag;
@@ -178,10 +213,21 @@ export class WorkOsStore {
   private withLock<T>(fn: () => T): T {
     const runId = `workos-${process.pid}-${crypto.randomBytes(4).toString("hex")}`;
     const deadline = Date.now() + LOCK_WAIT_MS; let release: (() => void) | null = null;
-    const lockStart = performance.now(); let retries = 0;
+    const lockStart = performance.now(); let retries = 0; const failures = new Map<string, number>();
     for (;;) {
-      try { release = acquireProcessLock(this.lockFile, runId); break; } catch {
-        if (Date.now() >= deadline) { this.noteLock(performance.now() - lockStart, retries); throw new WorkOsError("WORKOS_UNAVAILABLE", "LOCK_TIMEOUT"); }
+      try { release = acquireProcessLock(this.lockFile, runId); break; } catch (acquireError) {
+        // //TR: C-PAR03-DIAG-1: her başarısız edinme ileti başına sayılır (en çok 8 ileti; fazlası "(other)"); davranış değişmez.
+        const failure = `${(acquireError as NodeJS.ErrnoException | undefined)?.code ?? "-"}: ${String((acquireError as Error | undefined)?.message ?? acquireError).slice(0, 160)}`;
+        const failureKey = failures.has(failure) || failures.size < 8 ? failure : "(other)";
+        failures.set(failureKey, (failures.get(failureKey) ?? 0) + 1);
+        if (Date.now() >= deadline) {
+          this.noteLock(performance.now() - lockStart, retries);
+          const info = this.probeLockTimeout(lockStart, retries, failures, acquireError);
+          this.diag.lockTimeouts += 1; this.diag.lastLockTimeout = info;
+          const timeout = new WorkOsError("WORKOS_UNAVAILABLE", "LOCK_TIMEOUT");
+          Object.defineProperty(timeout, "diagnostic", {value: info, enumerable: false});
+          throw timeout;
+        }
         retries += 1;
         sleepSync(15);
       }

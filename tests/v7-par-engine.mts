@@ -9,6 +9,10 @@ import {pathToFileURL} from "node:url";
 const [ROOT, DIR, PHASE, TTL, ORPHAN_MS, OPTS_JSON] = process.argv.slice(2);
 const OPTS = JSON.parse(OPTS_JSON ?? "{}") as {grandchild?: "group" | "setsid"; service?: boolean; maxRecoveries?: number; failFirst?: string; hang?: boolean; exitOnFile?: boolean};
 const imp = (p: string) => import(pathToFileURL(path.join(ROOT, p)).href);
+// //TR: C-PAR03-DIAG-1: motor süreci `WORKOS_UNAVAILABLE: LOCK_TIMEOUT` (ya da başka bir hata) ile ölürse, bu süreçte kurulan HER store'un kilit tanısı (kim tuttu, ne kadar beklendi, delete-pending şüphesi) stderr'e yazılır ve hata aynen yeniden fırlatılır; davranış değişmez, ana test bunu `text()` içinde görür.
+const stores: Array<{writeStats(): any}> = [];
+const track = <T extends {writeStats(): any}>(s: T): T => { stores.push(s); return s; };
+const {lockDiagText} = await imp("tests/support/lock-diag.ts");
 const {WorkOsStore} = await imp("core/workos/store.ts");
 const {MissionRunner} = await imp("core/workos/runner.ts");
 const {FakeExecutors} = await imp("core/workos/executors.ts");
@@ -18,13 +22,14 @@ const {spawnGitSync} = await imp("automation/lib/git-isolation.mjs");
 const git = (cwd: string, args: string[]) => { const r = spawnGitSync(cwd, args); if (r.status !== 0) throw new Error(String(r.stderr)); return String(r.stdout).trim(); };
 const dataDir = path.join(DIR, "data"), runtime = path.join(DIR, "rt"), state = path.join(DIR, "state.json");
 const mk = (pair: any, ttl: number, sec: string, extra: Record<string, unknown> = {}) =>
-  new MissionRunner({executionGate: testExecutionGate(), store: new WorkOsStore(dataDir), dataDir, globalStopFile: path.join(runtime, "GLOBAL_STOP.json"), envPolicyFile: path.join(ROOT, "config/environment-policy.json"), executors: pair, retryBackoffMs: [0, 0], leaseTtlMs: ttl, security: fakeSecurity(path.join(DIR, sec)).options, ...extra});
+  new MissionRunner({executionGate: testExecutionGate(), store: track(new WorkOsStore(dataDir)), dataDir, globalStopFile: path.join(runtime, "GLOBAL_STOP.json"), envPolicyFile: path.join(ROOT, "config/environment-policy.json"), executors: pair, retryBackoffMs: [0, 0], leaseTtlMs: ttl, security: fakeSecurity(path.join(DIR, sec)).options, ...extra});
+try {
 if (PHASE === "1") {
   const repo = path.join(DIR, "src"); fs.mkdirSync(repo, {recursive: true}); fs.mkdirSync(runtime, {recursive: true});
   git(repo, ["init", "-q", "-b", "main"]);
   fs.writeFileSync(path.join(repo, "test.mjs"), `import fs from "node:fs";process.exit(fs.existsSync("feature.txt")?0:1);\n`);
   git(repo, ["add", "-A"]); git(repo, ["-c", "user.name=S", "-c", "user.email=s@x.invalid", "commit", "-q", "-m", "seed"]);
-  const store = new WorkOsStore(dataDir);
+  const store = track(new WorkOsStore(dataDir));
   const p = store.createProject({tenantId: "tA", orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL", repository: {path: repo}, testCommand: ["node", "test.mjs"]});
   const m = store.createMission({tenantId: "tA", projectId: p.projectId, title: "X", objective: "feature.txt", acceptanceCriteria: ["tests pass"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
   for (const to of ["PREFLIGHT", "AUTHORIZED"]) store.transitionMission({tenantId: "tA"}, m.missionId, to, "t", "FOUNDER_LOCAL");
@@ -44,7 +49,7 @@ if (PHASE === "1") {
   if (OPTS.service) { first.start(250); setInterval(() => undefined, 1000); await new Promise(() => undefined); } // start() zamanlayıcıyı unref eder: süreci canlı tutan ayrı bir zamanlayıcı gerekir // SIGINT testi: servis kipi; üst süreç SIGINT gönderir
   else {
     const rep = await first.tick(); // üst süreç bu süreci implementer çocuğu uyurken SIGKILL eder; buraya DÖNÜLDÜYSE implementer çocuğu beklenen yerde değildir: sonuç sessiz kalmaz
-    const after = new WorkOsStore(dataDir).engineGetRun(run.runId), last = after?.evidence.at(-1);
+    const after = track(new WorkOsStore(dataDir)).engineGetRun(run.runId), last = after?.evidence.at(-1);
     console.log(JSON.stringify({phase1: "TICK_RETURNED_BEFORE_THE_KILL", report: rep, run: after ? {status: after.status, step: after.step, reason: after.reason, leaseExpiresAt: after.leaseExpiresAt, retryCount: after.retryCount, lastEvidence: last ? {kind: last.kind, step: last.step, exitCode: last.exitCode, note: String(last.note ?? "").slice(0, 200)} : null} : null}));
   }
 } else {
@@ -53,4 +58,8 @@ if (PHASE === "1") {
   let rep = await runner.tick();
   for (let i = 0; i < 80 && rep.recovered.length === 0; i++) { await new Promise(r => setTimeout(r, 250)); rep = await runner.tick(); }
   console.log(JSON.stringify({recovered: rep.recovered, fenced: rep.fenced, advanced: rep.advanced, cancelled: rep.cancelled}));
+}
+} catch (e) {
+  for (const [k, st] of stores.entries()) process.stderr.write(`PAR_ENGINE_STORE_DIAG store#${k}: ${lockDiagText(st.writeStats())}\n`);
+  throw e;
 }

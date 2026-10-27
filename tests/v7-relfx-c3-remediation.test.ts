@@ -15,6 +15,7 @@ import {disabledTestMarkers, evaluateTestSurface, parseTestRunStreams, parseTest
 import type {NameStatusEntry} from "../core/workos/test-surface.js";
 import type {StoreWriteStats, StoreWriteTiming} from "../core/workos/store.js";
 import type {FenceHit, StallGap} from "./support/par.js";
+import {lockDiagText} from "./support/lock-diag.js";
 import {REPO, T, drive, okScript, rmTmp, runner, setup, startRun, tmpRoot} from "./support/relfx.js";
 import {repositoryHead, repositoryHeadAsync} from "../core/workos/runner.js";
 import {canonicalPath} from "../core/workos/path-guard.js";
@@ -192,6 +193,7 @@ describe("LANE-C parallel runs: heartbeat and scheduling (C-PAR-1 PAR-03/05, #21
       lines.push(`FENCED thrown by: ${hits.length === 0 ? "(no traced call threw FENCED)" : hits.map(h => `${h.call}(${nameOf(h.runId)})${h.note === "" ? "" : ` ${h.note}`} perf=${h.atPerf} wall=${h.atWall}`).join("; ")}${trace ? ` [traced store calls: ${trace.calls()}]` : ""}`);
       const fmt = (w: StoreWriteTiming) => `${w.type} ${w.totalMs}ms@perf=${w.startedAtPerf} (lock ${w.lockWaitMs}/${w.lockRetries} retries, reload ${w.reloadMs}, journal ${w.journalMs}, snapshot ${w.snapshotMs}x${w.snapshotWrites}, release ${w.releaseMs})`;
       lines.push(`store: writes=${stats.writes} lockAcquisitions=${stats.lockAcquisitions} lockRetries=${stats.lockRetries} lockWaitMsTotal=${stats.lockWaitMsTotal} lockWaitMsMax=${stats.lockWaitMsMax} slowest=${stats.slowest ? fmt(stats.slowest) : "none"}`);
+      lines.push(lockDiagText(stats));
       for (const [k, g] of gaps.entries()) {
         const inside = stats.recent.filter(w => w.startedAtPerf < g.startPerf + g.gapMs && w.startedAtPerf + w.totalMs > g.startPerf);
         lines.push(`writes overlapping gap #${k + 1}: ${inside.length === 0 ? "(none: the block was NOT a store write)" : inside.map(fmt).join("; ")}`);
@@ -278,6 +280,157 @@ describe("C-PAR03-DIAG-1: the next Windows PAR-03 failure names the blocking pha
     const after = c.store.writeStats();
     expect([after.lockRetries, after.writes]).toEqual([during.lockRetries, during.writes + 1]);
     expect(after.recent[after.recent.length - 1].type).toBe("RUN_LEASE");
+  });
+
+  // //TR: LOCK_TIMEOUT tanısı (Windows CI: par motoru `WORKOS_UNAVAILABLE: LOCK_TIMEOUT` ile öldü): zaman aşımı anında kim tuttu (pid/runId/başlangıç/yaş/canlılık), bekleyen ne kadar bekledi (deneme sayısıyla), dosya durumu, açılabilirlik ve delete-pending şüphesi (EPERM/EBUSY/EACCES ya da okunamayan kilit) kaydedilir; hata iletisi/kodu DEĞİŞMEZ, ayrıntı numaralandırılamaz `diagnostic` özelliğinde ve writeStats().lastLockTimeout'tadır. Date.now kısa süreliğine ileri atılır; 10 sn'lik zaman aşımı sabiti DEĞİŞMEZ.
+  describe("LOCK_TIMEOUT: who held the lock, how long the waiter waited and whether the lock file looked delete-pending", () => {
+    const lockTimeout = (c: ReturnType<typeof setup>, runId: string) => {
+      const real = Date.now.bind(Date); let calls = 0;
+      const spy = vi.spyOn(Date, "now").mockImplementation(() => real() + (++calls > 5 ? 60_000 : 0));
+      try { c.store.acquireRunLease(runId, 5000, "diag"); } catch (e) { return e as Error & {code?: string; diagnostic?: ReturnType<typeof c.store.writeStats>["lastLockTimeout"]}; } finally { spy.mockRestore(); }
+      throw new Error("expected LOCK_TIMEOUT");
+    };
+    const attempts = (f: Record<string, number>) => Object.values(f).reduce((a, b) => a + b, 0);
+
+    it("an active holder: pid, host, runId, start, age and liveness are recorded, the waiter's wait and retries too, and the error stays exactly LOCK_TIMEOUT", () => {
+      const c = setup("diag-lt-active"); const A = c.mkRun("A");
+      const holder = acquireProcessLock(c.store.lockFile, "diag-holder");
+      let err: ReturnType<typeof lockTimeout>;
+      try { err = lockTimeout(c, A.runId); } finally { holder(); }
+      expect([err.message, err.code, Object.keys(err).includes("diagnostic")]).toEqual(["WORKOS_UNAVAILABLE: LOCK_TIMEOUT", "WORKOS_UNAVAILABLE", false]);
+      const st = c.store.writeStats(), t = st.lastLockTimeout!;
+      expect(st.lockTimeouts).toBe(1);
+      expect(err.diagnostic).toEqual(t);
+      expect(t.limitMs).toBe(10_000);
+      expect(t.retries).toBeGreaterThanOrEqual(1);
+      expect(t.waitedMs).toBeGreaterThanOrEqual(10 * t.retries);
+      expect(attempts(t.failures), "every failed attempt is counted once").toBe(t.retries + 1);
+      expect(Object.keys(t.failures)).toHaveLength(1);
+      expect(Object.keys(t.failures)[0]).toMatch(/^-: SUPERVISOR_ALREADY_RUNNING pid=\d+ runId=diag-holder$/);
+      expect(t.lastError.message).toMatch(/^SUPERVISOR_ALREADY_RUNNING pid=\d+ runId=diag-holder$/);
+      expect(t.holder).toMatchObject({state: "ACTIVE", pid: process.pid, hostname: os.hostname(), runId: "diag-holder", pidAlive: true, ownPid: true, code: null});
+      expect(t.holder.lockId).toMatch(/^[0-9a-f-]{36}$/);
+      expect(Date.parse(t.holder.startedAt!)).toBeGreaterThan(0);
+      expect(t.holder.ageMs).toBeGreaterThanOrEqual(0);
+      expect(t.file).toMatchObject({state: "PRESENT", code: null});
+      expect(t.file.sizeBytes).toBeGreaterThan(50);
+      expect(t.file.mtimeAgeMs).toBeGreaterThanOrEqual(0);
+      expect(t.open).toEqual({ok: true, code: null});
+      expect([t.deletePendingSuspected, t.suspicion]).toEqual([false, []]);
+      expect(t.atWall).toBeGreaterThan(0); expect(t.atPerf).toBeGreaterThan(0);
+      const text = lockDiagText(st);
+      for (const part of ["LOCK_TIMEOUT x1: last waited ", " of 10000 ms (", `holder ACTIVE pid=${process.pid} (THIS process) alive=true runId=diag-holder host=${os.hostname()}`, "lock file PRESENT size=", "; open ok; ", "last acquire error -: SUPERVISOR_ALREADY_RUNNING pid=", "acquire failures {", "deletePendingSuspected=false"]) expect(text, part).toContain(part);
+      expect(text).not.toContain("suspected [");
+      expect(c.store.writeStats().lastLockTimeout).toEqual(t); // a copy each time
+      c.store.writeStats().lastLockTimeout!.waitedMs = -1; expect(c.store.writeStats().lastLockTimeout!.waitedMs).toBe(t.waitedMs);
+    });
+
+    it("an unreadable (garbage) lock file and a lock owned by another host are told apart; neither is called delete-pending", () => {
+      const c = setup("diag-lt-garbage"); const A = c.mkRun("A");
+      fs.writeFileSync(c.store.lockFile, "{not json");
+      try {
+        const t = (lockTimeout(c, A.runId), c.store.writeStats().lastLockTimeout!);
+        expect(t.holder.state).toBe("UNPARSEABLE");
+        expect(t.lastError.message).toBe("SUPERVISOR_LOCK_FAIL_CLOSED state=UNREADABLE");
+        expect(t.suspicion).toEqual(["ACQUIRE_STATE_UNREADABLE", "LOCK_FILE_UNPARSEABLE"]);
+        expect(t.deletePendingSuspected).toBe(false);
+        expect(t.open.ok).toBe(true);
+        expect(lockDiagText(c.store.writeStats())).toContain("deletePendingSuspected=false [ACQUIRE_STATE_UNREADABLE, LOCK_FILE_UNPARSEABLE]");
+      } finally { fs.rmSync(c.store.lockFile, {force: true}); }
+      fs.writeFileSync(c.store.lockFile, JSON.stringify({pid: 4242, hostname: "other-host", runId: "remote-run", lockId: "lk-1", startedAt: new Date(Date.now() - 5000).toISOString()}));
+      try {
+        const t = (lockTimeout(c, A.runId), c.store.writeStats().lastLockTimeout!);
+        expect(t.holder).toMatchObject({state: "OTHER_HOST", pid: 4242, hostname: "other-host", runId: "remote-run", lockId: "lk-1", ownPid: false, pidAlive: null});
+        expect(t.holder.ageMs).toBeGreaterThanOrEqual(5000);
+        expect(t.lastError.message).toBe("SUPERVISOR_LOCK_OWNED_BY_OTHER_HOST hostname=other-host runId=remote-run");
+        expect([t.deletePendingSuspected, t.suspicion]).toEqual([false, []]);
+        expect(c.store.writeStats().lockTimeouts).toBe(2);
+      } finally { fs.rmSync(c.store.lockFile, {force: true}); }
+    });
+
+    it("EPERM/EBUSY/EACCES on open, stat or read of the lock file are reported as delete-pending suspicion with the exact code and place", () => {
+      const c = setup("diag-lt-eperm"); const A = c.mkRun("A");
+      const fsx = fs as unknown as Record<string, (...a: unknown[]) => unknown>;
+      const failing = (name: "openSync" | "statSync" | "readFileSync", code: string, when: (...a: unknown[]) => boolean) => {
+        const real = fsx[name].bind(fs);
+        return vi.spyOn(fsx, name).mockImplementation((...a: unknown[]) => { if (when(...a)) throw Object.assign(new Error(`${code}: simulated`), {code}); return real(...a); });
+      };
+      const holder = acquireProcessLock(c.store.lockFile, "diag-holder2");
+      const spies = [failing("openSync", "EPERM", (...a) => a[0] === c.store.lockFile && a[1] === "r"), failing("statSync", "EBUSY", (...a) => a[0] === c.store.lockFile)];
+      try {
+        const t = (lockTimeout(c, A.runId), c.store.writeStats().lastLockTimeout!);
+        expect(t.open).toEqual({ok: false, code: "EPERM"});
+        expect(t.file).toEqual({state: "STAT_ERROR", code: "EBUSY", sizeBytes: null, mtimeAgeMs: null});
+        expect(t.suspicion).toEqual(["STAT_EBUSY", "OPEN_EPERM"]);
+        expect(t.deletePendingSuspected).toBe(true);
+        expect(t.holder.state).toBe("ACTIVE"); // the holder is still readable: this is a file-state hint, not a verdict
+        expect(lockDiagText(c.store.writeStats())).toContain("lock file STAT_ERROR/EBUSY size=? mtimeAge=? ms; open FAILED/EPERM");
+        expect(lockDiagText(c.store.writeStats())).toContain("deletePendingSuspected=true [STAT_EBUSY, OPEN_EPERM]");
+      } finally { for (const sp of spies) sp.mockRestore(); holder(); }
+      const spy = failing("readFileSync", "EACCES", (...a) => a[0] === c.store.lockFile);
+      const holder2 = acquireProcessLock(c.store.lockFile, "diag-holder3");
+      try {
+        const t = (lockTimeout(c, A.runId), c.store.writeStats().lastLockTimeout!);
+        expect(t.holder).toMatchObject({state: "UNREADABLE", code: "EACCES", pid: null, runId: null});
+        expect(t.lastError.message).toBe("SUPERVISOR_LOCK_FAIL_CLOSED state=UNREADABLE");
+        expect(t.suspicion).toEqual(["READ_EACCES", "ACQUIRE_STATE_UNREADABLE"]);
+        expect(t.deletePendingSuspected).toBe(true);
+      } finally { spy.mockRestore(); holder2(); }
+      expect(c.store.writeStats().lockTimeouts).toBe(2);
+    });
+
+    // //TR: Yarış dalları: kilit dosyası yoklama anında yok/ENOENT (silinmiş) şüpheli DEĞİLDİR; sahip süreç yoklama anında ölmüş (ESRCH) ya da izin yok (EPERM) olarak görünebilir. Süreç yoklaması yalnız tanı yoklamasında (kendi `open` çağrısından SONRA) taklit edilir; kilit edinme denemeleri gerçek süreç durumunu görür.
+    it("race branches: a vanished lock file is not suspicious, and a holder that died (ESRCH) or cannot be signalled (EPERM) at probe time is reported as such", () => {
+      const c = setup("diag-lt-race"); const A = c.mkRun("A");
+      const fsx = fs as unknown as Record<string, (...a: unknown[]) => unknown>;
+      const holder = acquireProcessLock(c.store.lockFile, "diag-holder4");
+      const realStat = fsx.statSync.bind(fs), realOpen = fsx.openSync.bind(fs);
+      const stat = vi.spyOn(fsx, "statSync").mockImplementation((...a: unknown[]) => { if (a[0] === c.store.lockFile) throw Object.assign(new Error("ENOENT: simulated"), {code: "ENOENT"}); return realStat(...a); });
+      let vanished = false; const realRead = fsx.readFileSync.bind(fs);
+      const open = vi.spyOn(fsx, "openSync").mockImplementation((...a: unknown[]) => { if (a[0] === c.store.lockFile && a[1] === "r") { vanished = true; throw Object.assign(new Error("ENOENT: simulated"), {code: "ENOENT"}); } return realOpen(...a); });
+      const read = vi.spyOn(fsx, "readFileSync").mockImplementation((...a: unknown[]) => { if (vanished && a[0] === c.store.lockFile) throw Object.assign(new Error("ENOENT: simulated"), {code: "ENOENT"}); return realRead(...a); });
+      try {
+        const t = (lockTimeout(c, A.runId), c.store.writeStats().lastLockTimeout!);
+        expect(t.file).toEqual({state: "ABSENT", code: "ENOENT", sizeBytes: null, mtimeAgeMs: null});
+        expect(t.open).toEqual({ok: false, code: "ENOENT"});
+        expect(t.holder).toMatchObject({state: "ABSENT", code: "ENOENT", pid: null});
+        expect([t.deletePendingSuspected, t.suspicion]).toEqual([false, []]);
+      } finally { stat.mockRestore(); open.mockRestore(); read.mockRestore(); }
+      for (const [code, alive, state] of [["ESRCH", false, "DEAD_PID"], ["EPERM", null, "PRESENT"]] as const) {
+        let probing = false;
+        const realKill = process.kill.bind(process);
+        const o2 = vi.spyOn(fsx, "openSync").mockImplementation((...a: unknown[]) => { if (a[0] === c.store.lockFile && a[1] === "r") probing = true; return realOpen(...a); });
+        const kill = vi.spyOn(process, "kill").mockImplementation(((pid: number, sig?: string | number) => { if (probing && pid === process.pid && sig === 0) throw Object.assign(new Error(`${code}: simulated`), {code}); return realKill(pid, sig as never); }) as typeof process.kill);
+        try {
+          const t = (lockTimeout(c, A.runId), c.store.writeStats().lastLockTimeout!);
+          expect(t.holder).toMatchObject({state, pidAlive: alive, pid: process.pid, ownPid: true});
+        } finally { kill.mockRestore(); o2.mockRestore(); }
+      }
+      holder();
+      expect(c.store.writeStats().lockTimeouts).toBe(3);
+    });
+
+    // //TR: Ayrı süreçte çalışan par motoru LOCK_TIMEOUT ile ölünce kendi store'larının kilit tanısını stderr'e yazar (relfx-1-completion PAR04-GSTOP-NO-REAP'te `e2.text()` bunu gösterir) ve hatayı aynen yeniden fırlatır. Gerçek 10 sn'lik bekleme gerekir (zaman aşımı sabiti değişmez), bu yüzden yalnız POSIX'te çalışır.
+    it.skipIf(process.platform === "win32")("the par engine prints its stores' lock diagnostics to stderr when it dies of LOCK_TIMEOUT, and exits non-zero with the original error", { timeout: 60_000 }, () => {
+      const dir = path.join(tmp, "engine-lt"); fs.mkdirSync(path.join(dir, "data"), {recursive: true});
+      const holder = acquireProcessLock(path.join(dir, "data", "journal.lock"), "engine-test-holder");
+      let r: ReturnType<typeof spawnSync>;
+      try { r = spawnSync(process.execPath, ["--import", "tsx", path.join(REPO, "tests", "v7-par-engine.mts"), REPO, dir, "1", "5000", "1000"], {cwd: REPO, encoding: "utf8", timeout: 50_000}); } finally { holder(); }
+      const err = String(r.stderr);
+      expect(r.status).toBe(1);
+      expect(err).toMatch(/WorkOsError: WORKOS_UNAVAILABLE: LOCK_TIMEOUT/);
+      expect(err).toMatch(/PAR_ENGINE_STORE_DIAG store#0: LOCK_TIMEOUT x1: last waited \d+(\.\d+)? ms of 10000 ms \(\d+ retries\)/);
+      expect(err).toContain(`holder ACTIVE pid=${process.pid}`);
+      expect(err).toContain("runId=engine-test-holder");
+      expect(err).toContain("deletePendingSuspected=false");
+    });
+
+    it("lockDiagText says so when there was no timeout, and hbDiag carries the lock line", () => {
+      const c = setup("diag-lt-none"); c.mkRun("A");
+      const st = c.store.writeStats();
+      expect(lockDiagText(st)).toBe(`lock timeouts: 0 (lock retries ${st.lockRetries}, total wait ${st.lockWaitMsTotal} ms, longest ${st.lockWaitMsMax} ms)`);
+      expect(hbDiag(c, {}, [], {maxStallMs: () => 0, cpuMs: () => 0, wallMs: () => 0, topGaps: () => []}, 5000)).toContain(lockDiagText(st));
+    });
   });
 
   // //TR: stallProbe: en büyük 3 boşluk büyükten küçüğe, başlangıçları (performance.now ve Date.now) ve saat kaymasıyla; kaymanın izlenmesi için Date.now ileri atılır (lease duvar saatine bağlıdır).
@@ -380,7 +533,7 @@ describe("C-PAR03-DIAG-1: the next Windows PAR-03 failure names the blocking pha
     expect(hbDiag(c, {A: A.runId}, [], stub(0), 5000)).toContain("top gaps: (none)");
     // //TR: Çakışma sınırları: [startPerf, startPerf + gapMs) aralığıyla KESİŞEN yazılar listelenir; yalnız ucu değen (bitişi boşluğun başına, başlangıcı boşluğun sonuna eşit) yazılar ve uzaktakiler listelenmez.
     const w = (type: string, startedAtPerf: number, totalMs: number): StoreWriteTiming => ({type, startedAtWall: 0, startedAtPerf, totalMs, lockWaitMs: 0, lockRetries: 0, reloadMs: 0, journalMs: 0, snapshotMs: 0, snapshotWrites: 0, releaseMs: 0});
-    const fakeStats = (recent: StoreWriteTiming[]): StoreWriteStats => ({writes: recent.length, lockAcquisitions: recent.length, lockRetries: 0, lockWaitMsTotal: 0, lockWaitMsMax: 0, slowest: recent[0] ?? null, recent});
+    const fakeStats = (recent: StoreWriteTiming[]): StoreWriteStats => ({writes: recent.length, lockAcquisitions: recent.length, lockRetries: 0, lockWaitMsTotal: 0, lockWaitMsMax: 0, lockTimeouts: 0, lastLockTimeout: null, slowest: recent[0] ?? null, recent});
     const gapProbe = {maxStallMs: () => 100, cpuMs: () => 0, wallMs: () => 0, topGaps: () => [{gapMs: 100, startPerf: 1000, startWall: 5, driftMs: 0}]};
     const withWrites = (recent: StoreWriteTiming[]) => hbDiag({dataDir: c.dataDir, store: {engineGetRun: (id: string) => c.store.engineGetRun(id), writeStats: () => fakeStats(recent)}}, {A: A.runId}, [], gapProbe, 5000);
     const overlap = (m: string) => /writes overlapping gap #1: ([^\n]*)/.exec(m)![1];
