@@ -2246,6 +2246,16 @@
         "masterV2": "C-RDY-1 Role Readiness Auditor = Master V2 package 1 DONE (merged, not product-accepted)"
       },
       {
+        "pr": 290,
+        "merge": "0b71650",
+        "by": "coordinator direct merge, expectedHeadSha 5c451a3 (required checks green on 5c451a3, run 40493780278; optional UASCO Independent Review FAIL = REVIEWER_AUTH_REJECTED credential, non-blocking)",
+        "at": "2026-10-27T11:36:00Z",
+        "postMerge": "VERIFIED: parent1 ecdbaf9, parent2 = gated head 5c451a3, merge tree 4c1eceb == probe tree tested locally (ux-journey 108/108, checkout clean)",
+        "review": "full NO_BLOCKERS_1LOW (5c451a3)",
+        "riskTier": "R0 ROUTINE (tests + evidence doc + JSDoc)",
+        "masterV2": "A-285-LOWS: the 7 #285 delta LOWs"
+      },
+      {
         "pr": 289,
         "merge": "ecdbaf9",
         "by": "coordinator direct merge, expectedHeadSha 56b71e8 (required checks green on 56b71e8, run 40490230917)",
