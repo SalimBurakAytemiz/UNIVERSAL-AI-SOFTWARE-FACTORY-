@@ -12,6 +12,7 @@ import {FIRST_DELIVERY_BINDINGS, STAGE_CONSUMERS} from "../core/agents/first-del
 import {computeRoleStatusSummary, createEvidenceVerifier, runningRoleIdsFromRuns, roleLifecycle, TARGET_ROLE_COUNT} from "../core/agents/role-lifecycle.js";
 import {registerRoleStatusRoutes, resetReadinessInputCache, adapterRealityFor, resetAdapterRealityCache, sourceTreePresent} from "../apps/control-api/src/routes/role-status.js";
 import {ADAPTER_REALITY_RECORDS, buildAdapterRealityMap} from "../core/capabilities/adapter-reality.js";
+import {loadRoleContextInputFromRepo, resolveRoleContext, ROLE_CONTEXT_DEFAULT_MAX_BYTES} from "../core/agents/role-context.js";
 import {RUN_STATUSES, isOpenRun} from "../core/workos/run-state.js";
 import {pathToFileURL} from "node:url";
 import {READINESS_INPUT_FILES} from "../core/agents/readiness-audit.js";
@@ -490,6 +491,19 @@ describe("WFR-AT-004 and /v1/roles API", () => {
     const app = buildServer({controlToken: token, runtime, repoRoot: repo, port: 3210, logger: false});
     expect((await get(app, "/v1/roles")).statusCode).toBe(503);
     expect((await get(app, "/v1/roles/UASCO-0001")).statusCode).toBe(503);
+    expect((await get(app, "/v1/roles/UASCO-0001/context")).json()).toEqual({error: "ROLE_CONTEXT_INPUT_UNAVAILABLE"});
+    await app.close();
+  });
+  it("B2 (real buildServer): GET /v1/roles/:roleId/context returns the resolver's result with byte cap and provenance labels, 404 for an unknown role, 400 for a malformed id, 403 without the token; the role detail route is not shadowed", async () => {
+    const app = mk();
+    const r = await get(app, "/v1/roles/UASCO-0001/context"); expect(r.statusCode).toBe(200);
+    const body = r.json(); expect(body.status).toBe("RESOLVED"); expect(body.context.roleId).toBe("UASCO-0001");
+    expect(body.context.verifiedKnowledge).toBe(false); expect(body.context.bytes).toBeLessThanOrEqual(24_576); expect(JSON.stringify(body)).toContain("PROPOSED_DERIVED");
+    expect(body).toEqual(JSON.parse(JSON.stringify(resolveRoleContext(loadRoleContextInputFromRepo(REPO), "UASCO-0001"))));
+    expect([(await get(app, "/v1/roles/UASCO-9999/context")).statusCode, (await get(app, "/v1/roles/UASCO-9999/context")).json().error]).toEqual([404, "ROLE_NOT_IN_CATALOG"]);
+    expect((await get(app, "/v1/roles/abc/context")).statusCode).toBe(400);
+    expect((await app.inject({method: "GET", url: "/v1/roles/UASCO-0001/context", headers: {host: "127.0.0.1:3210"}})).statusCode).toBe(403);
+    expect((await get(app, "/v1/roles/UASCO-0001")).json().roleId ?? (await get(app, "/v1/roles/UASCO-0001")).json().role?.roleId).toBe("UASCO-0001");
     await app.close();
   });
 });
@@ -812,6 +826,74 @@ describe("LANE-C C1 role lifecycle computed only from evidence", () => {
         const recordAbs = new Set(recordFiles().map(f => path.join(stage, f)));
         expect(touched.filter(t => recordAbs.has(t)), "no record path touched").toEqual([]); expect(recordAbs.size).toBeGreaterThan(20);
       } finally { s1.mockRestore(); s2.mockRestore(); fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); resetAdapterRealityCache(); }
+    });
+    // ---- B2: GET /v1/roles/:roleId/context (core/agents/role-context.ts as-is) ----
+    const ctxAt = async (root: string, roleId: string, query = "") => {
+      const audits: Array<[string, any]> = []; const app = Fastify();
+      registerRoleStatusRoutes(app, {...depsWith(null), repoRoot: root, audit: (e: string, x: any) => audits.push([e, x])} as any); await app.ready();
+      try { const r = await app.inject({method: "GET", url: `/v1/roles/${roleId}/context${query}`}); return {code: r.statusCode, body: r.json(), raw: r.body, audits}; } finally { await app.close(); }
+    };
+    const ctxRegistryCopy = (mutate: (files: {roles: any; profiles: any}) => void, drop: string[] = []) => {
+      const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-ctx-"));
+      for (const f of ["role-definitions", "skills-v2", "technologies", "agent-skill-matrix", "role-execution-profiles"]) { fs.mkdirSync(path.join(dir, "registries"), {recursive: true}); if (!drop.includes(f)) fs.copyFileSync(path.join(REPO, "registries", `${f}.json`), path.join(dir, "registries", `${f}.json`)); }
+      const roles = JSON.parse(fs.readFileSync(path.join(dir, "registries/role-definitions.json"), "utf8")), profiles = JSON.parse(fs.readFileSync(path.join(dir, "registries/role-execution-profiles.json"), "utf8"));
+      mutate({roles, profiles}); fs.writeFileSync(path.join(dir, "registries/role-definitions.json"), JSON.stringify(roles)); fs.writeFileSync(path.join(dir, "registries/role-execution-profiles.json"), JSON.stringify(profiles));
+      return dir;
+    };
+    it("B2: a known role returns the resolver's RESOLVED result EXACTLY (no relabel/upgrade/summary), the byte cap holds, provenance labels are present", async () => {
+      const expected = JSON.parse(JSON.stringify(resolveRoleContext(loadRoleContextInputFromRepo(REPO), "UASCO-0001")));
+      const {code, body} = await ctxAt(REPO, "UASCO-0001"); expect(code).toBe(200);
+      expect(body).toEqual(expected); expect(body.status).toBe("RESOLVED");
+      const c = body.context; expect(c.verifiedKnowledge).toBe(false); expect(c.bytes).toBeLessThanOrEqual(ROLE_CONTEXT_DEFAULT_MAX_BYTES);
+      expect(c.skills.proposedOrigin).toBeDefined(); expect(c.canonical.origin).toBe("CANONICAL_ROLE_REGISTRY");
+      expect(JSON.stringify(c)).toContain("PROPOSED_DERIVED"); expect(c.technologies.length).toBeGreaterThan(0);
+      for (const id of ["UASCO-0100", "UASCO-0300", "UASCO-0500"]) { const r = await ctxAt(REPO, id); expect(r.code, id).toBe(200); expect(r.body.context.verifiedKnowledge, id).toBe(false); expect(r.body.context.bytes, id).toBeLessThanOrEqual(ROLE_CONTEXT_DEFAULT_MAX_BYTES); }
+    });
+    it("B2: an unknown role is the resolver's typed refusal as 404 (never an empty 200); a duplicate role id is 400; a canonical text that cannot fit the byte cap is 422", async () => {
+      const unknown = await ctxAt(REPO, "UASCO-9999"); expect([unknown.code, unknown.body]).toEqual([404, {error: "ROLE_NOT_IN_CATALOG", roleId: "UASCO-9999"}]);
+      const dup = ctxRegistryCopy(({roles}) => { roles.roles.push({...roles.roles[0]}); });
+      const big = ctxRegistryCopy(({roles}) => { roles.roles[0].responsibilities = Array.from({length: 40}, (_, k) => `${k}:` + "x".repeat(900)); });
+      try {
+        const d = await ctxAt(dup, roles0Id(dup)); expect([d.code, d.body.error]).toEqual([400, "ROLE_ID_DUPLICATE"]);
+        const b = await ctxAt(big, roles0Id(big)); expect([b.code, b.body.error]).toEqual([422, "ROLE_CONTEXT_EXCEEDS_BYTE_CAP"]);
+      } finally { fs.rmSync(dup, {recursive: true, force: true}); fs.rmSync(big, {recursive: true, force: true}); }
+    });
+    const roles0Id = (dir: string): string => JSON.parse(fs.readFileSync(path.join(dir, "registries/role-definitions.json"), "utf8")).roles[0].roleId;
+    it("B2: a malformed role id or any query is 400 before anything is read (no path traversal, no registry access)", async () => {
+      const real = fs.readFileSync, reads: string[] = [];
+      const spy = vi.spyOn(fs, "readFileSync").mockImplementation(((p: any, ...r: any[]) => { reads.push(String(p)); return (real as any).call(fs, p, ...r); }) as any);
+      try {
+        for (const bad of ["abc", "UASCO-1", "UASCO-12345", "uasco-0001", "UASCO-0001x", "status-summary", "..%2F..%2Fetc%2Fpasswd", "UASCO-0001%2F..%2F..%2Fx", "UASCO-000%31%0a"]) {
+          const r = await ctxAt(REPO, bad); expect([r.code, r.body.error], bad).toEqual([400, "INVALID_ROLE_ID"]);
+        }
+        expect((await ctxAt(REPO, "UASCO-0001", "?maxBytes=10")).body.error).toBe("INVALID_QUERY");
+        expect(reads.filter(f => f.includes("registries")), "nothing under registries/ was read for a bad request").toEqual([]);
+      } finally { spy.mockRestore(); }
+    });
+    it("B2: an unavailable or invalid input is 503 with its typed code (never a substituted empty context) and only the code is audited", async () => {
+      const noSkills = ctxRegistryCopy(() => {}, ["skills-v2"]), dupProfile = ctxRegistryCopy(({profiles}) => { profiles.profiles.push({...profiles.profiles[0]}); });
+      try {
+        const a = await ctxAt(noSkills, "UASCO-0001"); expect([a.code, a.body]).toEqual([503, {error: "ROLE_CONTEXT_INPUT_UNAVAILABLE"}]); expect(a.audits).toEqual([["WORKOS_ROLE_CONTEXT_UNAVAILABLE", {actor: "a", code: "ROLE_CONTEXT_INPUT_UNAVAILABLE"}]]); expect(a.raw).not.toContain("registries");
+        const b = await ctxAt(dupProfile, "UASCO-0001"); expect([b.code, b.body]).toEqual([503, {error: "ROLE_CONTEXT_INPUT_INVALID"}]);
+      } finally { fs.rmSync(noSkills, {recursive: true, force: true}); fs.rmSync(dupProfile, {recursive: true, force: true}); }
+    });
+    it("B2: any read failure while loading is fail-closed 503 (no empty context); an error that is NOT a typed input error is NOT degraded - it goes to workosFail", async () => {
+      const spy = vi.spyOn(fs, "readFileSync").mockImplementation((() => { throw new TypeError("boom"); }) as any);
+      let r; try { r = await ctxAt(REPO, "UASCO-0001"); } finally { spy.mockRestore(); }
+      expect([r.code, r.body]).toEqual([503, {error: "ROLE_CONTEXT_INPUT_UNAVAILABLE"}]);
+      const dir = ctxRegistryCopy(() => {}, ["skills-v2"]), audit = (): never => { throw new Error("audit failed"); };
+      try {
+        const app = Fastify(); registerRoleStatusRoutes(app, {...depsWith(null), repoRoot: dir, audit} as any); await app.ready();
+        try { const x = await app.inject({method: "GET", url: "/v1/roles/UASCO-0001/context"}); expect(x.statusCode).toBe(500); expect(x.json()).toEqual({error: "X"}); } finally { await app.close(); }
+      } finally { fs.rmSync(dir, {recursive: true, force: true}); }
+    });
+    it("B2: PACKAGED layout finding: the installer does not stage registries/agent-skill-matrix.json, so the route honestly answers 503 ROLE_CONTEXT_INPUT_UNAVAILABLE there", async () => {
+      const stage = await stagePackaged();
+      try {
+        for (const f of ["role-definitions", "skills-v2", "technologies", "role-execution-profiles"]) expect(fs.existsSync(path.join(stage, "registries", `${f}.json`)), f).toBe(true);
+        expect(fs.existsSync(path.join(stage, "registries/agent-skill-matrix.json"))).toBe(false);
+        const r = await ctxAt(stage, "UASCO-0001"); expect([r.code, r.body]).toEqual([503, {error: "ROLE_CONTEXT_INPUT_UNAVAILABLE"}]);
+      } finally { fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); }
     });
     it("H1/M2: a missing readiness input DEGRADES (200, legacy statusSummary byte-identical, readiness/reconciliation null, readinessError set, audit carries the code only); a programming error is NOT degraded (workosFail)", async () => {
       const stage = await stagePackaged();

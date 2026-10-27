@@ -8,6 +8,7 @@ import {computeRoleStatusSummary, createEvidenceVerifier} from "../../../../core
 import {READINESS_INPUT_FILES, computeRoleReadiness, loadReadinessInputFromRepo, reconcileLegacyStatusSummary} from "../../../../core/agents/readiness-audit.js";
 import type {AdapterRealityEntry, ReadinessInput} from "../../../../core/agents/readiness-audit.js";
 import {ADAPTER_REALITY_RECORDS, buildAdapterRealityMap} from "../../../../core/capabilities/adapter-reality.js";
+import {loadRoleContextInputFromRepo, resolveRoleContext} from "../../../../core/agents/role-context.js";
 
 export const ROLE_REGISTRY_FILE_REL = path.join("registries", "role-definitions.json");
 
@@ -66,6 +67,10 @@ export function adapterRealityFor(root: string): ReadonlyMap<string, AdapterReal
   if (contentFingerprint(root) === fp && sameEntries(first, entries)) adapterCache.set(root, {fp, entries}); else adapterCache.delete(root);
   return entries;
 }
+// //TR: B2: GET /v1/roles/:roleId/context = core/agents/role-context.ts resolveRoleContext'in AYNEN döndürdüğü çıktı (kaynak etiketleri PROPOSED_DERIVED / verifiedKnowledge:false / NAME_NOT_VERIFIED_IN_REGISTRY yeniden etiketlenmez, yükseltilmez, özetlenmez). roleId kanonik biçimle doğrulanır. Tipli girdi hataları (ROLE_CONTEXT_INPUT_UNAVAILABLE / _INVALID) 503 + kod olur, boş bağlam ASLA yerine konmaz; başka her hata workosFail'e gider. Girdi her istekte yüklenir (5 küçük kayıt dosyası; önbellek yok, bayat bağlam yok).
+const ROLE_CONTEXT_ID = /^UASCO-\d{4}$/;
+const ROLE_CONTEXT_INPUT_ERROR = /^(ROLE_CONTEXT_INPUT_(?:UNAVAILABLE|INVALID)):/;
+const ROLE_CONTEXT_REFUSAL_STATUS = {ROLE_NOT_IN_CATALOG: 404, ROLE_ID_DUPLICATE: 400, ROLE_CONTEXT_EXCEEDS_BYTE_CAP: 422} as const;
 const READINESS_INPUT_ERROR = /^READINESS_INPUT_(UNAVAILABLE|INVALID):/;
 
 export function registerRoleStatusRoutes(app: any, d: RouteDeps & {repoRoot: string; now?: () => Date; readinessCompute?: typeof computeRoleReadiness}): void {
@@ -105,6 +110,24 @@ export function registerRoleStatusRoutes(app: any, d: RouteDeps & {repoRoot: str
         return {statusSummary, statusSummaryStatus: "DEPRECATED_LEGACY_PROJECTION" as const, readiness: null, reconciliation: null, readinessError: "ROLE_READINESS_UNAVAILABLE" as const};
       }
       return {statusSummary, statusSummaryStatus: "DEPRECATED_LEGACY_PROJECTION" as const, readiness, reconciliation: reconcileLegacyStatusSummary(statusSummary, readiness)};
+    } catch (e) { return d.workosFail(reply, e); }
+  });
+
+  app.get("/v1/roles/:roleId/context", async (req: any, reply: any) => {
+    if (typeof req.query === "object" && req.query && Object.keys(req.query).length > 0) return reply.code(400).send({error: "INVALID_QUERY"});
+    const roleId = String(req.params?.roleId ?? "");
+    if (!ROLE_CONTEXT_ID.test(roleId)) return reply.code(400).send({error: "INVALID_ROLE_ID"});
+    try {
+      let input;
+      try { input = loadRoleContextInputFromRepo(d.repoRoot); } catch (e) {
+        const m = e instanceof Error ? ROLE_CONTEXT_INPUT_ERROR.exec(e.message) : null;
+        if (!m) throw e;
+        d.audit("WORKOS_ROLE_CONTEXT_UNAVAILABLE", {actor: d.actor, code: m[1]});
+        return reply.code(503).send({error: m[1]});
+      }
+      const r = resolveRoleContext(input, roleId);
+      if (r.status !== "RESOLVED") return reply.code(ROLE_CONTEXT_REFUSAL_STATUS[r.reason]).send({error: r.reason, roleId: r.roleId});
+      return r;
     } catch (e) { return d.workosFail(reply, e); }
   });
 }
