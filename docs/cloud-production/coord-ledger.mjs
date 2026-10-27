@@ -62,13 +62,25 @@ export function reviewRecord(j, { pr, sha, kind, verdict, ref, base = null }) {
 }
 
 //TR: Merge kapısı (COORD-002): auto-merge yalnız GÜNCEL head için temiz bir inceleme kaydı varken açık kalabilir; daha eski bir head'in temiz kaydı yeni head'i açmaz (#249: eski head'te kurulan auto-merge, delta incelemesi bitmeden yeni head'i birleştirdi).
-const OPEN_VERDICT = /^(NO_BLOCKERS|NO_CODE_BLOCKERS|BASE_MERGE_ONLY)/;
+//TR: BASE_MERGE_ONLY kendi başına temiz değildir: yalnız base merge yapılmış bir head, temel aldığı head'in (rec.base) hükmünü devralır. Zincir temiz bir NO_BLOCKERS/NO_CODE_BLOCKERS kaydında bitmiyorsa (bloklayıcı, kayıtsız, döngü) kapı KAPALI kalır (#265: 956065f BASE_MERGE_ONLY kaydı, d45c47b BLOCKERS_1MEDIUM iken kapıyı açıyordu).
+const OPEN_VERDICT = /^(NO_BLOCKERS|NO_CODE_BLOCKERS)/;
+const BASE_ONLY = /^BASE_MERGE_ONLY/;
 export function mergeGate(j, { pr, sha }) {
   if (!Number.isInteger(pr) || !SHA_RE.test(sha) || sha.length < 40) throw new Error('BAD_ARGS');
-  const rec = j.reviews.filter((r) => r.pr === pr && r.policy === POLICY.version && same(r.sha, sha)).at(-1);
+  const find = (s) => j.reviews.filter((r) => r.pr === pr && r.policy === POLICY.version && same(r.sha, s)).at(-1);
+  const rec = find(sha);
   if (!rec) return { code: 5, state: 'CLOSED', reason: 'NO_REVIEW_FOR_HEAD' };
-  if (!OPEN_VERDICT.test(rec.verdict)) return { code: 5, state: 'CLOSED', reason: 'VERDICT_BLOCKING', verdict: rec.verdict };
-  return { code: 0, state: 'OPEN', record: rec };
+  const seen = new Set();
+  let cur = rec;
+  while (BASE_ONLY.test(cur.verdict)) {
+    if (seen.has(cur.sha) || !cur.base || !SHA_RE.test(cur.base)) return { code: 5, state: 'CLOSED', reason: 'BASE_MERGE_ONLY_UNRESOLVED', verdict: rec.verdict };
+    seen.add(cur.sha);
+    const next = find(cur.base);
+    if (!next) return { code: 5, state: 'CLOSED', reason: 'BASE_MERGE_ONLY_UNRESOLVED', verdict: rec.verdict };
+    cur = next;
+  }
+  if (!OPEN_VERDICT.test(cur.verdict)) return { code: 5, state: 'CLOSED', reason: cur === rec ? 'VERDICT_BLOCKING' : 'BASE_VERDICT_BLOCKING', verdict: cur.verdict };
+  return { code: 0, state: 'OPEN', record: rec, ...(cur === rec ? {} : { inherited: cur }) };
 }
 
 export function testKey({ worktree, scope }) {

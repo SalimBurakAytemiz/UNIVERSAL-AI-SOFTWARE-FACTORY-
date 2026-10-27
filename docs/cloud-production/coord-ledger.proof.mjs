@@ -42,7 +42,17 @@ try {
   reviewRecord(j, { pr: 9, sha: S('b'), kind: 'delta', base: S('a'), verdict: 'BLOCKERS_HIGH', ref: 'r2' });
   check('merge-gate: blocking verdict -> CLOSED', mergeGate(j, { pr: 9, sha: S('b') }).reason === 'VERDICT_BLOCKING');
   reviewRecord(j, { pr: 9, sha: S('c'), kind: 'delta', base: S('b'), verdict: 'BASE_MERGE_ONLY_EMPTY_DELTA', ref: 'r3' });
-  check('merge-gate: base-merge-only record -> OPEN', mergeGate(j, { pr: 9, sha: S('c') }).code === 0);
+  // A base-merge-only head inherits its base head's verdict (#265: 956065f BASE_MERGE_ONLY opened the gate while d45c47b was BLOCKERS_1MEDIUM; the old pin here asserted that fail-open).
+  check('merge-gate: base-merge-only on a BLOCKING base -> CLOSED (inherits the base verdict)', mergeGate(j, { pr: 9, sha: S('c') }).code === 5 && mergeGate(j, { pr: 9, sha: S('c') }).reason === 'BASE_VERDICT_BLOCKING' && mergeGate(j, { pr: 9, sha: S('c') }).verdict === 'BLOCKERS_HIGH');
+  reviewRecord(j, { pr: 9, sha: S('d'), kind: 'delta', base: S('a'), verdict: 'BASE_MERGE_ONLY', ref: 'r4' });
+  check('merge-gate: base-merge-only on a CLEAN base -> OPEN', mergeGate(j, { pr: 9, sha: S('d') }).code === 0 && mergeGate(j, { pr: 9, sha: S('d') }).inherited.verdict === 'NO_BLOCKERS');
+  reviewRecord(j, { pr: 9, sha: S('e'), kind: 'delta', base: S('d'), verdict: 'BASE_MERGE_ONLY', ref: 'r5' });
+  check('merge-gate: a chain of base merges ending in a clean review -> OPEN', mergeGate(j, { pr: 9, sha: S('e') }).code === 0);
+  reviewRecord(j, { pr: 9, sha: S('f'), kind: 'delta', base: S('0'), verdict: 'BASE_MERGE_ONLY', ref: 'r6' });
+  check('merge-gate: base-merge-only whose base has no record -> CLOSED', mergeGate(j, { pr: 9, sha: S('f') }).reason === 'BASE_MERGE_ONLY_UNRESOLVED');
+  reviewRecord(j, { pr: 9, sha: S('1'), kind: 'delta', verdict: 'BASE_MERGE_ONLY', ref: 'r7' });
+  check('merge-gate: base-merge-only with no base -> CLOSED', mergeGate(j, { pr: 9, sha: S('1') }).reason === 'BASE_MERGE_ONLY_UNRESOLVED');
+  check('merge-gate: a base-merge-only record never opens another PR', mergeGate(j, { pr: 10, sha: S('d') }).code === 5);
   check('merge-gate: other PR record never opens this PR', mergeGate(j, { pr: 10, sha: S('a') }).code === 5);
   check('merge-gate: a short SHA is refused (gate needs the exact head)', throws(() => mergeGate(j, { pr: 9, sha: 'aaaaaaa' }), 'BAD_ARGS'));
 
