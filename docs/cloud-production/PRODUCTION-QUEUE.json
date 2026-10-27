@@ -2246,6 +2246,16 @@
         "masterV2": "C-RDY-1 Role Readiness Auditor = Master V2 package 1 DONE (merged, not product-accepted)"
       },
       {
+        "pr": 271,
+        "merge": "a3c8ad9",
+        "by": "coordinator direct merge, expectedHeadSha 1fab2d3 (required checks green on 1fab2d3)",
+        "at": "2026-10-27T02:00:00Z",
+        "postMerge": "VERIFIED: parent1 b6ecfca, parent2 = gated head 1fab2d3, merge-tree == merge tree 3a6c984",
+        "review": "full NO_BLOCKERS_3LOW (ledger 5de10ab); LOWs -> Lane B next push",
+        "riskTier": "R0 ROUTINE (docs/lanes evidence map only)",
+        "masterV2": "B-EP-EVIDENCE-1 endpoint evidence map (merged, not product-accepted; analysis + product-run NOT_REGISTERED = #242)"
+      },
+      {
         "pr": 263,
         "merge": "b6ecfca",
         "by": "coordinator direct merge, expectedHeadSha dae48c0 (required checks green on dae48c0)",
