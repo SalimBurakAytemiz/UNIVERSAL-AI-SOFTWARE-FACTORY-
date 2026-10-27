@@ -694,6 +694,24 @@ describe("UI-030 active worker fleet grid (live runs only, UNKNOWN stays UNKNOWN
     expect(g.groups.find((x: any) => x.status === "QUEUED").items.length).toBe(0);
     expect(g.groups.find((x: any) => x.status === "QUEUED").count).toBe(5);
   });
+  it("cards and details carry their own bucket: QUEUED and unknown-status runs are never tagged LIVE", async () => {
+    const core = await load("fleet-core.js");
+    expect(core.fleetCard(run(1, "QUEUED")).bucket).toBe("QUEUED");
+    expect(core.fleetCard(run(2, "STARTING")).bucket).toBe("UNKNOWN");
+    expect(core.fleetCard(run(3, "VERIFYING")).bucket).toBe("LIVE");
+    const runs = [run(1, "QUEUED"), run(2, "REVIEWING"), run(3, "CHECKPOINTING")];
+    expect(core.fleetDetail(runs, "run-0001").bucket).toBe("QUEUED");
+    expect(core.fleetDetail(runs, "run-0002").bucket).toBe("UNKNOWN");
+    expect(core.fleetDetail(runs, "run-0003").bucket).toBe("LIVE");
+  });
+  it("a bucket whose cards were all cut by the cap keeps its heading and real count but renders no empty list", async () => {
+    const {node} = await fleetCtx("ok", [...Array.from({length: 50}, (_, i) => run(i, "RUNNING")), run(900, "QUEUED"), run(901, "QUEUED"), run(902, "QUEUED")]);
+    const region = fleetNode(node);
+    expect(byTag(region, "h3").map(text)).toEqual(["Running (50)", "Queued, not running yet (3)"]);
+    expect(byTag(region, "ul").length).toBe(1);
+    expect(byTag(region, "li").length).toBe(50);
+    expect(text(byData(region, "truncated", "1")[0])).toBe("Showing 50 of 53 runs.");
+  });
   it("renders QUEUED and unknown-status runs in their own labelled buckets with a summary; the Live runs table lists only live workers", async () => {
     const {node} = await fleetCtx("ok", [run(1, "RUNNING"), run(2, "CHECKPOINTING"), run(3, "QUEUED"), run(4, "STARTING"), run(5, "SUCCEEDED")]);
     const region = fleetNode(node);
