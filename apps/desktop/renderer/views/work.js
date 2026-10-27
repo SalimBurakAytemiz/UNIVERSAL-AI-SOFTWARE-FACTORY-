@@ -294,8 +294,19 @@ function transitionControls(ctx,mission,awaiting,readiness=null,engine=undefined
     h(doc,"p",{class:"field-hint",id:"run-start-hint",text:ctx.t(startable?"work.run.hintOk":"work.run.hintNot")}),
     statusBlock(ctx,sid));
 }
+function runLinkCell(ctx,res,unk){
+  const doc=ctx.doc;
+  if(!res||res.state!=="VERIFIED"||!Array.isArray(res.items))return unk("runLink");
+  if(!res.items.length)return h(doc,"dd",{dataset:{taskField:"runLink",runLink:"none"},text:ctx.t("work.task.runLink.none")});
+  const more=res.items.length-RUNLINK_SHOWN;
+  return h(doc,"dd",{dataset:{taskField:"runLink",runLink:"linked"}},
+    h(doc,"ul",{class:"task-runlink-list"},res.items.slice(0,RUNLINK_SHOWN).map(l=>h(doc,"li",{dataset:{taskRunLink:l.runId}},h(doc,"span",{class:"mono",text:l.runId})," ",l.status?statusPill(ctx,l.status):h(doc,"span",{class:"task-unknown",text:ctx.t("work.task.unknown")})))),
+    more>0?h(doc,"p",{class:"note",dataset:{runLinkMore:String(more)},text:ctx.t("work.task.runLink.more",{n:more})}):null);
+}
 /** //TR: UI-026 görev denetçisi (salt okunur): seçili görevin yalnız mission okumasından gelen alanlarını gösterir; eksik alan UNKNOWN, okuma canlı değilse UNKNOWN durum notu. Hiçbir POST/depolama yoktur; seçim yalnız bellekte tutulur. */
-export function taskInspector(ctx,detail,runsRes,missionId){
+// //TR: UI-026 (A-UI026-1): "Koşu bağı" satırı, hemen altındaki görev-koşu panelinin okuduğu GET /v1/tasks/:id/runs sonucundan beslenir (ikinci okuma yok). Okuma VERIFIED değilse UNKNOWN kalır; VERIFIED ve boşsa "bağlı koşu yok"; yoksa en çok RUNLINK_SHOWN koşu kimliği + durum (kalanı "+N daha").
+export const RUNLINK_SHOWN=5;
+export function taskInspector(ctx,detail,runsRes,missionId,taskRuns=null){
   const doc=ctx.doc,sel=inspectedTask&&inspectedTask.missionId===missionId?inspectedTask.taskId:null;
   const inner=[h(doc,"p",{class:"note",text:ctx.t("work.task.lead")})];
   if(!sel)inner.push(h(doc,"p",{class:"note note-empty",role:"status",text:ctx.t("work.task.none")}));
@@ -312,7 +323,7 @@ export function taskInspector(ctx,detail,runsRes,missionId){
         h(doc,"dt",{text:ctx.t("work.task.status")}),h(doc,"dd",{dataset:{taskField:"status"}},statusPill(ctx,t.status)),
         h(doc,"dt",{text:ctx.t("work.task.mission")}),h(doc,"dd",{dataset:{taskField:"mission"},text:`${t.missionTitle} · ${statusLabel(ctx,t.missionStatus)} · ${t.riskLevel}`}),
         h(doc,"dt",{text:ctx.t("work.task.runs")}),runsText?h(doc,"dd",{dataset:{taskField:"runs"},text:runsText}):unk("runs"),
-        h(doc,"dt",{text:ctx.t("work.task.runLink")}),unk("runLink"),
+        h(doc,"dt",{text:ctx.t("work.task.runLink")}),runLinkCell(ctx,taskRuns&&taskRuns.taskId===sel?taskRuns.res:null,unk),
         ...(t.dependencies?[h(doc,"dt",{text:ctx.t("work.task.f.dependencies")}),h(doc,"dd",{dataset:{taskField:"dependencies"}},t.dependencies.length?h(doc,"ul",{},t.dependencies.map(d=>h(doc,"li",{},h(doc,"span",{text:d.title??d.taskId})," ",d.status?statusPill(ctx,d.status):h(doc,"span",{class:"task-unknown",text:ctx.t("work.task.unknown")})))):ctx.t("work.task.noDeps"))]:[]),
         ...t.unknownFields.flatMap(k=>[h(doc,"dt",{text:ctx.t(`work.task.f.${k}`)}),unk(k)])));
     }
@@ -358,7 +369,7 @@ function detailPanel(ctx,detail,runsRes,runDetails,evRes,project=null,taskRuns=n
     h(doc,"p",{class:"panel-meta"},statusPill(ctx,m.status),badge(ctx,m.riskLevel,"badge-risk"),h(doc,"span",{class:"mono",text:m.missionId}),missionNotVerified(runsRes.state==="VERIFIED"?runsRes.items:[],m.missionId)?notVerifiedBadge(ctx,"mission"):null),
     h(doc,"p",{text:m.objective}),
     h(doc,"h4",{text:ctx.t("work.detail.criteria")}),m.acceptanceCriteria.length?h(doc,"ul",{},m.acceptanceCriteria.map(c=>h(doc,"li",{text:c}))):emptyNote(ctx,"work.detail.noCriteria"),
-    m.tasks.length?h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),taskList(ctx,m.tasks,m.missionId),taskInspector(ctx,detail,runsRes,m.missionId),taskStatusControls(ctx,m,inspectedTask?.missionId===m.missionId?inspectedTask.taskId:null),taskRunsFor(ctx,m,runsRes,taskRuns)):h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),h(doc,"p",{class:"note",dataset:{noTasks:m.missionId},text:ctx.t("work.detail.noTasks")})),
+    m.tasks.length?h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),taskList(ctx,m.tasks,m.missionId),taskInspector(ctx,detail,runsRes,m.missionId,taskRuns),taskStatusControls(ctx,m,inspectedTask?.missionId===m.missionId?inspectedTask.taskId:null),taskRunsFor(ctx,m,runsRes,taskRuns)):h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),h(doc,"p",{class:"note",dataset:{noTasks:m.missionId},text:ctx.t("work.detail.noTasks")})),
     workTimeline(ctx,detail,runsRes),
     planFormPanel(ctx,m),
     h(doc,"h4",{text:ctx.t("work.timeline.title")}),statusTimeline(ctx,m.status),

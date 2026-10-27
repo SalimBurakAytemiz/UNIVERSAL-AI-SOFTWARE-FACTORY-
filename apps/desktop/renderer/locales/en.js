@@ -740,6 +740,8 @@ export default {
   "work.task.runs":"Mission runs",
   "work.task.runsCount":"{n} run(s) linked to the mission (not to this task)",
   "work.task.runLink":"Run link",
+  "work.task.runLink.none":"No run is linked to this task.",
+  "work.task.runLink.more":"+{n} more linked run(s); see the task runs panel below.",
   "work.task.f.assignee":"Assignee",
   "work.task.f.dueAt":"Due date",
   "work.task.f.dependencies":"Dependencies",

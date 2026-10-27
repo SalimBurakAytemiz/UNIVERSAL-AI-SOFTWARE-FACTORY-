@@ -740,6 +740,8 @@ export default {
   "work.task.runs":"Mission koşuları",
   "work.task.runsCount":"Mission'a bağlı {n} koşu (bu göreve değil)",
   "work.task.runLink":"Koşu bağı",
+  "work.task.runLink.none":"Bu göreve bağlı koşu yok.",
+  "work.task.runLink.more":"+{n} bağlı koşu daha; aşağıdaki görev koşuları panelinde.",
   "work.task.f.assignee":"Atanan",
   "work.task.f.dueAt":"Bitiş tarihi",
   "work.task.f.dependencies":"Bağımlılıklar",

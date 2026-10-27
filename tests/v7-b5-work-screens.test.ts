@@ -1753,6 +1753,41 @@ describe("LANE-A task run link", () => {
     expect(text(rows[0])).toContain("Running"); expect(text(rows[0])).not.toContain("not readable");
     expect(text(rows[1])).toContain("run record not readable"); expect(text(rows[1])).not.toContain("Running");
   });
+  // //TR: A-UI026-1: denetçideki "Koşu bağı" satırı artık hemen altındaki görev-koşu panelinin okuduğu GET /v1/tasks/:id/runs sonucundan beslenir; okunamayan/geçersiz yanıt UNKNOWN kalır.
+  it("UI-026 inspector 'Run link' row lists the task's linked runs from the same read as the task-runs panel, says 'no run linked' when the read is empty, and stays UNKNOWN when it cannot be read", async () => {
+    const field = (root: N) => byData(root, "taskField", "runLink")[0];
+    const o = await open({linked: {runs: [link(R1), {link: link(R2).link, run: null}]}, missionRuns: [R1, R2]});
+    expect(field(o.root).dataset.runLink).toBe("linked");
+    expect(byData(field(o.root), "taskRunLink").map(n => n.dataset.taskRunLink)).toEqual([R1, R2]);
+    const rows = byData(field(o.root), "taskRunLink");
+    expect(text(rows[0])).toContain("Running");
+    expect(text(rows[1])).toContain("UNKNOWN"); expect(text(rows[1])).not.toContain("Running");
+    expect([...new Set(o.calls.get.filter(p => p.startsWith("/v1/tasks/")))]).toEqual([`/v1/tasks/${T1}/runs`]); // no extra read for the inspector row
+    expect(o.calls.post).toEqual([]);
+    const none = await open({linked: {runs: []}});
+    expect(field(none.root).dataset.runLink).toBe("none");
+    expect(text(field(none.root))).toBe("No run is linked to this task.");
+    for (const bad of [undefined, {runs: "x"}, {runs: [{link: null}]}]) {
+      const u = await open({linked: bad});
+      expect(text(field(u.root)), JSON.stringify(bad) ?? "undefined").toBe("UNKNOWN");
+      expect(field(u.root).dataset.runLink).toBeUndefined();
+      expect(byData(field(u.root), "taskRunLink")).toEqual([]);
+    }
+  });
+  it("UI-026 inspector 'Run link' row shows at most 5 runs plus an exact '+N more' note, and the en/tr texts are pinned", async () => {
+    const ids = Array.from({length: 7}, (_, i) => "run_" + (i + 1).toString(16).padStart(2, "0").repeat(12));
+    const o = await open({linked: {runs: ids.map(id => link(id))}, missionRuns: ids});
+    const cell = byData(o.root, "taskField", "runLink")[0];
+    expect(byData(cell, "taskRunLink").map(n => n.dataset.taskRunLink)).toEqual(ids.slice(0, 5));
+    expect(text(byData(cell, "runLinkMore", "2")[0])).toBe("+2 more linked run(s); see the task runs panel below.");
+    const exact = await open({linked: {runs: ids.slice(0, 5).map(id => link(id))}, missionRuns: ids});
+    expect(byData(byData(exact.root, "taskField", "runLink")[0], "runLinkMore")).toEqual([]);
+    const en = (await load(rend, "locales", "en.js")).default as Record<string, string>, tr = (await load(rend, "locales", "tr.js")).default as Record<string, string>;
+    expect(en["work.task.runLink.none"]).toBe("No run is linked to this task.");
+    expect(tr["work.task.runLink.none"]).toBe("Bu göreve bağlı koşu yok.");
+    expect(en["work.task.runLink.more"]).toBe("+{n} more linked run(s); see the task runs panel below.");
+    expect(tr["work.task.runLink.more"]).toBe("+{n} bağlı koşu daha; aşağıdaki görev koşuları panelinde.");
+  });
   const RES = (over: any = {}) => ({taskId: T1, from: "IN_PROGRESS", to: "DONE", action: "TRANSITIONED", reason: null, ...over});
   const RECON = (results: any[], over: any = {}) => ({runId: R1, runStatus: "SUCCEEDED", results, ...over});
   it("builds the reconcile request with an EMPTY body and a canonical run id only", async () => {
