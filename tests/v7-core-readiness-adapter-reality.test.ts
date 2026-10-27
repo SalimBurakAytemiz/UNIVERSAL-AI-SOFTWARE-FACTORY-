@@ -134,7 +134,15 @@ describe("C-RDY-2a adapter-reality", () => {
       ["const v = x! / call(nn) / 2; const w = !/a\"b/.test(y);\ncall(nn2);", ["nn", "nn2"]],
       ["const r = obj.return / call(prop) / 2; const s = o.typeof / call(prop2) / 3;", ["prop", "prop2"]],
       ["const café = 4; const z = café / call(uni) / 2;", ["uni"]],
-      ["const m = `x \\${call(esc)} y \\` ${call(real)} z`;\ncall(after);", ["real", "after"]]
+      ["const m = `x \\${call(esc)} y \\` ${call(real)} z`;\ncall(after);", ["real", "after"]],
+      // //TR: Tur 3 (M2/L4): rakamla biten sayıdan sonra `/` bölmedir (trace-core.js `t%86400/3600`); `+`/`-` tek başına regex başlatır (yalnız art arda `++`/`--` bölmedir); `)!` ve `]!` TS non-null sonrası bölmedir; `.` öncesi boşluk/satır sonu özellik adını (return) anahtar sözcük yapmaz.
+      ["const q = 86400 / call(dig) / 2;", ["dig"]],
+      ["const t = 5 % 86400/3600; const u = 7 / call(dig2) / 2;", ["dig2"]],
+      ["const a = x + /a\"b/.test(y);\nconst b = x - /a\"b/.test(y);\ncall(plus);", ["plus"]],
+      ["const a = (b)! / call(nn3) / 2;", ["nn3"]],
+      ["const c = arr[0]! / call(nn4) / 2;", ["nn4"]],
+      ["const r = a\n  .return / call(ws1) / 2;", ["ws1"]],
+      ["const r = a . return / call(ws2) / 2; const s = b\n.typeof / call(ws3) / 2;", ["ws2", "ws3"]]
     ];
     for (const [text, expected] of divisionCases) expect(callsIn(codeViews(text)?.code ?? ""), text).toEqual(expected);
     // //TR: Kapanmamış dize/yorum/şablon sınıflandırılamaz: null (hiçbir şeyi kanıtlamaz).
@@ -165,6 +173,9 @@ describe("C-RDY-2a adapter-reality", () => {
       expect(verifyRecord(rec(), runner(body)), body).toMatchObject({verifiedCallers: 1, codePath: "PRESENT"});
     }
     expect(verifyRecord(rec(), runner("await notrunGitleaks(dir);\n"))).toMatchObject({verifiedCallers: 0}); // //TR: tam sözcük sınırı
+    // //TR: Tur 3 (M3): önceki karakter `_`, `$` ya da rakam olan ad (`_runGitleaks(`, `$runGitleaks(`, `9runGitleaks(`, `éRunGitleaks` benzeri) o çağıranı doğrulamaz; sonraki karakter `_`, `$`, rakam ya da harf ise ad eşleşmez.
+    for (const name of ["_runGitleaks", "$runGitleaks", "9runGitleaks", "ürunGitleaks"]) expect(verifyRecord(rec(), runner(`await ${name}(dir);\n`)), name).toMatchObject({verifiedCallers: 0, codePath: "ABSENT"});
+
     // //TR: İçe aktarma çağıranı: `from "ajv"` yalnız gerçek içe aktarmadır; yorum, başka bir dize ve alt yol (`ajv/dist/2020.js`) `from "ajv"` DEĞİLDİR.
     const ajv = rec({adapterId: "ajv", mode: "NPM_PACKAGE", module: "ajv", exportName: "default", callers: [{file: "core/a.ts", references: "from \"ajv\"", literal: true}]});
     const pkg = {"node_modules/ajv/package.json": "{}"};
@@ -178,6 +189,8 @@ describe("C-RDY-2a adapter-reality", () => {
     expect(scriptLit("const _electronUnused = 1;\n")).toMatchObject({exportDeclared: false, codePath: "ABSENT"});
     expect(scriptLit("const x_electron = 1;\n")).toMatchObject({exportDeclared: false, codePath: "ABSENT"});
     expect(scriptLit("const app = pw._electron.launch({});\n")).toMatchObject({exportDeclared: true, codePath: "PRESENT"});
+    for (const tail of ["2", "_", "$", "é", "٣"]) expect(scriptLit(`const _electron${tail} = 1;\n`), tail).toMatchObject({exportDeclared: false, codePath: "ABSENT"});
+    for (const lead of ["$", "9", "é", "٣"]) expect(scriptLit(`const ${lead}_electron = 1;\n`), lead).toMatchObject({exportDeclared: false, codePath: "ABSENT"});
     // //TR: Sözcük sınırı Unicode'dur: `café` içindeki `caf` ve `éx` içindeki `x` bir ad olarak eşleşmez.
     const unicodeLit = (name: string, body: string) => verifyRecord(rec({mode: "SCRIPT_LITERAL", module: "scripts/e2e/desktop-journey.e2e.mjs", exportName: name, entrypoint: true, callers: []}), fx({"scripts/e2e/desktop-journey.e2e.mjs": body}));
     expect(unicodeLit("caf", "const café = 1;\n")).toMatchObject({exportDeclared: false, codePath: "ABSENT"});
@@ -187,12 +200,26 @@ describe("C-RDY-2a adapter-reality", () => {
     expect(verifyRecord(rec(), fx({"core/workos/security-tools.ts": "export function runGitleaksLegacy() {}\n", "core/workos/runner.ts": "await runGitleaks(dir);\n"}))).toMatchObject({exportDeclared: false, codePath: "ABSENT"});
     // //TR: Bildirilen çağıran yalnız ÜRETİM yolu olabilir: testler, docs, __tests__, node_modules, kaynak olmayan dosya, kök dışı/mutlak/normalleşmemiş yol bir çağıran SAYILMAZ (dosyada çağrı olsa bile).
     const call = "await runGitleaks(dir);\n";
-    const pathRoot = fx({"core/workos/security-tools.ts": "export function runGitleaks() {}\n", "core/workos/runner.ts": call, "tests/x.test.ts": call, "core/x.test.ts": call, "core/__tests__/x.ts": call, "docs/x.ts": call, "core/node_modules/x.ts": call, "core/workos/runner.md": call, "core/abs.ts": call});
+    const pathRoot = fx({"core/workos/security-tools.ts": "export function runGitleaks() {}\n", "core/workos/runner.ts": call, "tests/x.test.ts": call, "core/x.test.ts": call, "core/__tests__/x.ts": call, "docs/x.ts": call, "core/node_modules/x.ts": call, "core/workos/runner.md": call, "core/abs.ts": call,
+      "core/x\\..\\..\\tests\\helper.ts": call, "tests/helpers/h.ts": call, "core/dist/x.js": call,
+      "core/Case.TEST.ts": call, "core/a.spec.ts": call, "core/B.SPEC.js": call, "core/a.test.mjs": call, "core/a.spec.cjs": call, "core/a.test.js": call,
+      "scripts/a-selftest.mjs": call, "core/a-SELFTEST.ts": call, "core/fake-harness.mjs": call, "core/FAKE-x.mjs": call,
+      "core/fixtures/f.ts": call, "core/Fixtures/g.ts": call, "core/fixture/f.ts": call, "core/Tests/t.ts": call, "core/test/t.ts": call, "core/tests/t.ts": call,
+      "core/__mocks__/m.ts": call, "core/__TESTS__/x.ts": call, "core/Node_Modules/x.ts": call, "core/DIST/x.js": call,
+      "scripts/validate-x.mjs": call, "scripts/verify-x.mjs": call, "core/my-fake-tool.mjs": call, "core/contest/x.ts": call, "core/tests.ts": call, "core/prefixed-selftest-tool.mjs": call, "core/nofixtures.ts": call});
     fs.writeFileSync(path.join(path.dirname(pathRoot), "outside.ts"), call);
-    for (const bad of ["tests/x.test.ts", "core/x.test.ts", "core/__tests__/x.ts", "docs/x.ts", "core/node_modules/x.ts", "core/workos/runner.md", "../outside.ts", path.join(pathRoot, "core/abs.ts"), "core/../core/workos/runner.ts", "core/./workos/runner.ts", "core//workos/runner.ts", "core\\workos\\runner.ts", ""]) {
+    for (const bad of ["tests/x.test.ts", "core/x.test.ts", "core/__tests__/x.ts", "docs/x.ts", "core/node_modules/x.ts", "core/workos/runner.md", "../outside.ts", path.join(pathRoot, "core/abs.ts"), "core/../core/workos/runner.ts", "core/./workos/runner.ts", "core//workos/runner.ts", "core\\workos\\runner.ts", "",
+      // //TR: Tur 3 (M1/L2): ters eğik çizgili `core/x\..\..\tests\helper.ts` (Windows'ta tests\helper.ts'ye çözülür), tests/ altındaki test OLMAYAN dosya, dist; büyük/küçük harf duyarsız .TEST./.spec./-selftest/fake-/fixtures/tests/__mocks__ yolları.
+      "core/x\\..\\..\\tests\\helper.ts", "tests/helpers/h.ts", "core/dist/x.js", "core/Case.TEST.ts", "core/a.spec.ts", "core/B.SPEC.js", "core/a.test.mjs", "core/a.spec.cjs", "core/a.test.js",
+      "scripts/a-selftest.mjs", "core/a-SELFTEST.ts", "core/fake-harness.mjs", "core/FAKE-x.mjs", "core/fixtures/f.ts", "core/Fixtures/g.ts", "core/fixture/f.ts", "core/Tests/t.ts", "core/test/t.ts", "core/tests/t.ts",
+      "core/__mocks__/m.ts", "core/__TESTS__/x.ts", "core/Node_Modules/x.ts", "core/DIST/x.js"]) {
       expect(verifyRecord(rec({callers: [{file: bad, references: "runGitleaks("}]}), pathRoot), JSON.stringify(bad)).toMatchObject({verifiedCallers: 0, failedCallers: [`${bad}:runGitleaks(`], codePath: "ABSENT", reasons: ["CALLER_NOT_PRODUCTION", "NO_PRODUCTION_CALLER"]});
     }
     expect(verifyRecord(rec({callers: [{file: "core/workos/runner.ts", references: "runGitleaks("}, {file: "tests/x.test.ts", references: "runGitleaks("}]}), pathRoot)).toMatchObject({verifiedCallers: 1, codePath: "PRESENT", reasons: ["CALLER_NOT_PRODUCTION"]});
+    // //TR: Kural açıkça belirtilir ve sabitlenir: `scripts/validate-*.mjs` / `verify-*.mjs` CI aracıdır ve ÜRETİM çağıranı SAYILIR (scripts bir üretim köküdür); ada `fake-`/`selftest`/`test`/`fixtures` benzeyen ama kuralı sağlamayan yollar da üretimdir.
+    for (const good of ["scripts/validate-x.mjs", "scripts/verify-x.mjs", "core/my-fake-tool.mjs", "core/contest/x.ts", "core/tests.ts", "core/prefixed-selftest-tool.mjs", "core/nofixtures.ts"]) {
+      expect(verifyRecord(rec({callers: [{file: good, references: "runGitleaks("}]}), pathRoot), good).toMatchObject({verifiedCallers: 1, failedCallers: [], codePath: "PRESENT", reasons: []});
+    }
     // //TR: Sınıflandırılamayan (kapanmamış dize) çağıran dosyası hiçbir şeyi doğrulamaz.
     expect(verifyRecord(rec(), runner("await runGitleaks(dir);\nconst broken = \"open\n"))).toMatchObject({verifiedCallers: 0, codePath: "ABSENT"});
   });
@@ -523,6 +550,19 @@ describe("C-RDY-2a adapter-reality", () => {
     const cls = ["export class Mm {", "  public pubM() {}", "  protected protM() {}", "  spaced () {}", "}", "const t = `", "class Tpl {", "  fake() {}", "}", "`;"].join("\n");
     for (const m of ["pubM", "protM", "spaced"]) expect(declaresMember(cls, "Mm", m), m).toBe(true);
     expect(declaresMember(cls, "Tpl", "fake")).toBe(false);
+    // //TR: Tur 3 (L1): dışa aktarım adı ve sınıf adı Unicode sözcük sınırıyla eşleşir: `runGitleaksé`/`runGitleaks٣`/`runGitleaks_`/`runGitleaks$` `runGitleaks` DEĞİLDİR; `Kü` sınıfı `K` sınıfı DEĞİLDİR.
+    for (const tail of ["é", "٣", "_", "$", "2"]) expect(declaresExport(`export const runGitleaks${tail} = 1;`, "runGitleaks"), tail).toBe(false);
+    expect(declaresExport("export const runGitleaks = 1;", "runGitleaks")).toBe(true);
+    expect(declaresExport("export const runGitleaksé = 1;", "runGitleaksé")).toBe(true);
+    for (const tail of ["ü", "٣", "_", "$", "2"]) expect(declaresMember(`export class K${tail} {\n  pair() {}\n}`, "K", "pair"), tail).toBe(false);
+    expect(declaresMember("export class Kü {\n  pair() {}\n}", "Kü", "pair")).toBe(true);
+    // //TR: Tur 3 (L4): sınıf başlığı biçimleri (abstract / default / declare / bunların birleşimi, girintili başlık) ve gövde ayrıştırması.
+    for (const header of ["export abstract class K", "export default class K", "declare class K", "export declare abstract class K", "abstract class K", "  export class K", "\texport class K"]) expect(declaresMember(`${header} {\n  pair() {}\n}`, "K", "pair"), header).toBe(true);
+    // //TR: Tur 3 (L3): üye bir DEVAM satırı değilse sayılır. ASI ile biten alan (`x = 1`), çıplak dekoratör (`@dec`), noktalı virgülsüz tipli alan (`m: Map<string, number>`), sonek `++`/`--`, dize/kapanan nesne/dizi/çağrı sonrası üye GERÇEKTİR.
+    const memberAfter = (prev: string) => declaresMember(`export class K {\n  ${prev}\n  pair() {}\n}`, "K", "pair");
+    for (const prev of ["x = 1", "@dec", "private m: Map<string, number>", "x = i++", "x = i--", "x = 'a'", "x = `a`", "x = [1]", "@d(1)", "x = {a: 1}", "x = a >= b ? c : d", "x: number;", "x = foo()", "y = a > b"]) expect(memberAfter(prev), prev).toBe(true);
+    // //TR: Devam işaretleriyle biten satırdan sonra gelen `pair(` bir önceki ifadenin devamıdır, üye DEĞİLDİR: `= ( , [ ? : + - * / % & | ^ . <` ve `=>`.
+    for (const prev of ["x =", "x = foo(", "x = foo(a,", "x = [", "x = c ?", "x = c ? 1 :", "x = a +", "x = a -", "x = a *", "x = a /", "x = a %", "x = a &", "x = a |", "x = a ^", "x = a.", "x = a <", "x = (a) =>"]) expect(memberAfter(prev), prev).toBe(false);
   });
 
   it("exact tokens and record data: case, regex metacharacters, caller references, reason order, probes of absent records", () => {
@@ -588,17 +628,21 @@ describe("C-RDY-2a adapter-reality", () => {
 
   it("importer scan details: extensions, test flavours, self import, hidden directories, word boundaries, unparseable files, bare specifiers", () => {
     const probe = DEAD_CODE_PROBES[0];
-    const imp = "import {resolveCapability} from \"./capabilities/resolver.js\";\n";
+    const imp = "import {resolveCapability} from \"./capabilities/resolver.js\";\n", rimp = imp.replace("./", "../");
     const root = fx({
       "core/capabilities/resolver.ts": "import {x} from \"./resolver.js\";\nexport function resolveCapability() {}\n",
       "core/.git/hook.ts": "import {resolveCapability} from \"../capabilities/resolver.js\";\n",
       "core/m1.mts": "import {resolveCapability} from \"./capabilities/resolver.js\";\n",
       "core/bare.ts": "import {resolveCapability} from \"./capabilities/resolver\";\n",
       "core/t1.test.js": imp, "core/t2.test.mjs": imp, "core/t3.test.cjs": imp, "core/t4.test.mts": imp,
+      // //TR: Tur 3: büyük/küçük harf duyarsız test destek yolları içe aktaran SAYILMAZ (spec, selftest, fake-, fixtures, tests, test, fixture, __mocks__); adı benzeyen ama kuralı sağlamayan dosyalar SAYILIR.
+      "core/B.SPEC.ts": imp, "core/y-selftest.mjs": imp, "core/Y-SELFTEST.ts": imp, "core/fake-x.mjs": imp, "core/FAKE-y.ts": imp,
+      "core/fixtures/a.ts": rimp, "core/Fixtures/b.ts": rimp, "core/tests/c.ts": rimp, "core/Test/d.ts": rimp, "core/fixture/e.ts": rimp, "core/__mocks__/f.ts": rimp, "core/DIST/g.ts": rimp, "core/Node_Modules/h.ts": rimp,
+      "core/contest/x.ts": rimp, "core/tests.ts": imp, "core/my-fake-tool.mjs": imp, "core/prefixed-selftest-tool.mjs": imp,
       "core/prefixed.ts": "const a = xfrom(\"./capabilities/resolver.js\"); reimport(\"./capabilities/resolver.js\"); prerequire(\"./capabilities/resolver.js\");\n",
       "core/broken.ts": "import {resolveCapability} from \"./capabilities/resolver.js\";\nconst broken = \"open\n"
     });
-    expect(findProductionImporters(root, probe)).toEqual(["core/bare.ts", "core/m1.mts"]);
+    expect(findProductionImporters(root, probe)).toEqual(["core/bare.ts", "core/contest/x.ts", "core/m1.mts", "core/my-fake-tool.mjs", "core/prefixed-selftest-tool.mjs", "core/tests.ts"]);
     // //TR: Uzantısız belirteç .mjs modülüne çözülür (uzantılar iki tarafta aynı biçimde atılır).
     expect(findProductionImporters(fx({"scripts/lib.mjs": "export const a = 1;\n", "scripts/user.mjs": "import {a} from \"./lib\";\n"}), {module: "scripts/lib.mjs", exports: ["a"]})).toEqual(["scripts/user.mjs"]);
     // //TR: Sınıflandırılamayan dosya paket içe aktaranı sayılmaz.

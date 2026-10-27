@@ -133,7 +133,7 @@ const tokenRe = (t: string, flags = "") => new RegExp(`${/^[\p{L}\p{N}_$]/u.test
 export function declaresExport(source: string, name: string): boolean { return exportIn(codeViews(source), name); }
 function exportIn(v: CodeViews | null, name: string): boolean {
   if (v === null) return false;
-  if (new RegExp(`^export\\s+(?:default\\s+)?(?:async\\s+)?(?:function\\*?|class|const|let|var)\\s+${escapeRe(name)}(?![\\w$])`, "m").test(v.code)) return true;
+  if (new RegExp(`^export\\s+(?:default\\s+)?(?:async\\s+)?(?:function\\*?|class|const|let|var)\\s+${escapeRe(name)}(?![\\p{L}\\p{N}_$])`, "mu").test(v.code)) return true;
   for (const m of v.code.matchAll(/^export\s+(?:type\s+)?\{([^}]*)\}/gm)) {
     for (const part of m[1].split(",")) { const names = part.trim().replace(/^type\s+/, "").split(/\s+as\s+/); if ((names[1] ?? names[0]).trim() === name) return true; }
   }
@@ -141,7 +141,7 @@ function exportIn(v: CodeViews | null, name: string): boolean {
 }
 // //TR: Sınıf gövdesinin YALNIZ en üst düzey (süslü derinlik 1) metni; iç içe bloklar boşaltılır ve kapanışları bir `;` sınırı olarak kalır; çok satırlı alan başlatıcılarının devam satırları üye sayılmaz çünkü üye bildirimi bir önceki bildirimin sonundan sonra başlamalıdır (memberIn). Böylece gövdedeki çağrılar üye bildirimi sanılmaz. Sınıf başlığı satır başında aranır (`const x = class K` ya da yorum/dize içindeki `class K` değil).
 function classBodyTopLevel(code: string, className: string): string | null {
-  const m = new RegExp(`^[ \\t]*(?:export\\s+(?:default\\s+)?)?(?:declare\\s+)?(?:abstract\\s+)?class\\s+${escapeRe(className)}(?![\\w$])`, "m").exec(code);
+  const m = new RegExp(`^[ \\t]*(?:export\\s+(?:default\\s+)?)?(?:declare\\s+)?(?:abstract\\s+)?class\\s+${escapeRe(className)}(?![\\p{L}\\p{N}_$])`, "mu").exec(code);
   if (m === null) return null;
   const open = code.indexOf("{", m.index + m[0].length);
   if (open < 0) return null;
@@ -160,22 +160,25 @@ export function declaresMember(source: string, className: string, member: string
 function memberIn(v: CodeViews | null, className: string, member: string): boolean {
   const top = v === null ? null : classBodyTopLevel(v.code, className);
   if (top === null) return false;
-  // //TR: Üye bildirimi bir önceki bildirimin SONUNDAN sonra başlar (başlangıç, `{ } ; ) ]`); `x =\n pair(a)` ya da `=>\n pair(a)` gibi devam satırları üye değildir.
+  // //TR: Üye bildirimi bir DEVAM satırı değilse sayılır: önceki anlamlı karakter bir devam işaretiyse (`= ( , [ ? : + - * / % & | ^ . <` ya da `=>`; art arda `++`/`--` sonek olduğundan devam DEĞİL) satır bir önceki ifadenin devamıdır (`x =\n pair(a)`); diğer her durumda (`{ } ; ) ]`, ASI ile biten alan `x = 1`, çıplak dekoratör `@dec`, tipli alan `m: Map<string, number>`) yeni bir bildirim başlar. Bilinen sınır (ABSENT yönü): düzenli ifade değişmezi (`/a/`) ile biten alandan sonraki üye gözden kaçar.
   const re = new RegExp(`^[ \\t]*(?:(?:private|public|protected|static|readonly)\\s+)*(?:async\\s+)?${escapeRe(member)}\\s*[(<]`, "gm");
   for (const m of top.matchAll(re)) {
     let k = m.index! - 1;
     while (k >= 0 && /\s/.test(top[k])) k--;
-    if (k < 0 || "{};)]".includes(top[k])) return true;
+    if (k < 0) return true;
+    const p = top[k];
+    const continues = ((p === "+" || p === "-") ? top[k - 1] !== p : "=(,[?:*/%&|^.<".includes(p)) || (p === ">" && top[k - 1] === "=");
+    if (!continues) return true;
   }
   return false;
 }
 
 // //TR: Bir kaydı doğrular: modül var, dışa aktarım (ve varsa üye) bildirilmiş, bildirilen çağıranlar o ifadeyi KODDA (yorum/dize dışında) gerçekten anıyor. codePath PRESENT YALNIZ çalıştıran (runs) bir kayıt için, modül+dışa aktarım doğrulanmış VE (SCRIPT_LITERAL giriş betiği ya da en az bir üretim çağıranı doğrulanmış) ise. Kaynak sınıflandırılamazsa (kapanmamış dize/yorum) hiçbir şey doğrulanmaz.
-// //TR: Bildirilen bir çağıran yalnız ÜRETİM yolu olabilir: depo köküne göreli, normalleşmiş, üretim köklerinden birinin altında, kaynak uzantılı, test dosyası/__tests__/node_modules/dist olmayan bir dosya (testler, docs ve depo dışı dosyalar bir çağıran sayılmaz).
+// //TR: Bildirilen bir çağıran yalnız ÜRETİM yolu olabilir: depo köküne göreli, normalleşmiş, üretim köklerinden birinin altında, kaynak uzantılı ve test destek dosyası olmayan bir dosya (testler, docs ve depo dışı dosyalar bir çağıran sayılmaz). Test destek kuralı büyük/küçük harfe DUYARSIZDIR: `.test.`/`.spec.` dosyaları, `*-selftest.*` öz sınamaları, `fake-*` sahte donanımları ve tests/test/fixtures/__tests__/__mocks__ dizinleri. `scripts/validate-*.mjs` ve `verify-*.mjs` CI aracıdır ve ÜRETİM sayılır (scripts bir üretim köküdür; scripts/ci/uasco-review/run.mjs de bir bildirilen çağırandır).
 const isProductionPath = (file: string): boolean => {
   if (file === "" || path.isAbsolute(file) || file.includes("\\") || path.posix.normalize(file) !== file) return false;
   const segs = file.split("/");
-  return PRODUCTION_ROOTS.includes(segs[0]) && !segs.some(sg => sg === ".." || sg === "node_modules" || sg === "dist" || sg === "__tests__") && SOURCE_EXT.test(file) && !TEST_FILE.test(file);
+  return PRODUCTION_ROOTS.includes(segs[0]) && !segs.slice(1).some(sg => EXCLUDED_DIRS.has(sg.toLowerCase())) && SOURCE_EXT.test(file) && !isTestSupportName(segs[segs.length - 1]);
 };
 // //TR: Bir çağrı boyunca aynı dosya birden çok kayıtta geçer (executors.ts, runner.ts): okuma + tarama dosya başına BİR kez yapılır.
 type SourceCache = Map<string, {exists: boolean; views: CodeViews | null}>;
@@ -246,16 +249,18 @@ export const DEAD_CODE_PROBES: readonly DeadCodeProbe[] = [{module: "core/capabi
 const PRODUCTION_ROOTS = ["apps", "core", "scripts", "automation"];
 // //TR: Taranan kaynak uzantıları YALNIZ ts/mts/mjs/cjs/js'dir. PowerShell (.ps1) kurulum betikleri (ör. scripts/ensure-omniroute.ps1 OmniRoute başlatıcısını açar) taranmaz: tarayıcı JS/TS sözdizimi içindir, bu bilinen kör noktadır ve haritada/sayımda görünmez (testte sabitlenmiştir).
 const SOURCE_EXT = /\.(?:ts|mts|mjs|cjs|js)$/;
-// //TR: Test dosyaları (*.test.* ve __tests__ dizinleri) üretim kodu DEĞİLDİR: üretim köklerinin içinde de taranmaz.
-const TEST_FILE = /\.test\.[cm]?[jt]s$/;
+// //TR: Test destek dosyaları üretim kodu DEĞİLDİR (büyük/küçük harfe duyarsız): `*.test.*`, `*.spec.*`, `*-selftest.*`, `fake-*`; dizinler: node_modules, dist, __tests__, __mocks__, fixtures, fixture, tests, test. Üretim köklerinin içinde de taranmaz.
+const TEST_FILE = /\.(?:test|spec)\.[cm]?[jt]s$|-selftest\.[cm]?[jt]s$|^fake-/i;
+const isTestSupportName = (name: string) => TEST_FILE.test(name);
+const EXCLUDED_DIRS: ReadonlySet<string> = new Set(["node_modules", "dist", "__tests__", "__mocks__", "fixtures", "fixture", "tests", "test"]);
 function listSources(dir: string, out: string[] = []): string[] {
   let entries: fs.Dirent[];
   try { entries = fs.readdirSync(dir, {withFileTypes: true}); } catch { return out; }
   // //TR: Dizin girdileri ada göre sıralanır (işletim sistemi sırasından bağımsız, belirli çıktı ve ileti).
   for (const e of [...entries].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
-    if (e.name === "node_modules" || e.name === "dist" || e.name === ".git" || e.name === "__tests__") continue;
+    if (e.name === ".git" || EXCLUDED_DIRS.has(e.name.toLowerCase())) continue;
     const p = path.join(dir, e.name);
-    if (e.isDirectory()) listSources(p, out); else if (e.isFile() && SOURCE_EXT.test(e.name) && !TEST_FILE.test(e.name)) out.push(p);
+    if (e.isDirectory()) listSources(p, out); else if (e.isFile() && SOURCE_EXT.test(e.name) && !isTestSupportName(e.name)) out.push(p);
   }
   return out;
 }

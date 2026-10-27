@@ -235,10 +235,10 @@
   },
   {
    "id": "R13",
-   "description": "the node_modules directory guard is removed from the production-source walk",
+   "description": "node_modules is no longer an excluded directory (walk and caller paths)",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "if (e.name === \"node_modules\" || e.name === \"dist\" ||",
-   "new": "if (e.name === \"dist\" ||"
+   "old": "new Set([\"node_modules\", \"dist\", \"__tests__\", \"__mocks__\", \"fixtures\", \"fixture\", \"tests\", \"test\"])",
+   "new": "new Set([\"dist\", \"__tests__\", \"__mocks__\", \"fixtures\", \"fixture\", \"tests\", \"test\"])"
   },
   {
    "id": "R14",
@@ -312,17 +312,17 @@
   },
   {
    "id": "R26",
-   "description": "test files inside the production roots are scanned",
+   "description": "test-support files inside the production roots are scanned",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": " && !TEST_FILE.test(e.name)",
-   "new": ""
+   "old": " && !isTestSupportName(e.name)) out.push(p);",
+   "new": ") out.push(p);"
   },
   {
    "id": "R27",
-   "description": "__tests__ directories are scanned",
+   "description": "__tests__ directories are no longer excluded",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": " || e.name === \"__tests__\") continue;",
-   "new": ") continue;"
+   "old": "new Set([\"node_modules\", \"dist\", \"__tests__\", \"__mocks__\", \"fixtures\", \"fixture\", \"tests\", \"test\"])",
+   "new": "new Set([\"node_modules\", \"dist\", \"__mocks__\", \"fixtures\", \"fixture\", \"tests\", \"test\"])"
   },
   {
    "id": "R28",
@@ -515,17 +515,17 @@
   },
   {
    "id": "P2",
-   "description": "test files count as production callers",
+   "description": "test-support files count as production callers",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": " && !TEST_FILE.test(file);",
+   "old": " && !isTestSupportName(segs[segs.length - 1]);",
    "new": ";"
   },
   {
    "id": "P3",
-   "description": "node_modules and __tests__ path segments count as production callers",
+   "description": "excluded-directory segments (node_modules, dist, __tests__ ...) count as production callers",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "|| sg === \"node_modules\" || sg === \"dist\" || sg === \"__tests__\")",
-   "new": "|| sg === \"dist\")"
+   "old": "!segs.slice(1).some(sg => EXCLUDED_DIRS.has(sg.toLowerCase())) && ",
+   "new": ""
   },
   {
    "id": "P4",
@@ -545,8 +545,8 @@
    "id": "P6",
    "description": "a caller with a non-source extension is accepted",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": " && SOURCE_EXT.test(file) && !TEST_FILE.test(file);",
-   "new": " && !TEST_FILE.test(file);"
+   "old": " && SOURCE_EXT.test(file) && !isTestSupportName(segs[segs.length - 1]);",
+   "new": " && !isTestSupportName(segs[segs.length - 1]);"
   },
   {
    "id": "P7",
@@ -606,9 +606,9 @@
   },
   {
    "id": "Q3",
-   "description": "member declarations need no declaration boundary before them (continuation lines count)",
+   "description": "member declarations need no continuation check (continuation lines count)",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "if (k < 0 || \"{};)]\".includes(top[k])) return true;",
+   "old": "if (!continues) return true;",
    "new": "return true;"
   },
   {
@@ -685,8 +685,8 @@
    "id": "HV-S09",
    "description": "regex literal at start of source rejected",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "if (k < 0) return true;",
-   "new": "if (k < 0) return false;"
+   "old": "if (k < 0) return true;\n    const p = code[k];",
+   "new": "if (k < 0) return false;\n    const p = code[k];"
   },
   {
    "id": "HV-S12",
@@ -811,8 +811,8 @@
    "id": "HV-E11",
    "description": "export declarations read from the literal view",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "${escapeRe(name)}(?![\\\\w$])`, \"m\").test(v.code)) return true;",
-   "new": "${escapeRe(name)}(?![\\\\w$])`, \"m\").test(v.literal)) return true;"
+   "old": "\"mu\").test(v.code)) return true;",
+   "new": "\"mu\").test(v.literal)) return true;"
   },
   {
    "id": "HV-M01",
@@ -951,8 +951,8 @@
    "id": "HV-X02",
    "description": ".git directory no longer skipped",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "|| e.name === \".git\" ||",
-   "new": "||"
+   "old": "if (e.name === \".git\" || EXCLUDED_DIRS.has(e.name.toLowerCase())) continue;",
+   "new": "if (EXCLUDED_DIRS.has(e.name.toLowerCase())) continue;"
   },
   {
    "id": "HV-X05",
@@ -965,22 +965,22 @@
    "id": "HV-X09",
    "description": "TEST_FILE only recognises .test.ts",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const TEST_FILE = /\\.test\\.[cm]?[jt]s$/;",
-   "new": "const TEST_FILE = /\\.test\\.ts$/;"
+   "old": "const TEST_FILE = /\\.(?:test|spec)\\.[cm]?[jt]s$|-selftest\\.[cm]?[jt]s$|^fake-/i;",
+   "new": "const TEST_FILE = /\\.(?:test|spec)\\.ts$|-selftest\\.[cm]?[jt]s$|^fake-/i;"
   },
   {
    "id": "HV-X10",
    "description": "TEST_FILE loses the c/m prefix",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const TEST_FILE = /\\.test\\.[cm]?[jt]s$/;",
-   "new": "const TEST_FILE = /\\.test\\.[jt]s$/;"
+   "old": "const TEST_FILE = /\\.(?:test|spec)\\.[cm]?[jt]s$|-selftest\\.[cm]?[jt]s$|^fake-/i;",
+   "new": "const TEST_FILE = /\\.(?:test|spec)\\.[jt]s$|-selftest\\.[cm]?[jt]s$|^fake-/i;"
   },
   {
    "id": "HV-X11",
    "description": "TEST_FILE loses .test.js",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "const TEST_FILE = /\\.test\\.[cm]?[jt]s$/;",
-   "new": "const TEST_FILE = /\\.test\\.[cm]?ts$/;"
+   "old": "const TEST_FILE = /\\.(?:test|spec)\\.[cm]?[jt]s$|-selftest\\.[cm]?[jt]s$|^fake-/i;",
+   "new": "const TEST_FILE = /\\.(?:test|spec)\\.[cm]?ts$|-selftest\\.[cm]?[jt]s$|^fake-/i;"
   },
   {
    "id": "HV-X12",
@@ -1190,6 +1190,559 @@
    "description": "a backslash + CRLF line continuation inside a string no longer consumes the LF (the string looks unterminated)",
    "file": "core/capabilities/adapter-reality.ts",
    "old": "if (e === \"\\r\" && src[i] === \"\\n\") body(src[i++]);",
+   "new": ""
+  },
+  {
+   "id": "D13",
+   "description": "a caller path containing a backslash is accepted (core/x\\..\\..\\tests\\helper.ts resolves to tests\\helper.ts on Windows)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": " || file.includes(\"\\\\\") || ",
+   "new": " || "
+  },
+  {
+   "id": "D12",
+   "description": "a caller under the tests/ root is accepted as production",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "return PRODUCTION_ROOTS.includes(segs[0]) && ",
+   "new": "return (PRODUCTION_ROOTS.includes(segs[0]) || segs[0] === \"tests\") && "
+  },
+  {
+   "id": "D15",
+   "description": "a dist segment no longer disqualifies a caller (or a walked directory)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"node_modules\", \"dist\", \"__tests__\", \"__mocks__\", \"fixtures\", \"fixture\", \"tests\", \"test\"])",
+   "new": "new Set([\"node_modules\", \"__tests__\", \"__mocks__\", \"fixtures\", \"fixture\", \"tests\", \"test\"])"
+  },
+  {
+   "id": "Z-X1",
+   "description": "__mocks__ is no longer an excluded directory",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"node_modules\", \"dist\", \"__tests__\", \"__mocks__\", \"fixtures\", \"fixture\", \"tests\", \"test\"])",
+   "new": "new Set([\"node_modules\", \"dist\", \"__tests__\", \"fixtures\", \"fixture\", \"tests\", \"test\"])"
+  },
+  {
+   "id": "Z-X2",
+   "description": "fixtures is no longer an excluded directory",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"node_modules\", \"dist\", \"__tests__\", \"__mocks__\", \"fixtures\", \"fixture\", \"tests\", \"test\"])",
+   "new": "new Set([\"node_modules\", \"dist\", \"__tests__\", \"__mocks__\", \"fixture\", \"tests\", \"test\"])"
+  },
+  {
+   "id": "Z-X3",
+   "description": "fixture is no longer an excluded directory",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"node_modules\", \"dist\", \"__tests__\", \"__mocks__\", \"fixtures\", \"fixture\", \"tests\", \"test\"])",
+   "new": "new Set([\"node_modules\", \"dist\", \"__tests__\", \"__mocks__\", \"fixtures\", \"tests\", \"test\"])"
+  },
+  {
+   "id": "Z-X4",
+   "description": "tests is no longer an excluded directory",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"node_modules\", \"dist\", \"__tests__\", \"__mocks__\", \"fixtures\", \"fixture\", \"tests\", \"test\"])",
+   "new": "new Set([\"node_modules\", \"dist\", \"__tests__\", \"__mocks__\", \"fixtures\", \"fixture\", \"test\"])"
+  },
+  {
+   "id": "Z-X5",
+   "description": "test is no longer an excluded directory",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"node_modules\", \"dist\", \"__tests__\", \"__mocks__\", \"fixtures\", \"fixture\", \"tests\", \"test\"])",
+   "new": "new Set([\"node_modules\", \"dist\", \"__tests__\", \"__mocks__\", \"fixtures\", \"fixture\", \"tests\"])"
+  },
+  {
+   "id": "Z-T1",
+   "description": "the test-support name rule is case sensitive",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const TEST_FILE = /\\.(?:test|spec)\\.[cm]?[jt]s$|-selftest\\.[cm]?[jt]s$|^fake-/i;",
+   "new": "const TEST_FILE = /\\.(?:test|spec)\\.[cm]?[jt]s$|-selftest\\.[cm]?[jt]s$|^fake-/;"
+  },
+  {
+   "id": "Z-T2",
+   "description": "*.spec.* files count as production",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const TEST_FILE = /\\.(?:test|spec)\\.[cm]?[jt]s$|-selftest\\.[cm]?[jt]s$|^fake-/i;",
+   "new": "const TEST_FILE = /\\.(?:test)\\.[cm]?[jt]s$|-selftest\\.[cm]?[jt]s$|^fake-/i;"
+  },
+  {
+   "id": "Z-T3",
+   "description": "*-selftest.* files count as production",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const TEST_FILE = /\\.(?:test|spec)\\.[cm]?[jt]s$|-selftest\\.[cm]?[jt]s$|^fake-/i;",
+   "new": "const TEST_FILE = /\\.(?:test|spec)\\.[cm]?[jt]s$|^fake-/i;"
+  },
+  {
+   "id": "Z-T4",
+   "description": "fake-* files count as production",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const TEST_FILE = /\\.(?:test|spec)\\.[cm]?[jt]s$|-selftest\\.[cm]?[jt]s$|^fake-/i;",
+   "new": "const TEST_FILE = /\\.(?:test|spec)\\.[cm]?[jt]s$|-selftest\\.[cm]?[jt]s$/i;"
+  },
+  {
+   "id": "Z-T5",
+   "description": "the fake- prefix is not anchored (my-fake-tool.mjs counts as test support)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const TEST_FILE = /\\.(?:test|spec)\\.[cm]?[jt]s$|-selftest\\.[cm]?[jt]s$|^fake-/i;",
+   "new": "const TEST_FILE = /\\.(?:test|spec)\\.[cm]?[jt]s$|-selftest\\.[cm]?[jt]s$|fake-/i;"
+  },
+  {
+   "id": "Z-T6",
+   "description": "bare selftest.mjs counts as test support (the dash is dropped)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const TEST_FILE = /\\.(?:test|spec)\\.[cm]?[jt]s$|-selftest\\.[cm]?[jt]s$|^fake-/i;",
+   "new": "const TEST_FILE = /\\.(?:test|spec)\\.[cm]?[jt]s$|selftest\\.[cm]?[jt]s$|^fake-/i;"
+  },
+  {
+   "id": "Z-T7",
+   "description": "selftest rule loses the c/m prefix",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const TEST_FILE = /\\.(?:test|spec)\\.[cm]?[jt]s$|-selftest\\.[cm]?[jt]s$|^fake-/i;",
+   "new": "const TEST_FILE = /\\.(?:test|spec)\\.[cm]?[jt]s$|-selftest\\.[jt]s$|^fake-/i;"
+  },
+  {
+   "id": "Z-T8",
+   "description": "selftest rule recognises only .ts",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const TEST_FILE = /\\.(?:test|spec)\\.[cm]?[jt]s$|-selftest\\.[cm]?[jt]s$|^fake-/i;",
+   "new": "const TEST_FILE = /\\.(?:test|spec)\\.[cm]?[jt]s$|-selftest\\.[cm]?ts$|^fake-/i;"
+  },
+  {
+   "id": "Z-P1",
+   "description": "the test-support rule is applied to the whole path instead of the file name (fake- never matches)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "!isTestSupportName(segs[segs.length - 1]);",
+   "new": "!isTestSupportName(file);"
+  },
+  {
+   "id": "Z-P2",
+   "description": "caller path segments are compared case sensitively",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "EXCLUDED_DIRS.has(sg.toLowerCase())",
+   "new": "EXCLUDED_DIRS.has(sg)"
+  },
+  {
+   "id": "Z-P3",
+   "description": "walked directory names are compared case sensitively",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "EXCLUDED_DIRS.has(e.name.toLowerCase())",
+   "new": "EXCLUDED_DIRS.has(e.name)"
+  },
+  {
+   "id": "Z-P4",
+   "description": "no file is test support",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const isTestSupportName = (name: string) => TEST_FILE.test(name);",
+   "new": "const isTestSupportName = (name: string) => false;"
+  },
+  {
+   "id": "Z-L1a",
+   "description": "export name boundary falls back to ASCII (runGitleaksé declares runGitleaks)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(?![\\\\p{L}\\\\p{N}_$])`, \"mu\").test(v.code)",
+   "new": "(?![\\\\w$])`, \"m\").test(v.code)"
+  },
+  {
+   "id": "Z-L1b",
+   "description": "class name boundary falls back to ASCII (class Kü is class K)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(?![\\\\p{L}\\\\p{N}_$])`, \"mu\").exec(code)",
+   "new": "(?![\\\\w$])`, \"m\").exec(code)"
+  },
+  {
+   "id": "Z-L1e1",
+   "description": "export boundary no longer rejects a letter after the name",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(?![\\\\p{L}\\\\p{N}_$])`, \"mu\").test(v.code)",
+   "new": "(?![\\\\p{N}_$])`, \"mu\").test(v.code)"
+  },
+  {
+   "id": "Z-L1e2",
+   "description": "export boundary no longer rejects a number after the name",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(?![\\\\p{L}\\\\p{N}_$])`, \"mu\").test(v.code)",
+   "new": "(?![\\\\p{L}_$])`, \"mu\").test(v.code)"
+  },
+  {
+   "id": "Z-L1e3",
+   "description": "export boundary no longer rejects an underscore after the name",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(?![\\\\p{L}\\\\p{N}_$])`, \"mu\").test(v.code)",
+   "new": "(?![\\\\p{L}\\\\p{N}$])`, \"mu\").test(v.code)"
+  },
+  {
+   "id": "Z-L1e4",
+   "description": "export boundary no longer rejects a dollar sign after the name",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(?![\\\\p{L}\\\\p{N}_$])`, \"mu\").test(v.code)",
+   "new": "(?![\\\\p{L}\\\\p{N}_])`, \"mu\").test(v.code)"
+  },
+  {
+   "id": "Z-L1c1",
+   "description": "class boundary no longer rejects a letter after the name",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(?![\\\\p{L}\\\\p{N}_$])`, \"mu\").exec(code)",
+   "new": "(?![\\\\p{N}_$])`, \"mu\").exec(code)"
+  },
+  {
+   "id": "Z-L1c2",
+   "description": "class boundary no longer rejects a number after the name",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(?![\\\\p{L}\\\\p{N}_$])`, \"mu\").exec(code)",
+   "new": "(?![\\\\p{L}_$])`, \"mu\").exec(code)"
+  },
+  {
+   "id": "Z-L1c3",
+   "description": "class boundary no longer rejects an underscore after the name",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(?![\\\\p{L}\\\\p{N}_$])`, \"mu\").exec(code)",
+   "new": "(?![\\\\p{L}\\\\p{N}$])`, \"mu\").exec(code)"
+  },
+  {
+   "id": "Z-L1c4",
+   "description": "class boundary no longer rejects a dollar sign after the name",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(?![\\\\p{L}\\\\p{N}_$])`, \"mu\").exec(code)",
+   "new": "(?![\\\\p{L}\\\\p{N}_])`, \"mu\").exec(code)"
+  },
+  {
+   "id": "Z-L1e5",
+   "description": "export name boundary uses ASCII digits only",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(?![\\\\p{L}\\\\p{N}_$])`, \"mu\").test(v.code)",
+   "new": "(?![\\\\p{L}0-9_$])`, \"mu\").test(v.code)"
+  },
+  {
+   "id": "Z-L1c5",
+   "description": "class name boundary uses ASCII digits only",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(?![\\\\p{L}\\\\p{N}_$])`, \"mu\").exec(code)",
+   "new": "(?![\\\\p{L}0-9_$])`, \"mu\").exec(code)"
+  },
+  {
+   "id": "Z-H1",
+   "description": "abstract class headers are not recognised",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "^[ \\\\t]*(?:export\\\\s+(?:default\\\\s+)?)?(?:declare\\\\s+)?(?:abstract\\\\s+)?class\\\\s+",
+   "new": "^[ \\\\t]*(?:export\\\\s+(?:default\\\\s+)?)?(?:declare\\\\s+)?class\\\\s+"
+  },
+  {
+   "id": "Z-H2",
+   "description": "declare class headers are not recognised",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "^[ \\\\t]*(?:export\\\\s+(?:default\\\\s+)?)?(?:declare\\\\s+)?(?:abstract\\\\s+)?class\\\\s+",
+   "new": "^[ \\\\t]*(?:export\\\\s+(?:default\\\\s+)?)?(?:abstract\\\\s+)?class\\\\s+"
+  },
+  {
+   "id": "Z-H3",
+   "description": "export default class headers are not recognised",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "^[ \\\\t]*(?:export\\\\s+(?:default\\\\s+)?)?(?:declare\\\\s+)?(?:abstract\\\\s+)?class\\\\s+",
+   "new": "^[ \\\\t]*(?:export\\\\s+)?(?:declare\\\\s+)?(?:abstract\\\\s+)?class\\\\s+"
+  },
+  {
+   "id": "Z-H4",
+   "description": "export class headers are not recognised",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "^[ \\\\t]*(?:export\\\\s+(?:default\\\\s+)?)?(?:declare\\\\s+)?(?:abstract\\\\s+)?class\\\\s+",
+   "new": "^[ \\\\t]*(?:declare\\\\s+)?(?:abstract\\\\s+)?class\\\\s+"
+  },
+  {
+   "id": "Z-H5",
+   "description": "indented class headers are not recognised",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "^[ \\\\t]*(?:export\\\\s+(?:default\\\\s+)?)?(?:declare\\\\s+)?(?:abstract\\\\s+)?class\\\\s+",
+   "new": "^(?:export\\\\s+(?:default\\\\s+)?)?(?:declare\\\\s+)?(?:abstract\\\\s+)?class\\\\s+"
+  },
+  {
+   "id": "D7",
+   "description": "digits no longer end an operand (86400/3600 starts a regex)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const IDENT_CHAR = /[\\p{L}\\p{N}_$]/u;",
+   "new": "const IDENT_CHAR = /[\\p{L}_$]/u;"
+  },
+  {
+   "id": "Z-I1",
+   "description": "letters no longer end an operand",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const IDENT_CHAR = /[\\p{L}\\p{N}_$]/u;",
+   "new": "const IDENT_CHAR = /[\\p{N}_$]/u;"
+  },
+  {
+   "id": "Z-I2",
+   "description": "underscore no longer ends an operand",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const IDENT_CHAR = /[\\p{L}\\p{N}_$]/u;",
+   "new": "const IDENT_CHAR = /[\\p{L}\\p{N}$]/u;"
+  },
+  {
+   "id": "Z-I3",
+   "description": "dollar sign no longer ends an operand",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const IDENT_CHAR = /[\\p{L}\\p{N}_$]/u;",
+   "new": "const IDENT_CHAR = /[\\p{L}\\p{N}_]/u;"
+  },
+  {
+   "id": "Z-I4",
+   "description": "only ASCII digits end an operand",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const IDENT_CHAR = /[\\p{L}\\p{N}_$]/u;",
+   "new": "const IDENT_CHAR = /[\\p{L}0-9_$]/u;"
+  },
+  {
+   "id": "R1-N13b",
+   "description": "token start boundary ignores a preceding underscore (_runGitleaks( verifies)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\"(?<![\\\\p{L}\\\\p{N}_$])\" : \"\"",
+   "new": "\"(?<![\\\\p{L}\\\\p{N}$])\" : \"\""
+  },
+  {
+   "id": "R1-N13c",
+   "description": "token start boundary ignores a preceding dollar sign ($runGitleaks( verifies)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\"(?<![\\\\p{L}\\\\p{N}_$])\" : \"\"",
+   "new": "\"(?<![\\\\p{L}\\\\p{N}_])\" : \"\""
+  },
+  {
+   "id": "R1-N13d",
+   "description": "token start boundary ignores a preceding number (9runGitleaks( verifies)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\"(?<![\\\\p{L}\\\\p{N}_$])\" : \"\"",
+   "new": "\"(?<![\\\\p{L}_$])\" : \"\""
+  },
+  {
+   "id": "R1-N13e",
+   "description": "token start boundary ignores a preceding letter",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\"(?<![\\\\p{L}\\\\p{N}_$])\" : \"\"",
+   "new": "\"(?<![\\\\p{N}_$])\" : \"\""
+  },
+  {
+   "id": "R1-N13f",
+   "description": "token start boundary knows only ASCII digits",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\"(?<![\\\\p{L}\\\\p{N}_$])\" : \"\"",
+   "new": "\"(?<![\\\\p{L}0-9_$])\" : \"\""
+  },
+  {
+   "id": "R1-N13g",
+   "description": "token start boundary knows only ASCII letters",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\"(?<![\\\\p{L}\\\\p{N}_$])\" : \"\"",
+   "new": "\"(?<![a-zA-Z\\\\p{N}_$])\" : \"\""
+  },
+  {
+   "id": "R1-N28b",
+   "description": "token end boundary ignores a following number (_electron2 matches _electron)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\"(?![\\\\p{L}\\\\p{N}_$])\" : \"\"",
+   "new": "\"(?![\\\\p{L}_$])\" : \"\""
+  },
+  {
+   "id": "R1-N28c",
+   "description": "token end boundary ignores a following underscore",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\"(?![\\\\p{L}\\\\p{N}_$])\" : \"\"",
+   "new": "\"(?![\\\\p{L}\\\\p{N}$])\" : \"\""
+  },
+  {
+   "id": "R1-N28d",
+   "description": "token end boundary ignores a following dollar sign",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\"(?![\\\\p{L}\\\\p{N}_$])\" : \"\"",
+   "new": "\"(?![\\\\p{L}\\\\p{N}_])\" : \"\""
+  },
+  {
+   "id": "R1-N28e",
+   "description": "token end boundary ignores a following letter",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\"(?![\\\\p{L}\\\\p{N}_$])\" : \"\"",
+   "new": "\"(?![\\\\p{N}_$])\" : \"\""
+  },
+  {
+   "id": "R1-N28f",
+   "description": "token end boundary knows only ASCII digits",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\"(?![\\\\p{L}\\\\p{N}_$])\" : \"\"",
+   "new": "\"(?![\\\\p{L}0-9_$])\" : \"\""
+  },
+  {
+   "id": "R1-N28g",
+   "description": "token end boundary knows only ASCII letters",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\"(?![\\\\p{L}\\\\p{N}_$])\" : \"\"",
+   "new": "\"(?![a-zA-Z\\\\p{N}_$])\" : \"\""
+  },
+  {
+   "id": "Z-C01",
+   "description": "member continuation rule no longer treats '=' as a continuation",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
+   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+  },
+  {
+   "id": "Z-C02",
+   "description": "member continuation rule no longer treats '(' as a continuation",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
+   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+  },
+  {
+   "id": "Z-C03",
+   "description": "member continuation rule no longer treats ',' as a continuation",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
+   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=([?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+  },
+  {
+   "id": "Z-C04",
+   "description": "member continuation rule no longer treats '[' as a continuation",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
+   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+  },
+  {
+   "id": "Z-C05",
+   "description": "member continuation rule no longer treats '?' as a continuation",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
+   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+  },
+  {
+   "id": "Z-C06",
+   "description": "member continuation rule no longer treats ':' as a continuation",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
+   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+  },
+  {
+   "id": "Z-C07",
+   "description": "member continuation rule no longer treats '*' as a continuation",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
+   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+  },
+  {
+   "id": "Z-C08",
+   "description": "member continuation rule no longer treats '/' as a continuation",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
+   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+  },
+  {
+   "id": "Z-C09",
+   "description": "member continuation rule no longer treats '%' as a continuation",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
+   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+  },
+  {
+   "id": "Z-C10",
+   "description": "member continuation rule no longer treats '&' as a continuation",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
+   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+  },
+  {
+   "id": "Z-C11",
+   "description": "member continuation rule no longer treats '|' as a continuation",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
+   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+  },
+  {
+   "id": "Z-C12",
+   "description": "member continuation rule no longer treats '^' as a continuation",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
+   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+  },
+  {
+   "id": "Z-C13",
+   "description": "member continuation rule no longer treats '.' as a continuation",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
+   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+  },
+  {
+   "id": "Z-C14",
+   "description": "member continuation rule no longer treats '<' as a continuation",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
+   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+  },
+  {
+   "id": "Z-C16",
+   "description": "a doubled +/- (postfix ++/--) is still a continuation",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
+   "new": "const continues = ((p === \"+\" || p === \"-\") ? true : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+  },
+  {
+   "id": "Z-C17",
+   "description": "a lone +/- is not a continuation",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
+   "new": "const continues = ((p === \"+\" || p === \"-\") ? false : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+  },
+  {
+   "id": "Z-C18",
+   "description": "a minus is not a continuation",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
+   "new": "const continues = ((p === \"+\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+  },
+  {
+   "id": "Z-C19",
+   "description": "a plus is not a continuation",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
+   "new": "const continues = ((p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");"
+  },
+  {
+   "id": "Z-C20",
+   "description": "=> is not a continuation",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
+   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p));"
+  },
+  {
+   "id": "Z-C21",
+   "description": "every > is a continuation (generic type ends)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\" && top[k - 1] === \"=\");",
+   "new": "const continues = ((p === \"+\" || p === \"-\") ? top[k - 1] !== p : \"=(,[?:*/%&|^.<\".includes(p)) || (p === \">\");"
+  },
+  {
+   "id": "Z-C22",
+   "description": "the first member of a class body is rejected",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (k < 0) return true;\n    const p = top[k];",
+   "new": "if (k < 0) return false;\n    const p = top[k];"
+  },
+  {
+   "id": "Z-D1",
+   "description": "a lone + or - ends an operand (x + /re/ is a division)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if ((p === \"+\" || p === \"-\") && code[k - 1] === p) return false;",
+   "new": "if (p === \"+\" || p === \"-\") return false;"
+  },
+  {
+   "id": "Z-D2",
+   "description": ")! is not a TS non-null (x)! / y starts a regex",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": " || code[k - 1] === \")\" || code[k - 1] === \"]\"))",
+   "new": " || code[k - 1] === \"]\"))"
+  },
+  {
+   "id": "Z-D3",
+   "description": "]! is not a TS non-null (a[0]! / y starts a regex)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": " || code[k - 1] === \")\" || code[k - 1] === \"]\"))",
+   "new": " || code[k - 1] === \")\"))"
+  },
+  {
+   "id": "Z-D4",
+   "description": "whitespace before a dot is not skipped (a .return / y is the keyword)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "while (q >= 0 && /\\s/.test(code[q])) q--;",
    "new": ""
   }
  ]
