@@ -2445,6 +2445,43 @@ describe("LANE-B run readiness", () => {
     }
   });
 
+  describe.skipIf(process.platform === "win32")("readiness REPOSITORY with a broken git (fake git on PATH; the probe is bounded)", () => {
+    const withFakeGit = async (script: string | null, fn: (dir: string) => Promise<void>) => {
+      const bin = fs.mkdtempSync(path.join(tmp, "readiness-fakegit-")), oldPath = process.env.PATH;
+      if (script !== null) { fs.writeFileSync(path.join(bin, "git"), script, {mode: 0o755}); }
+      process.env.PATH = bin;
+      try { await fn(bin); } finally { process.env.PATH = oldPath; fs.rmSync(bin, {recursive: true, force: true}); }
+    };
+    const check = async (name: string) => {
+      const {app, store} = await mk(); const dir = path.join(tmp, name); fs.mkdirSync(dir, {recursive: true});
+      const p = proj(store, {repository: {path: dir}}); msn(store, p.projectId);
+      const t0 = Date.now(), r = await rd(app, p.projectId);
+      return {c: by(r).REPOSITORY, ready: r.json().readiness.ready, ms: Date.now() - t0, body: r.body};
+    };
+    it("a MISSING git binary is BLOCKED with the runner's reason, never OK", async () => {
+      await withFakeGit(null, async () => {
+        const {c, ready} = await check("readiness-nogit");
+        expect([c.state, c.reason, c.nextAction, ready]).toEqual(["BLOCKED", "REPOSITORY_HEAD_UNRESOLVED", "CONFIGURE_REPOSITORY", false]);
+      });
+    });
+    it("git refusing the folder ('detected dubious ownership', exit 128) is BLOCKED with the runner's reason, never OK", async () => {
+      await withFakeGit("#!/bin/sh\necho 'fatal: detected dubious ownership in repository' >&2\nexit 128\n", async () => {
+        const {c, ready, body} = await check("readiness-dubious");
+        expect([c.state, c.reason, ready]).toEqual(["BLOCKED", "REPOSITORY_HEAD_UNRESOLVED", false]);
+        expect(body).not.toContain("dubious");
+      });
+    });
+    it("a HANGING git ends in UNKNOWN within the 3 s bound (READINESS_REPO_PROBE_MS), the run is not ready, no OK", async () => {
+      const {READINESS_REPO_PROBE_MS} = await import("../core/workos/readiness.js");
+      expect(READINESS_REPO_PROBE_MS).toBe(3000);
+      await withFakeGit("#!/bin/sh\nexec /bin/sleep 30\n", async () => {
+        const {c, ready, ms} = await check("readiness-hang");
+        expect([c.state, c.reason, ready]).toEqual(["UNKNOWN", "SOURCE_UNREADABLE", false]);
+        expect(ms).toBeLessThan(READINESS_REPO_PROBE_MS + 1500);
+      });
+    });
+  });
+
   it("flow testCommand follows mission-over-project: a command on either level alone is CONFIGURED, neither is MISSING", async () => {
     const {app, store} = await mk();
     void app;
@@ -2455,6 +2492,7 @@ describe("LANE-B run readiness", () => {
     expect(flag({}, {})).toBe("MISSING");
   });
 
+  // //TR: Bu durum eskiden BİLİNEN SINIR olarak sabitlenmişti (düz klasör readiness OK, runner sonra REPOSITORY_HEAD_UNRESOLVED ile BLOCK). runner.ts:146 readiness.ts'in repositoryHead çağıracağını söylüyordu; B-NEXT-1 bunu uyguladı, beklenti kasıtlı olarak düzeltildi (girdi aynı).
   it("an existing directory that is NOT a git repository is BLOCKED with the runner's own HEAD reason (was the pinned KNOWN LIMIT: it read OK and the runner later BLOCKed it)", async () => {
     const {app, store} = await mk();
     const dir = path.join(tmp, "readiness-not-git"); fs.mkdirSync(dir, {recursive: true});

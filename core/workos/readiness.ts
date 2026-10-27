@@ -19,13 +19,16 @@ const ok = (id: ReadinessCheckId, blocking = true): ReadinessCheck => ({id, stat
 const bad = (id: ReadinessCheckId, reason: string, nextAction: string, blocking = true): ReadinessCheck => ({id, state: "BLOCKED", blocking, reason, nextAction});
 const unknown = (id: ReadinessCheckId, blocking = true): ReadinessCheck => ({id, state: "UNKNOWN", blocking, reason: "SOURCE_UNREADABLE", nextAction: null});
 
-// runner.ts ile AYNI saf fonksiyonlar (repositoryPrecondition, ardından repositoryHead: depo kökü ve HEAD kararı, #218); runner WORKSPACE adımı aynı kararla BLOCK eder, readiness artık "OK" deyip sonra BLOCK etmez. Yol veya URL asla döndürülmez. Sınırlı sorgu: 3 s.
+// runner.ts ile AYNI saf fonksiyonlar (repositoryPrecondition, ardından repositoryHead: depo kökü ve HEAD kararı, #218); runner WORKSPACE adımı aynı kararla BLOCK eder, readiness artık "OK" deyip sonra BLOCK etmez. Yol veya URL asla döndürülmez. Git yalnız repositoryHead'in yalıtılmış (hook/config/env izole, salt-okunur rev-parse) çağrılarıyla çalışır. Sorgunun TOPLAM süresi READINESS_REPO_PROBE_MS ile sınırlıdır; süre dolarsa (takılan git) sonuç BLOCKED değil UNKNOWN'dur (belirlenemedi); hızlı başarısızlık (git yok, güvenli olmayan sahiplik, depo değil) runner'ın kendi gerekçesiyle BLOCKED kalır.
+export const READINESS_REPO_PROBE_MS = 3000;
 function repositoryCheck(project: Project, dataDir: string): ReadinessCheck {
   try {
     const r = repositoryPrecondition(project, dataDir);
     if (!r.ok) return bad("REPOSITORY", r.reason, "CONFIGURE_REPOSITORY");
-    const h = repositoryHead(r.src, {timeoutMs: 3000});
-    return h.ok ? ok("REPOSITORY") : bad("REPOSITORY", h.reason, "CONFIGURE_REPOSITORY");
+    const t0 = Date.now();
+    const h = repositoryHead(r.src, {timeoutMs: READINESS_REPO_PROBE_MS});
+    if (h.ok) return ok("REPOSITORY");
+    return Date.now() - t0 >= READINESS_REPO_PROBE_MS - 100 ? unknown("REPOSITORY") : bad("REPOSITORY", h.reason, "CONFIGURE_REPOSITORY");
   } catch { return unknown("REPOSITORY"); }
 }
 
