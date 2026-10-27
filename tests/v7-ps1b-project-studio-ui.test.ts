@@ -3239,6 +3239,17 @@ describe("LANE-A A-UI125-1 import success shows the agent configuration quaranti
     }
   });
 
+  it("A-ANALYSIS-L10N (#283 LOW): U+1D159 MUSICAL SYMBOL NULL NOTEHEAD is HIDDEN like U+2800 (it renders blank); its visible neighbours stay listed", async () => {
+    const blank = ".claude/settings" + cp(0x1d159) + ".json";
+    expect(await undisplayable(blank)).toEqual({state: "QUARANTINED", count: 2, undisplayable: 1, paths: ["CLAUDE.md"]});
+    expect(await mapQ([fileOf("CLAUDE.md", {pattern: "p" + cp(0x1d159) + "q"})])).toEqual({state: "UNKNOWN"});
+    expect(await mapQ([fileOf("CLAUDE.md")], {storedUnder: "a" + cp(0x1d159) + "b"})).toEqual({state: "UNKNOWN"});
+    for (const shown of [cp(0x1d158), cp(0x1d15a), cp(0x1d15e), cp(0x1d100)]) {
+      const name = "ok" + shown + "name/CLAUDE.md";
+      expect(await undisplayable(name), shown.codePointAt(0)!.toString(16)).toMatchObject({undisplayable: 0, paths: ["CLAUDE.md", name]});
+    }
+  });
+
   it("A-277-LOWS(c): nine stacked marks of EVERY mark category (Mn, Mc, Me) are hidden, eight are listed, in a path they are counted, in pattern and storedUnder they are UNKNOWN; lone high AND low surrogates (either order) are hidden while a valid astral pair is listed", async () => {
     const stack = (n: number, mark: number) => "a" + cp(...Array(n).fill(mark));
     for (const [label, mark] of [["Mn", 0x301], ["Me", 0x20dd], ["Mc", 0x903]] as const) {
