@@ -42,6 +42,8 @@ export const READINESS_LAYERS=Object.freeze(["DEFINED","PROFILED","KNOWLEDGE_REA
 export const LAYER_STATES=Object.freeze(["TRUE","FALSE","UNKNOWN","NOT_APPLICABLE"]);
 export const MAX_ROLES=5000;
 export const MAX_MISMATCHES=2000;
+export const MAX_REASONS=50;
+const REASON_RE=/^[A-Z][A-Z0-9_]{0,63}$/;
 const LEGACY_STATUS="DEPRECATED_LEGACY_PROJECTION";
 export const READINESS_UNAVAILABLE_CODE="ROLE_READINESS_UNAVAILABLE";
 const AUTHORITIES=Object.freeze(["AUTHORITATIVE_READINESS_MEASUREMENT","NON_AUTHORITATIVE_PROMOTED_STATUS_OVERRIDE"]);
@@ -78,6 +80,20 @@ export function mapReadiness(raw){
   if(i.journal==="ABSENT"&&(running.TRUE!==0||running.FALSE!==0||running.NOT_APPLICABLE!==0||running.UNKNOWN!==den))return bad;
   if(i.journal==="PRESENT"&&running.UNKNOWN!==0)return bad; // //TR: ters yön: günlük VARSA RUNNING ölçülmüş olmalıdır (measured = journal PRESENT)
   if(i.reachableStages==="NOT_SUPPLIED"&&stageWired.TRUE!==0)return bad;
+  // //TR: A2a: sunucunun gönderdiği TOOL_READY neden kodları (reasonCounts.TOOL_READY: kod -> o nedene sahip rol sayısı). Yoksa null (neden bilinmiyor); varsa her sayı 1..(FALSE+UNKNOWN) arasındadır (TRUE bir rolün nedeni olmaz) ve FALSE+UNKNOWN>0 ise en az bir neden vardır; aksi halde TÜM okuma ERROR.
+  let toolReasons=null;
+  if(r.reasonCounts!==undefined){
+    if(!isObj(r.reasonCounts))return bad;
+    const t=r.reasonCounts.TOOL_READY;
+    if(t!==undefined){
+      const tool=layers.find(l=>l.layer==="TOOL_READY"),open=tool.FALSE+tool.UNKNOWN;
+      if(!isObj(t)||Object.keys(t).length>MAX_REASONS)return bad;
+      const list=[];
+      for(const [code,n] of Object.entries(t)){if(!REASON_RE.test(code)||!count(n)||n<1||n>open)return bad;list.push({code,count:n})}
+      if(open>0&&list.length===0)return bad;
+      toolReasons=list.sort((a,b)=>a.code<b.code?-1:a.code>b.code?1:0);
+    }
+  }
   const computedAt=iso(r.computedAt);if(computedAt===null||typeof r.digest!=="string"||!SHA_RE.test(r.digest))return bad;
   if(c.status!==LEGACY_STATUS||c.authority!=="readiness"||typeof c.consistent!=="boolean"||typeof c.runningMeasured!=="boolean"||c.implementedMeaning!=="EXECUTABLE_CODE_PATH_INCLUDES_UNWIRED_STAGES")return bad;
   if(!Array.isArray(c.mismatches)||c.mismatches.length>MAX_MISMATCHES||c.mismatches.some(m=>typeof m!=="string"||m.length>200)||c.consistent!==(c.mismatches.length===0))return bad;
@@ -86,6 +102,6 @@ export function mapReadiness(raw){
   if(c.implementedStageWired!==wired)return bad;
   return {state:"VERIFIED",
     readiness:{authority:r.authority,denominator:den,layers,stageWired,proposedOnly:{source:p.source,profiles:p.profiles,withCandidateSkills:p.withCandidateSkills,withCandidateToolAdapters:p.withCandidateToolAdapters},
-      inputs:{journal:i.journal,adapterReality:i.adapterReality,reachableStages:i.reachableStages},anomalies:r.anomalies,computedAt,digest:r.digest},
+      inputs:{journal:i.journal,adapterReality:i.adapterReality,reachableStages:i.reachableStages},toolReasons,anomalies:r.anomalies,computedAt,digest:r.digest},
     reconciliation:{consistent:c.consistent,mismatchCount:c.mismatches.length,runningMeasured:c.runningMeasured,implementedStageWired:wired}};
 }

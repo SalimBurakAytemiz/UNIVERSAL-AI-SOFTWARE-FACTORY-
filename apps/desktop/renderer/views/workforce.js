@@ -340,7 +340,7 @@ function catalogSection(ctx,catalog,detail,agents){
 }
 
 export async function render(ctx,route){
-  const doc=ctx.doc,[cockpit,agents,runs,catalog,factory,ready,adapters,reality]=await Promise.all([ctx.api.cockpit(),ctx.api.agentCount(),ctx.api.workRuns(),ctx.api.roleCatalog(),ctx.api.rolesStatusSummary(),ctx.api.rolesReadiness(),ctx.api.integrationsAdapters(),ctx.api.adapterReality()]),w=cockpit.data.workforce;
+  const doc=ctx.doc,[cockpit,agents,runs,catalog,factory,ready,adapters]=await Promise.all([ctx.api.cockpit(),ctx.api.agentCount(),ctx.api.workRuns(),ctx.api.roleCatalog(),ctx.api.rolesStatusSummary(),ctx.api.rolesReadiness(),ctx.api.integrationsAdapters()]),w=cockpit.data.workforce;
   // //TR: INT-R3 D-M1-07: kayıtlı rol = kanonik sayı (GET /v1/agents registeredRoles, yoksa cockpit kanonik sayısı); sertifikalı sayı ayrı, eski kayıt yalnız LEGACY_REFERENCE_ONLY notu olarak.
   const registered=agents.registeredRoles!==null?agents.registeredRoles:w.registeredRoles;
   const regBlock=agents.registeredRoles!==null?{state:"VERIFIED",value:agents.registeredRoles}:w;
@@ -361,7 +361,7 @@ export async function render(ctx,route){
     panel(ctx,{titleKey:"workforce.fleet.title",id:"wf-fleet"},fleetBody(ctx,runs)),
     panel(ctx,{titleKey:"workforce.live.title",id:"wf-live"},liveRunsBody(ctx,runs)),
     readinessPanel(ctx,ready),
-    toolsPanel(ctx,{adapters,reality,ready}),
+    toolsPanel(ctx,{adapters,ready}),
     factoryStatusPanel(ctx,factory,ready),
     ...catalogSection(ctx,catalog,detail,agents));
 }
