@@ -1,5 +1,5 @@
 {
- "//TR": "C-PAR03-DIAG-1 (relfx-c3:200 PAR-03 Windows fence tanılaması: store yazı aşamaları, stallProbe boşlukları, fenceTrace, hbDiag) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt `file` içinde TAM 1 kez geçen bir metni değiştirir; docs/lanes/LANE-C-par03-diag-mutants.mjs hepsini tests/v7-relfx-c3-remediation.test.ts içindeki \"C-PAR03-DIAG-1\" testleriyle çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. D1-D27 core/workos/store.ts ölçümü (D28 yoktur: write() yeniden girişli değildir, iç içe çerçeve kodu kaldırıldı), D29-D44 tests/support/par.ts, D45-D55 hbDiag iletisi ve prob başlatma sırasıdır, D56 fenceTrace'in sarmaladığı yöntemi çağırmamasıdır. L1-L37: LOCK_TIMEOUT tanısı (kim tuttu, bekleme, delete-pending şüphesi), tanı metni ve par motorunun stderr çıktısı. Onarım turu 1 (#282, koordinatör 08:45Z): A1-A7 aşama atamasının sızıntıları (journal/snapshot/kilit bırakma/yeniden yükleme yanlış alana yazılır; her biri HEM sanal saat (kesin) testiyle HEM gerçek saat farksal testiyle (600 ms gecikme, tabana göre 0,9 x ve 0,5 x oranları) TEK BAŞINA öldürülür), V1-V8 kilit belgesinin process-lock.mjs geçerlilik kuralıyla INVALID olması, B1-B5 edinme ve zaman aşımının ayrı sayılması (B4/B5: çekişmeli ama BAŞARILI edinmenin bekleme/denemesi), J1-J2 journal aşamasının sınırları (open ve close), K1-K4 edinme hatası haritasının 8 anahtar sınırı; D7/D9/L13 yeni kod konumlarına yeniden yönlendirildi (aynı davranış).",
+ "//TR": "C-PAR03-DIAG-1 (relfx-c3:200 PAR-03 Windows fence tanılaması: store yazı aşamaları, stallProbe boşlukları, fenceTrace, hbDiag) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt `file` içinde TAM 1 kez geçen bir metni değiştirir; docs/lanes/LANE-C-par03-diag-mutants.mjs hepsini tests/v7-relfx-c3-remediation.test.ts içindeki \"C-PAR03-DIAG-1\" testleriyle çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. D1-D27 core/workos/store.ts ölçümü (D28 yoktur: write() yeniden girişli değildir, iç içe çerçeve kodu kaldırıldı), D29-D44 tests/support/par.ts, D45-D55 hbDiag iletisi ve prob başlatma sırasıdır, D56 fenceTrace'in sarmaladığı yöntemi çağırmamasıdır. L1-L37: LOCK_TIMEOUT tanısı (kim tuttu, bekleme, delete-pending şüphesi), tanı metni ve par motorunun stderr çıktısı. Onarım turu 1 (#282, koordinatör 08:45Z): A1-A7 aşama atamasının sızıntıları (journal/snapshot/kilit bırakma/yeniden yükleme yanlış alana yazılır; her biri HEM sanal saat (kesin) testiyle HEM gerçek saat farksal testiyle (600 ms gecikme, tabana göre 0,9 x ve 0,5 x oranları) TEK BAŞINA öldürülür), V1-V8 kilit belgesinin process-lock.mjs geçerlilik kuralıyla INVALID olması, B1-B5 edinme ve zaman aşımının ayrı sayılması (B4/B5: çekişmeli ama BAŞARILI edinmenin bekleme/denemesi), J1-J2 journal aşamasının sınırları (open ve close), K1-K4 edinme hatası haritasının 8 anahtar sınırı; D7/D9/L13 yeni kod konumlarına yeniden yönlendirildi. Tur 2 (koordinatör 09:39Z, Windows PAR-03 yalnız 921 ms döngü gecikmesiyle iki run'ı da fence etti): T1-T7 stallProbe'un HER vuruştaki duvar saati kayması (en büyük |kayma| ve 250 ms eşikli ilk 3 olay), T8-T13 fenceTrace'in tüm izlenen çağrıları kaydeden halkası (sonuç, süre, run, sınır 200), T14-T25 hbDiag'in run başına renewRunLease denemeleri (aralık, son 6, eşleşen yazının kilit beklemesi ve eşleşme penceresi) ve kayma satırı (aynı davranış). Tur 3 (koordinatör incelemesi, SON TEP-1 turu): U1-U5 hbDiag'in halka tamponu eski yazıları attıysa 'unknown' yazması (asla 'yazı değildi' demez), Q1-Q2 renew denemesinin KENDİ yazısı (toplam ve kilit beklemesi), S1-S3 store.lastWrite(), P1-P3 çağrı izinin yazıyı çağrıya bağlaması (eski yazıyı üstlenmez); T19-T23 (eşleşme penceresi) kaldırıldı: eşleşme artık yok, çağrı kendi yazısını taşır; A1-A7 artık üç enjekte yazının MEDYANI ve bir ilgisiz 600 ms durmayı tolere eden gerçek saat testiyle de TEK BAŞINA öldürülür.",
  "mutants": [
   {
    "id": "D1",
@@ -264,8 +264,8 @@
    "id": "D39",
    "description": "fenceTrace swallows the error",
    "file": "tests/support/par.ts",
-   "old": "        throw e;\n      }\n    };",
-   "new": "        return undefined;\n      }\n    };"
+   "old": "        throw e;\n      } finally {",
+   "new": "      } finally {"
   },
   {
    "id": "D40",
@@ -842,6 +842,241 @@
      "new": "    } finally { /* closed after the phase ends */ }\n    const journalEnd = performance.now();\n    fs.closeSync(fd);"
     }
    ]
+  },
+  {
+   "id": "T1",
+   "description": "the maximum drift is signed (a backward step is missed)",
+   "file": "tests/support/par.ts",
+   "old": "if (Math.abs(drift) > Math.abs(maxDrift.driftMs)) maxDrift =",
+   "new": "if (drift > maxDrift.driftMs) maxDrift ="
+  },
+  {
+   "id": "T2",
+   "description": "the maximum drift is never updated",
+   "file": "tests/support/par.ts",
+   "old": "if (Math.abs(drift) > Math.abs(maxDrift.driftMs)) maxDrift =",
+   "new": "if (false) maxDrift ="
+  },
+  {
+   "id": "T3",
+   "description": "the drift event threshold is ten times too high",
+   "file": "tests/support/par.ts",
+   "old": "if (Math.abs(drift) > DRIFT_EVENT_MS && driftEvents.length < 3) driftEvents.push",
+   "new": "if (Math.abs(drift) > 10 * DRIFT_EVENT_MS && driftEvents.length < 3) driftEvents.push"
+  },
+  {
+   "id": "T4",
+   "description": "the drift event threshold is ten times too low",
+   "file": "tests/support/par.ts",
+   "old": "if (Math.abs(drift) > DRIFT_EVENT_MS && driftEvents.length < 3) driftEvents.push",
+   "new": "if (Math.abs(drift) > DRIFT_EVENT_MS / 10 && driftEvents.length < 3) driftEvents.push"
+  },
+  {
+   "id": "T5",
+   "description": "only forward steps are drift events",
+   "file": "tests/support/par.ts",
+   "old": "if (Math.abs(drift) > DRIFT_EVENT_MS && driftEvents.length < 3) driftEvents.push",
+   "new": "if (drift > DRIFT_EVENT_MS && driftEvents.length < 3) driftEvents.push"
+  },
+  {
+   "id": "T6",
+   "description": "the drift events are not capped",
+   "file": "tests/support/par.ts",
+   "old": "if (Math.abs(drift) > DRIFT_EVENT_MS && driftEvents.length < 3) driftEvents.push",
+   "new": "if (Math.abs(drift) > DRIFT_EVENT_MS && driftEvents.length < 100) driftEvents.push"
+  },
+  {
+   "id": "T7",
+   "description": "the drift events are capped at two",
+   "file": "tests/support/par.ts",
+   "old": "if (Math.abs(drift) > DRIFT_EVENT_MS && driftEvents.length < 3) driftEvents.push",
+   "new": "if (Math.abs(drift) > DRIFT_EVENT_MS && driftEvents.length < 2) driftEvents.push"
+  },
+  {
+   "id": "T8",
+   "description": "a failed traced call is recorded as ok",
+   "file": "tests/support/par.ts",
+   "old": "outcome = \"error \" + String((e as {code?: unknown})?.code ?? (e as {name?: unknown})?.name ?? \"?\");",
+   "new": "outcome = \"ok\";"
+  },
+  {
+   "id": "T9",
+   "description": "the traced call duration is always zero",
+   "file": "tests/support/par.ts",
+   "old": "atWall, ms: performance.now() - atPerf, outcome, write:",
+   "new": "atWall, ms: 0, outcome, write:"
+  },
+  {
+   "id": "T10",
+   "description": "the traced call names the wrong run",
+   "file": "tests/support/par.ts",
+   "old": "runId: String(a[0]), atPerf, atWall, ms: performance.now() - atPerf",
+   "new": "runId: String(a[1]), atPerf, atWall, ms: performance.now() - atPerf"
+  },
+  {
+   "id": "T11",
+   "description": "the traced call ring is never trimmed",
+   "file": "tests/support/par.ts",
+   "old": "if (ring.length > TRACE_RING) ring.shift();",
+   "new": "if (false) ring.shift();"
+  },
+  {
+   "id": "T12",
+   "description": "the traced call ring holds 201 calls",
+   "file": "tests/support/par.ts",
+   "old": "export const TRACE_RING = 200;",
+   "new": "export const TRACE_RING = 201;"
+  },
+  {
+   "id": "T13",
+   "description": "failed traced calls are not recorded (only the successful ones)",
+   "file": "tests/support/par.ts",
+   "edits": [
+    {
+     "old": "        ring.push({call: name, runId: String(a[0]), atPerf, atWall, ms: performance.now() - atPerf, outcome, write:",
+     "new": "        if (outcome === \"ok\") ring.push({call: name, runId: String(a[0]), atPerf, atWall, ms: performance.now() - atPerf, outcome, write:"
+    }
+   ]
+  },
+  {
+   "id": "T14",
+   "description": "hbDiag lists every traced call of the run as a renew attempt",
+   "file": "tests/v7-relfx-c3-remediation.test.ts",
+   "old": "r.runId === id && r.call === \"renewRunLease\"",
+   "new": "r.runId === id"
+  },
+  {
+   "id": "T15",
+   "description": "hbDiag measures the interval from the first attempt, not the previous one",
+   "file": "tests/v7-relfx-c3-remediation.test.ts",
+   "old": "r.atPerf - renews[i - 1].atPerf",
+   "new": "r.atPerf - renews[0].atPerf"
+  },
+  {
+   "id": "T16",
+   "description": "hbDiag lists only the last five attempts",
+   "file": "tests/v7-relfx-c3-remediation.test.ts",
+   "old": "renews.slice(-6)",
+   "new": "renews.slice(-5)"
+  },
+  {
+   "id": "T17",
+   "description": "hbDiag lists the last seven attempts",
+   "file": "tests/v7-relfx-c3-remediation.test.ts",
+   "old": "renews.slice(-6)",
+   "new": "renews.slice(-7)"
+  },
+  {
+   "id": "T18",
+   "description": "hbDiag reports the smallest interval as the longest",
+   "file": "tests/v7-relfx-c3-remediation.test.ts",
+   "old": "deltas.reduce((m, d) => Math.max(m, d), 0)",
+   "new": "deltas.reduce((m, d) => Math.min(m, d), 0)"
+  },
+  {
+   "id": "T24",
+   "description": "hbDiag lists only the first drift event",
+   "file": "tests/v7-relfx-c3-remediation.test.ts",
+   "old": "de.map(e =>",
+   "new": "de.slice(0, 1).map(e =>"
+  },
+  {
+   "id": "T25",
+   "description": "hbDiag swaps the perf and wall time of the maximum drift",
+   "file": "tests/v7-relfx-c3-remediation.test.ts",
+   "old": "at perf=${md.atPerf} wall=${md.atWall}",
+   "new": "at perf=${md.atWall} wall=${md.atPerf}"
+  },
+  {
+   "id": "U1",
+   "description": "hbDiag never prints the unknown verdict (an earlier gap is 'NOT a store write' again)",
+   "file": "tests/v7-relfx-c3-remediation.test.ts",
+   "old": "const unknown = dropped > 0 && first !== undefined && g.startPerf < first.startedAtPerf ?",
+   "new": "const unknown = false ?"
+  },
+  {
+   "id": "U2",
+   "description": "hbDiag prints unknown even when the ring dropped nothing",
+   "file": "tests/v7-relfx-c3-remediation.test.ts",
+   "old": "dropped > 0 && first !== undefined && g.startPerf",
+   "new": "first !== undefined && g.startPerf"
+  },
+  {
+   "id": "U3",
+   "description": "hbDiag treats a gap starting exactly at the ring's first record as unknown",
+   "file": "tests/v7-relfx-c3-remediation.test.ts",
+   "old": "g.startPerf < first.startedAtPerf ?",
+   "new": "g.startPerf <= first.startedAtPerf ?"
+  },
+  {
+   "id": "U4",
+   "description": "hbDiag drops the unknown part when the gap also covers listed writes",
+   "file": "tests/v7-relfx-c3-remediation.test.ts",
+   "old": "inside.map(fmt).join(\"; \") + (unknown === \"\" ? \"\" : `; ${unknown}`)",
+   "new": "inside.map(fmt).join(\"; \")"
+  },
+  {
+   "id": "U5",
+   "description": "hbDiag counts every write as dropped",
+   "file": "tests/v7-relfx-c3-remediation.test.ts",
+   "old": "dropped = stats.writes - stats.recent.length;",
+   "new": "dropped = stats.writes;"
+  },
+  {
+   "id": "Q1",
+   "description": "hbDiag swaps the write total and the lock wait of a renew attempt",
+   "file": "tests/v7-relfx-c3-remediation.test.ts",
+   "old": "${Math.round(r.write.totalMs * 10) / 10}ms lock ${r.write.lockWaitMs}/${r.write.lockRetries}",
+   "new": "${r.write.lockWaitMs}ms lock ${Math.round(r.write.totalMs * 10) / 10}/${r.write.lockRetries}"
+  },
+  {
+   "id": "Q2",
+   "description": "hbDiag never shows the write of a renew attempt",
+   "file": "tests/v7-relfx-c3-remediation.test.ts",
+   "old": "r.write === null ? \"no write\" :",
+   "new": "true ? \"no write\" :"
+  },
+  {
+   "id": "S1",
+   "description": "lastWrite hands out the live record",
+   "file": "core/workos/store.ts",
+   "old": "return this.diag.last === null ? null : {...this.diag.last};",
+   "new": "return this.diag.last;"
+  },
+  {
+   "id": "S2",
+   "description": "lastWrite is never updated",
+   "file": "core/workos/store.ts",
+   "old": "d.writes += 1; d.last = t;",
+   "new": "d.writes += 1;"
+  },
+  {
+   "id": "S3",
+   "description": "lastWrite is the slowest write, not the latest",
+   "file": "core/workos/store.ts",
+   "old": "d.writes += 1; d.last = t;",
+   "new": "d.writes += 1; d.last = d.slowest;"
+  },
+  {
+   "id": "P1",
+   "description": "a traced call adopts a write that started before the call (a stale write)",
+   "file": "tests/support/par.ts",
+   "old": "last !== null && last.startedAtPerf >= atPerf - 0.15 ?",
+   "new": "last !== null ?"
+  },
+  {
+   "id": "P2",
+   "description": "a traced call never carries its write",
+   "file": "tests/support/par.ts",
+   "old": "last !== null && last.startedAtPerf >= atPerf - 0.15 ?",
+   "new": "false ?"
+  },
+  {
+   "id": "P3",
+   "description": "a traced call reports the total as the lock wait",
+   "file": "tests/support/par.ts",
+   "old": "lockWaitMs: last.lockWaitMs, lockRetries: last.lockRetries} : null",
+   "new": "lockWaitMs: last.totalMs, lockRetries: last.lockRetries} : null"
   }
  ]
 }

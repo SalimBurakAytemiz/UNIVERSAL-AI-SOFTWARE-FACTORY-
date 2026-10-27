@@ -127,8 +127,10 @@ const clone = <T>(x: T): T => structuredClone(x);
 export class WorkOsStore {
   readonly dataDir: string; readonly journalFile: string; readonly snapshotFile: string; readonly lockFile: string;
   // //TR: C-PAR03-DIAG-1: yalnız ölçüm durumu (bkz. StoreWriteStats); iş mantığı bunlara bağlı DEĞİLDİR.
-  private diag = {writes: 0, lockAcquisitions: 0, lockRetries: 0, lockWaitMsTotal: 0, lockWaitMsMax: 0, lockTimeouts: 0, lastLockTimeout: null as LockTimeoutInfo | null, slowest: null as StoreWriteTiming | null, recent: [] as StoreWriteTiming[]};
+  private diag = {writes: 0, lockAcquisitions: 0, lockRetries: 0, lockWaitMsTotal: 0, lockWaitMsMax: 0, lockTimeouts: 0, lastLockTimeout: null as LockTimeoutInfo | null, slowest: null as StoreWriteTiming | null, last: null as StoreWriteTiming | null, recent: [] as StoreWriteTiming[]};
   private frame: StoreWriteTiming | null = null;
+  // //TR: C-PAR03-DIAG-1 (tur 3): EN SON tamamlanan yazının süreleri (halka tamponundan bağımsız, tek kayıt; kopya). Halka 64 yazıda taşar (PAR-03'te bir tick'te 124 yazı görüldü); çağrı izi (fenceTrace) her çağrıdan hemen sonra bunu okuyup yazıyı çağrıya bağlar, böylece eşleştirme halkanın boyuna bağlı değildir.
+  lastWrite(): StoreWriteTiming | null { return this.diag.last === null ? null : {...this.diag.last}; }
   writeStats(): StoreWriteStats {
     const d = this.diag;
     return {writes: d.writes, lockAcquisitions: d.lockAcquisitions, lockRetries: d.lockRetries, lockWaitMsTotal: ms1(d.lockWaitMsTotal), lockWaitMsMax: ms1(d.lockWaitMsMax), lockTimeouts: d.lockTimeouts, lastLockTimeout: d.lastLockTimeout === null ? null : structuredClone(d.lastLockTimeout), slowest: d.slowest === null ? null : {...d.slowest}, recent: d.recent.map(r => ({...r}))};
@@ -171,7 +173,7 @@ export class WorkOsStore {
   private noteWrite(f: StoreWriteTiming, totalMs: number): void {
     const t: StoreWriteTiming = {type: f.type === "" ? "?" : f.type, startedAtWall: f.startedAtWall, startedAtPerf: ms1(f.startedAtPerf), totalMs: ms1(totalMs), lockWaitMs: ms1(f.lockWaitMs), lockRetries: f.lockRetries, reloadMs: ms1(f.reloadMs), journalMs: ms1(f.journalMs), snapshotMs: ms1(f.snapshotMs), snapshotWrites: f.snapshotWrites, releaseMs: ms1(f.releaseMs)};
     const d = this.diag;
-    d.writes += 1;
+    d.writes += 1; d.last = t;
     if (d.slowest === null || t.totalMs > d.slowest.totalMs) d.slowest = t;
     d.recent.push(t); if (d.recent.length > WRITE_RING) d.recent.shift();
   }

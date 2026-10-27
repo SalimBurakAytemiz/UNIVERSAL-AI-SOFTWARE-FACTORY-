@@ -14,13 +14,13 @@ import crypto from "node:crypto";
 import {disabledTestMarkers, evaluateTestSurface, parseTestRunStreams, parseTestRunSummary} from "../core/workos/test-surface.js";
 import type {NameStatusEntry} from "../core/workos/test-surface.js";
 import type {StoreWriteStats, StoreWriteTiming} from "../core/workos/store.js";
-import type {FenceHit, StallGap} from "./support/par.js";
+import type {DriftEvent, FenceHit, StallGap, TracedCall, TracedWrite} from "./support/par.js";
 import {lockDiagText} from "./support/lock-diag.js";
 import {REPO, T, drive, okScript, rmTmp, runner, setup, startRun, tmpRoot} from "./support/relfx.js";
 import {repositoryHead, repositoryHeadAsync} from "../core/workos/runner.js";
 import {canonicalPath} from "../core/workos/path-guard.js";
 import type {RepositoryHead} from "../core/workos/runner.js";
-import {ENV_POLICY, REPO as PAR_REPO, descendantPids, fenceTrace, git, groupLive, journal, leaseTimeline, parHarness, procAlive, setup as parSetup, slow, sleep, stallProbe, stopWithin, waitUntil, withFinalStop, wrapImplementer} from "./support/par.js";
+import {ENV_POLICY, REPO as PAR_REPO, TRACE_RING, descendantPids, fenceTrace, git, groupLive, journal, leaseTimeline, parHarness, procAlive, setup as parSetup, slow, sleep, stallProbe, stopWithin, waitUntil, withFinalStop, wrapImplementer} from "./support/par.js";
 import cp from "node:child_process";
 import os from "node:os";
 import {EventEmitter} from "node:events";
@@ -177,13 +177,16 @@ describe("LANE-C parallel runs: heartbeat and scheduling (C-PAR-1 PAR-03/05, #21
   // //TR: #224 tur 3 (Windows HB-1, d77d1e4 + coordinator delta review): eşzamansız-lease testlerinin TTL/gecikme çifti BİRLİKTE ölçeklendi (TTL 2 s -> 5 s, gecikme 3 s -> 7 s; oran ve "gecikme > TTL" iddiası aynı; tüm HB-1/PAR-03 mutantları yeni sabitlerle de ÖLÜR). Shard 1'deki fence'in NEDENİ KANITLANMADI (günlükte yalnız fence edilen run kimliği vardı): ölçekleme bir "marj" olduğunu KANITLAMAZ. Başarısızlık iletisi artık fence edilen run'ı, ölçülen en büyük olay döngüsü gecikmesini ve CPU/duvar süresini yazar. Kural: TTL'yi aşan bir gecikme, aksi gösterilmedikçe bir gerilemedir; gecikme TTL'nin altında olduğu hâlde fence olduysa gerçek bir lease boşluğudur.
   const HB_TTL = 5000, HB_BLOCK = 7000;
   // //TR: C-PAR03-DIAG-1: Windows'ta bir sonraki fence ENGELLEYEN AŞAMAYI adlandırmalıdır. Yorum kuralı (düzeltildi): sağlıklı bir run, TEK bir ana iş parçacığı bloğu TTL − TTL/3'e ulaştığında fence edilir (heartbeat TTL/3'te bir çalışır ve süresi dolmuş lease yenilenmez); TTL − TTL/3'ün ALTINDAKİ döngü gecikmesiyle olan fence gerçek bir lease boşluğudur, üstündeki ise engelleyen çağrı adlandırılana kadar bir bloktur. İleti: özet satırı, yorum, en büyük 3 boşluk (başlangıç Date.now/performance.now ve saat kayması), run başına lease olayları (aralık ve gecikme), FENCED'i hangi çağrının fırlattığı ve store yazı süreleri (kilit/yeniden yükleme/journal/snapshot/bırakma) ile boşluklarla çakışan yazılar. Teşhis kodu hata vermez: kendisi başarısız olursa iletide yazılır.
-  const hbDiag = (c: {dataDir: string; store: {engineGetRun(id: string): {status: string; reason?: string | null} | undefined; writeStats(): StoreWriteStats}}, runs: Record<string, string>, fenced: string[], probe: {maxStallMs(): number; cpuMs(): number; wallMs(): number; topGaps(): StallGap[]}, ttl: number, trace?: {hits(): FenceHit[]; calls(): number}): string => {
+  const hbDiag = (c: {dataDir: string; store: {engineGetRun(id: string): {status: string; reason?: string | null} | undefined; writeStats(): StoreWriteStats}}, runs: Record<string, string>, fenced: string[], probe: {maxStallMs(): number; cpuMs(): number; wallMs(): number; topGaps(): StallGap[]; maxDrift?(): DriftEvent; driftEvents?(): DriftEvent[]}, ttl: number, trace?: {hits(): FenceHit[]; calls(): number; ring?(): TracedCall[]}): string => {
     const nameOf = (id: string) => Object.entries(runs).find(([, v]) => v === id)?.[0] ?? id;
     const head = `fenced=${JSON.stringify(fenced.map(nameOf))} maxLoopStallMs=${probe.maxStallMs()} cpuMs=${probe.cpuMs()} wallMs=${probe.wallMs()} ttlMs=${ttl} ${Object.entries(runs).map(([k, id]) => `${k}=${c.store.engineGetRun(id)?.status}/${c.store.engineGetRun(id)?.reason ?? ""}`).join(" ")}`;
     try {
       const hb = Math.max(50, Math.floor(ttl / 3)), limit = Math.round(ttl - ttl / 3), gaps = probe.topGaps(), stats = c.store.writeStats();
       const lines = [head, `interpretation: a fence with a stall below TTL - TTL/3 (${limit} ms) is a real lease gap; a stall at or above it fences a healthy run and must be attributed to a blocking call (maxLoopStallMs=${probe.maxStallMs()} is ${probe.maxStallMs() >= limit ? "AT OR ABOVE" : "BELOW"} ${limit} ms)`];
       lines.push(`top gaps: ${gaps.length === 0 ? "(none)" : gaps.map((g, k) => `#${k + 1} ${g.gapMs}ms start wall=${g.startWall} perf=${g.startPerf} driftMs=${g.driftMs}`).join("; ")}`);
+      // //TR: duvar saati (Date.now, lease bitişinin saati) HER vuruşta ölçülür: en büyük |kayma| ve 250 ms'yi aşan ilk vuruşlar; döngü gecikmesi küçükken iki run da fence edildiyse ilk bakılacak yer burasıdır.
+      const md = probe.maxDrift?.(), de = probe.driftEvents?.() ?? [];
+      lines.push(md === undefined ? "wall clock: (this probe does not measure drift)" : `wall clock: max |drift| ${md.driftMs} ms at perf=${md.atPerf} wall=${md.atWall}; ${de.length === 0 ? "no tick drifted by more than 250 ms" : `ticks beyond 250 ms: ${de.map(e => `${e.driftMs}ms at perf=${e.atPerf} wall=${e.atWall}`).join("; ")}`}`);
       for (const [k, id] of Object.entries(runs)) {
         const ev = leaseTimeline(c.dataDir, id), steps = ev.slice(1).map((e, i) => ({kind: e.kind, interval: e.atMs - ev[i].atMs}));
         const worst = steps.reduce((m, s) => Math.max(m, s.interval), 0);
@@ -191,12 +194,23 @@ describe("LANE-C parallel runs: heartbeat and scheduling (C-PAR-1 PAR-03/05, #21
       }
       const hits = trace?.hits() ?? [];
       lines.push(`FENCED thrown by: ${hits.length === 0 ? "(no traced call threw FENCED)" : hits.map(h => `${h.call}(${nameOf(h.runId)})${h.note === "" ? "" : ` ${h.note}`} perf=${h.atPerf} wall=${h.atWall}`).join("; ")}${trace ? ` [traced store calls: ${trace.calls()}]` : ""}`);
+      // //TR: renewRunLease DENEMELERİ (başarılı ya da değil) run başına: başlangıç, süre, sonuç, eşleşen store yazısının kilit beklemesi/denemesi ve önceki denemeden bu yana geçen süre (+aralık). Fence'i atan denemenin aralığı ~heartbeat ise lease duvar saatiyle bitmiştir, aralık heartbeat'in çok üstündeyse renew HİÇ çağrılmamıştır (zamanlayıcı/heartbeat atlaması).
+      const ring = trace?.ring?.() ?? [];
+      const writeOf = (r: TracedCall) => (r.write === null ? "no write" : `write ${r.write.type} ${Math.round(r.write.totalMs * 10) / 10}ms lock ${r.write.lockWaitMs}/${r.write.lockRetries}`);
+      if (trace && trace.ring === undefined) lines.push("renew attempts: (this trace does not record calls)");
+      for (const [k, id] of Object.entries(runs)) {
+        const renews = ring.filter(r => r.runId === id && r.call === "renewRunLease"), deltas = renews.map((r, i) => (i === 0 ? 0 : r.atPerf - renews[i - 1].atPerf));
+        if (trace?.ring) lines.push(`renew attempts ${k}: n=${renews.length} maxGapMs=${Math.round(deltas.reduce((m, d) => Math.max(m, d), 0))} last=[${renews.slice(-6).map((r, i, all) => `perf=${Math.round(r.atPerf)} ${Math.round(r.ms * 10) / 10}ms ${r.outcome} ${writeOf(r)}${renews.length - all.length + i === 0 ? "" : ` +${Math.round(deltas[renews.length - all.length + i])}ms`}`).join(", ")}]`);
+      }
       const fmt = (w: StoreWriteTiming) => `${w.type} ${w.totalMs}ms@perf=${w.startedAtPerf} (lock ${w.lockWaitMs}/${w.lockRetries} retries, reload ${w.reloadMs}, journal ${w.journalMs}, snapshot ${w.snapshotMs}x${w.snapshotWrites}, release ${w.releaseMs})`;
       lines.push(`store: writes=${stats.writes} lockAcquisitions=${stats.lockAcquisitions} lockRetries=${stats.lockRetries} lockWaitMsTotal=${stats.lockWaitMsTotal} lockWaitMsMax=${stats.lockWaitMsMax} slowest=${stats.slowest ? fmt(stats.slowest) : "none"}`);
       lines.push(lockDiagText(stats));
+      // //TR: Halka tamponu yalnız SON yazıları tutar (WRITE_RING); bir boşluk halkanın ilk kaydından ÖNCE başladıysa ve halka eski yazıları attıysa, o boşlukta yazı olmadığı SÖYLENEMEZ: "bilinmiyor" yazılır (PAR-03'te bir tick'te 124 yazı, halka yalnız son 5,5 sn'yi kapsıyordu).
+      const first = stats.recent[0], dropped = stats.writes - stats.recent.length;
       for (const [k, g] of gaps.entries()) {
         const inside = stats.recent.filter(w => w.startedAtPerf < g.startPerf + g.gapMs && w.startedAtPerf + w.totalMs > g.startPerf);
-        lines.push(`writes overlapping gap #${k + 1}: ${inside.length === 0 ? "(none: the block was NOT a store write)" : inside.map(fmt).join("; ")}`);
+        const unknown = dropped > 0 && first !== undefined && g.startPerf < first.startedAtPerf ? `(unknown: ${dropped} older writes left the ring of ${stats.recent.length}; it starts at perf=${first.startedAtPerf} and this gap started at perf=${g.startPerf})` : "";
+        lines.push(`writes overlapping gap #${k + 1}: ${inside.length === 0 ? (unknown === "" ? "(none: the block was NOT a store write)" : unknown) : inside.map(fmt).join("; ") + (unknown === "" ? "" : `; ${unknown}`)}`);
       }
       return lines.join("\n");
     } catch (e) { return `${head}\n(diagnostics failed: ${e instanceof Error ? e.message : String(e)})`; }
@@ -282,22 +296,34 @@ describe("C-PAR03-DIAG-1: the next Windows PAR-03 failure names the blocking pha
     }
   });
 
-  it("store.writeStats() attributes a slow phase to its own field only, differentially on the real clock: bounds are ratios of the injected delay", { timeout: 60_000 }, () => {
+  it("store.writeStats() attributes a slow phase to its own field only, differentially on the real clock: median of three injected writes, bounds are ratios of the injected delay, one unrelated 600 ms stall is tolerated", { timeout: 120_000 }, () => {
     const c = setup("diag-phases"); const A = c.mkRun("A"); const lease = c.store.acquireRunLease(A.runId, 5000, "diag");
-    const DELAY = 1000, fds = new Set<unknown>();
+    const DELAY = 500, REPS = 3, STALL = 600, fds = new Set<unknown>();
     const busy = (ms: number) => { for (const until = performance.now() + ms; performance.now() < until;) { /* senkron gecikme */ } };
+    const median = (xs: number[]) => [...xs].sort((x, y) => x - y)[Math.floor(xs.length / 2)];
     const write = () => { c.store.renewRunLease(A.runId, lease.leaseId!, 5000, "diag"); return {...c.store.writeStats().recent.at(-1)!}; };
+    // //TR: İlgisiz TEK bir durma: kilit dosyasının oluşturulması (acquire) STALL ms bekler; ilk durumun 2. tekrarında verilir. Gerçek bir sızıntı HER tekrarda görünür, tek durma ise medyanı bozmaz.
+    const stallLockCreate = (ms: number) => { const real = fsx.openSync.bind(fs); const sp = vi.spyOn(fsx, "openSync").mockImplementation((...a: unknown[]) => { if (a[0] === c.store.lockFile && a[1] === "wx") busy(ms); return real(...a); }); return () => sp.mockRestore(); };
     for (const [phase, fn, when] of phaseCases(c)) {
       const base = {totalMs: Infinity, lockWaitMs: Infinity, reloadMs: Infinity, journalMs: Infinity, snapshotMs: Infinity, releaseMs: Infinity};
       for (let i = 0; i < 3; i++) { const b = write(); for (const k of Object.keys(base) as Array<keyof typeof base>) base[k] = Math.min(base[k], b[k]); }
-      const restore = injectDelay(c, fds, fn, when, () => busy(DELAY));
-      let w: StoreWriteTiming;
-      try { w = write(); } finally { restore(); }
-      expect(w.type, phase).toBe("RUN_LEASE");
-      expect(w[phase], phase + " carries at least 0.9 x the injected delay as often as it fires (a busy wait is a floor: load can only add)").toBeGreaterThanOrEqual(0.9 * DELAY * PHASE_TIMES[phase]);
-      expect(w.totalMs, phase + ": the total covers the injected delay").toBeGreaterThanOrEqual(0.9 * DELAY * PHASE_TIMES[phase]);
-      for (const other of PHASES) if (other !== phase) expect(Math.abs(w[other] - base[other]), phase + " delay must not leak into (or be subtracted from) " + other).toBeLessThan(0.5 * DELAY);
-      expect(c.store.writeStats().slowest!.totalMs, phase + ": the slowest write is at least this one").toBeGreaterThanOrEqual(w.totalMs);
+      const growth: Record<string, number[]> = Object.fromEntries(PHASES.map(p => [p, [] as number[]]));
+      for (let rep = 0; rep < REPS; rep++) {
+        const unstall = phase === "reloadMs" && rep === 1 ? stallLockCreate(STALL) : () => {};
+        const restore = injectDelay(c, fds, fn, when, () => busy(DELAY));
+        let w: StoreWriteTiming;
+        try { w = write(); } finally { restore(); unstall(); }
+        expect(w.type, phase).toBe("RUN_LEASE");
+        expect(w[phase], phase + " carries at least 0.9 x the injected delay as often as it fires (a busy wait is a floor: load can only add)").toBeGreaterThanOrEqual(0.9 * DELAY * PHASE_TIMES[phase]);
+        expect(w.totalMs, phase + ": the total covers the injected delay").toBeGreaterThanOrEqual(0.9 * DELAY * PHASE_TIMES[phase]);
+        for (const other of PHASES) if (other !== phase) growth[other].push(w[other] - base[other]);
+      }
+      for (const other of PHASES) if (other !== phase) expect(Math.abs(median(growth[other])), phase + " delay must not leak into (or be subtracted from) " + other + ": median of " + REPS + " writes " + JSON.stringify(growth[other])).toBeLessThan(0.5 * DELAY);
+      if (phase === "reloadMs") {
+        expect(growth.lockWaitMs[1], "the deliberate stall really landed in the lock phase of one repetition").toBeGreaterThanOrEqual(0.9 * STALL);
+        expect(Math.max(...growth.lockWaitMs), "a worst-sample check would have failed on that stall, the median does not").toBeGreaterThan(0.5 * DELAY);
+      }
+      expect(c.store.writeStats().slowest!.totalMs, phase + ": the slowest write is at least the delayed one").toBeGreaterThanOrEqual(0.9 * DELAY * PHASE_TIMES[phase]);
     }
   });
 
@@ -578,6 +604,45 @@ describe("C-PAR03-DIAG-1: the next Windows PAR-03 failure names the blocking pha
     expect(p2.topGaps()[0].driftMs).toBeLessThanOrEqual(7200);
   });
 
+  // //TR: Duvar saati (Date.now) kayması HER vuruşta ölçülür, yalnız en büyük 3 boşluğun içinde değil: boşluklar büyük (busy) iken sessiz bir dönemde Date.now ileri/geri atlarsa kayma maxDrift'te ve ilk 3 olayda görünür, en büyük 3 boşluğun kaymasında DEĞİL. Olaylar 250 ms eşiğini aşan ilk 3 vuruştur; en büyük kayma mutlak değerledir (geri atlama da bulunur).
+  it("stallProbe measures the wall-clock drift at every tick: a Date.now step in a quiet period is found although the three biggest gaps are elsewhere, forward and backward, capped at three events", async () => {
+    const busy = (ms: number) => { for (const until = performance.now() + ms; performance.now() < until;) { /* ana iş parçacığı bloklanır */ } };
+    const real = Date.now.bind(Date); let offset = 0;
+    const probe = stallProbe(20);
+    for (const ms of [100, 200, 300]) { busy(ms); await sleep(40); }
+    expect(probe.driftEvents(), "no step yet").toEqual([]);
+    expect(Math.abs(probe.maxDrift().driftMs), "no step yet").toBeLessThan(250);
+    const spy = vi.spyOn(Date, "now").mockImplementation(() => real() + offset);
+    try { offset = 7000; await sleep(150); offset = -3000; await sleep(150); offset = 0; await sleep(60); } finally { spy.mockRestore(); probe.stop(); }
+    const gaps = probe.topGaps(), md = probe.maxDrift(), ev = probe.driftEvents();
+    expect(gaps).toHaveLength(3);
+    expect(gaps.map(g => g.gapMs > 70), "the three biggest gaps are the busy blocks").toEqual([true, true, true]);
+    expect(gaps.every(g => Math.abs(g.driftMs) < 250), "the step is NOT inside the biggest gaps").toBe(true);
+    expect(md.driftMs).toBeGreaterThanOrEqual(6800); expect(md.driftMs).toBeLessThanOrEqual(7200);
+    expect(md.atPerf).toBeGreaterThan(0); expect(Math.abs(md.atWall - real())).toBeLessThan(60_000);
+    expect(ev, "the first three drifted ticks, then no more").toHaveLength(3);
+    expect(ev.every(e => e.driftMs >= 6800 && e.driftMs <= 7200)).toBe(true);
+    expect(ev.map(e => e.atPerf), "in tick order").toEqual([...ev.map(e => e.atPerf)].sort((a, b) => a - b));
+    ev[0].driftMs = -1; md.driftMs = -1; expect(probe.driftEvents()[0].driftMs).toBeGreaterThan(6000); expect(probe.maxDrift().driftMs).toBeGreaterThan(6000); // copies
+    const p2 = stallProbe(20);
+    const spy2 = vi.spyOn(Date, "now").mockImplementation(() => real() - 3000);
+    try { await sleep(120); } finally { spy2.mockRestore(); p2.stop(); }
+    expect(p2.maxDrift().driftMs, "a backward step is found by absolute value").toBeLessThanOrEqual(-2800);
+    expect(p2.maxDrift().driftMs).toBeGreaterThanOrEqual(-3200);
+    expect(p2.driftEvents().length, "a backward step is an event too").toBeGreaterThan(0);
+    expect(p2.driftEvents().every(e => e.driftMs < -250)).toBe(true);
+    const p3 = stallProbe(20); await sleep(100); p3.stop();
+    expect(p3.driftEvents(), "ticks without drift are not events").toEqual([]);
+    // //TR: Eşik 250 ms: 100 ms'lik bir kayma olay DEĞİL (yine de en büyük kayma olarak kaydedilir), 600 ms'lik kayma olaydır.
+    for (const [shift, isEvent] of [[100, false], [600, true]] as const) {
+      const p = stallProbe(20), sp = vi.spyOn(Date, "now").mockImplementation(() => real() + shift);
+      try { await sleep(100); } finally { sp.mockRestore(); p.stop(); }
+      expect(p.maxDrift().driftMs, "a " + shift + " ms step is the maximum drift").toBeGreaterThanOrEqual(shift - 15);
+      expect(p.maxDrift().driftMs).toBeLessThanOrEqual(shift + 15);
+      expect(p.driftEvents().length > 0, "a " + shift + " ms step is " + (isEvent ? "" : "not ") + "an event").toBe(isEvent);
+    }
+  });
+
   // //TR: fenceTrace: FENCED'i fırlatan store çağrısını (ad, run, geçiş/kanıt ayrıntısı, zaman) kaydeder, hatayı aynen yeniden fırlatır, başka hataları ve başarılı çağrıları kaydetmez.
   it("fenceTrace names the store call that threw FENCED, rethrows it unchanged and records nothing else", () => {
     const c = setup("diag-trace"); const A = c.mkRun("A");
@@ -592,6 +657,56 @@ describe("C-PAR03-DIAG-1: the next Windows PAR-03 failure names the blocking pha
     expect(hits.every(h => h.atPerf > 0 && Math.abs(h.atWall - Date.now()) < 60_000)).toBe(true);
     expect(trace.calls()).toBe(4);
     hits.length = 0; expect(trace.hits()).toHaveLength(2); // copy
+    const ring = trace.ring();
+    expect(ring.map(r => [r.call, r.runId, r.outcome])).toEqual([["renewRunLease", A.runId, "error WORKOS_LEASE_FENCED"], ["transitionRun", A.runId, "error WORKOS_LEASE_FENCED"], ["renewRunLease", "run_missing", "error WORKOS_NOT_FOUND"], ["acquireRunLease", A.runId, "ok"]]);
+    expect(ring.every(r => Number.isFinite(r.ms) && r.ms >= 0 && r.atPerf > 0 && Math.abs(r.atWall - Date.now()) < 60_000), "every traced call has a start on both clocks and a duration").toBe(true);
+    expect(ring.every((r, k, all) => k === 0 || r.atPerf >= all[k - 1].atPerf + all[k - 1].ms - 0.5), "calls do not overlap and are in order").toBe(true);
+    expect(ring[3].ms, "the acquire wrote to the journal and took measurable time").toBeGreaterThan(0);
+    ring.length = 0; expect(trace.ring()).toHaveLength(4); // copy
+  });
+
+  // //TR: store.lastWrite() EN SON tamamlanan yazıdır: halka tamponunun (64) boyundan bağımsız, kopyadır, başarısız (FENCED) yazıyı da kapsar; çağrı izi (fenceTrace) her çağrının KENDİ yazısını bununla bağlar ve yazı yapmadan fırlatan bir çağrıya eski bir yazıyı yüklemez.
+  it("store.lastWrite() is the latest write whatever the ring holds, a copy; fenceTrace binds each traced call to its own write and never to a stale one", () => {
+    const c = setup("diag-last"); const A = c.mkRun("A");
+    const lease = c.store.acquireRunLease(A.runId, 5000, "diag");
+    const trace = fenceTrace(c.store);
+    for (let i = 0; i < 70; i++) c.store.renewRunLease(A.runId, lease.leaseId!, 5000, "diag");
+    const stats = c.store.writeStats(), last = c.store.lastWrite()!;
+    expect(stats.writes - stats.recent.length, "the ring dropped older writes").toBeGreaterThan(0);
+    expect(last).toEqual(stats.recent[stats.recent.length - 1]);
+    expect(last.type).toBe("RUN_LEASE");
+    last.totalMs = -1; expect(c.store.lastWrite()!.totalMs).toBeGreaterThanOrEqual(0); // copy
+    const ring = trace.ring(), tail = ring[ring.length - 1];
+    expect(ring).toHaveLength(70);
+    expect(tail.write, "the traced renew carries the write it caused").toEqual({type: "RUN_LEASE", totalMs: stats.recent[stats.recent.length - 1].totalMs, lockWaitMs: stats.recent[stats.recent.length - 1].lockWaitMs, lockRetries: stats.recent[stats.recent.length - 1].lockRetries});
+    expect(ring.every(r => r.write !== null && r.write.type === "RUN_LEASE" && r.write.lockRetries === 0), "every traced renew has its own write").toBe(true);
+    expect(() => c.store.renewRunLease(A.runId, "lse_wrong", 5000, "diag")).toThrow(/FENCED/);
+    const failed = trace.ring().pop()!, failedWrite = c.store.lastWrite()!;
+    expect([failed.outcome, failed.write!.type, failedWrite.type], "a FENCED write is a write too").toEqual(["error WORKOS_LEASE_FENCED", failedWrite.type, failedWrite.type]);
+    expect(failed.write).toEqual({type: failedWrite.type, totalMs: failedWrite.totalMs, lockWaitMs: failedWrite.lockWaitMs, lockRetries: failedWrite.lockRetries});
+    // //TR: Yazı yapmadan fırlatan çağrı eski bir yazıyı üstlenmez: sahte store, çağrıdan ÖNCE başlamış bir "son yazı" bildirir.
+    let lastStart = 1;
+    const calls = Object.fromEntries(["acquireRunLease", "renewRunLease", "takeoverRunLease", "transitionRun", "checkpointRun", "addRunEvidence"].map(n => [n, () => { if (n === "renewRunLease") throw Object.assign(new Error("no write"), {code: "WORKOS_LEASE_FENCED"}); return "ok"; }]));
+    const stub = {...calls, lastWrite: () => ({type: "OLD", startedAtPerf: lastStart, totalMs: 9, lockWaitMs: 8, lockRetries: 7})} as Record<string, (...a: unknown[]) => unknown>;
+    const t2 = fenceTrace(stub);
+    expect(() => stub.renewRunLease("r1")).toThrow(/no write/);
+    lastStart = performance.now() + 50; stub.acquireRunLease("r2");
+    expect(t2.ring().map(r => [r.call, r.runId, r.write])).toEqual([["renewRunLease", "r1", null], ["acquireRunLease", "r2", {type: "OLD", totalMs: 9, lockWaitMs: 8, lockRetries: 7}]]);
+    const plain = Object.fromEntries(Object.keys(calls).map(n => [n, () => "ok"])) as Record<string, (...a: unknown[]) => unknown>;
+    const t3 = fenceTrace(plain); plain.acquireRunLease("r3");
+    expect(t3.ring()[0].write, "a store without lastWrite() yields no write").toBeNull();
+  });
+
+  // //TR: Çağrı halkası TRACE_RING (200) çağrıyla sınırlıdır: en eskiler düşer, en yeniler kalır.
+  it("fenceTrace keeps the last 200 traced calls of any outcome", () => {
+    const c = setup("diag-ring"); const A = c.mkRun("A"); const lease = c.store.acquireRunLease(A.runId, 5000, "t");
+    const trace = fenceTrace(c.store);
+    for (let i = 0; i < TRACE_RING + 5; i++) c.store.renewRunLease(A.runId, lease.leaseId!, 5000, "t");
+    expect(TRACE_RING).toBe(200);
+    expect([trace.calls(), trace.ring().length]).toEqual([TRACE_RING + 5, TRACE_RING]);
+    const ring = trace.ring();
+    expect(ring.every(r => r.call === "renewRunLease" && r.outcome === "ok")).toBe(true);
+    expect(ring[ring.length - 1].atPerf, "the newest call is kept").toBeGreaterThan(ring[0].atPerf);
   });
 
   // //TR: fenceTrace, aynı yöntemi ÖNCEDEN casuslayan bir testle (ör. journal-yazı zinciri) birlikte çalışır: ikisi de çağrıyı görür, önceki casusun davranışı ezilmez (vi.spyOn aynı casusu yeniden kullanıp gerçeklik ezerdi; bu bir regresyondu ve zincir testini kırmıştı).
@@ -621,9 +736,11 @@ describe("C-PAR03-DIAG-1: the next Windows PAR-03 failure names the blocking pha
     const lease = c.store.acquireRunLease(A.runId, 5000, "t");
     const probe = stallProbe(20);
     await sleep(1800); // //TR: kiralama ile yenileme arası heartbeat periyodunu (1666 ms) AŞAR: gecikme > 0 olmalı
+    const blockStart = performance.now();
     for (const until = performance.now() + 250; performance.now() < until;) { if (performance.now() > until - 120) break; }
     c.store.renewRunLease(A.runId, lease.leaseId!, 5000, "t");
     for (const until = performance.now() + 150; performance.now() < until;) { /* blok */ }
+    const blockEnd = performance.now();
     await sleep(60); probe.stop();
     expect(() => c.store.renewRunLease(A.runId, "lse_wrong", 5000, "t")).toThrow(/FENCED/);
     const msg = hbDiag(c, {A: A.runId, B: B.runId}, [A.runId], probe, 5000, trace);
@@ -635,10 +752,16 @@ describe("C-PAR03-DIAG-1: the next Windows PAR-03 failure names the blocking pha
     expect(interval).toBeGreaterThan(1666);
     expect(msg).toContain(`lease A: events=2 last3=[RENEW+${interval}ms(late ${interval - 1666})] lastEvent=RENEW@${new Date(ev[1].atMs).toISOString()} worstIntervalMs=${interval} (heartbeat 1666 ms, TTL 5000 ms)`);
     expect(msg).toContain("lease B: events=0 last3=[] lastEvent=none");
+    expect(msg, "wall clock drift of any tick is printed").toMatch(/wall clock: max \|drift\| -?\d+ ms at perf=\d+ wall=\d+; no tick drifted by more than 250 ms/);
+    expect(msg, "A: the successful renew, then the fenced one with its interval").toMatch(/renew attempts A: n=2 maxGapMs=\d+ last=\[perf=\d+ [\d.]+ms ok write RUN_LEASE [\d.]+ms lock [\d.]+\/0, perf=\d+ [\d.]+ms error WORKOS_LEASE_FENCED write \S+ [\d.]+ms lock [\d.]+\/0 \+\d+ms\]/);
+    expect(msg).toContain("renew attempts B: n=0 maxGapMs=0 last=[]");
     expect(msg).toContain("FENCED thrown by: renewRunLease(A) perf=");
     expect(msg).toContain("[traced store calls: ");
     expect(msg).toMatch(/store: writes=\d+ lockAcquisitions=\d+ lockRetries=0 lockWaitMsTotal=[\d.]+ lockWaitMsMax=[\d.]+ slowest=\S+ [\d.]+ms@perf=[\d.]+ \(lock [\d.]+\/0 retries, reload [\d.]+, journal [\d.]+, snapshot [\d.]+x\d+, release [\d.]+\)/);
-    expect(msg, "some listed gap overlaps the injected RUN_LEASE write (an unrelated runner pause may be gap #1)").toMatch(/writes overlapping gap #\d: RUN_LEASE [\d.]+ms@perf=[\d.]+ \(lock/);
+    // //TR: Enjekte edilen blok, başlangıcı blok penceresinin (önceki zamanlayıcı vuruşu payıyla, 25 ms) İÇİNDE olan boşluktur; sıra numarası #1 varsayılmaz (başka bir koşucu duraklaması daha büyük olabilir), ama o boşluk yine de RUN_LEASE yazısını listelemelidir.
+    const blockGap = probe.topGaps().findIndex(x => x.startPerf >= blockStart - 25 && x.startPerf <= blockEnd);
+    expect(blockGap, "the injected block is one of the three biggest gaps").toBeGreaterThanOrEqual(0);
+    expect(msg, "the gap that starts inside the injected block lists the injected RUN_LEASE write").toMatch(new RegExp(`writes overlapping gap #${blockGap + 1}: RUN_LEASE [\\d.]+ms@perf=[\\d.]+ \\(lock`));
     const stub = (ms: number) => ({maxStallMs: () => ms, cpuMs: () => 0, wallMs: () => 0, topGaps: () => []});
     expect(hbDiag(c, {A: A.runId}, [], stub(4000), 5000)).toContain("is AT OR ABOVE 3333 ms");
     expect(hbDiag(c, {A: A.runId}, [], stub(3000), 5000)).toContain("is BELOW 3333 ms");
@@ -655,6 +778,59 @@ describe("C-PAR03-DIAG-1: the next Windows PAR-03 failure names the blocking pha
     expect(both.match(/(IN_FROM_LEFT|INSIDE|IN_FROM_RIGHT|BEFORE|AFTER)/g)).toEqual(["IN_FROM_LEFT", "INSIDE", "IN_FROM_RIGHT"]);
     const broken = {dataDir: c.dataDir, store: {engineGetRun: (id: string) => c.store.engineGetRun(id), writeStats: () => { throw new Error("boom"); }}};
     expect(hbDiag(broken, {A: A.runId}, [], stub(0), 5000)).toMatch(/\(diagnostics failed: boom\)$/);
+  });
+
+  // //TR: hbDiag, run başına renewRunLease DENEMELERİNİ yazar: başlangıç (perf), süre, sonuç, ÇAĞRININ KENDİ store yazısı (tür, toplam, kilit beklemesi/denemesi; halka tamponundan bağımsız, çağrı izi yazıyı çağrıdan hemen sonra bağlar) ve önceki denemeden bu yana geçen süre; en çok son 6. Yazı yapmayan çağrı "no write" yazar. Duvar saati satırı probun en büyük kaymasını ve ilk olayları, probun kayma ölçmediği (ya da izin çağrı kaydetmediği) durumları ayrı yazar.
+  it("hbDiag lists every renewRunLease attempt per run (start, duration, outcome, its own write with total and lock wait, interval since the previous attempt) and the wall-clock drift of any tick", () => {
+    const c = setup("diag-renew"); const A = c.mkRun("A"), B = c.mkRun("B"), C = c.mkRun("C");
+    const wt = (type: string, totalMs: number, lockWaitMs: number, lockRetries: number): TracedWrite => ({type, totalMs, lockWaitMs, lockRetries});
+    const call = (name: string, runId: string, atPerf: number, ms: number, outcome = "ok", write: TracedWrite | null = null): TracedCall => ({call: name, runId, atPerf, atWall: 0, ms, outcome, write});
+    const ring: TracedCall[] = [
+      call("acquireRunLease", A.runId, 10, 5, "ok", wt("RUN_LEASE", 4, 99, 9)), call("renewRunLease", A.runId, 1000.2, 4.4, "ok", wt("RUN_LEASE", 4, 12.5, 2)), call("renewRunLease", A.runId, 2670.9, 3.1, "ok", wt("RUN_LEASE", 2.94, 0, 0)), call("transitionRun", A.runId, 3000, 2),
+      call("renewRunLease", A.runId, 6200.8, 0.4, "error WORKOS_LEASE_FENCED"), call("renewRunLease", B.runId, 1500, 2, "ok", wt("RUN_LEASE+CHECKPOINT", 1.5, 8.5, 1)),
+      ...Array.from({length: 8}, (_, k) => call("renewRunLease", C.runId, 100 * (k + 1), 1))
+    ];
+    const stats: StoreWriteStats = {writes: 0, lockAcquisitions: 0, lockRetries: 0, lockWaitMsTotal: 0, lockWaitMsMax: 0, lockTimeouts: 0, lastLockTimeout: null, slowest: null, recent: []};
+    const quiet = {maxStallMs: () => 100, cpuMs: () => 0, wallMs: () => 0, topGaps: () => [] as StallGap[]};
+    const mk = (probe: typeof quiet & {maxDrift?: () => DriftEvent; driftEvents?: () => DriftEvent[]}, trace?: {hits(): FenceHit[]; calls(): number; ring?(): TracedCall[]}) => hbDiag({dataDir: c.dataDir, store: {engineGetRun: (id: string) => c.store.engineGetRun(id), writeStats: () => stats}}, {A: A.runId, B: B.runId, C: C.runId}, [], probe, 5000, trace);
+    const full = {...quiet, maxDrift: () => ({atPerf: 4000, atWall: 123, driftMs: -3100}), driftEvents: () => [{atPerf: 3900, atWall: 120, driftMs: -3000}, {atPerf: 3950, atWall: 121, driftMs: 400}]};
+    const msg = mk(full, {hits: () => [], calls: () => ring.length, ring: () => ring});
+    expect(msg).toContain("renew attempts A: n=3 maxGapMs=3530 last=[perf=1000 4.4ms ok write RUN_LEASE 4ms lock 12.5/2, perf=2671 3.1ms ok write RUN_LEASE 2.9ms lock 0/0 +1671ms, perf=6201 0.4ms error WORKOS_LEASE_FENCED no write +3530ms]");
+    expect(msg, "a run with one attempt has no interval").toContain("renew attempts B: n=1 maxGapMs=0 last=[perf=1500 2ms ok write RUN_LEASE+CHECKPOINT 1.5ms lock 8.5/1]");
+    expect(msg, "only the last six of eight attempts are listed; the first listed one still shows its interval").toContain("renew attempts C: n=8 maxGapMs=100 last=[perf=300 1ms ok no write +100ms, perf=400 1ms ok no write +100ms, perf=500 1ms ok no write +100ms, perf=600 1ms ok no write +100ms, perf=700 1ms ok no write +100ms, perf=800 1ms ok no write +100ms]");
+    expect(msg).toContain("wall clock: max |drift| -3100 ms at perf=4000 wall=123; ticks beyond 250 ms: -3000ms at perf=3900 wall=120; 400ms at perf=3950 wall=121");
+    expect(mk({...full, driftEvents: () => []}, {hits: () => [], calls: () => 0, ring: () => []})).toContain("wall clock: max |drift| -3100 ms at perf=4000 wall=123; no tick drifted by more than 250 ms");
+    const noDrift = mk(quiet, {hits: () => [], calls: () => 0, ring: () => []});
+    expect(noDrift).toContain("wall clock: (this probe does not measure drift)");
+    expect(noDrift).toContain("renew attempts A: n=0 maxGapMs=0 last=[]");
+    expect(mk(quiet, {hits: () => [], calls: () => 0})).toContain("renew attempts: (this trace does not record calls)");
+    expect(mk(quiet), "without a trace there are no renew lines").not.toContain("renew attempts");
+  });
+
+  // //TR: Halka tamponu yalnız son 64 yazıyı tutar. Bir boşluk halkanın ilk kaydından ÖNCE başladıysa ve halka eski yazıları attıysa, "yazı değildi" DENEMEZ (PAR-03 örneğinde 124 yazı vardı, halka son 5,5 sn'yi kapsıyordu): "unknown" yazılır. Halka hiç yazı atmadıysa ya da boşluk ilk kayıttan sonra başladıysa eski karar geçerlidir.
+  it("hbDiag never says a gap was NOT a store write when the write ring had already dropped older writes before the gap's start", () => {
+    const c = setup("diag-ring-unknown"); const A = c.mkRun("A");
+    const wr = (type: string, startedAtPerf: number, totalMs: number): StoreWriteTiming => ({type, startedAtWall: 0, startedAtPerf, totalMs, lockWaitMs: 0, lockRetries: 0, reloadMs: 0, journalMs: 0, snapshotMs: 0, snapshotWrites: 0, releaseMs: 0});
+    const statsOf = (recent: StoreWriteTiming[], writes: number): StoreWriteStats => ({writes, lockAcquisitions: writes, lockRetries: 0, lockWaitMsTotal: 0, lockWaitMsMax: 0, lockTimeouts: 0, lastLockTimeout: null, slowest: recent[0] ?? null, recent});
+    const gapAt = (startPerf: number, gapMs = 100) => ({maxStallMs: () => gapMs, cpuMs: () => 0, wallMs: () => 0, topGaps: () => [{gapMs, startPerf, startWall: 5, driftMs: 0}]});
+    const run = (stats: StoreWriteStats, startPerf: number, gapMs = 100) => /writes overlapping gap #1: ([^\n]*)/.exec(hbDiag({dataDir: c.dataDir, store: {engineGetRun: (id: string) => c.store.engineGetRun(id), writeStats: () => stats}}, {A: A.runId}, [], gapAt(startPerf, gapMs), 5000))![1];
+    const ring = [wr("LATE", 12830.6, 20), wr("LATER", 13000, 20)];
+    const dropped = statsOf(ring, 124);
+    const unknown = "(unknown: 122 older writes left the ring of 2; it starts at perf=12830.6 and this gap started at perf=12327)";
+    expect(run(dropped, 12327), "gap starts before the ring and overlaps nothing in it").toBe(unknown);
+    expect(run(dropped, 12327, 600), "gap starts before the ring and also covers its first write: listed, plus the unknown part").toBe("LATE 20ms@perf=12830.6 (lock 0/0 retries, reload 0, journal 0, snapshot 0x0, release 0); (unknown: 122 older writes left the ring of 2; it starts at perf=12830.6 and this gap started at perf=12327)");
+    expect(run(dropped, 12830.6, 5), "a gap that starts exactly at the ring's first record is fully inside the ring: no unknown part").toBe("LATE 20ms@perf=12830.6 (lock 0/0 retries, reload 0, journal 0, snapshot 0x0, release 0)");
+    expect(run(dropped, 12900, 20), "a gap after the first record overlapping nothing is a real 'not a store write'").toBe("(none: the block was NOT a store write)");
+    expect(run(statsOf(ring, 2), 12327), "nothing was dropped: the ring is complete, so an earlier gap is a real 'not a store write'").toBe("(none: the block was NOT a store write)");
+    expect(run(statsOf([], 0), 12327), "no write at all").toBe("(none: the block was NOT a store write)");
+    // //TR: Gerçek store: 70 yazıdan sonra halka 64 kayıtlıdır; ilk kayıttan önce başlayan bir boşluk "unknown" olur.
+    const lease = c.store.acquireRunLease(A.runId, 5000, "diag");
+    for (let i = 0; i < 70; i++) c.store.renewRunLease(A.runId, lease.leaseId!, 5000, "diag");
+    const real = c.store.writeStats(), firstPerf = real.recent[0].startedAtPerf;
+    expect(real.recent).toHaveLength(64);
+    expect(real.writes - real.recent.length, "older writes were dropped").toBeGreaterThanOrEqual(6);
+    const msg = hbDiag(c, {A: A.runId}, [], gapAt(firstPerf - 50, 20), 5000);
+    expect(/writes overlapping gap #1: ([^\n]*)/.exec(msg)![1]).toMatch(new RegExp("^\\(unknown: \\d+ older writes left the ring of 64; it starts at perf=" + String(firstPerf).replace(".", "\\.") + " and this gap started at perf=" + String(firstPerf - 50).replace(".", "\\.") + "\\)$"));
   });
 });
 
