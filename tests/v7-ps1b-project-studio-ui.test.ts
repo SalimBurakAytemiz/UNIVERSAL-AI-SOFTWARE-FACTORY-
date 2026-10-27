@@ -1939,6 +1939,36 @@ describe("LANE-A project intake from an idea (fake DOM)", () => {
       const r = all(byId(unk.shown, "intake-readiness")!).find(n => n.dataset.readyCheck === "REPOSITORY")!;
       expect(text(r)).toContain("BRAND_NEW_REASON (not recognised)"); expect(text(r)).toContain("BRAND_NEW_ACTION (not recognised)");
     });
+    // //TR: A-276-L10N: Lane B (#276) iki yeni hazırlık nedeni kodu üretir; metinleri sabitlenir (en/tr), bilinmeyen kod hâlâ ham + "(not recognised)" ile gösterilir. Delta r1 (#280): HEAD_UNRESOLVED metni bu kodun TÜM nedenlerini söyler (commit yok, Git yok, Git klasörü reddetti, probe reddedildi); NOT_WORKTREE_ROOT metni "projeyi diğer depodan çıkarın" çözümünü de ekler; önceki iki sabit metin buna göre güncellendi.
+    it("shows the two repository-folder reasons from the server (REPOSITORY_HEAD_UNRESOLVED, REPOSITORY_NOT_WORKTREE_ROOT) with their exact en and tr texts, and an unknown code still falls back to the raw code", async () => {
+      const EN: Record<string, string> = {
+        REPOSITORY_HEAD_UNRESOLVED: "Git could not confirm a commit in this folder: it may not be a Git repository with at least one commit, Git may be missing, or Git may have refused the folder (for example because of its ownership). Check the folder and that Git is installed, then pick the project's top-level folder.",
+        REPOSITORY_NOT_WORKTREE_ROOT: "The folder is inside a Git repository but is not its top-level folder. Pick the top-level folder, or move the project out of the other repository."};
+      const TR: Record<string, string> = {
+        REPOSITORY_HEAD_UNRESOLVED: "Git bu klasörde bir commit doğrulayamadı: klasör en az bir commit içeren bir Git deposu olmayabilir, Git kurulu olmayabilir ya da Git klasörü (örneğin sahiplik nedeniyle) reddetmiş olabilir. Klasörü ve Git'in kurulu olduğunu kontrol edin, sonra projenin en üst klasörünü seçin.",
+        REPOSITORY_NOT_WORKTREE_ROOT: "Klasör bir Git deposunun içinde ama deponun en üst klasörü değil. En üst klasörü seçin ya da projeyi diğer depodan çıkarın."};
+      for (const [lang, want] of [["en", EN], ["tr", TR]] as const) {
+        for (const code of Object.keys(want)) {
+          forms.resetAllForms();
+          const odd = okChecks(); odd[2] = chk("REPOSITORY", "BLOCKED", true, code, "CONFIGURE_REPOSITORY");
+          const o = await submitted({lang, rd: readiness({ready: false, verifiable: false}, odd)});
+          const row = all(byId(o.shown, "intake-readiness")!).find(n => n.dataset.readyCheck === "REPOSITORY")!;
+          const reason = all(row).find(n => n.dataset.readyReason === code)!;
+          expect(text(reason), `${lang} ${code}`).toBe(want[code]);
+          expect(text(reason), `${lang} ${code}`).not.toContain(code);
+        }
+      }
+      const en = (await load(rend, "locales", "en.js")).default as Record<string, string>, tr = (await load(rend, "locales", "tr.js")).default as Record<string, string>;
+      for (const code of Object.keys(EN)) { expect(en[`runready.reason.${code}`]).toBe(EN[code]); expect(tr[`runready.reason.${code}`]).toBe(TR[code]); }
+      forms.resetAllForms();
+      const odd = okChecks(); odd[2] = chk("REPOSITORY", "BLOCKED", true, "REPOSITORY_FUTURE_REASON", "CONFIGURE_REPOSITORY");
+      const unk = await submitted({rd: readiness({ready: false, verifiable: false}, odd)});
+      expect(text(all(byId(unk.shown, "intake-readiness")!).find(n => n.dataset.readyReason === "REPOSITORY_FUTURE_REASON")!)).toBe("REPOSITORY_FUTURE_REASON (not recognised)");
+      // //TR: #280 LOW(b): Türkçe bilinmeyen-kod geri dönüşü de sabitlenir (ham kod + "(tanınmadı)").
+      forms.resetAllForms();
+      const unkTr = await submitted({lang: "tr", rd: readiness({ready: false, verifiable: false}, odd)});
+      expect(text(all(byId(unkTr.shown, "intake-readiness")!).find(n => n.dataset.readyReason === "REPOSITORY_FUTURE_REASON")!)).toBe("REPOSITORY_FUTURE_REASON (tanınmadı)");
+    });
     it("offers a button only for next steps that have a real destination, and it goes to the readiness mission, not a guessed one", async () => {
       forms.resetAllForms();
       const MSN2 = "msn_" + "dd".repeat(12);
@@ -3206,6 +3236,17 @@ describe("LANE-A A-UI125-1 import success shows the agent configuration quaranti
     for (const shown of [cp(0x2801), cp(0x28ff), cp(0x27ff), cp(0x2801, 0x2802)]) {
       const name = "ok" + shown + "name/CLAUDE.md";
       expect(await undisplayable(name), JSON.stringify(shown.codePointAt(0))).toMatchObject({undisplayable: 0, paths: ["CLAUDE.md", name]});
+    }
+  });
+
+  it("A-ANALYSIS-L10N (#283 LOW): U+1D159 MUSICAL SYMBOL NULL NOTEHEAD is HIDDEN like U+2800 (it renders blank); its visible neighbours stay listed", async () => {
+    const blank = ".claude/settings" + cp(0x1d159) + ".json";
+    expect(await undisplayable(blank)).toEqual({state: "QUARANTINED", count: 2, undisplayable: 1, paths: ["CLAUDE.md"]});
+    expect(await mapQ([fileOf("CLAUDE.md", {pattern: "p" + cp(0x1d159) + "q"})])).toEqual({state: "UNKNOWN"});
+    expect(await mapQ([fileOf("CLAUDE.md")], {storedUnder: "a" + cp(0x1d159) + "b"})).toEqual({state: "UNKNOWN"});
+    for (const shown of [cp(0x1d158), cp(0x1d15a), cp(0x1d15e), cp(0x1d100)]) {
+      const name = "ok" + shown + "name/CLAUDE.md";
+      expect(await undisplayable(name), shown.codePointAt(0)!.toString(16)).toMatchObject({undisplayable: 0, paths: ["CLAUDE.md", name]});
     }
   });
 
