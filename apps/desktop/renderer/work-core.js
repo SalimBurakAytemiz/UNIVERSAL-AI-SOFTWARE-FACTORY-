@@ -25,7 +25,9 @@ export const HIGH_RISK_TARGETS=Object.freeze(["AUTHORIZED","COMPLETE"]);
 export const REASON_REQUIRED_TARGETS=Object.freeze(["BLOCKED","REMEDIATING","FOUNDER_ATTENTION_REQUIRED"]);
 export const RISK_LEVELS=Object.freeze(["R0","R1","R2","R3","R4"]);
 export const RUN_START_STATUSES=Object.freeze(["AUTHORIZED","PLANNED"]);
-export const RUN_ACTIVE_STATES=Object.freeze(["QUEUED","LEASED","STARTING","RUNNING","VERIFYING","REVIEWING"]);
+// //TR: A-RUNSTATE-1 (UI-030/UI-134): canlı işçi koşuları SUNUCUNUN aktif-işçi kümesiyle (core/workos/run-state.ts ACTIVE_WORKER_STATUSES) birebir aynıdır; STARTING/REVIEWING RunStatus değildir. QUEUED canlı işçi DEĞİL, ayrı "kuyrukta (henüz çalışmıyor)" kovasıdır. Eşitlik tests/v7-ux-wp-agents.test.ts içinde sunucu dosyasından okunarak sınanır (sürüklenme CI'da düşer).
+export const RUN_LIVE_STATES=Object.freeze(["LEASED","RUNNING","CHECKPOINTING","VERIFYING"]);
+export const RUN_QUEUED_STATE="QUEUED";
 export const VERIFICATION_STATES=Object.freeze(["VERIFIED","MISMATCH","MISSING","UNVERIFIABLE"]);
 
 export const MISSION_ID_RE=/^msn_[0-9a-f]{24}$/;
@@ -202,13 +204,15 @@ export function buildTaskTransitionRequest({task,tasks,missionStatus,to,reason})
 // //TR: LANE-A: Koşu bir mission'a açılır; hangi görevi yürüttüğü bu bağla kaydedilir. GET {runs:[{link:{taskId,runId,missionId,linkedAt,...},run|null}]}; POST gövdesi yalnız {runId}. Bozuk kayıt tüm okumayı ERROR yapar; koşu kaydı yoksa durum null kalır (uydurulmaz).
 export const RUN_ID_RE=/^run_[0-9a-f]{24}$/;
 export const taskRunsPath=id=>TASK_ID_RE.test(String(id))?`/v1/tasks/${id}/runs`:null;
-export function mapTaskRuns(raw){
+// //TR: taskId/missionId verilirse her bağ BU göreve ve BU mission'a ait olmalı; başka göreve/mission'a ait bir bağ tüm okumayı ERROR yapar (denetçi satırı UNKNOWN kalır, yabancı koşu gösterilmez).
+export function mapTaskRuns(raw,taskId,missionId){
   const bad={state:"ERROR",items:[]};
   const list=isObj(raw)?raw.runs:null;if(!Array.isArray(list)||list.length>500)return bad;
   const items=[];
   for(const x of list){
     const l=isObj(x)?x.link:null;
     if(!isObj(l)||!TASK_ID_RE.test(String(l.taskId))||!RUN_ID_RE.test(String(l.runId))||!MISSION_ID_RE.test(String(l.missionId)))return bad;
+    if((taskId!==undefined&&l.taskId!==taskId)||(missionId!==undefined&&l.missionId!==missionId))return bad;
     items.push({taskId:l.taskId,runId:l.runId,missionId:l.missionId,linkedAt:iso(l.linkedAt),status:isObj(x.run)?statusStr(x.run.status):null});
   }
   return {state:"VERIFIED",items};
@@ -366,7 +370,7 @@ export function buildTransitionRequest({missionId,from,to,reason,confirmed,ackno
   const body={to,reason:r||`${from} -> ${to} (UASCO Desktop)`};
   return result(`/v1/missions/${missionId}/transition`,body,errors);
 }
-// //TR: COORD-RUN-EXPERT: core/agents/first-delivery-bindings.ts içindeki developer bağlamalarının aynası (rol TANIMI; çalışan ajan veya sertifika DEĞİL). Seçilen roleId koşu gövdesine yazılır ve sunucuda runner kapısı (assertRoleExecutes(roleId,"developer")) onu yeniden denetler; burada listede olmayan rol hiç gönderilmez. "" = rol atanmadan (eski davranış).
+// //TR: COORD-RUN-EXPERT: core/agents/first-delivery-bindings.ts içindeki developer bağlamalarının aynası (rol TANIMI; çalışan ajan veya sertifika DEĞİL). Seçilen roleId koşu gövdesine yazılır ve sunucuda runner kapısı (assertRoleExecutes(roleId,"developer")) onu yeniden denetler; burada listede olmayan rol hiç gönderilmez. "" = gövdede roleId yok; sunucu varsayılan developer rolünü (UASCO-0085) atar, yani bir rol YİNE yürür.
 export const RUN_EXPERTS=Object.freeze([Object.freeze({roleId:"UASCO-0085",function:"developer",capabilities:Object.freeze(["source-generation","backend-implementation"])})]);
 export const RUN_EXPERT_NONE="";
 export const isRunExpert=id=>RUN_EXPERTS.some(e=>e.roleId===id);
@@ -536,10 +540,12 @@ export function mapWorkRun(x){
     evidence:mapRunEvidence(x.evidence),reviewer:identity||verdict?{identity,verdict}:null
   };
 }
+export const WORK_RUNS_CAP=500;
 export function mapWorkRuns(raw){
   if(!isObj(raw))return {state:"ERROR",items:[]};
   const list=pick(raw.workRuns,raw.runs,raw.items);if(!Array.isArray(list))return {state:"ERROR",items:[]};
-  return {state:"VERIFIED",items:list.slice(0,500).map(mapWorkRun).filter(Boolean)};
+  // //TR: A-RUNSTATE-1 (#273 M3): sunucu en eski koşuları önce döndürür; 500'ü aşan listede en yeni (canlı/kuyruk) koşular kesilir. truncated:true yalnız kesildiğinde eklenir; filo/canlı paneller bu durumda kesin sayı veya "yok" demez.
+  return {state:"VERIFIED",items:list.slice(0,WORK_RUNS_CAP).map(mapWorkRun).filter(Boolean),...(list.length>WORK_RUNS_CAP?{truncated:true}:{})};
 }
 export function mapWorkRunDetail(raw){
   const inner=isObj(raw)?pick(raw.workRun,raw.run,raw):null,run=mapWorkRun(inner);
@@ -602,7 +608,8 @@ export function deriveInbox(missions,runs){
   return items;
 }
 export function filterMissions(items,status){return status==="ALL"||!status?items:items.filter(m=>m.status===status)}
-export function liveRuns(runs){return (runs??[]).filter(r=>RUN_ACTIVE_STATES.includes(r.status))}
+export function liveRuns(runs){return (runs??[]).filter(r=>RUN_LIVE_STATES.includes(r.status))}
+export function queuedRuns(runs){return (runs??[]).filter(r=>r.status===RUN_QUEUED_STATE)}
 
 // //TR: UI-026 salt-okunur görev denetçisi: yalnız GET /v1/missions/:id (görevler) ve GET /v1/work-runs okumalarından türetilir. Okuma VERIFIED değilse (STALE dahil) olumlu değer yoktur → UNKNOWN; API'nin vermediği alanlar (atanan, bitiş, bağımlılık, açıklama) asla uydurulmaz ve koşu-görev bağı sunucuda olmadığından bağ UNKNOWN kalır.
 export const TASK_UNKNOWN_FIELDS=Object.freeze(["assignee","dueAt","dependencies","description"]);
@@ -610,7 +617,8 @@ export function deriveTaskInspector(detailRes,runsRes,taskId){
   if(detailRes?.state!=="VERIFIED"||!detailRes.mission)return {state:"UNKNOWN",task:null};
   const m=detailRes.mission,t=(m.tasks??[]).find(x=>x.taskId===taskId);
   if(!t)return {state:"EMPTY",task:null};
-  const runsKnown=runsRes?.state==="VERIFIED"&&Array.isArray(runsRes.items),byStatus={};
+  // //TR: A-273-LOWS: mission koşu listesi 500'de kesildiyse (truncated) koşu sayısı kesin söylenemez; runs.known=false -> arayüz UNKNOWN gösterir.
+  const runsKnown=runsRes?.state==="VERIFIED"&&Array.isArray(runsRes.items)&&runsRes.truncated!==true,byStatus={};
   if(runsKnown)for(const r of runsRes.items)byStatus[r.status]=(byStatus[r.status]??0)+1;
   return {state:"VERIFIED",task:{taskId:t.taskId,title:t.title,status:t.status,missionId:m.missionId,missionTitle:m.title,missionStatus:m.status,riskLevel:m.riskLevel,
     // //TR: COORD-TASK-UI: bağımlılıklar yalnız okumada dependsOn dizisi varsa gösterilir (başlık/durum aynı mission'ın görevlerinden); yoksa alan UNKNOWN kalır.

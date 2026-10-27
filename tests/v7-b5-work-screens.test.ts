@@ -368,11 +368,14 @@ describe("B5 mappers: work runs, evidence, inbox derivation", () => {
     expect(c.deriveInbox(undefined, undefined)).toEqual([]);
     expect(JSON.stringify(items)).not.toMatch(/approved|auto/i);
   });
-  it("live runs are the active run states only", async () => {
+  // //TR: A-RUNSTATE-1: canlı koşular artık yalnız sunucunun aktif-işçi kümesidir (LEASED/RUNNING/CHECKPOINTING/VERIFYING); QUEUED canlı değil (ayrı kova), STARTING/REVIEWING RunStatus olmadığı için canlı sayılmaz.
+  it("live runs are the server worker-active run states only", async () => {
     const c = await load(rend, "work-core.js");
-    const runs = ["RUNNING", "QUEUED", "FAILED", "COMPLETED", "AWAITING_APPROVAL", "LEASED"].map((s, i) => ({runId: `run_${i}_000000`, status: s}));
-    expect(c.liveRuns(runs).map((r: any) => r.status)).toEqual(["RUNNING", "QUEUED", "LEASED"]);
+    const runs = ["RUNNING", "QUEUED", "FAILED", "COMPLETED", "AWAITING_APPROVAL", "LEASED", "CHECKPOINTING", "VERIFYING", "STARTING", "REVIEWING"].map((s, i) => ({runId: `run_${i}_000000`, status: s}));
+    expect(c.liveRuns(runs).map((r: any) => r.status)).toEqual(["RUNNING", "LEASED", "CHECKPOINTING", "VERIFYING"]);
+    expect(c.queuedRuns(runs).map((r: any) => r.status)).toEqual(["QUEUED"]);
     expect(c.liveRuns(undefined)).toEqual([]);
+    expect(c.queuedRuns(undefined)).toEqual([]);
   });
 });
 
@@ -403,7 +406,9 @@ describe("B5 i18n", () => {
     need.add("everif.NONE");
     for (const s of ["current", "done", "todo"]) need.add(`work.timeline.${s}`);
     for (const st of core.MISSION_STATUSES) need.add(`mstatus.${st}`);
-    for (const st of [...core.RUN_ACTIVE_STATES, "AWAITING_APPROVAL", "FAILED", "CANCELLED", "STOPPED"]) need.add(`mstatus.${st}`);
+    // //TR: A-RUNSTATE-1: RUN_ACTIVE_STATES yerine RUN_LIVE_STATES + QUEUED (CHECKPOINTING için mstatus anahtarı eklendi).
+    // //TR: #273 LOW: eski RUN_ACTIVE_STATES mstatus.STARTING'i zorunlu kılıyordu; STARTING dev-run durumu olarak kullanılmaya devam ettiği için anahtar burada açıkça zorunlu tutulur.
+    for (const st of [...core.RUN_LIVE_STATES, core.RUN_QUEUED_STATE, "STARTING", "AWAITING_APPROVAL", "FAILED", "CANCELLED", "STOPPED"]) need.add(`mstatus.${st}`);
     // form.field.* her doğrulama alanı için
     const fields = new Set<string>();
     const collect = (r: any) => { for (const f of Object.keys(r.errors ?? {})) fields.add(f); };
@@ -1587,7 +1592,7 @@ describe("COORD run expert selection", () => {
     expect(() => fdb.assertRoleExecutes(tester.roleId, "developer")).toThrow(/BINDING_ROLE_MISMATCH/);
     expect(c.isRunExpert(tester.roleId)).toBe(false);
   });
-  it("builds {roleId} only for a listed expert, {} without a role, and refuses any other role", async () => {
+  it("builds {roleId} only for a listed expert, {} (the server then assigns the default developer role UASCO-0085) without one, and refuses any other role", async () => {
     const c = await load(rend, "work-core.js"), run = (roleId?: string) => c.buildRunRequest({missionId: MID, status: "PLANNED", roleId});
     expect(run("UASCO-0085")).toEqual({ok: true, path: `/v1/missions/${MID}/runs`, body: {roleId: "UASCO-0085"}});
     expect(run("")).toEqual({ok: true, path: `/v1/missions/${MID}/runs`, body: {}});
@@ -1617,7 +1622,7 @@ describe("COORD run expert selection", () => {
     expect(byId(r3, "run-expert")).toBeNull();
   });
   it("the option that sends no roleId is labelled with the role the server then assigns (UASCO-0085, default), never as 'none', and still posts {}", async () => {
-    for (const [lang, want] of [["en", ["UASCO-0085 · developer", "Developer UASCO-0085 (default)"]], ["tr", ["UASCO-0085 · geliştirici", "Geliştirici UASCO-0085 (varsayılan)"]]] as const) {
+    for (const [lang, want] of [["en", ["UASCO-0085 · developer", "Server default (Developer UASCO-0085)"]], ["tr", ["UASCO-0085 · geliştirici", "Sunucu varsayılanı (Geliştirici UASCO-0085)"]]] as const) {
       forms.resetAllForms();
       const {ctx, doc, calls} = await mkCtx({lang, get: getFor("AUTHORIZED"), post: () => ({status: 202, body: {}})});
       const view = await load(rend, "views", "work.js");
@@ -1671,6 +1676,32 @@ describe("COORD first-delivery Desktop allow-list (main.mjs)", () => {
     for (const p of ["/v1/run-summaries/", "/v1/run-summaries?x=1", "/v1/run-summaries?status=running", "/v1/run-summaries?projectId=prj_x", "/v1/run-summaries?limit=0", `/v1/run-summaries?projectId=${PRJ}&projectId=${PRJ}`, "/v1/run-summaries/run_x", "/v1//run-summaries"]) expect(get(p), p).toBe(false);
     expect(post("/v1/run-summaries")).toBe(false);
   });
+  // Batch 4b: the analysis step/plan writes, the delivered-product status read and its start/stop writes (no restart), exact shapes only.
+  it("batch 4b: admits the analysis step/plan and product start/stop writes and the product status read, nothing near them", () => {
+    const get = loadGet(), {desktopPostPathAllowed: post} = loadPost();
+    const G4 = [`/v1/work-runs/${RUNID}/product`], P4 = [`/v1/missions/${MSN}/analysis/step`, `/v1/missions/${MSN}/analysis/plan`, `/v1/work-runs/${RUNID}/product/start`, `/v1/work-runs/${RUNID}/product/stop`];
+    for (const p of G4) { expect(get(p), p).toBe(true); expect(post(p), `POST ${p}`).toBe(false); for (const m of nearMisses(p)) expect(get(m), m).toBe(false); }
+    for (const p of P4) { expect(post(p), p).toBe(true); expect(get(p), `GET ${p}`).toBe(false); for (const m of nearMisses(p)) expect(post(m), m).toBe(false); }
+    for (const p of [`/v1/work-runs/${RUNID}/product/restart`, `/v1/missions/${MSN}/analysis`, `/v1/missions/${MSN}/analysis/steps`, `/v1/missions/${MSN}/analysis/step/x`, `/v1/missions/${MSN}/analysis/plans`, `/v1/missions/${MSN}/analysis/other`,
+      `/v1/projects/${PRJ}/analysis/step`, `/v1/missions/${PRJ}/analysis/step`, `/v1/work-runs/${RUNID}/products`, `/v1/work-runs/${RUNID}/product/`, `/v1/work-runs/${RUNID}/product/start/x`, `/v1/work-runs/${MSN}/product/start`, `/v1/work-runs/${RUNID}/product/status`,
+      `/v1/work-runs/${RUNID}/product?x=1`, `/v1/missions/${MSN}/analysis/step?x=1`, `/v1/work-runs/${RUNID}/product/stop?x=1`]) {
+      expect(get(p), p).toBe(false); expect(post(p), p).toBe(false);
+    }
+  });
+  it("batch 4b: server.ts imports and registers the analysis and product-run routes once, right after the pre-dev decision routes", () => {
+    const server = fs.readFileSync(path.join(root, "apps", "control-api", "src", "server.ts"), "utf8");
+    for (const [name, file] of [["registerAnalysisRoutes", "analysis"], ["registerProductRunRoutes", "product-run"]]) {
+      expect(server.match(new RegExp(`^import \\{${name}\\} from "\\./routes/${file}\\.js";$`, "gm"))?.length, name).toBe(1);
+      expect(server.match(new RegExp(`${name}\\(app,`, "g"))?.length, name).toBe(1);
+    }
+    expect(server.match(/^import \{AnalysisFlow,NO_ANALYSIS_BUILDER,claudeAnalysisReadiness\} from "\.\.\/\.\.\/\.\.\/core\/workos\/crew\/analysis\.js";$/gm)?.length).toBe(1);
+    // The flow is built per request with the route's own Global Stop check (stopped) combined with the server's closing flag, and the existing executor pair's pre-dev builder; the late-declared accessors are read lazily. builderTrace reads that same per-request builder's lastTrace (null without a builder), so the audit's builderRan is evidence-based.
+    // The closing flag is declared once, before the lane registrations, and only a preClose hook sets it (app.close stops a running paid analysis call instead of waiting for its timeout).
+    expect(server.match(/^let closing=false;app\.addHook\("preClose",async\(\)=>\{closing=true\}\);$/gm)?.length).toBe(1);
+    expect(server.match(/\bclosing\s*=(?!=)/g)?.length).toBe(2);
+    expect(server.indexOf("let closing=false;")).toBeLessThan(server.indexOf("registerIntakeRoutes(app,laneDeps);"));
+    expect(server).toMatch(/registerPredevDecisionRoutes\(app,laneDeps\);\n\/\/ [^\n]*\nregisterAnalysisRoutes\(app,\{\.\.\.laneDeps,analysisFlow:\(stopped\)=>\{const c=getExecutors\(\)\.pair\?\.preDevBuilder\?\.\(\)\?\?null;return Object\.assign\(new AnalysisFlow\(\{store:getStore\(\),scope,builder:c\?\?NO_ANALYSIS_BUILDER,readiness:\(\)=>claudeAnalysisReadiness\(\{controlRoot,profile:\{forbiddenRoots:\[getStore\(\)\.dataDir\]\},cli:getExecSetup\(\)\.cliStatus\(\)\}\),stopped:\(\)=>closing\|\|stopped\(\)\}\),\{builderTrace:\(\)=>c\?\.lastTrace\?\?null\}\);\}\}\);\n\/\/ [^\n]*\nregisterProductRunRoutes\(app,\{\.\.\.laneDeps,devruns:\(\)=>getDevRuns\(\)\}\);\nregisterRoleStatusRoutes\(app,/);
+  });
   it("server.ts registers the task-run link routes once, right after the task routes", () => {
     const server = fs.readFileSync(path.join(root, "apps", "control-api", "src", "server.ts"), "utf8");
     expect(server.match(/^import \{registerTaskRunRoutes\} from "\.\/routes\/task-runs\.js";$/gm)?.length).toBe(1);
@@ -1718,6 +1749,45 @@ describe("LANE-A task run link", () => {
     return {...c, view, tr, root};
   };
 
+  // //TR: A-273-LOWS: mission koşu listesi 500\'de kesildiyse (truncated) denetçideki "Mission runs" sayısı kesin söylenmez (UNKNOWN); kesilmemiş listede sayı aynen kalır.
+  it("UI-026 inspector 'Mission runs' count is UNKNOWN when the mission run list was cut at the 500-run cap, and exact otherwise", async () => {
+    const c = await load(rend, "work-core.js");
+    const rid = (i: number) => "run_" + i.toString(16).padStart(24, "0");
+    const detail = {state: "VERIFIED", mission: {missionId: MID, title: "M", status: "EXECUTING", riskLevel: "R1", tasks: [{taskId: T1, title: "Giriş", status: "PENDING", dependsOn: []}]}};
+    const mk = (n: number) => c.mapWorkRuns({workRuns: Array.from({length: n}, (_, i) => ({runId: rid(i), missionId: MID, status: "SUCCEEDED"}))});
+    expect(mk(502).truncated).toBe(true);
+    expect(c.deriveTaskInspector(detail, mk(502), T1).task.runs).toEqual({known: false, count: null, byStatus: {}});
+    expect(mk(500).truncated).toBeUndefined();
+    expect(c.deriveTaskInspector(detail, mk(500), T1).task.runs).toEqual({known: true, count: 500, byStatus: {SUCCEEDED: 500}});
+    expect(c.deriveTaskInspector(detail, mk(3), T1).task.runs.count).toBe(3);
+    const field = (root: N) => byData(root, "taskField", "runs")[0];
+    const cut = await open({linked: {runs: []}, missionRuns: Array.from({length: 502}, (_, i) => rid(i))});
+    expect(text(field(cut.root))).toBe("UNKNOWN");
+    const exact = await open({linked: {runs: []}, missionRuns: Array.from({length: 500}, (_, i) => rid(i))});
+    expect(text(field(exact.root))).toBe("500 run(s) linked to the mission (not to this task)");
+    const few = await open({linked: {runs: []}, missionRuns: [R1, R2, R3]});
+    expect(text(field(few.root))).toBe("3 run(s) linked to the mission (not to this task)");
+  });
+  // //TR: A-281-LOWS: mission koşu listesi 500\'de kesildiyse görev-koşu paneli "bağlı olmayan koşu yok" demez; hangi koşuların bağlı olmadığı söylenemez ve bağlama için koşu sunulmaz.
+  it("task-runs panel: a mission run list cut at the 500-run cap never claims 'no run that is not linked'; it says the unlinked runs cannot be determined and offers none (en/tr pinned)", async () => {
+    const rid = (i: number) => "run_" + i.toString(16).padStart(24, "0");
+    const note = (root: N) => byData(root, "taskrunsNote")[0];
+    const cut = await open({linked: {runs: []}, missionRuns: Array.from({length: 502}, (_, i) => rid(i))});
+    expect(note(cut.root).dataset.taskrunsNote).toBe("runsCut");
+    expect(text(note(cut.root))).toBe("The mission's run list was cut after 500 runs, so it cannot be said which runs are not yet linked to this task; none are offered for linking.");
+    expect(text(byId(cut.root, "task-runs")!)).not.toContain("no run that is not linked");
+    expect(byId(cut.root, "taskruns-run")).toBeNull();
+    expect(byId(cut.root, "taskruns-submit")).toBeNull();
+    const exact = await open({linked: {runs: []}, missionRuns: Array.from({length: 500}, (_, i) => rid(i))});
+    expect(note(exact.root)).toBeUndefined();
+    expect(byId(exact.root, "taskruns-run")).not.toBeNull();
+    const allLinked = await open({linked: {runs: [link(R1)]}, missionRuns: [R1]});
+    expect(note(allLinked.root).dataset.taskrunsNote).toBe("noUnlinked");
+    expect(text(note(allLinked.root))).toBe("This mission has no run that is not linked to this task yet. Start a run first.");
+    const en = (await load(rend, "locales", "en.js")).default as Record<string, string>, tr = (await load(rend, "locales", "tr.js")).default as Record<string, string>;
+    expect(tr["taskruns.runsCut"]).toBe("Mission'ın koşu listesi {n} koşudan sonra kesildi; hangi koşuların bu göreve henüz bağlı olmadığı söylenemez, bağlanacak koşu sunulmuyor.");
+    expect(en["taskruns.runsCut"]).toBe("The mission's run list was cut after {n} runs, so it cannot be said which runs are not yet linked to this task; none are offered for linking.");
+  });
   it("maps the link read strictly and offers only unlinked, canonical, unique runs", async () => {
     const c = await load(rend, "work-core.js");
     const ok = c.mapTaskRuns({runs: [link(R1), {link: link(R2).link, run: null}]});
@@ -1753,6 +1823,123 @@ describe("LANE-A task run link", () => {
     expect(rows.map(n => n.dataset.taskRun)).toEqual([R1, R2]);
     expect(text(rows[0])).toContain("Running"); expect(text(rows[0])).not.toContain("not readable");
     expect(text(rows[1])).toContain("run record not readable"); expect(text(rows[1])).not.toContain("Running");
+  });
+  // //TR: A-UI026-1: denetçideki "Koşu bağı" satırı artık hemen altındaki görev-koşu panelinin okuduğu GET /v1/tasks/:id/runs sonucundan beslenir; okunamayan/geçersiz yanıt UNKNOWN kalır.
+  it("UI-026 inspector 'Run link' row lists the task's linked runs from the same read as the task-runs panel, says 'no run linked' when the read is empty, and stays UNKNOWN when it cannot be read", async () => {
+    const field = (root: N) => byData(root, "taskField", "runLink")[0];
+    const o = await open({linked: {runs: [link(R1), {link: link(R2).link, run: null}]}, missionRuns: [R1, R2]});
+    expect(field(o.root).dataset.taskRunLinks).toBe("linked");
+    expect(byData(field(o.root), "taskRunLink").map(n => n.dataset.taskRunLink)).toEqual([R1, R2]);
+    expect(byData(field(o.root), "taskRunLink").map(n => n.dataset.taskRunLinkGoverning)).toEqual(["0", "1"]);
+    const rows = byData(field(o.root), "taskRunLink");
+    expect(text(rows[0])).toContain("Running");
+    expect(text(rows[1])).toContain("UNKNOWN"); expect(text(rows[1])).not.toContain("Running");
+    expect(o.calls.post).toEqual([]);
+    const none = await open({linked: {runs: []}});
+    expect(field(none.root).dataset.taskRunLinks).toBe("none");
+    expect(text(field(none.root))).toBe("No run is linked to this task.");
+    for (const bad of [undefined, {runs: "x"}, {runs: [{link: null}]}]) {
+      const u = await open({linked: bad});
+      expect(text(field(u.root)), JSON.stringify(bad) ?? "undefined").toBe("UNKNOWN");
+      expect(field(u.root).dataset.taskRunLinks).toBeUndefined();
+      expect(byData(field(u.root), "taskRunLink")).toEqual([]);
+    }
+  });
+  const ids7 = Array.from({length: 7}, (_, i) => "run_" + (i + 1).toString(16).padStart(2, "0").repeat(12));
+  it("UI-026 inspector 'Run link' row shows the NEWEST 5 links (the governing run, the last one linked, is always shown and marked), with an exact '+N older' note and pinned en/tr texts", async () => {
+    const o = await open({linked: {runs: ids7.map(id => link(id))}, missionRuns: ids7});
+    const cell = byData(o.root, "taskField", "runLink")[0];
+    const li = byData(cell, "taskRunLink");
+    expect(li.map(n => n.dataset.taskRunLink)).toEqual(ids7.slice(2));
+    expect(li.map(n => n.dataset.taskRunLinkGoverning)).toEqual(["0", "0", "0", "0", "1"]);
+    expect(text(byData(cell, "runLinkMore", "2")[0])).toBe("+2 older linked run(s) not shown; see the task runs panel below.");
+    const six = await open({linked: {runs: ids7.slice(0, 6).map(id => link(id))}, missionRuns: ids7});
+    const cell6 = byData(six.root, "taskField", "runLink")[0];
+    expect(byData(cell6, "taskRunLink").map(n => n.dataset.taskRunLink)).toEqual(ids7.slice(1, 6));
+    expect(text(byData(cell6, "runLinkMore", "1")[0])).toBe("+1 older linked run(s) not shown; see the task runs panel below.");
+    expect(byData(cell6, "taskRunLink").slice(-1)[0].dataset.taskRunLinkGoverning).toBe("1");
+    const exact = await open({linked: {runs: ids7.slice(0, 5).map(id => link(id))}, missionRuns: ids7});
+    expect(byData(byData(exact.root, "taskField", "runLink")[0], "runLinkMore")).toEqual([]);
+    expect(byData(byData(exact.root, "taskField", "runLink")[0], "taskRunLink").map(n => n.dataset.taskRunLink)).toEqual(ids7.slice(0, 5));
+    expect(byData(byData(exact.root, "taskField", "runLink")[0], "taskRunLink").map(n => n.dataset.taskRunLinkGoverning)).toEqual(["0", "0", "0", "0", "1"]);
+    for (const n of [3, 4]) {
+      const few = await open({linked: {runs: ids7.slice(0, n).map(id => link(id))}, missionRuns: ids7});
+      const c = byData(few.root, "taskField", "runLink")[0];
+      expect(byData(c, "taskRunLink").map(x => x.dataset.taskRunLink), `${n} links`).toEqual(ids7.slice(0, n));
+      expect(byData(c, "taskRunLink").map(x => x.dataset.taskRunLinkGoverning), `${n} links`).toEqual([...Array(n - 1).fill("0"), "1"]);
+      expect(byData(c, "runLinkMore"), `${n} links`).toEqual([]);
+      expect(text(c), `${n} links`).not.toContain("older");
+    }
+    const en = (await load(rend, "locales", "en.js")).default as Record<string, string>, tr = (await load(rend, "locales", "tr.js")).default as Record<string, string>;
+    expect(en["work.task.runLink.none"]).toBe("No run is linked to this task.");
+    expect(tr["work.task.runLink.none"]).toBe("Bu göreve bağlı koşu yok.");
+    expect(en["work.task.runLink.more"]).toBe("+{n} older linked run(s) not shown; see the task runs panel below.");
+    expect(tr["work.task.runLink.more"]).toBe("+{n} daha eski bağlı koşu gösterilmiyor; aşağıdaki görev koşuları panelinde.");
+    expect(en["work.task.lead"]).toBe("Read-only. Shows what the mission read provides and, for the Run link row, the task's linked runs (the same read as the task runs panel below); anything the API does not report is shown as UNKNOWN, never guessed.");
+    expect(tr["work.task.lead"]).toBe("Salt okunur. Mission okumasının verdiğini ve \"Koşu bağı\" satırı için görevin bağlı koşularını (aşağıdaki görev koşuları panelinin okuması) gösterir; API'nin bildirmediği her şey UNKNOWN olarak gösterilir, uydurulmaz.");
+  });
+  it("the inspector row adds NO read of its own: one GET /v1/tasks/:id/runs per render, the same one the panel uses", async () => {
+    const o = await open({linked: {runs: [link(R1)]}, missionRuns: [R1]});
+    const count = () => o.calls.get.filter(p => p === `/v1/tasks/${T1}/runs`).length;
+    o.ctx.store.cache.clear(); // the api serves repeat reads from a TTL cache; clear it so the count below is the reads of ONE render
+    const before = count();
+    mount(o.doc, await o.view.render(o.ctx));
+    expect(count() - before).toBe(1);
+    expect(byId(o.root, "task-runs")).not.toBeNull();
+    // //TR: #278 round 2: round-1 sırasında kaldırılan ASSERTION geri konuldu (yeni sayım testinin yanında ikisi de durur): inspector satırı BAŞKA bir /v1/tasks/ yolunu da okumaz.
+    expect([...new Set(o.calls.get.filter(p => p.startsWith("/v1/tasks/")))]).toEqual([`/v1/tasks/${T1}/runs`]);
+  });
+  it("mapTaskRuns with the requested task and mission: a link for another task or another mission turns the whole read into ERROR (the row shows UNKNOWN, no foreign run)", async () => {
+    const c = await load(rend, "work-core.js");
+    const T2 = "tsk_" + "b2".repeat(12), MID2 = "msn_" + "cd34".repeat(6);
+    expect(c.mapTaskRuns({runs: [link(R1)]}, T1, MID).state).toBe("VERIFIED");
+    expect(c.mapTaskRuns({runs: [link(R1), link(R2, {taskId: T2})]}, T1, MID)).toEqual({state: "ERROR", items: []});
+    expect(c.mapTaskRuns({runs: [link(R1), link(R2, {missionId: MID2})]}, T1, MID)).toEqual({state: "ERROR", items: []});
+    expect(c.mapTaskRuns({runs: [link(R1, {taskId: T2})]}, T1)).toEqual({state: "ERROR", items: []});
+    expect(c.mapTaskRuns({runs: [link(R1, {missionId: MID2})]}, T1, undefined).state).toBe("VERIFIED"); // no mission requested: unchanged one-argument behaviour
+    expect(c.mapTaskRuns({runs: [link(R1, {taskId: T2})]}).state).toBe("VERIFIED");
+    const o = await open({linked: {runs: [link(R1), link(R2, {taskId: T2})]}, missionRuns: [R1, R2]});
+    const cell = byData(o.root, "taskField", "runLink")[0];
+    expect(text(cell)).toBe("UNKNOWN");
+    expect(byData(cell, "taskRunLink")).toEqual([]);
+    const other = await open({linked: {runs: [link(R1, {missionId: "msn_" + "cd34".repeat(6)})]}, missionRuns: [R1]});
+    expect(text(byData(other.root, "taskField", "runLink")[0])).toBe("UNKNOWN");
+  });
+  it("a late answer for the PREVIOUSLY selected task is never shown for the newly selected one (task switched while the link read was in flight)", async () => {
+    const T2 = "tsk_" + "b2".repeat(12);
+    let release: (v: any) => void = () => {};
+    const slow = new Promise<any>(r => { release = r; });
+    let hold = false; // the module keeps the inspected task between tests, so the first render must not wait on the slow read
+    const get = (p: string) => {
+      if (p === "/v1/projects") return {projects: [project()]};
+      if (p === "/v1/missions") return {missions: [mission({status: "EXECUTING"})]};
+      if (p === `/v1/missions/${MID}`) return {mission: mission({status: "EXECUTING"}), tasks: [{taskId: T1, title: "Giriş", status: "PENDING", dependsOn: []}, {taskId: T2, title: "Çıkış", status: "PENDING", dependsOn: []}]};
+      if (p === `/v1/tasks/${T1}/runs`) return hold ? slow : {runs: []};
+      if (p === `/v1/tasks/${T2}/runs`) return {runs: []};
+      if (p.startsWith("/v1/work-runs")) return {workRuns: runs([R1])};
+      if (p.startsWith("/v1/evidence")) return {evidence: []};
+      return undefined;
+    };
+    const c = await mkCtx({get, lang: "en"});
+    forms.selection.missionId = MID;
+    const view = await load(rend, "views", "work.js"), tr = await load(rend, "views", "task-runs.js");
+    tr.resetTaskRunsDraft(null);
+    let first = mount(c.doc, await view.render(c.ctx));
+    for (const b of all(first).filter(n => "taskInspect" in n.dataset && n.attrs.get("aria-pressed") === "true")) b.fire("click"); // close any task left open by an earlier test
+    first = mount(c.doc, await view.render(c.ctx)); // fresh handlers: nothing selected now
+    hold = true;
+    byData(first, "taskInspect", T1)[0].fire("click");
+    const pendingRender = view.render(c.ctx); // starts: T1 selected, its link read is pending
+    for (let i = 0; i < 6; i++) await tick();
+    byData(first, "taskInspect", T2)[0].fire("click"); // the Founder selects T2 meanwhile
+    release({runs: [link(R1)]});
+    const root = mount(c.doc, (await pendingRender) as N);
+    const cell = byData(root, "taskField", "runLink")[0];
+    expect(byData(root, "taskField", "taskId")[0].textContent).toBe(T2);
+    expect(text(cell)).toBe("UNKNOWN");
+    expect(cell.dataset.taskRunLinks).toBeUndefined();
+    expect(byData(root, "taskRunLink")).toEqual([]);
+    expect(text(root)).not.toContain(R1 + " Running");
   });
   const RES = (over: any = {}) => ({taskId: T1, from: "IN_PROGRESS", to: "DONE", action: "TRANSITIONED", reason: null, ...over});
   const RECON = (results: any[], over: any = {}) => ({runId: R1, runStatus: "SUCCEEDED", results, ...over});
@@ -1889,7 +2076,8 @@ describe("LANE-A task run link", () => {
     const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js");
     const E = en.default ?? en.EN ?? en, T = tr.default ?? tr.TR ?? tr;
     const keys = Object.keys(E).filter(k => k.startsWith("taskruns.") || k.startsWith("flow.taskRuns"));
-    expect(keys.length).toBe(33);
+    // //TR: A-281-LOWS: yeni anahtar taskruns.runsCut eklendi; sayı 33 -> 34.
+    expect(keys.length).toBe(34);
     for (const k of keys) expect(T[k], k).toBeTruthy();
   });
 });
@@ -2653,6 +2841,21 @@ describe("LANE-A A-FLOW-GAP-2: the test-result step of a run says what really ha
     // a regression run that failed on another commit does not count; a missing regression never verifies
     expect(core.mapWorkRun(run({evidence: [attested("VERIFY_TESTS"), surface(7)]})).evidenceVerification.state).not.toBe("PRODUCT_VERIFIED");
   });
+  // W2 (review #226 survivor): when the server's delivery view is present it alone decides; a client recompute from the (truncated) evidence list never overrides the server's NOT_VERIFIED / FAILED.
+  it("isProductVerified: the server's delivery view decides when present (the recorded evidence's PRODUCT_VERIFIED never overrides NOT_VERIFIED or FAILED); without it the evidence rule applies", async () => {
+    const core = await load(rend, "work-core.js"), m1a = await load(rend, "m1a.js");
+    const proven = [attested("VERIFY_TESTS"), attested("REGRESSION_TESTS"), surface(7)];
+    for (const [state, reason, ran] of [["NOT_VERIFIED", "SANDBOX_ATTESTATION_MISSING", true], ["NOT_VERIFIED", "NOT_EXECUTED:SANDBOX_UNAVAILABLE", false], ["FAILED", "TESTS_FAILED", true]] as const) {
+      const w = await detail(dlv(state, reason, ran), {evidence: proven});
+      expect(w.evidenceVerification.state, reason).toBe("PRODUCT_VERIFIED"); // precondition: the client rule alone would say verified
+      expect(w.delivery.productVerification.state, reason).toBe(state);
+      expect(core.isProductVerified(w), reason).toBe(false); expect(m1a.runNotVerified(w), reason).toBe(true); expect(m1a.missionNotVerified([w], MID), reason).toBe(true);
+    }
+    const cut = await detail(dlv("PRODUCT_VERIFIED", "TESTS_EXECUTED_IN_VERIFIED_SANDBOX", true), {evidence: []});
+    expect(cut.evidenceVerification.state).not.toBe("PRODUCT_VERIFIED"); expect(core.isProductVerified(cut)).toBe(true); expect(m1a.runNotVerified(cut)).toBe(false);
+    const listItem = core.mapWorkRun(run({evidence: proven}));
+    expect(listItem.delivery?.productVerification?.state).toBeUndefined(); expect(core.isProductVerified(listItem)).toBe(true);
+  });
   it("list items without the delivery view keep the Founder-approved NOT_VERIFIED badge for every evidence case except the proven one", async () => {
     const core = await load(rend, "work-core.js");
     for (const [name, evidence, state] of EV_CASES) {
@@ -2719,6 +2922,7 @@ describe("LANE-A A-FLOW-GAP-2: the Journey end to end (stateful fake server, rea
       if (p === "/v1/work-runs" || p === `/v1/work-runs?missionId=${IMSN}`) return {workRuns: S.run ? [S.run] : []};
       if (S.run && p === `/v1/work-runs/${IRUN}`) return {workRun: S.run, outcomes: null, delivery: S.delivery()}; // the server also returns its delivery view (productVerification + testsExecuted)
       if (S.run && p === `/v1/work-runs/${IRUN}/tasks`) return {links: S.links};
+      if (S.productRoute && S.run && p === `/v1/work-runs/${IRUN}/product`) return {product: {runId: IRUN, deliveredHeadSha: HEAD, tiedToThisRun: false, devrun: {status: "STOPPED", pid: null, port: null, preview: {state: "UNAVAILABLE", url: null}, logTail: "", deliveryRunId: null, bridged: null}}};
       if (p.startsWith("/v1/evidence")) return {evidence: []};
       if (p === `/v1/projects/${IPRJ}/readiness`) return {readiness: {projectId: IPRJ, missionId: IMSN, ready: true, verifiable: S.tasks.length > 0, checks: [
         {id: "MISSION", state: "OK", blocking: true, reason: null, nextAction: null}, {id: "RISK", state: "OK", blocking: true, reason: null, nextAction: null},
@@ -2753,6 +2957,9 @@ describe("LANE-A A-FLOW-GAP-2: the Journey end to end (stateful fake server, rea
       const link = /^\/v1\/tasks\/(tsk_[0-9a-f]{24})\/runs$/.exec(p);
       if (link) { const l = {taskId: link[1], runId: b.runId, missionId: IMSN, tenantId: "t1", linkedAt: "2026-10-26T05:11:00.000Z", linkedBy: "FOUNDER_LOCAL"}; S.links.push(l); return {status: 201, body: {link: l}}; }
       if (p === `/v1/work-runs/${IRUN}/delivery/prepare`) { S.prepared = true; return {status: 200, body: {artifact: {exportArtifactHash: "f".repeat(64)}}}; }
+      // batch 4b: the analysis step answers 200 with the full BLOCKED step (Lane B route change), a product start without a verified sandbox is the plain 409 gate refusal.
+      if (p === `/v1/missions/${IMSN}/analysis/step`) return {status: 200, body: {status: "BLOCKED", blocker: "PROVIDER_PROVENANCE_NOT_READY", blockers: ["PROVIDER_PROVENANCE_NOT_READY", "implementer:CLAUDE_PROFILE_LOGIN_REQUIRED"], founderAction: "free text that is never shown"}};
+      if (p === `/v1/work-runs/${IRUN}/product/start`) return {status: 409, body: {error: "SANDBOX_UNAVAILABLE"}};
       return {status: 404, body: {}};
     };
     return {S, get, post};
@@ -2766,7 +2973,10 @@ describe("LANE-A A-FLOW-GAP-2: the Journey end to end (stateful fake server, rea
     expect(w.describePostResult({thrown: true, state: "UNAVAILABLE", message: "INVALID_API_PATH"}).key).toBe("post.err.unavailable");
     expect(w.describePostResult({thrown: true, state: "OFFLINE"}).key).toBe("post.err.offline"); expect(w.describePostResult({thrown: true, state: "ERROR"}).key).toBe("post.err.generic");
     const srv = await mkServer(), c = await mkCtx({lang: "en", get: srv.get, post: srv.post});
-    const raw = await c.ctx.api.raw(`/v1/work-runs/${IRUN}/product`); expect(raw.state).toBe("UNAVAILABLE"); // a read the allow-list refuses
+    const raw = await c.ctx.api.raw(`/v1/work-runs/${IRUN}/product`); expect(raw.state).toBe("UNAVAILABLE"); // after 4b the path is admitted; this fake server answers 404 for it (productRoute off), which is UNAVAILABLE too
+    // end-to-end allow-list refusal leg: a run-scoped product path the desktop does NOT admit never reaches the fake server; the bridge refuses it (INVALID_API_PATH) and the read is UNAVAILABLE
+    const refused = await c.ctx.api.raw(`/v1/work-runs/${IRUN}/product/status`); expect(refused.state).toBe("UNAVAILABLE");
+    expect(srv.S.blocked).toEqual([`GET /v1/work-runs/${IRUN}/product/status`]); // the admitted product read above was not blocked; only the refused one is
     // product card: unavailable read -> one line and the Run tab button
     srv.S.project = {projectId: IPRJ, name: "P", tenantId: "t1", environmentId: "local", createdAt: "2026-10-26T05:00:00.000Z"}; srv.S.mission = {missionId: IMSN, projectId: IPRJ, title: "M", status: "PLANNED", riskLevel: "R1", createdAt: "2026-10-26T05:00:00.000Z"};
     srv.S.run = {runId: IRUN, missionId: IMSN, projectId: IPRJ, status: "AWAITING_APPROVAL", headSha: HEAD, startedAt: "2026-10-26T05:10:00.000Z", evidence: []};
@@ -2800,7 +3010,7 @@ describe("LANE-A A-FLOW-GAP-2: the Journey end to end (stateful fake server, rea
     expect(byId(root, "intake-ready-go-PLAN_MISSION")).not.toBeNull(); expect(byId(root, "intake-open-mission")).not.toBeNull();
     expect(srv.S.posts[0]).toMatchObject({path: "/v1/intakes", body: {idea: IDEA, template: "web-node"}});
     table.INTAKE = "COMPLETE_IN_UI";
-    // 2) analysis: the Journey shows the section; the step POST is not allow-listed yet
+    // 2) analysis: the Journey shows the section; after 4b the step POST is admitted and the server answers its exact BLOCKED readiness
     byId(root, "intake-open-mission")!.fire("click"); expect(sel.missionId).toBe(IMSN);
     root = await view("views", "journey.js");
     expect(byId(root, "analysis-step")).not.toBeNull();
@@ -2808,9 +3018,11 @@ describe("LANE-A A-FLOW-GAP-2: the Journey end to end (stateful fake server, rea
     async function fire(n: N) { n.fire("click"); await sleep(); }
     await sleep();
     root = await view("views", "journey.js");
-    expect(byId(root, "analysis-step-status")!.textContent).toContain("not enabled in this build"); expect(byId(root, "analysis-plan-submit")).toBeNull();
-    expect(srv.S.blocked).toContain(`POST /v1/missions/${IMSN}/analysis/step`);
-    table.ANALYSIS_DRAFTS = "GATED_4B"; table.PLAN_FROM_ANALYSIS = "GATED_4B";
+    expect(byData(root, "analysisStatus", "BLOCKED").length).toBe(1); expect(byId(root, "analysis-plan-submit")).toBeNull();
+    expect(byData(root, "analysisBlocker").map(n => n.dataset.analysisBlocker)).toEqual(["PROVIDER_PROVENANCE_NOT_READY", "implementer:CLAUDE_PROFILE_LOGIN_REQUIRED"]);
+    expect(byId(root, "analysis-step-status")!.textContent).not.toContain("not enabled in this build"); expect(root.textContent).not.toContain("free text that is never shown");
+    expect(srv.S.posts.map((x: {path: string}) => x.path)).toContain(`/v1/missions/${IMSN}/analysis/step`);
+    table.ANALYSIS_DRAFTS = "BLOCKED_BY_SERVER_READINESS"; table.PLAN_FROM_ANALYSIS = "CLOSED_UNTIL_COMPLETE";
     // 3) the manual plan path in Work (POST /plan is allowed)
     root = await view("views", "work.js");
     expect(byId(root, "plan-form")).not.toBeNull();
@@ -2839,15 +3051,19 @@ describe("LANE-A A-FLOW-GAP-2: the Journey end to end (stateful fake server, rea
     const tr = byData(root, "runTestResult")[0];
     expect(tr.dataset.runTestResult).toBe("NOT_EXECUTED"); expect(tr.dataset.runTestReason).toBe("SANDBOX_UNAVAILABLE"); expect(tr.textContent).toContain("No verified sandbox existed");
     table.TEST_RESULT = "COMPLETE_IN_UI";
-    // 7) running product: the run-scoped product route is not allow-listed yet -> honest UNAVAILABLE
+    // 7) running product: after 4b the run-scoped route is admitted; Start is offered for the delivered commit and the server refuses without a verified sandbox
     c.calls.navigate.length = 0;
     sel.missionId = IMSN;
     const ws = await load(rend, "views", "projects.js"); const st = await load(rend, "studio-state.js"); st.openProject(IPRJ, "overview");
+    srv.S.productRoute = true;
+    root = mount(c.doc, await ws.render(ctx));
+    expect(byId(root, "studio-ov-product")!.dataset.productOffer).toBe("START"); expect(byId(root, "product-start")).not.toBeNull();
+    byId(root, "product-start")!.fire("click"); await sleep(); await sleep();
     root = mount(c.doc, await ws.render(ctx));
     const prod = byId(root, "studio-ov-product")!;
-    expect(prod.textContent).toContain("not available to the desktop yet"); expect(byId(root, "product-start")).toBeNull();
-    expect(srv.S.blocked).toContain(`GET /v1/work-runs/${IRUN}/product`);
-    table.RUNNING_PRODUCT = "GATED_4B";
+    expect(srv.S.posts.map((x: {path: string}) => x.path)).toContain(`/v1/work-runs/${IRUN}/product/start`);
+    expect(byId(root, "product-run-status")!.textContent).toContain("SANDBOX_UNAVAILABLE"); expect(prod.dataset.productState).toBe("STOPPED"); expect(byData(prod, "productUrl").length).toBe(0); expect(byId(root, "product-stop")).toBeNull();
+    table.RUNNING_PRODUCT = "REFUSED_NO_SANDBOX";
     // 8) delivery: prepare the delivery package (POST allowed) from the project's Delivery tab
     st.openProject(IPRJ, "delivery");
     root = mount(c.doc, await ws.render(ctx));
@@ -2857,9 +3073,9 @@ describe("LANE-A A-FLOW-GAP-2: the Journey end to end (stateful fake server, rea
     expect(srv.S.posts.map((p: {path: string}) => p.path)).toContain(`/v1/work-runs/${IRUN}/delivery/prepare`);
     expect(byId(mount(c.doc, await ws.render(ctx)), `dl-open-${IRUN}`)).not.toBeNull(); // the acceptance dialog can be opened
     table.DELIVERY = "COMPLETE_IN_UI";
-    expect(table).toEqual({INTAKE: "COMPLETE_IN_UI", ANALYSIS_DRAFTS: "GATED_4B", PLAN_FROM_ANALYSIS: "GATED_4B", PLAN_MANUAL: "COMPLETE_IN_UI", MISSION_TASKS: "COMPLETE_IN_UI", TASK_RUN: "COMPLETE_IN_UI", TEST_RESULT: "COMPLETE_IN_UI", RUNNING_PRODUCT: "GATED_4B", DELIVERY: "COMPLETE_IN_UI"});
-    // everything the renderer asked for outside the allow-list is exactly the 4B set
-    expect([...new Set(srv.S.blocked)].sort()).toEqual([`GET /v1/work-runs/${IRUN}/product`, `POST /v1/missions/${IMSN}/analysis/step`].sort());
+    expect(table).toEqual({INTAKE: "COMPLETE_IN_UI", ANALYSIS_DRAFTS: "BLOCKED_BY_SERVER_READINESS", PLAN_FROM_ANALYSIS: "CLOSED_UNTIL_COMPLETE", PLAN_MANUAL: "COMPLETE_IN_UI", MISSION_TASKS: "COMPLETE_IN_UI", TASK_RUN: "COMPLETE_IN_UI", TEST_RESULT: "COMPLETE_IN_UI", RUNNING_PRODUCT: "REFUSED_NO_SANDBOX", DELIVERY: "COMPLETE_IN_UI"});
+    // after 4b the renderer asks for nothing outside the allow-list
+    expect([...new Set(srv.S.blocked)]).toEqual([]);
   });
 });
 

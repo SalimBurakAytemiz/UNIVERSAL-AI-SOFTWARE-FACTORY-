@@ -170,6 +170,32 @@ export function buildImportRequest({projectId,kind,path}){
   const pe=validatePath(p);if(pe)errors.importPath=pe;else if(kind==="zip"&&!/\.zip$/i.test(p))errors.importPath="studio.err.zipExt";
   return result(`/v1/projects/${projectId}/import`,{kind,path:p},errors);
 }
+// //TR: İçe aktarma yanıtındaki ajan yapılandırma KARANTİNASI kanıtı (SBX-8, server.ts import rotası): gövde {project, import:{kind, headSha, agentConfigQuarantine?}}; alan YALNIZ karantinaya alınan dosya varsa gönderilir {count, headSha, files:[{path,pattern,kind,bytes,sha256}] (en çok 500), truncated, storedUnder}. QUARANTINED: alan geçerli. NONE: geçerli bir import bloğu var ve alan YOK (sunucu sözleşmesi: karantina yoksa alan gönderilmez; "tarama yapıldı" iddiası YOKTUR, yalnız "sunucu karantina bildirmedi"). UNKNOWN: import bloğu okunamıyor ya da alan bozuk (kısmi veri asla dönmez, düz başarı gibi gösterilmez).
+export const QUARANTINE_MAX_FILES=500;
+export const QUARANTINE_FILES_SHOWN=20;
+const SHA40_RE=/^[0-9a-f]{40}([0-9a-f]{24})?$/,SHA256_RE=/^[0-9a-f]{64}$/;
+const QUARANTINE_KINDS=Object.freeze(["file","symlink","other"]);
+// //TR: Görüntülenen bir yol/desen/saklama yeri, depo yazarının kontrol edebildiği metindir. Kontrol (Cc: C0, DEL, C1), biçim (Cf: bidi, sıfır genişlik, etiketler, FEFF, 00AD), vekil (Cs), satır/paragraf ayırıcı (Zl/Zp) ve Default_Ignorable karakterler (034F, FE0F, 3164 ...) GÖRÜNMEZ ya da satırı bozar; ".claude/settings\u2060.json" gerçeğinden ayırt edilemezdi. Ayrıca bir tabanda 8'den fazla yığılmış birleştirici işaret de gösterilmez.
+// //TR: A-277-LOWS: (1) U+2800 BRAILLE PATTERN BLANK görünür genişlikte ama boş çizilir; ".claude/settings\u2800.json" gerçeğinden ayırt edilemezdi, bu yüzden GİZLİ sayılır (kategori So olduğu için sınıf kurallarına girmez). (2) Baş/son boşluk (Zs: ASCII boşluk, NBSP, U+3000 ...) ve ardışık boşluk dizisi tek boşluğa çökerek (white-space:normal) başka bir ad gibi görünürdü; yol listelenmez, SAYILIR (desen/saklama yerinde UNKNOWN).
+const HIDDEN_CHARS_RE=/[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}\u2800]/u,STACKED_MARKS_RE=/\p{M}{9,}/u,EDGE_OR_RUN_SPACE_RE=/^\p{Zs}|\p{Zs}$|\p{Zs}{2,}/u;
+const cleanText=(x,max)=>typeof x==="string"&&x.length>0&&x.length<=max&&!HIDDEN_CHARS_RE.test(x)&&!STACKED_MARKS_RE.test(x)&&!EDGE_OR_RUN_SPACE_RE.test(x);
+export function mapImportQuarantine(res){
+  const unknown={state:"UNKNOWN"};
+  const b=res&&!res.thrown&&isObj(res.body)?res.body:null,imp=b&&isObj(b.import)?b.import:null;
+  if(imp===null||!IMPORT_KINDS.includes(imp.kind)||typeof imp.headSha!=="string"||!SHA40_RE.test(imp.headSha))return unknown;
+  const q=imp.agentConfigQuarantine;
+  if(q===undefined)return {state:"NONE",headSha:imp.headSha};
+  if(!isObj(q)||!Number.isSafeInteger(q.count)||q.count<1||q.count>1000000||q.headSha!==imp.headSha||typeof q.truncated!=="boolean"||!cleanText(q.storedUnder,200)||!Array.isArray(q.files))return unknown;
+  if(q.files.length>QUARANTINE_MAX_FILES||q.files.length!==Math.min(q.count,QUARANTINE_MAX_FILES)||q.truncated!==(q.count>q.files.length))return unknown;
+  const files=[];let undisplayable=0;
+  for(const f of q.files){
+    if(!isObj(f)||typeof f.path!=="string"||f.path.length===0||!cleanText(f.pattern,120)||!QUARANTINE_KINDS.includes(f.kind)||!Number.isSafeInteger(f.bytes)||f.bytes<0||typeof f.sha256!=="string"||!SHA256_RE.test(f.sha256))return unknown;
+    // //TR: Depo içeriği yola karar verir (git TAB/satır sonu ve çok uzun yola izin verir): geçerli sayı/commit kanıtı olan bir karantinayı tek böyle girdi için BİLİNMİYOR'a düşürmek yanlış nedeni söyler; girdi sayılır, listelenmez (undisplayable) ve asla NONE olmaz.
+    if(!cleanText(f.path,1024)){undisplayable++;continue}
+    files.push({path:f.path,pattern:f.pattern,kind:f.kind,bytes:f.bytes,sha256:f.sha256});
+  }
+  return {state:"QUARANTINED",headSha:imp.headSha,count:q.count,files,truncated:q.truncated,storedUnder:q.storedUnder,recorded:q.files.length,undisplayable};
+}
 export function buildDevRunRequest({projectId,action}){
   const errors={};
   if(!pid(projectId))errors.projectId="err.projectRequired";

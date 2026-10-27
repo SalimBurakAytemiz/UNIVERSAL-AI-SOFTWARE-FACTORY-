@@ -4,9 +4,10 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import {NAME_NOT_VERIFIED, ROLE_CONTEXT_DEFAULT_MAX_BYTES, ROLE_CONTEXT_SCHEMA_VERSION, loadRoleContextInputFromRepo, resolveAllRoleContexts, resolveRoleContext} from "../core/agents/role-context.js";
+import {NAME_NOT_VERIFIED, ROLE_CONTEXT_DEFAULT_MAX_BYTES, ROLE_CONTEXT_PROFILE_STATUSES, ROLE_CONTEXT_SCHEMA_VERSION, loadRoleContextInputFromRepo, resolveAllRoleContexts, resolveRoleContext} from "../core/agents/role-context.js";
 import type {ContextProfileLike, ContextRole, RoleContext, RoleContextInput, RoleContextResult} from "../core/agents/role-context.js";
 import {FIRST_DELIVERY_BINDINGS} from "../core/agents/first-delivery-bindings.js";
+import {resolveRoleExecution} from "../core/agents/role-execution.js";
 
 const REPO = path.resolve(import.meta.dirname, "..");
 const readJson = (rel: string) => JSON.parse(fs.readFileSync(path.join(REPO, rel), "utf8"));
@@ -42,6 +43,71 @@ const sha = (x: string) => crypto.createHash("sha256").update(x).digest("hex");
 // //TR: Özetin ŞARTNAMESİ (çözümleyici koduna bağlı değil): sha256(anahtarları sıralı JSON; undefined atlanır) bytes ve digest dışındaki HER alanın üzerinde.
 const canon = (v: unknown): string => v === null || typeof v !== "object" ? (JSON.stringify(v) ?? "null") : Array.isArray(v) ? `[${v.map(canon).join(",")}]` : `{${Object.keys(v).sort().filter(k => (v as Record<string, unknown>)[k] !== undefined).map(k => `${JSON.stringify(k)}:${canon((v as Record<string, unknown>)[k])}`).join(",")}}`;
 
+// //TR: BAĞIMSIZ ŞARTNAME (çözümleyici koduna bağlı değil, sınırsız bağlam için): her alanın değeri doğrudan girdiden türetilir. Sıralama kod noktasına göre ve kararlıdır (eşitler girdi sırasını korur), kopyalar korunur, eksik alanlar null olur, boş dizeler korunur, arama tam eşleşmedir. Bağlama (binding) kod tablosunun KENDİ çözümü olan resolveRoleExecution'dan türetilir.
+const cmpCP = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+const uniqCP = (xs: readonly string[]) => [...new Set(xs)].sort(cmpCP);
+const stableBy = <T,>(xs: readonly T[], key: (x: T) => string): T[] => xs.map((x, k) => [x, k] as const).sort((p, q) => cmpCP(key(p[0]), key(q[0])) || p[1] - q[1]).map(p => p[0]);
+function referenceBody(i: RoleContextInput, roleId: string): Omit<RoleContext, "bytes" | "digest"> {
+  const role = i.roles.find(r => r.roleId === roleId)!;
+  const techOf = (t: {technologyId: string; status: string}, requirement: "REQUIRED" | "OPTIONAL") => { const r = i.technologies.get(t.technologyId); return {technologyId: t.technologyId, requirement, registryId: r ? r.id : null, status: r ? t.status : NAME_NOT_VERIFIED, registryStatus: r ? r.status : null, knowledgeState: r ? r.knowledgeState : null}; };
+  const ids = uniqCP(role.requiredSkillIds);
+  const canonical = ids.filter(sk => i.skillIds.has(sk)).map(skillId => ({skillId, origin: "CANONICAL_ROLE_REGISTRY" as const}));
+  const canonSet = new Set(canonical.map(c => c.skillId));
+  const via = new Map<string, string[]>();
+  for (const a of role.legacyAliases) if (a.status === "SEMANTIC_VERIFIED") for (const sk of i.legacySkills.get(a.legacyId) ?? []) if (i.skillIds.has(sk) && !canonSet.has(sk)) via.set(sk, [...(via.get(sk) ?? []), a.legacyId]);
+  const proposed = uniqCP([...via.keys()]).map(skillId => ({skillId, status: "PROPOSED_DERIVED" as const, viaLegacyIds: uniqCP(via.get(skillId)!)}));
+  const aliases = stableBy(role.legacyAliases, a => a.legacyId).map(a => ({legacyId: a.legacyId, legacyTitle: a.legacyTitle ?? null, status: a.status, approval: a.approval ?? null, origin: "LEGACY_REFERENCE" as const, usedForProposedSkills: a.status === "SEMANTIC_VERIFIED"}));
+  const profile = i.profiles.find(pr => pr.roleId === role.roleId);
+  const res = resolveRoleExecution(role.roleId, i.roles, i.bindings);
+  const note = "RESOLVER_LABEL_NOT_THE_READINESS_EXECUTABLE_LAYER" as const;
+  const binding: RoleContext["binding"] = res.status === "EXECUTABLE"
+    ? {origin: "CODE_BINDING_TABLE", resolverLabel: "EXECUTABLE", reason: null, function: res.profile.function, providerRoute: res.profile.providerRoute, adapters: [...res.profile.adapters], note}
+    : {origin: "CODE_BINDING_TABLE", resolverLabel: "NOT_EXECUTABLE", reason: res.reason, function: null, providerRoute: null, adapters: [], note};
+  return {
+    schemaVersion: "1.0.0", roleId: role.roleId, verifiedKnowledge: false,
+    canonical: {origin: "CANONICAL_ROLE_REGISTRY", ref: `registries/role-definitions.json#roles[roleId=${role.roleId}]`, title: role.title, guildId: role.guildId, guildName: i.guilds.find(g => g.guildId === role.guildId)?.name ?? null, clusterId: role.clusterId, priority: role.priority ?? null, lifecycle: role.lifecycle ?? null,
+      responsibilities: [...role.responsibilities], forbiddenActions: [...role.forbiddenActions], specializationBoundaries: [...role.specializationBoundaries]},
+    technologies: [...stableBy(role.requiredTechnologies, t => t.technologyId).map(t => techOf(t, "REQUIRED")), ...stableBy(role.optionalTechnologies, t => t.technologyId).map(t => techOf(t, "OPTIONAL"))],
+    skills: {canonical, canonicalNotInSk2: ids.filter(sk => !i.skillIds.has(sk)), proposed, proposedOrigin: "PROPOSED_DERIVED"},
+    aliases,
+    reviewChain: profile ? {origin: profile.reviewChain.status, value: [...profile.reviewChain.value], gapId: profile.reviewChain.gapId} : null,
+    binding,
+    gapIds: uniqCP([...role.gapIds, ...(profile ? [profile.reviewChain.gapId, profile.candidateSkills.gapId].filter((g): g is string => typeof g === "string") : [])]),
+    truncation: []
+  };
+}
+// //TR: Belirli (tohumlu) rastgele girdi üretici: her alan için varsayılan OLMAYAN değerler (boş dize, undefined, büyük/küçük harf, boşluklu kimlik, kopya, sırasız, SK2 dışı beceri, matris satırı olmayan takma ad, başka bir role ait profil, kusurlu bağlama). Gerçek veri ve el yazması fixture'lar her alanda aynı sabiti taşıdığı için sabit kodlanmış değerler yalnız böyle girdilerde ayrışır.
+function rng(seed: number) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+const DEFECTS: Array<[string, (b: typeof DEV_BINDING) => typeof DEV_BINDING, string]> = [
+  ["capabilities", b => ({...b, capabilities: []}), "CAPABILITIES_MISSING"], ["route", b => ({...b, providerRoute: "NONE"}), "PROVIDER_ROUTE_MISSING"], ["tool", b => ({...b, allowedTools: ["NotATool"]}), "TOOL_NOT_ALLOWED"],
+  ["allowlist", b => ({...b, allowedTools: []}), "TOOL_ALLOWLIST_MISSING"], ["adapters", b => ({...b, adapters: []}), "ADAPTERS_MISSING"], ["limits", b => ({...b, limits: {...b.limits, maxCycles: 0}}), "LIMITS_INVALID"],
+  ["knowledge", b => ({...b, knowledgeSources: []}), "KNOWLEDGE_SOURCES_MISSING"], ["criteria", b => ({...b, evaluationCriteria: []}), "EVALUATION_CRITERIA_MISSING"]
+];
+function fuzzInput(seed: number): RoleContextInput {
+  const r = rng(seed);
+  const pick = <T,>(xs: readonly T[]): T => xs[Math.floor(r() * xs.length)];
+  const some = <T,>(xs: readonly T[], max: number): T[] => Array.from({length: Math.floor(r() * (max + 1))}, () => pick(xs));
+  const SK = ["SK2-A", "SK2-B", "SK2-C", "SK2-a", "SK2-b"], SK_OUT = ["SK2-OUT-1", "SK2-OUT-2", "sk2-c", "SK2-A "], LEG = ["001", "002", "003", "B1", "a1", "NOROW", " 001", "b1"];
+  const REG = ["tech-a", "tech-b", "tech-c", "Tech-D", "opt-x"], GHOST = ["ghost-1", "ghost-2", "TECH-A", " tech-a", "tech-a "], STAT = ["CANDIDATE_NOT_VERIFIED", "candidate_not_verified", "", "OTHER_STATUS"];
+  const rows = new Map(REG.map(slug => [slug, {id: pick(["TECH-A", "ID-ODD", "", "TECH-X"]), status: pick(["REGISTERED", "DEPRECATED", "", "BETA"]), knowledgeState: pick(["SEED_PROFILE", "STALE", "", "REVIEW"])}] as const));
+  const refs = () => some([...REG, ...GHOST], 6).map(technologyId => ({technologyId, status: pick(STAT)}));
+  const aliases = some(LEG, 6).map(legacyId => ({legacyId, ...(r() < 0.6 ? {legacyTitle: pick(["T1", "", "Title"])} : {}), status: pick(["SEMANTIC_VERIFIED", "SUSPECTED", "CONFLICT", "REJECTED", "semantic_verified", " SEMANTIC_VERIFIED", "SEMANTIC_VERIFIED_X", "SEMANTIC"]), ...(r() < 0.6 ? {approval: pick(["PROPOSED", "", "REJECTED"])} : {})}));
+  const guildId = pick(["G01", "g01", "G99"]);
+  const role = fxRole({
+    priority: pick([undefined, "", "P0", "P1"]), lifecycle: pick([undefined, "", "TARGET"]), guildId, title: pick(["Fixture role", ""]),
+    responsibilities: some(["R1", "R1", "r2"], 3), forbiddenActions: some(["F1", "f1"], 3), specializationBoundaries: some(["B1", "B1"], 3),
+    requiredSkillIds: some([...SK, ...SK_OUT], 6), requiredTechnologies: refs(), optionalTechnologies: refs(), legacyAliases: aliases, gapIds: some(["G-1", "G-2", "g-3", ""], 4)
+  });
+  const profileOf = (roleId: string): ContextProfileLike => ({roleId, reviewChain: {value: some(["UASCO-0002", "UASCO-0003", "uasco-0001", "UASCO-0002"], 4), gapId: pick([null, undefined as unknown as null, "", "GAP-R"]), status: pick(["PROPOSED_DERIVED", "OTHER_STATUS", "other_status"])}, candidateSkills: {value: [], gapId: pick([null, undefined as unknown as null, "", "GAP-C"])}});
+  const profiles = pick<ContextProfileLike[]>([[], [profileOf("UASCO-0001")], [profileOf("UASCO-0002")], [profileOf("UASCO-0002"), profileOf("UASCO-0001")], [profileOf("uasco-0001"), profileOf("UASCO-0001 ")], [profileOf("uasco-0001"), profileOf("UASCO-0001")]]);
+  const rekeyed = FIRST_DELIVERY_BINDINGS.map(b => ({...b, roleId: "UASCO-0001"}));
+  const defect = pick(DEFECTS);
+  const bindings = pick<typeof rekeyed>([[], [{...DEV_BINDING, roleId: "UASCO-0001"}], [pick(rekeyed)], [{...defect[1](DEV_BINDING), roleId: "UASCO-0001"}], [{...DEV_BINDING, roleId: "UASCO-0001", adapters: ["workos-runner", "local-claude-implementer", "workos-runner"]}]]);
+  return {
+    roles: [role], guilds: [{guildId: "G01 ", name: "Decoy", clusterId: "CL01"}, {guildId: pick(["g01", "G01", "G99"]), name: "Decoy2", clusterId: "CL99"}, ...(r() < 0.8 ? [{guildId, ...(r() < 0.7 ? {name: pick(["Guild One", ""])} : {}), clusterId: pick(["CL01", "CL99"])}] : [])].filter((g, k, all) => all.findIndex(x => x.guildId === g.guildId) === k),
+    skillIds: new Set(SK), technologies: rows, legacySkills: new Map(LEG.filter(id => id !== "NOROW" && id !== " 001").map(id => [id, some([...SK, ...SK_OUT], 4)] as const)), profiles, bindings
+  };
+}
 const deepFreeze = <T>(v: T): T => { if (v !== null && typeof v === "object" && !(v instanceof Map) && !(v instanceof Set)) { Object.freeze(v); for (const x of Object.values(v)) deepFreeze(x); } return v; };
 
 // //TR: Zengin fixture: tek rolde HER korumalı alan dolu (kanonik beceri, SK2'de olmayan kanonik beceri, iki gerekli teknoloji, 41 isteğe bağlı teknoloji (biri kayıtsız), 12 önerilen beceri, 9 takma ad, inceleme zinciri + boşluk, EXECUTABLE bağlama, boşluk kimlikleri); bayt sınırı her aşamada bu alanların bütünlüğünü korumalıdır.
@@ -580,6 +646,170 @@ describe("C-CTX-1 role-context", () => {
     expect(half.bytes).toBeLessThanOrEqual(small.bytes - 0.5);
   });
 
+  it("registry labels follow each row exactly: a second REQUIRED row and OPTIONAL rows with their own id, status and knowledgeState; optional order is slug order", () => {
+    // //TR: Satırlar KASTEN farklıdır (STALE bilgi durumu, standart olmayan kimlik, farklı kayıt durumu): bağlam her başvuruda KENDİ satırını izler; sabit "SEED_PROFILE"/tahmini TECH-<SLUG> kimliği/yalnız ilk başvuruyu izleyen kod bu değerleri tutturamaz.
+    const rows = new Map<string, {id: string; status: string; knowledgeState: string}>([
+      ["tech-a", {id: "TECH-A", status: "REGISTERED", knowledgeState: "SEED_PROFILE"}],
+      ["tech-b", {id: "ID-B-ODD", status: "DEPRECATED", knowledgeState: "STALE"}],
+      ["tech-c", {id: "TECH-C", status: "REGISTERED", knowledgeState: "REVIEW_PENDING"}],
+      ["opt-x", {id: "OPT-X-ODD", status: "REGISTERED", knowledgeState: "STALE-OPT"}],
+      ["opt-y", {id: "TECH-OPT-Y", status: "BETA", knowledgeState: "SEED_PROFILE"}]
+    ]);
+    const ref = (technologyId: string) => ({technologyId, status: "CANDIDATE_NOT_VERIFIED"});
+    const c = fresh("UASCO-0001", fxInput({requiredTechnologies: [ref("tech-c"), ref("tech-b"), ref("tech-a")], optionalTechnologies: [ref("opt-y"), ref("ghost-opt"), ref("opt-x")]}, {technologies: rows}));
+    const label = (technologyId: string, requirement: "REQUIRED" | "OPTIONAL") => { const r = rows.get(technologyId); return {technologyId, requirement, registryId: r?.id ?? null, status: r ? "CANDIDATE_NOT_VERIFIED" : NAME_NOT_VERIFIED, registryStatus: r?.status ?? null, knowledgeState: r?.knowledgeState ?? null}; };
+    expect(c.technologies).toEqual([label("tech-a", "REQUIRED"), label("tech-b", "REQUIRED"), label("tech-c", "REQUIRED"), label("ghost-opt", "OPTIONAL"), label("opt-x", "OPTIONAL"), label("opt-y", "OPTIONAL")]);
+    expect(c.technologies.map(t => t.knowledgeState)).toEqual(["SEED_PROFILE", "STALE", "REVIEW_PENDING", null, "STALE-OPT", "SEED_PROFILE"]);
+    expect(c.technologies.map(t => t.registryId)).toEqual(["TECH-A", "ID-B-ODD", "TECH-C", null, "OPT-X-ODD", "TECH-OPT-Y"]);
+    // //TR: Sıralama slug sırasıdır ve kayıtsız ad (ghost-opt) yerinde kalır, sona itilmez. Yarılama listenin ÖNEKİNİ korur ve kuyruğunu keser: ilk sıradaki ghost-opt bu yüzden isteğe bağlılar arasında SON kesilendir (yalnız isteğe bağlı liste sıfırlanınca kaybolur), ilk kesilen DEĞİLDİR. Zengin fixture'ın tam sırası sabit bir listedir; kısaltılmış her durumda (liste boş değilse) ghost-opt ilk isteğe bağlıdır.
+    const rich = checkChain(richInput(), "UASCO-0001");
+    expect(rich.full.technologies.map(t => t.technologyId)).toEqual(["tech-a", "tech-b", "ghost-opt", ...OPT_SLUGS]);
+    rich.states.forEach((st, k) => {
+      const opt = st.technologies.filter(t => t.requirement === "OPTIONAL");
+      if (opt.length > 0) expect(opt[0], `state ${k}`).toMatchObject({technologyId: "ghost-opt", registryId: null, status: NAME_NOT_VERIFIED});
+    });
+    const half = rich.states.find(st => st.skills.proposed.length === 0 && st.technologies.filter(t => t.requirement === "OPTIONAL").length === 20 && st.aliases.length === 9)!;
+    expect(half.technologies.filter(t => t.requirement === "OPTIONAL").map(t => t.technologyId)).toEqual(["ghost-opt", ...OPT_SLUGS.slice(0, 19)]);
+    // //TR: Gerçek roller: UASCO-0480/0484 isteğe bağlı [openxr (kayıtsız), ros2]; tek öğe kaldığında kalan openxr'dir (uyarı görünür bağlamdan kaybolmaz).
+    for (const id of ["UASCO-0480", "UASCO-0484"]) {
+      expect(ALL_BY_ID.get(id)!.technologies.filter(t => t.requirement === "OPTIONAL").map(t => t.technologyId), id).toEqual(["openxr", "ros2"]);
+      const walk = checkChain(input(), id);
+      const one = walk.states.find(st => st.technologies.filter(t => t.requirement === "OPTIONAL").length === 1);
+      if (one !== undefined) expect(one.technologies.filter(t => t.requirement === "OPTIONAL")[0], id).toMatchObject({technologyId: "openxr", registryId: null, status: NAME_NOT_VERIFIED});
+    }
+  });
+
+  it("the digest covers the truncation records; the default cap is exactly 24 576; the bytes fixed point holds across a power of ten", () => {
+    // //TR: İki kısaltılmış bağlam yalnız kısaltma KAYDINDA farklıdır (aynı görünen liste, farklı total): özet farklı olmalıdır.
+    const mk = (n: number) => { const slugs = Array.from({length: n}, (_, k) => `o-${String(k).padStart(2, "0")}`); return fxInput({optionalTechnologies: slugs.map(technologyId => ({technologyId, status: "CANDIDATE_NOT_VERIFIED"}))}, {technologies: new Map([["tech-a", techRow("tech-a")], ...slugs.map(slug => [slug, techRow(slug)] as const)])}); };
+    const four = fresh("UASCO-0001", mk(4), {maxBytes: 10_000_000});
+    const twoOfFour = fresh("UASCO-0001", mk(4), {maxBytes: four.bytes - 1});
+    const twoOfFive = fresh("UASCO-0001", mk(5), {maxBytes: twoOfFour.bytes});
+    expect(twoOfFour.truncation).toEqual([{field: "technologies.optional", kept: 2, total: 4}]);
+    expect(twoOfFive.truncation).toEqual([{field: "technologies.optional", kept: 2, total: 5}]);
+    expect(twoOfFive.technologies).toEqual(twoOfFour.technologies);
+    expect(twoOfFive.bytes).toBe(twoOfFour.bytes);
+    expect(twoOfFive.digest).not.toBe(twoOfFour.digest);
+    // //TR: Varsayılan sınır TAM 24 576'dır: dolgu metniyle bağlam tam 24 576 bayta getirilir (kısaltılmaz), bir bayt fazlası varsayılan seçeneklerle kısaltılır; 26 112 gibi daha gevşek bir sınır bunu yakalayamazdı.
+    const many = Array.from({length: 110}, (_, k) => `many-${String(k).padStart(3, "0")}`);
+    const padded = (pad: number) => richInput({responsibilities: ["R1", "p".repeat(pad)], optionalTechnologies: many.map(technologyId => ({technologyId, status: "CANDIDATE_NOT_VERIFIED"}))}, {technologies: new Map([["tech-a", techRow("tech-a")], ["tech-b", techRow("tech-b")], ...many.map(slug => [slug, techRow(slug)] as const)])});
+    const base = fresh("UASCO-0001", padded(0), {maxBytes: 10_000_000}).bytes;
+    const need = ROLE_CONTEXT_DEFAULT_MAX_BYTES - base;
+    expect(need).toBeGreaterThan(0);
+    const exact = fresh("UASCO-0001", padded(need));
+    expect(exact.bytes).toBe(24_576);
+    expect(exact.truncation).toEqual([]);
+    const over = fresh("UASCO-0001", padded(need + 1));
+    expect(over.truncation.length).toBeGreaterThan(0);
+    expect(over.bytes).toBeLessThanOrEqual(24_576);
+    expect(fresh("UASCO-0001", padded(need + 1), {maxBytes: 26_112}).truncation).toEqual([]);
+    // //TR: bytes kendi hanelerini sayan sabit noktadır; 10 000 sınırında (9 995 - 10 006) her bağlamda bytes gerçek serileştirilmiş uzunluktur ve tutarlı değerlerin en küçüğüdür.
+    const small = (pad: number) => fresh("UASCO-0001", fxInput({responsibilities: ["R1", "p".repeat(pad)]}), {maxBytes: 10_000_000});
+    const b0 = small(0).bytes;
+    const seen: number[] = [];
+    for (let target = 9_990; target <= 10_010; target++) {
+      const c = small(target - b0 - 5);
+      seen.push(c.bytes);
+      expect(c.bytes, `pad for ${target}`).toBe(Buffer.byteLength(JSON.stringify(c), "utf8"));
+      const { bytes: _b, digest: _d, ...rest } = c;
+      const restLen = Buffer.byteLength(JSON.stringify(rest), "utf8");
+      for (let x = c.bytes - 6; x < c.bytes; x++) expect(x === restLen + 85 + String(x).length, `smaller fixed point ${x} for ${c.bytes}`).toBe(false);
+    }
+    expect(seen.some(b => b < 10_000)).toBe(true);
+    expect(seen.some(b => b > 10_000)).toBe(true);
+  });
+
+  it("differential: the resolver equals an independent specification on all 599 roles and on 240 seeded adversarial inputs", () => {
+    // //TR: Gerçek 599 rol: bağımsız şartname bağlamla (bytes/digest hariç) birebir aynıdır.
+    for (const c of ALL) expect(strip(c), c.roleId).toEqual(referenceBody(input(), c.roleId));
+    // //TR: 240 tohumlu girdi: her alanda varsayılan olmayan değerler; bağlam şartnameye, bytes serileştirilmiş uzunluğa, özet şartnamedeki kararlı JSON'a eşit olmalıdır.
+    const reasons = new Set<string>();
+    let withProfile = 0;
+    for (let seed = 1; seed <= 240; seed++) {
+      const i = fuzzInput(seed);
+      const c = fresh("UASCO-0001", i, {maxBytes: 10_000_000});
+      expect(strip(c), `seed ${seed}`).toEqual(referenceBody(i, "UASCO-0001"));
+      expect(c.bytes, `seed ${seed} bytes`).toBe(Buffer.byteLength(JSON.stringify(c), "utf8"));
+      expect(c.digest, `seed ${seed} digest`).toBe(sha(canon(strip(c))));
+      if (c.binding.reason !== null) reasons.add(c.binding.reason);
+      if (c.reviewChain !== null) withProfile++;
+    }
+    // //TR: Üreticinin gerçekten çeşitli girdi verdiği sabitlenir (aksi hâlde fark testi boşa geçer).
+    expect(reasons.size).toBeGreaterThanOrEqual(8);
+    expect(withProfile).toBeGreaterThan(80);
+    expect(withProfile).toBeLessThan(200);
+  });
+
+  it("binding shapes per defect, empty-list refusal, batch default cap, input-decided bindings and a null maxBytes", () => {
+    // //TR: Kusurlu bağlama: HER kusur kendi nedenini taşır ve işlev/rota/bağdaştırıcılar boş/null kalır (tam şekil); kusursuz bağlama tam alanlarla gelir.
+    for (const [name, defect, reason] of DEFECTS) {
+      const c = fresh("UASCO-0001", fxInput({}, {bindings: [{...defect(DEV_BINDING), roleId: "UASCO-0001"}]}));
+      expect(c.binding, name).toEqual({origin: "CODE_BINDING_TABLE", resolverLabel: "NOT_EXECUTABLE", reason, function: null, providerRoute: null, adapters: [], note: "RESOLVER_LABEL_NOT_THE_READINESS_EXECUTABLE_LAYER"});
+    }
+    for (const b of FIRST_DELIVERY_BINDINGS) expect(ALL_BY_ID.get(b.roleId)!.binding, b.roleId).toEqual({origin: "CODE_BINDING_TABLE", resolverLabel: "EXECUTABLE", reason: null, function: b.function, providerRoute: b.providerRoute, adapters: [...b.adapters], note: "RESOLVER_LABEL_NOT_THE_READINESS_EXECUTABLE_LAYER"});
+    // //TR: Yinelenen lonca/profil satırlarında İLK eşleşme kazanır (yükleyici yinelenenleri zaten reddeder; çözümleyici belirli davranır): lonca adı ve inceleme zinciri ilk satırdan gelir.
+    const dupGuild = fresh("UASCO-0001", fxInput({}, {guilds: [{guildId: "G01", name: "First", clusterId: "CL01"}, {guildId: "G01", name: "Second", clusterId: "CL01"}]}));
+    expect(dupGuild.canonical.guildName).toBe("First");
+    const prof = (value: string[]): ContextProfileLike => ({roleId: "UASCO-0001", reviewChain: {value, gapId: null, status: "PROPOSED_DERIVED"}, candidateSkills: {value: [], gapId: null}});
+    expect(fresh("UASCO-0001", fxInput({}, {profiles: [prof(["UASCO-0002"]), prof(["UASCO-0003"])]})).reviewChain!.value).toEqual(["UASCO-0002"]);
+    // //TR: Hata iletileri TAM metindir (sonuna ek yazı eklenemez).
+    expect(() => resolveRoleContext(input(), "UASCO-0085", {maxBytes: Number.NaN})).toThrowError(/^ROLE_CONTEXT_INPUT_INVALID:MAX_BYTES:NaN$/);
+    expect(() => resolveRoleContext(input(), "UASCO-0085", {maxBytes: -5})).toThrowError(/^ROLE_CONTEXT_INPUT_INVALID:MAX_BYTES:-5$/);
+    // //TR: Bağlamayı girdi belirler: global tablodaki bir rol, girdide bağlama yoksa NOT_EXECUTABLE'dır.
+    expect(fresh("UASCO-0085", {...input(), bindings: []}).binding).toMatchObject({resolverLabel: "NOT_EXECUTABLE", reason: "ROLE_HAS_NO_BINDING", function: null});
+    // //TR: Listeleri zaten boş ama kanonik metni sınırı aşan rol: sessiz kırpma yok, tipli ret (kısaltılacak bir şey kalmadı).
+    expect(resolveRoleContext(fxInput({responsibilities: ["x".repeat(500)]}), "UASCO-0001", {maxBytes: 100})).toEqual({status: "NOT_RESOLVED", roleId: "UASCO-0001", reason: "ROLE_CONTEXT_EXCEEDS_BYTE_CAP"});
+    // //TR: resolveAll de varsayılan 24 576 sınırını uygular ve verilen seçeneği iletir; null maxBytes varsayılana düşer (hata değil).
+    const many = Array.from({length: 260}, (_, k) => `many-${String(k).padStart(3, "0")}`);
+    const hugeInput = richInput({optionalTechnologies: many.map(technologyId => ({technologyId, status: "CANDIDATE_NOT_VERIFIED"}))}, {technologies: new Map([["tech-a", techRow("tech-a")], ["tech-b", techRow("tech-b")], ...many.map(slug => [slug, techRow(slug)] as const)])});
+    const batch = resolveAllRoleContexts(hugeInput)[0];
+    expect(batch.status === "RESOLVED" && batch.context.bytes <= 24_576 && batch.context.truncation.length > 0).toBe(true);
+    expect(fresh("UASCO-0001", hugeInput, {maxBytes: null as unknown as number}).digest).toBe(fresh("UASCO-0001", hugeInput).digest);
+  });
+
+  it("golden digests: truncated contexts pin the exact bytes, truncation records and digest (skills.proposed and aliases)", () => {
+    // //TR: Tur 3 (R06): zengin fixture'ın kısaltma zincirinden seçilen durumlar (yalnız önerilen yarıya inmiş, önerilen sıfır, takma adlar kısmen kesilmiş, takma adlar sıfır) için bayt sayısı, kısaltma kayıtları ve özet SABİT değerlerdir; kayıt alan adı, kept/total ya da sıra değişirse özet değişir.
+    const walk = checkChain(richInput(), "UASCO-0001");
+    expect(walk.states).toHaveLength(15);
+    const golden = (k: number) => [walk.states[k].bytes, walk.states[k].truncation, walk.states[k].digest];
+    expect(golden(1), "proposed halved (6 of 12)").toEqual([10476, [{field: "skills.proposed", kept: 6, total: 12}], "2587cab7bfd1b9a784a2b4fc20606c19740ef096d7aca9763b114f65d1b03ac8"]);
+    expect(golden(4), "proposed zero").toEqual([10033, [{field: "skills.proposed", kept: 0, total: 12}], "e12cb742646e12f4a9f5d5838f1f274230abbf0a4e09e2d479fb0815f48edb04"]);
+    expect(golden(5), "proposed zero, optional halved (20 of 41)").toEqual([6433, [{field: "skills.proposed", kept: 0, total: 12}, {field: "technologies.optional", kept: 20, total: 41}], "41485a662ed393bc6d99c7ce77f91214dbe1f546cf2b576870c7badb01512657"]);
+    expect(golden(11), "aliases partial (4 of 9)").toEqual([2277, [{field: "skills.proposed", kept: 0, total: 12}, {field: "technologies.optional", kept: 0, total: 41}, {field: "aliases", kept: 4, total: 9}], "e8b58759e44567a4bee9cbd0c6b9676a0a6c05db484871b60f25ee1399f358b5"]);
+    expect(golden(14), "aliases zero (floor)").toEqual([1669, [{field: "skills.proposed", kept: 0, total: 12}, {field: "technologies.optional", kept: 0, total: 41}, {field: "aliases", kept: 0, total: 9}], "d52a0e6567e398c6fdaa40f81f46d054110ab01da06ded7668e2b474c2ffedc6"]);
+  });
+
+  it("resolveAll applies the exact default cap and forwards explicit caps", () => {
+    // //TR: Tur 3: varsayılan sınır TAM 24 576'dır (resolveAll'da da): listesi olmayan bir rol tam 24 576 bayta getirilince çözülür, bir bayt fazlası tipli retle sonuçlanır; açık maxBytes aynı sınırı iletir (24 575 reddeder, 26 112 gevşetir).
+    const plain = (pad: number) => fxInput({responsibilities: ["R1", "p".repeat(pad)]});
+    const base = fresh("UASCO-0001", plain(0), {maxBytes: 10_000_000}).bytes;
+    // //TR: bytes kendi hanelerini sayar: taban 4 haneli, hedef 5 haneli olduğundan dolgu tam sayıya hesapla DEĞİL, ölçerek bulunur (24 576 bayta ulaşan en büyük dolgu).
+    let need = ROLE_CONTEXT_DEFAULT_MAX_BYTES - base;
+    while (fresh("UASCO-0001", plain(need), {maxBytes: 10_000_000}).bytes > ROLE_CONTEXT_DEFAULT_MAX_BYTES) need--;
+    expect(base).toBeLessThan(10_000);
+    expect(fresh("UASCO-0001", plain(need), {maxBytes: 10_000_000}).bytes).toBe(24_576);
+    expect(fresh("UASCO-0001", plain(need + 1), {maxBytes: 10_000_000}).bytes).toBe(24_577);
+    const refused = [{status: "NOT_RESOLVED", roleId: "UASCO-0001", reason: "ROLE_CONTEXT_EXCEEDS_BYTE_CAP"}];
+    const fit = (r: RoleContextResult[]) => r.map(x => (x.status === "RESOLVED" ? [x.context.bytes, x.context.truncation.length] : x));
+    expect(fit(resolveAllRoleContexts(plain(need)))).toEqual([[24_576, 0]]);
+    expect(resolveAllRoleContexts(plain(need + 1))).toEqual(refused);
+    expect(fit(resolveAllRoleContexts(plain(need), {}))).toEqual([[24_576, 0]]);
+    expect(resolveAllRoleContexts(plain(need + 1), {})).toEqual(refused);
+    expect(fit(resolveAllRoleContexts(plain(need), {maxBytes: 24_576}))).toEqual([[24_576, 0]]);
+    expect(resolveAllRoleContexts(plain(need), {maxBytes: 24_575})).toEqual(refused);
+    expect(fit(resolveAllRoleContexts(plain(need + 1), {maxBytes: 26_112}))).toEqual([[24_577, 0]]);
+    // //TR: Kısaltılabilir listeli rol: tam sığan hâl kısaltılmaz, bir bayt fazlası varsayılanla kısaltılır ve sınırı aşmaz; 26 112 sınırı kısaltmaz.
+    const many = Array.from({length: 110}, (_, k) => `many-${String(k).padStart(3, "0")}`);
+    const padded = (pad: number) => richInput({responsibilities: ["R1", "p".repeat(pad)], optionalTechnologies: many.map(technologyId => ({technologyId, status: "CANDIDATE_NOT_VERIFIED"}))}, {technologies: new Map([["tech-a", techRow("tech-a")], ["tech-b", techRow("tech-b")], ...many.map(slug => [slug, techRow(slug)] as const)])});
+    const pbase = fresh("UASCO-0001", padded(0), {maxBytes: 10_000_000}).bytes;
+    const pneed = ROLE_CONTEXT_DEFAULT_MAX_BYTES - pbase;
+    expect(fit(resolveAllRoleContexts(padded(pneed)))).toEqual([[24_576, 0]]);
+    const over = resolveAllRoleContexts(padded(pneed + 1))[0];
+    expect(over.status).toBe("RESOLVED");
+    if (over.status === "RESOLVED") { expect(over.context.truncation.length).toBeGreaterThan(0); expect(over.context.bytes).toBeLessThanOrEqual(24_576); }
+    expect(fit(resolveAllRoleContexts(padded(pneed + 1), {maxBytes: 26_112}))).toEqual([[24_577, 0]]);
+  });
+
   it("the input loader fails closed and never writes", () => {
     const MINI: Record<string, unknown> = {
       "registries/role-definitions.json": {roles: [{roleId: "UASCO-0001", title: "T", guildId: "G01", clusterId: "CL01", responsibilities: ["r"], forbiddenActions: ["f"], specializationBoundaries: ["b"], requiredSkillIds: [],
@@ -617,6 +847,7 @@ describe("C-CTX-1 role-context", () => {
     expect(() => loadRoleContextInputFromRepo(mini("dup", f => { f["registries/technologies.json"] = dupTech; }))).toThrow("ROLE_CONTEXT_INPUT_INVALID:DUPLICATE_TECHNOLOGY_SLUG:tech-a");
     expect(() => loadRoleContextInputFromRepo(mini("dup", f => { f["registries/agent-skill-matrix.json"] = JSON.stringify({agents: [{agentId: "001", requiredSkillIds: []}, {agentId: "001", requiredSkillIds: []}]}); }))).toThrow("ROLE_CONTEXT_INPUT_INVALID:DUPLICATE_LEGACY_AGENT_ID:001");
     const p = {roleId: "UASCO-0001", reviewChain: {value: [], gapId: null, status: "PROPOSED_DERIVED"}, candidateSkills: {value: [], gapId: null}};
+    expect(ROLE_CONTEXT_PROFILE_STATUSES).toEqual(["PROPOSED_DERIVED"]);
     // //TR: Profil alanının kendi durumu (status) zorunludur: inceleme zinciri etiketi ondan gelir; durumsuz profil bozuk girdidir (tipli ret).
     expect(() => loadRoleContextInputFromRepo(mini("nostatus", f => { f["registries/role-execution-profiles.json"] = JSON.stringify({profiles: [{roleId: "UASCO-0001", reviewChain: {value: [], gapId: null}, candidateSkills: {value: [], gapId: null}}]}); }))).toThrow("ROLE_CONTEXT_INPUT_UNAVAILABLE:registries/role-execution-profiles.json");
     expect(() => loadRoleContextInputFromRepo(mini("dup", f => { f["registries/role-execution-profiles.json"] = JSON.stringify({profiles: [p, p]}); }))).toThrow("ROLE_CONTEXT_INPUT_INVALID:DUPLICATE_PROFILE_ROLE_ID:UASCO-0001");
@@ -640,9 +871,36 @@ describe("C-CTX-1 role-context", () => {
     cases.push([TE, "technology row null", d => { d.technologies[0] = null; return d; }]);
     cases.push([MX, "agent without agentId", d => { delete d.agents[0].agentId; return d; }], [MX, "agent without requiredSkillIds", d => { delete d.agents[0].requiredSkillIds; return d; }], [MX, "agent requiredSkillIds not strings", d => { d.agents[0].requiredSkillIds = [1]; return d; }], [MX, "agent row null", d => { d.agents[0] = null; return d; }]);
     cases.push([PR, "profile without roleId", d => { delete d.profiles[0].roleId; return d; }], [PR, "profile row null", d => { d.profiles[0] = null; return d; }], [PR, "profile reviewChain missing", d => { delete d.profiles[0].reviewChain; return d; }], [PR, "profile reviewChain null", d => { d.profiles[0].reviewChain = null; return d; }],
-      [PR, "reviewChain.value missing", d => { delete d.profiles[0].reviewChain.value; return d; }], [PR, "reviewChain.value not strings", d => { d.profiles[0].reviewChain.value = [1]; return d; }], [PR, "reviewChain.status not a string", d => { d.profiles[0].reviewChain.status = 1; return d; }],
+      [PR, "reviewChain.value missing", d => { delete d.profiles[0].reviewChain.value; return d; }], [PR, "reviewChain.value not strings", d => { d.profiles[0].reviewChain.value = [1]; return d; }], [PR, "reviewChain.status not a string", d => { d.profiles[0].reviewChain.status = 1; return d; }], [PR, "reviewChain.status outside the allowed values", d => { d.profiles[0].reviewChain.status = "CERTIFIED"; return d; }], [PR, "reviewChain.status prefix of the allowed value", d => { d.profiles[0].reviewChain.status = "PROPOSED"; return d; }], [PR, "reviewChain.status lower case", d => { d.profiles[0].reviewChain.status = "proposed_derived"; return d; }], [PR, "reviewChain.status padded", d => { d.profiles[0].reviewChain.status = " PROPOSED_DERIVED"; return d; }],
       [PR, "candidateSkills missing", d => { delete d.profiles[0].candidateSkills; return d; }], [PR, "candidateSkills not an object", d => { d.profiles[0].candidateSkills = "x"; return d; }], [PR, "candidateSkills.value missing", d => { delete d.profiles[0].candidateSkills.value; return d; }], [PR, "candidateSkills.value not strings", d => { d.profiles[0].candidateSkills.value = [1]; return d; }]);
-    expect(cases).toHaveLength(55);
-    for (const [rel, name, edit] of cases) expect(() => loadRoleContextInputFromRepo(mini("field", f => { f[rel] = JSON.stringify(edit(doc(rel))); })), `${rel}: ${name}`).toThrow(`ROLE_CONTEXT_INPUT_UNAVAILABLE:${rel}`);
+    expect(cases).toHaveLength(59);
+    for (const [rel, name, edit] of cases) expect(() => loadRoleContextInputFromRepo(mini("field", f => { f[rel] = JSON.stringify(edit(doc(rel))); })), `${rel}: ${name}`).toThrowError(new RegExp(`^ROLE_CONTEXT_INPUT_UNAVAILABLE:${rel.replace(/\./g, "\\.")}$`));
+    expect(() => loadRoleContextInputFromRepo(mini("dupx", f => { f["registries/technologies.json"] = JSON.stringify({technologies: [{id: "TECH-A", slug: "tech-a", status: "REGISTERED", knowledgeState: "S"}, {id: "TECH-B", slug: "tech-a", status: "REGISTERED", knowledgeState: "S"}]}); }))).toThrowError(/^ROLE_CONTEXT_INPUT_INVALID:DUPLICATE_TECHNOLOGY_SLUG:tech-a$/);
+
+    // //TR: Tur 3 (son TEP-1): durum izin listesi TAM eşitliktir ve HER satırda uygulanır: sonekli (`PROPOSED_DERIVED_CERTIFIED`), sonunda/başında boşluklu, satır sonlu, küçük harfli, boş, kısmi ve `CERTIFIED` durumlar reddedilir; geçerli satırlardan sonra gelen 2. (ya da ilk/ortadaki/son) kusurlu satır da reddedilir. Liste dondurulmuştur: push/atama/uzunluk değişikliği hata verir ve listeyi genişletmez.
+    const prof = (roleId: string, status: string) => ({roleId, reviewChain: {value: [], gapId: null, status}, candidateSkills: {value: [], gapId: null}});
+    const statusCases: Array<[string, unknown[]]> = [];
+    for (const bad of ["PROPOSED_DERIVED_CERTIFIED", "PROPOSED_DERIVED ", " PROPOSED_DERIVED", "PROPOSED_DERIVED\n", "proposed_derived", "CERTIFIED", "", "PROPOSED"]) statusCases.push([`single ${JSON.stringify(bad)}`, [prof("UASCO-0001", bad)]]);
+    statusCases.push(["row 2 of 2", [prof("UASCO-0001", "PROPOSED_DERIVED"), prof("UASCO-0002", "CERTIFIED")]]);
+    statusCases.push(["row 1 of 2", [prof("UASCO-0001", "CERTIFIED"), prof("UASCO-0002", "PROPOSED_DERIVED")]]);
+    statusCases.push(["middle of 3", [prof("UASCO-0001", "PROPOSED_DERIVED"), prof("UASCO-0002", "PROPOSED_DERIVED_CERTIFIED"), prof("UASCO-0003", "PROPOSED_DERIVED")]]);
+    statusCases.push(["last of 3 with a trailing space", [prof("UASCO-0001", "PROPOSED_DERIVED"), prof("UASCO-0002", "PROPOSED_DERIVED"), prof("UASCO-0003", "PROPOSED_DERIVED ")]]);
+    expect(statusCases).toHaveLength(12);
+    const prRe = new RegExp(`^ROLE_CONTEXT_INPUT_UNAVAILABLE:${PR.replace(/\./g, "\\.")}$`);
+    for (const [name, profiles] of statusCases) expect(() => loadRoleContextInputFromRepo(mini("status", f => { f[PR] = JSON.stringify({profiles}); })), name).toThrowError(prRe);
+    expect(loadRoleContextInputFromRepo(mini("status-ok", f => { f[PR] = JSON.stringify({profiles: [prof("UASCO-0001", "PROPOSED_DERIVED"), prof("UASCO-0002", "PROPOSED_DERIVED"), prof("UASCO-0003", "PROPOSED_DERIVED")]}); })).profiles).toHaveLength(3);
+    expect(Object.isFrozen(ROLE_CONTEXT_PROFILE_STATUSES)).toBe(true);
+    expect(() => (ROLE_CONTEXT_PROFILE_STATUSES as string[]).push("CERTIFIED")).toThrow(TypeError);
+    expect(() => { (ROLE_CONTEXT_PROFILE_STATUSES as string[])[0] = "CERTIFIED"; }).toThrow(TypeError);
+    expect(() => { (ROLE_CONTEXT_PROFILE_STATUSES as string[]).length = 0; }).toThrow(TypeError);
+    expect([...ROLE_CONTEXT_PROFILE_STATUSES]).toEqual(["PROPOSED_DERIVED"]);
+    expect(() => loadRoleContextInputFromRepo(mini("frozen", f => { f[PR] = JSON.stringify({profiles: [prof("UASCO-0001", "CERTIFIED")]}); }))).toThrowError(prRe);
+    // //TR: Tur 3: profil boşluk kimlikleri (reviewChain.gapId ve candidateSkills.gapId) `string | null` olmalıdır; sayı, boolean, nesne, dizi ve EKSİK alan DOĞRU dosya adıyla kapalı başarısızlıktır (iki alan da ayrı ayrı); boş dize ve dize geçerlidir.
+    const gapProfile = (site: "reviewChain" | "candidateSkills", gapId: unknown) => { const row: any = prof("UASCO-0001", "PROPOSED_DERIVED"); if (gapId === undefined) delete row[site].gapId; else row[site].gapId = gapId; return row; };
+    const gapCases: Array<[string, unknown]> = [];
+    for (const site of ["reviewChain", "candidateSkills"] as const) for (const bad of [5, true, {}, [], ["G"], undefined]) gapCases.push([`${site}.gapId ${bad === undefined ? "missing" : JSON.stringify(bad)}`, gapProfile(site, bad)]);
+    expect(gapCases).toHaveLength(12);
+    for (const [name, row] of gapCases) expect(() => loadRoleContextInputFromRepo(mini("gap", f => { f[PR] = JSON.stringify({profiles: [row]}); })), name).toThrowError(prRe);
+    for (const site of ["reviewChain", "candidateSkills"] as const) for (const good of [null, "", "WFR-GAP-X"]) expect(loadRoleContextInputFromRepo(mini("gap-ok", f => { f[PR] = JSON.stringify({profiles: [gapProfile(site, good)]}); })).profiles, `${site} ${JSON.stringify(good)}`).toHaveLength(1);
   });
 });

@@ -28,9 +28,10 @@ export function catalogFromRoles(roles) {
   };
 }
 
-/** work-runs listesinden run girdisi; rol kimliği kayıtlı bir loncaya eşleniyorsa guildId verilir, aksi halde null (tahmin yok). Liste VERIFIED değilse null. */
+/** work-runs listesinden run girdisi; rol kimliği kayıtlı bir loncaya eşleniyorsa guildId verilir, aksi halde null (tahmin yok). Liste VERIFIED değilse veya kesikse (truncated) null. */
 export function runsFromWorkRuns(workRuns, roles) {
-  if (!workRuns || workRuns.state !== "VERIFIED" || !Array.isArray(workRuns.items)) return null;
+  // //TR: A-273-LOWS: koşu listesi 500'de kesildiyse (sunucu en eski koşuları önce verir, en yeni canlı koşular eksik olabilir) kampüs kesin etkin-koşu sayısı (kesin 0 dahil) göstermez: runs null = UNAVAILABLE.
+  if (!workRuns || workRuns.state !== "VERIFIED" || !Array.isArray(workRuns.items) || workRuns.truncated === true) return null;
   const guildOf = new Map();
   if (roles && roles.state === "VERIFIED" && Array.isArray(roles.items)) for (const r of roles.items) guildOf.set(r.roleId, r.guildId);
   return workRuns.items.map((x) => ({
@@ -43,5 +44,7 @@ export function runsFromWorkRuns(workRuns, roles) {
 }
 
 export function buildCampusInput({ cockpit, control, roles, workRuns }) {
-  return { cockpit: globalStopSource(cockpit, control), catalog: catalogFromRoles(roles), runs: runsFromWorkRuns(workRuns, roles) };
+  // //TR: A-281-LOWS: kesik koşu listesi (runs null) "veri yok" ile aynı görünmesin; okunan koşu sayısı runsCutAt olarak taşınır (kesik değilse null).
+  const runsCutAt = workRuns && workRuns.state === "VERIFIED" && workRuns.truncated === true && Array.isArray(workRuns.items) ? workRuns.items.length : null;
+  return { cockpit: globalStopSource(cockpit, control), catalog: catalogFromRoles(roles), runs: runsFromWorkRuns(workRuns, roles), runsCutAt };
 }

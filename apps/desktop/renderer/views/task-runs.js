@@ -10,10 +10,10 @@ export const taskRunsDraft={taskId:null,runId:""};
 export function resetTaskRunsDraft(taskId=null){taskRunsDraft.taskId=taskId;taskRunsDraft.runId="";delete drafts.status[TASK_RUNS_FORM];delete drafts.status[RECONCILE_FORM]}
 
 /** Göreve bağlı koşuları okur: {state,items}; yol geçersizse ERROR, okuma başarısızsa istemci durumu (UNAVAILABLE/OFFLINE/…). */
-export async function loadTaskRuns(ctx,taskId){
+export async function loadTaskRuns(ctx,taskId,missionId){
   const path=taskRunsPath(taskId);if(!path)return {state:"ERROR",items:[]};
   const r=await ctx.api.raw(path);
-  return r.ok?mapTaskRuns(r.data):{state:r.state,items:[]};
+  return r.ok?mapTaskRuns(r.data,taskId,missionId):{state:r.state,items:[]};
 }
 export async function submitLinkRun(ctx,task,runId){
   const req=buildLinkRunRequest({taskId:task.taskId,runId,taskStatus:task.status});
@@ -65,6 +65,8 @@ export function taskRunsPanel(ctx,{task,linked,runsRes}){
   if(linked.state==="VERIFIED"){
     const opts=runsRes?.state==="VERIFIED"?linkableRuns(runsRes.items,linked.items):[];
     if(task.status==="DONE")form=h(doc,"p",{class:"note",role:"status",dataset:{taskrunsNote:"done"},text:ctx.t("taskruns.doneNote")});
+    // //TR: A-281-LOWS: mission koşu listesi 500'de kesildiyse (truncated) "bağlı olmayan koşu yok" denmez; hangi koşuların bağlı olmadığı söylenemez.
+    else if(runsRes?.state==="VERIFIED"&&runsRes.truncated===true)form=h(doc,"p",{class:"note",role:"status",dataset:{taskrunsNote:"runsCut"},text:ctx.t("taskruns.runsCut",{n:runsRes.items.length})});
     else if(runsRes?.state!=="VERIFIED")form=h(doc,"p",{class:"note",role:"status",dataset:{taskrunsNote:"runsUnknown"},text:ctx.t("taskruns.runsUnknown")});
     else if(!opts.length)form=h(doc,"p",{class:"note",role:"status",dataset:{taskrunsNote:"noUnlinked"},text:ctx.t("taskruns.noUnlinked")});
     else{

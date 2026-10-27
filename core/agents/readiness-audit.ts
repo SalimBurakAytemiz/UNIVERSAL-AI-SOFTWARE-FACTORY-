@@ -355,8 +355,14 @@ function readDoc(repoRoot: string, rel: string): {raw: Buffer; doc: Record<strin
 // //TR: nonEmpty=true: roles/guilds/clusters/skills BOŞ olamaz (boş bir kayıt ölçüm değil, bozuk girdidir; denetim paydası 0 olurdu).
 const arrayOf = (doc: Record<string, unknown>, key: string, rel: string, nonEmpty = false): unknown[] => { const v = doc[key]; if (!Array.isArray(v) || (nonEmpty && v.length === 0)) throw unavailable(rel); return v; };
 
+// //TR: Yükleyicinin okuduğu girdi dosyaları TEK yerde (sıra: roles, skills, technologies, source registry, execution profiles; bilgi profilleri her teknoloji için <knowledgeDir>/<slug>.json). Rota önbellek parmak izini buradan kurar; el ile kopya yoktur.
+export const READINESS_INPUT_FILES = Object.freeze({
+  registries: Object.freeze(["registries/role-definitions.json", "registries/skills-v2.json", "registries/technologies.json", "registries/technology-source-registry.json", "registries/role-execution-profiles.json"] as const),
+  knowledgeDir: "knowledge/technologies" as const
+});
+
 export function loadReadinessInputFromRepo(repoRoot: string, o: {runs: RunsObservation; adapterReality?: ReadonlyMap<string, AdapterRealityEntry>; reachableStages?: ReadonlySet<string>; now: Date}): ReadinessInput {
-  const REL_ROLES = "registries/role-definitions.json", REL_SKILLS = "registries/skills-v2.json", REL_TECH = "registries/technologies.json", REL_SRC = "registries/technology-source-registry.json", REL_PROFILES = "registries/role-execution-profiles.json";
+  const [REL_ROLES, REL_SKILLS, REL_TECH, REL_SRC, REL_PROFILES] = READINESS_INPUT_FILES.registries;
   const {raw, doc: rd} = readDoc(repoRoot, REL_ROLES);
   const roles = arrayOf(rd, "roles", REL_ROLES, true), guilds = arrayOf(rd, "guilds", REL_ROLES, true), clusters = arrayOf(rd, "clusters", REL_ROLES, true);
   const strArr = (v: unknown) => Array.isArray(v) && v.every(x => typeof x === "string");
@@ -372,7 +378,7 @@ export function loadReadinessInputFromRepo(repoRoot: string, o: {runs: RunsObser
 
   const knowledgeProfiles = new Map<string, readonly KnowledgeUnitLike[]>();
   for (const t of techs as {slug: string}[]) {
-    const rel = `knowledge/technologies/${t.slug}.json`;
+    const rel = `${READINESS_INPUT_FILES.knowledgeDir}/${t.slug}.json`;
     const units = arrayOf(readDoc(repoRoot, rel).doc, "knowledgeUnits", rel);
     for (const u of units) if (!isObject(u) || typeof u.facet !== "string" || typeof u.state !== "string" || !Array.isArray(u.sourceRefs) || !(u.lastValidatedAt === null || typeof u.lastValidatedAt === "string")) throw unavailable(rel);
     knowledgeProfiles.set(t.slug, units as KnowledgeUnitLike[]);

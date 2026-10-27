@@ -10,6 +10,8 @@ export const ROLE_CONTEXT_SCHEMA_VERSION = "1.0.0";
 // //TR: Varsayılan bayt sınırı: SON serileştirilmiş bağlam (bytes ve digest alanları DAHİL) bu sınırı aşarsa listeler öncelik sırasıyla kısaltılır ve kısaltma AÇIKÇA işaretlenir; kanonik metin asla kısaltılmaz (sığmıyorsa tipli ret). maxBytes sonlu ve pozitif bir sayı olmalıdır; NaN/sonsuz/sıfır/negatif sınırı sessizce kapatacağından ROLE_CONTEXT_INPUT_INVALID:MAX_BYTES:<değer> ile reddedilir.
 export const ROLE_CONTEXT_DEFAULT_MAX_BYTES = 24_576;
 export const NAME_NOT_VERIFIED = "NAME_NOT_VERIFIED_IN_REGISTRY";
+// //TR: Profil dosyasının inceleme zinciri durumu için KABUL EDİLEN değerler (bugün yalnız PROPOSED_DERIVED): yükleyici başka bir değeri (ör. CERTIFIED, `PROPOSED_DERIVED_CERTIFIED`, sonunda boşluklu `PROPOSED_DERIVED `) TAM eşitlikle ve HER satırda kapalı başarısızlıkla reddeder, böylece daha güçlü bir etiket sessizce bağlama taşınamaz; liste dondurulmuştur (push/atama ile genişletilemez). Çözümleyici saf bir fonksiyondur ve kendisine verilen profilin durumunu olduğu gibi etiketler; doğrulama yükleyicidedir.
+export const ROLE_CONTEXT_PROFILE_STATUSES: readonly string[] = Object.freeze(["PROPOSED_DERIVED"]);
 const REGISTRY = "registries/role-definitions.json";
 const PROFILES = "registries/role-execution-profiles.json";
 
@@ -162,6 +164,8 @@ export function resolveAllRoleContexts(i: RoleContextInput, o: {maxBytes?: numbe
 const unavailable = (rel: string): Error => new Error(`ROLE_CONTEXT_INPUT_UNAVAILABLE:${rel}`);
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const strArr = (v: unknown): v is string[] => Array.isArray(v) && v.every(x => typeof x === "string");
+// //TR: Profil boşluk kimliği (gapId) `string | null` olmalıdır: sayı, nesne, dizi, boolean ya da eksik alan kapalı başarısızlıktır (sessizce atlanmaz).
+const gapRef = (v: unknown): boolean => v === null || typeof v === "string";
 const techRefs = (v: unknown): boolean => Array.isArray(v) && v.every(t => isObject(t) && typeof t.technologyId === "string" && typeof t.status === "string");
 function readArray(repoRoot: string, rel: string, key: string): unknown[] {
   let doc: unknown;
@@ -184,7 +188,7 @@ export function loadRoleContextInputFromRepo(repoRoot: string): RoleContextInput
   const matrix = readArray(repoRoot, REL_MATRIX, "agents");
   for (const a of matrix) if (!isObject(a) || typeof a.agentId !== "string" || !strArr(a.requiredSkillIds)) throw unavailable(REL_MATRIX);
   const profiles = readArray(repoRoot, PROFILES, "profiles");
-  for (const p of profiles) if (!isObject(p) || typeof p.roleId !== "string" || !isObject(p.reviewChain) || !strArr(p.reviewChain.value) || typeof p.reviewChain.status !== "string" || !isObject(p.candidateSkills) || !strArr(p.candidateSkills.value)) throw unavailable(PROFILES);
+  for (const p of profiles) if (!isObject(p) || typeof p.roleId !== "string" || !isObject(p.reviewChain) || !strArr(p.reviewChain.value) || !ROLE_CONTEXT_PROFILE_STATUSES.includes(p.reviewChain.status as string) || !gapRef(p.reviewChain.gapId) || !isObject(p.candidateSkills) || !strArr(p.candidateSkills.value) || !gapRef(p.candidateSkills.gapId)) throw unavailable(PROFILES);
   const slug = indexBy(techs as {slug: string; id: string; status: string; knowledgeState: string}[], t => t.slug, "DUPLICATE_TECHNOLOGY_SLUG");
   const legacy = indexBy(matrix as {agentId: string; requiredSkillIds: string[]}[], a => a.agentId, "DUPLICATE_LEGACY_AGENT_ID");
   indexBy(profiles as {roleId: string}[], p => p.roleId, "DUPLICATE_PROFILE_ROLE_ID");
