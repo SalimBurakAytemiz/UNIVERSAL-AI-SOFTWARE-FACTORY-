@@ -2885,7 +2885,7 @@ describe("LANE-A A-UI125-1 import success shows the agent configuration quaranti
   it("UNKNOWN (the answer has no readable import block, or the evidence is malformed): never a plain success, never partial figures", async () => {
     const bads: Array<[string, any]> = [["empty body", {}], ["no import block", {project: {projectId: PID}}], ["import not an object", {import: "x"}],
       ["import without kind", {import: {headSha: HEAD}}], ["import with a bad headSha", {import: {kind: "git", headSha: "xyz"}}],
-      ["count mismatching the files", body(quarantine([fileOf("CLAUDE.md")], {count: 2}))], ["count zero", body(quarantine([], {count: 0}))],
+      ["count mismatching the files", body(quarantine([fileOf("CLAUDE.md")], {count: 2}))], ["count above the listed files with a consistent truncated flag (the server truncates only above 500)", body(quarantine([fileOf("CLAUDE.md"), fileOf("a/CLAUDE.md")], {count: 3, truncated: true}))], ["more files listed than counted", body(quarantine([fileOf("CLAUDE.md"), fileOf("a/CLAUDE.md")], {count: 1}))], ["count zero", body(quarantine([], {count: 0}))],
       ["truncated flag contradicting the counts", body(quarantine([fileOf("CLAUDE.md")], {truncated: true}))], ["evidence headSha differing from the import headSha", body(quarantine([fileOf("CLAUDE.md")], {headSha: "b".repeat(40)}))],
       ["a file with a bad sha256", body(quarantine([fileOf("CLAUDE.md", {sha256: "zz"})]))], ["a file kind outside file/symlink/other", body(quarantine([fileOf("CLAUDE.md", {kind: "dir"})]))],
       ["a file path with a control character", body(quarantine([fileOf("CLAUDE.md\n")]))], ["negative bytes", body(quarantine([fileOf("CLAUDE.md", {bytes: -1})]))],
