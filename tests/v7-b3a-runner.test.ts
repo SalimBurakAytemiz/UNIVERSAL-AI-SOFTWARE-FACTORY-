@@ -765,18 +765,19 @@ describe("LANE-C MissionRunner claim cap (maxConcurrentRuns)", () => {
   const REAL_SPAWN = cp.spawn;
   const boundedTick = async (mr: MissionRunner, c: Ctx, ids: string[], label: string, ctx: () => Record<string, unknown>, ms = 30_000) => {
     const mark = () => JSON.stringify(ids.map(id => { const r = c.store.engineGetRun(id); return r ? [r.status, r.step, r.checkpoints.length, r.evidence.length, r.retryCount, r.retryAt, r.leaseExpiresAt] : null; }));
-    let seen = mark(), quietSince = Date.now(), poll: ReturnType<typeof setInterval> | undefined, cleaned = false;
+    let seen = mark(), quietSince = Date.now(), poll: ReturnType<typeof setInterval> | undefined, cleaned = false, settled = false, stopped = false;
     const touch = () => { quietSince = Date.now(); };
     const spawnSpy = vi.spyOn(cp, "spawn").mockImplementation(((...a: unknown[]) => { const child = (REAL_SPAWN as (...x: unknown[]) => cp.ChildProcess).apply(cp, a); touch(); child.once("close", touch); return child; }) as typeof cp.spawn);
     const cleanup = () => { if (cleaned) return; cleaned = true; clearInterval(poll); spawnSpy.mockRestore(); };
-    onTestFinished(cleanup);
+    // //TR: vitest test zaman aşımı watchdog'dan önce düşerse tick hâlâ askıdadır: runner burada da (sınırlı) durdurulur, terk edilen tick sonraki teste taşmaz.
+    onTestFinished(async () => { if (!settled && !stopped) await Promise.race([mr.stop(), new Promise(r => setTimeout(r, 5_000))]); cleanup(); });
     const stalled = new Promise<never>((_, reject) => { poll = setInterval(() => {
       const now = mark();
       if (now !== seen) { seen = now; touch(); return; }
       if (Date.now() - quietSince >= ms) reject(new Error(`BOUNDED_TICK_TIMEOUT ${label}: no progress (run state or child process) for ${ms} ms of real time (virtual clock frozen?) ${runDiag(c, ids, ctx())}`));
     }, 200); });
-    try { return await Promise.race([mr.tick(), stalled]); }
-    catch (e) { await Promise.race([mr.stop(), new Promise(r => setTimeout(r, 10_000))]); throw e; }
+    try { return await Promise.race([mr.tick().finally(() => { settled = true; }), stalled]); }
+    catch (e) { stopped = true; await Promise.race([mr.stop(), new Promise(r => setTimeout(r, 10_000))]); throw e; }
     finally { cleanup(); }
   };
   // run geçişlerini kaydeder: sanal saat donukken RETRY_SCHEDULED'a girilmemeli (girilirse retryAt sanal saatle geçmez).
