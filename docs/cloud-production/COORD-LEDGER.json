@@ -632,6 +632,16 @@
       "ref": "wf_6d388e17-b52 (2 lenses + skeptics): HIGH UI-011 analysis step/plan counted covered but desktop POST allow-list + server registration absent (b5 test asserts blocked; authority request batch 4b = #242 Founder); MEDIUM UI-007 vs UI-124 inconsistent class for untested stop-confirm path; MEDIUM #46 ported via #170 (3a52348 ancestor) misreported UNKNOWN, UI-010 CSV ref wrong; MEDIUM UI-005/UI-115 follow-up file lists miss ROUTES pin tests; 8 LOW",
       "policy": "TEP-1",
       "at": "2026-10-27T01:06:11.294Z"
+    },
+    {
+      "pr": 266,
+      "sha": "5e17b79f04f126b5aa5306ddd210e4ed871152f5",
+      "kind": "delta",
+      "base": "254779c4b743768dc43eb491a0bfeec26ca98fa7",
+      "verdict": "NO_BLOCKERS_6LOW",
+      "ref": "wf_7a53b7d1-c41 (2 lenses + skeptics): both MEDIUMs + RECOVERING LOW FIXED (chain fails 4/4 on base, deterministic under load 16; per-method/threshold/lost mutants killed; SWEEP-5 interleavings safe); LOW follow-ups: N3 renew-after-write unpinned, N7 unconditional owned.delete unpinned, N8 caller-own lease unpinned, acquire/takeover unhooked, B position uncontrolled",
+      "policy": "TEP-1",
+      "at": "2026-10-27T01:16:43.509Z"
     }
   ],
   "tests": [],
