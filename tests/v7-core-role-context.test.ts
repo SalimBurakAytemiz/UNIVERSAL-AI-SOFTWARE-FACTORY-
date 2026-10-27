@@ -153,6 +153,7 @@ function checkChain(i: RoleContextInput, id: string) {
     // //TR: HER durumda (zemin dahil) kısaltılmayan her alan sınırsız bağlamla AYNIDIR; kısaltılan listeler onun ön ekidir; kayıt tam olarak kesileni ve sayılarını söyler.
     expect(strip(c), `${id} state ${k} [${kp},${ko},${ka}]`).toEqual({...strip(full), technologies: [...required, ...optional.slice(0, ko)], skills: {...full.skills, proposed: full.skills.proposed.slice(0, kp)}, aliases: full.aliases.slice(0, ka), truncation: records});
     expect(c.bytes, `${id} state ${k} bytes`).toBe(Buffer.byteLength(JSON.stringify(c), "utf8"));
+    expect(c.digest, `${id} state ${k} digest follows the specification (sha256 of the canonical body, truncation records included)`).toBe(sha(canon(strip(c))));
     if (k > 0) { expect(c.bytes).toBeLessThan(states[k - 1].bytes); expect(c.digest).not.toBe(states[k - 1].digest); }
     // //TR: Tam sığan sınır (bytes) bu durumu verir: sınır SON serileştirilmiş biçime uygulanır.
     expect(fresh(id, i, {maxBytes: c.bytes}).digest, `${id} state ${k} exact fit`).toBe(c.digest);
@@ -776,6 +777,13 @@ describe("C-CTX-1 role-context", () => {
     expect(golden(4), "proposed zero").toEqual([10033, [{field: "skills.proposed", kept: 0, total: 12}], "e12cb742646e12f4a9f5d5838f1f274230abbf0a4e09e2d479fb0815f48edb04"]);
     expect(golden(5), "proposed zero, optional halved (20 of 41)").toEqual([6433, [{field: "skills.proposed", kept: 0, total: 12}, {field: "technologies.optional", kept: 20, total: 41}], "41485a662ed393bc6d99c7ce77f91214dbe1f546cf2b576870c7badb01512657"]);
     expect(golden(11), "aliases partial (4 of 9)").toEqual([2277, [{field: "skills.proposed", kept: 0, total: 12}, {field: "technologies.optional", kept: 0, total: 41}, {field: "aliases", kept: 4, total: 9}], "e8b58759e44567a4bee9cbd0c6b9676a0a6c05db484871b60f25ee1399f358b5"]);
+    // //TR: C-CTX-1-LOWS (d): TEK kept sayılı durumlar (3, 1, 5, 1) da sabittir ve zincirdeki HER durumda özet = sha256(kanonik gövde) olarak şartnameyle de doğrulanır (kısaltma kayıtları dahil); tek kept sayılı kayıtları özetten düşüren bir mutant yaşayamaz.
+    expect(golden(2), "proposed kept 3 of 12 (odd)").toEqual([10251, [{field: "skills.proposed", kept: 3, total: 12}], "d911b2528c76f6f2cc4163e9ed68f1153fab88cea94cd0b1773a691b9b9a98de"]);
+    expect(golden(3), "proposed kept 1 of 12 (odd)").toEqual([10105, [{field: "skills.proposed", kept: 1, total: 12}], "28062b3146ecbd9ab71a457e9d79987674e72caceb13d092885bc0f270b2e8f8"]);
+    expect(golden(7), "optional kept 5 of 41 (odd)").toEqual([3822, [{field: "skills.proposed", kept: 0, total: 12}, {field: "technologies.optional", kept: 5, total: 41}], "4bef8c89c8ceb188809d685f4cc14c7ee82c9fb37461ac00ae3f9ed6e449957c"]);
+    expect(golden(13), "aliases kept 1 of 9 (odd)").toEqual([1822, [{field: "skills.proposed", kept: 0, total: 12}, {field: "technologies.optional", kept: 0, total: 41}, {field: "aliases", kept: 1, total: 9}], "3cdba3b10d8abd57960bda30b6cd2e94f8cb2774cd2c8c4fc32added11a877f7"]);
+    for (const k of [2, 3, 7, 13]) expect(walk.states[k].digest, `state ${k} follows the specification`).toBe(sha(canon(strip(walk.states[k]))));
+    expect(walk.states.some(st => st.truncation.some(r => r.kept % 2 === 1)), "the chain really has odd kept counts").toBe(true);
     expect(golden(14), "aliases zero (floor)").toEqual([1669, [{field: "skills.proposed", kept: 0, total: 12}, {field: "technologies.optional", kept: 0, total: 41}, {field: "aliases", kept: 0, total: 9}], "d52a0e6567e398c6fdaa40f81f46d054110ab01da06ded7668e2b474c2ffedc6"]);
   });
 
@@ -795,6 +803,11 @@ describe("C-CTX-1 role-context", () => {
     expect(resolveAllRoleContexts(plain(need + 1))).toEqual(refused);
     expect(fit(resolveAllRoleContexts(plain(need), {}))).toEqual([[24_576, 0]]);
     expect(resolveAllRoleContexts(plain(need + 1), {})).toEqual(refused);
+    // //TR: C-CTX-1-LOWS (e): açıkça verilmiş `{maxBytes: undefined}` varsayılan sınırdır (24 576), hata ya da başka bir sınır DEĞİL.
+    expect(fit(resolveAllRoleContexts(plain(need), {maxBytes: undefined}))).toEqual([[24_576, 0]]);
+    expect(resolveAllRoleContexts(plain(need + 1), {maxBytes: undefined})).toEqual(refused);
+    expect(fresh("UASCO-0001", plain(need), {maxBytes: undefined}).bytes).toBe(24_576);
+    expect(resolveRoleContext(plain(need + 1), "UASCO-0001", {maxBytes: undefined})).toEqual(refused[0]);
     expect(fit(resolveAllRoleContexts(plain(need), {maxBytes: 24_576}))).toEqual([[24_576, 0]]);
     expect(resolveAllRoleContexts(plain(need), {maxBytes: 24_575})).toEqual(refused);
     expect(fit(resolveAllRoleContexts(plain(need + 1), {maxBytes: 26_112}))).toEqual([[24_577, 0]]);
@@ -902,5 +915,42 @@ describe("C-CTX-1 role-context", () => {
     expect(gapCases).toHaveLength(12);
     for (const [name, row] of gapCases) expect(() => loadRoleContextInputFromRepo(mini("gap", f => { f[PR] = JSON.stringify({profiles: [row]}); })), name).toThrowError(prRe);
     for (const site of ["reviewChain", "candidateSkills"] as const) for (const good of [null, "", "WFR-GAP-X"]) expect(loadRoleContextInputFromRepo(mini("gap-ok", f => { f[PR] = JSON.stringify({profiles: [gapProfile(site, good)]}); })).profiles, `${site} ${JSON.stringify(good)}`).toHaveLength(1);
+
+    // //TR: C-CTX-1-LOWS (a): kötü durum GERÇEK biçimli bir satırda da reddedilir. Önceki fixture'lar asgari satırdı (gapId null, boş candidateSkills, `route` yok), bu yüzden kontrolü yalnız o koşullarda yapan mutantlar yaşıyordu. Satır, UASCO-0005'in gerçek profilinin kopyasıdır (string gapId, dolu candidateSkills, `route` anahtarı); gapId {null, string} x candidateSkills {boş, dolu} x route {var, yok} x durum {CERTIFIED, INTERNALLY_CERTIFIED} = 16 ret ve aynı 8 kombinasyonda geçerli durum KABUL (olumlu kontrol).
+    const realFile = JSON.parse(fs.readFileSync(path.join(REPO, "registries", "role-execution-profiles.json"), "utf8")) as {profiles: any[]};
+    const realRow = (status: unknown, o: {gapId?: string | null; skills?: boolean; route?: boolean} = {}) => {
+      const row = JSON.parse(JSON.stringify(realFile.profiles.find(x => x.roleId === "UASCO-0005")));
+      row.reviewChain.gapId = o.gapId === undefined ? "WFR-GAP-REVIEW-UASCO-0005" : o.gapId;
+      if (o.skills === false) row.candidateSkills.value = [];
+      if (o.route === false) delete row.route;
+      if (status === undefined) delete row.reviewChain.status; else row.reviewChain.status = status;
+      return row;
+    };
+    const base5 = realRow("PROPOSED_DERIVED");
+    expect([typeof base5.reviewChain.gapId, base5.candidateSkills.value.length > 0, "route" in base5]).toEqual(["string", true, true]);
+    const shapes: Array<[string, Parameters<typeof realRow>[1]]> = [];
+    for (const gapId of [null, "WFR-GAP-REVIEW-UASCO-0005"]) for (const skills of [true, false]) for (const route of [true, false]) shapes.push([`gapId=${gapId === null ? "null" : "string"} skills=${skills ? "filled" : "empty"} route=${route ? "present" : "absent"}`, {gapId, skills, route}]);
+    expect(shapes).toHaveLength(8);
+    for (const [name, o] of shapes) {
+      for (const bad of ["CERTIFIED", "INTERNALLY_CERTIFIED"]) expect(() => loadRoleContextInputFromRepo(mini("real-bad", f => { f[PR] = JSON.stringify({profiles: [realRow(bad, o)]}); })), `${name} ${bad}`).toThrowError(prRe);
+      expect(loadRoleContextInputFromRepo(mini("real-ok", f => { f[PR] = JSON.stringify({profiles: [realRow("PROPOSED_DERIVED", o)]}); })).profiles, name).toHaveLength(1);
+    }
+    // //TR: (b) dize olmayan durumlar (sayı, boolean, null, dizi, nesne, EKSİK alan; ["PROPOSED_DERIVED"] ve {value: ...} dize zorlaması yapan bir denetimi yakalar) gerçek biçimli satırda da reddedilir.
+    const nonStrings: Array<[string, unknown]> = [["number 1", 1], ["true", true], ["false", false], ["null", null], ["array with the exact status", ["PROPOSED_DERIVED"]], ["empty array", []], ["object with the exact status", {value: "PROPOSED_DERIVED"}], ["empty object", {}], ["missing", undefined]];
+    for (const [name, bad] of nonStrings) for (const [shape, o] of [["real-shaped", {}], ["minimal", {gapId: null, skills: false, route: false}]] as const) expect(() => loadRoleContextInputFromRepo(mini("nonstring", f => { f[PR] = JSON.stringify({profiles: [realRow(bad, o)]}); })), `${shape} ${name}`).toThrowError(prRe);
+    // //TR: (c) görünüşte aynı / görünmez / yerel ayara göre büyük-küçük harf / tam genişlik durumlar da TAM eşitlik nedeniyle reddedilir (NFKC normalleştirme, sıfır genişlikli karakter silme, locale-case yapan bir denetim yaşamaz).
+    const lookalikes: Array<[string, string]> = [
+      ["fullwidth", "ＰＲＯＰＯＳＥＤ＿ＤＥＲＩＶＥＤ"], ["fullwidth underscore only", "PROPOSED＿DERIVED"],
+      ["zero-width space inside", "PROPOSED​_DERIVED"], ["zero-width space before", "​PROPOSED_DERIVED"], ["zero-width space after", "PROPOSED_DERIVED​"],
+      ["zero-width joiner", "PROPOSED_DERIVED‍"], ["zero-width non-joiner", "PROPOSED_‌DERIVED"], ["word joiner", "PROPOSED⁠_DERIVED"], ["byte order mark", "﻿PROPOSED_DERIVED"], ["soft hyphen", "PROPOSED_DERI­VED"],
+      ["Cyrillic Er", "РROPOSED_DERIVED"], ["Cyrillic Ie and O", "PRОPOSЕD_DERIVED"], ["Greek Rho", "ΡROPOSED_DERIVED"],
+      ["lower case", "proposed_derived"], ["title case", "Proposed_Derived"], ["Turkish dotted capital I", "PROPOSED_DERİVED"], ["Turkish lower-case result", "proposed_derıved"], ["tr lower-case of the status", "PROPOSED_DERIVED".toLocaleLowerCase("tr")],
+      ["space instead of underscore", "PROPOSED DERIVED"], ["hyphen instead of underscore", "PROPOSED-DERIVED"], ["non-breaking space after", "PROPOSED_DERIVED "], ["tab before", "\tPROPOSED_DERIVED"], ["CRLF after", "PROPOSED_DERIVED\r\n"], ["combining acute", "PROPOSED_DERIVED́"], ["NUL after", "PROPOSED_DERIVED\u0000"]
+    ];
+    expect(lookalikes).toHaveLength(25);
+    for (const [name, bad] of lookalikes) {
+      expect(bad, name).not.toBe("PROPOSED_DERIVED");
+      expect(() => loadRoleContextInputFromRepo(mini("lookalike", f => { f[PR] = JSON.stringify({profiles: [realRow(bad)]}); })), name).toThrowError(prRe);
+    }
   });
 });
