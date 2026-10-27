@@ -592,6 +592,16 @@
       "ref": "wf_fe07e453-379 (2 lenses + 2 skeptics): M4 THEAD still unpinned (N07/N08/R27/R30 survive); L3 PRESENT full-UNKNOWN untested (R10); round-2 M1-M3/L1/L2/L4 FIXED; strategy: one bounded final push + coordinator mutant checklist",
       "policy": "TEP-1",
       "at": "2026-10-27T00:10:04.726Z"
+    },
+    {
+      "pr": 263,
+      "sha": "39d476bb02267f1e1a4ce0c479d391e46e6dcdca",
+      "kind": "delta",
+      "base": "49ead80387f54ad6c768e0defc7a9b17d9ce95cf",
+      "verdict": "NO_BLOCKERS_1LOW_final_checklist",
+      "ref": "wf_2f10b7c8-c47 coordinator checklist (ROUND_LIMIT bounded push) + skeptic: scope 1 file +50/-0; N07/N08/R27/R30/R10/R15/R29/R23/R24 + 2 own + 12 skeptic mutants KILLED; baseline 267/267; LOW: F5 failure labels for ''/{} unclear",
+      "policy": "TEP-1",
+      "at": "2026-10-27T00:19:45.022Z"
     }
   ],
   "tests": [],
