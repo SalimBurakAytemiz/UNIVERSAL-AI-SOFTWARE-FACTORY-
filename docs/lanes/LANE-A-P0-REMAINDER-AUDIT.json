@@ -209,7 +209,7 @@
       ],
       "f": "CODE_PRESENT (bell + 3-tab feed + event strip exist in shell.js) - not TEST_PASS_LINUX because no test executes renderFeed/bell. Dedicated feed with history/filters = SPEC_MISSING (and absent in code); design parity/real app = NOT_VERIFIED_LOCAL_ONLY.",
       "g": {
-        "follow_up": "UI-005: Notification Feed view (history + filters) and behavioural shell tests for bell/feed - spec-first (needs Founder/design input for scope) | Frozen scope - existing exact ROUTES pins that break when routes.js gains an id: ALWAYS tests/v7-b4-desktop-shell.test.ts:75 and tests/v7-ps1b-project-studio-ui.test.ts:619 (full-array equality); slice(-15) pins when the id is appended or inserted inside the last 15 ids: tests/v7-ux-executive.test.ts:876, tests/v7-ux-journey.test.ts:564, tests/v7-ux-matrix.test.ts:1008, tests/v7-ux-operations.test.ts:1101, tests/v7-ux-posture.test.ts:1052, tests/v7-ux-queue.test.ts:911, tests/v7-ux-readiness.test.ts:1116; tail pins when the id is appended after 'settings' or lands in the last 6: tests/v7-ux-matrix.test.ts:1266 (slice(-4)) and tests/v7-ux-operations.test.ts:1201 (slice(-6)). Inserting before the last 15 ids touches only the first two.",
+        "follow_up": "UI-005: Notification Feed view (history + filters) and behavioural shell tests for bell/feed - spec-first (needs Founder/design input for scope) | Frozen scope - existing exact ROUTES pins that break when routes.js gains an id: ALWAYS tests/v7-b4-desktop-shell.test.ts:75 and tests/v7-ps1b-project-studio-ui.test.ts:619 (full-array equality); slice(-15) pins when the id is appended or inserted inside the last 15 ids: tests/v7-ux-executive.test.ts:876, tests/v7-ux-journey.test.ts:564, tests/v7-ux-matrix.test.ts:1008, tests/v7-ux-operations.test.ts:1101, tests/v7-ux-posture.test.ts:1052, tests/v7-ux-queue.test.ts:911, tests/v7-ux-readiness.test.ts:1116; tail pins when the id is appended after 'settings' or lands in the last 6: tests/v7-ux-install.test.ts:607 (ROUTES.at(-1).id === \"settings\"; breaks as soon as the new route is appended after settings), tests/v7-ux-matrix.test.ts:1266 (slice(-4)) and tests/v7-ux-operations.test.ts:1201 (slice(-6)). Inserting before the last 15 ids touches only the first two. Conditional on the new route having factory:true: tests/v7-b4-desktop-shell.test.ts:74 (FACTORY_AREA_ORDER equality) and the factory-count==8 checks tests/v7-ux-executive.test.ts:878, tests/v7-ux-install.test.ts:609, tests/v7-ux-matrix.test.ts:1010, tests/v7-ux-operations.test.ts:1103, tests/v7-ux-posture.test.ts:1054, tests/v7-ux-queue.test.ts:913, tests/v7-ux-readiness.test.ts:1118 also break.",
         "size": "M",
         "files": [
           "apps/desktop/renderer/routes.js",
@@ -229,7 +229,9 @@
           "tests/v7-ux-queue.test.ts:911",
           "tests/v7-ux-readiness.test.ts:1116",
           "tests/v7-ux-matrix.test.ts:1266 (only if appended after settings)",
-          "tests/v7-ux-operations.test.ts:1201 (only if appended after settings)"
+          "tests/v7-ux-operations.test.ts:1201 (only if appended after settings)",
+          "tests/v7-ux-install.test.ts:607 (only if appended after settings)",
+          "tests/v7-b4-desktop-shell.test.ts:74 and the factory-count==8 lines tests/v7-ux-executive.test.ts:878, tests/v7-ux-install.test.ts:609, tests/v7-ux-matrix.test.ts:1010, tests/v7-ux-operations.test.ts:1103, tests/v7-ux-posture.test.ts:1054, tests/v7-ux-queue.test.ts:913, tests/v7-ux-readiness.test.ts:1118 (only if the new route has factory:true)"
         ]
       }
     },
@@ -1872,7 +1874,7 @@
       ],
       "f": "TEST_PASS_LINUX (kit pieces and tokens: visual-parity 10/0, wp2-cockpit 23/0); design-token parity SPEC_MISSING; reference screen absent; NOT_VERIFIED_LOCAL_ONLY for pixel parity",
       "g": {
-        "follow_up": "UI-115: read-only Design System reference route (token swatches from styles.css, the 14 state pills, kit samples) with no parity claim | Frozen scope - existing exact ROUTES pins that break when routes.js gains an id: ALWAYS tests/v7-b4-desktop-shell.test.ts:75 and tests/v7-ps1b-project-studio-ui.test.ts:619 (full-array equality); slice(-15) pins when the id is appended or inserted inside the last 15 ids: tests/v7-ux-executive.test.ts:876, tests/v7-ux-journey.test.ts:564, tests/v7-ux-matrix.test.ts:1008, tests/v7-ux-operations.test.ts:1101, tests/v7-ux-posture.test.ts:1052, tests/v7-ux-queue.test.ts:911, tests/v7-ux-readiness.test.ts:1116; tail pins when the id is appended after 'settings' or lands in the last 6: tests/v7-ux-matrix.test.ts:1266 (slice(-4)) and tests/v7-ux-operations.test.ts:1201 (slice(-6)). Inserting before the last 15 ids touches only the first two.",
+        "follow_up": "UI-115: read-only Design System reference route (token swatches from styles.css, the 14 state pills, kit samples) with no parity claim | Frozen scope - existing exact ROUTES pins that break when routes.js gains an id: ALWAYS tests/v7-b4-desktop-shell.test.ts:75 and tests/v7-ps1b-project-studio-ui.test.ts:619 (full-array equality); slice(-15) pins when the id is appended or inserted inside the last 15 ids: tests/v7-ux-executive.test.ts:876, tests/v7-ux-journey.test.ts:564, tests/v7-ux-matrix.test.ts:1008, tests/v7-ux-operations.test.ts:1101, tests/v7-ux-posture.test.ts:1052, tests/v7-ux-queue.test.ts:911, tests/v7-ux-readiness.test.ts:1116; tail pins when the id is appended after 'settings' or lands in the last 6: tests/v7-ux-install.test.ts:607 (ROUTES.at(-1).id === \"settings\"; breaks as soon as the new route is appended after settings), tests/v7-ux-matrix.test.ts:1266 (slice(-4)) and tests/v7-ux-operations.test.ts:1201 (slice(-6)). Inserting before the last 15 ids touches only the first two. Conditional on the new route having factory:true: tests/v7-b4-desktop-shell.test.ts:74 (FACTORY_AREA_ORDER equality) and the factory-count==8 checks tests/v7-ux-executive.test.ts:878, tests/v7-ux-install.test.ts:609, tests/v7-ux-matrix.test.ts:1010, tests/v7-ux-operations.test.ts:1103, tests/v7-ux-posture.test.ts:1054, tests/v7-ux-queue.test.ts:913, tests/v7-ux-readiness.test.ts:1118 also break.",
         "size": "M",
         "files": [
           "apps/desktop/renderer/routes.js",
@@ -1892,7 +1894,9 @@
           "tests/v7-ux-queue.test.ts:911",
           "tests/v7-ux-readiness.test.ts:1116",
           "tests/v7-ux-matrix.test.ts:1266 (only if appended after settings)",
-          "tests/v7-ux-operations.test.ts:1201 (only if appended after settings)"
+          "tests/v7-ux-operations.test.ts:1201 (only if appended after settings)",
+          "tests/v7-ux-install.test.ts:607 (only if appended after settings)",
+          "tests/v7-b4-desktop-shell.test.ts:74 and the factory-count==8 lines tests/v7-ux-executive.test.ts:878, tests/v7-ux-install.test.ts:609, tests/v7-ux-matrix.test.ts:1010, tests/v7-ux-operations.test.ts:1103, tests/v7-ux-posture.test.ts:1054, tests/v7-ux-queue.test.ts:913, tests/v7-ux-readiness.test.ts:1118 (only if the new route has factory:true)"
         ]
       }
     },
@@ -2011,20 +2015,19 @@
         "Stop dialog has no impact/blast-radius preview: index.html:55 shows only the static stop.dialog.body text and shell.js:196-203 passes no data; the shell already holds cockpit and attention reads (shell.js:116 reads, :118 stores data.cockpit and data.attention) but renders none in the dialog. Backlog task B2-UI-124 (live impact counts) exists as AUTHORITY_REQUIRED, not READY.",
         "No per-scope stop: the only stop path is the global one (main.mjs:319 -> POST /v1/control/stop, server.ts:166 writes the single GLOBAL_STOP.json); per-scope would need a new endpoint + IPC in protected main.mjs (CSV authority_needed). UNKNOWN: which scopes the design means.",
         "Test gap: no test drives #stopConfirm -> ctx.stop -> window.uasco.stop (see c.note); only dialog open/exists and resume confirmation are tested.",
-        "(the stop-confirm test gap is shared with UI-007: one S test task, see UI-007 g)",
+        "POINTER (not a delta): the stop-confirm test gap is tracked once, under UI-007 g (free size-S test task), not in B2-UI-124.",
         "NOT_VERIFIED_LOCAL_ONLY: design parity, real Electron IPC and real stop effect."
       ],
       "f": "CODE_PRESENT (global Stop dialog + confirmed Resume; resume confirmation and Stop wiring have passing Linux tests, but the stop-confirm to IPC path is untested); impact preview and per-scope stop ABSENT; design parity NOT_VERIFIED_LOCAL_ONLY",
       "g": {
-        "follow_up": "B2-UI-124: Stop dialog shows live impact counts (active runs, blocked items; unreadable shown as an em dash) plus a test that #stopConfirm triggers ctx.stop (needs Founder authority; per-scope stop is a separate server+protected-IPC task)",
+        "follow_up": "B2-UI-124: Stop dialog shows live impact counts (active runs, blocked items; unreadable shown as an em dash) (needs Founder authority; per-scope stop is a separate server+protected-IPC task). The #stopConfirm -> ctx.stop test is NOT part of this task: it is the free size-S task under UI-007 g",
         "size": "M",
         "files": [
           "apps/desktop/renderer/shell.js",
           "apps/desktop/renderer/model.js",
           "apps/desktop/renderer/locales/en.js",
           "apps/desktop/renderer/locales/tr.js",
-          "apps/desktop/renderer/styles.css",
-          "tests/v7-ux-shell.test.ts"
+          "apps/desktop/renderer/styles.css"
         ]
       }
     },
