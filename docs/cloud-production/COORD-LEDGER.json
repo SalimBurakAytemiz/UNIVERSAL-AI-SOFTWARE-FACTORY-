@@ -782,6 +782,16 @@
       "ref": "wf_dd7891af-d76 (2 lenses + 3 skeptics, none refuted): round-1 B1-B7 FIXED (TS ground truth 449/449, 169/169 catalogue killed); test gaps: CALLER_NOT_PRODUCTION guards D13/D12/D15 survive; IDENT_CHAR digits D7 survives; tokenRe partial boundary R1-N13b/R1-N28b survive; LOWs exportIn ASCII boundary (over-report), isProductionPath selftest/spec/fixture/.TEST., member-boundary ASI regression (under-report), unicode slash cases",
       "policy": "TEP-1",
       "at": "2026-10-27T02:30:59.206Z"
+    },
+    {
+      "pr": 275,
+      "sha": "3b3e9ac41aeed3d261d043d70326e7929b73a5b5",
+      "kind": "full",
+      "base": null,
+      "verdict": "BLOCKERS_1MEDIUM",
+      "ref": "wf_683d9625-361 (1 lens + skeptic, not refuted): 30 s startC bound lets drive-delay mutants (10/25 s) survive; fix = driveC (status past LEASED) <= 2 s; LOW stale TR note",
+      "policy": "TEP-1",
+      "at": "2026-10-27T02:51:33.822Z"
     }
   ],
   "tests": [],
