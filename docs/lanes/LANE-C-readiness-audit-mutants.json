@@ -1,5 +1,5 @@
 {
- "//TR": "C-RDY-1 (Rol Hazırlık Denetçisi) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt core/agents/readiness-audit.ts içinde TAM 1 kez geçen bir metni değiştirir; docs/lanes/LANE-C-readiness-audit-mutants.mjs hepsini tests/v7-core-readiness-audit.test.ts ile çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. M1-M13 koordinatör paketindeki zorunlu mutantlardır; M14-M25 ek savunma mutantlarıdır; X1-X15 #260 incelemesinin (BLOCKERS_MEDIUM) bulgularıdır (X1/X6 sertifika yolu, X2 CERTIFIED iddia anomalisi, X3/X4 satır bazlı toplamlar, X5/X15 terfi kümesi açıklaması, X7/X14 günlük gözlemi, X8/X9 boş payda ve boş kayıt, X10-X13 yinelenen anahtarlar).",
+ "//TR": "C-RDY-1 (Rol Hazırlık Denetçisi) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt core/agents/readiness-audit.ts içinde TAM 1 kez geçen bir metni değiştirir; docs/lanes/LANE-C-readiness-audit-mutants.mjs hepsini tests/v7-core-readiness-audit.test.ts ile çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. M1-M13 koordinatör paketindeki zorunlu mutantlardır; M14-M25 ek savunma mutantlarıdır; X1-X15 #260 incelemesinin (BLOCKERS_MEDIUM) bulgularıdır (X1/X6 sertifika yolu, X2 CERTIFIED iddia anomalisi, X3/X4 satır bazlı toplamlar, X5/X15 terfi kümesi açıklaması, X7/X14 günlük gözlemi, X8/X9 boş payda ve boş kayıt, X10-X13 yinelenen anahtarlar). C-RDY-2b (varlık denetimi, bağlam üzerinden PROFILED, #260 ertelenmiş LOW'lar): N1-N3 dağıtımın M1-M3'üdür (kimlik çakışmasın diye N), N4-N13 ek varlık mutantları, X16-X20 H1 ve yükleyici boş-dizi mutantlarıdır; M2/M5/M9/M15 desenleri PROFILED'ın rol bağlamına taşınması nedeniyle güncellendi.",
  "mutants": [
   {
    "id": "M1",
@@ -12,8 +12,8 @@
    "id": "M2",
    "description": "proposedProfiles candidate skills are counted as canonical skills",
    "file": "core/agents/readiness-audit.ts",
-   "old": "const skills = r.requiredSkillIds ?? [];",
-   "new": "const skills = [...(r.requiredSkillIds ?? []), ...(c.proposedBy.get(r.roleId)?.candidateSkills?.value ?? [])];"
+   "old": "const skills = res.context.skills.canonical;",
+   "new": "const skills = [...res.context.skills.canonical, ...(c.proposedBy.get(r.roleId)?.candidateSkills?.value ?? []).map(skillId => ({skillId, origin: \"CANONICAL_ROLE_REGISTRY\" as const}))];"
   },
   {
    "id": "M3",
@@ -33,8 +33,8 @@
    "id": "M5",
    "description": "KNOWLEDGE_READY accepts a unit with empty sourceRefs (vacuous every())",
    "file": "core/agents/readiness-audit.ts",
-   "old": "Array.isArray(u.sourceRefs) && u.sourceRefs.length > 0 && u.sourceRefs.every(",
-   "new": "Array.isArray(u.sourceRefs) && u.sourceRefs.every("
+   "old": "return Array.isArray(u.sourceRefs) && u.sourceRefs.length > 0 && u.sourceRefs.every(",
+   "new": "return Array.isArray(u.sourceRefs) && u.sourceRefs.every("
   },
   {
    "id": "M6",
@@ -61,7 +61,7 @@
    "id": "M9",
    "description": "PROFILED is TRUE with empty requiredTechnologies",
    "file": "core/agents/readiness-audit.ts",
-   "old": "if (techs.length === 0) reasons.push(\"NO_REQUIRED_TECHNOLOGIES\");",
+   "old": "if (required.length === 0) reasons.push(\"NO_REQUIRED_TECHNOLOGIES\");",
    "new": "if (false) reasons.push(\"NO_REQUIRED_TECHNOLOGIES\");"
   },
   {
@@ -103,7 +103,7 @@
    "id": "M15",
    "description": "PROFILED ignores the per-technology status (no promoted check)",
    "file": "core/agents/readiness-audit.ts",
-   "old": "if (techs.some(t => !c.promoted.has(t.status))) reasons.push(\"TECHNOLOGY_STATUS_NOT_PROMOTED\");",
+   "old": "if (required.some(t => t.registryId !== null && !c.promoted.has(t.status))) reasons.push(\"TECHNOLOGY_STATUS_NOT_PROMOTED\");",
    "new": "if (false) reasons.push(\"TECHNOLOGY_STATUS_NOT_PROMOTED\");"
   },
   {
@@ -280,6 +280,132 @@
    "file": "core/agents/readiness-audit.ts",
    "old": "promotedTechnologyStatuses: promotedDefault ? \"DEFAULT\" as const : promotedList,",
    "new": "promotedTechnologyStatuses: \"DEFAULT\" as const,"
+  },
+  {
+   "id": "N1",
+   "description": "legacy-referenced skills are counted as PROFILED (C-RDY-2b M1)",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "PROFILED: used > 0 ? result(\"TRUE\", [])",
+   "new": "PROFILED: used > 0 || legacyReferenced.has(s.id) ? result(\"TRUE\", [])"
+  },
+  {
+   "id": "N2",
+   "description": "a registry knowledgeState of SEED_PROFILE is counted as source-backed (C-RDY-2b M2)",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "const sourceBacked = (units ?? []).some(",
+   "new": "const sourceBacked = t.knowledgeState === \"SEED_PROFILE\" || (units ?? []).some("
+  },
+  {
+   "id": "N3",
+   "description": "PROFILED reads the PROPOSED skills of the role context as canonical (C-RDY-2b M3)",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "const skills = res.context.skills.canonical;",
+   "new": "const skills = [...res.context.skills.canonical, ...res.context.skills.proposed];"
+  },
+  {
+   "id": "N4",
+   "description": "the competency-pack ontology split is never flagged",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "flag: (packRefs.length > 0 && resolving < packRefs.length ? \"ONTOLOGY_SPLIT\" : \"NONE\") as \"ONTOLOGY_SPLIT\" | \"NONE\"",
+   "new": "flag: \"NONE\" as \"ONTOLOGY_SPLIT\" | \"NONE\""
+  },
+  {
+   "id": "N5",
+   "description": "an unsupplied runtime consumer count is reported as a structural 0",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "consumers === undefined ? result(\"UNKNOWN\", [\"RUNTIME_CONSUMERS_NOT_SUPPLIED\"]) : consumers === 0 ?",
+   "new": "consumers === undefined || consumers === 0 ?"
+  },
+  {
+   "id": "N6",
+   "description": "a CERTIFIED claim on a skill is read as INTERNALLY_CERTIFIED TRUE",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "INTERNALLY_CERTIFIED: result(\"FALSE\", [s.certificationState === \"NOT_CERTIFIED\" ? \"NOT_CERTIFIED_STATE\" : \"CERTIFICATION_NOT_EVIDENCED\"]),",
+   "new": "INTERNALLY_CERTIFIED: s.certificationState === \"CERTIFIED\" ? result(\"TRUE\", []) : result(\"FALSE\", [s.certificationState === \"NOT_CERTIFIED\" ? \"NOT_CERTIFIED_STATE\" : \"CERTIFICATION_NOT_EVIDENCED\"]),"
+  },
+  {
+   "id": "N7",
+   "description": "a duplicated skill id is still DEFINED",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "(idCount.get(s.id) ?? 0) !== 1 ? result(\"FALSE\", [\"DUPLICATE_ENTITY_ID\"])",
+   "new": "false ? result(\"FALSE\", [\"DUPLICATE_ENTITY_ID\"])"
+  },
+  {
+   "id": "N8",
+   "description": "a malformed skill id is still DEFINED",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "!SKILL_ID.test(String(s.id)) ?",
+   "new": "false ?"
+  },
+  {
+   "id": "N9",
+   "description": "non-executable entity layers are FALSE instead of NOT_APPLICABLE",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "const notApplicable = (): LayerResult => result(\"NOT_APPLICABLE\", [\"NOT_AN_EXECUTABLE_ENTITY\"]);",
+   "new": "const notApplicable = (): LayerResult => result(\"FALSE\", [\"NOT_AN_EXECUTABLE_ENTITY\"]);"
+  },
+  {
+   "id": "N10",
+   "description": "the entity audits are always labelled AUTHORITATIVE and never disclose the promoted set",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "isDefault: list.length === PROMOTED_TECHNOLOGY_STATUSES.size && list.every(x => PROMOTED_TECHNOLOGY_STATUSES.has(x))}",
+   "new": "isDefault: true}"
+  },
+  {
+   "id": "N11",
+   "description": "technology KNOWLEDGE_READY follows source-backed instead of a researched, validated, sourced unit",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "researchedSourced > 0 ? result(\"TRUE\", [])",
+   "new": "sourceBacked ? result(\"TRUE\", [])"
+  },
+  {
+   "id": "N12",
+   "description": "technology PROFILED ignores the promoted status (any requiring role is enough)",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "statuses.some(x => promoted.set.has(x)) ? result(\"TRUE\", [])",
+   "new": "statuses.length > 0 ? result(\"TRUE\", [])"
+  },
+  {
+   "id": "N13",
+   "description": "the entity loader accepts an empty competency-packs array",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "arrayOf(readDoc(repoRoot, REL_PACKS).doc, \"packs\", REL_PACKS, true)",
+   "new": "arrayOf(readDoc(repoRoot, REL_PACKS).doc, \"packs\", REL_PACKS, false)"
+  },
+  {
+   "id": "X16",
+   "description": "a runs array makes the journal PRESENT regardless of its tag (H1)",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "const journal: \"PRESENT\" | \"ABSENT\" = i.runs?.journal === \"PRESENT\" && Array.isArray(i.runs.runs) ? \"PRESENT\" : \"ABSENT\";",
+   "new": "const journal: \"PRESENT\" | \"ABSENT\" = Array.isArray((i.runs as {runs?: unknown} | undefined)?.runs) ? \"PRESENT\" : \"ABSENT\";"
+  },
+  {
+   "id": "X17",
+   "description": "the readiness loader accepts an empty technologies array",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "const techs = arrayOf(readDoc(repoRoot, REL_TECH).doc, \"technologies\", REL_TECH, true);",
+   "new": "const techs = arrayOf(readDoc(repoRoot, REL_TECH).doc, \"technologies\", REL_TECH, false);"
+  },
+  {
+   "id": "X18",
+   "description": "the readiness loader accepts an empty sourceClasses array",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "classes = arrayOf(src, \"sourceClasses\", REL_SRC, true);",
+   "new": "classes = arrayOf(src, \"sourceClasses\", REL_SRC, false);"
+  },
+  {
+   "id": "X19",
+   "description": "the readiness loader accepts an empty profiles array",
+   "file": "core/agents/readiness-audit.ts",
+   "old": "const profiles = arrayOf(readDoc(repoRoot, REL_PROFILES).doc, \"profiles\", REL_PROFILES, true);",
+   "new": "const profiles = arrayOf(readDoc(repoRoot, REL_PROFILES).doc, \"profiles\", REL_PROFILES, false);"
+  },
+  {
+   "id": "X20",
+   "description": "the readiness loader accepts an empty requiredProvenance list",
+   "file": "core/agents/readiness-audit.ts",
+   "old": " || requiredFields.length === 0) throw unavailable(REL_SRC);",
+   "new": ") throw unavailable(REL_SRC);"
   }
  ]
 }

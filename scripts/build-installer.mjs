@@ -38,7 +38,9 @@ export const RUNTIME_SCRIPTS = ["scripts/capture-provider-provenance.mjs", "scri
 export const PACKAGED_RUNTIME_READ_EXCLUSIONS = {
   "config/orchestrator-policy.json": "Developer-factory orchestrator policy; absent in the installed app -> cockpit orchestrator tile and repository review evidence are honestly UNAVAILABLE.",
   "config/trust-root-manifest.json": "Phase-0 acceptance binding of a developer install; the installed app has no Phase-0 report, so /v1/phase0 and /v1/install stay PENDING.",
-  "scripts/start-full-auto.ps1": "Retired legacy supervisor path (GOV2): startSupervisorDetached returns LEGACY_CODEX_REVIEW_PATH_RETIRED before this path is used."
+  "scripts/start-full-auto.ps1": "Retired legacy supervisor path (GOV2): startSupervisorDetached returns LEGACY_CODEX_REVIEW_PATH_RETIRED before this path is used.",
+  "registries/agent-skill-matrix.json": "Read only by loadEntityAuditInputsFromRepo (C-RDY-2b entity readiness audit, a developer/CI measurement); no packaged route calls it, so the 1.2 MB legacy skill matrix is not staged. Stage it when a packaged consumer exists.",
+  "registries/competency-packs.json": "Read only by loadEntityAuditInputsFromRepo (C-RDY-2b entity readiness audit, a developer/CI measurement); no packaged route calls it, so it is not staged. Stage it when a packaged consumer exists."
 };
 /** Statik veri, config ve script dosyalarını sahne köküne aynı göreli yollarla kopyalar; kopyalanan listeyi döner. */
 export function stageRuntimeFiles(root, stage) {
