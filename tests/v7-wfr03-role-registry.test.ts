@@ -728,6 +728,91 @@ describe("LANE-C C1 role lifecycle computed only from evidence", () => {
         const second = adapterRealityFor(stage)!; expect(second).not.toBe(first); expect(second.get("git")!.codePath).toBe("ABSENT");
       } finally { fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); resetAdapterRealityCache(); }
     });
+    // ---- B-ADAPTER review package (P1 before/after fingerprint + two builds, P2 non-regular file, P3 guard markers, P4 caller key + packaged never reads) ----
+    const gitAsyncEdit = (src: string) => src.replace("export function runGitAsync(", "export function runGitAsynd(");
+    it("P1a: a file that changes WHILE the map is built is never cached: the built result is not served after the content settles (no persistent stale PRESENT)", async () => {
+      const stage = await stageDevTree(); const file = path.join(stage, "core/workos/git-async.ts");
+      const original = fs.readFileSync(file, "utf8"), edited = gitAsyncEdit(original); expect(edited.length).toBe(original.length);
+      fs.writeFileSync(file, edited); resetAdapterRealityCache();
+      const real = fs.readFileSync; let n = 0;
+      const spy = vi.spyOn(fs, "readFileSync").mockImplementation(((p: any, ...r: any[]) => { if (String(p) === file && r[0] === "utf8" && ++n === 1) return original; return (real as any).call(fs, p, ...r); }) as any);
+      try {
+        expect(adapterRealityFor(stage)!.get("git")!.codePath, "fresh truth (settled content) is ABSENT").toBe("ABSENT");
+      } finally { spy.mockRestore(); }
+      try {
+        const again = adapterRealityFor(stage)!; expect(again.get("git")!.codePath, "the transient PRESENT was not cached").toBe("ABSENT"); expect(adapterRealityFor(stage)).toBe(again);
+      } finally { fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); resetAdapterRealityCache(); }
+    });
+    it("P1b: one transient read error (EBUSY) during the build is not cached as ABSENT", async () => {
+      const stage = await stageDevTree(); const file = path.join(stage, "core/workos/git-async.ts");
+      const real = fs.readFileSync; let n = 0;
+      const spy = vi.spyOn(fs, "readFileSync").mockImplementation(((p: any, ...r: any[]) => { if (String(p) === file && r[0] === "utf8" && ++n === 1) throw Object.assign(new Error("EBUSY"), {code: "EBUSY"}); return (real as any).call(fs, p, ...r); }) as any);
+      try {
+        expect(adapterRealityFor(stage)!.get("git")!.codePath).toBe("PRESENT");
+      } finally { spy.mockRestore(); }
+      try { const again = adapterRealityFor(stage)!; expect(again.get("git")!.codePath).toBe("PRESENT"); expect(adapterRealityFor(stage)).toBe(again); }
+      finally { fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); resetAdapterRealityCache(); }
+    });
+    it("P1c: a transient read error in the SECOND of the two builds is not cached either (the two builds must agree before anything is cached)", async () => {
+      const stage = await stageDevTree(); const file = path.join(stage, "core/workos/git-async.ts");
+      const real = fs.readFileSync; let n = 0;
+      const spy = vi.spyOn(fs, "readFileSync").mockImplementation(((p: any, ...r: any[]) => { if (String(p) === file && r[0] === "utf8" && ++n === 2) throw Object.assign(new Error("EBUSY"), {code: "EBUSY"}); return (real as any).call(fs, p, ...r); }) as any);
+      try { adapterRealityFor(stage); } finally { spy.mockRestore(); }
+      try { const again = adapterRealityFor(stage)!; expect(again.get("git")!.codePath, "the transient ABSENT was not cached").toBe("PRESENT"); expect(adapterRealityFor(stage)).toBe(again); }
+      finally { fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); resetAdapterRealityCache(); }
+    });
+    it.skipIf(process.platform === "win32")("P2: a FIFO at a record path is never read (a blocking read would hang the control API on every request); it is hashed as a type marker and the entry is honestly ABSENT", async () => {
+      const stage = await stageDevTree(); const fifo = path.join(stage, "scripts/discover-omniroute-models.mjs");
+      try {
+        fs.rmSync(fifo); cp.execFileSync("mkfifo", [fifo]);
+        const real = fs.readFileSync, reads: string[] = [];
+        const spy = vi.spyOn(fs, "readFileSync").mockImplementation(((p: any, ...r: any[]) => { reads.push(String(p)); if (String(p) === fifo) throw new Error("a FIFO read would block"); return (real as any).call(fs, p, ...r); }) as any);
+        try {
+          const e = adapterRealityFor(stage)!; expect(e.get("omniroute")!.codePath).toBe("ABSENT"); expect(e.get("git")!.codePath).toBe("PRESENT");
+          expect(reads.includes(fifo), "the FIFO is never opened for reading").toBe(false);
+        } finally { spy.mockRestore(); }
+      } finally { fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); resetAdapterRealityCache(); }
+    });
+    it("P3: the source-tree guard checks EACH marker: the real installer layout (adapter-reality.js, package name 'uasco-desktop') and every single missing/wrong marker are NOT a source tree", () => {
+      const mkTree = (o: {adapterTs?: boolean; adapterJs?: boolean; resolver?: boolean; pkg?: string | null; dirMarker?: boolean}) => {
+        const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-tree-")); fs.mkdirSync(path.join(dir, "core/capabilities"), {recursive: true});
+        const cap = (n: string) => path.join(dir, "core/capabilities", n);
+        if (o.adapterTs !== false) { if (o.dirMarker) fs.mkdirSync(cap("adapter-reality.ts")); else fs.writeFileSync(cap("adapter-reality.ts"), "x"); }
+        if (o.adapterJs) fs.writeFileSync(cap("adapter-reality.js"), "x");
+        if (o.resolver !== false) fs.writeFileSync(cap("resolver.ts"), "x");
+        if (o.pkg !== null) fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({name: o.pkg ?? "universal-ai-software-company-os"}));
+        return dir;
+      };
+      const cases: Array<[string, Parameters<typeof mkTree>[0], boolean]> = [
+        ["complete source tree", {}, true],
+        ["real installer stage: only adapter-reality.js and package name uasco-desktop", {adapterTs: false, adapterJs: true, resolver: false, pkg: "uasco-desktop"}, false],
+        ["adapter-reality.ts missing", {adapterTs: false}, false], ["resolver.ts missing", {resolver: false}, false],
+        ["package.json name differs", {pkg: "uasco-desktop"}, false], ["package.json missing", {pkg: null}, false],
+        ["marker is a directory, not a file", {dirMarker: true}, false]
+      ];
+      for (const [name, o, want] of cases) { const dir = mkTree(o); try { expect(sourceTreePresent(dir), name).toBe(want); } finally { fs.rmSync(dir, {recursive: true, force: true}); } }
+    });
+    it("P4a: a same-size edit of a CALLER file (server.ts) with a pinned mtime recomputes the map (callers are part of the cache key)", async () => {
+      const stage = await stageDevTree(); const file = path.join(stage, "apps/control-api/src/server.ts");
+      try {
+        const pinned = new Date(Math.floor(Date.now() / 1000) * 1000 - 60_000); fs.utimesSync(file, pinned, pinned);
+        const first = adapterRealityFor(stage)!; expect(first.get("workos-runner")!.codePath).toBe("PRESENT"); expect(adapterRealityFor(stage)).toBe(first);
+        const src = fs.readFileSync(file, "utf8"), edited = src.replace("new MissionRunner(", "new MissionRunnez("); expect(edited.length).toBe(src.length); expect(edited).not.toBe(src);
+        fs.writeFileSync(file, edited); fs.utimesSync(file, pinned, pinned);
+        const second = adapterRealityFor(stage)!; expect(second).not.toBe(first); expect(second.get("workos-runner")!.codePath).toBe("ABSENT");
+      } finally { fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); resetAdapterRealityCache(); }
+    });
+    it("P4b: in the PACKAGED layout NO adapter record path is read at all (the guard runs before the fingerprint): this is what the installer exclusion reasons say ('never reads')", async () => {
+      const stage = await stagePackaged(); resetAdapterRealityCache();
+      const real = fs.readFileSync, realStat = fs.statSync, touched: string[] = [];
+      const s1 = vi.spyOn(fs, "readFileSync").mockImplementation(((p: any, ...r: any[]) => { touched.push(String(p)); return (real as any).call(fs, p, ...r); }) as any);
+      const s2 = vi.spyOn(fs, "statSync").mockImplementation(((p: any, ...r: any[]) => { touched.push(String(p)); return (realStat as any).call(fs, p, ...r); }) as any);
+      try {
+        expect(adapterRealityFor(stage)).toBeUndefined();
+        const recordAbs = new Set(recordFiles().map(f => path.join(stage, f)));
+        expect(touched.filter(t => recordAbs.has(t)), "no record path touched").toEqual([]); expect(recordAbs.size).toBeGreaterThan(20);
+      } finally { s1.mockRestore(); s2.mockRestore(); fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); resetAdapterRealityCache(); }
+    });
     it("H1/M2: a missing readiness input DEGRADES (200, legacy statusSummary byte-identical, readiness/reconciliation null, readinessError set, audit carries the code only); a programming error is NOT degraded (workosFail)", async () => {
       const stage = await stagePackaged();
       try {

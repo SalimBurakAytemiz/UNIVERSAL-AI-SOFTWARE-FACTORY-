@@ -40,21 +40,30 @@ export function sourceTreePresent(root: string): boolean {
 }
 // //TR: Önbellek anahtarı: verifyRecord'un OKUDUĞU her dosyanın (modül, çağıranlar, npm paketlerinin package.json'ı) İÇERİK özeti; boyut+mtime değil, bu yüzden aynı boyut/aynı mtime ile yapılan bir düzenleme bayat bir PRESENT bırakamaz. Önbellek süreç başınadır (repoRoot başına bir giriş); özet her istekte yeniden hesaplanır (yalnız okuma + sha256, ayrıştırma yok).
 const adapterSourceFiles = (): string[] => [...new Set(ADAPTER_REALITY_RECORDS.flatMap(r => [r.mode === "NPM_PACKAGE" ? path.join("node_modules", r.module, "package.json") : r.module, ...r.callers.map(c => c.file)]))].sort();
+// //TR: Özet düz dosya olmayan girdiyi (FIFO, dizin) OKUMAZ (FIFO okuması süreci sonsuza dek bloklardı): tür işareti yeter. Okunamayan dosya ("<unreadable>") yok sayılan dosyadan ("<absent>") ayrı işaretlenir.
 const contentFingerprint = (root: string): string => {
   const h = crypto.createHash("sha256");
-  for (const rel of adapterSourceFiles()) { h.update(rel + "\0"); try { h.update(fs.readFileSync(path.join(root, rel))); } catch { h.update("<absent>"); } h.update("\0"); }
+  for (const rel of adapterSourceFiles()) {
+    h.update(rel + "\0");
+    const abs = path.join(root, rel);
+    try { h.update(fs.statSync(abs).isFile() ? fs.readFileSync(abs) : "<non-file>"); } catch (e) { h.update((e as NodeJS.ErrnoException)?.code === "ENOENT" ? "<absent>" : "<unreadable>"); }
+    h.update("\0");
+  }
   return h.digest("hex");
 };
 const adapterCache = new Map<string, {fp: string; entries: ReadonlyMap<string, AdapterRealityEntry>}>();
 /** Test kancası: adaptör gerçeklik önbelleğini boşaltır. */
 export function resetAdapterRealityCache(): void { adapterCache.clear(); }
+const sameEntries = (a: ReadonlyMap<string, AdapterRealityEntry>, b: ReadonlyMap<string, AdapterRealityEntry>): boolean => JSON.stringify([...a.entries()]) === JSON.stringify([...b.entries()]);
+// //TR: Önbelleğe ALMA koşulu (L3 ile aynı ilke): özet inşadan ÖNCE ve SONRA aynı olmalı VE iki bağımsız inşa aynı haritayı vermeli. Aksi halde (dosya inşa sırasında değişti ya da bir okuma geçici olarak başarısız oldu; readText bunu "dosya yok" sayar) sonuç önbelleğe ALINMAZ, taze inşa döner; bayat bir PRESENT/ABSENT kalıcılaşmaz. Bilinen sınır: iki inşayı da kapsayan ve özet alındığında geri dönmüş geçici bir içerik, yazılımla ayırt edilemez.
 /** Kaynak ağacı doğrulanmışsa kod destekli adaptör haritası (probe NOT_OBSERVED); aksi halde undefined (NOT_SUPPLIED). */
 export function adapterRealityFor(root: string): ReadonlyMap<string, AdapterRealityEntry> | undefined {
   if (!sourceTreePresent(root)) { adapterCache.delete(root); return undefined; }
   const fp = contentFingerprint(root), hit = adapterCache.get(root);
   if (hit && hit.fp === fp) return hit.entries;
-  const {entries} = buildAdapterRealityMap({records: ADAPTER_REALITY_RECORDS, repoRoot: root});
-  adapterCache.set(root, {fp, entries});
+  const first = buildAdapterRealityMap({records: ADAPTER_REALITY_RECORDS, repoRoot: root}).entries;
+  const entries = buildAdapterRealityMap({records: ADAPTER_REALITY_RECORDS, repoRoot: root}).entries;
+  if (contentFingerprint(root) === fp && sameEntries(first, entries)) adapterCache.set(root, {fp, entries}); else adapterCache.delete(root);
   return entries;
 }
 const READINESS_INPUT_ERROR = /^READINESS_INPUT_(UNAVAILABLE|INVALID):/;
