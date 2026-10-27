@@ -1,8 +1,8 @@
 // //TR: Bu görünüm parçası Project Studio'nun "Yeni Proje" sihirbazı ve "İçe Aktar" panelidir: şablon (boş dahil), ad, tür/teknoloji/hedef işletim sistemi, kabul kriterleri, bütçe ve dev/test komutları (argv listesi) project-core kurucusuyla doğrulanır, her gönderim için idempotency anahtarı üretilir; içe aktarma yolu renderer'a yazdırılmaz, yalnız ana süreçteki yerel dosya diyaloğundan dönen yol gösterilir ve geri gönderilir. Hiçbir otomatik gönderim yoktur.
 import {h} from "../components.js";
-import {buildWizardRequest,buildImportRequest,describeImportResult,TEMPLATES,TARGET_OS,IMPORT_KINDS} from "../project-core.js";
+import {buildWizardRequest,buildImportRequest,describeImportResult,mapImportQuarantine,QUARANTINE_FILES_SHOWN,TEMPLATES,TARGET_OS,IMPORT_KINDS} from "../project-core.js";
 import {drafts,selection,field,listEditor,statusBlock,setStatus,recordPost,focusResult,settle} from "../forms.js";
-import {studio,wizard,importDraft,studioTrackers,studioUi,resetWizard,resetImport,openProject,ideaDraft,resetIdea} from "../studio-state.js";
+import {studio,wizard,importDraft,studioTrackers,studioUi,resetWizard,resetImport,openProject,ideaDraft,resetIdea,importOutcome,setImportOutcome,clearImportOutcome} from "../studio-state.js";
 import {buildMissionRequest,MISSION_ID_RE,RISK_LEVELS} from "../work-core.js";
 
 export const WIZARD_FORM="studio-wizard";
@@ -115,14 +115,32 @@ export async function pickImportPath(ctx){
 export async function submitImport(ctx){
   const req=buildImportRequest({projectId:importDraft.projectId,kind:importDraft.kind,path:importDraft.path});
   if(!req.ok){setStatus(IMPORT_FORM,{ok:false,errors:req.errors});await ctx.rerender();focusResult(ctx,IMPORT_FORM,IMPORT_KEYS);return {ok:false,validation:true}}
-  drafts.busy[IMPORT_FORM]=true;
+  drafts.busy[IMPORT_FORM]=true;clearImportOutcome();
   let res;try{res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[IMPORT_FORM]=false}
   const d=describeImportResult(res);
-  setStatus(IMPORT_FORM,{ok:d.ok,key:d.ok?"studio.import.done":d.key,vars:d.ok?{}:d.vars,errors:null});
-  if(d.ok)resetImport();
+  // //TR: Başarılı içe aktarma karantinayı GİZLEYEN düz bir "kabul edildi" olamaz: sonuç (karantinaya alındı / sunucu bildirmedi / bilinmiyor) durum satırında ve altındaki kanıt bloğunda gösterilir.
+  const q=d.ok?mapImportQuarantine(res):null,doneKey=q===null?null:q.state==="QUARANTINED"?"studio.import.doneQuarantined":q.state==="UNKNOWN"?"studio.import.doneQuarantineUnknown":"studio.import.done";
+  setStatus(IMPORT_FORM,{ok:d.ok,key:d.ok?doneKey:d.key,vars:d.ok?(q.state==="QUARANTINED"?{count:q.count}:{}):d.vars,errors:null});
+  if(d.ok){const pid=importDraft.projectId;resetImport();setImportOutcome(pid,q)}
   await ctx.refreshAll({force:true});focusResult(ctx,IMPORT_FORM,IMPORT_KEYS);return {ok:d.ok,status:res?.status??null};
 }
 /** projects: seçilebilir proje listesi; fixedId verilirse hedef proje sabittir (çalışma alanı içinden). */
+// //TR: Son içe aktarmanın karantina kanıtı: QUARANTINED => adet, commit, saklama yeri ve (ilk QUARANTINE_FILES_SHOWN) dosya tablosu; NONE => "sunucu karantina bildirmedi"; UNKNOWN => bilinmiyor. Yalnız h()/textContent; sunucu metni HTML olarak yorumlanmaz.
+function quarantineBlock(ctx,fixedId){
+  const doc=ctx.doc,o=importOutcome,q=o.quarantine;
+  if(q===null||o.projectId===null||(fixedId&&o.projectId!==fixedId))return null;
+  const wrap=(...c)=>h(doc,"div",{class:"note studio-quarantine",id:"studio-import-quarantine",role:"status",dataset:{quarantine:q.state,quarantineFor:o.projectId}},h(doc,"h4",{text:ctx.t("studio.import.q.title")}),...c);
+  if(q.state==="UNKNOWN")return wrap(h(doc,"p",{dataset:{quarantineNote:"unknown"},text:ctx.t("studio.import.q.unknown")}));
+  if(q.state==="NONE")return wrap(h(doc,"p",{dataset:{quarantineNote:"none"},text:ctx.t("studio.import.q.none")}));
+  const shown=q.files.slice(0,QUARANTINE_FILES_SHOWN),cols=["path","pattern","kind","bytes","sha"];
+  const row=f=>h(doc,"tr",{dataset:{quarantineFile:f.path}},h(doc,"td",{class:"mono",text:f.path}),h(doc,"td",{class:"mono",text:f.pattern}),h(doc,"td",{text:f.kind}),h(doc,"td",{class:"num",text:String(f.bytes)}),h(doc,"td",{class:"mono",text:f.sha256.slice(0,12)}));
+  const table=h(doc,"div",{class:"table-wrap"},h(doc,"table",{class:"table",id:"studio-import-quarantine-files"},
+    h(doc,"caption",{class:"sr-only",text:ctx.t("studio.import.q.files")}),
+    h(doc,"thead",{},h(doc,"tr",{},cols.map(k=>h(doc,"th",{scope:"col",text:ctx.t(`studio.import.q.col.${k}`)})))),
+    h(doc,"tbody",{},shown.map(row))));
+  return wrap(h(doc,"p",{dataset:{quarantineNote:"quarantined",quarantineCount:String(q.count)},text:ctx.t("studio.import.q.quarantined",{count:q.count,sha:q.headSha.slice(0,12),where:q.storedUnder})}),table,
+    shown.length<q.count?h(doc,"p",{dataset:{quarantineMore:"1"},text:ctx.t("studio.import.q.more",{shown:shown.length,count:q.count})}):null);
+}
 export function importPanel(ctx,{projects,fixedId=null}){
   const doc=ctx.doc,st=drafts.status[IMPORT_FORM],errs=st?.errors??{},d=importDraft;
   if(fixedId)d.projectId=fixedId;
@@ -138,6 +156,7 @@ export function importPanel(ctx,{projects,fixedId=null}){
       h(doc,"p",{class:"field-hint",text:ctx.t("studio.import.hint")}),
       errs.importPath?h(doc,"p",{class:"field-error",id:"studio-import-path-err",text:ctx.t(errs.importPath)}):null),
     statusBlock(ctx,IMPORT_FORM),
+    quarantineBlock(ctx,fixedId),
     h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"submit",class:"btn btn-primary",id:"studio-import-submit",dataset:{focusKey:"studio-import-submit"},disabled:drafts.busy[IMPORT_FORM]===true||!d.path||!d.projectId,text:ctx.t("studio.import.submit")})));
   const details=h(doc,"details",{class:"panel form-panel",id:fixedId?"studio-import-ws":"studio-import",open:fixedId?true:(studioUi.importOpen||Boolean(st))},
     h(doc,"summary",{id:"studio-import-t",dataset:{focusKey:"studio-import-summary"},text:ctx.t("studio.import.title")}),

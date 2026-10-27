@@ -170,6 +170,27 @@ export function buildImportRequest({projectId,kind,path}){
   const pe=validatePath(p);if(pe)errors.importPath=pe;else if(kind==="zip"&&!/\.zip$/i.test(p))errors.importPath="studio.err.zipExt";
   return result(`/v1/projects/${projectId}/import`,{kind,path:p},errors);
 }
+// //TR: İçe aktarma yanıtındaki ajan yapılandırma KARANTİNASI kanıtı (SBX-8, server.ts import rotası): gövde {project, import:{kind, headSha, agentConfigQuarantine?}}; alan YALNIZ karantinaya alınan dosya varsa gönderilir {count, headSha, files:[{path,pattern,kind,bytes,sha256}] (en çok 500), truncated, storedUnder}. QUARANTINED: alan geçerli. NONE: geçerli bir import bloğu var ve alan YOK (sunucu sözleşmesi: karantina yoksa alan gönderilmez; "tarama yapıldı" iddiası YOKTUR, yalnız "sunucu karantina bildirmedi"). UNKNOWN: import bloğu okunamıyor ya da alan bozuk (kısmi veri asla dönmez, düz başarı gibi gösterilmez).
+export const QUARANTINE_MAX_FILES=500;
+export const QUARANTINE_FILES_SHOWN=20;
+const SHA40_RE=/^[0-9a-f]{40}([0-9a-f]{24})?$/,SHA256_RE=/^[0-9a-f]{64}$/;
+const QUARANTINE_KINDS=Object.freeze(["file","symlink","other"]);
+const cleanText=(x,max)=>typeof x==="string"&&x.length>0&&x.length<=max&&!/[\u0000-\u001f\u007f]/.test(x);
+export function mapImportQuarantine(res){
+  const unknown={state:"UNKNOWN"};
+  const b=res&&!res.thrown&&isObj(res.body)?res.body:null,imp=b&&isObj(b.import)?b.import:null;
+  if(imp===null||!IMPORT_KINDS.includes(imp.kind)||typeof imp.headSha!=="string"||!SHA40_RE.test(imp.headSha))return unknown;
+  const q=imp.agentConfigQuarantine;
+  if(q===undefined)return {state:"NONE",headSha:imp.headSha};
+  if(!isObj(q)||!Number.isSafeInteger(q.count)||q.count<1||q.count>1000000||q.headSha!==imp.headSha||typeof q.truncated!=="boolean"||!cleanText(q.storedUnder,200)||!Array.isArray(q.files))return unknown;
+  if(q.files.length>QUARANTINE_MAX_FILES||q.files.length!==Math.min(q.count,QUARANTINE_MAX_FILES)||q.truncated!==(q.count>q.files.length))return unknown;
+  const files=[];
+  for(const f of q.files){
+    if(!isObj(f)||!cleanText(f.path,1024)||!cleanText(f.pattern,120)||!QUARANTINE_KINDS.includes(f.kind)||!Number.isSafeInteger(f.bytes)||f.bytes<0||typeof f.sha256!=="string"||!SHA256_RE.test(f.sha256))return unknown;
+    files.push({path:f.path,pattern:f.pattern,kind:f.kind,bytes:f.bytes,sha256:f.sha256});
+  }
+  return {state:"QUARANTINED",headSha:imp.headSha,count:q.count,files,truncated:q.truncated,storedUnder:q.storedUnder};
+}
 export function buildDevRunRequest({projectId,action}){
   const errors={};
   if(!pid(projectId))errors.projectId="err.projectRequired";
