@@ -962,6 +962,16 @@
       "ref": "coord inline: diff 865f1da..45bbee4 = +12 test lines (0 removed), 1 TR comment, 1 doc line; removed Set assertion restored verbatim (the r1 reviewer's control run showed it kills N13c); no behaviour change",
       "policy": "TEP-1",
       "at": "2026-10-27T05:24:23.357Z"
+    },
+    {
+      "pr": 278,
+      "sha": "e9093b165c8d7501524f74cf8b39760d366a3c2d",
+      "kind": "delta",
+      "base": "45bbee4f2b811ddf125201abd6b9d5012eca5dac",
+      "verdict": "BASE_MERGE_ONLY_import_union",
+      "ref": "coord base merge db3dc93; only conflict = work-core.js import line, resolved as union (liveRuns + taskFollowsRun)",
+      "policy": "TEP-1",
+      "at": "2026-10-27T05:25:19.639Z"
     }
   ],
   "tests": [],
