@@ -1,5 +1,5 @@
 {
-  "//TR": "Kimlik bağlama kuralları: hangi önekler kimliktir, hangi alanlar taranır ve hangi bağ gücü hangi sınıfa yeterlidir. Gövde (body) metninde geçen kimlik ve 19 Ekim 'prs' alanındaki WEAK referans (aralık, iç içe, rol notlu veya kimlik kapısından geçmeyen) yalnız 19 Ekim'de zaten 'merge edildi' denen satırları DÜŞÜK güvenle destekler; ilerleme iddiası olmayan satırı yükseltmez. Rakamla bitmeyen kimlikler (L-WORKFORCE, CI-GREEN, PKG-LEASE1) PR başlığında ve dalında tam kimlik olarak eşleşir. 19 Ekim notu başka bilinen kalemi adlandırıyorsa ('#25 (UI-050 ...)' ya da dal biçiminde 'claude/l-assurance-ui049') veya PR'ın kendi başlığı/dalı bu satırı değil başka bir kalemi adlandırıyorsa PR o kalemindir (WEAK other-item; 19 Ekim prToWorkItems bu satırı o PR'a atıyorsa hariç) ve böyle bir referans hiçbir iddiayı desteklemez. Kayıt tutma PR'ları (başlığı backlog:/planning:/write-back/'(backlog only)' ile başlayan ya da kimliği yalnız 'UI-132 DONE' gibi durum ibaresinde anan) hiçbir zaman kanıt değildir: coded/integrated/başlangıç/lane vermez (BOOKKEEPING_PR). Gerçek başlangıç için commit yalnız kodlanmış kalemin konu başında kimliği adlandıran kendi commit'idir (ownCommitStart; backlog/planlama kayıt commit'leri hariç).",
+  "//TR": "Kimlik bağlama kuralları: hangi önekler kimliktir, hangi alanlar taranır ve hangi bağ gücü hangi sınıfa yeterlidir. Gövde (body) metninde geçen kimlik yalnız 19 Ekim'de zaten 'merge edildi' denen satırları DÜŞÜK güvenle destekler; 19 Ekim 'prs' alanındaki WEAK referans (aralık, iç içe, rol notlu, başka kaleme ait veya kimlik kapısından geçmeyen) hiçbir basamakta kanıt değildir (PR sahiplik kuralı: inventoryPrs.otherItemRule); ilerleme iddiası olmayan satırı yükseltmez. Rakamla bitmeyen kimlikler (L-WORKFORCE, CI-GREEN, PKG-LEASE1) PR başlığında ve dalında tam kimlik olarak eşleşir. 19 Ekim notu başka bilinen kalemi adlandırıyorsa ('#25 (UI-050 ...)' ya da dal biçiminde 'claude/l-assurance-ui049') veya PR'ın kendi başlığı/dalı bu satırı değil başka bir kalemi adlandırıyorsa PR o kalemindir (WEAK other-item; 19 Ekim prToWorkItems bu satırı o PR'a atıyorsa hariç) ve böyle bir referans hiçbir iddiayı desteklemez. Kayıt tutma PR'ları (başlığı backlog:/planning:/write-back/'(backlog only)' ile başlayan ya da kimliği yalnız 'UI-132 DONE' gibi durum ibaresinde anan) hiçbir zaman kanıt değildir: coded/integrated/başlangıç/lane vermez (BOOKKEEPING_PR). Gerçek başlangıç için commit yalnız kodlanmış kalemin konu başında kimliği adlandıran kendi commit'idir (ownCommitStart; backlog/planlama kayıt commit'leri hariç).",
   "schemaVersion": "1.0.0",
   "idPrefixes": [
     "UI",
@@ -37,7 +37,7 @@
     "maxRangeSpan": 100,
     "itemTitleNamesPrRegex": "\\bPR\\s*#(\\d{1,5})\\b",
     "slugIdRegex": "(?<![A-Za-z0-9])(UI|PH|PT|PQ|MOB)(\\d{3})(?![0-9])",
-    "otherItemRule": "a SINGLE reference is WEAK 'other-item:<ID>' when the PR is not this row's (its own title/branch, branch slugs such as ui049 included, does not name the row and the 19-Oct prToWorkItems map does not assign the PR to the row) and either the annotation names another known item (slug forms such as 'claude/l-assurance-ui049' normalised by slugIdRegex) or the PR's own title/branch names another known item; an other-item reference never corroborates a merged claim (it is listed in weakInventoryRefs only)",
+    "otherItemRule": "ownership rule (one rule for every PR -> row attribution): evidence for item Y on PR P = P's title/branch (branch slugs such as ui049 included) or body (body strength) names Y, the 19-Oct prToWorkItems map lists Y for P, or a coordinator record / overlay LINK names P for Y. OWN(P,X) when X has evidence (SHARED: several owners, OWN for each; title naming only Y while the map lists X: OWN for both, confidence at most MEDIUM, ownershipNotes); OTHER_ITEM(P,X) when only other items have evidence: every reference form is WEAK 'other-item:<IDs>' (corroborates nothing); UNASSIGNED(P) when no item has evidence: the explicitGates apply and a SINGLE reference whose 19-Oct annotation names another known item (slug forms normalised by slugIdRegex) is WEAK 'other-item:<ID>'",
     "explicitGates": {
       "PR_NAMES_ITEM": "the PR title, head branch or body names the item id (resolver, incl. aliases and literal ids)",
       "ITEM_TITLE_NAMES_PR": "the item's own 19-Oct title names the PR ('PR #N')",
@@ -49,7 +49,7 @@
       "role:<annotation>",
       "no-id-match"
     ],
-    "weakPolicy": "INVENTORY_WEAK: LOW confidence; corroborates only rows whose 19-Oct status claims merged (after every stronger source; never an other-item reference); never upgrades a row without a merged claim; never sets coded, actual start, lane or owner by itself (a WEAK-corroborated merged claim is integrated at LOW confidence, and coded follows integrated)"
+    "weakPolicy": "INVENTORY_WEAK: never evidence: never enters integratedBy, integratedPrs, strongPrs, coded, tested/CI, actual start, lastMergedAt, lane or owner; on a status-only merged claim the merged non-other-item WEAK PRs are listed as corroboratingWeakPrs (corroboration only); never upgrades any row"
   },
   "ownCommitStart": {
     "appliesTo": "actual.start from a v7 commit (ID_IN_COMMIT_MESSAGE link) of an item whose coded substep is TRUE",
@@ -101,8 +101,7 @@
       "ID_IN_BODY",
       "ID_IN_COMMIT_MESSAGE",
       "ROUTE_LITERAL_AT_HEAD",
-      "IPC_CHANNEL_LITERAL_AT_HEAD",
-      "INVENTORY_WEAK"
+      "IPC_CHANNEL_LITERAL_AT_HEAD"
     ],
     "relinkNonClaim": [
       "EXPLICIT",
@@ -122,7 +121,8 @@
       "INVENTORY_WEAK"
     ],
     "neverEvidence": [
-      "BOOKKEEPING_PR"
+      "BOOKKEEPING_PR",
+      "INVENTORY_WEAK"
     ],
     "supportingOnly": [
       "QUEUE_TEXT",
@@ -138,7 +138,7 @@
       "ROUTE_LITERAL_AT_HEAD": "MEDIUM",
       "IPC_CHANNEL_LITERAL_AT_HEAD": "MEDIUM",
       "OVERLAY": "MEDIUM",
-      "INVENTORY_WEAK": "LOW",
+      "INVENTORY_WEAK": "NONE",
       "BOOKKEEPING_PR": "NONE"
     }
   },

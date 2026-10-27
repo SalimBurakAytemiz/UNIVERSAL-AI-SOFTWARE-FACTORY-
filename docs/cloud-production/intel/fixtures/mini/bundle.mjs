@@ -71,6 +71,16 @@ export const ROWS = [
   ['UI-039', 'Trace waterfall', 'PENDING_CI', '#49', 'AT_RISK', 'x', 'UI-039'],
   ['UI-040', 'Journey strip (body-only integrating commit)', 'INTEGRATED_NOT_VERIFIED', 'none', 'AT_RISK', 'x', 'UI-040'],
   ['UI-041', 'Command matrix (own PR after an unattributed commit)', 'INTEGRATED_NOT_VERIFIED', '#57', 'AT_RISK', 'x', 'UI-041'],
+  // intel-1.4 PR ownership rule: a test+states PR the 19-Oct map assigns to a PT row, cited by a UI row that later got its own PR (UI-133
+  // shape) and by an MVP row with no own PR (UI-137 shape); a PR the map lists for two rows (SHARED); a PR whose title names one row while
+  // the map lists another (conflict)
+  ['UI-042', 'Workforce identity (another item test+states PR, own later PR)', 'INTEGRATED_NOT_VERIFIED', '#58 claude/test-states-workforce-2 (open)', 'AT_RISK', 'x', 'UI-042'],
+  ['PT-090', 'test+states: workforce-2 (19-Oct map owner of #58)', 'INTEGRATED_NOT_VERIFIED', '#58', 'NONE', 'platform/tests', 'L'],
+  ['UI-047', 'Tower stage list (only other items PRs, one closed)', 'INTEGRATED_NOT_VERIFIED', '#58 claude/test-states-workforce-2 (open); #49 claude/l-tower-trace-ui039 (open)', 'AT_RISK', 'x', 'UI-047'],
+  ['UI-043', 'Shared PR row A (map lists UI-043 and UI-044)', 'INTEGRATED_NOT_VERIFIED', '#61', 'AT_RISK', 'x', 'UI-043'],
+  ['UI-044', 'Shared PR row B', 'INTEGRATED_NOT_VERIFIED', '#61 (open)', 'AT_RISK', 'x', 'UI-044'],
+  ['UI-045', 'Map-assigned row of a title/map conflict PR', 'INTEGRATED_NOT_VERIFIED', '#60', 'AT_RISK', 'x', 'UI-045'],
+  ['UI-046', 'Title-named row of a title/map conflict PR', 'PENDING_CI', 'none', 'AT_RISK', 'x', 'UI-046'],
   ['E-ROLE-UASCO-0001', 'Role (not a work item)', 'DESIGN_ONLY', 'none', 'NONE', 'roles', 'x'],
 ];
 
@@ -120,9 +130,14 @@ export function miniBundle() {
     merged(50, '2026-10-20T05:50:27Z', { title: 'Backlog write-back 5: UI-024 DONE + UI-010 non-READY + P0 DESIGN-EVIDENCE-X + D-2026-10-20-MOBILE (MOB-12..31 non-READY)', headRef: 'claude/backlog-writeback-5', createdAt: '2026-10-20T04:59:08Z' }),
     merged(51, '2026-10-20T10:54:56Z', { title: 'MOB-12: threat model (docs only)', headRef: 'claude/mob-12', createdAt: '2026-10-20T07:54:44Z' }),
     merged(52, '2026-10-20T16:30:22Z', { title: 'Integration wave B13: batch-5 desktop READY tasks + SEC-X follow-up (backlog only)', headRef: 'claude/integration-wave-b13', createdAt: '2026-10-20T15:10:13Z' }),
-    merged(53, '2026-10-20T01:51:48Z', { title: 'Backlog: UI-028 DONE write-back + batch 3 (UI-029)', headRef: 'claude/backlog-batch-3', createdAt: '2026-10-20T01:20:00Z' }),
+    merged(53, '2026-10-20T01:51:48Z', { title: 'Backlog: UI-028 DONE write-back + batch 3 (UI-029)', headRef: 'claude/backlog-batch-3', createdAt: '2026-10-20T01:20:00Z', bodyTokens: ['UI-006'] }),
     merged(54, '2026-10-20T01:51:49Z', { title: 'Integration wave B2: #42 UI-024 + backlog #53 (UI-028 DONE, batch 3)', headRef: 'claude/integration-wave-b2', createdAt: '2026-10-20T01:30:00Z' }),
     merged(57, '2026-10-17T16:17:05Z', { title: 'UI-041: command matrix follow-up', headRef: 'claude/ui-041', createdAt: '2026-10-17T16:10:07Z' }),
+    // intel-1.4 ownership rule (map entries in inventory.json.prToWorkItems below)
+    merged(58, '2026-10-19T22:48:25Z', { title: 'test+states: workforce-2 (functional/negative/a11y)', headRef: 'claude/test-states-workforce-2', createdAt: '2026-10-19T00:36:54Z' }),
+    merged(59, '2026-10-21T10:00:00Z', { title: 'UI-042: workforce identity card', headRef: 'claude/ui-042', createdAt: '2026-10-20T08:00:00Z' }),
+    merged(60, '2026-10-19T12:30:00Z', { title: 'L-TOWER UI-046: stage timeline', headRef: 'claude/l-tower-ui046', createdAt: '2026-10-18T12:00:00Z' }),
+    merged(61, '2026-10-19T13:30:00Z', { title: 'Shared wiring (functional)', headRef: 'claude/shared-wiring', createdAt: '2026-10-18T13:00:00Z' }),
   ];
   const mergedHeads = pulls.filter((p) => p.mergedAt);
   const commits = [{ sha: S('c-ui005'), at: '2026-10-15T00:00:00Z', subject: 'fix UI-005 crash', body: '' }, { sha: S('c-route'), at: '2026-09-23T00:00:00Z', subject: 'control api', body: '' },
@@ -139,6 +154,9 @@ export function miniBundle() {
   checks[S('head1')] = [{ name: 'validate (ubuntu-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-18T01:00:00Z', completedAt: '2026-10-18T01:20:00Z' }, { name: 'validate (windows-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-18T01:00:00Z', completedAt: '2026-10-18T01:40:00Z' }];
   checks[S('head8')] = [{ name: 'validate (ubuntu-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-18T01:00:00Z', completedAt: null }, { name: 'validate (windows-latest)', status: 'completed', conclusion: 'failure', startedAt: '2026-10-18T01:00:00Z', completedAt: null }];
   for (const n of [6, 43, 44]) checks[S(`head${n}`)] = [{ name: 'validate (ubuntu-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-18T01:00:00Z', completedAt: '2026-10-18T01:20:00Z' }, { name: 'validate (windows-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-18T01:00:00Z', completedAt: '2026-10-18T01:40:00Z' }];
+  // #58 (another item's test+states PR) failed on Windows; the row's own #59 is green
+  checks[S('head58')] = [{ name: 'validate (ubuntu-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-19T01:00:00Z', completedAt: '2026-10-19T01:20:00Z' }, { name: 'validate (windows-latest)', status: 'completed', conclusion: 'failure', startedAt: '2026-10-19T01:00:00Z', completedAt: '2026-10-19T01:40:00Z' }];
+  checks[S('head59')] = [{ name: 'validate (ubuntu-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-21T01:00:00Z', completedAt: '2026-10-21T01:20:00Z' }, { name: 'validate (windows-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-21T01:00:00Z', completedAt: '2026-10-21T01:40:00Z' }];
   checks[S('head2')] = [{ name: 'validate (ubuntu-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-18T01:00:00Z', completedAt: null }, { name: 'validate (windows-latest)', status: 'completed', conclusion: 'failure', startedAt: '2026-10-18T01:00:00Z', completedAt: null }];
   const runs = [
     { id: 1001, name: 'CI', event: 'pull_request', status: 'completed', conclusion: 'success', runAttempt: 1, headSha: S('head24'), headBranch: 'claude/lane-c-rdy-1', createdAt: '2026-10-26T18:00:00Z', updatedAt: '2026-10-26T18:25:00Z', runStartedAt: '2026-10-26T18:00:10Z', prs: [24] },
@@ -179,7 +197,11 @@ export function miniBundle() {
     { id: 'PKG-LEASE1', title: 'Lease package', status: 'DONE', owner: 'CLOUD', dependsOn: [] },
     { id: 'SEC-IMPORT-GUARD', title: 'Import guard', status: 'DONE', owner: 'CLOUD', dependsOn: [] },
     // round 3: a Founder blocker registered by a write-back PR (DESIGN-EVIDENCE-UNAVAILABLE shape); an item whose first title link is that PR (MOB-1 shape)
-    { id: 'DESIGN-EVIDENCE-X', title: 'P0 blocker: approved design reference package not available', status: 'BLOCKED', owner: 'FOUNDER', dependsOn: [] },
+    { id: 'DESIGN-EVIDENCE-X', title: 'P0 blocker: approved design reference package not available', status: 'BLOCKED', owner: 'FOUNDER', priority: 'P0', requiresNewAuthority: true, dependsOn: [] },
+    // Founder queue view (R3-L1): a BLOCKED Founder-owned item without new authority, a BLOCKED item needing new authority, a plain BLOCKED item
+    { id: 'FD-SIGN-X', title: 'Release signing decision', status: 'BLOCKED', owner: 'FOUNDER', requiresNewAuthority: false, dependsOn: [] },
+    { id: 'RESEAL-X', title: 'Trust-root reseal', status: 'BLOCKED', owner: 'LOCAL', requiresNewAuthority: true, dependsOn: [] },
+    { id: 'LOCAL-BLOCKED-X', title: 'Locally blocked task', status: 'BLOCKED', owner: 'LOCAL', requiresNewAuthority: false, dependsOn: [] },
     { id: 'MOB-12', title: 'Mobile threat model', status: 'DONE', owner: 'CLOUD', dependsOn: [] },
   ] };
   const wave0 = { packages: [{ id: 'C-RDY-1', priority: 'P0', order: 1, title: 'Role Readiness Auditor', dependsOn: [] }, { id: 'C-CTX-1', priority: 'P0', order: 2, title: 'Role Context Resolver', dependsOn: ['C-RDY-1'] }], founderDecisions: ['FD-1 Legacy alias approval: decide canonical skills; blocks C-BIND-1.'] };
@@ -193,7 +215,7 @@ export function miniBundle() {
   const inputs = {
     schema: 'intel-inputs-1',
     meta: { refs: { v7: { sha: S('v7'), at: '2026-10-26T21:10:18Z' }, queue: { sha: S('queue'), at: '2026-10-26T21:00:00Z' }, reports: { sha: S('reports'), at: '2026-10-26T21:14:41Z' } }, inventoryBlob: S('inv'), csvBlob: S('csv'), inventoryBlobAtHead: S('inv'), cacheFrom: 'fixture' },
-    inventory: { json: { items, prToWorkItems: { '#48': ['UI-036', 'UI-037'] } }, csvText: csv },
+    inventory: { json: { items, prToWorkItems: { '#48': ['UI-036', 'UI-037'], '#58': ['PT-090'], '#60': ['UI-045'], '#61': ['UI-043', 'UI-044'] } }, csvText: csv },
     dependencyMap: { keystones: { 'K-CI': { resolvedBy: ['PT-001'] } }, edges: [{ from: 'PT-001', to: 'K-CI', type: 'depends-on' }] },
     roadmap,
     coordinator: { queue, ledger: { reviews: [{ pr: 24, sha: S('head24'), kind: 'full', verdict: 'NO_BLOCKERS', at: '2026-10-26T20:00:00Z' }] }, dispatch: { 'docs/cloud-production/dispatch/C-RDY-1.md': 'C-RDY-1 dispatch text' }, queueHistory: [

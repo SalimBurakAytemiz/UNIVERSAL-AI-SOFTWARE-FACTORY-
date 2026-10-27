@@ -1,4 +1,4 @@
-//TR: P10 çıktı kanıtı (ağsız): MD başlıkları A–J tam bu sırada; runtime NOT_MEASURED, FULL/FULL_ONLY ayrımı, hedef aralıkları, installer istisnası, PARTIAL satırı ve MVP payda gerekçesi panoda; çapa sayılar JSON alanlarına eşit; CSV sabit sütun sırasıyla JSON kalemlerine geri dönüşür; //TR ilk satırları/ilk anahtarları mevcut; CSV'de yorum satırı yok.
+//TR: P10 çıktı kanıtı (ağsız): MD başlıkları A–J tam bu sırada; runtime NOT_MEASURED, FULL/FULL_ONLY ayrımı, hedef aralıkları, installer istisnası, PARTIAL satırı ve MVP payda gerekçesi panoda; çapa sayılar JSON alanlarına eşit; CSV sabit sütun sırasıyla JSON kalemlerine geri dönüşür; //TR ilk satırları/ilk anahtarları mevcut; CSV'de yorum satırı yok. K7: Founder kuyruğu A (sayı + ilk 5'te P0), G (tablo) ve H (eylem) bölümlerinde görünür.
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { miniBundle } from '../fixtures/mini/bundle.mjs';
@@ -38,7 +38,16 @@ check('R2 inventory JSON carries corroboratingWeakPrs (WEAK-only corroboration l
   const cr = rows0().find((c) => c[0] === 'UI-025');
   check("R3 D.2 row of the WEAK-only UI-025 shows CORROBORATED_BY_WEAK_REF, 'WEAK: #6' and the WEAK reason (f0f537c: EVIDENCED_BY_PR | — | ... | —)", !!d2 && d2.includes('| CORROBORATED_BY_WEAK_REF | WEAK: #6 |') && /WEAK 19-Oct reference/.test(d2));
   check("R3 CSV has a corroboratingWeakPrs column: '#6' for UI-025, empty for an EXPLICIT row (UI-001)", CSV_COLUMNS.includes('corroboratingWeakPrs') && !!cr && cr[CSV_COLUMNS.indexOf('corroboratingWeakPrs')] === '#6' && rows0().find((c) => c[0] === 'UI-001')[CSV_COLUMNS.indexOf('corroboratingWeakPrs')] === '');
-  check('R3 JSON field docs name bookkeeping PRs and other-item references (integrated) and document actual.earlierMention; the ratio reason excludes both', /BOOKKEEPING_PR/.test(r.fieldSemantics['items[].substeps.integrated']) && /assigns to another item never corroborates/.test(r.fieldSemantics['items[].substeps.integrated']) && !!r.fieldSemantics['items[].actual.earlierMention'] && /never a reference assigned to another item/.test(r.metrics.ratios3.codeIntegrationRatio.reason) && /bookkeeping PR or commit/.test(r.metrics.ratios3.codeIntegrationRatio.reason));
+  check('R3 JSON field docs name bookkeeping PRs and the ownership rule (another item\'s PR never counts) and document actual.earlierMention; the ratio reason excludes both (intel-1.4 wording)', /BOOKKEEPING_PR/.test(r.fieldSemantics['items[].substeps.integrated']) && /another item's PR never counts/.test(r.fieldSemantics['items[].substeps.integrated']) && /ownership rule/.test(r.fieldSemantics['items[].substeps.integrated']) && !!r.fieldSemantics['items[].actual.earlierMention'] && /a PR owned only by other items never counts/.test(r.metrics.ratios3.codeIntegrationRatio.reason) && /bookkeeping PR or commit/.test(r.metrics.ratios3.codeIntegrationRatio.reason));
+}
+// K7 (R3-L1): the Founder queue view is rendered: A counts it and puts the P0 blocker among the first five, G has a table row per item, H lists
+// the action (03ed064: DESIGN-EVIDENCE-X appeared in no Founder view)
+{
+  const secOf = (letter) => { const a = md.indexOf(`## ${letter}. `); const b = md.indexOf('\n## ', a + 4); return md.slice(a, b < 0 ? undefined : b); };
+  const A = secOf('A'), G = secOf('G'), H = secOf('H');
+  check("K7 MD Founder view: section A counts 3 Founder blockers and lists DESIGN-EVIDENCE-X P0 among the first five; section G has a row for each of DESIGN-EVIDENCE-X / FD-SIGN-X / RESEAL-X; section H lists their actions; LOCAL-BLOCKED-X is in none (03ed064: absent)",
+    /Founder engelleri \(BLOCKED; sahibi FOUNDER veya yeni yetki gerekli\):\*\* 3 \(DESIGN-EVIDENCE-X P0, FD-SIGN-X, RESEAL-X\)/.test(A) && /^  - DESIGN-EVIDENCE-X: BLOCKED, sahibi FOUNDER, yeni yetki gerekli/m.test(A)
+    && ['DESIGN-EVIDENCE-X', 'FD-SIGN-X', 'RESEAL-X'].every((id) => new RegExp(`^\\| ${id} \\|`, 'm').test(G) && new RegExp(`^- ${id}: Founder engeli`, 'm').test(H)) && !/LOCAL-BLOCKED-X/.test(A + G + H.replace(/\*\*Lane[\s\S]*?\*\*Doğrulama/, '')) && Array.isArray(r.plan.founderBlocked) && !!r.fieldSemantics['plan.founderBlocked']);
 }
 // LOW label fixes (each fails on 4fe58dd)
 check('LOW runtime row shows NOT_MEASURED, never 0/n (%0)', /^\| Runtime doğrulandı \(runtimeVerificationRatio\) \| NOT_MEASURED/.test(row('Runtime doğrulandı') || '') && !/\| 0\/\d+ \(%0\)/.test(row('Runtime doğrulandı') || ''));

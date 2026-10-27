@@ -17,5 +17,6 @@
     "OBSOLETE": "{id}: kapsam dışı"
   },
   "verificationLane": { "id": "VERIFY", "template": "{id}: kabul kontrolü (MERGED_NOT_VERIFIED, MVP) — PR {prs}", "topN": 10 },
-  "decisionTemplate": "{id}: Founder kararı, {ageHours} saattir açık: {text}"
+  "decisionTemplate": "{id}: Founder kararı, {ageHours} saattir açık: {text}",
+  "founderBlockedTemplate": "{id}: Founder engeli — karar veya yeni yetki gerekli ({blockers})"
 }

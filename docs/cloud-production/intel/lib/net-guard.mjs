@@ -1,4 +1,4 @@
-//TR: Ağ koruması (NODE_OPTIONS=--import ile ön yüklenir; ürün kodu için asıl sınır readiness-runner'daki ad alanı kum havuzudur, bu koruma derinlemesine savunmadır): Node içinden her TCP/UDP/TLS/HTTP/DNS/fetch/WebSocket bağlantısını, ham soket/süreç bağlamalarını (process.binding tcp_wrap/pipe_wrap/process_wrap/spawn_sync, dlopen) ve izinsiz alt süreci (curl, sh, ...) INTEL_NET_BLOCKED hatasıyla durdurur. Yalnız gerçek yolu (realpath) os.tmpdir() altındaki unix soketleri (tsx IPC) ve yalnız process.execPath (koruma, NODE_OPTIONS ve kip ortamına ZORLA yazılarak devralınır; fork execPath'i de denetlenir) izinlidir. Node alt sürecinde korumadan ÖNCE kod çalıştırabilecek ön yükleme bayrakları (-r/--require/--import/--loader/--experimental-loader; argv, fork execArgv ve çağıranın NODE_OPTIONS'u) yalnız korumanın kendisini veya izinli ikili dizini altındaki dosyayı (tsx preflight/loader) gösterebilir; göreli/çıplak belirteç reddedilir. Kipler: strict (hazırlık ölçümü: ek olarak yalnız INTEL_NET_GUARD_ALLOW_BIN_DIR altındaki esbuild ikilisi; Worker ve yerel eklenti yasak) ve proof (kanıtlar: git yalnız GIT_ALLOW_PROTOCOL=file ile, tar, ad alanı kum havuzu için unshare).
+//TR: Ağ koruması (NODE_OPTIONS=--import ile ön yüklenir; ürün kodu için asıl sınır readiness-runner'daki ad alanı kum havuzudur, bu koruma derinlemesine savunmadır): Node içinden her TCP/UDP/TLS/HTTP/DNS/fetch/WebSocket bağlantısını, ham soket/süreç bağlamalarını (process.binding tcp_wrap/pipe_wrap/process_wrap/spawn_sync, dlopen) ve izinsiz alt süreci (curl, sh, ...) INTEL_NET_BLOCKED hatasıyla durdurur. Yalnız gerçek yolu (realpath) os.tmpdir() altındaki unix soketleri (tsx IPC) ve yalnız process.execPath (koruma, NODE_OPTIONS ve kip ortamına ZORLA yazılarak devralınır; fork execPath'i de denetlenir) izinlidir. Node alt sürecinde korumadan ÖNCE kod çalıştırabilecek ön yükleme bayrakları (-r/--require/--import/--loader/--experimental-loader) argv ve fork execArgv'de yalnız korumanın kendisini (veya içeriği aynı kopyasını) ya da izinli ikili dizini altındaki dosyayı (tsx preflight/loader), NODE_OPTIONS'ta yalnız korumayı gösterebilir; NODE_OPTIONS node'un kendi ayrıştırmasıyla (yalnız çift tırnak) VE tırnaklar atılmış düz metin olarak iki kez taranır (tek tırnak hilesi reddedilir); --env-file/--env-file-if-exists, yapılandırma dosyası ve snapshot bayrakları her yerde reddedilir; göreli/çıplak belirteç reddedilir. İzin verilen her alt sürecin ortamından LD_*/DYLD_* silinir; node alt sürecinin NODE_OPTIONS'u yalnız koruma importudur, diğer alt süreçlerde yalnız koruma importları kalır. process.execve ve process.dlopen her kipte yasaktır. Kipler: strict (hazırlık ölçümü: ek olarak yalnız INTEL_NET_GUARD_ALLOW_BIN_DIR altındaki esbuild ikilisi; Worker ve yerel eklenti yasak) ve proof (kanıtlar: git yalnız GIT_ALLOW_PROTOCOL=file ile, tar, ad alanı kum havuzu için unshare).
 import net from 'node:net';
 import tls from 'node:tls';
 import http from 'node:http';
@@ -11,6 +11,7 @@ import wt from 'node:worker_threads';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import { syncBuiltinESMExports } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
@@ -25,6 +26,8 @@ const localSocket = (p) => { if (typeof p !== 'string' || !p.length || p.startsW
 const GUARD_URL = import.meta.url;
 const GUARD_REAL = real(fileURLToPath(GUARD_URL));
 const EXEC_REAL = real(process.execPath);
+const sha = (f) => { try { return crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex'); } catch { return null; } };
+const GUARD_SHA = GUARD_REAL ? sha(GUARD_REAL) : null;
 
 // ---- sockets: only unix sockets under the temp dir (tsx IPC); every host:port connect throws before any packet is sent
 const origConnect = net.Socket.prototype.connect;
@@ -66,7 +69,9 @@ const BLOCKED_BINDINGS = new Set(['tcp_wrap', 'udp_wrap', 'pipe_wrap', 'stream_w
 const origBinding = process.binding;
 process.binding = function guardedBinding(name) { if (BLOCKED_BINDINGS.has(String(name))) throw fail(`process.binding ${name}`); return origBinding.call(this, name); };
 if (typeof process._linkedBinding === 'function') process._linkedBinding = blockFn('process._linkedBinding');
-if (MODE === 'strict') process.dlopen = blockFn('process.dlopen');
+// native addons and process-image replacement bypass every JS-level hook: blocked in both modes
+process.dlopen = blockFn('process.dlopen');
+if (typeof process.execve === 'function') process.execve = blockFn('process.execve');
 
 // ---- child processes: only this node binary (the guard, its mode and NODE_OPTIONS are FORCED into the child's env, so a caller-supplied
 // env cannot drop them); proof: git (file protocol only), tar and unshare; strict: the esbuild binary under the allowed bin dir
@@ -83,31 +88,55 @@ const BAD_NODE_FLAG = /^--(?:expose[-_]internals|allow[-_]natives[-_]syntax)(?:=
 // preloads run before (a --require preload even before) the guard's own --import: only the guard itself or a file under the allowed bin dir
 // (tsx's preflight.cjs / loader.mjs) may be preloaded; a relative or bare specifier cannot be checked and is refused
 const PRELOAD_FLAG = /^(?:-r|--require|--import|--loader|--experimental-loader)(?:=([\s\S]*))?$/;
+// flags that load code or environment (NODE_OPTIONS included) from a file before or instead of the guard: refused everywhere
+const FILE_FLAG = /^--(?:env-file(?:-if-exists)?|experimental-(?:default-)?config-file|snapshot-blob)(?:=|$)/;
 const ALLOW_BIN_REAL = ALLOW_BIN_DIR ? real(ALLOW_BIN_DIR) || ALLOW_BIN_DIR : null;
-const preloadOk = (spec) => {
-  let f = String(spec ?? '');
-  if (f.startsWith('file:')) { try { f = fileURLToPath(f); } catch { return false; } }
-  if (!path.isAbsolute(f)) return false;
-  const r = real(f);
-  return !!r && (r === GUARD_REAL || (!!ALLOW_BIN_REAL && r.startsWith(ALLOW_BIN_REAL + path.sep)));
-};
-const badPreload = (tokens) => {
+const specFile = (spec) => { let f = String(spec ?? ''); if (f.startsWith('file:')) { try { f = fileURLToPath(f); } catch { return null; } } return path.isAbsolute(f) ? real(f) : null; };
+// the guard itself, or a byte-identical copy of it (the readiness sandbox preloads a read-only copy)
+const isGuard = (spec) => { const r = specFile(spec); return !!r && (r === GUARD_REAL || (!!GUARD_SHA && sha(r) === GUARD_SHA)); };
+const preloadOk = (spec, allowBin) => { const r = specFile(spec); return !!r && (isGuard(spec) || (allowBin && !!ALLOW_BIN_REAL && r.startsWith(ALLOW_BIN_REAL + path.sep))); };
+const badPreload = (tokens, allowBin = true) => {
   for (let i = 0; i < tokens.length; i++) {
-    const t = String(tokens[i]), m = PRELOAD_FLAG.exec(t);
+    const t = String(tokens[i]);
+    if (FILE_FLAG.test(t)) return t.split('=')[0];
+    const m = PRELOAD_FLAG.exec(t);
     if (!m) continue;
     const flag = t.split('=')[0], v = m[1] !== undefined ? m[1] : tokens[++i];
-    if (!preloadOk(v)) return `${flag} ${path.basename(String(v ?? ''))}`;
+    if (!preloadOk(v, allowBin)) return `${flag} ${path.basename(String(v ?? ''))}`;
   }
   return null;
 };
-const optTokens = (s) => (String(s || '').match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || []).map((t) => t.replace(/"([^"]*)"|'([^']*)'/g, '$1$2'));
-const guardEnv = (env) => {
+// NODE_OPTIONS as node itself splits it: spaces separate, only double quotes group (backslash escapes inside them); single quotes are literal
+const nodeOptTokens = (s) => {
+  const out = []; let cur = null, q = false; const str = String(s ?? '');
+  for (let i = 0; i < str.length; i++) {
+    let c = str[i];
+    if (c === '\\' && q) { c = str[++i] ?? ''; }
+    else if (c === '"') { q = !q; cur = cur ?? ''; continue; }
+    else if (c === ' ' && !q) { if (cur !== null) { out.push(cur); cur = null; } continue; }
+    cur = (cur ?? '') + c;
+  }
+  if (cur !== null) out.push(cur);
+  return out;
+};
+// checked twice: as node parses it, and as plain words with every quote and backslash dropped (a quoting trick that hides a preload from
+// one reading is refused, never passed through); only the guard may be preloaded here
+const flatTokens = (s) => String(s ?? '').replace(/["'\\]/g, ' ').split(/\s+/).filter(Boolean);
+const optionsPreload = (s) => badPreload(nodeOptTokens(s), false) || badPreload(flatTokens(s), false);
+const guardImports = (s) => { const t = nodeOptTokens(s), out = []; for (let i = 0; i < t.length; i++) { const m = /^--import(?:=([\s\S]*))?$/.exec(t[i]); if (m) { const v = m[1] !== undefined ? m[1] : t[++i]; if (isGuard(v)) out.push(`--import ${v}`); } } return out; };
+// every allowed child: no LD_*/DYLD_* (dynamic-loader preloads) and no foreign NODE_OPTIONS; a node child gets exactly the guard import,
+// any other child keeps only guard imports already there (the sandbox launcher passes the guard copy to the node inside it)
+const childEnv = (env, node) => {
   const e = { ...(env || process.env) };
-  const imp = `--import ${GUARD_URL}`;
-  const no = String(e.NODE_OPTIONS || '');
-  const bp = badPreload(optTokens(no));
-  if (bp) throw fail(`node child NODE_OPTIONS preload ${bp}`);
-  e.NODE_OPTIONS = no.includes(imp) ? no : `${imp}${no ? ` ${no}` : ''}`;
+  for (const k of Object.keys(e)) if (/^(?:LD_|DYLD_)/i.test(k)) delete e[k];
+  const bp = optionsPreload(e.NODE_OPTIONS);
+  if (bp) throw fail(`${node ? 'node child' : 'child'} NODE_OPTIONS preload ${bp}`);
+  if (node) e.NODE_OPTIONS = `--import ${GUARD_URL}`;
+  else { const keep = guardImports(e.NODE_OPTIONS); if (keep.length) e.NODE_OPTIONS = keep.join(' '); else delete e.NODE_OPTIONS; }
+  return e;
+};
+const guardEnv = (env) => {
+  const e = childEnv(env, true);
   // a child may tighten proof -> strict, never loosen strict -> proof; under strict the allowed bin dir is the parent's
   e.INTEL_NET_GUARD = MODE === 'strict' || e.INTEL_NET_GUARD === 'strict' ? 'strict' : 'proof';
   if (MODE === 'strict') { if (process.env.INTEL_NET_GUARD_ALLOW_BIN_DIR) e.INTEL_NET_GUARD_ALLOW_BIN_DIR = process.env.INTEL_NET_GUARD_ALLOW_BIN_DIR; else delete e.INTEL_NET_GUARD_ALLOW_BIN_DIR; }
@@ -131,7 +160,8 @@ const guardCp = (name, orig, shell = false) => function guardedChild(file, ...re
     const bp = badPreload(argv);
     if (bp) throw fail(`child_process.${name} node preload ${bp}`);
     withOpts(rest, (o) => ({ ...o, env: guardEnv(o.env) }));
-  } else if (path.basename(String(file)) === 'git') withOpts(rest, (o) => ({ ...o, env: { ...(o.env || process.env), GIT_ALLOW_PROTOCOL: 'file' } }));
+  } else if (path.basename(String(file)) === 'git') withOpts(rest, (o) => ({ ...o, env: { ...childEnv(o.env, false), GIT_ALLOW_PROTOCOL: 'file' } }));
+  else withOpts(rest, (o) => ({ ...o, env: childEnv(o.env, false) }));
   return orig.call(this, file, ...rest);
 };
 cp.spawn = guardCp('spawn', cp.spawn);

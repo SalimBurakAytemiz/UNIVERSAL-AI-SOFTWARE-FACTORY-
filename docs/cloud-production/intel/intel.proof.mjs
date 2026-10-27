@@ -1,4 +1,4 @@
-//TR: UASCO Intel V1 toplu kanıt betiği (node docs/cloud-production/intel/intel.proof.mjs). Ağ yoktur: betik kendini ağ korumasıyla (lib/net-guard.mjs, proof kipi: her node sürecine NODE_OPTIONS ile ön yüklenir; git yalnız file protokolü) ve izin listeli ortamla (token/sır yok, iki harf düzeninde ölü vekil, GIT_CONFIG_GLOBAL=/dev/null, imzasız commit) yeniden çalıştırır; GitHub kaynağı enjekte edilir ve çağrı sayısı 0 doğrulanır. Kapsam: alt kanıtlar (P3 P4 P5 P6 P10 P11) + P1 determinizm, P2 taban uzlaştırması (gerçek 19 Ekim blob'u), P7 tazelik/hız (ETag, kaynak başına tazelik, parmak izi, git ref tazeliği), P8 guard/zaman, P9 eski anahtar sürekliliği, P12 mutantlar, P13 ürün kodu kum havuzu (ortam, ağ, koruma atlatma, /proc, ana makine dosya sistemi ve soket sondaları; kum havuzu yoksa çalıştırmama; çıktı şeması), P14 sınırlı arşiv.
+//TR: UASCO Intel V1 toplu kanıt betiği (node docs/cloud-production/intel/intel.proof.mjs). Ağ yoktur: betik kendini ağ korumasıyla (lib/net-guard.mjs, proof kipi: her node sürecine NODE_OPTIONS ile ön yüklenir; git yalnız file protokolü) ve izin listeli ortamla (token/sır yok, iki harf düzeninde ölü vekil, GIT_CONFIG_GLOBAL=/dev/null, imzasız commit) yeniden çalıştırır; GitHub kaynağı enjekte edilir ve çağrı sayısı 0 doğrulanır. Kapsam: alt kanıtlar (P3 P4 P5 P6 P10 P11 + ağ koruması lib/net-guard.proof.mjs) + P1 determinizm, P2 taban uzlaştırması (gerçek 19 Ekim blob'u), P7 tazelik/hız (ETag, kaynak başına tazelik, parmak izi, git ref tazeliği), P8 guard/zaman, P9 eski anahtar sürekliliği, P12 mutantlar (K1-K11 koordinatör listesi dahil; P12g: koruma mutantları korumasız 0. aşamadan, her biri yalnız kendi mutant korumasıyla ön yüklenmiş alt kanıtla çalışır, çünkü korumalı bir süreç başka bir korumanın ön yüklenmesine izin vermez), P13 ürün kodu kum havuzu (ortam, ağ, koruma atlatma, /proc, ana makine dosya sistemi ve soket sondaları; kum havuzu yoksa çalıştırmama; çıktı şeması), P14 sınırlı arşiv.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -32,9 +32,52 @@ const NOENV = {
   NODE_OPTIONS: `--import ${new URL('./lib/net-guard.mjs', import.meta.url).href}`, INTEL_NET_GUARD: 'proof',
   INTEL_REPO: process.env.INTEL_REPO || path.dirname(fileURLToPath(import.meta.url)),
 };
+// P12g network-guard mutants (K8-K10). A guarded process refuses to preload any guard but itself, so each mutant guard is launched from
+// this unguarded stage 0 as the only guard of its own lib/net-guard.proof.mjs run (allowlisted env, dead proxies); the mutant must make
+// that proof FAIL, and the unmutated copy (control) must pass the same way.
+const GUARD_MUT = [
+  { name: "K8: NODE_OPTIONS read with the 03ed064 tokenizer (single quotes group, no plain-word rescan)", apply: (s) => s.replace('const optionsPreload = (s) => badPreload(nodeOptTokens(s), false) || badPreload(flatTokens(s), false);', "const optionsPreload = (s) => badPreload((String(s || '').match(/(?:[^\\s\"']+|\"[^\"]*\"|'[^']*')+/g) || []).map((t) => t.replace(/\"([^\"]*)\"|'([^']*)'/g, '$1$2')), false);") },
+  { name: 'K9: LD_*/DYLD_* passed to allowed children', apply: (s) => s.replace("  for (const k of Object.keys(e)) if (/^(?:LD_|DYLD_)/i.test(k)) delete e[k];\n", '') },
+  { name: 'K10: process.execve allowed', apply: (s) => s.replace("if (typeof process.execve === 'function') process.execve = blockFn('process.execve');", '') },
+  { name: 'K10: process.dlopen blocked in strict mode only (03ed064)', apply: (s) => s.replace("process.dlopen = blockFn('process.dlopen');", "if (MODE === 'strict') process.dlopen = blockFn('process.dlopen');") },
+];
+function guardMutants(onlyKey) {
+  if (onlyKey && onlyKey !== 'P12') return { passed: 0, failed: 0, lines: [] };
+  const lines = []; let p = 0, f = 0;
+  const chk = (name, ok) => { if (ok) { p++; lines.push(`PASS ${name}`); } else { f++; lines.push(`FAIL ${name}`); } };
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'intel-guard-mut-'));
+  try {
+    const runCopy = (label, mutate) => {
+      const dir = path.join(base, sha256(label).slice(0, 8), 'lib'); fs.mkdirSync(dir, { recursive: true });
+      const src = fs.readFileSync(path.join(here, 'lib', 'net-guard.mjs'), 'utf8'), mut = mutate(src);
+      fs.writeFileSync(path.join(dir, 'net-guard.mjs'), mut); fs.copyFileSync(path.join(here, 'lib', 'net-guard.proof.mjs'), path.join(dir, 'net-guard.proof.mjs'));
+      const r = spawnSync(process.execPath, [path.join(dir, 'net-guard.proof.mjs')], { encoding: 'utf8', timeout: 180000, env: { ...NOENV, NODE_OPTIONS: `--import ${pathToFileURL(path.join(dir, 'net-guard.mjs')).href}`, INTEL_NET_GUARD: 'proof' } });
+      return { applied: mut !== src, r };
+    };
+    const ctl = runCopy('control', (x) => x);
+    chk(`P12g control: the unmutated guard proof passes under its own guard (exit ${ctl.r.status}; ${(/SUMMARY: .*/.exec(ctl.r.stdout || '') || ['no summary'])[0]})`, ctl.r.status === 0 && /SUMMARY: \d+ passed, 0 failed/.test(ctl.r.stdout || ''));
+    for (const mu of GUARD_MUT) {
+      const { applied, r } = runCopy(mu.name, mu.apply);
+      if (!applied) { chk(`P12g mutant applies: ${mu.name}`, false); continue; }
+      chk(`P12g mutant killed: ${mu.name} (lib/net-guard.proof.mjs exit ${r.status})`, r.status !== 0 && /FAIL /.test(r.stdout || ''));
+    }
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
+  return { passed: p, failed: f, lines };
+}
 if (process.env.INTEL_NET_GUARD_ACTIVE !== 'proof') {
-  const r = spawnSync(process.execPath, [fileURLToPath(import.meta.url), ...process.argv.slice(2)], { stdio: 'inherit', env: NOENV });
-  process.exit(r.status ?? 1);
+  const r = spawnSync(process.execPath, [fileURLToPath(import.meta.url), ...process.argv.slice(2)], { stdio: ['inherit', 'pipe', 'inherit'], encoding: 'utf8', maxBuffer: 1 << 26, env: NOENV });
+  const out = String(r.stdout || '');
+  const sm = /SUMMARY: (\d+) passed, (\d+) failed/.exec(out);
+  process.stdout.write(out.replace(/^SUMMARY: .*\n?/m, ''));
+  let p = sm ? Number(sm[1]) : 0, f = sm ? Number(sm[2]) : 0;
+  if (!sm || (r.status !== 0 && f === 0)) { f++; console.log(`FAIL guarded stage exited ${r.status} without a clean summary`); }
+  const oi = process.argv.indexOf('--only'), only = oi > 0 ? process.argv[oi + 1] : null;
+  const gm = guardMutants(only);
+  for (const l of gm.lines) console.log(l);
+  p += gm.passed; f += gm.failed;
+  console.log(`SUMMARY: ${p} passed, ${f} failed`);
+  process.exit(f ? 1 : 0);
 }
 const { rules } = loadRules(HERE);
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'intel-proof-'));
@@ -48,7 +91,7 @@ const g = (cwd, ...a) => execFileSync('git', ['-C', cwd, ...a], { encoding: 'utf
 
 try {
   // ---- sub-proofs
-  if (want('sub')) for (const p of ['model/status.proof.mjs', 'model/departments.proof.mjs', 'metrics/metrics.proof.mjs', 'metrics/history.proof.mjs', 'render/render.proof.mjs', 'lib/publish.proof.mjs']) {
+  if (want('sub')) for (const p of ['model/status.proof.mjs', 'model/departments.proof.mjs', 'metrics/metrics.proof.mjs', 'metrics/history.proof.mjs', 'render/render.proof.mjs', 'lib/publish.proof.mjs', 'lib/net-guard.proof.mjs']) {
     const r = spawnSync(process.execPath, [path.join(HERE, p)], { encoding: 'utf8', env: NOENV });
     const sum = /SUMMARY: (\d+) passed, (\d+) failed/.exec(r.stdout || '');
     check(`${p} (${sum ? `${sum[1]} passed, ${sum[2]} failed` : 'no summary'})`, r.status === 0 && sum && sum[2] === '0');
@@ -467,21 +510,34 @@ console.log(JSON.stringify(o));`;
       { name: 'R2-M1: any commit naming the id sets the start (bookkeeping commits included)', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('l.at && (integMsg.has(l.ref) || isOwnCommit(commitSubjects.get(l.ref), id, resolver, ownCommit))', 'l.at') },
       { name: 'R2-M1: start commits for items that are not coded', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('const ownStartCommits = coded !== T ? [] : [', 'const ownStartCommits = [') },
       { name: 'R2-H1: PARTIAL short-circuits independent evidence', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('const s1 = pick([...recExplicit, ...overlayL], integratedPr), s2 = pick(tb, integratedPr);\n    const plus', 'const s1 = [], s2 = [];\n    const plus') },
-      { name: 'R2-H1: ignore annotations that name another item', file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('        if (ids.length) return ids[0];', '        if (false) return ids[0];') },
+      { name: 'R2-H1: ignore annotations that name another item (UNASSIGNED PRs)', file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('        return ids.length ? ids[0] : null;', '        return null;') },
       { name: 'R3-M1: no slug normalisation of 19-Oct annotations (claude/l-assurance-ui034 names nothing)', file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('const ids = resolver.resolveText(deslug(ann));', 'const ids = resolver.resolveText(ann);') },
-      { name: "R3-M1: a PR whose own title names another item is not other-item", file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('return ownOther.length ? ownOther[0] : null;', 'return null;') },
-      { name: 'R3-M1: ignore the 19-Oct prToWorkItems assignment', file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace(" || (prToWorkItems[`#${n}`] || []).includes(it.id)", '') },
-      { name: 'R3-M2: bookkeeping PR titles count as ID_IN_TITLE evidence again', file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("if (field !== 'body' && isBk(n, it.id, field))", 'if (false)') },
+      { name: 'R3-M1: a PR whose own title/branch names another item is no ownership evidence', file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('for (const id of prOwnIds.get(p.number)) O(p.number).tb.add(id);', '') },
+      { name: 'R3-M1: ignore the 19-Oct prToWorkItems map', file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('for (const [k, ids] of Object.entries(prToWorkItems || {}))', 'for (const [k, ids] of Object.entries({}))') },
+      { name: 'R3-M2: bookkeeping PR titles count as ID_IN_TITLE evidence again', file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('        if (isBk(n, it.id, field)) add(', '        if (false) add(') },
       { name: "R3-M2: ignore 'DONE' status clauses in wave titles", file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("return b === 'ALL' || (field === 'title' && !!b && b.has(id));", "return b === 'ALL';") },
-      { name: 'R3-L1: other-item references corroborate a merged claim again', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("sw = pick(invWeak.filter((l) => !l.source.startsWith('inventory.prs:other-item:')), integratedPr)", 'sw = pick(invWeak, integratedPr)') },
-      { name: 'R3-L2: WEAK-only rows reported as EVIDENCED_BY_PR', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("weakOnly ? 'CORROBORATED_BY_WEAK_REF' : ", '') },
+      { name: 'R3-L1 / intel-1.4: WEAK references (other-item included) corroborate a merged claim again', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("    else { reconClass = 'STATUS_ONLY_UNVERIFIED'; confidence = 'LOW'; missing.push(", "    else if (pick(invWeak, integratedPr).length) { reconClass = 'CORROBORATED_BY_PR'; integratedBy = pick(invWeak, integratedPr); matchKind = 'INVENTORY_TEXT_WEAK'; confidence = 'LOW'; }\n    else { reconClass = 'STATUS_ONLY_UNVERIFIED'; confidence = 'LOW'; missing.push(") },
+      { name: 'R3-L2: WEAK-only rows reported without CORROBORATED_BY_WEAK_REF', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("statusOnlyWeak ? 'CORROBORATED_BY_WEAK_REF' : ", '') },
       { name: 'R3-L2: D.2 hides the WEAK PRs of a WEAK-only row', file: 'render/report-md.mjs', proof: 'render/render.proof.mjs', apply: (s) => s.replace("x.prs.map((n) => `#${n}`).join(', ') || ((x.weakPrs || []).length ?", "x.prs.map((n) => `#${n}`).join(', ') || ((x.weakPrs || []).length && false ?") },
       { name: 'R3-L3: the integrating commit does not date the start', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('(integMsg.has(l.ref) || isOwnCommit(', '(isOwnCommit(') },
       { name: 'R3-L3: bookkeeping head word ends at \\b (matches before -)', file: 'rules/link-patterns.json', proof: 'model/status.proof.mjs', apply: (s) => s.replace('|dispatch)(?![-\\\\w])', '|dispatch)\\\\b') },
       { name: 'R3-L3: no earlierMention for an unattributed earlier commit', file: 'model/pipeline.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('const earlierMention = em ?', 'const earlierMention = false ?') },
-      { name: 'R2-LOW: WEAK corroboration credits tested / CI / merge dates', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('const integPrs = weakOnly ? [] :', 'const integPrs =') },
+      { name: 'R2-LOW / intel-1.4: WEAK references enter integratedPrs / CI / merge dates', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("const integPrs = integratedBy.filter((l) => l.kind === 'PR').map(pr);", "const integPrs = [...integratedBy, ...weakCorr].filter((l) => l.kind === 'PR').map(pr);") },
       { name: 'R2-LOW: runtimeVerified back to a measured FALSE', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("const runtimeVerified = live ? 'NOT_MEASURED' : U;", 'const runtimeVerified = live ? F : U;') },
       { name: 'R2-LOW: open PR without a file list shown as founder false', file: 'render/report-json.mjs', proof: 'render/render.proof.mjs', apply: (s) => s.replace(": filesKnown ? false : 'UNKNOWN';", ': false;') },
+      // ---- coordinator checklist K1-K7, K11 (intel-1.4 PR ownership rule, Founder view, action text); K8-K10 run as P12g from stage 0
+      { name: "K1: the map's 'lists only other items' direction ignored (a test+states PR of a PT row counts EXPLICIT for a UI row)", file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('const all = new Set([...e.tb, ...e.body, ...e.map, ...e.rec]);', 'const all = new Set([...e.tb, ...e.body, ...(e.map.has(x) ? e.map : []), ...e.rec]);') },
+      { name: 'K2: OTHER_ITEM refs kept in strongPrs / ownStartPrs', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('const strongPrs = [...(it.baseline ? inv : []),', "const strongPrs = [...(it.baseline ? [...inv, ...invWeak.filter((l) => l.source.startsWith('inventory.prs:other-item:'))] : []),") },
+      { name: 'K3: a SHARED PR treated as OTHER_ITEM for each owner (under-report)', file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('    if (!all.has(x)) return all.size ?', '    if (!all.has(x) || others.length) return all.size ?') },
+      { name: 'K4: an UNASSIGNED PR that passes STATUS19_CLAIMS_MERGED demoted to WEAK (under-report)', file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("return o.kind === 'OTHER_ITEM' ? o.others.join(',') : null; };", "return o.kind === 'OTHER_ITEM' ? o.others.join(',') : o.kind === 'UNASSIGNED' ? 'UNASSIGNED' : null; };") },
+      { name: 'K5: title/map conflict resolved as OTHER_ITEM for the map-listed row (title wins)', file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('const all = new Set([...e.tb, ...e.body, ...e.map, ...e.rec]);', 'const all = new Set([...e.tb, ...e.body, ...(e.tb.size ? [] : e.map), ...e.rec]);') },
+      { name: 'K5: title/map conflict kept at HIGH confidence', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("if (ownershipNotes.length && confidence === 'HIGH') confidence = 'MEDIUM';", '') },
+      { name: 'K6: MERGED_NOT_VERIFIED action text lists every linked PR (closed-unmerged included) again', file: 'model/pipeline.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("prs: d.status === 'MERGED_NOT_VERIFIED' ? integText(d) : prText(d.linkedPrs, d.corroboratingWeakPrs),", 'prs: prText(d.linkedPrs, d.corroboratingWeakPrs),') },
+      { name: 'K7: Founder view drops BLOCKED items owned by FOUNDER (keeps requiresNewAuthority only)', file: 'model/pipeline.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("(x.owner === 'FOUNDER' || x.founderOwned || x.requiresNewAuthority)", '(x.requiresNewAuthority)') },
+      { name: 'K7: Founder view not rendered in the MD sections', file: 'render/report-md.mjs', proof: 'render/render.proof.mjs', apply: (s) => s.replace('const FB = r.plan.founderBlocked || [];', 'const FB = [];') },
+      { name: "K11: an OTHER_ITEM ref also attributed as EXPLICIT (double count of another item's PR)", file: 'model/links.mjs', proof: 'metrics/metrics.proof.mjs', apply: (s) => s.replace("else weak.set(r.n, r.reason); }", "else { weak.set(r.n, r.reason); if (/^other-item:/.test(r.reason)) explicit.set(r.n, 'inventory.prs[OTHER_ITEM]'); } }") },
+      { name: 'K11: the reconciliation partition drops a class (sums no longer match the baseline)', file: 'model/pipeline.mjs', proof: 'metrics/metrics.proof.mjs', apply: (s) => s.replace("const rcls = RECON_CLASSES.filter((c) => !c.startsWith('EXCLUDED') && !c.startsWith('ADDED'));", "const rcls = RECON_CLASSES.filter((c) => !c.startsWith('EXCLUDED') && !c.startsWith('ADDED') && c !== 'STATUS_ONLY_UNVERIFIED');") },
+      { name: "K-BK: a whole-title bookkeeping PR's body mention corroborates a merged claim again", file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('        if (isBk(n, it.id, field)) add(', "        if (field !== 'body' && isBk(n, it.id, field)) add(") },
       { name: 'count status-only merged claims as integrated', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("else { reconClass = 'STATUS_ONLY_UNVERIFIED'; confidence = 'LOW';", "else { reconClass = 'STATUS_ONLY_UNVERIFIED'; integratedBy = inv.length ? inv : [{ kind: 'COMMIT', ref: 'x', strength: 'X' }]; confidence = 'LOW';") },
     ];
     for (const mu of MUT) {

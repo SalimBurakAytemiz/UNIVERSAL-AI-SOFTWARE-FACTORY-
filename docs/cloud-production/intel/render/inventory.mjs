@@ -12,7 +12,7 @@ export function inventoryItem(x) {
     dependsOn: x.dependsOn, planned: x.planned, actual: x.actual, status: x.status, status19: x.status19, statusRule: x.statusRule, reconClass: x.reconClass, baselineClass: x.baselineClass, evidenceBaselineClass: x.evidenceBaselineClass ?? null, evidenceClass: x.evidenceClass, matchKind: x.matchKind,
     scopeReason: x.scopeReason ?? null, weakInventoryRefs: x.weakInventoryRefs || [],
     substeps: x.substeps, evidence: x.evidence, links: x.links, blockers: x.blockers, founderDecision: x.founderDecision, nextAction: x.nextAction, sizeEstimate: x.sizeEstimate,
-    measuredDurationHours: x.measuredDurationHours, cost: x.cost, confidence: x.confidence, stale: x.stale, missingEvidence: x.missingEvidence, aliases: x.aliases,
+    measuredDurationHours: x.measuredDurationHours, cost: x.cost, confidence: x.confidence, stale: x.stale, missingEvidence: x.missingEvidence, ownershipNotes: x.ownershipNotes || [], aliases: x.aliases,
     priority: x.priority, oct31: x.oct31, prs: x.prs, integratedPrs: x.integratedPrs, corroboratingWeakPrs: x.corroboratingWeakPrs || [], openPrs: x.openPrs, mergeCommits: x.mergeCommits, mergedAt: x.mergedAt, commits: x.commits, ciRuns: x.ciRuns,
     commitEvidence: x.commitEvidence, candidateLinks: x.candidateLinks, supportingRefs: x.supportingRefs, records: x.records, openDependsOn: x.openDependsOn ?? null, devOpenDependsOn: x.devOpenDependsOn ?? null,
   };

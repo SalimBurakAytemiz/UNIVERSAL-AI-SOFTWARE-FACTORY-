@@ -136,15 +136,18 @@ export function parseInventoryPrs(text, P) {
   }
   return out;
 }
-// Per PR number: EXPLICIT when at least one SINGLE, non-nested, role-free reference exists whose annotation does not assign the PR to
-// another known item (otherItemOf(n, annotation) -> that item's id or null) AND the gate holds (PR title/branch/body names the item, the
-// item's own 19-Oct title names the PR, or the 19-Oct status already claims merged/integrated); otherwise WEAK with the first reason found
-// ('other-item:<ID>' when the annotation names another item). Unknown PR numbers are dropped.
-export function inventoryPrRefs(row, prMap, P, gate, otherItemOf = () => null) {
+// Per PR number: WEAK 'other-item:<IDs>' first when the ownership rule finds evidence for other items only (ownerOf(n) -> their ids or
+// null; any reference form). Else EXPLICIT when at least one SINGLE, non-nested, role-free reference exists whose annotation does not
+// assign the PR to another known item (otherItemOf(n, annotation) -> that item's id or null) AND the gate holds (PR title/branch/body
+// names the item, the item's own 19-Oct title names the PR, or the 19-Oct status already claims merged/integrated); otherwise WEAK with the
+// first reason found ('other-item:<ID>' when the annotation names another item). Unknown PR numbers are dropped.
+export function inventoryPrRefs(row, prMap, P, gate, otherItemOf = () => null, ownerOf = () => null) {
   const byN = new Map();
   for (const r of parseInventoryPrs(row.prs, P)) { if (!prMap.has(r.n)) continue; if (!byN.has(r.n)) byN.set(r.n, []); byN.get(r.n).push(r); }
   const out = [];
   for (const [n, rs] of [...byN.entries()].sort((a, b) => a[0] - b[0])) {
+    const owners = ownerOf(n);
+    if (owners) { out.push({ n, strength: 'WEAK', gate: null, reason: `other-item:${owners}` }); continue; }
     const plain = rs.filter((r) => r.form === 'SINGLE' && !r.nested && !r.role);
     const other = plain.map((r) => otherItemOf(n, r.annotation || '')).find(Boolean) || null;
     const cand = plain.find((r) => !otherItemOf(n, r.annotation || ''));

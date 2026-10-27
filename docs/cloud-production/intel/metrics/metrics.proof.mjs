@@ -1,4 +1,4 @@
-//TR: P6 metrik ayrımı kanıtı (ağsız): acceptedRatio merge'leri yok sayar; runtime oranı NOT_MEASURED'dır (%0 değil); PARTIAL entegre sayılmaz; medyan çift n'de iki ortanın ortalamasıdır; devProgress yalnız coded/integrated/tested kullanır; UNIT ağırlık modelinde eşit ağırlık notu vardır; bilinmeyen weightModel eşit ağırlığa kapalı düşer ve DQ üretir; ölçülmemiş hazırlık katmanı 0 olarak gösterilmez; ETA yalnız ölçülmüş hızdan.
+//TR: P6 metrik ayrımı kanıtı (ağsız): acceptedRatio merge'leri yok sayar; runtime oranı NOT_MEASURED'dır (%0 değil); PARTIAL entegre sayılmaz; medyan çift n'de iki ortanın ortalamasıdır; devProgress yalnız coded/integrated/tested kullanır; UNIT ağırlık modelinde eşit ağırlık notu vardır; bilinmeyen weightModel eşit ağırlığa kapalı düşer ve DQ üretir; ölçülmemiş hazırlık katmanı 0 olarak gösterilmez; ETA yalnız ölçülmüş hızdan. K11: yalnız başka kalemlerin PR'larını anan satır entegre sayılmaz, FULL/MVP kod entegrasyonu payları entegre kalemlere eşittir, uzlaştırma bölüntüsü taban kümesine toplanır.
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -60,6 +60,23 @@ const runRow = md.split('\n').find((l) => l.startsWith('| RUNNING |'));
 check('MD: RUNNING row shows UNKNOWN in the TRUE column, not 0', !!runRow && runRow.split('|')[2].trim() === 'UNKNOWN');
 const toolRow = md.split('\n').find((l) => l.startsWith('| TOOL_READY |'));
 check('MD: TOOL_READY (measured:false) is not rendered as 0', !!toolRow && toolRow.split('|')[2].trim() === 'UNKNOWN');
+// K11 (intel-1.4 ownership rule): rows whose only PR references are other items' PRs never count as integrated, the FULL / MVP
+// code-integration numerators are exactly the live / MVP items with integrated TRUE, and the reconciliation partition sums to the
+// baseline set (03ed064: UI-047 counted as integrated through #58, the PT-090 test+states PR)
+{
+  const bk = miniBundle(); const mk = buildAll(bk.inputs, rules, bk.overlay, bk.meta, bk.nowIso);
+  const byK = new Map(mk.items.map((x) => [x.id, x]));
+  const live = mk.items.filter((x) => x.status !== 'OBSOLETE'), mvpL = live.filter((x) => x.scope === 'MVP');
+  const otherOnly = ['UI-031', 'UI-032', 'UI-047'];
+  check(`K11 OTHER_ITEM-only rows (${otherOnly.join(', ')}) are never integrated and add nothing to the FULL or MVP code-integration ratio (integrated: ${otherOnly.map((id) => byK.get(id)?.substeps.integrated).join('/')})`,
+    otherOnly.every((id) => byK.get(id) && byK.get(id).substeps.integrated !== 'TRUE' && byK.get(id).integratedPrs.length === 0));
+  check(`K11 code-integration numerators equal the integrated items exactly (FULL ${mk.metrics.ratios3.codeIntegrationRatio.full.n}/${mk.metrics.ratios3.codeIntegrationRatio.full.d}, MVP ${mk.metrics.ratios3.codeIntegrationRatio.mvp.n}/${mk.metrics.ratios3.codeIntegrationRatio.mvp.d})`,
+    mk.metrics.ratios3.codeIntegrationRatio.full.n === live.filter((x) => x.substeps.integrated === 'TRUE').length && mk.metrics.ratios3.codeIntegrationRatio.full.d === live.length
+    && mk.metrics.ratios3.codeIntegrationRatio.mvp.n === mvpL.filter((x) => x.substeps.integrated === 'TRUE').length && mk.metrics.ratios3.codeIntegrationRatio.mvp.d === mvpL.length);
+  const rp = mk.reconciliation; const sum = (xs, k) => xs.reduce((a, x) => a + x[k], 0);
+  check(`K11 the reconciliation partition sums to the baseline set (current ${sum(rp.currentPartition, 'full')}/${sum(rp.currentPartition, 'mvp')}, baseline ${sum(rp.baselinePartition, 'full')}/${sum(rp.baselinePartition, 'mvp')}, live baseline ${rp.live741}/${rp.mvp354}); every baseline row has exactly one reconClass`,
+    sum(rp.currentPartition, 'full') === rp.live741 && sum(rp.currentPartition, 'mvp') === rp.mvp354 && sum(rp.baselinePartition, 'full') === rp.live741 && sum(rp.baselinePartition, 'mvp') === rp.mvp354 && rp.live741 === mk.base.length);
+}
 // ETA from measured velocity only
 const pts = (vals) => vals.map((v, i) => ({ date: `2026-10-${String(20 + i).padStart(2, '0')}`, semantics: 'intel-1', mvpAccepted: v }));
 check('ETA_UNKNOWN with fewer than 3 snapshots', etaFrom(pts([0, 1]), 'mvpAccepted', 10, '2026-10-27T00:00:00Z', 3, 3, 'x').reason === 'INSUFFICIENT_HISTORY');
