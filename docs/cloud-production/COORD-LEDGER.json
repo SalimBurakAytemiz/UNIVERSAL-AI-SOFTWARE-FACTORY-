@@ -902,6 +902,16 @@
       "ref": "wf_cde1e78f-955",
       "policy": "TEP-1",
       "at": "2026-10-27T03:53:33.159Z"
+    },
+    {
+      "pr": 276,
+      "sha": "8b422848cb3cd07024b6e482fbdeb7145fc9d5cf",
+      "kind": "delta",
+      "base": "4b62348",
+      "verdict": "BLOCKERS_1MEDIUM_round2",
+      "ref": "wf_7b25c0ad-fdc",
+      "policy": "TEP-1",
+      "at": "2026-10-27T04:39:06.660Z"
     }
   ],
   "tests": [],
