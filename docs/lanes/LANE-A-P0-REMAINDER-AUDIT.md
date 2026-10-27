@@ -8,17 +8,19 @@ Durum: **TESTED (Linux) kanıtı toplandı; INTEGRATED değil, PRODUCT_ACCEPTED 
 - Satırlar (19): UI-001, 005, 006, 007, 008, 009, 010, 011, 022, 026, 028, 030, 053, 076, 113, 115, 124, 125, 134 (docs/planning/BACKLOG_CHECKPOINT.json görevi `P0-REMAINDER-AUDIT`).
 - Denetlenen taban: `origin/v7/integration` @ `459205c` (temiz ağaç). Denetim temeli (eski CSV): `docs/inventory/2026-10-19/SCREEN_AUDIT_252.csv`, temel commit `e12dbdd` (v7/integration'ın atasıdır; 1116 commit sonrası).
 - **(a) Spec kaynağı notu:** orijinal ec105b7 tabanlı dosyalar (`SCREEN_TRACEABILITY_252_PLUS.csv`, `AUDIT_252_GAP_REPORT.md`; BACKLOG_CHECKPOINT'te `origin/v6/pkg-t4-…@9dbb708`) bu depoda YOKTUR ve ilgili uzak dal alınamadı; satır metni bunun yerine 2026-10-19 CSV'sinden (`requirement_ref`, `missing_functions`) alınmıştır. Tasarım paketi ve UX-DEC metinleri UNKNOWN_SOURCE'tur (`docs/inventory/2026-10-19/raw/ux-decisions.csv` yalnız kısa başlıklar taşır).
-- **(c) Testler:** ilgili 28 test dosyası tek koşuda çalıştırıldı: `npx vitest run <28 dosya> --reporter=json` => **1444 geçti / 0 kaldı / 0 atlandı** (28 dosya). Satır başına adı geçen testler bu koşunun sonucundan birebir başlık eşleşmesiyle alındı; hiçbir geçiş çıkarım değildir.
-- **(d) Birleşmiş PR kapsaması:** karar commit başlığına değil diff/kod kanıtına dayanır (`git log e12dbdd..origin/v7/integration -- <dosyalar>` + dosya:satır grep). CSV'deki PR sha'larının atalığı `git merge-base --is-ancestor` ile denetlendi; tek istisna #46 (`f5800aa`) v7/integration'ın atası DEĞİLDİR (UI-010/UI-022 için içeriği denetlenmedi, UNKNOWN).
-- **(f) Kanıt sınıfı** (INTEGRATED / PRODUCT_ACCEPTED'dan ayrıdır): CODE_PRESENT / TEST_PASS_LINUX / NOT_VERIFIED / SPEC_MISSING. Piksel/tasarım eşliği ve gerçek masaüstü uygulaması **NOT_VERIFIED_LOCAL_ONLY**'dir (referans tasarımlar depoda yok); tahmin edilmedi. Tarih veya durum uydurulmadı.
+- **(c) Testler:** ilgili 28 test dosyası tek koşuda çalıştırıldı: `npx vitest run <28 dosya> --reporter=json` => **1444 geçti / 0 kaldı / 0 atlandı** (28 dosya). Çalıştırılan 28 dosya: `tests/v7-b4-desktop-shell.test.ts`, `tests/v7-b5-work-screens.test.ts`, `tests/v7-b6a-control-tower.test.ts`, `tests/v7-int-r3-desktop.test.ts`, `tests/v7-m1a-desktop.test.ts`, `tests/v7-ps1a-project-studio.test.ts`, `tests/v7-ps1b-project-studio-ui.test.ts`, `tests/v7-ps1b-relpath-canonical.test.ts`, `tests/v7-sbx8-agent-config.test.ts`, `tests/v7-ux-academy.test.ts`, `tests/v7-ux-executive.test.ts`, `tests/v7-ux-inbox.test.ts`, `tests/v7-ux-install.test.ts`, `tests/v7-ux-journey.test.ts`, `tests/v7-ux-matrix.test.ts`, `tests/v7-ux-operations.test.ts`, `tests/v7-ux-posture.test.ts`, `tests/v7-ux-queue.test.ts`, `tests/v7-ux-readiness.test.ts`, `tests/v7-ux-settings.test.ts`, `tests/v7-ux-shell.test.ts`, `tests/v7-ux-vp-visual-parity.test.ts`, `tests/v7-ux-wp-agents.test.ts`, `tests/v7-ux-wp-projects.test.ts`, `tests/v7-ux-wp-workos.test.ts`, `tests/v7-ux-wp2-cockpit.test.ts`, `tests/v7-ux-wp3-company.test.ts`, `tests/v7-ux-wp4-tower.test.ts`. Satır başına adı geçen testler bu koşunun sonucundan birebir başlık eşleşmesiyle alındı; hiçbir geçiş çıkarım değildir. Bir testin geçmesi, gerçek masaüstü derlemesinde çalıştığı anlamına gelmez: test sahte `ctx.api` veya sahte köprü kullanıyorsa kanıt yalnız renderer davranışıdır (bkz. UI-011).
+- **(d) Birleşmiş PR kapsaması:** karar commit başlığına değil diff/kod kanıtına dayanır (`git log e12dbdd..origin/v7/integration -- <dosyalar>` + dosya:satır grep). CSV'deki PR sha'larının atalığı `git merge-base --is-ancestor` ile denetlendi; tek istisna #46 (`f5800aa`): v7/integration'ın atası DEĞİLDİR, ama aynı değişiklik #170 üzerinden (merge `dac391d` / commit `3a52348`, `459205c`'nin atası) girmiştir (+/- satırları özdeş, yalnız test, +176) — yani 'ported via #170, audited'. UI-010'un CSV satırı #46'yı değil #40@6089bc8 ve #44@153cf24'ü listeler; UI-022'ninki #46@f5800aa'yı listeler.
+- **(f) Kanıt sınıfı** (INTEGRATED / PRODUCT_ACCEPTED'dan ayrıdır): CODE_PRESENT / TEST_PASS_LINUX / NOT_VERIFIED / SPEC_MISSING. Piksel/tasarım eşliği ve gerçek masaüstü uygulaması **NOT_VERIFIED_LOCAL_ONLY**'dir (referans tasarımlar depoda yok); tahmin edilmedi. Tarih veya durum uydurulmadı. a alanındaki 'PARAPHRASE:' ön eki, metnin kaynaktan birebir alıntı değil, özet/yeniden ifade olduğunu gösterir.
 
 ## Sayım (satır başına)
 
-- Gerçek, kanıtlı kalan delta + önerilen takip görevi var: **9** satır — UI-005 (M), UI-008 (M), UI-009 (L), UI-026 (S), UI-030 (S), UI-115 (M), UI-124 (M), UI-125 (S), UI-134 (S) (UI-030 ve UI-134 aynı küçük görevi paylaşır: 8 ayrı görev).
-- Kalan delta var ama görev önerilemiyor (kaynak/anlam spec'te yok): **1** satır — UI-113 (blast-radius verisi hiçbir okuma modelinde yok; tasarımdaki anlamı depoda yok).
-- Kod + Linux testleriyle kapsanmış görünen (kalan yalnız UNKNOWN / NOT_VERIFIED_LOCAL_ONLY / SERVER_LIMIT): **9** satır — UI-001, UI-006, UI-007, UI-010, UI-011, UI-022, UI-028, UI-053, UI-076.
-- Spec metni depoda eksik olan (en az bir delta maddesi 'UNKNOWN / not in repo' diye işaretli: gereksinimin içeriği veya anlamı depoda yok): **15** satır — UI-001, UI-005, UI-006, UI-007, UI-008, UI-009, UI-010, UI-011, UI-022, UI-026, UI-076, UI-113, UI-115, UI-125, UI-134 (bunlardan UI-005, UI-008, UI-009, UI-026, UI-115, UI-125, UI-134 aynı zamanda kanıtlı gerçek delta taşır; UI-113 görev önerilemeyen tek satırdır). Ek olarak 19 satırın TAMAMI için piksel/tasarım eşliği NOT_VERIFIED_LOCAL_ONLY'dir.
-- Kanıt sınıfı (f): TEST_PASS_LINUX 17, CODE_PRESENT 2 (UI-005, UI-124: davranışı çalıştıran test yok), NOT_VERIFIED 0, SPEC_MISSING 0 (SPEC_MISSING satır sınıfı değil, madde düzeyinde kullanıldı: bkz. e).
+- Gerçek, kanıtlı kalan delta (UNKNOWN / NOT_VERIFIED_LOCAL_ONLY / SERVER_LIMIT dışında en az bir madde) olan satır: **12** — UI-005, UI-007, UI-008, UI-009, UI-011, UI-026, UI-030, UI-113, UI-115, UI-124, UI-125, UI-134.
+- Bunlardan takip görevi veya engel kaydı olan: **11** satır — UI-005 (M), UI-007 (S, UI-124 ile paylaşılır), UI-008 (M), UI-009 (L), UI-011 (BLOCKED_ON_FOUNDER #242: COORD protected batch 4b, korumalı `apps/desktop/main.mjs` + `apps/control-api/src/server.ts`), UI-026 (S), UI-030 (S), UI-115 (M), UI-124 (M), UI-125 (S), UI-134 (S, UI-030 ile paylaşılır). Ayrı görev/engel sayısı: 9 (UI-007+UI-124 tek S görev, UI-030+UI-134 tek S görev).
+- Delta var ama görev önerilemiyor (kaynak/anlam spec'te yok): **1** satır — UI-113 (blast-radius verisi hiçbir okuma modelinde yok; tasarımdaki anlamı depoda yok).
+- Kod + Linux testleriyle kapsanmış görünen (kalan yalnız UNKNOWN / NOT_VERIFIED_LOCAL_ONLY / SERVER_LIMIT): **7** satır — UI-001, UI-006, UI-010, UI-022, UI-028, UI-053, UI-076.
+- Spec metni depoda eksik olan (SPEC_MISSING: en az bir delta maddesi 'UNKNOWN / not in repo' diye işaretli veya f/e alanında SPEC_MISSING / 'UNKNOWN: which scopes…' gibi açık spec belirsizliği yazılı): **17** satır — UI-001, UI-005, UI-006, UI-007, UI-008, UI-009, UI-010, UI-011, UI-022, UI-026, UI-030, UI-076, UI-113, UI-115, UI-124, UI-125, UI-134 (15 satırın e maddesinde literal 'UNKNOWN: spec not in repo' geçer; UI-030 f alanında per-agent grid için SPEC_MISSING taşır; UI-124 e maddesinde 'UNKNOWN: which scopes the design means' taşır). Ek olarak 19 satırın TAMAMI için piksel/tasarım eşliği NOT_VERIFIED_LOCAL_ONLY'dir.
+- Kanıt sınıfı (f): TEST_PASS_LINUX 15, CODE_PRESENT 4 (UI-005, UI-007 ve UI-124: davranışı çalıştıran test yok; UI-011: analiz adımı yalnız renderer'da, masaüstü derlemesinde BLOCKED), NOT_VERIFIED 0 (SPEC_MISSING satır sınıfı değil, madde düzeyinde kullanıldı: bkz. e).
+- 'Canlı' tanımı: QUEUED, sunucunun aktif-işçi kümesinde (`core/workos/run-state.ts:24`) YOKTUR ve ayrı 'bekleyen (henüz çalışmıyor)' kovasıdır; renderer'ın canlı kümesinde (`work-core.js:28`) bulunması canlı bir işçi olduğu anlamına gelmez (bkz. UI-030 / UI-134).
 
 ## Özet tablo
 
@@ -27,22 +29,22 @@ Durum: **TESTED (Linux) kanıtı toplandı; INTEGRATED değil, PRODUCT_ACCEPTED 
 | UI-001 | Kurucu Kontrol Paneli | #/home | TEST_PASS_LINUX | 0 | NONE (NONE) |
 | UI-005 | Bildirim Akışı | shell-only (no route; routes.js has no notifications entry) | CODE_PRESENT | 1 | UI-005: Notification Feed view (history + filters) and behavioural she (M) |
 | UI-006 | Karar & Onay Kutusu | #/inbox | TEST_PASS_LINUX | 0 | NONE (NONE) |
-| UI-007 | Acil Durdur & Durum | shell (all routes) + #/tower | TEST_PASS_LINUX | 0 | NONE (NONE) |
+| UI-007 | Acil Durdur & Durum | shell (all routes) + #/tower | CODE_PRESENT | 1 | UI-007 + UI-124 (shared): behavioural test that drives #stopConfirm th (S) |
 | UI-008 | Global Komut Paleti | shell-only (no route) | TEST_PASS_LINUX | 1 | UI-008: extend palette with confirmed command actions (resume, new pro (M) |
 | UI-009 | Şirket & Ürün Portföyü | #/projects | TEST_PASS_LINUX | 2 | UI-009: decide Company/Product grouping source (data-model decision: c (L) |
 | UI-010 | Yeni Proje Stüdyosu | #/projects | TEST_PASS_LINUX | 0 | NONE (NONE) |
-| UI-011 | Proje Yolculuğu | #/journey (routes.js:27, component 'journey' via planned.js; CSV's #/projects is stale) | TEST_PASS_LINUX | 0 | NONE (NONE) |
+| UI-011 | Proje Yolculuğu | #/journey (routes.js:27, component 'journey' via planned.js; CSV's #/projects is stale) | CODE_PRESENT | 1 | BLOCKED_ON_FOUNDER (#242): COORD protected batch 4b - allow-list + ser (BLOCKED) |
 | UI-022 | Proje Kaynak & Git | #/projects (Project Studio workspace, tabs files / changes / delivery) | TEST_PASS_LINUX | 0 | NONE (NONE) |
 | UI-026 | Görev Ayrıntı Inspector | #/work (apps/desktop/renderer/routes.js:19; inspector is an in-view panel in mission detail, no separate route) | TEST_PASS_LINUX | 3 | UI-026: show the task's linked runs in the inspector 'Run link' row (r (S) |
 | UI-028 | 599 Uzman Rol Kataloğu | #/workforce (routes.js:20) | TEST_PASS_LINUX | 0 | NONE (NONE) |
-| UI-030 | Aktif Worker Filosu | #/workforce (routes.js:20) | TEST_PASS_LINUX | 2 | UI-030: align fleet/live-run status set with the server active-worker  (S) |
+| UI-030 | Aktif Worker Filosu | #/workforce (routes.js:20) | TEST_PASS_LINUX | 3 | UI-030: align fleet/live-run status set with the server active-worker  (S) |
 | UI-053 | 2D Kontrol Kulesi | #/tower (routes.js:23) | TEST_PASS_LINUX | 0 | NONE (NONE) |
 | UI-076 | Sistem Ayarları | #/settings (routes.js:39) | TEST_PASS_LINUX | 0 | NONE (NONE) |
 | UI-113 | Onay Gerekiyor | #/inbox (routes.js:24) | TEST_PASS_LINUX | 1 | NONE (NONE) |
 | UI-115 | Tasarım Sistemi | cross-cutting (no route of its own; routes.js:17-39 has no design-system route) | TEST_PASS_LINUX | 1 | UI-115: read-only Design System reference route (token swatches from s (M) |
-| UI-124 | Acil Durdur Onayı ve Etki Alanı | #/tower (routes.js:23) plus the global top-bar Stop button, banner and dialog (every route) | CODE_PRESENT | 3 | B2-UI-124: Stop dialog shows live impact counts (active runs, blocked  (M) |
+| UI-124 | Acil Durdur Onayı ve Etki Alanı | #/tower (routes.js:23) plus the global top-bar Stop button, banner and dialog (every route) | CODE_PRESENT | 4 | B2-UI-124: Stop dialog shows live impact counts (active runs, blocked  (M) |
 | UI-125 | Brownfield Repo İçe Aktarma | #/projects (routes.js:18); the same importPanel is also embedded in the project workspace (studio-workspace.js:10) | TEST_PASS_LINUX | 1 | UI-125: show agent-config quarantine evidence (count, truncated, store (S) |
-| UI-134 | 599 Rol / Gerçek Worker Ayrımı | #/workforce (routes.js:20) | TEST_PASS_LINUX | 1 | Shared with UI-030 follow-up: align live-run status set with the serve (S) |
+| UI-134 | 599 Rol / Gerçek Worker Ayrımı | #/workforce (routes.js:20) | TEST_PASS_LINUX | 2 | Shared with UI-030 follow-up: align live-run status set with the serve (S) |
 
 ## Satır dışı (çapraz) bulgular
 
@@ -51,8 +53,9 @@ Durum: **TESTED (Linux) kanıtı toplandı; INTEGRATED değil, PRODUCT_ACCEPTED 
 - UI-026: denetçideki 'Run link' satırı sabit UNKNOWN (`views/work.js:315`, `tests/v7-b5-work-screens.test.ts:1071` ile sabitlenmiş) oysa hemen altındaki görev-koşu paneli bağları okuyor; `docs/ux/UI-026-TASK-INSPECTOR.md` 9-10. satırlar bayat.
 - UI-125: sunucu içe aktarma yanıtı `agentConfigQuarantine` taşır (`server.ts:405`) ama başarı yolu yalnız 'Import request accepted' der (`studio-wizard.js:121`).
 - Uç nokta kayması: CSV'de birçok satır `GET /v1/founder-attention` listeler; `api.attention()` artık `GET /v1/attention` okur (`api.js:57-59`) — b alanında güncel yol yazıldı.
-- UI-008: CSV'deki 'palet eylemi yok' boşluğu denetim temelinde zaten bayattı (`14f8212`, e12dbdd atası): go-to/inspect/STOP_ALL var; create/run/resume komutları yok. Ctrl+K keydown işleyicisinin (`shell.js:210`) testi yok.
-- UI-009: `GET /v1/projects` yanıtında şirket/ürün gruplama alanı yok (yalnız tek-tenant `Project` kayıtları; `customerId?` isteğe bağlı ve hiçbir renderer formu doldurmaz). Komut-matris rollup'ı bu satır için kanıt DEĞİLDİR.
+- UI-011: analiz adımı / plan oluştur (`POST /v1/missions/:id/analysis/step|plan`) gerçek masaüstü derlemesinde ENGELLİ: `apps/desktop/main.mjs:159-168` POST_ROUTE_RES'te analiz girdisi yok ve `apps/control-api/src/server.ts` `routes/analysis.ts` kaydetmez; `tests/v7-b5-work-screens.test.ts:2802-2810` bunu kendisi doğrular ('not allow-listed yet' / 'not enabled in this build'). Gerekli: korumalı `main.mjs` allow-list girdisi + korumalı `server.ts` rota kaydı = `docs/authority-requests/LANE-A-analysis-allowlist.md` (STATUS OPEN) = COORD protected batch 4b (#242), Founder kararı. Bu PR korumalı dosyaya dokunmaz.
+- UI-007 + UI-124: durdur akışı `#stopConfirm` tıklaması -> `ctx.stop` -> `window.uasco.stop` yolunu çalıştıran davranışsal test yok (yalnız kaynak-regex id listeleri); iki satır aynı S test görevini paylaşır (`tests/v7-ux-shell.test.ts`).
+- UI-005 / UI-115 takipleri dondurulmuş kapsam olarak ROUTES sabitleme testlerini listeler (bkz. ilgili g alanları): yeni bir rota eklemek bu testleri bilerek değiştirir.
 
 ## Satır satır (a–g)
 
@@ -61,7 +64,7 @@ Durum: **TESTED (Linux) kanıtı toplandı; INTEGRATED değil, PRODUCT_ACCEPTED 
 **a. spec sources**
   - `docs/inventory/2026-10-19/SCREEN_AUDIT_252.csv row UI-001 (requirement_ref)`: UASCO COMPLETE Desktop Blueprint / UX-DEC-001..071; stale route #/home; action_contract: read-only; links to routes; states: loading/empty/error/ok
   - `docs/inventory/2026-10-19/SCREEN_AUDIT_252.csv row UI-001 (missing_functions)`: 2D/3D tower hero tile and design-parity ordering unverified (design package UNKNOWN_SOURCE); Delivery KPI still stale on v7 (fix only on PR#19); product verification on real desktop app + live backend not recorded
-  - `docs/inventory/2026-10-19/raw/ux-decisions.csv UX-DEC-001 / UX-DEC-067`: UX-DEC-001 'Açılış ve Founder Cockpit' (text UNKNOWN_SOURCE); UX-DEC-067 'Unified 2D/3D Campus/Control Tower' (missing: '3D/WebGL campus + GPU detection absent')
+  - `docs/inventory/2026-10-19/raw/ux-decisions.csv UX-DEC-001 / UX-DEC-067`: PARAPHRASE: UX-DEC-001 'Açılış ve Founder Cockpit' (text UNKNOWN_SOURCE); UX-DEC-067 'Unified 2D/3D Campus/Control Tower' (missing: '3D/WebGL campus + GPU detection absent')
   - `docs/planning/BACKLOG_CHECKPOINT.json (task P0-REMAINDER-AUDIT, INV-17)`: UNVERIFIED_STALE_BACKLOG ... several similar rows have since merged ... so what is still missing for any of the 19 cannot be said without a fresh per-screen audit.
   - spec_missing: Design package UNKNOWN_SOURCE (Founder PC: C:/Users/salim/Downloads/UASCO_NEON_252_EKRAN_TAM_PAKET_2026-10-16); no image/Figma/PDF design file in the repo (BACKLOG_CHECKPOINT.json note on 'git ls-files has no PNG/SVG/JPG/PDF/Figma').; docs/planning/SCREEN_TRACEABILITY_252_PLUS.csv and AUDIT_252_GAP_REPORT.md (ec105b7 basis) are not on v7/integration (BACKLOG_CHECKPOINT.json P0-REMAINDER-AUDIT specFile: 'NOT on v7/integration').; UX-DEC-001..071 decision texts are UNKNOWN_SOURCE (only short stale titles in docs/inventory/2026-10-19/raw/ux-decisions.csv); no docs/ux/UI-xxx spec exists for this row id.; No docs/ux/UI-001 spec file.
 
@@ -102,7 +105,7 @@ Durum: **TESTED (Linux) kanıtı toplandı; INTEGRATED değil, PRODUCT_ACCEPTED 
 **a. spec sources**
   - `docs/inventory/2026-10-19/SCREEN_AUDIT_252.csv row UI-005 (requirement_ref)`: UASCO COMPLETE Desktop Blueprint / UX-DEC-001..071; stale route shell (all routes); action_contract: read-only; states: empty/error
   - `docs/inventory/2026-10-19/SCREEN_AUDIT_252.csv row UI-005 (missing_functions)`: no dedicated Notification Feed route/history/filters; only shell notification toast + right task stream tabs; product verification on real desktop app + live backend not recorded
-  - `docs/inventory/2026-10-19/raw/ux-decisions.csv UX-DEC-019`: 'Öncelikli/tekrarsız bildirim merkezi' (prioritised / de-duplicated notification centre; text UNKNOWN_SOURCE; missing: 'dedup polish unverified')
+  - `docs/inventory/2026-10-19/raw/ux-decisions.csv UX-DEC-019`: PARAPHRASE: 'Öncelikli/tekrarsız bildirim merkezi' (prioritised / de-duplicated notification centre; text UNKNOWN_SOURCE; missing: 'dedup polish unverified')
   - `docs/planning/BACKLOG_CHECKPOINT.json (task P0-REMAINDER-AUDIT, INV-17)`: UNVERIFIED_STALE_BACKLOG ... several similar rows have since merged ... so what is still missing for any of the 19 cannot be said without a fresh per-screen audit.
   - spec_missing: Design package UNKNOWN_SOURCE (Founder PC: C:/Users/salim/Downloads/UASCO_NEON_252_EKRAN_TAM_PAKET_2026-10-16); no image/Figma/PDF design file in the repo (BACKLOG_CHECKPOINT.json note on 'git ls-files has no PNG/SVG/JPG/PDF/Figma').; docs/planning/SCREEN_TRACEABILITY_252_PLUS.csv and AUDIT_252_GAP_REPORT.md (ec105b7 basis) are not on v7/integration (BACKLOG_CHECKPOINT.json P0-REMAINDER-AUDIT specFile: 'NOT on v7/integration').; UX-DEC-001..071 decision texts are UNKNOWN_SOURCE (only short stale titles in docs/inventory/2026-10-19/raw/ux-decisions.csv); no docs/ux/UI-xxx spec exists for this row id. What 'history' and 'filters' must contain is not specified anywhere in the repo.; No docs/ux/UI-005 spec file.
 
@@ -134,15 +137,15 @@ Durum: **TESTED (Linux) kanıtı toplandı; INTEGRATED değil, PRODUCT_ACCEPTED 
 
 **f. evidence class:** CODE_PRESENT (bell + 3-tab feed + event strip exist in shell.js) - not TEST_PASS_LINUX because no test executes renderFeed/bell. Dedicated feed with history/filters = SPEC_MISSING (and absent in code); design parity/real app = NOT_VERIFIED_LOCAL_ONLY.
 
-**g. follow-up:** UI-005: Notification Feed view (history + filters) and behavioural shell tests for bell/feed - spec-first (needs Founder/design input for scope) — size M; files: `apps/desktop/renderer/routes.js`, `apps/desktop/renderer/views/planned.js (component delegation)`, `apps/desktop/renderer/views/notifications.js (new)`, `apps/desktop/renderer/notifications-core.js (new)`, `apps/desktop/renderer/locales/en.js`, `apps/desktop/renderer/locales/tr.js`, `tests/v7-ux-shell.test.ts`
+**g. follow-up:** UI-005: Notification Feed view (history + filters) and behavioural shell tests for bell/feed - spec-first (needs Founder/design input for scope) | Frozen scope - existing exact ROUTES pins that break when routes.js gains an id: ALWAYS tests/v7-b4-desktop-shell.test.ts:75 and tests/v7-ps1b-project-studio-ui.test.ts:619 (full-array equality); slice(-15) pins when the id is appended or inserted inside the last 15 ids: tests/v7-ux-executive.test.ts:876, tests/v7-ux-journey.test.ts:564, tests/v7-ux-matrix.test.ts:1008, tests/v7-ux-operations.test.ts:1101, tests/v7-ux-posture.test.ts:1052, tests/v7-ux-queue.test.ts:911, tests/v7-ux-readiness.test.ts:1116; tail pins when the id is appended after 'settings' or lands in the last 6: tests/v7-ux-matrix.test.ts:1266 (slice(-4)) and tests/v7-ux-operations.test.ts:1201 (slice(-6)). Inserting before the last 15 ids touches only the first two. — size M; files: `apps/desktop/renderer/routes.js`, `apps/desktop/renderer/views/planned.js (component delegation)`, `apps/desktop/renderer/views/notifications.js (new)`, `apps/desktop/renderer/notifications-core.js (new)`, `apps/desktop/renderer/locales/en.js`, `apps/desktop/renderer/locales/tr.js`, `tests/v7-ux-shell.test.ts`, `tests/v7-b4-desktop-shell.test.ts:75`, `tests/v7-ps1b-project-studio-ui.test.ts:619`, `tests/v7-ux-executive.test.ts:876`, `tests/v7-ux-journey.test.ts:564`, `tests/v7-ux-matrix.test.ts:1008`, `tests/v7-ux-operations.test.ts:1101`, `tests/v7-ux-posture.test.ts:1052`, `tests/v7-ux-queue.test.ts:911`, `tests/v7-ux-readiness.test.ts:1116`, `tests/v7-ux-matrix.test.ts:1266 (only if appended after settings)`, `tests/v7-ux-operations.test.ts:1201 (only if appended after settings)`
 
 ### UI-006 — Karar & Onay Kutusu
 
 **a. spec sources**
   - `docs/inventory/2026-10-19/SCREEN_AUDIT_252.csv row UI-006 (requirement_ref)`: UASCO COMPLETE Desktop Blueprint / UX-DEC-001..071; stale route #/inbox; action_contract: POST /v1/missions/:id/transition (allowlisted); states: empty/pending/error
   - `docs/inventory/2026-10-19/SCREEN_AUDIT_252.csv row UI-006 (missing_functions)`: decision-detail card parity vs design unverified; no bulk actions (by design); product verification on real desktop app + live backend not recorded
-  - `docs/ux/UI-113-APPROVAL-REQUIRED.md`: Per mission awaiting approval: risk level; pending transition with 'Irreversible' / 'High risk' flags; linked work run; waiting-since; 'If approved' / 'If rejected' text. Blast radius / impact is always shown as UNKNOWN, because the data has no such field.
-  - `docs/inventory/2026-10-19/raw/ux-decisions.csv UX-DEC-019 / UX-DEC-020`: UX-DEC-019 'Öncelikli/tekrarsız bildirim merkezi'; UX-DEC-020 'Kapsama bağlı Founder Approval' (texts UNKNOWN_SOURCE)
+  - `docs/ux/UI-113-APPROVAL-REQUIRED.md`: PARAPHRASE: Per mission awaiting approval: risk level; pending transition with 'Irreversible' / 'High risk' flags; linked work run; waiting-since; 'If approved' / 'If rejected' text. Blast radius / impact is always shown as UNKNOWN, because the data has no such field.
+  - `docs/inventory/2026-10-19/raw/ux-decisions.csv UX-DEC-019 / UX-DEC-020`: PARAPHRASE: UX-DEC-019 'Öncelikli/tekrarsız bildirim merkezi'; UX-DEC-020 'Kapsama bağlı Founder Approval' (texts UNKNOWN_SOURCE)
   - `docs/planning/BACKLOG_CHECKPOINT.json (task P0-REMAINDER-AUDIT, INV-17)`: UNVERIFIED_STALE_BACKLOG ... several similar rows have since merged ... so what is still missing for any of the 19 cannot be said without a fresh per-screen audit.
   - spec_missing: Design package UNKNOWN_SOURCE (Founder PC: C:/Users/salim/Downloads/UASCO_NEON_252_EKRAN_TAM_PAKET_2026-10-16); no image/Figma/PDF design file in the repo (BACKLOG_CHECKPOINT.json note on 'git ls-files has no PNG/SVG/JPG/PDF/Figma').; docs/planning/SCREEN_TRACEABILITY_252_PLUS.csv and AUDIT_252_GAP_REPORT.md (ec105b7 basis) are not on v7/integration (BACKLOG_CHECKPOINT.json P0-REMAINDER-AUDIT specFile: 'NOT on v7/integration').; UX-DEC-001..071 decision texts are UNKNOWN_SOURCE (only short stale titles in docs/inventory/2026-10-19/raw/ux-decisions.csv); no docs/ux/UI-xxx spec exists for this row id. The 'decision-detail card' content list from the design is not in the repo (docs/ux/UI-113 is the only in-repo behaviour spec and it says design match is unverified).
 
@@ -164,7 +167,7 @@ Durum: **TESTED (Linux) kanıtı toplandı; INTEGRATED değil, PRODUCT_ACCEPTED 
   - `2e3e75f` UI-113: Approval-required state panel on #/inbox (renderer-only) — CSV item 'decision-detail card parity': diff adds the #inbox-required panel (inbox.js:140-176, approval-core.js) with risk, pending transition + irreversible/high-risk flags, linked run, waiting-since, if-approved/if-rejected, impact=UNKNOWN. It adds detail facts next to the card; it does not change decisionCard (inbox.js:45-59).
   - `325c09e, bbafa45, 74a6bfc` LANE-A: Founder attention queue UI on GET /v1/attention (+ #192 review fixes, re-verify LOWs) — Diff changes only the attention panel/summary of inbox.js (inbox.js:18-19,112-138) and api.attention; no change to decision cards or transition POST path.
   - `632a774` UI-105: route-titled, number-free loading skeleton — Diff adds inbox.js:198 skeleton re-export only (loading state).
-  - `all other non-merge commits in git.json for this row (e.g. f32bcd1, a153c7f, 3b7b5ac, 2372ae5, 72510d4, 5ce69df, f382693, 4a2b749, bccc2bf, 88cfe35)` Work-view / run / task features — git diff e12dbdd..HEAD of work-core.js and work-actions.js contains no change to deriveInbox, buildTransitionRequest, requiresConfirm or performTransition (grep of the diff returned only import and new-function lines); they affect #/work, not the decision card.
+  - `all other non-merge commits from `git log e12dbdd..origin/v7/integration` over the work-view files for this row (e.g. f32bcd1, a153c7f, 3b7b5ac, 2372ae5, 72510d4, 5ce69df, f382693, 4a2b749, bccc2bf, 88cfe35)` Work-view / run / task features — git diff e12dbdd..HEAD of work-core.js and work-actions.js contains no change to deriveInbox, buildTransitionRequest, requiresConfirm or performTransition (grep of the diff returned only import and new-function lines); they affect #/work, not the decision card.
   - covered_items:
     - Decision-detail facts (partial): inbox.js:140-176 + docs/ux/UI-113-APPROVAL-REQUIRED.md; tests 'UI-113 - Approval required panel on #/inbox' (9 tests) pass. Whether this equals the design's detail card is unknowable here.
   - uncovered_items:
@@ -214,19 +217,20 @@ Durum: **TESTED (Linux) kanıtı toplandı; INTEGRATED değil, PRODUCT_ACCEPTED 
     - 'main-process confirm': both Stop (index.html:53 <dialog id=stopDialog>) and Resume (app.js:49 confirmDialog) confirm in the renderer; main.mjs:319-320 handlers add no second confirm (main.mjs uses dialog only for showOpenDialog/showSaveDialog, lines 287,311). Whether the design wants a native main-process dialog is UNKNOWN: spec not in repo.
 
 **e. remaining delta**
+  - Test gap (same as UI-124): the stop path #stopConfirm click -> ctx.stop -> window.uasco.stop has no behavioural test (grep finds #stopConfirm only in HOST_IDS id lists: tests/v7-ux-shell.test.ts:166 and tests/v7-b4-desktop-shell.test.ts:326; app.js:31 stop() is checked by source regex only). The stop-failure alert is untested the same way.
   - UNKNOWN: spec not in repo - CSV action_contract says 'via main-process confirm'; code confirms in the renderer only (index.html:53, app.js:49, resume-confirm.js:8) and main.mjs:319-320 performs no confirmation.
   - NOT_VERIFIED_LOCAL_ONLY: pixel/design parity and the real desktop app + live backend product run (reference designs not in repo; Local-only).
 
-**f. evidence class:** TEST_PASS_LINUX (stop dialog open paths, resume confirm fail-closed, stopped state rendering in tower/campus pass); stop-IPC roundtrip is source-regex only. Design parity and real-app resume run = NOT_VERIFIED_LOCAL_ONLY.
+**f. evidence class:** CODE_PRESENT for the stop path (#stopConfirm -> ctx.stop -> stop IPC is not exercised by any test; source-regex only). TEST_PASS_LINUX for the stop dialog open paths, resume confirmation fail-closed and stopped-state rendering. Design parity and real-app resume run = NOT_VERIFIED_LOCAL_ONLY.
 
-**g. follow-up:** NONE — size NONE
+**g. follow-up:** UI-007 + UI-124 (shared): behavioural test that drives #stopConfirm through ctx.stop to window.uasco.stop (success and failure alert) — size S; files: `tests/v7-ux-shell.test.ts`
 
 ### UI-008 — Global Komut Paleti
 
 **a. spec sources**
   - `docs/inventory/2026-10-19/SCREEN_AUDIT_252.csv row UI-008 (requirement_ref)`: UASCO COMPLETE Desktop Blueprint / UX-DEC-001..071; stale route shell (all routes); action_contract: client-side nav; states: empty/results
   - `docs/inventory/2026-10-19/SCREEN_AUDIT_252.csv row UI-008 (missing_functions)`: Ctrl+K is search/navigation only; no command palette actions (commands, run/stop, create); product verification on real desktop app + live backend not recorded
-  - `apps/desktop/renderer/shell.js:129 (in-code TR design note)`: UX WP-SHELL-REFINE: Ctrl+K komut paleti. Mevcut 'aramayla gezin' KALDIRILMAZ; üzerine gruplu bir EYLEMLER bölümü eklenir: her rota için 'git', geçerli seçim için Inspector aç ve global STOP_ALL.
+  - `apps/desktop/renderer/shell.js:129 (in-code TR design note)`: PARAPHRASE: UX WP-SHELL-REFINE: Ctrl+K komut paleti. Mevcut 'aramayla gezin' KALDIRILMAZ; üzerine gruplu bir EYLEMLER bölümü eklenir: her rota için 'git', geçerli seçim için Inspector aç ve global STOP_ALL.
   - `docs/planning/BACKLOG_CHECKPOINT.json (task P0-REMAINDER-AUDIT, INV-17)`: UNVERIFIED_STALE_BACKLOG ... several similar rows have since merged ... so what is still missing for any of the 19 cannot be said without a fresh per-screen audit.
   - spec_missing: Design package UNKNOWN_SOURCE (Founder PC: C:/Users/salim/Downloads/UASCO_NEON_252_EKRAN_TAM_PAKET_2026-10-16); no image/Figma/PDF design file in the repo (BACKLOG_CHECKPOINT.json note on 'git ls-files has no PNG/SVG/JPG/PDF/Figma').; docs/planning/SCREEN_TRACEABILITY_252_PLUS.csv and AUDIT_252_GAP_REPORT.md (ec105b7 basis) are not on v7/integration (BACKLOG_CHECKPOINT.json P0-REMAINDER-AUDIT specFile: 'NOT on v7/integration').; No UX-DEC in docs/inventory/2026-10-19/raw/ux-decisions.csv has a palette/command title; which commands the design requires is UNKNOWN_SOURCE.; No docs/ux/UI-008 spec file.
 
@@ -260,8 +264,8 @@ Durum: **TESTED (Linux) kanıtı toplandı; INTEGRATED değil, PRODUCT_ACCEPTED 
 
 **a. spec sources**
   - `docs/inventory/2026-10-19/SCREEN_AUDIT_252.csv row UI-009 (requirement_ref)`: UASCO COMPLETE Desktop Blueprint / UX-DEC-001..071; stale route #/projects; action_contract: GET /v1/projects; states: empty/list
-  - `docs/inventory/2026-10-19/SCREEN_AUDIT_252.csv row UI-009 (missing_functions / dependencies)`: no Company/Product portfolio grouping or roll-ups; project portfolio KPIs only; ... | UI-081 Company OS for company grouping
-  - `docs/inventory/2026-10-19/raw/ux-decisions.csv UX-DEC-044`: 'Company Portfolio + çok ürün' (text UNKNOWN_SOURCE); missing: 'rich multi-product switcher partial'
+  - `docs/inventory/2026-10-19/SCREEN_AUDIT_252.csv row UI-009 (missing_functions / dependencies)`: PARAPHRASE: no Company/Product portfolio grouping or roll-ups; project portfolio KPIs only; ... | UI-081 Company OS for company grouping
+  - `docs/inventory/2026-10-19/raw/ux-decisions.csv UX-DEC-044`: PARAPHRASE: 'Company Portfolio + çok ürün' (text UNKNOWN_SOURCE); missing: 'rich multi-product switcher partial'
   - `docs/planning/BACKLOG_CHECKPOINT.json P0-REMAINDER-AUDIT notes`: UI-009 (company/product portfolio grouping) has a stated gap, but the shipped matrix rollup is a command-matrix rollup and /v1/projects grouping data was not checked.
   - spec_missing: Design package UNKNOWN_SOURCE (Founder PC: C:/Users/salim/Downloads/UASCO_NEON_252_EKRAN_TAM_PAKET_2026-10-16); no image/Figma/PDF design file in the repo (BACKLOG_CHECKPOINT.json note on 'git ls-files has no PNG/SVG/JPG/PDF/Figma').; docs/planning/SCREEN_TRACEABILITY_252_PLUS.csv and AUDIT_252_GAP_REPORT.md (ec105b7 basis) are not on v7/integration (BACKLOG_CHECKPOINT.json P0-REMAINDER-AUDIT specFile: 'NOT on v7/integration').; UX-DEC-001..071 decision texts are UNKNOWN_SOURCE (only short stale titles in docs/inventory/2026-10-19/raw/ux-decisions.csv); no docs/ux/UI-xxx spec exists for this row id. The meaning of 'Company' and 'Product' relative to project / tenant / customerId / CRM account is not defined in the repo.; No docs/ux/UI-009 spec file.
 
@@ -285,7 +289,7 @@ Durum: **TESTED (Linux) kanıtı toplandı; INTEGRATED değil, PRODUCT_ACCEPTED 
   - covered_items:
     - (yok)
   - uncovered_items:
-    - no Company/Product portfolio grouping or roll-ups: still true. grep -i 'compan|product|group|portfolio|customer' in projects.js returns no hit; projects are rendered as one flat list (projects.js:128). The only company-ish element is the per-card tenantId labelled 'Company (tenant)' (projects.js:88, locales/en.js:233). KPIs are project/environment/mission/active-run counts (projects.js:51-59).
+    - no Company/Product portfolio grouping or roll-ups: still true. grep -inE 'compan|product|group|portfolio|customer' in projects.js returns 2 hits (projects.js:54 and :68, both ARIA role="group" wrappers, not data grouping) and none for company/product/portfolio/customer; projects are rendered as one flat list (projects.js:128). The only company-ish element is the per-card tenantId labelled 'Company (tenant)' (projects.js:88, locales/en.js:233). KPIs are project/environment/mission/active-run counts (projects.js:51-59).
 
 **e. remaining delta**
   - UI: no Company/Product grouping or roll-ups on #/projects - flat list only (projects.js:128 prj.items.map(projectCard)); the 'Company (tenant)' fact is a per-card label (projects.js:88, locales/en.js:233). None of the merged commits since e12dbdd (6f5cd1e, 69e0881, 632a774) changes that.
@@ -295,7 +299,7 @@ Durum: **TESTED (Linux) kanıtı toplandı; INTEGRATED değil, PRODUCT_ACCEPTED 
 
 **f. evidence class:** TEST_PASS_LINUX for the flat project portfolio (KPIs, cards, closure, honest states; 30/30 wp-projects). Company/Product grouping = SPEC_MISSING and not implementable from current /v1/projects data (no grouping field); design parity/real app = NOT_VERIFIED_LOCAL_ONLY.
 
-**g. follow-up:** UI-009: decide Company/Product grouping source (data-model decision: customerId vs CRM account link vs product entity), then add grouped portfolio + roll-ups on #/projects — size L; files: `apps/desktop/renderer/views/projects.js`, `apps/desktop/renderer/model.js (mapProjects)`, `apps/desktop/renderer/locales/en.js`, `apps/desktop/renderer/locales/tr.js`, `tests/v7-ux-wp-projects.test.ts`, `core/workos/types.ts + core/workos/store.ts + apps/control-api/src/server.ts (only if a new grouping field is added; likely protected/authority-gated)`
+**g. follow-up:** UI-009: decide Company/Product grouping source (data-model decision: customerId vs CRM account link vs product entity), then add grouped portfolio + roll-ups on #/projects — size L; files: `apps/desktop/renderer/views/projects.js`, `apps/desktop/renderer/model.js (mapProjects)`, `apps/desktop/renderer/locales/en.js`, `apps/desktop/renderer/locales/tr.js`, `tests/v7-ux-wp-projects.test.ts`, `apps/control-api/src/server.ts (protected: config/protected-paths.json and trust-root-manifest.json)`, `core/workos/types.ts, core/workos/store.ts, core/workos/schemas.ts (only if a new grouping field is added; not listed in config/protected-paths.json at 459205c, but a data-model/authority decision)`
 
 ### UI-010 — Yeni Proje Stüdyosu
 
@@ -333,7 +337,7 @@ Durum: **TESTED (Linux) kanıtı toplandı; INTEGRATED değil, PRODUCT_ACCEPTED 
 
 **e. remaining delta**
   - UNKNOWN: spec not in repo - design wizard step set/order (CSV states 'step/error/done'). Code: single-form wizard (studio-wizard.js:80-100) with error/done states (statusBlock studio-wizard.js:94, recordPost 23, openCreated 95) and no step indicator.
-  - UNKNOWN: PR #46 (f5800aa) listed by the CSV as touching these renderer files is NOT an ancestor of origin/v7/integration (git.json); its content was not audited.
+  - PR #46 (f5800aa) is not an ancestor of origin/v7/integration, but its identical change landed via PR #170: merge dac391d / commit 3a52348 (ancestor of 459205c; `git merge-base --is-ancestor f5800aa origin/v7/integration` returns 1, the same check for 3a52348 returns 0). Same subject and author date as f5800aa; the +/- lines of the two commits hash identically (sha256 of `git show -U0 | grep '^[+-]'`) and the change is test-only (tests/v7-ps1b-project-studio-ui.test.ts, +176), so it is part of the 169 ps1b tests counted here - ported via #170, audited. (The CSV row for UI-010 lists #40@6089bc8 and #44@153cf24, not #46.)
   - NOT_VERIFIED_LOCAL_ONLY: pixel/design parity and the real desktop app + live backend product run (reference designs not in repo; Local-only).
 
 **f. evidence class:** TEST_PASS_LINUX for create/import/error/done behaviour (169/169 ps1b). Step-set parity = SPEC_MISSING; design parity/real app = NOT_VERIFIED_LOCAL_ONLY.
@@ -345,8 +349,8 @@ Durum: **TESTED (Linux) kanıtı toplandı; INTEGRATED değil, PRODUCT_ACCEPTED 
 **a. spec sources**
   - `docs/inventory/2026-10-19/SCREEN_AUDIT_252.csv row UI-011 (requirement_ref)`: UASCO COMPLETE Desktop Blueprint / UX-DEC-001..071; stale route #/projects; action_contract: read-only; states: -
   - `docs/inventory/2026-10-19/SCREEN_AUDIT_252.csv row UI-011 (missing_functions)`: phase stepper is read-only (no phase actions); design parity unverified; product verification on real desktop app + live backend not recorded
-  - `docs/inventory/2026-10-19/raw/ux-decisions.csv UX-DEC-063`: 'Project Journey/Mission/Dependency Graph' (text UNKNOWN_SOURCE); missing: 'dependency DAG projection absent'
-  - `apps/desktop/renderer/routes.js:6 (in-code TR note)`: Proje Yolculuğu: seçili mission'ın otonom zinciri (pre-dev fazları, ekip koordinasyon ledger'ı, geliştirme -> bağımsız inceleme -> teslim) ... salt-okunur GET /v1/predev/:missionId + GET /v1/crew/:missionId ... Hiçbir faz/onay/verdict uydurulmaz
+  - `docs/inventory/2026-10-19/raw/ux-decisions.csv UX-DEC-063`: PARAPHRASE: 'Project Journey/Mission/Dependency Graph' (text UNKNOWN_SOURCE); missing: 'dependency DAG projection absent'
+  - `apps/desktop/renderer/routes.js:6 (in-code TR note)`: PARAPHRASE: Proje Yolculuğu: seçili mission'ın otonom zinciri (pre-dev fazları, ekip koordinasyon ledger'ı, geliştirme -> bağımsız inceleme -> teslim) ... salt-okunur GET /v1/predev/:missionId + GET /v1/crew/:missionId ... Hiçbir faz/onay/verdict uydurulmaz
   - `docs/planning/BACKLOG_CHECKPOINT.json (task P0-REMAINDER-AUDIT, INV-17)`: UNVERIFIED_STALE_BACKLOG ... several similar rows have since merged ... so what is still missing for any of the 19 cannot be said without a fresh per-screen audit.
   - spec_missing: Design package UNKNOWN_SOURCE (Founder PC: C:/Users/salim/Downloads/UASCO_NEON_252_EKRAN_TAM_PAKET_2026-10-16); no image/Figma/PDF design file in the repo (BACKLOG_CHECKPOINT.json note on 'git ls-files has no PNG/SVG/JPG/PDF/Figma').; docs/planning/SCREEN_TRACEABILITY_252_PLUS.csv and AUDIT_252_GAP_REPORT.md (ec105b7 basis) are not on v7/integration (BACKLOG_CHECKPOINT.json P0-REMAINDER-AUDIT specFile: 'NOT on v7/integration').; UX-DEC-001..071 decision texts are UNKNOWN_SOURCE (only short stale titles in docs/inventory/2026-10-19/raw/ux-decisions.csv); no docs/ux/UI-xxx spec exists for this row id. Which phase actions the design wants on the stepper is not in the repo.; No docs/ux/UI-011 spec file.
 
@@ -356,32 +360,35 @@ Durum: **TESTED (Linux) kanıtı toplandı; INTEGRATED değil, PRODUCT_ACCEPTED 
   - GET /v1/missions (journey.js:218 via api.missions, api.js:55)
   - GET /v1/predev/:missionId (journey.js:230 via api.predev, api.js:157)
   - GET /v1/crew/:missionId (journey.js:231 via api.crew, api.js:158)
-  - POST /v1/missions/:id/predev/start and /predev/artifacts/:artifactId/approve|reject (predev-decisions.js:23 via ctx.api.post; paths predev-decisions-core.js:19-20)
-  - POST /v1/missions/:id/analysis/step and /analysis/plan (analysis-core.js:10-11, analysis-step.js); GET executors only when a step is BLOCKED (journey.js:233)
+  - POST /v1/missions/:id/predev/start and /predev/artifacts/:artifactId/approve|reject (predev-decisions.js:23 via ctx.api.post; paths predev-decisions-core.js:19-20) - allow-listed (main.mjs:167-168, COORD protected batch 3b) and registered in server.ts
+  - POST /v1/missions/:id/analysis/step and /analysis/plan (analysis-core.js:10-11, analysis-step.js) - renderer only: NOT in the desktop POST allow-list (apps/desktop/main.mjs:159-168 POST_ROUTE_RES has no analysis entry) and apps/control-api/src/server.ts registers no routes/analysis.ts, so in the real desktop build the step shows 'not enabled in this build'; GET executors only when a step is BLOCKED (journey.js:233)
 
 **c. tests (Linux, executed)**
   - `tests/v7-ux-journey.test.ts` — file PASS 100 / FAIL 0; tests: “renders the autonomous chain: 5 pre-dev phases with real artifact states, current phase marked, downstream NOT_STARTED when there are no runs”; “dev -> review -> delivery: real versions, verdicts and a source-only delivery (NOT_VERIFIED); PRODUCT_VERIFIED is never shown”; “mission list failure shows an honest state (OFFLINE / UNAVAILABLE / ERROR); no data is fabricated”; “approve: empty/invalid evidence is a validation error and sends NOTHING; valid evidence POSTs exactly {evidenceRefs}; success re-reads and says what the server reports”; “not started: only a Start control; it POSTs {} to the canonical path and reports the server's phase; the mission list and predev are re-read afterwards”; “COMPLETE opens 'Create plan'; it posts {} once, shows the traceability and offers the plan in Tasks; a refusal is shown by its code and nothing is claimed”
   - `tests/v7-ux-shell.test.ts` — file PASS 29 / FAIL 0; tests: “journey: empty list adds one next-step block + button -> navigate('work') once, selection unchanged, no reads/writes”
   - `tests/v7-b5-work-screens.test.ts` — file PASS 169 / FAIL 0; tests: “drives idea -> intake -> analysis -> plan -> mission/task -> run -> test result -> product -> delivery and records every step's status”
-  - note: v7-ux-journey.test.ts (100/100) covers read models, rail/phase/crew/dev panels, pre-dev decisions and the analysis step. Not covered: any dependency-graph/DAG (none in code), design parity, real backend. The test 'journey.js and journey-core.js never write' still passes because writes live in predev-decisions.js / analysis-step.js, not journey.js.
+  - note: BLOCKED in the real desktop build for the analysis part: the cited b5 test (tests/v7-b5-work-screens.test.ts:2802-2810) itself asserts 'the step POST is not allow-listed yet' and 'not enabled in this build', and the v7-ux-journey analysis tests drive a fake ctx.api.post, so they prove renderer behaviour only. v7-ux-journey.test.ts (100/100) covers read models, rail/phase/crew/dev panels, pre-dev decisions and the analysis step. Not covered: any dependency-graph/DAG (none in code), design parity, real backend. The test 'journey.js and journey-core.js never write' still passes because writes live in predev-decisions.js / analysis-step.js, not journey.js.
 
 **d. merged since audit basis (e12dbdd)**
   - `f8bf2eb` feat(ui): pre-dev Founder decisions in the Project Journey (start, approve with evidence, reject) — CSV item 'phase stepper is read-only (no phase actions)': diff adds decisionsPanel (predev-decisions.js) mounted at journey.js:138 with POST start/approve/reject; 17+5 tests pass.
   - `bec0d66` feat(ui): analysis step in the Journey (produce phase drafts, exact BLOCKED readiness, create the traced plan only after COMPLETE) — Same item: diff adds analysisPanel (analysis-step.js) mounted at journey.js:138 with POST analysis/step and analysis/plan; 4+14 tests pass.
   - `e177e3e` UI-106: journey/executive empty-state next step (renderer-only) — Empty-state: adds journey-empty-open-work button (journey.js:46-51); one test in v7-ux-shell.
   - covered_items:
-    - no phase actions: pre-dev start/approve-with-evidence/reject and analysis step/create-plan now exist (journey.js:138 -> predev-decisions.js, analysis-step.js); the rail itself stays read-only (journey.js:73 click only focuses the panel).
+    - pre-dev start/approve-with-evidence/reject: renderer (journey.js:138 -> predev-decisions.js) AND desktop allow-list (main.mjs:167-168) AND server routes (server.ts) exist; tested through the real buildServer in the COORD batch-3b cases (tests/support/protected-batch-3b.cases.ts) and the journey tests.
+    - the rail itself stays read-only (journey.js:73 click only focuses the panel).
   - uncovered_items:
+    - analysis step / create-plan: renderer-only (analysis-step.js, analysis-core.js); BLOCKED in the desktop build (no POST allow-list entry in main.mjs:159-168, no server route registration). CSV item 'no phase actions' is therefore only half closed: pre-dev yes, analysis no.
     - No actions on the develop/review/delivery stages inside the Journey (devPanel journey.js:206-214 is read-only; runs are started in #/work). Whether the design wants them: UNKNOWN: spec not in repo.
     - Dependency graph (UX-DEC-063 'dependency DAG projection absent'): no graph in journey.js (grep dependsOn|graph = none). Requirement text UNKNOWN_SOURCE.
 
 **e. remaining delta**
+  - BLOCKED: desktop POST allow-list entry for POST /v1/missions/:id/analysis/step|plan (protected apps/desktop/main.mjs) + server route registration of routes/analysis.ts (protected apps/control-api/src/server.ts). Request: docs/authority-requests/LANE-A-analysis-allowlist.md, STATUS OPEN = COORD protected batch 4b (#242), Founder decision. Until then the analysis step/create-plan cannot run in the desktop.
   - UNKNOWN: spec not in repo - whether the design needs phase actions on develop/review/delivery stages or a dependency graph in the Journey (journey.js:206-214 read-only; no graph code).
   - NOT_VERIFIED_LOCAL_ONLY: pixel/design parity and the real desktop app + live backend product run (reference designs not in repo; Local-only).
 
-**f. evidence class:** TEST_PASS_LINUX for the Journey (read models, honest states, pre-dev decisions, analysis step; 100/100). Remaining parity items = SPEC_MISSING; design parity/real app = NOT_VERIFIED_LOCAL_ONLY.
+**f. evidence class:** CODE_PRESENT for the analysis step / create-plan (renderer only; BLOCKED in the desktop build). TEST_PASS_LINUX for the read models, honest states and the pre-dev decisions (start/approve/reject are allow-listed and server-registered; 100/100 journey). Design parity/real app = NOT_VERIFIED_LOCAL_ONLY.
 
-**g. follow-up:** NONE — size NONE
+**g. follow-up:** BLOCKED_ON_FOUNDER (#242): COORD protected batch 4b - allow-list + server registration for the analysis routes (docs/authority-requests/LANE-A-analysis-allowlist.md STATUS OPEN); no Lane A renderer task until it lands — size BLOCKED; files: `apps/desktop/main.mjs (protected)`, `apps/control-api/src/server.ts (protected)`, `docs/authority-requests/LANE-A-analysis-allowlist.md`
 
 ### UI-022 — Proje Kaynak & Git
 
@@ -398,7 +405,7 @@ Durum: **TESTED (Linux) kanıtı toplandı; INTEGRATED değil, PRODUCT_ACCEPTED 
   - GET /v1/projects/:id/file?path= (studio-workspace.js:188 via api.projectFile, api.js:94; server.ts:431)
   - GET /v1/projects/:id/git/log?limit=50 (studio-workspace.js:199 via api.gitLog, api.js:95; server.ts:436)
   - GET /v1/projects/:id/git/diff?from&to (studio-workspace.js:216 via api.gitDiff, api.js:96; server.ts:442)
-  - GET /v1/projects/:id/exports (studio-workspace.js:264 via api.projectExports, api.js:97) and GET /v1/projects/:id/deliveries (api.js:100)
+  - GET /v1/deliveries?projectId=<id> (api.deliveries, api.js:100; path built by delivery-core.js:11 deliveriesPath; server.ts:331) and GET /v1/projects/:id/exports (studio-workspace.js:264 via api.projectExports, api.js:97; server.ts:459)
   - POST /v1/projects/:id/export (studio-workspace.js:246 via ctx.api.post; allow-list main.mjs:160); IPC showExport (studio-workspace.js:256, ids only)
   - GET /v1/projects/:id/devrun and POST .../devrun/start|stop|restart (Run tab, studio-workspace.js:122,150)
 
@@ -406,7 +413,7 @@ Durum: **TESTED (Linux) kanıtı toplandı; INTEGRATED değil, PRODUCT_ACCEPTED 
   - `tests/v7-ps1b-project-studio-ui.test.ts` — file PASS 169 / FAIL 0; tests: “files tab: lists entries, navigates folders with validated relative paths, shows a redacted read-only viewer and never builds a traversal path”; “changes tab: lists git history, renders diff lines as text spans with +/- markers, and sends only validated hashes”; “delivery tab: export POSTs the fixed route, lists exports, and 'show in folder' passes ids only to the native call”; “allows exactly the Project Studio read routes with strict ids and canonical encoded paths”; “files tab: list 404 shows UNAVAILABLE with no entries; an empty list says so; a file read failure shows no fabricated content”; “changes tab: git log 404 and an empty log render honest notes with no commit table, no diff picker and no diff request”
   - `tests/v7-ps1b-relpath-canonical.test.ts` — file PASS 5 / FAIL 0; tests: “whenever validRelPath accepts a name, the built files/file path is accepted by main (single, nested, route groups)”
   - `tests/v7-ps1a-project-studio.test.ts` — file PASS 14 / FAIL 0; tests: “lists and reads files safely: traversal, symlink/junction escape, .git, binary and size limits; secrets redacted”; “links runs to their commits, diffs run commits read-only and bounds large diffs; exports with reports”
-  - note: UI and bridge are tested with a fake DOM + real allow-list regexes; the server file/git/export logic is tested in v7-ps1a (core, not the HTTP route). v7-ux-install (CSV candidate) tests #/install and is not counted. Not covered: browse on a real repository in the desktop app, design parity.
+  - note: UI and bridge are tested with a fake DOM + real allow-list regexes; the server file/git/export logic IS tested through the real control-api in v7-ps1a (buildServer + app.inject: ps1a:15,47,52; files ps1a:305, git/diff/exports ps1a:338). v7-ux-install (CSV candidate) tests #/install and is not counted. Not covered: browse on a real repository in the desktop app, design parity.
 
 **d. merged since audit basis (e12dbdd)**
   - `120eaf6, bccc2bf, 961ef4c, 1dda6fc, f4f3d76, 601361e` Flow stepper / product card / knowledge panel / #226 review fixes in Studio overview — git diff e12dbdd..HEAD of studio-workspace.js has hunks only at lines 12-14 (imports) and 55-76 (overviewTab); filesTab (174-195), changesTab (198-225) and deliveryTab (263-280) are unchanged, so no CSV delta item is affected.
@@ -420,7 +427,7 @@ Durum: **TESTED (Linux) kanıtı toplandı; INTEGRATED değil, PRODUCT_ACCEPTED 
 
 **e. remaining delta**
   - UNKNOWN: spec not in repo - whether the design wants more than the read-only file viewer / two-commit diff / export (studio-workspace.js:174-225, 242-280).
-  - UNKNOWN: PR #46 (f5800aa) is NOT an ancestor of origin/v7/integration (git.json); content not audited.
+  - PR #46 (f5800aa) is not an ancestor of origin/v7/integration, but its identical change landed via PR #170: merge dac391d / commit 3a52348 (ancestor of 459205c; `git merge-base --is-ancestor f5800aa origin/v7/integration` returns 1, the same check for 3a52348 returns 0). Same subject and author date as f5800aa; the +/- lines of the two commits hash identically (sha256 of `git show -U0 | grep '^[+-]'`) and the change is test-only (tests/v7-ps1b-project-studio-ui.test.ts, +176), so it is part of the 169 ps1b tests counted here - ported via #170, audited. (The CSV row for UI-022 lists #46@f5800aa.)
   - NOT_VERIFIED_LOCAL_ONLY: pixel/design parity and the real desktop app + live backend product run (reference designs not in repo; Local-only).
 
 **f. evidence class:** TEST_PASS_LINUX for files / git log / diff / export behaviour (ps1b 169/169, ps1a 14/14, relpath 5/5). Design parity = SPEC_MISSING; real-app browse = NOT_VERIFIED_LOCAL_ONLY.
@@ -525,7 +532,7 @@ Durum: **TESTED (Linux) kanıtı toplandı; INTEGRATED değil, PRODUCT_ACCEPTED 
   - `docs/inventory/2026-10-19/SCREEN_AUDIT_252.csv row UI-030 column missing_functions (basis e12dbdd)`: live runs list exists; no per-agent fleet grid; runtime status honestly UNKNOWN; product verification on real desktop app + live backend not recorded
   - `docs/inventory/2026-10-19/SCREEN_AUDIT_252.csv row UI-030 column evidence`: stale issue: Active worker fleet: active runs via cockpit/work-runs; verify per-agent fleet grid
   - `docs/ux/UI-030-WORKER-FLEET.md`: one card per live (non-terminal) work run, as defined by the existing `liveRuns`
-  - `docs/ux/UI-030-WORKER-FLEET.md`: Design parity: NOT_VERIFIED. The design package is UNKNOWN_SOURCE.
+  - `docs/ux/UI-030-WORKER-FLEET.md`: PARAPHRASE: Design parity: NOT_VERIFIED. The design package is UNKNOWN_SOURCE.
   - spec_missing: 252-screen design package UASCO_NEON_252_EKRAN_TAM_PAKET_2026-10-16 is UNKNOWN_SOURCE (Founder PC only; docs/inventory/2026-10-19/README.md:136); UX-DEC-001..071 texts and UASCO COMPLETE Desktop Blueprint (SC-01..SC-18) are UNKNOWN_SOURCE (not in repo); ec105b7-basis SCREEN_TRACEABILITY_252_PLUS.csv / AUDIT_252_GAP_REPORT.md not in repo (BACKLOG P0-REMAINDER-AUDIT specFile points to unmerged branch v6/pkg-t4-...@9dbb708); What 'per-agent fleet grid' means in the original spec is not in the repo; docs/ux/UI-030 re-scopes it to per-run cards
 
 **b. route / views / data bindings**
@@ -555,13 +562,14 @@ Durum: **TESTED (Linux) kanıtı toplandı; INTEGRATED değil, PRODUCT_ACCEPTED 
 
 **e. remaining delta**
   - Fleet/live filter mismatch: renderer liveRuns uses RUN_ACTIVE_STATES=[QUEUED,LEASED,STARTING,RUNNING,VERIFYING,REVIEWING] (work-core.js:28,:605; fleet-core.js:14) but the server WorkRun status set has no STARTING/REVIEWING (core/workos/types.ts:72-74) and counts LEASED/RUNNING/CHECKPOINTING/VERIFYING as active workers (core/workos/run-state.ts:24, store.ts:771), so CHECKPOINTING runs counted in the 'active worker runs' KPI (workforce.js:293-295) never appear in the fleet grid or live-runs table. docs/ux/UI-030 says 'live (non-terminal)', which the code does not implement.
+  - QUEUED: it is in the renderer's live set (work-core.js:28) but NOT in the server's ACTIVE_WORKER_STATUSES (core/workos/run-state.ts:24) and not in LEASED_RUN_STATUSES (run-state.ts:22): it is in UNLEASED_RUN_STATUSES (run-state.ts:26), i.e. waiting for a lease, not a running worker. So QUEUED is a separate 'waiting' bucket, not a live worker: counting it in the 'live'/fleet set overstates active workers relative to the KPI. docs/ux/UI-030-WORKER-FLEET.md defines cards as 'live (non-terminal)', so whether queued runs belong on the fleet at all is a SPEC_MISSING choice; proposal: keep a labelled 'queued (not yet running)' bucket that is excluded from the active-worker count.
   - Last-heartbeat is always UNKNOWN against the real server: mapWorkRun reads heartbeatAt/lastHeartbeatAt/lease.heartbeatAt (work-core.js:523) but GET /v1/work-runs returns raw WorkRun (server.ts:320; fields leaseExpiresAt and updatedAt in core/workos/types.ts:137-141, no heartbeat field; grep -i heartbeat over core/workos/*.ts and apps/control-api/src/*.ts hits only runner.ts lease-heartbeat code/comments and one git-async.ts comment, no WorkRun field); updatedAt is not mapped (grep updatedAt work-core.js: no match) and fleetCard.updatedAt = heartbeatAt (fleet-core.js:25).
   - SERVER_LIMIT: no per-agent liveness/telemetry source exists (WorkRun has roleId but no agent/worker id or telemetry, core/workos/types.ts:137), so a per-agent fleet grid cannot be built renderer-only; the card shows run id + role only (workforce.js:73-90).
   - NOT_VERIFIED_LOCAL_ONLY: design parity and real desktop app + live backend run.
 
 **f. evidence class:** TEST_PASS_LINUX (per-run fleet grid, caps, honest states: 69/0); NOT_VERIFIED_LOCAL_ONLY for design parity/real app; per-agent grid SPEC_MISSING + SERVER_LIMIT
 
-**g. follow-up:** UI-030: align fleet/live-run status set with the server active-worker set (add CHECKPOINTING, drop STARTING/REVIEWING, test with server-shaped runs) and show updatedAt/leaseExpiresAt instead of the never-sent heartbeatAt — size S; files: `apps/desktop/renderer/work-core.js`, `apps/desktop/renderer/fleet-core.js`, `apps/desktop/renderer/views/workforce.js`, `apps/desktop/renderer/locales/en.js`, `apps/desktop/renderer/locales/tr.js`, `tests/v7-ux-wp-agents.test.ts`, `docs/ux/UI-030-WORKER-FLEET.md`
+**g. follow-up:** UI-030: align fleet/live-run status set with the server active-worker set (add CHECKPOINTING; drop STARTING/REVIEWING; keep QUEUED only as a separate, labelled 'queued (not yet running)' bucket that is not counted as a live worker - spec choice) and show updatedAt/leaseExpiresAt instead of the never-sent heartbeatAt — size S; files: `apps/desktop/renderer/work-core.js`, `apps/desktop/renderer/fleet-core.js`, `apps/desktop/renderer/views/workforce.js`, `apps/desktop/renderer/locales/en.js`, `apps/desktop/renderer/locales/tr.js`, `tests/v7-ux-wp-agents.test.ts`, `docs/ux/UI-030-WORKER-FLEET.md`
 
 ### UI-053 — 2D Kontrol Kulesi
 
@@ -733,7 +741,7 @@ Durum: **TESTED (Linux) kanıtı toplandı; INTEGRATED değil, PRODUCT_ACCEPTED 
 
 **f. evidence class:** TEST_PASS_LINUX (kit pieces and tokens: visual-parity 10/0, wp2-cockpit 23/0); design-token parity SPEC_MISSING; reference screen absent; NOT_VERIFIED_LOCAL_ONLY for pixel parity
 
-**g. follow-up:** UI-115: read-only Design System reference route (token swatches from styles.css, the 14 state pills, kit samples) with no parity claim — size M; files: `apps/desktop/renderer/routes.js`, `apps/desktop/renderer/views/planned.js`, `apps/desktop/renderer/views/design-system.js (new)`, `apps/desktop/renderer/locales/en.js`, `apps/desktop/renderer/locales/tr.js`, `apps/desktop/renderer/styles.css`, `tests/v7-ux-vp-visual-parity.test.ts`
+**g. follow-up:** UI-115: read-only Design System reference route (token swatches from styles.css, the 14 state pills, kit samples) with no parity claim | Frozen scope - existing exact ROUTES pins that break when routes.js gains an id: ALWAYS tests/v7-b4-desktop-shell.test.ts:75 and tests/v7-ps1b-project-studio-ui.test.ts:619 (full-array equality); slice(-15) pins when the id is appended or inserted inside the last 15 ids: tests/v7-ux-executive.test.ts:876, tests/v7-ux-journey.test.ts:564, tests/v7-ux-matrix.test.ts:1008, tests/v7-ux-operations.test.ts:1101, tests/v7-ux-posture.test.ts:1052, tests/v7-ux-queue.test.ts:911, tests/v7-ux-readiness.test.ts:1116; tail pins when the id is appended after 'settings' or lands in the last 6: tests/v7-ux-matrix.test.ts:1266 (slice(-4)) and tests/v7-ux-operations.test.ts:1201 (slice(-6)). Inserting before the last 15 ids touches only the first two. — size M; files: `apps/desktop/renderer/routes.js`, `apps/desktop/renderer/views/planned.js`, `apps/desktop/renderer/views/design-system.js (new)`, `apps/desktop/renderer/locales/en.js`, `apps/desktop/renderer/locales/tr.js`, `apps/desktop/renderer/styles.css`, `tests/v7-ux-vp-visual-parity.test.ts`, `tests/v7-b4-desktop-shell.test.ts:75`, `tests/v7-ps1b-project-studio-ui.test.ts:619`, `tests/v7-ux-executive.test.ts:876`, `tests/v7-ux-journey.test.ts:564`, `tests/v7-ux-matrix.test.ts:1008`, `tests/v7-ux-operations.test.ts:1101`, `tests/v7-ux-posture.test.ts:1052`, `tests/v7-ux-queue.test.ts:911`, `tests/v7-ux-readiness.test.ts:1116`, `tests/v7-ux-matrix.test.ts:1266 (only if appended after settings)`, `tests/v7-ux-operations.test.ts:1201 (only if appended after settings)`
 
 ### UI-124 — Acil Durdur Onayı ve Etki Alanı
 
@@ -742,7 +750,7 @@ Durum: **TESTED (Linux) kanıtı toplandı; INTEGRATED değil, PRODUCT_ACCEPTED 
   - `docs/inventory/2026-10-19/SCREEN_AUDIT_252.csv row UI-124 column missing_functions (basis e12dbdd)`: Global stop dialog + resume exist (stop/resume via dedicated IPC main.mjs:267-268); no per-scope stop or blast-radius/impact preview | design action_contract=existing view actions only; state_variants=loading/empty/error/denied via state kit
   - `docs/inventory/2026-10-19/SCREEN_AUDIT_252.csv row UI-124 column authority_needed (basis e12dbdd)`: none for current; per-scope stop needs new endpoint + IPC (protected main.mjs)
   - `docs/planning/FOUNDER_BATCH_2_AUTHORITY_REQUIRED_2026-10-18.md row B2-UI-124`: Stop dialog shows live impact counts (active runs, blocked items)
-  - `docs/planning/BACKLOG_CHECKPOINT.json task B2-UI-124`: status AUTHORITY_REQUIRED; "No authorizedBy: not READY."
+  - `docs/planning/BACKLOG_CHECKPOINT.json task B2-UI-124`: PARAPHRASE: status AUTHORITY_REQUIRED; "No authorizedBy: not READY."
   - `docs/inventory/2026-10-19/raw/ux-decisions.csv row UX-DEC-065`: STOP_ALL dialog/IPC, approvals (inbox/queue), settings governance read-only
   - spec_missing: 252-screen design package UASCO_NEON_252_EKRAN_TAM_PAKET_2026-10-16 is UNKNOWN_SOURCE (Founder PC only; docs/inventory/2026-10-19/README.md:136); UX-DEC-065 text is UNKNOWN_SOURCE (Founder PC, not in repo; ux-decisions.csv row 65); ec105b7-basis SCREEN_TRACEABILITY_252_PLUS.csv / AUDIT_252_GAP_REPORT.md not in repo (BACKLOG P0-REMAINDER-AUDIT specFile points to unmerged branch v6/pkg-t4-...@9dbb708); The meaning of 'per-scope' (which scopes: project, mission, run, guild?) is not defined anywhere in the repo
 
@@ -773,6 +781,7 @@ Durum: **TESTED (Linux) kanıtı toplandı; INTEGRATED değil, PRODUCT_ACCEPTED 
   - Stop dialog has no impact/blast-radius preview: index.html:55 shows only the static stop.dialog.body text and shell.js:196-203 passes no data; the shell already holds cockpit and attention reads (shell.js:116 reads, :118 stores data.cockpit and data.attention) but renders none in the dialog. Backlog task B2-UI-124 (live impact counts) exists as AUTHORITY_REQUIRED, not READY.
   - No per-scope stop: the only stop path is the global one (main.mjs:319 -> POST /v1/control/stop, server.ts:166 writes the single GLOBAL_STOP.json); per-scope would need a new endpoint + IPC in protected main.mjs (CSV authority_needed). UNKNOWN: which scopes the design means.
   - Test gap: no test drives #stopConfirm -> ctx.stop -> window.uasco.stop (see c.note); only dialog open/exists and resume confirmation are tested.
+  - (the stop-confirm test gap is shared with UI-007: one S test task, see UI-007 g)
   - NOT_VERIFIED_LOCAL_ONLY: design parity, real Electron IPC and real stop effect.
 
 **f. evidence class:** CODE_PRESENT (global Stop dialog + confirmed Resume; resume confirmation and Stop wiring have passing Linux tests, but the stop-confirm to IPC path is untested); impact preview and per-scope stop ABSENT; design parity NOT_VERIFIED_LOCAL_ONLY
@@ -857,10 +866,10 @@ Durum: **TESTED (Linux) kanıtı toplandı; INTEGRATED değil, PRODUCT_ACCEPTED 
 
 **e. remaining delta**
   - The 'real worker' side of the distinction disagrees with the server: the live-runs table and fleet use liveRuns (work-core.js:28,:605) = QUEUED/LEASED/STARTING/RUNNING/VERIFYING/REVIEWING while the 'Active worker runs' KPI (workforce.js:293-295) is the server count of LEASED/RUNNING/CHECKPOINTING/VERIFYING (core/workos/run-state.ts:24; store.ts:771) - same defect as UI-030, one shared fix.
+  - QUEUED is a separate 'waiting' bucket, not a live worker (see UI-030 e: UNLEASED_RUN_STATUSES, core/workos/run-state.ts:26); the shared fix keeps it out of the 'real worker' count.
   - UNKNOWN: spec not in repo - what the design's 'matrix' presentation is; the nearest existing element is the by-guild five-counter table (workforce.js:22-24).
   - NOT_VERIFIED_LOCAL_ONLY: design matrix parity, and real desktop app + live backend run.
 
 **f. evidence class:** TEST_PASS_LINUX (599-definition vs worker distinction, taxonomy, factory counters: tests/v7-ux-wp-agents.test.ts 69/0); design matrix parity NOT_VERIFIED_LOCAL_ONLY / SPEC_MISSING
 
 **g. follow-up:** Shared with UI-030 follow-up: align live-run status set with the server active-worker set so the real-worker side of #/workforce matches the KPI — size S; files: `apps/desktop/renderer/work-core.js`, `apps/desktop/renderer/fleet-core.js`, `apps/desktop/renderer/views/workforce.js`, `tests/v7-ux-wp-agents.test.ts`
-

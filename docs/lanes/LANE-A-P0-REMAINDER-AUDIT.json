@@ -17,7 +17,7 @@
           },
           {
             "source": "docs/inventory/2026-10-19/raw/ux-decisions.csv UX-DEC-001 / UX-DEC-067",
-            "text": "UX-DEC-001 'Açılış ve Founder Cockpit' (text UNKNOWN_SOURCE); UX-DEC-067 'Unified 2D/3D Campus/Control Tower' (missing: '3D/WebGL campus + GPU detection absent')"
+            "text": "PARAPHRASE: UX-DEC-001 'Açılış ve Founder Cockpit' (text UNKNOWN_SOURCE); UX-DEC-067 'Unified 2D/3D Campus/Control Tower' (missing: '3D/WebGL campus + GPU detection absent')"
           },
           {
             "source": "docs/planning/BACKLOG_CHECKPOINT.json (task P0-REMAINDER-AUDIT, INV-17)",
@@ -128,7 +128,7 @@
           },
           {
             "source": "docs/inventory/2026-10-19/raw/ux-decisions.csv UX-DEC-019",
-            "text": "'Öncelikli/tekrarsız bildirim merkezi' (prioritised / de-duplicated notification centre; text UNKNOWN_SOURCE; missing: 'dedup polish unverified')"
+            "text": "PARAPHRASE: 'Öncelikli/tekrarsız bildirim merkezi' (prioritised / de-duplicated notification centre; text UNKNOWN_SOURCE; missing: 'dedup polish unverified')"
           },
           {
             "source": "docs/planning/BACKLOG_CHECKPOINT.json (task P0-REMAINDER-AUDIT, INV-17)",
@@ -209,7 +209,7 @@
       ],
       "f": "CODE_PRESENT (bell + 3-tab feed + event strip exist in shell.js) - not TEST_PASS_LINUX because no test executes renderFeed/bell. Dedicated feed with history/filters = SPEC_MISSING (and absent in code); design parity/real app = NOT_VERIFIED_LOCAL_ONLY.",
       "g": {
-        "follow_up": "UI-005: Notification Feed view (history + filters) and behavioural shell tests for bell/feed - spec-first (needs Founder/design input for scope)",
+        "follow_up": "UI-005: Notification Feed view (history + filters) and behavioural shell tests for bell/feed - spec-first (needs Founder/design input for scope) | Frozen scope - existing exact ROUTES pins that break when routes.js gains an id: ALWAYS tests/v7-b4-desktop-shell.test.ts:75 and tests/v7-ps1b-project-studio-ui.test.ts:619 (full-array equality); slice(-15) pins when the id is appended or inserted inside the last 15 ids: tests/v7-ux-executive.test.ts:876, tests/v7-ux-journey.test.ts:564, tests/v7-ux-matrix.test.ts:1008, tests/v7-ux-operations.test.ts:1101, tests/v7-ux-posture.test.ts:1052, tests/v7-ux-queue.test.ts:911, tests/v7-ux-readiness.test.ts:1116; tail pins when the id is appended after 'settings' or lands in the last 6: tests/v7-ux-matrix.test.ts:1266 (slice(-4)) and tests/v7-ux-operations.test.ts:1201 (slice(-6)). Inserting before the last 15 ids touches only the first two.",
         "size": "M",
         "files": [
           "apps/desktop/renderer/routes.js",
@@ -218,7 +218,18 @@
           "apps/desktop/renderer/notifications-core.js (new)",
           "apps/desktop/renderer/locales/en.js",
           "apps/desktop/renderer/locales/tr.js",
-          "tests/v7-ux-shell.test.ts"
+          "tests/v7-ux-shell.test.ts",
+          "tests/v7-b4-desktop-shell.test.ts:75",
+          "tests/v7-ps1b-project-studio-ui.test.ts:619",
+          "tests/v7-ux-executive.test.ts:876",
+          "tests/v7-ux-journey.test.ts:564",
+          "tests/v7-ux-matrix.test.ts:1008",
+          "tests/v7-ux-operations.test.ts:1101",
+          "tests/v7-ux-posture.test.ts:1052",
+          "tests/v7-ux-queue.test.ts:911",
+          "tests/v7-ux-readiness.test.ts:1116",
+          "tests/v7-ux-matrix.test.ts:1266 (only if appended after settings)",
+          "tests/v7-ux-operations.test.ts:1201 (only if appended after settings)"
         ]
       }
     },
@@ -236,11 +247,11 @@
           },
           {
             "source": "docs/ux/UI-113-APPROVAL-REQUIRED.md",
-            "text": "Per mission awaiting approval: risk level; pending transition with 'Irreversible' / 'High risk' flags; linked work run; waiting-since; 'If approved' / 'If rejected' text. Blast radius / impact is always shown as UNKNOWN, because the data has no such field."
+            "text": "PARAPHRASE: Per mission awaiting approval: risk level; pending transition with 'Irreversible' / 'High risk' flags; linked work run; waiting-since; 'If approved' / 'If rejected' text. Blast radius / impact is always shown as UNKNOWN, because the data has no such field."
           },
           {
             "source": "docs/inventory/2026-10-19/raw/ux-decisions.csv UX-DEC-019 / UX-DEC-020",
-            "text": "UX-DEC-019 'Öncelikli/tekrarsız bildirim merkezi'; UX-DEC-020 'Kapsama bağlı Founder Approval' (texts UNKNOWN_SOURCE)"
+            "text": "PARAPHRASE: UX-DEC-019 'Öncelikli/tekrarsız bildirim merkezi'; UX-DEC-020 'Kapsama bağlı Founder Approval' (texts UNKNOWN_SOURCE)"
           },
           {
             "source": "docs/planning/BACKLOG_CHECKPOINT.json (task P0-REMAINDER-AUDIT, INV-17)",
@@ -315,7 +326,7 @@
             "touches": "Diff adds inbox.js:198 skeleton re-export only (loading state)."
           },
           {
-            "commit": "all other non-merge commits in git.json for this row (e.g. f32bcd1, a153c7f, 3b7b5ac, 2372ae5, 72510d4, 5ce69df, f382693, 4a2b749, bccc2bf, 88cfe35)",
+            "commit": "all other non-merge commits from `git log e12dbdd..origin/v7/integration` over the work-view files for this row (e.g. f32bcd1, a153c7f, 3b7b5ac, 2372ae5, 72510d4, 5ce69df, f382693, 4a2b749, bccc2bf, 88cfe35)",
             "subject": "Work-view / run / task features",
             "touches": "git diff e12dbdd..HEAD of work-core.js and work-actions.js contains no change to deriveInbox, buildTransitionRequest, requiresConfirm or performTransition (grep of the diff returned only import and new-function lines); they affect #/work, not the decision card."
           }
@@ -458,14 +469,17 @@
         ]
       },
       "e": [
+        "Test gap (same as UI-124): the stop path #stopConfirm click -> ctx.stop -> window.uasco.stop has no behavioural test (grep finds #stopConfirm only in HOST_IDS id lists: tests/v7-ux-shell.test.ts:166 and tests/v7-b4-desktop-shell.test.ts:326; app.js:31 stop() is checked by source regex only). The stop-failure alert is untested the same way.",
         "UNKNOWN: spec not in repo - CSV action_contract says 'via main-process confirm'; code confirms in the renderer only (index.html:53, app.js:49, resume-confirm.js:8) and main.mjs:319-320 performs no confirmation.",
         "NOT_VERIFIED_LOCAL_ONLY: pixel/design parity and the real desktop app + live backend product run (reference designs not in repo; Local-only)."
       ],
-      "f": "TEST_PASS_LINUX (stop dialog open paths, resume confirm fail-closed, stopped state rendering in tower/campus pass); stop-IPC roundtrip is source-regex only. Design parity and real-app resume run = NOT_VERIFIED_LOCAL_ONLY.",
+      "f": "CODE_PRESENT for the stop path (#stopConfirm -> ctx.stop -> stop IPC is not exercised by any test; source-regex only). TEST_PASS_LINUX for the stop dialog open paths, resume confirmation fail-closed and stopped-state rendering. Design parity and real-app resume run = NOT_VERIFIED_LOCAL_ONLY.",
       "g": {
-        "follow_up": "NONE",
-        "size": "NONE",
-        "files": []
+        "follow_up": "UI-007 + UI-124 (shared): behavioural test that drives #stopConfirm through ctx.stop to window.uasco.stop (success and failure alert)",
+        "size": "S",
+        "files": [
+          "tests/v7-ux-shell.test.ts"
+        ]
       }
     },
     {
@@ -482,7 +496,7 @@
           },
           {
             "source": "apps/desktop/renderer/shell.js:129 (in-code TR design note)",
-            "text": "UX WP-SHELL-REFINE: Ctrl+K komut paleti. Mevcut 'aramayla gezin' KALDIRILMAZ; üzerine gruplu bir EYLEMLER bölümü eklenir: her rota için 'git', geçerli seçim için Inspector aç ve global STOP_ALL."
+            "text": "PARAPHRASE: UX WP-SHELL-REFINE: Ctrl+K komut paleti. Mevcut 'aramayla gezin' KALDIRILMAZ; üzerine gruplu bir EYLEMLER bölümü eklenir: her rota için 'git', geçerli seçim için Inspector aç ve global STOP_ALL."
           },
           {
             "source": "docs/planning/BACKLOG_CHECKPOINT.json (task P0-REMAINDER-AUDIT, INV-17)",
@@ -572,11 +586,11 @@
           },
           {
             "source": "docs/inventory/2026-10-19/SCREEN_AUDIT_252.csv row UI-009 (missing_functions / dependencies)",
-            "text": "no Company/Product portfolio grouping or roll-ups; project portfolio KPIs only; ... | UI-081 Company OS for company grouping"
+            "text": "PARAPHRASE: no Company/Product portfolio grouping or roll-ups; project portfolio KPIs only; ... | UI-081 Company OS for company grouping"
           },
           {
             "source": "docs/inventory/2026-10-19/raw/ux-decisions.csv UX-DEC-044",
-            "text": "'Company Portfolio + çok ürün' (text UNKNOWN_SOURCE); missing: 'rich multi-product switcher partial'"
+            "text": "PARAPHRASE: 'Company Portfolio + çok ürün' (text UNKNOWN_SOURCE); missing: 'rich multi-product switcher partial'"
           },
           {
             "source": "docs/planning/BACKLOG_CHECKPOINT.json P0-REMAINDER-AUDIT notes",
@@ -648,7 +662,7 @@
         ],
         "covered_items": [],
         "uncovered_items": [
-          "no Company/Product portfolio grouping or roll-ups: still true. grep -i 'compan|product|group|portfolio|customer' in projects.js returns no hit; projects are rendered as one flat list (projects.js:128). The only company-ish element is the per-card tenantId labelled 'Company (tenant)' (projects.js:88, locales/en.js:233). KPIs are project/environment/mission/active-run counts (projects.js:51-59)."
+          "no Company/Product portfolio grouping or roll-ups: still true. grep -inE 'compan|product|group|portfolio|customer' in projects.js returns 2 hits (projects.js:54 and :68, both ARIA role=\"group\" wrappers, not data grouping) and none for company/product/portfolio/customer; projects are rendered as one flat list (projects.js:128). The only company-ish element is the per-card tenantId labelled 'Company (tenant)' (projects.js:88, locales/en.js:233). KPIs are project/environment/mission/active-run counts (projects.js:51-59)."
         ]
       },
       "e": [
@@ -667,7 +681,8 @@
           "apps/desktop/renderer/locales/en.js",
           "apps/desktop/renderer/locales/tr.js",
           "tests/v7-ux-wp-projects.test.ts",
-          "core/workos/types.ts + core/workos/store.ts + apps/control-api/src/server.ts (only if a new grouping field is added; likely protected/authority-gated)"
+          "apps/control-api/src/server.ts (protected: config/protected-paths.json and trust-root-manifest.json)",
+          "core/workos/types.ts, core/workos/store.ts, core/workos/schemas.ts (only if a new grouping field is added; not listed in config/protected-paths.json at 459205c, but a data-model/authority decision)"
         ]
       }
     },
@@ -777,7 +792,7 @@
       },
       "e": [
         "UNKNOWN: spec not in repo - design wizard step set/order (CSV states 'step/error/done'). Code: single-form wizard (studio-wizard.js:80-100) with error/done states (statusBlock studio-wizard.js:94, recordPost 23, openCreated 95) and no step indicator.",
-        "UNKNOWN: PR #46 (f5800aa) listed by the CSV as touching these renderer files is NOT an ancestor of origin/v7/integration (git.json); its content was not audited.",
+        "PR #46 (f5800aa) is not an ancestor of origin/v7/integration, but its identical change landed via PR #170: merge dac391d / commit 3a52348 (ancestor of 459205c; `git merge-base --is-ancestor f5800aa origin/v7/integration` returns 1, the same check for 3a52348 returns 0). Same subject and author date as f5800aa; the +/- lines of the two commits hash identically (sha256 of `git show -U0 | grep '^[+-]'`) and the change is test-only (tests/v7-ps1b-project-studio-ui.test.ts, +176), so it is part of the 169 ps1b tests counted here - ported via #170, audited. (The CSV row for UI-010 lists #40@6089bc8 and #44@153cf24, not #46.)",
         "NOT_VERIFIED_LOCAL_ONLY: pixel/design parity and the real desktop app + live backend product run (reference designs not in repo; Local-only)."
       ],
       "f": "TEST_PASS_LINUX for create/import/error/done behaviour (169/169 ps1b). Step-set parity = SPEC_MISSING; design parity/real app = NOT_VERIFIED_LOCAL_ONLY.",
@@ -801,11 +816,11 @@
           },
           {
             "source": "docs/inventory/2026-10-19/raw/ux-decisions.csv UX-DEC-063",
-            "text": "'Project Journey/Mission/Dependency Graph' (text UNKNOWN_SOURCE); missing: 'dependency DAG projection absent'"
+            "text": "PARAPHRASE: 'Project Journey/Mission/Dependency Graph' (text UNKNOWN_SOURCE); missing: 'dependency DAG projection absent'"
           },
           {
             "source": "apps/desktop/renderer/routes.js:6 (in-code TR note)",
-            "text": "Proje Yolculuğu: seçili mission'ın otonom zinciri (pre-dev fazları, ekip koordinasyon ledger'ı, geliştirme -> bağımsız inceleme -> teslim) ... salt-okunur GET /v1/predev/:missionId + GET /v1/crew/:missionId ... Hiçbir faz/onay/verdict uydurulmaz"
+            "text": "PARAPHRASE: Proje Yolculuğu: seçili mission'ın otonom zinciri (pre-dev fazları, ekip koordinasyon ledger'ı, geliştirme -> bağımsız inceleme -> teslim) ... salt-okunur GET /v1/predev/:missionId + GET /v1/crew/:missionId ... Hiçbir faz/onay/verdict uydurulmaz"
           },
           {
             "source": "docs/planning/BACKLOG_CHECKPOINT.json (task P0-REMAINDER-AUDIT, INV-17)",
@@ -833,8 +848,8 @@
           "GET /v1/missions (journey.js:218 via api.missions, api.js:55)",
           "GET /v1/predev/:missionId (journey.js:230 via api.predev, api.js:157)",
           "GET /v1/crew/:missionId (journey.js:231 via api.crew, api.js:158)",
-          "POST /v1/missions/:id/predev/start and /predev/artifacts/:artifactId/approve|reject (predev-decisions.js:23 via ctx.api.post; paths predev-decisions-core.js:19-20)",
-          "POST /v1/missions/:id/analysis/step and /analysis/plan (analysis-core.js:10-11, analysis-step.js); GET executors only when a step is BLOCKED (journey.js:233)"
+          "POST /v1/missions/:id/predev/start and /predev/artifacts/:artifactId/approve|reject (predev-decisions.js:23 via ctx.api.post; paths predev-decisions-core.js:19-20) - allow-listed (main.mjs:167-168, COORD protected batch 3b) and registered in server.ts",
+          "POST /v1/missions/:id/analysis/step and /analysis/plan (analysis-core.js:10-11, analysis-step.js) - renderer only: NOT in the desktop POST allow-list (apps/desktop/main.mjs:159-168 POST_ROUTE_RES has no analysis entry) and apps/control-api/src/server.ts registers no routes/analysis.ts, so in the real desktop build the step shows 'not enabled in this build'; GET executors only when a step is BLOCKED (journey.js:233)"
         ]
       },
       "c": {
@@ -869,7 +884,7 @@
             "file_fail": 0
           }
         ],
-        "note": "v7-ux-journey.test.ts (100/100) covers read models, rail/phase/crew/dev panels, pre-dev decisions and the analysis step. Not covered: any dependency-graph/DAG (none in code), design parity, real backend. The test 'journey.js and journey-core.js never write' still passes because writes live in predev-decisions.js / analysis-step.js, not journey.js."
+        "note": "BLOCKED in the real desktop build for the analysis part: the cited b5 test (tests/v7-b5-work-screens.test.ts:2802-2810) itself asserts 'the step POST is not allow-listed yet' and 'not enabled in this build', and the v7-ux-journey analysis tests drive a fake ctx.api.post, so they prove renderer behaviour only. v7-ux-journey.test.ts (100/100) covers read models, rail/phase/crew/dev panels, pre-dev decisions and the analysis step. Not covered: any dependency-graph/DAG (none in code), design parity, real backend. The test 'journey.js and journey-core.js never write' still passes because writes live in predev-decisions.js / analysis-step.js, not journey.js."
       },
       "d": {
         "merged_since_audit": [
@@ -890,22 +905,29 @@
           }
         ],
         "covered_items": [
-          "no phase actions: pre-dev start/approve-with-evidence/reject and analysis step/create-plan now exist (journey.js:138 -> predev-decisions.js, analysis-step.js); the rail itself stays read-only (journey.js:73 click only focuses the panel)."
+          "pre-dev start/approve-with-evidence/reject: renderer (journey.js:138 -> predev-decisions.js) AND desktop allow-list (main.mjs:167-168) AND server routes (server.ts) exist; tested through the real buildServer in the COORD batch-3b cases (tests/support/protected-batch-3b.cases.ts) and the journey tests.",
+          "the rail itself stays read-only (journey.js:73 click only focuses the panel)."
         ],
         "uncovered_items": [
+          "analysis step / create-plan: renderer-only (analysis-step.js, analysis-core.js); BLOCKED in the desktop build (no POST allow-list entry in main.mjs:159-168, no server route registration). CSV item 'no phase actions' is therefore only half closed: pre-dev yes, analysis no.",
           "No actions on the develop/review/delivery stages inside the Journey (devPanel journey.js:206-214 is read-only; runs are started in #/work). Whether the design wants them: UNKNOWN: spec not in repo.",
           "Dependency graph (UX-DEC-063 'dependency DAG projection absent'): no graph in journey.js (grep dependsOn|graph = none). Requirement text UNKNOWN_SOURCE."
         ]
       },
       "e": [
+        "BLOCKED: desktop POST allow-list entry for POST /v1/missions/:id/analysis/step|plan (protected apps/desktop/main.mjs) + server route registration of routes/analysis.ts (protected apps/control-api/src/server.ts). Request: docs/authority-requests/LANE-A-analysis-allowlist.md, STATUS OPEN = COORD protected batch 4b (#242), Founder decision. Until then the analysis step/create-plan cannot run in the desktop.",
         "UNKNOWN: spec not in repo - whether the design needs phase actions on develop/review/delivery stages or a dependency graph in the Journey (journey.js:206-214 read-only; no graph code).",
         "NOT_VERIFIED_LOCAL_ONLY: pixel/design parity and the real desktop app + live backend product run (reference designs not in repo; Local-only)."
       ],
-      "f": "TEST_PASS_LINUX for the Journey (read models, honest states, pre-dev decisions, analysis step; 100/100). Remaining parity items = SPEC_MISSING; design parity/real app = NOT_VERIFIED_LOCAL_ONLY.",
+      "f": "CODE_PRESENT for the analysis step / create-plan (renderer only; BLOCKED in the desktop build). TEST_PASS_LINUX for the read models, honest states and the pre-dev decisions (start/approve/reject are allow-listed and server-registered; 100/100 journey). Design parity/real app = NOT_VERIFIED_LOCAL_ONLY.",
       "g": {
-        "follow_up": "NONE",
-        "size": "NONE",
-        "files": []
+        "follow_up": "BLOCKED_ON_FOUNDER (#242): COORD protected batch 4b - allow-list + server registration for the analysis routes (docs/authority-requests/LANE-A-analysis-allowlist.md STATUS OPEN); no Lane A renderer task until it lands",
+        "size": "BLOCKED",
+        "files": [
+          "apps/desktop/main.mjs (protected)",
+          "apps/control-api/src/server.ts (protected)",
+          "docs/authority-requests/LANE-A-analysis-allowlist.md"
+        ]
       }
     },
     {
@@ -944,7 +966,7 @@
           "GET /v1/projects/:id/file?path= (studio-workspace.js:188 via api.projectFile, api.js:94; server.ts:431)",
           "GET /v1/projects/:id/git/log?limit=50 (studio-workspace.js:199 via api.gitLog, api.js:95; server.ts:436)",
           "GET /v1/projects/:id/git/diff?from&to (studio-workspace.js:216 via api.gitDiff, api.js:96; server.ts:442)",
-          "GET /v1/projects/:id/exports (studio-workspace.js:264 via api.projectExports, api.js:97) and GET /v1/projects/:id/deliveries (api.js:100)",
+          "GET /v1/deliveries?projectId=<id> (api.deliveries, api.js:100; path built by delivery-core.js:11 deliveriesPath; server.ts:331) and GET /v1/projects/:id/exports (studio-workspace.js:264 via api.projectExports, api.js:97; server.ts:459)",
           "POST /v1/projects/:id/export (studio-workspace.js:246 via ctx.api.post; allow-list main.mjs:160); IPC showExport (studio-workspace.js:256, ids only)",
           "GET /v1/projects/:id/devrun and POST .../devrun/start|stop|restart (Run tab, studio-workspace.js:122,150)"
         ]
@@ -982,7 +1004,7 @@
             "file_fail": 0
           }
         ],
-        "note": "UI and bridge are tested with a fake DOM + real allow-list regexes; the server file/git/export logic is tested in v7-ps1a (core, not the HTTP route). v7-ux-install (CSV candidate) tests #/install and is not counted. Not covered: browse on a real repository in the desktop app, design parity."
+        "note": "UI and bridge are tested with a fake DOM + real allow-list regexes; the server file/git/export logic IS tested through the real control-api in v7-ps1a (buildServer + app.inject: ps1a:15,47,52; files ps1a:305, git/diff/exports ps1a:338). v7-ux-install (CSV candidate) tests #/install and is not counted. Not covered: browse on a real repository in the desktop app, design parity."
       },
       "d": {
         "merged_since_audit": [
@@ -1010,7 +1032,7 @@
       },
       "e": [
         "UNKNOWN: spec not in repo - whether the design wants more than the read-only file viewer / two-commit diff / export (studio-workspace.js:174-225, 242-280).",
-        "UNKNOWN: PR #46 (f5800aa) is NOT an ancestor of origin/v7/integration (git.json); content not audited.",
+        "PR #46 (f5800aa) is not an ancestor of origin/v7/integration, but its identical change landed via PR #170: merge dac391d / commit 3a52348 (ancestor of 459205c; `git merge-base --is-ancestor f5800aa origin/v7/integration` returns 1, the same check for 3a52348 returns 0). Same subject and author date as f5800aa; the +/- lines of the two commits hash identically (sha256 of `git show -U0 | grep '^[+-]'`) and the change is test-only (tests/v7-ps1b-project-studio-ui.test.ts, +176), so it is part of the 169 ps1b tests counted here - ported via #170, audited. (The CSV row for UI-022 lists #46@f5800aa.)",
         "NOT_VERIFIED_LOCAL_ONLY: pixel/design parity and the real desktop app + live backend product run (reference designs not in repo; Local-only)."
       ],
       "f": "TEST_PASS_LINUX for files / git log / diff / export behaviour (ps1b 169/169, ps1a 14/14, relpath 5/5). Design parity = SPEC_MISSING; real-app browse = NOT_VERIFIED_LOCAL_ONLY.",
@@ -1286,7 +1308,7 @@
           },
           {
             "source": "docs/ux/UI-030-WORKER-FLEET.md",
-            "text": "Design parity: NOT_VERIFIED. The design package is UNKNOWN_SOURCE."
+            "text": "PARAPHRASE: Design parity: NOT_VERIFIED. The design package is UNKNOWN_SOURCE."
           }
         ],
         "spec_missing": [
@@ -1370,13 +1392,14 @@
       },
       "e": [
         "Fleet/live filter mismatch: renderer liveRuns uses RUN_ACTIVE_STATES=[QUEUED,LEASED,STARTING,RUNNING,VERIFYING,REVIEWING] (work-core.js:28,:605; fleet-core.js:14) but the server WorkRun status set has no STARTING/REVIEWING (core/workos/types.ts:72-74) and counts LEASED/RUNNING/CHECKPOINTING/VERIFYING as active workers (core/workos/run-state.ts:24, store.ts:771), so CHECKPOINTING runs counted in the 'active worker runs' KPI (workforce.js:293-295) never appear in the fleet grid or live-runs table. docs/ux/UI-030 says 'live (non-terminal)', which the code does not implement.",
+        "QUEUED: it is in the renderer's live set (work-core.js:28) but NOT in the server's ACTIVE_WORKER_STATUSES (core/workos/run-state.ts:24) and not in LEASED_RUN_STATUSES (run-state.ts:22): it is in UNLEASED_RUN_STATUSES (run-state.ts:26), i.e. waiting for a lease, not a running worker. So QUEUED is a separate 'waiting' bucket, not a live worker: counting it in the 'live'/fleet set overstates active workers relative to the KPI. docs/ux/UI-030-WORKER-FLEET.md defines cards as 'live (non-terminal)', so whether queued runs belong on the fleet at all is a SPEC_MISSING choice; proposal: keep a labelled 'queued (not yet running)' bucket that is excluded from the active-worker count.",
         "Last-heartbeat is always UNKNOWN against the real server: mapWorkRun reads heartbeatAt/lastHeartbeatAt/lease.heartbeatAt (work-core.js:523) but GET /v1/work-runs returns raw WorkRun (server.ts:320; fields leaseExpiresAt and updatedAt in core/workos/types.ts:137-141, no heartbeat field; grep -i heartbeat over core/workos/*.ts and apps/control-api/src/*.ts hits only runner.ts lease-heartbeat code/comments and one git-async.ts comment, no WorkRun field); updatedAt is not mapped (grep updatedAt work-core.js: no match) and fleetCard.updatedAt = heartbeatAt (fleet-core.js:25).",
         "SERVER_LIMIT: no per-agent liveness/telemetry source exists (WorkRun has roleId but no agent/worker id or telemetry, core/workos/types.ts:137), so a per-agent fleet grid cannot be built renderer-only; the card shows run id + role only (workforce.js:73-90).",
         "NOT_VERIFIED_LOCAL_ONLY: design parity and real desktop app + live backend run."
       ],
       "f": "TEST_PASS_LINUX (per-run fleet grid, caps, honest states: 69/0); NOT_VERIFIED_LOCAL_ONLY for design parity/real app; per-agent grid SPEC_MISSING + SERVER_LIMIT",
       "g": {
-        "follow_up": "UI-030: align fleet/live-run status set with the server active-worker set (add CHECKPOINTING, drop STARTING/REVIEWING, test with server-shaped runs) and show updatedAt/leaseExpiresAt instead of the never-sent heartbeatAt",
+        "follow_up": "UI-030: align fleet/live-run status set with the server active-worker set (add CHECKPOINTING; drop STARTING/REVIEWING; keep QUEUED only as a separate, labelled 'queued (not yet running)' bucket that is not counted as a live worker - spec choice) and show updatedAt/leaseExpiresAt instead of the never-sent heartbeatAt",
         "size": "S",
         "files": [
           "apps/desktop/renderer/work-core.js",
@@ -1849,7 +1872,7 @@
       ],
       "f": "TEST_PASS_LINUX (kit pieces and tokens: visual-parity 10/0, wp2-cockpit 23/0); design-token parity SPEC_MISSING; reference screen absent; NOT_VERIFIED_LOCAL_ONLY for pixel parity",
       "g": {
-        "follow_up": "UI-115: read-only Design System reference route (token swatches from styles.css, the 14 state pills, kit samples) with no parity claim",
+        "follow_up": "UI-115: read-only Design System reference route (token swatches from styles.css, the 14 state pills, kit samples) with no parity claim | Frozen scope - existing exact ROUTES pins that break when routes.js gains an id: ALWAYS tests/v7-b4-desktop-shell.test.ts:75 and tests/v7-ps1b-project-studio-ui.test.ts:619 (full-array equality); slice(-15) pins when the id is appended or inserted inside the last 15 ids: tests/v7-ux-executive.test.ts:876, tests/v7-ux-journey.test.ts:564, tests/v7-ux-matrix.test.ts:1008, tests/v7-ux-operations.test.ts:1101, tests/v7-ux-posture.test.ts:1052, tests/v7-ux-queue.test.ts:911, tests/v7-ux-readiness.test.ts:1116; tail pins when the id is appended after 'settings' or lands in the last 6: tests/v7-ux-matrix.test.ts:1266 (slice(-4)) and tests/v7-ux-operations.test.ts:1201 (slice(-6)). Inserting before the last 15 ids touches only the first two.",
         "size": "M",
         "files": [
           "apps/desktop/renderer/routes.js",
@@ -1858,7 +1881,18 @@
           "apps/desktop/renderer/locales/en.js",
           "apps/desktop/renderer/locales/tr.js",
           "apps/desktop/renderer/styles.css",
-          "tests/v7-ux-vp-visual-parity.test.ts"
+          "tests/v7-ux-vp-visual-parity.test.ts",
+          "tests/v7-b4-desktop-shell.test.ts:75",
+          "tests/v7-ps1b-project-studio-ui.test.ts:619",
+          "tests/v7-ux-executive.test.ts:876",
+          "tests/v7-ux-journey.test.ts:564",
+          "tests/v7-ux-matrix.test.ts:1008",
+          "tests/v7-ux-operations.test.ts:1101",
+          "tests/v7-ux-posture.test.ts:1052",
+          "tests/v7-ux-queue.test.ts:911",
+          "tests/v7-ux-readiness.test.ts:1116",
+          "tests/v7-ux-matrix.test.ts:1266 (only if appended after settings)",
+          "tests/v7-ux-operations.test.ts:1201 (only if appended after settings)"
         ]
       }
     },
@@ -1884,7 +1918,7 @@
           },
           {
             "source": "docs/planning/BACKLOG_CHECKPOINT.json task B2-UI-124",
-            "text": "status AUTHORITY_REQUIRED; \"No authorizedBy: not READY.\""
+            "text": "PARAPHRASE: status AUTHORITY_REQUIRED; \"No authorizedBy: not READY.\""
           },
           {
             "source": "docs/inventory/2026-10-19/raw/ux-decisions.csv row UX-DEC-065",
@@ -1977,6 +2011,7 @@
         "Stop dialog has no impact/blast-radius preview: index.html:55 shows only the static stop.dialog.body text and shell.js:196-203 passes no data; the shell already holds cockpit and attention reads (shell.js:116 reads, :118 stores data.cockpit and data.attention) but renders none in the dialog. Backlog task B2-UI-124 (live impact counts) exists as AUTHORITY_REQUIRED, not READY.",
         "No per-scope stop: the only stop path is the global one (main.mjs:319 -> POST /v1/control/stop, server.ts:166 writes the single GLOBAL_STOP.json); per-scope would need a new endpoint + IPC in protected main.mjs (CSV authority_needed). UNKNOWN: which scopes the design means.",
         "Test gap: no test drives #stopConfirm -> ctx.stop -> window.uasco.stop (see c.note); only dialog open/exists and resume confirmation are tested.",
+        "(the stop-confirm test gap is shared with UI-007: one S test task, see UI-007 g)",
         "NOT_VERIFIED_LOCAL_ONLY: design parity, real Electron IPC and real stop effect."
       ],
       "f": "CODE_PRESENT (global Stop dialog + confirmed Resume; resume confirmation and Stop wiring have passing Linux tests, but the stop-confirm to IPC path is untested); impact preview and per-scope stop ABSENT; design parity NOT_VERIFIED_LOCAL_ONLY",
@@ -2205,6 +2240,7 @@
       },
       "e": [
         "The 'real worker' side of the distinction disagrees with the server: the live-runs table and fleet use liveRuns (work-core.js:28,:605) = QUEUED/LEASED/STARTING/RUNNING/VERIFYING/REVIEWING while the 'Active worker runs' KPI (workforce.js:293-295) is the server count of LEASED/RUNNING/CHECKPOINTING/VERIFYING (core/workos/run-state.ts:24; store.ts:771) - same defect as UI-030, one shared fix.",
+        "QUEUED is a separate 'waiting' bucket, not a live worker (see UI-030 e: UNLEASED_RUN_STATUSES, core/workos/run-state.ts:26); the shared fix keeps it out of the 'real worker' count.",
         "UNKNOWN: spec not in repo - what the design's 'matrix' presentation is; the nearest existing element is the by-guild five-counter table (workforce.js:22-24).",
         "NOT_VERIFIED_LOCAL_ONLY: design matrix parity, and real desktop app + live backend run."
       ],
@@ -2220,5 +2256,35 @@
         ]
       }
     }
+  ],
+  "testFilesRun": [
+    "tests/v7-b4-desktop-shell.test.ts",
+    "tests/v7-b5-work-screens.test.ts",
+    "tests/v7-b6a-control-tower.test.ts",
+    "tests/v7-int-r3-desktop.test.ts",
+    "tests/v7-m1a-desktop.test.ts",
+    "tests/v7-ps1a-project-studio.test.ts",
+    "tests/v7-ps1b-project-studio-ui.test.ts",
+    "tests/v7-ps1b-relpath-canonical.test.ts",
+    "tests/v7-sbx8-agent-config.test.ts",
+    "tests/v7-ux-academy.test.ts",
+    "tests/v7-ux-executive.test.ts",
+    "tests/v7-ux-inbox.test.ts",
+    "tests/v7-ux-install.test.ts",
+    "tests/v7-ux-journey.test.ts",
+    "tests/v7-ux-matrix.test.ts",
+    "tests/v7-ux-operations.test.ts",
+    "tests/v7-ux-posture.test.ts",
+    "tests/v7-ux-queue.test.ts",
+    "tests/v7-ux-readiness.test.ts",
+    "tests/v7-ux-settings.test.ts",
+    "tests/v7-ux-shell.test.ts",
+    "tests/v7-ux-vp-visual-parity.test.ts",
+    "tests/v7-ux-wp-agents.test.ts",
+    "tests/v7-ux-wp-projects.test.ts",
+    "tests/v7-ux-wp-workos.test.ts",
+    "tests/v7-ux-wp2-cockpit.test.ts",
+    "tests/v7-ux-wp3-company.test.ts",
+    "tests/v7-ux-wp4-tower.test.ts"
   ]
 }
