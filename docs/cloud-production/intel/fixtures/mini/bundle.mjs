@@ -51,6 +51,12 @@ export const ROWS = [
   ['UI-025', 'Merged claim with only a consumer reference', 'INTEGRATED_NOT_VERIFIED', '#6 (open, consumer)', 'AT_RISK', 'x', 'UI-025'],
   ['UI-026', 'Integrated with failing CI', 'INTEGRATED_NOT_VERIFIED', '#8', 'AT_RISK', 'x', 'UI-026'],
   ['UI-027', 'Nested reference, progress claim', 'IN_PROGRESS', '#4 (closed; #7 builds on it)', 'AT_RISK', 'x', 'UI-027'],
+  // round 2: a partial EXPLICIT set with the item's own merged PR (UI-132 shape); a merged-claim row whose 19-Oct annotations name other
+  // items (PH-045 shape); the two items those PRs belong to
+  ['UI-028', 'Partial explicit set, own merged PR names the item', 'INTEGRATED_NOT_VERIFIED', '#40 claude/test-states (open); #41 claude/test-states-2 (open)', 'AT_RISK', 'x', 'UI-028'],
+  ['UI-029', 'Evidence lineage', 'INTEGRATED_NOT_VERIFIED', '#43', 'AT_RISK', 'x', 'UI-029'],
+  ['UI-030', 'Per-run test report', 'INTEGRATED_NOT_VERIFIED', '#44', 'AT_RISK', 'x', 'UI-030'],
+  ['UI-031', 'Capture/Evidence Bus (PRs of other items)', 'INTEGRATED_NOT_VERIFIED', '#43 (UI-029 evidence lineage, open); #44 (UI-030 per-run test report, open)', 'AT_RISK', 'x', 'UI-031'],
   ['E-ROLE-UASCO-0001', 'Role (not a work item)', 'DESIGN_ONLY', 'none', 'NONE', 'roles', 'x'],
 ];
 
@@ -86,13 +92,23 @@ export function miniBundle() {
     merged(24, '2026-10-26T21:00:13Z', { title: 'C-RDY-1 readiness', headRef: 'claude/lane-c-rdy-1' }),
     merged(25, '2026-10-21T13:24:56Z', { title: 'lockfile', headRef: 'claude/pq-009' }),
     pr(30, { state: 'open', closedAt: null, updatedAt: '2026-10-26T18:00:00Z', title: 'founder tier', headRef: 'claude/coord-protected' }),
+    merged(40, '2026-10-19T14:00:00Z', { title: 'test states projects', headRef: 'claude/test-states' }), pr(41, { title: 'test states studio', headRef: 'claude/test-states-2' }),
+    merged(42, '2026-10-20T01:00:56Z', { title: 'UI-028: read-only closure checklist', headRef: 'claude/ui-028' }),
+    merged(43, '2026-10-18T20:00:00Z', { title: 'L-ASSURANCE UI-029: evidence lineage', headRef: 'claude/l-assurance-lineage', createdAt: '2026-10-18T16:03:05Z' }),
+    merged(44, '2026-10-18T21:00:00Z', { title: 'L-ASSURANCE UI-030: per-run test report', headRef: 'claude/l-assurance-report', createdAt: '2026-10-18T16:05:00Z' }),
   ];
   const mergedHeads = pulls.filter((p) => p.mergedAt);
-  const commits = [{ sha: S('c-ui005'), at: '2026-10-15T00:00:00Z', subject: 'fix UI-005 crash', body: '' }, { sha: S('c-route'), at: '2026-09-23T00:00:00Z', subject: 'control api', body: '' }];
+  const commits = [{ sha: S('c-ui005'), at: '2026-10-15T00:00:00Z', subject: 'fix UI-005 crash', body: '' }, { sha: S('c-route'), at: '2026-09-23T00:00:00Z', subject: 'control api', body: '' },
+    // M1 (round 2): bookkeeping commits that only mention ids never set a start; an item's own commit (subject head names it) does
+    { sha: S('c-plan'), at: '2026-10-16T04:58:36Z', subject: 'planning: register MOB-11 as non-READY', body: '' },
+    { sha: S('c-backlog'), at: '2026-10-16T05:14:33Z', subject: 'backlog: makes UI-024 READY (docs only)', body: '' },
+    { sha: S('c-spec'), at: '2026-10-16T06:00:00Z', subject: 'MOB-6: screen specs (design only)', body: 'covers the UI-024 screen' },
+    { sha: S('c-own'), at: '2026-10-17T03:00:00Z', subject: 'UI-028: closure checklist core', body: '' }];
   const reachable = [...mergedHeads.map((p) => p.mergeCommitSha), ...commits.map((c) => c.sha), S('head-lane-a-x')];
   const checks = {};
   checks[S('head1')] = [{ name: 'validate (ubuntu-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-18T01:00:00Z', completedAt: '2026-10-18T01:20:00Z' }, { name: 'validate (windows-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-18T01:00:00Z', completedAt: '2026-10-18T01:40:00Z' }];
   checks[S('head8')] = [{ name: 'validate (ubuntu-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-18T01:00:00Z', completedAt: null }, { name: 'validate (windows-latest)', status: 'completed', conclusion: 'failure', startedAt: '2026-10-18T01:00:00Z', completedAt: null }];
+  for (const n of [6, 43, 44]) checks[S(`head${n}`)] = [{ name: 'validate (ubuntu-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-18T01:00:00Z', completedAt: '2026-10-18T01:20:00Z' }, { name: 'validate (windows-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-18T01:00:00Z', completedAt: '2026-10-18T01:40:00Z' }];
   checks[S('head2')] = [{ name: 'validate (ubuntu-latest)', status: 'completed', conclusion: 'success', startedAt: '2026-10-18T01:00:00Z', completedAt: null }, { name: 'validate (windows-latest)', status: 'completed', conclusion: 'failure', startedAt: '2026-10-18T01:00:00Z', completedAt: null }];
   const runs = [
     { id: 1001, name: 'CI', event: 'pull_request', status: 'completed', conclusion: 'success', runAttempt: 1, headSha: S('head24'), headBranch: 'claude/lane-c-rdy-1', createdAt: '2026-10-26T18:00:00Z', updatedAt: '2026-10-26T18:25:00Z', runStartedAt: '2026-10-26T18:00:10Z', prs: [24] },
@@ -113,13 +129,13 @@ export function miniBundle() {
     ],
     founderQueue: [{ id: 'FQ-PQ-009', priority: '0', kind: 'FOUNDER_ONLY', action: 'Merge #25 (lockfile-only fix).' }, { item: 'Raise the 2-builder cap', why: 'explicit Founder limit' }, { item: 'UASCO-AUD-005 sandbox substrate decision', why: 'hardware' }],
     integrationQueue: { founderDecisions: ['D1 (blocks everything): repair review secrets; affects UI-007.', 'D2: merge permission for #20, after review.'] },
-    productionLanes: { startedAt: '2026-10-21T07:23:41Z', deliverables: { 'LANE-A-x': { pr: 'branch only (PR limit)', branch: 'claude/lane-a-x', head: S('head-lane-a-x').slice(0, 7), status: 'TESTED', note: 'branch only' }, 'LANE-B-y': { pr: 'branch only (PR limit)', branch: 'claude/lane-b-y', head: S('head-lane-b-y').slice(0, 7), status: 'TESTED' } } },
+    productionLanes: { startedAt: '2026-10-21T07:23:41Z', deliverables: { 'LANE-A-x': { pr: 'branch only (PR limit)', branch: 'claude/lane-a-x', head: S('head-lane-a-x').slice(0, 7), status: 'TESTED', note: 'branch only' }, 'LANE-B-y': { pr: 'branch only (PR limit)', branch: 'claude/lane-b-y', head: S('head-lane-b-y').slice(0, 7), status: 'TESTED' }, 'LANE-B-REQ': { pr: 'branch only', branch: 'claude/lane-b-req', head: S('head-lane-b-req').slice(0, 7), status: 'AUTHORITY_REQUEST', note: 'authority request only' } } },
     coordinatorBuild: { 'COORD-Z': { branch: 'claude/coord-z', head: S('head-coord-z').slice(0, 7), status: 'IN_PROGRESS', owner: 'coord' }, 'COORD-FIRST-DELIVERY-WIRING': { pr: '143', branch: 'claude/coord-first-delivery-wiring', status: 'MERGED', owner: 'coord' } },
     integrationBoard: { prs: [{ pr: 30, owner: 'COORDINATOR', kind: 'x', state: 'DRAFT' }, { pr: 30, owner: 'COORDINATOR', kind: 'x', state: 'DRAFT' }], merges: [{ pr: 24, merge: S('merge24').slice(0, 7), by: 'auto', at: '2026-10-26T21:00:13Z', postMerge: 'VERIFIED' }] },
     autoMergeEvidence: [],
   };
   const shortMap = {}; const headDates = {};
-  for (const h of ['head20', 'head-lane-a-x', 'head-lane-b-y', 'head-coord-z']) { shortMap[S(h).slice(0, 7)] = S(h); headDates[S(h)] = '2026-10-20T00:00:00Z'; }
+  for (const h of ['head20', 'head-lane-a-x', 'head-lane-b-y', 'head-coord-z', 'head-lane-b-req']) { shortMap[S(h).slice(0, 7)] = S(h); headDates[S(h)] = '2026-10-20T00:00:00Z'; }
   const backlog = { tasks: [
     { id: 'MOB-6', title: 'Screen specs', status: 'DONE', owner: 'CLOUD', dependsOn: [] },
     { id: 'MOB-11', title: 'Repo validation scope', status: 'AUTHORITY_REQUIRED', owner: 'FOUNDER', dependsOn: ['MOB-6'] },

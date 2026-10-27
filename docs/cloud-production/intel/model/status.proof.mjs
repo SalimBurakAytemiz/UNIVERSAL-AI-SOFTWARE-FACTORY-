@@ -1,11 +1,11 @@
-//TR: P5 durum ve kanıt kanıtı (tablo güdümlü, ağsız): merge != tamamlandı; 19 Ekim 'prs' metnindeki rol notlu/aralık/iç içe/başka kalemin PR'ı WEAK'tir ve ilerleme iddiasız satırı yükseltmez; kısmi merge PARTIAL'dır; gerçek başlangıç yalnız kalemin kendi kanıtından; rakamla bitmeyen kimlikler başlık/dalda tam eşleşir; backlog DONE, sözleşme PLANNED, kanıtsız PRODUCT_ACCEPTED, FAKE yürütücü ve installer çıktıları runtimeVerified/accepted üretmez; kanıtsız ACCEPTANCE overlay'i reddedilir; gövde anması yalnız 'merge edildi' iddialı satırı destekler; öncelik sırası; PQ-007 çelişkisi; en uzun bilinen kimlik eşleşmesi.
+//TR: P5 durum ve kanıt kanıtı (tablo güdümlü, ağsız): merge != tamamlandı; 19 Ekim 'prs' metnindeki rol notlu/aralık/iç içe/başka kalemin PR'ı WEAK'tir ve ilerleme iddiasız satırı yükseltmez; kısmi merge PARTIAL'dır; gerçek başlangıç yalnız kalemin kendi kanıtından (kayıt/planlama commit'i değil, kodlanmış kalemin konu başı kimliği adlandıran kendi commit'i); kısmi EXPLICIT küme bağımsız kanıtı (başlık/dal PR'ı) gölgelemez; başka kaleme atanmış 19 Ekim notu WEAK'tir; WEAK destek yalnız integrated verir; runtimeVerified kalem düzeyinde NOT_MEASURED'dır; rakamla bitmeyen kimlikler başlık/dalda tam eşleşir; backlog DONE, sözleşme PLANNED, kanıtsız PRODUCT_ACCEPTED, FAKE yürütücü ve installer çıktıları runtimeVerified/accepted üretmez; kanıtsız ACCEPTANCE overlay'i reddedilir; gövde anması yalnız 'merge edildi' iddialı satırı destekler; öncelik sırası; PQ-007 çelişkisi; en uzun bilinen kimlik eşleşmesi.
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { miniBundle } from '../fixtures/mini/bundle.mjs';
 import { loadRules } from '../lib/gather.mjs';
 import { buildAll } from './pipeline.mjs';
 import { knownIdScan, literalIdScan } from '../core/ids.mjs';
-import { parseInventoryPrs } from './baseline.mjs';
+import { parseInventoryPrs, inventoryPrRefs } from './baseline.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 let passed = 0, failed = 0;
@@ -38,7 +38,7 @@ for (const [id, s, r, rule] of TABLE) check(`precedence: ${id} -> ${s} / ${r} (r
 check('every rule 1..10 is exercised by the table', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].every((n) => TABLE.some((t) => t[3] === n)));
 check('every item has exactly one status and one reconClass', m.items.every((x) => typeof x.status === 'string' && typeof x.reconClass === 'string'));
 check('merged != COMPLETED: merged PR items are MERGED_NOT_VERIFIED with accepted FALSE', ['UI-001', 'UI-024', 'UI-110'].every((id) => st(id) === 'MERGED_NOT_VERIFIED' && by.get(id).substeps.accepted === 'FALSE'));
-check('backlog DONE without evidence: UNKNOWN, never accepted or runtimeVerified', st('CP-DONE-ONLY') === 'UNKNOWN' && by.get('CP-DONE-ONLY').substeps.accepted === 'FALSE' && by.get('CP-DONE-ONLY').substeps.runtimeVerified === 'FALSE');
+check('backlog DONE without evidence: UNKNOWN, never accepted or runtimeVerified', st('CP-DONE-ONLY') === 'UNKNOWN' && by.get('CP-DONE-ONLY').substeps.accepted === 'FALSE' && by.get('CP-DONE-ONLY').substeps.runtimeVerified === 'NOT_MEASURED');
 check('queue PRODUCT_ACCEPTED without evidence is not accepted', by.get('PQ-003').substeps.accepted === 'FALSE' && st('PQ-003') !== 'COMPLETED_AND_VERIFIED');
 check('contract state PLANNED is never a closure (0 phases closed)', m.rm.phases.closedByEvidence === 0 && m.rm.phases.contractStatePlanned === 5);
 check('no item is runtimeVerified (no real-run evidence source; FAKE/installer excluded)', m.items.every((x) => x.substeps.runtimeVerified !== 'TRUE'));
@@ -56,7 +56,7 @@ check('tested: both required checks success -> TRUE; a failure -> FALSE; absent 
 const sub = (id) => by.get(id).substeps;
 check('H1 consumer-annotated merged PR does not upgrade a DESIGN_ONLY row (UI-021: NOT_STARTED, integrated FALSE, WEAK role:consumer)', st('UI-021') === 'NOT_STARTED' && sub('UI-021').integrated === 'FALSE' && sub('UI-021').coded === 'FALSE' && (by.get('UI-021').weakInventoryRefs || []).join() === '#6 role:consumer' && by.get('UI-021').prs.length === 0);
 check('H1 range reference #1-#2 is WEAK (UI-022: FOUNDER_ACTION_REQUIRED, integrated FALSE)', st('UI-022') === 'FOUNDER_ACTION_REQUIRED' && sub('UI-022').integrated === 'FALSE' && (by.get('UI-022').weakInventoryRefs || [null]).every((w) => / range #1-#2$/.test(w)));
-check("H1 unannotated reference to another item's merged PR is WEAK (UI-023 cites #10 'UI-003: ...': NOT_STARTED)", st('UI-023') === 'NOT_STARTED' && sub('UI-023').integrated === 'FALSE' && (by.get('UI-023').weakInventoryRefs || []).join() === '#10 no-id-match');
+check("H1 reference to another item's merged PR is WEAK (UI-023 cites #10 '(UI-003 return summary, merged)': NOT_STARTED, WEAK other-item:UI-003)", st('UI-023') === 'NOT_STARTED' && sub('UI-023').integrated === 'FALSE' && (by.get('UI-023').weakInventoryRefs || []).join() === '#10 other-item:UI-003');
 check('H1 a PR whose title names the item is EXPLICIT for an IN_PROGRESS row (UI-024 #7 -> MERGED_NOT_VERIFIED, HIGH)', st('UI-024') === 'MERGED_NOT_VERIFIED' && rc('UI-024') === 'EXPLICIT_PR_MERGED_ALL' && by.get('UI-024').confidence === 'HIGH');
 check("H1 the item's own title naming the PR ('(PR #5)') is EXPLICIT (UI-017 -> EXPLICIT_PR_OPEN)", rc('UI-017') === 'EXPLICIT_PR_OPEN' && st('UI-017') === 'IMPLEMENTED_NOT_MERGED');
 check('H1 a WEAK reference only supports a merged-claim row, at LOW confidence (UI-025: CORROBORATED_BY_PR / INVENTORY_TEXT_WEAK / LOW)', rc('UI-025') === 'CORROBORATED_BY_PR' && by.get('UI-025').matchKind === 'INVENTORY_TEXT_WEAK' && by.get('UI-025').confidence === 'LOW');
@@ -69,6 +69,23 @@ check('coded: closed-unmerged-only PR gives coded UNKNOWN with missingEvidence (
 check('M1 PH-001 cites a closed-unmerged PR of another item (#31): actual start UNKNOWN with sourcesChecked, phase actualStart null', by.get('PH-001').actual.start === null && by.get('PH-001').actual.startState === 'UNKNOWN' && (by.get('PH-001').actual.startSourcesChecked || []).length >= 5 && m.rm.byPhase.find((p) => p.id === 'PH-001').actualStart === null);
 check('M1 UI-024 starts at its own merged PR #7 createdAt (2026-10-17T07:00:00Z)', by.get('UI-024').actual.start === '2026-10-17T07:00:00Z' && by.get('UI-024').actual.startSource === 'PR #7 createdAt');
 check('M1 a closed-unmerged PR never sets a start (UI-014 #4 closed)', by.get('UI-014').actual.start === null);
+// ---- R2 (round-2 review of 4e1a897): each check below fails on 4e1a897 and passes after the fix
+const X = (id) => by.get(id);
+// M1 regression: a commit that only mentions the id (planning/backlog bookkeeping, another item's spec) never sets a start; a coded item's own commit does
+check("R2-M1 MOB-11 (not coded) named only by 'planning: register MOB-11 as non-READY': start UNKNOWN with sourcesChecked (4e1a897: 2026-10-16T04:58:36Z)", X('MOB-11').substeps.coded !== 'TRUE' && X('MOB-11').actual.start === null && (X('MOB-11').actual.startSourcesChecked || []).length >= 5);
+check("R2-M1 UI-024 (coded) starts at its own PR #7, not at the earlier 'backlog: ... UI-024 READY' or 'MOB-6: screen specs' commits (4e1a897: 2026-10-16T05:14:33Z)", X('UI-024').actual.start === '2026-10-17T07:00:00Z' && X('UI-024').actual.startSource === 'PR #7 createdAt');
+check("R2-M1 UI-028's own commit 'UI-028: closure checklist core' (subject head names the id) is a valid start", X('UI-028').actual.start === '2026-10-17T03:00:00Z' && /OWN_COMMIT/.test(X('UI-028').actual.startSource || ''));
+check('R2-M1 a record head of a non-coded item (LANE-B-REQ, AUTHORITY_REQUEST) sets no start; a coded branch-only head is labelled as not in v7 (LANE-B-Y)', X('LANE-B-REQ').substeps.coded === 'FALSE' && X('LANE-B-REQ').actual.start === null && /on its branch \(not in v7\/integration\)/.test(X('LANE-B-Y').actual.startSource || ''));
+// H1 regression: PARTIAL no longer short-circuits independent integrating evidence
+check('R2-H1 UI-028 (#40 merged, #41 closed; own PR #42 "UI-028: ..." merged into v7) is integrated: MERGED_NOT_VERIFIED / CORROBORATED_BY_PR / TITLE (4e1a897: UNKNOWN / PARTIAL)', st('UI-028') === 'MERGED_NOT_VERIFIED' && sub('UI-028').integrated === 'TRUE' && rc('UI-028') === 'CORROBORATED_BY_PR' && X('UI-028').matchKind === 'TITLE' && X('UI-028').integratedPrs.includes(42) && !X('UI-028').missingEvidence.some((x) => /PARTIAL/.test(x)));
+check('R2-H1 control: UI-002 (#2 merged, #3 closed, no independent evidence) stays PARTIAL with the independent-evidence note', sub('UI-002').integrated === 'PARTIAL' && rc('UI-002') === 'EXPLICIT_PR_MERGED_PARTIAL' && X('UI-002').missingEvidence.some((x) => /no independent evidence/.test(x)));
+// H1 residual: an annotation naming another known item assigns the PR to that item, even on a merged-claim row
+check('R2-H1 UI-031 (merged claim) cites #43 (UI-029 ...) and #44 (UI-030 ...): WEAK other-item, never EXPLICIT/HIGH, start not from #43 createdAt (4e1a897: EXPLICIT_PR_MERGED_ALL / HIGH / 2026-10-18T16:03:05Z)', (X('UI-031').weakInventoryRefs || []).join() === '#43 other-item:UI-029,#44 other-item:UI-030' && rc('UI-031') !== 'EXPLICIT_PR_MERGED_ALL' && X('UI-031').confidence === 'LOW' && X('UI-031').actual.start === null && !m.links.some((l) => l.itemId === 'UI-031' && l.kind === 'PR' && l.strength === 'EXPLICIT') && m.links.some((l) => l.itemId === 'UI-029' && l.ref === '#43' && l.strength === 'EXPLICIT'));
+// LOW: WEAK corroboration sets integrated only (no tested, CI runs, merge dates or integratedPrs from other items' PRs)
+check('R2-LOW WEAK-only corroboration (UI-025 #6 consumer, UI-031 #43/#44): integrated TRUE, tested UNKNOWN, integratedPrs/ciRuns/lastMergedAt empty, PRs listed as corroboratingWeakPrs (4e1a897: tested TRUE, integratedPrs [6])', ['UI-025', 'UI-031'].every((id) => sub(id).integrated === 'TRUE' && sub(id).tested === 'UNKNOWN' && X(id).integratedPrs.length === 0 && X(id).ciRuns.length === 0 && X(id).actual.lastMergedAt === null && X(id).corroboratingWeakPrs.length > 0 && X(id).matchKind === 'INVENTORY_TEXT_WEAK' && X(id).missingEvidence.some((x) => /WEAK 19-Oct reference/.test(x))) && X('UI-025').corroboratingWeakPrs.join() === '6');
+// LOW: runtime is NOT_MEASURED per item and in the substep tally (no measured FALSE)
+check('R2-LOW every live item has runtimeVerified NOT_MEASURED and the tally has no FALSE (4e1a897: FALSE on every item)', m.items.filter((x) => x.status !== 'OBSOLETE').every((x) => x.substeps.runtimeVerified === 'NOT_MEASURED') && m.metrics.full.substeps.runtimeVerified.NOT_MEASURED === m.metrics.full.n && m.metrics.full.substeps.runtimeVerified.FALSE === 0 && m.metrics.mvp.substeps.runtimeVerified.FALSE === 0);
+
 // ---- M2: exact-id match for ids without trailing digits (PR title / branch)
 check('M2 L-WORKFORCE linked to #26 by exact id in the title (ID_IN_TITLE) and is MERGED_NOT_VERIFIED', st('L-WORKFORCE') === 'MERGED_NOT_VERIFIED' && m.links.some((l) => l.itemId === 'L-WORKFORCE' && l.ref === '#26' && l.strength === 'ID_IN_TITLE'));
 check("M2 CI-GREEN matched in title 'CI-green:' and branch feature/ci-green-fixes; PKG-LEASE1 in title 'v7 pkg-lease1:'", m.links.some((l) => l.itemId === 'CI-GREEN' && l.ref === '#27' && l.strength === 'ID_IN_BRANCH') && st('CI-GREEN') === 'MERGED_NOT_VERIFIED' && st('PKG-LEASE1') === 'MERGED_NOT_VERIFIED');
@@ -86,6 +103,12 @@ check('parser: "#15 (#31 stacks on it); #17 (current); #14 (DUPLICATE, closed un
 check('parser: "38 open PRs (live): #8, #15-#17" -> prefix role on all, range expanded', pr('38 open PRs (live): #8, #15-#17') === '8:open prs 15R:open prs 16R:open prs 17R:open prs');
 check('parser: review notes in [..] never become roles ("#26[OPEN@x; review@head: scoped CLEAN (targeted tests only)]")', pr('#26[OPEN@0a60c14; review@head: scoped CLEAN COMMENT (code review + targeted tests only)]') === '26:-');
 check('parser: "#6 + #7 (merged a5e2a68, cd4b104; #/operations; one work item)" -> both unannotated (";" inside () does not split)', pr('#6 + #7 (merged a5e2a68, cd4b104; #/operations; one work item)') === '6:- 7:-');
+{
+  const prMap = new Map([[25, {}], [26, {}]]);
+  const other = (n, ann) => ((/UI-050/.test(ann) ? 'UI-050' : /UI-051/.test(ann) ? 'UI-051' : null));
+  const refs = inventoryPrRefs({ prs: '#25 (UI-050 evidence lineage, open); #26 (UI-051 per-run test report, open)' }, prMap, P, () => 'STATUS19_CLAIMS_MERGED', other);
+  check("R2 parser: '#25 (UI-050 evidence lineage, open); #26 (UI-051 ...)' on a merged-claim row -> WEAK other-item:UI-050 / other-item:UI-051 even with the STATUS19 gate", refs.map((r) => `${r.n}:${r.strength}:${r.reason}`).join() === '25:WEAK:other-item:UI-050,26:WEAK:other-item:UI-051');
+}
 check('push CI success on the integrating commit is not acceptance', by.get('C-RDY-1').status === 'MERGED_NOT_VERIFIED' && by.get('C-RDY-1').substeps.accepted === 'FALSE');
 // known-id longest match
 const ids = new Set(['UI-110', 'PQ-008', 'PQ-008-R1', 'UI-009', 'C-RDY-1']);

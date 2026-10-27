@@ -23,17 +23,20 @@ export const FIELD_SEMANTICS = {
   'inputs.wave0': 'git blob id of docs/cloud-production/intel/inputs/wave0-baseline.json (v0: the string read/UNAVAILABLE for an ephemeral scratchpad file)',
   'inputs.queueSha': 'origin/uasco/production-queue tip read by this run',
   fingerprint: 'sha256 over the whole normalized inputs bundle (git refs, inventory, coordinator records, PRs, runs, check-runs, files, merged_by, timings/jobs, texts, readiness, priors older than today, freshness states) + rules/overlay/wave0 blob ids + engine tree (and working-file hash when DIRTY); excluded: the clock (FRESH asOf, cache ages, fetch time) and GitHub call accounting; v0 covered SHAs + open PR heads only',
-  'items[].substeps.integrated': "TRUE only when every EXPLICIT PR of the item merged into v7/integration (or v7 commit/route evidence backs a merged claim); 'PARTIAL' when only some EXPLICIT PRs merged and the rest closed unmerged (never counted as integrated); a WEAK 19-Oct prs reference (range, nested, role-annotated such as consumer/relies on/tests only/reviews on/precedent, or a PR that does not name the item) never upgrades a row without a merged claim",
-  'items[].actual.start': 'earliest createdAt of a merged or open PR of the item itself, or of a commit naming the item / record head; UNKNOWN (null) with actual.startSourcesChecked otherwise; closed-unmerged PRs and WEAK references are never used',
+  'items[].substeps.integrated': "TRUE when every EXPLICIT PR of the item merged into v7/integration; or, when the EXPLICIT set is incomplete or absent, independent evidence (queue/deliverable/overlay PR, PR title/branch naming the id, record head in v7; for a 19-Oct merged claim also v7 commit/route evidence, PR body mention or a WEAK 19-Oct reference at LOW confidence). WEAK corroboration sets integrated only: tested stays UNKNOWN and integratedPrs/ciRuns/lastMergedAt stay empty (the PRs are listed in corroboratingWeakPrs). 'PARTIAL' when only some EXPLICIT PRs merged, the rest closed unmerged, and no independent evidence exists (never counted as integrated); a WEAK 19-Oct reference (range, nested, role-annotated, assigned to another item, gate failed) never upgrades a row without a merged claim",
+  'items[].substeps.runtimeVerified': "NOT_MEASURED for every live item (UNKNOWN when excluded): no runtime-evidence source exists, so no measured FALSE is shown; the substep tally has a NOT_MEASURED bucket",
+  'items[].corroboratingWeakPrs': 'PRs of WEAK 19-Oct references that corroborate a merged claim (integrated only, LOW); never integratedPrs, so their CI runs and merge dates are not credited to the item',
+  'items[].actual.start': 'earliest createdAt of a merged or open strong PR of the item itself; for a coded item also its own v7 commit (subject head names the id; backlog/planning/queue/ledger bookkeeping commits excluded) or its coordinator record head (labelled in v7/integration or on its branch); UNKNOWN (null) with actual.startSourcesChecked otherwise; closed-unmerged PRs, WEAK references and commits that merely mention the id never set a start',
   'items[].scope': "MVP / DEFERRED / FULL_ONLY. Baseline: 19-Oct oct31_impact (FULL_ONLY = impact NONE). Added items: MVP only by an explicit source (MVP-chain PR, Wave 0 mvp flag, queue MVP marker), else FULL_ONLY with scopeReason. The dashboard column 'FULL' means ALL live items, not scope FULL_ONLY",
   'metrics.mvp': 'live MVP-scope items = 19-Oct AT_RISK rows + added items made MVP by an explicit rule (reconciliation.mvpScope lists them with reasons); metrics.mvpBaseline is the 19-Oct-only MVP set',
   'metrics.ratios3.runtimeVerificationRatio': "NOT_MEASURED (n and pct are the string NOT_MEASURED): no runtime-evidence source exists; it is never shown as a measured 0 %",
-  'freshness.github.sources': 'per-source freshness (pulls, runs, check-runs, run timing/jobs, open-PR files, merged_by): FRESH, PARTIAL (some calls failed; cached data served with cacheAsOf / cacheAgeHours) or STALE_CACHE (nothing refreshed); the overall github state is the worst source',
+  'freshness.github.sources': 'per-source freshness (pulls, runs, check-runs, run timing/jobs, open-PR files, merged_by): FRESH, PARTIAL (some calls failed; cached data served with cacheAsOf / cacheAgeHours), STALE_CACHE (every call failed and cached data was served) or UNAVAILABLE (every call failed and nothing was served from cache: the data is missing, not stale); lastError is the last error of that source\'s own calls. freshness.github.state is PR-table based: STALE_CACHE / UNAVAILABLE only when the PR table itself was not refreshed, PARTIAL when any other source is not FRESH',
   'freshness.v7.state': 'FRESH only when this run fetched the refs successfully (fetchedAt); UNFETCHED when no fetch ran (lastFetchAt = FETCH_HEAD time); STALE when the fetch failed',
   githubCalls: 'GitHub REST calls of this run including 304 Not Modified answers',
   mvp: 'computed from rules/mvp-chain.json predicates against GitHub/git state (v0: hand-written)',
   mvpCritical: 'open items of the computed MVP chain',
-  'openPrs[].founder': 'protected files changed, FOUNDER-TIER/PROTECTED in the title, or an OPEN Founder decision references the PR (v0 hard-coded #66)',
+  'openPrs[].founder': 'true when protected files changed, FOUNDER-TIER/PROTECTED is in the title, or an OPEN Founder decision references the PR (v0 hard-coded #66); false only when the file list is known; the string UNKNOWN (and protectedFiles null, protectedFilesKnown false) when the file list could not be fetched and no title/decision rule applies',
+  founderFilesUnknown: 'open PRs whose file list could not be fetched (founder UNKNOWN); kept out of founder[] so that list keeps its legacy meaning and types',
   'fullScope.executableRoles_bound': 'registry claim (role-execution-profiles counts.boundRoles), not evidence; measured EXECUTABLE is agentFactory.layers',
   'fullScope.runningRoles': 'readiness RUNNING layer; UNKNOWN while no run journal is read',
   'fullScope.toolAdaptersImplemented_perWave0': 'registry claim: adapters whose implementation field is not NOT_IMPLEMENTED; canonical value is agentFactory.adapters.implemented (UNKNOWN until C-RDY-2a)',
@@ -64,12 +67,13 @@ export function buildReport(m, meta) {
     const u = c('validate (ubuntu-latest)'), w = c('validate (windows-latest)');
     const ci = [u, w].includes('failure') ? 'FAILED' : (u === 'success' && w === 'success') ? 'GREEN' : 'PENDING';
     const lane = /lane-a/.test(p.headRef) ? 'A' : /lane-b/.test(p.headRef) ? 'B' : /lane-c/.test(p.headRef) ? 'C' : /coord/.test(p.headRef) ? 'COORD' : 'OTHER';
-    const founder = files.some(isProt) || /FOUNDER-TIER|PROTECTED/.test(p.title) || decisionRefs.has(p.number);
     const filesKnown = Object.prototype.hasOwnProperty.call(m.inputs.github.prFiles, p.number);
-    return { number: p.number, lane, title: p.title.slice(0, 90), head: (p.headSha || '').slice(0, 7), draft: p.draft, autoMerge: p.autoMerge, ci, ciSource: staleAt !== undefined ? 'STALE_CACHE' : runs ? 'FRESH' : 'NONE', ciAsOf: staleAt !== undefined ? (staleAt || 'UNKNOWN') : null, ubuntu: u, windows: w, protectedFiles: files.filter(isProt).length, protectedFilesKnown: filesKnown, founder, url: p.url };
+    // without a file list the protected-file rule cannot be evaluated: founder is UNKNOWN unless a title/decision rule already applies
+    const founder = /FOUNDER-TIER|PROTECTED/.test(p.title) || decisionRefs.has(p.number) || (filesKnown && files.some(isProt)) ? true : filesKnown ? false : 'UNKNOWN';
+    return { number: p.number, lane, title: p.title.slice(0, 90), head: (p.headSha || '').slice(0, 7), draft: p.draft, autoMerge: p.autoMerge, ci, ciSource: staleAt !== undefined ? 'STALE_CACHE' : runs ? 'FRESH' : 'NONE', ciAsOf: staleAt !== undefined ? (staleAt || 'UNKNOWN') : null, ubuntu: u, windows: w, protectedFiles: filesKnown ? files.filter(isProt).length : null, protectedFilesKnown: filesKnown, founder, url: p.url };
   });
   const lanes = ['A', 'B', 'C', 'COORD'].map((L) => { const mm = pulls.filter((p) => p.mergedAt && (L === 'COORD' ? /coord/.test(p.headRef) : new RegExp(`lane-${L.toLowerCase()}`).test(p.headRef)));
-    const o = openPrs.filter((p) => p.lane === L); return { lane: L, mergedPrs: mm.length, openPrs: o.map((p) => p.number), ciFailed: o.filter((p) => p.ci === 'FAILED').map((p) => p.number), founder: o.filter((p) => p.founder).map((p) => p.number) }; });
+    const o = openPrs.filter((p) => p.lane === L); return { lane: L, mergedPrs: mm.length, openPrs: o.map((p) => p.number), ciFailed: o.filter((p) => p.ci === 'FAILED').map((p) => p.number), founder: o.filter((p) => p.founder === true).map((p) => p.number), founderUnknown: o.filter((p) => p.founder === 'UNKNOWN').map((p) => p.number) }; });
   const mvp = m.chain.map((s) => ({ step: s.step, status: s.status, evidence: s.evidence, open: s.open }));
   const mvpCritical = [...new Set(m.chain.flatMap((s) => s.open))];
   const reg = m.inputs.registries, rc = reg.roleDefs.counts || {}, pc = reg.profiles.counts || {};
@@ -81,7 +85,9 @@ export function buildReport(m, meta) {
     resolvers: af.resolvers.map((r) => `${r.id} ${r.present ? 'PRESENT' : 'ABSENT'}${r.wave0Package && !r.present ? ` (${r.wave0Package})` : ''}`).join('; '), continuousLearning: 'NOT_FOUND', wave0PackagesPlanned: (m.inputs.wave0.packages || []).length };
   const coverage = { mvpStepsDone: `${m.chain.filter((s) => s.status === 'DONE').length}/${m.chain.length}`, roleProfileCoverage_bound: pct(pc.boundRoles, rc.roles), roleCandidateSkills_proposed: pct(pc.withCandidateSkills, rc.roles),
     toolExecutionCoverage: pct(implClaim, reg.adapters.count), evaluationCoverage: pct(rc.evaluationSpecsExecuted, rc.evaluationSpecs), desktopFunctionalAcceptance: `UNKNOWN (accepted items ${m.metrics.full.substeps.accepted.TRUE}; 19-Oct: 0 product-verified screens; no acceptance record)` };
-  const founder = openPrs.filter((p) => p.founder).map((p) => ({ pr: p.number, ci: p.ci, protectedFiles: p.protectedFiles, action: p.ci === 'GREEN' ? 'review, approve, merge (draft -> ready)' : 'wait for CI; do not merge red', url: p.url }));
+  const founder = openPrs.filter((p) => p.founder === true).map((p) => ({ pr: p.number, ci: p.ci, protectedFiles: p.protectedFiles, action: p.ci === 'GREEN' ? 'review, approve, merge (draft -> ready)' : 'wait for CI; do not merge red', url: p.url }));
+  // open PRs whose file list could not be fetched: the Founder flag is UNKNOWN, so they are listed apart (never silently 'no')
+  const founderFilesUnknown = openPrs.filter((p) => p.founder === 'UNKNOWN').map((p) => ({ pr: p.number, ci: p.ci, action: 'file list UNKNOWN: check for protected files before any merge', url: p.url }));
   const pushRuns = m.inputs.github.runs.filter((r) => r.headBranch === 'v7/integration' && r.event === 'push').sort((a, b) => b.id - a.id);
   const inst = pushRuns.find((r) => r.name === 'Windows Installer'), ciPush = pushRuns.find((r) => r.name === 'CI');
   const today = now.slice(0, 10);
@@ -101,7 +107,7 @@ export function buildReport(m, meta) {
       legacyV0: stripRows(m.legacy),
     },
     lanes, openPrs, mvp, mvpCritical, fullScope, coverage,
-    oct31Risk: m.oct31.oct31Risk, eta, founder, founderQueueRecords: m.coordinator.founderQueue.length,
+    oct31Risk: m.oct31.oct31Risk, eta, founder, founderFilesUnknown, founderQueueRecords: m.coordinator.founderQueue.length,
     ledger: { reviews: m.coordinator.ledgerReviews.length, prs: new Set(m.coordinator.ledgerReviews.map((x) => x.pr)).size },
     mergesRecordedToday: m.coordinator.integrationBoard.merges.filter((x) => String(x.at || '').startsWith(today)).length,
     lastPush: { ci: ciPush ? `${ciPush.headSha.slice(0, 7)} ${ciPush.conclusion || ciPush.status}` : 'UNKNOWN', installer: inst ? `${inst.headSha.slice(0, 7)} ${inst.conclusion || inst.status} (run ${inst.id})` : 'UNKNOWN' },

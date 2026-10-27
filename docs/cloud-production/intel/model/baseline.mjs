@@ -1,4 +1,4 @@
-//TR: 19 Ekim envanterini (JSON + CSV, sabitlenmiş blob'lar) yükler; remaining-work.mjs v0 reconcile() kuralının DONDURULMUŞ kopyasını (v0 çapası) ve her satır için tek bir baselineClass üretir. Kanıt modeli için serbest metin 'prs' alanını tipli referanslara ayırır (tekil / aralık / iç içe / rol notlu); yalnız notsuz tekil ve kimlik kapısından geçen referans EXPLICIT'tir, gerisi WEAK. Roller (E-ROLE) iş kalemi değildir.
+//TR: 19 Ekim envanterini (JSON + CSV, sabitlenmiş blob'lar) yükler; remaining-work.mjs v0 reconcile() kuralının DONDURULMUŞ kopyasını (v0 çapası) ve her satır için tek bir baselineClass üretir. Kanıt modeli için serbest metin 'prs' alanını tipli referanslara ayırır (tekil / aralık / iç içe / rol notlu / başka kaleme atanmış); yalnız notsuz tekil, başka bilinen kalemi adlandırmayan ve kimlik kapısından geçen referans EXPLICIT'tir, gerisi WEAK. Roller (E-ROLE) iş kalemi değildir.
 import { parseCsvRecords } from '../core/csv.mjs';
 import { cmp, tally } from '../core/canonical-json.mjs';
 
@@ -126,29 +126,33 @@ export function parseInventoryPrs(text, P) {
       const ann = clean(top[j].end, j + 1 < top.length ? top[j + 1].start : seg.length);
       const rm = roleRe.exec(`${prefix} ${ann}`);
       top[i].role = rm ? rm[0].toLowerCase() : null;
+      top[i].annotation = `${prefix} ${ann}`.replace(/\s+/g, ' ').trim();
     }
     for (const r of refs) {
       const role = r.nested ? 'nested' : r.role;
       const nums = r.b !== null ? Array.from({ length: r.b - r.a + 1 }, (_, k) => r.a + k) : [r.a];
-      for (const n of nums) out.push({ n, form: r.b !== null ? 'RANGE' : 'SINGLE', range: r.b !== null ? `#${r.a}-#${r.b}` : null, nested: r.nested, role, segment: seg.trim().slice(0, 120) });
+      for (const n of nums) out.push({ n, form: r.b !== null ? 'RANGE' : 'SINGLE', range: r.b !== null ? `#${r.a}-#${r.b}` : null, nested: r.nested, role, annotation: r.nested ? null : (r.annotation ?? ''), segment: seg.trim().slice(0, 120) });
     }
   }
   return out;
 }
-// Per PR number: EXPLICIT when at least one SINGLE, non-nested, role-free reference exists AND the gate holds
-// (PR title/branch/body names the item, the item's own 19-Oct title names the PR, or the 19-Oct status already claims merged/integrated);
-// otherwise WEAK with the first reason found. Unknown PR numbers are dropped.
-export function inventoryPrRefs(row, prMap, P, gate) {
+// Per PR number: EXPLICIT when at least one SINGLE, non-nested, role-free reference exists whose annotation does not assign the PR to
+// another known item (otherItemOf(n, annotation) -> that item's id or null) AND the gate holds (PR title/branch/body names the item, the
+// item's own 19-Oct title names the PR, or the 19-Oct status already claims merged/integrated); otherwise WEAK with the first reason found
+// ('other-item:<ID>' when the annotation names another item). Unknown PR numbers are dropped.
+export function inventoryPrRefs(row, prMap, P, gate, otherItemOf = () => null) {
   const byN = new Map();
   for (const r of parseInventoryPrs(row.prs, P)) { if (!prMap.has(r.n)) continue; if (!byN.has(r.n)) byN.set(r.n, []); byN.get(r.n).push(r); }
   const out = [];
   for (const [n, rs] of [...byN.entries()].sort((a, b) => a[0] - b[0])) {
-    const cand = rs.find((r) => r.form === 'SINGLE' && !r.nested && !r.role);
+    const plain = rs.filter((r) => r.form === 'SINGLE' && !r.nested && !r.role);
+    const other = plain.map((r) => otherItemOf(n, r.annotation || '')).find(Boolean) || null;
+    const cand = plain.find((r) => !otherItemOf(n, r.annotation || ''));
     const g = cand ? gate(n) : null;
     if (cand && g) out.push({ n, strength: 'EXPLICIT', gate: g, reason: null });
     else {
       const r0 = rs.find((r) => r.form === 'RANGE') || rs.find((r) => r.nested) || rs.find((r) => r.role) || rs[0];
-      const reason = cand ? 'no-id-match' : r0.form === 'RANGE' ? `range ${r0.range}` : r0.nested ? 'nested' : `role:${r0.role}`;
+      const reason = cand ? 'no-id-match' : other ? `other-item:${other}` : r0.form === 'RANGE' ? `range ${r0.range}` : r0.nested ? 'nested' : `role:${r0.role}`;
       out.push({ n, strength: 'WEAK', gate: null, reason });
     }
   }

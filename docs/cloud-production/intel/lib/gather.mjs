@@ -1,9 +1,9 @@
-//TR: Saf olmayan toplama kenarı: git ve GitHub'dan tek bir girdi paketi (inputs bundle) kurar; GitHub tazeliği kaynak başına (pulls, runs, check-runs, timing/jobs, dosyalar, merged_by) tutulur ve başarısız her çağrı o kaynağı PARTIAL/STALE_CACHE yapar; önbellek sınırlıdır (yalnız kullanılan ETag/pickaxe/check kayıtları). Saf çekirdek yalnız bu paketi görür; aynı paket + aynı saat => bayt bayt aynı çıktı. Önbellek (cache.json) ETag'leri, imleçleri, değişmez check/timing/job kayıtlarını ve pickaxe sonuçlarını taşır.
+//TR: Saf olmayan toplama kenarı: git ve GitHub'dan tek bir girdi paketi (inputs bundle) kurar; GitHub tazeliği kaynak başına (pulls, runs, check-runs, timing/jobs, dosyalar, merged_by) tutulur ve başarısız her çağrı o kaynağı PARTIAL yapar, tüm çağrılar başarısızsa önbellekten veri sunulduysa STALE_CACHE, sunulmadıysa UNAVAILABLE; hata metni kaynağın kendi çağrısından alınır; önbellek sınırlıdır (yalnız kullanılan ETag/pickaxe/check kayıtları). Saf çekirdek yalnız bu paketi görür; aynı paket + aynı saat => bayt bayt aynı çıktı. Önbellek (cache.json) ETag'leri, imleçleri, değişmez check/timing/job kayıtlarını ve pickaxe sonuçlarını taşır.
 import fs from 'node:fs';
 import path from 'node:path';
 import { git, gitTry, resolveRefs, showText, showJson, catBlob, blobId, lsTree, readBlobs, revList, logCommits, pickaxeFirst, fileHistory, resolveCommits, commitDates, objectId } from './git.mjs';
 import { createGithub, pool } from './github.mjs';
-import { findTsx, readinessKey, runReadiness, SANDBOX_VERSION } from './readiness-runner.mjs';
+import { findTsx, readinessKey, runReadiness, validateAudit, SANDBOX_VERSION } from './readiness-runner.mjs';
 import { sha256, digestOf, cmp } from '../core/canonical-json.mjs';
 import { trtDate } from '../core/time.mjs';
 import { decisionLiterals, headRefsOf } from '../model/coordinator.mjs';
@@ -193,15 +193,20 @@ export async function gatherInputs({ repo, engineDir, outDir, nowIso, rules, ove
   const gh = createGithub({ api: C.githubApi, rateReserve: C.rateReserve, concurrency: C.fetchConcurrency, fetcher, etags: cache.etags || {} });
   const nowMs = Date.parse(nowIso);
   const ageH = (iso) => { const t = Date.parse(iso || ''); return Number.isFinite(t) ? Math.round((nowMs - t) / 36e5 * 10) / 10 : null; };
-  const srcState = (name, { attempted, failed, servedStale = 0, cacheAsOf = null, note = null }) => {
-    const state = !failed ? 'FRESH' : failed >= attempted && attempted > 0 ? 'STALE_CACHE' : 'PARTIAL';
-    return { source: name, state, attempted, failed, servedFromCache: servedStale, cacheAsOf: failed ? cacheAsOf : null, cacheAgeHours: failed && cacheAsOf ? ageH(cacheAsOf) : null, note };
+  // every call failed: STALE_CACHE only when cached data was actually served, otherwise UNAVAILABLE (the data is missing, not stale);
+  // lastError is the last error of THIS source's own calls (errors are attributed per fetch phase)
+  let errMark = 0;
+  const ownErrors = () => { const e = gh.state.errors.slice(errMark); errMark = gh.state.errors.length; return e; };
+  const srcState = (name, { attempted, failed, servedStale = 0, cacheAsOf = null, note = null, errors = [] }) => {
+    const state = !failed ? 'FRESH' : failed >= attempted && attempted > 0 ? (servedStale > 0 ? 'STALE_CACHE' : 'UNAVAILABLE') : 'PARTIAL';
+    return { source: name, state, attempted, failed, servedFromCache: servedStale, cacheAsOf: failed ? cacheAsOf : null, cacheAgeHours: failed && cacheAsOf ? ageH(cacheAsOf) : null, note, lastError: failed && errors.length ? String(errors[errors.length - 1]).slice(0, 160) : null };
   };
   const sources = {};
   const pullsC = cache.pulls || { cursor: null, table: [] };
+  errMark = gh.state.errors.length;
   const pr = await gh.fetchPullsIncremental(pullsC.table, pullsC.cursor);
-  sources.pulls = srcState('pulls', { attempted: pr.pages, failed: pr.complete ? 0 : 1, servedStale: pr.complete ? 0 : pr.pulls.length, cacheAsOf: cache.pulls?.asOf || null, note: pr.complete ? null : `pass incomplete after ${pr.okPages} page(s); cursor and page-1 ETag not advanced` });
-  if (!pr.complete && pr.okPages === 0) sources.pulls.state = 'STALE_CACHE';
+  sources.pulls = srcState('pulls', { attempted: pr.pages, failed: pr.complete ? 0 : 1, servedStale: pr.complete ? 0 : pr.pulls.length, cacheAsOf: cache.pulls?.asOf || null, note: pr.complete ? null : `pass incomplete after ${pr.okPages} page(s); cursor and page-1 ETag not advanced`, errors: ownErrors() });
+  if (!pr.complete && pr.okPages === 0) sources.pulls.state = pr.pulls.length ? 'STALE_CACHE' : 'UNAVAILABLE';
   else if (!pr.complete) sources.pulls.state = 'PARTIAL';
   cache.pulls = { cursor: pr.cursor, table: pr.pulls, asOf: pr.complete ? nowIso : (cache.pulls?.asOf || null) };
   const pulls = pr.pulls;
@@ -212,7 +217,7 @@ export async function gatherInputs({ repo, engineDir, outDir, nowIso, rules, ove
   const ru = await gh.fetchRunsIncremental(runsC.table, cutoff);
   const runsAll = ru.runs.filter((r) => !startAnchor || r.createdAt >= startAnchor).sort((a, b) => a.id - b.id);
   const runs = runsAll.slice(Math.max(0, runsAll.length - (C.maxRunsTable || 20000)));
-  sources.runs = srcState('runs', { attempted: ru.pages, failed: ru.complete ? 0 : 1, servedStale: ru.complete ? 0 : runs.length, cacheAsOf: cache.runs?.asOf || runsC.cursor || null, note: runs.length < runsAll.length ? `table bounded to ${runs.length} newest runs` : null });
+  sources.runs = srcState('runs', { attempted: ru.pages, failed: ru.complete ? 0 : 1, servedStale: ru.complete ? 0 : runs.length, cacheAsOf: cache.runs?.asOf || runsC.cursor || null, note: runs.length < runsAll.length ? `table bounded to ${runs.length} newest runs` : null, errors: ownErrors() });
   cache.runs = { cursor: ru.complete ? runs.reduce((m, r) => (r.createdAt > m ? r.createdAt : m), runsC.cursor || '') : runsC.cursor, table: runs, asOf: ru.complete ? nowIso : (cache.runs?.asOf || null) };
 
   cache.checks = cache.checks || {}; cache.checksAt = cache.checksAt || {};
@@ -226,7 +231,7 @@ export async function gatherInputs({ repo, engineDir, outDir, nowIso, rules, ove
   const checks = Object.fromEntries(checkShas.filter((x) => cache.checks[x]).map((x) => [x, cache.checks[x]]));
   const staleChecks = Object.fromEntries([...failedChecks].filter((x) => cache.checks[x]).sort(cmp).map((x) => [x, cache.checksAt[x] || null]));
   const oldest = (xs) => xs.filter(Boolean).sort(cmp)[0] || null;
-  sources.checks = srcState('check-runs', { attempted: needChecks.length, failed: failedChecks.size, servedStale: Object.keys(staleChecks).length, cacheAsOf: oldest(Object.values(staleChecks)) || (Object.keys(staleChecks).length ? 'UNKNOWN' : null), note: failedChecks.size ? `${failedChecks.size} check-run call(s) failed; ${Object.keys(staleChecks).length} head(s) served from cache, ${failedChecks.size - Object.keys(staleChecks).length} without data` : null });
+  sources.checks = srcState('check-runs', { attempted: needChecks.length, failed: failedChecks.size, servedStale: Object.keys(staleChecks).length, cacheAsOf: oldest(Object.values(staleChecks)) || (Object.keys(staleChecks).length ? 'UNKNOWN' : null), note: failedChecks.size ? `${failedChecks.size} check-run call(s) failed; ${Object.keys(staleChecks).length} head(s) served from cache, ${failedChecks.size - Object.keys(staleChecks).length} without data` : null, errors: ownErrors() });
 
   // run details: timing (24h CI runs) + jobs (7d CI runs), newest first, shared cap; completed runs only (immutable -> cached forever)
   cache.timings = cache.timings || {}; cache.jobs = cache.jobs || {};
@@ -246,7 +251,7 @@ export async function gatherInputs({ repo, engineDir, outDir, nowIso, rules, ove
   const timings = Object.fromEntries(in24.filter((r) => cache.timings[r.id]).map((r) => [r.id, cache.timings[r.id]]));
   const jobs = Object.fromEntries(in7d.filter((r) => cache.jobs[r.id]).map((r) => [r.id, cache.jobs[r.id]]));
   const runDetail = { timing24hCandidates: in24.length, timingFetched: Object.keys(timings).length, jobs7dCandidates: in7d.length, jobsFetched: Object.keys(jobs).length, timingFailed: failedT, jobsFailed: failedJ };
-  sources.runDetail = srcState('run timing + jobs', { attempted: needT.length + needJ.length, failed: failedT + failedJ, note: failedT + failedJ ? `${failedT} timing and ${failedJ} jobs call(s) failed; those runs fall back to APPROX duration / UNKNOWN runner minutes` : null });
+  sources.runDetail = srcState('run timing + jobs', { attempted: needT.length + needJ.length, failed: failedT + failedJ, note: failedT + failedJ ? `${failedT} timing and ${failedJ} jobs call(s) failed; those runs fall back to APPROX duration / UNKNOWN runner minutes` : null, errors: ownErrors() });
 
   cache.prFiles = cache.prFiles || {};
   const openPrs = pulls.filter((p) => p.state === 'open');
@@ -255,21 +260,22 @@ export async function gatherInputs({ repo, engineDir, outDir, nowIso, rules, ove
   await pool(needF, C.fetchConcurrency, async (p) => { const f = await gh.fetchPrFiles(p.number); if (f) cache.prFiles[`${p.number}@${p.headSha}`] = f; else failedF++; });
   const prFiles = Object.fromEntries(openPrs.filter((p) => cache.prFiles[`${p.number}@${p.headSha}`]).map((p) => [p.number, cache.prFiles[`${p.number}@${p.headSha}`]]));
   for (const k of Object.keys(cache.prFiles)) { const [n, x] = k.split('@'); if (!openPrs.some((p) => String(p.number) === n && p.headSha === x)) delete cache.prFiles[k]; }
-  sources.prFiles = srcState('open-PR files', { attempted: needF.length, failed: failedF, note: failedF ? `${failedF} open PR(s) without a file list: protectedFiles/founder flag UNKNOWN for them` : null });
+  sources.prFiles = srcState('open-PR files', { attempted: needF.length, failed: failedF, note: failedF ? `${failedF} open PR(s) without a file list: protectedFiles/founder flag UNKNOWN for them` : null, errors: ownErrors() });
 
   cache.mergedBy = cache.mergedBy || {};
   const needMB = pulls.filter((p) => p.mergedAt && cache.mergedBy[p.number] === undefined).sort((a, b) => cmp(b.mergedAt, a.mergedAt)).slice(0, C.maxMergedByCalls);
   let failedMB = 0;
   await pool(needMB, C.fetchConcurrency, async (p) => { const m = await gh.fetchMergedBy(p.number); if (m !== undefined) cache.mergedBy[p.number] = m; else failedMB++; });
   const mergedBy = Object.fromEntries(pulls.filter((p) => cache.mergedBy[p.number] !== undefined).map((p) => [p.number, cache.mergedBy[p.number]]));
-  sources.mergedBy = srcState('merged_by', { attempted: needMB.length, failed: failedMB });
+  sources.mergedBy = srcState('merged_by', { attempted: needMB.length, failed: failedMB, errors: ownErrors() });
   if (gh.state.partial) for (const k of Object.keys(sources)) if (sources[k].state === 'FRESH') { sources[k].state = 'PARTIAL'; sources[k].note = `${sources[k].note ? `${sources[k].note}; ` : ''}stopped at the rate reserve (${C.rateReserve})`; }
 
-  // overall: STALE_CACHE only when the PR table itself could not be refreshed; any other failed source makes it PARTIAL
-  const worst = sources.pulls.state === 'STALE_CACHE' ? 'STALE_CACHE' : Object.values(sources).some((x) => x.state !== 'FRESH') ? 'PARTIAL' : 'FRESH';
+  // overall (PR-table based): STALE_CACHE / UNAVAILABLE only when the PR table itself could not be refreshed (cached / no table);
+  // any other non-FRESH source makes it PARTIAL. The error names the first non-FRESH source and that source's own last error.
+  const worst = ['STALE_CACHE', 'UNAVAILABLE'].includes(sources.pulls.state) ? sources.pulls.state : Object.values(sources).some((x) => x.state !== 'FRESH') ? 'PARTIAL' : 'FRESH';
   const firstBad = Object.values(sources).find((x) => x.state !== 'FRESH');
   const freshness = worst === 'FRESH' ? { state: 'FRESH', asOf: nowIso, error: null }
-    : { state: worst, asOf: oldest(Object.values(sources).map((x) => (x.cacheAsOf && x.cacheAsOf !== 'UNKNOWN' ? x.cacheAsOf : null))) || (sources.pulls.state === 'FRESH' ? nowIso : cache.pulls.asOf || null), error: `${firstBad.source}: ${gh.state.errors.slice(-1)[0] || firstBad.note || 'call failed'}`.slice(0, 240) };
+    : { state: worst, asOf: oldest(Object.values(sources).map((x) => (x.cacheAsOf && x.cacheAsOf !== 'UNKNOWN' ? x.cacheAsOf : null))) || (sources.pulls.state === 'FRESH' ? nowIso : cache.pulls.asOf || null), error: `${firstBad.source}: ${firstBad.lastError || firstBad.note || 'call failed'}`.slice(0, 240) };
   // only the conditional pulls page-1 ETag is kept (bounded cache)
   cache.etags = Object.fromEntries(Object.entries(gh.state.etags).filter(([u]) => /\/pulls\?state=all&sort=updated&direction=desc&per_page=100&page=1$/.test(u)));
 
@@ -277,8 +283,14 @@ export async function gatherInputs({ repo, engineDir, outDir, nowIso, rules, ove
   const tsx = findTsx(tsxOpt, process.env.INTEL_TSX, C.tsxCandidates);
   const rk = readinessKey(repo, v7, S.readinessArchivePaths) + `|${trtDate(nowIso, C.tz)}|${SANDBOX_VERSION}`;
   let readiness;
-  if (cache.readiness && cache.readiness.key === rk && cache.readiness.result?.state === 'MEASURED') readiness = cache.readiness.result;
-  else { readiness = runReadiness({ repo, v7sha: v7, tsx, nowIso, archivePaths: S.readinessArchivePaths, module: AF.readinessModule, workDir }); if (readiness.state === 'MEASURED') cache.readiness = { key: rk, result: readiness }; }
+  // a cached measurement is reused only for the same key (tree ids, TRT date, sandbox version) and only if it still passes the audit schema;
+  // any other cached entry (older sandbox, unvalidated free text) is dropped so cache.json never carries it forward
+  if (cache.readiness && cache.readiness.key === rk && cache.readiness.result?.state === 'MEASURED' && validateAudit(cache.readiness.result.audit).ok) readiness = cache.readiness.result;
+  else {
+    delete cache.readiness;
+    readiness = runReadiness({ repo, v7sha: v7, tsx, nowIso, archivePaths: S.readinessArchivePaths, module: AF.readinessModule, workDir });
+    if (readiness.state === 'MEASURED') cache.readiness = { key: rk, result: readiness };
+  }
 
   // ---- target scan + source lines for target verification
   const refOf = (r) => (r === 'v7' ? v7 : r === 'queue' ? qsha : r === 'reports' ? refs.reports.sha : r);
@@ -308,18 +320,18 @@ export async function gatherInputs({ repo, engineDir, outDir, nowIso, rules, ove
   return { inputs, cache };
 }
 
-// Fingerprint over every output-affecting input (the whole bundle, normalized): clock-derived fields (FRESH asOf, cache ages, fetch time) and
-// GitHub call accounting (calls, 304s, rate remaining) are excluded; prior snapshots count only when they are older than the run's TRT date
+// Fingerprint over every output-affecting input (the whole bundle, normalized): clock-derived fields (FRESH asOf, cache ages, fetch time,
+// FETCH_HEAD mtime) and GitHub call accounting (calls, 304s, rate remaining, per-source attempted / servedFromCache) are excluded; prior snapshots count only when they are older than the run's TRT date
 // (the ones the history section can use). `reused` is claimed only for an identical fingerprint.
 export function inputsFingerprint(inputs, meta, { nowIso = null, tz } = {}) {
   const g = inputs.github || {};
   const today = nowIso ? trtDate(nowIso, tz) : null;
   const norm = {
     ...inputs,
-    meta: { ...inputs.meta, refsFetch: inputs.meta?.refsFetch ? { ...inputs.meta.refsFetch, at: null } : null },
+    meta: { ...inputs.meta, refsFetch: inputs.meta?.refsFetch ? { ...inputs.meta.refsFetch, at: null, lastFetchHeadAt: null } : null },
     github: { ...g, calls: null, notModified: null, rateRemaining: null,
       freshness: g.freshness ? { ...g.freshness, asOf: g.freshness.state === 'FRESH' ? null : g.freshness.asOf } : null,
-      sources: g.sources ? Object.fromEntries(Object.entries(g.sources).map(([k, v]) => [k, { ...v, cacheAgeHours: null }])) : null },
+      sources: g.sources ? Object.fromEntries(Object.entries(g.sources).map(([k, v]) => [k, { ...v, cacheAgeHours: null, attempted: null, servedFromCache: null }])) : null },
     prior: (inputs.prior || []).filter((p) => !today || p.date < today),
   };
   return sha256(JSON.stringify({

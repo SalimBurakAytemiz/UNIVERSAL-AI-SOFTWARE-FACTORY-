@@ -1,5 +1,5 @@
 {
-  "//TR": "Kimlik bağlama kuralları: hangi önekler kimliktir, hangi alanlar taranır ve hangi bağ gücü hangi sınıfa yeterlidir. Gövde (body) metninde geçen kimlik ve 19 Ekim 'prs' alanındaki WEAK referans (aralık, iç içe, rol notlu veya kimlik kapısından geçmeyen) yalnız 19 Ekim'de zaten 'merge edildi' denen satırları DÜŞÜK güvenle destekler; ilerleme iddiası olmayan satırı yükseltmez. Rakamla bitmeyen kimlikler (L-WORKFORCE, CI-GREEN, PKG-LEASE1) PR başlığında ve dalında tam kimlik olarak eşleşir.",
+  "//TR": "Kimlik bağlama kuralları: hangi önekler kimliktir, hangi alanlar taranır ve hangi bağ gücü hangi sınıfa yeterlidir. Gövde (body) metninde geçen kimlik ve 19 Ekim 'prs' alanındaki WEAK referans (aralık, iç içe, rol notlu veya kimlik kapısından geçmeyen) yalnız 19 Ekim'de zaten 'merge edildi' denen satırları DÜŞÜK güvenle destekler; ilerleme iddiası olmayan satırı yükseltmez. Rakamla bitmeyen kimlikler (L-WORKFORCE, CI-GREEN, PKG-LEASE1) PR başlığında ve dalında tam kimlik olarak eşleşir. 19 Ekim notu başka bilinen kalemi adlandırıyorsa ('#25 (UI-050 ...)') PR o kalemindir (WEAK other-item). Gerçek başlangıç için commit yalnız kodlanmış kalemin konu başında kimliği adlandıran kendi commit'idir (ownCommitStart; backlog/planlama kayıt commit'leri hariç).",
   "schemaVersion": "1.0.0",
   "idPrefixes": [
     "UI",
@@ -48,6 +48,12 @@
       "no-id-match"
     ],
     "weakPolicy": "INVENTORY_WEAK: LOW confidence; corroborates only rows whose 19-Oct status claims merged (after every stronger source); never upgrades a row without a merged claim; never sets coded, actual start, lane or owner"
+  },
+  "ownCommitStart": {
+    "appliesTo": "actual.start from a v7 commit (ID_IN_COMMIT_MESSAGE link) of an item whose coded substep is TRUE",
+    "subjectHead": "subject up to the first ': ' plus the next word (else the first three words); the id must be named there (resolver, aliases included)",
+    "bookkeepingSubjectRegex": "^(?:backlog|planning|plan|queue|ledger|reports?|writeback|board|lanes?|registry|inventory|status|coord(?:inator)?|dispatch(?!-claim))\\b",
+    "note": "a commit that only mentions the id elsewhere (body, a list in a planning/backlog edit, another item's design spec) never sets a start; dispatch-claim:<id> commits of a coded item count"
   },
   "fieldsSearched": {
     "pr": [

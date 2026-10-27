@@ -17,9 +17,12 @@ import { computeAgentFactory } from '../metrics/agent-factory.mjs';
 import { diffSnapshots, trend } from '../metrics/history.mjs';
 
 // Model semantics version of the trend point / snapshot. intel-1.1: typed 19-Oct prs references (EXPLICIT vs WEAK), PARTIAL integration,
-// own-evidence actual start, MVP scope for added items by explicit source. Points of another semantics never feed velocity.
-export const SEMANTICS = 'intel-1.1';
-const START_SOURCES = ['inventory.prs EXPLICIT PR (merged or open)', 'queue/deliverable/coordinatorBuild record PR (merged or open)', 'overlay LINK PR (merged or open)', 'PR title/branch naming the id (merged or open)', 'v7 commit message naming the id', 'coordinator record head in v7/integration'];
+// own-evidence actual start, MVP scope for added items by explicit source. intel-1.2: PARTIAL yields to independent integrating evidence,
+// 19-Oct annotations naming another item are WEAK, WEAK corroboration sets integrated only, own-commit start (bookkeeping commits excluded,
+// coded items only), runtimeVerified NOT_MEASURED per item. Points of another semantics never feed velocity.
+export const SEMANTICS = 'intel-1.2';
+const START_SOURCES = ['inventory.prs EXPLICIT PR (merged or open)', 'queue/deliverable/coordinatorBuild record PR (merged or open)', 'overlay LINK PR (merged or open)', 'PR title/branch naming the id (merged or open)',
+  "own v7 commit of a coded item (subject head names the id; backlog/planning/queue/ledger bookkeeping commits excluded)", 'coordinator record head of a coded item (in v7/integration or on its own branch, labelled)'];
 
 export function validateOverlay(raw, refs) {
   const accepted = [], rejected = [];
@@ -72,7 +75,9 @@ export function buildAll(inputs, rules, overlayRaw, meta, nowIsoRaw) {
   const runsBySha = new Map();
   for (const r of inputs.github.runs.filter((r) => r.name === C.ciWorkflowName && r.event === 'push' && r.headBranch === C.integrationBranch).sort((a, b) => a.id - b.id)) { if (!runsBySha.has(r.headSha)) runsBySha.set(r.headSha, []); runsBySha.get(r.headSha).push(r); }
   const dispatchedWave0 = new Set(Object.keys(coordinator.dispatchTexts).map((p) => (/dispatch\/([^/]+)\.md$/.exec(p) || [])[1]).filter(Boolean));
-  const ctx = { pulls, reachable, checks: inputs.github.checks, runsBySha, statusMap: SM, decisionsByItem, nowIso, staleHours: C.staleInProgressHours, acceptance, requiredChecks: C.requiredChecks, dispatchedWave0 };
+  const commitSubjects = new Map(inputs.v7.commits.map((c) => [c.sha, c.subject]));
+  const ctx = { pulls, reachable, checks: inputs.github.checks, runsBySha, statusMap: SM, decisionsByItem, nowIso, staleHours: C.staleInProgressHours, acceptance, requiredChecks: C.requiredChecks, dispatchedWave0,
+    commitSubjects, resolver: identity.resolver, ownCommit: LP.ownCommitStart };
 
   // ---- per item
   const compiled = compileRules(rules.departments);
@@ -98,7 +103,7 @@ export function buildAll(inputs, rules, overlayRaw, meta, nowIsoRaw) {
     const ibo = strongPrs.map((p) => ibOwner.get(p.number)).find(Boolean);
     const owner = qOwner || bOwner || it.owner || ibo || null;
     const execRaw = it.executorRaw || qOwner || null;
-    // actual start: earliest evidence that the item itself started (own merged/open PR, commit naming it, record head in v7); never a closed-unmerged PR or a WEAK reference
+    // actual start: earliest evidence that the item itself started (own merged/open PR; for a coded item its own commit or record head); never a closed-unmerged PR, a WEAK reference or a bookkeeping commit
     const startCands = [...d.ownStart.prs.map((p) => ({ at: p.createdAt, src: `PR #${p.number} createdAt` })), ...d.ownStart.commits.map((c) => ({ at: c.at, src: `commit ${/^[0-9a-f]{40}$/.test(c.ref) ? c.ref.slice(0, 7) : c.ref} (${c.strength})` }))].filter((c) => Number.isFinite(toMs(c.at))).map((c) => ({ ...c, at: new Date(toMs(c.at)).toISOString().replace('.000Z', 'Z') })).sort((a, b) => toMs(a.at) - toMs(b.at) || cmp(a.src, b.src));
     const start = startCands[0]?.at || null;
     const integratedMerged = d.integratedPrs.map((n) => pulls.get(n).mergedAt);
@@ -119,7 +124,7 @@ export function buildAll(inputs, rules, overlayRaw, meta, nowIsoRaw) {
       sizeEstimate: it.effort ? `${it.effort} (analyst estimate, 19-Oct)` : null,
       measuredDurationHours: firstPrCreated && lastMergedAt ? round1(hoursBetween(firstPrCreated, lastMergedAt)) : null, cost: null,
       confidence: d.confidence, stale: d.stale, missingEvidence: d.missingEvidence, aliases: it.aliases,
-      priority: it.priority, oct31: it.oct31, prs: d.linkedPrs, integratedPrs: d.integratedPrs, openPrs: d.openPrs, mergeCommits: d.mergeCommits, mergedAt: d.mergedAt,
+      priority: it.priority, oct31: it.oct31, prs: d.linkedPrs, integratedPrs: d.integratedPrs, corroboratingWeakPrs: d.corroboratingWeakPrs, openPrs: d.openPrs, mergeCommits: d.mergeCommits, mergedAt: d.mergedAt,
       commits: uniqSorted(ls.filter((l) => l.kind === 'COMMIT' && /^[0-9a-f]{40}$/.test(l.ref)).map((l) => l.ref.slice(0, 7))), ciRuns,
       status19: it.baseline ? it.baseline.status19 : null, area: it.baseline ? it.baseline.area : null, removedByOverlay: !!it.removed, excluded19: it.excluded,
       commitEvidence: d.commitEvidence, candidateLinks: d.candidateLinks, supportingRefs: d.supportingRefs, records: it.records.map((r) => `${r.kind}:${r.ref}:${r.status ?? 'none'}:${r.relation}`).sort(cmp),

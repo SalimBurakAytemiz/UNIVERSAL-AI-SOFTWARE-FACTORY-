@@ -1,4 +1,4 @@
-//TR: UASCO Intel V1 toplu kanıt betiği (node docs/cloud-production/intel/intel.proof.mjs). Ağ yoktur: betik kendini ağ korumasıyla (lib/net-guard.mjs, proof kipi: her node sürecine NODE_OPTIONS ile ön yüklenir; git yalnız file protokolü) ve izin listeli ortamla (token/sır yok, iki harf düzeninde ölü vekil, GIT_CONFIG_GLOBAL=/dev/null, imzasız commit) yeniden çalıştırır; GitHub kaynağı enjekte edilir ve çağrı sayısı 0 doğrulanır. Kapsam: alt kanıtlar (P3 P4 P5 P6 P10 P11) + P1 determinizm, P2 taban uzlaştırması (gerçek 19 Ekim blob'u), P7 tazelik/hız (ETag, kaynak başına tazelik, parmak izi, git ref tazeliği), P8 guard/zaman, P9 eski anahtar sürekliliği, P12 mutantlar, P13 ürün kodu kum havuzu (ortam + ağ sondası), P14 sınırlı arşiv.
+//TR: UASCO Intel V1 toplu kanıt betiği (node docs/cloud-production/intel/intel.proof.mjs). Ağ yoktur: betik kendini ağ korumasıyla (lib/net-guard.mjs, proof kipi: her node sürecine NODE_OPTIONS ile ön yüklenir; git yalnız file protokolü) ve izin listeli ortamla (token/sır yok, iki harf düzeninde ölü vekil, GIT_CONFIG_GLOBAL=/dev/null, imzasız commit) yeniden çalıştırır; GitHub kaynağı enjekte edilir ve çağrı sayısı 0 doğrulanır. Kapsam: alt kanıtlar (P3 P4 P5 P6 P10 P11) + P1 determinizm, P2 taban uzlaştırması (gerçek 19 Ekim blob'u), P7 tazelik/hız (ETag, kaynak başına tazelik, parmak izi, git ref tazeliği), P8 guard/zaman, P9 eski anahtar sürekliliği, P12 mutantlar, P13 ürün kodu kum havuzu (ortam, ağ, koruma atlatma, /proc, ana makine dosya sistemi ve soket sondaları; kum havuzu yoksa çalıştırmama; çıktı şeması), P14 sınırlı arşiv.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -13,7 +13,7 @@ import { sha256 } from './core/canonical-json.mjs';
 import { trtDate, trtClock } from './core/time.mjs';
 import { verifyOutputs, buildOutputs, pruneArchive } from './intel.mjs';
 import { gatherInputs, inputsFingerprint } from './lib/gather.mjs';
-import { runReadiness } from './lib/readiness-runner.mjs';
+import { runReadiness, sandboxAvailable, sandboxSpawnSync, validateAudit, SANDBOX_ISOLATION } from './lib/readiness-runner.mjs';
 import net from 'node:net';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -198,6 +198,22 @@ try {
     check('M5 a failed check-runs call marks that source (STALE_CACHE: 1/1 failed) and the overall GitHub state PARTIAL, not FRESH', gi.github.freshness.state === 'PARTIAL' && !!sc && sc.state === 'STALE_CACHE' && sc.failed === 1 && gi.github.sources.pulls.state === 'FRESH');
     check('M5 the cached CI served after the failure carries its age (cacheAsOf 2026-10-25T00:00:00Z, 43.7 h) and is listed in staleChecks', sc && sc.servedFromCache === 1 && sc.cacheAsOf === '2026-10-25T00:00:00Z' && sc.cacheAgeHours === 43.7 && gi.github.staleChecks[OPEN_HEAD] === '2026-10-25T00:00:00Z' && JSON.stringify(gi.github.checks[OPEN_HEAD]) === JSON.stringify(oldChecks));
     check('M5 git refs that this run did not fetch are UNFETCHED (not FRESH)', gi.meta.refsFetch?.ran === false);
+    // R2 LOW: freshness labels (fails on 4e1a897): every call of a source failed with nothing cached -> UNAVAILABLE (not STALE_CACHE);
+    // the overall error names the first non-FRESH source with ITS OWN error (not the last error of any source)
+    const ghStub2 = async (url) => {
+      if (/\/pulls\?state=all/.test(url)) return { status: 200, json: /page=1$/.test(url) ? [{ ...ghPr(7, '2026-10-26T10:00:00Z', null), head: { ref: 'claude/lane-a-x', sha: OPEN_HEAD } }, ghPr(8, '2026-10-26T09:00:00Z', '2026-10-26T09:00:00Z')] : [] };
+      if (/\/actions\/runs\?/.test(url)) return { status: 200, json: { workflow_runs: [] } };
+      if (/\/check-runs/.test(url)) throw new Error('CHECKS-502 (proof stub)');
+      if (/\/files\?/.test(url)) throw new Error('FILES-RESET (proof stub)');
+      throw new Error('MERGEDBY-FAIL (proof stub)');
+    };
+    const { inputs: g2i } = await gatherInputs({ repo: syn, engineDir: HERE, outDir: path.join(tmp, 'syn-out2'), nowIso: '2026-10-26T19:41:00Z', rules: rulesSyn, overlay: { entries: [] }, tsx: null, cache: {}, cacheFrom: 'proof', priorSnapshots: [], fetcher: ghStub2, workDir: tmp });
+    const s2 = g2i.github.sources;
+    check(`R2 every call failed and nothing served from cache -> UNAVAILABLE (check-runs ${s2.checks.state}, open-PR files ${s2.prFiles.state}, merged_by ${s2.mergedBy.state}) (4e1a897: STALE_CACHE)`, s2.checks.state === 'UNAVAILABLE' && s2.checks.servedFromCache === 0 && s2.prFiles.state === 'UNAVAILABLE' && s2.mergedBy.state === 'UNAVAILABLE' && s2.pulls.state === 'FRESH' && g2i.github.freshness.state === 'PARTIAL');
+    check(`R2 the overall error is the first bad source's own error (${g2i.github.freshness.error}) (4e1a897: check-runs: MERGEDBY-FAIL)`, /^check-runs: CHECKS-502/.test(g2i.github.freshness.error || '') && /CHECKS-502/.test(s2.checks.lastError || '') && /MERGEDBY-FAIL/.test(s2.mergedBy.lastError || ''));
+    const mb2 = miniBundle(); mb2.inputs.github.sources = s2; mb2.inputs.github.freshness = g2i.github.freshness;
+    const md2 = outputs(mb2).md;
+    check('R2 section J labels the overall GitHub row by its real rule (PR table based), not "worst source"', /\| GitHub REST \(genel: PR tablosu yenilenemezse STALE_CACHE\/UNAVAILABLE, başka kaynak eksikse PARTIAL; kaynak satırlarına bakın\) \| PARTIAL \|/.test(md2) && !/en kötü kaynak/.test(md2) && /\| GitHub: check-runs \| UNAVAILABLE \|/.test(md2));
     const mb = miniBundle();
     mb.inputs.github.sources = gi.github.sources; mb.inputs.github.freshness = gi.github.freshness; mb.inputs.github.staleChecks = { [S('head5')]: '2026-10-25T00:00:00Z' }; mb.inputs.github.checks[S('head5')] = oldChecks;
     const mo = outputs(mb), mr = JSON.parse(mo.json);
@@ -211,44 +227,149 @@ try {
     const fp0 = fpOf(() => {});
     check('LOW fingerprint changes when check-run conclusions, reports texts or open-PR files change', fp0 !== fpOf((I) => { I.github.checks[S('head1')] = I.github.checks[S('head1')].map((c) => ({ ...c, conclusion: 'failure' })); }) && fp0 !== fpOf((I) => { I.texts['reports:docs/cloud-production/reports/PRODUCTION-LOG.md'] = 'appended'; }) && fp0 !== fpOf((I) => { I.github.prFiles[30] = ['x']; }));
     check('LOW fingerprint ignores GitHub call accounting and the FRESH asOf clock', fp0 === fpOf((I) => { I.github.calls = 99; I.github.notModified = 7; I.github.rateRemaining = 4000; I.github.freshness.asOf = '2026-10-26T20:00:00Z'; }));
+    // R2 LOW: a warm rerun on identical data (other FETCH_HEAD mtime, fewer calls attempted / served from cache) keeps the fingerprint (fails on 4e1a897)
+    const warm = (fetchHead, attempted, served) => (I) => { I.meta.refsFetch = { ran: false, ok: null, at: null, error: null, lastFetchHeadAt: fetchHead }; I.github.sources = { pulls: { source: 'pulls', state: 'FRESH', attempted, failed: 0, servedFromCache: served, cacheAsOf: null, cacheAgeHours: null, note: null, lastError: null } }; };
+    check('R2 fingerprint ignores the FETCH_HEAD mtime and per-source attempted / servedFromCache (warm rerun, identical data)', fpOf(warm('2026-10-24T08:00:00Z', 3, 0)) === fpOf(warm('2026-10-26T19:00:00Z', 1, 0)) && fpOf(warm('2026-10-24T08:00:00Z', 3, 0)) !== fpOf((I) => { warm('2026-10-24T08:00:00Z', 3, 0)(I); I.github.sources.pulls.state = 'PARTIAL'; }));
   }
 
   // ---- P13 product-code sandbox: the readiness runner gives v7 code no secrets and no network (fails on 4fe58dd: env leaked, connect reached)
   if (want('P13')) {
-    let hits = 0;
+    // host-side observers: a TCP listener, a unix socket outside every sandbox dir, a root-only secret file and an escape-marker path
+    let hits = 0, sockHits = 0;
     const srv = net.createServer((c) => { hits++; c.destroy(); });
     await new Promise((r) => srv.listen(0, '127.0.0.1', r));
     const port = srv.address().port;
+    const hostSock = path.join(tmp, 'host.sock');
+    const usrv = net.createServer((c) => { sockHits++; c.destroy(); });
+    await new Promise((r) => usrv.listen(hostSock, r));
+    const secretFile = path.join(tmp, 'root-only-secret'); fs.writeFileSync(secretFile, 'proof-fake-secret-file\n', { mode: 0o600 });
+    // the marker path is on the host filesystem outside /tmp (the sandbox's /tmp is a private tmpfs, so a write there never reaches the host)
+    const marker = path.join(HERE, `.intel-escape-marker-${process.pid}`);
+    const hooksDir = path.join(path.resolve(HERE, g(HERE, 'rev-parse', '--git-common-dir')), 'hooks');
     const saved = {};
     const FAKE = { GH_TOKEN: 'proof-fake-gh', GITHUB_TOKEN: 'proof-fake-github', AWS_SECRET_ACCESS_KEY: 'proof-fake-aws', AWS_ACCESS_KEY_ID: 'proof-fake-akid', MY_API_KEY: 'proof-fake-key', SOME_SECRET_VALUE: 'proof-fake-secret', CLAUDE_CODE_MESSAGING_TOKEN: 'proof-fake-msg' };
     for (const [k, v] of Object.entries(FAKE)) { saved[k] = process.env[k]; process.env[k] = v; }
+    const J = JSON.stringify;
     const probeRepo = path.join(tmp, 'probe'); fs.mkdirSync(path.join(probeRepo, 'core', 'agents'), { recursive: true }); g(probeRepo, 'init', '-q');
-    fs.writeFileSync(path.join(probeRepo, 'core', 'agents', 'probe.mjs'), `
-import net from 'node:net'; import dns from 'node:dns'; import cp from 'node:child_process';
-const out = { env: Object.keys(process.env).filter((k) => /TOKEN|SECRET|_KEY|KEY_ID|PASSWORD|CREDENTIAL|^GH_|^GITHUB_|^AWS_/i.test(k)).sort(), proxies: ['HTTPS_PROXY','https_proxy','HTTP_PROXY','http_proxy','ALL_PROXY','all_proxy'].map((k) => k + '=' + (process.env[k] || '')), net: null, fetch: null, dns: null, curl: null, sh: null };
-const code = (e) => (e && (e.code || e.name)) || String(e);
-out.net = await new Promise((res) => { try { const s = net.connect(${port}, '127.0.0.1'); s.on('connect', () => { s.destroy(); res('CONNECTED'); }); s.on('error', (e) => res(code(e))); setTimeout(() => res('TIMEOUT'), 2000); } catch (e) { res(code(e)); } });
-try { await fetch('http://127.0.0.1:${port}/', { signal: AbortSignal.timeout(1500) }); out.fetch = 'RESPONDED'; } catch (e) { out.fetch = code(e.cause || e); }
-try { dns.lookup('example.com', () => {}); out.dns = 'CALLED'; } catch (e) { out.dns = code(e); }
-try { cp.execFileSync('curl', ['-sS', 'http://127.0.0.1:${port}/'], { stdio: 'ignore', timeout: 2000 }); out.curl = 'RAN'; } catch (e) { out.curl = code(e); }
-try { cp.execSync('true'); out.sh = 'RAN'; } catch (e) { out.sh = code(e); }
+    // every result is an enum code / count, so it travels through the validated audit schema (inputs.*)
+    const probeSrc = (extraInputs = '') => `
+import net from 'node:net'; import dns from 'node:dns'; import cp from 'node:child_process'; import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path';
+const C = (e) => { const c = String((e && (e.code || e.name)) || e).toUpperCase().replace(/[^A-Z0-9_]/g, '_'); return /^[A-Z]/.test(c) ? c.slice(0, 60) : 'E_' + c.slice(0, 58); };
+const tryC = (f) => { try { const v = f(); return v === undefined ? 'RAN' : v; } catch (e) { return C(e); } };
+const o = {};
+o.envSecretKeys = Object.keys(process.env).filter((k) => /TOKEN|SECRET|_KEY|KEY_ID|PASSWORD|CREDENTIAL|^GH_|^GITHUB_|^AWS_/i.test(k)).length;
+o.proxiesDead = ['HTTPS_PROXY','https_proxy','HTTP_PROXY','http_proxy','ALL_PROXY','all_proxy'].every((k) => process.env[k] === 'http://127.0.0.1:9');
+o.net = await new Promise((res) => { try { const s = net.connect(${port}, '127.0.0.1'); s.on('connect', () => { s.destroy(); res('CONNECTED'); }); s.on('error', (e) => res(C(e))); setTimeout(() => res('TIMEOUT'), 2000); } catch (e) { res(C(e)); } });
+try { await fetch('http://127.0.0.1:${port}/', { signal: AbortSignal.timeout(1500) }); o.fetch = 'RESPONDED'; } catch (e) { o.fetch = C(e.cause || e); }
+o.dns = tryC(() => { dns.lookup('example.com', () => {}); return 'CALLED'; });
+o.curl = tryC(() => { cp.execFileSync('curl', ['-sS', 'http://127.0.0.1:${port}/'], { stdio: 'ignore', timeout: 2000 }); });
+o.sh = tryC(() => { cp.execSync('true'); });
+// bypass 1: a node child with a caller-chosen env (no NODE_OPTIONS) must still carry the guard
+o.childNoGuardEnv = tryC(() => { const r = cp.spawnSync(process.execPath, ['-e', "const n=require('net');let d=0;const f=(x)=>{if(!d){d=1;console.log(String(x).toUpperCase().replace(/[^A-Z0-9_]/g,'_'));process.exit(0)}};try{const s=n.connect(${port},'127.0.0.1');s.on('connect',()=>f('CONNECTED'));s.on('error',(e)=>f(e.code||'ERR'));setTimeout(()=>f('TIMEOUT'),1500)}catch(e){f(e.code||'ERR')}"], { env: { PATH: process.env.PATH }, encoding: 'utf8', timeout: 5000 }); return (r.stdout || '').trim() || 'NO_OUTPUT'; });
+// bypass 2: fork with a foreign execPath (curl)
+o.forkCurl = await new Promise((res) => { try { const ch = cp.fork('http://127.0.0.1:${port}/fork-curl', [], { execPath: '/usr/bin/curl', execArgv: ['--noproxy', '*', '-sS'], stdio: 'ignore' }); ch.on('exit', () => res('RAN')); ch.on('error', (e) => res(C(e))); } catch (e) { res(C(e)); } });
+// bypass 3: raw TCP / process bindings
+o.bindingTcp = tryC(() => { const b = process.binding('tcp_wrap'); return typeof b.TCP === 'function' ? 'BINDING_AVAILABLE' : 'NO_TCP'; });
+o.bindingSpawn = tryC(() => { process.binding('spawn_sync'); return 'BINDING_AVAILABLE'; });
+// bypass 4: an executable merely NAMED node
+o.fakeNode = tryC(() => { const d = path.join(os.tmpdir(), 'fake-bin'); fs.mkdirSync(d, { recursive: true }); const f = path.join(d, 'node'); fs.writeFileSync(f, '#!/bin/sh\\necho FAKE_NODE_RAN\\n', { mode: 0o755 }); const r = cp.spawnSync(f, [], { encoding: 'utf8' }); return /FAKE_NODE_RAN/.test(r.stdout || '') ? 'RAN' : 'NOT_RUN'; });
+// bypass 5: the parent's (or any visible process's) environment through /proc
+o.procEnvironSecretHits = (() => { let n = 0; for (const d of tryC(() => fs.readdirSync('/proc')) instanceof Array ? fs.readdirSync('/proc') : []) { if (!/^\\d+$/.test(d)) continue; try { if (/proof-fake/.test(fs.readFileSync('/proc/' + d + '/environ', 'latin1'))) n++; } catch { /* unreadable */ } } return n; })();
+o.ppidEnviron = tryC(() => { const t = fs.readFileSync('/proc/' + process.ppid + '/environ', 'latin1'); return /proof-fake/.test(t) ? 'SECRET_VISIBLE' : 'NO_SECRET'; });
+// bypass 6: host filesystem: root-only file, a write outside the sandbox, the engine source and the repo hooks
+o.readSecret = tryC(() => { fs.readFileSync(${J(secretFile)}); return 'READ_OK'; });
+o.writeOutside = tryC(() => { fs.writeFileSync(${J(marker)}, 'x'); return 'WRITE_OK'; });
+o.engineWritable = tryC(() => { fs.accessSync(${J(path.join(HERE, 'lib'))}, fs.constants.W_OK); return 'W_OK'; });
+o.repoHooksWritable = tryC(() => { fs.accessSync(${J(hooksDir)}, fs.constants.W_OK); return 'W_OK'; });
+// bypass 7: a symlink in the sandbox tmpdir to a host unix socket
+o.symlinkSock = await new Promise((res) => { try { const l = path.join(os.tmpdir(), 'l.sock'); fs.symlinkSync(${J(hostSock)}, l); const s = net.connect({ path: l }); s.on('connect', () => { s.destroy(); res('CONNECTED'); }); s.on('error', (e) => res(C(e))); setTimeout(() => res('TIMEOUT'), 2000); } catch (e) { res(C(e)); } });
+${extraInputs}
 export const loadReadinessInputFromRepo = () => ({});
-export const computeRoleReadiness = () => ({ schemaVersion: 'probe', authority: 'probe', denominator: 0, totals: {}, stageWired: [], byGuild: [], byCluster: [], reasonCounts: {}, proposedOnly: {}, inputs: { probe: out }, anomalies: [], computedAt: null, digest: 'probe' });
-`);
+export const computeRoleReadiness = () => ({ schemaVersion: '0.0.1', authority: 'PROBE', denominator: 0, totals: {}, stageWired: { TRUE: 0, FALSE: 0, UNKNOWN: 0, NOT_APPLICABLE: 0, denominator: 0, measured: false }, byGuild: [], byCluster: [], reasonCounts: {}, proposedOnly: {}, inputs: o, anomalies: 0, computedAt: null, digest: '${'0'.repeat(64)}' });
+`;
+    fs.writeFileSync(path.join(probeRepo, 'core', 'agents', 'probe.mjs'), probeSrc());
+    fs.writeFileSync(path.join(probeRepo, 'core', 'agents', 'launder.mjs'), probeSrc("o.note = 'free text: ' + (process.env.PATH || '');"));
     g(probeRepo, 'add', '-A'); g(probeRepo, 'commit', '-q', '-m', 'probe');
-    const rr = runReadiness({ repo: probeRepo, v7sha: g(probeRepo, 'rev-parse', 'HEAD'), tsx: process.execPath, nowIso: '2026-10-26T19:41:00Z', archivePaths: ['core'], module: 'core/agents/probe.mjs', workDir: tmp });
-    await new Promise((r) => setTimeout(r, 300));
-    srv.close();
+    const head = g(probeRepo, 'rev-parse', 'HEAD');
+    const RR = (module, extra = {}) => runReadiness({ repo: probeRepo, v7sha: head, tsx: process.execPath, nowIso: '2026-10-26T19:41:00Z', archivePaths: ['core'], module, workDir: tmp, ...extra });
+    const sbxOk = sandboxAvailable();
+    if (sbxOk) {
+      const rr = RR('core/agents/probe.mjs');
+      await new Promise((r) => setTimeout(r, 300));
+      const pr = rr.audit?.inputs;
+      check(`P13 probe ran inside the real runReadiness path in the namespace sandbox (state ${rr.state}${rr.detail ? `: ${String(rr.detail).slice(0, 120)}` : ''}; isolation ${rr.sandbox?.isolation})`, rr.state === 'MEASURED' && !!pr && rr.sandbox?.isolation === SANDBOX_ISOLATION);
+      check(`M6 no token/key/secret/credential reaches product code (secret-like env keys: ${pr?.envSecretKeys})`, !!pr && pr.envSecretKeys === 0);
+      check('M6 every proxy variable, both cases, points at the closed port', !!pr && pr.proxiesDead === true);
+      check(`M6 TCP connect, fetch, DNS, curl and a shell are all blocked (net ${pr?.net}, fetch ${pr?.fetch}, dns ${pr?.dns}, curl ${pr?.curl}, sh ${pr?.sh})`, !!pr && pr.net !== 'CONNECTED' && pr.fetch !== 'RESPONDED' && pr.dns === 'INTEL_NET_BLOCKED' && pr.curl === 'INTEL_NET_BLOCKED' && pr.sh === 'INTEL_NET_BLOCKED');
+      check(`R2 guard bypasses fail inside the sandbox (node child with caller env ${pr?.childNoGuardEnv}, fork execPath=curl ${pr?.forkCurl}, process.binding tcp_wrap ${pr?.bindingTcp} / spawn_sync ${pr?.bindingSpawn}, file named node ${pr?.fakeNode}) (fails on 4e1a897: CONNECTED / RAN / BINDING_AVAILABLE)`, !!pr && pr.childNoGuardEnv === 'INTEL_NET_BLOCKED' && pr.forkCurl === 'INTEL_NET_BLOCKED' && pr.bindingTcp === 'INTEL_NET_BLOCKED' && pr.bindingSpawn === 'INTEL_NET_BLOCKED' && pr.fakeNode === 'INTEL_NET_BLOCKED');
+      check(`R2 no visible process environment carries a parent secret (/proc environ hits ${pr?.procEnvironSecretHits}, ppid ${pr?.ppidEnviron})`, !!pr && pr.procEnvironSecretHits === 0 && pr.ppidEnviron !== 'SECRET_VISIBLE');
+      check(`R2 host filesystem is out of reach: root-only file ${pr?.readSecret}, write outside ${pr?.writeOutside}, engine source ${pr?.engineWritable}, repo .git/hooks ${pr?.repoHooksWritable} (fails on 4e1a897: READ_OK / WRITE_OK / W_OK)`, !!pr && pr.readSecret !== 'READ_OK' && pr.writeOutside !== 'WRITE_OK' && !fs.existsSync(marker) && pr.engineWritable !== 'W_OK' && pr.repoHooksWritable !== 'W_OK');
+      check(`R2 a symlink in the sandbox tmpdir to a host unix socket does not connect (${pr?.symlinkSock}; host socket saw ${sockHits}) (fails on 4e1a897: CONNECTED)`, !!pr && pr.symlinkSock !== 'CONNECTED' && sockHits === 0);
+      check(`M6 the listening socket outside the sandbox saw no connection (hits ${hits})`, hits === 0);
+      // the OS boundary holds without the node guard: a shell inside the same launcher tries the classic escapes
+      const ob = path.join(tmp, 'os-probe'); fs.mkdirSync(ob);
+      const esc = `/usr/intel-escape-${process.pid}`;
+      const sh = [
+        `curl -sS --max-time 2 --noproxy '*' http://127.0.0.1:${port}/os-curl >/dev/null 2>&1 && echo curl=RAN || echo curl=FAILED`,
+        `n=0; for f in /proc/[0-9]*/environ; do if tr '\\0' '\\n' < "$f" 2>/dev/null | grep -q proof-fake; then n=$((n+1)); fi; done; echo environ=$n`,
+        `[ -e ${J(path.join(HERE, 'lib', 'net-guard.mjs'))} ] && echo engine=VISIBLE || echo engine=ABSENT`,
+        `[ -e ${J(secretFile)} ] && echo secret=VISIBLE || echo secret=ABSENT`,
+        `touch ${J(marker)} 2>/dev/null && echo marker=WRITTEN || echo marker=DENIED`,
+        `mount -o remount,rw /usr 2>/dev/null && echo remount=RW || echo remount=DENIED`,
+        `unshare -Urm sh -c 'mount -o remount,rw,bind /usr && touch ${esc}' >/dev/null 2>&1 && echo nested=RW || echo nested=DENIED`,
+        `mkdir -p x && chroot x /bin/true 2>/dev/null && echo chroot=OK || echo chroot=DENIED`,
+        `touch /usr/intel-escape-direct 2>/dev/null && echo usrwrite=OK || echo usrwrite=DENIED`,
+      ].join('\n');
+      const os1 = sandboxSpawnSync('/bin/sh', ['-c', sh], { base: ob });
+      const kv = Object.fromEntries(String(os1.stdout || '').trim().split('\n').map((l) => l.split('=')));
+      fs.rmSync(ob, { recursive: true, force: true });
+      await new Promise((r) => setTimeout(r, 200));
+      check(`R2 OS boundary without the guard (shell in the launcher): curl ${kv.curl}, /proc environ hits ${kv.environ}, engine ${kv.engine}, secret ${kv.secret}, marker ${kv.marker}, remount ${kv.remount}, nested userns ${kv.nested}, chroot ${kv.chroot}, /usr write ${kv.usrwrite}`,
+        os1.status === 0 && kv.curl === 'FAILED' && kv.environ === '0' && kv.engine === 'ABSENT' && kv.secret === 'ABSENT' && kv.marker === 'DENIED' && !fs.existsSync(marker) && kv.remount === 'DENIED' && kv.nested === 'DENIED' && !fs.existsSync(esc) && kv.chroot === 'DENIED' && kv.usrwrite === 'DENIED' && !fs.existsSync('/usr/intel-escape-direct') && hits === 0);
+      // laundering: product free text never reaches cache.json / published files
+      const rl = RR('core/agents/launder.mjs');
+      check(`R2 product output with free text is rejected, nothing of it is kept (state ${rl.state}, reason ${rl.reason}) (fails on 4e1a897: MEASURED with the text in audit.inputs)`, rl.state === 'UNAVAILABLE' && rl.reason === 'READINESS_OUTPUT_INVALID' && !rl.audit && !JSON.stringify(rl).includes('free text'));
+    } else check('P13 namespace sandbox unavailable on this host: the readiness run must refuse (checked below)', true);
+    // fail closed: without the namespace sandbox product code is not run at all (fails on 4e1a897: guard-only MEASURED)
+    hits = 0;
+    const rn = RR('core/agents/probe.mjs', { sandboxCheck: () => false });
+    await new Promise((r) => setTimeout(r, 200));
+    check(`R2 no namespace sandbox -> UNAVAILABLE / SANDBOX_UNAVAILABLE and the probe never ran (state ${rn.state}, reason ${rn.reason}, hits ${hits})`, rn.state === 'UNAVAILABLE' && rn.reason === 'SANDBOX_UNAVAILABLE' && !rn.audit && hits === 0 && !fs.existsSync(marker));
+    srv.close(); usrv.close();
     for (const k of Object.keys(FAKE)) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; }
-    const pr = rr.audit?.inputs?.probe;
-    check(`P13 probe ran inside the real runReadiness path (state ${rr.state}${rr.detail ? `: ${String(rr.detail).slice(0, 120)}` : ''})`, rr.state === 'MEASURED' && !!pr);
-    check(`M6 no token/key/secret/credential reaches product code (seen: ${pr ? pr.env.join(',') || 'none' : '?'})`, !!pr && pr.env.length === 0);
-    check('M6 every proxy variable, both cases, points at the closed port', !!pr && pr.proxies.every((x) => /=http:\/\/127\.0\.0\.1:9$/.test(x)));
-    check(`M6 TCP connect, fetch, DNS, curl and a shell are all blocked (net ${pr?.net}, fetch ${pr?.fetch}, dns ${pr?.dns}, curl ${pr?.curl}, sh ${pr?.sh})`, !!pr && pr.net !== 'CONNECTED' && pr.fetch !== 'RESPONDED' && pr.dns === 'INTEL_NET_BLOCKED' && pr.curl === 'INTEL_NET_BLOCKED' && pr.sh === 'INTEL_NET_BLOCKED' && [pr.net, pr.fetch].every((x) => x === 'INTEL_NET_BLOCKED' || rr.sandbox?.isolation === 'netns+guard'));
-    check(`M6 the listening socket outside the sandbox saw no connection (hits ${hits})`, hits === 0);
-    const rg = runReadiness({ repo: probeRepo, v7sha: g(probeRepo, 'rev-parse', 'HEAD'), tsx: process.execPath, nowIso: '2026-10-26T19:41:00Z', archivePaths: ['core'], module: 'core/agents/probe.mjs', workDir: tmp, netns: false });
-    const pg = rg.audit?.inputs?.probe;
-    check(`M6 without a network namespace the preload guard alone blocks connect and fetch (net ${pg?.net}, fetch ${pg?.fetch}; isolation ${rg.sandbox?.isolation})`, !!pg && rg.sandbox?.isolation === 'guard' && pg.net === 'INTEL_NET_BLOCKED' && pg.fetch === 'INTEL_NET_BLOCKED' && pg.env.length === 0);
+    // guard unit cases (no sandbox): strict guard in a child whose TMPDIR is an inner dir; a symlink there to an outer socket is refused,
+    // a real socket inside works (tsx IPC), and the env/fork/binding/fake-node bypasses fail (fails on 4e1a897: path.resolve, env kept, fork passed through)
+    const inner = path.join(tmp, 'gu-inner'); fs.mkdirSync(inner);
+    const outerSock = path.join(tmp, 'gu-outer.sock'), innerSock = path.join(inner, 'in.sock');
+    let outerHits = 0, innerHits = 0, tcpHits = 0;
+    const os2 = net.createServer((c) => { outerHits++; c.destroy(); }); await new Promise((r) => os2.listen(outerSock, r));
+    const is2 = net.createServer((c) => { innerHits++; c.destroy(); }); await new Promise((r) => is2.listen(innerSock, r));
+    const ts2 = net.createServer((c) => { tcpHits++; c.destroy(); }); await new Promise((r) => ts2.listen(0, '127.0.0.1', r));
+    const tport = ts2.address().port;
+    fs.symlinkSync(outerSock, path.join(inner, 'link.sock'));
+    const gsrc = `import net from 'node:net'; import cp from 'node:child_process'; import fs from 'node:fs'; import path from 'node:path';
+const C = (e) => String((e && (e.code || e.name)) || e);
+const conn = (o) => new Promise((res) => { try { const s = net.connect(o); s.on('connect', () => { s.destroy(); res('CONNECTED'); }); s.on('error', (e) => res(C(e))); setTimeout(() => res('TIMEOUT'), 1500); } catch (e) { res(C(e)); } });
+const o = { active: process.env.INTEL_NET_GUARD_ACTIVE };
+o.link = await conn({ path: ${J(path.join(inner, 'link.sock'))} });
+o.inner = await conn({ path: ${J(innerSock)} });
+o.child = (() => { try { const r = cp.spawnSync(process.execPath, ['-e', "const n=require('net');let d=0;const f=(x)=>{if(!d){d=1;console.log(String(x));process.exit(0)}};try{const s=n.connect(${tport},'127.0.0.1');s.on('connect',()=>f('CONNECTED'));s.on('error',(e)=>f(e.code||'ERR'))}catch(e){f(e.code||'ERR')}"], { env: { PATH: process.env.PATH }, encoding: 'utf8', timeout: 5000 }); return (r.stdout || '').trim() || 'NO_OUTPUT'; } catch (e) { return C(e); } })();
+o.fork = await new Promise((res) => { try { const ch = cp.fork('http://127.0.0.1:${tport}/fork', [], { execPath: '/usr/bin/curl', execArgv: ['--noproxy', '*', '-sS'], stdio: 'ignore' }); ch.on('exit', () => res('RAN')); ch.on('error', (e) => res(C(e))); } catch (e) { res(C(e)); } });
+o.binding = (() => { try { process.binding('tcp_wrap'); return 'BINDING_AVAILABLE'; } catch (e) { return C(e); } })();
+o.fakeNode = (() => { try { const f = path.join(${J(inner)}, 'node'); fs.writeFileSync(f, '#!/bin/sh\\necho RAN\\n', { mode: 0o755 }); return (cp.spawnSync(f, [], { encoding: 'utf8' }).stdout || '').trim() || 'NO_OUTPUT'; } catch (e) { return C(e); } })();
+o.internals = (() => { try { cp.spawnSync(process.execPath, ['--expose-internals', '-e', '0']); return 'RAN'; } catch (e) { return C(e); } })();
+console.log(JSON.stringify(o));`;
+    const gfile = path.join(tmp, 'guard-unit.mjs'); fs.writeFileSync(gfile, gsrc);
+    const gr = spawnSync(process.execPath, [gfile], { encoding: 'utf8', env: { PATH: NOENV.PATH, TMPDIR: inner, NODE_OPTIONS: `--import ${new URL('./lib/net-guard.mjs', import.meta.url).href}`, INTEL_NET_GUARD: 'strict' }, timeout: 20000 });
+    let gu = null; try { gu = JSON.parse(String(gr.stdout).trim().split('\n').pop()); } catch { gu = null; }
+    await new Promise((r) => setTimeout(r, 200));
+    os2.close(); is2.close(); ts2.close();
+    check(`R2 guard: a tmpdir symlink to an outer unix socket is refused by realpath (${gu?.link}, outer hits ${outerHits}); a real tmpdir socket still connects (${gu?.inner}, inner hits ${innerHits}; guard ${gu?.active}) (fails on 4e1a897: CONNECTED)`, !!gu && gu.active === 'strict' && gu.link === 'INTEL_NET_BLOCKED' && outerHits === 0 && gu.inner === 'CONNECTED' && innerHits === 1);
+    check(`R2 guard: node child with a caller env (${gu?.child}), fork execPath=curl (${gu?.fork}), process.binding tcp_wrap (${gu?.binding}), a file named node (${gu?.fakeNode}), --expose-internals (${gu?.internals}) are all blocked; TCP listener hits ${tcpHits}`, !!gu && gu.child === 'INTEL_NET_BLOCKED' && gu.fork === 'INTEL_NET_BLOCKED' && gu.binding === 'INTEL_NET_BLOCKED' && gu.fakeNode === 'INTEL_NET_BLOCKED' && gu.internals === 'INTEL_NET_BLOCKED' && tcpHits === 0);
+    // audit schema: numbers / enums / ids / hex / timestamps only
+    const okA = { schemaVersion: '1.0.0', authority: 'AUTHORITATIVE_READINESS_MEASUREMENT', denominator: 2, totals: { DEFINED: { TRUE: 2, FALSE: 0, UNKNOWN: 0, NOT_APPLICABLE: 0, denominator: 2, measured: true } }, stageWired: { TRUE: 0, FALSE: 2, UNKNOWN: 0, NOT_APPLICABLE: 0, denominator: 2, measured: false }, byGuild: [{ id: 'G01', kind: 'GUILD', clusterId: 'CL01', roles: 2, layers: {}, proposedOnly: { withCandidateSkills: 1 } }], byCluster: [], reasonCounts: { 'EXECUTABLE.stageWired': { NO_CODE_PATH: 2 } }, proposedOnly: { source: 'PROPOSED_DERIVED_NOT_RUNTIME', profiles: 2 }, inputs: { journal: 'ABSENT', roleDefinitionsSha256: 'a'.repeat(64), skillIds: 3 }, anomalies: 0, computedAt: '2026-10-26T23:32:07.997Z', digest: 'b'.repeat(64) };
+    const vA = validateAudit(okA), vB = validateAudit({ ...okA, inputs: { ...okA.inputs, journal: 'ghp_ABC def' } }), vC = validateAudit({ ...okA, extra: 1 }), vD = validateAudit({ ...okA, reasonCounts: { 'x y': { A: 1 } } });
+    check('R2 audit schema keeps a well-formed audit and rejects free text, unknown keys and invalid keys', vA.ok && JSON.stringify(vA.audit.inputs) === JSON.stringify(okA.inputs) && !vB.ok && !vC.ok && !vD.ok && !JSON.stringify(vB.errors).includes('ghp_'));
   }
 
   // ---- P14 bounded local archive: newest intel snapshot per TRT date, legacy-v0 never pruned (fails on 4fe58dd: grew without bound)
@@ -299,10 +420,14 @@ export const computeRoleReadiness = () => ({ schemaVersion: 'probe', authority: 
       const v = get(r, p);
       if (!v.length) { missing.push(p); continue; }
       const tt = type(v[0]);
-      if (!(tt === t || (t === 'number' && tt === 'number') || (p === 'totals.VERIFIED_REMAINING' && (tt === 'string' || tt === 'number')))) typeDiff.push(`${p}:${t}->${tt}`);
+      // documented UNKNOWN markers (FIELD_SEMANTICS): an open PR whose file list could not be fetched has founder 'UNKNOWN' and protectedFiles null
+      const unknownFiles = /^openPrs\[\]\.(founder|protectedFiles)$/.test(p) && r.openPrs[0]?.protectedFilesKnown === false && (p.endsWith('founder') ? v[0] === 'UNKNOWN' : v[0] === null);
+      if (!(tt === t || unknownFiles || (t === 'number' && tt === 'number') || (p === 'totals.VERIFIED_REMAINING' && (tt === 'string' || tt === 'number')))) typeDiff.push(`${p}:${t}->${tt}`);
     }
     check(`P9 every legacy key path exists (${kp.length} paths; missing: ${missing.slice(0, 5).join(',') || 'none'})`, missing.length === 0);
     check(`P9 every legacy key path keeps its type (diffs: ${typeDiff.slice(0, 5).join(',') || 'none'})`, typeDiff.length === 0);
+    const known = r.openPrs.filter((x) => x.protectedFilesKnown === true), unk = r.openPrs.filter((x) => x.protectedFilesKnown === false);
+    check(`P9 open PRs with a known file list keep the legacy types (founder boolean, protectedFiles number: ${known.length}); only file-list-UNKNOWN PRs carry the UNKNOWN markers (${unk.length})`, known.length > 0 && known.every((x) => typeof x.founder === 'boolean' && typeof x.protectedFiles === 'number') && unk.every((x) => (x.founder === 'UNKNOWN' || x.founder === true) && x.protectedFiles === null));
     const need = ['totals.allWorkDimensions.byStatus', 'totals.UNRECONCILED_WORK', 'totals.VERIFICATION_PENDING_MERGED', 'inputs.wave0', 'fingerprint', 'mvp', 'openPrs[].founder', 'fullScope.resolvers', 'fullScope.toolAdaptersImplemented_perWave0', 'eta'];
     check('P9 fieldSemantics names every refined field', need.every((k) => k in FIELD_SEMANTICS) && JSON.stringify(r.fieldSemantics) === JSON.stringify(FIELD_SEMANTICS));
     check('P9 totals.legacyV0 is present with the v0 summary shape', ['rows', 'unique', 'live', 'byStatus', 'stale', 'mvpScope_AT_RISK'].every((k) => k in r.totals.legacyV0.allWorkDimensions));
@@ -318,6 +443,13 @@ export const computeRoleReadiness = () => ({ schemaVersion: 'probe', authority: 
       { name: 'count DUPLICATE rows as live', file: 'model/identity.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("if (r.status19 === 'DUPLICATE' || r.status19 === 'OBSOLETE') { it.excluded", "if (r.status19 === 'OBSOLETE') { it.excluded") },
       { name: 'add body-only promotion for non-claim rows', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('const relink = [...recExplicit, ...overlayL, ...tb];', 'const relink = [...recExplicit, ...overlayL, ...tb, ...body];') },
       { name: 'drop the UNASSIGNED fallback', file: 'model/departments.mjs', proof: 'model/departments.proof.mjs', apply: (s) => s.replace("return { department: 'UNASSIGNED', ruleId: 'FALLBACK' };", "return { department: 'DESKTOP_UX', ruleId: 'FALLBACK' };") },
+      { name: 'R2-M1: any commit naming the id sets the start (bookkeeping commits included)', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('l.at && isOwnCommit(commitSubjects.get(l.ref), id, resolver, ownCommit)', 'l.at') },
+      { name: 'R2-M1: start commits for items that are not coded', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('const ownStartCommits = coded !== T ? [] : [', 'const ownStartCommits = [') },
+      { name: 'R2-H1: PARTIAL short-circuits independent evidence', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('const s1 = pick([...recExplicit, ...overlayL], integratedPr), s2 = pick(tb, integratedPr);\n    const plus', 'const s1 = [], s2 = [];\n    const plus') },
+      { name: 'R2-H1: ignore annotations that name another item', file: 'model/links.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('return ids.length && !ids.includes(it.id) ? ids[0] : null;', 'return null;') },
+      { name: 'R2-LOW: WEAK corroboration credits tested / CI / merge dates', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace('const integPrs = weakOnly ? [] :', 'const integPrs =') },
+      { name: 'R2-LOW: runtimeVerified back to a measured FALSE', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("const runtimeVerified = live ? 'NOT_MEASURED' : U;", 'const runtimeVerified = live ? F : U;') },
+      { name: 'R2-LOW: open PR without a file list shown as founder false', file: 'render/report-json.mjs', proof: 'render/render.proof.mjs', apply: (s) => s.replace(": filesKnown ? false : 'UNKNOWN';", ': false;') },
       { name: 'count status-only merged claims as integrated', file: 'model/status.mjs', proof: 'model/status.proof.mjs', apply: (s) => s.replace("else { reconClass = 'STATUS_ONLY_UNVERIFIED'; confidence = 'LOW';", "else { reconClass = 'STATUS_ONLY_UNVERIFIED'; integratedBy = inv.length ? inv : [{ kind: 'COMMIT', ref: 'x', strength: 'X' }]; confidence = 'LOW';") },
     ];
     for (const mu of MUT) {
@@ -330,6 +462,9 @@ export const computeRoleReadiness = () => ({ schemaVersion: 'probe', authority: 
       check(`P12 mutant killed: ${mu.name} (${mu.proof} exit ${r.status})`, r.status !== 0 && /FAIL /.test(r.stdout));
     }
   }
-} finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+} finally {
+  fs.rmSync(tmp, { recursive: true, force: true });
+  for (const f of fs.readdirSync(HERE).filter((n) => n.startsWith('.intel-escape-marker-'))) fs.rmSync(path.join(HERE, f), { force: true });
+}
 console.log(`SUMMARY: ${passed} passed, ${failed} failed`);
 process.exitCode = failed ? 1 : 0;

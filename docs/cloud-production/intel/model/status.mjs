@@ -1,4 +1,4 @@
-//TR: Kanıt merdiveni (coded -> integrated -> tested -> runtimeVerified -> accepted) ve durum önceliği. 19 Ekim 'prs' metni yalnız EXPLICIT referanslarla sınıf belirler (WEAK referans yalnız 'merge edildi' iddialı satırı DÜŞÜK güvenle destekler); kısmen merge edilmiş EXPLICIT PR kümesi integrated=PARTIAL'dır, tam entegre sayılmaz. İlk doğru kural kazanır: OBSOLETE, COMPLETED_AND_VERIFIED (çözümlenen kabul kanıtı), MERGED_NOT_VERIFIED (v7 atası merge/commit/route kanıtı), IMPLEMENTED_NOT_MERGED, FOUNDER_ACTION_REQUIRED, BLOCKED, IN_PROGRESS (taze talep), QUEUED, NOT_STARTED, UNKNOWN. JSON durum alanları, FAKE yürütücü, installer CI, backlog DONE ve sözleşme state'i ASLA kanıt değildir; kanıtsız ilerleme iddiası UNKNOWN olur ve missingEvidence taşır.
+//TR: Kanıt merdiveni (coded -> integrated -> tested -> runtimeVerified -> accepted) ve durum önceliği. 19 Ekim 'prs' metni yalnız EXPLICIT referanslarla sınıf belirler (WEAK referans yalnız 'merge edildi' iddialı satırı DÜŞÜK güvenle ve YALNIZ integrated için destekler: tested, CI koşuları, merge tarihi ve integratedPrs başka kalemin PR'ından alınmaz); kısmen merge edilmiş EXPLICIT PR kümesi önce bağımsız kanıtla (kayıt/overlay/başlık/dal PR'ı, v7'deki kayıt başı, merge iddiasında commit/route) aranır, yoksa integrated=PARTIAL'dır. Gerçek başlangıç yalnız kalemin kendi kanıtından: güçlü PR, kodlanmış kalemin konu başı kimliği adlandıran kendi commit'i (backlog/planlama kayıt commit'leri hariç) ve kodlanmış kalemin kayıt başı. runtimeVerified ölçüm kaynağı olmadığı için NOT_MEASURED'dır. İlk doğru kural kazanır: OBSOLETE, COMPLETED_AND_VERIFIED (çözümlenen kabul kanıtı), MERGED_NOT_VERIFIED (v7 atası merge/commit/route kanıtı), IMPLEMENTED_NOT_MERGED, FOUNDER_ACTION_REQUIRED, BLOCKED, IN_PROGRESS (taze talep), QUEUED, NOT_STARTED, UNKNOWN. JSON durum alanları, FAKE yürütücü, installer CI, backlog DONE ve sözleşme state'i ASLA kanıt değildir; kanıtsız ilerleme iddiası UNKNOWN olur ve missingEvidence taşır.
 import { uniqSorted, cmp } from '../core/canonical-json.mjs';
 import { baselineClass, classOfPrs } from './baseline.mjs';
 import { toMs } from '../core/time.mjs';
@@ -9,7 +9,7 @@ export const RECON_CLASSES = ['EXPLICIT_PR_MERGED_ALL', 'EXPLICIT_PR_MERGED_PART
 const T = 'TRUE', F = 'FALSE', U = 'UNKNOWN';
 
 export function deriveItem(it, links, ctx) {
-  const { pulls, reachable, checks, runsBySha, statusMap: SM, decisionsByItem, nowIso, staleHours, acceptance, requiredChecks, dispatchedWave0 } = ctx;
+  const { pulls, reachable, checks, runsBySha, statusMap: SM, decisionsByItem, nowIso, staleHours, acceptance, requiredChecks, dispatchedWave0, commitSubjects = new Map(), resolver = null, ownCommit = null } = ctx;
   const id = it.id;
   const prL = links.filter((l) => l.kind === 'PR');
   const pr = (l) => pulls.get(l.pr);
@@ -44,11 +44,19 @@ export function deriveItem(it, links, ctx) {
   if (it.excluded) reconClass = it.excluded === 'DUPLICATE' ? 'EXCLUDED_DUPLICATE' : 'EXCLUDED_OBSOLETE';
   else if (it.removed) reconClass = 'EXCLUDED_OBSOLETE';
   else if (!it.baseline) reconClass = `ADDED_${it.origin}`;
-  else if (ebc === 'PR_MERGED_ALL' || ebc === 'PR_MERGED_PARTIAL') {
-    reconClass = ebc === 'PR_MERGED_ALL' ? 'EXPLICIT_PR_MERGED_ALL' : 'EXPLICIT_PR_MERGED_PARTIAL';
-    integratedBy = pick(inv, integratedPr); matchKind = 'EXPLICIT'; confidence = 'HIGH';
-    // PARTIAL: only some EXPLICIT PRs merged, the rest closed without merge -> never counted as fully integrated
-    partial = ebc === 'PR_MERGED_PARTIAL';
+  else if (ebc === 'PR_MERGED_ALL') { reconClass = 'EXPLICIT_PR_MERGED_ALL'; integratedBy = pick(inv, integratedPr); matchKind = 'EXPLICIT'; confidence = 'HIGH'; }
+  else if (ebc === 'PR_MERGED_PARTIAL') {
+    // the EXPLICIT inventory set is incomplete (some merged, the rest closed unmerged): independent integrating evidence still counts
+    // (record/overlay PR, title/branch PR, record head in v7; for a merged claim also v7 commit/route evidence); PARTIAL only without it
+    const invM = pick(inv, integratedPr), claim = SM.baselineMergedClaim.includes(it.baseline.status19);
+    const s1 = pick([...recExplicit, ...overlayL], integratedPr), s2 = pick(tb, integratedPr);
+    const plus = (ls) => [...ls, ...invM.filter((l) => !ls.some((x) => x.pr === l.pr))];
+    if (s1.length) { reconClass = claim ? 'CORROBORATED_BY_PR' : 'RELINKED_MERGED_PR'; integratedBy = plus(s1); matchKind = 'EXPLICIT_QUEUE_OR_DELIVERABLE'; confidence = 'HIGH'; }
+    else if (s2.length) { reconClass = claim ? 'CORROBORATED_BY_PR' : 'RELINKED_MERGED_PR'; integratedBy = plus(s2); matchKind = s2.some((l) => l.strength === 'ID_IN_TITLE') ? 'TITLE' : 'BRANCH'; confidence = 'HIGH'; }
+    else if (headLinks.length) { reconClass = claim ? 'CORROBORATED_BY_COMMIT' : 'RELINKED_HEAD_IN_V7'; integratedBy = [...invM, ...headLinks]; matchKind = 'RECORD_HEAD'; confidence = 'MEDIUM'; }
+    else if (claim && commitMsg.length) { reconClass = 'CORROBORATED_BY_COMMIT'; integratedBy = [...invM, ...commitMsg]; matchKind = 'COMMIT_MESSAGE'; confidence = 'MEDIUM'; }
+    else if (claim && literal.length) { reconClass = 'CORROBORATED_BY_COMMIT'; integratedBy = [...invM, ...literal]; matchKind = literal[0].strength === 'ROUTE_LITERAL_AT_HEAD' ? 'ROUTE_LITERAL' : 'IPC_LITERAL'; confidence = 'MEDIUM'; }
+    else { reconClass = 'EXPLICIT_PR_MERGED_PARTIAL'; integratedBy = invM; matchKind = 'EXPLICIT'; confidence = 'HIGH'; partial = true; }
   } else if (ebc === 'PR_OPEN') { reconClass = 'EXPLICIT_PR_OPEN'; confidence = 'HIGH'; }
   else if (ebc === 'STALE_STATUS_SAYS_MERGED') {
     const s1 = pick([...recExplicit, ...overlayL], integratedPr), s2 = pick(tb, integratedPr), s2b = pick(body, integratedPr), sw = pick(invWeak, integratedPr);
@@ -83,7 +91,9 @@ export function deriveItem(it, links, ctx) {
 
   // ---- substeps
   const live = !it.excluded && !it.removed;
-  const integPrs = integratedBy.filter((l) => l.kind === 'PR').map(pr);
+  // WEAK-only corroboration (another item's PR cited in the 19-Oct text) supports integrated, never tested / CI runs / merge dates / integratedPrs
+  const weakOnly = matchKind === 'INVENTORY_TEXT_WEAK';
+  const integPrs = weakOnly ? [] : integratedBy.filter((l) => l.kind === 'PR').map(pr);
   const integCommits = integratedBy.filter((l) => l.kind === 'COMMIT');
   const strongPrs = [...(it.baseline ? inv : []), ...recExplicit, ...overlayL, ...tb, ...(!it.baseline ? prL.filter((l) => l.strength === 'EXPLICIT') : [])];
   const strongOpen = pick(strongPrs, isOpen);
@@ -108,7 +118,7 @@ export function deriveItem(it, links, ctx) {
     else if (partial) {
       integ = 'PARTIAL';
       const notMerged = inv.filter((l) => !integratedPr(pr(l))).map((l) => `#${l.pr}`);
-      missing.push(`integrated: PARTIAL: ${integratedBy.map((l) => `#${l.pr}`).join(',') || 'none'} merged into v7/integration, ${notMerged.join(',')} not merged; ${id} counts as integrated only when every EXPLICIT PR is merged`);
+      missing.push(`integrated: PARTIAL: ${integratedBy.map((l) => `#${l.pr}`).join(',') || 'none'} merged into v7/integration, ${notMerged.join(',')} not merged; no independent evidence (record/overlay/title/branch PR, record head in v7${SM.baselineMergedClaim.includes(it.baseline.status19) ? ', v7 commit/route' : ''}) found; ${id} counts as integrated only when every EXPLICIT PR is merged or such evidence exists`);
     } else if (claimsIntegrated || strongMergedElsewhere.length) { integ = U; missing.push(strongMergedElsewhere.length ? `integrated: PR ${strongMergedElsewhere.map((p) => `#${p.number}`).join(',')} merged but its merge commit is not an ancestor of v7/integration` : `integrated: merge into v7/integration claimed by a status field or record; no merge commit or v7 commit evidence for ${id}`); }
     if (integ === T) {
       const res = [];
@@ -128,10 +138,12 @@ export function deriveItem(it, links, ctx) {
         res.push(last.status !== 'completed' ? U : last.conclusion === 'success' ? T : F);
       }
       tested = res.includes(T) ? T : res.includes(U) ? U : F;
-      if (tested === U) missing.push(`tested: no completed required check-runs (${requiredChecks.join(' + ')}) or push CI found for the integrating head(s) of ${id}`);
+      if (weakOnly) { tested = U; missing.push(`tested: integration rests only on WEAK 19-Oct reference(s) ${integratedBy.map((l) => `#${l.pr}`).join(',')} (other items' PRs); their CI is not evidence for ${id}`); }
+      else if (tested === U) missing.push(`tested: no completed required check-runs (${requiredChecks.join(' + ')}) or push CI found for the integrating head(s) of ${id}`);
     } else if (integ === U || integ === 'PARTIAL') { tested = U; missing.push(`tested: depends on ${integ === 'PARTIAL' ? 'partial' : 'unresolved'} integration evidence`); }
   }
-  const runtimeVerified = live ? F : U;
+  // no runtime-evidence source exists: per item NOT_MEASURED (never a measured FALSE), matching the ratio
+  const runtimeVerified = live ? 'NOT_MEASURED' : U;
   const accepted = acc ? T : live ? F : U;
   evPr(integratedBy.filter((l) => l.kind === 'PR')); evC(integCommits);
   for (const l of strongOpen) evidence.push({ kind: 'PR', ref: `#${l.pr}`, at: pr(l).createdAt, strength: l.strength, state: 'open' });
@@ -172,16 +184,18 @@ export function deriveItem(it, links, ctx) {
   if (status === 'UNKNOWN' && confidence !== 'LOW') confidence = 'LOW';
   if (strongMergedElsewhere.length) evidence.push(...strongMergedElsewhere.map((p) => ({ kind: 'PR', ref: `#${p.number}`, at: p.mergedAt, strength: 'MERGED_OUTSIDE_V7', state: 'merged' })));
   const stale = !!(it.baseline && ['STALE_NO_EVIDENCE_NONPROGRESS', 'STALE_NO_EVIDENCE_PROGRESS_CLAIM', 'STATUS_ONLY_UNVERIFIED'].includes(reconClass));
-  // own PRs/commits that prove the item itself started: merged or open strong PRs (never closed-unmerged, never WEAK refs), commits naming the item, record heads in v7
+  // own evidence that the item itself started: merged or open strong PRs (never closed-unmerged, never WEAK refs); for a CODED item only:
+  // its own v7 commits (subject head names the id, bookkeeping subjects such as backlog:/planning: excluded) and its coordinator record heads
   const ownStartPrs = strongPrs.filter((l) => { const p = pr(l); return !!(p && (p.mergedAt || p.state === 'open')); }).map(pr);
-  const ownStartCommits = [...links.filter((l) => l.kind === 'COMMIT' && (l.strength === 'EXPLICIT' || l.strength === 'ID_IN_COMMIT_MESSAGE') && l.at),
-    ...recs.filter((r) => r.headFull && r.headAt).map((r) => ({ ref: r.headFull, at: r.headAt, strength: `RECORD_HEAD ${r.kind}:${r.ref}` }))];
+  const ownStartCommits = coded !== T ? [] : [
+    ...commitMsg.filter((l) => l.at && isOwnCommit(commitSubjects.get(l.ref), id, resolver, ownCommit)).map((l) => ({ ref: l.ref, at: l.at, strength: 'OWN_COMMIT (subject head names the id)' })),
+    ...recs.filter((r) => r.headFull && r.headAt).map((r) => ({ ref: r.headFull, at: r.headAt, strength: `RECORD_HEAD ${r.kind}:${r.ref} ${reachable.has(r.headFull) ? 'in v7/integration' : 'on its branch (not in v7/integration)'}` }))];
   const commitEvidence = integCommits.length ? { sha7: /^[0-9a-f]{40}$/.test(integCommits[0].ref) ? integCommits[0].ref.slice(0, 7) : integCommits[0].ref, at: integCommits[0].at, matchKind } : null;
   return {
     status, rule, reconClass, baselineClass: bc, evidenceBaselineClass: ebc, matchKind,
-    evidenceClass: !live ? 'EXCLUDED' : partial ? 'PARTIAL_PR_MERGE' : integPrs.length ? 'EVIDENCED_BY_PR' : integCommits.length ? 'EVIDENCED_BY_COMMIT' : strongOpen.length ? 'OPEN_PR_ONLY' : (status === 'UNKNOWN' || progressClaimNoEvidence) ? 'STATUS_ONLY_UNVERIFIED' : 'NO_PROGRESS_CLAIM',
+    evidenceClass: !live ? 'EXCLUDED' : partial ? 'PARTIAL_PR_MERGE' : integratedBy.some((l) => l.kind === 'PR') ? 'EVIDENCED_BY_PR' : integCommits.length ? 'EVIDENCED_BY_COMMIT' : strongOpen.length ? 'OPEN_PR_ONLY' : (status === 'UNKNOWN' || progressClaimNoEvidence) ? 'STATUS_ONLY_UNVERIFIED' : 'NO_PROGRESS_CLAIM',
     substeps: { coded, integrated: integ, tested, runtimeVerified, accepted },
-    integratedPrs: uniqSorted(integPrs.map((p) => p.number)), mergeCommits: uniqSorted(integPrs.map((p) => p.mergeCommitSha.slice(0, 7))), mergedAt: uniqSorted(integPrs.map((p) => p.mergedAt)),
+    integratedPrs: uniqSorted(integPrs.map((p) => p.number)), corroboratingWeakPrs: weakOnly ? uniqSorted(integratedBy.map((l) => l.pr)) : [], mergeCommits: uniqSorted(integPrs.map((p) => p.mergeCommitSha.slice(0, 7))), mergedAt: uniqSorted(integPrs.map((p) => p.mergedAt)),
     commitEvidence, supportingRefs: uniqSorted(supporting.map((l) => l.ref)),
     candidateLinks: uniqSorted([...(ebc !== 'STALE_STATUS_SAYS_MERGED' ? pick(body, (p) => p && p.mergedAt).map((l) => `body:#${l.pr}`) : []), ...(!['CORROBORATED_BY_COMMIT'].includes(reconClass) && !integrated ? commitMsg.map((l) => `commit:${l.ref.slice(0, 7)}`) : []),
       ...pick(invWeak, (p) => p && p.mergedAt).filter((l) => !integratedBy.includes(l)).map((l) => `inventory-weak:#${l.pr}`)]),
@@ -192,4 +206,17 @@ export function deriveItem(it, links, ctx) {
     openPrs: uniqSorted(strongOpen.map((l) => l.pr)),
     linkedPrs: uniqSorted(strongPrs.map((l) => l.pr)),
   };
+}
+
+// A commit is the item's own when its subject head (text up to the first ': ' plus the next word, or the first three words) names the id
+// and the subject is not a bookkeeping edit (rules/link-patterns.json ownCommitStart.bookkeepingSubjectRegex).
+export function subjectHead(subject) {
+  const s = String(subject || '');
+  const i = s.indexOf(': ');
+  return i >= 0 ? `${s.slice(0, i)}: ${s.slice(i + 2).split(/\s+/)[0] || ''}` : s.split(/\s+/).slice(0, 3).join(' ');
+}
+export function isOwnCommit(subject, id, resolver, rule) {
+  if (!subject || !resolver || !rule) return false;
+  if (new RegExp(rule.bookkeepingSubjectRegex, 'i').test(subject)) return false;
+  return resolver.resolveText(subjectHead(subject)).includes(id);
 }

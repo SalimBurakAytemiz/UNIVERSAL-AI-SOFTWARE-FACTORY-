@@ -26,6 +26,11 @@ check('MD executive summary (A) comes first', md.indexOf(SECTION_HEADINGS[0]) < 
 const row = (label) => md.split('\n').find((l) => l.startsWith(`| ${label}`));
 const inv = inventoryJson(m, { inputsShort: {} });
 check('anchor: live denominators equal JSON metrics (FULL liveNow, FULL 19-Oct, MVP liveNow, MVP 19-Oct)', row('Canlı iş (payda)') === `| Canlı iş (payda) | ${r.metrics.full.n} | ${r.metrics.baseline741.n} | ${r.metrics.mvp.n} | ${r.metrics.mvpBaseline.n} |`);
+// R2 LOW: an open PR without a file list is founder UNKNOWN (never 'hayır' / 0); a known file list keeps the legacy boolean/number (fails on 4e1a897)
+const op5 = r.openPrs.find((p) => p.number === 5), op30 = r.openPrs.find((p) => p.number === 30);
+check('R2 open PR #5 without a file list: founder UNKNOWN, protectedFiles null, MD row UNKNOWN (4e1a897: founder false / 0 / hayır)', !!op5 && op5.protectedFilesKnown === false && op5.founder === 'UNKNOWN' && op5.protectedFiles === null && /^\| #5 \|.*\| UNKNOWN \(dosya listesi alınamadı\) \| UNKNOWN \(dosya listesi yok\) \|/m.test(md) && !r.founder.some((f) => f.pr === 5) && r.founderFilesUnknown.some((f) => f.pr === 5 && /file list UNKNOWN/.test(f.action)));
+check('R2 open PR #30 with a known protected file keeps the legacy types (founder true, protectedFiles 1)', !!op30 && op30.founder === true && op30.protectedFiles === 1 && op30.protectedFilesKnown === true);
+check('R2 inventory JSON carries corroboratingWeakPrs (WEAK-only corroboration listed apart from integratedPrs)', (inv.items.find((x) => x.id === 'UI-025') || {}).corroboratingWeakPrs?.join() === '6' && (inv.items.find((x) => x.id === 'UI-025') || {}).integratedPrs?.length === 0);
 // LOW label fixes (each fails on 4fe58dd)
 check('LOW runtime row shows NOT_MEASURED, never 0/n (%0)', /^\| Runtime doğrulandı \(runtimeVerificationRatio\) \| NOT_MEASURED/.test(row('Runtime doğrulandı') || '') && !/\| 0\/\d+ \(%0\)/.test(row('Runtime doğrulandı') || ''));
 check("LOW 'FULL' has one meaning: the scope subset is FULL_ONLY (31 Ekim view and inventory scope)", md.includes('Ertelenebilir (DEFERRED + FULL_ONLY; 19 Ekim tabanı)') && !md.includes('(DEFERRED + FULL)') && inv.items.every((x) => x.scope !== 'FULL'));

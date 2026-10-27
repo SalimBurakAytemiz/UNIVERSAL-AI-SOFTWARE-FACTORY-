@@ -1,4 +1,4 @@
-//TR: Saf metrikler. Paydalar her sayıyla birlikte raporlanır. Kısmi entegrasyon (PARTIAL) ayrı sayılır ve entegre sayılmaz; runtime doğrulaması ölçüm kaynağı olmadığı için NOT_MEASURED'dır (%0 değil). Üç ayrı oran (FULL ve MVP için): kod entegrasyonu (PR merge != bitti), çalışma zamanı doğrulaması ve kabul edilmiş tamamlanma. Geliştirme ilerlemesi yalnız coded+integrated+tested'den hesaplanır (UNKNOWN=0, alt sınır) ve asla tamamlanmayla karıştırılmaz. Ağırlıklar critical-path.json weightModel'e bağlıdır; bilinmeyen model eşit ağırlığa kapalı düşer.
+//TR: Saf metrikler. Paydalar her sayıyla birlikte raporlanır. Kısmi entegrasyon (PARTIAL) ayrı sayılır ve entegre sayılmaz; runtime doğrulaması ölçüm kaynağı olmadığı için NOT_MEASURED'dır (%0 değil; kalem düzeyinde ve alt adım sayımında da NOT_MEASURED). Üç ayrı oran (FULL ve MVP için): kod entegrasyonu (PR merge != bitti), çalışma zamanı doğrulaması ve kabul edilmiş tamamlanma. Geliştirme ilerlemesi yalnız coded+integrated+tested'den hesaplanır (UNKNOWN=0, alt sınır) ve asla tamamlanmayla karıştırılmaz. Ağırlıklar critical-path.json weightModel'e bağlıdır; bilinmeyen model eşit ağırlığa kapalı düşer.
 import { pct, round1, round2, toMs, trtDate } from '../core/time.mjs';
 import { tally, cmp } from '../core/canonical-json.mjs';
 
@@ -21,7 +21,7 @@ export function block(xs, weights) {
   const statusCounts = tally(xs, (x) => x.status, STATUSES);
   delete statusCounts.OBSOLETE;
   const substeps = {};
-  for (const s of SUB) substeps[s] = tally(xs, (x) => x.substeps[s], s === 'integrated' ? ['TRUE', 'FALSE', 'UNKNOWN', 'PARTIAL'] : ['TRUE', 'FALSE', 'UNKNOWN']);
+  for (const s of SUB) substeps[s] = tally(xs, (x) => x.substeps[s], s === 'integrated' ? ['TRUE', 'FALSE', 'UNKNOWN', 'PARTIAL'] : s === 'runtimeVerified' ? ['TRUE', 'FALSE', 'UNKNOWN', NOT_MEASURED] : ['TRUE', 'FALSE', 'UNKNOWN']);
   const t = (s) => substeps[s].TRUE;
   let dev = 0, devU = 0;
   for (const x of xs) {
@@ -44,7 +44,7 @@ export function block(xs, weights) {
 export function ratios3(full, mvp) {
   return {
     codeIntegrationRatio: { label: 'PR merged ≠ done', full: full.ratios.integratedRatio, mvp: mvp.ratios.integratedRatio, partial: { full: full.ratios.integratedPartial, mvp: mvp.ratios.integratedPartial }, measured: true,
-      reason: 'integrated = every EXPLICIT PR merged into v7/integration, or v7 commit/route evidence for a merged claim; PARTIAL (some EXPLICIT PRs merged, the rest closed unmerged) is counted separately and never as integrated' },
+      reason: 'integrated = every EXPLICIT PR merged into v7/integration, or independent evidence: queue/deliverable/overlay PR, PR title/branch naming the id or record head in v7 (HIGH/MEDIUM); for a 19-Oct merged claim also v7 commit/route evidence (MEDIUM), a PR body mention (LOW) or a WEAK 19-Oct reference to another PR (LOW; integrated only, never tested/CI/merge date); PARTIAL (some EXPLICIT PRs merged, the rest closed unmerged, no independent evidence) is counted separately and never as integrated' },
     runtimeVerificationRatio: { full: full.ratios.runtimeVerifiedRatio, mvp: mvp.ratios.runtimeVerifiedRatio, measured: false, state: NOT_MEASURED, reason: 'NO_RUNTIME_EVIDENCE_SOURCE: no real-run evidence record exists in git or GitHub; FAKE executor CI, JSON status fields and installer-created artifacts are excluded' },
     acceptedCompletionRatio: { full: full.ratios.acceptedRatio, mvp: mvp.ratios.acceptedRatio, measured: true, source: 'overlay ACCEPTANCE records with a resolvable, non-FAKE evidenceRef', reason: `${full.ratios.acceptedRatio.n} accepted item(s) with an acceptance record; product_verified is NO on 1364/1364 inventory rows` },
   };

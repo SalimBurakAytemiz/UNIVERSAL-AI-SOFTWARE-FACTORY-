@@ -1,4 +1,4 @@
-//TR: Kalem -> kanıt bağlantıları: PR (EXPLICIT: 19 Ekim 'prs' alanında notsuz tekil ve kimlik kapısından geçen referans; INVENTORY_WEAK: aralık/iç içe/rol notlu/kapıdan geçmeyen; başlıkta / dalda (rakamla bitmeyen kimlikler tam eşleşmeyle) / gövdede kimlik), commit (v7 commit mesajında kimlik; kayıtlı dal başının v7 atası olması), HEAD'de route/IPC literal'i (pickaxe ile ilk getiren commit), koordinatör kayıtları, ledger incelemeleri ve destekleyici metin anmaları. Bağlar (itemId, kind, ref) ile sıralanır.
+//TR: Kalem -> kanıt bağlantıları: PR (EXPLICIT: 19 Ekim 'prs' alanında notsuz tekil, başka bilinen kalemi adlandırmayan ve kimlik kapısından geçen referans; INVENTORY_WEAK: aralık/iç içe/rol notlu/başka kaleme atanmış/kapıdan geçmeyen; başlıkta / dalda (rakamla bitmeyen kimlikler tam eşleşmeyle) / gövdede kimlik), commit (v7 commit mesajında kimlik; kayıtlı dal başının v7 atası olması), HEAD'de route/IPC literal'i (pickaxe ile ilk getiren commit), koordinatör kayıtları, ledger incelemeleri ve destekleyici metin anmaları. Bağlar (itemId, kind, ref) ile sıralanır.
 import { sha256, cmp } from '../core/canonical-json.mjs';
 import { inventoryPrRefs } from './baseline.mjs';
 
@@ -39,7 +39,10 @@ export function buildLinks(items, ctx) {
       const titlePrs = new Set([...String(it.baseline.title || '').matchAll(titlePrRe)].map((m) => Number(m[1])));
       const claimsMerged = statusMap.baselineMergedClaim.includes(it.baseline.status19);
       const gate = (n) => (names(byTitle, n) || names(byBranch, n) || names(byBody, n) ? 'PR_NAMES_ITEM' : titlePrs.has(n) ? 'ITEM_TITLE_NAMES_PR' : claimsMerged ? 'STATUS19_CLAIMS_MERGED' : null);
-      for (const r of inventoryPrRefs(it.baseline, pulls, IP, gate)) { if (r.strength === 'EXPLICIT') explicit.set(r.n, `inventory.prs[${r.gate}]`); else weak.set(r.n, r.reason); }
+      // an annotation naming another known item ('#25 (UI-050 evidence lineage)') assigns the PR to that item, unless the PR's own
+      // title or branch names this row; then it is never EXPLICIT for this row, whatever its 19-Oct status claims
+      const otherItemOf = (n, ann) => { if (!ann || names(byTitle, n) || names(byBranch, n)) return null; const ids = resolver.resolveText(ann); return ids.length && !ids.includes(it.id) ? ids[0] : null; };
+      for (const r of inventoryPrRefs(it.baseline, pulls, IP, gate, otherItemOf)) { if (r.strength === 'EXPLICIT') explicit.set(r.n, `inventory.prs[${r.gate}]`); else weak.set(r.n, r.reason); }
     }
     for (const r of it.records) if (r.pr && pulls.has(r.pr)) { const src = `${r.kind.toLowerCase()}:${r.ref}.pr`; if (!explicit.has(r.pr) || explicit.get(r.pr).startsWith('inventory.prs')) explicit.set(r.pr, explicit.has(r.pr) ? `${explicit.get(r.pr)}+${src}` : src); }
     for (const [n, src] of [...explicit.entries()].sort((a, b) => a[0] - b[0])) add({ itemId: it.id, kind: 'PR', ref: `#${n}`, pr: n, strength: 'EXPLICIT', source: src, at: prAt(pulls.get(n)) });

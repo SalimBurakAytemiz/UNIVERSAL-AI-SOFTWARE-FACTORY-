@@ -13,7 +13,7 @@ export function inventoryItem(x) {
     scopeReason: x.scopeReason ?? null, weakInventoryRefs: x.weakInventoryRefs || [],
     substeps: x.substeps, evidence: x.evidence, links: x.links, blockers: x.blockers, founderDecision: x.founderDecision, nextAction: x.nextAction, sizeEstimate: x.sizeEstimate,
     measuredDurationHours: x.measuredDurationHours, cost: x.cost, confidence: x.confidence, stale: x.stale, missingEvidence: x.missingEvidence, aliases: x.aliases,
-    priority: x.priority, oct31: x.oct31, prs: x.prs, integratedPrs: x.integratedPrs, openPrs: x.openPrs, mergeCommits: x.mergeCommits, mergedAt: x.mergedAt, commits: x.commits, ciRuns: x.ciRuns,
+    priority: x.priority, oct31: x.oct31, prs: x.prs, integratedPrs: x.integratedPrs, corroboratingWeakPrs: x.corroboratingWeakPrs || [], openPrs: x.openPrs, mergeCommits: x.mergeCommits, mergedAt: x.mergedAt, commits: x.commits, ciRuns: x.ciRuns,
     commitEvidence: x.commitEvidence, candidateLinks: x.candidateLinks, supportingRefs: x.supportingRefs, records: x.records, openDependsOn: x.openDependsOn ?? null, devOpenDependsOn: x.devOpenDependsOn ?? null,
   };
 }
