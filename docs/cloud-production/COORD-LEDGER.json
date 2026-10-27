@@ -1052,6 +1052,16 @@
       "ref": "wf_3373ed7f-68e: hardTimeout sets detached (setsid) for every HEAD probe; the probe group is never tracked (TK-5), so a hung git survives Ctrl+C/SIGHUP/engine termination (reproduced with include.path FIFO); strategy change: bounded Lane B push + coordinator checklist",
       "policy": "TEP-1",
       "at": "2026-10-27T08:04:33.821Z"
+    },
+    {
+      "pr": 276,
+      "sha": "669b12fc57681c5e7e241f5e01e2d5dbb69e1dbb",
+      "kind": "delta",
+      "base": "8fca680627119d0563c70c0def8ee44b4b3d803c",
+      "verdict": "NO_BLOCKERS_COORD_CHECKLIST_bounded_push",
+      "ref": "coord checklist on 669b12f: git-async.ts group = onSpawn-only (no detach for hardTimeout), hardStop = kill + destroy streams + settle; coordinator re-ran b1 readiness block 31/31 and mutants: detached re-added -> C1+C2 FAIL (killed), no destroy -> C4 FAIL (killed); grandchild-kill assertion narrowed to direct child by the requested strategy (documented); watch: maxGap 500->300 ms on Windows",
+      "policy": "TEP-1",
+      "at": "2026-10-27T08:22:57.245Z"
     }
   ],
   "tests": [],
