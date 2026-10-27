@@ -14,8 +14,15 @@ export const STATIC_DATA_FILES = [
   "registries/domain-packs.json",
   "roadmap/review-packages.json",
   // INT-R3 D-M1-04: WFR-03 kanonik rol kaydı (GET /v1/agents, /v1/roles, cockpit workforce); yoksa paketli /v1/agents 503 döner.
-  "registries/role-definitions.json"
+  "registries/role-definitions.json",
+  // B1: GET /v1/roles/status-summary okunurlük (readiness) girdileri (core/agents/readiness-audit.ts loadReadinessInputFromRepo); yoksa paketli uygulamada readiness kullanılamaz olur.
+  "registries/skills-v2.json",
+  "registries/technologies.json",
+  "registries/technology-source-registry.json",
+  "registries/role-execution-profiles.json"
 ];
+// B1: sahnelenen DİZİNLER (içindeki *.json dosyalarının TAMAMI, sahneleme anında dizinden türetilir; 415 dosya adı elle tutulmaz). readiness yükleyicisi her teknoloji için knowledge/technologies/<slug>.json okur.
+export const STATIC_DATA_DIRS = ["knowledge/technologies"];
 export const DESKTOP_FILES = ["apps/desktop/main.mjs", "apps/desktop/preload.mjs", "apps/desktop/backend-error.html"];
 // INT-R3 D-M1-01: paketli arka ucun çalışma anında okuduğu repo-göreli config dosyaları (safeChildEnv politikası, LOCAL_CLAUDE executor/broker yapılandırması).
 // Bu dosyalar kurulum dizininde salt-okunur program verisidir; değişken veri (provenance, ayarlar) userData altındaki kontrol köküne yazılır.
@@ -36,6 +43,18 @@ export const PACKAGED_RUNTIME_READ_EXCLUSIONS = {
 /** Statik veri, config ve script dosyalarını sahne köküne aynı göreli yollarla kopyalar; kopyalanan listeyi döner. */
 export function stageRuntimeFiles(root, stage) {
   const files = [...DESKTOP_FILES, ...STATIC_DATA_FILES, ...RUNTIME_CONFIG_FILES, ...RUNTIME_SCRIPTS];
+  // Dizin girdileri YALNIZ düz dosya olabilir (copyDir ile aynı kural): lstat bir sembolik bağı ya da düz olmayan girdiyi reddeder; copyFileSync bağı izleyip depo dışı içeriği paketlerdi.
+  // Dizinin KENDİSİ de gerçek bir dizin olmalı ve (sembolik üst bileşenler çözüldüğünde) depo kökünün içinde kalmalı; aksi halde bağlı bir dizin depo dışı dosyaları paketlerdi.
+  for (const dir of STATIC_DATA_DIRS) {
+    const abs = path.join(root, dir), realRoot = fs.realpathSync(root);
+    if (!fs.lstatSync(abs).isDirectory()) throw new Error(`SYMLINK_DENIED:${dir}`);
+    const realDir = fs.realpathSync(abs);
+    if (path.relative(realRoot, realDir).split(path.sep).join("/") !== dir) throw new Error(`SYMLINK_DENIED:${dir}`); // path.relative: Windows'ta büyük/küçük harfe duyarsız
+  }
+  for (const dir of STATIC_DATA_DIRS) for (const n of fs.readdirSync(path.join(root, dir)).filter(x => x.endsWith(".json")).sort()) {
+    if (!fs.lstatSync(path.join(root, dir, n)).isFile()) throw new Error(`SYMLINK_DENIED:${dir}/${n}`);
+    files.push(`${dir}/${n}`);
+  }
   for (const f of files) { fs.mkdirSync(path.dirname(path.join(stage, f)), {recursive: true}); fs.copyFileSync(path.join(root, f), path.join(stage, f)); }
   return files;
 }
