@@ -832,6 +832,16 @@
       "ref": "wf_974034f4-cb8 (2 lenses + 9 skeptics, none refuted): heartbeat row asserts cannot fail (N14/N15); fleet aria-label/lead still 'live'; 500-run cap silently drops newest (pre-existing, counts now definite); #/work KPI different live set (pre-existing); liveRuns/queuedRuns not checked over every status (N25-N27); queued/unknown-only fleet render untested (N22); card status/bucket not asserted (N19/N20); TR text of new keys unpinned (N09/N10/N23/N24/N35/N12); 10 LOW",
       "policy": "TEP-1",
       "at": "2026-10-27T03:06:44.062Z"
+    },
+    {
+      "pr": 265,
+      "sha": "956065fdbc5741874a81d9e683474bd241fc3303",
+      "kind": "delta",
+      "base": "d45c47b7ddf008da8ff1de28d10127608fe29bcb",
+      "verdict": "BASE_MERGE_ONLY",
+      "ref": "COORD base merge d0b3cf5; only conflict docs/lanes/LANE-C-MAP.md (base C-RDY-1 wording kept + PR C-CTX-1 bullet); role-context 24/24, b5+ps1b+ci-validation-shards 422/422, trust-root PASS",
+      "policy": "TEP-1",
+      "at": "2026-10-27T03:24:26.285Z"
     }
   ],
   "tests": [],
