@@ -1480,6 +1480,8 @@ export default {
   "runready.reason.REPOSITORY_NOT_MANAGED":"Depo uygulamanın yönettiği bir depo değil.",
   "runready.reason.REPOSITORY_PATH_FORBIDDEN":"Depo konumuna izin verilmiyor.",
   "runready.reason.REPOSITORY_PATH_NOT_FOUND":"Depo dizini yok.",
+  "runready.reason.REPOSITORY_HEAD_UNRESOLVED":"Klasör en az bir commit içeren bir Git deposu değil. İlk commit'ten sonra projenin en üst klasörünü seçin.",
+  "runready.reason.REPOSITORY_NOT_WORKTREE_ROOT":"Klasör bir Git deposunun içinde ama deponun en üst klasörü değil. En üst klasörü seçin.",
   "runready.reason.TEST_COMMAND_MISSING":"Test komutu tanımlı değil; koşunun sonucu NOT_EXECUTED olur.",
   "runready.reason.TEST_COMMAND_NOT_ALLOWED":"Test komutu izin verilen bir komut değil.",
   "runready.reason.NO_PLANNED_TASKS":"Mission'ın henüz planlı görevi yok.",

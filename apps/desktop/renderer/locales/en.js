@@ -1480,6 +1480,8 @@ export default {
   "runready.reason.REPOSITORY_NOT_MANAGED":"The repository is not one managed by the app.",
   "runready.reason.REPOSITORY_PATH_FORBIDDEN":"The repository location is not allowed.",
   "runready.reason.REPOSITORY_PATH_NOT_FOUND":"The repository directory does not exist.",
+  "runready.reason.REPOSITORY_HEAD_UNRESOLVED":"The folder is not a Git repository with at least one commit. Pick the project's top-level folder after the first commit.",
+  "runready.reason.REPOSITORY_NOT_WORKTREE_ROOT":"The folder is inside a Git repository but is not its top-level folder. Pick the top-level folder.",
   "runready.reason.TEST_COMMAND_MISSING":"No test command is set, so a run's result would be NOT_EXECUTED.",
   "runready.reason.TEST_COMMAND_NOT_ALLOWED":"The test command is not an allowed command.",
   "runready.reason.NO_PLANNED_TASKS":"The mission has no planned tasks yet.",
