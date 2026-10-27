@@ -1062,6 +1062,26 @@
       "ref": "coord checklist on 669b12f: git-async.ts group = onSpawn-only (no detach for hardTimeout), hardStop = kill + destroy streams + settle; coordinator re-ran b1 readiness block 31/31 and mutants: detached re-added -> C1+C2 FAIL (killed), no destroy -> C4 FAIL (killed); grandchild-kill assertion narrowed to direct child by the requested strategy (documented); watch: maxGap 500->300 ms on Windows",
       "policy": "TEP-1",
       "at": "2026-10-27T08:22:57.245Z"
+    },
+    {
+      "pr": 282,
+      "sha": "d641841aec3856986b8961bd83077396e82fa1c0",
+      "kind": "full",
+      "base": null,
+      "verdict": "NO_BLOCKERS_3LOW",
+      "ref": "wf_f7f9a1c7-d48:282",
+      "policy": "TEP-1",
+      "at": "2026-10-27T08:30:16.404Z"
+    },
+    {
+      "pr": 283,
+      "sha": "d77a68f0ff4a02e3deabfd756cf5abf167a27184",
+      "kind": "full",
+      "base": null,
+      "verdict": "NO_BLOCKERS_2LOW",
+      "ref": "wf_f7f9a1c7-d48:a277",
+      "policy": "TEP-1",
+      "at": "2026-10-27T08:30:16.459Z"
     }
   ],
   "tests": [],
