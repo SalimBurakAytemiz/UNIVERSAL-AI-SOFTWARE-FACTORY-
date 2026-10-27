@@ -582,6 +582,16 @@
       "ref": "wf_dceca550-cc5 (3 lenses + verify): cp.spawn spy leaks when vitest timeout fires first -> next boundedTick recurses; fixed in f98d467 (REAL_SPAWN at describe scope + onTestFinished cleanup)",
       "policy": "TEP-1",
       "at": "2026-10-27T00:01:40.310Z"
+    },
+    {
+      "pr": 263,
+      "sha": "49ead80387f54ad6c768e0defc7a9b17d9ce95cf",
+      "kind": "delta",
+      "base": "d6b46f81c8595606e9ee8bcd951d9c99bed82f78",
+      "verdict": "ROUND_LIMIT_2MEDIUM_test_gaps",
+      "ref": "wf_fe07e453-379 (2 lenses + 2 skeptics): M4 THEAD still unpinned (N07/N08/R27/R30 survive); L3 PRESENT full-UNKNOWN untested (R10); round-2 M1-M3/L1/L2/L4 FIXED; strategy: one bounded final push + coordinator mutant checklist",
+      "policy": "TEP-1",
+      "at": "2026-10-27T00:10:04.726Z"
     }
   ],
   "tests": [],
