@@ -377,6 +377,7 @@ describe("INT-R3 D-M1-01 packaged app stages every runtime-read repo file", () =
   it("B1/F3: a staged data DIRECTORY that is itself a symlink (or lives below a symlinked parent) is refused with SYMLINK_DENIED; its outside files are not copied", async ctx => {
     symlinkRuns.started++; let counted = false;
     const b = await load("scripts", "build-installer.mjs"); const outside = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-outside-"));
+    try {
     fs.writeFileSync(path.join(outside, "evil.json"), "{\"secret\":true}");
     for (const mode of ["dir", "parent"] as const) {
       const copy = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-src-")), out = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-out-"));
@@ -389,7 +390,22 @@ describe("INT-R3 D-M1-01 packaged app stages every runtime-read repo file", () =
         expect(fs.existsSync(path.join(out, "knowledge")), mode).toBe(false);
       } finally { for (const d of [copy, out]) fs.rmSync(d, {recursive: true, force: true}); }
     }
-    fs.rmSync(outside, {recursive: true, force: true});
+    } finally { fs.rmSync(outside, {recursive: true, force: true}); }
+  });
+  it("B1/X1: a repo root reached THROUGH a symlink stages normally (the containment check compares against realpath(root)); a data dir that escapes it is still refused", async ctx => {
+    symlinkRuns.started++;
+    const b = await load("scripts", "build-installer.mjs"); const real = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-real-")), link = path.join(os.tmpdir(), `uasco-b1-rootlink-${process.pid}-${Date.now()}`), out = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-out-")), out2 = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-out-")), outside = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-outside-"));
+    try {
+      b.stageRuntimeFiles(root, real);
+      if (!linkOrSkip(ctx, real, link, "dir")) return;
+      symlinkRuns.linked++;
+      const files: string[] = b.stageRuntimeFiles(link, out);
+      expect(files).toEqual(expect.arrayContaining(["registries/technologies.json"]));
+      expect(fs.readdirSync(path.join(out, "knowledge", "technologies")).length).toBeGreaterThan(100);
+      fs.rmSync(path.join(real, "knowledge", "technologies"), {recursive: true, force: true}); fs.writeFileSync(path.join(outside, "evil.json"), "{}");
+      fs.symlinkSync(outside, path.join(real, "knowledge", "technologies"), "dir");
+      expect(() => b.stageRuntimeFiles(link, out2)).toThrow("SYMLINK_DENIED:knowledge/technologies");
+    } finally { fs.rmSync(link, {force: true}); for (const d of [real, out, out2, outside]) fs.rmSync(d, {recursive: true, force: true}); }
   });
   it("B1/F4: the symlink tests above really RAN on a host that allows symlinks (an unconditional skip would otherwise pass silently); skipped only where the host refuses symlinks or the tests were filtered out", async ctx => {
     if (symlinkRuns.started === 0) { ctx.skip(); return; }
