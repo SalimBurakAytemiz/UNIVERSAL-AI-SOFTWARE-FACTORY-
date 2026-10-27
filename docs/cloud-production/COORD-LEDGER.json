@@ -772,6 +772,16 @@
       "ref": "COORD base merge e5cae0d (#267 watchdog); diff vs v7/integration = #268 docs only (LANE-A-P0-REMAINDER-AUDIT.{md,json}); prior r3 delta NO_BLOCKERS_1LOW at 89c6114",
       "policy": "TEP-1",
       "at": "2026-10-27T02:19:18.420Z"
+    },
+    {
+      "pr": 264,
+      "sha": "ae8ff399f4a260887c96211ee88872f3b6340055",
+      "kind": "delta",
+      "base": "54430beb86ae780b4c25cd32b664933d13028f29",
+      "verdict": "BLOCKERS_3MEDIUM_round2",
+      "ref": "wf_dd7891af-d76 (2 lenses + 3 skeptics, none refuted): round-1 B1-B7 FIXED (TS ground truth 449/449, 169/169 catalogue killed); test gaps: CALLER_NOT_PRODUCTION guards D13/D12/D15 survive; IDENT_CHAR digits D7 survives; tokenRe partial boundary R1-N13b/R1-N28b survive; LOWs exportIn ASCII boundary (over-report), isProductionPath selftest/spec/fixture/.TEST., member-boundary ASI regression (under-report), unicode slash cases",
+      "policy": "TEP-1",
+      "at": "2026-10-27T02:30:59.206Z"
     }
   ],
   "tests": [],
