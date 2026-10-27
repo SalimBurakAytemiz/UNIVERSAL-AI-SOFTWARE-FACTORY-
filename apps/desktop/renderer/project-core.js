@@ -184,12 +184,14 @@ export function mapImportQuarantine(res){
   if(q===undefined)return {state:"NONE",headSha:imp.headSha};
   if(!isObj(q)||!Number.isSafeInteger(q.count)||q.count<1||q.count>1000000||q.headSha!==imp.headSha||typeof q.truncated!=="boolean"||!cleanText(q.storedUnder,200)||!Array.isArray(q.files))return unknown;
   if(q.files.length>QUARANTINE_MAX_FILES||q.files.length!==Math.min(q.count,QUARANTINE_MAX_FILES)||q.truncated!==(q.count>q.files.length))return unknown;
-  const files=[];
+  const files=[];let undisplayable=0;
   for(const f of q.files){
-    if(!isObj(f)||!cleanText(f.path,1024)||!cleanText(f.pattern,120)||!QUARANTINE_KINDS.includes(f.kind)||!Number.isSafeInteger(f.bytes)||f.bytes<0||typeof f.sha256!=="string"||!SHA256_RE.test(f.sha256))return unknown;
+    if(!isObj(f)||typeof f.path!=="string"||f.path.length===0||!cleanText(f.pattern,120)||!QUARANTINE_KINDS.includes(f.kind)||!Number.isSafeInteger(f.bytes)||f.bytes<0||typeof f.sha256!=="string"||!SHA256_RE.test(f.sha256))return unknown;
+    // //TR: Depo içeriği yola karar verir (git TAB/satır sonu ve çok uzun yola izin verir): geçerli sayı/commit kanıtı olan bir karantinayı tek böyle girdi için BİLİNMİYOR'a düşürmek yanlış nedeni söyler; girdi sayılır, listelenmez (undisplayable) ve asla NONE olmaz.
+    if(!cleanText(f.path,1024)){undisplayable++;continue}
     files.push({path:f.path,pattern:f.pattern,kind:f.kind,bytes:f.bytes,sha256:f.sha256});
   }
-  return {state:"QUARANTINED",headSha:imp.headSha,count:q.count,files,truncated:q.truncated,storedUnder:q.storedUnder};
+  return {state:"QUARANTINED",headSha:imp.headSha,count:q.count,files,truncated:q.truncated,storedUnder:q.storedUnder,recorded:q.files.length,undisplayable};
 }
 export function buildDevRunRequest({projectId,action}){
   const errors={};

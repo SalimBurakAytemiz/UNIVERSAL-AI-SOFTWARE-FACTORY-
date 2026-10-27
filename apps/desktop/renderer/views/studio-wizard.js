@@ -106,22 +106,25 @@ export function wizardPanel(ctx){
 /** Ana süreçteki yerel dosya diyaloğunu açar; renderer yalnız tür verir, yol ana süreçten gelir. */
 export async function pickImportPath(ctx){
   const native=ctx.native;
-  if(!native||typeof native.pickImportPath!=="function"){setStatus(IMPORT_FORM,{ok:false,key:"studio.import.noDialog",vars:{},errors:null});await ctx.rerender();focusResult(ctx,IMPORT_FORM,IMPORT_KEYS);return {ok:false}}
-  let r;try{r=await native.pickImportPath(importDraft.kind)}catch{setStatus(IMPORT_FORM,{ok:false,key:"studio.import.dialogFailed",vars:{},errors:null});await ctx.rerender();focusResult(ctx,IMPORT_FORM,IMPORT_KEYS);return {ok:false}}
+  if(!native||typeof native.pickImportPath!=="function"){setStatus(IMPORT_FORM,{ok:false,key:"studio.import.noDialog",vars:{},errors:null,projectId:importDraft.projectId});await ctx.rerender();focusResult(ctx,IMPORT_FORM,IMPORT_KEYS);return {ok:false}}
+  let r;try{r=await native.pickImportPath(importDraft.kind)}catch{setStatus(IMPORT_FORM,{ok:false,key:"studio.import.dialogFailed",vars:{},errors:null,projectId:importDraft.projectId});await ctx.rerender();focusResult(ctx,IMPORT_FORM,IMPORT_KEYS);return {ok:false}}
   if(!r||r.cancelled===true||typeof r.path!=="string"||r.kind!==importDraft.kind){settle(ctx,IMPORT_KEYS);return {ok:false,cancelled:true}}
-  importDraft.path=r.path;importDraft.pickedFor=importDraft.kind;drafts.status[IMPORT_FORM]=undefined;
+  // //TR: Yeni yol seçimi önceki içe aktarmanın durumunu VE karantina kanıtını siler (aksi halde eski kanıt, seçili başka proje için görünür kalırdı).
+  importDraft.path=r.path;importDraft.pickedFor=importDraft.kind;drafts.status[IMPORT_FORM]=undefined;clearImportOutcome();
   await ctx.rerender();settle(ctx,IMPORT_KEYS);return {ok:true};
 }
 export async function submitImport(ctx){
-  const req=buildImportRequest({projectId:importDraft.projectId,kind:importDraft.kind,path:importDraft.path});
-  if(!req.ok){setStatus(IMPORT_FORM,{ok:false,errors:req.errors});await ctx.rerender();focusResult(ctx,IMPORT_FORM,IMPORT_KEYS);return {ok:false,validation:true}}
+  // //TR: Proje kimliği await'ten ÖNCE yakalanır; yanıt geldiğinde kullanıcı başka çalışma alanına geçmiş olsa bile durum ve kanıt isteği başlatılan projeye yazılır.
+  const pid=importDraft.projectId;
+  const req=buildImportRequest({projectId:pid,kind:importDraft.kind,path:importDraft.path});
+  if(!req.ok){setStatus(IMPORT_FORM,{ok:false,errors:req.errors,projectId:pid});await ctx.rerender();focusResult(ctx,IMPORT_FORM,IMPORT_KEYS);return {ok:false,validation:true}}
   drafts.busy[IMPORT_FORM]=true;clearImportOutcome();
   let res;try{res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[IMPORT_FORM]=false}
   const d=describeImportResult(res);
   // //TR: Başarılı içe aktarma karantinayı GİZLEYEN düz bir "kabul edildi" olamaz: sonuç (karantinaya alındı / sunucu bildirmedi / bilinmiyor) durum satırında ve altındaki kanıt bloğunda gösterilir.
   const q=d.ok?mapImportQuarantine(res):null,doneKey=q===null?null:q.state==="QUARANTINED"?"studio.import.doneQuarantined":q.state==="UNKNOWN"?"studio.import.doneQuarantineUnknown":"studio.import.done";
-  setStatus(IMPORT_FORM,{ok:d.ok,key:d.ok?doneKey:d.key,vars:d.ok?(q.state==="QUARANTINED"?{count:q.count}:{}):d.vars,errors:null});
-  if(d.ok){const pid=importDraft.projectId;resetImport();setImportOutcome(pid,q)}
+  setStatus(IMPORT_FORM,{ok:d.ok,key:d.ok?doneKey:d.key,vars:d.ok?(q.state==="QUARANTINED"?{count:q.count}:{}):d.vars,errors:null,projectId:pid});
+  if(d.ok){resetImport();setImportOutcome(pid,q)}
   await ctx.refreshAll({force:true});focusResult(ctx,IMPORT_FORM,IMPORT_KEYS);return {ok:d.ok,status:res?.status??null};
 }
 /** projects: seçilebilir proje listesi; fixedId verilirse hedef proje sabittir (çalışma alanı içinden). */
@@ -133,19 +136,24 @@ function quarantineBlock(ctx,fixedId){
   if(q.state==="UNKNOWN")return wrap(h(doc,"p",{dataset:{quarantineNote:"unknown"},text:ctx.t("studio.import.q.unknown")}));
   if(q.state==="NONE")return wrap(h(doc,"p",{dataset:{quarantineNote:"none"},text:ctx.t("studio.import.q.none")}));
   const shown=q.files.slice(0,QUARANTINE_FILES_SHOWN),cols=["path","pattern","kind","bytes","sha"];
+  // //TR: Sunucu en çok 500 yolu kaydeder (server.ts); truncated iken kalan adlar HİÇBİR yerde saklanmaz. Bu yüzden "tam liste manifestte" yalnız kesilmemiş kanıtta söylenir. Listelenemeyen yollar (çok uzun / kontrol karakteri) sayılır, gösterilmez.
+  const recorded=q.recorded??q.files.length,und=q.undisplayable??0,unlisted=q.count-shown.length-und;
   const row=f=>h(doc,"tr",{dataset:{quarantineFile:f.path}},h(doc,"td",{class:"mono",text:f.path}),h(doc,"td",{class:"mono",text:f.pattern}),h(doc,"td",{text:f.kind}),h(doc,"td",{class:"num",text:String(f.bytes)}),h(doc,"td",{class:"mono",text:f.sha256.slice(0,12)}));
-  const table=h(doc,"div",{class:"table-wrap"},h(doc,"table",{class:"table",id:"studio-import-quarantine-files"},
+  const table=shown.length===0?null:h(doc,"div",{class:"table-wrap"},h(doc,"table",{class:"table",id:"studio-import-quarantine-files"},
     h(doc,"caption",{class:"sr-only",text:ctx.t("studio.import.q.files")}),
     h(doc,"thead",{},h(doc,"tr",{},cols.map(k=>h(doc,"th",{scope:"col",text:ctx.t(`studio.import.q.col.${k}`)})))),
     h(doc,"tbody",{},shown.map(row))));
   return wrap(h(doc,"p",{dataset:{quarantineNote:"quarantined",quarantineCount:String(q.count)},text:ctx.t("studio.import.q.quarantined",{count:q.count,sha:q.headSha.slice(0,12),where:q.storedUnder})}),table,
-    shown.length<q.count?h(doc,"p",{dataset:{quarantineMore:"1"},text:ctx.t("studio.import.q.more",{shown:shown.length,count:q.count})}):null);
+    und>0?h(doc,"p",{dataset:{quarantineUndisplayable:String(und)},text:ctx.t("studio.import.q.undisplayable",{n:und})}):null,
+    unlisted>0?h(doc,"p",{dataset:{quarantineMore:"1"},text:q.truncated?ctx.t("studio.import.q.moreTruncated",{shown:shown.length,count:q.count,recorded,rest:q.count-recorded}):ctx.t("studio.import.q.more",{shown:shown.length,count:q.count})}):null);
 }
 export function importPanel(ctx,{projects,fixedId=null}){
-  const doc=ctx.doc,st=drafts.status[IMPORT_FORM],errs=st?.errors??{},d=importDraft;
+  const doc=ctx.doc,d=importDraft;
   if(fixedId)d.projectId=fixedId;
   else if(!d.projectId||!projects.some(p=>p.projectId===d.projectId))d.projectId=projects.some(p=>p.projectId===studio.lastCreated?.projectId)?studio.lastCreated.projectId:(projects.some(p=>p.projectId===ctx.store.projectId)?ctx.store.projectId:(projects[0]?.projectId??""));
   if(d.pickedFor!==d.kind){d.path="";d.pickedFor=null}
+  // //TR: Durum satırı kanıt bloğu gibi proje kapsamlıdır: çalışma alanı paneli yalnız KENDİ projesinin (veya proje etiketsiz) sonucunu gösterir; başka projenin "N dosya karantinaya alındı" satırı sızmaz.
+  const stAll=drafts.status[IMPORT_FORM],st=stAll&&(!fixedId||stAll.projectId===undefined||stAll.projectId===fixedId)?stAll:undefined,errs=st?.errors??{};
   const form=h(doc,"form",{id:"studio-import-form",novalidate:true,"aria-labelledby":"studio-import-t",on:{submit:e=>{e.preventDefault();if(!drafts.busy[IMPORT_FORM])submitImport(ctx)}}},
     fixedId?null:field(ctx,{id:"studio-import-project",labelKey:"studio.import.project",value:d.projectId,onInput:v=>{d.projectId=v},errorKey:errs.projectId,required:true,options:projects.length?projects.map(p=>({value:p.projectId,label:p.name})):[{value:"",label:ctx.t("work.form.noProjects")}]}),
     field(ctx,{id:"studio-import-kind",labelKey:"studio.import.kind",value:d.kind,onInput:v=>{d.kind=IMPORT_KINDS.includes(v)?v:"git";d.path="";d.pickedFor=null;Promise.resolve(ctx.rerender()).then(()=>settle(ctx,["id:studio-import-kind"]))},errorKey:errs.importKind,required:true,options:IMPORT_KINDS.map(k=>({value:k,label:ctx.t(`studio.import.kind.${k}`)}))}),
@@ -155,7 +163,7 @@ export function importPanel(ctx,{projects,fixedId=null}){
       h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn",id:"studio-import-pick",dataset:{focusKey:"studio-import-pick"},text:ctx.t(d.kind==="zip"?"studio.import.pickZip":"studio.import.pickGit"),on:{click:()=>{pickImportPath(ctx)}}})),
       h(doc,"p",{class:"field-hint",text:ctx.t("studio.import.hint")}),
       errs.importPath?h(doc,"p",{class:"field-error",id:"studio-import-path-err",text:ctx.t(errs.importPath)}):null),
-    statusBlock(ctx,IMPORT_FORM),
+    st?statusBlock(ctx,IMPORT_FORM):h(doc,"div",{class:"form-status",id:`${IMPORT_FORM}-status`,role:"status","aria-live":"polite",tabindex:"-1"}),
     quarantineBlock(ctx,fixedId),
     h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"submit",class:"btn btn-primary",id:"studio-import-submit",dataset:{focusKey:"studio-import-submit"},disabled:drafts.busy[IMPORT_FORM]===true||!d.path||!d.projectId,text:ctx.t("studio.import.submit")})));
   const details=h(doc,"details",{class:"panel form-panel",id:fixedId?"studio-import-ws":"studio-import",open:fixedId?true:(studioUi.importOpen||Boolean(st))},
