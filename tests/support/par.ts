@@ -109,21 +109,22 @@ export const stallProbe = (tickMs = 50) => {
     stop: () => clearInterval(t)
   };
 };
-// //TR: C-PAR03-DIAG-1: FENCED'i HANGİ store çağrısının fırlattığını kaydeder (heartbeat'in `catch { lost = true }`'u hatayı yutar, bu yüzden aksi hâlde hiç görünmez). Geçişli casus: davranışı değiştirmez, hatayı aynen yeniden fırlatır; installSlowGit gibi her testten sonra vi.restoreAllMocks ile geri alınır. Zamanlar performance.now ve Date.now (stallProbe ile aynı saatler).
+// //TR: C-PAR03-DIAG-1: FENCED'i HANGİ store çağrısının fırlattığını kaydeder (heartbeat'in `catch { lost = true }`'u hatayı yutar, bu yüzden aksi hâlde hiç görünmez). Geçişli sarmalayıcı: davranışı değiştirmez, hatayı aynen yeniden fırlatır. Zamanlar performance.now ve Date.now (stallProbe ile aynı saatler).
 export interface FenceHit { call: string; runId: string; note: string; atPerf: number; atWall: number }
 const FENCE_CALLS = ["acquireRunLease", "renewRunLease", "takeoverRunLease", "transitionRun", "checkpointRun", "addRunEvidence"] as const;
 export function fenceTrace(store: object): {hits: () => FenceHit[]; calls: () => number} {
   const hits: FenceHit[] = []; let calls = 0;
+  const target = store as Record<string, (...a: unknown[]) => unknown>;
   for (const name of FENCE_CALLS) {
-    const target = store as Record<string, (...a: unknown[]) => unknown>;
-    const real = target[name].bind(store);
-    vi.spyOn(target, name).mockImplementation((...a: unknown[]) => {
+    // //TR: vi.spyOn DEĞİL, örnek özelliğine doğrudan sarmalayıcı: aynı yöntemi zaten casuslayan bir test (ör. journal-yazı zinciri) vi.spyOn ile aynı casusu yeniden kullanıp gerçekliğini ezerdi; sarmalayıcı mevcut hâli (casus dahil) çağırır ve store örneği her testte yenidir.
+    const real = target[name];
+    target[name] = function (this: unknown, ...a: unknown[]) {
       calls += 1;
-      try { return real(...a); } catch (e) {
+      try { return real.apply(store, a); } catch (e) {
         if ((e as {code?: unknown})?.code === "WORKOS_LEASE_FENCED") hits.push({call: name, runId: String(a[0]), note: name === "transitionRun" ? `to=${String(a[2])} reason=${String(a[3])}` : name === "checkpointRun" ? `step=${String((a[2] as {step?: unknown})?.step)}` : name === "addRunEvidence" ? `kind=${String((a[2] as {kind?: unknown})?.kind)}` : "", atPerf: Math.round(performance.now()), atWall: Date.now()});
         throw e;
       }
-    });
+    };
   }
   return {hits: () => hits.map(h => ({...h})), calls: () => calls};
 }

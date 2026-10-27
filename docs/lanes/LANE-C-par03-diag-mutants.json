@@ -1,5 +1,5 @@
 {
- "//TR": "C-PAR03-DIAG-1 (relfx-c3:200 PAR-03 Windows fence tanılaması: store yazı aşamaları, stallProbe boşlukları, fenceTrace, hbDiag) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt `file` içinde TAM 1 kez geçen bir metni değiştirir; docs/lanes/LANE-C-par03-diag-mutants.mjs hepsini tests/v7-relfx-c3-remediation.test.ts içindeki \"C-PAR03-DIAG-1\" testleriyle çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. D1-D27 core/workos/store.ts ölçümü (D28 yoktur: write() yeniden girişli değildir, iç içe çerçeve kodu kaldırıldı), D29-D44 tests/support/par.ts, D45-D55 hbDiag iletisi ve prob başlatma sırasıdır.",
+ "//TR": "C-PAR03-DIAG-1 (relfx-c3:200 PAR-03 Windows fence tanılaması: store yazı aşamaları, stallProbe boşlukları, fenceTrace, hbDiag) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt `file` içinde TAM 1 kez geçen bir metni değiştirir; docs/lanes/LANE-C-par03-diag-mutants.mjs hepsini tests/v7-relfx-c3-remediation.test.ts içindeki \"C-PAR03-DIAG-1\" testleriyle çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. D1-D27 core/workos/store.ts ölçümü (D28 yoktur: write() yeniden girişli değildir, iç içe çerçeve kodu kaldırıldı), D29-D44 tests/support/par.ts, D45-D55 hbDiag iletisi ve prob başlatma sırasıdır, D56 fenceTrace'in sarmaladığı yöntemi çağırmamasıdır.",
  "mutants": [
   {
    "id": "D1",
@@ -264,8 +264,8 @@
    "id": "D39",
    "description": "fenceTrace swallows the error",
    "file": "tests/support/par.ts",
-   "old": "        throw e;\n      }\n    });",
-   "new": "        return undefined;\n      }\n    });"
+   "old": "        throw e;\n      }\n    };",
+   "new": "        return undefined;\n      }\n    };"
   },
   {
    "id": "D40",
@@ -378,6 +378,13 @@
    "file": "tests/v7-relfx-c3-remediation.test.ts",
    "old": "    const mr = c.runner({maxConcurrentRuns: 2, leaseTtlMs: TTL, executors: pair});\n    const probe = stallProbe(); // //TR: C-PAR03-DIAG-1: prob runner kurulduktan SONRA başlar (constructor'ın spawnSync + node.exe sha256'sı Linux'ta ~0,9 s, Windows'ta daha fazlasını ekler ve ilk boşluk olarak görünürdü)\n    const rep = await mr.tick().finally(() => probe.stop());\n    expect(slow.hits.sync + slow.hits.async, \"the slow-git scenario really fired once\")",
    "new": "    const probe = stallProbe();\n    const mr = c.runner({maxConcurrentRuns: 2, leaseTtlMs: TTL, executors: pair});\n    const rep = await mr.tick().finally(() => probe.stop());\n    expect(slow.hits.sync + slow.hits.async, \"the slow-git scenario really fired once\")"
+  },
+  {
+   "id": "D56",
+   "description": "fenceTrace does not call the method it wraps",
+   "file": "tests/support/par.ts",
+   "old": "try { return real.apply(store, a); } catch (e) {",
+   "new": "try { return undefined; } catch (e) {"
   }
  ]
 }

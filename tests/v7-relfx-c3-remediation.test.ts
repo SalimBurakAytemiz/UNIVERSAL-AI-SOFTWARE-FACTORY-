@@ -328,6 +328,17 @@ describe("C-PAR03-DIAG-1: the next Windows PAR-03 failure names the blocking pha
     hits.length = 0; expect(trace.hits()).toHaveLength(2); // copy
   });
 
+  // //TR: fenceTrace, aynı yöntemi ÖNCEDEN casuslayan bir testle (ör. journal-yazı zinciri) birlikte çalışır: ikisi de çağrıyı görür, önceki casusun davranışı ezilmez (vi.spyOn aynı casusu yeniden kullanıp gerçeklik ezerdi; bu bir regresyondu ve zincir testini kırmıştı).
+  it("fenceTrace composes with a spy that was installed on the same method first", () => {
+    const c = setup("diag-compose"); const A = c.mkRun("A");
+    const st = c.store as unknown as Record<"transitionRun", (...a: unknown[]) => unknown>;
+    const real = st.transitionRun.bind(c.store); let seenBySpy = 0;
+    vi.spyOn(st, "transitionRun").mockImplementation((...a: unknown[]) => { seenBySpy += 1; return real(...a); });
+    const trace = fenceTrace(c.store);
+    expect(() => c.store.transitionRun(A.runId, "lse_wrong", "RUNNING", "composed", "t")).toThrow(/WORKOS_LEASE_FENCED/);
+    expect([seenBySpy, trace.hits().map(h => h.note), trace.calls()]).toEqual([1, ["to=RUNNING reason=composed"], 1]);
+  });
+
   // //TR: stallProbe her PAR-03/HB-1 sahnesinde runner KURULDUKTAN sonra başlar: MissionRunner constructor'ı (spawnSync + node.exe sha256'sı) Linux'ta ~0,9 s, Windows'ta daha fazlasını ekler ve prob onu ilk "boşluk" olarak görürdü. Kaynak düzeyinde sabitlenir: 5 sahnenin hepsinde runner'ı kuran `mr` satırını hemen stallProbe satırı izler ve `.tick()` o `mr` üzerinde çağrılır.
   it("every PAR-03/HB-1 scenario starts its stallProbe after the runner is constructed", () => {
     const src = fs.readFileSync(path.join(REPO, "tests", "v7-relfx-c3-remediation.test.ts"), "utf8");
