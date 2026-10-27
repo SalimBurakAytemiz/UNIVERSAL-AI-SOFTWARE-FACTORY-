@@ -2246,6 +2246,16 @@
         "masterV2": "C-RDY-1 Role Readiness Auditor = Master V2 package 1 DONE (merged, not product-accepted)"
       },
       {
+        "pr": 273,
+        "merge": "db3dc93",
+        "by": "coordinator direct merge, expectedHeadSha 6694dc1 (required checks green on 6694dc1)",
+        "at": "2026-10-27T05:03:16Z",
+        "postMerge": "VERIFIED: parent1 779c840, parent2 = gated head 6694dc1, merge-tree == merge tree c00a04c (= probe tree tested locally: b5 + ux-wp-agents + ux-wp-workos + int-r3-desktop 335/335)",
+        "review": "full BLOCKERS -> delta r1 BLOCKERS_2MEDIUM (5097223) -> delta r2 NO_BLOCKERS_4LOW (6694dc1)",
+        "riskTier": "R0 ROUTINE (renderer + tests)",
+        "masterV2": "A-RUNSTATE-1: live worker set = server ACTIVE_WORKER_STATUSES; cut-list honesty; other excludes terminal"
+      },
+      {
         "pr": 242,
         "merge": "779c840",
         "by": "FOUNDER merge (Founder-tier protected: apps/control-api/src/server.ts, apps/desktop/main.mjs)",
