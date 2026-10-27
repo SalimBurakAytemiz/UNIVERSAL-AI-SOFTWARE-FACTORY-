@@ -550,7 +550,7 @@ describe("LANE-B project intake", () => {
     const {repositoryPrecondition} = await import("../core/workos/runner.js");
     expect(repositoryPrecondition(p, store.dataDir)).toMatchObject({ok: true});
     const {deriveReadiness} = await import("../core/workos/readiness.js");
-    const rd = deriveReadiness(store, {tenantId: "tA"}, p.projectId)!;
+    const rd = (await deriveReadiness(store, {tenantId: "tA"}, p.projectId))!;
     expect(rd.ready).toBe(true);
     expect(rd.checks.find(c => c.id === "REPOSITORY")!.state).toBe("OK");
     expect(r.body).not.toContain(store.dataDir);
@@ -565,7 +565,7 @@ describe("LANE-B project intake", () => {
     const {app, store} = await mkApp();
     const r = await post(app, {idea: IDEA, idempotencyKey: "tpl0"});
     const {deriveReadiness} = await import("../core/workos/readiness.js");
-    const rd = deriveReadiness(store, {tenantId: "tA"}, r.json().intake.projectId)!;
+    const rd = (await deriveReadiness(store, {tenantId: "tA"}, r.json().intake.projectId))!;
     expect(rd.ready).toBe(false);
     expect(rd.checks.find(c => c.id === "REPOSITORY")).toMatchObject({state: "BLOCKED", reason: "REPOSITORY_NOT_CONFIGURED"});
   });
@@ -2338,6 +2338,14 @@ describe("LANE-B run readiness", () => {
   const proj = (s: WorkOsStore, extra: any = {}) => s.createProject({tenantId: "tA", orgId: "o1", name: "p" + Math.random(), environmentId: "local", createdBy: "FOUNDER_LOCAL", ...extra});
   const msn = (s: WorkOsStore, projectId: string, extra: any = {}) => s.createMission({tenantId: "tA", projectId, title: "m", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL", ...extra});
   const rd = async (app: any, id: string) => (await app.inject({method: "GET", url: `/v1/projects/${id}/readiness`, headers: hdr}));
+  // Gerçek git deposu (kök + bir commit): runner'ın WORKSPACE adımı ile readiness'in kabul ettiği tek biçim.
+  const gitRepo = (dir: string, commit = true) => {
+    fs.mkdirSync(dir, {recursive: true});
+    const g = (args: string[]) => { const r = spawnGitSync(dir, args); if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`); };
+    g(["init", "-q", "-b", "main"]);
+    if (commit) { fs.writeFileSync(path.join(dir, "f.txt"), "x"); g(["add", "-A"]); g(["-c", "user.name=Seed", "-c", "user.email=seed@local.invalid", "commit", "-q", "-m", "seed"]); }
+    return dir;
+  };
   const by = (r: any) => Object.fromEntries(r.json().readiness.checks.map((c: any) => [c.id, c]));
 
   it("fresh project: no mission, no repository, no test command are reported with fixed codes and next actions; nothing is invented", async () => {
@@ -2355,7 +2363,7 @@ describe("LANE-B run readiness", () => {
 
   it("ready only when every blocking check is OK; verifiable additionally needs test command and plan; mission test command overrides the project's", async () => {
     const {app, store} = await mk();
-    const repoDir = path.join(tmp, "readiness-repo"); fs.mkdirSync(repoDir, {recursive: true});
+    const repoDir = gitRepo(path.join(tmp, "readiness-repo"));
     const p = proj(store, {repository: {path: repoDir}});
     const m = msn(store, p.projectId);
     let r = await rd(app, p.projectId);
@@ -2417,7 +2425,7 @@ describe("LANE-B run readiness", () => {
   it("readiness REPOSITORY answers are exactly the runner's own repositoryPrecondition reasons for all five BLOCK cases", async () => {
     const {repositoryPrecondition} = await import("../core/workos/runner.js");
     const {app, store} = await mk();
-    const dataDir = path.join(tmp, "data"), okDir = path.join(tmp, "readiness-parity-ok"); fs.mkdirSync(okDir, {recursive: true});
+    const dataDir = path.join(tmp, "data"), okDir = gitRepo(path.join(tmp, "readiness-parity-ok"));
     const cases: [string, any, string | null][] = [
       ["none", undefined, "REPOSITORY_NOT_CONFIGURED"],
       ["url only", {url: "https://example.com/a.git"}, "REMOTE_REPO_NOT_SUPPORTED_YET"],
@@ -2437,6 +2445,215 @@ describe("LANE-B run readiness", () => {
     }
   });
 
+  it("a MANAGED repository (canonical <dataDir>/projects/<id>/repo) gets the same HEAD decision: a plain managed folder is BLOCKED, a git root with a commit is OK", async () => {
+    const {app, store} = await mk();
+    for (const [name, asGit, want] of [["plain", false, "REPOSITORY_HEAD_UNRESOLVED"], ["git", true, null]] as const) {
+      const p = proj(store); msn(store, p.projectId);
+      const repo = path.join(store.dataDir, "projects", p.projectId, "repo");
+      if (asGit) gitRepo(repo); else fs.mkdirSync(repo, {recursive: true});
+      store.setProjectRepository({tenantId: "tA"}, p.projectId, {path: repo, managed: true}, "FOUNDER_LOCAL", {kind: "git", headSha: "0".repeat(40)});
+      const got = by(await rd(app, p.projectId)).REPOSITORY;
+      expect([got.state, got.reason], name).toEqual(want ? ["BLOCKED", want] : ["OK", null]);
+    }
+  });
+
+  it("an unexpected error while deciding (the repository path cannot be stat-ed) is UNKNOWN, never OK", async () => {
+    const {app, store} = await mk(); const dir = path.join(tmp, "readiness-throws"); fs.mkdirSync(dir, {recursive: true});
+    const p = proj(store, {repository: {path: dir}}); msn(store, p.projectId);
+    const real = fs.statSync, spy = vi.spyOn(fs, "statSync").mockImplementation(((q: any, ...r: any[]) => { if (String(q).includes("readiness-throws")) throw Object.assign(new Error("EACCES"), {code: "EACCES"}); return (real as any).call(fs, q, ...r); }) as any);
+    try {
+      const c = by(await rd(app, p.projectId)).REPOSITORY;
+      expect([c.state, c.reason]).toEqual(["UNKNOWN", "SOURCE_UNREADABLE"]);
+    } finally { spy.mockRestore(); }
+  });
+
+  it("the repository HEAD probe budget is a MONOTONIC deadline: a forward wall-clock step during the probe does not turn a valid repository into BLOCKED", async () => {
+    const {app, store} = await mk(); const repo = gitRepo(path.join(tmp, "readiness-clockstep"));
+    const p = proj(store, {repository: {path: repo}}); msn(store, p.projectId);
+    // Adım, ilk git çocuğu doğduktan SONRA gelir (sürücü son tarihini o zamana kadar hesaplamış olur); duvar saatine bağlı bir son tarih sonraki probları "süre doldu" sayardı.
+    const real = Date.now, realSpawn = cp.spawn; let stepped = false;
+    const spy = vi.spyOn(Date, "now").mockImplementation(() => real() + (stepped ? 3_600_000 : 0));
+    const sp = vi.spyOn(cp, "spawn").mockImplementation(((...a: any[]) => { stepped = true; return (realSpawn as any).apply(cp, a); }) as any);
+    try { const c = by(await rd(app, p.projectId)).REPOSITORY; expect(stepped, "the step happened during the probe").toBe(true); expect([c.state, c.reason]).toEqual(["OK", null]); } finally { sp.mockRestore(); spy.mockRestore(); }
+  });
+
+  it("the checks come back in the fixed server-side order MISSION, RISK, REPOSITORY, TEST_COMMAND, PLAN (the renderer turns the card into ERROR on any other order)", async () => {
+    const {app, store} = await mk(); const p = proj(store, {repository: {path: gitRepo(path.join(tmp, "readiness-order"))}}); msn(store, p.projectId);
+    const r = await rd(app, p.projectId);
+    expect(r.json().readiness.checks.map((c: any) => c.id)).toEqual(["MISSION", "RISK", "REPOSITORY", "TEST_COMMAND", "PLAN"]);
+  });
+
+  it("the route error path: when deriving rejects, the answer is workosFail's error (500 INTERNAL...), never a readiness body", async () => {
+    const {app, store} = await mk(); const p = proj(store); msn(store, p.projectId);
+    const spy = vi.spyOn(store, "getProject").mockImplementation((() => { throw new Error("boom"); }) as any);
+    try {
+      const r = await rd(app, p.projectId);
+      expect(r.statusCode).toBe(500); expect(r.json()).toEqual({error: "INTERNAL_ERROR"});
+    } finally { spy.mockRestore(); }
+  });
+
+  describe.skipIf(process.platform === "win32")("readiness REPOSITORY with a broken git (fake git on PATH; the probe is bounded)", () => {
+    const withFakeGit = async (script: string | null, fn: (dir: string) => Promise<void>) => {
+      const bin = fs.mkdtempSync(path.join(tmp, "readiness-fakegit-")), oldPath = process.env.PATH;
+      if (script !== null) { fs.writeFileSync(path.join(bin, "git"), script, {mode: 0o755}); }
+      process.env.PATH = bin;
+      try { await fn(bin); } finally { process.env.PATH = oldPath; fs.rmSync(bin, {recursive: true, force: true}); }
+    };
+    const check = async (name: string) => {
+      const {app, store} = await mk(); const dir = path.join(tmp, name); fs.mkdirSync(dir, {recursive: true});
+      const p = proj(store, {repository: {path: dir}}); msn(store, p.projectId);
+      const t0 = Date.now(), r = await rd(app, p.projectId);
+      return {c: by(r).REPOSITORY, ready: r.json().readiness.ready, ms: Date.now() - t0, body: r.body};
+    };
+    it("a MISSING git binary is BLOCKED with the runner's reason, never OK", async () => {
+      await withFakeGit(null, async () => {
+        const {c, ready} = await check("readiness-nogit");
+        expect([c.state, c.reason, c.nextAction, ready]).toEqual(["BLOCKED", "REPOSITORY_HEAD_UNRESOLVED", "CONFIGURE_REPOSITORY", false]);
+      });
+    });
+    it("git refusing the folder ('detected dubious ownership', exit 128) is BLOCKED with the runner's reason, never OK", async () => {
+      await withFakeGit("#!/bin/sh\necho 'fatal: detected dubious ownership in repository' >&2\nexit 128\n", async () => {
+        const {c, ready, body} = await check("readiness-dubious");
+        expect([c.state, c.reason, ready]).toEqual(["BLOCKED", "REPOSITORY_HEAD_UNRESOLVED", false]);
+        expect(body).not.toContain("dubious");
+      });
+    });
+    it("a HANGING git ends in UNKNOWN within the 3 s bound (READINESS_REPO_PROBE_MS), the run is not ready, no OK", async () => {
+      const {READINESS_REPO_PROBE_MS} = await import("../core/workos/readiness.js");
+      expect(READINESS_REPO_PROBE_MS).toBe(3000);
+      await withFakeGit("#!/bin/sh\nexec /bin/sleep 30\n", async () => {
+        const {c, ready, ms} = await check("readiness-hang");
+        expect([c.state, c.reason, ready]).toEqual(["UNKNOWN", "SOURCE_UNREADABLE", false]);
+        expect(ms).toBeLessThan(READINESS_REPO_PROBE_MS + 1500);
+      });
+    });
+    it("a hanging git does NOT block the process: over the WHOLE probe the largest gap between timer ticks stays small and an unrelated route answers fast (the async driver; a late sync fallback is caught too)", async () => {
+      await withFakeGit("#!/bin/sh\nexec /bin/sleep 30\n", async () => {
+        const {app, store} = await mk(); const dir = path.join(tmp, "readiness-nonblocking"); fs.mkdirSync(dir, {recursive: true});
+        app.get("/ping", async () => ({pong: true}));
+        const p = proj(store, {repository: {path: dir}}); msn(store, p.projectId);
+        let last = performance.now(), maxGap = 0; const timer = setInterval(() => { const n = performance.now(); maxGap = Math.max(maxGap, n - last); last = n; }, 50);
+        try {
+          const slow = rd(app, p.projectId), t0 = Date.now();
+          await new Promise(r => setTimeout(r, 300));
+          const pt0 = Date.now(), pong = await app.inject({method: "GET", url: "/ping", headers: hdr}), pingMs = Date.now() - pt0;
+          expect(pong.statusCode).toBe(200); expect(pingMs, "an unrelated route answers while git hangs").toBeLessThan(500);
+          const r = await slow; expect(Date.now() - t0).toBeGreaterThanOrEqual(2500);
+          await new Promise(r2 => setTimeout(r2, 60));
+          expect(maxGap, "no event-loop freeze at any point of the 3 s probe (a ~450 ms sync freeze is caught too)").toBeLessThan(300);
+          expect(by(r).REPOSITORY.state).toBe("UNKNOWN");
+        } finally { clearInterval(timer); }
+      });
+    });
+    it("on timeout the DIRECT git child is killed and the answer is UNKNOWN within the bound; a forked grandchild is a documented known limit (it is not killed, it just cannot hold the budget)", async () => {
+      const pf = path.join(tmp, "readiness-gc-pids.txt"); fs.rmSync(pf, {force: true});
+      await withFakeGit(`#!/bin/sh\necho $$ >> ${pf}\n/bin/sleep 30 &\necho $! >> ${pf}\nwait\n`, async () => {
+        let pids: number[] = [];
+        try {
+          const {c, ms} = await check("readiness-grandchild");
+          expect([c.state, c.reason]).toEqual(["UNKNOWN", "SOURCE_UNREADABLE"]); expect(ms).toBeLessThan(3000 + 1500);
+          pids = fs.readFileSync(pf, "utf8").trim().split("\n").map(Number); expect(pids.length).toBeGreaterThanOrEqual(2);
+          const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+          for (let n = 0; n < 40 && alive(pids[0]); n++) await new Promise(r => setTimeout(r, 50));
+          expect(alive(pids[0]), "the direct git child is gone after the probe").toBe(false);
+        } finally { for (const pid of pids.slice(1)) { try { process.kill(pid, "SIGKILL"); } catch { /* weg */ } } }
+      });
+    });
+    it.skipIf(!fs.existsSync("/proc/self/stat"))("C1: the HEAD-probe git child stays in the CALLER's process group (not detached/setsid), so terminal and group signals reach it", async () => {
+      const pf = path.join(tmp, "readiness-pgid.txt"); fs.rmSync(pf, {force: true});
+      const pgrpOf = (pid: number) => Number(fs.readFileSync(`/proc/${pid}/stat`, "utf8").replace(/^.*\) /, "").split(" ")[2]);
+      await withFakeGit(`#!/bin/sh\necho $$ > ${pf}\nexec /bin/sleep 30\n`, async () => {
+        const slow = check("readiness-pgid");
+        let pid = NaN; for (let n = 0; n < 60 && !Number.isFinite(pid); n++) { await new Promise(r => setTimeout(r, 50)); try { pid = Number(fs.readFileSync(pf, "utf8").trim()); } catch { pid = NaN; } if (!pid) pid = NaN; }
+        expect(Number.isFinite(pid)).toBe(true);
+        expect(pgrpOf(pid), "git child pgid equals this process's pgid").toBe(pgrpOf(process.pid));
+        await slow;
+      });
+    });
+    it("C2: a group SIGINT to a process that is running a hung HEAD probe leaves no git alive (a real terminal Ctrl+C / group signal reaches the probe)", async () => {
+      const pf = path.join(tmp, "readiness-sigint-pid.txt"), script = path.join(tmp, "readiness-sigint-parent.mts"); fs.rmSync(pf, {force: true});
+      fs.writeFileSync(script, `import {repositoryHeadAsync} from ${JSON.stringify(pathToFileURL(path.resolve(__dirname, "..", "core", "workos", "runner.ts")).href)};\nconsole.log("probing");\nawait repositoryHeadAsync(process.argv[2], {timeoutMs: 20000});\nconsole.log("done");\n`);
+      const bin = fs.mkdtempSync(path.join(tmp, "readiness-sigint-bin-")), work = path.join(tmp, "readiness-sigint-work"); fs.mkdirSync(work, {recursive: true});
+      fs.writeFileSync(path.join(bin, "git"), `#!/bin/sh\necho $$ > ${pf}\nexec /bin/sleep 30\n`, {mode: 0o755});
+      const parent = cp.spawn(process.execPath, ["--import", "tsx", script, work], {cwd: path.resolve(__dirname, ".."), env: {...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`}, detached: true, stdio: "ignore"});
+      const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+      let gitPid = NaN;
+      try {
+        for (let n = 0; n < 200 && !Number.isFinite(gitPid); n++) { await new Promise(r => setTimeout(r, 50)); try { gitPid = Number(fs.readFileSync(pf, "utf8").trim()); } catch { gitPid = NaN; } if (!gitPid) gitPid = NaN; }
+        expect(Number.isFinite(gitPid) && alive(gitPid), "the probe git is running").toBe(true);
+        process.kill(-parent.pid!, "SIGINT");
+        for (let n = 0; n < 40 && alive(gitPid); n++) await new Promise(r => setTimeout(r, 50));
+        expect(alive(gitPid), "no git left alive 2 s after the group SIGINT").toBe(false);
+      } finally { try { process.kill(-parent.pid!, "SIGKILL"); } catch { /* weg */ } if (Number.isFinite(gitPid)) { try { process.kill(gitPid, "SIGKILL"); } catch { /* weg */ } } fs.rmSync(bin, {recursive: true, force: true}); }
+    });
+    it("C4: after a timeout the stdout/stderr streams are DESTROYED (no more buffering) and the call settles at the bound without 'close'", async () => {
+      const { runGitAsync } = await import("../core/workos/git-async.js"); const realSpawn = cp.spawn; let kid: any = null;
+      const sp = vi.spyOn(cp, "spawn").mockImplementation(((...a: any[]) => { kid = (realSpawn as any).apply(cp, a); return kid; }) as any);
+      try {
+        await withFakeGit("#!/bin/sh\nwhile true; do echo xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx; /bin/sleep 0.05; done\n", async bin => {
+          const t0 = Date.now(), r = await runGitAsync(tmp, ["rev-parse"], {PATH: bin}, undefined, {timeoutMs: 400, hardTimeout: true});
+          expect([r.status, r.stdout]).toEqual([null, ""]); expect(Date.now() - t0).toBeLessThan(1500);
+          expect([kid.stdout.destroyed, kid.stderr.destroyed], "streams destroyed").toEqual([true, true]);
+        });
+      } finally { sp.mockRestore(); }
+    });
+    it("the classification of a failed probe uses the MONOTONIC clock: a forward wall-clock step during a FAST failure does not turn it into UNKNOWN", async () => {
+      const {app, store} = await mk(); const dir = path.join(tmp, "readiness-classify-clock"); fs.mkdirSync(dir, {recursive: true});
+      const p = proj(store, {repository: {path: dir}}); msn(store, p.projectId);
+      const real = Date.now, realSpawn = cp.spawn; let stepped = false;
+      const spy = vi.spyOn(Date, "now").mockImplementation(() => real() + (stepped ? 3_600_000 : 0));
+      const sp = vi.spyOn(cp, "spawn").mockImplementation(((...a: any[]) => { stepped = true; return (realSpawn as any).apply(cp, a); }) as any);
+      try { const c = by(await rd(app, p.projectId)).REPOSITORY; expect(stepped).toBe(true); expect([c.state, c.reason]).toEqual(["BLOCKED", "REPOSITORY_HEAD_UNRESOLVED"]); } finally { sp.mockRestore(); spy.mockRestore(); }
+    });
+    it.skipIf(!fs.existsSync("/usr/bin/setsid"))("the budget holds even when a grandchild ESCAPED the process group (setsid) and keeps the pipe open: the answer settles at the bound without waiting for 'close'", async () => {
+      const pf = path.join(tmp, "readiness-escaped-pids.txt"); fs.rmSync(pf, {force: true});
+      await withFakeGit(`#!/bin/sh\n/usr/bin/setsid /bin/sleep 30 &\nsleep 0.2\necho $! >> ${pf}\nwait\n`, async () => {
+        try {
+          const {c, ms} = await check("readiness-escaped");
+          expect([c.state, c.reason]).toEqual(["UNKNOWN", "SOURCE_UNREADABLE"]); expect(ms).toBeLessThan(3000 + 1500);
+        } finally { for (const pid of (fs.existsSync(pf) ? fs.readFileSync(pf, "utf8").trim().split("\n").map(Number) : [])) { try { process.kill(pid, "SIGKILL"); } catch { /* weg */ } } }
+      });
+    });
+    it("a slow but FINITE git failure (about 0.4 s per probe) stays BLOCKED with the runner's reason - only an exhausted budget is UNKNOWN", async () => {
+      await withFakeGit("#!/bin/sh\n/bin/sleep 0.4\nexit 128\n", async () => {
+        const {c, ms} = await check("readiness-slowfail");
+        expect([c.state, c.reason]).toEqual(["BLOCKED", "REPOSITORY_HEAD_UNRESOLVED"]); expect(ms).toBeGreaterThanOrEqual(350); expect(ms).toBeLessThan(2900);
+      });
+    });
+    it("a slow but FINITE git failure of about 2.5 s in total stays BLOCKED with the runner's reason (only an exhausted budget is UNKNOWN)", async () => {
+      await withFakeGit("#!/bin/sh\n/bin/sleep 0.85\nexit 128\n", async () => {
+        const {c, ms} = await check("readiness-slowfail-long");
+        expect([c.state, c.reason]).toEqual(["BLOCKED", "REPOSITORY_HEAD_UNRESOLVED"]); expect(ms).toBeGreaterThanOrEqual(2000); expect(ms).toBeLessThan(2900);
+      });
+    });
+    it("single-flight isolation and eviction: DIFFERENT repositories are probed separately, and a finished probe is not cached (the next read probes again)", async () => {
+      const log = path.join(tmp, "readiness-sf2-log.txt"); fs.rmSync(log, {force: true});
+      await withFakeGit(`#!/bin/sh\necho x >> ${log}\n/bin/sleep 0.3\nexit 128\n`, async () => {
+        const {app, store} = await mk();
+        const mkp = (name: string) => { const d = path.join(tmp, name); fs.mkdirSync(d, {recursive: true}); const p = proj(store, {repository: {path: d}}); msn(store, p.projectId); return p.projectId; };
+        const a1 = mkp("readiness-sf2-a"), b1 = mkp("readiness-sf2-b");
+        const count = () => (fs.existsSync(log) ? fs.readFileSync(log, "utf8").trim().split("\n").filter(Boolean).length : 0);
+        await rd(app, a1); const single = count(); expect(single).toBeGreaterThan(0); fs.rmSync(log, {force: true});
+        await Promise.all([rd(app, a1), rd(app, b1)]);
+        expect(count(), "two different repositories = two probes").toBe(2 * single); fs.rmSync(log, {force: true});
+        await rd(app, a1); await rd(app, a1);
+        expect(count(), "a finished (failed) probe is evicted: every sequential read probes again").toBe(2 * single);
+      });
+    });
+    it("parallel readiness reads of the SAME repository share one probe (single-flight): N GETs do not spawn N times the git children", async () => {
+      const log = path.join(tmp, "readiness-sf-log.txt"); fs.rmSync(log, {force: true});
+      await withFakeGit(`#!/bin/sh\necho x >> ${log}\n/bin/sleep 0.3\nexit 128\n`, async () => {
+        const {app, store} = await mk(); const dir = path.join(tmp, "readiness-singleflight"); fs.mkdirSync(dir, {recursive: true});
+        const ids = [0, 1, 2, 3].map(() => { const p = proj(store, {repository: {path: dir}}); msn(store, p.projectId); return p.projectId; });
+        const count = () => (fs.existsSync(log) ? fs.readFileSync(log, "utf8").trim().split("\n").filter(Boolean).length : 0);
+        await rd(app, ids[0]); const single = count(); expect(single).toBeGreaterThan(0); fs.rmSync(log, {force: true});
+        const all = await Promise.all(ids.map(id => rd(app, id)));
+        expect(all.map(r => by(r).REPOSITORY.reason)).toEqual(ids.map(() => "REPOSITORY_HEAD_UNRESOLVED"));
+        expect(count(), "same number of git children as ONE read").toBe(single);
+      });
+    });
+  });
+
   it("flow testCommand follows mission-over-project: a command on either level alone is CONFIGURED, neither is MISSING", async () => {
     const {app, store} = await mk();
     void app;
@@ -2447,14 +2664,31 @@ describe("LANE-B run readiness", () => {
     expect(flag({}, {})).toBe("MISSING");
   });
 
-  it("KNOWN LIMIT (pinned): an existing directory that is not a git repository reads as REPOSITORY OK; the runner later BLOCKs it with REPOSITORY_HEAD_UNRESOLVED", async () => {
+  // //TR: Bu durum eskiden BİLİNEN SINIR olarak sabitlenmişti (düz klasör readiness OK, runner sonra REPOSITORY_HEAD_UNRESOLVED ile BLOCK). runner.ts:146 readiness.ts'in repositoryHead çağıracağını söylüyordu; B-NEXT-1 bunu uyguladı, beklenti kasıtlı olarak düzeltildi (girdi aynı).
+  it("an existing directory that is NOT a git repository is BLOCKED with the runner's own HEAD reason (was the pinned KNOWN LIMIT: it read OK and the runner later BLOCKed it)", async () => {
     const {app, store} = await mk();
     const dir = path.join(tmp, "readiness-not-git"); fs.mkdirSync(dir, {recursive: true});
     const p = proj(store, {repository: {path: dir}});
     msn(store, p.projectId);
     const r = await rd(app, p.projectId);
-    expect(by(r).REPOSITORY.state).toBe("OK");
-    expect(r.json().readiness.ready).toBe(true);
+    // tmpdir bir git çalışma ağacının İÇİNDEYSE düz klasör o deponun alt dizinidir: runner'ın kendi sözlüğüyle NOT_WORKTREE_ROOT (hâlâ BLOCKED, asla OK).
+    const inside = spawnGitSync(dir, ["rev-parse", "--git-dir"], {env: Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^GIT_/i.test(k)))}).status === 0;
+    expect(by(r).REPOSITORY).toMatchObject({state: "BLOCKED", reason: inside ? "REPOSITORY_NOT_WORKTREE_ROOT" : "REPOSITORY_HEAD_UNRESOLVED", nextAction: "CONFIGURE_REPOSITORY", blocking: true});
+    expect(r.json().readiness.ready).toBe(false);
+    expect(r.body).not.toContain("readiness-not-git");
+  });
+
+  it("readiness REPOSITORY follows repositoryHead for git shapes: a root with a commit is OK, a repo without a commit is HEAD_UNRESOLVED, a sub-directory of a repo is NOT_WORKTREE_ROOT; same decision as the runner's", async () => {
+    const {repositoryHead} = await import("../core/workos/runner.js");
+    const {app, store} = await mk();
+    const root = gitRepo(path.join(tmp, "readiness-git-root")), empty = gitRepo(path.join(tmp, "readiness-git-empty"), false), sub = path.join(root, "pkg"); fs.mkdirSync(sub);
+    const cases: [string, string, string | null][] = [["root with commit", root, null], ["no commit", empty, "REPOSITORY_HEAD_UNRESOLVED"], ["sub-directory", sub, "REPOSITORY_NOT_WORKTREE_ROOT"]];
+    for (const [name, dir, want] of cases) {
+      const p = proj(store, {repository: {path: dir}}); msn(store, p.projectId);
+      const h = repositoryHead(dir), got = by(await rd(app, p.projectId)).REPOSITORY;
+      expect(h.ok ? null : h.reason, name).toBe(want);
+      expect([got.state, got.reason], name).toEqual(want ? ["BLOCKED", want] : ["OK", null]);
+    }
   });
 });
 
