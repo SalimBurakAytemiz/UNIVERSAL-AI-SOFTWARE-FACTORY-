@@ -1,5 +1,5 @@
 {
- "//TR": "C-CTX-1 (Rol Bağlamı Çözümleyicisi) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt core/agents/role-context.ts içinde TAM 1 kez geçen bir metni değiştirir; docs/lanes/LANE-C-role-context-mutants.mjs hepsini tests/v7-core-role-context.test.ts ile çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. M1-M4 dağıtım paketindeki zorunlu mutantlardır (M1 önerilen beceri kanonike karışır, M2 çözülemeyen teknoloji düşer, M3 SUSPECTED/CONFLICT takma adlarından da çözülür, M4 özet kanonik metni dışlar); M5-M20 ek savunma mutantlarıdır (doğrulanmış durum uydurma, durum yükseltme, bayt sınırı ve kesme sırası, yinelenen kimlik, SK2 süzgeçleri, boşluk kimlikleri, yükleyicinin kapalı başarısızlığı). X5-X9, N13, N16, N26, N27 ve C1-C40, #265 incelemesinin (TEP-1 tur 1) korumalı-alan, etiket, kısaltma kaydı, parite, maxBytes, son biçim bayt, varsayılan sınır ve özet kapsamı boşluklarını kapatan mutantlardır (M8/M19 yeni bayt ölçümüne göre yeniden yazıldı). H-* mutantları, bağımsız bir mutant avcısının (100 deneme) bulduğu ve sözleşme ayrıntıları testi ile alan düzeyinde yükleyici tablosunun öldürdüğü hayatta kalanlardır (kod noktası sıralaması, tekrarların korunması, null varsayılanlar, büyük/küçük harf duyarlılığı, kopyalama, seçenek iletimi, yükleyici alan denetimleri); S17/T04/T05/T07/T08 bilerek sabitlenmedi (boş dize boşluk kimliği, yinelenen girdi, tür olarak imkansız eksik durum). R6, R12-R17, R19-R22, R26-R27 #265 tur-2 incelemesinin (e36b9d0) hayatta kalan mutantları ve komşularıdır (kayıt satırı değerlerinin aynen taşınması, isteğe bağlı sıra, özetin kısaltma kaydı kapsaması, varsayılan sınırın tam değeri, bytes sabit noktası, profil durum izin listesi). HW-* mutantları, ikinci bağımsız mutant avcısının (115 deneme) bulduğu hayatta kalanlardır; bağımsız şartname farkı (240 tohumlu girdi + 599 gerçek rol), kusurlu bağlama şekilleri ve ek yükleyici durumlarıyla öldürülür. Tur 3 (son TEP-1 turu): Y-N12/Y-N14/Y3-N14b-d (durum izin listesi: önek, sağ/iki yan kırpma, büyük harf, içerir), Y-N15/Y3-N15b/c (yalnız ilk/son satır, ikinci satır atlanır), Y3-F1 (liste dondurulmaz), Y3-G1..G9 (boşluk kimliği türü), Y3-D1..D7 (özet kısaltma kayıtlarını görmez), Y-N21/Y-N22/Y3-C3..C5 (varsayılan sınır tam 24 576, resolveAll seçenekleri) koordinatör Y-* mutantlarının eşdeğer yeniden yazımlarıdır.",
+ "//TR": "C-CTX-1 (Rol Bağlamı Çözümleyicisi) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt core/agents/role-context.ts içinde TAM 1 kez geçen bir metni değiştirir; docs/lanes/LANE-C-role-context-mutants.mjs hepsini tests/v7-core-role-context.test.ts ile çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. M1-M4 dağıtım paketindeki zorunlu mutantlardır (M1 önerilen beceri kanonike karışır, M2 çözülemeyen teknoloji düşer, M3 SUSPECTED/CONFLICT takma adlarından da çözülür, M4 özet kanonik metni dışlar); M5-M20 ek savunma mutantlarıdır (doğrulanmış durum uydurma, durum yükseltme, bayt sınırı ve kesme sırası, yinelenen kimlik, SK2 süzgeçleri, boşluk kimlikleri, yükleyicinin kapalı başarısızlığı). X5-X9, N13, N16, N26, N27 ve C1-C40, #265 incelemesinin (TEP-1 tur 1) korumalı-alan, etiket, kısaltma kaydı, parite, maxBytes, son biçim bayt, varsayılan sınır ve özet kapsamı boşluklarını kapatan mutantlardır (M8/M19 yeni bayt ölçümüne göre yeniden yazıldı). H-* mutantları, bağımsız bir mutant avcısının (100 deneme) bulduğu ve sözleşme ayrıntıları testi ile alan düzeyinde yükleyici tablosunun öldürdüğü hayatta kalanlardır (kod noktası sıralaması, tekrarların korunması, null varsayılanlar, büyük/küçük harf duyarlılığı, kopyalama, seçenek iletimi, yükleyici alan denetimleri); S17/T04/T05/T07/T08 bilerek sabitlenmedi (boş dize boşluk kimliği, yinelenen girdi, tür olarak imkansız eksik durum). R6, R12-R17, R19-R22, R26-R27 #265 tur-2 incelemesinin (e36b9d0) hayatta kalan mutantları ve komşularıdır (kayıt satırı değerlerinin aynen taşınması, isteğe bağlı sıra, özetin kısaltma kaydı kapsaması, varsayılan sınırın tam değeri, bytes sabit noktası, profil durum izin listesi). HW-* mutantları, ikinci bağımsız mutant avcısının (115 deneme) bulduğu hayatta kalanlardır; bağımsız şartname farkı (240 tohumlu girdi + 599 gerçek rol), kusurlu bağlama şekilleri ve ek yükleyici durumlarıyla öldürülür. Tur 3 (son TEP-1 turu): Y-N12/Y-N14/Y3-N14b-d (durum izin listesi: önek, sağ/iki yan kırpma, büyük harf, içerir), Y-N15/Y3-N15b/c (yalnız ilk/son satır, ikinci satır atlanır), Y3-F1 (liste dondurulmaz), Y3-G1..G9 (boşluk kimliği türü), Y3-D1..D7 (özet kısaltma kayıtlarını görmez), Y-N21/Y-N22/Y3-C3..C5 (varsayılan sınır tam 24 576, resolveAll seçenekleri) koordinatör Y-* mutantlarının eşdeğer yeniden yazımlarıdır. C-CTX-1-LOWS: W12/W13/W20 (durum yalnız dar koşullarda denetlenir), W15/W17 (dize zorlaması), W01/W10/W11/W16 (NFKC, sıfır genişlik silme, locale/büyük harf), W07/W08 (özet tek/çift kept kısaltma kayıtlarını düşürür), W14/W18 (açık maxBytes: undefined) koordinatör NW-* mutantlarının eşdeğer yeniden yazımlarıdır.",
  "mutants": [
   {
    "id": "M1",
@@ -1778,6 +1778,97 @@
    "file": "core/agents/role-context.ts",
    "old": ".map(id => resolveRoleContext(i, id, o));",
    "new": ".map(id => resolveRoleContext(i, id, {}));"
+  },
+  {
+   "id": "W12",
+   "description": "the profile status is checked only when reviewChain.gapId is null",
+   "file": "core/agents/role-context.ts",
+   "old": "!ROLE_CONTEXT_PROFILE_STATUSES.includes(p.reviewChain.status as string)",
+   "new": "(p.reviewChain.gapId === null && !ROLE_CONTEXT_PROFILE_STATUSES.includes(p.reviewChain.status as string))"
+  },
+  {
+   "id": "W13",
+   "description": "the profile status is checked only when candidateSkills.value is empty",
+   "file": "core/agents/role-context.ts",
+   "old": "!ROLE_CONTEXT_PROFILE_STATUSES.includes(p.reviewChain.status as string)",
+   "new": "((p.candidateSkills as {value?: unknown[]} | undefined)?.value?.length === 0 && !ROLE_CONTEXT_PROFILE_STATUSES.includes(p.reviewChain.status as string))"
+  },
+  {
+   "id": "W20",
+   "description": "the profile status is checked only when the route key is absent",
+   "file": "core/agents/role-context.ts",
+   "old": "!ROLE_CONTEXT_PROFILE_STATUSES.includes(p.reviewChain.status as string)",
+   "new": "(!(\"route\" in p) && !ROLE_CONTEXT_PROFILE_STATUSES.includes(p.reviewChain.status as string))"
+  },
+  {
+   "id": "W15",
+   "description": "the profile status is coerced with String() before the check",
+   "file": "core/agents/role-context.ts",
+   "old": "!ROLE_CONTEXT_PROFILE_STATUSES.includes(p.reviewChain.status as string)",
+   "new": "!ROLE_CONTEXT_PROFILE_STATUSES.includes(String(p.reviewChain.status))"
+  },
+  {
+   "id": "W01",
+   "description": "the profile status is NFKC-normalised before the check",
+   "file": "core/agents/role-context.ts",
+   "old": "!ROLE_CONTEXT_PROFILE_STATUSES.includes(p.reviewChain.status as string)",
+   "new": "!ROLE_CONTEXT_PROFILE_STATUSES.includes(typeof p.reviewChain.status === \"string\" ? p.reviewChain.status.normalize(\"NFKC\") : (p.reviewChain.status as string))"
+  },
+  {
+   "id": "W10",
+   "description": "zero-width and soft-hyphen characters are stripped from the profile status before the check",
+   "file": "core/agents/role-context.ts",
+   "old": "!ROLE_CONTEXT_PROFILE_STATUSES.includes(p.reviewChain.status as string)",
+   "new": "!ROLE_CONTEXT_PROFILE_STATUSES.includes(typeof p.reviewChain.status === \"string\" ? p.reviewChain.status.replace(/[\\u00AD\\u200B-\\u200D\\u2060\\uFEFF]/g, \"\") : (p.reviewChain.status as string))"
+  },
+  {
+   "id": "W11",
+   "description": "the profile status is upper-cased (Turkish locale) before the check",
+   "file": "core/agents/role-context.ts",
+   "old": "!ROLE_CONTEXT_PROFILE_STATUSES.includes(p.reviewChain.status as string)",
+   "new": "!ROLE_CONTEXT_PROFILE_STATUSES.includes(typeof p.reviewChain.status === \"string\" ? p.reviewChain.status.toLocaleUpperCase(\"tr\") : (p.reviewChain.status as string))"
+  },
+  {
+   "id": "W16",
+   "description": "the profile status is trimmed and upper-cased before the check",
+   "file": "core/agents/role-context.ts",
+   "old": "!ROLE_CONTEXT_PROFILE_STATUSES.includes(p.reviewChain.status as string)",
+   "new": "!ROLE_CONTEXT_PROFILE_STATUSES.includes(typeof p.reviewChain.status === \"string\" ? p.reviewChain.status.trim().toUpperCase() : (p.reviewChain.status as string))"
+  },
+  {
+   "id": "W17",
+   "description": "an array holding the exact status passes the check",
+   "file": "core/agents/role-context.ts",
+   "old": "!ROLE_CONTEXT_PROFILE_STATUSES.includes(p.reviewChain.status as string)",
+   "new": "!ROLE_CONTEXT_PROFILE_STATUSES.includes(Array.isArray(p.reviewChain.status) ? (p.reviewChain.status as string[])[0] : (p.reviewChain.status as string))"
+  },
+  {
+   "id": "W07",
+   "description": "the digest drops truncation records whose kept count is even",
+   "file": "core/agents/role-context.ts",
+   "old": "const digest = sha256(stable(body));",
+   "new": "const digest = sha256(stable({...body, truncation: body.truncation.filter(r => r.kept % 2 === 0)}));"
+  },
+  {
+   "id": "W08",
+   "description": "the digest drops truncation records whose kept count is odd",
+   "file": "core/agents/role-context.ts",
+   "old": "const digest = sha256(stable(body));",
+   "new": "const digest = sha256(stable({...body, truncation: body.truncation.filter(r => r.kept % 2 === 1)}));"
+  },
+  {
+   "id": "W14",
+   "description": "an explicit maxBytes: undefined is rejected instead of meaning the default",
+   "file": "core/agents/role-context.ts",
+   "old": "const maxBytes = o.maxBytes ?? ROLE_CONTEXT_DEFAULT_MAX_BYTES;",
+   "new": "const maxBytes = \"maxBytes\" in o ? (o.maxBytes as number) : ROLE_CONTEXT_DEFAULT_MAX_BYTES;"
+  },
+  {
+   "id": "W18",
+   "description": "an explicit maxBytes: undefined means a looser cap",
+   "file": "core/agents/role-context.ts",
+   "old": "const maxBytes = o.maxBytes ?? ROLE_CONTEXT_DEFAULT_MAX_BYTES;",
+   "new": "const maxBytes = \"maxBytes\" in o ? (o.maxBytes ?? 26_112) : ROLE_CONTEXT_DEFAULT_MAX_BYTES;"
   }
  ]
 }
