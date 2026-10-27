@@ -175,7 +175,10 @@ export const QUARANTINE_MAX_FILES=500;
 export const QUARANTINE_FILES_SHOWN=20;
 const SHA40_RE=/^[0-9a-f]{40}([0-9a-f]{24})?$/,SHA256_RE=/^[0-9a-f]{64}$/;
 const QUARANTINE_KINDS=Object.freeze(["file","symlink","other"]);
-const cleanText=(x,max)=>typeof x==="string"&&x.length>0&&x.length<=max&&!/[\u0000-\u001f\u007f]/.test(x);
+// //TR: Görüntülenen bir yol/desen/saklama yeri, depo yazarının kontrol edebildiği metindir. Kontrol (Cc: C0, DEL, C1), biçim (Cf: bidi, sıfır genişlik, etiketler, FEFF, 00AD), vekil (Cs), satır/paragraf ayırıcı (Zl/Zp) ve Default_Ignorable karakterler (034F, FE0F, 3164 ...) GÖRÜNMEZ ya da satırı bozar; ".claude/settings\u2060.json" gerçeğinden ayırt edilemezdi. Ayrıca bir tabanda 8'den fazla yığılmış birleştirici işaret de gösterilmez.
+// //TR: A-277-LOWS: (1) U+2800 BRAILLE PATTERN BLANK görünür genişlikte ama boş çizilir; ".claude/settings\u2800.json" gerçeğinden ayırt edilemezdi, bu yüzden GİZLİ sayılır (kategori So olduğu için sınıf kurallarına girmez). (2) Baş/son boşluk (Zs: ASCII boşluk, NBSP, U+3000 ...) ve ardışık boşluk dizisi tek boşluğa çökerek (white-space:normal) başka bir ad gibi görünürdü; yol listelenmez, SAYILIR (desen/saklama yerinde UNKNOWN).
+const HIDDEN_CHARS_RE=/[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}\u2800]/u,STACKED_MARKS_RE=/\p{M}{9,}/u,EDGE_OR_RUN_SPACE_RE=/^\p{Zs}|\p{Zs}$|\p{Zs}{2,}/u;
+const cleanText=(x,max)=>typeof x==="string"&&x.length>0&&x.length<=max&&!HIDDEN_CHARS_RE.test(x)&&!STACKED_MARKS_RE.test(x)&&!EDGE_OR_RUN_SPACE_RE.test(x);
 export function mapImportQuarantine(res){
   const unknown={state:"UNKNOWN"};
   const b=res&&!res.thrown&&isObj(res.body)?res.body:null,imp=b&&isObj(b.import)?b.import:null;

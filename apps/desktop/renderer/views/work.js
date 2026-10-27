@@ -4,7 +4,7 @@ import {taskStatusControls} from "./task-status.js";
 import {taskRunsPanel,loadTaskRuns} from "./task-runs.js";
 import {h,panel,stateNote,emptyNote,chip,statusPill,statusLabel,badge,verificationChip,kpiTile,statePill,missionPill,timelineItem} from "../components.js";
 import {formatTime,formatCount,MISSING,missionPillKind} from "../model.js";
-import {MISSION_STATUSES,MISSION_PATH,RISK_LEVELS,RUN_EXPERTS,RUN_EXPERT_NONE,allowedNext,requiresConfirm,canStartRun,buildMissionRequest,filterMissions,formatDateTime,deriveTaskInspector,deriveWorkTimeline,runReadiness,runReasonHintKey,runStepRows} from "../work-core.js";
+import {MISSION_STATUSES,MISSION_PATH,RISK_LEVELS,RUN_EXPERTS,RUN_EXPERT_NONE,allowedNext,requiresConfirm,canStartRun,buildMissionRequest,filterMissions,taskFollowsRun,formatDateTime,deriveTaskInspector,deriveWorkTimeline,runReadiness,runReasonHintKey,runStepRows,liveRuns} from "../work-core.js";
 import {drafts,selection,trackers,field,listEditor,statusBlock,setStatus,recordPost,resetMissionDraft,focusResult} from "../forms.js";
 import {performTransition,startRun,actionStatusId} from "../work-actions.js";
 import {runLinkPanel} from "./run-link.js";
@@ -30,14 +30,16 @@ const blockOf=(res,value,source)=>({state:res?.state??"ERROR",value:LIVE(res)?va
 
 /** //TR: Görev/koşu özeti KPI satırı — hepsi gerçek okumalardan: toplam mission, etkin koşu (ACTIVE kategorisi), Kurucu dikkati bekleyen mission (ATTENTION+BLOCKED) ve gerçekten doğrulanmış koşu (yalnız test-yürütme kanıtı olan; FD-REL-1). Hiçbir sayı uydurulmaz. */
 function summaryTiles(ctx,miss,runs){
-  const activeRuns=LIVE(runs)?runs.items.filter(r=>missionPillKind(r.status)==="ACTIVE").length:null;
+  // //TR: A-RUNSTATE-1 (#273 M4): "etkin koşu" sunucunun aktif-işçi kümesidir (liveRuns); eski missionPillKind(ACTIVE) STARTING/REVIEWING'i sayıp CHECKPOINTING'i saymıyordu.
+  // //TR: #273 LOW: koşu listesi 500'de kesildiyse (en yeni koşular eksik olabilir) koşu tabanlı KPI'lar sayı göstermez; blok UNAVAILABLE olur (kesin 0/EMPTY denmez).
+  const runsB=runs?.truncated===true?{...runs,state:"UNAVAILABLE"}:runs,activeRuns=LIVE(runsB)?liveRuns(runsB.items).length:null;
   const attention=LIVE(miss)?miss.items.filter(m=>{const k=missionPillKind(m.status);return k==="ATTENTION"||k==="BLOCKED"}).length:null;
-  const verifiedRuns=LIVE(runs)?runs.items.filter(r=>r&&r.testsExecuted===true).length:null;
+  const verifiedRuns=LIVE(runsB)?runsB.items.filter(r=>r&&r.testsExecuted===true).length:null;
   return h(ctx.doc,"div",{class:"kpi-row",role:"group","aria-label":ctx.t("work.kpiGroup")},
     kpiTile(ctx,{id:"wk-missions",iconName:"tasks",labelKey:"work.kpi.missions",block:blockOf(miss,LIVE(miss)?miss.items.length:null,"GET /v1/missions"),qualifier:ctx.t("work.kpi.q.missions")}),
-    kpiTile(ctx,{id:"wk-active",iconName:"pulse",labelKey:"work.kpi.activeRuns",block:blockOf(runs,activeRuns,"GET /v1/work-runs"),qualifier:ctx.t("work.kpi.q.activeRuns"),live:LIVE(runs)&&activeRuns>0}),
+    kpiTile(ctx,{id:"wk-active",iconName:"pulse",labelKey:"work.kpi.activeRuns",block:blockOf(runsB,activeRuns,"GET /v1/work-runs"),qualifier:ctx.t("work.kpi.q.activeRuns"),live:LIVE(runsB)&&activeRuns>0}),
     kpiTile(ctx,{id:"wk-attention",iconName:"alert",labelKey:"work.kpi.attention",block:blockOf(miss,attention,"GET /v1/missions"),qualifier:ctx.t("work.kpi.q.attention"),risk:LIVE(miss)&&attention>0}),
-    kpiTile(ctx,{id:"wk-verified",iconName:"shield",labelKey:"work.kpi.verifiedRuns",block:blockOf(runs,verifiedRuns,"GET /v1/work-runs"),qualifier:ctx.t("work.kpi.q.verifiedRuns")}));
+    kpiTile(ctx,{id:"wk-verified",iconName:"shield",labelKey:"work.kpi.verifiedRuns",block:blockOf(runsB,verifiedRuns,"GET /v1/work-runs"),qualifier:ctx.t("work.kpi.q.verifiedRuns")}));
 }
 
 /** //TR: Yaşam-döngüsü dağılım şeridi: gerçek mission durumlarını kategoriye (missionPillKind) göre toplayıp sıralı rozet+sayı olarak gösterir; mission yoksa null (çağıran dürüst boş metni gösterir). */
@@ -294,8 +296,20 @@ function transitionControls(ctx,mission,awaiting,readiness=null,engine=undefined
     h(doc,"p",{class:"field-hint",id:"run-start-hint",text:ctx.t(startable?"work.run.hintOk":"work.run.hintNot")}),
     statusBlock(ctx,sid));
 }
-/** //TR: UI-026 görev denetçisi (salt okunur): seçili görevin yalnız mission okumasından gelen alanlarını gösterir; eksik alan UNKNOWN, okuma canlı değilse UNKNOWN durum notu. Hiçbir POST/depolama yoktur; seçim yalnız bellekte tutulur. */
-export function taskInspector(ctx,detail,runsRes,missionId){
+function runLinkCell(ctx,res,unk){
+  const doc=ctx.doc;
+  if(!res||res.state!=="VERIFIED"||!Array.isArray(res.items))return unk("runLink");
+  if(!res.items.length)return h(doc,"dd",{dataset:{taskField:"runLink",taskRunLinks:"none"},text:ctx.t("work.task.runLink.none")});
+  // //TR: En YENİ RUNLINK_SHOWN bağ gösterilir (yönetici koşu sunucu kuralıyla SON bağlanandır, asla gizlenmez); eski bağlar "+N daha eski" notuyla sayılır.
+  const hidden=Math.max(0,res.items.length-RUNLINK_SHOWN),shown=res.items.slice(hidden),follow=taskFollowsRun(res.items).slice(hidden);
+  return h(doc,"dd",{dataset:{taskField:"runLink",taskRunLinks:"linked"}},
+    hidden>0?h(doc,"p",{class:"note",dataset:{runLinkMore:String(hidden)},text:ctx.t("work.task.runLink.more",{n:hidden})}):null,
+    h(doc,"ul",{class:"task-runlink-list"},shown.map((l,k)=>h(doc,"li",{dataset:{taskRunLink:l.runId,taskRunLinkGoverning:follow[k].governing?"1":"0"}},h(doc,"span",{class:"mono",text:l.runId})," ",l.status?statusPill(ctx,l.status):h(doc,"span",{class:"task-unknown",text:ctx.t("work.task.unknown")})))));
+}
+// //TR: UI-026 (A-UI026-1): "Koşu bağı" satırı, hemen altındaki görev-koşu panelinin okuduğu GET /v1/tasks/:id/runs sonucundan beslenir (ikinci okuma yok). Okuma VERIFIED değilse UNKNOWN kalır; VERIFIED ve boşsa "bağlı koşu yok"; yoksa en YENİ RUNLINK_SHOWN koşu kimliği + durum (yönetici koşu son bağlanandır ve her zaman görünür; eski bağlar "+N daha eski" notuyla sayılır).
+export const RUNLINK_SHOWN=5;
+/** //TR: UI-026 görev denetçisi (salt okunur): seçili görevin mission okumasından gelen alanlarını ve (A-UI026-1) görev-koşu panelinin okuduğu GET /v1/tasks/:id/runs sonucundan "Koşu bağı" satırını gösterir; eksik alan UNKNOWN, okuma canlı değilse UNKNOWN durum notu. Hiçbir POST/depolama yoktur; seçim yalnız bellekte tutulur. */
+export function taskInspector(ctx,detail,runsRes,missionId,taskRuns=null){
   const doc=ctx.doc,sel=inspectedTask&&inspectedTask.missionId===missionId?inspectedTask.taskId:null;
   const inner=[h(doc,"p",{class:"note",text:ctx.t("work.task.lead")})];
   if(!sel)inner.push(h(doc,"p",{class:"note note-empty",role:"status",text:ctx.t("work.task.none")}));
@@ -312,7 +326,7 @@ export function taskInspector(ctx,detail,runsRes,missionId){
         h(doc,"dt",{text:ctx.t("work.task.status")}),h(doc,"dd",{dataset:{taskField:"status"}},statusPill(ctx,t.status)),
         h(doc,"dt",{text:ctx.t("work.task.mission")}),h(doc,"dd",{dataset:{taskField:"mission"},text:`${t.missionTitle} · ${statusLabel(ctx,t.missionStatus)} · ${t.riskLevel}`}),
         h(doc,"dt",{text:ctx.t("work.task.runs")}),runsText?h(doc,"dd",{dataset:{taskField:"runs"},text:runsText}):unk("runs"),
-        h(doc,"dt",{text:ctx.t("work.task.runLink")}),unk("runLink"),
+        h(doc,"dt",{text:ctx.t("work.task.runLink")}),runLinkCell(ctx,taskRuns&&taskRuns.taskId===sel?taskRuns.res:null,unk),
         ...(t.dependencies?[h(doc,"dt",{text:ctx.t("work.task.f.dependencies")}),h(doc,"dd",{dataset:{taskField:"dependencies"}},t.dependencies.length?h(doc,"ul",{},t.dependencies.map(d=>h(doc,"li",{},h(doc,"span",{text:d.title??d.taskId})," ",d.status?statusPill(ctx,d.status):h(doc,"span",{class:"task-unknown",text:ctx.t("work.task.unknown")})))):ctx.t("work.task.noDeps"))]:[]),
         ...t.unknownFields.flatMap(k=>[h(doc,"dt",{text:ctx.t(`work.task.f.${k}`)}),unk(k)])));
     }
@@ -358,7 +372,7 @@ function detailPanel(ctx,detail,runsRes,runDetails,evRes,project=null,taskRuns=n
     h(doc,"p",{class:"panel-meta"},statusPill(ctx,m.status),badge(ctx,m.riskLevel,"badge-risk"),h(doc,"span",{class:"mono",text:m.missionId}),missionNotVerified(runsRes.state==="VERIFIED"?runsRes.items:[],m.missionId)?notVerifiedBadge(ctx,"mission"):null),
     h(doc,"p",{text:m.objective}),
     h(doc,"h4",{text:ctx.t("work.detail.criteria")}),m.acceptanceCriteria.length?h(doc,"ul",{},m.acceptanceCriteria.map(c=>h(doc,"li",{text:c}))):emptyNote(ctx,"work.detail.noCriteria"),
-    m.tasks.length?h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),taskList(ctx,m.tasks,m.missionId),taskInspector(ctx,detail,runsRes,m.missionId),taskStatusControls(ctx,m,inspectedTask?.missionId===m.missionId?inspectedTask.taskId:null),taskRunsFor(ctx,m,runsRes,taskRuns)):h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),h(doc,"p",{class:"note",dataset:{noTasks:m.missionId},text:ctx.t("work.detail.noTasks")})),
+    m.tasks.length?h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),taskList(ctx,m.tasks,m.missionId),taskInspector(ctx,detail,runsRes,m.missionId,taskRuns),taskStatusControls(ctx,m,inspectedTask?.missionId===m.missionId?inspectedTask.taskId:null),taskRunsFor(ctx,m,runsRes,taskRuns)):h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),h(doc,"p",{class:"note",dataset:{noTasks:m.missionId},text:ctx.t("work.detail.noTasks")})),
     workTimeline(ctx,detail,runsRes),
     planFormPanel(ctx,m),
     h(doc,"h4",{text:ctx.t("work.timeline.title")}),statusTimeline(ctx,m.status),
@@ -385,7 +399,7 @@ export async function render(ctx){
     const engine=await ctx.api.executors();
     const runLinks=new Map();
     await Promise.all([...runDetails.keys()].map(async id=>{runLinks.set(id,await ctx.api.runTasks(id))}));
-    const taskRuns=inspectedTask?.missionId===selection.missionId?{taskId:inspectedTask.taskId,res:await loadTaskRuns(ctx,inspectedTask.taskId)}:null;
+    const taskRuns=inspectedTask?.missionId===selection.missionId?{taskId:inspectedTask.taskId,res:await loadTaskRuns(ctx,inspectedTask.taskId,inspectedTask.missionId)}:null;
     detailNode=detailPanel(ctx,detail,runsRes,runDetails,evRes,detail.state==="VERIFIED"?(projects.find(p=>p.projectId===detail.mission.projectId)??null):null,taskRuns,runLinks,engine);
   }
   // //TR: Premium başlık (hero): göz üstü etiket + başlık + alt başlık + dürüst kaynak çipi/kapsam. Mevcut h1#view-title korunur (odak hedefi).

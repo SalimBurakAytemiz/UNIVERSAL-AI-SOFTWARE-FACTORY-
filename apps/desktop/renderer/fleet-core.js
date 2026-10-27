@@ -1,32 +1,46 @@
-// //TR: Bu modül UI-030 "Aktif işçi filosu ızgarası"nın saf (DOM'suz) çekirdeğidir: #/workforce görünümünün ZATEN okuduğu GET /v1/work-runs satırlarından yalnız canlı (terminal olmayan) koşuları durum kovalarına dağıtır; kendi okuması, yeni uç noktası veya yazımı YOKTUR. Verideki olmayan alanlar (rol, mission, kalp atışı) UNKNOWN kalır; sayı/canlılık uydurulmaz. Üst sınır 50 kart; aşılırsa "X / Y gösteriliyor" notu için truncated bilgisi döner.
-import {RUN_ACTIVE_STATES,liveRuns} from "./work-core.js";
+// //TR: Bu modül UI-030 "Aktif işçi filosu ızgarası"nın saf (DOM'suz) çekirdeğidir: #/workforce görünümünün ZATEN okuduğu GET /v1/work-runs satırlarından koşuları üç kovaya dağıtır (A-RUNSTATE-1): canlı işçi (yalnız sunucunun aktif-işçi kümesi), "kuyrukta (henüz çalışmıyor)" ve "durum bilinmiyor" (asla canlı sayılmaz); terminal koşular gösterilmez; kendi okuması, yeni uç noktası veya yazımı YOKTUR. Verideki olmayan alanlar (rol, mission, kalp atışı) UNKNOWN kalır; sayı/canlılık uydurulmaz. Üst sınır 50 kart; aşılırsa "X / Y gösteriliyor" notu için truncated bilgisi döner.
+import {RUN_LIVE_STATES,RUN_QUEUED_STATE,liveRuns,queuedRuns} from "./work-core.js";
+import {RUN_STATUSES,TERMINAL_RUN_STATUSES} from "./executive-core.js";
 
 export const MAX_FLEET_CARDS=50;
+export const FLEET_BUCKETS=Object.freeze({LIVE:"LIVE",QUEUED:"QUEUED",UNKNOWN:"UNKNOWN",OTHER:"OTHER"});
+
+/** A-RUNSTATE-1: durum -> kova. LIVE yalnız sunucunun aktif-işçi kümesi; QUEUED ayrı kova; sunucu RunStatus listesinde olmayan her şey UNKNOWN (asla canlı sayılmaz); geri kalan bilinen durumlar OTHER (ızgarada yok). */
+export function runBucket(status){
+  if(RUN_LIVE_STATES.includes(status))return FLEET_BUCKETS.LIVE;
+  if(status===RUN_QUEUED_STATE)return FLEET_BUCKETS.QUEUED;
+  return RUN_STATUSES.includes(status)?FLEET_BUCKETS.OTHER:FLEET_BUCKETS.UNKNOWN;
+}
 
 /**
- * Canlı koşuları RUN_ACTIVE_STATES sırasıyla kovalara böler; toplam kart sayısı MAX_FLEET_CARDS ile sınırlıdır.
- * -> {total, shown, truncated, groups:[{status,count,items}]}; count kovanın gerçek (sınırsız) sayısıdır, items gösterilen kartlardır.
+ * Koşuları kovalara böler: canlı işçi durumları (RUN_LIVE_STATES sırasıyla), sonra "kuyrukta (henüz çalışmıyor)", sonra "durum bilinmiyor". Kart sınırı MAX_FLEET_CARDS; canlı kovalar önce yer alır.
+ * -> {total, live, queued, unknown, other, shown, truncated, groups:[{status,bucket,count,items}]}; count kovanın gerçek (sınırsız) sayısı, items gösterilen kartlardır; live yalnız canlı işçi sayısıdır.
  */
 export function fleetGroups(runs,max=MAX_FLEET_CARDS){
-  const live=liveRuns(Array.isArray(runs)?runs.filter(r=>r&&typeof r==="object"):[]);
+  const valid=Array.isArray(runs)?runs.filter(r=>r&&typeof r==="object"):[];
+  const live=liveRuns(valid),queued=queuedRuns(valid),unknown=valid.filter(r=>runBucket(r.status)===FLEET_BUCKETS.UNKNOWN),// //TR: other = bilinen, canlı olmayan VE terminal olmayan koşular (yeniden deneme planlı, kurtarılıyor, onay bekliyor vb.); biten (terminal) koşular sayılmaz.
+    other=valid.filter(r=>runBucket(r.status)===FLEET_BUCKETS.OTHER&&!TERMINAL_RUN_STATUSES.includes(r.status)).length;
   let room=Math.max(0,Math.trunc(max)),shown=0;
   const groups=[];
-  for(const status of RUN_ACTIVE_STATES){
-    const all=live.filter(r=>r.status===status);
-    if(!all.length)continue;
+  const add=(status,bucket,all)=>{
+    if(!all.length)return;
     const items=all.slice(0,room);room-=items.length;shown+=items.length;
-    groups.push({status,count:all.length,items});
-  }
-  return {total:live.length,shown,truncated:shown<live.length,groups};
+    groups.push({status,bucket,count:all.length,items});
+  };
+  for(const status of RUN_LIVE_STATES)add(status,FLEET_BUCKETS.LIVE,live.filter(r=>r.status===status));
+  add(RUN_QUEUED_STATE,FLEET_BUCKETS.QUEUED,queued);
+  add(FLEET_BUCKETS.UNKNOWN,FLEET_BUCKETS.UNKNOWN,unknown);
+  const total=live.length+queued.length+unknown.length;
+  return {total,live:live.length,queued:queued.length,unknown:unknown.length,other,shown,truncated:shown<total,groups};
 }
 
 /** Kart alanları: yalnız veride gerçekten olan değerler; yoksa null (arayüz UNKNOWN/— gösterir, uydurma yok). */
 export function fleetCard(run){
-  return {runId:run.runId,status:run.status,role:run.role??null,missionId:run.missionId??null,updatedAt:run.heartbeatAt??null};
+  return {runId:run.runId,status:run.status,bucket:runBucket(run.status),role:run.role??null,missionId:run.missionId??null,updatedAt:run.heartbeatAt??null};
 }
 
 /**
- * UI-032: seçili canlı koşunun ayrıntısı. Koşu artık canlı değilse (listede yok) null döner; canlı ajan telemetrisi YOK, o alan her zaman null (UNKNOWN).
+ * UI-032: seçili koşunun (canlı, kuyrukta veya durumu bilinmeyen) ayrıntısı. Koşu artık ızgarada değilse (listede yok) null döner; canlı ajan telemetrisi YOK, o alan her zaman null (UNKNOWN).
  */
 export function fleetDetail(runs,runId){
   if(typeof runId!=="string"||!runId)return null;
