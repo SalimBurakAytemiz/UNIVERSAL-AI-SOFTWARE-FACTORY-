@@ -2246,6 +2246,16 @@
         "masterV2": "C-RDY-1 Role Readiness Auditor = Master V2 package 1 DONE (merged, not product-accepted)"
       },
       {
+        "pr": 270,
+        "merge": "5fc093d",
+        "by": "coordinator direct merge, expectedHeadSha e31ff27 (required checks green on e31ff27)",
+        "at": "2026-10-27T02:40:00Z",
+        "postMerge": "VERIFIED: parent1 e5cae0d, parent2 = gated head e31ff27, merge-tree == merge tree d054e52 (= tree tested locally: b3a + ci-validation-shards 119/119)",
+        "review": "full BLOCKERS_2MEDIUM (64fc2d8) -> delta NO_BLOCKERS (e31ff27, ledger 52edaf2)",
+        "riskTier": "R0 ROUTINE (scripts/local-worker probe diagnostics + tests)",
+        "masterV2": "B-PROBE-DIAG-1 local-worker probe diagnostics for the 0.9% Windows PROBE_FAILED flake (merged; root cause still UNKNOWN until the diagnostics fire)"
+      },
+      {
         "pr": 267,
         "merge": "e5cae0d",
         "by": "coordinator direct merge, expectedHeadSha 747a084 (required checks green on 747a084)",
