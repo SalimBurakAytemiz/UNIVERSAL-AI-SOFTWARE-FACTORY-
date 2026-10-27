@@ -792,6 +792,26 @@
       "ref": "wf_683d9625-361 (1 lens + skeptic, not refuted): 30 s startC bound lets drive-delay mutants (10/25 s) survive; fix = driveC (status past LEASED) <= 2 s; LOW stale TR note",
       "policy": "TEP-1",
       "at": "2026-10-27T02:51:33.822Z"
+    },
+    {
+      "pr": 274,
+      "sha": "8abe6ee254dfcf5d406276c99c141520a0b7f51b",
+      "kind": "full",
+      "base": null,
+      "verdict": "NO_BLOCKERS_4LOW",
+      "ref": "wf_63b7fa17-a21 (108 endpoints re-derived by own scanner, class totals 99/4/0/5 recomputed, 18 status-summary tests matched; NM4/XM2/F3-partial/linkOrSkip killed; LOWs: JSON dNote api.js:222->234, 'no test changed' sentence, T4 non-EPERM mutants, F4 started count unpinned)",
+      "policy": "TEP-1",
+      "at": "2026-10-27T02:54:10.972Z"
+    },
+    {
+      "pr": 269,
+      "sha": "74714e6c44e66c07dc7c7b32ac326bb01867f2fe",
+      "kind": "delta",
+      "base": "8f0f273",
+      "verdict": "NO_BLOCKERS_5LOW",
+      "ref": "wf_63b7fa17-a21: M1-M5 + L1-L5 FIXED; LOWs: projectId on validation/noDialog statuses unpinned (D28/D29), non-string path -> UNKNOWN unpinned (D23), no TR note at removed pin, C1/bidi chars listed (visual spoof, textContent only; security LOW carried), list panel unscoped (pre-existing)",
+      "policy": "TEP-1",
+      "at": "2026-10-27T02:54:11.006Z"
     }
   ],
   "tests": [],
