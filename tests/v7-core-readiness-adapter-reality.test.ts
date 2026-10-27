@@ -479,6 +479,159 @@ describe("C-RDY-2a adapter-reality", () => {
     expect(absentAudit.totals.TOOL_READY.TRUE).toBe(8);
   });
 
+  it("scanner golden views: exact code and literal views, line preservation and every slash decision", () => {
+    // //TR: Tam eşitlik: dize içindeki her üç tırnak türü literal görünümde \u0001 olur (code görünümünde gövde boş); regex gövdesi code'da boş, literal'da (tırnaklar maskeli) korunur; shebang iki görünümde de boş.
+    const show = (v: string) => v.replace(/\u0001/g, "¤");
+    const g1 = codeViews("const s = \"a'b`c\"; const t = 'x\"y';")!;
+    expect(show(g1.code)).toBe("const s = \"     \"; const t = '   ';");
+    expect(show(g1.literal)).toBe("const s = \"a¤b¤c\"; const t = 'x¤y';");
+    const g2 = codeViews("const r = /a\"b/g;")!;
+    expect(show(g2.code)).toBe("const r = /   /g;");
+    expect(show(g2.literal)).toBe("const r = /a¤b/g;");
+    const g3 = codeViews("#!/usr/bin/env node\nconst k = \"v\";")!;
+    expect(g3.code).toBe("                   \nconst k = \" \";");
+    expect(g3.literal).toBe("                   \nconst k = \"v\";");
+    // //TR: Satır sayısı ve CR/LF çok satırlı yorum, dize ve şablonda KORUNUR (kod görünümü kaynakla aynı uzunlukta ve aynı satır dizilimindedir).
+    const multi = "a /* x\ny */ b\r\n`p\nq` + \"s\\\nt\";\r\n";
+    const mv = codeViews(multi)!;
+    for (const view of [mv.code, mv.literal]) {
+      expect(view).toHaveLength(multi.length);
+      expect([...view].map(c => (c === "\n" || c === "\r" ? c : ".")).join("")).toBe([...multi].map(c => (c === "\n" || c === "\r" ? c : ".")).join(""));
+    }
+    // //TR: Bölme/regex kararları: dize ve şablondan sonra `/` bölmedir; `)` sonrası satır başı/sekme ardından `/` bölmedir; kaynağın başındaki `/` regex'tir; `/*/` yorumu hemen kapanmaz; `}` sonrası satır başındaki tek `/` regex değil bölmedir (sonraki satırdaki `/` ile eşleşmez); iç içe şablon ifadesi dış derinliği geri yükler.
+    const calls = (text: string) => [...codeViews(text)!.code.matchAll(/call\((\w+)\)/g)].map(m => m[1]);
+    expect(calls("const a = \"s\" / call(d1) / 2;\nconst b = `t` / call(d2) / 3;")).toEqual(["d1", "d2"]);
+    expect(calls("const c = (a)\n/ call(d3) / 2; const d = (b)\t/ call(d4) / 2;")).toEqual(["d3", "d4"]);
+    expect(calls("/a\"b/.test(x);\ncall(s9);")).toEqual(["s9"]);
+    expect(calls("/*/ call(hidden) */ call(shown);")).toEqual(["shown"]);
+    const loneSlash = "const o = {}\n/ call(d5);\ncall(d6) / 2;";
+    expect(calls(loneSlash)).toEqual(["d5", "d6"]);
+    expect(codeViews(loneSlash)!.code).toHaveLength(loneSlash.length);
+    expect(calls("const t = `o ${ {k: `i ${ 1 } j`}.k + call(s21) } p`;")).toEqual(["s21"]);
+  });
+
+  it("declaration forms: default, let/var, generators, type modifiers, multi-line lists, member modifiers, template text", () => {
+    const src = ["export default function dflt() {}", "export let lv = 1;", "export var vv = 2;", "export function* gen() {}", "export { type T4, V4 };", "export {\n  a1,\n  b1 as c1\n};", "const t = `\nexport function inTpl() {}\nexport { inList };\n`;"].join("\n");
+    for (const n of ["dflt", "lv", "vv", "gen", "T4", "V4", "a1", "c1"]) expect(declaresExport(src, n), n).toBe(true);
+    for (const n of ["b1", "inTpl", "inList", "type", "export"]) expect(declaresExport(src, n), n).toBe(false);
+    const cls = ["export class Mm {", "  public pubM() {}", "  protected protM() {}", "  spaced () {}", "}", "const t = `", "class Tpl {", "  fake() {}", "}", "`;"].join("\n");
+    for (const m of ["pubM", "protM", "spaced"]) expect(declaresMember(cls, "Mm", m), m).toBe(true);
+    expect(declaresMember(cls, "Tpl", "fake")).toBe(false);
+  });
+
+  it("exact tokens and record data: case, regex metacharacters, caller references, reason order, probes of absent records", () => {
+    const lib = {"core/workos/security-tools.ts": "export function runGitleaks() {}\n"};
+    const runner = (body: string) => fx({...lib, "core/workos/runner.ts": body});
+    expect(verifyRecord(rec(), runner("RUNGITLEAKS(dir);\n"))).toMatchObject({verifiedCallers: 0, codePath: "ABSENT"});
+    const studioRec = rec({exportName: "ProjectStudio", module: "core/workos/project-studio.ts", callers: [{file: "core/workos/crew/dev-review.ts", references: "studio.prepareRunDelivery("}]});
+    const studioRoot = (call: string) => fx({"core/workos/project-studio.ts": "export class ProjectStudio {\n  prepareRunDelivery() {}\n}\n", "core/workos/crew/dev-review.ts": call});
+    expect(verifyRecord(studioRec, studioRoot("studioXprepareRunDelivery(dir);\n"))).toMatchObject({verifiedCallers: 0, codePath: "ABSENT"});
+    expect(verifyRecord(studioRec, studioRoot("studio.prepareRunDelivery(dir);\n"))).toMatchObject({verifiedCallers: 1, codePath: "PRESENT"});
+    // //TR: Gerçek kayıt verisi pinlenir: güvenlik üçlüsünün çağıran başvuruları, sınıf üyesi, CI sınıfları ve github jetonu (başka bir çalışan sembole/jetona kaydırılamaz).
+    expect(real("gitleaks").callers).toEqual([{file: "core/workos/runner.ts", references: "runGitleaks("}]);
+    expect(real("trivy").callers).toEqual([{file: "core/workos/runner.ts", references: "runTrivy("}]);
+    expect(real("semgrep").callers).toEqual([{file: "core/workos/runner.ts", references: "discoverSecurityTools("}]);
+    expect(real("local-claude-reviewer")).toMatchObject({exportName: "LocalClaudeExecutors", member: "pair"});
+    expect([real("ajv").ciEvidence, real("ajv-formats").ciEvidence]).toEqual(["IN_PROCESS_RUNTIME", "IN_PROCESS_RUNTIME"]);
+    expect(real("github").ciTokens).toEqual(["node scripts/ci/uasco-review/run.mjs scope"]);
+    // //TR: Neden sırası sabittir ve entrypoint:false bir uyarı DEĞİLDİR.
+    expect(verifyRecord(rec({module: "core/workos/no-such-module.ts", runs: false, entrypoint: true, callers: [{file: "core/workos/runner.ts", references: "noSuchSymbolFixture("}]}), REPO).reasons).toEqual(["MODULE_MISSING", "CALLER_NOT_FOUND", "NEVER_RUNS_IN_PRODUCTION", "ENTRYPOINT_NOT_A_SCRIPT", "NO_PRODUCTION_CALLER"]);
+    expect(verifyRecord(rec({entrypoint: false}), REPO)).toMatchObject({codePath: "PRESENT", reasons: []});
+    // //TR: Kod yolu ABSENT olan kayıt da kendisine verilen yoklamayı korur; node_modules/<paket> dizini package.json olmadan paket sayılmaz; rapor verilen kayıtları kullanır (CI sorunu ve uzlaştırma).
+    const gone = buildAdapterRealityMap({records: [rec({adapterId: "gone", module: "core/workos/no-such-module.ts"})], repoRoot: REPO, probes: new Map<string, ProbeObservation>([["gone", "READY"]])}).entries.get("gone");
+    expect(gone).toEqual({adapterId: "gone", codePath: "ABSENT", probe: "READY"});
+    expect(verifyRecord(rec({mode: "NPM_PACKAGE", module: "pkgx", exportName: "default", callers: []}), fx({"node_modules/pkgx/readme.md": "x"}))).toMatchObject({moduleExists: false, reasons: ["MODULE_MISSING", "NO_PRODUCTION_CALLER"]});
+    const extra = rec({adapterId: "xtool", origin: "UNREGISTERED", ciEvidence: "REAL", ciTokens: ["nope-token"]});
+    const custom = report({records: [...ADAPTER_REALITY_RECORDS, extra]});
+    expect(custom.ciProblems).toEqual(["xtool:CI_TOKEN_NOT_IN_WORKFLOWS:nope-token"]);
+    expect(custom.reconciliation.unregisteredReal).toEqual(["claude-cli", "git", "node", "npm", "xtool"]);
+  });
+
+  it("reconciliation details: exact finding texts, sorted lists, code-point tie-break, implemented counts, unresolved vs registry ids", () => {
+    const row = (id: string, implementation: string, status = "REGISTERED"): RegistryAdapterRow => ({id, category: "X", status, implementation});
+    const v = (adapterId: string, codePath: "PRESENT" | "ABSENT"): RecordVerification => ({adapterId, moduleExists: true, exportDeclared: true, verifiedCallers: 1, failedCallers: [], codePath, reasons: []});
+    const records = [rec({adapterId: "u", origin: "REGISTRY"}), rec({adapterId: "o", origin: "REGISTRY"}), rec({adapterId: "B1", origin: "REGISTRY"}), rec({adapterId: "a1", origin: "REGISTRY"}), rec({adapterId: "empty", origin: "REGISTRY"}), rec({adapterId: "ru", origin: "UNREGISTERED"}), rec({adapterId: "x", origin: "UNREGISTERED"})];
+    const verifications = new Map<string, RecordVerification>([["u", v("u", "PRESENT")], ["o", v("o", "ABSENT")], ["B1", v("B1", "ABSENT")], ["a1", v("a1", "ABSENT")], ["empty", v("empty", "ABSENT")], ["ru", v("ru", "PRESENT")], ["x", v("x", "PRESENT")]]);
+    const rc = reconcileAdapterReality({
+      registry: [row("u", "NOT_IMPLEMENTED"), row("o", "IMPLEMENTED"), row("B1", "IMPLEMENTED"), row("a1", "IMPLEMENTED"), row("empty", ""), row("ru", "NOT_IMPLEMENTED"), row("n", "PARTIAL"), row("d1", "IMPLEMENTED", "DRAFT")],
+      records, verifications, bindingAdapterIds: ["zeta", "alpha", "n", "u"],
+      deadCode: [{module: "core/z.ts", exports: ["a", "b"], importers: []}, {module: "core/a.ts", exports: ["c"], importers: []}]
+    });
+    expect(rc.findings).toEqual([
+      {finding: "ADAPTER_UNRESOLVED", id: "alpha", detail: "binding adapter id has no reality-map record"},
+      {finding: "ADAPTER_UNRESOLVED", id: "n", detail: "binding adapter id has no reality-map record"},
+      {finding: "ADAPTER_UNRESOLVED", id: "zeta", detail: "binding adapter id has no reality-map record"},
+      {finding: "DEAD_CODE", id: "core/a.ts", detail: "no production importer for c"},
+      {finding: "DEAD_CODE", id: "core/z.ts", detail: "no production importer for a, b"},
+      {finding: "OVER_REPORTED", id: "B1", detail: "registry implementation IMPLEMENTED but no verified code path"},
+      {finding: "OVER_REPORTED", id: "a1", detail: "registry implementation IMPLEMENTED but no verified code path"},
+      {finding: "OVER_REPORTED", id: "d1", detail: "registry implementation IMPLEMENTED but the adapter is not in the reality map"},
+      {finding: "OVER_REPORTED", id: "empty", detail: "registry implementation  but no verified code path"},
+      {finding: "OVER_REPORTED", id: "n", detail: "registry implementation PARTIAL but the adapter is not in the reality map"},
+      {finding: "OVER_REPORTED", id: "o", detail: "registry implementation IMPLEMENTED but no verified code path"},
+      {finding: "UNDER_REPORTED", id: "ru", detail: "registry implementation NOT_IMPLEMENTED but a verified code path exists"},
+      {finding: "UNDER_REPORTED", id: "u", detail: "registry implementation NOT_IMPLEMENTED but a verified code path exists"},
+      {finding: "UNREGISTERED_REAL", id: "x", detail: "real code path, no registry row"}
+    ]);
+    expect(rc.deadCode).toEqual(["core/a.ts", "core/z.ts"]);
+    expect(rc.unresolvedBindingAdapters).toEqual(["alpha", "n", "zeta"]);
+    // //TR: Uygulanmış sayısı durumdan bağımsızdır (DRAFT satır dahil) ve boş dize uygulanmış sayılır; kayıtsız-köken kaydı kayıt satırı olan bir kimlikle de kayıt defteri kod destekli listesine girer.
+    expect(rc.registry).toEqual({total: 8, defined: 7, implemented: 6});
+    expect(rc.codeBackedRegistryIds).toEqual(["ru", "u"]);
+  });
+
+  it("importer scan details: extensions, test flavours, self import, hidden directories, word boundaries, unparseable files, bare specifiers", () => {
+    const probe = DEAD_CODE_PROBES[0];
+    const imp = "import {resolveCapability} from \"../capabilities/resolver.js\";\n";
+    const root = fx({
+      "core/capabilities/resolver.ts": "import {x} from \"./resolver.js\";\nexport function resolveCapability() {}\n",
+      "core/.git/hook.ts": imp,
+      "core/m1.mts": "import {resolveCapability} from \"./capabilities/resolver.js\";\n",
+      "core/bare.ts": "import {resolveCapability} from \"./capabilities/resolver\";\n",
+      "core/t1.test.js": imp, "core/t2.test.mjs": imp, "core/t3.test.cjs": imp, "core/t4.test.mts": imp,
+      "core/prefixed.ts": "const a = xfrom(\"./capabilities/resolver.js\"); reimport(\"./capabilities/resolver.js\"); prerequire(\"./capabilities/resolver.js\");\n",
+      "core/broken.ts": "import {resolveCapability} from \"./capabilities/resolver.js\";\nconst broken = \"open\n"
+    });
+    expect(findProductionImporters(root, probe)).toEqual(["core/bare.ts", "core/m1.mts"]);
+    // //TR: Uzantısız belirteç .mjs modülüne çözülür (uzantılar iki tarafta aynı biçimde atılır).
+    expect(findProductionImporters(fx({"scripts/lib.mjs": "export const a = 1;\n", "scripts/user.mjs": "import {a} from \"./lib\";\n"}), {module: "scripts/lib.mjs", exports: ["a"]})).toEqual(["scripts/user.mjs"]);
+    // //TR: Sınıflandırılamayan dosya paket içe aktaranı sayılmaz.
+    expect(findPackageImporters(fx({"core/p.ts": "import A from \"ajv\";\nconst broken = \"open\n", "core/q.ts": "import A from \"ajv\";\n"}), "ajv")).toEqual(["core/q.ts"]);
+  });
+
+  it("census details: spawn family, word boundaries, regex metacharacters, case, de-duplication, sorting, exclusion reasons", () => {
+    const root = fx({
+      "core/a.ts": "execFile(\"tool-ef\", []); execFileSync('Tool.EXE', []); spawn( \"sp-tool\", []); spawnSync(`ss-tool`, []); const myspawn = (x, y) => 0; myspawn(\"not-a-cmd\", []);\nconst m1 = \"acme-tool\"; const m2 = \"acme-tool\"; const dots = \"aXb\"; const lower = \"mixed-case\";\n",
+      "core/b.ts": "const m = \"acme-tool\"; const exact = \"a.b\";\n",
+      "core/z-broken.ts": "const x = \"open\n", "core/a-broken.ts": "const y = \"open\n"
+    });
+    const c = censusProduction(root, ["acme-tool", "a.b", "Mixed-Case"]);
+    expect([...c.registryIds.entries()]).toEqual([["acme-tool", ["core/a.ts", "core/b.ts"]], ["Mixed-Case", ["core/a.ts"]], ["a.b", ["core/b.ts"]]]);
+    expect([...c.commands.entries()]).toEqual([["tool-ef", ["core/a.ts"]], ["Tool.EXE", ["core/a.ts"]], ["sp-tool", ["core/a.ts"]], ["ss-tool", ["core/a.ts"]]]);
+    expect(c.unparseable).toEqual(["core/a-broken.ts", "core/z-broken.ts"]);
+    const none = {registryIds: {}, commands: {}};
+    expect(censusProblems({...c, unparseable: []}, [], none).filter(p => p.startsWith("REGISTRY_ID_UNMAPPED:acme-tool"))).toEqual(["REGISTRY_ID_UNMAPPED:acme-tool:core/a.ts"]);
+    // //TR: Eşlenmiş ama görülmeyen bir kimlik için dışlama yalnız ALSO_MAPPED verir (STALE değil); boş gerekçe UNMAPPED değil WITHOUT_REASON verir.
+    expect(censusProblems({registryIds: new Map(), commands: new Map(), unparseable: []}, [rec({adapterId: "ghost-id"})], {registryIds: {"ghost-id": "reason"}, commands: {}})).toEqual(["REGISTRY_ID_EXCLUSION_ALSO_MAPPED:ghost-id"]);
+    expect(censusProblems({...c, commands: new Map(), unparseable: []}, [rec({adapterId: "a.b"}), rec({adapterId: "Mixed-Case"})], {registryIds: {"acme-tool": ""}, commands: {}})).toEqual(["REGISTRY_ID_EXCLUSION_WITHOUT_REASON:acme-tool"]);
+  });
+
+  it("workflow and registry readers: indented YAML comments, name order, every adapter row is validated", () => {
+    const wfRoot = fx({".github/workflows/b.yml": "- run: echo B-MARK\n", ".github/workflows/a.yaml": "jobs:\n    # node tools/indented.mjs\n  x: A-MARK\n"});
+    const wf = readWorkflowTexts(wfRoot);
+    expect(wf).toHaveLength(2);
+    expect(wf[0]).toContain("A-MARK");
+    expect(wf[1]).toContain("B-MARK");
+    expect(wf[0]).not.toContain("indented.mjs");
+    const good = {id: "a", category: "C", status: "REGISTERED", implementation: "NOT_IMPLEMENTED"};
+    const load = (rows: unknown[]) => { const r = fx({"registries/tool-adapters.json": JSON.stringify({adapters: rows})}); return () => loadRegistryAdapters(r); };
+    expect(load([good, good])()).toHaveLength(2);
+    for (const bad of [{...good, id: 1}, {...good, status: 1}, {...good, implementation: 1}]) {
+      expect(load([bad]), JSON.stringify(bad)).toThrow("ADAPTER_REGISTRY_UNAVAILABLE:registries/tool-adapters.json");
+      expect(load([good, bad]), `second ${JSON.stringify(bad)}`).toThrow("ADAPTER_REGISTRY_UNAVAILABLE:registries/tool-adapters.json");
+    }
+  });
+
   it("registry loader fails closed", () => {
     const rel = "registries/tool-adapters.json";
     const root = (body: string | null) => { const r = fs.mkdtempSync(path.join(tmp, "reg-")); if (body !== null) { fs.mkdirSync(path.join(r, "registries")); fs.writeFileSync(path.join(r, rel), body); } return r; };

@@ -1,5 +1,5 @@
 {
- "//TR": "C-RDY-2a (Adapter Gerçeklik Haritası) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt `file` içinde TAM 1 kez geçen bir metni (ya da `edits` listesindeki her metni) değiştirir; docs/lanes/LANE-C-adapter-reality-mutants.mjs hepsini tests/v7-core-readiness-adapter-reality.test.ts ile çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. M1-M5 dağıtım paketindeki zorunlu mutantlardır (M1 trivy REAL -> CI dürüstlüğü, M2 çağıran kontrolü atlanır, M3 çözümleyici kayıt implementation alanını okur, M4 ADAPTER_UNRESOLVED düşer, M5 yoklama varsayılanı READY); M6-M24 ek savunma mutantlarıdır (M2/M8/M9/M12/M14/M21/M23 tarayıcı sonrası kodla yeniden yazıldı). R1, R4, R5, R9-R14, R16 #264 incelemesinin (TEP-1 tur 1) hayatta kalan mutantlarıdır (R9/R10 üretim dosyalarında yorum/dize anmalarını bırakıp KOD kullanımını değiştirir); R17-R44 onarımla gelen kodun (tarayıcı, sınıf kapsamlı üye, içe aktaran çözümü, eksiksizlik sayımı, github kaydı, CI sınıfları) mutantlarıdır. G1, G2, G4, N8, N11, N12, N13, N14, N28 #264 turu-2 incelemesinin (86f6587) hayatta kalan mutantlarıdır; P1-P8 (çağıran yolu kısıtı), S1-S5 (bölme/regex ayrımı ve Unicode), Q2-Q4 (sınıf üyesi sınırları), O1-O4 (omniroute kaydı) tur-2 koduna aittir.",
+ "//TR": "C-RDY-2a (Adapter Gerçeklik Haritası) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt `file` içinde TAM 1 kez geçen bir metni (ya da `edits` listesindeki her metni) değiştirir; docs/lanes/LANE-C-adapter-reality-mutants.mjs hepsini tests/v7-core-readiness-adapter-reality.test.ts ile çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. M1-M5 dağıtım paketindeki zorunlu mutantlardır (M1 trivy REAL -> CI dürüstlüğü, M2 çağıran kontrolü atlanır, M3 çözümleyici kayıt implementation alanını okur, M4 ADAPTER_UNRESOLVED düşer, M5 yoklama varsayılanı READY); M6-M24 ek savunma mutantlarıdır (M2/M8/M9/M12/M14/M21/M23 tarayıcı sonrası kodla yeniden yazıldı). R1, R4, R5, R9-R14, R16 #264 incelemesinin (TEP-1 tur 1) hayatta kalan mutantlarıdır (R9/R10 üretim dosyalarında yorum/dize anmalarını bırakıp KOD kullanımını değiştirir); R17-R44 onarımla gelen kodun (tarayıcı, sınıf kapsamlı üye, içe aktaran çözümü, eksiksizlik sayımı, github kaydı, CI sınıfları) mutantlarıdır. G1, G2, G4, N8, N11, N12, N13, N14, N28 #264 turu-2 incelemesinin (86f6587) hayatta kalan mutantlarıdır; P1-P8 (çağıran yolu kısıtı), S1-S5 (bölme/regex ayrımı ve Unicode), Q2-Q4 (sınıf üyesi sınırları), O1-O4 (omniroute kaydı) tur-2 koduna aittir. HV-* mutantları, bağımsız bir mutant avcısının (192 deneme) bulduğu ve tur-2 sertleştirme testlerinin (tarayıcı altın görünümleri, bildirim biçimleri, neden sırası, uzlaştırma ayrıntıları, içe aktaran taraması, sayım ayrıntıları, okuyucular) öldürdüğü hayatta kalanlardır; C03/C05/K01/X04 bilerek eklenmedi (denk mutantlar ya da Windows sembolik bağ izni gerektiren senaryo).",
  "mutants": [
   {
    "id": "M1",
@@ -645,6 +645,538 @@
    "file": "core/capabilities/adapter-reality.ts",
    "old": "    spark: \"UI sparkline CSS class",
    "new": "    omniroute: \"hidden\",\n    spark: \"UI sparkline CSS class"
+  },
+  {
+   "id": "HV-S01",
+   "description": "literal view does not mask backticks inside string bodies",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "c === \"\\\"\" || c === \"'\" || c === \"`\" ? \"\\u0001\" : c",
+   "new": "c === \"\\\"\" || c === \"'\" ? \"\\u0001\" : c"
+  },
+  {
+   "id": "HV-S02",
+   "description": "literal view does not mask single quotes inside string bodies",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "c === \"\\\"\" || c === \"'\" || c === \"`\" ? \"\\u0001\" : c",
+   "new": "c === \"\\\"\" || c === \"`\" ? \"\\u0001\" : c"
+  },
+  {
+   "id": "HV-S03",
+   "description": "nl() stops preserving LF",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const nl = (c: string) => (c === \"\\n\" || c === \"\\r\" ? c : \" \");",
+   "new": "const nl = (c: string) => (c === \"\\r\" ? c : \" \");"
+  },
+  {
+   "id": "HV-S04",
+   "description": "nl() stops preserving CR",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const nl = (c: string) => (c === \"\\n\" || c === \"\\r\" ? c : \" \");",
+   "new": "const nl = (c: string) => (c === \"\\n\" ? c : \" \");"
+  },
+  {
+   "id": "HV-S08",
+   "description": "regexAllowed skips only plain spaces back to the previous token",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "while (k >= 0 && /\\s/.test(code[k])) k--;",
+   "new": "while (k >= 0 && / /.test(code[k])) k--;"
+  },
+  {
+   "id": "HV-S09",
+   "description": "regex literal at start of source rejected",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (k < 0) return true;",
+   "new": "if (k < 0) return false;"
+  },
+  {
+   "id": "HV-S12",
+   "description": "slash after a double-quoted string becomes a regex start",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "|| p === \"\\\"\" || p === \"'\" || p === \"`\");",
+   "new": "|| p === \"'\" || p === \"`\");"
+  },
+  {
+   "id": "HV-S13",
+   "description": "slash after a template literal becomes a regex start",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "|| p === \"\\\"\" || p === \"'\" || p === \"`\");",
+   "new": "|| p === \"\\\"\" || p === \"'\");"
+  },
+  {
+   "id": "HV-S16",
+   "description": "block comment search starts at i+1 so /*/ closes at once",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const end = src.indexOf(\"*/\", i + 2);",
+   "new": "const end = src.indexOf(\"*/\", i + 1);"
+  },
+  {
+   "id": "HV-S20",
+   "description": "regex-literal scan may cross line breaks",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "for (; j < n && src[j] !== \"\\n\"; j++) { const e",
+   "new": "for (; j < n; j++) { const e"
+  },
+  {
+   "id": "HV-S21",
+   "description": "template-expression frame stores depth 0 instead of outer depth",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "frames.push(depth); depth = 0;",
+   "new": "frames.push(0); depth = 0;"
+  },
+  {
+   "id": "HV-S24",
+   "description": "shebang kept in the literal view",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (src.startsWith(\"#!\")) while (i < n && src[i] !== \"\\n\") blank(src[i++]);",
+   "new": "if (src.startsWith(\"#!\")) while (i < n && src[i] !== \"\\n\") body(src[i++]);"
+  },
+  {
+   "id": "HV-S28",
+   "description": "regex body kept in the code view",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "for (let k = i + 1; k < j; k++) body(src[k]);",
+   "new": "for (let k = i + 1; k < j; k++) plain(src[k]);"
+  },
+  {
+   "id": "HV-S29",
+   "description": "regex body blanked in the literal view",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "for (let k = i + 1; k < j; k++) body(src[k]);",
+   "new": "for (let k = i + 1; k < j; k++) blank(src[k]);"
+  },
+  {
+   "id": "HV-S34",
+   "description": "slash with no closing slash on the line is still consumed as a regex",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (ok) { plain(\"/\"); for (let k = i + 1; k < j; k++)",
+   "new": "if (true) { plain(\"/\"); for (let k = i + 1; k < j; k++)"
+  },
+  {
+   "id": "HV-T01",
+   "description": "tokenRe default flags become case-insensitive",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const tokenRe = (t: string, flags = \"\") =>",
+   "new": "const tokenRe = (t: string, flags = \"i\") =>"
+  },
+  {
+   "id": "HV-T05",
+   "description": "escapeRe no longer escapes '.'",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "s.replace(/[.*+?^${}()|[\\]\\\\]/g, \"\\\\$&\")",
+   "new": "s.replace(/[*+?^${}()|[\\]\\\\]/g, \"\\\\$&\")"
+  },
+  {
+   "id": "HV-E01",
+   "description": "declaresExport ignores `export default`",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "`^export\\\\s+(?:default\\\\s+)?(?:async\\\\s+)?",
+   "new": "`^export\\\\s+(?:async\\\\s+)?"
+  },
+  {
+   "id": "HV-E02",
+   "description": "declaresExport ignores let/var exports",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(?:function\\\\*?|class|const|let|var)\\\\s+",
+   "new": "(?:function\\\\*?|class|const)\\\\s+"
+  },
+  {
+   "id": "HV-E03",
+   "description": "declaresExport ignores generator functions",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(?:function\\\\*?|class|const|let|var)\\\\s+",
+   "new": "(?:function|class|const|let|var)\\\\s+"
+  },
+  {
+   "id": "HV-E05",
+   "description": "export { type X } modifier not stripped",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "part.trim().replace(/^type\\s+/, \"\").split",
+   "new": "part.trim().split"
+  },
+  {
+   "id": "HV-E08",
+   "description": "export { } list must be on one line",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\\{([^}]*)\\}/gm",
+   "new": "\\{([^}\\n]*)\\}/gm"
+  },
+  {
+   "id": "HV-E10",
+   "description": "export { } lists read from the literal view",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "for (const m of v.code.matchAll(/^export\\s+(?:type\\s+)?\\{",
+   "new": "for (const m of v.literal.matchAll(/^export\\s+(?:type\\s+)?\\{"
+  },
+  {
+   "id": "HV-E11",
+   "description": "export declarations read from the literal view",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "${escapeRe(name)}(?![\\\\w$])`, \"m\").test(v.code)) return true;",
+   "new": "${escapeRe(name)}(?![\\\\w$])`, \"m\").test(v.literal)) return true;"
+  },
+  {
+   "id": "HV-M01",
+   "description": "member lookup ignores `public`",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(?:(?:private|public|protected|static|readonly)\\\\s+)*",
+   "new": "(?:(?:private|protected|static|readonly)\\\\s+)*"
+  },
+  {
+   "id": "HV-M02",
+   "description": "member lookup ignores `protected`",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(?:(?:private|public|protected|static|readonly)\\\\s+)*",
+   "new": "(?:(?:private|public|static|readonly)\\\\s+)*"
+  },
+  {
+   "id": "HV-M05",
+   "description": "whitespace between member name and paren no longer allowed",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "${escapeRe(member)}\\\\s*[(<]",
+   "new": "${escapeRe(member)}[(<]"
+  },
+  {
+   "id": "HV-M07",
+   "description": "class body located in the literal view",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "classBodyTopLevel(v.code, className)",
+   "new": "classBodyTopLevel(v.literal, className)"
+  },
+  {
+   "id": "HV-V02",
+   "description": "NEVER_RUNS_IN_PRODUCTION emitted last instead of in order",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "  if (!r.runs) reasons.push(\"NEVER_RUNS_IN_PRODUCTION\");\n  if (r.entrypoint === true && r.mode !== \"SCRIPT_LITERAL\") reasons.push(\"ENTRYPOINT_NOT_A_SCRIPT\");\n  const callerOk = (r.entrypoint === true && r.mode === \"SCRIPT_LITERAL\") || verifiedCallers >= 1;\n  if (!callerOk) reasons.push(\"NO_PRODUCTION_CALLER\");",
+   "new": "  if (r.entrypoint === true && r.mode !== \"SCRIPT_LITERAL\") reasons.push(\"ENTRYPOINT_NOT_A_SCRIPT\");\n  const callerOk = (r.entrypoint === true && r.mode === \"SCRIPT_LITERAL\") || verifiedCallers >= 1;\n  if (!callerOk) reasons.push(\"NO_PRODUCTION_CALLER\");\n  if (!r.runs) reasons.push(\"NEVER_RUNS_IN_PRODUCTION\");"
+  },
+  {
+   "id": "HV-V05",
+   "description": "entrypoint:false is flagged as ENTRYPOINT_NOT_A_SCRIPT",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (r.entrypoint === true && r.mode !== \"SCRIPT_LITERAL\") reasons.push",
+   "new": "if (r.entrypoint !== undefined && r.mode !== \"SCRIPT_LITERAL\") reasons.push"
+  },
+  {
+   "id": "HV-P01",
+   "description": "report validates CI evidence against the constant records, not the supplied ones",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "ciProblems: ciEvidenceProblems(records, readWorkflowTexts(repoRoot))",
+   "new": "ciProblems: ciEvidenceProblems(ADAPTER_REALITY_RECORDS, readWorkflowTexts(repoRoot))"
+  },
+  {
+   "id": "HV-P02",
+   "description": "report reconciles the constant records instead of supplied ones",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "registry: loadRegistryAdapters(repoRoot), records, verifications,",
+   "new": "registry: loadRegistryAdapters(repoRoot), records: ADAPTER_REALITY_RECORDS, verifications,"
+  },
+  {
+   "id": "HV-R01",
+   "description": "UNDER_REPORTED detail loses the implementation value",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "detail: `registry implementation ${row.implementation} but a verified code path exists`",
+   "new": "detail: `registry implementation but a verified code path exists`"
+  },
+  {
+   "id": "HV-R02",
+   "description": "OVER_REPORTED (no code path) detail text changed",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "detail: `registry implementation ${row.implementation} but no verified code path`",
+   "new": "detail: `registry implementation ${row.implementation} but no code path`"
+  },
+  {
+   "id": "HV-R05",
+   "description": "DEAD_CODE detail export list joined without separator",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "detail: `no production importer for ${d.exports.join(\", \")}`",
+   "new": "detail: `no production importer for ${d.exports.join(\"\")}`"
+  },
+  {
+   "id": "HV-R07",
+   "description": "deadCode list not sorted",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "deadCode: deadCode.sort(),",
+   "new": "deadCode: deadCode,"
+  },
+  {
+   "id": "HV-R08",
+   "description": "unresolved binding ids not sorted",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": ".filter(id => !mapped.has(id)).sort();",
+   "new": ".filter(id => !mapped.has(id));"
+  },
+  {
+   "id": "HV-R09",
+   "description": "finding id tie-break uses localeCompare",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "a.id < b.id ? -1 : a.id > b.id ? 1 : 0",
+   "new": "a.id.localeCompare(b.id)"
+  },
+  {
+   "id": "HV-R14",
+   "description": "registry.implemented also requires status REGISTERED",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "implemented: i.registry.filter(r => r.implementation !== \"NOT_IMPLEMENTED\").length",
+   "new": "implemented: i.registry.filter(r => r.implementation !== \"NOT_IMPLEMENTED\" && r.status === \"REGISTERED\").length"
+  },
+  {
+   "id": "HV-R16",
+   "description": "row with empty implementation string counts as not implemented",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const implemented = row.implementation !== \"NOT_IMPLEMENTED\";",
+   "new": "const implemented = row.implementation !== \"NOT_IMPLEMENTED\" && row.implementation !== \"\";"
+  },
+  {
+   "id": "HV-R17",
+   "description": "ids known to the registry are never ADAPTER_UNRESOLVED",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const unresolved = [...new Set(i.bindingAdapterIds)].filter(id => !mapped.has(id)).sort();",
+   "new": "const unresolved = [...new Set(i.bindingAdapterIds)].filter(id => !mapped.has(id) && !registryById.has(id)).sort();"
+  },
+  {
+   "id": "HV-R18",
+   "description": "only REGISTRY-origin records enter codeBackedRegistryIds",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "codeBackedRegistryIds.push(r.adapterId);",
+   "new": "if (r.origin === \"REGISTRY\") codeBackedRegistryIds.push(r.adapterId);"
+  },
+  {
+   "id": "HV-X01",
+   "description": "self-import no longer skipped in findProductionImporters",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (stripExt(path.resolve(f)) === target) continue;",
+   "new": ""
+  },
+  {
+   "id": "HV-X02",
+   "description": ".git directory no longer skipped",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "|| e.name === \".git\" ||",
+   "new": "||"
+  },
+  {
+   "id": "HV-X05",
+   "description": ".mts dropped from SOURCE_EXT",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const SOURCE_EXT = /\\.(?:ts|mts|mjs|cjs|js)$/;",
+   "new": "const SOURCE_EXT = /\\.(?:ts|mjs|cjs|js)$/;"
+  },
+  {
+   "id": "HV-X09",
+   "description": "TEST_FILE only recognises .test.ts",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const TEST_FILE = /\\.test\\.[cm]?[jt]s$/;",
+   "new": "const TEST_FILE = /\\.test\\.ts$/;"
+  },
+  {
+   "id": "HV-X10",
+   "description": "TEST_FILE loses the c/m prefix",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const TEST_FILE = /\\.test\\.[cm]?[jt]s$/;",
+   "new": "const TEST_FILE = /\\.test\\.[jt]s$/;"
+  },
+  {
+   "id": "HV-X11",
+   "description": "TEST_FILE loses .test.js",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const TEST_FILE = /\\.test\\.[cm]?[jt]s$/;",
+   "new": "const TEST_FILE = /\\.test\\.[cm]?ts$/;"
+  },
+  {
+   "id": "HV-X12",
+   "description": "stripExt no longer strips .mjs",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const stripExt = (p: string) => p.replace(/\\.(?:ts|mts|mjs|cjs|js)$/, \"\");",
+   "new": "const stripExt = (p: string) => p.replace(/\\.(?:ts|mts|cjs|js)$/, \"\");"
+  },
+  {
+   "id": "HV-X16",
+   "description": "importSpecifiers: `from` loses \\b",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/(?:\\bfrom|\\bimport|\\brequire)\\s*\\(?",
+   "new": "/(?:from|\\bimport|\\brequire)\\s*\\(?"
+  },
+  {
+   "id": "HV-X17",
+   "description": "importSpecifiers: `import` loses \\b",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/(?:\\bfrom|\\bimport|\\brequire)\\s*\\(?",
+   "new": "/(?:\\bfrom|import|\\brequire)\\s*\\(?"
+  },
+  {
+   "id": "HV-X26",
+   "description": "unparseable file counts as a production importer",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (v !== null && importSpecifiers(v.literal).some(sp => sp.startsWith(\".\") && stripExt",
+   "new": "if (v === null || importSpecifiers(v.literal).some(sp => sp.startsWith(\".\") && stripExt"
+  },
+  {
+   "id": "HV-X27",
+   "description": "unparseable file counts as a package importer",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (v !== null && importSpecifiers(v.literal).some(sp => sp === pkg",
+   "new": "if (v === null || importSpecifiers(v.literal).some(sp => sp === pkg"
+  },
+  {
+   "id": "HV-K05",
+   "description": "census file list keeps duplicate files",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "else if (!l.includes(f)) l.push(f); };",
+   "new": "else l.push(f); };"
+  },
+  {
+   "id": "HV-K06",
+   "description": "census unparseable list not sorted",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "return {registryIds: ids, commands, unparseable: unparseable.sort()};",
+   "new": "return {registryIds: ids, commands, unparseable};"
+  },
+  {
+   "id": "HV-K07",
+   "description": "SPAWN_CALL ignores spawn",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/\\b(?:spawn|spawnSync|execFile|execFileSync)\\(",
+   "new": "/\\b(?:spawnSync|execFile|execFileSync)\\("
+  },
+  {
+   "id": "HV-K11",
+   "description": "SPAWN_CALL loses leading \\b",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/\\b(?:spawn|spawnSync|execFile|execFileSync)\\(",
+   "new": "/(?:spawn|spawnSync|execFile|execFileSync)\\("
+  },
+  {
+   "id": "HV-K12",
+   "description": "SPAWN_CALL disallows whitespace after the paren",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\\(\\s*([\"'`])([A-Za-z0-9_.-]+)\\1/g",
+   "new": "\\(([\"'`])([A-Za-z0-9_.-]+)\\1/g"
+  },
+  {
+   "id": "HV-K17",
+   "description": "census lower-cases command names",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "add(commands, m[2], file)",
+   "new": "add(commands, m[2].toLowerCase(), file)"
+  },
+  {
+   "id": "HV-N09",
+   "description": "census registry ids not regex-escaped",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": ".map(escapeRe).join(\"|\")})",
+   "new": ".join(\"|\")})"
+  },
+  {
+   "id": "HV-N10",
+   "description": "census id map does not lower-case registry ids",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "registryIds.map(id => [id.toLowerCase(), id] as const)",
+   "new": "registryIds.map(id => [id, id] as const)"
+  },
+  {
+   "id": "HV-L01",
+   "description": "EXCLUSION_STALE also fires for mapped exclusions",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "else if (!seen.has(k)) out.push(`${kind}_EXCLUSION_STALE:${k}`);",
+   "new": "if (!seen.has(k)) out.push(`${kind}_EXCLUSION_STALE:${k}`);"
+  },
+  {
+   "id": "HV-L02",
+   "description": "UNMAPPED message lists every file",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "out.push(`${kind}_UNMAPPED:${k}:${files[0]}`)",
+   "new": "out.push(`${kind}_UNMAPPED:${k}:${files.join(\",\")}`)"
+  },
+  {
+   "id": "HV-L04",
+   "description": "empty-string exclusion reason counts as no exclusion",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (!mapped.has(k) && excluded[k] === undefined)",
+   "new": "if (!mapped.has(k) && !excluded[k])"
+  },
+  {
+   "id": "HV-W03",
+   "description": "full-line YAML comments recognised only at column 0",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": ".filter(l => !/^\\s*#/.test(l))",
+   "new": ".filter(l => !/^#/.test(l))"
+  },
+  {
+   "id": "HV-W04",
+   "description": "workflow names not sorted",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "names = fs.readdirSync(dir).filter(n => /\\.ya?ml$/.test(n)).sort();",
+   "new": "names = fs.readdirSync(dir).filter(n => /\\.ya?ml$/.test(n));"
+  },
+  {
+   "id": "HV-Y01",
+   "description": "registry loader no longer validates id type",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "typeof (r as RegistryAdapterRow)?.id === \"string\" && typeof (r as RegistryAdapterRow)?.status",
+   "new": "typeof (r as RegistryAdapterRow)?.status"
+  },
+  {
+   "id": "HV-Y02",
+   "description": "registry loader no longer validates status type",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "&& typeof (r as RegistryAdapterRow)?.status === \"string\"",
+   "new": ""
+  },
+  {
+   "id": "HV-Y03",
+   "description": "registry loader no longer validates implementation type",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "&& typeof (r as RegistryAdapterRow)?.implementation === \"string\"",
+   "new": ""
+  },
+  {
+   "id": "HV-Y05",
+   "description": "registry loader validates only the first row",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "!rows.every((r: unknown) =>",
+   "new": "!rows.slice(0, 1).every((r: unknown) =>"
+  },
+  {
+   "id": "HV-N15",
+   "description": "probe observations are dropped for ABSENT records",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "probe: i.probes?.get(r.adapterId) ?? \"NOT_OBSERVED\"}",
+   "new": "probe: v.codePath === \"PRESENT\" ? (i.probes?.get(r.adapterId) ?? \"NOT_OBSERVED\") : \"NOT_OBSERVED\"}"
+  },
+  {
+   "id": "HV-N17",
+   "description": "npm package existence checks the directory, not package.json",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "readText(path.join(repoRoot, \"node_modules\", r.module, \"package.json\")) !== null",
+   "new": "fs.existsSync(path.join(repoRoot, \"node_modules\", r.module))"
+  },
+  {
+   "id": "HV-D01",
+   "description": "data: gitleaks caller references runTrivy( (still present in runner.ts)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "callers: [caller(RUN, \"runGitleaks(\")], ciEvidence: \"FAKE_BINARY_ONLY\"",
+   "new": "callers: [caller(RUN, \"runTrivy(\")], ciEvidence: \"FAKE_BINARY_ONLY\""
+  },
+  {
+   "id": "HV-D02",
+   "description": "data: ajv ciEvidence IN_PROCESS_RUNTIME -> FAKE_ONLY",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "callers: AJV_CALLERS, ciEvidence: \"IN_PROCESS_RUNTIME\"",
+   "new": "callers: AJV_CALLERS, ciEvidence: \"FAKE_ONLY\""
+  },
+  {
+   "id": "HV-D05",
+   "description": "data: local-claude-reviewer drops member pair",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "exportName: \"LocalClaudeExecutors\", member: \"pair\", runs: true",
+   "new": "exportName: \"LocalClaudeExecutors\", runs: true"
+  },
+  {
+   "id": "HV-D07",
+   "description": "data: github ciTokens swapped to another token held by a workflow",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "ciTokens: [\"node scripts/ci/uasco-review/run.mjs scope\"]",
+   "new": "ciTokens: [\"node scripts/run-validation.mjs\"]"
   }
  ]
 }

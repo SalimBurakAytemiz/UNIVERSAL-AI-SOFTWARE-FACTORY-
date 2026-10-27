@@ -246,7 +246,8 @@ const TEST_FILE = /\.test\.[cm]?[jt]s$/;
 function listSources(dir: string, out: string[] = []): string[] {
   let entries: fs.Dirent[];
   try { entries = fs.readdirSync(dir, {withFileTypes: true}); } catch { return out; }
-  for (const e of entries) {
+  // //TR: Dizin girdileri ada göre sıralanır (işletim sistemi sırasından bağımsız, belirli çıktı ve ileti).
+  for (const e of [...entries].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
     if (e.name === "node_modules" || e.name === "dist" || e.name === ".git" || e.name === "__tests__") continue;
     const p = path.join(dir, e.name);
     if (e.isDirectory()) listSources(p, out); else if (e.isFile() && SOURCE_EXT.test(e.name) && !TEST_FILE.test(e.name)) out.push(p);
