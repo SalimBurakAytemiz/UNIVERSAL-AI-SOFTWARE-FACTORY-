@@ -139,6 +139,8 @@ describe("C-RDY-2a adapter-reality", () => {
       ["const q = 86400 / call(dig) / 2;", ["dig"]],
       ["const t = 5 % 86400/3600; const u = 7 / call(dig2) / 2;", ["dig2"]],
       ["const a = x + /a\"b/.test(y);\nconst b = x - /a\"b/.test(y);\ncall(plus);", ["plus"]],
+      ["const $a = $ / call(dd1) / 2; const _b = _ / call(dd2) / 2; const c_ = a_ / call(dd2b) / 2; const d$ = a$ / call(dd2c) / 2;", ["dd1", "dd2", "dd2b", "dd2c"]],
+      ["const n = x٣ / call(dd3) / 2;", ["dd3"]],
       ["const a = (b)! / call(nn3) / 2;", ["nn3"]],
       ["const c = arr[0]! / call(nn4) / 2;", ["nn4"]],
       ["const r = a\n  .return / call(ws1) / 2;", ["ws1"]],
@@ -206,7 +208,7 @@ describe("C-RDY-2a adapter-reality", () => {
       "scripts/a-selftest.mjs": call, "core/a-SELFTEST.ts": call, "core/fake-harness.mjs": call, "core/FAKE-x.mjs": call,
       "core/fixtures/f.ts": call, "core/Fixtures/g.ts": call, "core/fixture/f.ts": call, "core/Tests/t.ts": call, "core/test/t.ts": call, "core/tests/t.ts": call,
       "core/__mocks__/m.ts": call, "core/__TESTS__/x.ts": call, "core/Node_Modules/x.ts": call, "core/DIST/x.js": call,
-      "scripts/validate-x.mjs": call, "scripts/verify-x.mjs": call, "core/my-fake-tool.mjs": call, "core/contest/x.ts": call, "core/tests.ts": call, "core/prefixed-selftest-tool.mjs": call, "core/nofixtures.ts": call});
+      "scripts/validate-x.mjs": call, "scripts/verify-x.mjs": call, "core/my-fake-tool.mjs": call, "core/contest/x.ts": call, "core/tests.ts": call, "core/prefixed-selftest-tool.mjs": call, "core/nofixtures.ts": call, "core/selftest.mjs": call});
     fs.writeFileSync(path.join(path.dirname(pathRoot), "outside.ts"), call);
     for (const bad of ["tests/x.test.ts", "core/x.test.ts", "core/__tests__/x.ts", "docs/x.ts", "core/node_modules/x.ts", "core/workos/runner.md", "../outside.ts", path.join(pathRoot, "core/abs.ts"), "core/../core/workos/runner.ts", "core/./workos/runner.ts", "core//workos/runner.ts", "core\\workos\\runner.ts", "",
       // //TR: Tur 3 (M1/L2): ters eğik çizgili `core/x\..\..\tests\helper.ts` (Windows'ta tests\helper.ts'ye çözülür), tests/ altındaki test OLMAYAN dosya, dist; büyük/küçük harf duyarsız .TEST./.spec./-selftest/fake-/fixtures/tests/__mocks__ yolları.
@@ -217,7 +219,7 @@ describe("C-RDY-2a adapter-reality", () => {
     }
     expect(verifyRecord(rec({callers: [{file: "core/workos/runner.ts", references: "runGitleaks("}, {file: "tests/x.test.ts", references: "runGitleaks("}]}), pathRoot)).toMatchObject({verifiedCallers: 1, codePath: "PRESENT", reasons: ["CALLER_NOT_PRODUCTION"]});
     // //TR: Kural açıkça belirtilir ve sabitlenir: `scripts/validate-*.mjs` / `verify-*.mjs` CI aracıdır ve ÜRETİM çağıranı SAYILIR (scripts bir üretim köküdür); ada `fake-`/`selftest`/`test`/`fixtures` benzeyen ama kuralı sağlamayan yollar da üretimdir.
-    for (const good of ["scripts/validate-x.mjs", "scripts/verify-x.mjs", "core/my-fake-tool.mjs", "core/contest/x.ts", "core/tests.ts", "core/prefixed-selftest-tool.mjs", "core/nofixtures.ts"]) {
+    for (const good of ["scripts/validate-x.mjs", "scripts/verify-x.mjs", "core/my-fake-tool.mjs", "core/contest/x.ts", "core/tests.ts", "core/prefixed-selftest-tool.mjs", "core/nofixtures.ts", "core/selftest.mjs"]) {
       expect(verifyRecord(rec({callers: [{file: good, references: "runGitleaks("}]}), pathRoot), good).toMatchObject({verifiedCallers: 1, failedCallers: [], codePath: "PRESENT", reasons: []});
     }
     // //TR: Sınıflandırılamayan (kapanmamış dize) çağıran dosyası hiçbir şeyi doğrulamaz.
