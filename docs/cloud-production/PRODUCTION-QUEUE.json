@@ -2246,6 +2246,16 @@
         "masterV2": "C-RDY-1 Role Readiness Auditor = Master V2 package 1 DONE (merged, not product-accepted)"
       },
       {
+        "pr": 280,
+        "merge": "ac9dfb9",
+        "by": "coordinator direct merge, expectedHeadSha c0c3899 (required checks green on c0c3899)",
+        "at": "2026-10-27T08:47:51Z",
+        "postMerge": "VERIFIED: parent1 ad37b37, parent2 = gated head c0c3899, merge tree a6f1f05 == probe tree tested locally (27 locale-dependent files 1588/1588)",
+        "review": "full BLOCKERS_1MEDIUM (ae2f3a9) -> delta NO_BLOCKERS coord inline (c0c3899)",
+        "riskTier": "R0 ROUTINE (locales + tests)",
+        "masterV2": "A-276-L10N: truthful en/tr texts for #276 readiness reasons REPOSITORY_HEAD_UNRESOLVED / REPOSITORY_NOT_WORKTREE_ROOT"
+      },
+      {
         "pr": 283,
         "merge": "ad37b37",
         "by": "coordinator direct merge, expectedHeadSha d77a68f (required checks green on d77a68f)",
