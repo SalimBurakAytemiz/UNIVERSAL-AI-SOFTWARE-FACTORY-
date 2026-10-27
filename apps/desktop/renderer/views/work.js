@@ -4,7 +4,7 @@ import {taskStatusControls} from "./task-status.js";
 import {taskRunsPanel,loadTaskRuns} from "./task-runs.js";
 import {h,panel,stateNote,emptyNote,chip,statusPill,statusLabel,badge,verificationChip,kpiTile,statePill,missionPill,timelineItem} from "../components.js";
 import {formatTime,formatCount,MISSING,missionPillKind} from "../model.js";
-import {MISSION_STATUSES,MISSION_PATH,RISK_LEVELS,RUN_EXPERTS,RUN_EXPERT_NONE,allowedNext,requiresConfirm,canStartRun,buildMissionRequest,filterMissions,formatDateTime,deriveTaskInspector,deriveWorkTimeline,runReadiness,runReasonHintKey,runStepRows} from "../work-core.js";
+import {MISSION_STATUSES,MISSION_PATH,RISK_LEVELS,RUN_EXPERTS,RUN_EXPERT_NONE,allowedNext,requiresConfirm,canStartRun,buildMissionRequest,filterMissions,taskFollowsRun,formatDateTime,deriveTaskInspector,deriveWorkTimeline,runReadiness,runReasonHintKey,runStepRows} from "../work-core.js";
 import {drafts,selection,trackers,field,listEditor,statusBlock,setStatus,recordPost,resetMissionDraft,focusResult} from "../forms.js";
 import {performTransition,startRun,actionStatusId} from "../work-actions.js";
 import {runLinkPanel} from "./run-link.js";
@@ -297,15 +297,16 @@ function transitionControls(ctx,mission,awaiting,readiness=null,engine=undefined
 function runLinkCell(ctx,res,unk){
   const doc=ctx.doc;
   if(!res||res.state!=="VERIFIED"||!Array.isArray(res.items))return unk("runLink");
-  if(!res.items.length)return h(doc,"dd",{dataset:{taskField:"runLink",runLink:"none"},text:ctx.t("work.task.runLink.none")});
-  const more=res.items.length-RUNLINK_SHOWN;
-  return h(doc,"dd",{dataset:{taskField:"runLink",runLink:"linked"}},
-    h(doc,"ul",{class:"task-runlink-list"},res.items.slice(0,RUNLINK_SHOWN).map(l=>h(doc,"li",{dataset:{taskRunLink:l.runId}},h(doc,"span",{class:"mono",text:l.runId})," ",l.status?statusPill(ctx,l.status):h(doc,"span",{class:"task-unknown",text:ctx.t("work.task.unknown")})))),
-    more>0?h(doc,"p",{class:"note",dataset:{runLinkMore:String(more)},text:ctx.t("work.task.runLink.more",{n:more})}):null);
+  if(!res.items.length)return h(doc,"dd",{dataset:{taskField:"runLink",taskRunLinks:"none"},text:ctx.t("work.task.runLink.none")});
+  // //TR: En YENİ RUNLINK_SHOWN bağ gösterilir (yönetici koşu sunucu kuralıyla SON bağlanandır, asla gizlenmez); eski bağlar "+N daha eski" notuyla sayılır.
+  const hidden=Math.max(0,res.items.length-RUNLINK_SHOWN),shown=res.items.slice(hidden),follow=taskFollowsRun(res.items).slice(hidden);
+  return h(doc,"dd",{dataset:{taskField:"runLink",taskRunLinks:"linked"}},
+    hidden>0?h(doc,"p",{class:"note",dataset:{runLinkMore:String(hidden)},text:ctx.t("work.task.runLink.more",{n:hidden})}):null,
+    h(doc,"ul",{class:"task-runlink-list"},shown.map((l,k)=>h(doc,"li",{dataset:{taskRunLink:l.runId,taskRunLinkGoverning:follow[k].governing?"1":"0"}},h(doc,"span",{class:"mono",text:l.runId})," ",l.status?statusPill(ctx,l.status):h(doc,"span",{class:"task-unknown",text:ctx.t("work.task.unknown")})))));
 }
-/** //TR: UI-026 görev denetçisi (salt okunur): seçili görevin yalnız mission okumasından gelen alanlarını gösterir; eksik alan UNKNOWN, okuma canlı değilse UNKNOWN durum notu. Hiçbir POST/depolama yoktur; seçim yalnız bellekte tutulur. */
 // //TR: UI-026 (A-UI026-1): "Koşu bağı" satırı, hemen altındaki görev-koşu panelinin okuduğu GET /v1/tasks/:id/runs sonucundan beslenir (ikinci okuma yok). Okuma VERIFIED değilse UNKNOWN kalır; VERIFIED ve boşsa "bağlı koşu yok"; yoksa en çok RUNLINK_SHOWN koşu kimliği + durum (kalanı "+N daha").
 export const RUNLINK_SHOWN=5;
+/** //TR: UI-026 görev denetçisi (salt okunur): seçili görevin mission okumasından gelen alanlarını ve (A-UI026-1) görev-koşu panelinin okuduğu GET /v1/tasks/:id/runs sonucundan "Koşu bağı" satırını gösterir; eksik alan UNKNOWN, okuma canlı değilse UNKNOWN durum notu. Hiçbir POST/depolama yoktur; seçim yalnız bellekte tutulur. */
 export function taskInspector(ctx,detail,runsRes,missionId,taskRuns=null){
   const doc=ctx.doc,sel=inspectedTask&&inspectedTask.missionId===missionId?inspectedTask.taskId:null;
   const inner=[h(doc,"p",{class:"note",text:ctx.t("work.task.lead")})];
@@ -396,7 +397,7 @@ export async function render(ctx){
     const engine=await ctx.api.executors();
     const runLinks=new Map();
     await Promise.all([...runDetails.keys()].map(async id=>{runLinks.set(id,await ctx.api.runTasks(id))}));
-    const taskRuns=inspectedTask?.missionId===selection.missionId?{taskId:inspectedTask.taskId,res:await loadTaskRuns(ctx,inspectedTask.taskId)}:null;
+    const taskRuns=inspectedTask?.missionId===selection.missionId?{taskId:inspectedTask.taskId,res:await loadTaskRuns(ctx,inspectedTask.taskId,inspectedTask.missionId)}:null;
     detailNode=detailPanel(ctx,detail,runsRes,runDetails,evRes,detail.state==="VERIFIED"?(projects.find(p=>p.projectId===detail.mission.projectId)??null):null,taskRuns,runLinks,engine);
   }
   // //TR: Premium başlık (hero): göz üstü etiket + başlık + alt başlık + dürüst kaynak çipi/kapsam. Mevcut h1#view-title korunur (odak hedefi).
