@@ -916,8 +916,9 @@ describe("UI-030 worker fleet grid (live / queued / unknown buckets, UNKNOWN sta
   });
 
   it("LOW: data-fleet-summary appears exactly once, and fleetGroups sends non-string statuses to UNKNOWN (never live)", async () => {
-    const {node} = await fleetCtx("ok", [run(1, "RUNNING"), run(2, "QUEUED")]);
+    const {node} = await fleetCtx("ok", [run(1, "RUNNING"), run(2, "QUEUED"), run(3, "RETRY_SCHEDULED")]);
     expect(byData(node, "fleetSummary").length).toBe(1);
+    expect(byData(node, "fleetOther").length).toBe(1);
     const core = await load("fleet-core.js");
     const sneaky = [run(1, 7 as any), run(2, {toString: () => "RUNNING"} as any), run(3, ["RUNNING"] as any), run(4, null as any), run(5, undefined as any), run(6, true as any)];
     const g = core.fleetGroups(sneaky);
