@@ -1152,6 +1152,16 @@
       "ref": "wf_3c6b806e-6a2",
       "policy": "TEP-1",
       "at": "2026-10-27T09:38:09.567Z"
+    },
+    {
+      "pr": 276,
+      "sha": "82e4f2692ec638f760be7ff93bb90b3b83d34463",
+      "kind": "delta",
+      "base": "669b12fc57681c5e7e241f5e01e2d5dbb69e1dbb",
+      "verdict": "BASE_MERGE_ONLY_runner_union_HEAD_GIT_HARDEN_plus_hardTimeout",
+      "ref": "coord-merge-tree-diff-runner-ts-2-hunks-union",
+      "policy": "TEP-1",
+      "at": "2026-10-27T10:19:42.520Z"
     }
   ],
   "tests": [],
