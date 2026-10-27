@@ -692,13 +692,23 @@
       "ref": "wf_a0ea4836-1e2 (2 lenses + skeptics): spec + GUID redaction OK, no limit changed; MEDIUM status-null/signal/ETIMEDOUT vectors unpinned (N2/N2b/N25 survive); MEDIUM platform default + non-Windows result unpinned (N7/N27/N18 survive); LOWs: tail slice, durationMs bracketing, parseable+error success, stdout leak via empty stderr, spawn invocation unpinned, GUID glued/split edge",
       "policy": "TEP-1",
       "at": "2026-10-27T01:38:35.424Z"
+    },
+    {
+      "pr": 242,
+      "sha": "53726f350b47cbd8ac904abd82eb419c5bcdc8ee",
+      "kind": "delta",
+      "base": "8c5e768ba547c2cb374bb3f1d67c3091960c4eda",
+      "verdict": "BASE_MERGE_ONLY_reseal",
+      "ref": "53726f3 = base merge 902ba66 into 8c5e768; only conflict config/trust-root-manifest.json regenerated (verify PASS); no #242 file content changed; local b1 157 + b5 172 + b4 52 + wfr03 132 pass; FOUNDER decision still required (protected main.mjs + server.ts)",
+      "policy": "TEP-1",
+      "at": "2026-10-27T01:43:15.099Z"
     }
   ],
   "tests": [],
   "fingerprint": {
-    "value": "e0fd76828668157b811449bd469bc169f00dab720fe8d36d605491eda9d6f57d",
-    "at": "2026-10-27T00:44:40.002Z",
-    "base": "459205ca73890760015662bdbc7e4ee9b920bf86",
-    "prs": 12
+    "value": "604d399ac224c4ca1eb2ea5e426a265c940a2518de5f745436508dab39b928eb",
+    "at": "2026-10-27T01:42:23.944Z",
+    "base": "902ba662a6407d9575ccacc872a59f3aaaa790f9",
+    "prs": 14
   }
 }
