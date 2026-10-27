@@ -1749,6 +1749,25 @@ describe("LANE-A task run link", () => {
     return {...c, view, tr, root};
   };
 
+  // //TR: A-273-LOWS: mission koşu listesi 500\'de kesildiyse (truncated) denetçideki "Mission runs" sayısı kesin söylenmez (UNKNOWN); kesilmemiş listede sayı aynen kalır.
+  it("UI-026 inspector 'Mission runs' count is UNKNOWN when the mission run list was cut at the 500-run cap, and exact otherwise", async () => {
+    const c = await load(rend, "work-core.js");
+    const rid = (i: number) => "run_" + i.toString(16).padStart(24, "0");
+    const detail = {state: "VERIFIED", mission: {missionId: MID, title: "M", status: "EXECUTING", riskLevel: "R1", tasks: [{taskId: T1, title: "Giriş", status: "PENDING", dependsOn: []}]}};
+    const mk = (n: number) => c.mapWorkRuns({workRuns: Array.from({length: n}, (_, i) => ({runId: rid(i), missionId: MID, status: "SUCCEEDED"}))});
+    expect(mk(502).truncated).toBe(true);
+    expect(c.deriveTaskInspector(detail, mk(502), T1).task.runs).toEqual({known: false, count: null, byStatus: {}});
+    expect(mk(500).truncated).toBeUndefined();
+    expect(c.deriveTaskInspector(detail, mk(500), T1).task.runs).toEqual({known: true, count: 500, byStatus: {SUCCEEDED: 500}});
+    expect(c.deriveTaskInspector(detail, mk(3), T1).task.runs.count).toBe(3);
+    const field = (root: N) => byData(root, "taskField", "runs")[0];
+    const cut = await open({linked: {runs: []}, missionRuns: Array.from({length: 502}, (_, i) => rid(i))});
+    expect(text(field(cut.root))).toBe("UNKNOWN");
+    const exact = await open({linked: {runs: []}, missionRuns: Array.from({length: 500}, (_, i) => rid(i))});
+    expect(text(field(exact.root))).toBe("500 run(s) linked to the mission (not to this task)");
+    const few = await open({linked: {runs: []}, missionRuns: [R1, R2, R3]});
+    expect(text(field(few.root))).toBe("3 run(s) linked to the mission (not to this task)");
+  });
   it("maps the link read strictly and offers only unlinked, canonical, unique runs", async () => {
     const c = await load(rend, "work-core.js");
     const ok = c.mapTaskRuns({runs: [link(R1), {link: link(R2).link, run: null}]});

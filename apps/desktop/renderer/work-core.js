@@ -617,7 +617,8 @@ export function deriveTaskInspector(detailRes,runsRes,taskId){
   if(detailRes?.state!=="VERIFIED"||!detailRes.mission)return {state:"UNKNOWN",task:null};
   const m=detailRes.mission,t=(m.tasks??[]).find(x=>x.taskId===taskId);
   if(!t)return {state:"EMPTY",task:null};
-  const runsKnown=runsRes?.state==="VERIFIED"&&Array.isArray(runsRes.items),byStatus={};
+  // //TR: A-273-LOWS: mission koşu listesi 500'de kesildiyse (truncated) koşu sayısı kesin söylenemez; runs.known=false -> arayüz UNKNOWN gösterir.
+  const runsKnown=runsRes?.state==="VERIFIED"&&Array.isArray(runsRes.items)&&runsRes.truncated!==true,byStatus={};
   if(runsKnown)for(const r of runsRes.items)byStatus[r.status]=(byStatus[r.status]??0)+1;
   return {state:"VERIFIED",task:{taskId:t.taskId,title:t.title,status:t.status,missionId:m.missionId,missionTitle:m.title,missionStatus:m.status,riskLevel:m.riskLevel,
     // //TR: COORD-TASK-UI: bağımlılıklar yalnız okumada dependsOn dizisi varsa gösterilir (başlık/durum aynı mission'ın görevlerinden); yoksa alan UNKNOWN kalır.
