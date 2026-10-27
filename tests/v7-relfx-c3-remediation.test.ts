@@ -211,6 +211,7 @@ describe("C-PAR03-DIAG-1: the next Windows PAR-03 failure names the blocking pha
     expect(s.writes).toBe(base.writes + 2);
     const last = s.recent[s.recent.length - 1];
     expect(last.type).toBe("RUN_LEASE");
+    expect(last.startedAtPerf, "consecutive writes start at increasing performance.now() times").toBeGreaterThan(s.recent[s.recent.length - 2].startedAtPerf);
     for (const w of s.recent) {
       for (const k of ["totalMs", "lockWaitMs", "reloadMs", "journalMs", "snapshotMs", "snapshotWrites", "releaseMs", "lockRetries", "startedAtPerf", "startedAtWall"] as const) expect(Number.isFinite(w[k]) && w[k] >= 0, `${w.type}.${k}`).toBe(true);
       expect(w.totalMs + 0.6, `${w.type}: the total covers the phases`).toBeGreaterThanOrEqual(w.lockWaitMs + w.reloadMs + w.journalMs + w.snapshotMs + w.releaseMs);
@@ -225,6 +226,7 @@ describe("C-PAR03-DIAG-1: the next Windows PAR-03 failure names the blocking pha
     for (let i = 0; i < 70; i++) c.store.renewRunLease(A.runId, lease.leaseId!, 5000, "diag");
     const full = c.store.writeStats();
     expect(full.writes).toBe(base.writes + 72);
+    expect(full.lockAcquisitions - s.lockAcquisitions, "exactly one lock acquisition per write").toBe(70);
     expect(full.recent).toHaveLength(64);
     expect(full.recent.every((w, k, all) => k === 0 || w.startedAtPerf >= all[k - 1].startedAtPerf)).toBe(true);
   });
@@ -341,7 +343,7 @@ describe("C-PAR03-DIAG-1: the next Windows PAR-03 failure names the blocking pha
     const trace = fenceTrace(c.store);
     const lease = c.store.acquireRunLease(A.runId, 5000, "t");
     const probe = stallProbe(20);
-    await sleep(60);
+    await sleep(1800); // //TR: kiralama ile yenileme arası heartbeat periyodunu (1666 ms) AŞAR: gecikme > 0 olmalı
     for (const until = performance.now() + 250; performance.now() < until;) { if (performance.now() > until - 120) break; }
     c.store.renewRunLease(A.runId, lease.leaseId!, 5000, "t");
     for (const until = performance.now() + 150; performance.now() < until;) { /* blok */ }
@@ -352,7 +354,9 @@ describe("C-PAR03-DIAG-1: the next Windows PAR-03 failure names the blocking pha
     expect(msg).toContain("interpretation: a fence with a stall below TTL - TTL/3 (3333 ms) is a real lease gap");
     expect(msg).toMatch(/maxLoopStallMs=\d+ is BELOW 3333 ms/);
     expect(msg).toMatch(/top gaps: #1 \d+ms start wall=\d+ perf=\d+ driftMs=-?\d+/);
-    expect(msg).toMatch(/lease A: events=2 last3=\[RENEW\+\d+ms\(late \d+\)\] lastEvent=RENEW@\d{4}-\d\d-\d\dT.*\(heartbeat 1666 ms, TTL 5000 ms\)/);
+    const ev = leaseTimeline(c.dataDir, A.runId), interval = ev[1].atMs - ev[0].atMs;
+    expect(interval).toBeGreaterThan(1666);
+    expect(msg).toContain(`lease A: events=2 last3=[RENEW+${interval}ms(late ${interval - 1666})] lastEvent=RENEW@${new Date(ev[1].atMs).toISOString()} worstIntervalMs=${interval} (heartbeat 1666 ms, TTL 5000 ms)`);
     expect(msg).toContain("lease B: events=0 last3=[] lastEvent=none");
     expect(msg).toContain("FENCED thrown by: renewRunLease(A) perf=");
     expect(msg).toContain("[traced store calls: ");

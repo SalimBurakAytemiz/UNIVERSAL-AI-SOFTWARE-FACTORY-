@@ -1,5 +1,5 @@
 {
- "//TR": "C-PAR03-DIAG-1 (relfx-c3:200 PAR-03 Windows fence tanılaması: store yazı aşamaları, stallProbe boşlukları, fenceTrace, hbDiag) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt `file` içinde TAM 1 kez geçen bir metni değiştirir; docs/lanes/LANE-C-par03-diag-mutants.mjs hepsini tests/v7-relfx-c3-remediation.test.ts içindeki \"C-PAR03-DIAG-1\" testleriyle çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. D1-D28 core/workos/store.ts ölçümü, D29-D44 tests/support/par.ts, D45-D55 hbDiag iletisi ve prob başlatma sırasıdır.",
+ "//TR": "C-PAR03-DIAG-1 (relfx-c3:200 PAR-03 Windows fence tanılaması: store yazı aşamaları, stallProbe boşlukları, fenceTrace, hbDiag) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt `file` içinde TAM 1 kez geçen bir metni değiştirir; docs/lanes/LANE-C-par03-diag-mutants.mjs hepsini tests/v7-relfx-c3-remediation.test.ts içindeki \"C-PAR03-DIAG-1\" testleriyle çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. D1-D27 core/workos/store.ts ölçümü (D28 yoktur: write() yeniden girişli değildir, iç içe çerçeve kodu kaldırıldı), D29-D44 tests/support/par.ts, D45-D55 hbDiag iletisi ve prob başlatma sırasıdır.",
  "mutants": [
   {
    "id": "D1",
@@ -189,13 +189,6 @@
    "file": "core/workos/store.ts",
    "old": "this.noteWrite(frame, performance.now() - frame.startedAtPerf);",
    "new": "this.noteWrite(frame, 0);"
-  },
-  {
-   "id": "D28",
-   "description": "a nested write loses the outer frame",
-   "file": "core/workos/store.ts",
-   "old": "} finally { this.frame = outer; this.noteWrite(",
-   "new": "} finally { this.frame = null; this.noteWrite("
   },
   {
    "id": "D29",

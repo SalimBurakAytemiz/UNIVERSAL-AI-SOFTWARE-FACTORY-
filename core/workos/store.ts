@@ -481,10 +481,10 @@ export class WorkOsStore {
   // Her yazı lock altında disk yeniden doğrulanarak yapılır: başka örnek/süreç yazdıysa onun yazıları görülür, bozuk disk fail-closed.
   private write<T>(fn: () => T): T {
     const frame: StoreWriteTiming = {type: "", startedAtWall: Date.now(), startedAtPerf: performance.now(), totalMs: 0, lockWaitMs: 0, lockRetries: 0, reloadMs: 0, journalMs: 0, snapshotMs: 0, snapshotWrites: 0, releaseMs: 0};
-    const outer = this.frame; this.frame = frame;
+    this.frame = frame; // //TR: write() yeniden girişli DEĞİLDİR (iç içe çağrı süreç kilidinde 10 sn takılır), bu yüzden çerçeve tek ve bitince sıfırlanır
     try {
       return this.withLock(() => { const reloadStart = performance.now(), snapshotBefore = frame.snapshotMs; try { this.load(); } finally { frame.reloadMs = performance.now() - reloadStart - (frame.snapshotMs - snapshotBefore); } this.guard(true); return fn(); });
-    } finally { this.frame = outer; this.noteWrite(frame, performance.now() - frame.startedAtPerf); }
+    } finally { this.frame = null; this.noteWrite(frame, performance.now() - frame.startedAtPerf); }
   }
   // WFR04A-C1-F3: at verilirse (academy ön-denemesinde kullanılan zaman) aynen yazılır; ön-deneme ile diske yazılan girdi aynı zamanı taşır.
   private append(type: JournalType, actor: string, payload: Record<string, unknown>, at?: string): JournalEntry {
