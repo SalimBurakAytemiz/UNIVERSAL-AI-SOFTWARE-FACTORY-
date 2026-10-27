@@ -1232,6 +1232,16 @@
       "ref": "wf_f87532ab-845",
       "policy": "TEP-1",
       "at": "2026-10-27T11:42:10.892Z"
+    },
+    {
+      "pr": 292,
+      "sha": "a6b1988149a39b13e730383d200c4fdebc9645f6",
+      "kind": "full",
+      "base": null,
+      "verdict": "BLOCKERS_1MEDIUM_4LOW_stale_catalogue_text",
+      "ref": "wf_29aece29-367",
+      "policy": "TEP-1",
+      "at": "2026-10-27T11:54:55.049Z"
     }
   ],
   "tests": [],
