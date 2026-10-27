@@ -30,7 +30,7 @@ SRV "-" for rows 5c (interval), 7, 8, 13-17 means the route module is merged but
 ## Open items
 - Unwired merged routes (rows 5c interval, 7, 8, 13-17): need protected batches (server.ts + main.mjs). Lane A consumers for memory, knowledge and attention exist, so those screens read "unavailable" until the batches land (INF from the Lane A PR descriptions, not re-grepped).
 - Desktop allow-list lacks GET /v1/work-runs/:id/tasks and POST .../tasks/reconcile (G).
-- Row 8 limit, pinned by a test: an existing directory that is not a git repository reads REPOSITORY OK; the runner then BLOCKs with REPOSITORY_HEAD_UNRESOLVED. Waits for Lane C's C-RUNNER-HEAD-PREDICATE.
+- Row 8 (B-NEXT-1): the REPOSITORY check now also applies `repositoryHead()` (Lane C #218), so a directory that is not a git worktree root with a commit reads BLOCKED with the runner's own reason (REPOSITORY_HEAD_UNRESOLVED / REPOSITORY_NOT_WORKTREE_ROOT) instead of OK. The earlier pinned known limit no longer exists.
 - Row 6 internals (runner.ts) and `GET /v1/predev/:missionId` are not traced by Lane B.
 - Candidate, not started: starting a run does not create the task -> run link (a client must POST /v1/tasks/:id/runs); Desktop callers not yet checked.
 - Not covered by this lane: Windows, Electron, packaged runs, visual checks.

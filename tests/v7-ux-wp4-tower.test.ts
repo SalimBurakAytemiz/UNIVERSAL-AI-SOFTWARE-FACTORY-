@@ -224,6 +224,24 @@ describe("UX WP4 honest empty states (no fabricated counts)", () => {
     expect(mf.dataset.runsCut).toBe("false"); expect(mf.textContent).toContain("run list no data");
   });
 
+  // //TR: #284 incelemesi: "N koşudan sonra kesildi" sayısı OKUNAN GEÇERLİ kayıt sayısıdır (items.length), ham 500 değil; N != 500 olan bir fikstürle sabitlenir.
+  it("the 'cut after N runs' number is the count of valid records that were read (items.length), pinned with a fixture where N is not 500", async () => {
+    const mk = (i: number) => wr(i, "SUCCEEDED", "UASCO-0001");
+    const list = [...Array.from({length: 497}, (_, i) => mk(i)), {runId: "not a run id!", status: "RUNNING"}, {runId: "bad id 2", status: "RUNNING"}, {runId: "bad id 3", status: "RUNNING"}, mk(900), mk(901)];
+    expect(list.length).toBe(502);
+    const feed = await load("control-tower", "feed.js"), work = await load("work-core.js");
+    const mapped = work.mapWorkRuns({workRuns: list});
+    expect(mapped.truncated).toBe(true); expect(mapped.items.length).toBe(497);
+    const roles = {state: "VERIFIED", items: [{roleId: "UASCO-0001", guildId: "G01", clusterId: "CL01"}]};
+    expect(feed.buildCampusInput({cockpit: null, roles, workRuns: mapped}).runsCutAt).toBe(497);
+    const {campus} = await mount({cockpit: COCKPIT(), workRuns: list}, "en");
+    const feeds = all(campus).find(n => n.getAttribute("class") === "note ct-feeds")!;
+    expect(feeds.textContent).toContain("run list cut after 497 runs (counts unknown)");
+    expect(feeds.textContent).not.toContain("500");
+    const tr = await mount({cockpit: COCKPIT(), workRuns: list}, "tr");
+    expect(all(tr.campus).find(n => n.getAttribute("class") === "note ct-feeds")!.textContent).toContain("497 koşudan sonra kesildi");
+  });
+
   it("keeps target roles but shows active runs as no data when only the run feed is missing", async () => {
     const {campus} = await mount({cockpit: COCKPIT(), workRuns: null});
     const rows = rowsSvg(campus);

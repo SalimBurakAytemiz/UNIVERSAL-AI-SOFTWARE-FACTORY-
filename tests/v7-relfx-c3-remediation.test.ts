@@ -419,6 +419,50 @@ describe("C-PAR-1 + #218: the runner's repository HEAD probe is the same decisio
     expect(asyncV).toEqual(UNRESOLVED);
     expect(syncV).toEqual(UNRESOLVED);
   });
+
+  // //TR: C-GIT-FSMON-1 (Lane B bildirimi): readiness kullanıcının seçtiği klasörlerde bu probları çağıracak; deponun kendi .git/config'i hâlâ okunur. İki sürücü her alt komutun önüne AYNI sabit önek listesini koyar (protocol.allow=never, core.fsmonitor=false, core.untrackedCache=false); komut satırı `-c` depo yerel yapılandırmasının önüne geçer. Aşağıdaki test iki sürücünün kullandığı HER rev-parse biçimini (5 alt komut) kaydeder ve önekin alt komuttan hemen ÖNCE, sırasıyla ve iki sürücüde birebir aynı olduğunu sabitler.
+  it("C-GIT-FSMON-1: both drivers put the same fixed safety flags right before every subcommand they use (all five rev-parse forms): protocol.allow=never, core.fsmonitor=false, core.untrackedCache=false", { timeout: 60_000 }, async () => {
+    const root = path.join(tmp, "root"); repo(root);
+    const sub = path.join(root, "pkg"); fs.mkdirSync(sub, {recursive: true});
+    const bareSrc = path.join(tmp, "bare-src"); repo(bareSrc); const bare = path.join(tmp, "bare.git"); git(tmp, ["clone", "-q", "--bare", bareSrc, bare]);
+    const plain = fs.mkdtempSync(path.join(tmp, "plain-"));
+    const seen = {sync: [] as string[][], async: [] as string[][]};
+    slow.observeSync = (_cwd, args) => { seen.sync.push(args); };
+    slow.observe = (_cwd, args) => { seen.async.push(args); };
+    try { for (const dir of [root, sub, bare, plain]) { repositoryHead(dir); await repositoryHeadAsync(dir); } } finally { slow.observeSync = null; slow.observe = null; }
+    const FLAGS = ["-c", "protocol.allow=never", "-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false"];
+    expect(seen.sync.length).toBeGreaterThanOrEqual(8);
+    expect(seen.async).toEqual(seen.sync); // the same decision procedure issues the very same git calls
+    for (const args of [...seen.sync, ...seen.async]) {
+      const at = args.indexOf("rev-parse");
+      expect(at, args.join(" ")).toBeGreaterThanOrEqual(FLAGS.length);
+      expect(args.slice(at - FLAGS.length, at), args.join(" ")).toEqual(FLAGS);
+    }
+    const forms = [...new Set([...seen.sync, ...seen.async].map(a => a.slice(a.indexOf("rev-parse")).join(" ")))].sort();
+    expect(forms).toEqual(["rev-parse --absolute-git-dir", "rev-parse --git-dir", "rev-parse --is-bare-repository", "rev-parse --show-toplevel", "rev-parse HEAD HEAD^{commit}"]);
+  });
+
+  // //TR: C-GIT-FSMON-1 davranış testi: deponun .git/config'inde çalıştırılabilir bir core.fsmonitor betiği (ve core.untrackedCache=true) varken iki sürücü de betiği ASLA çalıştırmaz ve kararı değişmez. Pozitif kontrol: aynı yapılandırma, indeksi yenileyen bir git çağrısında (status) önek OLMADAN betiği GERÇEKTEN çalıştırır; iki bayrakla çalıştırmaz (tehdit gerçek ve bayraklar onu kapatıyor).
+  it.skipIf(process.platform === "win32")("C-GIT-FSMON-1: a hostile core.fsmonitor script in the repository's own .git/config never runs for either driver (positive control: it does run for an index-refreshing git call without the flags, and not with them)", { timeout: 60_000 }, async () => {
+    const root = path.join(tmp, "hostile"), head = repo(root)!;
+    const marker = path.join(tmp, "fsmonitor-ran"), script = path.join(tmp, "hostile-fsmonitor.sh");
+    fs.writeFileSync(script, `#!/bin/sh\necho ran >> "${marker}"\nexit 0\n`, {mode: 0o755});
+    git(root, ["config", "core.fsmonitor", script]); git(root, ["config", "core.untrackedCache", "true"]);
+    const sub = path.join(root, "pkg"); fs.mkdirSync(sub, {recursive: true});
+    const bareSrc = path.join(tmp, "bare-src"); repo(bareSrc); const bare = path.join(tmp, "hostile.git"); git(tmp, ["clone", "-q", "--bare", bareSrc, bare]);
+    git(bare, ["config", "core.fsmonitor", script]);
+    for (const [dir, want] of [[root, {ok: true, baseSha: head}], [sub, NOT_ROOT], [bare, {ok: true, baseSha: git(bare, ["rev-parse", "HEAD"])}]] as Array<[string, RepositoryHead]>) {
+      const [syncV, asyncV] = await both(dir);
+      expect([dir, syncV]).toEqual([dir, want]);
+      expect([dir, asyncV]).toEqual([dir, want]);
+    }
+    expect(fs.existsSync(marker), "no driver ran the hostile fsmonitor script").toBe(false);
+    git(root, ["status", "--porcelain"]);
+    expect(fs.existsSync(marker), "positive control: without the flags an index-refreshing call DOES run it").toBe(true);
+    fs.rmSync(marker);
+    git(root, ["-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false", "status", "--porcelain"]);
+    expect(fs.existsSync(marker), "positive control: the two flags switch it off").toBe(false);
+  });
 });
 
 // //TR: #224 koordinatör incelemesi (REVIEW-0baa72f) düzeltmelerinin testleri. Her test, düzeltilmemiş runner'da (c0259b7) BAŞARISIZ olacak biçimde yazılmıştır (yeni modüller dinamik içe aktarılır ki dosya eski kodda da yüklensin). Motor tabanlı testler tests/v7-par-engine.mts'i iki ayrı süreçte çalıştırır ve birini SIGKILL/SIGINT ile durdurur.
