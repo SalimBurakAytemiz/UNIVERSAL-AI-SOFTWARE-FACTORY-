@@ -1,10 +1,13 @@
 // //TR: Bu test UX WP-AGENTS AI İş Gücü rol kataloğu görünümünü (apps/desktop/renderer/views/workforce.js) ve destekleyen saf modelini (mapRoleCatalogPage/mapRoleDetail) + api.roleCatalog()/roleDetail() + main.mjs allow-list'ini doğrular: katalog yalnız canlı /v1/roles kanonik kaydından (tam-ya-da-boş sayfalama) okunur; 599 rol TANIMI dürüst sayılır ama runtimeStatus UNKNOWN ve proficiencyStatus NOT_EVALUATED (0 sertifikalı) belirgin gösterilir, asla N aktif ajan/sertifikalı işçi ima edilmez; küme/lonca/başlık süzgeci gerçek veriden çalışır; rol tanımı ayrıntısı GET /v1/roles/:roleId'den sorumluluklar/uzmanlık/yasak eylemler/değerlendirme şartnamelerini gösterir; /v1/roles/:roleId yalnız kanonik kimlikle fail-closed allow-list'tedir; workforce.cat.* sözlüğü EN/TR'de birebirdir; eksik/bozuk katalogda dürüst durum, uydurma yok.
 import {describe, it, expect, beforeEach} from "vitest";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import {pathToFileURL} from "node:url";
 import {computeRoleReadiness, loadReadinessInputFromRepo, reconcileLegacyStatusSummary} from "../core/agents/readiness-audit.js";
 import {computeRoleStatusSummary} from "../core/agents/role-lifecycle.js";
+import {WorkOsStore} from "../core/workos/store.js";
+import {ACTIVE_WORKER_STATUSES, RUN_STATUSES as SERVER_RUN_STATUSES} from "../core/workos/run-state.js";
 
 const root = path.resolve(__dirname, "..");
 const rend = path.join(root, "apps", "desktop", "renderer");
@@ -590,12 +593,16 @@ describe("UI-030 active worker fleet grid (live runs only, UNKNOWN stays UNKNOWN
   }
   const fleetNode = (n: N) => byId(n, "wf-fleet")!;
 
-  it("core groups only live runs by status bucket, drops terminal runs and keeps API order", async () => {
+  // //TR: A-RUNSTATE-1: "COMPLETED" bir sunucu RunStatus'u değildir (artık UNKNOWN kovasına düşer); terminal koşu için gerçek SUCCEEDED/FAILED kullanılır. QUEUED artık canlı değil, ayrı kovadır.
+  it("core groups live runs by server worker status, keeps QUEUED as a separate bucket, drops terminal runs and keeps API order", async () => {
     const core = await load("fleet-core.js");
-    const g = core.fleetGroups([run(1, "RUNNING"), run(2, "COMPLETED"), run(3, "QUEUED"), run(4, "RUNNING"), null, run(5, "FAILED")]);
+    const g = core.fleetGroups([run(1, "RUNNING"), run(2, "SUCCEEDED"), run(3, "QUEUED"), run(4, "RUNNING"), null, run(5, "FAILED")]);
     expect(g.total).toBe(3); expect(g.shown).toBe(3); expect(g.truncated).toBe(false);
-    expect(g.groups.map((x: any) => [x.status, x.count])).toEqual([["QUEUED", 1], ["RUNNING", 2]]);
-    expect(g.groups[1].items.map((r: any) => r.runId)).toEqual(["run-0001", "run-0004"]);
+    expect(g.live).toBe(2);
+    expect(g.queued).toBe(1);
+    expect(g.unknown).toBe(0);
+    expect(g.groups.map((x: any) => [x.status, x.bucket, x.count])).toEqual([["RUNNING", "LIVE", 2], ["QUEUED", "QUEUED", 1]]);
+    expect(g.groups[0].items.map((r: any) => r.runId)).toEqual(["run-0001", "run-0004"]);
     expect(core.fleetGroups(undefined).total).toBe(0);
   });
   it("core caps at 50 cards while bucket counts and total stay real", async () => {
@@ -608,17 +615,19 @@ describe("UI-030 active worker fleet grid (live runs only, UNKNOWN stays UNKNOWN
   });
   it("core card carries only real fields; absent ones are null, never invented", async () => {
     const core = await load("fleet-core.js");
-    expect(core.fleetCard(run(1, "RUNNING"))).toEqual({runId: "run-0001", status: "RUNNING", role: null, missionId: null, updatedAt: null});
+    // //TR: A-RUNSTATE-1: kart artık kovasını da taşır (bucket); diğer alanlar aynı.
+    expect(core.fleetCard(run(1, "RUNNING"))).toEqual({runId: "run-0001", status: "RUNNING", bucket: "LIVE", role: null, missionId: null, updatedAt: null});
   });
   it("renders a labelled region, grouped list semantics, <time>, UNKNOWN fields and a keyboard-reachable mission link", async () => {
-    const {node, navigated} = await fleetCtx("ok", [run(1, "RUNNING", {role: "ROLE.X", missionId: "msn_0123456789abcdef01234567", heartbeatAt: "2026-10-19T10:00:00.000Z"}), run(2, "QUEUED"), run(3, "COMPLETED")]);
+    const {node, navigated} = await fleetCtx("ok", [run(1, "RUNNING", {role: "ROLE.X", missionId: "msn_0123456789abcdef01234567", heartbeatAt: "2026-10-19T10:00:00.000Z"}), run(2, "QUEUED"), run(3, "SUCCEEDED")]);
     const region = fleetNode(node);
     expect(byId(node, "wf-fleet")!.tagName).toBe("SECTION");
     const body = all(region).find(n => n.attrs.get("role") === "region")!;
     expect(body.attrs.get("aria-label")).toBeTruthy();
     expect(byTag(region, "ul").length).toBe(2);
     expect(byTag(region, "li").map(li => li.dataset.fleetRunId).sort()).toEqual(["run-0001", "run-0002"]);
-    expect(byTag(region, "h3").map(text)).toEqual(["Queued (1)", "Running (1)"]);
+    // //TR: A-RUNSTATE-1: canlı kovalar önce, kuyruk kovası kendi "henüz çalışmıyor" başlığıyla sonra.
+    expect(byTag(region, "h3").map(text)).toEqual(["Running (1)", "Queued, not running yet (1)"]);
     const t = byTag(region, "time"); expect(t.length).toBe(1); expect(t[0].attrs.get("datetime")).toBe("2026-10-19T10:00:00.000Z");
     expect(byData(region, "unknown", "1").length).toBe(2);
     const btn = byTag(region, "button").filter(b => b.attrs.get("id") === "wf-fleet-open-run-0001"); expect(btn.length).toBe(1);
@@ -631,7 +640,8 @@ describe("UI-030 active worker fleet grid (live runs only, UNKNOWN stays UNKNOWN
     expect(byData(fleetNode(few.node), "truncated").length).toBe(0);
     const many = await fleetCtx("ok", Array.from({length: 60}, (_, i) => run(i, "RUNNING")));
     const note = byData(fleetNode(many.node), "truncated"); expect(note.length).toBe(1);
-    expect(text(note[0])).toBe("Showing 50 of 60 live runs.");
+    // //TR: A-RUNSTATE-1: not artık canlı + kuyruk + bilinmeyen kartların toplamını söyler, hepsine "canlı" demez.
+    expect(text(note[0])).toBe("Showing 50 of 60 runs.");
     expect(byTag(fleetNode(many.node), "li").length).toBe(50);
   });
   it("read failure replaces the grid with the honest state note, never a 0; empty gives an explicit note", async () => {
@@ -639,9 +649,95 @@ describe("UI-030 active worker fleet grid (live runs only, UNKNOWN stays UNKNOWN
     expect(byTag(r1, "ul").length).toBe(0); expect(all(r1).some(n => n.attrs.get("role") === "status")).toBe(true); expect(text(r1)).not.toMatch(/\b0\b/);
     const err = await fleetCtx("err"); const r2 = fleetNode(err.node);
     expect(byTag(r2, "ul").length).toBe(0); expect(all(r2).some(n => n.attrs.get("role") === "status")).toBe(true);
-    const empty = await fleetCtx("ok", [run(1, "COMPLETED")]);
+    const empty = await fleetCtx("ok", [run(1, "SUCCEEDED")]);
     expect(text(fleetNode(empty.node))).toContain("There are no live work runs");
     expect(byTag(fleetNode(empty.node), "li").length).toBe(0);
+  });
+  // //TR: A-RUNSTATE-1 eşlik testi: renderer'ın canlı/kuyruk/durum kümeleri sunucunun core/workos/run-state.ts dosyasından (ACTIVE_WORKER_STATUSES, RUN_STATUSES) gerçekten içe aktarılarak karşılaştırılır; sunucu kümesi değişirse bu test CI'da düşer.
+  it("parity: the renderer's live set IS the server ACTIVE_WORKER_STATUSES and its status copy IS the server RUN_STATUSES", async () => {
+    const work = await load("work-core.js"), exec = await load("executive-core.js");
+    expect([...work.RUN_LIVE_STATES]).toEqual([...ACTIVE_WORKER_STATUSES]);
+    expect([...exec.RUN_STATUSES].sort()).toEqual([...SERVER_RUN_STATUSES].sort());
+    expect(work.RUN_QUEUED_STATE).toBe("QUEUED");
+    expect(SERVER_RUN_STATUSES).toContain("QUEUED");
+    expect(ACTIVE_WORKER_STATUSES).not.toContain("QUEUED");
+    expect(SERVER_RUN_STATUSES).not.toContain("STARTING");
+    expect(SERVER_RUN_STATUSES).not.toContain("REVIEWING");
+    expect(work.RUN_LIVE_STATES).toContain("CHECKPOINTING");
+    expect(work.RUN_LIVE_STATES).not.toContain("STARTING");
+    expect(work.RUN_LIVE_STATES).not.toContain("REVIEWING");
+    expect(work.RUN_LIVE_STATES).not.toContain("QUEUED");
+  });
+  it("runBucket maps every server RunStatus to exactly one bucket and sends anything else to UNKNOWN, never LIVE", async () => {
+    const core = await load("fleet-core.js");
+    for (const st of SERVER_RUN_STATUSES) {
+      const want = (ACTIVE_WORKER_STATUSES as readonly string[]).includes(st) ? "LIVE" : st === "QUEUED" ? "QUEUED" : "OTHER";
+      expect(core.runBucket(st), st).toBe(want);
+    }
+    for (const bad of ["STARTING", "REVIEWING", "COMPLETED", "running", "RUNNING ", "", "—", null, undefined, 7, {}]) {
+      expect(core.runBucket(bad), String(bad)).toBe("UNKNOWN");
+    }
+  });
+  it("fleetGroups: live statuses in server order incl. CHECKPOINTING, then QUEUED, then UNKNOWN; unknown never counts as live", async () => {
+    const core = await load("fleet-core.js");
+    const g = core.fleetGroups([run(1, "VERIFYING"), run(2, "STARTING"), run(3, "QUEUED"), run(4, "CHECKPOINTING"), run(5, "REVIEWING"), run(6, "LEASED"), run(7, "RUNNING"), run(8, "SUCCEEDED"), run(9, "—")]);
+    expect(g.groups.map((x: any) => [x.status, x.bucket, x.count])).toEqual([["LEASED", "LIVE", 1], ["RUNNING", "LIVE", 1], ["CHECKPOINTING", "LIVE", 1], ["VERIFYING", "LIVE", 1], ["QUEUED", "QUEUED", 1], ["UNKNOWN", "UNKNOWN", 3]]);
+    expect(g.live).toBe(4); expect(g.queued).toBe(1); expect(g.unknown).toBe(3); expect(g.total).toBe(8);
+    expect(g.groups[5].items.map((r: any) => r.runId)).toEqual(["run-0002", "run-0005", "run-0009"]);
+  });
+  it("fleetGroups: the card cap fills live buckets first, so queued/unknown runs never push a live run out; counts stay real", async () => {
+    const core = await load("fleet-core.js");
+    const g = core.fleetGroups([...Array.from({length: 5}, (_, i) => run(100 + i, "QUEUED")), ...Array.from({length: 50}, (_, i) => run(i, "RUNNING")), run(900, "STARTING")]);
+    expect(g.live).toBe(50); expect(g.queued).toBe(5); expect(g.unknown).toBe(1);
+    expect(g.shown).toBe(50); expect(g.truncated).toBe(true);
+    expect(g.groups.find((x: any) => x.status === "RUNNING").items.length).toBe(50);
+    expect(g.groups.find((x: any) => x.status === "QUEUED").items.length).toBe(0);
+    expect(g.groups.find((x: any) => x.status === "QUEUED").count).toBe(5);
+  });
+  it("renders QUEUED and unknown-status runs in their own labelled buckets with a summary; the Live runs table lists only live workers", async () => {
+    const {node} = await fleetCtx("ok", [run(1, "RUNNING"), run(2, "CHECKPOINTING"), run(3, "QUEUED"), run(4, "STARTING"), run(5, "SUCCEEDED")]);
+    const region = fleetNode(node);
+    expect(byTag(region, "h3").map(text)).toEqual(["Running (1)", "Checkpointing (1)", "Queued, not running yet (1)", "Unknown status (1)"]);
+    expect(text(byData(region, "fleetSummary", "1")[0])).toBe("2 live, 1 queued (not running yet), 1 with an unknown status.");
+    expect(byData(region, "kind", "QUEUED").length).toBe(1);
+    expect(byData(region, "kind", "UNKNOWN").length).toBe(1);
+    expect(text(byData(region, "bucketNote", "QUEUED")[0])).toContain("not live workers");
+    expect(text(byData(region, "bucketNote", "UNKNOWN")[0])).toContain("never counted as live");
+    expect(byData(region, "bucketNote", "LIVE").length).toBe(0);
+    expect(byTag(region, "li").map(li => li.dataset.fleetRunId).sort()).toEqual(["run-0001", "run-0002", "run-0003", "run-0004"]);
+    const live = byId(node, "wf-live")!;
+    expect(byTag(live, "tr").map(tr => tr.dataset.runId).filter(Boolean)).toEqual(["run-0001", "run-0002"]);
+  });
+  // //TR: A-RUNSTATE-1 (madde 3): sunucudaki WorkRun'ın kalp atışı alanı YOKTUR (core/workos/types.ts: yalnız leaseExpiresAt). Bu test GERÇEK WorkOsStore'dan üretilmiş WorkRun şeklini kullanır; kartta ve canlı koşu tablosunda kalp atışı BİLİNMİYOR kalır, leaseExpiresAt kalp atışı diye gösterilmez.
+  it("heartbeat against the REAL server WorkRun shape: the server sends none, so card, detail and Live runs row stay UNKNOWN (leaseExpiresAt is not a heartbeat)", async () => {
+    const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-rs1-"));
+    try {
+      const store = new WorkOsStore(path.join(dir, "data"));
+      const prj = store.createProject({tenantId: "tA", orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL"});
+      const msn = store.createMission({tenantId: "tA", projectId: prj.projectId, title: "T", objective: "O", acceptanceCriteria: ["c1"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
+      for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission({tenantId: "tA"}, msn.missionId, to, "go", "FOUNDER_LOCAL");
+      const queued = store.createRun({tenantId: "tA", missionId: msn.missionId, executor: {implementer: "a", reviewer: "b"}, createdBy: "FOUNDER_LOCAL"});
+      const leased = store.acquireRunLease(queued.runId, 60_000, "FOUNDER_LOCAL");
+      const raw = {runs: store.listRuns({tenantId: "tA"})};
+      expect(leased.status).toBe("LEASED");
+      expect(Object.keys(raw.runs[0]).filter(k => /heartbeat/i.test(k))).toEqual([]);
+      expect(typeof raw.runs[0].leaseExpiresAt).toBe("string");
+      const work = await load("work-core.js"), core = await load("fleet-core.js");
+      const items = work.mapWorkRuns(raw).items;
+      expect(items.length).toBe(1);
+      const g = core.fleetGroups(items);
+      expect(g.groups.map((x: any) => [x.status, x.bucket])).toEqual([["LEASED", "LIVE"]]);
+      expect(g.groups[0].items[0].heartbeatAt).toBeNull();
+      expect(core.fleetCard(g.groups[0].items[0]).updatedAt).toBeNull();
+      expect(core.fleetDetail(items, leased.runId).updatedAt).toBeNull();
+      const {node} = await fleetCtx("ok", raw.runs);
+      const region = fleetNode(node);
+      expect(byTag(region, "time").length).toBe(0);
+      expect(byTag(region, "dd").map(text)).toEqual(["UNKNOWN", "UNKNOWN"]);
+      const row = byTag(byId(node, "wf-live")!, "tr").find(tr => tr.dataset.runId === leased.runId)!;
+      expect(byTag(row, "time").length).toBe(0);
+      expect(text(row)).not.toContain(leased.leaseExpiresAt as string);
+    } finally { fs.rmSync(dir, {recursive: true, force: true}); }
   });
   it("workforce.fleet.* keys are identical in EN and TR with the same placeholders", async () => {
     const tr = (await load("locales", "tr.js")).default as Record<string, string>, en = (await load("locales", "en.js")).default as Record<string, string>;
@@ -666,8 +762,9 @@ describe("UI-032 worker detail panel from the fleet grid (run-level only, UNKNOW
   const run = (i: number, status: string, extra: any = {}) => ({runId: `run-${String(i).padStart(4, "0")}`, status, ...extra});
   it("fleetDetail resolves only live runs and always reports telemetry as null", async () => {
     const core = await load("fleet-core.js");
-    const runs = [run(1, "RUNNING", {role: "ROLE.X"}), run(2, "COMPLETED")];
-    expect(core.fleetDetail(runs, "run-0001")).toEqual({runId: "run-0001", status: "RUNNING", role: "ROLE.X", missionId: null, updatedAt: null, telemetry: null});
+    const runs = [run(1, "RUNNING", {role: "ROLE.X"}), run(2, "SUCCEEDED")];
+    // //TR: A-RUNSTATE-1: ayrıntı kovayı da bildirir (bucket).
+    expect(core.fleetDetail(runs, "run-0001")).toEqual({runId: "run-0001", status: "RUNNING", bucket: "LIVE", role: "ROLE.X", missionId: null, updatedAt: null, telemetry: null});
     expect(core.fleetDetail(runs, "run-0002")).toBeNull();
     expect(core.fleetDetail(runs, "nope")).toBeNull();
     expect(core.fleetDetail(runs, null)).toBeNull();

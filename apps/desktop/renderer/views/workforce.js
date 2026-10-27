@@ -115,6 +115,12 @@ function fleetDetailPanel(ctx,items){
     h(doc,"p",{class:"note",text:ctx.t("workforce.fleet.detail.note")}));
 }
 
+// //TR: A-RUNSTATE-1: canlı durum kovaları durum adıyla, kuyruk ve bilinmeyen kovalar kendi açık başlıklarıyla; kuyrukta/bilinmeyen koşular asla "canlı" başlığı altında görünmez.
+function groupTitle(ctx,g){
+  if(g.bucket==="QUEUED")return ctx.t("workforce.fleet.bucket.queued",{n:String(g.count)});
+  if(g.bucket==="UNKNOWN")return ctx.t("workforce.fleet.bucket.unknown",{n:String(g.count)});
+  return ctx.t("workforce.fleet.group",{status:statusLabel(ctx,g.status),n:String(g.count)});
+}
 function fleetBody(ctx,runs){
   const doc=ctx.doc;
   if(runs.state!=="VERIFIED")return stateNote(ctx,runs.state,runs.state==="UNAVAILABLE"?"run.unavailable":undefined);
@@ -134,9 +140,11 @@ function fleetBody(ctx,runs){
   };
   return h(doc,"div",{class:"wf-fleet",role:"region","aria-label":ctx.t("workforce.fleet.label")},
     h(doc,"p",{class:"note",text:ctx.t("workforce.fleet.lead")}),
-    f.groups.map(g=>h(doc,"section",{class:"wf-fleet-group",dataset:{bucket:g.status},"aria-label":ctx.t("workforce.fleet.group",{status:statusLabel(ctx,g.status),n:String(g.count)})},
-      h(doc,"h3",{class:"wf-fleet-h",text:ctx.t("workforce.fleet.group",{status:statusLabel(ctx,g.status),n:String(g.count)})}),
-      h(doc,"ul",{class:"wf-fleet-list"},g.items.map(card)))),
+    h(doc,"p",{class:"note",dataset:{fleetSummary:"1"},text:ctx.t("workforce.fleet.summary",{live:String(f.live),queued:String(f.queued),unknown:String(f.unknown)})}),
+    f.groups.map(g=>{const title=groupTitle(ctx,g);return h(doc,"section",{class:"wf-fleet-group",dataset:{bucket:g.status,kind:g.bucket},"aria-label":title},
+      h(doc,"h3",{class:"wf-fleet-h",text:title}),
+      g.bucket==="LIVE"?null:h(doc,"p",{class:"note",dataset:{bucketNote:g.bucket},text:ctx.t(g.bucket==="QUEUED"?"workforce.fleet.queued.note":"workforce.fleet.unknown.note")}),
+      g.items.length?h(doc,"ul",{class:"wf-fleet-list"},g.items.map(card)):null)}),
     fleetDetailPanel(ctx,runs.items),
     f.truncated?h(doc,"p",{class:"note",dataset:{truncated:"1"},text:ctx.t("workforce.fleet.showing",{shown:String(f.shown),total:String(f.total)})}):null);
 }

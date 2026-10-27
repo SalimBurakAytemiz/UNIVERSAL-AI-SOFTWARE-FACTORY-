@@ -368,11 +368,14 @@ describe("B5 mappers: work runs, evidence, inbox derivation", () => {
     expect(c.deriveInbox(undefined, undefined)).toEqual([]);
     expect(JSON.stringify(items)).not.toMatch(/approved|auto/i);
   });
-  it("live runs are the active run states only", async () => {
+  // //TR: A-RUNSTATE-1: canlı koşular artık yalnız sunucunun aktif-işçi kümesidir (LEASED/RUNNING/CHECKPOINTING/VERIFYING); QUEUED canlı değil (ayrı kova), STARTING/REVIEWING RunStatus olmadığı için canlı sayılmaz.
+  it("live runs are the server worker-active run states only", async () => {
     const c = await load(rend, "work-core.js");
-    const runs = ["RUNNING", "QUEUED", "FAILED", "COMPLETED", "AWAITING_APPROVAL", "LEASED"].map((s, i) => ({runId: `run_${i}_000000`, status: s}));
-    expect(c.liveRuns(runs).map((r: any) => r.status)).toEqual(["RUNNING", "QUEUED", "LEASED"]);
+    const runs = ["RUNNING", "QUEUED", "FAILED", "COMPLETED", "AWAITING_APPROVAL", "LEASED", "CHECKPOINTING", "VERIFYING", "STARTING", "REVIEWING"].map((s, i) => ({runId: `run_${i}_000000`, status: s}));
+    expect(c.liveRuns(runs).map((r: any) => r.status)).toEqual(["RUNNING", "LEASED", "CHECKPOINTING", "VERIFYING"]);
+    expect(c.queuedRuns(runs).map((r: any) => r.status)).toEqual(["QUEUED"]);
     expect(c.liveRuns(undefined)).toEqual([]);
+    expect(c.queuedRuns(undefined)).toEqual([]);
   });
 });
 
@@ -403,7 +406,8 @@ describe("B5 i18n", () => {
     need.add("everif.NONE");
     for (const s of ["current", "done", "todo"]) need.add(`work.timeline.${s}`);
     for (const st of core.MISSION_STATUSES) need.add(`mstatus.${st}`);
-    for (const st of [...core.RUN_ACTIVE_STATES, "AWAITING_APPROVAL", "FAILED", "CANCELLED", "STOPPED"]) need.add(`mstatus.${st}`);
+    // //TR: A-RUNSTATE-1: RUN_ACTIVE_STATES yerine RUN_LIVE_STATES + QUEUED (CHECKPOINTING için mstatus anahtarı eklendi).
+    for (const st of [...core.RUN_LIVE_STATES, core.RUN_QUEUED_STATE, "AWAITING_APPROVAL", "FAILED", "CANCELLED", "STOPPED"]) need.add(`mstatus.${st}`);
     // form.field.* her doğrulama alanı için
     const fields = new Set<string>();
     const collect = (r: any) => { for (const f of Object.keys(r.errors ?? {})) fields.add(f); };
