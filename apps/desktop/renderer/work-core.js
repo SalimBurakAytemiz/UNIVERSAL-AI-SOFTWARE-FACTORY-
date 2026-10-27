@@ -25,7 +25,9 @@ export const HIGH_RISK_TARGETS=Object.freeze(["AUTHORIZED","COMPLETE"]);
 export const REASON_REQUIRED_TARGETS=Object.freeze(["BLOCKED","REMEDIATING","FOUNDER_ATTENTION_REQUIRED"]);
 export const RISK_LEVELS=Object.freeze(["R0","R1","R2","R3","R4"]);
 export const RUN_START_STATUSES=Object.freeze(["AUTHORIZED","PLANNED"]);
-export const RUN_ACTIVE_STATES=Object.freeze(["QUEUED","LEASED","STARTING","RUNNING","VERIFYING","REVIEWING"]);
+// //TR: A-RUNSTATE-1 (UI-030/UI-134): canlı işçi koşuları SUNUCUNUN aktif-işçi kümesiyle (core/workos/run-state.ts ACTIVE_WORKER_STATUSES) birebir aynıdır; STARTING/REVIEWING RunStatus değildir. QUEUED canlı işçi DEĞİL, ayrı "kuyrukta (henüz çalışmıyor)" kovasıdır. Eşitlik tests/v7-ux-wp-agents.test.ts içinde sunucu dosyasından okunarak sınanır (sürüklenme CI'da düşer).
+export const RUN_LIVE_STATES=Object.freeze(["LEASED","RUNNING","CHECKPOINTING","VERIFYING"]);
+export const RUN_QUEUED_STATE="QUEUED";
 export const VERIFICATION_STATES=Object.freeze(["VERIFIED","MISMATCH","MISSING","UNVERIFIABLE"]);
 
 export const MISSION_ID_RE=/^msn_[0-9a-f]{24}$/;
@@ -536,10 +538,12 @@ export function mapWorkRun(x){
     evidence:mapRunEvidence(x.evidence),reviewer:identity||verdict?{identity,verdict}:null
   };
 }
+export const WORK_RUNS_CAP=500;
 export function mapWorkRuns(raw){
   if(!isObj(raw))return {state:"ERROR",items:[]};
   const list=pick(raw.workRuns,raw.runs,raw.items);if(!Array.isArray(list))return {state:"ERROR",items:[]};
-  return {state:"VERIFIED",items:list.slice(0,500).map(mapWorkRun).filter(Boolean)};
+  // //TR: A-RUNSTATE-1 (#273 M3): sunucu en eski koşuları önce döndürür; 500'ü aşan listede en yeni (canlı/kuyruk) koşular kesilir. truncated:true yalnız kesildiğinde eklenir; filo/canlı paneller bu durumda kesin sayı veya "yok" demez.
+  return {state:"VERIFIED",items:list.slice(0,WORK_RUNS_CAP).map(mapWorkRun).filter(Boolean),...(list.length>WORK_RUNS_CAP?{truncated:true}:{})};
 }
 export function mapWorkRunDetail(raw){
   const inner=isObj(raw)?pick(raw.workRun,raw.run,raw):null,run=mapWorkRun(inner);
@@ -602,7 +606,8 @@ export function deriveInbox(missions,runs){
   return items;
 }
 export function filterMissions(items,status){return status==="ALL"||!status?items:items.filter(m=>m.status===status)}
-export function liveRuns(runs){return (runs??[]).filter(r=>RUN_ACTIVE_STATES.includes(r.status))}
+export function liveRuns(runs){return (runs??[]).filter(r=>RUN_LIVE_STATES.includes(r.status))}
+export function queuedRuns(runs){return (runs??[]).filter(r=>r.status===RUN_QUEUED_STATE)}
 
 // //TR: UI-026 salt-okunur görev denetçisi: yalnız GET /v1/missions/:id (görevler) ve GET /v1/work-runs okumalarından türetilir. Okuma VERIFIED değilse (STALE dahil) olumlu değer yoktur → UNKNOWN; API'nin vermediği alanlar (atanan, bitiş, bağımlılık, açıklama) asla uydurulmaz ve koşu-görev bağı sunucuda olmadığından bağ UNKNOWN kalır.
 export const TASK_UNKNOWN_FIELDS=Object.freeze(["assignee","dueAt","dependencies","description"]);
