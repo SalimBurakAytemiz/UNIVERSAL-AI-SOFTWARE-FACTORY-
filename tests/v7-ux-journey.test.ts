@@ -1910,3 +1910,187 @@ describe("LANE-A A-FLOW-TASK-1: the task status step of the first-delivery flow 
     expect(s.calls.refresh).toBe(refresh0 + 1);
   });
 });
+
+// //TR: A-UI011-EVIDENCE-1 (yalnız kanıt + test, yeni özellik yok): COORD protected batch 4b (#242) analiz ve ürün-çalıştırma rotalarını server.ts'e kaydetti ve main.mjs'de izinledi. Bu blok masaüstü render katmanının (GERÇEK görünümler + GERÇEK api.js + main.mjs izin listesi ve hata gövdesi temizleyici) bu rotalara GERÇEK bir control-api üzerinden ulaştığını Linux'ta kanıtlar. ÜCRETLİ Claude çağrısı YAPILMAZ: LOCAL_CLAUDE hiçbir zaman etkinleştirilmez (yalnız ücretsiz BLOCKED/409 durumları); gerçek bir analiz, Windows ve gerçek Electron çalıştırılmaz (NOT_EXECUTED).
+describe("LANE-A A-UI011-EVIDENCE-1: the analysis step and the run-the-product step against the REAL control-api (free states only, LOCAL_CLAUDE stays off)", () => {
+  const block = (name: string) => { const m = new RegExp(`// ${name}-BEGIN\\n([\\s\\S]*?)// ${name}-END`).exec(mainSrc); if (!m) throw new Error(`missing ${name}`); return m[1]; };
+  const postAllowed = new Function(`${block("B5-POST-ALLOWLIST")}\nreturn desktopPostPathAllowed;`)() as (v: unknown) => boolean;
+  const getAllowed = new Function(`${block("B4-ALLOWLIST")}\nreturn desktopExtraGetPathAllowed;`)() as (v: unknown) => boolean;
+  // main.mjs's own error-body scrubber, exactly as the desktop bridge applies it before the renderer sees a POST answer
+  const scrubSrc = mainSrc.slice(mainSrc.indexOf("function scrubText("), mainSrc.indexOf("async function apiPost("));
+  const sanitizePostBody = new Function("token", `${scrubSrc}\nreturn sanitizePostBody;`)(TOKEN) as (status: number, parsed: unknown) => unknown;
+  const text = (n: N) => n.textContent;
+  const tick = () => new Promise(r => setTimeout(r, 0));
+
+  async function setup(executors?: unknown) {
+    fs.mkdirSync(runtime(), {recursive: true});
+    const store = new WorkOsStore(dataDir()), scope = {tenantId: "tA"};
+    const project = store.createProject({tenantId: "tA", orgId: "org1", name: "Evidence", environmentId: "env-dev", createdBy: RECORDER});
+    const open = store.createMission({tenantId: "tA", projectId: project.projectId, title: "Open mission", objective: "obj", acceptanceCriteria: ["ac"], riskLevel: "R0", createdBy: RECORDER});
+    const exec = store.createMission({tenantId: "tA", projectId: project.projectId, title: "Executing mission", objective: "obj", acceptanceCriteria: ["ac"], riskLevel: "R0", createdBy: RECORDER});
+    for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission(scope, exec.missionId, to, to, RECORDER);
+    const run = store.createRun({tenantId: "tA", missionId: exec.missionId, executor: {implementer: "a", reviewer: "b"}, createdBy: RECORDER});
+    const app = buildServer({controlToken: TOKEN, runtime: runtime(), dataDir: dataDir(), tenantId: "tA", port: 3210, logger: false, ...(executors ? {executors: executors as never} : {})}); apps.push(app);
+    const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js"), forms = await load("forms.js");
+    forms.resetAllForms();
+    const doc = new D(), cache = st.createStore(null);
+    const calls = {post: [] as Array<{path: string; status: number; wire: any; seen: any}>, confirm: [] as any[], get: [] as string[]};
+    const bridge = {
+      apiGet: async (p: string) => { calls.get.push(p); const r = await app.inject({method: "GET", url: p, headers: hdr}); if (r.statusCode !== 200) throw new Error(`${p}: HTTP ${r.statusCode}`); return r.json(); },
+      apiPost: async (p: string, b: unknown) => {
+        if (!postAllowed(p)) throw new Error("INVALID_API_PATH");
+        const r = await app.inject({method: "POST", url: p, headers: {...hdr, "content-type": "application/json"}, payload: JSON.stringify(b)});
+        let wire: any = null; try { wire = r.json(); } catch { /* non-json */ }
+        const seen = sanitizePostBody(r.statusCode, wire);
+        calls.post.push({path: p, status: r.statusCode, wire, seen}); return {status: r.statusCode, body: seen};
+      }
+    };
+    const api = apiMod.createApi({bridge, store: cache});
+    const t = (k: string, v?: any) => i18n.translate("en", k, v);
+    const ctx: any = {doc, store: cache, api, i18n: {lang: "en", t}, t, navigate: () => {}, rerender: async () => { cache.clear?.(); cache.cache?.clear?.(); }, refreshAll: async () => { cache.cache?.clear?.(); },
+      confirm: async (o: any) => { calls.confirm.push(o); return true; }, selectProject() {}, renderAttention() {}, principal: "FOUNDER_LOCAL", settleFocus: () => {}};
+    const executorsOf = async () => getJson(app, "/v1/system/executors");
+    return {app, ctx, doc, calls, forms, project, open, exec, run, executorsOf};
+  }
+
+  const blockerCodes = (root: N) => allData(root, "analysisBlocker").map(n => n.dataset.analysisBlocker);
+  async function analyseOnce(s: Awaited<ReturnType<typeof setup>>, missionId: string) {
+    const an = await load("views", "analysis-step.js");
+    an.resetAnalysis(missionId);
+    const result = await an.submitAnalysisStep(s.ctx, missionId);
+    const panel = an.analysisPanel(s.ctx, {missionId, exec: await s.ctx.api.executors()}) as N;
+    s.doc.body.replaceChildren(panel);
+    return {an, result, panel, post: s.calls.post.at(-1)!};
+  }
+  // The free BLOCKED answer: the same renderer state whether no executor is configured at all or an executor pair without a pre-development builder is installed (both give the route NO_ANALYSIS_BUILDER).
+  function expectFreeBlocked(s: Awaited<ReturnType<typeof setup>>, r: Awaited<ReturnType<typeof analyseOnce>>, missionId: string) {
+    expect(r.post.path).toBe(`/v1/missions/${missionId}/analysis/step`);
+    expect(r.post.status).toBe(200);
+    expect(r.post.wire.status).toBe("BLOCKED");
+    expect(Array.isArray(r.post.wire.blockers) && r.post.wire.blockers.length >= 1).toBe(true);
+    expect(r.post.wire.blockers.at(-1)).toBe("EXECUTOR_NOT_ENABLED"); // the route appends this when there is no builder, whatever else the machine reports
+    expect(r.post.wire.blocker).toBe(r.post.wire.blockers[0]);
+    expect(r.result).toEqual({ok: false, kind: "STEP", status: 200});
+    expect(byData(r.panel, "analysisStatus", "BLOCKED")).toBeDefined();
+    expect(blockerCodes(r.panel)).toEqual(r.post.wire.blockers);
+    expect(text(r.panel)).toContain("Blocked: the analysis cannot start until these are fixed. Nothing was produced or recorded.");
+    expect(text(r.panel)).not.toContain("not enabled in this build");
+    expect(byId(r.panel, "analysis-plan-submit")).toBeUndefined(); // Create plan stays closed
+    expect(byData(r.panel, "analysisPlanGate", "CLOSED")).toBeDefined();
+    expect(text(byData(r.panel, "analysisHandPlan")!)).toContain("write the plan by hand in Tasks"); // the free way out
+  }
+  async function expectLocalClaudeStillOff(s: Awaited<ReturnType<typeof setup>>, before: any) {
+    const after = await s.executorsOf();
+    expect(after.executors.LOCAL_CLAUDE.enabled).toBe(false);
+    expect(after.active).toEqual(before.active); // the active executor did not change
+    expect(s.calls.post.map(x => x.path).filter(p => p.includes("/executors/"))).toEqual([]); // the enable route is never called
+    expect(s.calls.post.every(x => x.status !== 201)).toBe(true);
+  }
+
+  it("NO_ANALYSIS_BUILDER, no executor configured and LOCAL_CLAUDE disabled: the real route answers a FREE 200 BLOCKED and the view shows the exact blockers; nothing is produced, LOCAL_CLAUDE stays off", async () => {
+    const s = await setup();
+    const before = await s.executorsOf();
+    expect(before.executors.LOCAL_CLAUDE.enabled).toBe(false);
+    expect(before.active).toEqual({reason: "EXECUTOR_NOT_CONFIGURED"});
+    const r = await analyseOnce(s, s.open.missionId);
+    expectFreeBlocked(s, r, s.open.missionId);
+    // The desktop bridge's own scrubber leaves the 200 body untouched for these code-only strings.
+    expect(r.post.seen.blockers).toEqual(r.post.wire.blockers);
+    // FINDING F1 (renderer, not the server): analysis-step.js blockerText has no analysis.blocker.EXECUTOR_NOT_ENABLED key (only setup.reason.EXECUTOR_NOT_ENABLED exists), so the last blocker shows the raw code with a "not recognised" note. This pin flips to the translated text when that key is added.
+    const last = allData(r.panel, "analysisBlocker").at(-1)!;
+    expect(last.dataset.analysisBlocker).toBe("EXECUTOR_NOT_ENABLED");
+    expect(text(last)).toContain("EXECUTOR_NOT_ENABLED (not recognised)");
+    expect(allData(r.panel, "analysisBlocker").length).toBe(r.post.wire.blockers.length);
+    await expectLocalClaudeStillOff(s, before);
+    const pd = (await getJson(s.app, `/v1/predev/${s.open.missionId}`)).predev; // nothing was recorded by the free BLOCKED step
+    expect([pd.active, pd.phase, pd.preDevId]).toEqual([false, "NOT_STARTED", null]);
+    expect(Object.values(pd.artifacts as Record<string, any>).every((x: any) => x.state === "NOT_STARTED" && x.artifactId === null)).toBe(true);
+  });
+
+  it("NO_ANALYSIS_BUILDER with an installed executor pair that has no pre-development builder (the fake pair): the same free BLOCKED, the active executor is the pair, LOCAL_CLAUDE stays off", async () => {
+    const {FakeExecutors} = await import("../core/workos/executors.js");
+    const fake = new FakeExecutors({implement: () => ({files: {"feature.txt": "x\n"}, message: "fake"}), review: () => ({verdict: "CLEAN"})});
+    const s = await setup(fake.pair());
+    const before = await s.executorsOf();
+    expect(before.executors.LOCAL_CLAUDE.enabled).toBe(false);
+    expect(before.active.reason).not.toBe("EXECUTOR_NOT_CONFIGURED");
+    expect(before.active.reason).not.toBe("LOCAL_CLAUDE");
+    const r = await analyseOnce(s, s.open.missionId);
+    expectFreeBlocked(s, r, s.open.missionId);
+    await expectLocalClaudeStillOff(s, before);
+  });
+
+  it("the analysis plan route is reached with the exact refusal: Create plan before COMPLETE is a 409 ANALYSIS_NOT_COMPLETE the view classifies as a refusal; a mission that is no longer open for pre-development is a 409 WORKOS_CONFLICT (FINDING F2: shown only as the generic conflict text)", async () => {
+    const s = await setup();
+    const core = await load("analysis-core.js");
+    const pres = await s.ctx.api.post(core.analysisPlanPath(s.open.missionId), {});
+    expect(pres).toEqual({ok: false, status: 409, body: {error: "ANALYSIS_NOT_COMPLETE"}});
+    expect(core.classifyAnalysisPlan(pres)).toEqual({kind: "REFUSED", code: "ANALYSIS_NOT_COMPLETE"});
+    expect(core.analysisStatusKey(core.classifyAnalysisPlan(pres), pres, "plan")).toEqual({ok: false, key: "analysis.plan.refused", vars: {code: "ANALYSIS_NOT_COMPLETE"}});
+    // An unknown mission id is a 404 from the route (WORKOS_NOT_FOUND), classified as not found.
+    const nf = await s.ctx.api.post(core.analysisStepPath("msn_" + "0".repeat(24)), {});
+    expect(nf.status).toBe(404); expect(core.classifyAnalysisStep(nf).kind).toBe("NOT_FOUND");
+    // FINDING F2 (analysis-core.js classifyAnalysisStep / describePostResult): the route says WHY (reason MISSION_NOT_PREDEV_ELIGIBLE) and the bridge keeps it, but the view only shows the generic 409 conflict text (which also mentions an idempotency key that does not apply).
+    const an = await load("views", "analysis-step.js");
+    an.resetAnalysis(s.exec.missionId);
+    const r = await an.submitAnalysisStep(s.ctx, s.exec.missionId);
+    const post = s.calls.post.at(-1)!;
+    expect(post.status).toBe(409); expect(post.seen).toEqual({error: "WORKOS_CONFLICT", reason: "MISSION_NOT_PREDEV_ELIGIBLE"});
+    expect(r).toEqual({ok: false, kind: "FAILED", status: 409});
+    s.doc.body.replaceChildren(an.analysisPanel(s.ctx, {missionId: s.exec.missionId, exec: null}) as N);
+    expect(text(byId(s.doc.body, "analysis-step-status")!)).toBe("Conflict (HTTP 409): the record does not accept this change in its current state, or the idempotency key was already used with a different request.");
+  });
+
+  it("run-the-product on a run that has no product: the real GET shape is accepted, the card offers neither start nor stop, Start (called directly) is the exact 409 PRODUCT_RUN_NOT_DELIVERABLE with reason NOT_STARTED:QUEUED, Stop is an idempotent 200, and LOCAL_CLAUDE stays off", async () => {
+    const s = await setup();
+    const before = await s.executorsOf();
+    const pc = await load("views", "product-card.js"), core = await load("project-core.js");
+    // the desktop allow-lists admit exactly these paths
+    expect(getAllowed(core.runProductPath(s.run.runId))).toBe(true);
+    for (const a of ["start", "stop"]) expect(postAllowed(`/v1/work-runs/${s.run.runId}/product/${a}`)).toBe(true);
+    expect(getAllowed(core.runProductPath(s.run.runId) + "?x=1")).toBe(false);
+    // real GET -> renderer mapper (no mock of the route)
+    const prod = await s.ctx.api.runProduct(s.run.runId);
+    expect(prod.state).toBe("VERIFIED");
+    expect(prod.product).toMatchObject({runId: s.run.runId, deliveredHeadSha: null, tiedToThisRun: false, deliverable: null});
+    expect(prod.product.run).toMatchObject({status: "STOPPED", deliveryRunId: null, reason: null});
+    // the card for that run
+    const project = (await s.ctx.api.projects()).items[0], runs = (await s.ctx.api.workRuns({missionId: s.exec.missionId})).items;
+    const card = await pc.productCard(s.ctx, project, runs.find((r: any) => r.runId === s.run.runId)); s.doc.body.replaceChildren(card);
+    expect([card.dataset.productState, card.dataset.productOffer, card.dataset.productRun]).toEqual(["STOPPED", "NONE", s.run.runId]);
+    expect(byId(card, "product-start")).toBeUndefined(); expect(byId(card, "product-stop")).toBeUndefined();
+    expect(byData(card, "productCommit", "NONE")).toBeDefined();
+    expect(text(byData(card, "productDelivery", "NOT_DELIVERABLE")!)).toBe("This run cannot be started as a product: its source generation is not complete or it has no delivered commit (NOT_STARTED). Nothing is started from here.");
+    // Start, driven directly through the real route and the real bridge scrubber: the exact refusal and its reason
+    const started = await pc.productAction(s.ctx, project, s.run.runId, "start");
+    expect(started).toEqual({ok: false, status: 409});
+    const startPost = s.calls.post.at(-1)!;
+    expect(startPost.path).toBe(`/v1/work-runs/${s.run.runId}/product/start`);
+    expect(startPost.seen).toEqual({error: "PRODUCT_RUN_NOT_DELIVERABLE", reason: "NOT_STARTED:QUEUED"});
+    expect(s.forms.drafts.status["product-run"]).toEqual({ok: false, key: "post.err.409.PRODUCT_RUN_NOT_DELIVERABLE", vars: {status: 409, reason: "NOT_STARTED:QUEUED"}, errors: null});
+    expect(s.ctx.t("post.err.409.PRODUCT_RUN_NOT_DELIVERABLE", {reason: "NOT_STARTED:QUEUED"})).toBe("Refused (PRODUCT_RUN_NOT_DELIVERABLE, reason NOT_STARTED:QUEUED): this run has no delivered source commit, so there is no product to start.");
+    expect(s.calls.confirm).toHaveLength(1); // the Founder confirmed the start; the server still refused
+    // Stop: idempotent 200, nothing was running
+    const stopped = await pc.productAction(s.ctx, project, s.run.runId, "stop");
+    expect(stopped).toEqual({ok: true, status: 200});
+    expect(s.forms.drafts.status["product-run"]).toEqual({ok: true, key: "product.done.stop", vars: {}, errors: null});
+    expect(s.calls.post.at(-1)!.seen.product).toMatchObject({runId: s.run.runId, tiedToThisRun: false, devrun: {status: "STOPPED"}});
+    expect((await getJson(s.app, `/v1/projects/${s.project.projectId}/devrun`)).devrun?.status ?? "STOPPED").toBe("STOPPED"); // no dev-run was started
+    await expectLocalClaudeStillOff(s, before);
+  });
+
+  it("the bad-shape and bad-state edges of the product routes also reach the view honestly: unknown run is a 404 the card does not turn into a product; a malformed run id never reaches the server", async () => {
+    const s = await setup();
+    const pc = await load("views", "product-card.js"), core = await load("project-core.js");
+    expect(core.runProductPath("run_zz")).toBeNull();
+    expect(core.buildProductRequest({runId: "run_zz", action: "start"}).ok).toBe(false);
+    const project = (await s.ctx.api.projects()).items[0];
+    const bad = await pc.productAction(s.ctx, project, "run_zz", "start");
+    expect(bad).toEqual({ok: false, validation: true});
+    expect(s.calls.post).toEqual([]); // nothing was sent
+    const ghost = "run_" + "0".repeat(24);
+    const res = await s.ctx.api.post(`/v1/work-runs/${ghost}/product/stop`, {});
+    expect(res).toEqual({ok: false, status: 404, body: {error: "RUN_NOT_FOUND"}});
+    expect((await s.ctx.api.runProduct(ghost)).state).not.toBe("VERIFIED");
+  });
+});
