@@ -1046,10 +1046,15 @@ describe("LANE-A A-FLOW-5 analysis step — view (Journey)", () => {
     const src = (f: string) => fs.readFileSync(path.join(__dirname, "..", f), "utf8");
     const cp = src("core/workos/claude-profiles.ts"), an = src("core/workos/crew/analysis.ts"), fdb = src("core/agents/first-delivery-bindings.ts");
     const codes = new Set<string>();
-    for (const m of /export type LauncherCheck = [^\n]*/.exec(cp)![0].matchAll(/"([A-Z][A-Z0-9_]+)"/g)) codes.add(m[1]);
+    // //TR: L1: tarama tek satıra güvenmez; LauncherCheck tipi birden çok satıra sarılabilir, analysis.ts doğrudan {status:"BLOCKED", blocker:"X"} döndürebilir ve claudeRoleReadiness önek taşımayan bir kodu blockers.push ile ekleyebilir.
+    const launcherFrom = cp.indexOf("export type LauncherCheck ="), launcherTo = cp.indexOf("export function claudeLauncherCheck(");
+    if (launcherFrom < 0 || launcherTo < launcherFrom) throw new Error("missing LauncherCheck type");
+    for (const m of cp.slice(launcherFrom, launcherTo).matchAll(/"([A-Z][A-Z0-9_]+)"/g)) codes.add(m[1]);
     const body = cp.slice(cp.indexOf("export function claudeRoleReadiness("), cp.indexOf("// //TR: Claude CLI yazdırma kipinde"));
     for (const m of body.matchAll(/\b((?:CLAUDE|PROVIDER|CLI)_[A-Z_]+)\b/g)) codes.add(m[1]);
     for (const m of an.matchAll(/blockedStep\("([A-Z_]+)"/g)) codes.add(m[1]);
+    for (const m of an.matchAll(/status:\s*"BLOCKED",\s*blocker:\s*"([A-Z][A-Z0-9_]+)"/g)) codes.add(m[1]); // a direct BLOCKED return that bypasses blockedStep
+    for (const src2 of [body, an]) for (const push of src2.matchAll(/\bblockers\.push\(([^;]*?)\);/g)) for (const m of push[1].matchAll(/(?:^|(?<!\?)\?\s*|(?<![?:\w$]):\s*)["`]([A-Z][A-Z0-9_]+)(?=["`:])/g)) codes.add(m[1]); // an unprefixed code pushed onto blockers
     for (const m of an.matchAll(/\?\? "([A-Z_]+)"/g)) codes.add(m[1]);
     const { EXECUTOR_NOT_ENABLED } = await import("../core/workos/crew/analysis.js"); codes.add(EXECUTOR_NOT_ENABLED);
     if (/ROLE_NOT_EXECUTABLE/.test(fdb)) codes.add("ROLE_NOT_EXECUTABLE");
@@ -1068,8 +1073,8 @@ describe("LANE-A A-FLOW-5 analysis step — view (Journey)", () => {
         expect(dict[`analysis.blocker.${code}`], `${lang} analysis.blocker.${code}`).toBeTruthy();
       }
     }
-    expect(E["analysis.blocker.EXECUTOR_NOT_ENABLED"]).toBe("Local Claude is not enabled, so no draft can be produced. Open Settings, then Executors, and enable Local Claude.");
-    expect(T["analysis.blocker.EXECUTOR_NOT_ENABLED"]).toBe("Local Claude etkin değil, bu yüzden taslak üretilemez. Ayarlar > Yürütücüler bölümünden Local Claude'u etkinleştirin.");
+    expect(E["analysis.blocker.EXECUTOR_NOT_ENABLED"]).toBe("Local Claude is not enabled, so no draft can be produced. Open Settings, then AI Executors, and enable Local Claude.");
+    expect(T["analysis.blocker.EXECUTOR_NOT_ENABLED"]).toBe("Local Claude etkin değil, bu yüzden taslak üretilemez. Ayarlar > AI Yürütücüleri bölümünden Local Claude'u etkinleştirin.");
     expect(E["analysis.blocker.ANALYSIS_IN_PROGRESS"]).toBe("A draft for this mission is already being produced. Wait for it to finish, then look at the pending draft.");
     expect(T["analysis.blocker.ANALYSIS_IN_PROGRESS"]).toBe("Bu mission için bir taslak zaten üretiliyor. Bitmesini bekleyin, sonra bekleyen taslağa bakın.");
     expect(E["analysis.blocker.CLAUDE_PACKAGE_PROVENANCE_CHANGED"]).toBe("The installed Claude Code package changed after it was verified. Enable Local Claude again to verify the new install.");
@@ -1079,7 +1084,7 @@ describe("LANE-A A-FLOW-5 analysis step — view (Journey)", () => {
     const after = await press(b, "analysis-step-submit");
     const rows = allData(block(after), "analysisBlocker");
     expect(rows.map(n => n.dataset.analysisBlocker)).toEqual(["PROVIDER_PROVENANCE_NOT_READY", "EXECUTOR_NOT_ENABLED"]);
-    expect(rows[1].textContent).toBe("Local Claude is not enabled, so no draft can be produced. Open Settings, then Executors, and enable Local Claude.");
+    expect(rows[1].textContent).toBe("Local Claude is not enabled, so no draft can be produced. Open Settings, then AI Executors, and enable Local Claude.");
     expect(block(after).textContent).not.toContain("not recognised");
   });
 
@@ -1095,19 +1100,21 @@ describe("LANE-A A-FLOW-5 analysis step — view (Journey)", () => {
     expect(c.analysisStatusKey({kind: "CONFLICT", reason: "SOMETHING_NEW"}, {}, "step")).toEqual({ok: false, key: "analysis.conflict.other", vars: {reason: "SOMETHING_NEW"}});
     expect(c.ANALYSIS_CONFLICT_REASONS).toEqual(["MISSION_NOT_PREDEV_ELIGIBLE"]);
     const E = (await load("locales", "en.js")).default as Record<string, string>, T = (await load("locales", "tr.js")).default as Record<string, string>;
-    expect(E["analysis.conflict.MISSION_NOT_PREDEV_ELIGIBLE"]).toBe("This mission is no longer open for the pre-development analysis (for example a run has already started). Nothing was produced.");
-    expect(T["analysis.conflict.MISSION_NOT_PREDEV_ELIGIBLE"]).toBe("Bu mission artık ön geliştirme analizine açık değil (örneğin bir koşu zaten başladı). Hiçbir şey üretilmedi.");
-    expect(E["analysis.conflict.other"]).toBe("The server refused the analysis step because of a conflict ({reason}). Nothing was produced.");
-    expect(T["analysis.conflict.other"]).toBe("Sunucu analiz adımını bir çakışma nedeniyle reddetti ({reason}). Hiçbir şey üretilmedi.");
+    expect(E["analysis.conflict.MISSION_NOT_PREDEV_ELIGIBLE"]).toBe("This mission is no longer open for the pre-development analysis (for example a run has already started). Nothing was recorded.");
+    expect(T["analysis.conflict.MISSION_NOT_PREDEV_ELIGIBLE"]).toBe("Bu mission artık ön geliştirme analizine açık değil (örneğin bir koşu zaten başladı). Hiçbir şey kaydedilmedi.");
+    expect(E["analysis.conflict.other"]).toBe("The server refused the analysis step because of a conflict ({reason}). Nothing was recorded.");
+    expect(T["analysis.conflict.other"]).toBe("Sunucu analiz adımını bir çakışma nedeniyle reddetti ({reason}). Hiçbir şey kaydedilmedi.");
     for (const k of ["analysis.conflict.MISSION_NOT_PREDEV_ELIGIBLE", "analysis.conflict.other"]) expect(E[k]).not.toMatch(/idempotency/i);
+    // //TR: L2: çakışma geç yolda builder.produce SONRASI da gelebilir (recorder.start -> openPreDevSequence); bu yüzden metin "hiçbir şey üretilmedi" ya da iş/maliyet olmadığı iddiasını TAŞIMAZ, yalnız "kaydedilmedi" der.
+    for (const k of ["analysis.conflict.MISSION_NOT_PREDEV_ELIGIBLE", "analysis.conflict.other"]) { expect(E[k]).not.toMatch(/produced|no cost|free of charge/i); expect(T[k]).not.toMatch(/üretil|maliyet/i); expect(E[k]).toContain("Nothing was recorded."); expect(T[k]).toContain("Hiçbir şey kaydedilmedi."); }
     // through the real block, with the body exactly as the desktop bridge delivers it
     const b = await open({status: 409, body: {error: "WORKOS_CONFLICT", reason: "MISSION_NOT_PREDEV_ELIGIBLE"}});
     const after = await press(b, "analysis-step-submit");
-    expect(stOf(after).textContent).toBe("This mission is no longer open for the pre-development analysis (for example a run has already started). Nothing was produced.");
+    expect(stOf(after).textContent).toBe("This mission is no longer open for the pre-development analysis (for example a run has already started). Nothing was recorded.");
     expect(stOf(after).dataset.result).toBe("error");
     expect(byId(after, "analysis-plan-submit")).toBeUndefined();
     const u = await open({status: 409, body: {error: "WORKOS_CONFLICT", reason: "SOMETHING_NEW"}});
-    expect(stOf(await press(u, "analysis-step-submit")).textContent).toBe("The server refused the analysis step because of a conflict (SOMETHING_NEW). Nothing was produced.");
+    expect(stOf(await press(u, "analysis-step-submit")).textContent).toBe("The server refused the analysis step because of a conflict (SOMETHING_NEW). Nothing was recorded.");
     const g = await open({status: 409, body: {error: "WORKOS_CONFLICT"}});
     expect(stOf(await press(g, "analysis-step-submit")).textContent).toMatch(/^Conflict \(HTTP 409\)/);
   });
@@ -2100,10 +2107,11 @@ describe("LANE-A A-UI011-EVIDENCE-1: the analysis step and the run-the-product s
     expect(seenLogin).not.toContain(s.controlRoot);
     expect(seenLogin).toContain("[path]");
     expect(r.post.seen).not.toEqual(r.post.wire);
-    // FINDING F1 (renderer, not the server): analysis-step.js blockerText has no analysis.blocker.EXECUTOR_NOT_ENABLED key (only setup.reason.EXECUTOR_NOT_ENABLED exists), so the last blocker shows the raw code with a "not recognised" note. This pin flips to the translated text when that key is added.
+    // FINDING F1 (fixed by #286): analysis.blocker.EXECUTOR_NOT_ENABLED now exists, so the last blocker shows its translated text and no "not recognised" note.
     const last = allData(r.panel, "analysisBlocker").at(-1)!;
     expect(last.dataset.analysisBlocker).toBe("EXECUTOR_NOT_ENABLED");
-    expect(text(last)).toContain("EXECUTOR_NOT_ENABLED (not recognised)");
+    expect(text(last)).toContain("Local Claude is not enabled, so no draft can be produced. Open Settings, then AI Executors, and enable Local Claude.");
+    expect(text(last)).not.toContain("not recognised");
     expect(allData(r.panel, "analysisBlocker").length).toBe(r.post.wire.blockers.length);
     await expectLocalClaudeStillOff(s, before);
     const pd = (await getJson(s.app, `/v1/predev/${s.open.missionId}`)).predev; // nothing was recorded by the free BLOCKED step
@@ -2124,7 +2132,7 @@ describe("LANE-A A-UI011-EVIDENCE-1: the analysis step and the run-the-product s
     await expectLocalClaudeStillOff(s, before);
   });
 
-  it("the analysis plan route is reached with the exact refusal: Create plan before COMPLETE is a 409 ANALYSIS_NOT_COMPLETE the view classifies as a refusal; a mission that is no longer open for pre-development is a 409 WORKOS_CONFLICT (FINDING F2: shown only as the generic conflict text)", async () => {
+  it("the analysis plan route is reached with the exact refusal: Create plan before COMPLETE is a 409 ANALYSIS_NOT_COMPLETE the view classifies as a refusal; a mission that is no longer open for pre-development is a 409 WORKOS_CONFLICT (FINDING F2, fixed by #286: shown as its own CONFLICT text)", async () => {
     const s = await setup();
     const before = await localClaudeOffBefore(s);
     const core = await load("analysis-core.js");
@@ -2135,15 +2143,15 @@ describe("LANE-A A-UI011-EVIDENCE-1: the analysis step and the run-the-product s
     // An unknown mission id is a 404 from the route (WORKOS_NOT_FOUND), classified as not found.
     const nf = await s.ctx.api.post(core.analysisStepPath("msn_" + "0".repeat(24)), {});
     expect(nf.status).toBe(404); expect(core.classifyAnalysisStep(nf).kind).toBe("NOT_FOUND");
-    // FINDING F2 (analysis-core.js classifyAnalysisStep / describePostResult): the route says WHY (reason MISSION_NOT_PREDEV_ELIGIBLE) and the bridge keeps it, but the view only shows the generic 409 conflict text (which also mentions an idempotency key that does not apply).
+    // FINDING F2 (fixed by #286): the route says WHY (reason MISSION_NOT_PREDEV_ELIGIBLE), the bridge keeps it, and classifyAnalysisStep now returns CONFLICT with that reason, so the view shows its own text (no idempotency wording).
     const an = await load("views", "analysis-step.js");
     an.resetAnalysis(s.exec.missionId);
     const r = await an.submitAnalysisStep(s.ctx, s.exec.missionId);
     const post = s.calls.post.at(-1)!;
     expect(post.status).toBe(409); expect(post.seen).toEqual({error: "WORKOS_CONFLICT", reason: "MISSION_NOT_PREDEV_ELIGIBLE"});
-    expect(r).toEqual({ok: false, kind: "FAILED", status: 409});
+    expect(r).toMatchObject({ok: false, kind: "CONFLICT", status: 409});
     s.doc.body.replaceChildren(an.analysisPanel(s.ctx, {missionId: s.exec.missionId, exec: null}) as N);
-    expect(text(byId(s.doc.body, "analysis-step-status")!)).toBe("Conflict (HTTP 409): the record does not accept this change in its current state, or the idempotency key was already used with a different request.");
+    expect(text(byId(s.doc.body, "analysis-step-status")!)).toBe("This mission is no longer open for the pre-development analysis (for example a run has already started). Nothing was recorded.");
     await expectLocalClaudeStillOff(s, before);
   });
 
