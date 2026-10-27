@@ -642,6 +642,16 @@
       "ref": "wf_7a53b7d1-c41 (2 lenses + skeptics): both MEDIUMs + RECOVERING LOW FIXED (chain fails 4/4 on base, deterministic under load 16; per-method/threshold/lost mutants killed; SWEEP-5 interleavings safe); LOW follow-ups: N3 renew-after-write unpinned, N7 unconditional owned.delete unpinned, N8 caller-own lease unpinned, acquire/takeover unhooked, B position uncontrolled",
       "policy": "TEP-1",
       "at": "2026-10-27T01:16:43.509Z"
+    },
+    {
+      "pr": 262,
+      "sha": "fced8160d7d30ce887f9b3ed99911aa67711b575",
+      "kind": "delta",
+      "base": "94ffb5e21dea5791e3b94cd2fa4892524b74c05c",
+      "verdict": "BASE_MERGE_ONLY_plus_266_port",
+      "ref": "fced816 = merge of 459205c + #266 254779c into 94ffb5e (no #262 file changed); #266 reviewed + merged b974406 (5e17b79 NO_BLOCKERS_6LOW); #262 own content = 94ffb5e final checklist NO_BLOCKERS_3LOW; CI fced816 all green incl installer",
+      "policy": "TEP-1",
+      "at": "2026-10-27T01:18:06.087Z"
     }
   ],
   "tests": [],
