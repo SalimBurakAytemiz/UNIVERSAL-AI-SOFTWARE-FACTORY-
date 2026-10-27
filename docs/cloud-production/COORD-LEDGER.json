@@ -822,6 +822,16 @@
       "ref": "wf_236fbfbf-960: driveC traced synchronous (QUEUED->LEASED->RUNNING in one pump), 6/6 runs incl. load pass; DELAY10/25, ESDELAY10/25, M3, LND, CAP, ST10 killed; ps1a innerPortFor never == PORT; LOW REAL netns random host port (Linux only)",
       "policy": "TEP-1",
       "at": "2026-10-27T03:06:14.799Z"
+    },
+    {
+      "pr": 273,
+      "sha": "02bcebff831fd3d0b8655e655230ae366a754844",
+      "kind": "full",
+      "base": null,
+      "verdict": "BLOCKERS_9MEDIUM",
+      "ref": "wf_974034f4-cb8 (2 lenses + 9 skeptics, none refuted): heartbeat row asserts cannot fail (N14/N15); fleet aria-label/lead still 'live'; 500-run cap silently drops newest (pre-existing, counts now definite); #/work KPI different live set (pre-existing); liveRuns/queuedRuns not checked over every status (N25-N27); queued/unknown-only fleet render untested (N22); card status/bucket not asserted (N19/N20); TR text of new keys unpinned (N09/N10/N23/N24/N35/N12); 10 LOW",
+      "policy": "TEP-1",
+      "at": "2026-10-27T03:06:44.062Z"
     }
   ],
   "tests": [],
