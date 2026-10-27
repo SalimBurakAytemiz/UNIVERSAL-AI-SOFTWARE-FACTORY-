@@ -872,6 +872,36 @@
       "ref": "wf_0dbbe2ce-a28: round-1 MEDIUM1/2 + LOWs FIXED, 599-role output byte-identical, 224/224 catalogue killed; MEDIUM allow-list tests miss suffix + later rows (Y-N12/Y-N15/Y-N14 survive -> stronger reviewChain.origin label); LOWs unregistered optional cut first (slug order), gapId types unchecked, R06 partial (aliases/skills records), resolveAll default cap unpinned, allow-list array mutable (freeze)",
       "policy": "TEP-1",
       "at": "2026-10-27T03:46:13.405Z"
+    },
+    {
+      "pr": 273,
+      "sha": "5097223bd5bc3eba1196e71a8ba1834a9375d12a",
+      "kind": "delta",
+      "base": "02bcebf",
+      "verdict": "BLOCKERS_2MEDIUM",
+      "ref": "wf_bfdfc16b-653:273-delta-r1",
+      "policy": "TEP-1",
+      "at": "2026-10-27T03:53:21.789Z"
+    },
+    {
+      "pr": 277,
+      "sha": "c60cf634a2cff538a635137938afc15add2d915d",
+      "kind": "full",
+      "base": null,
+      "verdict": "BLOCKERS_1MEDIUM",
+      "ref": "wf_bfdfc16b-653:277-full",
+      "policy": "TEP-1",
+      "at": "2026-10-27T03:53:21.837Z"
+    },
+    {
+      "pr": 278,
+      "sha": "0620b7052907fa4c09b6ff6fdb0624570e89302f",
+      "kind": "full",
+      "base": null,
+      "verdict": "BLOCKERS_1MEDIUM",
+      "ref": "wf_cde1e78f-955",
+      "policy": "TEP-1",
+      "at": "2026-10-27T03:53:33.159Z"
     }
   ],
   "tests": [],
