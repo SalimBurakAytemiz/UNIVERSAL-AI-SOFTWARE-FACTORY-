@@ -66,6 +66,8 @@ export function mapAnalysisStep(x){
   }
 }
 /** Adım yanıtı -> {kind:"STEP",step} | {kind:"NOT_ENABLED"|"INVALID"|"FAILED"|"DENIED"|"STOPPED"|"NOT_FOUND"}. HTTP durumu sonuçla uyumlu olmalıdır: BLOCKED yalnız 200/409, REJECTED/BUILDER_FAILED yalnız 200/502, diğerleri yalnız 2xx. */
+export const ANALYSIS_CONFLICT_REASONS=Object.freeze(["MISSION_NOT_PREDEV_ELIGIBLE"]);
+const CONFLICT_REASON_RE=/^[A-Z][A-Z0-9_]{0,63}$/;
 export function classifyAnalysisStep(res){
   if(!res)return {kind:"FAILED"};
   if(res.thrown&&/INVALID_API_PATH/.test(String(res.message??"")))return {kind:"NOT_ENABLED"};
@@ -84,6 +86,8 @@ export function classifyAnalysisStep(res){
   if(s>=200&&s<300)return {kind:"INVALID"};
   // //TR: Ortak ücretli üretim kilidi: aynı mission zaten üretiliyor (PREDEV_PRODUCE_IN_PROGRESS) ya da başka bir mission üretiyor (PREDEV_PRODUCE_BUSY); bu bir idempotency çakışması DEĞİLDİR, sonuç da iddia edilmez.
   if(s===409&&isObj(body)&&(body.error==="PREDEV_PRODUCE_IN_PROGRESS"||body.error==="PREDEV_PRODUCE_BUSY"))return {kind:"BUSY",scope:body.error==="PREDEV_PRODUCE_BUSY"?"OTHER":"SAME"};
+  // //TR: A-ANALYSIS-L10N (F2): 409 WORKOS_CONFLICT + reason (ör. MISSION_NOT_PREDEV_ELIGIBLE) sunucunun NEDEN söylediği koşuldur ve köprü onu korur; genel "idempotency anahtarı" 409 metnine düşürülmez.
+  if(s===409&&isObj(body)&&body.error==="WORKOS_CONFLICT"&&typeof body.reason==="string"&&CONFLICT_REASON_RE.test(body.reason))return {kind:"CONFLICT",reason:body.reason};
   if(s===423)return {kind:"STOPPED"};
   if(s===403)return {kind:"DENIED"};
   if(s===404&&notFoundBody(body))return {kind:"NOT_FOUND"};
@@ -142,6 +146,7 @@ export function analysisStatusKey(c,res,verb){
   if(c.kind==="INVALID")return {ok:false,key:"analysis.invalid",vars:{}};
   if(c.kind==="BUSY")return {ok:false,key:`analysis.busy.${c.scope}`,vars:{}};
   if(c.kind==="STOPPED")return {ok:false,key:"post.err.423",vars:{status:423}};
+  if(c.kind==="CONFLICT")return ANALYSIS_CONFLICT_REASONS.includes(c.reason)?{ok:false,key:`analysis.conflict.${c.reason}`,vars:{}}:{ok:false,key:"analysis.conflict.other",vars:{reason:c.reason}};
   // 403: sunucunun ACTION_DENIED nedeni (varsa) ya da yetki hatası; describePostResult ikisini de doğru ayırır.
   const d=describePostResult(res);return {ok:false,key:d.key,vars:d.vars};
 }
