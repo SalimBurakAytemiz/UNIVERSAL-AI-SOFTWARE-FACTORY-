@@ -15,17 +15,19 @@
 Static `/v1/roles/status-summary` takes precedence over the parametric `/v1/roles/:roleId` (find-my-way matches static segments first); the existing `:roleId` handler keeps rejecting non-`UASCO-NNNN` ids with 400.
 
 ## Response (frozen, Lane A depends on it)
+Top-level keys: `statusSummary` (unchanged legacy projection), `statusSummaryStatus` (`"DEPRECATED_LEGACY_PROJECTION"`), `readiness` (`computeRoleReadiness` output, the AUTHORITATIVE measurement) and `reconciliation` (`reconcileLegacyStatusSummary`). The route computes no counter itself. When the readiness inputs are missing or invalid it answers **200** with `readiness: null`, `reconciliation: null` and `readinessError: "ROLE_READINESS_UNAVAILABLE"` (the legacy `statusSummary` is still returned; audit `WORKOS_ROLE_READINESS_DEGRADED` carries the error code only). Any other error goes to `workosFail`.
 ```json
 {"statusSummary":{"target":599,"registered":599,"implemented":2,"tested":0,"certified":0,"running":0,
  "byGuild":[{"guildId":"G01","registered":8,"implemented":0,"tested":0,"certified":0,"running":0}],
- "computedAt":"ISO-8601","basis":{"roleDefinitionsSha256":"<hex>","bindingsCount":9}}}
+ "computedAt":"ISO-8601","basis":{"roleDefinitionsSha256":"<hex>","bindingsCount":9}},
+ "statusSummaryStatus":"DEPRECATED_LEGACY_PROJECTION","readiness":{"...":"see core/agents/readiness-audit.ts"},"reconciliation":{"consistent":true,"runningMeasured":false}}
 ```
 Counters are independent (no promotion between them):
 - registered: role is in `registries/role-definitions.json`.
 - implemented: `resolveRoleExecution` is EXECUTABLE AND the route has a production executor (`CLAUDE_IMPLEMENTER` / `CLAUDE_REVIEWER`) AND a run stage consumes that binding function (`STAGE_CONSUMERS` in `core/agents/first-delivery-bindings.ts`).
 - tested: at least one evaluation spec that is not `NOT_EXECUTED` AND whose evidence ref verifies (format, file inside `audit/evidence/role-evaluations`, sha256, content names role/evaluation/verdict, artifact hash, not FAKE).
 - certified: the same rule as `scripts/validate-role-registry.mjs` (CERTIFIED + scope + evaluator refs + REVIEWER/APPROVED evidence + six verified PASSED specs + unexpired).
-- running: an `AGENT_TRACE` evidence exists in a non-terminal run of the tenant (registered role ids only).
+- running: an `AGENT_TRACE` evidence exists in an OPEN run of the tenant, i.e. `run-state.isOpenRun` (not terminal and not `AWAITING_APPROVAL`); registered role ids only. Without a run journal RUNNING is UNKNOWN in `readiness` (not measured).
 Errors: `503 ROLE_REGISTRY_UNAVAILABLE` when the registry file is missing/invalid (no number is invented); store errors go through `workosFail`.
 
 ## Tests that prove it

@@ -209,6 +209,44 @@ describe("C-PAR-1 PAR-03: synchronous git in one run must not starve another run
     let fired = false; // yalnız İLK HEAD okuması yavaş (A'nınki); B'ninki ve sonraki adımlar hızlı
     await slowGitLeavesBUnfenced((_A, srcRepo) => (cwd, args) => { const here = canonicalPath(cwd), repo = canonicalPath(srcRepo); const hit = !fired && here.ok && repo.ok && here.key === repo.key && args.includes("HEAD^{commit}") && args.includes("HEAD"); if (hit) fired = true; return hit; }); // //TR: Windows CI: runner depo yolunu path-guard'ın kanonik biçimine (8.3 kısa adları açılmış, harf büyüklüğü katlanmış) çevirir; sabit `===` eşleşmeyip yavaş-git senaryosu hiç tetiklenmiyordu
   });
+  // //TR: RCA relfx-c3:200 (Windows shard 1, #259/#261): iki CI başarısızlığında yavaş git eşzamansızdı (hits=1; stall 7 s değil 3-4 s; cpuMs duvar süresinin çok altında, yani G/Ç beklemesi). Stall'ı, bir run'ın adım sınırında ARA VERMEDEN yaptığı senkron, dayanıklı journal yazıları zinciri (kanıt -> CHECKPOINTING -> checkpoint -> yenileme -> sonraki adım RUNNING) üretiyordu: yavaş diskte zincir TTL - heartbeat aralığını aşar ve öbür run'ın setInterval heartbeat'i hiç çalışamaz. Burada zincir deterministik kurulur: A'nın WORKSPACE kanıtından IMPLEMENT RUNNING geçişine kadarki 4 run yazısının HER BİRİ yazıldıktan sonra SANAL saat (store + runner) 1.4 s ilerler (hiçbiri tek başına TTL'yi aşmaz; toplam 5.6 s > TTL 5 s). Zincir senkron olduğu için arada heartbeat çalışamaz; gerçek disk hızı sonucu değiştirmez (#266 incelemesi: gerçek-zaman bloklu sürüm yavaş diskte düzeltmeyle de düşebiliyordu). Düzeltmesiz runner'da B'nin lease'i zincir içinde dolar (fence); düzeltmeyle her runner yazısı önce heartbeat'i gecikmiş lease'leri yeniler.
+  it("run A's step-boundary journal-write chain (4 slow durable writes of 1.4 s, none above TTL 5 s, 5.6 s in total) leaves run B unfenced: every runner write first renews the overdue leases", { timeout: 90_000 }, async () => {
+    const TTL = HB_TTL, STALL = 1400, LONG = 8000, clock = {t: Date.now()};
+    const c = setup("chain", {}, () => clock.t); const A = c.mkRun("A"), B = c.mkRun("B");
+    const calls = {B: 0, Baborted: 0};
+    const pair = wrapImplementer(c.base, async (w, spec, ctx) => {
+      if (spec.title === "B" && ++calls.B === 1) { // run B: uzun eşzamansız çağrı; lease'i yalnız heartbeat'e (düzeltmeyle runner yazılarına da) bağlıdır
+        const startedAt = new Date().toISOString();
+        for (const until = Date.now() + LONG; Date.now() < until;) {
+          await sleep(100);
+          if (ctx.shouldAbort?.()) { calls.Baborted += 1; return {exitCode: null, log: "aborted", argv: ["fake-long"], startedAt, endedAt: new Date().toISOString(), timedOut: false, aborted: true, transient: false}; }
+        }
+      }
+      return c.base.implementer.implement(w, spec, ctx);
+    });
+    const chain = {open: false, closed: false, stalls: 0};
+    const block = () => { chain.stalls += 1; clock.t += STALL; }; // yavaş fsync gibi: yazı sanal saatte STALL sürer (senkron zincirde döngü dönmez)
+    const st = c.store as unknown as Record<"transitionRun" | "checkpointRun" | "addRunEvidence", (...a: unknown[]) => unknown>;
+    for (const name of ["transitionRun", "checkpointRun", "addRunEvidence"] as const) {
+      const real = st[name].bind(c.store);
+      vi.spyOn(st, name).mockImplementation((...a: unknown[]) => {
+        const r = real(...a);
+        if (a[0] !== A.runId || chain.closed) return r;
+        if (name === "addRunEvidence" && (a[2] as {kind?: string}).kind === "WORKSPACE") chain.open = true;
+        if (!chain.open) return r;
+        block();
+        if (name === "transitionRun" && a[3] === "step IMPLEMENT started") chain.closed = true;
+        return r;
+      });
+    }
+    const probe = stallProbe();
+    const rep = await c.runner({maxConcurrentRuns: 2, leaseTtlMs: TTL, executors: pair, now: () => clock.t}).tick().finally(() => probe.stop());
+    expect([chain.closed, chain.stalls], "the slow write chain really ran once, end to end").toEqual([true, 4]);
+    expect(rep.claimed.sort()).toEqual([A.runId, B.runId].sort());
+    expect(rep.fenced, hbDiag(c, {A: A.runId, B: B.runId}, rep.fenced, probe, TTL)).toEqual([]);
+    expect([calls.B, calls.Baborted]).toEqual([1, 0]);
+    expect([c.status(A.runId), c.status(B.runId)]).toEqual(["AWAITING_APPROVAL", "AWAITING_APPROVAL"]);
+  });
 
   it("span() renews EVERY owned lease before and after a synchronous span (throttled to TTL/10, so the journal does not balloon)", { timeout: 60_000 }, async () => {
     const c = setup(); const A = c.mkRun("A"), B = c.mkRun("B"), clock = {t: Date.now()};
@@ -222,6 +260,51 @@ describe("C-PAR-1 PAR-03: synchronous git in one run must not starve another run
     clock.t += 7000;
     expect(span(() => { clock.t += 7000; return "ok"; })).toBe("ok");
     expect(renews(), "one renewal before and one after the span, for each run").toEqual(base.map(n => n + 2));
+  });
+
+  // //TR: #266 incelemesi (MEDIUM): kanca HER run yazısı yöntemi için ayrı ayrı sabitlenir (zincir testi tek bir yöntemin kancasıyla da geçerdi). Sanal saatle: heartbeat periyodu (TTL/3) dolmamış lease yenilenmez (eşik bir ms altında), dolmuş her lease yöntemden ÖNCE bir kez yenilenir (yazının kendisi başarısız olsa bile), kanca dışı çağrı ve kayıp (lost) lease yenilenmez.
+  it("each runner journal write (transitionRun, checkpointRun, addRunEvidence) first renews every owned lease whose heartbeat is overdue (TTL/3, virtual clock); a fresher lease, a lost lease and a non-write store call renew nothing", { timeout: 60_000 }, async () => {
+    const TTL = 6000, HB = 2000, clock = {t: Date.now()};
+    const c = setup("hook", {}, () => clock.t); const A = c.mkRun("A"), B = c.mkRun("B");
+    const mr = c.runner({maxConcurrentRuns: 2, maxStepsPerTick: 0, leaseTtlMs: TTL, now: () => clock.t});
+    expect((await mr.tick()).claimed).toHaveLength(2); // both LEASED and owned; no step ran
+    const renews = () => [A, B].map(r => journal(c.dataDir).filter(e => e.type === "RUN_LEASE" && e.payload.runId === r.runId && e.payload.kind === "RENEW").length);
+    const store = (mr as unknown as {o: {store: Record<string, (...a: unknown[]) => unknown>}}).o.store;
+    const call = (name: string) => { try { store[name]("run_missing", "lse_missing"); } catch { /* yazının kendisi reddedilir: yalnız ÖNCESİNDEKİ kanca ölçülür */ } };
+    let base = renews();
+    clock.t += HB - 1;
+    for (const name of ["transitionRun", "checkpointRun", "addRunEvidence"]) call(name);
+    expect(renews(), "a heartbeat period not yet over: nothing renewed").toEqual(base);
+    for (const name of ["transitionRun", "checkpointRun", "addRunEvidence"]) {
+      clock.t += HB;
+      call(name);
+      expect(renews(), `${name}: each overdue lease renewed exactly once before the write`).toEqual(base.map(n => n + 1));
+      base = renews();
+    }
+    clock.t += HB;
+    call("engineGetRun");
+    expect(renews(), "a store call that is not a runner write renews nothing").toEqual(base);
+    (mr as unknown as {owned: Map<string, {lost: boolean}>}).owned.get(A.runId)!.lost = true;
+    call("transitionRun");
+    expect(renews(), "a lost lease is not renewed; the other overdue one is").toEqual([base[0], base[1] + 1]);
+  });
+
+  // //TR: #266 incelemesi (LOW, SWEEP-5 niyeti): geçici yazar-durdurma hatasında run RECOVERING kalır ve lease'i YENİLENMEZ (dolunca sonraki devir yeniden dener). Yazı kancası bu son RECOVERY yazısında lease'i uzatmamalı: tarama heartbeat periyodundan (TTL/3) uzun sürse bile TAKEOVER'dan sonra bu run için RENEW yoktur.
+  it.skipIf(process.platform !== "linux")("SWEEP-5: the retry-later RECOVERY write does not renew the RECOVERING lease, even when the writer sweep took longer than a heartbeat period", { timeout: 120_000 }, async () => {
+    const G = await import("../core/workos/writer-guard.js");
+    const c = setup("sw5"); const r = c.mkRun("R");
+    expect((await c.runner({leaseTtlMs: 300, maxStepsPerTick: 0}).tick()).claimed).toEqual([r.runId]);
+    const file = path.join(c.dataDir, "runs", r.runId, "workspace.owner.json");
+    fs.mkdirSync(path.dirname(file), {recursive: true});
+    fs.writeFileSync(file, JSON.stringify({leaseId: "lse_gone", engineId: "engine_gone", hostname: os.hostname(), pid: 1, childPgid: null, childStart: null, step: "IMPLEMENT", at: new Date().toISOString(), bootId: G.bootId?.() ?? null}));
+    await sleep(450); // önceki lease (300 ms) doldu
+    const spy = vi.spyOn(G, "sweepWriters").mockImplementation((async (o: {includeCurrent?: boolean}) => { await sleep(700); return o.includeCurrent === true ? {killed: [], survivors: []} : {killed: [], survivors: [4242]}; }) as typeof G.sweepWriters);
+    try { await c.runner({leaseTtlMs: 1500}).tick(); } finally { spy.mockRestore(); } // heartbeat periyodu 500 ms < tarama 700 ms
+    const run = c.store.engineGetRun(r.runId)!;
+    expect(run.status, `${run.status}/${run.reason}`).toBe("RECOVERING");
+    expect(run.evidence.find(e => e.kind === "RECOVERY")?.note ?? "").toMatch(/retrying at the next takeover/);
+    const lease = journal(c.dataDir).filter(e => e.type === "RUN_LEASE" && e.payload.runId === r.runId).map(e => String(e.payload.kind));
+    expect(lease.slice(lease.lastIndexOf("TAKEOVER")), "no renewal after the takeover: the lease runs out and the next takeover retries").toEqual(["TAKEOVER"]);
   });
 
   it("the real event-loop monitor sees a recent stall even after a long healthy period (a single stall must not be buried in a long window)", { timeout: 60_000 }, async () => {
