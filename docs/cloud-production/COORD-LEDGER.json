@@ -922,6 +922,26 @@
       "ref": "wf_b613e212-694",
       "policy": "TEP-1",
       "at": "2026-10-27T05:01:23.787Z"
+    },
+    {
+      "pr": 265,
+      "sha": "80d14a984c6e80c2af1984483856befa686010d2",
+      "kind": "delta",
+      "base": "0f8b45343189f782d6d522e3e0c52b9159cc982d",
+      "verdict": "BASE_MERGE_ONLY",
+      "ref": "coord-base-merge-db3dc93-reseal",
+      "policy": "TEP-1",
+      "at": "2026-10-27T05:07:05.593Z"
+    },
+    {
+      "pr": 264,
+      "sha": "a1b7ea1f995b3957b1438b345e990826d6fc1d79",
+      "kind": "delta",
+      "base": "4dc0268b74b34389b10f10995ee2074bc36b82bb",
+      "verdict": "BASE_MERGE_ONLY",
+      "ref": "coord-base-merge-db3dc93-reseal",
+      "policy": "TEP-1",
+      "at": "2026-10-27T05:07:05.632Z"
     }
   ],
   "tests": [],
