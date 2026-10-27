@@ -2246,6 +2246,16 @@
         "masterV2": "C-RDY-1 Role Readiness Auditor = Master V2 package 1 DONE (merged, not product-accepted)"
       },
       {
+        "pr": 267,
+        "merge": "e5cae0d",
+        "by": "coordinator direct merge, expectedHeadSha 747a084 (required checks green on 747a084)",
+        "at": "2026-10-27T02:19:00Z",
+        "postMerge": "VERIFIED: parent1 30e4e83, parent2 = gated head 747a084, merge-tree == merge tree a6cbb05 (= tree tested locally: b3a 50/50)",
+        "review": "full NO_BLOCKERS_1LOW (6ca888f) + delta NO_BLOCKERS_3LOW (747a084, ledger 8cb1f51)",
+        "riskTier": "R0 ROUTINE (tests/v7-b3a-runner.test.ts only)",
+        "masterV2": "Windows load-flake fix: b3a BOUNDED_TICK_TIMEOUT no-progress watchdog + abandoned-runner stop (merged)"
+      },
+      {
         "pr": 272,
         "merge": "30e4e83",
         "by": "coordinator direct merge, expectedHeadSha 853271c (required checks green on 853271c)",
