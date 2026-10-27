@@ -1142,6 +1142,16 @@
       "ref": "wf_4e4c044c-230",
       "policy": "TEP-1",
       "at": "2026-10-27T09:18:56.892Z"
+    },
+    {
+      "pr": 286,
+      "sha": "945c68a9370b59654cb96ac23b3d2190839629f5",
+      "kind": "full",
+      "base": null,
+      "verdict": "NO_BLOCKERS_3LOW",
+      "ref": "wf_3c6b806e-6a2",
+      "policy": "TEP-1",
+      "at": "2026-10-27T09:38:09.567Z"
     }
   ],
   "tests": [],
