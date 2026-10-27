@@ -205,7 +205,7 @@
     "sample": "/health"
    },
    "d": [
-    "apps/desktop/renderer/api.js:64"
+    "apps/desktop/renderer/api.js:74"
    ],
    "e": "TESTED_LINUX"
   },
@@ -444,7 +444,7 @@
     "sample": "/v1/agents"
    },
    "d": [
-    "apps/desktop/renderer/api.js:104",
+    "apps/desktop/renderer/api.js:114",
     "apps/desktop/renderer/views/tower.js:16"
    ],
    "e": "TESTED_LINUX"
@@ -671,7 +671,7 @@
     "sample": "/v1/control/status"
    },
    "d": [
-    "apps/desktop/renderer/api.js:56",
+    "apps/desktop/renderer/api.js:66",
     "apps/desktop/renderer/operations-core.js:5"
    ],
    "e": "TESTED_LINUX"
@@ -855,7 +855,7 @@
     "sample": "/v1/runs"
    },
    "d": [
-    "apps/desktop/renderer/api.js:65",
+    "apps/desktop/renderer/api.js:75",
     "apps/desktop/renderer/operations-core.js:6"
    ],
    "e": "TESTED_LINUX"
@@ -940,7 +940,7 @@
     "sample": "/v1/runs/RUN-0001/events"
    },
    "d": [
-    "apps/desktop/renderer/api.js:68",
+    "apps/desktop/renderer/api.js:78",
     "apps/desktop/renderer/audit-core.js:13",
     "apps/desktop/renderer/audit-core.js:26",
     "apps/desktop/renderer/views/tower.js:50"
@@ -1404,7 +1404,7 @@
    "d": [
     "apps/desktop/renderer/work-core.js:116",
     "apps/desktop/renderer/project-core.js:136",
-    "apps/desktop/renderer/api.js:54",
+    "apps/desktop/renderer/api.js:64",
     "apps/desktop/renderer/matrix-core.js:6"
    ],
    "e": "TESTED_LINUX"
@@ -2027,7 +2027,7 @@
    "d": [
     "apps/desktop/renderer/work-core.js:116",
     "apps/desktop/renderer/project-core.js:136",
-    "apps/desktop/renderer/api.js:54",
+    "apps/desktop/renderer/api.js:64",
     "apps/desktop/renderer/matrix-core.js:6"
    ],
    "e": "TESTED_LINUX"
@@ -2224,8 +2224,8 @@
    "d": [
     "apps/desktop/renderer/work-core.js:135",
     "apps/desktop/renderer/executive-core.js:5",
-    "apps/desktop/renderer/api.js:55",
-    "apps/desktop/renderer/api.js:70",
+    "apps/desktop/renderer/api.js:65",
+    "apps/desktop/renderer/api.js:80",
     "apps/desktop/renderer/views/journey.js:45",
     "apps/desktop/renderer/views/studio-workspace.js:45",
     "apps/desktop/renderer/views/studio-workspace.js:229"
@@ -2466,8 +2466,8 @@
    "d": [
     "apps/desktop/renderer/work-core.js:135",
     "apps/desktop/renderer/executive-core.js:5",
-    "apps/desktop/renderer/api.js:55",
-    "apps/desktop/renderer/api.js:70",
+    "apps/desktop/renderer/api.js:65",
+    "apps/desktop/renderer/api.js:80",
     "apps/desktop/renderer/views/journey.js:45",
     "apps/desktop/renderer/views/studio-workspace.js:45",
     "apps/desktop/renderer/views/studio-workspace.js:229"
@@ -2570,7 +2570,7 @@
     "sample": "/v1/missions/msn_0123456789abcdef01234567"
    },
    "d": [
-    "apps/desktop/renderer/api.js:71"
+    "apps/desktop/renderer/api.js:81"
    ],
    "e": "TESTED_LINUX"
   },
@@ -3248,7 +3248,7 @@
    },
    "d": [
     "apps/desktop/renderer/executive-core.js:5",
-    "apps/desktop/renderer/api.js:74",
+    "apps/desktop/renderer/api.js:84",
     "apps/desktop/renderer/views/assurance.js:484"
    ],
    "e": "TESTED_LINUX"
@@ -3381,7 +3381,7 @@
     "sample": "/v1/work-runs/run_0123456789abcdef01234567"
    },
    "d": [
-    "apps/desktop/renderer/api.js:78"
+    "apps/desktop/renderer/api.js:88"
    ],
    "e": "TESTED_LINUX"
   },
@@ -5343,7 +5343,7 @@
     "sample": "/v1/evidence"
    },
    "d": [
-    "apps/desktop/renderer/api.js:87",
+    "apps/desktop/renderer/api.js:97",
     "apps/desktop/renderer/audit-core.js:6"
    ],
    "e": "TESTED_LINUX"
@@ -5527,7 +5527,7 @@
     "sample": "/v1/evidence/evd_0123456789abcdef01234567"
    },
    "d": [
-    "apps/desktop/renderer/api.js:89"
+    "apps/desktop/renderer/api.js:99"
    ],
    "e": "TESTED_LINUX"
   },
@@ -7107,8 +7107,8 @@
     "sample": "/v1/roles"
    },
    "d": [
-    "apps/desktop/renderer/api.js:109",
-    "apps/desktop/renderer/api.js:123"
+    "apps/desktop/renderer/api.js:119",
+    "apps/desktop/renderer/api.js:133"
    ],
    "e": "TESTED_LINUX"
   },
@@ -7178,8 +7178,7 @@
     "sample": "/v1/roles/UASCO-0001"
    },
    "d": [
-    "apps/desktop/renderer/agent-factory-core.js:2",
-    "apps/desktop/renderer/api.js:136"
+    "apps/desktop/renderer/api.js:146"
    ],
    "e": "TESTED_LINUX"
   },
@@ -8040,7 +8039,7 @@
    },
    "d": [
     "apps/desktop/renderer/executive-core.js:5",
-    "apps/desktop/renderer/api.js:53"
+    "apps/desktop/renderer/api.js:63"
    ],
    "e": "TESTED_LINUX"
   },
@@ -9219,7 +9218,7 @@
     "sample": "/v1/projects/prj_0123456789abcdef01234567/memory"
    },
    "d": [
-    "apps/desktop/renderer/api.js:222",
+    "apps/desktop/renderer/api.js:234",
     "apps/desktop/renderer/knowledge-core.js:115"
    ],
    "e": "TESTED_LINUX"
@@ -9987,7 +9986,9 @@
     "ref": "apps/desktop/main.mjs:168",
     "sample": "/v1/missions/msn_0123456789abcdef01234567/predev/artifacts/pda_0123456789abcdef01234567/approve"
    },
-   "d": "NONE",
+   "d": [
+    "apps/desktop/renderer/predev-decisions-core.js:20"
+   ],
    "e": "TESTED_LINUX"
   },
   {
@@ -10052,7 +10053,9 @@
     "ref": "apps/desktop/main.mjs:168",
     "sample": "/v1/missions/msn_0123456789abcdef01234567/predev/artifacts/pda_0123456789abcdef01234567/reject"
    },
-   "d": "NONE",
+   "d": [
+    "apps/desktop/renderer/predev-decisions-core.js:20"
+   ],
    "e": "TESTED_LINUX"
   },
   {
@@ -10470,18 +10473,19 @@
    "a": {
     "method": "GET",
     "path": "/v1/roles/status-summary",
-    "registeredAt": "apps/control-api/src/routes/role-status.ts:13",
+    "registeredAt": "apps/control-api/src/routes/role-status.ts:35",
     "handler": "app.get(\"/v1/roles/status-summary\", async (_req: any, reply: any) => {",
     "serverRegistered": true
    },
    "b": {
-    "testsRun": 2,
-    "pass": 2,
+    "testsRun": 18,
+    "pass": 18,
     "fail": 0,
     "skip": 0,
     "httpStatusClasses": [
      200,
      403,
+     500,
      503
     ],
     "tests": [
@@ -10492,6 +10496,135 @@
       "httpStatuses": [
        200,
        403
+      ]
+     },
+     {
+      "file": "tests/v7-wfr03-role-registry.test.ts",
+      "title": "LANE-C C1 role lifecycle computed only from evidence > B1 readiness on /v1/roles/status-summary (single source: core/agents/readiness-audit.ts) > (a) journal ABSENT: RUNNING is UNKNOWN for all 599 and NOT measured; the legacy running is not presented as measured; TOOL_READY / stageWired stay UNKNOWN (nothing supplied)",
+      "result": "PASS",
+      "httpStatuses": [
+       200
+      ]
+     },
+     {
+      "file": "tests/v7-wfr03-role-registry.test.ts",
+      "title": "LANE-C C1 role lifecycle computed only from evidence > B1 readiness on /v1/roles/status-summary (single source: core/agents/readiness-audit.ts) > (b) journal PRESENT: an open RUNNING run marks its role RUNNING (measured); an AWAITING_APPROVAL run does NOT (isOpenRun); the legacy running counter agrees",
+      "result": "PASS",
+      "httpStatuses": [
+       200
+      ]
+     },
+     {
+      "file": "tests/v7-wfr03-role-registry.test.ts",
+      "title": "LANE-C C1 role lifecycle computed only from evidence > B1 readiness on /v1/roles/status-summary (single source: core/agents/readiness-audit.ts) > (c) the legacy statusSummary is byte-identical to computeRoleStatusSummary on the same inputs (journal absent and present)",
+      "result": "PASS",
+      "httpStatuses": [
+       200
+      ]
+     },
+     {
+      "file": "tests/v7-wfr03-role-registry.test.ts",
+      "title": "LANE-C C1 role lifecycle computed only from evidence > B1 readiness on /v1/roles/status-summary (single source: core/agents/readiness-audit.ts) > (d) the route computes NO counter: readiness and reconciliation equal the core functions' output exactly, and the body has exactly the four agreed keys",
+      "result": "PASS",
+      "httpStatuses": [
+       200
+      ]
+     },
+     {
+      "file": "tests/v7-wfr03-role-registry.test.ts",
+      "title": "LANE-C C1 role lifecycle computed only from evidence > B1 readiness on /v1/roles/status-summary (single source: core/agents/readiness-audit.ts) > F1: a knowledge profile that was ALREADY read changes DURING the load -> not cached (the next request reloads); registry-only guards with an after-load fingerprint fail here",
+      "result": "PASS",
+      "httpStatuses": [
+       200
+      ]
+     },
+     {
+      "file": "tests/v7-wfr03-role-registry.test.ts",
+      "title": "LANE-C C1 role lifecycle computed only from evidence > B1 readiness on /v1/roles/status-summary (single source: core/agents/readiness-audit.ts) > F5: the slug list comes from the registry ON DISK - a technology added there joins the cache fingerprint (its profile change reloads) and a slug dropped from it leaves the fingerprint (its profile change no longer reloads)",
+      "result": "PASS",
+      "httpStatuses": [
+       200
+      ]
+     },
+     {
+      "file": "tests/v7-wfr03-role-registry.test.ts",
+      "title": "LANE-C C1 role lifecycle computed only from evidence > B1 readiness on /v1/roles/status-summary (single source: core/agents/readiness-audit.ts) > H1/M2: a missing readiness input DEGRADES (200, legacy statusSummary byte-identical, readiness/reconciliation null, readinessError set, audit carries the code only); a programming error is NOT degraded (workosFail)",
+      "result": "PASS",
+      "httpStatuses": [
+       200,
+       500
+      ]
+     },
+     {
+      "file": "tests/v7-wfr03-role-registry.test.ts",
+      "title": "LANE-C C1 role lifecycle computed only from evidence > B1 readiness on /v1/roles/status-summary (single source: core/agents/readiness-audit.ts) > H1: the PACKAGED layout (installer-staged files only) answers 200 with a FULL readiness (599 measured as defined)",
+      "result": "PASS",
+      "httpStatuses": [
+       200
+      ]
+     },
+     {
+      "file": "tests/v7-wfr03-role-registry.test.ts",
+      "title": "LANE-C C1 role lifecycle computed only from evidence > B1 readiness on /v1/roles/status-summary (single source: core/agents/readiness-audit.ts) > L1: a legacy/readiness MISMATCH reaches the client (consistent false + mismatch list) - the route never forces consistency",
+      "result": "PASS",
+      "httpStatuses": [
+       200
+      ]
+     },
+     {
+      "file": "tests/v7-wfr03-role-registry.test.ts",
+      "title": "LANE-C C1 role lifecycle computed only from evidence > B1 readiness on /v1/roles/status-summary (single source: core/agents/readiness-audit.ts) > L2: the legacy statusSummary equals the output of the code BEFORE this change (digests generated at base 9ab1791 for a no-AWAITING input; basis.roleDefinitionsSha256 excluded; update only with a deliberate registry/binding change)",
+      "result": "PASS",
+      "httpStatuses": [
+       200
+      ]
+     },
+     {
+      "file": "tests/v7-wfr03-role-registry.test.ts",
+      "title": "LANE-C C1 role lifecycle computed only from evidence > B1 readiness on /v1/roles/status-summary (single source: core/agents/readiness-audit.ts) > M1: for EVERY run status the role is RUNNING exactly when isOpenRun(status) - lifecycle function and readiness layer",
+      "result": "PASS",
+      "httpStatuses": [
+       200
+      ]
+     },
+     {
+      "file": "tests/v7-wfr03-role-registry.test.ts",
+      "title": "LANE-C C1 role lifecycle computed only from evidence > B1 readiness on /v1/roles/status-summary (single source: core/agents/readiness-audit.ts) > M3: the static readiness input is loaded ONCE per root (no knowledge file re-read on the next request) and reloaded when an input file changes",
+      "result": "PASS",
+      "httpStatuses": [
+       200
+      ]
+     },
+     {
+      "file": "tests/v7-wfr03-role-registry.test.ts",
+      "title": "LANE-C C1 role lifecycle computed only from evidence > B1 readiness on /v1/roles/status-summary (single source: core/agents/readiness-audit.ts) > R2-L1: the evidence verifier is built PER REQUEST: evidence written after the first request is seen by the next one",
+      "result": "PASS",
+      "httpStatuses": [
+       200
+      ]
+     },
+     {
+      "file": "tests/v7-wfr03-role-registry.test.ts",
+      "title": "LANE-C C1 role lifecycle computed only from evidence > B1 readiness on /v1/roles/status-summary (single source: core/agents/readiness-audit.ts) > R2-L3: a loader input that changes DURING the load is not cached (the full input-list fingerprint is taken before the load)",
+      "result": "PASS",
+      "httpStatuses": [
+       200
+      ]
+     },
+     {
+      "file": "tests/v7-wfr03-role-registry.test.ts",
+      "title": "LANE-C C1 role lifecycle computed only from evidence > B1 readiness on /v1/roles/status-summary (single source: core/agents/readiness-audit.ts) > R2-L4: the role-definitions sha cross-check degrades on a same-size/same-mtime edit, the degrade EVICTS the cache (next request is full again), and `now` is refreshed per request",
+      "result": "PASS",
+      "httpStatuses": [
+       200
+      ]
+     },
+     {
+      "file": "tests/v7-wfr03-role-registry.test.ts",
+      "title": "LANE-C C1 role lifecycle computed only from evidence > B1 readiness on /v1/roles/status-summary (single source: core/agents/readiness-audit.ts) > R2-M1: the cache is invalidated by a change of EACH of the 5 loader inputs and of a knowledge profile; the input list is the loader's own exported constant",
+      "result": "PASS",
+      "httpStatuses": [
+       200
       ]
      },
      {
@@ -11299,5 +11432,7 @@
    "evidenceClass": "CODE_ONLY",
    "note": "tests reference the channel/bridge textually or through fake bridges; the ipcMain handler is never executed (real Electron NOT_RUN)"
   }
- ]
+ ],
+ "refreshedAtBase": "30e4e83",
+ "refreshNote": "Pinned at 459205c; refreshed at 30e4e83 (v7/integration after #262/#272): renderer line numbers re-mapped, E1 predev decision caller, E2 role-detail caller, E3 role-status row (re-run instrumented on the wfr03 + b4-desktop-shell files only: 185 tests, all passed). All other test counts are as measured at 459205c."
 }
