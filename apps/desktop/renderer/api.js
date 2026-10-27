@@ -16,6 +16,7 @@ import {CONTROL_PATH,RUNS_PATH,mapOperationsControl,mapOperationsRuns,mapOperati
 import {DOMAINS_PATH,mapDomains} from "./domains-core.js";
 import {SCHEDULER_PATH,mapScheduler} from "./scheduler-core.js";
 import {CAPABILITIES_PATH,ADAPTERS_PATH,FABRICS_PATH,mapCapabilities,mapAdapters,mapFabrics} from "./integrations-core.js";
+import {ADAPTER_REALITY_PATH,mapAdapterReality} from "./adapter-reality-core.js";
 import {knowledgePath,mapKnowledge,provenancePath,mapProvenance,mapMemoryList} from "./knowledge-core.js";
 import {STATUS_SUMMARY_PATH,mapStatusSummary,mapReadiness} from "./agent-factory-core.js";
 import {ATTENTION_PATH as WORKOS_ATTENTION_PATH,mapAttentionQueue,attentionAsBlocked} from "./attention-core.js";
@@ -208,6 +209,8 @@ export function createApi({bridge,store,now=()=>Date.now()}){
     // //TR: FA-V2-PRODUCT (UI-078): Uzantılar ve Entegrasyonlar salt-okunur kayıt defteri okumaları (GET /v1/capabilities, /v1/adapters, /v1/fabrics; sorgu dizesi ve POST yok); üç yol da automation/lib/control-boundary.mjs desktopGetPathAllowed listesinde zaten vardır (yeni uç nokta yok).
     async integrationsCapabilities(){const r=await get(CAPABILITIES_PATH);return r.ok?mapCapabilities(r.data):{state:r.state,registry:null,message:r.message}},
     async integrationsAdapters(){const r=await get(ADAPTERS_PATH);return r.ok?mapAdapters(r.data):{state:r.state,registry:null,message:r.message}},
+    // //TR: A2 Araçlar paneli: GET /v1/adapters/reality (ÖNERİLEN salt-okunur uç nokta; sunucuda ve ana süreç izin listesinde henüz yok, docs/authority-requests/LANE-A-adapter-reality-route.md). Okunamazsa ya da UNAVAILABLE ise rapor null'dır ve panel "ölçülmedi" der; hiçbir sayı uydurulmaz.
+    async adapterReality(){const r=await get(ADAPTER_REALITY_PATH);if(!r.ok)return {state:r.state,reality:null,message:r.message};const m=mapAdapterReality(r.data);return m.state==="VERIFIED"?m:{state:m.state,reality:null}},
     async integrationsFabrics(){const r=await get(FABRICS_PATH);return r.ok?mapFabrics(r.data):{state:r.state,registry:null,message:r.message}},
     // //TR: Ajan Fabrikası durum özeti (GET /v1/roles/status-summary, sorgu dizesi ve POST yok); beş sayaç ayrı tutulur. Ana süreç izin listesi girişi koordinatörün korumalı grubundadır; o gelene kadar okuma UNAVAILABLE döner ve hiçbir sayı uydurulmaz.
     async rolesStatusSummary(){const r=await readStatusSummary();return r.ok?mapStatusSummary(r.data):{state:r.state,summary:null,message:r.message}},

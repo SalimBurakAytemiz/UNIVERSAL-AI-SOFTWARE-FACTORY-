@@ -9,6 +9,7 @@ import {notVerifiedBadge,runNotVerified} from "../m1a.js";
 import {buildTaxonomy} from "../workforce-taxonomy-core.js";
 import {fleetGroups,fleetCard,fleetDetail} from "../fleet-core.js";
 import {FACTORY_COUNTERS,STATUS_SUMMARY_PATH} from "../agent-factory-core.js";
+import {toolsPanel} from "./tools-panel.js";
 
 // //TR: Ajan Fabrikası durumu (Founder direktifi 599 ajan): GET /v1/roles/status-summary'nin beş sayacı AYRI gösterilir (kayıtlı, uygulanmış, test edilmiş, sertifikalı, çalışan); toplanmaz, oranlanmaz, "599 kayıtlı" = "599 çalışan ajan" denmez. Okunamıyorsa sayı yerine durum notu gösterilir (0 uydurulmaz).
 function factoryStatusPanel(ctx,res,ready){
@@ -339,7 +340,7 @@ function catalogSection(ctx,catalog,detail,agents){
 }
 
 export async function render(ctx,route){
-  const doc=ctx.doc,[cockpit,agents,runs,catalog,factory,ready]=await Promise.all([ctx.api.cockpit(),ctx.api.agentCount(),ctx.api.workRuns(),ctx.api.roleCatalog(),ctx.api.rolesStatusSummary(),ctx.api.rolesReadiness()]),w=cockpit.data.workforce;
+  const doc=ctx.doc,[cockpit,agents,runs,catalog,factory,ready,adapters,reality]=await Promise.all([ctx.api.cockpit(),ctx.api.agentCount(),ctx.api.workRuns(),ctx.api.roleCatalog(),ctx.api.rolesStatusSummary(),ctx.api.rolesReadiness(),ctx.api.integrationsAdapters(),ctx.api.adapterReality()]),w=cockpit.data.workforce;
   // //TR: INT-R3 D-M1-07: kayıtlı rol = kanonik sayı (GET /v1/agents registeredRoles, yoksa cockpit kanonik sayısı); sertifikalı sayı ayrı, eski kayıt yalnız LEGACY_REFERENCE_ONLY notu olarak.
   const registered=agents.registeredRoles!==null?agents.registeredRoles:w.registeredRoles;
   const regBlock=agents.registeredRoles!==null?{state:"VERIFIED",value:agents.registeredRoles}:w;
@@ -360,6 +361,7 @@ export async function render(ctx,route){
     panel(ctx,{titleKey:"workforce.fleet.title",id:"wf-fleet"},fleetBody(ctx,runs)),
     panel(ctx,{titleKey:"workforce.live.title",id:"wf-live"},liveRunsBody(ctx,runs)),
     readinessPanel(ctx,ready),
+    toolsPanel(ctx,{adapters,reality,ready}),
     factoryStatusPanel(ctx,factory,ready),
     ...catalogSection(ctx,catalog,detail,agents));
 }
