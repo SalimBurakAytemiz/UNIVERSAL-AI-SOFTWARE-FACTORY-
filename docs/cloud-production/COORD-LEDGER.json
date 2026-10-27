@@ -1032,6 +1032,16 @@
       "ref": "wf_908e1b03-21c:279",
       "policy": "TEP-1",
       "at": "2026-10-27T07:49:37.870Z"
+    },
+    {
+      "pr": 280,
+      "sha": "c0c3899a653e0fdc59432b643a207740476ed5ed",
+      "kind": "delta",
+      "base": "ae2f3a9",
+      "verdict": "NO_BLOCKERS_COORD_INLINE_text_only",
+      "ref": "coord inline: diff ae2f3a9..c0c3899 = 4 locale strings reworded to the reviewer's truthful wording (all causes named; ROOT move-out fix) + the same 4 pins updated + tr fallback pin added + TR note; no code change",
+      "policy": "TEP-1",
+      "at": "2026-10-27T07:56:37.718Z"
     }
   ],
   "tests": [],
