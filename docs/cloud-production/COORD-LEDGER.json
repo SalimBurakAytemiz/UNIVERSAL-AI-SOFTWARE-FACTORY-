@@ -682,6 +682,16 @@
       "ref": "fd3df93 = cherry-pick of COORD 97773c4 (reviewed in #267 delta wf_2931126b-736: FIXED); dae48c0 = base merge 902ba66 (#266 + #262, both reviewed+merged), no #263 file changed; local 618/618; #263 own content 39d476b final checklist NO_BLOCKERS_1LOW",
       "policy": "TEP-1",
       "at": "2026-10-27T01:33:24.067Z"
+    },
+    {
+      "pr": 270,
+      "sha": "83589666798305a3aca313c0d494b81b4cacabb5",
+      "kind": "full",
+      "base": null,
+      "verdict": "BLOCKERS_2MEDIUM_test_gaps",
+      "ref": "wf_a0ea4836-1e2 (2 lenses + skeptics): spec + GUID redaction OK, no limit changed; MEDIUM status-null/signal/ETIMEDOUT vectors unpinned (N2/N2b/N25 survive); MEDIUM platform default + non-Windows result unpinned (N7/N27/N18 survive); LOWs: tail slice, durationMs bracketing, parseable+error success, stdout leak via empty stderr, spawn invocation unpinned, GUID glued/split edge",
+      "policy": "TEP-1",
+      "at": "2026-10-27T01:38:35.424Z"
     }
   ],
   "tests": [],
