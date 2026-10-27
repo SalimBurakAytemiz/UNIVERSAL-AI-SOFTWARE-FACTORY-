@@ -1476,6 +1476,56 @@ describe("LANE-A A1 role readiness panel (8 layers)", () => {
     expect(clr.hits).toHaveLength(2);
   });
 
+  // //TR: #263 son tur (F1-F5): tablo YAPISI sabitlenir (doğrudan çocuklar tam [CAPTION, THEAD, TBODY]; başlık metinleri THEAD>TR>TH içinden okunur), RUNNING için "tamamen UNKNOWN ama günlük VAR" durumu ERROR, by-guild başlığının tr etiketleri, bayat okuma serbest bırakma koruması ve readinessError ile geçerli readiness birleşimleri.
+  it("both tables have the exact structure [CAPTION, THEAD, TBODY] and their header cells are read from THEAD > TR > TH (readiness layers and factory by-guild, en and tr)", async () => {
+    const structure = (table: N) => {
+      const kids = table.children.map(c => c.tagName), thead = table.children.find(c => c.tagName === "THEAD")!;
+      return {kids, trs: thead.children.map(c => c.tagName), heads: thead.children[0].children.map(c => `${c.tagName}:${c.attrs.get("scope")}:${text(c)}`), caption: text(table.children.find(c => c.tagName === "CAPTION")!)};
+    };
+    const th = (scopeCols: string[]) => scopeCols.map(t => `TH:col:${t}`);
+    const expected = {
+      en: {ready: {caption: "8 layers + wired stages", heads: th(["Layer", "Counts", "Measurement"])}, factory: {caption: "By guild", heads: th(["Guild", "Registered", "Implemented: code path (includes unwired stages)", "Tested", "Certified", "Running now"])}},
+      tr: {ready: {caption: "8 katman + bağlı aşamalar", heads: th(["Katman", "Sayılar", "Ölçüm"])}, factory: {caption: "Loncaya göre", heads: th(["Lonca", "Kayıtlı", "Uygulanmış: kod yolu (bağlanmamış aşamaları içerir)", "Test edilmiş", "Sertifikalı", "Şu an çalışan"])}}};
+    for (const lang of ["en", "tr"] as const) {
+      const pg = await page({roles: "ok", detail: true, statusSummary: slim("ABSENT")}, lang);
+      for (const [name, id] of [["ready", "wf-readiness-layers"], ["factory", "wf-factory-guilds"]] as const) {
+        const st = structure(byId(pg.node, id)!);
+        expect(st.kids, `${lang} ${name}`).toEqual(["CAPTION", "THEAD", "TBODY"]);
+        expect(st.trs, `${lang} ${name}`).toEqual(["TR"]);
+        expect(st.heads, `${lang} ${name}`).toEqual(expected[lang][name].heads);
+        expect(st.caption, `${lang} ${name}`).toBe(expected[lang][name].caption);
+      }
+    }
+  });
+
+  it("RUNNING that is entirely UNKNOWN while the journal is PRESENT is an ERROR (not just UNKNOWN = 1)", async () => {
+    const c = await load("agent-factory-core.js"), x = slim("PRESENT");
+    Object.assign(x.readiness.totals.RUNNING, {TRUE: 0, FALSE: 0, UNKNOWN: 599, NOT_APPLICABLE: 0, measured: false});
+    expect(c.mapReadiness(x)).toEqual(ERR);
+  });
+
+  it("a valid readiness object next to a readinessError of any kind is an ERROR (null, a number, another string, the exact string)", async () => {
+    const c = await load("agent-factory-core.js");
+    for (const bad of [null, 503, "OTHER", "ROLE_READINESS_UNAVAILABLE", "", false, {}]) expect(c.mapReadiness({...slim("ABSENT"), readinessError: bad}), String(bad)).toEqual(ERR);
+  });
+
+  it("a read that finishes after it was superseded does not release the newer shared read", async () => {
+    const apiMod = await load("api.js"), st = await load("state.js");
+    let clock = 1_760_000_000_000; const hits: string[] = [], pending: Array<(v: unknown) => void> = [];
+    const store = st.createStore(null);
+    const api = apiMod.createApi({bridge: {apiGet: (p: string) => new Promise(r => { hits.push(p); pending.push(r); })}, store, now: () => (clock += 60_000)});
+    const a = api.rolesStatusSummary();      // A starts
+    store.invalidate();                      // the cache and the epoch change
+    const b = api.rolesStatusSummary();      // B starts (a fresh read)
+    expect(hits).toHaveLength(2);
+    pending[0](slim("ABSENT")); await a;     // A completes: it must not release B
+    const c = api.rolesReadiness();          // a third call shares B
+    expect(hits).toHaveLength(2);
+    pending[1](slim("ABSENT"));
+    expect([(await b).state, (await c).state]).toEqual(["VERIFIED", "VERIFIED"]);
+    expect(hits).toHaveLength(2);
+  });
+
   it("en and tr have the same readiness keys with the same placeholders, and the Turkish panel says Bilinmiyor", async () => {
     const en = (await load("locales", "en.js")).default as Record<string, string>, tr = (await load("locales", "tr.js")).default as Record<string, string>;
     const keys = Object.keys(en).filter(k => k.startsWith("workforce.ready."));
