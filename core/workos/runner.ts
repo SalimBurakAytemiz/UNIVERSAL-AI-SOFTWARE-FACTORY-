@@ -618,6 +618,8 @@ export class MissionRunner {
       }
     }
     const note = `takeover attempt ${run.attempt}; resume step ${run.step} cycle ${run.remediationCycle}; completed checkpoints ${run.checkpoints.length}; recovery ${recoveries} of budget ${this.o.maxRecoveries}${writer ? `; writer ${writer}` : ""}${problems.length ? `; problems ${problems.join(",")}` : ""}${retryLater ? "; transient writer stop failure: retrying at the next takeover (bounded by the recovery budget)" : ""}`;
+    // //TR: SWEEP-5: geri bırakılacak run sahiplikten bu son RECOVERY yazısından ÖNCE çıkarılır; yazı kancası (renew-before-write) ve başka run'ın span()'i bu lease'i yenileyip sonraki devri geciktiremez.
+    if (retryLater) this.owned.delete(run.runId);
     this.o.store.addRunEvidence(run.runId, leaseId, {step: "RECOVERY", cycle: run.remediationCycle, kind: "RECOVERY", argv: [], startedAt: at, endedAt: at, exitCode: problems.length || retryLater ? 1 : 0, logPath: null, logSha256: null, note}, this.o.actor);
     if (retryLater) return false; // //TR: SWEEP-5: run RECOVERING kalır, lease yenilenmez; dolunca sonraki devir yazarı yeniden durdurmayı dener (her devir recovery bütçesinden yer): terminal yalnız bütçe tükenince (RECOVERY_BUDGET_EXHAUSTED)
     if (!problems.length) return true;
