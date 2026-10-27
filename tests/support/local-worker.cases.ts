@@ -213,6 +213,32 @@ export function registerLocalWorkerCases() {
       let opts: any; probeHost({run: (_c: string, _a: string[], o: any) => { opts = o; return {status: 0, stdout: "{}"}; }, platform: "win32"});
       expect(opts.timeout).toBe(60000);
     });
+    it("R1-M1: exit/signal/ETIMEDOUT vectors - a signal-killed child is a non-zero exit, only ETIMEDOUT is a timeout (a bare SIGTERM is not), any non-zero status counts", () => {
+      const why = (r: any) => probe(r).reasons[1];
+      expect(why({status: null, signal: "SIGKILL", stdout: "", stderr: ""})).toBe("PROBE_EXIT_NONZERO");
+      expect(why({error: {code: "ETIMEDOUT"}, status: null, signal: null})).toBe("PROBE_TIMEOUT");
+      expect(why({signal: "SIGTERM", status: null})).toBe("PROBE_EXIT_NONZERO");
+      expect(why({status: -1, signal: null, stdout: "", stderr: ""})).toBe("PROBE_EXIT_NONZERO");
+      expect(probe({status: null, signal: "SIGKILL", stdout: "", stderr: ""}).probeError).toMatchObject({code: null, status: null, signal: "SIGKILL"});
+    });
+    it("R1-M2: a non-Windows platform never spawns and answers PLATFORM_NOT_WINDOWS; with no arguments the platform is the real host's", () => {
+      const run = vi.fn(() => { throw new Error("must not spawn"); });
+      const p = probeHost({run: run as any, platform: "linux", now: 1_700_000_000_000});
+      expect([p.platform, p.supported, p.reasons, p.sandbox, p.fingerprint, run.mock.calls.length]).toEqual(["linux", false, ["PLATFORM_NOT_WINDOWS"], {available: false, reasons: ["PLATFORM_NOT_WINDOWS"]}, null, 0]);
+      for (const other of ["darwin", "freebsd"]) expect(probeHost({run: run as any, platform: other, now: 1}).reasons, other).toEqual(["PLATFORM_NOT_WINDOWS"]);
+      if (process.platform !== "win32") expect(probeHost().platform).toBe(process.platform);
+    });
+    it("R1-L: stderrTail is exactly the LAST 400 chars; durationMs brackets the run() call; a parseable object with r.error stays supported; empty stderr never echoes stdout; the spawn invocation is pinned", () => {
+      expect(probe({status: 1, stdout: "", stderr: "Q".repeat(100) + "Z".repeat(400)}).probeError.stderrTail).toBe("Z".repeat(400));
+      expect(probe({status: 1, stdout: "", stderr: "H" + "m".repeat(498) + "T"}).probeError.stderrTail).toBe("m".repeat(399) + "T");
+      let clock = 5_000; const clk = vi.spyOn(Date, "now").mockImplementation(() => clock);
+      try { expect(probeHost({run: (() => { clock += 500; return {status: 1, stdout: "", stderr: ""}; }) as any, platform: "win32", now: 1}).probeError.durationMs).toBe(500); } finally { clk.mockRestore(); }
+      const raw = {os: {editionId: "Professional", build: "26100"}, cpu: {name: "x", logical: 8}, hypervisorPresent: true, memory: {totalMB: 16304, freeMB: 9800}, sandboxExe: true};
+      expect(probe({error: Object.assign(new Error("late"), {code: "EPIPE"}), status: null, stdout: JSON.stringify(raw), stderr: ""})).toMatchObject({supported: true});
+      const e = probe({status: 1, stdout: `partial ${GUID_A}`, stderr: ""}).probeError; expect(e.stderrTail).toBe(""); expect(e.stdoutBytes).toBe(`partial ${GUID_A}`.length);
+      let call: any; probeHost({run: ((c: string, a: string[], o: any) => { call = {c, a, o}; return {status: 0, stdout: "{}"}; }) as any, platform: "win32"});
+      expect([call.c, call.a.slice(0, 3), call.a.length, call.o]).toEqual(["powershell.exe", ["-NoProfile", "-NonInteractive", "-Command"], 4, {encoding: "utf8", timeout: 60000, windowsHide: true}]);
+    });
   });
 
   describe("local Windows test worker: end-to-end job flow (real git, archive and step runner; Sandbox launcher stubbed)", {timeout: 240000}, () => {
