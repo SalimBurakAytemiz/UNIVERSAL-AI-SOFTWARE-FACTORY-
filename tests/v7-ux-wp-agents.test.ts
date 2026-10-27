@@ -6,6 +6,7 @@ import path from "node:path";
 import {pathToFileURL} from "node:url";
 import {computeRoleReadiness, loadReadinessInputFromRepo, reconcileLegacyStatusSummary} from "../core/agents/readiness-audit.js";
 import {computeRoleStatusSummary} from "../core/agents/role-lifecycle.js";
+import {buildAdapterRealityMap, ADAPTER_REALITY_RECORDS} from "../core/capabilities/adapter-reality.js";
 import {WorkOsStore} from "../core/workos/store.js";
 import {ACTIVE_WORKER_STATUSES, RUN_STATUSES as SERVER_RUN_STATUSES, TERMINAL_RUN_STATUSES as SERVER_TERMINAL} from "../core/workos/run-state.js";
 
@@ -1475,7 +1476,7 @@ describe("LANE-A A1 role readiness panel (8 layers)", () => {
     expect(a.readiness.layers.find((l: any) => l.layer === "TOOL_READY")).toMatchObject({TRUE: 0, FALSE: 590, UNKNOWN: 9, measured: false});
     expect(a.readiness.inputs).toEqual({journal: "ABSENT", adapterReality: "NOT_SUPPLIED", reachableStages: "NOT_SUPPLIED"});
     expect(a.reconciliation).toEqual({consistent: true, mismatchCount: 0, runningMeasured: false, implementedStageWired: "UNKNOWN"});
-    expect(Object.keys(a.readiness).sort()).toEqual(["anomalies", "authority", "computedAt", "denominator", "digest", "inputs", "layers", "proposedOnly", "stageWired"]);
+    expect(Object.keys(a.readiness).sort()).toEqual(["anomalies", "authority", "computedAt", "denominator", "digest", "inputs", "layers", "proposedOnly", "stageWired", "toolReasons"]); // //TR: A2a mapReadiness TOOL_READY neden kodlarını (toolReasons) taşır; anahtar listesi bilerek bir anahtar genişledi.
     const p = c.mapReadiness(fixture("PRESENT"));
     expect(p.state).toBe("VERIFIED");
     expect(p.readiness.layers.find((l: any) => l.layer === "RUNNING")).toMatchObject({TRUE: 0, FALSE: 599, UNKNOWN: 0, measured: true});
@@ -1873,5 +1874,160 @@ describe("LANE-A A1 role readiness panel (8 layers)", () => {
     const {panel} = await page({roles: "ok", detail: true, statusSummary: slim("ABSENT")}, "tr");
     expect(text(rowOf(panel, "RUNNING"))).toContain("Bilinmiyor – çalıştırma günlüğü yok");
     expect(text(rowOf(panel, "TOOL_READY"))).toContain("TRUE 0, FALSE 590, UNKNOWN 9 / 599");
+  });
+});
+
+// //TR: A2a Araçlar paneli: yalnız mevcut hazırlıktan (TOOL_READY sayıları + sunucunun gönderdiği neden kodları + adapterReality girdisi) ve katalog sayısından beslenir; GERÇEK rota biçimli girdiyle (bu depo, adapterReality SUPPLIED ve NOT_SUPPLIED). NOT_SUPPLIED "bu uygulamada ölçülmedi" der, sıfır ya da "hazır değil" değil; probe olmadan hiçbir yerde "kurulu" yazmaz. Adaptör başına satırlar (A2b) YOKTUR.
+describe("LANE-A A2a Tools panel (TOOL_READY only; not measured is never zero; no per-adapter claims)", () => {
+  const REPO = path.resolve(__dirname, "..");
+  const NOW = new Date("2026-10-27T00:00:00Z");
+  const summaryFor = (adapters: "SUPPLIED" | "NOT_SUPPLIED") => {
+    const i = loadReadinessInputFromRepo(REPO, {runs: {journal: "ABSENT"}, now: NOW, ...(adapters === "SUPPLIED" ? {adapterReality: buildAdapterRealityMap({records: ADAPTER_REALITY_RECORDS, repoRoot: REPO}).entries} : {})}), audit = computeRoleReadiness(i);
+    const legacy = computeRoleStatusSummary({roles: i.roles, guildIds: i.guilds.map(g => g.guildId), roleDefinitionsSha256: i.roleDefinitionsSha256, bindings: i.bindings, verify: i.verify, runs: [], now: NOW});
+    const {roles: _r, byGuild: _g, byCluster: _c, ...slimReadiness} = audit as any; // the route sends the whole audit; the bulky per-role / per-group arrays are not needed here, reasonCounts is kept
+    return {statusSummary: legacy, statusSummaryStatus: "DEPRECATED_LEGACY_PROJECTION", readiness: slimReadiness, reconciliation: reconcileLegacyStatusSummary(legacy, audit)};
+  };
+  const cache = {SUPPLIED: null as any, NOT_SUPPLIED: null as any};
+  const summary = (k: "SUPPLIED" | "NOT_SUPPLIED") => structuredClone(cache[k] ??= summaryFor(k));
+  type Feed2 = {summary?: unknown};
+  async function mkTools(feed: Feed2, lang = "en") {
+    const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js"), tp = await load("views", "tools-panel.js");
+    const doc = new D(), store = st.createStore(null), calls: string[] = [];
+    const bridge = {apiGet: async (p: string) => {
+      calls.push(p);
+      if (p === "/v1/roles/status-summary") { const v = "summary" in feed ? feed.summary : summary("SUPPLIED"); if (v instanceof Error) throw v; return v; }
+      throw new Error(`${p}: HTTP 404`);
+    }};
+    const api = apiMod.createApi({bridge, store}), t = (k: string, v?: any) => i18n.translate(lang, k, v);
+    const ctx: any = {doc, store, api, i18n: {lang, t}, t, navigate: () => {}, rerender: () => {}, settleFocus: () => {}, principal: "FOUNDER_LOCAL"};
+    const panel = tp.toolsPanel(ctx, {ready: await api.rolesReadiness()}) as N;
+    return {ctx, panel, calls, api};
+  }
+  const everything = (n: N): string => [n, ...all(n)].map(x => [x._text, x.className, ...x.attrs.values(), ...Object.values(x.dataset)].join("\u0001")).join("\u0002");
+  const edit = (k: "SUPPLIED" | "NOT_SUPPLIED", f: (x: any) => void) => { const x = summary(k); f(x); return x; };
+  const hasZeroCount = (hay: string) => /(?<![0-9.,])0(?![0-9])/.test(hay);
+
+  it("the real SUPPLIED payload: TOOL_READY is never TRUE without a probe, and the server's reason codes are the only reasons shown", async () => {
+    const f = summary("SUPPLIED"), c = await load("agent-factory-core.js");
+    const m = c.mapReadiness(f), tool = m.readiness.layers.find((l: any) => l.layer === "TOOL_READY");
+    expect(m.state).toBe("VERIFIED");
+    expect(m.readiness.inputs.adapterReality).toBe("SUPPLIED");
+    expect(tool.TRUE).toBe(0); // 22 records, probe always NOT_OBSERVED: nothing can be TRUE
+    expect(tool.TRUE + tool.FALSE + tool.UNKNOWN + tool.NOT_APPLICABLE).toBe(599);
+    expect(m.readiness.toolReasons).toEqual(Object.entries(f.readiness.reasonCounts.TOOL_READY).map(([code, count]) => ({code, count})).sort((a: any, b: any) => (a.code < b.code ? -1 : 1)));
+    expect(m.readiness.toolReasons.length).toBeGreaterThan(0);
+    expect(tool).toMatchObject({TRUE: 0, FALSE: 590, UNKNOWN: 9, NOT_APPLICABLE: 0, denominator: 599}); // the real repo: 590 roles have no binding, 9 have adapters that no probe has seen
+    expect(m.readiness.toolReasons).toEqual([{code: "PROBE_NOT_OBSERVED", count: 9}, {code: "ROLE_HAS_NO_BINDING", count: 590}]);
+    expect(m.readiness.toolReasons.map((x: any) => x.code)).toContain("PROBE_NOT_OBSERVED");
+    for (const x of m.readiness.toolReasons) expect(x.count).toBeLessThanOrEqual(tool.FALSE + tool.UNKNOWN);
+    const ns = c.mapReadiness(summary("NOT_SUPPLIED"));
+    expect(ns.readiness.inputs.adapterReality).toBe("NOT_SUPPLIED");
+    expect(ns.readiness.toolReasons.map((x: any) => x.code)).toContain("ADAPTER_REALITY_NOT_SUPPLIED");
+    expect(c.mapReadiness(slimNoReasons(summary("SUPPLIED"))).readiness.toolReasons).toBeNull(); // no reasonCounts sent: reasons unknown, not empty
+  });
+  const slimNoReasons = (x: any) => { delete x.readiness.reasonCounts; return x; };
+
+  it("toolReasons is fail-closed: a malformed or impossible reasonCounts.TOOL_READY makes the WHOLE readiness ERROR", async () => {
+    const c = await load("agent-factory-core.js");
+    const bads: Array<[string, any]> = [
+      ["reasonCounts not an object", edit("SUPPLIED", x => { x.readiness.reasonCounts = []; })],
+      ["TOOL_READY not an object", edit("SUPPLIED", x => { x.readiness.reasonCounts.TOOL_READY = []; })],
+      ["code not UPPER_SNAKE", edit("SUPPLIED", x => { x.readiness.reasonCounts.TOOL_READY = {"bad code": 1}; })],
+      ["count zero", edit("SUPPLIED", x => { x.readiness.reasonCounts.TOOL_READY = {...x.readiness.reasonCounts.TOOL_READY, PROBE_NOT_OBSERVED: 0}; })],
+      ["count negative", edit("SUPPLIED", x => { x.readiness.reasonCounts.TOOL_READY.PROBE_NOT_OBSERVED = -1; })],
+      ["count a float", edit("SUPPLIED", x => { x.readiness.reasonCounts.TOOL_READY.PROBE_NOT_OBSERVED = 1.5; })],
+      ["count a string", edit("SUPPLIED", x => { x.readiness.reasonCounts.TOOL_READY.PROBE_NOT_OBSERVED = "9"; })],
+      ["count above FALSE+UNKNOWN (a TRUE role has no reason)", edit("SUPPLIED", x => { const t = x.readiness.totals.TOOL_READY; x.readiness.reasonCounts.TOOL_READY.PROBE_NOT_OBSERVED = t.FALSE + t.UNKNOWN + 1; })],
+      ["no reason although FALSE+UNKNOWN is above zero", edit("SUPPLIED", x => { x.readiness.reasonCounts.TOOL_READY = {}; })],
+      ["more than 50 codes", edit("SUPPLIED", x => { x.readiness.reasonCounts.TOOL_READY = Object.fromEntries(Array.from({length: 51}, (_, k) => [`CODE_${k}`, 1])); })]];
+    for (const [name, raw] of bads) expect(c.mapReadiness(raw), name).toEqual({state: "ERROR", readiness: null, reconciliation: null});
+  });
+
+  it("SUPPLIED panel (en): each count carries its denominator, the reasons come from the server with plain texts, the probe sentence is shown, the catalogue count is labelled not verified, and nothing is summed or called installed", async () => {
+    const {panel, calls} = await mkTools({});
+    expect(calls).toEqual(["/v1/roles/status-summary"]);
+    const f = summary("SUPPLIED"), tool = f.readiness.totals.TOOL_READY;
+    expect(byData(panel, "toolsReadiness")[0].dataset.toolsReadiness).toBe("MEASURED");
+    expect(byData(panel, "toolsReadiness")[0].dataset.denominator).toBe("599");
+    for (const k of ["TRUE", "FALSE", "UNKNOWN"]) expect(text(byData(panel, "toolsState", k)[0]), k).toBe(`${k}: ${tool[k]} of 599`);
+    expect(byData(panel, "toolsState", "NOT_APPLICABLE")).toEqual([]);
+    expect(text(byData(panel, "toolsWhy", "PROBE_NOT_OBSERVED")[0])).toBe("For roles with bound adapters, adapter code is checked, but no live probe has run, so they cannot be TOOL_READY: TRUE.");
+    const items = byData(panel, "toolsReason");
+    expect(items.map(n => n.dataset.toolsReason).sort()).toEqual(Object.keys(f.readiness.reasonCounts.TOOL_READY).sort());
+    for (const n of items) { expect(n.dataset.known).toBe("true"); expect(text(n)).toContain(`${n.dataset.count} of 599 roles`); expect(text(n)).toContain(n.dataset.toolsReason!); }
+    const probeItem = byData(panel, "toolsReason", "PROBE_NOT_OBSERVED")[0];
+    expect(text(probeItem)).toContain("9 of 599 roles"); expect(text(byData(panel, "toolsReason", "ROLE_HAS_NO_BINDING")[0])).toContain("The role has no tool binding: 590 of 599 roles");
+    expect(text(probeItem)).toContain("A bound adapter's code is checked, but no live probe has run");
+    expect(byData(panel, "toolsCatalogue")).toEqual([]); // the catalogue count is not part of A2a
+    // no sums, no percentages, no per-adapter claims
+    expect(text(panel)).not.toMatch(/%|percent/i);
+    expect(text(panel)).not.toMatch(/install|kurul/i);
+    expect(everything(panel)).not.toMatch(/install|kurul/i);
+    expect(text(panel)).not.toMatch(/code-backed|CI evidence|UNDER_REPORTED|DEAD_CODE|NOT_IMPLEMENTED registered/i);
+    expect(byData(panel, "toolsAdapter")).toEqual([]);
+    expect(text(panel)).not.toMatch(/tools\.[a-z]/); // no raw locale key
+    expect(text(byData(panel, "toolsFact", "toolReady")[0])).not.toMatch(/total|sum|combined/i); // the three counts are shown one by one, never added up
+  });
+
+  it("NOT_SUPPLIED (packaged build): 'not measured in this app' with no TOOL_READY count, no reason and no zero", async () => {
+    const {panel} = await mkTools({summary: summary("NOT_SUPPLIED")});
+    expect(byData(panel, "toolsReadiness")[0].dataset.toolsReadiness).toBe("NOT_MEASURED");
+    expect(text(byData(panel, "toolsReadiness")[0])).toBe("Not measured in this app (packaged build): adapter reality is not supplied here. This is not zero and not \"not ready\".");
+    for (const k of ["toolsState", "toolsReason", "toolsReasons", "toolsWhy", "toolsFact"]) expect(byData(panel, k), k).toEqual([]);
+    expect(text(panel)).not.toMatch(/install|kurul/i);
+    expect(/(?<![0-9.,])0(?![0-9])/.test(text(byData(panel, "toolsReadiness")[0]))).toBe(false);
+  });
+
+  it("readiness unreadable or unavailable: tool readiness is unknown (never zero), with no count", async () => {
+    for (const sum of [new Error("/v1/roles/status-summary: HTTP 404"), new Error("fetch failed"), {...summary("SUPPLIED"), readiness: null, reconciliation: null, readinessError: "ROLE_READINESS_UNAVAILABLE"}]) {
+      const {panel} = await mkTools({summary: sum});
+      expect(byData(panel, "toolsReadiness")[0].dataset.toolsReadiness).toBe("UNAVAILABLE");
+      expect(text(byData(panel, "toolsReadiness")[0])).toBe("Tool readiness could not be read, so it is unknown (not zero).");
+      expect(byData(panel, "toolsState")).toEqual([]);
+      expect(hasZeroCount(text(panel))).toBe(false);
+    }
+  });
+
+  it("an unknown reason code gets the honest fallback (code kept, not hidden); a payload without reasonCounts says the reasons are unknown; a NOT_APPLICABLE count is shown only when there is one", async () => {
+    const unknown = await mkTools({summary: edit("SUPPLIED", x => { x.readiness.reasonCounts.TOOL_READY = {...x.readiness.reasonCounts.TOOL_READY, SOMETHING_NEW: 1}; })});
+    const u = byData(unknown.panel, "toolsReason", "SOMETHING_NEW")[0];
+    expect(u.dataset.known).toBe("false");
+    expect(text(u)).toBe("Reason code not recognised by this app: 1 of 599 roles SOMETHING_NEW");
+    const none = await mkTools({summary: slimNoReasons(summary("SUPPLIED"))});
+    expect(byData(none.panel, "toolsReasons")[0].dataset.toolsReasons).toBe("UNKNOWN");
+    expect(text(byData(none.panel, "toolsReasons")[0])).toBe("The server sent no reason codes, so the reasons are unknown.");
+    expect(byData(none.panel, "toolsWhy")).toEqual([]); // no PROBE_NOT_OBSERVED evidence, so the probe sentence is not claimed
+    const na = await mkTools({summary: edit("SUPPLIED", x => { const t = x.readiness.totals.TOOL_READY; t.UNKNOWN -= 1; t.NOT_APPLICABLE = 1; x.readiness.reasonCounts.TOOL_READY.PROBE_NOT_OBSERVED = Math.min(x.readiness.reasonCounts.TOOL_READY.PROBE_NOT_OBSERVED, t.FALSE + t.UNKNOWN); })});
+    expect(text(byData(na.panel, "toolsState", "NOT_APPLICABLE")[0])).toBe("Not applicable: 1 of 599");
+  });
+
+  it("Turkish renders the same structure with Turkish text; en and tr define the same tools.* keys with the same placeholders, every reason code has a text, and no text says installed or kurulu", async () => {
+    const tr = await mkTools({}, "tr");
+    expect(text(byData(tr.panel, "toolsState", "TRUE")[0])).toMatch(/^TRUE: 599 içinde \d+$/);
+    expect(text(byData(tr.panel, "toolsWhy", "PROBE_NOT_OBSERVED")[0])).toBe("Bağlı adaptörü olan roller için adaptör kodu denetleniyor ama hiçbir canlı probe çalışmadı, bu yüzden TOOL_READY: TRUE olamazlar.");
+    expect(text(tr.panel)).not.toMatch(/install|kurul/i);
+    const nm = await mkTools({summary: summary("NOT_SUPPLIED")}, "tr");
+    expect(text(byData(nm.panel, "toolsReadiness")[0])).toContain("Bu uygulamada ölçülmedi (paketli derleme)");
+    const E = (await load("locales", "en.js")).default as Record<string, string>, T = (await load("locales", "tr.js")).default as Record<string, string>;
+    const keys = Object.keys(E).filter(k => k.startsWith("tools."));
+    expect(keys.length).toBe(21);
+    expect(Object.keys(T).filter(k => k.startsWith("tools.")).sort()).toEqual([...keys].sort());
+    const ph = (v: string) => [...v.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort().join(",");
+    for (const k of keys) { expect(E[k].length, k).toBeGreaterThan(0); expect(T[k].length, k).toBeGreaterThan(0); expect(ph(T[k]), k).toBe(ph(E[k])); expect(E[k], k).not.toMatch(/install/i); expect(T[k], k).not.toMatch(/kurul/i); }
+    const serverCodes = ["ROLE_HAS_NO_BINDING", "ADAPTERS_MISSING", "ADAPTER_UNRESOLVED", "ADAPTER_CODE_ABSENT", "PROBE_FAILED", "PROBE_NOT_OBSERVED", "ADAPTER_REALITY_NOT_SUPPLIED"];
+    for (const code of serverCodes) { expect(E[`tools.reason.${code}`], code).toBeTruthy(); expect(T[`tools.reason.${code}`], code).toBeTruthy(); }
+    const src = fs.readFileSync(path.join(rend, "views", "tools-panel.js"), "utf8");
+    for (const m of src.matchAll(/ctx\.t\("(tools\.[A-Za-z.]+)"/g)) expect(E[m[1]], m[1]).toBeDefined();
+    expect(src).not.toMatch(/adapters\/reality|ADAPTER_REALITY_PATH|integrationsAdapters|ADAPTERS_PATH/); // A2b is deferred: no adapter route or catalogue call
+  });
+
+  it("the Workforce view mounts the panel between the readiness panel and the factory panel and reads no new GET path", async () => {
+    const m = await mkCtx({roles: "ok", detail: true, statusSummary: summary("SUPPLIED")}, "en");
+    const out = await renderWf(m.ctx), ids = all(out.node).filter(n => n.tagName === "SECTION").map(n => n.id);
+    expect(ids.indexOf("wf-tools")).toBeGreaterThan(ids.indexOf("wf-readiness"));
+    expect(ids.indexOf("wf-tools")).toBeLessThan(ids.indexOf("wf-factory"));
+    const panel = byId(out.node, "wf-tools")!;
+    expect(byData(panel, "toolsReadiness")[0].dataset.toolsReadiness).toBe("MEASURED");
+    expect(m.calls.some(p => p.includes("adapters"))).toBe(false);
   });
 });
