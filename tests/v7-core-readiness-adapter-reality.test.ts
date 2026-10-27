@@ -682,6 +682,73 @@ describe("C-RDY-2a adapter-reality", () => {
     }
   });
 
+  it("round-3 independent hunt pins: caller depth and roots, walk names and order, member and export forms, token and identifier categories, slash decisions", () => {
+    const lib = {"core/workos/security-tools.ts": "export function runGitleaks() {}\n"};
+    const callBody = "await runGitleaks(dir);\n";
+    // //TR: Çağıran yolu: kök adı önek/büyük harf değil TAM eşleşir (corex, Core, models üretim kökü DEĞİL); hariç tutulan dizin, test destek adı ve ters eğik çizgi HERHANGİ bir derinlikte reddedilir; yalnız tam ad kuralına uyanlar (latest.ts, test.ts, spec.ts, fakes.ts, .spec.js.ts, a-selftest.js.ts, .e2e., mock-, gizli dizin ve build/coverage/e2e/spec/__fixtures__/mocks/vendor/out/specs dizinleri) üretimdir.
+    const prod = (file: string) => { const r = verifyRecord(rec({callers: [{file, references: "runGitleaks("}]}), fx({...lib, [file]: callBody})); return {verifiedCallers: r.verifiedCallers, reasons: r.reasons}; };
+    const NOT = {verifiedCallers: 0, reasons: ["CALLER_NOT_PRODUCTION", "NO_PRODUCTION_CALLER"]}, YES = {verifiedCallers: 1, reasons: []};
+    for (const f of ["corex/workos/runner.ts", "Core/workos/runner.ts", "core/workos/tests/t.ts", "core/workos/deep/fixtures/t.ts", "core/workos/x.test.ts", "core/workos/x-selftest.mjs", "core/workos/fake-x.mjs", "models/omniroute/client.ts", "core/a\\b/c.ts"]) expect(prod(f), f).toEqual(NOT);
+    const goodDirs = ["build", "coverage", "e2e", "spec", "__fixtures__", "mocks", "vendor", "out", "specs"].map(d => `core/${d}/x.ts`);
+    for (const f of ["core/latest.ts", "core/test.ts", "core/spec.ts", "core/fakes.ts", "core/a.spec.js.ts", "core/a-selftest.js.ts", "core/x.e2e.mjs", "core/mock-x.mjs", "core/.hidden/x.ts", ...goodDirs]) expect(prod(f), f).toEqual(YES);
+    // //TR: Üretim ağacı taraması: gizli dizin (`.hidden`, `.GIT`), `fake-lib`/`a.test.ts` adlı DİZİN taranır (yalnız tam `.git` ve hariç dizin adları atlanır); kaynak olmayan/uzantısı sonda olmayan dosyalar (`.json`, `.md`, `.ts.bak`, `ghosts`) taranmaz; `models/` bir kök değildir; kök sırası apps, core, scripts, automation; dizin içi sıra kod noktası sırasıdır (B.ts a.ts'den önce).
+    const probe = DEAD_CODE_PROBES[0], impl = "import {resolveCapability} from \"../capabilities/resolver.js\";\n";
+    const imp = (f: string) => findProductionImporters(fx({"core/capabilities/resolver.ts": "export function resolveCapability() {}\n", [f]: impl}), probe);
+    for (const f of ["core/.hidden/h.ts", "core/.GIT/h.ts", "core/fake-lib/h.ts", "core/a.test.ts/h.ts"]) expect(imp(f), f).toEqual([f]);
+    const ajvImp = (files: string[]) => findPackageImporters(fx(Object.fromEntries(files.map(f => [f, "import A from \"ajv\";\n"]))), "ajv");
+    expect(ajvImp(["core/notes.json", "core/r.md", "core/q.ts"])).toEqual(["core/q.ts"]);
+    expect(ajvImp(["core/a.ts.bak", "core/a.json", "core/q.ts"])).toEqual(["core/q.ts"]);
+    expect(ajvImp(["core/ghosts", "core/q.ts"])).toEqual(["core/q.ts"]);
+    expect(ajvImp(["models/m.ts", "core/c.ts"])).toEqual(["core/c.ts"]);
+    const censusOf = (files: string[]) => [...censusProduction(fx(Object.fromEntries(files.map(f => [f, "const x = \"acme-tool\";\n"]))), ["acme-tool"]).registryIds.entries()];
+    expect(censusOf(["automation/d.mjs", "scripts/c.mjs", "core/b.ts", "apps/a.ts"])).toEqual([["acme-tool", ["apps/a.ts", "core/b.ts", "scripts/c.mjs", "automation/d.mjs"]]]);
+    expect(censusOf(["core/a.ts", "core/B.ts"])).toEqual([["acme-tool", ["core/B.ts", "core/a.ts"]]]);
+    // //TR: Sınıf üyesi biçimleri: sütun 0'daki devam satırı ve aynı satırdaki anma üye DEĞİLDİR; iki değiştirici, çift boşluk, ad ile `(` arası boşluk/satır sonu, sekme girintisi, readonly, `$` adı üyedir; büyük/küçük harf duyarlıdır; devam bloğundan sonraki gerçek üye bulunur; `K{` üyedir, gövdesiz/`classK`/kapanmamış sınıf değildir; CRLF devam satırı üye DEĞİLDİR; `publicApi`/`asyncRun` değiştirici+ad DEĞİLDİR.
+    const mem = (body: string, m = "pair") => declaresMember(`export class K {\n${body}\n}`, "K", m);
+    for (const b of ["  public static pair() {}", "  private  pair() {}", "  pair  () {}", "  pair\n  () {}", "\tpair() {}", "  readonly pair() {}", "  f = g(\n    pair(1)\n  );\n  pair() {}", "  x = a!\n  pair() {}"]) expect(mem(b), b).toBe(true);
+    for (const b of ["  x = await pair(1);", "  x = !pair(1);", "  Pair() {}"]) expect(mem(b), b).toBe(false);
+    expect(declaresMember("export class K {\nx =\npair() {}\n}", "K", "pair")).toBe(false);
+    expect(declaresMember("export class K {\nfield = foo(\npair(1)\n);\n}", "K", "pair")).toBe(false);
+    expect(declaresMember("export class K {\r\n  x =\r\n  pair() {}\r\n}", "K", "pair")).toBe(false);
+    expect(declaresMember("export class K {\n  $pair() {}\n}", "K", "$pair")).toBe(true);
+    expect(declaresMember("export class A$ {\n  pair() {}\n}", "A$", "pair")).toBe(true);
+    expect(declaresMember("export class K{\n  pair() {}\n}", "K", "pair")).toBe(true);
+    for (const src of ["export class k {\n  pair() {}\n}", "function f() { pair() }\nexport class K", "classK {\n  pair() {}\n}", "export class K {\n  pair() {}\n"]) expect(declaresMember(src, "K", "pair"), src).toBe(false);
+    expect(mem("  publicApi() {}", "Api")).toBe(false);
+    expect(mem("  asyncRun() {}", "Run")).toBe(false);
+    // //TR: Dışa aktarım biçimleri: yalnız satır başındaki `export` sayılır (girintili namespace içi değil); `constx`, büyük/küçük harf, enum, interface ve `export{a}` (boşluksuz) bildirim DEĞİLDİR (bilinen sınır); `$x`, `typeName`, sekme/satır sonlu `as`, `default async function` bildirimdir.
+    for (const [src, name] of [["namespace N {\n  export const inner = 1;\n}", "inner"], ["namespace N {\n  export { inner };\n}", "inner"], ["export constx = 1;", "x"], ["export const FOO = 1;", "foo"], ["export { Foo };", "foo"], ["export enum E { A }", "E"], ["export interface I {}", "I"], ["export{a};", "a"]]) expect(declaresExport(src, name), src).toBe(false);
+    for (const [src, name] of [["export const $x = 1;", "$x"], ["export { typeName };", "typeName"], ["export { f\tas g };", "g"], ["export { f as\ng };", "g"], ["export { f\n  as g };", "g"], ["export default async function dd() {}", "dd"], ["export { base };", "base"]]) expect(declaresExport(src, name), src).toBe(true);
+    // //TR: Sözcük sınırı: başı noktalama olan ifade (`.connect(`) sınır koşulu almaz; başı/sonu `9`, `$`, `_`, rakam olan ifadeler komşu sözcük karakterinde eşleşmez.
+    const tok = (refs: string, body: string) => verifyRecord(rec({callers: [{file: "core/workos/runner.ts", references: refs}]}), fx({...lib, "core/workos/runner.ts": body})).verifiedCallers;
+    expect([tok("9x(", "await 9x(dir);\n"), tok("9x(", "await a9x(dir);\n"), tok("$tok(", "await a$tok(dir);\n"), tok(".connect(", "client.connect(x);\n")]).toEqual([1, 0, 0, 1]);
+    expect([tok("tok_", "await tok_x(dir);\n"), tok("tok1", "await tok12(dir);\n"), tok("tok$", "await tok$x(dir);\n")]).toEqual([0, 0, 0]);
+    // //TR: Unicode kategorileri: büyük harf (Lu), başka harf (Lo), üst simge sayı (No) ve Roma rakamı (Nl) de sözcük karakteridir: sözcük sınırı, dışa aktarım adı, sınıf adı ve `/` öncesi tanımlayıcı sonu bunları tanır.
+    const lit = (name: string, body: string) => verifyRecord(rec({mode: "SCRIPT_LITERAL", module: "scripts/e2e/d.mjs", exportName: name, entrypoint: true, callers: []}), fx({"scripts/e2e/d.mjs": body})).exportDeclared;
+    const calls = (text: string) => { const v = codeViews(text); return v === null ? null : [...v.code.matchAll(/call\((\w+)\)/g)].map(m => m[1]); };
+    for (const ch of ["²", "Ⅳ", "É", "中"]) {
+      expect([lit("x", `const ${ch}x = 1;\n`), lit("x", `const x${ch} = 1;\n`), lit(`${ch}x`, `const a${ch}x = 1;\n`), lit(`x${ch}`, `const x${ch}y = 1;\n`)], ch).toEqual([false, false, false, false]);
+      expect(declaresExport(`export const runGitleaks${ch} = 1;`, "runGitleaks"), ch).toBe(false);
+      expect(declaresMember(`export class K${ch} {\n  pair() {}\n}`, "K", "pair"), ch).toBe(false);
+      expect(calls(`const q = x${ch} / call(a) / 2;`), ch).toEqual(["a"]);
+    }
+    // //TR: Düzenli ifade üstkarakterleri ad içinde sabit metin olarak aranır: `* + ? ^ | \\ [ ] { }`.
+    expect([lit("a*b", "const b = 1;\n"), lit("a+b", "const ab = 1;\n"), lit("a?b", "const b = 1;\n"), lit("^x", "x = 1;\n"), lit("a|b", "const a = 1;\n"), lit("a\\b", "const a = 1;\n")]).toEqual([false, false, false, false, false, false]);
+    expect([lit("{x}", "const o = {x};\n"), lit("x}", "const o = {x};\n"), lit("a[0]", "const v = a[0];\n")]).toEqual([true, true, true]);
+    // //TR: Bölme/regex kararları: her regex-öncesi anahtar sözcük (kaynağın başında ve ortasında) bir regex başlatır; `this`, büyük harfli `Of`/`Return`, tek tırnaklı dize, TS non-null Unicode ad, `}` sonrası satır başı, satır sonu/CR/NBSP boşlukları ve `.` öncesi/sonrası boşluk bölme/özellik kararını değiştirmez.
+    for (const kw of ["return", "typeof", "case", "in", "of", "delete", "void", "throw", "new", "else", "do", "yield", "await", "instanceof"]) {
+      expect(calls(`${kw} /"/.test(x);\ncall(z);`), kw).toEqual(["z"]);
+      expect(calls(`x = 1;\n${kw} /"/.test(x);\ncall(z);`), kw).toEqual(["z"]);
+    }
+    expect(codeViews("!/\"/.test(x);\ncall(z);")).not.toBeNull();
+    for (const [text, expected] of [
+      ["const h = this / call(a) / 2;", ["a"]], ["const Of = 4; const q = Of / call(a) / 2;", ["a"]], ["const Return = 4; const q = Return / call(a) / 2;", ["a"]], [".return / call(a) / 2;", ["a"]],
+      ["const q = 'a' / call(a) / 2;", ["a"]], ["function f() {}\n/\"/.test(x);\ncall(z);", ["z"]], ["const c = café! / call(u) / 2;", ["u"]],
+      ["const r = a.\n  return / call(ws4) / 2;", ["ws4"]], ["const q = (a)\r\n/ call(d3) / 2;", ["d3"]], ["const q = a\r\n/ call(d3) / 2;", ["d3"]],
+      ["const q = (a)\u00a0/ call(d3) / 2;", ["d3"]], ["const r = a.\u00a0return / call(w) / 2;", ["w"]], ["const q = FOO / call(a) / 2;", ["a"]], ["const q = Ⅳ / call(a) / 2;", ["a"]], ["const q = 中 / call(a) / 2;", ["a"]]
+    ] as Array<[string, string[]]>) expect(calls(text), text).toEqual(expected);
+  });
+
   it("registry loader fails closed", () => {
     const rel = "registries/tool-adapters.json";
     const root = (body: string | null) => { const r = fs.mkdtempSync(path.join(tmp, "reg-")); if (body !== null) { fs.mkdirSync(path.join(r, "registries")); fs.writeFileSync(path.join(r, rel), body); } return r; };

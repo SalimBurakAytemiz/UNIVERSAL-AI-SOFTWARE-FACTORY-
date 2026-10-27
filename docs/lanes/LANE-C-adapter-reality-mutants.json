@@ -1,5 +1,5 @@
 {
- "//TR": "C-RDY-2a (Adapter Gerçeklik Haritası) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt `file` içinde TAM 1 kez geçen bir metni (ya da `edits` listesindeki her metni) değiştirir; docs/lanes/LANE-C-adapter-reality-mutants.mjs hepsini tests/v7-core-readiness-adapter-reality.test.ts ile çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. M1-M5 dağıtım paketindeki zorunlu mutantlardır (M1 trivy REAL -> CI dürüstlüğü, M2 çağıran kontrolü atlanır, M3 çözümleyici kayıt implementation alanını okur, M4 ADAPTER_UNRESOLVED düşer, M5 yoklama varsayılanı READY); M6-M24 ek savunma mutantlarıdır (M2/M8/M9/M12/M14/M21/M23 tarayıcı sonrası kodla yeniden yazıldı). R1, R4, R5, R9-R14, R16 #264 incelemesinin (TEP-1 tur 1) hayatta kalan mutantlarıdır (R9/R10 üretim dosyalarında yorum/dize anmalarını bırakıp KOD kullanımını değiştirir); R17-R44 onarımla gelen kodun (tarayıcı, sınıf kapsamlı üye, içe aktaran çözümü, eksiksizlik sayımı, github kaydı, CI sınıfları) mutantlarıdır. G1, G2, G4, N8, N11, N12, N13, N14, N28 #264 turu-2 incelemesinin (86f6587) hayatta kalan mutantlarıdır; P1-P8 (çağıran yolu kısıtı), S1-S5 (bölme/regex ayrımı ve Unicode), Q2-Q4 (sınıf üyesi sınırları), O1-O4 (omniroute kaydı) tur-2 koduna aittir. HV-* mutantları, bağımsız bir mutant avcısının (192 deneme) bulduğu ve tur-2 sertleştirme testlerinin (tarayıcı altın görünümleri, bildirim biçimleri, neden sırası, uzlaştırma ayrıntıları, içe aktaran taraması, sayım ayrıntıları, okuyucular) öldürdüğü hayatta kalanlardır; C03/C05/K01/X04 bilerek eklenmedi (denk mutantlar ya da Windows sembolik bağ izni gerektiren senaryo). Tur 3 (son TEP-1 turu, koordinatör kontrol listesi): D7, D12, D13, D15, R1-N13b..g, R1-N28b..g koordinatör mutantlarıdır; Z-X (hariç tutulan dizinler), Z-T/Z-P (test destek adı, büyük/küçük harf), Z-L1/Z-H (Unicode dışa aktarım ve sınıf başlığı sınırları), Z-I (tanımlayıcı karakterler), Z-C (üye devam kuralı), Z-D (bölme kararları) yeni kodun mutantlarıdır; R13/R26/R27/P2/P3/P6/Q3/HV-S09/HV-E11/HV-X02/HV-X09-X11 yeni kod konumlarına yeniden yönlendirildi (aynı davranış).",
+ "//TR": "C-RDY-2a (Adapter Gerçeklik Haritası) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt `file` içinde TAM 1 kez geçen bir metni (ya da `edits` listesindeki her metni) değiştirir; docs/lanes/LANE-C-adapter-reality-mutants.mjs hepsini tests/v7-core-readiness-adapter-reality.test.ts ile çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. M1-M5 dağıtım paketindeki zorunlu mutantlardır (M1 trivy REAL -> CI dürüstlüğü, M2 çağıran kontrolü atlanır, M3 çözümleyici kayıt implementation alanını okur, M4 ADAPTER_UNRESOLVED düşer, M5 yoklama varsayılanı READY); M6-M24 ek savunma mutantlarıdır (M2/M8/M9/M12/M14/M21/M23 tarayıcı sonrası kodla yeniden yazıldı). R1, R4, R5, R9-R14, R16 #264 incelemesinin (TEP-1 tur 1) hayatta kalan mutantlarıdır (R9/R10 üretim dosyalarında yorum/dize anmalarını bırakıp KOD kullanımını değiştirir); R17-R44 onarımla gelen kodun (tarayıcı, sınıf kapsamlı üye, içe aktaran çözümü, eksiksizlik sayımı, github kaydı, CI sınıfları) mutantlarıdır. G1, G2, G4, N8, N11, N12, N13, N14, N28 #264 turu-2 incelemesinin (86f6587) hayatta kalan mutantlarıdır; P1-P8 (çağıran yolu kısıtı), S1-S5 (bölme/regex ayrımı ve Unicode), Q2-Q4 (sınıf üyesi sınırları), O1-O4 (omniroute kaydı) tur-2 koduna aittir. HV-* mutantları, bağımsız bir mutant avcısının (192 deneme) bulduğu ve tur-2 sertleştirme testlerinin (tarayıcı altın görünümleri, bildirim biçimleri, neden sırası, uzlaştırma ayrıntıları, içe aktaran taraması, sayım ayrıntıları, okuyucular) öldürdüğü hayatta kalanlardır; C03/C05/K01/X04 bilerek eklenmedi (denk mutantlar ya da Windows sembolik bağ izni gerektiren senaryo). Tur 3 (son TEP-1 turu, koordinatör kontrol listesi): D7, D12, D13, D15, R1-N13b..g, R1-N28b..g koordinatör mutantlarıdır; Z-X (hariç tutulan dizinler), Z-T/Z-P (test destek adı, büyük/küçük harf), Z-L1/Z-H (Unicode dışa aktarım ve sınıf başlığı sınırları), Z-I (tanımlayıcı karakterler), Z-C (üye devam kuralı), Z-D (bölme kararları) yeni kodun mutantlarıdır; R13/R26/R27/P2/P3/P6/Q3/HV-S09/HV-E11/HV-X02/HV-X09-X11 yeni kod konumlarına yeniden yönlendirildi (aynı davranış). H3-* mutantları, tur-3 kodunun bağımsız mutant avcısı tarafından bulunan ve 'round-3 independent hunt pins' testinin öldürdüğü hayatta kalanlardır (A1 çağıran yolu/yürüyüş, A2 üye, A3 dışa aktarım/sözcük sınırı/Unicode/kaçış, A4 bölme-regex); denk olanlar (A1-09/10/11, C-02/04, A2-22, B-01..04/07/08, A3-10, B-05, C-05) ve sembolik bağ senaryoları (A1-31/35, Windows izni) ile 'i+++' gibi daha-doğru-olan davranış değişiklikleri (A2-26, A4-26) bilerek eklenmedi.",
  "mutants": [
   {
    "id": "M1",
@@ -1744,6 +1744,881 @@
    "file": "core/capabilities/adapter-reality.ts",
    "old": "while (q >= 0 && /\\s/.test(code[q])) q--;",
    "new": ""
+  },
+  {
+   "id": "H3-A1-01",
+   "description": "independent hunt (round 3), fixture(s) a1.rootPrefix",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "PRODUCTION_ROOTS.includes(segs[0]) && !segs.slice(1)",
+   "new": "PRODUCTION_ROOTS.some(r => file.startsWith(r)) && !segs.slice(1)"
+  },
+  {
+   "id": "H3-A1-02",
+   "description": "independent hunt (round 3), fixture(s) a1.rootCase",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "PRODUCTION_ROOTS.includes(segs[0]) && !segs.slice(1)",
+   "new": "PRODUCTION_ROOTS.includes(segs[0].toLowerCase()) && !segs.slice(1)"
+  },
+  {
+   "id": "H3-A1-03",
+   "description": "independent hunt (round 3), fixture(s) a1.deepExcludedDir,a1.deepExcludedDir3",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "!segs.slice(1).some(",
+   "new": "!segs.slice(1, 2).some("
+  },
+  {
+   "id": "H3-A1-04",
+   "description": "independent hunt (round 3), fixture(s) a1.deepTestName,a1.deepTestName2,a1.deepFake",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "!isTestSupportName(segs[segs.length - 1])",
+   "new": "!isTestSupportName(segs[1])"
+  },
+  {
+   "id": "H3-A1-05",
+   "description": "independent hunt (round 3), fixture(s) a1.modelsRoot",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "return PRODUCTION_ROOTS.includes(segs[0]) &&",
+   "new": "return (PRODUCTION_ROOTS.includes(segs[0]) || segs[0] === \"models\") &&"
+  },
+  {
+   "id": "H3-A1-06",
+   "description": "independent hunt (round 3), fixture(s) a1.modelsRoot,a1.modelsScan",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const PRODUCTION_ROOTS = [\"apps\", \"core\", \"scripts\", \"automation\"];",
+   "new": "const PRODUCTION_ROOTS = [\"apps\", \"core\", \"scripts\", \"automation\", \"models\"];"
+  },
+  {
+   "id": "H3-A1-07",
+   "description": "independent hunt (round 3), fixture(s) a1.rootOrder",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const PRODUCTION_ROOTS = [\"apps\", \"core\", \"scripts\", \"automation\"];",
+   "new": "const PRODUCTION_ROOTS = [\"automation\", \"scripts\", \"core\", \"apps\"];"
+  },
+  {
+   "id": "H3-A1-08",
+   "description": "independent hunt (round 3), fixture(s) a1.midBackslash",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "file.includes(\"\\\\\")",
+   "new": "file.split(\"/\").pop()!.includes(\"\\\\\")"
+  },
+  {
+   "id": "H3-A1-12",
+   "description": "independent hunt (round 3), fixture(s) a1.testLatest,a1.testBare,a1.testBare2",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/\\.(?:test|spec)\\.[cm]?[jt]s$|-selftest",
+   "new": "/(?:test|spec)\\.[cm]?[jt]s$|-selftest"
+  },
+  {
+   "id": "H3-A1-13",
+   "description": "independent hunt (round 3), fixture(s) a1.testLatest",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/\\.(?:test|spec)\\.[cm]?[jt]s$|-selftest",
+   "new": "/.(?:test|spec)\\.[cm]?[jt]s$|-selftest"
+  },
+  {
+   "id": "H3-A1-14",
+   "description": "independent hunt (round 3), fixture(s) a1.fakeNoDash",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "|^fake-/i",
+   "new": "|^fake/i"
+  },
+  {
+   "id": "H3-A1-15",
+   "description": "independent hunt (round 3), fixture(s) a1.testJsTs",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\\.(?:test|spec)\\.[cm]?[jt]s$|-selftest",
+   "new": "\\.(?:test|spec)\\.[cm]?[jt]s|-selftest"
+  },
+  {
+   "id": "H3-A1-16",
+   "description": "independent hunt (round 3), fixture(s) a1.selftestJsTs",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "-selftest\\.[cm]?[jt]s$|^fake-",
+   "new": "-selftest\\.[cm]?[jt]s|^fake-"
+  },
+  {
+   "id": "H3-A1-17",
+   "description": "independent hunt (round 3), fixture(s) a1.e2e",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\\.(?:test|spec)\\.[cm]?[jt]s$|-selftest",
+   "new": "\\.(?:test|spec|e2e)\\.[cm]?[jt]s$|-selftest"
+  },
+  {
+   "id": "H3-A1-18",
+   "description": "independent hunt (round 3), fixture(s) a1.mockPrefix",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "|^fake-/i",
+   "new": "|^(?:fake|mock)-/i"
+  },
+  {
+   "id": "H3-A1-20",
+   "description": "independent hunt (round 3), fixture(s) a1.dir.build",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\"tests\", \"test\"])",
+   "new": "\"tests\", \"test\", \"build\"])"
+  },
+  {
+   "id": "H3-A1-21",
+   "description": "independent hunt (round 3), fixture(s) a1.dir.coverage",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\"tests\", \"test\"])",
+   "new": "\"tests\", \"test\", \"coverage\"])"
+  },
+  {
+   "id": "H3-A1-22",
+   "description": "independent hunt (round 3), fixture(s) a1.dir.e2e",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\"tests\", \"test\"])",
+   "new": "\"tests\", \"test\", \"e2e\"])"
+  },
+  {
+   "id": "H3-A1-23",
+   "description": "independent hunt (round 3), fixture(s) a1.dir.spec",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\"tests\", \"test\"])",
+   "new": "\"tests\", \"test\", \"spec\"])"
+  },
+  {
+   "id": "H3-A1-24",
+   "description": "independent hunt (round 3), fixture(s) a1.dir.__fixtures__",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\"tests\", \"test\"])",
+   "new": "\"tests\", \"test\", \"__fixtures__\"])"
+  },
+  {
+   "id": "H3-A1-25",
+   "description": "independent hunt (round 3), fixture(s) a1.dir.mocks",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\"tests\", \"test\"])",
+   "new": "\"tests\", \"test\", \"mocks\"])"
+  },
+  {
+   "id": "H3-A1-26",
+   "description": "independent hunt (round 3), fixture(s) a1.dir.vendor",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\"tests\", \"test\"])",
+   "new": "\"tests\", \"test\", \"vendor\"])"
+  },
+  {
+   "id": "H3-A1-27",
+   "description": "independent hunt (round 3), fixture(s) a1.dir.out",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\"tests\", \"test\"])",
+   "new": "\"tests\", \"test\", \"out\"])"
+  },
+  {
+   "id": "H3-A1-28",
+   "description": "independent hunt (round 3), fixture(s) a1.dir.specs",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\"tests\", \"test\"])",
+   "new": "\"tests\", \"test\", \"specs\"])"
+  },
+  {
+   "id": "H3-A1-29",
+   "description": "independent hunt (round 3), fixture(s) a1.scanHiddenDir,a1.scanGitUpper",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "e.name === \".git\" ||",
+   "new": "e.name.startsWith(\".\") ||"
+  },
+  {
+   "id": "H3-A1-30",
+   "description": "independent hunt (round 3), fixture(s) a1.scanGitUpper",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "e.name === \".git\" ||",
+   "new": "e.name.toLowerCase() === \".git\" ||"
+  },
+  {
+   "id": "H3-A1-33",
+   "description": "independent hunt (round 3), fixture(s) a1.sortCase",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(a.name < b.name ? -1 : a.name > b.name ? 1 : 0)",
+   "new": "a.name.localeCompare(b.name)"
+  },
+  {
+   "id": "H3-A1-34",
+   "description": "independent hunt (round 3), fixture(s) a1.scanFakeDir,a1.scanTestDirName",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "EXCLUDED_DIRS.has(e.name.toLowerCase())) continue;",
+   "new": "EXCLUDED_DIRS.has(e.name.toLowerCase()) || isTestSupportName(e.name)) continue;"
+  },
+  {
+   "id": "H3-A1-36",
+   "description": "independent hunt (round 3), fixture(s) a1.scanNonSource,a1.scanExtSuffix",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const SOURCE_EXT = /\\.(?:ts|mts|mjs|cjs|js)$/;",
+   "new": "const SOURCE_EXT = /\\.(?:ts|mts|mjs|cjs|js)/;"
+  },
+  {
+   "id": "H3-A1-37",
+   "description": "independent hunt (round 3), fixture(s) a1.scanExtDot",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const SOURCE_EXT = /\\.(?:ts|mts|mjs|cjs|js)$/;",
+   "new": "const SOURCE_EXT = /.(?:ts|mts|mjs|cjs|js)$/;"
+  },
+  {
+   "id": "H3-A1-38",
+   "description": "independent hunt (round 3), fixture(s) a1.hiddenDirCaller",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "EXCLUDED_DIRS.has(sg.toLowerCase()))",
+   "new": "EXCLUDED_DIRS.has(sg.toLowerCase()) || sg.startsWith(\".\"))"
+  },
+  {
+   "id": "H3-A2-01",
+   "description": "independent hunt (round 3), fixture(s) a2.col0cont,a2.col0cont2",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "let k = m.index! - 1;",
+   "new": "let k = m.index!;"
+  },
+  {
+   "id": "H3-A2-02",
+   "description": "independent hunt (round 3), fixture(s) a2.awaitSameLine,a2.notSameLine,a2.modPrefixed,a2.asyncPrefixed",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "`^[ \\\\t]*(?:(?:private",
+   "new": "`[ \\\\t]*(?:(?:private"
+  },
+  {
+   "id": "H3-A2-03",
+   "description": "independent hunt (round 3), fixture(s) a2.twoMods",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "protected|static|readonly)\\\\s+)*",
+   "new": "protected|static|readonly)\\\\s+)?"
+  },
+  {
+   "id": "H3-A2-04",
+   "description": "independent hunt (round 3), fixture(s) a2.multiSpaceMod",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "readonly)\\\\s+)*(?:async",
+   "new": "readonly)\\\\s)*(?:async"
+  },
+  {
+   "id": "H3-A2-05",
+   "description": "independent hunt (round 3), fixture(s) a2.multiSpaceParen,a2.newlineParen",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "${escapeRe(member)}\\\\s*[(<]",
+   "new": "${escapeRe(member)}\\\\s?[(<]"
+  },
+  {
+   "id": "H3-A2-06",
+   "description": "independent hunt (round 3), fixture(s) a2.tabIndent",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "`^[ \\\\t]*(?:(?:private",
+   "new": "`^ *(?:(?:private"
+  },
+  {
+   "id": "H3-A2-07",
+   "description": "independent hunt (round 3), fixture(s) a2.readonlyMethod",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "|static|readonly)",
+   "new": "|static)"
+  },
+  {
+   "id": "H3-A2-08",
+   "description": "independent hunt (round 3), fixture(s) a2.escMember",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(?:async\\\\s+)?${escapeRe(member)}",
+   "new": "(?:async\\\\s+)?${member}"
+  },
+  {
+   "id": "H3-A2-09",
+   "description": "independent hunt (round 3), fixture(s) a2.caseMember",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "[(<]`, \"gm\");",
+   "new": "[(<]`, \"gmi\");"
+  },
+  {
+   "id": "H3-A2-10",
+   "description": "independent hunt (round 3), fixture(s) a2.firstContThenReal",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (!continues) return true;",
+   "new": "if (!continues) return true; else break;"
+  },
+  {
+   "id": "H3-A2-12",
+   "description": "independent hunt (round 3), fixture(s) a2.noSpaceBrace",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const open = code.indexOf(\"{\", m.index + m[0].length);",
+   "new": "const open = code.indexOf(\"{\", m.index + m[0].length + 1);"
+  },
+  {
+   "id": "H3-A2-13",
+   "description": "independent hunt (round 3), fixture(s) a2.noBraceAfter",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (open < 0) return null;",
+   "new": ""
+  },
+  {
+   "id": "H3-A2-14",
+   "description": "independent hunt (round 3), fixture(s) a2.classNoSpace2",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "class\\\\s+${escapeRe(className)}(?!",
+   "new": "class\\\\s*${escapeRe(className)}(?!"
+  },
+  {
+   "id": "H3-A2-15",
+   "description": "independent hunt (round 3), fixture(s) a2.escClass",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "class\\\\s+${escapeRe(className)}(?!",
+   "new": "class\\\\s+${className}(?!"
+  },
+  {
+   "id": "H3-A2-16",
+   "description": "independent hunt (round 3), fixture(s) a2.caseClass",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\"mu\").exec(code)",
+   "new": "\"imu\").exec(code)"
+  },
+  {
+   "id": "H3-A2-17",
+   "description": "independent hunt (round 3), fixture(s) a2.unterminatedClass",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "  return null;",
+   "new": "  return out;"
+  },
+  {
+   "id": "H3-A2-21",
+   "description": "independent hunt (round 3), fixture(s) a2.nonNullThenMember",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\"=(,[?:*/%&|^.<\".includes(p)",
+   "new": "\"=(,[?:*/%&|^.<!\".includes(p)"
+  },
+  {
+   "id": "H3-A3-01",
+   "description": "independent hunt (round 3), fixture(s) a3.nsIndented",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "`^export\\\\s+(?:default\\\\s+)?(?:async",
+   "new": "`export\\\\s+(?:default\\\\s+)?(?:async"
+  },
+  {
+   "id": "H3-A3-02",
+   "description": "independent hunt (round 3), fixture(s) a3.nsIndentedList",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/^export\\s+(?:type\\s+)?\\{([^}]*)\\}/gm",
+   "new": "/export\\s+(?:type\\s+)?\\{([^}]*)\\}/gm"
+  },
+  {
+   "id": "H3-A3-03",
+   "description": "independent hunt (round 3), fixture(s) a3.constNoSpace",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "var)\\\\s+${escapeRe(name)}",
+   "new": "var)\\\\s*${escapeRe(name)}"
+  },
+  {
+   "id": "H3-A3-04",
+   "description": "independent hunt (round 3), fixture(s) a3.dollarName,esc.dollar",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "${escapeRe(name)}(?![",
+   "new": "${name}(?!["
+  },
+  {
+   "id": "H3-A3-05",
+   "description": "independent hunt (round 3), fixture(s) a3.upperLower",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\"mu\").test(v.code)",
+   "new": "\"imu\").test(v.code)"
+  },
+  {
+   "id": "H3-A3-06",
+   "description": "independent hunt (round 3), fixture(s) a3.typePrefixName",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": ".replace(/^type\\s+/, \"\")",
+   "new": ".replace(/^type\\s*/, \"\")"
+  },
+  {
+   "id": "H3-A3-07",
+   "description": "independent hunt (round 3), fixture(s) a3.asTab2,a3.asNl",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": ".split(/\\s+as\\s+/)",
+   "new": ".split(\" as \")"
+  },
+  {
+   "id": "H3-A3-08",
+   "description": "independent hunt (round 3), fixture(s) a3.enum",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(?:function\\\\*?|class|const|let|var)",
+   "new": "(?:function\\\\*?|class|const|let|var|enum)"
+  },
+  {
+   "id": "H3-A3-09",
+   "description": "independent hunt (round 3), fixture(s) a3.interface",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(?:function\\\\*?|class|const|let|var)",
+   "new": "(?:function\\\\*?|class|const|let|var|interface)"
+  },
+  {
+   "id": "H3-A3-11",
+   "description": "independent hunt (round 3), fixture(s) a3.tokLead.digit,a3.gs.No",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/^[\\p{L}\\p{N}_$]/u.test(t)",
+   "new": "/^[\\p{L}_$]/u.test(t)"
+  },
+  {
+   "id": "H3-A3-12",
+   "description": "independent hunt (round 3), fixture(s) a3.tokLeadDollar",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/^[\\p{L}\\p{N}_$]/u.test(t)",
+   "new": "/^[\\p{L}\\p{N}_]/u.test(t)"
+  },
+  {
+   "id": "H3-A3-13",
+   "description": "independent hunt (round 3), fixture(s) a3.tokLeadPunct",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/^[\\p{L}\\p{N}_$]/u.test(t)",
+   "new": "/[\\p{L}\\p{N}_$]/u.test(t)"
+  },
+  {
+   "id": "H3-A3-14",
+   "description": "independent hunt (round 3), fixture(s) a3.tokTrailDigit,a3.ge.No",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/[\\p{L}\\p{N}_$]$/u.test(t)",
+   "new": "/[\\p{L}_$]$/u.test(t)"
+  },
+  {
+   "id": "H3-A3-15",
+   "description": "independent hunt (round 3), fixture(s) a3.tokTrailUnderscore",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/[\\p{L}\\p{N}_$]$/u.test(t)",
+   "new": "/[\\p{L}\\p{N}$]$/u.test(t)"
+  },
+  {
+   "id": "H3-A3-16",
+   "description": "independent hunt (round 3), fixture(s) a3.tokTrailDollar",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/[\\p{L}\\p{N}_$]$/u.test(t)",
+   "new": "/[\\p{L}\\p{N}_]$/u.test(t)"
+  },
+  {
+   "id": "H3-A4-01",
+   "description": "independent hunt (round 3), fixture(s) a4.kwStartReturn,a4.kw.typeof,a4.kw.case,a4.kw.in,a4.kw.of,a4.kw.delete,a4.kw.vo",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "while (j >= 0 && IDENT_CHAR.test(code[j])) j--;",
+   "new": "while (j > 0 && IDENT_CHAR.test(code[j])) j--;"
+  },
+  {
+   "id": "H3-A4-16",
+   "description": "independent hunt (round 3), fixture(s) a4.this",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\"await\", \"instanceof\"])",
+   "new": "\"await\", \"instanceof\", \"this\"])"
+  },
+  {
+   "id": "H3-A4-17",
+   "description": "independent hunt (round 3), fixture(s) a4.upperKw,a4.Return",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "return REGEX_KEYWORDS.has(code.slice(j + 1, k + 1).join(\"\"));",
+   "new": "return REGEX_KEYWORDS.has(code.slice(j + 1, k + 1).join(\"\").toLowerCase());"
+  },
+  {
+   "id": "H3-A4-18",
+   "description": "independent hunt (round 3), fixture(s) a4.dotStart",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (q >= 0 && code[q] === \".\") return false;",
+   "new": "if (q > 0 && code[q] === \".\") return false;"
+  },
+  {
+   "id": "H3-A4-19",
+   "description": "independent hunt (round 3), fixture(s) a4.bangStart",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (p === \"!\" && k > 0 && (",
+   "new": "if (p === \"!\" && k >= 0 && ("
+  },
+  {
+   "id": "H3-A4-20",
+   "description": "independent hunt (round 3), fixture(s) a4.bangStart",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (p === \"!\" && k > 0 && (",
+   "new": "if (p === \"!\" && ("
+  },
+  {
+   "id": "H3-A4-21",
+   "description": "independent hunt (round 3), fixture(s) a4.quoteSingle",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "p === \"\\\"\" || p === \"'\" || p === \"`\"",
+   "new": "p === \"\\\"\" || p === \"`\""
+  },
+  {
+   "id": "H3-A4-22",
+   "description": "independent hunt (round 3), fixture(s) a4.afterBrace",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "|| p === \"'\" || p === \"`\");",
+   "new": "|| p === \"'\" || p === \"`\" || p === \"}\");"
+  },
+  {
+   "id": "H3-A4-23",
+   "description": "independent hunt (round 3), fixture(s) a4.unicodeBang",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(IDENT_CHAR.test(code[k - 1]) ||",
+   "new": "(/[\\w$]/.test(code[k - 1]) ||"
+  },
+  {
+   "id": "H3-K-typeof",
+   "description": "independent hunt (round 3), fixture(s) a4.kw.typeof,a4.kwMid",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"return\", \"typeof\", \"case\", \"in\", \"of\", \"delete\", \"void\", \"throw\", \"new\", \"else\", \"do\", \"yield\", \"await\", \"instanceof\"])",
+   "new": "new Set([\"return\", \"case\", \"in\", \"of\", \"delete\", \"void\", \"throw\", \"new\", \"else\", \"do\", \"yield\", \"await\", \"instanceof\"])"
+  },
+  {
+   "id": "H3-K-case",
+   "description": "independent hunt (round 3), fixture(s) a4.kw.case,a4.kwMid",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"return\", \"typeof\", \"case\", \"in\", \"of\", \"delete\", \"void\", \"throw\", \"new\", \"else\", \"do\", \"yield\", \"await\", \"instanceof\"])",
+   "new": "new Set([\"return\", \"typeof\", \"in\", \"of\", \"delete\", \"void\", \"throw\", \"new\", \"else\", \"do\", \"yield\", \"await\", \"instanceof\"])"
+  },
+  {
+   "id": "H3-K-in",
+   "description": "independent hunt (round 3), fixture(s) a4.kw.in,a4.kwMid",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"return\", \"typeof\", \"case\", \"in\", \"of\", \"delete\", \"void\", \"throw\", \"new\", \"else\", \"do\", \"yield\", \"await\", \"instanceof\"])",
+   "new": "new Set([\"return\", \"typeof\", \"case\", \"of\", \"delete\", \"void\", \"throw\", \"new\", \"else\", \"do\", \"yield\", \"await\", \"instanceof\"])"
+  },
+  {
+   "id": "H3-K-of",
+   "description": "independent hunt (round 3), fixture(s) a4.kw.of,a4.kwMid",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"return\", \"typeof\", \"case\", \"in\", \"of\", \"delete\", \"void\", \"throw\", \"new\", \"else\", \"do\", \"yield\", \"await\", \"instanceof\"])",
+   "new": "new Set([\"return\", \"typeof\", \"case\", \"in\", \"delete\", \"void\", \"throw\", \"new\", \"else\", \"do\", \"yield\", \"await\", \"instanceof\"])"
+  },
+  {
+   "id": "H3-K-delete",
+   "description": "independent hunt (round 3), fixture(s) a4.kw.delete,a4.kwMid",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"return\", \"typeof\", \"case\", \"in\", \"of\", \"delete\", \"void\", \"throw\", \"new\", \"else\", \"do\", \"yield\", \"await\", \"instanceof\"])",
+   "new": "new Set([\"return\", \"typeof\", \"case\", \"in\", \"of\", \"void\", \"throw\", \"new\", \"else\", \"do\", \"yield\", \"await\", \"instanceof\"])"
+  },
+  {
+   "id": "H3-K-void",
+   "description": "independent hunt (round 3), fixture(s) a4.kw.void,a4.kwMid",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"return\", \"typeof\", \"case\", \"in\", \"of\", \"delete\", \"void\", \"throw\", \"new\", \"else\", \"do\", \"yield\", \"await\", \"instanceof\"])",
+   "new": "new Set([\"return\", \"typeof\", \"case\", \"in\", \"of\", \"delete\", \"throw\", \"new\", \"else\", \"do\", \"yield\", \"await\", \"instanceof\"])"
+  },
+  {
+   "id": "H3-K-throw",
+   "description": "independent hunt (round 3), fixture(s) a4.kw.throw,a4.kwMid",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"return\", \"typeof\", \"case\", \"in\", \"of\", \"delete\", \"void\", \"throw\", \"new\", \"else\", \"do\", \"yield\", \"await\", \"instanceof\"])",
+   "new": "new Set([\"return\", \"typeof\", \"case\", \"in\", \"of\", \"delete\", \"void\", \"new\", \"else\", \"do\", \"yield\", \"await\", \"instanceof\"])"
+  },
+  {
+   "id": "H3-K-new",
+   "description": "independent hunt (round 3), fixture(s) a4.kw.new,a4.kwMid",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"return\", \"typeof\", \"case\", \"in\", \"of\", \"delete\", \"void\", \"throw\", \"new\", \"else\", \"do\", \"yield\", \"await\", \"instanceof\"])",
+   "new": "new Set([\"return\", \"typeof\", \"case\", \"in\", \"of\", \"delete\", \"void\", \"throw\", \"else\", \"do\", \"yield\", \"await\", \"instanceof\"])"
+  },
+  {
+   "id": "H3-K-else",
+   "description": "independent hunt (round 3), fixture(s) a4.kw.else,a4.kwMid",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"return\", \"typeof\", \"case\", \"in\", \"of\", \"delete\", \"void\", \"throw\", \"new\", \"else\", \"do\", \"yield\", \"await\", \"instanceof\"])",
+   "new": "new Set([\"return\", \"typeof\", \"case\", \"in\", \"of\", \"delete\", \"void\", \"throw\", \"new\", \"do\", \"yield\", \"await\", \"instanceof\"])"
+  },
+  {
+   "id": "H3-K-do",
+   "description": "independent hunt (round 3), fixture(s) a4.kw.do,a4.kwMid",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"return\", \"typeof\", \"case\", \"in\", \"of\", \"delete\", \"void\", \"throw\", \"new\", \"else\", \"do\", \"yield\", \"await\", \"instanceof\"])",
+   "new": "new Set([\"return\", \"typeof\", \"case\", \"in\", \"of\", \"delete\", \"void\", \"throw\", \"new\", \"else\", \"yield\", \"await\", \"instanceof\"])"
+  },
+  {
+   "id": "H3-K-yield",
+   "description": "independent hunt (round 3), fixture(s) a4.kw.yield,a4.kwMid",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"return\", \"typeof\", \"case\", \"in\", \"of\", \"delete\", \"void\", \"throw\", \"new\", \"else\", \"do\", \"yield\", \"await\", \"instanceof\"])",
+   "new": "new Set([\"return\", \"typeof\", \"case\", \"in\", \"of\", \"delete\", \"void\", \"throw\", \"new\", \"else\", \"do\", \"await\", \"instanceof\"])"
+  },
+  {
+   "id": "H3-K-await",
+   "description": "independent hunt (round 3), fixture(s) a4.kw.await,a4.kwMid",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"return\", \"typeof\", \"case\", \"in\", \"of\", \"delete\", \"void\", \"throw\", \"new\", \"else\", \"do\", \"yield\", \"await\", \"instanceof\"])",
+   "new": "new Set([\"return\", \"typeof\", \"case\", \"in\", \"of\", \"delete\", \"void\", \"throw\", \"new\", \"else\", \"do\", \"yield\", \"instanceof\"])"
+  },
+  {
+   "id": "H3-K-instanceof",
+   "description": "independent hunt (round 3), fixture(s) a4.kw.instanceof,a4.kwMid",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new Set([\"return\", \"typeof\", \"case\", \"in\", \"of\", \"delete\", \"void\", \"throw\", \"new\", \"else\", \"do\", \"yield\", \"await\", \"instanceof\"])",
+   "new": "new Set([\"return\", \"typeof\", \"case\", \"in\", \"of\", \"delete\", \"void\", \"throw\", \"new\", \"else\", \"do\", \"yield\", \"await\"])"
+  },
+  {
+   "id": "H3-U-ID-Nd",
+   "description": "independent hunt (round 3), fixture(s) a4.superNo,a4.romanDiv",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const IDENT_CHAR = /[\\p{L}\\p{N}_$]/u;",
+   "new": "const IDENT_CHAR = /[\\p{L}\\p{Nd}_$]/u;"
+  },
+  {
+   "id": "H3-U-ID-Ll",
+   "description": "independent hunt (round 3), fixture(s) a4.upperIdentDiv,a4.cjkIdentDiv",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const IDENT_CHAR = /[\\p{L}\\p{N}_$]/u;",
+   "new": "const IDENT_CHAR = /[\\p{Ll}\\p{N}_$]/u;"
+  },
+  {
+   "id": "H3-U-ID-LuLl",
+   "description": "independent hunt (round 3), fixture(s) a4.cjkIdentDiv",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const IDENT_CHAR = /[\\p{L}\\p{N}_$]/u;",
+   "new": "const IDENT_CHAR = /[\\p{Lu}\\p{Ll}\\p{N}_$]/u;"
+  },
+  {
+   "id": "H3-U-LB-Nd",
+   "description": "independent hunt (round 3), fixture(s) a3.tokLeadNd,a3.tokLeadNl",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\"(?<![\\\\p{L}\\\\p{N}_$])\"",
+   "new": "\"(?<![\\\\p{L}\\\\p{Nd}_$])\""
+  },
+  {
+   "id": "H3-U-LB-Ll",
+   "description": "independent hunt (round 3), fixture(s) a3.tokLeadLu,a3.tokLeadLo",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\"(?<![\\\\p{L}\\\\p{N}_$])\"",
+   "new": "\"(?<![\\\\p{Ll}\\\\p{N}_$])\""
+  },
+  {
+   "id": "H3-U-LB-LuLl",
+   "description": "independent hunt (round 3), fixture(s) a3.tokLeadLo",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\"(?<![\\\\p{L}\\\\p{N}_$])\"",
+   "new": "\"(?<![\\\\p{Lu}\\\\p{Ll}\\\\p{N}_$])\""
+  },
+  {
+   "id": "H3-U-LA-Nd",
+   "description": "independent hunt (round 3), fixture(s) a3.tokTrailNd,a3.tokTrailNl",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\"(?![\\\\p{L}\\\\p{N}_$])\" : \"\"}",
+   "new": "\"(?![\\\\p{L}\\\\p{Nd}_$])\" : \"\"}"
+  },
+  {
+   "id": "H3-U-LA-LuLl",
+   "description": "independent hunt (round 3), fixture(s) a3.tokTrailLo",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "\"(?![\\\\p{L}\\\\p{N}_$])\" : \"\"}",
+   "new": "\"(?![\\\\p{Lu}\\\\p{Ll}\\\\p{N}_$])\" : \"\"}"
+  },
+  {
+   "id": "H3-U-EX-Nd",
+   "description": "independent hunt (round 3), fixture(s) a3.expNo,a3.expNl",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(?![\\\\p{L}\\\\p{N}_$])`, \"mu\").test(v.code)",
+   "new": "(?![\\\\p{L}\\\\p{Nd}_$])`, \"mu\").test(v.code)"
+  },
+  {
+   "id": "H3-U-EX-LuLl",
+   "description": "independent hunt (round 3), fixture(s) a3.expLo",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(?![\\\\p{L}\\\\p{N}_$])`, \"mu\").test(v.code)",
+   "new": "(?![\\\\p{Lu}\\\\p{Ll}\\\\p{N}_$])`, \"mu\").test(v.code)"
+  },
+  {
+   "id": "H3-U-CB-Nd",
+   "description": "independent hunt (round 3), fixture(s) a3.clsNo,a3.clsNl",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(?![\\\\p{L}\\\\p{N}_$])`, \"mu\").exec(code)",
+   "new": "(?![\\\\p{L}\\\\p{Nd}_$])`, \"mu\").exec(code)"
+  },
+  {
+   "id": "H3-U-CB-Ll",
+   "description": "independent hunt (round 3), fixture(s) a3.clsLu,a3.clsLo",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(?![\\\\p{L}\\\\p{N}_$])`, \"mu\").exec(code)",
+   "new": "(?![\\\\p{Ll}\\\\p{N}_$])`, \"mu\").exec(code)"
+  },
+  {
+   "id": "H3-U-CB-LuLl",
+   "description": "independent hunt (round 3), fixture(s) a3.clsLo",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(?![\\\\p{L}\\\\p{N}_$])`, \"mu\").exec(code)",
+   "new": "(?![\\\\p{Lu}\\\\p{Ll}\\\\p{N}_$])`, \"mu\").exec(code)"
+  },
+  {
+   "id": "H3-U-GS-Nd",
+   "description": "independent hunt (round 3), fixture(s) a3.gs.No",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/^[\\p{L}\\p{N}_$]/u.test(t)",
+   "new": "/^[\\p{L}\\p{Nd}_$]/u.test(t)"
+  },
+  {
+   "id": "H3-U-GS-Ll",
+   "description": "independent hunt (round 3), fixture(s) a3.gs.Lu,a3.gs.Lo",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/^[\\p{L}\\p{N}_$]/u.test(t)",
+   "new": "/^[\\p{Ll}\\p{N}_$]/u.test(t)"
+  },
+  {
+   "id": "H3-U-GS-LuLl",
+   "description": "independent hunt (round 3), fixture(s) a3.gs.Lo",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/^[\\p{L}\\p{N}_$]/u.test(t)",
+   "new": "/^[\\p{Lu}\\p{Ll}\\p{N}_$]/u.test(t)"
+  },
+  {
+   "id": "H3-U-GE-Nd",
+   "description": "independent hunt (round 3), fixture(s) a3.ge.No",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/[\\p{L}\\p{N}_$]$/u.test(t)",
+   "new": "/[\\p{L}\\p{Nd}_$]$/u.test(t)"
+  },
+  {
+   "id": "H3-U-GE-Ll",
+   "description": "independent hunt (round 3), fixture(s) a3.tokTrailLuStart,a3.ge.Lu,a3.ge.Lo",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/[\\p{L}\\p{N}_$]$/u.test(t)",
+   "new": "/[\\p{Ll}\\p{N}_$]$/u.test(t)"
+  },
+  {
+   "id": "H3-U-GE-LuLl",
+   "description": "independent hunt (round 3), fixture(s) a3.tokTrailLuStart,a3.ge.Lo",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/[\\p{L}\\p{N}_$]$/u.test(t)",
+   "new": "/[\\p{Lu}\\p{Ll}\\p{N}_$]$/u.test(t)"
+  },
+  {
+   "id": "H3-A2-27",
+   "description": "independent hunt (round 3), fixture(s) a2.modPrefixed",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "readonly)\\\\s+)*(?:async",
+   "new": "readonly)\\\\s*)*(?:async"
+  },
+  {
+   "id": "H3-A2-28",
+   "description": "independent hunt (round 3), fixture(s) a2.asyncPrefixed",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(?:async\\\\s+)?${escapeRe(member)}",
+   "new": "(?:async\\\\s*)?${escapeRe(member)}"
+  },
+  {
+   "id": "H3-A2-29",
+   "description": "independent hunt (round 3), fixture(s) a2.crlfCont",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "while (k >= 0 && /\\s/.test(top[k])) k--;",
+   "new": "while (k >= 0 && /[ \\t\\n]/.test(top[k])) k--;"
+  },
+  {
+   "id": "H3-A3-20",
+   "description": "independent hunt (round 3), fixture(s) a3.defaultAsync",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(?:default\\\\s+)?(?:async\\\\s+)?(?:function",
+   "new": "(?:async\\\\s+)?(?:default\\\\s+)?(?:function"
+  },
+  {
+   "id": "H3-A3-21",
+   "description": "independent hunt (round 3), fixture(s) a3.caseAsList",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if ((names[1] ?? names[0]).trim() === name) return true;",
+   "new": "if ((names[1] ?? names[0]).trim().toLowerCase() === name.toLowerCase()) return true;"
+  },
+  {
+   "id": "H3-A3-25",
+   "description": "independent hunt (round 3), fixture(s) a3.noSpaceBraceList",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/^export\\s+(?:type\\s+)?\\{([^}]*)\\}/gm",
+   "new": "/^export\\s*(?:type\\s+)?\\{([^}]*)\\}/gm"
+  },
+  {
+   "id": "H3-A4-28",
+   "description": "independent hunt (round 3), fixture(s) a4.nlAfterDot,a4.nbspDot",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "while (q >= 0 && /\\s/.test(code[q])) q--;",
+   "new": "while (q >= 0 && /[ \\t]/.test(code[q])) q--;"
+  },
+  {
+   "id": "H3-A4-29",
+   "description": "independent hunt (round 3), fixture(s) a4.crDiv,a4.crDivIdent,a4.nbspDiv",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "while (k >= 0 && /\\s/.test(code[k])) k--;",
+   "new": "while (k >= 0 && /[ \\t\\n]/.test(code[k])) k--;"
+  },
+  {
+   "id": "H3-A4-30",
+   "description": "independent hunt (round 3), fixture(s) a4.nbspDiv",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "while (k >= 0 && /\\s/.test(code[k])) k--;",
+   "new": "while (k >= 0 && /[ \\t\\r\\n]/.test(code[k])) k--;"
+  },
+  {
+   "id": "H3-A4-31",
+   "description": "independent hunt (round 3), fixture(s) a4.nbspDot",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "while (q >= 0 && /\\s/.test(code[q])) q--;",
+   "new": "while (q >= 0 && /[ \\t\\r\\n]/.test(code[q])) q--;"
+  },
+  {
+   "id": "H3-E-star",
+   "description": "independent hunt (round 3), fixture(s) esc.star",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/[.*+?^${}()|[\\]\\\\]/g",
+   "new": "/[.+?^${}()|[\\]\\\\]/g"
+  },
+  {
+   "id": "H3-E-plus",
+   "description": "independent hunt (round 3), fixture(s) esc.plus",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/[.*+?^${}()|[\\]\\\\]/g",
+   "new": "/[.*?^${}()|[\\]\\\\]/g"
+  },
+  {
+   "id": "H3-E-qm",
+   "description": "independent hunt (round 3), fixture(s) esc.qm",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/[.*+?^${}()|[\\]\\\\]/g",
+   "new": "/[.*+^${}()|[\\]\\\\]/g"
+  },
+  {
+   "id": "H3-E-caret",
+   "description": "independent hunt (round 3), fixture(s) esc.caret",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/[.*+?^${}()|[\\]\\\\]/g",
+   "new": "/[.*+?${}()|[\\]\\\\]/g"
+  },
+  {
+   "id": "H3-E-dollar",
+   "description": "independent hunt (round 3), fixture(s) a2.escMember,a2.escClass,a3.dollarName,esc.dollar",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/[.*+?^${}()|[\\]\\\\]/g",
+   "new": "/[.*+?^{}()|[\\]\\\\]/g"
+  },
+  {
+   "id": "H3-E-lbrace",
+   "description": "independent hunt (round 3), fixture(s) esc.lbrace",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/[.*+?^${}()|[\\]\\\\]/g",
+   "new": "/[.*+?^$}()|[\\]\\\\]/g"
+  },
+  {
+   "id": "H3-E-rbrace",
+   "description": "independent hunt (round 3), fixture(s) esc.lbrace,esc.rbrace",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/[.*+?^${}()|[\\]\\\\]/g",
+   "new": "/[.*+?^${()|[\\]\\\\]/g"
+  },
+  {
+   "id": "H3-E-pipe",
+   "description": "independent hunt (round 3), fixture(s) esc.pipe",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/[.*+?^${}()|[\\]\\\\]/g",
+   "new": "/[.*+?^${}()[\\]\\\\]/g"
+  },
+  {
+   "id": "H3-E-lbracket",
+   "description": "independent hunt (round 3), fixture(s) esc.lbracket",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/[.*+?^${}()|[\\]\\\\]/g",
+   "new": "/[.*+?^${}()|\\]\\\\]/g"
+  },
+  {
+   "id": "H3-E-rbracket",
+   "description": "independent hunt (round 3), fixture(s) esc.lbracket",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/[.*+?^${}()|[\\]\\\\]/g",
+   "new": "/[.*+?^${}()|[\\\\]/g"
+  },
+  {
+   "id": "H3-E-bslash",
+   "description": "independent hunt (round 3), fixture(s) esc.bslash",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "/[.*+?^${}()|[\\]\\\\]/g",
+   "new": "/[.*+?^${}()|[\\]]/g"
   }
  ]
 }
