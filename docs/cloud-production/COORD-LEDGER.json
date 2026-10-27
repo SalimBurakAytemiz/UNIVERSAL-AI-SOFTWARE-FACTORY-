@@ -1192,6 +1192,16 @@
       "ref": "wf_65dfb426-0e0",
       "policy": "TEP-1",
       "at": "2026-10-27T10:54:00.463Z"
+    },
+    {
+      "pr": 287,
+      "sha": "43a0be53778c910cd4fc2a403bef26a9c30fb1ca",
+      "kind": "delta",
+      "base": "e6943c05198b890cf1ac287e81eaeab5236b84e0",
+      "verdict": "NO_BLOCKERS_4LOW_P1-P4_FIXED",
+      "ref": "wf_1d43b706-47a",
+      "policy": "TEP-1",
+      "at": "2026-10-27T11:04:35.101Z"
     }
   ],
   "tests": [],
