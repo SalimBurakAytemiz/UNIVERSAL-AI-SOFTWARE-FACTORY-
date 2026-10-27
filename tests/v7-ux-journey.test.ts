@@ -1053,8 +1053,8 @@ describe("LANE-A A-FLOW-5 analysis step — view (Journey)", () => {
     const body = cp.slice(cp.indexOf("export function claudeRoleReadiness("), cp.indexOf("// //TR: Claude CLI yazdırma kipinde"));
     for (const m of body.matchAll(/\b((?:CLAUDE|PROVIDER|CLI)_[A-Z_]+)\b/g)) codes.add(m[1]);
     for (const m of an.matchAll(/blockedStep\("([A-Z_]+)"/g)) codes.add(m[1]);
-    for (const m of an.matchAll(/status:\s*"BLOCKED",\s*blocker:\s*"([A-Z][A-Z0-9_]+)"/g)) codes.add(m[1]); // a direct BLOCKED return that bypasses blockedStep
-    for (const src2 of [body, an]) for (const push of src2.matchAll(/\bblockers\.push\(([^;]*?)\);/g)) for (const m of push[1].matchAll(/(?:^|(?<!\?)\?\s*|(?<![?:\w$]):\s*)["`]([A-Z][A-Z0-9_]+)(?=["`:])/g)) codes.add(m[1]); // an unprefixed code pushed onto blockers
+    for (const m of an.matchAll(/\bblocker:\s*"([A-Z][A-Z0-9_]+)"/g)) codes.add(m[1]); // a direct BLOCKED return that bypasses blockedStep, in either key order
+    for (const src2 of [body, an]) for (const push of src2.matchAll(/\bblockers\.push\(([^;]*?)\);/g)) for (const m of push[1].matchAll(/(?:^\s*|(?<!\?)\?\s*|(?<![?:\w$]):\s*|,\s*)["`]([A-Z][A-Z0-9_]+)(?=["`:])/g)) codes.add(m[1]); // an unprefixed code pushed onto blockers
     for (const m of an.matchAll(/\?\? "([A-Z_]+)"/g)) codes.add(m[1]);
     const { EXECUTOR_NOT_ENABLED } = await import("../core/workos/crew/analysis.js"); codes.add(EXECUTOR_NOT_ENABLED);
     if (/ROLE_NOT_EXECUTABLE/.test(fdb)) codes.add("ROLE_NOT_EXECUTABLE");
@@ -2010,13 +2010,16 @@ describe("LANE-A A-UI011-EVIDENCE-1: the analysis step and the run-the-product s
   const savedEnv: Record<string, string | undefined> = {};
   const checkoutProfiles = () => { const p = path.join(process.cwd(), "claude-profiles"); return fs.existsSync(p) ? fs.readdirSync(p, {recursive: true}).map(String).sort() : null; };
   let profilesBefore: string[] | null = null;
-  const controlRoot = () => path.join(tmp, "control");
+  // //TR: scrubText yalnız /tmp, /var, /home, /Users, /etc, /opt, /root altındaki ve sürücü harfli yolları yeniden yazar; makinenin TMPDIR'i /srv gibi bir yerdeyse gerçek gövdedeki yol değişmezdi. Bu yüzden controlRoot, Windows dışında, kesin olarak /tmp altında açılır (afterEach siler).
+  let ctlBase = "";
+  const controlRoot = () => path.join(ctlBase, "control");
   beforeEach(async () => {
+    ctlBase = process.platform === "win32" ? tmp : fs.mkdtempSync("/tmp/uasco-journey-ctl-");
     for (const k of ENV_KEYS) { savedEnv[k] = process.env[k]; delete process.env[k]; }
     profilesBefore = checkoutProfiles();
     baseGetAllowed = (await import("../automation/lib/control-boundary.mjs")).desktopGetPathAllowed as (v: unknown) => boolean;
   });
-  afterEach(() => { for (const k of ENV_KEYS) { if (savedEnv[k] === undefined) delete process.env[k]; else process.env[k] = savedEnv[k]; } });
+  afterEach(() => { for (const k of ENV_KEYS) { if (savedEnv[k] === undefined) delete process.env[k]; else process.env[k] = savedEnv[k]; } try { if (ctlBase !== tmp) fs.rmSync(ctlBase, {recursive: true, force: true}); } catch { /* Windows */ } });
 
   async function setup(executors?: unknown) {
     fs.mkdirSync(runtime(), {recursive: true}); fs.mkdirSync(controlRoot(), {recursive: true});
@@ -2047,7 +2050,7 @@ describe("LANE-A A-UI011-EVIDENCE-1: the analysis step and the run-the-product s
     const ctx: any = {doc, store: cache, api, i18n: {lang: "en", t}, t, navigate: () => {}, rerender: async () => { cache.clear?.(); cache.cache?.clear?.(); }, refreshAll: async () => { cache.cache?.clear?.(); },
       confirm: async (o: any) => { calls.confirm.push(o); return true; }, selectProject() {}, renderAttention() {}, principal: "FOUNDER_LOCAL", settleFocus: () => {}};
     const executorsOf = async () => getJson(app, "/v1/system/executors");
-    return {app, ctx, doc, calls, forms, project, open, exec, run, executorsOf, profilesBefore: profilesBefore, controlRoot: controlRoot()};
+    return {app, ctx, doc, calls, forms, project, open, exec, run, executorsOf, profilesBefore: profilesBefore, controlRoot: controlRoot(), bridge};
   }
 
   const blockerCodes = (root: N) => allData(root, "analysisBlocker").map(n => n.dataset.analysisBlocker);
@@ -2082,8 +2085,11 @@ describe("LANE-A A-UI011-EVIDENCE-1: the analysis step and the run-the-product s
     expect(after.active).toEqual(before.active); // the active executor did not change
     expect(s.calls.post.map(x => x.path).filter(p => p.includes("/executors/"))).toEqual([]); // the enable route is never called
     expect(s.calls.post.every(x => x.status !== 201)).toBe(true);
-    // the runner stayed off: the QUEUED run created by setup was never leased, and nothing was written under the checkout
-    expect((await getJson(s.app, `/v1/work-runs/${s.run.runId}`)).run.status).toBe("QUEUED");
+    // //TR: Runner'ın ilk pump'ı intervalMs (2000 ms) SONRA gelir ve her test ~1.7 sn'de biter; bu yüzden QUEUED denetimi tek başına "runner kapalı" kanıtı DEĞİLDİR. Asıl kanıt: sunucu runner'ı açık görseydi onReady'de WORKOS_RUNNER_STARTED ya da WORKOS_RUNNER_NOT_STARTED denetim olayını yazardı; hiçbiri yoktur. QUEUED denetimi yalnız görünür sonuçtur.
+    const events = fs.existsSync(path.join(runtime(), "control-api-events.jsonl")) ? fs.readFileSync(path.join(runtime(), "control-api-events.jsonl"), "utf8") : "";
+    expect(events).not.toContain("WORKOS_RUNNER");
+    expect((await getJson(s.app, `/v1/work-runs/${s.run.runId}`)).run.status).toBe("QUEUED"); // the visible effect, not the proof
+    // and nothing was written under the checkout
     expect(checkoutProfiles()).toEqual(s.profilesBefore);
   }
   // LOCAL_CLAUDE is off BEFORE the step under test runs; the returned snapshot is what expectLocalClaudeStillOff compares against
@@ -2149,7 +2155,7 @@ describe("LANE-A A-UI011-EVIDENCE-1: the analysis step and the run-the-product s
     const r = await an.submitAnalysisStep(s.ctx, s.exec.missionId);
     const post = s.calls.post.at(-1)!;
     expect(post.status).toBe(409); expect(post.seen).toEqual({error: "WORKOS_CONFLICT", reason: "MISSION_NOT_PREDEV_ELIGIBLE"});
-    expect(r).toMatchObject({ok: false, kind: "CONFLICT", status: 409});
+    expect(r).toEqual({ok: false, kind: "CONFLICT", status: 409});
     s.doc.body.replaceChildren(an.analysisPanel(s.ctx, {missionId: s.exec.missionId, exec: null}) as N);
     expect(text(byId(s.doc.body, "analysis-step-status")!)).toBe("This mission is no longer open for the pre-development analysis (for example a run has already started). Nothing was recorded.");
     await expectLocalClaudeStillOff(s, before);
@@ -2190,6 +2196,23 @@ describe("LANE-A A-UI011-EVIDENCE-1: the analysis step and the run-the-product s
     expect(s.forms.drafts.status["product-run"]).toEqual({ok: true, key: "product.done.stop", vars: {}, errors: null});
     expect(s.calls.post.at(-1)!.seen.product).toMatchObject({runId: s.run.runId, tiedToThisRun: false, devrun: {status: "STOPPED"}});
     expect((await getJson(s.app, `/v1/projects/${s.project.projectId}/devrun`)).devrun.status).toBe("STOPPED"); // no dev-run was started
+    await expectLocalClaudeStillOff(s, before);
+  });
+
+  // //TR: Köprü kapıları belirleyici olmalı: GET'in yalnız desktopGetPathAllowed tarafından izinlendiği bir yol ve POST'un gövde denetiminin reddettiği gövdeler. Kapı kaldırılırsa bu test düşer.
+  it("the desktop bridge gates are decisive: a GET admitted only by desktopGetPathAllowed passes, an unlisted GET and a non-object or oversized POST body are refused before any request is sent", async () => {
+    const s = await setup();
+    expect(baseGetAllowed("/v1/control/status")).toBe(true); expect(getAllowed("/v1/control/status")).toBe(false); // admitted by the base list alone
+    const status = await s.bridge.apiGet("/v1/control/status");
+    expect(status).toBeTruthy(); expect(s.calls.get).toEqual(["/v1/control/status"]);
+    expect(baseGetAllowed("/v1/control/nope") || getAllowed("/v1/control/nope")).toBe(false);
+    await expect(s.bridge.apiGet("/v1/control/nope")).rejects.toThrow("INVALID_API_PATH");
+    const step = `/v1/missions/${s.open.missionId}/analysis/step`;
+    expect(postGates.desktopPostBodyCheck([]).ok).toBe(false);
+    await expect(s.bridge.apiPost(step, [])).rejects.toThrow("INVALID_API_BODY");
+    await expect(s.bridge.apiPost(step, {pad: "x".repeat(40000)})).rejects.toThrow("API_BODY_TOO_LARGE");
+    expect(s.calls.post).toEqual([]); // nothing reached the server
+    const before = await localClaudeOffBefore(s);
     await expectLocalClaudeStillOff(s, before);
   });
 
