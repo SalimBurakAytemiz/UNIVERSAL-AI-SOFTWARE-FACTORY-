@@ -65,6 +65,8 @@ export function taskRunsPanel(ctx,{task,linked,runsRes}){
   if(linked.state==="VERIFIED"){
     const opts=runsRes?.state==="VERIFIED"?linkableRuns(runsRes.items,linked.items):[];
     if(task.status==="DONE")form=h(doc,"p",{class:"note",role:"status",dataset:{taskrunsNote:"done"},text:ctx.t("taskruns.doneNote")});
+    // //TR: A-281-LOWS: mission koşu listesi 500'de kesildiyse (truncated) "bağlı olmayan koşu yok" denmez; hangi koşuların bağlı olmadığı söylenemez.
+    else if(runsRes?.state==="VERIFIED"&&runsRes.truncated===true)form=h(doc,"p",{class:"note",role:"status",dataset:{taskrunsNote:"runsCut"},text:ctx.t("taskruns.runsCut",{n:runsRes.items.length})});
     else if(runsRes?.state!=="VERIFIED")form=h(doc,"p",{class:"note",role:"status",dataset:{taskrunsNote:"runsUnknown"},text:ctx.t("taskruns.runsUnknown")});
     else if(!opts.length)form=h(doc,"p",{class:"note",role:"status",dataset:{taskrunsNote:"noUnlinked"},text:ctx.t("taskruns.noUnlinked")});
     else{
