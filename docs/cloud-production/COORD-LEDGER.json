@@ -602,6 +602,16 @@
       "ref": "wf_2f10b7c8-c47 coordinator checklist (ROUND_LIMIT bounded push) + skeptic: scope 1 file +50/-0; N07/N08/R27/R30/R10/R15/R29/R23/R24 + 2 own + 12 skeptic mutants KILLED; baseline 267/267; LOW: F5 failure labels for ''/{} unclear",
       "policy": "TEP-1",
       "at": "2026-10-27T00:19:45.022Z"
+    },
+    {
+      "pr": 266,
+      "sha": "254779c4b743768dc43eb491a0bfeec26ca98fa7",
+      "kind": "full",
+      "base": null,
+      "verdict": "BLOCKERS_2MEDIUM_test_strength",
+      "ref": "wf_6ca4414b-fc7 (3 lenses + skeptics): chain test real-time dependent (can fail with fix on slow disk); dropping one RENEWING_WRITES method survives; LOWs: RECOVERING lease renewed by hook (SWEEP-5 intent), throttle/lost unpinned, proxy no set trap, acquire/takeover not hooked; fixed in 5e17b79",
+      "policy": "TEP-1",
+      "at": "2026-10-27T00:29:52.835Z"
     }
   ],
   "tests": [],
