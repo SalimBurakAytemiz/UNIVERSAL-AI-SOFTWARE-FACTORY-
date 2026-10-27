@@ -10,10 +10,10 @@ export const taskRunsDraft={taskId:null,runId:""};
 export function resetTaskRunsDraft(taskId=null){taskRunsDraft.taskId=taskId;taskRunsDraft.runId="";delete drafts.status[TASK_RUNS_FORM];delete drafts.status[RECONCILE_FORM]}
 
 /** Göreve bağlı koşuları okur: {state,items}; yol geçersizse ERROR, okuma başarısızsa istemci durumu (UNAVAILABLE/OFFLINE/…). */
-export async function loadTaskRuns(ctx,taskId){
+export async function loadTaskRuns(ctx,taskId,missionId){
   const path=taskRunsPath(taskId);if(!path)return {state:"ERROR",items:[]};
   const r=await ctx.api.raw(path);
-  return r.ok?mapTaskRuns(r.data):{state:r.state,items:[]};
+  return r.ok?mapTaskRuns(r.data,taskId,missionId):{state:r.state,items:[]};
 }
 export async function submitLinkRun(ctx,task,runId){
   const req=buildLinkRunRequest({taskId:task.taskId,runId,taskStatus:task.status});
