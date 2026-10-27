@@ -5,6 +5,7 @@ vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import crypto from "node:crypto";
 import {pathToFileURL} from "node:url";
 import {logicalTestFiles} from "./support/validation-test-shards.js";
 
@@ -2830,5 +2831,289 @@ describe("LANE-A A-FLOW-4: running product after delivery (B-RUN-1 contract, run
     const ok = await open({});
     byId(ok.root, "product-open-run")!.fire("click"); await tick();
     expect(st.studio.tab).toBe("run");
+  });
+});
+
+// //TR: LANE-A A-UI125-1: İçe aktarma başarısı ajan yapılandırma KARANTİNASINI gizleyen düz bir "kabul edildi" olamaz. Yanıt şekli gerçek sunucudan alınmıştır (server.ts import rotası; v7-sbx8-agent-config.test.ts sözleşme testi gerçek yanıtı eşleyiciye okutur): {project, import:{kind, headSha, agentConfigQuarantine?:{count, headSha, files:[{path,pattern,kind,bytes,sha256}], truncated, storedUnder}}}; alan YALNIZ karantina varsa gelir.
+describe("LANE-A A-UI125-1 import success shows the agent configuration quarantine honestly (fake DOM)", () => {
+  const HEAD = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
+  const fileOf = (p: string, over: Record<string, any> = {}) => ({path: p, pattern: p.endsWith(".json") ? ".mcp.json" : "CLAUDE.md", kind: "file", bytes: 120, sha256: crypto.createHash("sha256").update(p).digest("hex"), ...over});
+  const quarantine = (files: any[], over: Record<string, any> = {}) => ({count: files.length, headSha: HEAD, files, truncated: false, storedUnder: "projects/<projectId>/quarantine/agent-config/<sha256>", ...over});
+  const body = (q?: unknown) => ({project: {projectId: PID, name: "Mağaza"}, import: {kind: "git", headSha: HEAD, ...(q === undefined ? {} : {agentConfigQuarantine: q})}});
+  const imp = async (post: () => {status: number; body: any}, lang = "en", fixed = false) => {
+    const native = {pickImportPath: async (k: string) => ({cancelled: false, path: k === "zip" ? "C:\\z\\a.zip" : "C:\\Projeler\\app", kind: k})};
+    const c = await mkCtx({get: projectsGet(), post, native, lang});
+    if (fixed) st.openProject(PID, "overview");
+    let root = mount(c.doc, await projectsView.render(c.ctx));
+    byId(root, "studio-import-pick")!.fire("click"); await tick();
+    root = mount(c.doc, await projectsView.render(c.ctx));
+    byId(root, "studio-import-form")!.fire("submit"); await tick();
+    root = mount(c.doc, await projectsView.render(c.ctx));
+    return {...c, root};
+  };
+  const block = (root: N) => byId(root, "studio-import-quarantine");
+  const statusText = (root: N) => text(byId(root, "studio-import-status")!);
+
+  it("QUARANTINED: the status says files were quarantined and are NOT in the repository, and the evidence block lists count, commit, storage and every file", async () => {
+    const files = [fileOf("CLAUDE.md"), fileOf(".claude/settings.json", {pattern: ".claude/**"}), fileOf("pkg/.mcp.json")];
+    const r = await imp(() => ({status: 200, body: body(quarantine(files))}));
+    expect(forms.drafts.status["studio-import"]).toMatchObject({ok: true, key: "studio.import.doneQuarantined", vars: {count: 3}});
+    expect(statusText(r.root)).toBe("Import accepted, but 3 agent configuration file(s) were quarantined: they are NOT in the project repository. Details below.");
+    expect(statusText(r.root)).not.toContain("Import request accepted.");
+    const b = block(r.root)!;
+    expect(b.dataset.quarantine).toBe("QUARANTINED");
+    expect(b.dataset.quarantineFor).toBe(PID);
+    expect(text(all(b).find(n => n.dataset.quarantineNote === "quarantined")!)).toBe("3 agent configuration file(s) were quarantined at commit a1b2c3d4e5f6 and are not in the managed repository. Evidence is stored under projects/<projectId>/quarantine/agent-config/<sha256>.");
+    expect(all(b).filter(n => "quarantineFile" in n.dataset).map(n => n.dataset.quarantineFile)).toEqual(["CLAUDE.md", ".claude/settings.json", "pkg/.mcp.json"]);
+    const row = all(b).find(n => n.dataset.quarantineFile === ".claude/settings.json")!;
+    expect(row.children.map(text)).toEqual([".claude/settings.json", ".claude/**", "file", "120", fileOf(".claude/settings.json").sha256.slice(0, 12)]);
+    expect(all(b).filter(n => n.tagName === "TH").map(text)).toEqual(["Path", "Pattern", "Kind", "Bytes", "SHA-256 (first 12)"]);
+    expect(all(b).filter(n => "quarantineMore" in n.dataset)).toEqual([]);
+    expect(Object.keys(r.calls.post[0].body)).toEqual(["kind", "path"]); // the request itself is unchanged
+  });
+
+  it("NOT quarantined (no agentConfigQuarantine field in a readable import block): the plain acceptance plus an explicit 'server reported no quarantine' line - never a quarantine claim", async () => {
+    const r = await imp(() => ({status: 200, body: body()}));
+    expect(forms.drafts.status["studio-import"]).toMatchObject({ok: true, key: "studio.import.done"});
+    expect(statusText(r.root)).toBe("Import request accepted.");
+    const b = block(r.root)!;
+    expect(b.dataset.quarantine).toBe("NONE");
+    expect(text(all(b).find(n => n.dataset.quarantineNote === "none")!)).toBe("The server reported no agent configuration quarantine for this import. (It sends this evidence only when something was quarantined.)");
+    expect(all(b).filter(n => "quarantineFile" in n.dataset)).toEqual([]);
+    expect(text(b)).not.toMatch(/were quarantined at commit/);
+  });
+
+  it("UNKNOWN (the answer has no readable import block, or the evidence is malformed): never a plain success, never partial figures", async () => {
+    const bads: Array<[string, any]> = [["empty body", {}], ["no import block", {project: {projectId: PID}}], ["import not an object", {import: "x"}],
+      ["import without kind", {import: {headSha: HEAD}}], ["import with a bad headSha", {import: {kind: "git", headSha: "xyz"}}],
+      ["count mismatching the files", body(quarantine([fileOf("CLAUDE.md")], {count: 2}))], ["count above the listed files with a consistent truncated flag (the server truncates only above 500)", body(quarantine([fileOf("CLAUDE.md"), fileOf("a/CLAUDE.md")], {count: 3, truncated: true}))], ["more files listed than counted", body(quarantine([fileOf("CLAUDE.md"), fileOf("a/CLAUDE.md")], {count: 1}))], ["count zero", body(quarantine([], {count: 0}))],
+      ["truncated flag contradicting the counts", body(quarantine([fileOf("CLAUDE.md")], {truncated: true}))], ["evidence headSha differing from the import headSha", body(quarantine([fileOf("CLAUDE.md")], {headSha: "b".repeat(40)}))],
+      ["a file with a bad sha256", body(quarantine([fileOf("CLAUDE.md", {sha256: "zz"})]))], ["a file kind outside file/symlink/other", body(quarantine([fileOf("CLAUDE.md", {kind: "dir"})]))],
+      ["a file pattern with a control character", body(quarantine([fileOf("CLAUDE.md", {pattern: "CLAUDE.md\n"})]))], ["storedUnder with a newline", body(quarantine([fileOf("CLAUDE.md")], {storedUnder: "a\nb"}))], ["a file without sha256", body(quarantine([{path: "CLAUDE.md", pattern: "CLAUDE.md", kind: "file", bytes: 1}]))], ["an empty file path", body(quarantine([fileOf("")]))], ["negative bytes", body(quarantine([fileOf("CLAUDE.md", {bytes: -1})]))],
+      ["files not an array", body(quarantine([fileOf("CLAUDE.md")], {files: "x"}))], ["storedUnder missing", body(quarantine([fileOf("CLAUDE.md")], {storedUnder: undefined}))],
+      ["the quarantine field is null", body(null)], ["the quarantine field is an array", body([])]];
+    const pc = await load(rend, "project-core.js");
+    for (const [name, b] of bads) expect(pc.mapImportQuarantine({status: 200, body: b}), name).toEqual({state: "UNKNOWN"});
+    const r = await imp(() => ({status: 202, body: {}}));
+    expect(forms.drafts.status["studio-import"]).toMatchObject({ok: true, key: "studio.import.doneQuarantineUnknown"});
+    expect(statusText(r.root)).toBe("Import request accepted. The quarantine outcome is unknown: the server's answer did not carry a readable import result.");
+    const b = block(r.root)!;
+    expect(b.dataset.quarantine).toBe("UNKNOWN");
+    expect(text(all(b).find(n => n.dataset.quarantineNote === "unknown")!)).toBe("Quarantine status unknown: the server's answer did not carry a readable import result, so nothing can be said about quarantined files.");
+    expect(all(b).filter(n => "quarantineFile" in n.dataset)).toEqual([]);
+  });
+
+  it("the mapper accepts exactly the server's limits: at most 500 files, truncated only when count > files, and the view shows the first 20 with a 'showing N of M' note", async () => {
+    const pc = await load(rend, "project-core.js");
+    const many = (n: number) => Array.from({length: n}, (_, i) => fileOf(`d${i}/CLAUDE.md`));
+    expect(pc.QUARANTINE_MAX_FILES).toBe(500);
+    expect(pc.mapImportQuarantine({status: 200, body: body(quarantine(many(500)))}).state).toBe("QUARANTINED");
+    expect(pc.mapImportQuarantine({status: 200, body: body(quarantine(many(500), {count: 600, truncated: true}))})).toMatchObject({state: "QUARANTINED", count: 600, truncated: true});
+    expect(pc.mapImportQuarantine({status: 200, body: body(quarantine(many(500), {count: 501}))})).toEqual({state: "UNKNOWN"}); // 501 would have been truncated
+    expect(pc.mapImportQuarantine({status: 200, body: body(quarantine(many(501), {count: 501}))})).toEqual({state: "UNKNOWN"}); // the server never lists more than 500
+    const r = await imp(() => ({status: 200, body: body(quarantine(many(25)))}));
+    const b = block(r.root)!;
+    expect(all(b).filter(n => "quarantineFile" in n.dataset)).toHaveLength(20);
+    expect(text(all(b).find(n => "quarantineMore" in n.dataset)!)).toBe("Showing 20 of 25 quarantined files; the full list is in the evidence manifest stored by the server.");
+    const big = await imp(() => ({status: 200, body: body(quarantine(many(500), {count: 600, truncated: true}))}));
+    expect(text(all(block(big.root)!).find(n => "quarantineMore" in n.dataset)!)).toContain("Showing 20 of 600");
+    expect(text(byId(big.root, "studio-import-status")!)).toContain("600 agent configuration file(s)");
+  });
+
+  it("a failed import shows no quarantine block, and starting a new import clears the previous outcome; the workspace panel shows only its own project's outcome", async () => {
+    const first = await imp(() => ({status: 200, body: body(quarantine([fileOf("CLAUDE.md")]))}));
+    expect(block(first.root)).not.toBeNull();
+    // the same drafts: a second import that fails (409) clears the old block
+    const native = {pickImportPath: async (k: string) => ({cancelled: false, path: "C:\\Projeler\\app", kind: k})};
+    const c = await mkCtx({get: projectsGet(), post: () => ({status: 409, body: {error: "PROJECT_REPOSITORY_ALREADY_MANAGED"}}), native, lang: "en"});
+    let root = mount(c.doc, await projectsView.render(c.ctx));
+    expect(block(root)).not.toBeNull(); // still the previous (module state) outcome until a new import starts
+    byId(root, "studio-import-pick")!.fire("click"); await tick();
+    root = mount(c.doc, await projectsView.render(c.ctx));
+    byId(root, "studio-import-form")!.fire("submit"); await tick();
+    root = mount(c.doc, await projectsView.render(c.ctx));
+    expect(forms.drafts.status["studio-import"].ok).toBe(false);
+    expect(block(root)).toBeNull();
+    // workspace panel (fixedId): another project's outcome is not shown
+    st.setImportOutcome("prj_" + "ff00".repeat(6), {state: "QUARANTINED", headSha: HEAD, count: 1, files: [fileOf("CLAUDE.md")], truncated: false, storedUnder: "x"});
+    const ws = await openWs({get: projectsGet(), lang: "en"});
+    expect(block(ws.root)).toBeNull();
+    st.setImportOutcome(PID, {state: "NONE", headSha: HEAD});
+    const ws2 = await openWs({get: projectsGet(), lang: "en"});
+    expect(block(ws2.root)?.dataset.quarantine).toBe("NONE");
+  });
+
+  // ---- #269 round-1 repair (COORD ledger 9207490) ----
+  const PID_B = "prj_" + "cd34".repeat(6);
+  const twoProjects = () => projectsGet({"/v1/projects": {projects: [project(), project({projectId: PID_B, name: "Dükkan"})]}});
+  const many = (n: number) => Array.from({length: n}, (_, i) => fileOf(`d${i}/CLAUDE.md`));
+  const wsStatus = (root: N) => text(byId(root, "studio-import-status")!);
+  const submitWs = async (c: any, pid: string) => {
+    st.openProject(pid, "overview");
+    let root = mount(c.doc, await projectsView.render(c.ctx));
+    byId(root, "studio-import-pick")!.fire("click"); await tick();
+    root = mount(c.doc, await projectsView.render(c.ctx));
+    byId(root, "studio-import-form")!.fire("submit"); await tick();
+    return mount(c.doc, await projectsView.render(c.ctx));
+  };
+  const native = {pickImportPath: async (k: string) => ({cancelled: false, path: k === "zip" ? "C:\\z\\a.zip" : "C:\\Projeler\\app", kind: k})};
+
+  it("M1: the outcome is filed under the project the import was STARTED for, even when another workspace is open when the POST resolves", async () => {
+    let release: (v: any) => void = () => {};
+    const pending = new Promise<any>(r => { release = r; });
+    const c = await mkCtx({get: twoProjects(), post: (() => pending) as any, native, lang: "en"});
+    st.openProject(PID, "overview");
+    let root = mount(c.doc, await projectsView.render(c.ctx));
+    byId(root, "studio-import-pick")!.fire("click"); await tick();
+    root = mount(c.doc, await projectsView.render(c.ctx));
+    byId(root, "studio-import-form")!.fire("submit"); await tick();
+    expect(c.calls.post.map(x => x.path)).toEqual([`/v1/projects/${PID}/import`]);
+    st.openProject(PID_B, "overview"); // the Founder moves to workspace B while the POST is in flight
+    mount(c.doc, await projectsView.render(c.ctx));
+    release({status: 200, body: body(quarantine([fileOf("CLAUDE.md")]))}); await tick(); await tick();
+    expect(st.importOutcome.projectId).toBe(PID);
+    const rootB = mount(c.doc, await projectsView.render(c.ctx));
+    expect(block(rootB)).toBeNull();
+    expect(wsStatus(rootB)).toBe("");
+    st.openProject(PID, "overview");
+    const rootA = mount(c.doc, await projectsView.render(c.ctx));
+    expect(block(rootA)?.dataset.quarantine).toBe("QUARANTINED");
+    expect(block(rootA)?.dataset.quarantineFor).toBe(PID);
+    expect(wsStatus(rootA)).toContain("1 agent configuration file(s) were quarantined");
+  });
+
+  it("M3: the quarantine status line is project-scoped like the evidence block (real submit path): another workspace shows neither", async () => {
+    const c = await mkCtx({get: twoProjects(), post: () => ({status: 200, body: body(quarantine([fileOf("CLAUDE.md"), fileOf("a/CLAUDE.md"), fileOf("b/CLAUDE.md")]))}), native, lang: "en"});
+    const rootA = await submitWs(c, PID);
+    expect(wsStatus(rootA)).toContain("3 agent configuration file(s) were quarantined");
+    expect(block(rootA)?.dataset.quarantineFor).toBe(PID);
+    st.openProject(PID_B, "overview");
+    const rootB = mount(c.doc, await projectsView.render(c.ctx));
+    expect(byId(rootB, "studio-import-ws")).not.toBeNull();
+    expect(block(rootB)).toBeNull();
+    expect(wsStatus(rootB)).toBe("");
+    expect(text(byId(rootB, "studio-import-ws")!)).not.toMatch(/quarantined/);
+    st.openProject(PID, "overview");
+    expect(wsStatus(mount(c.doc, await projectsView.render(c.ctx)))).toContain("3 agent configuration file(s) were quarantined");
+  });
+
+  it("M2: the 'more' note claims the manifest only when the manifest holds every path; for a truncated list it says only the first N are recorded (en and tr, exact text)", async () => {
+    const big = await imp(() => ({status: 200, body: body(quarantine(many(500), {count: 600, truncated: true}))}));
+    expect(text(all(block(big.root)!).find(n => "quarantineMore" in n.dataset)!)).toBe("Showing 20 of 600 quarantined files; only the first 500 paths are recorded and the other 100 are not retained by name.");
+    const bigTr = await imp(() => ({status: 200, body: body(quarantine(many(500), {count: 600, truncated: true}))}), "tr");
+    expect(text(all(block(bigTr.root)!).find(n => "quarantineMore" in n.dataset)!)).toBe("Karantinaya alınan 600 dosyanın 20 tanesi gösteriliyor; yalnız ilk 500 yol kayıtlıdır, kalan 100 dosyanın adı saklanmaz.");
+    const mid = await imp(() => ({status: 200, body: body(quarantine(many(30)))}));
+    expect(text(all(block(mid.root)!).find(n => "quarantineMore" in n.dataset)!)).toBe("Showing 20 of 30 quarantined files; the full list is in the evidence manifest stored by the server.");
+    const midTr = await imp(() => ({status: 200, body: body(quarantine(many(30)))}), "tr");
+    expect(text(all(block(midTr.root)!).find(n => "quarantineMore" in n.dataset)!)).toBe("Karantinaya alınan 30 dosyanın 20 tanesi gösteriliyor; tam liste sunucunun sakladığı kanıt manifestindedir.");
+    expect(text(block(big.root)!)).not.toMatch(/manifest/);
+  });
+
+  it("M4/M5: exact en and tr heading, caption and column texts in QUARANTINED, and exact heading + body text in NONE and UNKNOWN", async () => {
+    const h4 = (root: N) => text(all(block(root)!).find(n => n.tagName === "H4")!);
+    const q = await imp(() => ({status: 200, body: body(quarantine([fileOf("CLAUDE.md")]))}));
+    expect(h4(q.root)).toBe("Agent configuration quarantine");
+    expect(text(all(block(q.root)!).find(n => n.tagName === "CAPTION")!)).toBe("Quarantined agent configuration files");
+    expect(all(block(q.root)!).filter(n => n.tagName === "TH").map(text)).toEqual(["Path", "Pattern", "Kind", "Bytes", "SHA-256 (first 12)"]);
+    const qTr = await imp(() => ({status: 200, body: body(quarantine([fileOf("CLAUDE.md")]))}), "tr");
+    expect(h4(qTr.root)).toBe("Ajan yapılandırma karantinası");
+    expect(text(all(block(qTr.root)!).find(n => n.tagName === "CAPTION")!)).toBe("Karantinaya alınan ajan yapılandırma dosyaları");
+    expect(all(block(qTr.root)!).filter(n => n.tagName === "TH").map(text)).toEqual(["Yol", "Desen", "Tür", "Bayt", "SHA-256 (ilk 12)"]);
+    const n = await imp(() => ({status: 200, body: body()}));
+    expect(h4(n.root)).toBe("Agent configuration quarantine");
+    const nTr = await imp(() => ({status: 200, body: body()}), "tr");
+    expect(h4(nTr.root)).toBe("Ajan yapılandırma karantinası");
+    const u = await imp(() => ({status: 202, body: {}}));
+    expect(h4(u.root)).toBe("Agent configuration quarantine");
+    expect(text(block(u.root)!)).toBe("Agent configuration quarantineQuarantine status unknown: the server's answer did not carry a readable import result, so nothing can be said about quarantined files.");
+    const uTr = await imp(() => ({status: 202, body: {}}), "tr");
+    expect(h4(uTr.root)).toBe("Ajan yapılandırma karantinası");
+    expect(text(all(block(uTr.root)!).find(x => x.dataset.quarantineNote === "unknown")!)).toBe("Karantina durumu bilinmiyor: sunucunun yanıtı okunabilir bir içe aktarma sonucu taşımıyordu; karantinaya alınan dosyalar hakkında bir şey söylenemez.");
+    expect(text(all(block(uTr.root)!).find(x => x.dataset.quarantineNote === "unknown")!)).not.toBe(text(all(block(nTr.root)!).find(x => x.dataset.quarantineNote === "none")!));
+  });
+
+  it("L4: the NONE state renders no files table, no caption and no 'showing N of M' note", async () => {
+    const n = await imp(() => ({status: 200, body: body()}));
+    const b = block(n.root)!;
+    expect(b.dataset.quarantine).toBe("NONE");
+    expect(byId(b, "studio-import-quarantine-files")).toBeNull();
+    expect(all(b).filter(x => ["TABLE", "CAPTION", "TH", "TR"].includes(x.tagName))).toEqual([]);
+    expect(all(b).filter(x => "quarantineMore" in x.dataset || "quarantineUndisplayable" in x.dataset)).toEqual([]);
+    expect(text(b)).not.toMatch(/Showing/);
+  });
+
+  it("L1: picking a new path clears the previous import's quarantine evidence along with its status", async () => {
+    const r = await imp(() => ({status: 200, body: body(quarantine([fileOf("CLAUDE.md")]))}));
+    expect(block(r.root)).not.toBeNull();
+    byId(r.root, "studio-import-pick")!.fire("click"); await tick();
+    const root = mount(r.doc, await projectsView.render(r.ctx));
+    expect(block(root)).toBeNull();
+    expect(st.importOutcome).toEqual({projectId: null, quarantine: null});
+  });
+
+  it("L2: a file entry without sha256 is UNKNOWN, and the projects view renders it without crashing", async () => {
+    const r = await imp(() => ({status: 200, body: body(quarantine([{path: "CLAUDE.md", pattern: "CLAUDE.md", kind: "file", bytes: 1}]))}));
+    expect(block(r.root)?.dataset.quarantine).toBe("UNKNOWN");
+    expect(all(block(r.root)!).filter(n => "quarantineFile" in n.dataset)).toEqual([]);
+  });
+
+  it("L3: the mapper bounds and charset are pinned (bytes integer/safe, count <= 1000000, path <= 1024, pattern <= 120, storedUnder <= 200, no NUL/DEL/control characters)", async () => {
+    const pc = await load(rend, "project-core.js");
+    const map = (files: any[], over: Record<string, any> = {}) => pc.mapImportQuarantine({status: 200, body: body(quarantine(files, over))});
+    expect(map([fileOf("CLAUDE.md", {bytes: 1.5})])).toEqual({state: "UNKNOWN"});
+    expect(map([fileOf("CLAUDE.md", {bytes: 2 ** 53})])).toEqual({state: "UNKNOWN"});
+    expect(map([fileOf("CLAUDE.md", {bytes: 0})]).state).toBe("QUARANTINED");
+    expect(map(many(500), {count: 1_000_000, truncated: true}).state).toBe("QUARANTINED");
+    expect(map(many(500), {count: 1_000_001, truncated: true})).toEqual({state: "UNKNOWN"});
+    expect(map(many(500), {count: 1.5 + 500, truncated: true})).toEqual({state: "UNKNOWN"});
+    expect(map([fileOf("CLAUDE.md", {pattern: "p".repeat(120)})]).state).toBe("QUARANTINED");
+    expect(map([fileOf("CLAUDE.md", {pattern: "p".repeat(121)})])).toEqual({state: "UNKNOWN"});
+    expect(map([fileOf("CLAUDE.md")], {storedUnder: "s".repeat(200)}).state).toBe("QUARANTINED");
+    expect(map([fileOf("CLAUDE.md")], {storedUnder: "s".repeat(201)})).toEqual({state: "UNKNOWN"});
+    for (const bad of ["a\u0000b", "a\u007fb", "a\tb", "a\u001fb"]) {
+      expect(map([fileOf("CLAUDE.md", {pattern: bad})]), JSON.stringify(bad)).toEqual({state: "UNKNOWN"});
+      expect(map([fileOf("CLAUDE.md")], {storedUnder: bad}), JSON.stringify(bad)).toEqual({state: "UNKNOWN"});
+    }
+    const ok = map([fileOf("p".repeat(1024))]);
+    expect(ok).toMatchObject({state: "QUARANTINED", undisplayable: 0, recorded: 1});
+    expect(ok.files).toHaveLength(1);
+    for (const bad of ["p".repeat(1025), "a\u0000b", "a\u007fb", "a\tb", "a\nb"]) {
+      const m = map([fileOf("CLAUDE.md"), fileOf(bad)]);
+      expect(m, JSON.stringify(bad.slice(0, 6))).toMatchObject({state: "QUARANTINED", count: 2, recorded: 2, undisplayable: 1});
+      expect(m.files.map((f: any) => f.path)).toEqual(["CLAUDE.md"]);
+    }
+  });
+
+  it("L5: one repo-controlled undisplayable path (too long, TAB, newline) keeps the real quarantine count and commit, is counted but not listed, and is never NONE or a wrong-cause UNKNOWN", async () => {
+    const r = await imp(() => ({status: 200, body: body(quarantine([fileOf("CLAUDE.md"), fileOf("evil\tname/CLAUDE.md"), fileOf("x".repeat(1030))]))}));
+    expect(forms.drafts.status["studio-import"]).toMatchObject({ok: true, key: "studio.import.doneQuarantined", vars: {count: 3}});
+    const b = block(r.root)!;
+    expect(b.dataset.quarantine).toBe("QUARANTINED");
+    expect(text(all(b).find(n => n.dataset.quarantineNote === "quarantined")!)).toBe("3 agent configuration file(s) were quarantined at commit a1b2c3d4e5f6 and are not in the managed repository. Evidence is stored under projects/<projectId>/quarantine/agent-config/<sha256>.");
+    expect(all(b).filter(n => "quarantineFile" in n.dataset).map(n => n.dataset.quarantineFile)).toEqual(["CLAUDE.md"]);
+    expect(text(all(b).find(n => "quarantineUndisplayable" in n.dataset)!)).toBe("2 recorded path(s) cannot be displayed (too long or containing control characters); they are counted above but not listed.");
+    expect(all(b).filter(n => "quarantineMore" in n.dataset)).toEqual([]);
+    const tr = await imp(() => ({status: 200, body: body(quarantine([fileOf("CLAUDE.md"), fileOf("evil\nname/CLAUDE.md")]))}), "tr");
+    expect(text(all(block(tr.root)!).find(n => "quarantineUndisplayable" in n.dataset)!)).toBe("Kayıtlı 1 yol gösterilemiyor (çok uzun veya kontrol karakteri içeriyor); yukarıda sayıldı ama listelenmedi.");
+    const allBad = await imp(() => ({status: 200, body: body(quarantine([fileOf("a\nb")]))}));
+    expect(block(allBad.root)?.dataset.quarantine).toBe("QUARANTINED");
+    expect(byId(block(allBad.root)!, "studio-import-quarantine-files")).toBeNull();
+    expect(forms.drafts.status["studio-import"]).toMatchObject({key: "studio.import.doneQuarantined", vars: {count: 1}});
+  });
+
+  it("Turkish renders the same three outcomes, and the en/tr keys have the same placeholders", async () => {
+    const q = await imp(() => ({status: 200, body: body(quarantine([fileOf("CLAUDE.md")]))}), "tr");
+    expect(statusText(q.root)).toBe("İçe aktarma kabul edildi, ancak 1 ajan yapılandırma dosyası karantinaya alındı: bunlar proje deposunda DEĞİL. Ayrıntılar aşağıda.");
+    expect(text(all(block(q.root)!).find(n => n.dataset.quarantineNote === "quarantined")!)).toBe("1 ajan yapılandırma dosyası a1b2c3d4e5f6 commit'inde karantinaya alındı ve yönetilen depoda değil. Kanıt şurada saklanır: projects/<projectId>/quarantine/agent-config/<sha256>.");
+    const n = await imp(() => ({status: 200, body: body()}), "tr");
+    expect(text(all(block(n.root)!).find(x => x.dataset.quarantineNote === "none")!)).toBe("Sunucu bu içe aktarma için ajan yapılandırma karantinası bildirmedi. (Bu kanıtı yalnız bir şey karantinaya alındığında gönderir.)");
+    const u = await imp(() => ({status: 202, body: {}}), "tr");
+    expect(statusText(u.root)).toBe("İçe aktarma isteği kabul edildi. Karantina sonucu bilinmiyor: sunucunun yanıtı okunabilir bir içe aktarma sonucu taşımıyordu.");
+    const en = (await load(rend, "locales", "en.js")).default as Record<string, string>, tr = (await load(rend, "locales", "tr.js")).default as Record<string, string>;
+    const keys = Object.keys(en).filter(k => k.startsWith("studio.import.q.") || k === "studio.import.doneQuarantined" || k === "studio.import.doneQuarantineUnknown");
+    // //TR: A-UI125-1 repair: iki yeni anahtar (q.moreTruncated, q.undisplayable) eklendi; sayı 13 -> 15.
+    expect(keys.length).toBe(15);
+    const ph = (x: string) => (x.match(/\{\w+\}/g) ?? []).sort().join(",");
+    for (const k of keys) { expect(tr[k], k).toBeTruthy(); expect(ph(tr[k]), k).toBe(ph(en[k])); }
   });
 });

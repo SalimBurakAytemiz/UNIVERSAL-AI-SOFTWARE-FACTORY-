@@ -287,9 +287,10 @@ describe("C-RDY-1 readiness-audit", () => {
     expect(countOnly(absent.totals.RUNNING)).toEqual({TRUE: 0, FALSE: 0, UNKNOWN: 599});
     expect(absent.totals.RUNNING.measured).toBe(false);
     expect(absent.inputs.journal).toBe("ABSENT");
-    // //TR: AÇIK SORU (değiştirilmedi): runningRoleIdsFromRuns AWAITING_APPROVAL'ı da açık sayar (role-lifecycle.ts:76), oysa run-state.ts:40 isOpenRun onu açık saymaz. Bu test mevcut davranışı sabitler, kararı koordinatöre bırakır.
+    // //TR: KARAR (B1, koordinatör): runningRoleIdsFromRuns artık run-state.isOpenRun ile tutarlıdır; AWAITING_APPROVAL açık run DEĞİLDİR, onay bekleyen run'daki rol RUNNING sayılmaz (eskiden sayılıyor ve bu test o davranışı sabitliyordu).
     const awaiting = computeRoleReadiness(realInput({runs: observe([run("AWAITING_APPROVAL", trace("agent=a3 role=UASCO-0043 state=COMPLETED"))])}));
-    expect(roleOf(awaiting, "UASCO-0043").layers.RUNNING.state).toBe("TRUE");
+    expect(roleOf(awaiting, "UASCO-0043").layers.RUNNING).toEqual({state: "FALSE", reasons: ["NOT_IN_OPEN_RUN"]});
+    expect(countOnly(awaiting.totals.RUNNING)).toEqual({TRUE: 0, FALSE: 599, UNKNOWN: 0});
   });
 
   it("knowledge: no vacuous truth and full provenance", () => {
