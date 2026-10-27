@@ -952,6 +952,16 @@
       "ref": "wf_4a5a13a0-b74",
       "policy": "TEP-1",
       "at": "2026-10-27T05:19:55.313Z"
+    },
+    {
+      "pr": 278,
+      "sha": "45bbee4f2b811ddf125201abd6b9d5012eca5dac",
+      "kind": "delta",
+      "base": "865f1da",
+      "verdict": "NO_BLOCKERS_COORD_INLINE_tests_docs_comment_only",
+      "ref": "coord inline: diff 865f1da..45bbee4 = +12 test lines (0 removed), 1 TR comment, 1 doc line; removed Set assertion restored verbatim (the r1 reviewer's control run showed it kills N13c); no behaviour change",
+      "policy": "TEP-1",
+      "at": "2026-10-27T05:24:23.357Z"
     }
   ],
   "tests": [],
