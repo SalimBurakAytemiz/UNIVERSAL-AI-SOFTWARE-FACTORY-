@@ -912,13 +912,23 @@
       "ref": "wf_7b25c0ad-fdc",
       "policy": "TEP-1",
       "at": "2026-10-27T04:39:06.660Z"
+    },
+    {
+      "pr": 273,
+      "sha": "6694dc103b1c08510f45218bfe9b4e6904745803",
+      "kind": "delta",
+      "base": "5097223",
+      "verdict": "NO_BLOCKERS_4LOW",
+      "ref": "wf_b613e212-694",
+      "policy": "TEP-1",
+      "at": "2026-10-27T05:01:23.787Z"
     }
   ],
   "tests": [],
   "fingerprint": {
-    "value": "91f5da1926ec5f4eb2dceb4097c075b1aefb95d2f8feb4885a533b5c0dcb1c37",
-    "at": "2026-10-27T03:41:38.459Z",
-    "base": "d0b3cf5e7dc16f81aee2a07f139bb03bf757b350",
-    "prs": 12
+    "value": "e1852f34eac0d94df0d5797c7023b3228f7894c51c1b5c91f8bd2827ec88ad3d",
+    "at": "2026-10-27T04:42:09.099Z",
+    "base": "779c840b71f46737a56a785ece4ee29d32b4b803",
+    "prs": 10
   }
 }
