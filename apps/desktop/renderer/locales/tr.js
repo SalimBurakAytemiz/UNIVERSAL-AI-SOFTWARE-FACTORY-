@@ -770,7 +770,7 @@ export default {
   "work.run.expert":"Uzman geliştirici",
   "work.run.expertHint":"Koşu bu rol tanımının yürütme profiline (araçlar, limitler) bağlanır ve sunucu rolün yürütülebilir olduğunu yeniden denetler. Rol sertifikalı değildir.",
   "work.run.expertOpt":"{roleId} · {fn}",
-  "work.run.expertNone":"Rol atamadan başlat",
+  "work.run.expertDefault":"Geliştirici {roleId} (varsayılan)",
   "work.run.fn.developer":"geliştirici",
   "err.roleNotExecutable":"Bu rol koşu yürütemez; listedeki uzman rollerden birini seçin.",
   "form.field.roleId":"Uzman rol",
