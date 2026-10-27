@@ -3,7 +3,7 @@
 
 **Refresh (B-LOWS-2):** the map was measured at 459205c and its cells were refreshed against 30e4e83 (v7/integration after #262 and #272). Renderer file:line references are re-mapped to the 30e4e83 files; E1: the two pre-dev decision endpoints (`approve`, `reject`) HAVE a renderer caller (`renderer/predev-decisions-core.js:20`, `predevDecisionPath`; the path is built with a `${verb}` template, which the literal matcher missed); E2: `GET /v1/roles/:roleId` is called from `renderer/api.js:146` (the earlier `agent-factory-core.js:2` is the static `/v1/roles/status-summary` constant); E3: `GET /v1/roles/status-summary` is now registered at `routes/role-status.ts:35`, answers `{statusSummary, statusSummaryStatus, readiness, reconciliation}` (or the degrade form with `readinessError`) and is exercised by 18 tests (the instrumented run was repeated for `tests/v7-wfr03-role-registry.test.ts` and `tests/v7-b4-desktop-shell.test.ts` only: 185 tests, all passed; statuses 200/403/500/503). Class counts are unchanged (99 / 4 / 0 / 5). Every other test count is still the one measured at 459205c.
 
-Docs only. No code or test was changed. Machine-readable twin: `docs/lanes/LANE-B-ENDPOINT-EVIDENCE.json` (fields per endpoint: `id` G-EP id or UNMAPPED, `a` registration, `b` tests run on this base, `c` desktop allow-list, `d` renderer caller, `e` evidence class).
+This map is documentation only: it describes the repository and changes no behaviour (the commits that carry it may also touch tests). Machine-readable twin: `docs/lanes/LANE-B-ENDPOINT-EVIDENCE.json` (fields per endpoint: `id` G-EP id or UNMAPPED, `a` registration, `b` tests run on this base, `c` desktop allow-list, `d` renderer caller, `e` evidence class).
 
 ## Result
 
@@ -225,5 +225,6 @@ Windows (every Windows-only branch and CI shard), real Electron and the IPC hand
 
 - A passing test that only reaches a route's gates (423/403/400) counts as exercising the route; the `(no 2xx)` flag marks routes whose success path was never observed.
 - `UNMAPPED` ids are routes added after the 2026-10-19 inventory.
+- `GET /v1/projects/:id/readiness` (B-NEXT-1): the repository HEAD probe is async, bounded to 3 s and single-flight per repository path; the probe git is a plain child in the caller's process group (terminal signals reach it); on timeout only that direct child is killed and its pipes are destroyed, then the call settles at once. Known limit: a grandchild that escaped with `setsid` is not killed (it can no longer hold the budget). Known Windows limit (predates it): the timeout path of `git-async` kills the git tree with a synchronous, untimed `taskkill`, so the event loop is blocked for that call only.
 - The inventory's statuses are not restated here; this map is evidence, not a status change.
 
