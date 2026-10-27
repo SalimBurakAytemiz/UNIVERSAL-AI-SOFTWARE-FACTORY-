@@ -1,5 +1,5 @@
 // //TR: Bu test C-RDY-2a Adapter Gerçeklik Haritasını (core/capabilities/adapter-reality.ts) doğrular: her harita girdisinin modülü var, dışa aktarımı dinamik içe aktarmayla görünür ve bildirilen üretim çağıranları o dışa aktarımı KODDA (yorum ve dize içeriği dışında) gerçekten anıyor (T1, tarayıcı ve çağıran fixture'ları); gerçek kayıtlarda kayıt-defteri-ile-kod uzlaştırması (UNDER_REPORTED/UNREGISTERED_REAL/DEAD_CODE), eksiksizlik sayımı (kod destekli bir araç haritanın dışında kalamaz) ve yetenek çözümleyicisinin sağlığı gerçeklik haritasından alması (T2); CI dürüstlüğü: iş akışlarında geçmeyen bir araç REAL sayılamaz, iş akışı anma kümesi açıkça sabitlenir (T3); 10 bağlama adaptörünün çözülmesi ve bilinmeyen kimliğin ADAPTER_UNRESOLVED olması (T4); her girişin yoklama varsayılanı NOT_OBSERVED'dır ve C-RDY-1 TOOL_READY açık bir READY yoklaması olmadan TRUE olmaz (T5). Hiçbir test kayıt dosyasına yazmaz; hiçbir ikili çalıştırılmaz.
-import {describe, it, expect, beforeAll, afterAll} from "vitest";
+import {describe, it, expect, beforeAll, afterAll, vi} from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -23,6 +23,12 @@ const report = (o: {probes?: ReadonlyMap<string, ProbeObservation>; bindingAdapt
   buildAdapterRealityReport(REPO, {bindingAdapterIds: BINDING_ADAPTER_IDS, ...o});
 const allReady = (ids: readonly string[]): ReadonlyMap<string, ProbeObservation> => new Map(ids.map(id => [id, "READY" as const]));
 const messageDrift = (what: string, follow: string) => `${what}: ${follow}`;
+// //TR: Dizin listesi işletim sistemi sırasına bağlıdır (bazı dosya sistemleri zaten sıralı döner); sıralamayı sınamak için readdirSync sonuçları TERSİNE çevrilir.
+const withReversedDirs = <T>(f: () => T): T => {
+  const original = fs.readdirSync;
+  const spy = vi.spyOn(fs, "readdirSync").mockImplementation(((...a: unknown[]) => { const r = (original as (...x: unknown[]) => unknown)(...a); return Array.isArray(r) ? [...r].reverse() : r; }) as never);
+  try { return f(); } finally { spy.mockRestore(); }
+};
 
 describe("C-RDY-2a adapter-reality", () => {
   let tmp = "";
@@ -605,7 +611,7 @@ describe("C-RDY-2a adapter-reality", () => {
       "core/a.ts": "execFile(\"tool-ef\", []); execFileSync('Tool.EXE', []); spawn( \"sp-tool\", []); spawnSync(`ss-tool`, []); const myspawn = (x, y) => 0; myspawn(\"not-a-cmd\", []);\nconst m1 = \"acme-tool\"; const m2 = \"acme-tool\"; const dots = \"aXb\"; const lower = \"mixed-case\";\n",
       "core/z-broken.ts": "const x = \"open\n", "automation/m-broken.mjs": "const w = \"open\n", "core/a-broken.ts": "const y = \"open\n"
     });
-    const c = censusProduction(root, ["acme-tool", "a.b", "Mixed-Case"]);
+    const c = withReversedDirs(() => censusProduction(root, ["acme-tool", "a.b", "Mixed-Case"]));
     expect([...c.registryIds.entries()]).toEqual([["acme-tool", ["core/a.ts", "core/b.ts"]], ["Mixed-Case", ["core/a.ts"]], ["a.b", ["core/b.ts"]]]);
     expect([...c.commands.entries()]).toEqual([["tool-ef", ["core/a.ts"]], ["Tool.EXE", ["core/a.ts"]], ["sp-tool", ["core/a.ts"]], ["ss-tool", ["core/a.ts"]]]);
     expect(c.unparseable).toEqual(["automation/m-broken.mjs", "core/a-broken.ts", "core/z-broken.ts"]);
@@ -618,7 +624,7 @@ describe("C-RDY-2a adapter-reality", () => {
 
   it("workflow and registry readers: indented YAML comments, name order, every adapter row is validated", () => {
     const wfRoot = fx({".github/workflows/c.yml": "- run: echo C-MARK\n", ".github/workflows/a.yaml": "jobs:\n    #node tools/indented.mjs\n  x: A-MARK\n", ".github/workflows/e.yml": "- run: echo E-MARK\n", ".github/workflows/b.yml": "- run: echo B-MARK\n", ".github/workflows/d.yaml": "- run: echo D-MARK\n"});
-    const wf = readWorkflowTexts(wfRoot);
+    const wf = withReversedDirs(() => readWorkflowTexts(wfRoot));
     expect(wf.map(t => /([A-E])-MARK/.exec(t)![1])).toEqual(["A", "B", "C", "D", "E"]);
     expect(wf[0]).not.toContain("indented.mjs");
     const good = {id: "a", category: "C", status: "REGISTERED", implementation: "NOT_IMPLEMENTED"};
