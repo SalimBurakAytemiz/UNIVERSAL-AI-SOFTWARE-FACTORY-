@@ -44,5 +44,7 @@ export function runsFromWorkRuns(workRuns, roles) {
 }
 
 export function buildCampusInput({ cockpit, control, roles, workRuns }) {
-  return { cockpit: globalStopSource(cockpit, control), catalog: catalogFromRoles(roles), runs: runsFromWorkRuns(workRuns, roles) };
+  // //TR: A-281-LOWS: kesik koşu listesi (runs null) "veri yok" ile aynı görünmesin; okunan koşu sayısı runsCutAt olarak taşınır (kesik değilse null).
+  const runsCutAt = workRuns && workRuns.state === "VERIFIED" && workRuns.truncated === true && Array.isArray(workRuns.items) ? workRuns.items.length : null;
+  return { cockpit: globalStopSource(cockpit, control), catalog: catalogFromRoles(roles), runs: runsFromWorkRuns(workRuns, roles), runsCutAt };
 }
