@@ -36,11 +36,11 @@ export function mountCampus(ctx, input) {
   const t = model.totals;
   const summary = h(doc, "p", { class: "ct-summary", dataset: { ctSummary: "1" },
     text: model.dataState.catalog ? ctx.t("tower.map.summary", { districts: t.districts, buildings: t.buildings, roles: num(t.targetRoles), active: num(t.activeRuns) }) : ctx.t("tower.map.summaryNone") });
-  const feeds = h(doc, "p", { class: "note ct-feeds", dataset: { catalog: String(model.dataState.catalog), cockpit: String(model.dataState.cockpit), runs: String(model.dataState.runs) },
+  const feeds = h(doc, "p", { class: "note ct-feeds", dataset: { catalog: String(model.dataState.catalog), cockpit: String(model.dataState.cockpit), runs: String(model.dataState.runs), runsCut: String(Number.isSafeInteger(input.runsCutAt)) },
     text: ctx.t("tower.map.feeds", {
       status: ctx.t(model.dataState.cockpit ? "tower.map.feedOk" : "tower.map.feedNone"),
       catalog: ctx.t(model.dataState.catalog ? "tower.map.feedOk" : "tower.map.feedNone"),
-      runs: ctx.t(model.dataState.runs ? "tower.map.feedOk" : "tower.map.feedNone")
+      runs: model.dataState.runs ? ctx.t("tower.map.feedOk") : Number.isSafeInteger(input.runsCutAt) ? ctx.t("tower.map.feedCut", { n: input.runsCutAt }) : ctx.t("tower.map.feedNone")
     }) });
 
   const targets = [];

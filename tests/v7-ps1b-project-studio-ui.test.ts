@@ -913,7 +913,8 @@ describe("PS-1B static safety and wiring", () => {
     expect(step.command.slice(j, j + 2)).toEqual(["tests/v7-ps1b-project-studio-ui.test.ts", "tests/v7-ps1b-relpath-canonical.test.ts"]);
     // V7-CORE-PREDEV (FA-V2-PRODUCT): CORE pre-dev sözleşme testi (core-predev-*) ve UX paketleri (ux-*) de sona eklenir; ps1b çiftinin sırası ve tekilliği değişmez.
     // MASTER-V2 C-RDY-1 (#260, R1 TEST_REGISTRATION_APPEND): rol hazırlık denetçisi testi (core-readiness-*) de sona eklenir; sıra ve tekillik kuralı aynen geçerlidir.
-    for (const later of step.command.slice(j + 2)) expect(later).toMatch(/^tests\/v7-(?:b([6-9]|\d{2,})[a-z]?|ps\d+[a-z]?|m1a|core-predev|core-readiness|ux)-[a-z0-9-]+\.test\.ts$/);
+    // MASTER-V2 C-CTX-1 (#265, R1 TEST_REGISTRATION_APPEND): rol bağlamı çözücüsü testi (core-role-*) de sona eklenir; sıra ve tekillik kuralı aynen geçerlidir.
+    for (const later of step.command.slice(j + 2)) expect(later).toMatch(/^tests\/v7-(?:b([6-9]|\d{2,})[a-z]?|ps\d+[a-z]?|m1a|core-predev|core-readiness|core-role|ux)-[a-z0-9-]+\.test\.ts$/);
     expect(step.command.filter((x: string) => x === "tests/v7-ps1b-project-studio-ui.test.ts").length).toBe(1);
     expect(step.command).toContain("tests/v7-b7-installer.test.ts");
   });
@@ -1938,6 +1939,36 @@ describe("LANE-A project intake from an idea (fake DOM)", () => {
       const r = all(byId(unk.shown, "intake-readiness")!).find(n => n.dataset.readyCheck === "REPOSITORY")!;
       expect(text(r)).toContain("BRAND_NEW_REASON (not recognised)"); expect(text(r)).toContain("BRAND_NEW_ACTION (not recognised)");
     });
+    // //TR: A-276-L10N: Lane B (#276) iki yeni hazırlık nedeni kodu üretir; metinleri sabitlenir (en/tr), bilinmeyen kod hâlâ ham + "(not recognised)" ile gösterilir. Delta r1 (#280): HEAD_UNRESOLVED metni bu kodun TÜM nedenlerini söyler (commit yok, Git yok, Git klasörü reddetti, probe reddedildi); NOT_WORKTREE_ROOT metni "projeyi diğer depodan çıkarın" çözümünü de ekler; önceki iki sabit metin buna göre güncellendi.
+    it("shows the two repository-folder reasons from the server (REPOSITORY_HEAD_UNRESOLVED, REPOSITORY_NOT_WORKTREE_ROOT) with their exact en and tr texts, and an unknown code still falls back to the raw code", async () => {
+      const EN: Record<string, string> = {
+        REPOSITORY_HEAD_UNRESOLVED: "Git could not confirm a commit in this folder: it may not be a Git repository with at least one commit, Git may be missing, or Git may have refused the folder (for example because of its ownership). Check the folder and that Git is installed, then pick the project's top-level folder.",
+        REPOSITORY_NOT_WORKTREE_ROOT: "The folder is inside a Git repository but is not its top-level folder. Pick the top-level folder, or move the project out of the other repository."};
+      const TR: Record<string, string> = {
+        REPOSITORY_HEAD_UNRESOLVED: "Git bu klasörde bir commit doğrulayamadı: klasör en az bir commit içeren bir Git deposu olmayabilir, Git kurulu olmayabilir ya da Git klasörü (örneğin sahiplik nedeniyle) reddetmiş olabilir. Klasörü ve Git'in kurulu olduğunu kontrol edin, sonra projenin en üst klasörünü seçin.",
+        REPOSITORY_NOT_WORKTREE_ROOT: "Klasör bir Git deposunun içinde ama deponun en üst klasörü değil. En üst klasörü seçin ya da projeyi diğer depodan çıkarın."};
+      for (const [lang, want] of [["en", EN], ["tr", TR]] as const) {
+        for (const code of Object.keys(want)) {
+          forms.resetAllForms();
+          const odd = okChecks(); odd[2] = chk("REPOSITORY", "BLOCKED", true, code, "CONFIGURE_REPOSITORY");
+          const o = await submitted({lang, rd: readiness({ready: false, verifiable: false}, odd)});
+          const row = all(byId(o.shown, "intake-readiness")!).find(n => n.dataset.readyCheck === "REPOSITORY")!;
+          const reason = all(row).find(n => n.dataset.readyReason === code)!;
+          expect(text(reason), `${lang} ${code}`).toBe(want[code]);
+          expect(text(reason), `${lang} ${code}`).not.toContain(code);
+        }
+      }
+      const en = (await load(rend, "locales", "en.js")).default as Record<string, string>, tr = (await load(rend, "locales", "tr.js")).default as Record<string, string>;
+      for (const code of Object.keys(EN)) { expect(en[`runready.reason.${code}`]).toBe(EN[code]); expect(tr[`runready.reason.${code}`]).toBe(TR[code]); }
+      forms.resetAllForms();
+      const odd = okChecks(); odd[2] = chk("REPOSITORY", "BLOCKED", true, "REPOSITORY_FUTURE_REASON", "CONFIGURE_REPOSITORY");
+      const unk = await submitted({rd: readiness({ready: false, verifiable: false}, odd)});
+      expect(text(all(byId(unk.shown, "intake-readiness")!).find(n => n.dataset.readyReason === "REPOSITORY_FUTURE_REASON")!)).toBe("REPOSITORY_FUTURE_REASON (not recognised)");
+      // //TR: #280 LOW(b): Türkçe bilinmeyen-kod geri dönüşü de sabitlenir (ham kod + "(tanınmadı)").
+      forms.resetAllForms();
+      const unkTr = await submitted({lang: "tr", rd: readiness({ready: false, verifiable: false}, odd)});
+      expect(text(all(byId(unkTr.shown, "intake-readiness")!).find(n => n.dataset.readyReason === "REPOSITORY_FUTURE_REASON")!)).toBe("REPOSITORY_FUTURE_REASON (tanınmadı)");
+    });
     it("offers a button only for next steps that have a real destination, and it goes to the readiness mission, not a guessed one", async () => {
       forms.resetAllForms();
       const MSN2 = "msn_" + "dd".repeat(12);
@@ -2883,6 +2914,7 @@ describe("LANE-A A-UI125-1 import success shows the agent configuration quaranti
   });
 
   it("UNKNOWN (the answer has no readable import block, or the evidence is malformed): never a plain success, never partial figures", async () => {
+    // //TR: A-UI125-1 round-1 (#269): bu tablodan "dosya yolunda kontrol karakteri => UNKNOWN" girdisi bilerek çıkarıldı; yol artık listelenmez ama SAYILIR (QUARANTINED + undisplayable) ve kanıtı "L5"/"L3" testlerinde sabitlenmiştir. Desen ve storedUnder içindeki kontrol karakterleri hâlâ UNKNOWN'dur (aşağıdaki iki girdi).
     const bads: Array<[string, any]> = [["empty body", {}], ["no import block", {project: {projectId: PID}}], ["import not an object", {import: "x"}],
       ["import without kind", {import: {headSha: HEAD}}], ["import with a bad headSha", {import: {kind: "git", headSha: "xyz"}}],
       ["count mismatching the files", body(quarantine([fileOf("CLAUDE.md")], {count: 2}))], ["count above the listed files with a consistent truncated flag (the server truncates only above 500)", body(quarantine([fileOf("CLAUDE.md"), fileOf("a/CLAUDE.md")], {count: 3, truncated: true}))], ["more files listed than counted", body(quarantine([fileOf("CLAUDE.md"), fileOf("a/CLAUDE.md")], {count: 1}))], ["count zero", body(quarantine([], {count: 0}))],
@@ -3083,6 +3115,8 @@ describe("LANE-A A-UI125-1 import success shows the agent configuration quaranti
     }
   });
 
+  // //TR: A-277-LOWS: q.undisplayable metni artık gerçek nedenleri sayar; bu bloktaki ve C1/bidi testindeki sabit metinler (en/tr) buna göre güncellendi, başka assertion değişmedi.
+  // //TR: A-269-LOWS: q.undisplayable metni C1/bidi/biçimlendirme karakterlerini de kapsayacak şekilde genişletildi; L5 testindeki iki sabit metin (en/tr) buna göre güncellendi; C1/bidi testindeki metin yenidir; başka assertion değişmedi.
   it("L5: one repo-controlled undisplayable path (too long, TAB, newline) keeps the real quarantine count and commit, is counted but not listed, and is never NONE or a wrong-cause UNKNOWN", async () => {
     const r = await imp(() => ({status: 200, body: body(quarantine([fileOf("CLAUDE.md"), fileOf("evil\tname/CLAUDE.md"), fileOf("x".repeat(1030))]))}));
     expect(forms.drafts.status["studio-import"]).toMatchObject({ok: true, key: "studio.import.doneQuarantined", vars: {count: 3}});
@@ -3090,14 +3124,148 @@ describe("LANE-A A-UI125-1 import success shows the agent configuration quaranti
     expect(b.dataset.quarantine).toBe("QUARANTINED");
     expect(text(all(b).find(n => n.dataset.quarantineNote === "quarantined")!)).toBe("3 agent configuration file(s) were quarantined at commit a1b2c3d4e5f6 and are not in the managed repository. Evidence is stored under projects/<projectId>/quarantine/agent-config/<sha256>.");
     expect(all(b).filter(n => "quarantineFile" in n.dataset).map(n => n.dataset.quarantineFile)).toEqual(["CLAUDE.md"]);
-    expect(text(all(b).find(n => "quarantineUndisplayable" in n.dataset)!)).toBe("2 recorded path(s) cannot be displayed (too long or containing control characters); they are counted above but not listed.");
+    expect(text(all(b).find(n => "quarantineUndisplayable" in n.dataset)!)).toBe("2 recorded path(s) cannot be displayed (too long, or containing control, hidden or formatting characters, unpaired surrogates, variation selectors, 9 or more stacked combining marks, or leading, trailing or repeated spaces); they are counted above but not listed.");
     expect(all(b).filter(n => "quarantineMore" in n.dataset)).toEqual([]);
     const tr = await imp(() => ({status: 200, body: body(quarantine([fileOf("CLAUDE.md"), fileOf("evil\nname/CLAUDE.md")]))}), "tr");
-    expect(text(all(block(tr.root)!).find(n => "quarantineUndisplayable" in n.dataset)!)).toBe("Kayıtlı 1 yol gösterilemiyor (çok uzun veya kontrol karakteri içeriyor); yukarıda sayıldı ama listelenmedi.");
+    expect(text(all(block(tr.root)!).find(n => "quarantineUndisplayable" in n.dataset)!)).toBe("Kayıtlı 1 yol gösterilemiyor (çok uzun; veya kontrol, gizli ya da biçimlendirme karakteri, eşleşmemiş vekil karakter, varyasyon seçici, 9 veya daha fazla yığılmış birleştirici işaret ya da baştaki, sondaki veya tekrarlanan boşluk içeriyor); yukarıda sayıldı ama listelenmedi.");
     const allBad = await imp(() => ({status: 200, body: body(quarantine([fileOf("a\nb")]))}));
     expect(block(allBad.root)?.dataset.quarantine).toBe("QUARANTINED");
     expect(byId(block(allBad.root)!, "studio-import-quarantine-files")).toBeNull();
     expect(forms.drafts.status["studio-import"]).toMatchObject({key: "studio.import.doneQuarantined", vars: {count: 1}});
+  });
+
+  // ---- A-269-LOWS (COORD ledger, #269 review LOWs) ----
+  it("D28/D29: the noDialog, dialogFailed and validation statuses carry the project id, and a workspace panel shows only its own project's status", async () => {
+    const PID_B = "prj_" + "cd34".repeat(6);
+    const two = projectsGet({"/v1/projects": {projects: [project(), project({projectId: PID_B, name: "Dükkan"})]}});
+    const noNative = await mkCtx({get: two, lang: "en"});
+    st.openProject(PID, "overview");
+    let root = mount(noNative.doc, await projectsView.render(noNative.ctx));
+    byId(root, "studio-import-pick")!.fire("click"); await tick();
+    expect(forms.drafts.status["studio-import"]).toMatchObject({ok: false, key: "studio.import.noDialog", projectId: PID});
+    root = mount(noNative.doc, await projectsView.render(noNative.ctx));
+    expect(text(byId(root, "studio-import-status")!)).toContain("The file dialog is not available");
+    st.openProject(PID_B, "overview");
+    expect(text(byId(mount(noNative.doc, await projectsView.render(noNative.ctx)), "studio-import-status")!)).toBe("");
+    forms.resetAllForms(); st.resetStudio();
+    const broken = await mkCtx({get: two, lang: "en", native: {pickImportPath: async () => { throw new Error("boom"); }}});
+    st.openProject(PID, "overview");
+    root = mount(broken.doc, await projectsView.render(broken.ctx));
+    byId(root, "studio-import-pick")!.fire("click"); await tick();
+    expect(forms.drafts.status["studio-import"]).toMatchObject({ok: false, key: "studio.import.dialogFailed", projectId: PID});
+    st.openProject(PID_B, "overview");
+    expect(text(byId(mount(broken.doc, await projectsView.render(broken.ctx)), "studio-import-status")!)).toBe("");
+    forms.resetAllForms(); st.resetStudio();
+    const val = await mkCtx({get: two, lang: "en", native});
+    st.openProject(PID, "overview");
+    root = mount(val.doc, await projectsView.render(val.ctx));
+    byId(root, "studio-import-form")!.fire("submit"); await tick();
+    expect(val.calls.post).toEqual([]);
+    expect(forms.drafts.status["studio-import"]).toMatchObject({ok: false, projectId: PID});
+    expect(Object.keys(forms.drafts.status["studio-import"].errors).length).toBeGreaterThan(0);
+    root = mount(val.doc, await projectsView.render(val.ctx));
+    expect(text(byId(root, "studio-import-status")!)).not.toBe("");
+    st.openProject(PID_B, "overview");
+    expect(text(byId(mount(val.doc, await projectsView.render(val.ctx)), "studio-import-status")!)).toBe("");
+  });
+
+  it("D23: a file entry whose path is not a string (or is empty) is UNKNOWN, never a listed or counted file", async () => {
+    const pc = await load(rend, "project-core.js");
+    for (const bad of [7, null, undefined, {}, ["CLAUDE.md"], true, ""]) {
+      const f: any = {...fileOf("CLAUDE.md"), path: bad};
+      expect(pc.mapImportQuarantine({status: 200, body: body(quarantine([f]))}), JSON.stringify(bad) ?? "undefined").toEqual({state: "UNKNOWN"});
+    }
+    const noPath: any = fileOf("CLAUDE.md"); delete noPath.path;
+    expect(pc.mapImportQuarantine({status: 200, body: body(quarantine([noPath]))})).toEqual({state: "UNKNOWN"});
+  });
+
+  it("hidden characters in a path are counted but not listed (every class: C1, bidi/format, zero-width, line/paragraph separators, BOM, soft hyphen, default-ignorables, tags, lone surrogate); in a pattern or storedUnder they are UNKNOWN; printable neighbours stay listed", async () => {
+    const pc = await load(rend, "project-core.js");
+    const map = (files: any[], over: Record<string, any> = {}) => pc.mapImportQuarantine({status: 200, body: body(quarantine(files, over))});
+    // //TR: #277 LOW(a): U+2060, U+2065 ve U+206A önceden "yazdırılabilir komşu" listesindeydi; Cf/Default_Ignorable (görünmez) oldukları için GİZLİ listeye taşındı. Bu bir sıkılaştırmadır, assertion gevşetilmedi.
+    const hidden = ["\u0080", "\u0085", "\u009f", "\u00ad", "\u061c", "\u180e", "\u200b", "\u200c", "\u200d", "\u200e", "\u200f", "\u2028", "\u2029", "\u202a", "\u202b", "\u202c", "\u202d", "\u202e",
+      "\u2060", "\u2064", "\u2065", "\u2066", "\u2067", "\u2068", "\u2069", "\u206a", "\u206f", "\ufeff", "\ufff9", "\ufffb", "\u034f", "\ufe0f", "\u3164", "\u115f", "\u{e0001}", "\u{e007f}", "\ud800"];
+    const label = (c: string) => "U+" + (c.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, "0");
+    for (const c of hidden) {
+      const m = map([fileOf("CLAUDE.md"), fileOf(`ev${c}il/CLAUDE.md`)]);
+      expect(m, label(c)).toMatchObject({state: "QUARANTINED", count: 2, recorded: 2, undisplayable: 1});
+      expect(m.files.map((f: any) => f.path), label(c)).toEqual(["CLAUDE.md"]);
+      expect(map([fileOf("CLAUDE.md", {pattern: `p${c}q`})]), label(c)).toEqual({state: "UNKNOWN"});
+      expect(map([fileOf("CLAUDE.md")], {storedUnder: `a${c}b`}), label(c)).toEqual({state: "UNKNOWN"});
+    }
+    const shown = ["~", "\u00a0", "\u00a1", "\u00ac", "\u00ae", "\u00b7", "\u00e9", "\u200a", "\u2010", "\u2027", "\u202f", "\u205f", "\u2070", "\ufffc", "\u3042", "\u0301"];
+    for (const c of shown) {
+      const m = map([fileOf(`ok${c}name/CLAUDE.md`)]);
+      expect(m, label(c)).toMatchObject({state: "QUARANTINED", undisplayable: 0});
+      expect(m.files.map((f: any) => f.path), label(c)).toEqual([`ok${c}name/CLAUDE.md`]);
+    }
+    // lookalike: the invisible character makes the name differ from the real one while rendering identically, so it must not be listed
+    expect(map([fileOf(".claude/settings\u2060.json")]).files).toEqual([]);
+    expect(map([fileOf(".claude/settings.json")]).files.map((f: any) => f.path)).toEqual([".claude/settings.json"]);
+    // stacked combining marks: at most 8 on one base are listed, 9 or more are counted but not listed
+    expect(map([fileOf("a" + "\u0301".repeat(8))]).files).toHaveLength(1);
+    expect(map([fileOf("a" + "\u0301".repeat(9))])).toMatchObject({state: "QUARANTINED", undisplayable: 1, files: []});
+    expect(map([fileOf("CLAUDE.md", {pattern: "a" + "\u0301".repeat(9)})])).toEqual({state: "UNKNOWN"});
+    const r = await imp(() => ({status: 200, body: body(quarantine([fileOf("a\u202eb/CLAUDE.md")]))}));
+    expect(all(block(r.root)!).filter(n => "quarantineFile" in n.dataset)).toEqual([]);
+    expect(text(all(block(r.root)!).find(n => "quarantineUndisplayable" in n.dataset)!)).toBe("1 recorded path(s) cannot be displayed (too long, or containing control, hidden or formatting characters, unpaired surrogates, variation selectors, 9 or more stacked combining marks, or leading, trailing or repeated spaces); they are counted above but not listed.");
+  });
+
+  // ---- A-277-LOWS (COORD ledger): display honesty for paths that read like another name ----
+  // //TR: Test kaynağı görünmez karakter taşımaz: tüm kod noktaları String.fromCodePoint ile üretilir.
+  const cp = (...n: number[]) => String.fromCodePoint(...n);
+  const mapQ = async (files: any[], over: Record<string, any> = {}) => (await load(rend, "project-core.js")).mapImportQuarantine({status: 200, body: body(quarantine(files, over))});
+  const undisplayable = async (path: string) => { const m = await mapQ([fileOf("CLAUDE.md"), fileOf(path)]); return {state: m.state, count: m.count, undisplayable: m.undisplayable, paths: m.files?.map((f: any) => f.path)}; };
+
+  it("A-277-LOWS(a): leading, trailing and repeated spaces (ASCII, NBSP, ideographic) make a path undisplayable because the cell would render it as a different name; single inner spaces stay listed; pattern and storedUnder are UNKNOWN", async () => {
+    for (const bad of [" CLAUDE.md", "CLAUDE.md ", "a  b/CLAUDE.md", "a " + cp(0xa0) + "b/CLAUDE.md", "CLAUDE.md" + cp(0xa0), cp(0x3000) + "CLAUDE.md", "dir/CLAUDE.md" + cp(0x2009), "a" + cp(0x2003, 0x2003) + "b"]) {
+      expect(await undisplayable(bad), JSON.stringify([...bad].map(c => c.codePointAt(0)))).toEqual({state: "QUARANTINED", count: 2, undisplayable: 1, paths: ["CLAUDE.md"]});
+      expect(await mapQ([fileOf("CLAUDE.md", {pattern: bad})]), "pattern").toEqual({state: "UNKNOWN"});
+      expect(await mapQ([fileOf("CLAUDE.md")], {storedUnder: bad}), "storedUnder").toEqual({state: "UNKNOWN"});
+    }
+    for (const good of ["My Folder/CLAUDE.md", "a" + cp(0xa0) + "b/CLAUDE.md", "a" + cp(0x3000) + "b", ".claude/agents/my agent.md"]) {
+      expect(await undisplayable(good), JSON.stringify(good)).toEqual({state: "QUARANTINED", count: 2, undisplayable: 0, paths: ["CLAUDE.md", good]});
+    }
+  });
+
+  it("A-277-LOWS(d): U+2800 BRAILLE PATTERN BLANK is HIDDEN (it renders blank, so a name with it reads like the real one); visible braille and neighbouring symbols stay listed", async () => {
+    const lookalike = ".claude/settings" + cp(0x2800) + ".json";
+    expect(await undisplayable(lookalike)).toEqual({state: "QUARANTINED", count: 2, undisplayable: 1, paths: ["CLAUDE.md"]});
+    expect(await mapQ([fileOf("CLAUDE.md", {pattern: "p" + cp(0x2800) + "q"})])).toEqual({state: "UNKNOWN"});
+    expect(await mapQ([fileOf("CLAUDE.md")], {storedUnder: "a" + cp(0x2800) + "b"})).toEqual({state: "UNKNOWN"});
+    for (const shown of [cp(0x2801), cp(0x28ff), cp(0x27ff), cp(0x2801, 0x2802)]) {
+      const name = "ok" + shown + "name/CLAUDE.md";
+      expect(await undisplayable(name), JSON.stringify(shown.codePointAt(0))).toMatchObject({undisplayable: 0, paths: ["CLAUDE.md", name]});
+    }
+  });
+
+  it("A-277-LOWS(c): nine stacked marks of EVERY mark category (Mn, Mc, Me) are hidden, eight are listed, in a path they are counted, in pattern and storedUnder they are UNKNOWN; lone high AND low surrogates (either order) are hidden while a valid astral pair is listed", async () => {
+    const stack = (n: number, mark: number) => "a" + cp(...Array(n).fill(mark));
+    for (const [label, mark] of [["Mn", 0x301], ["Me", 0x20dd], ["Mc", 0x903]] as const) {
+      expect(await undisplayable(stack(9, mark)), `${label} x9`).toEqual({state: "QUARANTINED", count: 2, undisplayable: 1, paths: ["CLAUDE.md"]});
+      expect(await undisplayable(stack(8, mark)), `${label} x8`).toMatchObject({undisplayable: 0});
+      expect(await mapQ([fileOf("CLAUDE.md", {pattern: stack(9, mark)})]), `${label} pattern`).toEqual({state: "UNKNOWN"});
+      expect(await mapQ([fileOf("CLAUDE.md")], {storedUnder: stack(9, mark)}), `${label} storedUnder`).toEqual({state: "UNKNOWN"});
+    }
+    const mixed = "a" + cp(0x301, 0x903, 0x20dd, 0x301, 0x903, 0x20dd, 0x302, 0x93e, 0x20de);
+    expect(await undisplayable(mixed)).toMatchObject({undisplayable: 1});
+    for (const lone of [cp(0xd800), cp(0xdbff), cp(0xdc00), cp(0xdfff), cp(0xdc00) + cp(0xd800)]) {
+      const name = "x" + lone + "y/CLAUDE.md";
+      expect(await undisplayable(name), JSON.stringify([...lone].map(c => c.charCodeAt(0)))).toMatchObject({state: "QUARANTINED", undisplayable: 1, paths: ["CLAUDE.md"]});
+      expect(await mapQ([fileOf("CLAUDE.md", {pattern: name})]), "pattern").toEqual({state: "UNKNOWN"});
+      expect(await mapQ([fileOf("CLAUDE.md")], {storedUnder: name}), "storedUnder").toEqual({state: "UNKNOWN"});
+    }
+    const astral = "ok" + cp(0x1f600) + "name/CLAUDE.md";
+    expect(await undisplayable(astral)).toMatchObject({undisplayable: 0, paths: ["CLAUDE.md", astral]});
+  });
+
+  it("A-277-LOWS(b): the undisplayable note names the real causes (en and tr, exact text)", async () => {
+    const en = (await load(rend, "locales", "en.js")).default as Record<string, string>, tr = (await load(rend, "locales", "tr.js")).default as Record<string, string>;
+    expect(en["studio.import.q.undisplayable"]).toBe("{n} recorded path(s) cannot be displayed (too long, or containing control, hidden or formatting characters, unpaired surrogates, variation selectors, 9 or more stacked combining marks, or leading, trailing or repeated spaces); they are counted above but not listed.");
+    expect(tr["studio.import.q.undisplayable"]).toBe("Kayıtlı {n} yol gösterilemiyor (çok uzun; veya kontrol, gizli ya da biçimlendirme karakteri, eşleşmemiş vekil karakter, varyasyon seçici, 9 veya daha fazla yığılmış birleştirici işaret ya da baştaki, sondaki veya tekrarlanan boşluk içeriyor); yukarıda sayıldı ama listelenmedi.");
+    const r = await imp(() => ({status: 200, body: body(quarantine([fileOf("CLAUDE.md"), fileOf(" lead.md")]))}));
+    expect(text(all(block(r.root)!).find(n => "quarantineUndisplayable" in n.dataset)!)).toBe("1 recorded path(s) cannot be displayed (too long, or containing control, hidden or formatting characters, unpaired surrogates, variation selectors, 9 or more stacked combining marks, or leading, trailing or repeated spaces); they are counted above but not listed.");
+    expect(all(block(r.root)!).filter(n => "quarantineFile" in n.dataset).map(n => n.dataset.quarantineFile)).toEqual(["CLAUDE.md"]);
   });
 
   it("Turkish renders the same three outcomes, and the en/tr keys have the same placeholders", async () => {

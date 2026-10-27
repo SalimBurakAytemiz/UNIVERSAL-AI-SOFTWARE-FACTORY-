@@ -150,8 +150,10 @@ function gitProbeEnv(): NodeJS.ProcessEnv {
   for (const [k, v] of Object.entries(process.env)) if (typeof v === "string" && !v.includes("\0") && GIT_PROBE_ENV.has(k.toUpperCase())) env[k] = v;
   return env;
 }
-// //TR: Karar prosedürü TEK yerde (jeneratör): her `yield` bir git probu ister ve çıktısını (başarısızsa null) geri alır. Eşzamanlı sürücü (repositoryHead: salt kullanım/testler; readiness.ts de runner de artık EŞZAMANSIZ sürücüyü kullanır) ve eşzamansız sürücü (repositoryHeadAsync: runner WORKSPACE adımı ve readiness.ts) aynı prosedürü, aynı `-c protocol.allow=never` önekini, aynı tavanı (GIT_CEILING_DIRECTORIES) ve aynı son tarihi uygular; test iki sürücüyü aynı depo matrisinde karşılaştırır.
+// //TR: Karar prosedürü TEK yerde (jeneratör): her `yield` bir git probu ister ve çıktısını (başarısızsa null) geri alır. Eşzamanlı sürücü (repositoryHead: salt kullanım/testler; readiness.ts de runner de artık EŞZAMANSIZ sürücüyü kullanır) ve eşzamansız sürücü (repositoryHeadAsync: runner WORKSPACE adımı ve readiness.ts) aynı prosedürü, aynı HEAD_GIT_HARDEN önekini (`-c protocol.allow=never -c core.fsmonitor=false -c core.untrackedCache=false`), aynı tavanı (GIT_CEILING_DIRECTORIES) ve aynı son tarihi uygular; test iki sürücüyü aynı depo matrisinde karşılaştırır.
 interface HeadProbe { args: string[]; ceiling: boolean }
+// //TR: C-GIT-FSMON-1: iki sürücünün TEK sabit güvenlik önek listesi (komut satırı `-c` depo yerel .git/config'in önüne geçer): protokol kapalı; çalıştırılabilir bir `core.fsmonitor` betiği ve `core.untrackedCache` kapalı, böylece kullanıcının seçtiği (düşman olabilecek) bir klasörün .git/config'i git probundan bir betik çalıştıramaz. `rev-parse` bugün fsmonitor başlatmaz (indeksi yenileyen status/diff/ls-files/update-index başlatır); bu önek yine de her proba konur ki ileride eklenecek bir alt komut da aynı güvenceyle çalışsın.
+const HEAD_GIT_HARDEN: readonly string[] = ["-c", "protocol.allow=never", "-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false"];
 function* headDecision(root: string): Generator<HeadProbe, RepositoryHead, string | null> {
   const same = (p: string | null, to: string = root): boolean => { if (!p) return false; const a = canonicalPath(p), b = canonicalPath(to); return a.ok && b.ok && a.key === b.key; };
   const own = path.join(root, ".git");
@@ -173,7 +175,7 @@ export function repositoryHead(src: string, opts: {timeoutMs?: number} = {}): Re
       const left = Math.ceil(deadline - performance.now());
       if (exhausted || left <= 0) { exhausted = true; return null; }
       try {
-        const r = spawnGitSync(root, ["-c", "protocol.allow=never", ...p.args], {env: p.ceiling ? {...env, GIT_CEILING_DIRECTORIES: path.dirname(root)} : env, maxBuffer: 1024 * 1024, timeout: left, killSignal: "SIGKILL"});
+        const r = spawnGitSync(root, [...HEAD_GIT_HARDEN, ...p.args], {env: p.ceiling ? {...env, GIT_CEILING_DIRECTORIES: path.dirname(root)} : env, maxBuffer: 1024 * 1024, timeout: left, killSignal: "SIGKILL"});
         if (r.error) { exhausted = true; return null; }
         return r.status === 0 ? String(r.stdout ?? "").replace(/\n$/, "") : null;
       } catch { return null; }
@@ -196,7 +198,7 @@ export async function repositoryHeadAsync(src: string, opts: {timeoutMs?: number
       const left = Math.ceil(deadline - performance.now());
       if (exhausted || left <= 0) { exhausted = true; return null; }
       try {
-        const r = await runGitAsync(root, ["-c", "protocol.allow=never", ...p.args], p.ceiling ? {...env, GIT_CEILING_DIRECTORIES: path.dirname(root)} : env, undefined, {timeoutMs: left, hardTimeout: true});
+        const r = await runGitAsync(root, [...HEAD_GIT_HARDEN, ...p.args], p.ceiling ? {...env, GIT_CEILING_DIRECTORIES: path.dirname(root)} : env, undefined, {timeoutMs: left, hardTimeout: true});
         if (r.status === null) { exhausted = true; return null; }
         return r.status === 0 ? r.stdout.replace(/\n$/, "") : null;
       } catch { return null; }
