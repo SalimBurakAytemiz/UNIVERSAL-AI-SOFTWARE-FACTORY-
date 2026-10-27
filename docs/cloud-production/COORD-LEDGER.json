@@ -812,6 +812,16 @@
       "ref": "wf_63b7fa17-a21: M1-M5 + L1-L5 FIXED; LOWs: projectId on validation/noDialog statuses unpinned (D28/D29), non-string path -> UNKNOWN unpinned (D23), no TR note at removed pin, C1/bidi chars listed (visual spoof, textContent only; security LOW carried), list panel unscoped (pre-existing)",
       "policy": "TEP-1",
       "at": "2026-10-27T02:54:11.006Z"
+    },
+    {
+      "pr": 275,
+      "sha": "57556ca66e656a78f60f00cdbb168da39b2ce9c9",
+      "kind": "delta",
+      "base": "3b3e9ac41aeed3d261d043d70326e7929b73a5b5",
+      "verdict": "NO_BLOCKERS_1LOW",
+      "ref": "wf_236fbfbf-960: driveC traced synchronous (QUEUED->LEASED->RUNNING in one pump), 6/6 runs incl. load pass; DELAY10/25, ESDELAY10/25, M3, LND, CAP, ST10 killed; ps1a innerPortFor never == PORT; LOW REAL netns random host port (Linux only)",
+      "policy": "TEP-1",
+      "at": "2026-10-27T03:06:14.799Z"
     }
   ],
   "tests": [],

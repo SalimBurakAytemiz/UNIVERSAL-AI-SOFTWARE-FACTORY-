@@ -2246,6 +2246,16 @@
         "masterV2": "C-RDY-1 Role Readiness Auditor = Master V2 package 1 DONE (merged, not product-accepted)"
       },
       {
+        "pr": 269,
+        "merge": "d0b3cf5",
+        "by": "coordinator direct merge, expectedHeadSha 74714e6 (required checks green on 74714e6)",
+        "at": "2026-10-27T03:05:00Z",
+        "postMerge": "VERIFIED: parent1 75b0e36, parent2 = gated head 74714e6, merge-tree == merge tree 26d3c9c (= tree tested locally: 9 renderer/locale files 559/559)",
+        "review": "full BLOCKERS_5MEDIUM (8f0f273) -> delta NO_BLOCKERS_5LOW (74714e6, ledger ae6f7f0)",
+        "riskTier": "R0 ROUTINE (renderer Project Studio + tests; no protected file)",
+        "masterV2": "UI-125 import quarantine outcome in Project Studio (merged, not product-accepted); 5 LOWs incl. C1/bidi path spoof (security LOW) + main.mjs scrubText (protected, Founder) carried"
+      },
+      {
         "pr": 274,
         "merge": "75b0e36",
         "by": "coordinator direct merge, expectedHeadSha 8abe6ee (required checks green on 8abe6ee)",
