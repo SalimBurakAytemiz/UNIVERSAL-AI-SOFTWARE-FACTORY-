@@ -2246,6 +2246,16 @@
         "masterV2": "C-RDY-1 Role Readiness Auditor = Master V2 package 1 DONE (merged, not product-accepted)"
       },
       {
+        "pr": 242,
+        "merge": "779c840",
+        "by": "FOUNDER merge (Founder-tier protected: apps/control-api/src/server.ts, apps/desktop/main.mjs)",
+        "at": "2026-10-27T04:18:20Z",
+        "postMerge": "VERIFIED: parent1 39dfe92, parent2 = gated head 5815714, merge-tree == merge tree da89f2c == tree of 5815714 (tested locally 515/515, trust-root PASS; CI run 40446015270 all green incl. installer)",
+        "review": "delta NO_BLOCKERS (earlier head) -> base merge 5815714 BASE_MERGE_ONLY (48cd63d)",
+        "riskTier": "R2 FOUNDER",
+        "masterV2": "analysis + product-run routes registered and desktop allow-listed (UI-011 unblocked on v7/integration)"
+      },
+      {
         "pr": 275,
         "merge": "39dfe92",
         "by": "coordinator direct merge, expectedHeadSha 57556ca (required checks green on 57556ca)",
