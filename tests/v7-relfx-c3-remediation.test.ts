@@ -896,7 +896,7 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
     expect(c.status(A.runId)).toBe("CANCELLED");
   });
 
-  it("TEST-PAR05-REFILL (M3): with a 60 s timer the freed slot is refilled IMMEDIATELY (C starts within 2 s of A finishing while B is still in IMPLEMENT)", { timeout: 120_000 }, async () => {
+  it("TEST-PAR05-REFILL (M3): with a 60 s timer the freed slot is refilled IMMEDIATELY (C is leased within 2 s of A finishing and starts long before the timer, while B is still in IMPLEMENT)", { timeout: 120_000 }, async () => {
     const c = setup(); const A = c.mkRun("A"), B = c.mkRun("B"), C = c.mkRun("C");
     const t0 = Date.now(), at: Record<string, number> = {}, mark = (k: string) => { at[k] ??= Date.now() - t0; };
     const pair = wrapImplementer(c.base, async (w, spec, ctx) => {
@@ -911,11 +911,14 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
     await withFinalStop(() => mr.stop(), async () => {
       for (const deadline = Date.now() + 100_000; Date.now() < deadline;) {
         for (const [t, id] of Object.entries(ids)) if (c.status(id) === "AWAITING_APPROVAL") mark(`done${t}`);
+        const sc = c.status(C.runId); if (sc !== "CREATED" && sc !== "QUEUED") mark("leaseC"); // //TR: yeniden doldurma anı = C'nin lease aldığı an (pump); startC ise C'nin workspace hazırlığından SONRA implementer'a girdiği andır ve yüklü Windows'ta 2 sn'yi aşabilir (startC-doneA=2320 ms, run 40434203018)
         if (at.doneA !== undefined && at.startC !== undefined) break;
         await sleep(50);
       }
     });
-    expect(at.startC - at.doneA, JSON.stringify(at)).toBeLessThanOrEqual(2000);
+    expect(at.leaseC - at.doneA, JSON.stringify(at)).toBeLessThanOrEqual(2000);
+    expect(at.leaseC, `C was leased before A freed its slot (cap 2): ${JSON.stringify(at)}`).toBeGreaterThanOrEqual(at.doneA);
+    expect(at.startC - at.doneA, `C must be DRIVEN at once, not only leased: the 60 s timer would start it about ${60_000 - at.doneA} ms after A: ${JSON.stringify(at)}`).toBeLessThanOrEqual(30_000);
     expect(at.startC, JSON.stringify(at)).toBeGreaterThan(at.doneA);
   });
 
