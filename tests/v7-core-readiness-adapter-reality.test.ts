@@ -45,10 +45,10 @@ describe("C-RDY-2a adapter-reality", () => {
   };
 
   it("every map entry: module, export and production callers exist", async () => {
-    expect(ADAPTER_REALITY_RECORDS).toHaveLength(21);
-    expect(new Set(ADAPTER_REALITY_RECORDS.map(r => r.adapterId)).size).toBe(21);
+    expect(ADAPTER_REALITY_RECORDS).toHaveLength(22);
+    expect(new Set(ADAPTER_REALITY_RECORDS.map(r => r.adapterId)).size).toBe(22);
     const counts = (o: string) => ADAPTER_REALITY_RECORDS.filter(r => r.origin === o).length;
-    expect([counts("REGISTRY"), counts("UNREGISTERED"), counts("BINDING")]).toEqual([7, 4, 10]);
+    expect([counts("REGISTRY"), counts("UNREGISTERED"), counts("BINDING")]).toEqual([8, 4, 10]);
     for (const r of ADAPTER_REALITY_RECORDS) {
       const v = verifyRecord(r, REPO);
       expect(v.moduleExists, `${r.adapterId} module`).toBe(true);
@@ -56,10 +56,12 @@ describe("C-RDY-2a adapter-reality", () => {
       expect(v.failedCallers, `${r.adapterId} callers`).toEqual([]);
       expect(v.verifiedCallers, `${r.adapterId} verified callers`).toBe(r.callers.length);
       expect(await exportVisible(r), `${r.adapterId} dynamic import`).toBe(true);
-      // //TR: semgrep yalnız bulunur (runs false): kod yolu ABSENT; diğer her kayıt PRESENT.
-      expect(v.codePath, r.adapterId).toBe(r.adapterId === "semgrep" ? "ABSENT" : "PRESENT");
+      // //TR: semgrep ve omniroute yalnız bulunur/keşfedilir (runs false): kod yolu ABSENT; diğer her kayıt PRESENT.
+      expect(v.codePath, r.adapterId).toBe(["omniroute", "semgrep"].includes(r.adapterId) ? "ABSENT" : "PRESENT");
     }
     expect(verifyRecord(real("semgrep"), REPO).reasons).toContain("NEVER_RUNS_IN_PRODUCTION");
+    // //TR: omniroute: keşif betiği (tek GET <gateway>/models) gerçek ve bildirilmiş, ama üretimde modelleri onunla çağıran kod yok: runs false, tek neden NEVER_RUNS_IN_PRODUCTION.
+    expect(verifyRecord(real("omniroute"), REPO)).toMatchObject({moduleExists: true, exportDeclared: true, verifiedCallers: 0, failedCallers: [], codePath: "ABSENT", reasons: ["NEVER_RUNS_IN_PRODUCTION"]});
     // //TR: Var olmayan dışa aktarımlı bir fixture hem metin doğrulamasında hem dinamik içe aktarmada başarısız olur.
     const ghost = rec({exportName: "noSuchExport"});
     expect(verifyRecord(ghost, REPO)).toMatchObject({moduleExists: true, exportDeclared: false, codePath: "ABSENT", reasons: ["EXPORT_NOT_DECLARED"]});
@@ -85,6 +87,9 @@ describe("C-RDY-2a adapter-reality", () => {
     expect(verifyRecord(rec({entrypoint: true, callers: []}), REPO)).toMatchObject({codePath: "ABSENT", reasons: ["ENTRYPOINT_NOT_A_SCRIPT", "NO_PRODUCTION_CALLER"]});
     expect(verifyRecord(rec({adapterId: "gitleaks", origin: "REGISTRY", entrypoint: true, callers: []}), REPO).codePath).toBe("ABSENT");
     expect(verifyRecord(rec({entrypoint: true}), REPO)).toMatchObject({codePath: "PRESENT", reasons: ["ENTRYPOINT_NOT_A_SCRIPT"]});
+    // //TR: entrypoint YALNIZ SCRIPT_LITERAL için geçerlidir: bir NPM_PACKAGE kaydında da çağıran gereksinimini atlatamaz (N12).
+    const pkgRoot = fx({"node_modules/ajv/package.json": "{}"});
+    expect(verifyRecord(rec({mode: "NPM_PACKAGE", module: "ajv", exportName: "default", entrypoint: true, callers: []}), pkgRoot)).toMatchObject({moduleExists: true, exportDeclared: true, codePath: "ABSENT", reasons: ["ENTRYPOINT_NOT_A_SCRIPT", "NO_PRODUCTION_CALLER"]});
     expect(verifyRecord(rec({module: "core/workos/no-such-module.ts"}), REPO)).toMatchObject({moduleExists: false, codePath: "ABSENT", reasons: ["MODULE_MISSING"]});
     expect(verifyRecord(rec({runs: false}), REPO).codePath).toBe("ABSENT");
     expect(verifyRecord(rec({mode: "NPM_PACKAGE", module: "no-such-package-xyz", exportName: "default", callers: []}), REPO)).toMatchObject({moduleExists: false, codePath: "ABSENT"});
@@ -114,6 +119,18 @@ describe("C-RDY-2a adapter-reality", () => {
     const quoted = codeViews("const s = 'import x from \"./a.js\"';")!;
     expect(quoted.literal).not.toContain("from \"./a.js\"");
     expect(codeViews("#!/usr/bin/env node\nconst k = 1;")!.code).toBe("                   \nconst k = 1;");
+    // //TR: Bölme/regex ayrımı ile şablon ve kaçış dalları: her fixture'dan sonra gelen `call(...)` KOD olarak görünmelidir (aksi hâlde tarayıcı yanlış sınıflandırmıştır, kapanmamış dize null verir). G1 regex anahtar sözcükten sonra, G2 şablon ifadesi içindeki nesne değişmezi `}`, G4 `)`/`]` sonrası bölme, N8 şablonda kaçışlı `${` ve kaçışlı ters tırnak; ayrıca art arda ++/--, TS `!`, anahtar sözcük adlı özellik ve Unicode tanımlayıcı.
+    const divisionCases: Array<[string, string[]]> = [
+      ["function f(x) { return /a\"b/.test(x); }\ncall(g1);", ["g1"]],
+      ["const t = `a ${ {k: \"}\"}.k + call(g2in) } b`;\ncall(g2);", ["g2in", "g2"]],
+      ["const q = (a) / call(g4a) / b;\nconst r = arr[0] / call(g4b) / 2;", ["g4a", "g4b"]],
+      ["let n = a++ / call(inc) / 2; let m = b-- / call(dec) / 2;", ["inc", "dec"]],
+      ["const v = x! / call(nn) / 2; const w = !/a\"b/.test(y);\ncall(nn2);", ["nn", "nn2"]],
+      ["const r = obj.return / call(prop) / 2; const s = o.typeof / call(prop2) / 3;", ["prop", "prop2"]],
+      ["const café = 4; const z = café / call(uni) / 2;", ["uni"]],
+      ["const m = `x \\${call(esc)} y \\` ${call(real)} z`;\ncall(after);", ["real", "after"]]
+    ];
+    for (const [text, expected] of divisionCases) expect(callsIn(codeViews(text)?.code ?? ""), text).toEqual(expected);
     // //TR: Kapanmamış dize/yorum/şablon sınıflandırılamaz: null (hiçbir şeyi kanıtlamaz).
     for (const bad of ["const a = \"open", "/* open", "const t = `open", "const x = `${call(1)"]) expect(codeViews(bad), bad).toBeNull();
   });
@@ -147,6 +164,24 @@ describe("C-RDY-2a adapter-reality", () => {
     const pkg = {"node_modules/ajv/package.json": "{}"};
     expect(verifyRecord(ajv, fx({...pkg, "core/a.ts": "// import A from \"ajv\";\nconst s = 'import A from \"ajv\"';\nimport B from \"ajv/dist/2020.js\";\n"}))).toMatchObject({verifiedCallers: 0, codePath: "ABSENT"});
     expect(verifyRecord(ajv, fx({...pkg, "core/a.ts": "// note\nimport A from \"ajv\";\n"}))).toMatchObject({verifiedCallers: 1, codePath: "PRESENT"});
+    // //TR: Şablonda kaçışlı `\${...}` bir ifade DEĞİLDİR (N8): içindeki çağrı kod sayılmaz.
+    expect(verifyRecord(rec(), runner("const m = `x \\${runGitleaks(dir)} y`;\n"))).toMatchObject({verifiedCallers: 0, codePath: "ABSENT"});
+    // //TR: Kaynağı sınıflandırılamayan (kapanmamış dize) MODÜL dışa aktarımı kanıtlamaz (N11); tam sözcük sınırı: önek/sonek benzeri adlar eşleşmez (N13, N28).
+    expect(verifyRecord(rec(), fx({"core/workos/security-tools.ts": "export function runGitleaks() {}\nconst broken = \"open\n", "core/workos/runner.ts": "await runGitleaks(dir);\n"}))).toMatchObject({moduleExists: true, exportDeclared: false, codePath: "ABSENT", reasons: ["EXPORT_NOT_DECLARED"]});
+    const scriptLit = (body: string) => verifyRecord(rec({mode: "SCRIPT_LITERAL", module: "scripts/e2e/desktop-journey.e2e.mjs", exportName: "_electron", entrypoint: true, callers: []}), fx({"scripts/e2e/desktop-journey.e2e.mjs": body}));
+    expect(scriptLit("const _electronUnused = 1;\n")).toMatchObject({exportDeclared: false, codePath: "ABSENT"});
+    expect(scriptLit("const x_electron = 1;\n")).toMatchObject({exportDeclared: false, codePath: "ABSENT"});
+    expect(scriptLit("const app = pw._electron.launch({});\n")).toMatchObject({exportDeclared: true, codePath: "PRESENT"});
+    expect(verifyRecord(rec(), fx({"core/workos/security-tools.ts": "function runGitleaksLegacy(){}\nexport {runGitleaksLegacy};\n", "core/workos/runner.ts": "await runGitleaks(dir);\n"}))).toMatchObject({exportDeclared: false, codePath: "ABSENT"});
+    expect(verifyRecord(rec(), fx({"core/workos/security-tools.ts": "export function runGitleaksLegacy() {}\n", "core/workos/runner.ts": "await runGitleaks(dir);\n"}))).toMatchObject({exportDeclared: false, codePath: "ABSENT"});
+    // //TR: Bildirilen çağıran yalnız ÜRETİM yolu olabilir: testler, docs, __tests__, node_modules, kaynak olmayan dosya, kök dışı/mutlak/normalleşmemiş yol bir çağıran SAYILMAZ (dosyada çağrı olsa bile).
+    const call = "await runGitleaks(dir);\n";
+    const pathRoot = fx({"core/workos/security-tools.ts": "export function runGitleaks() {}\n", "core/workos/runner.ts": call, "tests/x.test.ts": call, "core/x.test.ts": call, "core/__tests__/x.ts": call, "docs/x.ts": call, "core/node_modules/x.ts": call, "core/workos/runner.md": call, "core/abs.ts": call});
+    fs.writeFileSync(path.join(path.dirname(pathRoot), "outside.ts"), call);
+    for (const bad of ["tests/x.test.ts", "core/x.test.ts", "core/__tests__/x.ts", "docs/x.ts", "core/node_modules/x.ts", "core/workos/runner.md", "../outside.ts", path.join(pathRoot, "core/abs.ts"), "core/../core/workos/runner.ts", "core\\workos\\runner.ts", ""]) {
+      expect(verifyRecord(rec({callers: [{file: bad, references: "runGitleaks("}]}), pathRoot), JSON.stringify(bad)).toMatchObject({verifiedCallers: 0, failedCallers: [`${bad}:runGitleaks(`], codePath: "ABSENT", reasons: ["CALLER_NOT_PRODUCTION", "NO_PRODUCTION_CALLER"]});
+    }
+    expect(verifyRecord(rec({callers: [{file: "core/workos/runner.ts", references: "runGitleaks("}, {file: "tests/x.test.ts", references: "runGitleaks("}]}), pathRoot)).toMatchObject({verifiedCallers: 1, codePath: "PRESENT", reasons: ["CALLER_NOT_PRODUCTION"]});
     // //TR: Sınıflandırılamayan (kapanmamış dize) çağıran dosyası hiçbir şeyi doğrulamaz.
     expect(verifyRecord(rec(), runner("await runGitleaks(dir);\nconst broken = \"open\n"))).toMatchObject({verifiedCallers: 0, codePath: "ABSENT"});
   });
@@ -165,6 +200,14 @@ describe("C-RDY-2a adapter-reality", () => {
     expect(declaresMember(src, "LocalClaudeExecutors", "pair")).toBe(false);
     expect(declaresMember(src, "NoSuchClass", "pair")).toBe(false);
     expect(declaresExport("export function broken() {\nconst s = \"open;\n", "broken")).toBe(false);
+    // //TR: Çok satırlı alan başlatıcıları ve devam satırları üye DEĞİLDİR; yalnız önceki bildirimin sonundan sonra başlayan bildirim üyedir; `const x = class K` ya da yorumdaki `class K` yerine satır başındaki sınıf başlığı kullanılır.
+    const k1 = ["export class K {", "  field = foo(", "    pair(1)", "  );", "  other =", "    pair2(a);", "  cb = (a) =>", "    pair3(a);", "  pair4() {}", "}"].join("\n");
+    for (const m of ["pair", "pair2", "pair3"]) expect(declaresMember(k1, "K", m), m).toBe(false);
+    expect(declaresMember(k1, "K", "pair4")).toBe(true);
+    const k2 = "const x = class K { fake() {} };\n// class K { ghost() {} }\nexport class K {\n  real() {}\n}\n";
+    expect(declaresMember(k2, "K", "fake")).toBe(false);
+    expect(declaresMember(k2, "K", "ghost")).toBe(false);
+    expect(declaresMember(k2, "K", "real")).toBe(true);
   });
 
   it("reconciliation on real registries", () => {
@@ -180,6 +223,9 @@ describe("C-RDY-2a adapter-reality", () => {
     // //TR: semgrep kayıtlıdır ve kodda yalnız bulunur: kod destekli değil, bulgu yok. Kayıt defteri hiçbir adaptörü uygulanmış saymaz.
     expect(rc.codeBackedRegistryIds).not.toContain("semgrep");
     expect(rc.findings.some(f => f.id === "semgrep")).toBe(false);
+    // //TR: omniroute da kayıtlıdır ve kodda yalnız keşfedilir (runs false): kod destekli değil, bulgu yok.
+    expect(rc.codeBackedRegistryIds).not.toContain("omniroute");
+    expect(rc.findings.some(f => f.id === "omniroute")).toBe(false);
     expect(r.deadCode).toEqual([{module: "core/capabilities/resolver.ts", exports: ["resolveCapability", "resolveCapabilityFromReality"], importers: []}]);
     expect(r.ciProblems).toEqual([]);
     // //TR: Kod destekli kimlikler sabit kodlanmış DEĞİLDİR: gerçek adlı bir kimliğin modülü yok edilirse (ABSENT) kod destekli listeden ve UNDER_REPORTED'dan düşer.
@@ -193,7 +239,7 @@ describe("C-RDY-2a adapter-reality", () => {
     // //TR: Yetenek çözümleyicisi: sağlık gerçeklik haritasından gelir. Kayıt satırları araç olarak verilir (implementation hep NOT_IMPLEMENTED); yoklama gözlenmeden hiçbiri çözülmez.
     const tools = loadRegistryAdapters(REPO).map(a => ({id: a.id, category: a.category, capabilities: [a.category], implementation: a.implementation}));
     for (const cap of ["SECRETS", "SUPPLY_CHAIN", "BROWSER", "API_SCHEMA", "SAST", "SCM"]) expect(resolveCapabilityFromReality(cap, tools, [], r.entries).tools, cap).toEqual([]);
-    const ready = report({probes: allReady(["gitleaks", "trivy", "playwright", "ajv", "semgrep", "git", "github"])}).entries;
+    const ready = report({probes: allReady(["gitleaks", "trivy", "playwright", "ajv", "semgrep", "git", "github", "omniroute"])}).entries;
     expect(resolveCapabilityFromReality("SECRETS", tools, [], ready).tools.map(t => t.id)).toEqual(["gitleaks"]);
     expect(resolveCapabilityFromReality("SUPPLY_CHAIN", tools, [], ready).tools.map(t => t.id)).toEqual(["trivy"]);
     expect(resolveCapabilityFromReality("BROWSER", tools, [], ready).tools.map(t => t.id)).toEqual(["playwright"]);
@@ -201,6 +247,7 @@ describe("C-RDY-2a adapter-reality", () => {
     expect(resolveCapabilityFromReality("SCM", tools, [], ready).tools.map(t => t.id)).toEqual(["github"]);
     // //TR: semgrep'in yoklaması READY olsa bile kod yolu ABSENT olduğundan çözülmez; git için kayıt satırı yok (haritada UNREGISTERED) çözülmez; FAILED yoklama çözülmez.
     expect(resolveCapabilityFromReality("SAST", tools, [], ready).tools).toEqual([]);
+    expect(resolveCapabilityFromReality("MODEL_GATEWAY", tools, [], ready).tools).toEqual([]);
     expect(resolveCapabilityFromReality("SECRETS", tools, [], report({probes: new Map<string, ProbeObservation>([["gitleaks", "FAILED"]])}).entries).tools).toEqual([]);
     // //TR: Kaynaklar (resources) değişmedi: ready bayrağı ve yetenek eşleşmesi.
     expect(resolveCapabilityFromReality("X", [], [{id: "r1", capabilities: ["X"], ready: true}, {id: "r2", capabilities: ["X"], ready: false}], new Map()).resources.map(x => x.id)).toEqual(["r1"]);
@@ -229,6 +276,9 @@ describe("C-RDY-2a adapter-reality", () => {
     expect(censusProblems(census, ADAPTER_REALITY_RECORDS, {registryIds: {...excl.registryIds, spark: " "}, commands: excl.commands})).toEqual(["REGISTRY_ID_EXCLUSION_WITHOUT_REASON:spark"]);
     expect(censusProblems(census, ADAPTER_REALITY_RECORDS, {registryIds: excl.registryIds, commands: {...excl.commands, nosuchcmd: "x"}})).toEqual(["COMMAND_EXCLUSION_STALE:nosuchcmd"]);
     expect(censusProblems({...census, unparseable: ["core/broken.ts"]}, ADAPTER_REALITY_RECORDS)).toEqual(["SOURCE_UNPARSEABLE:core/broken.ts"]);
+    // //TR: Bilinen kör nokta: PowerShell (.ps1) betikleri taranmaz (tarayıcı JS/TS içindir); bu sabitlenmiştir, .ps1 taraması eklenirse bu pin ve MAP birlikte güncellenir.
+    const ps1Root = fx({"scripts/start-tool.ps1": "Start-Process acme-tool\n", "scripts/x.mjs": "const a = 1;\n"});
+    expect([...censusProduction(ps1Root, ["acme-tool"]).registryIds.keys()]).toEqual([]);
     // //TR: Fixture: tam sözcük, büyük/küçük harf duyarsız, dizeler dahil, yorumlar/test dosyaları/kendi modülü hariç; spawn ailesinin ilk dize argümanı komuttur.
     const root = fx({
       "core/x.ts": "// acme-tool in a comment\nconst name = \"Acme-Tool\";\nspawnSync(\"acme-run\", []);\nconst other = \"acme-tools and myacme-tool\";\n",
@@ -330,7 +380,8 @@ describe("C-RDY-2a adapter-reality", () => {
       node: ["ci.yml", "uasco-independent-review.yml", "windows-installer.yml"],
       npm: ["ci.yml", "windows-installer.yml"]
     });
-    for (const tool of ["gitleaks", "trivy", "playwright", "semgrep"]) expect(real(tool).ciEvidence, tool).not.toBe("REAL");
+    for (const tool of ["gitleaks", "trivy", "playwright", "semgrep", "omniroute"]) expect(real(tool).ciEvidence, tool).not.toBe("REAL");
+    expect(real("omniroute").ciEvidence).toBe("DISCOVERY_ONLY");
     expect(real("trivy").ciEvidence).toBe("FAKE_ONLY");
     expect(real("gitleaks").ciEvidence).toBe("FAKE_BINARY_ONLY");
     expect(real("playwright").ciEvidence).toBe("HARNESS_NOT_CI");
@@ -344,6 +395,9 @@ describe("C-RDY-2a adapter-reality", () => {
     // //TR: REAL yalnız iş akışında gerçekten geçen jetonla savunulur: bulunmayan jeton ve jetonsuz REAL (ya da REAL_WHEN_CONFIGURED) sorundur; diğer sınıflar sorun üretmez.
     expect(ciEvidenceProblems([rec({adapterId: "x", ciEvidence: "REAL", ciTokens: ["definitely-not-in-any-workflow"]})], texts)).toEqual(["x:CI_TOKEN_NOT_IN_WORKFLOWS:definitely-not-in-any-workflow"]);
     expect(ciEvidenceProblems([rec({adapterId: "x", ciEvidence: "REAL_WHEN_CONFIGURED", ciTokens: ["definitely-not-in-any-workflow"]})], texts)).toEqual(["x:CI_TOKEN_NOT_IN_WORKFLOWS:definitely-not-in-any-workflow"]);
+    // //TR: Her jeton ayrı ayrı savunulur: ilk jeton workflow'da olsa da ikincisi yoksa (ya da tersi) sorun, ikinci jetonun adıyla döner (N14).
+    expect(ciEvidenceProblems([rec({adapterId: "two", ciEvidence: "REAL", ciTokens: ["present-token", "missing-token"]})], ["... present-token ..."])).toEqual(["two:CI_TOKEN_NOT_IN_WORKFLOWS:missing-token"]);
+    expect(ciEvidenceProblems([rec({adapterId: "two", ciEvidence: "REAL", ciTokens: ["missing-token", "present-token"]})], ["... present-token ..."])).toEqual(["two:CI_TOKEN_NOT_IN_WORKFLOWS:missing-token"]);
     expect(ciEvidenceProblems([rec({adapterId: "y", ciEvidence: "REAL"})], texts)).toEqual(["y:REAL_WITHOUT_CI_TOKENS"]);
     expect(ciEvidenceProblems([rec({adapterId: "y", ciEvidence: "REAL_WHEN_CONFIGURED"})], texts)).toEqual(["y:REAL_WITHOUT_CI_TOKENS"]);
     expect(ciEvidenceProblems([rec({adapterId: "z", ciEvidence: "FAKE_ONLY", ciTokens: ["nope"]})], texts)).toEqual([]);
@@ -382,7 +436,7 @@ describe("C-RDY-2a adapter-reality", () => {
 
   it("every entry defaults to NOT_OBSERVED and a tool resolves only with an explicit READY probe", () => {
     const {entries} = buildAdapterRealityMap({records: ADAPTER_REALITY_RECORDS, repoRoot: REPO});
-    expect(entries.size).toBe(21);
+    expect(entries.size).toBe(22);
     // //TR: Varsayılan HER giriş için NOT_OBSERVED'dır (kayıt, kayıtsız-gerçek ve bağlama kökenli girişlerin hepsi): git/npm/node/claude-cli dahil.
     for (const [id, e] of entries) expect(e.probe, id).toBe("NOT_OBSERVED");
     expect([...new Set(ADAPTER_REALITY_RECORDS.map(r => r.origin))].sort()).toEqual(["BINDING", "REGISTRY", "UNREGISTERED"]);
@@ -391,12 +445,12 @@ describe("C-RDY-2a adapter-reality", () => {
       const one = buildAdapterRealityMap({records: ADAPTER_REALITY_RECORDS, repoRoot: REPO, probes: new Map<string, ProbeObservation>([[target, "READY"]])}).entries;
       for (const [id, e] of one) expect(e.probe, `${target}:${id}`).toBe(id === target ? "READY" : "NOT_OBSERVED");
     }
-    // //TR: Çözümleyici: yoklama yokken hiçbir araç çözülmez; yalnız kendi READY yoklaması olan ve kod yolu PRESENT olan araç çözülür (semgrep ABSENT: READY bile yetmez).
+    // //TR: Çözümleyici: yoklama yokken hiçbir araç çözülmez; yalnız kendi READY yoklaması olan ve kod yolu PRESENT olan araç çözülür (semgrep ve omniroute ABSENT: READY bile yetmez).
     for (const r of ADAPTER_REALITY_RECORDS) {
       const tools = [{id: r.adapterId, category: "X", capabilities: ["CAP"]}];
       expect(resolveCapabilityFromReality("CAP", tools, [], entries).tools, `${r.adapterId} unprobed`).toEqual([]);
       const probed = new Map(entries).set(r.adapterId, {...entries.get(r.adapterId)!, probe: "READY"});
-      expect(resolveCapabilityFromReality("CAP", tools, [], probed).tools.map(t => t.id), `${r.adapterId} READY`).toEqual(r.adapterId === "semgrep" ? [] : [r.adapterId]);
+      expect(resolveCapabilityFromReality("CAP", tools, [], probed).tools.map(t => t.id), `${r.adapterId} READY`).toEqual(["omniroute", "semgrep"].includes(r.adapterId) ? [] : [r.adapterId]);
     }
   });
 

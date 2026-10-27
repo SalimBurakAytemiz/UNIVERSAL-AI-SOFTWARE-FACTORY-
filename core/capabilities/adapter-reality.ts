@@ -37,6 +37,7 @@ export const ADAPTER_REALITY_RECORDS: readonly AdapterRealityRecord[] = [
   {adapterId: "ajv-formats", origin: "REGISTRY", module: "ajv-formats", mode: "NPM_PACKAGE", exportName: "default", runs: true, callers: AJV_FORMATS_CALLERS, ciEvidence: "IN_PROCESS_RUNTIME", note: "format keywords for the in-process validators"},
   {adapterId: "github", origin: "REGISTRY", module: "scripts/ci/uasco-review/github.mjs", mode: "EXPORT", exportName: "client", runs: true, callers: [caller("scripts/ci/uasco-review/run.mjs", "client(")], ciEvidence: "REAL_WHEN_CONFIGURED", ciTokens: ["node scripts/ci/uasco-review/run.mjs scope"], note: "GitHub REST client of the independent-review workflow (pull_request_target/workflow_dispatch, environment uasco-review, non-draft same-repo PRs only, so an ordinary push does not exercise it); gh CLI wrappers (command-contracts gh.exe, verify-remote-protection.mjs, configure-github-protection.mjs) are separate host-tool uses"},
   {adapterId: "playwright", origin: "REGISTRY", module: "scripts/e2e/desktop-journey.e2e.mjs", mode: "SCRIPT_LITERAL", exportName: "_electron", runs: true, entrypoint: true, callers: [], ciEvidence: "HARNESS_NOT_CI", note: "Electron desktop journey harness; run by hand/locally, no workflow runs it"},
+  {adapterId: "omniroute", origin: "REGISTRY", module: "scripts/discover-omniroute-models.mjs", mode: "SCRIPT_LITERAL", exportName: "fetch", runs: false, entrypoint: true, callers: [], ciEvidence: "DISCOVERY_ONLY", note: "model-gateway discovery: one policy-gated GET <gateway>/models with the OMNIROUTE_API_KEY bearer, run by hand, writes .ai/runtime/OMNIROUTE_MODELS.json; no production code routes a model call through OmniRoute; models/omniroute/client.ts (discoverOmniRouteModels) is outside the scanned roots and imported by nothing; scripts/ensure-omniroute.ps1 (installer, PowerShell, outside the scanned sources) starts the launcher"},
   {adapterId: "git", origin: "UNREGISTERED", module: "core/workos/git-async.ts", mode: "EXPORT", exportName: "runGitAsync", runs: true, callers: [caller(RUN, "runGitAsync(")], ciEvidence: "RUNTIME_PREREQUISITE", note: "real git on the host (also automation/lib/git-isolation.mjs); not in registries/tool-adapters.json"},
   {adapterId: "npm", origin: "UNREGISTERED", module: "automation/lib/dependency-install.mjs", mode: "EXPORT", exportName: "ensureDependencies", runs: true, callers: [caller("scripts/ensure-dependencies.mjs", "ensureDependencies(")], ciEvidence: "REAL", ciTokens: ["node scripts/ensure-dependencies.mjs"], note: "dependency install (npm ci) through ensureDependencies; ci.yml and windows-installer.yml run scripts/ensure-dependencies.mjs; not in registries/tool-adapters.json"},
   {adapterId: "node", origin: "UNREGISTERED", module: EXE, mode: "EXPORT", exportName: "runNodeScript", runs: true, callers: [caller("core/workos/executor-setup.ts", "runNodeScript(")], ciEvidence: "REAL", ciTokens: ["node scripts/run-validation.mjs"], note: "UASCO's own node scripts run through runNodeScript; CI runs node steps; not in registries/tool-adapters.json"},
@@ -64,18 +65,29 @@ const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 // //TR: Kaynak tarayıcısı (modül ÇALIŞTIRILMAZ, yan etki yok). İki görünüm üretir, ikisi de kaynakla AYNI uzunlukta ve aynı satır sayısındadır: code = yorumlar ve dize/şablon/regex İÇERİKLERİ boşluğa çevrilmiş (tırnaklar kalır); literal = yorumlar boşluğa çevrilmiş, dize içerikleri korunmuş ama içlerindeki tırnak karakterleri \u0001 yapılmış (başka bir dizenin içindeki `from "x"` gerçek bir içe aktarma gibi eşleşemez). Dize/şablon/yorum/regex kapanmadan biterse null döner: sınıflandırılamayan kaynak hiçbir şeyi KANITLAMAZ.
 export interface CodeViews { code: string; literal: string }
 const nl = (c: string) => (c === "\n" || c === "\r" ? c : " ");
+const IDENT_CHAR = /[\p{L}\p{N}_$]/u;
 const REGEX_KEYWORDS = new Set(["return", "typeof", "case", "in", "of", "delete", "void", "throw", "new", "else", "do", "yield", "await", "instanceof"]);
 export function codeViews(src: string): CodeViews | null {
   const n = src.length, code: string[] = [], lit: string[] = [];
   const body = (c: string) => { code.push(nl(c)); lit.push(c === "\"" || c === "'" || c === "`" ? "\u0001" : c); };
   const plain = (c: string) => { code.push(c); lit.push(c); };
   const blank = (c: string) => { code.push(nl(c)); lit.push(nl(c)); };
+  // //TR: `/` bölme mi regex mi? Öncesindeki anlamlı karaktere bakılır: tanımlayıcı (Unicode dahil) bir anahtar sözcükse (return, typeof ...) ve `.` ile gelen bir özellik adı DEĞİLSE regex; `)` `]` dize kapanışı, art arda `++`/`--` ve bir tanımlayıcıya/`)`/`]`'ye bitişik TS `!` (a! / b) bölmedir; diğer noktalama regex başlatır.
   const regexAllowed = (): boolean => {
     let k = code.length - 1;
     while (k >= 0 && /\s/.test(code[k])) k--;
     if (k < 0) return true;
     const p = code[k];
-    if (/[\w$]/.test(p)) { let j = k; while (j >= 0 && /[\w$]/.test(code[j])) j--; return REGEX_KEYWORDS.has(code.slice(j + 1, k + 1).join("")); }
+    if (IDENT_CHAR.test(p)) {
+      let j = k;
+      while (j >= 0 && IDENT_CHAR.test(code[j])) j--;
+      let q = j;
+      while (q >= 0 && /\s/.test(code[q])) q--;
+      if (q >= 0 && code[q] === ".") return false;
+      return REGEX_KEYWORDS.has(code.slice(j + 1, k + 1).join(""));
+    }
+    if ((p === "+" || p === "-") && code[k - 1] === p) return false;
+    if (p === "!" && k > 0 && (IDENT_CHAR.test(code[k - 1]) || code[k - 1] === ")" || code[k - 1] === "]")) return false;
     return !(p === ")" || p === "]" || p === "\"" || p === "'" || p === "`");
   };
   const frames: number[] = [];
@@ -110,7 +122,7 @@ export function codeViews(src: string): CodeViews | null {
   return inTpl || frames.length > 0 ? null : {code: code.join(""), literal: lit.join("")};
 }
 // //TR: Bir ifade yalnız tam sözcük olarak aranır (başı/sonu sözcük karakteriyse sınır koşulu eklenir; `runGitleaks(` gibi ifadelerde sondaki parantez sınırdır).
-const tokenRe = (t: string, flags = "") => new RegExp(`${/^[\w$]/.test(t) ? "(?<![\\w$])" : ""}${escapeRe(t)}${/[\w$]$/.test(t) ? "(?![\\w$])" : ""}`, flags);
+const tokenRe = (t: string, flags = "") => new RegExp(`${/^[\p{L}\p{N}_$]/u.test(t) ? "(?<![\\p{L}\\p{N}_$])" : ""}${escapeRe(t)}${/[\p{L}\p{N}_$]$/u.test(t) ? "(?![\\p{L}\\p{N}_$])" : ""}`, `u${flags}`);
 
 // //TR: Dışa aktarım bildirimi KOD görünümünde aranır: `export [default] [async] function|class|const|let|var NAME` ya da `export [type] { a, b as c }` (yalnız DIŞA AKTARILAN ad sayılır: `f as g` için g, f DEĞİL). Yorumdaki ya da dizedeki `export ...` bildirim değildir.
 export function declaresExport(source: string, name: string): boolean { return exportIn(codeViews(source), name); }
@@ -122,18 +134,21 @@ function exportIn(v: CodeViews | null, name: string): boolean {
   }
   return false;
 }
-// //TR: Sınıf gövdesinin YALNIZ en üst düzey (derinlik 1) metni; iç içe bloklar boşaltılır, böylece gövdedeki çağrılar üye bildirimi sanılmaz.
+// //TR: Sınıf gövdesinin YALNIZ en üst düzey (süslü derinlik 1, parantez/köşeli parantez içi DEĞİL) metni; iç içe bloklar (kapanışları bir `;` sınırı olarak kalır), argüman listeleri ve çok satırlı alan başlatıcıları boşaltılır, böylece gövdedeki çağrılar üye bildirimi sanılmaz. Sınıf başlığı satır başında aranır (`const x = class K` ya da yorum/dize içindeki `class K` değil).
 function classBodyTopLevel(code: string, className: string): string | null {
-  const m = new RegExp(`(?<![\\w$])class\\s+${escapeRe(className)}(?![\\w$])`).exec(code);
+  const m = new RegExp(`^[ \\t]*(?:export\\s+(?:default\\s+)?)?(?:declare\\s+)?(?:abstract\\s+)?class\\s+${escapeRe(className)}(?![\\w$])`, "m").exec(code);
   if (m === null) return null;
   const open = code.indexOf("{", m.index + m[0].length);
   if (open < 0) return null;
-  let depth = 0, out = "";
+  let depth = 0, nest = 0, out = "";
   for (let i = open; i < code.length; i++) {
     const ch = code[i];
     if (ch === "{") { depth++; out += " "; continue; }
-    if (ch === "}") { depth--; if (depth === 0) return out; out += " "; continue; }
-    out += depth === 1 ? ch : nl(ch);
+    if (ch === "}") { depth--; if (depth === 0) return out; out += depth === 1 ? ";" : " "; continue; }
+    if (depth !== 1) { out += nl(ch); continue; }
+    if (ch === ")" || ch === "]") nest = Math.max(0, nest - 1);
+    out += nest === 0 ? ch : nl(ch);
+    if (ch === "(" || ch === "[") nest++;
   }
   return null;
 }
@@ -141,10 +156,24 @@ function classBodyTopLevel(code: string, className: string): string | null {
 export function declaresMember(source: string, className: string, member: string): boolean { return memberIn(codeViews(source), className, member); }
 function memberIn(v: CodeViews | null, className: string, member: string): boolean {
   const top = v === null ? null : classBodyTopLevel(v.code, className);
-  return top !== null && new RegExp(`^\\s*(?:(?:private|public|protected|static|readonly)\\s+)*(?:async\\s+)?${escapeRe(member)}\\s*[(<]`, "m").test(top);
+  if (top === null) return false;
+  // //TR: Üye bildirimi bir önceki bildirimin SONUNDAN sonra başlar (başlangıç, `{ } ; ) ]`); `x =\n pair(a)` ya da `=>\n pair(a)` gibi devam satırları üye değildir.
+  const re = new RegExp(`^[ \\t]*(?:(?:private|public|protected|static|readonly)\\s+)*(?:async\\s+)?${escapeRe(member)}\\s*[(<]`, "gm");
+  for (const m of top.matchAll(re)) {
+    let k = m.index! - 1;
+    while (k >= 0 && /\s/.test(top[k])) k--;
+    if (k < 0 || "{};)]".includes(top[k])) return true;
+  }
+  return false;
 }
 
 // //TR: Bir kaydı doğrular: modül var, dışa aktarım (ve varsa üye) bildirilmiş, bildirilen çağıranlar o ifadeyi KODDA (yorum/dize dışında) gerçekten anıyor. codePath PRESENT YALNIZ çalıştıran (runs) bir kayıt için, modül+dışa aktarım doğrulanmış VE (SCRIPT_LITERAL giriş betiği ya da en az bir üretim çağıranı doğrulanmış) ise. Kaynak sınıflandırılamazsa (kapanmamış dize/yorum) hiçbir şey doğrulanmaz.
+// //TR: Bildirilen bir çağıran yalnız ÜRETİM yolu olabilir: depo köküne göreli, normalleşmiş, üretim köklerinden birinin altında, kaynak uzantılı, test dosyası/__tests__/node_modules/dist olmayan bir dosya (testler, docs ve depo dışı dosyalar bir çağıran sayılmaz).
+const isProductionPath = (file: string): boolean => {
+  if (file === "" || path.isAbsolute(file) || file.includes("\\") || path.posix.normalize(file) !== file) return false;
+  const segs = file.split("/");
+  return PRODUCTION_ROOTS.includes(segs[0]) && !segs.some(sg => sg === ".." || sg === "node_modules" || sg === "dist" || sg === "__tests__") && SOURCE_EXT.test(file) && !TEST_FILE.test(file);
+};
 // //TR: Bir çağrı boyunca aynı dosya birden çok kayıtta geçer (executors.ts, runner.ts): okuma + tarama dosya başına BİR kez yapılır.
 type SourceCache = Map<string, {exists: boolean; views: CodeViews | null}>;
 function loadSource(file: string, cache: SourceCache): {exists: boolean; views: CodeViews | null} {
@@ -169,12 +198,15 @@ export function verifyRecord(r: AdapterRealityRecord, repoRoot: string, cache: S
   }
   const failedCallers: string[] = [];
   let verifiedCallers = 0;
+  let badPaths = 0;
   for (const c of r.callers) {
+    if (!isProductionPath(c.file)) { badPaths++; failedCallers.push(`${c.file}:${c.references}`); continue; }
     const cv = loadSource(path.join(repoRoot, c.file), cache).views;
     if (cv !== null && tokenRe(c.references).test(c.literal === true ? cv.literal : cv.code)) verifiedCallers++;
     else failedCallers.push(`${c.file}:${c.references}`);
   }
-  if (failedCallers.length > 0) reasons.push("CALLER_NOT_FOUND");
+  if (badPaths > 0) reasons.push("CALLER_NOT_PRODUCTION");
+  if (failedCallers.length > badPaths) reasons.push("CALLER_NOT_FOUND");
   if (!r.runs) reasons.push("NEVER_RUNS_IN_PRODUCTION");
   if (r.entrypoint === true && r.mode !== "SCRIPT_LITERAL") reasons.push("ENTRYPOINT_NOT_A_SCRIPT");
   const callerOk = (r.entrypoint === true && r.mode === "SCRIPT_LITERAL") || verifiedCallers >= 1;
@@ -209,6 +241,7 @@ export interface AdapterReconciliation {
 // //TR: Ölü kod adayları: dışa aktarımı olan ama hiçbir ÜRETİM dosyasının içe aktarmadığı modüller. Yetenek çözümleyicisinin şu an üretim içe aktaranı yoktur (testler üretim sayılmaz); B1 gibi bir bağlama onu içe aktarırsa DEAD_CODE sayısı değişir ve test bunu adıyla söyler.
 export const DEAD_CODE_PROBES: readonly DeadCodeProbe[] = [{module: "core/capabilities/resolver.ts", exports: ["resolveCapability", "resolveCapabilityFromReality"]}];
 const PRODUCTION_ROOTS = ["apps", "core", "scripts", "automation"];
+// //TR: Taranan kaynak uzantıları YALNIZ ts/mts/mjs/cjs/js'dir. PowerShell (.ps1) kurulum betikleri (ör. scripts/ensure-omniroute.ps1 OmniRoute başlatıcısını açar) taranmaz: tarayıcı JS/TS sözdizimi içindir, bu bilinen kör noktadır ve haritada/sayımda görünmez (testte sabitlenmiştir).
 const SOURCE_EXT = /\.(?:ts|mts|mjs|cjs|js)$/;
 // //TR: Test dosyaları (*.test.* ve __tests__ dizinleri) üretim kodu DEĞİLDİR: üretim köklerinin içinde de taranmaz.
 const TEST_FILE = /\.test\.[cm]?[jt]s$/;
@@ -339,15 +372,14 @@ export interface CensusExclusions { registryIds: Readonly<Record<string, string>
 export const CENSUS_EXCLUSIONS: CensusExclusions = {
   registryIds: {
     spark: "UI sparkline CSS class and i18n keys (apps/desktop/renderer); not the Spark tool",
-    docker: "'.docker' is a secret-directory deny-list entry (sandbox.mjs, linux-unshare-sandbox.ts) and 'docker' a which/where presence name in scripts/doctor.mjs and scripts/preflight.mjs; no code runs docker",
-    appium: "presence name only in scripts/doctor.mjs and scripts/preflight.mjs (checked with which/where); no code drives it",
-    adb: "presence name only in scripts/doctor.mjs and scripts/preflight.mjs (checked with which/where); no code drives it",
-    helm: "presence name only in scripts/doctor.mjs and scripts/preflight.mjs (checked with which/where); no code drives it",
-    ffmpeg: "presence name only in scripts/doctor.mjs and scripts/preflight.mjs (checked with which/where); no code drives it",
+    docker: "'.docker' is a secret-directory deny-list entry (sandbox.mjs, linux-unshare-sandbox.ts) and 'docker' a presence name: scripts/doctor.mjs checks it with which/where and scripts/preflight.mjs runs `docker --version` for a baseline report; no code drives docker for work",
+    appium: "presence name only: scripts/doctor.mjs checks it with which/where and scripts/preflight.mjs runs `appium --version` for a baseline report; no code drives it for work",
+    adb: "presence name only: scripts/doctor.mjs checks it with which/where and scripts/preflight.mjs runs `adb --version` for a baseline report; no code drives it for work",
+    helm: "presence name only: scripts/doctor.mjs checks it with which/where and scripts/preflight.mjs runs `helm --version` for a baseline report; no code drives it for work",
+    ffmpeg: "presence name only: scripts/doctor.mjs checks it with which/where and scripts/preflight.mjs runs `ffmpeg --version` for a baseline report; no code drives it for work",
     gradle: "name in the TEST_COMMAND_EXECUTABLES allow-list (core/workos/schemas.ts) that only validates a project-configured test command; no gradle adapter is wired",
-    cargo: "allow-list name for project-configured test commands, a test-output format with a summary-line parser (core/workos/test-surface.ts) and a presence name in scripts/doctor.mjs; no cargo adapter is wired",
-    cypress: "harness config-file glob in core/workos/test-surface.ts; no code runs cypress",
-    omniroute: "the real client is models/omniroute/client.ts (outside the scanned roots) and only validator and selftest scripts reference it (as text to check or to import); scripts in the roots read config/omniroute-policy.json or check the installed package; no production caller runs it"
+    cargo: "allow-list name for project-configured test commands, a test-output format with a summary-line parser (core/workos/test-surface.ts) and a presence name (scripts/doctor.mjs which/where, scripts/preflight.mjs `--version`); no cargo adapter is wired",
+    cypress: "harness config-file glob in core/workos/test-surface.ts; no code runs cypress"
   },
   commands: {
     getconf: "POSIX configuration query in core/workos/devrun.ts; host utility, not an adapter",

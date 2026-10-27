@@ -1,5 +1,5 @@
 {
- "//TR": "C-RDY-2a (Adapter Gerçeklik Haritası) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt `file` içinde TAM 1 kez geçen bir metni (ya da `edits` listesindeki her metni) değiştirir; docs/lanes/LANE-C-adapter-reality-mutants.mjs hepsini tests/v7-core-readiness-adapter-reality.test.ts ile çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. M1-M5 dağıtım paketindeki zorunlu mutantlardır (M1 trivy REAL -> CI dürüstlüğü, M2 çağıran kontrolü atlanır, M3 çözümleyici kayıt implementation alanını okur, M4 ADAPTER_UNRESOLVED düşer, M5 yoklama varsayılanı READY); M6-M24 ek savunma mutantlarıdır (M2/M8/M9/M12/M14/M21/M23 tarayıcı sonrası kodla yeniden yazıldı). R1, R4, R5, R9-R14, R16 #264 incelemesinin (TEP-1 tur 1) hayatta kalan mutantlarıdır (R9/R10 üretim dosyalarında yorum/dize anmalarını bırakıp KOD kullanımını değiştirir); R17-R44 onarımla gelen kodun (tarayıcı, sınıf kapsamlı üye, içe aktaran çözümü, eksiksizlik sayımı, github kaydı, CI sınıfları) mutantlarıdır.",
+ "//TR": "C-RDY-2a (Adapter Gerçeklik Haritası) için YENİDEN ÜRETİLEBİLİR mutant listesi: her kayıt `file` içinde TAM 1 kez geçen bir metni (ya da `edits` listesindeki her metni) değiştirir; docs/lanes/LANE-C-adapter-reality-mutants.mjs hepsini tests/v7-core-readiness-adapter-reality.test.ts ile çalıştırır ve her birinin ÖLDÜRÜLMESİNİ (KILLED) bekler. M1-M5 dağıtım paketindeki zorunlu mutantlardır (M1 trivy REAL -> CI dürüstlüğü, M2 çağıran kontrolü atlanır, M3 çözümleyici kayıt implementation alanını okur, M4 ADAPTER_UNRESOLVED düşer, M5 yoklama varsayılanı READY); M6-M24 ek savunma mutantlarıdır (M2/M8/M9/M12/M14/M21/M23 tarayıcı sonrası kodla yeniden yazıldı). R1, R4, R5, R9-R14, R16 #264 incelemesinin (TEP-1 tur 1) hayatta kalan mutantlarıdır (R9/R10 üretim dosyalarında yorum/dize anmalarını bırakıp KOD kullanımını değiştirir); R17-R44 onarımla gelen kodun (tarayıcı, sınıf kapsamlı üye, içe aktaran çözümü, eksiksizlik sayımı, github kaydı, CI sınıfları) mutantlarıdır. G1, G2, G4, N8, N11, N12, N13, N14, N28 #264 turu-2 incelemesinin (86f6587) hayatta kalan mutantlarıdır; P1-P8 (çağıran yolu kısıtı), S1-S5 (bölme/regex ayrımı ve Unicode), Q1-Q4 (sınıf üyesi sınırları), O1-O4 (omniroute kaydı) tur-2 koduna aittir.",
  "mutants": [
   {
    "id": "M1",
@@ -307,8 +307,8 @@
    "id": "R25",
    "description": "nested class-body blocks are not blanked (a call inside a method body counts as a member)",
    "file": "core/capabilities/adapter-reality.ts",
-   "old": "out += depth === 1 ? ch : nl(ch);",
-   "new": "out += ch;"
+   "old": "if (depth !== 1) { out += nl(ch); continue; }",
+   "new": "if (depth !== 1) { out += ch; continue; }"
   },
   {
    "id": "R26",
@@ -442,6 +442,216 @@
    "file": "core/capabilities/adapter-reality.ts",
    "old": "spark: \"UI sparkline CSS class",
    "new": "sparkx: \"UI sparkline CSS class"
+  },
+  {
+   "id": "G1",
+   "description": "regex literals are never recognized after a keyword (return /a\"b/ opens a phantom string)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "return REGEX_KEYWORDS.has(code.slice(j + 1, k + 1).join(\"\"));",
+   "new": "return false;"
+  },
+  {
+   "id": "G2",
+   "description": "a } inside a template expression always closes it (an object literal brace ends the expression)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (depth === 0 && frames.length > 0)",
+   "new": "if (frames.length > 0)"
+  },
+  {
+   "id": "G4",
+   "description": "a regex is allowed after ) and ] (division is misread as a regex)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "return !(p === \")\" || p === \"]\" || p === \"\\\"\" || p === \"'\" || p === \"`\");",
+   "new": "return !(p === \"\\\"\" || p === \"'\" || p === \"`\");"
+  },
+  {
+   "id": "N8",
+   "description": "the template-body escape branch is removed (an escaped ${ opens an expression)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (c === \"\\\\\") { body(c); i++; if (i < n) body(src[i++]); continue; }",
+   "new": ""
+  },
+  {
+   "id": "N11",
+   "description": "an unparseable module source counts as declaring its export",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "else if (views === null) exportDeclared = false;",
+   "new": "else if (views === null) exportDeclared = true;"
+  },
+  {
+   "id": "N12",
+   "description": "entrypoint exempts every non-EXPORT mode (an NPM_PACKAGE needs no caller)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "(r.entrypoint === true && r.mode === \"SCRIPT_LITERAL\") || verifiedCallers >= 1",
+   "new": "(r.entrypoint === true && r.mode !== \"EXPORT\") || verifiedCallers >= 1"
+  },
+  {
+   "id": "N13",
+   "description": "tokenRe has no leading identifier boundary (_electronUnused-style prefixes match)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "${/^[\\p{L}\\p{N}_$]/u.test(t) ? \"(?<![\\\\p{L}\\\\p{N}_$])\" : \"\"}",
+   "new": "${\"\"}"
+  },
+  {
+   "id": "N28",
+   "description": "tokenRe has no trailing identifier boundary (runGitleaksLegacy matches runGitleaks)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "${/[\\p{L}\\p{N}_$]$/u.test(t) ? \"(?![\\\\p{L}\\\\p{N}_$])\" : \"\"}",
+   "new": "${\"\"}"
+  },
+  {
+   "id": "N14",
+   "description": "only the first CI token of a REAL record is checked against the workflows",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "for (const t of tokens) if (!workflowTexts",
+   "new": "for (const t of tokens.slice(0, 1)) if (!workflowTexts"
+  },
+  {
+   "id": "P1",
+   "description": "declared callers are not restricted to production paths",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (!isProductionPath(c.file)) {",
+   "new": "if (false) {"
+  },
+  {
+   "id": "P2",
+   "description": "test files count as production callers",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": " && !TEST_FILE.test(file);",
+   "new": ";"
+  },
+  {
+   "id": "P3",
+   "description": "node_modules and __tests__ path segments count as production callers",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "|| sg === \"node_modules\" || sg === \"dist\" || sg === \"__tests__\")",
+   "new": "|| sg === \"dist\")"
+  },
+  {
+   "id": "P4",
+   "description": "absolute, backslash and non-normalized caller paths are accepted",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (file === \"\" || path.isAbsolute(file) || file.includes(\"\\\\\") || path.posix.normalize(file) !== file) return false;",
+   "new": "if (file === \"\") return false;"
+  },
+  {
+   "id": "P5",
+   "description": "a caller outside the production roots is accepted",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "return PRODUCTION_ROOTS.includes(segs[0]) && ",
+   "new": "return "
+  },
+  {
+   "id": "P6",
+   "description": "a caller with a non-source extension is accepted",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": " && SOURCE_EXT.test(file) && !TEST_FILE.test(file);",
+   "new": " && !TEST_FILE.test(file);"
+  },
+  {
+   "id": "P7",
+   "description": "the CALLER_NOT_PRODUCTION reason is dropped",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (badPaths > 0) reasons.push(\"CALLER_NOT_PRODUCTION\");",
+   "new": ""
+  },
+  {
+   "id": "P8",
+   "description": "a non-production caller is also reported as CALLER_NOT_FOUND",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "failedCallers.length > badPaths",
+   "new": "failedCallers.length > 0"
+  },
+  {
+   "id": "S1",
+   "description": "postfix ++/-- before / is read as a regex start",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if ((p === \"+\" || p === \"-\") && code[k - 1] === p) return false;",
+   "new": ""
+  },
+  {
+   "id": "S2",
+   "description": "a TS non-null ! before / is read as a regex start",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (p === \"!\" && k > 0 && (IDENT_CHAR.test(code[k - 1]) || code[k - 1] === \")\" || code[k - 1] === \"]\")) return false;",
+   "new": ""
+  },
+  {
+   "id": "S3",
+   "description": "a keyword used as a property name (obj.return / 2) is read as a keyword",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (q >= 0 && code[q] === \".\") return false;",
+   "new": ""
+  },
+  {
+   "id": "S4",
+   "description": "identifier characters are ASCII only (non-ASCII identifiers are punctuation)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "const IDENT_CHAR = /[\\p{L}\\p{N}_$]/u;",
+   "new": "const IDENT_CHAR = /[\\w$]/u;"
+  },
+  {
+   "id": "S5",
+   "description": "tokenRe boundaries are ASCII only (café matches caf)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "${/[\\p{L}\\p{N}_$]$/u.test(t) ? \"(?![\\\\p{L}\\\\p{N}_$])\" : \"\"}",
+   "new": "${/[\\p{L}\\p{N}_$]$/u.test(t) ? \"(?![\\\\w$])\" : \"\"}"
+  },
+  {
+   "id": "Q1",
+   "description": "parenthesis/bracket nesting is not tracked in the class body (a multi-line initializer argument counts as a member)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (ch === \"(\" || ch === \"[\") nest++;",
+   "new": ""
+  },
+  {
+   "id": "Q2",
+   "description": "a closed member body leaves no ; boundary (the next member is rejected)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "out += depth === 1 ? \";\" : \" \"; continue; }",
+   "new": "out += \" \"; continue; }"
+  },
+  {
+   "id": "Q3",
+   "description": "member declarations need no declaration boundary before them (continuation lines count)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "if (k < 0 || \"{};)]\".includes(top[k])) return true;",
+   "new": "return true;"
+  },
+  {
+   "id": "Q4",
+   "description": "the class header is searched anywhere, not only at a line start (const x = class K counts)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "new RegExp(`^[ \\\\t]*(?:export\\\\s+(?:default\\\\s+)?)?(?:declare\\\\s+)?(?:abstract\\\\s+)?class\\\\s+${escapeRe(className)}",
+   "new": "new RegExp(`(?:export\\\\s+(?:default\\\\s+)?)?(?:declare\\\\s+)?(?:abstract\\\\s+)?class\\\\s+${escapeRe(className)}"
+  },
+  {
+   "id": "O1",
+   "description": "omniroute is claimed to run in production (runs true)",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "exportName: \"fetch\", runs: false, entrypoint: true, callers: [], ciEvidence: \"DISCOVERY_ONLY\"",
+   "new": "exportName: \"fetch\", runs: true, entrypoint: true, callers: [], ciEvidence: \"DISCOVERY_ONLY\""
+  },
+  {
+   "id": "O2",
+   "description": "omniroute is claimed as a hand-run harness instead of discovery only",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "callers: [], ciEvidence: \"DISCOVERY_ONLY\", note: \"model-gateway discovery",
+   "new": "callers: [], ciEvidence: \"HARNESS_NOT_CI\", note: \"model-gateway discovery"
+  },
+  {
+   "id": "O3",
+   "description": "omniroute points at a literal that is not in the script",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "module: \"scripts/discover-omniroute-models.mjs\", mode: \"SCRIPT_LITERAL\", exportName: \"fetch\"",
+   "new": "module: \"scripts/discover-omniroute-models.mjs\", mode: \"SCRIPT_LITERAL\", exportName: \"noSuchLiteral\""
+  },
+  {
+   "id": "O4",
+   "description": "omniroute is excluded from the census although it has a record",
+   "file": "core/capabilities/adapter-reality.ts",
+   "old": "    spark: \"UI sparkline CSS class",
+   "new": "    omniroute: \"hidden\",\n    spark: \"UI sparkline CSS class"
   }
  ]
 }
