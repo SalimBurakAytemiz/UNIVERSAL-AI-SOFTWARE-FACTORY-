@@ -775,6 +775,25 @@ describe("LANE-C C1 role lifecycle computed only from evidence", () => {
       try { const again = adapterRealityFor(stage)!; expect(again.get("git")!.codePath, "the transient ABSENT was not cached").toBe("PRESENT"); expect(adapterRealityFor(stage)).toBe(again); }
       finally { fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); resetAdapterRealityCache(); }
     });
+    it("P1d: the AFTER fingerprint is checked: a file whose BYTES change between the builds and the closing fingerprint is not cached (the buffer reads are the fingerprint's, the utf8 reads are the builds')", async () => {
+      const stage = await stageDevTree(); const file = path.join(stage, "core/workos/git-async.ts");
+      const real = fs.readFileSync; let buf = 0;
+      const spy = vi.spyOn(fs, "readFileSync").mockImplementation(((p: any, ...r: any[]) => { const out = (real as any).call(fs, p, ...r); if (String(p) === file && r[0] === undefined && ++buf === 2) return Buffer.concat([out, Buffer.from(" ")]); return out; }) as any);
+      let first: any;
+      try { first = adapterRealityFor(stage)!; } finally { spy.mockRestore(); }
+      try {
+        const second = adapterRealityFor(stage)!; expect(second, "the first result was not cached").not.toBe(first); expect(adapterRealityFor(stage)).toBe(second);
+      } finally { fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); resetAdapterRealityCache(); }
+    });
+    it("F-TAG: marker bytes in a file cannot impersonate an absent/non-file/unreadable input (the fingerprint inputs are type-tagged)", async () => {
+      const stage = await stageDevTree(); const pkg = path.join(stage, "node_modules/ajv/package.json");
+      try {
+        fs.rmSync(pkg); const absent = adapterRealityFor(stage)!; expect(absent.get("ajv")!.codePath).toBe("ABSENT");
+        fs.writeFileSync(pkg, "<absent>"); // 8 bytes, the old marker text
+        const present = adapterRealityFor(stage)!; expect(present).not.toBe(absent); expect(adapterRealityFor(stage)).toBe(present);
+        fs.rmSync(pkg); const again = adapterRealityFor(stage)!; expect(again.get("ajv")!.codePath, "the deleted file is ABSENT again, not a cached PRESENT").toBe("ABSENT");
+      } finally { fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); resetAdapterRealityCache(); }
+    });
     it.skipIf(process.platform === "win32")("P2: a FIFO at a record path is never read (a blocking read would hang the control API on every request); it is hashed as a type marker and the entry is honestly ABSENT", async () => {
       const stage = await stageDevTree(); const fifo = path.join(stage, "scripts/discover-omniroute-models.mjs");
       try {
@@ -824,7 +843,7 @@ describe("LANE-C C1 role lifecycle computed only from evidence", () => {
       try {
         expect(adapterRealityFor(stage)).toBeUndefined();
         const recordAbs = new Set(recordFiles().map(f => path.join(stage, f)));
-        expect(touched.filter(t => recordAbs.has(t)), "no record path touched").toEqual([]); expect(recordAbs.size).toBeGreaterThan(20);
+        expect(touched, "positive control: the spy saw the guard's own stat").toContain(path.join(stage, "core/capabilities/adapter-reality.ts")); expect(touched.filter(t => recordAbs.has(t)), "no record path touched").toEqual([]); expect(recordAbs.size).toBeGreaterThan(20);
       } finally { s1.mockRestore(); s2.mockRestore(); fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); resetAdapterRealityCache(); }
     });
     // ---- B2: GET /v1/roles/:roleId/context (core/agents/role-context.ts as-is) ----

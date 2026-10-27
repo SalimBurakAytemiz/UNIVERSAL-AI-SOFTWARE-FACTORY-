@@ -47,7 +47,10 @@ const contentFingerprint = (root: string): string => {
   for (const rel of adapterSourceFiles()) {
     h.update(rel + "\0");
     const abs = path.join(root, rel);
-    try { h.update(fs.statSync(abs).isFile() ? fs.readFileSync(abs) : "<non-file>"); } catch (e) { h.update((e as NodeJS.ErrnoException)?.code === "ENOENT" ? "<absent>" : "<unreadable>"); }
+    // Her girdi TÜR ETİKETİ ile başlar: dosya = "F" + bayt sayısı + ":" + baytlar; işaretler = "A" (yok), "N" (düz dosya değil), "U" (okunamadı). Böylece "<absent>" baytlarını içeren bir dosya, yok olan dosyayla aynı özeti VEREMEZ.
+    try {
+      if (fs.statSync(abs).isFile()) { const buf = fs.readFileSync(abs); h.update(`F${buf.length}:`); h.update(buf); } else h.update("N");
+    } catch (e) { h.update((e as NodeJS.ErrnoException)?.code === "ENOENT" ? "A" : "U"); }
     h.update("\0");
   }
   return h.digest("hex");
@@ -56,7 +59,7 @@ const adapterCache = new Map<string, {fp: string; entries: ReadonlyMap<string, A
 /** Test kancası: adaptör gerçeklik önbelleğini boşaltır. */
 export function resetAdapterRealityCache(): void { adapterCache.clear(); }
 const sameEntries = (a: ReadonlyMap<string, AdapterRealityEntry>, b: ReadonlyMap<string, AdapterRealityEntry>): boolean => JSON.stringify([...a.entries()]) === JSON.stringify([...b.entries()]);
-// //TR: Önbelleğe ALMA koşulu (L3 ile aynı ilke): özet inşadan ÖNCE ve SONRA aynı olmalı VE iki bağımsız inşa aynı haritayı vermeli. Aksi halde (dosya inşa sırasında değişti ya da bir okuma geçici olarak başarısız oldu; readText bunu "dosya yok" sayar) sonuç önbelleğe ALINMAZ, taze inşa döner; bayat bir PRESENT/ABSENT kalıcılaşmaz. Bilinen sınır: iki inşayı da kapsayan ve özet alındığında geri dönmüş geçici bir içerik, yazılımla ayırt edilemez.
+// //TR: Önbelleğe ALMA koşulu (L3 ile aynı ilke): özet inşadan ÖNCE ve SONRA aynı olmalı VE iki bağımsız inşa aynı haritayı vermeli. Aksi halde (dosya inşa sırasında değişti ya da bir okuma geçici olarak başarısız oldu; readText bunu "dosya yok" sayar) sonuç önbelleğe ALINMAZ, taze inşa döner; bayat bir PRESENT/ABSENT kalıcılaşmaz. Bilinen sınırlar: (1) iki inşayı da kapsayan ve özet alındığında geri dönmüş geçici bir içerik, (2) iki inşayı da kapsayan geçici OKUMA HATALARI (Windows kilidi / antivirüs kaynaklı EBUSY/EPERM): readText bunları "dosya yok" sayar ve sonuç ABSENT olarak önbelleğe alınır; içerik değişene kadar kalır. İkisi de yazılımla ayırt edilemez.
 /** Kaynak ağacı doğrulanmışsa kod destekli adaptör haritası (probe NOT_OBSERVED); aksi halde undefined (NOT_SUPPLIED). */
 export function adapterRealityFor(root: string): ReadonlyMap<string, AdapterRealityEntry> | undefined {
   if (!sourceTreePresent(root)) { adapterCache.delete(root); return undefined; }
