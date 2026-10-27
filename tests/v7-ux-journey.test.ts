@@ -1914,32 +1914,51 @@ describe("LANE-A A-FLOW-TASK-1: the task status step of the first-delivery flow 
 // //TR: A-UI011-EVIDENCE-1 (yalnız kanıt + test, yeni özellik yok): COORD protected batch 4b (#242) analiz ve ürün-çalıştırma rotalarını server.ts'e kaydetti ve main.mjs'de izinledi. Bu blok masaüstü render katmanının (GERÇEK görünümler + GERÇEK api.js + main.mjs izin listesi ve hata gövdesi temizleyici) bu rotalara GERÇEK bir control-api üzerinden ulaştığını Linux'ta kanıtlar. ÜCRETLİ Claude çağrısı YAPILMAZ: LOCAL_CLAUDE hiçbir zaman etkinleştirilmez (yalnız ücretsiz BLOCKED/409 durumları); gerçek bir analiz, Windows ve gerçek Electron çalıştırılmaz (NOT_EXECUTED).
 describe("LANE-A A-UI011-EVIDENCE-1: the analysis step and the run-the-product step against the REAL control-api (free states only, LOCAL_CLAUDE stays off)", () => {
   const block = (name: string) => { const m = new RegExp(`// ${name}-BEGIN\\n([\\s\\S]*?)// ${name}-END`).exec(mainSrc); if (!m) throw new Error(`missing ${name}`); return m[1]; };
-  const postAllowed = new Function(`${block("B5-POST-ALLOWLIST")}\nreturn desktopPostPathAllowed;`)() as (v: unknown) => boolean;
+  const postGates = new Function(`${block("B5-POST-ALLOWLIST")}\nreturn {desktopPostPathAllowed, desktopPostBodyCheck};`)() as {desktopPostPathAllowed: (v: unknown) => boolean; desktopPostBodyCheck: (b: unknown) => {ok: boolean; text?: string; error?: string}};
+  const postAllowed = postGates.desktopPostPathAllowed;
   const getAllowed = new Function(`${block("B4-ALLOWLIST")}\nreturn desktopExtraGetPathAllowed;`)() as (v: unknown) => boolean;
+  // apps/desktop/main.mjs:321 admits a GET when desktopGetPathAllowed (automation/lib/control-boundary.mjs) OR desktopExtraGetPathAllowed holds
+  let baseGetAllowed: (v: unknown) => boolean = () => false;
   // main.mjs's own error-body scrubber, exactly as the desktop bridge applies it before the renderer sees a POST answer
-  const scrubSrc = mainSrc.slice(mainSrc.indexOf("function scrubText("), mainSrc.indexOf("async function apiPost("));
+  const scrubFrom = mainSrc.indexOf("function scrubText("), scrubTo = mainSrc.indexOf("async function apiPost(");
+  if (scrubFrom < 0) throw new Error("missing function scrubText("); if (scrubTo < 0) throw new Error("missing async function apiPost(");
+  const scrubSrc = mainSrc.slice(scrubFrom, scrubTo);
   const sanitizePostBody = new Function("token", `${scrubSrc}\nreturn sanitizePostBody;`)(TOKEN) as (status: number, parsed: unknown) => unknown;
   const text = (n: N) => n.textContent;
   const tick = () => new Promise(r => setTimeout(r, 0));
 
+  // //TR: Sunucu ana makinenin ortamından UASCO_WORKOS_EXECUTOR / UASCO_WORKOS_RUNNER / UASCO_CONTROL_ROOT okur; bu blok bunları siler (afterEach'te geri koyar), controlRoot'u geçici dizine ve runner'ı kapalıya sabitler ve checkout içindeki claude-profiles'a hiçbir şey yazılmadığını sabitler.
+  const ENV_KEYS = ["UASCO_WORKOS_EXECUTOR", "UASCO_WORKOS_RUNNER", "UASCO_CONTROL_ROOT"];
+  const savedEnv: Record<string, string | undefined> = {};
+  const checkoutProfiles = () => { const p = path.join(process.cwd(), "claude-profiles"); return fs.existsSync(p) ? fs.readdirSync(p, {recursive: true}).map(String).sort() : null; };
+  let profilesBefore: string[] | null = null;
+  const controlRoot = () => path.join(tmp, "control");
+  beforeEach(async () => {
+    for (const k of ENV_KEYS) { savedEnv[k] = process.env[k]; delete process.env[k]; }
+    profilesBefore = checkoutProfiles();
+    baseGetAllowed = (await import("../automation/lib/control-boundary.mjs")).desktopGetPathAllowed as (v: unknown) => boolean;
+  });
+  afterEach(() => { for (const k of ENV_KEYS) { if (savedEnv[k] === undefined) delete process.env[k]; else process.env[k] = savedEnv[k]; } });
+
   async function setup(executors?: unknown) {
-    fs.mkdirSync(runtime(), {recursive: true});
+    fs.mkdirSync(runtime(), {recursive: true}); fs.mkdirSync(controlRoot(), {recursive: true});
     const store = new WorkOsStore(dataDir()), scope = {tenantId: "tA"};
     const project = store.createProject({tenantId: "tA", orgId: "org1", name: "Evidence", environmentId: "env-dev", createdBy: RECORDER});
     const open = store.createMission({tenantId: "tA", projectId: project.projectId, title: "Open mission", objective: "obj", acceptanceCriteria: ["ac"], riskLevel: "R0", createdBy: RECORDER});
     const exec = store.createMission({tenantId: "tA", projectId: project.projectId, title: "Executing mission", objective: "obj", acceptanceCriteria: ["ac"], riskLevel: "R0", createdBy: RECORDER});
     for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission(scope, exec.missionId, to, to, RECORDER);
     const run = store.createRun({tenantId: "tA", missionId: exec.missionId, executor: {implementer: "a", reviewer: "b"}, createdBy: RECORDER});
-    const app = buildServer({controlToken: TOKEN, runtime: runtime(), dataDir: dataDir(), tenantId: "tA", port: 3210, logger: false, ...(executors ? {executors: executors as never} : {})}); apps.push(app);
+    const app = buildServer({controlToken: TOKEN, runtime: runtime(), dataDir: dataDir(), tenantId: "tA", port: 3210, logger: false, controlRoot: controlRoot(), runner: {enabled: false}, ...(executors ? {executors: executors as never} : {})}); apps.push(app);
     const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js"), forms = await load("forms.js");
     forms.resetAllForms();
     const doc = new D(), cache = st.createStore(null);
     const calls = {post: [] as Array<{path: string; status: number; wire: any; seen: any}>, confirm: [] as any[], get: [] as string[]};
     const bridge = {
-      apiGet: async (p: string) => { calls.get.push(p); const r = await app.inject({method: "GET", url: p, headers: hdr}); if (r.statusCode !== 200) throw new Error(`${p}: HTTP ${r.statusCode}`); return r.json(); },
+      apiGet: async (p: string) => { calls.get.push(p); if (!baseGetAllowed(p) && !getAllowed(p)) throw new Error("INVALID_API_PATH"); const r = await app.inject({method: "GET", url: p, headers: hdr}); if (r.statusCode !== 200) throw new Error(`${p}: HTTP ${r.statusCode}`); return r.json(); },
       apiPost: async (p: string, b: unknown) => {
         if (!postAllowed(p)) throw new Error("INVALID_API_PATH");
-        const r = await app.inject({method: "POST", url: p, headers: {...hdr, "content-type": "application/json"}, payload: JSON.stringify(b)});
+        const prepared = postGates.desktopPostBodyCheck(b); if (!prepared.ok) throw new Error(prepared.error);
+        const r = await app.inject({method: "POST", url: p, headers: {...hdr, "content-type": "application/json"}, payload: prepared.text});
         let wire: any = null; try { wire = r.json(); } catch { /* non-json */ }
         const seen = sanitizePostBody(r.statusCode, wire);
         calls.post.push({path: p, status: r.statusCode, wire, seen}); return {status: r.statusCode, body: seen};
@@ -1950,7 +1969,7 @@ describe("LANE-A A-UI011-EVIDENCE-1: the analysis step and the run-the-product s
     const ctx: any = {doc, store: cache, api, i18n: {lang: "en", t}, t, navigate: () => {}, rerender: async () => { cache.clear?.(); cache.cache?.clear?.(); }, refreshAll: async () => { cache.cache?.clear?.(); },
       confirm: async (o: any) => { calls.confirm.push(o); return true; }, selectProject() {}, renderAttention() {}, principal: "FOUNDER_LOCAL", settleFocus: () => {}};
     const executorsOf = async () => getJson(app, "/v1/system/executors");
-    return {app, ctx, doc, calls, forms, project, open, exec, run, executorsOf};
+    return {app, ctx, doc, calls, forms, project, open, exec, run, executorsOf, profilesBefore: profilesBefore, controlRoot: controlRoot()};
   }
 
   const blockerCodes = (root: N) => allData(root, "analysisBlocker").map(n => n.dataset.analysisBlocker);
@@ -1985,6 +2004,15 @@ describe("LANE-A A-UI011-EVIDENCE-1: the analysis step and the run-the-product s
     expect(after.active).toEqual(before.active); // the active executor did not change
     expect(s.calls.post.map(x => x.path).filter(p => p.includes("/executors/"))).toEqual([]); // the enable route is never called
     expect(s.calls.post.every(x => x.status !== 201)).toBe(true);
+    // the runner stayed off: the QUEUED run created by setup was never leased, and nothing was written under the checkout
+    expect((await getJson(s.app, `/v1/work-runs/${s.run.runId}`)).run.status).toBe("QUEUED");
+    expect(checkoutProfiles()).toEqual(s.profilesBefore);
+  }
+  // LOCAL_CLAUDE is off BEFORE the step under test runs; the returned snapshot is what expectLocalClaudeStillOff compares against
+  async function localClaudeOffBefore(s: Awaited<ReturnType<typeof setup>>) {
+    const before = await s.executorsOf();
+    expect(before.executors.LOCAL_CLAUDE.enabled).toBe(false);
+    return before;
   }
 
   it("NO_ANALYSIS_BUILDER, no executor configured and LOCAL_CLAUDE disabled: the real route answers a FREE 200 BLOCKED and the view shows the exact blockers; nothing is produced, LOCAL_CLAUDE stays off", async () => {
@@ -1994,8 +2022,13 @@ describe("LANE-A A-UI011-EVIDENCE-1: the analysis step and the run-the-product s
     expect(before.active).toEqual({reason: "EXECUTOR_NOT_CONFIGURED"});
     const r = await analyseOnce(s, s.open.missionId);
     expectFreeBlocked(s, r, s.open.missionId);
-    // The desktop bridge's own scrubber leaves the 200 body untouched for these code-only strings.
+    // The desktop bridge's own scrubber leaves the code-only blockers untouched but REALLY rewrites the host path the server puts in readiness.profiles.*.loginCommand (main.mjs scrubText -> "[path]"): seen differs from wire.
     expect(r.post.seen.blockers).toEqual(r.post.wire.blockers);
+    const wireLogin = r.post.wire.readiness.profiles.implementer.loginCommand as string, seenLogin = r.post.seen.readiness.profiles.implementer.loginCommand as string;
+    expect(wireLogin).toContain(s.controlRoot);
+    expect(seenLogin).not.toContain(s.controlRoot);
+    expect(seenLogin).toContain("[path]");
+    expect(r.post.seen).not.toEqual(r.post.wire);
     // FINDING F1 (renderer, not the server): analysis-step.js blockerText has no analysis.blocker.EXECUTOR_NOT_ENABLED key (only setup.reason.EXECUTOR_NOT_ENABLED exists), so the last blocker shows the raw code with a "not recognised" note. This pin flips to the translated text when that key is added.
     const last = allData(r.panel, "analysisBlocker").at(-1)!;
     expect(last.dataset.analysisBlocker).toBe("EXECUTOR_NOT_ENABLED");
@@ -2022,6 +2055,7 @@ describe("LANE-A A-UI011-EVIDENCE-1: the analysis step and the run-the-product s
 
   it("the analysis plan route is reached with the exact refusal: Create plan before COMPLETE is a 409 ANALYSIS_NOT_COMPLETE the view classifies as a refusal; a mission that is no longer open for pre-development is a 409 WORKOS_CONFLICT (FINDING F2: shown only as the generic conflict text)", async () => {
     const s = await setup();
+    const before = await localClaudeOffBefore(s);
     const core = await load("analysis-core.js");
     const pres = await s.ctx.api.post(core.analysisPlanPath(s.open.missionId), {});
     expect(pres).toEqual({ok: false, status: 409, body: {error: "ANALYSIS_NOT_COMPLETE"}});
@@ -2039,11 +2073,12 @@ describe("LANE-A A-UI011-EVIDENCE-1: the analysis step and the run-the-product s
     expect(r).toEqual({ok: false, kind: "FAILED", status: 409});
     s.doc.body.replaceChildren(an.analysisPanel(s.ctx, {missionId: s.exec.missionId, exec: null}) as N);
     expect(text(byId(s.doc.body, "analysis-step-status")!)).toBe("Conflict (HTTP 409): the record does not accept this change in its current state, or the idempotency key was already used with a different request.");
+    await expectLocalClaudeStillOff(s, before);
   });
 
   it("run-the-product on a run that has no product: the real GET shape is accepted, the card offers neither start nor stop, Start (called directly) is the exact 409 PRODUCT_RUN_NOT_DELIVERABLE with reason NOT_STARTED:QUEUED, Stop is an idempotent 200, and LOCAL_CLAUDE stays off", async () => {
     const s = await setup();
-    const before = await s.executorsOf();
+    const before = await localClaudeOffBefore(s);
     const pc = await load("views", "product-card.js"), core = await load("project-core.js");
     // the desktop allow-lists admit exactly these paths
     expect(getAllowed(core.runProductPath(s.run.runId))).toBe(true);
@@ -2075,12 +2110,13 @@ describe("LANE-A A-UI011-EVIDENCE-1: the analysis step and the run-the-product s
     expect(stopped).toEqual({ok: true, status: 200});
     expect(s.forms.drafts.status["product-run"]).toEqual({ok: true, key: "product.done.stop", vars: {}, errors: null});
     expect(s.calls.post.at(-1)!.seen.product).toMatchObject({runId: s.run.runId, tiedToThisRun: false, devrun: {status: "STOPPED"}});
-    expect((await getJson(s.app, `/v1/projects/${s.project.projectId}/devrun`)).devrun?.status ?? "STOPPED").toBe("STOPPED"); // no dev-run was started
+    expect((await getJson(s.app, `/v1/projects/${s.project.projectId}/devrun`)).devrun.status).toBe("STOPPED"); // no dev-run was started
     await expectLocalClaudeStillOff(s, before);
   });
 
   it("the bad-shape and bad-state edges of the product routes also reach the view honestly: unknown run is a 404 the card does not turn into a product; a malformed run id never reaches the server", async () => {
     const s = await setup();
+    const before = await localClaudeOffBefore(s);
     const pc = await load("views", "product-card.js"), core = await load("project-core.js");
     expect(core.runProductPath("run_zz")).toBeNull();
     expect(core.buildProductRequest({runId: "run_zz", action: "start"}).ok).toBe(false);
@@ -2092,5 +2128,6 @@ describe("LANE-A A-UI011-EVIDENCE-1: the analysis step and the run-the-product s
     const res = await s.ctx.api.post(`/v1/work-runs/${ghost}/product/stop`, {});
     expect(res).toEqual({ok: false, status: 404, body: {error: "RUN_NOT_FOUND"}});
     expect((await s.ctx.api.runProduct(ghost)).state).not.toBe("VERIFIED");
+    await expectLocalClaudeStillOff(s, before);
   });
 });

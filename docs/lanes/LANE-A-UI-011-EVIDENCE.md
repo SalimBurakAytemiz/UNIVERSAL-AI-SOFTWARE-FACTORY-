@@ -9,7 +9,7 @@ The P0 remainder audit (`LANE-A-P0-REMAINDER-AUDIT.md`, UI-011) marked the Journ
 
 ## What is now VERIFIED on Linux
 
-Test block `LANE-A A-UI011-EVIDENCE-1` in `tests/v7-ux-journey.test.ts` (5 tests, 105/105 in the file). A real `buildServer` instance answers through `app.inject`; the bridge applies main.mjs's own `B5-POST-ALLOWLIST` and its own `scrubText`/`sanitizePostBody` (extracted from `main.mjs`, not re-implemented); the views are the real `analysis-step.js`, `product-card.js` and `api.js`. No route is mocked. A free state is a 200 BLOCKED or a 409; nothing starts a Claude process.
+Test block `LANE-A A-UI011-EVIDENCE-1` in `tests/v7-ux-journey.test.ts` (5 tests, 105/105 in the file). A real `buildServer` instance answers through `app.inject`; the bridge applies the same gates as `main.mjs` `uasco:api-get`/`uasco:api-post` (lines 321-322), each extracted from the source and not re-implemented: for GET, `desktopGetPathAllowed` (automation/lib/control-boundary.mjs) OR `desktopExtraGetPathAllowed` (`B4-ALLOWLIST`); for POST, `desktopPostPathAllowed` and `desktopPostBodyCheck` (`B5-POST-ALLOWLIST`), then `scrubText`/`sanitizePostBody` on the answer. Not applied here: `requireTrustedSender`, `verifyServerIdentity` and `psImportPostAllowed` (they need the real Electron process); the views are the real `analysis-step.js`, `product-card.js` and `api.js`. No route is mocked. A free state is a 200 BLOCKED or a 409; nothing starts a Claude process.
 
 | State | Real answer | Exact UI state (en) |
 |---|---|---|
@@ -22,7 +22,11 @@ Test block `LANE-A A-UI011-EVIDENCE-1` in `tests/v7-ux-journey.test.ts` (5 tests
 | Product stop on that run | 200, idempotent, same product shape | key `product.done.stop`; no dev-run was started |
 | Allow-lists | main.mjs admits `GET /v1/work-runs/:id/product` (and refuses a query string) and `POST .../product/start\|stop` | n/a |
 
-No paid call: every test asserts LOCAL_CLAUDE `enabled:false` before and after, the active executor unchanged, and that the `.../executors/local-claude/enable` route is never called. The `claude` CLI may exist on the machine; it is never started because every step is refused before a builder is invoked.
+No paid call: each of the five tests asserts LOCAL_CLAUDE `enabled:false` before, and after the step asserts it is still off, the active executor unchanged, and that no `.../executors/` route was ever posted. The server is built sealed: `controlRoot` is the test's temp directory, `runner.enabled` is false, and `UASCO_WORKOS_EXECUTOR`, `UASCO_WORKOS_RUNNER` and `UASCO_CONTROL_ROOT` are removed from the environment for this block and restored afterwards, so a developer machine that sets them cannot start a run or an executor. Each test ends by asserting the QUEUED run created by setup is still QUEUED and that nothing was written under the checkout's `claude-profiles`. The `claude` CLI may exist on the machine; it is never started because every step is refused before a builder is invoked.
+
+Host independence: executor readiness scans the host PATH (a machine with `claude` installed reports a different blocker list). The assertions therefore compare the view with the blockers the server returned (same codes, same order) and pin only the last one, `EXECUTOR_NOT_ENABLED`, never a fixed count.
+
+The bridge scrubber is exercised on a real body: the free 200 BLOCKED answer carries `readiness.profiles.*.loginCommand`, which contains the temp `controlRoot` path; `sanitizePostBody` rewrites it to `[path]`, so the renderer's copy differs from the wire body (asserted).
 
 ## Findings (renderer; the server is not touched)
 
@@ -38,3 +42,7 @@ No real wiring gap was found: every path and shape the renderer sends or reads i
 - A real analysis: no AI builder was invoked, so DRAFT_READY, AWAITING_APPROVAL, COMPLETE and the plan creation after a real analysis are covered only by the existing fake-route tests, not by this update.
 - A real product run: no delivered source commit exists in these tests, so a real start through a verified sandbox, the preview URL and a real stop of a running product were not exercised.
 - Pixel and design parity; product verification (PRODUCT_VERIFIED) is out of scope.
+
+## Observation (protected file, not changed here)
+
+`main.mjs` `scrubText` also rewrites a PowerShell `Env:\NAME` fragment because its drive-letter pattern (`[A-Za-z]:[\\/]...`) matches `v:\CLAUDE_CONFIG_DIR`: the renderer's copy of `loginCommand` ends `Remove-Item En[path]`. No view reads that field today (the analysis view shows `blockers` only), so there is no visible effect; if a view ever shows `loginCommand`, `main.mjs` needs a fix (coordinator-owned file).
