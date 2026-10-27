@@ -150,7 +150,7 @@ function gitProbeEnv(): NodeJS.ProcessEnv {
   for (const [k, v] of Object.entries(process.env)) if (typeof v === "string" && !v.includes("\0") && GIT_PROBE_ENV.has(k.toUpperCase())) env[k] = v;
   return env;
 }
-// //TR: Karar prosedürü TEK yerde (jeneratör): her `yield` bir git probu ister ve çıktısını (başarısızsa null) geri alır. Eşzamanlı sürücü (repositoryHead: readiness.ts, Lane B) ve eşzamansız sürücü (repositoryHeadAsync: runner) aynı prosedürü, aynı `-c protocol.allow=never` önekini, aynı tavanı (GIT_CEILING_DIRECTORIES) ve aynı son tarihi uygular; test iki sürücüyü aynı depo matrisinde karşılaştırır.
+// //TR: Karar prosedürü TEK yerde (jeneratör): her `yield` bir git probu ister ve çıktısını (başarısızsa null) geri alır. Eşzamanlı sürücü (repositoryHead: salt kullanım/testler; readiness.ts de runner de artık EŞZAMANSIZ sürücüyü kullanır) ve eşzamansız sürücü (repositoryHeadAsync: runner WORKSPACE adımı ve readiness.ts) aynı prosedürü, aynı `-c protocol.allow=never` önekini, aynı tavanı (GIT_CEILING_DIRECTORIES) ve aynı son tarihi uygular; test iki sürücüyü aynı depo matrisinde karşılaştırır.
 interface HeadProbe { args: string[]; ceiling: boolean }
 function* headDecision(root: string): Generator<HeadProbe, RepositoryHead, string | null> {
   const same = (p: string | null, to: string = root): boolean => { if (!p) return false; const a = canonicalPath(p), b = canonicalPath(to); return a.ok && b.ok && a.key === b.key; };
@@ -167,10 +167,10 @@ export function repositoryHead(src: string, opts: {timeoutMs?: number} = {}): Re
     const c = canonicalPath(src);
     if (!c.ok) return PROBE_REFUSED;
     const root = c.path, env = gitProbeEnv();
-    const deadline = Date.now() + (opts.timeoutMs ?? 10_000);
+    const deadline = performance.now() + (opts.timeoutMs ?? 10_000);
     let exhausted = false;
     const run = (p: HeadProbe): string | null => {
-      const left = deadline - Date.now();
+      const left = Math.ceil(deadline - performance.now());
       if (exhausted || left <= 0) { exhausted = true; return null; }
       try {
         const r = spawnGitSync(root, ["-c", "protocol.allow=never", ...p.args], {env: p.ceiling ? {...env, GIT_CEILING_DIRECTORIES: path.dirname(root)} : env, maxBuffer: 1024 * 1024, timeout: left, killSignal: "SIGKILL"});
@@ -190,13 +190,13 @@ export async function repositoryHeadAsync(src: string, opts: {timeoutMs?: number
     const c = canonicalPath(src);
     if (!c.ok) return PROBE_REFUSED;
     const root = c.path, env = gitProbeEnv();
-    const deadline = Date.now() + (opts.timeoutMs ?? 10_000);
+    const deadline = performance.now() + (opts.timeoutMs ?? 10_000);
     let exhausted = false;
     const run = async (p: HeadProbe): Promise<string | null> => {
-      const left = deadline - Date.now();
+      const left = Math.ceil(deadline - performance.now());
       if (exhausted || left <= 0) { exhausted = true; return null; }
       try {
-        const r = await runGitAsync(root, ["-c", "protocol.allow=never", ...p.args], p.ceiling ? {...env, GIT_CEILING_DIRECTORIES: path.dirname(root)} : env, undefined, {timeoutMs: left});
+        const r = await runGitAsync(root, ["-c", "protocol.allow=never", ...p.args], p.ceiling ? {...env, GIT_CEILING_DIRECTORIES: path.dirname(root)} : env, undefined, {timeoutMs: left, hardTimeout: true});
         if (r.status === null) { exhausted = true; return null; }
         return r.status === 0 ? r.stdout.replace(/\n$/, "") : null;
       } catch { return null; }

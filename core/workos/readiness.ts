@@ -21,14 +21,21 @@ const unknown = (id: ReadinessCheckId, blocking = true): ReadinessCheck => ({id,
 
 // runner.ts ile AYNI karar prosedürü (repositoryPrecondition, ardından repositoryHeadAsync: depo kökü ve HEAD, #218); runner WORKSPACE adımı aynı kararla BLOCK eder, readiness artık "OK" deyip sonra BLOCK etmez. EŞZAMANSIZ sürücü şarttır: bu okuma control-api sürecinde (MissionRunner, Global Stop, lease yenileme ile aynı olay döngüsü) çalışır; eşzamanlı spawnSync takılan bir git'te tüm süreci dondururdu. Yol veya URL asla döndürülmez. Yalıtım: host global/system config'i, hook'lar ve ortam izole edilir; depo-yerel .git/config ve include.path hedefleri okunmaya DEVAM eder; yalnız salt-okunur rev-parse çalışır. Sorgunun TOPLAM süresi READINESS_REPO_PROBE_MS ile sınırlıdır; süre dolarsa (takılan git) sonuç BLOCKED değil UNKNOWN'dur (belirlenemedi); süre tek yönlü saatle (performance.now) ölçülür, duvar saati geri alınsa da karar değişmez. Hızlı başarısızlık (git yok, güvenli olmayan sahiplik, depo değil) runner'ın kendi gerekçesiyle BLOCKED kalır.
 export const READINESS_REPO_PROBE_MS = 3000;
+// //TR: Aynı depo yolu için eşzamanlı okumalar TEK probu paylaşır (single-flight): N paralel GET, N*k git çocuğu üretmez. Bilinen Windows sınırı (bu PR'dan önce de vardı): git-async kill() Windows'ta `taskkill`'ı eşzamanlı ve zaman aşımsız spawnSync ile çağırır; yani M1 (olay döngüsü) POSIX'te tam, Windows'ta zaman aşımı yolunda yalnız taskkill süresince bloklanır.
+const inflight = new Map<string, Promise<ReadinessCheck>>();
+async function probeRepository(src: string): Promise<ReadinessCheck> {
+  const t0 = performance.now();
+  const h = await repositoryHeadAsync(src, {timeoutMs: READINESS_REPO_PROBE_MS});
+  if (h.ok) return ok("REPOSITORY");
+  return performance.now() - t0 >= READINESS_REPO_PROBE_MS - 100 ? unknown("REPOSITORY") : bad("REPOSITORY", h.reason, "CONFIGURE_REPOSITORY");
+}
 async function repositoryCheck(project: Project, dataDir: string): Promise<ReadinessCheck> {
   try {
     const r = repositoryPrecondition(project, dataDir);
     if (!r.ok) return bad("REPOSITORY", r.reason, "CONFIGURE_REPOSITORY");
-    const t0 = performance.now();
-    const h = await repositoryHeadAsync(r.src, {timeoutMs: READINESS_REPO_PROBE_MS});
-    if (h.ok) return ok("REPOSITORY");
-    return performance.now() - t0 >= READINESS_REPO_PROBE_MS - 100 ? unknown("REPOSITORY") : bad("REPOSITORY", h.reason, "CONFIGURE_REPOSITORY");
+    let p = inflight.get(r.src);
+    if (!p) { const q = probeRepository(r.src).finally(() => { inflight.delete(r.src); }); inflight.set(r.src, q); p = q; }
+    return await p;
   } catch { return unknown("REPOSITORY"); }
 }
 

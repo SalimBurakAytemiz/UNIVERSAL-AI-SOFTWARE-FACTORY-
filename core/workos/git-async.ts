@@ -9,7 +9,7 @@ const MAX_BUFFER = 64 * 1024 * 1024;
 
 // //TR: `cp.spawn` varsayılan dışa aktarım nesnesinden çağrılır (testler "yavaş git" modelini bu nesne üzerinde vi.spyOn ile kurar). #224 tur 3: önceki sürüm `cp.execFile(..., {detached: true})` kullanıyordu; execFile `detached` seçeneğini YOK SAYAR (yalnız cwd/env/uid/gid/shell/signal/windowsHide'ı spawn'a iletir), yani yazar git çocuğu hiçbir zaman kendi süreç grubunda başlamadı ve kayıtlı pgid var olmayan bir gruptu (devir/abort/çıkış öldürmeleri ESRCH ile sessizce boşa giderdi). Burada spawn kullanılır (detached gerçekten uygulanır) ve execFile'ın çıktı toplama/maxBuffer/zaman aşımı davranışı korunur.
 // onSpawn: çocuk doğar doğmaz (eşzamanlı) yazar kaydı; fırlatırsa çocuk öldürülür ve status null döner (kayıtsız yazar bırakılmaz). timeoutMs: süre dolarsa SIGKILL, status null. shouldAbort: 100 ms'de bir yoklanır; true olursa çocuk (Windows'ta ağaç) öldürülür ve `aborted` ile hemen dönülür.
-export function runGitAsync(cwd: string, args: string[], env: NodeJS.ProcessEnv, onSpawn?: (c: SpawnedChild) => void, o: {timeoutMs?: number; shouldAbort?: () => boolean} = {}): Promise<GitRun> {
+export function runGitAsync(cwd: string, args: string[], env: NodeJS.ProcessEnv, onSpawn?: (c: SpawnedChild) => void, o: {timeoutMs?: number; shouldAbort?: () => boolean; hardTimeout?: boolean} = {}): Promise<GitRun> {
   return new Promise(resolve => {
     let poll: NodeJS.Timeout | null = null, timer: NodeJS.Timeout | null = null, done = false;
     const settle = (r: GitRun) => {
@@ -20,7 +20,7 @@ export function runGitAsync(cwd: string, args: string[], env: NodeJS.ProcessEnv,
       resolve(r);
     };
     try {
-      const group = onSpawn !== undefined && process.platform !== "win32"; // yazar git çocuğu kendi süreç grubunda başlar (devirde öldürülebilsin)
+      const group = (onSpawn !== undefined || o.hardTimeout === true) && process.platform !== "win32"; // yazar git çocuğu kendi süreç grubunda başlar (devirde öldürülebilsin)
       const child = cp.spawn("git", isolatedGitArgs(args), {cwd, env: isolatedGitEnv(env), windowsHide: true, stdio: ["pipe", "pipe", "pipe"], ...(group ? {detached: true} : {})});
       // //TR: Windows'ta `git` bir sarmalayıcıdır (alt süreçleri ve git-remote-*/index-pack yardımcıları vardır): yalnız kök pid'i öldürmek yardımcıları çalışır bırakırdı; implementer'ın killTree'si gibi taskkill /T /F ile AĞAÇ öldürülür. POSIX'te süreç grubu (onSpawn varsa) ya da çocuk.
       const kill = () => {
@@ -49,7 +49,8 @@ export function runGitAsync(cwd: string, args: string[], env: NodeJS.ProcessEnv,
         const stdout = Buffer.concat(outChunks).toString("utf8"), stderr = Buffer.concat(errChunks).toString("utf8");
         settle({status: typeof code === "number" ? code : null, stdout, stderr: stderr || (signal ? `terminated by ${signal}` : "")});
       });
-      if (o.timeoutMs !== undefined) timer = setTimeout(kill, o.timeoutMs);
+      // //TR: hardTimeout (readiness probe, B-NEXT-1): süre dolunca çocuk (POSIX: tüm süreç grubu) öldürülür VE 'close' BEKLENMEDEN status null ile dönülür; boru tutan bir torun 'close'u geciktirip bütçeyi yutamaz.
+      if (o.timeoutMs !== undefined) timer = setTimeout(o.hardTimeout === true ? () => { kill(); settle({status: null, stdout: "", stderr: "TIMEOUT"}); } : kill, o.timeoutMs);
       if (onSpawn && child.pid) {
         try { onSpawn({pid: child.pid, pgid: group ? child.pid : null}); } catch (e) {
           kill();

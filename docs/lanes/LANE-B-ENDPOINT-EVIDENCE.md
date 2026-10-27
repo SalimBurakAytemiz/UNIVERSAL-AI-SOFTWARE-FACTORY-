@@ -225,5 +225,6 @@ Windows (every Windows-only branch and CI shard), real Electron and the IPC hand
 
 - A passing test that only reaches a route's gates (423/403/400) counts as exercising the route; the `(no 2xx)` flag marks routes whose success path was never observed.
 - `UNMAPPED` ids are routes added after the 2026-10-19 inventory.
+- `GET /v1/projects/:id/readiness` (B-NEXT-1): the repository HEAD probe is async, bounded to 3 s and single-flight per repository path; on POSIX the timeout kills the git process group. Known Windows limit (predates it): the timeout path of `git-async` kills the git tree with a synchronous, untimed `taskkill`, so the event loop is blocked for that call only.
 - The inventory's statuses are not restated here; this map is evidence, not a status change.
 
