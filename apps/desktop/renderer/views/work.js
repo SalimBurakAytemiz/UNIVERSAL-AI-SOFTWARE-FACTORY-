@@ -31,14 +31,15 @@ const blockOf=(res,value,source)=>({state:res?.state??"ERROR",value:LIVE(res)?va
 /** //TR: Görev/koşu özeti KPI satırı — hepsi gerçek okumalardan: toplam mission, etkin koşu (ACTIVE kategorisi), Kurucu dikkati bekleyen mission (ATTENTION+BLOCKED) ve gerçekten doğrulanmış koşu (yalnız test-yürütme kanıtı olan; FD-REL-1). Hiçbir sayı uydurulmaz. */
 function summaryTiles(ctx,miss,runs){
   // //TR: A-RUNSTATE-1 (#273 M4): "etkin koşu" sunucunun aktif-işçi kümesidir (liveRuns); eski missionPillKind(ACTIVE) STARTING/REVIEWING'i sayıp CHECKPOINTING'i saymıyordu.
-  const activeRuns=LIVE(runs)?liveRuns(runs.items).length:null;
+  // //TR: #273 LOW: koşu listesi 500'de kesildiyse (en yeni koşular eksik olabilir) koşu tabanlı KPI'lar sayı göstermez; blok UNAVAILABLE olur (kesin 0/EMPTY denmez).
+  const runsB=runs?.truncated===true?{...runs,state:"UNAVAILABLE"}:runs,activeRuns=LIVE(runsB)?liveRuns(runsB.items).length:null;
   const attention=LIVE(miss)?miss.items.filter(m=>{const k=missionPillKind(m.status);return k==="ATTENTION"||k==="BLOCKED"}).length:null;
-  const verifiedRuns=LIVE(runs)?runs.items.filter(r=>r&&r.testsExecuted===true).length:null;
+  const verifiedRuns=LIVE(runsB)?runsB.items.filter(r=>r&&r.testsExecuted===true).length:null;
   return h(ctx.doc,"div",{class:"kpi-row",role:"group","aria-label":ctx.t("work.kpiGroup")},
     kpiTile(ctx,{id:"wk-missions",iconName:"tasks",labelKey:"work.kpi.missions",block:blockOf(miss,LIVE(miss)?miss.items.length:null,"GET /v1/missions"),qualifier:ctx.t("work.kpi.q.missions")}),
-    kpiTile(ctx,{id:"wk-active",iconName:"pulse",labelKey:"work.kpi.activeRuns",block:blockOf(runs,activeRuns,"GET /v1/work-runs"),qualifier:ctx.t("work.kpi.q.activeRuns"),live:LIVE(runs)&&activeRuns>0}),
+    kpiTile(ctx,{id:"wk-active",iconName:"pulse",labelKey:"work.kpi.activeRuns",block:blockOf(runsB,activeRuns,"GET /v1/work-runs"),qualifier:ctx.t("work.kpi.q.activeRuns"),live:LIVE(runsB)&&activeRuns>0}),
     kpiTile(ctx,{id:"wk-attention",iconName:"alert",labelKey:"work.kpi.attention",block:blockOf(miss,attention,"GET /v1/missions"),qualifier:ctx.t("work.kpi.q.attention"),risk:LIVE(miss)&&attention>0}),
-    kpiTile(ctx,{id:"wk-verified",iconName:"shield",labelKey:"work.kpi.verifiedRuns",block:blockOf(runs,verifiedRuns,"GET /v1/work-runs"),qualifier:ctx.t("work.kpi.q.verifiedRuns")}));
+    kpiTile(ctx,{id:"wk-verified",iconName:"shield",labelKey:"work.kpi.verifiedRuns",block:blockOf(runsB,verifiedRuns,"GET /v1/work-runs"),qualifier:ctx.t("work.kpi.q.verifiedRuns")}));
 }
 
 /** //TR: Yaşam-döngüsü dağılım şeridi: gerçek mission durumlarını kategoriye (missionPillKind) göre toplayıp sıralı rozet+sayı olarak gösterir; mission yoksa null (çağıran dürüst boş metni gösterir). */

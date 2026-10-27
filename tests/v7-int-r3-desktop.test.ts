@@ -98,6 +98,12 @@ describe("INT-R3 D-M1-07 canonical role counts in the desktop", () => {
     const btns = all(r).filter(n => n.tagName === "BUTTON" && n.textContent.startsWith("run_")).map(n => n.textContent);
     expect(btns).toEqual(["run_a1 · —", "run_b2 · Failed", "run_c3 · Running"]);
   });
+  it("control tower run list: a null summary status falls back to the manifest status, and to a dash when there is none", async () => {
+    const {ctx, doc} = await mkCtx(p => (p === "/v1/runs" ? {runs: [{runId: "run_d4", summary: {status: null}}, {runId: "run_e5", summary: {status: null}, manifest: {status: "FAILED"}}, {runId: "run_f6", summary: {}, manifest: {status: null}}]} : p === "/v1/agents" ? AGENTS : undefined));
+    const view = await load(rend, "views", "tower.js");
+    const r = mount(doc, await view.render(ctx));
+    expect(all(r).filter(n => n.tagName === "BUTTON" && n.textContent.startsWith("run_")).map(n => n.textContent)).toEqual(["run_d4 · —", "run_e5 · Failed", "run_f6 · —"]);
+  });
   it("home cockpit tile renders the canonical registered count", async () => {
     const m = await load(rend, "model.js");
     const c = m.mapCockpit(COCKPIT);

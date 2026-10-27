@@ -100,8 +100,8 @@ function liveRunsBody(ctx,runs){
       h(doc,"td",{},r.missionId?h(doc,"button",{type:"button",class:"link-btn",id:`wf-open-${r.runId}`,dataset:{focusKey:`wf-open-${r.runId}`},on:{click:()=>{selection.missionId=r.missionId;ctx.navigate("work")}},text:ctx.t("workforce.live.open")}):MISSING))))));
 }
 
-// //TR: UI-030 işçi filosu ızgarası: GET /v1/work-runs'tan yalnız canlı koşular, durum kovalarına göre kart; okuma başarısızsa dürüst durum notu ızgaranın yerini alır (asla 0). Olmayan alanlar BİLİNMİYOR; en çok 50 kart + "X / Y" notu.
-// //TR: UI-032 işçi ayrıntı paneli: yalnız seçili canlı koşunun mevcut alanları; koşu artık canlı değilse panel görünmez. Canlı ajan telemetrisi yoktur, UNKNOWN gösterilir.
+// //TR: UI-030 işçi filosu ızgarası: GET /v1/work-runs'tan canlı, kuyruktaki ve durumu bilinmeyen koşular kovalara göre kart (A-RUNSTATE-1); okuma başarısızsa dürüst durum notu ızgaranın yerini alır (asla 0). Olmayan alanlar BİLİNMİYOR; en çok 50 kart + "X / Y" notu.
+// //TR: UI-032 işçi ayrıntı paneli: yalnız seçili koşunun (ızgarada gösterilen herhangi bir kova) mevcut alanları; koşu artık ızgarada değilse panel görünmez. Canlı ajan telemetrisi yoktur, UNKNOWN gösterilir.
 function fleetDetailPanel(ctx,items){
   const doc=ctx.doc,d=fleetDetail(items,fleetSel.runId);
   if(!d)return null;
@@ -119,7 +119,9 @@ function fleetDetailPanel(ctx,items){
 }
 
 // //TR: A-RUNSTATE-1: canlı durum kovaları durum adıyla, kuyruk ve bilinmeyen kovalar kendi açık başlıklarıyla; kuyrukta/bilinmeyen koşular asla "canlı" başlığı altında görünmez.
-function groupTitle(ctx,g){
+function groupTitle(ctx,g,cut=false){
+  // //TR: Kesik listede (500 sınırı, en yeni koşular eksik olabilir) başlıklar sayı taşımaz; sayılar eksik sayımı kesin gibi gösterirdi.
+  if(cut)return g.bucket==="QUEUED"?ctx.t("workforce.fleet.bucket.queued.nocount"):g.bucket==="UNKNOWN"?ctx.t("workforce.fleet.bucket.unknown.nocount"):statusLabel(ctx,g.status);
   if(g.bucket==="QUEUED")return ctx.t("workforce.fleet.bucket.queued",{n:String(g.count)});
   if(g.bucket==="UNKNOWN")return ctx.t("workforce.fleet.bucket.unknown",{n:String(g.count)});
   return ctx.t("workforce.fleet.group",{status:statusLabel(ctx,g.status),n:String(g.count)});
@@ -129,7 +131,9 @@ function fleetBody(ctx,runs){
   if(runs.state!=="VERIFIED")return stateNote(ctx,runs.state,runs.state==="UNAVAILABLE"?"run.unavailable":undefined);
   const f=fleetGroups(runs.items),cut=runs.truncated===true;
   // //TR: A-RUNSTATE-1 (#273 M3): kesik listede özet sayıları ve "canlı koşu yok" notu kesin söylenmez; yalnız görünen koşular kartlanır ve kesik notu gösterilir.
-  if(!f.total)return cut?runsTruncatedNote(ctx):emptyNote(ctx,"workforce.fleet.none");
+  // //TR: Boş ızgarada da "diğer durumlar" notu gösterilir (yalnız onay bekleyen/yeniden denenen koşular varsa "canlı koşu yok" tek başına yanıltırdı).
+  const otherNote=()=>!cut&&f.other>0?h(doc,"p",{class:"note",dataset:{fleetOther:String(f.other)},text:ctx.t("workforce.fleet.other",{n:String(f.other)})}):null;
+  if(!f.total)return cut?runsTruncatedNote(ctx):h(doc,"div",{},emptyNote(ctx,"workforce.fleet.none"),otherNote());
   const unknown=()=>h(doc,"span",{class:"wf-fleet-unknown",dataset:{unknown:"1"},text:ctx.t("workforce.fleet.unknown")});
   const card=run=>{
     const c=fleetCard(run);
@@ -145,13 +149,13 @@ function fleetBody(ctx,runs){
   return h(doc,"div",{class:"wf-fleet",role:"region","aria-label":ctx.t("workforce.fleet.label")},
     h(doc,"p",{class:"note",text:ctx.t("workforce.fleet.lead")}),
     cut?runsTruncatedNote(ctx):h(doc,"p",{class:"note",dataset:{fleetSummary:"1"},text:ctx.t("workforce.fleet.summary",{live:String(f.live),queued:String(f.queued),unknown:String(f.unknown)})}),
-    !cut&&f.other>0?h(doc,"p",{class:"note",dataset:{fleetOther:String(f.other)},text:ctx.t("workforce.fleet.other",{n:String(f.other)})}):null,
-    f.groups.map(g=>{const title=groupTitle(ctx,g);return h(doc,"section",{class:"wf-fleet-group",dataset:{bucket:g.status,kind:g.bucket},"aria-label":title},
+    otherNote(),
+    f.groups.map(g=>{const title=groupTitle(ctx,g,cut);return h(doc,"section",{class:"wf-fleet-group",dataset:{bucket:g.status,kind:g.bucket},"aria-label":title},
       h(doc,"h3",{class:"wf-fleet-h",text:title}),
       g.bucket==="LIVE"?null:h(doc,"p",{class:"note",dataset:{bucketNote:g.bucket},text:ctx.t(g.bucket==="QUEUED"?"workforce.fleet.queued.note":"workforce.fleet.unknown.note")}),
       g.items.length?h(doc,"ul",{class:"wf-fleet-list"},g.items.map(card)):null)}),
     fleetDetailPanel(ctx,runs.items),
-    f.truncated?h(doc,"p",{class:"note",dataset:{truncated:"1"},text:ctx.t("workforce.fleet.showing",{shown:String(f.shown),total:String(f.total)})}):null);
+    f.truncated?h(doc,"p",{class:"note",dataset:{truncated:"1"},text:cut?ctx.t("workforce.fleet.showingCut",{shown:String(f.shown)}):ctx.t("workforce.fleet.showing",{shown:String(f.shown),total:String(f.total)})}):null);
 }
 
 // //TR: Ham durum (UNKNOWN/NOT_EVALUATED/NOT_EXECUTED vb.) yükseltilmeden nötr rozet olarak gösterilir; renk tek başına anlam taşımaz, metin ham değerdir.

@@ -107,6 +107,22 @@ describe("UX WP-WORKOS honest states (no data)", () => {
     const {ctx} = await mkCtx(fromFix({...FULL, "/v1/work-runs": {workRuns: statuses.map((st, i) => ({runId: `run_k${i}_000000`, status: st}))}}));
     expect(kpiValue(await view.render(ctx), "wk-active")).toBe(String(ACTIVE_WORKER_STATUSES.length));
   });
+  // //TR: #273 LOW(a): koşu listesi 500\'de kesildiyse koşu tabanlı KPI\'lar kesin sayı/EMPTY göstermez; UNAVAILABLE ve "—" olur.
+  it("a cut run list (more than 500 runs) makes the run-based KPIs UNAVAILABLE instead of a definite 0 or count", async () => {
+    const view = await load("views", "work.js");
+    const many = (n: number, st: string, off = 0) => Array.from({length: n}, (_, i) => ({runId: `run_c${off + i}_000000`, status: st}));
+    const cut = await mkCtx(fromFix({...FULL, "/v1/work-runs": {workRuns: [...many(500, "SUCCEEDED"), ...many(3, "RUNNING", 900)]}}));
+    const root = await view.render(cut.ctx);
+    for (const id of ["wk-active", "wk-verified"]) {
+      expect(kpiValue(root, id), id).toBe("—");
+      expect(kpi(root, id).dataset.state, id).toBe("UNAVAILABLE");
+      expect(pills(kpi(root, id)), id).toEqual(["UNAVAILABLE"]);
+    }
+    const exact = await mkCtx(fromFix({...FULL, "/v1/work-runs": {workRuns: [...many(497, "SUCCEEDED"), ...many(3, "RUNNING", 900)]}}));
+    const ok = await view.render(exact.ctx);
+    expect(kpiValue(ok, "wk-active")).toBe("3");
+    expect(kpi(ok, "wk-active").dataset.state).toBe("VERIFIED");
+  });
   it("marks OFFLINE separately from UNAVAILABLE", async () => {
     const view = await load("views", "work.js");
     const {ctx} = await mkCtx(() => { throw new Error("fetch failed"); });

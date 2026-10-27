@@ -1,6 +1,6 @@
 // //TR: Bu modül UI-030 "Aktif işçi filosu ızgarası"nın saf (DOM'suz) çekirdeğidir: #/workforce görünümünün ZATEN okuduğu GET /v1/work-runs satırlarından koşuları üç kovaya dağıtır (A-RUNSTATE-1): canlı işçi (yalnız sunucunun aktif-işçi kümesi), "kuyrukta (henüz çalışmıyor)" ve "durum bilinmiyor" (asla canlı sayılmaz); terminal koşular gösterilmez; kendi okuması, yeni uç noktası veya yazımı YOKTUR. Verideki olmayan alanlar (rol, mission, kalp atışı) UNKNOWN kalır; sayı/canlılık uydurulmaz. Üst sınır 50 kart; aşılırsa "X / Y gösteriliyor" notu için truncated bilgisi döner.
 import {RUN_LIVE_STATES,RUN_QUEUED_STATE,liveRuns,queuedRuns} from "./work-core.js";
-import {RUN_STATUSES} from "./executive-core.js";
+import {RUN_STATUSES,TERMINAL_RUN_STATUSES} from "./executive-core.js";
 
 export const MAX_FLEET_CARDS=50;
 export const FLEET_BUCKETS=Object.freeze({LIVE:"LIVE",QUEUED:"QUEUED",UNKNOWN:"UNKNOWN",OTHER:"OTHER"});
@@ -18,7 +18,8 @@ export function runBucket(status){
  */
 export function fleetGroups(runs,max=MAX_FLEET_CARDS){
   const valid=Array.isArray(runs)?runs.filter(r=>r&&typeof r==="object"):[];
-  const live=liveRuns(valid),queued=queuedRuns(valid),unknown=valid.filter(r=>runBucket(r.status)===FLEET_BUCKETS.UNKNOWN),other=valid.filter(r=>runBucket(r.status)===FLEET_BUCKETS.OTHER).length;
+  const live=liveRuns(valid),queued=queuedRuns(valid),unknown=valid.filter(r=>runBucket(r.status)===FLEET_BUCKETS.UNKNOWN),// //TR: other = bilinen, canlı olmayan VE terminal olmayan koşular (yeniden deneme planlı, kurtarılıyor, onay bekliyor vb.); biten (terminal) koşular sayılmaz.
+    other=valid.filter(r=>runBucket(r.status)===FLEET_BUCKETS.OTHER&&!TERMINAL_RUN_STATUSES.includes(r.status)).length;
   let room=Math.max(0,Math.trunc(max)),shown=0;
   const groups=[];
   const add=(status,bucket,all)=>{
@@ -39,7 +40,7 @@ export function fleetCard(run){
 }
 
 /**
- * UI-032: seçili canlı koşunun ayrıntısı. Koşu artık ızgarada değilse (listede yok) null döner; canlı ajan telemetrisi YOK, o alan her zaman null (UNKNOWN).
+ * UI-032: seçili koşunun (canlı, kuyrukta veya durumu bilinmeyen) ayrıntısı. Koşu artık ızgarada değilse (listede yok) null döner; canlı ajan telemetrisi YOK, o alan her zaman null (UNKNOWN).
  */
 export function fleetDetail(runs,runId){
   if(typeof runId!=="string"||!runId)return null;

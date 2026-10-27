@@ -7,7 +7,7 @@ import {pathToFileURL} from "node:url";
 import {computeRoleReadiness, loadReadinessInputFromRepo, reconcileLegacyStatusSummary} from "../core/agents/readiness-audit.js";
 import {computeRoleStatusSummary} from "../core/agents/role-lifecycle.js";
 import {WorkOsStore} from "../core/workos/store.js";
-import {ACTIVE_WORKER_STATUSES, RUN_STATUSES as SERVER_RUN_STATUSES} from "../core/workos/run-state.js";
+import {ACTIVE_WORKER_STATUSES, RUN_STATUSES as SERVER_RUN_STATUSES, TERMINAL_RUN_STATUSES as SERVER_TERMINAL} from "../core/workos/run-state.js";
 
 const root = path.resolve(__dirname, "..");
 const rend = path.join(root, "apps", "desktop", "renderer");
@@ -907,12 +907,60 @@ describe("UI-030 worker fleet grid (live / queued / unknown buckets, UNKNOWN sta
   it("LOW: known non-live, non-terminal runs (retry scheduled, recovering, awaiting approval ...) are counted in an explicit 'other' note, not silently dropped; en text pinned", async () => {
     const core = await load("fleet-core.js");
     const g = core.fleetGroups([run(1, "RUNNING"), run(2, "RETRY_SCHEDULED"), run(3, "RECOVERING"), run(4, "AWAITING_APPROVAL"), run(5, "SUCCEEDED")]);
-    expect(g.other).toBe(4);
+    // //TR: #273 round 2 (MEDIUM-2): yanlış pin düzeltildi; "other" yalnız canlı olmayan VE terminal olmayan bilinen koşulardır (RETRY_SCHEDULED, RECOVERING, AWAITING_APPROVAL = 3). SUCCEEDED terminaldir ve sayılmaz; test başlığı ve docs/ux/UI-030 zaten böyle diyordu.
+    expect(g.other).toBe(3);
     expect(g.total).toBe(1);
     const {node} = await fleetCtx("ok", [run(1, "RUNNING"), run(2, "RETRY_SCHEDULED"), run(3, "RECOVERING")]);
     expect(text(byData(fleetNode(node), "fleetOther", "2")[0])).toBe("2 more run(s) are in other states (for example retry scheduled, recovering or awaiting approval) and are not shown in the fleet grid.");
     const none = await fleetCtx("ok", [run(1, "RUNNING")]);
     expect(byData(fleetNode(none.node), "fleetOther").length).toBe(0);
+  });
+
+  // ---- #273 round 2 (COORD ledger 5c59063) ----
+  const cutList = () => [run(1, "RUNNING"), run(2, "QUEUED"), run(3, "STARTING"), ...Array.from({length: 502}, (_, i) => run(100 + i, "SUCCEEDED"))];
+  it("MEDIUM-1: in a cut run list the group headings and the showing note carry NO count (undercounts must not look exact); the uncut inverse keeps its counts (en and tr)", async () => {
+    const en = await fleetCtx("ok", cutList());
+    const f = fleetNode(en.node);
+    expect(byTag(f, "h3").map(text)).toEqual(["Running", "Queued, not running yet", "Unknown status"]);
+    expect(byData(f, "listTruncated", "1").length).toBe(1);
+    expect(byData(f, "fleetSummary").length).toBe(0);
+    expect(byData(f, "truncated").length).toBe(0);
+    expect(byTag(f, "li").length).toBe(3);
+    expect(all(f).filter(n => n.attrs.get("aria-label") !== undefined && /\(\d+\)/.test(n.attrs.get("aria-label") ?? "")).map(n => n.attrs.get("aria-label"))).toEqual([]);
+    const many = await fleetCtx("ok", [...Array.from({length: 60}, (_, i) => run(i, "RUNNING")), ...Array.from({length: 445}, (_, i) => run(100 + i, "SUCCEEDED"))]);
+    expect(text(byData(fleetNode(many.node), "truncated", "1")[0])).toBe("Showing 50 cards; the run list was cut, so the full number of runs is unknown.");
+    expect(byTag(fleetNode(many.node), "h3").map(text)).toEqual(["Running"]);
+    const tr = await fleetCtx("ok", cutList(), "tr");
+    expect(byTag(fleetNode(tr.node), "h3").map(text)).toEqual(["Çalışıyor", "Kuyrukta, henüz çalışmıyor", "Durum bilinmiyor"]);
+    const trMany = await fleetCtx("ok", [...Array.from({length: 60}, (_, i) => run(i, "RUNNING")), ...Array.from({length: 445}, (_, i) => run(100 + i, "SUCCEEDED"))], "tr");
+    expect(text(byData(fleetNode(trMany.node), "truncated", "1")[0])).toBe("50 kart gösteriliyor; koşu listesi kesildi, bu yüzden toplam koşu sayısı bilinmiyor.");
+    const fine = await fleetCtx("ok", [run(1, "RUNNING"), run(2, "QUEUED"), run(3, "STARTING")]);
+    expect(byTag(fleetNode(fine.node), "h3").map(text)).toEqual(["Running (1)", "Queued, not running yet (1)", "Unknown status (1)"]);
+  });
+
+  it("MEDIUM-2: 'other' counts only known non-live NON-terminal runs; terminal runs never appear in it, and a terminal-only fleet shows no 'other' note; renderer terminal copy equals the server set", async () => {
+    const exec = await load("executive-core.js"), core = await load("fleet-core.js");
+    expect([...exec.TERMINAL_RUN_STATUSES].sort()).toEqual([...SERVER_TERMINAL].sort());
+    for (const st of SERVER_TERMINAL) expect(core.fleetGroups([run(1, st)]).other, st).toBe(0);
+    for (const st of ["RETRY_SCHEDULED", "RECOVERING", "AWAITING_APPROVAL", "DEGRADED", "HANDOFF_PENDING", "CREATED", "CANCELLING"]) expect(core.fleetGroups([run(1, st)]).other, st).toBe(1);
+    const g = core.fleetGroups([run(1, "RUNNING"), ...SERVER_TERMINAL.map((st: string, i: number) => run(10 + i, st))]);
+    expect(g.other).toBe(0);
+    const {node} = await fleetCtx("ok", [run(1, "RUNNING"), ...Array.from({length: 5}, (_, i) => run(10 + i, "SUCCEEDED"))]);
+    expect(byData(fleetNode(node), "fleetOther").length).toBe(0);
+    const onlyTerminal = await fleetCtx("ok", SERVER_TERMINAL.map((st: string, i: number) => run(10 + i, st)));
+    expect(byData(fleetNode(onlyTerminal.node), "fleetOther").length).toBe(0);
+    expect(text(fleetNode(onlyTerminal.node))).toContain("There are no live work runs");
+  });
+
+  it("LOW(b)/(c): an empty grid still shows the 'other' note (non-terminal runs only); in a cut list the 'other' note is absent", async () => {
+    const empty = await fleetCtx("ok", [run(1, "RECOVERING"), run(2, "RETRY_SCHEDULED"), run(3, "AWAITING_APPROVAL")]);
+    expect(text(fleetNode(empty.node))).toContain("There are no live work runs");
+    expect(text(byData(fleetNode(empty.node), "fleetOther", "3")[0])).toBe("3 more run(s) are in other states (for example retry scheduled, recovering or awaiting approval) and are not shown in the fleet grid.");
+    const cut = await fleetCtx("ok", [run(1, "RUNNING"), run(2, "RETRY_SCHEDULED"), ...Array.from({length: 503}, (_, i) => run(100 + i, "SUCCEEDED"))]);
+    expect(byData(fleetNode(cut.node), "listTruncated", "1").length).toBe(1);
+    expect(byData(fleetNode(cut.node), "fleetOther").length).toBe(0);
+    const emptyCut = await fleetCtx("ok", [run(1, "RETRY_SCHEDULED"), ...Array.from({length: 503}, (_, i) => run(100 + i, "SUCCEEDED"))]);
+    expect(byData(fleetNode(emptyCut.node), "fleetOther").length).toBe(0);
   });
 
   it("LOW: data-fleet-summary appears exactly once, and fleetGroups sends non-string statuses to UNKNOWN (never live)", async () => {
