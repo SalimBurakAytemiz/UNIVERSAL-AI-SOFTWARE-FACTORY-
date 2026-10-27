@@ -10,7 +10,8 @@ import {buildServer} from "../apps/control-api/src/server.js";
 import Fastify from "fastify";
 import {FIRST_DELIVERY_BINDINGS, STAGE_CONSUMERS} from "../core/agents/first-delivery-bindings.js";
 import {computeRoleStatusSummary, createEvidenceVerifier, runningRoleIdsFromRuns, roleLifecycle, TARGET_ROLE_COUNT} from "../core/agents/role-lifecycle.js";
-import {registerRoleStatusRoutes, resetReadinessInputCache} from "../apps/control-api/src/routes/role-status.js";
+import {registerRoleStatusRoutes, resetReadinessInputCache, adapterRealityFor, resetAdapterRealityCache, sourceTreePresent} from "../apps/control-api/src/routes/role-status.js";
+import {ADAPTER_REALITY_RECORDS, buildAdapterRealityMap} from "../core/capabilities/adapter-reality.js";
 import {RUN_STATUSES, isOpenRun} from "../core/workos/run-state.js";
 import {pathToFileURL} from "node:url";
 import {READINESS_INPUT_FILES} from "../core/agents/readiness-audit.js";
@@ -621,11 +622,11 @@ describe("LANE-C C1 role lifecycle computed only from evidence", () => {
     const trace = (role: string) => ({kind: "AGENT_TRACE", note: `agent=a1 role=${role} state=COMPLETED`, evidenceId: "e", step: "IMPLEMENT", cycle: 0, argv: [], startedAt: "", endedAt: "", exitCode: 0, logPath: null, logSha256: null} as any);
     const roleLayer = (body: any, roleId: string) => body.readiness.roles.find((r: any) => r.roleId === roleId).layers.RUNNING;
 
-    it("(a) journal ABSENT: RUNNING is UNKNOWN for all 599 and NOT measured; the legacy running is not presented as measured; TOOL_READY / stageWired stay UNKNOWN (nothing supplied)", async () => {
+    it("(a) journal ABSENT: RUNNING is UNKNOWN for all 599 and NOT measured; the legacy running is not presented as measured; adapterReality is SUPPLIED in the dev tree (code paths only, no probes) while TOOL_READY stays unmeasured and stageWired UNKNOWN (reachableStages not supplied)", async () => {
       const {code, body} = await get(null); expect(code).toBe(200);
       expect(body.statusSummaryStatus).toBe("DEPRECATED_LEGACY_PROJECTION");
       expect(body.readiness.totals.RUNNING).toMatchObject({UNKNOWN: 599, TRUE: 0, measured: false, denominator: 599});
-      expect(body.readiness.inputs).toMatchObject({journal: "ABSENT", adapterReality: "NOT_SUPPLIED", reachableStages: "NOT_SUPPLIED"});
+      expect(body.readiness.inputs).toMatchObject({journal: "ABSENT", adapterReality: "SUPPLIED", reachableStages: "NOT_SUPPLIED"});
       expect(body.reconciliation).toMatchObject({status: "DEPRECATED_LEGACY_PROJECTION", authority: "readiness", runningMeasured: false, implementedMeaning: "EXECUTABLE_CODE_PATH_INCLUDES_UNWIRED_STAGES", implementedStageWired: "UNKNOWN"});
       expect(body.readiness.totals.TOOL_READY.UNKNOWN).toBeGreaterThan(0); expect(body.readiness.totals.TOOL_READY.measured).toBe(false);
       expect(Object.keys(body)).not.toContain("running"); expect(body.readiness.roles.every((r: any) => r.layers.RUNNING.state === "UNKNOWN")).toBe(true);
@@ -650,7 +651,7 @@ describe("LANE-C C1 role lifecycle computed only from evidence", () => {
       for (const runs of [null, [{status: "RUNNING", evidence: [trace("UASCO-0252")]}]] as const) {
         const {body} = await get(runs as any);
         const obs = runs === null ? {journal: "ABSENT" as const} : {journal: "PRESENT" as const, runs: runs as any};
-        const expected = computeRoleReadiness(loadReadinessInputFromRepo(REPO, {runs: obs, now: NOW}));
+        const expected = computeRoleReadiness(loadReadinessInputFromRepo(REPO, {runs: obs, adapterReality: buildAdapterRealityMap({records: ADAPTER_REALITY_RECORDS, repoRoot: REPO}).entries, now: NOW}));
         expect(body.readiness).toEqual(JSON.parse(JSON.stringify(expected)));
         expect(body.reconciliation).toEqual(JSON.parse(JSON.stringify(reconcileLegacyStatusSummary(base({runs: (runs ?? []) as any}), expected))));
         expect(Object.keys(body).sort()).toEqual(["readiness", "reconciliation", "statusSummary", "statusSummaryStatus"]);
@@ -675,10 +676,58 @@ describe("LANE-C C1 role lifecycle computed only from evidence", () => {
         expect(body.readinessError).toBeUndefined(); expect(body.readiness).not.toBeNull();
         expect(body.readiness.denominator).toBe(599); expect(body.readiness.totals.DEFINED.TRUE).toBe(599); expect(body.readiness.totals.RUNNING.UNKNOWN).toBe(599);
         expect(body.readiness.totals.KNOWLEDGE_READY.measured).toBe(true);
-        const repoBody = (await getAt(REPO, null)).body; expect(body.readiness.digest).toBe(repoBody.readiness.digest); expect(JSON.stringify(body.statusSummary)).toBe(JSON.stringify(repoBody.statusSummary));
+        const repoBody = (await getAt(REPO, null)).body; expect(JSON.stringify(body.statusSummary)).toBe(JSON.stringify(repoBody.statusSummary));
+        // Paketlenmiş düzende adaptör kaynakları yoktur: adapterReality NOT_SUPPLIED kalır, özet "adapterReality verilmemiş" çekirdek çıktısıyla aynıdır (dev ağacı SUPPLIED olduğu için özeti ondan farklıdır).
+        expect(body.readiness.inputs.adapterReality).toBe("NOT_SUPPLIED"); expect(repoBody.readiness.inputs.adapterReality).toBe("SUPPLIED");
+        expect(body.readiness.digest).toBe(computeRoleReadiness(loadReadinessInputFromRepo(REPO, {runs: {journal: "ABSENT"}, now: NOW})).digest);
       } finally { fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); }
     });
 
+    // ---- B-ADAPTER: adapterReality only from a verified SOURCE tree ----
+    const recordFiles = () => [...new Set(ADAPTER_REALITY_RECORDS.flatMap(r => [r.mode === "NPM_PACKAGE" ? path.join("node_modules", r.module, "package.json") : r.module, ...r.callers.map(c => c.file)]))];
+    const stageDevTree = async () => {
+      const stage = await stagePackaged();
+      for (const rel of [...recordFiles(), "core/capabilities/adapter-reality.ts", "core/capabilities/resolver.ts", "package.json"]) { const dst = path.join(stage, rel); fs.mkdirSync(path.dirname(dst), {recursive: true}); fs.copyFileSync(path.join(REPO, rel), dst); }
+      resetAdapterRealityCache(); return stage;
+    };
+    it("B-ADAPTER: in the dev tree the route supplies the code-backed adapter map (every entry probe NOT_OBSERVED, no invented probes) and TOOL_READY is not newly TRUE", async () => {
+      resetAdapterRealityCache();
+      const entries = adapterRealityFor(REPO)!; expect(entries).toBeDefined(); expect(entries.size).toBe(ADAPTER_REALITY_RECORDS.length);
+      expect([...entries.values()].every(e => e.probe === "NOT_OBSERVED")).toBe(true);
+      expect([...entries.values()].map(e => e.codePath).includes("ABSENT")).toBe(true); // semgrep/omniroute never run: honest ABSENT, not hidden
+      const {body} = await getAt(REPO, null); expect(body.readiness.inputs.adapterReality).toBe("SUPPLIED");
+      const without = computeRoleReadiness(loadReadinessInputFromRepo(REPO, {runs: {journal: "ABSENT"}, now: NOW}));
+      expect(body.readiness.totals.TOOL_READY).toEqual(JSON.parse(JSON.stringify(without.totals.TOOL_READY)));
+    });
+    it("B-ADAPTER: the PACKAGED layout (no adapter sources) is NOT_SUPPLIED as a whole - never an all-ABSENT map; TOOL_READY stays unmeasured", async () => {
+      const stage = await stagePackaged();
+      try {
+        expect(sourceTreePresent(stage)).toBe(false); expect(adapterRealityFor(stage)).toBeUndefined();
+        const {body} = await getAt(stage, null); expect(body.readiness.inputs.adapterReality).toBe("NOT_SUPPLIED"); expect(body.readiness.totals.TOOL_READY.measured).toBe(false);
+      } finally { fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); resetAdapterRealityCache(); }
+    });
+    it("B-ADAPTER: in a verified source tree a MISSING record module is a REAL codePath ABSENT while the report stays SUPPLIED (the guard is tree markers, not records)", async () => {
+      const stage = await stageDevTree();
+      try {
+        expect(sourceTreePresent(stage)).toBe(true);
+        expect(adapterRealityFor(stage)!.get("git")!.codePath).toBe("PRESENT");
+        fs.rmSync(path.join(stage, "core/workos/git-async.ts"));
+        const after = adapterRealityFor(stage)!; expect(after.get("git")!.codePath).toBe("ABSENT"); expect(after.get("gitleaks")!.codePath).toBe("PRESENT");
+        const {body} = await getAt(stage, null); expect(body.readiness.inputs.adapterReality).toBe("SUPPLIED");
+      } finally { fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); resetAdapterRealityCache(); }
+    });
+    it("B-ADAPTER: the adapter map is cached per source CONTENT: same sources = same map object; an edit with the SAME size and the SAME mtime still recomputes (no stale PRESENT)", async () => {
+      const stage = await stageDevTree(); const file = path.join(stage, "core/workos/git-async.ts");
+      try {
+        const pinned = new Date(Math.floor(Date.now() / 1000) * 1000 - 60_000); fs.utimesSync(file, pinned, pinned); // tam saniye: parçalı ms hassasiyeti geri okumada kayar
+        const first = adapterRealityFor(stage)!; expect(first.get("git")!.codePath).toBe("PRESENT"); expect(adapterRealityFor(stage)).toBe(first);
+        const st = fs.statSync(file), src = fs.readFileSync(file, "utf8"), edited = src.replace("export function runGitAsync(", "export function runGitAsynd(");
+        expect(edited.length).toBe(src.length); expect(edited).not.toBe(src);
+        fs.writeFileSync(file, edited); fs.utimesSync(file, st.atime, st.mtime);
+        const st2 = fs.statSync(file); expect([st2.size, st2.mtimeMs]).toEqual([st.size, st.mtimeMs]);
+        const second = adapterRealityFor(stage)!; expect(second).not.toBe(first); expect(second.get("git")!.codePath).toBe("ABSENT");
+      } finally { fs.rmSync(stage, {recursive: true, force: true}); resetReadinessInputCache(); resetAdapterRealityCache(); }
+    });
     it("H1/M2: a missing readiness input DEGRADES (200, legacy statusSummary byte-identical, readiness/reconciliation null, readinessError set, audit carries the code only); a programming error is NOT degraded (workosFail)", async () => {
       const stage = await stagePackaged();
       try {

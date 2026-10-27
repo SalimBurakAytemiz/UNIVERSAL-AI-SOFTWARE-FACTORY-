@@ -6,7 +6,8 @@ import type {RouteDeps} from "./deps.js";
 import {FIRST_DELIVERY_BINDINGS} from "../../../../core/agents/first-delivery-bindings.js";
 import {computeRoleStatusSummary, createEvidenceVerifier} from "../../../../core/agents/role-lifecycle.js";
 import {READINESS_INPUT_FILES, computeRoleReadiness, loadReadinessInputFromRepo, reconcileLegacyStatusSummary} from "../../../../core/agents/readiness-audit.js";
-import type {ReadinessInput} from "../../../../core/agents/readiness-audit.js";
+import type {AdapterRealityEntry, ReadinessInput} from "../../../../core/agents/readiness-audit.js";
+import {ADAPTER_REALITY_RECORDS, buildAdapterRealityMap} from "../../../../core/capabilities/adapter-reality.js";
 
 export const ROLE_REGISTRY_FILE_REL = path.join("registries", "role-definitions.json");
 
@@ -28,6 +29,34 @@ function staticReadinessInput(root: string, now: Date): ReadinessInput {
   if (loaded.length === slugs.length && loaded.every((x, k) => x === slugs[k]) && fingerprint(root, slugs) === before) staticInputCache.set(root, {fp: before, slugs, input});
   return input;
 }
+// //TR: B-ADAPTER: adapterReality YALNIZ doğrulanmış bir KAYNAK AĞACINDA verilir (geliştirme/çalışma ağacı). Paketlenmiş uygulamada (installer yalnız çalışma-zamanı VERİ dosyalarını hazırlar) adaptör modül/çağıran kaynakları yoktur; hepsini "kod yok" (ABSENT) saymak yanlış bir "araç hazır değil" iddiası olurdu, bu yüzden orada rapor NOT_SUPPLIED kalır (TOOL_READY UNKNOWN). Ağaç işaretleri HİÇBİR kayda bağlı değildir: doğrulanmış bir ağaçta eksik bir modül dosyası GERÇEK bir codePath ABSENT'tir (haritanın amacı). Yoklama (probe) UYDURULMAZ: her giriş NOT_OBSERVED kalır.
+const TREE_MARKERS = ["core/capabilities/adapter-reality.ts", "core/capabilities/resolver.ts"] as const;
+const REPO_PACKAGE_NAME = "universal-ai-software-company-os";
+export function sourceTreePresent(root: string): boolean {
+  try {
+    for (const m of TREE_MARKERS) if (!fs.statSync(path.join(root, m)).isFile()) return false;
+    return JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"))?.name === REPO_PACKAGE_NAME;
+  } catch { return false; }
+}
+// //TR: Önbellek anahtarı: verifyRecord'un OKUDUĞU her dosyanın (modül, çağıranlar, npm paketlerinin package.json'ı) İÇERİK özeti; boyut+mtime değil, bu yüzden aynı boyut/aynı mtime ile yapılan bir düzenleme bayat bir PRESENT bırakamaz. Önbellek süreç başınadır (repoRoot başına bir giriş); özet her istekte yeniden hesaplanır (yalnız okuma + sha256, ayrıştırma yok).
+const adapterSourceFiles = (): string[] => [...new Set(ADAPTER_REALITY_RECORDS.flatMap(r => [r.mode === "NPM_PACKAGE" ? path.join("node_modules", r.module, "package.json") : r.module, ...r.callers.map(c => c.file)]))].sort();
+const contentFingerprint = (root: string): string => {
+  const h = crypto.createHash("sha256");
+  for (const rel of adapterSourceFiles()) { h.update(rel + "\0"); try { h.update(fs.readFileSync(path.join(root, rel))); } catch { h.update("<absent>"); } h.update("\0"); }
+  return h.digest("hex");
+};
+const adapterCache = new Map<string, {fp: string; entries: ReadonlyMap<string, AdapterRealityEntry>}>();
+/** Test kancası: adaptör gerçeklik önbelleğini boşaltır. */
+export function resetAdapterRealityCache(): void { adapterCache.clear(); }
+/** Kaynak ağacı doğrulanmışsa kod destekli adaptör haritası (probe NOT_OBSERVED); aksi halde undefined (NOT_SUPPLIED). */
+export function adapterRealityFor(root: string): ReadonlyMap<string, AdapterRealityEntry> | undefined {
+  if (!sourceTreePresent(root)) { adapterCache.delete(root); return undefined; }
+  const fp = contentFingerprint(root), hit = adapterCache.get(root);
+  if (hit && hit.fp === fp) return hit.entries;
+  const {entries} = buildAdapterRealityMap({records: ADAPTER_REALITY_RECORDS, repoRoot: root});
+  adapterCache.set(root, {fp, entries});
+  return entries;
+}
 const READINESS_INPUT_ERROR = /^READINESS_INPUT_(UNAVAILABLE|INVALID):/;
 
 export function registerRoleStatusRoutes(app: any, d: RouteDeps & {repoRoot: string; now?: () => Date; readinessCompute?: typeof computeRoleReadiness}): void {
@@ -47,12 +76,13 @@ export function registerRoleStatusRoutes(app: any, d: RouteDeps & {repoRoot: str
         roleDefinitionsSha256: legacyShaEarly, bindings: FIRST_DELIVERY_BINDINGS,
         verify: createEvidenceVerifier(d.repoRoot), runs: observed.journal === "PRESENT" ? observed.runs : [], now
       });
-      // Tek kaynak kuralı: bu rota HİÇBİR sayaç hesaplamaz; ölçüm core/agents/readiness-audit.ts'tedir. adapterReality ve reachableStages VERİLMEZ (TOOL_READY / stageWired UNKNOWN kalır).
+      // Tek kaynak kuralı: bu rota HİÇBİR sayaç hesaplamaz; ölçüm core/agents/readiness-audit.ts'tedir. adapterReality YALNIZ doğrulanmış kaynak ağacında verilir (B-ADAPTER; aksi halde TOOL_READY UNKNOWN), reachableStages VERİLMEZ (stageWired UNKNOWN kalır).
       const legacySha = legacyShaEarly;
       let readiness;
       try {
         // verify HER istekte yeni kurulur (kanıt kökü kuruluşta çözülür; sonradan yazılan kanıt bayat kalmasın); önbellekte yalnız durağan girdi.
-        const input = {...staticReadinessInput(d.repoRoot, now), verify: createEvidenceVerifier(d.repoRoot), runs: observed, now};
+        const adapterReality = adapterRealityFor(d.repoRoot);
+        const input = {...staticReadinessInput(d.repoRoot, now), ...(adapterReality ? {adapterReality} : {}), verify: createEvidenceVerifier(d.repoRoot), runs: observed, now};
         // L4: kayıt iki kez okunur (eski sayaç + readiness); sha uyuşmazsa (okumalar arasında değişti) readiness kullanılamaz sayılır, sayı uydurulmaz.
         if (input.roleDefinitionsSha256 !== legacySha) throw new Error("READINESS_INPUT_INVALID:ROLE_DEFINITIONS_CHANGED");
         readiness = (d.readinessCompute ?? computeRoleReadiness)(input); // readinessCompute: yalnız test tohumu (üretimde verilmez)
