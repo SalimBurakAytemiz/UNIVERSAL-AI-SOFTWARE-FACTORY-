@@ -2246,6 +2246,16 @@
         "masterV2": "C-RDY-1 Role Readiness Auditor = Master V2 package 1 DONE (merged, not product-accepted)"
       },
       {
+        "pr": 264,
+        "merge": "b1c18ad",
+        "by": "coordinator direct merge, expectedHeadSha 09a926f (required checks green on 09a926f, run 40475602432)",
+        "at": "2026-10-27T09:14:30Z",
+        "postMerge": "VERIFIED: parent1 4d79cb7, parent2 = gated head 09a926f, merge tree 5655189 == probe tree tested locally (git worktree: adapter-reality + role-context + readiness-audit + ci-validation-shards + b2 + sbx8 196/196; earlier b4/b5/ps1b/pkg-f pass); trust-root PASS on probe",
+        "review": "r3 delta BLOCKERS_2MEDIUM at ROUND_LIMIT -> bounded push 071ac9f NO_BLOCKERS (coordinator checklist) -> COORD base merge 09a926f BASE_MERGE_ONLY (validation union, MAP order, reseal)",
+        "riskTier": "R1 (tests-8 registration + trust-root reseal by coordinator)",
+        "masterV2": "C-RDY-2a: Adapter Reality Map"
+      },
+      {
         "pr": 284,
         "merge": "4d79cb7",
         "by": "coordinator direct merge, expectedHeadSha ec7caca (required checks green on ec7caca)",
