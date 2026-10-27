@@ -2960,7 +2960,7 @@ describe("LANE-A A-UI125-1 import success shows the agent configuration quaranti
   it("M1: the outcome is filed under the project the import was STARTED for, even when another workspace is open when the POST resolves", async () => {
     let release: (v: any) => void = () => {};
     const pending = new Promise<any>(r => { release = r; });
-    const c = await mkCtx({get: twoProjects(), post: () => pending, native, lang: "en"});
+    const c = await mkCtx({get: twoProjects(), post: (() => pending) as any, native, lang: "en"});
     st.openProject(PID, "overview");
     let root = mount(c.doc, await projectsView.render(c.ctx));
     byId(root, "studio-import-pick")!.fire("click"); await tick();
