@@ -368,11 +368,14 @@ describe("B5 mappers: work runs, evidence, inbox derivation", () => {
     expect(c.deriveInbox(undefined, undefined)).toEqual([]);
     expect(JSON.stringify(items)).not.toMatch(/approved|auto/i);
   });
-  it("live runs are the active run states only", async () => {
+  // //TR: A-RUNSTATE-1: canlı koşular artık yalnız sunucunun aktif-işçi kümesidir (LEASED/RUNNING/CHECKPOINTING/VERIFYING); QUEUED canlı değil (ayrı kova), STARTING/REVIEWING RunStatus olmadığı için canlı sayılmaz.
+  it("live runs are the server worker-active run states only", async () => {
     const c = await load(rend, "work-core.js");
-    const runs = ["RUNNING", "QUEUED", "FAILED", "COMPLETED", "AWAITING_APPROVAL", "LEASED"].map((s, i) => ({runId: `run_${i}_000000`, status: s}));
-    expect(c.liveRuns(runs).map((r: any) => r.status)).toEqual(["RUNNING", "QUEUED", "LEASED"]);
+    const runs = ["RUNNING", "QUEUED", "FAILED", "COMPLETED", "AWAITING_APPROVAL", "LEASED", "CHECKPOINTING", "VERIFYING", "STARTING", "REVIEWING"].map((s, i) => ({runId: `run_${i}_000000`, status: s}));
+    expect(c.liveRuns(runs).map((r: any) => r.status)).toEqual(["RUNNING", "LEASED", "CHECKPOINTING", "VERIFYING"]);
+    expect(c.queuedRuns(runs).map((r: any) => r.status)).toEqual(["QUEUED"]);
     expect(c.liveRuns(undefined)).toEqual([]);
+    expect(c.queuedRuns(undefined)).toEqual([]);
   });
 });
 
@@ -403,7 +406,9 @@ describe("B5 i18n", () => {
     need.add("everif.NONE");
     for (const s of ["current", "done", "todo"]) need.add(`work.timeline.${s}`);
     for (const st of core.MISSION_STATUSES) need.add(`mstatus.${st}`);
-    for (const st of [...core.RUN_ACTIVE_STATES, "AWAITING_APPROVAL", "FAILED", "CANCELLED", "STOPPED"]) need.add(`mstatus.${st}`);
+    // //TR: A-RUNSTATE-1: RUN_ACTIVE_STATES yerine RUN_LIVE_STATES + QUEUED (CHECKPOINTING için mstatus anahtarı eklendi).
+    // //TR: #273 LOW: eski RUN_ACTIVE_STATES mstatus.STARTING'i zorunlu kılıyordu; STARTING dev-run durumu olarak kullanılmaya devam ettiği için anahtar burada açıkça zorunlu tutulur.
+    for (const st of [...core.RUN_LIVE_STATES, core.RUN_QUEUED_STATE, "STARTING", "AWAITING_APPROVAL", "FAILED", "CANCELLED", "STOPPED"]) need.add(`mstatus.${st}`);
     // form.field.* her doğrulama alanı için
     const fields = new Set<string>();
     const collect = (r: any) => { for (const f of Object.keys(r.errors ?? {})) fields.add(f); };
@@ -1670,6 +1675,32 @@ describe("COORD first-delivery Desktop allow-list (main.mjs)", () => {
     for (const p of ["/v1/run-summaries/", "/v1/run-summaries?x=1", "/v1/run-summaries?status=running", "/v1/run-summaries?projectId=prj_x", "/v1/run-summaries?limit=0", `/v1/run-summaries?projectId=${PRJ}&projectId=${PRJ}`, "/v1/run-summaries/run_x", "/v1//run-summaries"]) expect(get(p), p).toBe(false);
     expect(post("/v1/run-summaries")).toBe(false);
   });
+  // Batch 4b: the analysis step/plan writes, the delivered-product status read and its start/stop writes (no restart), exact shapes only.
+  it("batch 4b: admits the analysis step/plan and product start/stop writes and the product status read, nothing near them", () => {
+    const get = loadGet(), {desktopPostPathAllowed: post} = loadPost();
+    const G4 = [`/v1/work-runs/${RUNID}/product`], P4 = [`/v1/missions/${MSN}/analysis/step`, `/v1/missions/${MSN}/analysis/plan`, `/v1/work-runs/${RUNID}/product/start`, `/v1/work-runs/${RUNID}/product/stop`];
+    for (const p of G4) { expect(get(p), p).toBe(true); expect(post(p), `POST ${p}`).toBe(false); for (const m of nearMisses(p)) expect(get(m), m).toBe(false); }
+    for (const p of P4) { expect(post(p), p).toBe(true); expect(get(p), `GET ${p}`).toBe(false); for (const m of nearMisses(p)) expect(post(m), m).toBe(false); }
+    for (const p of [`/v1/work-runs/${RUNID}/product/restart`, `/v1/missions/${MSN}/analysis`, `/v1/missions/${MSN}/analysis/steps`, `/v1/missions/${MSN}/analysis/step/x`, `/v1/missions/${MSN}/analysis/plans`, `/v1/missions/${MSN}/analysis/other`,
+      `/v1/projects/${PRJ}/analysis/step`, `/v1/missions/${PRJ}/analysis/step`, `/v1/work-runs/${RUNID}/products`, `/v1/work-runs/${RUNID}/product/`, `/v1/work-runs/${RUNID}/product/start/x`, `/v1/work-runs/${MSN}/product/start`, `/v1/work-runs/${RUNID}/product/status`,
+      `/v1/work-runs/${RUNID}/product?x=1`, `/v1/missions/${MSN}/analysis/step?x=1`, `/v1/work-runs/${RUNID}/product/stop?x=1`]) {
+      expect(get(p), p).toBe(false); expect(post(p), p).toBe(false);
+    }
+  });
+  it("batch 4b: server.ts imports and registers the analysis and product-run routes once, right after the pre-dev decision routes", () => {
+    const server = fs.readFileSync(path.join(root, "apps", "control-api", "src", "server.ts"), "utf8");
+    for (const [name, file] of [["registerAnalysisRoutes", "analysis"], ["registerProductRunRoutes", "product-run"]]) {
+      expect(server.match(new RegExp(`^import \\{${name}\\} from "\\./routes/${file}\\.js";$`, "gm"))?.length, name).toBe(1);
+      expect(server.match(new RegExp(`${name}\\(app,`, "g"))?.length, name).toBe(1);
+    }
+    expect(server.match(/^import \{AnalysisFlow,NO_ANALYSIS_BUILDER,claudeAnalysisReadiness\} from "\.\.\/\.\.\/\.\.\/core\/workos\/crew\/analysis\.js";$/gm)?.length).toBe(1);
+    // The flow is built per request with the route's own Global Stop check (stopped) combined with the server's closing flag, and the existing executor pair's pre-dev builder; the late-declared accessors are read lazily. builderTrace reads that same per-request builder's lastTrace (null without a builder), so the audit's builderRan is evidence-based.
+    // The closing flag is declared once, before the lane registrations, and only a preClose hook sets it (app.close stops a running paid analysis call instead of waiting for its timeout).
+    expect(server.match(/^let closing=false;app\.addHook\("preClose",async\(\)=>\{closing=true\}\);$/gm)?.length).toBe(1);
+    expect(server.match(/\bclosing\s*=(?!=)/g)?.length).toBe(2);
+    expect(server.indexOf("let closing=false;")).toBeLessThan(server.indexOf("registerIntakeRoutes(app,laneDeps);"));
+    expect(server).toMatch(/registerPredevDecisionRoutes\(app,laneDeps\);\n\/\/ [^\n]*\nregisterAnalysisRoutes\(app,\{\.\.\.laneDeps,analysisFlow:\(stopped\)=>\{const c=getExecutors\(\)\.pair\?\.preDevBuilder\?\.\(\)\?\?null;return Object\.assign\(new AnalysisFlow\(\{store:getStore\(\),scope,builder:c\?\?NO_ANALYSIS_BUILDER,readiness:\(\)=>claudeAnalysisReadiness\(\{controlRoot,profile:\{forbiddenRoots:\[getStore\(\)\.dataDir\]\},cli:getExecSetup\(\)\.cliStatus\(\)\}\),stopped:\(\)=>closing\|\|stopped\(\)\}\),\{builderTrace:\(\)=>c\?\.lastTrace\?\?null\}\);\}\}\);\n\/\/ [^\n]*\nregisterProductRunRoutes\(app,\{\.\.\.laneDeps,devruns:\(\)=>getDevRuns\(\)\}\);\nregisterRoleStatusRoutes\(app,/);
+  });
   it("server.ts registers the task-run link routes once, right after the task routes", () => {
     const server = fs.readFileSync(path.join(root, "apps", "control-api", "src", "server.ts"), "utf8");
     expect(server.match(/^import \{registerTaskRunRoutes\} from "\.\/routes\/task-runs\.js";$/gm)?.length).toBe(1);
@@ -2652,6 +2683,21 @@ describe("LANE-A A-FLOW-GAP-2: the test-result step of a run says what really ha
     // a regression run that failed on another commit does not count; a missing regression never verifies
     expect(core.mapWorkRun(run({evidence: [attested("VERIFY_TESTS"), surface(7)]})).evidenceVerification.state).not.toBe("PRODUCT_VERIFIED");
   });
+  // W2 (review #226 survivor): when the server's delivery view is present it alone decides; a client recompute from the (truncated) evidence list never overrides the server's NOT_VERIFIED / FAILED.
+  it("isProductVerified: the server's delivery view decides when present (the recorded evidence's PRODUCT_VERIFIED never overrides NOT_VERIFIED or FAILED); without it the evidence rule applies", async () => {
+    const core = await load(rend, "work-core.js"), m1a = await load(rend, "m1a.js");
+    const proven = [attested("VERIFY_TESTS"), attested("REGRESSION_TESTS"), surface(7)];
+    for (const [state, reason, ran] of [["NOT_VERIFIED", "SANDBOX_ATTESTATION_MISSING", true], ["NOT_VERIFIED", "NOT_EXECUTED:SANDBOX_UNAVAILABLE", false], ["FAILED", "TESTS_FAILED", true]] as const) {
+      const w = await detail(dlv(state, reason, ran), {evidence: proven});
+      expect(w.evidenceVerification.state, reason).toBe("PRODUCT_VERIFIED"); // precondition: the client rule alone would say verified
+      expect(w.delivery.productVerification.state, reason).toBe(state);
+      expect(core.isProductVerified(w), reason).toBe(false); expect(m1a.runNotVerified(w), reason).toBe(true); expect(m1a.missionNotVerified([w], MID), reason).toBe(true);
+    }
+    const cut = await detail(dlv("PRODUCT_VERIFIED", "TESTS_EXECUTED_IN_VERIFIED_SANDBOX", true), {evidence: []});
+    expect(cut.evidenceVerification.state).not.toBe("PRODUCT_VERIFIED"); expect(core.isProductVerified(cut)).toBe(true); expect(m1a.runNotVerified(cut)).toBe(false);
+    const listItem = core.mapWorkRun(run({evidence: proven}));
+    expect(listItem.delivery?.productVerification?.state).toBeUndefined(); expect(core.isProductVerified(listItem)).toBe(true);
+  });
   it("list items without the delivery view keep the Founder-approved NOT_VERIFIED badge for every evidence case except the proven one", async () => {
     const core = await load(rend, "work-core.js");
     for (const [name, evidence, state] of EV_CASES) {
@@ -2718,6 +2764,7 @@ describe("LANE-A A-FLOW-GAP-2: the Journey end to end (stateful fake server, rea
       if (p === "/v1/work-runs" || p === `/v1/work-runs?missionId=${IMSN}`) return {workRuns: S.run ? [S.run] : []};
       if (S.run && p === `/v1/work-runs/${IRUN}`) return {workRun: S.run, outcomes: null, delivery: S.delivery()}; // the server also returns its delivery view (productVerification + testsExecuted)
       if (S.run && p === `/v1/work-runs/${IRUN}/tasks`) return {links: S.links};
+      if (S.productRoute && S.run && p === `/v1/work-runs/${IRUN}/product`) return {product: {runId: IRUN, deliveredHeadSha: HEAD, tiedToThisRun: false, devrun: {status: "STOPPED", pid: null, port: null, preview: {state: "UNAVAILABLE", url: null}, logTail: "", deliveryRunId: null, bridged: null}}};
       if (p.startsWith("/v1/evidence")) return {evidence: []};
       if (p === `/v1/projects/${IPRJ}/readiness`) return {readiness: {projectId: IPRJ, missionId: IMSN, ready: true, verifiable: S.tasks.length > 0, checks: [
         {id: "MISSION", state: "OK", blocking: true, reason: null, nextAction: null}, {id: "RISK", state: "OK", blocking: true, reason: null, nextAction: null},
@@ -2752,6 +2799,9 @@ describe("LANE-A A-FLOW-GAP-2: the Journey end to end (stateful fake server, rea
       const link = /^\/v1\/tasks\/(tsk_[0-9a-f]{24})\/runs$/.exec(p);
       if (link) { const l = {taskId: link[1], runId: b.runId, missionId: IMSN, tenantId: "t1", linkedAt: "2026-10-26T05:11:00.000Z", linkedBy: "FOUNDER_LOCAL"}; S.links.push(l); return {status: 201, body: {link: l}}; }
       if (p === `/v1/work-runs/${IRUN}/delivery/prepare`) { S.prepared = true; return {status: 200, body: {artifact: {exportArtifactHash: "f".repeat(64)}}}; }
+      // batch 4b: the analysis step answers 200 with the full BLOCKED step (Lane B route change), a product start without a verified sandbox is the plain 409 gate refusal.
+      if (p === `/v1/missions/${IMSN}/analysis/step`) return {status: 200, body: {status: "BLOCKED", blocker: "PROVIDER_PROVENANCE_NOT_READY", blockers: ["PROVIDER_PROVENANCE_NOT_READY", "implementer:CLAUDE_PROFILE_LOGIN_REQUIRED"], founderAction: "free text that is never shown"}};
+      if (p === `/v1/work-runs/${IRUN}/product/start`) return {status: 409, body: {error: "SANDBOX_UNAVAILABLE"}};
       return {status: 404, body: {}};
     };
     return {S, get, post};
@@ -2765,7 +2815,10 @@ describe("LANE-A A-FLOW-GAP-2: the Journey end to end (stateful fake server, rea
     expect(w.describePostResult({thrown: true, state: "UNAVAILABLE", message: "INVALID_API_PATH"}).key).toBe("post.err.unavailable");
     expect(w.describePostResult({thrown: true, state: "OFFLINE"}).key).toBe("post.err.offline"); expect(w.describePostResult({thrown: true, state: "ERROR"}).key).toBe("post.err.generic");
     const srv = await mkServer(), c = await mkCtx({lang: "en", get: srv.get, post: srv.post});
-    const raw = await c.ctx.api.raw(`/v1/work-runs/${IRUN}/product`); expect(raw.state).toBe("UNAVAILABLE"); // a read the allow-list refuses
+    const raw = await c.ctx.api.raw(`/v1/work-runs/${IRUN}/product`); expect(raw.state).toBe("UNAVAILABLE"); // after 4b the path is admitted; this fake server answers 404 for it (productRoute off), which is UNAVAILABLE too
+    // end-to-end allow-list refusal leg: a run-scoped product path the desktop does NOT admit never reaches the fake server; the bridge refuses it (INVALID_API_PATH) and the read is UNAVAILABLE
+    const refused = await c.ctx.api.raw(`/v1/work-runs/${IRUN}/product/status`); expect(refused.state).toBe("UNAVAILABLE");
+    expect(srv.S.blocked).toEqual([`GET /v1/work-runs/${IRUN}/product/status`]); // the admitted product read above was not blocked; only the refused one is
     // product card: unavailable read -> one line and the Run tab button
     srv.S.project = {projectId: IPRJ, name: "P", tenantId: "t1", environmentId: "local", createdAt: "2026-10-26T05:00:00.000Z"}; srv.S.mission = {missionId: IMSN, projectId: IPRJ, title: "M", status: "PLANNED", riskLevel: "R1", createdAt: "2026-10-26T05:00:00.000Z"};
     srv.S.run = {runId: IRUN, missionId: IMSN, projectId: IPRJ, status: "AWAITING_APPROVAL", headSha: HEAD, startedAt: "2026-10-26T05:10:00.000Z", evidence: []};
@@ -2799,7 +2852,7 @@ describe("LANE-A A-FLOW-GAP-2: the Journey end to end (stateful fake server, rea
     expect(byId(root, "intake-ready-go-PLAN_MISSION")).not.toBeNull(); expect(byId(root, "intake-open-mission")).not.toBeNull();
     expect(srv.S.posts[0]).toMatchObject({path: "/v1/intakes", body: {idea: IDEA, template: "web-node"}});
     table.INTAKE = "COMPLETE_IN_UI";
-    // 2) analysis: the Journey shows the section; the step POST is not allow-listed yet
+    // 2) analysis: the Journey shows the section; after 4b the step POST is admitted and the server answers its exact BLOCKED readiness
     byId(root, "intake-open-mission")!.fire("click"); expect(sel.missionId).toBe(IMSN);
     root = await view("views", "journey.js");
     expect(byId(root, "analysis-step")).not.toBeNull();
@@ -2807,9 +2860,11 @@ describe("LANE-A A-FLOW-GAP-2: the Journey end to end (stateful fake server, rea
     async function fire(n: N) { n.fire("click"); await sleep(); }
     await sleep();
     root = await view("views", "journey.js");
-    expect(byId(root, "analysis-step-status")!.textContent).toContain("not enabled in this build"); expect(byId(root, "analysis-plan-submit")).toBeNull();
-    expect(srv.S.blocked).toContain(`POST /v1/missions/${IMSN}/analysis/step`);
-    table.ANALYSIS_DRAFTS = "GATED_4B"; table.PLAN_FROM_ANALYSIS = "GATED_4B";
+    expect(byData(root, "analysisStatus", "BLOCKED").length).toBe(1); expect(byId(root, "analysis-plan-submit")).toBeNull();
+    expect(byData(root, "analysisBlocker").map(n => n.dataset.analysisBlocker)).toEqual(["PROVIDER_PROVENANCE_NOT_READY", "implementer:CLAUDE_PROFILE_LOGIN_REQUIRED"]);
+    expect(byId(root, "analysis-step-status")!.textContent).not.toContain("not enabled in this build"); expect(root.textContent).not.toContain("free text that is never shown");
+    expect(srv.S.posts.map((x: {path: string}) => x.path)).toContain(`/v1/missions/${IMSN}/analysis/step`);
+    table.ANALYSIS_DRAFTS = "BLOCKED_BY_SERVER_READINESS"; table.PLAN_FROM_ANALYSIS = "CLOSED_UNTIL_COMPLETE";
     // 3) the manual plan path in Work (POST /plan is allowed)
     root = await view("views", "work.js");
     expect(byId(root, "plan-form")).not.toBeNull();
@@ -2838,15 +2893,19 @@ describe("LANE-A A-FLOW-GAP-2: the Journey end to end (stateful fake server, rea
     const tr = byData(root, "runTestResult")[0];
     expect(tr.dataset.runTestResult).toBe("NOT_EXECUTED"); expect(tr.dataset.runTestReason).toBe("SANDBOX_UNAVAILABLE"); expect(tr.textContent).toContain("No verified sandbox existed");
     table.TEST_RESULT = "COMPLETE_IN_UI";
-    // 7) running product: the run-scoped product route is not allow-listed yet -> honest UNAVAILABLE
+    // 7) running product: after 4b the run-scoped route is admitted; Start is offered for the delivered commit and the server refuses without a verified sandbox
     c.calls.navigate.length = 0;
     sel.missionId = IMSN;
     const ws = await load(rend, "views", "projects.js"); const st = await load(rend, "studio-state.js"); st.openProject(IPRJ, "overview");
+    srv.S.productRoute = true;
+    root = mount(c.doc, await ws.render(ctx));
+    expect(byId(root, "studio-ov-product")!.dataset.productOffer).toBe("START"); expect(byId(root, "product-start")).not.toBeNull();
+    byId(root, "product-start")!.fire("click"); await sleep(); await sleep();
     root = mount(c.doc, await ws.render(ctx));
     const prod = byId(root, "studio-ov-product")!;
-    expect(prod.textContent).toContain("not available to the desktop yet"); expect(byId(root, "product-start")).toBeNull();
-    expect(srv.S.blocked).toContain(`GET /v1/work-runs/${IRUN}/product`);
-    table.RUNNING_PRODUCT = "GATED_4B";
+    expect(srv.S.posts.map((x: {path: string}) => x.path)).toContain(`/v1/work-runs/${IRUN}/product/start`);
+    expect(byId(root, "product-run-status")!.textContent).toContain("SANDBOX_UNAVAILABLE"); expect(prod.dataset.productState).toBe("STOPPED"); expect(byData(prod, "productUrl").length).toBe(0); expect(byId(root, "product-stop")).toBeNull();
+    table.RUNNING_PRODUCT = "REFUSED_NO_SANDBOX";
     // 8) delivery: prepare the delivery package (POST allowed) from the project's Delivery tab
     st.openProject(IPRJ, "delivery");
     root = mount(c.doc, await ws.render(ctx));
@@ -2856,9 +2915,9 @@ describe("LANE-A A-FLOW-GAP-2: the Journey end to end (stateful fake server, rea
     expect(srv.S.posts.map((p: {path: string}) => p.path)).toContain(`/v1/work-runs/${IRUN}/delivery/prepare`);
     expect(byId(mount(c.doc, await ws.render(ctx)), `dl-open-${IRUN}`)).not.toBeNull(); // the acceptance dialog can be opened
     table.DELIVERY = "COMPLETE_IN_UI";
-    expect(table).toEqual({INTAKE: "COMPLETE_IN_UI", ANALYSIS_DRAFTS: "GATED_4B", PLAN_FROM_ANALYSIS: "GATED_4B", PLAN_MANUAL: "COMPLETE_IN_UI", MISSION_TASKS: "COMPLETE_IN_UI", TASK_RUN: "COMPLETE_IN_UI", TEST_RESULT: "COMPLETE_IN_UI", RUNNING_PRODUCT: "GATED_4B", DELIVERY: "COMPLETE_IN_UI"});
-    // everything the renderer asked for outside the allow-list is exactly the 4B set
-    expect([...new Set(srv.S.blocked)].sort()).toEqual([`GET /v1/work-runs/${IRUN}/product`, `POST /v1/missions/${IMSN}/analysis/step`].sort());
+    expect(table).toEqual({INTAKE: "COMPLETE_IN_UI", ANALYSIS_DRAFTS: "BLOCKED_BY_SERVER_READINESS", PLAN_FROM_ANALYSIS: "CLOSED_UNTIL_COMPLETE", PLAN_MANUAL: "COMPLETE_IN_UI", MISSION_TASKS: "COMPLETE_IN_UI", TASK_RUN: "COMPLETE_IN_UI", TEST_RESULT: "COMPLETE_IN_UI", RUNNING_PRODUCT: "REFUSED_NO_SANDBOX", DELIVERY: "COMPLETE_IN_UI"});
+    // after 4b the renderer asks for nothing outside the allow-list
+    expect([...new Set(srv.S.blocked)]).toEqual([]);
   });
 });
 
