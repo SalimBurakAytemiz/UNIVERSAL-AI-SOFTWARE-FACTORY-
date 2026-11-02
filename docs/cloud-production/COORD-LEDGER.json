@@ -1242,6 +1242,16 @@
       "ref": "wf_29aece29-367",
       "policy": "TEP-1",
       "at": "2026-10-27T11:54:55.049Z"
+    },
+    {
+      "pr": 292,
+      "sha": "43776e1ad6a17118d2c954e738f3e707ad1e8278",
+      "kind": "delta",
+      "base": "a6b1988149a39b13e730383d200c4fdebc9645f6",
+      "verdict": "NO_BLOCKERS_M1_L1-L4_fixed_wp-agents121_renderer1565_2mutants_killed",
+      "ref": "coord-inline-2026-11-02T0250Z",
+      "policy": "TEP-1",
+      "at": "2026-11-02T02:39:49.016Z"
     }
   ],
   "tests": [],
