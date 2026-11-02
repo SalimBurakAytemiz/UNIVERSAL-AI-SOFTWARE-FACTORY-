@@ -1282,6 +1282,16 @@
       "ref": "wf_1c7042cf-8eb",
       "policy": "TEP-1",
       "at": "2026-11-02T04:52:47.848Z"
+    },
+    {
+      "pr": 282,
+      "sha": "b13e23d4d323994f2d1004d27bf4d5b326888bee",
+      "kind": "delta",
+      "base": "658095e17245f0b4b12ab0300d53205260303c58",
+      "verdict": "NO_BLOCKERS_6LOW_r3-final_M-ring-unknown-fixed_call-ring-undisclosed_gap-window-tick_stale-guard-unpinned_test-timeout-60to120s_gap-binding-5ms-slack-win-flake-risk",
+      "ref": "wf_f07380b4-f35",
+      "policy": "TEP-1",
+      "at": "2026-11-02T04:54:50.181Z"
     }
   ],
   "tests": [],
