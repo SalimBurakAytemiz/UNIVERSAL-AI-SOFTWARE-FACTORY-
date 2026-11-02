@@ -1322,6 +1322,16 @@
       "ref": "closure-v2-verify-parents-tree-eq",
       "policy": "TEP-1",
       "at": "2026-11-02T06:22:11.259Z"
+    },
+    {
+      "pr": 282,
+      "sha": "842e4920312c8fcfb4a04d4f51a8b7729d5f6d5d",
+      "kind": "delta",
+      "base": "b13e23d4d323994f2d1004d27bf4d5b326888bee",
+      "verdict": "BASE_MERGE_ONLY_MAP_union_base_first_patch-id-identical_outside_map",
+      "ref": "closure-v2-merge-tree-diff-MAP-only",
+      "policy": "TEP-1",
+      "at": "2026-11-02T06:48:55.266Z"
     }
   ],
   "tests": [],
