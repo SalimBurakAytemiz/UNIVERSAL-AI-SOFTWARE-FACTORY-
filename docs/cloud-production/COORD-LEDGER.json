@@ -1292,6 +1292,36 @@
       "ref": "wf_f07380b4-f35",
       "policy": "TEP-1",
       "at": "2026-11-02T04:54:50.181Z"
+    },
+    {
+      "pr": 292,
+      "sha": "2d5c913e22a21423d9e2f1e0a0044f8c27fb0222",
+      "kind": "delta",
+      "base": "43776e1ad6a17118d2c954e738f3e707ad1e8278",
+      "verdict": "BASE_MERGE_ONLY_update-branch_6b174dc_tree_eq_merge-tree",
+      "ref": "closure-v2-verify-parents-tree-eq",
+      "policy": "TEP-1",
+      "at": "2026-11-02T06:22:11.167Z"
+    },
+    {
+      "pr": 291,
+      "sha": "78d77f9718b7b52cc17c8915448f9830341c3aab",
+      "kind": "delta",
+      "base": "4b4eee04a6a8b8e6567d140356892f19c4eb4315",
+      "verdict": "BASE_MERGE_ONLY_update-branch_6b174dc_tree_eq_merge-tree",
+      "ref": "closure-v2-verify-parents-tree-eq",
+      "policy": "TEP-1",
+      "at": "2026-11-02T06:22:11.217Z"
+    },
+    {
+      "pr": 288,
+      "sha": "9edf75caa3b6ea6c183d029169e4c44d4baad07f",
+      "kind": "delta",
+      "base": "7bf22e53841dffa657ea4e0d28e326da2026f4cc",
+      "verdict": "BASE_MERGE_ONLY_update-branch_6b174dc_tree_eq_merge-tree",
+      "ref": "closure-v2-verify-parents-tree-eq",
+      "policy": "TEP-1",
+      "at": "2026-11-02T06:22:11.259Z"
     }
   ],
   "tests": [],
