@@ -19,7 +19,8 @@ export const STATIC_DATA_FILES = [
   "registries/skills-v2.json",
   "registries/technologies.json",
   "registries/technology-source-registry.json",
-  "registries/role-execution-profiles.json"
+  "registries/role-execution-profiles.json",
+  "registries/agent-skill-matrix.json"
 ];
 // B1: sahnelenen DİZİNLER (içindeki *.json dosyalarının TAMAMI, sahneleme anında dizinden türetilir; 415 dosya adı elle tutulmaz). readiness yükleyicisi her teknoloji için knowledge/technologies/<slug>.json okur.
 export const STATIC_DATA_DIRS = ["knowledge/technologies"];
