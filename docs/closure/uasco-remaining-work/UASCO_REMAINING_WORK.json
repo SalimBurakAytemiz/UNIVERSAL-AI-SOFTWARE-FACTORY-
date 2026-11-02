@@ -8327,7 +8327,7 @@
    }
   ],
   "open": {
-   "295": "BLOCKED: Windows shard 1 failed twice on different known flakes; 1 re-run used; Founder re-run needed",
+   "295": "BLOCKED: attempt 3 (Founder re-run failed jobs) all 3 Windows shards PASS but aggregator FAIL 'validation report missing' (COORD-001: aggregator reads current-attempt shard reports only); needs 'Re-run all jobs' on run 41404034146",
    "282": "BLOCKED: base red; auto-merge disabled (COORD-002); head 842e492 gate OPEN",
    "294": "BLOCKED: base red; canonical copy on uasco/production-reports",
    "251": "MERGE_AFTER_APPROVAL: trust-root-manifest conflict, 3 protected files",
@@ -8344,6 +8344,7 @@
   ],
   "triggersEnabled": 0,
   "localComponents": "UNKNOWN",
-  "finalStatus": "PAUSED_WITH_BLOCKERS"
+  "finalStatus": "PAUSED_WITH_BLOCKERS",
+  "coord001": "Re-run failed jobs can never make validate (windows-latest) green: aggregator downloads shard reports of the current attempt only; fix targeted by #251 (protected CI-TEP1)"
  }
 }
