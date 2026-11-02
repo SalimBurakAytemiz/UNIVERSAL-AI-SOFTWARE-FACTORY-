@@ -1352,13 +1352,28 @@ Bu bulut oturumu Founder-PC'ye erişemez. Durum **UNKNOWN** kalır. Founder PC'd
 | --- | --- |
 | #294 | **MERGED** 11:09:57Z, merge `16d3a925` (parent2 = 6d19132 gözden geçirilmiş head ✓, tree = merge-tree ✓; review NO_BLOCKERS docs-only, ledger 122a1b12; yetkili auto-merge). Ana dala bu raporun 10:50Z anlık kopyası girdi |
 | `v7/integration` | **16d3a925**. Önceki head d5f4365f push CI PASS (41424008197). 16d3a925'te yalnız docs değişti |
-| #282 | **BLOCKED**. Head 5d66b03, ledger kapısı açık, auto-merge açık. Kendi düzeltmesi (`relfx-c3:763`) Windows shard 1'de PASS. Run 41427606970'te iki koşu yapıldı (izinli tek tam yeniden koşu kullanıldı); her birinde PR dışı farklı bir Windows testi kaldı: attempt 1 shard 2 `relfx-1-completion:459` (sıfır bayt lock, LOCK_TIMEOUT), attempt 2 shard 1 `v7-core-role-context:826` (5 s timeout; #291'in testi). Founder eylemi: run 41427606970 → **Re-run all jobs**. Yeşil olursa kendiliğinden merge olur |
+| #282 | **BLOCKED → DEFER_TO_ROADMAP (P bölümü)**. Head 5d66b03, ledger kapısı açık, auto-merge açık. Kendi düzeltmesi (`relfx-c3:763`) Windows shard 1'de PASS. Run 41427606970'te iki koşu yapıldı (izinli tek tam yeniden koşu kullanıldı); her birinde PR dışı farklı bir Windows testi kaldı: attempt 1 shard 2 `relfx-1-completion:459` (sıfır bayt lock, LOCK_TIMEOUT), attempt 2 shard 1 `v7-core-role-context:826` (5 s timeout; #291'in testi). Founder eylemi: run 41427606970 → **Re-run all jobs**. Yeşil olursa kendiliğinden merge olur |
 | Bu kapanışta merge edilenler | #293 (Founder), #291, #288, #292, #295, #294 |
 | Açık kalanlar | #282 (Windows CI kararsızlığı); #251, #247, #231, #66 (Founder-tier; M.5) |
 | Rutinler | **0 etkin**. Bu oturumun iki tek atımlık hatırlatıcısı vardı: biri ateşlendi, ikincisi 11:15Z'de silindi |
 | Yerel bileşenler | UNKNOWN (M.7 adımları) |
 
 Yeni teknik borç TD-V2-07: Windows shard'ları bugün 4 farklı PR-dışı testte kırmızı oldu: F-B1-006, relfx-c3:200, relfx-1:459, role-context:826. Ortak etken Windows runner zamanlaması ve store-lock. Ürün ve CI düzeltmesi RW-013 ve #251 (COORD-001) kapsamında, Founder kararıyla.
+
+**Final durum: PAUSED_WITH_BLOCKERS.**
+
+## P. #282 kararı ve kapanış sonu (2026-11-02T11:45Z)
+
+- **Base doğrulandı:** `v7/integration` = 16d3a925 (#294 merge). CI 41434581692 ✅, Windows Installer 41434581581 ✅.
+- **#282: DEFER_TO_ROADMAP.**
+  - PR `core/workos/store.ts`'in `withLock` döngüsünü ölçüyor (103 satır).
+  - O-bölümündeki "PR dışı" ifadesi düzeltildi: önceki iki PR yorumundaki "store.ts'e dokunmuyor" iddiası yanlıştı.
+  - Base iki kez yeşil (d5f4365, 16d3a925). PR head 5d66b03 iki kez Windows'ta kırmızı: relfx-1:459 kilit yolu LOCK_TIMEOUT, role-context:826 timeout. Etki dışlanamadı.
+  - Auto-merge kapatıldı; branch, ledger kayıtları (deeffafa) ve mutant kanıtı korunuyor.
+  - Yeniden ele alma kabul ölçütü: aynı head'de 3 ardışık tam yeşil Windows koşusu + base kontrol koşusu.
+  - Eşleme: RW-013, TD-V2-06/07. PR yorumu 6579149788.
+- **Otomasyon:** 0/11 rutin etkin, 0 in-progress Actions run. #282 aboneliği kaldırıldı.
+- **V3 devri:** `DELTA_HANDOVER_V3.md`.
 
 **Final durum: PAUSED_WITH_BLOCKERS.**
 

@@ -2729,7 +2729,7 @@
    "module": "CI",
    "department": "CI ve Yayın Mühendisliği",
    "priority": "P2",
-   "status": "OPEN",
+   "status": "DEFERRED",
    "statusEvidenceTag": "VERIFIED",
    "completionCriteria": "Round-3 delta NO_BLOCKERS + CI yeşil → merge; değilse ROUND_LIMIT → kapat (round cap 3 uygulanır).",
    "dependencies": [
@@ -2755,7 +2755,8 @@
     "GH-CONFLICTS (#282)"
    ],
    "plan": "A",
-   "owner": "AGENT"
+   "owner": "AGENT",
+   "note": "PR #282 DEFER_TO_ROADMAP 2026-11-02 (P bölümü)"
   },
   {
    "id": "UASCO-RW-045",
@@ -8293,12 +8294,15 @@
  },
  "finalPrClosure": {
   "//TR": "Final PR unblock ve kapanış delta kaydı (2026-11-02T07:55Z); çelişen değerlerde bu blok geçerli",
-  "at": "2026-11-02T11:15Z",
+  "at": "2026-11-02T11:45Z",
   "integrationHead": "16d3a925b8a3f4ffc08dea2ea64c53862a7bcb03",
   "integrationHeadCi": {
-   "run": 41424008197,
+   "run": 41434581692,
    "conclusion": "success",
-   "note": "d5f4365; 16d3a925 docs-only on top"
+   "installer": {
+    "run": 41434581581,
+    "conclusion": "success"
+   }
   },
   "merged": [
    {
@@ -8335,11 +8339,11 @@
     "pr": 294,
     "merge": "16d3a925b8a3f4ffc08dea2ea64c53862a7bcb03",
     "by": "auto-merge",
-    "pushCi": "pending (docs-only)"
+    "pushCi": "41434581692 success; installer 41434581581 success"
    }
   ],
   "open": {
-   "282": "BLOCKED: two attempts each failed on a different non-PR Windows test (relfx-1:459 zero-byte lock; role-context:826 timeout); own fix relfx-c3:763 PASS on Windows; gate OPEN, auto-merge armed; Founder: Re-run all jobs on run 41427606970",
+   "282": "DEFER_TO_ROADMAP: instruments core/workos/store.ts withLock (103 lines); base green twice (d5f4365, 16d3a925) while 5d66b03 red twice on Windows (relfx-1:459 LOCK_TIMEOUT, role-context:826 timeout); influence not excluded; auto-merge disabled; branch+ledger+mutant evidence kept; maps to RW-013, TD-V2-06/07",
    "251": "MERGE_AFTER_APPROVAL (trust-root reseal)",
    "247": "MERGE_AFTER_APPROVAL (trust-root reseal)",
    "231": "BLOCKED (Founder-tier + Windows 11/WSL2)",
@@ -8359,6 +8363,8 @@
   "techDebt": [
    "TD-V2-06 Windows store-lock zero-byte lock file -> LOCK_TIMEOUT (relfx-1:459, F-B1-006, relfx-c3:200 family; RW-013)",
    "TD-V2-07 Windows shards failed today on 4 different non-PR tests (F-B1-006, relfx-c3:200, relfx-1:459, role-context:826)"
-  ]
+  ],
+  "correction": "Earlier PR #282 comments wrongly said it does not touch core/workos/store.ts; corrected in comment 6579149788",
+  "deltaHandover": "docs/closure/uasco-remaining-work/DELTA_HANDOVER_V3.md"
  }
 }
