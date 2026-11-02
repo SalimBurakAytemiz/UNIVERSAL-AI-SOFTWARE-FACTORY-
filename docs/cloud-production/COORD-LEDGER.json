@@ -1272,6 +1272,16 @@
       "ref": "wf_c700d6f5-f24",
       "policy": "TEP-1",
       "at": "2026-11-02T03:20:53.281Z"
+    },
+    {
+      "pr": 288,
+      "sha": "7bf22e53841dffa657ea4e0d28e326da2026f4cc",
+      "kind": "delta",
+      "base": "73fa26e897c74f95cca6f525abe5c398b504fa91",
+      "verdict": "NO_BLOCKERS_6LOW_M1-M2-R1-R6-fixed_85of85-mutants_last-ref-only-gap_applicable-unpinned_consumers1-unpinned_base-merge-manual-union",
+      "ref": "wf_1c7042cf-8eb",
+      "policy": "TEP-1",
+      "at": "2026-11-02T04:52:47.848Z"
     }
   ],
   "tests": [],
