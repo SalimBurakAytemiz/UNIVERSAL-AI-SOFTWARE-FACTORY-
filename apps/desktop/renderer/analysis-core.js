@@ -67,7 +67,7 @@ export function mapAnalysisStep(x){
 }
 export const ANALYSIS_CONFLICT_REASONS=Object.freeze(["MISSION_NOT_PREDEV_ELIGIBLE"]);
 const CONFLICT_REASON_RE=/^[A-Z][A-Z0-9_]{0,63}$/;
-/** Adım yanıtı -> {kind:"STEP",step} | {kind:"NOT_ENABLED"|"INVALID"|"FAILED"|"DENIED"|"STOPPED"|"NOT_FOUND"|"BUSY"}| {kind:"CONFLICT",reason}. HTTP durumu sonuçla uyumlu olmalıdır: BLOCKED yalnız 200/409, REJECTED/BUILDER_FAILED yalnız 200/502, diğerleri yalnız 2xx. */
+/** Adım yanıtı -> {kind:"STEP",step} | {kind:"NOT_ENABLED"|"INVALID"|"FAILED"|"DENIED"|"STOPPED"|"NOT_FOUND"} | {kind:"BUSY",scope:"OTHER"|"SAME"} | {kind:"CONFLICT",reason}. HTTP durumu sonuçla uyumlu olmalıdır: BLOCKED yalnız 200/409, REJECTED/BUILDER_FAILED yalnız 200/502, diğerleri yalnız 2xx. */
 export function classifyAnalysisStep(res){
   if(!res)return {kind:"FAILED"};
   if(res.thrown&&/INVALID_API_PATH/.test(String(res.message??"")))return {kind:"NOT_ENABLED"};
