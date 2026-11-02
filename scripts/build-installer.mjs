@@ -19,7 +19,8 @@ export const STATIC_DATA_FILES = [
   "registries/skills-v2.json",
   "registries/technologies.json",
   "registries/technology-source-registry.json",
-  "registries/role-execution-profiles.json"
+  "registries/role-execution-profiles.json",
+  "registries/agent-skill-matrix.json"
 ];
 // B1: sahnelenen DİZİNLER (içindeki *.json dosyalarının TAMAMI, sahneleme anında dizinden türetilir; 415 dosya adı elle tutulmaz). readiness yükleyicisi her teknoloji için knowledge/technologies/<slug>.json okur.
 export const STATIC_DATA_DIRS = ["knowledge/technologies"];
@@ -43,7 +44,9 @@ export const PACKAGED_RUNTIME_READ_EXCLUSIONS = {
   "scripts/ci/uasco-review/run.mjs": "Code path named by an adapter-reality record (core/capabilities/adapter-reality.ts) that only the dev-tree verifier inspects; the installed app has no source tree, so role-status supplies adapterReality NOT_SUPPLIED and never reads it (pinned by tests/v7-wfr03-role-registry.test.ts 'B-ADAPTER: the PACKAGED layout').",
   "scripts/e2e/desktop-journey.e2e.mjs": "Code path named by an adapter-reality record (core/capabilities/adapter-reality.ts) that only the dev-tree verifier inspects; the installed app has no source tree, so role-status supplies adapterReality NOT_SUPPLIED and never reads it (pinned by tests/v7-wfr03-role-registry.test.ts 'B-ADAPTER: the PACKAGED layout').",
   "scripts/discover-omniroute-models.mjs": "Code path named by an adapter-reality record (core/capabilities/adapter-reality.ts) that only the dev-tree verifier inspects; the installed app has no source tree, so role-status supplies adapterReality NOT_SUPPLIED and never reads it (pinned by tests/v7-wfr03-role-registry.test.ts 'B-ADAPTER: the PACKAGED layout').",
-  "scripts/ensure-dependencies.mjs": "Code path named by an adapter-reality record (core/capabilities/adapter-reality.ts) that only the dev-tree verifier inspects; the installed app has no source tree, so role-status supplies adapterReality NOT_SUPPLIED and never reads it (pinned by tests/v7-wfr03-role-registry.test.ts 'B-ADAPTER: the PACKAGED layout')."
+  "scripts/ensure-dependencies.mjs": "Code path named by an adapter-reality record (core/capabilities/adapter-reality.ts) that only the dev-tree verifier inspects; the installed app has no source tree, so role-status supplies adapterReality NOT_SUPPLIED and never reads it (pinned by tests/v7-wfr03-role-registry.test.ts 'B-ADAPTER: the PACKAGED layout').",
+  "registries/agent-skill-matrix.json": "Read only by loadEntityAuditInputsFromRepo (C-RDY-2b entity readiness audit, a developer/CI measurement); no packaged route calls it, so the 1.2 MB legacy skill matrix is not staged. Stage it when a packaged consumer exists.",
+  "registries/competency-packs.json": "Read only by loadEntityAuditInputsFromRepo (C-RDY-2b entity readiness audit, a developer/CI measurement); no packaged route calls it, so it is not staged. Stage it when a packaged consumer exists."
 };
 /** Statik veri, config ve script dosyalarını sahne köküne aynı göreli yollarla kopyalar; kopyalanan listeyi döner. */
 export function stageRuntimeFiles(root, stage) {

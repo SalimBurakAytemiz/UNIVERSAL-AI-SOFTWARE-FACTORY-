@@ -8,6 +8,7 @@ import {computeRoleStatusSummary, createEvidenceVerifier} from "../../../../core
 import {READINESS_INPUT_FILES, computeRoleReadiness, loadReadinessInputFromRepo, reconcileLegacyStatusSummary} from "../../../../core/agents/readiness-audit.js";
 import type {AdapterRealityEntry, ReadinessInput} from "../../../../core/agents/readiness-audit.js";
 import {ADAPTER_REALITY_RECORDS, buildAdapterRealityMap} from "../../../../core/capabilities/adapter-reality.js";
+import {loadRoleContextInputFromRepo, resolveRoleContext} from "../../../../core/agents/role-context.js";
 
 export const ROLE_REGISTRY_FILE_REL = path.join("registries", "role-definitions.json");
 
@@ -46,7 +47,10 @@ const contentFingerprint = (root: string): string => {
   for (const rel of adapterSourceFiles()) {
     h.update(rel + "\0");
     const abs = path.join(root, rel);
-    try { h.update(fs.statSync(abs).isFile() ? fs.readFileSync(abs) : "<non-file>"); } catch (e) { h.update((e as NodeJS.ErrnoException)?.code === "ENOENT" ? "<absent>" : "<unreadable>"); }
+    // Her girdi TÜR ETİKETİ ile başlar: dosya = "F" + bayt sayısı + ":" + baytlar; işaretler = "A" (yok), "N" (düz dosya değil), "U" (okunamadı). Böylece "<absent>" baytlarını içeren bir dosya, yok olan dosyayla aynı özeti VEREMEZ.
+    try {
+      if (fs.statSync(abs).isFile()) { const buf = fs.readFileSync(abs); h.update(`F${buf.length}:`); h.update(buf); } else h.update("N");
+    } catch (e) { h.update((e as NodeJS.ErrnoException)?.code === "ENOENT" ? "A" : "U"); }
     h.update("\0");
   }
   return h.digest("hex");
@@ -55,7 +59,7 @@ const adapterCache = new Map<string, {fp: string; entries: ReadonlyMap<string, A
 /** Test kancası: adaptör gerçeklik önbelleğini boşaltır. */
 export function resetAdapterRealityCache(): void { adapterCache.clear(); }
 const sameEntries = (a: ReadonlyMap<string, AdapterRealityEntry>, b: ReadonlyMap<string, AdapterRealityEntry>): boolean => JSON.stringify([...a.entries()]) === JSON.stringify([...b.entries()]);
-// //TR: Önbelleğe ALMA koşulu (L3 ile aynı ilke): özet inşadan ÖNCE ve SONRA aynı olmalı VE iki bağımsız inşa aynı haritayı vermeli. Aksi halde (dosya inşa sırasında değişti ya da bir okuma geçici olarak başarısız oldu; readText bunu "dosya yok" sayar) sonuç önbelleğe ALINMAZ, taze inşa döner; bayat bir PRESENT/ABSENT kalıcılaşmaz. Bilinen sınır: iki inşayı da kapsayan ve özet alındığında geri dönmüş geçici bir içerik, yazılımla ayırt edilemez.
+// //TR: Önbelleğe ALMA koşulu (L3 ile aynı ilke): özet inşadan ÖNCE ve SONRA aynı olmalı VE iki bağımsız inşa aynı haritayı vermeli. Aksi halde (dosya inşa sırasında değişti ya da bir okuma geçici olarak başarısız oldu; readText bunu "dosya yok" sayar) sonuç önbelleğe ALINMAZ, taze inşa döner; bayat bir PRESENT/ABSENT kalıcılaşmaz. Bilinen sınırlar: (1) iki inşayı da kapsayan ve özet alındığında geri dönmüş geçici bir içerik, (2) iki inşayı da kapsayan geçici OKUMA HATALARI (Windows kilidi / antivirüs kaynaklı EBUSY/EPERM): readText bunları "dosya yok" sayar ve sonuç ABSENT olarak önbelleğe alınır; içerik değişene kadar kalır. İkisi de yazılımla ayırt edilemez.
 /** Kaynak ağacı doğrulanmışsa kod destekli adaptör haritası (probe NOT_OBSERVED); aksi halde undefined (NOT_SUPPLIED). */
 export function adapterRealityFor(root: string): ReadonlyMap<string, AdapterRealityEntry> | undefined {
   if (!sourceTreePresent(root)) { adapterCache.delete(root); return undefined; }
@@ -66,6 +70,10 @@ export function adapterRealityFor(root: string): ReadonlyMap<string, AdapterReal
   if (contentFingerprint(root) === fp && sameEntries(first, entries)) adapterCache.set(root, {fp, entries}); else adapterCache.delete(root);
   return entries;
 }
+// //TR: B2: GET /v1/roles/:roleId/context = core/agents/role-context.ts resolveRoleContext'in AYNEN döndürdüğü çıktı (kaynak etiketleri PROPOSED_DERIVED / verifiedKnowledge:false / NAME_NOT_VERIFIED_IN_REGISTRY yeniden etiketlenmez, yükseltilmez, özetlenmez). roleId kanonik biçimle doğrulanır. Tipli girdi hataları (ROLE_CONTEXT_INPUT_UNAVAILABLE / _INVALID) 503 + kod olur, boş bağlam ASLA yerine konmaz; başka her hata workosFail'e gider. Girdi her istekte yüklenir (5 küçük kayıt dosyası; önbellek yok, bayat bağlam yok).
+const ROLE_CONTEXT_ID = /^UASCO-\d{4}$/;
+const ROLE_CONTEXT_INPUT_ERROR = /^(ROLE_CONTEXT_INPUT_(?:UNAVAILABLE|INVALID)):/;
+const ROLE_CONTEXT_REFUSAL_STATUS = {ROLE_NOT_IN_CATALOG: 404, ROLE_ID_DUPLICATE: 400, ROLE_CONTEXT_EXCEEDS_BYTE_CAP: 422} as const;
 const READINESS_INPUT_ERROR = /^READINESS_INPUT_(UNAVAILABLE|INVALID):/;
 
 export function registerRoleStatusRoutes(app: any, d: RouteDeps & {repoRoot: string; now?: () => Date; readinessCompute?: typeof computeRoleReadiness}): void {
@@ -105,6 +113,24 @@ export function registerRoleStatusRoutes(app: any, d: RouteDeps & {repoRoot: str
         return {statusSummary, statusSummaryStatus: "DEPRECATED_LEGACY_PROJECTION" as const, readiness: null, reconciliation: null, readinessError: "ROLE_READINESS_UNAVAILABLE" as const};
       }
       return {statusSummary, statusSummaryStatus: "DEPRECATED_LEGACY_PROJECTION" as const, readiness, reconciliation: reconcileLegacyStatusSummary(statusSummary, readiness)};
+    } catch (e) { return d.workosFail(reply, e); }
+  });
+
+  app.get("/v1/roles/:roleId/context", async (req: any, reply: any) => {
+    if (typeof req.query === "object" && req.query && Object.keys(req.query).length > 0) return reply.code(400).send({error: "INVALID_QUERY"});
+    const roleId = String(req.params?.roleId ?? "");
+    if (!ROLE_CONTEXT_ID.test(roleId)) return reply.code(400).send({error: "INVALID_ROLE_ID"});
+    try {
+      let input;
+      try { input = loadRoleContextInputFromRepo(d.repoRoot); } catch (e) {
+        const m = e instanceof Error ? ROLE_CONTEXT_INPUT_ERROR.exec(e.message) : null;
+        if (!m) throw e;
+        d.audit("WORKOS_ROLE_CONTEXT_UNAVAILABLE", {actor: d.actor, code: m[1]});
+        return reply.code(503).send({error: m[1]});
+      }
+      const r = resolveRoleContext(input, roleId);
+      if (r.status !== "RESOLVED") return reply.code(ROLE_CONTEXT_REFUSAL_STATUS[r.reason]).send({error: r.reason, roleId: r.roleId});
+      return r;
     } catch (e) { return d.workosFail(reply, e); }
   });
 }
