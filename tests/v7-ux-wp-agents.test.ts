@@ -1877,7 +1877,7 @@ describe("LANE-A A1 role readiness panel (8 layers)", () => {
   });
 });
 
-// //TR: A2a Araçlar paneli: yalnız mevcut hazırlıktan (TOOL_READY sayıları + sunucunun gönderdiği neden kodları + adapterReality girdisi) ve katalog sayısından beslenir; GERÇEK rota biçimli girdiyle (bu depo, adapterReality SUPPLIED ve NOT_SUPPLIED). NOT_SUPPLIED "bu uygulamada ölçülmedi" der, sıfır ya da "hazır değil" değil; probe olmadan hiçbir yerde "kurulu" yazmaz. Adaptör başına satırlar (A2b) YOKTUR.
+// //TR: A2a Araçlar paneli: yalnız mevcut hazırlıktan (TOOL_READY sayıları + sunucunun gönderdiği neden kodları + adapterReality girdisi) beslenir; GERÇEK rota biçimli girdiyle (bu depo, adapterReality SUPPLIED ve NOT_SUPPLIED). NOT_SUPPLIED "bu uygulamada ölçülmedi" der, sıfır ya da "hazır değil" değil; probe olmadan hiçbir yerde "kurulu" yazmaz. Adaptör başına satırlar (A2b) YOKTUR.
 describe("LANE-A A2a Tools panel (TOOL_READY only; not measured is never zero; no per-adapter claims)", () => {
   const REPO = path.resolve(__dirname, "..");
   const NOW = new Date("2026-10-27T00:00:00Z");
@@ -1939,15 +1939,23 @@ describe("LANE-A A2a Tools panel (TOOL_READY only; not measured is never zero; n
       ["count a string", edit("SUPPLIED", x => { x.readiness.reasonCounts.TOOL_READY.PROBE_NOT_OBSERVED = "9"; })],
       ["count above FALSE+UNKNOWN (a TRUE role has no reason)", edit("SUPPLIED", x => { const t = x.readiness.totals.TOOL_READY; x.readiness.reasonCounts.TOOL_READY.PROBE_NOT_OBSERVED = t.FALSE + t.UNKNOWN + 1; })],
       ["no reason although FALSE+UNKNOWN is above zero", edit("SUPPLIED", x => { x.readiness.reasonCounts.TOOL_READY = {}; })],
+      ["reasons sum far below FALSE+UNKNOWN (every open role carries at least one reason)", edit("SUPPLIED", x => { x.readiness.reasonCounts.TOOL_READY = {PROBE_NOT_OBSERVED: 1}; })],
+      ["reasons sum one below FALSE+UNKNOWN", edit("SUPPLIED", x => { x.readiness.reasonCounts.TOOL_READY = {ROLE_HAS_NO_BINDING: 590, PROBE_NOT_OBSERVED: 8}; })],
+      ["TRUE above zero: a count above FALSE+UNKNOWN but still within the denominator", edit("SUPPLIED", x => { const t = x.readiness.totals.TOOL_READY; t.TRUE = 5; t.FALSE -= 5; x.readiness.reasonCounts.TOOL_READY = {ROLE_HAS_NO_BINDING: t.FALSE, PROBE_NOT_OBSERVED: t.FALSE + t.UNKNOWN + 1}; })],
       ["more than 50 codes", edit("SUPPLIED", x => { x.readiness.reasonCounts.TOOL_READY = Object.fromEntries(Array.from({length: 51}, (_, k) => [`CODE_${k}`, 1])); })]];
     for (const [name, raw] of bads) expect(c.mapReadiness(raw), name).toEqual({state: "ERROR", readiness: null, reconciliation: null});
+    // positive controls for the two bounds: with TRUE above zero, counts that sum to FALSE+UNKNOWN (and one overlap role carrying two reasons) are accepted
+    const okTrue = edit("SUPPLIED", x => { const t = x.readiness.totals.TOOL_READY; t.TRUE = 5; t.FALSE -= 5; x.readiness.reasonCounts.TOOL_READY = {ROLE_HAS_NO_BINDING: t.FALSE, PROBE_NOT_OBSERVED: t.UNKNOWN}; });
+    expect(c.mapReadiness(okTrue).state).toBe("VERIFIED");
+    const overlap = edit("SUPPLIED", x => { x.readiness.reasonCounts.TOOL_READY = {ROLE_HAS_NO_BINDING: 590, PROBE_NOT_OBSERVED: 9, ADAPTER_CODE_ABSENT: 2}; });
+    expect(c.mapReadiness(overlap).state).toBe("VERIFIED"); // sum above FALSE+UNKNOWN is fine: one role can carry several reasons
   });
 
-  it("SUPPLIED panel (en): each count carries its denominator, the reasons come from the server with plain texts, the probe sentence is shown, the catalogue count is labelled not verified, and nothing is summed or called installed", async () => {
+  it("SUPPLIED panel (en): each count carries its denominator, the reasons come from the server with plain texts, the probe sentence is shown, and nothing is summed or called installed", async () => {
     const {panel, calls} = await mkTools({});
     expect(calls).toEqual(["/v1/roles/status-summary"]);
     const f = summary("SUPPLIED"), tool = f.readiness.totals.TOOL_READY;
-    expect(byData(panel, "toolsReadiness")[0].dataset.toolsReadiness).toBe("MEASURED");
+    expect(byData(panel, "toolsReadiness")[0].dataset.toolsReadiness).toBe("ADAPTERS_SUPPLIED");
     expect(byData(panel, "toolsReadiness")[0].dataset.denominator).toBe("599");
     for (const k of ["TRUE", "FALSE", "UNKNOWN"]) expect(text(byData(panel, "toolsState", k)[0]), k).toBe(`${k}: ${tool[k]} of 599`);
     expect(byData(panel, "toolsState", "NOT_APPLICABLE")).toEqual([]);
@@ -2016,6 +2024,12 @@ describe("LANE-A A2a Tools panel (TOOL_READY only; not measured is never zero; n
     for (const k of keys) { expect(E[k].length, k).toBeGreaterThan(0); expect(T[k].length, k).toBeGreaterThan(0); expect(ph(T[k]), k).toBe(ph(E[k])); expect(E[k], k).not.toMatch(/install/i); expect(T[k], k).not.toMatch(/kurul/i); }
     const serverCodes = ["ROLE_HAS_NO_BINDING", "ADAPTERS_MISSING", "ADAPTER_UNRESOLVED", "ADAPTER_CODE_ABSENT", "PROBE_FAILED", "PROBE_NOT_OBSERVED", "ADAPTER_REALITY_NOT_SUPPLIED"];
     for (const code of serverCodes) { expect(E[`tools.reason.${code}`], code).toBeTruthy(); expect(T[`tools.reason.${code}`], code).toBeTruthy(); }
+    // //TR: Olumlu "hazır/ready" iddiası yasak: bilinen olumsuz ifadeler çıkarıldıktan sonra tools.* değerlerinde "ready" (en) ya da "hazır" (tr) KALMAMALI; TOOL_READY gibi kod adları bir kelime sınırı oluşturmaz, "hazırlığı" gibi ekli sözcükler eşleşmez.
+    const NEGATED_EN = ["nothing here says a tool is ready or working without one", "not \"not ready\""], NEGATED_TR = ["bir aracın hazır ya da çalışır olduğunu söylemez", "\"hazır değil\""];
+    const positiveReady = (v: string, lang: "en" | "tr") => { let t = v; for (const n of lang === "en" ? NEGATED_EN : NEGATED_TR) t = t.split(n).join(" "); return lang === "en" ? /\bready\b/i.test(t) : /(?<!\p{L})hazır(?!\p{L})/iu.test(t); };
+    for (const k of keys) { expect(E[k], `en ${k}`).not.toMatch(/catalog/i); expect(T[k], `tr ${k}`).not.toMatch(/katalog/i); } // the panel reads no catalogue, so no text may claim it does
+    for (const k of keys) { expect(positiveReady(E[k], "en"), `en ${k}`).toBe(false); expect(positiveReady(T[k], "tr"), `tr ${k}`).toBe(false); }
+    expect(positiveReady("The adapter is ready but not in the map", "en")).toBe(true); expect(positiveReady("All tools are ready.", "en")).toBe(true); expect(positiveReady("Tüm araçlar hazır.", "tr")).toBe(true); expect(positiveReady("Araç hazırlığı (adaptörler)", "tr")).toBe(false); expect(positiveReady("Why roles are not TOOL_READY: TRUE", "en")).toBe(false);
     const src = fs.readFileSync(path.join(rend, "views", "tools-panel.js"), "utf8");
     for (const m of src.matchAll(/ctx\.t\("(tools\.[A-Za-z.]+)"/g)) expect(E[m[1]], m[1]).toBeDefined();
     expect(src).not.toMatch(/adapters\/reality|ADAPTER_REALITY_PATH|integrationsAdapters|ADAPTERS_PATH/); // A2b is deferred: no adapter route or catalogue call
@@ -2027,7 +2041,7 @@ describe("LANE-A A2a Tools panel (TOOL_READY only; not measured is never zero; n
     expect(ids.indexOf("wf-tools")).toBeGreaterThan(ids.indexOf("wf-readiness"));
     expect(ids.indexOf("wf-tools")).toBeLessThan(ids.indexOf("wf-factory"));
     const panel = byId(out.node, "wf-tools")!;
-    expect(byData(panel, "toolsReadiness")[0].dataset.toolsReadiness).toBe("MEASURED");
+    expect(byData(panel, "toolsReadiness")[0].dataset.toolsReadiness).toBe("ADAPTERS_SUPPLIED");
     expect(m.calls.some(p => p.includes("adapters"))).toBe(false);
   });
 });

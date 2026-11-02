@@ -1228,7 +1228,7 @@ export default {
   "workforce.ready.input.SUPPLIED":"supplied",
   "workforce.ready.input.NOT_SUPPLIED":"not supplied",
   "tools.title":"Tool readiness (adapters)",
-  "tools.lead":"This panel reads only the TOOL_READY layer of the role readiness and the catalogue count. Checking adapter code is not a live probe, and nothing here says a tool is ready or working without one.",
+  "tools.lead":"This panel reads only the TOOL_READY layer of the role readiness. Checking adapter code is not a live probe, and nothing here says a tool is ready or working without one.",
   "tools.notRead":"Tool readiness could not be read, so it is unknown (not zero).",
   "tools.notMeasured":"Not measured in this app (packaged build): adapter reality is not supplied here. This is not zero and not \"not ready\".",
   "tools.counts.label":"Roles by TOOL_READY state",

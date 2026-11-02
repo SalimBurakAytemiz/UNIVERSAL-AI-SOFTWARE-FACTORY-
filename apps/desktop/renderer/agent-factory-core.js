@@ -80,7 +80,7 @@ export function mapReadiness(raw){
   if(i.journal==="ABSENT"&&(running.TRUE!==0||running.FALSE!==0||running.NOT_APPLICABLE!==0||running.UNKNOWN!==den))return bad;
   if(i.journal==="PRESENT"&&running.UNKNOWN!==0)return bad; // //TR: ters yön: günlük VARSA RUNNING ölçülmüş olmalıdır (measured = journal PRESENT)
   if(i.reachableStages==="NOT_SUPPLIED"&&stageWired.TRUE!==0)return bad;
-  // //TR: A2a: sunucunun gönderdiği TOOL_READY neden kodları (reasonCounts.TOOL_READY: kod -> o nedene sahip rol sayısı). Yoksa null (neden bilinmiyor); varsa her sayı 1..(FALSE+UNKNOWN) arasındadır (TRUE bir rolün nedeni olmaz) ve FALSE+UNKNOWN>0 ise en az bir neden vardır; aksi halde TÜM okuma ERROR.
+  // //TR: A2a: sunucunun gönderdiği TOOL_READY neden kodları (reasonCounts.TOOL_READY: kod -> o nedene sahip rol sayısı). Yoksa null (neden bilinmiyor); varsa her sayı 1..(FALSE+UNKNOWN) arasındadır (TRUE bir rolün nedeni olmaz) ve nedenlerin toplamı FALSE+UNKNOWN'dan az olamaz (her açık rolün en az bir nedeni vardır); aksi halde TÜM okuma ERROR.
   let toolReasons=null;
   if(r.reasonCounts!==undefined){
     if(!isObj(r.reasonCounts))return bad;
@@ -90,7 +90,7 @@ export function mapReadiness(raw){
       if(!isObj(t)||Object.keys(t).length>MAX_REASONS)return bad;
       const list=[];
       for(const [code,n] of Object.entries(t)){if(!REASON_RE.test(code)||!count(n)||n<1||n>open)return bad;list.push({code,count:n})}
-      if(open>0&&list.length===0)return bad;
+      if(list.reduce((s,x)=>s+x.count,0)<open)return bad; // //TR: üretici garantisi: her açık rolün en az bir nedeni vardır, yani nedenlerin toplamı FALSE+UNKNOWN'dan az olamaz (boş liste dahil)
       toolReasons=list.sort((a,b)=>a.code<b.code?-1:a.code>b.code?1:0);
     }
   }

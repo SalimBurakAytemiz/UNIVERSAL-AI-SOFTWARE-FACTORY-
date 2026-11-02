@@ -1228,7 +1228,7 @@ export default {
   "workforce.ready.input.SUPPLIED":"verildi",
   "workforce.ready.input.NOT_SUPPLIED":"verilmedi",
   "tools.title":"Araç hazırlığı (adaptörler)",
-  "tools.lead":"Bu panel yalnız rol hazırlığının TOOL_READY katmanını ve katalog sayısını okur. Adaptör kodunu denetlemek canlı bir probe değildir; probe olmadan burada hiçbir şey bir aracın hazır ya da çalışır olduğunu söylemez.",
+  "tools.lead":"Bu panel yalnız rol hazırlığının TOOL_READY katmanını okur. Adaptör kodunu denetlemek canlı bir probe değildir; probe olmadan burada hiçbir şey bir aracın hazır ya da çalışır olduğunu söylemez.",
   "tools.notRead":"Araç hazırlığı okunamadı, bu yüzden bilinmiyor (sıfır değil).",
   "tools.notMeasured":"Bu uygulamada ölçülmedi (paketli derleme): adaptör gerçekliği burada sağlanmıyor. Bu sıfır değildir ve \"hazır değil\" değildir.",
   "tools.counts.label":"TOOL_READY durumuna göre roller",

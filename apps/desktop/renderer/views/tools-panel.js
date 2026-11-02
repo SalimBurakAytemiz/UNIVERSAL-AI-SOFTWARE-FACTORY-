@@ -30,7 +30,7 @@ export function toolsPanel(ctx,{ready}){
   const probeReason=(r.toolReasons??[]).some(x=>x.code==="PROBE_NOT_OBSERVED");
   return panel(ctx,{titleKey:"tools.title",id,className:"wf-tools"},...head,
     h(doc,"div",{class:"tools-fact",dataset:{toolsFact:"toolReady"}},h(doc,"h3",{class:"wf-dist-title",text:ctx.t("tools.counts.label")}),
-      h(doc,"ul",{class:"note",dataset:{toolsReadiness:"MEASURED",denominator:String(r.denominator)}},COUNT_STATES.filter(k=>k!=="NOT_APPLICABLE"||tool.NOT_APPLICABLE>0).map(k=>
+      h(doc,"ul",{class:"note",dataset:{toolsReadiness:"ADAPTERS_SUPPLIED",denominator:String(r.denominator)}},COUNT_STATES.filter(k=>k!=="NOT_APPLICABLE"||tool.NOT_APPLICABLE>0).map(k=>
         h(doc,"li",{dataset:{toolsState:k,count:String(tool[k])},text:ctx.t(`tools.count.${k}`,{n:formatCount(tool[k]),den})}))),
       probeReason?h(doc,"p",{class:"note",dataset:{toolsWhy:"PROBE_NOT_OBSERVED"},text:ctx.t("tools.why.probe")}):null),
     h(doc,"div",{class:"tools-fact",dataset:{toolsFact:"reasons"}},h(doc,"h3",{class:"wf-dist-title",text:ctx.t("tools.reasons.label")}),reasonRows(ctx,r,tool)),src);
