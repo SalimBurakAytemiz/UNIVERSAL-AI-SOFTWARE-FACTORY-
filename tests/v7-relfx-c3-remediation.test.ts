@@ -759,7 +759,9 @@ describe("C-PAR03-DIAG-1: the next Windows PAR-03 failure names the blocking pha
     expect(msg).toContain("[traced store calls: ");
     expect(msg).toMatch(/store: writes=\d+ lockAcquisitions=\d+ lockRetries=0 lockWaitMsTotal=[\d.]+ lockWaitMsMax=[\d.]+ slowest=\S+ [\d.]+ms@perf=[\d.]+ \(lock [\d.]+\/0 retries, reload [\d.]+, journal [\d.]+, snapshot [\d.]+x\d+, release [\d.]+\)/);
     // //TR: Enjekte edilen blok, başlangıcı blok penceresinin (önceki zamanlayıcı vuruşu payıyla, 25 ms) İÇİNDE olan boşluktur; sıra numarası #1 varsayılmaz (başka bir koşucu duraklaması daha büyük olabilir), ama o boşluk yine de RUN_LEASE yazısını listelemelidir.
-    const blockGap = probe.topGaps().findIndex(x => x.startPerf >= blockStart - 25 && x.startPerf <= blockEnd);
+    // //TR: Blok senkron olduğu için içinde hiçbir zamanlayıcı vuruşu olmaz: blok ortasını KAPSAYAN tek boşluk ([startPerf, startPerf + gapMs + 20 ms tick]) enjekte edilen bloktur. Başlangıca sabit pay (25 ms) koymak Windows'ta yanlıştı: 15,6 ms zamanlayıcı çözünürlüğüyle 20 ms tick ~31 ms aralıkla vurur ve son vuruş bloktan 25 ms'den daha önce düşebilir (#282 CI 41424130963).
+    const blockMid = (blockStart + blockEnd) / 2;
+    const blockGap = probe.topGaps().findIndex(x => x.startPerf <= blockMid && blockMid <= x.startPerf + x.gapMs + 20);
     expect(blockGap, "the injected block is one of the three biggest gaps").toBeGreaterThanOrEqual(0);
     expect(msg, "the gap that starts inside the injected block lists the injected RUN_LEASE write").toMatch(new RegExp(`writes overlapping gap #${blockGap + 1}: RUN_LEASE [\\d.]+ms@perf=[\\d.]+ \\(lock`));
     const stub = (ms: number) => ({maxStallMs: () => ms, cpuMs: () => 0, wallMs: () => 0, topGaps: () => []});
