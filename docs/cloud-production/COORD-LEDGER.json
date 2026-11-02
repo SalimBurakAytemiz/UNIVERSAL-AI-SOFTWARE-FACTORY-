@@ -1332,6 +1332,16 @@
       "ref": "closure-v2-merge-tree-diff-MAP-only",
       "policy": "TEP-1",
       "at": "2026-11-02T06:48:55.266Z"
+    },
+    {
+      "pr": 295,
+      "sha": "d53c37d1a3dc61103c555c3245d790ac5b623fed",
+      "kind": "full",
+      "base": null,
+      "verdict": "NO_BLOCKERS_4LOW_informational_consumer-traced_role-status.ts:118-125",
+      "ref": "closure-v2-fresh-readonly-subagent-review",
+      "policy": "TEP-1",
+      "at": "2026-11-02T07:07:16.222Z"
     }
   ],
   "tests": [],
