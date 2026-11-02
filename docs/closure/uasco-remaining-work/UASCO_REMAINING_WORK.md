@@ -36,7 +36,7 @@
 | Kapanıştaki integration head / CI | 0b71650fa88b (değişmedi; VERIFIED git ls-remote) / son push CI 40497319498 success (2026-10-27); aynı head'de yeni bir koşu dependency-supply-chain adımında kırmızı olur (yerel npm audit 11 moderate, VERIFIED) — #293 merge edilene kadar |
 | Kapanışta yapılan merge'ler | 0 (kapanış sırasında hiçbir PR merge edilmedi; VERIFIED) |
 | Ledger head / kayıt | 2e92b36 (uasco/production-queue; kapanış kayıtları 47d46b0, 3074ec2, afe2f9b, f3ebe94, 2e92b36) / 129 review / 54 PR @2e92b36 |
-| Rapor yayını (branch / PR / merge SHA) | uasco/production-reports → docs/closure/uasco-remaining-work/ (CI'sız rapor dalı, hemen erişilebilir) + claude/coord-closure-report-2026-11-02 → v7/integration / #__REPORT_PR__ (v7/integration'a) / Merge edilmedi — PR'ın required check'i base-wide dependency audit nedeniyle kırmızı kalır; #293 merge edildikten sonra merge edilebilir (REQUIRES_EXTERNAL_ACTION). Kanonik kopya uasco/production-reports dalında yayında. |
+| Rapor yayını (branch / PR / merge SHA) | uasco/production-reports → docs/closure/uasco-remaining-work/ (CI'sız rapor dalı, hemen erişilebilir) + claude/coord-closure-report-2026-11-02 → v7/integration / #294 (v7/integration'a) / Merge edilmedi — PR'ın required check'i base-wide dependency audit nedeniyle kırmızı kalır; #293 merge edildikten sonra merge edilebilir (REQUIRES_EXTERNAL_ACTION). Kanonik kopya uasco/production-reports dalında yayında. |
 | Ana checkout geri yükleme | /home/user/UNIVERSAL-AI-SOFTWARE-FACTORY- → v6/pkg-t4-powershell-safety-and-verifier-differential-4js0ph dalına geri alındı (çalışma ağacı temiz; denetim sırasında detached 0b71650'deydi) |
 | Founder'ın tamamladığı aksiyonlar | Kapanış süresince Founder aksiyonu yok (bekleyenler: K.1 ve Q19) |
 | Yeniden başlatma (rollback) planı | K.1 tablosu (trigger bazında update_trigger enabled=true veya Founder'ın claude.ai/code/routines ekranı) + K.2 yeniden başlatma adımları (öneri: kapatılan trigger'lar update_trigger enabled=true ile, ancak Plan A0 kararlarından sonra) |
@@ -675,7 +675,7 @@ Tamamlanamayan PR ve CI işlemleri (05:30Z, VERIFIED):
 - **#293** REQUIRES_EXTERNAL_ACTION: CI yeşil, Founder authority bekliyor.
 - **#292, #291, #288, #282** BLOCKED: review temiz ve merge-gate açık; base CI kırmızı ve #293 bekleniyor. #291, #288 ve #282 ayrıca draft.
 - **#251, #247, #231, #66** REQUIRES_EXTERNAL_ACTION: Founder-tier ya da Founder-held, dirty.
-- **Rapor PR'ı #__REPORT_PR__**: aynı base CI nedeniyle bekliyor. Rapor uasco/production-reports dalında yayında.
+- **Rapor PR'ı #294**: aynı base CI nedeniyle bekliyor. Rapor uasco/production-reports dalında yayında.
 - **CI**: 2 waiting run (39687649214, 41381085962) founder-authority onayı bekliyor. Base'de yeni push CI koşusu yok.
 - Kapanışta 0 merge.
 
@@ -719,7 +719,7 @@ Diğer değişiklikler (GitHub workflow, Actions, ruleset, oturum arşivi vb.) v
 | PR aktivite abonelikleri kaldırıldı (#293, #251, #247, #231) | 05:16Z | subscribe_pr_activity ile yeniden abone olunur (yeniden başlatmada) |
 | Lane oturumlarına FREEZE (02:3xZ) ve PAUSED (05:17Z) mesajları | 02:3xZ / 05:17Z | Founder'ın açık yeniden başlatma talimatıyla yeni görev paketi gönderilir |
 | Ledger kayıtları (append-only): 47d46b0, 3074ec2, afe2f9b, f3ebe94, 2e92b36 | 02:39-04:55Z | Geri alma gerekmez (denetim izi) |
-| Rapor commit'leri (uasco/production-reports + claude/coord-closure-report-2026-11-02, PR #__REPORT_PR__) | 05:3xZ | Gerekmez |
+| Rapor commit'leri (uasco/production-reports + claude/coord-closure-report-2026-11-02, PR #294) | 05:3xZ | Gerekmez |
 | Ana checkout v6/pkg-t4-… dalına geri alındı | 05:3xZ | Gerekmez |
 
 GitHub workflow, Actions ayarı, ruleset, secret, provider yapılandırması, branch silme, oturum arşivleme: **hiçbiri değiştirilmedi** (VERIFIED). UASCO dışındaki projelere dokunulmadı.
@@ -731,7 +731,7 @@ GitHub workflow, Actions ayarı, ruleset, secret, provider yapılandırması, br
 2. Founder: #293 kararı. Seçenekler: founder-authority onayı + protected merge, ya da bir audit istisnası. Ardından base CI yeşil olur.
 3. Founder: Plan A0 kararları (J.1 S1; RW-007, RW-003, RW-015) ve açık yeniden başlatma talimatı.
 4. COORD: controller tick'i yeniden etkinleştir (update_trigger trig_01Ln2KUz671sAXXmAUu6tVm4 enabled=true) ya da olay güdümlü uyanmaya geç (RW-046). Plan A'ya göre gerekli lane tick'lerini aç: Lane A trig_01BMrSHJzf85secZCW2jKJsc, Lane B trig_01XN7KFTiR6oXtEH81drD9wP. Lane C yalnız Plan B'de açılır: trig_01LtND1PCR7XXvaxFewc2Eas.
-5. COORD: #292, #291, #288 ve #282 için sırayla update-branch, base-merge delta kaydı, ready-for-review (draft'lar), CI, merge-gate, auto-merge ve post-merge doğrulama. Ardından rapor PR'ı #__REPORT_PR__.
+5. COORD: #292, #291, #288 ve #282 için sırayla update-branch, base-merge delta kaydı, ready-for-review (draft'lar), CI, merge-gate, auto-merge ve post-merge doğrulama. Ardından rapor PR'ı #294.
 6. İsteğe bağlı: heartbeat'i yeniden aç (update_trigger trig_01QEwrSwCvd8UCbKFn97MiHh enabled=true) ya da günlük takvime al (RW-019). PR aboneliklerini yeniden kur.
 
 Taslak (Plan A0'dan türetildi, ESTIMATE; koordinatör kapanışta kesinleştirir; hiçbir adım başlatılmadı):
@@ -749,7 +749,7 @@ Taslak (Plan A0'dan türetildi, ESTIMATE; koordinatör kapanışta kesinleştiri
 | --- | --- | --- | --- |
 | Integration head | 0b71650fa88b | EV01 | 0b71650fa88b (değişmedi; VERIFIED git ls-remote) |
 | Son merge'den beri saat | ≈136,3 | EV01 | ≈138 (2026-10-27T11:34:54Z → 2026-11-02T05:30Z) |
-| Açık PR | 9 | EV02 | 10 (9 + rapor PR'ı #__REPORT_PR__) |
+| Açık PR | 9 | EV02 | 10 (9 + rapor PR'ı #294) |
 | Merge'e hazır PR | 0 | G1 §3 | 0 — 4 lane PR'ı (#292, #291, #288, #282) review-temiz ve merge-gate açık, ama base CI kırmızı; #293 Founder yetkisi bekliyor |
 | Base CI (yeni koşu) | kırmızı (DEPENDENCY_AUDIT_BLOCKERS:11) düzeltmesiz her koşuda; #293'ün kendi CI'ı yeşil | EV04, EV45 | Her yeni koşuda hâlâ kırmızı (#293 merge edilene kadar); #293'ün kendi CI'ı + Windows installer yeşil |
 | npm audit moderate+ | 11 | EV05 | Base 11 moderate (değişmedi); #293 head'inde 0 |
