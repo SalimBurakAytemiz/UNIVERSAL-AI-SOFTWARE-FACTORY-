@@ -8293,12 +8293,11 @@
  },
  "finalPrClosure": {
   "//TR": "Final PR unblock ve kapanış delta kaydı (2026-11-02T07:55Z); çelişen değerlerde bu blok geçerli",
-  "at": "2026-11-02T07:55Z",
-  "integrationHead": "a75e27f235643593eb9f2aec9772e8c614f78bc0",
+  "at": "2026-11-02T10:50Z",
+  "integrationHead": "d5f4365fda64b898d9e1f0bdc264111d9080a7f0",
   "integrationHeadCi": {
-   "run": 41402348632,
-   "conclusion": "failure",
-   "cause": "tests/v7-b7-installer.test.ts:341 (fix #295) + Windows shard 1"
+   "run": 41424008197,
+   "conclusion": "success"
   },
   "merged": [
    {
@@ -8324,12 +8323,18 @@
     "merge": "a75e27f235643593eb9f2aec9772e8c614f78bc0",
     "by": "auto-merge",
     "pushCi": "41402348632 failure (installer:341)"
+   },
+   {
+    "pr": 295,
+    "merge": "d5f4365fda64b898d9e1f0bdc264111d9080a7f0",
+    "by": "auto-merge after Founder Re-run all jobs",
+    "pushCi": "41424008197 success"
    }
   ],
   "open": {
-   "295": "BLOCKED: attempt 3 (Founder re-run failed jobs) all 3 Windows shards PASS but aggregator FAIL 'validation report missing' (COORD-001: aggregator reads current-attempt shard reports only); needs 'Re-run all jobs' on run 41404034146",
-   "282": "BLOCKED: base red; auto-merge disabled (COORD-002); head 842e492 gate OPEN",
-   "294": "BLOCKED: base red; canonical copy on uasco/production-reports",
+   "295": "MERGED",
+   "282": "head 5d66b03 (own test fixed, review NO_BLOCKERS 2 LOW, ledger deeffafa); attempt 1 shard 2 failed on pre-existing Windows store-lock zero-byte lock LOCK_TIMEOUT (relfx-1:459); one full re-run started; auto-merge armed",
+   "294": "updated onto current base with this canonical report; review -> ledger -> auto-merge",
    "251": "MERGE_AFTER_APPROVAL: trust-root-manifest conflict, 3 protected files",
    "247": "MERGE_AFTER_APPROVAL: trust-root-manifest conflict",
    "231": "BLOCKED: Founder-tier + Windows 11/WSL2 acceptance",
@@ -8345,6 +8350,9 @@
   "triggersEnabled": 0,
   "localComponents": "UNKNOWN",
   "finalStatus": "PAUSED_WITH_BLOCKERS",
-  "coord001": "Re-run failed jobs can never make validate (windows-latest) green: aggregator downloads shard reports of the current attempt only; fix targeted by #251 (protected CI-TEP1)"
+  "coord001": "Re-run failed jobs can never make validate (windows-latest) green: aggregator downloads shard reports of the current attempt only; fix targeted by #251 (protected CI-TEP1)",
+  "techDebt": [
+   "TD-V2-06 Windows store-lock zero-byte lock file -> LOCK_TIMEOUT (relfx-1:459, F-B1-006, relfx-c3:200 family; RW-013)"
+  ]
  }
 }

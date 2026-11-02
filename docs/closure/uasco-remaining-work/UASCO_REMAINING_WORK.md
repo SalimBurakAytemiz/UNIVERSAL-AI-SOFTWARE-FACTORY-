@@ -1330,6 +1330,22 @@ Bu bulut oturumu Founder-PC'ye erişemez. Durum **UNKNOWN** kalır. Founder PC'd
 
 **Düzeltme (L.11):** L.11 raporun oturum dalı `claude/peaceful-heisenberg-f0452y`'ye de yazıldığını söylüyordu. O push uzak dala ulaşmadı (uzak dal 0b71650'de kalmıştı). Kanonik kopya yalnız bu daldadır (`uasco/production-reports`). Oturum dalı şimdi yalnız #295 düzeltmesini taşır.
 
+## N. Kapanış sonu güncellemesi (2026-11-02T10:50Z)
+
+| Öğe | Durum | Kanıt |
+| --- | --- | --- |
+| #295 | **MERGED** 09:51Z, merge `d5f4365f` (parent2 = d53c37d gözden geçirilmiş head; tree = merge-tree ✓). Founder "Re-run all jobs" ile yeşile döndü | git; ledger a336c4a2 |
+| `v7/integration` | **d5f4365f**, push CI **PASS** (41424008197: ubuntu + 3 Windows shard + aggregator) | Actions |
+| #282 | Head **5d66b03**. Kendi testi düzeltildi (`relfx-c3:763`, blok-ortası boşluk eşlemesi; Windows 15,6 ms zamanlayıcı çözünürlüğü; taze review NO_BLOCKERS 2 LOW, ledger deeffafa). Attempt 1: ubuntu ✓, shard 1 ✓ (düzeltme Windows'ta doğrulandı), shard 3 ✓, shard 2 ✗ `relfx-1-completion:459`. Bu shard 2 hatası bilinen Windows store-lock sorunu: öldürülen engine sıfır baytlık lock dosyası bırakıyor, sonuç `LOCK_TIMEOUT` (RW-013); PR'ın diff'i dışında. İzinli tek tam yeniden koşu başlatıldı (rerun_workflow_run). Auto-merge açık, ledger kapısı açık | run 41427606970 |
+| #294 | Güncel base'e alındı. Rapor dosyaları bu kanonik kopyayla değiştirildi (v7/integration'a tek, tutarlı kopya girer). Taze salt-okur review → ledger → auto-merge | bu bölüm |
+| Rutinler | 0 / 11 etkin | list_triggers |
+
+**Not:** #294 ile `v7/integration`'a giren kopya merge anının görüntüsüdür. Sonraki durum değişiklikleri yalnız bu dalda (`uasco/production-reports`) tutulur.
+
+**Kalan Founder aksiyonları:** FA-3 (IR token), FA-4 (#251/#247/#231 reseal), FA-5 (#231 Windows 11/WSL2), FA-6 (#66 yeniden kurma), FA-7 (Founder-PC kontrolü, M.7), FA-8 (39687649214), FA-9 (FD-10 ledger founder-authority). Yeni bulgu (TD-V2-06): Windows store-lock sıfır-bayt lock dosyası `LOCK_TIMEOUT` üretiyor (relfx-1:459, F-B1-006, relfx-c3:200 aynı aileden) ve Windows shard'larını sık sık kırmızıya çeviriyor. Ürün düzeltmesi Plan A'da RW-013 kapsamında.
+
+**Final durum:** PAUSED_WITH_BLOCKERS. Bulut otomasyonları kapalı; base yeşil; Founder-tier PR'lar ve yerel bileşenler (UNKNOWN) açık.
+
 ## Baseline ve Kapanış Karşılaştırması
 
 | Metrik | Baseline (denetim) | Kaynak | Kapanış |
