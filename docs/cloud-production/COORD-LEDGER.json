@@ -1362,6 +1362,16 @@
       "ref": "closure-v2-fresh-readonly-subagent-review",
       "policy": "TEP-1",
       "at": "2026-11-02T10:22:38.772Z"
+    },
+    {
+      "pr": 294,
+      "sha": "6d19132db2e08d499d17cc34ceab4842d0cffe06",
+      "kind": "full",
+      "base": null,
+      "verdict": "NO_BLOCKERS_docs-only_3INFO_secrets-scan-clean_facts-verified",
+      "ref": "closure-v2-fresh-readonly-subagent-review",
+      "policy": "TEP-1",
+      "at": "2026-11-02T10:45:20.686Z"
     }
   ],
   "tests": [],
