@@ -25,13 +25,13 @@ export type EvaluatedReason = "NO_EVALUATION_SPECS" | "NO_SPEC_EXECUTED" | "EVID
 export type CertifiedReason = "NOT_CERTIFIED_STATUS" | "CERTIFICATION_EVIDENCE_INVALID";
 export type RunningReason = "NO_RUN_JOURNAL" | "NOT_IN_OPEN_RUN";
 // //TR: C-RDY-2b varlık (beceri/teknoloji) denetimi nedenleri; NOT_APPLICABLE yalnız varlıklar için kullanılır (kanonik roller için ASLA).
-export type EntityReason = "BAD_ENTITY_ID" | "DUPLICATE_ENTITY_ID" | "NOT_CANONICALLY_REQUIRED_BY_ANY_ROLE" | "NOT_REQUIRED_BY_ANY_ROLE" | "NO_SKILL_SOURCE_REFS" | "NOT_CERTIFIED_STATE" | "CERTIFICATION_NOT_EVIDENCED" | "NO_RUNTIME_CONSUMER" | "NO_ENTITY_RUN_JOURNAL" | "RUNTIME_CONSUMERS_NOT_SUPPLIED" | "NOT_AN_EXECUTABLE_ENTITY";
+export type EntityReason = "BAD_ENTITY_ID" | "DUPLICATE_ENTITY_ID" | "NOT_CANONICALLY_REQUIRED_BY_ANY_ROLE" | "NOT_REQUIRED_BY_ANY_ROLE" | "NO_SKILL_SOURCE_REFS" | "SKILL_SOURCE_REFS_NOT_PROVENANCE_COMPLETE" | "NOT_CERTIFIED_STATE" | "CERTIFICATION_NOT_EVIDENCED" | "NO_RUNTIME_CONSUMER" | "NO_ENTITY_RUN_JOURNAL" | "RUNTIME_CONSUMERS_NOT_SUPPLIED" | "NOT_AN_EXECUTABLE_ENTITY";
 // //TR: Kapalı birleşim: bunun dışındaki herhangi bir dize tip hatasıdır.
 export type ReadinessReason = DefinedReason | ProfiledReason | KnowledgeReason | ToolReason | ExecutableReason | StageWiredReason | EvaluatedReason | CertifiedReason | RunningReason | EntityReason;
 
 // //TR: reasons sıralı ve tekilleştirilmiş; YALNIZ state === "TRUE" iken boştur.
 export interface LayerResult { state: LayerState; reasons: readonly ReadinessReason[] }
-// //TR: Dört durum payda'yı toplar; measured === (payda > 0 && UNKNOWN === 0): boş bir grup (payda 0) hiçbir şeyi ÖLÇMEMİŞTİR, ölçülmüş sıfır değildir (koordinatör şartname değişikliği, #260 incelemesi). Ölçülmemiş toplam asla 0 olarak sunulmamalıdır.
+// //TR: Dört durum payda'yı toplar; measured === (uygulanabilir sayı (payda - NOT_APPLICABLE) > 0 && UNKNOWN === 0): boş bir grup ya da tamamı NOT_APPLICABLE olan bir katman hiçbir şeyi ÖLÇMEMİŞTİR, ölçülmüş sıfır değildir (koordinatör şartname değişikliği, #260 ve #288 incelemeleri). Ölçülmemiş toplam asla 0 olarak sunulmamalıdır. Rol katmanlarında NOT_APPLICABLE yoktur, bu yüzden rol çıktısı (JSON ve özet) değişmez.
 export interface LayerCount { TRUE: number; FALSE: number; UNKNOWN: number; NOT_APPLICABLE: number; denominator: number; measured: boolean }
 export interface AdapterRealityEntry { adapterId: string; codePath: "PRESENT" | "ABSENT"; probe: "READY" | "FAILED" | "NOT_OBSERVED" }
 export interface KnowledgeUnitLike { facet: string; state: string; sourceRefs: readonly unknown[]; lastValidatedAt: string | null }
@@ -150,8 +150,10 @@ const toContextRole = (r: ReadinessRole): ContextRole => ({
   requiredSkillIds: r.requiredSkillIds ?? [], requiredTechnologies: r.requiredTechnologies ?? [], optionalTechnologies: [],
   legacyAliases: (r as {legacyAliases?: ContextRole["legacyAliases"]}).legacyAliases ?? [], gapIds: [], ...(r.evaluationSpecs ? {evaluationSpecs: r.evaluationSpecs} : {})
 });
+// //TR: PROFILED bağlam METNİNE bakmaz (metin boş verilir), yalnız kanonik beceri/teknolojiye bakar: varsayılan 24 576 baytlık sınır bu yüzden uygulanmaz (aşırı büyük bir rol, tabanın TRUE dediği yerde FALSE ROLE_CONTEXT_NOT_RESOLVED vermesin).
+const NO_BYTE_CAP = Number.MAX_SAFE_INTEGER;
 function profiledLayer(r: ReadinessRole, c: Ctx): LayerResult {
-  const res = resolveRoleContext(c.ctxInput, r.roleId);
+  const res = resolveRoleContext(c.ctxInput, r.roleId, {maxBytes: NO_BYTE_CAP});
   if (res.status !== "RESOLVED") return result("FALSE", ["ROLE_CONTEXT_NOT_RESOLVED"]);
   const reasons: ReadinessReason[] = [];
   const skills = res.context.skills.canonical;
@@ -252,7 +254,7 @@ function anomaliesOf(r: ReadinessRole, layers: Readonly<Record<ReadinessLayer, L
 const countOf = (xs: readonly LayerResult[]): LayerCount => {
   const n = {TRUE: 0, FALSE: 0, UNKNOWN: 0, NOT_APPLICABLE: 0};
   for (const x of xs) n[x.state]++;
-  return {...n, denominator: xs.length, measured: xs.length > 0 && n.UNKNOWN === 0};
+  return {...n, denominator: xs.length, measured: xs.length - n.NOT_APPLICABLE > 0 && n.UNKNOWN === 0};
 };
 const layerCounts = (rs: readonly RoleReadiness[]): Readonly<Record<ReadinessLayer, LayerCount>> =>
   Object.fromEntries(READINESS_LAYERS.map(l => [l, countOf(rs.map(r => r.layers[l]))])) as Record<ReadinessLayer, LayerCount>;
@@ -368,6 +370,8 @@ export function loadReadinessInputFromRepo(repoRoot: string, o: {runs: RunsObser
   const strArr = (v: unknown) => Array.isArray(v) && v.every(x => typeof x === "string");
   for (const r of roles) if (!isObject(r) || typeof r.roleId !== "string" || typeof r.guildId !== "string" || typeof r.clusterId !== "string" || !strArr(r.requiredSkillIds) || !Array.isArray(r.knowledgeSourceRefs) || !Array.isArray(r.evaluationSpecs)
     || !Array.isArray(r.requiredTechnologies) || !r.requiredTechnologies.every(t => isObject(t) && typeof t.technologyId === "string" && typeof t.status === "string")) throw unavailable(REL_ROLES);
+  // //TR: R1: legacyAliases rol bağlamına (PROFILED) verilir; varsa şekli bozuk (null öğe, dizi olmayan değer) bir alan TypeError/500 yerine READINESS_INPUT_INVALID:ROLE_LEGACY_ALIASES:<roleId> ile reddedilir. Alan yoksa [] sayılır.
+  for (const r of roles as {roleId: string; legacyAliases?: unknown}[]) if (r.legacyAliases !== undefined && (!Array.isArray(r.legacyAliases) || !r.legacyAliases.every(a => isObject(a) && typeof a.legacyId === "string" && typeof a.status === "string"))) throw new Error(`READINESS_INPUT_INVALID:ROLE_LEGACY_ALIASES:${r.roleId}`);
   for (const g of guilds) if (!isObject(g) || typeof g.guildId !== "string" || typeof g.clusterId !== "string") throw unavailable(REL_ROLES);
   for (const k of clusters) if (!isObject(k) || typeof k.clusterId !== "string") throw unavailable(REL_ROLES);
 
@@ -445,10 +449,11 @@ export interface TechnologyAuditInput extends EntityAuditBase {
   technologies: readonly TechnologyRecordLike[]; knowledgeProfiles: ReadonlyMap<string, readonly KnowledgeUnitLike[]>; roles: readonly ReadinessRole[];
   sourceProvenance: {requiredFields: readonly string[]; certifiableClasses: ReadonlySet<string>};
 }
+export interface EntityLayerCount extends LayerCount { applicable: number }
 export interface EntityReadiness { id: string; layers: Readonly<Record<ReadinessLayer, LayerResult>> }
 export interface SkillReadiness extends EntityReadiness { legacyReference: boolean; canonicalRoles: number }
 export interface TechnologyReadiness extends EntityReadiness { sourceBacked: boolean; registryKnowledgeState: string; units: {total: number; byState: Readonly<Record<string, number>>; researchedSourced: number} }
-export interface EntityAuditBody { schemaVersion: "1.0.0"; authority: ReadinessAudit["authority"]; denominator: number; totals: Readonly<Record<ReadinessLayer, LayerCount>>; reasonCounts: Readonly<Record<string, Readonly<Record<string, number>>>>; promotedTechnologyStatuses: "DEFAULT" | readonly string[]; runtimeConsumers: number | "NOT_SUPPLIED" }
+export interface EntityAuditBody { schemaVersion: "1.0.0"; authority: ReadinessAudit["authority"]; denominator: number; totals: Readonly<Record<ReadinessLayer, EntityLayerCount>>; reasonCounts: Readonly<Record<string, Readonly<Record<string, number>>>>; promotedTechnologyStatuses: "DEFAULT" | readonly string[]; runtimeConsumers: number | "NOT_SUPPLIED" }
 export interface SkillAudit extends EntityAuditBody {
   entity: "SKILL"; legacyReference: {referenced: number; unreferenced: number};
   competencyPacks: {refs: number; unique: number; resolvingInSk2: number; flag: "ONTOLOGY_SPLIT" | "NONE"};
@@ -466,7 +471,11 @@ const promotedDisclosure = (e: EntityAuditBase): {set: ReadonlySet<string>; isDe
 };
 // //TR: Varlık RUNNING: tüketici hiç yoksa yapısal 0 (FALSE); tüketici varsa ama varlık kullanımını kaydeden günlük yok -> UNKNOWN; tüketici sayısı verilmediyse UNKNOWN.
 const entityRunning = (consumers: number | undefined): LayerResult => consumers === undefined ? result("UNKNOWN", ["RUNTIME_CONSUMERS_NOT_SUPPLIED"]) : consumers === 0 ? result("FALSE", ["NO_RUNTIME_CONSUMER"]) : result("UNKNOWN", ["NO_ENTITY_RUN_JOURNAL"]);
-const entityTotals = (items: readonly EntityReadiness[]): Record<ReadinessLayer, LayerCount> => Object.fromEntries(READINESS_LAYERS.map(l => [l, countOf(items.map(x => x.layers[l]))])) as Record<ReadinessLayer, LayerCount>;
+// //TR: R2: varlık sayımı uygulanabilir payda'yı (payda - NOT_APPLICABLE) açıkça verir; uygulanabilir sayı 0 ise measured false'tur (hiçbir şey ölçülmemiştir).
+const entityCountOf = (xs: readonly LayerResult[]): EntityLayerCount => { const c = countOf(xs); return {...c, applicable: c.denominator - c.NOT_APPLICABLE}; };
+const entityTotals = (items: readonly EntityReadiness[]): Record<ReadinessLayer, EntityLayerCount> => Object.fromEntries(READINESS_LAYERS.map(l => [l, entityCountOf(items.map(x => x.layers[l]))])) as Record<ReadinessLayer, EntityLayerCount>;
+// //TR: R6: tüketici sayısı verilmişse negatif olmayan güvenli bir tamsayı olmalıdır; NaN, -1, 1.5, Infinity, dize AUTHORITATIVE ölçüm sayılmaz, tipli reddedilir.
+const checkConsumers = (n: unknown): void => { if (n !== undefined && (typeof n !== "number" || !Number.isSafeInteger(n) || n < 0)) throw new Error(`READINESS_INPUT_INVALID:RUNTIME_CONSUMERS:${String(n)}`); };
 const entityReasonCounts = (items: readonly EntityReadiness[]): Record<string, Record<string, number>> => {
   const out: Record<string, Record<string, number>> = {};
   for (const l of READINESS_LAYERS) { const m: Record<string, number> = {}; for (const x of items) for (const r of x.layers[l].reasons) m[r] = (m[r] ?? 0) + 1; out[l] = m; }
@@ -475,13 +484,14 @@ const entityReasonCounts = (items: readonly EntityReadiness[]): Record<string, R
 const sortedBy = <T>(xs: readonly T[], key: (x: T) => string): T[] => [...xs].sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));
 
 export function auditSkills(i: SkillAuditInput): SkillAudit {
+  checkConsumers(i.runtimeConsumers);
   const idCount = new Map<string, number>();
   for (const s of i.skills) idCount.set(s.id, (idCount.get(s.id) ?? 0) + 1);
   // //TR: KANONİK kullanım rol bağlamından okunur (resolveRoleContext.skills.canonical): önerilen ve eski başvurular burada YOKTUR. Bağlam metni gereksiz: boş verilir.
   const bare: RoleContextInput = {...i.roleContext, roles: i.roleContext.roles.map(r => ({...r, responsibilities: [], forbiddenActions: [], specializationBoundaries: []})), profiles: [], bindings: []};
   const canonicalRoles = new Map<string, number>();
   for (const id of new Set(bare.roles.map(r => r.roleId))) {
-    const res = resolveRoleContext(bare, id);
+    const res = resolveRoleContext(bare, id, {maxBytes: NO_BYTE_CAP});
     if (res.status === "RESOLVED") for (const sk of res.context.skills.canonical) canonicalRoles.set(sk.skillId, (canonicalRoles.get(sk.skillId) ?? 0) + 1);
   }
   const legacyReferenced = new Set([...i.roleContext.legacySkills.values()].flat());
@@ -492,7 +502,7 @@ export function auditSkills(i: SkillAuditInput): SkillAudit {
     const layers: Record<ReadinessLayer, LayerResult> = {
       DEFINED: !SKILL_ID.test(String(s.id)) ? result("FALSE", ["BAD_ENTITY_ID"]) : (idCount.get(s.id) ?? 0) !== 1 ? result("FALSE", ["DUPLICATE_ENTITY_ID"]) : result("TRUE", []),
       PROFILED: used > 0 ? result("TRUE", []) : result("FALSE", ["NOT_CANONICALLY_REQUIRED_BY_ANY_ROLE"]),
-      KNOWLEDGE_READY: refs.length > 0 && refs.every(r => sourceRefQualifies(r, i.sourceProvenance)) ? result("TRUE", []) : result("FALSE", ["NO_SKILL_SOURCE_REFS"]),
+      KNOWLEDGE_READY: refs.length === 0 ? result("FALSE", ["NO_SKILL_SOURCE_REFS"]) : refs.every(r => sourceRefQualifies(r, i.sourceProvenance)) ? result("TRUE", []) : result("FALSE", ["SKILL_SOURCE_REFS_NOT_PROVENANCE_COMPLETE"]),
       TOOL_READY: notApplicable(), EXECUTABLE: notApplicable(), EVALUATED: notApplicable(),
       INTERNALLY_CERTIFIED: result("FALSE", [s.certificationState === "NOT_CERTIFIED" ? "NOT_CERTIFIED_STATE" : "CERTIFICATION_NOT_EVIDENCED"]),
       RUNNING: entityRunning(i.runtimeConsumers)
@@ -513,6 +523,7 @@ export function auditSkills(i: SkillAuditInput): SkillAudit {
 }
 
 export function auditTechnologies(i: TechnologyAuditInput): TechnologyAudit {
+  checkConsumers(i.runtimeConsumers);
   const slugCount = new Map<string, number>();
   for (const t of i.technologies) slugCount.set(t.slug, (slugCount.get(t.slug) ?? 0) + 1);
   const promoted = promotedDisclosure(i);
@@ -532,7 +543,7 @@ export function auditTechnologies(i: TechnologyAuditInput): TechnologyAudit {
       PROFILED: statuses.length === 0 ? result("FALSE", ["NOT_REQUIRED_BY_ANY_ROLE"]) : statuses.some(x => promoted.set.has(x)) ? result("TRUE", []) : result("FALSE", ["TECHNOLOGY_STATUS_NOT_PROMOTED"]),
       KNOWLEDGE_READY: units === undefined ? result("FALSE", ["KNOWLEDGE_PROFILE_MISSING"]) : researchedSourced > 0 ? result("TRUE", []) : result("FALSE", ["NO_RESEARCHED_SOURCED_UNIT"]),
       TOOL_READY: notApplicable(), EXECUTABLE: notApplicable(), EVALUATED: notApplicable(),
-      INTERNALLY_CERTIFIED: result("FALSE", [(units ?? []).every(u => (u as {certification?: unknown}).certification === "NOT_CERTIFIED") ? "NOT_CERTIFIED_STATE" : "CERTIFICATION_NOT_EVIDENCED"]),
+      INTERNALLY_CERTIFIED: result("FALSE", [units !== undefined && units.length > 0 && units.every(u => (u as {certification?: unknown}).certification === "NOT_CERTIFIED") ? "NOT_CERTIFIED_STATE" : "CERTIFICATION_NOT_EVIDENCED"]),
       RUNNING: entityRunning(i.runtimeConsumers)
     };
     return {id: t.slug, layers, sourceBacked, registryKnowledgeState: t.knowledgeState, units: {total: units?.length ?? 0, byState, researchedSourced}};
@@ -550,18 +561,22 @@ export function auditTechnologies(i: TechnologyAuditInput): TechnologyAudit {
   return {...body, digest: sha256(stable(body))};
 }
 
-// //TR: Varlık girdisini depodan yükler (salt okunur): SK2 beceri kayıtları, teknoloji kayıtları, rol bağlamı girdisi (C-CTX-1 yükleyicisi: roller, eski beceri matrisi), yetkinlik paketleri (registries/competency-packs.json packs[].requiredSkills) ve mevcut hazırlık yükleyicisinin bilgi birimleri/kaynak sağlayıcı kuralları. Eksik/bozuk/boş dosyada READINESS_INPUT_UNAVAILABLE:<yol> fırlatır; boş veri ASLA yerine konmaz.
+// //TR: Varlık girdisini depodan yükler (salt okunur): SK2 beceri kayıtları, teknoloji kayıtları, rol bağlamı girdisi (C-CTX-1 yükleyicisi: roller, eski beceri matrisi), yetkinlik paketleri (registries/competency-packs.json packs[].requiredSkills) ve mevcut hazırlık yükleyicisinin bilgi birimleri/kaynak sağlayıcı kuralları. Eksik/bozuk/boş dosyada READINESS_INPUT_UNAVAILABLE:<yol>; geçersiz tüketici sayısı, yinelenen beceri kimliği / teknoloji kısaltması (sıra-bağımlı özet olmasın) ve bozuk beceri alanı (sourceRefs dizi değil, certificationState/status dize değil) için READINESS_INPUT_INVALID:<kod>:<anahtar> fırlatır; rol bağlamı yükleyicisinin ROLE_CONTEXT_INPUT_* hataları READINESS_INPUT_* adıyla yeniden fırlatılır. Boş veri ASLA yerine konmaz.
 export function loadEntityAuditInputsFromRepo(repoRoot: string, o: EntityAuditBase = {}): {skills: SkillAuditInput; technologies: TechnologyAuditInput} {
+  checkConsumers(o.runtimeConsumers);
   const REL_SKILLS = "registries/skills-v2.json", REL_TECH = "registries/technologies.json", REL_PACKS = "registries/competency-packs.json";
   // //TR: Küçük dosya önce okunur (hızlı başarısızlık); ağır yüklemeler (415 bilgi dosyası) ondan sonra gelir.
   const packs = arrayOf(readDoc(repoRoot, REL_PACKS).doc, "packs", REL_PACKS, true);
   for (const p of packs) if (!isObject(p) || !Array.isArray(p.requiredSkills) || !p.requiredSkills.every(x => typeof x === "string")) throw unavailable(REL_PACKS);
   const base = loadReadinessInputFromRepo(repoRoot, {runs: {journal: "ABSENT"}, now: new Date(0)});
-  const roleContext = loadRoleContextInputFromRepo(repoRoot);
+  let roleContext: RoleContextInput;
+  try { roleContext = loadRoleContextInputFromRepo(repoRoot); } catch (e) { throw e instanceof Error && e.message.startsWith("ROLE_CONTEXT_INPUT_") ? new Error(e.message.replace(/^ROLE_CONTEXT_/, "READINESS_")) : e; }
   const skillRecords = arrayOf(readDoc(repoRoot, REL_SKILLS).doc, "skills", REL_SKILLS, true);
-  for (const s of skillRecords) if (!isObject(s) || typeof s.id !== "string") throw unavailable(REL_SKILLS);
+  for (const s of skillRecords) if (!isObject(s) || typeof s.id !== "string" || (s.sourceRefs !== undefined && !Array.isArray(s.sourceRefs)) || (s.certificationState !== undefined && typeof s.certificationState !== "string") || (s.status !== undefined && typeof s.status !== "string")) throw unavailable(REL_SKILLS);
   const techRecords = arrayOf(readDoc(repoRoot, REL_TECH).doc, "technologies", REL_TECH, true);
   for (const t of techRecords) if (!isObject(t) || typeof t.id !== "string" || typeof t.slug !== "string" || typeof t.status !== "string" || typeof t.knowledgeState !== "string") throw unavailable(REL_TECH);
+  // //TR: R3: yinelenen beceri kimliği girdi hatasıdır: aksi halde bir kimlik iki satır olur, payda şişer ve özet girdi sırasına bağlı olurdu. Yinelenen teknoloji kısaltmasını rol bağlamı yükleyicisi (DUPLICATE_TECHNOLOGY_SLUG) bu noktadan önce reddeder ve READINESS_INPUT_INVALID olarak yeniden adlandırılır.
+  uniqueBy(skillRecords as {id: string}[], s => s.id, "DUPLICATE_SKILL_ID");
   const extra = {...(o.promotedTechnologyStatuses ? {promotedTechnologyStatuses: o.promotedTechnologyStatuses} : {}), ...(o.runtimeConsumers !== undefined ? {runtimeConsumers: o.runtimeConsumers} : {})};
   return {
     skills: {skills: skillRecords as SkillRecordLike[], roleContext, competencyPackRefs: (packs as {requiredSkills: string[]}[]).flatMap(p => p.requiredSkills), sourceProvenance: base.sourceProvenance, ...extra},
