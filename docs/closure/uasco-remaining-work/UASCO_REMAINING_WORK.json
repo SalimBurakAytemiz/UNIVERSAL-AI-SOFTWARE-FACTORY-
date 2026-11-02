@@ -8293,11 +8293,12 @@
  },
  "finalPrClosure": {
   "//TR": "Final PR unblock ve kapanış delta kaydı (2026-11-02T07:55Z); çelişen değerlerde bu blok geçerli",
-  "at": "2026-11-02T10:50Z",
-  "integrationHead": "d5f4365fda64b898d9e1f0bdc264111d9080a7f0",
+  "at": "2026-11-02T11:15Z",
+  "integrationHead": "16d3a925b8a3f4ffc08dea2ea64c53862a7bcb03",
   "integrationHeadCi": {
    "run": 41424008197,
-   "conclusion": "success"
+   "conclusion": "success",
+   "note": "d5f4365; 16d3a925 docs-only on top"
   },
   "merged": [
    {
@@ -8329,16 +8330,20 @@
     "merge": "d5f4365fda64b898d9e1f0bdc264111d9080a7f0",
     "by": "auto-merge after Founder Re-run all jobs",
     "pushCi": "41424008197 success"
+   },
+   {
+    "pr": 294,
+    "merge": "16d3a925b8a3f4ffc08dea2ea64c53862a7bcb03",
+    "by": "auto-merge",
+    "pushCi": "pending (docs-only)"
    }
   ],
   "open": {
-   "295": "MERGED",
-   "282": "head 5d66b03 (own test fixed, review NO_BLOCKERS 2 LOW, ledger deeffafa); attempt 1 shard 2 failed on pre-existing Windows store-lock zero-byte lock LOCK_TIMEOUT (relfx-1:459); one full re-run started; auto-merge armed",
-   "294": "updated onto current base with this canonical report; review -> ledger -> auto-merge",
-   "251": "MERGE_AFTER_APPROVAL: trust-root-manifest conflict, 3 protected files",
-   "247": "MERGE_AFTER_APPROVAL: trust-root-manifest conflict",
-   "231": "BLOCKED: Founder-tier + Windows 11/WSL2 acceptance",
-   "66": "DEFER_TO_ROADMAP: unrelated histories with v7/integration"
+   "282": "BLOCKED: two attempts each failed on a different non-PR Windows test (relfx-1:459 zero-byte lock; role-context:826 timeout); own fix relfx-c3:763 PASS on Windows; gate OPEN, auto-merge armed; Founder: Re-run all jobs on run 41427606970",
+   "251": "MERGE_AFTER_APPROVAL (trust-root reseal)",
+   "247": "MERGE_AFTER_APPROVAL (trust-root reseal)",
+   "231": "BLOCKED (Founder-tier + Windows 11/WSL2)",
+   "66": "DEFER_TO_ROADMAP (unrelated histories)"
   },
   "mergeGateRootCause": "mergeGate opens only on NO_BLOCKERS/NO_CODE_BLOCKERS verdict bound to head SHA; reviewRecord refuses a second record for the same SHA; founder-authority environment approval is not a ledger input",
   "reviewerAuthRejected": "scripts/ci/uasco-review/review-gate.mjs:122,146; claude-code-action is_error auth-shaped result; secret CLAUDE_CODE_OAUTH_TOKEN in environment uasco-review must be regenerated (value not read)",
@@ -8352,7 +8357,8 @@
   "finalStatus": "PAUSED_WITH_BLOCKERS",
   "coord001": "Re-run failed jobs can never make validate (windows-latest) green: aggregator downloads shard reports of the current attempt only; fix targeted by #251 (protected CI-TEP1)",
   "techDebt": [
-   "TD-V2-06 Windows store-lock zero-byte lock file -> LOCK_TIMEOUT (relfx-1:459, F-B1-006, relfx-c3:200 family; RW-013)"
+   "TD-V2-06 Windows store-lock zero-byte lock file -> LOCK_TIMEOUT (relfx-1:459, F-B1-006, relfx-c3:200 family; RW-013)",
+   "TD-V2-07 Windows shards failed today on 4 different non-PR tests (F-B1-006, relfx-c3:200, relfx-1:459, role-context:826)"
   ]
  }
 }

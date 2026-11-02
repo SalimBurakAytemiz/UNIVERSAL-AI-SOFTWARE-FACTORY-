@@ -1346,6 +1346,22 @@ Bu bulut oturumu Founder-PC'ye erişemez. Durum **UNKNOWN** kalır. Founder PC'd
 
 **Final durum:** PAUSED_WITH_BLOCKERS. Bulut otomasyonları kapalı; base yeşil; Founder-tier PR'lar ve yerel bileşenler (UNKNOWN) açık.
 
+## O. Son durum (2026-11-02T11:15Z)
+
+| Öğe | Durum |
+| --- | --- |
+| #294 | **MERGED** 11:09:57Z, merge `16d3a925` (parent2 = 6d19132 gözden geçirilmiş head ✓, tree = merge-tree ✓; review NO_BLOCKERS docs-only, ledger 122a1b12; yetkili auto-merge). Ana dala bu raporun 10:50Z anlık kopyası girdi |
+| `v7/integration` | **16d3a925**. Önceki head d5f4365f push CI PASS (41424008197). 16d3a925'te yalnız docs değişti |
+| #282 | **BLOCKED**. Head 5d66b03, ledger kapısı açık, auto-merge açık. Kendi düzeltmesi (`relfx-c3:763`) Windows shard 1'de PASS. Run 41427606970'te iki koşu yapıldı (izinli tek tam yeniden koşu kullanıldı); her birinde PR dışı farklı bir Windows testi kaldı: attempt 1 shard 2 `relfx-1-completion:459` (sıfır bayt lock, LOCK_TIMEOUT), attempt 2 shard 1 `v7-core-role-context:826` (5 s timeout; #291'in testi). Founder eylemi: run 41427606970 → **Re-run all jobs**. Yeşil olursa kendiliğinden merge olur |
+| Bu kapanışta merge edilenler | #293 (Founder), #291, #288, #292, #295, #294 |
+| Açık kalanlar | #282 (Windows CI kararsızlığı); #251, #247, #231, #66 (Founder-tier; M.5) |
+| Rutinler | **0 etkin**. Bu oturumun iki tek atımlık hatırlatıcısı vardı: biri ateşlendi, ikincisi 11:15Z'de silindi |
+| Yerel bileşenler | UNKNOWN (M.7 adımları) |
+
+Yeni teknik borç TD-V2-07: Windows shard'ları bugün 4 farklı PR-dışı testte kırmızı oldu: F-B1-006, relfx-c3:200, relfx-1:459, role-context:826. Ortak etken Windows runner zamanlaması ve store-lock. Ürün ve CI düzeltmesi RW-013 ve #251 (COORD-001) kapsamında, Founder kararıyla.
+
+**Final durum: PAUSED_WITH_BLOCKERS.**
+
 ## Baseline ve Kapanış Karşılaştırması
 
 | Metrik | Baseline (denetim) | Kaynak | Kapanış |
