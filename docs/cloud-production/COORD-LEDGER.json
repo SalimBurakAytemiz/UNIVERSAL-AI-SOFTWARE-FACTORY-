@@ -1342,6 +1342,16 @@
       "ref": "closure-v2-fresh-readonly-subagent-review",
       "policy": "TEP-1",
       "at": "2026-11-02T07:07:16.222Z"
+    },
+    {
+      "pr": 282,
+      "sha": "60fe3db9d8ec42d4df1fa8e6400738f41e2f6f35",
+      "kind": "delta",
+      "base": "842e4920312c8fcfb4a04d4f51a8b7729d5f6d5d",
+      "verdict": "BASE_MERGE_ONLY_update-branch_d5f4365_tree_eq_merge-tree",
+      "ref": "closure-v2-verify-parents-tree-eq",
+      "policy": "TEP-1",
+      "at": "2026-11-02T09:52:24.501Z"
     }
   ],
   "tests": [],
