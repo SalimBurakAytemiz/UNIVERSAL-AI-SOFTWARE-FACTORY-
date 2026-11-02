@@ -7,7 +7,9 @@
 | generatedAt | 2026-11-02T02:50:00Z (baseline çapası; kanıt penceresi 02:50Z-04:05Z) |
 | integrationHead | v7/integration @ 0b71650fa88b9802968562c63ca33f8b56e9648b (merge #290, 2026-10-27T11:34:54Z); 03:50:46Z'de git ls-remote ile yeniden doğrulandı |
 | Girdiler | G1-G7 denetçi raporları (eksik denetçi yok), COORD-LEDGER @afe2f9b, Master V2 WAVE0-BASELINE.json, önceki denetim v1.0 (CLAIMED) |
-| Durum | KANONİK — kapanış değerleri 2026-11-02T05:30Z'de dolduruldu (COORD). Son durum: PAUSED_WITH_BLOCKERS. Bu rapor hiçbir işi başlatmaz. |
+| Durum | KANONİK — kapanış değerleri 2026-11-02T05:30Z'de dolduruldu (COORD). Son durum: PAUSED_WITH_BLOCKERS. Bu rapor hiçbir işi başlatmaz. · **V2 ≈06:00Z (L bölümü):** Master V2 kontrollü kapanış güncellemesi 2026-11-02T06:10Z (L bölümü; çelişen değerlerde L geçerli). Son durum yine PAUSED_WITH_BLOCKERS; bulut rutinleri 11/11 kapalı, yerel bileşenler UNKNOWN. |
+| Final PR closure güncellemesi | 2026-11-02T07:55Z: M bölümü (merge zinciri, #293 kapı kök nedeni, #295, IR auth, Founder-tier, Founder-PC adımları) + JSON `finalPrClosure` |
+| Master V2 güncellemesi | 2026-11-02T06:10Z — oturum session_015dYwb2fTtgsPy3wpVN9rYC; L bölümü + JSON `masterV2` + evidence/G9-master-v2-closure.md |
 | Etiketler | VERIFIED = birincil kaynakta kontrol edildi · CLAIMED = doküman söylüyor, yeniden doğrulanmadı · ESTIMATE = çıkarım (yöntemiyle) · UNKNOWN = ölçülemedi · NOT_RUN_ENV_UNAVAILABLE = ortam yok, asla PASS değil · COORD-VERIFIED = koordinatörün 2026-11-02 doğruladığı olgu |
 | Seviye merdiveni | PLANNED > DESIGNED > CODED > INTEGRATED > TESTED(unit) > VERIFIED_REAL_ENV > USABLE_BY_END_USER |
 | Kimlikler | Kısaltma: metin ve tablolarda RW-### = envanter kimliği UASCO-RW-### (JSON `inventory[].id`). |
@@ -46,7 +48,7 @@
 
 | PR | Konu | Head (~04:02Z) | Baseline durumu | Envanter | Kapanış |
 | --- | --- | --- | --- | --- | --- |
-| #293 | COORD dep fix (glob/minimatch overrides) | ee2facb | Açık, draft değil; CI yeşil (41381085868, installer 41381085966); ledger BLOCKERS_GOV_FOUNDER_AUTHORITY; founder-authority job waiting (41381085962) | RW-001 | REQUIRES_EXTERNAL_ACTION — CI tamamen yeşil (41381085868; installer 41381085966); kod hatası yok (review wf_c700d6f5-f24, 5 LOW); yönetişim engeli: package.json overrides protectedField + CI_EXECUTED_FLOOR (ledger afe2f9b). Founder: founder-authority environment onayı (run 41381085962) + protected merge. PR yorumu 6568245662. |
+| #293 | COORD dep fix (glob/minimatch overrides) | ee2facb | Açık, draft değil; CI yeşil (41381085868, installer 41381085966); ledger BLOCKERS_GOV_FOUNDER_AUTHORITY; founder-authority job waiting (41381085962) | RW-001 | REQUIRES_EXTERNAL_ACTION — CI tamamen yeşil (41381085868; installer 41381085966); kod hatası yok (review wf_c700d6f5-f24, 5 LOW); yönetişim engeli: package.json overrides protectedField + CI_EXECUTED_FLOOR (ledger afe2f9b). Founder: founder-authority environment onayı (run 41381085962) + protected merge. PR yorumu 6568245662. · **V2 ≈06:00Z (L bölümü):** Founder founder-authority environment onayını verdi (41381085962 founder-authority job success 05:42Z); IR check FAIL (REVIEWER_AUTH_REJECTED); ledger merge-gate yine CLOSED (exit 5) → karar MERGE_AFTER_APPROVAL: Founder protected merge bekliyor. |
 | #292 | Lane A A2 tools panel | 43776e1 | Delta NO_BLOCKERS; CI base-wide kırmızı | RW-042 | BLOCKED — delta NO_BLOCKERS (47d46b0), merge-gate açık; required check validate (ubuntu-latest) base-wide audit nedeniyle kırmızı (41377356505). Sonraki adım: #293 merge → update-branch → base-merge delta kaydı → auto-merge → post-merge doğrulama. |
 | #291 | Lane B B2 role context | 4b4eee0 | Draft; full NO_BLOCKERS 4 LOW | RW-043 | BLOCKED — full NO_BLOCKERS 4 LOW (3074ec2, wf_10d5501d-ffb), merge-gate açık; draft ve base'in gerisinde; #293 bekliyor. Sonraki adım: #293 → ready-for-review → update-branch → CI → merge. |
 | #288 | Lane C C-RDY-2b | 7bf22e5 | Draft; BLOCKERS 2M+14L @73fa26e; onarım push'u ~04:01Z | RW-076 | BLOCKED — repair 7bf22e5 delta NO_BLOCKERS 6 LOW (f3ebe94, wf_1c7042cf-8eb; 85/85 mutant öldü), merge-gate açık; draft; CI 41386006766 yalnız dependency-supply-chain'de kırmızı (base-wide); #293 bekliyor. |
@@ -65,8 +67,8 @@
 | Lane B tick | trig_01XN7KFTiR6oXtEH81drD9wP | 33 * * * * | Kapatıldı 02:27Z | KAPALI — enabled=false (02:27:25Z); VERIFIED |
 | Lane C tick | trig_01LtND1PCR7XXvaxFewc2Eas | 53 * * * * | Kapatıldı 02:27Z | KAPALI — enabled=false (02:27:25Z); VERIFIED |
 | Heartbeat | trig_01QEwrSwCvd8UCbKFn97MiHh | 11 */3 * * * | ETKİN; 03:11:26Z ateşledi; agent kapatabilir | KAPALI — enabled=false (05:16:43Z, COORD); son rapor 52e826c @03:12Z; VERIFIED |
-| Independent Cloud Reviewer | trig_01NJCi2PSTJxh6rMMLewLvGM | 38 * * * * | ETKİN; 02:38:39Z ve 03:39:10Z'de ateşledi (list_triggers 04:28Z); http_api (yalnız Founder) | ETKİN (DURDURULAMADI) — http_api ile oluşturulmuş; agent'ın update_trigger isteği reddedildi (05:16Z). Saatlik read-only reviewer; son ateşleme 04:38:33Z (~47 sn). Founder kapatmalı: https://claude.ai/code/routines/trig_01NJCi2PSTJxh6rMMLewLvGM |
-| UASCO Cloud Development | trig_018vLbG82sUcp6ncPhRurka5 | 29 * * * * (Sonnet 5.5) | ETKİN; 02:29:54Z ve 03:29:53Z'de ateşledi (list_triggers 04:28Z); http_api (yalnız Founder) | ETKİN (DURDURULAMADI) — http_api ile oluşturulmuş; agent'ın update_trigger isteği reddedildi (02:27Z). Saatlik builder (Sonnet 5.5, taze oturum); son ateşleme 04:29:42Z (~30 sn çalıştı; yeni branch/PR/commit gözlenmedi, VERIFIED git ls-remote + PR listesi). Founder kapatmalı: https://claude.ai/code/routines/trig_018vLbG82sUcp6ncPhRurka5 |
+| Independent Cloud Reviewer | trig_01NJCi2PSTJxh6rMMLewLvGM | 38 * * * * | ETKİN; 02:38:39Z ve 03:39:10Z'de ateşledi (list_triggers 04:28Z); http_api (yalnız Founder) | ETKİN (DURDURULAMADI) — http_api ile oluşturulmuş; agent'ın update_trigger isteği reddedildi (05:16Z). Saatlik read-only reviewer; son ateşleme 04:38:33Z (~47 sn). Founder kapatmalı: https://claude.ai/code/routines/trig_01NJCi2PSTJxh6rMMLewLvGM · **V2 ≈06:00Z (L bölümü):** KAPALI — enabled=false, updated 05:40:15Z (Founder); son ateşleme 05:38:44Z. VERIFIED list_triggers. |
+| UASCO Cloud Development | trig_018vLbG82sUcp6ncPhRurka5 | 29 * * * * (Sonnet 5.5) | ETKİN; 02:29:54Z ve 03:29:53Z'de ateşledi (list_triggers 04:28Z); http_api (yalnız Founder) | ETKİN (DURDURULAMADI) — http_api ile oluşturulmuş; agent'ın update_trigger isteği reddedildi (02:27Z). Saatlik builder (Sonnet 5.5, taze oturum); son ateşleme 04:29:42Z (~30 sn çalıştı; yeni branch/PR/commit gözlenmedi, VERIFIED git ls-remote + PR listesi). Founder kapatmalı: https://claude.ai/code/routines/trig_018vLbG82sUcp6ncPhRurka5 · **V2 ≈06:00Z (L bölümü):** KAPALI — enabled=false, updated 05:40:11Z (Founder); son ateşleme 05:30:03Z. VERIFIED list_triggers. |
 | Safety-net one-shot | trig_0137JfTiMWXAbqVQNaPSMVmF | 2026-11-02T03:56Z | 03:56:44Z'de ateşledi; enabled=false, ended_reason run_once_fired (get_trigger 04:28Z, VERIFIED) | KAPALI — run_once_fired 03:56:44Z; VERIFIED |
 | Production Builder x2, PR #11 safety-net, probe | trig_01HJfvsZ..., trig_01BiCMim..., trig_01EJnVSL..., trig_017MW7Ln... | - | Önceden kapalı | KAPALI — değişmedi; VERIFIED |
 
@@ -75,7 +77,7 @@
 | Lane A session_01MApoJPisUKhZdWpTJmcnY3 | idle; yalnız #292 (ACK) | IDLE — PAUSED bildirimi 05:17Z alındı, tur 05:17:44Z bitti (list_events VERIFIED); açık: #292; branch-only claude/lane-a-tools-panel-a2b @ce09d00 dokunulmadı |
 | Lane B session_01VaHcvhtW9yjHAsFktdTn5f | idle; #291 + #231 dondu (ACK) | IDLE — PAUSED bildirimi alındı, tur 05:17:42Z bitti (VERIFIED); açık: #291, #231 |
 | Lane C session_01Vf5LYEF7vPGkRwL6X5AeGT | ~03:21Z RUNNING (G6); #282 b13e23d ve #288 7bf22e5 pushladı; eval-tester mutasyon koşusu (RW-045); 04:02Z'den beri IDLE (get_session 04:28Z) | IDLE — PAUSED bildirimi alındı, tur 05:17:31Z bitti (VERIFIED); #282 b13e23d ve #288 7bf22e5 son push'ları; yerel worktree'ler korunuyor |
-| Actions kuyruğu / takılı IR run | ~02:55Z (G1): 0 queued, 0 in_progress, 1 waiting (39687649214). 04:27Z: 0 queued, 1 in_progress (CI 41386006766, #288), 2 waiting (39687649214; 41381085962 #293 founder-authority) (EV46) | 0 queued / 0 in_progress / 2 waiting (05:2xZ, status filtreli actions_list VERIFIED) / 39687649214 (2026-10-21'den beri waiting, founder-authority) + 41381085962 (#293 founder-authority) — ikisi de Founder environment onayı bekliyor; dokunulmadı |
+| Actions kuyruğu / takılı IR run | ~02:55Z (G1): 0 queued, 0 in_progress, 1 waiting (39687649214). 04:27Z: 0 queued, 1 in_progress (CI 41386006766, #288), 2 waiting (39687649214; 41381085962 #293 founder-authority) (EV46) | 0 queued / 0 in_progress / 2 waiting (05:2xZ, status filtreli actions_list VERIFIED) / 39687649214 (2026-10-21'den beri waiting, founder-authority) + 41381085962 (#293 founder-authority) — ikisi de Founder environment onayı bekliyor; dokunulmadı · **V2 ≈06:00Z (L bölümü):** 0 queued / 0 in_progress / 1 waiting (39687649214); 41381085962 completed success. |
 | Heartbeat raporu | 52e826ce @03:12:19Z (uasco/production-reports) | Son rapor 52e826c @03:12Z; heartbeat 05:16:43Z'de kapatıldı |
 
 ## C. Ürün Hazırlığı
@@ -705,8 +707,8 @@ Satırlar B.2'deki trigger verisinden ve lane oturumlarından alındı; kapanı�
 | Lane B tick | trig_01XN7KFTiR6oXtEH81drD9wP | 33 * * * * | enabled → false, 02:27Z (COORD; B.2) | update_trigger enabled=true (aynı koşulla) | KAPALI — enabled=false (02:27:25Z); VERIFIED |
 | Lane C tick | trig_01LtND1PCR7XXvaxFewc2Eas | 53 * * * * | enabled → false, 02:27Z (COORD; B.2) | update_trigger enabled=true; Plan A'da Lane C yok, en erken Plan B | KAPALI — enabled=false (02:27:25Z); VERIFIED |
 | Heartbeat | trig_01QEwrSwCvd8UCbKFn97MiHh | 11 */3 * * * | Baseline'da ETKİN (meta_mcp; agent kapatabilir); kapanıştaki değişiklik kapanış sütununda | Kapatıldıysa update_trigger enabled=true ya da günlük takvim (RW-019) | KAPALI — enabled=false (05:16:43Z, COORD); son rapor 52e826c @03:12Z; VERIFIED |
-| Independent Cloud Reviewer | trig_01NJCi2PSTJxh6rMMLewLvGM | 38 * * * * | Baseline'da ETKİN; http_api, yalnız Founder kapatabilir | Founder claude.ai/code/routines üzerinden açar; öneri: açmadan önce tek review yoluna birleştir (RW-060) | ETKİN (DURDURULAMADI) — http_api ile oluşturulmuş; agent'ın update_trigger isteği reddedildi (05:16Z). Saatlik read-only reviewer; son ateşleme 04:38:33Z (~47 sn). Founder kapatmalı: https://claude.ai/code/routines/trig_01NJCi2PSTJxh6rMMLewLvGM |
-| UASCO Cloud Development | trig_018vLbG82sUcp6ncPhRurka5 | 29 * * * * | Baseline'da ETKİN; http_api, yalnız Founder kapatabilir | Founder claude.ai/code/routines üzerinden açar; öneri: RETIRE (RW-002; F) | ETKİN (DURDURULAMADI) — http_api ile oluşturulmuş; agent'ın update_trigger isteği reddedildi (02:27Z). Saatlik builder (Sonnet 5.5, taze oturum); son ateşleme 04:29:42Z (~30 sn çalıştı; yeni branch/PR/commit gözlenmedi, VERIFIED git ls-remote + PR listesi). Founder kapatmalı: https://claude.ai/code/routines/trig_018vLbG82sUcp6ncPhRurka5 |
+| Independent Cloud Reviewer | trig_01NJCi2PSTJxh6rMMLewLvGM | 38 * * * * | Baseline'da ETKİN; http_api, yalnız Founder kapatabilir | Founder claude.ai/code/routines üzerinden açar; öneri: açmadan önce tek review yoluna birleştir (RW-060) | ETKİN (DURDURULAMADI) — http_api ile oluşturulmuş; agent'ın update_trigger isteği reddedildi (05:16Z). Saatlik read-only reviewer; son ateşleme 04:38:33Z (~47 sn). Founder kapatmalı: https://claude.ai/code/routines/trig_01NJCi2PSTJxh6rMMLewLvGM · **V2 ≈06:00Z:** KAPALI — Founder 05:40:15Z (list_triggers VERIFIED) |
+| UASCO Cloud Development | trig_018vLbG82sUcp6ncPhRurka5 | 29 * * * * | Baseline'da ETKİN; http_api, yalnız Founder kapatabilir | Founder claude.ai/code/routines üzerinden açar; öneri: RETIRE (RW-002; F) | ETKİN (DURDURULAMADI) — http_api ile oluşturulmuş; agent'ın update_trigger isteği reddedildi (02:27Z). Saatlik builder (Sonnet 5.5, taze oturum); son ateşleme 04:29:42Z (~30 sn çalıştı; yeni branch/PR/commit gözlenmedi, VERIFIED git ls-remote + PR listesi). Founder kapatmalı: https://claude.ai/code/routines/trig_018vLbG82sUcp6ncPhRurka5 · **V2 ≈06:00Z:** KAPALI — Founder 05:40:11Z (list_triggers VERIFIED) |
 | Safety-net one-shot | trig_0137JfTiMWXAbqVQNaPSMVmF | 2026-11-02T03:56Z | 03:56:44Z ateşledi; enabled=false, run_once_fired (VERIFIED, B.2) | Geri alma yok (tek seferlik, bitti); yeniden oluşturulmaz | KAPALI — run_once_fired 03:56:44Z; VERIFIED |
 | Production Builder x2, PR #11 safety-net, probe | trig_01HJfvsZ..., trig_01BiCMim..., trig_01EJnVSL..., trig_017MW7Ln... | - | Kapanıştan önce kapalıydı; değiştirilmedi (B.2) | Geri alma gerekmez; açılmamalı | KAPALI — değişmedi; VERIFIED |
 | Lane oturumları A / B / C | session_01MApoJPisUKhZdWpTJmcnY3 / session_01VaHcvhtW9yjHAsFktdTn5f / session_01Vf5LYEF7vPGkRwL6X5AeGT | - | Dondurma mesajı 02:3xZ (ACK; evidence/COORD-CLOSURE-LOG.md); son bilinen durum IDLE (COORD-VERIFIED, EV47) | Founder talimatıyla yeni görev paketi gönderilir; Plan A'da yalnız Lane A ve B | IDLE — PAUSED bildirimi 05:17Z alındı, tur 05:17:44Z bitti (list_events VERIFIED); açık: #292; branch-only claude/lane-a-tools-panel-a2b @ce09d00 dokunulmadı / IDLE — PAUSED bildirimi alındı, tur 05:17:42Z bitti (VERIFIED); açık: #291, #231 / IDLE — PAUSED bildirimi alındı, tur 05:17:31Z bitti (VERIFIED); #282 b13e23d ve #288 7bf22e5 son push'ları; yerel worktree'ler korunuyor |
@@ -742,6 +744,607 @@ Taslak (Plan A0'dan türetildi, ESTIMATE; koordinatör kapanışta kesinleştiri
 4. Trigger'lar yukarıdaki tabloya göre yalnız gerekenler açılır; önce bütçe eşiği (RW-003). http_api rutinleri açılmaz (RW-002).
 5. Lane A ve B'ye görev paketi gönderilir (önce RW-042 #292 ve RW-043 #291); Lane C Plan A boyunca idle kalır (J.2).
 6. Kapanış değerleri (Baseline ve Kapanış Karşılaştırması) yeni baseline olarak alınır; ilerleme M1-M6 ile ölçülür (J.1 12. soru).
+
+## L. Master V2 Kontrollü Kapanış Güncellemesi (2026-11-02T06:10Z)
+
+> Founder direktifi "UASCO MASTER V2 — CONTROLLED CLOSURE, COMPLETE PROJECT DISCOVERY & ROADMAP BASELINE" (2026-11-02). Bu bölüm önceki kapanışın (05:30Z) üzerine **yeniden doğrulanmış delta**dır; A-K bölümlerindeki veriler başlangıç verisi olarak kullanıldı, çelişen değerlerde bu bölüm geçerlidir. Yeni Epic/Feature/sprint başlatılmadı; hiçbir trigger yeniden etkinleştirilmedi; hiçbir PR merge/close edilmedi; secret/provider yapılandırmasına dokunulmadı. Ham doğrulama kaydı: `evidence/G9-master-v2-closure.md`.
+
+### L.1 BASELINE_BEFORE_FINAL_CLOSURE (06:00Z) ve önceki raporla fark
+
+| Alan | Önceki rapor (05:30Z) | Yeniden doğrulanan (≈06:00Z) | Değişti mi | Kaynak |
+| --- | --- | --- | --- | --- |
+| Merged PR toplamı | 259 | 259 (head değişmedi, yeni merge yok) | Hayır | git ls-remote v7/integration = 0b71650 |
+| Açık PR | 10 (#294 dahil) | 10: #294 #293 #292 #291 #288 #282 #251 #247 #231 #66 | Hayır | list_pull_requests state=open |
+| Draft PR | 6 | 7: #291, #288, #282, #251, #247, #231, #66 | Düzeltme (önceki sayım 6) | list_pull_requests draft alanı |
+| Founder onayı bekleyen PR | #293, #251, #247, #231, #66 | #293 (environment onayı verildi, protected merge bekliyor), #251, #247, #231, #66 | Kısmen | actions_get 41381085962 |
+| v7/integration head | 0b71650 | 0b71650fa88b9802968562c63ca33f8b56e9648b | Hayır | git ls-remote |
+| Bekleyen Actions | 2 waiting (39687649214, 41381085962) | 1 waiting (39687649214); 41381085962 completed success | EVET | actions_list status=waiting |
+| Etkin Cloud rutinleri | 2 (CDev, ICR — agent kapatamadı) | 0 / 11 | EVET | list_triggers |
+| Controller + Lane A/B/C | Kapalı | Kapalı (enabled=false, 02:27:25Z) | Hayır | list_triggers |
+| Lane oturumları | IDLE | IDLE (05:17Z'den beri) | Hayır | list_sessions |
+| Koordinatör oturumu | aktif kapanış | IDLE, disconnected; $4.549,72 API-eşdeğer | EVET | get_session |
+| #294 CI | beklemede | 41393881832 FAIL (DEPENDENCY_AUDIT_BLOCKERS:11, base-wide); IR 41393879807 success | EVET | get_job_logs 125111026076 |
+| Yerel worker / V6 / Windows Task Scheduler | UNKNOWN | UNKNOWN (Founder-PC erişimi yok) | Hayır | — |
+| Son kanonik rapor commit'i | 84280f7 (uasco/production-reports) | Bu güncelleme ile yeni commit (aşağıda L.11) | EVET | git log |
+| Önceki durum | PAUSED_WITH_BLOCKERS | Bkz. L.12 | — | — |
+
+Not: önceki rapor B.1 tablosunda 9 PR + #294 listeliyordu; draft sayısı GitHub alanından yeniden sayıldığında **7** (#291, #288, #282, #251, #247, #231, #66). Açık ve draft olmayan: #294, #293, #292.
+
+### L.2 Otomasyon durumu (Aşama 2 ve 11)
+
+| Bileşen | Id | Durum | Kanıt |
+| --- | --- | --- | --- |
+| Controller tick | trig_01Ln2KUz671sAXXmAUu6tVm4 | KAPALI (enabled=false) | list_triggers ≈06:00Z VERIFIED |
+| Lane A tick | trig_01BMrSHJzf85secZCW2jKJsc | KAPALI (enabled=false) | list_triggers ≈06:00Z VERIFIED |
+| Lane B tick | trig_01XN7KFTiR6oXtEH81drD9wP | KAPALI (enabled=false) | list_triggers ≈06:00Z VERIFIED |
+| Lane C tick | trig_01LtND1PCR7XXvaxFewc2Eas | KAPALI (enabled=false) | list_triggers ≈06:00Z VERIFIED |
+| Heartbeat | trig_01QEwrSwCvd8UCbKFn97MiHh | KAPALI (enabled=false) | list_triggers ≈06:00Z VERIFIED |
+| Production Builder (persistent) | trig_01HJfvsZWCh5QKihm7iRZHFw | KAPALI (enabled=false) | list_triggers ≈06:00Z VERIFIED |
+| Production Builder (queue) | trig_01BiCMimhXYFpRs3wFSbknSD | KAPALI (enabled=false) | list_triggers ≈06:00Z VERIFIED |
+| UASCO Cloud Development | trig_018vLbG82sUcp6ncPhRurka5 | KAPALI (enabled=false) — Founder 05:40Z'de kapattı | list_triggers ≈06:00Z VERIFIED · **V2 ≈06:00Z:** KAPALI — Founder 05:40:11Z (list_triggers VERIFIED) |
+| Independent Cloud Reviewer | trig_01NJCi2PSTJxh6rMMLewLvGM | KAPALI (enabled=false) — Founder 05:40Z'de kapattı | list_triggers ≈06:00Z VERIFIED · **V2 ≈06:00Z:** KAPALI — Founder 05:40:15Z (list_triggers VERIFIED) |
+| PR #11 safety-net (one-shot) | trig_01EJnVSL9xQzJnc4gxNnXKmH | KAPALI (enabled=false) | list_triggers ≈06:00Z VERIFIED |
+| Cloud Development probe | trig_017MW7Ln2JfbiasnumAp5cJU | KAPALI (enabled=false) | list_triggers ≈06:00Z VERIFIED |
+| PR abonelikleri / event trigger | — | Bu oturumda abonelik yok; koordinatör oturumu IDLE+disconnected (abonelik olayları yeni iş başlatmaz, yalnız oturumu uyandırır) | get_session |
+| GitHub Actions schedule | ci, uasco-independent-review, windows-installer | Zamanlanmış (cron) workflow 0; Actions toptan kapatılmadı (direktif) | .github/workflows/*.yml grep |
+| GitHub Actions bekleyen | 39687649214 | waiting (2026-10-21, eski SEC vitest PR'ı IR founder-authority); yeni iş başlatmaz; dokunulmadı | actions_list |
+| Claude Cloud Scheduled Tasks (Cowork yerel) | — | UNKNOWN (list_triggers yerel Cowork görevlerini listelemez) | — |
+| Yerel V6 Supervisor / Windows Task Scheduler / yerel worker | — | UNKNOWN — Founder-PC bu oturumdan erişilemez; durdurulmuş SAYILMADI | — |
+
+### L.3 PR #293 bağımlılık engeli (Aşama 3)
+
+| Alan | Değer |
+| --- | --- |
+| Head | ee2facb7e06afb81edbcb1e56fa64aae5ccfa6d3 (1 commit; package.json + package-lock.json; +24/-42) |
+| Değişiklik | npm overrides glob 14.0.3 + minimatch 11.0.3 (electron-builder 27.0.0-alpha.9 dev ağacı); gate/test/workflow değişmedi |
+| Güvenlik etkisi | npm audit 11 moderate → 0 (yerel, PR gövdesi); glob/minimatch major yükseltmesi yalnız build araçlarında; repo kodu bu paketleri import etmiyor |
+| Required check | validate (ubuntu-latest) success, validate (windows-latest) success (41381085868); 3 Windows shard success; installer success (41381085966) |
+| IR run 41381085962 | Founder founder-authority environment onayını VERDİ (job 125071926978 success 05:42:11Z). ai-review job success ama check-run 125071908981 = FAIL: VERDICT_MISSING + REVIEWER_AUTH_REJECTED (CLAUDE_CODE_OAUTH_TOKEN reddedildi). IR required değil. |
+| mergeable_state | unstable (yalnız opsiyonel IR check kırmızı) |
+| Ledger merge-gate | exit 5 CLOSED — verdict BLOCKERS_GOV_FOUNDER_AUTHORITY (SHA-bound; aynı SHA için yeni kayıt ALREADY_RECORDED ile reddedilir) |
+| Bu oturumun kararı | MERGE EDİLMEDİ. Yetkili mekanizma (ledger merge-gate) kapalı; Founder-authority kaydı "protected merge" istiyor; koruma kaldırılmadı, ledger elle yazılmadı. |
+| Founder eylemi | (1) GitHub → PR #293 → "Merge pull request" (merge commit) — ya da yazılı yetki: "#293'ü koordinatör merge etsin". (2) Opsiyonel: Settings → Environments → review ortamı → CLAUDE_CODE_OAUTH_TOKEN secret'ını `claude setup-token` ile yenile (IR check'i için). (3) Merge sonrası v7/integration push CI'ı otomatik koşar. |
+| Bağımlı PR'lar | #292, #291, #288, #282, #294 aynı base-wide hata için yeniden koşturulmadı (tekrarlı CI üretimi yok). |
+
+### L.4 PR kapanış ve blokaj matrisi (Aşama 4)
+
+| PR | Head | Konu | Risk sınıfı | CI | Review/gate | Karar | Sonraki adım | Envanter |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| #293 | ee2facb | COORD CI-FIX glob/minimatch overrides | GOV/Founder (package.json overrides protectedField) | Required: validate ubuntu ✅ windows ✅ (41381085868), 3 shard ✅, installer ✅ (41381085966); IR founder-authority ✅ 05:42Z; IR check ❌ REVIEWER_AUTH_REJECTED | mergeable_state=unstable (yalnız opsiyonel IR check kırmızı); ledger merge-gate CLOSED (exit 5) | **MERGE_AFTER_APPROVAL** | Founder environment onayı VERILDI. Kalan: ledger kararı SHA-bound ve kapalı → Founder protected merge (GitHub PR ekranı → "Merge pull request") ya da açık yazılı yetki ile koordinatörün merge etmesi. IR token'ı (CLAUDE_CODE_OAUTH_TOKEN) yenilenmeden IR check kırmızı kalır (required değil). | RW-001 |
+| #292 | 43776e1 | Lane A Tools Panel | Routine | validate ubuntu ❌ base-wide DEPENDENCY_AUDIT_BLOCKERS:11 (41377356505) | merge-gate OPEN (delta NO_BLOCKERS 47d46b0) | **BLOCKED** | #293 → update-branch → CI → base-merge delta kaydı → auto-merge | RW-042 |
+| #291 | 4b4eee0 | Lane B Role Context | Routine (draft, base gerisinde 5e8fc50) | Base-wide kırmızı beklenir | merge-gate OPEN (full NO_BLOCKERS 4 LOW) | **BLOCKED** | #293 → ready-for-review → update-branch → CI → merge | RW-043 |
+| #288 | 7bf22e5 | Lane C Entity Readiness | Routine (draft) | CI 41386006766 ❌ yalnız dependency-supply-chain; installer ✅ 41386006836 | merge-gate OPEN (delta NO_BLOCKERS 6 LOW) | **BLOCKED** | #293 sonrası; Plan A'da park (RW-076) | RW-076 |
+| #282 | b13e23d | Windows PAR03 Diagnostics | Routine (draft, TEP-1 tur limiti doldu) | CI 41383416275 ❌ dependency-supply-chain (+ aggregator MODULE_NOT_FOUND nedeni kurulmadı) | merge-gate OPEN (r3 NO_BLOCKERS 6 LOW) | **BLOCKED** | #293 sonrası CI; aggregator hatası tekrar ederse REPAIR_REQUIRED | RW-044 |
+| #251 | f40bea3 | Protected CI-TEP1 | Founder-held (protected CI dosyaları) | dirty (base b371ebd) | — | **MERGE_AFTER_APPROVAL** | Founder: protected path onayı + conflict çözümü; RW-012 | RW-012 |
+| #247 | 323c14f | Protected Autonomy Hardening (16.8 GB temp leak + reseal) | FOUNDER-TIER (trust-root reseal) | dirty (base 0ddb170) | — | **MERGE_AFTER_APPROVAL** | Founder reseal yetkisi + rebase; RW-012 | RW-012 |
+| #231 | c9a3e2d | Windows WSL2 Sandbox | FOUNDER-TIER (sandbox güven sınırı) | dirty (base 459205c); 9 review head | — | **BLOCKED** | Founder-tier karar + gerçek Windows 11/WSL2 kabul testi (Founder-PC). Kritik yol (RW-004). | RW-004 |
+| #66 | ffeaf79 | Electron E2E Verification | Founder-held (2026-10-20) | base d38f87c, eski | — | **DEFER_TO_ROADMAP** | Gerçek Electron ortamı gerekli; Plan A4 (RW-005) kanıt adımına bağla; branch korunur | RW-012 |
+| #294 | 81fecb0 | Canonical Closure Report | Docs-only | CI 41393881832 ❌ shard1 DEPENDENCY_AUDIT_BLOCKERS:11 (base-wide); IR 41393879807 ✅ | — | **BLOCKED** | #293 merge sonrası update-branch + CI → merge. Kanonik kopya uasco/production-reports'ta (bu güncelleme dahil). | RW-014 |
+
+Kapanışta merge edilen PR: **0**. Hiçbir PR yalnız sayıyı sıfırlamak için kapatılmadı; tüm branch'ler korunuyor.
+
+### L.5 Test ve entegrasyon doğrulaması (Aşama 5)
+
+Kapanışta merge olmadığından merge-sonrası doğrulama gerekmedi; mevcut sonuçlar SHA bazında yeniden kullanıldı (aynı testler tekrar koşturulmadı).
+
+| Kategori | Durum | Not |
+| --- | --- | --- |
+| Unit | PASS (base 0b71650, push CI 40497319498 2026-10-27, run-validation) | Yeni koşu base-wide audit adımında durur → ancak #293 head ee2facb üzerinde tam ubuntu run-validation PASS (41381085868) |
+| Integration | PASS (aynı CI; buildServer gerçek route testleri) | Gerçek model/sandbox entegrasyonu yok |
+| Contract/API | PASS (aynı CI; 73/73 renderer /v1 yolu kayıtlı route, G3) | 10 route yalnız fake bridge (RW-053) |
+| UI/Component | PASS (renderer testleri CI içinde) | Gerçek kullanıcı oturumu yok |
+| Windows build | PASS (3 Windows shard + aggregator: 40497319498 base; 41381085868 #293) | — |
+| Windows installer | PASS (CI runner smoke: 40497319565 base, 41381085966 #293) | İmzasız; Founder-PC kurulumu NOT_RUN_ENV_UNAVAILABLE |
+| Electron runtime | NOT_RUN_ENV_UNAVAILABLE (gerçek masaüstü); Linux journey CLAIMED (EV41) | #66 DEFER |
+| End-to-end | FAIL/BLOCKED — Windows sandbox yok (packaged-entry.ts:54, SANDBOX_UNAVAILABLE); gerçek-model e2e yalnız 2026-10-14 oyuncak run (EV11) | RW-004, RW-005 |
+| Security | FAIL (dependency-supply-chain: DEPENDENCY_AUDIT_BLOCKERS:11 her yeni base koşusunda; 41393881832 shard1) — #293 ile 0 | gitleaks/trivy gerçek araç koşusu bu ortamda NOT_RUN_ENV_UNAVAILABLE |
+| Release/packaging | BLOCKED (release/tag 0; imza yok; release-supply-chain dependency adımına bağlı) | RW-022 |
+
+### L.6 Gerçek mimari: 16 aşamalı akış (Aşama 6)
+
+Sınıflar E bölümündeki tanımlarla aynı (REAL / REAL-code/SIM-evidence / PARTIAL / PLAN). v7/integration head 05:30Z'den beri değişmediğinden E bölümündeki kod yolları geçerli; aşağıdaki kritik iddialar bu oturumda yeniden kontrol edildi (packaged-entry.ts:52-57, crew/coordinator.ts importer'ları, model-routing importer'ları, command-intake importer'ı, OmniRoute adapter kaydı, ürün içinde PR/push 0).
+
+| # | Aşama | Beklenen | Gerçek mevcut davranış | Sınıf | Dosya / kanıt | Eksik bağlantı (envanter) |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | FOUNDER COMMAND | Tek doğal-dil komut | Yok: yapılandırılmış "Fikirden başla" formu | PLAN (doğal dil) / REAL (form) | core/mission/command-intake.ts üretimde 0 importer (bu oturumda grep VERIFIED) | RW-025 |
+| 2 | COMMAND INTAKE | Doğrulanmış mission DRAFT | POST /v1/intakes → submitIntake, idempotent DRAFT | REAL | apps/control-api routes/intake.ts; core/workos/intake.ts | — |
+| 3 | BUSINESS ANALYSIS | BA artifact, bağımsız onay | AnalysisFlow → PreDevDriver → ClaudePreDevBuilder (Claude CLI); FAKE/yoksa BLOCKED | REAL-code/SIM-evidence | core/workos/predev/*; gerçek modelle hiç koşmadı | RW-005 |
+| 4 | REQUIREMENT ANALYSIS | İzlenebilir gereksinim | Aynı pre-dev zinciri (Requirements artifact) | REAL-code/SIM-evidence | predev/types.ts | RW-005 |
+| 5 | SOFTWARE ARCHITECTURE | Mimari artifact | Aynı zincir (Architecture artifact) — yapı doğrulayıcı, içerik kalitesi ölçülmüyor | REAL-code/SIM-evidence | predev-decisions.ts | RW-005 |
+| 6 | EPIC / FEATURE / TASK | Hiyerarşik iş kırılımı | Yalnız plan → task (createTaskDetailed, dependsOn); Epic/Feature ürün içinde yok | PARTIAL | core/workos plan.ts | RW-034 |
+| 7 | AGENT ASSIGNMENT | Uzmanlığa göre rol | Statik FIRST_DELIVERY_BINDINGS 9 rol; 599 rol PROPOSED_DERIVED_NOT_RUNTIME | PARTIAL | first-delivery-bindings.ts; composeTeam bağlı değil | RW-055, RW-080 |
+| 8 | MODEL SELECTION | Maliyet/veri sınıfı routing | Yok: sabit Claude CLI profili; routeModel yalnız core/policy/model-routing.ts + testler | PLAN | models/router, core/policy/model-routing.ts (üretim çağıranı yok) | RW-036 |
+| 9 | CODE GENERATION | İzole ortamda kod | Implementer Claude CLI, run workspace, git izolasyonu | REAL-code/SIM-evidence (Linux) | core/workos/runner.ts MissionRunner | RW-004 |
+| 10 | TESTING | Sandbox içinde test | Gate + SandboxProvider; Windows'ta sağlayıcı yok → NOT_EXECUTED | REAL-code/SIM-evidence; Windows BLOCKED | packaged-entry.ts:54 (bu oturumda okundu) | RW-004 |
+| 11 | SECURITY REVIEW | SAST/SCA/secrets | gitleaks/trivy (PATH'te varsa), dahili secret taraması, Claude reviewer; semgrep/SBOM yok; policy ctx sabit ALLOW | PARTIAL | security-tools.ts; server.ts:193-196 | RW-028, RW-031 |
+| 12 | PR CREATION | Müşteri repo'suna PR | Ürün içinde yok (apps/core/models içinde push/PR API 0 isabet, bu oturumda git grep) | PLAN | — | RW-054 |
+| 13 | MERGE | Kapılı merge | Ürün içinde yok; yalnız geliştirme düzleminde (coord-ledger merge-gate + ruleset) | PLAN (ürün) | docs/cloud-production/coord-ledger.mjs | RW-054 |
+| 14 | BUILD | Ürün build'i | Müşteri projesi için build adımı = testCommand; UASCO'nun kendi build'i CI'da | PARTIAL | windows-installer.yml (UASCO için) | RW-004 |
+| 15 | DEPLOYMENT | Deploy/canary/rollback | Yok; deployPanel kalıcı BLOCKED | PLAN | apps/desktop delivery.js:86 | RW-069 |
+| 16 | PRODUCT DELIVERY | Doğrulanmış teslim paketi | Sunucu ZIP teslimi REAL; Desktop export düğmesi kırık (AUD-022); etiket her zaman NOT_VERIFIED | REAL (sunucu) / FAIL (Desktop) | prepareRunDelivery; views/delivery-panel.js | RW-009 |
+
+Ajan/model: ürün düzleminde yalnız Claude CLI (implementer + reviewer profilleri); model id seçilmiyor. Engelleyen ilk sorun: **TESTING (Windows sandbox yok)** — bu aşama olmadan PRODUCT DELIVERY doğrulanamaz.
+
+**14 özel soru:**
+
+| # | Soru | Bulgu |
+| --- | --- | --- |
+| 1 | Desktop ↔ backend | Electron main paketli Control API'yi rastgele 127.0.0.1 portunda başlatır; token stdin'den, kimlik challenge'ı; renderer yalnız IPC allow-list ile HTTP /v1 çağırır (main.mjs). Installer CI smoke'ta controlApi:HEALTHY VERIFIED_REAL_ENV (yalnız CI runner). |
+| 2 | Görevler hangi controller'a gidiyor | Control API içindeki MissionRunner (core/workos/runner.ts:213, start(2000ms)); /v1/control/stop|resume STOP dosyası. V6 supervisor ve bulut koordinatörü ürün yolunda değil. |
+| 3 | MissionRunner ne yapabiliyor | Run claim (lease, runner.lock, fenced takeover), 7 adımlı sabit hat, remediation ≤2, retry ≤2, AWAITING_APPROVAL'da durur; merge/push/complete yapmaz. Aynı anda 1 run. Kanıt: v7-b3a* unit (FAKE executor); canlı 1 oyuncak run. |
+| 4 | CrewCoordinator çalışma zamanına bağlı mı | HAYIR. core/workos/crew/coordinator.ts üretimde yalnız predev/placeholder.ts ve validators.ts tarafından adı geçiyor (tip/yer tutucu); runner'dan çağrılmıyor (bu oturumda grep). |
+| 5 | Ajan rolleri yürütülebilir mi | Yalnız 9 rol (6 CLAUDE_REVIEWER, 2 CLAUDE_IMPLEMENTER, 1 DETERMINISTIC_STUDIO). 599 rol katalog verisi, 590'ı yürütülemez; değerlendirilmiş rol 0 (EV12). |
+| 6 | Model routing var mı | HAYIR (çalışma zamanında). Sabit Claude CLI; routeModel/chooseProvider yalnız testlerden çağrılıyor. |
+| 7 | Claude CLI ↔ UASCO-EVREN Gateway | Çalışan entegrasyon YOK. "Evren" adı yalnız marka/locale (tr.js "Evrensel"). Model gateway = OmniRoute: yalnız elle çalışan keşif betiği (scripts/discover-omniroute-models.mjs); models/omniroute/client.ts hiçbir yerden import edilmiyor (core/capabilities/adapter-reality.ts:40 kaydı, bu oturumda okundu). Ürün yalnız Claude CLI kullanıyor. |
+| 8 | Test/QA çekirdekleri gerçek araçlara bağlı mı | Kısmen: testCommand gate+sandbox ile (Linux); gitleaks/trivy PATH'te varsa; CI'da gerçek araçlarla koşmuyor (FAKE scanner testleri). core/qa/api bağlı değil. |
+| 9 | Windows sandbox neden çalışmıyor | packagedServerOptions sandbox seçeneği vermiyor (packaged-entry.ts:52-57, "sandbox seçeneği YOKTUR"); server.ts Linux dışı null provider. WSL2 sağlayıcısı #231 Founder-tier, dirty, merge edilmedi. |
+| 10 | Desktop'tan gerçek kod üretimi | Linux'ta kod yolu var (LOCAL_CLAUDE + Claude login gerekir); kurulu Windows uygulamasında kod üretilir ama test/doğrulama NOT_EXECUTED → mission COMPLETE/PRODUCT_VERIFIED imkânsız. Gerçek-modelle kanıt yalnız 2026-10-14 32 sn oyuncak run. |
+| 11 | PR/merge ürün içinden | HAYIR. Ürün çıktısı yerel git branch + ZIP. |
+| 12 | Kullanıcı son çıktıyı nasıl alıyor | Sunucu tarafı prepareRunDelivery ZIP (README, raporlar, VERIFICATION_STATUS.json, NOT_VERIFIED); Desktop "Export delivery package" scrubber yüzünden kırık (AUD-022, RW-009). |
+| 13 | Cloud ve local aynı görevi iki kez çalıştırabilir mi | Ürün: cloud yürütme yok (CLAUDE_CLOUD_SESSION NOT_CONFIGURED) → hayır. Geliştirme düzlemi: EVET riski vardı — dispatch.mjs create-only ref claim yalnız konvansiyon; FA-LEASE2 yetkili değil (refs/uasco/* = 0, bu oturumda ls-remote); V6 yerel supervisor durumu UNKNOWN. Şu an tüm bulut rutinleri kapalı. |
+| 14 | Görev sahipliği/lease/concurrency | Ürün içinde GERÇEK: runner.lock + lease TTL + fenced takeover, tek run (unit testli). Geliştirme düzleminde kısmi: claim ref + nonce + read-back; merkezi lease (FA-LEASE2) yok; LeaseManager bağlı değil. |
+
+### L.7 Epic / Feature / Task envanteri (Aşama 7)
+
+Ölçek ayrımı (karıştırılmamalı): **9 Epic / 49 Feature / 129 Task** = roadmap hiyerarşisi (JSON `roadmap`); **87 madde** = kalan iş envanteri (JSON `inventory`, 80 açık + 7 CLOSED). 129 Task'ın 99'u bir envanter maddesine (`inventoryId`) bağlı; **30 Task'ın envanter bağı boş** (izlenebilirlik boşluğu, TD-V2-04; bunlar Task Dependency Matrix'te "—" ile görünür). Task durumları: COMPLETE 36, BLOCKED 23, UNVERIFIABLE 6, MISSING 57, PARTIAL 7. Eksik kayıt tamamlanmış sayılmadı. Kalıcı kimlikler değişmedi (UASCO-E##, UASCO-F###, UASCO-T####, UASCO-RW-###); eski kaynak kimlikleri `inventory[].mergedFrom` içinde korunuyor.
+
+**Epic özeti**
+
+| Epic | Ad | Modül | Durum | Feature (COMPLETE/PARTIAL/MISSING/BLOCKED/UNVERIFIABLE) | Task COMPLETE / toplam | Açık envanter (P0/P1/P2/P3) |
+| --- | --- | --- | --- | --- | --- | --- |
+| E01 | Masaüstü uygulaması | A | PARTIAL | 0/6/3/1/0 | 10 / 25 | 1/5/6/2 |
+| E02 | Yazılım fabrikası hattı | B | PARTIAL | 0/4/3/1/0 | 6 / 19 | 2/4/4/1 |
+| E03 | Çok ajanlı orkestrasyon | C | PARTIAL | 0/3/2/1/0 | 7 / 18 | 1/3/4/3 |
+| E04 | Model ve sağlayıcı yönetimi | D | PARTIAL | 0/1/3/0/0 | 3 / 7 | 0/4/0/0 |
+| E05 | QA ve güvenlik platformu | E | PARTIAL | 0/4/1/1/0 | 4 / 12 | 3/3/2/0 |
+| E06 | Mobil Companion | F | PARTIAL | 0/1/1/1/0 | 1 / 8 | 0/4/2/0 |
+| E07 | CI, yayın ve dağıtım | CI | PARTIAL | 0/2/0/2/0 | 2 / 11 | 1/4/3/0 |
+| E08 | Yönetişim ve Founder yetkisi | GOV | BLOCKED | 0/1/0/1/1 | 0 / 7 | 1/2/3/1 |
+| E09 | Geliştirme operasyonları ve kayıtlar | OPS | PARTIAL | 0/2/3/0/0 | 3 / 22 | 2/7/7/3 |
+
+Ayrıntılı Epic amaçları, kabul kriterleri ve Feature/Task satırları D bölümünde ve JSON `roadmap` içinde; aşağıdaki matrisler bunlardan türetildi.
+
+### L.8 Master Roadmap veri paketi (Aşama 9)
+
+Tüm efor değerleri ESTIMATE (envanter `effort` alanı; ölçüm değil). Yürürlüğe alınmadı; Founder incelemesi bekleniyor.
+
+**L.8.1 Epic Dependency Graph** (kenar = bir Epic'in açık envanter maddesi diğer Epic'teki maddeye bağımlı; etiket = bağımlılık sayısı)
+
+```mermaid
+flowchart LR
+  E01["E01 Masaüstü uygulaması"]
+  E02["E02 Yazılım fabrikası hattı"]
+  E03["E03 Çok ajanlı orkestrasyon"]
+  E04["E04 Model ve sağlayıcı yönetimi"]
+  E05["E05 QA ve güvenlik platformu"]
+  E06["E06 Mobil Companion"]
+  E07["E07 CI, yayın ve dağıtım"]
+  E08["E08 Yönetişim ve Founder yetkisi"]
+  E09["E09 Geliştirme operasyonları ve kayıtlar"]
+  E01 -->|7| E02
+  E01 -->|4| E03
+  E01 -->|1| E04
+  E01 -->|1| E09
+  E02 -->|3| E01
+  E02 -->|3| E03
+  E02 -->|1| E09
+  E03 -->|2| E01
+  E03 -->|4| E02
+  E04 -->|1| E01
+  E04 -->|1| E02
+  E04 -->|1| E03
+  E04 -->|1| E05
+  E05 -->|5| E01
+  E05 -->|2| E02
+  E05 -->|2| E03
+  E05 -->|3| E06
+  E05 -->|7| E07
+  E05 -->|2| E08
+  E07 -->|4| E01
+  E07 -->|1| E02
+  E07 -->|2| E03
+  E07 -->|1| E05
+  E07 -->|1| E08
+  E08 -->|1| E05
+  E08 -->|1| E07
+  E09 -->|1| E02
+  E09 -->|2| E03
+  E09 -->|1| E06
+  E09 -->|3| E08
+```
+
+**L.8.2 Feature Completion Matrix**
+
+| Feature | Epic | Ad | Durum | Kanıtlanmış en yüksek seviye | Task C/P/M/B/U |
+| --- | --- | --- | --- | --- | --- |
+| F001 | E01 | Electron kabuğu + paketli backend başlatma | PARTIAL | VERIFIED_REAL_ENV (yalnız CI runner) | 1/0/1/1/1 |
+| F002 | E01 | UI kabuğu, 23 route, renderer → Control API bağlantısı | PARTIAL | INTEGRATED + TESTED(unit) | 1/0/1/1/1 |
+| F003 | E01 | Intake ve tek komut alanı | PARTIAL | INTEGRATED + TESTED(unit) (form); komut alanı PLANNED | 2/0/1/0/0 |
+| F004 | E01 | Görev/plan/çalıştırma ekranları (Work, Studio, pre-dev kararları) | PARTIAL | INTEGRATED + TESTED(unit); Linux Electron CLAIMED | 2/0/1/0/0 |
+| F005 | E01 | Teslim kartı ve dışa aktarma | BLOCKED | CODED, Desktop export kırık | 1/0/1/0/0 |
+| F006 | E01 | Akıllı revizyon | MISSING | PLANNED | 0/0/1/0/0 |
+| F007 | E01 | Ses girişi | MISSING | PLANNED | 0/0/1/0/0 |
+| F008 | E01 | Bildirimler ve raporlar | PARTIAL | INTEGRATED (in-app) | 1/0/1/0/0 |
+| F009 | E01 | Masaüstü güvenlik sertleştirmesi | PARTIAL | TESTED(unit) + kısmen VERIFIED_REAL_ENV (CI) | 2/0/2/0/0 |
+| F010 | E01 | Güncelleme ve geri alma | MISSING | PLANNED (manuel NSIS hook CODED) | 0/0/1/0/0 |
+| F011 | E02 | Pre-dev zinciri (BA, Requirements, Plan, Architecture, UxSpec) | PARTIAL | TESTED(unit), sahte builder | 1/0/1/0/0 |
+| F012 | E02 | Implement + review runner (7 adım) | PARTIAL | INTEGRATED + TESTED(unit); bir kez canlı (2026-10-14) | 1/0/0/1/1 |
+| F013 | E02 | Sandbox'ta test yürütme | BLOCKED | Linux: CODED + CI; Windows: yok | 1/0/1/1/0 |
+| F014 | E02 | Güvenlik aşaması | PARTIAL | TESTED(unit), sahte binary | 1/0/1/1/0 |
+| F015 | E02 | Kaynak teslimi ve kabul | PARTIAL | INTEGRATED + TESTED(unit) | 1/0/1/0/0 |
+| F016 | E02 | Müşteri stack ve şablonları | MISSING | 3 basit Node şablonu | 1/0/1/0/0 |
+| F017 | E02 | Müşteri PR / merge / deploy | MISSING | PLANNED | 0/0/3/0/0 |
+| F018 | E02 | Dokümantasyon üretimi | MISSING | DESIGNED (registry) | 0/0/1/0/0 |
+| F019 | E03 | Tek mission runner (lease, fencing, retry) | PARTIAL | INTEGRATED + TESTED(unit) | 2/0/1/0/0 |
+| F020 | E03 | Crew/team çalışma zamanı | MISSING | CODED + TESTED(unit), bağlı değil | 1/0/1/0/0 |
+| F021 | E03 | Paralel/sub-agent çalışma ve görev dağıtımı | MISSING | yok | 0/0/1/0/0 |
+| F022 | E03 | Duraklatma, devam, kurtarma | PARTIAL | GLOBAL_STOP INTEGRATED | 1/0/1/0/0 |
+| F023 | E03 | Yerel + bulut lease (FA-LEASE2) | BLOCKED | CODED, bağlı değil | 1/0/0/1/0 |
+| F024 | E03 | Rol bağlama ve hazırlık ölçümü (Master V2) | PARTIAL | 9 rol bağlı; 6/21 V2 maddesi merge | 2/3/3/0/0 |
+| F025 | E04 | Claude CLI executor çifti (iki profil) | PARTIAL | INTEGRATED; paketli uygulamada UNKNOWN | 1/0/0/0/1 |
+| F026 | E04 | Model yönlendirme | MISSING | CODED çekirdek, bağlı değil | 1/0/1/0/0 |
+| F027 | E04 | Token/maliyet ölçümü | MISSING | yok | 0/0/1/0/0 |
+| F028 | E04 | Failover, ikinci sağlayıcı, yerel model | MISSING | DESIGNED (OmniRoute yalnız keşif) | 1/0/1/0/0 |
+| F029 | E05 | Test-surface bütünlük koruması | PARTIAL | INTEGRATED + TESTED(unit) | 1/0/0/0/0 |
+| F030 | E05 | Trust root ve korunan yollar | PARTIAL | SEALED (373 dosya), imzasız | 1/0/1/2/0 |
+| F031 | E05 | Kimlik ayrımı ve ruleset | BLOCKED | yok (0 onay) | 0/0/0/1/0 |
+| F032 | E05 | Action-gateway politikası | PARTIAL | INTEGRATED, sabit ALLOW | 1/0/1/0/0 |
+| F033 | E05 | Bağımlılık tedarik zinciri kapısı | PARTIAL | Kapı çalışıyor; base kırmızı | 1/0/1/1/0 |
+| F034 | E05 | Repo güvenlik taraması | MISSING | kapalı | 0/0/0/1/0 |
+| F035 | E06 | Mobil tasarım paketi ve salt-okur çekirdek | PARTIAL | DESIGNED + TESTED(unit, local) | 1/1/0/1/0 |
+| F036 | E06 | Mobil uygulama ve gateway | MISSING | DESIGNED | 0/0/3/1/0 |
+| F037 | E06 | Uzaktan onay ve STOP | BLOCKED | DESIGNED | 0/0/1/0/0 |
+| F038 | E07 | CI hattı (ubuntu + 3 Windows shard + aggregator) | PARTIAL | Çalışıyor; şu an base-wide kırmızı; flaky | 1/1/2/1/0 |
+| F039 | E07 | Windows installer build | PARTIAL | VERIFIED_REAL_ENV (CI); release yok | 1/0/1/0/0 |
+| F040 | E07 | İmzalı sürüm | BLOCKED | yok | 0/0/0/1/0 |
+| F041 | E07 | Windows desktop E2E CI | BLOCKED | Linux harness CLAIMED | 0/1/0/2/0 |
+| F042 | E08 | Bağımsız review yolu | BLOCKED | Workflow canlı, ai-review skipped | 0/0/1/1/0 |
+| F043 | E08 | Founder yetki kaydı ve kararlar | PARTIAL | Serbest metin | 0/0/1/3/0 |
+| F044 | E08 | Self-hosted runner hijyeni | UNVERIFIABLE | UNKNOWN (API 403) | 0/0/0/0/1 |
+| F045 | E09 | Dev-plane orkestrasyonu (koordinatör, lane'ler, ledger, dispatch) | PARTIAL | Gerçek, günlük kullanımda; SPOF | 2/1/2/1/1 |
+| F046 | E09 | Kota ve bütçe kontrolü | MISSING | yok | 0/0/4/0/0 |
+| F047 | E09 | Rutin ve oturum hijyeni | PARTIAL | 4 trigger kapatıldı; 2'si Founder'da | 1/0/3/1/0 |
+| F048 | E09 | Tek görev kaydı ve tek roadmap | MISSING | dağınık, bayat | 0/0/5/0/0 |
+| F049 | E09 | Kanıt saklama | MISSING | artifact'lar siliniyor | 0/0/1/0/0 |
+
+**L.8.3 Task Dependency Matrix** (yalnız COMPLETE olmayan Task'lar; bağımlılıklar envanter maddesi üzerinden)
+
+| Task | Feature | Ad | Durum | Envanter | Öncelik | Bağımlı olduğu envanter | Efor (ESTIMATE) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| T0002 | F001 | Founder-PC kurulum pilotu | BLOCKED | RW-011 | P1 | RW-001 | {'size': 'S', 'hoursMin': 2, 'hoursMax': 6, 'basis': 'ESTIMATE'} |
+| T0003 | F001 | Paketli uygulamada PATH/Claude CLI keşfi | UNVERIFIABLE | RW-010 | P1 | RW-011 | {'size': 'S', 'hoursMin': 2, 'hoursMax': 8, 'basis': 'ESTIMATE'} |
+| T0004 | F001 | Backend crash/restart yönetimi | MISSING | RW-051 | P2 | — | {'size': 'M', 'hoursMin': 8, 'hoursMax': 20, 'basis': 'ESTIMATE'} |
+| T0006 | F002 | 10 fake-bridge route için real-server testi | MISSING | RW-053 | P2 | — | {'size': 'M', 'hoursMin': 12, 'hoursMax': 30, 'basis': 'ESTIMATE'} |
+| T0007 | F002 | Windows real-Electron journey | BLOCKED | RW-024 | P1 | RW-001, RW-006 | {'size': 'M', 'hoursMin': 8, 'hoursMax': 24, 'basis': 'ESTIMATE'} |
+| T0008 | F002 | Linux real-Electron journey (17/21, 20/20) | UNVERIFIABLE | — | — | — | — |
+| T0011 | F003 | Tek komut alanı UI + route | MISSING | RW-025 | P1 | RW-005 | {'size': 'M', 'hoursMin': 8, 'hoursMax': 24, 'basis': 'ESTIMATE'} |
+| T0014 | F004 | Gerçek ortamda Founder akışı | MISSING | RW-005 | P0 | RW-004, RW-009, RW-010, RW-011 | {'size': 'L', 'hoursMin': 16, 'hoursMax': 40, 'basis': 'ESTIMATE'} |
+| T0016 | F005 | Desktop export düzeltmesi | MISSING | RW-009 | P1 | RW-001, RW-006 | {'size': 'S', 'hoursMin': 3, 'hoursMax': 8, 'basis': 'ESTIMATE'} |
+| T0017 | F006 | UI-015 akıllı revizyon | MISSING | RW-067 | P2 | RW-005, RW-025 | {'size': 'L', 'hoursMin': 24, 'hoursMax': 60, 'basis': 'ESTIMATE'} |
+| T0018 | F007 | Masaüstü ses girişi | MISSING | RW-073 | P3 | RW-025 | {'size': 'L', 'hoursMin': 24, 'hoursMax': 60, 'basis': 'ESTIMATE'} |
+| T0020 | F008 | OS bildirimi ve rapor dışa aktarma | MISSING | RW-068 | P2 | RW-009 | {'size': 'XL', 'hoursMin': 60, 'hoursMax': 160, 'basis': 'ESTIMATE'} |
+| T0023 | F009 | Fuses, asar, safeStorage | MISSING | RW-052 | P2 | — | {'size': 'M', 'hoursMin': 8, 'hoursMax': 24, 'basis': 'ESTIMATE'} |
+| T0024 | F010 | dev.N → dev.N+1 upgrade ve yedek | MISSING | RW-050 | P2 | RW-022 | {'size': 'L', 'hoursMin': 16, 'hoursMax': 40, 'basis': 'ESTIMATE'} |
+| T0026 | F011 | Gerçek-model pre-dev koşusu ve kalite rubric'i | MISSING | RW-026 | P1 | RW-005 | {'size': 'L', 'hoursMin': 16, 'hoursMax': 40, 'basis': 'ESTIMATE'} |
+| T0028 | F012 | B3B canlı smoke 2026-10-14 | UNVERIFIABLE | — | — | — | — |
+| T0029 | F012 | Windows'ta gerçek implement + verify | BLOCKED | RW-005 | P0 | RW-004, RW-009, RW-010, RW-011 | {'size': 'L', 'hoursMin': 16, 'hoursMax': 40, 'basis': 'ESTIMATE'} |
+| T0031 | F013 | Windows sağlayıcısı (#231) | BLOCKED | RW-004 | P0 | RW-001 | {'size': 'XL', 'hoursMin': 40, 'hoursMax': 120, 'basis': 'ESTIMATE'} |
+| T0033 | F014 | Gerçek gitleaks/trivy/semgrep + SBOM | BLOCKED | RW-031 | P1 | RW-006 | {'size': 'M', 'hoursMin': 12, 'hoursMax': 30, 'basis': 'ESTIMATE'} |
+| T0035 | F015 | Founder kabulü gerçek ortamda | MISSING | RW-005 | P0 | RW-004, RW-009, RW-010, RW-011 | {'size': 'L', 'hoursMin': 16, 'hoursMax': 40, 'basis': 'ESTIMATE'} |
+| T0037 | F016 | Gerçek web stack; mobil/CMS stack'leri | MISSING | RW-027 | P1 | RW-005 | {'size': 'XL', 'hoursMin': 40, 'hoursMax': 120, 'basis': 'ESTIMATE'} |
+| T0038 | F017 | Kapsam kararı | MISSING | RW-016 | P1 | RW-015 | {'size': 'S', 'hoursMin': 0.5, 'hoursMax': 2, 'basis': 'ESTIMATE'} |
+| T0039 | F017 | Müşteri repo'suna push/PR | MISSING | RW-054 | P2 | RW-005, RW-016 | {'size': 'L', 'hoursMin': 24, 'hoursMax': 60, 'basis': 'ESTIMATE'} |
+| T0040 | F017 | CI/CD, deploy, izleme üretimi | MISSING | RW-069 | P2 | RW-016, RW-054 | {'size': 'XL', 'hoursMin': 120, 'hoursMax': 300, 'basis': 'ESTIMATE'} |
+| T0041 | F018 | API docs, kılavuz, changelog üretimi | MISSING | RW-070 | P2 | RW-005 | {'size': 'L', 'hoursMin': 24, 'hoursMax': 60, 'basis': 'ESTIMATE'} |
+| T0044 | F019 | Gerçek ortamda remediation döngüsü | MISSING | RW-005 | P0 | RW-004, RW-009, RW-010, RW-011 | {'size': 'L', 'hoursMin': 16, 'hoursMax': 40, 'basis': 'ESTIMATE'} |
+| T0046 | F020 | Crew çalışma zamanı sürücüsü | MISSING | RW-033 | P1 | RW-005, RW-055 | {'size': 'XL', 'hoursMin': 60, 'hoursMax': 160, 'basis': 'ESTIMATE'} |
+| T0047 | F021 | Paralel run ve görev dağıtımı | MISSING | RW-034 | P1 | RW-033 | {'size': 'XL', 'hoursMin': 60, 'hoursMax': 160, 'basis': 'ESTIMATE'} |
+| T0049 | F022 | Run başına pause/resume ve kurtarma | MISSING | RW-057 | P2 | — | {'size': 'L', 'hoursMin': 24, 'hoursMax': 60, 'basis': 'ESTIMATE'} |
+| T0051 | F023 | Origin'de yetkili canlı lease | BLOCKED | RW-035 | P1 | — | {'size': 'XL', 'hoursMin': 40, 'hoursMax': 120, 'basis': 'ESTIMATE'} |
+| T0053 | F024 | Master V2 A2 (#292) | PARTIAL | RW-042 | P2 | RW-001 | {'size': 'S', 'hoursMin': 1, 'hoursMax': 3, 'basis': 'ESTIMATE'} |
+| T0054 | F024 | Master V2 B2 (#291) | PARTIAL | RW-043 | P2 | RW-001 | {'size': 'S', 'hoursMin': 1, 'hoursMax': 3, 'basis': 'ESTIMATE'} |
+| T0055 | F024 | Master V2 C-RDY-2b (#288) | PARTIAL | RW-076 | P3 | — | {'size': 'M', 'hoursMin': 4, 'hoursMax': 12, 'basis': 'ESTIMATE'} |
+| T0056 | F024 | Master V2 kalan Lane-C paketleri | MISSING | RW-077 | P3 | RW-015 | {'size': 'XL', 'hoursMin': 60, 'hoursMax': 160, 'basis': 'ESTIMATE'} |
+| T0057 | F024 | Master V2 kalan cross-lane maddeleri | MISSING | RW-078 | P3 | RW-014 | {'size': 'L', 'hoursMin': 24, 'hoursMax': 60, 'basis': 'ESTIMATE'} |
+| T0059 | F024 | Rol bağlama genişletme | MISSING | RW-055 | P2 | RW-026 | {'size': 'L', 'hoursMin': 24, 'hoursMax': 60, 'basis': 'ESTIMATE'} |
+| T0061 | F025 | Paketli uygulamada READY durumu | UNVERIFIABLE | RW-010 | P1 | RW-011 | {'size': 'S', 'hoursMin': 2, 'hoursMax': 8, 'basis': 'ESTIMATE'} |
+| T0063 | F026 | Yönlendirmeyi bağla + Desktop model yapılandırması | MISSING | RW-036 | P1 | RW-032 | {'size': 'L', 'hoursMin': 24, 'hoursMax': 60, 'basis': 'ESTIMATE'} |
+| T0064 | F027 | Ürün içi token/maliyet ölçümü | MISSING | RW-032 | P1 | — | {'size': 'M', 'hoursMin': 12, 'hoursMax': 30, 'basis': 'ESTIMATE'} |
+| T0066 | F028 | Failover ve ikinci sağlayıcı | MISSING | RW-037 | P1 | RW-036 | {'size': 'XL', 'hoursMin': 60, 'hoursMax': 160, 'basis': 'ESTIMATE'} |
+| T0069 | F030 | Korunan yol kapsamı | BLOCKED | RW-006 | P0 | — | {'size': 'M', 'hoursMin': 4, 'hoursMax': 10, 'basis': 'ESTIMATE'} |
+| T0070 | F030 | Trust-root imzası | BLOCKED | RW-029 | P1 | RW-006 | {'size': 'M', 'hoursMin': 8, 'hoursMax': 20, 'basis': 'ESTIMATE'} |
+| T0071 | F030 | vitest config koruması | MISSING | RW-030 | P1 | RW-006 | {'size': 'S', 'hoursMin': 3, 'hoursMax': 8, 'basis': 'ESTIMATE'} |
+| T0072 | F031 | Ruleset / kimlik ayrımı | BLOCKED | RW-008 | P0 | RW-023 | {'size': 'M', 'hoursMin': 4, 'hoursMax': 12, 'basis': 'ESTIMATE'} |
+| T0074 | F032 | Gerçek politika bağlamı | MISSING | RW-028 | P1 | RW-032 | {'size': 'M', 'hoursMin': 12, 'hoursMax': 30, 'basis': 'ESTIMATE'} |
+| T0076 | F033 | #293 override düzeltmesi | BLOCKED | RW-001 | P0 | — | {'size': 'S', 'hoursMin': 1, 'hoursMax': 4, 'basis': 'ESTIMATE'} |
+| T0077 | F033 | Kararlı electron-builder | MISSING | RW-063 | P2 | RW-001 | {'size': 'M', 'hoursMin': 4, 'hoursMax': 12, 'basis': 'ESTIMATE'} |
+| T0078 | F034 | Dependabot / secret / code scanning | BLOCKED | RW-062 | P2 | — | {'size': 'S', 'hoursMin': 2, 'hoursMax': 6, 'basis': 'ESTIMATE'} |
+| T0080 | F035 | Salt-okur TS çekirdek (PQ-008) | PARTIAL | RW-084 | P2 | — | {'size': 'S', 'hoursMin': 0, 'hoursMax': 0, 'basis': 'ESTIMATE'} |
+| T0081 | F035 | Çekirdek testinin CI kaydı | BLOCKED | RW-064 | P2 | RW-006 | {'size': 'S', 'hoursMin': 0.5, 'hoursMax': 2, 'basis': 'ESTIMATE'} |
+| T0082 | F036 | FA-MOB kararları | BLOCKED | RW-038 | P1 | RW-015 | {'size': 'S', 'hoursMin': 2, 'hoursMax': 6, 'basis': 'ESTIMATE'} |
+| T0083 | F036 | RN/Android uygulaması | MISSING | RW-039 | P1 | RW-038, RW-040 | {'size': 'XL', 'hoursMin': 120, 'hoursMax': 300, 'basis': 'ESTIMATE'} |
+| T0084 | F036 | /v1/mobile + gateway | MISSING | RW-040 | P1 | RW-038, RW-028 | {'size': 'XL', 'hoursMin': 60, 'hoursMax': 160, 'basis': 'ESTIMATE'} |
+| T0085 | F036 | Mobil güvenlik koşulları ve ileri özellikler | MISSING | RW-071 | P2 | RW-039 | {'size': 'XL', 'hoursMin': 60, 'hoursMax': 160, 'basis': 'ESTIMATE'} |
+| T0086 | F037 | Attestation sertleştirme | MISSING | RW-041 | P1 | RW-028, RW-040 | {'size': 'L', 'hoursMin': 24, 'hoursMax': 60, 'basis': 'ESTIMATE'} |
+| T0088 | F038 | Kararlılık ≥%95 | MISSING | RW-013 | P1 | RW-001 | {'size': 'L', 'hoursMin': 16, 'hoursMax': 40, 'basis': 'ESTIMATE'} |
+| T0089 | F038 | Base-wide dependency kırmızısı | BLOCKED | RW-001 | P0 | — | {'size': 'S', 'hoursMin': 1, 'hoursMax': 4, 'basis': 'ESTIMATE'} |
+| T0090 | F038 | #282 PAR03 diag | PARTIAL | RW-044 | P2 | RW-001 | {'size': 'S', 'hoursMin': 1, 'hoursMax': 4, 'basis': 'ESTIMATE'} |
+| T0091 | F038 | CI dakika verimliliği | MISSING | RW-061 | P2 | RW-012, RW-013 | {'size': 'M', 'hoursMin': 6, 'hoursMax': 16, 'basis': 'ESTIMATE'} |
+| T0093 | F040 | Code signing + Release | BLOCKED | RW-022 | P1 | RW-001, RW-006 | {'size': 'L', 'hoursMin': 16, 'hoursMax': 40, 'basis': 'ESTIMATE'} |
+| T0094 | F041 | Desktop journey E2E harness | PARTIAL | — | — | — | — |
+| T0095 | F041 | Windows CI job | BLOCKED | RW-024 | P1 | RW-001, RW-006 | {'size': 'M', 'hoursMin': 8, 'hoursMax': 24, 'basis': 'ESTIMATE'} |
+| T0096 | F041 | #66 kararı | BLOCKED | RW-012 | P1 | RW-001 | {'size': 'S', 'hoursMin': 1, 'hoursMax': 4, 'basis': 'ESTIMATE'} |
+| T0097 | F042 | IR workflow bootstrap | BLOCKED | RW-023 | P1 | — | {'size': 'M', 'hoursMin': 4, 'hoursMax': 12, 'basis': 'ESTIMATE'} |
+| T0098 | F042 | Review mekanizması konsolidasyonu | MISSING | RW-060 | P2 | RW-002, RW-023 | {'size': 'M', 'hoursMin': 6, 'hoursMax': 16, 'basis': 'ESTIMATE'} |
+| T0099 | F043 | Founder register | MISSING | RW-047 | P2 | RW-014 | {'size': 'S', 'hoursMin': 4, 'hoursMax': 8, 'basis': 'ESTIMATE'} |
+| T0100 | F043 | Founder-held PR'lar | BLOCKED | RW-012 | P1 | RW-001 | {'size': 'S', 'hoursMin': 1, 'hoursMax': 4, 'basis': 'ESTIMATE'} |
+| T0101 | F043 | fsmon yetki talebi | BLOCKED | RW-065 | P2 | RW-006 | {'size': 'S', 'hoursMin': 2, 'hoursMax': 6, 'basis': 'ESTIMATE'} |
+| T0102 | F043 | Master V2 Founder kararları | BLOCKED | RW-079 | P3 | RW-015 | {'size': 'S', 'hoursMin': 2, 'hoursMax': 6, 'basis': 'ESTIMATE'} |
+| T0103 | F044 | Runner kontrolü | UNVERIFIABLE | RW-007 | P0 | — | {'size': 'S', 'hoursMin': 0.25, 'hoursMax': 0.5, 'basis': 'ESTIMATE'} |
+| T0106 | F045 | Koordinatör yeniden şekillendirme | MISSING | RW-017 | P1 | — | {'size': 'M', 'hoursMin': 6, 'hoursMax': 16, 'basis': 'ESTIMATE'} |
+| T0107 | F045 | Lane C freeze kapsamı | UNVERIFIABLE | RW-045 | P2 | — | {'size': 'S', 'hoursMin': 0.5, 'hoursMax': 2, 'basis': 'ESTIMATE'} |
+| T0108 | F045 | Yerel Windows test worker pilotu | BLOCKED | RW-058 | P2 | RW-011 | {'size': 'M', 'hoursMin': 8, 'hoursMax': 20, 'basis': 'ESTIMATE'} |
+| T0109 | F045 | Dev-plane mantığını üründen ayırma | MISSING | RW-059 | P2 | — | {'size': 'M', 'hoursMin': 8, 'hoursMax': 20, 'basis': 'ESTIMATE'} |
+| T0110 | F046 | Bütçe ve USAGE_LIMIT | MISSING | RW-003 | P0 | RW-002, RW-017 | {'size': 'M', 'hoursMin': 6, 'hoursMax': 16, 'basis': 'ESTIMATE'} |
+| T0111 | F046 | Maliyet telemetrisi | MISSING | RW-018 | P1 | — | {'size': 'M', 'hoursMin': 6, 'hoursMax': 16, 'basis': 'ESTIMATE'} |
+| T0112 | F046 | Olay güdümlü uyanma | MISSING | RW-046 | P2 | RW-003 | {'size': 'M', 'hoursMin': 6, 'hoursMax': 16, 'basis': 'ESTIMATE'} |
+| T0113 | F046 | Repo görünürlüğü/CI bütçesi kararı | MISSING | RW-021 | P1 | — | {'size': 'S', 'hoursMin': 0.25, 'hoursMax': 1, 'basis': 'ESTIMATE'} |
+| T0115 | F047 | http_api rutinleri | BLOCKED | RW-002 | P0 | — | {'size': 'S', 'hoursMin': 0.25, 'hoursMax': 0.5, 'basis': 'ESTIMATE'} |
+| T0116 | F047 | Heartbeat kararı | MISSING | RW-019 | P1 | — | {'size': 'S', 'hoursMin': 0.25, 'hoursMax': 1, 'basis': 'ESTIMATE'} |
+| T0117 | F047 | Rutin prompt sürümleme | MISSING | RW-020 | P1 | — | {'size': 'S', 'hoursMin': 2, 'hoursMax': 6, 'basis': 'ESTIMATE'} |
+| T0118 | F047 | Oturum/branch/workflow hijyeni | MISSING | RW-072 | P3 | — | {'size': 'S', 'hoursMin': 3, 'hoursMax': 8, 'basis': 'ESTIMATE'} |
+| T0119 | F048 | Tek görev kaydı | MISSING | RW-014 | P1 | RW-015 | {'size': 'M', 'hoursMin': 12, 'hoursMax': 30, 'basis': 'ESTIMATE'} |
+| T0120 | F048 | Tek roadmap | MISSING | RW-015 | P1 | — | {'size': 'S', 'hoursMin': 2, 'hoursMax': 6, 'basis': 'ESTIMATE'} |
+| T0121 | F048 | Kapsam/LOW dengesi | MISSING | RW-049 | P2 | — | {'size': 'S', 'hoursMin': 2, 'hoursMax': 6, 'basis': 'ESTIMATE'} |
+| T0122 | F048 | Ekran backlog'u yeniden sınıflama | MISSING | RW-066 | P2 | RW-014 | {'size': 'M', 'hoursMin': 6, 'hoursMax': 16, 'basis': 'ESTIMATE'} |
+| T0123 | F048 | Registry genişliği programı (ertelendi) | MISSING | RW-080 | P3 | RW-026 | {'size': 'XL', 'hoursMin': 200, 'hoursMax': 600, 'basis': 'ESTIMATE'} |
+| T0124 | F049 | Kanıt digest manifesti | MISSING | RW-048 | P2 | — | {'size': 'S', 'hoursMin': 3, 'hoursMax': 8, 'basis': 'ESTIMATE'} |
+| T0125 | F013 | Claude CLI'yi sandbox'ta çalıştırma | MISSING | RW-075 | P3 | RW-004 | {'size': 'L', 'hoursMin': 24, 'hoursMax': 60, 'basis': 'ESTIMATE'} |
+| T0126 | F009 | Yerel veri şifreleme / anahtarlı anchor | MISSING | RW-074 | P3 | RW-052 | {'size': 'L', 'hoursMin': 24, 'hoursMax': 60, 'basis': 'ESTIMATE'} |
+| T0127 | F039 | Güncelleme kanalı imzalı artifact'larla | MISSING | RW-050 | P2 | RW-022 | {'size': 'L', 'hoursMin': 16, 'hoursMax': 40, 'basis': 'ESTIMATE'} |
+| T0128 | F045 | Lane C #288 onarım/park kararı | PARTIAL | RW-076 | P3 | — | {'size': 'M', 'hoursMin': 4, 'hoursMax': 12, 'basis': 'ESTIMATE'} |
+| T0129 | F014 | core/qa/api validator'ları bağla/kaldır | MISSING | RW-056 | P2 | — | {'size': 'S', 'hoursMin': 4, 'hoursMax': 10, 'basis': 'ESTIMATE'} |
+
+**L.8.4 Critical Path**
+
+En uzun açık bağımlılık zinciri (envanter `dependencies` üzerinden hesaplandı): RW-001 (Base-wide dependency audit kırmızısını kapat (#293)) → RW-011 (Founder-PC installer pilotu (0.7.0-dev.3)) → RW-010 (Paketli uygulamada PATH ve Claude CLI keşfi (AUD-115)) → RW-005 (İlk gerçek uçtan uca çalıştırma (fikir → teslim) Founder-PC') → RW-026 (Pre-dev çıktı kalitesi ve ilk rol değerlendirmeleri (FD-2, F) → RW-055 (Daha fazla rolü çalışma zamanı aşamalarına bağla (9/599)) → RW-033 (Crew/team katmanı için çalışma zamanı sürücüsü) → RW-034 (Sub-agent/paralel çalışma ve otomatik görev dağıtımı).
+
+En çok işi bloke eden açık maddeler: RW-001 (11 madde bekliyor); RW-006 (8 madde bekliyor); RW-005 (7 madde bekliyor); RW-015 (5 madde bekliyor); RW-011 (3 madde bekliyor); RW-014 (3 madde bekliyor).
+
+Plan A sırası (J bölümü): A0 — Founder kararları/aksiyonları (yeniden başlatmadan önce): UASCO-RW-002, UASCO-RW-007, UASCO-RW-001, UASCO-RW-003, UASCO-RW-015, UASCO-RW-016, UASCO-RW-021 ve #231 için Founder-tier kararı (UASCO-RW-004). / A1 — Base'i yeşile döndür ve uçuştaki işi kapat: UASCO-RW-001, UASCO-RW-042, UASCO-RW-043, UASCO-RW-044, UASCO-RW-012; UASCO-RW-076 park edilir. / A2 — Ölçüm ve kontrol: UASCO-RW-017, UASCO-RW-018, UASCO-RW-046, UASCO-RW-019, UASCO-RW-020, UASCO-RW-045, UASCO-RW-014, UASCO-RW-047, UASCO-RW-048, UASCO-RW-049. / A3 — Kritik yol (seri): UASCO-RW-006, UASCO-RW-004, UASCO-RW-009, UASCO-RW-011, UASCO-RW-010; paralelde UASCO-RW-013. / A4 — Kanıt: UASCO-RW-005 (3 ardışık gerçek çalıştırma).
+
+**L.8.5 Product Readiness Matrix**
+
+| Modül | Çalışıyor (REAL, test kanıtlı) | Yalnız kodlanmış (bağlı değil / SIM) | Eksik |
+| --- | --- | --- | --- |
+| A Masaüstü | Kurulum/başlatma/kaldırma (CI runner), intake, plan/görev ekranları, Tower/STOP, ilerleme görünümleri | Teslim export düğmesi (kırık), LOCAL_CLAUDE akışı (gerçek modelle doğrulanmadı) | Otomatik güncelleme, komut alanı, ses, uzak çalışma, imza |
+| B Fabrika | Hash-zincirli journal, kaynak ZIP teslimi (sunucu) | Pre-dev zinciri, kod üretimi, test adımı (Linux), remediation | Windows sandbox, DevOps/CI-CD/deploy/izleme, admin/CMS |
+| C Orkestrasyon | Tek MissionRunner, lease/lock | CrewCoordinator, composeTeam, LeaseManager | Paralel crew, portföy scheduler |
+| D Model | Claude CLI tek sağlayıcı | routeModel, chooseProvider, OmniRoute client | Metering, failover, ikinci sağlayıcı |
+| E QA/Güvenlik | UASCO'nun kendi CI'ı; dahili secret taraması | gitleaks/trivy entegrasyonu (FAKE testli), core/qa/api | SAST, SBOM, DAST, gerçek policy context |
+| F Mobil | — | Companion izleme çekirdeği (yerel unit) | Uygulama, gateway, eşleştirme |
+
+RW-002 notu: iki http_api rutini 05:40Z'de kapandı (VERIFIED); tamamlama kriterinin 24 saatlik gözlem kısmı 2026-11-03T05:40Z'de doğrulanmalı, bu yüzden durum BLOCKED olarak bırakıldı.
+
+**L.8.6 Technical Debt Register** — I bölümündeki RK01-RK16 + teknik borç listesi geçerli. Bu oturumda eklenen: TD-V2-01 IR reviewer token reddi (REVIEWER_AUTH_REJECTED) → bağımsız review check'i her PR'da FAIL üretir; TD-V2-02 ledger SHA-bound verdict'i Founder onayı sonrası açılamıyor (founder-authority environment onayı ledger'a yansımıyor; iki yetki kaydı senkron değil); TD-V2-03 draft sayısı önceki raporda 6 yazılmış, gerçek 7 (kayıt sürüklenmesi); TD-V2-04 30 roadmap Task'ının inventoryId alanı boş.
+
+**L.8.7 Agent/Model Capability Matrix**
+
+| Ajan/bileşen | Düzlem | Model | Gerçekten çalışıyor mu | Yetenek | Kanıt |
+| --- | --- | --- | --- | --- | --- |
+| Coordinator (session_01DmTHw4…) | Geliştirme | Opus 5.5 xhigh + ultracode | Evet (şu an IDLE) | Merge lane, review, repair, rapor; işlerin %85 maliyeti | get_session $4.549,72 |
+| Lane A/B/C builder | Geliştirme | Sonnet 5.5 | Evet (IDLE) | Frontend / backend / agents; PR açma | list_sessions |
+| Cloud Development rutini | Geliştirme | Sonnet 5.5 | Kapalı | Saatlik builder; son 5 ateşlemede iş üretmedi (~30-40 sn) | list_triggers |
+| Independent Cloud Reviewer rutini | Geliştirme | varsayılan | Kapalı | Read-only ön review | list_triggers |
+| GitHub IR workflow (CLAUDE_REVIEWER) | Geliştirme/CI | Claude (OAuth token) | Kısmen — token reddediliyor | SHA-bound bağımsız review check | check-run 125071908981 |
+| Ürün implementer profili | Ürün | Claude CLI (model seçilmiyor) | Kod yolu var; gerçek kanıt 1 oyuncak run | Kod üretimi | EV11 |
+| Ürün reviewer profili (6 rol) | Ürün | Claude CLI | Kod yolu var; FAKE ile test | Pre-dev ve kod review | first-delivery-bindings.ts |
+| 599 rol kataloğu | Ürün (veri) | — | Hayır (590 yürütülemez, 0 değerlendirilmiş) | Katalog | EV12 |
+| V6 Supervisor | Yerel | — | UNKNOWN | Repo içi build supervisor | — |
+
+**L.8.8 CI/Test Stability Matrix**
+
+| Kontrol | Son durum | Kararlılık | Kök neden |
+| --- | --- | --- | --- |
+| validate (ubuntu-latest) | base üzerinde her yeni koşu FAIL; #293 head PASS | Deterministik kırmızı | dependency-supply-chain: 11 moderate (glob/minimatch) |
+| validate-windows-shard 1/3 | FAIL (#294 41393881832) | Deterministik (aynı audit adımı shard1'de) | Aynı |
+| validate-windows-shard 2-3/3 | PASS (≈19-25 dk) | Tarihsel flake (PAR-03 LOCK_TIMEOUT, RW-013) | Windows zamanlama; #282 teşhis PR'ı |
+| validate (windows-latest) aggregator | FAIL eğer herhangi shard FAIL | Türev | — |
+| Windows Installer | PASS (#288, #293, base) | Kararlı | — |
+| UASCO Independent Review | #293 FAIL (token), #294 success, #288 skipped (draft) | Kararsız / opsiyonel | REVIEWER_AUTH_REJECTED; founder-authority bekleme |
+
+Neden CI aynı engelde tekrar duruyor: tek bir upstream advisory (electron-builder alpha dev ağacı) dependency-supply-chain politikasıyla (moderate bloklar) her PR'ı base-wide kırmızı yapıyor; düzeltme (#293) Founder yetki kapısında. Lane'ler düzeltmeyi içermeyen head'lerle push ettikçe her koşu aynı hatayı üretti.
+
+**L.8.9 Next Execution Order Proposal** (öncelik + gerçek bağımlılık; topolojik sıra; ESTIMATE efor)
+
+- **P0** (8): RW-001 Base-wide dependency audit kırmızısını kapat (#2 [BLOCKED; {'size': 'S', 'hoursMin': 1, 'hoursMax': 4, 'basis': 'ESTIMATE'}], RW-002 http_api rutinlerini kapat: UASCO Cloud Developm [BLOCKED; {'size': 'S', 'hoursMin': 0.25, 'hoursMax': 0.5, 'basis': 'ESTIMATE'}], RW-003 Kullanım bütçesi ve USAGE_LIMIT davranışı (yenid [OPEN; {'size': 'M', 'hoursMin': 6, 'hoursMax': 16, 'basis': 'ESTIMATE'}], RW-004 Windows sandbox sağlayıcısı (#231 WSL2): kurulu  [BLOCKED; {'size': 'XL', 'hoursMin': 40, 'hoursMax': 120, 'basis': 'ESTIMATE'}], RW-006 Korunan yol kapsamını genişlet + trust-root rese [BLOCKED; {'size': 'M', 'hoursMin': 4, 'hoursMax': 10, 'basis': 'ESTIMATE'}], RW-005 İlk gerçek uçtan uca çalıştırma (fikir → teslim) [BLOCKED; {'size': 'L', 'hoursMin': 16, 'hoursMax': 40, 'basis': 'ESTIMATE'}], RW-007 Self-hosted runner DESKTOP-G4U0679 kontrolü ve k [UNKNOWN; {'size': 'S', 'hoursMin': 0.25, 'hoursMax': 0.5, 'basis': 'ESTIMATE'}], RW-008 Builder/reviewer/merger kimlik ayrımı ve ruleset [BLOCKED; {'size': 'M', 'hoursMin': 4, 'hoursMax': 12, 'basis': 'ESTIMATE'}]
+- **P1** (33): RW-017 Koordinatör oturumunu yeniden şekillendir: periy [OPEN; {'size': 'M', 'hoursMin': 6, 'hoursMax': 16, 'basis': 'ESTIMATE'}], RW-009 Desktop 'Export delivery package' her zaman başa [OPEN; {'size': 'S', 'hoursMin': 3, 'hoursMax': 8, 'basis': 'ESTIMATE'}], RW-011 Founder-PC installer pilotu (0.7.0-dev.3) [BLOCKED; {'size': 'S', 'hoursMin': 2, 'hoursMax': 6, 'basis': 'ESTIMATE'}], RW-010 Paketli uygulamada PATH ve Claude CLI keşfi (AUD [UNKNOWN; {'size': 'S', 'hoursMin': 2, 'hoursMax': 8, 'basis': 'ESTIMATE'}], RW-023 Independent Review bootstrap, reviewer kimliği/O [BLOCKED; {'size': 'M', 'hoursMin': 4, 'hoursMax': 12, 'basis': 'ESTIMATE'}], RW-012 Founder-held PR kararları: #66, #247, #251 [BLOCKED; {'size': 'S', 'hoursMin': 1, 'hoursMax': 4, 'basis': 'ESTIMATE'}], RW-013 Windows CI kararlılığı (FD-LV1 kalıntı grant, ti [BLOCKED; {'size': 'L', 'hoursMin': 16, 'hoursMax': 40, 'basis': 'ESTIMATE'}], RW-015 Tek yetkili roadmap ilan et; diğer planları arşi [OPEN; {'size': 'S', 'hoursMin': 2, 'hoursMax': 6, 'basis': 'ESTIMATE'}], RW-014 Tek, makine-okunur görev kaydı (merge'lerden bes [OPEN; {'size': 'M', 'hoursMin': 12, 'hoursMax': 30, 'basis': 'ESTIMATE'}], RW-016 Kapsam kararı: v1 = yalnız kaynak teslimi mi, PR [OPEN; {'size': 'S', 'hoursMin': 0.5, 'hoursMax': 2, 'basis': 'ESTIMATE'}], RW-018 Dev-plane maliyet/token telemetrisi ve bütçe uyg [OPEN; {'size': 'M', 'hoursMin': 6, 'hoursMax': 16, 'basis': 'ESTIMATE'}], RW-019 Heartbeat rutini: kapat veya günlüğe indir [OPEN; {'size': 'S', 'hoursMin': 0.25, 'hoursMax': 1, 'basis': 'ESTIMATE'}], RW-020 Rutin prompt'larını repo'da sürümle (AUD-018) [OPEN; {'size': 'S', 'hoursMin': 2, 'hoursMax': 6, 'basis': 'ESTIMATE'}], RW-021 Repo görünürlüğü ve CI bütçesi kararı [OPEN; {'size': 'S', 'hoursMin': 0.25, 'hoursMax': 1, 'basis': 'ESTIMATE'}], RW-022 İmzalı sürüm kanalı: code-signing, Release workf [BLOCKED; {'size': 'L', 'hoursMin': 16, 'hoursMax': 40, 'basis': 'ESTIMATE'}], RW-024 Gerçek Electron desktop journey E2E'yi Windows C [BLOCKED; {'size': 'M', 'hoursMin': 8, 'hoursMax': 24, 'basis': 'ESTIMATE'}], RW-025 Tek komut alanı: command-intake çekirdeğini Desk [OPEN; {'size': 'M', 'hoursMin': 8, 'hoursMax': 24, 'basis': 'ESTIMATE'}], RW-026 Pre-dev çıktı kalitesi ve ilk rol değerlendirmel [BLOCKED; {'size': 'L', 'hoursMin': 16, 'hoursMax': 40, 'basis': 'ESTIMATE'}], RW-027 Müşteri stack kapsamı: gerçek scaffold ve araç z [OPEN; {'size': 'XL', 'hoursMin': 40, 'hoursMax': 120, 'basis': 'ESTIMATE'}], RW-032 Ürün içinde token/maliyet ölçümü ve bütçe uygula [OPEN; {'size': 'M', 'hoursMin': 12, 'hoursMax': 30, 'basis': 'ESTIMATE'}], RW-028 Action-gateway: sabit ALLOW politika bağlamını g [OPEN; {'size': 'M', 'hoursMin': 12, 'hoursMax': 30, 'basis': 'ESTIMATE'}], RW-029 Trust root'u repo dışı anahtarla imzala (AUD-007 [BLOCKED; {'size': 'M', 'hoursMin': 8, 'hoursMax': 20, 'basis': 'ESTIMATE'}], RW-030 PR ile eklenen vitest/vite config'in CI'ı boş ye [OPEN; {'size': 'S', 'hoursMin': 3, 'hoursMax': 8, 'basis': 'ESTIMATE'}], RW-031 Gerçek SAST + gerçek gitleaks/trivy CI'da (FD-8) [BLOCKED; {'size': 'M', 'hoursMin': 12, 'hoursMax': 30, 'basis': 'ESTIMATE'}], RW-033 Crew/team katmanı için çalışma zamanı sürücüsü [OPEN; {'size': 'XL', 'hoursMin': 60, 'hoursMax': 160, 'basis': 'ESTIMATE'}], RW-034 Sub-agent/paralel çalışma ve otomatik görev dağı [OPEN; {'size': 'XL', 'hoursMin': 60, 'hoursMax': 160, 'basis': 'ESTIMATE'}], RW-035 Yerel+bulut eşzamanlılığı: FA-LEASE2 yetkili lea [BLOCKED; {'size': 'XL', 'hoursMin': 40, 'hoursMax': 120, 'basis': 'ESTIMATE'}], RW-036 Model yönlendirme (routeModel/chooseProvider) ve [OPEN; {'size': 'L', 'hoursMin': 24, 'hoursMax': 60, 'basis': 'ESTIMATE'}], RW-037 Sağlayıcı failover, ikinci sağlayıcı ve yerel/üc [OPEN; {'size': 'XL', 'hoursMin': 60, 'hoursMax': 160, 'basis': 'ESTIMATE'}], RW-038 Mobil Founder kararları FA-MOB-1..23 ve MOB-11.. [BLOCKED; {'size': 'S', 'hoursMin': 2, 'hoursMax': 6, 'basis': 'ESTIMATE'}], RW-040 /v1/mobile/* route'ları, eşleştirme ve telefona  [OPEN; {'size': 'XL', 'hoursMin': 60, 'hoursMax': 160, 'basis': 'ESTIMATE'}], RW-039 Mobil Companion uygulaması (React Native/Android [OPEN; {'size': 'XL', 'hoursMin': 120, 'hoursMax': 300, 'basis': 'ESTIMATE'}], RW-041 Uzaktan onay ve STOP için onay-attestation sertl [OPEN; {'size': 'L', 'hoursMin': 24, 'hoursMax': 60, 'basis': 'ESTIMATE'}]
+- **P2** (30): RW-055 Daha fazla rolü çalışma zamanı aşamalarına bağla [OPEN; {'size': 'L', 'hoursMin': 24, 'hoursMax': 60, 'basis': 'ESTIMATE'}], RW-042 #292 (A2 tools panel): dep fix sonrası güncelle  [BLOCKED; {'size': 'S', 'hoursMin': 1, 'hoursMax': 3, 'basis': 'ESTIMATE'}], RW-043 #291 (B2 role context route): draft'tan çıkar, g [BLOCKED; {'size': 'S', 'hoursMin': 1, 'hoursMax': 3, 'basis': 'ESTIMATE'}], RW-044 #282 (PAR03 diag): round-3 delta review (b13e23d [OPEN; {'size': 'S', 'hoursMin': 1, 'hoursMax': 4, 'basis': 'ESTIMATE'}], RW-045 Lane C dondurma kapsamı: claude/lane-c-eval-test [UNKNOWN; {'size': 'S', 'hoursMin': 0.5, 'hoursMax': 2, 'basis': 'ESTIMATE'}], RW-046 Saatlik tick yerine olay güdümlü uyanma + hatırl [OPEN; {'size': 'M', 'hoursMin': 6, 'hoursMax': 16, 'basis': 'ESTIMATE'}], RW-047 Founder kuyruğu ve yetki talepleri için sahip/so [OPEN; {'size': 'S', 'hoursMin': 4, 'hoursMax': 8, 'basis': 'ESTIMATE'}], RW-048 Süresi dolan CI kanıtlarının özetlerini koru (za [OPEN; {'size': 'S', 'hoursMin': 3, 'hoursMax': 8, 'basis': 'ESTIMATE'}], RW-049 Ürün/meta dengesi ve LOW bulgu toplama kuralı [OPEN; {'size': 'S', 'hoursMin': 2, 'hoursMax': 6, 'basis': 'ESTIMATE'}], RW-050 Güncelleme ve geri alma yolu (AUD-081) [OPEN; {'size': 'L', 'hoursMin': 16, 'hoursMax': 40, 'basis': 'ESTIMATE'}], RW-051 Paketli backend yaşam döngüsü: crash/restart, IP [OPEN; {'size': 'M', 'hoursMin': 8, 'hoursMax': 20, 'basis': 'ESTIMATE'}], RW-052 Electron kod bütünlüğü: fuses, asar, debug switc [OPEN; {'size': 'M', 'hoursMin': 8, 'hoursMax': 24, 'basis': 'ESTIMATE'}], RW-053 10 fake-bridge route için renderer→real-server t [OPEN; {'size': 'M', 'hoursMin': 12, 'hoursMax': 30, 'basis': 'ESTIMATE'}], RW-054 Müşteri teslim kanalı: müşteri repo'suna push/PR [OPEN; {'size': 'L', 'hoursMin': 24, 'hoursMax': 60, 'basis': 'ESTIMATE'}], RW-056 core/qa/api validator'larını üretime bağla veya  [OPEN; {'size': 'S', 'hoursMin': 4, 'hoursMax': 10, 'basis': 'ESTIMATE'}], RW-057 Run başına duraklatma/devam ve BLOCKED run kurta [OPEN; {'size': 'L', 'hoursMin': 24, 'hoursMax': 60, 'basis': 'ESTIMATE'}], RW-058 Yerel Windows test worker (PR #190) Founder-PC p [BLOCKED; {'size': 'M', 'hoursMin': 8, 'hoursMax': 20, 'basis': 'ESTIMATE'}], RW-059 Dev-plane mantığını ve V6 supervisor yüzeylerini [OPEN; {'size': 'M', 'hoursMin': 8, 'hoursMax': 20, 'basis': 'ESTIMATE'}], RW-060 Dört üst üste binen review mekanizmasını tek yön [OPEN; {'size': 'M', 'hoursMin': 6, 'hoursMax': 16, 'basis': 'ESTIMATE'}], RW-061 CI dakika verimliliği [OPEN; {'size': 'M', 'hoursMin': 6, 'hoursMax': 16, 'basis': 'ESTIMATE'}], RW-062 Dependabot, secret scanning, code scanning ve gi [BLOCKED; {'size': 'S', 'hoursMin': 2, 'hoursMax': 6, 'basis': 'ESTIMATE'}], RW-063 Alpha electron-builder 27.0.0-alpha.9'u kararlı  [OPEN; {'size': 'M', 'hoursMin': 4, 'hoursMax': 12, 'basis': 'ESTIMATE'}], RW-064 apps/mobile/src/core/monitoring.test.ts dosyasın [BLOCKED; {'size': 'S', 'hoursMin': 0.5, 'hoursMax': 2, 'basis': 'ESTIMATE'}], RW-065 git-isolation merkezi fsmonitor/untrackedCache y [BLOCKED; {'size': 'S', 'hoursMin': 2, 'hoursMax': 6, 'basis': 'ESTIMATE'}], RW-066 252 ekran anahtarını yeniden sınıfla (147 BLOCKE [OPEN; {'size': 'M', 'hoursMin': 6, 'hoursMax': 16, 'basis': 'ESTIMATE'}], RW-067 Akıllı revizyon (UI-015) [OPEN; {'size': 'L', 'hoursMin': 24, 'hoursMax': 60, 'basis': 'ESTIMATE'}], RW-068 Masaüstü ikincil yetenekler: OS bildirimi, rapor [OPEN; {'size': 'XL', 'hoursMin': 60, 'hoursMax': 160, 'basis': 'ESTIMATE'}], RW-069 Müşteri projesi için CI/CD, deploy ve izleme üre [OPEN; {'size': 'XL', 'hoursMin': 120, 'hoursMax': 300, 'basis': 'ESTIMATE'}], RW-070 Dokümantasyon üretimi (API docs, kullanıcı kılav [OPEN; {'size': 'L', 'hoursMin': 24, 'hoursMax': 60, 'basis': 'ESTIMATE'}], RW-071 Mobil güvenlik koşulları, RN sertifikasyonu ve i [OPEN; {'size': 'XL', 'hoursMin': 60, 'hoursMax': 160, 'basis': 'ESTIMATE'}]
+- **P3** (9): RW-072 Oturum, branch ve workflow hijyeni [OPEN; {'size': 'S', 'hoursMin': 3, 'hoursMax': 8, 'basis': 'ESTIMATE'}], RW-073 Masaüstü ses girişi [OPEN; {'size': 'L', 'hoursMin': 24, 'hoursMax': 60, 'basis': 'ESTIMATE'}], RW-074 Yerel veri şifreleme ve anahtarlı journal anchor [OPEN; {'size': 'L', 'hoursMin': 24, 'hoursMax': 60, 'basis': 'ESTIMATE'}], RW-075 Implementer/reviewer Claude CLI süreçlerini de s [OPEN; {'size': 'L', 'hoursMin': 24, 'hoursMax': 60, 'basis': 'ESTIMATE'}], RW-076 #288 (C-RDY-2b): 2M+14L onarımı veya park [OPEN; {'size': 'M', 'hoursMin': 4, 'hoursMax': 12, 'basis': 'ESTIMATE'}], RW-077 Master V2 Lane-C kalan paketleri (C-CTX-2, C-EVA [OPEN; {'size': 'XL', 'hoursMin': 60, 'hoursMax': 160, 'basis': 'ESTIMATE'}], RW-078 Master V2 cross-lane kalanlar (A3, B3, B4, Z1, Z [OPEN; {'size': 'L', 'hoursMin': 24, 'hoursMax': 60, 'basis': 'ESTIMATE'}], RW-079 Master V2 Founder kararları (FD-1, FD-4, FD-5, F [BLOCKED; {'size': 'S', 'hoursMin': 2, 'hoursMax': 6, 'basis': 'ESTIMATE'}], RW-080 Registry genişliği programı (599 rol, 425 skill, [OPEN; {'size': 'XL', 'hoursMin': 200, 'hoursMax': 600, 'basis': 'ESTIMATE'}]
+
+Paralel yapılabilir: farklı modüldeki ve birbirine bağımlılığı olmayan P1/P2 maddeleri (A renderer, C agents, OPS kayıtları). Seri olmak zorunda: RW-001 → RW-004 → RW-005 hattı (base yeşil → Windows sandbox → gerçek uçtan uca kanıt). Gereksiz PR/denetim önleme önerileri: (1) base-wide kırmızıda lane push'larını dondur (CI üretme); (2) review yalnız ledger DONE değilse (TEP-1 zaten var) ve delta; (3) docs-only PR'ları (rapor) CI'sız rapor dalında tut; (4) tek koordinatör yerine lane başına merge yetkisi + otomatik merge-gate; (5) ürün:süreç satır oranını her tick raporla (son 100 PR: %16,1 ürün kodu, EV29).
+
+**L.8.10 Founder Decision Register**
+
+| Id | Karar / eylem | Engellediği | Nerede | Öneri |
+| --- | --- | --- | --- | --- |
+| FD-01 | #293 protected merge (environment onayı verildi) | RW-001 → tüm açık PR'lar, base CI | GitHub PR #293 → Merge pull request | ONAYLA (CI tamamen yeşil, kod kusuru yok) |
+| FD-02 | IR reviewer token yenileme (CLAUDE_CODE_OAUTH_TOKEN) | Bağımsız review check'i | Repo Settings → Environments → review env secret; `claude setup-token` | Yenile veya IR'ı resmen opsiyonel bırak |
+| FD-03 | #231 WSL2 sandbox Founder-tier kararı + Windows 11 gerçek kabul | RW-004, MVP | PR #231 + Founder-PC | Plan A3 başında |
+| FD-04 | #247 trust-root reseal + #251 protected CI | RW-012, disk sızıntısı, Windows CI süresi | PR #247, #251 | Rebase sonrası onay |
+| FD-05 | #66 Electron E2E | RW-005 kanıtı | PR #66 | DEFER (Plan A4) |
+| FD-06 | Plan A0 kararları (RW-002, 003, 007, 015, 016, 021) | Yeniden başlatma | J.1 | Plan A seç |
+| FD-07 | Yerel V6 supervisor / Task Scheduler / worker durumunu doğrula | PAUSED_VERIFIED | Founder-PC: Görev Zamanlayıcı + süreç listesi | Durdur ve raporla |
+| FD-08 | Eski waiting IR run 39687649214 (2026-10-21) | Actions kuyruğu hijyeni | Actions → run → Cancel / Reject | Reddet/iptal (kod 34aa57e eski base) |
+| FD-09 | Yeniden başlatma talimatı | Tüm geliştirme | Yazılı direktif | FD-01 ve FD-06 sonrası |
+
+### L.9 Ajanlar, modeller ve hız analizi (Aşama 8)
+
+- **İşlerin çoğu neden koordinatörde gerçekleşti?** Merge, review, repair, ledger ve rapor yetkisi tek oturumda toplandı (F bölümü); lane'ler yalnız branch/PR üretiyor. Maliyetin %85'i koordinatör (EV23); bağlam büyüdükçe her tick pahalandı (cache-read %97+).
+- **Ajanlar hangi kurallarla seçiliyor?** Geliştirme: lane = dosya alanı (A frontend, B backend, C agents) + kuyruk claim; ürün: statik 9 rol binding. Yetenek bazlı seçim yok.
+- **Aynı kodu neden birden fazla ajan inceliyor?** 4 üst üste binen mekanizma: koordinatör TEP-1 review (2-3 lens + skeptic), Independent Cloud Reviewer rutini, GitHub IR workflow, lane self-check. Ledger yalnız koordinatörün review'unu tekilleştiriyor.
+- **Hangi işler paralel?** L.8.9: modüller arası bağımsız P1/P2 maddeleri. Base CI ve Founder-tier kapıları seri.
+- **Hangi işler diğerlerini bloke ediyor?** L.8.4: RW-001, RW-006, RW-005.
+- **CI neden aynı engelde?** L.8.8.
+- **Model kotası bitince durum nasıl korunuyor?** Ürün: run BLOCKED/PROVIDER_QUOTA, journal korunur, failover yok. Geliştirme: branch/PR/ledger/queue git'te; oturum kotası (haftalık) dolunca tüm filo durdu (134,4 h boşluk, EV42); otomatik devam yok.
+- **Yeniden başlayan oturum nereden devam ediyor?** Ledger fingerprint + PRODUCTION-QUEUE + PR head SHA (controller FAST PATH); lane oturumları kalıcı persistent_session_id ile kendi worktree'sinden. Kalıcı lease (FA-LEASE2) yok.
+- **Ürünün parçası olan yapılandırmalar** config/execution-backends.json, config/omniroute-policy.json, config/protected-paths.json, registries/*, apps/*, core/*.
+- **Yalnız geliştirme altyapısı** docs/cloud-production/* (ledger, queue, dispatch), docs/planning/dispatch.mjs, .github/workflows/*, automation/ (V6), rutin prompt'ları.
+- **Maliyet ayrımı** Gerçek fatura: UNKNOWN (abonelik; fatura verisi erişilemez). API-eşdeğer tahmin: koordinatör $4.549,72 (06:00Z) + lane'ler (H bölümü, ≈$774 05:30Z) — faturalanan değil. Ölçülemeyen: rutin oturumları ve GitHub Actions dakikaları (H bölümü).
+
+### L.10 Yeniden başlatma / geri alma prosedürü
+
+K.1/K.2 geçerli. Sıra: FD-01 (#293 merge) → v7/integration push CI yeşil doğrula → FD-06 Plan A0 → **yazılı yeniden başlatma talimatı** → yalnız sonra `update_trigger enabled=true` (önce Controller trig_01Ln2KUz671sAXXmAUu6tVm4, sonra lane tick'leri). Cloud Development ve Independent Cloud Reviewer rutinleri http_api ile oluşturulmuş; yalnız Founder claude.ai/code/routines ekranından açabilir. Geri alma: her trigger için `enabled=false`; hiçbir veri/branch silinmedi.
+
+### L.11 Yayın
+
+Bu güncelleme `uasco/production-reports` dalındaki kanonik rapor ailesine (aynı dosyalar) ve oturum dalı `claude/peaceful-heisenberg-f0452y`'ye yazıldı. Yeni PR açılmadı (#294 mevcut rapor PR'ı; base-wide CI nedeniyle BLOCKED).
+
+### L.12 Final durum
+
+**PAUSED_WITH_BLOCKERS.** Erişilebilir tüm bulut otomasyonları (11/11 rutin) kapalı ve doğrulandı; bekleyen tek Actions run'ı yeni iş başlatmıyor; tüm lane/koordinatör oturumları IDLE. PAUSED_VERIFIED kullanılamaz çünkü: (1) Founder-PC bileşenleri (V6 supervisor, Windows Task Scheduler, yerel worker, Cowork yerel görevleri) UNKNOWN — birden fazla kritik yerel sistem doğrulanamadı; (2) #293 merge edilmedi, base CI kırmızı; (3) 1 Actions run waiting.
+
+### L.13 Founder Handover (Aşama 12 — 20 soru)
+
+| # | Soru | Yanıt (kanıt) |
+| --- | --- | --- |
+| 1 | PR kapanışı tamamlandı mı? | **Hayır.** 10 açık PR'ın 0'ı merge edildi; tümü kararlandırıldı (L.4). Tek kök engel #293 Founder protected merge. |
+| 2 | Hangi PR'lar merge edildi? | Kapanış süresince **hiçbiri** (v7/integration head 0b71650 değişmedi; son merge #290, 2026-10-27). |
+| 3 | Hangileri neden merge edilemedi? | #293: ledger merge-gate SHA-bound CLOSED + Founder protected merge (environment onayı 05:42Z verildi). #292/#291/#288/#282/#294: base-wide DEPENDENCY_AUDIT_BLOCKERS:11 (#293'e bağımlı). #251/#247/#231: Founder-tier + conflict. #66: gerçek Electron ortamı (DEFER). |
+| 4 | Son entegrasyon commit'i? | `0b71650fa88b9802968562c63ca33f8b56e9648b` (merge #290). |
+| 5 | Testlerin gerçek sonucu? | Base'de son push CI PASS (40497319498, 2026-10-27) ama her yeni koşu Security/dependency adımında FAIL; #293 head'de ubuntu + 3 Windows shard + installer PASS. Electron/e2e/Founder-PC NOT_RUN_ENV_UNAVAILABLE; e2e Windows'ta sandbox yok (L.5). |
+| 6 | Tüm otomasyonlar durdu mu? | Bulut: **evet, 11/11 rutin kapalı** (VERIFIED). Yerel (V6, Task Scheduler, worker, Cowork yerel): **UNKNOWN**. |
+| 7 | Çalışan / bilinmeyen görev? | Çalışan: yalnız bu kapanış oturumu. Waiting: Actions run 39687649214 (eski, yeni iş başlatmaz). Bilinmeyen: Founder-PC bileşenleri. |
+| 8 | Hangi modüller gerçekten çalışıyor? | Installer/başlatma (CI runner), intake → mission DRAFT, plan/görev store, journal, STOP, ilerleme ekranları, sunucu ZIP teslimi, UASCO'nun kendi CI'ı (L.8.5). |
+| 9 | Yalnız kodlanmış? | Pre-dev zinciri, kod üretimi/test adımı (yalnız FAKE/Linux), CrewCoordinator, composeTeam, routeModel/chooseProvider, OmniRoute client, LeaseManager, command-intake, gitleaks/trivy entegrasyonu, mobil çekirdek. |
+| 10 | Eksik? | Windows sandbox (merge edilmemiş), PR/merge/deploy (ürün içinde), model routing/failover/metering, SAST/SBOM/DAST, mobil uygulama, imzalı release, auto-update. |
+| 11 | Her Epic'in durumu? | L.7 Epic özeti: E01-E07, E09 PARTIAL; E08 BLOCKED; hiçbiri COMPLETE (USABLE_BY_END_USER = 0). |
+| 12 | Her Feature'ın durumu? | L.8.2: 49 Feature = PARTIAL 24 · MISSING 16 · BLOCKED 8 · UNVERIFIABLE 1 · COMPLETE 0. |
+| 13 | Kalan iş ve bağımlılıklar? | 87 envanter maddesi: 80 açık (OPEN 53 · BLOCKED 24 · UNKNOWN 3) + 7 CLOSED; 129 Task'ın 93'ü COMPLETE değil. Bağımlılıklar L.8.3/L.8.4. |
+| 14 | En kritik teknik eksikler? | RW-001 base CI, RW-004 Windows sandbox, RW-009 Desktop export, RW-010 paketli PATH/Claude CLI keşfi, RW-006 CI dosyalarının korunması, tek kimlik (RW-008). |
+| 15 | Uçtan uca ilk darboğaz? | **Windows sandbox yokluğu** (packaged-entry.ts:52-57): kurulu uygulamada test/doğrulama NOT_EXECUTED → teslim doğrulanamaz. Geliştirme tarafında ilk darboğaz #293. |
+| 16 | Ajan/model gerçek durumu? | Geliştirme: Opus koordinatör + 3 Sonnet lane, hepsi IDLE; IR workflow token reddiyle FAIL. Ürün: yalnız Claude CLI, 9 yürütülebilir rol, model routing yok (L.8.7). |
+| 17 | Neden beklenen hızda ilerlemedi? | Takvimin %55,2'si sıfır commit (haftalık kota, EV42); tek koordinatör darboğazı ve %85 maliyet; çıktının %49,5'i süreç/CI/kanıt, %16,1 ürün kodu (EV29); 4 üst üste binen review; base-wide CI kırmızısında lane push'larının tekrar koşu üretmesi; Founder-tier kapılarda bekleme. |
+| 18 | Yeni roadmap için hazır bilgiler? | L.8.1-L.8.10 (Epic graph, Feature/Task matrisleri, kritik yol, readiness, teknik borç, ajan/model, CI kararlılığı, yürütme sırası, karar kaydı) + JSON `masterV2` + `inventory` + `roadmap` + `plans`. |
+| 19 | Gereken Founder kararları? | FD-01 … FD-09 (L.8.10); en acil FD-01 (#293 merge) ve FD-07 (Founder-PC yerel otomasyonları). |
+| 20 | Yeniden başlatma işlemleri? | L.10: #293 merge → base CI yeşil → Plan A0 → yazılı restart talimatı → Controller, sonra lane trigger'ları `enabled=true`. |
+
+**Son durum: PAUSED_WITH_BLOCKERS** (birden fazla kritik yerel sistem UNKNOWN; #293 açık).
+
+## M. Final PR Unblock & Closure (2026-11-02T07:55Z)
+
+> Founder direktifleri "UASCO — FINAL PR UNBLOCK & CLOSURE" ve "#293 manuel merge edildi" (2026-11-02). L bölümünün üzerine delta; çelişen değerlerde M geçerlidir. Yeni Epic/Feature/sprint başlatılmadı; hiçbir rutin açılmadı; secret değerleri görüntülenmedi.
+
+### M.1 #293: ledger merge-gate neden kapalı kaldı (kök neden)
+
+| Bulgu | Kanıt |
+| --- | --- |
+| `mergeGate` yalnız güncel head SHA'ya bağlı ve verdict'i `/^(NO_BLOCKERS\|NO_CODE_BLOCKERS)/` ile başlayan bir review kaydında açılır; `BASE_MERGE_ONLY` yalnız temiz bir kayda zincirlenirse devralır | docs/cloud-production/coord-ledger.mjs (`OPEN_VERDICT`, `mergeGate`) @uasco/production-queue |
+| #293'ün tek kaydı `BLOCKERS_GOV_FOUNDER_AUTHORITY_…_code-NO_DEFECTS_5LOW` (afe2f9b) → `VERDICT_BLOCKING` (exit 5) | `coord-ledger.mjs merge-gate --pr 293 --sha ee2facb…` |
+| `reviewRecord` aynı PR+SHA için ikinci kaydı `ALREADY_RECORDED` ile reddeder → aynı head için kapı ledger içinden yeniden açılamaz | coord-ledger.mjs `reviewRecord` |
+| Founder'ın onayı GitHub Actions `uasco-founder-authority` environment onayıdır (run 41381085962, job founder-authority success 05:42Z). Bu onay ledger'a hiçbir girdi üretmez; iki yetki kaydı arasında köprü yok | .github/workflows/uasco-independent-review.yml (founder-authority job, `environment: uasco-founder-authority`) |
+| Sonuç: senkronizasyon boşluğu tasarımsal. Güvenli tek yol Founder'ın korumalı merge'iydi; Founder 06:17:59Z'de #293'ü merge etti (merge 6b174dc, parent2 = ee2facb, tree = merge-tree, VERIFIED) | git |
+
+**Önerilen kalıcı çözüm (uygulanmadı; geliştirme altyapısı değişikliği, Founder kararı FD-10):** ledger'a `founder-authority` kayıt türü ekle: `{pr, sha, runId, environment, approvedAt}`; kapı yalnız verdict `BLOCKERS_GOV_FOUNDER_AUTHORITY_*_code-NO_DEFECTS*` VE aynı SHA için GitHub deployment-approval API'sinden doğrulanmış bir founder-authority kaydı varsa açılsın. Kayıt elle yazılamaz, API'den okunarak yazılır.
+
+### M.2 Merge ve CI zinciri
+
+| Sıra | PR | Merge commit | parent2 = gözden geçirilmiş head | Ledger | Merge eden | PR CI (required) | Base push CI (merge sonrası) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | #293 | 6b174dc4 (06:17:59Z) | ee2facb ✓, tree = merge-tree ✓ | gate CLOSED (M.1) | Founder (manuel) | ubuntu ✓ windows ✓ (41381085868) | **PASS** 41399037045; installer 41399036913 |
+| 2 | #291 | 16d3a71a (06:47Z) | 78d77f9 ✓, tree ✓ | BASE_MERGE_ONLY → 4b4eee0 NO_BLOCKERS (9040d7a2) | auto-merge | ✓ | **FAIL** 41402142167: Windows shard 1 `relfx-c3:200` (PAR-03, RW-013) |
+| 3 | #288 | 272efccc (06:47Z) | 9edf75c ✓, tree ✓ | BASE_MERGE_ONLY → 7bf22e5 NO_BLOCKERS (9040d7a2) | auto-merge | ✓ | CANCELLED 41402160660 (yerini sonraki push aldı) |
+| 4 | #292 | a75e27f2 (06:49Z) | 2d5c913 ✓, tree ✓ | BASE_MERGE_ONLY → 43776e1 NO_BLOCKERS (9040d7a2) | auto-merge | ✓ | **FAIL** 41402348632: ubuntu + Windows shard 1 `v7-b7-installer:341` (M.3) |
+
+Merge edilmeyenler: #282 (base kırmızı; auto-merge COORD-002 gereği kapatıldı), #295 (Windows shard 1 iki kez farklı bilinen flake), #294 (base kırmızı; rapor içeriği kanonik dalda).
+
+Not: GitHub ruleset yalnız iki `validate` kontrolünü zorunlu tutar ve "up-to-date" istemez. #291 ve #288 bu yüzden birleşik CI olmadan art arda merge oldu (M.3).
+
+### M.3 Kapanışta bulunan ve düzeltilen base-wide hata (#295)
+
+#291 ve #288 tek başına yeşildi ama birlikte `tests/v7-b7-installer.test.ts:341`'i kırdı. #288 `registries/agent-skill-matrix.json`'u installer exclusion listesine koydu; #291 aynı dosyayı paketli bir route için stage etti. Ruleset "up-to-date" istemediği için ikisi birleşik CI olmadan art arda merge oldu. Bu bir süreç dersi: aynı dosyaya dokunan PR'lar seri merge edilmeli ya da merge sonrası push CI beklenmeli (TD-V2-05). Düzeltme: [#295](https://github.com/SalimBurakAytemiz/UNIVERSAL-AI-SOFTWARE-FACTORY-/pull/295), 1 satır. Review'u taze, salt-okur bir alt ajan yaptı (NO_BLOCKERS, 4 LOW; ledger a336c4a2; tüketici `apps/control-api/src/routes/role-status.ts:118-125` izlendi). Durum: ubuntu ✓; Windows shard 1 run 41404034146 attempt 1'de `v7-b2-workos-hardening:154` (F-B1-006, 3 eşzamanlı journal yazarı, Windows) ve attempt 2'de (tek izinli yeniden koşu) `v7-relfx-c3-remediation:200` (PAR-03 fence) ile FAIL. İkisi de diff dışında ve base'de de görülen Windows zamanlama hataları (16d3a71 push CI aynı relfx-c3 hatası). Politika gereği üçüncü koşu başlatılmadı. **BLOCKED**: Founder'ın başlattığı attempt 3'te (08:49-09:13Z) 3 Windows shard'ı da PASS oldu; `validate (windows-latest)` aggregator'ı yine FAIL verdi: `validation report missing`. Neden **COORD-001**: aggregator yalnız aynı attempt'in shard raporlarını indiriyor, "Re-run failed jobs" shard 2-3'ü attempt 1'den devralıyor. #251 bu hatayı hedefliyor. Founder tek eylemi: Actions → run 41404034146 → **"Re-run all jobs"**. Yeşil olursa auto-merge (ledger kapısı açık, d53c37d) otomatik merge eder. Önceki "Re-run failed jobs" önerisi hatalıydı.
+
+### M.4 `REVIEWER_AUTH_REJECTED` kaynağı
+
+- Üreten kod: `scripts/ci/uasco-review/review-gate.mjs:122,146` (`AUTH_RE`). Reviewer'ın son `result` mesajı `is_error: true` ve auth/oauth/401/login biçimli bir metin taşıyınca bu kod atanır.
+- Çalışan adım: `anthropics/claude-code-action` (`ai-review` job, `environment: uasco-review`, secret `CLAUDE_CODE_OAUTH_TOKEN`; workflow satır 126).
+- #293 ai-review (job 125115982300, 05:42:41Z): "UASCO reviewer diagnosis: REVIEWER_AUTH_REJECTED", `VERDICT_JSON` boş.
+- Anlamı: environment'taki OAuth token'ı Anthropic tarafından reddedildi (süresi dolmuş, iptal edilmiş ya da yanlış hesap). Secret değeri okunmadı ve rapora yazılmadı. Diagnostics artifact'ı (13119665414) bu oturumun proxy'si tarafından engellendi (blob host 403), sayılar okunamadı.
+- **Founder eylemi:** Founder makinesinde `claude setup-token` → GitHub → Settings → Environments → `uasco-review` → Secret `CLAUDE_CODE_OAUTH_TOKEN` → Update. Sonra bir PR'da "Re-run all jobs" ile doğrula. IR check'i required değil; merge'leri engellemedi.
+
+### M.5 Founder-tier PR'lar (ayrı değerlendirme; hiçbiri zorla merge edilmedi)
+
+| PR | Head | Base'in gerisinde | Korunan yol | Çakışma (güncel base) | Gerçek ortam | Karar |
+| --- | --- | --- | --- | --- | --- | --- |
+| #251 Protected CI-TEP1 | f40bea3 | 263 commit | 3 / 4 dosya | config/trust-root-manifest.json | — | MERGE_AFTER_APPROVAL: Founder protected-path onayı + trust-root reseal + rebase/merge |
+| #247 Autonomy temp cleanup + reseal | 323c14f | 199 | 2 / 3 | config/trust-root-manifest.json | — | MERGE_AFTER_APPROVAL: aynı reseal; 16,8 GB temp sızıntısı düzeltmesi bekliyor |
+| #231 WSL2 sandbox | c9a3e2d | 166 | 2 / 42 | config/trust-root-manifest.json | Windows 11 + WSL2 (Founder-PC) gerekli | BLOCKED: Founder-tier karar + gerçek ortam kabul testi (RW-004, kritik yol) |
+| #66 Electron E2E | ffeaf79 | — | 12 / 451 | `git merge-tree`: **refusing to merge unrelated histories** (v7/integration ile ortak ata yok) | Gerçek Electron | DEFER_TO_ROADMAP / SUPERSEDED adayı: güncel base üzerinde yeniden kurulmalı; branch korunur |
+
+### M.6 Test sonuçları (son durum)
+
+| Kategori | Durum | Kanıt |
+| --- | --- | --- |
+| Unit / Integration / Contract / UI (Linux) | PASS @6b174dc (41399037045); FAIL @a75e27f yalnız `v7-b7-installer:341` (41402348632); #295 head'de ubuntu PASS (41404034146) | CI |
+| Security / dependency audit | **PASS**: dependency-supply-chain @6b174dc ve sonrası (DEPENDENCY_AUDIT_BLOCKERS 0) | 41399037045, 41402299333 |
+| Windows build (3 shard) | Shard 2-3 PASS; shard 1 kararsız (relfx-c3:200, F-B1-006) + a75e27f'te installer testi | 41402142167, 41402348632, 41404034146 |
+| Windows installer | PASS @6b174dc (41399036913) | CI |
+| Electron runtime / E2E / Founder-PC | NOT_RUN_ENV_UNAVAILABLE | — |
+| Yerel (bu oturum, Node 22) | v7-b7-installer base 35/36 → fix 36/36; ilgili 15 dosya 236 PASS / 8 skip / 2 FAIL (pkg-aut1, pkg-aut2: düzeltmesiz base'de de aynı, sandbox ortamı) | — |
+| Release/packaging | BLOCKED (release/tag 0, imza yok) | — |
+
+### M.7 Yerel V6 Supervisor / Task Scheduler: UNKNOWN, Founder kontrol adımları
+
+Bu bulut oturumu Founder-PC'ye erişemez. Durum **UNKNOWN** kalır. Founder PC'de PowerShell'de çalıştırın:
+
+1. `Get-ScheduledTask | Where-Object { $_.TaskName -like 'UASCO*' } | Select-Object TaskName, State, TaskPath` — beklenen görev adları (repo kodu): `UASCO-Autonomous-Supervisor`, `UASCO-Supervisor-Watchdog`, `UASCO-Installed-Supervisor`. Hepsi `Disabled` olmalı ya da hiç olmamalı.
+2. Etkin olan varsa: `Disable-ScheduledTask -TaskName '<ad>'` (silmeyin).
+3. `Get-CimInstance Win32_Process -Filter "Name='node.exe' OR Name='claude.exe'" | Select-Object ProcessId, CommandLine` — `uasco-orchestrator`, `supervisor` veya `local-worker` içeren süreç olmamalı.
+4. Claude Desktop → Cowork → Scheduled tasks: UASCO ile ilgili görev yok ya da kapalı olmalı.
+5. Sonucu (ekran görüntüsü veya çıktı) bir sonraki oturuma iletin; rapor o zaman PAUSED_VERIFIED'e yükseltilebilir.
+
+### M.8 Otomasyonlar
+
+- Bulut rutinleri: **0 / 11 etkin** (list_triggers ≈07:50Z). Bu oturum yalnız tek atımlık bir hatırlatıcı (trig_01YTb88eFb1MP2bPrcBzGN4N, 07:29Z ateşledi, artık etkin değil) oluşturdu; Controller/Lane/saatlik rutinler açılmadı.
+- GitHub Actions: 1 waiting (39687649214, 2026-10-21, eski IR). Zamanlanmış workflow 0.
+- PR abonelikleri: bu oturum #295 ve #282'yi izliyor (olay gelirse uyanır; yeni iş başlatmaz).
+- Lane/koordinatör oturumları IDLE. Yerel bileşenler UNKNOWN (M.7).
+
+### M.9 Kalan Founder aksiyonları
+
+| # | Eylem | Nerede |
+| --- | --- | --- |
+| FA-1 | #295'i tam yeniden koştur: **"Re-run all jobs"** ("Re-run failed jobs" COORD-001 nedeniyle aggregator'da her zaman FAIL; attempt 3, 09:13Z: 3 shard da PASS, aggregator `validation report missing`) | Actions → run 41404034146 → Re-run all jobs |
+| FA-2 | #295 merge olduktan sonra: #282 update-branch → ledger BASE_MERGE_ONLY → auto-merge; sonra #294 | Bu oturuma "devam" talimatı |
+| FA-3 | IR token yenile (`CLAUDE_CODE_OAUTH_TOKEN`) | Settings → Environments → uasco-review |
+| FA-4 | Trust-root reseal kararı (#251, #247, #231 aynı manifest çakışması) | PR #251/#247/#231 |
+| FA-5 | #231 için Windows 11 + WSL2 gerçek kabul testi | Founder-PC |
+| FA-6 | #66: güncel base üzerinde yeniden kurma veya SUPERSEDED kararı | PR #66 |
+| FA-7 | Yerel V6/Task Scheduler/Cowork kontrolü (M.7) | Founder-PC |
+| FA-8 | Eski waiting run 39687649214'ü reddet/iptal | Actions |
+| FA-9 | FD-10: ledger'a founder-authority kayıt türü (M.1) | Karar |
+
+### M.10 Final durum
+
+**PAUSED_WITH_BLOCKERS.** Bulut otomasyonları 11/11 kapalı (VERIFIED). Merge edilenler: #293 (Founder), #291, #288, #292 (yetkili auto-merge, ledger kapısı açık, parent ve tree doğrulandı). `v7/integration` = a75e27f2, **push CI kırmızı** (installer testi; düzeltme #295). Açık: #295, #282, #294 (base/CI), #251, #247, #231, #66 (Founder-tier). Yerel bileşenler UNKNOWN. PAUSED_VERIFIED koşulları sağlanmadı.
+
+**Düzeltme (L.11):** L.11 raporun oturum dalı `claude/peaceful-heisenberg-f0452y`'ye de yazıldığını söylüyordu. O push uzak dala ulaşmadı (uzak dal 0b71650'de kalmıştı). Kanonik kopya yalnız bu daldadır (`uasco/production-reports`). Oturum dalı şimdi yalnız #295 düzeltmesini taşır.
+
+## N. Kapanış sonu güncellemesi (2026-11-02T10:50Z)
+
+| Öğe | Durum | Kanıt |
+| --- | --- | --- |
+| #295 | **MERGED** 09:51Z, merge `d5f4365f` (parent2 = d53c37d gözden geçirilmiş head; tree = merge-tree ✓). Founder "Re-run all jobs" ile yeşile döndü | git; ledger a336c4a2 |
+| `v7/integration` | **d5f4365f**, push CI **PASS** (41424008197: ubuntu + 3 Windows shard + aggregator) | Actions |
+| #282 | Head **5d66b03**. Kendi testi düzeltildi (`relfx-c3:763`, blok-ortası boşluk eşlemesi; Windows 15,6 ms zamanlayıcı çözünürlüğü; taze review NO_BLOCKERS 2 LOW, ledger deeffafa). Attempt 1: ubuntu ✓, shard 1 ✓ (düzeltme Windows'ta doğrulandı), shard 3 ✓, shard 2 ✗ `relfx-1-completion:459`. Bu shard 2 hatası bilinen Windows store-lock sorunu: öldürülen engine sıfır baytlık lock dosyası bırakıyor, sonuç `LOCK_TIMEOUT` (RW-013); PR'ın diff'i dışında. İzinli tek tam yeniden koşu başlatıldı (rerun_workflow_run). Auto-merge açık, ledger kapısı açık | run 41427606970 |
+| #294 | Güncel base'e alındı. Rapor dosyaları bu kanonik kopyayla değiştirildi (v7/integration'a tek, tutarlı kopya girer). Taze salt-okur review → ledger → auto-merge | bu bölüm |
+| Rutinler | 0 / 11 etkin | list_triggers |
+
+**Not:** #294 ile `v7/integration`'a giren kopya merge anının görüntüsüdür. Sonraki durum değişiklikleri yalnız bu dalda (`uasco/production-reports`) tutulur.
+
+**Kalan Founder aksiyonları:** FA-3 (IR token), FA-4 (#251/#247/#231 reseal), FA-5 (#231 Windows 11/WSL2), FA-6 (#66 yeniden kurma), FA-7 (Founder-PC kontrolü, M.7), FA-8 (39687649214), FA-9 (FD-10 ledger founder-authority). Yeni bulgu (TD-V2-06): Windows store-lock sıfır-bayt lock dosyası `LOCK_TIMEOUT` üretiyor (relfx-1:459, F-B1-006, relfx-c3:200 aynı aileden) ve Windows shard'larını sık sık kırmızıya çeviriyor. Ürün düzeltmesi Plan A'da RW-013 kapsamında.
+
+**Final durum:** PAUSED_WITH_BLOCKERS. Bulut otomasyonları kapalı; base yeşil; Founder-tier PR'lar ve yerel bileşenler (UNKNOWN) açık.
 
 ## Baseline ve Kapanış Karşılaştırması
 

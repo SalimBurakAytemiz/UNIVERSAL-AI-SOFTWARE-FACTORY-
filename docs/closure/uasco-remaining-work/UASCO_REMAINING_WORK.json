@@ -8,7 +8,8 @@
   "mergeOf": "#290",
   "mergedAt": "2026-10-27T11:34:54Z",
   "recheckedAt": "2026-11-02T03:50:46Z",
-  "recheckMethod": "git ls-remote origin refs/heads/v7/integration"
+  "recheckMethod": "git ls-remote origin refs/heads/v7/integration",
+  "finalPrClosure": "a75e27f235643593eb9f2aec9772e8c614f78bc0 (2026-11-02T06:49Z, push CI failure 41402348632)"
  },
  "baseline": {
   "evidenceWindow": "2026-11-02T02:50Z-04:05Z (denetçi kanıtları 02:55Z-03:51Z; açık PR listesi ~04:02Z)",
@@ -1214,7 +1215,8 @@
     "AUD-133"
    ],
    "plan": "A",
-   "owner": "FOUNDER"
+   "owner": "FOUNDER",
+   "note": "V2 2026-11-02 ≈06:00Z: iki rutin enabled=false (Founder 05:40Z; list_triggers VERIFIED). Kriterin 24 saatlik 'last_fired değişmez' kısmı 2026-11-03T05:40Z'de kontrol edilmeli; o zamana kadar durum değiştirilmedi."
   },
   {
    "id": "UASCO-RW-003",
@@ -7091,7 +7093,7 @@
     ]
    }
   ],
-  "finalStatus": "PAUSED_WITH_BLOCKERS — erişilebilen bütün geliştirme otomasyonları durduruldu ve doğrulandı; ancak (1) UASCO Cloud Development ve Independent Cloud Reviewer rutinleri http_api ile oluşturulduğu için agent tarafından durdurulamadı ve saatlik ateşlemeye devam ediyor, (2) #293 ve Founder-tier PR'lar Founder yetkisi bekliyor, (3) Founder PC'deki olası yerel V6 supervisor / Task Scheduler durumu UNKNOWN (bu oturumdan erişilemiyor).",
+  "finalStatus": "PAUSED_WITH_BLOCKERS",
   "finalStatusAllowed": {
    "PAUSED_VERIFIED": "Kapanış tamamlandı ve erişilebilir bütün ilgili otomasyonların durduğu doğrulandı.",
    "PAUSED_WITH_BLOCKERS": "Kapanış mümkün olduğu kadar tamamlandı, ancak çözülmemiş işler veya durdurulamayan süreçler mevcut.",
@@ -7481,6 +7483,12 @@
    "claim": "Taslaktan sonraki canlı durum: #293 ee2facb CI tamamen yeşil (run 41381085868: validate ubuntu, 3 Windows shard, validate windows; installer 41381085966); founder-authority job 41381085962 Founder environment onayını bekliyor; COORD review wf_c700d6f5-f24 kod kusuru yok, 5 LOW; yönetişim blocker'ı package.json overrides protectedField (config/package-policy.json) + merge-gate CI_EXECUTED_FLOOR (npm-manifest/npm-lockfile) fail-closed; ledger afe2f9b BLOCKERS_GOV_FOUNDER_AUTHORITY; sınıf REQUIRES_EXTERNAL_ACTION. #291 full NO_BLOCKERS 4 LOW (ledger 3074ec2, wf_10d5501d-ffb), merge-gate açık, draft ve base'in gerisinde; #292 delta NO_BLOCKERS (ledger 47d46b0), merge-gate açık; ikisi de #293'ün arkasında BLOCKED. #282 r3 b13e23d ve #288 r1 7bf22e5 COORD delta review'ları sürüyor. 3 lane dondurma altında IDLE.",
    "source": "Koordinatör doğrulaması 2026-11-02 (evidence/COORD-CLOSURE-LOG.md güncellemeleri ~03:25Z-04:50Z)",
    "tag": "COORD-VERIFIED"
+  },
+  {
+   "id": "EV48",
+   "claim": "Master V2 yeniden doğrulama: 11/11 rutin kapalı; 10 açık PR (7 draft), head'ler değişmedi; v7/integration 0b71650; #293 founder-authority onaylandı fakat IR check REVIEWER_AUTH_REJECTED ve ledger merge-gate exit 5; #294 CI 41393881832 DEPENDENCY_AUDIT_BLOCKERS:11; 1 waiting run; refs/uasco/* = 0; cron workflow 0.",
+   "source": "list_triggers, list_pull_requests, actions_list/get, get_check_run 125071908981, get_job_logs 125111026076, coord-ledger merge-gate, git ls-remote (2026-11-02 ≈06:00Z); evidence/G9-master-v2-closure.md",
+   "tag": "VERIFIED"
   }
  ],
  "closure": {
@@ -7515,7 +7523,7 @@
    "trig_0137JfTiMWXAbqVQNaPSMVmF": "KAPALI — run_once_fired 03:56:44Z; VERIFIED",
    "trig_01HJfvsZ...": "KAPALI — değişmedi; VERIFIED"
   },
-  "enabledTriggers": "2 — UASCO Cloud Development ve Independent Cloud Reviewer (ikisi de http_api; yalnız Founder kapatabilir)",
+  "enabledTriggers": "0 — 11/11 rutin enabled=false (V2 ≈06:00Z list_triggers; CDev 05:40:11Z ve ICR 05:40:15Z Founder tarafından kapatıldı)",
   "lanes": {
    "A": "IDLE — PAUSED bildirimi 05:17Z alındı, tur 05:17:44Z bitti (list_events VERIFIED); açık: #292; branch-only claude/lane-a-tools-panel-a2b @ce09d00 dokunulmadı",
    "B": "IDLE — PAUSED bildirimi alındı, tur 05:17:42Z bitti (VERIFIED); açık: #291, #231",
@@ -7526,15 +7534,15 @@
   "ledgerRecords": "129 review / 54 PR @2e92b36",
   "coordinatorCostUsd": "$4.540,87 (05:16Z, platform cost_usd; API-eşdeğeri, fatura değil)",
   "longSessionsCostUsd": "$5.323,84 (koordinatör 4.540,87 + Lane A 212,61 + Lane B 131,93 + Lane C 438,43; 05:17Z)",
-  "actionsState": "0 queued / 0 in_progress / 2 waiting (05:2xZ, status filtreli actions_list VERIFIED)",
-  "irStuckRun": "39687649214 (2026-10-21'den beri waiting, founder-authority) + 41381085962 (#293 founder-authority) — ikisi de Founder environment onayı bekliyor; dokunulmadı",
+  "actionsState": "0 queued / 0 in_progress / 1 waiting (39687649214) (V2 ≈06:00Z)",
+  "irStuckRun": "39687649214 waiting (2026-10-21); 41381085962 completed success 05:43Z (founder-authority onaylandı; IR check FAIL REVIEWER_AUTH_REJECTED)",
   "usableFeatures": "0 (değişmedi)",
   "verifiedRealEnv": "Değişmedi: installer CI smoke (VERIFIED; #293 installer run 41381085966 da yeşil) + 1 oyuncak run (CLAIMED)",
   "openP0": "8 (değişmedi)",
-  "founderPending": "13 grup + kapanışta eklenen 2: #293 founder-authority onayı/protected merge ve 2 http_api rutininin kapatılması",
+  "founderPending": "FD-01 #293 protected merge; FD-02 IR token; FD-03 #231; FD-04 #247/#251; FD-05 #66; FD-06 Plan A0; FD-07 Founder-PC yerel otomasyon; FD-08 39687649214; FD-09 restart",
   "releases": "0 / 0 (değişmedi)",
   "installerArtifact": "base artifact 2026-11-26'da siliniyor (run 40497319565); #293 installer run 41381085966 ayrıca yeşil",
-  "founderActions": "Kapanış süresince Founder aksiyonu yok (bekleyenler: K.1 ve Q19)",
+  "founderActions": "05:40Z: Cloud Development + Independent Cloud Reviewer rutinleri kapatıldı; 05:42Z: #293 founder-authority environment onayı. Bekleyen: FD-01..FD-09 (masterV2/L.8.10)",
   "pauseDeclaredAt": "2026-11-02T05:17Z — controller + 3 lane tick'leri 02:27:25Z, heartbeat 05:16:43Z kapatıldı; lane'lere PAUSED bildirimi 05:17Z teslim edildi ve 3 lane de 05:17:3x-44Z'de turunu bitirip IDLE oldu (list_events, VERIFIED)",
   "rollbackPlan": "K.1 tablosu (trigger bazında update_trigger enabled=true veya Founder'ın claude.ai/code/routines ekranı) + K.2 yeniden başlatma adımları",
   "reportBranch": "uasco/production-reports → docs/closure/uasco-remaining-work/ (CI'sız rapor dalı, hemen erişilebilir) + claude/coord-closure-report-2026-11-02 → v7/integration",
@@ -7543,5 +7551,808 @@
   "mainCheckout": "/home/user/UNIVERSAL-AI-SOFTWARE-FACTORY- → v6/pkg-t4-powershell-safety-and-verifier-differential-4js0ph dalına geri alındı (çalışma ağacı temiz; denetim sırasında detached 0b71650'deydi)",
   "heartbeat": "Son rapor 52e826c @03:12Z; heartbeat 05:16:43Z'de kapatıldı",
   "notes": "Sıra: PR/test/merge kapanışı → denetim (G1-G8) → envanter/planlar → duraklatma aksiyonları (05:16-05:17Z) → rapor doldurma ve yayın → son kontrol. Duraklatma aksiyonları rapor yayından hemen önce yapıldı ki rapor son durumu yansıtsın. Kapanışta yeni geliştirme başlatılmadı; yalnız base-wide CI düzeltmesi #293 (Aşama 3 kapsamında) açıldı."
+ },
+ "masterV2": {
+  "verifiedAt": "2026-11-02T06:10Z",
+  "session": "session_015dYwb2fTtgsPy3wpVN9rYC (Master V2 kontrollü kapanış)",
+  "integrationHead": {
+   "branch": "v7/integration",
+   "sha": "0b71650fa88b9802968562c63ca33f8b56e9648b",
+   "lastMerge": "#290 2026-10-27T11:34:54Z",
+   "changedSincePrevReport": false,
+   "source": "git ls-remote + list_pull_requests base.sha"
+  },
+  "canonicalReportCommitBefore": "84280f7703f450790dfa015bbbc47476ece48436 (uasco/production-reports, 2026-11-02T05:25:01Z)",
+  "prs": {
+   "mergedTotal": 259,
+   "mergedTotalNote": "Önceki rapordaki 259 (G8 gh api). 05:30Z'den bu yana merge yok (v7/integration head değişmedi) → 259 geçerli; yeniden sayım yapılmadı (head değişmediği için gereksiz).",
+   "open": 10,
+   "draft": 7,
+   "openList": [
+    294,
+    293,
+    292,
+    291,
+    288,
+    282,
+    251,
+    247,
+    231,
+    66
+   ],
+   "newPrsSincePrev": 0
+  },
+  "actions": {
+   "waiting": [
+    "39687649214 (IR, #sec-vitest, 2026-10-21'den beri founder-authority bekliyor)"
+   ],
+   "queued": 0,
+   "inProgress": 0,
+   "resolvedSincePrev": "41381085962 (#293 IR) — Founder founder-authority environment onayını verdi; job 05:42:07Z-05:42:11Z success; ai-review success; finish success; ama IR check-run 125071908981 = FAIL (VERDICT_MISSING, REVIEWER_AUTH_REJECTED: CLAUDE_CODE_OAUTH_TOKEN reddedildi)",
+   "scheduledWorkflows": 0,
+   "scheduledWorkflowsNote": ".github/workflows/{ci,uasco-independent-review,windows-installer}.yml: cron/schedule 0; yalnız pull_request/push/workflow_dispatch"
+  },
+  "triggers": {
+   "total": 11,
+   "enabled": 0,
+   "note": "list_triggers (bu oturum, ~06:00Z): 11 rutinin 11'i enabled=false. trig_018vLbG82sUcp6ncPhRurka5 (Cloud Development) updated 05:40:11Z, trig_01NJCi2PSTJxh6rMMLewLvGM (Independent Cloud Reviewer) updated 05:40:15Z → Founder tarafından kapatıldı (agent update_trigger yetkisi önceden reddedilmişti). Son ateşlemeler: CDev 05:30:03Z (~40 sn), ICR 05:38:44Z (~42 sn) — kapanıştan sonra yeni branch/PR yok (open PR listesi değişmedi)."
+  },
+  "sessions": {
+   "coordinator": "session_01DmTHw4gBA3wvY1tKM9bk2e IDLE, disconnected, need_input; cost_usd 4549.72 (API-equivalent, get_session ~06:00Z)",
+   "laneA": "session_01MApoJPisUKhZdWpTJmcnY3 IDLE (05:17:44Z), blocked bucket (Founder authority on #293)",
+   "laneB": "session_01VaHcvhtW9yjHAsFktdTn5f IDLE (05:17:42Z)",
+   "laneC": "session_01Vf5LYEF7vPGkRwL6X5AeGT IDLE (05:17:31Z)",
+   "running": "Yalnız bu kapanış oturumu (session_015dYwb2fTtgsPy3wpVN9rYC)"
+  },
+  "ledger": {
+   "head": "2e92b366 (uasco/production-queue, 04:54:50Z) — değişmedi",
+   "mergeGate293": "exit 5 CLOSED VERDICT_BLOCKING (BLOCKERS_GOV_FOUNDER_AUTHORITY_…_code-NO_DEFECTS_5LOW); aynı SHA için ikinci kayıt reviewRecord tarafından ALREADY_RECORDED ile reddedilir"
+  },
+  "refsUasco": 0,
+  "remoteHeads": 356,
+  "remoteClaudeHeads": 339,
+  "prDecisions": [
+   {
+    "pr": 293,
+    "head": "ee2facb",
+    "title": "COORD CI-FIX glob/minimatch overrides",
+    "riskClass": "GOV/Founder (package.json overrides protectedField)",
+    "ci": "Required: validate ubuntu ✅ windows ✅ (41381085868), 3 shard ✅, installer ✅ (41381085966); IR founder-authority ✅ 05:42Z; IR check ❌ REVIEWER_AUTH_REJECTED",
+    "gate": "mergeable_state=unstable (yalnız opsiyonel IR check kırmızı); ledger merge-gate CLOSED (exit 5)",
+    "decision": "MERGE_AFTER_APPROVAL",
+    "next": "Founder environment onayı VERILDI. Kalan: ledger kararı SHA-bound ve kapalı → Founder protected merge (GitHub PR ekranı → \"Merge pull request\") ya da açık yazılı yetki ile koordinatörün merge etmesi. IR token'ı (CLAUDE_CODE_OAUTH_TOKEN) yenilenmeden IR check kırmızı kalır (required değil).",
+    "inventory": "RW-001"
+   },
+   {
+    "pr": 292,
+    "head": "43776e1",
+    "title": "Lane A Tools Panel",
+    "riskClass": "Routine",
+    "ci": "validate ubuntu ❌ base-wide DEPENDENCY_AUDIT_BLOCKERS:11 (41377356505)",
+    "gate": "merge-gate OPEN (delta NO_BLOCKERS 47d46b0)",
+    "decision": "BLOCKED",
+    "next": "#293 → update-branch → CI → base-merge delta kaydı → auto-merge",
+    "inventory": "RW-042"
+   },
+   {
+    "pr": 291,
+    "head": "4b4eee0",
+    "title": "Lane B Role Context",
+    "riskClass": "Routine (draft, base gerisinde 5e8fc50)",
+    "ci": "Base-wide kırmızı beklenir",
+    "gate": "merge-gate OPEN (full NO_BLOCKERS 4 LOW)",
+    "decision": "BLOCKED",
+    "next": "#293 → ready-for-review → update-branch → CI → merge",
+    "inventory": "RW-043"
+   },
+   {
+    "pr": 288,
+    "head": "7bf22e5",
+    "title": "Lane C Entity Readiness",
+    "riskClass": "Routine (draft)",
+    "ci": "CI 41386006766 ❌ yalnız dependency-supply-chain; installer ✅ 41386006836",
+    "gate": "merge-gate OPEN (delta NO_BLOCKERS 6 LOW)",
+    "decision": "BLOCKED",
+    "next": "#293 sonrası; Plan A'da park (RW-076)",
+    "inventory": "RW-076"
+   },
+   {
+    "pr": 282,
+    "head": "b13e23d",
+    "title": "Windows PAR03 Diagnostics",
+    "riskClass": "Routine (draft, TEP-1 tur limiti doldu)",
+    "ci": "CI 41383416275 ❌ dependency-supply-chain (+ aggregator MODULE_NOT_FOUND nedeni kurulmadı)",
+    "gate": "merge-gate OPEN (r3 NO_BLOCKERS 6 LOW)",
+    "decision": "BLOCKED",
+    "next": "#293 sonrası CI; aggregator hatası tekrar ederse REPAIR_REQUIRED",
+    "inventory": "RW-044"
+   },
+   {
+    "pr": 251,
+    "head": "f40bea3",
+    "title": "Protected CI-TEP1",
+    "riskClass": "Founder-held (protected CI dosyaları)",
+    "ci": "dirty (base b371ebd)",
+    "gate": "—",
+    "decision": "MERGE_AFTER_APPROVAL",
+    "next": "Founder: protected path onayı + conflict çözümü; RW-012",
+    "inventory": "RW-012"
+   },
+   {
+    "pr": 247,
+    "head": "323c14f",
+    "title": "Protected Autonomy Hardening (16.8 GB temp leak + reseal)",
+    "riskClass": "FOUNDER-TIER (trust-root reseal)",
+    "ci": "dirty (base 0ddb170)",
+    "gate": "—",
+    "decision": "MERGE_AFTER_APPROVAL",
+    "next": "Founder reseal yetkisi + rebase; RW-012",
+    "inventory": "RW-012"
+   },
+   {
+    "pr": 231,
+    "head": "c9a3e2d",
+    "title": "Windows WSL2 Sandbox",
+    "riskClass": "FOUNDER-TIER (sandbox güven sınırı)",
+    "ci": "dirty (base 459205c); 9 review head",
+    "gate": "—",
+    "decision": "BLOCKED",
+    "next": "Founder-tier karar + gerçek Windows 11/WSL2 kabul testi (Founder-PC). Kritik yol (RW-004).",
+    "inventory": "RW-004"
+   },
+   {
+    "pr": 66,
+    "head": "ffeaf79",
+    "title": "Electron E2E Verification",
+    "riskClass": "Founder-held (2026-10-20)",
+    "ci": "base d38f87c, eski",
+    "gate": "—",
+    "decision": "DEFER_TO_ROADMAP",
+    "next": "Gerçek Electron ortamı gerekli; Plan A4 (RW-005) kanıt adımına bağla; branch korunur",
+    "inventory": "RW-012"
+   },
+   {
+    "pr": 294,
+    "head": "81fecb0",
+    "title": "Canonical Closure Report",
+    "riskClass": "Docs-only",
+    "ci": "CI 41393881832 ❌ shard1 DEPENDENCY_AUDIT_BLOCKERS:11 (base-wide); IR 41393879807 ✅",
+    "gate": "—",
+    "decision": "BLOCKED",
+    "next": "#293 merge sonrası update-branch + CI → merge. Kanonik kopya uasco/production-reports'ta (bu güncelleme dahil).",
+    "inventory": "RW-014"
+   }
+  ],
+  "tests": [
+   {
+    "category": "Unit",
+    "status": "PASS (base 0b71650, push CI 40497319498 2026-10-27, run-validation)",
+    "note": "Yeni koşu base-wide audit adımında durur → ancak #293 head ee2facb üzerinde tam ubuntu run-validation PASS (41381085868)"
+   },
+   {
+    "category": "Integration",
+    "status": "PASS (aynı CI; buildServer gerçek route testleri)",
+    "note": "Gerçek model/sandbox entegrasyonu yok"
+   },
+   {
+    "category": "Contract/API",
+    "status": "PASS (aynı CI; 73/73 renderer /v1 yolu kayıtlı route, G3)",
+    "note": "10 route yalnız fake bridge (RW-053)"
+   },
+   {
+    "category": "UI/Component",
+    "status": "PASS (renderer testleri CI içinde)",
+    "note": "Gerçek kullanıcı oturumu yok"
+   },
+   {
+    "category": "Windows build",
+    "status": "PASS (3 Windows shard + aggregator: 40497319498 base; 41381085868 #293)",
+    "note": "—"
+   },
+   {
+    "category": "Windows installer",
+    "status": "PASS (CI runner smoke: 40497319565 base, 41381085966 #293)",
+    "note": "İmzasız; Founder-PC kurulumu NOT_RUN_ENV_UNAVAILABLE"
+   },
+   {
+    "category": "Electron runtime",
+    "status": "NOT_RUN_ENV_UNAVAILABLE (gerçek masaüstü); Linux journey CLAIMED (EV41)",
+    "note": "#66 DEFER"
+   },
+   {
+    "category": "End-to-end",
+    "status": "FAIL/BLOCKED — Windows sandbox yok (packaged-entry.ts:54, SANDBOX_UNAVAILABLE); gerçek-model e2e yalnız 2026-10-14 oyuncak run (EV11)",
+    "note": "RW-004, RW-005"
+   },
+   {
+    "category": "Security",
+    "status": "FAIL (dependency-supply-chain: DEPENDENCY_AUDIT_BLOCKERS:11 her yeni base koşusunda; 41393881832 shard1) — #293 ile 0",
+    "note": "gitleaks/trivy gerçek araç koşusu bu ortamda NOT_RUN_ENV_UNAVAILABLE"
+   },
+   {
+    "category": "Release/packaging",
+    "status": "BLOCKED (release/tag 0; imza yok; release-supply-chain dependency adımına bağlı)",
+    "note": "RW-022"
+   }
+  ],
+  "flow16": [
+   {
+    "stage": "FOUNDER COMMAND",
+    "expected": "Tek doğal-dil komut",
+    "actual": "Yok: yapılandırılmış \"Fikirden başla\" formu",
+    "class": "PLAN (doğal dil) / REAL (form)",
+    "evidence": "core/mission/command-intake.ts üretimde 0 importer (bu oturumda grep VERIFIED)",
+    "gap": "RW-025"
+   },
+   {
+    "stage": "COMMAND INTAKE",
+    "expected": "Doğrulanmış mission DRAFT",
+    "actual": "POST /v1/intakes → submitIntake, idempotent DRAFT",
+    "class": "REAL",
+    "evidence": "apps/control-api routes/intake.ts; core/workos/intake.ts",
+    "gap": "—"
+   },
+   {
+    "stage": "BUSINESS ANALYSIS",
+    "expected": "BA artifact, bağımsız onay",
+    "actual": "AnalysisFlow → PreDevDriver → ClaudePreDevBuilder (Claude CLI); FAKE/yoksa BLOCKED",
+    "class": "REAL-code/SIM-evidence",
+    "evidence": "core/workos/predev/*; gerçek modelle hiç koşmadı",
+    "gap": "RW-005"
+   },
+   {
+    "stage": "REQUIREMENT ANALYSIS",
+    "expected": "İzlenebilir gereksinim",
+    "actual": "Aynı pre-dev zinciri (Requirements artifact)",
+    "class": "REAL-code/SIM-evidence",
+    "evidence": "predev/types.ts",
+    "gap": "RW-005"
+   },
+   {
+    "stage": "SOFTWARE ARCHITECTURE",
+    "expected": "Mimari artifact",
+    "actual": "Aynı zincir (Architecture artifact) — yapı doğrulayıcı, içerik kalitesi ölçülmüyor",
+    "class": "REAL-code/SIM-evidence",
+    "evidence": "predev-decisions.ts",
+    "gap": "RW-005"
+   },
+   {
+    "stage": "EPIC / FEATURE / TASK",
+    "expected": "Hiyerarşik iş kırılımı",
+    "actual": "Yalnız plan → task (createTaskDetailed, dependsOn); Epic/Feature ürün içinde yok",
+    "class": "PARTIAL",
+    "evidence": "core/workos plan.ts",
+    "gap": "RW-034"
+   },
+   {
+    "stage": "AGENT ASSIGNMENT",
+    "expected": "Uzmanlığa göre rol",
+    "actual": "Statik FIRST_DELIVERY_BINDINGS 9 rol; 599 rol PROPOSED_DERIVED_NOT_RUNTIME",
+    "class": "PARTIAL",
+    "evidence": "first-delivery-bindings.ts; composeTeam bağlı değil",
+    "gap": "RW-055, RW-080"
+   },
+   {
+    "stage": "MODEL SELECTION",
+    "expected": "Maliyet/veri sınıfı routing",
+    "actual": "Yok: sabit Claude CLI profili; routeModel yalnız core/policy/model-routing.ts + testler",
+    "class": "PLAN",
+    "evidence": "models/router, core/policy/model-routing.ts (üretim çağıranı yok)",
+    "gap": "RW-036"
+   },
+   {
+    "stage": "CODE GENERATION",
+    "expected": "İzole ortamda kod",
+    "actual": "Implementer Claude CLI, run workspace, git izolasyonu",
+    "class": "REAL-code/SIM-evidence (Linux)",
+    "evidence": "core/workos/runner.ts MissionRunner",
+    "gap": "RW-004"
+   },
+   {
+    "stage": "TESTING",
+    "expected": "Sandbox içinde test",
+    "actual": "Gate + SandboxProvider; Windows'ta sağlayıcı yok → NOT_EXECUTED",
+    "class": "REAL-code/SIM-evidence; Windows BLOCKED",
+    "evidence": "packaged-entry.ts:54 (bu oturumda okundu)",
+    "gap": "RW-004"
+   },
+   {
+    "stage": "SECURITY REVIEW",
+    "expected": "SAST/SCA/secrets",
+    "actual": "gitleaks/trivy (PATH'te varsa), dahili secret taraması, Claude reviewer; semgrep/SBOM yok; policy ctx sabit ALLOW",
+    "class": "PARTIAL",
+    "evidence": "security-tools.ts; server.ts:193-196",
+    "gap": "RW-028, RW-031"
+   },
+   {
+    "stage": "PR CREATION",
+    "expected": "Müşteri repo'suna PR",
+    "actual": "Ürün içinde yok (apps/core/models içinde push/PR API 0 isabet, bu oturumda git grep)",
+    "class": "PLAN",
+    "evidence": "—",
+    "gap": "RW-054"
+   },
+   {
+    "stage": "MERGE",
+    "expected": "Kapılı merge",
+    "actual": "Ürün içinde yok; yalnız geliştirme düzleminde (coord-ledger merge-gate + ruleset)",
+    "class": "PLAN (ürün)",
+    "evidence": "docs/cloud-production/coord-ledger.mjs",
+    "gap": "RW-054"
+   },
+   {
+    "stage": "BUILD",
+    "expected": "Ürün build'i",
+    "actual": "Müşteri projesi için build adımı = testCommand; UASCO'nun kendi build'i CI'da",
+    "class": "PARTIAL",
+    "evidence": "windows-installer.yml (UASCO için)",
+    "gap": "RW-004"
+   },
+   {
+    "stage": "DEPLOYMENT",
+    "expected": "Deploy/canary/rollback",
+    "actual": "Yok; deployPanel kalıcı BLOCKED",
+    "class": "PLAN",
+    "evidence": "apps/desktop delivery.js:86",
+    "gap": "RW-069"
+   },
+   {
+    "stage": "PRODUCT DELIVERY",
+    "expected": "Doğrulanmış teslim paketi",
+    "actual": "Sunucu ZIP teslimi REAL; Desktop export düğmesi kırık (AUD-022); etiket her zaman NOT_VERIFIED",
+    "class": "REAL (sunucu) / FAIL (Desktop)",
+    "evidence": "prepareRunDelivery; views/delivery-panel.js",
+    "gap": "RW-009"
+   }
+  ],
+  "architectureQuestions": [
+   {
+    "q": "Desktop ↔ backend",
+    "a": "Electron main paketli Control API'yi rastgele 127.0.0.1 portunda başlatır; token stdin'den, kimlik challenge'ı; renderer yalnız IPC allow-list ile HTTP /v1 çağırır (main.mjs). Installer CI smoke'ta controlApi:HEALTHY VERIFIED_REAL_ENV (yalnız CI runner)."
+   },
+   {
+    "q": "Görevler hangi controller'a gidiyor",
+    "a": "Control API içindeki MissionRunner (core/workos/runner.ts:213, start(2000ms)); /v1/control/stop|resume STOP dosyası. V6 supervisor ve bulut koordinatörü ürün yolunda değil."
+   },
+   {
+    "q": "MissionRunner ne yapabiliyor",
+    "a": "Run claim (lease, runner.lock, fenced takeover), 7 adımlı sabit hat, remediation ≤2, retry ≤2, AWAITING_APPROVAL'da durur; merge/push/complete yapmaz. Aynı anda 1 run. Kanıt: v7-b3a* unit (FAKE executor); canlı 1 oyuncak run."
+   },
+   {
+    "q": "CrewCoordinator çalışma zamanına bağlı mı",
+    "a": "HAYIR. core/workos/crew/coordinator.ts üretimde yalnız predev/placeholder.ts ve validators.ts tarafından adı geçiyor (tip/yer tutucu); runner'dan çağrılmıyor (bu oturumda grep)."
+   },
+   {
+    "q": "Ajan rolleri yürütülebilir mi",
+    "a": "Yalnız 9 rol (6 CLAUDE_REVIEWER, 2 CLAUDE_IMPLEMENTER, 1 DETERMINISTIC_STUDIO). 599 rol katalog verisi, 590'ı yürütülemez; değerlendirilmiş rol 0 (EV12)."
+   },
+   {
+    "q": "Model routing var mı",
+    "a": "HAYIR (çalışma zamanında). Sabit Claude CLI; routeModel/chooseProvider yalnız testlerden çağrılıyor."
+   },
+   {
+    "q": "Claude CLI ↔ UASCO-EVREN Gateway",
+    "a": "Çalışan entegrasyon YOK. \"Evren\" adı yalnız marka/locale (tr.js \"Evrensel\"). Model gateway = OmniRoute: yalnız elle çalışan keşif betiği (scripts/discover-omniroute-models.mjs); models/omniroute/client.ts hiçbir yerden import edilmiyor (core/capabilities/adapter-reality.ts:40 kaydı, bu oturumda okundu). Ürün yalnız Claude CLI kullanıyor."
+   },
+   {
+    "q": "Test/QA çekirdekleri gerçek araçlara bağlı mı",
+    "a": "Kısmen: testCommand gate+sandbox ile (Linux); gitleaks/trivy PATH'te varsa; CI'da gerçek araçlarla koşmuyor (FAKE scanner testleri). core/qa/api bağlı değil."
+   },
+   {
+    "q": "Windows sandbox neden çalışmıyor",
+    "a": "packagedServerOptions sandbox seçeneği vermiyor (packaged-entry.ts:52-57, \"sandbox seçeneği YOKTUR\"); server.ts Linux dışı null provider. WSL2 sağlayıcısı #231 Founder-tier, dirty, merge edilmedi."
+   },
+   {
+    "q": "Desktop'tan gerçek kod üretimi",
+    "a": "Linux'ta kod yolu var (LOCAL_CLAUDE + Claude login gerekir); kurulu Windows uygulamasında kod üretilir ama test/doğrulama NOT_EXECUTED → mission COMPLETE/PRODUCT_VERIFIED imkânsız. Gerçek-modelle kanıt yalnız 2026-10-14 32 sn oyuncak run."
+   },
+   {
+    "q": "PR/merge ürün içinden",
+    "a": "HAYIR. Ürün çıktısı yerel git branch + ZIP."
+   },
+   {
+    "q": "Kullanıcı son çıktıyı nasıl alıyor",
+    "a": "Sunucu tarafı prepareRunDelivery ZIP (README, raporlar, VERIFICATION_STATUS.json, NOT_VERIFIED); Desktop \"Export delivery package\" scrubber yüzünden kırık (AUD-022, RW-009)."
+   },
+   {
+    "q": "Cloud ve local aynı görevi iki kez çalıştırabilir mi",
+    "a": "Ürün: cloud yürütme yok (CLAUDE_CLOUD_SESSION NOT_CONFIGURED) → hayır. Geliştirme düzlemi: EVET riski vardı — dispatch.mjs create-only ref claim yalnız konvansiyon; FA-LEASE2 yetkili değil (refs/uasco/* = 0, bu oturumda ls-remote); V6 yerel supervisor durumu UNKNOWN. Şu an tüm bulut rutinleri kapalı."
+   },
+   {
+    "q": "Görev sahipliği/lease/concurrency",
+    "a": "Ürün içinde GERÇEK: runner.lock + lease TTL + fenced takeover, tek run (unit testli). Geliştirme düzleminde kısmi: claim ref + nonce + read-back; merkezi lease (FA-LEASE2) yok; LeaseManager bağlı değil."
+   }
+  ],
+  "epicDependencyEdges": [
+   {
+    "fromEpic": "UASCO-E01",
+    "toEpic": "UASCO-E02",
+    "count": 7
+   },
+   {
+    "fromEpic": "UASCO-E01",
+    "toEpic": "UASCO-E03",
+    "count": 4
+   },
+   {
+    "fromEpic": "UASCO-E01",
+    "toEpic": "UASCO-E04",
+    "count": 1
+   },
+   {
+    "fromEpic": "UASCO-E01",
+    "toEpic": "UASCO-E09",
+    "count": 1
+   },
+   {
+    "fromEpic": "UASCO-E02",
+    "toEpic": "UASCO-E01",
+    "count": 3
+   },
+   {
+    "fromEpic": "UASCO-E02",
+    "toEpic": "UASCO-E03",
+    "count": 3
+   },
+   {
+    "fromEpic": "UASCO-E02",
+    "toEpic": "UASCO-E09",
+    "count": 1
+   },
+   {
+    "fromEpic": "UASCO-E03",
+    "toEpic": "UASCO-E01",
+    "count": 2
+   },
+   {
+    "fromEpic": "UASCO-E03",
+    "toEpic": "UASCO-E02",
+    "count": 4
+   },
+   {
+    "fromEpic": "UASCO-E04",
+    "toEpic": "UASCO-E01",
+    "count": 1
+   },
+   {
+    "fromEpic": "UASCO-E04",
+    "toEpic": "UASCO-E02",
+    "count": 1
+   },
+   {
+    "fromEpic": "UASCO-E04",
+    "toEpic": "UASCO-E03",
+    "count": 1
+   },
+   {
+    "fromEpic": "UASCO-E04",
+    "toEpic": "UASCO-E05",
+    "count": 1
+   },
+   {
+    "fromEpic": "UASCO-E05",
+    "toEpic": "UASCO-E01",
+    "count": 5
+   },
+   {
+    "fromEpic": "UASCO-E05",
+    "toEpic": "UASCO-E02",
+    "count": 2
+   },
+   {
+    "fromEpic": "UASCO-E05",
+    "toEpic": "UASCO-E03",
+    "count": 2
+   },
+   {
+    "fromEpic": "UASCO-E05",
+    "toEpic": "UASCO-E06",
+    "count": 3
+   },
+   {
+    "fromEpic": "UASCO-E05",
+    "toEpic": "UASCO-E07",
+    "count": 7
+   },
+   {
+    "fromEpic": "UASCO-E05",
+    "toEpic": "UASCO-E08",
+    "count": 2
+   },
+   {
+    "fromEpic": "UASCO-E07",
+    "toEpic": "UASCO-E01",
+    "count": 4
+   },
+   {
+    "fromEpic": "UASCO-E07",
+    "toEpic": "UASCO-E02",
+    "count": 1
+   },
+   {
+    "fromEpic": "UASCO-E07",
+    "toEpic": "UASCO-E03",
+    "count": 2
+   },
+   {
+    "fromEpic": "UASCO-E07",
+    "toEpic": "UASCO-E05",
+    "count": 1
+   },
+   {
+    "fromEpic": "UASCO-E07",
+    "toEpic": "UASCO-E08",
+    "count": 1
+   },
+   {
+    "fromEpic": "UASCO-E08",
+    "toEpic": "UASCO-E05",
+    "count": 1
+   },
+   {
+    "fromEpic": "UASCO-E08",
+    "toEpic": "UASCO-E07",
+    "count": 1
+   },
+   {
+    "fromEpic": "UASCO-E09",
+    "toEpic": "UASCO-E02",
+    "count": 1
+   },
+   {
+    "fromEpic": "UASCO-E09",
+    "toEpic": "UASCO-E03",
+    "count": 2
+   },
+   {
+    "fromEpic": "UASCO-E09",
+    "toEpic": "UASCO-E06",
+    "count": 1
+   },
+   {
+    "fromEpic": "UASCO-E09",
+    "toEpic": "UASCO-E08",
+    "count": 3
+   }
+  ],
+  "criticalPath": [
+   "UASCO-RW-001",
+   "UASCO-RW-011",
+   "UASCO-RW-010",
+   "UASCO-RW-005",
+   "UASCO-RW-026",
+   "UASCO-RW-055",
+   "UASCO-RW-033",
+   "UASCO-RW-034"
+  ],
+  "topBlockers": [
+   {
+    "id": "UASCO-RW-001",
+    "blocks": 11
+   },
+   {
+    "id": "UASCO-RW-006",
+    "blocks": 8
+   },
+   {
+    "id": "UASCO-RW-005",
+    "blocks": 7
+   },
+   {
+    "id": "UASCO-RW-015",
+    "blocks": 5
+   },
+   {
+    "id": "UASCO-RW-011",
+    "blocks": 3
+   },
+   {
+    "id": "UASCO-RW-014",
+    "blocks": 3
+   },
+   {
+    "id": "UASCO-RW-002",
+    "blocks": 2
+   },
+   {
+    "id": "UASCO-RW-004",
+    "blocks": 2
+   },
+   {
+    "id": "UASCO-RW-009",
+    "blocks": 2
+   },
+   {
+    "id": "UASCO-RW-023",
+    "blocks": 2
+   }
+  ],
+  "executionOrder": {
+   "P0": [
+    "UASCO-RW-001",
+    "UASCO-RW-002",
+    "UASCO-RW-003",
+    "UASCO-RW-004",
+    "UASCO-RW-006",
+    "UASCO-RW-005",
+    "UASCO-RW-007",
+    "UASCO-RW-008"
+   ],
+   "P1": [
+    "UASCO-RW-017",
+    "UASCO-RW-009",
+    "UASCO-RW-011",
+    "UASCO-RW-010",
+    "UASCO-RW-023",
+    "UASCO-RW-012",
+    "UASCO-RW-013",
+    "UASCO-RW-015",
+    "UASCO-RW-014",
+    "UASCO-RW-016",
+    "UASCO-RW-018",
+    "UASCO-RW-019",
+    "UASCO-RW-020",
+    "UASCO-RW-021",
+    "UASCO-RW-022",
+    "UASCO-RW-024",
+    "UASCO-RW-025",
+    "UASCO-RW-026",
+    "UASCO-RW-027",
+    "UASCO-RW-032",
+    "UASCO-RW-028",
+    "UASCO-RW-029",
+    "UASCO-RW-030",
+    "UASCO-RW-031",
+    "UASCO-RW-033",
+    "UASCO-RW-034",
+    "UASCO-RW-035",
+    "UASCO-RW-036",
+    "UASCO-RW-037",
+    "UASCO-RW-038",
+    "UASCO-RW-040",
+    "UASCO-RW-039",
+    "UASCO-RW-041"
+   ],
+   "P2": [
+    "UASCO-RW-055",
+    "UASCO-RW-042",
+    "UASCO-RW-043",
+    "UASCO-RW-044",
+    "UASCO-RW-045",
+    "UASCO-RW-046",
+    "UASCO-RW-047",
+    "UASCO-RW-048",
+    "UASCO-RW-049",
+    "UASCO-RW-050",
+    "UASCO-RW-051",
+    "UASCO-RW-052",
+    "UASCO-RW-053",
+    "UASCO-RW-054",
+    "UASCO-RW-056",
+    "UASCO-RW-057",
+    "UASCO-RW-058",
+    "UASCO-RW-059",
+    "UASCO-RW-060",
+    "UASCO-RW-061",
+    "UASCO-RW-062",
+    "UASCO-RW-063",
+    "UASCO-RW-064",
+    "UASCO-RW-065",
+    "UASCO-RW-066",
+    "UASCO-RW-067",
+    "UASCO-RW-068",
+    "UASCO-RW-069",
+    "UASCO-RW-070",
+    "UASCO-RW-071"
+   ],
+   "P3": [
+    "UASCO-RW-072",
+    "UASCO-RW-073",
+    "UASCO-RW-074",
+    "UASCO-RW-075",
+    "UASCO-RW-076",
+    "UASCO-RW-077",
+    "UASCO-RW-078",
+    "UASCO-RW-079",
+    "UASCO-RW-080"
+   ]
+  },
+  "draftCountCorrection": {
+   "previous": 6,
+   "verified": 7,
+   "drafts": [
+    291,
+    288,
+    282,
+    251,
+    247,
+    231,
+    66
+   ]
+  },
+  "founderDecisions": [
+   "FD-01 #293 protected merge",
+   "FD-02 IR token",
+   "FD-03 #231",
+   "FD-04 #247/#251",
+   "FD-05 #66 defer",
+   "FD-06 Plan A0",
+   "FD-07 Founder-PC local automation check",
+   "FD-08 stale waiting run 39687649214",
+   "FD-09 restart directive"
+  ],
+  "unknown": [
+   "V6 Supervisor (Founder-PC)",
+   "Windows Task Scheduler",
+   "Local worker services",
+   "Cowork local scheduled tasks",
+   "Real billing"
+  ],
+  "finalStatus": "PAUSED_WITH_BLOCKERS",
+  "//TR": "Master V2 kontrollü kapanış delta kaydı (2026-11-02T06:10Z); çelişen değerlerde bu blok geçerli"
+ },
+ "finalPrClosure": {
+  "//TR": "Final PR unblock ve kapanış delta kaydı (2026-11-02T07:55Z); çelişen değerlerde bu blok geçerli",
+  "at": "2026-11-02T10:50Z",
+  "integrationHead": "d5f4365fda64b898d9e1f0bdc264111d9080a7f0",
+  "integrationHeadCi": {
+   "run": 41424008197,
+   "conclusion": "success"
+  },
+  "merged": [
+   {
+    "pr": 293,
+    "merge": "6b174dc420c844243487e3efbd16bbd54b71f737",
+    "by": "Founder",
+    "pushCi": "41399037045 success"
+   },
+   {
+    "pr": 291,
+    "merge": "16d3a71a51dc5b759f900117127e38e5d6fba6a6",
+    "by": "auto-merge",
+    "pushCi": "41402142167 failure (relfx-c3:200 Windows flake)"
+   },
+   {
+    "pr": 288,
+    "merge": "272efccc34757ffb0563f51bf4ff1acee87115c4",
+    "by": "auto-merge",
+    "pushCi": "41402160660 cancelled"
+   },
+   {
+    "pr": 292,
+    "merge": "a75e27f235643593eb9f2aec9772e8c614f78bc0",
+    "by": "auto-merge",
+    "pushCi": "41402348632 failure (installer:341)"
+   },
+   {
+    "pr": 295,
+    "merge": "d5f4365fda64b898d9e1f0bdc264111d9080a7f0",
+    "by": "auto-merge after Founder Re-run all jobs",
+    "pushCi": "41424008197 success"
+   }
+  ],
+  "open": {
+   "295": "MERGED",
+   "282": "head 5d66b03 (own test fixed, review NO_BLOCKERS 2 LOW, ledger deeffafa); attempt 1 shard 2 failed on pre-existing Windows store-lock zero-byte lock LOCK_TIMEOUT (relfx-1:459); one full re-run started; auto-merge armed",
+   "294": "updated onto current base with this canonical report; review -> ledger -> auto-merge",
+   "251": "MERGE_AFTER_APPROVAL: trust-root-manifest conflict, 3 protected files",
+   "247": "MERGE_AFTER_APPROVAL: trust-root-manifest conflict",
+   "231": "BLOCKED: Founder-tier + Windows 11/WSL2 acceptance",
+   "66": "DEFER_TO_ROADMAP: unrelated histories with v7/integration"
+  },
+  "mergeGateRootCause": "mergeGate opens only on NO_BLOCKERS/NO_CODE_BLOCKERS verdict bound to head SHA; reviewRecord refuses a second record for the same SHA; founder-authority environment approval is not a ledger input",
+  "reviewerAuthRejected": "scripts/ci/uasco-review/review-gate.mjs:122,146; claude-code-action is_error auth-shaped result; secret CLAUDE_CODE_OAUTH_TOKEN in environment uasco-review must be regenerated (value not read)",
+  "ledgerCommits": [
+   "9040d7a2",
+   "ec09930c",
+   "a336c4a2"
+  ],
+  "triggersEnabled": 0,
+  "localComponents": "UNKNOWN",
+  "finalStatus": "PAUSED_WITH_BLOCKERS",
+  "coord001": "Re-run failed jobs can never make validate (windows-latest) green: aggregator downloads shard reports of the current attempt only; fix targeted by #251 (protected CI-TEP1)",
+  "techDebt": [
+   "TD-V2-06 Windows store-lock zero-byte lock file -> LOCK_TIMEOUT (relfx-1:459, F-B1-006, relfx-c3:200 family; RW-013)"
+  ]
  }
 }
