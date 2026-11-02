@@ -33,7 +33,10 @@ Gerekçe: matriste `dependsOn: []` olan, harici sır/bütçe/sağlayıcı gerekt
 | Hedef | `core/cloud/contracts.ts` (yeni), `tests/cloud-contracts.test.ts` (yeni) |
 | İş | job id, tenant, imzalı kapsam (HMAC-SHA256, timing-safe), 24h timeout tavanı / 8h default, ≤3 retry, tenant-bazlı idempotency, yapılandırılmış olay akışı doğrulaması, artifact SHA, sır içermeyen audit kaydı; her belirsizlik fail-closed red |
 | Done kriteri | Sözleşme testleri ve yetkisiz iş isteği reddi PASS |
-| Kanıt | `vitest` 23/23 PASS; `tsc --noEmit` PASS (Node 24.22.2, bulut konteyner) |
+| Kanıt | `vitest tests/cloud-contracts.test.ts` 23/23 PASS; `tsc --noEmit` PASS; `npm run validate` statik kapıları (registry…SECRET_SANITY) PASS (Node 24.22.2 / npm 11.21.1, bulut konteyner) |
+| Tam suite | 3302 pass / 7 fail / 25 skip. 1 fail bu commit'e ait: `pkg-vs-validation-sharding` (yeni test dosyası henüz bir CI shard'ına kayıtlı değil). 6 fail bu commit'in import etmediği modüllerde, konteyner ortamına bağlı: `v7-int-r3-sbx-gate` ×4 (unshare sandbox), `pkg-t3-omniroute-install-compat` (NPM_ROOT_UNAVAILABLE), `pkg-aut1-orchestrator` (process-tree kill). Hosted CI'da yeniden doğrulanmalı. |
+| Ortam | `dependency-supply-chain` (npm audit) bu konteynerin proxy'sinde `DEPENDENCY_AUDIT_INVALID_RESPONSE`; hosted CI'da koşar, burada PASS sayılmadı. |
+| Bekleyen supervisor adımı | `config/validation.json` korumalı trust-root dosyası; builder değiştiremez. Supervisor `S-REG (R1 TEST_REGISTRATION_APPEND + TRUST_ROOT_RESEAL)` ile `tests/cloud-contracts.test.ts` bir vitest shard'ına eklenip reseal edilmeli (örnek: `c7a33f84`). Bu yapılmadan sharding testi ve CI kırmızı kalır. |
 
 ## Sonraki izinli adımlar (bağımlılık sırasıyla, Founder kararı gerekmeyenler)
 
