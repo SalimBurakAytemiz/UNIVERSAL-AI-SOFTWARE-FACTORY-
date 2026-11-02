@@ -2729,7 +2729,7 @@
    "module": "CI",
    "department": "CI ve Yayın Mühendisliği",
    "priority": "P2",
-   "status": "DEFERRED",
+   "status": "BLOCKED",
    "statusEvidenceTag": "VERIFIED",
    "completionCriteria": "Round-3 delta NO_BLOCKERS + CI yeşil → merge; değilse ROUND_LIMIT → kapat (round cap 3 uygulanır).",
    "dependencies": [
@@ -2756,7 +2756,7 @@
    ],
    "plan": "A",
    "owner": "AGENT",
-   "note": "PR #282 DEFER_TO_ROADMAP 2026-11-02 (P bölümü)"
+   "note": "PR #282 DEFER_TO_ROADMAP 2026-11-02 (P bölümü); status kept within the inventory enum"
   },
   {
    "id": "UASCO-RW-045",
