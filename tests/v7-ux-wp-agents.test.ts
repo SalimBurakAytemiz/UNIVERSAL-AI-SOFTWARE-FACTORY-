@@ -1933,7 +1933,7 @@ describe("LANE-A A2a Tools panel (TOOL_READY only; not measured is never zero; n
       ["reasonCounts not an object", edit("SUPPLIED", x => { x.readiness.reasonCounts = []; })],
       ["TOOL_READY not an object", edit("SUPPLIED", x => { x.readiness.reasonCounts.TOOL_READY = []; })],
       ["code not UPPER_SNAKE", edit("SUPPLIED", x => { x.readiness.reasonCounts.TOOL_READY = {"bad code": 1}; })],
-      ["count zero", edit("SUPPLIED", x => { x.readiness.reasonCounts.TOOL_READY = {...x.readiness.reasonCounts.TOOL_READY, PROBE_NOT_OBSERVED: 0}; })],
+      ["count zero (the sum still covers every open role)", edit("SUPPLIED", x => { x.readiness.reasonCounts.TOOL_READY = {...x.readiness.reasonCounts.TOOL_READY, ADAPTER_CODE_ABSENT: 0}; })],
       ["count negative", edit("SUPPLIED", x => { x.readiness.reasonCounts.TOOL_READY.PROBE_NOT_OBSERVED = -1; })],
       ["count a float", edit("SUPPLIED", x => { x.readiness.reasonCounts.TOOL_READY.PROBE_NOT_OBSERVED = 1.5; })],
       ["count a string", edit("SUPPLIED", x => { x.readiness.reasonCounts.TOOL_READY.PROBE_NOT_OBSERVED = "9"; })],
