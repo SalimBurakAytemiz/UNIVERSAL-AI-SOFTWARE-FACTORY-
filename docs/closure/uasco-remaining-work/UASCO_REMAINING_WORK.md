@@ -8,6 +8,7 @@
 | integrationHead | v7/integration @ 0b71650fa88b9802968562c63ca33f8b56e9648b (merge #290, 2026-10-27T11:34:54Z); 03:50:46Z'de git ls-remote ile yeniden doğrulandı |
 | Girdiler | G1-G7 denetçi raporları (eksik denetçi yok), COORD-LEDGER @afe2f9b, Master V2 WAVE0-BASELINE.json, önceki denetim v1.0 (CLAIMED) |
 | Durum | KANONİK — kapanış değerleri 2026-11-02T05:30Z'de dolduruldu (COORD). Son durum: PAUSED_WITH_BLOCKERS. Bu rapor hiçbir işi başlatmaz. · **V2 ≈06:00Z (L bölümü):** Master V2 kontrollü kapanış güncellemesi 2026-11-02T06:10Z (L bölümü; çelişen değerlerde L geçerli). Son durum yine PAUSED_WITH_BLOCKERS; bulut rutinleri 11/11 kapalı, yerel bileşenler UNKNOWN. |
+| Final PR closure güncellemesi | 2026-11-02T07:55Z: M bölümü (merge zinciri, #293 kapı kök nedeni, #295, IR auth, Founder-tier, Founder-PC adımları) + JSON `finalPrClosure` |
 | Master V2 güncellemesi | 2026-11-02T06:10Z — oturum session_015dYwb2fTtgsPy3wpVN9rYC; L bölümü + JSON `masterV2` + evidence/G9-master-v2-closure.md |
 | Etiketler | VERIFIED = birincil kaynakta kontrol edildi · CLAIMED = doküman söylüyor, yeniden doğrulanmadı · ESTIMATE = çıkarım (yöntemiyle) · UNKNOWN = ölçülemedi · NOT_RUN_ENV_UNAVAILABLE = ortam yok, asla PASS değil · COORD-VERIFIED = koordinatörün 2026-11-02 doğruladığı olgu |
 | Seviye merdiveni | PLANNED > DESIGNED > CODED > INTEGRATED > TESTED(unit) > VERIFIED_REAL_ENV > USABLE_BY_END_USER |
@@ -1229,6 +1230,105 @@ Bu güncelleme `uasco/production-reports` dalındaki kanonik rapor ailesine (ayn
 | 20 | Yeniden başlatma işlemleri? | L.10: #293 merge → base CI yeşil → Plan A0 → yazılı restart talimatı → Controller, sonra lane trigger'ları `enabled=true`. |
 
 **Son durum: PAUSED_WITH_BLOCKERS** (birden fazla kritik yerel sistem UNKNOWN; #293 açık).
+
+## M. Final PR Unblock & Closure (2026-11-02T07:55Z)
+
+> Founder direktifleri "UASCO — FINAL PR UNBLOCK & CLOSURE" ve "#293 manuel merge edildi" (2026-11-02). L bölümünün üzerine delta; çelişen değerlerde M geçerlidir. Yeni Epic/Feature/sprint başlatılmadı; hiçbir rutin açılmadı; secret değerleri görüntülenmedi.
+
+### M.1 #293: ledger merge-gate neden kapalı kaldı (kök neden)
+
+| Bulgu | Kanıt |
+| --- | --- |
+| `mergeGate` yalnız güncel head SHA'ya bağlı ve verdict'i `/^(NO_BLOCKERS\|NO_CODE_BLOCKERS)/` ile başlayan bir review kaydında açılır; `BASE_MERGE_ONLY` yalnız temiz bir kayda zincirlenirse devralır | docs/cloud-production/coord-ledger.mjs (`OPEN_VERDICT`, `mergeGate`) @uasco/production-queue |
+| #293'ün tek kaydı `BLOCKERS_GOV_FOUNDER_AUTHORITY_…_code-NO_DEFECTS_5LOW` (afe2f9b) → `VERDICT_BLOCKING` (exit 5) | `coord-ledger.mjs merge-gate --pr 293 --sha ee2facb…` |
+| `reviewRecord` aynı PR+SHA için ikinci kaydı `ALREADY_RECORDED` ile reddeder → aynı head için kapı ledger içinden yeniden açılamaz | coord-ledger.mjs `reviewRecord` |
+| Founder'ın onayı GitHub Actions `uasco-founder-authority` environment onayıdır (run 41381085962, job founder-authority success 05:42Z). Bu onay ledger'a hiçbir girdi üretmez; iki yetki kaydı arasında köprü yok | .github/workflows/uasco-independent-review.yml (founder-authority job, `environment: uasco-founder-authority`) |
+| Sonuç: senkronizasyon boşluğu tasarımsal. Güvenli tek yol Founder'ın korumalı merge'iydi; Founder 06:17:59Z'de #293'ü merge etti (merge 6b174dc, parent2 = ee2facb, tree = merge-tree, VERIFIED) | git |
+
+**Önerilen kalıcı çözüm (uygulanmadı; geliştirme altyapısı değişikliği, Founder kararı FD-10):** ledger'a `founder-authority` kayıt türü ekle: `{pr, sha, runId, environment, approvedAt}`; kapı yalnız verdict `BLOCKERS_GOV_FOUNDER_AUTHORITY_*_code-NO_DEFECTS*` VE aynı SHA için GitHub deployment-approval API'sinden doğrulanmış bir founder-authority kaydı varsa açılsın. Kayıt elle yazılamaz, API'den okunarak yazılır.
+
+### M.2 Merge ve CI zinciri
+
+| Sıra | PR | Merge commit | parent2 = gözden geçirilmiş head | Ledger | Merge eden | PR CI (required) | Base push CI (merge sonrası) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | #293 | 6b174dc4 (06:17:59Z) | ee2facb ✓, tree = merge-tree ✓ | gate CLOSED (M.1) | Founder (manuel) | ubuntu ✓ windows ✓ (41381085868) | **PASS** 41399037045; installer 41399036913 |
+| 2 | #291 | 16d3a71a (06:47Z) | 78d77f9 ✓, tree ✓ | BASE_MERGE_ONLY → 4b4eee0 NO_BLOCKERS (9040d7a2) | auto-merge | ✓ | **FAIL** 41402142167: Windows shard 1 `relfx-c3:200` (PAR-03, RW-013) |
+| 3 | #288 | 272efccc (06:47Z) | 9edf75c ✓, tree ✓ | BASE_MERGE_ONLY → 7bf22e5 NO_BLOCKERS (9040d7a2) | auto-merge | ✓ | CANCELLED 41402160660 (yerini sonraki push aldı) |
+| 4 | #292 | a75e27f2 (06:49Z) | 2d5c913 ✓, tree ✓ | BASE_MERGE_ONLY → 43776e1 NO_BLOCKERS (9040d7a2) | auto-merge | ✓ | **FAIL** 41402348632: ubuntu + Windows shard 1 `v7-b7-installer:341` (M.3) |
+
+Merge edilmeyenler: #282 (base kırmızı; auto-merge COORD-002 gereği kapatıldı), #295 (Windows shard 1 iki kez farklı bilinen flake), #294 (base kırmızı; rapor içeriği kanonik dalda).
+
+Not: GitHub ruleset yalnız iki `validate` kontrolünü zorunlu tutar ve "up-to-date" istemez. #291 ve #288 bu yüzden birleşik CI olmadan art arda merge oldu (M.3).
+
+### M.3 Kapanışta bulunan ve düzeltilen base-wide hata (#295)
+
+#291 ve #288 tek başına yeşildi ama birlikte `tests/v7-b7-installer.test.ts:341`'i kırdı. #288 `registries/agent-skill-matrix.json`'u installer exclusion listesine koydu; #291 aynı dosyayı paketli bir route için stage etti. Ruleset "up-to-date" istemediği için ikisi birleşik CI olmadan art arda merge oldu. Bu bir süreç dersi: aynı dosyaya dokunan PR'lar seri merge edilmeli ya da merge sonrası push CI beklenmeli (TD-V2-05). Düzeltme: [#295](https://github.com/SalimBurakAytemiz/UNIVERSAL-AI-SOFTWARE-FACTORY-/pull/295), 1 satır. Review'u taze, salt-okur bir alt ajan yaptı (NO_BLOCKERS, 4 LOW; ledger a336c4a2; tüketici `apps/control-api/src/routes/role-status.ts:118-125` izlendi). Durum: ubuntu ✓; Windows shard 1 run 41404034146 attempt 1'de `v7-b2-workos-hardening:154` (F-B1-006, 3 eşzamanlı journal yazarı, Windows) ve attempt 2'de (tek izinli yeniden koşu) `v7-relfx-c3-remediation:200` (PAR-03 fence) ile FAIL. İkisi de diff dışında ve base'de de görülen Windows zamanlama hataları (16d3a71 push CI aynı relfx-c3 hatası). Politika gereği üçüncü koşu başlatılmadı. **BLOCKED**: Founder tek eylemi: Actions → run 41404034146 → "Re-run failed jobs" (ya da bu oturuma bir yeniden koşu için yazılı yetki). Yeşil olursa auto-merge (ledger kapısı açık, d53c37d) otomatik merge eder.
+
+### M.4 `REVIEWER_AUTH_REJECTED` kaynağı
+
+- Üreten kod: `scripts/ci/uasco-review/review-gate.mjs:122,146` (`AUTH_RE`). Reviewer'ın son `result` mesajı `is_error: true` ve auth/oauth/401/login biçimli bir metin taşıyınca bu kod atanır.
+- Çalışan adım: `anthropics/claude-code-action` (`ai-review` job, `environment: uasco-review`, secret `CLAUDE_CODE_OAUTH_TOKEN`; workflow satır 126).
+- #293 ai-review (job 125115982300, 05:42:41Z): "UASCO reviewer diagnosis: REVIEWER_AUTH_REJECTED", `VERDICT_JSON` boş.
+- Anlamı: environment'taki OAuth token'ı Anthropic tarafından reddedildi (süresi dolmuş, iptal edilmiş ya da yanlış hesap). Secret değeri okunmadı ve rapora yazılmadı. Diagnostics artifact'ı (13119665414) bu oturumun proxy'si tarafından engellendi (blob host 403), sayılar okunamadı.
+- **Founder eylemi:** Founder makinesinde `claude setup-token` → GitHub → Settings → Environments → `uasco-review` → Secret `CLAUDE_CODE_OAUTH_TOKEN` → Update. Sonra bir PR'da "Re-run all jobs" ile doğrula. IR check'i required değil; merge'leri engellemedi.
+
+### M.5 Founder-tier PR'lar (ayrı değerlendirme; hiçbiri zorla merge edilmedi)
+
+| PR | Head | Base'in gerisinde | Korunan yol | Çakışma (güncel base) | Gerçek ortam | Karar |
+| --- | --- | --- | --- | --- | --- | --- |
+| #251 Protected CI-TEP1 | f40bea3 | 263 commit | 3 / 4 dosya | config/trust-root-manifest.json | — | MERGE_AFTER_APPROVAL: Founder protected-path onayı + trust-root reseal + rebase/merge |
+| #247 Autonomy temp cleanup + reseal | 323c14f | 199 | 2 / 3 | config/trust-root-manifest.json | — | MERGE_AFTER_APPROVAL: aynı reseal; 16,8 GB temp sızıntısı düzeltmesi bekliyor |
+| #231 WSL2 sandbox | c9a3e2d | 166 | 2 / 42 | config/trust-root-manifest.json | Windows 11 + WSL2 (Founder-PC) gerekli | BLOCKED: Founder-tier karar + gerçek ortam kabul testi (RW-004, kritik yol) |
+| #66 Electron E2E | ffeaf79 | — | 12 / 451 | `git merge-tree`: **refusing to merge unrelated histories** (v7/integration ile ortak ata yok) | Gerçek Electron | DEFER_TO_ROADMAP / SUPERSEDED adayı: güncel base üzerinde yeniden kurulmalı; branch korunur |
+
+### M.6 Test sonuçları (son durum)
+
+| Kategori | Durum | Kanıt |
+| --- | --- | --- |
+| Unit / Integration / Contract / UI (Linux) | PASS @6b174dc (41399037045); FAIL @a75e27f yalnız `v7-b7-installer:341` (41402348632); #295 head'de ubuntu PASS (41404034146) | CI |
+| Security / dependency audit | **PASS**: dependency-supply-chain @6b174dc ve sonrası (DEPENDENCY_AUDIT_BLOCKERS 0) | 41399037045, 41402299333 |
+| Windows build (3 shard) | Shard 2-3 PASS; shard 1 kararsız (relfx-c3:200, F-B1-006) + a75e27f'te installer testi | 41402142167, 41402348632, 41404034146 |
+| Windows installer | PASS @6b174dc (41399036913) | CI |
+| Electron runtime / E2E / Founder-PC | NOT_RUN_ENV_UNAVAILABLE | — |
+| Yerel (bu oturum, Node 22) | v7-b7-installer base 35/36 → fix 36/36; ilgili 15 dosya 236 PASS / 8 skip / 2 FAIL (pkg-aut1, pkg-aut2: düzeltmesiz base'de de aynı, sandbox ortamı) | — |
+| Release/packaging | BLOCKED (release/tag 0, imza yok) | — |
+
+### M.7 Yerel V6 Supervisor / Task Scheduler: UNKNOWN, Founder kontrol adımları
+
+Bu bulut oturumu Founder-PC'ye erişemez. Durum **UNKNOWN** kalır. Founder PC'de PowerShell'de çalıştırın:
+
+1. `Get-ScheduledTask | Where-Object { $_.TaskName -like 'UASCO*' } | Select-Object TaskName, State, TaskPath` — beklenen görev adları (repo kodu): `UASCO-Autonomous-Supervisor`, `UASCO-Supervisor-Watchdog`, `UASCO-Installed-Supervisor`. Hepsi `Disabled` olmalı ya da hiç olmamalı.
+2. Etkin olan varsa: `Disable-ScheduledTask -TaskName '<ad>'` (silmeyin).
+3. `Get-CimInstance Win32_Process -Filter "Name='node.exe' OR Name='claude.exe'" | Select-Object ProcessId, CommandLine` — `uasco-orchestrator`, `supervisor` veya `local-worker` içeren süreç olmamalı.
+4. Claude Desktop → Cowork → Scheduled tasks: UASCO ile ilgili görev yok ya da kapalı olmalı.
+5. Sonucu (ekran görüntüsü veya çıktı) bir sonraki oturuma iletin; rapor o zaman PAUSED_VERIFIED'e yükseltilebilir.
+
+### M.8 Otomasyonlar
+
+- Bulut rutinleri: **0 / 11 etkin** (list_triggers ≈07:50Z). Bu oturum yalnız tek atımlık bir hatırlatıcı (trig_01YTb88eFb1MP2bPrcBzGN4N, 07:29Z ateşledi, artık etkin değil) oluşturdu; Controller/Lane/saatlik rutinler açılmadı.
+- GitHub Actions: 1 waiting (39687649214, 2026-10-21, eski IR). Zamanlanmış workflow 0.
+- PR abonelikleri: bu oturum #295 ve #282'yi izliyor (olay gelirse uyanır; yeni iş başlatmaz).
+- Lane/koordinatör oturumları IDLE. Yerel bileşenler UNKNOWN (M.7).
+
+### M.9 Kalan Founder aksiyonları
+
+| # | Eylem | Nerede |
+| --- | --- | --- |
+| FA-1 | #295 Windows shard 1'i bir kez daha koştur (veya bu oturuma yazılı yetki) | Actions → run 41404034146 → Re-run failed jobs |
+| FA-2 | #295 merge olduktan sonra: #282 update-branch → ledger BASE_MERGE_ONLY → auto-merge; sonra #294 | Bu oturuma "devam" talimatı |
+| FA-3 | IR token yenile (`CLAUDE_CODE_OAUTH_TOKEN`) | Settings → Environments → uasco-review |
+| FA-4 | Trust-root reseal kararı (#251, #247, #231 aynı manifest çakışması) | PR #251/#247/#231 |
+| FA-5 | #231 için Windows 11 + WSL2 gerçek kabul testi | Founder-PC |
+| FA-6 | #66: güncel base üzerinde yeniden kurma veya SUPERSEDED kararı | PR #66 |
+| FA-7 | Yerel V6/Task Scheduler/Cowork kontrolü (M.7) | Founder-PC |
+| FA-8 | Eski waiting run 39687649214'ü reddet/iptal | Actions |
+| FA-9 | FD-10: ledger'a founder-authority kayıt türü (M.1) | Karar |
+
+### M.10 Final durum
+
+**PAUSED_WITH_BLOCKERS.** Bulut otomasyonları 11/11 kapalı (VERIFIED). Merge edilenler: #293 (Founder), #291, #288, #292 (yetkili auto-merge, ledger kapısı açık, parent ve tree doğrulandı). `v7/integration` = a75e27f2, **push CI kırmızı** (installer testi; düzeltme #295). Açık: #295, #282, #294 (base/CI), #251, #247, #231, #66 (Founder-tier). Yerel bileşenler UNKNOWN. PAUSED_VERIFIED koşulları sağlanmadı.
+
+**Düzeltme (L.11):** L.11 raporun oturum dalı `claude/peaceful-heisenberg-f0452y`'ye de yazıldığını söylüyordu. O push uzak dala ulaşmadı (uzak dal 0b71650'de kalmıştı). Kanonik kopya yalnız bu daldadır (`uasco/production-reports`). Oturum dalı şimdi yalnız #295 düzeltmesini taşır.
 
 ## Baseline ve Kapanış Karşılaştırması
 

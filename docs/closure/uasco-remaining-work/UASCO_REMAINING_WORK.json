@@ -8,7 +8,8 @@
   "mergeOf": "#290",
   "mergedAt": "2026-10-27T11:34:54Z",
   "recheckedAt": "2026-11-02T03:50:46Z",
-  "recheckMethod": "git ls-remote origin refs/heads/v7/integration"
+  "recheckMethod": "git ls-remote origin refs/heads/v7/integration",
+  "finalPrClosure": "a75e27f235643593eb9f2aec9772e8c614f78bc0 (2026-11-02T06:49Z, push CI failure 41402348632)"
  },
  "baseline": {
   "evidenceWindow": "2026-11-02T02:50Z-04:05Z (denetçi kanıtları 02:55Z-03:51Z; açık PR listesi ~04:02Z)",
@@ -7092,7 +7093,7 @@
     ]
    }
   ],
-  "finalStatus": "PAUSED_WITH_BLOCKERS — erişilebilen bütün geliştirme otomasyonları durduruldu ve doğrulandı; ancak (1) UASCO Cloud Development ve Independent Cloud Reviewer rutinleri http_api ile oluşturulduğu için agent tarafından durdurulamadı ve saatlik ateşlemeye devam ediyor, (2) #293 ve Founder-tier PR'lar Founder yetkisi bekliyor, (3) Founder PC'deki olası yerel V6 supervisor / Task Scheduler durumu UNKNOWN (bu oturumdan erişilemiyor).",
+  "finalStatus": "PAUSED_WITH_BLOCKERS",
   "finalStatusAllowed": {
    "PAUSED_VERIFIED": "Kapanış tamamlandı ve erişilebilir bütün ilgili otomasyonların durduğu doğrulandı.",
    "PAUSED_WITH_BLOCKERS": "Kapanış mümkün olduğu kadar tamamlandı, ancak çözülmemiş işler veya durdurulamayan süreçler mevcut.",
@@ -8289,5 +8290,60 @@
   ],
   "finalStatus": "PAUSED_WITH_BLOCKERS",
   "//TR": "Master V2 kontrollü kapanış delta kaydı (2026-11-02T06:10Z); çelişen değerlerde bu blok geçerli"
+ },
+ "finalPrClosure": {
+  "//TR": "Final PR unblock ve kapanış delta kaydı (2026-11-02T07:55Z); çelişen değerlerde bu blok geçerli",
+  "at": "2026-11-02T07:55Z",
+  "integrationHead": "a75e27f235643593eb9f2aec9772e8c614f78bc0",
+  "integrationHeadCi": {
+   "run": 41402348632,
+   "conclusion": "failure",
+   "cause": "tests/v7-b7-installer.test.ts:341 (fix #295) + Windows shard 1"
+  },
+  "merged": [
+   {
+    "pr": 293,
+    "merge": "6b174dc420c844243487e3efbd16bbd54b71f737",
+    "by": "Founder",
+    "pushCi": "41399037045 success"
+   },
+   {
+    "pr": 291,
+    "merge": "16d3a71a51dc5b759f900117127e38e5d6fba6a6",
+    "by": "auto-merge",
+    "pushCi": "41402142167 failure (relfx-c3:200 Windows flake)"
+   },
+   {
+    "pr": 288,
+    "merge": "272efccc34757ffb0563f51bf4ff1acee87115c4",
+    "by": "auto-merge",
+    "pushCi": "41402160660 cancelled"
+   },
+   {
+    "pr": 292,
+    "merge": "a75e27f235643593eb9f2aec9772e8c614f78bc0",
+    "by": "auto-merge",
+    "pushCi": "41402348632 failure (installer:341)"
+   }
+  ],
+  "open": {
+   "295": "BLOCKED: Windows shard 1 failed twice on different known flakes; 1 re-run used; Founder re-run needed",
+   "282": "BLOCKED: base red; auto-merge disabled (COORD-002); head 842e492 gate OPEN",
+   "294": "BLOCKED: base red; canonical copy on uasco/production-reports",
+   "251": "MERGE_AFTER_APPROVAL: trust-root-manifest conflict, 3 protected files",
+   "247": "MERGE_AFTER_APPROVAL: trust-root-manifest conflict",
+   "231": "BLOCKED: Founder-tier + Windows 11/WSL2 acceptance",
+   "66": "DEFER_TO_ROADMAP: unrelated histories with v7/integration"
+  },
+  "mergeGateRootCause": "mergeGate opens only on NO_BLOCKERS/NO_CODE_BLOCKERS verdict bound to head SHA; reviewRecord refuses a second record for the same SHA; founder-authority environment approval is not a ledger input",
+  "reviewerAuthRejected": "scripts/ci/uasco-review/review-gate.mjs:122,146; claude-code-action is_error auth-shaped result; secret CLAUDE_CODE_OAUTH_TOKEN in environment uasco-review must be regenerated (value not read)",
+  "ledgerCommits": [
+   "9040d7a2",
+   "ec09930c",
+   "a336c4a2"
+  ],
+  "triggersEnabled": 0,
+  "localComponents": "UNKNOWN",
+  "finalStatus": "PAUSED_WITH_BLOCKERS"
  }
 }
