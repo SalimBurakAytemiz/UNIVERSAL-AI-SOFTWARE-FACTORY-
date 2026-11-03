@@ -1237,7 +1237,7 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     };
     return new LocalClaudeExecutors(REPO, control, {runReviewer}).pair();
   };
-  const evaluated = (o: EvaluationOutcome) => { if (o.status !== "EVALUATED") throw new Error(`expected EVALUATED, got ${JSON.stringify(o)}`); return o; };
+  const evaluated = (o: EvaluationOutcome, label?: string) => { if (o.status !== "EVALUATED") throw new Error(`${label ? `[${label}] ` : ""}expected EVALUATED, got ${JSON.stringify(o)}`); return o; };
   const listing = (d: string): string[] => fs.existsSync(d) ? fs.readdirSync(d, {recursive: true}).map(String).sort() : [];
   const repoSnapshot = () => sha(JSON.stringify({reg: sha(fs.readFileSync(REG_FILE)), evidence: listing(path.join(REPO, "audit", "evidence", "role-evaluations")), git: cp.spawnSync("git", ["status", "--porcelain"], {cwd: REPO, encoding: "utf8"}).stdout}));
 
@@ -1302,28 +1302,39 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
   it("infrastructure trouble is NOT an evaluation result: exit code, timeout, abort and non-role blocks -> NOT_EXECUTED and NOTHING is staged; role-caused builder refusals -> FAILED", { timeout: 180_000 }, async () => {
     const at = new Date().toISOString();
     const custom = (r: Record<string, unknown>): ExecutorPair => ({...fakePair(), implementer: {identity: "X_IMPL", implement: async () => ({exitCode: 0, log: "", argv: [], startedAt: at, endedAt: at, timedOut: false, aborted: false, transient: false, ...r})}});
-    const infra: Array<[string, ExecutorPair, string, Parameters<typeof evaluate>[2]?]> = [
-      ["exit code", fakePair({implement: () => ({exitCode: 1})}), "IMPLEMENT_EXIT_NONZERO"],
+    // UASCO-T0087: implementer infrastructure failures carry a diagnostic `detail` (exit=N:<redacted stderr>); the reason code is unchanged; TIMEOUT/ABORTED carry none
+    const infra: Array<[string, ExecutorPair, string, Parameters<typeof evaluate>[2] | undefined, unknown?]> = [
+      ["exit code", fakePair({implement: () => ({exitCode: 1})}), "IMPLEMENT_EXIT_NONZERO", undefined, "exit=1:"],
       ["timeout", fakePair({implement: () => ({files: {"greeting.txt": "hello\n"}, sleepMs: 5000})}), "TIMEOUT", {timeoutMs: 700}],
-      ["profile not logged in", custom({exitCode: null, blockReason: "CLAUDE_PROFILE_LOGIN_REQUIRED"}), "IMPLEMENT_BLOCKED:CLAUDE_PROFILE_LOGIN_REQUIRED"],
-      ["workspace config refused", custom({exitCode: null, blockReason: "WORKSPACE_CONTAINS_AGENT_CONFIG"}), "IMPLEMENT_BLOCKED:WORKSPACE_CONTAINS_AGENT_CONFIG"],
-      ["never started", custom({exitCode: null}), "NOT_STARTED"],
-      ["aborted", custom({aborted: true, exitCode: null}), "ABORTED"]
+      ["profile not logged in", custom({exitCode: null, blockReason: "CLAUDE_PROFILE_LOGIN_REQUIRED"}), "IMPLEMENT_BLOCKED:CLAUDE_PROFILE_LOGIN_REQUIRED", undefined, "exit=null:"],
+      ["workspace config refused", custom({exitCode: null, blockReason: "WORKSPACE_CONTAINS_AGENT_CONFIG"}), "IMPLEMENT_BLOCKED:WORKSPACE_CONTAINS_AGENT_CONFIG", undefined, "exit=null:"],
+      ["never started", custom({exitCode: null, log: "spawn ENOENT\n  claude"}), "NOT_STARTED", undefined, "exit=null:spawn ENOENT claude"],
+      ["aborted", custom({aborted: true, exitCode: null}), "ABORTED", undefined]
     ];
-    for (const [label, pair, reason, extra] of infra) {
+    for (const [label, pair, reason, extra, detail] of infra) {
       const root = stagingOf();
       const o = await evaluate(pair, DEV, {stagingRoot: root, ...(extra ?? {})});
-      expect([label, o]).toEqual([label, {status: "NOT_EXECUTED", roleId: DEV, evaluationId: "EV-01", reason}]);
+      expect([label, o]).toEqual([label, {status: "NOT_EXECUTED", roleId: DEV, evaluationId: "EV-01", reason, ...(detail !== undefined ? {detail} : {})}]);
       expect([label, listing(root)]).toEqual([label, []]);
     }
     for (const reason of ["BUILDER_PRODUCED_NO_CHANGE", "BUILDER_TOUCHED_GIT_INTERNALS", "BUILDER_TOUCHED_AGENT_CONFIG", "BUILDER_CHANGED_FORBIDDEN_PATH:GITLINK", "BUILDER_MOVED_HEAD"]) {
       const r = evaluated(await evaluate(custom({exitCode: null, blockReason: reason}), DEV));
       expect([reason, r.verdict, r.checks]).toEqual([reason, "FAILED", [{id: "builder_commit_accepted", passed: false, detail: reason}]]);
     }
+    // UASCO-T0087 diagnosability: a non-zero implementer exit names the exit code and the (redacted, collapsed, clipped) stderr; the reason is unchanged
+    {
+      const root = stagingOf(), token = "sk-ant-" + "a".repeat(40);
+      const o = await evaluate(fakePair({implement: () => ({exitCode: 3, stderr: `fatal: Unable to create '/w/.git/index.lock': File exists.\n  token=${token} ${"x".repeat(300)}`})}), DEV, {stagingRoot: root});
+      if (o.status !== "NOT_EXECUTED") throw new Error(JSON.stringify(o));
+      expect([o.reason, o.detail?.startsWith("exit=3:fatal: Unable to create '/w/.git/index.lock': File exists. token=")]).toEqual(["IMPLEMENT_EXIT_NONZERO", true]);
+      expect(o.detail!.length).toBeLessThanOrEqual(120);
+      expect(o.detail).not.toContain(token); expect(o.detail).not.toContain("sk-ant-aaaa"); expect(o.detail).not.toMatch(/\s{2,}|\n/);
+      expect(listing(root)).toEqual([]);
+    }
     // the engine's own failures are infrastructure, not the role's: nothing is staged and no verdict exists
     for (const reason of ["BUILDER_STATUS_FAILED", "BUILDER_COMMIT_FAILED", "BUILDER_STAGE_FAILED", "BUILDER_START_SHA_INVALID", "BUILDER_INDEX_RESET_FAILED"]) {
       const root = stagingOf();
-      expect([reason, await evaluate(custom({exitCode: null, blockReason: reason}), DEV, {stagingRoot: root})]).toEqual([reason, {status: "NOT_EXECUTED", roleId: DEV, evaluationId: "EV-01", reason: `IMPLEMENT_BLOCKED:${reason}`}]);
+      expect([reason, await evaluate(custom({exitCode: null, blockReason: reason}), DEV, {stagingRoot: root})]).toEqual([reason, {status: "NOT_EXECUTED", roleId: DEV, evaluationId: "EV-01", reason: `IMPLEMENT_BLOCKED:${reason}`, detail: "exit=null:"}]);
       expect(listing(root)).toEqual([]);
     }
   });
@@ -1607,7 +1618,7 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       ["no commit at all", {implement: () => ({files: {"test/add.test.js": good}, noCommit: true})}, "commit_produced"]
     ];
     for (const [label, o, failing, detail] of cases) {
-      const r = evaluated(await evaluate(fakePair(o), TESTER));
+      const r = evaluated(await evaluate(fakePair(o), TESTER), label);
       expect([label, r.verdict, r.checks.find(c => !c.passed)?.id]).toEqual([label, "FAILED", failing]);
       if (detail) expect([label, r.checks.find(c => !c.passed)?.detail]).toEqual([label, expect.stringContaining(detail)]);
       if (failing === "no_early_exit") expect([label, r.checks.filter(c => !c.passed).map(c => c.id)]).toEqual([label, ["no_early_exit"]]); // a control statement is an early exit, not an out-of-order declaration
@@ -1618,7 +1629,7 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     expect(broken.checks.find(c => c.id === "references_module")?.detail).toMatch(/not analysable/);
     // infrastructure is infrastructure for the tester too
     const root = stagingOf();
-    expect(await evaluate(fakePair({implement: () => ({exitCode: 1})}), TESTER, {stagingRoot: root})).toEqual({status: "NOT_EXECUTED", roleId: TESTER, evaluationId: "EV-01", reason: "IMPLEMENT_EXIT_NONZERO"});
+    expect(await evaluate(fakePair({implement: () => ({exitCode: 1})}), TESTER, {stagingRoot: root})).toEqual({status: "NOT_EXECUTED", roleId: TESTER, evaluationId: "EV-01", reason: "IMPLEMENT_EXIT_NONZERO", detail: "exit=1:"});
     expect(listing(root)).toEqual([]);
     // the tester must be an implementer-route binding: a reviewer-route binding with the tester function is refused
     const reviewerRoute = FIRST_DELIVERY_BINDINGS.map(b => b === FIRST_DELIVERY_BINDINGS.find(x => x.roleId === TESTER) ? {...b, providerRoute: "CLAUDE_REVIEWER" as const, allowedTools: [...bindingTools("CLAUDE_REVIEWER")], limits: {...b.limits, maxFilesWritten: 0}} : b);

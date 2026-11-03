@@ -120,7 +120,7 @@ export class EvaluationStaging {
 
 // ---------------------------------------------------------------- types
 export interface EvalCheck { id: string; passed: boolean; detail: string }
-interface ProcedureRun { infra: string | null; checks: EvalCheck[]; artifact: Record<string, unknown>; identities: Record<string, string> }
+interface ProcedureRun { infra: string | null; infraDetail?: string; checks: EvalCheck[]; artifact: Record<string, unknown>; identities: Record<string, string> }
 interface ProcCtx { pair: ExecutorPair; profile: RoleExecutionProfile; timeoutMs: number; shouldAbort?: () => boolean; tmp: string }
 interface Procedure {
   id: string; version: string; fixtureDigest: string; specKind: string; functions: readonly FirstDeliveryFunction[];
@@ -132,7 +132,7 @@ export interface EvaluationDeps {
 }
 export type EvaluationOutcome =
   | {status: "EVALUATED"; verdict: "PASSED" | "FAILED"; roleId: string; evaluationId: string; executorKind: "FAKE" | "LOCAL_CLAUDE"; evidenceRef: string; evidenceFile: string; artifactFile: string; checks: EvalCheck[]; verifier: {countsIfPromoted: boolean; problem: string | null}}
-  | {status: "NOT_EXECUTED"; roleId: string; evaluationId: string; reason: string}
+  | {status: "NOT_EXECUTED"; roleId: string; evaluationId: string; reason: string; detail?: string}
   | {status: "REFUSED"; reason: string};
 
 // ---------------------------------------------------------------- git helpers (yalnız geçici depolarda)
@@ -145,10 +145,21 @@ const git = (cwd: string, args: string[]) => spawnGitSync(cwd, ["-c", "core.fsmo
 const gitOut = (cwd: string, args: string[]): string | null => { const r = git(cwd, args); return r.status === 0 ? String(r.stdout ?? "") : null; };
 // //TR: Teşhis (A-TEST-DIAG-1): git adımı başarısız olduğunda NE olduğu görünsün: çıkış kodu / sinyal / başlatma hatası kodu + redakte edilmiş, boşlukları daraltılmış, en çok 120 karakterlik stderr. Yalnız ileti metnidir: sonuç (NOT_EXECUTED), yeniden deneme ya da süre davranışı DEĞİŞMEZ.
 type GitRes = {status: number | null; signal?: NodeJS.Signals | null; error?: Error; stderr?: unknown};
+const scrubDetail = (text: unknown, max: number): string => {
+  const scrubbed = String(text ?? "").replace(/([a-z][a-z0-9+.-]{0,31}:\/\/)[^\s/]+@/gi, "$1[REDACTED]@"); // URL userinfo (user:password@host, the password may hold '@'); linear: the scheme part is bounded
+  return redactSecrets(scrubbed.replace(/\s+/g, " ").trim()).slice(0, Math.max(0, max)); // collapse -> redact -> clip: collapsing first lets a pattern split by a newline match, clipping last never leaves a secret fragment
+};
 const gitDetail = (r: GitRes): string => {
   const how = r.error ? `spawn=${(r.error as NodeJS.ErrnoException).code ?? "ERR"}` : r.signal ? `signal=${r.signal}` : `exit=${r.status}`;
-  const scrubbed = String(r.stderr ?? "").replace(/([a-z][a-z0-9+.-]{0,31}:\/\/)[^\s/]+@/gi, "$1[REDACTED]@"); // URL userinfo (user:password@host, the password may hold '@'); linear: the scheme part is bounded
-  return `${how}:${redactSecrets(scrubbed.replace(/\s+/g, " ").trim()).slice(0, 120)}`; // collapse -> redact -> clip: collapsing first lets a pattern split by a newline match, clipping last never leaves a secret fragment
+  return `${how}:${scrubDetail(r.stderr, 120)}`;
+};
+// //TR: Teşhis (UASCO-T0087): implementer altyapı nedeniyle başarısız olduğunda (IMPLEMENT_EXIT_NONZERO / NOT_STARTED / IMPLEMENT_BLOCKED) neden kodu AYNEN kalır;
+// yanına en çok 120 karakterlik `exit=N:<stderr>` ayrıntısı eklenir (stderr bölümü yoksa günlüğün kendisi). Aynı daralt -> redakte -> kırp sırası; sonuç sınıfı değişmez.
+export const IMPLEMENT_DETAIL_MAX = 120;
+const implementDetail = (exitCode: number | null, log: unknown): string => {
+  const text = String(log ?? ""), i = text.lastIndexOf("--- stderr ---");
+  const head = `exit=${exitCode}:`;
+  return head + scrubDetail(i >= 0 ? text.slice(i + "--- stderr ---".length) : text, IMPLEMENT_DETAIL_MAX - head.length);
 };
 const setupFail = (step: string, r: GitRes): string => `WORKSPACE_SETUP_FAILED:${step}:${gitDetail(r)}`;
 function seedRepo(dir: string, files: Readonly<Record<string, string>>): string {
@@ -174,7 +185,7 @@ type Implemented = {ok: false; run: ProcedureRun} | {ok: true; ws: string; start
 async function implementGolden(c: ProcCtx, g: GoldenImpl): Promise<Implemented> {
   const impl = c.pair.implementer, ws = path.join(c.tmp, "work");
   const identities = {implementer: impl.identity};
-  const infra = (reason: string): Implemented => ({ok: false, run: {infra: reason, checks: [], artifact: {}, identities}});
+  const infra = (reason: string, infraDetail?: string): Implemented => ({ok: false, run: {infra: reason, ...(infraDetail !== undefined ? {infraDetail} : {}), checks: [], artifact: {}, identities}});
   const start = seedRepo(ws, g.seed);
   const checkout = git(ws, ["checkout", "-q", "-B", g.branch, start]);
   if (checkout.status !== 0) return infra(setupFail("checkout", checkout));
@@ -184,8 +195,8 @@ async function implementGolden(c: ProcCtx, g: GoldenImpl): Promise<Implemented> 
   const log = clip(String(r.log ?? ""), 4000); // redaksiyon artefakt/kanıt yazımında tek noktadan yapılır
   if (r.aborted) return infra("ABORTED");
   if (r.timedOut) return infra("TIMEOUT");
-  if (r.blockReason && !ROLE_BLOCK.test(r.blockReason)) return infra(`IMPLEMENT_BLOCKED:${r.blockReason.slice(0, 80)}`);
-  if (!r.blockReason && r.exitCode !== 0) return infra(r.exitCode === null ? "NOT_STARTED" : "IMPLEMENT_EXIT_NONZERO");
+  if (r.blockReason && !ROLE_BLOCK.test(r.blockReason)) return infra(`IMPLEMENT_BLOCKED:${r.blockReason.slice(0, 80)}`, implementDetail(r.exitCode, r.log));
+  if (!r.blockReason && r.exitCode !== 0) return infra(r.exitCode === null ? "NOT_STARTED" : "IMPLEMENT_EXIT_NONZERO", implementDetail(r.exitCode, r.log));
   const checks: EvalCheck[] = [];
   if (r.blockReason) {
     checks.push({id: "builder_commit_accepted", passed: false, detail: r.blockReason.slice(0, 100)});
@@ -404,7 +415,7 @@ export async function runRoleEvaluation(deps: EvaluationDeps, roleId: string, ev
   catch (e) { return {status: "NOT_EXECUTED", roleId, evaluationId, reason: `PROCEDURE_EXCEPTION:${redactSecrets(msgOf(e).replace(/\s+/g, " ").trim()).slice(0, 240)}`}; }
   finally { try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* geçici dizin en iyi çabayla silinir */ } }
   // //TR: Altyapı kaynaklı sonuç bir DEĞERLENDİRME SONUCU değildir: hiçbir kanıt yazılmaz (rol ne geçer ne kalır).
-  if (run.infra !== null) return {status: "NOT_EXECUTED", roleId, evaluationId, reason: run.infra};
+  if (run.infra !== null) return {status: "NOT_EXECUTED", roleId, evaluationId, reason: run.infra, ...(run.infraDetail !== undefined ? {detail: run.infraDetail} : {})};
   const verdict = verdictOf(run.checks);
   if (verdict === null) return {status: "NOT_EXECUTED", roleId, evaluationId, reason: "NO_CHECKS_EVALUATED"};
   const endedAt = now().toISOString();
