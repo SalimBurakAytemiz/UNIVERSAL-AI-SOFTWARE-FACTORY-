@@ -2353,7 +2353,10 @@ describe("A-TEST-DIAG-1: a failing git step in the evaluation pipeline is diagno
   const SPLIT_HEAD = "sk-" + "ant-api03-", SPLIT_TAIL = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-AbCd";
   const leaks = (s: string) => [PEM_BODY, PEM_BODY2, JWT.split(".")[1], JWT.split(".")[2], BEARER, BASIC, SPLIT_TAIL, SPLIT_TAIL.slice(0, 12)].filter(x => s.includes(x));
   const leaky = [["pem", PEM], ["unterminated pem", PEM_OPEN], ["bearer", `Authorization: Bearer ${BEARER}`], ["bearer jwt", `Authorization: Bearer ${JWT}`], ["bare jwt", `token=${JWT} rejected`],
-    ["basic", `Authorization: Basic ${BASIC}`], ["split sk-ant", `key ${SPLIT_HEAD}\n${SPLIT_TAIL}`]] as const;
+    ["basic", `Authorization: Basic ${BASIC}`], ["split sk-ant", `key ${SPLIT_HEAD}\n${SPLIT_TAIL}`],
+    // B-2: the line break comes AFTER a full-length head (column 40+), CRLF, sk-proj split after 24, and the tail followed by text on the same line
+    ["split at column 40+", `key ${SPLIT_HEAD}${SPLIT_TAIL.slice(0, 30)}\n${SPLIT_TAIL}\nnext line`], ["split crlf", `key ${SPLIT_HEAD}\r\n${SPLIT_TAIL}\r\nnext`],
+    ["sk-proj split after 24", `key ${"sk-" + "proj-"}${SPLIT_TAIL.slice(0, 24)}\n${SPLIT_TAIL}`], ["split tail then text", `key ${SPLIT_HEAD}${SPLIT_TAIL.slice(0, 30)}\n${SPLIT_TAIL} rejected`]] as const;
 
   it("redaction-only patterns: whole PEM blocks (also unterminated), Bearer/Basic values, JWTs and a newline-split sk-ant key are redacted; diff scanning (findSecretKinds/scanDiffForSecrets) is unchanged", () => {
     for (const [label, text] of leaky) expect([label, leaks(redactSecrets(text))]).toEqual([label, []]);
@@ -2363,6 +2366,15 @@ describe("A-TEST-DIAG-1: a failing git step in the evaluation pipeline is diagno
     expect(redactSecrets(`Authorization: Basic ${BASIC}`)).toBe("Authorization: Basic [REDACTED:AUTH_TOKEN]");
     expect(redactSecrets(`t ${JWT} x`)).toBe("t [REDACTED:JWT] x");
     expect(redactSecrets(`key ${SPLIT_HEAD}\n${SPLIT_TAIL}\nnext`)).toBe("key [REDACTED:SPLIT_KEY]\nnext");
+    expect(redactSecrets(`key ${SPLIT_HEAD}${SPLIT_TAIL.slice(0, 30)}\n${SPLIT_TAIL}\nnext line`)).toBe("key [REDACTED:SPLIT_KEY]\nnext line");
+    expect(redactSecrets(`key ${SPLIT_HEAD}\r\n${SPLIT_TAIL}\r\nnext`)).toBe("key [REDACTED:SPLIT_KEY]\r\nnext");
+    // N-3: no over-redaction: a non key-like head (sk-learn) and an ordinary next line after a full key stay readable; the full key keeps its own kind
+    expect(redactSecrets("import sk-learn\nTracebackX (most recent call last)")).toBe("import sk-learn\nTracebackX (most recent call last)");
+    expect(redactSecrets("pip install sk-learn\nTraceback\n  File x")).toBe("pip install sk-learn\nTraceback\n  File x"); // a whole-line word after a non key-like head
+    expect(redactSecrets(`k ${SPLIT_HEAD}${SPLIT_TAIL}\nTraceback (most recent call last)`)).toBe("k [REDACTED:ANTHROPIC_KEY]\nTraceback (most recent call last)");
+    // N-1 / L-1: a letter-only opaque token of 20+ characters is redacted (no digit required); short prose words are not
+    expect(redactSecrets("Authorization: Bearer " + "abcdefghij".repeat(2) + "KLMN")).toBe("Authorization: Bearer [REDACTED:AUTH_TOKEN]");
+    expect(redactSecrets("Authorization: Basic " + "QWxhZGRpbjpvcGVuc2VzYW1l")).toBe("Authorization: Basic [REDACTED:AUTH_TOKEN]");
     // ordinary prose is not redacted; a known token type keeps its specific label
     expect(redactSecrets("missing Bearer token; basic validation failed")).toBe("missing Bearer token; basic validation failed");
     const GH = "ghp_" + "a1B2c3D4e5".repeat(4);
@@ -2404,6 +2416,22 @@ describe("A-TEST-DIAG-1: a failing git step in the evaluation pipeline is diagno
       expect(reason).toMatch(/^PROCEDURE_EXCEPTION:GIT_SEED_FAILED:init:exit=128:a\.a\./);
       expect(ms, `scrub + clip took ${ms.toFixed(0)} ms`).toBeLessThan(500);
     } finally { spy.mockRestore(); }
+  });
+
+  // //TR: UASCO-T0087 B-1: redaksiyon desenleri için kötücül 200k girdiler (bir koşunun içinden yeniden başlama, nokta/END/satır sonu eksik, uzun boşluk) doğrusal kalır.
+  it("redaction stays linear on pathological 200k inputs for every redaction pattern (regression guard, not a timeout)", () => {
+    const n = 200_000;
+    const inputs: Record<string, string> = {
+      "-eyJ run (no dots)": "-eyJ".repeat(n / 4), "eyJ dots": "eyJaaaa.".repeat(n / 8), "eyJ one long run": "eyJ" + "a".repeat(n),
+      "sk- run": "sk-".repeat(n / 3), "sk-ant- run": "sk-ant-".repeat(n / 7), "sk-ant- newline run": "sk-ant-\n".repeat(n / 8), "split head then spaces": "sk-ant-x" + " ".repeat(n),
+      "split continuation lines": ("sk-ant-x\n" + "A".repeat(300) + "\n").repeat(Math.floor(n / 310)),
+      "BEGIN run": `${D}BEGIN `.repeat(n / 11), "BEGIN PRIVATE run": `${D}BEGIN ` + "PRIVATE ".repeat(n / 8), "unterminated PEM": `${D}BEGIN RSA PRIVATE KEY${D}` + "A".repeat(n),
+      "Bearer run": "Bearer \t".repeat(n / 8), "Bearer long": "Bearer " + "a".repeat(n), "Basic run": "Basic ".repeat(n / 6),
+    };
+    for (const [label, text] of Object.entries(inputs)) {
+      const t0 = performance.now(); redactSecrets(text); const ms = performance.now() - t0;
+      expect([label, ms < 500], `${label}: ${ms.toFixed(0)} ms`).toEqual([label, true]);
+    }
   });
 });
 

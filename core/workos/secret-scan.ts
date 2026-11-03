@@ -55,18 +55,24 @@ export function scanCommitMessagesForSecrets(log: string): SecretHit[] {
 }
 
 // Yalnız REDAKSİYON için (findSecretKinds / diff taraması bunları KULLANMAZ; tarama davranışı değişmez).
-// ÖNCE: PEM bloğu BEGIN..END dahil tümüyle; END yoksa (kırpılmış/kesik çıktı) metnin sonuna kadar her şey (başlık deseninden önce: yoksa gövde açıkta kalırdı).
+// Doğrusallık (UASCO-T0087 B-1): her desen ya yalnız bir "koşu"nun BAŞINDA başlayabilir (geriye bakış: önceki karakter aynı sınıftan olamaz,
+// böylece "-eyJ-eyJ..." gibi bir koşunun içindeki her konumdan yeniden tarama olmaz) ya da başarısız olmadan önce sınırlı ({..,N}) karakter tarar.
+// ÖNCE (PATTERNS'ten önce):
+// - PEM bloğu BEGIN..END dahil tümüyle; END yoksa (kırpılmış/kesik çıktı) metnin sonuna kadar her şey (başlık deseninden önce: yoksa gövde açıkta kalırdı);
+// - satır sonuyla bölünmüş sk- anahtarı (B-2): baş parça herhangi bir uzunlukta ({0,256}) olabilir; PATTERNS baş parçayı kendi türüyle gizlerse devam
+//   satırları açıkta kalırdı. Baş "anahtar gibi" olmalı (bilinen önek ant-/proj-/svcacct-/admin- ya da bir rakam: "sk-learn" düz metni gizlenmez) ve her
+//   devam satırı YALNIZ anahtar karakterlerinden oluşmalı (satır sonuna kadar): sıradan bir sonraki satır ("Traceback (most recent ...") gizlenmez.
 const REDACT_BEFORE: ReadonlyArray<readonly [string, RegExp, string?]> = [
-  ["PRIVATE_KEY", /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----[\s\S]*?(?:-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----|$(?![\s\S]))/g]
+  ["PRIVATE_KEY", /-----BEGIN (?:[A-Z0-9]{1,16} ){0,8}PRIVATE KEY(?: BLOCK)?-----[\s\S]*?(?:-----END (?:[A-Z0-9]{1,16} ){0,8}PRIVATE KEY(?: BLOCK)?-----|$(?![\s\S]))/g],
+  // devam parçası: satırın tamamı anahtar karakteri (satır sonuna kadar) YA DA rakam içeren >=16 karakterlik anahtar parçası (ardından metin gelse bile)
+  ["SPLIT_KEY", /(?<![A-Za-z0-9_-])sk-(?:(?:ant-|proj-|svcacct-|admin-)[A-Za-z0-9_-]{0,256}|(?=[A-Za-z0-9_-]{0,256}\d)[A-Za-z0-9_-]{1,256})(?:[ \t]{0,16}\r?\n[ \t]{0,16}(?:[A-Za-z0-9_-]{8,256}(?=[ \t]{0,16}(?:\r?\n|$))|(?=[A-Za-z0-9_-]{0,256}\d)[A-Za-z0-9_-]{16,256}))+/g]
 ];
-// SONRA (PATTERNS türlerini koruyarak, ör. `Bearer ghp_...` GITHUB_TOKEN olarak kalır): JWT biçimi, HTTP `Bearer <değer>` / `Basic <base64>`
-// (önek korunur, değer gizlenir; değer en az bir rakam taşımalı: "missing Bearer token" / "basic validation" gibi düz metin gizlenmez) ve
-// satır sonuyla bölünmüş sk- / sk-ant- anahtarı (önek parçası tam anahtardan kısa {0,19}; devam satırları en az 8 karakterlik anahtar parçası).
+// SONRA (PATTERNS türlerini koruyarak, ör. `Bearer ghp_...` GITHUB_TOKEN olarak kalır): JWT biçimi ve HTTP `Bearer <değer>` / `Basic <base64>`
+// (önek korunur, değer gizlenir; değer en az 20 karakterlik bir belirteç olmalı: "missing Bearer token" / "basic validation" gibi düz metin gizlenmez).
 const REDACT_AFTER: ReadonlyArray<readonly [string, RegExp, string?]> = [
-  ["JWT", /\beyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]*/g],
-  ["AUTH_TOKEN", /\b(Bearer)\s+(?=[A-Za-z0-9._~+/-]*\d)[A-Za-z0-9._~+/-]{8,}=*/gi, "$1 "],
-  ["AUTH_TOKEN", /\b(Basic)\s+(?=[A-Za-z0-9+/]*\d)[A-Za-z0-9+/]{8,}={0,2}/gi, "$1 "],
-  ["SPLIT_KEY", /\bsk-(?:ant-)?[A-Za-z0-9_-]{0,19}(?:[ \t]*\r?\n[ \t]*[A-Za-z0-9_-]{8,})+/g]
+  ["JWT", /(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{4,16384}\.[A-Za-z0-9_-]{4,16384}\.[A-Za-z0-9_-]{0,16384}/g],
+  ["AUTH_TOKEN", /\b(Bearer)[ \t]{1,16}[A-Za-z0-9._~+/-]{20,4096}=*/gi, "$1 "],
+  ["AUTH_TOKEN", /\b(Basic)[ \t]{1,16}[A-Za-z0-9+/]{20,4096}={0,2}/gi, "$1 "]
 ];
 const applyRedact = (text: string, list: ReadonlyArray<readonly [string, RegExp, string?]>) =>
   list.reduce((out, [kind, re, keep]) => out.replace(re, keep ? `${keep}[REDACTED:${kind}]` : `[REDACTED:${kind}]`), text);
