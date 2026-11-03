@@ -7,8 +7,8 @@ The queue directory (`jobs.journal.jsonl`, `jobs.audit.jsonl`, `jobs.lock`) belo
 
 | Error | Meaning | Operator action |
 | --- | --- | --- |
-| `QUEUE_LOCKED` | Another live process holds `jobs.lock`, or is taking over a stale lock right now. | Expected while another instance runs. Stop the other instance. Do **not** delete the lock while a queue process is running. |
-| `QUEUE_TAKEOVER_STALE` | A process crashed while taking over a stale lock and left `jobs.lock.takeover` behind. The queue fails closed instead of guessing. | 1. Confirm that no queue process is running on this host (check the process list for the control API).<br>2. Delete `jobs.lock.takeover` in the queue directory. Leave `jobs.lock` in place: its owner is dead, so the next start takes it over safely.<br>3. Start the service again. |
+| `QUEUE_LOCKED` | Another live process holds `jobs.lock`, or a live process is taking over a stale lock right now. After a crash, the next start takes over the dead owner's lock automatically. | Expected while another instance runs. Stop the other instance. Do **not** delete the lock while a queue process is running. |
+| `QUEUE_TAKEOVER_STALE` | 16 takeover attempts in a row on the same stale lock all crashed. Each left its own `jobs.lock.takeover.<hash>.<n>` token behind. A single crash during a takeover **recovers on its own**: the next start uses the next token generation and never deletes a token, then clears the old tokens. | 1. Investigate why takeovers keep crashing (disk full, permissions, OOM).<br>2. Confirm that no queue process is running.<br>3. Delete the `jobs.lock.takeover.*` files and start again. |
 | `JOURNAL_CORRUPT: …` | The journal has a torn, unparseable or inconsistent line. The queue refuses to start rather than replay unknown state. | Do not edit the journal in place. Keep a copy for analysis and restore it from the last good backup. The lock is released on this failure, so a restart after the restore works. |
 | `leaseMs invalid` | The configuration is wrong. No lock is taken. | Fix the configuration and start again. |
 
