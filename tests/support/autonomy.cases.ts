@@ -137,6 +137,19 @@ export function registerAutonomyCases() {
       const mixed = d([cleanReview("AUTONOMY-EXCEPTIONS: paid_spend", SHA, {id: 1}, "sA"), later({body: `x\nAUTONOMY-EXCEPTIONS: LEGAL\nVERDICT-BINDING: verdict=CLEAN head=${SHA} base=${BASE} reviewer-session=sC`}, "sC")]);
       expect(mixed.decision).toBe("BLOCK");
       expect(mixed.reasons).toContain("REVIEWER_ATTESTATION_MALFORMED");
+      // Review 5757807150 B-1: garbled spellings of the token in an earlier qualifying review never let a later "none" through.
+      for (const tok of ["AUTONOMY\u2011EXCEPTIONS", "AUTONOMY\u2013EXCEPTIONS", "AUTONOMY EXCEPTIONS", "AUTONOMY_EXCEPTIONS", "AUTONOMY&#45;EXCEPTIONS", "AUTONOMY&#x2d;EXCEPTIONS", "AUTONOMY&hyphen;EXCEPTIONS", "ＡＵＴＯＮＯＭＹ-ＥＸＣＥＰＴＩＯＮＳ", "**AUTONOMY-EXCEPTIONS**"]) {
+        const r = d([cleanReview(`${tok}: PAID_SPEND`, SHA, {id: 1}, "r1"), later({}, "r2")]);
+        expect(r.decision).toBe("BLOCK");
+        expect(r.reasons.some((x: string) => x === "REVIEWER_ATTESTATION_MALFORMED" || x === "REVIEWER_ATTESTATION_MISSING")).toBe(true);
+        // Inside one review, a garbled exception next to a proper "none" is contradictory and fails closed.
+        expect(d([cleanReview(`${tok}: PAID_SPEND\nAUTONOMY-EXCEPTIONS: none`, SHA, {id: 1}, "r1")]).reasons).toContain("REVIEWER_ATTESTATION_MALFORMED");
+      }
+      // Fix (b): an earlier qualifying CLEAN review with no attestation at all blocks too.
+      expect(d([cleanReview("", SHA, {id: 1}, "r1"), later({}, "r2")]).reasons).toContain("REVIEWER_ATTESTATION_MISSING");
+      // NB-2: a dismissed CLEAN review still contributes its exception.
+      const dismissed = cleanReview("AUTONOMY-EXCEPTIONS: PAID_SPEND", SHA, {id: 1, state: "DISMISSED"}, "r1");
+      expect(d([dismissed, later({}, "r2")]).reasons).toEqual(["REVIEWER_ATTESTED:PAID_SPEND"]);
       // The PR author's own review counts in process mode (merge-gate's allowed set).
       expect(d([cleanReview("AUTONOMY-EXCEPTIONS: none", SHA, {user: {login: "Author"}})]).decision).toBe("AUTO_MERGE");
     });
