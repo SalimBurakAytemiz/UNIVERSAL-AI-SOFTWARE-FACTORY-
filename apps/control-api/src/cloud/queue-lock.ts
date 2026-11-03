@@ -76,7 +76,7 @@ export function acquireQueueLock(lockPath: string, o: QueueLockOptions = {}): Qu
   const won = (): QueueLock => {   // kilit bizde: artık geçersiz devralma jetonlarını (ve eski biçim `.takeover`) temizle
     let names: string[] = [];
     try { names = io.list(dir); } catch { return lock; }
-    // başka sürecin yazmakta olduğu geçici dosyaya (.tmp-) dokunulmaz (L-1); sahibi ölü .tmp- artıkları silinir (N-3)
+    // başka sürecin yazmakta olduğu geçici dosyaya (.tmp-) dokunulmaz (L-1); ölü sahipli geçici dosya pid'e göre seçilir: kuyruk dizini tek bir pid ad alanına aittir (runbook); sahibi ölü .tmp- artıkları silinir (N-3)
     const tmpOwnerDead = (n: string) => { const m = /\.tmp-(\d+)-[0-9a-f]{16}$/.exec(n); return m !== null && !alive(Number(m[1])); };
     for (const n of names) if (n.startsWith(`${base}.`) && n.includes(".tmp-") && tmpOwnerDead(n)) { try { io.unlink(prefix + n); } catch { /* yut */ } }
     for (const n of names) if ((n === `${base}.takeover` || n.startsWith(`${base}.takeover.`)) && !n.includes(".tmp-")) { try { io.unlink(prefix + n); } catch { /* yut */ } }
@@ -93,7 +93,7 @@ export function acquireQueueLock(lockPath: string, o: QueueLockOptions = {}): Qu
       const t = tokenOf(raw, k);
       if (linkWithContent(io, t, id)) { token = t; break; }
       let traw: string;
-      try { traw = io.read(t); } catch (e) { if (isEnoent(e)) { if (++spins <= 8) { k--; continue; } throw new Error("QUEUE_LOCKED"); } throw e; }   // N-3: bütçe aşılınca tipli hata   // sahibi bıraktı: aynı kuşağı yeniden dene (sınırlı)
+      try { traw = io.read(t); } catch (e) { if (isEnoent(e)) { if (++spins <= 8) { k--; continue; } throw new Error("QUEUE_LOCKED"); } throw e; }   // sahibi bıraktı: aynı kuşağı sınırlı kez yeniden dene; bütçe aşılınca tipli QUEUE_LOCKED (N-3)
       if (holdsLive(traw)) throw new Error("QUEUE_LOCKED");   // bu S'yi başka bir canlı süreç devralıyor
       // sahibi ölü: jeton silinmez, bir sonraki kuşak denenir
     }

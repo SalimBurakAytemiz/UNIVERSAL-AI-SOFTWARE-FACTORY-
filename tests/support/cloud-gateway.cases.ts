@@ -164,7 +164,7 @@ export function registerCloudGatewayCases(): void {
       await new Promise(r => setTimeout(r, 60));
       expect(fast?.aborted).toBe(false);   // zamanlayıcı temizlendi: başarılı çağrının sinyali sonradan abort edilmez
     });
-      it("N-1/G2: overlapping and nested known secrets are fully redacted, in any configuration order", () => {
+    it("N-1/G2: overlapping and nested known secrets are fully redacted, in any configuration order", () => {
       const C = "AAAAAAAA11111111", D = "11111111BBBBBBBB", outer = "PREFIX-" + C + "-SUFFIX";
       for (const order of [[C, D, outer], [outer, D, C], [D, C, outer]]) {
         const {g} = gw({knownSecrets: order});
@@ -174,6 +174,18 @@ export function registerCloudGatewayCases(): void {
       }
     });
 
+    it("#300 LOW-3: a known secret inside a session token cannot break the token pattern and leave its signature visible", () => {
+      const token = tok();
+      const sig = token.split(".").pop()!;
+      const inner = token.slice(3, 15);   // a known secret that sits inside the token's payload
+      expect(inner.length).toBeGreaterThanOrEqual(8);
+      const {g} = gw({knownSecrets: [inner]});
+      const out = g.redact(`failure for ${token} done`);
+      expect(out).not.toContain(sig);
+      expect(out).not.toContain(inner);
+      expect(out).toContain("failure for ");
+      expect(out).toContain(" done");
+    });
     it("N-2/G12: an audit-sink failure on the FAILED path still returns the redacted failure", async () => {
       const prov: ModelProvider = {name: "fail", async invoke() { throw new Error(`boom ${PROVIDER_SECRET}`); }};
       const budget = new TenantBudget(new Map([["tenant-001", 1]]));

@@ -160,7 +160,7 @@ export function registerQueueLockCases(): void {
       const b = acquireQueueLock(L, {io, alive: p => !dead(p), pid: 222});
       expect(files.get(L)!.data).toBe(b.id);
     });
-      it("N-2/Q8: the legacy single `.takeover` file is cleared by the winner", () => {
+    it("N-2/Q8: the legacy single `.takeover` file is cleared by the winner", () => {
       const {io, files} = memIo();
       files.set(`${L}.takeover`, {data: `998:${"e".repeat(32)}`, mtime: 0});
       acquireQueueLock(L, {io, alive: p => !dead(p), pid: 222});

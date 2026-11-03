@@ -1,6 +1,9 @@
 // //TR: Bu dosya CLOUD-T0004 bulut Control API kapısını uygular: bulut çalışma zamanı yapılandırması (yoksa CLOUD_RUNTIME_NOT_CONFIGURED, yerel yedek yok), yalnız https uç nokta, imzalı oturum, en az yetki rolleri, tenant izolasyonu, secret redaksiyonu ve tenant bütçesiyle sınırlı model çağrısı.
 import {createHmac, randomUUID, timingSafeEqual} from "node:crypto";
 import {redactSecrets} from "../../../../core/workos/secret-scan.js";
+
+/** Session token shape issued by issueSession (v1.<payload>.<nonce>.<64-hex HMAC>). */
+const SESSION_TOKEN_RE = /v1\.[A-Za-z0-9._:-]{3,128}\.[A-Za-z0-9_-]+\.[0-9a-f]{64}/g;
 import type {CloudEnvironment} from "../../../../core/cloud/contracts.js";
 
 export type GatewayDeny =
@@ -159,18 +162,21 @@ export class CloudGateway {
     // N-1: bütün bilinen secret eşleşmelerinin aralıkları birleştirilir; çakışan iki secret birbirinin kalanını açıkta bırakamaz.
     const src = String(text);
     const known = [...(this.o.knownSecrets ?? [])].filter(s => typeof s === "string" && s.length >= 8);
-    const spans: Array<[number, number]> = [];
-    for (const k of known) for (let at = src.indexOf(k); at !== -1; at = src.indexOf(k, at + 1)) spans.push([at, at + k.length]);
+    const spans: Array<[number, number, boolean]> = [];   // [start, end, isSessionToken]
+    for (const k of known) for (let at = src.indexOf(k); at !== -1; at = src.indexOf(k, at + 1)) spans.push([at, at + k.length, false]);
+    // #300 review LOW-3: session tokens are matched on the ORIGINAL text too, so a known secret inside a token cannot break the token
+    // pattern and leave the rest of it (e.g. the 64-hex signature) visible.
+    for (const m of src.matchAll(SESSION_TOKEN_RE)) spans.push([m.index!, m.index! + m[0].length, true]);
     spans.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
     let out = "", pos = 0;
     for (let n = 0; n < spans.length;) {
-      let [st, en] = spans[n++]!;
-      while (n < spans.length && spans[n]![0] <= en) en = Math.max(en, spans[n++]![1]);
-      out += src.slice(pos, st) + "[REDACTED]"; pos = en;
+      let [st, en, session] = spans[n++]!;
+      while (n < spans.length && spans[n]![0] <= en) { en = Math.max(en, spans[n]![1]); session = session || spans[n]![2]; n++; }
+      out += src.slice(pos, st) + (session ? "[REDACTED_SESSION]" : "[REDACTED]"); pos = en;
     }
     out += src.slice(pos);
     out = redactSecrets(out);
-    return out.replace(/v1\.[A-Za-z0-9._:-]{3,128}\.[A-Za-z0-9_-]+\.[0-9a-f]{64}/g, "[REDACTED_SESSION]").slice(0, 2000);
+    return out.replace(SESSION_TOKEN_RE, "[REDACTED_SESSION]").slice(0, 2000);
   }
 
   private log(r: Omit<GatewayAuditRecord, "at">): void {
