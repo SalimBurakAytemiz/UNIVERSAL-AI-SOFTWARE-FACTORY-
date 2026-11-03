@@ -160,5 +160,26 @@ export function registerQueueLockCases(): void {
       const b = acquireQueueLock(L, {io, alive: p => !dead(p), pid: 222});
       expect(files.get(L)!.data).toBe(b.id);
     });
+    it("N-2/Q8: the legacy single `.takeover` file is cleared by the winner", () => {
+      const {io, files} = memIo();
+      files.set(`${L}.takeover`, {data: `998:${"e".repeat(32)}`, mtime: 0});
+      acquireQueueLock(L, {io, alive: p => !dead(p), pid: 222});
+      expect(files.has(`${L}.takeover`)).toBe(false);
+    });
+
+    it("N-3: temp leftovers of dead processes are collected; a live process's in-flight temp is kept", () => {
+      const {io, files} = memIo();
+      const deadTmp = `${tok(STALE, 1)}.tmp-998-0123456789abcdef`, liveTmp = `${L}.tmp-333-fedcba9876543210`;
+      files.set(deadTmp, {data: "x", mtime: 0}); files.set(liveTmp, {data: "y", mtime: 0});
+      acquireQueueLock(L, {io, alive: p => !dead(p), pid: 222});
+      expect(files.has(deadTmp)).toBe(false);
+      expect(files.has(liveTmp)).toBe(true);
+    });
+
+    it("N-3/Q7: an endlessly vanishing token is a typed QUEUE_LOCKED, never a raw ENOENT", () => {
+      const {io, files} = memIo({beforeRead: p => { if (p === tok(STALE, 1)) files.delete(p); }, beforeLink: p => { if (p === tok(STALE, 1)) files.set(p, {data: `333:${"e".repeat(32)}`, mtime: 0}); }});
+      files.set(L, {data: STALE, mtime: 0});
+      expect(() => acquireQueueLock(L, {io, alive: p => !dead(p), pid: 222})).toThrow(/^QUEUE_LOCKED$/);
+    });
   });
 }
