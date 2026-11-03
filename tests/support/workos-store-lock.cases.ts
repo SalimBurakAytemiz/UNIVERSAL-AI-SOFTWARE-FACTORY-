@@ -5,7 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import cp from "node:child_process";
 import {threadId} from "node:worker_threads";
-import {WorkOsStore, acquireStoreLock, STORE_LOCK_ORPHAN_GRACE_MS, type StoreLockIo} from "../../core/workos/store.js";
+import {createHash} from "node:crypto";
+import {WorkOsStore, acquireStoreLock, storeLockHostTag, STORE_LOCK_ORPHAN_GRACE_MS, type StoreLockIo} from "../../core/workos/store.js";
 
 type Hook = (p: string) => void;
 /** Bellek içi dosya sistemi; `hooks` bir işlemden hemen önce hata fırlatabilir ya da başka bir sürecin adımını araya sokabilir. */
@@ -27,6 +28,8 @@ const err = (code: string) => Object.assign(new Error(code), {code});
 const clock = {t: 1_000_000};
 const now = () => clock.t;
 const L = "/w/journal.lock";
+const H = storeLockHostTag();   // bu host
+const OTHER = storeLockHostTag(`${os.hostname()}-peer`);   // ortak dataDir'i paylaşan başka host
 const LIVE = new Set([111, 222, 333]);
 const alive = (pid: number) => LIVE.has(pid);
 const noSleep = () => { clock.t += 10; };
@@ -42,7 +45,7 @@ export function registerWorkosStoreLockCases(): void {
       files.set(L, {data: "", mtime: clock.t - STORE_LOCK_ORPHAN_GRACE_MS - 1});
       const l = acquireStoreLock(L, {...base, io, pid: 111});
       expect(files.get(L)!.data).toBe(l.id);
-      expect(l.id).toMatch(new RegExp(`^111\\.${threadId}:[0-9a-f]{32}$`));
+      expect(l.id).toMatch(new RegExp(`^111\\.${threadId}\\.${H}:[0-9a-f]{32}$`));
       l.release();
       expect(lockFiles(files)).toEqual([]);
     });
@@ -68,7 +71,7 @@ export function registerWorkosStoreLockCases(): void {
     });
 
     it("a lock of a dead (killed) writer is recovered, in both the new and the legacy process-lock format", () => {
-      for (const data of [`999.0:${"d".repeat(32)}`, JSON.stringify({pid: 999, hostname: os.hostname(), runId: "r", lockId: "x"})]) {
+      for (const data of [`999.0.${H}:${"d".repeat(32)}`, JSON.stringify({pid: 999, hostname: os.hostname(), runId: "r", lockId: "x"})]) {
         const {io, files} = memIo();
         files.set(L, {data, mtime: clock.t});
         const l = acquireStoreLock(L, {...base, io, pid: 111});
@@ -79,12 +82,51 @@ export function registerWorkosStoreLockCases(): void {
     });
 
     it("a lock held by another live process, or by another host, is never removed", () => {
-      for (const data of [`222.0:${"a".repeat(32)}`, JSON.stringify({pid: 999, hostname: `${os.hostname()}-other`})]) {
+      for (const [data, code] of [[`222.0.${H}:${"a".repeat(32)}`, /STORE_LOCKED/], [JSON.stringify({pid: 999, hostname: `${os.hostname()}-other`}), /STORE_LOCK_OTHER_HOST/]] as const) {
         const {io, files} = memIo();
         files.set(L, {data, mtime: 0});
-        expect(() => acquireStoreLock(L, {...base, io, pid: 111})).toThrow(/STORE_LOCKED/);
+        expect(() => acquireStoreLock(L, {...base, io, pid: 111})).toThrow(code);
         expect(files.get(L)!.data).toBe(data);
       }
+    });
+
+    it("NB-1: a lock of another host is never taken over or deleted, even if its PID looks dead here (STORE_LOCK_OTHER_HOST)", () => {
+      for (const data of [`999.0.${OTHER}:${"e".repeat(32)}`, `111.${threadId}.${OTHER}:${"e".repeat(32)}`, JSON.stringify({pid: 999, hostname: `${os.hostname()}-peer`})]) {
+        const {io, files} = memIo();
+        files.set(L, {data, mtime: 0});
+        clock.t += 10 * STORE_LOCK_ORPHAN_GRACE_MS;
+        expect(() => acquireStoreLock(L, {...base, io, pid: 111})).toThrow(/STORE_LOCK_OTHER_HOST/);
+        expect(files.get(L)!.data).toBe(data);
+        expect(lockFiles(files)).toEqual([L]);   // no takeover token left behind either
+      }
+    });
+
+    it("NB-1: a takeover token held by another host blocks the takeover fail-closed", () => {
+      const {io, files} = memIo();
+      files.set(L, {data: "", mtime: 0});
+      const token = `${L}.takeover.${createHash("sha256").update("").digest("hex").slice(0, 24)}.1`;
+      files.set(token, {data: `999.0.${OTHER}:${"f".repeat(32)}`, mtime: 0});
+      expect(() => acquireStoreLock(L, {...base, io, pid: 111})).toThrow(/STORE_LOCK_OTHER_HOST/);
+      expect(files.get(L)!.data).toBe("");
+      expect(files.get(token)!.data).toBe(`999.0.${OTHER}:${"f".repeat(32)}`);
+    });
+
+    it("NB-1: same host, dead PID is still recovered", () => {
+      const {io, files} = memIo();
+      files.set(L, {data: `999.7.${H}:${"9".repeat(32)}`, mtime: clock.t});
+      const l = acquireStoreLock(L, {...base, io, pid: 111});
+      expect(files.get(L)!.data).toBe(l.id);
+      l.release();
+      expect(lockFiles(files)).toEqual([]);
+    });
+
+    it("L-1: the winner sweeps a crashed writer's old temp file but never a fresh one", () => {
+      const {io, files} = memIo();
+      files.set(`${L}.tmp-0000000000000001`, {data: "x", mtime: clock.t - STORE_LOCK_ORPHAN_GRACE_MS - 1});
+      files.set(`${L}.tmp-0000000000000002`, {data: "y", mtime: clock.t});
+      const l = acquireStoreLock(L, {...base, io, pid: 111});
+      expect(lockFiles(files)).toEqual([L, `${L}.tmp-0000000000000002`]);
+      l.release();
     });
 
     it("two contenders on the same stale zero-byte lock: exactly one wins, the other never becomes a second writer", () => {
@@ -140,9 +182,9 @@ export function registerWorkosStoreLockCases(): void {
     it("release never removes a lock that is no longer ours", () => {
       const {io, files} = memIo();
       const a = acquireStoreLock(L, {...base, io, pid: 111});
-      files.set(L, {data: `222.0:${"b".repeat(32)}`, mtime: clock.t});
+      files.set(L, {data: `222.0.${H}:${"b".repeat(32)}`, mtime: clock.t});
       a.release();
-      expect(files.get(L)!.data).toBe(`222.0:${"b".repeat(32)}`);
+      expect(files.get(L)!.data).toBe(`222.0.${H}:${"b".repeat(32)}`);
     });
 
     describe("real filesystem (runs on the Windows shard too)", () => {
@@ -169,7 +211,7 @@ export function registerWorkosStoreLockCases(): void {
         const dir = path.join(tmp, "d"); fs.mkdirSync(dir, {recursive: true});
         const kid = cp.spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {stdio: "ignore"});
         const pid = kid.pid!;
-        fs.writeFileSync(path.join(dir, "journal.lock"), `${pid}.0:${"c".repeat(32)}`);
+        fs.writeFileSync(path.join(dir, "journal.lock"), `${pid}.0.${storeLockHostTag()}:${"c".repeat(32)}`);
         const s = new WorkOsStore(dir);
         await new Promise<void>(resolve => { kid.on("exit", () => resolve()); kid.kill("SIGKILL"); });
         const t0 = Date.now();

@@ -95,17 +95,22 @@ export interface StoreLock {readonly id: string; release(): void}
 export const STORE_LOCK_ORPHAN_GRACE_MS = 2_000;
 export const STORE_LOCK_MAX_TAKEOVER_GENERATIONS = 16;
 const RELEASE_RETRY_MS = 2_000;
+// L-3: modül örneği başına bir küme varsayılır (aynı thread'de iki ayrı store modülü kopyası iç içe withLock yapmaz).
 // Bu süreçte (iş parçacığı dahil) şu an tutulan kilit kimlikleri: kendi PID+thread etiketli ama burada tutulmayan kilit yetimdir (bırakması düşmüş) ve geri alınır.
 const heldStoreLocks = new Set<string>();
 const errCode = (e: unknown) => (e as NodeJS.ErrnoException)?.code;
 // Windows paylaşım ihlali / silme-beklemede dosya: geçicidir, kilit durumu hakkında bilgi vermez.
 export const isTransientFsError = (e: unknown) => ["EBUSY", "EPERM", "EACCES"].includes(String(errCode(e)));
 const storeLockBusy = () => Object.assign(new Error("STORE_LOCK_BUSY"), {code: "STORE_LOCK_BUSY"});
+const storeLockOtherHost = () => Object.assign(new Error("STORE_LOCK_OTHER_HOST"), {code: "STORE_LOCK_OTHER_HOST"});
 const storeLocked = () => Object.assign(new Error("STORE_LOCKED"), {code: "STORE_LOCKED"});
-// Kilit içeriği: `${pid}.${threadId}:${32 hex}`; eski process-lock JSON içeriğinden yalnız pid/hostname okunur.
+// NB-1: kilit içeriği `${pid}.${threadId}.${host12}:${32 hex}`; host12 = sha256(os.hostname()) ilk 12 hex (ham host adı yazılmaz).
+// Başka host'un kilidi (ortak/ağ dataDir) PID'i burada ölü görünse bile ASLA devralınmaz/silinmez: STORE_LOCK_OTHER_HOST (fail-closed, eski process-lock gibi).
+export const storeLockHostTag = (host: string = os.hostname()) => crypto.createHash("sha256").update(host).digest("hex").slice(0, 12);
+// Eski process-lock JSON içeriğinden yalnız pid/hostname okunur.
 function parseStoreLockOwner(raw: string): {pid: number; tid: number | null} | "OTHER_HOST" | null {
-  const m = /^(\d+)\.(\d+):[0-9a-f]{32}$/.exec(raw.trim());
-  if (m) return {pid: Number(m[1]), tid: Number(m[2])};
+  const m = /^(\d+)\.(\d+)\.([0-9a-f]{12}):[0-9a-f]{32}$/.exec(raw.trim());
+  if (m) return m[3] !== storeLockHostTag() ? "OTHER_HOST" : {pid: Number(m[1]), tid: Number(m[2])};
   try {
     const j = JSON.parse(raw) as {pid?: unknown; hostname?: unknown};
     if (j && Number.isSafeInteger(j.pid) && (j.pid as number) > 0) return typeof j.hostname === "string" && j.hostname !== os.hostname() ? "OTHER_HOST" : {pid: j.pid as number, tid: null};
@@ -127,12 +132,12 @@ function pidAliveDefault(pid: number): boolean {
 export function acquireStoreLock(lockPath: string, o: StoreLockOptions = {}): StoreLock {
   const io = o.io ?? defaultStoreLockIo, alive = o.alive ?? pidAliveDefault, now = o.now ?? Date.now, sleep = o.sleep ?? sleepSync;
   const grace = o.orphanGraceMs ?? STORE_LOCK_ORPHAN_GRACE_MS, ownPid = o.pid ?? process.pid;
-  const id = `${ownPid}.${threadId}:${crypto.randomBytes(16).toString("hex")}`;
+  const id = `${ownPid}.${threadId}.${storeLockHostTag()}:${crypto.randomBytes(16).toString("hex")}`;
   const dir = path.dirname(lockPath), base = path.basename(lockPath), prefix = lockPath.slice(0, lockPath.length - base.length);
   const tokenOf = (stale: string, k: number) => `${lockPath}.takeover.${crypto.createHash("sha256").update(stale).digest("hex").slice(0, 24)}.${k}`;
   const holdsLive = (file: string, raw: string): boolean => {
     const owner = parseStoreLockOwner(raw);
-    if (owner === "OTHER_HOST") return true;
+    if (owner === "OTHER_HOST") throw storeLockOtherHost();
     if (owner === null) {   // sıfır bayt / bozuk: yalnız yeterince yaşlıysa bayat
       let m: number;
       try { m = io.mtimeMs(file); } catch (e) { if (errCode(e) === "ENOENT") return false; throw isTransientFsError(e) ? storeLockBusy() : e; }
@@ -170,6 +175,8 @@ export function acquireStoreLock(lockPath: string, o: StoreLockOptions = {}): St
     let names: string[] = [];
     try { names = io.list(dir); } catch { return lock; }
     for (const n of names) if (n.startsWith(`${base}.takeover.`) && !n.includes(".tmp-")) { try { io.unlink(prefix + n); } catch { /* yut */ } }
+    // L-1: yazma ile silme arasında çöken sürecin geçici dosyası; yalnız grace'ten yaşlıysa silinir (yazılmakta olan başkasının geçici dosyasına dokunulmaz).
+    for (const n of names) if (n.startsWith(`${base}.`) && n.includes(".tmp-")) { try { if (now() - io.mtimeMs(prefix + n) >= grace) io.unlink(prefix + n); } catch { /* yut */ } }
     return lock;
   };
   for (let attempt = 0; attempt < 4; attempt++) {
@@ -236,7 +243,7 @@ export interface RunPatch {
 }
 export interface RunWriteOptions { patch?: RunPatch; mission?: {to: MissionStatus; reason: string} }
 // //TR: REL-FX-4 fs seam'i: yalnız test enjeksiyonu (ENOSPC/kısa yazma); verilmezse fs.writeSync kullanılır.
-export interface WorkOsStoreOptions { now?: () => number; io?: {writeSync?: (fd: number, data: Buffer) => number}; lock?: StoreLockOptions }
+export interface WorkOsStoreOptions { now?: () => number; io?: {writeSync?: (fd: number, data: Buffer) => number}; /** Yalnız test: üretimde verilmez (pid/canlılık/io sahteciliği kilit güvencesini bozar). */ lock?: StoreLockOptions }
 // //TR: REL-FX-4: geçerli zincir üzerinde tek sonlandırılmamış son satır (yırtık append). quarantineFile dataDir'e görelidir (mutlak yol sızmaz).
 export interface TornTail { offset: number; bytes: number; sha256: string; fileSha256: string; expectedSeq: number; lastSeq: number; quarantineFile: string; quarantined: boolean }
 export interface JournalHealth { state: "OK" | "ABSENT" | "TORN_TAIL" | "TAMPERED" | "UNAVAILABLE"; reason: string | null; tornTail: TornTail | null }
