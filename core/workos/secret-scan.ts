@@ -54,9 +54,26 @@ export function scanCommitMessagesForSecrets(log: string): SecretHit[] {
   return hits;
 }
 
+// Yalnız REDAKSİYON için (findSecretKinds / diff taraması bunları KULLANMAZ; tarama davranışı değişmez).
+// ÖNCE: PEM bloğu BEGIN..END dahil tümüyle; END yoksa (kırpılmış/kesik çıktı) metnin sonuna kadar her şey (başlık deseninden önce: yoksa gövde açıkta kalırdı).
+const REDACT_BEFORE: ReadonlyArray<readonly [string, RegExp, string?]> = [
+  ["PRIVATE_KEY", /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----[\s\S]*?(?:-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----|$(?![\s\S]))/g]
+];
+// SONRA (PATTERNS türlerini koruyarak, ör. `Bearer ghp_...` GITHUB_TOKEN olarak kalır): JWT biçimi, HTTP `Bearer <değer>` / `Basic <base64>`
+// (önek korunur, değer gizlenir; değer en az bir rakam taşımalı: "missing Bearer token" / "basic validation" gibi düz metin gizlenmez) ve
+// satır sonuyla bölünmüş sk- / sk-ant- anahtarı (önek parçası tam anahtardan kısa {0,19}; devam satırları en az 8 karakterlik anahtar parçası).
+const REDACT_AFTER: ReadonlyArray<readonly [string, RegExp, string?]> = [
+  ["JWT", /\beyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]*/g],
+  ["AUTH_TOKEN", /\b(Bearer)\s+(?=[A-Za-z0-9._~+/-]*\d)[A-Za-z0-9._~+/-]{8,}=*/gi, "$1 "],
+  ["AUTH_TOKEN", /\b(Basic)\s+(?=[A-Za-z0-9+/]*\d)[A-Za-z0-9+/]{8,}={0,2}/gi, "$1 "],
+  ["SPLIT_KEY", /\bsk-(?:ant-)?[A-Za-z0-9_-]{0,19}(?:[ \t]*\r?\n[ \t]*[A-Za-z0-9_-]{8,})+/g]
+];
+const applyRedact = (text: string, list: ReadonlyArray<readonly [string, RegExp, string?]>) =>
+  list.reduce((out, [kind, re, keep]) => out.replace(re, keep ? `${keep}[REDACTED:${kind}]` : `[REDACTED:${kind}]`), text);
+
 // Log'lara yazmadan önce eşleşen her değer sabit bir etiketle değiştirilir.
 export function redactSecrets(text: string): string {
-  let out = text;
+  let out = applyRedact(text, REDACT_BEFORE);
   for (const [kind, re] of PATTERNS) out = out.replace(new RegExp(re.source, "g"), `[REDACTED:${kind}]`);
-  return out;
+  return applyRedact(out, REDACT_AFTER);
 }

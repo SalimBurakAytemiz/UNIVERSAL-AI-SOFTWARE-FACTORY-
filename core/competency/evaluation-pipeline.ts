@@ -145,16 +145,18 @@ const git = (cwd: string, args: string[]) => spawnGitSync(cwd, ["-c", "core.fsmo
 const gitOut = (cwd: string, args: string[]): string | null => { const r = git(cwd, args); return r.status === 0 ? String(r.stdout ?? "") : null; };
 // //TR: Teşhis (A-TEST-DIAG-1): git adımı başarısız olduğunda NE olduğu görünsün: çıkış kodu / sinyal / başlatma hatası kodu + redakte edilmiş, boşlukları daraltılmış, en çok 120 karakterlik stderr. Yalnız ileti metnidir: sonuç (NOT_EXECUTED), yeniden deneme ya da süre davranışı DEĞİŞMEZ.
 type GitRes = {status: number | null; signal?: NodeJS.Signals | null; error?: Error; stderr?: unknown};
+// //TR: redact (ham) -> daralt -> redact (yeniden) -> kırp. Ham metindeki redaksiyon satırlara bölünmüş değerleri (PEM bloğu, satır kaydırmalı anahtar) yakalar;
+// daraltmadan sonraki ikinci geçiş, boşluk daraltmanın birleştirdiği desenleri yakalar; kırpma en sonda olduğundan kırpılmış bir gizli parça kalmaz.
 const scrubDetail = (text: unknown, max: number): string => {
-  const scrubbed = String(text ?? "").replace(/([a-z][a-z0-9+.-]{0,31}:\/\/)[^\s/]+@/gi, "$1[REDACTED]@"); // URL userinfo (user:password@host, the password may hold '@'); linear: the scheme part is bounded
-  return redactSecrets(scrubbed.replace(/\s+/g, " ").trim()).slice(0, Math.max(0, max)); // collapse -> redact -> clip: collapsing first lets a pattern split by a newline match, clipping last never leaves a secret fragment
+  const scrubbed = redactSecrets(String(text ?? "")).replace(/([a-z][a-z0-9+.-]{0,31}:\/\/)[^\s/]+@/gi, "$1[REDACTED]@"); // URL userinfo (user:password@host, the password may hold '@'); linear: the scheme part is bounded
+  return redactSecrets(scrubbed.replace(/\s+/g, " ").trim()).slice(0, Math.max(0, max));
 };
 const gitDetail = (r: GitRes): string => {
   const how = r.error ? `spawn=${(r.error as NodeJS.ErrnoException).code ?? "ERR"}` : r.signal ? `signal=${r.signal}` : `exit=${r.status}`;
   return `${how}:${scrubDetail(r.stderr, 120)}`;
 };
 // //TR: Teşhis (UASCO-T0087): implementer altyapı nedeniyle başarısız olduğunda (IMPLEMENT_EXIT_NONZERO / NOT_STARTED / IMPLEMENT_BLOCKED) neden kodu AYNEN kalır;
-// yanına en çok 120 karakterlik `exit=N:<stderr>` ayrıntısı eklenir (stderr bölümü yoksa günlüğün kendisi). Aynı daralt -> redakte -> kırp sırası; sonuç sınıfı değişmez.
+// yanına en çok 120 karakterlik `exit=N:<stderr BAŞI>` ayrıntısı eklenir (stderr bölümünün başından; bölüm yoksa günlüğün başından). Aynı scrubDetail sırası; sonuç sınıfı değişmez.
 export const IMPLEMENT_DETAIL_MAX = 120;
 const implementDetail = (exitCode: number | null, log: unknown): string => {
   const text = String(log ?? ""), i = text.lastIndexOf("--- stderr ---");
@@ -412,7 +414,7 @@ export async function runRoleEvaluation(deps: EvaluationDeps, roleId: string, ev
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-eval-"));
   let run: ProcedureRun;
   try { run = await procedure.run({pair: deps.pair, profile, timeoutMs, ...(deps.shouldAbort ? {shouldAbort: deps.shouldAbort} : {}), tmp}, profile.function); }
-  catch (e) { return {status: "NOT_EXECUTED", roleId, evaluationId, reason: `PROCEDURE_EXCEPTION:${redactSecrets(msgOf(e).replace(/\s+/g, " ").trim()).slice(0, 240)}`}; }
+  catch (e) { return {status: "NOT_EXECUTED", roleId, evaluationId, reason: `PROCEDURE_EXCEPTION:${scrubDetail(msgOf(e), 240)}`}; }
   finally { try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* geçici dizin en iyi çabayla silinir */ } }
   // //TR: Altyapı kaynaklı sonuç bir DEĞERLENDİRME SONUCU değildir: hiçbir kanıt yazılmaz (rol ne geçer ne kalır).
   if (run.infra !== null) return {status: "NOT_EXECUTED", roleId, evaluationId, reason: run.infra, ...(run.infraDetail !== undefined ? {detail: run.infraDetail} : {})};

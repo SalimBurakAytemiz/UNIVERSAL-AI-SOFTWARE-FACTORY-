@@ -23,6 +23,7 @@ import {GOLDEN_TESTS, sha256Json} from "../core/competency/evaluation-fixtures.j
 import {executeBlockers, parseArgs, resolveControlRoot, runCli} from "../core/competency/evaluation-cli.js";
 import {MAX_TEST_SOURCE_BYTES, analyzeAddTest, tokenize, topLevelStatements} from "../core/competency/static-test-analysis.js";
 import {FakeExecutors, LocalClaudeExecutors, reviewerArgv} from "../core/workos/executors.js";
+import {findSecretKinds, redactSecrets, scanDiffForSecrets} from "../core/workos/secret-scan.js";
 import type {ExecutorPair, FakeScript, ProcResult} from "../core/workos/executors.js";
 import {ClaudePreDevBuilder} from "../core/workos/predev/claude-builder.js";
 import {OUTPUT_SKELETONS} from "../core/workos/predev/role-prompts.js";
@@ -2339,6 +2340,57 @@ describe("A-TEST-DIAG-1: a failing git step in the evaluation pipeline is diagno
     const ws = await reasonFor(`error: https://alice:${PASS}@git.example.com/r.git refused`, DEV, "-B");
     expect(ws).toMatch(/^WORKSPACE_SETUP_FAILED:checkout:exit=128:/);
     expect(ws).not.toContain("alice"); expect(ws).not.toContain(PASS); expect(ws).toContain("https://[REDACTED]@git.example.com/r.git");
+  });
+
+  // //TR: UASCO-T0087 NB-1: detail yüzeyi (implementer/CLI stderr) genişledi; PEM gövdesi, Bearer/Basic/JWT değeri ve satırla bölünmüş sk-ant anahtarı hiçbir yolda (implement detail, gitDetail, PROCEDURE_EXCEPTION) sızmaz.
+  // Değerler çalışma zamanında birleştirilir: depo gizli görünümlü bir literal taşımaz.
+  const D = "-".repeat(5), PEM_BODY = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASC" + "Q".repeat(24), PEM_BODY2 = "Zm9vYmFyYmF6cXV4" + "W".repeat(20);
+  const PEM = `${D}BEGIN RSA PRIVATE KEY${D}\n${PEM_BODY}\n${PEM_BODY2}\n${D}END RSA PRIVATE KEY${D}`;
+  const PEM_OPEN = `${D}BEGIN OPENSSH PRIVATE KEY${D}\n${PEM_BODY}\n${PEM_BODY2}`; // kesik: END yok
+  const JWT = ["eyJ" + "hbGciOiJIUzI1NiJ9", "eyJ" + "zdWIiOiIxMjM0NTY3ODkwIn0", "SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"].join(".");
+  const BEARER = "opaque" + "Tok3n" + "9f8e7d6c5b4a";
+  const BASIC = Buffer.from("alice:" + "s3cr3t" + "-pw").toString("base64");
+  const SPLIT_HEAD = "sk-" + "ant-api03-", SPLIT_TAIL = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-AbCd";
+  const leaks = (s: string) => [PEM_BODY, PEM_BODY2, JWT.split(".")[1], JWT.split(".")[2], BEARER, BASIC, SPLIT_TAIL, SPLIT_TAIL.slice(0, 12)].filter(x => s.includes(x));
+  const leaky = [["pem", PEM], ["unterminated pem", PEM_OPEN], ["bearer", `Authorization: Bearer ${BEARER}`], ["bearer jwt", `Authorization: Bearer ${JWT}`], ["bare jwt", `token=${JWT} rejected`],
+    ["basic", `Authorization: Basic ${BASIC}`], ["split sk-ant", `key ${SPLIT_HEAD}\n${SPLIT_TAIL}`]] as const;
+
+  it("redaction-only patterns: whole PEM blocks (also unterminated), Bearer/Basic values, JWTs and a newline-split sk-ant key are redacted; diff scanning (findSecretKinds/scanDiffForSecrets) is unchanged", () => {
+    for (const [label, text] of leaky) expect([label, leaks(redactSecrets(text))]).toEqual([label, []]);
+    expect(redactSecrets(`a ${PEM} b`)).toBe("a [REDACTED:PRIVATE_KEY] b");
+    expect(redactSecrets(`a ${PEM_OPEN}`)).toBe("a [REDACTED:PRIVATE_KEY]");
+    expect(redactSecrets(`Authorization: Bearer ${BEARER}`)).toBe("Authorization: Bearer [REDACTED:AUTH_TOKEN]");
+    expect(redactSecrets(`Authorization: Basic ${BASIC}`)).toBe("Authorization: Basic [REDACTED:AUTH_TOKEN]");
+    expect(redactSecrets(`t ${JWT} x`)).toBe("t [REDACTED:JWT] x");
+    expect(redactSecrets(`key ${SPLIT_HEAD}\n${SPLIT_TAIL}\nnext`)).toBe("key [REDACTED:SPLIT_KEY]\nnext");
+    // ordinary prose is not redacted; a known token type keeps its specific label
+    expect(redactSecrets("missing Bearer token; basic validation failed")).toBe("missing Bearer token; basic validation failed");
+    const GH = "ghp_" + "a1B2c3D4e5".repeat(4);
+    expect(redactSecrets(`Bearer ${GH}`)).toBe("Bearer [REDACTED:GITHUB_TOKEN]");
+    // scanning is unchanged: the new shapes are not secret KINDS for the diff gate
+    expect(findSecretKinds(`Bearer ${BEARER} ${JWT} Basic ${BASIC}`)).toEqual([]);
+    expect(findSecretKinds(PEM)).toEqual(["PRIVATE_KEY"]);
+    expect(scanDiffForSecrets(`+++ b/a.txt\n@@ -0,0 +1,1 @@\n+Authorization: Bearer ${BEARER}\n`)).toEqual([]);
+  });
+
+  it("no PEM body, bearer/basic value, JWT or split sk-ant fragment survives in gitDetail (seed and setup paths), PROCEDURE_EXCEPTION or the implementer detail", async () => {
+    const throwing = (err: unknown): ExecutorPair => new FakeExecutors({implement: () => { throw err; }, review: () => ({verdict: "CLEAN"})}).pair();
+    const stage = () => path.join(fs.mkdtempSync(path.join(tmp, "diag-")), "staging");
+    for (const [label, text] of leaky) {
+      const seed = reasonOf((await run(DEV, "add", {status: 128, stderr: `fatal: ${text}`})).out);
+      const setup = reasonOf((await run(DEV, "-B", {status: 1, stderr: `error: ${text}`})).out);
+      const thrown = reasonOf(await runRoleEvaluation({repoRoot: REPO, stagingRoot: stage(), pair: throwing(new Error(`EXECUTOR_FAILED: ${text}`))}, DEV, "EV-01"));
+      const impl = await runRoleEvaluation({repoRoot: REPO, stagingRoot: stage(), pair: new FakeExecutors({implement: () => ({exitCode: 3, stderr: `fatal: ${text}`}), review: () => ({verdict: "CLEAN"})}).pair()}, DEV, "EV-01");
+      expect([label, reasonOf(impl)]).toEqual([label, "IMPLEMENT_EXIT_NONZERO"]);
+      const detail = (impl as {detail?: string}).detail ?? "";
+      expect([label, detail.startsWith("exit=3:fatal: "), detail.length <= 120]).toEqual([label, true, true]);
+      for (const [where, out] of [["seed", seed], ["setup", setup], ["procedure", thrown], ["implement detail", detail]] as const) {
+        expect([label, where, leaks(out)]).toEqual([label, where, []]);
+        expect([label, where, out]).toEqual([label, where, expect.stringContaining("[REDACTED:")]);
+      }
+      expect(setup).toMatch(/^WORKSPACE_SETUP_FAILED:checkout:exit=1:error: /);
+      expect(seed).toMatch(/^PROCEDURE_EXCEPTION:GIT_SEED_FAILED:add:exit=128:fatal: /);
+    }
   });
 
   it("scrubbing a 200k-character stderr stays linear (regression guard, not a timeout)", async () => {
