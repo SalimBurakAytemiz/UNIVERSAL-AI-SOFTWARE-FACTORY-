@@ -7,8 +7,11 @@ import {findSecretKinds,redactSecrets} from "../workos/secret-scan.js";
 
 export const ARTIFACT_STORE_VERSION="uasco.cloud.artifacts.v1" as const;
 export const DEFAULT_MAX_ARTIFACT_BYTES=256*1024*1024;
-/** Yapılandırma ile aşılamayan sert tavan. */
-export const HARD_MAX_ARTIFACT_BYTES=2*1024*1024*1024;
+/** Yapılandırma ile aşılamayan sert tavan (V8 dize sınırının ve tek parça bellek tamponunun altında). */
+export const HARD_MAX_ARTIFACT_BYTES=256*1024*1024;
+/** Secret taraması parça parça yapılır; örtüşme sınırda bölünen kalıpları yakalar. */
+const SCAN_CHUNK_BYTES=4*1024*1024;
+const SCAN_OVERLAP_BYTES=4096;
 export const DEFAULT_DELIVERY_TTL_MS=5*60*1000;
 export const MAX_DELIVERY_TTL_MS=15*60*1000;
 export const MIN_KEY_BYTES=32;
@@ -63,7 +66,11 @@ export class InMemoryArtifactBackend implements ArtifactBlobBackend{
   keys():string[]{return [...this.blobs.keys()]}
 }
 
-/** Dizin arka ucu: geçici dosya + hard link ile atomik, bir kez yazılan nesneler; kök dışına çıkış reddedilir. */
+/**
+ * Dizin arka ucu: geçici dosya + hard link ile atomik, bir kez yazılan nesneler; kök dışına çıkış reddedilir.
+ * Yalnız büyük/küçük harf duyarlı Linux dosya sistemi içindir (staging/test): fsync yapmaz ve kök altındaki önceden var olan
+ * symlink'leri izler; harf katlayan birimlerde (APFS/NTFS) "Acme"/"acme" tenant yolları çakışır. Üretim için kullanılmaz.
+ */
 export class FileSystemArtifactBackend implements ArtifactBlobBackend{
   readonly name="filesystem";
   private readonly root:string;
@@ -124,7 +131,7 @@ export interface CloudArtifactStoreOptions{
   now?:()=>Date;
 }
 
-interface DeliveryClaims{v:typeof ARTIFACT_STORE_VERSION;kid:string;jti:string;t:string;p:string;n:string;s:string;iat:number;exp:number}
+interface DeliveryClaims{v:typeof ARTIFACT_STORE_VERSION;kid:string;jti:string;sub:string;t:string;p:string;n:string;s:string;iat:number;exp:number}
 
 const keyLen=(k:string|Buffer)=>typeof k==="string"?Buffer.byteLength(k):k.byteLength;
 const isId=(v:unknown):v is string=>typeof v==="string"&&ID_RE.test(v);
@@ -173,9 +180,14 @@ export class CloudArtifactStore{
   }
 
   private scanSecrets(content:Buffer):string[]{
-    const text=content.toString("utf8");
-    const kinds=new Set(findSecretKinds(text));
-    for(const s of this.o.knownSecrets??[])if(typeof s==="string"&&s.length>=8&&text.includes(s))kinds.add("known-secret");
+    const known=(this.o.knownSecrets??[]).filter(s=>typeof s==="string"&&s.length>=8);
+    const overlap=Math.max(SCAN_OVERLAP_BYTES,...known.map(s=>Buffer.byteLength(s)));
+    const kinds=new Set<string>();
+    for(let off=0;off===0||off<content.byteLength;off+=SCAN_CHUNK_BYTES){
+      const text=content.subarray(Math.max(0,off-overlap),off+SCAN_CHUNK_BYTES).toString("utf8");
+      for(const k of findSecretKinds(text))kinds.add(k);
+      for(const s of known)if(text.includes(s))kinds.add("known-secret");
+    }
     return [...kinds].sort();
   }
 
@@ -189,24 +201,33 @@ export class CloudArtifactStore{
     if(bad)return deny(bad);
     if((input.jobId!==undefined&&!isId(input.jobId))||(input.producer!==undefined&&!isId(input.producer)))return deny("INVALID_ID");
     if(!Buffer.isBuffer(input.content))return deny("INVALID_CONTENT");
+    if(input.content.byteLength>this.maxBytes)return deny("TOO_LARGE");
+    // Çağıranın tamponu değişebilir: doğrulama, tarama ve şifreleme yalnız girişte alınan kopya üzerinde yapılır.
+    const content=Buffer.from(input.content);
     if(typeof input.sha256!=="string"||!SHA256_RE.test(input.sha256))return deny("HASH_MISMATCH");
     if(typeof input.sizeBytes!=="number"||!Number.isSafeInteger(input.sizeBytes)||input.sizeBytes<0)return deny("SIZE_MISMATCH");
-    if(input.content.byteLength>this.maxBytes||input.sizeBytes>this.maxBytes)return deny("TOO_LARGE");
-    if(input.content.byteLength!==input.sizeBytes)return deny("SIZE_MISMATCH");
+    if(input.sizeBytes>this.maxBytes)return deny("TOO_LARGE");
+    if(content.byteLength!==input.sizeBytes)return deny("SIZE_MISMATCH");
     const ref:ArtifactRef={name:input.name,sha256:input.sha256,sizeBytes:input.sizeBytes};
-    if(!verifyArtifact(ref,input.content))return deny("HASH_MISMATCH");
-    const kinds=this.scanSecrets(input.content);
-    if(kinds.length)return deny("SECRET_DETECTED",{secretKinds:kinds});
-
     const {tenantId:t,projectId:p,name}=input;
     try{
+      if(!verifyArtifact(ref,content))return deny("HASH_MISMATCH");
+      const kinds=this.scanSecrets(content);
+      if(kinds.length)return deny("SECRET_DETECTED",{secretKinds:kinds});
       const prev=await this.readManifest({tenantId:t,projectId:p,name});
       if(prev.ok)return this.immutableOrReplay(prev.manifest,input.sha256,base,deny);
       if(prev.reason!=="NOT_FOUND")return deny(prev.reason);
       const iv=randomBytes(12);
       const c=createCipheriv("aes-256-gcm",this.derive(t,"enc"),iv);c.setAAD(this.aad(t,p,input.sha256));
-      const ct=Buffer.concat([c.update(input.content),c.final()]);
-      await this.o.backend.putIfAbsent(this.blobKey(t,p,input.sha256),Buffer.concat([Buffer.from([BLOB_FORMAT]),iv,c.getAuthTag(),ct]));
+      const ct=Buffer.concat([c.update(content),c.final()]);
+      const blobKey=this.blobKey(t,p,input.sha256);
+      if(!await this.o.backend.putIfAbsent(blobKey,Buffer.concat([Buffer.from([BLOB_FORMAT]),iv,c.getAuthTag(),ct]))){
+        // Yuva zaten dolu (aynı içerik başka adla ya da önceki yarım/bozuk yazım): manifest yazılmadan önce mevcut blob doğrulanır.
+        const existing=await this.o.backend.get(blobKey);
+        if(!existing)return deny("BLOB_TAMPERED");
+        const v=this.decryptVerified(t,p,input.sha256,input.sizeBytes,existing);
+        if(!v.ok)return deny(v.reason);
+      }
       const body:Omit<ArtifactManifest,"mac">={v:ARTIFACT_STORE_VERSION,tenantId:t,projectId:p,name,sha256:input.sha256,sizeBytes:input.sizeBytes,
         storedAt:this.now().toISOString(),jobId:input.jobId??null,producer:input.producer??null};
       const manifest:ArtifactManifest={...body,mac:this.macOf(body)};
@@ -251,15 +272,21 @@ export class CloudArtifactStore{
     if(expectSha!==undefined&&!hexEqual(m.sha256,expectSha))return fail("HASH_MISMATCH");
     const blob=await this.o.backend.get(this.blobKey(l.tenantId,l.projectId,m.sha256));
     if(!blob)return fail("NOT_FOUND");
+    const v=this.decryptVerified(l.tenantId,l.projectId,m.sha256,m.sizeBytes,blob);
+    return v.ok?{ok:true,content:v.content,manifest:m}:v;
+  }
+
+  /** Şifreli blob'u açar ve içeriği beyan edilen sha/boyutla yeniden doğrular. */
+  private decryptVerified(t:string,p:string,sha:string,sizeBytes:number,blob:Buffer):ArtifactResult<{content:Buffer}>{
     if(blob.byteLength<1+12+16||blob[0]!==BLOB_FORMAT)return fail("BLOB_TAMPERED");
     let content:Buffer;
     try{
-      const d=createDecipheriv("aes-256-gcm",this.derive(l.tenantId,"enc"),blob.subarray(1,13));
-      d.setAAD(this.aad(l.tenantId,l.projectId,m.sha256));d.setAuthTag(blob.subarray(13,29));
+      const d=createDecipheriv("aes-256-gcm",this.derive(t,"enc"),blob.subarray(1,13));
+      d.setAAD(this.aad(t,p,sha));d.setAuthTag(blob.subarray(13,29));
       content=Buffer.concat([d.update(blob.subarray(29)),d.final()]);
     }catch{return fail("BLOB_TAMPERED")}
-    if(!verifyArtifact({name:m.name,sha256:m.sha256,sizeBytes:m.sizeBytes},content))return fail("HASH_MISMATCH");
-    return {ok:true,content,manifest:m};
+    if(!verifyArtifact({name:"blob",sha256:sha,sizeBytes},content))return fail("HASH_MISMATCH");
+    return {ok:true,content};
   }
 
   /** Doğrulanmış okuma: manifest MAC, şifreli blob bütünlüğü ve sha/boyut yeniden hesaplanır. Çağıran tenant'ı yalnız kendi tenant'ını okuyabilir. */
@@ -267,9 +294,9 @@ export class CloudArtifactStore{
     return this.guardedRead("GET",principal,l);
   }
 
-  private async guardedRead(action:"GET"|"REDEEM_DELIVERY",principal:DeliveryPrincipal|null,l:ArtifactLocator,expectSha?:string):Promise<ArtifactResult<{content:Buffer;manifest:ArtifactManifest}>>{
+  private async guardedRead(action:"GET"|"REDEEM_DELIVERY",principal:DeliveryPrincipal|null,l:ArtifactLocator,expectSha?:string,tokenSubject?:string):Promise<ArtifactResult<{content:Buffer;manifest:ArtifactManifest}>>{
     const base={action,tenantId:isId(l?.tenantId)?l.tenantId:null,projectId:isId(l?.projectId)?l.projectId:null,
-      name:isSafeArtifactName(l?.name)?l.name:null,sha256:expectSha??null,subject:principal&&isId(principal.subject)?principal.subject:null};
+      name:isSafeArtifactName(l?.name)?l.name:null,sha256:expectSha??null,subject:principal&&isId(principal.subject)?principal.subject:(tokenSubject??null)};
     const deny=(reason:ArtifactDenyReason)=>{this.log({...base,decision:"DENIED",reason});return fail<{content:Buffer;manifest:ArtifactManifest}>(reason)};
     const bad=this.locatorOk(l);
     if(bad)return deny(bad);
@@ -282,7 +309,11 @@ export class CloudArtifactStore{
     }catch{return deny("BACKEND_ERROR")}
   }
 
-  /** Kısa ömürlü imzalı teslim URL'i. Token tenant+proje+ad+sha'ya bağlıdır; URL'de imza dışında secret yoktur. */
+  /**
+   * Kısa ömürlü imzalı teslim URL'i. Token tenant+proje+ad+sha'ya bağlıdır; URL'de imza dışında secret yoktur.
+   * Token bir taşıyıcı (bearer) belgedir: exp'e kadar yeniden kullanılabilir ve sorgu dizesinde taşındığından erişim log'u/Referer
+   * yoluyla sızabilir; bu yüzden TTL kısa tutulur. Canlı iptal için revokedTokenIds değiştirilebilir bir Set olarak verilmelidir.
+   */
   async issueDeliveryUrl(principal:DeliveryPrincipal,l:ArtifactLocator,ttlMs=DEFAULT_DELIVERY_TTL_MS):Promise<ArtifactResult<{url:string;expiresAt:string;sha256:string}>>{
     const base={action:"ISSUE_DELIVERY" as const,tenantId:isId(l?.tenantId)?l.tenantId:null,projectId:isId(l?.projectId)?l.projectId:null,
       name:isSafeArtifactName(l?.name)?l.name:null,sha256:null,subject:principal&&isId(principal.subject)?principal.subject:null};
@@ -297,7 +328,7 @@ export class CloudArtifactStore{
     let m:ArtifactManifest;
     try{const r=await this.fetchVerified(l);if(!r.ok)return deny(r.reason);m=r.manifest}catch{return deny("BACKEND_ERROR")}   // bozuk artifact için URL verilmez
     const iat=this.now().getTime();
-    const claims:DeliveryClaims={v:ARTIFACT_STORE_VERSION,kid:this.o.activeDeliveryKeyId,jti:randomUUID(),t:l.tenantId,p:l.projectId,n:l.name,s:m.sha256,iat,exp:iat+ttlMs};
+    const claims:DeliveryClaims={v:ARTIFACT_STORE_VERSION,kid:this.o.activeDeliveryKeyId,jti:randomUUID(),sub:principal.subject,t:l.tenantId,p:l.projectId,n:l.name,s:m.sha256,iat,exp:iat+ttlMs};
     const payload=b64url(canonicalJson(claims));
     const sig=createHmac("sha256",key).update(payload).digest("hex");
     const u=new URL(this.baseUrl.href);
@@ -329,7 +360,7 @@ export class CloudArtifactStore{
     if(parts.length!==2||!B64URL_RE.test(parts[0]!)||!HEX64_RE.test(parts[1]!))return deny("TOKEN_MALFORMED",l);
     let c:DeliveryClaims;
     try{c=JSON.parse(Buffer.from(parts[0]!,"base64url").toString("utf8")) as DeliveryClaims}catch{return deny("TOKEN_MALFORMED",l)}
-    if(!c||typeof c!=="object"||c.v!==ARTIFACT_STORE_VERSION||!isId(c.kid)||typeof c.jti!=="string"||!isId(c.t)||!isId(c.p)||!isSafeArtifactName(c.n)
+    if(!c||typeof c!=="object"||c.v!==ARTIFACT_STORE_VERSION||!isId(c.kid)||typeof c.jti!=="string"||!isId(c.sub)||!isId(c.t)||!isId(c.p)||!isSafeArtifactName(c.n)
       ||typeof c.s!=="string"||!SHA256_RE.test(c.s)||!Number.isSafeInteger(c.iat)||!Number.isSafeInteger(c.exp))return deny("TOKEN_MALFORMED",l);
     const key=this.o.deliveryKeys.get(c.kid);
     if(key===undefined)return deny("TOKEN_KEY_UNKNOWN",l);
@@ -340,6 +371,6 @@ export class CloudArtifactStore{
     if(now>=c.exp)return deny("TOKEN_EXPIRED",l);
     if(this.o.revokedTokenIds?.has(c.jti))return deny("TOKEN_REVOKED",l);
     if(c.t!==l.tenantId||c.p!==l.projectId||c.n!==l.name)return deny("TOKEN_SCOPE_MISMATCH",l);
-    return this.guardedRead("REDEEM_DELIVERY",null,l,c.s);
+    return this.guardedRead("REDEEM_DELIVERY",null,l,c.s,c.sub);
   }
 }

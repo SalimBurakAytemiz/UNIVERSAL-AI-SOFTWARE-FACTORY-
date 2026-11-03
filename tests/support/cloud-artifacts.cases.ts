@@ -4,7 +4,7 @@ import {mkdtemp, rm, readdir, readFile} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {
-  CloudArtifactStore, FileSystemArtifactBackend, InMemoryArtifactBackend, MAX_DELIVERY_TTL_MS, isSafeArtifactName,
+  CloudArtifactStore, FileSystemArtifactBackend, HARD_MAX_ARTIFACT_BYTES, InMemoryArtifactBackend, MAX_DELIVERY_TTL_MS, isSafeArtifactName,
   type ArtifactAuditRecord, type ArtifactBlobBackend, type CloudArtifactStoreOptions,
 } from "../../core/cloud/artifacts.js";
 import {canonicalJson, sha256Hex} from "../../core/cloud/contracts.js";
@@ -64,7 +64,8 @@ export function registerCloudArtifactsCases(): void {
       const {store} = mkStore({maxArtifactBytes: 8});
       expect(await store.put(putIn("tenant-001", "proj-001", "big.bin", Buffer.alloc(9)))).toMatchObject({ok: false, reason: "TOO_LARGE"});
       expect((await store.put(putIn("tenant-001", "proj-001", "ok.bin", Buffer.alloc(8)))).ok).toBe(true);
-      expect(() => mkStore({maxArtifactBytes: 3 * 1024 ** 3})).toThrow("ARTIFACT_MAX_BYTES_INVALID");
+      expect(HARD_MAX_ARTIFACT_BYTES).toBeLessThan(512 * 1024 * 1024);   // V8 dize sınırının altında (review N2)
+      expect(() => mkStore({maxArtifactBytes: HARD_MAX_ARTIFACT_BYTES + 1})).toThrow("ARTIFACT_MAX_BYTES_INVALID");
     });
     it("rejects unsafe names and ids", async () => {
       for (const n of ["../x", "/etc/passwd", "a//b", "a/./b", "a/", "a\\b", "", "x".repeat(256), "a b"]) expect(isSafeArtifactName(n)).toBe(false);
@@ -103,6 +104,44 @@ export function registerCloudArtifactsCases(): void {
       const ct = Buffer.concat([c.update(body("evil")), c.final()]);
       backend.tamper(`t/tenant-001/p/proj-001/blob/${sha}`, () => Buffer.concat([Buffer.from([1]), iv, c.getAuthTag(), ct]));
       expect(await store.get(A, {tenantId: "tenant-001", projectId: "proj-001", name: "x.bin"})).toMatchObject({ok: false, reason: "HASH_MISMATCH"});
+    });
+    it("snapshots content at entry: mutating the caller's buffer after put cannot change what is stored (review N1)", async () => {
+      const {store} = mkStore();
+      const c = body("original bytes"), sha = sha256Hex(c);
+      const pending = store.put({tenantId: "tenant-001", projectId: "proj-001", name: "m.bin", content: c, sha256: sha, sizeBytes: c.byteLength});
+      c.fill(0x41);   // after the call, before the await
+      expect((await pending).ok).toBe(true);
+      const got = await store.get(A, {tenantId: "tenant-001", projectId: "proj-001", name: "m.bin"});
+      expect(got.ok && got.content.toString()).toBe("original bytes");
+      const leaked = body(`clean prefix ${"x".repeat(40)}`);
+      const p2 = store.put(putIn("tenant-001", "proj-001", "s.txt", leaked));
+      leaked.write(KNOWN, 0);   // injecting a secret after the scan must not reach storage
+      expect((await p2).ok).toBe(true);
+      const got2 = await store.get(A, {tenantId: "tenant-001", projectId: "proj-001", name: "s.txt"});
+      expect(got2.ok && got2.content.toString().includes(KNOWN)).toBe(false);
+    });
+    it("a poisoned pre-existing blob slot is detected and never reported ok (review N1)", async () => {
+      const backend = new InMemoryArtifactBackend();
+      const {store} = mkStore({backend});
+      const c = body("honest"), sha = sha256Hex(c);
+      await backend.putIfAbsent(`t/tenant-001/p/proj-001/blob/${sha}`, Buffer.from("garbage-from-a-bad-first-write-0123456789"));
+      expect(await store.put(putIn("tenant-001", "proj-001", "h.bin", c))).toMatchObject({ok: false, reason: "BLOB_TAMPERED"});
+      expect(await store.get(A, {tenantId: "tenant-001", projectId: "proj-001", name: "h.bin"})).toMatchObject({ok: false, reason: "NOT_FOUND"});
+      // a valid existing blob (same content under another name) is reused
+      expect((await store.put(putIn("tenant-001", "proj-001", "a1.bin", body("dup")))).ok).toBe(true);
+      expect((await store.put(putIn("tenant-001", "proj-001", "a2.bin", body("dup")))).ok).toBe(true);
+      const got = await store.get(A, {tenantId: "tenant-001", projectId: "proj-001", name: "a2.bin"});
+      expect(got.ok && got.content.toString()).toBe("dup");
+    });
+    it("secret scan is chunked (patterns straddling a chunk boundary are found) and scan errors are typed denials (review N2)", async () => {
+      const {store} = mkStore();
+      for (const secret of [KNOWN, `AKIA${"B".repeat(16)}`]) {
+        const big = Buffer.alloc(4 * 1024 * 1024 + 64, 0x20);
+        big.write(secret, 4 * 1024 * 1024 - 10);
+        expect(await store.put(putIn("tenant-001", "proj-001", `big-${secret.length}.bin`, big))).toMatchObject({ok: false, reason: "SECRET_DETECTED"});
+      }
+      const bad = mkStore({knownSecrets: {filter() { throw new Error("boom"); }} as unknown as string[]}).store;
+      expect(await bad.put(putIn("tenant-001", "proj-001", "x.bin", body("x")))).toMatchObject({ok: false, reason: "BACKEND_ERROR"});
     });
     it("a forged sha claim in the delivery token is denied (tampered hash)", async () => {
       const {store} = mkStore();
@@ -262,7 +301,8 @@ export function registerCloudArtifactsCases(): void {
       const text = JSON.stringify(audit);
       const token = new URL(d.url).searchParams.get("token")!;
       for (const s of [token, token.split(".")[1]!, DKEY, MASTER.toString(), "secret-free content"]) expect(text).not.toContain(s);
-      expect(audit.map(a => `${a.action}:${a.decision}`)).toEqual(["PUT:ALLOWED", "ISSUE_DELIVERY:ALLOWED", "REDEEM_DELIVERY:ALLOWED", "REDEEM_DELIVERY:DENIED", "GET:DENIED"]);
+      expect(audit.filter(a => a.action === "REDEEM_DELIVERY").map(a => a.subject)).toEqual(["user-001", undefined]);   // review L2: token carries the issuing subject
+    expect(audit.map(a => `${a.action}:${a.decision}`)).toEqual(["PUT:ALLOWED", "ISSUE_DELIVERY:ALLOWED", "REDEEM_DELIVERY:ALLOWED", "REDEEM_DELIVERY:DENIED", "GET:DENIED"]);
     });
     it("backend failures are denials, not throws", async () => {
       const broken: ArtifactBlobBackend = {name: "broken", putIfAbsent: async () => { throw new Error("disk"); }, get: async () => { throw new Error("disk"); }};
