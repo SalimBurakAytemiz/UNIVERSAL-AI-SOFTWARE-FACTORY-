@@ -150,6 +150,10 @@ export function registerAutonomyCases() {
       // NB-2: a dismissed CLEAN review still contributes its exception.
       const dismissed = cleanReview("AUTONOMY-EXCEPTIONS: PAID_SPEND", SHA, {id: 1, state: "DISMISSED"}, "r1");
       expect(d([dismissed, later({}, "r2")]).reasons).toEqual(["REVIEWER_ATTESTED:PAID_SPEND"]);
+      // NB-1 of review 5757869995: homoglyphs, inline HTML and double-escaped entities count as mentions too.
+      for (const tok of ["AUTОNOMY-EXCEPTIONS", "AUTONOMY<b></b>-EXCEPTIONS", "AUTONOMY&amp;#45;EXCEPTIONS", "αutonomy-exceptions"]) {
+        expect(d([cleanReview(`${tok}: PAID_SPEND\nAUTONOMY-EXCEPTIONS: none`, SHA, {id: 1}, "r1")]).reasons).toContain("REVIEWER_ATTESTATION_MALFORMED");
+      }
       // The PR author's own review counts in process mode (merge-gate's allowed set).
       expect(d([cleanReview("AUTONOMY-EXCEPTIONS: none", SHA, {user: {login: "Author"}})]).decision).toBe("AUTO_MERGE");
     });
@@ -161,6 +165,7 @@ export function registerAutonomyCases() {
       files["docs/planning/autonomy/standing-authority.json"] = Buffer.from(JSON.stringify(policy));
       files["docs/planning/autonomy/task-index.json"] = Buffer.from(JSON.stringify(index));
       files["config/protected-paths.json"] = Buffer.from(JSON.stringify({exactPaths: ["x"], protectedPrefixes: ["y/"]}));
+      files["docs/planning/autonomy/STATE.json"] = Buffer.from(JSON.stringify({done: [{task: "CLOUD-T0010", pr: 1}]}));
       fs.writeFileSync(path.join(root, "docs/planning/autonomy/standing-authority.json"), files["docs/planning/autonomy/standing-authority.json"]);
       fs.writeFileSync(path.join(root, "docs/planning/autonomy/task-index.json"), files["docs/planning/autonomy/task-index.json"]);
       const seen: string[] = [];
@@ -180,6 +185,7 @@ export function registerAutonomyCases() {
       };
       const c = collectEvidence({api, pr: 7, implementerSessions: ["s1"], root});
       expect(c.trust.reasons).toEqual([]);
+      expect(c.state.done[0].task).toBe("CLOUD-T0010");
       expect(c.evidence.implementerSessions).toEqual(["s1"]);
       expect(c.evidence.protectedPaths).toEqual({exactPaths: ["x"], protectedPrefixes: ["y/"]});
       expect(c.evidence.checkRuns[0]).toMatchObject({workflowPath: ".github/workflows/ci.yml", workflowRunEvent: "pull_request"});
@@ -201,6 +207,17 @@ export function registerAutonomyCases() {
       expect(() => pages(() => Array(100).fill(1), "x")).toThrow("EVIDENCE_PAGE_CAP");
       expect(() => pages(() => ({}), "x", "k")).toThrow("EVIDENCE_LIST_MALFORMED");
       fs.rmSync(root, {recursive: true, force: true});
+    });
+    it("NB2 the declared task must be actionable: no blocked/split/deferred/unverifiable status, no LOCAL execution, dependencies merged", () => {
+      const ix = {tasks: [t("C-T0001", "T2", {status: "BLOCKED"}), t("C-T0002", "T2", {exec: "LOCAL"}), t("C-T0003", "T2", {deps: [["C-T0009", "MERGED"]]}),
+        t("C-T0004", "T2", {deps: [["C-T0009", "MERGED"]]}), t("C-T0005", "T2", {status: "ASSET_DONE"}), t("C-T0006", "T2", {status: "SPLIT"})]};
+      const d = (id: string, state = {}) => decideAutoMerge({gate: merge, body: body(id), policy, index: ix, evidence: ev(), state});
+      expect(d("C-T0001").reasons).toEqual(["TASK_NOT_ACTIONABLE:BLOCKED"]);
+      expect(d("C-T0006").reasons).toEqual(["TASK_NOT_ACTIONABLE:SPLIT"]);
+      expect(d("C-T0002").reasons).toEqual(["TASK_LOCAL_EXECUTION"]);
+      expect(d("C-T0003").reasons).toEqual(["TASK_DEPENDENCY_UNMET:C-T0009"]);
+      expect(d("C-T0004", {done: [{task: "C-T0009", pr: 9}]}).decision).toBe("AUTO_MERGE");
+      expect(d("C-T0005").decision).toBe("AUTO_MERGE");   // fixes to delivered work stay routine
     });
     it("A9 integration with the real merge-gate: malformed or empty evidence never auto-merges", () => {
       for (const evidence of [{}, {pr: {number: 1}}, null]) {

@@ -20,6 +20,8 @@ const ATTEST_RE = /^AUTONOMY-EXCEPTIONS: (none|[A-Z_]{1,32}(?:,[A-Z_]{1,32})*)\s
 // Matrix statuses that count as delivered for dependency purposes, and statuses that are never picked as new work.
 export const DONE_STATUSES = Object.freeze(["ASSET_DONE", "DONE_OBSERVED"]);
 export const NOT_PICKABLE = Object.freeze(["ASSET_DONE", "DONE_OBSERVED", "SPLIT", "BLOCKED", "DEFERRED", "UNVERIFIABLE", "VERIFY_PENDING"]);
+// Declared-task states that a routine merge may not claim (NB-2 of review 5757869995). Done tasks stay mergeable: fixes to delivered work are routine.
+export const NOT_MERGEABLE = Object.freeze(["SPLIT", "BLOCKED", "DEFERRED", "UNVERIFIABLE"]);
 // Paths that define this authority. Changing them would widen it, so a PR touching any of them is a Founder decision (B-1).
 // STATE.json is the loop's own progress record and is updated by routine PRs.
 export const GOVERNANCE_PREFIXES = Object.freeze(["docs/planning/autonomy/", "docs/planning/authority/", "docs/planning/v41/", "docs/planning/cloud-only/", ".claude/"]);
@@ -81,10 +83,17 @@ const INVISIBLE_G = new RegExp(INVISIBLE_RE.source, "gu");
 export const MALFORMED = "MALFORMED";
 // A line "mentions" the attestation if, after NFKC, removing invisibles and decoding HTML character references, it holds the two words
 // joined by up to 8 non-alphanumerics (any dash, space, underscore, entity...). Every such line must be the single well-formed one (B-1 of review 5757807150).
-const decodeEntities = l => l.replace(/&#x([0-9a-f]{1,6});?/gi, (_, h) => String.fromCodePoint(Math.min(parseInt(h, 16), 0x10ffff)))
-  .replace(/&#(\d{1,7});?/g, (_, d) => String.fromCodePoint(Math.min(Number(d), 0x10ffff))).replace(/&[a-z]+;/gi, " ");
+// Common Cyrillic/Greek look-alikes of the token's Latin letters, folded before matching (NB-1 of review 5757869995).
+const CONFUSABLES = new Map(Object.entries({"а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "у": "y", "х": "x", "і": "i", "т": "t", "м": "m", "н": "n", "к": "k",
+  "А": "A", "Е": "E", "О": "O", "Р": "P", "С": "C", "У": "Y", "Х": "X", "І": "I", "Т": "T", "М": "M", "Н": "N", "К": "K", "ο": "o", "Ο": "O", "α": "a", "Α": "A",
+  "ε": "e", "Ε": "E", "τ": "t", "Τ": "T", "ν": "n", "Ν": "N", "μ": "m", "Μ": "M", "ρ": "p", "Ρ": "P", "χ": "x", "Χ": "X", "ι": "i", "Ι": "I", "κ": "k", "Κ": "K", "υ": "y", "Υ": "Y"}));
+const fold = l => [...l].map(c => CONFUSABLES.get(c) ?? c).join("");
+const decodeOnce = l => l.replace(/&#x([0-9a-f]{1,6});?/gi, (_, h) => String.fromCodePoint(Math.min(parseInt(h, 16), 0x10ffff)))
+  .replace(/&#(\d{1,7});?/g, (_, d) => String.fromCodePoint(Math.min(Number(d), 0x10ffff))).replace(/&amp;/gi, "&").replace(/&[a-z]+;/gi, " ");
+// Entities are decoded up to three times (double escaping such as &amp;#45;) and inline HTML tags are removed.
+const decodeEntities = l => decodeOnce(decodeOnce(decodeOnce(l))).replace(/<[^>]{0,200}>/g, "");
 const MENTION_RE = /autonomy[^\p{L}\p{N}]{0,8}exceptions/iu;
-export const mentionsAttestation = l => MENTION_RE.test(decodeEntities(l.normalize("NFKC").replace(INVISIBLE_G, "")).normalize("NFKC").replace(INVISIBLE_G, ""));
+export const mentionsAttestation = l => MENTION_RE.test(fold(decodeEntities(l.normalize("NFKC").replace(INVISIBLE_G, "")).normalize("NFKC").replace(INVISIBLE_G, "")));
 /**
  * One review's attestation: null if no line mentions it at all; MALFORMED if any line anywhere (fenced, quoted, with invisibles,
  * any case or dash, entities, several lines) mentions it and the review does not hold exactly one well-formed plain line.
@@ -119,8 +128,8 @@ export function attestationOf({reviews, head, base, allowed, implementerSessions
     if (!REVIEW_STATES.has(r.state) || !Number.isFinite(t)) return [];
     return [{t, id: Number(r.id) || 0, a: reviewAttestation(r.body), selectable: true}];
   });
-  const sel = all.filter(x => x.selectable).sort((x, y) => x.t - y.t || x.id - y.id);
-  if (!sel.length) return null;
+  // The selected review (latest selectable, as merge-gate picks it) only has to exist: every qualifying review must carry its own line anyway.
+  if (!all.some(x => x.selectable)) return null;
   // Any qualifying review whose attestation cannot be read fails the whole decision closed: its stated exception may be the one hidden.
   if (all.some(x => x.a === MALFORMED)) return MALFORMED;
   // Every qualifying CLEAN review must carry its own attestation; a silent one may be a garbled exception (B-1 of review 5757807150, fix (b)).
@@ -130,7 +139,7 @@ export function attestationOf({reviews, head, base, allowed, implementerSessions
 }
 
 /** Pure decision: merge-gate result + evidence + PR body + policy + task index => AUTO_MERGE | FOUNDER_REQUIRED | BLOCK. */
-export function decideAutoMerge({gate, body, policy, index, evidence = {}}) {
+export function decideAutoMerge({gate, body, policy, index, evidence = {}, state = {}}) {
   const reasons = [];
   const founder = [];
   const tid = taskOf(body);
@@ -140,6 +149,10 @@ export function decideAutoMerge({gate, body, policy, index, evidence = {}}) {
   if (task) {
     if (!policy.coveredTiers.includes(task.tier)) founder.push(`TIER_NOT_COVERED:${task.tier}`);
     founder.push(...openGates(task, policy));
+    if (NOT_MERGEABLE.includes(task.status)) founder.push(`TASK_NOT_ACTIONABLE:${task.status}`);
+    if (task.exec === "LOCAL") founder.push("TASK_LOCAL_EXECUTION");
+    const done = doneSet(index, state);
+    for (const d of task.deps ?? []) if (Array.isArray(d) ? d[1] !== "MERGED" || !done.has(d[0]) : !done.has(d)) founder.push(`TASK_DEPENDENCY_UNMET:${Array.isArray(d) ? d[0] : d}`);
   }
   // B-3: without the builder session ids, merge-gate cannot reject a self-review, so the autonomous path refuses to decide.
   const impl = Array.isArray(evidence.implementerSessions) ? evidence.implementerSessions.filter(s => typeof s === "string" && s.trim() !== "") : [];
@@ -170,8 +183,9 @@ export function decideAutoMerge({gate, body, policy, index, evidence = {}}) {
 }
 
 /** Next pickable tasks: not done, not in flight, every dependency done, tier covered, no open gate. Blocked tasks never stop unrelated ones. */
+export const doneSet = (index, state) => new Set([...(state?.done ?? []).map(x => typeof x === "string" ? x : x.task), ...index.tasks.filter(t => DONE_STATUSES.includes(t.status)).map(t => t.id)]);
 export function nextTasks({index, state, policy, limit = 5}) {
-  const done = new Set([...(state.done ?? []).map(x => typeof x === "string" ? x : x.task), ...index.tasks.filter(t => DONE_STATUSES.includes(t.status)).map(t => t.id)]);
+  const done = doneSet(index, state);
   const busy = new Set([...(state.inFlight ?? []).map(x => x.task), ...(state.blocked ?? []).map(x => x.task)]);
   const ready = [], held = [];
   for (const t of index.tasks) {
@@ -222,6 +236,7 @@ export function collectEvidence({api, pr, implementerSessions, root = ROOT}) {
   const policy = JSON.parse(contentAt(api, "docs/planning/autonomy/standing-authority.json", base0).buf.toString("utf8"));
   const index = JSON.parse(contentAt(api, "docs/planning/autonomy/task-index.json", base0).buf.toString("utf8"));
   const pp = JSON.parse(contentAt(api, "config/protected-paths.json", base0).buf.toString("utf8"));
+  const state = JSON.parse(contentAt(api, "docs/planning/autonomy/STATE.json", base0).buf.toString("utf8"));
   const runs = pages(api, `actions/runs?head_sha=${head}`, "workflow_runs");
   const suite = new Map(runs.map(r => [r.check_suite_id, r]));
   // NB-1: every run on the head, not only the latest per name.
@@ -240,14 +255,14 @@ export function collectEvidence({api, pr, implementerSessions, root = ROOT}) {
       currentBaseSha, checkRuns, reviews, diffFiles, protectedPaths: {exactPaths: pp.exactPaths, protectedPrefixes: pp.protectedPrefixes}, rules,
       implementerSessions: [...(implementerSessions ?? [])],
     },
-    body: p.body ?? "", policy, index,
+    body: p.body ?? "", policy, index, state,
     trust: {reasons: [...trustMismatch.map(f => `LOCAL_TRUST_FILE_MISMATCH:${f}`), ...(currentBaseSha !== base0 ? ["TRUST_BASE_MOVED"] : [])]},
   };
 }
 
-export function decideFor({evidence, body, policy = loadPolicy(), index = loadIndex(), trust}) {
+export function decideFor({evidence, body, policy = loadPolicy(), index = loadIndex(), state = {done: []}, trust}) {
   const gate = evaluateMergeGate(evidence, {mode: policy.gateMode, trustedReviewerLogins: policy.trustedReviewerLogins, expectedBaseRef: policy.baseRef});
-  const result = decideAutoMerge({gate, body, policy, index, evidence: evidence ?? {}});
+  const result = decideAutoMerge({gate, body, policy, index, evidence: evidence ?? {}, state});
   // NB-a: the trust result from collectEvidence is mandatory; a missing or malformed one blocks.
   const tr = trust && Array.isArray(trust.reasons) && trust.reasons.every(x => typeof x === "string") ? trust.reasons : ["TRUST_RESULT_MISSING"];
   if (tr.length) { result.decision = "BLOCK"; result.authority = null; result.reasons = [...tr, ...result.reasons]; }
