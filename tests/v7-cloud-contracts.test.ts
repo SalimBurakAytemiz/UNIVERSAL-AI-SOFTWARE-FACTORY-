@@ -7,6 +7,7 @@ import {
   CLOUD_CONTRACT_VERSION,MAX_JOB_TIMEOUT_MS,signScope,verifyScopeSignature,validateCloudJobRequest,verifyEventStream,verifyArtifact,
   auditRecordFor,canonicalJson,sha256Hex,type CloudJobRequest,type CloudJobEvent,type UnsignedScope,
 } from "../core/cloud/contracts.js";
+import {registerCloudProviderRoutingCases} from "./support/cloud-provider-routing.cases.js"; // CLOUD-T0015 sağlayıcı yönlendirme/kota/fallback vakaları
 
 const SIGNING_FIXTURE="test-scope-key-".repeat(3);
 const now=new Date("2026-11-02T12:00:00Z");
@@ -150,3 +151,4 @@ describe("cloud contract: review follow-ups (PR #296 LOW-1, LOW-2, INFO-3)",()=>
 registerCloudJobQueueCases();
 registerQueueLockCases();
 registerCloudGatewayCases();
+registerCloudProviderRoutingCases();
