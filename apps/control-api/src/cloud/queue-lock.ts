@@ -1,4 +1,4 @@
-// //TR: Bu dosya bulut iş kuyruğunun tek yazıcı kilidini uygular: kilit içeriği önce geçici dosyaya yazılıp link() ile atomik konur (boş kilit penceresi yok), bayat kilidi yalnız devralma jetonunu tutan süreç siler (rename-back yok), bırakma yalnız kendi benzersiz kimliğini taşıyan kilidi siler.
+// //TR: Bu dosya bulut iş kuyruğunun tek yazıcı kilidini uygular: kilit içeriği önce geçici dosyaya yazılıp link() ile atomik konur (boş kilit penceresi yok), bayat kilidi yalnız devralma jetonunu tutan süreç siler (rename-back yok; sahibi ölü jeton otomatik silinmez, QUEUE_TAKEOVER_STALE), bırakma yalnız kendi benzersiz kimliğini taşıyan kilidi siler.
 import fs from "node:fs";
 import {randomBytes} from "node:crypto";
 
@@ -8,14 +8,12 @@ export interface LockIo {
   link(existing: string, target: string): void;   // hedef varsa EEXIST
   read(path: string): string;
   unlink(path: string): void;
-  mtimeMs(path: string): number;
 }
 export const defaultLockIo: LockIo = {
   writeFile(p, data) { const fd = fs.openSync(p, "wx"); try { fs.writeSync(fd, data); fs.fsyncSync(fd); } finally { fs.closeSync(fd); } },
   link: (a, b) => fs.linkSync(a, b),
   read: p => fs.readFileSync(p, "utf8"),
   unlink: p => fs.unlinkSync(p),
-  mtimeMs: p => fs.statSync(p).mtimeMs,
 };
 
 /** EPERM: süreç var ama sinyal izni yok -> canlı. ESRCH: yok -> ölü. */
@@ -26,10 +24,7 @@ export function pidAlive(pid: number, kill: (pid: number, sig: 0) => void = (p, 
 export interface QueueLockOptions {
   io?: LockIo;
   alive?: (pid: number) => boolean;
-  now?: () => number;
   pid?: number;
-  /** Sahibi ölü bir devralma jetonu bu süreden eskiyse silinebilir (jetonu tutarken çöken süreç). */
-  staleTokenGraceMs?: number;
 }
 export interface QueueLock {readonly id: string; release(): void}
 
@@ -56,9 +51,9 @@ function linkWithContent(io: LockIo, target: string, id: string): boolean {
  *   okunan bayat kilittir (rename-back yok, başkasının kilidi silinmez).
  */
 export function acquireQueueLock(lockPath: string, o: QueueLockOptions = {}): QueueLock {
-  const io = o.io ?? defaultLockIo, alive = o.alive ?? ((p: number) => pidAlive(p)), now = o.now ?? Date.now;
+  const io = o.io ?? defaultLockIo, alive = o.alive ?? ((p: number) => pidAlive(p));
   const id = `${o.pid ?? process.pid}:${randomBytes(16).toString("hex")}`;
-  const token = `${lockPath}.takeover`, grace = o.staleTokenGraceMs ?? 60_000;
+  const token = `${lockPath}.takeover`;
   const holdsLive = (raw: string) => { const p = parsePid(raw); return Number.isSafeInteger(p) && p > 0 && alive(p); };
   const lock: QueueLock = {
     id,
@@ -77,11 +72,10 @@ export function acquireQueueLock(lockPath: string, o: QueueLockOptions = {}): Qu
     if (!linkWithContent(io, token, id)) {
       let traw = "";
       try { traw = io.read(token); } catch (e) { if (isEnoent(e)) continue; throw e; }
-      let age = 0;
-      try { age = now() - io.mtimeMs(token); } catch { continue; }
-      if (holdsLive(traw) || age < grace) throw new Error("QUEUE_LOCKED");   // başka süreç devralıyor
-      try { io.unlink(token); } catch { /* yut */ }   // jetonu tutarken çökmüş sürecin artığı (kalan risk: belgelendi)
-      continue;
+      if (holdsLive(traw)) throw new Error("QUEUE_LOCKED");   // başka süreç devralıyor
+      // NB-5: sahibi ölü jeton OTOMATİK SİLİNMEZ. Jetonu tutarken çöken süreçten sonra iki sürecin aynı jetonu temizleyip ikisinin de
+      // kilidi alması mümkündü; bunun yerine güvenli tarafta kalınır. Operatör: süreç olmadığını doğrulayıp `${lockPath}.takeover` silinir.
+      throw new Error("QUEUE_TAKEOVER_STALE");
     }
     try {
       let again: string | null = null;

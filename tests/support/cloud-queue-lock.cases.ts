@@ -11,7 +11,6 @@ function memIo(hooks: Partial<Record<"beforeLink" | "beforeUnlink" | "beforeRead
     link(a, b) { hooks.beforeLink?.(b); const f = files.get(a); if (!f) throw err("ENOENT"); if (files.has(b)) throw err("EEXIST"); files.set(b, {...f}); },
     read(p) { hooks.beforeRead?.(p); const f = files.get(p); if (!f) throw err("ENOENT"); return f.data; },
     unlink(p) { hooks.beforeUnlink?.(p); if (!files.delete(p)) throw err("ENOENT"); },
-    mtimeMs(p) { const f = files.get(p); if (!f) throw err("ENOENT"); return f.mtime; },
   };
   return {io, files};
 }
@@ -51,10 +50,15 @@ export function registerQueueLockCases(): void {
       const {io, files} = memIo();
       files.set(L, {data: `999:${"d".repeat(32)}`, mtime: 0});
       files.set(`${L}.takeover`, {data: `333:${"e".repeat(32)}`, mtime: 0});   // canlı süreç devralıyor
-      expect(() => acquireQueueLock(L, {io, alive: p => !dead(p), pid: 222, now: () => 10 ** 9})).toThrow(/QUEUE_LOCKED/);
+      expect(() => acquireQueueLock(L, {io, alive: p => !dead(p), pid: 222})).toThrow(/QUEUE_LOCKED/);
       expect(files.get(L)!.data).toBe(`999:${"d".repeat(32)}`);   // silinmedi
-      files.set(`${L}.takeover`, {data: `998:${"e".repeat(32)}`, mtime: 0});   // jetonu tutarken çökmüş, süre dolmuş
-      const b = acquireQueueLock(L, {io, alive: p => !dead(p), pid: 222, now: () => 10 ** 9});
+      // NB-5: jetonu tutarken çökmüş süreç -> otomatik temizlik YOK; operatör görür, kilit ve jeton yerinde kalır.
+      files.set(`${L}.takeover`, {data: `998:${"e".repeat(32)}`, mtime: 0});
+      expect(() => acquireQueueLock(L, {io, alive: p => !dead(p), pid: 222})).toThrow(/QUEUE_TAKEOVER_STALE/);
+      expect(files.get(L)!.data).toBe(`999:${"d".repeat(32)}`);
+      expect(files.get(`${L}.takeover`)!.data).toBe(`998:${"e".repeat(32)}`);
+      files.delete(`${L}.takeover`);   // operatör temizledi
+      const b = acquireQueueLock(L, {io, alive: p => !dead(p), pid: 222});
       expect(files.get(L)!.data).toBe(b.id);
     });
 
@@ -72,6 +76,20 @@ export function registerQueueLockCases(): void {
       expect(files.get(L)!.data).toBe(`222:${"f".repeat(32)}`);
       files.set(L, {data: a.id, mtime: 0}); a.release();
       expect(files.has(L)).toBe(false);
+    });
+      it("malformed lock content is never mistaken for a live owner (NB-6 Q13)", () => {
+      const {io, files} = memIo();
+      files.set(L, {data: "111garbage", mtime: 0});   // 111 canlı ama içerik tanınmıyor
+      const a = acquireQueueLock(L, {io, alive: p => !dead(p), pid: 222});
+      expect(files.get(L)!.data).toBe(a.id);
+    });
+
+    it("an owner releasing during our acquire is retried, not an error (NB-6 Q15/Q16)", () => {
+      let released = false;
+      const {io, files} = memIo({beforeRead: p => { if (p === L && !released) { released = true; files.delete(L); } }});
+      files.set(L, {data: `111:${"a".repeat(32)}`, mtime: 0});
+      const b = acquireQueueLock(L, {io, alive: p => !dead(p), pid: 222});
+      expect(files.get(L)!.data).toBe(b.id);
     });
   });
 }
