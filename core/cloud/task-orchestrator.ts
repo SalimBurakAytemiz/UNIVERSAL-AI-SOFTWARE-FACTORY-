@@ -79,6 +79,16 @@ function validTask(t: Record<string, unknown>): boolean {
  * Merkle tarzı olduğundan üst akıştaki bir değişiklik alt akış kimliklerini de değiştirir; aynı plan her zaman aynı kimlikleri üretir
  * (görev sırası ya da JSON anahtar sırası kimliği etkilemez). `scope` verilirse kapsam/ağ/toplam maliyet ön kontrolü yapılır.
  */
+/** Görev kimliği türetimi (buildTaskDag ve dispatch aynı fonksiyonu kullanır: dağıtım elindeki DAG'a güvenmez, kimliği içerikten yeniden hesaplar). */
+function taskIdOf(ctx: {namespace: string; tenantId: string; projectId: string; environment: CloudEnvironment}, body: Omit<DagTask, "taskId">): string {
+  const b = {key: body.key, kind: body.kind, role: body.role, title: body.title, deps: body.deps, founderGate: body.founderGate, needsNetwork: body.needsNetwork,
+    estimatedCostUsd: body.estimatedCostUsd, timeoutMs: body.timeoutMs, retry: {maxAttempts: body.retry.maxAttempts, backoffMs: body.retry.backoffMs},
+    inputArtifacts: body.inputArtifacts.map(a => ({name: a.name, sha256: a.sha256, sizeBytes: a.sizeBytes}))};
+  return "task-" + sha256Hex(canonicalJson({v: CLOUD_CONTRACT_VERSION, ns: ctx.namespace, tenantId: ctx.tenantId, projectId: ctx.projectId, environment: ctx.environment, ...b})).slice(0, 40);
+}
+/** Founder kapısı her zaman yeniden türetilir; elde tutulan `false` DELIVERY/production görevini açamaz. */
+const requiresFounder = (founderGate: unknown, kind: CloudJobKind, env: CloudEnvironment) => founderGate === true || FOUNDER_GATED_KINDS.includes(kind) || env === "production";
+
 export function buildTaskDag(input: unknown, scope?: SignedScope): DagDecision {
   if (!isObj(input) || !onlyFields(input, PLAN_FIELDS) || !Array.isArray(input.tasks)) return deny("PLAN_MALFORMED");
   const p = input;
@@ -124,13 +134,13 @@ export function buildTaskDag(input: unknown, scope?: SignedScope): DagDecision {
     if (scope && !scope.jobKinds.includes(s.kind)) return deny("KIND_NOT_IN_SCOPE", k);
     if (scope && s.needsNetwork && !scope.allowNetwork) return deny("NETWORK_NOT_IN_SCOPE", k);
     const deps = s.deps.map(d => (byKey.get(d) as DagTask).taskId).sort();
-    const founderGate = s.founderGate === true || FOUNDER_GATED_KINDS.includes(s.kind) || env === "production";
+    const founderGate = requiresFounder(s.founderGate, s.kind, env);
     const body = {
       key: s.key, kind: s.kind, role: ROLE_REGISTRY[s.kind], title: s.title, deps, founderGate, needsNetwork: s.needsNetwork,
       estimatedCostUsd: s.estimatedCostUsd, timeoutMs: s.timeoutMs, retry: {maxAttempts: s.retry.maxAttempts, backoffMs: s.retry.backoffMs},
       inputArtifacts: (s.inputArtifacts ?? []).map(a => ({name: a.name, sha256: a.sha256, sizeBytes: a.sizeBytes})),
     };
-    const taskId = "task-" + sha256Hex(canonicalJson({v: CLOUD_CONTRACT_VERSION, ns: p.namespace, tenantId: p.tenantId, projectId: p.projectId, environment: env, ...body})).slice(0, 40);
+    const taskId = taskIdOf({namespace: p.namespace as string, tenantId: p.tenantId as string, projectId: p.projectId as string, environment: env}, body);
     const t: DagTask = Object.freeze({taskId, ...body}) as DagTask;
     byKey.set(k, t); tasksById.set(taskId, t); total += s.estimatedCostUsd;
   }
@@ -191,7 +201,7 @@ export interface DispatchReport {
   complete: boolean;   // tüm görevler SUCCEEDED
   failed: boolean;     // en az bir görev terminal başarısız
 }
-export type DispatchResult = {ok: true; report: DispatchReport} | {ok: false; reason: "DAG_INVALID" | "JOB_MISMATCH" | "SUBMIT_DENIED" | "UNKNOWN_JOB_STATUS"; taskId?: string; detail?: string};
+export type DispatchResult = {ok: true; report: DispatchReport} | {ok: false; reason: "DAG_INVALID" | "TASK_ID_MISMATCH" | "JOB_MISMATCH" | "SUBMIT_DENIED" | "UNKNOWN_JOB_STATUS"; taskId?: string; detail?: string};
 
 export interface TaskOrchestratorOptions {
   queue: TaskJobSink; scope: SignedScope; now?: () => Date; maxInFlight?: number;
@@ -231,6 +241,11 @@ export class TaskOrchestrator {
     // 1) kuyruktaki mevcut durumu oku; kimlik çakışması/bozulma => fail-closed
     for (const id of dag.order) {
       const t = dag.tasks.get(id) as DagTask;
+      // Elle kurulmuş/serileştirilmiş/değiştirilmiş DAG'a güvenilmez: kimlik içerikten yeniden hesaplanır, uyuşmazlık sabit kodla reddedilir.
+      let derived: string;
+      try { derived = isObj(t) && Array.isArray(t.deps) && Array.isArray(t.inputArtifacts) && isObj(t.retry) && isKind(t.kind) && ROLE_REGISTRY[t.kind] === t.role ? taskIdOf(dag, t) : ""; }
+      catch { derived = ""; }
+      if (t?.taskId !== id || derived !== id) return {ok: false, reason: "TASK_ID_MISMATCH", taskId: id};
       if (t.deps.some(d => !seen.has(d))) return {ok: false, reason: "DAG_INVALID", detail: `order ${id}`};
       seen.add(id);
       const st = this.o.queue.get(id);
@@ -248,7 +263,7 @@ export class TaskOrchestrator {
       const depSt = t.deps.map(d => statuses[d]);
       if (depSt.some(v => v === "BLOCKED_UPSTREAM" || FAILED_STATUSES.has(v))) { statuses[id] = "BLOCKED_UPSTREAM"; continue; }
       if (!depSt.every(v => v === "SUCCEEDED")) { statuses[id] = "WAITING_DEPS"; continue; }
-      if (t.founderGate && !approvals.has(id)) { statuses[id] = "BLOCKED_FOUNDER_GATE"; continue; }
+      if (requiresFounder(t.founderGate, t.kind, dag.environment) && !approvals.has(id)) { statuses[id] = "BLOCKED_FOUNDER_GATE"; continue; }
       if (inFlight >= this.maxInFlight) { statuses[id] = "DEFERRED_CAPACITY"; continue; }
       const r = this.o.queue.submit(this.jobFor(t, dag));
       if (!r.ok) return {ok: false, reason: "SUBMIT_DENIED", taskId: id, detail: r.reason};

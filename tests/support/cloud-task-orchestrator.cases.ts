@@ -6,7 +6,7 @@ import path from "node:path";
 import {randomUUID} from "node:crypto";
 import {CloudJobQueue, signWorkerAuth, type WorkerAuth} from "../../apps/control-api/src/cloud/jobs.js";
 import type {ModelProvider} from "../../apps/control-api/src/cloud/remote-gateway.js";
-import {signScope, type UnsignedScope} from "../../core/cloud/contracts.js";
+import {CLOUD_CONTRACT_VERSION, signScope, type UnsignedScope} from "../../core/cloud/contracts.js";
 import {
   ROLE_REGISTRY, TaskOrchestrator, buildTaskDag, decomposeIntent, type TaskDag, type TaskPlan, type TaskSpec,
 } from "../../core/cloud/task-orchestrator.js";
@@ -166,9 +166,41 @@ describe("CLOUD-T0010 cloud task DAG orchestrator", () => {
 
   it("an existing job under a task id with different content is a JOB_MISMATCH, never silently reused", () => {
     const q = mkQueue(); const dag = dagOf(plan([t("a")])); const id = dag.order[0];
-    const forged = new Map(dag.tasks); forged.set(id, {...dag.tasks.get(id)!, timeoutMs: 120_000});
-    new TaskOrchestrator({queue: q, scope, now}).dispatch({...dag, tasks: forged});
+    // Kuyruğa aynı jobId altında farklı içerikli bir iş doğrudan (orkestratör dışından) yazılır.
+    const a = dag.tasks.get(id)!;
+    expect(q.submit({contractVersion: CLOUD_CONTRACT_VERSION, jobId: id, tenantId: "tenant-001", projectId: "proj-001", environment: "staging", kind: "BUILD", idempotencyKey: id,
+      timeoutMs: 120_000, retry: a.retry, needsNetwork: false, estimatedCostUsd: 1, inputArtifacts: [], scope, requestedAt: clock.toISOString()})).toMatchObject({ok: true});
     expect(new TaskOrchestrator({queue: q, scope, now}).dispatch(dag)).toEqual({ok: false, reason: "JOB_MISMATCH", taskId: id});
+  });
+
+  it("dispatch does not trust the DAG it is handed: tampered content under an existing id is TASK_ID_MISMATCH and nothing is queued", () => {
+    const q = mkQueue(); const dag = dagOf(diamond()); const o = new TaskOrchestrator({queue: q, scope, now});
+    const build = idOf(dag, "build");
+    for (const patch of [{timeoutMs: 120_000}, {kind: "TEST" as const}, {role: "delivery" as const}, {deps: [idOf(dag, "test")]}, {taskId: "task-" + "0".repeat(40)}]) {
+      const forged = new Map(dag.tasks); forged.set(build, {...dag.tasks.get(build)!, ...patch});
+      expect(o.dispatch({...dag, tasks: forged})).toEqual({ok: false, reason: "TASK_ID_MISMATCH", taskId: build});
+    }
+    const broken = new Map(dag.tasks); broken.set(build, {...dag.tasks.get(build)!, retry: null as unknown as {maxAttempts: number; backoffMs: number}});
+    expect(o.dispatch({...dag, tasks: broken})).toEqual({ok: false, reason: "TASK_ID_MISMATCH", taskId: build});
+    expect(q.claim(auth("claim", "*"))).toEqual({ok: false, reason: "NO_JOB"});
+  });
+
+  it("a mutated founderGate=false on DELIVERY or on a production plan cannot dispatch without approval", () => {
+    const q = mkQueue();
+    // (1) DELIVERY: kimlik yeniden hesaplanırsa bile kapı yeniden türetilir; kimliği koruyan değiştirme TASK_ID_MISMATCH'e düşer.
+    const del = dagOf(plan([t("d", [], {kind: "DELIVERY", estimatedCostUsd: 0})])); const did = del.order[0];
+    const m1 = new Map(del.tasks); m1.set(did, {...del.tasks.get(did)!, founderGate: false});
+    expect(new TaskOrchestrator({queue: q, scope, now}).dispatch({...del, tasks: m1})).toEqual({ok: false, reason: "TASK_ID_MISMATCH", taskId: did});
+    // (2) production: içerikten tutarlı biçimde yeniden kimliklendirilmiş "kapısız" DAG bile onaysız gönderilmez.
+    const pScope = signScope({...unsigned, environment: "production"}, SCOPE_FIXTURE);
+    const prod = dagOf(plan([t("p", [], {estimatedCostUsd: 0})], {environment: "production"}), pScope);
+    const pid = prod.order[0];
+    const m2 = new Map(prod.tasks); m2.set(pid, {...prod.tasks.get(pid)!, founderGate: false});
+    const po = new TaskOrchestrator({queue: q, scope: pScope, now});
+    expect(po.dispatch({...prod, tasks: m2})).toEqual({ok: false, reason: "TASK_ID_MISMATCH", taskId: pid});
+    const r = po.dispatch(prod); if (!r.ok) throw new Error(r.reason);
+    expect(r.report.statuses[pid]).toBe("BLOCKED_FOUNDER_GATE"); expect(r.report.submitted).toEqual([]);
+    expect(q.claim(auth("claim", "*"))).toEqual({ok: false, reason: "NO_JOB"});
   });
 
   it("decomposes an intent through a fake ModelProvider; untrusted output is validated, context comes from the signed scope", async () => {
