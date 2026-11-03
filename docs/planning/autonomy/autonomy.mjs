@@ -21,6 +21,7 @@ const ATTEST_RE = /^AUTONOMY-EXCEPTIONS: (none|[A-Z_]{1,32}(?:,[A-Z_]{1,32})*)\s
 export const DONE_STATUSES = Object.freeze(["ASSET_DONE", "DONE_OBSERVED"]);
 export const NOT_PICKABLE = Object.freeze(["ASSET_DONE", "DONE_OBSERVED", "SPLIT", "BLOCKED", "DEFERRED", "UNVERIFIABLE", "VERIFY_PENDING"]);
 // Declared-task states that a routine merge may not claim (NB-2 of review 5757869995). Done tasks stay mergeable: fixes to delivered work are routine.
+// VERIFY_PENDING stays routine on purpose: verifying delivered work is ordinary development.
 export const NOT_MERGEABLE = Object.freeze(["SPLIT", "BLOCKED", "DEFERRED", "UNVERIFIABLE"]);
 // Paths that define this authority. Changing them would widen it, so a PR touching any of them is a Founder decision (B-1).
 // STATE.json is the loop's own progress record and is updated by routine PRs.
@@ -91,9 +92,11 @@ const fold = l => [...l].map(c => CONFUSABLES.get(c) ?? c).join("");
 const decodeOnce = l => l.replace(/&#x([0-9a-f]{1,6});?/gi, (_, h) => String.fromCodePoint(Math.min(parseInt(h, 16), 0x10ffff)))
   .replace(/&#(\d{1,7});?/g, (_, d) => String.fromCodePoint(Math.min(Number(d), 0x10ffff))).replace(/&amp;/gi, "&").replace(/&[a-z]+;/gi, " ");
 // Entities are decoded up to three times (double escaping such as &amp;#45;) and inline HTML tags are removed.
-const decodeEntities = l => decodeOnce(decodeOnce(decodeOnce(l))).replace(/<[^>]{0,200}>/g, "");
+const decodeEntities = (l, strip) => { const d = decodeOnce(decodeOnce(decodeOnce(l))); return strip ? d.replace(/<[^>]{0,200}>/g, "") : d; };
 const MENTION_RE = /autonomy[^\p{L}\p{N}]{0,8}exceptions/iu;
-export const mentionsAttestation = l => MENTION_RE.test(fold(decodeEntities(l.normalize("NFKC").replace(INVISIBLE_G, "")).normalize("NFKC").replace(INVISIBLE_G, "")));
+// Tag stripping may only ADD detections: a line is a mention if the test hits before OR after tags are removed (NB-1 of review 5757980178).
+const normMention = (l, strip) => fold(decodeEntities(l.normalize("NFKC").replace(INVISIBLE_G, ""), strip).normalize("NFKC").replace(INVISIBLE_G, ""));
+export const mentionsAttestation = l => MENTION_RE.test(normMention(l, false)) || MENTION_RE.test(normMention(l, true));
 /**
  * One review's attestation: null if no line mentions it at all; MALFORMED if any line anywhere (fenced, quoted, with invisibles,
  * any case or dash, entities, several lines) mentions it and the review does not hold exactly one well-formed plain line.
@@ -221,6 +224,24 @@ export function pages(api, p, key) {
 const gitBlobSha = buf => createHash("sha1").update(`blob ${buf.length}\0`).update(buf).digest("hex");
 const contentAt = (api, file, ref) => { const j = api(`contents/${file}?ref=${ref}`); if (j.encoding !== "base64") throw new Error("CONTENT_ENCODING"); return {sha: j.sha, buf: Buffer.from(j.content, "base64")}; };
 
+/**
+ * STATE.json done entries are claims written by routine PRs. Only entries whose PR is merged into the base ref and declares that task
+ * (its single UASCO-TASK line, or the task id as the first word of its title) count; the rest are dropped (NB-2 of review 5757980178).
+ */
+export function verifiedState(api, state, baseRef) {
+  const done = [], dropped = [];
+  for (const e of Array.isArray(state?.done) ? state.done : []) {
+    const task = typeof e === "string" ? e : e?.task, pr = typeof e === "object" && e ? e.pr : undefined;
+    let ok = false;
+    if (typeof task === "string" && Number.isSafeInteger(pr) && pr > 0) {
+      const p = api(`pulls/${pr}`);
+      ok = p.merged === true && p.base?.ref === baseRef && (taskOf(p.body ?? "") === task || String(p.title ?? "").split(/\s+/)[0] === task);
+    }
+    (ok ? done : dropped).push(ok ? {task, pr} : String(task));
+  }
+  return {done, dropped};
+}
+
 /** Evidence for merge-gate, with trust inputs read from the base, and local trust files checked against it. `api` is injectable for tests. */
 export function collectEvidence({api, pr, implementerSessions, root = ROOT}) {
   const p = api(`pulls/${pr}`);
@@ -236,7 +257,7 @@ export function collectEvidence({api, pr, implementerSessions, root = ROOT}) {
   const policy = JSON.parse(contentAt(api, "docs/planning/autonomy/standing-authority.json", base0).buf.toString("utf8"));
   const index = JSON.parse(contentAt(api, "docs/planning/autonomy/task-index.json", base0).buf.toString("utf8"));
   const pp = JSON.parse(contentAt(api, "config/protected-paths.json", base0).buf.toString("utf8"));
-  const state = JSON.parse(contentAt(api, "docs/planning/autonomy/STATE.json", base0).buf.toString("utf8"));
+  const state = verifiedState(api, JSON.parse(contentAt(api, "docs/planning/autonomy/STATE.json", base0).buf.toString("utf8")), p.base.ref);
   const runs = pages(api, `actions/runs?head_sha=${head}`, "workflow_runs");
   const suite = new Map(runs.map(r => [r.check_suite_id, r]));
   // NB-1: every run on the head, not only the latest per name.

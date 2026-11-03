@@ -2,7 +2,7 @@
 import fs from "node:fs";
 import {describe, it, expect} from "vitest";
 // @ts-expect-error untyped .mjs module
-import {decideAutoMerge, nextTasks, taskOf, openGates, decideFor, loadPolicy, loadIndex, loadState, isGovernancePath, attestationOf, collectEvidence, pages, TRUST_FILES} from "../../docs/planning/autonomy/autonomy.mjs";
+import {verifiedState, mentionsAttestation, decideAutoMerge, nextTasks, taskOf, openGates, decideFor, loadPolicy, loadIndex, loadState, isGovernancePath, attestationOf, collectEvidence, pages, TRUST_FILES} from "../../docs/planning/autonomy/autonomy.mjs";
 import {createHash} from "node:crypto";
 import os from "node:os";
 import path from "node:path";
@@ -172,6 +172,7 @@ export function registerAutonomyCases() {
       let baseReads = 0, moved = false;
       const api = (p: string) => {
         seen.push(p);
+        if (p === "pulls/1") return {merged: true, base: {ref: "v7/integration"}, title: "CLOUD-T0010 thing", body: ""};
         if (p === "pulls/7") return {number: 7, state: "open", draft: false, merged: false, changed_files: 1, head: {sha: SHA, ref: "h"}, base: {ref: "v7/integration", sha: BASE}, user: {login: "u"}, body: body("CLOUD-T0010")};
         if (p.startsWith("branches/")) return {commit: {sha: moved && baseReads++ > 0 ? "c".repeat(40) : BASE}};
         if (p.startsWith("contents/")) { const f = decodeURIComponent(p.slice(9, p.indexOf("?ref="))); expect(p.endsWith(`?ref=${BASE}`)).toBe(true); return {sha: blob(files[f]), encoding: "base64", content: files[f].toString("base64")}; }
@@ -218,6 +219,22 @@ export function registerAutonomyCases() {
       expect(d("C-T0003").reasons).toEqual(["TASK_DEPENDENCY_UNMET:C-T0009"]);
       expect(d("C-T0004", {done: [{task: "C-T0009", pr: 9}]}).decision).toBe("AUTO_MERGE");
       expect(d("C-T0005").decision).toBe("AUTO_MERGE");   // fixes to delivered work stay routine
+    });
+    it("NB1b tag stripping never hides a mention; NB2b STATE done entries are verified against merged PRs", () => {
+      expect(mentionsAttestation("x < AUTONOMY-EXCEPTIONS: PAID_SPEND > y")).toBe(true);
+      expect(mentionsAttestation("&#60;AUTONOMY-EXCEPTIONS: PAID_SPEND&#62;")).toBe(true);
+      expect(mentionsAttestation("AUTONOMY<b></b>-EXCEPTIONS")).toBe(true);
+      const prs: Record<number, unknown> = {
+        1: {merged: true, base: {ref: "v7/integration"}, title: "A-T0001 x", body: ""},
+        2: {merged: false, base: {ref: "v7/integration"}, title: "A-T0002 x", body: ""},
+        3: {merged: true, base: {ref: "other"}, title: "A-T0003 x", body: ""},
+        4: {merged: true, base: {ref: "v7/integration"}, title: "fix stuff A-T0004", body: "UASCO-TASK: A-T0009\n"},
+        5: {merged: true, base: {ref: "v7/integration"}, title: "misc", body: "UASCO-TASK: A-T0005\n"},
+      };
+      const api = (p: string) => prs[Number(p.split("/")[1])];
+      const v = verifiedState(api, {done: [{task: "A-T0001", pr: 1}, {task: "A-T0002", pr: 2}, {task: "A-T0003", pr: 3}, {task: "A-T0004", pr: 4}, {task: "A-T0005", pr: 5}, "A-T0006", {task: "A-T0007"}]}, "v7/integration");
+      expect(v.done.map((x: {task: string}) => x.task)).toEqual(["A-T0001", "A-T0005"]);
+      expect(v.dropped).toEqual(["A-T0002", "A-T0003", "A-T0004", "A-T0006", "A-T0007"]);
     });
     it("A9 integration with the real merge-gate: malformed or empty evidence never auto-merges", () => {
       for (const evidence of [{}, {pr: {number: 1}}, null]) {
