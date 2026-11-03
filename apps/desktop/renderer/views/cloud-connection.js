@@ -12,6 +12,11 @@ export const CLIENT_ROLE_ACTIONS=Object.freeze({
 export const REMOTE_COMMANDS=Object.freeze(["job.submit","job.cancel","artifact.download","system.stop"]);
 export const LOCAL_EXECUTION_ALLOWED=false;
 const MAX_TEXT=512;
+/** core/cloud/contracts.ts ID_RE / ARTIFACT_NAME_RE / SHA256_RE ile aynı: komut argümanı yalnız bu desenlerden geçen HAM değerdir. */
+export const CLOUD_ID_RE=/^[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$/;
+export const ARTIFACT_NAME_RE=/^(?!.*\.\.)(?![/\\])[A-Za-z0-9._/-]{1,255}$/;
+const SHA256_RE=/^[0-9a-f]{64}$/;
+const rawIf=(v,re)=>typeof v==="string"&&re.test(v)?v:null;
 
 function isLoopbackHost(hostname){
   const x=String(hostname).toLowerCase().replace(/\.+$/,"").replace(/^\[|\]$/g,"");
@@ -75,15 +80,18 @@ export function allowedCommands(derived){
   return REMOTE_COMMANDS.filter(a=>allowed.has(a));
 }
 
-/** İş sonuçları: yalnız beklenen alanlar, sunucu metni temizlenmiş; indirme yalnız SHA'sı olan artifact için ve komut izinliyse. */
+/** İş sonuçları: görüntü metni temizlenmiş; komut argümanı ayrıca doğrulanmış HAM id/ad (temizlenmiş metin ASLA komuta gitmez). Ham değer desene uymazsa komut sunulmaz. */
 export function jobRows(jobs,derived){
   const canDownload=allowedCommands(derived).includes("artifact.download"),canCancel=allowedCommands(derived).includes("job.cancel");
-  return (Array.isArray(jobs)?jobs:[]).filter(j=>j&&typeof j==="object").slice(0,100).map(j=>({
-    jobId:sanitizeServerText(j.jobId),status:sanitizeServerText(j.status),message:sanitizeServerText(j.message),
-    cancellable:canCancel&&(j.status==="QUEUED"||j.status==="RUNNING"),
-    artifacts:(Array.isArray(j.artifacts)?j.artifacts:[]).filter(a=>a&&typeof a.name==="string").map(a=>({
-      name:sanitizeServerText(a.name),downloadable:canDownload&&typeof a.sha256==="string"&&/^[0-9a-f]{64}$/.test(a.sha256)})),
-  }));
+  return (Array.isArray(jobs)?jobs:[]).filter(j=>j&&typeof j==="object").slice(0,100).map(j=>{
+    const rawJobId=rawIf(j.jobId,CLOUD_ID_RE);
+    return {jobId:sanitizeServerText(j.jobId),rawJobId,status:sanitizeServerText(j.status),message:sanitizeServerText(j.message),
+      cancellable:canCancel&&rawJobId!==null&&(j.status==="QUEUED"||j.status==="RUNNING"),
+      artifacts:(Array.isArray(j.artifacts)?j.artifacts:[]).filter(a=>a&&typeof a.name==="string").map(a=>{
+        const rawName=rawIf(a.name,ARTIFACT_NAME_RE);
+        return {name:sanitizeServerText(a.name),rawName,downloadable:canDownload&&rawJobId!==null&&rawName!==null&&typeof a.sha256==="string"&&SHA256_RE.test(a.sha256)};
+      })};
+  });
 }
 
 const TEXT=Object.freeze({
@@ -120,9 +128,9 @@ export function cloudConnectionView(ctx,model){
     rows.length?h(doc,"ul",{class:"cards"},rows.map(j=>h(doc,"li",{class:"card",dataset:{cloudJob:j.jobId,cloudJobStatus:j.status}},
       h(doc,"span",{class:"mono",text:j.jobId})," ",h(doc,"span",{text:j.status}),
       j.message?h(doc,"p",{class:"note",text:j.message}):null,
-      j.cancellable?h(doc,"button",{type:"button",class:"btn",dataset:{cloudCmd:"job.cancel"},text:tr(ctx,"cloud.cmd.job.cancel"),on:{click:send(ctx,"job.cancel",{jobId:j.jobId})}}):null,
+      j.cancellable?h(doc,"button",{type:"button",class:"btn",dataset:{cloudCmd:"job.cancel"},text:tr(ctx,"cloud.cmd.job.cancel"),on:{click:send(ctx,"job.cancel",{jobId:j.rawJobId})}}):null,
       j.artifacts.length?h(doc,"ul",{class:"cloud-artifacts"},j.artifacts.map(a=>h(doc,"li",{},h(doc,"span",{class:"mono",text:a.name}),
-        a.downloadable?h(doc,"button",{type:"button",class:"btn",dataset:{cloudCmd:"artifact.download"},text:tr(ctx,"cloud.cmd.artifact.download"),on:{click:send(ctx,"artifact.download",{jobId:j.jobId,name:a.name})}}):null))):null)))
+        a.downloadable?h(doc,"button",{type:"button",class:"btn",dataset:{cloudCmd:"artifact.download"},text:tr(ctx,"cloud.cmd.artifact.download"),on:{click:send(ctx,"artifact.download",{jobId:j.rawJobId,name:a.rawName})}}):null))):null)))
       :h(doc,"p",{class:"note note-empty",text:tr(ctx,"cloud.noJobs")})):null;
   const global=cmds.filter(c=>c==="job.submit"||c==="system.stop");
   return h(doc,"section",{class:"cloud-connection",id:"cloud-connection",role:"region","aria-label":tr(ctx,"cloud.title"),dataset:{cloudState:d.state,readOnly:String(d.readOnly),localExecution:"false"}},

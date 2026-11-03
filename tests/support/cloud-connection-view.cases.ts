@@ -96,6 +96,28 @@ export function registerCloudConnectionViewCases(): void {
       expect(f.sent.map(s => s[0]).sort()).toEqual(["artifact.download", "job.cancel", "job.submit", "system.stop"]);
       expect(f.sent.find(s => s[0] === "artifact.download")![1]).toEqual({jobId: "job-1", name: "out.zip"});
     });
+    it("command arguments use the validated RAW id/name, never the sanitized display text", async () => {
+      const shaId = `job-${"c".repeat(64)}`, longName = `dist/${"f".repeat(64)}/${"n".repeat(180)}.zip`;
+      const {node, sent} = await render(okModel({session: sess(["OPERATOR"]), jobs: [{jobId: shaId, status: "RUNNING", artifacts: [{name: longName, sha256: "d".repeat(64)}]}]}));
+      expect(node.textContent).not.toContain(shaId); expect(node.textContent).toContain("[REDACTED]");
+      expect(longName.length).toBe(254); expect(node.textContent).not.toContain(longName);
+      for (const n of node.all().filter(x => x.dataset.cloudCmd)) n.fire("click");
+      expect(sent.filter(x => x[0] !== "job.submit")).toEqual([["job.cancel", {jobId: shaId}], ["artifact.download", {jobId: shaId, name: longName}]]);
+    });
+    it("offers no command when the raw job id or artifact name fails the gateway pattern", async () => {
+      const m = await load(); const d = m.deriveConnectionState(okModel({session: sess(["FOUNDER"])}));
+      const art = (name: string) => [{name, sha256: "e".repeat(64)}];
+      for (const jobId of ["<b>x</b>", "a", "", "job id", 42, null, "x".repeat(200)]) {
+        const [r] = m.jobRows([{jobId, status: "RUNNING", artifacts: art("ok.zip")}], d);
+        expect(r.rawJobId).toBeNull(); expect(r.cancellable).toBe(false); expect(r.artifacts[0].downloadable).toBe(false);
+      }
+      for (const name of ["../etc/passwd", "/abs.zip", "a b.zip", "x".repeat(256), "evil<script>.zip"]) {
+        const [r] = m.jobRows([{jobId: "job-0001", status: "RUNNING", artifacts: art(name)}], d);
+        expect(r.cancellable).toBe(true); expect(r.artifacts[0].rawName).toBeNull(); expect(r.artifacts[0].downloadable).toBe(false);
+      }
+      const {cmds} = await render(okModel({session: sess(["OPERATOR"]), jobs: [{jobId: "<bad>", status: "RUNNING", artifacts: art("../x")}]}));
+      expect(cmds).toEqual(["job.submit"]);
+    });
     it("never renders session tokens or secrets, even if the server sends them", async () => {
       const token = issueSession({subject: "user-001", tenantId: "tenant-001", roles: ["OPERATOR"]}, 3_600_000, "sk-1", "session-fixture-key-".repeat(3), now);
       const leak = "provider-fixture-credential-0123456789";
