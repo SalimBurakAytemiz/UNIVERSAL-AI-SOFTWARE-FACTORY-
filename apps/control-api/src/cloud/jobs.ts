@@ -1,11 +1,12 @@
 // //TR: Bu dosya (güven sınırı: kuyruk dizini sunucunun kendi diskidir ve tek PID ad alanındaki tek süreç tarafından kullanılır; journal'a MAC uygulanmaz ve maskeli scope imzaları replay'de yeniden doğrulanmaz) CLOUD-T0003 bulut iş kuyruğunu uygular: imzalı istek kabulü (CLOUD-T0001 sözleşmesi), kimliği doğrulanmış worker lease'i, heartbeat, iptal, global STOP, dayanıklı (append-only journal) yeniden deneme ve aynı işin iki kez yürütülmemesi; her karar audit kaydına yazılır.
 import fs from "node:fs";
 import path from "node:path";
-import {createHash, createHmac, randomBytes, randomUUID, timingSafeEqual} from "node:crypto";
+import {createHash, createHmac, randomUUID, timingSafeEqual} from "node:crypto";
 import {
   auditRecordFor, canonicalJson, validateCloudJobRequest, verifyEventStream, TERMINAL_EVENT_TYPES,
   type ArtifactRef, type CloudJobEvent, type CloudJobEventType, type CloudJobRequest,
 } from "../../../../core/cloud/contracts.js";
+import {acquireQueueLock, type QueueLock} from "./queue-lock.js";
 
 export const WORKER_AUTH_MAX_SKEW_MS = 2 * 60 * 1000;
 export const DEFAULT_LEASE_MS = 5 * 60 * 1000;
@@ -41,10 +42,7 @@ export function signWorkerAuth(a: Omit<WorkerAuth, "signature">, secret: string 
   return {...a, signature: createHmac("sha256", secret).update(`${a.workerId}\n${a.action}\n${a.jobId}\n${a.at}\n${a.nonce}\n${workerBodyDigest(body)}`).digest("hex")};
 }
 
-/** EPERM: süreç var ama sinyal izni yok -> canlı. ESRCH: yok -> ölü. */
-export function pidAlive(pid: number, kill: (pid: number, sig: 0) => void = (p, sg) => { process.kill(p, sg); }): boolean {
-  try { kill(pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code === "EPERM"; }
-}
+export {pidAlive} from "./queue-lock.js";
 
 const isTerminal = (t: string) => (TERMINAL_EVENT_TYPES as readonly string[]).includes(t);
 
@@ -60,54 +58,24 @@ export class CloudJobQueue {
   private readonly leaseMs: number;
 
   private readonly lockPath: string;
-  private lockFd: number | null = null;
+  private lock: QueueLock | null = null;
 
   constructor(private readonly opts: CloudJobQueueOptions) {
     this.leaseMs = opts.leaseMs ?? DEFAULT_LEASE_MS;
     if (!Number.isSafeInteger(this.leaseMs) || this.leaseMs < 1000) throw new Error("leaseMs invalid");   // kilitten önce (N-2)
     fs.mkdirSync(opts.dir, {recursive: true});
     this.lockPath = path.join(opts.dir, "jobs.lock");
-    this.acquireLock();   // L-3: tek yazıcı; aynı dizinde ikinci kuyruk örneği açılmaz (çift yürütme yok)
+    this.lock = acquireQueueLock(this.lockPath);   // L-3/NB-1: tek yazıcı (queue-lock.ts); aynı dizinde ikinci kuyruk örneği açılmaz
     this.journal = path.join(opts.dir, "jobs.journal.jsonl");
     this.audit = path.join(opts.dir, "jobs.audit.jsonl");
     this.now = opts.now ?? (() => new Date());
     try { this.replay(); } catch (e) { this.close(); throw e; }
   }
 
-  private acquireLock(): void {
-    for (let i = 0; i < 3; i++) {
-      let fd: number | null = null;
-      try {
-        fd = fs.openSync(this.lockPath, "wx");
-        fs.writeSync(fd, String(process.pid)); fs.fsyncSync(fd);
-        this.lockFd = fd; return;
-      } catch (e) {
-        if (fd !== null) { try { fs.closeSync(fd); } catch { /* yut */ } fs.rmSync(this.lockPath, {force: true}); throw e; }   // N-2: yazma hatası kilit bırakmaz
-        if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-      }
-      // Mevcut kilit: sahibi canlıysa reddet. Boş/okunamayan kilit (yazma sırasında çökme) ölü sayılır.
-      let raw = "";
-      try { raw = fs.readFileSync(this.lockPath, "utf8").trim(); } catch { continue; }
-      const pid = /^\d+$/.test(raw) ? Number(raw) : Number.NaN;
-      if (Number.isSafeInteger(pid) && pid > 0 && pidAlive(pid)) throw new Error("QUEUE_LOCKED");
-      // N-1: devralma yarışını önlemek için bayat kilit önce benzersiz bir ada taşınır; taşınan dosya hâlâ okunan içeriği taşıyorsa silinir.
-      const moved = `${this.lockPath}.stale-${randomBytes(8).toString("hex")}`;
-      try { fs.renameSync(this.lockPath, moved); } catch { continue; }   // başka süreç önce davrandı
-      let movedRaw: string | null = null;
-      try { movedRaw = fs.readFileSync(moved, "utf8").trim(); } catch { /* yut */ }
-      if (movedRaw !== raw) {   // arada taze bir kilit oluşmuş ve onu taşımışız: geri koy, kilitli say
-        try { fs.renameSync(moved, this.lockPath); } catch { /* yut */ }
-        throw new Error("QUEUE_LOCKED");
-      }
-      fs.rmSync(moved, {force: true});
-    }
-    throw new Error("QUEUE_LOCKED");
-  }
-
   /** Kilidi bırakır. Kapatılan örnek bir daha kullanılmaz. */
   close(): void {
     this.closed = true;
-    if (this.lockFd !== null) { fs.closeSync(this.lockFd); this.lockFd = null; fs.rmSync(this.lockPath, {force: true}); }
+    if (this.lock) { this.lock.release(); this.lock = null; }
   }
   private closed = false;
   private assertOpen(): void { if (this.closed) throw new Error("QUEUE_CLOSED"); }   // N-4

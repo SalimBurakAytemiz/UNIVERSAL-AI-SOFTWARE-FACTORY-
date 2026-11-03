@@ -252,15 +252,15 @@ describe("CLOUD-T0003 cloud job queue", () => {
   });
   it("N-3: a dead owner's lock (and an empty lock file) is taken over; a live owner's is not", () => {
     fs.mkdirSync(dir, {recursive: true});
-    fs.writeFileSync(path.join(dir, "jobs.lock"), "999999999");   // böyle bir süreç yok
+    fs.writeFileSync(path.join(dir, "jobs.lock"), `999999999:${"a".repeat(32)}`);   // böyle bir süreç yok
     expect(() => mkQueue()).not.toThrow();
     while (open.length) open.pop()!.close();
     fs.writeFileSync(path.join(dir, "jobs.lock"), "");             // yazma sırasında çökmüş kilit
     expect(() => mkQueue()).not.toThrow();
     while (open.length) open.pop()!.close();
-    fs.writeFileSync(path.join(dir, "jobs.lock"), String(process.pid));
+    fs.writeFileSync(path.join(dir, "jobs.lock"), `${process.pid}:${"b".repeat(32)}`);
     expect(() => new CloudJobQueue(opts(60_000))).toThrow(/QUEUE_LOCKED/);
-    expect(fs.readdirSync(dir).filter(f => f.includes(".stale-"))).toEqual([]);
+    expect(fs.readdirSync(dir).filter(f => /\.(tmp|takeover)/.test(f))).toEqual([]);
   });
 
   it("N-3: EPERM means alive, ESRCH means dead", () => {

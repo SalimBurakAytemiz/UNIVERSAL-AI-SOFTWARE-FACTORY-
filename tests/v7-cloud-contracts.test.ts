@@ -1,6 +1,7 @@
 // //TR: Bu test CLOUD-T0001 bulut yürütme sözleşmesinin imzalı kapsam, tenant/proje/ortam bağlama, timeout/retry sınırları, idempotency, olay akışı ve artifact SHA kapılarında fail-closed davrandığını doğrular.
 import {describe,it,expect} from "vitest";
-import {registerCloudJobQueueCases} from "./support/cloud-jobs.cases.js";   // CLOUD-T0003 iş kuyruğu vakaları (aynı CI kaydı altında koşar)
+import {registerCloudJobQueueCases} from "./support/cloud-jobs.cases.js";
+import {registerQueueLockCases} from "./support/cloud-queue-lock.cases.js";   // kuyruk kilidi yarış vakaları   // CLOUD-T0003 iş kuyruğu vakaları (aynı CI kaydı altında koşar)
 import {
   CLOUD_CONTRACT_VERSION,MAX_JOB_TIMEOUT_MS,signScope,verifyScopeSignature,validateCloudJobRequest,verifyEventStream,verifyArtifact,
   auditRecordFor,canonicalJson,sha256Hex,type CloudJobRequest,type CloudJobEvent,type UnsignedScope,
@@ -146,3 +147,4 @@ describe("cloud contract: review follow-ups (PR #296 LOW-1, LOW-2, INFO-3)",()=>
 });
 
 registerCloudJobQueueCases();
+registerQueueLockCases();
