@@ -55,7 +55,7 @@ export interface CloudJobRequest{
 export type CloudDenyReason=
   |"MALFORMED_REQUEST"|"CONTRACT_VERSION_UNSUPPORTED"|"INVALID_ID"|"INVALID_KIND"
   |"TIMEOUT_OUT_OF_RANGE"|"RETRY_OUT_OF_RANGE"|"COST_INVALID"|"ARTIFACT_INVALID"
-  |"SCOPE_MALFORMED"|"SCOPE_KEY_UNKNOWN"|"SCOPE_SIGNATURE_INVALID"|"SCOPE_NOT_YET_VALID"|"SCOPE_EXPIRED"|"SCOPE_LIFETIME_TOO_LONG"
+  |"SCOPE_MALFORMED"|"SCOPE_KEY_UNKNOWN"|"SCOPE_SIGNATURE_INVALID"|"SCOPE_NOT_YET_VALID"|"SCOPE_EXPIRED"|"SCOPE_LIFETIME_TOO_LONG"|"SCOPE_WINDOW_INVALID"
   |"TENANT_MISMATCH"|"PROJECT_MISMATCH"|"ENVIRONMENT_MISMATCH"|"KIND_NOT_IN_SCOPE"|"NETWORK_NOT_IN_SCOPE"|"COST_EXCEEDS_SCOPE"
   |"REQUEST_FROM_FUTURE"|"IDEMPOTENCY_CONFLICT";
 
@@ -168,7 +168,8 @@ export function validateCloudJobRequest(input:unknown,ctx:ValidationContext):Clo
   if(key===undefined)return deny("SCOPE_KEY_UNKNOWN");
   if(!verifyScopeSignature(s,key))return deny("SCOPE_SIGNATURE_INVALID");
   const issued=parseTime(s.issuedAt),expires=parseTime(s.expiresAt);
-  if(expires<=issued||expires-issued>MAX_SCOPE_LIFETIME_MS)return deny("SCOPE_LIFETIME_TOO_LONG");
+  if(expires<=issued)return deny("SCOPE_WINDOW_INVALID");
+  if(expires-issued>MAX_SCOPE_LIFETIME_MS)return deny("SCOPE_LIFETIME_TOO_LONG");
   if(issued>now+skew)return deny("SCOPE_NOT_YET_VALID");
   if(now>=expires)return deny("SCOPE_EXPIRED");
   if(s.tenantId!==r.tenantId)return deny("TENANT_MISMATCH");
@@ -179,7 +180,8 @@ export function validateCloudJobRequest(input:unknown,ctx:ValidationContext):Clo
   if(r.estimatedCostUsd>s.maxCostUsd)return deny("COST_EXCEEDS_SCOPE");
 
   const job=r as unknown as CloudJobRequest;
-  const digest=requestDigest(job);
+  let digest:string;
+  try{digest=requestDigest(job)}catch{return deny("MALFORMED_REQUEST","non-canonical field")}   // NaN/BigInt/döngü: istisna değil red
   let replay=false;
   if(ctx.idempotencyIndex){
     const idxKey=`${job.tenantId}\u0000${job.idempotencyKey}`;
@@ -193,6 +195,7 @@ export function validateCloudJobRequest(input:unknown,ctx:ValidationContext):Clo
 // --- structured job events ---
 export type CloudJobEventType="QUEUED"|"STARTED"|"HEARTBEAT"|"LOG"|"ARTIFACT"|"RETRYING"|"SUCCEEDED"|"FAILED"|"CANCELLED"|"TIMED_OUT"|"STOPPED";
 export const TERMINAL_EVENT_TYPES:readonly CloudJobEventType[]=["SUCCEEDED","FAILED","CANCELLED","TIMED_OUT","STOPPED"];
+export const CLOUD_JOB_EVENT_TYPES:readonly CloudJobEventType[]=["QUEUED","STARTED","HEARTBEAT","LOG","ARTIFACT","RETRYING",...TERMINAL_EVENT_TYPES];
 export interface CloudJobEvent{jobId:string;seq:number;type:CloudJobEventType;at:string;attempt:number;artifact?:ArtifactRef;message?:string}
 
 export type EventStreamVerdict={ok:true;terminal?:CloudJobEventType}|{ok:false;reason:string;index:number};
@@ -200,8 +203,10 @@ export type EventStreamVerdict={ok:true;terminal?:CloudJobEventType}|{ok:false;r
 /** Olay akışı bütünlüğü: tek jobId, seq 0'dan kesintisiz, zaman monoton, ilk olay QUEUED, en çok bir terminal ve en sonda, attempt ≤ retry sınırı. */
 export function verifyEventStream(events:readonly CloudJobEvent[],job:Pick<CloudJobRequest,"jobId"|"retry">):EventStreamVerdict{
   let lastAt=-Infinity,attempt=1,terminal:CloudJobEventType|undefined;
+  if(!Array.isArray(events)||events.length===0)return {ok:false,reason:"EMPTY_STREAM",index:0};
   for(let i=0;i<events.length;i++){
     const e=events[i]!;
+    if(!e||typeof e!=="object"||!(CLOUD_JOB_EVENT_TYPES as readonly string[]).includes(e.type))return {ok:false,reason:"UNKNOWN_EVENT_TYPE",index:i};
     if(e.jobId!==job.jobId)return {ok:false,reason:"JOB_ID_MISMATCH",index:i};
     if(e.seq!==i)return {ok:false,reason:"SEQ_GAP",index:i};
     const at=parseTime(e.at);
@@ -213,7 +218,8 @@ export function verifyEventStream(events:readonly CloudJobEvent[],job:Pick<Cloud
     if(e.type==="RETRYING"){if(e.attempt!==attempt+1)return {ok:false,reason:"RETRY_ATTEMPT_SKIP",index:i}}
     else if(e.attempt!==attempt)return {ok:false,reason:"ATTEMPT_OUT_OF_RANGE",index:i};
     attempt=e.attempt;
-    if(e.type==="ARTIFACT"&&(!e.artifact||!SHA256_RE.test(e.artifact.sha256)||!ARTIFACT_NAME_RE.test(e.artifact.name)))return {ok:false,reason:"ARTIFACT_INVALID",index:i};
+    if(e.type==="ARTIFACT"&&(!e.artifact||!SHA256_RE.test(e.artifact.sha256)||!ARTIFACT_NAME_RE.test(e.artifact.name)
+      ||typeof e.artifact.sizeBytes!=="number"||!Number.isSafeInteger(e.artifact.sizeBytes)||e.artifact.sizeBytes<0))return {ok:false,reason:"ARTIFACT_INVALID",index:i};
     if(TERMINAL_EVENT_TYPES.includes(e.type))terminal=e.type;
   }
   return terminal?{ok:true,terminal}:{ok:true};
