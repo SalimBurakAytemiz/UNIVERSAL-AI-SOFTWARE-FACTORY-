@@ -54,14 +54,39 @@ export class CloudJobQueue {
   private readonly now: () => Date;
   private readonly leaseMs: number;
 
+  private readonly lockPath: string;
+  private lockFd: number | null = null;
+
   constructor(private readonly opts: CloudJobQueueOptions) {
     fs.mkdirSync(opts.dir, {recursive: true});
+    this.lockPath = path.join(opts.dir, "jobs.lock");
+    this.acquireLock();   // L-3: tek yazıcı; aynı dizinde ikinci kuyruk örneği açılmaz (çift yürütme yok)
     this.journal = path.join(opts.dir, "jobs.journal.jsonl");
     this.audit = path.join(opts.dir, "jobs.audit.jsonl");
     this.now = opts.now ?? (() => new Date());
     this.leaseMs = opts.leaseMs ?? DEFAULT_LEASE_MS;
     if (!Number.isSafeInteger(this.leaseMs) || this.leaseMs < 1000) throw new Error("leaseMs invalid");
-    this.replay();
+    try { this.replay(); } catch (e) { this.close(); throw e; }
+  }
+
+  private acquireLock(): void {
+    for (let i = 0; i < 2; i++) {
+      try { this.lockFd = fs.openSync(this.lockPath, "wx"); fs.writeSync(this.lockFd, String(process.pid)); fs.fsyncSync(this.lockFd); return; }
+      catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+        const pid = Number(fs.readFileSync(this.lockPath, "utf8").trim());
+        let alive = true;
+        if (Number.isSafeInteger(pid) && pid > 0) { try { process.kill(pid, 0); } catch (k) { alive = (k as NodeJS.ErrnoException).code === "EPERM"; } }
+        if (alive) throw new Error("QUEUE_LOCKED");
+        fs.rmSync(this.lockPath, {force: true});   // çökmüş sürecin bıraktığı kilit
+      }
+    }
+    throw new Error("QUEUE_LOCKED");
+  }
+
+  /** Kilidi bırakır. Kapatılan örnek bir daha kullanılmaz. */
+  close(): void {
+    if (this.lockFd !== null) { fs.closeSync(this.lockFd); this.lockFd = null; fs.rmSync(this.lockPath, {force: true}); }
   }
 
   // ---------- persistence ----------
@@ -148,11 +173,11 @@ export class CloudJobQueue {
   submit(input: unknown): {ok: true; jobId: string; replay: boolean} | {ok: false; reason: string} {
     if (this.stopped) { this.auditLog({decision: "DENIED", reason: "GLOBAL_STOP_ACTIVE"}); return {ok: false, reason: "GLOBAL_STOP_ACTIVE"}; }
     const d = validateCloudJobRequest(input, {scopeKeys: this.opts.scopeKeys, now: this.now(), idempotencyIndex: new Map(this.idem)});
+    if (d.ok && !d.replay && this.jobs.has(d.job.jobId)) { this.auditLog({decision: "DENIED", reason: "JOB_ID_REUSED", jobId: d.job.jobId}); return {ok: false, reason: "JOB_ID_REUSED"}; }
     this.auditLog({...auditRecordFor(input, d, this.now())});
     if (!d.ok) return {ok: false, reason: d.reason};
     const k = `${d.job.tenantId}\u0000${d.job.idempotencyKey}`;
     if (d.replay) return {ok: true, jobId: this.idemJob.get(k) as string, replay: true};
-    if (this.jobs.has(d.job.jobId)) { this.auditLog({decision: "DENIED", reason: "JOB_ID_REUSED", jobId: d.job.jobId}); return {ok: false, reason: "JOB_ID_REUSED"}; }
     const job = {...d.job, scope: {...d.job.scope, signature: "[stored-verified]"}};   // imza journal'a yazılmaz; doğrulama kabulde yapıldı
     const queued: CloudJobEvent = {jobId: job.jobId, seq: 0, type: "QUEUED", at: this.now().toISOString(), attempt: 1};
     this.append({kind: "submit", job, requestDigest: d.requestDigest}, {kind: "event", event: queued});
@@ -170,7 +195,7 @@ export class CloudJobQueue {
     const now = this.now().getTime();
     const s = [...this.jobs.values()].find(x => x.status === "QUEUED" && x.notBefore <= now);
     if (!s) return {ok: false, reason: "NO_JOB"};
-    const lease: Lease = {leaseId: randomUUID(), workerId: auth.workerId, expiresAt: now + this.leaseMs};
+    const lease: Lease = {leaseId: randomUUID(), workerId: auth.workerId, expiresAt: Math.min(now + this.leaseMs, (s.startedAt ?? now) + s.job.timeoutMs)};
     this.emit(s, "STARTED", {message: JSON.stringify(lease)});
     this.auditLog({decision: "CLAIMED", jobId: s.job.jobId, workerId: auth.workerId, attempt: s.attempt});
     return {ok: true, job: s.job, lease: {...lease}, attempt: s.attempt};
@@ -205,13 +230,16 @@ export class CloudJobQueue {
     if ("reason" in h) { this.auditLog({decision: "RESULT_REJECTED", jobId, reason: h.reason}); return {ok: false, reason: h.reason}; }
     const s = h.s;
     const invalid = () => { this.auditLog({decision: "RESULT_REJECTED", jobId, reason: "RESULT_INVALID"}); return {ok: false as const, reason: "RESULT_INVALID" as const}; };
-    if (!result || (result.status !== "SUCCEEDED" && result.status !== "FAILED") || (result.artifacts !== undefined && !Array.isArray(result.artifacts))) return invalid();
+    if (!result || (result.status !== "SUCCEEDED" && result.status !== "FAILED") || (result.artifacts !== undefined && !Array.isArray(result.artifacts))
+      || (result.message !== undefined && (typeof result.message !== "string" || result.message.length > 2000))) return invalid();   // L-1
+    // L-2: worker'ın artifact nesnesindeki fazladan alanlar journal'a yazılmaz.
+    const artifacts: ArtifactRef[] = (result.artifacts ?? []).map(a => ({name: (a as ArtifactRef)?.name, sha256: (a as ArtifactRef)?.sha256, sizeBytes: (a as ArtifactRef)?.sizeBytes}));
     if (result.status === "SUCCEEDED") {
       // Artifact'lar tek tek doğrulanır (emit içinde verifyEventStream); biri bozuksa hiçbiri yazılmaz.
       const probe = [...s.events];
-      for (const a of result.artifacts ?? []) probe.push({jobId, seq: probe.length, type: "ARTIFACT", at: this.now().toISOString(), attempt: s.attempt, artifact: a});
+      for (const a of artifacts) probe.push({jobId, seq: probe.length, type: "ARTIFACT", at: this.now().toISOString(), attempt: s.attempt, artifact: a});
       if (!verifyEventStream(probe, s.job).ok) return invalid();
-      for (const a of result.artifacts ?? []) this.emit(s, "ARTIFACT", {artifact: a});
+      for (const a of artifacts) this.emit(s, "ARTIFACT", {artifact: a});
       this.emit(s, "SUCCEEDED");
     } else this.failOrRetry(s, result.message);
     this.auditLog({decision: "RESULT_ACCEPTED", jobId, status: s.status, attempt: s.attempt});
@@ -244,10 +272,11 @@ export class CloudJobQueue {
     const now = this.now().getTime();
     for (const s of this.jobs.values()) {
       if (isTerminal(s.status)) continue;
-      if (s.startedAt !== null && now - s.startedAt > s.job.timeoutMs) { this.emit(s, "TIMED_OUT"); continue; }
+      if (s.startedAt !== null && now - s.startedAt > s.job.timeoutMs) { this.emit(s, "TIMED_OUT"); this.auditLog({decision: "TIMED_OUT", jobId: s.job.jobId}); continue; }
       if (s.status === "RUNNING" && s.lease && s.lease.expiresAt <= now) {
         if (s.attempt < s.job.retry.maxAttempts) this.emit(s, "RETRYING", {message: "LEASE_EXPIRED"});
         else this.emit(s, "TIMED_OUT", {message: "LEASE_EXPIRED"});
+        this.auditLog({decision: s.status, jobId: s.job.jobId, reason: "LEASE_EXPIRED"});
       }
     }
   }

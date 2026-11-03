@@ -29,12 +29,15 @@ const done = (q: CloudJobQueue, jobId: string, leaseId: string, result: JobResul
   q.complete(auth("complete", jobId, w, k, {leaseId, result}), jobId, leaseId, result);
 
 let dir: string;
-const mkQueue = (leaseMs = 60_000) => new CloudJobQueue({dir, scopeKeys: new Map([["k-1", SCOPE_FIXTURE]]), workerKeys: new Map([["worker-a", WORKER_FIXTURE], ["worker-b", WORKER_FIXTURE + "b"]]), now, leaseMs});
+const open: CloudJobQueue[] = [];
+const opts = (leaseMs: number) => ({dir, scopeKeys: new Map([["k-1", SCOPE_FIXTURE]]), workerKeys: new Map([["worker-a", WORKER_FIXTURE], ["worker-b", WORKER_FIXTURE + "b"]]), now, leaseMs});
+/** Yeni örnek = süreç yeniden başlatması: önceki örnek kapatılır (tek yazıcı kilidi). */
+const mkQueue = (leaseMs = 60_000) => { while (open.length) open.pop()!.close(); const q = new CloudJobQueue(opts(leaseMs)); open.push(q); return q; };
 
 export function registerCloudJobQueueCases(): void {
 describe("CLOUD-T0003 cloud job queue", () => {
   beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-cloud-jobs-")); clock = new Date("2026-11-03T12:00:00Z"); });
-  afterEach(() => fs.rmSync(dir, {recursive: true, force: true}));
+  afterEach(() => { while (open.length) open.pop()!.close(); fs.rmSync(dir, {recursive: true, force: true}); });
   it("worker integration: submit -> claim -> heartbeat -> complete with artifacts; stream is valid", () => {
     const q = mkQueue();
     const r = req(); expect(q.submit(r)).toEqual({ok: true, jobId: r.jobId, replay: false});
@@ -214,6 +217,38 @@ describe("CLOUD-T0003 cloud job queue", () => {
     q.submit({...req(), jobId: r.jobId});
     const audit = fs.readFileSync(path.join(dir, "jobs.audit.jsonl"), "utf8");
     expect(audit).toContain('"reason":"RESULT_INVALID"'); expect(audit).toContain('"reason":"JOB_ID_REUSED"');
+  });
+  it("L-1/L-2: a non-string FAILED message is RESULT_INVALID (no throw); extra artifact fields are not journaled", () => {
+    const q = mkQueue(); const r = req(); q.submit(r);
+    const c = q.claim(auth("claim", "*")); if (!c.ok) throw new Error(c.reason);
+    expect(done(q, r.jobId, c.lease.leaseId, {status: "FAILED", message: 42 as unknown as string})).toEqual({ok: false, reason: "RESULT_INVALID"});
+    expect(q.get(r.jobId)!.status).toBe("RUNNING");
+    const blob = {...art, blob: "x".repeat(1000)};
+    expect(done(q, r.jobId, c.lease.leaseId, {status: "SUCCEEDED", artifacts: [blob]})).toEqual({ok: true, status: "SUCCEEDED"});
+    expect(fs.readFileSync(path.join(dir, "jobs.journal.jsonl"), "utf8")).not.toContain("x".repeat(100));
+  });
+
+  it("L-3: a second queue instance on the same directory is refused while the first is open", () => {
+    mkQueue();
+    expect(() => new CloudJobQueue(opts(60_000))).toThrow(/QUEUE_LOCKED/);
+  });
+
+  it("T-1: a future-dated proof (inside the skew window) is still refused after a restart", () => {
+    const q1 = mkQueue(); q1.submit(req()); q1.submit(req());
+    const future = signWorkerAuth({workerId: "worker-a", action: "claim", jobId: "*", at: new Date(clock.getTime() + 119_000).toISOString(), nonce: randomUUID()}, WORKER_FIXTURE);
+    expect(q1.claim(future)).toMatchObject({ok: true});
+    advance(200_000);   // kanıt hâlâ ±2 dk penceresinde (+119 s tarihli); nonce süresi bunu kapsamalı
+    expect(mkQueue().claim(future)).toEqual({ok: false, reason: "WORKER_AUTH_REPLAYED"});
+  });
+
+  it("T-2: timeoutMs bounds the whole run across retries (the run clock is not reset by a new claim); claim lease is capped", () => {
+    const q = mkQueue(60_000); const r = req({timeoutMs: 90_000}); q.submit(r);
+    const c1 = q.claim(auth("claim", "*")); if (!c1.ok) throw new Error(c1.reason);
+    advance(61_000); q.reap(); advance(1_000);
+    const c2 = q.claim(auth("claim", "*")); if (!c2.ok) throw new Error(c2.reason);
+    expect(c2.lease.expiresAt).toBe(Date.parse("2026-11-03T12:00:00Z") + 90_000);
+    advance(29_000);
+    expect(done(q, r.jobId, c2.lease.leaseId, {status: "SUCCEEDED"})).toEqual({ok: false, reason: "JOB_TIMED_OUT"});
   });
 });
 }
