@@ -6,7 +6,7 @@ import path from "node:path";
 import cp from "node:child_process";
 import {threadId} from "node:worker_threads";
 import {createHash} from "node:crypto";
-import {WorkOsStore, acquireStoreLock, storeLockHostTag, STORE_LOCK_ORPHAN_GRACE_MS, type StoreLockIo} from "../../core/workos/store.js";
+import {WorkOsStore, acquireStoreLock, defaultStoreLockIo, storeLockHostTag, STORE_LOCK_ORPHAN_GRACE_MS, STORE_LOCK_RELEASE_RETRY_MS, type StoreLockIo} from "../../core/workos/store.js";
 
 type Hook = (p: string) => void;
 /** Bellek içi dosya sistemi; `hooks` bir işlemden hemen önce hata fırlatabilir ya da başka bir sürecin adımını araya sokabilir. */
@@ -34,6 +34,7 @@ const LIVE = new Set([111, 222, 333]);
 const alive = (pid: number) => LIVE.has(pid);
 const noSleep = () => { clock.t += 10; };
 const base = {alive, now, sleep: noSleep};
+const sleepSyncMs = (ms: number) => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); };
 const lockFiles = (files: Map<string, unknown>) => [...files.keys()].filter(k => k.startsWith(L)).sort();
 
 export function registerWorkosStoreLockCases(): void {
@@ -156,19 +157,37 @@ export function registerWorkosStoreLockCases(): void {
       }
     });
 
-    it("Windows: an unlink that keeps failing leaves an orphan the owner reclaims, while other live processes still see it as held", () => {
-      let block = true;
-      const {io, files} = memIo({beforeUnlink: p => { if (block && p === L) throw err("EPERM"); }});
+    it("Windows: an unlink that keeps failing leaves an orphan the owner thread adopts without any fs mutation, while other live processes still see it as held", () => {
+      let block = true, mutations = 0;
+      const {io, files} = memIo({
+        beforeUnlink: p => { if (block && p === L) throw err("EPERM"); },
+        beforeLink: () => { mutations++; }, beforeWrite: () => { mutations++; },
+      });
       const a = acquireStoreLock(L, {...base, io, pid: 111});
       a.release();   // bounded retries exhausted: lock stays on disk
       expect(files.get(L)!.data).toBe(a.id);
       expect(() => acquireStoreLock(L, {...base, io, pid: 222})).toThrow(/STORE_LOCKED/);   // never two writers
-      block = false;
-      const b = acquireStoreLock(L, {...base, io, pid: 111});   // same process+thread: reclaims its own orphan, no LOCK_TIMEOUT
-      expect(files.get(L)!.data).toBe(b.id);
+      mutations = 0;
+      const b = acquireStoreLock(L, {...base, io, pid: 111});   // same process+thread, unlink STILL failing: adopted as-is, no LOCK_TIMEOUT
+      expect(b.id).toBe(a.id);
+      expect(files.get(L)!.data).toBe(a.id);
+      expect(mutations).toBe(2);   // only the first attempt (temp write + link -> EEXIST); the lock is never deleted or re-linked
       expect(() => acquireStoreLock(L, {...base, io, pid: 111})).toThrow(/STORE_LOCKED/);   // a lock this thread actually holds is live
+      block = false;
       b.release();
       expect(lockFiles(files)).toEqual([]);
+    });
+
+    it("PAR-03 regression (run 41705299747): a release that keeps failing blocks the thread for at most STORE_LOCK_RELEASE_RETRY_MS, far below a heartbeat period", () => {
+      expect(STORE_LOCK_RELEASE_RETRY_MS).toBeLessThanOrEqual(1500 / 3 / 2);   // engine tests: TTL 1500 ms, heartbeat TTL/3
+      for (const code of ["EPERM", "EBUSY", "EACCES"]) {
+        let slept = 0;
+        const {io} = memIo({beforeUnlink: p => { if (p === L) throw err(code); }});
+        const l = acquireStoreLock(L, {...base, io, pid: 111, sleep: ms => { slept += ms; clock.t += ms; }});
+        l.release();
+        expect(slept).toBeLessThanOrEqual(STORE_LOCK_RELEASE_RETRY_MS + 10);
+        expect(slept).toBeGreaterThan(0);   // it did retry
+      }
     });
 
     it("Windows: link onto a delete-pending lock (EPERM/EACCES) is a retryable busy, creates no lock and leaves no temp file", () => {
@@ -205,6 +224,17 @@ export function registerWorkosStoreLockCases(): void {
         expect(Date.now() - t0).toBeLessThan(5_000);
         expect(new WorkOsStore(dir).getProject({tenantId: "tA"}, p.projectId)).toEqual(p);
         expect(fs.readdirSync(dir).filter(f => f.startsWith("journal.lock"))).toEqual([]);
+      });
+
+      it("PAR-03 regression: with journal.lock undeletable (Windows EPERM) every write still succeeds and no write blocks for long", () => {
+        const dir = path.join(tmp, "d");
+        let slept = 0;
+        const io: StoreLockIo = {...defaultStoreLockIo, unlink: p => { if (path.basename(p) === "journal.lock") throw err("EPERM"); defaultStoreLockIo.unlink(p); }};
+        const s = new WorkOsStore(dir, {lock: {io, sleep: ms => { slept += ms; sleepSyncMs(ms); }}});
+        const ids: string[] = [];
+        for (let i = 0; i < 6; i++) { const t0 = Date.now(); ids.push(s.createProject(proj).projectId); expect(Date.now() - t0).toBeLessThan(1_000); }
+        expect(new WorkOsStore(dir, {lock: {io}}).listProjects({tenantId: "tA"}).map(p => p.projectId).sort()).toEqual([...ids].sort());
+        expect(slept).toBeLessThanOrEqual(12 * (STORE_LOCK_RELEASE_RETRY_MS + 10));   // bounded per release, never the old 2 s
       });
 
       it("a killed writer's lock (real dead PID) is recovered without LOCK_TIMEOUT", async () => {

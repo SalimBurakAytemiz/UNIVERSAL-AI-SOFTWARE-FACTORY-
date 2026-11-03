@@ -94,7 +94,11 @@ export interface StoreLockOptions {
 export interface StoreLock {readonly id: string; release(): void}
 export const STORE_LOCK_ORPHAN_GRACE_MS = 2_000;
 export const STORE_LOCK_MAX_TAKEOVER_GENERATIONS = 16;
-const RELEASE_RETRY_MS = 2_000;
+// //TR: PAR-03 bütçesi: kilit yolundaki her senkron bekleme olay döngüsünü (lease heartbeat'i dahil) durdurur. Engine testleri TTL=1500 ms, heartbeat TTL/3 kullanır;
+// 2 sn'lik bir bırakma yeniden denemesi Windows'ta (taranan/silinemeyen kilit) heartbeat'i aç bırakıp kendi lease'ini fence ettiriyordu (run 41705299747).
+// Bu yüzden yeniden deneme bütçeleri heartbeat periyodunun çok altındadır; düşen bırakma beklenmez, kilit sahip thread tarafından dosya işlemi yapılmadan sahiplenilir.
+export const STORE_LOCK_RELEASE_RETRY_MS = 100;
+const JOURNAL_OPEN_RETRY_MS = 250;
 // L-3: modül örneği başına bir küme varsayılır (aynı thread'de iki ayrı store modülü kopyası iç içe withLock yapmaz).
 // Bu süreçte (iş parçacığı dahil) şu an tutulan kilit kimlikleri: kendi PID+thread etiketli ama burada tutulmayan kilit yetimdir (bırakması düşmüş) ve geri alınır.
 const heldStoreLocks = new Set<string>();
@@ -157,19 +161,20 @@ export function acquireStoreLock(lockPath: string, o: StoreLockOptions = {}): St
     finally { try { io.unlink(tmp); } catch { /* yut: zaten yok */ } }
   };
   const retryTransient = (fn: () => void) => {
-    const deadline = now() + RELEASE_RETRY_MS;
-    for (;;) { try { fn(); return; } catch (e) { if (!isTransientFsError(e) || now() >= deadline) throw e; sleep(10); } }
+    const deadline = now() + STORE_LOCK_RELEASE_RETRY_MS;
+    for (;;) { try { fn(); return; } catch (e) { if (!isTransientFsError(e) || now() >= deadline) throw e; sleep(5); } }
   };
-  const lock: StoreLock = {
+  const makeLock = (id: string): StoreLock => ({
     id,
     release() {   // yalnız hâlâ bizim kimliğimizi taşıyan kilit silinir; Windows geçici hataları sınırlı yeniden denenir
-      heldStoreLocks.delete(id);   // silme yine de düşerse kilit yetimdir: bu thread'in sonraki alımı onu geri alır, başka süreç bizi ölü görünce alır
+      heldStoreLocks.delete(id);   // silme yine de düşerse kilit yetimdir: bu thread'in sonraki alımı onu dosya işlemi yapmadan sahiplenir, başka süreç bizi ölü görünce alır
       let raw: string | null = null;
       try { retryTransient(() => { raw = readOrNull(lockPath); }); } catch { return; }
       if (raw === null || String(raw).trim() !== id) return;
       try { retryTransient(() => { try { io.unlink(lockPath); } catch (e) { if (errCode(e) !== "ENOENT") throw e; } }); } catch { /* yetim kalır; yukarıya bakınız */ }
     },
-  };
+  });
+  const lock = makeLock(id);
   const won = (): StoreLock => {
     heldStoreLocks.add(id);
     let names: string[] = [];
@@ -183,6 +188,12 @@ export function acquireStoreLock(lockPath: string, o: StoreLockOptions = {}): St
     if (linkWithContent(lockPath)) return won();
     const raw = tryRead(lockPath);
     if (raw === null) continue;
+    // Yetim kendi kilidimiz (aynı host+pid+thread, tutulmuyor): silinip yeniden konmaz, OLDUĞU GİBİ sahiplenilir. Başka süreç pid'imizi canlı, başka thread
+    // tid'i farklı görür; bu thread senkrondur: ikinci yazar oluşamaz ve silinemeyen (Windows) bir kilit sahibini hiç bekletmez.
+    const owner = parseStoreLockOwner(raw);
+    if (owner !== null && owner !== "OTHER_HOST" && owner.pid === ownPid && owner.tid === threadId && !heldStoreLocks.has(raw.trim())) {
+      const adopted = raw.trim(); heldStoreLocks.add(adopted); return makeLock(adopted);
+    }
     if (holdsLive(lockPath, raw)) throw storeLocked();
     let token: string | null = null, spins = 0;
     for (let k = 1; k <= STORE_LOCK_MAX_TAKEOVER_GENERATIONS && token === null; k++) {
@@ -208,7 +219,7 @@ export function acquireStoreLock(lockPath: string, o: StoreLockOptions = {}): St
 }
 // Windows: başka sürecin tanıtıcısı/silme-beklemesi yüzünden geçici açılış hatası yazıdan ÖNCE sınırlı yeniden denenir (hiçbir bayt yazılmamıştır).
 function openForAppend(file: string): number {
-  const deadline = Date.now() + RELEASE_RETRY_MS;
+  const deadline = Date.now() + JOURNAL_OPEN_RETRY_MS;
   for (;;) { try { return fs.openSync(file, "a"); } catch (e) { if (!isTransientFsError(e) || Date.now() >= deadline) throw e; sleepSync(10); } }
 }
 
