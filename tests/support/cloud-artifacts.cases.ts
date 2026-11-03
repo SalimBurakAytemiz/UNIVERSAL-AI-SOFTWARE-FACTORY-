@@ -167,6 +167,45 @@ export function registerCloudArtifactsCases(): void {
       expect(await store.put(W("tenant-001"), boom)).toMatchObject({ok: false, reason: "INVALID_CONTENT"});
       expect(await store.put(boom, putIn("tenant-001", "proj-001", "q.bin", body("q")))).toMatchObject({ok: false, reason: "INVALID_CONTENT"});
     });
+    it("get / issueDeliveryUrl / redeem read caller objects once: a tenant-switching getter never reaches the victim (review B1)", async () => {
+      const {store} = mkStore();
+      await store.put(W("tenant-001"), putIn("tenant-001", "proj-001", "victim.bin", body("victim plaintext")));
+      await store.put(W("tenant-002"), putIn("tenant-002", "proj-001", "victim.bin", body("attacker own")));
+      const counts: Record<string, number> = {};
+      const switching = (tag: string, first: Record<string, string>, later: Record<string, string>) => {
+        const o = {};
+        for (const k of Object.keys(first)) Object.defineProperty(o, k, {enumerable: true, get() {
+          const key = `${tag}.${k}`; counts[key] = (counts[key] ?? 0) + 1; return counts[key] === 1 ? first[k] : later[k];
+        }});
+        return o as never;
+      };
+      const attacker = {tenantId: "tenant-002", subject: "user-002"};
+      const loc2 = {tenantId: "tenant-002", projectId: "proj-001", name: "victim.bin"};
+      const loc1 = {tenantId: "tenant-001", projectId: "proj-001", name: "victim.bin"};
+      // locator passes the tenant gate as tenant-002, then would point at tenant-001
+      const g = await store.get(switching("gp", attacker, {tenantId: "tenant-001", subject: "user-001"}), switching("gl", loc2, loc1));
+      expect(g.ok && g.content.toString()).toBe("attacker own");
+      const iss = await store.issueDeliveryUrl(switching("ip", attacker, {tenantId: "tenant-001", subject: "user-001"}), switching("il", loc2, loc1));
+      expect(iss.ok).toBe(true); if (!iss.ok) return;
+      expect(new URL(iss.url).pathname).toBe("/api/artifacts/tenant-002/proj-001/victim.bin");
+      const claims = JSON.parse(Buffer.from(new URL(iss.url).searchParams.get("token")!.split(".")[0]!, "base64url").toString());
+      expect(claims).toMatchObject({t: "tenant-002", sub: "user-002", s: sha256Hex("attacker own")});
+      const red = await store.redeemDeliveryUrl(iss.url);
+      expect(red.ok && red.content.toString()).toBe("attacker own");
+      expect(Object.values(counts).every(n => n === 1)).toBe(true);
+      expect(Object.keys(counts).length).toBe(10);
+      // the reverse order (attacker identity first is tenant-001 victim locator) is denied outright
+      expect(await store.get(attacker, switching("rl", loc1, loc2))).toMatchObject({ok: false, reason: "TENANT_DENIED"});
+      expect(await store.issueDeliveryUrl(attacker, switching("rl2", loc1, loc2))).toMatchObject({ok: false, reason: "TENANT_DENIED"});
+      const boom = new Proxy({}, {get() { throw new Error("trap"); }}) as never;
+      expect(await store.get(boom, loc1)).toMatchObject({ok: false, reason: "INVALID_ID"});
+      expect(await store.issueDeliveryUrl(A, boom)).toMatchObject({ok: false, reason: "INVALID_ID"});
+      const urlObj = {toString: () => iss.url} as never;
+      expect(await store.redeemDeliveryUrl(urlObj)).toMatchObject({ok: false, reason: "TOKEN_MALFORMED"});
+      // put: a Buffer-like Proxy whose reads throw is a typed denial
+      const evilBuf = new Proxy(Buffer.from("x"), {get() { throw new Error("trap"); }}) as never;
+      expect(await store.put(W("tenant-001"), {...putIn("tenant-001", "proj-001", "e.bin", body("x")), content: evilBuf})).toMatchObject({ok: false, reason: "INVALID_CONTENT"});
+    });
     it("put is tenant-bound: another tenant cannot pre-occupy a victim's name (review NB2)", async () => {
       const {store} = mkStore();
       const victim = {tenantId: "tenant-001", projectId: "proj-001", name: "dist/app.zip"};

@@ -173,6 +173,21 @@ export class CloudArtifactStore{
     try{this.o.audit({at:this.now().toISOString(),...r,name:r.name===null?null:redactSecrets(r.name)})}catch{/* audit sink hatası işlemi değiştirmez */}
   }
 
+  /**
+   * Çağıranın nesnelerinden her alan TEK kez, try içinde okunur ve yalnız dize ilkelleri dondurulmuş yeni nesnelere kopyalanır;
+   * aşağı akış (kapı, anahtarlar, AAD, token iddiaları, audit) yalnız bu kopyaları görür. Okuma hatası => null (tipli red).
+   */
+  private snapshot(principal:unknown,l:unknown):{principal:Readonly<DeliveryPrincipal>;l:Readonly<ArtifactLocator>}|null{
+    const str=(v:unknown)=>typeof v==="string"?v:undefined;
+    try{
+      let pt:unknown,ps:unknown,t:unknown,p:unknown,n:unknown;
+      if(principal!==null&&typeof principal==="object")({tenantId:pt,subject:ps}=principal as Record<string,unknown>);
+      if(l!==null&&typeof l==="object")({tenantId:t,projectId:p,name:n}=l as Record<string,unknown>);
+      return {principal:Object.freeze({tenantId:str(pt),subject:str(ps)}) as Readonly<DeliveryPrincipal>,
+        l:Object.freeze({tenantId:str(t),projectId:str(p),name:str(n)}) as Readonly<ArtifactLocator>};
+    }catch{return null}
+  }
+
   private locatorOk(l:ArtifactLocator):ArtifactDenyReason|null{
     if(!l||typeof l!=="object"||!isId(l.tenantId)||!isId(l.projectId))return "INVALID_ID";
     if(!isSafeArtifactName(l.name))return "INVALID_NAME";
@@ -210,10 +225,13 @@ export class CloudArtifactStore{
     // Yazma da tenant'a bağlıdır: başka tenant'ın ad alanı önceden doldurulamaz.
     if(!isId(pt)||!isId(ps)||pt!==t)return deny("TENANT_DENIED");
     if((jobId!==undefined&&!isId(jobId))||(producer!==undefined&&!isId(producer)))return deny("INVALID_ID");
-    if(!Buffer.isBuffer(raw))return deny("INVALID_CONTENT");
-    if(raw.byteLength>this.maxBytes)return deny("TOO_LARGE");
     // Çağıranın tamponu değişebilir: doğrulama, tarama ve şifreleme yalnız girişte alınan kopya üzerinde yapılır.
-    const content=Buffer.from(raw);
+    let content:Buffer;
+    try{
+      if(!Buffer.isBuffer(raw))return deny("INVALID_CONTENT");
+      if(raw.byteLength>this.maxBytes)return deny("TOO_LARGE");
+      content=Buffer.from(raw);
+    }catch{return deny("INVALID_CONTENT")}
     if(typeof sha!=="string"||!SHA256_RE.test(sha))return deny("HASH_MISMATCH");
     if(typeof size!=="number"||!Number.isSafeInteger(size)||size<0)return deny("SIZE_MISMATCH");
     if(size>this.maxBytes)return deny("TOO_LARGE");
@@ -300,8 +318,10 @@ export class CloudArtifactStore{
   }
 
   /** Doğrulanmış okuma: manifest MAC, şifreli blob bütünlüğü ve sha/boyut yeniden hesaplanır. Çağıran tenant'ı yalnız kendi tenant'ını okuyabilir. */
-  async get(principal:DeliveryPrincipal,l:ArtifactLocator):Promise<ArtifactResult<{content:Buffer;manifest:ArtifactManifest}>>{
-    return this.guardedRead("GET",principal,l);
+  async get(principalIn:DeliveryPrincipal,locIn:ArtifactLocator):Promise<ArtifactResult<{content:Buffer;manifest:ArtifactManifest}>>{
+    const snap=this.snapshot(principalIn,locIn);
+    if(!snap){this.log({action:"GET",decision:"DENIED",reason:"INVALID_ID",tenantId:null,projectId:null,name:null,sha256:null});return fail("INVALID_ID")}
+    return this.guardedRead("GET",snap.principal,snap.l);
   }
 
   private async guardedRead(action:"GET"|"REDEEM_DELIVERY",principal:DeliveryPrincipal|null,l:ArtifactLocator,expectSha?:string,tokenSubject?:string):Promise<ArtifactResult<{content:Buffer;manifest:ArtifactManifest}>>{
@@ -324,7 +344,10 @@ export class CloudArtifactStore{
    * Token bir taşıyıcı (bearer) belgedir: exp'e kadar yeniden kullanılabilir ve sorgu dizesinde taşındığından erişim log'u/Referer
    * yoluyla sızabilir; bu yüzden TTL kısa tutulur. Canlı iptal için revokedTokenIds değiştirilebilir bir Set olarak verilmelidir.
    */
-  async issueDeliveryUrl(principal:DeliveryPrincipal,l:ArtifactLocator,ttlMs=DEFAULT_DELIVERY_TTL_MS):Promise<ArtifactResult<{url:string;expiresAt:string;sha256:string}>>{
+  async issueDeliveryUrl(principalIn:DeliveryPrincipal,locIn:ArtifactLocator,ttlMs:number=DEFAULT_DELIVERY_TTL_MS):Promise<ArtifactResult<{url:string;expiresAt:string;sha256:string}>>{
+    const snap=this.snapshot(principalIn,locIn);
+    if(!snap){this.log({action:"ISSUE_DELIVERY",decision:"DENIED",reason:"INVALID_ID",tenantId:null,projectId:null,name:null,sha256:null});return fail("INVALID_ID")}
+    const {principal,l}=snap;
     const base={action:"ISSUE_DELIVERY" as const,tenantId:isId(l?.tenantId)?l.tenantId:null,projectId:isId(l?.projectId)?l.projectId:null,
       name:isSafeArtifactName(l?.name)?l.name:null,sha256:null,subject:principal&&isId(principal.subject)?principal.subject:null};
     const deny=(reason:ArtifactDenyReason)=>{this.log({...base,decision:"DENIED",reason});return fail<{url:string;expiresAt:string;sha256:string}>(reason)};
@@ -357,6 +380,7 @@ export class CloudArtifactStore{
       return fail<{content:Buffer;manifest:ArtifactManifest}>(reason);
     };
     if(!this.baseUrl)return deny("BASE_URL_INSECURE");
+    if(typeof url!=="string")return deny("TOKEN_MALFORMED");   // nesne toString'i çağrılmaz
     let u:URL;
     try{u=new URL(url)}catch{return deny("TOKEN_MALFORMED")}
     const prefix=`${this.baseUrl.pathname.replace(/\/+$/,"")}/artifacts/`;
@@ -366,7 +390,7 @@ export class CloudArtifactStore{
     let segs:string[];
     try{segs=u.pathname.slice(prefix.length).split("/").map(decodeURIComponent)}catch{return deny("TOKEN_MALFORMED")}
     if(segs.length<3)return deny("TOKEN_SCOPE_MISMATCH");
-    const l:ArtifactLocator={tenantId:segs[0]!,projectId:segs[1]!,name:segs.slice(2).join("/")};
+    const l:Readonly<ArtifactLocator>=Object.freeze({tenantId:segs[0]!,projectId:segs[1]!,name:segs.slice(2).join("/")});
     const parts=tokens[0]!.split(".");
     if(parts.length!==2||!B64URL_RE.test(parts[0]!)||!HEX64_RE.test(parts[1]!))return deny("TOKEN_MALFORMED");
     let c:DeliveryClaims;
@@ -376,7 +400,7 @@ export class CloudArtifactStore{
     const key=this.o.deliveryKeys.get(c.kid);
     if(key===undefined)return deny("TOKEN_KEY_UNKNOWN");
     if(!hexEqual(parts[1]!,createHmac("sha256",key).update(parts[0]!).digest("hex")))return deny("TOKEN_SIGNATURE_INVALID");
-    const claimed:ArtifactLocator={tenantId:c.t,projectId:c.p,name:c.n};   // imza doğrulandı: audit yalnız doğrulanmış iddialardan atfedilir
+    const claimed:Readonly<ArtifactLocator>=Object.freeze({tenantId:c.t,projectId:c.p,name:c.n});   // imza doğrulandı: audit yalnız doğrulanmış iddialardan atfedilir
     const now=this.now().getTime();
     if(!Number.isFinite(now)||c.exp<=c.iat||c.exp-c.iat>MAX_DELIVERY_TTL_MS)return deny("TOKEN_MALFORMED",claimed);
     if(c.iat>now+60_000)return deny("TOKEN_NOT_YET_VALID",claimed);
