@@ -7,6 +7,7 @@ import {registerCloudConnectionViewCases} from "./support/cloud-connection-view.
 import {registerWorkosStoreLockCases} from "./support/workos-store-lock.cases.js";   // V3-T1001 store kilidi kurtarma vakaları
 import {registerAutonomyCases} from "./support/autonomy.cases.js";             // FD-2026-11-03 kalıcı otonomi karar modülü vakaları
 import {registerAutonomyExecutorCases} from "./support/autonomy-executor.cases.js"; // FD-2026-11-03 yürütücü (merge + doğrulama) vakaları
+import {registerCloudArtifactsCases} from "./support/cloud-artifacts.cases.js"; // CLOUD-T0008 artifact deposu ve imzalı teslim vakaları
 import {
   CLOUD_CONTRACT_VERSION,MAX_JOB_TIMEOUT_MS,signScope,verifyScopeSignature,validateCloudJobRequest,verifyEventStream,verifyArtifact,
   auditRecordFor,canonicalJson,sha256Hex,type CloudJobRequest,type CloudJobEvent,type UnsignedScope,
@@ -159,4 +160,5 @@ registerCloudConnectionViewCases();
 registerWorkosStoreLockCases();
 registerAutonomyCases();
 registerAutonomyExecutorCases();
+registerCloudArtifactsCases();
 registerCrewCoordinatorCases();
