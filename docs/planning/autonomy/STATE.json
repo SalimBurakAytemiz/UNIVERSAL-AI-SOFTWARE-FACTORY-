@@ -1,0 +1,13 @@
+{
+  "//TR": "Otonom döngünün kalıcı durumu: tamamlanan (merge edilmiş) görevler, sürmekte olan PR'lar ve Founder kararı bekleyenler. Her görev PR'ı ile birlikte güncellenir; kota/oturum kesintisinden sonra döngü buradan devam eder.",
+  "schemaVersion": "1.0.0",
+  "authority": "FD-2026-11-03-STANDING-AUTONOMY",
+  "updatedAt": "2026-11-03",
+  "done": [
+    {"task": "CLOUD-T0001", "pr": 296},
+    {"task": "CLOUD-T0003", "pr": 297},
+    {"task": "CLOUD-T0004", "pr": 298}
+  ],
+  "inFlight": [],
+  "blocked": []
+}
