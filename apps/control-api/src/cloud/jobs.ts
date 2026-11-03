@@ -1,9 +1,9 @@
-// //TR: Bu dosya CLOUD-T0003 bulut iş kuyruğunu uygular: imzalı istek kabulü (CLOUD-T0001 sözleşmesi), kimliği doğrulanmış worker lease'i, heartbeat, iptal, global STOP, dayanıklı (append-only journal) yeniden deneme ve aynı işin iki kez yürütülmemesi; her karar audit kaydına yazılır.
+// //TR: Bu dosya (güven sınırı: kuyruk dizini sunucunun kendi diskidir, journal'a MAC uygulanmaz ve maskeli scope imzaları replay'de yeniden doğrulanmaz) CLOUD-T0003 bulut iş kuyruğunu uygular: imzalı istek kabulü (CLOUD-T0001 sözleşmesi), kimliği doğrulanmış worker lease'i, heartbeat, iptal, global STOP, dayanıklı (append-only journal) yeniden deneme ve aynı işin iki kez yürütülmemesi; her karar audit kaydına yazılır.
 import fs from "node:fs";
 import path from "node:path";
-import {createHmac, randomUUID, timingSafeEqual} from "node:crypto";
+import {createHash, createHmac, randomUUID, timingSafeEqual} from "node:crypto";
 import {
-  auditRecordFor, validateCloudJobRequest, verifyEventStream, TERMINAL_EVENT_TYPES,
+  auditRecordFor, canonicalJson, validateCloudJobRequest, verifyEventStream, TERMINAL_EVENT_TYPES,
   type ArtifactRef, type CloudJobEvent, type CloudJobEventType, type CloudJobRequest,
 } from "../../../../core/cloud/contracts.js";
 
@@ -12,9 +12,10 @@ export const DEFAULT_LEASE_MS = 5 * 60 * 1000;
 
 export type QueueDenyReason =
   | "WORKER_AUTH_INVALID" | "WORKER_AUTH_REPLAYED" | "GLOBAL_STOP_ACTIVE" | "JOB_NOT_FOUND" | "LEASE_MISMATCH" | "LEASE_EXPIRED"
-  | "JOB_CANCELLED" | "JOB_TERMINAL" | "RESULT_INVALID";
+  | "JOB_CANCELLED" | "JOB_TERMINAL" | "JOB_TIMED_OUT" | "RESULT_INVALID";
 
-/** Worker her çağrıda imzalı bir kimlik kanıtı gönderir: HMAC-SHA256(secret, `${workerId}\n${action}\n${jobId}\n${at}\n${nonce}`). */
+/** Worker her çağrıda imzalı bir kanıt gönderir: HMAC-SHA256(secret, `${workerId}\n${action}\n${jobId}\n${at}\n${nonce}\n${bodyDigest}`).
+ *  bodyDigest = sha256(canonicalJson(body)); body claim için {}, heartbeat için {leaseId}, complete için {leaseId, result}. Böylece yoldaki biri lease'i ya da sonucu değiştiremez. */
 export interface WorkerAuth {workerId: string; action: "claim" | "heartbeat" | "complete"; jobId: string; at: string; nonce: string; signature: string}
 export interface Lease {leaseId: string; workerId: string; expiresAt: number}
 export interface JobResult {status: "SUCCEEDED" | "FAILED"; artifacts?: ArtifactRef[]; message?: string}
@@ -32,10 +33,12 @@ export interface CloudJobQueueOptions {
   leaseMs?: number;
 }
 
-type JournalLine = {kind: "submit"; job: CloudJobRequest; requestDigest: string} | {kind: "event"; event: CloudJobEvent} | {kind: "stop"; at: string};
+type JournalLine = {kind: "submit"; job: CloudJobRequest; requestDigest: string} | {kind: "event"; event: CloudJobEvent} | {kind: "stop"; at: string} | {kind: "nonce"; key: string; exp: number};
 
-export function signWorkerAuth(a: Omit<WorkerAuth, "signature">, secret: string | Buffer): WorkerAuth {
-  return {...a, signature: createHmac("sha256", secret).update(`${a.workerId}\n${a.action}\n${a.jobId}\n${a.at}\n${a.nonce}`).digest("hex")};
+export const workerBodyDigest = (body: unknown): string => createHash("sha256").update(canonicalJson(body ?? {})).digest("hex");
+
+export function signWorkerAuth(a: Omit<WorkerAuth, "signature">, secret: string | Buffer, body: unknown = {}): WorkerAuth {
+  return {...a, signature: createHmac("sha256", secret).update(`${a.workerId}\n${a.action}\n${a.jobId}\n${a.at}\n${a.nonce}\n${workerBodyDigest(body)}`).digest("hex")};
 }
 
 const isTerminal = (t: string) => (TERMINAL_EVENT_TYPES as readonly string[]).includes(t);
@@ -62,20 +65,26 @@ export class CloudJobQueue {
   }
 
   // ---------- persistence ----------
-  private append(line: JournalLine): void {
+  /** Birden çok satır tek write + fsync ile yazılır (submit + QUEUED aynı kayıtta: arada çökme boş akış bırakmaz). */
+  private append(...lines: JournalLine[]): void {
     const fd = fs.openSync(this.journal, "a");
-    try { fs.writeSync(fd, JSON.stringify(line) + "\n"); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+    try { fs.writeSync(fd, lines.map(l => JSON.stringify(l) + "\n").join("")); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
   }
   private auditLog(rec: Record<string, unknown>): void {
-    fs.appendFileSync(this.audit, JSON.stringify({at: this.now().toISOString(), ...rec}) + "\n");
+    const fd = fs.openSync(this.audit, "a");
+    try { fs.writeSync(fd, JSON.stringify({at: this.now().toISOString(), ...rec}) + "\n"); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
   }
   /** Journal'dan durumu yeniden kurar. Bozuk satır ya da bütünlüğü bozuk olay akışı: fail-closed (kurucu hata atar). */
   private replay(): void {
     if (!fs.existsSync(this.journal)) return;
-    const lines = fs.readFileSync(this.journal, "utf8").split("\n").filter(Boolean);
+    const text = fs.readFileSync(this.journal, "utf8");
+    if (text.length > 0 && !text.endsWith("\n")) throw new Error("JOURNAL_CORRUPT: torn trailing line");
+    const lines = text.split("\n").filter(Boolean);
     for (const raw of lines) {
-      const l = JSON.parse(raw) as JournalLine;
+      let l: JournalLine;
+      try { l = JSON.parse(raw) as JournalLine; } catch { throw new Error("JOURNAL_CORRUPT: unparseable line"); }
       if (l.kind === "submit") this.indexSubmit(l.job, l.requestDigest);
+      else if (l.kind === "nonce") { if (typeof l.key === "string" && Number.isFinite(l.exp)) this.nonces.set(l.key, l.exp); }
       else if (l.kind === "stop") this.stopped = true;
       else if (l.kind === "event") {
         const s = this.jobs.get(l.event.jobId);
@@ -115,19 +124,22 @@ export class CloudJobQueue {
   }
 
   // ---------- worker authentication ----------
-  private authWorker(a: WorkerAuth, action: WorkerAuth["action"], jobId: string): QueueDenyReason | null {
+  private authWorker(a: WorkerAuth, action: WorkerAuth["action"], jobId: string, body: unknown = {}): QueueDenyReason | null {
     const deny = (r: QueueDenyReason) => { this.auditLog({decision: "WORKER_DENIED", reason: r, workerId: typeof a?.workerId === "string" ? a.workerId.slice(0, 64) : null, action}); return r; };
     if (!a || typeof a !== "object" || a.action !== action || a.jobId !== jobId || typeof a.nonce !== "string" || !/^[A-Za-z0-9-]{16,64}$/.test(a.nonce)) return deny("WORKER_AUTH_INVALID");
     const key = typeof a.workerId === "string" ? this.opts.workerKeys.get(a.workerId) : undefined;
     const at = typeof a.at === "string" ? Date.parse(a.at) : Number.NaN;
     const now = this.now().getTime();
     if (key === undefined || !Number.isFinite(at) || Math.abs(now - at) > WORKER_AUTH_MAX_SKEW_MS || typeof a.signature !== "string" || !/^[0-9a-f]{64}$/.test(a.signature)) return deny("WORKER_AUTH_INVALID");
-    const expected = Buffer.from(signWorkerAuth({workerId: a.workerId, action, jobId, at: a.at, nonce: a.nonce}, key).signature, "hex");
+    let expected: Buffer;
+    try { expected = Buffer.from(signWorkerAuth({workerId: a.workerId, action, jobId, at: a.at, nonce: a.nonce}, key, body).signature, "hex"); } catch { return deny("WORKER_AUTH_INVALID"); }
     if (!timingSafeEqual(expected, Buffer.from(a.signature, "hex"))) return deny("WORKER_AUTH_INVALID");
     for (const [n, exp] of this.nonces) if (exp < now) this.nonces.delete(n);
-    const nk = `${a.workerId}\u0000${a.nonce}`;
+    const nk = createHash("sha256").update(`${a.workerId}\u0000${a.nonce}`).digest("hex");
     if (this.nonces.has(nk)) return deny("WORKER_AUTH_REPLAYED");
-    this.nonces.set(nk, now + 2 * WORKER_AUTH_MAX_SKEW_MS);
+    const exp = now + 2 * WORKER_AUTH_MAX_SKEW_MS;
+    this.append({kind: "nonce", key: nk, exp});   // kalıcı: yeniden başlatmadan sonra da replay reddedilir
+    this.nonces.set(nk, exp);
     return null;
   }
 
@@ -140,11 +152,12 @@ export class CloudJobQueue {
     if (!d.ok) return {ok: false, reason: d.reason};
     const k = `${d.job.tenantId}\u0000${d.job.idempotencyKey}`;
     if (d.replay) return {ok: true, jobId: this.idemJob.get(k) as string, replay: true};
-    if (this.jobs.has(d.job.jobId)) return {ok: false, reason: "JOB_ID_REUSED"};
+    if (this.jobs.has(d.job.jobId)) { this.auditLog({decision: "DENIED", reason: "JOB_ID_REUSED", jobId: d.job.jobId}); return {ok: false, reason: "JOB_ID_REUSED"}; }
     const job = {...d.job, scope: {...d.job.scope, signature: "[stored-verified]"}};   // imza journal'a yazılmaz; doğrulama kabulde yapıldı
-    this.append({kind: "submit", job, requestDigest: d.requestDigest});
+    const queued: CloudJobEvent = {jobId: job.jobId, seq: 0, type: "QUEUED", at: this.now().toISOString(), attempt: 1};
+    this.append({kind: "submit", job, requestDigest: d.requestDigest}, {kind: "event", event: queued});
     this.indexSubmit(job, d.requestDigest);
-    this.emit(this.jobs.get(job.jobId) as JobState, "QUEUED");
+    this.applyEvent(this.jobs.get(job.jobId) as JobState, queued);
     return {ok: true, jobId: job.jobId, replay: false};
   }
 
@@ -163,36 +176,41 @@ export class CloudJobQueue {
     return {ok: true, job: s.job, lease: {...lease}, attempt: s.attempt};
   }
 
-  private holder(auth: WorkerAuth, action: WorkerAuth["action"], jobId: string, leaseId: string): {s: JobState} | {reason: QueueDenyReason} {
-    const bad = this.authWorker(auth, action, jobId); if (bad) return {reason: bad};
+  private holder(auth: WorkerAuth, action: WorkerAuth["action"], jobId: string, leaseId: string, body: unknown): {s: JobState} | {reason: QueueDenyReason} {
+    const bad = this.authWorker(auth, action, jobId, body); if (bad) return {reason: bad};
     const s = this.jobs.get(jobId); if (!s) return {reason: "JOB_NOT_FOUND"};
     if (s.status === "CANCELLED") return {reason: "JOB_CANCELLED"};
     if (s.status === "STOPPED") return {reason: "GLOBAL_STOP_ACTIVE"};
     if (isTerminal(s.status)) return {reason: "JOB_TERMINAL"};
     if (!s.lease || s.lease.leaseId !== leaseId || s.lease.workerId !== auth.workerId) return {reason: "LEASE_MISMATCH"};
-    if (s.lease.expiresAt <= this.now().getTime()) return {reason: "LEASE_EXPIRED"};
+    const now = this.now().getTime();
+    if (s.startedAt !== null && now - s.startedAt > s.job.timeoutMs) {   // B-1: toplam süre heartbeat/complete'te de uygulanır
+      this.emit(s, "TIMED_OUT"); this.auditLog({decision: "TIMED_OUT", jobId}); return {reason: "JOB_TIMED_OUT"};
+    }
+    if (s.lease.expiresAt <= now) return {reason: "LEASE_EXPIRED"};
     return {s};
   }
 
   /** Lease'i uzatır. İş iptal edildiyse JOB_CANCELLED, STOP varsa GLOBAL_STOP_ACTIVE döner: worker durur ve çıktı üretmez. */
   heartbeat(auth: WorkerAuth, jobId: string, leaseId: string): {ok: true} | {ok: false; reason: QueueDenyReason} {
-    const h = this.holder(auth, "heartbeat", jobId, leaseId); if ("reason" in h) return {ok: false, reason: h.reason};
-    const exp = this.now().getTime() + this.leaseMs;
+    const h = this.holder(auth, "heartbeat", jobId, leaseId, {leaseId}); if ("reason" in h) return {ok: false, reason: h.reason};
+    const exp = Math.min(this.now().getTime() + this.leaseMs, (h.s.startedAt as number) + h.s.job.timeoutMs);   // lease toplam süreyi aşamaz
     this.emit(h.s, "HEARTBEAT", {message: String(exp)});
     return {ok: true};
   }
 
   /** Sonuç yalnız geçerli lease sahibinden kabul edilir; iptal/STOP/süresi geçmiş işin çıktısı asla kaydedilmez. */
   complete(auth: WorkerAuth, jobId: string, leaseId: string, result: JobResult): {ok: true; status: CloudJobEventType} | {ok: false; reason: QueueDenyReason} {
-    const h = this.holder(auth, "complete", jobId, leaseId);
+    const h = this.holder(auth, "complete", jobId, leaseId, {leaseId, result});
     if ("reason" in h) { this.auditLog({decision: "RESULT_REJECTED", jobId, reason: h.reason}); return {ok: false, reason: h.reason}; }
     const s = h.s;
-    if (!result || (result.status !== "SUCCEEDED" && result.status !== "FAILED") || (result.artifacts !== undefined && !Array.isArray(result.artifacts))) return {ok: false, reason: "RESULT_INVALID"};
+    const invalid = () => { this.auditLog({decision: "RESULT_REJECTED", jobId, reason: "RESULT_INVALID"}); return {ok: false as const, reason: "RESULT_INVALID" as const}; };
+    if (!result || (result.status !== "SUCCEEDED" && result.status !== "FAILED") || (result.artifacts !== undefined && !Array.isArray(result.artifacts))) return invalid();
     if (result.status === "SUCCEEDED") {
       // Artifact'lar tek tek doğrulanır (emit içinde verifyEventStream); biri bozuksa hiçbiri yazılmaz.
       const probe = [...s.events];
       for (const a of result.artifacts ?? []) probe.push({jobId, seq: probe.length, type: "ARTIFACT", at: this.now().toISOString(), attempt: s.attempt, artifact: a});
-      if (!verifyEventStream(probe, s.job).ok) return {ok: false, reason: "RESULT_INVALID"};
+      if (!verifyEventStream(probe, s.job).ok) return invalid();
       for (const a of result.artifacts ?? []) this.emit(s, "ARTIFACT", {artifact: a});
       this.emit(s, "SUCCEEDED");
     } else this.failOrRetry(s, result.message);

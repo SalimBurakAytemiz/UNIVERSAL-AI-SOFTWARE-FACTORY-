@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {randomUUID} from "node:crypto";
-import {CloudJobQueue, signWorkerAuth, type WorkerAuth} from "../../apps/control-api/src/cloud/jobs.js";
+import {CloudJobQueue, signWorkerAuth, type JobResult, type WorkerAuth} from "../../apps/control-api/src/cloud/jobs.js";
 import {CLOUD_CONTRACT_VERSION, signScope, sha256Hex, verifyEventStream, type CloudJobRequest, type UnsignedScope} from "../../core/cloud/contracts.js";
 
 const SCOPE_FIXTURE = "scope-fixture-key-".repeat(3);
@@ -22,8 +22,11 @@ function req(over: Partial<CloudJobRequest> = {}): CloudJobRequest {
     idempotencyKey: `idem-${String(n).padStart(4, "0")}`, timeoutMs: 60 * 60 * 1000, retry: {maxAttempts: 2, backoffMs: 1000}, needsNetwork: false, estimatedCostUsd: 1,
     inputArtifacts: [], scope: signScope(unsigned, SCOPE_FIXTURE), requestedAt: "2026-11-03T11:59:00Z", ...over};
 }
-const auth = (action: WorkerAuth["action"], jobId: string, workerId = "worker-a", key = WORKER_FIXTURE): WorkerAuth =>
-  signWorkerAuth({workerId, action, jobId, at: clock.toISOString(), nonce: randomUUID()}, key);
+const auth = (action: WorkerAuth["action"], jobId: string, workerId = "worker-a", key = WORKER_FIXTURE, body: unknown = {}): WorkerAuth =>
+  signWorkerAuth({workerId, action, jobId, at: clock.toISOString(), nonce: randomUUID()}, key, body);
+const hb = (q: CloudJobQueue, jobId: string, leaseId: string, w = "worker-a", k = WORKER_FIXTURE) => q.heartbeat(auth("heartbeat", jobId, w, k, {leaseId}), jobId, leaseId);
+const done = (q: CloudJobQueue, jobId: string, leaseId: string, result: JobResult, w = "worker-a", k = WORKER_FIXTURE) =>
+  q.complete(auth("complete", jobId, w, k, {leaseId, result}), jobId, leaseId, result);
 
 let dir: string;
 const mkQueue = (leaseMs = 60_000) => new CloudJobQueue({dir, scopeKeys: new Map([["k-1", SCOPE_FIXTURE]]), workerKeys: new Map([["worker-a", WORKER_FIXTURE], ["worker-b", WORKER_FIXTURE + "b"]]), now, leaseMs});
@@ -37,8 +40,8 @@ describe("CLOUD-T0003 cloud job queue", () => {
     const r = req(); expect(q.submit(r)).toEqual({ok: true, jobId: r.jobId, replay: false});
     const c = q.claim(auth("claim", "*")); if (!c.ok) throw new Error(c.reason);
     expect(c.job.jobId).toBe(r.jobId);
-    advance(10_000); expect(q.heartbeat(auth("heartbeat", r.jobId), r.jobId, c.lease.leaseId)).toEqual({ok: true});
-    expect(q.complete(auth("complete", r.jobId), r.jobId, c.lease.leaseId, {status: "SUCCEEDED", artifacts: [art]})).toEqual({ok: true, status: "SUCCEEDED"});
+    advance(10_000); expect(hb(q, r.jobId, c.lease.leaseId)).toEqual({ok: true});
+    expect(done(q, r.jobId, c.lease.leaseId, {status: "SUCCEEDED", artifacts: [art]})).toEqual({ok: true, status: "SUCCEEDED"});
     const s = q.get(r.jobId)!;
     expect(s.events.map(e => e.type)).toEqual(["QUEUED", "STARTED", "HEARTBEAT", "ARTIFACT", "SUCCEEDED"]);
     expect(verifyEventStream(s.events, s.job)).toEqual({ok: true, terminal: "SUCCEEDED"});
@@ -58,8 +61,8 @@ describe("CLOUD-T0003 cloud job queue", () => {
     const q = mkQueue(); const r = req(); q.submit(r);
     const c = q.claim(auth("claim", "*")); if (!c.ok) throw new Error(c.reason);
     expect(q.cancel(r.jobId)).toEqual({ok: true});
-    expect(q.heartbeat(auth("heartbeat", r.jobId), r.jobId, c.lease.leaseId)).toEqual({ok: false, reason: "JOB_CANCELLED"});
-    expect(q.complete(auth("complete", r.jobId), r.jobId, c.lease.leaseId, {status: "SUCCEEDED", artifacts: [art]})).toEqual({ok: false, reason: "JOB_CANCELLED"});
+    expect(hb(q, r.jobId, c.lease.leaseId)).toEqual({ok: false, reason: "JOB_CANCELLED"});
+    expect(done(q, r.jobId, c.lease.leaseId, {status: "SUCCEEDED", artifacts: [art]})).toEqual({ok: false, reason: "JOB_CANCELLED"});
     const s = q.get(r.jobId)!;
     expect(s.events.some(e => e.type === "ARTIFACT" || e.type === "SUCCEEDED")).toBe(false);
     expect(s.status).toBe("CANCELLED");
@@ -75,10 +78,10 @@ describe("CLOUD-T0003 cloud job queue", () => {
     const q = mkQueue(); const r = req(); q.submit(r);
     const c = q.claim(auth("claim", "*")); if (!c.ok) throw new Error(c.reason);
     expect(q.claim(auth("claim", "*", "worker-b", WORKER_FIXTURE + "b"))).toEqual({ok: false, reason: "NO_JOB"});
-    expect(q.complete(auth("complete", r.jobId, "worker-b", WORKER_FIXTURE + "b"), r.jobId, c.lease.leaseId, {status: "SUCCEEDED"})).toEqual({ok: false, reason: "LEASE_MISMATCH"});
-    expect(q.complete(auth("complete", r.jobId), r.jobId, "other-lease", {status: "SUCCEEDED"})).toEqual({ok: false, reason: "LEASE_MISMATCH"});
-    expect(q.complete(auth("complete", r.jobId), r.jobId, c.lease.leaseId, {status: "SUCCEEDED"})).toEqual({ok: true, status: "SUCCEEDED"});
-    expect(q.complete(auth("complete", r.jobId), r.jobId, c.lease.leaseId, {status: "SUCCEEDED"})).toEqual({ok: false, reason: "JOB_TERMINAL"});
+    expect(done(q, r.jobId, c.lease.leaseId, {status: "SUCCEEDED"}, "worker-b", WORKER_FIXTURE + "b")).toEqual({ok: false, reason: "LEASE_MISMATCH"});
+    expect(done(q, r.jobId, "other-lease", {status: "SUCCEEDED"})).toEqual({ok: false, reason: "LEASE_MISMATCH"});
+    expect(done(q, r.jobId, c.lease.leaseId, {status: "SUCCEEDED"})).toEqual({ok: true, status: "SUCCEEDED"});
+    expect(done(q, r.jobId, c.lease.leaseId, {status: "SUCCEEDED"})).toEqual({ok: false, reason: "JOB_TERMINAL"});
   });
 
   it("lease expiry: retried after backoff, then TIMED_OUT when attempts are exhausted; the stale worker's result is refused", () => {
@@ -86,7 +89,7 @@ describe("CLOUD-T0003 cloud job queue", () => {
     const c1 = q.claim(auth("claim", "*")); if (!c1.ok) throw new Error(c1.reason);
     advance(61_000); q.reap();
     expect(q.get(r.jobId)!.status).toBe("QUEUED");
-    expect(q.complete(auth("complete", r.jobId), r.jobId, c1.lease.leaseId, {status: "SUCCEEDED"})).toEqual({ok: false, reason: "LEASE_MISMATCH"});
+    expect(done(q, r.jobId, c1.lease.leaseId, {status: "SUCCEEDED"})).toEqual({ok: false, reason: "LEASE_MISMATCH"});
     expect(q.claim(auth("claim", "*"))).toEqual({ok: false, reason: "NO_JOB"});   // backoff 1 s
     advance(1_000);
     const c2 = q.claim(auth("claim", "*")); if (!c2.ok) throw new Error(c2.reason);
@@ -101,7 +104,7 @@ describe("CLOUD-T0003 cloud job queue", () => {
     for (const expected of ["RETRYING", "FAILED"]) {
       advance(1_000);
       const c = q.claim(auth("claim", "*")); if (!c.ok) throw new Error(c.reason);
-      expect(q.complete(auth("complete", r.jobId), r.jobId, c.lease.leaseId, {status: "FAILED", message: "exit 1"})).toMatchObject({ok: true});
+      expect(done(q, r.jobId, c.lease.leaseId, {status: "FAILED", message: "exit 1"})).toMatchObject({ok: true});
       expect(q.get(r.jobId)!.events.at(-1)!.type).toBe(expected);
     }
   });
@@ -109,7 +112,7 @@ describe("CLOUD-T0003 cloud job queue", () => {
   it("job timeoutMs bounds the whole run even with heartbeats", () => {
     const q = mkQueue(); const r = req({timeoutMs: 120_000}); q.submit(r);
     const c = q.claim(auth("claim", "*")); if (!c.ok) throw new Error(c.reason);
-    for (let i = 0; i < 3; i++) { advance(50_000); q.heartbeat(auth("heartbeat", r.jobId), r.jobId, c.lease.leaseId); }
+    for (let i = 0; i < 3; i++) { advance(50_000); hb(q, r.jobId, c.lease.leaseId); }
     q.reap();
     expect(q.get(r.jobId)!.status).toBe("TIMED_OUT");
   });
@@ -119,7 +122,7 @@ describe("CLOUD-T0003 cloud job queue", () => {
     const c = q.claim(auth("claim", "*")); if (!c.ok) throw new Error(c.reason);
     q.stopAll();
     expect(q.get(a.jobId)!.status).toBe("STOPPED"); expect(q.get(b.jobId)!.status).toBe("STOPPED");
-    expect(q.complete(auth("complete", a.jobId), a.jobId, c.lease.leaseId, {status: "SUCCEEDED", artifacts: [art]})).toEqual({ok: false, reason: "GLOBAL_STOP_ACTIVE"});
+    expect(done(q, a.jobId, c.lease.leaseId, {status: "SUCCEEDED", artifacts: [art]})).toEqual({ok: false, reason: "GLOBAL_STOP_ACTIVE"});
     expect(q.submit(req())).toEqual({ok: false, reason: "GLOBAL_STOP_ACTIVE"});
     expect(q.claim(auth("claim", "*"))).toEqual({ok: false, reason: "GLOBAL_STOP_ACTIVE"});
     expect(mkQueue().isStopped).toBe(true);
@@ -144,7 +147,7 @@ describe("CLOUD-T0003 cloud job queue", () => {
     const c = q1.claim(auth("claim", "*")); if (!c.ok) throw new Error(c.reason);
     const q2 = mkQueue();
     expect(q2.get(b.jobId)!.status).toBe("QUEUED");
-    expect(q2.complete(auth("complete", a.jobId), a.jobId, c.lease.leaseId, {status: "SUCCEEDED"})).toEqual({ok: false, reason: "LEASE_EXPIRED"});
+    expect(done(q2, a.jobId, c.lease.leaseId, {status: "SUCCEEDED"})).toEqual({ok: false, reason: "LEASE_EXPIRED"});
     q2.reap(); expect(q2.get(a.jobId)!.status).toBe("QUEUED");
     expect(q2.submit(a)).toEqual({ok: true, jobId: a.jobId, replay: true});   // idempotency persists
   });
@@ -159,9 +162,58 @@ describe("CLOUD-T0003 cloud job queue", () => {
     const q = mkQueue(); const r = req(); q.submit(r);
     const c = q.claim(auth("claim", "*")); if (!c.ok) throw new Error(c.reason);
     const before = q.get(r.jobId)!.events.length;
-    expect(q.complete(auth("complete", r.jobId), r.jobId, c.lease.leaseId, {status: "DONE" as "SUCCEEDED"})).toEqual({ok: false, reason: "RESULT_INVALID"});
-    expect(q.complete(auth("complete", r.jobId), r.jobId, c.lease.leaseId, {status: "SUCCEEDED", artifacts: [art, {...art, name: "../x"}]})).toEqual({ok: false, reason: "RESULT_INVALID"});
+    expect(done(q, r.jobId, c.lease.leaseId, {status: "DONE" as "SUCCEEDED"})).toEqual({ok: false, reason: "RESULT_INVALID"});
+    expect(done(q, r.jobId, c.lease.leaseId, {status: "SUCCEEDED", artifacts: [art, {...art, name: "../x"}]})).toEqual({ok: false, reason: "RESULT_INVALID"});
     expect(q.get(r.jobId)!.events.length).toBe(before);
+  });
+  it("B-1: after timeoutMs, heartbeat and complete are refused and no output is recorded; heartbeats cannot extend the lease past the bound", () => {
+    const q = mkQueue(60_000); const r = req({timeoutMs: 120_000}); q.submit(r);
+    const c = q.claim(auth("claim", "*")); if (!c.ok) throw new Error(c.reason);
+    advance(50_000); expect(hb(q, r.jobId, c.lease.leaseId)).toEqual({ok: true});
+    advance(50_000); expect(hb(q, r.jobId, c.lease.leaseId)).toEqual({ok: true});
+    expect(q.get(r.jobId)!.lease!.expiresAt).toBe(Date.parse("2026-11-03T12:00:00Z") + 120_000);   // 100 s + 60 s lease, bound 120 s
+    advance(100_000);
+    expect(done(q, r.jobId, c.lease.leaseId, {status: "SUCCEEDED", artifacts: [art]})).toEqual({ok: false, reason: "JOB_TIMED_OUT"});
+    const s = q.get(r.jobId)!;
+    expect(s.status).toBe("TIMED_OUT"); expect(s.events.some(e => e.type === "ARTIFACT" || e.type === "SUCCEEDED")).toBe(false);
+    expect(hb(q, r.jobId, c.lease.leaseId)).toEqual({ok: false, reason: "JOB_TERMINAL"});
+  });
+
+  it("B-2: a used worker proof is refused after a restart (nonces are persisted)", () => {
+    const q1 = mkQueue(); q1.submit(req()); q1.submit(req());
+    const proof = auth("claim", "*");
+    expect(q1.claim(proof)).toMatchObject({ok: true});
+    const q2 = mkQueue();
+    expect(q2.claim(proof)).toEqual({ok: false, reason: "WORKER_AUTH_REPLAYED"});
+    expect(q2.claim(auth("claim", "*"))).toMatchObject({ok: true});
+  });
+
+  it("N-1: the worker MAC binds the lease and the result body; a changed lease or result is refused", () => {
+    const q = mkQueue(); const r = req(); q.submit(r);
+    const c = q.claim(auth("claim", "*")); if (!c.ok) throw new Error(c.reason);
+    const signedFor = {status: "FAILED" as const};
+    const proof = auth("complete", r.jobId, "worker-a", WORKER_FIXTURE, {leaseId: c.lease.leaseId, result: signedFor});
+    expect(q.complete(proof, r.jobId, c.lease.leaseId, {status: "SUCCEEDED", artifacts: [art]})).toEqual({ok: false, reason: "WORKER_AUTH_INVALID"});
+    const hbProof = auth("heartbeat", r.jobId, "worker-a", WORKER_FIXTURE, {leaseId: "other-lease"});
+    expect(q.heartbeat(hbProof, r.jobId, c.lease.leaseId)).toEqual({ok: false, reason: "WORKER_AUTH_INVALID"});
+    expect(q.get(r.jobId)!.status).toBe("RUNNING");
+  });
+
+  it("N-2: submit writes its two journal lines atomically; a torn tail is a typed JOURNAL_CORRUPT", () => {
+    const q = mkQueue(); const r = req(); q.submit(r);
+    const j = path.join(dir, "jobs.journal.jsonl");
+    expect(fs.readFileSync(j, "utf8").trim().split("\n").map(l => JSON.parse(l).kind)).toEqual(["submit", "event"]);
+    fs.appendFileSync(j, '{"kind":"event","event":{"jobId"');
+    expect(() => mkQueue()).toThrow(/JOURNAL_CORRUPT: torn trailing line/);
+  });
+
+  it("N-3: rejected results and job id reuse are audited", () => {
+    const q = mkQueue(); const r = req(); q.submit(r);
+    const c = q.claim(auth("claim", "*")); if (!c.ok) throw new Error(c.reason);
+    done(q, r.jobId, c.lease.leaseId, {status: "DONE" as "SUCCEEDED"});
+    q.submit({...req(), jobId: r.jobId});
+    const audit = fs.readFileSync(path.join(dir, "jobs.audit.jsonl"), "utf8");
+    expect(audit).toContain('"reason":"RESULT_INVALID"'); expect(audit).toContain('"reason":"JOB_ID_REUSED"');
   });
 });
 }
