@@ -2,7 +2,7 @@
 import {describe, it, expect} from "vitest";
 import {issueSession, MAX_SESSION_TTL_MS} from "../../apps/control-api/src/cloud/remote-gateway.js";
 import {
-  SessionKeyRing, checkEnvironmentSeparation, evaluateHealth, evaluatePromotion, secretsEqual, MAX_STAGING_EVIDENCE_AGE_MS,
+  SessionKeyRing, checkEnvironmentSeparation, evaluateHealth, evaluatePromotion, issueDeployApproval, secretsEqual, MAX_STAGING_EVIDENCE_AGE_MS, MAX_DEPLOY_APPROVAL_TTL_MS,
   type HealthProbe, type HealthReport,
 } from "../../apps/control-api/src/cloud/deployment.js";
 
@@ -19,11 +19,13 @@ const probe = (name: string, ok: boolean | "throw" | "hang", critical = true): H
   return {ok};
 }});
 const deps = () => ({staging: {env: STG_ENV, keys: SessionKeyRing.create("staging", "stg-k1", S1)}, production: {env: PRD_ENV, keys: SessionKeyRing.create("production", "prd-k1", P1)}});
-const healthy: HealthReport = {environment: "staging", state: "HEALTHY", checkedAt: t0.toISOString(), probes: [{name: "api", ok: true, critical: true}]};
+const healthy: HealthReport = {environment: "staging", state: "HEALTHY", checkedAt: t0.toISOString(), artifactSha256: SHA, probes: [{name: "api", ok: true, critical: true}]};
 const evidence = (over: Record<string, unknown> = {}) => ({artifactSha256: SHA, stagingHealth: healthy, smokePassed: true, smokeAt: t0.toISOString(), ...over});
-const founder = (ring: SessionKeyRing, roles: ("FOUNDER" | "OPERATOR" | "VIEWER")[] = ["FOUNDER"], now = t0) => {
-  const k = ring.signingKey(); return issueSession({subject: "founder-01", tenantId: "tenant-001", roles}, 3_600_000, k.keyId, k.secret, now);
+const founder = (ring: SessionKeyRing, roles: ("FOUNDER" | "OPERATOR" | "VIEWER")[] = ["FOUNDER"], now = t0, tenantId = "platform-001", subject = "founder-01") => {
+  const k = ring.signingKey(); return issueSession({subject, tenantId, roles}, 3_600_000, k.keyId, k.secret, now);
 };
+const sidOf = (token: string) => (JSON.parse(Buffer.from(token.split(".")[2]!, "base64url").toString("utf8")) as {sid: string}).sid;
+const policy = {platformTenantId: "platform-001"};
 
 export function registerCloudDeployCases(): void {
   describe("CLOUD-T0012 session key rotation", () => {
@@ -61,6 +63,12 @@ export function registerCloudDeployCases(): void {
     });
     it("secretsEqual is digest based and exact", () => {
       expect(secretsEqual(S1, S1)).toBe(true); expect(secretsEqual(S1, S2)).toBe(false); expect(secretsEqual(S1, Buffer.from(S1))).toBe(true);
+    });
+    it("Buffer secrets are copied on admit: later mutation by the caller does not change the ring (LOW-6)", () => {
+      const buf = Buffer.from(S1); const ring = SessionKeyRing.create("staging", "stg-k1", buf);
+      const tok = founder(ring); buf.fill(0);
+      expect(ring.verify(tok, at(1000)).ok).toBe(true);
+      expect(ring.rotate("stg-k2", S1, t0)).toEqual({ok: false, reason: "KEY_REUSED"});
     });
     it("describe() never exposes secret material", () => {
       const ring = SessionKeyRing.create("production", "prd-k1", P1); ring.rotate("prd-k2", P2, t0);
@@ -112,24 +120,39 @@ export function registerCloudDeployCases(): void {
       const weird: HealthProbe = {name: "api", critical: true, check: async () => ({ok: "yes" as unknown as boolean})};
       expect((await evaluateHealth({env: STG_ENV, keys: keys(), probes: [weird], now: t0})).state).toBe("UNHEALTHY");
     });
+    it("carries the artifact sha in the report; a throwing redactor still yields a report (NB-4, NB-5)", async () => {
+      const r = await evaluateHealth({env: STG_ENV, keys: keys(), probes: [probe("api", true), probe("db", "throw")], now: t0, artifactSha256: SHA,
+        redact: () => { throw new Error("unbound redactor"); }});
+      expect(r.artifactSha256).toBe(SHA); expect(r.state).toBe("UNHEALTHY"); expect(r.probes[1]!.detail).toBe("[REDACTED]");
+      expect((await evaluateHealth({env: {}, keys: keys(), probes: [], now: t0, artifactSha256: SHA})).artifactSha256).toBe(SHA);
+      await expect(evaluateHealth({env: STG_ENV, keys: keys(), probes: [], now: t0, artifactSha256: "bad"})).rejects.toThrow("HEALTH_ARTIFACT_INVALID");
+    });
     it("rejects an out-of-range probe timeout", async () => {
       await expect(evaluateHealth({env: STG_ENV, keys: keys(), probes: [probe("api", true)], now: t0, timeoutMs: 1})).rejects.toThrow("HEALTH_TIMEOUT_INVALID");
     });
   });
 
   describe("CLOUD-T0012 promotion gate (production only via authorised deploy)", () => {
-    it("allows promotion with matching healthy staging evidence and a production FOUNDER session", () => {
-      const d = deps();
-      expect(evaluatePromotion({...d, artifactSha256: SHA, evidence: evidence(), deployToken: founder(d.production.keys), now: at(1000)}))
-        .toEqual({ok: true, approvedBy: "founder-01", artifactSha256: SHA});
+    const setup = () => {
+      const d = deps(); const tok = founder(d.production.keys);
+      const approval = issueDeployApproval(d.production.keys, sidOf(tok), SHA, at(500));
+      return {d, tok, approval, base: {...d, artifactSha256: SHA, evidence: evidence(), deployToken: tok, deployApproval: approval, policy, now: at(1000)}};
+    };
+    type P = Parameters<typeof evaluatePromotion>[0];
+    const run = (base: P, over: Record<string, unknown> = {}) => { const x = evaluatePromotion({...base, ...over} as P); return x.ok ? "OK" : x.reason; };
+    it("allows promotion with matching healthy staging evidence, a platform FOUNDER session and an artifact-bound approval", () => {
+      const {base} = setup();
+      expect(evaluatePromotion(base)).toEqual({ok: true, approvedBy: "founder-01", artifactSha256: SHA});
+      expect(run(base, {policy: {platformTenantId: "platform-001", founderSubjects: new Set(["founder-01"])}})).toBe("OK");
     });
     it("denies every missing precondition (fail-closed)", () => {
-      const d = deps(); const tok = founder(d.production.keys); const base = {...d, artifactSha256: SHA, evidence: evidence(), deployToken: tok, now: at(1000)};
-      const r = (over: Record<string, unknown>) => { const x = evaluatePromotion({...base, ...over} as Parameters<typeof evaluatePromotion>[0]); return x.ok ? "OK" : x.reason; };
+      const {d, base} = setup(); const r = (over: Record<string, unknown>) => run(base, over);
       expect(r({artifactSha256: "nope"})).toBe("ARTIFACT_INVALID");
       expect(r({evidence: evidence({artifactSha256: "b".repeat(64)})})).toBe("STAGING_EVIDENCE_MISMATCH");
       expect(r({evidence: evidence({stagingHealth: {...healthy, state: "DEGRADED"}})})).toBe("STAGING_UNHEALTHY");
       expect(r({evidence: evidence({stagingHealth: {...healthy, environment: "production"}})})).toBe("STAGING_UNHEALTHY");
+      expect(r({evidence: evidence({stagingHealth: {...healthy, artifactSha256: "b".repeat(64)}})})).toBe("STAGING_UNHEALTHY");   // health for another artifact
+      expect(r({evidence: evidence({stagingHealth: {...healthy, artifactSha256: undefined}})})).toBe("STAGING_UNHEALTHY");
       expect(r({evidence: evidence({smokePassed: false})})).toBe("STAGING_SMOKE_FAILED");
       expect(r({now: at(MAX_STAGING_EVIDENCE_AGE_MS + 1)})).toBe("STAGING_EVIDENCE_STALE");
       expect(r({evidence: evidence({smokeAt: "garbage"})})).toBe("STAGING_EVIDENCE_STALE");
@@ -140,12 +163,38 @@ export function registerCloudDeployCases(): void {
       expect(r({now: at(3_600_000)})).toBe("DEPLOY_SESSION_EXPIRED");
       expect(r({production: {...d.production, keys: SessionKeyRing.create("production", "prd-k9", S1)}})).toBe("SECRET_SHARED");
     });
-    it("a deploy token signed before a production key rotation still works during overlap, not after revoke", () => {
-      const d = deps(); const tok = founder(d.production.keys);
-      d.production.keys.rotate("prd-k2", P2, at(500));
-      expect(evaluatePromotion({...d, artifactSha256: SHA, evidence: evidence(), deployToken: tok, now: at(1000)}).ok).toBe(true);
+    it("binds approval to the platform tenant and the founder allow-list (NB-2)", () => {
+      const {d, base} = setup();
+      const tenantFounder = founder(d.production.keys, ["FOUNDER"], t0, "tenant-001");
+      expect(run(base, {deployToken: tenantFounder, deployApproval: issueDeployApproval(d.production.keys, sidOf(tenantFounder), SHA, at(500))})).toBe("DEPLOY_TENANT_DENIED");
+      expect(run(base, {policy: {platformTenantId: "platform-001", founderSubjects: new Set(["founder-02"])}})).toBe("DEPLOY_SUBJECT_DENIED");
+      expect(run(base, {policy: undefined})).toBe("DEPLOY_POLICY_INVALID");
+      expect(run(base, {policy: {platformTenantId: ""}})).toBe("DEPLOY_POLICY_INVALID");
+      expect(run(base, {policy: {platformTenantId: "platform-001", founderSubjects: new Set()}})).toBe("DEPLOY_POLICY_INVALID");
+    });
+    it("binds approval to the session and the artifact sha, short-lived, signed by production (NB-3)", () => {
+      const {d, tok, approval, base} = setup();
+      expect(run(base, {deployApproval: undefined})).toBe("DEPLOY_APPROVAL_INVALID");          // a stolen session alone is not deploy authority
+      const otherSha = "c".repeat(64);
+      expect(run(base, {deployApproval: issueDeployApproval(d.production.keys, sidOf(tok), otherSha, at(500))})).toBe("DEPLOY_APPROVAL_INVALID");
+      const other = founder(d.production.keys);
+      expect(run(base, {deployApproval: issueDeployApproval(d.production.keys, sidOf(other), SHA, at(500))})).toBe("DEPLOY_APPROVAL_INVALID");
+      expect(run(base, {deployApproval: approval.replace(SHA, otherSha)})).toBe("DEPLOY_APPROVAL_INVALID");   // tampered sha
+      expect(run(base, {deployApproval: approval.slice(0, -1) + (approval.endsWith("0") ? "1" : "0")})).toBe("DEPLOY_APPROVAL_INVALID");
+      expect(run(base, {now: at(500 + MAX_DEPLOY_APPROVAL_TTL_MS)})).toBe("DEPLOY_APPROVAL_EXPIRED");
+      const p = approval.split("."); p[4] = String(Number(p[4]) + 3_600_000);
+      expect(run(base, {deployApproval: p.join(".")})).toBe("DEPLOY_APPROVAL_INVALID");          // extending expiry breaks the mac
+      expect(run(base, {deployApproval: issueDeployApproval(d.production.keys, sidOf(tok), SHA, at(3_600_000))})).toBe("DEPLOY_APPROVAL_INVALID");   // forward-skewed issuer clock
+      expect(() => issueDeployApproval(d.staging.keys, sidOf(tok), SHA, t0)).toThrow("DEPLOY_APPROVAL_RING_NOT_PRODUCTION");
+      expect(() => issueDeployApproval(d.production.keys, sidOf(tok), SHA, t0, MAX_DEPLOY_APPROVAL_TTL_MS + 1)).toThrow("DEPLOY_APPROVAL_TTL_INVALID");
+      expect(() => issueDeployApproval(d.production.keys, sidOf(tok), "x", t0)).toThrow("DEPLOY_APPROVAL_FIELDS_INVALID");
+    });
+    it("a deploy token and approval signed before a production key rotation work during overlap, not after revoke", () => {
+      const {d, base} = setup();
+      d.production.keys.rotate("prd-k2", P2, at(600));
+      expect(run(base)).toBe("OK");
       d.production.keys.revoke("prd-k1");
-      expect(evaluatePromotion({...d, artifactSha256: SHA, evidence: evidence(), deployToken: tok, now: at(1000)})).toEqual({ok: false, reason: "DEPLOY_SESSION_INVALID"});
+      expect(run(base)).toBe("DEPLOY_SESSION_INVALID");
     });
   });
 }

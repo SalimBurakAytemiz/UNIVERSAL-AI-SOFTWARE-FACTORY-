@@ -1,5 +1,5 @@
 // //TR: Bu dosya CLOUD-T0012 staging/production ayrımını (ayrı uç nokta, ayrık anahtar kimlikleri, farklı secret'lar), oturum anahtarı rotasyonunu (örtüşen keyId penceresi, sabit-zamanlı doğrulama), sağlık durumunu ve production'a yalnız yetkili terfi kapısını fail-closed olarak uygular; hiçbir altyapı açmaz, ağ çağrısı yapmaz.
-import {createHash, timingSafeEqual} from "node:crypto";
+import {createHash, createHmac, timingSafeEqual} from "node:crypto";
 import type {CloudEnvironment} from "../../../../core/cloud/contracts.js";
 import {MAX_SESSION_TTL_MS, resolveCloudRuntimeConfig, verifySession, type CloudRuntimeConfig, type CloudSession} from "./remote-gateway.js";
 
@@ -8,6 +8,8 @@ const SHA256_RE = /^[0-9a-f]{64}$/;
 const MIN_SECRET_BYTES = 32;
 const digest = (s: string | Buffer): Buffer => createHash("sha256").update(s).digest();
 const byteLen = (s: string | Buffer): number => typeof s === "string" ? Buffer.byteLength(s, "utf8") : s.byteLength;
+/** Buffer secret'lar kopyalanır: çağıran Buffer'ı sonradan değiştirse/sıfırlasa da halka ve özet geçmişi tutarlı kalır. */
+const ownCopy = (s: string | Buffer): string | Buffer => typeof s === "string" ? s : Buffer.from(s);
 /** Sabit-zamanlı eşitlik: iki secret'ın özetleri karşılaştırılır (uzunluk sızmaz). */
 export function secretsEqual(a: string | Buffer, b: string | Buffer): boolean { return timingSafeEqual(digest(a), digest(b)); }
 
@@ -31,7 +33,7 @@ export class SessionKeyRing {
   static create(environment: CloudEnvironment, keyId: string, secret: string | Buffer): SessionKeyRing {
     const ring = new SessionKeyRing(environment);
     const err = ring.admit(keyId, secret); if (err) throw new Error(err);
-    ring.entries.push({keyId, secret, state: "ACTIVE", verifyUntil: null});
+    ring.entries.push({keyId, secret: ownCopy(secret), state: "ACTIVE", verifyUntil: null});
     return ring;
   }
 
@@ -51,7 +53,7 @@ export class SessionKeyRing {
     this.prune(now);
     const prev = this.entries.find(e => e.state === "ACTIVE")!;
     prev.state = "VERIFY_ONLY"; prev.verifyUntil = now.getTime() + overlapMs;
-    this.entries.push({keyId, secret, state: "ACTIVE", verifyUntil: null});
+    this.entries.push({keyId, secret: ownCopy(secret), state: "ACTIVE", verifyUntil: null});
     return {ok: true, retiredKeyId: prev.keyId, verifyUntil: new Date(prev.verifyUntil).toISOString()};
   }
 
@@ -81,6 +83,9 @@ export class SessionKeyRing {
 
   /** @internal ayrım denetimi için: halkadaki tüm (geçmiş dahil) keyId ve secret özetleri. */
   footprint(): {ids: ReadonlySet<string>; digests: readonly Buffer[]} { return {ids: this.usedIds, digests: this.usedDigests}; }
+
+  /** @internal dağıtım onayı doğrulaması için: halkada şu an geçerli olan bir keyId'nin secret'ı. */
+  keyFor(keyId: string, now: Date): string | Buffer | undefined { return this.verificationKeys(now).get(keyId); }
 
   verify(token: unknown, now: Date, revoked?: ReadonlySet<string>) { return verifySession(token, this.verificationKeys(now), now, revoked); }
 }
@@ -113,7 +118,7 @@ export function checkEnvironmentSeparation(staging: EnvironmentDeployment, produ
 // ---------- health ----------
 export type HealthState = "HEALTHY" | "DEGRADED" | "UNHEALTHY" | "UNKNOWN";
 export interface HealthProbe {readonly name: string; readonly critical: boolean; check(signal: AbortSignal): Promise<{ok: boolean; detail?: string}>}
-export interface HealthReport {environment: CloudEnvironment | null; state: HealthState; checkedAt: string; probes: Array<{name: string; ok: boolean; critical: boolean; detail?: string}>}
+export interface HealthReport {environment: CloudEnvironment | null; state: HealthState; checkedAt: string; artifactSha256?: string; probes: Array<{name: string; ok: boolean; critical: boolean; detail?: string}>}
 
 /**
  * Sağlık: önce çalışma zamanı yapılandırması (yoksa UNHEALTHY), sonra en az bir anahtar, sonra sondalar.
@@ -121,16 +126,19 @@ export interface HealthReport {environment: CloudEnvironment | null; state: Heal
  * Zaman aşımı/hata sonda başarısızlığıdır; detay redakte edilir (ör. CloudGateway.redact).
  */
 export async function evaluateHealth(o: {env: Readonly<Record<string, string | undefined>>; keys: SessionKeyRing; probes: readonly HealthProbe[];
-  now: Date; timeoutMs?: number; redact?: (s: string) => string}): Promise<HealthReport> {
+  now: Date; timeoutMs?: number; redact?: (s: string) => string; artifactSha256?: string}): Promise<HealthReport> {
   const checkedAt = o.now.toISOString();
-  const redact = o.redact ?? ((_: string) => "[REDACTED]");   // redaktör verilmezse ayrıntı hiç gösterilmez
+  // Redaktör verilmezse ayrıntı hiç gösterilmez; redaktör hata atarsa (ör. bağlanmamış gw.redact) rapor yine üretilir, ayrıntı gizlenir.
+  const redact = (s: string): string => { if (!o.redact) return "[REDACTED]"; try { return String(o.redact(s)); } catch { return "[REDACTED]"; } };
+  if (o.artifactSha256 !== undefined && (typeof o.artifactSha256 !== "string" || !SHA256_RE.test(o.artifactSha256))) throw new Error("HEALTH_ARTIFACT_INVALID");
+  const tag = o.artifactSha256 ? {artifactSha256: o.artifactSha256} : {};
   const rt = resolveCloudRuntimeConfig(o.env);
-  if (!rt.ok) return {environment: null, state: "UNHEALTHY", checkedAt, probes: [{name: "runtime-config", ok: false, critical: true, detail: rt.reason}]};
+  if (!rt.ok) return {environment: null, state: "UNHEALTHY", checkedAt, ...tag, probes: [{name: "runtime-config", ok: false, critical: true, detail: rt.reason}]};
   const environment = rt.config.environment;
-  if (o.keys.environment !== environment) return {environment, state: "UNHEALTHY", checkedAt, probes: [{name: "session-keys", ok: false, critical: true, detail: "KEYRING_ENVIRONMENT_MISMATCH"}]};
+  if (o.keys.environment !== environment) return {environment, state: "UNHEALTHY", checkedAt, ...tag, probes: [{name: "session-keys", ok: false, critical: true, detail: "KEYRING_ENVIRONMENT_MISMATCH"}]};
   const timeoutMs = o.timeoutMs ?? 5_000;
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 10 || timeoutMs > 60_000) throw new Error("HEALTH_TIMEOUT_INVALID");
-  if (o.probes.length === 0) return {environment, state: "UNKNOWN", checkedAt, probes: []};
+  if (o.probes.length === 0) return {environment, state: "UNKNOWN", checkedAt, ...tag, probes: []};
   const results = await Promise.all(o.probes.map(async p => {
     const ctl = new AbortController(); let timer: NodeJS.Timeout | undefined;
     try {
@@ -143,30 +151,71 @@ export async function evaluateHealth(o: {env: Readonly<Record<string, string | u
     } finally { if (timer) clearTimeout(timer); }
   }));
   const state: HealthState = results.some(r => !r.ok && r.critical) ? "UNHEALTHY" : results.some(r => !r.ok) ? "DEGRADED" : "HEALTHY";
-  return {environment, state, checkedAt, probes: results};
+  return {environment, state, checkedAt, ...tag, probes: results};
 }
 
 // ---------- promotion gate (staging -> production) ----------
 export interface StagingEvidence {artifactSha256: string; stagingHealth: HealthReport; smokePassed: boolean; smokeAt: string}
 export type PromotionDeny =
   | SeparationDeny | "ARTIFACT_INVALID" | "STAGING_EVIDENCE_MISMATCH" | "STAGING_UNHEALTHY" | "STAGING_SMOKE_FAILED" | "STAGING_EVIDENCE_STALE"
-  | "DEPLOY_SESSION_INVALID" | "DEPLOY_SESSION_EXPIRED" | "DEPLOY_NOT_FOUNDER";
+  | "DEPLOY_SESSION_INVALID" | "DEPLOY_SESSION_EXPIRED" | "DEPLOY_NOT_FOUNDER" | "DEPLOY_TENANT_DENIED" | "DEPLOY_SUBJECT_DENIED"
+  | "DEPLOY_POLICY_INVALID" | "DEPLOY_APPROVAL_INVALID" | "DEPLOY_APPROVAL_EXPIRED";
 export const MAX_STAGING_EVIDENCE_AGE_MS = 24 * 60 * 60 * 1000;
+export const MAX_DEPLOY_APPROVAL_TTL_MS = 15 * 60 * 1000;
+/** Production terfisini kim onaylayabilir: yalnız platform tenant'ı ve (ayarlıysa) izinli Founder subject'leri. */
+export interface DeployPolicy {platformTenantId: string; founderSubjects?: ReadonlySet<string>}
+
+const approvalMac = (key: string | Buffer, keyId: string, sid: string, sha: string, exp: number) =>
+  createHmac("sha256", key).update(`da1.${keyId}.${sid}.${sha}.${exp}`).digest("hex");
 
 /**
- * Production'a terfi yalnız: ayrım geçerli + aynı artifact SHA için staging HEALTHY + smoke PASS (≤24 saat) +
- * production anahtar halkasıyla doğrulanan FOUNDER oturumu. Staging oturumu production'da geçmez (ayrık anahtarlar).
+ * Sunucu tarafında, Founder'ın açık onay eyleminde üretilen, tek artifact'a ve tek oturuma bağlı kısa ömürlü dağıtım onayı:
+ * `da1.<keyId>.<sid>.<artifactSha256>.<expiresAtMs>.<hex hmac>` — production ACTIVE anahtarıyla imzalanır, ≤15 dk geçerlidir.
+ * Çalınmış bir oturum belirteci tek başına dağıtım yetkisi vermez; başka artifact için onay yeniden kullanılamaz.
+ */
+export function issueDeployApproval(ring: SessionKeyRing, sid: string, artifactSha256: string, now: Date, ttlMs: number = MAX_DEPLOY_APPROVAL_TTL_MS): string {
+  if (ring.environment !== "production") throw new Error("DEPLOY_APPROVAL_RING_NOT_PRODUCTION");
+  if (typeof sid !== "string" || !/^[A-Za-z0-9-]{8,64}$/.test(sid) || typeof artifactSha256 !== "string" || !SHA256_RE.test(artifactSha256)) throw new Error("DEPLOY_APPROVAL_FIELDS_INVALID");
+  if (!Number.isSafeInteger(ttlMs) || ttlMs < 1000 || ttlMs > MAX_DEPLOY_APPROVAL_TTL_MS) throw new Error("DEPLOY_APPROVAL_TTL_INVALID");
+  const k = ring.signingKey(), exp = now.getTime() + ttlMs;
+  return `da1.${k.keyId}.${sid}.${artifactSha256}.${exp}.${approvalMac(k.secret, k.keyId, sid, artifactSha256, exp)}`;
+}
+
+function verifyDeployApproval(approval: unknown, ring: SessionKeyRing, sid: string, artifactSha256: string, now: Date): "OK" | "DEPLOY_APPROVAL_INVALID" | "DEPLOY_APPROVAL_EXPIRED" {
+  if (typeof approval !== "string" || approval.length > 512) return "DEPLOY_APPROVAL_INVALID";
+  const parts = approval.split(".");   // keyId "." içerebilir: son dört alan sabit, keyId aradaki kısımdır
+  if (parts.length < 6 || parts[0] !== "da1") return "DEPLOY_APPROVAL_INVALID";
+  const [aSid, aSha, expS, mac] = parts.slice(-4) as [string, string, string, string];
+  const keyId = parts.slice(1, -4).join(".");
+  if (!KEY_ID_RE.test(keyId) || !/^[0-9]{1,16}$/.test(expS) || !/^[0-9a-f]{64}$/.test(mac)) return "DEPLOY_APPROVAL_INVALID";
+  const key = ring.keyFor(keyId, now); if (key === undefined) return "DEPLOY_APPROVAL_INVALID";
+  const exp = Number(expS);
+  if (!timingSafeEqual(Buffer.from(approvalMac(key, keyId, aSid, aSha, exp), "hex"), Buffer.from(mac, "hex"))) return "DEPLOY_APPROVAL_INVALID";
+  if (aSid !== sid || aSha !== artifactSha256) return "DEPLOY_APPROVAL_INVALID";
+  if (exp - now.getTime() > MAX_DEPLOY_APPROVAL_TTL_MS) return "DEPLOY_APPROVAL_INVALID";
+  if (now.getTime() >= exp) return "DEPLOY_APPROVAL_EXPIRED";
+  return "OK";
+}
+
+/**
+ * Production'a terfi yalnız: ayrım geçerli + aynı artifact SHA için staging HEALTHY (rapor aynı SHA'yı taşır) + smoke PASS (≤24 saat) +
+ * production anahtar halkasıyla doğrulanan, platform tenant'ına ait (ve izin listesi varsa listedeki) FOUNDER oturumu +
+ * o oturuma ve o artifact SHA'sına bağlı süresi dolmamış dağıtım onayı. Staging oturumu production'da geçmez (ayrık anahtarlar).
+ * SINIR: staging kanıtı (smoke/health) çağıranın beyanıdır, imzalı değildir; güven Founder onayına dayanır (runbook §4).
  * Bu fonksiyon bir karar döndürür; dağıtımı kendisi yapmaz (gerçek altyapı D-03/D-29 kapsamındadır).
  */
 export function evaluatePromotion(o: {staging: EnvironmentDeployment; production: EnvironmentDeployment; artifactSha256: string;
-  evidence: StagingEvidence; deployToken: unknown; now: Date; revoked?: ReadonlySet<string>}):
+  evidence: StagingEvidence; deployToken: unknown; deployApproval: unknown; policy: DeployPolicy; now: Date; revoked?: ReadonlySet<string>}):
   {ok: true; approvedBy: string; artifactSha256: string} | {ok: false; reason: PromotionDeny} {
+  const pol = o.policy;
+  if (!pol || typeof pol.platformTenantId !== "string" || !KEY_ID_RE.test(pol.platformTenantId)
+    || (pol.founderSubjects !== undefined && (!(pol.founderSubjects instanceof Set) || pol.founderSubjects.size === 0))) return {ok: false, reason: "DEPLOY_POLICY_INVALID"};
   const sep = checkEnvironmentSeparation(o.staging, o.production);
   if (!sep.ok) return sep;
   if (typeof o.artifactSha256 !== "string" || !SHA256_RE.test(o.artifactSha256)) return {ok: false, reason: "ARTIFACT_INVALID"};
   const ev = o.evidence;
   if (!ev || ev.artifactSha256 !== o.artifactSha256) return {ok: false, reason: "STAGING_EVIDENCE_MISMATCH"};
-  if (ev.stagingHealth?.environment !== "staging" || ev.stagingHealth.state !== "HEALTHY") return {ok: false, reason: "STAGING_UNHEALTHY"};
+  if (ev.stagingHealth?.environment !== "staging" || ev.stagingHealth.state !== "HEALTHY" || ev.stagingHealth.artifactSha256 !== o.artifactSha256) return {ok: false, reason: "STAGING_UNHEALTHY"};
   if (ev.smokePassed !== true) return {ok: false, reason: "STAGING_SMOKE_FAILED"};
   const at = Date.parse(ev.smokeAt), hAt = Date.parse(ev.stagingHealth.checkedAt), n = o.now.getTime();
   if (!Number.isFinite(at) || !Number.isFinite(hAt) || at > n + 60_000 || hAt > n + 60_000 || n - at > MAX_STAGING_EVIDENCE_AGE_MS || n - hAt > MAX_STAGING_EVIDENCE_AGE_MS)
@@ -175,5 +224,9 @@ export function evaluatePromotion(o: {staging: EnvironmentDeployment; production
   if (!v.ok) return {ok: false, reason: v.reason === "SESSION_EXPIRED" ? "DEPLOY_SESSION_EXPIRED" : "DEPLOY_SESSION_INVALID"};
   const s: CloudSession = v.session;
   if (!s.roles.includes("FOUNDER")) return {ok: false, reason: "DEPLOY_NOT_FOUNDER"};
+  if (s.tenantId !== pol.platformTenantId) return {ok: false, reason: "DEPLOY_TENANT_DENIED"};
+  if (pol.founderSubjects && !pol.founderSubjects.has(s.subject)) return {ok: false, reason: "DEPLOY_SUBJECT_DENIED"};
+  const a = verifyDeployApproval(o.deployApproval, o.production.keys, s.sid, o.artifactSha256, o.now);
+  if (a !== "OK") return {ok: false, reason: a};
   return {ok: true, approvedBy: s.subject, artifactSha256: o.artifactSha256};
 }
