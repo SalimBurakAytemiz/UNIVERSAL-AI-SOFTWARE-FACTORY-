@@ -1,5 +1,6 @@
 // //TR: Bu vaka dosyası (kayıtlı tests/v7-cloud-contracts.test.ts tarafından içe aktarılır) CLOUD-T0004 bulut Control API kapısının çalışma zamanı yokken fail-closed davrandığını, https zorunluluğunu, oturum imzasını, tenant çapraz erişim reddini, en az yetkiyi, secret redaksiyonunu ve bütçe sınırlı model çağrısını doğrular.
 import {describe, it, expect} from "vitest";
+import {createHmac} from "node:crypto";
 import {
   CloudGateway, TenantBudget, authorize, issueSession, resolveCloudRuntimeConfig, verifySession,
   type GatewayAuditRecord, type ModelProvider,
@@ -109,6 +110,59 @@ export function registerCloudGatewayCases(): void {
       expect(await g.invokeModel(tok(), "tenant-001", req)).toMatchObject({ok: true});
       expect(audit.at(-1)).toMatchObject({overrun: true, costUsd: 0.9});
       expect(await g.invokeModel(tok(), "tenant-001", req)).toEqual({ok: false, reason: "BUDGET_EXCEEDED"});
+    });
+      it("BLOCKING fix: a known secret that contains a key pattern is fully redacted (known secrets first, longest first)", async () => {
+      const secret = "sk-ant-api03-" + "Z".repeat(30) + ".PRIVATE/tail+value=Q9xT7wLm";
+      const aws = ["AKIA", "ABCDEFGHIJKLMNOP", ":wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"].join("");   // örnek değer; çalışma anında birleştirilir
+      const prov: ModelProvider = {name: "leaky", async invoke() { throw new Error(`denied for ${secret} and ${aws}`); }};
+      const {g, audit} = gw({provider: prov, knownSecrets: [aws, secret]});
+      const r = await g.invokeModel(tok(), "tenant-001", req);
+      const all = JSON.stringify([r, audit]);
+      for (const leak of ["PRIVATE/tail", "Q9xT7wLm", "wJalrXUtnFEMI", "EXAMPLEKEY"]) expect(all).not.toContain(leak);
+    });
+
+    it("L-2: prototype names are never roles (issue and verify), a bad role is a deny not a throw", () => {
+      expect(() => issueSession({subject: "user-001", tenantId: "tenant-001", roles: ["constructor" as "VIEWER"]}, 1000, "sk-1", KEY, t0)).toThrow(/ROLES/);
+      for (const roles of [["constructor"], ["toString"], ["ADMIN"], []]) {
+        const body = Buffer.from(JSON.stringify({sid: "s-1", subject: "user-001", tenantId: "tenant-001", roles, issuedAt: t0.getTime(), expiresAt: t0.getTime() + 60_000})).toString("base64url");
+        const t = `v1.sk-1.${body}.${createHmac("sha256", KEY).update(`v1.sk-1.${body}`).digest("hex")}`;   // geçerli imzalı ama bozuk rol
+        expect(verifySession(t, keys, t0)).toEqual({ok: false, reason: "SESSION_INVALID"});
+        expect(gw().g.gate(t, "job.read", "tenant-001")).toEqual({ok: false, reason: "SESSION_INVALID"});
+      }
+    });
+
+    it("GW6: a session issued in the future is invalid", () => {
+      expect(verifySession(tok("tenant-001", ["OPERATOR"], 3_600_000, new Date(t0.getTime() + 5 * 60_000)), keys, t0)).toEqual({ok: false, reason: "SESSION_INVALID"});
+    });
+
+    it("L-3: production refuses every loopback form", () => {
+      for (const host of ["localhost.", "foo.localhost", "LOCALHOST", "[::ffff:127.0.0.1]", "[::1]", "[::]", "127.1.2.3", "0.0.0.0"])
+        expect(resolveCloudRuntimeConfig({UASCO_CLOUD_ENDPOINT: `https://${host}:8443/`, UASCO_CLOUD_ENVIRONMENT: "production"})).toEqual({ok: false, reason: "ENDPOINT_INSECURE"});
+      expect(resolveCloudRuntimeConfig({UASCO_CLOUD_ENDPOINT: "https://cloud.example.invalid/", UASCO_CLOUD_ENVIRONMENT: "production"})).toMatchObject({ok: true});
+    });
+
+    it("L-4/L-5: an audit sink failure never changes the result or double-settles; an invalid provider cost is charged at the cap and audited", async () => {
+      const budget = new TenantBudget(new Map([["tenant-001", 1]]));
+      const g1 = gw({budget, audit: () => { throw new Error("sink down"); }}).g;
+      expect(await g1.invokeModel(tok(), "tenant-001", req)).toMatchObject({ok: true});
+      expect(budget.committed("tenant-001")).toBeCloseTo(0.01);
+      const neg: ModelProvider = {name: "neg", async invoke() { return {text: "x", inputTokens: 1, outputTokens: 1, costUsd: -5}; }};
+      const {g, audit} = gw({provider: neg});
+      expect(await g.invokeModel(tok(), "tenant-001", req)).toMatchObject({ok: true, response: {costUsd: 0.5}});
+      expect(audit.at(-1)).toMatchObject({decision: "ALLOWED", costUsd: 0.5, reason: "PROVIDER_COST_INVALID"});
+      for (const t of [Number.NaN, 0, Number.POSITIVE_INFINITY, 5]) expect(() => gw({providerTimeoutMs: t})).toThrow(/PROVIDER_TIMEOUT_INVALID/);
+    });
+
+    it("GW10/GW13: on timeout the provider's signal is aborted; after success no timer is left running", async () => {
+      let seen: AbortSignal | undefined;
+      const hang: ModelProvider = {name: "hang", invoke: (_r, signal) => { seen = signal; return new Promise((_, rej) => signal.addEventListener("abort", () => rej(new Error("aborted")))); }};
+      expect(await gw({provider: hang}).g.invokeModel(tok(), "tenant-001", req)).toMatchObject({ok: false, reason: "PROVIDER_TIMEOUT"});
+      expect(seen?.aborted).toBe(true);
+      let fast: AbortSignal | undefined;
+      const quick: ModelProvider = {name: "quick", async invoke(_r, signal) { fast = signal; return {text: "ok", inputTokens: 1, outputTokens: 1, costUsd: 0.01}; }};
+      expect(await gw({provider: quick, providerTimeoutMs: 20}).g.invokeModel(tok(), "tenant-001", req)).toMatchObject({ok: true});
+      await new Promise(r => setTimeout(r, 60));
+      expect(fast?.aborted).toBe(false);   // zamanlayıcı temizlendi: başarılı çağrının sinyali sonradan abort edilmez
     });
   });
 }

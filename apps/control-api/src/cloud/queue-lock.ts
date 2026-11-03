@@ -75,7 +75,8 @@ export function acquireQueueLock(lockPath: string, o: QueueLockOptions = {}): Qu
   const won = (): QueueLock => {   // kilit bizde: artık geçersiz devralma jetonlarını (ve eski biçim `.takeover`) temizle
     let names: string[] = [];
     try { names = io.list(dir); } catch { return lock; }
-    for (const n of names) if (n === `${base}.takeover` || n.startsWith(`${base}.takeover.`)) { try { io.unlink(prefix + n); } catch { /* yut */ } }
+    // başka sürecin yazmakta olduğu geçici dosyaya (.tmp-) dokunulmaz (L-1)
+    for (const n of names) if ((n === `${base}.takeover` || n.startsWith(`${base}.takeover.`)) && !n.includes(".tmp-")) { try { io.unlink(prefix + n); } catch { /* yut */ } }
     return lock;
   };
   for (let attempt = 0; attempt < 4; attempt++) {

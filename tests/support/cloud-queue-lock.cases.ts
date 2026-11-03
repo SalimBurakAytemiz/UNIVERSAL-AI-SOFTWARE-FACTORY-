@@ -145,5 +145,20 @@ export function registerQueueLockCases(): void {
       expect(() => acquireQueueLock(L, {io, alive: p => !dead(p), pid: 222})).toThrow(/QUEUE_LOCKED/);
       expect(files.get(L)!.data).toBe(S2);
     });
+      it("L-1: the winner's token GC never deletes another process's in-flight temp file", () => {
+      const {io, files} = memIo();
+      const inflight = `${tok(STALE, 1)}.tmp-abcdef0123456789`;
+      files.set(inflight, {data: `333:${"e".repeat(32)}`, mtime: 0});
+      acquireQueueLock(L, {io, alive: p => !dead(p), pid: 222});
+      expect(files.has(inflight)).toBe(true);
+    });
+
+    it("QL4: the last generation (MAX) is still usable", () => {
+      const {io, files} = memIo();
+      files.set(L, {data: STALE, mtime: 0});
+      for (let k = 1; k < MAX_TAKEOVER_GENERATIONS; k++) files.set(tok(STALE, k), {data: `998:${"e".repeat(32)}`, mtime: 0});
+      const b = acquireQueueLock(L, {io, alive: p => !dead(p), pid: 222});
+      expect(files.get(L)!.data).toBe(b.id);
+    });
   });
 }

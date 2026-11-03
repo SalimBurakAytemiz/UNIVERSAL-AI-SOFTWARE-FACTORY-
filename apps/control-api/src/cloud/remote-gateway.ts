@@ -16,10 +16,19 @@ export const ROLE_PERMISSIONS: Readonly<Record<CloudRole, readonly GatewayAction
   VIEWER: ["job.read", "artifact.download"],
 });
 export const MAX_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+/** Yalnız kendi alanları: "constructor" gibi prototip adları rol sayılmaz. */
+const isRole = (r: unknown): r is CloudRole => typeof r === "string" && Object.hasOwn(ROLE_PERMISSIONS, r);
 
 // ---------- runtime configuration ----------
 export interface CloudRuntimeConfig {endpoint: URL; environment: CloudEnvironment}
-const LOOPBACK = /^(localhost|127\.\d+\.\d+\.\d+|\[::1\]|0\.0\.0\.0)$/i;
+/** Üretimde reddedilen yerel adresler: localhost (sondaki nokta ve *.localhost dahil), 127/8, 0.0.0.0, ::, ::1, IPv4-mapped loopback. */
+function isLoopbackHost(hostname: string): boolean {
+  const h = hostname.toLowerCase().replace(/\.+$/, "").replace(/^\[|\]$/g, "");
+  if (h === "localhost" || h.endsWith(".localhost")) return true;
+  if (/^127\.\d+\.\d+\.\d+$/.test(h) || h === "0.0.0.0" || h === "::" || h === "::1") return true;
+  if (/^::ffff:(127\.\d+\.\d+\.\d+|7f[0-9a-f]{2}:[0-9a-f]{1,4}|0\.0\.0\.0|0:0)$/.test(h)) return true;
+  return false;
+}
 
 /** Ortam değişkenlerinden bulut çalışma zamanını çözer. Uç nokta yoksa iş başlatılmaz; yerel WSL/process yedeği YOKTUR (CLOUD-T0014 ile uyumlu). */
 export function resolveCloudRuntimeConfig(env: Readonly<Record<string, string | undefined>>):
@@ -31,7 +40,7 @@ export function resolveCloudRuntimeConfig(env: Readonly<Record<string, string | 
   const environment = (env.UASCO_CLOUD_ENVIRONMENT ?? "staging") as CloudEnvironment;
   if (environment !== "staging" && environment !== "production") return {ok: false, reason: "CLOUD_RUNTIME_NOT_CONFIGURED"};
   if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) return {ok: false, reason: "ENDPOINT_INSECURE"};
-  if (environment === "production" && LOOPBACK.test(url.hostname)) return {ok: false, reason: "ENDPOINT_INSECURE"};
+  if (environment === "production" && isLoopbackHost(url.hostname)) return {ok: false, reason: "ENDPOINT_INSECURE"};
   return {ok: true, config: {endpoint: url, environment}};
 }
 
@@ -43,7 +52,7 @@ const b64u = (b: Buffer | string) => Buffer.from(b).toString("base64url");
 /** Oturum belirteci: `v1.<keyId>.<base64url(payload)>.<hex hmac>`. Sunucu tarafında üretilir; istemci (.exe) yalnız taşır. */
 export function issueSession(s: Omit<CloudSession, "sid" | "issuedAt" | "expiresAt">, ttlMs: number, keyId: string, secret: string | Buffer, now: Date): string {
   if (!ID_RE.test(s.subject) || !ID_RE.test(s.tenantId) || !ID_RE.test(keyId)) throw new Error("SESSION_FIELDS_INVALID");
-  if (!Array.isArray(s.roles) || s.roles.length === 0 || !s.roles.every(r => r in ROLE_PERMISSIONS)) throw new Error("SESSION_ROLES_INVALID");
+  if (!Array.isArray(s.roles) || s.roles.length === 0 || !s.roles.every(isRole)) throw new Error("SESSION_ROLES_INVALID");
   if (!Number.isSafeInteger(ttlMs) || ttlMs < 1000 || ttlMs > MAX_SESSION_TTL_MS) throw new Error("SESSION_TTL_INVALID");
   if ((typeof secret === "string" ? secret.length : secret.byteLength) < 32) throw new Error("SESSION_KEY_TOO_SHORT");
   const payload: CloudSession = {sid: randomUUID(), subject: s.subject, tenantId: s.tenantId, roles: [...new Set(s.roles)], issuedAt: now.getTime(), expiresAt: now.getTime() + ttlMs};
@@ -63,7 +72,7 @@ export function verifySession(token: unknown, keys: ReadonlyMap<string, string |
   let p: CloudSession;
   try { p = JSON.parse(Buffer.from(parts[2]!, "base64url").toString("utf8")) as CloudSession; } catch { return bad; }
   if (!p || typeof p !== "object" || typeof p.sid !== "string" || !ID_RE.test(p.subject) || !ID_RE.test(p.tenantId) || !Array.isArray(p.roles)
-    || !p.roles.every(r => r in ROLE_PERMISSIONS) || !Number.isSafeInteger(p.issuedAt) || !Number.isSafeInteger(p.expiresAt)
+    || p.roles.length === 0 || !p.roles.every(isRole) || !Number.isSafeInteger(p.issuedAt) || !Number.isSafeInteger(p.expiresAt)
     || p.expiresAt - p.issuedAt > MAX_SESSION_TTL_MS || p.issuedAt > now.getTime() + 60_000) return bad;
   if (revoked.has(p.sid)) return bad;
   if (now.getTime() >= p.expiresAt) return {ok: false, reason: "SESSION_EXPIRED"};
@@ -93,12 +102,12 @@ export class TenantBudget {
     const id = randomUUID(); this.reserved.set(id, {tenantId, usd: maxUsd}); return {ok: true, id};
   }
   /** Gerçek maliyet ayrılan tavanı aşarsa yine gerçek maliyet kaydedilir (eksik kayıt yok) ve overrun bildirilir. */
-  settle(id: string, actualUsd: number): {overrun: boolean} {
+  settle(id: string, actualUsd: number): {overrun: boolean; chargedUsd: number} {
     const r = this.reserved.get(id); if (!r) throw new Error("RESERVATION_UNKNOWN");
     this.reserved.delete(id);
     const usd = Number.isFinite(actualUsd) && actualUsd >= 0 ? actualUsd : r.usd;   // ölçülemeyen maliyet: ayrılan tavan yazılır
     this.spent.set(r.tenantId, (this.spent.get(r.tenantId) ?? 0) + usd);
-    return {overrun: usd > r.usd + 1e-9};
+    return {overrun: usd > r.usd + 1e-9, chargedUsd: usd};
   }
   release(id: string): void { this.reserved.delete(id); }
   committed(tenantId: string): number {
@@ -110,7 +119,8 @@ export class TenantBudget {
 // ---------- model invocation ----------
 export interface ModelRequest {model: string; prompt: string; maxOutputTokens: number; maxCostUsd: number}
 export interface ModelResponse {text: string; inputTokens: number; outputTokens: number; costUsd: number}
-/** Bulut tarafındaki model sağlayıcısı (CLOUD-T0015 gerçek bağlantıyı sağlar). Kimlik bilgisi sağlayıcının içinde kalır, kapıya geçmez. */
+/** Bulut tarafındaki model sağlayıcısı (CLOUD-T0015 gerçek bağlantıyı sağlar). Kimlik bilgisi sağlayıcının içinde kalır, kapıya geçmez.
+ *  Sözleşme: `signal` abort edildiğinde sağlayıcı isteği iptal etmek ZORUNDADIR; zaman aşımından sonra gelen maliyet ayrılan tavanla sınırlı kaydedilir. */
 export interface ModelProvider {readonly name: string; invoke(req: ModelRequest, signal: AbortSignal): Promise<ModelResponse>}
 export interface GatewayAuditRecord {at: string; action: GatewayAction; tenantId: string | null; subject: string | null; decision: "ALLOWED" | "DENIED" | "FAILED"; reason?: string; costUsd?: number; overrun?: boolean}
 
@@ -133,16 +143,23 @@ export class CloudGateway {
   constructor(private readonly o: CloudGatewayOptions) {
     this.runtime = resolveCloudRuntimeConfig(o.env);
     this.now = o.now ?? (() => new Date());
+    const t = o.providerTimeoutMs ?? 120_000;
+    if (!Number.isSafeInteger(t) || t < 10 || t > 600_000) throw new Error("PROVIDER_TIMEOUT_INVALID");   // L-5
+    this.timeoutMs = t;
   }
+  private readonly timeoutMs: number;
 
   /** UI ve istemci için güvenli durum: uç nokta adresi ya da secret içermez. */
   status(): {status: "CLOUD_READY" | "CLOUD_RUNTIME_NOT_CONFIGURED" | "ENDPOINT_INSECURE"; environment?: CloudEnvironment} {
     return this.runtime.ok ? {status: "CLOUD_READY", environment: this.runtime.config.environment} : {status: this.runtime.reason};
   }
 
+  /** Önce bilinen secret'lar (en uzundan kısaya, tam eşleşme), sonra kalıplar: kalıp dönüşümü bilinen bir secret'ı parçalayıp kalanını sızdıramaz. */
   redact(text: string): string {
-    let out = redactSecrets(String(text));
-    for (const s of this.o.knownSecrets ?? []) if (s && s.length >= 8) out = out.split(s).join("[REDACTED]");
+    let out = String(text);
+    const known = [...(this.o.knownSecrets ?? [])].filter(s => typeof s === "string" && s.length >= 8).sort((a, b) => b.length - a.length);
+    for (const s of known) out = out.split(s).join("[REDACTED]");
+    out = redactSecrets(out);
     return out.replace(/v1\.[A-Za-z0-9._:-]{3,128}\.[A-Za-z0-9_-]+\.[0-9a-f]{64}/g, "[REDACTED_SESSION]").slice(0, 2000);
   }
 
@@ -173,20 +190,22 @@ export class CloudGateway {
     const r = this.o.budget.reserve(tenantId, req.maxCostUsd);
     if (!r.ok) { this.log({...base, decision: "DENIED", reason: r.reason}); return {ok: false, reason: r.reason}; }
     const ctl = new AbortController();
-    const timeoutMs = this.o.providerTimeoutMs ?? 120_000;
-    let timer: NodeJS.Timeout | undefined;
+    const timeoutMs = this.timeoutMs;
+    let timer: NodeJS.Timeout | undefined, settled = false;
     try {
-      const timeout = new Promise<never>((_, rej) => { timer = setTimeout(() => { ctl.abort(); rej(Object.assign(new Error("timeout"), {code: "PROVIDER_TIMEOUT"})); }, timeoutMs); });
+      // önce zaman aşımı, sonra abort: sağlayıcının abort hatası nedeni maskelemez
+      const timeout = new Promise<never>((_, rej) => { timer = setTimeout(() => { rej(Object.assign(new Error("timeout"), {code: "PROVIDER_TIMEOUT"})); ctl.abort(); }, timeoutMs); });
       const response = await Promise.race([this.o.provider.invoke(req, ctl.signal), timeout]);
-      const {overrun} = this.o.budget.settle(r.id, response.costUsd);
-      this.log({...base, decision: "ALLOWED", costUsd: response.costUsd, overrun});
-      return {ok: true, response};
+      const {overrun, chargedUsd} = this.o.budget.settle(r.id, response.costUsd); settled = true;
+      const costValid = typeof response.costUsd === "number" && Number.isFinite(response.costUsd) && response.costUsd >= 0;
+      try { this.log({...base, decision: "ALLOWED", costUsd: chargedUsd, overrun, ...(costValid ? {} : {reason: "PROVIDER_COST_INVALID"})}); } catch { /* audit sink hatası sonucu değiştirmez */ }
+      return {ok: true, response: {...response, costUsd: chargedUsd}};
     } catch (e) {
       // Sağlayıcı hatasında maliyet bilinmiyor: ayrılan tavan harcanmış sayılır (eksik faturalama yok), metin redakte edilir.
-      this.o.budget.settle(r.id, Number.NaN);
+      if (!settled) { this.o.budget.settle(r.id, Number.NaN); settled = true; }
       const reason: GatewayDeny = (e as {code?: string})?.code === "PROVIDER_TIMEOUT" ? "PROVIDER_TIMEOUT" : "PROVIDER_ERROR";
       const detail = this.redact(e instanceof Error ? e.message : String(e));
-      this.log({...base, decision: "FAILED", reason: `${reason}: ${detail}`});
+      try { this.log({...base, decision: "FAILED", reason: `${reason}: ${detail}`}); } catch { /* audit sink hatası */ }
       return {ok: false, reason, detail};
     } finally { if (timer) clearTimeout(timer); }
   }
