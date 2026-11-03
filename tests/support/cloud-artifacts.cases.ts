@@ -16,6 +16,7 @@ const KNOWN = "known-fixture-credential-0123456789";
 const BASE = "https://cloud.example.invalid/api";
 const A = {tenantId: "tenant-001", subject: "user-001"};
 const B = {tenantId: "tenant-002", subject: "user-002"};
+const W = (tenantId: string) => ({tenantId, subject: "writer-01"});
 
 function mkStore(over: Partial<CloudArtifactStoreOptions> = {}) {
   let t = new Date("2026-11-03T12:00:00Z").getTime();
@@ -34,8 +35,8 @@ export function registerCloudArtifactsCases(): void {
     it("stores two projects and downloads both via signed URLs with matching sha", async () => {
       const {store} = mkStore();
       const p1 = body("project one build output"), p2 = body("project two build output");
-      expect((await store.put(putIn("tenant-001", "proj-001", "dist/app.zip", p1, {jobId: "job-0001", producer: "worker-01"}))).ok).toBe(true);
-      expect((await store.put(putIn("tenant-001", "proj-002", "dist/app.zip", p2))).ok).toBe(true);
+      expect((await store.put(W("tenant-001"), putIn("tenant-001", "proj-001", "dist/app.zip", p1, {jobId: "job-0001", producer: "worker-01"}))).ok).toBe(true);
+      expect((await store.put(W("tenant-001"), putIn("tenant-001", "proj-002", "dist/app.zip", p2))).ok).toBe(true);
       for (const [proj, content] of [["proj-001", p1], ["proj-002", p2]] as const) {
         const d = await store.issueDeliveryUrl(A, {tenantId: "tenant-001", projectId: proj, name: "dist/app.zip"});
         expect(d.ok).toBe(true); if (!d.ok) return;
@@ -47,23 +48,23 @@ export function registerCloudArtifactsCases(): void {
     it("records immutable provenance; same sha replays, different sha is denied", async () => {
       const {store} = mkStore();
       const c = body("v1");
-      const first = await store.put(putIn("tenant-001", "proj-001", "out.bin", c, {jobId: "job-0001", producer: "worker-01"}));
+      const first = await store.put(W("tenant-001"), putIn("tenant-001", "proj-001", "out.bin", c, {jobId: "job-0001", producer: "worker-01"}));
       expect(first).toMatchObject({ok: true, replay: false, manifest: {jobId: "job-0001", producer: "worker-01", sha256: sha256Hex(c)}});
-      expect(await store.put(putIn("tenant-001", "proj-001", "out.bin", c, {jobId: "job-0009"}))).toMatchObject({ok: true, replay: true, manifest: {jobId: "job-0001"}});
-      expect(await store.put(putIn("tenant-001", "proj-001", "out.bin", body("v2")))).toMatchObject({ok: false, reason: "ARTIFACT_IMMUTABLE"});
+      expect(await store.put(W("tenant-001"), putIn("tenant-001", "proj-001", "out.bin", c, {jobId: "job-0009"}))).toMatchObject({ok: true, replay: true, manifest: {jobId: "job-0001"}});
+      expect(await store.put(W("tenant-001"), putIn("tenant-001", "proj-001", "out.bin", body("v2")))).toMatchObject({ok: false, reason: "ARTIFACT_IMMUTABLE"});
     });
     it("verifies sha and size on put", async () => {
       const {store} = mkStore();
       const c = body("payload");
-      expect(await store.put({...putIn("tenant-001", "proj-001", "a.txt", c), sha256: sha256Hex("other")})).toMatchObject({ok: false, reason: "HASH_MISMATCH"});
-      expect(await store.put({...putIn("tenant-001", "proj-001", "a.txt", c), sha256: "ABC"})).toMatchObject({ok: false, reason: "HASH_MISMATCH"});
-      expect(await store.put({...putIn("tenant-001", "proj-001", "a.txt", c), sizeBytes: 3})).toMatchObject({ok: false, reason: "SIZE_MISMATCH"});
-      expect(await store.put({...putIn("tenant-001", "proj-001", "a.txt", c), content: "payload" as unknown as Buffer})).toMatchObject({ok: false, reason: "INVALID_CONTENT"});
+      expect(await store.put(W("tenant-001"), {...putIn("tenant-001", "proj-001", "a.txt", c), sha256: sha256Hex("other")})).toMatchObject({ok: false, reason: "HASH_MISMATCH"});
+      expect(await store.put(W("tenant-001"), {...putIn("tenant-001", "proj-001", "a.txt", c), sha256: "ABC"})).toMatchObject({ok: false, reason: "HASH_MISMATCH"});
+      expect(await store.put(W("tenant-001"), {...putIn("tenant-001", "proj-001", "a.txt", c), sizeBytes: 3})).toMatchObject({ok: false, reason: "SIZE_MISMATCH"});
+      expect(await store.put(W("tenant-001"), {...putIn("tenant-001", "proj-001", "a.txt", c), content: "payload" as unknown as Buffer})).toMatchObject({ok: false, reason: "INVALID_CONTENT"});
     });
     it("enforces size limits (configured and hard ceiling)", async () => {
       const {store} = mkStore({maxArtifactBytes: 8});
-      expect(await store.put(putIn("tenant-001", "proj-001", "big.bin", Buffer.alloc(9)))).toMatchObject({ok: false, reason: "TOO_LARGE"});
-      expect((await store.put(putIn("tenant-001", "proj-001", "ok.bin", Buffer.alloc(8)))).ok).toBe(true);
+      expect(await store.put(W("tenant-001"), putIn("tenant-001", "proj-001", "big.bin", Buffer.alloc(9)))).toMatchObject({ok: false, reason: "TOO_LARGE"});
+      expect((await store.put(W("tenant-001"), putIn("tenant-001", "proj-001", "ok.bin", Buffer.alloc(8)))).ok).toBe(true);
       expect(HARD_MAX_ARTIFACT_BYTES).toBeLessThan(512 * 1024 * 1024);   // V8 dize sınırının altında (review N2)
       expect(() => mkStore({maxArtifactBytes: HARD_MAX_ARTIFACT_BYTES + 1})).toThrow("ARTIFACT_MAX_BYTES_INVALID");
     });
@@ -71,14 +72,14 @@ export function registerCloudArtifactsCases(): void {
       for (const n of ["../x", "/etc/passwd", "a//b", "a/./b", "a/", "a\\b", "", "x".repeat(256), "a b"]) expect(isSafeArtifactName(n)).toBe(false);
       expect(isSafeArtifactName("dist/app-1.0.zip")).toBe(true);
       const {store} = mkStore();
-      expect(await store.put(putIn("tenant-001", "proj-001", "../escape", body("x")))).toMatchObject({ok: false, reason: "INVALID_NAME"});
-      expect(await store.put(putIn("t/../x", "proj-001", "a", body("x")))).toMatchObject({ok: false, reason: "INVALID_ID"});
+      expect(await store.put(W("tenant-001"), putIn("tenant-001", "proj-001", "../escape", body("x")))).toMatchObject({ok: false, reason: "INVALID_NAME"});
+      expect(await store.put(W("t/../x"), putIn("t/../x", "proj-001", "a", body("x")))).toMatchObject({ok: false, reason: "INVALID_ID"});
     });
     it("denies tampered ciphertext, tampered manifest and swapped blobs on get", async () => {
       const backend = new InMemoryArtifactBackend();
       const {store} = mkStore({backend});
-      await store.put(putIn("tenant-001", "proj-001", "a.bin", body("aaaa")));
-      await store.put(putIn("tenant-001", "proj-001", "b.bin", body("bbbb")));
+      await store.put(W("tenant-001"), putIn("tenant-001", "proj-001", "a.bin", body("aaaa")));
+      await store.put(W("tenant-001"), putIn("tenant-001", "proj-001", "b.bin", body("bbbb")));
       const loc = {tenantId: "tenant-001", projectId: "proj-001", name: "a.bin"};
       expect((await store.get(A, loc)).ok).toBe(true);
       const blobA = backend.keys().find(k => k.endsWith(sha256Hex("aaaa")))!;
@@ -97,7 +98,7 @@ export function registerCloudArtifactsCases(): void {
       const backend = new InMemoryArtifactBackend();
       const {store} = mkStore({backend});
       const real = body("real"), sha = sha256Hex(real);
-      await store.put(putIn("tenant-001", "proj-001", "x.bin", real));
+      await store.put(W("tenant-001"), putIn("tenant-001", "proj-001", "x.bin", real));
       const key = Buffer.from(hkdfSync("sha256", MASTER, "uasco.cloud.artifacts.v1", "enc:tenant-001", 32));
       const iv = randomBytes(12), c = createCipheriv("aes-256-gcm", key, iv);
       c.setAAD(Buffer.from(canonicalJson({v: "uasco.cloud.artifacts.v1", tenantId: "tenant-001", projectId: "proj-001", sha256: sha})));
@@ -108,13 +109,13 @@ export function registerCloudArtifactsCases(): void {
     it("snapshots content at entry: mutating the caller's buffer after put cannot change what is stored (review N1)", async () => {
       const {store} = mkStore();
       const c = body("original bytes"), sha = sha256Hex(c);
-      const pending = store.put({tenantId: "tenant-001", projectId: "proj-001", name: "m.bin", content: c, sha256: sha, sizeBytes: c.byteLength});
+      const pending = store.put(W("tenant-001"), {tenantId: "tenant-001", projectId: "proj-001", name: "m.bin", content: c, sha256: sha, sizeBytes: c.byteLength});
       c.fill(0x41);   // after the call, before the await
       expect((await pending).ok).toBe(true);
       const got = await store.get(A, {tenantId: "tenant-001", projectId: "proj-001", name: "m.bin"});
       expect(got.ok && got.content.toString()).toBe("original bytes");
       const leaked = body(`clean prefix ${"x".repeat(40)}`);
-      const p2 = store.put(putIn("tenant-001", "proj-001", "s.txt", leaked));
+      const p2 = store.put(W("tenant-001"), putIn("tenant-001", "proj-001", "s.txt", leaked));
       leaked.write(KNOWN, 0);   // injecting a secret after the scan must not reach storage
       expect((await p2).ok).toBe(true);
       const got2 = await store.get(A, {tenantId: "tenant-001", projectId: "proj-001", name: "s.txt"});
@@ -125,11 +126,11 @@ export function registerCloudArtifactsCases(): void {
       const {store} = mkStore({backend});
       const c = body("honest"), sha = sha256Hex(c);
       await backend.putIfAbsent(`t/tenant-001/p/proj-001/blob/${sha}`, Buffer.from("garbage-from-a-bad-first-write-0123456789"));
-      expect(await store.put(putIn("tenant-001", "proj-001", "h.bin", c))).toMatchObject({ok: false, reason: "BLOB_TAMPERED"});
+      expect(await store.put(W("tenant-001"), putIn("tenant-001", "proj-001", "h.bin", c))).toMatchObject({ok: false, reason: "BLOB_TAMPERED"});
       expect(await store.get(A, {tenantId: "tenant-001", projectId: "proj-001", name: "h.bin"})).toMatchObject({ok: false, reason: "NOT_FOUND"});
       // a valid existing blob (same content under another name) is reused
-      expect((await store.put(putIn("tenant-001", "proj-001", "a1.bin", body("dup")))).ok).toBe(true);
-      expect((await store.put(putIn("tenant-001", "proj-001", "a2.bin", body("dup")))).ok).toBe(true);
+      expect((await store.put(W("tenant-001"), putIn("tenant-001", "proj-001", "a1.bin", body("dup")))).ok).toBe(true);
+      expect((await store.put(W("tenant-001"), putIn("tenant-001", "proj-001", "a2.bin", body("dup")))).ok).toBe(true);
       const got = await store.get(A, {tenantId: "tenant-001", projectId: "proj-001", name: "a2.bin"});
       expect(got.ok && got.content.toString()).toBe("dup");
     });
@@ -138,14 +139,48 @@ export function registerCloudArtifactsCases(): void {
       for (const secret of [KNOWN, `AKIA${"B".repeat(16)}`]) {
         const big = Buffer.alloc(4 * 1024 * 1024 + 64, 0x20);
         big.write(secret, 4 * 1024 * 1024 - 10);
-        expect(await store.put(putIn("tenant-001", "proj-001", `big-${secret.length}.bin`, big))).toMatchObject({ok: false, reason: "SECRET_DETECTED"});
+        expect(await store.put(W("tenant-001"), putIn("tenant-001", "proj-001", `big-${secret.length}.bin`, big))).toMatchObject({ok: false, reason: "SECRET_DETECTED"});
       }
       const bad = mkStore({knownSecrets: {filter() { throw new Error("boom"); }} as unknown as string[]}).store;
-      expect(await bad.put(putIn("tenant-001", "proj-001", "x.bin", body("x")))).toMatchObject({ok: false, reason: "BACKEND_ERROR"});
+      expect(await bad.put(W("tenant-001"), putIn("tenant-001", "proj-001", "x.bin", body("x")))).toMatchObject({ok: false, reason: "BACKEND_ERROR"});
+    });
+    it("fields are read once: a getter/Proxy input that changes values across reads cannot poison a slot (review NB1)", async () => {
+      const backend = new InMemoryArtifactBackend();
+      const {store} = mkStore({backend});
+      const good = body("good"), evil = body("evil");
+      const reads: Record<string, number> = {};
+      const flip = <T>(k: string, first: T, later: T) => () => { reads[k] = (reads[k] ?? 0) + 1; return reads[k] === 1 ? first : later; };
+      const input = Object.defineProperties({}, {
+        tenantId: {get: flip("t", "tenant-001", "tenant-002")}, projectId: {get: flip("p", "proj-001", "proj-009")},
+        name: {get: flip("n", "p.bin", "other.bin")}, content: {get: flip("c", good, evil)},
+        sha256: {get: flip("s", sha256Hex(good), sha256Hex(evil))}, sizeBytes: {get: flip("z", 4, 4)},
+        jobId: {get: flip("j", "job-0001", "bad id!")}, producer: {get: flip("r", undefined, "bad id!")},
+      }) as never;
+      const r = await store.put(W("tenant-001"), input);
+      expect(r).toMatchObject({ok: true, manifest: {tenantId: "tenant-001", projectId: "proj-001", name: "p.bin", sha256: sha256Hex(good), jobId: "job-0001", producer: null}});
+      expect(Object.values(reads).every(n => n === 1)).toBe(true);
+      const got = await store.get(A, {tenantId: "tenant-001", projectId: "proj-001", name: "p.bin"});
+      expect(got.ok && got.content.toString()).toBe("good");
+      expect(backend.keys().some(k => k.includes("tenant-002") || k.includes("proj-009"))).toBe(false);
+      // a Proxy that throws on read is a typed denial
+      const boom = new Proxy({}, {get() { throw new Error("trap"); }}) as never;
+      expect(await store.put(W("tenant-001"), boom)).toMatchObject({ok: false, reason: "INVALID_CONTENT"});
+      expect(await store.put(boom, putIn("tenant-001", "proj-001", "q.bin", body("q")))).toMatchObject({ok: false, reason: "INVALID_CONTENT"});
+    });
+    it("put is tenant-bound: another tenant cannot pre-occupy a victim's name (review NB2)", async () => {
+      const {store} = mkStore();
+      const victim = {tenantId: "tenant-001", projectId: "proj-001", name: "dist/app.zip"};
+      expect(await store.put(B, putIn("tenant-001", "proj-001", "dist/app.zip", body("attacker")))).toMatchObject({ok: false, reason: "TENANT_DENIED"});
+      for (const pr of [null, {tenantId: "tenant-001"}, {tenantId: "bad id", subject: "user-001"}] as never[])
+        expect(await store.put(pr, putIn("tenant-001", "proj-001", "dist/app.zip", body("attacker")))).toMatchObject({ok: false, reason: "TENANT_DENIED"});
+      expect(await store.get(A, victim)).toMatchObject({ok: false, reason: "NOT_FOUND"});
+      expect(await store.put(A, putIn("tenant-001", "proj-001", "dist/app.zip", body("victim")))).toMatchObject({ok: true, replay: false});
+      const got = await store.get(A, victim);
+      expect(got.ok && got.content.toString()).toBe("victim");
     });
     it("a forged sha claim in the delivery token is denied (tampered hash)", async () => {
       const {store} = mkStore();
-      await store.put(putIn("tenant-001", "proj-001", "x.bin", body("real")));
+      await store.put(W("tenant-001"), putIn("tenant-001", "proj-001", "x.bin", body("real")));
       const r = await store.issueDeliveryUrl(A, {tenantId: "tenant-001", projectId: "proj-001", name: "x.bin"});
       expect(r.ok).toBe(true); if (!r.ok) return;
       const u = new URL(r.url); const [p, s] = u.searchParams.get("token")!.split(".");
@@ -161,12 +196,12 @@ export function registerCloudArtifactsCases(): void {
     it("another tenant cannot read, issue for, or see the artifact; same content is stored per tenant", async () => {
       const {store, backend} = mkStore();
       const c = body("shared content");
-      await store.put(putIn("tenant-001", "proj-001", "a.bin", c));
+      await store.put(W("tenant-001"), putIn("tenant-001", "proj-001", "a.bin", c));
       const loc = {tenantId: "tenant-001", projectId: "proj-001", name: "a.bin"};
       expect(await store.get(B, loc)).toMatchObject({ok: false, reason: "TENANT_DENIED"});
       expect(await store.issueDeliveryUrl(B, loc)).toMatchObject({ok: false, reason: "TENANT_DENIED"});
       expect(await store.get(B, {...loc, tenantId: "tenant-002"})).toMatchObject({ok: false, reason: "NOT_FOUND"});
-      await store.put(putIn("tenant-002", "proj-001", "a.bin", c));
+      await store.put(W("tenant-002"), putIn("tenant-002", "proj-001", "a.bin", c));
       const blobs = (backend as InMemoryArtifactBackend).keys().filter(k => k.includes("/blob/"));
       expect(blobs.map(k => k.split("/")[1]).sort()).toEqual(["tenant-001", "tenant-002"]);
       const [b1, b2] = await Promise.all(blobs.map(k => backend.get(k)));
@@ -175,7 +210,7 @@ export function registerCloudArtifactsCases(): void {
     it("a manifest relocated to another tenant's key is denied", async () => {
       const backend = new InMemoryArtifactBackend();
       const {store} = mkStore({backend});
-      await store.put(putIn("tenant-001", "proj-001", "a.bin", body("t1")));
+      await store.put(W("tenant-001"), putIn("tenant-001", "proj-001", "a.bin", body("t1")));
       const m1 = backend.keys().find(k => k.startsWith("t/tenant-001/") && k.includes("/manifest/"))!;
       const evil: ArtifactBlobBackend = {name: "evil", putIfAbsent: (k, d) => backend.putIfAbsent(k, d),
         get: k => backend.get(k.startsWith("t/tenant-002/") ? k.replace("t/tenant-002/", "t/tenant-001/") : k)};
@@ -187,7 +222,7 @@ export function registerCloudArtifactsCases(): void {
       const dir = await mkdtemp(join(tmpdir(), "uasco-art-")); dirs.push(dir);
       const plain = "plaintext marker 0xC0FFEE";
       const s1 = mkStore({backend: new FileSystemArtifactBackend(dir)}).store;
-      expect((await s1.put(putIn("tenant-001", "proj-001", "dist/a.txt", body(plain)))).ok).toBe(true);
+      expect((await s1.put(W("tenant-001"), putIn("tenant-001", "proj-001", "dist/a.txt", body(plain)))).ok).toBe(true);
       const files = (await readdir(dir, {recursive: true, withFileTypes: true})).filter(f => f.isFile());
       expect(files.some(f => f.name.endsWith(".tmp"))).toBe(false);
       for (const f of files) expect((await readFile(join(f.parentPath, f.name))).includes(Buffer.from(plain))).toBe(false);
@@ -202,7 +237,7 @@ export function registerCloudArtifactsCases(): void {
     });
     it("a different master key cannot decrypt (fail-closed)", async () => {
       const backend = new InMemoryArtifactBackend();
-      await mkStore({backend}).store.put(putIn("tenant-001", "proj-001", "a.bin", body("x")));
+      await mkStore({backend}).store.put(W("tenant-001"), putIn("tenant-001", "proj-001", "a.bin", body("x")));
       const other = mkStore({backend, masterKey: Buffer.from("other-master-fixture-key-".repeat(2))}).store;
       expect(await other.get(A, {tenantId: "tenant-001", projectId: "proj-001", name: "a.bin"})).toMatchObject({ok: false, reason: "MANIFEST_TAMPERED"});
     });
@@ -216,7 +251,7 @@ export function registerCloudArtifactsCases(): void {
     const loc = {tenantId: "tenant-001", projectId: "proj-001", name: "dist/app.zip"};
     async function issued(over: Partial<CloudArtifactStoreOptions> = {}, ttl?: number) {
       const s = mkStore(over);
-      await s.store.put(putIn("tenant-001", "proj-001", "dist/app.zip", body("zipbytes")));
+      await s.store.put(W("tenant-001"), putIn("tenant-001", "proj-001", "dist/app.zip", body("zipbytes")));
       const d = await s.store.issueDeliveryUrl(A, loc, ttl);
       if (!d.ok) throw new Error(d.reason);
       return {...s, url: d.url};
@@ -241,8 +276,8 @@ export function registerCloudArtifactsCases(): void {
     });
     it("path/tenant/project rebinding, signature edits and foreign origins are denied", async () => {
       const s = await issued();
-      await s.store.put(putIn("tenant-001", "proj-001", "other.zip", body("other")));
-      await s.store.put(putIn("tenant-002", "proj-001", "dist/app.zip", body("zipbytes")));
+      await s.store.put(W("tenant-001"), putIn("tenant-001", "proj-001", "other.zip", body("other")));
+      await s.store.put(W("tenant-002"), putIn("tenant-002", "proj-001", "dist/app.zip", body("zipbytes")));
       const u = new URL(s.url);
       const re = (path: string) => { const x = new URL(u.href); x.pathname = path; return x.href; };
       expect(await s.store.redeemDeliveryUrl(re("/api/artifacts/tenant-001/proj-001/other.zip"))).toMatchObject({ok: false, reason: "TOKEN_SCOPE_MISMATCH"});
@@ -284,15 +319,15 @@ export function registerCloudArtifactsCases(): void {
     it("refuses artifacts containing secrets; audit names only the kind", async () => {
       const {store, audit} = mkStore();
       const leaked = body(`config: token=${KNOWN}\n`);
-      expect(await store.put(putIn("tenant-001", "proj-001", "cfg.txt", leaked))).toMatchObject({ok: false, reason: "SECRET_DETECTED"});
+      expect(await store.put(W("tenant-001"), putIn("tenant-001", "proj-001", "cfg.txt", leaked))).toMatchObject({ok: false, reason: "SECRET_DETECTED"});
       const pattern = body(`AWS=AKIA${"A".repeat(16)}\n`);
-      expect(await store.put(putIn("tenant-001", "proj-001", "cfg2.txt", pattern))).toMatchObject({ok: false, reason: "SECRET_DETECTED"});
+      expect(await store.put(W("tenant-001"), putIn("tenant-001", "proj-001", "cfg2.txt", pattern))).toMatchObject({ok: false, reason: "SECRET_DETECTED"});
       expect(audit.filter(a => a.reason === "SECRET_DETECTED").every(a => (a.secretKinds?.length ?? 0) > 0)).toBe(true);
       expect(JSON.stringify(audit)).not.toContain(KNOWN);
     });
     it("audit records never include tokens, signatures, keys or content", async () => {
       const {store, audit} = mkStore();
-      await store.put(putIn("tenant-001", "proj-001", "a.bin", body("secret-free content")));
+      await store.put(W("tenant-001"), putIn("tenant-001", "proj-001", "a.bin", body("secret-free content")));
       const d = await store.issueDeliveryUrl(A, {tenantId: "tenant-001", projectId: "proj-001", name: "a.bin"});
       if (!d.ok) throw new Error(d.reason);
       await store.redeemDeliveryUrl(d.url);
@@ -301,13 +336,28 @@ export function registerCloudArtifactsCases(): void {
       const text = JSON.stringify(audit);
       const token = new URL(d.url).searchParams.get("token")!;
       for (const s of [token, token.split(".")[1]!, DKEY, MASTER.toString(), "secret-free content"]) expect(text).not.toContain(s);
-      expect(audit.filter(a => a.action === "REDEEM_DELIVERY").map(a => a.subject)).toEqual(["user-001", undefined]);   // review L2: token carries the issuing subject
+      expect(audit.filter(a => a.action === "REDEEM_DELIVERY").map(a => a.subject)).toEqual(["user-001", undefined]);
+    const unverified = audit.filter(a => a.action === "REDEEM_DELIVERY" && a.decision === "DENIED");
+    expect(unverified.every(a => a.tenantId === null && a.projectId === null && a.name === null)).toBe(true);   // review L2   // review L2: token carries the issuing subject
     expect(audit.map(a => `${a.action}:${a.decision}`)).toEqual(["PUT:ALLOWED", "ISSUE_DELIVERY:ALLOWED", "REDEEM_DELIVERY:ALLOWED", "REDEEM_DELIVERY:DENIED", "GET:DENIED"]);
+    // review L2: an invalid signature is attributed to nothing; a valid token presented on another path is attributed to its signed claims
+    const {store: s2, audit: a2} = mkStore();
+    await s2.put(W("tenant-001"), putIn("tenant-001", "proj-001", "a.bin", body("x")));
+    await s2.put(W("tenant-001"), putIn("tenant-001", "proj-001", "b.bin", body("y")));
+    const d2 = await s2.issueDeliveryUrl(A, {tenantId: "tenant-001", projectId: "proj-001", name: "a.bin"});
+    if (!d2.ok) throw new Error(d2.reason);
+    const u2 = new URL(d2.url); const tk = u2.searchParams.get("token")!;
+    const forged = new URL(u2.href); forged.pathname = "/api/artifacts/tenant-001/proj-001/b.bin";
+    forged.searchParams.set("token", tk.slice(0, -1) + (tk.endsWith("0") ? "1" : "0"));
+    await s2.redeemDeliveryUrl(forged.href);
+    const moved = new URL(u2.href); moved.pathname = "/api/artifacts/tenant-001/proj-001/b.bin";
+    await s2.redeemDeliveryUrl(moved.href);
+    expect(a2.filter(a => a.action === "REDEEM_DELIVERY").map(a => [a.reason, a.name])).toEqual([["TOKEN_SIGNATURE_INVALID", null], ["TOKEN_SCOPE_MISMATCH", "a.bin"]]);
     });
     it("backend failures are denials, not throws", async () => {
       const broken: ArtifactBlobBackend = {name: "broken", putIfAbsent: async () => { throw new Error("disk"); }, get: async () => { throw new Error("disk"); }};
       const {store} = mkStore({backend: broken});
-      expect(await store.put(putIn("tenant-001", "proj-001", "a.bin", body("x")))).toMatchObject({ok: false, reason: "BACKEND_ERROR"});
+      expect(await store.put(W("tenant-001"), putIn("tenant-001", "proj-001", "a.bin", body("x")))).toMatchObject({ok: false, reason: "BACKEND_ERROR"});
       expect(await store.get(A, {tenantId: "tenant-001", projectId: "proj-001", name: "a.bin"})).toMatchObject({ok: false, reason: "BACKEND_ERROR"});
     });
   });

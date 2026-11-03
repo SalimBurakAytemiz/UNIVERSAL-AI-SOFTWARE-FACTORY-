@@ -192,50 +192,60 @@ export class CloudArtifactStore{
   }
 
   /** İçerik adresli, bir kez yazılan put. Beyan edilen sha/boyut gerçek içerikle eşleşmeli; aynı ad + aynı sha => REPLAY, farklı sha => ARTIFACT_IMMUTABLE. */
-  async put(input:PutArtifactInput):Promise<ArtifactResult<{manifest:ArtifactManifest;replay:boolean}>>{
-    const loc={tenantId:input?.tenantId,projectId:input?.projectId,name:input?.name};
-    const base={action:"PUT" as const,tenantId:isId(loc.tenantId)?loc.tenantId:null,projectId:isId(loc.projectId)?loc.projectId:null,
-      name:isSafeArtifactName(loc.name)?loc.name:null,sha256:typeof input?.sha256==="string"&&SHA256_RE.test(input.sha256)?input.sha256:null};
-    const deny=(reason:ArtifactDenyReason,extra:Partial<ArtifactAuditRecord>={})=>{this.log({...base,decision:"DENIED",reason,...extra});return fail<{manifest:ArtifactManifest;replay:boolean}>(reason)};
-    const bad=this.locatorOk(loc as ArtifactLocator);
-    if(bad)return deny(bad);
-    if((input.jobId!==undefined&&!isId(input.jobId))||(input.producer!==undefined&&!isId(input.producer)))return deny("INVALID_ID");
-    if(!Buffer.isBuffer(input.content))return deny("INVALID_CONTENT");
-    if(input.content.byteLength>this.maxBytes)return deny("TOO_LARGE");
+  async put(principal:DeliveryPrincipal,input:PutArtifactInput):Promise<ArtifactResult<{manifest:ArtifactManifest;replay:boolean}>>{
+    type R=ArtifactResult<{manifest:ArtifactManifest;replay:boolean}>;
+    // Her alan girişte TEK kez okunur (getter/Proxy doğrulamadan sonra farklı değer döndüremez); sonrası yalnız yerel kopyaları kullanır.
+    let t:unknown,p:unknown,name:unknown,raw:unknown,sha:unknown,size:unknown,jobId:unknown,producer:unknown,pt:unknown,ps:unknown;
+    try{
+      const i=input as unknown as Record<string,unknown>;
+      ({tenantId:t,projectId:p,name,content:raw,sha256:sha,sizeBytes:size,jobId,producer}=i);
+      const pr=principal as unknown;
+      if(pr!==null&&typeof pr==="object")({tenantId:pt,subject:ps}=pr as Record<string,unknown>);
+    }catch{this.log({action:"PUT",decision:"DENIED",reason:"INVALID_CONTENT",tenantId:null,projectId:null,name:null,sha256:null});return fail("INVALID_CONTENT")}
+    const base={action:"PUT" as const,tenantId:isId(t)?t:null,projectId:isId(p)?p:null,name:isSafeArtifactName(name)?name:null,
+      sha256:typeof sha==="string"&&SHA256_RE.test(sha)?sha:null,subject:isId(ps)?ps:null};
+    const deny=(reason:ArtifactDenyReason,extra:Partial<ArtifactAuditRecord>={}):R=>{this.log({...base,decision:"DENIED",reason,...extra});return fail(reason)};
+    if(!isId(t)||!isId(p))return deny("INVALID_ID");
+    if(!isSafeArtifactName(name))return deny("INVALID_NAME");
+    // Yazma da tenant'a bağlıdır: başka tenant'ın ad alanı önceden doldurulamaz.
+    if(!isId(pt)||!isId(ps)||pt!==t)return deny("TENANT_DENIED");
+    if((jobId!==undefined&&!isId(jobId))||(producer!==undefined&&!isId(producer)))return deny("INVALID_ID");
+    if(!Buffer.isBuffer(raw))return deny("INVALID_CONTENT");
+    if(raw.byteLength>this.maxBytes)return deny("TOO_LARGE");
     // Çağıranın tamponu değişebilir: doğrulama, tarama ve şifreleme yalnız girişte alınan kopya üzerinde yapılır.
-    const content=Buffer.from(input.content);
-    if(typeof input.sha256!=="string"||!SHA256_RE.test(input.sha256))return deny("HASH_MISMATCH");
-    if(typeof input.sizeBytes!=="number"||!Number.isSafeInteger(input.sizeBytes)||input.sizeBytes<0)return deny("SIZE_MISMATCH");
-    if(input.sizeBytes>this.maxBytes)return deny("TOO_LARGE");
-    if(content.byteLength!==input.sizeBytes)return deny("SIZE_MISMATCH");
-    const ref:ArtifactRef={name:input.name,sha256:input.sha256,sizeBytes:input.sizeBytes};
-    const {tenantId:t,projectId:p,name}=input;
+    const content=Buffer.from(raw);
+    if(typeof sha!=="string"||!SHA256_RE.test(sha))return deny("HASH_MISMATCH");
+    if(typeof size!=="number"||!Number.isSafeInteger(size)||size<0)return deny("SIZE_MISMATCH");
+    if(size>this.maxBytes)return deny("TOO_LARGE");
+    if(content.byteLength!==size)return deny("SIZE_MISMATCH");
+    const sizeBytes:number=size;
+    const ref:ArtifactRef={name,sha256:sha,sizeBytes};
     try{
       if(!verifyArtifact(ref,content))return deny("HASH_MISMATCH");
       const kinds=this.scanSecrets(content);
       if(kinds.length)return deny("SECRET_DETECTED",{secretKinds:kinds});
       const prev=await this.readManifest({tenantId:t,projectId:p,name});
-      if(prev.ok)return this.immutableOrReplay(prev.manifest,input.sha256,base,deny);
+      if(prev.ok)return this.immutableOrReplay(prev.manifest,sha,base,deny);
       if(prev.reason!=="NOT_FOUND")return deny(prev.reason);
       const iv=randomBytes(12);
-      const c=createCipheriv("aes-256-gcm",this.derive(t,"enc"),iv);c.setAAD(this.aad(t,p,input.sha256));
+      const c=createCipheriv("aes-256-gcm",this.derive(t,"enc"),iv);c.setAAD(this.aad(t,p,sha));
       const ct=Buffer.concat([c.update(content),c.final()]);
-      const blobKey=this.blobKey(t,p,input.sha256);
+      const blobKey=this.blobKey(t,p,sha);
       if(!await this.o.backend.putIfAbsent(blobKey,Buffer.concat([Buffer.from([BLOB_FORMAT]),iv,c.getAuthTag(),ct]))){
         // Yuva zaten dolu (aynı içerik başka adla ya da önceki yarım/bozuk yazım): manifest yazılmadan önce mevcut blob doğrulanır.
         const existing=await this.o.backend.get(blobKey);
         if(!existing)return deny("BLOB_TAMPERED");
-        const v=this.decryptVerified(t,p,input.sha256,input.sizeBytes,existing);
+        const v=this.decryptVerified(t,p,sha,sizeBytes,existing);
         if(!v.ok)return deny(v.reason);
       }
-      const body:Omit<ArtifactManifest,"mac">={v:ARTIFACT_STORE_VERSION,tenantId:t,projectId:p,name,sha256:input.sha256,sizeBytes:input.sizeBytes,
-        storedAt:this.now().toISOString(),jobId:input.jobId??null,producer:input.producer??null};
+      const body:Omit<ArtifactManifest,"mac">={v:ARTIFACT_STORE_VERSION,tenantId:t,projectId:p,name,sha256:sha,sizeBytes,
+        storedAt:this.now().toISOString(),jobId:(jobId as string|undefined)??null,producer:(producer as string|undefined)??null};
       const manifest:ArtifactManifest={...body,mac:this.macOf(body)};
       const wrote=await this.o.backend.putIfAbsent(this.manifestKey(t,p,name),Buffer.from(canonicalJson(manifest)));
       if(!wrote){   // yarış: başka yazar önce geldi
         const raced=await this.readManifest({tenantId:t,projectId:p,name});
         if(!raced.ok)return deny(raced.reason);
-        return this.immutableOrReplay(raced.manifest,input.sha256,base,deny);
+        return this.immutableOrReplay(raced.manifest,sha,base,deny);
       }
       this.log({...base,decision:"ALLOWED"});
       return {ok:true,manifest,replay:false};
@@ -340,6 +350,7 @@ export class CloudArtifactStore{
 
   /** Teslim URL'ini açar: köken, yol ve token iddiaları birebir eşleşmeli; imza sabit zamanlı doğrulanır; içerik sha'sı token'daki sha ile eşleşmeli. */
   async redeemDeliveryUrl(url:string):Promise<ArtifactResult<{content:Buffer;manifest:ArtifactManifest}>>{
+    // Doğrulanmamış URL'den tenant/proje/ad atfedilmez (imza öncesi redlerde null).
     const deny=(reason:ArtifactDenyReason,l:Partial<ArtifactLocator>={})=>{
       this.log({action:"REDEEM_DELIVERY",decision:"DENIED",reason,tenantId:isId(l.tenantId)?l.tenantId:null,projectId:isId(l.projectId)?l.projectId:null,
         name:isSafeArtifactName(l.name)?l.name:null,sha256:null});
@@ -357,20 +368,21 @@ export class CloudArtifactStore{
     if(segs.length<3)return deny("TOKEN_SCOPE_MISMATCH");
     const l:ArtifactLocator={tenantId:segs[0]!,projectId:segs[1]!,name:segs.slice(2).join("/")};
     const parts=tokens[0]!.split(".");
-    if(parts.length!==2||!B64URL_RE.test(parts[0]!)||!HEX64_RE.test(parts[1]!))return deny("TOKEN_MALFORMED",l);
+    if(parts.length!==2||!B64URL_RE.test(parts[0]!)||!HEX64_RE.test(parts[1]!))return deny("TOKEN_MALFORMED");
     let c:DeliveryClaims;
-    try{c=JSON.parse(Buffer.from(parts[0]!,"base64url").toString("utf8")) as DeliveryClaims}catch{return deny("TOKEN_MALFORMED",l)}
+    try{c=JSON.parse(Buffer.from(parts[0]!,"base64url").toString("utf8")) as DeliveryClaims}catch{return deny("TOKEN_MALFORMED")}
     if(!c||typeof c!=="object"||c.v!==ARTIFACT_STORE_VERSION||!isId(c.kid)||typeof c.jti!=="string"||!isId(c.sub)||!isId(c.t)||!isId(c.p)||!isSafeArtifactName(c.n)
-      ||typeof c.s!=="string"||!SHA256_RE.test(c.s)||!Number.isSafeInteger(c.iat)||!Number.isSafeInteger(c.exp))return deny("TOKEN_MALFORMED",l);
+      ||typeof c.s!=="string"||!SHA256_RE.test(c.s)||!Number.isSafeInteger(c.iat)||!Number.isSafeInteger(c.exp))return deny("TOKEN_MALFORMED");
     const key=this.o.deliveryKeys.get(c.kid);
-    if(key===undefined)return deny("TOKEN_KEY_UNKNOWN",l);
-    if(!hexEqual(parts[1]!,createHmac("sha256",key).update(parts[0]!).digest("hex")))return deny("TOKEN_SIGNATURE_INVALID",l);
+    if(key===undefined)return deny("TOKEN_KEY_UNKNOWN");
+    if(!hexEqual(parts[1]!,createHmac("sha256",key).update(parts[0]!).digest("hex")))return deny("TOKEN_SIGNATURE_INVALID");
+    const claimed:ArtifactLocator={tenantId:c.t,projectId:c.p,name:c.n};   // imza doğrulandı: audit yalnız doğrulanmış iddialardan atfedilir
     const now=this.now().getTime();
-    if(!Number.isFinite(now)||c.exp<=c.iat||c.exp-c.iat>MAX_DELIVERY_TTL_MS)return deny("TOKEN_MALFORMED",l);
-    if(c.iat>now+60_000)return deny("TOKEN_NOT_YET_VALID",l);
-    if(now>=c.exp)return deny("TOKEN_EXPIRED",l);
-    if(this.o.revokedTokenIds?.has(c.jti))return deny("TOKEN_REVOKED",l);
-    if(c.t!==l.tenantId||c.p!==l.projectId||c.n!==l.name)return deny("TOKEN_SCOPE_MISMATCH",l);
+    if(!Number.isFinite(now)||c.exp<=c.iat||c.exp-c.iat>MAX_DELIVERY_TTL_MS)return deny("TOKEN_MALFORMED",claimed);
+    if(c.iat>now+60_000)return deny("TOKEN_NOT_YET_VALID",claimed);
+    if(now>=c.exp)return deny("TOKEN_EXPIRED",claimed);
+    if(this.o.revokedTokenIds?.has(c.jti))return deny("TOKEN_REVOKED",claimed);
+    if(c.t!==l.tenantId||c.p!==l.projectId||c.n!==l.name)return deny("TOKEN_SCOPE_MISMATCH",claimed);
     return this.guardedRead("REDEEM_DELIVERY",null,l,c.s,c.sub);
   }
 }
