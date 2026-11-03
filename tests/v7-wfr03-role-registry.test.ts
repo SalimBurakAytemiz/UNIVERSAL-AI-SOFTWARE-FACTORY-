@@ -23,6 +23,7 @@ import {GOLDEN_TESTS, sha256Json} from "../core/competency/evaluation-fixtures.j
 import {executeBlockers, parseArgs, resolveControlRoot, runCli} from "../core/competency/evaluation-cli.js";
 import {MAX_TEST_SOURCE_BYTES, analyzeAddTest, tokenize, topLevelStatements} from "../core/competency/static-test-analysis.js";
 import {FakeExecutors, LocalClaudeExecutors, reviewerArgv} from "../core/workos/executors.js";
+import {findSecretKinds, redactSecrets, scanDiffForSecrets} from "../core/workos/secret-scan.js";
 import type {ExecutorPair, FakeScript, ProcResult} from "../core/workos/executors.js";
 import {ClaudePreDevBuilder} from "../core/workos/predev/claude-builder.js";
 import {OUTPUT_SKELETONS} from "../core/workos/predev/role-prompts.js";
@@ -1237,7 +1238,7 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     };
     return new LocalClaudeExecutors(REPO, control, {runReviewer}).pair();
   };
-  const evaluated = (o: EvaluationOutcome) => { if (o.status !== "EVALUATED") throw new Error(`expected EVALUATED, got ${JSON.stringify(o)}`); return o; };
+  const evaluated = (o: EvaluationOutcome, label?: string) => { if (o.status !== "EVALUATED") throw new Error(`${label ? `[${label}] ` : ""}expected EVALUATED, got ${JSON.stringify(o)}`); return o; };
   const listing = (d: string): string[] => fs.existsSync(d) ? fs.readdirSync(d, {recursive: true}).map(String).sort() : [];
   const repoSnapshot = () => sha(JSON.stringify({reg: sha(fs.readFileSync(REG_FILE)), evidence: listing(path.join(REPO, "audit", "evidence", "role-evaluations")), git: cp.spawnSync("git", ["status", "--porcelain"], {cwd: REPO, encoding: "utf8"}).stdout}));
 
@@ -1302,28 +1303,39 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
   it("infrastructure trouble is NOT an evaluation result: exit code, timeout, abort and non-role blocks -> NOT_EXECUTED and NOTHING is staged; role-caused builder refusals -> FAILED", { timeout: 180_000 }, async () => {
     const at = new Date().toISOString();
     const custom = (r: Record<string, unknown>): ExecutorPair => ({...fakePair(), implementer: {identity: "X_IMPL", implement: async () => ({exitCode: 0, log: "", argv: [], startedAt: at, endedAt: at, timedOut: false, aborted: false, transient: false, ...r})}});
-    const infra: Array<[string, ExecutorPair, string, Parameters<typeof evaluate>[2]?]> = [
-      ["exit code", fakePair({implement: () => ({exitCode: 1})}), "IMPLEMENT_EXIT_NONZERO"],
+    // UASCO-T0087: implementer infrastructure failures carry a diagnostic `detail` (exit=N:<redacted stderr>); the reason code is unchanged; TIMEOUT/ABORTED carry none
+    const infra: Array<[string, ExecutorPair, string, Parameters<typeof evaluate>[2] | undefined, unknown?]> = [
+      ["exit code", fakePair({implement: () => ({exitCode: 1})}), "IMPLEMENT_EXIT_NONZERO", undefined, "exit=1:"],
       ["timeout", fakePair({implement: () => ({files: {"greeting.txt": "hello\n"}, sleepMs: 5000})}), "TIMEOUT", {timeoutMs: 700}],
-      ["profile not logged in", custom({exitCode: null, blockReason: "CLAUDE_PROFILE_LOGIN_REQUIRED"}), "IMPLEMENT_BLOCKED:CLAUDE_PROFILE_LOGIN_REQUIRED"],
-      ["workspace config refused", custom({exitCode: null, blockReason: "WORKSPACE_CONTAINS_AGENT_CONFIG"}), "IMPLEMENT_BLOCKED:WORKSPACE_CONTAINS_AGENT_CONFIG"],
-      ["never started", custom({exitCode: null}), "NOT_STARTED"],
-      ["aborted", custom({aborted: true, exitCode: null}), "ABORTED"]
+      ["profile not logged in", custom({exitCode: null, blockReason: "CLAUDE_PROFILE_LOGIN_REQUIRED"}), "IMPLEMENT_BLOCKED:CLAUDE_PROFILE_LOGIN_REQUIRED", undefined, "exit=null:"],
+      ["workspace config refused", custom({exitCode: null, blockReason: "WORKSPACE_CONTAINS_AGENT_CONFIG"}), "IMPLEMENT_BLOCKED:WORKSPACE_CONTAINS_AGENT_CONFIG", undefined, "exit=null:"],
+      ["never started", custom({exitCode: null, log: "spawn ENOENT\n  claude"}), "NOT_STARTED", undefined, "exit=null:spawn ENOENT claude"],
+      ["aborted", custom({aborted: true, exitCode: null}), "ABORTED", undefined]
     ];
-    for (const [label, pair, reason, extra] of infra) {
+    for (const [label, pair, reason, extra, detail] of infra) {
       const root = stagingOf();
       const o = await evaluate(pair, DEV, {stagingRoot: root, ...(extra ?? {})});
-      expect([label, o]).toEqual([label, {status: "NOT_EXECUTED", roleId: DEV, evaluationId: "EV-01", reason}]);
+      expect([label, o]).toEqual([label, {status: "NOT_EXECUTED", roleId: DEV, evaluationId: "EV-01", reason, ...(detail !== undefined ? {detail} : {})}]);
       expect([label, listing(root)]).toEqual([label, []]);
     }
     for (const reason of ["BUILDER_PRODUCED_NO_CHANGE", "BUILDER_TOUCHED_GIT_INTERNALS", "BUILDER_TOUCHED_AGENT_CONFIG", "BUILDER_CHANGED_FORBIDDEN_PATH:GITLINK", "BUILDER_MOVED_HEAD"]) {
       const r = evaluated(await evaluate(custom({exitCode: null, blockReason: reason}), DEV));
       expect([reason, r.verdict, r.checks]).toEqual([reason, "FAILED", [{id: "builder_commit_accepted", passed: false, detail: reason}]]);
     }
+    // UASCO-T0087 diagnosability: a non-zero implementer exit names the exit code and the (redacted, collapsed, clipped) stderr; the reason is unchanged
+    {
+      const root = stagingOf(), token = "sk-ant-" + "a".repeat(40);
+      const o = await evaluate(fakePair({implement: () => ({exitCode: 3, stderr: `fatal: Unable to create '/w/.git/index.lock': File exists.\n  token=${token} ${"x".repeat(300)}`})}), DEV, {stagingRoot: root});
+      if (o.status !== "NOT_EXECUTED") throw new Error(JSON.stringify(o));
+      expect([o.reason, o.detail?.startsWith("exit=3:fatal: Unable to create '/w/.git/index.lock': File exists. token=")]).toEqual(["IMPLEMENT_EXIT_NONZERO", true]);
+      expect(o.detail!.length).toBeLessThanOrEqual(120);
+      expect(o.detail).not.toContain(token); expect(o.detail).not.toContain("sk-ant-aaaa"); expect(o.detail).not.toMatch(/\s{2,}|\n/);
+      expect(listing(root)).toEqual([]);
+    }
     // the engine's own failures are infrastructure, not the role's: nothing is staged and no verdict exists
     for (const reason of ["BUILDER_STATUS_FAILED", "BUILDER_COMMIT_FAILED", "BUILDER_STAGE_FAILED", "BUILDER_START_SHA_INVALID", "BUILDER_INDEX_RESET_FAILED"]) {
       const root = stagingOf();
-      expect([reason, await evaluate(custom({exitCode: null, blockReason: reason}), DEV, {stagingRoot: root})]).toEqual([reason, {status: "NOT_EXECUTED", roleId: DEV, evaluationId: "EV-01", reason: `IMPLEMENT_BLOCKED:${reason}`}]);
+      expect([reason, await evaluate(custom({exitCode: null, blockReason: reason}), DEV, {stagingRoot: root})]).toEqual([reason, {status: "NOT_EXECUTED", roleId: DEV, evaluationId: "EV-01", reason: `IMPLEMENT_BLOCKED:${reason}`, detail: "exit=null:"}]);
       expect(listing(root)).toEqual([]);
     }
   });
@@ -1607,7 +1619,7 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       ["no commit at all", {implement: () => ({files: {"test/add.test.js": good}, noCommit: true})}, "commit_produced"]
     ];
     for (const [label, o, failing, detail] of cases) {
-      const r = evaluated(await evaluate(fakePair(o), TESTER));
+      const r = evaluated(await evaluate(fakePair(o), TESTER), label);
       expect([label, r.verdict, r.checks.find(c => !c.passed)?.id]).toEqual([label, "FAILED", failing]);
       if (detail) expect([label, r.checks.find(c => !c.passed)?.detail]).toEqual([label, expect.stringContaining(detail)]);
       if (failing === "no_early_exit") expect([label, r.checks.filter(c => !c.passed).map(c => c.id)]).toEqual([label, ["no_early_exit"]]); // a control statement is an early exit, not an out-of-order declaration
@@ -1618,7 +1630,7 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
     expect(broken.checks.find(c => c.id === "references_module")?.detail).toMatch(/not analysable/);
     // infrastructure is infrastructure for the tester too
     const root = stagingOf();
-    expect(await evaluate(fakePair({implement: () => ({exitCode: 1})}), TESTER, {stagingRoot: root})).toEqual({status: "NOT_EXECUTED", roleId: TESTER, evaluationId: "EV-01", reason: "IMPLEMENT_EXIT_NONZERO"});
+    expect(await evaluate(fakePair({implement: () => ({exitCode: 1})}), TESTER, {stagingRoot: root})).toEqual({status: "NOT_EXECUTED", roleId: TESTER, evaluationId: "EV-01", reason: "IMPLEMENT_EXIT_NONZERO", detail: "exit=1:"});
     expect(listing(root)).toEqual([]);
     // the tester must be an implementer-route binding: a reviewer-route binding with the tester function is refused
     const reviewerRoute = FIRST_DELIVERY_BINDINGS.map(b => b === FIRST_DELIVERY_BINDINGS.find(x => x.roleId === TESTER) ? {...b, providerRoute: "CLAUDE_REVIEWER" as const, allowedTools: [...bindingTools("CLAUDE_REVIEWER")], limits: {...b.limits, maxFilesWritten: 0}} : b);
@@ -2330,6 +2342,69 @@ describe("A-TEST-DIAG-1: a failing git step in the evaluation pipeline is diagno
     expect(ws).not.toContain("alice"); expect(ws).not.toContain(PASS); expect(ws).toContain("https://[REDACTED]@git.example.com/r.git");
   });
 
+  // //TR: UASCO-T0087 NB-1: detail yüzeyi (implementer/CLI stderr) genişledi; PEM gövdesi, Bearer/Basic/JWT değeri ve satırla bölünmüş sk-ant anahtarı hiçbir yolda (implement detail, gitDetail, PROCEDURE_EXCEPTION) sızmaz.
+  // Değerler çalışma zamanında birleştirilir: depo gizli görünümlü bir literal taşımaz.
+  const D = "-".repeat(5), PEM_BODY = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASC" + "Q".repeat(24), PEM_BODY2 = "Zm9vYmFyYmF6cXV4" + "W".repeat(20);
+  const PEM = `${D}BEGIN RSA PRIVATE KEY${D}\n${PEM_BODY}\n${PEM_BODY2}\n${D}END RSA PRIVATE KEY${D}`;
+  const PEM_OPEN = `${D}BEGIN OPENSSH PRIVATE KEY${D}\n${PEM_BODY}\n${PEM_BODY2}`; // kesik: END yok
+  const JWT = ["eyJ" + "hbGciOiJIUzI1NiJ9", "eyJ" + "zdWIiOiIxMjM0NTY3ODkwIn0", "SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"].join(".");
+  const BEARER = "opaque" + "Tok3n" + "9f8e7d6c5b4a";
+  const BASIC = Buffer.from("alice:" + "s3cr3t" + "-pw").toString("base64");
+  const SPLIT_HEAD = "sk-" + "ant-api03-", SPLIT_TAIL = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-AbCd";
+  const leaks = (s: string) => [PEM_BODY, PEM_BODY2, JWT.split(".")[1], JWT.split(".")[2], BEARER, BASIC, SPLIT_TAIL, SPLIT_TAIL.slice(0, 12)].filter(x => s.includes(x));
+  const leaky = [["pem", PEM], ["unterminated pem", PEM_OPEN], ["bearer", `Authorization: Bearer ${BEARER}`], ["bearer jwt", `Authorization: Bearer ${JWT}`], ["bare jwt", `token=${JWT} rejected`],
+    ["basic", `Authorization: Basic ${BASIC}`], ["split sk-ant", `key ${SPLIT_HEAD}\n${SPLIT_TAIL}`],
+    // B-2: the line break comes AFTER a full-length head (column 40+), CRLF, sk-proj split after 24, and the tail followed by text on the same line
+    ["split at column 40+", `key ${SPLIT_HEAD}${SPLIT_TAIL.slice(0, 30)}\n${SPLIT_TAIL}\nnext line`], ["split crlf", `key ${SPLIT_HEAD}\r\n${SPLIT_TAIL}\r\nnext`],
+    ["sk-proj split after 24", `key ${"sk-" + "proj-"}${SPLIT_TAIL.slice(0, 24)}\n${SPLIT_TAIL}`], ["split tail then text", `key ${SPLIT_HEAD}${SPLIT_TAIL.slice(0, 30)}\n${SPLIT_TAIL} rejected`]] as const;
+
+  it("redaction-only patterns: whole PEM blocks (also unterminated), Bearer/Basic values, JWTs and a newline-split sk-ant key are redacted; diff scanning (findSecretKinds/scanDiffForSecrets) is unchanged", () => {
+    for (const [label, text] of leaky) expect([label, leaks(redactSecrets(text))]).toEqual([label, []]);
+    expect(redactSecrets(`a ${PEM} b`)).toBe("a [REDACTED:PRIVATE_KEY] b");
+    expect(redactSecrets(`a ${PEM_OPEN}`)).toBe("a [REDACTED:PRIVATE_KEY]");
+    expect(redactSecrets(`Authorization: Bearer ${BEARER}`)).toBe("Authorization: Bearer [REDACTED:AUTH_TOKEN]");
+    expect(redactSecrets(`Authorization: Basic ${BASIC}`)).toBe("Authorization: Basic [REDACTED:AUTH_TOKEN]");
+    expect(redactSecrets(`t ${JWT} x`)).toBe("t [REDACTED:JWT] x");
+    expect(redactSecrets(`key ${SPLIT_HEAD}\n${SPLIT_TAIL}\nnext`)).toBe("key [REDACTED:SPLIT_KEY]\nnext");
+    expect(redactSecrets(`key ${SPLIT_HEAD}${SPLIT_TAIL.slice(0, 30)}\n${SPLIT_TAIL}\nnext line`)).toBe("key [REDACTED:SPLIT_KEY]\nnext line");
+    expect(redactSecrets(`key ${SPLIT_HEAD}\r\n${SPLIT_TAIL}\r\nnext`)).toBe("key [REDACTED:SPLIT_KEY]\r\nnext");
+    // N-3: no over-redaction: a non key-like head (sk-learn) and an ordinary next line after a full key stay readable; the full key keeps its own kind
+    expect(redactSecrets("import sk-learn\nTracebackX (most recent call last)")).toBe("import sk-learn\nTracebackX (most recent call last)");
+    expect(redactSecrets("pip install sk-learn\nTraceback\n  File x")).toBe("pip install sk-learn\nTraceback\n  File x"); // a whole-line word after a non key-like head
+    expect(redactSecrets(`k ${SPLIT_HEAD}${SPLIT_TAIL}\nTraceback (most recent call last)`)).toBe("k [REDACTED:ANTHROPIC_KEY]\nTraceback (most recent call last)");
+    // N-1 / L-1: a letter-only opaque token of 20+ characters is redacted (no digit required); short prose words are not
+    expect(redactSecrets("Authorization: Bearer " + "abcdefghij".repeat(2) + "KLMN")).toBe("Authorization: Bearer [REDACTED:AUTH_TOKEN]");
+    expect(redactSecrets("Authorization: Basic " + "QWxhZGRpbjpvcGVuc2VzYW1l")).toBe("Authorization: Basic [REDACTED:AUTH_TOKEN]");
+    // ordinary prose is not redacted; a known token type keeps its specific label
+    expect(redactSecrets("missing Bearer token; basic validation failed")).toBe("missing Bearer token; basic validation failed");
+    const GH = "ghp_" + "a1B2c3D4e5".repeat(4);
+    expect(redactSecrets(`Bearer ${GH}`)).toBe("Bearer [REDACTED:GITHUB_TOKEN]");
+    // scanning is unchanged: the new shapes are not secret KINDS for the diff gate
+    expect(findSecretKinds(`Bearer ${BEARER} ${JWT} Basic ${BASIC}`)).toEqual([]);
+    expect(findSecretKinds(PEM)).toEqual(["PRIVATE_KEY"]);
+    expect(scanDiffForSecrets(`+++ b/a.txt\n@@ -0,0 +1,1 @@\n+Authorization: Bearer ${BEARER}\n`)).toEqual([]);
+  });
+
+  it("no PEM body, bearer/basic value, JWT or split sk-ant fragment survives in gitDetail (seed and setup paths), PROCEDURE_EXCEPTION or the implementer detail", async () => {
+    const throwing = (err: unknown): ExecutorPair => new FakeExecutors({implement: () => { throw err; }, review: () => ({verdict: "CLEAN"})}).pair();
+    const stage = () => path.join(fs.mkdtempSync(path.join(tmp, "diag-")), "staging");
+    for (const [label, text] of leaky) {
+      const seed = reasonOf((await run(DEV, "add", {status: 128, stderr: `fatal: ${text}`})).out);
+      const setup = reasonOf((await run(DEV, "-B", {status: 1, stderr: `error: ${text}`})).out);
+      const thrown = reasonOf(await runRoleEvaluation({repoRoot: REPO, stagingRoot: stage(), pair: throwing(new Error(`EXECUTOR_FAILED: ${text}`))}, DEV, "EV-01"));
+      const impl = await runRoleEvaluation({repoRoot: REPO, stagingRoot: stage(), pair: new FakeExecutors({implement: () => ({exitCode: 3, stderr: `fatal: ${text}`}), review: () => ({verdict: "CLEAN"})}).pair()}, DEV, "EV-01");
+      expect([label, reasonOf(impl)]).toEqual([label, "IMPLEMENT_EXIT_NONZERO"]);
+      const detail = (impl as {detail?: string}).detail ?? "";
+      expect([label, detail.startsWith("exit=3:fatal: "), detail.length <= 120]).toEqual([label, true, true]);
+      for (const [where, out] of [["seed", seed], ["setup", setup], ["procedure", thrown], ["implement detail", detail]] as const) {
+        expect([label, where, leaks(out)]).toEqual([label, where, []]);
+        expect([label, where, out]).toEqual([label, where, expect.stringContaining("[REDACTED:")]);
+      }
+      expect(setup).toMatch(/^WORKSPACE_SETUP_FAILED:checkout:exit=1:error: /);
+      expect(seed).toMatch(/^PROCEDURE_EXCEPTION:GIT_SEED_FAILED:add:exit=128:fatal: /);
+    }
+  });
+
   it("scrubbing a 200k-character stderr stays linear (regression guard, not a timeout)", async () => {
     const real = cp.spawnSync.bind(cp); let t0 = 0;
     const spy = vi.spyOn(cp, "spawnSync").mockImplementation(((cmd: string, args: string[], opts: any) => {
@@ -2341,6 +2416,22 @@ describe("A-TEST-DIAG-1: a failing git step in the evaluation pipeline is diagno
       expect(reason).toMatch(/^PROCEDURE_EXCEPTION:GIT_SEED_FAILED:init:exit=128:a\.a\./);
       expect(ms, `scrub + clip took ${ms.toFixed(0)} ms`).toBeLessThan(500);
     } finally { spy.mockRestore(); }
+  });
+
+  // //TR: UASCO-T0087 B-1: redaksiyon desenleri için kötücül 200k girdiler (bir koşunun içinden yeniden başlama, nokta/END/satır sonu eksik, uzun boşluk) doğrusal kalır.
+  it("redaction stays linear on pathological 200k inputs for every redaction pattern (regression guard, not a timeout)", () => {
+    const n = 200_000;
+    const inputs: Record<string, string> = {
+      "-eyJ run (no dots)": "-eyJ".repeat(n / 4), "eyJ dots": "eyJaaaa.".repeat(n / 8), "eyJ one long run": "eyJ" + "a".repeat(n),
+      "sk- run": "sk-".repeat(n / 3), "sk-ant- run": "sk-ant-".repeat(n / 7), "sk-ant- newline run": "sk-ant-\n".repeat(n / 8), "split head then spaces": "sk-ant-x" + " ".repeat(n),
+      "split continuation lines": ("sk-ant-x\n" + "A".repeat(300) + "\n").repeat(Math.floor(n / 310)),
+      "BEGIN run": `${D}BEGIN `.repeat(n / 11), "BEGIN PRIVATE run": `${D}BEGIN ` + "PRIVATE ".repeat(n / 8), "unterminated PEM": `${D}BEGIN RSA PRIVATE KEY${D}` + "A".repeat(n),
+      "Bearer run": "Bearer \t".repeat(n / 8), "Bearer long": "Bearer " + "a".repeat(n), "Basic run": "Basic ".repeat(n / 6),
+    };
+    for (const [label, text] of Object.entries(inputs)) {
+      const t0 = performance.now(); redactSecrets(text); const ms = performance.now() - t0;
+      expect([label, ms < 500], `${label}: ${ms.toFixed(0)} ms`).toEqual([label, true]);
+    }
   });
 });
 
