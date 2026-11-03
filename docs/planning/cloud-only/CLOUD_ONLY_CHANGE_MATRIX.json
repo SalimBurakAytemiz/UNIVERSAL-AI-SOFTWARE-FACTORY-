@@ -1,0 +1,1481 @@
+{
+ "//TR": "Bu dosya Founder'ın 2026-11-02 cloud-only değişiklik matrisinin (MERGE_ONLY) birebir kaydıdır; yürütme kaynağı değildir, 241-Task PATCHED matrisiyle birleştirme girdisidir.",
+ "sourceFile": "UASCO_BULUT_DEGISIKLIK_MATRISI.json",
+ "status": "MERGE_ONLY_NOT_EXECUTION_SOURCE",
+ "fromBaselineTaskCount": 175,
+ "newerPatchedTaskCountClaimed": 241,
+ "instructions": "Apply changes keyed by ID to latest PATCHED source; preserve typed deps, PR bundles, claims, reseal lock and independent audit, do not overwrite latest patched matrix.",
+ "existingTaskOverrides": {
+  "V4-T0002": {
+   "name": "Bulut çalışma rutinleri ve cloud supervisor tespiti (yerel PC denetimi değil)",
+   "work": "GitHub Actions/Claude Cloud oturumları, mevcut bulut rutinleri ve eski remote worker kayıtlarını salt-okur envanterle. Founder-PC veya Task Scheduler gerekmiyor.",
+   "done": "CLOUD_ONLY: Required cloud CI/hosted runtime evidence for this task; never Founder-PC tests.",
+   "targetFiles": [
+    "EXT:GitHub Actions & Claude Cloud supervisor records"
+   ],
+   "dependsOn": [],
+   "wave": "W0",
+   "lane": "E_CONTROL",
+   "executionLocation": "CLOUD",
+   "startGates": [],
+   "mergeGates": [],
+   "authorityTier": "T0",
+   "reviewModel": "—",
+   "localRuntimeRequired": false
+  },
+  "UASCO-T0002": {
+   "name": "Founder Windows uygulaması SON KULLANICI KABULÜ (yalnız kur/aç/kullan)",
+   "work": "Bulutta tam E2E/CI SUCCESS sonrasında Founder yalnız imzalı/hash doğrulanmış Windows .exe kurar, giriş yapar, UI kullanır ve görsel/işlevsel kabul verir; Node, Git, WSL, CLI, güvenlik araçları ve test worker kurmaz.",
+   "done": "CLOUD_ONLY: Founder installs/opens .exe, logs in, views cloud run, downloads result; no local execution.",
+   "targetFiles": [
+    "EXT:Founder-PC USER-ACCEPTANCE-ONLY"
+   ],
+   "dependsOn": [
+    "CLOUD-T0011",
+    "CLOUD-T0006"
+   ],
+   "wave": "W1",
+   "lane": "F_FOUNDER",
+   "executionLocation": "FOUNDER_UAT_ONLY",
+   "startGates": [
+    "D-23",
+    "D-26"
+   ],
+   "mergeGates": [],
+   "authorityTier": "T3",
+   "reviewModel": "—",
+   "localRuntimeRequired": false
+  },
+  "UASCO-T0014": {
+   "name": "Bulut CI gerçek kullanıcı senaryosu: iki şablon, üç ardışık E2E",
+   "work": "Linux cloud runner/sandbox üzerinde 2 şablonda 3 ardışık gerçek model+task+test+security+export koşusu; Founder PC kullanılmaz.",
+   "done": "CLOUD_ONLY: Required cloud CI/hosted runtime evidence for this task; never Founder-PC tests.",
+   "targetFiles": [
+    "NEW:tests/cloud/e2e-first-delivery.test.ts"
+   ],
+   "dependsOn": [
+    "CLOUD-T0011"
+   ],
+   "wave": "W1",
+   "lane": "C_ENGINE",
+   "executionLocation": "CLOUD",
+   "startGates": [
+    "D-29"
+   ],
+   "mergeGates": [],
+   "authorityTier": "T0",
+   "reviewModel": "—",
+   "localRuntimeRequired": false
+  },
+  "UASCO-T0029": {
+   "name": "Cloud sandbox implement + verify uçtan uca doğrulama",
+   "work": "Claude Cloud/ayrı cloud worker sandbox içinde gerçek proje implement, izole test; Windows host prosesleri kullanılmaz; ağ/kaçış negatif testleri zorunlu.",
+   "done": "CLOUD_ONLY: Required cloud CI/hosted runtime evidence for this task; never Founder-PC tests.",
+   "targetFiles": [
+    "NEW:tests/cloud/implement-verify.test.ts"
+   ],
+   "dependsOn": [
+    "CLOUD-T0002",
+    "UASCO-T0031.b",
+    "CLOUD-T0007"
+   ],
+   "wave": "W1",
+   "lane": "C_ENGINE",
+   "executionLocation": "CLOUD",
+   "startGates": [],
+   "mergeGates": [
+    "D-03"
+   ],
+   "authorityTier": "T0",
+   "reviewModel": "—",
+   "localRuntimeRequired": false
+  },
+  "UASCO-T0031": {
+   "name": "#231 WSL2 sağlayıcısını devre dışı bırak; bulut SandboxProvider entegrasyonu",
+   "work": "#231 dosyalarını olduğu gibi merge ETME. Önce cloud sandbox adapter ve server bağlantısını kur; win32 için WSL2 varsayılan seçim kullanılmasın. Güvenli fallback fail-closed.",
+   "done": "CLOUD_ONLY: Required cloud CI/hosted runtime evidence for this task; never Founder-PC tests.",
+   "targetFiles": [
+    "NEW:core/sandbox/cloud-sandbox-provider.ts"
+   ],
+   "dependsOn": [
+    "CLOUD-T0002"
+   ],
+   "wave": "W1",
+   "lane": "C_ENGINE",
+   "executionLocation": "CLOUD",
+   "startGates": [],
+   "mergeGates": [
+    "D-03",
+    "D-31",
+    "D-07"
+   ],
+   "authorityTier": "T2",
+   "reviewModel": "taze Opus",
+   "localRuntimeRequired": false
+  },
+  "UASCO-T0031.a": {
+   "name": "Desktop setup-check: cloud worker erişilebilirlik ve auth reason kodları",
+   "work": "WSL_DISTRO/interop/virtualization yerel kontrolleri yerine CLOUD_AUTH_REQUIRED, CLOUD_WORKER_UNAVAILABLE, CLOUD_RUNTIME_NOT_CONFIGURED, CLOUD_READY durumlarını göster.",
+   "done": "CLOUD_ONLY: Required cloud CI/hosted runtime evidence for this task; never Founder-PC tests.",
+   "targetFiles": [
+    "apps/desktop/renderer/views/setup-check.js"
+   ],
+   "dependsOn": [
+    "CLOUD-T0004"
+   ],
+   "wave": "W1",
+   "lane": "A_UI",
+   "executionLocation": "CLOUD",
+   "startGates": [],
+   "mergeGates": [],
+   "authorityTier": "T1",
+   "reviewModel": "taze Sonnet",
+   "localRuntimeRequired": false
+  },
+  "UASCO-T0031.b": {
+   "name": "Control API cloud sandbox adapter bağlantısı",
+   "work": "server.ts varsayılan SandboxProvider olarak yerel WSL2 yerine remote cloud worker seçer; signed job, TLS, tenant scope ve fail-closed enforced.",
+   "done": "CLOUD_ONLY: Required cloud CI/hosted runtime evidence for this task; never Founder-PC tests.",
+   "targetFiles": [
+    "apps/control-api/src/server.ts"
+   ],
+   "dependsOn": [
+    "UASCO-T0031",
+    "CLOUD-T0004"
+   ],
+   "wave": "W1",
+   "lane": "B_API",
+   "executionLocation": "CLOUD",
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "authorityTier": "T2",
+   "reviewModel": "taze Opus",
+   "localRuntimeRequired": false
+  },
+  "UASCO-T0069.c": {
+   "name": "Bulut sandbox entegrasyonunun trust-root reseal ve yetkili merge paketi",
+   "work": "Yeni cloud provider + server bağlantısı + gate negatif testleri tamamlandığında trust-root manifest reseal; #231 olduğu gibi MERGE YOK. Korumalı kod T2 review ve Founder onayı.",
+   "done": "CLOUD_ONLY: Required cloud CI/hosted runtime evidence for this task; never Founder-PC tests.",
+   "targetFiles": [
+    "config/trust-root-manifest.json"
+   ],
+   "dependsOn": [
+    "UASCO-T0031",
+    "UASCO-T0031.b",
+    "UASCO-T0069.a",
+    "CLOUD-T0014"
+   ],
+   "wave": "W1",
+   "lane": "D_CI_RELEASE",
+   "executionLocation": "CLOUD",
+   "startGates": [],
+   "mergeGates": [
+    "D-07",
+    "D-31",
+    "D-03"
+   ],
+   "authorityTier": "T2",
+   "reviewModel": "taze Opus",
+   "localRuntimeRequired": false
+  },
+  "UASCO-T0035": {
+   "name": "Cloud R1 test/security/delivery kanıt kabulü",
+   "work": "Tam cloud chain 2 ürün 3 gerçek run; evidence ve artifact hashleri doğrula. Founder-PC otomatik test yürütmez.",
+   "done": "CLOUD_ONLY: Required cloud CI/hosted runtime evidence for this task; never Founder-PC tests.",
+   "targetFiles": [
+    "NEW:tests/cloud/r1-acceptance.test.ts"
+   ],
+   "dependsOn": [
+    "CLOUD-T0011"
+   ],
+   "wave": "W1",
+   "lane": "D_CI_RELEASE",
+   "executionLocation": "CLOUD",
+   "startGates": [
+    "D-19"
+   ],
+   "mergeGates": [],
+   "authorityTier": "T0",
+   "reviewModel": "—",
+   "localRuntimeRequired": false
+  },
+  "UASCO-T0044": {
+   "name": "Bulut remediation döngüsü ve STOP/negative test",
+   "work": "Gerçek cloud worker üzerinde seed hata→kod düzeltme→test, stop/retry/auth denial negative tests.",
+   "done": "CLOUD_ONLY: Required cloud CI/hosted runtime evidence for this task; never Founder-PC tests.",
+   "targetFiles": [
+    "NEW:tests/cloud/remediation.test.ts"
+   ],
+   "dependsOn": [
+    "CLOUD-T0007"
+   ],
+   "wave": "W1",
+   "lane": "C_ENGINE",
+   "executionLocation": "CLOUD",
+   "startGates": [],
+   "mergeGates": [],
+   "authorityTier": "T0",
+   "reviewModel": "—",
+   "localRuntimeRequired": false
+  },
+  "UASCO-T0003": {
+   "name": "Cloud model bağlantıları keşfi (yerel claude.exe zorunluluğu yok)",
+   "work": "Model/provider endpoint ve cloud executor auth probe, token bütçesi, fallback. Founder Windows PATH ve native claude.exe keşfi yok.",
+   "done": "CLOUD_ONLY: Required cloud CI/hosted runtime evidence for this task; never Founder-PC tests.",
+   "targetFiles": [
+    "NEW:core/cloud/ai-model-discovery.ts"
+   ],
+   "dependsOn": [
+    "CLOUD-T0004"
+   ],
+   "wave": "W1",
+   "lane": "C_ENGINE",
+   "executionLocation": "CLOUD",
+   "startGates": [],
+   "mergeGates": [],
+   "authorityTier": "T1",
+   "reviewModel": "taze Opus (güvenlik-hassas, koruma öncesi telafi; X-03)",
+   "localRuntimeRequired": false
+  },
+  "UASCO-T0061": {
+   "name": "Cloud executor/provider hazır olma durumu",
+   "work": "Bulut executor kimlik doğrulama + availability + retry; Windows Claude CLI kurulum şartı yok.",
+   "done": "CLOUD_ONLY: Required cloud CI/hosted runtime evidence for this task; never Founder-PC tests.",
+   "targetFiles": [
+    "NEW:core/cloud/executor-readiness.ts"
+   ],
+   "dependsOn": [
+    "CLOUD-T0004"
+   ],
+   "wave": "W1",
+   "lane": "C_ENGINE",
+   "executionLocation": "CLOUD",
+   "startGates": [],
+   "mergeGates": [],
+   "authorityTier": "T1",
+   "reviewModel": "taze Opus (güvenlik-hassas, koruma öncesi telafi; X-03)",
+   "localRuntimeRequired": false
+  },
+  "UASCO-T0061.a": {
+   "name": "Bulut sağlayıcı API değişiminde güvenli recovery",
+   "work": "Provider endpoint/version/credential rotasyonu, koşan job checkpoint ve safe retry; yerel Claude launcher SHA pinning son kullanıcıya zorunlu değil.",
+   "done": "CLOUD_ONLY: Required cloud CI/hosted runtime evidence for this task; never Founder-PC tests.",
+   "targetFiles": [
+    "NEW:core/cloud/provider-provenance.ts"
+   ],
+   "dependsOn": [
+    "UASCO-T0061"
+   ],
+   "wave": "W1",
+   "lane": "C_ENGINE",
+   "executionLocation": "CLOUD",
+   "startGates": [
+    "D-29"
+   ],
+   "mergeGates": [],
+   "authorityTier": "T1",
+   "reviewModel": "taze Opus (güvenlik-hassas, koruma öncesi telafi; X-03)",
+   "localRuntimeRequired": false
+  },
+  "V3-T1010": {
+   "name": "Bulutta güvenlik tarama profili R1",
+   "work": "gitleaks, trivy ve gerekli scanning tools cloud runner image içinde pinned+SHA doğrulanmış; founder PC kurulumu yok.",
+   "done": "CLOUD_ONLY: Required cloud CI/hosted runtime evidence for this task; never Founder-PC tests.",
+   "targetFiles": [
+    "NEW:scripts/ci/cloud-security.mjs"
+   ],
+   "dependsOn": [
+    "CLOUD-T0007"
+   ],
+   "wave": "W1",
+   "lane": "D_CI_RELEASE",
+   "executionLocation": "CLOUD",
+   "startGates": [
+    "D-19"
+   ],
+   "mergeGates": [],
+   "authorityTier": "T1",
+   "reviewModel": "taze Opus (güvenlik-hassas, koruma öncesi telafi; X-03)",
+   "localRuntimeRequired": false
+  },
+  "V3-T1013": {
+   "name": "Bulutta gerçek modelle BA/pre-dev koşusu",
+   "work": "Gerçek AI provider cloud executor üzerinden; kullanıcı bilgisayarında Claude Code CLI veya login gerekmiyor.",
+   "done": "CLOUD_ONLY: Required cloud CI/hosted runtime evidence for this task; never Founder-PC tests.",
+   "targetFiles": [
+    "NEW:tests/cloud/predev-live.test.ts"
+   ],
+   "dependsOn": [
+    "CLOUD-T0004"
+   ],
+   "wave": "W1",
+   "lane": "B_API",
+   "executionLocation": "CLOUD",
+   "startGates": [],
+   "mergeGates": [],
+   "authorityTier": "T1",
+   "reviewModel": "taze Sonnet",
+   "localRuntimeRequired": false
+  },
+  "V3-T1018": {
+   "name": "Bulutta R1 negatif senaryoları",
+   "work": "Cloud egress deny, sandbox escape deny, secret redaction, STOP, provider failure; Windows kullanıcı cihazı kullanılmaz.",
+   "done": "CLOUD_ONLY: Required cloud CI/hosted runtime evidence for this task; never Founder-PC tests.",
+   "targetFiles": [
+    "NEW:tests/cloud/negative-r1.test.ts"
+   ],
+   "dependsOn": [
+    "CLOUD-T0007"
+   ],
+   "wave": "W1",
+   "lane": "C_ENGINE",
+   "executionLocation": "CLOUD",
+   "startGates": [],
+   "mergeGates": [],
+   "authorityTier": "T0",
+   "reviewModel": "—",
+   "localRuntimeRequired": false
+  },
+  "V3-T1019": {
+   "name": "Founder yalnız .exe kur/aç/kullan UAT kılavuzu",
+   "work": "UAT adımları: imzalı/hash .exe indir, kur, başlat, login, proje isteği gönder, cloud job durumunu gör, teslimi indir, sorun bildir. CLI/WSL/Node yok.",
+   "done": "CLOUD_ONLY: Required cloud CI/hosted runtime evidence for this task; never Founder-PC tests.",
+   "targetFiles": [
+    "NEW:docs/acceptance/windows/FOUNDER-UAT-ONLY.md"
+   ],
+   "dependsOn": [
+    "CLOUD-T0006"
+   ],
+   "wave": "W1",
+   "lane": "A_UI",
+   "executionLocation": "CLOUD",
+   "startGates": [],
+   "mergeGates": [],
+   "authorityTier": "T0",
+   "reviewModel": "deterministic + Haiku özet",
+   "localRuntimeRequired": false
+  },
+  "UASCO-T0108": {
+   "name": "GitHub-hosted Windows CI worker pilotu (yerel Founder-PC worker YOK)",
+   "work": "10 PR Windows smoke ve installer regresyonunu hosted Windows runner üzerinde gözle; self-hosted Founder-PC runner/Task Scheduler gerektirme.",
+   "done": "CLOUD_ONLY: Required cloud CI/hosted runtime evidence for this task; never Founder-PC tests.",
+   "targetFiles": [
+    "NEW:.github/workflows/cloud-windows-ci.yml"
+   ],
+   "dependsOn": [
+    "CLOUD-T0006"
+   ],
+   "wave": "W2",
+   "lane": "D_CI_RELEASE",
+   "executionLocation": "CLOUD",
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "authorityTier": "T2",
+   "reviewModel": "taze Opus",
+   "localRuntimeRequired": false
+  },
+  "UASCO-T0110": {
+   "name": "Cloud usage/cost quota pause/resume",
+   "work": "Cloud provider limits, rate/cost meters, job pause/retry control, non-billable local client; no local worker.",
+   "done": "CLOUD_ONLY: Required cloud CI/hosted runtime evidence for this task; never Founder-PC tests.",
+   "targetFiles": [
+    "NEW:core/cloud/usage-quota.ts"
+   ],
+   "dependsOn": [
+    "CLOUD-T0001"
+   ],
+   "wave": "W0",
+   "lane": "E_CONTROL",
+   "executionLocation": "CLOUD",
+   "startGates": [],
+   "mergeGates": [
+    "D-08"
+   ],
+   "authorityTier": "T0",
+   "reviewModel": "deterministic + Haiku özet",
+   "localRuntimeRequired": false
+  },
+  "UASCO-T0078": {
+   "name": "Cloud worker scheduler/dispatcher heartbeat",
+   "work": "Cloud only worker lifecycle health check and lease; local laptop Task Scheduler kullanma.",
+   "done": "CLOUD_ONLY: Required cloud CI/hosted runtime evidence for this task; never Founder-PC tests.",
+   "targetFiles": [
+    "NEW:core/cloud/worker-scheduler.ts"
+   ],
+   "dependsOn": [
+    "CLOUD-T0003"
+   ],
+   "wave": "W1",
+   "lane": "E_CONTROL",
+   "executionLocation": "CLOUD",
+   "startGates": [],
+   "mergeGates": [],
+   "authorityTier": "T3",
+   "reviewModel": "—",
+   "localRuntimeRequired": false
+  },
+  "V3-T1034": {
+   "name": "Cloud CI bağımsız reviewer secret yönetimi",
+   "work": "Repository/CI secretları uygun hosted vault/GitHub secrets içinde; Founder-PCye secret/tool kurulmaz.",
+   "done": "CLOUD_ONLY: Required cloud CI/hosted runtime evidence for this task; never Founder-PC tests.",
+   "targetFiles": [
+    "EXT:GitHub Actions secret store"
+   ],
+   "dependsOn": [],
+   "wave": "W0",
+   "lane": "F_FOUNDER",
+   "executionLocation": "CLOUD_GOVERNANCE_OR_APPROVAL_ONLY",
+   "startGates": [
+    "D-21"
+   ],
+   "mergeGates": [],
+   "authorityTier": "T3",
+   "reviewModel": "—",
+   "localRuntimeRequired": false
+  }
+ },
+ "newTasks": [
+  {
+   "id": "CLOUD-T0001",
+   "parentId": "",
+   "legacyId": "",
+   "v3Feature": "V3-F013",
+   "epic": "V3-E3",
+   "name": "Bulut yürütme veri sözleşmesi ve güven sınırı",
+   "v31Status": "PROPOSED_CLOUD_ONLY",
+   "phase": "P0",
+   "wave": "W0",
+   "r1Critical": false,
+   "lane": "C_ENGINE",
+   "v4FeatureLane": "C_ENGINE",
+   "model": "sonnet",
+   "escalation": "Sonnet → one bounded Opus diagnosis on proof of failed hypotheses",
+   "reviewModel": "taze Opus (T2)",
+   "authorityTier": "T2",
+   "tierReason": "cloud-only controls; classify again against actual repo protected paths",
+   "costClass": "M",
+   "effort": [
+    4,
+    12
+   ],
+   "targetFiles": [
+    "NEW:core/cloud/contracts.ts"
+   ],
+   "protectedFiles": [],
+   "discovery": "Read only task target modules, current SHA and changed files; no full-repo scan.",
+   "dependsOn": [],
+   "gates": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "work": "İş/job kimliği, tenant, signed scope, timeout, idempotency, audit, retry, structured events, artifact SHA ve auth/deny politikalarını tasarla; tip, şema ve negatif testler.",
+   "done": "Sözleşme testleri ve yetkisiz iş isteği reddi PASS.",
+   "acId": "",
+   "acText": "",
+   "evidenceId": "",
+   "evidenceClass": "CLOUD_EXECUTION",
+   "evidenceEnv": "CLOUD",
+   "deliveryScenario": "CLOUD_ONLY_E2E",
+   "prMerge": "draft PR → SHA-bound review → hosted CI PASS → protected approval when required → serial merge",
+   "source": "CLOUD_ONLY_CHANGE_REQUEST 2026-11-02",
+   "executionLocation": "CLOUD",
+   "localRuntimeRequired": false,
+   "cloudOnlyOverride": true
+  },
+  {
+   "id": "CLOUD-T0002",
+   "parentId": "",
+   "legacyId": "",
+   "v3Feature": "V3-F013",
+   "epic": "V3-E3",
+   "name": "Uzaktan bulut sandbox ve izolasyon adapter",
+   "v31Status": "PROPOSED_CLOUD_ONLY",
+   "phase": "P1",
+   "wave": "W1",
+   "r1Critical": true,
+   "lane": "C_ENGINE",
+   "v4FeatureLane": "C_ENGINE",
+   "model": "sonnet",
+   "escalation": "Sonnet → one bounded Opus diagnosis on proof of failed hypotheses",
+   "reviewModel": "taze Opus (T2)",
+   "authorityTier": "T2",
+   "tierReason": "cloud-only controls; classify again against actual repo protected paths",
+   "costClass": "M",
+   "effort": [
+    12,
+    40
+   ],
+   "targetFiles": [
+    "NEW:core/sandbox/cloud-sandbox-provider.ts"
+   ],
+   "protectedFiles": [],
+   "discovery": "Read only task target modules, current SHA and changed files; no full-repo scan.",
+   "dependsOn": [
+    "CLOUD-T0001",
+    "CLOUD-T0003"
+   ],
+   "gates": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "work": "WSL2 yerine remote SandboxProvider ile cloud worker API, job allowlist, tenant isolation, CPU/RAM/time limit, deny egress, secrets, workspace boundary; sağlayıcı kimliği ve izolasyon kanıtı olmadan unavailable.",
+   "done": "Gerçek cloud runner sandbox escape/network/FS deny negatif testleri PASS. LOCAL WSL gerekmiyor.",
+   "acId": "",
+   "acText": "",
+   "evidenceId": "",
+   "evidenceClass": "CLOUD_EXECUTION",
+   "evidenceEnv": "CLOUD",
+   "deliveryScenario": "CLOUD_ONLY_E2E",
+   "prMerge": "draft PR → SHA-bound review → hosted CI PASS → protected approval when required → serial merge",
+   "source": "CLOUD_ONLY_CHANGE_REQUEST 2026-11-02",
+   "executionLocation": "CLOUD",
+   "localRuntimeRequired": false,
+   "cloudOnlyOverride": true
+  },
+  {
+   "id": "CLOUD-T0003",
+   "parentId": "",
+   "legacyId": "",
+   "v3Feature": "V3-F019",
+   "epic": "V3-E3",
+   "name": "Cloud job kuyruğu, signed dispatch, worker heartbeat ve STOP",
+   "v31Status": "PROPOSED_CLOUD_ONLY",
+   "phase": "P1",
+   "wave": "W1",
+   "r1Critical": true,
+   "lane": "B_API",
+   "v4FeatureLane": "B_API",
+   "model": "sonnet",
+   "escalation": "Sonnet → one bounded Opus diagnosis on proof of failed hypotheses",
+   "reviewModel": "taze Opus (T2)",
+   "authorityTier": "T2",
+   "tierReason": "cloud-only controls; classify again against actual repo protected paths",
+   "costClass": "M",
+   "effort": [
+    10,
+    32
+   ],
+   "targetFiles": [
+    "NEW:apps/control-api/src/cloud/jobs.ts"
+   ],
+   "protectedFiles": [],
+   "discovery": "Read only task target modules, current SHA and changed files; no full-repo scan.",
+   "dependsOn": [
+    "CLOUD-T0001"
+   ],
+   "gates": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "work": "Queue lease/idempotency, heartbeat, cancellation, durable retry and no duplicate execution; authenticated worker and audit log.",
+   "done": "Worker integration + canceled job no-output negative tests PASS.",
+   "acId": "",
+   "acText": "",
+   "evidenceId": "",
+   "evidenceClass": "CLOUD_EXECUTION",
+   "evidenceEnv": "CLOUD",
+   "deliveryScenario": "CLOUD_ONLY_E2E",
+   "prMerge": "draft PR → SHA-bound review → hosted CI PASS → protected approval when required → serial merge",
+   "source": "CLOUD_ONLY_CHANGE_REQUEST 2026-11-02",
+   "executionLocation": "CLOUD",
+   "localRuntimeRequired": false,
+   "cloudOnlyOverride": true
+  },
+  {
+   "id": "CLOUD-T0004",
+   "parentId": "",
+   "legacyId": "",
+   "v3Feature": "V3-F025",
+   "epic": "V3-E3",
+   "name": "Bulut Control API, kimlik, TLS, tenant güvenliği ve model bağlantısı",
+   "v31Status": "PROPOSED_CLOUD_ONLY",
+   "phase": "P1",
+   "wave": "W1",
+   "r1Critical": true,
+   "lane": "B_API",
+   "v4FeatureLane": "B_API",
+   "model": "sonnet",
+   "escalation": "Sonnet → one bounded Opus diagnosis on proof of failed hypotheses",
+   "reviewModel": "taze Opus (T2)",
+   "authorityTier": "T2",
+   "tierReason": "cloud-only controls; classify again against actual repo protected paths",
+   "costClass": "M",
+   "effort": [
+    14,
+    45
+   ],
+   "targetFiles": [
+    "NEW:apps/control-api/src/cloud/remote-gateway.ts"
+   ],
+   "protectedFiles": [],
+   "discovery": "Read only task target modules, current SHA and changed files; no full-repo scan.",
+   "dependsOn": [
+    "CLOUD-T0001"
+   ],
+   "gates": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "work": "Hosted Control API endpoint configuration, login/session, least privilege, TLS, secret vault, user/tenant scoping, Claude provider execution and bounded billing. Hosted service mevcut değilse CLOUD_RUNTIME_NOT_CONFIGURED.",
+   "done": "Cloud API real e2e auth cross-tenant denial, secret redaction + model invocation PASS.",
+   "acId": "",
+   "acText": "",
+   "evidenceId": "",
+   "evidenceClass": "CLOUD_EXECUTION",
+   "evidenceEnv": "CLOUD",
+   "deliveryScenario": "CLOUD_ONLY_E2E",
+   "prMerge": "draft PR → SHA-bound review → hosted CI PASS → protected approval when required → serial merge",
+   "source": "CLOUD_ONLY_CHANGE_REQUEST 2026-11-02",
+   "executionLocation": "CLOUD",
+   "localRuntimeRequired": false,
+   "cloudOnlyOverride": true
+  },
+  {
+   "id": "CLOUD-T0005",
+   "parentId": "",
+   "legacyId": "",
+   "v3Feature": "V3-F001",
+   "epic": "V3-E3",
+   "name": "Windows .exe yalnız remote cloud client/Control UI",
+   "v31Status": "PROPOSED_CLOUD_ONLY",
+   "phase": "P1",
+   "wave": "W1",
+   "r1Critical": true,
+   "lane": "A_UI",
+   "v4FeatureLane": "A_UI",
+   "model": "sonnet",
+   "escalation": "Sonnet → one bounded Opus diagnosis on proof of failed hypotheses",
+   "reviewModel": "taze Opus (T2)",
+   "authorityTier": "T1",
+   "tierReason": "cloud-only controls; classify again against actual repo protected paths",
+   "costClass": "M",
+   "effort": [
+    10,
+    35
+   ],
+   "targetFiles": [
+    "NEW:apps/desktop/renderer/views/cloud-connection.js"
+   ],
+   "protectedFiles": [],
+   "discovery": "Read only task target modules, current SHA and changed files; no full-repo scan.",
+   "dependsOn": [
+    "CLOUD-T0004"
+   ],
+   "gates": [],
+   "startGates": [],
+   "mergeGates": [],
+   "work": "Electron Windows 10/11 client auth, secure session, connection status, job commands/results/download; local WSL/Node/Claude CLI/tool install veya güvenilmeyen kod çalıştırma yok. Offline mod: status/read-only only.",
+   "done": "Windows runner 10/11 uygun olanlarda install, login, command, event streaming, download, stop; local execution 0.",
+   "acId": "",
+   "acText": "",
+   "evidenceId": "",
+   "evidenceClass": "CLOUD_EXECUTION",
+   "evidenceEnv": "CLOUD",
+   "deliveryScenario": "CLOUD_ONLY_E2E",
+   "prMerge": "draft PR → SHA-bound review → hosted CI PASS → protected approval when required → serial merge",
+   "source": "CLOUD_ONLY_CHANGE_REQUEST 2026-11-02",
+   "executionLocation": "CLOUD",
+   "localRuntimeRequired": false,
+   "cloudOnlyOverride": true
+  },
+  {
+   "id": "CLOUD-T0006",
+   "parentId": "",
+   "legacyId": "",
+   "v3Feature": "V3-F039",
+   "epic": "V3-E3",
+   "name": "Bulut Windows installer ve otomatik GUI/API smoke",
+   "v31Status": "PROPOSED_CLOUD_ONLY",
+   "phase": "P1",
+   "wave": "W1",
+   "r1Critical": true,
+   "lane": "D_CI_RELEASE",
+   "v4FeatureLane": "D_CI_RELEASE",
+   "model": "sonnet",
+   "escalation": "Sonnet → one bounded Opus diagnosis on proof of failed hypotheses",
+   "reviewModel": "taze Opus (T2)",
+   "authorityTier": "T2",
+   "tierReason": "cloud-only controls; classify again against actual repo protected paths",
+   "costClass": "M",
+   "effort": [
+    8,
+    24
+   ],
+   "targetFiles": [
+    "NEW:.github/workflows/uasco-cloud-windows-e2e.yml"
+   ],
+   "protectedFiles": [],
+   "discovery": "Read only task target modules, current SHA and changed files; no full-repo scan.",
+   "dependsOn": [
+    "CLOUD-T0005"
+   ],
+   "gates": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "work": "GitHub hosted Windows runner ile .exe artifact, kur/kaldır, Electron UI↔remote mock/real staging API; cloud test evidence, exe SHA, stable logs. Founder-PC runner yok.",
+   "done": "Aynı SHA için successful hosted Windows installer/UI smoke + exe SHA logged.",
+   "acId": "",
+   "acText": "",
+   "evidenceId": "",
+   "evidenceClass": "CLOUD_EXECUTION",
+   "evidenceEnv": "CLOUD",
+   "deliveryScenario": "CLOUD_ONLY_E2E",
+   "prMerge": "draft PR → SHA-bound review → hosted CI PASS → protected approval when required → serial merge",
+   "source": "CLOUD_ONLY_CHANGE_REQUEST 2026-11-02",
+   "executionLocation": "CLOUD",
+   "localRuntimeRequired": false,
+   "cloudOnlyOverride": true
+  },
+  {
+   "id": "CLOUD-T0007",
+   "parentId": "",
+   "legacyId": "",
+   "v3Feature": "V3-F014",
+   "epic": "V3-E3",
+   "name": "Cloud QA/SAST/SCA/secret scanning ve izolasyon testleri",
+   "v31Status": "PROPOSED_CLOUD_ONLY",
+   "phase": "P1",
+   "wave": "W1",
+   "r1Critical": true,
+   "lane": "D_CI_RELEASE",
+   "v4FeatureLane": "D_CI_RELEASE",
+   "model": "sonnet",
+   "escalation": "Sonnet → one bounded Opus diagnosis on proof of failed hypotheses",
+   "reviewModel": "taze Opus (T2)",
+   "authorityTier": "T1",
+   "tierReason": "cloud-only controls; classify again against actual repo protected paths",
+   "costClass": "M",
+   "effort": [
+    8,
+    30
+   ],
+   "targetFiles": [
+    "NEW:scripts/ci/cloud-assurance.mjs"
+   ],
+   "protectedFiles": [],
+   "discovery": "Read only task target modules, current SHA and changed files; no full-repo scan.",
+   "dependsOn": [
+    "CLOUD-T0002"
+   ],
+   "gates": [],
+   "startGates": [],
+   "mergeGates": [],
+   "work": "Cloud runner image gitleaks/trivy pinned, integrity, branch protection, SAST/negative tests, real security evidence, never PARTIAL=PASS.",
+   "done": "Cloud CI real security + negative evidence PASS; tools absent => BLOCKED, not bypassed.",
+   "acId": "",
+   "acText": "",
+   "evidenceId": "",
+   "evidenceClass": "CLOUD_EXECUTION",
+   "evidenceEnv": "CLOUD",
+   "deliveryScenario": "CLOUD_ONLY_E2E",
+   "prMerge": "draft PR → SHA-bound review → hosted CI PASS → protected approval when required → serial merge",
+   "source": "CLOUD_ONLY_CHANGE_REQUEST 2026-11-02",
+   "executionLocation": "CLOUD",
+   "localRuntimeRequired": false,
+   "cloudOnlyOverride": true
+  },
+  {
+   "id": "CLOUD-T0008",
+   "parentId": "",
+   "legacyId": "",
+   "v3Feature": "V3-F015",
+   "epic": "V3-E3",
+   "name": "Bulut artifact storage, SHA, signed delivery URL",
+   "v31Status": "PROPOSED_CLOUD_ONLY",
+   "phase": "P1",
+   "wave": "W1",
+   "r1Critical": true,
+   "lane": "B_API",
+   "v4FeatureLane": "B_API",
+   "model": "sonnet",
+   "escalation": "Sonnet → one bounded Opus diagnosis on proof of failed hypotheses",
+   "reviewModel": "taze Opus (T2)",
+   "authorityTier": "T2",
+   "tierReason": "cloud-only controls; classify again against actual repo protected paths",
+   "costClass": "M",
+   "effort": [
+    8,
+    25
+   ],
+   "targetFiles": [
+    "NEW:core/cloud/artifacts.ts"
+   ],
+   "protectedFiles": [],
+   "discovery": "Read only task target modules, current SHA and changed files; no full-repo scan.",
+   "dependsOn": [
+    "CLOUD-T0003"
+   ],
+   "gates": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "work": "Tenant isolation, short-lived signed download URL, SHA256, immutable provenance, encryption at rest, secret redaction; no local project compile.",
+   "done": "Two projects downloaded + clean cloud independent npm ci/test + tampered hash denied.",
+   "acId": "",
+   "acText": "",
+   "evidenceId": "",
+   "evidenceClass": "CLOUD_EXECUTION",
+   "evidenceEnv": "CLOUD",
+   "deliveryScenario": "CLOUD_ONLY_E2E",
+   "prMerge": "draft PR → SHA-bound review → hosted CI PASS → protected approval when required → serial merge",
+   "source": "CLOUD_ONLY_CHANGE_REQUEST 2026-11-02",
+   "executionLocation": "CLOUD",
+   "localRuntimeRequired": false,
+   "cloudOnlyOverride": true
+  },
+  {
+   "id": "CLOUD-T0009",
+   "parentId": "",
+   "legacyId": "",
+   "v3Feature": "V3-F043",
+   "epic": "V3-E3",
+   "name": "Bulut altyapı sağlayıcısı ve kapasite hazır olma kapısı",
+   "v31Status": "PROPOSED_CLOUD_ONLY",
+   "phase": "P0",
+   "wave": "W0",
+   "r1Critical": false,
+   "lane": "E_CONTROL",
+   "v4FeatureLane": "E_CONTROL",
+   "model": "deterministic",
+   "escalation": "Sonnet → one bounded Opus diagnosis on proof of failed hypotheses",
+   "reviewModel": "taze Opus (T2)",
+   "authorityTier": "T1",
+   "tierReason": "cloud-only controls; classify again against actual repo protected paths",
+   "costClass": "M",
+   "effort": [
+    1,
+    3
+   ],
+   "targetFiles": [
+    "EXT:Cloud provider & hosted worker service"
+   ],
+   "protectedFiles": [],
+   "discovery": "Read only task target modules, current SHA and changed files; no full-repo scan.",
+   "dependsOn": [],
+   "gates": [],
+   "startGates": [],
+   "mergeGates": [],
+   "work": "Cloud backend/sandbox runtime, free/paid limits, secrets, Windows CI availability, auth/deployment endpoints read-only verify; ücret/abonelik yetkisi Founder, available değilse CLOUD_RUNTIME_NOT_CONFIGURED.",
+   "done": "Gerçek cloud runtime endpoint ve sandbox worker verified OR BLOCKED_INFRA; fake PASS yok.",
+   "acId": "",
+   "acText": "",
+   "evidenceId": "",
+   "evidenceClass": "CLOUD_EXECUTION",
+   "evidenceEnv": "CLOUD",
+   "deliveryScenario": "CLOUD_ONLY_E2E",
+   "prMerge": "draft PR → SHA-bound review → hosted CI PASS → protected approval when required → serial merge",
+   "source": "CLOUD_ONLY_CHANGE_REQUEST 2026-11-02",
+   "executionLocation": "CLOUD",
+   "localRuntimeRequired": false,
+   "cloudOnlyOverride": true
+  },
+  {
+   "id": "CLOUD-T0010",
+   "parentId": "",
+   "legacyId": "",
+   "v3Feature": "V3-F050",
+   "epic": "V3-E3",
+   "name": "Claude bulut ajansal görev kırılımı ve idempotent task DAG",
+   "v31Status": "PROPOSED_CLOUD_ONLY",
+   "phase": "P2",
+   "wave": "W2",
+   "r1Critical": false,
+   "lane": "B_API",
+   "v4FeatureLane": "B_API",
+   "model": "sonnet",
+   "escalation": "Sonnet → one bounded Opus diagnosis on proof of failed hypotheses",
+   "reviewModel": "taze Opus (T2)",
+   "authorityTier": "T2",
+   "tierReason": "cloud-only controls; classify again against actual repo protected paths",
+   "costClass": "M",
+   "effort": [
+    12,
+    40
+   ],
+   "targetFiles": [
+    "NEW:core/cloud/task-orchestrator.ts"
+   ],
+   "protectedFiles": [],
+   "discovery": "Read only task target modules, current SHA and changed files; no full-repo scan.",
+   "dependsOn": [
+    "CLOUD-T0003",
+    "CLOUD-T0004"
+   ],
+   "gates": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "work": "Founder fikri → BA/analiz/plan/Feature/Task/AC/evidence → model seçimi → cloud builder/reviewer/test/security → PR, git ops; bounded queue; role registry; manual Founder gates respected.",
+   "done": "Gerçek cloud predev/task dispatch/review to artifact E2E, no local agent.",
+   "acId": "",
+   "acText": "",
+   "evidenceId": "",
+   "evidenceClass": "CLOUD_EXECUTION",
+   "evidenceEnv": "CLOUD",
+   "deliveryScenario": "CLOUD_ONLY_E2E",
+   "prMerge": "draft PR → SHA-bound review → hosted CI PASS → protected approval when required → serial merge",
+   "source": "CLOUD_ONLY_CHANGE_REQUEST 2026-11-02",
+   "executionLocation": "CLOUD",
+   "localRuntimeRequired": false,
+   "cloudOnlyOverride": true
+  },
+  {
+   "id": "CLOUD-T0011",
+   "parentId": "",
+   "legacyId": "",
+   "v3Feature": "V3-F057",
+   "epic": "V3-E3",
+   "name": "İki proje tipi 3× tam bulut E2E ve bağımsız teslim testi",
+   "v31Status": "PROPOSED_CLOUD_ONLY",
+   "phase": "P1",
+   "wave": "W1",
+   "r1Critical": true,
+   "lane": "D_CI_RELEASE",
+   "v4FeatureLane": "D_CI_RELEASE",
+   "model": "sonnet",
+   "escalation": "Sonnet → one bounded Opus diagnosis on proof of failed hypotheses",
+   "reviewModel": "taze Opus (T2)",
+   "authorityTier": "T2",
+   "tierReason": "cloud-only controls; classify again against actual repo protected paths",
+   "costClass": "M",
+   "effort": [
+    8,
+    24
+   ],
+   "targetFiles": [
+    "NEW:tests/cloud/acceptance-suite.mts"
+   ],
+   "protectedFiles": [],
+   "discovery": "Read only task target modules, current SHA and changed files; no full-repo scan.",
+   "dependsOn": [
+    "CLOUD-T0002",
+    "CLOUD-T0004",
+    "CLOUD-T0007",
+    "CLOUD-T0008"
+   ],
+   "gates": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "work": "web-node ve node-lib projeleri: gerçek model→implement→sandbox test→security→ZIP; cloud clean checkout npm ci/test ve STOP/negative; 3 gerçek ardışık koşu.",
+   "done": "6 gerçek cloud run PASS; evidence links SHA bound; no Founder-PC tests.",
+   "acId": "",
+   "acText": "",
+   "evidenceId": "",
+   "evidenceClass": "CLOUD_EXECUTION",
+   "evidenceEnv": "CLOUD",
+   "deliveryScenario": "CLOUD_ONLY_E2E",
+   "prMerge": "draft PR → SHA-bound review → hosted CI PASS → protected approval when required → serial merge",
+   "source": "CLOUD_ONLY_CHANGE_REQUEST 2026-11-02",
+   "executionLocation": "CLOUD",
+   "localRuntimeRequired": false,
+   "cloudOnlyOverride": true
+  },
+  {
+   "id": "CLOUD-T0012",
+   "parentId": "",
+   "legacyId": "",
+   "v3Feature": "V3-F039",
+   "epic": "V3-E3",
+   "name": "Cloud staging/production ayrımı ve health/secret rotasyonu",
+   "v31Status": "PROPOSED_CLOUD_ONLY",
+   "phase": "P1",
+   "wave": "W1",
+   "r1Critical": true,
+   "lane": "D_CI_RELEASE",
+   "v4FeatureLane": "D_CI_RELEASE",
+   "model": "sonnet",
+   "escalation": "Sonnet → one bounded Opus diagnosis on proof of failed hypotheses",
+   "reviewModel": "taze Opus (T2)",
+   "authorityTier": "T2",
+   "tierReason": "cloud-only controls; classify again against actual repo protected paths",
+   "costClass": "M",
+   "effort": [
+    6,
+    18
+   ],
+   "targetFiles": [
+    "NEW:docs/cloud/DEPLOYMENT-RUNBOOK.md"
+   ],
+   "protectedFiles": [],
+   "discovery": "Read only task target modules, current SHA and changed files; no full-repo scan.",
+   "dependsOn": [
+    "CLOUD-T0004"
+   ],
+   "gates": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "work": "Cloud service configuration and deployment runbook; staging smoke, monitoring, logs redacted, rollback, backup and secret rotation; hiçbir altyapıyı otomatik ücretli açma.",
+   "done": "Staging gerçek health/auth test PASS, production yalnız yetkili deploy.",
+   "acId": "",
+   "acText": "",
+   "evidenceId": "",
+   "evidenceClass": "CLOUD_EXECUTION",
+   "evidenceEnv": "CLOUD",
+   "deliveryScenario": "CLOUD_ONLY_E2E",
+   "prMerge": "draft PR → SHA-bound review → hosted CI PASS → protected approval when required → serial merge",
+   "source": "CLOUD_ONLY_CHANGE_REQUEST 2026-11-02",
+   "executionLocation": "CLOUD",
+   "localRuntimeRequired": false,
+   "cloudOnlyOverride": true
+  },
+  {
+   "id": "CLOUD-T0013",
+   "parentId": "",
+   "legacyId": "",
+   "v3Feature": "V3-F039",
+   "epic": "V3-E3",
+   "name": "Cloud Windows 10/11 uyumluluk matrisi ve installer smoke",
+   "v31Status": "PROPOSED_CLOUD_ONLY",
+   "phase": "P1",
+   "wave": "W1",
+   "r1Critical": true,
+   "lane": "D_CI_RELEASE",
+   "v4FeatureLane": "D_CI_RELEASE",
+   "model": "sonnet",
+   "escalation": "Sonnet → one bounded Opus diagnosis on proof of failed hypotheses",
+   "reviewModel": "taze Opus (T2)",
+   "authorityTier": "T1",
+   "tierReason": "cloud-only controls; classify again against actual repo protected paths",
+   "costClass": "M",
+   "effort": [
+    4,
+    12
+   ],
+   "targetFiles": [
+    "NEW:tests/ci/windows-os-matrix.mts"
+   ],
+   "protectedFiles": [],
+   "discovery": "Read only task target modules, current SHA and changed files; no full-repo scan.",
+   "dependsOn": [
+    "CLOUD-T0006"
+   ],
+   "gates": [],
+   "startGates": [],
+   "mergeGates": [],
+   "work": "Hosted runner desteklenen Windows sürümleri ve sürüm matrisi; Windows 10 Home 19045 hedeflenirse uygun runner/VM ortamını doğrula, yoksa UNKNOWN yaz; Founder PC otomatik testte kullanılmaz.",
+   "done": "Desteklenen OS sürümleri açık ve doğrulanmış, Windows 10 hosted run yoksa UNKNOWN bildir.",
+   "acId": "",
+   "acText": "",
+   "evidenceId": "",
+   "evidenceClass": "CLOUD_EXECUTION",
+   "evidenceEnv": "CLOUD",
+   "deliveryScenario": "CLOUD_ONLY_E2E",
+   "prMerge": "draft PR → SHA-bound review → hosted CI PASS → protected approval when required → serial merge",
+   "source": "CLOUD_ONLY_CHANGE_REQUEST 2026-11-02",
+   "executionLocation": "CLOUD",
+   "localRuntimeRequired": false,
+   "cloudOnlyOverride": true
+  },
+  {
+   "id": "CLOUD-T0014",
+   "parentId": "",
+   "legacyId": "",
+   "v3Feature": "V3-F013",
+   "epic": "V3-E3",
+   "name": "Yerel WSL/runtime çalıştırmayı kapat, fail-closed cloud mode",
+   "v31Status": "PROPOSED_CLOUD_ONLY",
+   "phase": "P1",
+   "wave": "W1",
+   "r1Critical": true,
+   "lane": "C_ENGINE",
+   "v4FeatureLane": "C_ENGINE",
+   "model": "sonnet",
+   "escalation": "Sonnet → one bounded Opus diagnosis on proof of failed hypotheses",
+   "reviewModel": "taze Opus (T2)",
+   "authorityTier": "T2",
+   "tierReason": "cloud-only controls; classify again against actual repo protected paths",
+   "costClass": "M",
+   "effort": [
+    6,
+    18
+   ],
+   "targetFiles": [
+    "NEW:core/sandbox/cloud-only-gate.ts"
+   ],
+   "protectedFiles": [],
+   "discovery": "Read only task target modules, current SHA and changed files; no full-repo scan.",
+   "dependsOn": [
+    "CLOUD-T0002"
+   ],
+   "gates": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "work": "Windows ürün modunda default WSL2/local process fallback OFF; Cloud endpoint unavailable durumunda job başlatılmaz; eski #231 değişiklikleri otomatik merge edilmez; native cloud-only gate.",
+   "done": "Windows client üzerinde wsl.exe/node/claude.exe launch 0; cloud unavailable => non-executing error.",
+   "acId": "",
+   "acText": "",
+   "evidenceId": "",
+   "evidenceClass": "CLOUD_EXECUTION",
+   "evidenceEnv": "CLOUD",
+   "deliveryScenario": "CLOUD_ONLY_E2E",
+   "prMerge": "draft PR → SHA-bound review → hosted CI PASS → protected approval when required → serial merge",
+   "source": "CLOUD_ONLY_CHANGE_REQUEST 2026-11-02",
+   "executionLocation": "CLOUD",
+   "localRuntimeRequired": false,
+   "cloudOnlyOverride": true
+  },
+  {
+   "id": "CLOUD-T0015",
+   "parentId": "",
+   "legacyId": "",
+   "v3Feature": "V3-F025",
+   "epic": "V3-E3",
+   "name": "Bulut model sağlayıcıları ve kota/fallback entegre yürütme",
+   "v31Status": "PROPOSED_CLOUD_ONLY",
+   "phase": "P1",
+   "wave": "W1",
+   "r1Critical": true,
+   "lane": "C_ENGINE",
+   "v4FeatureLane": "C_ENGINE",
+   "model": "sonnet",
+   "escalation": "Sonnet → one bounded Opus diagnosis on proof of failed hypotheses",
+   "reviewModel": "taze Opus (T2)",
+   "authorityTier": "T2",
+   "tierReason": "cloud-only controls; classify again against actual repo protected paths",
+   "costClass": "M",
+   "effort": [
+    8,
+    30
+   ],
+   "targetFiles": [
+    "NEW:models/cloud-router/provider-routing.ts"
+   ],
+   "protectedFiles": [],
+   "discovery": "Read only task target modules, current SHA and changed files; no full-repo scan.",
+   "dependsOn": [
+    "CLOUD-T0004"
+   ],
+   "gates": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "work": "Claude / mevcut ücretsiz sağlayıcılar yalnız doğrulanan API erişimiyle; key vault, rate limits, model capabilities, per task Haiku/Sonnet/Opus, fallback without leaks, approval for paid.",
+   "done": "Gerçek cloud model request, auth deny, quota/fallback, token usage evidence.",
+   "acId": "",
+   "acText": "",
+   "evidenceId": "",
+   "evidenceClass": "CLOUD_EXECUTION",
+   "evidenceEnv": "CLOUD",
+   "deliveryScenario": "CLOUD_ONLY_E2E",
+   "prMerge": "draft PR → SHA-bound review → hosted CI PASS → protected approval when required → serial merge",
+   "source": "CLOUD_ONLY_CHANGE_REQUEST 2026-11-02",
+   "executionLocation": "CLOUD",
+   "localRuntimeRequired": false,
+   "cloudOnlyOverride": true
+  }
+ ],
+ "decisionOverrides": {
+  "D-03": {
+   "title": "Cloud sandbox zorunlu; Windows/WSL2 yerel kurulum yok",
+   "options": "A: güvenli cloud sandbox/runner servisi ve izolasyon kanıtı; B: başka cloud provider; C: ertele. Yerel WSL2 seçeneği yok.",
+   "recommendation": "A, ancak yetkilendirilen/erişilebilir cloud worker kanıtından sonra",
+   "blocks": "CLOUD-T0002 ve UASCO-T0031 merge; runtime yoksa BLOCKED_INFRA"
+  },
+  "D-23": {
+   "title": "Founder yalnız .exe kurulum, giriş, UI ve son kullanıcı kabulü yapar",
+   "options": "A: Founder Windows 10 Home .exe kur/aç/kullan UAT; B: opsiyonel uzaktan ekran gösterimi. Tüm E2E, security, agent/model/sandbox testi cloud CI.",
+   "recommendation": "A",
+   "blocks": "Founder yalnız UASCO-T0002; cloud testleri D-23 beklemez"
+  },
+  "D-26": {
+   "title": "Windows 10 Home / Windows 11 desktop istemci uyumluluğu; lokal sandbox yok",
+   "options": "A: Windows 10 19045 dahil hedefle ve hosted smoke kanıtla; B: desteklenmeyen OS için açık uyumluluk sınırlaması ve güvenli hata. WSL2 ön koşulu yok.",
+   "recommendation": "A; kanıt yoksa UNKNOWN",
+   "blocks": "CLOUD-T0013, UASCO-T0002"
+  },
+  "D-12": {
+   "title": "Bulut supervisor/worker tekilliği; Founder-PC yerel otomasyon ön koşulu kaldırılır",
+   "options": "A: Cloud job controller en fazla 3 builder ile, eski cloud rutinleri kapalı kontrolü; B: önce 1 slotla çalış. Founder-PC scheduled tasks kontrolü zorunlu değil.",
+   "recommendation": "A; cloud controller proof sonrası 3 slot",
+   "blocks": "CLOUD-T0003, V4-T0002"
+  },
+  "D-07": {
+   "title": "Cloud-only protected-path reseal/merge sırası; #231 WSL dalı değişmeden merge edilmez",
+   "options": "A: #251 sonra #247; cloud sandbox adapter ve server cloud-only policy için ayrı reviewed T2 reseal; B: ayrı güvenli PR paketleri.",
+   "recommendation": "A",
+   "blocks": "UASCO-T0069.c, CLOUD-T0014"
+  },
+  "D-31": {
+   "title": "Cloud-only T2 onayları tek karar oturumunda paketlenir, her PR ayrı açık onay",
+   "options": "A: dalga başı T2 review paketi; korumalı manifest, cloud auth/worker, CI/security, Electron main için ayrı onay; B: PR tekil anında; blanket yetki YOK.",
+   "recommendation": "A",
+   "blocks": "Korumalı T2 PR merge"
+  },
+  "D-24": {
+   "title": "Orijinal V3.1 ve mevcut PATCHED görev şeması birlikte uzlaştırılsın",
+   "options": "A: kaynak UUID/Task ID koru; PATCHED 241 Task mevcutsa üzerine cloud-only delta uygula; B: önceki 175 tabanlısa cloud task ekle. 175 ile 241 içeriğini otomatik eşdeğer sayma.",
+   "recommendation": "A",
+   "blocks": "Task import/compatibility"
+  },
+  "D-08": {
+   "title": "Cloud runner, API, storage, Claude model maliyeti için kurallı bütçe",
+   "options": "A: 0 ek ücretli kaynak, ücretsiz kotalarla başla ve sert dur; B: açık Founder bütçe tavanı ve ücretli cloud runtime sağlar. Ücretli kaynak izinsiz kurulmaz.",
+   "recommendation": "A, altyapı yetmezse BLOCKED_INFRA",
+   "blocks": "Cloud runtime provisioning, AI usage"
+  },
+  "D-19": {
+   "title": "Cloud CI güvenlik tarama araçları; Founder PC kurulumu yok",
+   "options": "A: cloud runner image pinned gitleaks/trivy; B: hosted provider scanning. Yalnız raporlanan PASS kabul.",
+   "recommendation": "A",
+   "blocks": "CLOUD-T0007"
+  },
+  "D-28": {
+   "title": "Cloud sandbox müşteri bağımlılık yüklemesi: izole ağ, cache, egress",
+   "options": "A: taranan/değişmez lockfile cache cloud worker; B: allowlisted registry; C: geçersiz. Laptop bypass yok.",
+   "recommendation": "A",
+   "blocks": "CLOUD-T0002 and CLOUD-T0011"
+  },
+  "D-29": {
+   "title": "Yerel Claude launcher SHA yerine cloud model gateway credential/identity rotasyonu",
+   "options": "A: cloud provider key vault, revocation, stable job resume; B: cloud platform auth integration. Native claude.exe Founder-PC zorunluluğu yok.",
+   "recommendation": "A",
+   "blocks": "CLOUD-T0015, UASCO-T0061.a"
+  }
+ },
+ "acceptanceOverrides": [
+  {
+   "acId": "V3-AC-F001-1",
+   "environment": "FOUNDER_UI_UAT_ONLY",
+   "criterion": "Founder only installs, opens, logs in and exercises visible .exe UI. Actual execution and tests happen remotely; show trustworthy cloud status/artifact. Original functional behavior: CI installer'ı (sha256 kayıtlı) Windows UI'ye kurulur; açılır; backend HEALTHY; RW-011 kontrol listesi PASS",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "CI installer'ı (sha256 kayıtlı) Founder-PC'ye kurulur; açılır; backend HEALTHY; RW-011 kontrol listesi PASS"
+  },
+  {
+   "acId": "V3-AC-F001-2",
+   "environment": "CLOUD_HOSTED_CI_OR_ISOLATED_WORKER",
+   "criterion": "Hosted real model/code/security test evidence required. No Founder-PC execution. bulut kontrollü hosted çalışma ortamında GET /v1/system/executors CLOUD_EXECUTOR için READY (CLI_NOT_FOUND değil)",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "Kurulu uygulamada GET /v1/system/executors LOCAL_CLAUDE için READY (CLI_NOT_FOUND değil)"
+  },
+  {
+   "acId": "V3-AC-F003-2",
+   "environment": "FOUNDER_UI_UAT_ONLY",
+   "criterion": "Founder only installs, opens, logs in and exercises visible .exe UI. Actual execution and tests happen remotely; show trustworthy cloud status/artifact. Original functional behavior: Tek alan → DRAFT önerisi (asla authorize etmez); belirsiz komut netleştirme sorusu döner; Windows UI'de 3 örnek komut DRAFT üretir",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "Tek alan → DRAFT önerisi (asla authorize etmez); belirsiz komut netleştirme sorusu döner; Founder-PC'de 3 örnek komut DRAFT üretir"
+  },
+  {
+   "acId": "V3-AC-F004-1",
+   "environment": "FOUNDER_UI_UAT_ONLY",
+   "criterion": "Founder only installs, opens, logs in and exercises visible .exe UI. Actual execution and tests happen remotely; show trustworthy cloud status/artifact. Original functional behavior: Windows UI'de intake → onaylar → run → teslim akışı yalnız Desktop ekranlarından, elle dosya düzenlemeden tamamlanır (3/3)",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "Founder-PC'de intake → onaylar → run → teslim akışı yalnız Desktop ekranlarından, elle dosya düzenlemeden tamamlanır (3/3)"
+  },
+  {
+   "acId": "V3-AC-F007-1",
+   "environment": "FOUNDER_UI_UAT_ONLY",
+   "criterion": "Founder only installs, opens, logs in and exercises visible .exe UI. Actual execution and tests happen remotely; show trustworthy cloud status/artifact. Original functional behavior: Gizlilik kararı kayıtlı; ses → DRAFT komut testi; ses verisi saklama politikası uygulanır",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "Gizlilik kararı kayıtlı; ses → DRAFT komut testi; ses verisi saklama politikası uygulanır"
+  },
+  {
+   "acId": "V3-AC-F011-1",
+   "environment": "CLOUD_HOSTED_CI_OR_ISOLATED_WORKER",
+   "criterion": "Hosted real model/code/security test evidence required. No Founder-PC execution. BA/Requirements/Architecture/Plan gerçek modelle üretilir (FAKE değil, journal + artifact hash); her biri Founder APPROVED",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "BA/Requirements/Architecture/Plan gerçek modelle üretilir (FAKE değil, journal + artifact hash); her biri Founder APPROVED"
+  },
+  {
+   "acId": "V3-AC-F011-2",
+   "environment": "CLOUD_HOSTED_CI_OR_ISOLATED_WORKER",
+   "criterion": "Hosted real model/code/security test evidence required. No Founder-PC execution. Yazılı kalite rubric'iyle ≥2 projede Founder puanı ≥ eşik",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "Yazılı kalite rubric'iyle ≥2 projede Founder puanı ≥ eşik"
+  },
+  {
+   "acId": "V3-AC-F050-2",
+   "environment": "FOUNDER_UI_UAT_ONLY",
+   "criterion": "Founder only installs, opens, logs in and exercises visible .exe UI. Actual execution and tests happen remotely; show trustworthy cloud status/artifact. Original functional behavior: Desktop'ta hiyerarşi görünür; Founder Feature düzeyinde onay/revizyon ister; onaysız Task yürütmeye alınmaz",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "Desktop'ta hiyerarşi görünür; Founder Feature düzeyinde onay/revizyon ister; onaysız Task yürütmeye alınmaz"
+  },
+  {
+   "acId": "V3-AC-F012-2",
+   "environment": "CLOUD_HOSTED_CI_OR_ISOLATED_WORKER",
+   "criterion": "Hosted real model/code/security test evidence required. No Founder-PC execution. bulut kontrollü hosted çalışma ortamında gerçek implement + verify + review CLEAN; 3 ardışık run",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "Windows'ta gerçek implement + verify + review CLEAN; 3 ardışık run"
+  },
+  {
+   "acId": "V3-AC-F013-1",
+   "environment": "CLOUD_HOSTED_CI_OR_ISOLATED_WORKER",
+   "criterion": "Hosted real model/code/security test evidence required. No Founder-PC execution. bulut kontrollü hosted çalışma ortamında testCommand isolated cloud sandbox'ta PASSED/FAILED (NOT_EXECUTED değil)",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "Kurulu uygulamada testCommand WSL2 sandbox'ta PASSED/FAILED (NOT_EXECUTED değil)"
+  },
+  {
+   "acId": "V3-AC-F013-2",
+   "environment": "CLOUD_HOSTED_CI_OR_ISOLATED_WORKER",
+   "criterion": "Hosted real model/code/security test evidence required. No Founder-PC execution. Sandbox'tan ağ çıkışı ve workspace dışı yazma reddedilir",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "Sandbox'tan ağ çıkışı ve workspace dışı yazma reddedilir"
+  },
+  {
+   "acId": "V3-AC-F014-1",
+   "environment": "CLOUD_HOSTED_CI_OR_ISOLATED_WORKER",
+   "criterion": "Hosted real model/code/security test evidence required. No Founder-PC execution. SEC-PROFILE-R1 (yerleşik secret scan + pinned gitleaks + SCA) gerçek binary ile çalışır; araç eksikse sonuç PARTIAL ve teslim PRODUCT_VERIFIED olamaz",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "SEC-PROFILE-R1 (yerleşik secret scan + pinned gitleaks + SCA) gerçek binary ile çalışır; araç eksikse sonuç PARTIAL ve teslim PRODUCT_VERIFIED olamaz"
+  },
+  {
+   "acId": "V3-AC-F005-1",
+   "environment": "FOUNDER_UI_UAT_ONLY",
+   "criterion": "Founder only installs, opens, logs in and exercises visible .exe UI. Actual execution and tests happen remotely; show trustworthy cloud status/artifact. Original functional behavior: Desktop export kurulu uygulamada ZIP üretir; sha256 sunucu kaydıyla eşleşir; scrubber+export testi iki OS'ta yeşil",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "Desktop export kurulu uygulamada ZIP üretir; sha256 sunucu kaydıyla eşleşir; scrubber+export testi iki OS'ta yeşil"
+  },
+  {
+   "acId": "V3-AC-F006-1",
+   "environment": "FOUNDER_UI_UAT_ONLY",
+   "criterion": "Founder only installs, opens, logs in and exercises visible .exe UI. Actual execution and tests happen remotely; show trustworthy cloud status/artifact. Original functional behavior: Revizyon talebi → değişiklik planı → yeni run → diff onayı Windows UI'de uçtan uca",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "Revizyon talebi → değişiklik planı → yeni run → diff onayı Founder-PC'de uçtan uca"
+  },
+  {
+   "acId": "V3-AC-F015-1",
+   "environment": "FOUNDER_UI_UAT_ONLY",
+   "criterion": "Founder only installs, opens, logs in and exercises visible .exe UI. Actual execution and tests happen remotely; show trustworthy cloud status/artifact. Original functional behavior: SOURCE_DELIVERY_ACCEPTED gerçek run için kurulu uygulamada kaydedilir ve DELIVERY_ACCEPTED kanıtına bağlanır (3/3)",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "SOURCE_DELIVERY_ACCEPTED gerçek run için kurulu uygulamada kaydedilir ve DELIVERY_ACCEPTED kanıtına bağlanır (3/3)"
+  },
+  {
+   "acId": "V3-AC-F018-1",
+   "environment": "FOUNDER_UI_UAT_ONLY",
+   "criterion": "Founder only installs, opens, logs in and exercises visible .exe UI. Actual execution and tests happen remotely; show trustworthy cloud status/artifact. Original functional behavior: Teslimde API docs + kullanıcı kılavuzu + changelog; Founder okuma testi",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "Teslimde API docs + kullanıcı kılavuzu + changelog; Founder okuma testi"
+  },
+  {
+   "acId": "V3-AC-F057-2",
+   "environment": "CLOUD_HOSTED_CI_OR_ISOLATED_WORKER",
+   "criterion": "Hosted real model/code/security test evidence required. No Founder-PC execution. Teslim ZIP'i temiz dizinde UASCO dışında `npm ci && npm test` ile geçer (script çıktısı; 3/3)",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "Teslim ZIP'i temiz dizinde UASCO dışında `npm ci && npm test` ile geçer (script çıktısı; 3/3)"
+  },
+  {
+   "acId": "V3-AC-F019-2",
+   "environment": "CLOUD_HOSTED_CI_OR_ISOLATED_WORKER",
+   "criterion": "Hosted real model/code/security test evidence required. No Founder-PC execution. Gerçek run'da tohumlanmış başarısız test remediation döngüsüyle düzeltilir (≥1 run)",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "Gerçek run'da tohumlanmış başarısız test remediation döngüsüyle düzeltilir (≥1 run)"
+  },
+  {
+   "acId": "V3-AC-F020-1",
+   "environment": "CLOUD_HOSTED_CI_OR_ISOLATED_WORKER",
+   "criterion": "Hosted real model/code/security test evidence required. No Founder-PC execution. Bir mission'da ≥3 rol crew sürücüsüyle çalışır; handoff journal'da; gerçek run",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "Bir mission'da ≥3 rol crew sürücüsüyle çalışır; handoff journal'da; gerçek run"
+  },
+  {
+   "acId": "V3-AC-F021-1",
+   "environment": "CLOUD_HOSTED_CI_OR_ISOLATED_WORKER",
+   "criterion": "Hosted real model/code/security test evidence required. No Founder-PC execution. ≥2 eşzamanlı run lease/fencing testli ve çakışmasız; bütçe sınırı uygulanır",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "≥2 eşzamanlı run lease/fencing testli ve çakışmasız; bütçe sınırı uygulanır"
+  },
+  {
+   "acId": "V3-AC-F022-1",
+   "environment": "CLOUD_HOSTED_CI_OR_ISOLATED_WORKER",
+   "criterion": "Hosted real model/code/security test evidence required. No Founder-PC execution. STOP çalışan run'ı CANCELLED yapar; sağlayıcı hatası/kota açık BLOCKED nedeniyle durur (sessiz başarısızlık yok)",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "STOP çalışan run'ı CANCELLED yapar; sağlayıcı hatası/kota açık BLOCKED nedeniyle durur (sessiz başarısızlık yok)"
+  },
+  {
+   "acId": "V3-AC-F024-1",
+   "environment": "CLOUD_HOSTED_CI_OR_ISOLATED_WORKER",
+   "criterion": "Hosted real model/code/security test evidence required. No Founder-PC execution. ≥3 yeni arketip bağlaması; her biri gerçek run'da kullanıldı ve EVALUATED",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "≥3 yeni arketip bağlaması; her biri gerçek run'da kullanıldı ve EVALUATED"
+  },
+  {
+   "acId": "V3-AC-F025-1",
+   "environment": "CLOUD_HOSTED_CI_OR_ISOLATED_WORKER",
+   "criterion": "Hosted real model/code/security test evidence required. No Founder-PC execution. Paketli uygulamada executor READY; implementer ve reviewer profilleri ayrı",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "Paketli uygulamada executor READY; implementer ve reviewer profilleri ayrı"
+  },
+  {
+   "acId": "V3-AC-F027-1",
+   "environment": "CLOUD_HOSTED_CI_OR_ISOLATED_WORKER",
+   "criterion": "Hosted real model/code/security test evidence required. No Founder-PC execution. CLI'nin raporladığı kullanım adım kaydına yazılır; yoksa UNKNOWN etiketlenir (R1'de 3/3 run)",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "CLI'nin raporladığı kullanım adım kaydına yazılır; yoksa UNKNOWN etiketlenir (R1'de 3/3 run)"
+  },
+  {
+   "acId": "V3-AC-F028-1",
+   "environment": "CLOUD_HOSTED_CI_OR_ISOLATED_WORKER",
+   "criterion": "Hosted real model/code/security test evidence required. No Founder-PC execution. Kota/rate-limit'te onaylı politikayla ikinci yol; bir gerçek run başka sağlayıcı veya isolated cloud sandboxle tamamlanır; model id ve bağımsızlık etiketi kayıtlı",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "Kota/rate-limit'te onaylı politikayla ikinci yol; bir gerçek run başka sağlayıcı veya yerel modelle tamamlanır; model id ve bağımsızlık etiketi kayıtlı"
+  },
+  {
+   "acId": "V3-AC-F051-1",
+   "environment": "CLOUD_HOSTED_CI_OR_ISOLATED_WORKER",
+   "criterion": "Hosted real model/code/security test evidence required. No Founder-PC execution. Onaylı görev DAG'ı runner'ı sürer; her Task kendi test/review kanıtını üretir",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "Onaylı görev DAG'ı runner'ı sürer; her Task kendi test/review kanıtını üretir"
+  },
+  {
+   "acId": "V3-AC-F055-1",
+   "environment": "CLOUD_HOSTED_CI_OR_ISOLATED_WORKER",
+   "criterion": "Hosted real model/code/security test evidence required. No Founder-PC execution. 9 bağlı rol için rol başına ≥5 vaka gerçek modelle koşar; sonuç non-FAKE kanıt",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "9 bağlı rol için rol başına ≥5 vaka gerçek modelle koşar; sonuç non-FAKE kanıt"
+  },
+  {
+   "acId": "V3-AC-F055-2",
+   "environment": "CLOUD_HOSTED_CI_OR_ISOLATED_WORKER",
+   "criterion": "Hosted real model/code/security test evidence required. No Founder-PC execution. Arketip başına başarı oranı, maliyet, süre; ≥6 arketip CERTIFIED (eşik Founder kararı)",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "Arketip başına başarı oranı, maliyet, süre; ≥6 arketip CERTIFIED (eşik Founder kararı)"
+  },
+  {
+   "acId": "V3-AC-F009-3",
+   "environment": "CLOUD_HOSTED_CI_OR_ISOLATED_WORKER",
+   "criterion": "Hosted real model/code/security test evidence required. No Founder-PC execution. cloud model provider süreçleri sandbox'ta; anahtarlı journal anchor + tamper testi",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "Claude CLI süreçleri sandbox'ta; anahtarlı journal anchor + tamper testi"
+  },
+  {
+   "acId": "V3-AC-F008-2",
+   "environment": "FOUNDER_UI_UAT_ONLY",
+   "criterion": "Founder only installs, opens, logs in and exercises visible .exe UI. Actual execution and tests happen remotely; show trustworthy cloud status/artifact. Original functional behavior: Cockpit'te run durumu, engeller, bekleyen onaylar, maliyet/bütçe tek ekranda; 5 iş günü kullanım kaydı",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "Cockpit'te run durumu, engeller, bekleyen onaylar, maliyet/bütçe tek ekranda; 5 iş günü kullanım kaydı"
+  },
+  {
+   "acId": "V3-AC-F008-3",
+   "environment": "FOUNDER_UI_UAT_ONLY",
+   "criterion": "Founder only installs, opens, logs in and exercises visible .exe UI. Actual execution and tests happen remotely; show trustworthy cloud status/artifact. Original functional behavior: OS bildirimi ve rapor dışa aktarma",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "OS bildirimi ve rapor dışa aktarma"
+  },
+  {
+   "acId": "V3-AC-F016-2",
+   "environment": "CLOUD_HOSTED_CI_OR_ISOLATED_WORKER",
+   "criterion": "Hosted real model/code/security test evidence required. No Founder-PC execution. İkinci gerçek web stack (TS + frontend + test runner) gerçek uçtan uca PASS",
+   "historicalEnvironment": "FOUNDER-PC",
+   "historicalCriterion": "İkinci gerçek web stack (TS + frontend + test runner) gerçek uçtan uca PASS"
+  }
+ ],
+ "prohibited": "No local WSL/VM/BIOS/local worker/Node/Claude CLI/security tool; Founder only exe UAT; #231 unmodified merge forbidden; no local fallback."
+}
