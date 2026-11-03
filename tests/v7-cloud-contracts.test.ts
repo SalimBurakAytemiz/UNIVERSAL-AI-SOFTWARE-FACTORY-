@@ -11,6 +11,7 @@ import {
   CLOUD_CONTRACT_VERSION,MAX_JOB_TIMEOUT_MS,signScope,verifyScopeSignature,validateCloudJobRequest,verifyEventStream,verifyArtifact,
   auditRecordFor,canonicalJson,sha256Hex,type CloudJobRequest,type CloudJobEvent,type UnsignedScope,
 } from "../core/cloud/contracts.js";
+import {registerCrewCoordinatorCases} from "./support/crew-coordinator.cases.js"; // UASCO-T0045 CrewCoordinator/composeTeam AC bağlama vakaları
 
 const SIGNING_FIXTURE="test-scope-key-".repeat(3);
 const now=new Date("2026-11-02T12:00:00Z");
@@ -158,3 +159,4 @@ registerCloudConnectionViewCases();
 registerWorkosStoreLockCases();
 registerAutonomyCases();
 registerAutonomyExecutorCases();
+registerCrewCoordinatorCases();
