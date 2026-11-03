@@ -83,3 +83,23 @@ export function routeModel(request: unknown, catalog: unknown): ModelRouteDecisi
   const none = `no permitted model at ${base} or above for ${r.dataClass}`;
   return { ...refuse("NO_PERMITTED_MODEL", none), reasons: [...reasons, none] };
 }
+
+// //TR: UASCO-T0062 / V3-AC-F026-1: her adımın model id'si ve routing kararı tek, saf ve deterministik bir kayda dönüşür; journal girdisi ve Desktop satırı bu kayıttan türetilir (journal'a yazma ve Desktop bağlaması ayrı bağlama işidir).
+export interface ModelRoutingRecord {
+  kind: "MODEL_ROUTING_DECISION"; stepId: string;
+  decision: ModelRouteDecision["decision"]; code: RouteCode; modelId: string | null; modelClass: ModelClass | null; tier: CostTier | null; reasons: readonly string[];
+}
+export function modelRoutingRecord(stepId: unknown, decision: ModelRouteDecision): ModelRoutingRecord {
+  if (!nonEmpty(stepId)) throw new Error("Model routing record requires a non-empty stepId");
+  const routed = decision.decision === "ROUTE";
+  if (routed !== (decision.code === "ROUTED") || routed !== nonEmpty(decision.modelId)) throw new Error("Model routing decision is inconsistent");
+  return Object.freeze({ kind: "MODEL_ROUTING_DECISION", stepId, decision: decision.decision, code: decision.code, modelId: decision.modelId,
+    modelClass: decision.modelClass, tier: decision.tier, reasons: Object.freeze([...decision.reasons]) });
+}
+// //TR: Her adım kararsız kalamaz: routeModel ile kayıt birlikte üretilir; REFUSE da kayda geçer.
+export function routeModelStep(stepId: unknown, request: unknown, catalog: unknown): { decision: ModelRouteDecision; record: ModelRoutingRecord } {
+  const decision = routeModel(request, catalog);
+  return { decision, record: modelRoutingRecord(stepId, decision) };
+}
+export const modelRoutingDesktopLine = (r: ModelRoutingRecord): string =>
+  r.decision === "ROUTE" ? `${r.stepId}: ROUTE ${r.modelId} (${r.modelClass}/${r.tier})` : `${r.stepId}: REFUSE ${r.code} — ${r.reasons.join("; ")}`;
