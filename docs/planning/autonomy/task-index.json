@@ -1,0 +1,4666 @@
+{
+ "//TR": "build-task-index.mjs tarafından V4.1 yürütme matrisinden türetilir; elle düzenlenmez.",
+ "source": {
+  "zip": "docs/planning/v41/UASCO_V4_1_CLOUD_MERGED.zip",
+  "entry": "UASCO_V4_1_CLOUD/02_V4_1_EXECUTION_MATRIX.json",
+  "sha256": "95d5dbbf8271e70a267732b0a3250f8b938bfffa7072f17d49c45b9691380ffb"
+ },
+ "count": 256,
+ "tasks": [
+  {
+   "id": "CLOUD-T0001",
+   "tier": "T2",
+   "status": "PROPOSED_CLOUD_ONLY",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "Bulut yürütme veri sözleşmesi ve güven sınırı"
+  },
+  {
+   "id": "CLOUD-T0009",
+   "tier": "T1",
+   "status": "PROPOSED_CLOUD_ONLY",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "CLOUD",
+   "name": "Bulut altyapı sağlayıcısı ve kapasite hazır olma kapısı"
+  },
+  {
+   "id": "UASCO-T0001",
+   "tier": "T2",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Installer CI smoke (kur/başlat/onar/kaldır)"
+  },
+  {
+   "id": "UASCO-T0004",
+   "tier": "T2",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Backend crash/restart yönetimi"
+  },
+  {
+   "id": "UASCO-T0005",
+   "tier": "T2",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Renderer'ın 73 /v1 path'i kayıtlı route'a çözülür"
+  },
+  {
+   "id": "UASCO-T0007",
+   "tier": "T2",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Windows real-Electron journey"
+  },
+  {
+   "id": "UASCO-T0009",
+   "tier": "T1",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Intake formu → POST /v1/intakes"
+  },
+  {
+   "id": "UASCO-T0010",
+   "tier": "T1",
+   "status": "ASSET_CODED_UNWIRED",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Command-intake çekirdeği"
+  },
+  {
+   "id": "UASCO-T0011",
+   "tier": "T1",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Tek komut alanı UI + route"
+  },
+  {
+   "id": "UASCO-T0012",
+   "tier": "T1",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Work ekranı, görev durumu, görev→run bağlantısı"
+  },
+  {
+   "id": "UASCO-T0013",
+   "tier": "T1",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Analysis/predev route'ları ve kararları"
+  },
+  {
+   "id": "UASCO-T0015",
+   "tier": "T2",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "prepareRunDelivery ZIP + secret-scan bloğu"
+  },
+  {
+   "id": "UASCO-T0016",
+   "tier": "T2",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Desktop export düzeltmesi"
+  },
+  {
+   "id": "UASCO-T0017",
+   "tier": "T2",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "UI-015 akıllı revizyon"
+  },
+  {
+   "id": "UASCO-T0018",
+   "tier": "T2",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [
+    "D-15"
+   ],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Masaüstü ses girişi"
+  },
+  {
+   "id": "UASCO-T0019",
+   "tier": "T1",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "In-app bildirim akışı"
+  },
+  {
+   "id": "UASCO-T0020",
+   "tier": "T1",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "OS bildirimi ve rapor dışa aktarma"
+  },
+  {
+   "id": "UASCO-T0021",
+   "tier": "T2",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "AUD-004 token kapısı"
+  },
+  {
+   "id": "UASCO-T0022",
+   "tier": "T2",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "CSP, IPC allow-list, trusted-sender kontrolü"
+  },
+  {
+   "id": "UASCO-T0023.a",
+   "tier": "T2",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [
+    "D-27"
+   ],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Paketli backend'i utilityProcess'e taşıma (RunAsNode fuse ön koşulu)"
+  },
+  {
+   "id": "UASCO-T0025",
+   "tier": "T1",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "ClaudePreDevBuilder + validator'lar"
+  },
+  {
+   "id": "UASCO-T0027",
+   "tier": "T2",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "MissionRunner 7 adım"
+  },
+  {
+   "id": "UASCO-T0030",
+   "tier": "T2",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Linux unshare sağlayıcısı + ürün çalıştırma"
+  },
+  {
+   "id": "UASCO-T0032",
+   "tier": "T2",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Yerleşik secret scan (5 tür)"
+  },
+  {
+   "id": "UASCO-T0034",
+   "tier": "T2",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "SOURCE_DELIVERY_ACCEPTED kaydı"
+  },
+  {
+   "id": "UASCO-T0036",
+   "tier": "T1",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "web-node / node-lib / empty şablonları"
+  },
+  {
+   "id": "UASCO-T0038",
+   "tier": "T0",
+   "status": "MISSING",
+   "wave": "W0",
+   "deps": [
+    [
+     "UASCO-T0120",
+     "MERGED"
+    ]
+   ],
+   "startGates": [
+    "D-02"
+   ],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Kapsam kararı"
+  },
+  {
+   "id": "UASCO-T0039",
+   "tier": "T3",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Müşteri repo'suna push/PR"
+  },
+  {
+   "id": "UASCO-T0042",
+   "tier": "T2",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Lease yenileme, fencing, claim cap"
+  },
+  {
+   "id": "UASCO-T0043",
+   "tier": "T2",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Quota/rate-limit sınıflama → BLOCKED"
+  },
+  {
+   "id": "UASCO-T0045",
+   "tier": "T1",
+   "status": "ASSET_CODED_UNWIRED",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "CrewCoordinator / composeTeam çekirdeği"
+  },
+  {
+   "id": "UASCO-T0048",
+   "tier": "T2",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "GLOBAL_STOP"
+  },
+  {
+   "id": "UASCO-T0050",
+   "tier": "T2",
+   "status": "ASSET_CODED_UNWIRED",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "pkg-lease1 cross-environment lease kodu"
+  },
+  {
+   "id": "UASCO-T0051",
+   "tier": "T2",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Origin'de yetkili canlı lease"
+  },
+  {
+   "id": "UASCO-T0052",
+   "tier": "T2",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Master V2: C-RDY-1, C-CTX-1, C-RDY-2a, B1, A1, A4"
+  },
+  {
+   "id": "UASCO-T0053",
+   "tier": "T2",
+   "status": "DONE_OBSERVED",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Master V2 A2 (#292)"
+  },
+  {
+   "id": "UASCO-T0054",
+   "tier": "T2",
+   "status": "DONE_OBSERVED",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Master V2 B2 (#291)"
+  },
+  {
+   "id": "UASCO-T0055",
+   "tier": "T2",
+   "status": "DONE_OBSERVED",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Master V2 C-RDY-2b (#288)"
+  },
+  {
+   "id": "UASCO-T0056",
+   "tier": "T2",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Master V2 kalan Lane-C paketleri"
+  },
+  {
+   "id": "UASCO-T0057",
+   "tier": "T2",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Master V2 kalan cross-lane maddeleri"
+  },
+  {
+   "id": "UASCO-T0058",
+   "tier": "T2",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "9 first-delivery rol bağlaması"
+  },
+  {
+   "id": "UASCO-T0059",
+   "tier": "T2",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [
+    "D-10"
+   ],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Rol bağlama genişletme"
+  },
+  {
+   "id": "UASCO-T0060",
+   "tier": "T2",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "LocalClaudeExecutors + iki profil"
+  },
+  {
+   "id": "UASCO-T0062",
+   "tier": "T2",
+   "status": "ASSET_CODED_UNWIRED",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "routeModel çekirdeği"
+  },
+  {
+   "id": "UASCO-T0065",
+   "tier": "T2",
+   "status": "ASSET_CODED_UNWIRED",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "OmniRoute keşif istemcisi"
+  },
+  {
+   "id": "UASCO-T0066",
+   "tier": "T3",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [
+    "D-09"
+   ],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Failover ve ikinci sağlayıcı"
+  },
+  {
+   "id": "UASCO-T0067",
+   "tier": "T2",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "test-surface.ts koruması"
+  },
+  {
+   "id": "UASCO-T0068",
+   "tier": "T2",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Trust-root mührü (verify ok)"
+  },
+  {
+   "id": "UASCO-T0069",
+   "tier": "T2",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Korunan yol kapsamı"
+  },
+  {
+   "id": "UASCO-T0072",
+   "tier": "T3",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [
+    "D-05"
+   ],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Ruleset / kimlik ayrımı"
+  },
+  {
+   "id": "UASCO-T0073",
+   "tier": "T2",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Action-gateway çekirdeği"
+  },
+  {
+   "id": "UASCO-T0074",
+   "tier": "T2",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Gerçek politika bağlamı"
+  },
+  {
+   "id": "UASCO-T0075",
+   "tier": "T2",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "dependency-supply-chain kapısı"
+  },
+  {
+   "id": "UASCO-T0076",
+   "tier": "T2",
+   "status": "DONE_OBSERVED",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "#293 override düzeltmesi"
+  },
+  {
+   "id": "UASCO-T0079",
+   "tier": "T2",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "MOB-1..9 tasarım dokümanları"
+  },
+  {
+   "id": "UASCO-T0083",
+   "tier": "T1",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "RN/Android uygulaması"
+  },
+  {
+   "id": "UASCO-T0084",
+   "tier": "T1",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "/v1/mobile + gateway"
+  },
+  {
+   "id": "UASCO-T0085",
+   "tier": "T1",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Mobil güvenlik koşulları ve ileri özellikler"
+  },
+  {
+   "id": "UASCO-T0086",
+   "tier": "T1",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Attestation sertleştirme"
+  },
+  {
+   "id": "UASCO-T0087",
+   "tier": "T2",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Sharded Windows CI"
+  },
+  {
+   "id": "UASCO-T0089",
+   "tier": "T2",
+   "status": "DONE_OBSERVED",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Base-wide dependency kırmızısı"
+  },
+  {
+   "id": "UASCO-T0092",
+   "tier": "T2",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "windows-installer.yml"
+  },
+  {
+   "id": "UASCO-T0096",
+   "tier": "T0",
+   "status": "BLOCKED",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [
+    "D-11"
+   ],
+   "mergeGates": [],
+   "exec": "",
+   "name": "#66 kararı"
+  },
+  {
+   "id": "UASCO-T0100",
+   "tier": "T0",
+   "status": "BLOCKED",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Founder-held PR'lar"
+  },
+  {
+   "id": "UASCO-T0103",
+   "tier": "T3",
+   "status": "UNVERIFIABLE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Runner kontrolü"
+  },
+  {
+   "id": "UASCO-T0104",
+   "tier": "T2",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "coord-ledger SHA-bound review + merge-gate"
+  },
+  {
+   "id": "UASCO-T0105",
+   "tier": "T2",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Dispatch claim (nonce + ls-remote read-back)"
+  },
+  {
+   "id": "UASCO-T0107",
+   "tier": "T2",
+   "status": "UNVERIFIABLE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Lane C freeze kapsamı"
+  },
+  {
+   "id": "UASCO-T0110",
+   "tier": "T2",
+   "status": "MISSING",
+   "wave": "W0",
+   "deps": [
+    [
+     "CLOUD-T0001",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-08",
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "Cloud usage/cost quota pause/resume"
+  },
+  {
+   "id": "UASCO-T0113",
+   "tier": "T3",
+   "status": "MISSING",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [
+    "D-14"
+   ],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Repo görünürlüğü/CI bütçesi kararı"
+  },
+  {
+   "id": "UASCO-T0114",
+   "tier": "T2",
+   "status": "ASSET_DONE",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Controller + 3 lane tick kapatıldı (02:27Z)"
+  },
+  {
+   "id": "UASCO-T0115",
+   "tier": "T2",
+   "status": "VERIFY_PENDING",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "http_api rutinleri"
+  },
+  {
+   "id": "UASCO-T0116",
+   "tier": "T2",
+   "status": "MISSING",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Heartbeat kararı"
+  },
+  {
+   "id": "UASCO-T0117",
+   "tier": "T2",
+   "status": "MISSING",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Rutin prompt sürümleme"
+  },
+  {
+   "id": "UASCO-T0119",
+   "tier": "T0",
+   "status": "MISSING",
+   "wave": "W0",
+   "deps": [
+    [
+     "V3-T1006",
+     "DONE"
+    ],
+    [
+     "V3-T1005",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0120",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Tek görev kaydı"
+  },
+  {
+   "id": "UASCO-T0120",
+   "tier": "T2",
+   "status": "MISSING",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [
+    "D-01"
+   ],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Tek roadmap"
+  },
+  {
+   "id": "UASCO-T0123",
+   "tier": "T2",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Registry genişliği programı (ertelendi)"
+  },
+  {
+   "id": "UASCO-T0124",
+   "tier": "T0",
+   "status": "MISSING",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Kanıt digest manifesti"
+  },
+  {
+   "id": "UASCO-T0128",
+   "tier": "T2",
+   "status": "DONE_OBSERVED",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Lane C #288 onarım/park kararı"
+  },
+  {
+   "id": "V3-T1001",
+   "tier": "T1",
+   "status": "PROPOSED",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Store-lock sıfır-bayt kilit kurtarma (TD-V2-06)"
+  },
+  {
+   "id": "V3-T1002",
+   "tier": "T2",
+   "status": "PROPOSED",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-18",
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Provenance kontrollü shard aggregator"
+  },
+  {
+   "id": "V3-T1003",
+   "tier": "T2",
+   "status": "PROPOSED",
+   "wave": "W0",
+   "deps": [
+    [
+     "V3-T1002",
+     "CODE_READY"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-18",
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Shard verdict ↔ GitHub job conclusion çapraz kontrolü"
+  },
+  {
+   "id": "V3-T1005",
+   "tier": "T2",
+   "status": "PROPOSED",
+   "wave": "W0",
+   "deps": [
+    [
+     "V3-T1006",
+     "DONE"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "PR şablonu + V3-T kimliği zorunlu check"
+  },
+  {
+   "id": "V3-T1006",
+   "tier": "T0",
+   "status": "PROPOSED",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "LEGACY_BASELINE snapshot'ı"
+  },
+  {
+   "id": "V3-T1007",
+   "tier": "T2",
+   "status": "PROPOSED",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [
+    "D-17"
+   ],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Base-red politikası: merge-freeze, build-freeze değil"
+  },
+  {
+   "id": "V3-T1008",
+   "tier": "T2",
+   "status": "PROPOSED",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Ara seri merge kuralı (aynı dosya kümesi)"
+  },
+  {
+   "id": "V3-T1010",
+   "tier": "T2",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [
+    "D-19",
+    "D-23"
+   ],
+   "mergeGates": [],
+   "exec": "CLOUD",
+   "name": "Bulutta güvenlik tarama profili R1"
+  },
+  {
+   "id": "V3-T1011",
+   "tier": "T2",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Üç bağımsız kabulden teslim etiketi türetme"
+  },
+  {
+   "id": "V3-T1013",
+   "tier": "T1",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [
+    "D-23"
+   ],
+   "mergeGates": [],
+   "exec": "CLOUD",
+   "name": "Bulutta gerçek modelle BA/pre-dev koşusu"
+  },
+  {
+   "id": "V3-T1017",
+   "tier": "T2",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Golden eval v0 (9 bağlı rol)"
+  },
+  {
+   "id": "V3-T1020",
+   "tier": "T3",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-04"
+   ],
+   "exec": "",
+   "name": "Birleşik SHA CI (merge queue veya zorunlu up-to-date)"
+  },
+  {
+   "id": "V3-T1026",
+   "tier": "T2",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Ürün R0–R3 → action-gateway eşlemesi"
+  },
+  {
+   "id": "V3-T1027",
+   "tier": "T1",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Cockpit maliyet/bütçe ve onay kuyruğu paneli"
+  },
+  {
+   "id": "V3-T1030",
+   "tier": "T2",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Yerel/ücretsiz model aday değerlendirmesi (spike)"
+  },
+  {
+   "id": "V3-T1033",
+   "tier": "T2",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "FA-LEASE2 log-only modu"
+  },
+  {
+   "id": "V3-T1034",
+   "tier": "T3",
+   "status": "PROPOSED",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [
+    "D-21"
+   ],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "CLOUD_GOVERNANCE_OR_APPROVAL_ONLY",
+   "name": "Cloud CI bağımsız reviewer secret yönetimi"
+  },
+  {
+   "id": "V3-T1036",
+   "tier": "T2",
+   "status": "PROPOSED",
+   "wave": "W0",
+   "deps": [
+    [
+     "V3-T1002",
+     "CODE_READY"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-18",
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Attempt geçmişi ve PASS_AFTER_RETRY raporu"
+  },
+  {
+   "id": "V3-T1037",
+   "tier": "T2",
+   "status": "SPLIT",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [
+    "D-10"
+   ],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Arketip eval ve sertifikasyon"
+  },
+  {
+   "id": "V4-T0001",
+   "tier": "T0",
+   "status": "PROPOSED_V4_1",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-30"
+   ],
+   "exec": "",
+   "name": "Installer artifact toplama ve .exe SHA kaydı (latest-known-good)"
+  },
+  {
+   "id": "V4-T0002",
+   "tier": "T0",
+   "status": "PROPOSED_V4_1",
+   "wave": "W0",
+   "deps": [],
+   "startGates": [
+    "D-12"
+   ],
+   "mergeGates": [],
+   "exec": "CLOUD",
+   "name": "Bulut çalışma rutinleri ve cloud supervisor tespiti (yerel PC denetimi değil)"
+  },
+  {
+   "id": "CLOUD-T0002",
+   "tier": "T2",
+   "status": "PROPOSED_CLOUD_ONLY",
+   "wave": "W1",
+   "deps": [
+    [
+     "CLOUD-T0001",
+     "MERGED"
+    ],
+    [
+     "CLOUD-T0003",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "Uzaktan bulut sandbox ve izolasyon adapter"
+  },
+  {
+   "id": "CLOUD-T0003",
+   "tier": "T2",
+   "status": "PROPOSED_CLOUD_ONLY",
+   "wave": "W1",
+   "deps": [
+    [
+     "CLOUD-T0001",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "Cloud job kuyruğu, signed dispatch, worker heartbeat ve STOP"
+  },
+  {
+   "id": "CLOUD-T0004",
+   "tier": "T2",
+   "status": "PROPOSED_CLOUD_ONLY",
+   "wave": "W1",
+   "deps": [
+    [
+     "CLOUD-T0001",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "Bulut Control API, kimlik, TLS, tenant güvenliği ve model bağlantısı"
+  },
+  {
+   "id": "CLOUD-T0005",
+   "tier": "T1",
+   "status": "PROPOSED_CLOUD_ONLY",
+   "wave": "W1",
+   "deps": [
+    [
+     "CLOUD-T0004",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "CLOUD",
+   "name": "Windows .exe yalnız remote cloud client/Control UI"
+  },
+  {
+   "id": "CLOUD-T0006",
+   "tier": "T2",
+   "status": "PROPOSED_CLOUD_ONLY",
+   "wave": "W1",
+   "deps": [
+    [
+     "CLOUD-T0005",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "Bulut Windows installer ve otomatik GUI/API smoke"
+  },
+  {
+   "id": "CLOUD-T0007",
+   "tier": "T2",
+   "status": "PROPOSED_CLOUD_ONLY",
+   "wave": "W1",
+   "deps": [
+    [
+     "CLOUD-T0002",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "Cloud QA/SAST/SCA/secret scanning ve izolasyon testleri"
+  },
+  {
+   "id": "CLOUD-T0008",
+   "tier": "T2",
+   "status": "PROPOSED_CLOUD_ONLY",
+   "wave": "W1",
+   "deps": [
+    [
+     "CLOUD-T0003",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "Bulut artifact storage, SHA, signed delivery URL"
+  },
+  {
+   "id": "CLOUD-T0011",
+   "tier": "T2",
+   "status": "PROPOSED_CLOUD_ONLY",
+   "wave": "W1",
+   "deps": [
+    [
+     "CLOUD-T0002",
+     "MERGED"
+    ],
+    [
+     "CLOUD-T0004",
+     "MERGED"
+    ],
+    [
+     "CLOUD-T0007",
+     "MERGED"
+    ],
+    [
+     "CLOUD-T0008",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "İki proje tipi 3× tam bulut E2E ve bağımsız teslim testi"
+  },
+  {
+   "id": "CLOUD-T0012",
+   "tier": "T2",
+   "status": "PROPOSED_CLOUD_ONLY",
+   "wave": "W1",
+   "deps": [
+    [
+     "CLOUD-T0004",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "Cloud staging/production ayrımı ve health/secret rotasyonu"
+  },
+  {
+   "id": "CLOUD-T0013",
+   "tier": "T1",
+   "status": "PROPOSED_CLOUD_ONLY",
+   "wave": "W1",
+   "deps": [
+    [
+     "CLOUD-T0006",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "CLOUD",
+   "name": "Cloud Windows 10/11 uyumluluk matrisi ve installer smoke"
+  },
+  {
+   "id": "CLOUD-T0014",
+   "tier": "T2",
+   "status": "PROPOSED_CLOUD_ONLY",
+   "wave": "W1",
+   "deps": [
+    [
+     "CLOUD-T0002",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "Yerel WSL/runtime çalıştırmayı kapat, fail-closed cloud mode"
+  },
+  {
+   "id": "CLOUD-T0015",
+   "tier": "T2",
+   "status": "PROPOSED_CLOUD_ONLY",
+   "wave": "W1",
+   "deps": [
+    [
+     "CLOUD-T0004",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "Bulut model sağlayıcıları ve kota/fallback entegre yürütme"
+  },
+  {
+   "id": "UASCO-T0002",
+   "tier": "T3",
+   "status": "BLOCKED",
+   "wave": "W1",
+   "deps": [
+    [
+     "V3-T1019",
+     "MERGED"
+    ],
+    [
+     "V4-T0001",
+     "DONE"
+    ],
+    [
+     "CLOUD-T0011",
+     "MERGED"
+    ],
+    [
+     "CLOUD-T0006",
+     "MERGED"
+    ]
+   ],
+   "startGates": [
+    "D-23",
+    "D-26"
+   ],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "FOUNDER_UAT_ONLY",
+   "name": "Founder Windows uygulaması SON KULLANICI KABULÜ (yalnız kur/aç/kullan)"
+  },
+  {
+   "id": "UASCO-T0002.a",
+   "tier": "T0",
+   "status": "PROPOSED_V4_1",
+   "wave": "W1",
+   "deps": [
+    [
+     "V4-T0001.a",
+     "DONE"
+    ],
+    [
+     "UASCO-T0002",
+     "ACCEPTED"
+    ],
+    [
+     "CLOUD-T0011",
+     "MERGED"
+    ],
+    [
+     "CLOUD-T0006",
+     "MERGED"
+    ]
+   ],
+   "startGates": [
+    "D-23",
+    "D-26"
+   ],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Founder: merge sonrası yeni installer ile kurulum kabulü"
+  },
+  {
+   "id": "UASCO-T0003",
+   "tier": "T2",
+   "status": "UNVERIFIABLE",
+   "wave": "W1",
+   "deps": [
+    [
+     "UASCO-T0002",
+     "ACCEPTED"
+    ],
+    [
+     "CLOUD-T0004",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "Cloud model bağlantıları keşfi (yerel claude.exe zorunluluğu yok)"
+  },
+  {
+   "id": "UASCO-T0014",
+   "tier": "T1",
+   "status": "MISSING",
+   "wave": "W1",
+   "deps": [
+    [
+     "UASCO-T0029",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0016.A",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0016.D",
+     "REVIEWED"
+    ],
+    [
+     "V3-T1013.B",
+     "MERGED"
+    ],
+    [
+     "V3-T1013.F",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0031",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0003",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0061",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0002",
+     "ACCEPTED"
+    ],
+    [
+     "CLOUD-T0011",
+     "MERGED"
+    ]
+   ],
+   "startGates": [
+    "D-23",
+    "D-29"
+   ],
+   "mergeGates": [],
+   "exec": "CLOUD",
+   "name": "Bulut CI gerçek kullanıcı senaryosu: iki şablon, üç ardışık E2E"
+  },
+  {
+   "id": "UASCO-T0016.A",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W1",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Desktop export düzeltmesi — A_UI kısmı"
+  },
+  {
+   "id": "UASCO-T0016.D",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W1",
+   "deps": [
+    [
+     "UASCO-T0016.A",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Desktop export düzeltmesi — D_CI_RELEASE kısmı"
+  },
+  {
+   "id": "UASCO-T0028",
+   "tier": "T0",
+   "status": "UNVERIFIABLE",
+   "wave": "W1",
+   "deps": [
+    [
+     "UASCO-T0029",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0031",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0016.A",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0016.D",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0003",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0061",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0002",
+     "ACCEPTED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "B3B canlı smoke 2026-10-14"
+  },
+  {
+   "id": "UASCO-T0029",
+   "tier": "T1",
+   "status": "BLOCKED",
+   "wave": "W1",
+   "deps": [
+    [
+     "UASCO-T0002.a",
+     "ACCEPTED"
+    ],
+    [
+     "UASCO-T0031.a",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0003",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0061",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0061.a",
+     "MERGED"
+    ],
+    [
+     "CLOUD-T0002",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0031.b",
+     "REVIEWED"
+    ],
+    [
+     "CLOUD-T0007",
+     "MERGED"
+    ]
+   ],
+   "startGates": [
+    "D-23"
+   ],
+   "mergeGates": [
+    "D-03"
+   ],
+   "exec": "CLOUD",
+   "name": "Cloud sandbox implement + verify uçtan uca doğrulama"
+  },
+  {
+   "id": "UASCO-T0031",
+   "tier": "T2",
+   "status": "BLOCKED",
+   "wave": "W1",
+   "deps": [
+    [
+     "CLOUD-T0002",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-03",
+    "D-31",
+    "D-07"
+   ],
+   "exec": "CLOUD",
+   "name": "#231 WSL2 sağlayıcısını devre dışı bırak; bulut SandboxProvider entegrasyonu"
+  },
+  {
+   "id": "UASCO-T0031.a",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1",
+   "wave": "W1",
+   "deps": [
+    [
+     "CLOUD-T0004",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31",
+    "D-03",
+    "D-07"
+   ],
+   "exec": "CLOUD",
+   "name": "Desktop setup-check: cloud worker erişilebilirlik ve auth reason kodları"
+  },
+  {
+   "id": "UASCO-T0031.b",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1",
+   "wave": "W1",
+   "deps": [
+    [
+     "UASCO-T0031",
+     "CODE_READY"
+    ],
+    [
+     "CLOUD-T0004",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31",
+    "D-03",
+    "D-07"
+   ],
+   "exec": "CLOUD",
+   "name": "Control API cloud sandbox adapter bağlantısı"
+  },
+  {
+   "id": "UASCO-T0031.c",
+   "tier": "T1",
+   "status": "PROPOSED_V4_1",
+   "wave": "W1",
+   "deps": [
+    [
+     "UASCO-T0069.c",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [
+    "D-23",
+    "D-03",
+    "D-07"
+   ],
+   "mergeGates": [
+    "D-03"
+   ],
+   "exec": "CLOUD",
+   "name": "Founder kabul kiti: #231 son head SHA'sı üzerinde (reseal sonrası)"
+  },
+  {
+   "id": "UASCO-T0035",
+   "tier": "T1",
+   "status": "MISSING",
+   "wave": "W1",
+   "deps": [
+    [
+     "UASCO-T0014",
+     "MERGED"
+    ],
+    [
+     "V3-T1011.B",
+     "REVIEWED"
+    ],
+    [
+     "V3-T1011.D",
+     "REVIEWED"
+    ],
+    [
+     "V3-T1012",
+     "MERGED"
+    ],
+    [
+     "V3-T1010.C",
+     "MERGED"
+    ],
+    [
+     "V3-T1010.F",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0031",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0016.A",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0016.D",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0003",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0061",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0002",
+     "ACCEPTED"
+    ],
+    [
+     "CLOUD-T0011",
+     "MERGED"
+    ]
+   ],
+   "startGates": [
+    "D-23",
+    "D-19"
+   ],
+   "mergeGates": [],
+   "exec": "CLOUD",
+   "name": "Cloud R1 test/security/delivery kanıt kabulü"
+  },
+  {
+   "id": "UASCO-T0044",
+   "tier": "T1",
+   "status": "MISSING",
+   "wave": "W1",
+   "deps": [
+    [
+     "UASCO-T0029",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0031",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0016.A",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0016.D",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0003",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0061",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0002",
+     "ACCEPTED"
+    ],
+    [
+     "CLOUD-T0007",
+     "MERGED"
+    ]
+   ],
+   "startGates": [
+    "D-23"
+   ],
+   "mergeGates": [],
+   "exec": "CLOUD",
+   "name": "Bulut remediation döngüsü ve STOP/negative test"
+  },
+  {
+   "id": "UASCO-T0061",
+   "tier": "T2",
+   "status": "UNVERIFIABLE",
+   "wave": "W1",
+   "deps": [
+    [
+     "UASCO-T0003",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0002",
+     "ACCEPTED"
+    ],
+    [
+     "CLOUD-T0004",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "Cloud executor/provider hazır olma durumu"
+  },
+  {
+   "id": "UASCO-T0061.a",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1",
+   "wave": "W1",
+   "deps": [
+    [
+     "V3-T1016",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0061",
+     "MERGED"
+    ]
+   ],
+   "startGates": [
+    "D-29"
+   ],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "Bulut sağlayıcı API değişiminde güvenli recovery"
+  },
+  {
+   "id": "UASCO-T0069.a",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1",
+   "wave": "W1",
+   "deps": [
+    [
+     "V3-T1002",
+     "REVIEWED"
+    ],
+    [
+     "V3-T1003",
+     "REVIEWED"
+    ],
+    [
+     "V3-T1036",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-07",
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Reseal batch 1: #251 (provenance) + W1'de değişmeyecek güven sınırı dosyalarının korunması"
+  },
+  {
+   "id": "UASCO-T0069.b",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1",
+   "wave": "W1",
+   "deps": [
+    [
+     "UASCO-T0069.c",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0029",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0016.A",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0016.D",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-07",
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Koruma genişletmesi: runner, execution-gate, security-tools, sandbox, claude-profiles (W1 kodu merge edildikten sonra)"
+  },
+  {
+   "id": "UASCO-T0069.c",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1",
+   "wave": "W1",
+   "deps": [
+    [
+     "UASCO-T0031",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0031.b",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0069.a",
+     "MERGED"
+    ],
+    [
+     "CLOUD-T0014",
+     "MERGED"
+    ]
+   ],
+   "startGates": [
+    "D-23"
+   ],
+   "mergeGates": [
+    "D-03",
+    "D-07",
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "Bulut sandbox entegrasyonunun trust-root reseal ve yetkili merge paketi"
+  },
+  {
+   "id": "UASCO-T0078",
+   "tier": "T3",
+   "status": "BLOCKED",
+   "wave": "W1",
+   "deps": [
+    [
+     "CLOUD-T0003",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "Cloud worker scheduler/dispatcher heartbeat"
+  },
+  {
+   "id": "UASCO-T0088",
+   "tier": "T1",
+   "status": "MISSING",
+   "wave": "W1",
+   "deps": [
+    [
+     "V3-T1001",
+     "MERGED"
+    ],
+    [
+     "V3-T1002",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Kararlılık ≥%95"
+  },
+  {
+   "id": "UASCO-T0090",
+   "tier": "T0",
+   "status": "DEFERRED",
+   "wave": "W1",
+   "deps": [
+    [
+     "V3-T1001",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0088",
+     "MERGED"
+    ]
+   ],
+   "startGates": [
+    "D-22"
+   ],
+   "mergeGates": [],
+   "exec": "",
+   "name": "#282 PAR03 diag"
+  },
+  {
+   "id": "UASCO-T0099",
+   "tier": "T2",
+   "status": "MISSING",
+   "wave": "W1",
+   "deps": [
+    [
+     "UASCO-T0119",
+     "DONE"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Founder register"
+  },
+  {
+   "id": "UASCO-T0100.a",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1",
+   "wave": "W1",
+   "deps": [
+    [
+     "UASCO-T0069.a",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-07",
+    "D-31"
+   ],
+   "exec": "",
+   "name": "#247 rebase + reseal + merge (gating değil)"
+  },
+  {
+   "id": "UASCO-T0106",
+   "tier": "T2",
+   "status": "MISSING",
+   "wave": "W1",
+   "deps": [
+    [
+     "UASCO-T0111",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Koordinatör yeniden şekillendirme"
+  },
+  {
+   "id": "UASCO-T0111",
+   "tier": "T2",
+   "status": "MISSING",
+   "wave": "W1",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Maliyet telemetrisi"
+  },
+  {
+   "id": "UASCO-T0112",
+   "tier": "T2",
+   "status": "MISSING",
+   "wave": "W1",
+   "deps": [
+    [
+     "UASCO-T0110",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Olay güdümlü uyanma"
+  },
+  {
+   "id": "V3-T1004",
+   "tier": "T2",
+   "status": "PROPOSED",
+   "wave": "W1",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-06",
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Ledger founder-authority kayıt türü"
+  },
+  {
+   "id": "V3-T1010.C",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W1",
+   "deps": [
+    [
+     "UASCO-T0002",
+     "ACCEPTED"
+    ]
+   ],
+   "startGates": [
+    "D-19",
+    "D-23"
+   ],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "Bulutta güvenlik tarama profili R1 — C_ENGINE kısmı"
+  },
+  {
+   "id": "V3-T1010.F",
+   "tier": "T2",
+   "status": "PROPOSED_CLOUD_ONLY",
+   "wave": "W1",
+   "deps": [
+    [
+     "V3-T1010.C",
+     "MERGED"
+    ],
+    [
+     "CLOUD-T0007",
+     "MERGED"
+    ]
+   ],
+   "startGates": [
+    "D-19",
+    "D-23"
+   ],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "Bulutta güvenlik tarama profili R1 — bulut koşusu"
+  },
+  {
+   "id": "V3-T1011.B",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W1",
+   "deps": [
+    [
+     "UASCO-T0016.A",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0016.D",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Üç bağımsız kabulden teslim etiketi türetme — B_API kısmı"
+  },
+  {
+   "id": "V3-T1011.D",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W1",
+   "deps": [
+    [
+     "V3-T1011.B",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Üç bağımsız kabulden teslim etiketi türetme — D_CI_RELEASE kısmı"
+  },
+  {
+   "id": "V3-T1012",
+   "tier": "T1",
+   "status": "PROPOSED",
+   "wave": "W1",
+   "deps": [
+    [
+     "V3-T1012.a",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Bağımsız yeniden üretim script'i"
+  },
+  {
+   "id": "V3-T1012.a",
+   "tier": "T1",
+   "status": "PROPOSED_V4_1",
+   "wave": "W1",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Şablonlara kilit dosyası + teslimde kilit dosyası zorunlu"
+  },
+  {
+   "id": "V3-T1013.B",
+   "tier": "T1",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W1",
+   "deps": [
+    [
+     "UASCO-T0003",
+     "MERGED"
+    ]
+   ],
+   "startGates": [
+    "D-23"
+   ],
+   "mergeGates": [],
+   "exec": "CLOUD",
+   "name": "Bulutta gerçek modelle BA/pre-dev koşusu — B_API kısmı"
+  },
+  {
+   "id": "V3-T1013.F",
+   "tier": "T1",
+   "status": "PROPOSED_CLOUD_ONLY",
+   "wave": "W1",
+   "deps": [
+    [
+     "V3-T1013.B",
+     "MERGED"
+    ],
+    [
+     "CLOUD-T0004",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0002.a",
+     "ACCEPTED"
+    ]
+   ],
+   "startGates": [
+    "D-23"
+   ],
+   "mergeGates": [],
+   "exec": "CLOUD",
+   "name": "Bulutta gerçek modelle BA/pre-dev koşusu — bulut koşusu"
+  },
+  {
+   "id": "V3-T1014",
+   "tier": "T2",
+   "status": "PROPOSED",
+   "wave": "W1",
+   "deps": [
+    [
+     "UASCO-T0069.c",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "ProviderPort arayüzü"
+  },
+  {
+   "id": "V3-T1016",
+   "tier": "T2",
+   "status": "PROPOSED",
+   "wave": "W1",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Kota olay modeli (BLOCKED_RESUMABLE)"
+  },
+  {
+   "id": "V3-T1018",
+   "tier": "T1",
+   "status": "PROPOSED",
+   "wave": "W1",
+   "deps": [
+    [
+     "UASCO-T0029",
+     "MERGED"
+    ],
+    [
+     "CLOUD-T0007",
+     "MERGED"
+    ]
+   ],
+   "startGates": [
+    "D-23"
+   ],
+   "mergeGates": [],
+   "exec": "CLOUD",
+   "name": "Bulutta R1 negatif senaryoları"
+  },
+  {
+   "id": "V3-T1019",
+   "tier": "T2",
+   "status": "PROPOSED",
+   "wave": "W1",
+   "deps": [
+    [
+     "CLOUD-T0006",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "Founder yalnız .exe kur/aç/kullan UAT kılavuzu"
+  },
+  {
+   "id": "V4-T0001.a",
+   "tier": "T0",
+   "status": "PROPOSED_V4_1",
+   "wave": "W1",
+   "deps": [
+    [
+     "UASCO-T0069.c",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0016.A",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0016.D",
+     "REVIEWED"
+    ],
+    [
+     "CLOUD-T0002",
+     "MERGED"
+    ],
+    [
+     "CLOUD-T0003",
+     "MERGED"
+    ],
+    [
+     "CLOUD-T0004",
+     "MERGED"
+    ],
+    [
+     "CLOUD-T0005",
+     "MERGED"
+    ],
+    [
+     "CLOUD-T0006",
+     "MERGED"
+    ],
+    [
+     "CLOUD-T0007",
+     "MERGED"
+    ],
+    [
+     "CLOUD-T0008",
+     "MERGED"
+    ],
+    [
+     "CLOUD-T0011",
+     "MERGED"
+    ],
+    [
+     "CLOUD-T0012",
+     "MERGED"
+    ],
+    [
+     "CLOUD-T0013",
+     "MERGED"
+    ],
+    [
+     "CLOUD-T0014",
+     "MERGED"
+    ],
+    [
+     "CLOUD-T0015",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0003",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0031.a",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0061",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0061.a",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0088",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0110",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0120",
+     "MERGED"
+    ],
+    [
+     "V3-T1001",
+     "MERGED"
+    ],
+    [
+     "V3-T1010.C",
+     "MERGED"
+    ],
+    [
+     "V3-T1010.F",
+     "MERGED"
+    ],
+    [
+     "V3-T1012",
+     "MERGED"
+    ],
+    [
+     "V3-T1012.a",
+     "MERGED"
+    ],
+    [
+     "V3-T1013.B",
+     "MERGED"
+    ],
+    [
+     "V3-T1019",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-30"
+   ],
+   "exec": "",
+   "name": "#231 ve export sonrası installer artifact toplama + .exe SHA"
+  },
+  {
+   "id": "CLOUD-T0010",
+   "tier": "T2",
+   "status": "PROPOSED_CLOUD_ONLY",
+   "wave": "W2",
+   "deps": [
+    [
+     "CLOUD-T0003",
+     "MERGED"
+    ],
+    [
+     "CLOUD-T0004",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "Claude bulut ajansal görev kırılımı ve idempotent task DAG"
+  },
+  {
+   "id": "UASCO-T0004.A",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W2",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Backend crash/restart yönetimi — A_UI kısmı"
+  },
+  {
+   "id": "UASCO-T0004.D",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W2",
+   "deps": [
+    [
+     "UASCO-T0004.A",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Backend crash/restart yönetimi — D_CI_RELEASE kısmı"
+  },
+  {
+   "id": "UASCO-T0006",
+   "tier": "T1",
+   "status": "MISSING",
+   "wave": "W2",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "10 fake-bridge route için real-server testi"
+  },
+  {
+   "id": "UASCO-T0007.A",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W2",
+   "deps": [
+    [
+     "UASCO-T0095",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0069.a",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Windows real-Electron journey — A_UI kısmı"
+  },
+  {
+   "id": "UASCO-T0007.D",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W2",
+   "deps": [
+    [
+     "UASCO-T0007.A",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Windows real-Electron journey — D_CI_RELEASE kısmı"
+  },
+  {
+   "id": "UASCO-T0008",
+   "tier": "T0",
+   "status": "UNVERIFIABLE",
+   "wave": "W2",
+   "deps": [
+    [
+     "UASCO-T0095",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0069.a",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Linux real-Electron journey (17/21, 20/20)"
+  },
+  {
+   "id": "UASCO-T0011.A",
+   "tier": "T1",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W2",
+   "deps": [
+    [
+     "UASCO-T0011.B",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Tek komut alanı UI + route — A_UI kısmı"
+  },
+  {
+   "id": "UASCO-T0011.B",
+   "tier": "T1",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W2",
+   "deps": [
+    [
+     "UASCO-T0035",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0014",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0028",
+     "DONE"
+    ],
+    [
+     "UASCO-T0029",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0044",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Tek komut alanı UI + route — B_API kısmı"
+  },
+  {
+   "id": "UASCO-T0026",
+   "tier": "T1",
+   "status": "MISSING",
+   "wave": "W2",
+   "deps": [
+    [
+     "V3-T1013.B",
+     "MERGED"
+    ],
+    [
+     "V3-T1013.F",
+     "MERGED"
+    ],
+    [
+     "V3-T1017.C",
+     "REVIEWED"
+    ],
+    [
+     "V3-T1017.D",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0014",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0028",
+     "DONE"
+    ],
+    [
+     "UASCO-T0029",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0035",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0044",
+     "MERGED"
+    ]
+   ],
+   "startGates": [
+    "D-19"
+   ],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Gerçek-model pre-dev koşusu ve kalite rubric'i"
+  },
+  {
+   "id": "UASCO-T0033",
+   "tier": "T2",
+   "status": "BLOCKED",
+   "wave": "W2",
+   "deps": [
+    [
+     "UASCO-T0069.a",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Gerçek gitleaks/trivy/semgrep + SBOM"
+  },
+  {
+   "id": "UASCO-T0049",
+   "tier": "T2",
+   "status": "MISSING",
+   "wave": "W2",
+   "deps": [
+    [
+     "V3-T1016",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Run başına pause/resume ve kurtarma"
+  },
+  {
+   "id": "UASCO-T0064",
+   "tier": "T2",
+   "status": "MISSING",
+   "wave": "W2",
+   "deps": [
+    [
+     "V3-T1015",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Ürün içi token/maliyet ölçümü"
+  },
+  {
+   "id": "UASCO-T0070",
+   "tier": "T2",
+   "status": "BLOCKED",
+   "wave": "W2",
+   "deps": [
+    [
+     "UASCO-T0069.a",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Trust-root imzası"
+  },
+  {
+   "id": "UASCO-T0071",
+   "tier": "T2",
+   "status": "MISSING",
+   "wave": "W2",
+   "deps": [
+    [
+     "UASCO-T0069.a",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "vitest config koruması"
+  },
+  {
+   "id": "UASCO-T0074.B",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W2",
+   "deps": [
+    [
+     "V3-T1026.B",
+     "REVIEWED"
+    ],
+    [
+     "V3-T1026.D",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0064",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Gerçek politika bağlamı — B_API kısmı"
+  },
+  {
+   "id": "UASCO-T0074.D",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W2",
+   "deps": [
+    [
+     "UASCO-T0074.B",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Gerçek politika bağlamı — D_CI_RELEASE kısmı"
+  },
+  {
+   "id": "UASCO-T0091",
+   "tier": "T2",
+   "status": "MISSING",
+   "wave": "W2",
+   "deps": [
+    [
+     "V3-T1002",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0096",
+     "DONE"
+    ],
+    [
+     "UASCO-T0100",
+     "DONE"
+    ],
+    [
+     "UASCO-T0088",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "CI dakika verimliliği"
+  },
+  {
+   "id": "UASCO-T0094",
+   "tier": "T1",
+   "status": "PARTIAL",
+   "wave": "W2",
+   "deps": [
+    [
+     "UASCO-T0095",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0069.a",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Desktop journey E2E harness"
+  },
+  {
+   "id": "UASCO-T0095",
+   "tier": "T2",
+   "status": "BLOCKED",
+   "wave": "W2",
+   "deps": [
+    [
+     "UASCO-T0096",
+     "DONE"
+    ],
+    [
+     "UASCO-T0069.a",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Windows CI job"
+  },
+  {
+   "id": "UASCO-T0097",
+   "tier": "T3",
+   "status": "BLOCKED",
+   "wave": "W2",
+   "deps": [
+    [
+     "V3-T1034",
+     "DONE"
+    ]
+   ],
+   "startGates": [
+    "D-05"
+   ],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "IR workflow bootstrap"
+  },
+  {
+   "id": "UASCO-T0098",
+   "tier": "T2",
+   "status": "MISSING",
+   "wave": "W2",
+   "deps": [
+    [
+     "V3-T1034",
+     "DONE"
+    ],
+    [
+     "UASCO-T0115",
+     "MERGED"
+    ]
+   ],
+   "startGates": [
+    "D-21"
+   ],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Review mekanizması konsolidasyonu"
+  },
+  {
+   "id": "UASCO-T0101",
+   "tier": "T0",
+   "status": "BLOCKED",
+   "wave": "W2",
+   "deps": [
+    [
+     "UASCO-T0069.a",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "fsmon yetki talebi"
+  },
+  {
+   "id": "UASCO-T0108",
+   "tier": "T2",
+   "status": "BLOCKED",
+   "wave": "W2",
+   "deps": [
+    [
+     "UASCO-T0002",
+     "ACCEPTED"
+    ],
+    [
+     "CLOUD-T0006",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "GitHub-hosted Windows CI worker pilotu (yerel Founder-PC worker YOK)"
+  },
+  {
+   "id": "UASCO-T0109",
+   "tier": "T2",
+   "status": "MISSING",
+   "wave": "W2",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Dev-plane mantığını üründen ayırma"
+  },
+  {
+   "id": "UASCO-T0121",
+   "tier": "T2",
+   "status": "MISSING",
+   "wave": "W2",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Kapsam/LOW dengesi"
+  },
+  {
+   "id": "UASCO-T0122",
+   "tier": "T0",
+   "status": "MISSING",
+   "wave": "W2",
+   "deps": [
+    [
+     "UASCO-T0119",
+     "DONE"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Ekran backlog'u yeniden sınıflama"
+  },
+  {
+   "id": "UASCO-T0129",
+   "tier": "T2",
+   "status": "MISSING",
+   "wave": "W2",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "core/qa/api validator'ları bağla/kaldır"
+  },
+  {
+   "id": "V3-T1015",
+   "tier": "T2",
+   "status": "PROPOSED",
+   "wave": "W2",
+   "deps": [
+    [
+     "V3-T1014",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "CLI kullanım yakalama"
+  },
+  {
+   "id": "V3-T1017.C",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W2",
+   "deps": [
+    [
+     "V3-T1014",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Golden eval v0 (9 bağlı rol) — C_ENGINE kısmı"
+  },
+  {
+   "id": "V3-T1017.D",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W2",
+   "deps": [
+    [
+     "V3-T1017.C",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Golden eval v0 (9 bağlı rol) — D_CI_RELEASE kısmı"
+  },
+  {
+   "id": "V3-T1021",
+   "tier": "T2",
+   "status": "PROPOSED",
+   "wave": "W2",
+   "deps": [
+    [
+     "V3-T1006",
+     "DONE"
+    ]
+   ],
+   "startGates": [
+    "D-01"
+   ],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Tarihsel 168 PR geriye dönük eşleme (gating değil)"
+  },
+  {
+   "id": "V3-T1022",
+   "tier": "T1",
+   "status": "PROPOSED",
+   "wave": "W2",
+   "deps": [
+    [
+     "UASCO-T0026",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Plan → Epic/Feature/Task/AC şeması ve üretici"
+  },
+  {
+   "id": "V3-T1023",
+   "tier": "T1",
+   "status": "PROPOSED",
+   "wave": "W2",
+   "deps": [
+    [
+     "V3-T1022",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Hiyerarşi görünümü ve Feature onayı"
+  },
+  {
+   "id": "V3-T1025",
+   "tier": "T2",
+   "status": "PROPOSED",
+   "wave": "W2",
+   "deps": [
+    [
+     "V3-T1004",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "authority-matrix.json + tek değerlendirici"
+  },
+  {
+   "id": "V3-T1026.B",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W2",
+   "deps": [
+    [
+     "V3-T1025",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Ürün R0–R3 → action-gateway eşlemesi — B_API kısmı"
+  },
+  {
+   "id": "V3-T1026.D",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W2",
+   "deps": [
+    [
+     "V3-T1026.B",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Ürün R0–R3 → action-gateway eşlemesi — D_CI_RELEASE kısmı"
+  },
+  {
+   "id": "V3-T1027.A",
+   "tier": "T1",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W2",
+   "deps": [
+    [
+     "V3-T1027.B",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Cockpit maliyet/bütçe ve onay kuyruğu paneli — A_UI kısmı"
+  },
+  {
+   "id": "V3-T1027.B",
+   "tier": "T1",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W2",
+   "deps": [
+    [
+     "UASCO-T0064",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Cockpit maliyet/bütçe ve onay kuyruğu paneli — B_API kısmı"
+  },
+  {
+   "id": "V3-T1037.C",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W2",
+   "deps": [
+    [
+     "V3-T1017.C",
+     "REVIEWED"
+    ],
+    [
+     "V3-T1017.D",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [
+    "D-10"
+   ],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Arketip eval ve sertifikasyon — C_ENGINE kısmı"
+  },
+  {
+   "id": "V3-T1037.D",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W2",
+   "deps": [
+    [
+     "V3-T1037.C",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [
+    "D-10"
+   ],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Arketip eval ve sertifikasyon — D_CI_RELEASE kısmı"
+  },
+  {
+   "id": "UASCO-T0039.B",
+   "tier": "T1",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W3",
+   "deps": [
+    [
+     "UASCO-T0039.C",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Müşteri repo'suna push/PR — B_API kısmı"
+  },
+  {
+   "id": "UASCO-T0039.C",
+   "tier": "T1",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W3",
+   "deps": [
+    [
+     "UASCO-T0035",
+     "MERGED"
+    ],
+    [
+     "V3-T1026.B",
+     "REVIEWED"
+    ],
+    [
+     "V3-T1026.D",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0014",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0028",
+     "DONE"
+    ],
+    [
+     "UASCO-T0029",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0044",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0038",
+     "DONE"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Müşteri repo'suna push/PR — C_ENGINE kısmı"
+  },
+  {
+   "id": "UASCO-T0046",
+   "tier": "T1",
+   "status": "MISSING",
+   "wave": "W3",
+   "deps": [
+    [
+     "V3-T1031",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0059.C",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0059.D",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0014",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0028",
+     "DONE"
+    ],
+    [
+     "UASCO-T0029",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0035",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0044",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Crew çalışma zamanı sürücüsü"
+  },
+  {
+   "id": "UASCO-T0047",
+   "tier": "T2",
+   "status": "MISSING",
+   "wave": "W3",
+   "deps": [
+    [
+     "UASCO-T0046",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Paralel run ve görev dağıtımı"
+  },
+  {
+   "id": "UASCO-T0051.D",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W3",
+   "deps": [
+    [
+     "UASCO-T0051.E",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Origin'de yetkili canlı lease — D_CI_RELEASE kısmı"
+  },
+  {
+   "id": "UASCO-T0051.E",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W3",
+   "deps": [
+    [
+     "V3-T1033.E",
+     "REVIEWED"
+    ],
+    [
+     "V3-T1033.D",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Origin'de yetkili canlı lease — E_CONTROL kısmı"
+  },
+  {
+   "id": "UASCO-T0059.C",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W3",
+   "deps": [
+    [
+     "UASCO-T0026",
+     "MERGED"
+    ]
+   ],
+   "startGates": [
+    "D-10"
+   ],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Rol bağlama genişletme — C_ENGINE kısmı"
+  },
+  {
+   "id": "UASCO-T0059.D",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W3",
+   "deps": [
+    [
+     "UASCO-T0059.C",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [
+    "D-10"
+   ],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Rol bağlama genişletme — D_CI_RELEASE kısmı"
+  },
+  {
+   "id": "UASCO-T0063",
+   "tier": "T2",
+   "status": "MISSING",
+   "wave": "W3",
+   "deps": [
+    [
+     "V3-T1028",
+     "MERGED"
+    ],
+    [
+     "V3-T1029",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0064",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Yönlendirmeyi bağla + Desktop model yapılandırması"
+  },
+  {
+   "id": "UASCO-T0066.C",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W3",
+   "deps": [
+    [
+     "UASCO-T0063",
+     "MERGED"
+    ],
+    [
+     "V3-T1030.C",
+     "REVIEWED"
+    ],
+    [
+     "V3-T1030.D",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [
+    "D-09"
+   ],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Failover ve ikinci sağlayıcı — C_ENGINE kısmı"
+  },
+  {
+   "id": "UASCO-T0066.D",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W3",
+   "deps": [
+    [
+     "UASCO-T0066.C",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [
+    "D-09"
+   ],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Failover ve ikinci sağlayıcı — D_CI_RELEASE kısmı"
+  },
+  {
+   "id": "UASCO-T0072.D",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W3",
+   "deps": [
+    [
+     "UASCO-T0097",
+     "MERGED"
+    ]
+   ],
+   "startGates": [
+    "D-05"
+   ],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Ruleset / kimlik ayrımı — D_CI_RELEASE kısmı"
+  },
+  {
+   "id": "UASCO-T0072.F",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W3",
+   "deps": [
+    [
+     "UASCO-T0072.D",
+     "MERGED"
+    ]
+   ],
+   "startGates": [
+    "D-05"
+   ],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Ruleset / kimlik ayrımı — F_FOUNDER kısmı"
+  },
+  {
+   "id": "V3-T1020.D",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W3",
+   "deps": [
+    [
+     "V3-T1008",
+     "MERGED"
+    ],
+    [
+     "V3-T1002",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-04",
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Birleşik SHA CI (merge queue veya zorunlu up-to-date) — D_CI_RELEASE kısmı"
+  },
+  {
+   "id": "V3-T1020.F",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W3",
+   "deps": [
+    [
+     "V3-T1020.D",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-04",
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Birleşik SHA CI (merge queue veya zorunlu up-to-date) — F_FOUNDER kısmı"
+  },
+  {
+   "id": "V3-T1028",
+   "tier": "T2",
+   "status": "PROPOSED",
+   "wave": "W3",
+   "deps": [
+    [
+     "V3-T1014",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Adım başına model id kaydı"
+  },
+  {
+   "id": "V3-T1029",
+   "tier": "T2",
+   "status": "PROPOSED",
+   "wave": "W3",
+   "deps": [
+    [
+     "V3-T1017.C",
+     "REVIEWED"
+    ],
+    [
+     "V3-T1017.D",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Routing politika tablosu (M0–M3) ve eval harness"
+  },
+  {
+   "id": "V3-T1030.C",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W3",
+   "deps": [
+    [
+     "V3-T1017.C",
+     "REVIEWED"
+    ],
+    [
+     "V3-T1017.D",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Yerel/ücretsiz model aday değerlendirmesi (spike) — C_ENGINE kısmı"
+  },
+  {
+   "id": "V3-T1030.D",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W3",
+   "deps": [
+    [
+     "V3-T1030.C",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Yerel/ücretsiz model aday değerlendirmesi (spike) — D_CI_RELEASE kısmı"
+  },
+  {
+   "id": "V3-T1031",
+   "tier": "T2",
+   "status": "PROPOSED",
+   "wave": "W3",
+   "deps": [
+    [
+     "V3-T1023",
+     "MERGED"
+    ],
+    [
+     "V3-T1032",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Görev DAG yürütücüsü"
+  },
+  {
+   "id": "V3-T1032",
+   "tier": "T2",
+   "status": "PROPOSED",
+   "wave": "W3",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Görev başına kanıt ve alt lease"
+  },
+  {
+   "id": "V3-T1033.D",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W3",
+   "deps": [
+    [
+     "V3-T1033.E",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "FA-LEASE2 log-only modu — D_CI_RELEASE kısmı"
+  },
+  {
+   "id": "V3-T1033.E",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W3",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "FA-LEASE2 log-only modu — E_CONTROL kısmı"
+  },
+  {
+   "id": "V3-T1035",
+   "tier": "T2",
+   "status": "PROPOSED",
+   "wave": "W3",
+   "deps": [
+    [
+     "V3-T1032",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Ürün bulut backend devri (handoff) tasarımı"
+  },
+  {
+   "id": "UASCO-T0017.A",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W4",
+   "deps": [
+    [
+     "UASCO-T0017.C",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "UI-015 akıllı revizyon — A_UI kısmı"
+  },
+  {
+   "id": "UASCO-T0017.C",
+   "tier": "T1",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W4",
+   "deps": [
+    [
+     "UASCO-T0011.B",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0011.A",
+     "REVIEWED"
+    ],
+    [
+     "V3-T1023",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0014",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0028",
+     "DONE"
+    ],
+    [
+     "UASCO-T0029",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0035",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0044",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "UI-015 akıllı revizyon — C_ENGINE kısmı"
+  },
+  {
+   "id": "UASCO-T0017.D",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W4",
+   "deps": [
+    [
+     "UASCO-T0017.C",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0017.A",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "UI-015 akıllı revizyon — D_CI_RELEASE kısmı"
+  },
+  {
+   "id": "UASCO-T0020.A",
+   "tier": "T1",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W4",
+   "deps": [
+    [
+     "UASCO-T0020.B",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "OS bildirimi ve rapor dışa aktarma — A_UI kısmı"
+  },
+  {
+   "id": "UASCO-T0020.B",
+   "tier": "T1",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W4",
+   "deps": [
+    [
+     "UASCO-T0016.A",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0016.D",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "OS bildirimi ve rapor dışa aktarma — B_API kısmı"
+  },
+  {
+   "id": "UASCO-T0023",
+   "tier": "T2",
+   "status": "MISSING",
+   "wave": "W4",
+   "deps": [
+    [
+     "UASCO-T0023.a.A",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0023.a.D",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [
+    "D-27"
+   ],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Fuses, asar, safeStorage"
+  },
+  {
+   "id": "UASCO-T0023.a.A",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W4",
+   "deps": [],
+   "startGates": [
+    "D-27"
+   ],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Paketli backend'i utilityProcess'e taşıma (RunAsNode fuse ön koşulu) — A_UI kısmı"
+  },
+  {
+   "id": "UASCO-T0023.a.D",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W4",
+   "deps": [
+    [
+     "UASCO-T0023.a.A",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [
+    "D-27"
+   ],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Paketli backend'i utilityProcess'e taşıma (RunAsNode fuse ön koşulu) — D_CI_RELEASE kısmı"
+  },
+  {
+   "id": "UASCO-T0024",
+   "tier": "T2",
+   "status": "MISSING",
+   "wave": "W4",
+   "deps": [
+    [
+     "UASCO-T0093",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "dev.N → dev.N+1 upgrade ve yedek"
+  },
+  {
+   "id": "UASCO-T0037",
+   "tier": "T1",
+   "status": "MISSING",
+   "wave": "W4",
+   "deps": [
+    [
+     "UASCO-T0035",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0014",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0028",
+     "DONE"
+    ],
+    [
+     "UASCO-T0029",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0044",
+     "MERGED"
+    ]
+   ],
+   "startGates": [
+    "D-28"
+   ],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Gerçek web stack; mobil/CMS stack'leri"
+  },
+  {
+   "id": "UASCO-T0040",
+   "tier": "T3",
+   "status": "MISSING",
+   "wave": "W4",
+   "deps": [
+    [
+     "UASCO-T0039.C",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0039.B",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0038",
+     "DONE"
+    ]
+   ],
+   "startGates": [
+    "D-28",
+    "D-02"
+   ],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "CI/CD, deploy, izleme üretimi"
+  },
+  {
+   "id": "UASCO-T0041",
+   "tier": "T1",
+   "status": "MISSING",
+   "wave": "W4",
+   "deps": [
+    [
+     "UASCO-T0035",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0014",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0028",
+     "DONE"
+    ],
+    [
+     "UASCO-T0029",
+     "MERGED"
+    ],
+    [
+     "UASCO-T0044",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "API docs, kılavuz, changelog üretimi"
+  },
+  {
+   "id": "UASCO-T0077",
+   "tier": "T2",
+   "status": "MISSING",
+   "wave": "W4",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Kararlı electron-builder"
+  },
+  {
+   "id": "UASCO-T0093",
+   "tier": "T3",
+   "status": "BLOCKED",
+   "wave": "W4",
+   "deps": [
+    [
+     "UASCO-T0069.a",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [
+    "D-13"
+   ],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Code signing + Release"
+  },
+  {
+   "id": "UASCO-T0118",
+   "tier": "T2",
+   "status": "MISSING",
+   "wave": "W4",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Oturum/branch/workflow hijyeni"
+  },
+  {
+   "id": "UASCO-T0125",
+   "tier": "T2",
+   "status": "MISSING",
+   "wave": "W4",
+   "deps": [
+    [
+     "UASCO-T0031",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0069.c",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Claude CLI'yi sandbox'ta çalıştırma"
+  },
+  {
+   "id": "UASCO-T0126",
+   "tier": "T1",
+   "status": "MISSING",
+   "wave": "W4",
+   "deps": [
+    [
+     "UASCO-T0023",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Yerel veri şifreleme / anahtarlı anchor"
+  },
+  {
+   "id": "UASCO-T0127",
+   "tier": "T2",
+   "status": "MISSING",
+   "wave": "W4",
+   "deps": [
+    [
+     "UASCO-T0093",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Güncelleme kanalı imzalı artifact'larla"
+  },
+  {
+   "id": "UASCO-T0018.A",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W5",
+   "deps": [
+    [
+     "UASCO-T0011.B",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0011.A",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [
+    "D-15"
+   ],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Masaüstü ses girişi — A_UI kısmı"
+  },
+  {
+   "id": "UASCO-T0018.D",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W5",
+   "deps": [
+    [
+     "UASCO-T0018.A",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [
+    "D-15"
+   ],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Masaüstü ses girişi — D_CI_RELEASE kısmı"
+  },
+  {
+   "id": "UASCO-T0056.C",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W5",
+   "deps": [
+    [
+     "UASCO-T0120",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Master V2 kalan Lane-C paketleri — C_ENGINE kısmı"
+  },
+  {
+   "id": "UASCO-T0056.D",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W5",
+   "deps": [
+    [
+     "UASCO-T0056.C",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Master V2 kalan Lane-C paketleri — D_CI_RELEASE kısmı"
+  },
+  {
+   "id": "UASCO-T0057.C",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W5",
+   "deps": [
+    [
+     "UASCO-T0119",
+     "DONE"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Master V2 kalan cross-lane maddeleri — C_ENGINE kısmı"
+  },
+  {
+   "id": "UASCO-T0057.D",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W5",
+   "deps": [
+    [
+     "UASCO-T0057.C",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Master V2 kalan cross-lane maddeleri — D_CI_RELEASE kısmı"
+  },
+  {
+   "id": "UASCO-T0080",
+   "tier": "T1",
+   "status": "PARTIAL",
+   "wave": "W5",
+   "deps": [
+    [
+     "UASCO-T0081",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Salt-okur TS çekirdek (PQ-008)"
+  },
+  {
+   "id": "UASCO-T0081",
+   "tier": "T2",
+   "status": "BLOCKED",
+   "wave": "W5",
+   "deps": [
+    [
+     "UASCO-T0069.a",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Çekirdek testinin CI kaydı"
+  },
+  {
+   "id": "UASCO-T0082",
+   "tier": "T0",
+   "status": "BLOCKED",
+   "wave": "W5",
+   "deps": [
+    [
+     "UASCO-T0120",
+     "MERGED"
+    ]
+   ],
+   "startGates": [
+    "D-15"
+   ],
+   "mergeGates": [],
+   "exec": "",
+   "name": "FA-MOB kararları"
+  },
+  {
+   "id": "UASCO-T0083.B",
+   "tier": "T1",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W5",
+   "deps": [
+    [
+     "UASCO-T0082",
+     "DONE"
+    ],
+    [
+     "UASCO-T0084.B",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0084.E",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "RN/Android uygulaması — B_API kısmı"
+  },
+  {
+   "id": "UASCO-T0083.E",
+   "tier": "T1",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W5",
+   "deps": [
+    [
+     "UASCO-T0083.B",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "RN/Android uygulaması — E_CONTROL kısmı"
+  },
+  {
+   "id": "UASCO-T0084.B",
+   "tier": "T1",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W5",
+   "deps": [
+    [
+     "UASCO-T0082",
+     "DONE"
+    ],
+    [
+     "UASCO-T0074.B",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0074.D",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "/v1/mobile + gateway — B_API kısmı"
+  },
+  {
+   "id": "UASCO-T0084.E",
+   "tier": "T1",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W5",
+   "deps": [
+    [
+     "UASCO-T0084.B",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "/v1/mobile + gateway — E_CONTROL kısmı"
+  },
+  {
+   "id": "UASCO-T0085.B",
+   "tier": "T1",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W5",
+   "deps": [
+    [
+     "UASCO-T0083.B",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0083.E",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Mobil güvenlik koşulları ve ileri özellikler — B_API kısmı"
+  },
+  {
+   "id": "UASCO-T0085.E",
+   "tier": "T1",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W5",
+   "deps": [
+    [
+     "UASCO-T0085.B",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Mobil güvenlik koşulları ve ileri özellikler — E_CONTROL kısmı"
+  },
+  {
+   "id": "UASCO-T0086.B",
+   "tier": "T1",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W5",
+   "deps": [
+    [
+     "UASCO-T0084.B",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0084.E",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0074.B",
+     "REVIEWED"
+    ],
+    [
+     "UASCO-T0074.D",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Attestation sertleştirme — B_API kısmı"
+  },
+  {
+   "id": "UASCO-T0086.E",
+   "tier": "T1",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W5",
+   "deps": [
+    [
+     "UASCO-T0086.B",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Attestation sertleştirme — E_CONTROL kısmı"
+  },
+  {
+   "id": "UASCO-T0102",
+   "tier": "T0",
+   "status": "DEFERRED",
+   "wave": "W5",
+   "deps": [
+    [
+     "UASCO-T0120",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [],
+   "exec": "",
+   "name": "Master V2 Founder kararları"
+  },
+  {
+   "id": "UASCO-T0123.C",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W5",
+   "deps": [
+    [
+     "UASCO-T0026",
+     "MERGED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Registry genişliği programı (ertelendi) — C_ENGINE kısmı"
+  },
+  {
+   "id": "UASCO-T0123.D",
+   "tier": "T2",
+   "status": "PROPOSED_V4_1_SPLIT",
+   "wave": "W5",
+   "deps": [
+    [
+     "UASCO-T0123.C",
+     "REVIEWED"
+    ]
+   ],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "",
+   "name": "Registry genişliği programı (ertelendi) — D_CI_RELEASE kısmı"
+  }
+ ]
+}
