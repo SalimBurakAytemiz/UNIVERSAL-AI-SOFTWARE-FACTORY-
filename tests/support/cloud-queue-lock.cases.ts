@@ -91,5 +91,23 @@ export function registerQueueLockCases(): void {
       const b = acquireQueueLock(L, {io, alive: p => !dead(p), pid: 222});
       expect(files.get(L)!.data).toBe(b.id);
     });
+      it("ENOENT on the takeover-token read is retried, then the lock is acquired (NB-8 / M9)", () => {
+      let gone = false;
+      const {io, files} = memIo({beforeRead: p => { if (p === `${L}.takeover` && !gone) { gone = true; files.delete(`${L}.takeover`); } }});
+      files.set(L, {data: `999:${"d".repeat(32)}`, mtime: 0});
+      files.set(`${L}.takeover`, {data: `333:${"e".repeat(32)}`, mtime: 0});   // canlı devralan, okumadan hemen önce bitiriyor
+      const b = acquireQueueLock(L, {io, alive: p => !dead(p), pid: 222});
+      expect(files.get(L)!.data).toBe(b.id);
+    });
+
+    it("a stale pid that becomes live after the token is taken is never deleted (NB-8 / M5)", () => {
+      let tokenTaken = false;
+      const {io, files} = memIo({beforeLink: p => { if (p === `${L}.takeover`) tokenTaken = true; }});
+      files.set(L, {data: `999:${"d".repeat(32)}`, mtime: 0});
+      const alive = (p: number) => p === 999 ? tokenTaken : !dead(p);   // pid yeniden kullanıldı
+      expect(() => acquireQueueLock(L, {io, alive, pid: 222})).toThrow(/QUEUE_LOCKED/);
+      expect(files.get(L)!.data).toBe(`999:${"d".repeat(32)}`);
+      expect(files.has(`${L}.takeover`)).toBe(false);
+    });
   });
 }
