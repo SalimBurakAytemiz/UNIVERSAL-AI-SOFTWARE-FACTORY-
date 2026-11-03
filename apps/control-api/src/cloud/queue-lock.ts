@@ -61,6 +61,7 @@ export function acquireQueueLock(lockPath: string, o: QueueLockOptions = {}): Qu
   const io = o.io ?? defaultLockIo, alive = o.alive ?? ((p: number) => pidAlive(p));
   const id = `${o.pid ?? process.pid}:${randomBytes(16).toString("hex")}`;
   const dir = path.dirname(lockPath), base = path.basename(lockPath);
+  const prefix = lockPath.slice(0, lockPath.length - base.length);   // jeton yolları lockPath'in kendi ayırıcısıyla kurulur (Windows: path.join "\\" üretir)
   const tokenOf = (stale: string, k: number) => `${lockPath}.takeover.${createHash("sha256").update(stale).digest("hex").slice(0, 24)}.${k}`;
   const holdsLive = (raw: string) => { const p = parsePid(raw); return Number.isSafeInteger(p) && p > 0 && alive(p); };
   const lock: QueueLock = {
@@ -74,7 +75,7 @@ export function acquireQueueLock(lockPath: string, o: QueueLockOptions = {}): Qu
   const won = (): QueueLock => {   // kilit bizde: artık geçersiz devralma jetonlarını (ve eski biçim `.takeover`) temizle
     let names: string[] = [];
     try { names = io.list(dir); } catch { return lock; }
-    for (const n of names) if (n === `${base}.takeover` || n.startsWith(`${base}.takeover.`)) { try { io.unlink(path.join(dir, n)); } catch { /* yut */ } }
+    for (const n of names) if (n === `${base}.takeover` || n.startsWith(`${base}.takeover.`)) { try { io.unlink(prefix + n); } catch { /* yut */ } }
     return lock;
   };
   for (let attempt = 0; attempt < 4; attempt++) {
