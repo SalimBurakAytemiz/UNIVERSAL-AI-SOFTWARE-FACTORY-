@@ -67,7 +67,7 @@ const sleepSync = (ms: number) => { Atomics.wait(new Int32Array(new SharedArrayB
 // bayat kilit yalnız o içeriğe özgü kuşaklı devralma jetonunu alan süreç tarafından silinir; hiçbir zaman iki yazar olmaz.
 /** Testlerde Windows hatalarını ve araya giren süreçleri benzetmek için dar dosya sistemi yüzeyi. */
 export interface StoreLockIo {
-  writeFile(path: string, data: string): void;   // "wx" + yaz + fsync
+  writeFile(path: string, data: string): void;   // "wx" + yaz (fsync YOK: bkz. defaultStoreLockIo)
   link(existing: string, target: string): void;   // hedef varsa EEXIST
   read(path: string): string;
   unlink(path: string): void;
@@ -75,7 +75,9 @@ export interface StoreLockIo {
   mtimeMs(path: string): number;
 }
 export const defaultStoreLockIo: StoreLockIo = {
-  writeFile(p, data) { const fd = fs.openSync(p, "wx"); try { fs.writeSync(fd, data); fs.fsyncSync(fd); } finally { fs.closeSync(fd); } },
+  // //TR: UASCO-T0042: kilit içeriği fsync edilmez. Kilit yalnız canlı süreçler arası dışlamadır; güç kesintisinden sonra kimse onu tutmaz ve boş/yarım kilit
+  // PID/yaş kuralıyla geri alınır. Her withLock'taki bu fsync Windows'ta CPU'suz G/Ç beklemesi olarak olay döngüsünü (lease heartbeat'i) durduruyordu.
+  writeFile(p, data) { const fd = fs.openSync(p, "wx"); try { fs.writeSync(fd, data); } finally { fs.closeSync(fd); } },
   link: (a, b) => fs.linkSync(a, b),
   read: p => fs.readFileSync(p, "utf8"),
   unlink: p => fs.unlinkSync(p),

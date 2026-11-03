@@ -21,7 +21,7 @@ export function registerWorkosStoreIoCases(): void {
       const before = snap(dir), prevBefore = fs.readFileSync(path.join(dir, "snapshot.json.prev"), "utf8");
       const f = countFsync();
       expect(reader.listProjects({tenantId: "tA"}).length).toBe(2);   // signature changed -> locked load()
-      expect(f.n()).toBeLessThanOrEqual(1);                             // at most the lock file; no snapshot rewrite (was 4+)
+      expect(f.n()).toBe(0);                                            // neither the lock nor an unchanged snapshot is fsynced (was 4+)
       expect(snap(dir)).toBe(before);
       expect(fs.readFileSync(path.join(dir, "snapshot.json.prev"), "utf8")).toBe(prevBefore);
     });
@@ -32,8 +32,8 @@ export function registerWorkosStoreIoCases(): void {
       s.createProject(proj);
       const f = countFsync();
       for (let i = 0; i < 5; i++) s.createProject(proj);
-      // per write: lock (<=1) + journal append (1) + one writeJsonAtomic (tmp + .prev [+ dir on POSIX] = <=3)
-      expect(f.n() / 5).toBeLessThanOrEqual(5);
+      // per write: journal append (1) + one writeJsonAtomic (tmp + .prev [+ dir on POSIX] = <=3); the lock is not fsynced
+      expect(f.n() / 5).toBeLessThanOrEqual(4);
       const fresh = new WorkOsStore(dir);
       expect(JSON.parse(snap(dir)).lastSeq).toBe(6);
       expect(fresh.listProjects({tenantId: "tA"}).length).toBe(6);
