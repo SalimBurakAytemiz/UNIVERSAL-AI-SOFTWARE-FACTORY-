@@ -4,6 +4,7 @@ import {registerCloudJobQueueCases} from "./support/cloud-jobs.cases.js";       
 import {registerQueueLockCases} from "./support/cloud-queue-lock.cases.js";     // CLOUD-T0003 kuyruk kilidi yarış vakaları
 import {registerCloudGatewayCases} from "./support/cloud-gateway.cases.js";     // CLOUD-T0004 Control API kapısı vakaları
 import {registerCloudConnectionViewCases} from "./support/cloud-connection-view.cases.js"; // CLOUD-T0005 masaüstü bulut bağlantı görünümü vakaları
+import {registerWorkosStoreLockCases} from "./support/workos-store-lock.cases.js";   // V3-T1001 store kilidi kurtarma vakaları
 import {registerAutonomyCases} from "./support/autonomy.cases.js";             // FD-2026-11-03 kalıcı otonomi karar modülü vakaları
 import {registerAutonomyExecutorCases} from "./support/autonomy-executor.cases.js"; // FD-2026-11-03 yürütücü (merge + doğrulama) vakaları
 import {
@@ -154,5 +155,6 @@ registerCloudJobQueueCases();
 registerQueueLockCases();
 registerCloudGatewayCases();
 registerCloudConnectionViewCases();
+registerWorkosStoreLockCases();
 registerAutonomyCases();
 registerAutonomyExecutorCases();
