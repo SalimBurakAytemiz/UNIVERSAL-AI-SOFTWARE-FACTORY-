@@ -351,11 +351,14 @@ export class WorkOsStore {
       const {entries, torn} = this.readVerifiedEntries();
       const st = emptyState();
       for (const e of entries) this.apply(st, e);
-      this.checkSnapshotAgainst(entries);
+      const snapRaw = this.checkSnapshotAgainst(entries);
       this.state = st; this.tamperReason = null; this.unavailableReason = null; this.sig = sigBefore;
       // REL-FX-4: yırtık kuyrukta hiçbir şey yazılmaz (snapshot dahil); yalnız karantina kopyası alınır.
       this.tornTail = torn ? this.quarantine(torn, st.lastSeq) : null;
-      if (!torn && entries.length > 0) this.writeSnapshotBestEffort();
+      // //TR: UASCO-T0042 (PAR-03, Windows heartbeat açlığı): her load() (okuma yenilemesi ve her yazının ön-doğrulaması) snapshot'ı koşulsuz yeniden yazıyordu:
+      // writeJsonAtomic = geçici dosya + .prev kopyası + dizin, üç fsync. Bir tick'te ~1200 fsync ölçüldü (Linux, 121 withLock); Windows'ta fsync CPU'suz G/Ç beklemesidir ve
+      // senkron store zincirlerinde olay döngüsünü saniyelerce durdurup öbür run'ın lease heartbeat'ini aç bırakıyordu. Disk üzerindeki snapshot yazılacak baytlarla AYNIYSA yazılmaz.
+      if (!torn && entries.length > 0 && snapRaw !== this.snapshotText()) this.writeSnapshotBestEffort();
     } catch (e) { this.fail(e); }
   }
   // //TR: REL-FX-4: dosya "\n" ile bitmiyorsa son satır ayrılır; önek tam zincir doğrulamasından geçer. Kuyruk yalnız zincirin beklenen SONRAKİ girdisinin baş baytlarıysa
@@ -418,21 +421,24 @@ export class WorkOsStore {
     });
   }
   // Snapshot geride kalabilir (çökme), ama journal'dan ileri veya farklı bir geçmişe işaret edemez (kuyruk silme tespiti).
-  private checkSnapshotAgainst(entries: JournalEntry[]): void {
-    if (!fs.existsSync(this.snapshotFile)) return;
-    let snap: {lastSeq?: unknown; lastHash?: unknown};
-    try { snap = JSON.parse(fs.readFileSync(this.snapshotFile, "utf8")); } catch { return; /* türetilmiş dosya; yeniden yazılır */ }
-    const s = snap.lastSeq;
-    if (typeof s !== "number" || !Number.isInteger(s) || s < 0) return;
+  // Disk üzerindeki snapshot'ın ham metnini döner (yoksa/okunamazsa null); zincirle çelişiyorsa tamper fırlatır.
+  private checkSnapshotAgainst(entries: JournalEntry[]): string | null {
+    if (!fs.existsSync(this.snapshotFile)) return null;
+    let raw: string, snap: {lastSeq?: unknown; lastHash?: unknown};
+    try { raw = fs.readFileSync(this.snapshotFile, "utf8"); snap = JSON.parse(raw); } catch { return null; /* türetilmiş dosya; yeniden yazılır */ }
+    const s = snap?.lastSeq;
+    if (typeof s !== "number" || !Number.isInteger(s) || s < 0) return raw;
     if (s > entries.length) throw tampered("JOURNAL_SHORTER_THAN_SNAPSHOT");
     const expected = s === 0 ? GENESIS : entries[s - 1].hash;
     if (snap.lastHash !== expected) throw tampered("SNAPSHOT_HASH_NOT_IN_JOURNAL");
+    return raw;
   }
   // Snapshot türetilmiştir: yazılamaması (ör. disk dolu) journal'ı veya okumaları bozmaz; sonraki yüklemede yeniden yazılır.
   private writeSnapshotBestEffort(): void { try { this.writeSnapshot(); } catch { /* türetilmiş dosya */ } }
-  private writeSnapshot(): void {
-    writeJsonAtomic(this.snapshotFile, {"//TR": "Bu snapshot journal.jsonl dosyasından türetilir; otorite journal'dır, bu dosya silinip yeniden üretilebilir.", schemaVersion: "1.0.0", ...this.state});
-  }
+  private snapshotValue() { return {"//TR": "Bu snapshot journal.jsonl dosyasından türetilir; otorite journal'dır, bu dosya silinip yeniden üretilebilir.", schemaVersion: "1.0.0", ...this.state}; }
+  // writeJsonAtomic'in yazdığı baytlarla birebir aynı serileştirme (JSON.stringify(value, null, 2) + "\n").
+  private snapshotText(): string { return JSON.stringify(this.snapshotValue(), null, 2) + "\n"; }
+  private writeSnapshot(): void { writeJsonAtomic(this.snapshotFile, this.snapshotValue()); }
   private apply(st: State, e: JournalEntry): void {
     const p = e.payload;
     if (!isObj(p)) throw malformed(`PAYLOAD_SHAPE:${e.seq}`);
