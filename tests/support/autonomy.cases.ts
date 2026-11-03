@@ -102,10 +102,10 @@ export function registerAutonomyCases() {
     it("NB5 the reviewer must attest to the content-level exceptions on the CLEAN review itself", () => {
       const d = (reviews: unknown[]) => decideAutoMerge({gate: merge, body: body("CLOUD-T0010"), policy, index, evidence: ev({reviews})});
       expect(d([cleanReview("")]).reasons).toContain("REVIEWER_ATTESTATION_MISSING");
-      expect(d([cleanReview("> AUTONOMY-EXCEPTIONS: none")]).reasons).toContain("REVIEWER_ATTESTATION_MISSING");
-      expect(d([cleanReview("```\nAUTONOMY-EXCEPTIONS: none\n```")]).reasons).toContain("REVIEWER_ATTESTATION_MISSING");
+      expect(d([cleanReview("> AUTONOMY-EXCEPTIONS: none")]).reasons).toContain("REVIEWER_ATTESTATION_MALFORMED");
+      expect(d([cleanReview("```\nAUTONOMY-EXCEPTIONS: none\n```")]).reasons).toContain("REVIEWER_ATTESTATION_MALFORMED");
       expect(d([cleanReview("AUTONOMY-EXCEPTIONS: none", "c".repeat(40))]).reasons).toContain("REVIEWER_ATTESTATION_MISSING");
-      expect(d([cleanReview("AUTONOMY-EXCEPTIONS: none\nAUTONOMY-EXCEPTIONS: none")]).reasons).toContain("REVIEWER_ATTESTATION_MISSING");
+      expect(d([cleanReview("AUTONOMY-EXCEPTIONS: none\nAUTONOMY-EXCEPTIONS: none")]).reasons).toContain("REVIEWER_ATTESTATION_MALFORMED");
       const paid = d([cleanReview("AUTONOMY-EXCEPTIONS: PAID_SPEND,NEW_CREDENTIAL")]);
       expect(paid.decision).toBe("FOUNDER_REQUIRED");
       expect(paid.reasons).toEqual(["REVIEWER_ATTESTED:PAID_SPEND", "REVIEWER_ATTESTED:NEW_CREDENTIAL"]);
@@ -124,6 +124,19 @@ export function registerAutonomyCases() {
       expect(d([cleanReview("", SHA, {}), later({user: {login: "mallory"}})]).reasons).toContain("REVIEWER_ATTESTATION_MISSING");
       // A builder-session CLEAN is never the selected review, so it cannot supply the attestation the governed review lacks.
       expect(d([cleanReview("", SHA, {}), later({}, "session_builder")]).reasons).toContain("REVIEWER_ATTESTATION_MISSING");
+      // BLOCKING-A (review 5757730354): an unreadable attestation on ANY qualifying review fails closed, whatever a later review says.
+      for (const bad of ["AUTONOMY-EXCEPTIONS: PAID_SPEND, LEGAL", "AUTONOMY-EXCEPTIONS: PAID_SPEND\nAUTONOMY-EXCEPTIONS: none", "AUTONOMY-EXCEPTIONS: paid_spend",
+        "AUTONOMY-EXCEPTIONS: PAID_SPEND\u200b", "AUTONOMY\u200b-EXCEPTIONS: none", "> AUTONOMY-EXCEPTIONS: PAID_SPEND\nAUTONOMY-EXCEPTIONS: none", "```\nAUTONOMY-EXCEPTIONS: PAID_SPEND\n```\nAUTONOMY-EXCEPTIONS: none",
+        "  AUTONOMY-EXCEPTIONS: none", "autonomy-exceptions: none"]) {
+        for (const reviews of [[cleanReview(bad, SHA, {id: 1}, "sA"), later({}, "sC")], [cleanReview("AUTONOMY-EXCEPTIONS: none", SHA, {id: 1}, "sA"), later({body: `x\n${bad}\nVERDICT-BINDING: verdict=CLEAN head=${SHA} base=${BASE} reviewer-session=sC`}, "sC")]]) {
+          const r = d(reviews);
+          expect(r.decision).toBe("BLOCK");
+          expect(r.reasons).toContain("REVIEWER_ATTESTATION_MALFORMED");
+        }
+      }
+      const mixed = d([cleanReview("AUTONOMY-EXCEPTIONS: paid_spend", SHA, {id: 1}, "sA"), later({body: `x\nAUTONOMY-EXCEPTIONS: LEGAL\nVERDICT-BINDING: verdict=CLEAN head=${SHA} base=${BASE} reviewer-session=sC`}, "sC")]);
+      expect(mixed.decision).toBe("BLOCK");
+      expect(mixed.reasons).toContain("REVIEWER_ATTESTATION_MALFORMED");
       // The PR author's own review counts in process mode (merge-gate's allowed set).
       expect(d([cleanReview("AUTONOMY-EXCEPTIONS: none", SHA, {user: {login: "Author"}})]).decision).toBe("AUTO_MERGE");
     });

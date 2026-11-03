@@ -9,7 +9,7 @@ import path from "node:path";
 import {execFileSync} from "node:child_process";
 import {createHash} from "node:crypto";
 import {fileURLToPath} from "node:url";
-import {evaluateMergeGate, parseBinding, normPath} from "../merge-gate.mjs";
+import {evaluateMergeGate, parseBinding, normPath, INVISIBLE_RE} from "../merge-gate.mjs";
 
 export const EXIT = {AUTO_MERGE: 0, BLOCK: 2, INTERNAL_ERROR: 3, FOUNDER_REQUIRED: 4};
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -74,6 +74,22 @@ export function isGovernancePath(p) {
 }
 
 const REVIEW_STATES = new Set(["COMMENTED", "APPROVED"]);
+// Same login shape merge-gate accepts (NB-d).
+const LOGIN_RE = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})(?:\[bot\])?$/;
+const INVISIBLE_G = new RegExp(INVISIBLE_RE.source, "gu");
+export const MALFORMED = "MALFORMED";
+/**
+ * One review's attestation: null if no line mentions it at all; MALFORMED if any line anywhere (fenced, quoted, with invisibles,
+ * any case, several lines) mentions `autonomy-exceptions` and the review does not hold exactly one well-formed plain line (BLOCKING-A).
+ */
+export function reviewAttestation(body) {
+  if (typeof body !== "string") return null;
+  const mentions = body.split(/\r?\n/).filter(l => /autonomy-exceptions/i.test(l.replace(INVISIBLE_G, "")));
+  if (mentions.length === 0) return null;
+  const plain = plainLines(body).map(l => ATTEST_RE.exec(l)).filter(Boolean);
+  if (mentions.length !== 1 || plain.length !== 1 || INVISIBLE_RE.test(mentions[0]) || !ATTEST_RE.test(mentions[0])) return MALFORMED;
+  return plain[0][1];
+}
 const lc = s => s.toLowerCase();
 /**
  * The reviewer's exception attestation (BLOCKING-1 of review 5757611393). It uses merge-gate's own selection rules:
@@ -84,17 +100,18 @@ const lc = s => s.toLowerCase();
  */
 export function attestationOf({reviews, head, base, allowed, implementerSessions = []}) {
   const impl = new Set(implementerSessions);
-  const att = body => { const l = plainLines(body).map(x => ATTEST_RE.exec(x)).filter(Boolean); return l.length === 1 ? l[0][1] : null; };
   const ok = (Array.isArray(reviews) ? reviews : []).flatMap(r => {
     if (!r || typeof r.body !== "string" || r.commit_id !== head || !REVIEW_STATES.has(r.state)) return [];
-    const login = r.user && typeof r.user.login === "string" ? lc(r.user.login) : null;
+    const login = r.user && typeof r.user.login === "string" && LOGIN_RE.test(r.user.login) ? lc(r.user.login) : null;
     if (login === null || !allowed.has(login)) return [];
     const t = Date.parse(r.submitted_at);
     const b = parseBinding(r.body);
     if (!Number.isFinite(t) || !b || b.code || b.verdict !== "CLEAN" || b.head !== head || b.base !== base || impl.has(b.session)) return [];
-    return [{t, id: Number(r.id) || 0, a: att(r.body)}];
+    return [{t, id: Number(r.id) || 0, a: reviewAttestation(r.body)}];
   }).sort((x, y) => x.t - y.t || x.id - y.id);
   if (!ok.length || ok.at(-1).a === null) return null;
+  // Any qualifying review whose attestation cannot be read fails the whole decision closed: its stated exception may be the one hidden.
+  if (ok.some(x => x.a === MALFORMED)) return MALFORMED;
   const codes = new Set(ok.flatMap(x => (x.a === null || x.a === "none" ? [] : x.a.split(","))));
   return codes.size ? [...codes].join(",") : "none";
 }
@@ -126,10 +143,11 @@ export function decideAutoMerge({gate, body, policy, index, evidence = {}}) {
     if (gr.length === 0) reasons.push("GATE_NOT_MERGE");
   } else {
     // NB-5: content-level exceptions (spend, accounts, production operations) are attested by the independent reviewer.
-    const author = typeof evidence.pr?.user?.login === "string" ? [lc(evidence.pr.user.login)] : [];
+    const author = typeof evidence.pr?.user?.login === "string" && LOGIN_RE.test(evidence.pr.user.login) ? [lc(evidence.pr.user.login)] : [];
     const allowed = new Set([...(policy.trustedReviewerLogins ?? []).map(lc), ...(policy.gateMode === "process" ? author : [])]);
     const att = attestationOf({reviews: evidence.reviews, head: gate.expectedHeadSha, base: gate.expectedBaseSha, allowed, implementerSessions: impl});
     if (att === null) reasons.push("REVIEWER_ATTESTATION_MISSING");
+    else if (att === MALFORMED) reasons.push("REVIEWER_ATTESTATION_MALFORMED");
     else if (att !== "none") for (const x of att.split(",")) founder.push(`REVIEWER_ATTESTED:${x}`);
   }
   const decision = reasons.length ? "BLOCK" : founder.length ? "FOUNDER_REQUIRED" : "AUTO_MERGE";
