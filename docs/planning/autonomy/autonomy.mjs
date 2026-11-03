@@ -228,14 +228,21 @@ const contentAt = (api, file, ref) => { const j = api(`contents/${file}?ref=${re
  * STATE.json done entries are claims written by routine PRs. Only entries whose PR is merged into the base ref and declares that task
  * (its single UASCO-TASK line, or the task id as the first word of its title) count; the rest are dropped (NB-2 of review 5757980178).
  */
+export const MAX_STATE_ENTRIES = 500;
 export function verifiedState(api, state, baseRef) {
-  const done = [], dropped = [];
-  for (const e of Array.isArray(state?.done) ? state.done : []) {
+  const done = [], dropped = [], seen = new Map();
+  const entries = Array.isArray(state?.done) ? state.done : [];
+  // NB-2 of review 5758038281: bounded, one API call per distinct PR; an unreadable PR drops its entry instead of failing every decide.
+  if (entries.length > MAX_STATE_ENTRIES) throw new Error("STATE_TOO_LARGE");
+  for (const e of entries) {
     const task = typeof e === "string" ? e : e?.task, pr = typeof e === "object" && e ? e.pr : undefined;
     let ok = false;
     if (typeof task === "string" && Number.isSafeInteger(pr) && pr > 0) {
-      const p = api(`pulls/${pr}`);
-      ok = p.merged === true && p.base?.ref === baseRef && (taskOf(p.body ?? "") === task || String(p.title ?? "").split(/\s+/)[0] === task);
+      if (!seen.has(pr)) { let p = null; try { p = api(`pulls/${pr}`); } catch { p = null; } seen.set(pr, p); }
+      const p = seen.get(pr);
+      // NB-1: a PR that declares a task in its body vouches only for that task; the title's first word is a fallback for PRs with no declaration.
+      const declared = p ? taskOf(p.body ?? "") : null;
+      ok = !!p && p.merged === true && p.base?.ref === baseRef && (declared !== null ? declared === task : String(p.title ?? "").split(/\s+/)[0] === task);
     }
     (ok ? done : dropped).push(ok ? {task, pr} : String(task));
   }

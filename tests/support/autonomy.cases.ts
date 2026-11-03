@@ -235,6 +235,16 @@ export function registerAutonomyCases() {
       const v = verifiedState(api, {done: [{task: "A-T0001", pr: 1}, {task: "A-T0002", pr: 2}, {task: "A-T0003", pr: 3}, {task: "A-T0004", pr: 4}, {task: "A-T0005", pr: 5}, "A-T0006", {task: "A-T0007"}]}, "v7/integration");
       expect(v.done.map((x: {task: string}) => x.task)).toEqual(["A-T0001", "A-T0005"]);
       expect(v.dropped).toEqual(["A-T0002", "A-T0003", "A-T0004", "A-T0006", "A-T0007"]);
+      // NB-1 of review 5758038281: a body declaration vouches only for that task, never for the title's task.
+      prs[6] = {merged: true, base: {ref: "v7/integration"}, title: "A-T0001 x", body: "UASCO-TASK: A-T0009\n"};
+      expect(verifiedState(api, {done: [{task: "A-T0001", pr: 6}, {task: "A-T0009", pr: 6}]}, "v7/integration").done.map((x: {task: string}) => x.task)).toEqual(["A-T0009"]);
+      // NB-2: one call per PR, an unreadable PR drops its entry, oversize state fails closed.
+      let calls = 0;
+      const counting = (p: string) => { calls++; if (p === "pulls/404") throw new Error("404"); return prs[Number(p.split("/")[1])]; };
+      const w = verifiedState(counting, {done: [{task: "A-T0001", pr: 1}, {task: "A-T0001", pr: 1}, {task: "A-T0008", pr: 404}]}, "v7/integration");
+      expect(calls).toBe(2);
+      expect(w.dropped).toEqual(["A-T0008"]);
+      expect(() => verifiedState(counting, {done: Array(501).fill("x")}, "v7/integration")).toThrow("STATE_TOO_LARGE");
     });
     it("A9 integration with the real merge-gate: malformed or empty evidence never auto-merges", () => {
       for (const evidence of [{}, {pr: {number: 1}}, null]) {
