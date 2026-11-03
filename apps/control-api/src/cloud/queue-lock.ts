@@ -1,6 +1,7 @@
-// //TR: Bu dosya bulut iş kuyruğunun tek yazıcı kilidini uygular: kilit içeriği önce geçici dosyaya yazılıp link() ile atomik konur (boş kilit penceresi yok), bayat kilidi yalnız devralma jetonunu tutan süreç siler (rename-back yok; sahibi ölü jeton otomatik silinmez, QUEUE_TAKEOVER_STALE), bırakma yalnız kendi benzersiz kimliğini taşıyan kilidi siler.
+// //TR: Bu dosya bulut iş kuyruğunun tek yazıcı kilidini uygular: kilit içeriği önce geçici dosyaya yazılıp link() ile atomik konur (boş kilit penceresi yok), bayat kilidi yalnız o kilide özgü kuşaklı devralma jetonunu tutan süreç siler (rename-back yok; ölü sahipli jeton silinmeden sonraki kuşakla otomatik kurtarma), bırakma yalnız kendi benzersiz kimliğini taşıyan kilidi siler.
 import fs from "node:fs";
-import {randomBytes} from "node:crypto";
+import path from "node:path";
+import {createHash, randomBytes} from "node:crypto";
 
 /** Testlerde araya girmek için kullanılan dar dosya sistemi yüzeyi. */
 export interface LockIo {
@@ -8,12 +9,14 @@ export interface LockIo {
   link(existing: string, target: string): void;   // hedef varsa EEXIST
   read(path: string): string;
   unlink(path: string): void;
+  list(dir: string): string[];
 }
 export const defaultLockIo: LockIo = {
   writeFile(p, data) { const fd = fs.openSync(p, "wx"); try { fs.writeSync(fd, data); fs.fsyncSync(fd); } finally { fs.closeSync(fd); } },
   link: (a, b) => fs.linkSync(a, b),
   read: p => fs.readFileSync(p, "utf8"),
   unlink: p => fs.unlinkSync(p),
+  list: d => fs.readdirSync(d),
 };
 
 /** EPERM: süreç var ama sinyal izni yok -> canlı. ESRCH: yok -> ölü. */
@@ -43,17 +46,23 @@ function linkWithContent(io: LockIo, target: string, id: string): boolean {
   }
 }
 
+export const MAX_TAKEOVER_GENERATIONS = 16;
+
 /**
  * Kilidi alır ya da QUEUE_LOCKED fırlatır.
- * - Kilit dosyası yalnız tam içerikle ortaya çıkar (link), bu yüzden okuyan süreç asla boş/yarım kilit görmez.
- * - Bayat (sahibi ölü) kilidi silmek için önce `${lockPath}.takeover` jetonu link() ile alınır. Jeton tutulurken bayat kilit
- *   yalnız jeton sahibi tarafından silinebilir; taze kilit yalnız dosya yokken oluşabilir. Silinen dosya bu yüzden her zaman
- *   okunan bayat kilittir (rename-back yok, başkasının kilidi silinmez).
+ * - Kilit dosyası yalnız tam içerikle ortaya çıkar (link), okuyan süreç asla boş/yarım kilit görmez.
+ * - Bayat kilit S (sahibi ölü ya da tanınmayan içerik) yalnız `${lockPath}.takeover.<h(S)>.<k>` jetonunu link() ile alan süreç
+ *   tarafından ve yalnız içerik hâlâ S ise silinir. Kilit kimlikleri benzersiz rastgele olduğu için S bir daha oluşmaz.
+ * - Otomatik kurtarma: k kuşağının sahibi ölüyse jeton SİLİNMEZ; k+1 kuşağı denenir. Her kuşağı en çok bir süreç alır, bu yüzden
+ *   iki süreç aynı S'yi aynı anda devralamaz (NB-5 yarışı yapısal olarak yok). Kilidi alan süreç eski jetonları temizler.
+ * - Ardışık MAX_TAKEOVER_GENERATIONS devralma çökmesi: QUEUE_TAKEOVER_STALE (güvenli tarafta kal).
  */
 export function acquireQueueLock(lockPath: string, o: QueueLockOptions = {}): QueueLock {
   const io = o.io ?? defaultLockIo, alive = o.alive ?? ((p: number) => pidAlive(p));
   const id = `${o.pid ?? process.pid}:${randomBytes(16).toString("hex")}`;
-  const token = `${lockPath}.takeover`;
+  const dir = path.dirname(lockPath), base = path.basename(lockPath);
+  const prefix = lockPath.slice(0, lockPath.length - base.length);   // jeton yolları lockPath'in kendi ayırıcısıyla kurulur (Windows: path.join "\\" üretir)
+  const tokenOf = (stale: string, k: number) => `${lockPath}.takeover.${createHash("sha256").update(stale).digest("hex").slice(0, 24)}.${k}`;
   const holdsLive = (raw: string) => { const p = parsePid(raw); return Number.isSafeInteger(p) && p > 0 && alive(p); };
   const lock: QueueLock = {
     id,
@@ -63,28 +72,38 @@ export function acquireQueueLock(lockPath: string, o: QueueLockOptions = {}): Qu
       if (raw.trim() === id) { try { io.unlink(lockPath); } catch { /* yut */ } }
     },
   };
-  for (let attempt = 0; attempt < 3; attempt++) {
-    if (linkWithContent(io, lockPath, id)) return lock;
+  const won = (): QueueLock => {   // kilit bizde: artık geçersiz devralma jetonlarını (ve eski biçim `.takeover`) temizle
+    let names: string[] = [];
+    try { names = io.list(dir); } catch { return lock; }
+    // başka sürecin yazmakta olduğu geçici dosyaya (.tmp-) dokunulmaz (L-1)
+    for (const n of names) if ((n === `${base}.takeover` || n.startsWith(`${base}.takeover.`)) && !n.includes(".tmp-")) { try { io.unlink(prefix + n); } catch { /* yut */ } }
+    return lock;
+  };
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (linkWithContent(io, lockPath, id)) return won();
     let raw: string;
     try { raw = io.read(lockPath); } catch (e) { if (isEnoent(e)) continue; throw e; }
     if (holdsLive(raw)) throw new Error("QUEUE_LOCKED");
-    // Bayat kilit (ölü pid ya da tanınmayan içerik). Devralma jetonunu al.
-    if (!linkWithContent(io, token, id)) {
-      let traw = "";
-      try { traw = io.read(token); } catch (e) { if (isEnoent(e)) continue; throw e; }
-      if (holdsLive(traw)) throw new Error("QUEUE_LOCKED");   // başka süreç devralıyor
-      // NB-5: sahibi ölü jeton OTOMATİK SİLİNMEZ. Jetonu tutarken çöken süreçten sonra iki sürecin aynı jetonu temizleyip ikisinin de
-      // kilidi alması mümkündü; bunun yerine güvenli tarafta kalınır. Operatör: süreç olmadığını doğrulayıp `${lockPath}.takeover` silinir.
-      throw new Error("QUEUE_TAKEOVER_STALE");
+    // Bayat kilit S = raw. Bu S için boş bir kuşak jetonu al.
+    let token: string | null = null, spins = 0;
+    for (let k = 1; k <= MAX_TAKEOVER_GENERATIONS && token === null; k++) {
+      const t = tokenOf(raw, k);
+      if (linkWithContent(io, t, id)) { token = t; break; }
+      let traw: string;
+      try { traw = io.read(t); } catch (e) { if (isEnoent(e) && ++spins <= 8) { k--; continue; } throw e; }   // sahibi bıraktı: aynı kuşağı yeniden dene (sınırlı)
+      if (holdsLive(traw)) throw new Error("QUEUE_LOCKED");   // bu S'yi başka bir canlı süreç devralıyor
+      // sahibi ölü: jeton silinmez, bir sonraki kuşak denenir
     }
+    if (token === null) throw new Error("QUEUE_TAKEOVER_STALE");
     try {
       let again: string | null = null;
       try { again = io.read(lockPath); } catch (e) { if (!isEnoent(e)) throw e; }
-      if (again !== null) {
-        if (again !== raw && holdsLive(again)) throw new Error("QUEUE_LOCKED");
-        if (!holdsLive(again)) { try { io.unlink(lockPath); } catch (e) { if (!isEnoent(e)) throw e; } }
+      if (again === raw) {   // yalnız jetonun koruduğu S silinir; pid yeniden canlı görünüyorsa muhafazakâr davran
+        if (holdsLive(again)) throw new Error("QUEUE_LOCKED");
+        try { io.unlink(lockPath); } catch (e) { if (!isEnoent(e)) throw e; }
       }
-      if (linkWithContent(io, lockPath, id)) return lock;
+      else if (again !== null) { if (holdsLive(again)) throw new Error("QUEUE_LOCKED"); continue; }   // başka bir bayat içerik: kendi jetonuyla
+      if (linkWithContent(io, lockPath, id)) return won();
     } finally {
       try { if (io.read(token).trim() === id) io.unlink(token); } catch { /* yut */ }
     }
