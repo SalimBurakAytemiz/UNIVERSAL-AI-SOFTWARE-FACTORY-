@@ -101,7 +101,7 @@ export function registerQueueLockCases(): void {
       files.set(L, {data: a.id, mtime: 0}); a.release();
       expect(files.has(L)).toBe(false);
     });
-      it("malformed lock content is never mistaken for a live owner (NB-6 Q13)", () => {
+    it("malformed lock content is never mistaken for a live owner (NB-6 Q13)", () => {
       const {io, files} = memIo();
       files.set(L, {data: "111garbage", mtime: 0});   // 111 canlı ama içerik tanınmıyor
       const a = acquireQueueLock(L, {io, alive: p => !dead(p), pid: 222});
@@ -115,7 +115,7 @@ export function registerQueueLockCases(): void {
       const b = acquireQueueLock(L, {io, alive: p => !dead(p), pid: 222});
       expect(files.get(L)!.data).toBe(b.id);
     });
-      it("ENOENT on the takeover-token read is retried, then the lock is acquired (NB-8 / M9)", () => {
+    it("ENOENT on the takeover-token read is retried, then the lock is acquired (NB-8 / M9)", () => {
       let gone = false;
       const {io, files} = memIo({beforeRead: p => { if (p === tok(STALE, 1) && !gone) { gone = true; files.delete(tok(STALE, 1)); } }});
       files.set(L, {data: STALE, mtime: 0});
@@ -133,7 +133,7 @@ export function registerQueueLockCases(): void {
       expect(files.get(L)!.data).toBe(`999:${"d".repeat(32)}`);
       expect([...files.keys()].filter(k => k.includes(".takeover"))).toEqual([]);
     });
-      it("holding the token for S never deletes a different stale lock S2 that another process is taking over", () => {
+    it("holding the token for S never deletes a different stale lock S2 that another process is taking over", () => {
       const S2 = `997:${"9".repeat(32)}`;
       let swapped = false;
       const {io, files} = memIo({beforeLink: p => {
@@ -145,7 +145,7 @@ export function registerQueueLockCases(): void {
       expect(() => acquireQueueLock(L, {io, alive: p => !dead(p), pid: 222})).toThrow(/QUEUE_LOCKED/);
       expect(files.get(L)!.data).toBe(S2);
     });
-      it("L-1: the winner's token GC never deletes another process's in-flight temp file", () => {
+    it("L-1: the winner's token GC never deletes another process's in-flight temp file", () => {
       const {io, files} = memIo();
       const inflight = `${tok(STALE, 1)}.tmp-abcdef0123456789`;
       files.set(inflight, {data: `333:${"e".repeat(32)}`, mtime: 0});
