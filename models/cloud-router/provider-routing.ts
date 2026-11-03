@@ -24,6 +24,7 @@ export interface RoutingContext {
   tenantId: string;
   subject: string;
   /** PAID katmanı yalnız açık onayla (ör. Founder D-03/D-29 kapısı) seçilebilir. */
+  /** NB-2: gateway entegrasyonu bunu doğrulanabilir bir Founder onayından türetmelidir; istek gövdesinden ASLA kabul edilmez. */
   paidApproved?: boolean;
   signal?: AbortSignal;
 }
@@ -49,7 +50,7 @@ export interface RoutingAuditRecord {
 }
 export type RouteResult =
   | {ok: true; providerId: string; model: string; response: ModelResponse; attempts: AttemptRecord[]; chargedUsd: number}
-  | {ok: false; reason: RouteDeny; attempts: AttemptRecord[]; chargedUsd: number; detail?: string};
+  | {ok: false; reason: RouteDeny; attempts: AttemptRecord[]; chargedUsd: number; detail?: string; overrun?: true};
 
 export interface ProviderRouterOptions {
   routes: readonly ProviderRoute[];
@@ -205,9 +206,11 @@ export class ProviderRouter {
     const tenantOk = typeof ctx?.tenantId === "string" && ID_RE.test(ctx.tenantId);
     const capOk = typeof req?.capability === "string" && ID_RE.test(req.capability);
     const base = {tenantId: tenantOk ? ctx.tenantId : null, subject: typeof ctx?.subject === "string" && ID_RE.test(ctx.subject) ? ctx.subject : null, capability: capOk ? req.capability : null};
+    let overrun = false;   // settle, bildirilen gerçek ücret toplam tavanı aştıysa işaretler (eksik faturalama yok)
     const deny = (reason: RouteDeny, chargedUsd = 0, detail?: string): RouteResult => {
-      this.log({...base, decision: reason === "ALL_PROVIDERS_FAILED" || reason === "BUDGET_EXHAUSTED_BY_FAILURES" || reason === "POLICY_REFUSAL" ? "FAILED" : "DENIED", reason: detail ? `${reason}: ${detail}` : reason, costUsd: chargedUsd});
-      return {ok: false, reason, attempts, chargedUsd, ...(detail ? {detail} : {})};
+      const why = (detail ? `${reason}: ${detail}` : reason) + (overrun ? " [BUDGET_OVERRUN]" : "");
+      this.log({...base, decision: reason === "ALL_PROVIDERS_FAILED" || reason === "BUDGET_EXHAUSTED_BY_FAILURES" || reason === "POLICY_REFUSAL" ? "FAILED" : "DENIED", reason: why, costUsd: chargedUsd});
+      return {ok: false, reason, attempts, chargedUsd, ...(detail ? {detail} : {}), ...(overrun ? {overrun: true as const} : {})};
     };
 
     // 1) tenant izolasyonu önce: başka tenant'a yönelik istek hiçbir sağlayıcıya ulaşmaz
@@ -230,7 +233,7 @@ export class ProviderRouter {
 
     let consumed = 0, settled = false;
     const settle = (extraUsd = 0): {chargedUsd: number; overrun: boolean} => {
-      settled = true; const r = this.o.budget!.settle(res.id, consumed + extraUsd); return r;
+      settled = true; const r = this.o.budget!.settle(res.id, consumed + extraUsd); overrun = r.overrun; return r;
     };
     try {
       const estIn = estimateInputTokens(req.prompt);
@@ -269,8 +272,8 @@ export class ProviderRouter {
           this.log({...base, decision: "ROUTED", providerId: route.id, outcome: "OK", costUsd: s.chargedUsd, ...(costOk ? {} : {reason: "PROVIDER_COST_INVALID"}), ...(s.overrun ? {reason: "BUDGET_OVERRUN"} : {})});
           return {ok: true, providerId: route.id, model, response: {...r.response, costUsd: usd}, attempts, chargedUsd: s.chargedUsd};
         }
-        // başarısız deneme: bildirilen ücret (deneme tavanıyla sınırlı) ya da tavan
-        const usd = nonNeg(r.billedUsd) ? Math.min(r.billedUsd, cap) : cap;
+        // başarısız deneme: sağlayıcının bildirdiği gerçek ücret olduğu gibi (tavanı aşsa da; overrun settle'da işaretlenir), yoksa tavan
+        const usd = nonNeg(r.billedUsd) ? r.billedUsd : cap;
         consumed += usd; fix(projTokens, usd);
         const detail = this.redact(r.message);
         lastDetail = `${route.id}: ${r.outcome}`;
@@ -295,10 +298,15 @@ export class ProviderRouter {
     const ctl = new AbortController();
     let timer: NodeJS.Timeout | undefined;
     const onParent = () => ctl.abort();
+    let onAbortReject: (() => void) | undefined;
     parent?.addEventListener("abort", onParent, {once: true});
     try {
       const timeout = new Promise<never>((_, rej) => { timer = setTimeout(() => { rej(Object.assign(new Error("timeout"), {code: "PROVIDER_TIMEOUT"})); ctl.abort(); }, this.timeoutMs); });
-      const aborted = new Promise<never>((_, rej) => { if (parent) { const f = () => rej(Object.assign(new Error("aborted"), {code: "ABORTED"})); if (parent.aborted) f(); else parent.addEventListener("abort", f, {once: true}); } });
+      const aborted = new Promise<never>((_, rej) => {
+        if (!parent) return;
+        onAbortReject = () => rej(Object.assign(new Error("aborted"), {code: "ABORTED"}));
+        if (parent.aborted) onAbortReject(); else parent.addEventListener("abort", onAbortReject, {once: true});
+      });
       const response = await Promise.race([Promise.resolve().then(() => provider.invoke(req, ctl.signal)), timeout, aborted]);
       if (!validResponse(response)) return {kind: "fail", outcome: "PROVIDER_RESPONSE_INVALID", message: "provider response invalid", aborted: false};
       return {kind: "ok", response};
@@ -310,6 +318,7 @@ export class ProviderRouter {
     } finally {
       if (timer) clearTimeout(timer);
       parent?.removeEventListener("abort", onParent);
+      if (onAbortReject) parent?.removeEventListener("abort", onAbortReject);   // uzun ömürlü sinyalde dinleyici birikmez (LOW-4)
     }
   }
 }

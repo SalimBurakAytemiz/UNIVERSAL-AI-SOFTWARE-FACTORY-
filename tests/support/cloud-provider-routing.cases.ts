@@ -124,6 +124,29 @@ export function registerCloudProviderRoutingCases(): void {
       expect(r).toMatchObject({ok: true, chargedUsd: 1});
       expect(audit.at(-1)).toMatchObject({decision: "ROUTED", reason: "PROVIDER_COST_INVALID"});
     });
+    it("records a failed attempt's reported charge as-is even above its cap and flags the overrun (review NB-1)", async () => {
+      const a = fake("a", fail(undefined, 2.5)), b = fake("b", ok(0.1));
+      const r1 = await setup([route("p1", a, {priority: 1}), route("p2", b, {priority: 2})]).router.route(CTX, REQ);
+      expect(r1).toMatchObject({ok: true, providerId: "p2", chargedUsd: 2.6});
+      expect(r1.attempts[0]).toMatchObject({outcome: "PROVIDER_ERROR", chargedUsd: 2.5});
+      expect(b.calls[0]!.maxCostUsd).toBeCloseTo(0.5);
+      const c = fake("c", fail(undefined, 5)), d = fake("d", ok());
+      const {router, budget, audit} = setup([route("p1", c, {priority: 1}), route("p2", d, {priority: 2})]);
+      const r2 = await router.route(CTX, REQ);
+      expect(r2).toMatchObject({ok: false, reason: "BUDGET_EXHAUSTED_BY_FAILURES", chargedUsd: 5, overrun: true});
+      expect(d.calls).toHaveLength(0);
+      expect(budget.committed("tenant-001")).toBeCloseTo(5);   // no under-billing
+      expect(audit.at(-1)!.reason).toContain("BUDGET_OVERRUN");
+    });
+    it("does not accumulate abort listeners on a long-lived caller signal (review LOW-4)", async () => {
+      const ctl = new AbortController(); let active = 0;
+      const add = ctl.signal.addEventListener.bind(ctl.signal), rem = ctl.signal.removeEventListener.bind(ctl.signal);
+      ctl.signal.addEventListener = ((t: string, l: EventListenerOrEventListenerObject, o?: AddEventListenerOptions) => { active++; add(t, l, o); }) as typeof ctl.signal.addEventListener;
+      ctl.signal.removeEventListener = ((t: string, l: EventListenerOrEventListenerObject, o?: EventListenerOptions) => { active--; rem(t, l, o); }) as typeof ctl.signal.removeEventListener;
+      const {router} = setup([route("p1", fake("a", fail(undefined, 0)), {priority: 1}), route("p2", fake("b", fail(undefined, 0)), {priority: 2}), route("p3", fake("c", ok()), {priority: 3})]);
+      for (let i = 0; i < 3; i++) expect(await router.route({...CTX, signal: ctl.signal}, REQ)).toMatchObject({ok: true, providerId: "p3"});
+      expect(active).toBe(0);
+    });
     it("propagates caller abort without further fallback", async () => {
       const ctl = new AbortController();
       const a = fake("a", (_r, s) => { setTimeout(() => ctl.abort(), 1); return hang(_r, s); }), b = fake("b", ok());
