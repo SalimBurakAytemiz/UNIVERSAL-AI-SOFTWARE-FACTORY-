@@ -164,5 +164,27 @@ export function registerCloudGatewayCases(): void {
       await new Promise(r => setTimeout(r, 60));
       expect(fast?.aborted).toBe(false);   // zamanlayıcı temizlendi: başarılı çağrının sinyali sonradan abort edilmez
     });
+      it("N-1/G2: overlapping and nested known secrets are fully redacted, in any configuration order", () => {
+      const C = "AAAAAAAA11111111", D = "11111111BBBBBBBB", outer = "PREFIX-" + C + "-SUFFIX";
+      for (const order of [[C, D, outer], [outer, D, C], [D, C, outer]]) {
+        const {g} = gw({knownSecrets: order});
+        expect(g.redact(`x AAAAAAAA11111111BBBBBBBB y`)).toBe("x [REDACTED] y");
+        expect(g.redact(`x ${outer} y`)).toBe("x [REDACTED] y");
+        expect(g.redact(`${C} ${D}`)).toBe("[REDACTED] [REDACTED]");
+      }
+    });
+
+    it("N-2/G12: an audit-sink failure on the FAILED path still returns the redacted failure", async () => {
+      const prov: ModelProvider = {name: "fail", async invoke() { throw new Error(`boom ${PROVIDER_SECRET}`); }};
+      const budget = new TenantBudget(new Map([["tenant-001", 1]]));
+      const r = await gw({provider: prov, budget, audit: () => { throw new Error("sink down"); }}).g.invokeModel(tok(), "tenant-001", req);
+      expect(r).toMatchObject({ok: false, reason: "PROVIDER_ERROR"});
+      expect(JSON.stringify(r)).not.toContain(PROVIDER_SECRET);
+      expect(budget.committed("tenant-001")).toBeCloseTo(0.5);
+    });
+
+    it("N-2/G15: tenant isolation is decided before roles (cross-tenant VIEWER asking for STOP -> TENANT_DENIED)", () => {
+      expect(gw().g.gate(tok("tenant-002", ["VIEWER"]), "system.stop", "tenant-001")).toEqual({ok: false, reason: "TENANT_DENIED"});
+    });
   });
 }

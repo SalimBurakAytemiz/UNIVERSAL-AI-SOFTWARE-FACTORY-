@@ -156,9 +156,19 @@ export class CloudGateway {
 
   /** Önce bilinen secret'lar (en uzundan kısaya, tam eşleşme), sonra kalıplar: kalıp dönüşümü bilinen bir secret'ı parçalayıp kalanını sızdıramaz. */
   redact(text: string): string {
-    let out = String(text);
-    const known = [...(this.o.knownSecrets ?? [])].filter(s => typeof s === "string" && s.length >= 8).sort((a, b) => b.length - a.length);
-    for (const s of known) out = out.split(s).join("[REDACTED]");
+    // N-1: bütün bilinen secret eşleşmelerinin aralıkları birleştirilir; çakışan iki secret birbirinin kalanını açıkta bırakamaz.
+    const src = String(text);
+    const known = [...(this.o.knownSecrets ?? [])].filter(s => typeof s === "string" && s.length >= 8);
+    const spans: Array<[number, number]> = [];
+    for (const k of known) for (let at = src.indexOf(k); at !== -1; at = src.indexOf(k, at + 1)) spans.push([at, at + k.length]);
+    spans.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
+    let out = "", pos = 0;
+    for (let n = 0; n < spans.length;) {
+      let [st, en] = spans[n++]!;
+      while (n < spans.length && spans[n]![0] <= en) en = Math.max(en, spans[n++]![1]);
+      out += src.slice(pos, st) + "[REDACTED]"; pos = en;
+    }
+    out += src.slice(pos);
     out = redactSecrets(out);
     return out.replace(/v1\.[A-Za-z0-9._:-]{3,128}\.[A-Za-z0-9_-]+\.[0-9a-f]{64}/g, "[REDACTED_SESSION]").slice(0, 2000);
   }
