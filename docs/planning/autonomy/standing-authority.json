@@ -1,0 +1,25 @@
+{
+  "//TR": "Founder kalıcı otonomi kararının makine tarafından okunan biçimi: hangi kademelerin otomatik merge edileceğini, D-31 dışında hangi kapıların sağlanmış sayıldığını ve Founder'a kalan istisnaları tanımlar; autonomy.mjs bunu merge-gate.mjs sonucu ile birlikte uygular.",
+  "schemaVersion": "1.0.0",
+  "decisionId": "FD-2026-11-03-STANDING-AUTONOMY",
+  "record": "docs/planning/authority/FD-2026-11-03-STANDING-AUTONOMY.md",
+  "effectiveFrom": "2026-11-03",
+  "baseRef": "v7/integration",
+  "gateMode": "process",
+  "trustedReviewerLogins": ["SalimBurakAytemiz"],
+  "coveredTiers": ["T0", "T1", "T2"],
+  "standingGates": ["D-31"],
+  "satisfiedGates": {
+    "D-01": "Founder D-01: start real development within task authority (handover 2026-11-02)",
+    "D-31": "replaced for covered tiers by FD-2026-11-03-STANDING-AUTONOMY"
+  },
+  "founderOnlyGateReasons": {
+    "D-08": "PAID_SPEND",
+    "D-03": "EXTERNAL_PROVIDER_OR_ACCOUNT",
+    "D-29": "EXTERNAL_PROVIDER_OR_ACCOUNT",
+    "D-07": "PROTECTED_GOVERNANCE",
+    "D-23": "FOUNDER_ACCEPTANCE"
+  },
+  "founderRequiredGateReasons": ["PROTECTED_PATH", "CI_EXECUTED_PATH"],
+  "mergeMethod": "merge"
+}
