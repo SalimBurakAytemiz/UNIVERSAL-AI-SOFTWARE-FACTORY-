@@ -9,7 +9,7 @@ import path from "node:path";
 import {execFileSync} from "node:child_process";
 import {createHash} from "node:crypto";
 import {fileURLToPath} from "node:url";
-import {evaluateMergeGate, parseBinding} from "../merge-gate.mjs";
+import {evaluateMergeGate, parseBinding, normPath} from "../merge-gate.mjs";
 
 export const EXIT = {AUTO_MERGE: 0, BLOCK: 2, INTERNAL_ERROR: 3, FOUNDER_REQUIRED: 4};
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -65,23 +65,38 @@ export function openGates(task, policy) {
   return out;
 }
 
-const norm = p => (typeof p === "string" ? path.posix.normalize(p.replace(/\\/g, "/")).replace(/^(?:\.\/|\/)+/, "").toLowerCase() : null);
-/** True if a diff path belongs to the authority's own definition. */
+/** True if a diff path belongs to the authority's own definition. Uses merge-gate's normPath (L-b); an unusable path is fail-closed. */
 export function isGovernancePath(p) {
-  const n = norm(p);
-  if (n === null) return true;   // unusable path: fail-closed
+  const n = normPath(p);
+  if (n === null) return true;
   if (GOVERNANCE_EXEMPT.includes(n)) return false;
   return GOVERNANCE_EXACT.includes(n) || GOVERNANCE_PREFIXES.some(x => n.startsWith(x));
 }
 
-/** The reviewer's exception attestation from the latest CLEAN binding review on the exact head and base; null if none (NB-5). */
-export function attestationOf(reviews, head, base) {
-  const clean = (Array.isArray(reviews) ? reviews : []).filter(r => r && r.commit_id === head && typeof r.body === "string")
-    .map(r => ({r, b: parseBinding(r.body)})).filter(x => x.b && x.b.verdict === "CLEAN" && x.b.head === head && x.b.base === base)
-    .sort((a, b) => Date.parse(a.r.submitted_at) - Date.parse(b.r.submitted_at));
-  if (!clean.length) return null;
-  const lines = plainLines(clean.at(-1).r.body).map(l => ATTEST_RE.exec(l)).filter(Boolean);
-  return lines.length === 1 ? lines[0][1] : null;
+const REVIEW_STATES = new Set(["COMMENTED", "APPROVED"]);
+const lc = s => s.toLowerCase();
+/**
+ * The reviewer's exception attestation (BLOCKING-1 of review 5757611393). It uses merge-gate's own selection rules:
+ * - only reviews from `allowed` logins (trusted reviewers plus, in process mode, the PR author) count;
+ * - a review counts only if its state is COMMENTED or APPROVED, its time is valid, its binding is CLEAN on the exact head and base, and its session is not a builder session;
+ * - the selected review is the latest by time, then by id, the same one merge-gate accepts. It must carry exactly one attestation line, else null.
+ * The exceptions are the union over EVERY qualifying CLEAN review, so a later review can never erase an earlier attested exception.
+ */
+export function attestationOf({reviews, head, base, allowed, implementerSessions = []}) {
+  const impl = new Set(implementerSessions);
+  const att = body => { const l = plainLines(body).map(x => ATTEST_RE.exec(x)).filter(Boolean); return l.length === 1 ? l[0][1] : null; };
+  const ok = (Array.isArray(reviews) ? reviews : []).flatMap(r => {
+    if (!r || typeof r.body !== "string" || r.commit_id !== head || !REVIEW_STATES.has(r.state)) return [];
+    const login = r.user && typeof r.user.login === "string" ? lc(r.user.login) : null;
+    if (login === null || !allowed.has(login)) return [];
+    const t = Date.parse(r.submitted_at);
+    const b = parseBinding(r.body);
+    if (!Number.isFinite(t) || !b || b.code || b.verdict !== "CLEAN" || b.head !== head || b.base !== base || impl.has(b.session)) return [];
+    return [{t, id: Number(r.id) || 0, a: att(r.body)}];
+  }).sort((x, y) => x.t - y.t || x.id - y.id);
+  if (!ok.length || ok.at(-1).a === null) return null;
+  const codes = new Set(ok.flatMap(x => (x.a === null || x.a === "none" ? [] : x.a.split(","))));
+  return codes.size ? [...codes].join(",") : "none";
 }
 
 /** Pure decision: merge-gate result + evidence + PR body + policy + task index => AUTO_MERGE | FOUNDER_REQUIRED | BLOCK. */
@@ -111,7 +126,9 @@ export function decideAutoMerge({gate, body, policy, index, evidence = {}}) {
     if (gr.length === 0) reasons.push("GATE_NOT_MERGE");
   } else {
     // NB-5: content-level exceptions (spend, accounts, production operations) are attested by the independent reviewer.
-    const att = attestationOf(evidence.reviews, gate.expectedHeadSha, gate.expectedBaseSha);
+    const author = typeof evidence.pr?.user?.login === "string" ? [lc(evidence.pr.user.login)] : [];
+    const allowed = new Set([...(policy.trustedReviewerLogins ?? []).map(lc), ...(policy.gateMode === "process" ? author : [])]);
+    const att = attestationOf({reviews: evidence.reviews, head: gate.expectedHeadSha, base: gate.expectedBaseSha, allowed, implementerSessions: impl});
     if (att === null) reasons.push("REVIEWER_ATTESTATION_MISSING");
     else if (att !== "none") for (const x of att.split(",")) founder.push(`REVIEWER_ATTESTED:${x}`);
   }
@@ -196,10 +213,12 @@ export function collectEvidence({api, pr, implementerSessions, root = ROOT}) {
   };
 }
 
-export function decideFor({evidence, body, policy = loadPolicy(), index = loadIndex(), trust = {reasons: []}}) {
+export function decideFor({evidence, body, policy = loadPolicy(), index = loadIndex(), trust}) {
   const gate = evaluateMergeGate(evidence, {mode: policy.gateMode, trustedReviewerLogins: policy.trustedReviewerLogins, expectedBaseRef: policy.baseRef});
   const result = decideAutoMerge({gate, body, policy, index, evidence: evidence ?? {}});
-  if (trust.reasons.length) { result.decision = "BLOCK"; result.authority = null; result.reasons = [...trust.reasons, ...result.reasons]; }
+  // NB-a: the trust result from collectEvidence is mandatory; a missing or malformed one blocks.
+  const tr = trust && Array.isArray(trust.reasons) && trust.reasons.every(x => typeof x === "string") ? trust.reasons : ["TRUST_RESULT_MISSING"];
+  if (tr.length) { result.decision = "BLOCK"; result.authority = null; result.reasons = [...tr, ...result.reasons]; }
   return {gate, result};
 }
 

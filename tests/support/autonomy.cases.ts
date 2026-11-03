@@ -11,15 +11,15 @@ const SHA = "a".repeat(40), BASE = "b".repeat(40);
 const merge = {decision: "MERGE", reasons: [], expectedHeadSha: SHA, expectedBaseSha: BASE};
 const block = (...reasons: string[]) => ({decision: "BLOCK", reasons, expectedHeadSha: SHA, expectedBaseSha: BASE});
 const policy = {
-  decisionId: "FD-TEST", coveredTiers: ["T0", "T1", "T2"], standingGates: ["D-31"], satisfiedGates: {"D-01": "x"},
+  decisionId: "FD-TEST", gateMode: "process", trustedReviewerLogins: ["Rev"], coveredTiers: ["T0", "T1", "T2"], standingGates: ["D-31"], satisfiedGates: {"D-01": "x"},
   founderOnlyGateReasons: {"D-08": "PAID_SPEND", "D-03": "EXTERNAL_PROVIDER_OR_ACCOUNT"}, founderRequiredGateReasons: ["PROTECTED_PATH", "CI_EXECUTED_PATH"],
 };
 const t = (id: string, tier: string, o: Record<string, unknown> = {}) => ({id, tier, status: "MISSING", wave: "W0", deps: [], startGates: [], mergeGates: ["D-31"], exec: "CLOUD", name: id, ...o});
 const index = {tasks: [t("CLOUD-T0010", "T2"), t("UASCO-T0072", "T3"), t("CLOUD-T0015", "T2", {mergeGates: ["D-31", "D-08"]}), t("V3-T1099", "T1", {startGates: ["D-77"]})]};
 const body = (id: string) => `Summary\n\nUASCO-TASK: ${id}\n`;
-const cleanReview = (att = "AUTONOMY-EXCEPTIONS: none", head = SHA) => ({id: 1, user: {login: "r"}, state: "COMMENTED", commit_id: head, submitted_at: "2026-11-03T10:00:00Z",
-  body: `findings\n${att}\nVERDICT-BINDING: verdict=CLEAN head=${head} base=${BASE} reviewer-session=session_rev`});
-const ev = (o: Record<string, unknown> = {}) => ({implementerSessions: ["session_builder"], diffFiles: [{filename: "apps/x.ts", status: "modified"}], reviews: [cleanReview()], ...o});
+const cleanReview = (att = "AUTONOMY-EXCEPTIONS: none", head = SHA, o: Record<string, unknown> = {}, session = "session_rev") => ({id: 1, user: {login: "rev"}, state: "COMMENTED", commit_id: head, submitted_at: "2026-11-03T10:00:00Z",
+  body: `findings\n${att}\nVERDICT-BINDING: verdict=CLEAN head=${head} base=${BASE} reviewer-session=${session}`, ...o});
+const ev = (o: Record<string, unknown> = {}) => ({implementerSessions: ["session_builder"], diffFiles: [{filename: "apps/x.ts", status: "modified"}], reviews: [cleanReview()], pr: {user: {login: "author"}}, ...o});
 
 export function registerAutonomyCases() {
   describe("standing autonomy authority (FD-2026-11-03)", () => {
@@ -109,7 +109,23 @@ export function registerAutonomyCases() {
       const paid = d([cleanReview("AUTONOMY-EXCEPTIONS: PAID_SPEND,NEW_CREDENTIAL")]);
       expect(paid.decision).toBe("FOUNDER_REQUIRED");
       expect(paid.reasons).toEqual(["REVIEWER_ATTESTED:PAID_SPEND", "REVIEWER_ATTESTED:NEW_CREDENTIAL"]);
-      expect(attestationOf([cleanReview()], SHA, BASE)).toBe("none");
+      expect(attestationOf({reviews: [cleanReview()], head: SHA, base: BASE, allowed: new Set(["rev"])})).toBe("none");
+    });
+    it("NB5b no later or foreign review can erase an attested exception (review 5757611393 BLOCKING-1)", () => {
+      const d = (reviews: unknown[]) => decideAutoMerge({gate: merge, body: body("CLOUD-T0010"), policy, index, evidence: ev({reviews})});
+      const paid = cleanReview("AUTONOMY-EXCEPTIONS: PAID_SPEND", SHA, {id: 1});
+      const later = (o: Record<string, unknown>, session?: string) => cleanReview("AUTONOMY-EXCEPTIONS: none", SHA, {id: 2, submitted_at: "2026-11-03T11:00:00Z", ...o}, session);
+      for (const extra of [later({user: {login: "mallory"}}), later({}, "session_builder"), later({}), later({state: "PENDING"}), later({submitted_at: null}), later({user: null})]) {
+        const r = d([paid, extra]);
+        expect(r.decision).toBe("FOUNDER_REQUIRED");
+        expect(r.reasons).toContain("REVIEWER_ATTESTED:PAID_SPEND");
+      }
+      // A foreign account's attestation never counts, even alone: the governed reviewer's review must carry it.
+      expect(d([cleanReview("", SHA, {}), later({user: {login: "mallory"}})]).reasons).toContain("REVIEWER_ATTESTATION_MISSING");
+      // A builder-session CLEAN is never the selected review, so it cannot supply the attestation the governed review lacks.
+      expect(d([cleanReview("", SHA, {}), later({}, "session_builder")]).reasons).toContain("REVIEWER_ATTESTATION_MISSING");
+      // The PR author's own review counts in process mode (merge-gate's allowed set).
+      expect(d([cleanReview("AUTONOMY-EXCEPTIONS: none", SHA, {user: {login: "Author"}})]).decision).toBe("AUTO_MERGE");
     });
     it("B2/NB1/NB2/NB3 evidence: trust inputs from the base, local trust files must match it, every check run, no silent truncation", () => {
       const root = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-aut-"));
@@ -122,11 +138,11 @@ export function registerAutonomyCases() {
       fs.writeFileSync(path.join(root, "docs/planning/autonomy/standing-authority.json"), files["docs/planning/autonomy/standing-authority.json"]);
       fs.writeFileSync(path.join(root, "docs/planning/autonomy/task-index.json"), files["docs/planning/autonomy/task-index.json"]);
       const seen: string[] = [];
-      let baseReads = 0;
+      let baseReads = 0, moved = false;
       const api = (p: string) => {
         seen.push(p);
         if (p === "pulls/7") return {number: 7, state: "open", draft: false, merged: false, changed_files: 1, head: {sha: SHA, ref: "h"}, base: {ref: "v7/integration", sha: BASE}, user: {login: "u"}, body: body("CLOUD-T0010")};
-        if (p.startsWith("branches/")) return {commit: {sha: baseReads++ === 0 ? BASE : BASE}};
+        if (p.startsWith("branches/")) return {commit: {sha: moved && baseReads++ > 0 ? "c".repeat(40) : BASE}};
         if (p.startsWith("contents/")) { const f = decodeURIComponent(p.slice(9, p.indexOf("?ref="))); expect(p.endsWith(`?ref=${BASE}`)).toBe(true); return {sha: blob(files[f]), encoding: "base64", content: files[f].toString("base64")}; }
         if (p.startsWith("actions/runs")) return {workflow_runs: [{check_suite_id: 11, path: ".github/workflows/ci.yml", event: "pull_request"}]};
         if (p.startsWith(`commits/${SHA}/check-runs`)) return {check_runs: [{name: "validate (ubuntu-latest)", status: "completed", conclusion: "success", head_sha: SHA, app: {slug: "github-actions"}, completed_at: "t", check_suite: {id: 11}},
@@ -150,6 +166,12 @@ export function registerAutonomyCases() {
       const {result} = decideFor(t);
       expect(result.decision).toBe("BLOCK");
       expect(result.reasons[0]).toBe("LOCAL_TRUST_FILE_MISMATCH:docs/planning/merge-gate.mjs");
+      expect(decideFor({evidence: t.evidence, body: t.body, policy: t.policy, index: t.index}).result.reasons).toContain("TRUST_RESULT_MISSING");
+      fs.writeFileSync(path.join(root, "docs/planning/merge-gate.mjs"), files["docs/planning/merge-gate.mjs"]);
+      moved = true;
+      const m = collectEvidence({api, pr: 7, implementerSessions: ["s1"], root});
+      expect(m.trust.reasons).toEqual(["TRUST_BASE_MOVED"]);
+      expect(decideFor(m).result.decision).toBe("BLOCK");
       expect(() => pages(() => Array(100).fill(1), "x")).toThrow("EVIDENCE_PAGE_CAP");
       expect(() => pages(() => ({}), "x", "k")).toThrow("EVIDENCE_LIST_MALFORMED");
       fs.rmSync(root, {recursive: true, force: true});
