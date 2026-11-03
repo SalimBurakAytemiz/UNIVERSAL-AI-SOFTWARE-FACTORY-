@@ -29,7 +29,7 @@ export const GOVERNANCE_PREFIXES = Object.freeze(["docs/planning/autonomy/", "do
 export const GOVERNANCE_EXACT = Object.freeze(["docs/planning/merge-gate.mjs", "docs/planning/merge-gate.proof.mjs", "docs/planning/merge_gate.md"]);
 export const GOVERNANCE_EXEMPT = Object.freeze(["docs/planning/autonomy/state.json"]);
 // Files decide trusts. Each must equal the base's blob, so a PR-head or stale checkout can never supply its own rules (B-2).
-export const TRUST_FILES = Object.freeze(["docs/planning/autonomy/autonomy.mjs", "docs/planning/autonomy/standing-authority.json",
+export const TRUST_FILES = Object.freeze(["docs/planning/autonomy/autonomy.mjs", "docs/planning/autonomy/executor.mjs", "docs/planning/autonomy/standing-authority.json",
   "docs/planning/autonomy/task-index.json", "docs/planning/merge-gate.mjs"]);
 export const MAX_PAGES = 30;
 
