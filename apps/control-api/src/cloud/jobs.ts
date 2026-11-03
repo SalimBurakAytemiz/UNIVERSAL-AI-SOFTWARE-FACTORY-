@@ -1,7 +1,7 @@
-// //TR: Bu dosya (güven sınırı: kuyruk dizini sunucunun kendi diskidir, journal'a MAC uygulanmaz ve maskeli scope imzaları replay'de yeniden doğrulanmaz) CLOUD-T0003 bulut iş kuyruğunu uygular: imzalı istek kabulü (CLOUD-T0001 sözleşmesi), kimliği doğrulanmış worker lease'i, heartbeat, iptal, global STOP, dayanıklı (append-only journal) yeniden deneme ve aynı işin iki kez yürütülmemesi; her karar audit kaydına yazılır.
+// //TR: Bu dosya (güven sınırı: kuyruk dizini sunucunun kendi diskidir ve tek PID ad alanındaki tek süreç tarafından kullanılır; journal'a MAC uygulanmaz ve maskeli scope imzaları replay'de yeniden doğrulanmaz) CLOUD-T0003 bulut iş kuyruğunu uygular: imzalı istek kabulü (CLOUD-T0001 sözleşmesi), kimliği doğrulanmış worker lease'i, heartbeat, iptal, global STOP, dayanıklı (append-only journal) yeniden deneme ve aynı işin iki kez yürütülmemesi; her karar audit kaydına yazılır.
 import fs from "node:fs";
 import path from "node:path";
-import {createHash, createHmac, randomUUID, timingSafeEqual} from "node:crypto";
+import {createHash, createHmac, randomBytes, randomUUID, timingSafeEqual} from "node:crypto";
 import {
   auditRecordFor, canonicalJson, validateCloudJobRequest, verifyEventStream, TERMINAL_EVENT_TYPES,
   type ArtifactRef, type CloudJobEvent, type CloudJobEventType, type CloudJobRequest,
@@ -41,6 +41,11 @@ export function signWorkerAuth(a: Omit<WorkerAuth, "signature">, secret: string 
   return {...a, signature: createHmac("sha256", secret).update(`${a.workerId}\n${a.action}\n${a.jobId}\n${a.at}\n${a.nonce}\n${workerBodyDigest(body)}`).digest("hex")};
 }
 
+/** EPERM: süreç var ama sinyal izni yok -> canlı. ESRCH: yok -> ölü. */
+export function pidAlive(pid: number, kill: (pid: number, sig: 0) => void = (p, sg) => { process.kill(p, sg); }): boolean {
+  try { kill(pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code === "EPERM"; }
+}
+
 const isTerminal = (t: string) => (TERMINAL_EVENT_TYPES as readonly string[]).includes(t);
 
 export class CloudJobQueue {
@@ -58,36 +63,54 @@ export class CloudJobQueue {
   private lockFd: number | null = null;
 
   constructor(private readonly opts: CloudJobQueueOptions) {
+    this.leaseMs = opts.leaseMs ?? DEFAULT_LEASE_MS;
+    if (!Number.isSafeInteger(this.leaseMs) || this.leaseMs < 1000) throw new Error("leaseMs invalid");   // kilitten önce (N-2)
     fs.mkdirSync(opts.dir, {recursive: true});
     this.lockPath = path.join(opts.dir, "jobs.lock");
     this.acquireLock();   // L-3: tek yazıcı; aynı dizinde ikinci kuyruk örneği açılmaz (çift yürütme yok)
     this.journal = path.join(opts.dir, "jobs.journal.jsonl");
     this.audit = path.join(opts.dir, "jobs.audit.jsonl");
     this.now = opts.now ?? (() => new Date());
-    this.leaseMs = opts.leaseMs ?? DEFAULT_LEASE_MS;
-    if (!Number.isSafeInteger(this.leaseMs) || this.leaseMs < 1000) throw new Error("leaseMs invalid");
     try { this.replay(); } catch (e) { this.close(); throw e; }
   }
 
   private acquireLock(): void {
-    for (let i = 0; i < 2; i++) {
-      try { this.lockFd = fs.openSync(this.lockPath, "wx"); fs.writeSync(this.lockFd, String(process.pid)); fs.fsyncSync(this.lockFd); return; }
-      catch (e) {
+    for (let i = 0; i < 3; i++) {
+      let fd: number | null = null;
+      try {
+        fd = fs.openSync(this.lockPath, "wx");
+        fs.writeSync(fd, String(process.pid)); fs.fsyncSync(fd);
+        this.lockFd = fd; return;
+      } catch (e) {
+        if (fd !== null) { try { fs.closeSync(fd); } catch { /* yut */ } fs.rmSync(this.lockPath, {force: true}); throw e; }   // N-2: yazma hatası kilit bırakmaz
         if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-        const pid = Number(fs.readFileSync(this.lockPath, "utf8").trim());
-        let alive = true;
-        if (Number.isSafeInteger(pid) && pid > 0) { try { process.kill(pid, 0); } catch (k) { alive = (k as NodeJS.ErrnoException).code === "EPERM"; } }
-        if (alive) throw new Error("QUEUE_LOCKED");
-        fs.rmSync(this.lockPath, {force: true});   // çökmüş sürecin bıraktığı kilit
       }
+      // Mevcut kilit: sahibi canlıysa reddet. Boş/okunamayan kilit (yazma sırasında çökme) ölü sayılır.
+      let raw = "";
+      try { raw = fs.readFileSync(this.lockPath, "utf8").trim(); } catch { continue; }
+      const pid = /^\d+$/.test(raw) ? Number(raw) : Number.NaN;
+      if (Number.isSafeInteger(pid) && pid > 0 && pidAlive(pid)) throw new Error("QUEUE_LOCKED");
+      // N-1: devralma yarışını önlemek için bayat kilit önce benzersiz bir ada taşınır; taşınan dosya hâlâ okunan içeriği taşıyorsa silinir.
+      const moved = `${this.lockPath}.stale-${randomBytes(8).toString("hex")}`;
+      try { fs.renameSync(this.lockPath, moved); } catch { continue; }   // başka süreç önce davrandı
+      let movedRaw: string | null = null;
+      try { movedRaw = fs.readFileSync(moved, "utf8").trim(); } catch { /* yut */ }
+      if (movedRaw !== raw) {   // arada taze bir kilit oluşmuş ve onu taşımışız: geri koy, kilitli say
+        try { fs.renameSync(moved, this.lockPath); } catch { /* yut */ }
+        throw new Error("QUEUE_LOCKED");
+      }
+      fs.rmSync(moved, {force: true});
     }
     throw new Error("QUEUE_LOCKED");
   }
 
   /** Kilidi bırakır. Kapatılan örnek bir daha kullanılmaz. */
   close(): void {
+    this.closed = true;
     if (this.lockFd !== null) { fs.closeSync(this.lockFd); this.lockFd = null; fs.rmSync(this.lockPath, {force: true}); }
   }
+  private closed = false;
+  private assertOpen(): void { if (this.closed) throw new Error("QUEUE_CLOSED"); }   // N-4
 
   // ---------- persistence ----------
   /** Birden çok satır tek write + fsync ile yazılır (submit + QUEUED aynı kayıtta: arada çökme boş akış bırakmaz). */
@@ -171,6 +194,7 @@ export class CloudJobQueue {
   // ---------- API ----------
   /** İş kabulü: CLOUD-T0001 sözleşmesiyle doğrulanır; aynı idempotency anahtarı + aynı içerik = aynı iş (replay). */
   submit(input: unknown): {ok: true; jobId: string; replay: boolean} | {ok: false; reason: string} {
+    this.assertOpen();
     if (this.stopped) { this.auditLog({decision: "DENIED", reason: "GLOBAL_STOP_ACTIVE"}); return {ok: false, reason: "GLOBAL_STOP_ACTIVE"}; }
     const d = validateCloudJobRequest(input, {scopeKeys: this.opts.scopeKeys, now: this.now(), idempotencyIndex: new Map(this.idem)});
     if (d.ok && !d.replay && this.jobs.has(d.job.jobId)) { this.auditLog({decision: "DENIED", reason: "JOB_ID_REUSED", jobId: d.job.jobId}); return {ok: false, reason: "JOB_ID_REUSED"}; }
@@ -188,13 +212,14 @@ export class CloudJobQueue {
 
   /** Bir worker en eski hazır işi alır. Bir işin aynı anda tek geçerli lease'i olur (çift yürütme yok). */
   claim(auth: WorkerAuth): {ok: true; job: CloudJobRequest; lease: Lease; attempt: number} | {ok: false; reason: QueueDenyReason | "NO_JOB"} {
+    this.assertOpen();
     // claim kanıtında jobId her zaman "*"
     const bad = this.authWorker(auth, "claim", "*"); if (bad) return {ok: false, reason: bad};
-    if (this.stopped) return {ok: false, reason: "GLOBAL_STOP_ACTIVE"};
+    if (this.stopped) { this.auditLog({decision: "WORKER_DENIED", reason: "GLOBAL_STOP_ACTIVE", workerId: auth.workerId, action: "claim"}); return {ok: false, reason: "GLOBAL_STOP_ACTIVE"}; }
     this.reap();
     const now = this.now().getTime();
     const s = [...this.jobs.values()].find(x => x.status === "QUEUED" && x.notBefore <= now);
-    if (!s) return {ok: false, reason: "NO_JOB"};
+    if (!s) { this.auditLog({decision: "NO_JOB", workerId: auth.workerId}); return {ok: false, reason: "NO_JOB"}; }
     const lease: Lease = {leaseId: randomUUID(), workerId: auth.workerId, expiresAt: Math.min(now + this.leaseMs, (s.startedAt ?? now) + s.job.timeoutMs)};
     this.emit(s, "STARTED", {message: JSON.stringify(lease)});
     this.auditLog({decision: "CLAIMED", jobId: s.job.jobId, workerId: auth.workerId, attempt: s.attempt});
@@ -218,7 +243,9 @@ export class CloudJobQueue {
 
   /** Lease'i uzatır. İş iptal edildiyse JOB_CANCELLED, STOP varsa GLOBAL_STOP_ACTIVE döner: worker durur ve çıktı üretmez. */
   heartbeat(auth: WorkerAuth, jobId: string, leaseId: string): {ok: true} | {ok: false; reason: QueueDenyReason} {
-    const h = this.holder(auth, "heartbeat", jobId, leaseId, {leaseId}); if ("reason" in h) return {ok: false, reason: h.reason};
+    this.assertOpen();
+    const h = this.holder(auth, "heartbeat", jobId, leaseId, {leaseId});
+    if ("reason" in h) { this.auditLog({decision: "HEARTBEAT_REJECTED", jobId, reason: h.reason}); return {ok: false, reason: h.reason}; }
     const exp = Math.min(this.now().getTime() + this.leaseMs, (h.s.startedAt as number) + h.s.job.timeoutMs);   // lease toplam süreyi aşamaz
     this.emit(h.s, "HEARTBEAT", {message: String(exp)});
     return {ok: true};
@@ -226,6 +253,7 @@ export class CloudJobQueue {
 
   /** Sonuç yalnız geçerli lease sahibinden kabul edilir; iptal/STOP/süresi geçmiş işin çıktısı asla kaydedilmez. */
   complete(auth: WorkerAuth, jobId: string, leaseId: string, result: JobResult): {ok: true; status: CloudJobEventType} | {ok: false; reason: QueueDenyReason} {
+    this.assertOpen();
     const h = this.holder(auth, "complete", jobId, leaseId, {leaseId, result});
     if ("reason" in h) { this.auditLog({decision: "RESULT_REJECTED", jobId, reason: h.reason}); return {ok: false, reason: h.reason}; }
     const s = h.s;
@@ -253,8 +281,10 @@ export class CloudJobQueue {
 
   /** İptal: iş hemen CANCELLED (terminal). Çalışan worker'ın heartbeat ve sonucu JOB_CANCELLED ile reddedilir; çıktısı asla kaydedilmez. */
   cancel(jobId: string): {ok: true} | {ok: false; reason: QueueDenyReason} {
-    const s = this.jobs.get(jobId); if (!s) return {ok: false, reason: "JOB_NOT_FOUND"};
-    if (isTerminal(s.status)) return {ok: false, reason: "JOB_TERMINAL"};
+    this.assertOpen();
+    const s = this.jobs.get(jobId);
+    if (!s) { this.auditLog({decision: "CANCEL_REJECTED", jobId: String(jobId).slice(0, 128), reason: "JOB_NOT_FOUND"}); return {ok: false, reason: "JOB_NOT_FOUND"}; }
+    if (isTerminal(s.status)) { this.auditLog({decision: "CANCEL_REJECTED", jobId, reason: "JOB_TERMINAL"}); return {ok: false, reason: "JOB_TERMINAL"}; }
     this.emit(s, "CANCELLED");
     this.auditLog({decision: "CANCELLED", jobId});
     return {ok: true};
@@ -262,6 +292,7 @@ export class CloudJobQueue {
 
   /** Global STOP: yeni kabul ve claim yok; terminal olmayan bütün işler STOPPED. Kalıcıdır (journal). */
   stopAll(): void {
+    this.assertOpen();
     if (!this.stopped) { this.stopped = true; this.append({kind: "stop", at: this.now().toISOString()}); }
     for (const s of this.jobs.values()) if (!isTerminal(s.status)) this.emit(s, "STOPPED");
     this.auditLog({decision: "GLOBAL_STOP"});
@@ -269,6 +300,7 @@ export class CloudJobQueue {
 
   /** Süresi geçen lease'ler: deneme hakkı varsa RETRYING, yoksa TIMED_OUT. İşin toplam süresi timeoutMs'i aşarsa TIMED_OUT. */
   reap(): void {
+    this.assertOpen();
     const now = this.now().getTime();
     for (const s of this.jobs.values()) {
       if (isTerminal(s.status)) continue;

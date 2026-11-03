@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {randomUUID} from "node:crypto";
-import {CloudJobQueue, signWorkerAuth, type JobResult, type WorkerAuth} from "../../apps/control-api/src/cloud/jobs.js";
+import {CloudJobQueue, pidAlive, signWorkerAuth, type JobResult, type WorkerAuth} from "../../apps/control-api/src/cloud/jobs.js";
 import {CLOUD_CONTRACT_VERSION, signScope, sha256Hex, verifyEventStream, type CloudJobRequest, type UnsignedScope} from "../../core/cloud/contracts.js";
 
 const SCOPE_FIXTURE = "scope-fixture-key-".repeat(3);
@@ -249,6 +249,51 @@ describe("CLOUD-T0003 cloud job queue", () => {
     expect(c2.lease.expiresAt).toBe(Date.parse("2026-11-03T12:00:00Z") + 90_000);
     advance(29_000);
     expect(done(q, r.jobId, c2.lease.leaseId, {status: "SUCCEEDED"})).toEqual({ok: false, reason: "JOB_TIMED_OUT"});
+  });
+  it("N-3: a dead owner's lock (and an empty lock file) is taken over; a live owner's is not", () => {
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(path.join(dir, "jobs.lock"), "999999999");   // böyle bir süreç yok
+    expect(() => mkQueue()).not.toThrow();
+    while (open.length) open.pop()!.close();
+    fs.writeFileSync(path.join(dir, "jobs.lock"), "");             // yazma sırasında çökmüş kilit
+    expect(() => mkQueue()).not.toThrow();
+    while (open.length) open.pop()!.close();
+    fs.writeFileSync(path.join(dir, "jobs.lock"), String(process.pid));
+    expect(() => new CloudJobQueue(opts(60_000))).toThrow(/QUEUE_LOCKED/);
+    expect(fs.readdirSync(dir).filter(f => f.includes(".stale-"))).toEqual([]);
+  });
+
+  it("N-3: EPERM means alive, ESRCH means dead", () => {
+    const err = (code: string) => () => { throw Object.assign(new Error(code), {code}); };
+    expect(pidAlive(1, err("EPERM"))).toBe(true);
+    expect(pidAlive(1, err("ESRCH"))).toBe(false);
+    expect(pidAlive(1, () => {})).toBe(true);
+  });
+
+  it("N-2/N-3: a failing constructor never leaves the lock behind", () => {
+    expect(() => new CloudJobQueue(opts(5))).toThrow(/leaseMs/);
+    expect(fs.existsSync(path.join(dir, "jobs.lock"))).toBe(false);
+    const q = mkQueue(); q.submit(req()); q.close(); open.length = 0;
+    fs.appendFileSync(path.join(dir, "jobs.journal.jsonl"), "{not json}\n");
+    expect(() => new CloudJobQueue(opts(60_000))).toThrow(/JOURNAL_CORRUPT/);
+    expect(fs.existsSync(path.join(dir, "jobs.lock"))).toBe(false);
+  });
+
+  it("N-4: a closed instance is fenced", () => {
+    const q = mkQueue(); q.close(); open.length = 0;
+    expect(() => q.submit(req())).toThrow(/QUEUE_CLOSED/);
+    expect(() => q.stopAll()).toThrow(/QUEUE_CLOSED/);
+    expect(() => q.claim(auth("claim", "*"))).toThrow(/QUEUE_CLOSED/);
+  });
+
+  it("N-5: post-authentication denials are audited", () => {
+    const q = mkQueue(); const r = req(); q.submit(r);
+    expect(q.cancel("job-none")).toMatchObject({ok: false});
+    const c = q.claim(auth("claim", "*")); if (!c.ok) throw new Error(c.reason);
+    expect(q.claim(auth("claim", "*"))).toEqual({ok: false, reason: "NO_JOB"});
+    expect(hb(q, r.jobId, "other-lease")).toEqual({ok: false, reason: "LEASE_MISMATCH"});
+    const audit = fs.readFileSync(path.join(dir, "jobs.audit.jsonl"), "utf8");
+    for (const d of ["CANCEL_REJECTED", "NO_JOB", "HEARTBEAT_REJECTED"]) expect(audit).toContain(`"decision":"${d}"`);
   });
 });
 }
