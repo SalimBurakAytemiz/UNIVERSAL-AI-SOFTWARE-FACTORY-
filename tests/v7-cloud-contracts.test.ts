@@ -1,5 +1,6 @@
 // //TR: Bu test CLOUD-T0001 bulut yürütme sözleşmesinin imzalı kapsam, tenant/proje/ortam bağlama, timeout/retry sınırları, idempotency, olay akışı ve artifact SHA kapılarında fail-closed davrandığını doğrular.
 import {describe,it,expect} from "vitest";
+import {registerCloudJobQueueCases} from "./support/cloud-jobs.cases.js";   // CLOUD-T0003 iş kuyruğu vakaları (aynı CI kaydı altında koşar)
 import {
   CLOUD_CONTRACT_VERSION,MAX_JOB_TIMEOUT_MS,signScope,verifyScopeSignature,validateCloudJobRequest,verifyEventStream,verifyArtifact,
   auditRecordFor,canonicalJson,sha256Hex,type CloudJobRequest,type CloudJobEvent,type UnsignedScope,
@@ -128,3 +129,20 @@ describe("cloud contract: events, artifacts, audit",()=>{
     expect(denied).toMatchObject({decision:"DENIED",jobId:null,reason:"CONTRACT_VERSION_UNSUPPORTED"});
   });
 });
+
+describe("cloud contract: review follow-ups (PR #296 LOW-1, LOW-2, INFO-3)",()=>{
+  const job={jobId:"job-0001",retry:{maxAttempts:2,backoffMs:0}};
+  const q={jobId:"job-0001",seq:0,type:"QUEUED" as const,attempt:1,at:"2026-11-02T12:00:00Z"};
+  it("rejects unknown event types, empty streams and bad artifact sizes",()=>{
+    expect(verifyEventStream([],job)).toMatchObject({ok:false,reason:"EMPTY_STREAM"});
+    expect(verifyEventStream([q,{...q,seq:1,type:"BOGUS" as unknown as "LOG"}],job)).toMatchObject({ok:false,reason:"UNKNOWN_EVENT_TYPE"});
+    for(const sizeBytes of [-1,1.5,Number.NaN])expect(verifyEventStream([q,{...q,seq:1,type:"ARTIFACT",artifact:{...art,sizeBytes}}],job)).toMatchObject({ok:false,reason:"ARTIFACT_INVALID"});
+  });
+  it("a non-canonical extra field is a deny, never a throw",()=>{
+    expect(reason({...mk(),extra:Number.NaN})).toBe("MALFORMED_REQUEST");
+    expect(reason({...mk(),extra:BigInt(1)})).toBe("MALFORMED_REQUEST");
+  });
+  it("an inverted scope window has its own reason code",()=>expect(reason(mk({},{issuedAt:"2026-11-02T11:00:00Z",expiresAt:"2026-11-02T10:00:00Z"}))).toBe("SCOPE_WINDOW_INVALID"));
+});
+
+registerCloudJobQueueCases();
