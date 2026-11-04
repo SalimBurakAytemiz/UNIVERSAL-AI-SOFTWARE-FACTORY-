@@ -51,12 +51,16 @@ function seeded() {
   const cc = q.claim(auth("claim", "*")); if (!cc.ok || cc.job.jobId !== c.jobId) throw new Error("claim c");
   return {q, a, b, c, x, lease: cc.lease.leaseId};
 }
-function mkServer(queue: () => CloudJobQueue | null, tenantId = TENANT) {
+type QueueLike = Pick<CloudJobQueue, "list" | "summary" | "isStopped">;
+/** Kurucu PR'ından önce server.ts route'u kaydetmez: test modülü kaydeder. Sonra server.ts `registerCloudJobRoutes(app,{queue:()=>opts.cloudJobQueue??null,scope})`
+ *  ile kaydeder; test aynı kuyruğu buildServer seçeneğiyle verir. İki durumda da aynı gerçek belirteç kancası ve aynı route kodu sınanır. */
+function mkServer(queue: QueueLike | null, tenantId = TENANT) {
   const runtime = path.join(dir, "runtime"); fs.mkdirSync(runtime, {recursive: true});
-  const app = buildServer({controlToken: TOKEN, runtime, repoRoot: REPO, dataDir: path.join(dir, "data"), tenantId, port: 3210, logger: false});
-  registerCloudJobRoutes(app, {queue, scope: {tenantId}});
+  const app = buildServer({controlToken: TOKEN, runtime, repoRoot: REPO, dataDir: path.join(dir, "data"), tenantId, port: 3210, logger: false, cloudJobQueue: queue} as any);
+  if (!app.hasRoute({method: "GET", url: CLOUD_JOBS_PATH})) registerCloudJobRoutes(app, {queue: () => queue as CloudJobQueue | null, scope: {tenantId}});
   apps.push(app); return app;
 }
+const throwingQueue = (): QueueLike => ({list: () => { throw new Error("disk gone /home/x/secret"); }, summary: () => { throw new Error("boom"); }, isStopped: false});
 const get = (app: any, url: string, token: string | null = TOKEN) => app.inject({method: "GET", url, headers: {...(token ? {"x-uasco-control-token": token} : {}), host: "127.0.0.1:3210"}});
 
 // ---------- renderer köprüsü: main.mjs uasco:api-get + verifyServerIdentity + api() sözleşmesi ----------
@@ -135,7 +139,7 @@ export function registerCloudJobsStatusCases(): void {
 
     it("GET /v1/cloud/jobs goes through the real buildServer token hook, is tenant-scoped, read-only, and fails closed", async () => {
       const {q, a, x} = seeded();
-      const app = mkServer(() => q);
+      const app = mkServer(q);
       expect((await get(app, CLOUD_JOBS_PATH, null)).statusCode).toBe(403);
       expect((await get(app, CLOUD_JOBS_PATH, "w".repeat(32))).statusCode).toBe(403);
       const ok = await get(app, CLOUD_JOBS_PATH);
@@ -158,23 +162,23 @@ export function registerCloudJobsStatusCases(): void {
         expect(r.statusCode, method).toBe(404);
       }
       // aynı kuyruk, diğer tenant'ın sunucusu yalnız kendi işini görür
-      const otherApp = mkServer(() => q, OTHER);
+      const otherApp = mkServer(q, OTHER);
       expect((await get(otherApp, CLOUD_JOBS_PATH)).json().jobs.map((j: any) => j.jobId)).toEqual([x.jobId]);
     });
 
     it("no queue -> honest NOT_CONFIGURED (list) and 503 (item); a throwing queue -> 500 CLOUD_JOBS_UNAVAILABLE", async () => {
-      const none = mkServer(() => null);
+      const none = mkServer(null);
       expect((await get(none, CLOUD_JOBS_PATH)).json()).toEqual({state: "NOT_CONFIGURED", jobs: []});
       const item = await get(none, `${CLOUD_JOBS_PATH}/job-st-0001`);
       expect([item.statusCode, item.json()]).toEqual([503, {error: "CLOUD_RUNTIME_NOT_CONFIGURED"}]);
-      const boom = mkServer(() => { throw new Error("disk gone /home/x/secret"); });
+      const boom = mkServer(throwingQueue());
       const r = await get(boom, CLOUD_JOBS_PATH);
       expect([r.statusCode, r.json()]).toEqual([500, {error: "CLOUD_JOBS_UNAVAILABLE"}]);
     });
 
     it("desktop panel renders the REAL route data through a bridge mirroring main.mjs (proposed allow-list entry)", async () => {
       const {q, a, b, c} = seeded();
-      const app = mkServer(() => q);
+      const app = mkServer(q);
       const r = await renderPanel(app, proposedAllows);
       expect(r.seen).toEqual([{path: CLOUD_JOBS_PATH, status: 200}]);
       expect(r.state).toBe("OK");
@@ -189,15 +193,15 @@ export function registerCloudJobsStatusCases(): void {
     });
 
     it("desktop panel is honest on every failure: server 500 -> ERROR, no queue -> NOT_CONFIGURED, today's main.mjs allow-list -> UNAVAILABLE; never a fake card", async () => {
-      const boom = mkServer(() => { throw new Error("boom"); });
+      const boom = mkServer(throwingQueue());
       const e = await renderPanel(boom, proposedAllows);
       expect([e.state, e.cards.length, e.seen]).toEqual(["ERROR", 0, [{path: CLOUD_JOBS_PATH, status: 500}]]);
       expect(e.loaded.code).toBe(`${CLOUD_JOBS_PATH}: HTTP 500`);
-      const none = mkServer(() => null);
+      const none = mkServer(null);
       const nc = await renderPanel(none, proposedAllows);
       expect([nc.state, nc.cards.length]).toEqual(["NOT_CONFIGURED", 0]);
       const {q} = seeded();
-      const real = await renderPanel(mkServer(() => q), mainAllows);
+      const real = await renderPanel(mkServer(q), mainAllows);
       if (mainAllows(CLOUD_JOBS_PATH)) {
         expect(real.state).toBe("OK");   // Kurucu PR'ı main.mjs'e girişi ekledikten sonra
       } else {

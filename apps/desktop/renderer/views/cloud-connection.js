@@ -176,7 +176,7 @@ export function cloudJobsPanel(ctx,loaded){
   const doc=ctx.doc,st=CLOUD_JOBS_STATES.includes(loaded?.state)?loaded.state:"ERROR",jobs=st==="OK"?loaded.jobs:[];
   return h(doc,"section",{class:"cloud-jobs-status",id:"cloud-jobs-status",role:"region","aria-label":tr(ctx,"cloud.jobs"),dataset:{cloudJobsState:st}},
     h(doc,"h4",{text:tr(ctx,"cloud.jobs")}),
-    h(doc,"p",{class:`note${st==="OK"?"":" note-error"}`,role:"status",dataset:{cloudJobsStatus:st},text:tr(ctx,`cloud.jobsStatus.${st}`)}),
+    h(doc,"p",{class:`note${st==="OK"?"":` note-${st.toLowerCase()}`}`,role:"status",dataset:{cloudJobsStatus:st},text:tr(ctx,`cloud.jobsStatus.${st}`)}),
     st!=="OK"&&loaded?.code?h(doc,"p",{class:"note mono",dataset:{cloudJobsCode:loaded.code},text:loaded.code}):null,
     st==="OK"&&loaded.stopped?h(doc,"p",{class:"note note-error",dataset:{cloudJobsStopped:"true"},text:tr(ctx,"cloud.jobsStopped")}):null,
     st==="OK"?(jobs.length?h(doc,"ul",{class:"cards"},jobs.map(j=>h(doc,"li",{class:"card",dataset:{cloudJob:j.jobId,cloudJobStatus:j.status}},
