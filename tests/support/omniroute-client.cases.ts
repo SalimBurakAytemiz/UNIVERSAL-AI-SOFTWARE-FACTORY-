@@ -1,5 +1,5 @@
 // //TR: UASCO-T0065 / V3-AC-F028-1 gerileme koruması: gerçek OmniRoute keşif istemcisini yalnız loopback HTTP sunucusuna karşı (ağ/ücret yok) çalıştırır; model id keşfi, onaysız host/URL credential/protokol reddi, redirect ve askıda kalmada anahtar sızmaması, kota/429 durumunda fail-closed hata (ikinci yola devretmek için) kanıtlanır.
-import {describe,it,expect,beforeAll,afterAll,afterEach} from "vitest";
+import {describe,it,expect,beforeAll,afterAll,beforeEach,afterEach} from "vitest";
 import http from "node:http";
 import type {AddressInfo} from "node:net";
 import {discoverOmniRouteModels} from "../../models/omniroute/client.js";
@@ -15,6 +15,13 @@ async function serve():Promise<Srv>{
   s.close=()=>new Promise<void>(r=>{server.closeAllConnections();server.close(()=>r())});
   return s;
 }
+// //TR: NB-1: reddin NEDENİ sabitlenir (çıplak toThrow değil). Node 24 undici: redirect:"error" -> TypeError("fetch failed", cause: "unexpected redirect");
+// AbortSignal.timeout -> DOMException TimeoutError (bazı sürüm/platformlarda AbortError ya da TypeError'ın cause'u olarak gelir: hepsi kabul edilir, başka hata kabul edilmez).
+async function rejection(p:Promise<unknown>):Promise<{name:string;message:string;causeName:string|null;causeMessage:string|null}>{
+  try{await p}catch(e){const err=e as {name?:string;message?:string;cause?:{name?:string;message?:string}};return {name:String(err?.name),message:String(err?.message),causeName:err?.cause?.name??null,causeMessage:err?.cause?.message??null}}
+  throw new Error("expected a rejection");
+}
+const ABORT_NAMES=["TimeoutError","AbortError"];
 const json=(body:unknown,status=200)=>(_q:http.IncomingMessage,r:http.ServerResponse)=>{r.writeHead(status,{"content-type":"application/json"});r.end(JSON.stringify(body))};
 
 export function registerOmniRouteClientCases():void{
@@ -22,7 +29,11 @@ export function registerOmniRouteClientCases():void{
     let gw:Srv,other:Srv;
     beforeAll(async()=>{gw=await serve();other=await serve()});
     afterAll(async()=>{await gw.close();await other.close()});
-    afterEach(()=>{gw.hits.length=0;other.hits.length=0;delete process.env.OMNIROUTE_BASE_URL;delete process.env.OMNIROUTE_API_KEY});
+    // //TR: LOW-2: ortam değişkenleri silinmez, testten önceki değerlerine geri döner (dışarıdan verilmiş bir değer korunur).
+    const ENV_KEYS=["OMNIROUTE_BASE_URL","OMNIROUTE_API_KEY"] as const;
+    let savedEnv:Record<string,string|undefined>={};
+    beforeEach(()=>{savedEnv=Object.fromEntries(ENV_KEYS.map(k=>[k,process.env[k]]))});
+    afterEach(()=>{gw.hits.length=0;other.hits.length=0;for(const k of ENV_KEYS){const v=savedEnv[k];if(v===undefined)delete process.env[k];else process.env[k]=v}});
 
     it("discovers model ids with one GET <base>/models, sending the key only as a Bearer header to the loopback gateway",async()=>{
       gw.reply=json({object:"list",data:[{id:"anthropic/claude-opus-x",owned_by:"anthropic"},{id:"openai/gpt-y"}]});
@@ -53,6 +64,7 @@ export function registerOmniRouteClientCases():void{
         ["http://127.0.0.1.nip.io/v1","OMNIROUTE_GATEWAY_HOST_NOT_APPROVED"],
         [gw.base.replace("http://","http://user:pw@"),"OMNIROUTE_URL_CREDENTIAL_DENIED"],
         [gw.base.replace("http://","http://user@"),"OMNIROUTE_URL_CREDENTIAL_DENIED"],
+        [gw.base.replace("http://","http://:pw@"),"OMNIROUTE_URL_CREDENTIAL_DENIED"], // LOW-1: password only (empty username) is still a credential
         ["file:///etc/passwd","OMNIROUTE_PROTOCOL_DENIED"],
         [gw.base.replace("http:","ftp:"),"OMNIROUTE_PROTOCOL_DENIED"],
         ["not a url","OMNIROUTE_BASE_URL_INVALID"],
@@ -85,7 +97,9 @@ export function registerOmniRouteClientCases():void{
     it("a redirect is refused: the key never reaches the redirect target",async()=>{
       gw.reply=(_q,r)=>{r.writeHead(302,{location:other.base+"/models"});r.end()};
       other.reply=json({data:[{id:"leak"}]});
-      await expect(discoverOmniRouteModels(gw.base,KEY,{timeoutMs:2000})).rejects.toThrow();
+      const e=await rejection(discoverOmniRouteModels(gw.base,KEY,{timeoutMs:2000}));
+      expect({name:e.name,message:e.message}).toEqual({name:"TypeError",message:"fetch failed"});
+      expect(e.causeMessage??"").toMatch(/redirect/i);
       expect(gw.hits.length).toBe(1);
       expect(other.hits).toEqual([]);
     });
@@ -100,7 +114,8 @@ export function registerOmniRouteClientCases():void{
     it("a hanging gateway is abandoned at the timeout; out-of-range timeouts are refused up front",async()=>{
       gw.reply=()=>{/* never answers */};
       const t0=Date.now();
-      await expect(discoverOmniRouteModels(gw.base,KEY,{timeoutMs:150})).rejects.toThrow();
+      const e=await rejection(discoverOmniRouteModels(gw.base,KEY,{timeoutMs:150}));
+      expect(ABORT_NAMES.includes(e.name)||ABORT_NAMES.includes(e.causeName??""),JSON.stringify(e)).toBe(true);
       expect(Date.now()-t0).toBeLessThan(5000);
       gw.hits.length=0;
       for(const timeoutMs of [99,30_001,Number.NaN,Number.POSITIVE_INFINITY])
