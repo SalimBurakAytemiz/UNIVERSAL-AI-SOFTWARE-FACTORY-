@@ -4,6 +4,7 @@ import {
   canonicalJson, sha256Hex,
   type ArtifactRef, type CloudEnvironment, type CloudJobKind, type CloudJobRequest, type RetryPolicy, type SignedScope,
 } from "./contracts.js";
+import {createHmac, timingSafeEqual} from "node:crypto";
 import {intakeCommand, type IntakeResult} from "../mission/command-intake.js";
 
 export const MAX_DAG_TASKS = 128;
@@ -277,44 +278,117 @@ export class TaskOrchestrator {
   }
 }
 
-// ---------- CLOUD-T0011 köprüsü: command intake -> görev kırılımı -> kuyruk ----------
-// //TR: CLOUD-T0011: zincirin bağlı olmayan ilk halkası buydu (core/mission/command-intake yalnız DRAFT öneri üretir; hiçbir şey onu orkestratöre bağlamıyordu).
-// Intake hiçbir zaman yetki vermez: buradan geçmek için öneri PROPOSED olmalı, yetki/risk bayrağı taşımamalı ve Founder TAM bu hedef metni (sha256) onaylamış olmalı.
-// Tenant/proje/ortam intake'ten değil yalnız imzalı kapsamdan gelir; ad alanı hedef özetinden türetilir (aynı onaylı komut aynı DAG'ı verir: idempotent yeniden gönderim).
+// ---------- CLOUD-T0011 köprüsü: command intake -> doğrulanmış Founder onayı -> görev kırılımı -> kuyruk ----------
+// //TR: CLOUD-T0011: zincirin bağlı olmayan ilk halkası buydu (core/mission/command-intake yalnız DRAFT öneri üretir). #330 incelemesi NB-1: onay artık kendi beyanı DEĞİL;
+// supervisor'ın SignedScope için kullandığı AYNI şemayla (HMAC-SHA256, canonicalJson, keyId -> kapsam anahtarı) imzalanmış, tek kullanımlık, kısa ömürlü bir onay jetonudur.
+// Jeton hedef özetini, tenant/proje/ortamı, süreyi (<= 15 dk) ve tek kullanımlık kimliği bağlar; süresi geçmiş, tekrar oynatılmış, kapsamı uyuşmayan, özeti yanlış,
+// imzasız veya kurcalanmış jeton INTAKE aşamasında reddedilir (planlayıcı çağrılmaz). Sabit `type` alanı alan ayrımı sağlar: bir kapsam imzası onay yerine geçemez.
+// Kapsam: imza, jetonu supervisor'ın verdiğini kanıtlar; insan Founder'ın kimliğini (Desktop oturumu) bu katman doğrulamaz, supervisor'ın onay akışı doğrular.
 export const INTAKE_MAX_RISK = 3;
-export interface FounderIntakeConfirmation {confirmedBy: string; objectiveSha256: string}
-export type IntakeBridgeDeny = "INTAKE_REJECTED" | "INTAKE_NEEDS_FOUNDER" | "INTAKE_NOT_CONFIRMED";
-export type IntakeIntent = {ok: true; intent: string; namespace: string} | {ok: false; reason: IntakeBridgeDeny; detail?: string};
+export const FOUNDER_CONFIRMATION_TYPE = "FOUNDER_INTAKE_CONFIRMATION" as const;
+export const FOUNDER_CONFIRMATION_MAX_TTL_MS = 15 * 60 * 1000;
+export interface FounderIntakeConfirmation {
+  type: typeof FOUNDER_CONFIRMATION_TYPE; confirmationId: string; confirmedBy: string; objectiveSha256: string;
+  tenantId: string; projectId: string; environment: CloudEnvironment; issuedAt: string; expiresAt: string; keyId: string;
+  /** hex HMAC-SHA256 over canonicalJson(confirmation without signature) — SignedScope ile aynı şema ve anahtar ailesi */
+  signature: string;
+}
+export type UnsignedFounderConfirmation = Omit<FounderIntakeConfirmation, "signature">;
+/** Tek kullanımlık onay kimlikleri: consume() ilk çağrıda true, sonra (süre dolana dek) false. */
+export interface ConfirmationReplayStore {consume(confirmationId: string, expiresAtMs: number): boolean}
+export class InMemoryConfirmationReplayStore implements ConfirmationReplayStore {
+  private readonly used = new Map<string, number>();
+  constructor(private readonly now: () => number = Date.now) {}
+  consume(id: string, expiresAtMs: number): boolean {
+    const t = this.now();
+    for (const [k, exp] of this.used) if (exp < t) this.used.delete(k);
+    if (this.used.has(id)) return false;
+    this.used.set(id, expiresAtMs); return true;
+  }
+}
+export interface ConfirmationAuditRecord {
+  at: string; decision: "ACCEPTED" | "REJECTED"; reason?: string; confirmationId: string | null; confirmedBy: string | null; tenantId: string | null; namespace?: string;
+}
+export interface ConfirmationVerifier {
+  /** Supervisor'ın kapsam imza anahtarları (keyId -> sır); SignedScope doğrulamasıyla aynı harita. */
+  keys: ReadonlyMap<string, string | Buffer>;
+  scope: SignedScope; now: () => Date; replay: ConfirmationReplayStore;
+  audit?: (r: ConfirmationAuditRecord) => void;
+}
+/** Supervisor tarafı: Founder bu hedefi onayladığında jetonu imzalar (signScope ile aynı HMAC ve anahtar uzunluğu kuralı). */
+export function signFounderConfirmation(c: UnsignedFounderConfirmation, secret: string | Buffer): FounderIntakeConfirmation {
+  if (!secret || (typeof secret === "string" ? secret.length : secret.byteLength) < 32) throw new Error("Confirmation signing secret must be at least 32 bytes");
+  return {...c, signature: createHmac("sha256", secret).update(canonicalJson(c)).digest("hex")};
+}
+const CONF_FIELDS = new Set(["type", "confirmationId", "confirmedBy", "objectiveSha256", "tenantId", "projectId", "environment", "issuedAt", "expiresAt", "keyId", "signature"]);
+function verifyConfirmation(c: unknown, digest: string, v: ConfirmationVerifier): {ok: true; c: FounderIntakeConfirmation} | {ok: false; why: string} {
+  if (!isObj(c) || !onlyFields(c, CONF_FIELDS) || c.type !== FOUNDER_CONFIRMATION_TYPE) return {ok: false, why: "UNSIGNED_OR_MALFORMED"};
+  const x = c as unknown as FounderIntakeConfirmation;
+  if (![x.confirmationId, x.confirmedBy, x.tenantId, x.projectId, x.keyId].every(f => typeof f === "string" && ID_RE.test(f)) || typeof x.signature !== "string" || !SHA256_RE.test(x.signature)) return {ok: false, why: "UNSIGNED_OR_MALFORMED"};
+  const secret = v.keys.get(x.keyId);
+  if (secret === undefined) return {ok: false, why: "KEY_UNKNOWN"};
+  const {signature, ...unsigned} = x;
+  const expected = Buffer.from(createHmac("sha256", secret).update(canonicalJson(unsigned)).digest("hex"), "hex"), got = Buffer.from(signature, "hex");
+  if (got.length !== expected.length || !timingSafeEqual(got, expected)) return {ok: false, why: "SIGNATURE_INVALID"};
+  if (x.objectiveSha256 !== digest) return {ok: false, why: "DIGEST_MISMATCH"};
+  if (x.tenantId !== v.scope.tenantId || x.projectId !== v.scope.projectId || x.environment !== v.scope.environment) return {ok: false, why: "SCOPE_MISMATCH"};
+  const iss = Date.parse(x.issuedAt), exp = Date.parse(x.expiresAt), now = v.now().getTime();
+  if (!Number.isFinite(iss) || !Number.isFinite(exp) || exp <= iss || exp - iss > FOUNDER_CONFIRMATION_MAX_TTL_MS) return {ok: false, why: "LIFETIME_INVALID"};
+  if (now < iss || now >= exp) return {ok: false, why: "EXPIRED_OR_NOT_YET_VALID"};
+  if (!v.replay.consume(x.confirmationId, exp)) return {ok: false, why: "REPLAYED"};
+  return {ok: true, c: x};
+}
 
-/** Onaylı bir command-intake önerisini orkestratör niyetine çevirir; her belirsizlik reddir. */
-export function intentFromIntake(result: IntakeResult, confirmation: FounderIntakeConfirmation | null | undefined): IntakeIntent {
-  if (!isObj(result) || result.ok !== true || !isObj(result.proposal)) return {ok: false, reason: "INTAKE_REJECTED", detail: isObj(result) && result.ok === false ? String(result.code) : undefined};
+export type IntakeBridgeDeny = "INTAKE_REJECTED" | "INTAKE_NEEDS_FOUNDER" | "INTAKE_NOT_CONFIRMED";
+export type IntakeIntent = {ok: true; intent: string; namespace: string; confirmedBy: string; confirmationId: string} | {ok: false; reason: IntakeBridgeDeny; detail?: string};
+
+/** Onaylı bir command-intake önerisini orkestratör niyetine çevirir; onay jetonu doğrulanır ve tüketilir. Her belirsizlik reddir; her karar denetime yazılır. */
+export function intentFromIntake(result: IntakeResult, confirmation: unknown, v: ConfirmationVerifier): IntakeIntent {
+  const audit = (r: Omit<ConfirmationAuditRecord, "at">) => { try { v.audit?.({at: v.now().toISOString(), ...r}); } catch { /* denetim hatası kararı değiştirmez */ } };
+  const who = isObj(confirmation) && typeof confirmation.confirmationId === "string" && ID_RE.test(confirmation.confirmationId) ? confirmation.confirmationId : null;
+  const by = isObj(confirmation) && typeof confirmation.confirmedBy === "string" && ID_RE.test(confirmation.confirmedBy) ? confirmation.confirmedBy : null;
+  const reject = (reason: IntakeBridgeDeny, detail?: string): IntakeIntent => {
+    audit({decision: "REJECTED", reason: detail ? `${reason}:${detail}` : reason, confirmationId: who, confirmedBy: by, tenantId: v.scope?.tenantId ?? null});
+    return detail === undefined ? {ok: false, reason} : {ok: false, reason, detail};
+  };
+  if (!isObj(result) || result.ok !== true || !isObj(result.proposal)) return reject("INTAKE_REJECTED", isObj(result) && result.ok === false ? String(result.code) : undefined);
   const p = result.proposal;
   if (p.status !== "DRAFT" || p.outcome !== "PROPOSED" || p.authorityRequired !== false || !(p.riskLevel >= 1 && p.riskLevel <= INTAKE_MAX_RISK)
     || p.reasons.length > 0 || typeof p.objective !== "string" || p.objective.trim().length === 0 || p.objective.length > MAX_INTENT_CHARS) {
-    return {ok: false, reason: "INTAKE_NEEDS_FOUNDER", detail: p.reasons.join(",") || p.outcome};
+    return reject("INTAKE_NEEDS_FOUNDER", p.reasons.join(",") || p.outcome);
   }
   const digest = sha256Hex(p.objective);
-  if (!isObj(confirmation) || typeof confirmation.confirmedBy !== "string" || !ID_RE.test(confirmation.confirmedBy) || confirmation.objectiveSha256 !== digest) {
-    return {ok: false, reason: "INTAKE_NOT_CONFIRMED"};
-  }
-  return {ok: true, intent: p.objective, namespace: `intake-${digest.slice(0, 24)}`};
+  const ver = verifyConfirmation(confirmation, digest, v);
+  if (!ver.ok) return reject("INTAKE_NOT_CONFIRMED", ver.why);
+  const namespace = `intake-${digest.slice(0, 24)}`;
+  audit({decision: "ACCEPTED", confirmationId: ver.c.confirmationId, confirmedBy: ver.c.confirmedBy, tenantId: ver.c.tenantId, namespace});
+  return {ok: true, intent: p.objective, namespace, confirmedBy: ver.c.confirmedBy, confirmationId: ver.c.confirmationId};
 }
 
 export type IntakeDispatchResult =
-  | {ok: true; namespace: string; dag: TaskDag; report: DispatchReport; plannerCostUsd: number}
+  | {ok: true; namespace: string; dag: TaskDag; report: DispatchReport; plannerCostUsd: number; plannerCached: boolean; confirmation: {confirmedBy: string; confirmationId: string}}
   | {ok: false; stage: "INTAKE" | "DECOMPOSE" | "DISPATCH"; reason: string; detail?: string};
 
-/** Founder komut metni -> intakeCommand -> onay kontrolü -> decomposeIntent (PlannerModel) -> TaskOrchestrator.dispatch (CLOUD-T0003 kuyruğu). */
+/**
+ * Founder komut metni -> intakeCommand -> imzalı onay doğrulaması -> decomposeIntent (PlannerModel) -> TaskOrchestrator.dispatch (CLOUD-T0003 kuyruğu).
+ * NB-2: `planCache` verilirse ad alanı başına DAG önbelleğe alınır; aynı onaylı komutun yeniden gönderimi (ör. Founder kapısı onayı için) planlayıcıyı YENİDEN
+ * çağırmaz. Her gönderim yine de yeni, tek kullanımlık bir onay jetonu ister.
+ */
 export async function dispatchIntakeCommand(
-  text: unknown, confirmation: FounderIntakeConfirmation | null | undefined, planner: PlannerModel,
-  o: Omit<DecomposeOptions, "namespace">, orchestrator: TaskOrchestrator, approvals: ReadonlySet<string> = new Set(),
+  text: unknown, confirmation: unknown, verifier: ConfirmationVerifier, planner: PlannerModel,
+  o: Omit<DecomposeOptions, "namespace" | "scope">, orchestrator: TaskOrchestrator, approvals: ReadonlySet<string> = new Set(),
+  planCache?: Map<string, TaskDag>,
 ): Promise<IntakeDispatchResult> {
-  const it = intentFromIntake(intakeCommand(text, {origin: "cloud-intake"}), confirmation);
+  const it = intentFromIntake(intakeCommand(text, {origin: "cloud-intake"}), confirmation, verifier);
   if (!it.ok) return {ok: false, stage: "INTAKE", reason: it.reason, ...(it.detail ? {detail: it.detail} : {})};
-  const d = await decomposeIntent(it.intent, planner, {...o, namespace: it.namespace});
-  if (!d.ok) return {ok: false, stage: "DECOMPOSE", reason: d.reason, ...(d.detail ? {detail: d.detail} : {})};
-  const r = orchestrator.dispatch(d.dag, approvals);
+  let dag = planCache?.get(it.namespace), costUsd = 0;
+  const cached = dag !== undefined;
+  if (!dag) {
+    const d = await decomposeIntent(it.intent, planner, {...o, scope: verifier.scope, namespace: it.namespace});
+    if (!d.ok) return {ok: false, stage: "DECOMPOSE", reason: d.reason, ...(d.detail ? {detail: d.detail} : {})};
+    dag = d.dag; costUsd = d.costUsd; planCache?.set(it.namespace, dag);
+  }
+  const r = orchestrator.dispatch(dag, approvals);
   if (!r.ok) return {ok: false, stage: "DISPATCH", reason: r.reason, ...(r.detail ? {detail: r.detail} : {})};
-  return {ok: true, namespace: it.namespace, dag: d.dag, report: r.report, plannerCostUsd: d.costUsd};
+  return {ok: true, namespace: it.namespace, dag, report: r.report, plannerCostUsd: costUsd, plannerCached: cached, confirmation: {confirmedBy: it.confirmedBy, confirmationId: it.confirmationId}};
 }
