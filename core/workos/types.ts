@@ -29,6 +29,7 @@ export interface ProjectExport {
   exportId: string; projectId: string; tenantId: string; commit: string; sha256: string; size: number; file: string; createdAt: string; createdBy: string;
   runId: string | null; contents: { readme: boolean; testReport: boolean; securityReport: boolean; runReport: boolean; verificationStatus?: boolean };
   secretScan: { scanner: "builtin"; status: "CLEAN"; entriesScanned: number };
+  lockfileManager?: "npm" | "yarn" | "pnpm"; // Founder karar A: lockfile PRESENT iken tespit edilen paket yöneticisi
   lockfile?: "PRESENT" | "MISSING" | "NOT_APPLICABLE"; // V3-T1012.a: kaynak kökünde package.json + kilit dosyası durumu (eski kayıtlarda yoktur)
   // M1a: arşiv kökündeki VERIFICATION_STATUS.json'un özeti (kanıttan türetilir; masaüstü NOT_VERIFIED rozeti için). Eski kayıtlarda yoktur.
   // M1a c2: varsayılan proje dışa aktarımı bir koşu teslimi DEĞİLDİR: runDelivery "NO_RUN", productVerification her zaman NOT_VERIFIED (eski kayıtlarda bu iki alan yoktur).

@@ -441,5 +441,37 @@ describe("V3-T1012 run delivery requires a lockfile (delivery gap of V3-AC-F057-
     expect(p2.statusCode, p2.body).toBe(201);
     const zip = fs.readFileSync(path.join(c.dataDir, p2.json().artifact.artifactPath));
     expect(listZipEntries(zip, undefined, {scanOnly: true}).map(e => e.name)).toContain("source/package-lock.json");
+    const zreadme = readZipEntry(zip, listZipEntries(zip, undefined, {scanOnly: true}).find(e => e.name === "README.md")!).toString("utf8");
+    expect(zreadme).toContain("| Install | `npm ci` (npm: package-lock.json) |");
+  });
+
+  // Founder decision A: the run delivery follows the declared package manager (yarn/pnpm are never executed here).
+  it("packageManager pnpm with only an npm lock -> 409 DELIVERY_LOCKFILE_INCONSISTENT (reason MANAGER_MISMATCH), nothing written; a yarn project is delivered with the yarn install command", { timeout: T }, async () => {
+    const c = setup(tmp), app = noProviderApi(c), pid = await studioProject(c, app, "t1012-delivery-pm");
+    const repo = new WorkOsStore(c.dataDir).getProject({tenantId: "tA"}, pid)!.repository!.path!;
+    const ID = ["-c", "user.name=t", "-c", "user.email=t@x.invalid"];
+    const pkg = JSON.parse(fs.readFileSync(path.join(repo, "package.json"), "utf8"));
+    fs.writeFileSync(path.join(repo, "package.json"), JSON.stringify({...pkg, packageManager: "pnpm@9.12.0"}, null, 2) + "\n");
+    git(repo, ["add", "package.json"]); git(repo, [...ID, "commit", "-q", "-m", "declare pnpm"]);
+    const {run} = await m1aRun(c, app, pid, {"feature.txt": "ok\n"});
+    const n0 = journalEntries(c).length, e0 = events(c).length;
+    const r = await prepare(app, run.runId);
+    expect(r.statusCode, r.body).toBe(409);
+    expect(r.json()).toEqual({error: "DELIVERY_LOCKFILE_INCONSISTENT", reason: "MANAGER_MISMATCH"});
+    expect(journalEntries(c).length).toBe(n0);
+    expect(tree(path.join(c.dataDir, "deliveries"))).toEqual([]);
+    const all = JSON.stringify(events(c).slice(e0));
+    expect(all).toContain("WORKOS_DELIVERY_PREPARE_REFUSED"); expect(all).toContain("DELIVERY_LOCKFILE_INCONSISTENT"); expect(all).not.toContain("WORKOS_DELIVERY_ARTIFACT_PREPARED");
+    // switch the project to yarn (declared + yarn.lock, npm lock removed): the delivery is prepared and names the yarn command
+    fs.writeFileSync(path.join(repo, "package.json"), JSON.stringify({...pkg, packageManager: "yarn@4.5.0"}, null, 2) + "\n");
+    fs.writeFileSync(path.join(repo, "yarn.lock"), "# yarn lockfile v1\n");
+    git(repo, ["rm", "-q", "package-lock.json"]); git(repo, ["add", "package.json", "yarn.lock"]); git(repo, [...ID, "commit", "-q", "-m", "yarn"]);
+    const ok = await m1aRun(c, app, pid, {"feature.txt": "ok again\n"});
+    const p2 = await prepare(app, ok.run.runId);
+    expect(p2.statusCode, p2.body).toBe(201);
+    const zip = fs.readFileSync(path.join(c.dataDir, p2.json().artifact.artifactPath)), ents = listZipEntries(zip, undefined, {scanOnly: true});
+    expect(ents.map(e => e.name)).toEqual(expect.arrayContaining(["source/yarn.lock"])); expect(ents.map(e => e.name)).not.toContain("source/package-lock.json");
+    const zreadme = readZipEntry(zip, ents.find(e => e.name === "README.md")!).toString("utf8");
+    expect(zreadme).toContain("| Install | `yarn install --immutable` (yarn: yarn.lock) |"); expect(zreadme).not.toContain("npm ci");
   });
 });

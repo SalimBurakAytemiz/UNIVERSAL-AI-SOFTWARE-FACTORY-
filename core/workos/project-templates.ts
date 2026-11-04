@@ -7,11 +7,44 @@ const pkgName = (name: string) => (name.toLowerCase().replace(/[^a-z0-9._-]+/g, 
 const mdSafe = (name: string) => name.replace(/[\r\n]+/g, " ").replace(/[<>`]/g, "").slice(0, 200);
 // //TR: V3-T1012.a: bağımlılıksız şablonun kilit dosyası; npm'in --package-lock-only ile ürettiği lockfileVersion 3 biçimiyle birebir aynıdır, böylece teslimde `npm ci` ağ gerektirmeden çalışır.
 export const lockfileFor = (name: string) => JSON.stringify({name, version: "0.1.0", lockfileVersion: 3, requires: true, packages: {"": {name, version: "0.1.0", license: "UNLICENSED"}}}, null, 2) + "\n";
-// //TR: Kök dizindeki dosya adlarından teslimin kilit dosyası durumu: package.json yoksa NOT_APPLICABLE; varsa package-lock.json/npm-shrinkwrap.json olmadan MISSING (`npm ci` başarısız olur).
-export function lockfileStatus(rootFiles: readonly string[]): "PRESENT" | "MISSING" | "NOT_APPLICABLE" {
-  if (!rootFiles.includes("package.json")) return "NOT_APPLICABLE";
-  return rootFiles.includes("package-lock.json") || rootFiles.includes("npm-shrinkwrap.json") ? "PRESENT" : "MISSING";
+// //TR: Kök dizindeki dosya adlarından (ve package.json içeriğinden) teslimin kilit dosyası durumu: package.json yoksa NOT_APPLICABLE; tutarlı bir kilit yoksa MISSING ya da INCONSISTENT.
+export type LockfileManager = "npm" | "yarn" | "pnpm";
+// //TR: Founder karar A: npm, Yarn ve pnpm kilitleri. package.json `packageManager` (corepack) bildiriyorsa o yöneticinin kilidi zorunludur; yalnız başka bir yöneticinin kilidi
+// geçmez (MANAGER_MISMATCH). Bildirim yoksa tek bir yöneticinin kilidi yeter; birden çok yöneticinin kilidi sessizce kabul edilmez (MULTIPLE_LOCKS). Desteklenmeyen yönetici: UNSUPPORTED_MANAGER.
+export const LOCKFILES: Readonly<Record<LockfileManager, readonly string[]>> = {npm: ["package-lock.json", "npm-shrinkwrap.json"], yarn: ["yarn.lock"], pnpm: ["pnpm-lock.yaml"]};
+export const INSTALL_COMMAND: Readonly<Record<LockfileManager, string>> = {npm: "npm ci", yarn: "yarn install --immutable", pnpm: "pnpm install --frozen-lockfile"};
+export interface LockfileCheck {
+  status: "PRESENT" | "MISSING" | "NOT_APPLICABLE" | "INCONSISTENT";
+  manager: LockfileManager | null; declared: string | null; lockfiles: string[];
+  reason: "MANAGER_MISMATCH" | "MULTIPLE_LOCKS" | "UNSUPPORTED_MANAGER" | null; installCommand: string | null;
 }
+const MANAGERS = Object.keys(LOCKFILES) as LockfileManager[];
+// packageManager "<name>@<version>[+hash]" -> name; geçersiz JSON / alan yok / dize değil -> null (bildirim yok sayılır: eski npm davranışı aynen kalır).
+export function declaredPackageManager(packageJson: string | null | undefined): string | null {
+  if (typeof packageJson !== "string") return null;
+  let pm: unknown;
+  try { pm = (JSON.parse(packageJson) as {packageManager?: unknown})?.packageManager; } catch { return null; }
+  if (typeof pm !== "string" || !pm.trim()) return null;
+  return pm.trim().split("@")[0]!.toLowerCase();
+}
+export function lockfileCheck(rootFiles: readonly string[], packageJson?: string | null): LockfileCheck {
+  const lockfiles = MANAGERS.flatMap(m => LOCKFILES[m].filter(f => rootFiles.includes(f)));
+  const present = MANAGERS.filter(m => LOCKFILES[m].some(f => rootFiles.includes(f)));
+  const out = (status: LockfileCheck["status"], manager: LockfileManager | null, declared: string | null, reason: LockfileCheck["reason"] = null): LockfileCheck =>
+    ({status, manager, declared, lockfiles, reason, installCommand: status === "PRESENT" && manager ? INSTALL_COMMAND[manager] : null});
+  if (!rootFiles.includes("package.json")) return out("NOT_APPLICABLE", null, null);
+  const declared = declaredPackageManager(packageJson);
+  if (declared !== null) {
+    if (!(MANAGERS as string[]).includes(declared)) return out("INCONSISTENT", null, declared, "UNSUPPORTED_MANAGER");
+    const m = declared as LockfileManager;
+    if (present.includes(m)) return out("PRESENT", m, declared);
+    return present.length ? out("INCONSISTENT", m, declared, "MANAGER_MISMATCH") : out("MISSING", m, declared);
+  }
+  if (present.length > 1) return out("INCONSISTENT", null, null, "MULTIPLE_LOCKS");
+  return present.length ? out("PRESENT", present[0]!, null) : out("MISSING", null, null);
+}
+/** Geriye uyumlu kısa biçim (yalnız durum). */
+export function lockfileStatus(rootFiles: readonly string[], packageJson?: string | null): LockfileCheck["status"] { return lockfileCheck(rootFiles, packageJson).status; }
 const htmlEsc = (s: string) => s.replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"}[c] as string));
 
 export function renderTemplate(template: ProjectTemplate, projectName: string): TemplateSpec {

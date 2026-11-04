@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {spawnSync} from "node:child_process";
-import {renderTemplate,lockfileStatus} from "../../core/workos/project-templates.js";
+import {renderTemplate,lockfileStatus,lockfileCheck} from "../../core/workos/project-templates.js";
 import {ProjectStudio,StudioError} from "../../core/workos/project-studio.js";
 import {listZipEntries,readZipEntry} from "../../core/workos/zip.js";
 import type {Project} from "../../core/workos/types.js";
@@ -73,6 +73,56 @@ export function registerTemplateLockfileCases():void{
       expect(before.filter(f=>f.endsWith(".zip"))).toEqual([`${ok.exportId}.zip`]);
       const eid="prj_"+"b".repeat(24),erepo=studio.createTemplateRepository(eid,"empty","Empty");
       expect(studio.exportProject({projectId:eid,name:"Empty",repository:{path:erepo.path,managed:true}} as unknown as Project,[],undefined,"tester").lockfile).toBe("NOT_APPLICABLE");
+    },60_000);
+
+    // Founder decision A: Yarn and pnpm locks, consistent with package.json packageManager (corepack). Nothing here runs yarn/pnpm/corepack or touches the network.
+    it("lockfileCheck: manager-consistent locks pass and name the manager + install command; a mismatch, an unsupported manager or several managers' locks are INCONSISTENT",()=>{
+      const pm=(packageManager?:unknown)=>JSON.stringify({name:"x",version:"0.1.0",...(packageManager===undefined?{}:{packageManager})});
+      const P="package.json";
+      expect(lockfileCheck([P,"package-lock.json"],pm())).toEqual({status:"PRESENT",manager:"npm",declared:null,lockfiles:["package-lock.json"],reason:null,installCommand:"npm ci"});
+      expect(lockfileCheck([P,"yarn.lock"],pm())).toMatchObject({status:"PRESENT",manager:"yarn",installCommand:"yarn install --immutable"});
+      expect(lockfileCheck([P,"pnpm-lock.yaml"],pm())).toMatchObject({status:"PRESENT",manager:"pnpm",installCommand:"pnpm install --frozen-lockfile"});
+      expect(lockfileCheck([P,"pnpm-lock.yaml"],pm("pnpm@9.12.0+sha512.abc"))).toMatchObject({status:"PRESENT",manager:"pnpm",declared:"pnpm"});
+      expect(lockfileCheck([P,"yarn.lock"],pm("yarn@4.5.0"))).toMatchObject({status:"PRESENT",manager:"yarn",declared:"yarn"});
+      expect(lockfileCheck([P,"package-lock.json","npm-shrinkwrap.json"],pm())).toMatchObject({status:"PRESENT",manager:"npm"});           // two npm locks: one manager, no conflict
+      // packageManager names a manager whose lock is absent: another manager's lock alone does not pass
+      expect(lockfileCheck([P,"package-lock.json"],pm("pnpm@9.0.0"))).toEqual({status:"INCONSISTENT",manager:"pnpm",declared:"pnpm",lockfiles:["package-lock.json"],reason:"MANAGER_MISMATCH",installCommand:null});
+      expect(lockfileCheck([P,"yarn.lock"],pm("npm@10.8.0"))).toMatchObject({status:"INCONSISTENT",reason:"MANAGER_MISMATCH",manager:"npm"});
+      expect(lockfileCheck([P],pm("yarn@4.0.0"))).toMatchObject({status:"MISSING",manager:"yarn",reason:null});
+      expect(lockfileCheck([P,"bun.lockb"],pm("bun@1.1.0"))).toMatchObject({status:"INCONSISTENT",reason:"UNSUPPORTED_MANAGER",declared:"bun",manager:null});
+      // no packageManager: several managers' locks are reported, not silently accepted
+      expect(lockfileCheck([P,"package-lock.json","yarn.lock"],pm())).toMatchObject({status:"INCONSISTENT",reason:"MULTIPLE_LOCKS",manager:null,lockfiles:["package-lock.json","yarn.lock"]});
+      expect(lockfileCheck([P,"yarn.lock","pnpm-lock.yaml"],pm())).toMatchObject({status:"INCONSISTENT",reason:"MULTIPLE_LOCKS"});
+      // the declared manager's lock wins even when another manager's lock is also committed
+      expect(lockfileCheck([P,"package-lock.json","pnpm-lock.yaml"],pm("pnpm@9.0.0"))).toMatchObject({status:"PRESENT",manager:"pnpm"});
+      // unreadable / malformed package.json or a non-string packageManager: no declaration (the npm behaviour of #324/#327 is unchanged)
+      for(const raw of [undefined,null,"{not json",pm(42),pm(""),pm({name:"pnpm"})])expect(lockfileCheck([P,"package-lock.json"],raw as string|null|undefined),String(raw)).toMatchObject({status:"PRESENT",manager:"npm",declared:null});
+      expect(lockfileCheck(["README.md","yarn.lock"],pm("yarn@4.0.0"))).toMatchObject({status:"NOT_APPLICABLE",manager:null,installCommand:null});
+      expect(lockfileStatus([P,"package-lock.json"],pm("pnpm@9.0.0"))).toBe("INCONSISTENT");
+    });
+
+    it("project export follows the manager: a pnpm project exports with the pnpm command; a packageManager mismatch or two managers' locks are refused (EXPORT_LOCKFILE_INCONSISTENT + reason), nothing written",()=>{
+      const dataDir=path.join(root,"data-pm"),studio=new ProjectStudio({dataDir,envPolicyFile:ENV_POLICY});
+      const readme=(file:string)=>{const buf=fs.readFileSync(path.join(dataDir,file));const e=listZipEntries(buf).find(x=>x.name==="README.md")!;return readZipEntry(buf,e).toString("utf8")};
+      const id="prj_"+"c".repeat(24),repo=studio.createTemplateRepository(id,"node-lib","PM Demo");
+      const project={projectId:id,name:"PM Demo",repository:{path:repo.path,managed:true},testCommand:["node","test.js"]} as unknown as Project;
+      const g=(args:string[])=>{const r=spawnSync("git",args,{cwd:repo.path,encoding:"utf8",env:{...process.env,GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@x",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@x"}});expect(r.status,r.stderr).toBe(0)};
+      const pkg=JSON.parse(fs.readFileSync(path.join(repo.path,"package.json"),"utf8"));
+      const setPm=(v:string|undefined)=>{const n={...pkg};if(v)n.packageManager=v;fs.writeFileSync(path.join(repo.path,"package.json"),JSON.stringify(n,null,2)+"\n");g(["add","package.json"])};
+      const exportsNow=()=>fs.existsSync(path.join(dataDir,"exports"))?fs.readdirSync(path.join(dataDir,"exports")).filter(f=>f.endsWith(".zip")):[];
+      const refusal=()=>{try{studio.exportProject(project,[],undefined,"tester");return null}catch(e){return e as {code:string;status:number;reason?:string}}};
+      // 1. packageManager pnpm, but only the npm lock committed -> MANAGER_MISMATCH
+      setPm("pnpm@9.12.0");g(["commit","-q","-m","declare pnpm"]);
+      expect(refusal()).toMatchObject({code:"EXPORT_LOCKFILE_INCONSISTENT",status:409,reason:"MANAGER_MISMATCH"});expect(exportsNow()).toEqual([]);
+      // 2. pnpm lock committed in its place -> PRESENT, manager pnpm, README names `pnpm install --frozen-lockfile`
+      g(["rm","-q","package-lock.json"]);fs.writeFileSync(path.join(repo.path,"pnpm-lock.yaml"),"lockfileVersion: '9.0'\n");g(["add","pnpm-lock.yaml"]);g(["commit","-q","-m","pnpm lock"]);
+      const ok=studio.exportProject(project,[],undefined,"tester");
+      expect(ok).toMatchObject({lockfile:"PRESENT",lockfileManager:"pnpm"});
+      const text=readme(ok.file);expect(text).toContain("| Lockfile | PRESENT (pnpm: pnpm-lock.yaml; `pnpm install --frozen-lockfile`");expect(text).toContain("- Install dependencies: `pnpm install --frozen-lockfile`");expect(text).not.toContain("npm ci");
+      // 3. no packageManager and a yarn.lock next to the pnpm lock -> MULTIPLE_LOCKS
+      setPm(undefined);fs.writeFileSync(path.join(repo.path,"yarn.lock"),"# yarn lockfile v1\n");g(["add","yarn.lock"]);g(["commit","-q","-m","two locks"]);
+      expect(refusal()).toMatchObject({code:"EXPORT_LOCKFILE_INCONSISTENT",status:409,reason:"MULTIPLE_LOCKS"});
+      expect(exportsNow()).toEqual([ok.file.replace(/^exports\//,"")]);
     },60_000);
   });
 }

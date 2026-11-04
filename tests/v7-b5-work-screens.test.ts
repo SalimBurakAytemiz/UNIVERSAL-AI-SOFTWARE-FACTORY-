@@ -261,6 +261,13 @@ describe("B5 form request builders", () => {
     // V3-T1012 delivery gap: the run delivery lockfile gate (409 DELIVERY_LOCKFILE_MISSING) has its own text as well, in en and tr
     expect(d(409, "DELIVERY_LOCKFILE_MISSING")).toMatchObject({ok: false, key: "post.err.409.DELIVERY_LOCKFILE_MISSING"});
     for (const dict of [en, tr]) { expect(dict["post.err.409.DELIVERY_LOCKFILE_MISSING"]).toContain("DELIVERY_LOCKFILE_MISSING"); expect(dict["post.err.409.DELIVERY_LOCKFILE_MISSING"]).toContain("package-lock.json"); }
+    // Founder decision A: yarn/pnpm locks are named in the missing-lock texts, and the manager-inconsistency refusals have their own texts (en and tr)
+    for (const code of ["EXPORT_LOCKFILE_INCONSISTENT", "DELIVERY_LOCKFILE_INCONSISTENT"]) expect(d(409, code)).toMatchObject({ok: false, key: `post.err.409.${code}`});
+    for (const dict of [en, tr]) for (const code of ["EXPORT_LOCKFILE_MISSING", "DELIVERY_LOCKFILE_MISSING", "EXPORT_LOCKFILE_INCONSISTENT", "DELIVERY_LOCKFILE_INCONSISTENT"]) {
+      expect(dict[`post.err.409.${code}`]).toContain(code);
+      if (code.endsWith("_MISSING")) for (const lock of ["package-lock.json", "yarn.lock", "pnpm-lock.yaml"]) expect(dict[`post.err.409.${code}`]).toContain(lock);
+      else expect(dict[`post.err.409.${code}`]).toContain("packageManager");
+    }
     expect(c.describePostResult({thrown: true, state: "OFFLINE"}).key).toBe("post.err.offline");
     expect(c.describePostResult({thrown: true, state: "ERROR"}).key).toBe("post.err.generic");
     expect(c.describePostResult(null).ok).toBe(false);

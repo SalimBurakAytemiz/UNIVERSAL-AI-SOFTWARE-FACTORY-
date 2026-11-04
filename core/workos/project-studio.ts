@@ -7,7 +7,7 @@ import {spawnGitSync} from "../../automation/lib/git-isolation.mjs";
 import type {DeliveryArtifactRecord, Project, ProjectExport, ProjectTemplate, RunEvidence, WorkRun} from "./types.js";
 import {M1A_LABELS, deliveryArtifactPath, deliveryPrepareCheck, deliveryVerificationStatus, verificationStatus} from "./outcomes.js";
 import {findSecretKinds, redactSecrets} from "./secret-scan.js";
-import {lockfileStatus, renderTemplate} from "./project-templates.js";
+import {lockfileCheck, renderTemplate, type LockfileCheck} from "./project-templates.js";
 import {DEFAULT_ZIP_LIMITS, ZipError, listZipEntries, readZipEntry, writeZip} from "./zip.js";
 import type {ZipWriteEntry} from "./zip.js";
 import type {ZipLimits} from "./zip.js";
@@ -343,9 +343,14 @@ export class ProjectStudio {
     const sha = this.resolveCommit(project, runs, commit ?? "HEAD");
     // V3-T1012.a (#324 NB-1): "teslimde kilit dosyası zorunlu": package.json'u olup kilidi (package-lock.json / npm-shrinkwrap.json) olmayan bir Node teslimi
     // `npm ci` ile kurulamaz; dışa aktarım HİÇBİR ŞEY yazılmadan (geçici dizin, arşiv, kayıt yok) EXPORT_LOCKFILE_MISSING 409 ile reddedilir. Kök ağaç okunamazsa da reddedilir (fail-closed).
+    // Founder karar A: kilit, package.json `packageManager` ile tutarlı olmalıdır (npm / Yarn / pnpm); tutarsızlık EXPORT_LOCKFILE_INCONSISTENT 409 (reason = neden) ile reddedilir.
     const ls = this.git(root, ["ls-tree", "--name-only", sha], alt);
-    const lockfile = ls.status === 0 ? lockfileStatus(String(ls.stdout ?? "").split("\n").map(x => x.trim()).filter(Boolean)) : "MISSING";
-    if (lockfile === "MISSING") throw new StudioError("EXPORT_LOCKFILE_MISSING", 409);
+    const names = ls.status === 0 ? String(ls.stdout ?? "").split("\n").map(x => x.trim()).filter(Boolean) : null;
+    const pj = names?.includes("package.json") ? this.gitOk(root, ["show", `${sha}:package.json`], alt) : null;
+    const lc: LockfileCheck | null = names && !(names.includes("package.json") && pj === null) ? lockfileCheck(names, pj) : null;   // okunamayan ağaç/package.json: fail-closed
+    if (!lc || lc.status === "MISSING") throw new StudioError("EXPORT_LOCKFILE_MISSING", 409);
+    if (lc.status === "INCONSISTENT") throw new StudioError("EXPORT_LOCKFILE_INCONSISTENT", 409, lc.reason ?? undefined);
+    const lockfile = lc.status;
     const exportId = `exp_${crypto.randomBytes(12).toString("hex")}`;
     const outDir = this.exportsDir(), tmp = path.join(outDir, `.tmp-${exportId}`);
     fs.mkdirSync(tmp, {recursive: true});
@@ -392,9 +397,9 @@ export class ProjectStudio {
         `| Security | ${sec ? `${sec.status}${sec.gaps.length ? ` (gaps: ${sec.gaps.join(", ")})` : ""}` : "NOT_AVAILABLE"} |`,
         `| Independent review | ${review ? `${review.verdict} by ${review.reviewerIdentity ?? "unknown"}` : "NOT_AVAILABLE"} |`,
         "| Export secret scan | CLEAN (built-in scanner over every archived file) |",
-        `| Lockfile | ${lockfile === "PRESENT" ? "PRESENT (`npm ci` installs exactly the locked tree)" : "NOT_APPLICABLE (no package.json)"} |`, "",
+        `| Lockfile | ${lockfile === "PRESENT" ? `PRESENT (${lc.manager}: ${lc.lockfiles.join(", ")}; \`${lc.installCommand}\` installs exactly the locked tree)` : "NOT_APPLICABLE (no package.json)"} |`, "",
         "## How to run", "",
-        `- Tests: ${fmt(project.testCommand)}`, `- Development server: ${fmt(project.devCommand)}`, "",
+        ...(lc.installCommand ? [`- Install dependencies: \`${lc.installCommand}\``] : []), `- Tests: ${fmt(project.testCommand)}`, `- Development server: ${fmt(project.devCommand)}`, "",
         "Run the commands from the `source/` directory. Reports (when available) are under `reports/`.", "",
         "Delivery decision: this package is an export of the project state; it is not a merge, release or production deployment.", ""
       ].join("\n");
@@ -425,7 +430,7 @@ export class ProjectStudio {
       const final = path.join(outDir, `${exportId}.zip`);
       fs.renameSync(zipTmp, final);
       return {exportId, projectId: project.projectId, commit: sha, sha256: sha256(buf), size: buf.length, file: `exports/${exportId}.zip`, createdAt: new Date().toISOString(), createdBy: actor,
-        runId: run?.runId ?? null, contents, lockfile, secretScan: {scanner: "builtin", status: "CLEAN", entriesScanned: scanned},
+        runId: run?.runId ?? null, contents, lockfile, ...(lc.manager && lockfile === "PRESENT" ? {lockfileManager: lc.manager} : {}), secretScan: {scanner: "builtin", status: "CLEAN", entriesScanned: scanned},
         verification: {label: vs.label, testsExecuted: vs.testsExecuted, notExecutedReason: vs.notExecutedReason, functionalAcceptance: vs.functionalAcceptance, completionMode: vs.completionMode, runDelivery: "NO_RUN", productVerification: "NOT_VERIFIED"}};
     } finally { try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* geçici dizin */ } }
   }
@@ -514,7 +519,14 @@ export class ProjectStudio {
     }
     // //TR: V3-T1012 (Founder karar B): teslim ZIP'i de "teslimde kilit dosyası zorunlu" kuralına tabidir: kök ağaçta package.json olup kilit yoksa `npm ci` başarısız olur.
     // Karar blob içerikleri okunmadan, arşiv/dosya/kayıt/audit-başarı oluşmadan verilir (okunamayan ağaç yukarıda DELIVERY_SOURCE_UNAVAILABLE ile zaten fail-closed reddedilir).
-    if (lockfileStatus(files.map(f => f.name.toString("utf8").slice("source/".length)).filter(n => !n.includes("/"))) === "MISSING") throw new StudioError("DELIVERY_LOCKFILE_MISSING", 409);
+    // Founder karar A: yalnız kök package.json blob'u (varsa) okunur; kilit `packageManager` ile tutarlı değilse DELIVERY_LOCKFILE_INCONSISTENT 409 (reason = neden).
+    const rootNames = files.map(f => f.name.toString("utf8").slice("source/".length)).filter(n => !n.includes("/"));
+    const pjEntry = files.find(f => f.name.toString("utf8") === "source/package.json");
+    const pj = pjEntry ? this.gitOk(root, [...neutral, "cat-file", "blob", pjEntry.sha]) : null;
+    if (pjEntry && pj === null) throw new StudioError("DELIVERY_SOURCE_UNAVAILABLE", 409);
+    const lc = lockfileCheck(rootNames, pj);
+    if (lc.status === "MISSING") throw new StudioError("DELIVERY_LOCKFILE_MISSING", 409);
+    if (lc.status === "INCONSISTENT") throw new StudioError("DELIVERY_LOCKFILE_INCONSISTENT", 409, lc.reason ?? undefined);
     if (files.length > EXPORT_LIMITS.maxFiles) throw new StudioError("DELIVERY_TOO_LARGE", 409);
     const cat = files.length ? spawnGitSync(root, [...neutral, "cat-file", "--batch"], {env: this.env(), encoding: "buffer", input: Buffer.from(files.map(f => f.sha).join("\n") + "\n", "utf8"), maxBuffer: EXPORT_LIMITS.maxTotalBytes + 64 * files.length + 1024, timeout: this.o.gitTimeoutMs ?? 10 * 60_000}) : null;
     if (cat && cat.status !== 0) throw new StudioError("DELIVERY_SOURCE_UNAVAILABLE", 409);
@@ -544,7 +556,8 @@ export class ProjectStudio {
       `| Product verification | ${vs.labels.productVerification} (${vs.productVerificationReason}) |`,
       `| Tests executed | ${vs.testsExecuted ? "yes" : `no (${vs.notExecutedReason ?? "not executed"})`} |`,
       `| Independent review | ${vs.reviewVerdict} (evidence ${vs.reviewEvidenceId}) |`,
-      `| Static security | ${sec ? `${sec.status}${sec.gaps.length ? ` (gaps: ${sec.gaps.join(", ")})` : ""}` : "NOT_AVAILABLE"} |`, "",
+      `| Static security | ${sec ? `${sec.status}${sec.gaps.length ? ` (gaps: ${sec.gaps.join(", ")})` : ""}` : "NOT_AVAILABLE"} |`,
+      `| Install | ${lc.installCommand ? `\`${lc.installCommand}\` (${lc.manager}: ${lc.lockfiles.join(", ")})` : "NOT_APPLICABLE (no package.json)"} |`, "",
       "## Verification and acceptance", "",
       `- The SHA-256 of this archive is the exportArtifactHash shown by UASCO; verify it with \`Get-FileHash -Algorithm SHA256 <file>\` before use.`,
       `- When the Founder accepts this source delivery, UASCO records "${M1A_LABELS.SOURCE_DELIVERY_ACCEPTED}" in its journal (SOURCE_DELIVERY_ACCEPTED, bound to runId + mission + source commit + this archive's hash). The acceptance is not stored in this archive.`,
