@@ -45,8 +45,8 @@ There are exactly two cloud environments: `staging` and `production` (`CloudEnvi
 
 Limits of the separation check (state them, do not assume them away):
 
-- It compares host **names** only. Two different names that resolve to the same host or IP are not detected, and private or metadata ranges (10/8, 172.16/12, 192.168/16, 169.254/16) are not refused, only loopback is. Check DNS and network placement by hand when you configure the endpoints.
-- `rotate()`, `describe()` and every check take `now` from the caller. Always pass the server clock (NTP-synchronised). A clock that runs ahead can extend a retired key's verify window, but never beyond the 24 h overlap cap.
+- Hosts are compared after canonicalisation (an IPv4-mapped IPv6 literal equals its dotted IPv4). A production endpoint on a private, link-local, CGNAT, metadata, multicast or documentation IP literal, or an internal name (`.internal`, `.local`, `.lan`, `.corp`, `.home.arpa`, single-label), is refused with `ENDPOINT_NON_PUBLIC`. No DNS lookup is made (no network): two different names that resolve to the same host, or a public name that resolves to a private IP, are **not** detected. Check DNS and network placement by hand when you configure the endpoints.
+- `rotate()`, `describe()` and every check take `now` from the caller. In production, create each ring with the trusted server clock: `SessionKeyRing.create(env, keyId, secret, {clock: () => Date.now()})` on an NTP-synchronised host. Then `rotate()` and verification refuse a `now` more than 5 minutes off that clock, or an unreadable clock (`CLOCK_SKEW`, fail closed). Without the option, only a rotation earlier than the previous one is refused (`CLOCK_REGRESSED`), and a forward-skewed `now` can still extend a retired key's verify window up to the 24 h overlap cap. The option is not enforced by code; it is a configuration rule.
 
 Secrets never live in the repository, in `.env` files that are committed, or in logs. They come from the platform's secret manager (to be chosen under D-29) and are passed to the process at start.
 
