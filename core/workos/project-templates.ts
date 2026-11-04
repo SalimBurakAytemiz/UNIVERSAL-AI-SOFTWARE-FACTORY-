@@ -5,6 +5,13 @@ export interface TemplateSpec { files: Record<string, string>; testCommand?: str
 
 const pkgName = (name: string) => (name.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^[-._]+|[-._]+$/g, "").slice(0, 60) || "project");
 const mdSafe = (name: string) => name.replace(/[\r\n]+/g, " ").replace(/[<>`]/g, "").slice(0, 200);
+// //TR: V3-T1012.a: bağımlılıksız şablonun kilit dosyası; npm'in --package-lock-only ile ürettiği lockfileVersion 3 biçimiyle birebir aynıdır, böylece teslimde `npm ci` ağ gerektirmeden çalışır.
+export const lockfileFor = (name: string) => JSON.stringify({name, version: "0.1.0", lockfileVersion: 3, requires: true, packages: {"": {name, version: "0.1.0", license: "UNLICENSED"}}}, null, 2) + "\n";
+// //TR: Kök dizindeki dosya adlarından teslimin kilit dosyası durumu: package.json yoksa NOT_APPLICABLE; varsa package-lock.json/npm-shrinkwrap.json olmadan MISSING (`npm ci` başarısız olur).
+export function lockfileStatus(rootFiles: readonly string[]): "PRESENT" | "MISSING" | "NOT_APPLICABLE" {
+  if (!rootFiles.includes("package.json")) return "NOT_APPLICABLE";
+  return rootFiles.includes("package-lock.json") || rootFiles.includes("npm-shrinkwrap.json") ? "PRESENT" : "MISSING";
+}
 const htmlEsc = (s: string) => s.replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"}[c] as string));
 
 export function renderTemplate(template: ProjectTemplate, projectName: string): TemplateSpec {
@@ -15,6 +22,7 @@ export function renderTemplate(template: ProjectTemplate, projectName: string): 
       projectType: "web", testCommand: ["node", "test.js"], devCommand: ["node", "server.js"],
       files: {
         "package.json": JSON.stringify({name: pkg, version: "0.1.0", private: true, description: "Web starter created by UASCO Project Studio", main: "server.js", scripts: {start: "node server.js", test: "node test.js"}, license: "UNLICENSED"}, null, 2) + "\n",
+        "package-lock.json": lockfileFor(pkg),
         "server.js": [
           "\"use strict\";",
           "// Minimal dependency-free web server. PORT comes from the environment; it binds to the loopback interface only.",
@@ -93,6 +101,7 @@ export function renderTemplate(template: ProjectTemplate, projectName: string): 
       projectType: "library", testCommand: ["node", "test.js"],
       files: {
         "package.json": JSON.stringify({name: pkg, version: "0.1.0", private: true, description: "Library starter created by UASCO Project Studio", main: "index.js", scripts: {test: "node test.js"}, license: "UNLICENSED"}, null, 2) + "\n",
+        "package-lock.json": lockfileFor(pkg),
         "index.js": [
           "\"use strict\";",
           "// Turns a title into a URL-friendly slug.",
