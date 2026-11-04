@@ -56,7 +56,7 @@
         310,
         313
       ],
-      "note": "#310 PAR-03 fsync fix merged; #313 PAR-04 Windows takeover fix in review; V3-EV record still open"
+      "note": "#310 PAR-03 fsync fix and #313 PAR-04 Windows takeover fix merged; V3-EV record still open"
     },
     {
       "task": "CLOUD-T0010",
