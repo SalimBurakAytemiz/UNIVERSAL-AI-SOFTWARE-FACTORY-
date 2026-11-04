@@ -3,6 +3,7 @@ import {describe, it, expect} from "vitest";
 import {issueSession, MAX_SESSION_TTL_MS} from "../../apps/control-api/src/cloud/remote-gateway.js";
 import {
   SessionKeyRing, checkEnvironmentSeparation, evaluateHealth, evaluatePromotion, issueDeployApproval, secretsEqual, MAX_STAGING_EVIDENCE_AGE_MS, MAX_DEPLOY_APPROVAL_TTL_MS,
+  MAX_CLOCK_SKEW_MS, canonicalHost, isNonPublicHost,
   type HealthProbe, type HealthReport,
 } from "../../apps/control-api/src/cloud/deployment.js";
 
@@ -195,6 +196,55 @@ export function registerCloudDeployCases(): void {
       expect(run(base)).toBe("OK");
       d.production.keys.revoke("prd-k1");
       expect(run(base)).toBe("DEPLOY_SESSION_INVALID");
+    });
+  });
+  describe("CLOUD-T0012 review follow-up: host/IP separation (LOW-7) and trusted clock (LOW-8)", () => {
+    const prd = (endpoint: string) => ({...deps().production, env: {...PRD_ENV, UASCO_CLOUD_ENDPOINT: endpoint}});
+    it("IPv4-mapped IPv6 and dotted IPv4 of the same address count as one host", () => {
+      expect(canonicalHost("[::ffff:cb00:7101]")).toBe("203.0.113.1");
+      expect(canonicalHost("203.0.113.1.")).toBe("203.0.113.1");
+      const stg = {...deps().staging, env: {...STG_ENV, UASCO_CLOUD_ENDPOINT: "https://8.8.4.4/api"}};
+      expect(checkEnvironmentSeparation(stg, prd("https://[::ffff:808:404]/api"))).toEqual({ok: false, reason: "ENDPOINT_SHARED"});
+      expect(checkEnvironmentSeparation(stg, prd("https://8.8.8.8/api")).ok).toBe(true);
+    });
+    it("production endpoint on private, link-local, CGNAT, metadata or internal names is refused", () => {
+      for (const ep of ["https://10.1.2.3/", "https://172.16.0.1/", "https://172.31.255.255/", "https://192.168.1.1/", "https://169.254.169.254/",
+        "https://100.64.0.1/", "https://0.0.0.1/", "https://224.0.0.1/", "https://[fd00::1]/", "https://[fe80::1]/", "https://[ff02::1]/", "https://[::ffff:a00:1]/",
+        "https://[2001:db8::1]/", "https://metadata.google.internal/", "https://api.corp/", "https://printer.local/", "https://intranet-host/"]) {
+        expect(isNonPublicHost(new URL(ep).hostname), ep).toBe(true);
+        expect(checkEnvironmentSeparation(deps().staging, prd(ep)), ep).toEqual({ok: false, reason: "ENDPOINT_NON_PUBLIC"});
+      }
+      for (const ep of ["https://172.15.255.255/", "https://172.32.0.1/", "https://100.128.0.1/", "https://8.8.8.8/", "https://[2606:4700::1111]/", "https://prod.example.invalid/"])
+        expect(isNonPublicHost(new URL(ep).hostname), ep).toBe(false);
+    });
+    it("staging may stay on a private address; only production is restricted", () => {
+      const stg = {...deps().staging, env: {...STG_ENV, UASCO_CLOUD_ENDPOINT: "https://10.0.0.5/api"}};
+      expect(checkEnvironmentSeparation(stg, deps().production).ok).toBe(true);
+    });
+    it("with a trusted clock, a skewed caller `now` cannot rotate or verify", () => {
+      let wall = t0.getTime();
+      const ring = SessionKeyRing.create("staging", "stg-k1", S1, {clock: () => wall});
+      const tok = founder(ring);
+      expect(ring.rotate("stg-k2", S2, at(MAX_CLOCK_SKEW_MS + 1))).toEqual({ok: false, reason: "CLOCK_SKEW"});
+      expect(ring.rotate("stg-k2", S2, at(-MAX_CLOCK_SKEW_MS - 1))).toEqual({ok: false, reason: "CLOCK_SKEW"});
+      expect(ring.signingKey().keyId).toBe("stg-k1");                          // failed rotation is a no-op
+      expect(ring.verify(tok, at(MAX_CLOCK_SKEW_MS + 1)).ok).toBe(false);       // skewed verify: no keys
+      expect(ring.verificationKeys(at(-MAX_CLOCK_SKEW_MS - 1)).size).toBe(0);
+      expect(ring.verify(tok, at(MAX_CLOCK_SKEW_MS)).ok).toBe(true);            // boundary is inclusive
+      expect(ring.rotate("stg-k2", S2, at(MAX_CLOCK_SKEW_MS))).toMatchObject({ok: true, retiredKeyId: "stg-k1"});
+      wall = Number.NaN;
+      expect(ring.verificationKeys(t0).size).toBe(0);                          // unreadable clock fails closed
+      const throwing = SessionKeyRing.create("staging", "stg-k9", S1, {clock: () => { throw new Error("ntp down"); }});
+      expect(throwing.rotate("stg-k10", S2, t0)).toEqual({ok: false, reason: "CLOCK_SKEW"});
+      expect(() => SessionKeyRing.create("staging", "stg-k8", S1, {clock: 5 as unknown as () => number})).toThrow("CLOCK_INVALID");
+    });
+    it("rotation refuses a `now` earlier than the previous rotation (CLOCK_REGRESSED), even without a trusted clock", () => {
+      const ring = SessionKeyRing.create("staging", "stg-k1", S1);
+      expect(ring.rotate("stg-k2", S2, at(10_000)).ok).toBe(true);
+      expect(ring.rotate("stg-k3", S1 + "-3", at(9_999))).toEqual({ok: false, reason: "CLOCK_REGRESSED"});
+      expect(ring.signingKey().keyId).toBe("stg-k2");
+      expect(ring.rotate("stg-k3", S1 + "-3", at(10_000)).ok).toBe(true);     // same instant is allowed
+      expect(ring.rotate("stg-k4", S1 + "-4", new Date(Number.NaN))).toEqual({ok: false, reason: "CLOCK_SKEW"});
     });
   });
 }

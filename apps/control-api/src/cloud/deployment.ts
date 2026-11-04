@@ -16,7 +16,13 @@ export function secretsEqual(a: string | Buffer, b: string | Buffer): boolean { 
 // ---------- key ring with overlapping rotation ----------
 export type KeyState = "ACTIVE" | "VERIFY_ONLY";
 interface RingEntry {keyId: string; secret: string | Buffer; state: KeyState; verifyUntil: number | null}
-export type RotationDeny = "KEY_ID_INVALID" | "KEY_ID_REUSED" | "KEY_TOO_SHORT" | "KEY_REUSED" | "OVERLAP_INVALID";
+export type RotationDeny = "KEY_ID_INVALID" | "KEY_ID_REUSED" | "KEY_TOO_SHORT" | "KEY_REUSED" | "OVERLAP_INVALID" | "CLOCK_SKEW" | "CLOCK_REGRESSED";
+/** Güvenilen sunucu saati ile çağıranın `now` değeri arasında izin verilen en büyük fark. */
+export const MAX_CLOCK_SKEW_MS = 5 * 60_000;
+export interface KeyRingOptions {
+  /** Güvenilen sunucu saati (ms). Verilirse rotate() ve doğrulama, bu saatten MAX_CLOCK_SKEW_MS'den fazla sapan `now` değerini reddeder. Production'da zorunlu tutulmalıdır (runbook §1). */
+  readonly clock?: () => number;
+}
 
 /**
  * Bir ortamın oturum anahtar halkası. Her an tek ACTIVE (imzalayan) anahtar vardır.
@@ -28,13 +34,25 @@ export class SessionKeyRing {
   private readonly entries: RingEntry[] = [];
   private readonly usedIds = new Set<string>();
   private readonly usedDigests: Buffer[] = [];
-  private constructor(readonly environment: CloudEnvironment) {}
+  /** Son başarılı rotasyonun zamanı: geriye giden `now` ile rotasyon reddedilir (CLOCK_REGRESSED). */
+  private lastRotationAt = Number.NEGATIVE_INFINITY;
+  private constructor(readonly environment: CloudEnvironment, private readonly clock?: () => number) {}
 
-  static create(environment: CloudEnvironment, keyId: string, secret: string | Buffer): SessionKeyRing {
-    const ring = new SessionKeyRing(environment);
+  static create(environment: CloudEnvironment, keyId: string, secret: string | Buffer, options: KeyRingOptions = {}): SessionKeyRing {
+    if (options.clock !== undefined && typeof options.clock !== "function") throw new Error("CLOCK_INVALID");
+    const ring = new SessionKeyRing(environment, options.clock);
     const err = ring.admit(keyId, secret); if (err) throw new Error(err);
     ring.entries.push({keyId, secret: ownCopy(secret), state: "ACTIVE", verifyUntil: null});
     return ring;
+  }
+
+  /** Güvenilen saat varsa `now` ondan en çok MAX_CLOCK_SKEW_MS sapabilir; saat okunamazsa ya da sayı değilse sapma kabul edilir (fail-closed). */
+  private skewed(now: Date): boolean {
+    const t = now instanceof Date ? now.getTime() : NaN;
+    if (!Number.isFinite(t)) return true;
+    if (this.clock === undefined) return false;
+    let c: number; try { c = this.clock(); } catch { return true; }
+    return !Number.isFinite(c) || Math.abs(t - c) > MAX_CLOCK_SKEW_MS;
   }
 
   private admit(keyId: string, secret: string | Buffer): RotationDeny | null {
@@ -49,8 +67,10 @@ export class SessionKeyRing {
 
   rotate(keyId: string, secret: string | Buffer, now: Date, overlapMs: number = MAX_SESSION_TTL_MS): {ok: true; retiredKeyId: string; verifyUntil: string} | {ok: false; reason: RotationDeny} {
     if (!Number.isSafeInteger(overlapMs) || overlapMs < 60_000 || overlapMs > 2 * MAX_SESSION_TTL_MS) return {ok: false, reason: "OVERLAP_INVALID"};
+    if (this.skewed(now)) return {ok: false, reason: "CLOCK_SKEW"};
+    if (now.getTime() < this.lastRotationAt) return {ok: false, reason: "CLOCK_REGRESSED"};
     const err = this.admit(keyId, secret); if (err) return {ok: false, reason: err};
-    this.prune(now);
+    this.prune(now); this.lastRotationAt = now.getTime();
     const prev = this.entries.find(e => e.state === "ACTIVE")!;
     prev.state = "VERIFY_ONLY"; prev.verifyUntil = now.getTime() + overlapMs;
     this.entries.push({keyId, secret: ownCopy(secret), state: "ACTIVE", verifyUntil: null});
@@ -72,6 +92,7 @@ export class SessionKeyRing {
 
   /** verifySession için doğrulama anahtarları: ACTIVE + süresi dolmamış VERIFY_ONLY. */
   verificationKeys(now: Date): ReadonlyMap<string, string | Buffer> {
+    if (this.skewed(now)) return new Map();   // sapmış saat: hiçbir anahtar doğrulamaz (fail-closed)
     return new Map(this.entries.filter(e => e.state === "ACTIVE" || now.getTime() < e.verifyUntil!).map(e => [e.keyId, e.secret] as const));
   }
 
@@ -93,7 +114,44 @@ export class SessionKeyRing {
 // ---------- staging / production separation ----------
 export interface EnvironmentDeployment {env: Readonly<Record<string, string | undefined>>; keys: SessionKeyRing}
 export type SeparationDeny =
-  | "STAGING_NOT_CONFIGURED" | "PRODUCTION_NOT_CONFIGURED" | "ENVIRONMENT_MISLABELLED" | "ENDPOINT_SHARED" | "KEY_ID_SHARED" | "SECRET_SHARED" | "KEYRING_ENVIRONMENT_MISMATCH";
+  | "STAGING_NOT_CONFIGURED" | "PRODUCTION_NOT_CONFIGURED" | "ENVIRONMENT_MISLABELLED" | "ENDPOINT_SHARED" | "ENDPOINT_NON_PUBLIC" | "KEY_ID_SHARED" | "SECRET_SHARED" | "KEYRING_ENVIRONMENT_MISMATCH";
+
+const ipv4Num = (h: string): number | null => {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h); if (!m) return null;
+  const o = m.slice(1).map(Number); if (o.some(x => x > 255)) return null;
+  return ((o[0]! << 24) >>> 0) + (o[1]! << 16) + (o[2]! << 8) + o[3]!;
+};
+/** WHATWG URL IPv6'yı zaten kanonik (küçük harf, sıkıştırılmış) yazar; tek fark IPv4-eşlemeli biçimdir, o IPv4'e indirgenir. */
+export function canonicalHost(hostname: string): string {
+  const h = hostname.toLowerCase().replace(/\.+$/, "");
+  const m = /^\[::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})\]$/.exec(h) ?? /^\[::ffff:(\d+\.\d+\.\d+\.\d+)\]$/.exec(h);
+  if (m && m.length === 3) { const n = (parseInt(m[1]!, 16) << 16 >>> 0) + parseInt(m[2]!, 16); return [n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join("."); }
+  if (m) return m[1]!;
+  return h;
+}
+const V4_NON_PUBLIC: ReadonlyArray<readonly [number, number]> = [
+  [0x00000000, 8], [0x0a000000, 8], [0x64400000, 10], [0x7f000000, 8], [0xa9fe0000, 16], [0xac100000, 12],
+  [0xc0000000, 24], [0xc0000200, 24], [0xc0a80000, 16], [0xc6120000, 15], [0xc6336400, 24], [0xcb007100, 24], [0xe0000000, 3],
+];
+const NON_PUBLIC_SUFFIX = [".internal", ".local", ".localhost", ".home.arpa", ".lan", ".intranet", ".corp"];
+/**
+ * Production uç noktası için çevrimdışı denetim: özel/bağlantı-yerel/CGNAT/metadata/belgelendirme/çoklu yayın IP sabitleri
+ * ve iç ağ ad uzantıları reddedilir. DNS çözülmez (ağ yok): genel bir adın özel IP'ye çözülmesi burada yakalanamaz (runbook §1).
+ */
+export function isNonPublicHost(hostname: string): boolean {
+  const h = canonicalHost(hostname);
+  const n = ipv4Num(h);
+  if (n !== null) return V4_NON_PUBLIC.some(([base, bits]) => ((n >>> (32 - bits)) << (32 - bits)) >>> 0 === base);
+  if (h.startsWith("[")) {
+    const v6 = h.slice(1, -1);
+    if (v6 === "::" || v6 === "::1") return true;
+    const first = parseInt((v6.split(":")[0] || "0"), 16);
+    if (v6.startsWith("::")) return true;                                   // :: ile başlayan (uyumlu/eşlemeli kalıntı) adresler genel değildir
+    return (first & 0xfe00) === 0xfc00 || (first & 0xffc0) === 0xfe80 || (first & 0xff00) === 0xff00 || v6.startsWith("2001:db8:") || v6.startsWith("64:ff9b:");
+  }
+  if (h === "localhost" || h === "metadata" || h === "metadata.google.internal") return true;
+  return NON_PUBLIC_SUFFIX.some(sfx => h.endsWith(sfx)) || !h.includes(".");
+}
 
 /** İki ortam tamamen ayrık olmalıdır: farklı host, ayrık keyId kümeleri, ortak secret yok. Herhangi bir belirsizlik reddir. */
 export function checkEnvironmentSeparation(staging: EnvironmentDeployment, production: EnvironmentDeployment):
@@ -105,8 +163,8 @@ export function checkEnvironmentSeparation(staging: EnvironmentDeployment, produ
   if (s.config.environment !== "staging" || p.config.environment !== "production")
     return {ok: false, reason: "ENVIRONMENT_MISLABELLED"};
   if (staging.keys.environment !== "staging" || production.keys.environment !== "production") return {ok: false, reason: "KEYRING_ENVIRONMENT_MISMATCH"};
-  const host = (u: URL) => u.hostname.toLowerCase().replace(/\.+$/, "");
-  if (host(s.config.endpoint) === host(p.config.endpoint)) return {ok: false, reason: "ENDPOINT_SHARED"};
+  if (canonicalHost(s.config.endpoint.hostname) === canonicalHost(p.config.endpoint.hostname)) return {ok: false, reason: "ENDPOINT_SHARED"};
+  if (isNonPublicHost(p.config.endpoint.hostname)) return {ok: false, reason: "ENDPOINT_NON_PUBLIC"};
   const sf = staging.keys.footprint(), pf = production.keys.footprint();
   for (const id of sf.ids) if (pf.ids.has(id)) return {ok: false, reason: "KEY_ID_SHARED"};
   let shared = false;   // sabit-zamanlı: erken çıkış yok
