@@ -7,6 +7,7 @@ import {
   type ArtifactRef, type CloudJobEvent, type CloudJobEventType, type CloudJobRequest,
 } from "../../../../core/cloud/contracts.js";
 import {acquireQueueLock, type QueueLock} from "./queue-lock.js";
+import {redactSecrets} from "../../../../core/workos/secret-scan.js";
 
 export const WORKER_AUTH_MAX_SKEW_MS = 2 * 60 * 1000;
 export const DEFAULT_LEASE_MS = 5 * 60 * 1000;
@@ -52,13 +53,29 @@ export interface JobSummary {
   requestedAt: string; updatedAt: string | null; lastEventType: CloudJobEventType | null; message: string | null; artifacts: ArtifactRef[];
 }
 const REASON_EVENTS: readonly string[] = ["RETRYING", "FAILED", "TIMED_OUT"];
+export const JOB_MESSAGE_MAX = 200;
+/** CLOUD-T0005 sunucu tarafı redaksiyon: worker'ın yeniden deneme/hata metni API'den çıkmadan önce temizlenir (masaüstü temizleyicisine güvenilmez).
+ *  Sıra: bilinen secret desenleri (redactSecrets) -> kimlik bilgili URL -> anahtar=değer -> kısa Bearer/Basic -> anahtar biçimli uzun diziler -> mutlak yollar -> kontrol karakterleri; en son 200'e kırpılır.
+ *  Tüm nicelikler sınırlıdır (doğrusal süre). */
+export function redactJobMessage(text: string): string {
+  let s = redactSecrets(String(text).slice(0, 4096));
+  s = s
+    .replace(/\b([A-Za-z][A-Za-z0-9+.-]{0,16}):\/\/[^\s/?#@]{1,512}@/g, "$1://[REDACTED:URL_CREDENTIALS]@")
+    .replace(/\b(token|secret|password|passwd|pwd|api[_-]?key|access[_-]?key|client[_-]?secret|authorization|auth|credentials?|session|cookie)(\s{0,8}[:=]\s{0,8})("?)(?:(?:Bearer|Basic)[ \t]{1,16})?[^\s",;&]{1,4096}/gi, "$1$2$3[REDACTED:KEY_VALUE]")
+    .replace(/\b(Bearer|Basic)[ \t]{1,16}(?!\[REDACTED)(?=[^\s,;]{0,4096}[0-9._~+/=-])[^\s,;]{6,4096}/gi, "$1 [REDACTED:AUTH_TOKEN]")
+    .replace(/(?<![A-Za-z0-9_\[-])(?=[A-Za-z0-9+/_-]{0,4096}\d)(?=[A-Za-z0-9+/_-]{0,4096}[A-Za-z])[A-Za-z0-9+/_-]{32,4096}={0,2}/g, "[REDACTED:KEY_SHAPED]")
+    .replace(/\b[A-Za-z]:[\\/][^\s"'<>|]{0,4096}/g, "[path]")
+    .replace(/(?<![A-Za-z0-9._:/~-])\/(?:[^\s/"'<>]{1,256}\/){1,64}[^\s"'<>]{0,256}/g, "[path]")
+    .replace(/[\u0000-\u0008\u000B-\u001F\u007F]/g, "");
+  return s.slice(0, JOB_MESSAGE_MAX);
+}
 function summarize(s: JobState): JobSummary {
   const last = s.events.length ? s.events[s.events.length - 1]! : null;
   const reason = [...s.events].reverse().find(e => REASON_EVENTS.includes(e.type) && typeof e.message === "string");
   return {
     jobId: s.job.jobId, projectId: s.job.projectId, environment: s.job.environment, kind: s.job.kind, status: s.status, attempt: s.attempt,
     maxAttempts: s.job.retry.maxAttempts, requestedAt: s.job.requestedAt, updatedAt: last ? last.at : null, lastEventType: last ? last.type : null,
-    message: reason ? String(reason.message).slice(0, 200) : null,
+    message: reason ? redactJobMessage(String(reason.message)) : null,
     artifacts: s.events.filter(e => e.type === "ARTIFACT" && e.artifact).map(e => ({name: e.artifact!.name, sha256: e.artifact!.sha256, sizeBytes: e.artifact!.sizeBytes})),
   };
 }

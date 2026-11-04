@@ -5,8 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import {pathToFileURL} from "node:url";
-import {CloudJobQueue, signWorkerAuth, type WorkerAuth} from "../../apps/control-api/src/cloud/jobs.js";
-import {registerCloudJobRoutes, CLOUD_JOBS_PATH} from "../../apps/control-api/src/routes/cloud-jobs.js";
+import {CloudJobQueue, signWorkerAuth, redactJobMessage, JOB_MESSAGE_MAX, type WorkerAuth} from "../../apps/control-api/src/cloud/jobs.js";
+import {registerCloudJobRoutes, CLOUD_JOBS_PATH, CLOUD_JOB_ID_RE} from "../../apps/control-api/src/routes/cloud-jobs.js";
 import {buildServer} from "../../apps/control-api/src/server.js";
 import {CLOUD_CONTRACT_VERSION, signScope, sha256Hex, type CloudJobRequest, type UnsignedScope} from "../../core/cloud/contracts.js";
 import {controlChallengeProof, desktopGetPathAllowed} from "../../automation/lib/control-boundary.mjs";
@@ -221,6 +221,104 @@ export function registerCloudJobsStatusCases(): void {
       expect(sec.jobs[0].message).toBe("token=[REDACTED]");
       // proposed allow-list entries are exact (anchored)
       for (const p of [`${CLOUD_JOBS_PATH}/`, `${CLOUD_JOBS_PATH}?x`, `${CLOUD_JOBS_PATH}x`, `${CLOUD_JOBS_PATH}/a/b`, `${CLOUD_JOBS_PATH}/..`]) expect(PROPOSED_GET.some(re => re.test(p)), p).toBe(false);
+    });
+
+    // ---------- Kurucu yönlendirmeli sertleştirme (#335 takibi) ----------
+    it("server-side redaction: a planted secret in a worker FAILED/RETRYING message never leaves the API (not relying on the desktop sanitizer)", async () => {
+      const q = new CloudJobQueue({dir, scopeKeys: new Map([["k-1", SCOPE_KEY]]), workerKeys: new Map([["worker-a", WORKER_KEY]]), now: () => clock, leaseMs: 60_000});
+      open.push(q);
+      // test içinde birleştirilen sahte secret'lar (depoda düz literal yok)
+      const planted = {
+        kv: ["tok", "en=", "pl4nted-T0k3n-value"].join(""), bearer: ["Bear", "er abc.def.ghi"].join(""), url: ["https://ci-user:", "s3cr3tPW", "@git.example.com/r.git"].join(""),
+        key: ["AKIA", "PLANTED0123456789", "abcdefghij0123"].join(""), path: "/home/runner/.config/app/credentials.json", win: "C:\\Users\\builder\\secrets\\id.txt",
+      };
+      const raw = `step failed ${planted.kv} ${planted.bearer} clone ${planted.url} using ${planted.key} at ${planted.path} or ${planted.win}`;
+      const j = req(TENANT, {retry: {maxAttempts: 2, backoffMs: 1000}});
+      expect(q.submit(j)).toMatchObject({ok: true});
+      const c1 = q.claim(auth("claim", "*")); if (!c1.ok) throw new Error("claim");
+      const res = {status: "FAILED" as const, message: raw};
+      expect(q.complete(auth("complete", j.jobId, {leaseId: c1.lease.leaseId, result: res}), j.jobId, c1.lease.leaseId, res)).toMatchObject({ok: true});   // attempt 1 -> RETRYING
+      const app = mkServer(q);
+      const listBody = (await get(app, CLOUD_JOBS_PATH)).body, itemBody = (await get(app, `${CLOUD_JOBS_PATH}/${j.jobId}`)).body;
+      const row = q.summary(TENANT, j.jobId)!;
+      expect(row.status).toBe("QUEUED");
+      expect(row.lastEventType).toBe("RETRYING");
+      for (const blob of [listBody, itemBody, JSON.stringify(row)]) {
+        for (const secret of ["pl4nted-T0k3n-value", "abc.def.ghi", "s3cr3tPW", "ci-user", planted.key, "/home/runner", "credentials.json", "C:\\\\Users", "builder"]) expect(blob, secret).not.toContain(secret);
+      }
+      expect(row.message).toContain("step failed");
+      expect(row.message).toMatch(/\[REDACTED:KEY_VALUE\]|\[REDACTED:/);
+      expect(row.message!.length).toBeLessThanOrEqual(JOB_MESSAGE_MAX);
+      // redactor units: each class on its own; benign text untouched
+      expect(redactJobMessage(planted.kv)).toBe("token=[REDACTED:KEY_VALUE]");
+      expect(redactJobMessage(`auth: ${planted.bearer}`)).not.toContain("abc.def.ghi");
+      expect(redactJobMessage(`Authorization ${planted.bearer}`)).not.toContain("abc.def.ghi");
+      expect(redactJobMessage(planted.url)).toBe("https://[REDACTED:URL_CREDENTIALS]@git.example.com/r.git");
+      expect(redactJobMessage(planted.key)).toBe("[REDACTED:KEY_SHAPED]");
+      expect(redactJobMessage(`at ${planted.path}:12`)).toBe("at [path]");
+      expect(redactJobMessage(planted.win)).toBe("[path]");
+      for (const benign of ["compile error in step 2", "LEASE_EXPIRED", "see https://example.com/docs/a for help", "missing Bearer token"]) expect(redactJobMessage(benign), benign).toBe(benign);
+      expect(redactJobMessage("x".repeat(5000))).toHaveLength(JOB_MESSAGE_MAX);
+      expect(redactJobMessage(`ok\u0000\u0007done`)).toBe("okdone");
+    });
+
+    it("forged tenant headers and query parameters never change the tenant: only RouteDeps.scope applies", async () => {
+      const {q, x} = seeded();
+      const app = mkServer(q);
+      const mine = (await get(app, CLOUD_JOBS_PATH)).json().jobs.map((j: any) => j.jobId).sort();
+      expect(mine).toHaveLength(3);
+      const forge = (url: string, extra: Record<string, string>) => app.inject({method: "GET", url, headers: {"x-uasco-control-token": TOKEN, host: "127.0.0.1:3210", ...extra}});
+      for (const h of [{"x-uasco-tenant": OTHER}, {"x-tenant-id": OTHER}, {"x-uasco-tenant": OTHER, "x-tenant-id": OTHER}, {tenant: OTHER}] as Array<Record<string, string>>) {
+        const r = await forge(CLOUD_JOBS_PATH, h);
+        expect([JSON.stringify(h), r.statusCode, r.json().jobs.map((j: any) => j.jobId).sort()]).toEqual([JSON.stringify(h), 200, mine]);
+        const it2 = await forge(`${CLOUD_JOBS_PATH}/${x.jobId}`, h);
+        expect([JSON.stringify(h), it2.statusCode]).toEqual([JSON.stringify(h), 404]);
+      }
+      for (const qs of [`?tenantId=${OTHER}`, `?tenant=${OTHER}`, `?tenantId=${OTHER}&tenant=${OTHER}`, `?scope=${OTHER}`]) {
+        const r = await forge(`${CLOUD_JOBS_PATH}${qs}`, {});
+        expect([qs, r.statusCode, r.json().jobs.map((j: any) => j.jobId).sort()]).toEqual([qs, 200, mine]);
+        expect((await forge(`${CLOUD_JOBS_PATH}/${x.jobId}${qs}`, {})).statusCode, qs).toBe(404);
+      }
+    });
+
+    it("boundaries: job id 3 / 128 / 129 chars, status enum, message cap 200, list limit 0 / 1 / 100 / 101 / NaN", async () => {
+      expect([CLOUD_JOB_ID_RE.test("abc"), CLOUD_JOB_ID_RE.test("ab"), CLOUD_JOB_ID_RE.test("a".repeat(128)), CLOUD_JOB_ID_RE.test("a".repeat(129))]).toEqual([true, false, true, false]);
+      const q = new CloudJobQueue({dir, scopeKeys: new Map([["k-1", SCOPE_KEY]]), workerKeys: new Map([["worker-a", WORKER_KEY]]), now: () => clock, leaseMs: 60_000});
+      open.push(q);
+      const id3 = "abc", id128 = "j" + "0".repeat(127);
+      for (const id of [id3, id128]) expect(q.submit(req(TENANT, {jobId: id})), id).toMatchObject({ok: true});
+      expect(q.summary(TENANT, id3)?.jobId).toBe(id3);
+      expect(q.summary(TENANT, id128)?.jobId).toBe(id128);
+      const app = mkServer(q);
+      expect((await get(app, `${CLOUD_JOBS_PATH}/${id3}`)).json()).toMatchObject({job: {jobId: id3, status: "QUEUED"}});
+      expect((await get(app, `${CLOUD_JOBS_PATH}/ab`)).statusCode).toBe(400);
+      // 128: route kabul eder; Fastify maxParamLength varsayılanı (100) Kurucu PR'ında >=128 yapılana kadar 414 ile önce reddeder
+      const maxParam = Number(app.initialConfig?.maxParamLength ?? 100);
+      const r128 = await get(app, `${CLOUD_JOBS_PATH}/${id128}`);
+      if (maxParam >= 128) expect(r128.json()).toMatchObject({job: {jobId: id128}}); else expect(r128.statusCode).toBe(414);
+      expect([400, 414]).toContain((await get(app, `${CLOUD_JOBS_PATH}/${"j".repeat(129)}`)).statusCode);
+      // status enum: her durum kapalı kümeden
+      const ENUM = ["QUEUED", "RUNNING", "SUCCEEDED", "FAILED", "CANCELLED", "TIMED_OUT", "STOPPED"];
+      const cj = req(); q.submit(cj); expect(q.cancel(cj.jobId)).toEqual({ok: true});
+      const fj = req(); q.submit(fj);
+      const c = q.claim(auth("claim", "*")); if (!c.ok) throw new Error("claim");
+      const long = {status: "FAILED" as const, message: "E".repeat(1500)};
+      expect(q.complete(auth("complete", c.job.jobId, {leaseId: c.lease.leaseId, result: long}), c.job.jobId, c.lease.leaseId, long)).toMatchObject({ok: true});
+      const failed = q.summary(TENANT, c.job.jobId)!;
+      expect(failed.status).toBe("FAILED");
+      expect(failed.message).toHaveLength(JOB_MESSAGE_MAX);
+      q.stopAll();
+      const statuses = q.list(TENANT).map(r => r.status);
+      expect(statuses).toContain("CANCELLED"); expect(statuses).toContain("STOPPED"); expect(statuses).toContain("FAILED");
+      for (const st of statuses) expect(ENUM, st).toContain(st);
+    });
+
+    it("list limit clamps to 1..100 (0 -> 1, 1, 100, 101 -> 100, NaN / non-integer -> 100)", () => {
+      const q = new CloudJobQueue({dir, scopeKeys: new Map([["k-1", SCOPE_KEY]]), workerKeys: new Map([["worker-a", WORKER_KEY]]), now: () => clock, leaseMs: 60_000});
+      open.push(q);
+      for (let i = 0; i < 102; i++) expect(q.submit(req()).ok).toBe(true);
+      expect([0, 1, 100, 101, Number.NaN, 2.5, -5, Number.POSITIVE_INFINITY].map(l => q.list(TENANT, l).length)).toEqual([1, 1, 100, 100, 100, 100, 1, 100]);
+      expect(q.list(TENANT).length).toBe(100);
     });
   });
 }
