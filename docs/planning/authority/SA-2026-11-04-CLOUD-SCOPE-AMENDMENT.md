@@ -29,6 +29,8 @@ This record makes each extension explicit and traceable, so it is neither hidden
   - `apps/control-api/src/cloud/jobs.ts`: limited to adding the read-only `list()`, `summary()` and their redaction helper (`redactJobMessage`). No change to submit, claim, complete, cancel, STOP or any other queue semantics is covered; those stay owned by CLOUD-T0003.
   - `NEW:apps/control-api/src/routes/cloud-jobs.ts`
   - `NEW:tests/support/cloud-jobs-status.cases.ts`
+  - `apps/desktop/renderer/views/tower.js`: mounting the read-only cloud jobs panel only (one import, one load call, one panel).
+  - `tests/support/renderer-real-server.cases.ts`: the tower path and allow-list expectations for that panel only.
   - The 2-line registration in `tests/v7-cloud-contracts.test.ts`.
 - **Rationale:** the Desktop panel can show real job state only if the server exposes it. Without these files the panel can only show sample data, which is forbidden.
 - **Dependencies:** CLOUD-T0004 (gateway; already in the matrix) and **CLOUD-T0003 (queue; added by this amendment)**. The protected wiring in `server.ts` and the `main.mjs` GET allow-list is a separate Founder-tier PR.
