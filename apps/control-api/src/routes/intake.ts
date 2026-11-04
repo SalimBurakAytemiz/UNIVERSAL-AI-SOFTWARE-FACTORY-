@@ -3,8 +3,10 @@ import {LANE_WRITE_BODY_LIMIT} from "./deps.js";
 import type {RouteDeps} from "./deps.js";
 import path from "node:path";
 import {ProjectStudio, StudioError} from "../../../../core/workos/project-studio.js";
+import {intakeCommand, INTAKE_MAX_LENGTH} from "../../../../core/mission/command-intake.js";
 import {submitIntake, listIntakes, getIntake, validateIntakeCreate, IntakeError} from "../../../../core/workos/intake.js";
 
+export const COMMAND_INTAKE_PATH = "/v1/command-intake";
 const validIntakeId = (x: unknown) => typeof x === "string" && /^itk_[0-9a-f]{24}$/.test(x);
 
 export function registerIntakeRoutes(app: any, d: RouteDeps): void {
@@ -40,4 +42,13 @@ export function registerIntakeRoutes(app: any, d: RouteDeps): void {
     d.audit(r.replayed ? "WORKOS_IDEMPOTENT_REPLAY" : "WORKOS_INTAKE_CREATED", {actor: d.actor, kind: "intake", intakeId: r.intake.intakeId, projectId: r.intake.projectId, missionId: r.intake.missionId, ...(r.intake.template ? {template: r.intake.template} : {})});
     return reply.code(r.replayed ? 200 : 201).send({intake: r.intake});
   }));
+  // //TR: UASCO-T0010 komut girişi: tek alan -> saf DRAFT önerisi (asla yetkilendirmez, hiçbir şey yazmaz/yürütmez); belirsiz komutta netleştirme sorusu döner. Köken istemciden alınmaz, sunucu "CONTROL_API" atar.
+  app.post(COMMAND_INTAKE_PATH, {bodyLimit: LANE_WRITE_BODY_LIMIT}, async (req: any, reply: any) => {
+    const body = req.body;
+    if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some(k => k !== "text")) return reply.code(400).send({error: "INVALID_BODY", maxLength: INTAKE_MAX_LENGTH});
+    const r = intakeCommand(body.text, {origin: "CONTROL_API"});
+    if (!r.ok) return reply.code(400).send({error: r.code, maxLength: INTAKE_MAX_LENGTH});
+    d.audit("COMMAND_INTAKE_DRAFTED", {actor: d.actor, outcome: r.proposal.outcome, type: r.proposal.type, riskLevel: r.proposal.riskLevel});
+    return reply.code(200).send({proposal: r.proposal});
+  });
 }
