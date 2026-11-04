@@ -19,9 +19,10 @@ This record covers exactly one thing: the Claude Code cloud routine (scheduled t
 |---|---|---|
 | Trigger | `trig_01QEwrSwCvd8UCbKFn97MiHh`, created via `meta_mcp` (an agent can disable it; not `http_api`) | G6 §agents table; COORD-CLOSURE-LOG |
 | Schedule history | `11 * * * *` (hourly, 2026-10-18) → `11 */3 * * *` (every 3 h) | automation-governance.csv AG-003; G6 |
-| Original purpose | "UASCO cloud production heartbeat": hourly dispatch, recovery of abandoned claims (> 6 h, no PR), and a production log | AG-003; CLOUD_MIGRATION_MANIFEST L1, "Recovery" |
-| Later prompt | Report-only recovery classification: "you dispatch nothing" | G6 §summary ("Dispatch is dead…") |
-| Output | Direct pushes of `docs/cloud-production/reports/PRODUCTION-LOG.md` to the non-merging branch `uasco/production-reports` | AG-003; G1 §253; G6 |
+| Original purpose (AG-003, 2026-10-19) | "UASCO cloud production heartbeat": hourly dispatch, recovery of abandoned claims (> 6 h, no PR), and a production log | AG-003; CLOUD_MIGRATION_MANIFEST L1, "Recovery" |
+| Later prompt | Report-only recovery classification: "you dispatch nothing"; its dispatch authority is `docs/cloud-production/PRODUCTION-QUEUE.json` on branch `uasco/production-queue` | G6 §summary ("Dispatch is dead…"); current stored prompt (`get_trigger`, 2026-11-04, quoted in PR #332) |
+| Output (AG-003, 2026-10-19) | Appends to `docs/cloud-production/reports/PRODUCTION-LOG.md`, pushed directly to the non-merging branch `uasco/production-reports` | AG-003; G1 §253; G6 |
+| Output (current prompt) | Each run writes a NEW file `docs/cloud-production/reports/<YYYY-MM-DD>/HEARTBEAT-<HHMM>Z.md` on `uasco/production-reports`; `PRODUCTION-LOG.md` is a frozen archive the routine must never append to; report commits carry `[skip ci]` | current stored prompt (`get_trigger`, 2026-11-04, quoted in PR #332) |
 | Last report | commit `52e826ce`, 2026-11-02T03:12:19Z | G6 §271; UASCO_REMAINING_WORK.md B.1 |
 | Disabled | 2026-11-02T05:16:43Z by the coordinator (`enabled=false`) | UASCO_REMAINING_WORK.md B.2 / L table ("list_triggers ≈06:00Z VERIFIED"); G9 row 1 |
 
@@ -43,35 +44,36 @@ These other things are also called "heartbeat" in the repo. They are separate sy
    - The dispatch path was never exercised: the queue had 0 READY tasks (AG-003).
    - The later prompt says "you dispatch nothing", and all 16 queue tasks are INTEGRATED or TESTED (G6).
    - All builder and dispatch routines are disabled: the controller, Lane A/B/C ticks and both Production Builders (L table, ≈06:00Z 2026-11-02).
-3. **Its output is unreliable.** The AG-003 audit found that the routine:
+3. **Its output was unreliable.** The AG-003 audit (2026-10-19) found that the routine, as it was then:
    - read QUEUE.json from an unmerged PR branch, and so reported closed PRs #13 and #14 as active;
    - reported merged PRs as unmerged;
    - logged "Active implementer sessions: UNKNOWN" on every run;
    - did not use `docs/cloud-production/report.mjs` (CP-REPORT).
 
-   G6 also found two silent gaps of 77.4 h and 138.0 h.
+   The current prompt fixes the first point: it reads `PRODUCTION-QUEUE.json` on `uasco/production-queue`, not QUEUE.json from an unmerged PR branch. Points two to four are not re-measured for the current prompt. G6 also found two silent gaps of 77.4 h and 138.0 h, which still hold for the 2026-10-18..11-02 history.
 4. **Cost and noise.**
    - Each run costs about $0.37 (n=1, measured: G6 §24, §199).
-   - Every report push triggered a full CI run (AG-003: runs 39193619224, 39188878062, 39184319260).
-   - The two report branches hold 37.3% of all commits since 2026-10-17 (G7 §83).
-5. **A daily schedule would not fix 1–3.** Running daily cuts cost and noise but still produces reports nobody reads, about stale queue state. An event-driven trigger (on PR merge or claim) does not exist in this repo. Building one is a new feature, which is outside T0116.
+   - Under the AG-003 prompt (2026-10-19), every report push triggered a full CI run (runs 39193619224, 39188878062, 39184319260). The current prompt marks report commits `[skip ci]`, so this no longer applies.
+   - `uasco/production-queue` and `uasco/production-reports` together hold 37.3% of all commits since 2026-10-17 (691 of 1,854; G7 §83). That figure covers both branches combined; it is not the heartbeat's share alone.
+5. **A daily schedule would not fix 1–2.** Running daily cuts cost and noise but still produces reports nobody reads. An event-driven trigger (on PR merge or claim) does not exist in this repo. Building one is a new feature, which is outside T0116.
 
 ## Consumers and the effect on each
 
 | Consumer | What it relied on | Effect of CLOSE |
 |---|---|---|
-| Coordinator session (human reader) | Ad-hoc reading of `PRODUCTION-LOG.md` on `uasco/production-reports` | None in practice. Status now lives in the canonical closure report (`docs/closure/uasco-remaining-work/`), the review ledger and the PR list. The coordinator writes a snapshot on demand. |
+| Coordinator session (human reader) | Ad-hoc reading of the heartbeat reports on `uasco/production-reports` (`PRODUCTION-LOG.md` until AG-003, 2026-10-19; per-run `reports/<YYYY-MM-DD>/HEARTBEAT-<HHMM>Z.md` files under the current prompt) | None in practice. Status now lives in the canonical closure report (`docs/closure/uasco-remaining-work/`), the review ledger and the PR list. The coordinator writes a snapshot on demand. |
 | Founder | The same branch, if opened manually | Same as the coordinator row. One run is available on request (Rollback, option 1). |
 | UASCO Cloud Development routine `trig_018vLbG82sUcp6ncPhRurka5` | Its prompt calls the heartbeat the "primary dispatcher" and says "no --claim while heartbeat owns dispatch" (G5 §22, §167; G6) | None at run time: the Founder disabled this routine at 2026-11-02T05:40:11Z (L table). If it is ever re-enabled, its prompt must stop citing the heartbeat first. That belongs to T0117 (routine prompt versioning). |
-| Abandoned-claim recovery (CLOUD_MIGRATION_MANIFEST "Recovery", step 2b) | Heartbeat resumed a claim older than 6 h with no PR | No automatic recovery exists any more; claims are recovered manually by the coordinator. `docs/cloud-production/CLOUD_MIGRATION_MANIFEST.md` L1 and "Recovery" still describe the heartbeat as the recovery path. That text is now stale. Correcting it is a follow-up, because the file is outside this task's target set. |
-| GitHub Actions CI | Every report push triggered CI | Fewer wasted CI runs. Nothing depends on those runs. |
+| Abandoned-claim recovery (CLOUD_MIGRATION_MANIFEST "Recovery", step 2b) | Heartbeat resumed a claim older than 6 h with no PR | No automatic recovery exists any more; claims are recovered manually by the coordinator. `docs/cloud-production/CLOUD_MIGRATION_MANIFEST.md` L1, backlog selection and "Recovery" now say the same (updated in the follow-up commit that stacks on this record). |
+| GitHub Actions CI | Under AG-003 (2026-10-19), every report push triggered CI; the current prompt uses `[skip ci]` | None now. The CI cost was already removed by `[skip ci]`; nothing depends on those runs. |
+| `docs/planning/cloud-only/HANDOVER_RECONCILIATION_2026-11-02.md` (L18, L27) | Names `uasco/production-reports` as the canonical copy of `docs/closure/uasco-remaining-work/` | None. That use is the closure report family, not heartbeat output, and the branch is kept. Closing the heartbeat only stops new `HEARTBEAT-*.md` files there. |
 | `docs/cloud-production/report.mjs` (CP-REPORT) | Not used by the heartbeat (AG-003) | None. |
 
 ## Live state: what is verified and what is not
 
 - **VERIFIED (2026-11-02):** `enabled=false` at 05:16:43Z, and still disabled at about 06:00Z. The source is `list_triggers` as recorded in the closure report. A later `list_triggers` call, made after 05:40Z, showed all 11 routines with `enabled=false` (G9 row 1).
-- **UNVERIFIED (2026-11-04):** the routine's current state. Trigger state cannot be read from the repository, and this record was written without `list_triggers` or `get_trigger` access. Before this record is relied on, an operator must run `get_trigger trig_01QEwrSwCvd8UCbKFn97MiHh` and confirm `enabled=false`. If it is enabled, disable it with `update_trigger trig_01QEwrSwCvd8UCbKFn97MiHh enabled=false`. This is allowed because the routine was created via `meta_mcp`.
-- **UNVERIFIED:** the routine's exact current prompt text. It is not stored in the repository. Versioning it is T0117 (RW-020).
+- **VERIFIED (2026-11-04, read-only `get_trigger` by the coordinator, recorded in PR #332):** `enabled=false`; cron `11 */3 * * *`; updated 2026-11-02T05:16:43Z; last run 2026-11-02T03:11:26Z, SUCCEEDED; `created_via` `meta_mcp`. If a later check finds it enabled, disable it with `update_trigger trig_01QEwrSwCvd8UCbKFn97MiHh enabled=false`, which is allowed because it was created via `meta_mcp`.
+- **Not in the repository:** the routine's exact prompt text. It was read with `get_trigger` on 2026-11-04 and is quoted in the PR #332 body. Versioning it in the repo is T0117 (RW-020).
 
 ## Rollback
 
@@ -83,6 +85,6 @@ All rollback options are trigger API calls. No repository change is needed.
 
 Before option 2 or 3, also check two things:
 - Is a consumer actually named? If not, the reasons above still hold.
-- Does the stored prompt still read QUEUE.json from an unmerged branch? See reason 3.
+- Does the stored prompt still read QUEUE.json from an unmerged branch? Answered 2026-11-04: no. The current prompt reads `PRODUCTION-QUEUE.json` on `uasco/production-queue`. Check it again with `get_trigger` before re-enabling, because the prompt is not yet versioned in the repo (T0117).
 
 To undo this decision record itself, revert the commit that adds `docs/routines/heartbeat.md`.
