@@ -817,11 +817,12 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
   // yeniden üretilir. (1) writerState ALIVE ile kimlik sorgusu arasında yazar biter (ya da pid'i kısa ömürlü bir sürece geçip o da biter): belirteç null; düzeltme öncesi bu
   // KALICI "identity cannot be proven" -> RECOVERY_FAILED idi. (2) Sahip kaydı Windows paylaşım ihlaliyle (EPERM/EBUSY/EACCES) geçici olarak okunamaz: düzeltme öncesi
   // "owner record unreadable" -> devirde KALICI RECOVERY_FAILED ve sürüşte (guardWorkspace) sahte fence idi.
-  const asWin32 = async <T>(body: () => Promise<T>): Promise<T> => {
+  const asPlatform = async <T>(platform: NodeJS.Platform, body: () => Promise<T> | T): Promise<T> => {
     const plat = Object.getOwnPropertyDescriptor(process, "platform")!;
-    Object.defineProperty(process, "platform", {...plat, value: "win32"});
+    Object.defineProperty(process, "platform", {...plat, value: platform});
     try { return await body(); } finally { Object.defineProperty(process, "platform", plat); }
   };
+  const asWin32 = <T>(body: () => Promise<T> | T): Promise<T> => asPlatform("win32", body);
   const ownerRec = (over: Record<string, unknown> = {}) => ({leaseId: "lse_old", engineId: "engine_old", hostname: os.hostname(), pid: 1, childPgid: 4242, childStart: "638000000000000000", step: "IMPLEMENT", at: new Date().toISOString(), bootId: null, ...over});
   type Reap = {problem: string | null; note: string; transient?: true};
 
@@ -851,21 +852,45 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
     const c = setup("ownread"), runId = "run_" + "0".repeat(24);
     const file = path.join(c.dataDir, "runs", runId, G.OWNER_FILE), rec = ownerRec();
     G.writeOwner(file, rec as never);
-    const real = fs.readFileSync.bind(fs); let fails = 0, calls = 0;
+    const real = fs.readFileSync.bind(fs); let fails = 0, calls = 0, errno = "EPERM";
     const spy = vi.spyOn(fs, "readFileSync").mockImplementation(((p: fs.PathOrFileDescriptor, ...a: unknown[]) => {
-      if (p === file) { calls++; if (fails > 0) { fails--; throw Object.assign(new Error("EPERM: operation not permitted (simulated sharing violation)"), {code: "EPERM"}); } }
+      if (p === file) { calls++; if (fails > 0) { fails--; throw Object.assign(new Error(`${errno}: simulated read failure`), {code: errno}); } }
       return (real as (...x: unknown[]) => unknown)(p, ...a);
     }) as typeof fs.readFileSync);
+    const read = (platform: NodeJS.Platform) => asPlatform(platform, () => G.readOwner(file));
     try {
       fails = 2; calls = 0;
-      expect(G.readOwner(file)).toEqual({kind: "OK", rec});
+      expect(await read("win32")).toEqual({kind: "OK", rec});
       expect(calls, "two failed reads, then the successful one").toBe(3);
       fails = 1_000; calls = 0;
-      expect(G.readOwner(file)).toEqual({kind: "INVALID", why: "owner record unreadable (EPERM)", mtimeMs: null, transient: true});
+      expect(await read("win32")).toEqual({kind: "INVALID", why: "owner record unreadable (EPERM)", mtimeMs: null, transient: true});
       expect(calls, "bounded: OWNER_READ_ATTEMPTS reads, no endless loop").toBe(G.OWNER_READ_ATTEMPTS);
       const runner = c.runner({executors: c.base}) as unknown as {reapPriorWriter(run: {runId: string}, leaseId: string): Promise<Reap>};
       fails = 1_000;
       expect(await asWin32(() => runner.reapPriorWriter({runId}, "lse_new"))).toEqual({problem: "WORKSPACE_WRITER_ALIVE", note: "owner record unreadable (EPERM)", transient: true});
+      // N2 (#313 review, kills the "every errno is transient" mutant): an errno outside the allow-list is read ONCE and is a hard INVALID, also on win32
+      errno = "EIO"; fails = 1_000; calls = 0;
+      expect(await read("win32")).toEqual({kind: "INVALID", why: "owner record unreadable (EIO)", mtimeMs: null});
+      expect(calls, "no re-read for a non-transient errno").toBe(1);
+      // N1 (#313 review): on POSIX EPERM/EACCES is a persistent permission problem: one read, not transient, and the errno reaches the terminal takeover note
+      for (const [platform, code] of [["linux", "EPERM"], ["darwin", "EACCES"]] as const) {
+        errno = code; fails = 1_000; calls = 0;
+        expect([platform, await read(platform)]).toEqual([platform, {kind: "INVALID", why: `owner record unreadable (${code})`, mtimeMs: null}]);
+        expect([platform, calls]).toEqual([platform, 1]);
+        fails = 1_000;
+        expect([platform, await asPlatform(platform, () => runner.reapPriorWriter({runId}, "lse_new"))]).toEqual([platform, {problem: "WORKSPACE_WRITER_ALIVE", note: `owner record unreadable (${code})`}]);
+      }
+      // N3 (#313 review): the drive path never fails open: with the owner record of THIS lease persistently unreadable, guardWorkspace and recordChild still fence
+      const drv = runner as unknown as {guardWorkspace(run: {runId: string}, leaseId: string): void; recordChild(run: {runId: string}, leaseId: string, c: {pid: number; pgid?: number}): string | null};
+      for (const [platform, code] of [["win32", "EPERM"], ["win32", "EBUSY"], ["linux", "EPERM"]] as const) {
+        errno = code; fails = 1_000;
+        await asPlatform(platform, () => {
+          expect(() => drv.guardWorkspace({runId}, "lse_old"), `${platform}/${code}`).toThrow(/WORKOS_LEASE_FENCED/);
+          expect(() => drv.recordChild({runId}, "lse_old", {pid: 4242, pgid: 4242}), `${platform}/${code}`).toThrow(/WORKOS_LEASE_FENCED/);
+        });
+      }
+      fails = 0; // control: the same lease with a readable record is NOT fenced
+      expect(() => drv.guardWorkspace({runId}, "lse_old")).not.toThrow();
     } finally { spy.mockRestore(); }
     fs.writeFileSync(file, "{\"leaseId\": \"lse_o"); // torn write: not transient
     const torn = G.readOwner(file);
