@@ -20,6 +20,7 @@ import {registerCloudProviderRoutingCases} from "./support/cloud-provider-routin
 import {registerCrewCoordinatorCases} from "./support/crew-coordinator.cases.js"; // UASCO-T0045 CrewCoordinator/composeTeam AC bağlama vakaları
 import {registerLeaseClaimsCases} from "./support/lease-claims.cases.js";   // UASCO-T0050 pkg-lease1 claim ref / çakışma / çift claim vakaları
 import {registerOmniRouteClientCases} from "./support/omniroute-client.cases.js"; // UASCO-T0065 OmniRoute keşif istemcisi loopback vakaları
+import {registerTemplateLockfileCases} from "./support/template-lockfile.cases.js"; // V3-T1012.a şablon kilit dosyası / npm ci && npm test vakaları
 
 const SIGNING_FIXTURE="test-scope-key-".repeat(3);
 const now=new Date("2026-11-02T12:00:00Z");
@@ -176,3 +177,4 @@ registerCloudArtifactsCases();
 registerCrewCoordinatorCases();
 registerLeaseClaimsCases();
 registerOmniRouteClientCases();
+registerTemplateLockfileCases();
