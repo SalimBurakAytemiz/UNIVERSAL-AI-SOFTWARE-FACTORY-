@@ -46,6 +46,7 @@ export type OwnerRead = {kind: "ABSENT"} | {kind: "OK"; rec: WorkspaceOwner} | {
 // //TR: UASCO-T0042 (PAR-04 Windows RCA): Windows'ta bir dosyanın okunması, başka bir tanıtıcı (virüs tarayıcı/dizinleyici, atomik değiştirmenin rename'i, eşzamanlı yazar) onu
 // tutarken geçici olarak EPERM/EBUSY/EACCES (paylaşım ihlali, silme-beklemede) verir. Bu "kayıt bozuk" DEĞİLDİR: okuma kısa, sınırlı bir beklemeyle yeniden denenir;
 // yine okunamazsa sonuç `transient` işaretlidir (çağıran fence/devri kalıcı başarısızlık yapmaz). Ayrıştırılamayan içerik (yırtık yazı) geçici değildir.
+// N1 (#313 incelemesi): bu yalnız win32'de geçerlidir; POSIX'te EACCES/EPERM bir izin sorunudur ve kalıcıdır (yeniden okunmaz, transient DEĞİL); errno gerekçede taşınır.
 export const OWNER_READ_TRANSIENT_CODES: ReadonlySet<string> = new Set(["EPERM", "EBUSY", "EACCES"]);
 export const OWNER_READ_ATTEMPTS = 4;
 const sleepSync = (ms: number) => { try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch { /* yok say */ } };
@@ -56,7 +57,7 @@ export function readOwner(file: string): OwnerRead {
     try { raw = fs.readFileSync(file, "utf8"); break; } catch (e) {
       const code = String((e as NodeJS.ErrnoException).code ?? "");
       if (code === "ENOENT") return {kind: "ABSENT"};
-      const transient = OWNER_READ_TRANSIENT_CODES.has(code);
+      const transient = process.platform === "win32" && OWNER_READ_TRANSIENT_CODES.has(code);
       if (!transient || attempt >= OWNER_READ_ATTEMPTS) return {kind: "INVALID", why: `owner record unreadable${code ? ` (${code})` : ""}`, mtimeMs: null, ...(transient ? {transient: true as const} : {})};
       sleepSync(25 * attempt); // en çok ~150 ms, yalnız okuma hatasında
     }
