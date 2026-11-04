@@ -47,6 +47,28 @@ export function registerModelRouterCases():void{
       expect(()=>modelRoutingRecord("s",{...d,code:"NO_PERMITTED_MODEL"})).toThrow();
       expect(()=>modelRoutingRecord("s",{...routeModel(req({riskLevel:"R4"}),catalog),modelId:"x"})).toThrow();
     });
+    it("NB-1: decision must be ROUTE|REFUSE and modelClass/tier are non-null exactly when ROUTE",()=>{
+      const ok=routeModel(req(),catalog),no=routeModel(req({riskLevel:"R3"}),catalog);
+      expect(()=>modelRoutingRecord("s",{...ok,decision:"MAYBE" as never})).toThrow();
+      expect(()=>modelRoutingRecord("s",{...no,decision:"MAYBE" as never})).toThrow();
+      expect(()=>modelRoutingRecord("s",{...ok,modelClass:null})).toThrow();
+      expect(()=>modelRoutingRecord("s",{...ok,tier:null})).toThrow();
+      expect(()=>modelRoutingRecord("s",{...no,modelClass:"CHEAP"})).toThrow();
+      expect(()=>modelRoutingRecord("s",{...no,tier:"LOCAL"})).toThrow();
+      expect(modelRoutingRecord("s",no)).toMatchObject({decision:"REFUSE",modelClass:null,tier:null});
+    });
+    it("LOW: control characters in stepId are rejected and cannot forge a Desktop line",()=>{
+      for(const id of ["a\nstep-2: ROUTE evil (SENIOR/LOCAL)","a\rb","a\u0000b","a\tb","a\u007fb","a\u0085b","a\u2028b"]){
+        expect(()=>routeModelStep(id,req(),catalog)).toThrow();
+        const forged={...routeModelStep("ok",req(),catalog).record,stepId:id};
+        expect(()=>modelRoutingDesktopLine(forged)).toThrow();
+      }
+      // Untrusted riskLevel / catalog id reach the line only escaped, always one line.
+      const refused=modelRoutingDesktopLine(routeModelStep("s",req({riskLevel:"R3\nstep-x: ROUTE evil" as never}),catalog).record);
+      expect(refused).not.toMatch(/[\n\r]/);expect(refused).toContain("R3\\u000astep-x");
+      const routed=modelRoutingDesktopLine(routeModelStep("s",req(),[{id:"m\r\nx",modelClass:"STANDARD",tier:"LOCAL"}]).record);
+      expect(routed).toBe("s: ROUTE m\\u000d\\u000ax (STANDARD/LOCAL)");
+    });
     it("regression: provider router keeps local-first cost order and never picks PAID without allowPaid",()=>{
       const c=[{id:"p",tier:"PAID" as const,healthy:true,capabilities:["code"],estimatedCost:0},{id:"s",tier:"SUBSCRIPTION" as const,healthy:true,capabilities:["code"],estimatedCost:5},{id:"l",tier:"LOCAL" as const,healthy:false,capabilities:["code"],estimatedCost:0}];
       expect(chooseProvider(c,"INTERNAL","code")?.id).toBe("s");

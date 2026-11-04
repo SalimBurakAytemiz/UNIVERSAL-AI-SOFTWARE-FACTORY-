@@ -89,10 +89,16 @@ export interface ModelRoutingRecord {
   kind: "MODEL_ROUTING_DECISION"; stepId: string;
   decision: ModelRouteDecision["decision"]; code: RouteCode; modelId: string | null; modelClass: ModelClass | null; tier: CostTier | null; reasons: readonly string[];
 }
+// //TR: Kontrol karakteri (\n, \r, C0/C1, DEL) içeren stepId Desktop satırını sahteleyebilir; fail-closed reddedilir.
+const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g;
+// //TR: Katalog id ve reasons (ör. ham riskLevel) dış girdiden gelebilir; Desktop satırında kontrol karakterleri \\uXXXX olarak kaçırılır.
+const escapeControl = (v: string): string => v.replace(CONTROL_CHARS, c => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
+const safeStepId = (v: unknown): v is string => nonEmpty(v) && v.search(CONTROL_CHARS) < 0;
 export function modelRoutingRecord(stepId: unknown, decision: ModelRouteDecision): ModelRoutingRecord {
-  if (!nonEmpty(stepId)) throw new Error("Model routing record requires a non-empty stepId");
+  if (!safeStepId(stepId)) throw new Error("Model routing record requires a non-empty stepId without control characters");
+  if (!oneOf(decision.decision, ["ROUTE", "REFUSE"] as const)) throw new Error("Model routing decision is inconsistent");
   const routed = decision.decision === "ROUTE";
-  if (routed !== (decision.code === "ROUTED") || routed !== nonEmpty(decision.modelId)) throw new Error("Model routing decision is inconsistent");
+  if (routed !== (decision.code === "ROUTED") || routed !== nonEmpty(decision.modelId) || routed !== (decision.modelClass !== null) || routed !== (decision.tier !== null)) throw new Error("Model routing decision is inconsistent");
   return Object.freeze({ kind: "MODEL_ROUTING_DECISION", stepId, decision: decision.decision, code: decision.code, modelId: decision.modelId,
     modelClass: decision.modelClass, tier: decision.tier, reasons: Object.freeze([...decision.reasons]) });
 }
@@ -101,5 +107,7 @@ export function routeModelStep(stepId: unknown, request: unknown, catalog: unkno
   const decision = routeModel(request, catalog);
   return { decision, record: modelRoutingRecord(stepId, decision) };
 }
-export const modelRoutingDesktopLine = (r: ModelRoutingRecord): string =>
-  r.decision === "ROUTE" ? `${r.stepId}: ROUTE ${r.modelId} (${r.modelClass}/${r.tier})` : `${r.stepId}: REFUSE ${r.code} — ${r.reasons.join("; ")}`;
+export const modelRoutingDesktopLine = (r: ModelRoutingRecord): string => {
+  if (!safeStepId(r.stepId)) throw new Error("Model routing record stepId is not displayable");
+  return r.decision === "ROUTE" ? `${r.stepId}: ROUTE ${escapeControl(String(r.modelId))} (${r.modelClass}/${r.tier})` : `${r.stepId}: REFUSE ${r.code} — ${escapeControl(r.reasons.join("; "))}`;
+};
