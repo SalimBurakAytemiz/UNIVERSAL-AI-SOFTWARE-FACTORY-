@@ -63,7 +63,7 @@
       "prs": [
         301
       ],
-      "note": "in review"
+      "note": "increment merged (#301: idempotent cloud task DAG orchestrator); doneMerge needs a real cloud predev/task dispatch/review-to-artifact E2E with no local agent (D-03 infrastructure)"
     },
     {
       "task": "CLOUD-T0015",
