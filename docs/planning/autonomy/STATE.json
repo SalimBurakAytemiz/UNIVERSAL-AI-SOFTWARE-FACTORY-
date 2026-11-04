@@ -70,7 +70,7 @@
       "prs": [
         304
       ],
-      "note": "in review"
+      "note": "increment merged (#304: provider routing with quota, fallback and circuit breaker); doneMerge needs a real cloud model request, auth deny and token usage evidence (D-03 infrastructure)"
     }
   ],
   "blocked": [
