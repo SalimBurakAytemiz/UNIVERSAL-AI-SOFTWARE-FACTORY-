@@ -10,7 +10,8 @@ import {createRequire} from "node:module";
 import {REQUIRED_CONTEXTS} from "../../../docs/planning/merge-gate.mjs";
 import {decide, preGate, validateVerdict, renderSummary, founderAuthorityOk, carriesSecret, negativeVerdict, verdictIsNegative, VERDICT_RESULTS, SEVERITIES, CLASSIFICATIONS, CHECK_KEYS, CHECK_NAME, FOUNDER_ENVIRONMENT,
   VERDICT_KEYS, FINDING_KEYS, canonical,
-  diagnoseReviewerOutput, reviewerFailureCode, REVIEWER_DIAGNOSTIC_CODES, REVIEWER_DIAGNOSTIC_KEYS, REVIEWER_REMEDIES, EXECUTION_FILE_MAX_BYTES} from "./review-gate.mjs";
+  diagnoseReviewerOutput, reviewerFailureCode, REVIEWER_DIAGNOSTIC_CODES, REVIEWER_DIAGNOSTIC_KEYS, REVIEWER_REMEDIES, EXECUTION_FILE_MAX_BYTES,
+  REVIEWER_AUTH_SUBCODES, REVIEWER_AUTH_REMEDIES, reviewerDetail} from "./review-gate.mjs";
 import {client, waitForCi, ciCheckRuns, diffPaths, sameChange, prDiff, priorNegativeVerdicts} from "./github.mjs";
 import {reviewerSchema, modelArg, apiSchema, API_UNSUPPORTED_KEYWORDS} from "./run.mjs";
 
@@ -126,13 +127,15 @@ const ALL_RECS = [];
 const dx = raw => { const rec = diagnoseReviewerOutput(raw); ALL_RECS.push(rec); return rec; };
 const codeOf = raw => dx(raw).code;
 const onlyKeys = rec => JSON.stringify(Object.keys(rec ?? {})) === JSON.stringify(REVIEWER_DIAGNOSTIC_KEYS) && REVIEWER_DIAGNOSTIC_CODES.includes(rec.code) && typeof rec.isError === "boolean"
-  && (rec.turns === null || Number.isSafeInteger(rec.turns)) && (rec.durationMs === null || Number.isSafeInteger(rec.durationMs)) && typeof rec.modelUsed === "boolean";
-const UNREADABLE_REC = JSON.stringify({code: "REVIEWER_OUTPUT_UNREADABLE", isError: true, turns: null, durationMs: null, modelUsed: false});
+  && (rec.turns === null || Number.isSafeInteger(rec.turns)) && (rec.durationMs === null || Number.isSafeInteger(rec.durationMs)) && typeof rec.modelUsed === "boolean"
+  && (rec.code === "REVIEWER_AUTH_REJECTED" ? REVIEWER_AUTH_SUBCODES.includes(rec.authSubcode) : rec.authSubcode === null)
+  && (rec.httpStatus === null || (Number.isSafeInteger(rec.httpStatus) && rec.httpStatus >= 400 && rec.httpStatus <= 599));
+const UNREADABLE_REC = JSON.stringify({code: "REVIEWER_OUTPUT_UNREADABLE", isError: true, turns: null, durationMs: null, modelUsed: false, authSubcode: null, httpStatus: null});
 const AUTH_TEXTS = ["Invalid API key · Please run /login", "OAuth token has expired. Please obtain a new token or refresh your existing token.", "Not logged in · Please run /login",
   'Failed to authenticate. API Error: 401 {"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}', "OAuth token revoked", "401 Unauthorized", "Please log in again."];
 check("R1 an auth error (the observed shape: error, 1 turn, 305 ms, no model usage) => REVIEWER_AUTH_REJECTED with only counts copied",
   AUTH_TEXTS.every(t => codeOf(execFile(errResult(t))) === "REVIEWER_AUTH_REJECTED")
-  && JSON.stringify(dx(execFile(errResult(AUTH_TEXTS[0])))) === JSON.stringify({code: "REVIEWER_AUTH_REJECTED", isError: true, turns: 1, durationMs: 305, modelUsed: false}));
+  && JSON.stringify(dx(execFile(errResult(AUTH_TEXTS[0])))) === JSON.stringify({code: "REVIEWER_AUTH_REJECTED", isError: true, turns: 1, durationMs: 305, modelUsed: false, authSubcode: "AUTH_TOKEN_INVALID", httpStatus: null}));
 const MODEL_TEXTS = ["There's an issue with the selected model (x-model). It may not exist or you may not have access to it. Run /model to pick a different model.",
   'API Error: 404 {"type":"error","error":{"type":"not_found_error","message":"model: x-model"}}', "model not found", "The model x-model does not exist", "Unknown model x-model"];
 check("R2 a model error => REVIEWER_MODEL_UNAVAILABLE", MODEL_TEXTS.every(t => codeOf(execFile(errResult(t))) === "REVIEWER_MODEL_UNAVAILABLE"));
@@ -144,7 +147,7 @@ const SCHEMA_TEXTS = ['API Error: 400 {"type":"error","error":{"type":"invalid_r
   "structured output is not supported for this request", "output_format: schema type not allowed"];
 check("R3b the API refusing the verdict schema (the observed shape: error, 1 turn, 305 ms, no model usage) => REVIEWER_SCHEMA_REJECTED",
   SCHEMA_TEXTS.every(t => codeOf(execFile(errResult(t))) === "REVIEWER_SCHEMA_REJECTED")
-  && JSON.stringify(dx(execFile(errResult(SCHEMA_TEXTS[0])))) === JSON.stringify({code: "REVIEWER_SCHEMA_REJECTED", isError: true, turns: 1, durationMs: 305, modelUsed: false}));
+  && JSON.stringify(dx(execFile(errResult(SCHEMA_TEXTS[0])))) === JSON.stringify({code: "REVIEWER_SCHEMA_REJECTED", isError: true, turns: 1, durationMs: 305, modelUsed: false, authSubcode: null, httpStatus: 400}));
 check("R3c schema refusal ranks after auth, model and quota and after a run that used the model; schema words without a refusal, or in a run without an error, change nothing",
   codeOf(execFile(errResult("Invalid API key · Please run /login (JSON schema error)"))) === "REVIEWER_AUTH_REJECTED"
   && codeOf(execFile(errResult("model not found; input_schema invalid"))) === "REVIEWER_MODEL_UNAVAILABLE"
@@ -165,7 +168,8 @@ check("R4 the reviewer ran but gave no structured output (turn limit, no output 
 check("R5 an error that matches no known cause => REVIEWER_ERROR_UNCLASSIFIED", codeOf(execFile(errResult("Something went wrong"))) === "REVIEWER_ERROR_UNCLASSIFIED"
   && codeOf(execFile(errResult(undefined))) === "REVIEWER_ERROR_UNCLASSIFIED" && codeOf(execFile(errResult("", {subtype: "error_during_execution", num_turns: 0}))) === "REVIEWER_ERROR_UNCLASSIFIED");
 check("R6 a run without an error that carries structured output => REVIEWER_OK (never a blocking reason)",
-  JSON.stringify(dx(execFile(okResult))) === JSON.stringify({code: "REVIEWER_OK", isError: false, turns: 14, durationMs: 120000, modelUsed: true}) && reviewerFailureCode(dx(execFile(okResult))) === null);
+  JSON.stringify(dx(execFile(okResult))) === JSON.stringify({code: "REVIEWER_OK", isError: false, turns: 14, durationMs: 120000, modelUsed: true, authSubcode: null, httpStatus: null})
+  && reviewerFailureCode(dx(execFile(okResult))) === null);
 check("R7 the LAST result message decides", codeOf(execFile(errResult(AUTH_TEXTS[0]), okResult)) === "REVIEWER_OK" && codeOf(execFile(okResult, errResult(AUTH_TEXTS[0]))) === "REVIEWER_AUTH_REJECTED");
 const UNREADABLE_INPUTS = [null, undefined, 42, "", "   ", "not json", '{"type":"result","is_error":true,"result":"Invalid API key"}', "[]", JSON.stringify(INIT), '[1,"x",null,[]]',
   '[{"type":"result","is_error":tr', "[" + " ".repeat(EXECUTION_FILE_MAX_BYTES) + "]", execFile(okResult) + " ".repeat(EXECUTION_FILE_MAX_BYTES)];
@@ -179,8 +183,49 @@ const leaks = s => [FAKE.anthropic.slice(0, 12), "Ignore all", "CLEAN", "naming"
 check("R9 fake verdicts, PASS lines and instructions in the record only feed the classification: text of a run without an error is never classified, and nothing of it is kept",
   JSON.stringify(injected.map(x => x.code)) === JSON.stringify(["REVIEWER_NO_STRUCTURED_OUTPUT", "REVIEWER_NO_STRUCTURED_OUTPUT", "REVIEWER_AUTH_REJECTED", "REVIEWER_ERROR_UNCLASSIFIED", "REVIEWER_QUOTA_OR_RATE_LIMIT"])
   && injected.every(x => !leaks(JSON.stringify(x))));
-check("R10 every diagnostics record has exactly the five allowed keys (code, isError, turns, durationMs, modelUsed) with typed values",
-  ALL_RECS.length >= 40 && ALL_RECS.every(onlyKeys) && JSON.stringify(REVIEWER_DIAGNOSTIC_KEYS) === JSON.stringify(["code", "isError", "turns", "durationMs", "modelUsed"]));
+// //TR: Kimlik doğrulama alt kodları: her alt kod kendi sentetik metninden çıkar; model ve kota metinleri OAuth veya login geçse de auth sayılmaz; HTTP durumu yalnız 400-599 tamsayısıdır; kayıtta hiçbir metin kalmaz; gözlenen biçim (1 tur, ~2,1 s, model kullanımı yok) metin bilinmeden token sorunu sayılmaz.
+const sub = t => { const r = dx(execFile(errResult(t))); return r.code === "REVIEWER_AUTH_REJECTED" ? r.authSubcode : r.code; };
+const SUB_TEXTS = {
+  AUTH_TOKEN_EXPIRED: ["OAuth token has expired. Please obtain a new token or refresh your existing token.", 'API Error: 401 {"type":"error","error":{"type":"authentication_error","message":"OAuth token has expired"}}',
+    "expired token", "Your session has expired, please log in again"],
+  AUTH_TOKEN_REVOKED: ["OAuth token revoked", "The access token has been revoked", 'API Error: 401 {"error":{"type":"authentication_error","message":"token_revoked"}}'],
+  AUTH_TOKEN_INVALID: ["Invalid API key · Please run /login", 'Failed to authenticate. API Error: 401 {"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}',
+    "Invalid bearer token", "invalid_token: malformed token", "Invalid OAuth token"],
+  AUTH_NOT_LOGGED_IN: ["Not logged in · Please run /login", "Please log in again.", "Please run /login to authenticate", "No API key found. Please log in"],
+  AUTH_OAUTH_FLOW_UNSUPPORTED: ['API Error: 401 {"type":"error","error":{"type":"authentication_error","message":"OAuth authentication is currently not supported."}}',
+    'API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"This credential is only authorized for use with Claude Code and cannot be used for other API requests."}}'],
+  AUTH_FORBIDDEN: ['API Error: 403 {"type":"error","error":{"type":"permission_error","message":"Your account does not have permission"}}', "403 Forbidden",
+    "Authentication succeeded but your organization has disabled Claude Code", "OAuth: your plan does not include Claude Code"],
+  AUTH_UNSPECIFIED: ["401 Unauthorized", "authentication_error", "Failed to authenticate", "OAuth error", "Login failed"]};
+check("R11 each auth subcode follows from its own error text (EXPIRED, REVOKED, INVALID, NOT_LOGGED_IN, OAUTH_FLOW_UNSUPPORTED, FORBIDDEN, UNSPECIFIED)",
+  JSON.stringify(Object.keys(SUB_TEXTS)) === JSON.stringify(REVIEWER_AUTH_SUBCODES) && Object.entries(SUB_TEXTS).every(([c, ts]) => ts.every(t => sub(t) === c)));
+check("R12 model access and limits rank before the broad OAuth/login words: a model not available to this OAuth token is MODEL_UNAVAILABLE; 429, 529 and quota phrases are QUOTA even beside auth words",
+  sub("The model claude-x is not available to this OAuth token") === "REVIEWER_MODEL_UNAVAILABLE" && sub("There's an issue with the selected model (x). Run /login or /model") === "REVIEWER_MODEL_UNAVAILABLE"
+  && sub("OAuth usage limit reached") === "REVIEWER_QUOTA_OR_RATE_LIMIT" && sub('API Error: 429 {"error":{"type":"rate_limit_error"}} please log in') === "REVIEWER_QUOTA_OR_RATE_LIMIT"
+  && sub("API Error: 529 authentication pending") === "REVIEWER_QUOTA_OR_RATE_LIMIT" && sub("HTTP 429 from oauth endpoint") === "REVIEWER_QUOTA_OR_RATE_LIMIT"
+  && sub("Credit balance is too low; invalid api key") === "REVIEWER_QUOTA_OR_RATE_LIMIT" && sub("Invalid API key · Please run /login (JSON schema error)") === "AUTH_TOKEN_INVALID");
+const st = t => dx(execFile(errResult(t))).httpStatus;
+check("R13 httpStatus is the first status 400-599 (a labelled one first), else null; never a duration, a timestamp or a 2xx/3xx",
+  st("API Error: 401 x") === 401 && st("took 404 tries then status 403") === 403 && st("401 Unauthorized") === 401 && st("HTTP/1.1 502 Bad Gateway") === 502
+  && st("Something went wrong") === null && st("status 200, retry in 305 ms") === null && st("limit reached|1760000000") === null && st("v1.4.401 failed at 12:404") === null
+  && st("API Error: 600 x") === null && dx(execFile({...okResult, result: "API Error: 401"})).httpStatus === null);
+{
+  const SECRETISH = `${INJECT}\n${FAKE.anthropic}\nAuthorization: Bearer ${FAKE.anthropic}`;
+  const recs = [...Object.values(SUB_TEXTS).flat(), ...MODEL_TEXTS, ...QUOTA_TEXTS, ...SCHEMA_TEXTS].map(t => dx(execFile(errResult(`${SECRETISH}\n${t}`), )));
+  check("R14 no text leaks: with an injected verdict, a credential shape and an Authorization header in the error text, each record holds only fixed codes, booleans and integers",
+    recs.every(r => onlyKeys(r) && !leaks(JSON.stringify(r)) && !JSON.stringify(r).includes("Bearer") && Object.entries(r).every(([k, v]) => v === null || typeof v === "boolean"
+      || Number.isSafeInteger(v) || (k === "code" ? REVIEWER_DIAGNOSTIC_CODES : REVIEWER_AUTH_SUBCODES).includes(v))));
+}
+{
+  // The observed failure (runs 39691167453 ... 41784906521): is_error, 1 turn, ~2100-2250 ms, empty modelUsage, cost 0, the error text never published.
+  const obs = (t, ms) => dx(execFile(errResult(t, {duration_ms: ms})));
+  const u = obs("Something went wrong", 2150), j = obs("--json-schema was provided but Claude did not return structured_output", 2250), o = obs("OAuth request failed", 2100);
+  check("R15 the observed shape alone proves nothing about the token: an unknown text is UNCLASSIFIED, a bare OAuth mention is AUTH_UNSPECIFIED, whose remedy asks for no token rotation",
+    u.code === "REVIEWER_ERROR_UNCLASSIFIED" && u.authSubcode === null && u.turns === 1 && u.durationMs === 2150 && u.modelUsed === false && j.code === "REVIEWER_ERROR_UNCLASSIFIED"
+    && o.code === "REVIEWER_AUTH_REJECTED" && o.authSubcode === "AUTH_UNSPECIFIED" && !/regenerate|setup-token/i.test(REVIEWER_AUTH_REMEDIES[o.authSubcode]));
+}
+check("R10 every diagnostics record has exactly the seven allowed keys (code, isError, turns, durationMs, modelUsed, authSubcode, httpStatus) with typed values",
+  ALL_RECS.length >= 40 && ALL_RECS.every(onlyKeys) && JSON.stringify(REVIEWER_DIAGNOSTIC_KEYS) === JSON.stringify(["code", "isError", "turns", "durationMs", "modelUsed", "authSubcode", "httpStatus"]));
 const FAIL_CODES = REVIEWER_DIAGNOSTIC_CODES.filter(c => c !== "REVIEWER_OK");
 const diagRec = code => ({code, isError: true, turns: 1, durationMs: 305, modelUsed: false});
 const miss = D({verdict: null}), missA = D({verdict: null, diag: diagRec("REVIEWER_AUTH_REJECTED")});
@@ -229,11 +274,30 @@ check("G43b a valid positive verdict whose decision fails for another reason (st
 }
 {
   const sm = renderSummary(missA);
-  check("G45 the check summary gives each failure code its fixed remedy (AUTH: claude setup-token into CLAUDE_CODE_OAUTH_TOKEN); no diagnosis, no remedy line",
-    sm.includes("Reviewer diagnosis `REVIEWER_AUTH_REJECTED`: " + REVIEWER_REMEDIES.REVIEWER_AUTH_REJECTED) && /claude setup-token\) into the review environment secret CLAUDE_CODE_OAUTH_TOKEN/.test(sm)
+  // Changed: an AUTH code without a proven subcode used to ask for a new token (claude setup-token). That was the misclassification; it is now AUTH_UNSPECIFIED.
+  check("G45 the check summary gives each failure code its fixed remedy (AUTH without a subcode: AUTH_UNSPECIFIED, cause not proven, no token rotation); no diagnosis, no remedy line",
+    sm.includes("Reviewer diagnosis `REVIEWER_AUTH_REJECTED` (`AUTH_UNSPECIFIED`): " + REVIEWER_REMEDIES.REVIEWER_AUTH_REJECTED) && !/setup-token|Regenerate/.test(sm) && /not proven/.test(sm)
     && FAIL_CODES.every(c => (t => typeof t === "string")(REVIEWER_REMEDIES[c]) && renderSummary(D({verdict: null, diag: diagRec(c)})).includes(REVIEWER_REMEDIES[c]))
     && !renderSummary(miss).includes("Reviewer diagnosis") && !renderSummary(ok).includes("Reviewer diagnosis") && JSON.stringify(Object.keys(REVIEWER_REMEDIES)) === JSON.stringify(FAIL_CODES)
     && Object.values(REVIEWER_REMEDIES).every(t => !/[@|<>`\r\n]/.test(t)));
+  // //TR: Alt koda göre çözüm: yalnız EXPIRED, REVOKED ve INVALID token yenilemeyi önerir; alt kod ve HTTP durumu karar kaydına ve kontrol özetine yalnız sabit değer olarak geçer; bilinmeyen alt kod UNSPECIFIED sayılır.
+  const REGEN_RE = /Regenerate the reviewer token \(claude setup-token\)/, R = REVIEWER_AUTH_REMEDIES;
+  const withSub = (s, h = 401) => D({verdict: null, diag: {...diagRec("REVIEWER_AUTH_REJECTED"), authSubcode: s, httpStatus: h}});
+  check("G49 the remedy follows the subcode: only EXPIRED, REVOKED and INVALID ask for a new token; NOT_LOGGED_IN points at the secret and the claude_code_oauth_token input; OAUTH_FLOW_UNSUPPORTED and FORBIDDEN at the auth method, plan and model access; UNSPECIFIED says the cause is not proven",
+    JSON.stringify(Object.keys(R)) === JSON.stringify(REVIEWER_AUTH_SUBCODES) && REVIEWER_AUTH_SUBCODES.every(s => REGEN_RE.test(R[s]) === ["AUTH_TOKEN_EXPIRED", "AUTH_TOKEN_REVOKED", "AUTH_TOKEN_INVALID"].includes(s))
+    && /CLAUDE_CODE_OAUTH_TOKEN/.test(R.AUTH_NOT_LOGGED_IN) && /claude_code_oauth_token/.test(R.AUTH_NOT_LOGGED_IN) && /no token rotation/.test(R.AUTH_NOT_LOGGED_IN)
+    && ["AUTH_OAUTH_FLOW_UNSUPPORTED", "AUTH_FORBIDDEN"].every(s => /auth method|plan/.test(R[s]) && /model access/.test(R[s])) && /plan/.test(R.AUTH_OAUTH_FLOW_UNSUPPORTED)
+    && /not proven/.test(R.AUTH_UNSPECIFIED) && /Do not rotate the reviewer token without evidence/.test(R.AUTH_UNSPECIFIED) && Object.values(R).every(t => !/[@|<>`\r\n]/.test(t))
+    && REVIEWER_AUTH_SUBCODES.every(s => renderSummary(withSub(s)).includes(`Reviewer diagnosis \`REVIEWER_AUTH_REJECTED\` (\`${s}\`, HTTP 401): ${R[s]}`)));
+  check("G50 the decision record carries reviewerDiagnosis {code, authSubcode, httpStatus} only when the code was appended; an unknown subcode or a bad status is normalised (UNSPECIFIED, null); the reasons stay the bare code",
+    same(withSub("AUTH_NOT_LOGGED_IN").reviewerDiagnosis, {code: "REVIEWER_AUTH_REJECTED", authSubcode: "AUTH_NOT_LOGGED_IN", httpStatus: 401})
+    && same(withSub("AUTH_TOKEN_FAKE", 200).reviewerDiagnosis, {code: "REVIEWER_AUTH_REJECTED", authSubcode: "AUTH_UNSPECIFIED", httpStatus: null})
+    && same(withSub(" AUTH_TOKEN_EXPIRED", "401").reviewerDiagnosis, {code: "REVIEWER_AUTH_REJECTED", authSubcode: "AUTH_UNSPECIFIED", httpStatus: null})
+    && same(D({verdict: null, diag: {...diagRec("REVIEWER_QUOTA_OR_RATE_LIMIT"), authSubcode: "AUTH_TOKEN_EXPIRED", httpStatus: 429}}).reviewerDiagnosis, {code: "REVIEWER_QUOTA_OR_RATE_LIMIT", authSubcode: null, httpStatus: 429})
+    && !("reviewerDiagnosis" in miss) && !("reviewerDiagnosis" in ok) && !("reviewerDiagnosis" in D({diag: diagRec("REVIEWER_AUTH_REJECTED")}))
+    && same(withSub("AUTH_TOKEN_EXPIRED").reasons, missA.reasons) && withSub("AUTH_TOKEN_EXPIRED").digest !== withSub("AUTH_NOT_LOGGED_IN").digest
+    && reviewerDetail(null) === null && reviewerDetail({code: "REVIEWER_OK"}) === null
+    && !renderSummary({...withSub("AUTH_TOKEN_EXPIRED"), reviewerDiagnosis: {code: "REVIEWER_AUTH_REJECTED", authSubcode: "<b>x</b>", httpStatus: 1e9}}).includes("<b>"));
   check("G46 the schema-refusal remedy points at the schema in scripts/ci/uasco-review and says no credential change is needed; the code is added only when no verdict was delivered",
     /refused the verdict schema/.test(REVIEWER_REMEDIES.REVIEWER_SCHEMA_REJECTED) && REVIEWER_REMEDIES.REVIEWER_SCHEMA_REJECTED.includes("scripts/ci/uasco-review")
     && /no credential change is needed/.test(REVIEWER_REMEDIES.REVIEWER_SCHEMA_REJECTED) && !REVIEWER_REMEDIES.REVIEWER_SCHEMA_REJECTED.includes("CLAUDE_CODE_OAUTH_TOKEN")
@@ -687,8 +751,8 @@ const green = [{name: UBU, status: "completed", conclusion: "success"}, {name: W
   const r1 = await runPhase("reviewer-diagnose", {EXECUTION_FILE: exf, UASCO_VERDICT_DIR: vdir, GITHUB_STEP_SUMMARY: sumf});
   const written = fs.readFileSync(path.join(vdir, "reviewer-diagnostics.json"), "utf8"), summary = fs.readFileSync(sumf, "utf8");
   const leakedE = s => leaks(s) || s.includes("login");
-  check("E21 reviewer-diagnose writes only the five-key record and one fixed summary line; no text of the execution record reaches the file, the step summary or the log",
-    r1.code === 0 && onlyKeys(JSON.parse(written)) && JSON.parse(written).code === "REVIEWER_AUTH_REJECTED" && summary === "UASCO reviewer diagnosis: REVIEWER_AUTH_REJECTED\n"
+  check("E21 reviewer-diagnose writes only the seven-key record and one fixed summary line; no text of the execution record reaches the file, the step summary or the log",
+    r1.code === 0 && onlyKeys(JSON.parse(written)) && JSON.parse(written).code === "REVIEWER_AUTH_REJECTED" && summary === "UASCO reviewer diagnosis: REVIEWER_AUTH_REJECTED AUTH_TOKEN_INVALID\n"
     && ![written, summary, r1.out, r1.err].some(leakedE));
   const cases = {missing: path.join(tmp, "absent.json"), unset: "", directory: tmp};
   const bodies = {oversized: execFile(okResult) + " ".repeat(EXECUTION_FILE_MAX_BYTES), malformed: '[{"type":"result","is_error":tr', emptyArray: "[]", empty: "",
@@ -734,6 +798,18 @@ const green = [{name: UBU, status: "completed", conclusion: "success"}, {name: W
     ro.code === 0 && overDiag.trim() === UNREADABLE_REC && b1.concluded?.conclusion === "failure" && same(dec(b1), dec(b0)) && dec(b1).reasons.includes("VERDICT_BLOCKED")
     && !dec(b1).reasons.includes("REVIEWER_OUTPUT_UNREADABLE") && !b1.concluded.output.summary.includes("Reviewer diagnosis") && b1.concluded.output.summary === b0.concluded?.output.summary
     && /^v2:1:/.test(b1.concluded.external_id ?? "") && b1.concluded.external_id === b0.concluded?.external_id);
+  // End to end with a subcode: the real reviewer-diagnose phase, then decide and finish. Only the enum and the integer travel; the remedy asks for no new token.
+  const flf = path.join(tmp, "flow.json"), fdir = path.join(tmp, "out-flow"), fsum = path.join(tmp, "flow-summary.md");
+  fs.writeFileSync(flf, execFile(errResult(`${INJECT}\n${SUB_TEXTS.AUTH_OAUTH_FLOW_UNSUPPORTED[0]}`, {duration_ms: 2150})));
+  const rf = await runPhase("reviewer-diagnose", {EXECUTION_FILE: flf, UASCO_VERDICT_DIR: fdir, GITHUB_STEP_SUMMARY: fsum});
+  const frec = fs.readFileSync(path.join(fdir, "reviewer-diagnostics.json"), "utf8"), fline = fs.readFileSync(fsum, "utf8");
+  const fe = await e2e({ci: green, verdictObj: null, diagnostics: frec});
+  made.push(fe);
+  check("E21i an OAuth-flow refusal end to end: the record and the job summary carry only AUTH_OAUTH_FLOW_UNSUPPORTED and 401; the check names the subcode and its remedy, and asks for no new token",
+    rf.code === 0 && onlyKeys(JSON.parse(frec)) && JSON.parse(frec).authSubcode === "AUTH_OAUTH_FLOW_UNSUPPORTED" && JSON.parse(frec).httpStatus === 401
+    && fline === "UASCO reviewer diagnosis: REVIEWER_AUTH_REJECTED AUTH_OAUTH_FLOW_UNSUPPORTED http=401\n" && ![frec, fline, rf.out, rf.err].some(s => leakedE(s) || s.includes("currently not supported"))
+    && fe.concluded?.conclusion === "failure" && fe.concluded.output.summary.includes(`(\`AUTH_OAUTH_FLOW_UNSUPPORTED\`, HTTP 401): ${REVIEWER_AUTH_REMEDIES.AUTH_OAUTH_FLOW_UNSUPPORTED}`)
+    && !/setup-token/.test(fe.concluded.output.summary) && JSON.stringify(dec(fe).reasons) === JSON.stringify([...dec(m0).reasons, "REVIEWER_AUTH_REJECTED"]) && /^v2:0:/.test(fe.concluded.external_id ?? ""));
   for (const x of [tmp, ...made.map(r => r.dir)]) fs.rmSync(x, {recursive: true, force: true});
 }
 {
