@@ -169,7 +169,9 @@ const POST_ROUTE_RES=[/^\/v1\/projects$/,/^\/v1\/missions$/,/^\/v1\/missions\/ms
   // COORD protected batch 3b (LANE-B-predev-decisions, LANE-A #197): pre-dev dizisini başlat ({}), bir taslağı onayla ({evidenceRefs}) veya reddet ({reason}); onaylayan her zaman sunucu aktörüdür, kapılar sunucuda (Global Stop 423, politika 403, sıkı gövde 400, bağımsız onaylayan/kanıt/faz sırası 409).
   /^\/v1\/missions\/msn_[0-9a-f]{24}\/predev\/start$/,/^\/v1\/missions\/msn_[0-9a-f]{24}\/predev\/artifacts\/pda_[0-9a-f]{24}\/(?:approve|reject)$/,
   // COORD korumalı paket 4b (LANE-A-analysis-allowlist, LANE-A-devrun-allowlist): analiz adımını üret ya da onaylı analizden görev planını oluştur ({}); teslim edilen ürünü başlat/durdur ({}); yeniden başlatma (restart) izinlenmez. Kapılar sunucuda (Global Stop 423, politika 403, sıkı gövde 400, sandbox yoksa 409).
-  /^\/v1\/missions\/msn_[0-9a-f]{24}\/analysis\/(?:step|plan)$/,/^\/v1\/work-runs\/run_[0-9a-f]{24}\/product\/(?:start|stop)$/];
+  /^\/v1\/missions\/msn_[0-9a-f]{24}\/analysis\/(?:step|plan)$/,/^\/v1\/work-runs\/run_[0-9a-f]{24}\/product\/(?:start|stop)$/,
+  // COORD korumalı (Founder kararı F, UASCO-T0010 / #312): komut girişi yalnız TASLAK öneri döndürür ({text}); hiçbir şey yazmaz, yetkilendirmez. Aynı kapılar: güvenilir gönderen, kimlik doğrulama, token ana süreçte, sıkı gövde 400.
+  /^\/v1\/command-intake$/];
 function desktopPostPathAllowed(value){
   return typeof value==="string"&&value.length<=128&&POST_ROUTE_RES.some(re=>re.test(value));
 }
