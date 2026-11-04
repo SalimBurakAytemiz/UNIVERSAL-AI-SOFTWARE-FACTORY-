@@ -14,6 +14,7 @@ import {
   CLOUD_CONTRACT_VERSION,MAX_JOB_TIMEOUT_MS,signScope,verifyScopeSignature,validateCloudJobRequest,verifyEventStream,verifyArtifact,
   auditRecordFor,canonicalJson,sha256Hex,type CloudJobRequest,type CloudJobEvent,type UnsignedScope,
 } from "../core/cloud/contracts.js";
+import {registerModelRouterCases} from "./support/model-router.cases.js";   // UASCO-T0062 routeModel karar kaydı vakaları
 import {registerCloudProviderRoutingCases} from "./support/cloud-provider-routing.cases.js"; // CLOUD-T0015 sağlayıcı yönlendirme/kota/fallback vakaları
 import {registerCrewCoordinatorCases} from "./support/crew-coordinator.cases.js"; // UASCO-T0045 CrewCoordinator/composeTeam AC bağlama vakaları
 
@@ -165,6 +166,7 @@ registerWorkosStoreIoCases();
 registerAutonomyCases();
 registerAutonomyExecutorCases();
 registerCommandIntakeCases();
+registerModelRouterCases();
 registerCloudProviderRoutingCases();
 registerCloudArtifactsCases();
 registerCrewCoordinatorCases();
