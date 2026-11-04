@@ -8,6 +8,7 @@
   - It does not edit `docs/planning/autonomy/task-index.json`, `standing-authority.json`, `merge-gate.mjs` or `autonomy.mjs`.
   - It does not change tiers, merge gates, doneMerge criteria or acceptance states.
   - It does not satisfy any review, CI or environment gate.
+- **What it is NOT:** no code reads this file. `merge-gate.mjs`, `autonomy.mjs` and `executor.mjs` do not read `docs/planning/authority/*`, so merging it creates **no automatic authority** of any kind. Each PR listed in §2 is still evaluated by the gate as it is today. Where the gate returns `FOUNDER_REQUIRED` (an unknown task id such as CLOUD-T0016, a reviewer exception, or a protected path), the PR still needs the Founder's own merge.
 - **How it is used:**
   - An independent reviewer judging `TASK_SCOPE_MISMATCH` for a PR in §2 reads the matrix `targetFiles` plus the additions in this record, once it is merged.
   - A PR that is merged under this record still reports only `CODE_MERGED`. It does not count as acceptance of its task.
@@ -25,13 +26,13 @@ This record makes each extension explicit and traceable, so it is neither hidden
 ### A. CLOUD-T0005: Windows .exe remote cloud client / Control UI (T1)
 - **Matrix targetFiles:** `NEW:apps/desktop/renderer/views/cloud-connection.js`.
 - **Added:**
-  - `apps/control-api/src/cloud/jobs.ts`: the read-only `list()` and `summary()` methods only. The queue semantics stay owned by CLOUD-T0003.
+  - `apps/control-api/src/cloud/jobs.ts`: limited to adding the read-only `list()`, `summary()` and their redaction helper (`redactJobMessage`). No change to submit, claim, complete, cancel, STOP or any other queue semantics is covered; those stay owned by CLOUD-T0003.
   - `NEW:apps/control-api/src/routes/cloud-jobs.ts`
   - `NEW:tests/support/cloud-jobs-status.cases.ts`
   - The 2-line registration in `tests/v7-cloud-contracts.test.ts`.
 - **Rationale:** the Desktop panel can show real job state only if the server exposes it. Without these files the panel can only show sample data, which is forbidden.
-- **Dependencies:** CLOUD-T0003 (queue) and CLOUD-T0004 (gateway). The protected wiring in `server.ts` and the `main.mjs` GET allow-list is a separate Founder-tier PR.
-- **Risk:** T1 to T2. The change is read-only and tenant-scoped. Lease, worker, scope, signature and idempotency data are never returned. Requirements:
+- **Dependencies:** CLOUD-T0004 (gateway; already in the matrix) and **CLOUD-T0003 (queue; added by this amendment)**. The protected wiring in `server.ts` and the `main.mjs` GET allow-list is a separate Founder-tier PR.
+- **Risk:** the task's authority tier stays **T1 (unchanged)**. The added code is read-only and tenant-scoped. Lease, worker, scope, signature and idempotency data are never returned. Requirements:
   - server-side redaction of worker messages;
   - negative tests showing that forged tenant headers and query parameters are ignored.
 - **Acceptance unchanged:** the doneMerge criterion (install, login, command, event streaming, download and stop on a Windows runner) is not met by this PR.
@@ -64,7 +65,8 @@ This record makes each extension explicit and traceable, so it is neither hidden
   - `NEW:apps/control-api/src/cloud/chain-host.ts`
   - `NEW:scripts/cloud-chain-host.mts`
   - the related cases under `tests/`.
-- **Dependencies:** CLOUD-T0002, CLOUD-T0003, CLOUD-T0010 and CLOUD-T0015 (code delivered or stacked).
+- **Dependencies (all new; the task itself is new):** CLOUD-T0002, CLOUD-T0003, CLOUD-T0010 and CLOUD-T0015 (code delivered or stacked).
+- **New files, explicitly:** `apps/control-api/src/cloud/chain-host.ts`, `scripts/cloud-chain-host.mts`, and new cases in `tests/cloud/acceptance-suite.mts` (an existing CLOUD-T0011 file; only new describe blocks are covered).
 - **Scope:** compose the existing real components in one local process:
   command intake → task DAG → cloud job queue → worker → sandbox adapter → artefact store → verified delivery.
 - **Fail-closed rules:**
