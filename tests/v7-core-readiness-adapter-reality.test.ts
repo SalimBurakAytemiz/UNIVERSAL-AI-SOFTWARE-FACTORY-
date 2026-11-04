@@ -406,7 +406,7 @@ describe("C-RDY-2a adapter-reality", () => {
     const names = fs.readdirSync(wfDir).filter(n => /\.ya?ml$/.test(n)).sort();
     const texts = readWorkflowTexts(REPO);
     expect(texts.length).toBe(names.length);
-    expect(names).toEqual(["ci.yml", "uasco-independent-review.yml", "windows-installer.yml"]);
+    expect(names).toEqual(["ci.yml", "uasco-independent-review.yml", "uasco-oauth-diagnose.yml", "windows-installer.yml"]);
     // //TR: İş akışlarında geçen kayıt-defteri/harita kimlikleri AÇIKÇA sabitlenir. gitleaks/trivy/playwright/semgrep hiçbir iş akışında geçmez; biri geçerse (ör. gitleaks/trivy'yi CI'a ekleyen bir PR, #251 gibi) bu pin adıyla patlar ve ciEvidence sınıfını gözden geçirmek gerekir.
     const ids = [...new Set([...loadRegistryAdapters(REPO).map(a => a.id), ...ADAPTER_REALITY_RECORDS.map(r => r.adapterId)])].sort();
     const mentions: Record<string, string[]> = {};
@@ -416,8 +416,8 @@ describe("C-RDY-2a adapter-reality", () => {
       if (hits.length > 0) mentions[id] = hits;
     }
     expect(mentions, messageDrift("a workflow now mentions another tool", "classify that tool's ciEvidence in adapter-reality.ts (REAL needs ciTokens that a workflow holds) and update this pin; do not leave a REAL claim without a token")).toEqual({
-      github: ["ci.yml", "uasco-independent-review.yml", "windows-installer.yml"],
-      node: ["ci.yml", "uasco-independent-review.yml", "windows-installer.yml"],
+      github: ["ci.yml", "uasco-independent-review.yml", "uasco-oauth-diagnose.yml", "windows-installer.yml"],
+      node: ["ci.yml", "uasco-independent-review.yml", "uasco-oauth-diagnose.yml", "windows-installer.yml"],
       npm: ["ci.yml", "windows-installer.yml"]
     });
     for (const tool of ["gitleaks", "trivy", "playwright", "semgrep", "omniroute"]) expect(real(tool).ciEvidence, tool).not.toBe("REAL");
