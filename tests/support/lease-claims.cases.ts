@@ -15,7 +15,16 @@ type Env={bare:string;work:string;bl:string};
 type Out={code:number|null;j:any;raw:string};
 const parse=(stdout:string)=>{try{return JSON.parse(stdout.trim().split("\n").filter(Boolean).pop()??"")}catch{return null}};
 const dispatch=(e:Env,args:string[]):Out=>{const r=spawnSync(process.execPath,[DISPATCH,...args,"--backlog",e.bl],{cwd:e.work,encoding:"utf8",env:{...process.env,...GIT_ENV}});return {code:r.status,j:parse(r.stdout),raw:r.stdout}};
-const dispatchAsync=(e:Env,args:string[])=>new Promise<Out>(res=>{const c=spawn(process.execPath,[DISPATCH,...args,"--backlog",e.bl],{cwd:e.work,env:{...process.env,...GIT_ENV}});let out="";c.stdout.on("data",d=>out+=d);c.on("close",code=>res({code,j:parse(out),raw:out}))});
+type AsyncOut=Out&{startedAt:number;endedAt:number};
+// spawn errors resolve (never hang); a run that outlives 60 s is killed and reported as code null; start/end times let races prove overlap
+const dispatchAsync=(e:Env,args:string[])=>new Promise<AsyncOut>(res=>{
+  const startedAt=Date.now();let out="",done=false;
+  const finish=(code:number|null,extra="")=>{if(done)return;done=true;clearTimeout(timer);res({code,j:parse(out),raw:out+extra,startedAt,endedAt:Date.now()})};
+  const c=spawn(process.execPath,[DISPATCH,...args,"--backlog",e.bl],{cwd:e.work,env:{...process.env,...GIT_ENV}});
+  const timer=setTimeout(()=>{c.kill("SIGKILL");finish(null," [killed: 60 s timeout]")},60_000);
+  c.on("error",err=>finish(null,` [spawn error: ${err.message}]`));c.stdout.on("data",d=>out+=d);c.on("close",code=>finish(code));
+});
+const overlapped=(rs:AsyncOut[])=>rs[0]!.startedAt<rs[1]!.endedAt&&rs[1]!.startedAt<rs[0]!.endedAt;
 const claimRefs=(bare:string)=>G(bare,["for-each-ref","--format=%(refname)","refs/uasco/claims/"]).split("\n").filter(Boolean);
 const heads=(bare:string)=>G(bare,["for-each-ref","--format=%(refname)","refs/heads/claude/"]).split("\n").filter(Boolean);
 const leaseOn=(bare:string,id:string)=>JSON.parse(G(bare,["cat-file","blob",G(bare,["rev-parse",`refs/uasco/claims/${id}`])]));
@@ -81,6 +90,7 @@ export function registerLeaseClaimsCases():void{
       for(let round=0;round<3;round++){
         const e=mkEnv(["R-1"]);
         const rs=await Promise.all(["w1","w2"].map(o=>dispatchAsync(e,["--claim","--owner",o])));
+        expect(overlapped(rs),"the two claim processes ran concurrently").toBe(true);
         const starts=rs.filter(r=>r.j?.outcome==="START"&&r.j.claimed===true);
         expect(starts.length,rs.map(r=>r.raw).join(" | ")).toBe(1);
         expect(rs.filter(r=>r.j?.outcome==="NO_ACTION").length).toBe(1);
@@ -93,6 +103,7 @@ export function registerLeaseClaimsCases():void{
       for(let round=0;round<6;round++){
         const e=mkEnv(["Q-1"]);
         const rs=await Promise.all(["w1","w2"].map(o=>dispatchAsync(e,["--claim","--no-lease","--owner",o])));
+        expect(overlapped(rs),"the two claim processes ran concurrently").toBe(true);
         expect(rs.filter(r=>r.j?.outcome==="START"&&r.j.claimed===true).length,rs.map(r=>r.raw).join(" | ")).toBe(1);
         expect(heads(e.bare)).toEqual(["refs/heads/claude/q-1"]);
         expect(claimRefs(e.bare)).toEqual([]);
@@ -107,16 +118,37 @@ export function registerLeaseClaimsCases():void{
       let seed=0x2f6b;const rnd=()=>{seed=(seed*1103515245+12345)&0x7fffffff;return seed/0x80000000};
       const oracle=new Map<string,{w:number;token:string;expiresAt:number}|null>();
       const tokens=new Map<string,string>(); // `${task}|${w}` -> token the worker believes it holds
-      let grants=0,held=0,renewed=0,released=0,takeovers=0,doubleClaims=0;
+      const pausedUntil=new Map<string,number>(); // zombie holders: keep their token, wake up after their own TTL has run out
+      let grants=0,held=0,renewed=0,released=0,takeovers=0,doubleClaims=0,paused=0,lost=0,zombieNoop=0,zombieRenewed=0;
       for(let t=0;t<=DAYS*24*36e5;t+=STEP){
         for(const task of TASKS)for(let w=0;w<W.length;w++){
           const now=t+w*60000,key=`${task}|${w}`,id={taskId:task,...W[w]!},cur=oracle.get(task)??null,mine=tokens.get(key);
+          const wake=pausedUntil.get(key);
+          if(wake!==undefined&&now<wake)continue; // still paused: no heartbeat, no claim
           if(mine){
+            const stillMine=cur?.token===mine; // per the oracle: nobody took over while we were away
+            if(wake!==undefined){
+              // zombie wake-up (paused past its own TTL): it may renew/release only if nobody took over; otherwise LOST / NOOP
+              pausedUntil.delete(key);
+              if(rnd()<0.5){
+                const r=renew(store,{...id,token:mine,now,ttlMs:TTL});
+                expect(r.status,`zombie renew ${task} w${w} t=${now}`).toBe(stillMine?"RENEWED":"LOST");
+                if(r.status==="RENEWED"){zombieRenewed++;oracle.set(task,{w,token:mine,expiresAt:now+TTL})}else{lost++;tokens.delete(key)}
+              }else{
+                const r=release(store,{...id,token:mine});tokens.delete(key);
+                expect(r.status,`zombie release ${task} w${w} t=${now}`).toBe(stillMine?"RELEASED":"NOOP");
+                if(r.status==="RELEASED"){released++;oracle.set(task,null)}else zombieNoop++;
+              }
+              const rec=store.read(task);expect(rec?.token??null).toBe(oracle.get(task)?.token??null);
+              continue;
+            }
             const p=rnd();
-            if(p<0.15){tokens.delete(key);continue} // crash: stops heartbeating, lease must expire before anyone else gets it
-            if(p<0.30){const r=release(store,{...id,token:mine});tokens.delete(key);if(r.status==="RELEASED"){released++;oracle.set(task,null)}continue}
+            if(p<0.10){tokens.delete(key);continue} // crash: forgets the token, lease must expire before anyone else gets it
+            if(p<0.25){paused++;pausedUntil.set(key,now+TTL+STEP);continue} // pause: keeps the token, sleeps past its TTL
+            if(p<0.35){const r=release(store,{...id,token:mine});tokens.delete(key);expect(r.status).toBe("RELEASED");released++;oracle.set(task,null);continue}
             const r=renew(store,{...id,token:mine,now,ttlMs:TTL});
-            if(r.status==="RENEWED"){renewed++;oracle.set(task,{w,token:mine,expiresAt:now+TTL})}else tokens.delete(key); // LOST: never happens while heartbeats beat the TTL
+            expect(r.status,`live renew ${task} w${w} t=${now}`).toBe("RENEWED"); // heartbeats every STEP < TTL never lose a live lease
+            renewed++;oracle.set(task,{w,token:mine,expiresAt:now+TTL});
             continue;
           }
           if(rnd()<0.5)continue;
@@ -125,14 +157,33 @@ export function registerLeaseClaimsCases():void{
             grants++;
             if(cur&&cur.w!==w&&now<=cur.expiresAt)doubleClaims++; // someone else's lease was still live
             if(cur&&cur.w!==w)takeovers++;
-            const g=r.record!;tokens.set(key,g.token);oracle.set(task,{w,token:g.token,expiresAt:g.expiresAt});
+            const g=r.record!;
+            if(cur&&cur.w===w&&cur.token!==g.token){
+              // the same worker re-took its own expired lease under a NEW token: its previous grant's token must no longer renew it
+              expect(renew(store,{...id,token:cur.token,now,ttlMs:TTL}).status,`stale-token renew ${task} w${w}`).toBe("LOST");
+            }tokens.set(key,g.token);oracle.set(task,{w,token:g.token,expiresAt:g.expiresAt});
           }else{held++;expect(cur&&now<=cur.expiresAt&&cur.w!==w,`HELD only while another live lease exists (${task} t=${now})`).toBe(true)}
           const rec=store.read(task);expect(rec?.token??null).toBe(oracle.get(task)?.token??null);
         }
       }
       expect(doubleClaims).toBe(0);
-      // the schedule really exercised conflicts, expiry takeovers, renewals, losses and releases (not a vacuous run)
-      for(const [k,v] of Object.entries({grants,held,renewed,released,takeovers}))expect(v,k).toBeGreaterThan(0);
+      // the schedule really exercised conflicts, expiry takeovers, renewals, releases, pauses and zombie losses (not a vacuous run)
+      for(const [k,v] of Object.entries({grants,held,renewed,released,takeovers,paused,lost,zombieNoop}))expect(v,k).toBeGreaterThan(0);
     },180_000);
+
+    it("same worker, stale token: after re-taking its own expired lease, the previous grant's token can neither renew nor release it",()=>{
+      const repo=path.join(root,"stale");fs.mkdirSync(repo);G(repo,["init","-q"]);
+      const store=createLocalGitRefStore({repoDir:repo}),TTL=6*36e5,id={taskId:"Z-1",environment:"CLOUD",workerId:"w-z",sessionId:"s-z"};
+      const first=claim(store,{...id,now:0,ttlMs:TTL});expect(first.status).toBe("GRANTED");
+      const second=claim(store,{...id,now:TTL+1,ttlMs:TTL}); // the old grant expired unrenewed: a fresh grant, new token, epoch 2
+      expect(second).toMatchObject({status:"GRANTED",record:{epoch:2}});
+      const oldTok=first.record!.token,newTok=second.record!.token;expect(newTok).not.toBe(oldTok);
+      expect(renew(store,{...id,token:oldTok,now:TTL+2,ttlMs:TTL}).status).toBe("LOST");
+      expect(release(store,{...id,token:oldTok}).status).toBe("NOOP");
+      expect(store.read("Z-1")?.token).toBe(newTok);
+      expect(renew(store,{...id,token:newTok,now:TTL+3,ttlMs:TTL})).toMatchObject({status:"RENEWED",record:{token:newTok,expiresAt:2*TTL+3}});
+      expect(release(store,{...id,token:newTok}).status).toBe("RELEASED");
+      expect(store.read("Z-1")).toBeNull();
+    },60_000);
   });
 }
