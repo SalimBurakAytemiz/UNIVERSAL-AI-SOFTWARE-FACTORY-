@@ -42,11 +42,25 @@ export function sameBoot(a: string | null, b: string | null): boolean {
 export const bootTimeMs = (): number => Date.now() - os.uptime() * 1000;
 
 // ---- sahiplik kaydı ----
-export type OwnerRead = {kind: "ABSENT"} | {kind: "OK"; rec: WorkspaceOwner} | {kind: "INVALID"; why: string; mtimeMs: number | null};
+export type OwnerRead = {kind: "ABSENT"} | {kind: "OK"; rec: WorkspaceOwner} | {kind: "INVALID"; why: string; mtimeMs: number | null; transient?: true};
+// //TR: UASCO-T0042 (PAR-04 Windows RCA): Windows'ta bir dosyanın okunması, başka bir tanıtıcı (virüs tarayıcı/dizinleyici, atomik değiştirmenin rename'i, eşzamanlı yazar) onu
+// tutarken geçici olarak EPERM/EBUSY/EACCES (paylaşım ihlali, silme-beklemede) verir. Bu "kayıt bozuk" DEĞİLDİR: okuma kısa, sınırlı bir beklemeyle yeniden denenir;
+// yine okunamazsa sonuç `transient` işaretlidir (çağıran fence/devri kalıcı başarısızlık yapmaz). Ayrıştırılamayan içerik (yırtık yazı) geçici değildir.
+export const OWNER_READ_TRANSIENT_CODES: ReadonlySet<string> = new Set(["EPERM", "EBUSY", "EACCES"]);
+export const OWNER_READ_ATTEMPTS = 4;
+const sleepSync = (ms: number) => { try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch { /* yok say */ } };
 // //TR: Yalnız ana dosya okunur; .prev yedeğine DÜŞÜLMEZ (yırtık bir yazı çocuğu yeni kaydetmiş olabilir: eski kayıt "yazar yok" derdi). Yırtık/okunamayan kayıt önyüklemeden ESKİYSE (süreçler yeniden başlatmadan sağ çıkmaz) çağıran "yazar yok" sayar; değilse fail-closed.
 export function readOwner(file: string): OwnerRead {
-  let raw: string;
-  try { raw = fs.readFileSync(file, "utf8"); } catch (e) { return (e as NodeJS.ErrnoException).code === "ENOENT" ? {kind: "ABSENT"} : {kind: "INVALID", why: "owner record unreadable", mtimeMs: null}; }
+  let raw = "";
+  for (let attempt = 1; ; attempt++) {
+    try { raw = fs.readFileSync(file, "utf8"); break; } catch (e) {
+      const code = String((e as NodeJS.ErrnoException).code ?? "");
+      if (code === "ENOENT") return {kind: "ABSENT"};
+      const transient = OWNER_READ_TRANSIENT_CODES.has(code);
+      if (!transient || attempt >= OWNER_READ_ATTEMPTS) return {kind: "INVALID", why: `owner record unreadable${code ? ` (${code})` : ""}`, mtimeMs: null, ...(transient ? {transient: true as const} : {})};
+      sleepSync(25 * attempt); // en çok ~150 ms, yalnız okuma hatasında
+    }
+  }
   let prev: unknown = null;
   try { prev = JSON.parse(raw); } catch { /* aşağıda geçersiz */ }
   if (isOwner(prev)) return {kind: "OK", rec: {...prev, bootId: prev.bootId ?? null}};
