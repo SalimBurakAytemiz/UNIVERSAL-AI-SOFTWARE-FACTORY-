@@ -70,7 +70,14 @@
       "prs": [
         304
       ],
-      "note": "increment merged (#304: provider routing with quota, fallback and circuit breaker); doneMerge needs a real cloud model request, auth deny and token usage evidence (D-03 infrastructure)"
+      "note": "increment merged (#304: provider routing with quota, fallback and circuit breaker); doneMerge needs real cloud model request, auth deny, quota/fallback and token usage evidence (D-03 infrastructure)"
+    },
+    {
+      "task": "UASCO-T0062",
+      "prs": [
+        311
+      ],
+      "note": "increment merged (#311: per-step routing record and Desktop line); journal and Desktop wiring still open (V3-AC-F026-1)"
     }
   ],
   "blocked": [
