@@ -7,6 +7,47 @@ import {buildIntakeRequest,mapIntake,mapIntakes,INTAKES_PATH,INTAKE_PROJECT_TYPE
 import {runReadinessBlock} from "./run-readiness.js";
 
 export const INTAKE_FORM="intake";
+// //TR: UASCO-T0010 komut girişi paneli: tek alan -> POST /v1/command-intake -> yalnız DRAFT öneri gösterilir (asla yetkilendirmez/yürütmez); belirsiz komutta sunucunun netleştirme sorusu gösterilir; 3 örnek komut tek tıkla DRAFT üretir. Sunucu metni yalnız textContent ile çizilir. Yanıt DRAFT ve yetkisiz değilse fail-closed hata gösterilir.
+export const COMMAND_INTAKE_PATH="/v1/command-intake";
+export const COMMAND_INTAKE_EXAMPLES=Object.freeze(["Ayarlar sayfasını geliştir","Audit the login module","Birim testlerini doğrula"]);
+export const commandUi={text:"",busy:false,result:null};
+export async function submitCommand(ctx,text){
+  const t=typeof text==="string"?text:commandUi.text;commandUi.text=t;
+  if(commandUi.busy)return {ok:false,busy:true};
+  if(!t.trim()){commandUi.result={kind:"error",code:"INTAKE_EMPTY"};await ctx.rerender();return {ok:false}}
+  commandUi.busy=true;let res;try{res=await ctx.api.post(COMMAND_INTAKE_PATH,{text:t})}finally{commandUi.busy=false}
+  const p=res?.ok?res.body?.proposal:null;
+  const draft=p&&typeof p==="object"&&p.status==="DRAFT"&&p.authorization?.verified===false;
+  commandUi.result=draft?{kind:"draft",proposal:p}:{kind:"error",code:typeof res?.body?.error==="string"?res.body.error:"UNAVAILABLE"};
+  await ctx.rerender();return {ok:Boolean(draft)};
+}
+function commandResult(ctx,r){
+  const doc=ctx.doc;
+  if(!r)return null;
+  if(r.kind!=="draft")return h(doc,"p",{class:"field-error",id:"command-intake-error",role:"alert",dataset:{commandError:String(r.code)}},`${ctx.t("cmdIntake.error")} `,h(doc,"span",{class:"mono",text:String(r.code)}));
+  const p=r.proposal,c=p.clarification&&typeof p.clarification.question==="string"?p.clarification:null;
+  return h(doc,"div",{class:"card",id:"command-intake-result",dataset:{commandStatus:"DRAFT",commandOutcome:String(p.outcome)}},
+    h(doc,"p",{},badge(ctx,ctx.t("cmdIntake.draft"),"badge-notverified")," ",h(doc,"span",{class:"note",text:ctx.t("cmdIntake.neverAuthorizes")})),
+    h(doc,"dl",{class:"kv"},
+      h(doc,"dt",{text:ctx.t("cmdIntake.outcome")}),h(doc,"dd",{class:"mono",text:String(p.outcome)}),
+      h(doc,"dt",{text:ctx.t("cmdIntake.type")}),h(doc,"dd",{class:"mono",text:p.type==null?"—":String(p.type)}),
+      h(doc,"dt",{text:ctx.t("cmdIntake.risk")}),h(doc,"dd",{class:"mono",text:String(p.riskLevel)}),
+      h(doc,"dt",{text:ctx.t("cmdIntake.reasons")}),h(doc,"dd",{class:"mono",text:Array.isArray(p.reasons)&&p.reasons.length?p.reasons.join(", "):"—"})),
+    c?h(doc,"p",{id:"command-intake-clarify",role:"status",dataset:{clarifyCode:String(c.code)}},h(doc,"strong",{text:`${ctx.t("cmdIntake.clarify")} `}),h(doc,"span",{text:c.question})):null);
+}
+export function commandIntakePanel(ctx){
+  const doc=ctx.doc;
+  const ta=h(doc,"textarea",{id:"command-intake-text",rows:"3",maxlength:"2000","aria-labelledby":"command-intake-label",dataset:{focusKey:"command-intake-text"}});
+  ta.value=commandUi.text;ta.addEventListener("input",()=>{commandUi.text=ta.value});
+  return h(doc,"section",{class:"card",id:"command-intake","aria-labelledby":"command-intake-t"},
+    h(doc,"h3",{id:"command-intake-t",text:ctx.t("cmdIntake.title")}),
+    h(doc,"p",{class:"note",text:ctx.t("cmdIntake.lead")}),
+    h(doc,"label",{id:"command-intake-label",for:"command-intake-text",text:ctx.t("cmdIntake.label")}),ta,
+    h(doc,"div",{class:"btn-row",id:"command-intake-examples","aria-label":ctx.t("cmdIntake.examples")},COMMAND_INTAKE_EXAMPLES.map((ex,i)=>
+      h(doc,"button",{type:"button",class:"btn",dataset:{commandExample:String(i)},disabled:commandUi.busy,text:ex,on:{click:()=>submitCommand(ctx,ex)}}))),
+    h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn btn-primary",id:"command-intake-submit",disabled:commandUi.busy,text:ctx.t("cmdIntake.submit"),on:{click:()=>submitCommand(ctx)}})),
+    commandResult(ctx,commandUi.result));
+}
 const KEYS=["id:intake-submit","id:intake-t"];
 const fresh=()=>({idea:"",title:"",projectType:"",techStack:[""],targetOS:[],acceptanceCriteria:[""],riskLevel:"",template:"web-node"});
 export const intakeDraft=fresh();
@@ -84,6 +125,7 @@ export async function intakePanel(ctx){
     h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"submit",class:"btn btn-primary",id:"intake-submit",dataset:{focusKey:"intake-submit"},disabled:drafts.busy[INTAKE_FORM]===true,text:ctx.t("intake.submit")})));
   const details=h(doc,"details",{class:"panel form-panel",id:"intake",open:intakeUi.open||Boolean(st)||Boolean(intakeUi.last)},
     h(doc,"summary",{id:"intake-t",dataset:{focusKey:"intake-summary"},text:ctx.t("intake.title")}),
+    commandIntakePanel(ctx),
     h(doc,"p",{class:"note",text:ctx.t("intake.lead")}),form,
     h(doc,"h3",{text:ctx.t("intake.history")}),history(ctx,list));
   details.addEventListener("toggle",()=>{intakeUi.open=details.open===true});
