@@ -70,7 +70,7 @@ const SENSITIVE_KEY_VALUE = new RegExp(
 const SENSITIVE_FLAG = new RegExp(
   `(?<![A-Za-z0-9_-])(--?[A-Za-z0-9_-]{0,64}?${SENSITIVE_WORD}[A-Za-z0-9_-]{0,64})(=|[ \\t]{1,8})(${QUOTED_VALUE}|(?!-)[^\\s"']{1,4096})`, "gi");
 const quoteLike = (v: string) => (v.startsWith('"') ? '"' : v.startsWith("'") ? "'" : "");
-/** CLOUD-T0005 sunucu tarafı redaksiyon: YALNIZ sunucu denetim kaydı (jobs.audit.jsonl) içindir; API worker metnini hiç döndürmez (messageCode kullanılır).
+/** CLOUD-T0005 redaksiyon yardımcısı (bağımsız birim olarak test edilir). Kuyruk worker metnini hiçbir yerde saklamaz: API, journal ve denetim kaydı yalnız kapalı messageCode taşır.
  *  Sıra: bilinen secret desenleri (redactSecrets) -> kimlik bilgili URL -> anahtar=değer -> kısa Bearer/Basic -> anahtar biçimli uzun diziler -> mutlak yollar -> kontrol karakterleri; en son 200'e kırpılır.
  *  Tüm nicelikler sınırlıdır (doğrusal süre). */
 export function redactJobMessage(text: string): string {
@@ -303,14 +303,16 @@ export class CloudJobQueue {
       for (const a of artifacts) this.emit(s, "ARTIFACT", {artifact: a});
       this.emit(s, "SUCCEEDED");
     } else this.failOrRetry(s, result.message);
-    // Tanı değeri yalnız sunucu denetim kaydında, redakte edilmiş olarak tutulur; API'ye çıkmaz.
-    this.auditLog({decision: "RESULT_ACCEPTED", jobId, status: s.status, attempt: s.attempt, ...(result.status === "FAILED" && typeof result.message === "string" ? {messageRedacted: redactJobMessage(result.message)} : {})});
+    // Denetim kaydı worker metnini (redakte bile) tutmaz; yalnız kapalı messageCode yazılır.
+    this.auditLog({decision: "RESULT_ACCEPTED", jobId, status: s.status, attempt: s.attempt, messageCode: messageCodeFor(s)});
     return {ok: true, status: s.status as CloudJobEventType};
   }
 
   private failOrRetry(s: JobState, why?: string): void {
-    if (s.attempt < s.job.retry.maxAttempts) this.emit(s, "RETRYING", why ? {message: why.slice(0, 200)} : {});
-    else this.emit(s, "FAILED", why ? {message: why.slice(0, 200)} : {});
+    // Ham worker metni hiçbir yerde saklanmaz: journal'a yalnız birebir tanınan makine kodu yazılır.
+    const code = machineCode(why);
+    if (s.attempt < s.job.retry.maxAttempts) this.emit(s, "RETRYING", code ? {message: code} : {});
+    else this.emit(s, "FAILED", code ? {message: code} : {});
   }
 
   /** İptal: iş hemen CANCELLED (terminal). Çalışan worker'ın heartbeat ve sonucu JOB_CANCELLED ile reddedilir; çıktısı asla kaydedilmez. */

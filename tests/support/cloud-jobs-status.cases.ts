@@ -185,7 +185,7 @@ export function registerCloudJobsStatusCases(): void {
       expect(r.cards.map(x => [x.dataset.cloudJob, x.dataset.cloudJobStatus])).toEqual([[c.jobId, "RUNNING"], [b.jobId, "FAILED"], [a.jobId, "SUCCEEDED"]]);
       // worker metni gösterilmez: yalnız sabit kod + sabit açıklama
       expect(r.root.textContent).not.toContain("compile error in step 2");
-      expect(r.root.all().find(x => x.dataset.cloudJobCode === "WORKER_FAILED")?.textContent).toBe("WORKER_FAILED İş bulutta başarısız oldu. Ayrıntı yalnız sunucu denetim kaydındadır.");
+      expect(r.root.all().find(x => x.dataset.cloudJobCode === "WORKER_FAILED")?.textContent).toBe("WORKER_FAILED İş bulutta başarısız oldu. Güvenlik nedeniyle worker çıktısı saklanmaz.");
       expect(r.root.textContent).toContain(ART.name);
       expect(r.root.all().some(x => x.tagName === "BUTTON")).toBe(false);   // salt-okunur
       q.stopAll();
@@ -376,10 +376,22 @@ export function registerCloudJobsStatusCases(): void {
         expect(job.messageCode, planted[i]![0]).toBe("WORKER_FAILED");
       }
       for (const j of JSON.parse(list).jobs) expect(Object.keys(j).sort()).toEqual(ALLOWED);
-      // server-side audit keeps a REDACTED diagnostic only (never the raw secret)
+      // server-side retention: NO worker text is kept at all (not even redacted) — audit and journal hold only the closed code
       const audit = fs.readFileSync(path.join(dir, "jobs.audit.jsonl"), "utf8");
-      expect(audit).toContain("messageRedacted");
-      for (const s of ["r3-env-val", "r3-json-val", "r3-sq-val", "r3-flag-val", "r3bearer0123456789", "r3pemBODY", "r3urlpw"]) expect(audit, s).not.toContain(s);
+      const journal = fs.readFileSync(path.join(dir, "jobs.journal.jsonl"), "utf8");
+      for (const [form, , secret] of planted) { expect(audit, `audit ${form}`).not.toContain(secret); expect(journal, `journal ${form}`).not.toContain(secret); }
+      expect(audit).not.toContain("messageRedacted");
+      const accepted = audit.trim().split("\n").map(l => JSON.parse(l)).filter(e => e.decision === "RESULT_ACCEPTED" && ids.includes(e.jobId));
+      expect(accepted).toHaveLength(planted.length);
+      for (const e of accepted) expect(e.messageCode).toBe("WORKER_FAILED");
+      // a known machine code is the only worker string that may be persisted
+      const kq = new CloudJobQueue({dir: path.join(dir, "known"), scopeKeys: new Map([["k-1", SCOPE_KEY]]), workerKeys: new Map([["worker-a", WORKER_KEY]]), now: () => clock, leaseMs: 60_000});
+      open.push(kq);
+      const kj = req(); expect(kq.submit(kj).ok).toBe(true);
+      const kc = kq.claim(auth("claim", "*")); if (!kc.ok) throw new Error("claim");
+      const kres = {status: "FAILED" as const, message: "SANDBOX_UNAVAILABLE"};
+      expect(kq.complete(auth("complete", kj.jobId, {leaseId: kc.lease.leaseId, result: kres}), kj.jobId, kc.lease.leaseId, kres)).toMatchObject({ok: true});
+      expect(kq.summary(TENANT, kj.jobId)).toMatchObject({status: "FAILED", messageCode: "SANDBOX_UNAVAILABLE"});
       // code mapping: only exact known machine codes are recognised; anything else is generic
       const ev = (type: string, message?: string) => ({jobId: "j", seq: 0, type, at: "2026-11-03T12:00:00Z", attempt: 1, ...(message === undefined ? {} : {message})}) as any;
       const cases: Array<[string, any[], string | null]> = [

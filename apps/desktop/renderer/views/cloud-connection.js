@@ -114,7 +114,7 @@ const TEXT=Object.freeze({
   "cloud.jobsStatus.OFFLINE":"Control API'ye ulaşılamadı (OFFLINE).",
   "cloud.jobsStatus.ERROR":"Bulut iş durumu okunamadı (ERROR).",
   "cloud.jobsStopped":"Global STOP etkin: yeni iş kabul edilmez.",
-  "cloud.jobCode.WORKER_FAILED":"İş bulutta başarısız oldu. Ayrıntı yalnız sunucu denetim kaydındadır.",
+  "cloud.jobCode.WORKER_FAILED":"İş bulutta başarısız oldu. Güvenlik nedeniyle worker çıktısı saklanmaz.",
   "cloud.jobCode.TIMED_OUT":"İş zaman aşımına uğradı.",
   "cloud.jobCode.RETRYING":"İş başarısız oldu ve yeniden denenecek.",
   "cloud.jobCode.LEASE_EXPIRED":"Worker yanıt vermeyi bıraktı (lease süresi doldu).",
