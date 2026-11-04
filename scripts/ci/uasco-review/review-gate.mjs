@@ -148,7 +148,11 @@ const authSubcode = text => (AUTH_SUB_RES.find(([, re]) => re.test(text)) ?? ["A
 const STATUS_LABELLED_RE = /(?:api error|status(?: code)?|http(?:\/\d(?:\.\d)?)?)[: =]{0,3}([45]\d\d)\b/i, STATUS_BARE_RE = /(?<![\d.:-])\b([45]\d\d)\b(?![\d.:-]\d)/;
 const httpStatusOf = text => { const m = STATUS_LABELLED_RE.exec(text) ?? STATUS_BARE_RE.exec(text); return m ? Number(m[1]) : null; };
 const MODEL_RE = /\bmodel\b[^\n]{0,160}?(?:not[ _]found|not available|unavailable|does(?: not|n't) exist|may not exist|not supported|unsupported|not have access)|(?:unknown|invalid|unsupported|unavailable) model\b|issue with the selected model|not_found_error[\s\S]{0,300}?\bmodel\b|\bmodel\b[\s\S]{0,300}?not_found_error|\b404\b[\s\S]{0,300}?\bmodel\b|\bmodel\b[\s\S]{0,300}?\b404\b/i;
-const QUOTA_RE = /credit balance|\bquota\b|usage limit|rate[ _-]?limit|\b429\b|overloaded|\b529\b|too many requests|limit reached/i;
+// HTTP 429 and 529 are matched through the parsed status (httpStatusOf), not here.
+const QUOTA_RE = /credit balance|\bquota\b|usage limit|rate[ _-]?limit|overloaded|too many requests|limit reached/i;
+// An explicit credential phrase (a token, key or credential with a bad state, "not logged in", "401 Unauthorized", authentication_error) outranks
+// incidental model, quota or 429 text: only without one does the MODEL -> QUOTA -> AUTH order apply. A bare "OAuth token" is not explicit.
+const EXPLICIT_CRED_RE = /(?:invalid|expired|revoked|malformed)[ _-]?(?:oauth[ _-])?(?:api[ _-]?key|x-api-key|bearer|token|credentials?)\b|(?:oauth[ _-]token|api[ _-]?key|access[ _-]token|credentials?)[^\n]{0,40}?\b(?:has expired|is expired|expired|been revoked|revoked|is invalid)\b|token_(?:expired|revoked)|not logged in|\b401\b[^\n]{0,20}?unauthori[sz]ed|unauthori[sz]ed[^\n]{0,20}?\b401\b|authentication_error/i;
 // The request's verdict schema refused by the API (for example 400 invalid_request_error on the JSON schema): a schema term near a refusal word.
 const SCHEMA_TERM = "(?:json[ _-]?schema|input_schema|output_format|structured[ _-]?output)", SCHEMA_REFUSAL = "(?:invalid|not supported|unsupported|not allowed|rejected|error)";
 const SCHEMA_RE = new RegExp(`${SCHEMA_TERM}[\\s\\S]{0,200}?${SCHEMA_REFUSAL}|${SCHEMA_REFUSAL}[\\s\\S]{0,200}?${SCHEMA_TERM}`, "i");
@@ -171,7 +175,9 @@ export function diagnoseReviewerOutput(raw) {
     if (!isError) return at(res.subtype === "success" && res.structured_output !== undefined && res.structured_output !== null ? "REVIEWER_OK" : "REVIEWER_NO_STRUCTURED_OUTPUT");
     const text = [res.result, ...(Array.isArray(res.errors) ? res.errors : [])].filter(isStr).join("\n").slice(0, 65536);
     const status = httpStatusOf(text);
-    // Model access and limits first: their texts can mention OAuth or login without the credential being at fault. 429 and 529 are never auth.
+    if (EXPLICIT_CRED_RE.test(text)) return at("REVIEWER_AUTH_REJECTED", authSubcode(text), status);
+    // Without an explicit credential phrase, model access and limits come first: their texts can mention OAuth or login without the credential
+    // being at fault. HTTP 429 and 529 are never auth.
     if (MODEL_RE.test(text)) return at("REVIEWER_MODEL_UNAVAILABLE", null, status);
     if (QUOTA_RE.test(text) || status === 429 || status === 529) return at("REVIEWER_QUOTA_OR_RATE_LIMIT", null, status);
     if (AUTH_RE.test(text)) return at("REVIEWER_AUTH_REJECTED", authSubcode(text), status);

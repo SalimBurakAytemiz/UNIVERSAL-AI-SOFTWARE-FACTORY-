@@ -203,8 +203,23 @@ check("R12 model access and limits rank before the broad OAuth/login words: a mo
   sub("The model claude-x is not available to this OAuth token") === "REVIEWER_MODEL_UNAVAILABLE" && sub("There's an issue with the selected model (x). Run /login or /model") === "REVIEWER_MODEL_UNAVAILABLE"
   && sub("OAuth usage limit reached") === "REVIEWER_QUOTA_OR_RATE_LIMIT" && sub('API Error: 429 {"error":{"type":"rate_limit_error"}} please log in') === "REVIEWER_QUOTA_OR_RATE_LIMIT"
   && sub("API Error: 529 authentication pending") === "REVIEWER_QUOTA_OR_RATE_LIMIT" && sub("HTTP 429 from oauth endpoint") === "REVIEWER_QUOTA_OR_RATE_LIMIT"
-  && sub("Credit balance is too low; invalid api key") === "REVIEWER_QUOTA_OR_RATE_LIMIT" && sub("Invalid API key · Please run /login (JSON schema error)") === "AUTH_TOKEN_INVALID");
+  && sub("Invalid API key · Please run /login (JSON schema error)") === "AUTH_TOKEN_INVALID");
 const st = t => dx(execFile(errResult(t))).httpStatus;
+// NB-1: an explicit credential phrase outranks incidental quota, 429, 529 or model text (mixed texts as the reviewer reproduced them). Changed from R12:
+// "Credit balance is too low; invalid api key" used to be QUOTA; the explicit "invalid api key" now decides (AUTH_TOKEN_INVALID).
+const MIXED = [["Credit balance is too low; invalid api key", "AUTH_TOKEN_INVALID"], ["Invalid API key. Retried after API Error: 429 rate_limit_error", "AUTH_TOKEN_INVALID"],
+  ["OAuth token has expired (quota check skipped)", "AUTH_TOKEN_EXPIRED"], ['API Error: 401 {"error":{"type":"authentication_error","message":"OAuth token has expired"}} then 529 overloaded', "AUTH_TOKEN_EXPIRED"],
+  ["The access token has been revoked; model claude-x is not supported", "AUTH_TOKEN_REVOKED"], ["Not logged in · Please run /login (usage limit reached)", "AUTH_NOT_LOGGED_IN"],
+  ["Not logged in; the model claude-x is not available", "AUTH_NOT_LOGGED_IN"], ["401 Unauthorized after 429 Too Many Requests", "AUTH_UNSPECIFIED"],
+  ["authentication_error: model claude-x not found", "AUTH_UNSPECIFIED"], ["API Error: 529 authentication_error", "AUTH_UNSPECIFIED"]];
+check("R16 NB-1: an explicit credential phrase (invalid/expired/revoked token or key, not logged in, 401 Unauthorized, authentication_error) outranks quota, 429, 529 and model text; without one the MODEL -> QUOTA -> AUTH order still holds",
+  MIXED.every(([t, c]) => sub(t) === c) && sub("The model claude-x is not available to this OAuth token") === "REVIEWER_MODEL_UNAVAILABLE"
+  && sub("OAuth usage limit reached") === "REVIEWER_QUOTA_OR_RATE_LIMIT" && sub("model claude-x not found; please log in") === "REVIEWER_MODEL_UNAVAILABLE"
+  && dx(execFile(errResult(MIXED[1][0]))).httpStatus === 429 && dx(execFile(errResult(MIXED[7][0]))).httpStatus === 401);
+// LOW 1: 429 and 529 reach QUOTA only through the parsed status (QUOTA_RE has no status numbers), so dropping that clause fails this check.
+check("R17 a bare HTTP 429 or 529 with no quota words is QUOTA through the parsed status; a 503 or 400 alone is not",
+  ["API Error: 429", "HTTP/1.1 529", "status 429", "Error 529 {}"].every(t => sub(t) === "REVIEWER_QUOTA_OR_RATE_LIMIT" && [429, 529].includes(st(t)))
+  && sub("API Error: 503") === "REVIEWER_ERROR_UNCLASSIFIED" && sub("API Error: 400") === "REVIEWER_ERROR_UNCLASSIFIED");
 check("R13 httpStatus is the first status 400-599 (a labelled one first), else null; never a duration, a timestamp or a 2xx/3xx",
   st("API Error: 401 x") === 401 && st("took 404 tries then status 403") === 403 && st("401 Unauthorized") === 401 && st("HTTP/1.1 502 Bad Gateway") === 502
   && st("Something went wrong") === null && st("status 200, retry in 305 ms") === null && st("limit reached|1760000000") === null && st("v1.4.401 failed at 12:404") === null
