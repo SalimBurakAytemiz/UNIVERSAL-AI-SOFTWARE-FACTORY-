@@ -61,7 +61,10 @@ export function redactJobMessage(text: string): string {
   let s = redactSecrets(String(text).slice(0, 4096));
   s = s
     .replace(/\b([A-Za-z][A-Za-z0-9+.-]{0,16}):\/\/[^\s/?#@]{1,512}@/g, "$1://[REDACTED:URL_CREDENTIALS]@")
-    .replace(/\b(token|secret|password|passwd|pwd|api[_-]?key|access[_-]?key|client[_-]?secret|authorization|auth|credentials?|session|cookie)(\s{0,8}[:=]\s{0,8})("?)(?:(?:Bearer|Basic)[ \t]{1,16})?[^\s",;&]{1,4096}/gi, "$1$2$3[REDACTED:KEY_VALUE]")
+    // JSON biçimi: "<..anahtar..>" : "<değer>" (anahtar kelime bir tanımlayıcının parçası olabilir: "db_password", "authToken")
+    .replace(/"([A-Za-z0-9_.-]{0,64}?(?:token|secret|password|passwd|pwd|api[_-]?key|access[_-]?key|client[_-]?secret|authorization|auth|credentials?|session|cookie)[A-Za-z0-9_.-]{0,64})"(\s{0,8}:\s{0,8})"(?:[^"\\\r\n]|\\.){0,4096}"/gi, '"$1"$2"[REDACTED:KEY_VALUE]"')
+    // anahtar=değer / anahtar: değer; anahtar kelime ön ek veya son ek alabilir (DB_PASSWORD, GITHUB_TOKEN, AWS_SECRET_ACCESS_KEY)
+    .replace(/\b([A-Za-z0-9_-]{0,64}?(?:token|secret|password|passwd|pwd|api[_-]?key|access[_-]?key|client[_-]?secret|authorization|auth|credentials?|session|cookie)[A-Za-z0-9_-]{0,64})(\s{0,8}[:=]\s{0,8})("?)(?:(?:Bearer|Basic)[ \t]{1,16})?[^\s",;&]{1,4096}/gi, "$1$2$3[REDACTED:KEY_VALUE]")
     .replace(/\b(Bearer|Basic)[ \t]{1,16}(?!\[REDACTED)(?=[^\s,;]{0,4096}[0-9._~+/=-])[^\s,;]{6,4096}/gi, "$1 [REDACTED:AUTH_TOKEN]")
     .replace(/(?<![A-Za-z0-9_\[-])(?=[A-Za-z0-9+/_-]{0,4096}\d)(?=[A-Za-z0-9+/_-]{0,4096}[A-Za-z])[A-Za-z0-9+/_-]{32,4096}={0,2}/g, "[REDACTED:KEY_SHAPED]")
     .replace(/\b[A-Za-z]:[\\/][^\s"'<>|]{0,4096}/g, "[path]")

@@ -262,6 +262,36 @@ export function registerCloudJobsStatusCases(): void {
       expect(redactJobMessage(`ok\u0000\u0007done`)).toBe("okdone");
     });
 
+    it("server-side redaction covers prefixed env-var keys and JSON key/value forms (#335 blocking review finding)", async () => {
+      const J = (...p: string[]) => p.join("");   // değerler çalışma anında birleştirilir (depoda düz secret literal yok)
+      const cases: Array<[string, string, string]> = [
+        ["DB_PASSWORD", J("DB_PASS", "WORD=", "hunter2-db-Pw"), "DB_PASSWORD=[REDACTED:KEY_VALUE]"],
+        ["GITHUB_TOKEN", J("GITHUB_TO", "KEN=", "gh-tok-", "plantedvalue42"), "GITHUB_TOKEN=[REDACTED:KEY_VALUE]"],
+        ["AWS_SECRET_ACCESS_KEY", J("AWS_SECRET", "_ACCESS_KEY=", "wJalrXUtn", "FEMIK7MDENG"), "AWS_SECRET_ACCESS_KEY=[REDACTED:KEY_VALUE]"],
+        ["JSON password", J('{"pass', 'word":"', "pw-json-planted", '"}'), '{"password":"[REDACTED:KEY_VALUE]"}'],
+        ["JSON token (space)", J('{"to', 'ken": "', "tk json planted", '"}'), '{"token": "[REDACTED:KEY_VALUE]"}'],
+      ];
+      const leaked = ["hunter2-db-Pw", "plantedvalue42", "wJalrXUtn", "FEMIK7MDENG", "pw-json-planted", "tk json planted"];
+      for (const [name, input, want] of cases) expect(redactJobMessage(input), name).toBe(want);
+      // aynı değerler worker FAILED mesajında API'den (liste + tekil) sızmaz
+      const q = new CloudJobQueue({dir, scopeKeys: new Map([["k-1", SCOPE_KEY]]), workerKeys: new Map([["worker-a", WORKER_KEY]]), now: () => clock, leaseMs: 60_000});
+      open.push(q);
+      const app = mkServer(q);
+      for (const [name, input] of cases) {
+        const j = req(); expect(q.submit(j).ok).toBe(true);
+        const c = q.claim(auth("claim", "*")); if (!c.ok || c.job.jobId !== j.jobId) throw new Error("claim");
+        const res = {status: "FAILED" as const, message: `step failed: ${input} (exit 1)`};
+        expect(q.complete(auth("complete", j.jobId, {leaseId: c.lease.leaseId, result: res}), j.jobId, c.lease.leaseId, res)).toMatchObject({ok: true});
+        const item = (await get(app, `${CLOUD_JOBS_PATH}/${j.jobId}`)).body;
+        for (const v of leaked) expect(item, `${name}: ${v}`).not.toContain(v);
+        expect(JSON.parse(item).job.message, name).toContain("[REDACTED:KEY_VALUE]");
+      }
+      const list = (await get(app, CLOUD_JOBS_PATH)).body;
+      for (const v of leaked) expect(list, v).not.toContain(v);
+      // benign text with keyword fragments stays readable
+      for (const benign of ["authentication failed for user", "token refresh scheduled", "session ended normally"]) expect(redactJobMessage(benign), benign).toBe(benign);
+    });
+
     it("forged tenant headers and query parameters never change the tenant: only RouteDeps.scope applies", async () => {
       const {q, x} = seeded();
       const app = mkServer(q);
