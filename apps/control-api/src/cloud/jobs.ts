@@ -46,6 +46,23 @@ export {pidAlive} from "./queue-lock.js";
 
 const isTerminal = (t: string) => (TERMINAL_EVENT_TYPES as readonly string[]).includes(t);
 
+/** CLOUD-T0005: masaüstüne giden redaksiyon güvenli iş özeti (izin verilen alanların kapalı listesi). */
+export interface JobSummary {
+  jobId: string; projectId: string; environment: string; kind: string; status: JobState["status"]; attempt: number; maxAttempts: number;
+  requestedAt: string; updatedAt: string | null; lastEventType: CloudJobEventType | null; message: string | null; artifacts: ArtifactRef[];
+}
+const REASON_EVENTS: readonly string[] = ["RETRYING", "FAILED", "TIMED_OUT"];
+function summarize(s: JobState): JobSummary {
+  const last = s.events.length ? s.events[s.events.length - 1]! : null;
+  const reason = [...s.events].reverse().find(e => REASON_EVENTS.includes(e.type) && typeof e.message === "string");
+  return {
+    jobId: s.job.jobId, projectId: s.job.projectId, environment: s.job.environment, kind: s.job.kind, status: s.status, attempt: s.attempt,
+    maxAttempts: s.job.retry.maxAttempts, requestedAt: s.job.requestedAt, updatedAt: last ? last.at : null, lastEventType: last ? last.type : null,
+    message: reason ? String(reason.message).slice(0, 200) : null,
+    artifacts: s.events.filter(e => e.type === "ARTIFACT" && e.artifact).map(e => ({name: e.artifact!.name, sha256: e.artifact!.sha256, sizeBytes: e.artifact!.sizeBytes})),
+  };
+}
+
 export class CloudJobQueue {
   private readonly jobs = new Map<string, JobState>();
   private readonly idem = new Map<string, string>();      // tenant\0key -> requestDigest
@@ -282,5 +299,24 @@ export class CloudJobQueue {
   }
 
   get(jobId: string): Readonly<JobState> | undefined { return this.jobs.get(jobId); }
+
+  /** CLOUD-T0005 salt-okunur durum özeti: yalnız çağıranın tenant'ındaki işler, en yeni önce, en çok `limit` (1..100). Lease, worker kimliği, imza/scope,
+   *  idempotency anahtarı ve olay mesajları (STARTED/HEARTBEAT lease taşır) ASLA dönmez; yalnız terminal/yeniden deneme olaylarının kısa nedeni (≤200) döner. */
+  list(tenantId: string, limit = 100): JobSummary[] {
+    if (typeof tenantId !== "string" || tenantId.length === 0) return [];
+    const max = Number.isSafeInteger(limit) ? Math.min(Math.max(limit, 1), 100) : 100;
+    const out: JobSummary[] = [];
+    for (const s of [...this.jobs.values()].reverse()) {
+      if (s.job.tenantId !== tenantId) continue;
+      out.push(summarize(s));
+      if (out.length >= max) break;
+    }
+    return out;
+  }
+  /** Tek iş özeti; başka tenant'ın işi bulunmamış gibi davranır (varlık sızdırılmaz). */
+  summary(tenantId: string, jobId: string): JobSummary | null {
+    const s = this.jobs.get(jobId);
+    return s && s.job.tenantId === tenantId ? summarize(s) : null;
+  }
   get isStopped(): boolean { return this.stopped; }
 }
