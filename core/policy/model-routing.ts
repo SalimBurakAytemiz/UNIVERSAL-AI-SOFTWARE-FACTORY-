@@ -90,13 +90,21 @@ export interface ModelRoutingRecord {
   decision: ModelRouteDecision["decision"]; code: RouteCode; modelId: string | null; modelClass: ModelClass | null; tier: CostTier | null; reasons: readonly string[];
 }
 // //TR: Kontrol karakteri (\n, \r, C0/C1, DEL) içeren stepId Desktop satırını sahteleyebilir; fail-closed reddedilir.
-const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g;
+// //TR: Bidi yön denetimleri (U+202A–U+202E, U+2066–U+2069) ve sıfır genişlikli karakterler (U+200B–U+200F, U+2060–U+2065, U+FEFF) de satırı görsel olarak sahteleyebilir.
+const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]/g;
 // //TR: Katalog id ve reasons (ör. ham riskLevel) dış girdiden gelebilir; Desktop satırında kontrol karakterleri \\uXXXX olarak kaçırılır.
-const escapeControl = (v: string): string => v.replace(CONTROL_CHARS, c => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
+// //TR: Ters eğik çizgi önce \\\\ olarak kaçırılır; böylece çıktıdaki her \\uXXXX yalnız kaçırılmış bir kontrol karakterinden gelir (belirsizlik yok).
+const escapeControl = (v: string): string => v.replace(/\\/g, "\\\\").replace(CONTROL_CHARS, c => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
+const ROUTE_CODES: readonly RouteCode[] = ["ROUTED", "INVALID_REQUEST", "INVALID_CATALOG", RISK_REFUSAL, "REVIEWER_NOT_INDEPENDENT", "NO_PERMITTED_MODEL"];
+// //TR: code/modelClass/tier Desktop satırına ham girer; kapalı kümeler dışındaki (ör. elle kurulmuş, satır sonu içeren) değerler fail-closed reddedilir.
+const closedFieldsValid = (d: Pick<ModelRoutingRecord, "code" | "modelClass" | "tier" | "reasons">): boolean =>
+  oneOf(d.code, ROUTE_CODES) && (d.modelClass === null || oneOf(d.modelClass, MODEL_CLASS_ORDER)) && (d.tier === null || oneOf(d.tier, COST_TIER_ORDER))
+  && Array.isArray(d.reasons) && d.reasons.every(x => typeof x === "string");
 const safeStepId = (v: unknown): v is string => nonEmpty(v) && v.search(CONTROL_CHARS) < 0;
 export function modelRoutingRecord(stepId: unknown, decision: ModelRouteDecision): ModelRoutingRecord {
   if (!safeStepId(stepId)) throw new Error("Model routing record requires a non-empty stepId without control characters");
   if (!oneOf(decision.decision, ["ROUTE", "REFUSE"] as const)) throw new Error("Model routing decision is inconsistent");
+  if (!closedFieldsValid(decision)) throw new Error("Model routing decision has an unknown code, model class, tier or reason");
   const routed = decision.decision === "ROUTE";
   if (routed !== (decision.code === "ROUTED") || routed !== nonEmpty(decision.modelId) || routed !== (decision.modelClass !== null) || routed !== (decision.tier !== null)) throw new Error("Model routing decision is inconsistent");
   return Object.freeze({ kind: "MODEL_ROUTING_DECISION", stepId, decision: decision.decision, code: decision.code, modelId: decision.modelId,
@@ -108,6 +116,7 @@ export function routeModelStep(stepId: unknown, request: unknown, catalog: unkno
   return { decision, record: modelRoutingRecord(stepId, decision) };
 }
 export const modelRoutingDesktopLine = (r: ModelRoutingRecord): string => {
-  if (!safeStepId(r.stepId)) throw new Error("Model routing record stepId is not displayable");
-  return r.decision === "ROUTE" ? `${r.stepId}: ROUTE ${escapeControl(String(r.modelId))} (${r.modelClass}/${r.tier})` : `${r.stepId}: REFUSE ${r.code} — ${escapeControl(r.reasons.join("; "))}`;
+  if (!safeStepId(r.stepId) || !oneOf(r.decision, ["ROUTE", "REFUSE"] as const) || !closedFieldsValid(r)) throw new Error("Model routing record is not displayable");
+  const step = escapeControl(r.stepId);
+  return r.decision === "ROUTE" ? `${step}: ROUTE ${escapeControl(String(r.modelId))} (${r.modelClass}/${r.tier})` : `${step}: REFUSE ${r.code} — ${escapeControl(r.reasons.join("; "))}`;
 };
