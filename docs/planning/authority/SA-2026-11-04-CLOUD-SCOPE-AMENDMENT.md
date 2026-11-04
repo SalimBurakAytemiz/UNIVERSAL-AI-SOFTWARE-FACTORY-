@@ -26,7 +26,7 @@ This record makes each extension explicit and traceable, so it is neither hidden
 ### A. CLOUD-T0005: Windows .exe remote cloud client / Control UI (T1)
 - **Matrix targetFiles:** `NEW:apps/desktop/renderer/views/cloud-connection.js`.
 - **Added:**
-  - `apps/control-api/src/cloud/jobs.ts`: limited to adding the read-only `list()`, `summary()` and their redaction helper (`redactJobMessage`). No change to submit, claim, complete, cancel, STOP or any other queue semantics is covered; those stay owned by CLOUD-T0003.
+  - `apps/control-api/src/cloud/jobs.ts`: limited to (a) the read-only `list()` and `summary()`; (b) the closed message-code set (`JOB_MESSAGE_CODES`, `JobMessageCode`, `messageCodeFor`, the exact-match machine-code check) that `summary()` returns instead of worker text; (c) a data-minimisation change to what the queue *persists* on retry/failure: the journal event and the `RESULT_ACCEPTED` audit entry keep only a closed machine code, never worker free text; and (d) the exported, unit-tested `redactJobMessage` helper, which the queue no longer uses. No change to the submit, claim, complete, cancel or STOP state transitions, retry counting or any other queue semantics is covered; those stay owned by CLOUD-T0003.
   - `NEW:apps/control-api/src/routes/cloud-jobs.ts`
   - `NEW:tests/support/cloud-jobs-status.cases.ts`
   - `apps/desktop/renderer/views/tower.js`: mounting the read-only cloud jobs panel only (one import, one load call, one panel).
@@ -35,7 +35,7 @@ This record makes each extension explicit and traceable, so it is neither hidden
 - **Rationale:** the Desktop panel can show real job state only if the server exposes it. Without these files the panel can only show sample data, which is forbidden.
 - **Dependencies:** CLOUD-T0004 (gateway; already in the matrix) and **CLOUD-T0003 (queue; added by this amendment)**. The protected wiring in `server.ts` and the `main.mjs` GET allow-list is a separate Founder-tier PR.
 - **Risk:** the task's authority tier stays **T1 (unchanged)**. The added code is read-only and tenant-scoped. Lease, worker, scope, signature and idempotency data are never returned. Requirements:
-  - server-side redaction of worker messages;
+  - worker free text never leaves the API and is never persisted (only a closed `messageCode`);
   - negative tests showing that forged tenant headers and query parameters are ignored.
 - **Acceptance unchanged:** the doneMerge criterion (install, login, command, event streaming, download and stop on a Windows runner) is not met by this PR.
 - **PR:** #335.
@@ -66,7 +66,7 @@ This record makes each extension explicit and traceable, so it is neither hidden
 - **targetFiles:**
   - `NEW:apps/control-api/src/cloud/chain-host.ts`
   - `NEW:scripts/cloud-chain-host.mts`
-  - the related cases under `tests/`.
+  - new `describe` blocks in `tests/cloud/acceptance-suite.mts` only.
 - **Dependencies (all new; the task itself is new):** CLOUD-T0002, CLOUD-T0003, CLOUD-T0010 and CLOUD-T0015 (code delivered or stacked).
 - **New files, explicitly:** `apps/control-api/src/cloud/chain-host.ts`, `scripts/cloud-chain-host.mts`, and new cases in `tests/cloud/acceptance-suite.mts` (an existing CLOUD-T0011 file; only new describe blocks are covered).
 - **Scope:** compose the existing real components in one local process:
