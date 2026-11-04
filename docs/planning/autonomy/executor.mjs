@@ -14,7 +14,7 @@ const SHA_RE = /^[0-9a-f]{40}$/;
 export const MAIN_WORKFLOWS = Object.freeze([".github/workflows/ci.yml", ".github/workflows/windows-installer.yml"]);
 const REPO = "SalimBurakAytemiz/UNIVERSAL-AI-SOFTWARE-FACTORY-";
 
-/** Write access through curl (the environment's proxy authenticates). Only PUT pulls/<n>/merge is ever used. */
+/** Write access through curl (the environment's proxy authenticates). executeMerge only ever calls it with PUT pulls/<n>/merge. */
 export const curlWrite = repo => (method, p, body) => JSON.parse(execFileSync("curl", ["-sS", "-X", method, "-H", "Content-Type: application/json",
   "-H", "Accept: application/vnd.github+json", ...(process.env.GITHUB_TOKEN ? ["-H", `Authorization: Bearer ${process.env.GITHUB_TOKEN}`] : []),
   `https://api.github.com/repos/${repo}/${p}`, "-d", JSON.stringify(body)], {maxBuffer: 16 << 20}).toString("utf8"));
@@ -30,10 +30,24 @@ export function executeMerge({api, write, pr, implementerSessions, decide = deci
     gate: {decision: gate.decision, trust: gate.trust, identityIndependence: gate.identityIndependence}};
   if (result.decision !== "AUTO_MERGE") return {...base, decision: result.decision};
   if (!SHA_RE.test(result.expectedHeadSha ?? "") || !SHA_RE.test(result.expectedBaseSha ?? "")) return {...base, decision: "INTERNAL_ERROR", reasons: ["SHA_MALFORMED"]};
+  // Only a true merge commit can be verified as (base, head); any other method is refused before writing (review 5758193752 L-6).
+  if ((c.policy?.mergeMethod ?? "merge") !== "merge") return {...base, decision: "INTERNAL_ERROR", reasons: ["MERGE_METHOD_UNSUPPORTED"]};
+  const baseRef = c.evidence.pr.base.ref;
+  // GitHub's merge API binds only the head. The base is re-read immediately before the write, so a base that moved is refused
+  // instead of merged; a move inside the remaining window is detected afterwards by verifyMerge (VERIFY_FAILED), never hidden (NB-1).
+  let tip0;
+  try { tip0 = api(`branches/${encodeURIComponent(baseRef)}`).commit.sha; } catch { return {...base, decision: "INTERNAL_ERROR", reasons: ["BASE_UNREADABLE"]}; }
+  if (tip0 !== result.expectedBaseSha) return {...base, decision: "BLOCK", reasons: ["BASE_MOVED_BEFORE_MERGE"]};
   let m;
-  try { m = write("PUT", `pulls/${pr}/merge`, {sha: result.expectedHeadSha, merge_method: c.policy?.mergeMethod ?? "merge"}); } catch { return {...base, decision: "MERGE_FAILED", reasons: ["MERGE_REQUEST_FAILED"]}; }
-  if (!m || m.merged !== true || !SHA_RE.test(m.sha ?? "")) return {...base, decision: "MERGE_FAILED", reasons: ["MERGE_REFUSED"]};
-  const v = verifyMerge({api, mergeSha: m.sha, baseSha: result.expectedBaseSha, headSha: result.expectedHeadSha, baseRef: c.evidence.pr.base.ref});
+  try { m = write("PUT", `pulls/${pr}/merge`, {sha: result.expectedHeadSha, merge_method: "merge"}); } catch { m = null; }
+  if (!m || m.merged !== true || !SHA_RE.test(m.sha ?? "")) {
+    // L-4: a lost or non-JSON response may hide a merge that happened; the PR is re-read before reporting, never re-merged.
+    let p = null;
+    try { p = api(`pulls/${pr}`); } catch { p = null; }
+    if (!(p && p.merged === true && SHA_RE.test(p.merge_commit_sha ?? "") && p.head?.sha === result.expectedHeadSha)) return {...base, decision: "MERGE_FAILED", reasons: [m ? "MERGE_REFUSED" : "MERGE_REQUEST_FAILED"]};
+    m = {merged: true, sha: p.merge_commit_sha};
+  }
+  const v = verifyMerge({api, mergeSha: m.sha, baseSha: result.expectedBaseSha, headSha: result.expectedHeadSha, baseRef});
   return {...base, decision: v.ok ? "MERGED_VERIFIED" : "VERIFY_FAILED", mergeSha: m.sha, authority: result.authority, reasons: v.reasons};
 }
 
@@ -54,12 +68,14 @@ export function verifyMerge({api, mergeSha, baseSha, headSha, baseRef}) {
 }
 
 /** Post-merge main verification: the push runs of MAIN_WORKFLOWS on the merge commit. Missing or unfinished => MAIN_RUNNING; any failure => MAIN_FAIL. */
-export function verifyMain({api, sha}) {
+export function verifyMain({api, sha, baseRef = "v7/integration"}) {
   if (!SHA_RE.test(sha ?? "")) return {decision: "INTERNAL_ERROR", reasons: ["SHA_MALFORMED"]};
-  const runs = (api(`actions/runs?head_sha=${sha}&event=push&per_page=100`).workflow_runs ?? []).filter(r => r.head_sha === sha);
+  // NB-2/NB-3 of review 5758193752: only push runs on the base branch for this SHA count; the list API returns each run's latest attempt, so the newest run id wins.
+  const runs = (api(`actions/runs?head_sha=${sha}&event=push&branch=${encodeURIComponent(baseRef)}&per_page=100`).workflow_runs ?? [])
+    .filter(r => r.head_sha === sha && r.event === "push" && r.head_branch === baseRef);
   const out = {};
   for (const wf of MAIN_WORKFLOWS) {
-    const latest = runs.filter(r => r.path === wf).sort((a, b) => (b.run_attempt ?? 0) - (a.run_attempt ?? 0) || b.id - a.id)[0];
+    const latest = runs.filter(r => r.path === wf).sort((a, b) => b.id - a.id)[0];
     out[wf] = !latest ? "MISSING" : latest.status !== "completed" ? "RUNNING" : latest.conclusion === "success" ? "PASS" : "FAIL";
   }
   const vals = Object.values(out);
@@ -71,7 +87,7 @@ const args = (argv, k) => argv.flatMap((a, i) => (a === k && i + 1 < argv.length
 
 export function runCli(argv) {
   const api = curlApi(REPO);
-  if (argv[0] === "merge" && args(argv, "--pr").length === 1) {
+  if (argv[0] === "merge" && args(argv, "--pr").length === 1 && /^[1-9]\d{0,9}$/.test(args(argv, "--pr")[0])) {
     const r = executeMerge({api, write: curlWrite(REPO), pr: Number(args(argv, "--pr")[0]), implementerSessions: args(argv, "--implementer-session")});
     return {exit: EXIT[r.decision] ?? EXIT.INTERNAL_ERROR, res: r};
   }

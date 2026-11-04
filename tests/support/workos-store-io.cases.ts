@@ -3,7 +3,7 @@ import {describe, it, expect, beforeEach, afterEach, vi} from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import {WorkOsStore, acquireStoreLock, defaultStoreLockIo, type StoreLockIo} from "../../core/workos/store.js";
+import {WorkOsStore, acquireStoreLock, defaultStoreLockIo, storeLockHostTag, type StoreLockIo} from "../../core/workos/store.js";
 
 export function registerWorkosStoreIoCases(): void {
   describe("UASCO-T0042 PAR-03: Work OS store durable I/O per operation (Windows heartbeat starvation)", () => {
@@ -91,6 +91,61 @@ export function registerWorkosStoreIoCases(): void {
       for (let i = 0; i < 20; i++) { const l = acquireStoreLock(L, {io}); expect(files.get(L)).toBe(l.id); l.release(); }
       expect(busy()).toBe(0);                                  // no EPERM on the lock name: nothing for withLock to spin on
       expect([...files.keys()].filter(k => k.startsWith(L))).toEqual([]);   // tombstones are removed (or swept by the next winner)
+    });
+
+    // NB-2 (#321 review): the stale-takeover path vacates the stale name the same way release() does, so the link() right after it is not blocked.
+    const staleId = (pid: number, host = storeLockHostTag()) => `${pid}.0.${host}:${"a".repeat(32)}`;
+    it("stale takeover vacates the dead owner's lock by tombstone rename: the takeover's own link and the next acquire do not stall", () => {
+      const {io, files, busy} = pendingIo(1_000);
+      files.set(L, staleId(999_999));                          // dead owner, same host
+      const l = acquireStoreLock(L, {io, alive: () => false});
+      expect(files.get(L)).toBe(l.id);
+      expect(busy()).toBe(0);                                  // no EPERM on the lock name during the takeover
+      l.release();
+      const next = acquireStoreLock(L, {io, alive: () => false});
+      expect(files.get(L)).toBe(next.id); next.release();
+      expect(busy()).toBe(0);
+      expect([...files.keys()].filter(k => k.startsWith(L))).toEqual([]);   // no takeover token, temp file or tombstone left behind
+    });
+    it("takeover guarantees are unchanged: a live owner is STORE_LOCKED and another host's lock is STORE_LOCK_OTHER_HOST, both left untouched", () => {
+      const {io, files} = pendingIo(1_000);
+      files.set(L, staleId(4242));
+      expect(() => acquireStoreLock(L, {io, alive: () => true})).toThrow(/STORE_LOCKED/);
+      expect(files.get(L)).toBe(staleId(4242));
+      files.set(L, staleId(999_999, "0123456789ab"));
+      expect(() => acquireStoreLock(L, {io, alive: () => false})).toThrow(/STORE_LOCK_OTHER_HOST/);
+      expect(files.get(L)).toBe(staleId(999_999, "0123456789ab"));
+      expect([...files.keys()].filter(k => k !== L && k.startsWith(L))).toEqual([]);
+    });
+    // The rename must only ever move the stale lock this process holds the generation token for: these interleavings would otherwise rename a live lock away.
+    it("takeover race: if the name changed after our token (another taker re-linked a live lock), it is never vacated", () => {
+      const {io, files} = pendingIo(0);
+      files.set(L, staleId(999_999));
+      let tokenTaken = false, raced = false;
+      const racing: StoreLockIo = {...io,
+        link(a, b) { io.link(a, b); if (b.includes(".takeover.")) tokenTaken = true; },
+        read(p) {
+          if (p === L && tokenTaken && !raced) { raced = true; const seen = staleId(888_888); files.set(L, staleId(4242)); return seen; } // B vacated S' and linked its live lock right after our read
+          return io.read(p);
+        }};
+      expect(() => acquireStoreLock(L, {io: racing, alive: pid => pid === 4242})).toThrow(/STORE_LOCKED/);
+      expect(raced).toBe(true);
+      expect(files.get(L)).toBe(staleId(4242));                // B's live lock is intact
+    });
+    it("takeover race: a zero-byte lock that turns young again (a legacy writer is mid-write) is re-checked and not vacated", () => {
+      const {io, files} = pendingIo(0);
+      files.set(L, "");
+      let calls = 0;
+      const legacy: StoreLockIo = {...io, mtimeMs: () => (++calls === 1 ? Date.now() - 60_000 : Date.now())};
+      expect(() => acquireStoreLock(L, {io: legacy, alive: () => false})).toThrow(/STORE_LOCKED/);
+      expect(calls).toBeGreaterThan(1);
+      expect(files.get(L)).toBe("");
+    });
+    it("without rename support the stale takeover still uses in-place unlink (the delete-pending name blocks its link)", () => {
+      const {io, files, busy} = pendingIo(1_000);
+      files.set(L, staleId(999_999));
+      expect(() => acquireStoreLock(L, {io: {...io, rename: undefined}, alive: () => false})).toThrow(/STORE_LOCK_BUSY/);
+      expect(busy()).toBe(1);
     });
 
     it("without rename support the old unlink path is still used (and is exactly what leaves the name delete-pending)", () => {
