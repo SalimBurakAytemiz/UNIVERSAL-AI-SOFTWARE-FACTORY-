@@ -73,6 +73,8 @@ export interface StoreLockIo {
   unlink(path: string): void;
   list(dir: string): string[];
   mtimeMs(path: string): number;
+  /** İsteğe bağlı (yoksa bırakma doğrudan unlink'e düşer): hedef yoksa yeniden adlandırır. */
+  rename?(from: string, to: string): void;
 }
 export const defaultStoreLockIo: StoreLockIo = {
   // //TR: UASCO-T0042: kilit içeriği fsync edilmez. Kilit yalnız canlı süreçler arası dışlamadır; güç kesintisinden sonra kimse onu tutmaz ve boş/yarım kilit
@@ -83,6 +85,7 @@ export const defaultStoreLockIo: StoreLockIo = {
   unlink: p => fs.unlinkSync(p),
   list: d => fs.readdirSync(d),
   mtimeMs: p => fs.statSync(p).mtimeMs,
+  rename: (a, b) => fs.renameSync(a, b),
 };
 export interface StoreLockOptions {
   io?: StoreLockIo;
@@ -173,6 +176,14 @@ export function acquireStoreLock(lockPath: string, o: StoreLockOptions = {}): St
       let raw: string | null = null;
       try { retryTransient(() => { raw = readOrNull(lockPath); }); } catch { return; }
       if (raw === null || String(raw).trim() !== id) return;
+      // //TR: UASCO-T0042 (C-PAR-1 PAR-03, Windows): kilit ADINDA yerinde silme yapılmaz. Windows'ta dış bir tanıtıcı (Defender/dizinleyici, FILE_SHARE_DELETE ile) dosyayı
+      // tutarken unlink adı "silme-beklemede" bırakır; tanıtıcı kapanana dek o ada link() EPERM verir ve withLock senkron döngüde (sleepSync) LOCK_WAIT_MS'e kadar bekler:
+      // olay döngüsü saniyelerce CPU'suz durur ve lease heartbeat'leri açlıktan fence olur (CI: maxLoopStallMs 4161..10469, hep <= LOCK_WAIT_MS + ek, cpuMs ~1 s).
+      // Önce benzersiz bir mezar adına rename edilir (ad hemen boşalır; silme-beklemesi yalnız mezarda kalır), sonra mezar silinir; rename olmazsa eski unlink yolu.
+      if (io.rename) {
+        const tomb = `${lockPath}.rel-${crypto.randomBytes(8).toString("hex")}`;
+        try { io.rename(lockPath, tomb); try { io.unlink(tomb); } catch { /* mezar artığı: kilit değildir, kazanan süpürür */ } return; } catch { /* aşağıdaki unlink yolu */ }
+      }
       try { retryTransient(() => { try { io.unlink(lockPath); } catch (e) { if (errCode(e) !== "ENOENT") throw e; } }); } catch { /* yetim kalır; yukarıya bakınız */ }
     },
   });
@@ -182,6 +193,8 @@ export function acquireStoreLock(lockPath: string, o: StoreLockOptions = {}): St
     let names: string[] = [];
     try { names = io.list(dir); } catch { return lock; }
     for (const n of names) if (n.startsWith(`${base}.takeover.`) && !n.includes(".tmp-")) { try { io.unlink(prefix + n); } catch { /* yut */ } }
+    // Bırakma mezarları hiçbir zaman canlı kilit değildir (yalnız bırakılmış kilidin yeni adı): yaşa bakılmadan süpürülür.
+    for (const n of names) if (n.startsWith(`${base}.rel-`)) { try { io.unlink(prefix + n); } catch { /* yut */ } }
     // L-1: yazma ile silme arasında çöken sürecin geçici dosyası; yalnız grace'ten yaşlıysa silinir (yazılmakta olan başkasının geçici dosyasına dokunulmaz).
     for (const n of names) if (n.startsWith(`${base}.`) && n.includes(".tmp-")) { try { if (now() - io.mtimeMs(prefix + n) >= grace) io.unlink(prefix + n); } catch { /* yut */ } }
     return lock;
@@ -320,14 +333,22 @@ export class WorkOsStore {
   }
   // F-B1-006: journal append ve doğrulamalı yükleme süreçler arası tek lock ile serileşir. V3-T1001: link() tabanlı store kilidi
   // (sıfır-bayt/ölü/yetim kilit güvenli geri alınır, Windows geçici hataları yeniden denenir).
+  // //TR: UASCO-T0042 kanıtı: withLock'un senkron bekleme döngüsü olay döngüsünü durdurur; en uzun bekleme ve son geçici hata kodu tutulur (PAR-03 teşhisi bunu basar).
+  private lockWait = {waits: 0, totalMs: 0, maxMs: 0, lastCode: null as string | null};
+  lockWaitStats(): {waits: number; totalMs: number; maxMs: number; lastCode: string | null} { return {...this.lockWait}; }
   private withLock<T>(fn: () => T): T {
     fs.mkdirSync(this.dataDir, {recursive: true});
-    const deadline = Date.now() + LOCK_WAIT_MS; let release: (() => void) | null = null;
-    for (;;) {
-      try { const l = acquireStoreLock(this.lockFile, this.lockOptions); release = () => l.release(); break; } catch {
-        if (Date.now() >= deadline) throw new WorkOsError("WORKOS_UNAVAILABLE", "LOCK_TIMEOUT");
-        sleepSync(15);
+    const t0 = Date.now(), deadline = t0 + LOCK_WAIT_MS; let release: (() => void) | null = null, spun = false;
+    try {
+      for (;;) {
+        try { const l = acquireStoreLock(this.lockFile, this.lockOptions); release = () => l.release(); break; } catch (e) {
+          spun = true; this.lockWait.lastCode = String((e as NodeJS.ErrnoException)?.code ?? (e as Error)?.message ?? "?").slice(0, 40);
+          if (Date.now() >= deadline) throw new WorkOsError("WORKOS_UNAVAILABLE", "LOCK_TIMEOUT");
+          sleepSync(15);
+        }
       }
+    } finally {
+      if (spun) { const w = Date.now() - t0; this.lockWait.waits += 1; this.lockWait.totalMs += w; this.lockWait.maxMs = Math.max(this.lockWait.maxMs, w); }
     }
     try { return fn(); } finally { try { release?.(); } catch { /* lock sahipliği değişmişse yazma zaten tamamlandı */ } }
   }
