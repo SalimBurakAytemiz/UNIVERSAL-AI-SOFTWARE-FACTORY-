@@ -1,6 +1,7 @@
 # //TR: Bu korunan workflow (public repo, ucretsiz standart GitHub-hosted runner'lar) Linux + Windows uzerinde deterministic lockfile install, canonical/mechanical validation (600 sn adim limiti altinda sirali tests kabuklari dahil), baseline secret scan ve trust-kernel self-test calistirir; yalniz master/v7/integration push'unda, PR'larda ve elle tetiklenir (cift tetikleme yok), PR'da eskiyen kosu iptal edilir, sonuc commit SHA'sina bagli CI_EVIDENCE.json (yalniz adim kimligi/durum/sure) olarak 14 gun saklanir; self-hosted, larger veya ucretli runner kullanmaz. Yetki: FD-PUBLIC-CI-2026-10-19 (yalniz PR #49).
 # //TR: CI-PARALLEL (oneri, Founder yetkisi gerekir): Linux validate tek is olarak degismez; Windows dogrulamasi config/validation.json shardPlan.win32 ile ayni adimlari, ayni 600 sn limitini koruyarak 3 kabuga (validate-windows-shard (1..3)) bolunur ve zorunlu 'validate (windows-latest)' baglami fail-closed scripts/validate-shards.mjs birlestiricisidir (eksik/fazla/tekrar/SHA/ozet/FAIL/zaman asimi = FAIL); secret-sanity, kernel self-test ve ci-evidence orada calisir.
 # //TR: CI-TEP1 (Founder yetkisi gerekir): preflight (ubuntu-latest, 15 dk) mevcut ucuz kontrolleri (tedarik zinciri, trust-root, secret, //TR, mimari, typecheck) Windows kabuklarindan ONCE calistirir; validate-windows-shard ona baglidir (needs), Linux validate bagimsizdir ve her adimi calistirir. preflight FAIL olursa kabuklar atlanir ve zorunlu 'validate (windows-latest)' preflight'i adlandirarak kirmizi olur. Birlestirici bu run_id'nin TUM attempt'lerindeki kabuk artifact'lerini ayri alt dizinlere indirir ve --max-attempt ile her kabuk icin bu attempt'i asmayan en yuksek attempt'in raporunu kullanir (COORD-001: yalniz basarisiz kabugun yeniden calistirilmasi artik birlestiriciyi her zaman dusurmez; yeni FAIL eski PASS ile ortulmez).
+# //TR: CI-AGG-CANCEL (Founder yetkisi gerekir): birlestirici is 'if: always()' yerine 'if: ${{ !cancelled() }}' ile calisir; yeni bir push ile iptal edilen (supersede) kosuda Windows runner'i bos yere tutmaz, kabuklar FAIL/atlanmis oldugunda ise yine calisir ve fail-closed kirmizi olur (zorunlu kontrol degismez).
 name: CI
 on:
   push:
@@ -108,7 +109,7 @@ jobs:
   validate-windows:
     name: validate (windows-latest)
     needs: [preflight, validate-windows-shard]
-    if: always()
+    if: ${{ !cancelled() }}
     runs-on: windows-latest
     timeout-minutes: 30
     env:

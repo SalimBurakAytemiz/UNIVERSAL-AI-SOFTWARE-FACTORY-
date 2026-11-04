@@ -270,7 +270,7 @@ describe("canonical shard plan and CI wiring",()=>{
     expect(ci).toContain("name: validate-windows-shard (${{ matrix.shard }})");
     expect(ci).toContain("node scripts/run-validation.mjs --shard ${{ matrix.shard }}/3");
     expect(ci.match(/name: validate \(windows-latest\)/g)).toHaveLength(1);
-    expect(ci).toMatch(/validate-windows:\n {4}name: validate \(windows-latest\)\n {4}needs: \[preflight, validate-windows-shard\]\n {4}if: always\(\)/);
+    expect(ci).toMatch(/validate-windows:\n {4}name: validate \(windows-latest\)\n {4}needs: \[preflight, validate-windows-shard\]\n {4}if: \$\{\{ !cancelled\(\) \}\}\n/);
     expect(ci).toContain('test "$SHARDS_RESULT" = "success"');
     // //TR: S1: birleştirici işi PR-kontrollü bağımlılık kurmaz; yalnız Node yerleşikleriyle çalışır. S2: run id/attempt bağlanır.
     const agg=ci.slice(ci.indexOf("\n  validate-windows:\n"));expect(agg.length).toBeGreaterThan(100);
@@ -304,7 +304,7 @@ describe("canonical shard plan and CI wiring",()=>{
   });
   it("CI-TEP1: the required Windows aggregator stays fail-closed on preflight, reads every attempt of this run and passes --max-attempt",()=>{
     const agg=jobs["validate-windows"];
-    expect(agg).toMatch(/\n {4}needs: \[preflight, validate-windows-shard\]\n {4}if: always\(\)\n/);
+    expect(agg).toMatch(/\n {4}needs: \[preflight, validate-windows-shard\]\n {4}if: \$\{\{ !cancelled\(\) \}\}\n/);
     expect(agg).toContain("      PREFLIGHT_RESULT: ${{ needs.preflight.result }}\n      SHARDS_RESULT: ${{ needs.validate-windows-shard.result }}\n");
     const r=runs(agg);
     expect(r.slice(0,2)).toEqual(['test "$PREFLIGHT_RESULT" = "success" || (echo "preflight result=$PREFLIGHT_RESULT (expected success); validate-windows-shard result=$SHARDS_RESULT because the Windows shards need preflight" && exit 1)','test "$SHARDS_RESULT" = "success" || (echo "validate-windows-shard result=$SHARDS_RESULT (expected success)" && exit 1)']);
