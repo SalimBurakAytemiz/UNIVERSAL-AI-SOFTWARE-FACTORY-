@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import {pathToFileURL} from "node:url";
-import {CloudJobQueue, signWorkerAuth, redactJobMessage, JOB_MESSAGE_MAX, type WorkerAuth} from "../../apps/control-api/src/cloud/jobs.js";
+import {CloudJobQueue, signWorkerAuth, redactJobMessage, messageCodeFor, JOB_MESSAGE_CODES, JOB_MESSAGE_MAX, type WorkerAuth} from "../../apps/control-api/src/cloud/jobs.js";
 import {registerCloudJobRoutes, CLOUD_JOBS_PATH, CLOUD_JOB_ID_RE} from "../../apps/control-api/src/routes/cloud-jobs.js";
 import {buildServer} from "../../apps/control-api/src/server.js";
 import {CLOUD_CONTRACT_VERSION, signScope, sha256Hex, type CloudJobRequest, type UnsignedScope} from "../../core/cloud/contracts.js";
@@ -31,7 +31,7 @@ const auth = (action: WorkerAuth["action"], jobId: string, body: unknown = {}): 
   signWorkerAuth({workerId: "worker-a", action, jobId, at: clock.toISOString(), nonce: crypto.randomUUID()}, WORKER_KEY, body);
 const ART = {name: "out/app.zip", sha256: sha256Hex("bytes"), sizeBytes: 5};
 /** ALLOWED: JobSummary'nin kapalı alan listesi. Lease/worker/imza/idempotency alanı eklenirse test kırmızı olur. */
-const ALLOWED = ["artifacts", "attempt", "environment", "jobId", "kind", "lastEventType", "maxAttempts", "message", "projectId", "requestedAt", "status", "updatedAt"];
+const ALLOWED = ["artifacts", "attempt", "environment", "jobId", "kind", "lastEventType", "maxAttempts", "messageCode", "projectId", "requestedAt", "status", "updatedAt"];
 
 let dir = "";
 const open: CloudJobQueue[] = [];
@@ -126,9 +126,9 @@ export function registerCloudJobsStatusCases(): void {
       expect(rows.some(r => r.jobId === x.jobId)).toBe(false);
       expect(q.list(OTHER).map(r => r.jobId)).toEqual([x.jobId]);
       for (const r of rows) expect(Object.keys(r).sort()).toEqual(ALLOWED);
-      expect(rows.find(r => r.jobId === a.jobId)).toMatchObject({status: "SUCCEEDED", artifacts: [ART], message: null});
-      expect(rows.find(r => r.jobId === b.jobId)).toMatchObject({status: "FAILED", message: "compile error in step 2"});
-      expect(rows.find(r => r.jobId === c.jobId)).toMatchObject({status: "RUNNING", lastEventType: "STARTED", message: null});
+      expect(rows.find(r => r.jobId === a.jobId)).toMatchObject({status: "SUCCEEDED", artifacts: [ART], messageCode: null});
+      expect(rows.find(r => r.jobId === b.jobId)).toMatchObject({status: "FAILED", messageCode: "WORKER_FAILED"});
+      expect(rows.find(r => r.jobId === c.jobId)).toMatchObject({status: "RUNNING", lastEventType: "STARTED", messageCode: null});
       const blob = JSON.stringify(rows);
       for (const bad of [lease, "worker-a", "leaseId", "workerId", "expiresAt", "signature", "idempotencyKey", "idem-st-", "[stored-verified]", "scope", SCOPE_KEY, WORKER_KEY, "tenantId"]) expect(blob, bad).not.toContain(bad);
       expect(q.list(TENANT, 2)).toHaveLength(2);
@@ -183,7 +183,9 @@ export function registerCloudJobsStatusCases(): void {
       expect(r.seen).toEqual([{path: CLOUD_JOBS_PATH, status: 200}]);
       expect(r.state).toBe("OK");
       expect(r.cards.map(x => [x.dataset.cloudJob, x.dataset.cloudJobStatus])).toEqual([[c.jobId, "RUNNING"], [b.jobId, "FAILED"], [a.jobId, "SUCCEEDED"]]);
-      expect(r.root.textContent).toContain("compile error in step 2");
+      // worker metni gösterilmez: yalnız sabit kod + sabit açıklama
+      expect(r.root.textContent).not.toContain("compile error in step 2");
+      expect(r.root.all().find(x => x.dataset.cloudJobCode === "WORKER_FAILED")?.textContent).toBe("WORKER_FAILED İş bulutta başarısız oldu. Ayrıntı yalnız sunucu denetim kaydındadır.");
       expect(r.root.textContent).toContain(ART.name);
       expect(r.root.all().some(x => x.tagName === "BUTTON")).toBe(false);   // salt-okunur
       q.stopAll();
@@ -217,8 +219,14 @@ export function registerCloudJobsStatusCases(): void {
         expect((await view.loadCloudJobs(api(data))).state, JSON.stringify(data)).toBe("ERROR");
       }
       expect((await view.loadCloudJobs({get: async () => ({ok: false, state: "OFFLINE", message: "fetch failed"})})).state).toBe("OFFLINE");
-      const sec = await view.loadCloudJobs(api({state: "OK", jobs: [{jobId: "job-x-1", status: "FAILED", attempt: 1, maxAttempts: 1, kind: "BUILD", message: "token=abcdef1234567890"}]}));
-      expect(sec.jobs[0].message).toBe("token=[REDACTED]");
+      // ham "message" alanı (ör. eski sunucu) yok sayılır; bilinmeyen kod genel WORKER_FAILED'a düşer, bilinen kod korunur
+      const sec = await view.loadCloudJobs(api({state: "OK", jobs: [{jobId: "job-x-1", status: "FAILED", attempt: 1, maxAttempts: 1, kind: "BUILD", message: "token=abcdef1234567890 r3-render-marker", messageCode: "SOMETHING_NEW"},
+        {jobId: "job-x-2", status: "TIMED_OUT", attempt: 1, maxAttempts: 1, kind: "BUILD", messageCode: "LEASE_EXPIRED"}, {jobId: "job-x-3", status: "SUCCEEDED", attempt: 1, maxAttempts: 1, kind: "BUILD", messageCode: null}]}));
+      expect(sec.jobs.map((j: any) => j.messageCode)).toEqual(["WORKER_FAILED", "LEASE_EXPIRED", null]);
+      expect(JSON.stringify(sec)).not.toContain("abcdef1234567890");
+      expect(JSON.stringify(sec)).not.toContain("r3-render-marker");
+      expect(Object.keys(sec.jobs[0]).sort()).toEqual(["artifacts", "attempt", "jobId", "kind", "messageCode", "status", "updatedAt"]);
+      expect(JSON.stringify(view.cloudJobsPanel({doc: new D(), t: (k: string) => k}, sec).textContent)).not.toContain("r3-render-marker");
       // proposed allow-list entries are exact (anchored)
       for (const p of [`${CLOUD_JOBS_PATH}/`, `${CLOUD_JOBS_PATH}?x`, `${CLOUD_JOBS_PATH}x`, `${CLOUD_JOBS_PATH}/a/b`, `${CLOUD_JOBS_PATH}/..`]) expect(PROPOSED_GET.some(re => re.test(p)), p).toBe(false);
     });
@@ -246,9 +254,8 @@ export function registerCloudJobsStatusCases(): void {
       for (const blob of [listBody, itemBody, JSON.stringify(row)]) {
         for (const secret of ["pl4nted-T0k3n-value", "abc.def.ghi", "s3cr3tPW", "ci-user", planted.key, "/home/runner", "credentials.json", "C:\\\\Users", "builder"]) expect(blob, secret).not.toContain(secret);
       }
-      expect(row.message).toContain("step failed");
-      expect(row.message).toMatch(/\[REDACTED:KEY_VALUE\]|\[REDACTED:/);
-      expect(row.message!.length).toBeLessThanOrEqual(JOB_MESSAGE_MAX);
+      expect(row.messageCode).toBe("RETRYING");
+      expect("message" in row).toBe(false);
       // redactor units: each class on its own; benign text untouched
       expect(redactJobMessage(planted.kv)).toBe("token=[REDACTED:KEY_VALUE]");
       expect(redactJobMessage(`auth: ${planted.bearer}`)).not.toContain("abc.def.ghi");
@@ -284,7 +291,8 @@ export function registerCloudJobsStatusCases(): void {
         expect(q.complete(auth("complete", j.jobId, {leaseId: c.lease.leaseId, result: res}), j.jobId, c.lease.leaseId, res)).toMatchObject({ok: true});
         const item = (await get(app, `${CLOUD_JOBS_PATH}/${j.jobId}`)).body;
         for (const v of leaked) expect(item, `${name}: ${v}`).not.toContain(v);
-        expect(JSON.parse(item).job.message, name).toContain("[REDACTED:KEY_VALUE]");
+        expect(JSON.parse(item).job, name).toMatchObject({messageCode: "WORKER_FAILED"});
+        expect("message" in JSON.parse(item).job, name).toBe(false);
       }
       const list = (await get(app, CLOUD_JOBS_PATH)).body;
       for (const v of leaked) expect(list, v).not.toContain(v);
@@ -332,6 +340,69 @@ export function registerCloudJobsStatusCases(): void {
       for (const [form, , , secret] of table) expect(list, form).not.toContain(secret);
     });
 
+    it("worker free text never leaves the API: only a closed messageCode (all planted forms of the three review rounds; unknown text -> generic code)", async () => {
+      const J = (...p: string[]) => p.join("");
+      const PW = J("pass", "word"), TK = J("to", "ken");
+      // [biçim, worker metni, sızmaması gereken değer] — üç inceleme turunun tüm biçimleri
+      const planted: Array<[string, string, string]> = [
+        ["prefixed env", `DB_${PW.toUpperCase()}=r3-env-val`, "r3-env-val"], ["GITHUB_TOKEN", `GITHUB_${TK.toUpperCase()}=r3-gh-val`, "r3-gh-val"],
+        ["AWS_SECRET_ACCESS_KEY", "AWS_SECRET_ACCESS_KEY=r3-aws-val", "r3-aws-val"], ["JSON", `{"${PW}":"r3-json-val"}`, "r3-json-val"],
+        ["JSON spaced", `{"${TK}": "r3 json sp"}`, "r3 json sp"], ["single quotes", `{'${PW}': 'r3-sq-val'}`, "r3-sq-val"],
+        ["hash rocket", `{:${PW} => "r3-rocket-val", "${TK}" => 'r3-rocket2'}`, "r3-rocket-val"], ["hash rocket 2", `{"${TK}" => 'r3-rocket2'}`, "r3-rocket2"],
+        ["CLI flag", `--${PW} r3-flag-val`, "r3-flag-val"], ["CLI flag =", `--${TK}=r3-flag-eq`, "r3-flag-eq"], ["export", `export API_KEY=r3-export-val`, "r3-export-val"],
+        ["set", `set DB_${PW.toUpperCase()}=r3-set-val`, "r3-set-val"], ["Authorization Bearer", "Authorization: Bearer r3bearer0123456789", "r3bearer0123456789"],
+        ["Authorization Digest", `Authorization: Digest username="u", response="r3digestval"`, "r3digestval"], ["Authorization Token", "Authorization: Token r3tokscheme", "r3tokscheme"],
+        ["pass", "pass=r3-pass-val", "r3-pass-val"], ["private_key", J("private", "_key: ", "r3-privkey-val"), "r3-privkey-val"],
+        ["PEM", J("-----BEGIN ", "PRIVATE KEY-----\nr3pemBODY\n-----END ", "PRIVATE KEY-----"), "r3pemBODY"], ["URL creds", "https://u:r3urlpw@h.example/x", "r3urlpw"],
+        ["path", "/home/runner/r3-secret-dir/id_rsa", "r3-secret-dir"], ["plain prose", "worker said r3-prose-marker happened", "r3-prose-marker"],
+      ];
+      const q = new CloudJobQueue({dir, scopeKeys: new Map([["k-1", SCOPE_KEY]]), workerKeys: new Map([["worker-a", WORKER_KEY]]), now: () => clock, leaseMs: 60_000});
+      open.push(q);
+      const app = mkServer(q);
+      const ids: string[] = [];
+      for (const [, text] of planted) {
+        const j = req(); expect(q.submit(j).ok).toBe(true); ids.push(j.jobId);
+        const c = q.claim(auth("claim", "*")); if (!c.ok || c.job.jobId !== j.jobId) throw new Error("claim");
+        const res = {status: "FAILED" as const, message: text};
+        expect(q.complete(auth("complete", j.jobId, {leaseId: c.lease.leaseId, result: res}), j.jobId, c.lease.leaseId, res)).toMatchObject({ok: true});
+      }
+      const list = (await get(app, CLOUD_JOBS_PATH)).body;
+      for (const [form, , secret] of planted) expect(list, form).not.toContain(secret);
+      for (const [i, id] of ids.entries()) {
+        const body = (await get(app, `${CLOUD_JOBS_PATH}/${id}`)).body;
+        expect(body, planted[i]![0]).not.toContain(planted[i]![2]);
+        const job = JSON.parse(body).job;
+        expect(Object.keys(job).sort(), planted[i]![0]).toEqual(ALLOWED);
+        expect(job.messageCode, planted[i]![0]).toBe("WORKER_FAILED");
+      }
+      for (const j of JSON.parse(list).jobs) expect(Object.keys(j).sort()).toEqual(ALLOWED);
+      // server-side audit keeps a REDACTED diagnostic only (never the raw secret)
+      const audit = fs.readFileSync(path.join(dir, "jobs.audit.jsonl"), "utf8");
+      expect(audit).toContain("messageRedacted");
+      for (const s of ["r3-env-val", "r3-json-val", "r3-sq-val", "r3-flag-val", "r3bearer0123456789", "r3pemBODY", "r3urlpw"]) expect(audit, s).not.toContain(s);
+      // code mapping: only exact known machine codes are recognised; anything else is generic
+      const ev = (type: string, message?: string) => ({jobId: "j", seq: 0, type, at: "2026-11-03T12:00:00Z", attempt: 1, ...(message === undefined ? {} : {message})}) as any;
+      const cases: Array<[string, any[], string | null]> = [
+        ["FAILED", [ev("FAILED", "SANDBOX_UNAVAILABLE")], "SANDBOX_UNAVAILABLE"], ["FAILED", [ev("FAILED", "sandbox_unavailable")], "WORKER_FAILED"],
+        ["FAILED", [ev("FAILED", "SANDBOX_UNAVAILABLE: details")], "WORKER_FAILED"], ["FAILED", [ev("FAILED", "LEASE_EXPIRED")], "LEASE_EXPIRED"],
+        ["FAILED", [ev("FAILED", "SOME_NEW_CODE")], "WORKER_FAILED"], ["FAILED", [ev("FAILED")], "WORKER_FAILED"],
+        ["TIMED_OUT", [ev("TIMED_OUT", "LEASE_EXPIRED")], "LEASE_EXPIRED"], ["TIMED_OUT", [ev("TIMED_OUT")], "TIMED_OUT"], ["TIMED_OUT", [ev("TIMED_OUT", "free text")], "TIMED_OUT"],
+        ["QUEUED", [ev("RETRYING", "free text")], "RETRYING"], ["QUEUED", [ev("RETRYING", "LEASE_EXPIRED")], "LEASE_EXPIRED"], ["QUEUED", [ev("QUEUED")], null],
+        ["RUNNING", [ev("RETRYING", "x"), ev("STARTED")], "RETRYING"], ["SUCCEEDED", [ev("RETRYING", "x"), ev("SUCCEEDED")], null],
+        ["CANCELLED", [ev("CANCELLED")], "CANCELLED"], ["STOPPED", [ev("STOPPED")], "STOPPED"],
+      ];
+      for (const [status, events, want] of cases) expect(messageCodeFor({status: status as any, events}), `${status} ${JSON.stringify(events.map(e => e.message ?? null))}`).toBe(want);
+      for (const [, , want] of cases) if (want !== null) expect(JOB_MESSAGE_CODES as readonly string[]).toContain(want);
+      // real lease expiry through the queue -> LEASE_EXPIRED / RETRYING code, never text
+      const lq = new CloudJobQueue({dir: path.join(dir, "lease"), scopeKeys: new Map([["k-1", SCOPE_KEY]]), workerKeys: new Map([["worker-a", WORKER_KEY]]), now: () => clockL, leaseMs: 1000});
+      open.push(lq);
+      let clockL = new Date(clock.getTime());
+      const lj = req(TENANT, {retry: {maxAttempts: 1, backoffMs: 1000}}); expect(lq.submit(lj).ok).toBe(true);
+      expect(lq.claim(signWorkerAuth({workerId: "worker-a", action: "claim", jobId: "*", at: clockL.toISOString(), nonce: crypto.randomUUID()}, WORKER_KEY, {})).ok).toBe(true);
+      clockL = new Date(clockL.getTime() + 5000); lq.reap();
+      expect(lq.summary(TENANT, lj.jobId)).toMatchObject({status: "TIMED_OUT", messageCode: "LEASE_EXPIRED"});
+    });
+
     it("forged tenant headers and query parameters never change the tenant: only RouteDeps.scope applies", async () => {
       const {q, x} = seeded();
       const app = mkServer(q);
@@ -351,7 +422,7 @@ export function registerCloudJobsStatusCases(): void {
       }
     });
 
-    it("boundaries: job id 3 / 128 / 129 chars, status enum, message cap 200, list limit 0 / 1 / 100 / 101 / NaN", async () => {
+    it("boundaries: job id 3 / 128 / 129 chars, status enum, raw message never returned, list limit 0 / 1 / 100 / 101 / NaN", async () => {
       expect([CLOUD_JOB_ID_RE.test("abc"), CLOUD_JOB_ID_RE.test("ab"), CLOUD_JOB_ID_RE.test("a".repeat(128)), CLOUD_JOB_ID_RE.test("a".repeat(129))]).toEqual([true, false, true, false]);
       const q = new CloudJobQueue({dir, scopeKeys: new Map([["k-1", SCOPE_KEY]]), workerKeys: new Map([["worker-a", WORKER_KEY]]), now: () => clock, leaseMs: 60_000});
       open.push(q);
@@ -376,7 +447,8 @@ export function registerCloudJobsStatusCases(): void {
       expect(q.complete(auth("complete", c.job.jobId, {leaseId: c.lease.leaseId, result: long}), c.job.jobId, c.lease.leaseId, long)).toMatchObject({ok: true});
       const failed = q.summary(TENANT, c.job.jobId)!;
       expect(failed.status).toBe("FAILED");
-      expect(failed.message).toHaveLength(JOB_MESSAGE_MAX);
+      expect(failed.messageCode).toBe("WORKER_FAILED");
+      expect(JSON.stringify(failed)).not.toContain("EEEE");
       q.stopAll();
       const statuses = q.list(TENANT).map(r => r.status);
       expect(statuses).toContain("CANCELLED"); expect(statuses).toContain("STOPPED"); expect(statuses).toContain("FAILED");

@@ -1,4 +1,4 @@
-//TR: Bu dosya CLOUD-T0005 için salt-okunur bulut iş durumu route'larını sağlar (GET /v1/cloud/jobs ve /v1/cloud/jobs/:id); yalnız çağıranın tenant'ı görünür, kuyruk yoksa dürüst NOT_CONFIGURED döner, lease/worker/imza alanı asla dönmez. server.ts'e tek satırlık kayıt gerekir (Kurucu kapılı).
+//TR: Bu dosya CLOUD-T0005 için salt-okunur bulut iş durumu route'larını sağlar (GET /v1/cloud/jobs ve /v1/cloud/jobs/:id); yalnız çağıranın tenant'ı görünür, kuyruk yoksa dürüst NOT_CONFIGURED döner, lease/worker/imza alanı ve worker'ın serbest metni asla dönmez (yalnız sabit messageCode). server.ts'e tek satırlık kayıt gerekir (Kurucu kapılı).
 import type {CloudJobQueue} from "../cloud/jobs.js";
 
 export const CLOUD_JOBS_PATH = "/v1/cloud/jobs";

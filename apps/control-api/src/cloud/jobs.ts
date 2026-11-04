@@ -47,10 +47,17 @@ export {pidAlive} from "./queue-lock.js";
 
 const isTerminal = (t: string) => (TERMINAL_EVENT_TYPES as readonly string[]).includes(t);
 
-/** CLOUD-T0005: masaüstüne giden redaksiyon güvenli iş özeti (izin verilen alanların kapalı listesi). */
+/** CLOUD-T0005: worker'dan gelen serbest metin API'den ASLA çıkmaz; yalnız bu kapalı listedeki sabit kod döner (bilinmeyen metin genel koda düşer). */
+export const JOB_MESSAGE_CODES = ["WORKER_FAILED", "TIMED_OUT", "RETRYING", "LEASE_EXPIRED", "SANDBOX_UNAVAILABLE", "CANCELLED", "STOPPED"] as const;
+export type JobMessageCode = (typeof JOB_MESSAGE_CODES)[number];
+/** Worker/kuyruk tarafından üretilen tanınan makine kodları; metin bunlardan biriyle BİREBİR eşleşmiyorsa kod türetilmez. */
+const KNOWN_MACHINE_CODES: ReadonlySet<string> = new Set(["LEASE_EXPIRED", "SANDBOX_UNAVAILABLE"]);
+const machineCode = (msg: unknown): JobMessageCode | null => (typeof msg === "string" && KNOWN_MACHINE_CODES.has(msg) ? msg as JobMessageCode : null);
+
+/** CLOUD-T0005: masaüstüne giden iş özeti (izin verilen alanların kapalı listesi; serbest metin alanı yoktur). */
 export interface JobSummary {
   jobId: string; projectId: string; environment: string; kind: string; status: JobState["status"]; attempt: number; maxAttempts: number;
-  requestedAt: string; updatedAt: string | null; lastEventType: CloudJobEventType | null; message: string | null; artifacts: ArtifactRef[];
+  requestedAt: string; updatedAt: string | null; lastEventType: CloudJobEventType | null; messageCode: JobMessageCode | null; artifacts: ArtifactRef[];
 }
 const REASON_EVENTS: readonly string[] = ["RETRYING", "FAILED", "TIMED_OUT"];
 export const JOB_MESSAGE_MAX = 200;
@@ -63,7 +70,7 @@ const SENSITIVE_KEY_VALUE = new RegExp(
 const SENSITIVE_FLAG = new RegExp(
   `(?<![A-Za-z0-9_-])(--?[A-Za-z0-9_-]{0,64}?${SENSITIVE_WORD}[A-Za-z0-9_-]{0,64})(=|[ \\t]{1,8})(${QUOTED_VALUE}|(?!-)[^\\s"']{1,4096})`, "gi");
 const quoteLike = (v: string) => (v.startsWith('"') ? '"' : v.startsWith("'") ? "'" : "");
-/** CLOUD-T0005 sunucu tarafı redaksiyon: worker'ın yeniden deneme/hata metni API'den çıkmadan önce temizlenir (masaüstü temizleyicisine güvenilmez).
+/** CLOUD-T0005 sunucu tarafı redaksiyon: YALNIZ sunucu denetim kaydı (jobs.audit.jsonl) içindir; API worker metnini hiç döndürmez (messageCode kullanılır).
  *  Sıra: bilinen secret desenleri (redactSecrets) -> kimlik bilgili URL -> anahtar=değer -> kısa Bearer/Basic -> anahtar biçimli uzun diziler -> mutlak yollar -> kontrol karakterleri; en son 200'e kırpılır.
  *  Tüm nicelikler sınırlıdır (doğrusal süre). */
 export function redactJobMessage(text: string): string {
@@ -82,13 +89,24 @@ export function redactJobMessage(text: string): string {
     .replace(/[\u0000-\u0008\u000B-\u001F\u007F]/g, "");
   return s.slice(0, JOB_MESSAGE_MAX);
 }
+/** Kod yalnız durum + olay türü + tanınan makine kodundan türetilir; worker metni yalnız KNOWN_MACHINE_CODES ile birebir karşılaştırılır, asla kopyalanmaz. */
+export function messageCodeFor(s: Pick<JobState, "status" | "events">): JobMessageCode | null {
+  const reason = [...s.events].reverse().find(e => REASON_EVENTS.includes(e.type));
+  switch (s.status) {
+    case "CANCELLED": return "CANCELLED";
+    case "STOPPED": return "STOPPED";
+    case "TIMED_OUT": return machineCode(reason?.message) === "LEASE_EXPIRED" ? "LEASE_EXPIRED" : "TIMED_OUT";
+    case "FAILED": return machineCode(reason?.message) ?? "WORKER_FAILED";
+    case "QUEUED": case "RUNNING": return reason?.type === "RETRYING" ? (machineCode(reason.message) ?? "RETRYING") : null;
+    default: return null;
+  }
+}
 function summarize(s: JobState): JobSummary {
   const last = s.events.length ? s.events[s.events.length - 1]! : null;
-  const reason = [...s.events].reverse().find(e => REASON_EVENTS.includes(e.type) && typeof e.message === "string");
   return {
     jobId: s.job.jobId, projectId: s.job.projectId, environment: s.job.environment, kind: s.job.kind, status: s.status, attempt: s.attempt,
     maxAttempts: s.job.retry.maxAttempts, requestedAt: s.job.requestedAt, updatedAt: last ? last.at : null, lastEventType: last ? last.type : null,
-    message: reason ? redactJobMessage(String(reason.message)) : null,
+    messageCode: messageCodeFor(s),
     artifacts: s.events.filter(e => e.type === "ARTIFACT" && e.artifact).map(e => ({name: e.artifact!.name, sha256: e.artifact!.sha256, sizeBytes: e.artifact!.sizeBytes})),
   };
 }
@@ -285,7 +303,8 @@ export class CloudJobQueue {
       for (const a of artifacts) this.emit(s, "ARTIFACT", {artifact: a});
       this.emit(s, "SUCCEEDED");
     } else this.failOrRetry(s, result.message);
-    this.auditLog({decision: "RESULT_ACCEPTED", jobId, status: s.status, attempt: s.attempt});
+    // Tanı değeri yalnız sunucu denetim kaydında, redakte edilmiş olarak tutulur; API'ye çıkmaz.
+    this.auditLog({decision: "RESULT_ACCEPTED", jobId, status: s.status, attempt: s.attempt, ...(result.status === "FAILED" && typeof result.message === "string" ? {messageRedacted: redactJobMessage(result.message)} : {})});
     return {ok: true, status: s.status as CloudJobEventType};
   }
 
