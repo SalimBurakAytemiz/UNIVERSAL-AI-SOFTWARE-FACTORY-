@@ -512,6 +512,9 @@ export class ProjectStudio {
       if (!SHA.test(sha) || !name || name.split("/").some(s => s === "" || s === "." || s === ".." || s.toLowerCase() === ".git")) throw new StudioError("DELIVERY_SOURCE_UNAVAILABLE", 409);
       files.push({name: Buffer.from(`source/${name}`, "utf8"), mode, sha});
     }
+    // //TR: V3-T1012 (Founder karar B): teslim ZIP'i de "teslimde kilit dosyası zorunlu" kuralına tabidir: kök ağaçta package.json olup kilit yoksa `npm ci` başarısız olur.
+    // Karar blob içerikleri okunmadan, arşiv/dosya/kayıt/audit-başarı oluşmadan verilir (okunamayan ağaç yukarıda DELIVERY_SOURCE_UNAVAILABLE ile zaten fail-closed reddedilir).
+    if (lockfileStatus(files.map(f => f.name.toString("utf8").slice("source/".length)).filter(n => !n.includes("/"))) === "MISSING") throw new StudioError("DELIVERY_LOCKFILE_MISSING", 409);
     if (files.length > EXPORT_LIMITS.maxFiles) throw new StudioError("DELIVERY_TOO_LARGE", 409);
     const cat = files.length ? spawnGitSync(root, [...neutral, "cat-file", "--batch"], {env: this.env(), encoding: "buffer", input: Buffer.from(files.map(f => f.sha).join("\n") + "\n", "utf8"), maxBuffer: EXPORT_LIMITS.maxTotalBytes + 64 * files.length + 1024, timeout: this.o.gitTimeoutMs ?? 10 * 60_000}) : null;
     if (cat && cat.status !== 0) throw new StudioError("DELIVERY_SOURCE_UNAVAILABLE", 409);

@@ -405,3 +405,41 @@ describe("LANE-B delivery routes: write gates and refusal audit events", () => {
     expect(all).not.toContain(c.tmp);
   });
 });
+
+// //TR: V3-T1012 (Founder karar B): koşu teslim artefaktı da kilit dosyası ister. Kaynak ağacında package.json olup package-lock.json yoksa prepare 409 DELIVERY_LOCKFILE_MISSING ile
+// reddedilir: artefakt dosyası, geçici dosya, journal kaydı ya da PREPARED audit'i oluşmaz; yalnız route'un mevcut WORKOS_DELIVERY_PREPARE_REFUSED ret izi yazılır. Kilit geri gelince teslim eskisi gibi hazırlanır.
+describe("V3-T1012 run delivery requires a lockfile (delivery gap of V3-AC-F057-2)", () => {
+  const events = (c: Ctx): Array<Record<string, any>> => {
+    const f = path.join(c.runtime, "control-api-events.jsonl");
+    return fs.existsSync(f) ? fs.readFileSync(f, "utf8").split("\n").filter(Boolean).map(l => JSON.parse(l)) : [];
+  };
+  const tree = (dir: string): string[] => fs.existsSync(dir) ? fs.readdirSync(dir, {recursive: true}).map(String) : [];
+  it("source tree with package.json but no lock -> 409 DELIVERY_LOCKFILE_MISSING; no artifact, temp file, record or PREPARED audit; with the lock restored the delivery is prepared as before", { timeout: T }, async () => {
+    const c = setup(tmp), app = noProviderApi(c), pid = await studioProject(c, app, "t1012-delivery-lock");
+    const repo = new WorkOsStore(c.dataDir).getProject({tenantId: "tA"}, pid)!.repository!.path!;
+    const ID = ["-c", "user.name=t", "-c", "user.email=t@x.invalid"], rootSha = git(repo, ["rev-list", "--max-parents=0", "HEAD"]).trim();
+    git(repo, ["rm", "-q", "package-lock.json"]); git(repo, [...ID, "commit", "-q", "-m", "drop lock"]);
+    const {run} = await m1aRun(c, app, pid, {"feature.txt": "ok\n"});
+    const n0 = journalEntries(c).length, e0 = events(c).length;
+    const r = await prepare(app, run.runId);
+    expect(r.statusCode, r.body).toBe(409);
+    expect(r.json()).toEqual({error: "DELIVERY_LOCKFILE_MISSING"});
+    // the refused head really is a Node tree without a lock (its objects were imported by prepare before the gate)
+    const names = git(repo, ["ls-tree", "--name-only", run.headSha!]).split("\n");
+    expect(names).toEqual(expect.arrayContaining(["package.json", "feature.txt"])); expect(names).not.toContain("package-lock.json");
+    expect(journalEntries(c).length).toBe(n0);                                        // no delivery record
+    expect(tree(path.join(c.dataDir, "deliveries"))).toEqual([]);                      // no artifact and no .tmp- file
+    const after = events(c).slice(e0), all = JSON.stringify(after);
+    expect(all).toContain("WORKOS_DELIVERY_PREPARE_REFUSED"); expect(all).toContain("DELIVERY_LOCKFILE_MISSING");
+    expect(all).not.toContain("WORKOS_DELIVERY_ARTIFACT_PREPARED");
+    expect((await exportDelivery(app, run.runId)).statusCode).toBe(409);                 // nothing was prepared, so nothing can be exported
+    // the same project with the lock committed again: a new run's delivery is prepared exactly as before
+    fs.writeFileSync(path.join(repo, "package-lock.json"), git(repo, ["show", `${rootSha}:package-lock.json`]) + "\n");
+    git(repo, ["add", "package-lock.json"]); git(repo, [...ID, "commit", "-q", "-m", "restore lock"]);
+    const ok = await m1aRun(c, app, pid, {"feature.txt": "ok again\n"});
+    const p2 = await prepare(app, ok.run.runId);
+    expect(p2.statusCode, p2.body).toBe(201);
+    const zip = fs.readFileSync(path.join(c.dataDir, p2.json().artifact.artifactPath));
+    expect(listZipEntries(zip, undefined, {scanOnly: true}).map(e => e.name)).toContain("source/package-lock.json");
+  });
+});

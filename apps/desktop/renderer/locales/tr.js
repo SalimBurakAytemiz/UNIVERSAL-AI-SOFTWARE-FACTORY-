@@ -2081,6 +2081,7 @@ export default {
   "post.err.409.DELIVERY_ARTIFACT_MISSING":"Reddedildi (DELIVERY_ARTIFACT_MISSING): artefakt dosyası yok; paketi yeniden hazırlayın.",
   "post.err.409.DELIVERY_SOURCE_UNAVAILABLE":"Reddedildi (DELIVERY_SOURCE_UNAVAILABLE): koşunun kaynak commit'i okunamadı.",
   "post.err.409.EXPORT_BLOCKED_SECRET":"Reddedildi (EXPORT_BLOCKED_SECRET): pakette gizli bilgi bulundu; hiçbir şey yayımlanmadı.",
+  "post.err.409.DELIVERY_LOCKFILE_MISSING":"Reddedildi (DELIVERY_LOCKFILE_MISSING): koşunun kaynağında package.json var ama package-lock.json yok; teslim npm ci'de başarısız olurdu. Bir package-lock.json commit edin (npm install çalıştırıp kilit dosyasını commit edin) ve yeniden koşun; teslim paketi hazırlanmadı.",
   "post.err.409.EXPORT_LOCKFILE_MISSING":"Reddedildi (EXPORT_LOCKFILE_MISSING): bu Node projesinde package.json var ama package-lock.json yok. Dışa aktarmadan önce bir package-lock.json commit edin (npm install çalıştırıp kilit dosyasını commit edin); hiçbir şey yayımlanmadı.",
   "pill.LOADING":"YÜKLENİYOR",
   "pill.EMPTY":"BOŞ",

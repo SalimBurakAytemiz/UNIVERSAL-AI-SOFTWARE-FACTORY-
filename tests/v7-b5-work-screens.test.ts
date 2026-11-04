@@ -258,6 +258,9 @@ describe("B5 form request builders", () => {
     expect(d(409, "EXPORT_LOCKFILE_MISSING")).toMatchObject({ok: false, key: "post.err.409.EXPORT_LOCKFILE_MISSING"});
     for (const dict of [en, tr]) { expect(dict["post.err.409.EXPORT_LOCKFILE_MISSING"]).toContain("EXPORT_LOCKFILE_MISSING"); expect(dict["post.err.409.EXPORT_LOCKFILE_MISSING"]).toContain("package-lock.json"); }
     expect(en["post.err.409.EXPORT_LOCKFILE_MISSING"]).toMatch(/commit/i); expect(tr["post.err.409.EXPORT_LOCKFILE_MISSING"]).toMatch(/commit edin/);
+    // V3-T1012 delivery gap: the run delivery lockfile gate (409 DELIVERY_LOCKFILE_MISSING) has its own text as well, in en and tr
+    expect(d(409, "DELIVERY_LOCKFILE_MISSING")).toMatchObject({ok: false, key: "post.err.409.DELIVERY_LOCKFILE_MISSING"});
+    for (const dict of [en, tr]) { expect(dict["post.err.409.DELIVERY_LOCKFILE_MISSING"]).toContain("DELIVERY_LOCKFILE_MISSING"); expect(dict["post.err.409.DELIVERY_LOCKFILE_MISSING"]).toContain("package-lock.json"); }
     expect(c.describePostResult({thrown: true, state: "OFFLINE"}).key).toBe("post.err.offline");
     expect(c.describePostResult({thrown: true, state: "ERROR"}).key).toBe("post.err.generic");
     expect(c.describePostResult(null).ok).toBe(false);
