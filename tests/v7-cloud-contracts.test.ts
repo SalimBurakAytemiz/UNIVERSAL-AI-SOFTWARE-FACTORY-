@@ -5,13 +5,16 @@ import {registerQueueLockCases} from "./support/cloud-queue-lock.cases.js";     
 import {registerCloudGatewayCases} from "./support/cloud-gateway.cases.js";     // CLOUD-T0004 Control API kapısı vakaları
 import {registerCloudConnectionViewCases} from "./support/cloud-connection-view.cases.js"; // CLOUD-T0005 masaüstü bulut bağlantı görünümü vakaları
 import {registerWorkosStoreLockCases} from "./support/workos-store-lock.cases.js";   // V3-T1001 store kilidi kurtarma vakaları
+import {registerWorkosStoreIoCases} from "./support/workos-store-io.cases.js";     // UASCO-T0042 store işlem başına dayanıklı G/Ç vakaları
 import {registerAutonomyCases} from "./support/autonomy.cases.js";             // FD-2026-11-03 kalıcı otonomi karar modülü vakaları
 import {registerAutonomyExecutorCases} from "./support/autonomy-executor.cases.js"; // FD-2026-11-03 yürütücü (merge + doğrulama) vakaları
+import {registerCloudArtifactsCases} from "./support/cloud-artifacts.cases.js"; // CLOUD-T0008 artifact deposu ve imzalı teslim vakaları
 import {
   CLOUD_CONTRACT_VERSION,MAX_JOB_TIMEOUT_MS,signScope,verifyScopeSignature,validateCloudJobRequest,verifyEventStream,verifyArtifact,
   auditRecordFor,canonicalJson,sha256Hex,type CloudJobRequest,type CloudJobEvent,type UnsignedScope,
 } from "../core/cloud/contracts.js";
 import {registerModelRouterCases} from "./support/model-router.cases.js";   // UASCO-T0062 routeModel karar kaydı vakaları
+import {registerCrewCoordinatorCases} from "./support/crew-coordinator.cases.js"; // UASCO-T0045 CrewCoordinator/composeTeam AC bağlama vakaları
 
 const SIGNING_FIXTURE="test-scope-key-".repeat(3);
 const now=new Date("2026-11-02T12:00:00Z");
@@ -157,6 +160,9 @@ registerQueueLockCases();
 registerCloudGatewayCases();
 registerCloudConnectionViewCases();
 registerWorkosStoreLockCases();
+registerWorkosStoreIoCases();
 registerAutonomyCases();
 registerAutonomyExecutorCases();
 registerModelRouterCases();
+registerCloudArtifactsCases();
+registerCrewCoordinatorCases();

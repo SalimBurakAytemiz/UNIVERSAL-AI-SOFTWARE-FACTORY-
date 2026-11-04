@@ -428,6 +428,10 @@ export class MissionRunner {
     if (st === "GONE") return {problem: null, note: `writer group ${pgid} was already gone`}; // //TR: kanıt notu "durdurulacak yazar yoktu" der: yazarın devirden ÖNCE öldüğü (ya da hiç yaşamadığı) not'tan okunur
     if (st === "UNKNOWN") return alive(`writer group ${pgid} state unknown`);
     const now = await startToken(pgid);
+    // //TR: UASCO-T0042 (PAR-04 Windows RCA, CI 07f459c6 / #301 / #310): Windows'ta writerState ALIVE ile PowerShell kimlik sorgusu (~1-2 sn) arasında yazar ölmüş
+    // (motorla birlikte iş nesnesi kapanışı) ya da pid'i kısa ömürlü başka bir sürece geçip o da bitmiş olabilir: belirteç null döner. Bu "kimlik kanıtlanamadı" DEĞİLDİR;
+    // durum yeniden okunur, grup artık yoksa durdurulacak yazar yoktur. Hâlâ canlıysa aşağıdaki fail-closed dal aynen geçerlidir.
+    if (now === null && process.platform !== "linux" && writerState(pgid) === "GONE") return {problem: null, note: `writer group ${pgid} ended during the identity check`};
     // //TR: TK-3: kimlik belirteci EPERM'den ÖNCE karşılaştırılır. Kayıtlı pid başka bir kullanıcının sürecine geçtiyse (kill -> EPERM) belirteç farklıdır: bizim yazarımız yoktur, devir fail-closed OLMAZ. Linux /proc/<pid>/stat dünya okunurdur.
     // //TR: SWEEP-4: kayıtta başlangıç belirteci yoksa (kısa ömürlü git çocuğu) bile, kayıt yazıldıktan SONRA başlamış canlı süreç kayıtlı yazar olamaz (Windows ticks / macOS lstart; Linux'ta belirteç her zaman kayıtlıdır): karar reusedPid'de.
     if (reusedPid(process.platform, prev, now)) return {problem: null, note: `pid ${pgid} was reused by another process; no writer to stop`};
@@ -451,6 +455,7 @@ export class MissionRunner {
     const rec = readOwner(this.ownerPath(run.runId));
     let note = "", previousBoot = false;
     if (rec.kind === "INVALID") {
+      if (rec.transient === true) return alive(rec.why, true); // //TR: UASCO-T0042: geçici okuma hatası (Windows paylaşım ihlali): terminal değil, sonraki devirde (bütçe dahilinde) yeniden
       if (rec.mtimeMs !== null && rec.mtimeMs + BOOT_GRACE_MS < bootTimeMs()) { note = "owner record from before the current boot ignored"; previousBoot = true; }
       else return alive(rec.why);
     } else if (rec.kind === "OK") {
