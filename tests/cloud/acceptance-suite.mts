@@ -19,6 +19,8 @@ import http from "node:http";
 import {ProviderRouter, modelsFromDiscovery, routedPlannerModel, type PlannerUsage, type ProviderRoute, type QuotaLimits, type RoutingAuditRecord} from "../../models/cloud-router/provider-routing.js";
 import {TenantBudget, type ModelRequest} from "../../apps/control-api/src/cloud/remote-gateway.js";
 import {discoverOmniRouteModels} from "../../models/omniroute/client.js";
+import {CHAIN_HOST_ENV, cloudKeysFromEnv, createCloudChainHost, supervisorTestSigner, SUPERVISOR_TEST_SIGNER_LABEL, type ChainHostKeys} from "../../apps/control-api/src/cloud/chain-host.js";
+import cp from "node:child_process";
 
 /** Günlük rapor için halka tablosu: REAL = bu testte çalışan ürün kodu; STUB = testteki deterministik taklit; MISSING = ürün kodu yok (test yerine geçmez). */
 export const HOPS = Object.freeze([
@@ -43,6 +45,7 @@ const now = () => clock;
 const mkScope = (tenantId: string) => signScope({tenantId, projectId: "proj-web", environment: "staging", jobKinds: ["BUILD", "TEST", "PACKAGE", "DELIVERY"],
   allowNetwork: false, maxCostUsd: 10, issuedAt: "2026-11-04T08:00:00Z", expiresAt: "2026-11-04T18:00:00Z", keyId: "k-1"} satisfies UnsignedScope, SCOPE_KEY);
 const COMMAND = "Ayarlar sayfasını geliştir";
+const REPO_ROOT = path.resolve(import.meta.dirname, "..", "..");
 /** Supervisor tarafında imzalanan, tek kullanımlık Founder onay jetonu (SignedScope ile aynı HMAC şeması ve fixture kapsam anahtarı; yeni anahtar yok). */
 const confirm = (objective = COMMAND, tenantId = "tenant-a", over: Partial<UnsignedFounderConfirmation> = {}, secret: string = SCOPE_KEY) => signFounderConfirmation({
   type: FOUNDER_CONFIRMATION_TYPE, confirmationId: `conf-${randomUUID()}`, confirmedBy: "founder-001", objectiveSha256: createHash("sha256").update(objective).digest("hex"),
@@ -502,5 +505,147 @@ export function registerCloudAcceptanceSuite(): void {
       expect(y.usage.at(-1)).toMatchObject({ok: false, reason: "PLANNER_CAPABILITY_NOT_ALLOWED"});
       expect(x.primary.calls.length + x.fallback.calls.length + y.primary.calls.length + y.fallback.calls.length).toBe(0);
     });
+  });
+
+  // //TR: CLOUD-T0016 yerel tek süreçli zincir host'u (kanıt sınıfı LOCAL_E2E): korumalı satır yok; HTTP başlatma yolu yok; anahtarlar yalnız ortam adlarıyla; imzalayıcı SUPERVISOR_TEST_ONLY.
+  describe("CLOUD-T0016 chain host: one local process (queue + orchestrator + planner + worker + artifacts); LOCAL_E2E, NOT a cloud E2E", () => {
+    beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-chain-host-")); });
+    afterEach(() => { fs.rmSync(dir, {recursive: true, force: true}); });
+    const rnd = () => createHash("sha256").update(randomUUID()).digest("hex");   // çalışma anında üretilir; repoda değer yok
+    const envKeys = () => ({[CHAIN_HOST_ENV.scopeKeyId]: "k-local", [CHAIN_HOST_ENV.scopeKey]: rnd(), [CHAIN_HOST_ENV.workerKey]: rnd(), [CHAIN_HOST_ENV.artifactKey]: rnd(), [CHAIN_HOST_ENV.deliveryKey]: rnd()});
+    const keysOf = (env: Record<string, string>): ChainHostKeys => { const k = cloudKeysFromEnv(env); if (!k.ok) throw new Error(k.missing.join(",")); return k.keys; };
+    const digest = (t: string) => createHash("sha256").update(t).digest("hex");
+    const mkHost = (keys: ChainHostKeys, sandbox: SandboxProvider | null = new FakeSandbox(), audit: ConfirmationAuditRecord[] = []) =>
+      createCloudChainHost({dataDir: path.join(dir, "host"), keys, sandbox, planner: localStubPlanner(), plannerModel: "LOCAL_STUB", handlers: stubHandlers(j => j.kind.toLowerCase()),
+        globalStopFile: path.join(dir, "GLOBAL_STOP.json"), now, audit: a => audit.push(a)});
+    const scopeFor = (keys: ChainHostKeys) => supervisorTestSigner(keys, now).scope({tenantId: "tenant-a", projectId: "proj-web", environment: "staging", jobKinds: ["BUILD", "TEST", "PACKAGE", "DELIVERY"], allowNetwork: false, maxCostUsd: 10});
+    const confFor = (keys: ChainHostKeys, text = COMMAND) => supervisorTestSigner(keys, now).confirmation({objectiveSha256: digest(text), tenantId: "tenant-a", projectId: "proj-web", environment: "staging"});
+
+    it("K1 fail-closed: missing or short keys are reported by env NAME only (values never echoed)", () => {
+      const env = envKeys();
+      expect(cloudKeysFromEnv({})).toEqual({ok: false, missing: Object.values(CHAIN_HOST_ENV)});
+      const short = {...env, [CHAIN_HOST_ENV.workerKey]: "too-short"};
+      const r = cloudKeysFromEnv(short);
+      expect(r).toEqual({ok: false, missing: [CHAIN_HOST_ENV.workerKey]});
+      expect(JSON.stringify(r)).not.toContain("too-short");
+      expect(cloudKeysFromEnv({...env, [CHAIN_HOST_ENV.scopeKeyId]: "bad id!"})).toEqual({ok: false, missing: [CHAIN_HOST_ENV.scopeKeyId]});
+      expect(cloudKeysFromEnv(env).ok).toBe(true);
+    });
+
+    it("host runs the chain in-process: signed dispatch -> queue -> worker -> artifacts (FAKE_SANDBOX here); signer is labelled SUPERVISOR_TEST_ONLY", async () => {
+      const keys = keysOf(envKeys()), audit: ConfirmationAuditRecord[] = [], host = mkHost(keys, new FakeSandbox(), audit);
+      try {
+        expect(supervisorTestSigner(keys).label).toBe(SUPERVISOR_TEST_SIGNER_LABEL);
+        expect(SUPERVISOR_TEST_SIGNER_LABEL).toMatch(/not a Founder confirmation/);
+        const scope = scopeFor(keys);
+        let last: Awaited<ReturnType<typeof host.dispatch>> | null = null;
+        for (let round = 0; round < 6; round++) {
+          last = await host.dispatch(COMMAND, confFor(keys), scope);
+          expect(last.ok, JSON.stringify(last)).toBe(true);
+          if (!last.ok || Object.values(last.report.statuses).every(v => v === "SUCCEEDED" || v === "BLOCKED_FOUNDER_GATE")) break;
+          for (let i = 0; i < 5; i++) { const st = await host.runWorkerOnce(); if (st.state !== "DONE") break; }
+        }
+        expect(last && last.ok && Object.values(last.report.statuses).sort()).toEqual(["BLOCKED_FOUNDER_GATE", "SUCCEEDED", "SUCCEEDED", "SUCCEEDED"]);
+        expect(audit.every(a => a.decision === "ACCEPTED" && a.confirmedBy === "supervisor-test")).toBe(true);
+        const g = await host.store.get({tenantId: "tenant-a", subject: "observer-01"}, {tenantId: "tenant-a", projectId: "proj-web", name: "dist/app.zip"});
+        expect(g.ok).toBe(true);
+        expect(fs.readdirSync(path.join(dir, "host", "artifacts")).length).toBeGreaterThan(0);   // file-system backend, durable
+      } finally { await host.stop(); }
+    });
+
+    it("delivery integrity: a stored package is delivered via a verified signed URL; a tampered blob on disk or another tenant is never delivered", async () => {
+      const keys = keysOf(envKeys()), host = mkHost(keys);
+      try {
+        const scope = scopeFor(keys);
+        for (let round = 0; round < 6; round++) {
+          const d = await host.dispatch(COMMAND, confFor(keys), scope);
+          if (!d.ok || Object.values(d.report.statuses).every(v => v === "SUCCEEDED" || v === "BLOCKED_FOUNDER_GATE")) break;
+          for (let i = 0; i < 5; i++) { if ((await host.runWorkerOnce()).state !== "DONE") break; }
+        }
+        const ok = await host.deliver("tenant-a", "proj-web", "dist/app.zip");
+        expect(ok).toMatchObject({issued: true, redeemed: true, verified: true});
+        expect(await host.deliver("tenant-b", "proj-web", "dist/app.zip")).toMatchObject({verified: false, issued: false});
+        // tamper every stored blob on disk: redemption must fail closed
+        const walk = (d: string): string[] => fs.readdirSync(d, {withFileTypes: true}).flatMap(e => e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
+        for (const f of walk(path.join(dir, "host", "artifacts"))) { const b = fs.readFileSync(f); if (b.length > 0) { b[b.length - 1] ^= 0xff; fs.writeFileSync(f, b); } }
+        const bad = await host.deliver("tenant-a", "proj-web", "dist/app.zip");
+        expect(bad.verified).toBe(false);
+        expect(bad.sha256).toBeNull();
+      } finally { await host.stop(); }
+    });
+
+    it("host trusts only its own scope key: a confirmation signed by another host's key is rejected at INTAKE and nothing is queued", async () => {
+      const keys = keysOf(envKeys()), other = keysOf(envKeys()), host = mkHost(keys);
+      try {
+        const r = await host.dispatch(COMMAND, confFor(other), scopeFor(keys));
+        expect(r).toMatchObject({ok: false, stage: "INTAKE", reason: "INTAKE_NOT_CONFIRMED", detail: "SIGNATURE_INVALID"});
+        expect(await host.runWorkerOnce()).toEqual({state: "IDLE"});
+      } finally { await host.stop(); }
+    });
+
+    it("GLOBAL_STOP file stops the queue: the worker stops claiming and dispatch is refused", async () => {
+      const keys = keysOf(envKeys()), sb = new FakeSandbox(), host = mkHost(keys, sb);
+      try {
+        expect((await host.dispatch(COMMAND, confFor(keys), scopeFor(keys))).ok).toBe(true);
+        fs.writeFileSync(path.join(dir, "GLOBAL_STOP.json"), JSON.stringify({active: true, reason: "TEST_STOP"}));
+        expect(await host.runWorkerOnce()).toMatchObject({state: "STOPPED", reason: "GLOBAL_STOP_ACTIVE"});
+        expect(sb.runs).toBe(0);
+        // a NEW command needs a new submit, which the stopped queue refuses (re-dispatching the old one submits nothing and stays ok)
+        expect(await host.dispatch("Birim testlerini doğrula", confFor(keys, "Birim testlerini doğrula"), scopeFor(keys))).toMatchObject({ok: false, stage: "DISPATCH", reason: "SUBMIT_DENIED", detail: "GLOBAL_STOP_ACTIVE"});
+      } finally { await host.stop(); }
+    });
+
+    it("no HTTP start route: neither server.ts nor any control-api route imports or starts the chain host", () => {
+      const api = path.join(REPO_ROOT, "apps", "control-api", "src");
+      const files = [path.join(api, "server.ts"), ...fs.readdirSync(path.join(api, "routes")).filter(f => f.endsWith(".ts")).map(f => path.join(api, "routes", f))];
+      for (const f of files) expect(fs.readFileSync(f, "utf8"), f).not.toMatch(/chain-host|createCloudChainHost|supervisorTestSigner/);
+    });
+
+    it("no verified sandbox: the host worker stays UNAVAILABLE and claims nothing (Windows posture, K4)", async () => {
+      const keys = keysOf(envKeys()), host = mkHost(keys, null);
+      try {
+        expect((await host.dispatch(COMMAND, confFor(keys), scopeFor(keys))).ok).toBe(true);
+        expect(await host.runWorkerOnce()).toMatchObject({state: "UNAVAILABLE", reason: "SANDBOX_UNAVAILABLE"});
+      } finally { await host.stop(); }
+    });
+
+    it("real local run of scripts/cloud-chain-host.mts: queue -> worker -> linux-unshare-v2 sandbox -> artifacts (SKIPPED with the reason where the sandbox self-test fails)", async ctx => {
+      const script = path.join(REPO_ROOT, "scripts", "cloud-chain-host.mts");
+      const run = (env: Record<string, string>) => cp.spawnSync(process.execPath, ["--import", "tsx", script, "--supervisor-test", "--data-dir", path.join(dir, "run")],
+        {cwd: REPO_ROOT, env: {PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "", TMPDIR: process.env.TMPDIR ?? os.tmpdir(), ...env}, encoding: "utf8", timeout: 180_000});
+      const noKeys = run({});
+      expect(noKeys.status).toBe(2);
+      expect(JSON.parse(noKeys.stdout)).toMatchObject({result: "FAIL_CLOSED", reason: "KEYS_MISSING"});
+      const env = envKeys();
+      const unsigned = cp.spawnSync(process.execPath, ["--import", "tsx", script, "--data-dir", path.join(dir, "run0")], {cwd: REPO_ROOT, env: {PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "", ...env}, encoding: "utf8", timeout: 60_000});
+      expect(unsigned.status).toBe(2);
+      expect(JSON.parse(unsigned.stdout)).toMatchObject({result: "FAIL_CLOSED", reason: "NO_CONFIRMATION_SIGNER"});   // no implicit self-signing
+      const r = run(env);
+      const o = JSON.parse(r.stdout) as {result: string; evidenceClass: string; httpStartRoute: string; planner: string; sandbox: string; artifacts: {name: string; content?: string; sha256?: string}[]; confirmationSigner: string; label: string;
+        jobs: {key: string; status: string; transitions: string[]}[]; delivery: {issued: boolean; redeemed: boolean; verified: boolean; sha256: string | null}};
+      expect(o.evidenceClass).toBe("LOCAL_E2E");
+      expect(o.httpStartRoute).toBe("NONE");
+      expect(o.planner).toBe("LOCAL_STUB");
+      if (process.platform !== "linux") expect(o.sandbox).toMatch(/^UNAVAILABLE/);
+      for (const v of Object.values(env)) if (v.length >= 32) expect(r.stdout + r.stderr).not.toContain(v);   // key values never printed
+      expect(o.confirmationSigner).toBe(SUPERVISOR_TEST_SIGNER_LABEL);
+      expect(o.label).toMatch(/^LOCAL_E2E: .*NOT a cloud E2E/);
+      if (r.status === 3) { expect(o.result).toBe("SKIPPED"); ctx.skip(`script real run ${o.sandbox}`); return; }
+      expect(r.status, r.stdout + r.stderr).toBe(0);
+      expect(o.result).toBe("PASS");
+      expect(o.sandbox).toMatch(/^REAL/);
+      expect(o.artifacts.map(a => [a.name, a.content])).toEqual([["out/build.txt", "built by sandbox"], ["out/test.txt", "tests ok"], ["dist/app.txt", "package"]]);
+      expect(o.artifacts.every(a => /^[0-9a-f]{64}$/.test(a.sha256 ?? ""))).toBe(true);
+      // worker/queue state transitions per job
+      for (const j of o.jobs) {
+        expect(j.status, j.key).toBe("SUCCEEDED");
+        expect(j.transitions[0]).toBe("QUEUED"); expect(j.transitions).toContain("STARTED"); expect(j.transitions.at(-1)).toBe("SUCCEEDED");
+        expect(j.transitions.filter(t => t === "ARTIFACT").length).toBe(1);
+      }
+      expect(o.jobs.map(j => j.key)).toEqual(["build", "test", "package"]);
+      // verified delivery: signed URL redeemed, content hash equals the stored manifest hash
+      expect(o.delivery).toMatchObject({issued: true, redeemed: true, verified: true});
+      expect(o.delivery.sha256).toBe(o.artifacts.find(a => a.name === "dist/app.txt")!.sha256);
+    }, 240_000);
   });
 }
