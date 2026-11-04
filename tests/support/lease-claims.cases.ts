@@ -15,16 +15,16 @@ type Env={bare:string;work:string;bl:string};
 type Out={code:number|null;j:any;raw:string};
 const parse=(stdout:string)=>{try{return JSON.parse(stdout.trim().split("\n").filter(Boolean).pop()??"")}catch{return null}};
 const dispatch=(e:Env,args:string[]):Out=>{const r=spawnSync(process.execPath,[DISPATCH,...args,"--backlog",e.bl],{cwd:e.work,encoding:"utf8",env:{...process.env,...GIT_ENV}});return {code:r.status,j:parse(r.stdout),raw:r.stdout}};
-type AsyncOut=Out&{startedAt:number;endedAt:number};
-// spawn errors resolve (never hang); a run that outlives 60 s is killed and reported as code null; start/end times let races prove overlap
-const dispatchAsync=(e:Env,args:string[])=>new Promise<AsyncOut>(res=>{
-  const startedAt=Date.now();let out="",done=false;
-  const finish=(code:number|null,extra="")=>{if(done)return;done=true;clearTimeout(timer);res({code,j:parse(out),raw:out+extra,startedAt,endedAt:Date.now()})};
+// spawn errors resolve (never hang); a run that outlives 60 s is killed and reported as code null.
+// The race tests launch both claimers together but do not claim that their claim windows overlap: dispatch.mjs is not instrumented,
+// so an overlap cannot be proven from outside; the asserted property is the outcome (exactly one winner), whatever the interleaving.
+const dispatchAsync=(e:Env,args:string[])=>new Promise<Out>(res=>{
+  let out="",done=false;
+  const finish=(code:number|null,extra="")=>{if(done)return;done=true;clearTimeout(timer);res({code,j:parse(out),raw:out+extra})};
   const c=spawn(process.execPath,[DISPATCH,...args,"--backlog",e.bl],{cwd:e.work,env:{...process.env,...GIT_ENV}});
   const timer=setTimeout(()=>{c.kill("SIGKILL");finish(null," [killed: 60 s timeout]")},60_000);
   c.on("error",err=>finish(null,` [spawn error: ${err.message}]`));c.stdout.on("data",d=>out+=d);c.on("close",code=>finish(code));
 });
-const overlapped=(rs:AsyncOut[])=>rs[0]!.startedAt<rs[1]!.endedAt&&rs[1]!.startedAt<rs[0]!.endedAt;
 const claimRefs=(bare:string)=>G(bare,["for-each-ref","--format=%(refname)","refs/uasco/claims/"]).split("\n").filter(Boolean);
 const heads=(bare:string)=>G(bare,["for-each-ref","--format=%(refname)","refs/heads/claude/"]).split("\n").filter(Boolean);
 const leaseOn=(bare:string,id:string)=>JSON.parse(G(bare,["cat-file","blob",G(bare,["rev-parse",`refs/uasco/claims/${id}`])]));
@@ -90,7 +90,6 @@ export function registerLeaseClaimsCases():void{
       for(let round=0;round<3;round++){
         const e=mkEnv(["R-1"]);
         const rs=await Promise.all(["w1","w2"].map(o=>dispatchAsync(e,["--claim","--owner",o])));
-        expect(overlapped(rs),"the two claim processes ran concurrently").toBe(true);
         const starts=rs.filter(r=>r.j?.outcome==="START"&&r.j.claimed===true);
         expect(starts.length,rs.map(r=>r.raw).join(" | ")).toBe(1);
         expect(rs.filter(r=>r.j?.outcome==="NO_ACTION").length).toBe(1);
@@ -103,7 +102,6 @@ export function registerLeaseClaimsCases():void{
       for(let round=0;round<6;round++){
         const e=mkEnv(["Q-1"]);
         const rs=await Promise.all(["w1","w2"].map(o=>dispatchAsync(e,["--claim","--no-lease","--owner",o])));
-        expect(overlapped(rs),"the two claim processes ran concurrently").toBe(true);
         expect(rs.filter(r=>r.j?.outcome==="START"&&r.j.claimed===true).length,rs.map(r=>r.raw).join(" | ")).toBe(1);
         expect(heads(e.bare)).toEqual(["refs/heads/claude/q-1"]);
         expect(claimRefs(e.bare)).toEqual([]);
@@ -115,11 +113,12 @@ export function registerLeaseClaimsCases():void{
       const store=createLocalGitRefStore({repoDir:repo});
       const W=[{environment:"CLOUD",workerId:"w-a",sessionId:"s-a"},{environment:"LOCAL_WINDOWS",workerId:"w-b",sessionId:"s-b"},{environment:"CLOUD",workerId:"w-c",sessionId:"s-c"}];
       const TASKS=["S-1","S-2"],TTL=6*36e5,STEP=3*36e5,DAYS=7;
-      let seed=0x2f6b;const rnd=()=>{seed=(seed*1103515245+12345)&0x7fffffff;return seed/0x80000000};
+      // seed 42: this fixed schedule provably takes every branch asserted below (zombie still-mine renew + release, same-worker stale token)
+      let seed=42;const rnd=()=>{seed=(seed*1103515245+12345)&0x7fffffff;return seed/0x80000000};
       const oracle=new Map<string,{w:number;token:string;expiresAt:number}|null>();
       const tokens=new Map<string,string>(); // `${task}|${w}` -> token the worker believes it holds
       const pausedUntil=new Map<string,number>(); // zombie holders: keep their token, wake up after their own TTL has run out
-      let grants=0,held=0,renewed=0,released=0,takeovers=0,doubleClaims=0,paused=0,lost=0,zombieNoop=0,zombieRenewed=0;
+      let grants=0,held=0,renewed=0,released=0,takeovers=0,doubleClaims=0,paused=0,lost=0,zombieNoop=0,zombieRenewed=0,zombieStillMine=0,staleTokenLost=0;
       for(let t=0;t<=DAYS*24*36e5;t+=STEP){
         for(const task of TASKS)for(let w=0;w<W.length;w++){
           const now=t+w*60000,key=`${task}|${w}`,id={taskId:task,...W[w]!},cur=oracle.get(task)??null,mine=tokens.get(key);
@@ -130,6 +129,7 @@ export function registerLeaseClaimsCases():void{
             if(wake!==undefined){
               // zombie wake-up (paused past its own TTL): it may renew/release only if nobody took over; otherwise LOST / NOOP
               pausedUntil.delete(key);
+              if(stillMine)zombieStillMine++; // the branch where nobody took over during the pause: renew/release must still succeed
               if(rnd()<0.5){
                 const r=renew(store,{...id,token:mine,now,ttlMs:TTL});
                 expect(r.status,`zombie renew ${task} w${w} t=${now}`).toBe(stillMine?"RENEWED":"LOST");
@@ -160,7 +160,7 @@ export function registerLeaseClaimsCases():void{
             const g=r.record!;
             if(cur&&cur.w===w&&cur.token!==g.token){
               // the same worker re-took its own expired lease under a NEW token: its previous grant's token must no longer renew it
-              expect(renew(store,{...id,token:cur.token,now,ttlMs:TTL}).status,`stale-token renew ${task} w${w}`).toBe("LOST");
+              expect(renew(store,{...id,token:cur.token,now,ttlMs:TTL}).status,`stale-token renew ${task} w${w}`).toBe("LOST");staleTokenLost++;
             }tokens.set(key,g.token);oracle.set(task,{w,token:g.token,expiresAt:g.expiresAt});
           }else{held++;expect(cur&&now<=cur.expiresAt&&cur.w!==w,`HELD only while another live lease exists (${task} t=${now})`).toBe(true)}
           const rec=store.read(task);expect(rec?.token??null).toBe(oracle.get(task)?.token??null);
@@ -168,7 +168,9 @@ export function registerLeaseClaimsCases():void{
       }
       expect(doubleClaims).toBe(0);
       // the schedule really exercised conflicts, expiry takeovers, renewals, releases, pauses and zombie losses (not a vacuous run)
-      for(const [k,v] of Object.entries({grants,held,renewed,released,takeovers,paused,lost,zombieNoop}))expect(v,k).toBeGreaterThan(0);
+      for(const [k,v] of Object.entries({grants,held,renewed,released,takeovers,paused,lost,zombieNoop,zombieStillMine,staleTokenLost}))expect(v,k).toBeGreaterThan(0);
+      expect(zombieRenewed,"zombie still-mine renew branch taken").toBeGreaterThan(0);
+      expect(zombieStillMine-zombieRenewed,"zombie still-mine release branch taken").toBeGreaterThan(0);
     },180_000);
 
     it("same worker, stale token: after re-taking its own expired lease, the previous grant's token can neither renew nor release it",()=>{

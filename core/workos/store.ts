@@ -169,6 +169,15 @@ export function acquireStoreLock(lockPath: string, o: StoreLockOptions = {}): St
     const deadline = now() + STORE_LOCK_RELEASE_RETRY_MS;
     for (;;) { try { fn(); return; } catch (e) { if (!isTransientFsError(e) || now() >= deadline) throw e; sleep(5); } }
   };
+  // //TR: UASCO-T0042 NB-2: kilit adını boşaltmanın tek yolu (release ve bayat devralma ortak): önce benzersiz `.rel-` mezarına rename (ad hemen boşalır; Windows
+  // silme-beklemesi yalnız mezarda kalır), sonra mezar silinir. rename yoksa ya da başarısızsa false döner ve çağıran eski yerinde unlink yoluna düşer.
+  const vacateByTombstone = (): boolean => {
+    if (!io.rename) return false;
+    const tomb = `${lockPath}.rel-${crypto.randomBytes(8).toString("hex")}`;
+    try { io.rename(lockPath, tomb); } catch { return false; }
+    try { io.unlink(tomb); } catch { /* mezar artığı: kilit değildir, kazanan süpürür */ }
+    return true;
+  };
   const makeLock = (id: string): StoreLock => ({
     id,
     release() {   // yalnız hâlâ bizim kimliğimizi taşıyan kilit silinir; Windows geçici hataları sınırlı yeniden denenir
@@ -180,10 +189,7 @@ export function acquireStoreLock(lockPath: string, o: StoreLockOptions = {}): St
       // tutarken unlink adı "silme-beklemede" bırakır; tanıtıcı kapanana dek o ada link() EPERM verir ve withLock senkron döngüde (sleepSync) LOCK_WAIT_MS'e kadar bekler:
       // olay döngüsü saniyelerce CPU'suz durur ve lease heartbeat'leri açlıktan fence olur (CI: maxLoopStallMs 4161..10469, hep <= LOCK_WAIT_MS + ek, cpuMs ~1 s).
       // Önce benzersiz bir mezar adına rename edilir (ad hemen boşalır; silme-beklemesi yalnız mezarda kalır), sonra mezar silinir; rename olmazsa eski unlink yolu.
-      if (io.rename) {
-        const tomb = `${lockPath}.rel-${crypto.randomBytes(8).toString("hex")}`;
-        try { io.rename(lockPath, tomb); try { io.unlink(tomb); } catch { /* mezar artığı: kilit değildir, kazanan süpürür */ } return; } catch { /* aşağıdaki unlink yolu */ }
-      }
+      if (vacateByTombstone()) return;
       try { retryTransient(() => { try { io.unlink(lockPath); } catch (e) { if (errCode(e) !== "ENOENT") throw e; } }); } catch { /* yetim kalır; yukarıya bakınız */ }
     },
   });
@@ -223,7 +229,8 @@ export function acquireStoreLock(lockPath: string, o: StoreLockOptions = {}): St
       const again = tryRead(lockPath);
       if (again === raw) {
         if (holdsLive(lockPath, again)) throw storeLocked();
-        try { io.unlink(lockPath); } catch (e) { if (errCode(e) !== "ENOENT") throw isTransientFsError(e) ? storeLockBusy() : e; }
+        // NB-2: bayat S de yerinde silinmez (aynı Windows silme-beklemesi hemen aşağıdaki link()'i EPERM ile bekletirdi); jeton ve "içerik hâlâ S" denetimi değişmez.
+        if (!vacateByTombstone()) { try { io.unlink(lockPath); } catch (e) { if (errCode(e) !== "ENOENT") throw isTransientFsError(e) ? storeLockBusy() : e; } }
       } else if (again !== null) { if (holdsLive(lockPath, again)) throw storeLocked(); continue; }
       if (linkWithContent(lockPath)) return won();
     } finally {
