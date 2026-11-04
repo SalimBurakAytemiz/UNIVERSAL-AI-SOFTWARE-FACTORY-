@@ -9,6 +9,7 @@ import {registerWorkosStoreLockCases} from "./support/workos-store-lock.cases.js
 import {registerWorkosStoreIoCases} from "./support/workos-store-io.cases.js";     // UASCO-T0042 store işlem başına dayanıklı G/Ç vakaları
 import {registerAutonomyCases} from "./support/autonomy.cases.js";             // FD-2026-11-03 kalıcı otonomi karar modülü vakaları
 import {registerAutonomyExecutorCases} from "./support/autonomy-executor.cases.js"; // FD-2026-11-03 yürütücü (merge + doğrulama) vakaları
+import {registerCommandIntakeCases} from "./support/command-intake.cases.js";   // UASCO-T0010 komut girişi (DRAFT öneri, netleştirme, 3 örnek) vakaları
 import {registerCloudArtifactsCases} from "./support/cloud-artifacts.cases.js"; // CLOUD-T0008 artifact deposu ve imzalı teslim vakaları
 import {
   CLOUD_CONTRACT_VERSION,MAX_JOB_TIMEOUT_MS,signScope,verifyScopeSignature,validateCloudJobRequest,verifyEventStream,verifyArtifact,
@@ -168,6 +169,7 @@ registerWorkosStoreLockCases();
 registerWorkosStoreIoCases();
 registerAutonomyCases();
 registerAutonomyExecutorCases();
+registerCommandIntakeCases();
 registerModelRouterCases();
 registerCloudProviderRoutingCases();
 registerCloudArtifactsCases();

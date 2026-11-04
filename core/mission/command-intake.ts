@@ -17,7 +17,10 @@ export interface IntakeProposal {
   authorization: { verified: false };
   objective: string;
   origin: string | null;
+  clarification: IntakeClarification | null;
 }
+// UASCO-T0010: belirsiz/bilinmeyen tür için deterministik netleştirme sorusu (TR+EN); seçenekler yalnız bilinen türlerdir, hiçbir yetki vermez.
+export interface IntakeClarification { code: "KIND_UNKNOWN" | "KIND_AMBIGUOUS"; question: string; options: IntakeKind[] }
 export type IntakeResult = { ok: true; proposal: IntakeProposal } | { ok: false; code: IntakeRejection };
 
 // Katlama: küçük harf, Türkçe harfleri ASCII'ye indir; anahtar sözcükler katlanmış biçimdedir.
@@ -39,6 +42,12 @@ const FLAGS: Array<[IntakeReason, RegExp, IntakeRisk]> = [
   ["DELETION", /(\bdelet|\bremov|\bdrop\b|\bwipe|\bdestroy|\btruncat|rm -rf|\bsil\b|\bsilin|\bsilme|\bkaldir|yok et|temizle)/, 4],
   ["INSTRUCTION_LIKE", /(ignor\w*( \w+)? (rules|instructions|polic\w+|guard\w*)|disregard|bypass|override|skip (the )?(review|tests?|validation|checks?)|approve (it|this)|you are now|system prompt|authori[sz]e (it|this|the)|kurallari (yok say|atla)|talimat\w* (yok say|atla)|onceki talimat|incelemeyi atla|testleri atla|dogrudan onayla|yetkilendir|yetki ver)/, 4],
 ];
+const ALL_KINDS: IntakeKind[] = KINDS.map(([k]) => k);
+// UASCO-T0010: Windows UI'deki örnek komutlar; her biri tek türe çözülür ve DRAFT/PROPOSED üretir (testle bağlıdır).
+export const COMMAND_INTAKE_EXAMPLES: readonly string[] = Object.freeze(["Ayarlar sayfasını geliştir", "Audit the login module", "Birim testlerini doğrula"]);
+const clarify = (code: "KIND_UNKNOWN" | "KIND_AMBIGUOUS", kinds: IntakeKind[]): IntakeClarification => code === "KIND_UNKNOWN"
+  ? { code, question: `Komut hangi iş türü? / Which kind of work is this command? (${ALL_KINDS.join(" | ")})`, options: [...ALL_KINDS] }
+  : { code, question: `Komut birden fazla iş türüne uyuyor; hangisi kastedildi? / The command matches several kinds; which one did you mean? (${kinds.join(" | ")})`, options: [...kinds] };
 const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
 
 export function intakeCommand(text: unknown, context?: { origin?: unknown }): IntakeResult {
@@ -72,6 +81,7 @@ export function intakeCommand(text: unknown, context?: { origin?: unknown }): In
       authorization: { verified: false },
       objective: text.trim(),
       origin,
+      clarification: hits.length === 1 ? null : clarify(hits.length === 0 ? "KIND_UNKNOWN" : "KIND_AMBIGUOUS", hits.map(([k]) => k)),
     },
   };
 }
