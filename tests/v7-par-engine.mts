@@ -45,7 +45,9 @@ if (PHASE === "1") {
   else {
     const rep = await first.tick(); // üst süreç bu süreci implementer çocuğu uyurken SIGKILL eder; buraya DÖNÜLDÜYSE implementer çocuğu beklenen yerde değildir: sonuç sessiz kalmaz
     const after = new WorkOsStore(dataDir).engineGetRun(run.runId), last = after?.evidence.at(-1);
-    console.log(JSON.stringify({phase1: "TICK_RETURNED_BEFORE_THE_KILL", report: rep, run: after ? {status: after.status, step: after.step, reason: after.reason, leaseExpiresAt: after.leaseExpiresAt, retryCount: after.retryCount, lastEvidence: last ? {kind: last.kind, step: last.step, exitCode: last.exitCode, note: String(last.note ?? "").slice(0, 200)} : null} : null}));
+    // //TR: UASCO-T0042: fence nedeni ayırt edilebilsin: dönüş anı (lease süresi dolmuş mu?) ve sahip kaydının o anki okunuşu.
+    const ownerNow = (() => { try { return JSON.parse(fs.readFileSync(path.join(dataDir, "runs", run.runId, "workspace.owner.json"), "utf8")).leaseId === after?.leaseId ? "OWN_LEASE" : "OTHER_LEASE"; } catch (e) { return `UNREADABLE:${(e as NodeJS.ErrnoException).code ?? "PARSE"}`; } })();
+    console.log(JSON.stringify({phase1: "TICK_RETURNED_BEFORE_THE_KILL", returnedAt: new Date().toISOString(), owner: ownerNow, report: rep, run: after ? {status: after.status, step: after.step, reason: after.reason, leaseExpiresAt: after.leaseExpiresAt, retryCount: after.retryCount, lastEvidence: last ? {kind: last.kind, step: last.step, exitCode: last.exitCode, note: String(last.note ?? "").slice(0, 200)} : null} : null}));
   }
 } else {
   const fake = new FakeExecutors({implement: () => ({files: {"feature.txt": "ok\n"}}), review: () => ({verdict: "CLEAN"})});
