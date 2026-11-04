@@ -105,11 +105,16 @@ export function preGate(evidence) {
 // no text of the execution record leaves memory. REVIEWER_OK is never a blocking reason.
 export const REVIEWER_DIAGNOSTIC_CODES = Object.freeze(["REVIEWER_OK", "REVIEWER_AUTH_REJECTED", "REVIEWER_MODEL_UNAVAILABLE", "REVIEWER_QUOTA_OR_RATE_LIMIT",
   "REVIEWER_SCHEMA_REJECTED", "REVIEWER_NO_STRUCTURED_OUTPUT", "REVIEWER_ERROR_UNCLASSIFIED", "REVIEWER_OUTPUT_UNREADABLE"]);
-export const REVIEWER_DIAGNOSTIC_KEYS = Object.freeze(["code", "isError", "turns", "durationMs", "modelUsed"]);
+export const REVIEWER_DIAGNOSTIC_KEYS = Object.freeze(["code", "isError", "turns", "durationMs", "modelUsed", "authSubcode", "httpStatus"]);
+// //TR: Kimlik doğrulama alt kodu: REVIEWER_AUTH_REJECTED yalnız sınırlı desenlerle sabit bir alt koda ayrılır; yalnız EXPIRED, REVOKED ve INVALID token yenilemeyi önerebilir, kanıtsız durum UNSPECIFIED olur ve token değişikliği istemez. Hiçbir metin yayımlanmaz, yalnız alt kod ve 400-599 arası ilk HTTP durum tamsayısı.
+// The cause of an auth failure, as one fixed subcode (null for every other code). Only EXPIRED, REVOKED and INVALID prove that the token itself is bad.
+export const REVIEWER_AUTH_SUBCODES = Object.freeze(["AUTH_TOKEN_EXPIRED", "AUTH_TOKEN_REVOKED", "AUTH_TOKEN_INVALID", "AUTH_NOT_LOGGED_IN", "AUTH_OAUTH_FLOW_UNSUPPORTED",
+  "AUTH_FORBIDDEN", "AUTH_UNSPECIFIED"]);
 export const EXECUTION_FILE_MAX_BYTES = 4 * 1024 * 1024;
 const RERUN = "then start a new review (Re-run all jobs, or Run workflow with the PR number).";
 export const REVIEWER_REMEDIES = Object.freeze({
-  REVIEWER_AUTH_REJECTED: `The reviewer credential was rejected. Regenerate the reviewer token (claude setup-token) into the review environment secret CLAUDE_CODE_OAUTH_TOKEN, ${RERUN}`,
+  // The remedy for an auth failure without a proven subcode (see REVIEWER_AUTH_REMEDIES): it never asks for a new token.
+  REVIEWER_AUTH_REJECTED: `The reviewer failed with an authentication-related error whose cause is not proven (AUTH_UNSPECIFIED). Do not rotate the reviewer token without evidence: run the review once and read the auth subcode and HTTP status in the ai-review job summary, ${RERUN}`,
   REVIEWER_MODEL_UNAVAILABLE: `The requested reviewer model is not available to this credential. Correct or clear the repository variable UASCO_REVIEW_MODEL, ${RERUN}`,
   REVIEWER_QUOTA_OR_RATE_LIMIT: `The reviewer hit a usage, quota or rate limit, or the service was overloaded. Wait until the limit resets, ${RERUN}`,
   // The workflow runs from the default branch, so the schema fix must be merged into v7/integration before a new review can use it.
@@ -117,16 +122,42 @@ export const REVIEWER_REMEDIES = Object.freeze({
   REVIEWER_NO_STRUCTURED_OUTPUT: "The reviewer ran but returned no schema-valid verdict (for example it reached its turn limit). Start a new review; if this repeats, split the PR into smaller changes.",
   REVIEWER_ERROR_UNCLASSIFIED: `The reviewer failed with an error that matches no known cause. Check the ai-review job log of this run (the reviewer output itself is never published), ${RERUN}`,
   REVIEWER_OUTPUT_UNREADABLE: `The reviewer's execution record was missing or unreadable (the reviewer may not have started). Check the ai-review job log of this run, ${RERUN}`});
+const REGEN = "Regenerate the reviewer token (claude setup-token) into the review environment secret CLAUDE_CODE_OAUTH_TOKEN,";
+export const REVIEWER_AUTH_REMEDIES = Object.freeze({
+  AUTH_TOKEN_EXPIRED: `The reviewer token has expired. ${REGEN} ${RERUN}`,
+  AUTH_TOKEN_REVOKED: `The reviewer token was revoked. ${REGEN} ${RERUN}`,
+  AUTH_TOKEN_INVALID: `The reviewer token is malformed or unknown to the service. ${REGEN} ${RERUN}`,
+  AUTH_NOT_LOGGED_IN: `The reviewer CLI saw no credential (not logged in): the token is not reaching it. Check that the review environment secret CLAUDE_CODE_OAUTH_TOKEN exists in the job's environment and is passed to the action input claude_code_oauth_token; no token rotation is indicated, ${RERUN}`,
+  AUTH_OAUTH_FLOW_UNSUPPORTED: `The service refused this authentication method for the request (OAuth not supported for it). Check the auth method the action uses, the account plan and the model access; a new token of the same kind will not help, ${RERUN}`,
+  AUTH_FORBIDDEN: `The credential was accepted but the request is not permitted (403, permission, organization or plan). Check the account plan, organization settings and model access; no token rotation is indicated, ${RERUN}`,
+  AUTH_UNSPECIFIED: REVIEWER_REMEDIES.REVIEWER_AUTH_REJECTED});
 // Error texts of the CLI and the API. They are matched only when the record says is_error: the final text of a run without an error is the model's own
 // output (shaped by the reviewed PR), so it is never used. Every quantifier is bounded.
-const AUTH_RE = /invalid[ _-]?(?:api[ _-]?key|x-api-key|bearer|token|credential|auth)|authenticat|unauthori[sz]ed|\b401\b|oauth|token (?:has )?(?:expired|been revoked|revoked)|(?:expired|revoked) (?:oauth )?token|\/login\b|\blog ?in\b|not logged in/i;
+// AUTH_RE gates the auth code; it is checked after MODEL_RE and QUOTA_RE, so a model-access or limit error that mentions OAuth or login is not an auth failure.
+const AUTH_RE = /invalid[ _-]?(?:api[ _-]?key|x-api-key|bearer|token|credential|auth)|authenticat|unauthori[sz]ed|\b401\b|oauth|token (?:has )?(?:expired|been revoked|revoked)|(?:expired|revoked) (?:oauth )?token|\/login\b|\blog ?in\b|not logged in|only authori[sz]ed for use with claude code|\b403\b|forbidden|permission_error/i;
+// Subcodes, in this order. Every quantifier is bounded; none of the text is kept.
+const AUTH_SUB_RES = [
+  ["AUTH_TOKEN_EXPIRED", /(?:token|credential|session)[^\n]{0,40}?\bexpired\b|\bexpired[ _-](?:oauth[ _-])?(?:token|credential|session)|token_expired/i],
+  ["AUTH_TOKEN_REVOKED", /(?:token|credential|key)[^\n]{0,40}?\brevoked\b|\brevoked[ _-](?:oauth[ _-])?(?:token|credential|key)|token_revoked/i],
+  ["AUTH_OAUTH_FLOW_UNSUPPORTED", /oauth[^\n]{0,60}?(?:not (?:currently )?supported|unsupported|not allowed|not permitted)|(?:not (?:currently )?supported|unsupported)[^\n]{0,60}?oauth|only authori[sz]ed for use with claude code/i],
+  ["AUTH_FORBIDDEN", /\b403\b|forbidden|permission_error|permission denied|(?:does not|doesn't|do not) have permission|organi[sz]ation[^\n]{0,80}?(?:disabled|not allowed|not permitted|restricted|does not have)|\bplan\b[^\n]{0,60}?(?:does not include|doesn't include|not included|not support|upgrade)/i],
+  ["AUTH_TOKEN_INVALID", /invalid[ _-]?(?:api[ _-]?key|x-api-key|bearer|token|credential|oauth[ _-]token)|malformed[ _-](?:api[ _-]?key|token|credential)|unknown[ _-](?:api[ _-]?key|token|credential)|incorrect[ _-]api[ _-]?key/i],
+  ["AUTH_NOT_LOGGED_IN", /not logged in|\/login\b|please (?:run )?log ?in\b|\blog ?in again\b|no (?:api key|credentials?|auth(?:entication)? token) (?:found|provided|configured)/i]];
+const authSubcode = text => (AUTH_SUB_RES.find(([, re]) => re.test(text)) ?? ["AUTH_UNSPECIFIED"])[0];
+// The first HTTP status 400-599 in the error text: a labelled one ("API Error: 401", "status 403", "HTTP 529") first, else the first bare one.
+const STATUS_LABELLED_RE = /(?:api error|status(?: code)?|http(?:\/\d(?:\.\d)?)?)[: =]{0,3}([45]\d\d)\b/i, STATUS_BARE_RE = /(?<![\d.:-])\b([45]\d\d)\b(?![\d.:-]\d)/;
+const httpStatusOf = text => { const m = STATUS_LABELLED_RE.exec(text) ?? STATUS_BARE_RE.exec(text); return m ? Number(m[1]) : null; };
 const MODEL_RE = /\bmodel\b[^\n]{0,160}?(?:not[ _]found|not available|unavailable|does(?: not|n't) exist|may not exist|not supported|unsupported|not have access)|(?:unknown|invalid|unsupported|unavailable) model\b|issue with the selected model|not_found_error[\s\S]{0,300}?\bmodel\b|\bmodel\b[\s\S]{0,300}?not_found_error|\b404\b[\s\S]{0,300}?\bmodel\b|\bmodel\b[\s\S]{0,300}?\b404\b/i;
-const QUOTA_RE = /credit balance|\bquota\b|usage limit|rate[ _-]?limit|\b429\b|overloaded|\b529\b|too many requests|limit reached/i;
+// HTTP 429 and 529 are matched through the parsed status (httpStatusOf), not here.
+const QUOTA_RE = /credit balance|\bquota\b|usage limit|rate[ _-]?limit|overloaded|too many requests|limit reached/i;
+// An explicit credential phrase (a token, key or credential with a bad state, "not logged in", "401 Unauthorized", authentication_error) outranks
+// incidental model, quota or 429 text: only without one does the MODEL -> QUOTA -> AUTH order apply. A bare "OAuth token" is not explicit.
+const EXPLICIT_CRED_RE = /(?:invalid|expired|revoked|malformed)[ _-]?(?:oauth[ _-])?(?:api[ _-]?key|x-api-key|bearer|token|credentials?)\b|(?:oauth[ _-]token|api[ _-]?key|access[ _-]token|credentials?)[^\n]{0,40}?\b(?:has expired|is expired|expired|been revoked|revoked|is invalid)\b|token_(?:expired|revoked)|not logged in|\b401\b[^\n]{0,20}?unauthori[sz]ed|unauthori[sz]ed[^\n]{0,20}?\b401\b|authentication_error/i;
 // The request's verdict schema refused by the API (for example 400 invalid_request_error on the JSON schema): a schema term near a refusal word.
 const SCHEMA_TERM = "(?:json[ _-]?schema|input_schema|output_format|structured[ _-]?output)", SCHEMA_REFUSAL = "(?:invalid|not supported|unsupported|not allowed|rejected|error)";
 const SCHEMA_RE = new RegExp(`${SCHEMA_TERM}[\\s\\S]{0,200}?${SCHEMA_REFUSAL}|${SCHEMA_REFUSAL}[\\s\\S]{0,200}?${SCHEMA_TERM}`, "i");
 const count = v => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1e12 ? Math.round(v) : null;
-const diagnosis = (code, isError, turns, durationMs, modelUsed) => ({code, isError, turns, durationMs, modelUsed});
+const diagnosis = (code, isError, turns, durationMs, modelUsed, authSubcode = null, httpStatus = null) => ({code, isError, turns, durationMs, modelUsed, authSubcode, httpStatus});
 // raw = the execution file's text (a JSON array of SDK messages) or null. The LAST {"type":"result"} message is classified. Never throws.
 export function diagnoseReviewerOutput(raw) {
   const unreadable = diagnosis("REVIEWER_OUTPUT_UNREADABLE", true, null, null, false);
@@ -140,21 +171,33 @@ export function diagnoseReviewerOutput(raw) {
     if (res === null) return unreadable;
     const isError = res.is_error === true;
     const modelUsed = (isObj(res.modelUsage) && Object.keys(res.modelUsage).length > 0) || (typeof res.total_cost_usd === "number" && res.total_cost_usd > 0);
-    const at = code => diagnosis(code, isError, count(res.num_turns), count(res.duration_ms), modelUsed);
+    const at = (code, sub = null, status = null) => diagnosis(code, isError, count(res.num_turns), count(res.duration_ms), modelUsed, sub, status);
     if (!isError) return at(res.subtype === "success" && res.structured_output !== undefined && res.structured_output !== null ? "REVIEWER_OK" : "REVIEWER_NO_STRUCTURED_OUTPUT");
     const text = [res.result, ...(Array.isArray(res.errors) ? res.errors : [])].filter(isStr).join("\n").slice(0, 65536);
-    if (AUTH_RE.test(text)) return at("REVIEWER_AUTH_REJECTED");
-    if (MODEL_RE.test(text)) return at("REVIEWER_MODEL_UNAVAILABLE");
-    if (QUOTA_RE.test(text)) return at("REVIEWER_QUOTA_OR_RATE_LIMIT");
+    const status = httpStatusOf(text);
+    if (EXPLICIT_CRED_RE.test(text)) return at("REVIEWER_AUTH_REJECTED", authSubcode(text), status);
+    // Without an explicit credential phrase, model access and limits come first: their texts can mention OAuth or login without the credential
+    // being at fault. HTTP 429 and 529 are never auth.
+    if (MODEL_RE.test(text)) return at("REVIEWER_MODEL_UNAVAILABLE", null, status);
+    if (QUOTA_RE.test(text) || status === 429 || status === 529) return at("REVIEWER_QUOTA_OR_RATE_LIMIT", null, status);
+    if (AUTH_RE.test(text)) return at("REVIEWER_AUTH_REJECTED", authSubcode(text), status);
     // A run that used the model or hit a retry/turn limit got as far as answering: its failure is the missing output, never a refused schema.
-    if (modelUsed || (isStr(res.subtype) && res.subtype.startsWith("error_max"))) return at("REVIEWER_NO_STRUCTURED_OUTPUT");
-    if (SCHEMA_RE.test(text)) return at("REVIEWER_SCHEMA_REJECTED");
-    return at("REVIEWER_ERROR_UNCLASSIFIED");
+    if (modelUsed || (isStr(res.subtype) && res.subtype.startsWith("error_max"))) return at("REVIEWER_NO_STRUCTURED_OUTPUT", null, status);
+    if (SCHEMA_RE.test(text)) return at("REVIEWER_SCHEMA_REJECTED", null, status);
+    return at("REVIEWER_ERROR_UNCLASSIFIED", null, status);
   } catch {
     return unreadable;
   }
 }
 // The failure code a diagnostics record carries, or null: an unknown, malformed or REVIEWER_OK code counts as no diagnosis.
+// The detail a diagnostics record carries for the check summary: the auth subcode (AUTH code only; a missing or unknown one is AUTH_UNSPECIFIED) and the
+// HTTP status (an integer 400-599, else null). Nothing else of the record is used.
+export const reviewerDetail = d => {
+  const code = reviewerFailureCode(d);
+  if (code === null) return null;
+  const status = Number.isSafeInteger(d.httpStatus) && d.httpStatus >= 400 && d.httpStatus <= 599 ? d.httpStatus : null;
+  return {code, authSubcode: code === "REVIEWER_AUTH_REJECTED" ? (REVIEWER_AUTH_SUBCODES.includes(d.authSubcode) ? d.authSubcode : "AUTH_UNSPECIFIED") : null, httpStatus: status};
+};
 export const reviewerFailureCode = d => isObj(d) && isStr(d.code) && d.code !== "REVIEWER_OK" && REVIEWER_DIAGNOSTIC_CODES.includes(d.code) ? d.code : null;
 
 // Final decision. input = {evidence, verdict, currentHeadSha, approvals, policy:{founderLogin, reviewerSession}, reviewerDiagnostics?}.
@@ -201,20 +244,22 @@ export function decide(input) {
     else if (impl.has(pol.reviewerSession)) r.push("REVIEWER_IS_IMPLEMENTER");
     // Append-only: the code goes after every other reason, and only when no verdict was delivered (which already fails as VERDICT_MISSING or
     // VERDICT_UNREADABLE), so it can neither remove a reason, nor reach a passing decision, nor change how a delivered verdict is recorded.
-    const diag = noVerdictDelivered ? reviewerFailureCode(input.reviewerDiagnostics) : null;
-    if (diag !== null) r.push(diag);
-    return finish([...new Set(r)], headSha, baseSha, input);
+    const diag = noVerdictDelivered ? reviewerDetail(input.reviewerDiagnostics) : null;
+    if (diag !== null) r.push(diag.code);
+    return finish([...new Set(r)], headSha, baseSha, input, diag);
   } catch {
     return finish(["INTERNAL_ERROR"], null, null, input);
   }
 }
 
-function finish(reasons, headSha, baseSha, input) {
+// reviewerDiagnosis (code, auth subcode, HTTP status; fixed values only) is in the record only when a diagnosis code was appended, so every other record is unchanged.
+function finish(reasons, headSha, baseSha, input, reviewerDiagnosis = null) {
   const conclusion = reasons.length === 0 ? "success" : "failure";
   const verdict = isObj(input) && isObj(input.verdict) ? input.verdict : null;
   const ev = isObj(input) && isObj(input.evidence) ? input.evidence : null;
   const record = {check: CHECK_NAME, conclusion, reasons, headSha, baseSha, headTree: ev && isSha(ev.headTree) ? ev.headTree : null, pr: ev && isObj(ev.pr) ? ev.pr.number ?? null : null,
-    verdict, reviewerSession: isObj(input) && isObj(input.policy) && isStr(input.policy.reviewerSession) ? input.policy.reviewerSession : null};
+    verdict, reviewerSession: isObj(input) && isObj(input.policy) && isStr(input.policy.reviewerSession) ? input.policy.reviewerSession : null,
+    ...(reviewerDiagnosis !== null && reasons.includes(reviewerDiagnosis.code) ? {reviewerDiagnosis} : {})};
   return {...record, digest: sha256(canonical(record))};
 }
 
@@ -226,7 +271,14 @@ export function renderSummary(d, runUrl) {
   if (isStr(runUrl) && /^https:\/\/github\.com\/[^\s)]+$/.test(runUrl)) lines.push(`Run and evidence artifact: ${runUrl}`);
   lines.push("", d.reasons.length ? `Blocking reasons: ${d.reasons.map(x => `\`${x}\``).join(", ")}` : "Blocking reasons: none.");
   // A reviewer diagnosis among the reasons gets its fixed remedy sentence (never any text of the reviewer's output).
-  for (const c of d.reasons.filter(x => isStr(x) && Object.hasOwn(REVIEWER_REMEDIES, x))) lines.push("", `Reviewer diagnosis \`${c}\`: ${REVIEWER_REMEDIES[c]}`);
+  // An auth code gets the remedy of its subcode; the subcode and HTTP status are re-checked against their fixed sets (decision.json is a file).
+  const rd = isObj(d.reviewerDiagnosis) ? d.reviewerDiagnosis : {};
+  for (const c of d.reasons.filter(x => isStr(x) && Object.hasOwn(REVIEWER_REMEDIES, x))) {
+    const sub = rd.code === c && c === "REVIEWER_AUTH_REJECTED" ? (REVIEWER_AUTH_SUBCODES.includes(rd.authSubcode) ? rd.authSubcode : "AUTH_UNSPECIFIED") : null;
+    const st = rd.code === c && Number.isSafeInteger(rd.httpStatus) && rd.httpStatus >= 400 && rd.httpStatus <= 599 ? rd.httpStatus : null;
+    const tag = [sub === null ? null : `\`${sub}\``, st === null ? null : `HTTP ${st}`].filter(x => x !== null).join(", ");
+    lines.push("", `Reviewer diagnosis \`${c}\`${tag ? ` (${tag})` : ""}: ${sub === null ? REVIEWER_REMEDIES[c] : REVIEWER_AUTH_REMEDIES[sub]}`);
+  }
   if (d.verdict && Array.isArray(d.verdict.findings)) {
     lines.push("", `Reviewer result: ${flat(d.verdict.result, 20)}. ${flat(d.verdict.summary ?? "", 1500)}`);
     if (d.verdict.findings.length) {

@@ -832,15 +832,31 @@ describe("C-CTX-1 role-context", () => {
       "registries/agent-skill-matrix.json": {agents: [{agentId: "001", requiredSkillIds: ["SK2-A"]}]},
       "registries/role-execution-profiles.json": {profiles: [{roleId: "UASCO-0001", reviewChain: {value: ["UASCO-0002"], gapId: null, status: "PROPOSED_DERIVED"}, candidateSkills: {value: [], gapId: "WFR-GAP-SKILLS-UASCO-0001"}}]}
     };
-    const mini = (name: string, tweak: (f: Record<string, string | null>) => void = () => {}): string => {
+    const files = (tweak: (f: Record<string, string | null>) => void): Record<string, string | null> => {
+      const f: Record<string, string | null> = Object.fromEntries(Object.entries(MINI).map(([k, v]) => [k, JSON.stringify(v)]));
+      tweak(f);
+      return f;
+    };
+    const fresh = (name: string): string => {
       const root = fs.mkdtempSync(path.join(tmp, `${name}-`));
-      const files: Record<string, string | null> = Object.fromEntries(Object.entries(MINI).map(([k, v]) => [k, JSON.stringify(v)]));
-      tweak(files);
-      for (const [rel, body] of Object.entries(files)) if (body !== null) { fs.mkdirSync(path.dirname(path.join(root, rel)), {recursive: true}); fs.writeFileSync(path.join(root, rel), body); }
+      for (const [rel, body] of Object.entries(files(() => {}))) if (body !== null) { fs.mkdirSync(path.dirname(path.join(root, rel)), {recursive: true}); fs.writeFileSync(path.join(root, rel), body); }
       return root;
     };
+    // //TR: Windows CI kök nedeni (2026-11-04, 41772606137 ve 41766289041 koşuları): her vakada yeni bir fikstür deposu kurmak (182 depo, ~1100 dosya/dizin oluşturma) Linux'ta bile testin ~%70'iydi; NTFS + Defender altında 5 sn varsayılan sınırını aşıyordu. Vakalar artık TEK bir çalışma kökünü paylaşır ve her çağrıda yalnız önceki vakadan farklı olan dosyalar yazılır/silinir; yükleyicinin gördüğü dosya kümesi her vakada önceki gibi tam olarak MINI + o vakanın değişikliğidir (yükleyici yolu önbelleğe almaz). Hiçbir iddia değişmez; "hiç yazmaz" iddiası ayrı, taze "ok" kökünde kalır.
+    const work = fs.mkdtempSync(path.join(tmp, "case-"));
+    const onDisk = new Map<string, string | null>(), dirs = new Set<string>();
+    const mini = (name: string, tweak: (f: Record<string, string | null>) => void = () => {}): string => {
+      const want = files(tweak);
+      for (const rel of new Set([...onDisk.keys(), ...Object.keys(want)])) {
+        const body = want[rel] ?? null, p = path.join(work, rel);
+        if (onDisk.has(rel) && onDisk.get(rel) === body) continue;
+        if (body === null) fs.rmSync(p, {force: true}); else { if (!dirs.has(path.dirname(p))) { fs.mkdirSync(path.dirname(p), {recursive: true}); dirs.add(path.dirname(p)); } fs.writeFileSync(p, body); }
+        onDisk.set(rel, body);
+      }
+      return work;
+    };
     const snapshot = (root: string) => JSON.stringify(fs.readdirSync(root, {recursive: true}).map(String).sort().map(f => [f, fs.statSync(path.join(root, f)).isFile() ? fs.readFileSync(path.join(root, f), "utf8") : null]));
-    const ok = mini("ok");
+    const ok = fresh("ok");
     const before = snapshot(ok);
     const loaded = loadRoleContextInputFromRepo(ok);
     expect(snapshot(ok)).toBe(before);
