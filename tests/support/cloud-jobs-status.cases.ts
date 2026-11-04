@@ -292,6 +292,46 @@ export function registerCloudJobsStatusCases(): void {
       for (const benign of ["authentication failed for user", "token refresh scheduled", "session ended normally"]) expect(redactJobMessage(benign), benign).toBe(benign);
     });
 
+    it("server-side redaction is general: every key/value quoting form, CLI flags and export/set (table-driven; #335 second review finding)", async () => {
+      const J = (...p: string[]) => p.join("");   // planted değerler çalışma anında birleştirilir
+      const PW = J("pass", "word"), TK = J("to", "ken");
+      // [biçim, girdi, beklenen tam çıktı, sızmaması gereken değer]
+      const table: Array<[string, string, string, string]> = [
+        ['"k": "v"', `{"${PW}": "pl-dq-dq"}`, `{"${PW}": "[REDACTED:KEY_VALUE]"}`, "pl-dq-dq"],
+        ["'k': 'v'", `{'${PW}': 'pl-sq-sq'}`, `{'${PW}': '[REDACTED:KEY_VALUE]'}`, "pl-sq-sq"],
+        [`'k': "v"`, `{'${TK}': "pl sq dq"}`, `{'${TK}': "[REDACTED:KEY_VALUE]"}`, "pl sq dq"],
+        [`"k": 'v'`, `{"${TK}": 'pl dq sq'}`, `{"${TK}": '[REDACTED:KEY_VALUE]'}`, "pl dq sq"],
+        ["k: 'v'", `${PW}: 'pl bare sq'`, `${PW}: '[REDACTED:KEY_VALUE]'`, "pl bare sq"],
+        ["'k': v (unquoted)", `{'api_key': pl-sq-bare}`, `{'api_key': [REDACTED:KEY_VALUE]}`, "pl-sq-bare"],
+        ["k=v", `DB_${PW.toUpperCase()}=pl-kv-eq`, `DB_${PW.toUpperCase()}=[REDACTED:KEY_VALUE]`, "pl-kv-eq"],
+        ["--flag v", `--${PW} pl-flag-space`, `--${PW} [REDACTED:FLAG_VALUE]`, "pl-flag-space"],
+        ["--flag=v", `--${PW}=pl-flag-eq`, `--${PW}=[REDACTED:FLAG_VALUE]`, "pl-flag-eq"],
+        ['--flag "v w"', `--${TK} "pl flag quoted"`, `--${TK} "[REDACTED:FLAG_VALUE]"`, "pl flag quoted"],
+        ["-flag v (single dash)", "-api-key pl-dash-one", "-api-key [REDACTED:FLAG_VALUE]", "pl-dash-one"],
+        ["export K=v", `export GITHUB_${TK.toUpperCase()}=pl-export`, `export GITHUB_${TK.toUpperCase()}=[REDACTED:KEY_VALUE]`, "pl-export"],
+        ["set K=v", `set DB_${PW.toUpperCase()}=pl-set-cmd`, `set DB_${PW.toUpperCase()}=[REDACTED:KEY_VALUE]`, "pl-set-cmd"],
+        ["export K='v w'", `export AWS_SECRET_ACCESS_KEY='pl export quoted'`, `export AWS_SECRET_ACCESS_KEY='[REDACTED:KEY_VALUE]'`, "pl export quoted"],
+        ["k: Bearer v", "auth: Bearer pl-bearer-v", "auth: [REDACTED:KEY_VALUE]", "pl-bearer-v"],
+      ];
+      for (const [form, input, want] of table) expect(redactJobMessage(input), form).toBe(want);
+      // benign: anahtar kelime parçası, anahtar kelimesiz bayraklar, sonraki bayrak değer sayılmaz
+      for (const benign of ["-p 8080 --verbose", "--no-auth --verbose", "--retries 3 --timeout=30", "authentication failed for user", "token refresh scheduled",
+        "session ended normally", "missing Bearer token", "LEASE_EXPIRED", "compile error in step 2", "see https://example.com/docs/a for help"]) expect(redactJobMessage(benign), benign).toBe(benign);
+      // her biçim worker FAILED mesajı olarak API'den (tekil + liste) sızmaz
+      const q = new CloudJobQueue({dir, scopeKeys: new Map([["k-1", SCOPE_KEY]]), workerKeys: new Map([["worker-a", WORKER_KEY]]), now: () => clock, leaseMs: 60_000});
+      open.push(q);
+      const app = mkServer(q);
+      for (const [form, input, , secret] of table) {
+        const j = req(); expect(q.submit(j).ok).toBe(true);
+        const c = q.claim(auth("claim", "*")); if (!c.ok || c.job.jobId !== j.jobId) throw new Error("claim");
+        const res = {status: "FAILED" as const, message: `run: ${input}`};
+        expect(q.complete(auth("complete", j.jobId, {leaseId: c.lease.leaseId, result: res}), j.jobId, c.lease.leaseId, res)).toMatchObject({ok: true});
+        expect((await get(app, `${CLOUD_JOBS_PATH}/${j.jobId}`)).body, form).not.toContain(secret);
+      }
+      const list = (await get(app, CLOUD_JOBS_PATH)).body;
+      for (const [form, , , secret] of table) expect(list, form).not.toContain(secret);
+    });
+
     it("forged tenant headers and query parameters never change the tenant: only RouteDeps.scope applies", async () => {
       const {q, x} = seeded();
       const app = mkServer(q);

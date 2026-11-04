@@ -54,6 +54,15 @@ export interface JobSummary {
 }
 const REASON_EVENTS: readonly string[] = ["RETRYING", "FAILED", "TIMED_OUT"];
 export const JOB_MESSAGE_MAX = 200;
+const SENSITIVE_WORD = "(?:token|secret|password|passwd|pwd|api[_-]?key|access[_-]?key|client[_-]?secret|authorization|auth|credentials?|session|cookie)";
+const QUOTED_VALUE = `"(?:[^"\\\\\\r\\n]|\\\\.){0,4096}"|'(?:[^'\\\\\\r\\n]|\\\\.){0,4096}'`;
+/** CLOUD-T0005: tırnaklı/tırnaksız anahtar + ":" veya "=" + tırnaklı/tırnaksız değer. Tüm nicelikler sınırlı. */
+const SENSITIVE_KEY_VALUE = new RegExp(
+  `(?<![A-Za-z0-9_-])(["']?)([A-Za-z0-9_.-]{0,64}?${SENSITIVE_WORD}[A-Za-z0-9_.-]{0,64})\\1(\\s{0,8}[:=]\\s{0,8})(${QUOTED_VALUE}|(?:(?:Bearer|Basic)[ \\t]{1,16})?[^\\s"',;&}\\]]{1,4096})`, "gi");
+/** CLI bayrağı: -x / --x adında anahtar kelime, ardından "=" ya da boşluk ve değer. */
+const SENSITIVE_FLAG = new RegExp(
+  `(?<![A-Za-z0-9_-])(--?[A-Za-z0-9_-]{0,64}?${SENSITIVE_WORD}[A-Za-z0-9_-]{0,64})(=|[ \\t]{1,8})(${QUOTED_VALUE}|(?!-)[^\\s"']{1,4096})`, "gi");
+const quoteLike = (v: string) => (v.startsWith('"') ? '"' : v.startsWith("'") ? "'" : "");
 /** CLOUD-T0005 sunucu tarafı redaksiyon: worker'ın yeniden deneme/hata metni API'den çıkmadan önce temizlenir (masaüstü temizleyicisine güvenilmez).
  *  Sıra: bilinen secret desenleri (redactSecrets) -> kimlik bilgili URL -> anahtar=değer -> kısa Bearer/Basic -> anahtar biçimli uzun diziler -> mutlak yollar -> kontrol karakterleri; en son 200'e kırpılır.
  *  Tüm nicelikler sınırlıdır (doğrusal süre). */
@@ -61,10 +70,11 @@ export function redactJobMessage(text: string): string {
   let s = redactSecrets(String(text).slice(0, 4096));
   s = s
     .replace(/\b([A-Za-z][A-Za-z0-9+.-]{0,16}):\/\/[^\s/?#@]{1,512}@/g, "$1://[REDACTED:URL_CREDENTIALS]@")
-    // JSON biçimi: "<..anahtar..>" : "<değer>" (anahtar kelime bir tanımlayıcının parçası olabilir: "db_password", "authToken")
-    .replace(/"([A-Za-z0-9_.-]{0,64}?(?:token|secret|password|passwd|pwd|api[_-]?key|access[_-]?key|client[_-]?secret|authorization|auth|credentials?|session|cookie)[A-Za-z0-9_.-]{0,64})"(\s{0,8}:\s{0,8})"(?:[^"\\\r\n]|\\.){0,4096}"/gi, '"$1"$2"[REDACTED:KEY_VALUE]"')
-    // anahtar=değer / anahtar: değer; anahtar kelime ön ek veya son ek alabilir (DB_PASSWORD, GITHUB_TOKEN, AWS_SECRET_ACCESS_KEY)
-    .replace(/\b([A-Za-z0-9_-]{0,64}?(?:token|secret|password|passwd|pwd|api[_-]?key|access[_-]?key|client[_-]?secret|authorization|auth|credentials?|session|cookie)[A-Za-z0-9_-]{0,64})(\s{0,8}[:=]\s{0,8})("?)(?:(?:Bearer|Basic)[ \t]{1,16})?[^\s",;&]{1,4096}/gi, "$1$2$3[REDACTED:KEY_VALUE]")
+    // Hassas anahtar HER biçimde: "k": "v", 'k': 'v', 'k': "v", k: 'v', k=v, export/set K=v (anahtar kelime tanımlayıcının parçası olabilir: DB_PASSWORD, authToken).
+    // Değer çift/tek tırnaklı ya da tırnaksızdır; tırnak korunur, içerik gizlenir.
+    .replace(SENSITIVE_KEY_VALUE, (_m, q: string, key: string, sep: string, val: string) => `${q}${key}${q}${sep}${quoteLike(val)}[REDACTED:KEY_VALUE]${quoteLike(val)}`)
+    // CLI bayrakları: --password v / --password=v / -api-key v (yalnız bayrak adı anahtar kelime içeriyorsa; "-" ile başlayan değer bir sonraki bayraktır, dokunulmaz)
+    .replace(SENSITIVE_FLAG, (_m, flag: string, sep: string, val: string) => `${flag}${sep}${quoteLike(val)}[REDACTED:FLAG_VALUE]${quoteLike(val)}`)
     .replace(/\b(Bearer|Basic)[ \t]{1,16}(?!\[REDACTED)(?=[^\s,;]{0,4096}[0-9._~+/=-])[^\s,;]{6,4096}/gi, "$1 [REDACTED:AUTH_TOKEN]")
     .replace(/(?<![A-Za-z0-9_\[-])(?=[A-Za-z0-9+/_-]{0,4096}\d)(?=[A-Za-z0-9+/_-]{0,4096}[A-Za-z])[A-Za-z0-9+/_-]{32,4096}={0,2}/g, "[REDACTED:KEY_SHAPED]")
     .replace(/\b[A-Za-z]:[\\/][^\s"'<>|]{0,4096}/g, "[path]")
