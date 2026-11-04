@@ -69,6 +69,26 @@ export function registerModelRouterCases():void{
       const routed=modelRoutingDesktopLine(routeModelStep("s",req(),[{id:"m\r\nx",modelClass:"STANDARD",tier:"LOCAL"}]).record);
       expect(routed).toBe("s: ROUTE m\\u000d\\u000ax (STANDARD/LOCAL)");
     });
+    it("NB: code/modelClass/tier outside the closed sets cannot reach the record or the Desktop line",()=>{
+      const ok=routeModel(req(),catalog),no=routeModel(req({riskLevel:"R3"}),catalog),rec=modelRoutingRecord("s",ok);
+      expect(()=>modelRoutingRecord("s",{...ok,modelClass:"STANDARD\nstep-x: ROUTE evil" as never})).toThrow();
+      expect(()=>modelRoutingRecord("s",{...ok,tier:"LOCAL\r\nx" as never})).toThrow();
+      expect(()=>modelRoutingRecord("s",{...no,code:"NO_PERMITTED_MODEL\nstep-x: ROUTE evil" as never})).toThrow();
+      expect(()=>modelRoutingRecord("s",{...no,reasons:[7 as never]})).toThrow();
+      for(const bad of [{modelClass:"STANDARD\nx"},{tier:"LOCAL\nx"},{code:"ROUTED\nx"},{decision:"ROUTE\nx"}])
+        expect(()=>modelRoutingDesktopLine({...rec,...bad} as never)).toThrow();
+      for(const code of ["INVALID_REQUEST","INVALID_CATALOG","REVIEWER_NOT_INDEPENDENT","NO_PERMITTED_MODEL"] as const)
+        expect(modelRoutingDesktopLine(modelRoutingRecord("s",{...no,code}))).toContain(`REFUSE ${code} `);
+      expect(modelRoutingDesktopLine(modelRoutingRecord("s",no))).toContain(`REFUSE ${no.code} `);
+    });
+    it("LOW: bidi / zero-width characters are control chars; backslash is escaped so \\uXXXX is unambiguous",()=>{
+      for(const cp of [0x200b,0x200c,0x200d,0x200e,0x200f,0x202a,0x202b,0x202c,0x202d,0x202e,0x2060,0x2066,0x2067,0x2068,0x2069,0xfeff])
+        expect(()=>routeModelStep(`a${String.fromCharCode(cp)}b`,req(),catalog),cp.toString(16)).toThrow();
+      expect(routeModelStep("a\u202fb",req(),catalog).record.stepId).toBe("a\u202fb"); // narrow NBSP is not a control char
+      expect(modelRoutingDesktopLine(routeModelStep("a\\u000ab",req(),catalog).record)).toBe("a\\\\u000ab: ROUTE std-sub (STANDARD/SUBSCRIPTION)");
+      const routed=modelRoutingDesktopLine(routeModelStep("s",req(),[{id:"m\\u000a\u202ex",modelClass:"STANDARD",tier:"LOCAL"}]).record);
+      expect(routed).toBe("s: ROUTE m\\\\u000a\\u202ex (STANDARD/LOCAL)");
+    });
     it("regression: provider router keeps local-first cost order and never picks PAID without allowPaid",()=>{
       const c=[{id:"p",tier:"PAID" as const,healthy:true,capabilities:["code"],estimatedCost:0},{id:"s",tier:"SUBSCRIPTION" as const,healthy:true,capabilities:["code"],estimatedCost:5},{id:"l",tier:"LOCAL" as const,healthy:false,capabilities:["code"],estimatedCost:0}];
       expect(chooseProvider(c,"INTERNAL","code")?.id).toBe("s");
