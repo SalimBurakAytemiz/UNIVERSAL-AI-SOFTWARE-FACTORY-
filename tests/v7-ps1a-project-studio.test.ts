@@ -85,7 +85,7 @@ describe("PS-1A templates and managed repositories (PS-001/002)", () => {
     const repo = p.repository.path;
     expect(git(repo, ["log", "--format=%an <%ae>|%s"])).toBe("UASCO Project Studio <studio@local.invalid>|Initial commit from template web-node");
     expect(git(repo, ["status", "--porcelain"])).toBe("");
-    expect(git(repo, ["ls-files"]).split("\n").sort()).toEqual([".gitignore", "README.md", "package.json", "public/index.html", "server.js", "test.js"]);
+    expect(git(repo, ["ls-files"]).split("\n").sort()).toEqual([".gitignore", "README.md", "package-lock.json", "package.json", "public/index.html", "server.js", "test.js"]);
     const clone = path.join(tmp, "verify-clone"); git(tmp, ["clone", "-q", repo, clone]);
     expect(cp.spawnSync(process.execPath, ["test.js"], {cwd: clone, encoding: "utf8"}).status).toBe(0);
     const again = await call(app, "POST", "/v1/projects", body);
@@ -307,7 +307,7 @@ describe("PS-1A files and git (PS-007)", () => {
     const p = await createProject(app, {template: "web-node"});
     const repo = p.repository!.path;
     const root = (await call(app, "GET", `/v1/projects/${p.projectId}/files`)).json();
-    expect(root.entries.map((e: {name: string}) => e.name)).toEqual(["public", ".gitignore", "package.json", "README.md", "server.js", "test.js"]);
+    expect(root.entries.map((e: {name: string}) => e.name)).toEqual(["public", ".gitignore", "package-lock.json", "package.json", "README.md", "server.js", "test.js"]);
     expect((await call(app, "GET", `/v1/projects/${p.projectId}/files?all=1`)).json().entries.map((e: {name: string}) => e.name)).toContain(".git");
     const f = await call(app, "GET", `/v1/projects/${p.projectId}/file?path=server.js`);
     expect(f.statusCode).toBe(200);
@@ -377,7 +377,7 @@ describe("PS-1A files and git (PS-007)", () => {
     const entries = listZipEntries(zip, undefined, {scanOnly: true});
     const names = entries.filter(e => !e.isDir).map(e => e.name).sort();
     // V7-PKG-M1A-MODE: arşiv kökünde kanıttan türetilmiş VERIFICATION_STATUS.json da vardır (bu test TEST sağlayıcısıyla testleri yürütür: testsExecuted=true, yine NOT_VERIFIED).
-    expect(names).toEqual(["README.md", "VERIFICATION_STATUS.json", "reports/run-report.json", "reports/security-report.json", "reports/test-report.json", "source/.gitignore", "source/README.md", "source/feature.txt", "source/package.json", "source/public/index.html", "source/server.js", "source/test.js"]);
+    expect(names).toEqual(["README.md", "VERIFICATION_STATUS.json", "reports/run-report.json", "reports/security-report.json", "reports/test-report.json", "source/.gitignore", "source/README.md", "source/feature.txt", "source/package-lock.json", "source/package.json", "source/public/index.html", "source/server.js", "source/test.js"]);
     expect(entries.some(e => e.segments.includes(".git"))).toBe(false);
     const readme = readZipEntry(zip, entries.find(e => e.name === "README.md")!).toString("utf8");
     expect(readme).toContain(done.headSha!);

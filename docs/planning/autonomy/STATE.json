@@ -4,10 +4,89 @@
   "authority": "FD-2026-11-03-STANDING-AUTONOMY",
   "updatedAt": "2026-11-03",
   "done": [
-    {"task": "CLOUD-T0001", "pr": 296},
-    {"task": "CLOUD-T0003", "pr": 297},
-    {"task": "CLOUD-T0004", "pr": 298}
+    {
+      "task": "CLOUD-T0001",
+      "pr": 296
+    },
+    {
+      "task": "CLOUD-T0003",
+      "pr": 297
+    },
+    {
+      "task": "CLOUD-T0004",
+      "pr": 298
+    },
+    {
+      "task": "V3-T1001",
+      "pr": 303
+    }
   ],
-  "inFlight": [],
-  "blocked": []
+  "inFlight": [
+    {
+      "task": "CLOUD-T0005",
+      "prs": [
+        302
+      ],
+      "note": "increment merged; doneMerge needs a real Windows runner install/login/stream test and desktop wiring through protected files (Founder)"
+    },
+    {
+      "task": "CLOUD-T0008",
+      "prs": [
+        305
+      ],
+      "note": "increment merged (staging filesystem backend); doneMerge needs two real downloaded projects + clean cloud npm ci/test (D-03 infrastructure)"
+    },
+    {
+      "task": "UASCO-T0045",
+      "prs": [
+        309
+      ],
+      "note": "regression coverage merged; V3-EV-F020-1 hosted run and server.ts wiring still open"
+    },
+    {
+      "task": "UASCO-T0087",
+      "prs": [
+        307
+      ],
+      "note": "diagnostic detail and redaction hardening merged; V3-EV record still open"
+    },
+    {
+      "task": "UASCO-T0042",
+      "prs": [
+        310,
+        313
+      ],
+      "note": "#310 PAR-03 fsync fix and #313 PAR-04 Windows takeover fix merged; V3-EV record still open"
+    },
+    {
+      "task": "CLOUD-T0010",
+      "prs": [
+        301
+      ],
+      "note": "increment merged (#301: idempotent cloud task DAG orchestrator); doneMerge needs a real cloud predev/task dispatch/review-to-artifact E2E with no local agent (D-03 infrastructure)"
+    },
+    {
+      "task": "CLOUD-T0015",
+      "prs": [
+        304
+      ],
+      "note": "increment merged (#304: provider routing with quota, fallback and circuit breaker); doneMerge needs real cloud model request, auth deny, quota/fallback and token usage evidence (D-03 infrastructure)"
+    },
+    {
+      "task": "UASCO-T0062",
+      "prs": [
+        311
+      ],
+      "note": "increment merged (#311: per-step routing record and Desktop line); journal and Desktop wiring still open (V3-AC-F026-1)"
+    }
+  ],
+  "blocked": [
+    {
+      "task": "CLOUD-T0012",
+      "prs": [
+        308
+      ],
+      "reason": "FOUNDER_REQUIRED: reviewer attested TASK_SCOPE_MISMATCH (security code beyond the doc-only write-set)"
+    }
+  ]
 }

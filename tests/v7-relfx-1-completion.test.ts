@@ -253,7 +253,7 @@ describe("C-PAR-1 PAR-04: after an engine crash the implementer child must not k
     await release(dir); // yetim çocuk (hâlâ yaşıyorsa) şimdi uyanıp yazardı
     const run = new WorkOsStore(path.join(dir, "data")).engineGetRun(runId)!;
     const work = path.join(dir, "data", "runs", runId, "work");
-    expect(run.status).toBe("AWAITING_APPROVAL");
+    expect(run.status, JSON.stringify({reason: run.reason, recovery: run.evidence.filter(e => e.kind === "RECOVERY").map(e => e.note)})).toBe("AWAITING_APPROVAL"); // UASCO-T0042: a failure names the takeover note
     expect(fs.existsSync(path.join(work, "ORPHAN.txt"))).toBe(false);
     expect(git(work, ["log", "--format=%s"]).split("\n")).not.toContain("orphan commit");
     expect(git(work, ["rev-parse", "HEAD"])).toBe(run.headSha);
@@ -811,6 +811,90 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
         expect(s3.calls(), "the first try's post sweep, then the pre-reset sweep of each of the maxRetries (2) retries").toBe(3);
       } finally { s3.spy.mockRestore(); }
     }
+  });
+
+  // //TR: UASCO-T0042 (PAR-04 Windows RCA: CI 07f459c6 job 126256183867, #301 job 126259079773, #310 job 126257862696): devirdeki iki Windows yarış penceresi deterministik olarak
+  // yeniden üretilir. (1) writerState ALIVE ile kimlik sorgusu arasında yazar biter (ya da pid'i kısa ömürlü bir sürece geçip o da biter): belirteç null; düzeltme öncesi bu
+  // KALICI "identity cannot be proven" -> RECOVERY_FAILED idi. (2) Sahip kaydı Windows paylaşım ihlaliyle (EPERM/EBUSY/EACCES) geçici olarak okunamaz: düzeltme öncesi
+  // "owner record unreadable" -> devirde KALICI RECOVERY_FAILED ve sürüşte (guardWorkspace) sahte fence idi.
+  const asPlatform = async <T>(platform: NodeJS.Platform, body: () => Promise<T> | T): Promise<T> => {
+    const plat = Object.getOwnPropertyDescriptor(process, "platform")!;
+    Object.defineProperty(process, "platform", {...plat, value: platform});
+    try { return await body(); } finally { Object.defineProperty(process, "platform", plat); }
+  };
+  const asWin32 = <T>(body: () => Promise<T> | T): Promise<T> => asPlatform("win32", body);
+  const ownerRec = (over: Record<string, unknown> = {}) => ({leaseId: "lse_old", engineId: "engine_old", hostname: os.hostname(), pid: 1, childPgid: 4242, childStart: "638000000000000000", step: "IMPLEMENT", at: new Date().toISOString(), bootId: null, ...over});
+  type Reap = {problem: string | null; note: string; transient?: true};
+
+  it("UASCO-T0042 (Windows takeover race): a writer that ends between the liveness check and the identity query is GONE (no writer to stop), never an unprovable identity; a writer that stays alive without a token is still fail-closed", async () => {
+    const G = (await wg())!;
+    const c = setup("idrace");
+    const runner = c.runner({executors: c.base}) as unknown as {stopRecordedGroup(prev: unknown, pgid: number): Promise<Reap>};
+    let states: string[] = [];
+    const st = vi.spyOn(G, "writerState").mockImplementation((() => (states.shift() ?? "GONE")) as unknown as typeof G.writerState);
+    const tk = vi.spyOn(G, "startToken").mockResolvedValue(null);
+    const kill = vi.spyOn(G, "killWriterGroup").mockResolvedValue(undefined);
+    try {
+      await asWin32(async () => {
+        states = ["ALIVE", "GONE"]; // the window: alive at the first look, gone once the (slow) identity query returned nothing
+        expect(await runner.stopRecordedGroup(ownerRec(), 4242)).toEqual({problem: null, note: "writer group 4242 ended during the identity check"});
+        expect(kill, "nothing is killed when the writer is already gone").not.toHaveBeenCalled();
+        states = ["ALIVE", "ALIVE"]; // still alive and no identity: unchanged fail-closed verdict
+        const r = await runner.stopRecordedGroup(ownerRec(), 4242);
+        expect([r.problem, r.note, r.transient]).toEqual(["WORKSPACE_WRITER_ALIVE", "writer group 4242 is alive but its identity cannot be proven", undefined]);
+        expect(kill).not.toHaveBeenCalled();
+      });
+    } finally { st.mockRestore(); tk.mockRestore(); kill.mockRestore(); }
+  });
+
+  it("UASCO-T0042 (Windows sharing violation): a transiently unreadable owner record is re-read; a persistently unreadable one is TRANSIENT at takeover (retried, not RECOVERY_FAILED); torn content stays a hard INVALID", async () => {
+    const G = (await wg())!;
+    const c = setup("ownread"), runId = "run_" + "0".repeat(24);
+    const file = path.join(c.dataDir, "runs", runId, G.OWNER_FILE), rec = ownerRec();
+    G.writeOwner(file, rec as never);
+    const real = fs.readFileSync.bind(fs); let fails = 0, calls = 0, errno = "EPERM";
+    const spy = vi.spyOn(fs, "readFileSync").mockImplementation(((p: fs.PathOrFileDescriptor, ...a: unknown[]) => {
+      if (p === file) { calls++; if (fails > 0) { fails--; throw Object.assign(new Error(`${errno}: simulated read failure`), {code: errno}); } }
+      return (real as (...x: unknown[]) => unknown)(p, ...a);
+    }) as typeof fs.readFileSync);
+    const read = (platform: NodeJS.Platform) => asPlatform(platform, () => G.readOwner(file));
+    try {
+      fails = 2; calls = 0;
+      expect(await read("win32")).toEqual({kind: "OK", rec});
+      expect(calls, "two failed reads, then the successful one").toBe(3);
+      fails = 1_000; calls = 0;
+      expect(await read("win32")).toEqual({kind: "INVALID", why: "owner record unreadable (EPERM)", mtimeMs: null, transient: true});
+      expect(calls, "bounded: OWNER_READ_ATTEMPTS reads, no endless loop").toBe(G.OWNER_READ_ATTEMPTS);
+      const runner = c.runner({executors: c.base}) as unknown as {reapPriorWriter(run: {runId: string}, leaseId: string): Promise<Reap>};
+      fails = 1_000;
+      expect(await asWin32(() => runner.reapPriorWriter({runId}, "lse_new"))).toEqual({problem: "WORKSPACE_WRITER_ALIVE", note: "owner record unreadable (EPERM)", transient: true});
+      // N2 (#313 review, kills the "every errno is transient" mutant): an errno outside the allow-list is read ONCE and is a hard INVALID, also on win32
+      errno = "EIO"; fails = 1_000; calls = 0;
+      expect(await read("win32")).toEqual({kind: "INVALID", why: "owner record unreadable (EIO)", mtimeMs: null});
+      expect(calls, "no re-read for a non-transient errno").toBe(1);
+      // N1 (#313 review): on POSIX EPERM/EACCES is a persistent permission problem: one read, not transient, and the errno reaches the terminal takeover note
+      for (const [platform, code] of [["linux", "EPERM"], ["darwin", "EACCES"]] as const) {
+        errno = code; fails = 1_000; calls = 0;
+        expect([platform, await read(platform)]).toEqual([platform, {kind: "INVALID", why: `owner record unreadable (${code})`, mtimeMs: null}]);
+        expect([platform, calls]).toEqual([platform, 1]);
+        fails = 1_000;
+        expect([platform, await asPlatform(platform, () => runner.reapPriorWriter({runId}, "lse_new"))]).toEqual([platform, {problem: "WORKSPACE_WRITER_ALIVE", note: `owner record unreadable (${code})`}]);
+      }
+      // N3 (#313 review): the drive path never fails open: with the owner record of THIS lease persistently unreadable, guardWorkspace and recordChild still fence
+      const drv = runner as unknown as {guardWorkspace(run: {runId: string}, leaseId: string): void; recordChild(run: {runId: string}, leaseId: string, c: {pid: number; pgid?: number}): string | null};
+      for (const [platform, code] of [["win32", "EPERM"], ["win32", "EBUSY"], ["linux", "EPERM"]] as const) {
+        errno = code; fails = 1_000;
+        await asPlatform(platform, () => {
+          expect(() => drv.guardWorkspace({runId}, "lse_old"), `${platform}/${code}`).toThrow(/WORKOS_LEASE_FENCED/);
+          expect(() => drv.recordChild({runId}, "lse_old", {pid: 4242, pgid: 4242}), `${platform}/${code}`).toThrow(/WORKOS_LEASE_FENCED/);
+        });
+      }
+      fails = 0; // control: the same lease with a readable record is NOT fenced
+      expect(() => drv.guardWorkspace({runId}, "lse_old")).not.toThrow();
+    } finally { spy.mockRestore(); }
+    fs.writeFileSync(file, "{\"leaseId\": \"lse_o"); // torn write: not transient
+    const torn = G.readOwner(file);
+    expect([torn.kind, (torn as {transient?: true}).transient]).toEqual(["INVALID", undefined]);
   });
 
   it.skipIf(process.platform !== "linux")("SWEEP-5 (#224 round 3): a TRANSIENT stop failure at takeover (the sweep still finds a survivor) leaves the run RECOVERING for the next takeover, which succeeds; with a persistent failure the recovery budget ends it (RECOVERY_BUDGET_EXHAUSTED), never earlier", { timeout: 180_000 }, async () => {

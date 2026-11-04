@@ -1,12 +1,12 @@
 // //TR: Bu dosya Work OS kanonik store'unu uygular: append-only hash zincirli JSONL journal tek otoritedir, snapshot journal'dan türetilir; bozuk zincir fail-closed olur ve yazmayı reddeder.
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 // //TR: automation/lib korumalı olduğundan atomic-json.mjs için .d.mts eklenemez; yeniden kullanılan helper dar bir yerel tiple bağlanır, kopyalanmaz.
 // @ts-expect-error TS7016: atomic-json.mjs tip bildirimi yok
 import {sha256 as sha256Untyped, writeJsonAtomic as writeJsonAtomicUntyped} from "../../automation/lib/atomic-json.mjs";
-// //TR: Süreçler arası journal kilidi için mevcut process-lock helper'ı yeniden kullanılır, kopyalanmaz.
-import {acquireProcessLock} from "../../automation/lib/process-lock.mjs";
+import {threadId} from "node:worker_threads";
 import {assertTransition, isMissionStatus} from "../mission/state-machine.js";
 import type {MissionStatus} from "../mission/types.js";
 import {TASK_TRANSITIONS, WorkOsError, isTaskStatus, urlHasUserinfo} from "./types.js";
@@ -59,6 +59,185 @@ const isObj = (x: unknown): x is Record<string, unknown> => typeof x === "object
 const isStr = (x: unknown): x is string => typeof x === "string" && x.length > 0;
 const sleepSync = (ms: number) => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); };
 
+// ---- V3-T1001 / TD-V2-06: journal store kilidi ----
+// //TR: Eski process-lock (open "wx" + sonra yaz) iki kurtarılamaz durum bırakıyordu: (1) aç-yaz arasında çöken/öldürülen yazar sıfır baytlık kilit bırakır,
+// UNREADABLE fail-closed sayılır ve herkes LOCK_TIMEOUT alır; (2) Windows'ta bırakma sırasındaki geçici EBUSY/EPERM/EACCES (paylaşım ihlali, silme-beklemede dosya,
+// tarayıcı tanıtıcısı) okuma/silmeyi düşürür, kilit canlı sahibinin PID'iyle yetim kalır ve sahibi dahil kimse geri alamaz (F-B1-006 Windows kırmızısı).
+// Bu kilit queue-lock.ts'nin incelenmiş link() tasarımını izler: içerik önce geçici dosyaya yazılıp link() ile atomik konur (boş kilit penceresi yok),
+// bayat kilit yalnız o içeriğe özgü kuşaklı devralma jetonunu alan süreç tarafından silinir; hiçbir zaman iki yazar olmaz.
+/** Testlerde Windows hatalarını ve araya giren süreçleri benzetmek için dar dosya sistemi yüzeyi. */
+export interface StoreLockIo {
+  writeFile(path: string, data: string): void;   // "wx" + yaz (fsync YOK: bkz. defaultStoreLockIo)
+  link(existing: string, target: string): void;   // hedef varsa EEXIST
+  read(path: string): string;
+  unlink(path: string): void;
+  list(dir: string): string[];
+  mtimeMs(path: string): number;
+  /** İsteğe bağlı (yoksa bırakma doğrudan unlink'e düşer): hedef yoksa yeniden adlandırır. */
+  rename?(from: string, to: string): void;
+}
+export const defaultStoreLockIo: StoreLockIo = {
+  // //TR: UASCO-T0042: kilit içeriği fsync edilmez. Kilit yalnız canlı süreçler arası dışlamadır; güç kesintisinden sonra kimse onu tutmaz ve boş/yarım kilit
+  // PID/yaş kuralıyla geri alınır. Her withLock'taki bu fsync Windows'ta CPU'suz G/Ç beklemesi olarak olay döngüsünü (lease heartbeat'i) durduruyordu.
+  writeFile(p, data) { const fd = fs.openSync(p, "wx"); try { fs.writeSync(fd, data); } finally { fs.closeSync(fd); } },
+  link: (a, b) => fs.linkSync(a, b),
+  read: p => fs.readFileSync(p, "utf8"),
+  unlink: p => fs.unlinkSync(p),
+  list: d => fs.readdirSync(d),
+  mtimeMs: p => fs.statSync(p).mtimeMs,
+  rename: (a, b) => fs.renameSync(a, b),
+};
+export interface StoreLockOptions {
+  io?: StoreLockIo;
+  alive?: (pid: number) => boolean;
+  pid?: number;
+  now?: () => number;
+  sleep?: (ms: number) => void;
+  /** Ayrıştırılamayan (ör. sıfır baytlık) kilit bu yaştan gençse canlı bir eski-biçim yazarın aç-yaz penceresi olabilir: dokunulmaz. */
+  orphanGraceMs?: number;
+}
+export interface StoreLock {readonly id: string; release(): void}
+export const STORE_LOCK_ORPHAN_GRACE_MS = 2_000;
+export const STORE_LOCK_MAX_TAKEOVER_GENERATIONS = 16;
+// //TR: PAR-03 bütçesi: kilit yolundaki her senkron bekleme olay döngüsünü (lease heartbeat'i dahil) durdurur. Engine testleri TTL=1500 ms, heartbeat TTL/3 kullanır;
+// 2 sn'lik bir bırakma yeniden denemesi Windows'ta (taranan/silinemeyen kilit) heartbeat'i aç bırakıp kendi lease'ini fence ettiriyordu (run 41705299747).
+// Bu yüzden yeniden deneme bütçeleri heartbeat periyodunun çok altındadır; düşen bırakma beklenmez, kilit sahip thread tarafından dosya işlemi yapılmadan sahiplenilir.
+export const STORE_LOCK_RELEASE_RETRY_MS = 100;
+const JOURNAL_OPEN_RETRY_MS = 250;
+// L-3: modül örneği başına bir küme varsayılır (aynı thread'de iki ayrı store modülü kopyası iç içe withLock yapmaz).
+// Bu süreçte (iş parçacığı dahil) şu an tutulan kilit kimlikleri: kendi PID+thread etiketli ama burada tutulmayan kilit yetimdir (bırakması düşmüş) ve geri alınır.
+const heldStoreLocks = new Set<string>();
+const errCode = (e: unknown) => (e as NodeJS.ErrnoException)?.code;
+// Windows paylaşım ihlali / silme-beklemede dosya: geçicidir, kilit durumu hakkında bilgi vermez.
+export const isTransientFsError = (e: unknown) => ["EBUSY", "EPERM", "EACCES"].includes(String(errCode(e)));
+const storeLockBusy = () => Object.assign(new Error("STORE_LOCK_BUSY"), {code: "STORE_LOCK_BUSY"});
+const storeLockOtherHost = () => Object.assign(new Error("STORE_LOCK_OTHER_HOST"), {code: "STORE_LOCK_OTHER_HOST"});
+const storeLocked = () => Object.assign(new Error("STORE_LOCKED"), {code: "STORE_LOCKED"});
+// NB-1: kilit içeriği `${pid}.${threadId}.${host12}:${32 hex}`; host12 = sha256(os.hostname()) ilk 12 hex (ham host adı yazılmaz).
+// Başka host'un kilidi (ortak/ağ dataDir) PID'i burada ölü görünse bile ASLA devralınmaz/silinmez: STORE_LOCK_OTHER_HOST (fail-closed, eski process-lock gibi).
+export const storeLockHostTag = (host: string = os.hostname()) => crypto.createHash("sha256").update(host).digest("hex").slice(0, 12);
+// Eski process-lock JSON içeriğinden yalnız pid/hostname okunur.
+function parseStoreLockOwner(raw: string): {pid: number; tid: number | null} | "OTHER_HOST" | null {
+  const m = /^(\d+)\.(\d+)\.([0-9a-f]{12}):[0-9a-f]{32}$/.exec(raw.trim());
+  if (m) return m[3] !== storeLockHostTag() ? "OTHER_HOST" : {pid: Number(m[1]), tid: Number(m[2])};
+  try {
+    const j = JSON.parse(raw) as {pid?: unknown; hostname?: unknown};
+    if (j && Number.isSafeInteger(j.pid) && (j.pid as number) > 0) return typeof j.hostname === "string" && j.hostname !== os.hostname() ? "OTHER_HOST" : {pid: j.pid as number, tid: null};
+  } catch { /* ayrıştırılamaz */ }
+  return null;
+}
+function pidAliveDefault(pid: number): boolean {
+  try { process.kill(pid, 0); return true; } catch (e) { return errCode(e) !== "ESRCH"; }   // EPERM/bilinmeyen: canlı say (güvenli taraf)
+}
+
+/**
+ * Store kilidini alır ya da STORE_LOCKED / STORE_LOCK_BUSY fırlatır (çağıran withLock süre dolana kadar yeniden dener).
+ * - Kilit yalnız tam içerikle görünür (link); bu kod hiçbir zaman sıfır baytlık kilit üretmez.
+ * - Sahip ölü, yetim (kendi thread etiketi ama tutulmuyor) ya da içerik ayrıştırılamaz ve orphanGraceMs'den yaşlıysa kilit bayattır.
+ * - Bayat S yalnız `${lockPath}.takeover.<h(S)>.<k>` jetonunu link() ile alan süreç tarafından ve içerik hâlâ S ise silinir;
+ *   her kuşağı en çok bir süreç alır, ölü sahipli jeton silinmez, sonraki kuşak denenir (iki yazar yapısal olarak yok).
+ * - EBUSY/EPERM/EACCES (Windows) geçici sayılır: kilit oluşturulmaz, STORE_LOCK_BUSY ile yeniden denenir.
+ */
+export function acquireStoreLock(lockPath: string, o: StoreLockOptions = {}): StoreLock {
+  const io = o.io ?? defaultStoreLockIo, alive = o.alive ?? pidAliveDefault, now = o.now ?? Date.now, sleep = o.sleep ?? sleepSync;
+  const grace = o.orphanGraceMs ?? STORE_LOCK_ORPHAN_GRACE_MS, ownPid = o.pid ?? process.pid;
+  const id = `${ownPid}.${threadId}.${storeLockHostTag()}:${crypto.randomBytes(16).toString("hex")}`;
+  const dir = path.dirname(lockPath), base = path.basename(lockPath), prefix = lockPath.slice(0, lockPath.length - base.length);
+  const tokenOf = (stale: string, k: number) => `${lockPath}.takeover.${crypto.createHash("sha256").update(stale).digest("hex").slice(0, 24)}.${k}`;
+  const holdsLive = (file: string, raw: string): boolean => {
+    const owner = parseStoreLockOwner(raw);
+    if (owner === "OTHER_HOST") throw storeLockOtherHost();
+    if (owner === null) {   // sıfır bayt / bozuk: yalnız yeterince yaşlıysa bayat
+      let m: number;
+      try { m = io.mtimeMs(file); } catch (e) { if (errCode(e) === "ENOENT") return false; throw isTransientFsError(e) ? storeLockBusy() : e; }
+      return now() - m < grace;
+    }
+    if (owner.pid === ownPid && owner.tid === threadId) return heldStoreLocks.has(raw.trim());   // bu thread senkron: tutmuyorsak yetimdir
+    return owner.pid > 0 && alive(owner.pid);
+  };
+  const readOrNull = (p: string): string | null => { try { return io.read(p); } catch (e) { if (errCode(e) === "ENOENT") return null; throw e; } };
+  const tryRead = (p: string): string | null => { try { return readOrNull(p); } catch (e) { throw isTransientFsError(e) ? storeLockBusy() : e; } };
+  const linkWithContent = (target: string): boolean => {
+    const tmp = `${target}.tmp-${crypto.randomBytes(8).toString("hex")}`;
+    try {
+      io.writeFile(tmp, id);
+      try { io.link(tmp, target); return true; } catch (e) { if (errCode(e) === "EEXIST") return false; throw e; }
+    } catch (e) { throw isTransientFsError(e) ? storeLockBusy() : e; }
+    finally { try { io.unlink(tmp); } catch { /* yut: zaten yok */ } }
+  };
+  const retryTransient = (fn: () => void) => {
+    const deadline = now() + STORE_LOCK_RELEASE_RETRY_MS;
+    for (;;) { try { fn(); return; } catch (e) { if (!isTransientFsError(e) || now() >= deadline) throw e; sleep(5); } }
+  };
+  const makeLock = (id: string): StoreLock => ({
+    id,
+    release() {   // yalnız hâlâ bizim kimliğimizi taşıyan kilit silinir; Windows geçici hataları sınırlı yeniden denenir
+      heldStoreLocks.delete(id);   // silme yine de düşerse kilit yetimdir: bu thread'in sonraki alımı onu dosya işlemi yapmadan sahiplenir, başka süreç bizi ölü görünce alır
+      let raw: string | null = null;
+      try { retryTransient(() => { raw = readOrNull(lockPath); }); } catch { return; }
+      if (raw === null || String(raw).trim() !== id) return;
+      // //TR: UASCO-T0042 (C-PAR-1 PAR-03, Windows): kilit ADINDA yerinde silme yapılmaz. Windows'ta dış bir tanıtıcı (Defender/dizinleyici, FILE_SHARE_DELETE ile) dosyayı
+      // tutarken unlink adı "silme-beklemede" bırakır; tanıtıcı kapanana dek o ada link() EPERM verir ve withLock senkron döngüde (sleepSync) LOCK_WAIT_MS'e kadar bekler:
+      // olay döngüsü saniyelerce CPU'suz durur ve lease heartbeat'leri açlıktan fence olur (CI: maxLoopStallMs 4161..10469, hep <= LOCK_WAIT_MS + ek, cpuMs ~1 s).
+      // Önce benzersiz bir mezar adına rename edilir (ad hemen boşalır; silme-beklemesi yalnız mezarda kalır), sonra mezar silinir; rename olmazsa eski unlink yolu.
+      if (io.rename) {
+        const tomb = `${lockPath}.rel-${crypto.randomBytes(8).toString("hex")}`;
+        try { io.rename(lockPath, tomb); try { io.unlink(tomb); } catch { /* mezar artığı: kilit değildir, kazanan süpürür */ } return; } catch { /* aşağıdaki unlink yolu */ }
+      }
+      try { retryTransient(() => { try { io.unlink(lockPath); } catch (e) { if (errCode(e) !== "ENOENT") throw e; } }); } catch { /* yetim kalır; yukarıya bakınız */ }
+    },
+  });
+  const lock = makeLock(id);
+  const won = (): StoreLock => {
+    heldStoreLocks.add(id);
+    let names: string[] = [];
+    try { names = io.list(dir); } catch { return lock; }
+    for (const n of names) if (n.startsWith(`${base}.takeover.`) && !n.includes(".tmp-")) { try { io.unlink(prefix + n); } catch { /* yut */ } }
+    // Bırakma mezarları hiçbir zaman canlı kilit değildir (yalnız bırakılmış kilidin yeni adı): yaşa bakılmadan süpürülür.
+    for (const n of names) if (n.startsWith(`${base}.rel-`)) { try { io.unlink(prefix + n); } catch { /* yut */ } }
+    // L-1: yazma ile silme arasında çöken sürecin geçici dosyası; yalnız grace'ten yaşlıysa silinir (yazılmakta olan başkasının geçici dosyasına dokunulmaz).
+    for (const n of names) if (n.startsWith(`${base}.`) && n.includes(".tmp-")) { try { if (now() - io.mtimeMs(prefix + n) >= grace) io.unlink(prefix + n); } catch { /* yut */ } }
+    return lock;
+  };
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (linkWithContent(lockPath)) return won();
+    const raw = tryRead(lockPath);
+    if (raw === null) continue;
+    // Yetim kendi kilidimiz (aynı host+pid+thread, tutulmuyor): silinip yeniden konmaz, OLDUĞU GİBİ sahiplenilir. Başka süreç pid'imizi canlı, başka thread
+    // tid'i farklı görür; bu thread senkrondur: ikinci yazar oluşamaz ve silinemeyen (Windows) bir kilit sahibini hiç bekletmez.
+    const owner = parseStoreLockOwner(raw);
+    if (owner !== null && owner !== "OTHER_HOST" && owner.pid === ownPid && owner.tid === threadId && !heldStoreLocks.has(raw.trim())) {
+      const adopted = raw.trim(); heldStoreLocks.add(adopted); return makeLock(adopted);
+    }
+    if (holdsLive(lockPath, raw)) throw storeLocked();
+    let token: string | null = null, spins = 0;
+    for (let k = 1; k <= STORE_LOCK_MAX_TAKEOVER_GENERATIONS && token === null; k++) {
+      const t = tokenOf(raw, k);
+      if (linkWithContent(t)) { token = t; break; }
+      const traw = tryRead(t);
+      if (traw === null) { if (++spins <= 8) { k--; continue; } throw storeLockBusy(); }
+      if (holdsLive(t, traw)) throw storeLocked();   // bu S'yi başka bir canlı süreç devralıyor
+    }
+    if (token === null) throw Object.assign(new Error("STORE_TAKEOVER_STALE"), {code: "STORE_TAKEOVER_STALE"});
+    try {
+      const again = tryRead(lockPath);
+      if (again === raw) {
+        if (holdsLive(lockPath, again)) throw storeLocked();
+        try { io.unlink(lockPath); } catch (e) { if (errCode(e) !== "ENOENT") throw isTransientFsError(e) ? storeLockBusy() : e; }
+      } else if (again !== null) { if (holdsLive(lockPath, again)) throw storeLocked(); continue; }
+      if (linkWithContent(lockPath)) return won();
+    } finally {
+      try { if (io.read(token).trim() === id) io.unlink(token); } catch { /* yut */ }
+    }
+  }
+  throw storeLocked();
+}
+// Windows: başka sürecin tanıtıcısı/silme-beklemesi yüzünden geçici açılış hatası yazıdan ÖNCE sınırlı yeniden denenir (hiçbir bayt yazılmamıştır).
+function openForAppend(file: string): number {
+  const deadline = Date.now() + JOURNAL_OPEN_RETRY_MS;
+  for (;;) { try { return fs.openSync(file, "a"); } catch (e) { if (!isTransientFsError(e) || Date.now() >= deadline) throw e; sleepSync(10); } }
+}
+
 export function defaultDataDir(repoRoot: string = process.cwd()): string {
   return process.env.UASCO_DATA_DIR ? path.resolve(process.env.UASCO_DATA_DIR) : path.join(repoRoot, ".ai", "runtime", "workos");
 }
@@ -90,7 +269,7 @@ export interface RunPatch {
 }
 export interface RunWriteOptions { patch?: RunPatch; mission?: {to: MissionStatus; reason: string} }
 // //TR: REL-FX-4 fs seam'i: yalnız test enjeksiyonu (ENOSPC/kısa yazma); verilmezse fs.writeSync kullanılır.
-export interface WorkOsStoreOptions { now?: () => number; io?: {writeSync?: (fd: number, data: Buffer) => number} }
+export interface WorkOsStoreOptions { now?: () => number; io?: {writeSync?: (fd: number, data: Buffer) => number}; /** Yalnız test: üretimde verilmez (pid/canlılık/io sahteciliği kilit güvencesini bozar). */ lock?: StoreLockOptions }
 // //TR: REL-FX-4: geçerli zincir üzerinde tek sonlandırılmamış son satır (yırtık append). quarantineFile dataDir'e görelidir (mutlak yol sızmaz).
 export interface TornTail { offset: number; bytes: number; sha256: string; fileSha256: string; expectedSeq: number; lastSeq: number; quarantineFile: string; quarantined: boolean }
 export interface JournalHealth { state: "OK" | "ABSENT" | "TORN_TAIL" | "TAMPERED" | "UNAVAILABLE"; reason: string | null; tornTail: TornTail | null }
@@ -121,10 +300,12 @@ export class WorkOsStore {
   private readonly writeSyncFn: (fd: number, data: Buffer) => number;
   // B3a: lease süresi ve fencing için saat; testler crash/recovery senaryosunda ileri saatli ikinci bir örnek kurar.
   private readonly now: () => number;
+  private readonly lockOptions: StoreLockOptions;
 
   constructor(dataDir: string = defaultDataDir(), options: WorkOsStoreOptions = {}) {
     this.dataDir = dataDir;
     this.now = options.now ?? Date.now;
+    this.lockOptions = options.lock ?? {};
     this.writeSyncFn = options.io?.writeSync ?? ((fd, data) => fs.writeSync(fd, data));
     this.journalFile = path.join(dataDir, "journal.jsonl");
     this.snapshotFile = path.join(dataDir, "snapshot.json");
@@ -150,15 +331,24 @@ export class WorkOsStore {
   private signature(): string {
     try { const st = fs.statSync(this.journalFile); return `${st.size}:${st.mtimeMs}:${st.ino}`; } catch (e) { return (e as NodeJS.ErrnoException).code === "ENOENT" ? "ABSENT" : `ERR:${(e as NodeJS.ErrnoException).code ?? "?"}`; }
   }
-  // F-B1-006: journal append ve doğrulamalı yükleme süreçler arası tek lock ile serileşir (process-lock.mjs yeniden kullanılır).
+  // F-B1-006: journal append ve doğrulamalı yükleme süreçler arası tek lock ile serileşir. V3-T1001: link() tabanlı store kilidi
+  // (sıfır-bayt/ölü/yetim kilit güvenli geri alınır, Windows geçici hataları yeniden denenir).
+  // //TR: UASCO-T0042 kanıtı: withLock'un senkron bekleme döngüsü olay döngüsünü durdurur; en uzun bekleme ve son geçici hata kodu tutulur (PAR-03 teşhisi bunu basar).
+  private lockWait = {waits: 0, totalMs: 0, maxMs: 0, lastCode: null as string | null};
+  lockWaitStats(): {waits: number; totalMs: number; maxMs: number; lastCode: string | null} { return {...this.lockWait}; }
   private withLock<T>(fn: () => T): T {
-    const runId = `workos-${process.pid}-${crypto.randomBytes(4).toString("hex")}`;
-    const deadline = Date.now() + LOCK_WAIT_MS; let release: (() => void) | null = null;
-    for (;;) {
-      try { release = acquireProcessLock(this.lockFile, runId); break; } catch {
-        if (Date.now() >= deadline) throw new WorkOsError("WORKOS_UNAVAILABLE", "LOCK_TIMEOUT");
-        sleepSync(15);
+    fs.mkdirSync(this.dataDir, {recursive: true});
+    const t0 = Date.now(), deadline = t0 + LOCK_WAIT_MS; let release: (() => void) | null = null, spun = false;
+    try {
+      for (;;) {
+        try { const l = acquireStoreLock(this.lockFile, this.lockOptions); release = () => l.release(); break; } catch (e) {
+          spun = true; this.lockWait.lastCode = String((e as NodeJS.ErrnoException)?.code ?? (e as Error)?.message ?? "?").slice(0, 40);
+          if (Date.now() >= deadline) throw new WorkOsError("WORKOS_UNAVAILABLE", "LOCK_TIMEOUT");
+          sleepSync(15);
+        }
       }
+    } finally {
+      if (spun) { const w = Date.now() - t0; this.lockWait.waits += 1; this.lockWait.totalMs += w; this.lockWait.maxMs = Math.max(this.lockWait.maxMs, w); }
     }
     try { return fn(); } finally { try { release?.(); } catch { /* lock sahipliği değişmişse yazma zaten tamamlandı */ } }
   }
@@ -184,11 +374,14 @@ export class WorkOsStore {
       const {entries, torn} = this.readVerifiedEntries();
       const st = emptyState();
       for (const e of entries) this.apply(st, e);
-      this.checkSnapshotAgainst(entries);
+      const snapRaw = this.checkSnapshotAgainst(entries);
       this.state = st; this.tamperReason = null; this.unavailableReason = null; this.sig = sigBefore;
       // REL-FX-4: yırtık kuyrukta hiçbir şey yazılmaz (snapshot dahil); yalnız karantina kopyası alınır.
       this.tornTail = torn ? this.quarantine(torn, st.lastSeq) : null;
-      if (!torn && entries.length > 0) this.writeSnapshotBestEffort();
+      // //TR: UASCO-T0042 (PAR-03, Windows heartbeat açlığı): her load() (okuma yenilemesi ve her yazının ön-doğrulaması) snapshot'ı koşulsuz yeniden yazıyordu:
+      // writeJsonAtomic = geçici dosya + .prev kopyası + dizin, üç fsync. Bir tick'te ~1200 fsync ölçüldü (Linux, 121 withLock); Windows'ta fsync CPU'suz G/Ç beklemesidir ve
+      // senkron store zincirlerinde olay döngüsünü saniyelerce durdurup öbür run'ın lease heartbeat'ini aç bırakıyordu. Disk üzerindeki snapshot yazılacak baytlarla AYNIYSA yazılmaz.
+      if (!torn && entries.length > 0 && snapRaw !== this.snapshotText()) this.writeSnapshotBestEffort();
     } catch (e) { this.fail(e); }
   }
   // //TR: REL-FX-4: dosya "\n" ile bitmiyorsa son satır ayrılır; önek tam zincir doğrulamasından geçer. Kuyruk yalnız zincirin beklenen SONRAKİ girdisinin baş baytlarıysa
@@ -251,21 +444,24 @@ export class WorkOsStore {
     });
   }
   // Snapshot geride kalabilir (çökme), ama journal'dan ileri veya farklı bir geçmişe işaret edemez (kuyruk silme tespiti).
-  private checkSnapshotAgainst(entries: JournalEntry[]): void {
-    if (!fs.existsSync(this.snapshotFile)) return;
-    let snap: {lastSeq?: unknown; lastHash?: unknown};
-    try { snap = JSON.parse(fs.readFileSync(this.snapshotFile, "utf8")); } catch { return; /* türetilmiş dosya; yeniden yazılır */ }
-    const s = snap.lastSeq;
-    if (typeof s !== "number" || !Number.isInteger(s) || s < 0) return;
+  // Disk üzerindeki snapshot'ın ham metnini döner (yoksa/okunamazsa null); zincirle çelişiyorsa tamper fırlatır.
+  private checkSnapshotAgainst(entries: JournalEntry[]): string | null {
+    if (!fs.existsSync(this.snapshotFile)) return null;
+    let raw: string, snap: {lastSeq?: unknown; lastHash?: unknown};
+    try { raw = fs.readFileSync(this.snapshotFile, "utf8"); snap = JSON.parse(raw); } catch { return null; /* türetilmiş dosya; yeniden yazılır */ }
+    const s = snap?.lastSeq;
+    if (typeof s !== "number" || !Number.isInteger(s) || s < 0) return raw;
     if (s > entries.length) throw tampered("JOURNAL_SHORTER_THAN_SNAPSHOT");
     const expected = s === 0 ? GENESIS : entries[s - 1].hash;
     if (snap.lastHash !== expected) throw tampered("SNAPSHOT_HASH_NOT_IN_JOURNAL");
+    return raw;
   }
   // Snapshot türetilmiştir: yazılamaması (ör. disk dolu) journal'ı veya okumaları bozmaz; sonraki yüklemede yeniden yazılır.
   private writeSnapshotBestEffort(): void { try { this.writeSnapshot(); } catch { /* türetilmiş dosya */ } }
-  private writeSnapshot(): void {
-    writeJsonAtomic(this.snapshotFile, {"//TR": "Bu snapshot journal.jsonl dosyasından türetilir; otorite journal'dır, bu dosya silinip yeniden üretilebilir.", schemaVersion: "1.0.0", ...this.state});
-  }
+  private snapshotValue() { return {"//TR": "Bu snapshot journal.jsonl dosyasından türetilir; otorite journal'dır, bu dosya silinip yeniden üretilebilir.", schemaVersion: "1.0.0", ...this.state}; }
+  // writeJsonAtomic'in yazdığı baytlarla birebir aynı serileştirme (JSON.stringify(value, null, 2) + "\n").
+  private snapshotText(): string { return JSON.stringify(this.snapshotValue(), null, 2) + "\n"; }
+  private writeSnapshot(): void { writeJsonAtomic(this.snapshotFile, this.snapshotValue()); }
   private apply(st: State, e: JournalEntry): void {
     const p = e.payload;
     if (!isObj(p)) throw malformed(`PAYLOAD_SHAPE:${e.seq}`);
@@ -458,7 +654,7 @@ export class WorkOsStore {
     const entry: JournalEntry = {...body, hash: entryHash(body)};
     const line = Buffer.from(JSON.stringify(entry) + "\n", "utf8");
     fs.mkdirSync(this.dataDir, {recursive: true});
-    const fd = fs.openSync(this.journalFile, "a");
+    const fd = openForAppend(this.journalFile);
     try {
       const size = fs.fstatSync(fd).size;
       try {

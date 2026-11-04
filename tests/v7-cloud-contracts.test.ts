@@ -3,12 +3,23 @@ import {describe,it,expect} from "vitest";
 import {registerCloudJobQueueCases} from "./support/cloud-jobs.cases.js";        // CLOUD-T0003 iş kuyruğu vakaları (aynı CI kaydı altında koşar)
 import {registerQueueLockCases} from "./support/cloud-queue-lock.cases.js";     // CLOUD-T0003 kuyruk kilidi yarış vakaları
 import {registerCloudGatewayCases} from "./support/cloud-gateway.cases.js";     // CLOUD-T0004 Control API kapısı vakaları
+import {registerCloudTaskOrchestratorCases} from "./support/cloud-task-orchestrator.cases.js";   // CLOUD-T0010 görev DAG vakaları
+import {registerCloudConnectionViewCases} from "./support/cloud-connection-view.cases.js"; // CLOUD-T0005 masaüstü bulut bağlantı görünümü vakaları
+import {registerWorkosStoreLockCases} from "./support/workos-store-lock.cases.js";   // V3-T1001 store kilidi kurtarma vakaları
+import {registerWorkosStoreIoCases} from "./support/workos-store-io.cases.js";     // UASCO-T0042 store işlem başına dayanıklı G/Ç vakaları
 import {registerAutonomyCases} from "./support/autonomy.cases.js";             // FD-2026-11-03 kalıcı otonomi karar modülü vakaları
 import {registerAutonomyExecutorCases} from "./support/autonomy-executor.cases.js"; // FD-2026-11-03 yürütücü (merge + doğrulama) vakaları
+import {registerCommandIntakeCases} from "./support/command-intake.cases.js";   // UASCO-T0010 komut girişi (DRAFT öneri, netleştirme, 3 örnek) vakaları
+import {registerCloudArtifactsCases} from "./support/cloud-artifacts.cases.js"; // CLOUD-T0008 artifact deposu ve imzalı teslim vakaları
 import {
   CLOUD_CONTRACT_VERSION,MAX_JOB_TIMEOUT_MS,signScope,verifyScopeSignature,validateCloudJobRequest,verifyEventStream,verifyArtifact,
   auditRecordFor,canonicalJson,sha256Hex,type CloudJobRequest,type CloudJobEvent,type UnsignedScope,
 } from "../core/cloud/contracts.js";
+import {registerModelRouterCases} from "./support/model-router.cases.js";   // UASCO-T0062 routeModel karar kaydı vakaları
+import {registerCloudProviderRoutingCases} from "./support/cloud-provider-routing.cases.js"; // CLOUD-T0015 sağlayıcı yönlendirme/kota/fallback vakaları
+import {registerCrewCoordinatorCases} from "./support/crew-coordinator.cases.js"; // UASCO-T0045 CrewCoordinator/composeTeam AC bağlama vakaları
+import {registerLeaseClaimsCases} from "./support/lease-claims.cases.js";   // UASCO-T0050 pkg-lease1 claim ref / çakışma / çift claim vakaları
+import {registerTemplateLockfileCases} from "./support/template-lockfile.cases.js"; // V3-T1012.a şablon kilit dosyası / npm ci && npm test vakaları
 
 const SIGNING_FIXTURE="test-scope-key-".repeat(3);
 const now=new Date("2026-11-02T12:00:00Z");
@@ -152,5 +163,16 @@ describe("cloud contract: review follow-ups (PR #296 LOW-1, LOW-2, INFO-3)",()=>
 registerCloudJobQueueCases();
 registerQueueLockCases();
 registerCloudGatewayCases();
+registerCloudTaskOrchestratorCases();
+registerCloudConnectionViewCases();
+registerWorkosStoreLockCases();
+registerWorkosStoreIoCases();
 registerAutonomyCases();
 registerAutonomyExecutorCases();
+registerCommandIntakeCases();
+registerModelRouterCases();
+registerCloudProviderRoutingCases();
+registerCloudArtifactsCases();
+registerCrewCoordinatorCases();
+registerLeaseClaimsCases();
+registerTemplateLockfileCases();

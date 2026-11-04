@@ -7,7 +7,7 @@ import {spawnGitSync} from "../../automation/lib/git-isolation.mjs";
 import type {DeliveryArtifactRecord, Project, ProjectExport, ProjectTemplate, RunEvidence, WorkRun} from "./types.js";
 import {M1A_LABELS, deliveryArtifactPath, deliveryPrepareCheck, deliveryVerificationStatus, verificationStatus} from "./outcomes.js";
 import {findSecretKinds, redactSecrets} from "./secret-scan.js";
-import {renderTemplate} from "./project-templates.js";
+import {lockfileStatus, renderTemplate} from "./project-templates.js";
 import {DEFAULT_ZIP_LIMITS, ZipError, listZipEntries, readZipEntry, writeZip} from "./zip.js";
 import type {ZipWriteEntry} from "./zip.js";
 import type {ZipLimits} from "./zip.js";
@@ -357,6 +357,9 @@ export class ProjectStudio {
       // M1a (D-SBX1-PATH-2026-10-15): VERIFICATION_STATUS.json arşiv köküne yazılır; yalnız kanıttan türetilir. M1a c2: bu varsayılan proje dışa aktarımı bir koşu teslimi DEĞİLDİR;
       // her zaman NO_RUN/NOT_VERIFIED etiketlenir (koşu teslimi yalnız prepareRunDelivery artefaktıdır).
       const vs = verificationStatus(run, sha);
+      // V3-T1012.a: kilit dosyası olmayan Node teslimi `npm ci` ile kurulamaz; durum README'de ve export kaydında raporlanır.
+      const ls = this.git(root, ["ls-tree", "--name-only", sha], alt);
+      const lockfile = ls.status === 0 ? lockfileStatus(String(ls.stdout ?? "").split("\n").map(x => x.trim()).filter(Boolean)) : "MISSING";
       if (run && tests.length) {
         const f = path.join(reportDir, "test-report.json");
         const last = tests[tests.length - 1];
@@ -386,7 +389,8 @@ export class ProjectStudio {
         `| Verification | ${vs.label} (productVerification ${vs.productVerification}; functionalAcceptance ${vs.functionalAcceptance}; see VERIFICATION_STATUS.json) |`,
         `| Security | ${sec ? `${sec.status}${sec.gaps.length ? ` (gaps: ${sec.gaps.join(", ")})` : ""}` : "NOT_AVAILABLE"} |`,
         `| Independent review | ${review ? `${review.verdict} by ${review.reviewerIdentity ?? "unknown"}` : "NOT_AVAILABLE"} |`,
-        "| Export secret scan | CLEAN (built-in scanner over every archived file) |", "",
+        "| Export secret scan | CLEAN (built-in scanner over every archived file) |",
+        `| Lockfile | ${lockfile === "PRESENT" ? "PRESENT (`npm ci` installs exactly the locked tree)" : lockfile === "MISSING" ? "MISSING (package.json without package-lock.json: `npm ci` will fail)" : "NOT_APPLICABLE (no package.json)"} |`, "",
         "## How to run", "",
         `- Tests: ${fmt(project.testCommand)}`, `- Development server: ${fmt(project.devCommand)}`, "",
         "Run the commands from the `source/` directory. Reports (when available) are under `reports/`.", "",
@@ -419,7 +423,7 @@ export class ProjectStudio {
       const final = path.join(outDir, `${exportId}.zip`);
       fs.renameSync(zipTmp, final);
       return {exportId, projectId: project.projectId, commit: sha, sha256: sha256(buf), size: buf.length, file: `exports/${exportId}.zip`, createdAt: new Date().toISOString(), createdBy: actor,
-        runId: run?.runId ?? null, contents, secretScan: {scanner: "builtin", status: "CLEAN", entriesScanned: scanned},
+        runId: run?.runId ?? null, contents, lockfile, secretScan: {scanner: "builtin", status: "CLEAN", entriesScanned: scanned},
         verification: {label: vs.label, testsExecuted: vs.testsExecuted, notExecutedReason: vs.notExecutedReason, functionalAcceptance: vs.functionalAcceptance, completionMode: vs.completionMode, runDelivery: "NO_RUN", productVerification: "NOT_VERIFIED"}};
     } finally { try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* geçici dizin */ } }
   }
