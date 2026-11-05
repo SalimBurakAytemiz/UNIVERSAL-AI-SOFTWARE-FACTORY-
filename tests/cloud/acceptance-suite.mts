@@ -9,7 +9,7 @@ import {CLOUD_CONTRACT_VERSION, signScope, type UnsignedScope} from "../../core/
 import {CloudArtifactStore, InMemoryArtifactBackend} from "../../core/cloud/artifacts.js";
 import {TaskOrchestrator, dispatchIntakeCommand, intentFromIntake, type PlannerModel, type TaskDag} from "../../core/cloud/task-orchestrator.js";
 import {intakeCommand} from "../../core/mission/command-intake.js";
-import {CloudWorker, resolveDeliverable, scopedArtifactName, type CloudJobHandlers, type WorkerArtifactStore, type WorkerQueuePort} from "../../core/sandbox/cloud-sandbox-provider.js";
+import {CloudWorker, MAX_OUTPUTS, resolveDeliverable, scopedArtifactName, type CloudJobHandlers, type WorkerArtifactStore, type WorkerQueuePort} from "../../core/sandbox/cloud-sandbox-provider.js";
 import type {SandboxProvider, SandboxRunOptions} from "../../core/workos/execution-gate.js";
 import type {ProcResult} from "../../core/workos/executors.js";
 import {LinuxUnshareSandboxProvider} from "../../core/agents/linux-unshare-sandbox.js";
@@ -491,6 +491,36 @@ export function registerCloudAcceptanceSuite(): void {
       const okRef = {name: resultName(q, good, "dist/app.zip"), sha256: createHash("sha256").update("accepted").digest("hex"), sizeBytes: 8};
       const consumer3 = submitJob(q, pkgJob({kind: "BUILD", inputArtifacts: [okRef]}));
       expect(await worker(q, store, sb, [], now, {inputGate: gate}).runOnce()).toMatchObject({jobId: consumer3, status: "SUCCEEDED"});
+    });
+
+    it("N-2: a filesystem error in the worker (EISDIR while writing inputs) never escapes runOnce: job FAILED WORKER_IO_ERROR, nothing stored, sandbox never runs", async () => {
+      const q = mkQueue(), store = mkStore();
+      const put = async (name: string, data: string) => { const c = Buffer.from(data); const r = await store.put({tenantId: "tenant-a", subject: "seed-user"}, {tenantId: "tenant-a", projectId: "proj-web", name, content: c, sha256: createHash("sha256").update(c).digest("hex"), sizeBytes: c.length}); if (!r.ok) throw new Error(r.reason); return {name, sha256: createHash("sha256").update(c).digest("hex"), sizeBytes: c.length}; };
+      const deep = await put("x/y.txt", "deep"), flat = await put("x", "flat");   // writing inputs/x after inputs/x/ exists -> EISDIR
+      const before = store.backend.keys().length;
+      const sb = scripted(cwd => wfile(cwd, "dist/app.zip", "never"));
+      const id = submitJob(q, pkgJob({inputArtifacts: [deep, flat]}));
+      const step = await worker(q, store, sb, ["dist/app.zip"]).runOnce();
+      expect(step).toMatchObject({state: "DONE", jobId: id, status: "FAILED", result: {message: "WORKER_IO_ERROR"}});
+      expect(sb.runs).toBe(0);
+      expect(store.backend.keys().length).toBe(before);
+      expect(q.get(id)!.status).toBe("FAILED");
+    });
+
+    it("N-3: output count / per-output / total byte caps (bound to the CLOUD-T0008 and T0001 limits) -> FAILED before any put, nothing stored", async () => {
+      const q = mkQueue(), store = mkStore();
+      expect(MAX_OUTPUTS).toBe(256);
+      for (const bad of [{maxOutputBytes: 256 * 1024 * 1024 + 1}, {maxTotalOutputBytes: 0}, {maxOutputBytes: 1.5}]) expect(() => worker(q, store, scripted(() => undefined), [], now, bad)).toThrow(/invalid/);
+      const many = submitJob(q, pkgJob());
+      const outs = Array.from({length: MAX_OUTPUTS + 1}, (_, i) => `out/f${i}.txt`);
+      expect(await worker(q, store, scripted(cwd => { for (const o of outs) wfile(cwd, o, "x"); }), outs).runOnce()).toMatchObject({jobId: many, status: "FAILED", result: {message: "OUTPUT_COUNT_EXCEEDED"}});
+      const total = submitJob(q, pkgJob());
+      expect(await worker(q, store, scripted(cwd => { wfile(cwd, "out/a.bin", "a".repeat(600)); wfile(cwd, "out/b.bin", "b".repeat(600)); }), ["out/a.bin", "out/b.bin"], now, {maxOutputBytes: 1000, maxTotalOutputBytes: 1000}).runOnce())
+        .toMatchObject({jobId: total, status: "FAILED", result: {message: "OUTPUT_TOTAL_TOO_LARGE"}});
+      const per = submitJob(q, pkgJob());
+      expect(await worker(q, store, scripted(cwd => wfile(cwd, "out/a.bin", "a".repeat(1001))), ["out/a.bin"], now, {maxOutputBytes: 1000}).runOnce())
+        .toMatchObject({jobId: per, status: "FAILED", result: {message: "OUTPUT_TOO_LARGE"}});
+      expect(store.backend.keys()).toEqual([]);
     });
   });
 }

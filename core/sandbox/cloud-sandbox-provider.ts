@@ -3,7 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import {createHash} from "node:crypto";
 import {ExecutionGate, type SandboxProvider} from "../workos/execution-gate.js";
-import {isSafeArtifactName, type CloudArtifactStore} from "../cloud/artifacts.js";
+import {DEFAULT_MAX_ARTIFACT_BYTES, HARD_MAX_ARTIFACT_BYTES, isSafeArtifactName, type CloudArtifactStore} from "../cloud/artifacts.js";
+import {MAX_INPUT_ARTIFACTS} from "../cloud/contracts.js";
 import type {ArtifactRef, CloudJobKind, CloudJobRequest} from "../cloud/contracts.js";
 
 /** Worker'ın kuyruk yüzü. İmzalı worker kanıtını (anahtar) çağıranın bağdaştırıcısı üretir; worker gizli anahtar tutmaz. CLOUD-T0003 CloudJobQueue + signWorkerAuth ile sağlanır. */
@@ -22,6 +23,10 @@ export type WorkerArtifactStore = Pick<CloudArtifactStore, "get" | "put">;
 /** #344 B-1: çıktılar iş+deneme kapsamlı adlarla saklanır; iptal edilmiş bir deneme başka bir denemenin/işin adını asla işgal etmez. */
 export const scopedArtifactName = (jobId: string, attempt: number, rel: string) => `jobs/${jobId}/a${attempt}/${rel}`;
 export const DEFAULT_MAX_OUTPUT_BYTES = 64 * 1024 * 1024;
+// //TR: #344 N-3: sınırlar CLOUD-T0008/T0001 değerlerine bağlıdır (değiştirilmez): çıktı sayısı <= MAX_INPUT_ARTIFACTS (sonuç referansları bir sonraki işin girdisi olabilir),
+// tek çıktı <= depo tavanı (HARD_MAX_ARTIFACT_BYTES), toplam bellekte okunan <= DEFAULT_MAX_ARTIFACT_BYTES (varsayılan).
+export const MAX_OUTPUTS = MAX_INPUT_ARTIFACTS;
+export const DEFAULT_MAX_TOTAL_OUTPUT_BYTES = DEFAULT_MAX_ARTIFACT_BYTES;
 
 /** Kuyruğun bir iş için tuttuğu görünüm (CloudJobQueue.get yapısal olarak sağlar). */
 export interface AcceptedJobView {
@@ -75,8 +80,10 @@ export interface CloudWorkerOptions {
   /** Doğrulanmış (öz-testi geçen) sağlayıcı; null/geçersiz/öz-test başarısız => worker hiç iş almaz. */
   sandbox: SandboxProvider | null;
   store: WorkerArtifactStore;
-  /** Tek çıktının üst sınırı (varsayılan 64 MiB). */
+  /** Tek çıktının üst sınırı (varsayılan 64 MiB; depo tavanı HARD_MAX_ARTIFACT_BYTES ile sınırlanır). */
   maxOutputBytes?: number;
+  /** Bir denemenin tüm çıktılarının toplam üst sınırı (varsayılan DEFAULT_MAX_ARTIFACT_BYTES). */
+  maxTotalOutputBytes?: number;
   /** `jobs/` ad alanındaki girdiler için köken kapısı: üretici iş kuyrukta SUCCEEDED ve ad onun sonucunda olmalı. Yoksa böyle girdiler reddedilir. */
   inputGate?: (tenantId: string, projectId: string, name: string) => DeliverableDecision;
   /** İş çalışma alanlarının kökü (her iş: <kök>/<tenant>/<jobId>-<deneme>, iş sonunda silinir). */
@@ -104,6 +111,10 @@ export class CloudWorker {
   private readonly hbMs: number;
   constructor(private readonly o: CloudWorkerOptions) {
     if (!SAFE_SEG.test(o.workerId)) throw new Error("workerId invalid");
+    // N-3: sınırlar depo tavanını aşamaz (yapılandırma hatası kurulumda reddedilir)
+    for (const [k, v] of [["maxOutputBytes", o.maxOutputBytes], ["maxTotalOutputBytes", o.maxTotalOutputBytes]] as const) {
+      if (v !== undefined && (!Number.isSafeInteger(v) || v < 1 || v > HARD_MAX_ARTIFACT_BYTES)) throw new Error(`${k} invalid`);
+    }
     this.gate = new ExecutionGate(o.sandbox);
     this.hbMs = o.heartbeatMs ?? 1_000;
   }
@@ -165,13 +176,18 @@ export class CloudWorker {
       // #344 B-1 (a): TÜM çıktılar herhangi bir put'tan ÖNCE doğrulanır ve okunur; tek bir ret depoya hiçbir şey yazdırmaz.
       const staged: {name: string; content: Buffer; ref: ArtifactRef}[] = [];
       const seen = new Set<string>();
+      if (plan.outputs.length > MAX_OUTPUTS) return fail("OUTPUT_COUNT_EXCEEDED");
+      const perMax = Math.min(this.o.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES, HARD_MAX_ARTIFACT_BYTES), totalMax = this.o.maxTotalOutputBytes ?? DEFAULT_MAX_TOTAL_OUTPUT_BYTES;
+      let total = 0;
       for (const rel of plan.outputs) {
         if (seen.has(rel)) return fail("OUTPUT_DUPLICATE");
         seen.add(rel);
         const name = scopedArtifactName(job.jobId, c.attempt, rel);   // (b) iş+deneme kapsamlı ad
         if (!isSafeArtifactName(name)) return fail("OUTPUT_NAME_INVALID");
-        const r = readOutputSafely(wsReal, rel, this.o.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES);
-        if (!r.ok) return fail(r.reason);
+        const budget = Math.min(perMax, totalMax - total);
+        const r = readOutputSafely(wsReal, rel, budget);
+        if (!r.ok) return fail(r.reason === "OUTPUT_TOO_LARGE" && budget < perMax ? "OUTPUT_TOTAL_TOO_LARGE" : r.reason);
+        total += r.content.length;
         staged.push({name, content: r.content, ref: {name, sha256: sha(r.content), sizeBytes: r.content.length}});
       }
       // (c) put aşamasından hemen önce lease denetimi
@@ -189,6 +205,12 @@ export class CloudWorker {
       beat();
       if (lost) return {state: "ABANDONED", jobId: job.jobId, reason: lost};
       return finish({status: "SUCCEEDED", artifacts});
+    } catch {
+      // //TR: #344 N-2: dosya sistemi/sandbox/depo aşamasındaki beklenmeyen hata (EISDIR/EACCES/ENOTDIR, realpath, girdi yazımı) runOnce'tan kaçmaz:
+      // lease kaybolduysa ABANDONED (sonuç yazılmaz), değilse iş WORKER_IO_ERROR ile başarısız olur (yeniden deneme kuyruğun maxAttempts kuralıyla).
+      beat();
+      if (lost) return {state: "ABANDONED", jobId: job.jobId, reason: lost};
+      return fail("WORKER_IO_ERROR");
     } finally {
       clearInterval(timer);
       try { fs.rmSync(ws, {recursive: true, force: true}); } catch { /* en iyi çaba */ }
