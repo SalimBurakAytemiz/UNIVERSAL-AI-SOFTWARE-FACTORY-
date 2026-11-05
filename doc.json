@@ -1,6 +1,6 @@
 {
   "schema": "uasco.factory-v2.shared-registry/1",
-  "phase": "section:lease/shadow-probe-control/supervisor--SHADOW-probe-control",
+  "phase": "section:ledger/run1/c/000001",
   "sections": {
     "lease/shadow-probe-control/supervisor--SHADOW-probe-control": {
       "taskId": "supervisor--SHADOW-probe-control",
@@ -13,10 +13,42 @@
       "acquiredAt": 1793899955316,
       "heartbeatAt": 1793899955316,
       "expiresAt": 1793921555316
+    },
+    "ledger/run1/c/000001": {
+      "events": [
+        {
+          "kind": "SUPERVISOR_EPOCH",
+          "idempotencyKey": "epoch:1",
+          "data": {
+            "supervisorId": "session_015dYwb57qx21P4wudU5xauD",
+            "leaseToken": "session_015dYwb57qx21P4wudU5xauD:1:2a5bae8c-fdda-40ec-9cbc-23217de56578"
+          },
+          "fenceEpoch": 1,
+          "fenceToken": "session_015dYwb57qx21P4wudU5xauD:1:2a5bae8c-fdda-40ec-9cbc-23217de56578",
+          "seq": 1,
+          "at": 1793899959636,
+          "prev": "genesis",
+          "sig": {
+            "schema": "uasco.factory-v2.signed-action/1",
+            "domain": "probe-control",
+            "action": "LEDGER",
+            "role": "V2_CANDIDATE",
+            "sessionId": "session_015dYwb57qx21P4wudU5xauD",
+            "keyId": "k_225059701e7e1b78",
+            "prev": "genesis",
+            "payloadDigest": "293c178a18595610b7400576d7cee0b28fcfb07b4b11ffe802276077ea5c9262",
+            "issuedAt": 1793899960558,
+            "expiresAt": 1825435960558,
+            "nonce": "16ae346e-c524-4cbd-bad2-7e1f66ed3152",
+            "signature": "4isUPspvuoLMglV5ey7SpL6rLGXZUfuAnyJWQ+SzvCpSf7mj25tqeLCLPvI/BNliM7uF/P8ZMMzy+Gdh+IdaCA=="
+          }
+        }
+      ]
     }
   },
   "revs": {
-    "lease/shadow-probe-control/supervisor--SHADOW-probe-control": 1
+    "lease/shadow-probe-control/supervisor--SHADOW-probe-control": 1,
+    "ledger/run1/c/000001": 1
   },
-  "seq": 1
+  "seq": 2
 }
