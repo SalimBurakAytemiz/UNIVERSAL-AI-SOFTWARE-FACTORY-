@@ -359,7 +359,9 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
   };
   // //TR: #224 tur 3 (coordinator delta review #2): park ETTİKTEN sonra motorun KENDİ çıkışı da denetlenir: (a) öldürmeden hemen önce motor hâlâ canlı olmalı (kendi kendine çöken bir motor "simüle edilmiş çökme" sayılmaz), (b) öldürmeden sonra çıkış sinyali SIGKILL olmalı, (c) sahip kaydı yazarı gerçekten adlandırmalı (görmezden gelinmez). `hooks` yalnız yardımcının KENDİ testleri içindir: deterministik "motor tam o anda çöker" ve "kayıt yok" durumları.
   type CrashHooks = {beforeOwnerWait?: (ownerFile: string) => void; ownerWaitMs?: number; beforeKill?: (e: Engine) => Promise<void>; kill?: (e: Engine) => void};
-  const crashEngine = async (dir: string, opts: Record<string, unknown> = {}, startMs = 120_000, hooks: CrashHooks = {}) => {
+  // //TR: WIN-2b: motorun implementing.json'a ulaşma beklemesi test süresinden (120 sn) KISA olmalıdır; eşit olunca vitest zaman aşımı önce düşer, failEngine'in tanısı (tick raporu, run kaydı, canlılık) hiç yazılmaz ve canlı motor öldürülmez. Bu sınır yalnız beklemeyi bitirir; hiçbir iddia gevşemez.
+  const ENGINE_START_MS = 90_000;
+  const crashEngine = async (dir: string, opts: Record<string, unknown> = {}, startMs = ENGINE_START_MS, hooks: CrashHooks = {}) => {
     fs.mkdirSync(dir);
     const e1 = spawnEngine(dir, "1", opts), t0 = Date.now();
     const raced = await Promise.race([waitFor(() => fs.existsSync(path.join(dir, "implementing.json")), startMs), e1.closed.then(() => false)]);
@@ -422,7 +424,7 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
   // //TR: #224 tur 3 (coordinator delta review #2, MEDIUM): park ettikten SONRA kendi kendine çöken bir motor (kod 3 + stderr) "simüle edilmiş çökme" sayılmamalı. Handshake: motor yalnız test <dir>/engine-exit-now dosyasını yazınca çıkar, yardımcı bunu öldürmeden hemen önce (beforeKill) yapar: zamanlamaya bağlı değildir.
   it("HELPER: an engine that crashes on its own AFTER the writer parked (exit 3 + stderr) is a loud failure, never the simulated crash", { timeout: 120_000 }, async () => {
     const dir = path.join(tmp, "helper-selfcrash");
-    const err = await crashEngine(dir, {exitOnFile: true}, 120_000, {beforeKill: async e => { fs.writeFileSync(path.join(dir, "engine-exit-now"), "1"); await waitFor(() => e.exit() !== null, 10_000); }}).then(() => null, e => e as Error);
+    const err = await crashEngine(dir, {exitOnFile: true}, ENGINE_START_MS, {beforeKill: async e => { fs.writeFileSync(path.join(dir, "engine-exit-now"), "1"); await waitFor(() => e.exit() !== null, 10_000); }}).then(() => null, e => e as Error);
     try {
       expect(err, "the helper must FAIL when engine 1 died on its own").not.toBeNull();
       expect(err!.message).toMatch(/engine 1 exited on its own before the kill/);
@@ -433,7 +435,7 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
 
   it.skipIf(process.platform === "win32")("HELPER: an engine that is not ended by the helper's SIGKILL (the helper's kill was SIGTERM here) fails the exit-signal check", { timeout: 120_000 }, async () => {
     const dir = path.join(tmp, "helper-signal");
-    const err = await crashEngine(dir, {}, 120_000, {kill: e => { e.child.kill("SIGTERM"); }}).then(() => null, e => e as Error);
+    const err = await crashEngine(dir, {}, ENGINE_START_MS, {kill: e => { e.child.kill("SIGTERM"); }}).then(() => null, e => e as Error);
     try {
       expect(err, "the helper must FAIL when the engine did not die of SIGKILL").not.toBeNull();
       expect(err!.message).toMatch(/engine 1 must end by the helper's SIGKILL/);
@@ -443,7 +445,7 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
 
   it("HELPER: a missing owner record (the writer was never recorded) is a loud failure naming the record, not an ignored wait", { timeout: 120_000 }, async () => {
     const dir = path.join(tmp, "helper-norecord");
-    const err = await crashEngine(dir, {}, 120_000, {ownerWaitMs: 400, beforeOwnerWait: f => fs.writeFileSync(f, "not json")}).then(() => null, e => e as Error);
+    const err = await crashEngine(dir, {}, ENGINE_START_MS, {ownerWaitMs: 400, beforeOwnerWait: f => fs.writeFileSync(f, "not json")}).then(() => null, e => e as Error);
     try {
       expect(err, "the helper must FAIL when the owner record never names the writer").not.toBeNull();
       expect(err!.message).toMatch(/the owner record never named the writer's process group/);

@@ -39,11 +39,13 @@ if (PHASE === "1") {
     fs.writeFileSync(path.join(DIR, "implementing.json"), "1"); return base.implementer.implement(w, spec as never, ctx as never);
   }}};
   const first = mk(pair, Number(TTL), "sec1");
-  if (OPTS.exitOnFile) setInterval(() => { if (fs.existsSync(path.join(DIR, "engine-exit-now"))) { process.stderr.write("injected engine-1 crash after the writer parked\n"); process.exit(3); } }, 20);
+  // //TR: WIN-2b: exitOnFile aralığı süreci canlı tutar; tick erken dönerse (ör. lease fence) motor kapanmaz, yardımcı tanısız 120 sn bekler. Aralık tutulur ve tick dönünce temizlenir: erken dönüş her kipte kapanan bir süreç + tick raporu olarak görünür.
+  const exitOnFileTimer = OPTS.exitOnFile ? setInterval(() => { if (fs.existsSync(path.join(DIR, "engine-exit-now"))) { process.stderr.write("injected engine-1 crash after the writer parked\n"); process.exit(3); } }, 20) : null;
   if (OPTS.hang) { setInterval(() => undefined, 1000); await new Promise(() => undefined); }
   if (OPTS.service) { first.start(250); setInterval(() => undefined, 1000); await new Promise(() => undefined); } // start() zamanlayıcıyı unref eder: süreci canlı tutan ayrı bir zamanlayıcı gerekir // SIGINT testi: servis kipi; üst süreç SIGINT gönderir
   else {
     const rep = await first.tick(); // üst süreç bu süreci implementer çocuğu uyurken SIGKILL eder; buraya DÖNÜLDÜYSE implementer çocuğu beklenen yerde değildir: sonuç sessiz kalmaz
+    if (exitOnFileTimer) clearInterval(exitOnFileTimer);
     const after = new WorkOsStore(dataDir).engineGetRun(run.runId), last = after?.evidence.at(-1);
     // //TR: UASCO-T0042: fence nedeni ayırt edilebilsin: dönüş anı (lease süresi dolmuş mu?) ve sahip kaydının o anki okunuşu.
     const ownerNow = (() => { try { return JSON.parse(fs.readFileSync(path.join(dataDir, "runs", run.runId, "workspace.owner.json"), "utf8")).leaseId === after?.leaseId ? "OWN_LEASE" : "OTHER_LEASE"; } catch (e) { return `UNREADABLE:${(e as NodeJS.ErrnoException).code ?? "PARSE"}`; } })();
