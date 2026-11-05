@@ -36,7 +36,7 @@
       "open": [
         343
       ],
-      "note": "#302 view + #335 tenant-scoped job status/panel merged; #343 Founder-tier server.ts/main.mjs wiring + trust-root reseal (CLEAN, re-bind pending); #345 allow-list pins (CLEAN, re-bind pending). doneMerge needs a real Windows runner install/login/stream test."
+      "note": "#302 view + #335 tenant-scoped job status/panel + #345 allow-list pins merged; #343 Founder-tier server.ts/main.mjs wiring + trust-root reseal (CLEAN on an older base; needs base-merge + fresh reviewer). doneMerge needs a real Windows runner install/login/stream test."
     },
     {
       "task": "CLOUD-T0002",
@@ -220,7 +220,7 @@
     "//TR": "V4.1 -> Adaptive Parallel Factory V2 devir hazırlığı. Türetilmiş özet; görev kaynağı DEĞİLDİR. Kanonik kaynaklar: task-index.json, v41 matrisi, bu dosyanın done/inFlight/blocked alanları ve GitHub PR'ları.",
     "target": "UASCO Adaptive Parallel Factory V2 (separate Claude Cloud session)",
     "status": "PREPARING",
-    "authority": "V4.1 coordinator session_015dYwazi7LHFCg3dABbSW2P keeps dispatch and executor-merge authority until an atomic ownership+merge-authority transfer is recorded here; V2 has NO live task ownership yet.",
+    "authority": "V4.1 coordinator session_015dYwazi7LHFCg3dABbSW2P keeps dispatch and executor-merge authority until an atomic ownership+merge-authority transfer is recorded in a Founder-merged governance record (docs/planning/authority/*.md or standing-authority.json), never in this file; V2 has NO live task ownership yet.",
     "asOf": {
       "integration": "28fafd56e2d0f18c0e3889a2bacdfc23e6349dde",
       "at": "2026-11-05T09:40Z"
@@ -340,7 +340,7 @@
       "1. V2 reads this file + task-index.json + open PRs (read-only)",
       "2. Founder confirms V2 readiness",
       "3. V4.1 coordinator freezes NEW dispatch only (in-flight PRs continue)",
-      "4. ownership + executor-merge authority transferred in ONE governance PR recorded here (status=TRANSFERRED, with V2 supervisor session id)",
+      "4. ownership + executor-merge authority transferred in ONE Founder-merged governance PR under docs/planning/authority/ (or standing-authority.json) naming the V2 supervisor session id; this file may then be updated for information only (see authorityNote)",
       "5. V4.1 coordinator stops dispatching and merging; V2 must not restart tasks listed as done/inFlight"
     ],
     "authorityNote": "This 'handoff' block is informational. STATE.json is GOVERNANCE_EXEMPT (autonomy.mjs), so a routine PR can edit it; therefore handoff.status (including any future TRANSFERRED value) NEVER grants, widens or transfers authority. Authority comes only from docs/planning/autonomy/standing-authority.json and Founder-merged records under docs/planning/authority/. V2 and V4.1 must ignore handoff.status as an authority source.",
@@ -348,7 +348,7 @@
     "sharedStoreRequirements": [
       "1. A shared durable store both coordinator sessions can write: refs/uasco/* or a dedicated branch refs/heads/uasco/authority. V2 reports HTTP 403 for refs/uasco/* from its session git proxy; access is chosen when a session starts, so a V2 session with that access may have to be started. No such ref exists on origin yet; the V4.1 coordinator has not created or probed one.",
       "2. Because every session pushes as the same GitHub identity, a ref write alone proves nothing. A Founder-merged governance record (docs/planning/authority/*.md or standing-authority.json) must name the authority ref, the allowed coordinator session ids and the transfer gates (independent CLEAN review, green required CI, Founder decision id, drain acknowledgement). V2 must validate the ref content against that record.",
-      "3. V2's own code (claude/nice-sagan-c1zzow) must pass independent review, required CI and a Founder merge; its protected apps/control-api/src/server.ts change is a separate Founder-tier PR. Its open PR #347 currently fails the adapter-reality census (COMMAND_UNMAPPED:curl:automation/factory-v2/cli.mjs) on Linux and Windows.",
+      "3. V2's own code (claude/nice-sagan-c1zzow) must pass independent review, required CI and a Founder merge; its protected apps/control-api/src/server.ts change is a separate Founder-tier PR. Its open PR #347 failed the adapter-reality census at 4e02fbb7 (COMMAND_UNMAPPED:curl); V2 reports curl removed in 89cf3649 — re-verify on its current head's CI.",
       "4. The V4.1 drain acknowledgement (bridge ack) is written only after 1-3 are done and the Founder explicitly authorizes the cutover; until then V4.1 keeps dispatching and merging."
     ]
   }
