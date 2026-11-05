@@ -37,9 +37,6 @@ import {RISK_REFUSAL, hostExecutionNotice, riskAdmitted} from "./risk-admission.
 import {evaluateTestSurface, parseNameStatusZ, parseTestRunStreams, stripAnsi} from "./test-surface.js";
 import type {NameStatusEntry, TestRunSummary} from "./test-surface.js";
 import type {ReviewerTestSurface} from "./executors.js";
-// //TR: REL-FX-4: sağlayıcı kota/hız sınırı sınıflandırması korumalı master sınıflandırıcıyla yapılır (kopyalanmaz); tip bildirimi olmadığı için dar yerel tiple bağlanır.
-// @ts-expect-error TS7016: failure-classifier.mjs tip bildirimi yok
-import {classifyFailure as classifyFailureUntyped} from "../../automation/lib/failure-classifier.mjs";
 import type {ExecutorPair, MissionSpec, ProcResult, SpawnedChild} from "./executors.js";
 import {DEFAULT_MAX_REPORT_BYTES, DEFAULT_MAX_TRIVY_DB_AGE_MS, DEFAULT_SECURITY_TIMEOUT_MS, buildAddedLineStream, defaultTrivyCacheDir, discoverSecurityTools, evaluateSecurityPolicy, gitRangeProblem, mergeGitleaksPasses, runGitleaks, runGitleaksAddedLines, runTrivy, toolInfo, verifyTool} from "./security-tools.js";
 import type {GitleaksResult, PolicyInput, ResolvedTool, SecurityOptions, SecurityToolset} from "./security-tools.js";
@@ -79,24 +76,74 @@ const NEXT: Record<RunStep, RunStep | "FINISHED"> = {WORKSPACE: "IMPLEMENT", IMP
 const MISSION_AFTER: Partial<Record<RunStep, MissionStatus>> = {IMPLEMENT: "VERIFYING", SECURITY: "REVIEWING", REVIEW: "REGRESSION", REGRESSION: "REPORTING"};
 const stepStatus = (s: RunStep): RunStatus => (s === "VERIFY" || s === "SECURITY" || s === "REGRESSION" ? "VERIFYING" : "RUNNING");
 const sha256 = (b: Buffer | string) => crypto.createHash("sha256").update(b).digest("hex");
-const classifyFailure = classifyFailureUntyped as (x: {status: number | null; error?: string; stdout?: string; stderr?: string; timedOut?: boolean}) => {class: string};
-// REL-FX c2 (RV-RELFX-C1-004): başarısız executor çıktısının (ANSI temizlenmiş) son 8 KiB'ı satır satır incelenir. Sağlayıcı sınırı yalnız
-// (a) yapılandırılmış işaret satırı `UASCO_PROVIDER_LIMIT: QUOTA_EXHAUSTED|RATE_LIMIT` veya (b) Claude CLI hata satırları (satır başında "API Error",
-// "Claude AI usage limit reached", "usage limit reached", "You've hit your ... limit") üzerinde master sınıflandırıcı
-// QUOTA_EXHAUSTED/RATE_LIMIT verdiğinde sayılır; keyfi stderr (ör. "TypeError: rateLimiter is not a function") sağlayıcı sınırı değildir.
-// Disk dolu/kotası (ENOSPC, EDQUOT, "disk quota exceeded", "no space left on device") DISK_FULL ailesidir, asla PROVIDER_QUOTA değildir.
+// REL-FX c2 + UASCO-T0043: sağlayıcı kota/hız sınırı TABLO GÜDÜMLÜ ve ÇAPALI desenlerle sınıflandırılır (genel "metinde quota/rate geçiyor mu" taraması YOK).
+// Yanlış pozitif koruması: (1) yalnız başarısız çıkış (exitCode !== 0) sayılır; (2) yalnız her kanalın (procLog'daki stdout ve stderr bölümleri; bölümsüz
+// günlükte tüm metin) SON PROVIDER_TAIL_LINES boş olmayan satırı incelenir: CLI'nin kendi sonlandırıcı hata satırları; çıktının ortasındaki keyfi içerik
+// (ör. kullanıcı dosyasında "API Error: 429") sınıflandırılmaz; (3) her kural satır başına çapalıdır; JSON satırları yalnız sağlayıcı hata zarfı
+// ({"type":"error","error":{"type":...}}) veya CLI sonuç zarfı ({"type":"result","is_error":true,"result":...}) ise sayılır.
+// Disk dolu/kotası (ENOSPC, EDQUOT, "disk quota exceeded", "no space left on device") DISK_FULL ailesidir, asla PROVIDER_QUOTA değildir (bu davranış değişmedi).
 export type ExecutorLimit = "QUOTA_EXHAUSTED" | "RATE_LIMIT" | "DISK_FULL";
+export type ProviderLimitClass = "QUOTA_EXHAUSTED" | "RATE_LIMIT";
 const PROVIDER_MARKER_RE = /^UASCO_PROVIDER_LIMIT[:=]\s*(QUOTA_EXHAUSTED|RATE_LIMIT)\s*$/;
 const CLAUDE_CLI_ERROR_RE = /^(?:error:\s*)?(?:api error\b|claude(?: ai)? usage limit reached\b|usage limit reached\b|you(?:'|’)ve hit your (?:[\w-]+ )*limit\b|you have (?:hit|reached) your (?:[\w-]+ )*limit\b)/i;
 const DISK_FULL_RE = /\b(?:ENOSPC|EDQUOT)\b|no space left on device|disk quota exceeded|not enough space on the disk/i;
-export function executorLimit(exitCode: number | null, log: string): ExecutorLimit | null {
-  const lines = stripAnsi(String(log ?? "").slice(-8192)).split("\n").map(l => l.trim()).filter(Boolean);
-  for (const l of lines) { const m = PROVIDER_MARKER_RE.exec(l); if (m) return m[1] as ExecutorLimit; }
-  const cli = lines.filter(l => CLAUDE_CLI_ERROR_RE.test(l) && !DISK_FULL_RE.test(l));
-  if (cli.length) {
-    const c = classifyFailure({status: exitCode ?? 1, stderr: cli.join("\n"), timedOut: false}).class;
-    if (c === "QUOTA_EXHAUSTED" || c === "RATE_LIMIT") return c;
+export const PROVIDER_TAIL_LINES = 3;
+/** Ordered, anchored text rules (first match wins). Each id is pinned by a test. */
+export const PROVIDER_TEXT_RULES: ReadonlyArray<{id: string; limit: ProviderLimitClass; re: RegExp}> = [
+  {id: "CLI_USAGE_LIMIT", limit: "QUOTA_EXHAUSTED", re: /^(?:error:\s*)?(?:claude(?: ai)? )?usage limit reached\b/i},
+  {id: "CLI_HIT_RATE_LIMIT", limit: "RATE_LIMIT", re: /^(?:error:\s*)?you(?:(?:'|’)ve| have)?\s+(?:hit|reached) your (?:[\w-]+ )*rate limit\b/i},
+  {id: "CLI_HIT_LIMIT", limit: "QUOTA_EXHAUSTED", re: /^(?:error:\s*)?you(?:(?:'|’)ve| have)?\s+(?:hit|reached) your (?:[\w-]+ )*limit\b/i},
+  {id: "API_429", limit: "RATE_LIMIT", re: /^(?:error:\s*)?api error:?\s*429\b/i},
+  {id: "API_529_OVERLOADED", limit: "RATE_LIMIT", re: /^(?:error:\s*)?api error:?\s*529\b/i},
+  {id: "API_CREDIT_LOW", limit: "QUOTA_EXHAUSTED", re: /^(?:error:\s*)?api error:?\s*4\d\d\b.*\bcredit balance is too low\b/i},
+  {id: "API_RATE_TEXT", limit: "RATE_LIMIT", re: /^(?:error:\s*)?api error\b.*"type"\s*:\s*"(?:rate_limit_error|overloaded_error)"/i},
+];
+/** Provider error envelope types (Anthropic API error JSON). */
+const PROVIDER_JSON_ERROR_TYPES: Readonly<Record<string, ProviderLimitClass>> = {rate_limit_error: "RATE_LIMIT", overloaded_error: "RATE_LIMIT"};
+const textRule = (line: string) => PROVIDER_TEXT_RULES.find(r => r.re.test(line)) ?? null;
+function jsonRule(line: string): {id: string; limit: ProviderLimitClass} | null {
+  if (!line.startsWith("{") || line.length > 8192) return null;
+  let o: unknown;
+  try { o = JSON.parse(line); } catch { return null; }
+  const rec = (v: unknown) => (typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
+  const x = rec(o);
+  if (!x) return null;
+  if (x.type === "error") {
+    const err = rec(x.error);
+    const t = typeof err?.type === "string" ? err.type : "";
+    if (Object.prototype.hasOwnProperty.call(PROVIDER_JSON_ERROR_TYPES, t)) return {id: `JSON_ERROR_${t.toUpperCase()}`, limit: PROVIDER_JSON_ERROR_TYPES[t]!};
+    if (typeof err?.message === "string" && /^your credit balance is too low\b/i.test(err.message)) return {id: "JSON_ERROR_CREDIT_LOW", limit: "QUOTA_EXHAUSTED"};
+    return null;
   }
+  if (x.type === "result" && x.is_error === true && typeof x.result === "string") {
+    const first = stripAnsi(x.result).split("\n").map(l => l.trim()).find(Boolean) ?? "";
+    const r = textRule(first);
+    return r ? {id: `RESULT_${r.id}`, limit: r.limit} : null;
+  }
+  return null;
+}
+/** Each channel's last PROVIDER_TAIL_LINES non-empty lines (procLog sections; a log without sections is one channel). */
+function tailLines(log: string): string[] {
+  const text = stripAnsi(String(log ?? "").slice(-8192));
+  const parts = /\n?--- stdout ---\n/.test(text) || /\n?--- stderr ---\n/.test(text) ? text.split(/^--- (?:stdout|stderr) ---$/m).slice(1) : [text];
+  return parts.flatMap(p => p.split("\n").map(l => l.trim()).filter(Boolean).slice(-PROVIDER_TAIL_LINES));
+}
+/** UASCO-T0043: table-driven provider limit classification with the matched rule id (null = not a provider limit). */
+export function classifyProviderLimit(exitCode: number | null, log: string): {limit: ProviderLimitClass; rule: string} | null {
+  if (exitCode === 0) return null;
+  const lines = tailLines(log);
+  for (const l of lines) { const m = PROVIDER_MARKER_RE.exec(l); if (m) return {limit: m[1] as ProviderLimitClass, rule: "MARKER"}; }
+  for (const l of [...lines].reverse()) {
+    if (DISK_FULL_RE.test(l)) continue;
+    const r = jsonRule(l) ?? textRule(l);
+    if (r) return {limit: r.limit, rule: r.id};
+  }
+  return null;
+}
+export function executorLimit(exitCode: number | null, log: string): ExecutorLimit | null {
+  const p = classifyProviderLimit(exitCode, log);
+  if (p) return p.limit;
+  const lines = stripAnsi(String(log ?? "").slice(-8192)).split("\n").map(l => l.trim()).filter(Boolean);
   return lines.some(l => DISK_FULL_RE.test(l)) ? "DISK_FULL" : null;
 }
 export function providerLimit(exitCode: number | null, log: string): "QUOTA_EXHAUSTED" | "RATE_LIMIT" | null {
