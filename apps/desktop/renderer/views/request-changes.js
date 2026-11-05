@@ -4,7 +4,11 @@ import {drafts,field,statusBlock,setStatus,focusResult} from "../forms.js";
 import {performTransition} from "../work-actions.js";
 import {allowedNext,MISSION_ID_RE} from "../work-core.js";
 
-export const RC_MAX=4000;
+// //TR: Sunucu mission geçiş gerekçesini günlüğe reason.slice(0,1000) olarak yazar (core/workos/store.ts MISSION_TRANSITIONED): istemci sınırı AYNIDIR, böylece "kaydedildi" diye gösterilen metin günlüktekiyle birebir aynıdır (kesilmiş gerekçe asla "kaydedildi" denmez).
+export const RC_MAX=1000;
+export const rcPrefix=runId=>`Changes requested for run ${runId}: `;
+/** Yazılabilecek metnin azami uzunluğu (önek düşülür); textarea maxlength buna eşittir. */
+export const rcTextMax=runId=>Math.max(0,RC_MAX-rcPrefix(runId).length);
 export const rcStatusId=missionId=>`rc-${missionId}`;
 /** Taslak yalnız oturum içidir; mission ya da koşu değişince sıfırlanır. last: son başarılı istek (mission'a bağlı) gösterim için. */
 export const rcDraft={missionId:null,runId:null,text:"",last:null};
@@ -21,7 +25,7 @@ export function requestChangesTarget(mission,runsRes){
 export function buildRequestChangesReason(runId,text){
   const t=typeof text==="string"?text.trim():"";
   if(!t)return {ok:false,error:"rc.err.required"};
-  const reason=`Changes requested for run ${runId}: ${t}`;
+  const reason=`${rcPrefix(runId)}${t}`;
   if(reason.length>RC_MAX)return {ok:false,error:"rc.err.long"};
   return {ok:true,reason};
 }
@@ -55,7 +59,11 @@ export function requestChangesPanel(ctx,mission,runsRes){
   return wrap(
     h(doc,"p",{class:"note",text:ctx.t("rc.lead",{run:tg.runId})}),
     h(doc,"p",{class:"note",dataset:{rcHonest:"1"},text:ctx.t("rc.honest")}),
-    field(ctx,{id:"rc-text",labelKey:"rc.field",value:rcDraft.text,onInput:v=>{rcDraft.text=v},hintKey:"rc.hint",multiline:true,required:true}),
+    (()=>{const f=field(ctx,{id:"rc-text",labelKey:"rc.field",value:rcDraft.text,onInput:v=>{rcDraft.text=v},hintKey:"rc.hint",multiline:true,required:true});
+      // ortak forms.js field() maxlength almaz: sınır yalnız bu denetimin textarea'sına konur; doğrulama yine tüm gerekçe üzerinden yapılır
+      const ta=Array.from(f.children??[]).find(c=>c&&c.tagName==="TEXTAREA");if(ta)ta.setAttribute("maxlength",String(rcTextMax(tg.runId)));
+      const hint=Array.from(f.children??[]).find(c=>c&&c.id==="rc-text-hint");if(hint)hint.textContent=ctx.t("rc.hint",{max:rcTextMax(tg.runId)});
+      return f})(),
     h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn",id:"rc-submit",dataset:{focusKey:"rc-submit",rcRun:tg.runId},disabled:busy,text:ctx.t("rc.submit"),
       on:{click:()=>{if(drafts.busy[sid]!==true)submitRequestChanges(ctx,mission,tg.runId)}}})),
     statusBlock(ctx,sid),recorded);

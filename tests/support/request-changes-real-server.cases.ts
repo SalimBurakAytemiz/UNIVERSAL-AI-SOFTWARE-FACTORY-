@@ -152,6 +152,65 @@ describe("UASCO-T0017.A alternative: 'Request changes' for an AWAITING_APPROVAL 
     expect(h.find(n => n.id === "rc-submit")).toEqual([]); // the mission is no longer REPORTING: nothing more to request
   });
 
+  it("#383 B: more than 1000 characters (the server's journal cap) is refused before any dialog or POST; the textarea's maxlength is 1000 minus the run-id prefix", async () => {
+    const {app, s} = mkApp(), h = await harness(app, s.rep);
+    const max = h.rc.rcTextMax(s.run);
+    expect(max).toBe(1000 - `Changes requested for run ${s.run}: `.length);
+    const ta = h.find(n => n.id === "rc-text")[0];
+    expect(ta?.tagName).toBe("TEXTAREA"); expect(ta?.attrs.get("maxlength")).toBe(String(max));
+    expect(h.find(n => n.id === "rc-text-hint")[0]?.textContent).toBe(h.t("rc.hint", {max}));
+    h.rc.rcDraft.text = "x".repeat(max + 1);
+    expect(await h.rc.submitRequestChanges(h.ctx, h.mission(), s.run)).toEqual({ok: false, validation: true});
+    expect(h.out.confirms).toEqual([]); expect(h.posts()).toEqual([]);
+    await h.out.pending; expect(h.find(n => n.id === `rc-${s.rep}-status`)[0]?.textContent).toContain(h.t("rc.err.long"));
+    expect(await h.status(s.rep)).toBe("REPORTING");
+  });
+
+  it("#383 B: exactly 1000 characters round-trip identically: the POST body, the server journal and the 'recorded' note hold the same text", async () => {
+    const {app, s} = mkApp(), h = await harness(app, s.rep);
+    const max = h.rc.rcTextMax(s.run), text = ("Paginate the list, 25 per page; keep the sort. ").repeat(30).slice(0, max - 1) + "Z";
+    expect(text.length).toBe(max);
+    h.rc.rcDraft.text = text;
+    expect(await h.rc.submitRequestChanges(h.ctx, h.mission(), s.run)).toMatchObject({ok: true});
+    const reason = `Changes requested for run ${s.run}: ${text}`;
+    expect(reason.length).toBe(1000);
+    expect(h.posts().map(p => p.body)).toEqual([{to: "BLOCKED", reason}]);
+    const walk = (d: string): string[] => fs.readdirSync(d, {withFileTypes: true}).flatMap(e => e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
+    const find = (x: any): string[] => x && typeof x === "object" ? Object.entries(x).flatMap(([k, v]) => k === "reason" && typeof v === "string" ? [v] : find(v)) : [];
+    const journaled = walk(path.join(tmp, "data")).flatMap(f => fs.readFileSync(f, "utf8").split("\n")).filter(l => l.includes("MISSION_TRANSITIONED") && l.includes(s.rep) && l.includes("BLOCKED"))
+      .flatMap(l => { try { return find(JSON.parse(l)); } catch { return []; } });
+    expect(journaled, "the server journal keeps the reason unchanged").toContain(reason);
+    await h.out.pending;
+    expect(all(h.find(n => n.id === "rc-recorded")[0]!).find(n => n.tagName === "P" && n.className === "mono")?.textContent).toBe(reason);
+  });
+
+  it("mission switched while the dialog is open: a confirmed dialog posts nothing for the old mission (stale) and releases the lock (#383 R5)", async () => {
+    const {app, s} = mkApp(), h = await harness(app, s.rep);
+    h.rc.rcDraft.text = "Paginate";
+    let release!: (v: boolean) => void; h.out.answer = new Promise<boolean>(r => { release = r; });
+    const p = h.rc.submitRequestChanges(h.ctx, h.mission(), s.run);
+    for (let i = 0; i < 5; i++) await new Promise(r => setTimeout(r, 0));
+    h.forms.selection.missionId = s.plain; await h.ctx.rerender();
+    release(true);
+    expect(await p).toEqual({ok: false, stale: true});
+    expect(h.posts()).toEqual([]); expect(h.forms.drafts.busy[`rc-${s.rep}`]).toBe(false);
+    expect(await h.status(s.rep)).toBe("REPORTING");
+  });
+
+  it("the 'recorded' note reports the server's current status, not a fixed text: after moving the mission back to Preflight it says Preflight (#383 R11)", async () => {
+    const {app, s} = mkApp(), h = await harness(app, s.rep);
+    h.rc.rcDraft.text = "Paginate";
+    expect(await h.rc.submitRequestChanges(h.ctx, h.mission(), s.run)).toMatchObject({ok: true});
+    await h.out.pending;
+    expect(h.find(n => n.id === "rc-recorded")[0]?.textContent).toContain(h.t("rc.recorded", {status: "Blocked"}));
+    const r = await app.inject({method: "POST", url: `/v1/missions/${s.rep}/transition`, payload: JSON.stringify({to: "PREFLIGHT", reason: "back to planning"}), headers: {"x-uasco-control-token": TOKEN, host: "127.0.0.1:3210", "content-type": "application/json"}});
+    expect(r.statusCode).toBe(200);
+    await h.ctx.rerender();
+    const rec = h.find(n => n.id === "rc-recorded")[0];
+    expect(rec?.textContent).toContain(h.t("rc.recorded", {status: "Preflight"}));
+    expect(rec?.textContent).not.toContain("Blocked");
+  });
+
   it("error: the runs read fails -> not offered, with an honest note", async () => {
     const {app, s} = mkApp(); failOn = /^\/v1\/work-runs(\?|$)/;
     const h = await harness(app, s.rep);
@@ -170,7 +229,11 @@ describe("UASCO-T0017.A alternative: 'Request changes' for an AWAITING_APPROVAL 
     expect(rc.requestChangesTarget({...m, status: "REVIEWING"}, {state: "VERIFIED", items: [run("AWAITING_APPROVAL")]})).toEqual({state: "NONE"});
     expect(rc.requestChangesTarget(m, {state: "OFFLINE"})).toEqual({state: "RUNS_UNKNOWN"});
     expect(rc.buildRequestChangesReason("run_x", "")).toEqual({ok: false, error: "rc.err.required"});
-    expect(rc.buildRequestChangesReason("run_x", "a".repeat(4000))).toEqual({ok: false, error: "rc.err.long"});
+    expect(rc.RC_MAX).toBe(1000); // = the server's journal cap: reason.slice(0, 1000) in core/workos/store.ts
+    const pre = rc.rcPrefix("run_x").length;
+    expect(rc.buildRequestChangesReason("run_x", "a".repeat(1000 - pre))).toEqual({ok: true, reason: rc.rcPrefix("run_x") + "a".repeat(1000 - pre)});
+    expect(rc.buildRequestChangesReason("run_x", "a".repeat(1001 - pre))).toEqual({ok: false, error: "rc.err.long"});
+    expect(rc.rcTextMax("run_x")).toBe(1000 - pre);
     expect(rc.buildRequestChangesReason("run_x", " fix ")).toEqual({ok: true, reason: "Changes requested for run run_x: fix"});
     const en = (await load("locales", "en.js")).default, tr = (await load("locales", "tr.js")).default;
     const keys = Object.keys(en).filter((k: string) => k.startsWith("rc."));
