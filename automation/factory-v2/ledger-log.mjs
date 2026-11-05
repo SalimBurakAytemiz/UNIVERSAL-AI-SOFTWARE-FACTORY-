@@ -82,7 +82,7 @@ export function registryLog({registry, ns, signer, ring, domain, chunkSize = 100
    */
   const signedEventsOf = doc => (doc?.events ?? []).filter(e => { try { const {sig, ...body} = e; if (body.ledger !== ledgerId) return false; verifyAction(sig, {ring, action: "LEDGER", domain, prev: body.prev, payload: body, checkTime: false}); return true; } catch { return false; } });
   const antiRewind = (all, out) => {
-    if (!registry.history) return;
+    if (typeof registry.history !== "function") throw new LedgerError("LEDGER_HISTORY_UNAVAILABLE"); // cannot prove no rollback: fail closed
     const nums = chunksOf(all), last = nums.at(-1) ?? 0;
     const bySeq = new Map(out.map(e => [e.seq, digestOf(e)]));
     for (const n of [last, last + 1, last + 2]) { // the open chunk, and any chunk that existed after it

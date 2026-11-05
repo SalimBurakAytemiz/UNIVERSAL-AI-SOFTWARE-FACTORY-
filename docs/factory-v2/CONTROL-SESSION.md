@@ -33,6 +33,10 @@ All state lives in the shared ledger: a Supervisor-signed, hash-chained event lo
    - product evidence;
    - blockers.
 
+## Ledger format note
+
+Every event signs `ledger = <domain>/<ns>`. Ledgers written before this rule (the probe run `run1`) can no longer be read, by design. Start a new `ledgerNs` instead of migrating. The live ledger has never been written.
+
 ## Config (never committed when it names a private key)
 
 `{domain, mode: "SHADOW", registryBranch: "uasco/<name>", ledgerNs, keyringFile (probe-* domains only), signerKeyFile (outside any git tree), sessionId, repoUrl, backlogFile, target, leaseTtlMs, dispatchRef}`

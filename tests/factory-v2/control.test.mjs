@@ -308,5 +308,28 @@ describe("P0 blockers from the #388 review: rollback, ledger identity, lost/resu
     other.orch.bind(x.intentId, "session_sharedSESS01");
     expect(() => c.orch.bind(y.intentId, "session_sharedSESS01")).toThrow(/SESSION_ALREADY_BOUND/);
   });
+  it("a racing bind of the same intent by another session (stale pre-check view) is refused, never reported as bound", {timeout: T}, async () => {
+    const {r} = repo(); const leaseStore = createMemoryStore();
+    const c = control({r, leaseStore}); c.sup.start(); await c.sup.tick();
+    const [x] = c.orch.actions(); const other = control({r, leaseStore}); other.sup.start();
+    const stale = c.orch.workers(); c.orch.workers = () => stale; // c decided before other's bind landed
+    expect(other.orch.bind(x.intentId, "session_winnerAAAAA1")).toEqual({bound: true});
+    expect(() => c.orch.bind(x.intentId, "session_loserBBBBBB1")).toThrow(/INTENT_NOT_PENDING:RUNNING/);
+    expect(new StateJournal(localLedger(r)).workers.get(x.intentId).sessionId).toBe("session_winnerAAAAA1");
+    expect(c.orch.bind(x.intentId, "session_winnerAAAAA1")).toEqual({bound: true}); // same pair stays idempotent
+  });
+  it("a second, different result from the bound session after one was accepted is refused, not silently 'accepted'", {timeout: T}, async () => {
+    const {r} = repo(); const g = fakeGit(); const c = control({r, g}); c.sup.start(); await c.sup.tick();
+    const a = c.orch.actions()[0]; c.orch.bind(a.intentId, "session_builderDUP01"); const w = c.orch.workers(x => x.intentId === a.intentId)[0];
+    g.tips[w.branch] = sha("3"); g.trailers[sha("3")] = ["session_builderDUP01"];
+    const ok = result(w, {ok: true, headSha: sha("3"), summary: "one"});
+    expect(c.orch.submitResult(a.intentId, {sessionId: "session_builderDUP01", text: ok})).toEqual({accepted: true});
+    const stale = c.orch.workers(); c.orch.workers = () => stale.map(x => x.intentId === a.intentId ? {...x, status: "RUNNING"} : x); // stale pre-check
+    expect(c.orch.submitResult(a.intentId, {sessionId: "session_builderDUP01", text: result(w, {ok: true, headSha: sha("3"), summary: "two"})})).toMatchObject({accepted: false, reason: "INTENT_NOT_RUNNING:RESULT_ACCEPTED"});
+  });
+  it("a registry without history cannot prove no rollback: the ledger refuses to load", () => {
+    const {r} = repo(); const g = createSharedRegistry({docStore: createLocalDocStore(r), ref: REF});
+    expect(() => new StateJournal(registryLog({registry: {...g, history: undefined}, ns: "h", signer: S.V2, ring: ringFor(D), domain: D}))).toThrow(/LEDGER_HISTORY_UNAVAILABLE/);
+  });
 });
 

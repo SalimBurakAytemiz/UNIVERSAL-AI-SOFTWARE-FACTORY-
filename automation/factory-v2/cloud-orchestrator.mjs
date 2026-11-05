@@ -1,5 +1,6 @@
 // //TR: Factory V2 gerçek Cloud oturum orkestrasyonu: Supervisor'ın her işi kalıcı (paylaşımlı imzalı günlükte) bir "spawn intent" olur; ana kontrol oturumu bu intent'leri gerçek create_session çağrılarıyla açar ve platformun döndürdüğü gerçek oturum kimliğini bağlar. Sonuç kanalı: işçi oturumunun sonucu yalnız o oturum kimliğinin platform tarafından doğrulanmış transkriptinden (list_events) alınır; intent nonce'u, görev/deneme, lease epoch'u, dal ucu ve commit oturum izi eşleşmezse sonuç reddedilir. Kayıp/çökmüş oturum LOST olur ve sınırlı yeniden deneme ile yeni bir oturuma güvenle yeniden atanır; eski oturumun geç gelen sonucu kabul edilmez.
 import crypto from "node:crypto";
+const canonKey = v => crypto.createHash("sha256").update(JSON.stringify(v)).digest("hex").slice(0, 16);
 import {spawnSync} from "node:child_process";
 
 export const WORKER_ROLES = Object.freeze({BUILDER: "BUILDER", REVIEWER: "CLAUDE_REVIEWER"});
@@ -108,7 +109,8 @@ export class CloudOrchestrator {
     if (rec.status === "RUNNING" && rec.sessionId === sessionId) return {duplicate: true};
     if (rec.status !== "PENDING_SPAWN") throw new OrchestratorError("INTENT_NOT_PENDING", rec.status);
     if (all.some(w => w.sessionId === sessionId)) throw new OrchestratorError("SESSION_ALREADY_BOUND", sessionId);
-    const w = this.journal.worker(intentId, {status: "RUNNING", sessionId, boundAt: this.now()}, this.fence(), undefined,
+    // the key names the session: a racing bind of ANOTHER session is a new write that meets the guard, never a "duplicate" success
+    const w = this.journal.worker(intentId, {status: "RUNNING", sessionId, boundAt: this.now()}, this.fence(), `worker:${intentId}:RUNNING:${sessionId}`,
       (cur, j) => cur?.status !== "PENDING_SPAWN" ? `INTENT_NOT_PENDING:${cur?.status}` : [...j.workers.values()].some(x => x.sessionId === sessionId) ? "SESSION_ALREADY_BOUND" : null);
     if (w.rejected) throw new OrchestratorError(w.rejected.split(":")[0], w.rejected.split(":")[1] ?? sessionId); // lost a concurrent race
     return {bound: true};
@@ -138,7 +140,8 @@ export class CloudOrchestrator {
     // Final checks run INSIDE the ledger CAS on re-read state: a concurrent LOST / rebind / attempt change between the checks above
     // (including the slow git checks below) and this write refuses the result instead of accepting it.
     const still = (cur, j) => cur?.status !== "RUNNING" ? `INTENT_NOT_RUNNING:${cur?.status}` : cur.sessionId !== sessionId ? "SESSION_NOT_BOUND_TO_INTENT" : j.get(rec.taskId)?.attempt !== rec.attempt ? "STALE_ATTEMPT" : null;
-    const finalWrite = data => { const w = this.journal.worker(intentId, data, this.fence(), undefined, still); return w.rejected ? reject(w.rejected) : null; };
+    // key = intent + status + exact content: only a byte-identical resubmission is idempotent; any other result meets the guard
+    const finalWrite = data => { const w = this.journal.worker(intentId, data, this.fence(), `worker:${intentId}:${data.status}:${canonKey(data.result ?? data.reason ?? null)}`, still); return w.rejected ? reject(w.rejected) : null; };
     if (r.ok === false) return finalWrite({status: "FAILED", reason: String(r.error ?? "WORKER_REPORTED_FAILURE").slice(0, 300)}) ?? {accepted: true, failed: true};
     let result;
     if (rec.role === "BUILDER") {
