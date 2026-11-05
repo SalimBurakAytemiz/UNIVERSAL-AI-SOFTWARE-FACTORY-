@@ -142,3 +142,19 @@ describe("registry hardening (review of 5356c945)", () => {
     expect(r.cas("k", v1, {x: "stale"}).ok).toBe(false);
   });
 });
+
+describe("registry lease epochs (two-session probe observation)", () => {
+  it("release keeps an expired tombstone: re-acquisition from another environment is epoch+1 and the old token stays fenced", {timeout: T}, () => {
+    const w = world();
+    const a = new Ownership(w.reg(w.A).leaseStore("live"), {leaseId: "supervisor--x", environment: "a", workerId: "s", sessionId: "session_ownerAAAAA"});
+    const b = new Ownership(w.reg(w.B).leaseStore("live"), {leaseId: "supervisor--x", environment: "b", workerId: "s", sessionId: "session_ownerBBBBB"});
+    expect(a.acquire().granted).toBe(true); expect(a.epoch).toBe(1);
+    const old = {...a.record};
+    expect(a.release()).toBe(true);
+    expect(b.acquire().granted).toBe(true); expect(b.epoch).toBe(2);
+    a.record = old;
+    expect(() => a.fence()).toThrow(/OWNERSHIP_LOST/);
+    expect(b.release()).toBe(true);
+    expect(a.acquire().granted).toBe(true); expect(a.epoch).toBe(3);
+  });
+});

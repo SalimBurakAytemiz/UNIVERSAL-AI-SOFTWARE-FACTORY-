@@ -50,7 +50,13 @@ export function createSharedRegistry({docStore, ref, maxRetries = 8, backoffMs =
           if (!leaseVersion(expected) || leaseVersion(cur) !== leaseVersion(expected)) return {ok: false, current: cur ?? null};
           const r = update(k(id), sectionVersion(cur, d.revs?.[k(id)] ?? 0), rec); return r.ok ? {ok: true, current: rec} : {ok: false, current: r.current};
         },
-        remove(id, expected) { const d = readAll().doc, cur = d.sections[k(id)]; if (!leaseVersion(expected) || leaseVersion(cur) !== leaseVersion(expected)) return {ok: false}; return {ok: update(k(id), sectionVersion(cur, d.revs?.[k(id)] ?? 0), null).ok}; }
+        // Release leaves an expired tombstone instead of deleting, so the next grant is epoch+1: epochs only grow per lease id.
+        remove(id, expected) {
+          const d = readAll().doc, cur = d.sections[k(id)];
+          if (!leaseVersion(expected) || leaseVersion(cur) !== leaseVersion(expected)) return {ok: false};
+          const tomb = {...cur, token: `released:${cur.token}`, expiresAt: 0, released: true};
+          return {ok: update(k(id), sectionVersion(cur, d.revs?.[k(id)] ?? 0), tomb).ok};
+        }
       };
     }
   };
