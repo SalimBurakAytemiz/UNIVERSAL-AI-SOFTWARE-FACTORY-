@@ -27,7 +27,7 @@
   /* Grid boyutları (px/16 rem). */
   --nav-w:15rem;--feed-w:22rem;--topbar-h:7.875rem;--contextbar-h:3.5rem;--inspector-w:21.25rem;--page-pad:1.5rem;--card-min:12.5rem;--card-gap:.75rem;--main-min:30rem;
   /* Kontrol boyutları (dokunma/tıklama hedefi >= 24 CSS px, WCAG 2.5.8). */
-  --topbar-h-stacked:10.5rem;--topbar-h-narrow:14rem;--topbar-h-compact:16.5rem;--control-h:2.25rem;--control-h-sm:1.75rem;--control-pad-x:.8rem;
+  --topbar-h-stacked:10.5rem;--topbar-h-narrow:14rem;--topbar-h-compact:16.5rem;--target-min:24px;--control-h:2.25rem;--control-h-sm:1.75rem;--control-pad-x:.8rem;
   /* Yarıçap ölçeği 8/12/16/20 px + hap. */
   --radius-sm:.5rem;--radius-md:.75rem;--radius-lg:1rem;--radius-xl:1.25rem;--radius-pill:99px;--radius:var(--radius-md);
   /* //TR: İnce ışık kenarı (hairline bevel) ve katmanlı yükseklik; nötr ışık/gölge, palet token'ı değildir. */
@@ -53,6 +53,9 @@
   font-size:clamp(16px,.35vw + 10px,24px);
 }
 *{box-sizing:border-box}
+/* //TR: WCAG 2.5.8 hedef boyutu tabanı: simge/hap/bağlantı-düğme ve sekme hedefleri en az 24x24 CSS px. Dosyanın başında durur ki bileşenlerin daha büyük kendi min-height değerleri (örn. .btn 2.25rem) kazansın; bu kural yalnız taban koyar. */
+.btn,.btn-small,.btn-icon,.link-btn,.tabs [role="tab"],.search-opt,button.pill,button.chip,button.spill,button.badge,summary{min-height:var(--target-min)}
+.btn-small,.btn-icon,.link-btn,.tabs [role="tab"],button.pill,button.chip,button.spill,button.badge{min-width:var(--target-min)}
 html{background:var(--bg)}
 body{margin:0;min-height:100vh;color:var(--text);font-size:var(--fs-body);line-height:1.45;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
   background:radial-gradient(60rem 30rem at 85% -10%,var(--ambient-blue),transparent 60%),radial-gradient(50rem 28rem at 0% 0%,var(--ambient-cyan),transparent 55%),radial-gradient(90rem 60rem at 50% 118%,var(--scrim),transparent 70%),var(--bg)}
@@ -61,6 +64,9 @@ body{margin:0;min-height:100vh;color:var(--text);font-size:var(--fs-body);line-h
 .skip-link{position:absolute;left:.5rem;top:-4rem;z-index:100;padding:.6rem var(--space-4);background:var(--accent);color:var(--on-accent);border-radius:var(--radius-sm);font-weight:700}
 .skip-link:focus{top:.5rem}
 :focus-visible{outline:var(--focus-ring);outline-offset:var(--focus-ring-offset)}
+/* //TR: outline:none taşıyan programatik odak hedefleri (rota değişiminde odaklanan main/başlıklar) klavye odağında aynı token halkasını geri alır; outline:none hiçbir yerde yedeksiz kalmaz (testle zorlanır). */
+.main:focus-visible{outline:var(--focus-ring);outline-offset:calc(-1 * var(--focus-ring-width))}
+.view h1:focus-visible,.wiz-step-title:focus-visible,.drawer-title:focus-visible{outline:var(--focus-ring);outline-offset:var(--focus-ring-offset);border-radius:var(--radius-sm)}
 a{color:var(--link);text-decoration:underline;text-underline-offset:.18em}
 a:hover{color:var(--link-hover);text-decoration-thickness:2px}
 .mono{font-family:var(--font-mono);font-size:.85rem;overflow-wrap:anywhere}

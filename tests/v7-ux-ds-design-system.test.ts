@@ -263,6 +263,54 @@ describe("Layout fixes: sticky nav scroll area, responsive top bar, route notice
   });
 });
 
+describe("Accessibility pass: focus ring, reduced motion, target size", () => {
+  const body = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  const rules = [...body.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(m => ({sel: m[1].trim(), decl: m[2]}));
+  it("every interactive class is covered by a :focus-visible ring that is >= 2px and >= 3:1 on every surface and on the red/danger fills", () => {
+    // //TR: Küresel kural tüm öğeleri kapsar; hiçbir etkileşimli sınıf kuralı onu outline:none/0 ile ezmez.
+    expect(rules.some(r => r.sel === ":focus-visible" && r.decl === "outline:var(--focus-ring);outline-offset:var(--focus-ring-offset)")).toBe(true);
+    for (const r of rules) for (const s of r.sel.split(",").map(x => x.trim())) {
+      if (/\.(btn|btn-small|btn-icon|btn-primary|btn-danger|btn-stop|link-btn|nav-link|pill|chip|spill|badge|search-opt|kpi-drill)\b|\[role="tab"\]|\b(input|select|textarea|summary|button|a)\b/.test(s)) expect(r.decl, s).not.toMatch(/outline\s*:\s*(none|0)\b/);
+    }
+    expect(Number(/^(\d+)px$/.exec(tokens["--focus-ring-width"])![1])).toBeGreaterThanOrEqual(2);
+    // //TR: Halka 2px boşlukla çizilir: komşu renk her zaman çevredeki yüzeydir (dolgu değil); yüzeylere karşı >= 3:1 zorunlu. Dolgulardan yalnız boşluksuz durumda da güvenli olanlar ayrıca ölçülür (primary-hover 2.75:1 olduğu için boşluk ZORUNLUDUR).
+    expect(Number(/^(\d+)px$/.exec(tokens["--focus-ring-offset"])![1])).toBeGreaterThanOrEqual(2);
+    for (const bg of ["--bg", "--bg-2", "--surface", "--surface-2", "--surface-raised"]) expect(refRatio(resolve("--focus"), resolve(bg)), bg).toBeGreaterThanOrEqual(3);
+    for (const bg of ["--primary", "--danger-bg", "--danger-bg-active"]) expect(refRatio(resolve("--focus"), resolve(bg)), `${bg} (no-offset safety)`).toBeGreaterThanOrEqual(3);
+    // //TR: Yüksek kontrast tercihi focus değerini değiştirmez; forced-colors Highlight kullanır.
+    expect(/@media \(prefers-contrast:more\)\{\s*:root\{([^}]*)\}/.exec(css)![1]).not.toContain("--focus");
+    expect(css).toMatch(/@media \(forced-colors:active\)\{[^@]*\n  :focus-visible\{outline:3px solid Highlight\}/);
+  });
+  it("no outline:none is left without a :focus-visible replacement using the focus-ring token", () => {
+    const killers = rules.filter(r => /outline\s*:\s*(none|0)\b/.test(r.decl) && !r.sel.includes(":focus"));
+    expect(killers.length).toBeGreaterThan(0);
+    for (const k of killers) for (const s of k.sel.split(",").map(x => x.trim())) {
+      const repl = rules.find(r => r.sel.split(",").map(x => x.trim()).includes(`${s}:focus-visible`));
+      expect(repl, `${s} has no :focus-visible replacement`).toBeTruthy();
+      expect(repl!.decl, s).toContain("outline:var(--focus-ring)");
+    }
+  });
+  it("prefers-reduced-motion:reduce zeroes the motion tokens and disables every animation, transition and smooth scroll", () => {
+    const m = /@media \(prefers-reduced-motion:reduce\)\{([\s\S]*?)\n\}/.exec(css)?.[1] ?? "";
+    expect(m).toContain(":root{--motion-hover:0ms;--motion-panel:0ms;--motion-screen:0ms}");
+    expect(m).toContain("*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}");
+    // //TR: Animasyonlar yalnız bilinen anahtar karelerdir (pulse, stop-glow); hepsi yukarıdaki !important kuralıyla kapanır.
+    const kf = [...css.matchAll(/@keyframes ([a-z-]+)/g)].map(x => x[1]);
+    for (const n of [...css.matchAll(/animation:([a-z-]+)\s/g)].map(x => x[1])) expect(kf, n).toContain(n);
+  });
+  it("icon, pill, link-style and tab buttons have a >= 24x24 CSS px target floor (WCAG 2.5.8) that does not shrink larger controls", () => {
+    expect(tokens["--target-min"]).toBe("24px");
+    const hi = rules.find(r => r.decl === "min-height:var(--target-min)"), wi = rules.find(r => r.decl === "min-width:var(--target-min)");
+    expect(hi, "min-height floor").toBeTruthy(); expect(wi, "min-width floor").toBeTruthy();
+    for (const s of [".btn", ".btn-small", ".btn-icon", ".link-btn", '.tabs [role="tab"]', "button.pill", "button.chip", "button.spill", "button.badge"]) expect(hi!.sel.split(",").map(x => x.trim()), s).toContain(s);
+    for (const s of [".btn-small", ".btn-icon", ".link-btn", '.tabs [role="tab"]', "button.pill", "button.chip", "button.spill"]) expect(wi!.sel.split(",").map(x => x.trim()), s).toContain(s);
+    // //TR: Taban kuralı .btn kuralından ÖNCE gelir: .btn'in 2.25rem (36px) min-height değeri kazanır.
+    expect(css.indexOf("min-height:var(--target-min)")).toBeLessThan(css.indexOf("\n.btn{"));
+    expect(/\n\.btn\{[^}]*min-height:var\(--control-h\)/.test(css)).toBe(true);
+    expect(Number(/^([\d.]+)rem$/.exec(tokens["--control-h"])![1]) * 16).toBeGreaterThanOrEqual(24);
+  });
+});
+
 class E {
   tagName: string; children: any[] = []; attrs = new Map<string, string>(); dataset: Record<string, string> = {}; className = ""; textContent = ""; ls: Record<string, Function[]> = {};
   constructor(tag: string) { this.tagName = tag.toUpperCase(); }
