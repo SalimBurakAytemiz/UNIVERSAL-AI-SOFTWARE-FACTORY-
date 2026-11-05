@@ -21,7 +21,7 @@ const S1 = "1".repeat(40), S2 = "2".repeat(40), S3 = "3".repeat(40);
 const clean = (id, focus, head = S2, base = S1) => ({reviewerId: id, reviewerIdentity: id, focus, status: "CLEAN", headSha: head, baseSha: base, blockers: [], resolves: []});
 
 describe("factory-v2 topology", () => {
-  it("initial target is 8+4+3+1+1 = 17 and exclusivity roles are fixed at 1", () => {
+  it("initial target is 8+4+3+1+1 = 17 and exclusivity roles are fixed at 1", {timeout: T}, () => {
     const t = buildTopology();
     expect(INITIAL_TARGET).toEqual({builders: 8, reviewers: 4, mergePreparers: 3, mergeWriters: 1, supervisors: 1});
     expect(t.slots.length).toBe(17);
@@ -29,7 +29,7 @@ describe("factory-v2 topology", () => {
     expect(() => validateTarget({...INITIAL_TARGET, mergeWriters: 2})).toThrow(/mergeWriters/);
     expect(() => validateTarget({...INITIAL_TARGET, supervisors: 2})).toThrow(/supervisors/);
   });
-  it("A13: reconfigures 8 -> 10 -> 12 and drains (never preempts) busy slots when shrinking", () => {
+  it("A13: reconfigures 8 -> 10 -> 12 and drains (never preempts) busy slots when shrinking", {timeout: T}, () => {
     let t = buildTopology();
     const r10 = reconfigure(t, {...INITIAL_TARGET, builders: 10});
     expect(r10.slots.filter(s => s.role === "BUILDER").length).toBe(10);
@@ -66,14 +66,14 @@ describe("factory-v2 real concurrency (child processes, isolated worktrees)", ()
     sup.stop();
   });
 
-  it("A3: three preparers process independent candidates concurrently", async () => {
+  it("A3: three preparers process independent candidates concurrently", {timeout: T}, async () => {
     const facts = Array.from({length: 6}, (_, i) => ({i}));
     const {spans} = await prepareAll(facts, 3, async () => { await new Promise(r => setTimeout(r, 150)); return {ready: true}; });
     expect(maxOverlap(spans)).toBe(3);
     expect(new Set(spans.map(s => s.worker))).toEqual(new Set(["preparer-1", "preparer-2", "preparer-3"]));
   });
 
-  it("A8: builders cannot overwrite each other's uncommitted changes (separate worktrees and branches)", () => {
+  it("A8: builders cannot overwrite each other's uncommitted changes (separate worktrees and branches)", {timeout: T}, () => {
     const env = makeRepo();
     const a = createWorktree(env.repo, path.join(env.root, "wt"), {taskId: "X1", slotId: "builder-A", baseSha: env.base});
     const b = createWorktree(env.repo, path.join(env.root, "wt"), {taskId: "X2", slotId: "builder-B", baseSha: env.base});
@@ -86,7 +86,7 @@ describe("factory-v2 real concurrency (child processes, isolated worktrees)", ()
 });
 
 describe("factory-v2 exclusivity and fencing", () => {
-  it("A5 + A16: a second supervisor stays STANDBY; handover transfers ownership and fences the old owner", () => {
+  it("A5 + A16: a second supervisor stays STANDBY; handover transfers ownership and fences the old owner", {timeout: T}, () => {
     const env = makeRepo();
     const store = createGitStore(env.repo, "SHADOW");
     const {sup: s1} = makeSupervisor(env, {leaseStore: store, sessionId: "session_supervisorAA"});
@@ -101,7 +101,7 @@ describe("factory-v2 exclusivity and fencing", () => {
     expect(j.events.some(e => e.kind === "HANDOVER")).toBe(true);
   });
 
-  it("A5: after takeover the old supervisor's journal writes are rejected (stale fence epoch)", () => {
+  it("A5: after takeover the old supervisor's journal writes are rejected (stale fence epoch)", {timeout: T}, () => {
     const env = makeRepo();
     let now = 1_000_000;
     const store = createMemoryStore();
@@ -115,7 +115,7 @@ describe("factory-v2 exclusivity and fencing", () => {
     expect(() => s1.journal.enqueue("ZOMBIE-T0001", {}, s1.fenceRef)).toThrow(/JOURNAL_STALE_FENCE/);
   });
 
-  it("A4: concurrent writers cannot both write; CAS refuses a moved base", async () => {
+  it("A4: concurrent writers cannot both write; CAS refuses a moved base", {timeout: T}, async () => {
     const env = makeRepo();
     const store = createGitStore(env.repo, "SHADOW");
     const w1 = new Ownership(store, {leaseId: "writer--integ", environment: "cloud", workerId: "merge-writer", sessionId: "session_writer11"});
@@ -157,7 +157,7 @@ describe("factory-v2 exclusivity and fencing", () => {
 });
 
 describe("factory-v2 recovery and isolation", () => {
-  it("A7: a restarted supervisor recovers orphaned work but leaves validly-owned work alone; enqueue is idempotent", () => {
+  it("A7: a restarted supervisor recovers orphaned work but leaves validly-owned work alone; enqueue is idempotent", {timeout: T}, () => {
     const env = makeRepo();
     const store = createMemoryStore();
     const journalDir = path.join(env.root, "j");
@@ -198,7 +198,7 @@ describe("factory-v2 recovery and isolation", () => {
 describe("factory-v2 review and CI integrity (A9, A10)", () => {
   const req = ["ARCHITECTURE_CORRECTNESS", "SECURITY_ISOLATION"];
   const ok = {verdicts: [clean("R1", req[0]), clean("R2", req[1])], required: req, baseSha: S1, headSha: S2, builderIdentity: "builder-A"};
-  it("authorizes only exact-SHA, independent, clean, blocker-free verdicts", () => {
+  it("authorizes only exact-SHA, independent, clean, blocker-free verdicts", {timeout: T}, () => {
     expect(reviewAuthorizes(ok).authorized).toBe(true);
     expect(reviewAuthorizes({...ok, headSha: S3}).reasons).toContain("STALE_REVIEW");
     expect(reviewAuthorizes({...ok, verdicts: [clean("R1", req[0]), {...clean("R2", req[1]), status: "REVIEWER_AUTH_REJECTED"}]}).reasons).toContain("REVIEW_FAILED:REVIEWER_AUTH_REJECTED");
@@ -206,12 +206,12 @@ describe("factory-v2 review and CI integrity (A9, A10)", () => {
     expect(reviewAuthorizes({...ok, priorBlockers: [{id: "B-1"}]}).reasons).toContain("UNRESOLVED_PRIOR_BLOCKER:B-1");
     expect(reviewAuthorizes({...ok, verdicts: [clean("R1", req[0]), {...clean("R1", req[1])}]}).reasons).toContain("DUAL_REVIEW_NOT_INDEPENDENT");
   });
-  it("risk-aware allocation: low risk needs one reviewer, security/cross-system add focuses", () => {
+  it("risk-aware allocation: low risk needs one reviewer, security/cross-system add focuses", {timeout: T}, () => {
     expect(requiredFocuses(riskOf({paths: ["docs/x.md"], tier: "T0"}))).toEqual(["ARCHITECTURE_CORRECTNESS"]);
     expect(requiredFocuses(riskOf({paths: ["core/auth/token.ts"], tier: "T1"}))).toContain("SECURITY_ISOLATION");
     expect(requiredFocuses(riskOf({paths: ["automation/factory-v2/scheduler.mjs"], tier: "T1"}))).toContain("ADVERSARIAL_CROSS_SYSTEM");
   });
-  it("CI must be bound to the head SHA; protected paths and scope violations block; GitHub 'mergeable' is not a check", () => {
+  it("CI must be bound to the head SHA; protected paths and scope violations block; GitHub 'mergeable' is not a check", {timeout: T}, () => {
     const base = {candidate: {taskId: "t", headSha: S2, baseSha: S1, changedPaths: ["work/a.txt"], diffSource: "GIT_DIFF", allowedPaths: ["work/"], builderIdentity: "builder-A", required: ["ARCHITECTURE_CORRECTNESS"]},
       canonicalSha: S1, verdicts: [clean("R1", "ARCHITECTURE_CORRECTNESS")], ci: {sha: S2, requiredContexts: {validate: "success"}}, protectedPaths: {exactPaths: [], protectedPrefixes: ["config/"]}, githubMergeable: true};
     expect(prepareCandidate(base).ready).toBe(true);
@@ -225,7 +225,7 @@ describe("factory-v2 review and CI integrity (A9, A10)", () => {
 
 describe("factory-v2 quota governor and backpressure (A12)", () => {
   const s = {target: 8, current: 8, readyBacklog: 20, reviewQueue: 0, ciQueue: 0, mergeQueue: 0, reviewerSlots: 4};
-  it("normal -> full target; high usage halves; session limit / weekly exhaustion stop model calls; recovery resumes", () => {
+  it("normal -> full target; high usage halves; session limit / weekly exhaustion stop model calls; recovery resumes", {timeout: T}, () => {
     expect(decideBuilders({...s, quota: quotaMode({weeklyUsedPct: 31})}).builders).toBe(8);
     expect(decideBuilders({...s, quota: quotaMode({weeklyUsedPct: 95})}).builders).toBe(4);
     const lim = decideBuilders({...s, quota: quotaMode({sessionLimited: true, retryAfterMs: 60_000})});
@@ -234,14 +234,14 @@ describe("factory-v2 quota governor and backpressure (A12)", () => {
     expect(decideBuilders({...s, quota: quotaMode({providerHealthy: false})}).builders).toBe(4);
     expect(decideBuilders({...s, current: 4, quota: quotaMode({weeklyUsedPct: 2})}).builders).toBe(5); // reset -> step back up
   });
-  it("backpressure lowers builders and redirects capacity; hysteresis scales up one step at a time", () => {
+  it("backpressure lowers builders and redirects capacity; hysteresis scales up one step at a time", {timeout: T}, () => {
     const d = decideBuilders({...s, reviewQueue: 12, quota: {mode: "NORMAL"}});
     expect(d.builders).toBe(7); expect(d.redirect).toContain("REVIEW_REMEDIATION");
     expect(decideBuilders({...s, current: 6, reviewQueue: 5, quota: {mode: "NORMAL"}}).builders).toBe(6); // between watermarks: hold
     expect(decideBuilders({...s, readyBacklog: 3, quota: {mode: "NORMAL"}}).builders).toBe(3);
     expect(pickForWindow([{id: "a", estimateHours: 1}, {id: "b", estimateHours: 9}, {id: "c", estimateHours: 9, checkpointable: true}], 4).map(t => t.id)).toEqual(["a", "c"]);
   });
-  it("failure classes: transient retried with bounded backoff, auth/security never retried", () => {
+  it("failure classes: transient retried with bounded backoff, auth/security never retried", {timeout: T}, () => {
     expect(classify(new Error("429 RATE_LIMIT"))).toBe("TEMPORARY");
     expect(nextRetry(new Error("ECONNRESET"), 1)).toMatchObject({action: "RETRY", delayMs: 2000});
     expect(nextRetry(new Error("ECONNRESET"), 3).action).toBe("FAIL");
@@ -251,7 +251,7 @@ describe("factory-v2 quota governor and backpressure (A12)", () => {
 });
 
 describe("factory-v2 coexistence with the live V4.1 runtime (A15)", () => {
-  it("SHADOW uses an isolated ref namespace; LIVE excludes tasks the live runtime owns", () => {
+  it("SHADOW uses an isolated ref namespace; LIVE excludes tasks the live runtime owns", {timeout: T}, () => {
     expect(NAMESPACES.SHADOW).not.toBe(NAMESPACES.LIVE);
     expect(NAMESPACES.SHADOW.startsWith(NAMESPACES.LIVE)).toBe(false);
     const live = liveOwnedTasks({autonomyState: {inFlight: [{task: "CLOUD-T0005"}]}, openPrs: [{body: "x\nUASCO-TASK: CLOUD-T0002\n"}]});
@@ -259,20 +259,20 @@ describe("factory-v2 coexistence with the live V4.1 runtime (A15)", () => {
     const backlog = [{id: "CLOUD-T0005", status: "PROPOSED"}, {id: "CLOUD-T0002", status: "PROPOSED"}, {id: "CLOUD-T0099", status: "PROPOSED"}];
     expect(readyTasks(backlog, {excluded: live}).map(t => t.id)).toEqual(["CLOUD-T0099"]);
   });
-  it("dependency and file-scope rules: unmet deps and start gates are never dispatched; overlapping scopes are not run together", () => {
+  it("dependency and file-scope rules: unmet deps and start gates are never dispatched; overlapping scopes are not run together", {timeout: T}, () => {
     const b = [{id: "A-T0001", deps: [], status: "PROPOSED"}, {id: "A-T0002", deps: ["A-T0001"], status: "PROPOSED"}, {id: "A-T0003", deps: [], startGates: ["D-08"], status: "PROPOSED"}];
     expect(readyTasks(b).map(t => t.id)).toEqual(["A-T0001"]);
     expect(scopesOverlap(["core/x/"], ["core/x/y.ts"])).toBe(true);
     const a = assign([{id: "1", paths: ["core/x/a.ts"]}, {id: "2", paths: ["core/x/a.ts"]}, {id: "3", paths: ["core/y.ts"]}], buildTopology().slots.filter(s => s.role === "BUILDER"));
     expect(a.map(x => x.taskId)).toEqual(["1", "3"]);
   });
-  it("supervisor lease ids for SHADOW and LIVE domains never collide", () => {
+  it("supervisor lease ids for SHADOW and LIVE domains never collide", {timeout: T}, () => {
     expect(supervisorLeaseId("SHADOW-uasco")).not.toBe(supervisorLeaseId("LIVE-uasco"));
   });
 });
 
 describe("factory-v2 reviewer allocation", () => {
-  it("prefers specialists, falls back to any independent idle reviewer, never the builder", async () => {
+  it("prefers specialists, falls back to any independent idle reviewer, never the builder", {timeout: T}, async () => {
     const {allocateReviewers} = await import("../../automation/factory-v2/review.mjs");
     const idle = buildTopology().slots.filter(s => s.role === "REVIEWER").map(s => ({...s, identity: s.id}));
     const a = allocateReviewers(["ARCHITECTURE_CORRECTNESS"], idle.filter(r => r.id !== "reviewer-R1"), "builder-A");
@@ -286,14 +286,14 @@ describe("factory-v2 reviewer allocation", () => {
 describe("factory-v2 reviewer blockers (review of 2c94f31)", () => {
   const S = "1".repeat(40), H = "2".repeat(40);
   const v = {reviewerId: "reviewer-R1", reviewerIdentity: "reviewer-R1", focus: "ARCHITECTURE_CORRECTNESS", status: "CLEAN", headSha: H, baseSha: S, blockers: [], resolves: []};
-  it("B1: missing/empty review requirements and zero verdicts never authorize", () => {
+  it("B1: missing/empty review requirements and zero verdicts never authorize", {timeout: T}, () => {
     expect(reviewAuthorizes({verdicts: [], required: [], baseSha: S, headSha: H, builderIdentity: "builder-A"}).reasons).toEqual(expect.arrayContaining(["REVIEW_REQUIREMENTS_MISSING", "NO_CLEAN_REVIEW_AT_HEAD"]));
     expect(reviewAuthorizes({verdicts: [v], required: undefined, baseSha: S, headSha: H, builderIdentity: "builder-A"}).authorized).toBe(false);
     const f = {candidate: {taskId: "t", headSha: H, baseSha: S, changedPaths: ["work/a"], diffSource: "GIT_DIFF", allowedPaths: ["work/"], builderIdentity: "builder-A"}, canonicalSha: S, verdicts: [], ci: {sha: H, requiredContexts: {v: "success"}}};
     expect(prepareCandidate(f).ready).toBe(false);
     expect(prepareCandidate({...f, candidate: {...f.candidate, required: ["ARCHITECTURE_CORRECTNESS"], diffSource: undefined}, verdicts: [v]}).reasons).toContain("CHANGED_PATHS_UNVERIFIED");
   });
-  it("self-review is refused even when only reviewerId (not reviewerIdentity) matches the builder", () => {
+  it("self-review is refused even when only reviewerId (not reviewerIdentity) matches the builder", {timeout: T}, () => {
     const r = reviewAuthorizes({verdicts: [{...v, reviewerId: "builder-A"}], required: ["ARCHITECTURE_CORRECTNESS"], baseSha: S, headSha: H, builderIdentity: "builder-A"});
     expect(r.reasons).toContain("SELF_REVIEW:builder-A");
   });
@@ -314,7 +314,7 @@ describe("factory-v2 reviewer blockers (review of 2c94f31)", () => {
     expect(spawnSyncGit(env.repo, ["cat-file", "-e", "integ:config/evil.json"])).not.toBe(0);
     delete process.env.FACTORY_FAIL;
   });
-  it("SHADOW refuses a lease store outside the shadow namespace", () => {
+  it("SHADOW refuses a lease store outside the shadow namespace", {timeout: T}, () => {
     const env = makeRepo();
     expect(() => makeSupervisor(env, {leaseStore: {kind: "REMOTE_GIT_REF", namespace: NAMESPACES.LIVE, read: () => null}}).sup.start()).toThrow(/SHADOW_REQUIRES_SHADOW_NAMESPACE/);
   });
@@ -336,7 +336,7 @@ describe("factory-v2 reviewer blockers (review of 3213d6a8)", () => {
     expect(spawnSyncGit(env.repo, ["cat-file", "-e", "integ:config/evil.json"])).not.toBe(0);
     delete process.env.FACTORY_FAIL;
   });
-  it("merge checks diff from merge-base(canonical, head), so a wrong recorded base cannot hide changes", () => {
+  it("merge checks diff from merge-base(canonical, head), so a wrong recorded base cannot hide changes", {timeout: T}, () => {
     const env = makeRepo();
     const {sup} = makeSupervisor(env, {backlog: []});
     const wt = path.join(env.root, "m"); git(env.repo, "worktree", "add", "-q", "--detach", wt, env.base);
@@ -350,7 +350,7 @@ describe("factory-v2 reviewer blockers (review of 3213d6a8)", () => {
 });
 
 describe("merge-base diff when canonical has moved past the merge-base (review of 5356c945)", () => {
-  it("checks exactly the head's changes, not canonical-only changes, and still sees a hidden protected commit", () => {
+  it("checks exactly the head's changes, not canonical-only changes, and still sees a hidden protected commit", {timeout: T}, () => {
     const env = makeRepo();
     const {sup} = makeSupervisor(env, {backlog: []});
     const c = (wt, f) => { fs.mkdirSync(path.dirname(path.join(wt, f)), {recursive: true}); fs.writeFileSync(path.join(wt, f), f + "\n"); git(wt, "add", "."); git(wt, "-c", "user.name=t", "-c", "user.email=t@invalid", "commit", "-q", "-m", f); return git(wt, "rev-parse", "HEAD"); };
@@ -364,7 +364,7 @@ describe("merge-base diff when canonical has moved past the merge-base (review o
 });
 
 describe("crash classification is platform-independent", () => {
-  it("signal, null code, >=128 and negative codes are WORKER_CRASH (temporary); ordinary non-zero exits are not", async () => {
+  it("signal, null code, >=128 and negative codes are WORKER_CRASH (temporary); ordinary non-zero exits are not", {timeout: T}, async () => {
     const {LocalProcessExecutor} = await import("../../automation/factory-v2/executors.mjs");
     const env = makeRepo();
     const ex = new LocalProcessExecutor({repoDir: env.repo, worktreeRoot: path.join(env.root, "wt"), baseSha: env.base, command: job => [process.execPath, ["-e", `process.exit(${job.code})`]]});

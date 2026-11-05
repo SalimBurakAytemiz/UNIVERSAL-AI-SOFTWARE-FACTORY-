@@ -134,7 +134,7 @@ describe("2. acceptance evidence is verified (source, SHA, scope, authority) —
   };
   const gates = (o = {}) => ({reviewClean: {pr: 347, headSha: H}, ciPassed: {headSha: H}, founderAuthorization: {path: "docs/planning/authority/FD-2026-11-05-FACTORY-V2-CUTOVER.md"}, migrationAcceptance: {mergeSha: M}, ...o});
   const ctx = {domain: D, candidate: SESS.V2, manifestVersion: 1};
-  it("genuine evidence verifies and records exactly what was checked", () => {
+  it("genuine evidence verifies and records exactly what was checked", {timeout: T}, () => {
     const r = verifyGates(gates(), ctx, fixture());
     expect(r.verified.reviewClean).toMatchObject({pr: 347, headSha: H, mergeSha: M, reviewerSession: "session_reviewer01"});
     expect(r.verified.founderAuthorization).toMatchObject({canonicalSha: CAN, candidate: SESS.V2, manifestVersion: 1});
@@ -373,7 +373,7 @@ describe("review of af184254: history rewrite, history window, lease traffic, pr
     expect(regX.cas(key, stored.sha, altDoc).ok).toBe(true);
     expect(() => w.bA.read()).toThrow(/AUTHORITY_REGRESSION/);
   });
-  it("M7: only the first link from genesis may jump epochs; a rollback elsewhere must be exactly epoch+1", () => {
+  it("M7: only the first link from genesis may jump epochs; a rollback elsewhere must be exactly epoch+1", {timeout: T}, () => {
     const prev = {domain: D, authority: "V4.1", phase: "V41_AUTHORITATIVE", epoch: 2, holder: null, candidate: null, outgoing: null, manifest: null, gatesDigest: null, drainDigest: null};
     expect(() => checkTransition(prev, {...prev, epoch: 9}, {sessionId: SESS.V41})).toThrow(/ROLLBACK_FIELDS_INVALID/);
     expect(checkTransition(prev, {...prev, epoch: 3}, {sessionId: SESS.V41})).toBe("ROLLBACK");
@@ -428,7 +428,7 @@ describe("registry protection must come from active rulesets with no bypass", ()
     ["ruleset unreadable", rules, () => { throw new Error("403"); }, false],
     ["active, no bypass, both rules", rules, rs(), true]
   ])("guard: %s", (_n, r, x, want) => { let got; try { got = sync(r, x); } catch { got = false; } expect(got).toBe(want); });
-  it("async adapter path applies the same rule", async () => {
+  it("async adapter path applies the same rule", {timeout: T}, async () => {
     expect(await protectionFrom(rules, async () => rs())).toBe(true);
     expect(await protectionFrom(rules, async () => rs({bypass_actors: [{actor_id: 1}]}))).toBe(false);
     expect(await protectionFrom(rules, async () => { throw new Error("x"); })).toBe(false);
