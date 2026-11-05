@@ -44,12 +44,20 @@ export const validateIntakeCreate = (x: unknown): {ok: true} | {ok: false; error
   return {ok: true};
 };
 
-/** UASCO-T0011 sunucu yetki kapısı (istemci kapısından bağımsız): fikir, başlık ve kabul kriterleri komut girişinin yetki bayraklarıyla taranır (sınıflandırıcı değişmez).
+/** UASCO-T0011 sunucu yetki kapısı (istemci kapısından bağımsız): TÜM serbest metin alanları (INTAKE_SCANNED_FIELDS) komut girişinin yetki bayraklarıyla taranır (sınıflandırıcı değişmez).
  *  ENGELLEYEN bayraklar yalnız INSTRUCTION_LIKE ve PROTECTED_PATH'tir (ürün açıklamalarında yanlış pozitif vermeyen ikisi): bunlar varsa acknowledgedRisks TAM olarak aynı küme olmalıdır; eksik/fazla onay ve engelleyen bayrak yokken onay reddedilir.
  *  Diğer dört bayrak (DELETION, PAID_OR_PRODUCTION, SECRETS, MERGE_PUSH_FORCE) ENGELLEMEZ, yalnız kayda yazılır. Tür belirsizliği (KIND_UNKNOWN/AMBIGUOUS) hiç değerlendirilmez. */
 export const INTAKE_BLOCKING_REASONS: readonly IntakeAuthorityReason[] = Object.freeze(["PROTECTED_PATH", "INSTRUCTION_LIKE"] as IntakeAuthorityReason[]);
-export function intakeAuthorityCheck(input: Pick<IntakeInput, "idea" | "title" | "acceptanceCriteria" | "acknowledgedRisks">): {ok: boolean; flags: IntakeAuthorityReason[]; blocking: IntakeAuthorityReason[]; acknowledged: boolean} {
-  const flags = intakeAuthorityFlags([input.idea, input.title, ...(input.acceptanceCriteria ?? [])]);
+/** #381 B-1: taranan SERBEST METİN alanları (şemadaki her serbest metin alanı; ProjectBrief/prompt'a giden fikir, başlık, techStack, kabul kriterleri dahil). Bir alan ya burada ya INTAKE_UNSCANNED_FIELDS'te olmalıdır (test şemadan doğrular). */
+export const INTAKE_SCANNED_FIELDS = Object.freeze(["idea", "title", "techStack", "acceptanceCriteria", "testCommand", "repository"] as const);
+/** Taranmayan alanlar ve nedeni: yalnız sabit değerli (enum) alanlar ve hiçbir prompt'a gitmeyen, desenle sınırlı kimlik. */
+export const INTAKE_UNSCANNED_FIELDS: Readonly<Record<string, string>> = Object.freeze({projectType: "enum", targetOS: "enum", riskLevel: "enum", template: "enum", acknowledgedRisks: "enum", idempotencyKey: "identifier [A-Za-z0-9._-]{1,100}; stored only as a hash input, never in a brief or prompt"});
+/** Girdideki tüm taranan serbest metinler (eksik alan yok sayılır). */
+export function intakeFreeTexts(input: Partial<Pick<IntakeInput, "idea" | "title" | "techStack" | "acceptanceCriteria" | "testCommand" | "repository">>): unknown[] {
+  return [input.idea, input.title, ...(input.techStack ?? []), ...(input.acceptanceCriteria ?? []), ...(input.testCommand ?? []), input.repository?.url];
+}
+export function intakeAuthorityCheck(input: Partial<IntakeInput> & Pick<IntakeInput, "idea">): {ok: boolean; flags: IntakeAuthorityReason[]; blocking: IntakeAuthorityReason[]; acknowledged: boolean} {
+  const flags = intakeAuthorityFlags(intakeFreeTexts(input));
   const blocking = flags.filter(f => INTAKE_BLOCKING_REASONS.includes(f));
   const ack = input.acknowledgedRisks ?? [];
   const ok = ack.length === blocking.length && blocking.every(f => ack.includes(f));
