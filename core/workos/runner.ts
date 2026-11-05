@@ -925,6 +925,7 @@ export class MissionRunner {
     this.renew(run.runId, leaseId);
     const spec: MissionSpec = {...this.missionSpec(run), startSha: start};
     const lim = this.limitsOf(run);
+    if (abort()) return {kind: "CANCEL", reason: this.cancelReason()}; // //TR: UASCO-T0048: yarış kapatılır: adım başındaki stop denetiminden sonra (git/klon/tarama sürerken) yükselen GLOBAL_STOP, ücretli/yerel çağrı BAŞLAMADAN yakalanır (runProcess abort yoklaması ancak spawn sonrası başlar).
     const r = await this.withChild(run, leaseId, onSpawn => this.o.executors.implementer.implement(work, spec, {timeoutMs: lim.executorTimeoutMs, shouldAbort: abort, onSpawn, writerEnv: writerEnvFor(run.runId, leaseId), span: fn => this.span(fn)}));
     if (!(await this.sweepOwnWriters(run, leaseId))) return {kind: "RETRY", reason: "WORKSPACE_WRITER_ALIVE"}; // //TR: SWEEP-5: SIGKILL sonrası 2 sn içinde ölmeyen artık geçici olabilir: yeniden deneme (bütçe dahilinde; adım yeniden girişte workspace sıfırlanır); terminal yalnız retry bütçesi tükenince
     const head = await this.gitOk(work, ["rev-parse", "HEAD"]);
@@ -1013,6 +1014,7 @@ export class MissionRunner {
       this.sandboxNotExecuted(run, leaseId, "VERIFY_TESTS", argv, gate);
       return {kind: "DONE", next: "SECURITY", data: {tests: "NOT_EXECUTED", testsReason: gate.reason, secretHits: 0}};
     }
+    if (abort()) return {kind: "CANCEL", reason: this.cancelReason()}; // //TR: UASCO-T0048: yarış kapatılır: adım başındaki stop denetiminden sonra (git/klon/tarama sürerken) yükselen GLOBAL_STOP, ücretli/yerel çağrı BAŞLAMADAN yakalanır (runProcess abort yoklaması ancak spawn sonrası başlar).
     const r = await this.runTests(gate, argv, work, abort);
     // M1a c2: kanıt, kapı kararındaki doğrulanmış sağlayıcının kimliğini taşır (PRODUCT_VERIFIED için sandbox tanığı; kapı semantiği değişmez).
     this.procEvidence(run, leaseId, "VERIFY_TESTS", r, {commitSha: run.headSha, sandboxProviderId: gate.providerId});
@@ -1163,6 +1165,7 @@ export class MissionRunner {
     const testExecution = this.testsNotExecuted(run) ? {executed: false as const, reason: "SANDBOX_UNAVAILABLE" as const} : undefined;
     // //TR: Rol atanmış run'da reviewer zaman aşımı = min(run varsayılanı, bağlı security-reviewer limiti); profil run varsayılanını yalnız SIKILAŞTIRIR. (maxFilesWritten 0 aşağıdaki untouched-clone kapısıdır; maxCycles 1 = bu adımda tek review geçişi.) Rolsüz run değişmez.
     const reviewTimeoutMs = reviewerProfile ? effectiveLimits(reviewerProfile.limits, {maxRemediations: this.o.maxRemediations, executorTimeoutMs: this.o.executorTimeoutMs}).executorTimeoutMs : this.o.executorTimeoutMs;
+    if (abort()) return {kind: "CANCEL", reason: this.cancelReason()}; // //TR: UASCO-T0048: yarış kapatılır: adım başındaki stop denetiminden sonra (git/klon/tarama sürerken) yükselen GLOBAL_STOP, ücretli/yerel çağrı BAŞLAMADAN yakalanır (runProcess abort yoklaması ancak spawn sonrası başlar).
     const r = await this.withChild(run, leaseId, onSpawn => reviewer.review(clone, {...this.missionSpec(run), ...(testSurface ? {testSurface} : {}), ...(testExecution ? {testExecution} : {})}, diff, {timeoutMs: reviewTimeoutMs, shouldAbort: abort, onSpawn, writerEnv: writerEnvFor(run.runId, leaseId), span: fn => this.span(fn)}));
     const untouched = (await this.gitOk(clone, ["rev-parse", "HEAD"])) === run.headSha && (await this.gitOk(clone, ["status", "--porcelain", "--untracked-files=all"])) === "";
     const log = this.writeLog(run, "review", r.log);
@@ -1195,6 +1198,7 @@ export class MissionRunner {
     const gate = await this.authorizeTests("RUNNER_REGRESSION_TESTS");
     // M1a: sandbox yoksa regresyon komutu HİÇ çalışmaz; NOT_EXECUTED kanıtı yazılır ve REPORT'a geçilir (BLOCKED değil, bütçe tüketilmez).
     if (!gate.allowed) { this.sandboxNotExecuted(run, leaseId, "REGRESSION_TESTS", argv, gate); return {kind: "DONE", next: "REPORT", data: {tests: "NOT_EXECUTED", testsReason: gate.reason}}; }
+    if (abort()) return {kind: "CANCEL", reason: this.cancelReason()}; // //TR: UASCO-T0048: yarış kapatılır: adım başındaki stop denetiminden sonra (git/klon/tarama sürerken) yükselen GLOBAL_STOP, ücretli/yerel çağrı BAŞLAMADAN yakalanır (runProcess abort yoklaması ancak spawn sonrası başlar).
     const r = await this.runTests(gate, argv, clone, abort);
     this.procEvidence(run, leaseId, "REGRESSION_TESTS", r, {commitSha: run.headSha ?? undefined, sandboxProviderId: gate.providerId});
     if (r.aborted) return {kind: "CANCEL", reason: this.cancelReason()};
