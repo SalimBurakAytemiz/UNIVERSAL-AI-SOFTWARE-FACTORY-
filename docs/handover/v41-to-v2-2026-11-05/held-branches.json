@@ -181,22 +181,22 @@
       "owner": "E",
       "branch": "claude/builder-e-attention-flags",
       "task": "?",
-      "head": "a5b1a18b4b2986b1920d949824875279b4e3acdd",
-      "note": "INTAKE_AUTHORITY_FLAGGED; follow-up: ATTENTION_GROUP mapping (A)"
+      "head": "82336bf57ce6cff043c32e41320f050cb30a9ae8",
+      "note": "INTAKE_AUTHORITY_FLAGGED; follow-up: ATTENTION_GROUP mapping (A); base-merged b4bbe4b0 (2026-11-05 21:14Z, gates ok)"
     },
     {
       "owner": "E",
       "branch": "claude/builder-e-command-field-on-364",
       "task": "?",
-      "head": "2320887169358328ad00c23d9f00014e2dc29e01",
-      "note": "#372 merged into #364"
+      "head": "948f354e83450082974ce6b2937d1ee0ad0450c3",
+      "note": "#372 merged into #364; base-merged b4bbe4b0 (2026-11-05 21:14Z, gates ok)"
     },
     {
       "owner": "E",
       "branch": "claude/builder-e-reconnect-f1",
       "task": "UASCO-T0004.A",
-      "head": "3bb7bf21bf526440bf5395f3c6e202f960918cef",
-      "note": "on #386"
+      "head": "7abd5b8c572a289d0fe3451eca38b029b7cac0c7",
+      "note": "on #386; base-merged b4bbe4b0 (2026-11-05 21:14Z, gates ok)"
     },
     {
       "owner": "F",
