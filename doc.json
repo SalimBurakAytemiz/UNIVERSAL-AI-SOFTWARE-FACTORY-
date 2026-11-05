@@ -1,6 +1,6 @@
 {
   "schema": "uasco.factory-v2.shared-registry/1",
-  "phase": "section:probe/A-guard-checked",
+  "phase": "section:probe/go-lease",
   "sections": {
     "probe-keys/session_015dYwb2b3yVQ6iay68HXCD8": {
       "session": "session_015dYwb2b3yVQ6iay68HXCD8",
@@ -617,6 +617,10 @@
     "probe/A-guard-checked": {
       "session": "session_015dYwb2b3yVQ6iay68HXCD8",
       "at": 1793869387385
+    },
+    "probe/go-lease": {
+      "session": "session_015dYwb4zVwFwg69iij2RdGq",
+      "at": 1793869411914
     }
   },
   "revs": {
@@ -630,7 +634,8 @@
     "probe/B-prepared": 1,
     "relay/drain": 1,
     "probe/B-commit": 1,
-    "probe/A-guard-checked": 1
+    "probe/A-guard-checked": 1,
+    "probe/go-lease": 1
   },
-  "seq": 14
+  "seq": 15
 }
