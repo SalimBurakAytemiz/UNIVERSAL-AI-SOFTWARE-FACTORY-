@@ -10,7 +10,7 @@ import {h,panel,stateNote,emptyNote,chip,verificationChip,statePill,miniBars,bad
 import {MISSING,formatCount} from "../model.js";
 import {VERIFICATION_STATES,filterEvidence,formatDateTime} from "../work-core.js";
 import {drafts,selection,field} from "../forms.js";
-import {mapSecurityScans,evidenceIntegrity,buildLineage,buildLineageGraph,linkedNodeIds,lineageNavigate,GRAPH_KINDS,reviewRowVerified,mapTestReports} from "../assurance-core.js";
+import {mapSecurityScans,newestFirst,evidenceIntegrity,buildLineage,buildLineageGraph,linkedNodeIds,lineageNavigate,GRAPH_KINDS,reviewRowVerified,mapTestReports} from "../assurance-core.js";
 import {icon} from "../icons.js";
 
 const PAGE_LIMIT=100;
@@ -77,6 +77,8 @@ function evidencePanel(ctx,ev){
     bars??emptyNote(ctx,"qa.evidence.noBars"),
     h(doc,"p",{class:"note mono",text:ctx.t("qa.overview.source")}));
 }
+// //TR: Güvenlik okumasının gerçek toplamı (sunucunun döndürdüğü koşu sayısı); eşleyici en yeni SECURITY_ROWS_MAX koşuyu tutar, kesik kısım sayıyla söylenir.
+const scanTotal=scans=>Number.isSafeInteger(scans.total)&&scans.total>=scans.runs.length?scans.total:scans.runs.length;
 function posturePanel(ctx,scans){
   const doc=ctx.doc;
   if(scans.state!=="VERIFIED")return panel(ctx,{titleKey:"qa.posture.title",id:"qa-posture",className:"qa-posture"},
@@ -97,6 +99,7 @@ function posturePanel(ctx,scans){
       stat(ctx,"blocked","qa.scan.BLOCKED",bs.BLOCKED,{tone:bs.BLOCKED>0?"danger":null}),
       stat(ctx,"notrun","qa.scan.NOT_EXECUTED",bs.NOT_EXECUTED,{tone:"muted"})),
     bars??null,
+    scans.truncated===true?h(doc,"p",{class:"note note-stale",role:"note",dataset:{postureTruncated:String(scanTotal(scans)-scans.runs.length)},text:ctx.t("qa.security.more",{n:String(scanTotal(scans)-scans.runs.length)})}):null,
     h(doc,"p",{class:"note",text:ctx.t("qa.posture.note")}),
     h(doc,"p",{class:"note mono",text:ctx.t("qa.security.source")}));
 }
@@ -137,16 +140,16 @@ function securityPanel(ctx,scans){
   const runs=scans.runs;
   if(!runs.length)return panel(ctx,{titleKey:"qa.security.title",id:"qa-security",className:"qa-security"},
     h(doc,"p",{class:"note",text:ctx.t("qa.security.lead")}),emptyNote(ctx,"qa.security.none"),h(doc,"p",{class:"note mono",text:ctx.t("qa.security.source")}));
-  const page=runs.slice(0,SCAN_LIMIT);
+  const page=newestFirst(runs).slice(0,SCAN_LIMIT);
   const cols=["qa.security.col.run","qa.security.col.status","qa.security.col.secrets","qa.security.col.sca","qa.security.col.tools","qa.security.col.commit"];
   return panel(ctx,{titleKey:"qa.security.title",id:"qa-security",className:"qa-security"},
     h(doc,"p",{class:"note",text:ctx.t("qa.security.lead")}),
-    h(doc,"p",{class:"note",dataset:{results:"1"},text:ctx.t("qa.security.results",{shown:String(page.length),total:String(runs.length)})}),
+    h(doc,"p",{class:"note",dataset:{results:"1"},text:ctx.t("qa.security.results",{shown:String(page.length),total:String(scanTotal(scans))})}),
     h(doc,"div",{class:"table-wrap"},h(doc,"table",{class:"table qa-sec-table"},
       h(doc,"caption",{class:"sr-only",text:ctx.t("qa.security.caption")}),
       h(doc,"thead",{},h(doc,"tr",{},cols.map(k=>h(doc,"th",{scope:"col",text:ctx.t(k)})))),
       h(doc,"tbody",{},page.map(r=>securityRow(ctx,r))))),
-    runs.length>SCAN_LIMIT?h(doc,"p",{class:"note",dataset:{truncated:"1"},text:ctx.t("qa.security.more",{n:String(runs.length-SCAN_LIMIT)})}):null,
+    scanTotal(scans)>page.length?h(doc,"p",{class:"note",dataset:{truncated:"1"},text:ctx.t("qa.security.more",{n:String(scanTotal(scans)-page.length)})}):null,
     h(doc,"p",{class:"note",text:ctx.t("qa.tool.installedNote")}),
     h(doc,"p",{class:"note mono",text:ctx.t("qa.security.source")}));
 }
@@ -382,7 +385,7 @@ function testReportPanel(ctx,reports){
   const doc=ctx.doc,mk=(...k)=>panel(ctx,{titleKey:"assurance.testreport.title",id:"as-testrep",className:"as-testrep"},h(doc,"p",{class:"note",text:ctx.t("assurance.testreport.lead")}),...k,h(doc,"p",{class:"note mono",text:ctx.t("assurance.testreport.source")}));
   if(reports.state!=="VERIFIED")return mk(stateNote(ctx,reports.state));
   if(!reports.runs.length)return mk(emptyNote(ctx,"assurance.testreport.none"));
-  const page=reports.runs.slice(0,SCAN_LIMIT),cols=["assurance.testreport.col.run","assurance.testreport.col.state","assurance.testreport.col.executed","assurance.testreport.col.records","assurance.testreport.col.head"];
+  const page=newestFirst(reports.runs).slice(0,SCAN_LIMIT),cols=["assurance.testreport.col.run","assurance.testreport.col.state","assurance.testreport.col.executed","assurance.testreport.col.records","assurance.testreport.col.head"];
   return mk(
     h(doc,"p",{class:"note",dataset:{results:"testreport"},text:ctx.t("assurance.testreport.results",{shown:String(page.length),total:String(reports.total)})}),
     h(doc,"div",{class:"table-wrap"},h(doc,"table",{class:"table as-testrep-table"},
