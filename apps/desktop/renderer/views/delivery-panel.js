@@ -1,8 +1,8 @@
 // //TR: Bu görünüm parçası Project Studio > Teslim sekmesindeki M1a c2 koşu teslimlerini gösterir (D-M1A-ACCEPTANCE-CONDITIONS-2026-10-15): SOURCE_GENERATION_COMPLETE koşular runId, sourceCommit ve (hazırlandıysa) exportArtifactHash ile listelenir; "Teslim paketini hazırla" deterministik artefaktı üretir, kabul penceresi runId/görev/commit/artefakt hash'ini, testlerin çalıştırılmadığı beyanını ve değişen testleri her onay için ayrı açık kutuyla gösterir, "Teslim paketini dışa aktar" ana süreçte hash yeniden doğrulanarak yapılır. Diğer koşular yalnız iki eksen etiketiyle (eylemsiz) gösterilir. Hiçbir yüzey doğrulanmamış ürün için COMPLETE/PASS/VERIFIED göstermez; her eylemden sonra odak sonuç bloğuna taşınır (asla gövdede kalmaz).
-import {h,panel,stateNote,emptyNote,statusPill,badge} from "../components.js";
+import {h,panel,stateNote,emptyNote,statusPill,statePill,badge} from "../components.js";
 import {drafts,statusBlock,setStatus,focusResult,settle} from "../forms.js";
 import {describePostResult} from "../work-core.js";
-import {buildPrepareRequest,buildAcceptanceRequest,isSourceComplete,deliverySourceState} from "../delivery-core.js";
+import {buildPrepareRequest,buildAcceptanceRequest,isSourceComplete,deliverySourceState,deliveryChecklist,mapRunSecurity} from "../delivery-core.js";
 import {axisBadges,axisLabel,deliveryAckBlock,deliveryAckState,resetDeliveryAcks} from "../m1a.js";
 
 export const deliveryStatusId=runId=>`dl-${runId}`;
@@ -63,7 +63,41 @@ function sourceStateNote(ctx,d,src){
     src==="NOT_PREPARED"?null:[badge(ctx,ctx.t(`m1a.delivery.srcState.${src}`),src==="VALID"?"badge-notverified":"badge-risk")," ",h(doc,"span",{text:ctx.t(`m1a.delivery.srcNote.${src}`,vars)})],
     earlier?h(doc,"p",{dataset:{sourceAcceptedEarlier:"true"},text:ctx.t("m1a.delivery.srcAcceptedEarlier",{accepted:d.accepted.sourceCommit,head:d.sourceCommit})}):null);
 }
-function deliveryCard(ctx,d){
+// //TR: Teslim kontrol listesi: her satır kendi düzeyini rozet + metinle gösterir (yalnız renk değil). OK yalnız kanıtlı satırdır; doğrulama satırı PRODUCT_VERIFIED olmadıkça asla OK değildir.
+const LEVEL_PILL=Object.freeze({OK:"DONE",PENDING:"WAITING",ATTENTION:"ATTENTION",UNKNOWN:"NOT_VERIFIED"});
+function checklistValue(ctx,r){
+  if(r.key==="sha256")return r.value??ctx.t("delivery.check.val.notYet");
+  if(r.key==="securityStage"&&r.detail){
+    const base=ctx.t(`delivery.check.sec.${r.value}`);
+    return `${base} · ${ctx.t("delivery.check.sec.parts",{builtin:r.detail.builtin,gitleaks:r.detail.gitleaks,sca:r.detail.sca})}${r.detail.sameHead?"":` · ${ctx.t("delivery.check.sec.otherHead")}`}`;
+  }
+  if(r.key==="securityStage")return ctx.t(`delivery.check.sec.${r.value}`);
+  if(r.key==="verification")return `${r.value}${r.detail?` · ${r.detail}`:""}`;
+  return ctx.t(`delivery.check.val.${r.key}.${r.value}`);
+}
+export function deliveryChecklistBlock(ctx,d,sec){
+  const doc=ctx.doc,rows=deliveryChecklist(d,sec);
+  return h(doc,"section",{class:"delivery-checklist",dataset:{deliveryChecklist:d.runId},"aria-labelledby":`dl-check-t-${d.runId}`},
+    h(doc,"h4",{id:`dl-check-t-${d.runId}`,text:ctx.t("delivery.check.title")}),
+    h(doc,"ul",{class:"plain"},rows.map(r=>h(doc,"li",{dataset:{checkRow:r.key,checkLevel:r.level}},
+      statePill(ctx,LEVEL_PILL[r.level],{label:ctx.t(`delivery.check.level.${r.level}`)})," ",
+      h(doc,"strong",{text:ctx.t(`delivery.check.row.${r.key}`)}),": ",
+      h(doc,"span",{class:r.key==="sha256"&&r.value?"mono":"",text:checklistValue(ctx,r)})))),
+    d.productVerification?.state!=="PRODUCT_VERIFIED"?h(doc,"p",{class:"note",role:"note",dataset:{notVerifiedExplain:d.productVerification?.state??"UNKNOWN"}},
+      ctx.t("delivery.check.notVerified",{reason:d.productVerification?.reason??"—"})):null);
+}
+/** Kart başına koşu güvenlik aşaması: yalnız SOURCE_GENERATION_COMPLETE teslimler için mevcut izinli GET /v1/work-runs/:id (en çok 20); okunamayan koşu UNAVAILABLE kalır. */
+export async function loadDeliverySecurity(ctx,list,limit=20){
+  const out={};
+  if(!list||list.state!=="VERIFIED")return out;
+  const ids=list.items.filter(isSourceComplete).map(d=>d.runId).slice(0,limit);
+  await Promise.all(ids.map(async id=>{
+    let r=null;try{r=await ctx.api.raw(`/v1/work-runs/${id}`)}catch{r=null}
+    out[id]=r&&r.ok?mapRunSecurity(r.data):{state:r&&typeof r.state==="string"?r.state:"UNAVAILABLE"};
+  }));
+  return out;
+}
+function deliveryCard(ctx,d,sec){
   const doc=ctx.doc,sid=deliveryStatusId(d.runId),busy=drafts.busy[sid]===true,prepared=!!d.artifact,accepted=!!d.accepted;
   const fact=(k,v,cls="mono")=>[h(doc,"dt",{text:ctx.t(k)}),h(doc,"dd",{class:cls,text:v})];
   const src=deliverySourceState(d),blocked=src==="STALE"||src==="UNKNOWN";
@@ -83,19 +117,20 @@ function deliveryCard(ctx,d){
       ...fact("m1a.delivery.hash",d.artifact?.exportArtifactHash??ctx.t("m1a.delivery.notPrepared"),d.artifact?"mono":""),
       ...(prepared?fact("m1a.delivery.fileState",d.fileState?ctx.t(`m1a.delivery.file.${d.fileState}`):"—",""):[])),
     sourceStateNote(ctx,d,src),
+    deliveryChecklistBlock(ctx,d,sec),
     h(doc,"div",{class:"btn-row",role:"group","aria-label":ctx.t("m1a.delivery.actions",{run:d.runId})},buttons),
     dialog,
     statusBlock(ctx,sid));
 }
 /** Koşu teslimleri paneli: SOURCE_GENERATION_COMPLETE koşular eylemli kartlar, diğerleri yalnız iki eksen etiketiyle tablo. */
-export function runDeliveriesPanel(ctx,list){
+export function runDeliveriesPanel(ctx,list,securityByRun=list?.security??{}){
   const doc=ctx.doc;
   let body;
   if(list.state!=="VERIFIED")body=stateNote(ctx,list.state);
   else{
     const complete=list.items.filter(isSourceComplete),others=list.items.filter(d=>!isSourceComplete(d));
     body=h(doc,"div",{},
-      complete.length?h(doc,"ul",{class:"cards delivery-list"},complete.map(d=>deliveryCard(ctx,d))):emptyNote(ctx,"m1a.delivery.noneComplete"),
+      complete.length?h(doc,"ul",{class:"cards delivery-list"},complete.map(d=>deliveryCard(ctx,d,securityByRun[d.runId]))):emptyNote(ctx,"m1a.delivery.noneComplete"),
       others.length?h(doc,"div",{class:"table-wrap"},h(doc,"table",{class:"table",id:"studio-other-runs"},h(doc,"caption",{text:ctx.t("m1a.delivery.othersCaption")}),
         h(doc,"thead",{},h(doc,"tr",{},["m1a.delivery.col.run","m1a.delivery.col.status","m1a.delivery.col.source","m1a.delivery.col.product"].map(k=>h(doc,"th",{scope:"col",text:ctx.t(k)})))),
         h(doc,"tbody",{},others.map(d=>h(doc,"tr",{dataset:{otherRun:d.runId}},h(doc,"td",{class:"mono",text:d.runId}),h(doc,"td",{},d.status?statusPill(ctx,d.status):"—"),

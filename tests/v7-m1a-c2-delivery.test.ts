@@ -405,3 +405,38 @@ describe("LANE-B delivery routes: write gates and refusal audit events", () => {
     expect(all).not.toContain(c.tmp);
   });
 });
+
+// //TR: Teslim kontrol listesi — gerçek buildServer: hazırlanmadı / hazırlandı / dosya değişti / kabul edildi durumları, gerçek GET /v1/deliveries ve GET /v1/work-runs/:id yanıtlarından renderer çekirdeğiyle türetilir (uydurma yok).
+describe("Delivery checklist from the real Control API (renderer core over real responses)", () => {
+  const rend = async (f: string): Promise<any> => import(new URL(`../apps/desktop/renderer/${f}`, import.meta.url).href);
+  const levelsOf = async (app: App, pid: string, runId: string) => {
+    const dc = await rend("delivery-core.js");
+    const list = dc.mapDeliveries((await app.inject({method: "GET", url: `/v1/deliveries?projectId=${pid}`, headers: HDR})).json());
+    const d = list.items.find((x: any) => x.runId === runId);
+    const sec = dc.mapRunSecurity((await app.inject({method: "GET", url: `/v1/work-runs/${runId}`, headers: HDR})).json());
+    const rows = dc.deliveryChecklist(d, sec);
+    return {lv: Object.fromEntries(rows.map((r: any) => [r.key, r.level])), rows, sec, d};
+  };
+  it("each real state yields its own checklist; product verification is never Done; the security stage is the run's own record", { timeout: T }, async () => {
+    const c = setup(tmp), app = noProviderApi(c), pid = await studioProject(c, app, "c2-check");
+    const {run} = await m1aRun(c, app, pid);
+    const s0 = await levelsOf(app, pid, run.runId);
+    expect(s0.lv).toMatchObject({artifact: "PENDING", sha256: "PENDING", integrity: "PENDING", archiveScan: "PENDING", verification: "UNKNOWN", acceptance: "PENDING"});
+    // this M1a run has no security stage record (the runner's security stage is not configured here): honestly NOT_RUN -> "Not verified", never Done
+    expect(s0.sec).toEqual({state: "NOT_RUN"});
+    expect(s0.lv.securityStage).toBe("UNKNOWN");
+    const art = (await prepare(app, run.runId)).json().artifact;
+    const s1 = await levelsOf(app, pid, run.runId);
+    expect(s1.lv).toMatchObject({artifact: "OK", sha256: "OK", integrity: "OK", archiveScan: "OK", verification: "UNKNOWN", acceptance: "PENDING"});
+    expect(s1.rows.find((r: any) => r.key === "sha256").value).toBe(art.exportArtifactHash);
+    expect(s1.rows.find((r: any) => r.key === "verification").value).toBe("NOT_VERIFIED");
+    const file = path.join(c.dataDir, art.artifactPath), orig = fs.readFileSync(file);
+    fs.writeFileSync(file, Buffer.concat([orig, Buffer.from("x")]));
+    expect((await levelsOf(app, pid, run.runId)).lv.integrity).toBe("ATTENTION");
+    fs.writeFileSync(file, orig);
+    expect((await levelsOf(app, pid, run.runId)).lv.integrity).toBe("OK");
+    expect((await accept(app, run.runId, acceptanceOf(art))).statusCode).toBe(200);
+    const s3 = await levelsOf(app, pid, run.runId);
+    expect(s3.lv).toMatchObject({acceptance: "OK", verification: "UNKNOWN"});
+  });
+});
