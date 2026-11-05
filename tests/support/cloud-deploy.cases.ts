@@ -312,9 +312,32 @@ export function registerCloudDeployCases(): void {
       expect(go({consume: () => "maybe"} as unknown as DeployApprovalLedger)).toBe("DEPLOY_APPROVAL_LEDGER_UNAVAILABLE");
       const full = new InMemoryDeployApprovalLedger(1); full.consume("other:1", at(60_000).getTime(), at(1000).getTime());
       expect(go(full)).toBe("DEPLOY_APPROVAL_LEDGER_UNAVAILABLE");                          // capacity reached: refuse, never evict live entries
-      const later = new InMemoryDeployApprovalLedger(1); later.consume("other:1", at(900).getTime(), at(0).getTime());
-      expect(go(later)).toBe("OK");                                                          // expired entries are pruned first
+      const later = new InMemoryDeployApprovalLedger(1, () => at(900 + MAX_CLOCK_SKEW_MS).getTime()); later.consume("other:1", at(900).getTime(), at(0).getTime());
+      expect(go(later)).toBe("OK");                                                         // trusted clock past exp + skew: pruned first
       expect(() => new InMemoryDeployApprovalLedger(0)).toThrow("LEDGER_CAPACITY_INVALID");
+    });
+    it("a skewed-future caller `now` cannot prune a live consumed entry and re-enable a replay (#349 N-1)", () => {
+      const {approval, go} = ready();
+      const t = at(1000).getTime(), exp = at(500 + MAX_DEPLOY_APPROVAL_TTL_MS).getTime();
+      const noClock = new InMemoryDeployApprovalLedger();
+      expect(go(noClock)).toBe("OK");                                                        // consumed at t
+      expect(noClock.consume("other:1", t + 60_000, t + 365 * 86_400_000)).toBe(true);        // caller claims a year later
+      expect(go(noClock, {now: at(2000)})).toBe("DEPLOY_APPROVAL_REPLAYED");                 // replay at t+1s inside TTL: still refused
+      let wallLedger = t;
+      const clocked = new InMemoryDeployApprovalLedger(10, () => wallLedger);
+      expect(go(clocked)).toBe("OK");
+      expect(clocked.consume("other:2", t + 60_000, t + 365 * 86_400_000)).toBe(true);        // trusted clock still at t: nothing pruned
+      expect(go(clocked, {now: at(2000)})).toBe("DEPLOY_APPROVAL_REPLAYED");
+      wallLedger = exp + MAX_CLOCK_SKEW_MS - 1;                                              // just inside exp + skew: kept
+      expect(clocked.consume("other:3", wallLedger + 60_000, wallLedger)).toBe(true);
+      expect(clocked.consume(`prd-k1:${approval.split(".")[2]}`, exp, wallLedger)).toBe(false);
+      wallLedger = exp + MAX_CLOCK_SKEW_MS;                                                  // trusted clock past exp + skew: pruned
+      expect(clocked.consume(`prd-k1:${approval.split(".")[2]}`, exp, wallLedger)).toBe(true);
+      const broken = new InMemoryDeployApprovalLedger(10, () => { throw new Error("ntp down"); });
+      expect(go(broken)).toBe("OK"); expect(go(broken, {now: at(2000)})).toBe("DEPLOY_APPROVAL_REPLAYED");   // unreadable clock: no pruning
+      const infinite = new InMemoryDeployApprovalLedger(10, () => Number.POSITIVE_INFINITY);
+      expect(go(infinite)).toBe("OK"); expect(go(infinite, {now: at(2000)})).toBe("DEPLOY_APPROVAL_REPLAYED"); // non-finite clock: no pruning
+      expect(() => new InMemoryDeployApprovalLedger(10, 5 as unknown as () => number)).toThrow("LEDGER_CLOCK_INVALID");
     });
     it("the old nonce-less da1 approval format is refused", () => {
       const {approval, go} = ready();
