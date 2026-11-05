@@ -43,6 +43,14 @@ const FLAGS: Array<[IntakeReason, RegExp, IntakeRisk]> = [
   ["INSTRUCTION_LIKE", /(ignor\w*( \w+)? (rules|instructions|polic\w+|guard\w*)|disregard|bypass|override|skip (the )?(review|tests?|validation|checks?)|approve (it|this)|you are now|system prompt|authori[sz]e (it|this|the)|kurallari (yok say|atla)|talimat\w* (yok say|atla)|onceki talimat|incelemeyi atla|testleri atla|dogrudan onayla|yetkilendir|yetki ver)/, 4],
 ];
 const ALL_KINDS: IntakeKind[] = KINDS.map(([k]) => k);
+// UASCO-T0011 (sunucu kapısı): yetki gerektiren bayraklar (tür belirsizliği DEĞİL). POST /v1/intakes bunları her serbest metin alanında yeniden çalıştırır; uzunluk sınırı yoktur (intake fikri 4000 karaktere kadar).
+export type IntakeAuthorityReason = Exclude<IntakeReason, "KIND_UNKNOWN" | "KIND_AMBIGUOUS">;
+export const INTAKE_AUTHORITY_REASONS: readonly IntakeAuthorityReason[] = Object.freeze(FLAGS.map(([r]) => r as IntakeAuthorityReason));
+/** Verilen metinlerin birleşik yetki bayrakları (FLAGS sırasıyla, tekrarsız); metin olmayan öğe yok sayılır. intakeCommand ile aynı katlama ve aynı kurallar. */
+export function intakeAuthorityFlags(texts: readonly unknown[]): IntakeAuthorityReason[] {
+  const folded = texts.filter((t): t is string => typeof t === "string").map(fold);
+  return FLAGS.filter(([, re]) => folded.some(f => re.test(f))).map(([r]) => r as IntakeAuthorityReason);
+}
 // UASCO-T0010: Windows UI'deki örnek komutlar; her biri tek türe çözülür ve DRAFT/PROPOSED üretir (testle bağlıdır).
 export const COMMAND_INTAKE_EXAMPLES: readonly string[] = Object.freeze(["Ayarlar sayfasını geliştir", "Audit the login module", "Birim testlerini doğrula"]);
 const clarify = (code: "KIND_UNKNOWN" | "KIND_AMBIGUOUS", kinds: IntakeKind[]): IntakeClarification => code === "KIND_UNKNOWN"
