@@ -1,6 +1,6 @@
 {
   "schema": "uasco.factory-v2.shared-registry/1",
-  "phase": "section:lease/probe/supervisor--LIVE-probe",
+  "phase": "section:probe/B-acquired",
   "sections": {
     "probe/A-hello": {
       "session": "session_015dYwb2S8xAzNEs1GWUEheS",
@@ -24,7 +24,12 @@
       "acquiredAt": 1793866710063,
       "heartbeatAt": 1793866710063,
       "expiresAt": 1793867310063
+    },
+    "probe/B-acquired": {
+      "session": "session_015dYwb31nmLGx3QYYLp81ys",
+      "epoch": 1,
+      "at": 1793866714531
     }
   },
-  "seq": 5
+  "seq": 6
 }
