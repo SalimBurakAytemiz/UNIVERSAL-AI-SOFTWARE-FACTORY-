@@ -9,7 +9,7 @@ import {AuthorityBridge, snapshotV41, buildManifest, authorityRef} from "./bridg
 import {generateRoleKey, parseKeyring, signAction, canonDigest} from "./identity.mjs";
 import {verifyGates} from "./gate-verifier.mjs";
 import {mergeAuthority} from "./v41-guard.mjs";
-import {liveFreshness, liveGateDeps, liveGit, githubApi, BASE} from "./live-sources.mjs";
+import {liveFreshness, liveGateDeps, liveGit, githubClient, prefetchGateEvidence, ghGet, BASE} from "./live-sources.mjs";
 
 export const PROBE_DOMAIN = "probe-uasco";
 export const PROBE_KEYRING_PATH = "docs/factory-v2/probe/PROBE-ROLE-KEYS.json";
@@ -49,9 +49,12 @@ export async function runProbe({role, session, repoRoot, branch, keyDir, prBranc
   if (!ringSha) throw new Error("PROBE_KEYRING_NOT_PUBLISHED");
   log("KEYRING_PINNED", {commitSha: ringSha});
   const keyring = () => loadProbeKeyring({repoRoot, commitSha: ringSha, domain: PROBE_DOMAIN});
-  const live = deps.live ?? liveFreshness({repoRoot});
-  const realVerifier = (gates, ctx) => verifyGates(gates, ctx, deps.gateDeps ? deps.gateDeps() : liveGateDeps({repoRoot}));
-  const gh = deps.gh ?? githubApi(), lgit = deps.git ?? liveGit({repoRoot});
+  const ghc = deps.gh ? null : githubClient();
+  const live = deps.live ?? liveFreshness({repoRoot, gh: ghc});
+  let ghReader = null; // prefetched through the GitHub adapter immediately before each prepare attempt
+  const prefetch = async gates => { ghReader = deps.gateDeps ? null : await prefetchGateEvidence(ghc, gates); };
+  const realVerifier = (gates, ctx) => verifyGates(gates, ctx, deps.gateDeps ? deps.gateDeps() : liveGateDeps({repoRoot, gh: ghReader}));
+  const gh = deps.gh ?? (p => { throw new Error(`GH_SYNC_READ_UNSUPPORTED:${p}`); }), lgit = deps.git ?? liveGit({repoRoot});
   // PROBE waiver: only for a probe- domain and only when explicitly marked; the live domain never has it.
   const probeVerifier = (gates, ctx) => (gates?.probeWaiver === "PROBE-ONLY-NOT-ACCEPTANCE" && ctx.domain.startsWith("probe-")) ? {verified: {probeWaiver: true}} : realVerifier(gates, ctx);
   const bridge = new AuthorityBridge({docStore: reg, domain: PROBE_DOMAIN, keyring, gateVerifier: probeVerifier, live});
@@ -88,14 +91,19 @@ export async function runProbe({role, session, repoRoot, branch, keyDir, prBranc
     mark("probe/B-forged");
     await until("probe/A-reset");
     // manifest from LIVE canonical data
+    if (live.refresh) await live.refresh();
     const g = lgit, base = g.canonicalSha();
     const snapshot = snapshotV41({baseRef: BASE, baseSha: base, autonomyState: JSON.parse(g.show(base, "docs/planning/autonomy/STATE.json")),
       taskIndex: JSON.parse(g.show(base, "docs/planning/autonomy/task-index.json")), openPrs: live.openPrs()});
     const manifest = buildManifest({domain: PROBE_DOMAIN, version: 1, snapshot, fromSession: A_SESSION(), toSession: session});
-    attempt("B_PREPARE_TEXT_EVIDENCE", () => bridge.prepare({manifest, gates: {reviewClean: {evidence: "CLEAN"}, ciPassed: {evidence: "PASS"}, founderAuthorization: {evidence: "yes"}, migrationAcceptance: {evidence: "ok"}}, signer: me}));
-    const pr = gh("pulls/347");
-    attempt("B_PREPARE_REAL_BUT_UNMERGED_PR_347", () => bridge.prepare({manifest, signer: me, gates: {reviewClean: {pr: 347, headSha: pr.head.sha}, ciPassed: {headSha: pr.head.sha},
-      founderAuthorization: {path: "docs/planning/authority/FD-2026-11-03-STANDING-AUTONOMY.md"}, migrationAcceptance: {mergeSha: pr.merge_commit_sha ?? "0".repeat(40)}}}));
+    const textGates = {reviewClean: {evidence: "CLEAN"}, ciPassed: {evidence: "PASS"}, founderAuthorization: {evidence: "yes"}, migrationAcceptance: {evidence: "ok"}};
+    await prefetch(textGates);
+    attempt("B_PREPARE_TEXT_EVIDENCE", () => bridge.prepare({manifest, gates: textGates, signer: me}));
+    const pr = deps.gh ? gh("pulls/347") : await ghGet(ghc, "pulls/347");
+    const realGates = {reviewClean: {pr: 347, headSha: pr.head.sha}, ciPassed: {headSha: pr.head.sha},
+      founderAuthorization: {path: "docs/planning/authority/FD-2026-11-03-STANDING-AUTONOMY.md"}, migrationAcceptance: {mergeSha: pr.merge_commit_sha ?? "0".repeat(40)}};
+    await prefetch(realGates);
+    attempt("B_PREPARE_REAL_BUT_UNMERGED_PR_347", () => bridge.prepare({manifest, signer: me, gates: realGates}));
     attempt("B_PREPARE_PROBE_WAIVER", () => bridge.prepare({manifest, gates: {probeWaiver: "PROBE-ONLY-NOT-ACCEPTANCE"}, signer: me}).core.phase);
     const unresolved = [...new Set(snapshot.inFlight.map(f => f.task))];
     mark("probe/B-prepared", {unresolved});
@@ -107,6 +115,7 @@ export async function runProbe({role, session, repoRoot, branch, keyDir, prBranc
     const relay = await until("relay/drain");
     attempt("B_RELAY_ALTERED_DRAIN", () => bridge.drainAck({manifestDigest: md, drain: {...relay.drain, acks: {...relay.drain.acks, "FORGED-T0001": "COMPLETED"}}, envelope: relay.envelope}));
     attempt("B_RELAY_UNCHANGED_DRAIN", () => bridge.drainAck({manifestDigest: md, drain: relay.drain, envelope: relay.envelope}).signer);
+    if (live.refresh) await live.refresh(); // open PRs fetched just now through the adapter
     const committed = attempt("B_COMMIT_WITH_LIVE_FRESHNESS", () => bridge.commit({manifest, signer: me}).core);
     mark("probe/B-commit", {phase: committed?.phase ?? null});
     if (committed) {

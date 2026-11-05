@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {spawnSync} from "node:child_process";
+import {pathToFileURL, fileURLToPath} from "node:url";
 import {git} from "./harness.mjs";
 import {S, SESS, bridgeFor, commitLive, LIVE, ringFor} from "./keys.mjs";
 import {createRemoteDocStore, gitRunner} from "../../automation/factory-v2/ref-doc-store.mjs";
@@ -196,16 +197,16 @@ describe("5. the canonical merge path refuses V4.1 merges after handover (indepe
     expect(g(intent(c.core)).allowed).toBe(false);
   });
   it("the prepared executor.mjs patch blocks the real merge call before any write when V2 is authoritative", {timeout: T}, async () => {
-    const repo = path.resolve(import.meta.dirname, "../..");
+    const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
     const wt = fs.mkdtempSync(path.join(os.tmpdir(), "fv2-exec-"));
     fs.rmSync(wt, {recursive: true});
     git(repo, "worktree", "add", "-q", "--detach", wt, "HEAD");
     try {
       const ap = spawnSync("git", ["apply", path.join(repo, "docs/authority-requests/FV2-PROTECTED-EXECUTOR-AUTHORITY-FENCE.diff")], {cwd: wt, encoding: "utf8"});
       expect(ap.status, ap.stderr).toBe(0);
-      fs.symlinkSync(path.join(repo, "node_modules"), path.join(wt, "node_modules"));
+      fs.symlinkSync(path.join(repo, "node_modules"), path.join(wt, "node_modules"), "junction"); // junction: no privilege needed on Windows
       fs.cpSync(path.join(repo, "automation/factory-v2"), path.join(wt, "automation/factory-v2"), {recursive: true}); // the code under test, as in this working tree
-      const {executeMerge} = await import(path.join(wt, "docs/planning/autonomy/executor.mjs"));
+      const {executeMerge} = await import(pathToFileURL(path.join(wt, "docs/planning/autonomy/executor.mjs")).href);
       const H = "a".repeat(40), B = "b".repeat(40);
       let writes = 0;
       const run = authority => executeMerge({pr: 7, implementerSessions: ["s"], authority,

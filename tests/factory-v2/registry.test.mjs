@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {spawn} from "node:child_process";
-import {fileURLToPath} from "node:url";
+import {fileURLToPath, pathToFileURL} from "node:url";
 import {S, SESS, bridgeFor, commitLive, LIVE} from "./keys.mjs";
 import {git} from "./harness.mjs";
 import {createRemoteDocStore, gitRunner} from "../../automation/factory-v2/ref-doc-store.mjs";
@@ -57,8 +57,8 @@ describe("shared registry on one allowed branch (two environments)", () => {
   it("concurrent writers in separate processes lose no update (whole-doc CAS + per-section retry)", {timeout: T}, async () => {
     const w = world();
     const script = path.join(w.root, "writer.mjs");
-    fs.writeFileSync(script, `import {createRemoteDocStore, gitRunner} from ${JSON.stringify(path.resolve(HERE, "../../automation/factory-v2/ref-doc-store.mjs"))};
-import {createSharedRegistry} from ${JSON.stringify(path.resolve(HERE, "../../automation/factory-v2/shared-registry.mjs"))};
+    fs.writeFileSync(script, `import {createRemoteDocStore, gitRunner} from ${JSON.stringify(pathToFileURL(path.resolve(HERE, "../../automation/factory-v2/ref-doc-store.mjs")).href)};
+import {createSharedRegistry} from ${JSON.stringify(pathToFileURL(path.resolve(HERE, "../../automation/factory-v2/shared-registry.mjs")).href)};
 const [cwd, tag] = process.argv.slice(2);
 const reg = createSharedRegistry({docStore: createRemoteDocStore({runGit: gitRunner(cwd)}), ref: ${JSON.stringify(REF)}, maxRetries: 60, backoffMs: 15});
 for (let i = 0; i < 6; i++) if (!reg.cas("w/" + tag + "-" + i, null, {tag, i}).ok) process.exit(9);

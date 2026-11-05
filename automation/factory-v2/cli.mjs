@@ -25,7 +25,7 @@ import {Ownership} from "./ownership.mjs";
 import {runProbe, PROBE_DOMAIN} from "./probe-scenario.mjs";
 import {KEYRING_SCHEMA, generateRoleKey, signAction, canonDigest, loadCanonicalKeyring} from "./identity.mjs";
 import {verifyGates} from "./gate-verifier.mjs";
-import {liveGit, liveGateDeps, liveFreshness} from "./live-sources.mjs";
+import {liveGit, liveGateDeps, liveFreshness, githubClient, prefetchGateEvidence, openPrsLive, closedPrsLive} from "./live-sources.mjs";
 import {execFileSync} from "node:child_process";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -96,8 +96,7 @@ function intents() {
 }
 
 const REPO = "SalimBurakAytemiz/UNIVERSAL-AI-SOFTWARE-FACTORY-", BASE = "v7/integration", DOMAIN = "uasco-v7";
-const api = p => JSON.parse(execFileSync("curl", ["-sSf", "-H", "Accept: application/vnd.github+json", `https://api.github.com/repos/${REPO}/${p}`], {maxBuffer: 64 << 20}).toString("utf8"));
-const listPrs = state => { const out = []; for (let page = 1; page <= 10; page++) { const r = api(`pulls?state=${state}&per_page=100&page=${page}`); out.push(...r); if (r.length < 100) break; } return out; };
+// GitHub is read only through the code-backed adapter (scripts/ci/uasco-review/github.mjs via live-sources.mjs).
 async function bridge() {
   const sub = process.argv[3];
   const raw = createRemoteDocStore({runGit: gitRunner(ROOT)});
@@ -105,17 +104,18 @@ async function bridge() {
   const rb = arg("registry-branch");
   const docs = rb ? createSharedRegistry({docStore: raw, ref: `refs/heads/${rb}`}) : raw;
   // Identity = canonical keyring at the live canonical SHA; gate evidence and freshness = live GitHub + canonical git (never the caller).
-  const lg = liveGit({repoRoot: ROOT});
+  const lg = liveGit({repoRoot: ROOT}), ghc = githubClient(), live = liveFreshness({repoRoot: ROOT, gh: ghc});
+  let ghReader = null; // filled by prefetchGateEvidence right before prepare
   const b = () => new AuthorityBridge({docStore: docs, domain: DOMAIN, keyring: () => loadCanonicalKeyring({repoDir: ROOT, commitSha: lg.canonicalSha()}),
-    gateVerifier: (g, ctx) => verifyGates(g, ctx, liveGateDeps({repoRoot: ROOT})), live: liveFreshness({repoRoot: ROOT})});
+    gateVerifier: (g, ctx) => verifyGates(g, ctx, liveGateDeps({repoRoot: ROOT, gh: ghReader})), live});
   const actor = process.env.CLAUDE_SESSION_ID ?? arg("actor", "unknown"); // label for probe refs only; never an identity
   if (sub === "snapshot") {
     const g = a => execFileSync("git", a, {cwd: ROOT, maxBuffer: 64 << 20}).toString("utf8");
     g(["fetch", "-q", "origin", BASE]);
     const baseSha = g(["rev-parse", `origin/${BASE}`]).trim();
     const show = f => JSON.parse(g(["show", `${baseSha}:${f}`]));
-    const open = listPrs("open");
-    const merged = listPrs("closed").filter(p => p.merged_at && p.base?.ref === BASE);
+    const open = await openPrsLive(ghc);
+    const merged = (await closedPrsLive(ghc)).filter(p => p.merged_at && p.base?.ref === BASE);
     const snapshot = snapshotV41({baseRef: BASE, baseSha, autonomyState: show("docs/planning/autonomy/STATE.json"), taskIndex: show("docs/planning/autonomy/task-index.json"), openPrs: open, mergedPrs: merged});
     const cur = b().read().doc;
     const m = buildManifest({domain: DOMAIN, version: Number(arg("version", (cur.manifest?.version ?? 0) + 1)), snapshot, fromSession: arg("from", "V4.1"), toSession: arg("to", "UNASSIGNED")});
@@ -143,10 +143,10 @@ async function bridge() {
     const key = readJson(arg("key"));
     console.log(JSON.stringify(signAction({...key, domain: DOMAIN, action: "DRAIN_ACK", prev: canonDigest(cur.core), payload: br.drainCore(cur, {manifestDigest: cur.core.manifest?.digest, drain})}), null, 2));
   }
-  else if (sub === "prepare") console.log(JSON.stringify(b().prepare({manifest: readJson(arg("manifest")), gates: readJson(arg("gates")), signer: readJson(arg("key"))}).core, null, 2));
+  else if (sub === "prepare") { ghReader = await prefetchGateEvidence(ghc, readJson(arg("gates"))); console.log(JSON.stringify(b().prepare({manifest: readJson(arg("manifest")), gates: readJson(arg("gates")), signer: readJson(arg("key"))}).core, null, 2)); }
   else if (sub === "relay-drain") { const br = b(); console.log(JSON.stringify(br.drainAck({manifestDigest: br.read().core.manifest?.digest, drain: readJson(arg("drain")), envelope: readJson(arg("envelope"))}).signer, null, 2)); }
   else if (sub === "ack") console.log(JSON.stringify(b().drainAck({manifestDigest: readJson(arg("manifest")).digest, drain: readJson(arg("drain")), signer: readJson(arg("key"))}).core, null, 2));
-  else if (sub === "commit") console.log(JSON.stringify(b().commit({manifest: readJson(arg("manifest")), signer: readJson(arg("key"))}), null, 2)); // freshness read live by the bridge
+  else if (sub === "commit") { await live.refresh(); console.log(JSON.stringify(b().commit({manifest: readJson(arg("manifest")), signer: readJson(arg("key"))}), null, 2)); } // open PRs fetched just now through the adapter; base/STATE read from git by the bridge
   else if (sub === "rollback") console.log(JSON.stringify(b().rollback({reason: arg("reason", "manual"), signer: readJson(arg("key"))}).core, null, 2));
   else if (sub === "reset-invalid") console.log(JSON.stringify(b().resetInvalid({reason: arg("reason", "invalid record"), signer: readJson(arg("key"))}).core, null, 2));
   else { console.error("bridge snapshot|status|probe-store|keygen|prepare|sign-drain|relay-drain|ack|commit|rollback|reset-invalid"); process.exit(1); }

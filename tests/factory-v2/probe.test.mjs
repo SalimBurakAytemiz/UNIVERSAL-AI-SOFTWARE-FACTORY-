@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {spawn} from "node:child_process";
-import {fileURLToPath} from "node:url";
+import {fileURLToPath, pathToFileURL} from "node:url";
 import {git} from "./harness.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -22,11 +22,11 @@ describe("two-process rehearsal of the two-session security probe", () => {
     const runner = path.join(root, "run.mjs");
     fs.writeFileSync(runner, `
 import fs from "node:fs"; import {spawnSync} from "node:child_process";
-import {runProbe, PROBE_DOMAIN} from ${JSON.stringify(path.resolve(HERE, "../../automation/factory-v2/probe-scenario.mjs"))};
-import {createSharedRegistry} from ${JSON.stringify(path.resolve(HERE, "../../automation/factory-v2/shared-registry.mjs"))};
-import {createRemoteDocStore, gitRunner} from ${JSON.stringify(path.resolve(HERE, "../../automation/factory-v2/ref-doc-store.mjs"))};
-import {snapshotV41} from ${JSON.stringify(path.resolve(HERE, "../../automation/factory-v2/bridge.mjs"))};
-import {KEYRING_SCHEMA, parseKeyring} from ${JSON.stringify(path.resolve(HERE, "../../automation/factory-v2/identity.mjs"))};
+import {runProbe, PROBE_DOMAIN} from ${JSON.stringify(pathToFileURL(path.resolve(HERE, "../../automation/factory-v2/probe-scenario.mjs")).href)};
+import {createSharedRegistry} from ${JSON.stringify(pathToFileURL(path.resolve(HERE, "../../automation/factory-v2/shared-registry.mjs")).href)};
+import {createRemoteDocStore, gitRunner} from ${JSON.stringify(pathToFileURL(path.resolve(HERE, "../../automation/factory-v2/ref-doc-store.mjs")).href)};
+import {snapshotV41} from ${JSON.stringify(pathToFileURL(path.resolve(HERE, "../../automation/factory-v2/bridge.mjs")).href)};
+import {KEYRING_SCHEMA, parseKeyring} from ${JSON.stringify(pathToFileURL(path.resolve(HERE, "../../automation/factory-v2/identity.mjs")).href)};
 const [role, session, repo, out, ringFile, base] = process.argv.slice(2);
 const ev = [];
 const reg = createSharedRegistry({docStore: createRemoteDocStore({runGit: gitRunner(repo)}), ref: "refs/heads/uasco/registry-probe2"});
