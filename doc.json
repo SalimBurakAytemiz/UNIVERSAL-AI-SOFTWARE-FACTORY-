@@ -1,6 +1,6 @@
 {
   "schema": "uasco.factory-v2.shared-registry/1",
-  "phase": "section:probe-keys/session_015dYwb2b3yVQ6iay68HXCD8",
+  "phase": "section:probe-keys/session_015dYwb4zVwFwg69iij2RdGq",
   "sections": {
     "probe-keys/session_015dYwb2b3yVQ6iay68HXCD8": {
       "session": "session_015dYwb2b3yVQ6iay68HXCD8",
@@ -8,10 +8,18 @@
       "role": "V41_OWNER",
       "keyId": "k_d8f334bebf0fd76b",
       "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAIF5H3cMcfORM9oVsS/u1xFZB5F+qoMJTxNV+v5kL3ns=\n-----END PUBLIC KEY-----\n"
+    },
+    "probe-keys/session_015dYwb4zVwFwg69iij2RdGq": {
+      "session": "session_015dYwb4zVwFwg69iij2RdGq",
+      "at": 1793869275947,
+      "role": "V2_CANDIDATE",
+      "keyId": "k_4c65579e51b3e8a4",
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAPHxzx6jXCWksYIMKnEoHz4IWxp1EC1iH0blX4weCUHI=\n-----END PUBLIC KEY-----\n"
     }
   },
   "revs": {
-    "probe-keys/session_015dYwb2b3yVQ6iay68HXCD8": 1
+    "probe-keys/session_015dYwb2b3yVQ6iay68HXCD8": 1,
+    "probe-keys/session_015dYwb4zVwFwg69iij2RdGq": 1
   },
-  "seq": 1
+  "seq": 2
 }
