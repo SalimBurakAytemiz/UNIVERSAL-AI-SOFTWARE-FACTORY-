@@ -1,3 +1,4 @@
+// //TR: Bu test (UASCO-T0007, Builder I) akış kartının AWAITING_APPROVAL koşusunu "Engelli" değil "Onay bekliyor" gösterdiğini ve sunucu sandbox'ı UNAVAILABLE bildirdiğinde "Ürünü başlat" düğmesinin görünür nedenle devre dışı kaldığını, olumlu kontrollerle doğrular.
 // UASCO-T0007 (Builder I): flow card + product card UX honesty.
 // (1) A RUN stage whose latest run is AWAITING_APPROVAL is shown as "Awaiting approval", not "Blocked"; real blocks stay "Blocked".
 // (2) "Start product" is disabled with a visible reason when the server reports the sandbox as UNAVAILABLE; enabled otherwise (positive control).
