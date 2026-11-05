@@ -242,8 +242,14 @@ describe("UASCO-T0067 test-surface protection: commented-out, inverted, snapshot
     expect(surface(BEFORE, AFTER).weakened).toEqual([]);
     expect(surface(BEFORE, AFTER).functionalAcceptance).toBe("UNVERIFIED_ORACLE");
     expect(assertionCount(stripComments(AFTER, P))).toBe(assertionCount(AFTER));
-    // known, documented limit: an apostrophe and a "//" on the SAME line can still be misread (stripping only adds detections, so it is flagged, never hidden)
-    expect(assertionCount(stripComments("const el = <p>don't</p>; const u = 'http://h'; expect(a).toBe(1);", P))).toBe(0);
+    // same line: a word-internal apostrophe (letter ' letter) never starts a JS string, so <p>don't</p> followed by 'http://h' on the same line is read correctly
+    expect(assertionCount(stripComments("const el = <p>don't</p>; const u = 'http://h'; expect(a).toBe(1);", P))).toBe(1);
+    expect(surface(REAL, "const el = <p>it's fine, don't worry</p>; const u = 'http://h'; expect(u).toBeTruthy();\n" + REAL).weakened).toEqual([]);
+    // the one valid JS form of letter-quote-letter is a string right after a keyword: it stays a string ("//" inside is not a comment)
+    expect(assertionCount(stripComments("switch (x) { case'a//b': expect(a).toBe(1); }", P))).toBe(1);
+    expect(assertionCount(stripComments("function f() { return'a//b' } expect(a).toBe(1);", P))).toBe(1);
+    // remaining documented limit: a trailing possessive apostrophe (dogs'</p>) still opens a string to the line end; stripping only adds detections, so that is a false positive, never a hidden weakening
+    expect(assertionCount(stripComments("const el = <p>the dogs' toys</p>; const u = 'http://h'; expect(a).toBe(1);", P))).toBe(0);
     // a backslash line continuation keeps a string open across the newline (valid JS)
     expect(assertionCount(stripComments("const s = 'a\\\n// not a comment'; expect(a).toBe(1);", P))).toBe(1);
   });
