@@ -28,7 +28,7 @@ Measured 2026-11-05 ~19:20Z from the GitHub Actions API. Raw data: `ci-runs-2026
 | # | Proposal | Effect | Risk / note |
 |---|---|---|---|
 | P1 | (Checked, NOT recommended as-is.) Moving the aggregate `validate (windows-latest)` job to ubuntu. | Would free 1 of 4 Windows slots per run. | The aggregate is not a pure merger. It runs `secret-sanity` and the **bootstrap trust-kernel self-test** on Windows, and writes CI evidence with `--leg ${{ runner.os }}` (= Windows). Moving it would change what the Windows evidence leg proves. It needs a redesign, not a runner swap. |
-| P2 | On `pull_request`, add `concurrency: {group: ci-${{ github.head_ref }}, cancel-in-progress: true}` to CI. | Stops superseded heads from occupying Windows runners. | Protected ci.yml. It cancels only runs of stale heads; required checks still run on the current head. |
+| P2 | ~~Add `cancel-in-progress` concurrency to CI~~ **ALREADY APPLIED** (ci.yml:11-13, `ci-<event>-<PR no>`, cancel-in-progress on pull_request). Measured 20:56Z: 0 of 32 active runs belong to a stale SHA. | — | Closed: not a Founder decision. |
 | P3 | Larger or self-hosted Windows runners. A `validate-selfhosted.yml` already exists. | Removes the queue. | Cost or ops decision. |
 
 ## Review workflow (OAuth 401): safe fix proposal
@@ -47,3 +47,10 @@ Recommended, in order (all by the Founder; nobody pastes or transmits a token):
 3. **Do not** remove it from the ruleset or rename checks to work around it. If it is ever made required, it must be fixed first (step 1).
 
 The coordinator will not cancel runs, disable workflows, or edit rulesets without an explicit Founder instruction.
+
+## Update 2026-11-05 ~21:00Z (THROUGHPUT CONTROL measurement)
+
+- The review workflow does not just fail: its `collect` job holds an ubuntu runner idle for up to 100 min waiting for CI (`CI_WAIT_MINUTES: "100"`). Over 24h: 18 runs that reached collect used 413 runner-minutes (avg 22.9 min); 47 more are queued waiting for a runner. Since 12:00Z the review workflow has produced no verdicts that count (the gate uses CLAUDE_REVIEWER sessions).
+- The workflow is NOT among the required checks (required: `validate (ubuntu-latest)`, `validate (windows-latest)`).
+- **The single concrete action that needs a Founder decision:** disable the GitHub Actions → "UASCO Independent Review" workflow (Disable workflow; reversible; rulesets and required checks unchanged). Rotating the secret alone does not remove the idle runner wait in `collect`.
+- Windows failures (last 24h, 40 failed Windows jobs): 21 are aggregate noise (`Cannot find module scripts/ci/ci-evidence.mjs`: when a shard fails, checkout is skipped but the `if: always()` ci-evidence step still runs). Root causes: relfx-c3 heartbeat/slow-git (3), test-file registration/sharding (3), technology-discovery and relfx-1 5000 ms timeout (3), pkg-bs1 runas (2), EPERM temp-dir cleanup (1), EACCES (1), others (2). Assigned as independent tasks: D: WIN-1 (relfx-c3), WIN-3 (EPERM); A: WIN-2 (timeouts), WIN-4 (bs1, diagnosis only).
