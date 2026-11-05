@@ -261,6 +261,14 @@ describe("FD 2026-11-05 design system (black-red-white tokens, contrast, layout,
       expect(css).toMatch(/@media \(forced-colors:active\)\{[^@]*\.btn:disabled,\.btn-primary:disabled,\.btn-danger:disabled\{border:2px dashed GrayText;color:GrayText/);
       expect(css).not.toMatch(/\.btn-stop:disabled/);
     });
+    it("registry cards (.integ-row) drop the default h4/p margins and state-head rows space the pill from its label (token-only)", () => {
+      expect(css).toMatch(/\n\.integ-row>h4,\.integ-row>p\{margin:0\}/);
+      expect(css).toMatch(/\n\.integ-row\{gap:var\(--space-2\);padding:var\(--space-3\) var\(--space-4\)\}/);
+      const head = /\n\.academy-state-head,\.install-state-head\{([^}]*)\}/.exec(css)?.[1] ?? "";
+      for (const d of ["display:flex", "flex-wrap:wrap", "align-items:center", "gap:var(--space-2)"]) expect(head, d).toContain(d);
+      for (const sel of [".integ-row", ".integ-row>h4", ".integ-name", ".integ-row>p.mono"]) { const m = new RegExp(`\\n${sel.replace(/[.>]/g, c => "\\" + c)}\\{([^}]*)\\}`).exec(css); expect(m, sel).not.toBeNull(); expect(m![1], sel).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(/); }
+      expect(refRatio(resolve("--muted"), resolve("--surface"))).toBeGreaterThanOrEqual(4.5);
+    });
     it("a facts/kv list is separated from the button row that follows it", () => {
       expect(css).toMatch(/\n\.kv\+\.btn-row,\.facts\+\.btn-row,dl\+\.btn-row\{margin-top:var\(--space-4\)\}/);
     });
