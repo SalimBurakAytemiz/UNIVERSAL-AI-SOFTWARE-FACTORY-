@@ -298,7 +298,7 @@ describe("Queue — only already-allow-listed read-only GETs are used (protected
       expect(src).not.toMatch(/transition|performTransition|work-actions/);
     }
     const imports = moduleSpecifiers({source: read("views", "queue.js")}).sort();
-    expect(imports).toEqual(["../components.js", "../forms.js", "../model.js", "../queue-core.js", "../work-core.js"]);
+    expect(imports).toEqual(["../components.js", "../error-code.js", "../forms.js", "../model.js", "../queue-core.js", "../work-core.js"]);
     expect(moduleSpecifiers({source: read("queue-core.js")}).sort()).toEqual(["./attention-core.js", "./executive-core.js", "./work-core.js"]);
     for (const m of ["queueAttention", "queueMissions", "queueWorkRuns"]) expect(read("views", "queue.js")).toContain(`api.${m}(`);
     // api.js: tek apiPost çağrısı korunur (yeni POST yolu eklenmez); kuyruk erişimcileri yalnız sabit GET yollarını okur.

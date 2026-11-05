@@ -1,4 +1,5 @@
 // //TR: Bu görünüm İnsan Onayı Bekleyen İş Kuyruğu'dur (FA-V2-PRODUCT, UI-211): YALNIZ üç salt-okunur ve zaten izinli GET'ten okunur — GET /v1/attention (Founder dikkati: karar bekleyen koşu, engelli mission ve görev), GET /v1/missions (onay bekleyen mission durumları) ve GET /v1/work-runs (kapı bekleyen koşular). Kuyruk, öncelik düzeyine (türden türetilen belgelenmiş sıra) ve GERÇEK zaman damgasından hesaplanan bekleme süresine göre gruplanır/sıralanır; SLA hedefi kontrol düzleminde kayıtlı olmadığı için hiçbir SLA/son tarih değeri uydurulmaz, bekleme bantları yalnız geçen sürenin görüntü gruplamasıdır. HİÇBİR sayı, öğe veya onay UYDURULMAZ: bozuk yanıt tümden ERROR olarak gösterilir (kısmi/tahmini değer yok), okunamayan kaynak varsa toplam/öncelik sayıları gösterilmez ve kuyruk "boş" diye sunulmaz. Bu görünüm SALT-OKUNURDUR: onay/ret/yeniden-deneme burada yapılmaz; her öğe için MEVCUT akışlara (Gelen Kutusu, Work) gezinme sunulur. Toplu (bulk) eylem YOKTUR: her geçiş kendi gerekçesini ve yüksek riskli hedefte kendi onayını ister, bu yüzden her öğe mevcut akışta tek tek karara bağlanır. Ürün doğrulaması bu görünümde ASLA iddia edilmez ve ilgili sabit değer hiçbir yerde üretilmez. API verisi HTML olarak yorumlanmaz; yalnız h()/textContent kullanılır.
+import {safeErrorCode} from "../error-code.js";
 import {h,panel,statePill,statusPill,badge,kpiTile,statusLabel} from "../components.js";
 import {MISSING} from "../model.js";
 import {formatDateTime} from "../work-core.js";
@@ -38,7 +39,7 @@ function stateBlock(ctx,res,source){
   return h(doc,"div",{class:`queue-state state-${state.toLowerCase()}`,role:"status",dataset:{queueState:state,source}},
     h(doc,"p",{class:"queue-state-head"},statePill(ctx,failKind(state)),h(doc,"strong",{text:ctx.t(`queue.state.${state}`)})),
     h(doc,"p",{class:"note",text:ctx.t(`queue.hint.${state}`,{source:`GET ${QUEUE_SOURCE_PATHS[source]}`})}),
-    res.message?h(doc,"p",{class:"note mono",text:res.message}):null);
+    safeErrorCode(res.message)?h(doc,"p",{class:"note mono",dataset:{errorCode:safeErrorCode(res.message)},text:safeErrorCode(res.message)}):null);
 }
 
 /** Kaynak şeridi: her gerçek okuma kaynağının ayrık durum rozeti (renk tek başına anlam taşımaz). */
