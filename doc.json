@@ -11,8 +11,8 @@
       "epoch": 1,
       "token": "session_015dYwb57qx21P4wudU5xauD:1:2a5bae8c-fdda-40ec-9cbc-23217de56578",
       "acquiredAt": 1793899955316,
-      "heartbeatAt": 1793900340414,
-      "expiresAt": 1793921940414
+      "heartbeatAt": 1793900392889,
+      "expiresAt": 1793921992889
     },
     "ledger/run1/c/000001": {
       "events": [
@@ -658,9 +658,9 @@
     }
   },
   "revs": {
-    "lease/shadow-probe-control/supervisor--SHADOW-probe-control": 12,
+    "lease/shadow-probe-control/supervisor--SHADOW-probe-control": 13,
     "ledger/run1/c/000001": 17,
     "lease/shadow-probe-control/task--FV2-PROBE-CTL-1": 2
   },
-  "seq": 31
+  "seq": 32
 }
