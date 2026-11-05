@@ -53,14 +53,15 @@ export function registryLog({registry, ns, signer, ring, domain, chunkSize = 100
   if (!/^[A-Za-z0-9._-]{1,80}$/.test(ns ?? "")) throw new LedgerError("LEDGER_NS_INVALID", ns);
   if (!ring || !domain) throw new LedgerError("LEDGER_KEYRING_REQUIRED");
   const key = n => `ledger/${ns}/c/${String(n).padStart(6, "0")}`;
-  const chunks = () => registry.sections().map(k => CHUNK.exec(k)).filter(m => m && m[1] === ns).map(m => Number(m[2])).sort((a, b) => a - b);
+  const snap = () => (registry.snapshot ? registry.snapshot() : Object.fromEntries(registry.sections().map(k => [k, registry.read(k)])));
+  const chunksOf = all => Object.keys(all).map(k => CHUNK.exec(k)).filter(m => m && m[1] === ns).map(m => Number(m[2])).sort((a, b) => a - b);
   const digestOf = e => canonDigest(e);
   /** Verified events in order; throws on any gap, reorder, foreign or tampered event (fail closed). */
-  const loadVerified = () => {
+  const loadVerified = (all = snap()) => {
     const out = []; let prev = "genesis", expectNo = 1;
-    for (const n of chunks()) {
+    for (const n of chunksOf(all)) {
       if (n !== expectNo++) throw new LedgerError("LEDGER_CHUNK_GAP", String(n));
-      for (const e of registry.read(key(n)).doc?.events ?? []) {
+      for (const e of all[key(n)]?.doc?.events ?? []) {
         const {sig, ...body} = e;
         if (body.seq !== out.length + 1) throw new LedgerError("LEDGER_SEQ_GAP", String(body.seq));
         if (body.prev !== prev) throw new LedgerError("LEDGER_CHAIN_BROKEN", String(body.seq));
@@ -75,14 +76,14 @@ export function registryLog({registry, ns, signer, ring, domain, chunkSize = 100
     load: () => loadVerified().map(({sig, prev, ...e}) => ({...e, signer: sig.sessionId ?? null})),
     tryAppend(expectedSeq, entry) {
       if (!signer) throw new LedgerError("LEDGER_SIGNER_REQUIRED");
-      const all = loadVerified();
+      const view = snap(), all = loadVerified(view);
       if ((all.at(-1)?.seq ?? 0) !== expectedSeq) return {ok: false};
       const prev = all.length ? digestOf(all.at(-1)) : "genesis";
       const body = JSON.parse(JSON.stringify({...entry, prev})); // exactly what readers will see (no undefined fields)
       const e = {...body, sig: signAction({...signer, domain, action: "LEDGER", prev, payload: body, ttlMs: 365 * 24 * 3600_000})};
       try { verifyAction(e.sig, {ring, action: "LEDGER", domain, prev, payload: body, checkTime: false}); } catch (x) { throw new LedgerError("LEDGER_SIGNER_NOT_AUTHORIZED", x.code ?? x.message); } // never write what readers would refuse
-      const ns_ = chunks(), last = ns_.at(-1) ?? 0;
-      const cur = last ? registry.read(key(last)) : {sha: null, doc: null};
+      const last = chunksOf(view).at(-1) ?? 0;
+      const cur = last ? view[key(last)] : {sha: null, doc: null};
       const full = !last || (cur.doc?.events?.length ?? 0) >= chunkSize;
       const target = full ? key(last + 1) : key(last);
       const r = full ? registry.cas(target, null, {events: [e]}) : registry.cas(target, cur.sha, {events: [...cur.doc.events, e]});

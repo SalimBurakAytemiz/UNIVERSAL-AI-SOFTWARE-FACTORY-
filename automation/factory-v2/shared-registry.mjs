@@ -41,6 +41,8 @@ export function createSharedRegistry({docStore, ref, maxRetries = 8, backoffMs =
     cas: (key, expectedVersion, doc) => { const r = update(key, expectedVersion, doc); return r.ok ? {ok: true, sha: r.version} : {ok: false, sha: null, current: {sha: r.version, doc: r.current}}; },
     remove: (key, expectedVersion) => update(key, expectedVersion, null).ok,
     sections: () => Object.keys(readAll().doc.sections).sort(),
+    /** One consistent read of every section with its version (one fetch instead of one per section). */
+    snapshot: () => { const d = readAll().doc; return Object.fromEntries(Object.entries(d.sections).map(([k, v]) => [k, {sha: sectionVersion(v, d.revs?.[k] ?? 0), doc: v}])); },
     /**
      * Server-side stale-write probe: a whole-document write (current content + one marker section, all sidecars kept) whose parent is
      * `oldSha`. A protected or simply moved branch must refuse it. Even if it were accepted it could only add the marker.
