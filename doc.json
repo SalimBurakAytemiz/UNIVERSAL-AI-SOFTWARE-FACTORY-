@@ -1,6 +1,6 @@
 {
   "schema": "uasco.factory-v2.shared-registry/1",
-  "phase": "section:probe/A-ready",
+  "phase": "section:refs/uasco/authority/probe-uasco",
   "sections": {
     "probe-keys/session_015dYwb2b3yVQ6iay68HXCD8": {
       "session": "session_015dYwb2b3yVQ6iay68HXCD8",
@@ -19,12 +19,56 @@
     "probe/A-ready": {
       "session": "session_015dYwb2b3yVQ6iay68HXCD8",
       "at": 1793869315933
+    },
+    "refs/uasco/authority/probe-uasco": {
+      "schema": "uasco.factory-v2.authority/1",
+      "domain": "probe-uasco",
+      "authority": "V2",
+      "phase": "V2_AUTHORITATIVE",
+      "epoch": 7,
+      "holder": "session_015dYwb4zVwFwg69iij2RdGq",
+      "candidate": "session_015dYwb4zVwFwg69iij2RdGq",
+      "outgoing": "session_015dYwb2b3yVQ6iay68HXCD8",
+      "manifest": null,
+      "gatesDigest": null,
+      "drainDigest": null,
+      "chain": [
+        {
+          "core": {
+            "domain": "probe-uasco",
+            "authority": "V2",
+            "phase": "V2_AUTHORITATIVE",
+            "epoch": 7,
+            "holder": "session_015dYwb4zVwFwg69iij2RdGq",
+            "candidate": "session_015dYwb4zVwFwg69iij2RdGq",
+            "outgoing": "session_015dYwb2b3yVQ6iay68HXCD8",
+            "manifest": null,
+            "gatesDigest": null,
+            "drainDigest": null
+          },
+          "envelope": {
+            "schema": "uasco.factory-v2.signed-action/1",
+            "domain": "probe-uasco",
+            "action": "COMMIT",
+            "role": "V2_CANDIDATE",
+            "sessionId": "session_015dYwb4zVwFwg69iij2RdGq",
+            "keyId": "k_35c24d6dcb7752aa",
+            "prev": "forged",
+            "payloadDigest": "bf42713444be423de3990fc58b940e07f30a9f130ed3d33fb1f153ec0dd0a9fb",
+            "issuedAt": 1793869326796,
+            "expiresAt": 1793870226796,
+            "nonce": "211c20c1-588b-4122-aabb-eed3e1aa40d0",
+            "signature": "qbi6XB0VqxXumGMmOyBdjY0bb8jv+eXBVEJRSdC15z6ms9UgA2F55RNzm5yfSXnZaYI/WMYbdP+h3TvSBsp+Aw=="
+          }
+        }
+      ]
     }
   },
   "revs": {
     "probe-keys/session_015dYwb2b3yVQ6iay68HXCD8": 1,
     "probe-keys/session_015dYwb4zVwFwg69iij2RdGq": 1,
-    "probe/A-ready": 1
+    "probe/A-ready": 1,
+    "refs/uasco/authority/probe-uasco": 1
   },
-  "seq": 3
+  "seq": 4
 }
