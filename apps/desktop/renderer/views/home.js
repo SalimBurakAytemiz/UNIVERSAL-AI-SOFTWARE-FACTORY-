@@ -3,6 +3,7 @@ import {h,kpiTile,panel,emptyNote,stateNote,statusLabel,statePill,iconChip,miniB
 import {icon} from "../icons.js";
 import {formatCount,MISSING,formatTime,pillKindFor,missionPillKind,topEntries} from "../model.js";
 import {ROUTES,FACTORY_AREA_ORDER} from "../routes.js";
+import {buildProjectCockpit} from "../project-cockpit-core.js";
 
 const LOADING={loading:true,state:"UNAVAILABLE",value:null};
 const TONE={BLOCKED:"danger",FAILED:"danger",ATTENTION:"warn",WAITING:"warn",ACTIVE:"accent",DONE:"ok",STOPPED:"muted",IDLE:"muted",NEUTRAL:"muted"};
@@ -76,6 +77,26 @@ function orchestratorPanel(ctx,o){
     h(doc,"p",{class:"panel-meta"},chip(ctx,o),h(doc,"span",{text:ctx.t("tile.tooltip",{source:o.source??MISSING,asOf:o.asOf??MISSING})})),
     entries.length?h(doc,"ul",{class:"bars"},entries.map(([k,v])=>h(doc,"li",{},h(doc,"span",{class:"bar-label",text:statusLabel(ctx,k)}),h(doc,"progress",{max:String(max),value:String(v),"aria-label":`${statusLabel(ctx,k)}: ${v}`}),h(doc,"span",{class:"bar-num",text:String(v)})))):stateNote(ctx,o.state==="VERIFIED"?"EMPTY":o.state,o.state==="VERIFIED"?"empty.general":undefined));
 }
+/** //TR: V3-T1027: proje başına koşu durumu, engeller, bekleyen onaylar ve harcama. Her hücre kaynağının gerçek durumunu taşır; harcama uç noktası olmadığından her zaman dürüst "kullanılamıyor"dur. */
+function projectCockpitPanel(ctx,pc){
+  const doc=ctx.doc,na=s=>h(doc,"p",{class:`note note-${String(s).toLowerCase()}`,role:"status",text:ctx.t(`state.${s}`)});
+  const cell=(key,state,...kids)=>h(doc,"div",{class:"pc-cell",dataset:{pc:key,pcState:state}},h(doc,"p",{class:"pc-label",text:ctx.t(`home.pc.${key}`)}),...kids);
+  const runsCell=r=>r.state!=="VERIFIED"?cell("runs",r.state,na(r.state)):cell("runs","VERIFIED",
+    h(doc,"p",{class:"pc-value",text:formatCount(r.count)}),
+    h(doc,"p",{class:"pc-sub",text:r.count?topEntries(r.byStatus,4).map(e=>`${statusLabel(ctx,e.key)} ${e.value}`).join(" · "):ctx.t("home.pc.noRuns")}),
+    r.partial?h(doc,"p",{class:"pc-partial",dataset:{pcPartial:"1"},text:ctx.t("home.pc.partial",{shown:formatCount(r.shown),total:formatCount(r.total)})}):null);
+  const blockersCell=b=>b.state!=="VERIFIED"?cell("blockers",b.state,na(b.state)):cell("blockers","VERIFIED",
+    h(doc,"p",{class:"pc-value",text:formatCount(b.count)}),
+    b.count?h(doc,"ul",{class:"pc-list"},b.items.map(x=>h(doc,"li",{dataset:{pcRun:x.runId},text:`${statusLabel(ctx,x.status)} · ${x.reason??ctx.t("home.pc.noReason")}`}))):h(doc,"p",{class:"pc-sub",text:ctx.t("home.pc.none")}));
+  const approvalsCell=a=>a.state!=="VERIFIED"&&a.state!=="STALE"?cell("approvals",a.state,na(a.state)):cell("approvals",a.state,
+    h(doc,"p",{class:"pc-value",text:formatCount(a.count)}),
+    a.count?h(doc,"ul",{class:"pc-list"},a.items.map(x=>h(doc,"li",{dataset:{pcMission:x.missionId},text:`${x.title??x.missionId} · ${x.riskLevel??MISSING}`}))):h(doc,"p",{class:"pc-sub",text:ctx.t("home.pc.none")}));
+  // Harcama: hata değil, bilinen bir veri açığı; note-error sınıfı kullanılmaz ki gerçek hata ile karışmasın.
+  const spendCell=()=>cell("spend","UNAVAILABLE",h(doc,"p",{class:"pc-value",text:MISSING}),h(doc,"p",{class:"pc-na",dataset:{pcGap:"NO_SPEND_ENDPOINT"},text:ctx.t("home.pc.spendNA")}));
+  const body=pc.state==="EMPTY"?emptyNote(ctx,"home.pc.empty"):pc.state!=="VERIFIED"?na(pc.state):h(doc,"div",{class:"pc-rows"},pc.rows.map(r=>h(doc,"article",{class:"pc-row",dataset:{projectCockpit:r.projectId}},
+    h(doc,"h3",{class:"pc-name",text:r.name}),runsCell(r.runs),blockersCell(r.blockers),approvalsCell(r.approvals),spendCell())));
+  return panel(ctx,{titleKey:"home.pc.title",id:"home-projects"},h(doc,"div",{dataset:{projectCockpitState:pc.state}},body));
+}
 export function skeleton(ctx){
   const doc=ctx.doc;return h(doc,"div",{class:"view view-home","aria-busy":"true"},homeHeader(ctx),tiles(ctx,{loading:true}));
 }
@@ -93,12 +114,13 @@ function homeHeader(ctx,{asOf=null,tenant=null}={}){
     h(doc,"p",{class:"hero-hint",text:ctx.t("home.drillHint")}));
 }
 export async function render(ctx){
-  const doc=ctx.doc,[res,prj]=await Promise.all([ctx.api.cockpit(),ctx.api.projects()]),c=res.data;
+  const doc=ctx.doc,[res,prj,runs]=await Promise.all([ctx.api.cockpit(),ctx.api.projects(),ctx.api.runSummaries()]),c=res.data;
   const tenant=prj.state==="VERIFIED"?(prj.items.find(p=>p.projectId===ctx.store.projectId)??prj.items[0])?.tenantId??null:null;
   // //TR: Başarılı HTTP ama bozuk gövde (tüm bloklar ERROR) de açıklayıcı hata notu gösterir; sessiz boş ekran olmaz.
   const state=res.state==="OK"&&c.projects?.state==="ERROR"&&c.missions?.state==="ERROR"?"ERROR":res.state;
   const note=state==="OK"?null:h(doc,"p",{class:`note note-${state.toLowerCase()}`,role:"status",text:ctx.t(state==="UNAVAILABLE"?"cockpit.unavailable":"cockpit.failed")});
   return h(doc,"div",{class:"view view-home"},homeHeader(ctx,{asOf:c.generatedAt,tenant}),note,tiles(ctx,c),
+    projectCockpitPanel(ctx,buildProjectCockpit({projects:prj,approvals:c.approvals,runs})),
     panel(ctx,{titleKey:"home.map",id:"home-map",className:"panel-map"},areaCards(ctx,c)),
     h(doc,"div",{class:"two-col"},orchestratorPanel(ctx,c.orchestrator),
       panel(ctx,{titleKey:"home.workforceNote.title",id:"home-wf"},emptyNote(ctx,"home.workforceNote.body"))));
