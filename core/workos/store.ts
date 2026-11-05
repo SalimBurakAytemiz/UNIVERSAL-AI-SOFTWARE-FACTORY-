@@ -25,7 +25,7 @@ import {derivePreDevReadModel} from "./predev/read-model.js";
 import {PREDEV_OPEN_MISSION_STATUSES, emptyPreDevState, isPreDevJournalType} from "./predev/types.js";
 import type {ArtifactContent, ArtifactKind, ArtifactState, PreDevArtifact, PreDevJournalType, PreDevPhase, PreDevSequence, PreDevState} from "./predev/types.js";
 import type {PreDevReadModel} from "./predev/read-model.js";
-import {ACTIVE_WORKER_STATUSES, LEASED_RUN_STATUSES, UNLEASED_RUN_STATUSES, assertRunTransition, isOpenRun, isRunStatus, isRunStep} from "./run-state.js";
+import {ACTIVE_WORKER_STATUSES, LEASED_RUN_STATUSES, UNLEASED_RUN_STATUSES, assertRunTransition, isOpenRun, isRunStatus, isRunStep, resumeGate, resumeMissionStatus} from "./run-state.js";
 import {completionEvidence, deliveryPrepareCheck, sourceDeliveryAcceptanceCheck, validDeliveryArtifactRecord} from "./outcomes.js";
 import {RISK_REFUSAL, riskAdmitted} from "./risk-admission.js";
 
@@ -592,6 +592,21 @@ export class WorkOsStore {
         r.sourceDelivery = {...chk.record, acceptedAt: e.at};
         break;
       }
+      case "RUN_RESUMED": {
+        // //TR: UASCO-T0049: devam kaydı replay anında aynı kapıyla yeniden doğrulanır (açık istek + BLOCKED_RESUMABLE + resumeAfter girdi zamanında dolmuş), mission engel öncesi duruma,
+        // aynı mission'da başka açık run yok, devam checkpoint'i birebir türetilene eşit; aksi hâlde tamper.
+        const r = this.runFor(st, p, e.seq);
+        const gate = resumeGate(r, {explicit: true, requestedBy: p.requestedBy}, Date.parse(e.at));
+        if (p.from !== "BLOCKED" || p.to !== "QUEUED" || !gate.ok) throw tampered(`RUN_RESUME_ILLEGAL:${e.seq}`);
+        const m = st.missions[r.missionId], mv = p.mission, want = resumeMissionStatus(r.step, r.remediationCycle);
+        if (!m || m.status !== "BLOCKED" || !isObj(mv) || mv.missionId !== r.missionId || mv.from !== "BLOCKED" || mv.to !== want) throw tampered(`RUN_RESUME_MISSION:${e.seq}`);
+        if (Object.values(st.runs).some(x => x.runId !== r.runId && x.missionId === r.missionId && isOpenRun(x.status))) throw tampered(`RUN_RESUME_OPEN_RUN:${e.seq}`);
+        const c = p.checkpoint as RunCheckpoint, expect = this.resumeCheckpoint(r, gate.checkpoint.reason, String(p.requestedBy), e.at);
+        if (JSON.stringify(c) !== JSON.stringify(expect)) throw tampered(`RUN_RESUME_CHECKPOINT:${e.seq}`);
+        m.status = want;
+        r.checkpoints.push(expect); r.status = "QUEUED"; r.reason = `RESUMED: ${String(p.requestedBy)}`; r.leaseId = null; r.leaseExpiresAt = null; r.updatedAt = e.at;
+        break;
+      }
       case "RUN_CHECKPOINT": {
         const r = this.runFor(st, p, e.seq);
         const c = p.checkpoint as RunCheckpoint;
@@ -944,6 +959,33 @@ export class WorkOsStore {
       if (to === "SUCCEEDED") throw new WorkOsError("WORKOS_CONFLICT", "COMPLETION_REQUIRES_EVIDENCE_GUARD");
       const mv = this.missionMove(r.missionId, opts.mission);
       this.append("RUN_TRANSITION", actor, {runId, leaseId, from: r.status, to, reason: String(reason).slice(0, 1000), ...(opts.patch ? {patch: opts.patch} : {}), ...(mv ? {mission: mv} : {})});
+      return clone(this.state.runs[runId]);
+    });
+  }
+  // //TR: UASCO-T0049: devam checkpoint'i (son checkpoint olur; böylece bekleyen-engel koruması devam eden run'ı yeniden engellemez); yazma ve replay aynı türetmeyi kullanır.
+  private resumeCheckpoint(r: WorkRun, resumedFrom: string, requestedBy: string, at: string): RunCheckpoint {
+    return {step: r.step, cycle: r.remediationCycle, at, data: {outcome: "RESUMED", resumedFrom, attempt: r.attempt, requestedBy}};
+  }
+  /**
+   * UASCO-T0049: explicit, gated resume of a BLOCKED_RESUMABLE run (provider quota). The only path out of BLOCKED: requires an explicit request
+   * ({explicit: true, requestedBy}), a recorded resumable block whose resumeAfter is due, the mission still BLOCKED and no other open run on it.
+   * The same run continues: BLOCKED -> QUEUED at the same step, retryCount and checkpoints kept, the mission returns to the step's status.
+   */
+  resumeBlockedRun(scope: Scope, runId: string, request: unknown, actor: string): WorkRun {
+    return this.write(() => {
+      const r = this.state.runs[runId];
+      if (!r || r.tenantId !== scope.tenantId) throw new WorkOsError("WORKOS_NOT_FOUND", "run");
+      const at = this.nowIso();
+      const gate = resumeGate(r, request, Date.parse(at));
+      if (!gate.ok) throw new WorkOsError("WORKOS_CONFLICT", gate.reason);
+      const m = this.state.missions[r.missionId];
+      if (!m || m.status !== "BLOCKED") throw new WorkOsError("WORKOS_CONFLICT", "MISSION_NOT_BLOCKED");
+      if (!riskAdmitted(m.riskLevel)) throw new WorkOsError("WORKOS_CONFLICT", RISK_REFUSAL);
+      if (Object.values(this.state.runs).some(x => x.runId !== r.runId && x.missionId === r.missionId && isOpenRun(x.status))) throw new WorkOsError("WORKOS_CONFLICT", "RUN_ALREADY_ACTIVE");
+      const requestedBy = String((request as {requestedBy: string}).requestedBy).trim().slice(0, 200);
+      const to = resumeMissionStatus(r.step, r.remediationCycle);
+      this.append("RUN_RESUMED", actor, {runId, from: "BLOCKED", to: "QUEUED", requestedBy, mission: {missionId: r.missionId, from: "BLOCKED", to, reason: `run ${runId} resumed by ${requestedBy}`},
+        checkpoint: this.resumeCheckpoint(r, gate.checkpoint.reason, requestedBy, at)}, at);
       return clone(this.state.runs[runId]);
     });
   }

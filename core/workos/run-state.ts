@@ -1,5 +1,6 @@
 // //TR: Bu dosya worker run durumlarının (Master §06) açık allowlist geçiş tablosunu tanımlar; tabloda olmayan her geçiş fail-closed reddedilir ve journal replay'inde tamper sayılır.
 import type {RunCheckpoint, RunStatus, RunStep} from "./types.js";
+import type {MissionStatus} from "../mission/types.js";
 
 const transitions: Record<RunStatus, readonly RunStatus[]> = {
   CREATED: ["QUEUED", "BLOCKED", "CANCELLING"],
@@ -88,6 +89,17 @@ export function blockClass(run: RunView): "BLOCKED_RESUMABLE" | "BLOCKED_TERMINA
 export const autoResumeAllowed = (run: Pick<RunView, "step" | "checkpoints">): boolean => pendingResumableBlock(run) === null;
 export type ResumeRequest = {explicit: true; requestedBy: string};
 export type ResumeGateResult = {ok: true; checkpoint: ResumableBlockCheckpoint} | {ok: false; reason: "RESUME_REQUIRES_EXPLICIT_CALL" | "NOT_RESUMABLE" | "RESUME_NOT_YET_DUE"};
+// //TR: UASCO-T0049: devam ettirilen run'ın mission'ı, engellendiği adımın çalıştığı mission durumuna geri alınır (adım -> mission durumu eşlemesi runner'ın MISSION_AFTER/startMission kurallarıyla aynıdır).
+export function resumeMissionStatus(step: RunStep, remediationCycle: number): MissionStatus {
+  switch (step) {
+    case "WORKSPACE": return "PLANNED";
+    case "IMPLEMENT": return remediationCycle === 0 ? "EXECUTING" : "REMEDIATING";
+    case "VERIFY": case "SECURITY": return "VERIFYING";
+    case "REVIEW": return "REVIEWING";
+    case "REGRESSION": return "REGRESSION";
+    case "REPORT": return "REPORTING";
+  }
+}
 /** Açık resume kapısı (P2 sürdürme bunu kullanacak; bu paket sürdürmez): yalnız açık istek + BLOCKED_RESUMABLE + resumeAfter geçmiş. */
 export function resumeGate(run: RunView, request: unknown, nowMs: number): ResumeGateResult {
   const r = request as Partial<ResumeRequest> | null | undefined;

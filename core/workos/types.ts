@@ -44,6 +44,8 @@ export interface WorkTask {
 }
 export type JournalType = "PROJECT_CREATED" | "MISSION_CREATED" | "TASK_CREATED" | "TASK_TRANSITIONED" | "MISSION_TRANSITIONED"
   | "RUN_CREATED" | "RUN_LEASE" | "RUN_TRANSITION" | "RUN_CHECKPOINT" | "RUN_EVIDENCE"
+  // //TR: UASCO-T0049: BLOCKED_RESUMABLE bir run'ın açık, kapılı devamı (BLOCKED -> QUEUED, aynı adım; mission engel öncesi duruma); replay'de yeniden doğrulanır.
+  | "RUN_RESUMED"
   | "PROJECT_REPOSITORY_SET" | "PROJECT_EXPORT_RECORDED"
   // //TR: M1a c2 (D-M1A-ACCEPTANCE-CONDITIONS-2026-10-15): gerçek koşu çıktısının deterministik teslim artefaktı ve ona bağlı tek kullanımlık NOT_VERIFIED kaynak teslimi kabulü (COMPLETE değildir).
   | "DELIVERY_ARTIFACT_PREPARED" | "SOURCE_DELIVERY_ACCEPTED"
