@@ -386,6 +386,13 @@
       "task": "none (FD 2026-11-05 design system; Founder-tier)",
       "head": "549465879bf2186956b29cfd241adc08127b6a23",
       "note": "stacked on a11y-2 32eb0aba; CSS-only Control Tower SVG palette → FD tokens + forced-colors; test in listed visual-parity file"
+    },
+    {
+      "owner": "A",
+      "branch": "claude/builder-a-cloud-t0010",
+      "task": "WIN-2a/WIN-2b (Windows CI test robustness)",
+      "head": "c4d2d6c6ce1dc37daeda286990be5da084b1bfe9",
+      "note": "tests only: b87bfd70 relfx-1 fixture fixes (exitOnFile interval, ENGINE_START_MS 90s), 79b5117a SC14_TIMING diagnostic, c4d2d6c6 SC-14 timeout 30s (separable, pending Windows measurement)"
     }
   ]
 }

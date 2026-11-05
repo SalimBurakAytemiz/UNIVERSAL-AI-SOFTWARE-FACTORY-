@@ -6,6 +6,8 @@ Data source: the builders' reports (I, E, F) plus the coordinator's gate checks.
 1. **"UASCO Independent Review" workflow:** disable it (not required; the `collect` job held runners idle for 413 min in 24h). See CI-BOTTLENECK-AND-REVIEW-401.md.
 2. **TASK_LINE_RE suffix bug** (`docs/planning/autonomy/autonomy.mjs`): `(?:\.[a-z0-9]+)?` accepts only a single lowercase suffix; task-index.json has 63 IDs with uppercase or double suffixes (`.A`, `.a.A`), so none of them can be declared. Proposal: `(?:\.[A-Za-z0-9]+)*` (+ the title-id parse ~:229), or lowercase the suffixes in build-task-index.mjs. If fixed, #386 (T0004.A) and #390 (T0016.A) become eligible for autonomous merge.
 
+3. **WIN-4 (protected `scripts/bootstrap-autonomy-selftest.mjs`):** stopTickCases waits a fixed `setTimeout(1000)` before asserting the old tick pid is dead → races with Windows process-tree teardown (pkg-bs1 shard b, 2 failures). Proposal (Builder A): a bounded poll ≤15 s + print the pid's image/start time. The protected owner must apply it.
+
 ## Founder-tier PRs (dependency order)
 - **Builder I renderer UX** (`UASCO-TASK: none`, Founder product directive): #370 (T0007 SPLIT) → #371 (stacked on #370) → #377 → #382 → #397 (shares error-code.js with #382, so after #382). HELD after these: 371-safe cc3db0c, 377-safe f8ff0ae, 382-safe c2297f4 → 374-safe 7dbc56f → approval-gate 9d21537 → cloud-sink-guard 1f195e7. #375 has no deps.
 - **Builder E:** #381 (T0011.B; deps T0035/T0014/T0044 MISSING, T0028 UNVERIFIABLE, T0029 BLOCKED) → #372 (T0011.A, needs T0011.B REVIEWED). #374 (T0020.A ← T0020.B ← T0016.A + T0016.D).
