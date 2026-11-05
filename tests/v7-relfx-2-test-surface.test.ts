@@ -234,14 +234,16 @@ describe("UASCO-T0067 test-surface protection: commented-out, inverted, snapshot
     // Pinned by the growth RATIO (size ×3.33: linear ≈3–4, quadratic ≈11), not by a tight absolute time; the absolute bounds are generous (linear: ~0.1 s / ~0.3 s on Linux).
     const unit = 'it("case", () => { if (ok(x)) { expect(f(a, "b")).toBe(`c ${d}`); } /* c */ const r = /x[/]y/; // note\n});\n';
     const sized = (n: number) => unit.repeat(Math.ceil(n / unit.length));
-    const best = (src: string) => { let m = Infinity; for (let k = 0; k < 2; k++) { const t0 = performance.now(); stripComments(src, P); m = Math.min(m, performance.now() - t0); } return m; };
+    // Best of 5, small and large interleaved so a transient CPU-load spike hits both sizes alike (best-of-2 flaked once in 17 runs at <6; a loaded replica reached 5.58).
+    const time = (src: string) => { const t0 = performance.now(); stripComments(src, P); return performance.now() - t0; };
     const small = sized(300_000), large = sized(1_000_000);
     stripComments(sized(30_000), P);   // JIT warm-up
-    const tS = best(small);
+    let tS = time(small);
     expect(tS, `${tS.toFixed(0)} ms for ${small.length} chars`).toBeLessThan(1000);   // checked first: a quadratic build stops here instead of spending ~40 s on 1 MB
-    const tL = best(large);
+    let tL = Infinity;
+    for (let k = 0; k < 5; k++) { tL = Math.min(tL, time(large)); if (k < 4) tS = Math.min(tS, time(small)); }
     expect(tL, `${tL.toFixed(0)} ms for ${large.length} chars`).toBeLessThan(3000);
-    expect(tL / Math.max(tS, 1), `growth ${tS.toFixed(0)} ms → ${tL.toFixed(0)} ms`).toBeLessThan(6);
+    expect(tL / Math.max(tS, 1), `growth ${tS.toFixed(0)} ms → ${tL.toFixed(0)} ms`).toBeLessThan(8);   // linear ≈3–4 (5.58 under load), quadratic ≈10–11
     const out = stripComments(small, P);
     expect(assertionCount(out)).toBe(assertionCount(small));
     expect(stripComments(large, P)).toBe(stripComments(unit, P).repeat(large.length / unit.length));   // joined parts == per-unit result (no part lost or reordered)
@@ -251,6 +253,12 @@ describe("UASCO-T0067 test-surface protection: commented-out, inverted, snapshot
     expect(surface(BEFORE, AFTER).weakened).toEqual([]);
     expect(surface(BEFORE, AFTER).functionalAcceptance).toBe("UNVERIFIED_ORACLE");
     expect(assertionCount(stripComments(AFTER, P))).toBe(assertionCount(AFTER));
+    // a JSX quote that does open a string (after ">", not word-internal) still ends at the line end: the later 'http://…' line keeps its assertion
+    const AFTER_Q = "const el = <p>'quoted</p>;\n" + BEFORE;
+    expect(surface(BEFORE, AFTER_Q).weakened).toEqual([]);
+    expect(assertionCount(stripComments(AFTER_Q, P))).toBe(assertionCount(AFTER_Q));
+    // keyword guard also covers `export default'…'`: the string is a string, "//" inside is not a comment
+    expect(assertionCount(stripComments("export default'http://x'; expect(a).toBe(1);", P))).toBe(1);
     // same line: a word-internal apostrophe (letter ' letter) never starts a JS string, so <p>don't</p> followed by 'http://h' on the same line is read correctly
     expect(assertionCount(stripComments("const el = <p>don't</p>; const u = 'http://h'; expect(a).toBe(1);", P))).toBe(1);
     expect(surface(REAL, "const el = <p>it's fine, don't worry</p>; const u = 'http://h'; expect(u).toBeTruthy();\n" + REAL).weakened).toEqual([]);

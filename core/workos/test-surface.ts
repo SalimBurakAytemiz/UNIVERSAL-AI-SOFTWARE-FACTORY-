@@ -133,8 +133,8 @@ export function stripComments(s: string, filePath: string): string {
       i++; continue;
     }
     if (js && c === "`") { stack.push("tpl"); put(c); i++; continue; }
-    // #378 (aynı satırdaki kesme işareti): JS'de iki harf arasındaki ' (don't, it's) hiçbir zaman dize başlatmaz; geçerli tek istisna anahtar sözcükten hemen sonra gelen dizedir (case'a', return'x'). JSX metnindeki kesme işareti bu yüzden düz karakterdir.
-    if (js && c === "'" && /[A-Za-z]/.test(n ?? "") && /[A-Za-z]$/.test(tail()) && !/(?:^|[^\w$])(?:return|typeof|case|in|of|new|delete|void|throw|yield|await|else|do|instanceof)$/.test(tail())) { put(c); i++; continue; }
+    // #378 (aynı satırdaki kesme işareti): JS'de iki harf arasındaki ' (don't, it's) hiçbir zaman dize başlatmaz; geçerli tek istisna anahtar sözcükten hemen sonra gelen dizedir (case'a', return'x', export default'x'). JSX metnindeki kesme işareti bu yüzden düz karakterdir.
+    if (js && c === "'" && /[A-Za-z]/.test(n ?? "") && /[A-Za-z]$/.test(tail()) && !/(?:^|[^\w$])(?:return|typeof|case|in|of|new|delete|void|throw|yield|await|else|do|instanceof|default)$/.test(tail())) { put(c); i++; continue; }
     if (c === '"' || c === "'" || (c === "`" && slash)) {   // dize (JS dışı dillerde ters tırnak da düz dizedir): kaçışlarla sonuna kadar olduğu gibi geçer
       let j = i + 1; put(c);
       // #378 inceleme FP: JS'de ' ve " dizeleri satır sonunda biter (sonlanmamış dize sözdizimi hatasıdır): JSX metnindeki bir kesme işareti (<p>don't</p>) sonraki satırların dize/kod sınırlarını kaydıramaz.
