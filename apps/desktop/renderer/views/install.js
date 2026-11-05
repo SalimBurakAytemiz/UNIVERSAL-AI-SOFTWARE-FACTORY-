@@ -1,4 +1,5 @@
 // //TR: Bu görünüm İlk Çalıştırma Kurulum Doğrulaması'dır (FA-V2-PRODUCT, UI-248): YALNIZ üç salt-okunur ve zaten izinli GET'ten okunur — GET /v1/install (kurulum raporu: bileşenler ve Phase-0 bağı), GET /v1/phase0 (Phase-0 kabul raporu: kontroller) ve GET /v1/system/executors (AI yürütücüleri, sandbox, Claude profilleri; mevcut executors() erişimcisi). Bu ekran ilk açılış sihirbazı (`firstrun`) DEĞİLDİR. Doğrulama kararı sunucudan AYNEN gösterilir (VERIFIED, PENDING, REJECTED); hiçbir durum yükseltilmez, hiçbir kaynaktan genel bir "kurulum tamam" kararı türetilmez. VERIFIED/ACTIVE rozeti yalnız gerçek sunucu sinyali söylüyorsa vardır. Okunamayan kaynak (ya da doğrulanmamış raporun bileşenleri) için sayı 0 değil "—" ve dürüst durum rozeti görünür. Dosya yolu, dosya özeti ve imza değeri gösterilmez (eşleyici zaten taşımaz). Bu görünüm SALT-OKUNURDUR: kurulum/etkinleştirme/yazma eylemi yoktur; tek eylem mevcut Ayarlar ekranına gezinmedir. API verisi HTML olarak yorumlanmaz; yalnız h()/textContent kullanılır.
+import {safeErrorCode} from "../error-code.js";
 import {h,panel,statePill,kpiTile,stateNote} from "../components.js";
 import {MISSING} from "../model.js";
 import {formatDateTime} from "../work-core.js";
@@ -34,7 +35,7 @@ function stateBlock(ctx,res,source){
   return h(doc,"div",{class:`install-state state-${state.toLowerCase()}`,role:"status",dataset:{installState:state,source}},
     h(doc,"p",{class:"install-state-head"},statePill(ctx,failKind(state)),h(doc,"strong",{text:ctx.t(`install.state.${state}`)})),
     h(doc,"p",{class:"note",text:ctx.t(`install.hint.${state}`,{source:`GET ${INSTALL_SOURCE_PATHS[source]}`})}),
-    res.message?h(doc,"p",{class:"note mono",text:res.message}):null);
+    safeErrorCode(res.message)?h(doc,"p",{class:"note mono",dataset:{errorCode:safeErrorCode(res.message)},text:safeErrorCode(res.message)}):null);
 }
 /** Kaynak şeridi: her gerçek okuma kaynağının ayrık durum rozeti (renk tek başına anlam taşımaz). "Okuma başarılı" kurulum doğrulaması DEĞİLDİR. */
 function sourcesList(ctx,a){

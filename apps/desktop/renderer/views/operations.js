@@ -1,4 +1,5 @@
 // //TR: Bu görünüm Operasyon ve Kurtarma runbook'udur (FA-V2-PRODUCT, UI-071): YALNIZ üç salt-okunur ve zaten izinli GET'ten okunur — GET /v1/control/status (global stop ve Work OS günlük sağlığı), GET /v1/runs (supervisor koşuları) ve GET /v1/attention (Work OS'tan türeyen Founder dikkat öğeleri; emekli scheduler kaynağı, yeniden deneme ve checkpoint kayıtları okunmaz ve bu kaynakların bulunmadığı açıkça söylenir). Koşu ve kuyruk sağlığı, kurtarma gerektiren engelli iş öğeleri ve GERÇEK duruma yansıyan bir kurtarma kontrol listesi gösterilir; "takıldı" yalnız kayıtlı zaman damgasından ve açıkça belirtilen görüntü eşiklerinden türer. Genel durum DÜRÜSTTÜR: NO_ISSUES_RECORDED yalnız üç kaynak okunup doğrulandığında, global stop aktif değilken, günlük OK iken, en az bir koşu kayıtlıyken ve kayıtlı hiçbir sorun yokken görünür; okunamayan ya da doğrulanmamış kaynak asla "sağlıklı" görünmez ve eksik olan adıyla listelenir. Mevcut Stop/Resume/Retry denetimleri BURADA yeniden uygulanmaz ve tetiklenmez: yalnız dürüst durumları gösterilir ve eylemlerin yaşadığı mevcut ekranlara (Control Tower, Gelen Kutusu) gezinme sunulur; eylemler kabuk/IPC üzerinden bugünkü gibi çalışır. HİÇBİR sayı, durum veya geçiş UYDURULMAZ: bozuk yanıt tümden ERROR gösterilir, okunamayan kaynağın sayıları 0 değil "—" olur. Ürün doğrulaması bu görünümde ASLA iddia edilmez ve ilgili sabit değer hiçbir yerde üretilmez. API verisi HTML olarak yorumlanmaz; yalnız h()/textContent kullanılır.
+import {safeErrorCode} from "../error-code.js";
 import {h,panel,statePill,kpiTile} from "../components.js";
 import {MISSING,formatCount} from "../model.js";
 import {formatDateTime} from "../work-core.js";
@@ -47,7 +48,7 @@ function stateBlock(ctx,res,source){
   return h(doc,"div",{class:`ops-state state-${state.toLowerCase()}`,role:"status",dataset:{opsState:state,source}},
     h(doc,"p",{class:"ops-state-head"},statePill(ctx,failKind(state)),h(doc,"strong",{text:ctx.t(`ops.state.${state}`)})),
     h(doc,"p",{class:"note",text:ctx.t(`ops.hint.${state}`,{source:`GET ${OPS_SOURCE_PATHS[source]}`})}),
-    res.message?h(doc,"p",{class:"note mono",text:res.message}):null);
+    safeErrorCode(res.message)?h(doc,"p",{class:"note mono",dataset:{errorCode:safeErrorCode(res.message)},text:safeErrorCode(res.message)}):null);
 }
 /** Kaynak şeridi: her gerçek okuma kaynağının ayrık durum rozeti (renk tek başına anlam taşımaz). */
 function sourcesList(ctx,a){
