@@ -1,6 +1,6 @@
 {
   "schema": "uasco.factory-v2.shared-registry/1",
-  "phase": "section:lease/shadow-probe-control/supervisor--SHADOW-probe-control",
+  "phase": "section:ledger/run1/c/000001",
   "sections": {
     "lease/shadow-probe-control/supervisor--SHADOW-probe-control": {
       "taskId": "supervisor--SHADOW-probe-control",
@@ -947,6 +947,39 @@
             "nonce": "fdd54609-e137-46a1-ae66-e2e325e3b075",
             "signature": "UhNBF1OdFvttrx/oHaFwwfOIMSxRTN5UzBol3qAnlPzYtD/6mp4dmqq3bIVimLclF0iD9qy4hOAlqPspqxdwCg=="
           }
+        },
+        {
+          "kind": "ENQUEUE",
+          "taskId": "FV2-PROBE-CTL-2",
+          "idempotencyKey": "enqueue:FV2-PROBE-CTL-2",
+          "data": {
+            "paths": [
+              "docs/factory-v2/probe/control/"
+            ],
+            "tier": "T1",
+            "name": "Real-session probe: reassignment after session loss",
+            "spec": "Create the file docs/factory-v2/probe/control/hello-run2.md containing exactly two lines: the line <!-- //TR: Factory V2 gercek oturum probu ciktisi (yeniden atama). --> and the line: Factory V2 real-session probe run2 builder output. Touch nothing else.",
+            "area": "DOCS"
+          },
+          "fenceEpoch": 1,
+          "fenceToken": "session_015dYwb57qx21P4wudU5xauD:1:2a5bae8c-fdda-40ec-9cbc-23217de56578",
+          "seq": 27,
+          "at": 1793900657204,
+          "prev": "e9e2bd67e366c7369d10294e556cc5a65d82833b0046c2ed62f72ba6b5bf9e6e",
+          "sig": {
+            "schema": "uasco.factory-v2.signed-action/1",
+            "domain": "probe-control",
+            "action": "LEDGER",
+            "role": "V2_CANDIDATE",
+            "sessionId": "session_015dYwb57qx21P4wudU5xauD",
+            "keyId": "k_225059701e7e1b78",
+            "prev": "e9e2bd67e366c7369d10294e556cc5a65d82833b0046c2ed62f72ba6b5bf9e6e",
+            "payloadDigest": "d7468c785a7c19f4f5fdf358a9af2a86bd799f201b11444354744704c3c5a578",
+            "issuedAt": 1793900657941,
+            "expiresAt": 1825436657941,
+            "nonce": "54a2acbe-9754-4207-9ff7-a7aa55b56b69",
+            "signature": "9eWr6W0uWl4VgHK6ZIYgm/ZXoJc6VA6xHRmL5JLjLnE1G089nl3qM/gRl68etP+/WEHoQOQQfZbTFA1brrTvCA=="
+          }
         }
       ]
     },
@@ -966,8 +999,8 @@
   },
   "revs": {
     "lease/shadow-probe-control/supervisor--SHADOW-probe-control": 20,
-    "ledger/run1/c/000001": 26,
+    "ledger/run1/c/000001": 27,
     "lease/shadow-probe-control/task--FV2-PROBE-CTL-1": 2
   },
-  "seq": 48
+  "seq": 49
 }
