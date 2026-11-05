@@ -1,6 +1,6 @@
 {
   "schema": "uasco.factory-v2.shared-registry/1",
-  "phase": "section:lease/shadow-probe-control/supervisor--SHADOW-probe-control",
+  "phase": "section:ledger/run1/c/000001",
   "sections": {
     "lease/shadow-probe-control/supervisor--SHADOW-probe-control": {
       "taskId": "supervisor--SHADOW-probe-control",
@@ -732,6 +732,42 @@
             "nonce": "e7868bb7-2032-4e85-8cdf-538a17ea4ee3",
             "signature": "Wcbp8UKE7lPLT2GT51DR81sy7W55YQ72myd7DR0RY55lnh7p2TVNM/pxunjxDJJ1a/CXFmW4onf2dpWkkzZhBw=="
           }
+        },
+        {
+          "kind": "WORKER",
+          "idempotencyKey": "worker:intent_f49be5c97c54:RESULT_ACCEPTED",
+          "data": {
+            "status": "RESULT_ACCEPTED",
+            "result": {
+              "status": "CLEAN",
+              "headSha": "8ef00d2ed9b38645e8c21e63f3106309d948bb9e",
+              "baseSha": "70cb71d40a09b7fae86313b8bf0ad7502ba8dde5",
+              "blockers": [],
+              "resolves": [],
+              "reviewerSession": "session_015dYwb2QFbC2XUahXfzLY7E"
+            },
+            "resultAt": 1793900503033,
+            "intentId": "intent_f49be5c97c54"
+          },
+          "fenceEpoch": 1,
+          "fenceToken": "session_015dYwb57qx21P4wudU5xauD:1:2a5bae8c-fdda-40ec-9cbc-23217de56578",
+          "seq": 21,
+          "at": 1793900505880,
+          "prev": "050c0e9158f20485366fdfdf39c160a8410c4a5c7522a48c64c626f06475c67e",
+          "sig": {
+            "schema": "uasco.factory-v2.signed-action/1",
+            "domain": "probe-control",
+            "action": "LEDGER",
+            "role": "V2_CANDIDATE",
+            "sessionId": "session_015dYwb57qx21P4wudU5xauD",
+            "keyId": "k_225059701e7e1b78",
+            "prev": "050c0e9158f20485366fdfdf39c160a8410c4a5c7522a48c64c626f06475c67e",
+            "payloadDigest": "90dcee7ec70d4bd7c1f8f183c6ccde47eb1eae6e276bfc5843e009ecc789568e",
+            "issuedAt": 1793900507960,
+            "expiresAt": 1825436507960,
+            "nonce": "19327d0c-ac3e-4e64-b17a-ab4228fb6e8d",
+            "signature": "wFQwahYsEJ6FVdt0ogWFiwQcleaBPJ9iiPp3QTxtZhB3V391e7ieUjDAn50zfXEEBpPdz2DiejbiPOkyZFDACQ=="
+          }
         }
       ]
     },
@@ -751,8 +787,8 @@
   },
   "revs": {
     "lease/shadow-probe-control/supervisor--SHADOW-probe-control": 16,
-    "ledger/run1/c/000001": 20,
+    "ledger/run1/c/000001": 21,
     "lease/shadow-probe-control/task--FV2-PROBE-CTL-1": 2
   },
-  "seq": 38
+  "seq": 39
 }
