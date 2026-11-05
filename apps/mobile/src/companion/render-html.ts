@@ -1,5 +1,6 @@
 // //TR: Mobil Companion önizleme işleyicisi: ekran modellerini kaçışlı, statik HTML'e çevirir (bileşen testleri ve ekran görüntüsü için). Bu bir React Native/Android derlemesi DEĞİLDİR; betik, ağ çağrısı veya gizli veri içermez. Onayla/Reddet düğmeleri her zaman disabled ve nedenli işlenir.
 import type {ApprovalDetail, ApprovalsList, NotificationsList, ScreenHeader, StatusOverview} from "./screens.js";
+import type {Connection} from "./session.js";
 
 const ESC: Record<string, string> = {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"};
 export const esc = (v: unknown): string => String(v ?? "").replace(/[&<>"']/g, ch => ESC[ch]!);
@@ -10,6 +11,14 @@ function head(h: ScreenHeader): string {
 }
 const page = (title: string, body: string) =>
   `<section class="screen" aria-label="${esc(title)}"><h1>${esc(title)}</h1>${body}</section>`;
+
+/** Connection bar shown above every screen: state, last successful read (or "never") and, when not LIVE, how stale that read is. */
+export function renderConnection(c: Connection): string {
+  const age = c.staleForMs === null ? "" : `<span class="stale-age" data-stale-ms="${esc(c.staleForMs)}">data not refreshed for ${esc(Math.round(c.staleForMs / 1000))} s</span>`;
+  return `<div class="conn" data-connection="${esc(c.state)}"><span class="state">${esc(c.state)}</span>`
+    + `<span class="last-ok">Last successful read: <time>${c.lastSuccessAt === null ? "never" : esc(c.lastSuccessAt)}</time></span>${age}`
+    + `${c.failure ? `<span class="banner">${esc(c.failure)}</span>` : ""}</div>`;
+}
 
 export function renderStatus(s: StatusOverview): string {
   const stop = s.globalStop === null ? "—" : s.globalStop.active ? `ACTIVE${s.globalStop.reason ? `: ${esc(s.globalStop.reason)}` : ""}` : "inactive";
