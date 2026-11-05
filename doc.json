@@ -1,6 +1,6 @@
 {
   "schema": "uasco.factory-v2.shared-registry/1",
-  "phase": "section:probe/B-acquired",
+  "phase": "section:probe/A-done",
   "sections": {
     "probe/A-hello": {
       "session": "session_015dYwb2S8xAzNEs1GWUEheS",
@@ -29,7 +29,11 @@
       "session": "session_015dYwb31nmLGx3QYYLp81ys",
       "epoch": 1,
       "at": 1793866714531
+    },
+    "probe/A-done": {
+      "session": "session_015dYwb2S8xAzNEs1GWUEheS",
+      "at": 1793866722770
     }
   },
-  "seq": 6
+  "seq": 7
 }
