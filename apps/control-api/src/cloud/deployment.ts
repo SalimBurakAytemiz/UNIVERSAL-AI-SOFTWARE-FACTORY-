@@ -57,6 +57,9 @@ export class SessionKeyRing {
     return !Number.isFinite(c) || Math.abs(t - c) > MAX_CLOCK_SKEW_MS;
   }
 
+  /** @internal onay kaydını aynı güvenilen kaynağa bağlamak için (InMemoryDeployApprovalLedger.forRing / evaluatePromotion denetimi). */
+  trustedClock(): (() => number) | undefined { return this.clock; }
+
   /** @internal dağıtım onayı üretimi için: `now` güvenilen saatle uyumlu mu (sapma/okunamayan saat = false). */
   clockAccepts(now: Date): boolean { return !this.skewed(now); }
 
@@ -222,7 +225,8 @@ export interface StagingEvidence {artifactSha256: string; stagingHealth: HealthR
 export type PromotionDeny =
   | SeparationDeny | "ARTIFACT_INVALID" | "STAGING_EVIDENCE_MISMATCH" | "STAGING_UNHEALTHY" | "STAGING_SMOKE_FAILED" | "STAGING_EVIDENCE_STALE"
   | "DEPLOY_SESSION_INVALID" | "DEPLOY_SESSION_EXPIRED" | "DEPLOY_NOT_FOUNDER" | "DEPLOY_TENANT_DENIED" | "DEPLOY_SUBJECT_DENIED"
-  | "DEPLOY_POLICY_INVALID" | "DEPLOY_APPROVAL_INVALID" | "DEPLOY_APPROVAL_EXPIRED" | "DEPLOY_APPROVAL_REPLAYED" | "DEPLOY_APPROVAL_LEDGER_UNAVAILABLE";
+  | "DEPLOY_POLICY_INVALID" | "DEPLOY_APPROVAL_INVALID" | "DEPLOY_APPROVAL_EXPIRED" | "DEPLOY_APPROVAL_REPLAYED" | "DEPLOY_APPROVAL_LEDGER_UNAVAILABLE"
+  | "DEPLOY_APPROVAL_LEDGER_CLOCK_MISMATCH";
 export const MAX_STAGING_EVIDENCE_AGE_MS = 24 * 60 * 60 * 1000;
 export const MAX_DEPLOY_APPROVAL_TTL_MS = 15 * 60 * 1000;
 /** Production terfisini kim onaylayabilir: yalnız platform tenant'ı ve (ayarlıysa) izinli Founder subject'leri. */
@@ -239,16 +243,38 @@ const NONCE_RE = /^[0-9a-f]{32}$/;
  */
 export interface DeployApprovalLedger { consume(approvalId: string, expiresAtMs: number, nowMs: number): boolean }
 
-/** Süreç içi kayıt: yalnız tek örnek ve testler için. Yeniden başlatmada unutur; production için kalıcı depo kullanılmalıdır. */
+/**
+ * Süreç içi kayıt: yalnız tek örnek ve testler için. Yeniden başlatmada unutur; production için kalıcı depo kullanılmalıdır.
+ * Budama çağıranın `now` değerine asla dayanmaz (ileri sapmış bir `now` canlı kaydı silip tekrar oynatmayı açabilirdi):
+ * yalnız güvenilen `clock` verilirse ve kayıt `exp + MAX_CLOCK_SKEW_MS <= clock()` ise silinir. Saat yoksa ya da okunamazsa
+ * hiç budanmaz; kapasite dolunca kapı reddeder (fail-closed).
+ * #352 L-1: saat, production SessionKeyRing'in güvenilen saatiyle AYNI kaynak olmalıdır. `forRing(ring)` bunu halkadan türetir;
+ * evaluatePromotion saatli bir InMemoryDeployApprovalLedger'ın saati production halkasınınkiyle aynı işlev değilse terfiyi
+ * DEPLOY_APPROVAL_LEDGER_CLOCK_MISMATCH ile reddeder (sapmış ayrı bir saat canlı bir onayı budayıp tekrar oynatmayı açamaz).
+ * Saatsiz kayıt hiç budamadığı için kabul edilir. Arayüzü uygulayan başka (kalıcı) kayıtlar için bu eşleşme denetlenemez: aynı kural belgesel olarak geçerlidir.
+ */
 export class InMemoryDeployApprovalLedger implements DeployApprovalLedger {
   private readonly used = new Map<string, number>();
-  constructor(private readonly capacity = 10_000) {
+  /** Production halkasının güvenilen saatini kullanan kayıt (önerilen yol). */
+  static forRing(ring: SessionKeyRing, capacity = 10_000): InMemoryDeployApprovalLedger {
+    const c = ring.trustedClock(); if (c === undefined) throw new Error("LEDGER_RING_HAS_NO_CLOCK");
+    return new InMemoryDeployApprovalLedger(capacity, c);
+  }
+  /** @internal kapı denetimi için: budamada kullanılan saat (yoksa undefined). */
+  clockSource(): (() => number) | undefined { return this.clock; }
+  constructor(private readonly capacity = 10_000, private readonly clock?: () => number) {
     if (!Number.isSafeInteger(capacity) || capacity < 1) throw new Error("LEDGER_CAPACITY_INVALID");
+    if (clock !== undefined && typeof clock !== "function") throw new Error("LEDGER_CLOCK_INVALID");
+  }
+  private prune(): void {
+    if (this.clock === undefined) return;
+    let c: number; try { c = this.clock(); } catch { return; }
+    if (!Number.isFinite(c)) return;
+    for (const [id, exp] of this.used) if (exp + MAX_CLOCK_SKEW_MS <= c) this.used.delete(id);
   }
   consume(approvalId: string, expiresAtMs: number, nowMs: number): boolean {
     if (typeof approvalId !== "string" || approvalId.length === 0 || !Number.isFinite(expiresAtMs) || !Number.isFinite(nowMs)) throw new Error("LEDGER_INPUT_INVALID");
-    // Kayıt, onayın kendi süresi dolana kadar tutulur; sonrasında süre denetimi zaten reddeder.
-    for (const [id, exp] of this.used) if (exp <= nowMs) this.used.delete(id);
+    this.prune();   // `nowMs` yalnız doğrulanır; budamada kullanılmaz
     if (this.used.has(approvalId)) return false;
     if (this.used.size >= this.capacity) throw new Error("LEDGER_FULL");   // bilinmeyen durum: kapı reddeder
     this.used.set(approvalId, expiresAtMs);
@@ -321,6 +347,11 @@ export function evaluatePromotion(o: {staging: EnvironmentDeployment; production
   if (pol.founderSubjects && !pol.founderSubjects.has(s.subject)) return {ok: false, reason: "DEPLOY_SUBJECT_DENIED"};
   const a = verifyDeployApproval(o.deployApproval, o.production.keys, s.sid, o.artifactSha256, o.now);
   if (!a.ok) return a;
+  // #352 L-1: saatli süreç içi kayıt production halkasıyla aynı güvenilen saati kullanmalıdır (yoksa sapmış saat canlı onayı budayabilir).
+  if (o.approvals instanceof InMemoryDeployApprovalLedger) {
+    const lc = o.approvals.clockSource();
+    if (lc !== undefined && lc !== o.production.keys.trustedClock()) return {ok: false, reason: "DEPLOY_APPROVAL_LEDGER_CLOCK_MISMATCH"};
+  }
   let fresh: unknown;
   try { fresh = o.approvals.consume(a.id, a.exp, o.now.getTime()); } catch { return {ok: false, reason: "DEPLOY_APPROVAL_LEDGER_UNAVAILABLE"}; }
   if (fresh === false) return {ok: false, reason: "DEPLOY_APPROVAL_REPLAYED"};
