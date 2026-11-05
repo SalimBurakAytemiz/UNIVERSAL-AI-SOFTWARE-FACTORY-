@@ -480,6 +480,10 @@ describe("FD 2026-11-05: Control Tower SVG colours are re-themed onto design tok
     expect(spec('.ct-map svg text[fill]')).toBeGreaterThan(spec('.ct-map svg [fill="#22d3ee"]'));
     expect(spec('.ct-map svg rect[stroke]')).toBeGreaterThan(spec('.ct-map svg [stroke="#22d3ee"]'));
   });
+  it("long unbreakable registry values wrap inside their card instead of overflowing it", () => {
+    expect(css).toMatch(/\n\.integ-fact\{min-width:0;max-width:100%\}/);
+    expect(css).toMatch(/\n\.integ-fact \.badge\{white-space:normal;overflow-wrap:anywhere\}/);
+  });
   it("re-themed SVG text pairs meet AA on the plates they sit on", () => {
     // //TR: Metin: --text/--muted/--emphasis/--ok/--danger; plakalar: --surface (bina), --surface-2 (bölge), --bg (durdurma kutusu).
     for (const fg of ["text", "muted", "emphasis", "ok", "danger"]) for (const bg of ["surface", "surface-2", "bg"]) {

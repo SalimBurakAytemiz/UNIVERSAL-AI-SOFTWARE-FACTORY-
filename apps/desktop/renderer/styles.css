@@ -969,6 +969,9 @@ pre.code,.code{margin:var(--space-1) 0;padding:var(--space-2) var(--space-3);max
 .integ-row{overflow-wrap:anywhere}
 .integ-facts{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-2);margin:var(--space-1) 0 0}
 .integ-fact-label{color:var(--muted)}
+/* //TR: Uzun tek parça kayıt değerleri (örn. MISSION_TIME_REVALIDATION_REQUIRED) kart genişliğini aşmaz: olgu ve rozeti kart içinde sarar (Domains 1024 px, 12 px taşma). */
+.integ-fact{min-width:0;max-width:100%}
+.integ-fact .badge{white-space:normal;overflow-wrap:anywhere}
 .integ-tally{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-1)}
 /* //TR: Kayıt kartları (Integrations/Domains/Scheduler .integ-row): başlık/ad/olgu satırları arasındaki tarayıcı varsayılan h4/p boşlukları kaldırılır (349 kartlık sayfa yarı yüksekliğe iner); kimlik başlığı mono, ad orta kalın. */
 .integ-row{gap:var(--space-2);padding:var(--space-3) var(--space-4)}
