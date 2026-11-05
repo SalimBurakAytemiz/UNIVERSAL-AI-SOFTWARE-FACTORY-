@@ -1,0 +1,19 @@
+{
+  "schema": "uasco.factory-v2.shared-registry/1",
+  "phase": "section:lease/probe/supervisor--LIVE-probe",
+  "sections": {
+    "lease/probe/supervisor--LIVE-probe": {
+      "taskId": "supervisor--LIVE-probe",
+      "environment": "cloud:A",
+      "workerId": "supervisor",
+      "sessionId": "session_015dYwb2S8xAzNEs1GWUEheS",
+      "headSha": null,
+      "epoch": 1,
+      "token": "session_015dYwb2S8xAzNEs1GWUEheS:1:28abf686-050f-4002-ab2b-469915714bae",
+      "acquiredAt": 1793866692320,
+      "heartbeatAt": 1793866692320,
+      "expiresAt": 1793866812320
+    }
+  },
+  "seq": 1
+}
