@@ -16,7 +16,16 @@ fs.mkdirSync(shotsDir, {recursive: true});
 const dataRoot = fs.mkdtempSync(path.join(outDir, "data-"));
 export const ROUTES = Object.freeze(["home", "projects", "work", "inbox", "workforce", "assurance", "audit", "posture", "delivery", "tower", "queue", "readiness", "operations", "executive", "company", "academy", "domains", "journey", "matrix", "scheduler", "integrations", "install", "settings"]);
 const SELFTEST = argv.includes("--selftest");
-const routes = onlyArg >= 0 && argv[onlyArg + 1] ? argv[onlyArg + 1].split(",").filter(r => ROUTES.includes(r)) : ROUTES;
+// //TR: #387 B1: bilinmeyen rota adı sessizce süzülmez (0 sayfa = sahte PASS olurdu): reddedilir ve çıkış kodu 2 olur; boş liste de reddedilir.
+export function parseRoutes(arg, all = ROUTES) {
+  if (arg === undefined) return {ok: true, routes: [...all]};
+  const asked = String(arg).split(",").map(x => x.trim()).filter(Boolean), unknown = asked.filter(r => !all.includes(r));
+  if (!asked.length) return {ok: false, error: "--routes is empty"};
+  if (unknown.length) return {ok: false, error: `unknown route(s): ${unknown.join(", ")} (known: ${all.join(", ")})`};
+  return {ok: true, routes: [...new Set(asked)]};
+}
+const routeArg = onlyArg >= 0 ? (argv[onlyArg + 1] ?? "") : undefined, parsedRoutes = parseRoutes(routeArg);
+const routes = parsedRoutes.ok ? parsedRoutes.routes : [];
 export const LANGS = Object.freeze(["en", "tr"]);
 export const WIDTHS = Object.freeze([1280, 1024, 800]);
 const HEIGHT = 800;
@@ -62,12 +71,36 @@ async function electronBinary() {
 const freePort = () => new Promise((res, rej) => { const s = net.createServer(); s.on("error", rej); s.listen({host: "127.0.0.1", port: 0}, () => { const p = s.address().port; s.close(() => res(p)); }); });
 const ENV_ALLOW = ["PATH", "Path", "SystemRoot", "SYSTEMROOT", "TEMP", "TMP", "TMPDIR", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "DISPLAY", "XAUTHORITY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "LANG", "LC_ALL", "ComSpec", "PATHEXT", "windir"];
 const childEnv = extra => ({...Object.fromEntries(ENV_ALLOW.filter(k => process.env[k] !== undefined).map(k => [k, process.env[k]])), ...extra});
-async function cleanup() {
-  try { if (app) await Promise.race([app.close(), sleep(15000)]); } catch { /* yoksay */ }
-  try { if (backend && backend.exitCode === null) { backend.kill("SIGTERM"); await sleep(500); if (backend.exitCode === null) backend.kill("SIGKILL"); } } catch { /* yoksay */ }
+// //TR: #387 B2: desktop-journey ile aynı temizlik deseni: sıra arka uç (SIGTERM, 5 sn içinde çıkmazsa SIGKILL) -> Electron (close, 15 sn; olmazsa süreç SIGKILL) -> geçici veri dizini. Aynı süren temizlik her çağırana aynı söz olarak döner (finish ve sinyal birlikte).
+let cleanupP = null, sigExit = null;
+const cleanup = () => (cleanupP ??= doCleanup());
+async function doCleanup() {
+  try {
+    if (backend && backend.exitCode === null && backend.signalCode === null) {
+      const exited = new Promise(r => backend.once("exit", r)); backend.kill("SIGTERM");
+      await Promise.race([exited, sleep(5000)]);
+      if (backend.exitCode === null && backend.signalCode === null) { backend.kill("SIGKILL"); await Promise.race([exited, sleep(2000)]); }
+    }
+  } catch { /* yoksay */ }
+  try {
+    if (app) {
+      const proc = app.process(), gone = () => proc.exitCode !== null || proc.signalCode !== null, exited = gone() ? Promise.resolve() : new Promise(r => proc.once("exit", r));
+      await Promise.race([app.close(), sleep(15000).then(() => { throw new Error("close timeout"); })]).catch(() => { try { proc.kill("SIGKILL"); } catch { /* yoksay */ } });
+      // close() süreç gerçekten çıkmadan döner: süreç çıkana kadar beklenir (5 sn), çıkmazsa SIGKILL (selfcheck bunu yakaladı)
+      await Promise.race([exited, sleep(5000)]);
+      if (!gone()) { try { proc.kill("SIGKILL"); } catch { /* yoksay */ } await Promise.race([exited, sleep(2000)]); }
+    }
+  } catch { /* yoksay */ }
   try { fs.rmSync(dataRoot, {recursive: true, force: true}); } catch { /* yoksay */ }
 }
-process.on("exit", () => { try { if (backend && backend.exitCode === null) backend.kill("SIGKILL"); } catch { /* yoksay */ } try { fs.rmSync(dataRoot, {recursive: true, force: true}); } catch { /* yoksay */ } });
+// Sinyal gelirse çıkış kodu her koşulda 130 (SIGINT) / 143 (SIGTERM) olur; temizlik tamamlanmadan çıkılmaz.
+for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => { sigExit = sig === "SIGINT" ? 130 : 143; cleanup().finally(() => process.exit(sigExit)); });
+// Her çıkış yolunda arka uç ve Electron hâlâ yaşıyorsa SIGKILL, veri dizini senkron silinir: geride süreç ya da dizin kalmaz.
+process.on("exit", () => {
+  try { if (backend && backend.exitCode === null && backend.signalCode === null) backend.kill("SIGKILL"); } catch { /* yoksay */ }
+  try { const p = app?.process?.(); if (p && p.exitCode === null && p.signalCode === null) p.kill("SIGKILL"); } catch { /* yoksay */ }
+  try { fs.rmSync(dataRoot, {recursive: true, force: true}); } catch { /* yoksay */ }
+});
 
 // ---- tohum: GERÇEK API (fake-backend üzerinde gerçek buildServer) ----
 async function seed(port, token) {
@@ -235,6 +268,7 @@ async function visit(route) {
 }
 
 async function main() {
+  if (!parsedRoutes.ok) { console.log(`FAIL args: ${parsedRoutes.error}`); return 2; }
   const pw = loadPlaywright(), exe = await electronBinary();
   if (!pw || !exe) { console.log(`BLOCKED ${!pw ? "PLAYWRIGHT_MISSING" : "ELECTRON_BINARY_MISSING"}`); return 3; }
   if (process.platform !== "linux") { console.log("BLOCKED LINUX_ONLY (xvfb tour; not Windows acceptance)"); return 3; }
@@ -247,6 +281,7 @@ async function main() {
   console.log(`SEED project=${seeded.project.status}:${seeded.project.projectId} mission=${seeded.mission.status}:${seeded.mission.missionId}`);
   const noSandbox = process.getuid?.() === 0 || process.env.E2E_NO_SANDBOX === "1";
   app = await pw._electron.launch({executablePath: exe, args: [path.join("apps", "desktop", "main.mjs"), `--user-data-dir=${path.join(dataRoot, "electron-user-data")}`, ...(noSandbox ? ["--no-sandbox"] : []), "--disable-gpu"], cwd: repo, env: childEnv({CONTROL_API_PORT: String(port), UASCO_CONTROL_TOKEN: token}), timeout: 60000});
+  console.log(`PIDS backend=${backend.pid} electron=${app.process().pid} data=${dataRoot}`); // --selfcheck bu satırla artık süreç/dizin kalmadığını doğrular
   win = await app.firstWindow();
   await win.waitForSelector("main", {state: "attached", timeout: 30000});
   await win.evaluate(() => { localStorage.setItem("uasco.lang", "en"); }); await win.reload(); // tek başlangıç yüklemesi; dil değişimi sonra yalnız #langBtn ile
@@ -300,13 +335,48 @@ async function main() {
   }
   const failures = results.flatMap(r => CHECKS.filter(c => r.checks[c].status === "FAIL").map(c => ({route: r.route, lang: r.lang, width: r.width, check: c, evidence: r.checks[c].evidence, screenshot: r.screenshot})));
   const byCheck = Object.fromEntries(CHECKS.map(c => [c, {pass: results.filter(r => r.checks[c].status === "PASS").length, fail: results.filter(r => r.checks[c].status === "FAIL").length}]));
-  const report = {platform: process.platform, node: process.version, scope: "Linux xvfb only; not Windows acceptance", seeded, selftest, routes, langs: LANGS, widths: WIDTHS, pages: results.length, byCheck, failures, results, result: failures.length ? "FAIL" : "PASS"};
+  const report = {platform: process.platform, node: process.version, scope: "Linux xvfb only; not Windows acceptance", seeded, selftest, routes, langs: LANGS, widths: WIDTHS, pages: results.length, byCheck, failures, results, result: failures.length || !results.length ? "FAIL" : "PASS"};
   fs.writeFileSync(path.join(outDir, "report.json"), JSON.stringify(report, null, 2));
   console.log(`RESULT ${report.result} pages=${results.length} failures=${failures.length} ${JSON.stringify(byCheck)} out=${outDir}`);
+  // //TR: #387 B1: hiç sayfa gezilmediyse sonuç PASS sayılmaz.
+  if (!results.length) { console.log("FAIL no pages were visited"); return 1; }
   return failures.length ? 1 : 0;
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+// //TR: --selfcheck: betiğin kendisini alt süreç olarak çalıştırıp iki engeli doğrular: (1) bilinmeyen --routes -> çıkış 2, PASS yok, rapor yok; boş --routes -> 2; (2) çalışırken SIGTERM -> çıkış 143, arka uç ve Electron süreçleri ölü, geçici veri dizini silinmiş.
+async function selfcheck() {
+  const self = fileURLToPath(import.meta.url), results = [];
+  const run = (args, {killOn = null, sig = "SIGTERM"} = {}) => new Promise(res => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-tour-sc-"));
+    const c = spawn(process.execPath, [self, "--out", out, ...args], {cwd: repo, env: process.env, stdio: ["ignore", "pipe", "pipe"]});
+    let log = "", killed = false;
+    c.stdout.on("data", d => { log += d; if (killOn && !killed && killOn.test(log)) { killed = true; setTimeout(() => c.kill(sig), 1500); } }); c.stderr.on("data", d => { log += d; });
+    c.on("exit", (code, signal) => res({code, signal, log, out}));
+  });
+  const alive = pid => { try { process.kill(pid, 0); return true; } catch { return false; } };
+  const check = (name, ok, detail) => { results.push({name, ok, detail}); console.log(`${ok ? "PASS" : "FAIL"} selfcheck ${name} — ${detail}`); };
+  const bad = await run(["--routes", "home,nope"]);
+  check("unknown-route", bad.code === 2 && /FAIL args: unknown route\(s\): nope/.test(bad.log) && !/^RESULT PASS/m.test(bad.log) && !fs.existsSync(path.join(bad.out, "report.json")), `exit ${bad.code}; ${bad.log.trim().split("\n").pop()}`);
+  const empty = await run(["--routes", ""]);
+  check("empty-routes", empty.code === 2 && /--routes is empty/.test(empty.log), `exit ${empty.code}`);
+  for (const sig of ["SIGTERM", "SIGINT"]) {
+    const t = await run(["--routes", "home"], {killOn: /^PIDS backend=\d+ electron=\d+ data=\S+$/m, sig});
+    const m = /^PIDS backend=(\d+) electron=(\d+) data=(\S+)$/m.exec(t.log);
+    await sleep(500);
+    const want = sig === "SIGTERM" ? 143 : 130;
+    const ok = !!m && t.code === want && !alive(Number(m[1])) && !alive(Number(m[2])) && !fs.existsSync(m[3]);
+    check(`${sig.toLowerCase()}-cleanup`, ok, m ? `exit ${t.code} (want ${want}); backend ${m[1]} ${alive(Number(m[1])) ? "ALIVE" : "dead"}; electron ${m[2]} ${alive(Number(m[2])) ? "ALIVE" : "dead"}; data dir ${fs.existsSync(m[3]) ? "LEFT BEHIND" : "removed"}` : `no PIDS line (exit ${t.code})`);
+  }
+  for (const r of [bad, empty]) fs.rmSync(r.out, {recursive: true, force: true});
+  return results.every(r => r.ok) ? 0 : 1;
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url) && argv.includes("--selfcheck")) {
+  fs.rmSync(dataRoot, {recursive: true, force: true});
+  const code = await selfcheck();
+  console.log(`SELFCHECK ${code === 0 ? "PASS" : "FAIL"}`);
+  process.exit(code);
+} else if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   let code = 1;
   try { code = await main(); } catch (e) { console.log(`FAIL startup: ${String(e?.message ?? e).slice(0, 500)} ${backendLog.slice(-300)}`); code = 1; }
   await cleanup();
