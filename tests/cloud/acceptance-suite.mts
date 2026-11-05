@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import {createHash, randomUUID} from "node:crypto";
 import {CloudJobQueue, signWorkerAuth, type WorkerAuth} from "../../apps/control-api/src/cloud/jobs.js";
-import {CLOUD_CONTRACT_VERSION, signScope, type SignedScope, type UnsignedScope} from "../../core/cloud/contracts.js";
+import {CLOUD_CONTRACT_VERSION, signScope, verifyEventStream, type SignedScope, type UnsignedScope} from "../../core/cloud/contracts.js";
 import {CloudArtifactStore, InMemoryArtifactBackend} from "../../core/cloud/artifacts.js";
 import {CONFIRMATION_CLOCK_SKEW_MS, FOUNDER_CONFIRMATION_TYPE, InMemoryConfirmationReplayStore, TaskOrchestrator, dagOutsideScope, dispatchIntakeCommand, intentFromIntake, planCacheKey, signFounderConfirmation,
   type ConfirmationAuditRecord, type ConfirmationVerifier, type PlannerModel, type TaskDag, type UnsignedFounderConfirmation} from "../../core/cloud/task-orchestrator.js";
@@ -19,6 +19,8 @@ import http from "node:http";
 import {ProviderRouter, modelsFromDiscovery, routedPlannerModel, type PlannerUsage, type ProviderRoute, type QuotaLimits, type RoutingAuditRecord} from "../../models/cloud-router/provider-routing.js";
 import {TenantBudget, type ModelRequest} from "../../apps/control-api/src/cloud/remote-gateway.js";
 import {discoverOmniRouteModels} from "../../models/omniroute/client.js";
+import {CHAIN_HOST_ENV, cloudKeysFromEnv, createCloudChainHost, supervisorTestSigner, SUPERVISOR_TEST_SIGNER_LABEL, type ChainHostKeys} from "../../apps/control-api/src/cloud/chain-host.js";
+import cp from "node:child_process";
 
 /** Günlük rapor için halka tablosu: REAL = bu testte çalışan ürün kodu; STUB = testteki deterministik taklit; MISSING = ürün kodu yok (test yerine geçmez). */
 export const HOPS = Object.freeze([
@@ -43,6 +45,7 @@ const now = () => clock;
 const mkScope = (tenantId: string) => signScope({tenantId, projectId: "proj-web", environment: "staging", jobKinds: ["BUILD", "TEST", "PACKAGE", "DELIVERY"],
   allowNetwork: false, maxCostUsd: 10, issuedAt: "2026-11-04T08:00:00Z", expiresAt: "2026-11-04T18:00:00Z", keyId: "k-1"} satisfies UnsignedScope, SCOPE_KEY);
 const COMMAND = "Ayarlar sayfasını geliştir";
+const REPO_ROOT = path.resolve(import.meta.dirname, "..", "..");
 /** Supervisor tarafında imzalanan, tek kullanımlık Founder onay jetonu (SignedScope ile aynı HMAC şeması ve fixture kapsam anahtarı; yeni anahtar yok). */
 const confirm = (objective = COMMAND, tenantId = "tenant-a", over: Partial<UnsignedFounderConfirmation> = {}, secret: string = SCOPE_KEY) => signFounderConfirmation({
   type: FOUNDER_CONFIRMATION_TYPE, confirmationId: `conf-${randomUUID()}`, confirmedBy: "founder-001", objectiveSha256: createHash("sha256").update(objective).digest("hex"),
@@ -820,5 +823,326 @@ export function registerCloudAcceptanceSuite(): void {
       expect(y.usage.at(-1)).toMatchObject({ok: false, reason: "PLANNER_CAPABILITY_NOT_ALLOWED"});
       expect(x.primary.calls.length + x.fallback.calls.length + y.primary.calls.length + y.fallback.calls.length).toBe(0);
     });
+  });
+
+  // //TR: CLOUD-T0016 yerel tek süreçli zincir host'u (kanıt sınıfı LOCAL_E2E): korumalı satır yok; HTTP başlatma yolu yok; anahtarlar yalnız ortam adlarıyla; imzalayıcı SUPERVISOR_TEST_ONLY.
+  describe("CLOUD-T0016 chain host: one local process (queue + orchestrator + planner + worker + artifacts); LOCAL_E2E, NOT a cloud E2E", () => {
+    beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-chain-host-")); });
+    afterEach(() => { fs.rmSync(dir, {recursive: true, force: true}); });
+    const rnd = () => createHash("sha256").update(randomUUID()).digest("hex");   // çalışma anında üretilir; repoda değer yok
+    const envKeys = () => ({[CHAIN_HOST_ENV.scopeKeyId]: "k-local", [CHAIN_HOST_ENV.scopeKey]: rnd(), [CHAIN_HOST_ENV.workerKey]: rnd(), [CHAIN_HOST_ENV.artifactKey]: rnd(), [CHAIN_HOST_ENV.deliveryKey]: rnd()});
+    const keysOf = (env: Record<string, string>): ChainHostKeys => { const k = cloudKeysFromEnv(env); if (!k.ok) throw new Error(k.missing.join(",")); return k.keys; };
+    const digest = (t: string) => createHash("sha256").update(t).digest("hex");
+    const mkHost = (keys: ChainHostKeys, sandbox: SandboxProvider | null = new FakeSandbox(), audit: ConfirmationAuditRecord[] = []) =>
+      createCloudChainHost({dataDir: path.join(dir, "host"), keys, sandbox, planner: localStubPlanner(), plannerModel: "LOCAL_STUB", handlers: stubHandlers(j => j.kind.toLowerCase()),
+        globalStopFile: path.join(dir, "GLOBAL_STOP.json"), now, audit: a => audit.push(a)});
+    const scopeFor = (keys: ChainHostKeys) => supervisorTestSigner(keys, now).scope({tenantId: "tenant-a", projectId: "proj-web", environment: "staging", jobKinds: ["BUILD", "TEST", "PACKAGE", "DELIVERY"], allowNetwork: false, maxCostUsd: 10});
+    const confFor = (keys: ChainHostKeys, text = COMMAND) => supervisorTestSigner(keys, now).confirmation({objectiveSha256: digest(text), tenantId: "tenant-a", projectId: "proj-web", environment: "staging"});
+
+    it("K1 fail-closed: missing or short keys are reported by env NAME only (values never echoed)", () => {
+      const env = envKeys();
+      expect(cloudKeysFromEnv({})).toEqual({ok: false, missing: Object.values(CHAIN_HOST_ENV)});
+      const short = {...env, [CHAIN_HOST_ENV.workerKey]: "too-short"};
+      const r = cloudKeysFromEnv(short);
+      expect(r).toEqual({ok: false, missing: [CHAIN_HOST_ENV.workerKey]});
+      expect(JSON.stringify(r)).not.toContain("too-short");
+      expect(cloudKeysFromEnv({...env, [CHAIN_HOST_ENV.scopeKeyId]: "bad id!"})).toEqual({ok: false, missing: [CHAIN_HOST_ENV.scopeKeyId]});
+      expect(cloudKeysFromEnv(env).ok).toBe(true);
+    });
+
+    it("host runs the chain in-process: signed dispatch -> queue -> worker -> artifacts (FAKE_SANDBOX here); signer is labelled SUPERVISOR_TEST_ONLY", async () => {
+      const keys = keysOf(envKeys()), audit: ConfirmationAuditRecord[] = [], host = mkHost(keys, new FakeSandbox(), audit);
+      try {
+        expect(supervisorTestSigner(keys).label).toBe(SUPERVISOR_TEST_SIGNER_LABEL);
+        expect(SUPERVISOR_TEST_SIGNER_LABEL).toMatch(/not a Founder confirmation/);
+        const scope = scopeFor(keys);
+        let last: Awaited<ReturnType<typeof host.dispatch>> | null = null;
+        for (let round = 0; round < 6; round++) {
+          last = await host.dispatch(COMMAND, confFor(keys), scope);
+          expect(last.ok, JSON.stringify(last)).toBe(true);
+          if (!last.ok || Object.values(last.report.statuses).every(v => v === "SUCCEEDED" || v === "BLOCKED_FOUNDER_GATE")) break;
+          for (let i = 0; i < 5; i++) { const st = await host.runWorkerOnce(); if (st.state !== "DONE") break; }
+        }
+        expect(last && last.ok && Object.values(last.report.statuses).sort()).toEqual(["BLOCKED_FOUNDER_GATE", "SUCCEEDED", "SUCCEEDED", "SUCCEEDED"]);
+        expect(audit.every(a => a.decision === "ACCEPTED" && a.confirmedBy === "supervisor-test")).toBe(true);
+        const pkgId = last && last.ok ? [...last.dag.tasks.values()].find(t => t.kind === "PACKAGE")!.taskId : "";
+        const refs = host.resultArtifacts(pkgId);
+        expect(refs.map(a => a.name)).toEqual([scopedArtifactName(pkgId, 1, "dist/app.zip")]);   // accepted result, job+attempt-scoped
+        const g = await host.store.get({tenantId: "tenant-a", subject: "observer-01"}, {tenantId: "tenant-a", projectId: "proj-web", name: refs[0].name});
+        expect(g.ok).toBe(true);
+        expect(fs.readdirSync(path.join(dir, "host", "artifacts")).length).toBeGreaterThan(0);   // file-system backend, durable
+      } finally { await host.stop(); }
+    });
+
+    it("delivery integrity: a stored package is delivered via a verified signed URL; a tampered blob on disk or another tenant is never delivered", async () => {
+      const keys = keysOf(envKeys()), host = mkHost(keys);
+      try {
+        const scope = scopeFor(keys);
+        let pkgId = "", testId = "";
+        for (let round = 0; round < 6; round++) {
+          const d = await host.dispatch(COMMAND, confFor(keys), scope);
+          if (d.ok) { pkgId = [...d.dag.tasks.values()].find(t => t.kind === "PACKAGE")!.taskId; testId = [...d.dag.tasks.values()].find(t => t.kind === "TEST")!.taskId; }
+          if (!d.ok || Object.values(d.report.statuses).every(v => v === "SUCCEEDED" || v === "BLOCKED_FOUNDER_GATE")) break;
+          for (let i = 0; i < 5; i++) { if ((await host.runWorkerOnce()).state !== "DONE") break; }
+        }
+        const ok = await host.deliver("tenant-a", "proj-web", pkgId, "dist/app.zip");
+        expect(ok).toMatchObject({issued: true, redeemed: true, verified: true});
+        expect(await host.deliver("tenant-b", "proj-web", pkgId, "dist/app.zip")).toMatchObject({verified: false, issued: false, reason: "TENANT_MISMATCH"});
+        expect(await host.deliver("tenant-a", "proj-web", testId, "dist/app.zip")).toMatchObject({verified: false, reason: "NOT_A_RESULT_ARTIFACT"});   // not that job's result
+        expect(await host.deliver("tenant-a", "proj-web", "task-unknown", "dist/app.zip")).toMatchObject({verified: false, issued: false});
+        // tamper every stored blob on disk: redemption must fail closed
+        const walk = (d: string): string[] => fs.readdirSync(d, {withFileTypes: true}).flatMap(e => e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
+        for (const f of walk(path.join(dir, "host", "artifacts"))) { const b = fs.readFileSync(f); if (b.length > 0) { b[b.length - 1] ^= 0xff; fs.writeFileSync(f, b); } }
+        const bad = await host.deliver("tenant-a", "proj-web", pkgId, "dist/app.zip");
+        expect(bad.verified).toBe(false);
+        expect(bad.sha256).toBeNull();
+      } finally { await host.stop(); }
+    });
+
+    it("#344 B-1: the host delivers only from an accepted (SUCCEEDED) job result: a job cancelled mid-run has no result artifacts and delivery for it is refused (mid-put orphans: worker-level T2/T7)", async () => {
+      const keys = keysOf(envKeys());
+      let cancelTarget = "", hostRef: ReturnType<typeof createCloudChainHost> | null = null;
+      const sb = new FakeSandbox(new Set(), true, () => { if (cancelTarget) hostRef!.queue.cancel(cancelTarget); });
+      const host = hostRef = mkHost(keys, sb);
+      try {
+        const d = await host.dispatch(COMMAND, confFor(keys), scopeFor(keys));
+        if (!d.ok) throw new Error(JSON.stringify(d));
+        const buildId = d.report.submitted[0];
+        cancelTarget = buildId;
+        expect(await host.runWorkerOnce()).toMatchObject({state: "ABANDONED", jobId: buildId, reason: "JOB_CANCELLED"});
+        expect(host.resultArtifacts(buildId)).toEqual([]);
+        expect(await host.deliver("tenant-a", "proj-web", buildId, "dist/app.zip")).toMatchObject({verified: false, issued: false, reason: "JOB_NOT_SUCCEEDED"});
+      } finally { await host.stop(); }
+    });
+
+    it("host trusts only its own scope key: a confirmation signed by another host's key is rejected at INTAKE and nothing is queued", async () => {
+      const keys = keysOf(envKeys()), other = keysOf(envKeys()), host = mkHost(keys);
+      try {
+        const r = await host.dispatch(COMMAND, confFor(other), scopeFor(keys));
+        expect(r).toMatchObject({ok: false, stage: "INTAKE", reason: "INTAKE_NOT_CONFIRMED", detail: "SIGNATURE_INVALID"});
+        expect(await host.runWorkerOnce()).toEqual({state: "IDLE"});
+      } finally { await host.stop(); }
+    });
+
+    it("GLOBAL_STOP file stops the queue: the worker stops claiming and dispatch is refused", async () => {
+      const keys = keysOf(envKeys()), sb = new FakeSandbox(), host = mkHost(keys, sb);
+      try {
+        expect((await host.dispatch(COMMAND, confFor(keys), scopeFor(keys))).ok).toBe(true);
+        fs.writeFileSync(path.join(dir, "GLOBAL_STOP.json"), JSON.stringify({active: true, reason: "TEST_STOP"}));
+        expect(await host.runWorkerOnce()).toMatchObject({state: "STOPPED", reason: "GLOBAL_STOP_ACTIVE"});
+        expect(sb.runs).toBe(0);
+        // a NEW command needs a new submit, which the stopped queue refuses (re-dispatching the old one submits nothing and stays ok)
+        expect(await host.dispatch("Birim testlerini doğrula", confFor(keys, "Birim testlerini doğrula"), scopeFor(keys))).toMatchObject({ok: false, stage: "DISPATCH", reason: "SUBMIT_DENIED", detail: "GLOBAL_STOP_ACTIVE"});
+      } finally { await host.stop(); }
+    });
+
+    it("no HTTP start route: neither server.ts nor any control-api route imports or starts the chain host", () => {
+      const api = path.join(REPO_ROOT, "apps", "control-api", "src");
+      const files = [path.join(api, "server.ts"), ...fs.readdirSync(path.join(api, "routes")).filter(f => f.endsWith(".ts")).map(f => path.join(api, "routes", f))];
+      for (const f of files) expect(fs.readFileSync(f, "utf8"), f).not.toMatch(/chain-host|createCloudChainHost|supervisorTestSigner/);
+    });
+
+    it("no verified sandbox: the host worker stays UNAVAILABLE and claims nothing (Windows posture, K4)", async () => {
+      const keys = keysOf(envKeys()), host = mkHost(keys, null);
+      try {
+        expect((await host.dispatch(COMMAND, confFor(keys), scopeFor(keys))).ok).toBe(true);
+        expect(await host.runWorkerOnce()).toMatchObject({state: "UNAVAILABLE", reason: "SANDBOX_UNAVAILABLE"});
+      } finally { await host.stop(); }
+    });
+
+    it("real local run of scripts/cloud-chain-host.mts: queue -> worker -> linux-unshare-v2 sandbox -> artifacts (SKIPPED with the reason where the sandbox self-test fails)", async ctx => {
+      const script = path.join(REPO_ROOT, "scripts", "cloud-chain-host.mts");
+      const run = (env: Record<string, string>) => cp.spawnSync(process.execPath, ["--import", "tsx", script, "--supervisor-test", "--data-dir", path.join(dir, "run")],
+        {cwd: REPO_ROOT, env: {PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "", TMPDIR: process.env.TMPDIR ?? os.tmpdir(), ...env}, encoding: "utf8", timeout: 180_000});
+      const noKeys = run({});
+      expect(noKeys.status).toBe(2);
+      expect(JSON.parse(noKeys.stdout)).toMatchObject({result: "FAIL_CLOSED", reason: "KEYS_MISSING"});
+      const env = envKeys();
+      const unsigned = cp.spawnSync(process.execPath, ["--import", "tsx", script, "--data-dir", path.join(dir, "run0")], {cwd: REPO_ROOT, env: {PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "", ...env}, encoding: "utf8", timeout: 60_000});
+      expect(unsigned.status).toBe(2);
+      expect(JSON.parse(unsigned.stdout)).toMatchObject({result: "FAIL_CLOSED", reason: "NO_CONFIRMATION_SIGNER"});   // no implicit self-signing
+      const r = run(env);
+      const o = JSON.parse(r.stdout) as {result: string; evidenceClass: string; httpStartRoute: string; planner: string; sandbox: string; artifacts: {name: string; content?: string; sha256?: string}[]; confirmationSigner: string; label: string;
+        jobs: {key: string; status: string; transitions: string[]}[]; delivery: {issued: boolean; redeemed: boolean; verified: boolean; sha256: string | null}};
+      expect(o.evidenceClass).toBe("LOCAL_E2E");
+      expect(o.httpStartRoute).toBe("NONE");
+      expect(o.planner).toBe("LOCAL_STUB");
+      if (process.platform !== "linux") expect(o.sandbox).toMatch(/^UNAVAILABLE/);
+      for (const v of Object.values(env)) if (v.length >= 32) expect(r.stdout + r.stderr).not.toContain(v);   // key values never printed
+      expect(o.confirmationSigner).toBe(SUPERVISOR_TEST_SIGNER_LABEL);
+      expect(o.label).toMatch(/^LOCAL_E2E: .*NOT a cloud E2E/);
+      if (r.status === 3) { expect(o.result).toBe("SKIPPED"); ctx.skip(`script real run ${o.sandbox}`); return; }
+      expect(r.status, r.stdout + r.stderr).toBe(0);
+      expect(o.result).toBe("PASS");
+      expect(o.sandbox).toMatch(/^REAL/);
+      expect(o.artifacts.map(a => [a.name, a.content])).toEqual([["out/build.txt", "built by sandbox"], ["out/test.txt", "tests ok"], ["dist/app.txt", "package"]]);
+      expect(o.artifacts.every(a => /^[0-9a-f]{64}$/.test(a.sha256 ?? ""))).toBe(true);
+      // worker/queue state transitions per job
+      for (const j of o.jobs) {
+        expect(j.status, j.key).toBe("SUCCEEDED");
+        expect(j.transitions[0]).toBe("QUEUED"); expect(j.transitions).toContain("STARTED"); expect(j.transitions.at(-1)).toBe("SUCCEEDED");
+        expect(j.transitions.filter(t => t === "ARTIFACT").length).toBe(1);
+      }
+      expect(o.jobs.map(j => j.key)).toEqual(["build", "test", "package"]);
+      // verified delivery: signed URL redeemed, content hash equals the stored manifest hash
+      expect(o.delivery).toMatchObject({issued: true, redeemed: true, verified: true});
+      expect(o.delivery.sha256).toBe(o.artifacts.find(a => a.name === "dist/app.txt")!.sha256);
+    }, 240_000);
+  });
+
+  // //TR: chain-host v4 (#350 dersi): imzalı kapsam her dispatch'te doğrulanır; orkestratör tam imzalı kapsamla anahtarlanır; her imzalı kapsam alanı kendi yeniden hedefleme testiyle MAC'a bağlı.
+  describe("chain-host v4: caller scope is signature-verified on every dispatch; orchestrator keyed by the exact signed scope (per-field retarget tests)", () => {
+    beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-chain-v4-")); });
+    afterEach(() => { fs.rmSync(dir, {recursive: true, force: true}); });
+    const rnd = () => createHash("sha256").update(randomUUID()).digest("hex");   // çalışma anında üretilir; repoda değer yok
+    const keysV4 = (): ChainHostKeys => { const k = cloudKeysFromEnv({[CHAIN_HOST_ENV.scopeKeyId]: "k-local", [CHAIN_HOST_ENV.scopeKey]: rnd(), [CHAIN_HOST_ENV.workerKey]: rnd(),
+      [CHAIN_HOST_ENV.artifactKey]: rnd(), [CHAIN_HOST_ENV.deliveryKey]: rnd()}); if (!k.ok) throw new Error(k.missing.join(",")); return k.keys; };
+    const hostV4 = (keys: ChainHostKeys) => createCloudChainHost({dataDir: path.join(dir, "host"), keys, sandbox: new FakeSandbox(), planner: localStubPlanner(), plannerModel: "LOCAL_STUB",
+      handlers: stubHandlers(j => j.kind.toLowerCase()), globalStopFile: path.join(dir, "GLOBAL_STOP.json"), now});
+    const COMMAND2 = "Giriş sayfasını geliştir";
+    const conf = (keys: ChainHostKeys, text = COMMAND) => supervisorTestSigner(keys, now).confirmation({objectiveSha256: createHash("sha256").update(text).digest("hex"),
+      tenantId: "tenant-a", projectId: "proj-web", environment: "staging"});
+    const U: UnsignedScope = {tenantId: "tenant-a", projectId: "proj-web", environment: "staging", jobKinds: ["BUILD", "TEST", "PACKAGE", "DELIVERY"], allowNetwork: false, maxCostUsd: 10,
+      issuedAt: "2026-11-04T08:30:00.000Z", expiresAt: "2026-11-04T10:00:00.000Z", keyId: "k-local"};
+    const unsigned = (x: SignedScope): UnsignedScope => { const {signature: _s, ...rest} = x; return rest; };
+    // her satır: imza REDDEDİLEN değerle atılır, alan KABUL edilen değere yeniden yazılır (girdiler pozitif kontrolle birebir aynı; yalnız imza farklı)
+    const RETARGETS: ReadonlyArray<[keyof UnsignedScope, unknown]> = [
+      ["tenantId", "tenant-b"], ["projectId", "proj-other"], ["environment", "production"], ["jobKinds", ["BUILD"]], ["allowNetwork", true], ["maxCostUsd", 0.000001],
+      ["issuedAt", "2026-11-03T08:00:00.000Z"], ["expiresAt", "2026-11-04T08:59:00.000Z"], ["keyId", "k-other"],
+    ];
+
+    it("every signed scope field is MAC-bound at the host: a scope signed for another value and retargeted is refused before planning; positive control accepted", async () => {
+      const keys = keysV4(), host = hostV4(keys);
+      try {
+        const control = signScope(U, keys.scopeKey);
+        for (const [field, refused] of RETARGETS) {
+          const forged = {...signScope({...U, [field]: refused} as UnsignedScope, keys.scopeKey), [field]: U[field]} as SignedScope;   // keyId satırı: aynı sır, farklı keyId
+          expect(unsigned(forged), field).toEqual(unsigned(control));
+          expect(await host.dispatch(COMMAND, conf(keys), forged), field).toEqual({ok: false, stage: "INTAKE", reason: "SCOPE_SIGNATURE_INVALID"});
+          const pos = await host.dispatch(COMMAND, conf(keys), signScope({...U}, keys.scopeKey));
+          expect(pos.ok, `${field}: ${JSON.stringify(pos)}`).toBe(true);
+        }
+        for (const bad of [null, undefined, {}, {...control, keyId: "k-unknown"}, {...control, signature: "zz"}]) {
+          expect(await host.dispatch(COMMAND, conf(keys), bad as unknown as SignedScope)).toEqual({ok: false, stage: "INTAKE", reason: "SCOPE_SIGNATURE_INVALID"});
+        }
+      } finally { await host.stop(); }
+    });
+
+    it("a forged widening of an already-used scope (same tenant/project/env, reused signature) never reaches the cached orchestrator or the queue", async () => {
+      const keys = keysV4(), host = hostV4(keys);
+      try {
+        const a = signScope(U, keys.scopeKey);
+        expect((await host.dispatch(COMMAND, conf(keys), a)).ok).toBe(true);
+        const before = host.queue.list("tenant-a").length;
+        const forged = {...a, maxCostUsd: 1_000, jobKinds: ["BUILD", "TEST", "PACKAGE", "DELIVERY", "DEPLOY"]} as SignedScope;
+        expect(await host.dispatch(COMMAND2, conf(keys, COMMAND2), forged)).toEqual({ok: false, stage: "INTAKE", reason: "SCOPE_SIGNATURE_INVALID"});
+        expect(host.queue.list("tenant-a").length).toBe(before);
+      } finally { await host.stop(); }
+    });
+
+    it("a second validly signed scope for the same tenant/project/env gets its own orchestrator: its jobs carry ITS scope, not the first cached scope's", async () => {
+      const keys = keysV4(), host = hostV4(keys);
+      try {
+        const a = signScope(U, keys.scopeKey), b = signScope({...U, maxCostUsd: 9}, keys.scopeKey);
+        const ra = await host.dispatch(COMMAND, conf(keys), a), rb = await host.dispatch(COMMAND2, conf(keys, COMMAND2), b);
+        expect(ra.ok && rb.ok, JSON.stringify([ra, rb])).toBe(true);
+        if (!ra.ok || !rb.ok) return;
+        const sigs = (r: typeof ra) => r.ok ? [...r.dag.tasks.values()].map(t => host.queue.get(t.taskId)?.job.scope.maxCostUsd).filter(v => v !== undefined) : [];   // kuyruk imzayı redakte saklar; ayırt edici alan maxCostUsd
+        expect(sigs(ra).length).toBeGreaterThan(0); expect(sigs(rb).length).toBeGreaterThan(0);
+        expect(new Set(sigs(ra))).toEqual(new Set([10]));
+        expect(new Set(sigs(rb))).toEqual(new Set([9]));
+      } finally { await host.stop(); }
+    });
+
+    // //TR: #358 B-1: teslimde içerik özeti üç kaynakla (kabul edilen sonuç ref'i, manifest, imzalı URL) AYRI AYRI karşılaştırılır; her biri tek başına sapınca HASH_MISMATCH.
+    const sha = (b: Buffer | string) => createHash("sha256").update(b).digest("hex");
+    const putBlob = async (host: ReturnType<typeof hostV4>, name: string, text: string) => {
+      const content = Buffer.from(text);
+      const r = await host.store.put({tenantId: "tenant-a", subject: "seed-user"}, {tenantId: "tenant-a", projectId: "proj-web", name, content, sha256: sha(content), sizeBytes: content.byteLength});
+      expect(r.ok, JSON.stringify(r)).toBe(true);
+      return {name, sha256: sha(content), sizeBytes: content.byteLength};
+    };
+    type Ev = {jobId: string; seq: number; type: string; at: string; attempt: number; artifact?: {name: string; sha256: string; sizeBytes: number}};
+    const evs = (jobId: string, rows: Array<[string, number, Ev["artifact"]?]>): Ev[] =>
+      rows.map(([type, attempt, artifact], seq) => ({jobId, seq, type, at: new Date(clock.getTime() + seq).toISOString(), attempt, ...(artifact ? {artifact} : {})}));
+    /** Kuyruk görünümü test çifti: yalnız verilen jobId için, akış doğrulamasından geçen (verifyEventStream ok) bir görünüm döndürür; diğerleri gerçek kuyruğa gider. */
+    const fakeView = (host: ReturnType<typeof hostV4>, jobId: string, attempt: number, events: Ev[]) => {
+      expect(verifyEventStream(events as never, {jobId, retry: {maxAttempts: 3, backoffMs: 0}})).toEqual({ok: true, terminal: "SUCCEEDED"});
+      const real = host.queue.get.bind(host.queue);
+      (host.queue as {get: unknown}).get = (id: string) => id === jobId
+        ? {status: "SUCCEEDED", attempt, job: {jobId, tenantId: "tenant-a", projectId: "proj-web"}, events} : real(id);
+    };
+
+    it("#358 B-1: deliver pins redeemed sha == accepted ref AND == manifest AND == signed URL; each single divergence alone is HASH_MISMATCH; positive control verified", async () => {
+      const keys = keysV4();
+      const scenario = async (tamper: "none" | "ref" | "manifest" | "url") => {
+        const host = hostV4(keys);
+        try {
+          const J = `job-b1-${tamper}`, ref = await putBlob(host, scopedArtifactName(J, 1, "dist/app.zip"), `b1 ${tamper} bytes`);
+          fakeView(host, J, 1, evs(J, [["QUEUED", 1], ["STARTED", 1], ["ARTIFACT", 1, tamper === "ref" ? {...ref, sha256: sha("not the stored bytes")} : ref], ["SUCCEEDED", 1]]));
+          if (tamper === "manifest") {
+            const redeem = host.store.redeemDeliveryUrl.bind(host.store);
+            (host.store as {redeemDeliveryUrl: unknown}).redeemDeliveryUrl = async (u: string) => { const r = await redeem(u); return r.ok ? {...r, manifest: {...r.manifest, sha256: sha("other manifest")}} : r; };
+          }
+          if (tamper === "url") {
+            const issue = host.store.issueDeliveryUrl.bind(host.store);
+            (host.store as {issueDeliveryUrl: unknown}).issueDeliveryUrl = async (...a: Parameters<typeof issue>) => { const r = await issue(...a); return r.ok ? {...r, sha256: sha("other url")} : r; };
+          }
+          return {res: await host.deliver("tenant-a", "proj-web", J, "dist/app.zip"), ref};
+        } finally { await host.stop(); }
+      };
+      const ok = await scenario("none");
+      expect(ok.res).toEqual({issued: true, redeemed: true, sha256: ok.ref.sha256, verified: true});   // positive control
+      for (const t of ["ref", "manifest", "url"] as const) {
+        const r = await scenario(t);
+        expect(r.res, t).toEqual({issued: true, redeemed: true, sha256: r.ref.sha256, verified: false, reason: "HASH_MISMATCH"});
+      }
+    });
+
+    // //TR: #358 B-2: önceki (sonuçsuz) denemenin aynı rel'li yetim artifact'ı asla teslim edilmez; hem host (resultArtifacts) hem çekirdek (resolveDeliverable) son denemeyle süzer.
+    const orphanView = async (host: ReturnType<typeof hostV4>, J: string) => {
+      const orphan = await putBlob(host, scopedArtifactName(J, 1, "dist/app.zip"), "attempt-1 orphan bytes");
+      const final = await putBlob(host, scopedArtifactName(J, 2, "dist/app.zip"), "attempt-2 final bytes");
+      // akış geçerli: deneme 1 artifact'ı sonuçlanmadan yeniden deneme (lease süresi doldu / durduruldu) -> deneme 2 aynı rel ile başarılı
+      const events = evs(J, [["QUEUED", 1], ["STARTED", 1], ["ARTIFACT", 1, orphan], ["RETRYING", 2], ["STARTED", 2], ["ARTIFACT", 2, final], ["SUCCEEDED", 2]]);
+      return {orphan, final, events, view: {status: "SUCCEEDED", attempt: 2, job: {jobId: J, tenantId: "tenant-a", projectId: "proj-web"}, events}};
+    };
+
+    it("#358 B-2 core: resolveDeliverable resolves only the FINAL attempt's artifact; the earlier attempt's orphan with the same rel is NOT_A_RESULT_ARTIFACT (positive control: final resolves)", async () => {
+      const host = hostV4(keysV4());
+      try {
+        const J = "job-b2-core", o = await orphanView(host, J);
+        expect(verifyEventStream(o.events as never, {jobId: J, retry: {maxAttempts: 3, backoffMs: 0}})).toEqual({ok: true, terminal: "SUCCEEDED"});
+        expect(resolveDeliverable(o.view, "tenant-a", "proj-web", o.orphan.name)).toEqual({ok: false, reason: "NOT_A_RESULT_ARTIFACT"});
+        expect(resolveDeliverable(o.view, "tenant-a", "proj-web", o.final.name)).toEqual({ok: true, ref: o.final});
+      } finally { await host.stop(); }
+    });
+
+    it("#358 B-2 host: resultArtifacts lists only the final attempt and deliver(rel) delivers the attempt-2 bytes, never the attempt-1 orphan (positive control: verified final sha)", async () => {
+      const host = hostV4(keysV4());
+      try {
+        const J = "job-b2-host", o = await orphanView(host, J);
+        fakeView(host, J, 2, o.events);
+        expect(host.resultArtifacts(J)).toEqual([o.final]);
+        expect(await host.deliver("tenant-a", "proj-web", J, "dist/app.zip")).toEqual({issued: true, redeemed: true, sha256: o.final.sha256, verified: true});
+        expect(o.final.sha256).not.toBe(o.orphan.sha256);
+      } finally { await host.stop(); }
+    });
+
+    it("#358 N-1: an expired but validly signed scope is refused before the confirmation is consumed or the planner runs", async () => {
+      const keys = keysV4(), planner = localStubPlanner();
+      const host = createCloudChainHost({dataDir: path.join(dir, "host"), keys, sandbox: new FakeSandbox(), planner, plannerModel: "LOCAL_STUB",
+        handlers: stubHandlers(j => j.kind.toLowerCase()), globalStopFile: path.join(dir, "GLOBAL_STOP.json"), now});
+      try {
+        const c = conf(keys);
+        const expired = signScope({...U, issuedAt: "2026-11-04T08:00:00.000Z", expiresAt: "2026-11-04T09:00:00.000Z"}, keys.scopeKey);   // expiresAt == now
+        expect(await host.dispatch(COMMAND, c, expired)).toEqual({ok: false, stage: "INTAKE", reason: "SCOPE_EXPIRED"});
+        expect(planner.calls).toBe(0);
+        const pos = await host.dispatch(COMMAND, c, signScope(U, keys.scopeKey));   // the SAME confirmation is still unconsumed
+        expect(pos.ok, JSON.stringify(pos)).toBe(true);
+        expect(planner.calls).toBe(1);
+      } finally { await host.stop(); }
+    });
+
   });
 }
