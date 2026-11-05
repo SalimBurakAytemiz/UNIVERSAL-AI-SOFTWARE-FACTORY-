@@ -578,11 +578,11 @@ registerProtectedBatch3Cases();
 // //TR: COORD korumalı paket 3b (pre-dev karar rotaları + rol yaşam döngüsü özeti kaydı + izin listesi) senaryoları da bu kayıtlı dosyadan çalışır.
 import {registerProtectedBatch3bCases} from "./support/protected-batch-3b.cases.js";
 registerProtectedBatch3bCases();
+import {registerAnalysisDecisionsRealServerCases} from "./support/analysis-decisions-real-server.cases.js";
+registerAnalysisDecisionsRealServerCases();
 // //TR: UASCO-T0006: eski fake-bridge 10 rota için renderer -> gerçek buildServer senaryoları da bu kayıtlı dosyadan koşar
 import {registerRendererRealServerCases} from "./support/renderer-real-server.cases.js";
 registerRendererRealServerCases();
-import {registerAnalysisDecisionsRealServerCases} from "./support/analysis-decisions-real-server.cases.js";
-registerAnalysisDecisionsRealServerCases();
 // //TR: UASCO-T0010 masaüstü köprüsü: POST /v1/command-intake izin listesi (main.mjs POST_ROUTE_RES, Kurucu kapılı) ve gerçek buildServer'a giden panel senaryoları
 import {registerDesktopCommandIntakeBridgeCases} from "./support/desktop-command-intake-bridge.cases.js";
 registerDesktopCommandIntakeBridgeCases();
