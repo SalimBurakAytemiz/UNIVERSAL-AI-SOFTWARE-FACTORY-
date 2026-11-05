@@ -1,4 +1,5 @@
 // //TR: Bu modül Ayarlar > Sağlayıcı ve model yönlendirme görünümünün saf (DOM'suz) çekirdeğidir (PQ-005): mevcut GET /v1/system/executors, /v1/capabilities ve /v1/adapters yanıtlarını güvenli, sınırlı alanlara eşler. Kayıt değerleri (status, activation, implementation) AYNEN taşınır; hiçbiri etkin/bağlı/çalışıyor durumuna YÜKSELTİLMEZ. Yanıtta model alanı yoktur: model "—" kalır. Bozuk kayıt tüm okumayı ERROR yapar (kısmi görünüm yok).
+import {redactText} from "./project-core.js";
 const isObj=x=>x!==null&&typeof x==="object"&&!Array.isArray(x);
 const ID_RE=/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$/,WORD_RE=/^[A-Z][A-Z0-9_]{0,39}$/;
 // //TR: Kimlik ve sözcük alanları yalnız gerçek string olabilir (String() zorlaması 5 veya ["A"] gibi değerleri geçirirdi).
@@ -23,7 +24,8 @@ export function mapAdapters(raw){
   const list=isObj(raw)?raw.adapters:null;if(!Array.isArray(list))return bad;
   const items=[];
   for(const x of list){
-    if(!isObj(x)||!isId(x.id)||!isWord(x.category)||!isWord(x.status)||!isWord(x.implementation))return bad;
+    // //TR: Sır biçimli kimlik (sk-…, ghp_…, AKIA…) DOM'a hiçbir biçimde (önek, uzunluk, maske) taşınmaz: tüm okuma ERROR olur.
+    if(!isObj(x)||!isId(x.id)||redactText(x.id)!==x.id||!isWord(x.category)||!isWord(x.status)||!isWord(x.implementation))return bad;
     items.push({id:x.id,category:x.category,status:x.status,implementation:x.implementation,requiresCertification:typeof x.requiresCertification==="boolean"?x.requiresCertification:null});
   }
   return {state:"VERIFIED",items,total:items.length};
@@ -58,23 +60,35 @@ export function buildRoutingRows(exec){
 // var/yok/bilinmiyor olarak türetilir (profil READY = giriş sinyali var); hiçbir sır değeri, yol ya da komut taşınmaz.
 export const MODEL_ADAPTER_CATEGORIES=Object.freeze(["MODEL_GATEWAY","LOCAL_MODEL"]);
 export const MODEL_GAP="NO_READ_ROUTE";
+// //TR: Yapılandırma yalnız iki sinyalden türetilir: yürütücü için sunucunun KULLANDIĞI yürütücü (active === LOCAL_CLAUDE -> CONFIGURED; başka bir
+// okunmuş neden, örn. EXECUTOR_NOT_CONFIGURED -> NOT_CONFIGURED; okunamadı -> UNKNOWN); bağdaştırıcı için NOT_IMPLEMENTED -> NOT_CONFIGURED, aksi UNKNOWN
+// (bağdaştırıcı yapılandırması için okuma yolu yok; kayıt "REGISTERED" asla CONFIGURED sayılmaz).
+export const CONFIG_STATES=Object.freeze(["CONFIGURED","NOT_CONFIGURED","UNKNOWN"]);
+const execConfigured=active=>active==="LOCAL_CLAUDE"?"CONFIGURED":typeof active==="string"&&active?"NOT_CONFIGURED":"UNKNOWN";
+const adapterConfigured=impl=>impl==="NOT_IMPLEMENTED"?"NOT_CONFIGURED":"UNKNOWN";
+/** Satırların özeti: en az biri CONFIGURED -> CONFIGURED; hepsi NOT_CONFIGURED -> NOT_CONFIGURED; aksi (karışık bilinmeyen ya da satır yok) UNKNOWN. */
+export function providerConfigSummary(rows){
+  if(!Array.isArray(rows)||!rows.length)return "UNKNOWN";
+  if(rows.some(r=>r.configured==="CONFIGURED"))return "CONFIGURED";
+  return rows.every(r=>r.configured==="NOT_CONFIGURED")?"NOT_CONFIGURED":"UNKNOWN";
+}
 const credentialOf=state=>state==="READY"?"PRESENT":state==="LOGIN_REQUIRED"||state==="REFUSED"?"ABSENT":"UNKNOWN";
 /**
  * exec: mapExecutors çıktısı; adapters: mapAdapters çıktısı. Dönüş: {state, sources:{executors,adapters}, rows:[...]}.
  * state: iki kaynak da doğrulanmadıysa UNAVAILABLE (ya da ikisi de ERROR ise ERROR); en az biri doğrulandı ve satır yoksa EMPTY; aksi halde VERIFIED.
- * Satır: {id, kind, roles:[{role,state,credential}], executorState, inUse, status, implementation, fallback:null, quota:null, costClass:null, gap}.
+ * Satır: {id, kind, roles:[{role,state,credential}], executorState, inUse, configured (CONFIG_STATES), status, implementation, fallback:null, quota:null, costClass:null, gap}.
  */
 export function buildModelProviderRows(exec,adapters){
   const ex=exec&&exec.state==="VERIFIED"?exec:null,ad=adapters&&adapters.state==="VERIFIED"?adapters:null;
   const sources={executors:exec&&typeof exec.state==="string"?exec.state:"UNAVAILABLE",adapters:adapters&&typeof adapters.state==="string"?adapters.state:"UNAVAILABLE"};
-  if(!ex&&!ad)return {state:sources.executors==="ERROR"&&sources.adapters==="ERROR"?"ERROR":"UNAVAILABLE",sources,rows:[]};
+  if(!ex&&!ad)return {state:sources.executors==="ERROR"&&sources.adapters==="ERROR"?"ERROR":"UNAVAILABLE",sources,rows:[],configured:"UNKNOWN"};
   const rows=[];
   const local=ex?(ex.items??[]).find(e=>e.id==="LOCAL_CLAUDE")??null:null;
   if(local){
     const roles=["implementer","reviewer"].map(role=>{const p=(ex.profiles??[]).find(x=>x.role===role)??null;const state=p&&typeof p.state==="string"?p.state:null;return {role,state,credential:credentialOf(state)}});
-    rows.push({id:"LOCAL_CLAUDE",kind:"EXECUTOR",roles,executorState:local.state??null,inUse:ex.active==="LOCAL_CLAUDE",status:null,implementation:null,fallback:null,quota:null,costClass:null,gap:MODEL_GAP});
+    rows.push({id:"LOCAL_CLAUDE",kind:"EXECUTOR",roles,executorState:local.state??null,inUse:ex.active==="LOCAL_CLAUDE",configured:execConfigured(ex.active),status:null,implementation:null,fallback:null,quota:null,costClass:null,gap:MODEL_GAP});
   }
   if(ad)for(const a of ad.items)if(MODEL_ADAPTER_CATEGORIES.includes(a.category))
-    rows.push({id:a.id,kind:a.category,roles:[],executorState:null,inUse:false,status:a.status,implementation:a.implementation,fallback:null,quota:null,costClass:null,gap:MODEL_GAP});
-  return {state:rows.length?"VERIFIED":"EMPTY",sources,rows};
+    rows.push({id:a.id,kind:a.category,roles:[],executorState:null,inUse:false,configured:adapterConfigured(a.implementation),status:a.status,implementation:a.implementation,fallback:null,quota:null,costClass:null,gap:MODEL_GAP});
+  return {state:rows.length?"VERIFIED":"EMPTY",sources,rows,configured:providerConfigSummary(rows)};
 }

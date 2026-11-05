@@ -56,13 +56,13 @@ const FACTORY = {schemaVersion: "1.2.0", system: "UNIVERSAL-AI-SOFTWARE-COMPANY-
 const LOGIN = "$env:CLAUDE_CONFIG_DIR='C:/Users/u/.uasco/impl'; claude";
 
 interface Feed {
-  caps?: any; adapters?: any; execOff?: boolean; profiles?: Record<string, any> | null; controlActive?: boolean | null; controlReason?: string; controlOff?: boolean; healthOff?: boolean; factoryOff?: boolean; sandbox?: any;
+  caps?: any; adapters?: any; execOff?: boolean; profiles?: Record<string, any> | null; controlActive?: boolean | null; controlReason?: string; controlOff?: boolean; healthOff?: boolean; factoryOff?: boolean; sandbox?: any; active?: string | null;
 }
 function execResponse(feed: Feed) {
   const profiles = feed.profiles === undefined
     ? {implementer: {state: "READY", reason: null, loginCommand: LOGIN}, reviewer: {state: "LOGIN_REQUIRED", reason: "LOGIN_REQUIRED", loginCommand: LOGIN}}
     : feed.profiles;
-  return {executors: [{id: "LOCAL_CLAUDE", state: "READY"}], active: {reason: null}, sandbox: feed.sandbox ?? {state: "UNAVAILABLE", reason: "M1A_MODE"}, claudeProfiles: profiles};
+  return {executors: [{id: "LOCAL_CLAUDE", state: "READY"}], active: {reason: feed.active ?? null}, sandbox: feed.sandbox ?? {state: "UNAVAILABLE", reason: "M1A_MODE"}, claudeProfiles: profiles};
 }
 async function mkCtx(feed: Feed = {}, lang = "tr") {
   const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js");
@@ -992,5 +992,100 @@ describe("Model & provider settings (read-only; fallback/quota/cost honestly una
       expect(adRows.length).toBeGreaterThan(0);
       for (const r of res.rows) expect([r.fallback, r.quota, r.costClass]).toEqual([null, null, null]);
     } finally { await app.close(); fs.rmSync(tmp, {recursive: true, force: true}); }
+  });
+  // //TR: UASCO-T0006 (sağlayıcı ayarları): yapılandırma yalnız active (yürütücü) ve NOT_IMPLEMENTED (bağdaştırıcı) sinyalinden; REGISTERED asla CONFIGURED değildir; sır biçimli kimlik tüm okumayı ERROR yapar.
+  it("configuration: CONFIGURED only when the Control API reports LOCAL_CLAUDE in use; a registered adapter is never configured; the summary says NOT_CONFIGURED honestly", async () => {
+    const c = await load("routing-core.js"), ads = c.mapAdapters(MODEL_ADS);
+    const ex = (active: any) => ({state: "VERIFIED", items: [{id: "LOCAL_CLAUDE", state: "READY"}], active, profiles: [{role: "implementer", state: "READY"}]});
+    const on = c.buildModelProviderRows(ex("LOCAL_CLAUDE"), ads);
+    expect(on.rows.map((r: any) => [r.id, r.configured])).toEqual([["LOCAL_CLAUDE", "CONFIGURED"], ["omniroute", "NOT_CONFIGURED"], ["ollama", "NOT_CONFIGURED"]]);
+    expect(on.configured).toBe("CONFIGURED");
+    const off = c.buildModelProviderRows(ex("EXECUTOR_NOT_CONFIGURED"), ads);
+    expect(off.rows.map((r: any) => r.configured)).toEqual(["NOT_CONFIGURED", "NOT_CONFIGURED", "NOT_CONFIGURED"]);
+    expect(off.configured).toBe("NOT_CONFIGURED");
+    expect(c.buildModelProviderRows(ex(null), ads).configured).toBe("UNKNOWN");                       // active not read: not verified, never "not configured" nor "configured"
+    expect(c.buildModelProviderRows(ex("FAKE"), ads).rows[0].configured).toBe("NOT_CONFIGURED");       // another executor in use: LOCAL_CLAUDE is not the configured one
+    const impl = c.buildModelProviderRows(ex("EXECUTOR_NOT_CONFIGURED"), c.mapAdapters({adapters: [{...MODEL_ADS.adapters[0], implementation: "IMPLEMENTED"}]}));
+    expect(impl.rows[1].configured).toBe("UNKNOWN");                                                  // no adapter-config read route: an implemented adapter is UNKNOWN, never CONFIGURED
+    expect(impl.configured).toBe("UNKNOWN");
+    expect(c.providerConfigSummary([])).toBe("UNKNOWN");
+    expect(c.buildModelProviderRows({state: "ERROR"}, {state: "ERROR"}).configured).toBe("UNKNOWN");
+    for (const id of ["sk-ant-api03-" + "Q".repeat(24), "ghp_" + "Q".repeat(30), "AKIA" + "Q".repeat(16)])
+      expect(c.mapAdapters({adapters: [{...MODEL_ADS.adapters[0], id}]}).state, id).toBe("ERROR");
+    expect(c.mapAdapters({adapters: [{...MODEL_ADS.adapters[0], id: "llama-cpp"}]}).state).toBe("VERIFIED");
+  });
+  it("panel: the configuration column and summary render CONFIGURED / NOT_CONFIGURED / not verified from the reads (en + tr)", async () => {
+    const sum = (n: N) => within(n).find(x => x.dataset.providerConfig)!;
+    const off = await modelPanel({adapters: MODEL_ADS, active: "EXECUTOR_NOT_CONFIGURED"});
+    expect(sum(off.node).dataset.providerConfig).toBe("NOT_CONFIGURED");
+    expect(within(sum(off.node)).find(x => x.dataset.pill)!.dataset.pill).toBe("UNAVAILABLE");
+    expect(text(sum(off.node))).toContain("No AI provider is configured");
+    expect(within(off.node).filter(n => n.dataset.configured).map(n => n.dataset.configured)).toEqual(["NOT_CONFIGURED", "NOT_CONFIGURED", "NOT_CONFIGURED"]);
+    expect(text(off.node)).not.toContain("Configured (in use");
+    const on = await modelPanel({adapters: MODEL_ADS, active: "LOCAL_CLAUDE"});
+    expect(sum(on.node).dataset.providerConfig).toBe("CONFIGURED");
+    expect(within(on.node).find(n => n.dataset.modelRow === "LOCAL_CLAUDE" && true)!.children.map(c => c.dataset.configured).filter(Boolean)).toEqual(["CONFIGURED"]);
+    const unk = await modelPanel({adapters: MODEL_ADS});
+    expect(sum(unk.node).dataset.providerConfig).toBe("UNKNOWN");
+    expect(within(sum(unk.node)).find(x => x.dataset.pill)!.dataset.pill).toBe("NOT_VERIFIED");
+    const err = await modelPanel({execOff: true, adapters: {adapters: "nope"}});
+    expect(within(err.node).some(n => n.dataset.providerConfig)).toBe(false);                           // no rows read: no configuration claim at all
+    const tr = await modelPanel({adapters: MODEL_ADS, active: "EXECUTOR_NOT_CONFIGURED"}, "tr");
+    expect(text(sum(tr.node))).toContain("Hiçbir AI sağlayıcısı yapılandırılmadı");
+    const i18n = await load("i18n.js");
+    for (const lang of ["en", "tr"]) for (const k of ["models.col.config", ...["CONFIGURED", "NOT_CONFIGURED", "UNKNOWN"].flatMap(x => [`models.config.${x}`, `models.summary.${x}`])])
+      expect(i18n.translate(lang, k), `${lang} ${k}`).not.toBe(k);
+  });
+  it("real buildServer (fresh install, fake provider keys in the environment): the panel says NOT_CONFIGURED and no key value, prefix, length or fingerprint reaches the DOM", async () => {
+    const {buildServer} = await import("../apps/control-api/src/server.js");
+    const boundary = await import(pathToFileURL(path.join(root, "automation", "lib", "control-boundary.mjs")).href);
+    const extra = loadGet();
+    const KEYS: Record<string, string> = {ANTHROPIC_API_KEY: "sk-ant-api03-" + "Kq7".repeat(16), OPENAI_API_KEY: "sk-proj-" + "Vx9".repeat(16), GITHUB_TOKEN: "ghp_" + "Rm4".repeat(12)};
+    const saved = Object.fromEntries(Object.keys(KEYS).map(k => [k, process.env[k]]));
+    Object.assign(process.env, KEYS);
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-prov-")), TOKEN = crypto.randomBytes(24).toString("hex"), PORT = 3210, host = `127.0.0.1:${PORT}`;
+    const app = buildServer({controlToken: TOKEN, runtime: path.join(tmp, "rt"), repoRoot: root, dataDir: path.join(tmp, "data"), port: PORT, logger: false} as any);
+    try {
+      const bodies: string[] = [], byPath: Record<string, string> = {}, calls: string[] = [];
+      // main.mjs uasco:api-get: allow-list, /health identity proof, control token only in the bridge, "<path>: HTTP <code>" errors; POST fails the test
+      const bridge = {apiGet: async (p: string) => {
+        calls.push(p);
+        if (!(boundary.desktopGetPathAllowed(p) || extra(p))) throw new Error("INVALID_API_PATH");
+        const challenge = crypto.randomBytes(32).toString("hex"), hr = await app.inject({method: "GET", url: `/health?challenge=${challenge}`, headers: {host}});
+        if (hr.statusCode !== 200 || hr.json().controlProof !== boundary.controlChallengeProof(TOKEN, challenge)) throw new Error("CONTROL_API_IDENTITY_UNVERIFIED");
+        const r = await app.inject({method: "GET", url: p, headers: {"x-uasco-control-token": TOKEN, host}});
+        bodies.push(r.body); byPath[p] = r.body;
+        if (r.statusCode < 200 || r.statusCode >= 300) throw new Error(`${p}: HTTP ${r.statusCode}`);
+        return r.json();
+      }, apiPost: async (p: string) => { throw new Error(`POST must never be called (${p})`); }};
+      const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js"), m = await load("views", "model-settings.js");
+      const render = async (lang: string) => {
+        const doc = new D(), store = st.createStore(null), t = (k: string, v?: any) => i18n.translate(lang, k, v);
+        const ctx: any = {doc, store, api: apiMod.createApi({bridge, store}), i18n: {lang, t, setLang: () => {}}, t, navigate: () => {}, rerender: async () => {}, refreshAll: async () => {}, confirm: async () => false, principal: "FOUNDER_LOCAL"};
+        return (await m.modelSettingsPanel(ctx)) as N;
+      };
+      const node = await render("en");
+      expect(new Set(calls)).toEqual(new Set(["/v1/system/executors", "/v1/adapters"]));
+      expect(JSON.parse(byPath["/v1/system/executors"]).active.reason).toBe("EXECUTOR_NOT_CONFIGURED");   // measured, not assumed
+      const sum = within(node).find(x => x.dataset.providerConfig)!;
+      expect(sum.dataset.providerConfig).toBe("NOT_CONFIGURED");
+      expect(text(sum)).toContain("No AI provider is configured");
+      const cfg = within(node).filter(n => n.dataset.configured).map(n => n.dataset.configured);
+      expect(cfg.length).toBeGreaterThan(1); expect(cfg.every(x => x === "NOT_CONFIGURED")).toBe(true);
+      for (const n of [node, await render("tr")]) {
+        const dom = [text(n), ...within(n).flatMap(x => [...Object.values(x.dataset), ...x.attrs.values()])].join("\n");
+        for (const v of Object.values(KEYS)) {
+          expect(dom).not.toContain(v);
+          for (const cut of [v.slice(0, 12), v.slice(-6), v.slice(4, 16)]) expect(dom).not.toContain(cut);                       // no prefix / suffix / fragment
+          expect(dom).not.toContain(crypto.createHash("sha256").update(v).digest("hex").slice(0, 8));                         // no fingerprint
+          expect(dom).not.toMatch(new RegExp(`\\b${v.length}\\s*(?:chars?|karakter)`, "i"));                                 // no length disclosure
+        }
+        expect(dom).not.toMatch(/\bsk-|ghp_|\*{4,}|•{4,}/);                                                                     // no key prefix, no mask
+      }
+      for (const b of bodies) for (const v of Object.values(KEYS)) expect(b).not.toContain(v);                                 // the server never echoed a key either
+    } finally {
+      for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+      await app.close(); fs.rmSync(tmp, {recursive: true, force: true});
+    }
   });
 });
