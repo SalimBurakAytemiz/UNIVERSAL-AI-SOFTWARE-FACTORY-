@@ -116,9 +116,11 @@ export function stripComments(s: string, filePath: string): string {
   const stack: Array<"tpl" | number> = [];
   // #378 B1: açılış parantezinden önce if/while/for/with varsa, kapanıştan sonra gelen "/" bir düzenli ifadedir (if (x) /a[//]/.test(s)); başka ")" sonrası bölmedir.
   const parens: boolean[] = []; let kwParenClosed = false;
-  const prevWord = () => /(?:^|[^\w$])([A-Za-z_$][\w$]*)\s*$/.exec(out)?.[1] ?? "";
+  // #378 inceleme PERF: geriye bakış yalnız çıktının son 64 karakterinde yapılır (tüm çıktı üzerinde regex O(n²) idi: 300 KB test dosyası ~12 sn).
+  const tail = () => out.slice(-64);
+  const prevWord = () => /(?:^|[^\w$])([A-Za-z_$][\w$]*)\s*$/.exec(tail())?.[1] ?? "";
   // Düzenli ifade değişmezi (JS ailesi) yalnız bir ifadenin başlayabileceği yerde başlar: önceki anlamlı karakter yoksa ya da işleç/ayraçsa ya da önceki sözcük return/typeof/case/... ise. İçindeki tırnak/yorum benzeri dizgeler dize veya yorum sayılmaz.
-  const rxStart = () => { const t = out.replace(/\s+$/, ""); if (!t) return true; if (/[(,=:[!&|?{};+\-*%<>~^]$/.test(t)) return true; if (t.endsWith(")")) return kwParenClosed; return /(?:^|[^\w$])(?:return|typeof|case|in|of|new|delete|void|throw|yield|await|else|do)$/.test(t); };
+  const rxStart = () => { const t = tail().replace(/\s+$/, ""); if (!t) return true; if (/[(,=:[!&|?{};+\-*%<>~^]$/.test(t)) return true; if (t.endsWith(")")) return kwParenClosed; return /(?:^|[^\w$])(?:return|typeof|case|in|of|new|delete|void|throw|yield|await|else|do)$/.test(t); };
   while (i < s.length) {
     const c = s[i], n = s[i + 1], top = stack[stack.length - 1];
     if (top === "tpl") {
@@ -131,7 +133,8 @@ export function stripComments(s: string, filePath: string): string {
     if (js && c === "`") { stack.push("tpl"); out += c; i++; continue; }
     if (c === '"' || c === "'" || (c === "`" && slash)) {   // dize (JS dışı dillerde ters tırnak da düz dizedir): kaçışlarla sonuna kadar olduğu gibi geçer
       let j = i + 1; out += c;
-      while (j < s.length) { const d = s[j]; out += d; j++; if (d === "\\" && j < s.length) { out += s[j]; j++; continue; } if (d === c) break; }
+      // #378 inceleme FP: JS'de ' ve " dizeleri satır sonunda biter (sonlanmamış dize sözdizimi hatasıdır): JSX metnindeki bir kesme işareti (<p>don't</p>) sonraki satırların dize/kod sınırlarını kaydıramaz.
+      while (j < s.length) { const d = s[j]; if (js && c !== "`" && EOL.has(d)) break; out += d; j++; if (d === "\\" && j < s.length) { out += s[j]; j++; continue; } if (d === c) break; }
       i = j; continue;
     }
     if (typeof top === "number" && c === "{") { stack[stack.length - 1] = top + 1; out += c; i++; continue; }

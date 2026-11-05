@@ -229,4 +229,22 @@ describe("UASCO-T0067 test-surface protection: commented-out, inverted, snapshot
     // G2 receivers: only a test constructor, never a property or a longer identifier
     expect(disabledTestMarkers("submit.fails(x); obj.test.failing(y); edit.fails(z);")).toBe(0);
   });
+  it("#378 review: stripping is linear (a 300 KB test file strips in well under the old ~12 s) and a JSX apostrophe cannot shift string boundaries on later lines", () => {
+    // PERF: the look-behind (previous word / regex start) only reads the last 64 characters of the output
+    const unit = 'it("case", () => { if (ok(x)) { expect(f(a, "b")).toBe(`c ${d}`); } /* c */ const r = /x[/]y/; // note\n});\n';
+    const big = unit.repeat(Math.ceil(300_000 / unit.length));
+    const t0 = performance.now(); const out = stripComments(big, P); const ms = performance.now() - t0;
+    expect(ms, `${ms.toFixed(0)} ms for ${big.length} chars`).toBeLessThan(2000);   // quadratic version: ~12 s on this size; linear: tens of ms
+    expect(assertionCount(out)).toBe(assertionCount(big));
+    // FP: an honest JSX text edit with an apostrophe, followed later by a string containing "//", is not a weakening (a ' or " string ends at the line end)
+    const BEFORE = REAL + "const link = 'http://example.com'; expect(link).toBeTruthy();\n";
+    const AFTER = 'const el = <p>don\'t</p>;\n' + BEFORE;
+    expect(surface(BEFORE, AFTER).weakened).toEqual([]);
+    expect(surface(BEFORE, AFTER).functionalAcceptance).toBe("UNVERIFIED_ORACLE");
+    expect(assertionCount(stripComments(AFTER, P))).toBe(assertionCount(AFTER));
+    // known, documented limit: an apostrophe and a "//" on the SAME line can still be misread (stripping only adds detections, so it is flagged, never hidden)
+    expect(assertionCount(stripComments("const el = <p>don't</p>; const u = 'http://h'; expect(a).toBe(1);", P))).toBe(0);
+    // a backslash line continuation keeps a string open across the newline (valid JS)
+    expect(assertionCount(stripComments("const s = 'a\\\n// not a comment'; expect(a).toBe(1);", P))).toBe(1);
+  });
 });
