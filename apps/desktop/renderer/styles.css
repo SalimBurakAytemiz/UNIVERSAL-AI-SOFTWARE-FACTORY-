@@ -24,9 +24,9 @@
   /* Boşluk ölçeği: px/16 rem (mevcut kök font ölçeklemesiyle 4K'da büyür). */
   --space-1:.25rem;--space-2:.5rem;--space-3:.75rem;--space-4:1rem;--space-5:1.25rem;--space-6:1.5rem;--space-8:2rem;--space-10:2.5rem;--space-12:3rem;--space-16:4rem;
   /* Grid boyutları (px/16 rem). */
-  --nav-w:15rem;--feed-w:22rem;--topbar-h:4rem;--contextbar-h:3.5rem;--inspector-w:21.25rem;--page-pad:1.5rem;--card-min:12.5rem;--card-gap:.75rem;--main-min:30rem;
+  --nav-w:15rem;--feed-w:22rem;--topbar-h:7.875rem;--contextbar-h:3.5rem;--inspector-w:21.25rem;--page-pad:1.5rem;--card-min:12.5rem;--card-gap:.75rem;--main-min:30rem;
   /* Kontrol boyutları (dokunma/tıklama hedefi >= 24 CSS px, WCAG 2.5.8). */
-  --control-h:2.25rem;--control-h-sm:1.75rem;--control-pad-x:.8rem;
+  --topbar-h-stacked:10.5rem;--topbar-h-narrow:14rem;--control-h:2.25rem;--control-h-sm:1.75rem;--control-pad-x:.8rem;
   /* Yarıçap ölçeği 8/12/16/20 px + hap. */
   --radius-sm:.5rem;--radius-md:.75rem;--radius-lg:1rem;--radius-xl:1.25rem;--radius-pill:99px;--radius:var(--radius-md);
   /* //TR: İnce ışık kenarı (hairline bevel) ve katmanlı yükseklik; nötr ışık/gölge, palet token'ı değildir. */
@@ -70,7 +70,8 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
   grid-template-areas:"top top top" "ban ban ban" "nav main feed" "strip strip strip"}
 .topbar{grid-area:top;position:sticky;top:0;z-index:30;display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"brand search actions" "ctx ctx ctx";align-items:center;gap:.6rem .9rem;padding:.6rem var(--space-4);background:var(--veil-top);border-bottom:1px solid var(--border);box-shadow:var(--elev-2)}
 .stop-banner{grid-area:ban;display:flex;flex-wrap:wrap;gap:var(--space-3);align-items:center;justify-content:center;padding:.6rem var(--space-4);background:var(--danger-bg);color:var(--on-danger);border-bottom:2px solid var(--on-danger)}
-.nav{grid-area:nav;padding:var(--space-4) var(--space-3);border-right:1px solid var(--border);background:var(--veil-nav);min-width:0}
+/* //TR: Kenar gezinme kendi kaydırma alanıdır: üst çubuğun hemen altında yapışkan, yüksekliği görünür alanla sınırlı; sayfa ile birlikte kaymaz ve üst çubuğun altına girmez. --topbar-h her kırılımda ölçülen üst çubuk yüksekliğini (biraz fazlasıyla) taşır; kabuk çalışma anında documentElement üzerinde ölçülen değerle geçersiz kılabilir. */
+.nav{grid-area:nav;position:sticky;top:var(--topbar-h);z-index:20;align-self:start;height:calc(100vh - var(--topbar-h));max-height:calc(100vh - var(--topbar-h));overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--border-ui) transparent;padding:var(--space-4) var(--space-3);border-right:1px solid var(--border);background:var(--veil-nav);min-width:0}
 .main{grid-area:main;padding:var(--space-5) var(--page-pad);min-width:0;outline:none}
 .feed{grid-area:feed;padding:var(--space-4);border-left:1px solid var(--border);background:var(--veil-feed);min-width:0}
 .strip{grid-area:strip;display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2) var(--space-4);padding:.6rem var(--space-4);border-top:1px solid var(--border);background:var(--veil-strip)}
@@ -316,20 +317,29 @@ pre.code,.code{margin:var(--space-1) 0;padding:var(--space-2) var(--space-3);max
 .empty-state .icon{color:var(--emphasis)}.empty-state-title{margin:0;font-size:var(--fs-h3);font-weight:var(--fw-bold);color:var(--text)}.empty-state-body{margin:0}
 .empty-state-error{border-style:solid;border-color:var(--danger)}.empty-state-error .icon{color:var(--danger)}
 ::selection{background:var(--danger-bg);color:var(--on-danger)}
+/* //TR: Bilinmeyen rota bildirimi (kabuk #routeNotice): uyarı kenarlı, metin + kapatma düğmesi tek satırda, dar pencerede sarar. */
+.route-notice{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--space-2) var(--space-3);margin:0 0 var(--space-4);padding:var(--space-3) var(--space-4);border:1px solid var(--border-ui);border-left:4px solid var(--warn);border-radius:var(--radius-md);background:var(--surface-2);color:var(--text);box-shadow:var(--elev-1)}
+.route-notice>span{flex:1 1 16rem;min-width:0;overflow-wrap:anywhere}.route-notice .btn{flex:none}
 
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 @keyframes stop-glow{0%,100%{box-shadow:var(--glow-risk-min)}50%{box-shadow:var(--glow-risk-max)}}
 
 /* Duyarlı düzen: dar genişlik ve yüksek zoom */
 @media (min-width:2200px){
-  .topbar{grid-template-columns:auto minmax(8rem,34rem) minmax(0,1fr) auto;grid-template-areas:"brand search ctx actions"}
+  :root{--topbar-h:4.5rem}
+  .topbar{grid-template-columns:auto minmax(8rem,24rem) minmax(0,1fr) auto;grid-template-areas:"brand search ctx actions"}
 }
 @media (max-width:1700px){
   .app{grid-template-columns:var(--nav-w) minmax(0,1fr);grid-template-areas:"top top" "ban ban" "nav main" "nav feed" "strip strip"}
   .feed{border-left:0;border-top:1px solid var(--border)}
 }
 @media (max-width:1100px){
-  :root{--nav-w:4.4rem}
+  :root{--nav-w:4.4rem;--topbar-h:var(--topbar-h-stacked)}
+  /* //TR: Orta pencere: marka metni gizlenir ki arama sıkışmasın (arama ACİL DURDUR'un solunda, aynı satırda); bağlam çubuğu yatay kaydırma yerine sıkı aralıkla sarar. */
+  .brand-text{display:none}
+  .topbar{grid-template-columns:auto minmax(12rem,1fr) auto}
+  .ctx{flex-wrap:wrap;overflow-x:visible;gap:var(--space-1) var(--space-3)}
+  .ctx select{max-width:11rem}
   .nav-label{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
   .nav-link{justify-content:center;padding:.6rem .4rem}
   .nav-link .nav-count{position:absolute;top:.1rem;right:.1rem;min-width:1.1rem;height:1.1rem;font-size:.62rem}
@@ -344,6 +354,7 @@ pre.code,.code{margin:var(--space-1) 0;padding:var(--space-2) var(--space-3);max
 
 /* 200% zoom (örn. 640 CSS px) ve altı: arama kendi satırına iner; ACİL DURDUR satırı her zaman arama satırının üstünde kalır, açılır liste onu asla örtmez. */
 @media (max-width:640px){
+  :root{--topbar-h:var(--topbar-h-narrow)}
   .topbar{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"brand actions" "search search" "ctx ctx"}
   .search-results{max-height:min(40vh,16rem)}
 }

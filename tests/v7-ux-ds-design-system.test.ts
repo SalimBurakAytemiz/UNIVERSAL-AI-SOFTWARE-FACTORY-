@@ -129,6 +129,39 @@ describe("FD 2026-11-05 design system: coordinator visual defects (header, badge
   });
 });
 
+describe("Layout fixes: sticky nav scroll area, responsive top bar, route notice", () => {
+  const media = (q: string) => { const i = css.indexOf(`@media (${q}){`); if (i < 0) return ""; const j = css.indexOf("\n}", i); return css.slice(i, j); };
+  it("the sidebar nav is its own sticky scroll area directly below the top bar", () => {
+    const nav = /\n\.nav\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    for (const d of ["position:sticky", "top:var(--topbar-h)", "align-self:start", "max-height:calc(100vh - var(--topbar-h))", "overflow-y:auto"]) expect(nav, d).toContain(d);
+    expect(nav).not.toMatch(/overflow-y:(visible|hidden)/);
+    // //TR: Üst çubuk nav'ın üstünde kalır (yapışkan nav onun altına girmez, üstüne çıkmaz).
+    const z = (sel: string) => Number(new RegExp(`\\n${sel.replace(".", "\\.")}\\{[^}]*z-index:(\\d+)`).exec(css)?.[1]);
+    expect(z(".topbar")).toBeGreaterThan(z(".nav"));
+    expect(/\n\.topbar\{[^}]*position:sticky;top:0/.test(css)).toBe(true);
+  });
+  it("every top-bar layout has a --topbar-h token at least as tall as the rows it stacks", () => {
+    const rem = (v: string) => { const m = /^([\d.]+)rem$/.exec(v); return m ? Number(m[1]) : NaN; };
+    expect(rem(tokens["--topbar-h"])).toBeGreaterThanOrEqual(7.5); // 2 satır (ölçülen 1280px: 122.6px = 7.66rem)
+    expect(media("min-width:2200px")).toMatch(/--topbar-h:[\d.]+rem/);
+    expect(media("max-width:640px")).toContain("--topbar-h:var(--topbar-h-narrow)");
+    expect(rem(tokens["--topbar-h-narrow"])).toBeGreaterThan(rem(tokens["--topbar-h"]));
+  });
+  it("at <=1100px the search keeps its own column and the context bar wraps instead of scrolling horizontally", () => {
+    const m = media("max-width:1100px");
+    expect(m).toMatch(/\.topbar\{grid-template-columns:auto minmax\(12rem,1fr\) auto\}/);
+    expect(m).toMatch(/\.ctx\{flex-wrap:wrap;overflow-x:visible/);
+    expect(m).toContain(".brand-text{display:none}");
+    expect(m).not.toMatch(/\.(btn-stop|actions)[^{]*\{[^}]*display:none/);
+  });
+  it("the shell's unknown-route notice (.route-notice) is styled as a warn-edged row with a wrapping text span", () => {
+    const r = /\n\.route-notice\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    for (const d of ["display:flex", "flex-wrap:wrap", "border-left:4px solid var(--warn)", "background:var(--surface-2)", "color:var(--text)"]) expect(r, d).toContain(d);
+    expect(r).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(css).toMatch(/\.route-notice>span\{[^}]*min-width:0;overflow-wrap:anywhere/);
+  });
+});
+
 class E {
   tagName: string; children: any[] = []; attrs = new Map<string, string>(); dataset: Record<string, string> = {}; className = ""; textContent = ""; ls: Record<string, Function[]> = {};
   constructor(tag: string) { this.tagName = tag.toUpperCase(); }
