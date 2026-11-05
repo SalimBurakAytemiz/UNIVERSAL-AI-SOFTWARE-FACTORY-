@@ -1,6 +1,6 @@
 {
   "schema": "uasco.factory-v2.shared-registry/1",
-  "phase": "section:ledger/run2/c/000001",
+  "phase": "section:lease/shadow-probe-control/task--FV2-PROBE-S2-1",
   "sections": {
     "lease/shadow-probe-control/supervisor--SHADOW-probe-control": {
       "taskId": "supervisor--SHADOW-probe-control",
@@ -1633,6 +1633,18 @@
           }
         }
       ]
+    },
+    "lease/shadow-probe-control/task--FV2-PROBE-S2-1": {
+      "taskId": "task--FV2-PROBE-S2-1",
+      "environment": "cloud",
+      "workerId": "builder-A",
+      "sessionId": "session_015dYwb57qx21P4wudU5xauD",
+      "headSha": null,
+      "epoch": 1,
+      "token": "session_015dYwb57qx21P4wudU5xauD:1:ddaf65b1-98dc-42c4-9832-e8e23d070fd7",
+      "acquiredAt": 1793906970845,
+      "heartbeatAt": 1793906970845,
+      "expiresAt": 1793928570845
     }
   },
   "revs": {
@@ -1640,7 +1652,8 @@
     "ledger/run1/c/000001": 44,
     "lease/shadow-probe-control/task--FV2-PROBE-CTL-1": 2,
     "lease/shadow-probe-control/task--FV2-PROBE-CTL-2": 4,
-    "ledger/run2/c/000001": 2
+    "ledger/run2/c/000001": 2,
+    "lease/shadow-probe-control/task--FV2-PROBE-S2-1": 1
   },
-  "seq": 86
+  "seq": 87
 }
