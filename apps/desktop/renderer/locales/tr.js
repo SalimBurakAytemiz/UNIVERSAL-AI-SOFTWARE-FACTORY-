@@ -875,6 +875,7 @@ export default {
   "attention.next.PREPARE_DELIVERY":"Teslimi hazırlayın",
   "attention.next.ACCEPT_DELIVERY":"Teslimi kabul edin",
   "attention.next.REVIEW_RUN":"Koşuyu inceleyin",
+  "attention.next.RESUME_RUN":"Koşuyu sürdürün (açık Founder devamı)",
   "attention.next.REVIEW_MISSION":"Mission'ı inceleyin",
   "attention.next.AUTHORIZE_MISSION":"Mission'ı yetkilendirin",
   "attention.next.UNBLOCK_TASK":"Görevin engelini kaldırın",

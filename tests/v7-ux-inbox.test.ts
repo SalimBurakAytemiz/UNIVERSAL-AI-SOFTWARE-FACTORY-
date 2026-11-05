@@ -541,9 +541,27 @@ describe("LANE-A Founder attention core (GET /v1/attention)", () => {
     const m = await c();
     expect(m.ATTENTION_PATH).toBe("/v1/attention");
     expect(m.ATTENTION_KINDS).toEqual(["RUN_AWAITING_APPROVAL", "MISSION_FOUNDER_ATTENTION", "RUN_NEEDS_DECISION", "MISSION_AUTHORIZATION_PENDING", "MISSION_BLOCKED", "TASK_BLOCKED"]);
-    expect(m.ACTIONS_FOR_KIND).toEqual({RUN_AWAITING_APPROVAL: ["PREPARE_DELIVERY", "ACCEPT_DELIVERY"], MISSION_FOUNDER_ATTENTION: ["REVIEW_MISSION"], RUN_NEEDS_DECISION: ["REVIEW_RUN"], MISSION_AUTHORIZATION_PENDING: ["AUTHORIZE_MISSION"], MISSION_BLOCKED: ["REVIEW_MISSION"], TASK_BLOCKED: ["UNBLOCK_TASK"]});
+    expect(m.ACTIONS_FOR_KIND).toEqual({RUN_AWAITING_APPROVAL: ["PREPARE_DELIVERY", "ACCEPT_DELIVERY"], MISSION_FOUNDER_ATTENTION: ["REVIEW_MISSION"], RUN_NEEDS_DECISION: ["REVIEW_RUN", "RESUME_RUN"], MISSION_AUTHORIZATION_PENDING: ["AUTHORIZE_MISSION"], MISSION_BLOCKED: ["REVIEW_MISSION"], TASK_BLOCKED: ["UNBLOCK_TASK"]});
     expect([...new Set(Object.values(m.ACTIONS_FOR_KIND).flat())].sort()).toEqual([...m.NEXT_ACTIONS].sort());
     expect(m.ATTENTION_MAX_ITEMS).toBe(200);
+  });
+  it("UASCO-T0049 (3): a resumable blocked run (RUN_NEEDS_DECISION + RESUME_RUN) is VERIFIED and kept; an older server without RESUME_RUN still renders VERIFIED; RESUME_RUN on another kind is dropped", async () => {
+    const m = await c();
+    const older = m.mapAttentionQueue(q(ATT_ITEMS, attCounts()));   // a server that predates RESUME_RUN: same six counter keys, no new action
+    expect(older.state).toBe("VERIFIED");
+    expect(older.queue.dropped).toBe(0);
+    const resumable = item({nextAction: "RESUME_RUN", reason: "PROVIDER_QUOTA (resume after 2026-11-05T12:00:00.000Z)"});
+    const r = m.mapAttentionQueue(q([ATT_ITEMS[0], resumable, ATT_ITEMS[2]], attCounts()));
+    expect(r.state).toBe("VERIFIED");
+    expect(r.queue.dropped).toBe(0);
+    expect(r.queue.items.find((x: any) => x.kind === "RUN_NEEDS_DECISION")).toEqual(expect.objectContaining({nextAction: "RESUME_RUN", reason: "PROVIDER_QUOTA (resume after 2026-11-05T12:00:00.000Z)"}));
+    const wrong = m.mapAttentionQueue(q([ATT_ITEMS[0], item({kind: "MISSION_BLOCKED", nextAction: "RESUME_RUN", runId: null})], attCounts({RUN_NEEDS_DECISION: 0, MISSION_BLOCKED: 1, TASK_BLOCKED: 0})));
+    expect(wrong.state).toBe("VERIFIED");
+    expect(wrong.queue.dropped).toBe(1);   // the kind-to-action rule still refuses RESUME_RUN outside RUN_NEEDS_DECISION
+    const en = (await load("locales", "en.js")).default, tr = (await load("locales", "tr.js")).default;
+    expect(en["attention.next.RESUME_RUN"]).toBeTruthy();
+    expect(tr["attention.next.RESUME_RUN"]).toBeTruthy();
+    expect(tr["attention.next.RESUME_RUN"]).not.toBe(en["attention.next.RESUME_RUN"]);
   });
   it("sorts by severity (server order kept inside a kind) and keeps the counters separate", async () => {
     const m = await c();

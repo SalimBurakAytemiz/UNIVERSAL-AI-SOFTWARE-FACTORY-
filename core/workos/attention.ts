@@ -2,10 +2,11 @@
 import type {Scope, WorkRun} from "./types.js";
 import type {WorkOsStore} from "./store.js";
 import {redactSecrets} from "./secret-scan.js";
+import {blockClass, pendingResumableBlock} from "./run-state.js";
 
 export type AttentionKind =
   | "RUN_AWAITING_APPROVAL" | "RUN_NEEDS_DECISION" | "MISSION_FOUNDER_ATTENTION" | "MISSION_AUTHORIZATION_PENDING" | "MISSION_BLOCKED" | "TASK_BLOCKED";
-export type NextAction = "PREPARE_DELIVERY" | "ACCEPT_DELIVERY" | "REVIEW_RUN" | "REVIEW_MISSION" | "AUTHORIZE_MISSION" | "UNBLOCK_TASK";
+export type NextAction = "PREPARE_DELIVERY" | "ACCEPT_DELIVERY" | "REVIEW_RUN" | "REVIEW_MISSION" | "AUTHORIZE_MISSION" | "UNBLOCK_TASK" | "RESUME_RUN";
 export interface AttentionItem {
   kind: AttentionKind; nextAction: NextAction; projectId: string; missionId: string; runId: string | null; taskId: string | null;
   title: string; reason: string | null; since: string | null;
@@ -53,7 +54,14 @@ export function deriveAttention(store: WorkOsStore, scope: Scope): AttentionQueu
       // Kabul edilmiş kaynak teslimi varsa karar verilmiştir; öğe kuyruktan düşer (acceptance mission'ı COMPLETE yapmaz, ama Founder kararı tamamdır).
       if (r.sourceDelivery) continue;
       push({...base, kind: "RUN_AWAITING_APPROVAL", nextAction: r.deliveryArtifact ? "ACCEPT_DELIVERY" : "PREPARE_DELIVERY"});
-    } else if (RUN_DECISION.has(r.status)) push({...base, kind: "RUN_NEEDS_DECISION", nextAction: "REVIEW_RUN"});
+    } else if (RUN_DECISION.has(r.status)) {
+      // //TR: UASCO-T0049 (3): devam ettirilebilir engelli koşu (kota veya Founder duraklatması) aynı türde kalır (kuyruk/operasyon görünümleri onu görmeye devam eder) ama sonraki eylemi
+      // RESUME_RUN'dır; gerekçe engel nedeni ve biliniyorsa resumeAfter'dır. Devam yine yalnız açık, kapılı resumeBlockedRun ile olur; burası salt okunurdur.
+      const resumable = blockClass(r) === "BLOCKED_RESUMABLE" ? pendingResumableBlock(r) : null;
+      push(resumable
+        ? {...base, kind: "RUN_NEEDS_DECISION", nextAction: "RESUME_RUN", reason: clean(`${resumable.reason}${resumable.resumeAfter ? ` (resume after ${resumable.resumeAfter})` : ""}`, 300)}
+        : {...base, kind: "RUN_NEEDS_DECISION", nextAction: "REVIEW_RUN"});
+    }
   }
   items.sort((a, b) => RANK[a.kind] - RANK[b.kind] || (b.since ?? "").localeCompare(a.since ?? "") || a.missionId.localeCompare(b.missionId) || (a.taskId ?? "").localeCompare(b.taskId ?? ""));
   const truncated = items.length > ATTENTION_MAX_ITEMS;

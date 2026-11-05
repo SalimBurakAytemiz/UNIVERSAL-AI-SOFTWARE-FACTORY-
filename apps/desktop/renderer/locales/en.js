@@ -875,6 +875,7 @@ export default {
   "attention.next.PREPARE_DELIVERY":"Prepare the delivery",
   "attention.next.ACCEPT_DELIVERY":"Accept the delivery",
   "attention.next.REVIEW_RUN":"Review the run",
+  "attention.next.RESUME_RUN":"Resume the run (explicit Founder resume)",
   "attention.next.REVIEW_MISSION":"Review the mission",
   "attention.next.AUTHORIZE_MISSION":"Authorize the mission",
   "attention.next.UNBLOCK_TASK":"Unblock the task",

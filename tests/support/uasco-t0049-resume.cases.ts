@@ -4,6 +4,7 @@ import fs from "node:fs";
 import {WorkOsStore} from "../../core/workos/store.js";
 import {FakeExecutors} from "../../core/workos/executors.js";
 import {blockClass, isResumableBlockCheckpoint, pendingResumableBlock} from "../../core/workos/run-state.js";
+import {deriveAttention} from "../../core/workos/attention.js";
 import {T, drive, missionOf, okScript, rewriteJournal, rmTmp, runOf, runner, setup, startRun, tmpRoot, type Ctx} from "./relfx.js";
 
 /** Registered from tests/v7-relfx-4-interruption.test.ts (listed in config/validation.json); the suite's hooks are scoped to this describe. */
@@ -167,6 +168,26 @@ export function registerUascoT0049ResumeSuite(): void {
         expect(forge(() => {})).toBe(false);
         expect(forge(es => { es.push(pauseEntry(done.runId, "FOUNDER_LOCAL")); })).toBe(true);
         expect(forge(es => { const i = es.findIndex(x => x.type === "RUN_TRANSITION" && x.payload.to === "QUEUED"); es.splice(i + 1, 0, pauseEntry(done.runId, "")); })).toBe(true);
+      });
+    });
+
+
+    describe("UASCO-T0049 (3) the Founder attention queue marks resumable blocked runs RESUME_RUN", () => {
+      const att = (c: Ctx) => deriveAttention(c.store, {tenantId: "tA"}).items.filter(i => i.kind === "RUN_NEEDS_DECISION");
+      it("quota block -> RUN_NEEDS_DECISION/RESUME_RUN with reason and resumeAfter; paused -> RESUME_RUN/PAUSED; DISK_FULL (terminal) -> REVIEW_RUN; resumed -> no item", { timeout: T }, async () => {
+        const q = setup(tmp, "tA");
+        const quota = await quotaBlocked(q, FUTURE_RESET);
+        expect(att(q)).toEqual([expect.objectContaining({runId: quota.runId, nextAction: "RESUME_RUN", reason: `PROVIDER_QUOTA (resume after ${new Date(FUTURE_RESET * 1000).toISOString()})`})]);
+        const d = setup(tmp, "tA");
+        const disk = await quotaBlocked(d, 0, "ENOSPC: no space left on device, write");
+        expect(att(d)).toEqual([expect.objectContaining({runId: disk.runId, nextAction: "REVIEW_RUN", reason: "DISK_FULL"})]);   // positive control: terminal stays REVIEW_RUN
+        const p = setup(tmp, "tA"), fake = new FakeExecutors(okScript());
+        const r = startRun(p, fake);
+        p.store.requestRunPause({tenantId: "tA"}, r.runId, {explicit: true, requestedBy: "FOUNDER_LOCAL"}, "FOUNDER_LOCAL");
+        await drive(p, runner(p, fake), r.runId);
+        expect(att(p)).toEqual([expect.objectContaining({runId: r.runId, nextAction: "RESUME_RUN", reason: "PAUSED"})]);
+        p.store.resumeBlockedRun({tenantId: "tA"}, r.runId, REQ, "FOUNDER_LOCAL");
+        expect(att(p)).toEqual([]);   // a resumed (QUEUED) run needs no decision
       });
     });
 
