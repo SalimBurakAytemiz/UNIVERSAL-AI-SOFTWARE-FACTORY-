@@ -201,6 +201,7 @@ describe("5. the canonical merge path refuses V4.1 merges after handover (indepe
     expect(g(intent(c.core, {headSha: "b".repeat(40)})).reason).toMatch(/PAYLOAD_MISMATCH/);
     expect(g(intent(c.core, {}, S.V41)).reason).toMatch(/ROLE_NOT_ALLOWED/);
     expect(g(intent(c.core, {}, S.ATTACK)).reason).toMatch(/SIGNER_KEY_UNKNOWN/);
+    expect(g(intent(c.core, {}, S.V2b))).toMatchObject({allowed: false, reason: "MERGE_SIGNER_NOT_HOLDER"}); // a registered V2_CANDIDATE that is not the holder
     w.bA.rollback({reason: "back", signer: S.V41});
     expect(g(null)).toMatchObject({allowed: true, by: "V4.1"});
     expect(g(intent(c.core)).allowed).toBe(false);
@@ -453,6 +454,10 @@ describe("role key generation for real holders: the private key cannot land in a
     expect(JSON.parse(fs.readFileSync(out, "utf8")).privateKeyPem).toMatch(/PRIVATE KEY/);
     if (process.platform !== "win32") expect(fs.statSync(out).mode & 0o077).toBe(0);
     expect(() => writeRoleKey({role: "V2_CANDIDATE", sessionId: sid, out})).toThrow(/EEXIST/);
+    const savedPath = process.env.PATH; // without git the "outside any repository" proof is impossible: fail closed, write nothing
+    try { process.env.PATH = ""; expect(() => writeRoleKey({role: "V2_CANDIDATE", sessionId: sid, out: path.join(outside, "k2.json")})).toThrow(/KEYGEN_GIT_UNAVAILABLE/); }
+    finally { process.env.PATH = savedPath; }
+    expect(fs.existsSync(path.join(outside, "k2.json"))).toBe(false);
     // the printed entry is exactly what the canonical keyring loader accepts
     expect(() => parseKeyring({schema: "uasco.factory-v2.role-keys/1", mode: "LIVE", domain: "uasco-v7", keys: [pub]}, "test")).not.toThrow();
   });
