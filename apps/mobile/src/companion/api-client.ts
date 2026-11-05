@@ -27,7 +27,8 @@ export type ApiResult<T> =
 
 export const ATTENTION_KINDS = ["RUN_AWAITING_APPROVAL", "RUN_NEEDS_DECISION", "MISSION_FOUNDER_ATTENTION", "MISSION_AUTHORIZATION_PENDING", "MISSION_BLOCKED", "TASK_BLOCKED"] as const;
 export type AttentionKind = (typeof ATTENTION_KINDS)[number];
-export const NEXT_ACTIONS = ["PREPARE_DELIVERY", "ACCEPT_DELIVERY", "REVIEW_RUN", "REVIEW_MISSION", "AUTHORIZE_MISSION", "UNBLOCK_TASK"] as const;
+// //TR: UASCO-T0049 (3) ile uyum: RESUME_RUN eklemeli bir eylemdir ve yalnız RUN_NEEDS_DECISION türünde geçerlidir (devam ettirilebilir engelli koşu); başka türde görülürse yanıt yine bozuk sayılır.
+export const NEXT_ACTIONS = ["PREPARE_DELIVERY", "ACCEPT_DELIVERY", "REVIEW_RUN", "REVIEW_MISSION", "AUTHORIZE_MISSION", "UNBLOCK_TASK", "RESUME_RUN"] as const;
 export type NextAction = (typeof NEXT_ACTIONS)[number];
 
 export interface AttentionItem {
@@ -53,6 +54,7 @@ export function parseAttentionItem(v: unknown): AttentionItem | null {
   const o = rec(v);
   if (!o) return null;
   if (!(ATTENTION_KINDS as readonly unknown[]).includes(o.kind) || !(NEXT_ACTIONS as readonly unknown[]).includes(o.nextAction)) return null;
+  if (o.nextAction === "RESUME_RUN" && o.kind !== "RUN_NEEDS_DECISION") return null;
   if (!nonEmpty(o.projectId) || !nonEmpty(o.missionId) || typeof o.title !== "string") return null;
   if (!strOrNull(o.runId) || !strOrNull(o.taskId) || !strOrNull(o.reason) || !strOrNull(o.since)) return null;
   return {kind: o.kind as AttentionKind, nextAction: o.nextAction as NextAction, projectId: o.projectId, missionId: o.missionId, runId: o.runId, taskId: o.taskId,

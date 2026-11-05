@@ -1,8 +1,8 @@
-// //TR: UASCO-T0083 sözleşme testi: Mobil Companion istemcisi GERÇEK control-api'ye (buildServer, süreç içi inject; ağ yok) karşı çalışır; /v1/attention ve /v1/control/status yanıtları istemcinin katı ayrıştırıcısından geçer, ekran modelleri gerçek Work OS kayıtlarından türetilir; token'sız/yanlış token reddedilir. Ücretli/gerçek sağlayıcı yok.
+// //TR: UASCO-T0083 sözleşme testi (ve RESUME_RUN ayrıştırma uyumu): Mobil Companion istemcisi GERÇEK control-api'ye (buildServer, süreç içi inject; ağ yok) karşı çalışır; /v1/attention ve /v1/control/status yanıtları istemcinin katı ayrıştırıcısından geçer, ekran modelleri gerçek Work OS kayıtlarından türetilir; token'sız/yanlış token reddedilir. Ücretli/gerçek sağlayıcı yok.
 import {afterEach, beforeEach, describe, expect, it} from "vitest";
 import {HDR, rmTmp, setup, tmpRoot, api} from "./relfx.js";
-import {createCompanionClient, type CompanionTransport} from "../../apps/mobile/src/companion/api-client.js";
-import {approvalDetail, approvalsList, notificationsList, statusOverview} from "../../apps/mobile/src/companion/screens.js";
+import {createCompanionClient, parseAttention, type CompanionTransport} from "../../apps/mobile/src/companion/api-client.js";
+import {approvalAction, approvalDetail, approvalsList, notificationsList, statusOverview} from "../../apps/mobile/src/companion/screens.js";
 
 /** Registered from tests/v7-b1-workos.test.ts (listed in config/validation.json); the suite's hooks are scoped to this describe. */
 export function registerMobileCompanionContractSuite(): void {
@@ -49,6 +49,21 @@ export function registerMobileCompanionContractSuite(): void {
           expect(await createCompanionClient(injectTransport(app, {...HDR, "x-uasco-control-token": "wrong"})).attention()).toEqual({kind: "denied", code: "FORBIDDEN"});
           expect(await createCompanionClient(injectTransport(app, {...HDR, host: "phone.example:3210"})).controlStatus()).toEqual({kind: "denied", code: "HOST_REJECTED"});
         } finally { await app.close(); }
+      });
+    });
+
+
+    describe("UASCO-T0083 x T0049 (3): RESUME_RUN parse compatibility", () => {
+      const ZERO = {RUN_AWAITING_APPROVAL: 0, RUN_NEEDS_DECISION: 0, MISSION_FOUNDER_ATTENTION: 0, MISSION_AUTHORIZATION_PENDING: 0, MISSION_BLOCKED: 0, TASK_BLOCKED: 0};
+      const it0 = (o: Record<string, unknown>) => ({kind: "RUN_NEEDS_DECISION", nextAction: "REVIEW_RUN", projectId: "prj_1", missionId: "msn_1", runId: "run_1", taskId: null,
+        title: "Blocked run", reason: "PROVIDER_QUOTA", since: "2026-11-05T10:00:00.000Z", ...o});
+      const body = (items: unknown[]) => ({attention: {items, counts: {...ZERO, RUN_NEEDS_DECISION: items.length}, truncated: false, source: "WORKOS"}});
+      it("a RUN_NEEDS_DECISION item with RESUME_RUN no longer makes the queue MALFORMED; RESUME_RUN on another kind still does; old REVIEW_RUN items unchanged", () => {
+        const q = parseAttention(body([it0({nextAction: "RESUME_RUN", reason: "PROVIDER_QUOTA (resume after 2026-11-05T12:00:00.000Z)"})]));
+        expect(q?.items.map(i => i.nextAction)).toEqual(["RESUME_RUN"]);
+        expect(approvalAction(q!.items[0]).approve).toEqual(expect.objectContaining({enabled: false, desktopRoute: null}));   // still read-only on the phone
+        expect(parseAttention(body([it0({})]))?.items.map(i => i.nextAction)).toEqual(["REVIEW_RUN"]);   // positive control: older server shape
+        expect(parseAttention({attention: {items: [it0({kind: "MISSION_BLOCKED", nextAction: "RESUME_RUN", runId: null})], counts: {...ZERO, MISSION_BLOCKED: 1}, truncated: false, source: "WORKOS"}})).toBeNull();
       });
     });
 

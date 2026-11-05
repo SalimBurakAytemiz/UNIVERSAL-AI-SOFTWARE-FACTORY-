@@ -55,6 +55,7 @@ const DESKTOP_ROUTE: Readonly<Record<AttentionItem["nextAction"], string | null>
   PREPARE_DELIVERY: "POST /v1/work-runs/:id/delivery/prepare",
   AUTHORIZE_MISSION: "POST /v1/missions/:id/transition",
   REVIEW_RUN: null, REVIEW_MISSION: null, UNBLOCK_TASK: "POST /v1/tasks/:id/transition",
+  RESUME_RUN: null,   // resume is a store operation without an HTTP route yet (Founder item)
 };
 export const MOBILE_APPROVAL_DISABLED_REASON = "NO_DEVICE_SCOPED_APPROVAL_ROUTE: approve/reject from the phone needs an authenticated, device-scoped /v1/mobile approval route behind the gateway (UASCO-T0084); the desktop control token is never placed on the phone";
 
