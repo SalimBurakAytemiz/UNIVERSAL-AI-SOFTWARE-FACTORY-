@@ -18,7 +18,7 @@
   --color-purple:var(--purple);--color-green:var(--ok);--color-amber:var(--warn);--color-red:var(--danger);
   --color-text:var(--text);--color-muted:var(--muted);--color-primary:var(--primary);
   /* Yarı saydam katmanlar ve ortam ışığı (dolgu/ton; metin taşımaz). */
-  --veil-top:rgba(10,10,11,.94);--veil-strip:rgba(10,10,11,.96);--veil-nav:rgba(17,17,19,.72);--veil-feed:rgba(17,17,19,.62);
+  --surface-raised:#141416;--veil-top:var(--surface-raised);--veil-strip:var(--surface-raised);--veil-nav:rgba(17,17,19,.72);--veil-feed:rgba(17,17,19,.62);
   --ambient-blue:rgba(255,79,94,.10);--ambient-cyan:rgba(255,255,255,.04);
   --sel-cyan:rgba(255,255,255,.10);--sel-blue:rgba(255,255,255,.03);--scrim:rgba(0,0,0,.8);
   /* Boşluk ölçeği: px/16 rem (mevcut kök font ölçeklemesiyle 4K'da büyür). */
@@ -212,9 +212,14 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 .spill-empty,.spill-idle,.spill-stopped,.spill-neutral{color:var(--muted)}
 .badge,.pill{display:inline-block;padding:.1rem var(--space-2);border-radius:.4rem;font-size:.72rem;font-weight:700;background:var(--bg-2);border:1px solid var(--border);color:var(--text)}
 .badge-risk{color:var(--warn);border-color:var(--warn)}
+/* //TR: Rozetler grid/kart içinde tam genişliğe yayılmaz: içerik kadar kompakt satır-içi hap. */
+.badge,.pill,.chip,.spill{justify-self:start;align-self:start;width:max-content;max-width:100%}
+/* //TR: Uzun komut/kod blokları kartından taşmaz: kendi kaydırma kabı + sarma. */
+pre.code,.code{margin:var(--space-1) 0;padding:var(--space-2) var(--space-3);max-width:100%;min-width:0;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;font-family:var(--font-mono);font-size:var(--fs-caption);border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg)}
+.card>*{min-width:0;max-width:100%}
 
 /* Kartlar, tablo, harita */
-.cards{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(16rem,1fr));gap:.8rem}
+.cards{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(min(16rem,100%),1fr));gap:.8rem}
 .card{display:grid;gap:var(--space-2);align-content:start;padding:.95rem 1rem;border:1px solid var(--border);border-radius:var(--radius-md);background:linear-gradient(170deg,var(--surface),var(--bg-2) 86%);box-shadow:var(--elev-1);min-width:0}
 .card h3{margin:0;font-size:var(--fs-h3);font-weight:700}.card-active{border-color:var(--glow);box-shadow:var(--glow-md)}
 .table-wrap{overflow-x:auto}.table{width:100%;border-collapse:collapse}.table th,.table td{text-align:left;padding:var(--space-2) .6rem;border-bottom:1px solid var(--border)}.table th{color:var(--muted);font-size:.78rem}

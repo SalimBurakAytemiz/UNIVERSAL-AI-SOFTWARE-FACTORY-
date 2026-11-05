@@ -110,6 +110,25 @@ describe("FD 2026-11-05 design system: focus, motion and responsive coverage", (
   });
 });
 
+describe("FD 2026-11-05 design system: coordinator visual defects (header, badges, code, card grid)", () => {
+  it("the sticky top bar and bottom strip sit on an opaque token surface (no page text shows through)", () => {
+    expect(resolve("--surface-raised")).toMatch(/^#[0-9A-Fa-f]{6}$/);
+    expect(tokens["--veil-top"]).toBe("var(--surface-raised)");
+    expect(tokens["--veil-strip"]).toBe("var(--surface-raised)");
+    expect(css).toMatch(/\.topbar\{[^}]*position:sticky[^}]*background:var\(--veil-top\)/);
+    expect(refRatio(resolve("--text"), resolve("--surface-raised"))).toBeGreaterThanOrEqual(7);
+  });
+  it("status badges/pills are compact inline pills inside grid cards, not full-width bars", () => {
+    expect(css).toMatch(/\n\.badge,\.pill,\.chip,\.spill\{justify-self:start;align-self:start;width:max-content;max-width:100%\}/);
+  });
+  it("long commands wrap inside their own scroll container and card grids cannot force horizontal page scroll", () => {
+    const code = /\npre\.code,\.code\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    for (const d of ["max-width:100%", "min-width:0", "overflow:auto", "white-space:pre-wrap", "overflow-wrap:anywhere"]) expect(code, d).toContain(d);
+    expect(css).toMatch(/\.cards\{[^}]*grid-template-columns:repeat\(auto-fill,minmax\(min\(16rem,100%\),1fr\)\)/);
+    expect(css).toMatch(/\.card>\*\{min-width:0;max-width:100%\}/);
+  });
+});
+
 class E {
   tagName: string; children: any[] = []; attrs = new Map<string, string>(); dataset: Record<string, string> = {}; className = ""; textContent = ""; ls: Record<string, Function[]> = {};
   constructor(tag: string) { this.tagName = tag.toUpperCase(); }
