@@ -1,4 +1,5 @@
 // //TR: Bu görünüm Derleme Zamanlayıcı'dır (FA-V2-PRODUCT, UI-BUILD-SCHEDULER): YALNIZ salt-okunur ve zaten izinli GET /v1/scheduler'dan okunur. Sunucunun doğrulama durumu (VERIFIED/PENDING/REJECTED) AYNEN gösterilir; yalnız VERIFIED ise faz satırları listelenir, aksi halde faz/sayı/ilerleme uydurulmaz. COMPLETED bir fazın kaydıdır, ürün doğrulaması ya da teslim değildir. Yeniden deneme, engel kaldırma, düğme veya POST yoktur (eylemler Operasyon ve Kurtarma/kabuk yolunda kalır). Okunamayan kaynağın sayısı 0 değil "—" olur; etiketler ctx.t ile, sunucu metinleri yalnız textContent ile yazılır.
+import {safeErrorCode} from "../error-code.js";
 import {h,panel,statePill,badge} from "../components.js";
 import {MISSING,formatCount} from "../model.js";
 import {SCHEDULER_PATH,buildScheduler} from "../scheduler-core.js";
@@ -20,7 +21,7 @@ function stateBlock(ctx,a,message){
     h(doc,"p",{class:"integ-state-head"},statePill(ctx,failKind(st)),h(doc,"strong",{text:ctx.t(`scheduler.state.${st}`)})),
     h(doc,"p",{class:"note",text:ctx.t(`scheduler.hint.${st}`,{source:`GET ${SCHEDULER_PATH}`})}),
     a.pendingStatus?h(doc,"p",{class:"note mono",dataset:{schedStatus:a.pendingStatus},text:a.pendingStatus}):null,
-    message?h(doc,"p",{class:"note mono",text:message}):null);
+    safeErrorCode(message)?h(doc,"p",{class:"note mono",dataset:{stateErrorCode:safeErrorCode(message)},text:safeErrorCode(message)}):null);
 }
 function kpi(ctx,key,n,state){
   const doc=ctx.doc;
