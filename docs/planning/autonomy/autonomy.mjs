@@ -1,15 +1,16 @@
 // //TR: Bu modül Founder kalıcı otonomi kararını (FD-2026-11-03-STANDING-AUTONOMY) kodla uygular: merge-gate.mjs MERGE dediğinde, PR'ın tek V4.1 görevi kapsanan kademedeyse, D-31 dışındaki tüm kapıları sağlanmışsa, yönetişim yollarına dokunmuyorsa, builder oturumu bildirilmişse ve bağımsız reviewer istisna yokluğunu onaylamışsa AUTO_MERGE, Founder istisnasına giriyorsa FOUNDER_REQUIRED, aksi halde BLOCK der; güven girdileri (politika, dizin, korumalı yollar) base'den okunur. Çıktılar yalnız sabit kodlar, görev kimlikleri ve doğrulanmış SHA'lardır.
 // Usage:
 //   node docs/planning/autonomy/autonomy.mjs decide --pr <n> --implementer-session <id> [--implementer-session <id> ...]
-//   node docs/planning/autonomy/autonomy.mjs next [--limit n]
+//   node docs/planning/autonomy/autonomy.mjs next [--limit n]      (V4.1 next-task selection; fenced by the Factory V2 authority record)
 // decide must run from a checkout whose trust files are byte-identical to the base (checked against the base's blob SHAs).
-// Exit: 0 AUTO_MERGE (decide) or OK (next), 2 BLOCK, 4 FOUNDER_REQUIRED, 3 INTERNAL_ERROR.
+// Exit: 0 AUTO_MERGE (decide) or OK (next), 2 BLOCK (decide, or next refused by the authority fence), 4 FOUNDER_REQUIRED, 3 INTERNAL_ERROR.
 import fs from "node:fs";
 import path from "node:path";
 import {execFileSync} from "node:child_process";
 import {createHash} from "node:crypto";
 import {fileURLToPath} from "node:url";
 import {evaluateMergeGate, parseBinding, normPath, INVISIBLE_RE} from "../merge-gate.mjs";
+import {dispatchAuthority, liveAuthorityReaders} from "../../../automation/factory-v2/v41-guard.mjs";
 
 export const EXIT = {AUTO_MERGE: 0, BLOCK: 2, INTERNAL_ERROR: 3, FOUNDER_REQUIRED: 4};
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -302,12 +303,24 @@ export function decideFor({evidence, body, policy = loadPolicy(), index = loadIn
 }
 
 const args = (argv, k) => argv.flatMap((a, i) => (a === k && i + 1 < argv.length ? [argv[i + 1]] : []));
+const REPO = "SalimBurakAytemiz/UNIVERSAL-AI-SOFTWARE-FACTORY-";
+
+/**
+ * V4.1 new-work dispatch (`next`): the Factory V2 authority fence runs FIRST. On refusal nothing is loaded or selected and the result is
+ * BLOCK (exit 2) with AUTHORITY:<reason>; on allow the output is exactly today's nextTasks result (exit 0).
+ * authority() defaults to the live verified reader (same wiring as the executor's merge fence); repoRoot/api are injectable seams.
+ */
+export function dispatchNext({limit = 5, repoRoot = ROOT, api = curlApi(REPO), authority = () => dispatchAuthority(liveAuthorityReaders({repoRoot, api})),
+  load = {index: loadIndex, state: loadState, policy: loadPolicy}} = {}) {
+  let g;
+  try { g = authority(); } catch { g = {allowed: false, reason: "AUTHORITY_CHECK_FAILED"}; }
+  if (g?.allowed !== true) return {exit: EXIT.BLOCK, res: {decision: "BLOCK", reasons: [`AUTHORITY:${g?.reason ?? "UNKNOWN"}`]}};
+  return {exit: 0, res: nextTasks({index: load.index(), state: load.state(), policy: load.policy(), limit})};
+}
 
 export function runCli(argv) {
   const cmd = argv[0];
-  if (cmd === "next") {
-    return {exit: 0, res: nextTasks({index: loadIndex(), state: loadState(), policy: loadPolicy(), limit: Number(args(argv, "--limit")[0] ?? 5)})};
-  }
+  if (cmd === "next") return dispatchNext({limit: Number(args(argv, "--limit")[0] ?? 5)});
   if (cmd === "decide" && args(argv, "--pr").length === 1) {
     const repo = args(argv, "--repo")[0] ?? "SalimBurakAytemiz/UNIVERSAL-AI-SOFTWARE-FACTORY-";
     const c = collectEvidence({api: curlApi(repo), pr: Number(args(argv, "--pr")[0]), implementerSessions: args(argv, "--implementer-session")});
