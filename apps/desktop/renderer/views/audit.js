@@ -1,12 +1,23 @@
 // //TR: Bu görünüm Denetim İzi'dir (FA-V2-PRODUCT, UI-070): YALNIZ salt-okunur ve zaten izinli GET'lerden okunur — GET /v1/runs (en yeni N koşu), GET /v1/runs/RUN-*/events (koşu başına olay günlüğü) ve GET /v1/evidence (kanıt referansları). Olaylar koşular arasında yeni-önce tek listede birleştirilir. Okunamayan/bozuk kaynak asla boş-temiz liste olarak gösterilmez (ayrık dürüst durum, kısmi okuma işareti, okunamayan sayı 0 değil "—"); "temiz/sorunsuz/doğrulanmış" iddiası yoktur, kayıt yokluğu yalnız "kayıt yok" demektir. Etiketler ctx.t ile, sunucu metinleri yalnız textContent ile yazılır; yazma, POST veya eylem yoktur.
 import {h,panel,statePill,kpiTile,stateNote} from "../components.js";
 import {MISSING} from "../model.js";
-import {formatDateTime} from "../work-core.js";
+import {formatDateTime,verificationChipKind} from "../work-core.js";
 import {EVIDENCE_SOURCE_NAMES,AUDIT_SOURCES,AUDIT_SOURCE_PATHS,AUDIT_RUN_LIMIT,buildAudit} from "../audit-core.js";
 
 const failKind=state=>state==="OFFLINE"?"OFFLINE":state==="UNAVAILABLE"?"UNAVAILABLE":"FAILED";
 const failState=state=>state==="OFFLINE"||state==="UNAVAILABLE"?state:"ERROR";
 const stateRes=res=>res&&typeof res.state==="string"?res:{state:"UNAVAILABLE"};
+// //TR: UASCO Founder yönergesi (QA/Güvenlik UX): olay ve kanıt listeleri başlıklı tablodur; önem derecesi tonlu rozettir, doğrulaması bildirilmeyen kanıt "—" yerine açık "bildirilmedi" etiketi taşır. Değerler sunucudan aynen gelir (kod sütun başlığıyla etiketlenir), hiçbir değer uydurulmaz.
+const SEV_TONE={ERROR:"badge-risk",FATAL:"badge-risk",CRITICAL:"badge-risk",FAIL:"badge-risk",FAILED:"badge-risk",WARN:"badge-notverified",WARNING:"badge-notverified",HOLD:"badge-notverified"};
+const sevBadge=(ctx,sev)=>h(ctx.doc,"span",{class:`badge audit-sev ${SEV_TONE[sev]??""}`.trim(),text:sev??MISSING});
+const verifPill=(ctx,v)=>{const p=statePill(ctx,verificationChipKind(v),{label:v??ctx.t("audit.evidence.verif.none")});p.dataset.verification=v??"NONE";return p};
+function auditTable(ctx,{caption,cols,rows}){
+  const doc=ctx.doc;
+  return h(doc,"div",{class:"table-wrap"},h(doc,"table",{class:"table audit-table"},
+    h(doc,"caption",{class:"sr-only",text:caption}),
+    h(doc,"thead",{},h(doc,"tr",{},cols.map(c=>h(doc,"th",{scope:"col",text:c})))),
+    h(doc,"tbody",{},rows)));
+}
 const timeEl=(ctx,iso)=>iso?h(ctx.doc,"time",{datetime:iso,text:formatDateTime(iso,ctx.i18n.lang)}):h(ctx.doc,"span",{text:MISSING});
 
 function header(ctx){
@@ -96,12 +107,12 @@ function eventsPanel(ctx,a){
     if(!a.events.length){
       // Boş liste yalnız kayıt yokluğudur; okunamayan koşu varsa "kayıt yok" bile söylenmez.
       body=[...notes,er.failed.length===0?h(doc,"p",{class:"note",role:"status",dataset:{auditEmpty:"events"},text:t(a.runs.total===0?"audit.events.noRuns":"audit.events.none")}):null];
-    }else body=[...notes,h(doc,"ol",{class:"audit-list","aria-label":t("audit.events.aria")},a.events.map(e=>
-      h(doc,"li",{class:"audit-row",dataset:{auditEvent:"1",runId:e.runId,severity:e.severity}},
-        timeEl(ctx,e.timestamp),
-        h(doc,"span",{class:"badge audit-sev",text:e.severity}),
-        h(doc,"span",{class:"mono audit-run",text:e.runId}),
-        h(doc,"span",{class:"mono audit-label",dataset:{verbatim:"1"},text:`${e.stage??MISSING}/${e.event??MISSING}`}))))];
+    }else body=[...notes,auditTable(ctx,{caption:t("audit.events.aria"),cols:["time","severity","run","label"].map(k=>t(`audit.events.col.${k}`)),rows:a.events.map(e=>
+      h(doc,"tr",{dataset:{auditEvent:"1",runId:e.runId,severity:e.severity}},
+        h(doc,"td",{},timeEl(ctx,e.timestamp)),
+        h(doc,"td",{},sevBadge(ctx,e.severity)),
+        h(doc,"td",{class:"mono audit-run",text:e.runId}),
+        h(doc,"td",{class:"mono audit-label",dataset:{verbatim:"1"},text:`${e.stage??MISSING}/${e.event??MISSING}`})))})];
   }
   return panel(ctx,{titleKey:"audit.events.title",id:"audit-events",className:"audit-section"},h(doc,"p",{class:"note",text:t("audit.events.lead")}),body);
 }
@@ -116,13 +127,13 @@ function evidencePanel(ctx,a){
     if(ev.more)notes.push(h(doc,"p",{class:"note",dataset:{note:"more"},text:t("audit.evidence.more")}));
     if(ev.coverage!=="FULL")notes.push(h(doc,"p",{class:"note",role:"status",dataset:{note:"coverage",coverage:ev.coverage,evidenceSources:EVIDENCE_SOURCE_NAMES.map(k=>`${k}=${ev.sources[k]}`).join(",")},text:t(`audit.evidence.coverage.${ev.coverage}`)}));
     body=ev.items.length
-      ?[...notes,h(doc,"ul",{class:"audit-list","aria-label":t("audit.evidence.aria")},ev.items.map(e=>
-        h(doc,"li",{class:"audit-row",dataset:{auditEvidence:e.evidenceId,verification:e.verification??"NONE"}},
-          timeEl(ctx,e.createdAt),
-          h(doc,"span",{class:"badge audit-sev",text:e.verification??MISSING}),
-          h(doc,"span",{class:"mono audit-run",text:e.kind??MISSING}),
-          h(doc,"span",{class:"mono audit-label",dataset:{verbatim:"1"},text:e.evidenceId}),
-          e.runId?h(doc,"span",{class:"mono audit-run",text:e.runId}):null)))]
+      ?[...notes,auditTable(ctx,{caption:t("audit.evidence.aria"),cols:["time","verification","kind","id","run"].map(k=>t(`audit.evidence.col.${k}`)),rows:ev.items.map(e=>
+        h(doc,"tr",{dataset:{auditEvidence:e.evidenceId,verification:e.verification??"NONE"}},
+          h(doc,"td",{},timeEl(ctx,e.createdAt)),
+          h(doc,"td",{},verifPill(ctx,e.verification)),
+          h(doc,"td",{class:"mono audit-kind",dataset:{verbatim:"1"},text:e.kind??MISSING}),
+          h(doc,"td",{class:"mono audit-label",dataset:{verbatim:"1"},text:e.evidenceId}),
+          h(doc,"td",{class:"mono audit-run",text:e.runId??MISSING})))})]
       :[...notes,ev.skipped===0&&ev.coverage==="FULL"?h(doc,"p",{class:"note",role:"status",dataset:{auditEmpty:"evidence"},text:t("audit.evidence.none")}):null];
   }
   return panel(ctx,{titleKey:"audit.evidence.title",id:"audit-evidence",className:"audit-section"},h(doc,"p",{class:"note",text:t("audit.evidence.lead")}),body);
