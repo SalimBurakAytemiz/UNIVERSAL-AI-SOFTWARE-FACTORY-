@@ -178,3 +178,25 @@ describe("safe registry verification mode (Founder scope: probe/<run>/ only, no 
     expect(JSON.parse(r.stdout.trim().split("\n").at(-1))).toMatchObject({forcePushRewindRejected: true, nonFastForwardRejected: true, deleteRejected: true, headUnchanged: true, pass: true});
   });
 });
+
+describe("safe registry verification mode: follow-ups (review of 2b2f8e79)", () => {
+  it("an ACCEPTED stale-write probe (parent = current tip) keeps every section and sidecar and only adds its marker", {timeout: T}, () => {
+    const w = world();
+    const r = w.reg(w.A);
+    r.cas("probe/p1/A-hello", null, {v: 1});
+    r.cas("refs/uasco/authority/probe-x", null, {schema: "s", phase: "x"});
+    const before = r.sections();
+    const tip = git(w.origin, "rev-parse", REF);
+    expect(r.staleWriteProbe(tip, "probe/p1/marker", {m: 1}).ok).toBe(true);
+    expect(r.sections()).toEqual([...before, "probe/p1/marker"].sort());
+    expect(git(w.origin, "ls-tree", "-r", "--name-only", REF).split("\n").sort()).toEqual(["authority/probe-x.json", "doc.json"]);
+    expect(() => r.staleWriteProbe(tip, "probe/../x", {})).toThrow(/REGISTRY_KEY_INVALID/);
+  });
+  it("`registry verify` on a branch without verified protection exits 3 before any write", {timeout: T}, () => {
+    const r = spawnSync(process.execPath, [path.resolve(HERE, "../../automation/factory-v2/cli.mjs"), "registry", "verify", "--role", "A", "--session", "session_neverwrites01", "--run", "t", "--branch", "uasco/fv2-test-never-protected"], {encoding: "utf8", timeout: 120_000});
+    expect(r.status).toBe(3);
+    const steps = r.stdout.trim().split("\n").map(l => JSON.parse(l).step);
+    expect(steps.at(-1)).toBe("ABORTED_BEFORE_ANY_WRITE");
+    expect(steps).not.toContain("A_LEASE_ACQUIRED");
+  });
+});
