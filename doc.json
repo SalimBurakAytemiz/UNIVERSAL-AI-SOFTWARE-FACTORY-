@@ -1,6 +1,6 @@
 {
   "schema": "uasco.factory-v2.shared-registry/1",
-  "phase": "section:probe/B-forged",
+  "phase": "section:refs/uasco/authority/probe-uasco",
   "sections": {
     "probe-keys/session_015dYwb2b3yVQ6iay68HXCD8": {
       "session": "session_015dYwb2b3yVQ6iay68HXCD8",
@@ -23,12 +23,12 @@
     "refs/uasco/authority/probe-uasco": {
       "schema": "uasco.factory-v2.authority/1",
       "domain": "probe-uasco",
-      "authority": "V2",
-      "phase": "V2_AUTHORITATIVE",
-      "epoch": 7,
-      "holder": "session_015dYwb4zVwFwg69iij2RdGq",
-      "candidate": "session_015dYwb4zVwFwg69iij2RdGq",
-      "outgoing": "session_015dYwb2b3yVQ6iay68HXCD8",
+      "authority": "V4.1",
+      "phase": "V41_AUTHORITATIVE",
+      "epoch": 1,
+      "holder": null,
+      "candidate": null,
+      "outgoing": null,
       "manifest": null,
       "gatesDigest": null,
       "drainDigest": null,
@@ -36,12 +36,12 @@
         {
           "core": {
             "domain": "probe-uasco",
-            "authority": "V2",
-            "phase": "V2_AUTHORITATIVE",
-            "epoch": 7,
-            "holder": "session_015dYwb4zVwFwg69iij2RdGq",
-            "candidate": "session_015dYwb4zVwFwg69iij2RdGq",
-            "outgoing": "session_015dYwb2b3yVQ6iay68HXCD8",
+            "authority": "V4.1",
+            "phase": "V41_AUTHORITATIVE",
+            "epoch": 1,
+            "holder": null,
+            "candidate": null,
+            "outgoing": null,
             "manifest": null,
             "gatesDigest": null,
             "drainDigest": null
@@ -49,19 +49,27 @@
           "envelope": {
             "schema": "uasco.factory-v2.signed-action/1",
             "domain": "probe-uasco",
-            "action": "COMMIT",
-            "role": "V2_CANDIDATE",
-            "sessionId": "session_015dYwb4zVwFwg69iij2RdGq",
-            "keyId": "k_35c24d6dcb7752aa",
-            "prev": "forged",
-            "payloadDigest": "bf42713444be423de3990fc58b940e07f30a9f130ed3d33fb1f153ec0dd0a9fb",
-            "issuedAt": 1793869326796,
-            "expiresAt": 1793870226796,
-            "nonce": "211c20c1-588b-4122-aabb-eed3e1aa40d0",
-            "signature": "qbi6XB0VqxXumGMmOyBdjY0bb8jv+eXBVEJRSdC15z6ms9UgA2F55RNzm5yfSXnZaYI/WMYbdP+h3TvSBsp+Aw=="
+            "action": "ROLLBACK",
+            "role": "V41_OWNER",
+            "sessionId": "session_015dYwb2b3yVQ6iay68HXCD8",
+            "keyId": "k_d8f334bebf0fd76b",
+            "prev": "335a016b4cc8e36d2eb066dcd058c4355d54048f669c5ee7d43f49e649e0e39c",
+            "payloadDigest": "3591440a547706012fc7caf50c8d6350ed8243c9ec42719017dfe841a3ee1ab7",
+            "issuedAt": 1793869341187,
+            "expiresAt": 1793870241187,
+            "nonce": "6831d45d-dc95-40a7-943b-70f6d6ab8600",
+            "signature": "j1ZFYtVg86efG0HibaAcnx3d97rrTzi2As4oO3PaiCmpJwFXJ3g5pj2g7OwaXtN3Z/Pfdu8KS3wI2O82LVhVAw=="
           }
         }
-      ]
+      ],
+      "invalidRecordReplaced": "2a96540703e7f4cefc52b1ece1d376396ec29f28507834ba2da00539f7420992",
+      "rollbackReason": "RESET_INVALID:forged by registry writer",
+      "updatedAt": 1793869341192,
+      "updatedBy": {
+        "role": "V41_OWNER",
+        "sessionId": "session_015dYwb2b3yVQ6iay68HXCD8",
+        "keyId": "k_d8f334bebf0fd76b"
+      }
     },
     "probe/B-forged": {
       "session": "session_015dYwb4zVwFwg69iij2RdGq",
@@ -72,8 +80,8 @@
     "probe-keys/session_015dYwb2b3yVQ6iay68HXCD8": 1,
     "probe-keys/session_015dYwb4zVwFwg69iij2RdGq": 1,
     "probe/A-ready": 1,
-    "refs/uasco/authority/probe-uasco": 1,
+    "refs/uasco/authority/probe-uasco": 2,
     "probe/B-forged": 1
   },
-  "seq": 5
+  "seq": 6
 }
