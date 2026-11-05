@@ -1,5 +1,5 @@
 // //TR: Bu dosya CLOUD-T0012 staging/production ayrımını (ayrı uç nokta, ayrık anahtar kimlikleri, farklı secret'lar), oturum anahtarı rotasyonunu (örtüşen keyId penceresi, sabit-zamanlı doğrulama), sağlık durumunu ve production'a yalnız yetkili terfi kapısını fail-closed olarak uygular; hiçbir altyapı açmaz, ağ çağrısı yapmaz.
-import {createHash, createHmac, timingSafeEqual} from "node:crypto";
+import {createHash, createHmac, randomBytes, timingSafeEqual} from "node:crypto";
 import type {CloudEnvironment} from "../../../../core/cloud/contracts.js";
 import {MAX_SESSION_TTL_MS, resolveCloudRuntimeConfig, verifySession, type CloudRuntimeConfig, type CloudSession} from "./remote-gateway.js";
 
@@ -40,6 +40,8 @@ export class SessionKeyRing {
 
   static create(environment: CloudEnvironment, keyId: string, secret: string | Buffer, options: KeyRingOptions = {}): SessionKeyRing {
     if (options.clock !== undefined && typeof options.clock !== "function") throw new Error("CLOCK_INVALID");
+    // Production'da yerel saate geri dönüş yoktur: güvenilen saat verilmezse halka kurulmaz.
+    if (environment === "production" && options.clock === undefined) throw new Error("PRODUCTION_CLOCK_REQUIRED");
     const ring = new SessionKeyRing(environment, options.clock);
     const err = ring.admit(keyId, secret); if (err) throw new Error(err);
     ring.entries.push({keyId, secret: ownCopy(secret), state: "ACTIVE", verifyUntil: null});
@@ -54,6 +56,9 @@ export class SessionKeyRing {
     let c: number; try { c = this.clock(); } catch { return true; }
     return !Number.isFinite(c) || Math.abs(t - c) > MAX_CLOCK_SKEW_MS;
   }
+
+  /** @internal dağıtım onayı üretimi için: `now` güvenilen saatle uyumlu mu (sapma/okunamayan saat = false). */
+  clockAccepts(now: Date): boolean { return !this.skewed(now); }
 
   private admit(keyId: string, secret: string | Buffer): RotationDeny | null {
     if (typeof keyId !== "string" || !KEY_ID_RE.test(keyId)) return "KEY_ID_INVALID";
@@ -217,53 +222,94 @@ export interface StagingEvidence {artifactSha256: string; stagingHealth: HealthR
 export type PromotionDeny =
   | SeparationDeny | "ARTIFACT_INVALID" | "STAGING_EVIDENCE_MISMATCH" | "STAGING_UNHEALTHY" | "STAGING_SMOKE_FAILED" | "STAGING_EVIDENCE_STALE"
   | "DEPLOY_SESSION_INVALID" | "DEPLOY_SESSION_EXPIRED" | "DEPLOY_NOT_FOUNDER" | "DEPLOY_TENANT_DENIED" | "DEPLOY_SUBJECT_DENIED"
-  | "DEPLOY_POLICY_INVALID" | "DEPLOY_APPROVAL_INVALID" | "DEPLOY_APPROVAL_EXPIRED";
+  | "DEPLOY_POLICY_INVALID" | "DEPLOY_APPROVAL_INVALID" | "DEPLOY_APPROVAL_EXPIRED" | "DEPLOY_APPROVAL_REPLAYED" | "DEPLOY_APPROVAL_LEDGER_UNAVAILABLE";
 export const MAX_STAGING_EVIDENCE_AGE_MS = 24 * 60 * 60 * 1000;
 export const MAX_DEPLOY_APPROVAL_TTL_MS = 15 * 60 * 1000;
 /** Production terfisini kim onaylayabilir: yalnız platform tenant'ı ve (ayarlıysa) izinli Founder subject'leri. */
 export interface DeployPolicy {platformTenantId: string; founderSubjects?: ReadonlySet<string>}
 
-const approvalMac = (key: string | Buffer, keyId: string, sid: string, sha: string, exp: number) =>
-  createHmac("sha256", key).update(`da1.${keyId}.${sid}.${sha}.${exp}`).digest("hex");
+const approvalMac = (key: string | Buffer, keyId: string, nonce: string, sid: string, sha: string, exp: number) =>
+  createHmac("sha256", key).update(`da2.${keyId}.${nonce}.${sid}.${sha}.${exp}`).digest("hex");
+const NONCE_RE = /^[0-9a-f]{32}$/;
+
+/**
+ * Tüketilmiş dağıtım onaylarının kaydı: her onay en çok bir kez başarılı terfiye dönüşür.
+ * consume(): ilk kullanımda kaydeder ve true döner; daha önce tüketilmişse false. Durum bilinmiyorsa (hata, kapasite, bozuk yanıt)
+ * istisna fırlatmalıdır; kapı bunu reddeder (fail-closed). Production'da kalıcı ve tüm örneklerce paylaşılan bir depo gerekir (runbook §4).
+ */
+export interface DeployApprovalLedger { consume(approvalId: string, expiresAtMs: number, nowMs: number): boolean }
+
+/**
+ * Süreç içi kayıt: yalnız tek örnek ve testler için. Yeniden başlatmada unutur; production için kalıcı depo kullanılmalıdır.
+ * Budama çağıranın `now` değerine asla dayanmaz (ileri sapmış bir `now` canlı kaydı silip tekrar oynatmayı açabilirdi):
+ * yalnız güvenilen `clock` verilirse ve kayıt `exp + MAX_CLOCK_SKEW_MS <= clock()` ise silinir. Saat yoksa ya da okunamazsa
+ * hiç budanmaz; kapasite dolunca kapı reddeder (fail-closed).
+ */
+export class InMemoryDeployApprovalLedger implements DeployApprovalLedger {
+  private readonly used = new Map<string, number>();
+  constructor(private readonly capacity = 10_000, private readonly clock?: () => number) {
+    if (!Number.isSafeInteger(capacity) || capacity < 1) throw new Error("LEDGER_CAPACITY_INVALID");
+    if (clock !== undefined && typeof clock !== "function") throw new Error("LEDGER_CLOCK_INVALID");
+  }
+  private prune(): void {
+    if (this.clock === undefined) return;
+    let c: number; try { c = this.clock(); } catch { return; }
+    if (!Number.isFinite(c)) return;
+    for (const [id, exp] of this.used) if (exp + MAX_CLOCK_SKEW_MS <= c) this.used.delete(id);
+  }
+  consume(approvalId: string, expiresAtMs: number, nowMs: number): boolean {
+    if (typeof approvalId !== "string" || approvalId.length === 0 || !Number.isFinite(expiresAtMs) || !Number.isFinite(nowMs)) throw new Error("LEDGER_INPUT_INVALID");
+    this.prune();   // `nowMs` yalnız doğrulanır; budamada kullanılmaz
+    if (this.used.has(approvalId)) return false;
+    if (this.used.size >= this.capacity) throw new Error("LEDGER_FULL");   // bilinmeyen durum: kapı reddeder
+    this.used.set(approvalId, expiresAtMs);
+    return true;
+  }
+}
 
 /**
  * Sunucu tarafında, Founder'ın açık onay eyleminde üretilen, tek artifact'a ve tek oturuma bağlı kısa ömürlü dağıtım onayı:
- * `da1.<keyId>.<sid>.<artifactSha256>.<expiresAtMs>.<hex hmac>` — production ACTIVE anahtarıyla imzalanır, ≤15 dk geçerlidir.
+ * `da2.<keyId>.<nonce>.<sid>.<artifactSha256>.<expiresAtMs>.<hex hmac>` — production ACTIVE anahtarıyla imzalanır, ≤15 dk geçerlidir,
+ * tek kullanımlıktır (nonce, DeployApprovalLedger'da tüketilir). `now` güvenilen saatten sapıyorsa onay üretilmez.
  * Çalınmış bir oturum belirteci tek başına dağıtım yetkisi vermez; başka artifact için onay yeniden kullanılamaz.
  */
 export function issueDeployApproval(ring: SessionKeyRing, sid: string, artifactSha256: string, now: Date, ttlMs: number = MAX_DEPLOY_APPROVAL_TTL_MS): string {
   if (ring.environment !== "production") throw new Error("DEPLOY_APPROVAL_RING_NOT_PRODUCTION");
   if (typeof sid !== "string" || !/^[A-Za-z0-9-]{8,64}$/.test(sid) || typeof artifactSha256 !== "string" || !SHA256_RE.test(artifactSha256)) throw new Error("DEPLOY_APPROVAL_FIELDS_INVALID");
   if (!Number.isSafeInteger(ttlMs) || ttlMs < 1000 || ttlMs > MAX_DEPLOY_APPROVAL_TTL_MS) throw new Error("DEPLOY_APPROVAL_TTL_INVALID");
-  const k = ring.signingKey(), exp = now.getTime() + ttlMs;
-  return `da1.${k.keyId}.${sid}.${artifactSha256}.${exp}.${approvalMac(k.secret, k.keyId, sid, artifactSha256, exp)}`;
+  if (!ring.clockAccepts(now)) throw new Error("DEPLOY_APPROVAL_CLOCK_SKEW");
+  const k = ring.signingKey(), exp = now.getTime() + ttlMs, nonce = randomBytes(16).toString("hex");
+  return `da2.${k.keyId}.${nonce}.${sid}.${artifactSha256}.${exp}.${approvalMac(k.secret, k.keyId, nonce, sid, artifactSha256, exp)}`;
 }
 
-function verifyDeployApproval(approval: unknown, ring: SessionKeyRing, sid: string, artifactSha256: string, now: Date): "OK" | "DEPLOY_APPROVAL_INVALID" | "DEPLOY_APPROVAL_EXPIRED" {
-  if (typeof approval !== "string" || approval.length > 512) return "DEPLOY_APPROVAL_INVALID";
-  const parts = approval.split(".");   // keyId "." içerebilir: son dört alan sabit, keyId aradaki kısımdır
-  if (parts.length < 6 || parts[0] !== "da1") return "DEPLOY_APPROVAL_INVALID";
-  const [aSid, aSha, expS, mac] = parts.slice(-4) as [string, string, string, string];
-  const keyId = parts.slice(1, -4).join(".");
-  if (!KEY_ID_RE.test(keyId) || !/^[0-9]{1,16}$/.test(expS) || !/^[0-9a-f]{64}$/.test(mac)) return "DEPLOY_APPROVAL_INVALID";
-  const key = ring.keyFor(keyId, now); if (key === undefined) return "DEPLOY_APPROVAL_INVALID";
+function verifyDeployApproval(approval: unknown, ring: SessionKeyRing, sid: string, artifactSha256: string, now: Date):
+  {ok: true; id: string; exp: number} | {ok: false; reason: "DEPLOY_APPROVAL_INVALID" | "DEPLOY_APPROVAL_EXPIRED"} {
+  const bad = {ok: false, reason: "DEPLOY_APPROVAL_INVALID"} as const;
+  if (typeof approval !== "string" || approval.length > 512) return bad;
+  const parts = approval.split(".");   // keyId "." içerebilir: son beş alan sabit, keyId aradaki kısımdır
+  if (parts.length < 7 || parts[0] !== "da2") return bad;   // da1 (nonce'suz, tekrar oynatılabilir) artık kabul edilmez
+  const [nonce, aSid, aSha, expS, mac] = parts.slice(-5) as [string, string, string, string, string];
+  const keyId = parts.slice(1, -5).join(".");
+  if (!KEY_ID_RE.test(keyId) || !NONCE_RE.test(nonce) || !/^[0-9]{1,16}$/.test(expS) || !/^[0-9a-f]{64}$/.test(mac)) return bad;
+  const key = ring.keyFor(keyId, now); if (key === undefined) return bad;
   const exp = Number(expS);
-  if (!timingSafeEqual(Buffer.from(approvalMac(key, keyId, aSid, aSha, exp), "hex"), Buffer.from(mac, "hex"))) return "DEPLOY_APPROVAL_INVALID";
-  if (aSid !== sid || aSha !== artifactSha256) return "DEPLOY_APPROVAL_INVALID";
-  if (exp - now.getTime() > MAX_DEPLOY_APPROVAL_TTL_MS) return "DEPLOY_APPROVAL_INVALID";
-  if (now.getTime() >= exp) return "DEPLOY_APPROVAL_EXPIRED";
-  return "OK";
+  if (!timingSafeEqual(Buffer.from(approvalMac(key, keyId, nonce, aSid, aSha, exp), "hex"), Buffer.from(mac, "hex"))) return bad;
+  if (aSid !== sid || aSha !== artifactSha256) return bad;
+  if (exp - now.getTime() > MAX_DEPLOY_APPROVAL_TTL_MS) return bad;
+  if (now.getTime() >= exp) return {ok: false, reason: "DEPLOY_APPROVAL_EXPIRED"};
+  return {ok: true, id: `${keyId}:${nonce}`, exp};
 }
 
 /**
  * Production'a terfi yalnız: ayrım geçerli + aynı artifact SHA için staging HEALTHY (rapor aynı SHA'yı taşır) + smoke PASS (≤24 saat) +
  * production anahtar halkasıyla doğrulanan, platform tenant'ına ait (ve izin listesi varsa listedeki) FOUNDER oturumu +
- * o oturuma ve o artifact SHA'sına bağlı süresi dolmamış dağıtım onayı. Staging oturumu production'da geçmez (ayrık anahtarlar).
+ * o oturuma ve o artifact SHA'sına bağlı süresi dolmamış, daha önce tüketilmemiş dağıtım onayı. Staging oturumu production'da geçmez (ayrık anahtarlar).
+ * Onay yalnız diğer tüm koşullar sağlandığında, son adımda tüketilir; kayıt yoksa ya da durumu bilinmiyorsa terfi reddedilir.
  * SINIR: staging kanıtı (smoke/health) çağıranın beyanıdır, imzalı değildir; güven Founder onayına dayanır (runbook §4).
  * Bu fonksiyon bir karar döndürür; dağıtımı kendisi yapmaz (gerçek altyapı D-03/D-29 kapsamındadır).
  */
 export function evaluatePromotion(o: {staging: EnvironmentDeployment; production: EnvironmentDeployment; artifactSha256: string;
-  evidence: StagingEvidence; deployToken: unknown; deployApproval: unknown; policy: DeployPolicy; now: Date; revoked?: ReadonlySet<string>}):
+  evidence: StagingEvidence; deployToken: unknown; deployApproval: unknown; policy: DeployPolicy; approvals: DeployApprovalLedger; now: Date; revoked?: ReadonlySet<string>}):
   {ok: true; approvedBy: string; artifactSha256: string} | {ok: false; reason: PromotionDeny} {
   const pol = o.policy;
   if (!pol || typeof pol.platformTenantId !== "string" || !KEY_ID_RE.test(pol.platformTenantId)
@@ -285,6 +331,10 @@ export function evaluatePromotion(o: {staging: EnvironmentDeployment; production
   if (s.tenantId !== pol.platformTenantId) return {ok: false, reason: "DEPLOY_TENANT_DENIED"};
   if (pol.founderSubjects && !pol.founderSubjects.has(s.subject)) return {ok: false, reason: "DEPLOY_SUBJECT_DENIED"};
   const a = verifyDeployApproval(o.deployApproval, o.production.keys, s.sid, o.artifactSha256, o.now);
-  if (a !== "OK") return {ok: false, reason: a};
+  if (!a.ok) return a;
+  let fresh: unknown;
+  try { fresh = o.approvals.consume(a.id, a.exp, o.now.getTime()); } catch { return {ok: false, reason: "DEPLOY_APPROVAL_LEDGER_UNAVAILABLE"}; }
+  if (fresh === false) return {ok: false, reason: "DEPLOY_APPROVAL_REPLAYED"};
+  if (fresh !== true) return {ok: false, reason: "DEPLOY_APPROVAL_LEDGER_UNAVAILABLE"};   // bilinmeyen yanıt: fail-closed
   return {ok: true, approvedBy: s.subject, artifactSha256: o.artifactSha256};
 }
