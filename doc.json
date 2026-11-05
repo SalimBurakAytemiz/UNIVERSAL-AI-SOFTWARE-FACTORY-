@@ -1,6 +1,6 @@
 {
   "schema": "uasco.factory-v2.shared-registry/1",
-  "phase": "section:relay/drain",
+  "phase": "section:refs/uasco/authority/probe-uasco",
   "sections": {
     "probe-keys/session_015dYwb2b3yVQ6iay68HXCD8": {
       "session": "session_015dYwb2b3yVQ6iay68HXCD8",
@@ -24,7 +24,7 @@
       "schema": "uasco.factory-v2.authority/1",
       "domain": "probe-uasco",
       "authority": "V4.1",
-      "phase": "HANDOVER_PREPARED",
+      "phase": "V41_DRAINED",
       "epoch": 1,
       "holder": null,
       "candidate": "session_015dYwb4zVwFwg69iij2RdGq",
@@ -35,7 +35,7 @@
         "digest": "97a681210141d584734d5adb87ad23bc83b25f26cab80cd573b4450d02eaebdb"
       },
       "gatesDigest": "ac4767f12d99cbbf89ca2c49c28a3e3cb0e43344a06f6eedd0692a59db10bf2f",
-      "drainDigest": null,
+      "drainDigest": "9de6ca652a60c346df65ced968934b2c10cc832b19862baa7f9a4508102dac75",
       "chain": [
         {
           "core": {
@@ -96,20 +96,67 @@
             "nonce": "0c2d8468-6b4f-4b86-8866-4d875b45edd4",
             "signature": "U7lspghkVvlVPZf3IcovMOPNe+5B58D2UUXmM/BPJSV/+lSNBa/14lpchgiQMjBg3ouXRP8RBC6llZTGQbhyDQ=="
           }
+        },
+        {
+          "core": {
+            "domain": "probe-uasco",
+            "authority": "V4.1",
+            "phase": "V41_DRAINED",
+            "epoch": 1,
+            "holder": null,
+            "candidate": "session_015dYwb4zVwFwg69iij2RdGq",
+            "outgoing": "session_015dYwb2b3yVQ6iay68HXCD8",
+            "manifest": {
+              "ref": "refs/uasco/handover/probe-uasco/v1",
+              "version": 1,
+              "digest": "97a681210141d584734d5adb87ad23bc83b25f26cab80cd573b4450d02eaebdb"
+            },
+            "gatesDigest": "ac4767f12d99cbbf89ca2c49c28a3e3cb0e43344a06f6eedd0692a59db10bf2f",
+            "drainDigest": "9de6ca652a60c346df65ced968934b2c10cc832b19862baa7f9a4508102dac75"
+          },
+          "envelope": {
+            "schema": "uasco.factory-v2.signed-action/1",
+            "domain": "probe-uasco",
+            "action": "DRAIN_ACK",
+            "role": "V41_OWNER",
+            "sessionId": "session_015dYwb2b3yVQ6iay68HXCD8",
+            "keyId": "k_d8f334bebf0fd76b",
+            "prev": "6f3a56975e2e2270157170548194ac7e816c61154bb17aac3b1607fb85b99967",
+            "payloadDigest": "53f021a753f6dd022671c5ab1d2dea4f0a143e7cd13a321b08984e16798dd15a",
+            "issuedAt": 1793869367687,
+            "expiresAt": 1793870267687,
+            "nonce": "c1875a41-c10f-4a7d-be4b-157bf869d3a1",
+            "signature": "eKS5iNykdux2cD/CdNP+Ow3uQUwbnsurhGnXBMOCVZ/MacEwr0ia6DeKR7OU8if0hOcrClnCDAlLBoyhT46jDg=="
+          }
         }
       ],
       "invalidRecordReplaced": "2a96540703e7f4cefc52b1ece1d376396ec29f28507834ba2da00539f7420992",
       "rollbackReason": "RESET_INVALID:forged by registry writer",
-      "updatedAt": 1793869358367,
+      "updatedAt": 1793869373365,
       "updatedBy": {
-        "role": "V2_CANDIDATE",
-        "sessionId": "session_015dYwb4zVwFwg69iij2RdGq",
-        "keyId": "k_4c65579e51b3e8a4"
+        "role": "V41_OWNER",
+        "sessionId": "session_015dYwb2b3yVQ6iay68HXCD8",
+        "keyId": "k_d8f334bebf0fd76b"
       },
       "gates": {
         "probeWaiver": true
       },
-      "drain": null
+      "drain": {
+        "acks": {
+          "CLOUD-T0005": "FENCED",
+          "CLOUD-T0008": "FENCED",
+          "UASCO-T0045": "FENCED",
+          "UASCO-T0087": "FENCED",
+          "UASCO-T0042": "FENCED",
+          "CLOUD-T0010": "FENCED",
+          "CLOUD-T0015": "FENCED",
+          "UASCO-T0062": "FENCED"
+        },
+        "builderSessionsStopped": [
+          "session_probeNoBuilders"
+        ],
+        "note": "probe"
+      }
     },
     "probe/B-forged": {
       "session": "session_015dYwb4zVwFwg69iij2RdGq",
@@ -567,12 +614,12 @@
     "probe-keys/session_015dYwb2b3yVQ6iay68HXCD8": 1,
     "probe-keys/session_015dYwb4zVwFwg69iij2RdGq": 1,
     "probe/A-ready": 1,
-    "refs/uasco/authority/probe-uasco": 3,
+    "refs/uasco/authority/probe-uasco": 4,
     "probe/B-forged": 1,
     "probe/A-reset": 1,
     "refs/uasco/handover/probe-uasco/v1": 1,
     "probe/B-prepared": 1,
     "relay/drain": 1
   },
-  "seq": 11
+  "seq": 12
 }
