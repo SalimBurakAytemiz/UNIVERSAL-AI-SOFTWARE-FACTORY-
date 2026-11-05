@@ -13,7 +13,7 @@ if (job.kind === "REVIEW") {
   process.stdout.write(JSON.stringify({status, headSha: job.headSha, baseSha: job.baseSha, reviewerIdentity: job.slotId, blockers: status === "CHANGES_REQUESTED" ? [{id: `B-${job.taskId}`}] : [], resolves: remediated ? [`B-${job.taskId}`] : []}) + "\n");
   process.exit(0);
 }
-if (fail?.crash && (job.attempt ?? 0) < fail.crash) process.kill(process.pid, "SIGKILL");
+if (fail?.crash && (job.attempt ?? 0) < fail.crash) process.exit(137); // simulated crash, same result on POSIX and Windows (128+9 = killed)
 if (fail?.auth) { process.stderr.write("REVIEWER_AUTH_REJECTED: builder credentials refused"); process.exit(7); }
 let base = g("rev-parse", "HEAD");
 if (fail?.sneak) { // adversarial: hide a protected change below a reported "base" (review PoC on 3213d6a8)

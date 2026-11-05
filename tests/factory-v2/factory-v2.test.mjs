@@ -362,3 +362,16 @@ describe("merge-base diff when canonical has moved past the merge-base (review o
     expect(sup.diff(canonical, head).sort()).toContain("other/canonical-only.txt"); // a direct diff would differ
   });
 });
+
+describe("crash classification is platform-independent", () => {
+  it("signal, null code, >=128 and negative codes are WORKER_CRASH (temporary); ordinary non-zero exits are not", async () => {
+    const {LocalProcessExecutor} = await import("../../automation/factory-v2/executors.mjs");
+    const env = makeRepo();
+    const ex = new LocalProcessExecutor({repoDir: env.repo, worktreeRoot: path.join(env.root, "wt"), baseSha: env.base, command: job => [process.execPath, ["-e", `process.exit(${job.code})`]]});
+    const run = async code => { try { await ex.start({kind: "BUILD", role: "BUILDER", slotId: "builder-A", taskId: `C-${code}`, code}).done; return "ok"; } catch (e) { return e.code; } };
+    expect(await run(137)).toBe("WORKER_CRASH");
+    expect(await run(255)).toBe("WORKER_CRASH");
+    expect(await run(1)).toBe("WORKER_EXIT");
+    expect(classify(Object.assign(new Error("WORKER_CRASH:137"), {code: "WORKER_CRASH"}))).toBe("TEMPORARY");
+  });
+});

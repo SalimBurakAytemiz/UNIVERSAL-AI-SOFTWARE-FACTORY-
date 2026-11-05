@@ -193,10 +193,13 @@ describe("safe registry verification mode: follow-ups (review of 2b2f8e79)", () 
     expect(() => r.staleWriteProbe(tip, "probe/../x", {})).toThrow(/REGISTRY_KEY_INVALID/);
   });
   it("`registry verify` on a branch without verified protection exits 3 before any write", {timeout: T}, () => {
-    const r = spawnSync(process.execPath, [path.resolve(HERE, "../../automation/factory-v2/cli.mjs"), "registry", "verify", "--role", "A", "--session", "session_neverwrites01", "--run", "t", "--branch", "uasco/fv2-test-never-protected"], {encoding: "utf8", timeout: 120_000});
+    const r = spawnSync(process.execPath, [path.resolve(HERE, "../../automation/factory-v2/cli.mjs"), "registry", "verify", "--role", "A", "--session", "session_neverwrites01", "--run", "t", "--branch", "uasco/fv2-test-never-protected"], {encoding: "utf8", timeout: 120_000,
+      // unreachable proxy: the protection check cannot succeed, so the command must fail closed — deterministic, no network, never a write
+      env: {...process.env, HTTPS_PROXY: "http://127.0.0.1:9", https_proxy: "http://127.0.0.1:9", NODE_USE_ENV_PROXY: "1"}});
     expect(r.status).toBe(3);
     const steps = r.stdout.trim().split("\n").map(l => JSON.parse(l).step);
     expect(steps.at(-1)).toBe("ABORTED_BEFORE_ANY_WRITE");
     expect(steps).not.toContain("A_LEASE_ACQUIRED");
+    expect(steps).toContain("PROTECTION_CHECK_ERROR");
   });
 });

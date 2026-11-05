@@ -41,7 +41,10 @@ export class LocalProcessExecutor {
         clearTimeout(timer);
         const endedAt = Date.now();
         this.evidence.push({jobId, pid: child.pid, slotId: job.slotId, role: job.role, taskId: job.taskId, startedAt, endedAt, code, signal});
-        if (code !== 0) return reject(Object.assign(new Error(signal ? `WORKER_CRASH:${signal}` : `WORKER_EXIT_${code}:${err.slice(-200)}`), {code: signal ? "WORKER_CRASH" : "WORKER_EXIT"}));
+        // Abnormal termination is a crash on every platform: a signal (POSIX), exit >= 128 (shell "killed by signal" convention) or a
+        // negative / NTSTATUS-range code (Windows TerminateProcess / exceptions). A crash is TEMPORARY (bounded retry); other exits are not.
+        const crashed = !!signal || code === null || code >= 128 || code < 0;
+        if (code !== 0) return reject(Object.assign(new Error(crashed ? `WORKER_CRASH:${signal ?? code}` : `WORKER_EXIT_${code}:${err.slice(-200)}`), {code: crashed ? "WORKER_CRASH" : "WORKER_EXIT"}));
         try { const line = out.trim().split("\n").at(-1); resolve({ok: true, ...JSON.parse(line), branch: wt?.branch}); } catch { reject(new Error("WORKER_OUTPUT_INVALID")); }
       });
     });
