@@ -1,5 +1,6 @@
 // //TR: Bu görünüm Güvence Komuta Merkezi ve Güvenlik Duruşu'dur (FA-V2-PRODUCT, UI-037+046): YALNIZ üç salt-okunur ve zaten izinli GET'ten okunur — GET /v1/work-runs (koşu başına QA testi ve güvenlik taraması kanıtı), GET /v1/reviews (bağımsız inceleme kararları, UI-049) ve GET /v1/cockpit (yalnız evidence bloğu: hash-doğrulanmış kanıt bütünlüğü). Dört sütun (QA kanıtı, güvenlik taraması, bağımsız inceleme, kanıt bütünlüğü) toplu olarak gösterilir ve genel duruş DÜRÜSTTÜR: ASSURED yalnız dört sütunun HEPSİ gerçekten sağlandığında görünür; QA NOT_EXECUTED, güvenlik PASSED değil, inceleme temiz-ve-bağımsız değil ya da kanıt doğrulanmamış/eksik/okunamıyorsa asla görünmez ve tam olarak neyin eksik olduğu adıyla listelenir. Bağımsız inceleme durumları (CLEAN/BLOCKED/NO_VERDICT/NOT_REVIEWED/INDEPENDENCE_UNVERIFIED) sunucudan aynen taşınır. HİÇBİR sayı, duruş veya geçiş UYDURULMAZ: bozuk yanıt tümden ERROR olarak gösterilir (kısmi/tahmini değer yok), okunamayan kaynağın sayıları 0 değil "—" olur ve ilgili sütun UNKNOWN'dır. Ürün doğrulaması bu görünümde ASLA iddia edilmez ve ilgili sabit değer hiçbir yerde üretilmez. Bu görünüm SALT-OKUNURDUR: onay/ret/teslim burada yapılmaz, yalnız mevcut ekranlara gezinme sunulur. API verisi HTML olarak yorumlanmaz; yalnız h()/textContent kullanılır.
-import {h,panel,statePill,kpiTile} from "../components.js";
+import {safeErrorCode} from "../error-code.js";
+import {h,panel,statePill,kpiTile,statusLabel} from "../components.js";
 import {MISSING} from "../model.js";
 import {formatDateTime} from "../work-core.js";
 import {POSTURE_SOURCES,POSTURE_SOURCE_PATHS,QA_STATES,SECURITY_STATES,REVIEW_STATES,MAX_POSTURE_ROWS,PILL_FOR_RUN_STATUS,UNKNOWN_DETAILS,buildPosture,shortSha} from "../posture-core.js";
@@ -41,7 +42,7 @@ function stateBlock(ctx,res,source){
   return h(doc,"div",{class:`posture-state state-${state.toLowerCase()}`,role:"status",dataset:{postureState:state,source}},
     h(doc,"p",{class:"posture-state-head"},statePill(ctx,failKind(state)),h(doc,"strong",{text:ctx.t(`posture.state.${state}`)})),
     h(doc,"p",{class:"note",text:ctx.t(`posture.hint.${state}`,{source:`GET ${POSTURE_SOURCE_PATHS[source]}`})}),
-    res.message?h(doc,"p",{class:"note mono",text:res.message}):null);
+    safeErrorCode(res.message)?h(doc,"p",{class:"note mono",dataset:{stateErrorCode:safeErrorCode(res.message)},text:safeErrorCode(res.message)}):null);
 }
 /** Kaynak şeridi: her gerçek okuma kaynağının ayrık durum rozeti (renk tek başına anlam taşımaz). */
 function sourcesList(ctx,a){
@@ -163,7 +164,9 @@ function valuePill(ctx,pillar,value){return statePill(ctx,VALUE_PILL[pillar][val
 function runFacts(ctx,row){
   const doc=ctx.doc,t=ctx.t,rows=[];
   const add=(key,label,attrs,...dd)=>rows.push([h(doc,"dt",{text:label}),h(doc,"dd",{dataset:{field:key,...attrs}},...dd)]);
-  add("run",t("posture.field.run"),{},statePill(ctx,PILL_FOR_RUN_STATUS[row.status]??"NEUTRAL",{label:row.status})," ",mono(doc,row.step));
+  // Durum kodu sözlükten okunur etikete çevrilir (mstatus.*; yoksa ham kod); ham kod pill'in title'ında ve kartın data-run-status'unda kalır. Adım kodu "Adım" etiketiyle gösterilir.
+  const runPill=statePill(ctx,PILL_FOR_RUN_STATUS[row.status]??"NEUTRAL",{label:statusLabel(ctx,row.status)});runPill.setAttribute("title",String(row.status));runPill.dataset.runStatusCode=String(row.status);
+  add("run",t("posture.field.run"),{},runPill," ",h(doc,"span",{class:"note",text:t("posture.field.step")})," ",mono(doc,row.step));
   add("mission",t("posture.field.mission"),{},mono(doc,row.missionId));
   add("updated",t("posture.field.updated"),{},h(doc,"time",{datetime:row.updatedAt,text:formatDateTime(row.updatedAt,ctx.i18n.lang)}));
   add("head",t("posture.field.head"),{},row.headSha?h(doc,"span",{class:"mono",title:row.headSha,text:shortSha(row.headSha)}):MISSING);

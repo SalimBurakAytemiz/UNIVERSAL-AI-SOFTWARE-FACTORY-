@@ -487,6 +487,11 @@ export const FLOW_DETAIL_STATES=Object.freeze({
   DELIVERY:Object.freeze({PRODUCT_VERIFIED:["DONE"],NOT_VERIFIED:["DONE"],SOURCE_DELIVERY_ACCEPTED_NOT_VERIFIED:["ACTIVE"],ARTIFACT_PREPARED_NOT_VERIFIED:["ACTIVE"]})
 });
 const FLOW_STATUS_RE=/^[A-Z][A-Z0-9_]{0,39}$/;
+// //TR: UASCO-T0007: Sunucu AWAITING_APPROVAL koşusunu RUN aşamasında BLOCKED sayar (Founder kararı bekleniyor). Ekranda bu "Engelli" değil "Onay bekliyor" olarak gösterilir; yalnız RUN + BLOCKED + ayrıntı durumu tam olarak AWAITING_APPROVAL iken. Ham sunucu durumu değişmez (data-flow-state).
+export function flowDisplayState(s){
+  if(s&&s.stage==="RUN"&&s.state==="BLOCKED"&&typeof s.detail==="string"){const m=/^([A-Z][A-Z0-9_]{0,39})\/[A-Z][A-Z0-9_]{0,39}$/.exec(s.detail);if(m&&m[1]==="AWAITING_APPROVAL")return "AWAITING_APPROVAL"}
+  return s?s.state:"UNKNOWN";
+}
 /** {kind:"key",key,vars} | {kind:"status",status} | {kind:"raw",text,mismatch?} | null (detay yok). PLAN "n/m DONE" ve RUN "STATUS/STEP" biçimleri sayı/durum olarak ayrıştırılır. */
 export function describeFlowDetail(stage,detail,state){
   if(typeof detail!=="string"||!detail)return null;

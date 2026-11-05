@@ -465,26 +465,53 @@ async function runSteps() {
       must(await win.evaluate(() => !document.querySelector("#studio-ov-product #product-start, #studio-ov-product #product-stop, #studio-ov-product [data-product-url]")), "product card offers Start/Stop/address although the product routes are not admitted");
       return {notVerified: "GATED_4B", detail: "honest 'not available to the desktop yet' shown in the product card; the post-4b assertion (exact SANDBOX_UNAVAILABLE refusal) was NOT run"};
     }
+    // UASCO-T0007: the first-delivery flow card shows the AWAITING_APPROVAL run as "Awaiting approval", never as "Blocked" (the raw server state stays in data-flow-state).
+    await waitSel('#studio-ov-flow li[data-flow-stage="RUN"]', 20000);
+    const flowRun = await win.evaluate(() => { const li = document.querySelector('#studio-ov-flow li[data-flow-stage="RUN"]'); return {state: li?.dataset.flowState ?? null, display: li?.dataset.flowDisplayState ?? null, badge: li?.querySelector(".badge")?.textContent ?? null}; });
+    const runNow = (await serverGet(`/v1/work-runs/${runId}`))?.run?.status ?? null;
+    if (runNow === "AWAITING_APPROVAL") must(flowRun.display === "AWAITING_APPROVAL" && flowRun.badge === "Awaiting approval" && flowRun.state === "BLOCKED", `the flow card shows the AWAITING_APPROVAL run as ${JSON.stringify(flowRun)}`)
+    else must(flowRun.display === flowRun.state, `the flow card relabels a ${runNow} run: ${JSON.stringify(flowRun)}`);
     // 4b sonrası: Start sunulur (kaynak üretimi tamam + teslim commit'i), sandbox yok => sunucunun kesin reddi; host'ta hiçbir şey başlamaz.
     await waitSel("#studio-ov-product #product-start", 20000);
     const startRe = new RegExp(`^/v1/work-runs/${runId}/product/start$`);
     expectCount("product start requests before the Founder pressed Start", await requestCount("POST", startRe), 0);
-    await win.click("#product-start"); await confirmDialog("start product");
-    await waitSel("#product-run-status[data-result]", 20000);
-    const ui = await win.evaluate(() => { const c = document.querySelector("#studio-ov-product"); return {result: document.querySelector("#product-run-status")?.dataset.result ?? null, state: c?.dataset.productState ?? null, reason: c?.querySelector("[data-product-reason]")?.dataset.productReason ?? null, url: !!c?.querySelector("[data-product-url]"), stop: !!document.querySelector("#product-stop")}; });
+    let ui;
+    if (serverSandbox === "UNAVAILABLE") {
+      // UASCO-T0007: the server already reported the sandbox UNAVAILABLE -> Start is disabled with a visible reason; pressing it sends nothing.
+      const btn = await win.evaluate(() => { const b = document.querySelector("#product-start"), why = document.querySelector("#studio-ov-product #product-start-why"); return {disabled: !!b?.disabled, blocked: b?.dataset.productStartBlocked ?? null, describedBy: b?.getAttribute("aria-describedby") ?? null, why: why ? (why.innerText ?? why.textContent ?? "") : null, whyVisible: !!why && why.getClientRects().length > 0}; });
+      must(btn.disabled === true && btn.blocked === "SANDBOX_UNAVAILABLE", `Start is not disabled although the server reports the sandbox UNAVAILABLE: ${JSON.stringify(btn)}`);
+      must(btn.describedBy === "product-start-why" && btn.whyVisible && /Start is disabled/.test(btn.why ?? "") && /SANDBOX_UNAVAILABLE/.test(btn.why ?? ""), `the disabled Start has no visible reason: ${JSON.stringify(btn)}`);
+      await win.click("#product-start", {force: true, timeout: 5000}).catch(() => {}); // a disabled button must not send anything
+      await win.waitForTimeout(1000);
+      expectCount("product start requests after pressing the disabled Start", await requestCount("POST", startRe), 0);
+      must(!(await win.$("#product-run-status[data-result]")), "pressing the disabled Start produced a result");
+      // The server-side refusal is still enforced: a direct start (not through the disabled button) is a plain 409 SANDBOX_UNAVAILABLE.
+      const direct = await fetch(`http://127.0.0.1:${apiPort}/v1/work-runs/${runId}/product/start`, {method: "POST", headers: {"x-uasco-control-token": apiToken, "content-type": "application/json"}, body: "{}", signal: AbortSignal.timeout(20000)});
+      const directBody = await direct.json().catch(() => null);
+      must(direct.status === 409, `the direct product start was answered ${direct.status}, not 409: ${JSON.stringify(directBody)?.slice(0, 200)}`);
+      must(/SANDBOX_UNAVAILABLE/.test(JSON.stringify(directBody ?? {})), `the direct product start refusal does not name SANDBOX_UNAVAILABLE: ${JSON.stringify(directBody)?.slice(0, 200)}`);
+      // the card re-reads the server and shows the server's refusal reason
+      await win.click("#refreshBtn"); // the app's own Refresh re-reads the server (no cache)
+      await waitSel("#studio-ov-product [data-product-reason]", 20000);
+      ui = await win.evaluate(() => { const c = document.querySelector("#studio-ov-product"); return {result: "refused-server-side", state: c?.dataset.productState ?? null, reason: c?.querySelector("[data-product-reason]")?.dataset.productReason ?? null, url: !!c?.querySelector("[data-product-url]"), stop: !!document.querySelector("#product-stop")}; });
+    } else {
+      await win.click("#product-start"); await confirmDialog("start product");
+      await waitSel("#product-run-status[data-result]", 20000);
+      ui = await win.evaluate(() => { const c = document.querySelector("#studio-ov-product"); return {result: document.querySelector("#product-run-status")?.dataset.result ?? null, state: c?.dataset.productState ?? null, reason: c?.querySelector("[data-product-reason]")?.dataset.productReason ?? null, url: !!c?.querySelector("[data-product-url]"), stop: !!document.querySelector("#product-stop")}; });
+      must(ui.result === "error", `the refused start is shown as '${ui.result}' instead of an error`);
+    }
     // Sunucu: tek bir başlatma isteği gitti ve düz 409 SANDBOX_UNAVAILABLE ile reddedildi (doğrulanmış sandbox yok); ekran bunu BAŞARI olarak göstermez.
     const starts = ((await serverGet("/__e2e/requests"))?.requests ?? []).filter(r => r.method === "POST" && startRe.test(r.url));
     expectCount("product start request", starts.length, 1); must(starts[0].status === 409, `the product start was answered ${starts[0].status}, not 409`);
     const prod = (await serverGet(`/v1/work-runs/${runId}/product`))?.product;
     must(prod && prod.devrun?.status !== "RUNNING" && prod.devrun?.status !== "STARTING", `the server reports a running product: ${JSON.stringify(prod?.devrun)}`);
-    must(ui.result === "error", `the refused start is shown as '${ui.result}' instead of an error`);
     must(ui.state !== "RUNNING" && ui.state !== "STARTING" && !ui.url && !ui.stop, `product card claims a running product: ${JSON.stringify(ui)}`);
     const reason = ui.reason;
     must(typeof reason === "string" && /^(DEVRUN_)?SANDBOX_UNAVAILABLE/.test(reason), `the card shows reason ${reason} instead of the server's sandbox refusal`);
     const card = ui;
     const ws = path.join(dataRoot, "workos", "projects", projectId, "devrun", "workspace");
     must(!fs.existsSync(ws), `a dev-run workspace was created on the host: ${ws}`);
-    return `refused: ${reason}; card=${card.state}; no host workspace`;
+    return `${serverSandbox === "UNAVAILABLE" ? "Start disabled with visible reason (SANDBOX_UNAVAILABLE), disabled press sent 0 requests; direct start " : ""}refused: ${reason}; card=${card.state}; flow RUN=${flowRun.display}; no host workspace`;
   });
   await step("request-ledger", async () => {
     // Yolculuk bittiğinde sunucunun kendi günlüğü sayılır: "başlatılmadı" iddiaları yalnız bir an için değil TÜM yolculuk için geçerli olmalı.

@@ -376,7 +376,7 @@ describe("Posture — only already-allow-listed read-only GETs are used (protect
       expect(src).not.toMatch(/transition|performTransition|work-actions/);
     }
     const imports = moduleSpecifiers({source: read("views", "posture.js")}).sort();
-    expect(imports).toEqual(["../components.js", "../model.js", "../posture-core.js", "../work-core.js"]);
+    expect(imports).toEqual(["../components.js", "../error-code.js", "../model.js", "../posture-core.js", "../work-core.js"]);
     expect(moduleSpecifiers({source: read("posture-core.js")}).sort()).toEqual(["./readiness-core.js"]);
     for (const m of ["commandCenterWorkRuns", "commandCenterReviews", "commandCenterEvidence"]) expect(read("views", "posture.js")).toContain(`api.${m}(`);
     // api.js: tek apiPost çağrısı korunur (yeni POST yolu eklenmez); duruş erişimcileri yalnız sabit GET yollarını okur.
@@ -1331,3 +1331,23 @@ describe("Build Scheduler — rendering (read-only, honest states, accessibility
   });
 });
 
+
+// Founder directive (QA & Security UX, Builder I): the run status in "Posture by run" is a readable label, not a bare enum code;
+// the raw server code stays in the card's data-run-status and the pill's title; the step code is labelled.
+describe("Security Posture — QA/Security UX: run status label (en + tr)", () => {
+  const runPill = (root: N, runId: string) => allData(field(itemFor(root, runId), "run")!, "pill")[0];
+  it("en: AWAITING_APPROVAL reads 'Awaiting approval'; the code is kept in the title and data; RUNNING reads 'Running'", async () => {
+    const {root} = await renderView(serve());
+    const p = runPill(root, RUN2);
+    expect(p.textContent).toBe("Awaiting approval");
+    expect(p.getAttribute("title")).toBe("AWAITING_APPROVAL");
+    expect(p.dataset.runStatusCode).toBe("AWAITING_APPROVAL");
+    expect(itemFor(root, RUN2).dataset.runStatus).toBe("AWAITING_APPROVAL");
+    expect(field(itemFor(root, RUN4), "run")!.textContent).toContain("step IMPLEMENT");
+  });
+  it("tr: the same status is localised", async () => {
+    const {root} = await renderView(serve(), "tr");
+    expect(runPill(root, RUN2).textContent).toBe("Onay bekliyor");
+    expect(field(itemFor(root, RUN4), "run")!.textContent).toContain("adım IMPLEMENT");
+  });
+});
