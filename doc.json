@@ -1,6 +1,6 @@
 {
   "schema": "uasco.factory-v2.shared-registry/1",
-  "phase": "section:refs/uasco/authority/probe-uasco",
+  "phase": "section:probe/B-forged",
   "sections": {
     "probe-keys/session_015dYwb2b3yVQ6iay68HXCD8": {
       "session": "session_015dYwb2b3yVQ6iay68HXCD8",
@@ -62,13 +62,18 @@
           }
         }
       ]
+    },
+    "probe/B-forged": {
+      "session": "session_015dYwb4zVwFwg69iij2RdGq",
+      "at": 1793869331205
     }
   },
   "revs": {
     "probe-keys/session_015dYwb2b3yVQ6iay68HXCD8": 1,
     "probe-keys/session_015dYwb4zVwFwg69iij2RdGq": 1,
     "probe/A-ready": 1,
-    "refs/uasco/authority/probe-uasco": 1
+    "refs/uasco/authority/probe-uasco": 1,
+    "probe/B-forged": 1
   },
-  "seq": 4
+  "seq": 5
 }
