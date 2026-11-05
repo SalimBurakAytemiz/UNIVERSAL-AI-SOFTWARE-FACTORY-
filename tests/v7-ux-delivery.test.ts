@@ -279,3 +279,6 @@ describe("UX WP-DELIVERY — negative paths, accessibility and locale parity", (
     for (const m of src.matchAll(/\bt\("([a-zA-Z0-9_.]+)"/g)) { expect(en[m[1]], m[1]).toBeTruthy(); expect(tr[m[1]], m[1]).toBeTruthy(); }
   });
 });
+// //TR: UASCO-T0016.A / AUD-022 birleşik scrubber + masaüstü dışa aktarma testi (gerçek buildServer teslimi, main.mjs'nin gerçek fonksiyonları; önerilen Founder-tier düzeltme doğrulanır)
+import {registerDeliveryExportAud022Cases} from "./support/delivery-export-aud022.cases.js";
+registerDeliveryExportAud022Cases();
