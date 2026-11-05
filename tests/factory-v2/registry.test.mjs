@@ -3,7 +3,7 @@ import {describe, it, expect} from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import {spawn} from "node:child_process";
+import {spawn, spawnSync} from "node:child_process";
 import {fileURLToPath, pathToFileURL} from "node:url";
 import {S, SESS, bridgeFor, commitLive, LIVE} from "./keys.mjs";
 import {git} from "./harness.mjs";
@@ -156,5 +156,25 @@ describe("registry lease epochs (two-session probe observation)", () => {
     expect(() => a.fence()).toThrow(/OWNERSHIP_LOST/);
     expect(b.release()).toBe(true);
     expect(a.acquire().granted).toBe(true); expect(a.epoch).toBe(3);
+  });
+});
+
+describe("safe registry verification mode (Founder scope: probe/<run>/ only, no destructive steps on live branches)", () => {
+  it("leases can be confined to a key prefix; the server-side stale-write probe is refused and could only add its marker", {timeout: T}, () => {
+    const w = world();
+    const r = w.reg(w.A);
+    const leases = r.leaseStore("probe-p1", {keyPrefix: "probe/p1/lease/"});
+    expect(new Ownership(leases, {leaseId: "supervisor--probe", environment: "a", workerId: "s", sessionId: "session_scopedAAAAA"}).acquire().granted).toBe(true);
+    expect(r.sections()).toEqual(["probe/p1/lease/supervisor--probe"]);
+    const first = git(w.origin, "rev-parse", REF);
+    r.cas("probe/p1/A-hello", null, {v: 1});
+    const res = r.staleWriteProbe(first, "probe/p1/stale-write-marker", {v: 1});
+    expect(res.ok).toBe(false);
+    expect(r.sections()).toEqual(["probe/p1/A-hello", "probe/p1/lease/supervisor--probe"]);
+  });
+  it("`registry attack-sim` (isolated bare origin with deny non-fast-forward + deny deletes) rejects force-push, non-ff push and deletion", {timeout: T}, () => {
+    const r = spawnSync(process.execPath, [path.resolve(HERE, "../../automation/factory-v2/cli.mjs"), "registry", "attack-sim"], {encoding: "utf8", env: {...process.env, HTTPS_PROXY: ""}});
+    expect(r.status, r.stderr).toBe(0);
+    expect(JSON.parse(r.stdout.trim().split("\n").at(-1))).toMatchObject({forcePushRewindRejected: true, nonFastForwardRejected: true, deleteRejected: true, headUnchanged: true, pass: true});
   });
 });
