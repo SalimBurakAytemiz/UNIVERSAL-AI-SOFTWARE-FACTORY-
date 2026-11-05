@@ -35,7 +35,7 @@ function stateBlock(ctx,res,source){
   return h(doc,"div",{class:`install-state state-${state.toLowerCase()}`,role:"status",dataset:{installState:state,source}},
     h(doc,"p",{class:"install-state-head"},statePill(ctx,failKind(state)),h(doc,"strong",{text:ctx.t(`install.state.${state}`)})),
     h(doc,"p",{class:"note",text:ctx.t(`install.hint.${state}`,{source:`GET ${INSTALL_SOURCE_PATHS[source]}`})}),
-    safeErrorCode(res.message)?h(doc,"p",{class:"note mono",dataset:{errorCode:safeErrorCode(res.message)},text:safeErrorCode(res.message)}):null);
+    safeErrorCode(res.message)?h(doc,"p",{class:"note mono",dataset:{stateErrorCode:safeErrorCode(res.message)},text:safeErrorCode(res.message)}):null);
 }
 /** Kaynak şeridi: her gerçek okuma kaynağının ayrık durum rozeti (renk tek başına anlam taşımaz). "Okuma başarılı" kurulum doğrulaması DEĞİLDİR. */
 function sourcesList(ctx,a){

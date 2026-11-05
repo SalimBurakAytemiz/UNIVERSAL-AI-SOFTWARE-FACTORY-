@@ -48,7 +48,7 @@ function stateBlock(ctx,res,source){
   return h(doc,"div",{class:`ops-state state-${state.toLowerCase()}`,role:"status",dataset:{opsState:state,source}},
     h(doc,"p",{class:"ops-state-head"},statePill(ctx,failKind(state)),h(doc,"strong",{text:ctx.t(`ops.state.${state}`)})),
     h(doc,"p",{class:"note",text:ctx.t(`ops.hint.${state}`,{source:`GET ${OPS_SOURCE_PATHS[source]}`})}),
-    safeErrorCode(res.message)?h(doc,"p",{class:"note mono",dataset:{errorCode:safeErrorCode(res.message)},text:safeErrorCode(res.message)}):null);
+    safeErrorCode(res.message)?h(doc,"p",{class:"note mono",dataset:{stateErrorCode:safeErrorCode(res.message)},text:safeErrorCode(res.message)}):null);
 }
 /** Kaynak şeridi: her gerçek okuma kaynağının ayrık durum rozeti (renk tek başına anlam taşımaz). */
 function sourcesList(ctx,a){
