@@ -16,10 +16,12 @@ export interface TestSurfaceSummary {
 
 // Repo test glob'ları (master change-guard tests/** kuralı + yaygın ekosistem kalıpları). Belgeleme için glob, eşleme için eşdeğer regex.
 export const TEST_GLOBS: readonly string[] = ["tests/**", "test/**", "**/tests/**", "**/test/**", "spec/**", "specs/**", "**/spec/**", "**/specs/**", "**/__tests__/**", "**/*.test.*", "**/*.spec.*", "**/*_test.*", "**/*_spec.*", "**/*Spec.*",
-  "**/*.cy.*", "**/*.e2e-spec.*", "**/test_*.py", "**/test.{js,mjs,cjs,ts}"];
+  "**/*.cy.*", "**/*.e2e-spec.*", "**/test_*.py", "**/test.{js,mjs,cjs,ts}", "**/__snapshots__/**", "**/*.snap"];
 // RV-RELFX-C4-002: koşular büyük/küçük harfe duyarsız NTFS'te yürür; test yolu desenleri de duyarsız (i) eşlenir (Tests/, A.Test.ts, TEST_a.py varyantları test sayılır; fail-closed).
 const TEST_PATH_RES: readonly RegExp[] = [/(^|\/)tests?\//i, /(^|\/)specs?\//i, /(^|\/)__tests__\//i, /\.(test|spec)\.[A-Za-z0-9]+$/i, /_(test|spec)\.[A-Za-z0-9]+$/i, /[^/]Spec\.[A-Za-z0-9]+$/i,
-  /\.cy\.[A-Za-z0-9]+$/i, /\.e2e-spec\.[A-Za-z0-9]+$/i, /(^|\/)test_[^/]*\.py$/i, /(^|\/)test\.(js|mjs|cjs|ts)$/i];
+  /\.cy\.[A-Za-z0-9]+$/i, /\.e2e-spec\.[A-Za-z0-9]+$/i, /(^|\/)test_[^/]*\.py$/i, /(^|\/)test\.(js|mjs|cjs|ts)$/i,
+  // UASCO-T0067 G3: anlık görüntü (snapshot) dosyaları beklenen çıktının kendisidir; test dizini dışında da (src/__snapshots__/a.test.ts.snap) silinmesi/yeniden yazılması test yüzeyidir.
+  /(^|\/)__snapshots__\//i, /\.snap$/i];
 // Test harness yapılandırması: bu dosyalar testlerin hangi kapsamda/nasıl koşacağını belirler; değişiklikleri TEST_SURFACE sayılır (harness listesi).
 // Koşulsuz: config dosyaları (vite.config.* dahil: vitest test bloğunu taşıyabilir; blok ayrıştırılmaz, fail-closed dosyanın her değişikliği sayılır), conftest.py (her dizinde),
 // pytest.ini, tox.ini. Koşullu: package.json yalnız scripts.test/pretest/posttest veya üst düzey jest/mocha/ava anahtarları değişince,
@@ -101,6 +103,46 @@ export function parseNameStatusZ(out: string): NameStatusEntry[] {
 }
 
 // automation/lib/change-guard.mjs assertionCount fikri (orada export edilmez; korumalı dosya değiştirilmez): expect/assert çağrıları + assert.<yöntem>(.
+// UASCO-T0067 G1: yorum satırına alınmış test/iddia sayılmaz. Yorumlar dize ve şablon içerikleri korunarak çıkarılır: // ve /* */ (JS/TS/Go/Rust/Java/C#/Kotlin/PHP), # (Python/Ruby/PHP).
+// Dize dışında ters bölü bir sonraki karakteri tüketir (düzenli ifade değişmezindeki \/\/ yorum sanılmaz). Bilinmeyen uzantıda metin aynen kalır.
+// ECMAScript satır sonlandırıcıları (LF, CR, U+2028, U+2029) bir // yorumunu bitirir: ayırıcıdan sonraki iddia GERÇEK koddur (V8 ile aynı).
+const EOL: ReadonlySet<string> = new Set(["\n", "\r", "\u2028", "\u2029"]);
+export function stripComments(s: string, filePath: string): string {
+  const ext = (/\.([A-Za-z0-9]+)$/.exec(filePath)?.[1] ?? "").toLowerCase();
+  const slash = /^(m?[jt]sx?|cjs|cts|mts|go|rs|java|cs|kt|php)$/.test(ext), hash = /^(py|rb|php)$/.test(ext);
+  if (!slash && !hash) return s;
+  let out = "", i = 0, q: string | null = null;
+  // Düzenli ifade değişmezi (JS ailesi) yalnız bir ifadenin başlayabileceği yerde başlar: önceki anlamlı karakter yoksa ya da işleç/ayraçsa ya da önceki sözcük return/typeof/case/... ise. İçindeki tırnak/yorum benzeri dizgeler dize veya yorum sayılmaz.
+  const rxStart = () => { const t = out.replace(/\s+$/, ""); if (!t) return true; if (/[(,=:[!&|?{};+\-*%<>~^]$/.test(t)) return true; return /(?:^|[^\w$])(?:return|typeof|case|in|of|new|delete|void|throw|yield|await|else|do)$/.test(t); };
+  while (i < s.length) {
+    const c = s[i], n = s[i + 1];
+    if (q) { out += c; if (c === "\\" && i + 1 < s.length) { out += n; i += 2; continue; } if (c === q) q = null; i++; continue; }
+    if (c === '"' || c === "'" || (c === "`" && slash)) { q = c; out += c; i++; continue; }
+    if (slash && /^(m?[jt]sx?|cjs|cts|mts)$/.test(ext) && c === "/" && n !== "/" && n !== "*" && rxStart()) {
+      let j = i + 1, cls = false, ok = false;
+      for (; j < s.length && !EOL.has(s[j]); j++) { const d = s[j]; if (d === "\\") { j++; continue; } if (cls) { if (d === "]") cls = false; continue; } if (d === "[") cls = true; else if (d === "/") { ok = true; break; } }
+      if (ok) { out += s.slice(i, j + 1); i = j + 1; continue; }   // kapanmayan "/" bölme işlecidir: olduğu gibi geçer
+    }
+    if (c === "\\" && slash && i + 1 < s.length) { out += c + n; i += 2; continue; }
+    if (slash && c === "/" && n === "/") { while (i < s.length && !EOL.has(s[i])) i++; continue; }
+    if (slash && c === "/" && n === "*") { const e = s.indexOf("*/", i + 2); const end = e < 0 ? s.length : e + 2; out += s.slice(i, end).replace(/[^\n]/g, ""); i = end; continue; }
+    if (hash && c === "#" && !(ext === "php" && n === "[")) { while (i < s.length && !EOL.has(s[i])) i++; continue; }
+    out += c; i++;
+  }
+  return out;
+}
+// UASCO-T0067 G4: kendi kendini doğrulayan (totolojik) iddialar hiçbir şeyi sınamaz: expect(<değişmez>).toBe/toEqual/toStrictEqual(<aynı değişmez>),
+// expect(<doğru değişmez>).toBeTruthy/toBeDefined(), expect(<yanlış değişmez>).toBeFalsy(), assert(true)/assert.ok(true), assert.equal/strictEqual/deepEqual/deepStrictEqual(<L>, <aynı L>).
+const LIT = String.raw`(?:true|false|null|undefined|-?\d+(?:\.\d+)?|'[^'\n]*'|"[^"\n]*")`;
+const VACUOUS_RES: readonly RegExp[] = [
+  new RegExp(String.raw`\bexpect\(\s*(${LIT})\s*\)\s*\.\s*(?:toBe|toEqual|toStrictEqual)\(\s*\1\s*\)`, "g"),
+  /\bexpect\(\s*(?:true|-?[1-9]\d*(?:\.\d+)?|'[^'\n]+'|"[^"\n]+")\s*\)\s*\.\s*(?:toBeTruthy|toBeDefined)\(\s*\)/g,
+  /\bexpect\(\s*(?:false|0|null|''|"")\s*\)\s*\.\s*toBeFalsy\(\s*\)/g,
+  /\bassert(?:\.ok)?\(\s*true\s*\)/g,
+  new RegExp(String.raw`\bassert\.(?:equal|strictEqual|deepEqual|deepStrictEqual)\(\s*(${LIT})\s*,\s*\1\s*\)`, "g")];
+export function vacuousAssertionCount(s = ""): number { return VACUOUS_RES.reduce((n, re) => n + (s.match(re) ?? []).length, 0); }
+// Gerçek (yorum dışı, totolojik olmayan) iddia sayısı (G4 karşılaştırmasıyla aynı tanım).
+export function effectiveAssertionCount(s: string, filePath: string): number { const t = stripComments(s, filePath); return Math.max(0, assertionCount(t) - vacuousAssertionCount(t)); }
 export function assertionCount(s = ""): number { return (s.match(/\b(?:expect|assert(?:\.\w+)?|assertEquals|assertTrue|assertFalse)\s*\(/g) ?? []).length; }
 // Testi devre dışı bırakan/daraltan işaretler: .skip/.only/.todo/.skipIf/.runIf( ve zincirli biçimleri (it.skip.each(t)(, describe.skip.each(, test.only.each(;
 // vitest/jest/mocha/node:test t.skip, pytest.skip), xit/xdescribe/xtest/fit/fdescribe( (xit.each( dahil), node:test/vitest seçenek nesnesi {skip|todo|only: <false olmayan>}
@@ -112,6 +154,8 @@ export function assertionCount(s = ""): number { return (s.match(/\b(?:expect|as
 // @<alias>.skip, çıplak skip(/xfail(, importorskip(, SkipTest; RV-RELFX-C3-003).
 const DISABLED_RES: readonly RegExp[] = [
   /\.(?:skip|only|todo|skipIf|runIf)\b(?:\.\w+)*\s*[(`]/g,
+  // UASCO-T0067 G2: vitest it.fails / jest test.failing beklentiyi TERSİNE çevirir (başarısız test geçer); yalnız test yapıcısına zincirli biçim sayılır (nesne üzerindeki ilgisiz .fails( çağrısı sayılmaz).
+  /(?<![.\w$])(?:it|test|describe|suite|specify|bench)(?:\.\w+)*\.(?:fails|failing)\b(?:\.\w+)*\s*[(`]/g,
   /(?<![.\w$])[xf](?:it|describe|test|context|specify)(?:\.\w+)*\s*[(`]/g,
   /(?<![.\w$])(?:[A-Za-z_$][\w$]*\.)*(?:it|test|describe|suite|specify|context)(?:\.\w+)*\s*\(\s*(?:(?:`[^`]*`|'[^']*'|"[^"]*"|[\w.]+)\s*,\s*)?\{[^{}]*?(?<=[{,]\s*)(?:["']?(?:skip|todo|only)["']?\s*:(?!\s*(?:false\b|null\b|undefined\b|0\b|''|""|[,}]))|(?:skip|todo|only)\s*(?=[,}]))/g,
   /\bmark\.(?:skip|skipif|xfail)\b/g,
@@ -226,9 +270,14 @@ export function evaluateTestSurface(i: EvaluateInput): TestSurfaceSummary {
     if (!CODE_RE.test(afterPath)) return;
     const b = i.contentAt(i.baseSha, beforePath), a = i.contentAt(i.headSha, afterPath);
     if (b === null || a === null) return;
-    const nb = assertionCount(b), na = assertionCount(a);
+    // UASCO-T0067 G1: mevcut testin karşılaştırması yorumları çıkarılmış metinde yapılır (yoruma alınan iddia/test azalma sayılır; işaretler de öyle). Yeni dosya sınıflaması (TRIVIAL_TEST_ADDED) ham sayıyla kalır: tester oracle'ının sabitlenmiş denetim sırası değişmez.
+    // G4: ham sayı düşmediği hâlde GERÇEK (totolojik olmayan) iddia sayısı düştüyse bir iddia totolojiyle değiştirilmiştir. Totolojiler tek başına zayıflatma değildir
+    // (mevcut fixture'lar ve yeni test sınıflaması onları iddia sayar; TRIVIAL_TEST_ADDED ham sayıyla kalır).
+    const tb = stripComments(b, beforePath), ta = stripComments(a, afterPath);
+    const nb = assertionCount(tb), na = assertionCount(ta), rb = nb - vacuousAssertionCount(tb), ra = na - vacuousAssertionCount(ta);
     if (nb > 0 && na < nb) weakened.push({path: afterPath, before: nb, after: na, reason: "ASSERTION_COUNT_REDUCED"});
-    else if (disabledTestMarkers(a) > disabledTestMarkers(b)) weakened.push({path: afterPath, before: nb, after: na, reason: "SKIP_OR_ONLY_ADDED"});
+    else if (rb > 0 && ra < rb) weakened.push({path: afterPath, before: rb, after: ra, reason: "ASSERTION_COUNT_REDUCED"});
+    else if (disabledTestMarkers(ta) > disabledTestMarkers(tb)) weakened.push({path: afterPath, before: nb, after: na, reason: "SKIP_OR_ONLY_ADDED"});
   };
   for (const e of i.entries) {
     // RV-RELFX-C4-001: harness sınıflaması test-yolu dalından bağımsızdır. Harness kontrolü her name-status girişinde (RENAMED'de hem eski hem yeni yolda, isHarnessChange içinde)

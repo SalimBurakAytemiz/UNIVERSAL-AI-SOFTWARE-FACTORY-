@@ -2,7 +2,7 @@
 import {describe, it, expect, beforeEach, afterEach} from "vitest";
 import {FakeExecutors} from "../core/workos/executors.js";
 import type {FakeImplementDirective, MissionSpec} from "../core/workos/executors.js";
-import {assertionCount, evaluateTestSurface, isHarnessChange, isRealTestFile, isTestPath, parseExecutedTestCount, parseNameStatusZ} from "../core/workos/test-surface.js";
+import {assertionCount, disabledTestMarkers, effectiveAssertionCount, evaluateTestSurface, isHarnessChange, isRealTestFile, isTestPath, parseExecutedTestCount, parseNameStatusZ, stripComments} from "../core/workos/test-surface.js";
 import {deriveOutcomes} from "../core/workos/outcomes.js";
 import {HDR, T, api, drive, okScript, rmTmp, runner, setup, startRun, tmpRoot} from "./support/relfx.js";
 import type {Ctx} from "./support/relfx.js";
@@ -143,5 +143,57 @@ describe("REL-FX-2 test-surface guard in the runner", () => {
     const {run} = await runWith({files: {"feature.txt": "ok\n"}}, {"run-tests.mjs": RUN_TESTS, "README.txt": "base\n"});
     expect(run.status).toBe("AWAITING_APPROVAL");
     expect(surfaceOf(run)).toEqual(expect.objectContaining({executedTests: 0, functionalAcceptance: "UNVERIFIED_VACUOUS", reason: "ZERO_TESTS_EXECUTED"}));
+  });
+});
+
+// //TR: UASCO-T0067 test-surface koruması: dört gerçek boşluk kapatıldı. G1 yoruma alınmış iddia/test sayılmaz; G2 it.fails / test.failing (beklentiyi tersine çevirir) devre dışı işaretidir; G3 test dizini dışındaki anlık görüntü dosyaları (src/__snapshots__/*.snap) test yüzeyidir; G4 totolojik iddia (expect(true).toBe(true) vb.) gerçek iddianın yerini alamaz. Her boşluk için yakalanan bir fixture farkı ve normal yeniden düzenlemenin İŞARETLENMEDİĞİ pozitif kontrol vardır.
+describe("UASCO-T0067 test-surface protection: commented-out, inverted, snapshot and tautological weakening", () => {
+  const P = "src/math.test.ts";
+  const REAL = 'import {it, expect} from "vitest";\nimport {add} from "./math";\nit("adds", () => {\n  expect(add(1, 2)).toBe(3);\n  expect(add(-1, 1)).toBe(0);\n});\n';
+  const surface = (before: string | null, after: string | null, entries: Parameters<typeof evaluateTestSurface>[0]["entries"] = [{status: "MODIFIED", path: P}]) =>
+    evaluateTestSurface({baseSha: "B", headSha: "H", entries, executedTests: 3, contentAt: (ref, p) => (p === P || p.endsWith(".snap") ? (ref === "B" ? before : after) : null)});
+  const weakenedReason = (after: string) => surface(REAL, after).weakened.map(w => w.reason);
+  it("G1: commenting a test or an assertion out is ASSERTION_COUNT_REDUCED (// and /* */) and blocks; positive control: adding or reordering comments next to real assertions is not flagged", () => {
+    expect(weakenedReason(REAL.replace("  expect(add(-1, 1)).toBe(0);", "  // expect(add(-1, 1)).toBe(0);"))).toEqual(["ASSERTION_COUNT_REDUCED"]);
+    expect(weakenedReason(REAL.replace('it("adds"', '/* it("adds"').replace("});\n", "}); */\n"))).toEqual(["ASSERTION_COUNT_REDUCED"]);
+    expect(surface(REAL, REAL.replace("  expect(add(-1, 1)).toBe(0);", "  // expect(add(-1, 1)).toBe(0);")).functionalAcceptance).toBe("BLOCKED");
+    const commented = REAL.replace("it(\"adds\"", "// adds two numbers; see expect() docs\nit(\"adds\"").replace("  expect(add(1, 2)).toBe(3);", "  /* sum */ expect(add(1, 2)).toBe(3); // ok");
+    expect(surface(REAL, commented).weakened).toEqual([]);
+    expect(surface(REAL, commented).functionalAcceptance).toBe("UNVERIFIED_ORACLE");
+  });
+  it("G2: it.fails / test.failing (an inverted expectation) is SKIP_OR_ONLY_ADDED; positive control: an unrelated .fails( call on an object is not a marker", () => {
+    expect(weakenedReason(REAL.replace('it("adds"', 'it.fails("adds"'))).toEqual(["SKIP_OR_ONLY_ADDED"]);
+    expect(weakenedReason(REAL.replace('it("adds"', 'test.failing("adds"').replace("{it,", "{test, it,"))).toEqual(["SKIP_OR_ONLY_ADDED"]);
+    expect(disabledTestMarkers('it.fails.each([1])("x", () => {});')).toBe(1);
+    expect(disabledTestMarkers('const r = validator.fails("x"); job.failing(1);')).toBe(0);
+    expect(surface(REAL, REAL.replace("  expect(add(1, 2)).toBe(3);", "  expect(add(1, 2)).toBe(3);\n  expect(check.fails(add)).toBe(false);")).weakened).toEqual([]);
+  });
+  it("G3: snapshot files outside a test directory are test surface (deleting one is TEST_DELETED, editing one is not silently ignored); positive control: a non-snapshot source file is still outside the surface", () => {
+    for (const p of ["src/__snapshots__/math.test.ts.snap", "packages/ui/src/components/__snapshots__/Button.test.tsx.snap", "src/render.snap"]) expect(isTestPath(p), p).toBe(true);
+    const del = surface("exports[`adds 1`] = `3`;", null, [{status: "DELETED", path: "src/__snapshots__/math.test.ts.snap"}]);
+    expect(del).toMatchObject({deleted: ["src/__snapshots__/math.test.ts.snap"], functionalAcceptance: "BLOCKED", reason: "TEST_DELETED"});
+    const mod = surface("exports[`adds 1`] = `3`;", "exports[`adds 1`] = `4`;", [{status: "MODIFIED", path: "src/__snapshots__/math.test.ts.snap"}]);
+    expect(mod).toMatchObject({modified: ["src/__snapshots__/math.test.ts.snap"], functionalAcceptance: "UNVERIFIED_ORACLE"});
+    for (const p of ["src/snapshot.ts", "src/snapshots/index.ts", "docs/snap.md"]) expect(isTestPath(p), p).toBe(false);
+  });
+  it("G4: replacing a real assertion with a tautology is ASSERTION_COUNT_REDUCED; positive controls: real literal assertions stay counted, and a new tautology-only test keeps its pinned UNVERIFIED_ORACLE label (never VERIFIED)", () => {
+    expect(weakenedReason(REAL.replace("  expect(add(1, 2)).toBe(3);", "  expect(true).toBe(true);"))).toEqual(["ASSERTION_COUNT_REDUCED"]);
+    expect(weakenedReason(REAL.replace("  expect(add(-1, 1)).toBe(0);", "  expect(1).toEqual(1);"))).toEqual(["ASSERTION_COUNT_REDUCED"]);
+    const onlyTaut = 'import {it, expect} from "vitest";\nit("ok", () => { expect(true).toBeTruthy(); assert.ok(true); expect("a").toBe("a"); });\n';
+    expect(surface(null, onlyTaut, [{status: "ADDED", path: P}])).toMatchObject({trivialAdded: [], functionalAcceptance: "UNVERIFIED_ORACLE"});   // pinned by REL-FX-2: a literal assertion counts as one
+    expect(surface(REAL, REAL.replace("  expect(add(1, 2)).toBe(3);", "  expect(true).toBe(true);\n  expect(add(1, 2)).toBe(3);")).weakened).toEqual([]);   // adding a tautology next to the real ones is not weakening
+    for (const real of ["expect(add(1, 2)).toBe(3);", "expect(isEven(2)).toBe(true);", "expect(1).toBe(2);", "expect(parse('1')).toEqual(1);", "assert.equal(add(1, 1), 2);"]) expect(effectiveAssertionCount(real, P), real).toBe(1);
+    expect(surface(REAL, REAL.replace("expect(add(1, 2)).toBe(3);", "expect(add(2, 1)).toBe(3);")).weakened).toEqual([]);
+  });
+  it("comment stripping keeps strings, template literals and regex literals intact (no false weakening from // or quotes inside them) and keeps line numbers", () => {
+    const tricky = 'expect(url).toBe("http://x/*y*/");\nexpect(s).toMatch(/^https:\\/\\//);\nexpect(q).toMatch(/[\'"]/);\nexpect(t).toBe(`a // b ${1}`);\nexpect(r).toEqual(a / b / c); // note\n';
+    expect(assertionCount(stripComments(tricky, "a.test.ts"))).toBe(5);
+    expect(stripComments(tricky, "a.test.ts").split("\n")).toHaveLength(tricky.split("\n").length);
+    // a quote inside a regex literal must not open a string: the commented-out assertion after it is still a comment (and real code after it is still code)
+    const rxQuote = 'expect(q).toMatch(/[\'"]/);\n// expect(dead).toBe(1);\nexpect(live).toBe(2);\n';
+    expect(assertionCount(stripComments(rxQuote, "a.test.ts"))).toBe(2);
+    expect(assertionCount(stripComments('x = 1  # expect(a)\nassert(f(1) == 2)  # ok\n', "test_a.py"))).toBe(1);
+    expect(stripComments("expect(a) // c", "notes.txt")).toBe("expect(a) // c");   // unknown extension: text unchanged
+    for (const sep of ["\r", "\u2028", "\u2029"]) expect(assertionCount(stripComments("// note" + sep + "expect(add(1, 1)).toBe(2);", "a.test.ts")), JSON.stringify(sep)).toBe(1);   // ECMAScript line terminators end a // comment
   });
 });
