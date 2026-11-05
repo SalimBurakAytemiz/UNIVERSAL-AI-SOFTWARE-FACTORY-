@@ -156,5 +156,40 @@ describe("UASCO-T0006: Project Studio wizard -> real buildServer (environmentId 
       await app.close();
     }
   });
+  // //TR: İkinci adım (sihirbaz sonrası): Kurucu fikri ilk mission olarak POST /v1/missions ile yeni projeye bağlanır. Düzeltmeden önce sihirbaz proje oluşturamadığından bu yol gerçek sunucuda hiç erişilebilir değildi.
+  const created = async (app: App, token = TOKEN) => {
+    const ok = await setup(app); Object.assign(ok.studio.wizard, {name: "Book club", template: "web-node"});
+    expect(await ok.sw.submitWizard(ok.ctx)).toEqual({ok: true});
+    const pid = ok.studio.studio.lastCreated!.projectId as string;
+    const s = token === TOKEN ? ok : await setup(app, token); s.studio.studio.lastCreated = {projectId: pid, name: "Book club"};
+    Object.assign(s.studio.ideaDraft, {title: "Book club MVP", objective: "Members suggest books and vote", criteria: ["Members can vote"], riskLevel: "R1"});
+    return {s, pid};
+  };
+  const missions = async (app: App, pid: string) => (await app.inject({method: "GET", url: `/v1/missions?projectId=${pid}`, headers: hdr})).json().missions as Array<{missionId: string; projectId: string; title: string}>;
+  it("idea -> first mission, happy path: submitIdea creates the mission on the real server, linked to the wizard's project, and selects it", { timeout: 60_000 }, async () => {
+    const app = mkApp(), {s, pid} = await created(app);
+    expect(await s.sw.submitIdea(s.ctx)).toEqual({ok: true});
+    expect(s.posts.map(p => [p.path, p.status])).toEqual([["/v1/projects", 201], ["/v1/missions", 201]]);
+    const ms = await missions(app, pid);
+    expect(ms.map(m => [m.title, m.projectId])).toEqual([["Book club MVP", pid]]);
+    expect(s.studio.ideaDraft.missionId).toBe(ms[0].missionId);
+    expect((await load("forms.js")).selection.missionId).toBe(ms[0].missionId);
+  });
+  it("idea -> first mission, server error path: a real 500 on POST /v1/missions -> an honest error, no mission, nothing selected", { timeout: 60_000 }, async () => {
+    const app = mkApp(); let failMissions = false;
+    app.addHook("onRequest", async (req, reply) => { if (failMissions && req.method === "POST" && req.url === "/v1/missions") return reply.code(500).send({error: "INJECTED_SERVER_FAILURE"}); });
+    const {s, pid} = await created(app); failMissions = true;
+    expect(await s.sw.submitIdea(s.ctx)).toEqual({ok: false});
+    expect(s.posts.at(-1)).toMatchObject({path: "/v1/missions", status: 500});
+    expect(await missions(app, pid)).toEqual([]); expect(s.studio.ideaDraft.missionId ?? null).toBeNull();
+  });
+  it("idea -> first mission, identity path: token mismatch -> nothing is posted, no mission; the real server refuses that token with 403", { timeout: 60_000 }, async () => {
+    const app = mkApp(), {s, pid} = await created(app, WRONG);
+    expect(await s.sw.submitIdea(s.ctx)).toEqual({ok: false});
+    expect(s.posts).toEqual([]);
+    expect(await missions(app, pid)).toEqual([]);
+    const direct = await app.inject({method: "POST", url: "/v1/missions", headers: {"x-uasco-control-token": WRONG, host: "127.0.0.1:3210", "content-type": "application/json"}, payload: JSON.stringify({projectId: pid, title: "x", objective: "y", acceptanceCriteria: ["z"], riskLevel: "R1"})});
+    expect(direct.statusCode).toBe(403);
+  });
 });
 }
