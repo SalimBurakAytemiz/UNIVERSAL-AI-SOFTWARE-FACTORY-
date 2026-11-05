@@ -1,6 +1,6 @@
 {
   "schema": "uasco.factory-v2.shared-registry/1",
-  "phase": "section:probe/B-commit",
+  "phase": "section:probe/A-guard-checked",
   "sections": {
     "probe-keys/session_015dYwb2b3yVQ6iay68HXCD8": {
       "session": "session_015dYwb2b3yVQ6iay68HXCD8",
@@ -613,6 +613,10 @@
       "session": "session_015dYwb4zVwFwg69iij2RdGq",
       "at": 1793869377963,
       "phase": null
+    },
+    "probe/A-guard-checked": {
+      "session": "session_015dYwb2b3yVQ6iay68HXCD8",
+      "at": 1793869387385
     }
   },
   "revs": {
@@ -625,7 +629,8 @@
     "refs/uasco/handover/probe-uasco/v1": 1,
     "probe/B-prepared": 1,
     "relay/drain": 1,
-    "probe/B-commit": 1
+    "probe/B-commit": 1,
+    "probe/A-guard-checked": 1
   },
-  "seq": 13
+  "seq": 14
 }
