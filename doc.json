@@ -1,6 +1,6 @@
 {
   "schema": "uasco.factory-v2.shared-registry/1",
-  "phase": "section:lease/shadow-probe-control/supervisor--SHADOW-probe-control",
+  "phase": "section:ledger/run1/c/000001",
   "sections": {
     "lease/shadow-probe-control/supervisor--SHADOW-probe-control": {
       "taskId": "supervisor--SHADOW-probe-control",
@@ -582,6 +582,35 @@
             "nonce": "6b8fc1bc-b21a-4b8f-964b-67e141998ce9",
             "signature": "WWK19MuvYEfe9Qqn2y32JM8/k3XTR2Qnl3i9oWOLHqhjrJVJJHHoeExyOknSGZzhJWThs90rMTGjg1wtJeqMBQ=="
           }
+        },
+        {
+          "kind": "WORKER",
+          "idempotencyKey": "worker:intent_326bf84e2639:RUNNING",
+          "data": {
+            "status": "RUNNING",
+            "sessionId": "session_015dYwazTwnin58kSnnBDRas",
+            "boundAt": 1793900311410,
+            "intentId": "intent_326bf84e2639"
+          },
+          "fenceEpoch": 1,
+          "fenceToken": "session_015dYwb57qx21P4wudU5xauD:1:2a5bae8c-fdda-40ec-9cbc-23217de56578",
+          "seq": 16,
+          "at": 1793900313668,
+          "prev": "38b0ae5bb2c0c54b2e1c1f57e1d58c03045d3cd17c39268f05f303327d13331d",
+          "sig": {
+            "schema": "uasco.factory-v2.signed-action/1",
+            "domain": "probe-control",
+            "action": "LEDGER",
+            "role": "V2_CANDIDATE",
+            "sessionId": "session_015dYwb57qx21P4wudU5xauD",
+            "keyId": "k_225059701e7e1b78",
+            "prev": "38b0ae5bb2c0c54b2e1c1f57e1d58c03045d3cd17c39268f05f303327d13331d",
+            "payloadDigest": "d22b55167c4f20be51bcd8c08501618d2131ba1a5283518f93a3cf66ec55cc02",
+            "issuedAt": 1793900315168,
+            "expiresAt": 1825436315168,
+            "nonce": "4ec9fe9d-ceff-4b90-8909-d24d0ae1818d",
+            "signature": "7ZkdJWUln5FFrfjEj66uCLV+ekfl9R2gSIICMtBHvk7BlvEOABlH9WTdmL2Y5y4ozv2eVCjqf8pQLL59okSmAw=="
+          }
         }
       ]
     },
@@ -601,8 +630,8 @@
   },
   "revs": {
     "lease/shadow-probe-control/supervisor--SHADOW-probe-control": 10,
-    "ledger/run1/c/000001": 15,
+    "ledger/run1/c/000001": 16,
     "lease/shadow-probe-control/task--FV2-PROBE-CTL-1": 2
   },
-  "seq": 27
+  "seq": 28
 }
