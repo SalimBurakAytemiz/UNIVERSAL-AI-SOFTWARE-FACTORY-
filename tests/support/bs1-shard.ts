@@ -1,4 +1,4 @@
-// //TR: Bu yardımcı BS1 selftest senaryolarını doğrulama adımlarına bölen tek kaynaktır: her senaryo tam olarak bir kabukta (shard) yer alır, kabuk içindeki gruplar paralel alt süreçler olarak çalışır (e kabuğunda dört, a kabuğunda üç, diğerlerinde en çok iki), Windows'ta tek paylaşılan fikstür şablonunu kullanır ve kabuğun her senaryosu PASS olmak zorundadır. Kapsam bütünlüğünü tests/pkg-vs-validation-sharding.test.ts denetler.
+// //TR: Bu yardımcı BS1 selftest senaryolarını doğrulama adımlarına bölen tek kaynaktır: her senaryo tam olarak bir kabukta (shard) yer alır, kabuk içindeki gruplar paralel alt süreçler olarak çalışır (a ve e kabuklarında üç, diğerlerinde en çok iki), Windows'ta tek paylaşılan fikstür şablonunu kullanır ve kabuğun her senaryosu PASS olmak zorundadır. Kapsam bütünlüğünü tests/pkg-vs-validation-sharding.test.ts denetler.
 import cp from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -27,18 +27,19 @@ export const BS1_PARTITION:Record<Bs1Shard,string[][]>={
     ["entry-stops-the-old-tick-only-at-a-safe-point-or-at-once-in-the-release-lane"]
   ],
   // //TR: d kabuğunda yalnız kayıt/geri-alma (REG) grubu kalır; ilk-çalıştırma-hatası (FRF) grubu Windows CI'da d adımının %71-83'ünü tuttuğu ve adım 600 sn sınırında öldürüldüğü için (2026-10-22: 3 zaman aşımı) g kabuğuna taşınmıştır. Senaryo, PASS koşulu ve 600 sn sınırı aynıdır.
+  // //TR: C5 (2026-11-05, run 41968543502: tests-bs1-e 600 sn sınırında öldürüldü): e kabuğunun hafif tick-öldürme/kilit çifti (e'de grup 4, ölçülen medyan 145 sn) d kabuğunda REG'in yanında ikinci paralel grup olarak çalışır; d'nin boşluğu vardır (adım ~286 sn), e'nin kritik yolundaki entry-heals grubuna binen eşzamanlı yük azalır. Senaryolar, PASS koşulu ve 600 sn sınırı aynıdır; FRF ile REG yine ayrı adımlardadır.
   d: [
-    ["bootstrap-task-registration-succeeds-or-rolls-back-without-a-runnable-task"]
+    ["bootstrap-task-registration-succeeds-or-rolls-back-without-a-runnable-task"],
+    ["entry-kills-the-whole-tick-process-tree-on-timeout-and-clears-its-lock",
+     "entry-clears-only-provably-stale-locks-and-replaces-a-dangling-link"]
   ],
-  // //TR: e kabuğu (7 senaryo) Windows CI ölçümüne göre dört paralel gruba bölünür: en ağır iki senaryo (entry-heals ~229 sn, kills-a-hung ~220 sn) tek başına bir grupta çalışır; hafif üç senaryo a kabuğuna taşınmıştır. Adım süresi en ağır grup + şablon kurulumu kadardır; checkBs1Partition her senaryonun tam bir kez atandığını doğrular.
+  // //TR: e kabuğu (5 senaryo) Windows CI ölçümüne göre üç paralel gruba bölünür: en ağır iki senaryo (entry-heals ~229 sn, kills-a-hung ~220 sn) tek başına bir grupta çalışır; hafif üç senaryo a kabuğuna, tick-öldürme/kilit çifti d kabuğuna taşınmıştır (C5, 2026-11-05: 36 koşuda e adımı medyan 359 / p90 504 / en çok 592 sn, kritik yol her koşuda entry-heals grubu). Adım süresi en ağır grup + şablon kurulumu kadardır; checkBs1Partition her senaryonun tam bir kez atandığını doğrular.
   e: [
     ["bootstrap-repairs-an-inactive-half-cloned-plane-and-replaces-a-dangling-link",
      "entry-delegates-to-a-governed-plane-entry-and-to-the-launcher",
      "entry-heartbeat-watch-needs-two-stale-polls-ignores-suspend-and-reads-the-backup"],
     ["entry-heals-an-interrupted-link-switch-and-refuses-broken-or-unproven-planes"],
-    ["entry-kills-a-hung-supervisor-whose-heartbeat-is-frozen"],
-    ["entry-kills-the-whole-tick-process-tree-on-timeout-and-clears-its-lock",
-     "entry-clears-only-provably-stale-locks-and-replaces-a-dangling-link"]
+    ["entry-kills-a-hung-supervisor-whose-heartbeat-is-frozen"]
   ],
   f: [
     ["entry-generation-2-liveness-heartbeat-work-conserving-loop-dead-lease-and-single-instance"],
