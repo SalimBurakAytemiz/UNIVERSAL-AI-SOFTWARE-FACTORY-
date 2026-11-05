@@ -1,4 +1,4 @@
-// //TR: Bu betik gerçek Electron masaüstü uygulamasını (Playwright _electron) geçici veri dizini ve FAKE yürütücü ile sürer: fikir -> intake (web-node) -> plan -> görev -> koşu -> teslim. Her adımda ekrandaki durum doğrulanır ve ekran görüntüsü alınır; GATED_4B adımlar dürüstçe "etkin değil" görünmelidir. Gerçek Claude ve ağ yoktur. Çıkış kodu: 0 = tüm planlı adımlar geçti (NOT_VERIFIED:GATED_4B olabilir), 1 = bir adım ya da başlatma başarısız, 3 = BLOCKED (yalnız HİÇBİR ŞEY başlatılmadan önce denetlenen ön koşul eksik: Playwright, Electron binary'si ya da ekran; PASS sayılmaz), 4 = --require-post-4b iken NOT_VERIFIED ya da NOT_EXECUTED (rotası bu masaüstü derlemesinde kayıtlı/izinli olmadığı için NEDENİYLE çalıştırılamayan) adım var. 21 planlı adım sabit paydadır; planlı ama hiç çalışmayan adım NOT_REACHED sayılır (sonuç FAIL:INCOMPLETE). Son adım (request-ledger) sunucunun istek günlüğünü TÜM yolculuk için sayar. Batch 4b öncesi/sonrası: gerçek main.mjs allow-list'i uygulama içinden yoklanır (detect-routes). Kullanım: node scripts/e2e/desktop-journey.e2e.mjs [--out <dizin>] [--require-post-4b] (Linux başsız ortam: xvfb-run -a node ...).
+// //TR: Bu betik gerçek Electron masaüstü uygulamasını (Playwright _electron) geçici veri dizini ve FAKE yürütücü ile sürer: fikir -> intake (web-node) -> plan -> görev -> koşu -> teslim. Her adımda ekrandaki durum doğrulanır ve ekran görüntüsü alınır; GATED_4B adımlar dürüstçe "etkin değil" görünmelidir. Gerçek Claude ve ağ yoktur. Çıkış kodu: 0 = tüm planlı adımlar geçti (NOT_VERIFIED:GATED_4B olabilir), 1 = bir adım ya da başlatma başarısız, 3 = BLOCKED (yalnız HİÇBİR ŞEY başlatılmadan önce denetlenen ön koşul eksik: Playwright, Electron binary'si ya da ekran; PASS sayılmaz), 4 = --require-post-4b iken NOT_VERIFIED ya da NOT_EXECUTED (rotası bu masaüstü derlemesinde kayıtlı/izinli olmadığı için NEDENİYLE çalıştırılamayan) adım var. 22 planlı adım sabit paydadır; planlı ama hiç çalışmayan adım NOT_REACHED sayılır (sonuç FAIL:INCOMPLETE). Son adım (request-ledger) sunucunun istek günlüğünü TÜM yolculuk için sayar. Batch 4b öncesi/sonrası: gerçek main.mjs allow-list'i uygulama içinden yoklanır (detect-routes). Kullanım: node scripts/e2e/desktop-journey.e2e.mjs [--out <dizin>] [--require-post-4b] (Linux başsız ortam: xvfb-run -a node ...).
 import {spawn} from "node:child_process";
 import {createRequire} from "node:module";
 import crypto from "node:crypto";
@@ -19,7 +19,7 @@ const dataRoot = fs.mkdtempSync(path.join(outDir, "data-"));
 // Planlı adımlar (sabit payda). kind: FUNCTIONAL = gerçek işlev sürülür; GATED_ASSERTED = 4b kapısına bağlı iddia (kapalıysa NOT_VERIFIED:GATED_4B); NOT_EXECUTED_ASSERTED = "çalıştırılmadı" durumunun dürüst gösterimi.
 const PLAN = [["first-run-dialog", "FUNCTIONAL"], ["detect-routes", "FUNCTIONAL"], ["setup-check", "FUNCTIONAL"], ["intake-idea", "FUNCTIONAL"], ["analysis", "GATED_ASSERTED"], ["plan-gate-closed", "FUNCTIONAL"], ["analysis-stuck-shown", "GATED_ASSERTED"], ["reapprove-once", "GATED_ASSERTED"], ["plan-task-by-hand", "FUNCTIONAL"],
   ["authorize-mission", "FUNCTIONAL"], ["run-engine-truth", "FUNCTIONAL"], ["start-run", "FUNCTIONAL"], ["run-reaches-review", "FUNCTIONAL"], ["test-result-honest", "NOT_EXECUTED_ASSERTED"],
-  ["link-run-to-task", "FUNCTIONAL"], ["task-status-done", "FUNCTIONAL"], ["open-project-workspace", "FUNCTIONAL"], ["delivery-prepare", "FUNCTIONAL"], ["delivery-accept", "FUNCTIONAL"], ["product", "GATED_ASSERTED"], ["request-ledger", "FUNCTIONAL"]];
+  ["link-run-to-task", "FUNCTIONAL"], ["task-status-done", "FUNCTIONAL"], ["open-project-workspace", "FUNCTIONAL"], ["delivery-prepare", "FUNCTIONAL"], ["delivery-checklist", "FUNCTIONAL"], ["delivery-accept", "FUNCTIONAL"], ["product", "GATED_ASSERTED"], ["request-ledger", "FUNCTIONAL"]];
 const KIND = Object.fromEntries(PLAN);
 const steps = [];
 const mode = {analysis: "UNKNOWN", product: "UNKNOWN"}; // ADMITTED | GATED_4B (uygulamadaki gerçek allow-list'ten)
@@ -439,6 +439,37 @@ async function runSteps() {
     await win.click(`#dl-prep-${runId}`);
     await waitFn(id => document.querySelector(`[data-delivery-run="${id}"]`)?.dataset.deliveryState === "PREPARED", runId, 60000, "delivery PREPARED");
     return "export artifact prepared (POST /v1/work-runs/:id/delivery/prepare)";
+  });
+  // //TR: Teslim kontrol listesi (UASCO-T0015): hazırlanmış koşuda 7 satır ve data-check-level değerleri sunucu gerçeğiyle eşleşmeli; ürün doğrulaması asla "OK" değildir. EN ve TR ekran görüntüsü alınır (dil düğmesiyle, yeniden yükleme yok), sonra dil EN'e döner.
+  await step("delivery-checklist", async () => {
+    const sel = `[data-delivery-checklist="${runId}"]`, ROWS = ["artifact", "sha256", "integrity", "archiveScan", "securityStage", "verification", "acceptance"];
+    const read = () => win.evaluate(s => [...document.querySelectorAll(`${s} [data-check-row]`)].map(n => [n.dataset.checkRow, n.dataset.checkLevel]), sel);
+    // Dil, kabuğun dil düğmesiyle (yeniden yüklemeden) değiştirilir: uygulama durumu (seçili görev, stüdyo sekmesi) korunur.
+    const toLang = async (lang, title) => { await win.click("#langBtn"); await waitFn(([s, t]) => (document.querySelector(s)?.textContent ?? "").includes(t), [sel, title], 20000, `checklist rendered in ${lang}`); };
+    const snap = async lang => { const card = win.locator(`[data-delivery-run="${runId}"]`); await card.scrollIntoViewIfNeeded(); const f = `delivery-checklist-${lang}.png`; await card.screenshot({path: path.join(shotsDir, f), timeout: 10000}); return f; };
+    await waitSel(sel, 20000);
+    const rows = await read();
+    must(JSON.stringify(rows.map(r => r[0])) === JSON.stringify(ROWS), `checklist rows are ${rows.map(r => r[0]).join(",")}, expected ${ROWS.join(",")}`);
+    const lv = Object.fromEntries(rows);
+    // Hazırlanmış paket: artefakt/sha256/bütünlük/paket taraması kanıtlı (OK); güvenlik aşaması ürün doğrulamasından bağımsız ama bu koşuda kaydı yok; kabul henüz yok.
+    for (const k of ["artifact", "sha256", "integrity", "archiveScan"]) must(lv[k] === "OK", `${k} is ${lv[k]} on a prepared, unmodified package`);
+    must(lv.verification === (serverPv?.state === "PRODUCT_VERIFIED" ? "OK" : serverPv?.state === "FAILED" ? "ATTENTION" : "UNKNOWN"), `verification level ${lv.verification} does not follow the server's productVerification ${serverPv?.state}`);
+    must(lv.verification !== "OK" || serverPv?.state === "PRODUCT_VERIFIED", "verification shown as done without PRODUCT_VERIFIED");
+    must(["OK", "ATTENTION", "UNKNOWN"].includes(lv.securityStage), `securityStage level ${lv.securityStage} is not a checklist level`);
+    // Kaynak üretimi tamam olan koşunun sunucuda BLOCKED olmayan bir SECURITY_REPORT kanıtı vardır: satır o gerçek kaydı göstermeli ("kayıt yok" değil; #384 B1).
+    const secText = await win.evaluate(s => document.querySelector(`${s} [data-check-row="securityStage"]`)?.textContent ?? "", sel);
+    must(!/no security stage recorded|could not be read|unreadable record/.test(secText), `the security row does not show the run's SECURITY_REPORT: ${secText.slice(0, 160)}`);
+    must(/built-in secrets (CLEAN|FINDINGS)/.test(secText), `the security row does not show the stage components: ${secText.slice(0, 160)}`);
+    must(lv.acceptance === "PENDING", `acceptance is ${lv.acceptance} before accepting`);
+    const sha = await win.evaluate(s => document.querySelector(`${s} [data-check-row="sha256"]`)?.textContent ?? "", sel);
+    must(/[0-9a-f]{64}/.test(sha), "the sha256 row does not show a sha256");
+    if (serverPv?.state !== "PRODUCT_VERIFIED") must(await win.evaluate(s => !!document.querySelector(`${s} [data-not-verified-explain]`), sel), "no NOT_VERIFIED explanation on a not product-verified delivery");
+    const en = await snap("en");
+    await toLang("tr", "Teslim kontrol listesi");
+    must(JSON.stringify(await read()) === JSON.stringify(rows), "the Turkish checklist levels differ from the English ones");
+    const tr = await snap("tr");
+    await toLang("en", "Delivery checklist");
+    return `7 rows ${rows.map(r => r.join("=")).join(",")}; screenshots ${en}, ${tr}`;
   });
   await step("delivery-accept", async () => {
     const card = `[data-delivery-run="${runId}"]`;
