@@ -194,8 +194,13 @@ export function registerCloudDeployCases(): void {
       expect(run(base, {deployApproval: approval.replace(SHA, otherSha)})).toBe("DEPLOY_APPROVAL_INVALID");   // tampered sha
       expect(run(base, {deployApproval: approval.slice(0, -1) + (approval.endsWith("0") ? "1" : "0")})).toBe("DEPLOY_APPROVAL_INVALID");
       expect(run(base, {now: at(500 + MAX_DEPLOY_APPROVAL_TTL_MS)})).toBe("DEPLOY_APPROVAL_EXPIRED");
-      const p = approval.split("."); p[4] = String(Number(p[4]) + 3_600_000);
+      const p = approval.split("."); const ei = p.length - 2; p[ei] = String(Number(p[ei]) + 3_600_000);   // da2 layout: exp is the field before the mac
       expect(run(base, {deployApproval: p.join(".")})).toBe("DEPLOY_APPROVAL_INVALID");          // extending expiry breaks the mac
+      // //TR: #349 B-1: süre MAC kapsamında olmalı; kısa ömürlü bir onayın süresi 15 dk tavanının İÇİNDE uzatılsa bile reddedilir (TTL sınırı değil MAC yakalar).
+      const short = issueDeployApproval(d.production.keys, sidOf(tok), SHA, at(500), 60_000);
+      expect(run(base, {deployApproval: short})).toBe("OK");
+      const q = short.split("."); const qi = q.length - 2; q[qi] = String(Number(q[qi]) + 300_000);
+      expect(run(base, {deployApproval: q.join(".")})).toBe("DEPLOY_APPROVAL_INVALID");
       wallMs = at(3_600_000).getTime();   // issuer whose trusted clock itself runs an hour ahead: the gate still refuses
       const ahead = issueDeployApproval(d.production.keys, sidOf(tok), SHA, at(3_600_000)); wallMs = t0.getTime();
       expect(run(base, {deployApproval: ahead})).toBe("DEPLOY_APPROVAL_INVALID");
