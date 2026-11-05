@@ -4,6 +4,7 @@ import {
   canonicalJson, sha256Hex,
   type ArtifactRef, type CloudEnvironment, type CloudJobKind, type CloudJobRequest, type RetryPolicy, type SignedScope,
 } from "./contracts.js";
+import {intakeCommand, type IntakeResult} from "../mission/command-intake.js";
 
 export const MAX_DAG_TASKS = 128;
 export const MAX_TASK_DEPS = 32;
@@ -274,4 +275,46 @@ export class TaskOrchestrator {
     const vals = dag.order.map(id => statuses[id]);
     return {ok: true, report: {dagId: dag.dagId, submitted, statuses, complete: vals.every(v => v === "SUCCEEDED"), failed: vals.some(v => FAILED_STATUSES.has(v))}};
   }
+}
+
+// ---------- CLOUD-T0011 köprüsü: command intake -> görev kırılımı -> kuyruk ----------
+// //TR: CLOUD-T0011: zincirin bağlı olmayan ilk halkası buydu (core/mission/command-intake yalnız DRAFT öneri üretir; hiçbir şey onu orkestratöre bağlamıyordu).
+// Intake hiçbir zaman yetki vermez: buradan geçmek için öneri PROPOSED olmalı, yetki/risk bayrağı taşımamalı ve Founder TAM bu hedef metni (sha256) onaylamış olmalı.
+// Tenant/proje/ortam intake'ten değil yalnız imzalı kapsamdan gelir; ad alanı hedef özetinden türetilir (aynı onaylı komut aynı DAG'ı verir: idempotent yeniden gönderim).
+export const INTAKE_MAX_RISK = 3;
+export interface FounderIntakeConfirmation {confirmedBy: string; objectiveSha256: string}
+export type IntakeBridgeDeny = "INTAKE_REJECTED" | "INTAKE_NEEDS_FOUNDER" | "INTAKE_NOT_CONFIRMED";
+export type IntakeIntent = {ok: true; intent: string; namespace: string} | {ok: false; reason: IntakeBridgeDeny; detail?: string};
+
+/** Onaylı bir command-intake önerisini orkestratör niyetine çevirir; her belirsizlik reddir. */
+export function intentFromIntake(result: IntakeResult, confirmation: FounderIntakeConfirmation | null | undefined): IntakeIntent {
+  if (!isObj(result) || result.ok !== true || !isObj(result.proposal)) return {ok: false, reason: "INTAKE_REJECTED", detail: isObj(result) && result.ok === false ? String(result.code) : undefined};
+  const p = result.proposal;
+  if (p.status !== "DRAFT" || p.outcome !== "PROPOSED" || p.authorityRequired !== false || !(p.riskLevel >= 1 && p.riskLevel <= INTAKE_MAX_RISK)
+    || p.reasons.length > 0 || typeof p.objective !== "string" || p.objective.trim().length === 0 || p.objective.length > MAX_INTENT_CHARS) {
+    return {ok: false, reason: "INTAKE_NEEDS_FOUNDER", detail: p.reasons.join(",") || p.outcome};
+  }
+  const digest = sha256Hex(p.objective);
+  if (!isObj(confirmation) || typeof confirmation.confirmedBy !== "string" || !ID_RE.test(confirmation.confirmedBy) || confirmation.objectiveSha256 !== digest) {
+    return {ok: false, reason: "INTAKE_NOT_CONFIRMED"};
+  }
+  return {ok: true, intent: p.objective, namespace: `intake-${digest.slice(0, 24)}`};
+}
+
+export type IntakeDispatchResult =
+  | {ok: true; namespace: string; dag: TaskDag; report: DispatchReport; plannerCostUsd: number}
+  | {ok: false; stage: "INTAKE" | "DECOMPOSE" | "DISPATCH"; reason: string; detail?: string};
+
+/** Founder komut metni -> intakeCommand -> onay kontrolü -> decomposeIntent (PlannerModel) -> TaskOrchestrator.dispatch (CLOUD-T0003 kuyruğu). */
+export async function dispatchIntakeCommand(
+  text: unknown, confirmation: FounderIntakeConfirmation | null | undefined, planner: PlannerModel,
+  o: Omit<DecomposeOptions, "namespace">, orchestrator: TaskOrchestrator, approvals: ReadonlySet<string> = new Set(),
+): Promise<IntakeDispatchResult> {
+  const it = intentFromIntake(intakeCommand(text, {origin: "cloud-intake"}), confirmation);
+  if (!it.ok) return {ok: false, stage: "INTAKE", reason: it.reason, ...(it.detail ? {detail: it.detail} : {})};
+  const d = await decomposeIntent(it.intent, planner, {...o, namespace: it.namespace});
+  if (!d.ok) return {ok: false, stage: "DECOMPOSE", reason: d.reason, ...(d.detail ? {detail: d.detail} : {})};
+  const r = orchestrator.dispatch(d.dag, approvals);
+  if (!r.ok) return {ok: false, stage: "DISPATCH", reason: r.reason, ...(r.detail ? {detail: r.detail} : {})};
+  return {ok: true, namespace: it.namespace, dag: d.dag, report: r.report, plannerCostUsd: d.costUsd};
 }
