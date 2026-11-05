@@ -73,7 +73,7 @@ export async function runProbe({role, session, repoRoot, branch, keyDir, prBranc
     mark("relay/drain", {envelope: env, drain, manifestDigest: cur.core.manifest.digest});
     log("A_DRAIN_SIGNED_OFFLINE_FOR_RELAY", {prev: env.prev, keyId: env.keyId});
     const done = await until("probe/B-commit");
-    log("A_SAW_B_COMMIT", done);
+    log("A_SAW_B_COMMIT", {bCommit: done}); // nested: never let B's record fields overwrite this log line's role/session/at
     const guard = v2Intent => mergeAuthority({readAuthority: () => reg.read(authorityRef(PROBE_DOMAIN)).doc, keyring, domain: PROBE_DOMAIN, pr: 347, headSha: "0".repeat(39) + "1", v2Intent});
     log("A_GUARD_V41_MERGE_AFTER_HANDOVER", guard(null));
     const c = bridge.read().core;
