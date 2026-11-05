@@ -24,11 +24,16 @@ import {createSharedRegistry} from "./shared-registry.mjs";
 import {Ownership} from "./ownership.mjs";
 import {runProbe, PROBE_DOMAIN} from "./probe-scenario.mjs";
 import {KEYRING_SCHEMA, generateRoleKey, signAction, canonDigest, loadCanonicalKeyring} from "./identity.mjs";
-import {verifyGates} from "./gate-verifier.mjs";
+import {verifyGates, reviewBinding} from "./gate-verifier.mjs";
 import {liveAuthorityReaders} from "./v41-guard.mjs";
-import {liveGit, liveGateDeps, liveFreshness, githubClient, prefetchGateEvidence, openPrsLive, closedPrsLive, branchProtected} from "./live-sources.mjs";
+import {liveGit, liveGateDeps, liveFreshness, githubClient, prefetchGateEvidence, openPrsLive, closedPrsLive, branchProtected, ghGet} from "./live-sources.mjs";
 import {execFileSync} from "node:child_process";
 
+// Node's built-in fetch (used by the GitHub adapter) honours HTTPS_PROXY only with NODE_USE_ENV_PROXY=1: re-run once with it set.
+if (process.env.HTTPS_PROXY && process.env.NODE_USE_ENV_PROXY !== "1") {
+  const r = (await import("node:child_process")).spawnSync(process.execPath, process.argv.slice(1), {stdio: "inherit", env: {...process.env, NODE_USE_ENV_PROXY: "1"}});
+  process.exit(r.status ?? 1);
+}
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..");
 const arg = (n, d) => { const i = process.argv.indexOf(`--${n}`); return i > 0 ? process.argv[i + 1] : d; };
@@ -136,6 +141,12 @@ async function bridge() {
     const del = c.ok ? docs.remove(ref, c.sha) : false;
     console.log(JSON.stringify({ref, created: c.ok, secondCreateRefused: race ? !race.ok : null, deleted: del}));
     process.exit(c.ok && race && !race.ok && del ? 0 : 2);
+  } else if (sub === "check-review") {
+    // Pre-merge readiness: is there a trusted, SHA-bound, independent CLEAN review binding for the PR's CURRENT head? (read-only)
+    const n = Number(arg("pr")); const pr = await ghGet(ghc, `pulls/${n}`);
+    const gh = await prefetchGateEvidence(ghc, {reviewClean: {pr: n, headSha: pr.head.sha}});
+    try { console.log(JSON.stringify({pr: n, ready: true, ...reviewBinding(pr, n, pr.head.sha, liveGateDeps({repoRoot: ROOT, gh}))}, null, 2)); }
+    catch (e) { console.log(JSON.stringify({pr: n, ready: false, headSha: pr.head.sha, baseSha: pr.base?.sha, reason: String(e?.message ?? e)}, null, 2)); process.exit(2); }
   } else if (sub === "keygen") {
     // the private key stays in this container; print only the public keyring entry for a Founder-approved keyring PR
     const k = {...generateRoleKey(), role: arg("role"), sessionId: arg("session")};

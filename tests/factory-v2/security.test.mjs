@@ -13,7 +13,8 @@ import {Ownership} from "../../automation/factory-v2/ownership.mjs";
 import {snapshotV41, buildManifest, authorityRef, verifyAuthorityDoc, checkTransition} from "../../automation/factory-v2/bridge.mjs";
 import {signAction, canonDigest} from "../../automation/factory-v2/identity.mjs";
 import {verifyGates} from "../../automation/factory-v2/gate-verifier.mjs";
-import {mergeAuthority} from "../../automation/factory-v2/v41-guard.mjs";
+import {mergeAuthority, liveAuthorityReaders} from "../../automation/factory-v2/v41-guard.mjs";
+import {protectionFrom} from "../../automation/factory-v2/live-sources.mjs";
 
 const T = 180_000, D = "uasco-v7";
 const GATES = {reviewClean: {evidence: "r"}, ciPassed: {evidence: "c"}, founderAuthorization: {evidence: "f"}, migrationAcceptance: {evidence: "m"}};
@@ -150,6 +151,7 @@ describe("2. acceptance evidence is verified (source, SHA, scope, authority) —
     ["reviewer is the PR's own implementer (Claude-Session trailer, same login)", gates(), {commits: [{sha: H, commit: {message: "x\n\nClaude-Session: https://claude.ai/code/session_reviewer01"}}]}, /NO_TRUSTED_CLEAN_BINDING_AT_HEAD/],
     ["100 or more commits (listing may be truncated)", gates(), {commits: Array.from({length: 100}, () => ({sha: H, commit: {message: "x\n\nClaude-Session: https://claude.ai/code/session_builderPR347"}}))}, /PR_COMMITS_UNVERIFIABLE/],
     ["reviewer session is a case variant of the implementer", gates(), {commits: [{sha: H, commit: {message: "x\n\nClaude-Session: https://claude.ai/code/session_REVIEWER01"}}]}, /NO_TRUSTED_CLEAN_BINDING_AT_HEAD/],
+    ["reviewer-side case variant of the implementer session", gates(), {reviews: [binding({body: `VERDICT-BINDING: verdict=CLEAN head=${H} base=${BASE} reviewer-session=SESSION_BUILDERPR347`})]}, /NO_TRUSTED_CLEAN_BINDING_AT_HEAD/],
     ["PR commits without implementer trailers", gates(), {commits: [{sha: H, commit: {message: "no trailer"}}]}, /IMPLEMENTER_SESSIONS_UNKNOWN/],
     ["migration run on another branch", gates(), {push: [{id: 1, path: ".github/workflows/ci.yml", head_branch: "other", head_sha: "c".repeat(40), status: "completed", conclusion: "success"}]}, /NO_PUSH_RUN/],
     ["CI on another SHA", gates({ciPassed: {headSha: "e".repeat(40)}}), {}, /GATE_CI:SHA_NOT_REVIEWED_HEAD/],
@@ -374,5 +376,59 @@ describe("review of af184254: history rewrite, history window, lease traffic, pr
     expect(() => checkTransition(prev, {...prev, epoch: 9}, {sessionId: SESS.V41})).toThrow(/ROLLBACK_FIELDS_INVALID/);
     expect(checkTransition(prev, {...prev, epoch: 3}, {sessionId: SESS.V41})).toBe("ROLLBACK");
     expect(checkTransition({...prev, epoch: 0}, {...prev, epoch: 9}, {sessionId: SESS.V41})).toBe("ROLLBACK");
+  });
+});
+
+describe("review of aec2ff87 non-blocking follow-ups", () => {
+  const key = authorityRef(D);
+  it("an unparseable historical authority entry (no key needed to write it) cannot lock the bridge or the guard", {timeout: T}, () => {
+    const w = world(); toV2(w);
+    // a raw commit whose authority sidecar is not JSON, pushed fast-forward by a keyless writer
+    const g = (...a) => git(w.X, ...a);
+    g("fetch", "-q", "origin", "+refs/heads/uasco/registry:refs/heads/uasco/registry");
+    const tip = g("rev-parse", "refs/heads/uasco/registry");
+    const docBlob = g("rev-parse", `${tip}:doc.json`);
+    const bad = spawnSync("git", ["hash-object", "-w", "--stdin"], {cwd: w.X, input: "{not json", encoding: "utf8"}).stdout.trim();
+    const sub = spawnSync("git", ["mktree"], {cwd: w.X, input: `100644 blob ${bad}\tuasco-v7.json\n`, encoding: "utf8"}).stdout.trim();
+    const tree = spawnSync("git", ["mktree"], {cwd: w.X, input: `100644 blob ${docBlob}\tdoc.json\n040000 tree ${sub}\tauthority\n`, encoding: "utf8"}).stdout.trim();
+    const c1 = spawnSync("git", ["-c", "user.name=x", "-c", "user.email=x@invalid", "commit-tree", tree, "-p", tip, "-m", "garbage"], {cwd: w.X, encoding: "utf8"}).stdout.trim();
+    const good = g("rev-parse", `${tip}^{tree}`); // then restore the honest tree on top
+    const c2 = spawnSync("git", ["-c", "user.name=x", "-c", "user.email=x@invalid", "commit-tree", good, "-p", c1, "-m", "restore"], {cwd: w.X, encoding: "utf8"}).stdout.trim();
+    g("push", "-q", "origin", `${c2}:refs/heads/uasco/registry`);
+    expect(w.bB.assertV2(SESS.V2, 1)).toBe(1); // still verifies the real chain
+    expect(w.bA.v41MayDispatch()).toBe(false);
+    const guard = mergeAuthority({readAuthority: () => w.reg(w.A).read(key).doc, readHistory: () => w.reg(w.A).history(key), registryProtected: () => true, keyring: () => ringFor(D), pr: 7, headSha: "a".repeat(40)});
+    expect(guard).toMatchObject({allowed: false, reason: "V41_FENCED_BY_V2_AUTHORITY"});
+    expect(w.bX.rollback({reason: "still recoverable", signer: S.FOUNDER}).core.phase).toBe("V41_AUTHORITATIVE");
+  });
+  it("commit() is refused when registry protection is not verified", {timeout: T}, () => {
+    const w = world();
+    w.bB.prepare({manifest: w.m, gates: GATES, signer: S.V2});
+    w.bA.drainAck({manifestDigest: w.m.digest, drain, signer: S.V41});
+    expect(() => bridgeFor(w.reg(w.B), D, {storeProtected: () => false}).commit({manifest: w.m, signer: S.V2})).toThrow(/REGISTRY_NOT_PROTECTED/);
+    expect(() => bridgeFor(w.reg(w.B), D, {storeProtected: () => { throw new Error("api down"); }}).commit({manifest: w.m, signer: S.V2})).toThrow(/REGISTRY_NOT_PROTECTED/);
+  });
+});
+
+describe("registry protection must come from active rulesets with no bypass", () => {
+  const rules = [{type: "deletion", ruleset_id: 1}, {type: "non_fast_forward", ruleset_id: 1}];
+  const rs = o => ({enforcement: "active", bypass_actors: [], current_user_can_bypass: "never", ...o});
+  const sync = (rulesOut, rsOut) => {
+    const api = p => (p.startsWith("rules/branches/") ? rulesOut : typeof rsOut === "function" ? rsOut() : rsOut);
+    return liveAuthorityReaders({repoRoot: ".", api}).registryProtected();
+  };
+  it.each([
+    ["no rules", [], rs(), false],
+    ["only deletion", [rules[0]], rs(), false],
+    ["bypass actor listed", rules, rs({bypass_actors: [{actor_type: "RepositoryRole", actor_id: 5}]}), false],
+    ["current identity may bypass", rules, rs({current_user_can_bypass: "always"}), false],
+    ["evaluate-only ruleset", rules, rs({enforcement: "evaluate"}), false],
+    ["ruleset unreadable", rules, () => { throw new Error("403"); }, false],
+    ["active, no bypass, both rules", rules, rs(), true]
+  ])("guard: %s", (_n, r, x, want) => { let got; try { got = sync(r, x); } catch { got = false; } expect(got).toBe(want); });
+  it("async adapter path applies the same rule", async () => {
+    expect(await protectionFrom(rules, async () => rs())).toBe(true);
+    expect(await protectionFrom(rules, async () => rs({bypass_actors: [{actor_id: 1}]}))).toBe(false);
+    expect(await protectionFrom(rules, async () => { throw new Error("x"); })).toBe(false);
   });
 });

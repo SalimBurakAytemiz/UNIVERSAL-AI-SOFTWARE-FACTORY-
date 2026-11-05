@@ -17,17 +17,13 @@ export class GateError extends Error { constructor(gate, code, detail) { super(`
  * context: {domain, candidate, manifestVersion}
  * Returns normalised, verified evidence (what was actually checked) for the authority record.
  */
-export function verifyGates(gates, context, deps) {
-  const out = {}, canonical = deps.git.canonicalSha();
-  if (!SHA.test(canonical ?? "")) throw new GateError("ALL", "CANONICAL_UNKNOWN");
-  // --- review: source = merged PR on the canonical branch; sha = exact head; scope = factory files; authority = trusted login + CLEAN binding
-  const rv = gates?.reviewClean;
-  if (!Number.isInteger(rv?.pr) || !SHA.test(rv?.headSha ?? "")) throw new GateError("REVIEW", "EVIDENCE_SHAPE");
-  const pr = deps.gh(`pulls/${rv.pr}`);
-  if (!pr?.merged || !SHA.test(pr.merge_commit_sha ?? "")) throw new GateError("REVIEW", "PR_NOT_MERGED", String(rv.pr));
-  if (pr.base?.ref !== deps.baseRef) throw new GateError("REVIEW", "WRONG_BASE", pr.base?.ref);
-  if (pr.head?.sha !== rv.headSha) throw new GateError("REVIEW", "HEAD_MISMATCH");
-  if (!deps.git.isAncestor(pr.merge_commit_sha, canonical)) throw new GateError("REVIEW", "MERGE_NOT_IN_CANONICAL");
+/**
+ * The review part of the review gate, usable BEFORE merge (e.g. Founder merge readiness): scope, implementer sessions from commit
+ * trailers, and exactly one trusted-login COMMENTED/APPROVED review whose VERDICT-BINDING is CLEAN for this exact head and the PR's base,
+ * by a session that is not an implementer (case-insensitive). Throws GateError otherwise.
+ */
+export function reviewBinding(pr, prNumber, headSha, deps) {
+  const rv = {pr: prNumber, headSha};
   const files = deps.gh(`pulls/${rv.pr}/files?per_page=100`).map(f => f.filename);
   if (!files.some(f => f.startsWith(FACTORY_SCOPE_PREFIX))) throw new GateError("REVIEW", "OUT_OF_SCOPE");
   // Builder sessions come from the PR's own commits (Claude-Session trailers), not from the caller: every session posts as the same
@@ -43,7 +39,22 @@ export function verifyGates(gates, context, deps) {
     .find(({r, b}) => b && !b.code && b.verdict === "CLEAN" && b.head === rv.headSha && b.base === pr.base?.sha && trusted.has(String(r.user?.login ?? "").toLowerCase())
       && ["COMMENTED", "APPROVED"].includes(r.state) && !builders.has(String(b.session).toLowerCase()));
   if (!binding) throw new GateError("REVIEW", "NO_TRUSTED_CLEAN_BINDING_AT_HEAD");
-  out.reviewClean = {pr: rv.pr, headSha: rv.headSha, baseSha: pr.base.sha, mergeSha: pr.merge_commit_sha, reviewId: binding.r.id, reviewerSession: binding.b.session, implementerSessions: [...implementers].sort()};
+  return {reviewId: binding.r.id, reviewerSession: binding.b.session, reviewer: binding.r.user?.login, headSha, baseSha: pr.base?.sha, implementerSessions: [...implementers].sort()};
+}
+
+export function verifyGates(gates, context, deps) {
+  const out = {}, canonical = deps.git.canonicalSha();
+  if (!SHA.test(canonical ?? "")) throw new GateError("ALL", "CANONICAL_UNKNOWN");
+  // --- review: source = merged PR on the canonical branch; sha = exact head; scope = factory files; authority = trusted login + CLEAN binding
+  const rv = gates?.reviewClean;
+  if (!Number.isInteger(rv?.pr) || !SHA.test(rv?.headSha ?? "")) throw new GateError("REVIEW", "EVIDENCE_SHAPE");
+  const pr = deps.gh(`pulls/${rv.pr}`);
+  if (!pr?.merged || !SHA.test(pr.merge_commit_sha ?? "")) throw new GateError("REVIEW", "PR_NOT_MERGED", String(rv.pr));
+  if (pr.base?.ref !== deps.baseRef) throw new GateError("REVIEW", "WRONG_BASE", pr.base?.ref);
+  if (pr.head?.sha !== rv.headSha) throw new GateError("REVIEW", "HEAD_MISMATCH");
+  if (!deps.git.isAncestor(pr.merge_commit_sha, canonical)) throw new GateError("REVIEW", "MERGE_NOT_IN_CANONICAL");
+  const binding = reviewBinding(pr, rv.pr, rv.headSha, deps);
+  out.reviewClean = {pr: rv.pr, headSha: rv.headSha, baseSha: pr.base.sha, mergeSha: pr.merge_commit_sha, reviewId: binding.reviewId, reviewerSession: binding.reviewerSession, implementerSessions: binding.implementerSessions};
   // --- CI on the reviewed head: required contexts, from the required workflow, by the Actions app, all success
   const ci = gates?.ciPassed;
   if (ci?.headSha !== rv.headSha) throw new GateError("CI", "SHA_NOT_REVIEWED_HEAD");

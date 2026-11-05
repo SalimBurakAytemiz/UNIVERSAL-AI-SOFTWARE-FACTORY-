@@ -29,6 +29,7 @@ The full diff is in `FV2-PROTECTED-EXECUTOR-AUTHORITY-FENCE.diff`.
   - Reason: the anti-rewind check walks the registry's history, which is trustworthy only if nobody can force-push or delete it.
   - All factory writes are plain fast-forward pushes, so they work under this protection.
 - **The patched executor** passes its own `curlApi` to the guard for this rules check.
+- **No bypass actors (machine-checked).** A rule only counts if it comes from an `active` ruleset whose `rulesets/{id}` record shows `bypass_actors: []` and `current_user_can_bypass: "never"` for the checking identity. If a ruleset is unreadable, the branch is treated as unprotected. The canonical rulesets already meet this today (UASCO-V7-INTEGRATION-PROTECTION 25433316 and UASCO-MASTER-PROTECTION 25435619 both have `bypass_actors: []` and `never`).
 
 ## Evidence
 - `tests/factory-v2/security.test.mjs`, test "the prepared executor.mjs patch blocks the real merge call before any write when V2 is authoritative". It applies this diff in a temporary worktree and drives the patched `executeMerge`:

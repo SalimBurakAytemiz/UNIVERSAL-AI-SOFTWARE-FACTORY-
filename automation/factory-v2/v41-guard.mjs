@@ -49,7 +49,8 @@ export function liveAuthorityReaders({repoRoot, remote = "origin", baseRef = "v7
     const r = git(["log", "--first-parent", "--format=%H", `--max-count=${MAX + 1}`, sha, "--", file]); if (r.status !== 0) throw new Error("REGISTRY_HISTORY_FAILED");
     const shas = r.stdout.split("\n").filter(Boolean);
     if (shas.length > MAX) throw new Error("REGISTRY_HISTORY_TOO_LONG");
-    return shas.reverse().map(c => { const s = git(["show", `${c}:${file}`]); return s.status === 0 ? JSON.parse(s.stdout) : null; });
+    // an unparseable historical entry carries no authority: null, never a permanent lock-up (the current record stays strict)
+    return shas.reverse().map(c => { const s = git(["show", `${c}:${file}`]); if (s.status !== 0) return null; try { return JSON.parse(s.stdout); } catch { return null; } });
   };
   const hwmFile = path.join(repoRoot, ".git", `uasco-authority-hwm-${domain}.json`);
   return {
@@ -57,8 +58,13 @@ export function liveAuthorityReaders({repoRoot, remote = "origin", baseRef = "v7
     // server-enforced protection of the registry branch: both force-push (non_fast_forward) and deletion must be forbidden
     registryProtected() {
       if (typeof api !== "function") return false;
-      const rules = api(`rules/branches/${encodeURIComponent(branch)}`);
-      const types = new Set((Array.isArray(rules) ? rules : []).map(r => r?.type));
+      // same rule as live-sources.protectionFrom, synchronous: only rules from active rulesets with NO bypass count
+      const types = new Set();
+      for (const r of [].concat(api(`rules/branches/${encodeURIComponent(branch)}`) ?? [])) {
+        if (!["non_fast_forward", "deletion"].includes(r?.type) || !Number.isInteger(r?.ruleset_id)) continue;
+        const rs = api(`rulesets/${r.ruleset_id}`);
+        if (rs?.enforcement === "active" && Array.isArray(rs?.bypass_actors) && rs.bypass_actors.length === 0 && rs.current_user_can_bypass === "never") types.add(r.type);
+      }
       return types.has("non_fast_forward") && types.has("deletion");
     },
     // canonical anchor: a governance-path cutover authorization for this domain exists on the canonical branch

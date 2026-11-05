@@ -34,7 +34,7 @@ function makeDocStore(ops, kind) {
       const r = ops.git(["log", "--first-parent", "--format=%H", `--max-count=${max + 1}`, sha, "--", path]); if (r.status !== 0) throw new Error("REFDOC_HISTORY_FAILED");
       const shas = r.stdout.split("\n").filter(Boolean);
       if (shas.length > max) throw new Error("REFDOC_HISTORY_TOO_LONG");
-      return shas.reverse().map(c => { const s = ops.git(["show", `${c}:${path}`]); if (s.status !== 0) return null; try { return JSON.parse(s.stdout); } catch { throw new Error("REFDOC_HISTORY_UNPARSEABLE"); } });
+      return shas.reverse().map(c => { const s = ops.git(["show", `${c}:${path}`]); if (s.status !== 0) return null; try { return JSON.parse(s.stdout); } catch { return null; } }); // an unparseable HISTORICAL entry carries no authority (the current record stays strict)
     },
     /** CAS: expectedSha null = must not exist. Returns {ok, sha, current}. */
     cas(ref, expectedSha, doc, files = {}) {

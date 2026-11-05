@@ -11,8 +11,19 @@ const repoPath = (gh, p) => `/repos/${gh.repo}/${p}`;
 export const ghGet = (gh, p) => gh.req("GET", repoPath(gh, p));
 /** Server-enforced protection of a branch (rulesets): force-push (non_fast_forward) and deletion both forbidden. */
 export async function branchProtected(gh, branch) {
-  const rules = await ghGet(gh, `rules/branches/${encodeURIComponent(branch)}`);
-  const types = new Set((Array.isArray(rules) ? rules : []).map(r => r?.type));
+  return protectionFrom(await ghGet(gh, `rules/branches/${encodeURIComponent(branch)}`), async id => ghGet(gh, `rulesets/${id}`));
+}
+/**
+ * A rule counts only if it comes from an ACTIVE ruleset with no bypass actors that the current identity can never bypass
+ * (rulesets/{id}: bypass_actors = [], current_user_can_bypass = "never"). Unreadable ruleset => not protected (fail closed).
+ */
+export async function protectionFrom(rules, getRuleset) {
+  const types = new Set();
+  for (const r of Array.isArray(rules) ? rules : []) {
+    if (!["non_fast_forward", "deletion"].includes(r?.type) || !Number.isInteger(r?.ruleset_id)) continue;
+    let rs; try { rs = await getRuleset(r.ruleset_id); } catch { return false; }
+    if (rs?.enforcement === "active" && Array.isArray(rs?.bypass_actors) && rs.bypass_actors.length === 0 && rs.current_user_can_bypass === "never") types.add(r.type);
+  }
   return types.has("non_fast_forward") && types.has("deletion");
 }
 /** All open PRs, read live through the adapter. */
