@@ -1,6 +1,6 @@
 {
   "schema": "uasco.factory-v2.shared-registry/1",
-  "phase": "section:refs/uasco/authority/probe-uasco",
+  "phase": "section:probe/A-done",
   "sections": {
     "probe-keys/session_015dYwb2b3yVQ6iay68HXCD8": {
       "session": "session_015dYwb2b3yVQ6iay68HXCD8",
@@ -657,6 +657,10 @@
       "acquiredAt": 1793869454494,
       "heartbeatAt": 1793869454494,
       "expiresAt": 1793869484494
+    },
+    "probe/A-done": {
+      "session": "session_015dYwb2b3yVQ6iay68HXCD8",
+      "at": 1793869469344
     }
   },
   "revs": {
@@ -672,7 +676,8 @@
     "probe/B-commit": 1,
     "probe/A-guard-checked": 1,
     "probe/go-lease": 1,
-    "lease/probe/writer--LIVE-probe-uasco": 2
+    "lease/probe/writer--LIVE-probe-uasco": 2,
+    "probe/A-done": 1
   },
-  "seq": 18
+  "seq": 19
 }
