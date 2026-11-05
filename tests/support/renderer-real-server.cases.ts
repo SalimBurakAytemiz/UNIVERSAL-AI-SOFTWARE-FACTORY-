@@ -18,13 +18,13 @@ const TOKEN = "t".repeat(32), WRONG = "w".repeat(32), RECORDER = "implementer@lo
 const MAIN_SRC = fs.readFileSync(path.join(REPO, "apps", "desktop", "main.mjs"), "utf8");
 const allowBlock = (() => { const a = MAIN_SRC.indexOf("// B4-ALLOWLIST-BEGIN"), b = MAIN_SRC.indexOf("// B4-ALLOWLIST-END"); if (a < 0 || b < 0) throw new Error("main.mjs B4-ALLOWLIST block not found"); return MAIN_SRC.slice(a, b); })();
 const desktopExtraGetPathAllowed = new Function(`${allowBlock}\nreturn desktopExtraGetPathAllowed;`)() as (v: unknown) => boolean;
-const desktopAllows = (p: string) => desktopGetPathAllowed(p) || desktopExtraGetPathAllowed(p);
+export const desktopAllows = (p: string) => desktopGetPathAllowed(p) || desktopExtraGetPathAllowed(p);
 // //TR: N1b: üretimde /health gövdesi sunucudan değil main.mjs'ten gelir (kimlik doğrulandıktan sonra sabit nesne); köprü bunu aynen taklit eder.
-const SYNTHETIC_HEALTH = {status: "HEALTHY", system: "UNIVERSAL-AI-SOFTWARE-COMPANY-OS", serverIdentity: "VERIFIED"};
+export const SYNTHETIC_HEALTH = {status: "HEALTHY", system: "UNIVERSAL-AI-SOFTWARE-COMPANY-OS", serverIdentity: "VERIFIED"};
 const PROJECT = "UASCO-T0006 project", MISSION = "UASCO-T0006 mission";
 
 // ---------------- minimal DOM (diğer renderer testleriyle aynı desen) ----------------
-class N {
+export class N {
   tagName: string; children: N[] = []; parent: N | null = null; attrs = new Map<string, string>(); dataset: Record<string, string> = {}; className = ""; _text = "";
   ls = new Map<string, Array<(e: unknown) => void>>(); style: Record<string, string> = {}; hidden = false; value = ""; checked = false; disabled = false;
   constructor(public doc: D, tag: string) { this.tagName = tag.toUpperCase(); }
@@ -46,14 +46,14 @@ class N {
   querySelector() { return null; }
   querySelectorAll() { return []; }
 }
-class D {
+export class D {
   body: N; constructor() { this.body = new N(this, "body"); }
   createElement(t: string) { return new N(this, t); }
   createElementNS(_ns: string, t: string) { return new N(this, t); }
   createTextNode(s: string) { const n = new N(this, "#text"); n._text = s; return n; }
   getElementById() { return null; }
 }
-const all = (n: N): N[] => n.children.flatMap(c => [c, ...all(c)]);
+export const all = (n: N): N[] => n.children.flatMap(c => [c, ...all(c)]);
 const kpiText = (r: N, key: string) => all(r).find(n => n.dataset.kpi === key)?.textContent ?? `<no kpi ${key}>`;
 // hata işaretleri: ortak durum notları (note-error / note-failed) ve Company OS kaynak durumları
 const failureMarks = (r: N) => all(r).filter(n => /\bnote-(error|failed|offline)\b/.test(n.className) || ["ERROR", "OFFLINE"].includes(n.dataset.companyState ?? "")).map(n => `${n.className}|${n.dataset.companyState ?? ""}`);
@@ -110,7 +110,8 @@ async function renderAgainstServer(app: App, view: string, token = TOKEN) {
     renderAttention: (_c: unknown, att: {state?: string} | null) => { attention.push(String(att?.state)); }};
   const mod = await load("views", `${view}.js`);
   const root: N = await mod.render(ctx);
-  const paths = [...new Set(seen.map(s => s.path.replace(/\?.*$/, "")))].sort();
+  // mission-specific reads (e.g. the Inbox approval queue's GET /v1/predev/:missionId) are compared by route, not by id
+  const paths = [...new Set(seen.map(s => s.path.replace(/\?.*$/, "").replace(/msn_[0-9a-f]{24}/g, ":missionId")))].sort();
   // api.get sonuçları (store.cache): görünümün ne gördüğünü — başarı mı, sınıflanmış hata mı — doğrudan gösterir (hata yutulursa ok:true olurdu)
   // L1 (#323): store.cache is the {at, promise} map api.js itself writes (state.js createStore); if that shape changes this fails loudly instead of silently reading nothing
   const entries = [...store.cache.entries()] as Array<[string, {promise?: Promise<{ok: boolean; state?: string; message?: string}>}]>;
@@ -132,7 +133,7 @@ const PATHS: Record<string, string[]> = {
   assurance: ["/v1/cockpit", "/v1/evidence", "/v1/reviews", "/v1/work-runs"],
   delivery: ["/health", "/v1/attention", "/v1/control/status", "/v1/work-runs"],
   tower: ["/health", "/v1/adapters", "/v1/agents", "/v1/attention", "/v1/capabilities", ...(CLOUD_JOBS_PENDING ? [] : ["/v1/cloud/jobs"]), "/v1/cockpit", "/v1/control/status", "/v1/install", "/v1/phase0", "/v1/retry", "/v1/roles", "/v1/runs", "/v1/scheduler", "/v1/work-runs"],
-  inbox: ["/v1/attention", "/v1/cockpit", "/v1/missions", "/v1/work-runs"],
+  inbox: ["/v1/attention", "/v1/cockpit", "/v1/missions", "/v1/predev/:missionId", "/v1/work-runs"],
   company: ["/v1/company/accounts", "/v1/company/contacts", "/v1/company/contracts", "/v1/company/invoices", "/v1/company/opportunities", "/v1/company/payments"],
   settings: ["/health", "/v1/adapters", "/v1/capabilities", "/v1/control/status", "/v1/factory", "/v1/system/executors"],
 };
@@ -236,8 +237,8 @@ describe("UASCO-T0006: renderer -> real buildServer for the 10 formerly fake-bri
       const r = await renderAgainstServer(app, view, WRONG);
       expect(r.refused, `${view}: allow-list`).toEqual(pendingRefused(view));
       expect(r.results.length, `${view}: reads attempted`).toBeGreaterThan(0);
-      // L2 (#323): /health is excluded because main.mjs answers it itself; /v1/roles?cursor=... pages and /v1/deliveries?projectId=... only follow a SUCCESSFUL first read (paging cursor / selected project), so they are not attempted when that read fails
-      expect(r.results.map(x => x.path).sort(), `${view}: the same reads as the happy path`).toEqual(expect.arrayContaining(PATHS[view].filter(p => p !== "/health" && !p.includes("/v1/roles") && !p.includes("/v1/deliveries")).map(p => expect.stringMatching(new RegExp(`^${p.replace(/[/.]/g, "\\$&")}(\\?|$)`)))));
+      // L2 (#323): /health is excluded because main.mjs answers it itself; /v1/roles?cursor=... pages, /v1/deliveries?projectId=... and the Inbox's /v1/predev/:missionId only follow a SUCCESSFUL first read (paging cursor / selected project), so they are not attempted when that read fails
+      expect(r.results.map(x => x.path).sort(), `${view}: the same reads as the happy path`).toEqual(expect.arrayContaining(PATHS[view].filter(p => p !== "/health" && !p.includes("/v1/roles") && !p.includes("/v1/deliveries") && !p.includes("/v1/predev/")).map(p => expect.stringMatching(new RegExp(`^${p.replace(/[/.]/g, "\\$&")}(\\?|$)`)))));
       for (const x of r.results.filter(x => !pendingRefused(view).includes(x.path))) expect([view, x.path, x.ok, x.state, x.message]).toEqual([view, x.path, false, "ERROR", "CONTROL_API_IDENTITY_UNVERIFIED"]);
       expect(r.seen, `${view}: nothing was read from /v1 with an unverified identity`).toEqual([]);
       for (const p of new Set(r.results.map(x => x.path).filter(p => p.startsWith("/v1/")))) {
