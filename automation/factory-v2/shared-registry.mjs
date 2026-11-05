@@ -41,15 +41,25 @@ export function createSharedRegistry({docStore, ref, maxRetries = 8, backoffMs =
     cas: (key, expectedVersion, doc) => { const r = update(key, expectedVersion, doc); return r.ok ? {ok: true, sha: r.version} : {ok: false, sha: null, current: {sha: r.version, doc: r.current}}; },
     remove: (key, expectedVersion) => update(key, expectedVersion, null).ok,
     sections: () => Object.keys(readAll().doc.sections).sort(),
-    /** Every historical value of one section, oldest first (null where it was absent): lets readers detect deletion/rewind. */
+    /**
+     * Server-side stale-write probe: a whole-document write (current content + one marker section, all sidecars kept) whose parent is
+     * `oldSha`. A protected or simply moved branch must refuse it. Even if it were accepted it could only add the marker.
+     */
+    staleWriteProbe(oldSha, key, value) {
+      if (!KEY.test(key)) throw new Error(`REGISTRY_KEY_INVALID:${key}`);
+      const cur = readAll();
+      const sections = {...cur.doc.sections, [key]: value};
+      return docStore.cas(ref, oldSha, {...cur.doc, sections, seq: (cur.doc.seq ?? 0) + 1, phase: `stale-probe:${key}`}, sidecarsOf(sections));
+    },
+    /** Every historical value of one section (null where it was absent): lets readers detect deletion/rewind. */
     history: key => {
       const p = sidecarPath(key);
       if (p && docStore.historyOf) return docStore.historyOf(ref, p);
       return (docStore.history ? docStore.history(ref) : []).map(h => h.doc?.sections?.[key] ?? null);
     },
     /** task-lease Store contract (createIfAbsent/read/cas/remove) under `lease/<namespace>/<id>`; CAS on the lease VERSION like the ref store. */
-    leaseStore(namespace) {
-      const k = id => `lease/${namespace}/${id}`;
+    leaseStore(namespace, {keyPrefix = null} = {}) {
+      const k = id => (keyPrefix ? `${keyPrefix}${id}` : `lease/${namespace}/${id}`);
       return {
         kind: docStore.kind, namespace: `registry:${ref}:${namespace}`,
         read: id => readAll().doc.sections[k(id)] ?? null,
