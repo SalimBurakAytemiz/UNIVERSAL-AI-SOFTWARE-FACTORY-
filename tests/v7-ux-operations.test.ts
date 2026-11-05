@@ -1943,7 +1943,7 @@ __bi_describe('Builder I: renderer raw-error sweep', {timeout: 120_000}, () => {
   const leaked = (root: N) => all(root).some(n => n.children.length === 0 && /Error invoking remote method|uasco:api-get|\/v1\/\S*: HTTP/.test(n.textContent));
   const codes = (root: N) => all(root).filter(n => n.dataset.stateErrorCode !== undefined).map(n => [n.dataset.stateErrorCode, n.textContent]); // data-state-error-code (install.js keeps data-error-code for its own install-errors list)
 
-  const VIEWS = ["journey", "scheduler", "operations", "install", "matrix", "integrations", "audit", "posture"] as const;
+  const VIEWS = ["journey", "scheduler", "operations", "install", "matrix", "integrations", "audit", "posture", "queue", "readiness"] as const;
 
   describe("raw-error sweep — healthy real reads show no error code (control)", () => {
     for (const id of VIEWS) it(`${id}: no code line and no leaked bridge text`, async () => {
@@ -1983,7 +1983,7 @@ __bi_describe('Builder I: renderer raw-error sweep', {timeout: 120_000}, () => {
   // Files touched by an open PR are allow-listed here and reported as follow-ups (they are fixed or will be fixed in their own PR).
   const OPEN_PR_FOLLOW_UPS = new Set([
     // #371: audit.js and posture.js are fixed in the #371 follow-up
-    "views/queue.js", "views/readiness.js", "views/tower.js", // #377
+    // #377: tower.js has no direct sink; queue.js and readiness.js are fixed in the #377 follow-up
     "views/company.js", "views/academy.js", "views/domains.js", // #382 (fixed there)
     "views/executive.js"                              // #374
   ]);
@@ -2015,7 +2015,7 @@ __bi_describe('Builder I: renderer raw-error sweep', {timeout: 120_000}, () => {
     const old = files.filter(f => !OPEN_PR_FOLLOW_UPS.has(f) && /dataset:\{errorCode:safeErrorCode\(/.test(fs.readFileSync(path.join(rend, f), "utf8")));
     expect(old).toEqual([]);
     const users = files.filter(f => /dataset:\{stateErrorCode:safeErrorCode\(/.test(fs.readFileSync(path.join(rend, f), "utf8"))).sort();
-    for (const f of ["views/audit.js", "views/posture.js", "views/install.js", "views/integrations.js", "views/journey.js", "views/matrix.js", "views/operations.js", "views/scheduler.js"]) expect(users, f).toContain(f);
+    for (const f of ["views/audit.js", "views/posture.js", "views/queue.js", "views/readiness.js", "views/install.js", "views/integrations.js", "views/journey.js", "views/matrix.js", "views/operations.js", "views/scheduler.js"]) expect(users, f).toContain(f);
     expect(fs.readFileSync(path.join(rend, "views", "install.js"), "utf8")).toContain('dataset:{errorCode:e}'); // the install-errors list keeps its own attribute
   });
   it("each exemption still matches exactly one line (a stale exemption fails)", () => {

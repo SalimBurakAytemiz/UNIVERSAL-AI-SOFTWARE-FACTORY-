@@ -386,7 +386,7 @@ describe("Readiness — only already-allow-listed read-only GETs are used (prote
       expect(src).not.toMatch(/transition|performTransition|work-actions/);
     }
     const imports = moduleSpecifiers({source: read("views", "readiness.js")}).sort();
-    expect(imports).toEqual(["../components.js", "../forms.js", "../model.js", "../readiness-core.js", "../work-core.js"]);
+    expect(imports).toEqual(["../components.js", "../error-code.js", "../forms.js", "../model.js", "../readiness-core.js", "../work-core.js"]);
     expect(moduleSpecifiers({source: read("readiness-core.js")}).sort()).toEqual(["./executive-core.js", "./work-core.js"]);
     for (const m of ["readinessWorkRuns", "readinessReviews", "readinessEvidence", "readinessMissions"]) expect(read("views", "readiness.js")).toContain(`api.${m}(`);
     // api.js: tek apiPost çağrısı korunur (yeni POST yolu eklenmez); hazırlık erişimcileri yalnız sabit GET yollarını okur.
