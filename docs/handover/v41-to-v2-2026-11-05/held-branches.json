@@ -309,6 +309,20 @@
    "task": "none (Founder-held)",
    "head": "47d6c4baf3e0b8dd5c2a3acfc776e26c4dae9afd",
    "note": "scripts/ci/uasco-review/oauth-probe.mjs (CI path → Founder-tier); local-only until 2026-11-05, pushed by coordinator; patch-id dc7d770b"
+  },
+  {
+   "owner": "A",
+   "branch": "claude/builder-a-uasco-t0116-fu",
+   "task": "UASCO-T0116 (merged #332) review follow-up",
+   "head": "2dc4f374e18a9c3d52677b1576efa2167daff6a2",
+   "note": "docs only; patch-ids 1ba74af4+ceb9ef06; was local-only, pushed by coordinator"
+  },
+  {
+   "owner": "A",
+   "branch": "claude/builder-a-uasco-t0065-fu",
+   "task": "UASCO-T0065 (merged #322) review follow-up",
+   "head": "e5938fa7d9333ead8475604af0936cf7ace871e6",
+   "note": "tests only; patch-id 9bbc76b3; OmniRoute 15/15; was local-only, pushed by coordinator"
   }
  ]
 }

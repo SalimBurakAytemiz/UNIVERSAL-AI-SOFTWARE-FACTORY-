@@ -5,9 +5,9 @@ Each builder reported its unpushed local commits, comparing local and remote bra
 
 | Builder | Unpushed local work | Notes |
 |---|---|---|
-| A | **2 local-only follow-ups:** `t0116-fu` ee5366e0 (T0116 review NB-1/NB-2/LOW + manifest heartbeat line); `t0065-fu` f129c29e (T0065 omniroute-client pins). Requested from A as patches, to be pushed HELD. | T0117 d6a0cfe2 discarded (D owns T0117). Bell 2297c341 pushed by the coordinator. |
+| A | none (both local-only follow-ups were recovered and pushed HELD: `claude/builder-a-uasco-t0116-fu` 2dc4f374, `claude/builder-a-uasco-t0065-fu` e5938fa7) | T0117 d6a0cfe2 discarded (D owns T0117). Bell 2297c341 pushed by the coordinator. |
 | C | none | #403 (T0111, draft) 9b5740a2 delivered. Idle. |
-| D | **local-only:** `reviewer-oauth-probe` 47d6c4ba (Founder-held OAuth probe). Requested as a patch. | t0117 71acc4cf is held as a patch by the coordinator (prompts to be read; exclude trig_01BiCM). qa-n2-ps1a is superseded by the #361 head. qa-windows-flakes has nothing pending. |
+| D | none (the OAuth probe was recovered and pushed HELD: `claude/builder-d-reviewer-oauth-probe` 47d6c4ba) | t0117 71acc4cf is held as a patch by the coordinator (prompts to be read; exclude trig_01BiCM). qa-n2-ps1a is superseded by the #361 head. qa-windows-flakes has nothing pending. |
 | E | none | 9 branches: PRs #364 #372 #374 #381 #386 #390; HELD command-field-on-364 23208871, attention-flags a5b1a18b, reconnect-f1 3bb7bf21. AUD-022 diffs are preserved in `founder-proposals/aud022/` (sha256 verified). |
 | F | none | Current stack: #385 aff94627 → polish-2-2 a9f48863 → polish-3-2 11c08cad → a11y-2 32eb0aba. Superseded (do not merge): design-system 73300c9f (#365 closed), layout-fixes 4d5df0a1 (#376), polish-2 d363e08f, polish-3 cb11201e, a11y 4c6004af. Open item: re-pin the visual-parity palette (Founder). |
 | G | not yet reported | Assurance-core newest-500 work in progress. |
@@ -24,6 +24,8 @@ C. Open PRs on SPLIT/BLOCKED IDs (FOUNDER_REQUIRED): T0007 #370; T0011 #372 #381
 
 D. Other:
 - CLOUD-T0016 is used in #361 and in merged commits, but it is absent from the index.
-- UASCO-T0124 (#396) is a supervisor-only register task ("LLM yazmaz"). A builder PR on it may clash with the task's owner. **Verified by the coordinator** in the Founder's V4.1 matrix (`02_V4_1_EXECUTION_MATRIX.json`: model `deterministic`, targetFiles `EXT:register dalı (supervisor)`, tierReason `register/Founder aksiyonu/salt-okur`). #396 is therefore removed from auto-merge and is FOUNDER_REQUIRED.
+- UASCO-T0124 (#396) is a supervisor-only register task ("LLM yazmaz"). A builder PR on it may clash with the task's owner. **Verified by the coordinator** in the Founder's V4.1 matrix (in the repo inside `docs/planning/v41/UASCO_V4_1_CLOUD_MERGED.zip` → `02_V4_1_EXECUTION_MATRIX.json`, T0124 record from line 5511; prMerge: "Supervisor deterministik kayıt: yalnız register dalı (CI'sız), yalnız araç çıktısı; LLM yazmaz"; model `deterministic`, targetFiles `EXT:register dalı (supervisor)`, tierReason `register/Founder aksiyonu/salt-okur`). #396 is therefore removed from auto-merge and is FOUNDER_REQUIRED.
 
 The index is supervisor-owned and was not edited.
+
+Note: `UASCO_REMAINING_WORK.md` lists RW-048 (= T0124) with assignee "A". The two planning documents disagree, which is why this is left to the Founder.
