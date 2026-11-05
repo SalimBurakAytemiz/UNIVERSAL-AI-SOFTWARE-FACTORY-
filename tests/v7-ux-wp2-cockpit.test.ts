@@ -3,6 +3,8 @@ import {describe, it, expect} from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import {pathToFileURL} from "node:url";
+import os from "node:os";
+import {HDR, api as realApi, rmTmp, setup} from "./support/relfx.js";
 
 const rend = path.resolve(__dirname, "..", "apps", "desktop", "renderer");
 const load = async (...p: string[]): Promise<any> => import(pathToFileURL(path.join(rend, ...p)).href);
@@ -395,4 +397,100 @@ describe("UI-105 route-titled number-free loading skeleton", () => {
     const fc = css.slice(css.indexOf("@media (forced-colors:active)"));
     expect(/^\s*\.skel-block,[^{]*\{[^}]*border:1px solid CanvasText/m.test(fc)).toBe(true);
   });
+});
+
+// //TR: Founder Cockpit KPI dürüstlüğü, GERÇEK control-api (buildServer, süreç içi inject) ile: kısmi okuma (bir kaynak ERROR, diğerleri VERIFIED) karoda "—" + durum gösterir, asla 0/uydurma sayı değil; 200'de kesilen onay listesi karoda açıkça "yalnız ilk 200/toplam" der.
+describe("Founder Cockpit KPI honesty against the real control-api", () => {
+  const realGet = (app: any) => async (p: string) => {
+    const r = await app.inject({method: "GET", url: p, headers: HDR});
+    if (r.statusCode !== 200) throw new Error(`${p}: HTTP ${r.statusCode}`);
+    return JSON.parse(r.body);
+  };
+  const val = (root: N, id: string) => cls(kpi(root, id), "kpi-value").map(n => n.textContent);
+  const qual = (root: N, id: string) => cls(kpi(root, id), "kpi-qual").map(n => n.textContent).join(" ");
+
+  it("partial read: a broken workforce registry is ERROR -> '—' with the honest state, never 0; Work OS tiles stay VERIFIED with real numbers", async () => {
+    const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-cockpit-"));
+    try {
+      const c = setup(tmp, "tA");
+      fs.mkdirSync(path.join(tmp, "registries"), {recursive: true});
+      fs.writeFileSync(path.join(tmp, "registries", "agents.json"), JSON.stringify({agents: "not-a-list"}));
+      const app = await realApi(c);
+      try {
+        const home = await load("views", "home.js");
+        const {ctx} = await mkCtx(realGet(app));
+        const root = await home.render(ctx, {id: "home"});
+        expect(kpi(root, "workforce").dataset.state).toBe("ERROR");
+        expect(val(root, "workforce")).toEqual(["—", "—"]);
+        expect(kpi(root, "workforce").textContent).toContain(`${ctx.t("chip.UNVERIFIED")} · ${ctx.t("state.ERROR")}`);
+        expect(kpi(root, "workforce").textContent).not.toMatch(/\b0\b/);
+        expect(kpi(root, "projects").dataset.state).toBe("VERIFIED");   // positive control: the healthy source still shows its real count
+        expect(val(root, "projects")).toEqual(["1"]);
+        expect(val(root, "missions")).toEqual(["1"]);
+      } finally { await app.close(); }
+    } finally { rmTmp(tmp); }
+  }, 120_000);
+
+  it("partial read: a tampered Work OS journal makes projects/missions/approvals ERROR -> '—' with the honest state and the failed note, never 0", async () => {
+    const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-cockpit-"));
+    try {
+      const c = setup(tmp, "tA");
+      const j = path.join(c.dataDir, "journal.jsonl"), lines = fs.readFileSync(j, "utf8").split("\n");
+      lines[0] = lines[0].replace('"name":"P"', '"name":"X"');   // hash chain broken -> the store refuses to read
+      fs.writeFileSync(j, lines.join("\n"));
+      fs.rmSync(path.join(c.dataDir, "snapshot.json"), {force: true});
+      const app = await realApi(c);
+      try {
+        const home = await load("views", "home.js");
+        const {ctx} = await mkCtx(realGet(app));
+        const root = await home.render(ctx, {id: "home"});
+        for (const id of ["projects", "missions", "approvals"]) {
+          expect(kpi(root, id).dataset.state, id).toBe("ERROR");
+          expect(val(root, id), id).toEqual(["—"]);
+          expect(qual(root, id), id).toBe(`${ctx.t("chip.UNVERIFIED")} · ${ctx.t("state.ERROR")}`);
+        }
+        expect(all(root).filter(n => n.attrs.get("role") === "status").map(n => n.textContent)).toContain(ctx.t("cockpit.failed"));
+      } finally { await app.close(); }
+    } finally { rmTmp(tmp); }
+  }, 120_000);
+
+  it("truncated: more than 200 missions awaiting approval -> the approvals tile says only the first 200 of the real total are counted", async () => {
+    const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-cockpit-"));
+    try {
+      const c = setup(tmp, "tA", {authorize: false});   // mission 1 stays DRAFT
+      for (let i = 0; i < 201; i++) {
+        const m = c.store.createMission({tenantId: "tA", projectId: c.projectId, title: `M${i}`, objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
+        c.store.transitionMission({tenantId: "tA"}, m.missionId, "PREFLIGHT", "t", "FOUNDER_LOCAL");
+      }
+      const app = await realApi(c);
+      try {
+        const home = await load("views", "home.js");
+        const {ctx} = await mkCtx(realGet(app));
+        const root = await home.render(ctx, {id: "home"});
+        expect(kpi(root, "approvals").dataset.state).toBe("VERIFIED");
+        expect(val(root, "approvals")).toEqual(["200"]);
+        expect(qual(root, "approvals")).toContain(ctx.t("kpi.q.approvalsTruncated", {shown: "200", total: "201"}));
+        expect(qual(root, "approvals")).not.toContain(ctx.t("kpi.q.approvals"));
+      } finally { await app.close(); }
+    } finally { rmTmp(tmp); }
+  }, 180_000);
+
+  it("not truncated (positive control): 2 awaiting approvals -> exact count and the normal qualifier", async () => {
+    const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-cockpit-"));
+    try {
+      const c = setup(tmp, "tA", {authorize: false});
+      for (let i = 0; i < 2; i++) {
+        const m = c.store.createMission({tenantId: "tA", projectId: c.projectId, title: `M${i}`, objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
+        c.store.transitionMission({tenantId: "tA"}, m.missionId, "PREFLIGHT", "t", "FOUNDER_LOCAL");
+      }
+      const app = await realApi(c);
+      try {
+        const home = await load("views", "home.js");
+        const {ctx} = await mkCtx(realGet(app));
+        const root = await home.render(ctx, {id: "home"});
+        expect(val(root, "approvals")).toEqual(["2"]);
+        expect(qual(root, "approvals")).toBe(ctx.t("kpi.q.approvals"));
+      } finally { await app.close(); }
+    } finally { rmTmp(tmp); }
+  }, 120_000);
 });
