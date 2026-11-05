@@ -474,5 +474,25 @@ export function registerCloudJobsStatusCases(): void {
       expect([0, 1, 100, 101, Number.NaN, 2.5, -5, Number.POSITIVE_INFINITY].map(l => q.list(TENANT, l).length)).toEqual([1, 1, 100, 100, 100, 100, 1, 100]);
       expect(q.list(TENANT).length).toBe(100);
     });
+
+    // //TR: NB-1 (#343): GERÇEK main.mjs B4-ALLOWLIST bloğu (çıkarılıp değerlendirilir) bulut iş yollarını birebir sabitler; Kurucu girişi gelmeden önce izinli satırlar da reddedilmelidir.
+    it("real main.mjs B4-ALLOWLIST pins /v1/cloud/jobs exactly (bypass inputs refused; allowed rows gated by CLOUD_JOBS_PENDING)", () => {
+      const CLOUD_JOBS_PENDING = !mainAllows(CLOUD_JOBS_PATH);
+      // once the Founder line exists, an emptied/neutralised entry must not silently fall back to "pending"
+      expect(CLOUD_JOBS_PENDING, "CLOUD_JOBS_GET_RES present but /v1/cloud/jobs refused").toBe(!/\bCLOUD_JOBS_GET_RES\b/.test(allowBlock));
+      const allowed = [CLOUD_JOBS_PATH, `${CLOUD_JOBS_PATH}/abc`, `${CLOUD_JOBS_PATH}/a${"b".repeat(127)}`, `${CLOUD_JOBS_PATH}/job-st-0001`, `${CLOUD_JOBS_PATH}/a1._:-z`];
+      expect(allowed[2]!.length - CLOUD_JOBS_PATH.length - 1).toBe(128);
+      const refused = [`${CLOUD_JOBS_PATH}?x=1`, `${CLOUD_JOBS_PATH}/`, `${CLOUD_JOBS_PATH}/abc/`, `${CLOUD_JOBS_PATH}/a%2Fb`, `${CLOUD_JOBS_PATH}/%2e%2e`, `${CLOUD_JOBS_PATH}//abc`,
+        `${CLOUD_JOBS_PATH}/abc/sub`, `${CLOUD_JOBS_PATH}/a${"b".repeat(128)}`, `${CLOUD_JOBS_PATH}/.abc`, `${CLOUD_JOBS_PATH}/ab`, "/V1/cloud/jobs", `/V1/cloud/jobs/abc`,
+        `${CLOUD_JOBS_PATH}/ab\u00e7d`, `${CLOUD_JOBS_PATH}/abc\n`, `${CLOUD_JOBS_PATH}\n`, `${CLOUD_JOBS_PATH}#frag`, `${CLOUD_JOBS_PATH}/abc#frag`, `${CLOUD_JOBS_PATH}/abc?x=1`,
+        `${CLOUD_JOBS_PATH}/a b c`, `${CLOUD_JOBS_PATH}/abc=1`, `${CLOUD_JOBS_PATH}/../health`, `${CLOUD_JOBS_PATH}x`, `${CLOUD_JOBS_PATH}/abc\u0000`];
+      expect(refused[7]!.length - CLOUD_JOBS_PATH.length - 1).toBe(129);
+      for (const p of allowed) expect(mainAllows(p), JSON.stringify(p)).toBe(!CLOUD_JOBS_PENDING);
+      for (const p of refused) expect(mainAllows(p), JSON.stringify(p)).toBe(false);
+      // the proposed Founder line and the real one agree row-for-row (pre-merge this proves the table itself)
+      for (const p of allowed) expect(proposedAllows(p), JSON.stringify(p)).toBe(true);
+      for (const p of refused) expect(proposedAllows(p), JSON.stringify(p)).toBe(false);
+      if (!CLOUD_JOBS_PENDING) expect(allowBlock).toContain(String.raw`const CLOUD_JOBS_GET_RES=[/^\/v1\/cloud\/jobs$/,/^\/v1\/cloud\/jobs\/[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$/];`);
+    });
   });
 }
