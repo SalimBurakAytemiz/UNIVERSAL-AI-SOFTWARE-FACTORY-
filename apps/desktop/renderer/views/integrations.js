@@ -23,7 +23,7 @@ function stateBlock(ctx,state,source,message){
   return h(doc,"div",{class:`integ-state state-${st.toLowerCase()}`,role:"status",dataset:{integState:st,source}},
     h(doc,"p",{class:"integ-state-head"},statePill(ctx,failKind(st)),h(doc,"strong",{text:ctx.t(`integrations.state.${st}`)})),
     h(doc,"p",{class:"note",text:ctx.t(`integrations.hint.${st}`,{source:`GET ${INTEG_SOURCE_PATHS[source]}`})}),
-    safeErrorCode(message)?h(doc,"p",{class:"note mono",dataset:{errorCode:safeErrorCode(message)},text:safeErrorCode(message)}):null);
+    safeErrorCode(message)?h(doc,"p",{class:"note mono",dataset:{stateErrorCode:safeErrorCode(message)},text:safeErrorCode(message)}):null);
 }
 
 function sourcesPanel(ctx,res,a){
