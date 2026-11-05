@@ -10,6 +10,7 @@ import {spawnGitSync} from "../automation/lib/git-isolation.mjs";
 import {WorkOsStore} from "../core/workos/store.js";
 import {EvidenceIndex, EvidenceInputError, TAIL_BYTES} from "../core/evidence/index.js";
 import type {EvidenceItem} from "../core/evidence/index.js";
+import {registerArtifactDigestManifestSuite} from "./support/artifact-digest-manifest.cases.js";
 import {buildServer} from "../apps/control-api/src/server.js";
 
 const T = 60_000;
@@ -731,3 +732,4 @@ describe("PQ-006: no user-directory path leaves the Evidence API", () => {
     }
   });
 });
+registerArtifactDigestManifestSuite();
