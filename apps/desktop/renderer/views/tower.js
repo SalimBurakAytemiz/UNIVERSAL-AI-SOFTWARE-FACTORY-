@@ -9,11 +9,14 @@ import {attentionNotes} from "./attention-notes.js";
 import {buildCampusInput} from "../control-tower/feed.js";
 import {mountCampus} from "../control-tower/mount.js";
 import {buildStageTimeline,formatMs} from "../trace-core.js";
+import {loadCloudJobs,cloudJobsPanel} from "./cloud-connection.js";
 
 const okData=r=>r.ok?r.data:null;
 export async function render(ctx){
   const doc=ctx.doc,api=ctx.api;
   const [health,phase0,install,sched,agents,caps,tools,retry,runs,att,control,cockpit,roleList,workRuns]=await Promise.all([api.health(),api.raw("/v1/phase0"),api.raw("/v1/install"),api.raw("/v1/scheduler"),api.raw("/v1/agents"),api.raw("/v1/capabilities"),api.raw("/v1/adapters"),api.raw("/v1/retry"),api.runs(),api.attention(),api.control(),api.cockpit(),api.roles(),api.workRuns()]);
+  // //TR: CLOUD-T0005: gerçek bulut iş durumu GET /v1/cloud/jobs ile okunur; masaüstü izin listesi/route yoksa dürüst UNAVAILABLE/NOT_CONFIGURED, asla örnek veri.
+  const cloudJobs=await loadCloudJobs(api);
   const campus=mountCampus(ctx,buildCampusInput({cockpit,control,roles:roleList,workRuns}));
   const s=okData(sched),completed=Array.isArray(s?.phases)?s.phases.filter(x=>x.status==="COMPLETED").length:0;
   const fact=(labelKey,value,state)=>h(doc,"div",{class:"fact",dataset:{fact:labelKey}},h(doc,"span",{class:"fact-label",text:ctx.t(labelKey)}),h(doc,"strong",{class:"fact-value",text:value}),state?chip(ctx,{state,value:1}):null);
@@ -68,6 +71,7 @@ export async function render(ctx){
         retryFact(ctx,retry,fact))),
     stopCard,
     panel(ctx,{titleKey:"tower.attention",id:"tower-attention"},attention,...attentionNotes(ctx,att.queue)),
+    h(doc,"div",{class:"panel",id:"tower-cloud-jobs"},cloudJobsPanel(ctx,cloudJobs)),
     panel(ctx,{titleKey:"tower.runs",id:"tower-runs"},runs.state!=="VERIFIED"?stateNote(ctx,runs.state):runList.length?h(doc,"div",{class:"btn-row"},runList):emptyNote(ctx,"tower.noRuns")),
     panel(ctx,{titleKey:"tower.selected",id:"tower-selected"},selected,h(doc,"h3",{text:ctx.t("tower.events")}),eventsEl,h(doc,"h3",{text:ctx.t("tower.trace.title")}),traceEl,h(doc,"h3",{text:ctx.t("tower.logs")}),logButtons,logText));
 }
