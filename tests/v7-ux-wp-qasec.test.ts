@@ -1144,10 +1144,16 @@ describe("UASCO-T0006 — Assurance view over the REAL Control API (renderer -> 
     expect(scanRow(r, none.runId)!.dataset.scan).toBe("NOT_EXECUTED");
   });
 
-  it("error: wrong bridge token -> identity unverified, every read a real 403; every panel says error, no zero counts are presented as measured", async () => {
+  it("error: wrong bridge token -> the bridge's identity proof fails before any /v1 read (and the server itself would answer 403); every panel says error, no zero counts are presented as measured", async () => {
     seedRun(SEC());
     const app = mkApp();
-    const {root: r} = await renderReal(injectT(app), "w".repeat(32));
+    // the server's own answer to the wrong token, asserted directly: the renderer never gets this far because the bridge stops at the identity check
+    for (const url of READS) {
+      const direct = await app.inject({method: "GET", url, headers: {"x-uasco-control-token": "w".repeat(32), host: `127.0.0.1:${PORT}`}});
+      expect(direct.statusCode, url).toBe(403);
+    }
+    const {root: r, calls} = await renderReal(injectT(app), "w".repeat(32));
+    expect([...calls].sort()).toEqual([...READS].sort());                             // the view did try its four reads; each failed at the bridge identity check
     for (const id of ["qa-posture", "qa-security", "as-testrep", "assurance-list"]) expect(stateNotes(r, id), id).toEqual(["error"]);
     expect(panelText(r, "qa-posture")).not.toContain("0 runs ·");
     expect(byData(r, "runId").filter(n => n.tagName === "TR")).toHaveLength(0);
