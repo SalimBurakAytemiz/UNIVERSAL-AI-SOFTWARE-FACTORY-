@@ -1,0 +1,16 @@
+diff --git a/apps/desktop/main.mjs b/apps/desktop/main.mjs
+index b64f2eb..953f1cb 100644
+--- a/apps/desktop/main.mjs
++++ b/apps/desktop/main.mjs
+@@ -244,8 +244,9 @@ function deliveryExportCheck(body,runId,deliveriesRoot,fsMod,pathMod,cryptoMod){
+   if(!DELIVERY_RUN_ID_RE.test(String(runId))||!rec||typeof rec!=="object"||rec.runId!==runId||!DELIVERY_HASH_RE.test(String(rec.exportArtifactHash))||rec.artifactPath!==`deliveries/${rec.runId}/${rec.exportArtifactHash}.zip`)return {ok:false,reason:"DELIVERY_RECORD_INVALID"};
+   if(body.sha256!==rec.exportArtifactHash||body.fileState!=="VERIFIED")return {ok:false,reason:"DELIVERY_ARTIFACT_HASH_MISMATCH"};
+   if(typeof deliveriesRoot!=="string"||!pathMod.isAbsolute(deliveriesRoot))return {ok:false,reason:"DELIVERY_PATH_REJECTED"};
+-  let real,expected;try{real=fsMod.realpathSync(String(body.path));expected=fsMod.realpathSync(pathMod.join(deliveriesRoot,rec.runId,`${rec.exportArtifactHash}.zip`))}catch{return {ok:false,reason:"DELIVERY_ARTIFACT_MISSING"}}
+-  if(real!==expected)return {ok:false,reason:"DELIVERY_PATH_REJECTED"};
++  // AUD-022: body.path sanitizePostBody/scrubText ile "[path]" olur; dosya yalnız veri dizini + doğrulanmış kayıttan türetilir.
++  let real,rootReal;try{rootReal=fsMod.realpathSync(deliveriesRoot);real=fsMod.realpathSync(pathMod.join(deliveriesRoot,rec.runId,`${rec.exportArtifactHash}.zip`))}catch{return {ok:false,reason:"DELIVERY_ARTIFACT_MISSING"}}
++  if(!real.startsWith(rootReal+pathMod.sep))return {ok:false,reason:"DELIVERY_PATH_REJECTED"};
+   let bytes;try{bytes=fsMod.readFileSync(real)}catch{return {ok:false,reason:"DELIVERY_ARTIFACT_MISSING"}}
+   const sha=cryptoMod.createHash("sha256").update(bytes).digest("hex");
+   if(sha!==rec.exportArtifactHash)return {ok:false,reason:"DELIVERY_ARTIFACT_HASH_MISMATCH"};

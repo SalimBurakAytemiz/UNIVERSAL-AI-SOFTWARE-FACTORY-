@@ -295,6 +295,13 @@
    "task": "UASCO-T0117",
    "head": "71acc4cf (builder local), code patch sha256 d9e380ad, expected tree 26eec82b",
    "note": "routine prompts; coordinator to read prompts before capture; exclude trig_01BiCM (contains e-mail)"
+  },
+  {
+   "owner": "H",
+   "branch": "claude/builder-h-work-polish",
+   "task": "V3-T1023 (to be re-tagged UASCO-T0012 on rebase)",
+   "head": "da252f6c (builder-reported)",
+   "note": "waits #366; FOUNDER_REQUIRED as tagged"
   }
  ]
 }

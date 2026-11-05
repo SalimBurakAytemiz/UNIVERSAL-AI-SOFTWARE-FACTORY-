@@ -1,0 +1,16 @@
+diff --git a/tests/v7-m1a-desktop.test.ts b/tests/v7-m1a-desktop.test.ts
+index 597e635..1a6c440 100644
+--- a/tests/v7-m1a-desktop.test.ts
++++ b/tests/v7-m1a-desktop.test.ts
+@@ -422,7 +422,10 @@ describe("M1a c2 protected main-process wiring (pure blocks evaluated in isolati
+       expect(b.deliveryExportCheck(body, RUN2, rootDir, fs, path, crypto).reason).toBe("DELIVERY_RECORD_INVALID");
+       expect(b.deliveryExportCheck({...body, sha256: H2}, RUN, rootDir, fs, path, crypto).reason).toBe("DELIVERY_ARTIFACT_HASH_MISMATCH");
+       const outside = path.join(tmp, "elsewhere.zip"); fs.writeFileSync(outside, bytes);
+-      expect(b.deliveryExportCheck({...body, path: outside}, RUN, rootDir, fs, path, crypto).reason).toBe("DELIVERY_PATH_REJECTED");
++      // AUD-022: the server's body.path is never trusted (the bridge scrubs it to "[path]"); a foreign path is ignored and only <data>/deliveries/<run>/<hash>.zip is handed out
++      const foreign = b.deliveryExportCheck({...body, path: outside}, RUN, rootDir, fs, path, crypto);
++      expect(foreign.ok).toBe(true); expect(Buffer.compare(foreign.bytes, bytes)).toBe(0);
++      expect(b.deliveryExportCheck({...body, path: "[path]"}, RUN, rootDir, fs, path, crypto).ok).toBe(true);
+       fs.writeFileSync(file, Buffer.concat([bytes, Buffer.from("x")]));
+       expect(b.deliveryExportCheck(body, RUN, rootDir, fs, path, crypto).reason).toBe("DELIVERY_ARTIFACT_HASH_MISMATCH");
+       fs.rmSync(file);

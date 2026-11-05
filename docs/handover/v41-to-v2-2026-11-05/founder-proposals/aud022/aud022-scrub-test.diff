@@ -1,0 +1,17 @@
+diff --git a/tests/support/delivery-export-aud022.cases.ts b/tests/support/delivery-export-aud022.cases.ts
+index 1d84905..9f777e7 100644
+--- a/tests/support/delivery-export-aud022.cases.ts
++++ b/tests/support/delivery-export-aud022.cases.ts
+@@ -86,8 +86,10 @@ export function registerDeliveryExportAud022Cases(): void {
+       // Windows ve POSIX veri dizinleri de aynı biçimde silinir (paketli uygulama: %APPDATA% / ~/.config)
+       for (const p of ["C:\\Users\\Founder\\AppData\\Roaming\\UASCO\\workos\\deliveries\\run_x\\h.zip", "C:/Users/Founder/AppData/Roaming/UASCO/deliveries/h.zip", "/home/founder/.config/UASCO/workos/deliveries/run_x/h.zip", "/Users/founder/Library/Application Support/UASCO/deliveries/h.zip", "/tmp/x/deliveries/h.zip"])
+         { const out = scrub(p); expect(out.startsWith("[path]"), p).toBe(true); expect(out, p).not.toBe(p); expect(fs.existsSync(out)).toBe(false); }
+-      // not: boşluklu yol (macOS "Application Support") yalnız boşluğa kadar silinir; kalan kısım metinde kalır
+-      expect(scrub("/Users/founder/Library/Application Support/UASCO/x.zip")).toBe("[path] Support/UASCO/x.zip");
++      // boşluklu yol (macOS "Application Support"): bugün yalnız boşluğa kadar silinir ("[path] Support/…"); scrubText sertleştirmesi uygulanınca tamamı silinir ve test kendiliğinden sıkılaşır
++      const spaced = scrub("/Users/founder/Library/Application Support/UASCO/x.zip");
++      expect(["[path] Support/UASCO/x.zip", "[path]"]).toContain(spaced);
++      if (spaced === "[path]") expect(scrub("C:\\Users\\Ali Veli\\AppData\\x.zip")).toBe("[path]");
+     });
+ 
+     it("the real main.mjs export path: today it fails with DELIVERY_ARTIFACT_MISSING only because of the scrubbed path (the unscrubbed body passes); once main.mjs is fixed this tightens to a real export", async () => {

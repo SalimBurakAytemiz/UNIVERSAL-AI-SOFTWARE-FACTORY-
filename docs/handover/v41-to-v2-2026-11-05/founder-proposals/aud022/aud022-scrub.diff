@@ -1,0 +1,14 @@
+diff --git a/apps/desktop/main.mjs b/apps/desktop/main.mjs
+index b64f2eb..1f8db71 100644
+--- a/apps/desktop/main.mjs
++++ b/apps/desktop/main.mjs
+@@ -267,7 +267,8 @@ async function api(pathName,options={}){
+ /** Hata gövdesinden token ve yerel mutlak yol sızıntısını temizler (renderer yalnız kısa, güvenli hata alanlarını görür). */
+ function scrubText(v,max=300){
+   let t=String(v??"");if(token&&t.includes(token))t=t.split(token).join("[redacted]");
+-  return t.replace(/[A-Za-z]:[\\/][^\s"']*/g,"[path]").replace(/\/(?:Users|home|var|tmp|etc|opt|root)\/[^\s"']*/g,"[path]").slice(0,max);
++  // AUD-022 yan bulgu: boşluklu yol bileşenleri (ör. "Application Support", "Program Files", "Ali Veli") yolun devamı (/ veya \\) geliyorsa yolla birlikte silinir.
++  return t.replace(/[A-Za-z]:[\\/][^\s"']*(?: [^\s"'/\\:]+(?=[/\\])[^\s"']*)*/g,"[path]").replace(/\/(?:Users|home|var|tmp|etc|opt|root)\/[^\s"']*(?: [^\s"'/\\:]+(?=[/\\])[^\s"']*)*/g,"[path]").slice(0,max);
+ }
+ function sanitizePostBody(status,parsed){
+   if(parsed===null||typeof parsed!=="object"||Array.isArray(parsed))return status>=400?{error:"NON_JSON_ERROR"}:{};
