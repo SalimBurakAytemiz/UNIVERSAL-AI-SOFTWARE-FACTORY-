@@ -1,3 +1,4 @@
+// //TR: Bu test (Builder I, Projeler UX) gerçek control-api üzerinde studio okuma hatasının açıklandığını, "Oluşturuldu" alanının tarih taşıdığını ve sandbox UNAVAILABLE iken dev-run Başlat/Yeniden başlat düğmelerinin görünür nedenle kapalı olduğunu doğrular.
 // Builder I — Projects / Project Studio UX, against the REAL control-api (buildServer + app.inject) behind the desktop
 // bridge's own GET/POST allow-lists. Each test pins one defect fix and carries a positive control:
 //  (1) a studio read that fails says what could not be read, the HTTP status and that it is not an empty result (not a bare "Error");
