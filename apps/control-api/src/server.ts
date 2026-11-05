@@ -71,6 +71,8 @@ import {registerRoleStatusRoutes} from "./routes/role-status.js";
 // //TR: COORD korumalı paket 4a (LANE-B-vertical-flow-wiring, LANE-B-run-readiness, LANE-B-run-summaries, LANE-A-readiness-allowlist): birleşmiş ama kayıtsız salt-okunur akış route'ları (proje koşu-hazırlığı ve hafif sayfalı koşu özeti).
 import {registerReadinessRoutes} from "./routes/readiness.js";
 import {registerRunSummaryRoutes} from "./routes/run-summaries.js";
+import {registerCloudJobRoutes} from "./routes/cloud-jobs.js";
+import type {CloudJobQueue} from "./cloud/jobs.js";
 // //TR: COORD korumalı paket 4b (LANE-B-batch-4b, LANE-C-flow-analysis, LANE-B-devrun-bridge B-RUN-1): analiz adımı/plan route'ları Lane C'nin AnalysisFlow'u üzerinde; teslim edilen ürünü yalnız doğrulanmış sandbox içinde çalıştıran start/stop/status route'ları.
 import {registerAnalysisRoutes} from "./routes/analysis.js";
 import {AnalysisFlow,NO_ANALYSIS_BUILDER,claudeAnalysisReadiness} from "../../../core/workos/crew/analysis.js";
@@ -84,12 +86,12 @@ const DEFAULT_RUN_ROLE_ID=bindingForFunction("developer").roleId;
 // //TR: B1: buildServer testlerin ve CLI başlatmanın ortak girişidir; varsayılanlar eski sabit davranışla aynıdır (127.0.0.1 bind, token/Host kontrolü), opts yalnızca test enjeksiyonu içindir.
 // //TR: B3a: executors yalnız programatik test enjeksiyonudur; gerçek adapter yalnız UASCO_WORKOS_EXECUTOR=local-claude ile seçilir. runner.enabled (veya UASCO_WORKOS_RUNNER=1) olmadan engine tick'i başlamaz.
 // //TR: PS-1A: controlRoot provenance/ayar kontrol köküdür (paketli: userData, geliştirme: repo); studio/executorSetup yalnız test enjeksiyonudur (sahte provenance yakalayıcı, CLI keşfi, dev-run zamanlamaları, ZIP sınırları).
-export interface BuildServerOptions{controlToken?:string;runtime?:string;port?:number;dataDir?:string;repoRoot?:string;tenantId?:string;orgId?:string;actor?:string;policyContext?:Partial<ActionPolicyContext>;logger?:boolean;executors?:ExecutorPair;runner?:{enabled?:boolean;intervalMs?:number}&Partial<Pick<RunnerOptions,"leaseTtlMs"|"maxRemediations"|"maxRetries"|"retryBackoffMs"|"testTimeoutMs"|"executorTimeoutMs"|"security">>;
+export interface BuildServerOptions{cloudJobQueue?:CloudJobQueue|null;controlToken?:string;runtime?:string;port?:number;dataDir?:string;repoRoot?:string;tenantId?:string;orgId?:string;actor?:string;policyContext?:Partial<ActionPolicyContext>;logger?:boolean;executors?:ExecutorPair;runner?:{enabled?:boolean;intervalMs?:number}&Partial<Pick<RunnerOptions,"leaseTtlMs"|"maxRemediations"|"maxRetries"|"retryBackoffMs"|"testTimeoutMs"|"executorTimeoutMs"|"security">>;
   controlRoot?:string;studio?:{zipLimits?:Partial<ZipLimits>;devrun?:Partial<Pick<DevRunOptions,"startTimeOf"|"startWaitMs"|"graceMs"|"probeIntervalMs"|"stopPollMs"|"logRingBytes"|"logTailBytes"|"treeSnapshotMs">>};executorSetup?:Pick<ExecutorSetupOptions,"captureProvenance"|"findClaudeCli">;
   // //TR: SBX-GATE: sandbox yalnız programatik test enjeksiyonudur (testlerdeki sahte sağlayıcı); env/config/journal/API gövdesi/masaüstü ayarı sağlayıcı kaydedemez. Seçenek hiç verilmezse Linux'ta varsayılan LinuxUnshareSandboxProvider denenir; selfTest geçmeden hiçbir proje kodu yürütülmez (SANDBOX_UNAVAILABLE). Açıkça null/undefined verilirse sağlayıcı yoktur ve yürütme her zaman SANDBOX_UNAVAILABLE ile reddedilir.
   sandbox?:SandboxProvider|null;workosStoreOptions?:WorkOsStoreOptions}
 export function buildServer(opts:BuildServerOptions={}){
-const app=Fastify({logger:opts.logger??true,requestIdHeader:"x-request-id",genReqId:()=>crypto.randomUUID(),bodyLimit:64*1024,frameworkErrors});
+const app=Fastify({maxParamLength:128,logger:opts.logger??true,requestIdHeader:"x-request-id",genReqId:()=>crypto.randomUUID(),bodyLimit:64*1024,frameworkErrors});
 // //TR: LANE-B-error-contract: Fastify'nin kendi ürettiği hatalar (bozuk JSON, içerik türü, gövde sınırı, bilinmeyen rota) sabit {error:"KOD"} gövdesine çevrilir; route düzeyindeki yanıtlar değişmez.
 registerErrorContract(app);
 const readJson=(p:string)=>JSON.parse(fs.readFileSync(p,"utf8"));
@@ -272,6 +274,8 @@ registerTaskRoutes(app,laneDeps);
 registerTaskRunRoutes(app,laneDeps);
 // //TR: COORD korumalı paket 4a (LANE-B-run-summaries): GET /v1/run-summaries salt-okunur, sayfalı, tenant kapsamlı koşu özeti (kanıt/checkpoint dizisi yok); eski /v1/work-runs değişmez.
 registerRunSummaryRoutes(app,laneDeps);
+// //TR: CLOUD-T0005: salt-okunur bulut iş durumu (GET /v1/cloud/jobs[/:id]); kuyruk verilene kadar dürüst NOT_CONFIGURED.
+registerCloudJobRoutes(app,{queue:()=>opts.cloudJobQueue??null,scope});
 registerMemoryRoutes(app,laneDeps);
 registerKnowledgeRoutes(app,laneDeps);
 registerAttentionRoutes(app,laneDeps);
