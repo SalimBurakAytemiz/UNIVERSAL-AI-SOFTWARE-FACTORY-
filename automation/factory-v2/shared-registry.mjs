@@ -46,7 +46,7 @@ export function createSharedRegistry({docStore, ref, maxRetries = 8, backoffMs =
      * `oldSha`. A protected or simply moved branch must refuse it. Even if it were accepted it could only add the marker.
      */
     staleWriteProbe(oldSha, key, value) {
-      if (!KEY.test(key)) throw new Error(`REGISTRY_KEY_INVALID:${key}`);
+      if (!KEY.test(key) || key.includes("..")) throw new Error(`REGISTRY_KEY_INVALID:${key}`);
       const cur = readAll();
       const sections = {...cur.doc.sections, [key]: value};
       return docStore.cas(ref, oldSha, {...cur.doc, sections, seq: (cur.doc.seq ?? 0) + 1, phase: `stale-probe:${key}`}, sidecarsOf(sections));
