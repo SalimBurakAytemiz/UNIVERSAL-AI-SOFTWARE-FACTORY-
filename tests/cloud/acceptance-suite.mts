@@ -7,7 +7,7 @@ import {createHash, randomUUID} from "node:crypto";
 import {CloudJobQueue, signWorkerAuth, type WorkerAuth} from "../../apps/control-api/src/cloud/jobs.js";
 import {CLOUD_CONTRACT_VERSION, signScope, type SignedScope, type UnsignedScope} from "../../core/cloud/contracts.js";
 import {CloudArtifactStore, InMemoryArtifactBackend} from "../../core/cloud/artifacts.js";
-import {FOUNDER_CONFIRMATION_TYPE, InMemoryConfirmationReplayStore, TaskOrchestrator, dagOutsideScope, dispatchIntakeCommand, intentFromIntake, planCacheKey, signFounderConfirmation,
+import {CONFIRMATION_CLOCK_SKEW_MS, FOUNDER_CONFIRMATION_TYPE, InMemoryConfirmationReplayStore, TaskOrchestrator, dagOutsideScope, dispatchIntakeCommand, intentFromIntake, planCacheKey, signFounderConfirmation,
   type ConfirmationAuditRecord, type ConfirmationVerifier, type PlannerModel, type TaskDag, type UnsignedFounderConfirmation} from "../../core/cloud/task-orchestrator.js";
 import {intakeCommand} from "../../core/mission/command-intake.js";
 import {CloudWorker, MAX_OUTPUTS, resolveDeliverable, scopedArtifactName, type CloudJobHandlers, type WorkerArtifactStore, type WorkerQueuePort} from "../../core/sandbox/cloud-sandbox-provider.js";
@@ -607,11 +607,41 @@ export function registerCloudAcceptanceSuite(): void {
       expect(intentFromIntake(intake(), confirm(COMMAND, "tenant-a", {keyId: "k-2"}), {...ver2(), confirmationKeyIds: new Set(["k-2"])})).toMatchObject({ok: true});
       expect(intentFromIntake(intake(), confirm(COMMAND, "tenant-a", {issuedAt: "Wed, 04 Nov 2026 08:55:00 GMT"}), ver())).toEqual({ok: false, reason: "INTAKE_NOT_CONFIRMED", detail: "LIFETIME_INVALID"});
     });
-    it("L1: the replay store prunes with the verifier's clock (no second clock)", () => {
+    it("#350 N-1: the replay store never prunes by the caller's `now`; only a trusted clock past exp + skew prunes (supersedes L1)", () => {
       const st = new InMemoryConfirmationReplayStore();
       expect(st.consume("c-1", 1_000, 500)).toBe(true);
-      expect(st.consume("c-1", 1_000, 900)).toBe(false);   // still within its lifetime by the verifier's clock
-      expect(st.consume("c-1", 1_000, 1_001)).toBe(true);  // expired by the verifier's clock -> pruned
+      expect(st.consume("c-1", 1_000, 1_001)).toBe(false);                    // caller time past exp: NOT pruned (old L1 behaviour removed)
+      expect(st.consume("c-1", 1_000, 10 ** 13)).toBe(false);                 // even a far-future caller time cannot evict it
+      let wall = 500;
+      const tc = new InMemoryConfirmationReplayStore(10, () => wall);
+      expect(tc.consume("c-1", 1_000, 500)).toBe(true);
+      wall = 1_000 + CONFIRMATION_CLOCK_SKEW_MS - 1;
+      expect(tc.consume("c-1", 1_000, 10 ** 13)).toBe(false);                 // trusted clock just inside exp + skew: kept
+      wall = 1_000 + CONFIRMATION_CLOCK_SKEW_MS;
+      expect(tc.consume("c-1", 1_000, 0)).toBe(true);                         // positive control: trusted clock past exp + skew prunes
+      const thrower = new InMemoryConfirmationReplayStore(10, () => { throw new Error("ntp down"); });
+      expect(thrower.consume("c-1", 1_000, 500)).toBe(true); expect(thrower.consume("c-1", 1_000, 10 ** 13)).toBe(false);
+      const inf = new InMemoryConfirmationReplayStore(10, () => Number.POSITIVE_INFINITY);
+      expect(inf.consume("c-1", 1_000, 500)).toBe(true); expect(inf.consume("c-1", 1_000, 10 ** 13)).toBe(false);
+      expect(() => new InMemoryConfirmationReplayStore(0)).toThrow("REPLAY_STORE_CAPACITY_INVALID");
+      expect(() => new InMemoryConfirmationReplayStore(10, 5 as unknown as () => number)).toThrow("REPLAY_STORE_CLOCK_INVALID");
+    });
+    it("#350 N-1: a forward-skewed verifier `now` cannot evict a live confirmation and replay it", () => {
+      const store = new InMemoryConfirmationReplayStore();
+      const v = (at: Date): ConfirmationVerifier => ({keys: new Map([["k-1", SCOPE_KEY]]), scope: mkScope("tenant-a"), now: () => at, replay: store});
+      const token = confirm();                                                // valid 08:55–09:05
+      const other = confirm(COMMAND, "tenant-a", {issuedAt: "2026-11-05T08:55:00Z", expiresAt: "2026-11-05T09:05:00Z"});
+      expect(intentFromIntake(intake(), token, v(clock))).toMatchObject({ok: true});
+      expect(intentFromIntake(intake(), other, v(new Date("2026-11-05T09:00:00Z")))).toMatchObject({ok: true});   // a day ahead: old code pruned here
+      expect(intentFromIntake(intake(), token, v(new Date(clock.getTime() + 1000)))).toEqual({ok: false, reason: "INTAKE_NOT_CONFIRMED", detail: "REPLAYED"});
+    });
+    it("#350 N-1: a full or failing replay store fails closed (REPLAY_STORE_UNAVAILABLE), never evicting live entries", () => {
+      const full = new InMemoryConfirmationReplayStore(1); full.consume("other", Date.parse("2026-11-04T09:05:00Z"), clock.getTime());
+      const vf = (replay: ConfirmationVerifier["replay"]): ConfirmationVerifier => ({keys: new Map([["k-1", SCOPE_KEY]]), scope: mkScope("tenant-a"), now, replay});
+      expect(intentFromIntake(intake(), confirm(), vf(full))).toEqual({ok: false, reason: "INTAKE_NOT_CONFIRMED", detail: "REPLAY_STORE_UNAVAILABLE"});
+      expect(intentFromIntake(intake(), confirm(), vf({consume: () => { throw new Error("down"); }}))).toEqual({ok: false, reason: "INTAKE_NOT_CONFIRMED", detail: "REPLAY_STORE_UNAVAILABLE"});
+      expect(intentFromIntake(intake(), confirm(), vf({consume: () => "maybe" as unknown as boolean}))).toEqual({ok: false, reason: "INTAKE_NOT_CONFIRMED", detail: "REPLAY_STORE_UNAVAILABLE"});
+      expect(intentFromIntake(intake(), confirm(), vf(new InMemoryConfirmationReplayStore(2)))).toMatchObject({ok: true});   // positive control
     });
 
     // ---- B2 ----
