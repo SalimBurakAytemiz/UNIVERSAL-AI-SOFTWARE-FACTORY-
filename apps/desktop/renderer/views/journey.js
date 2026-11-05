@@ -1,4 +1,5 @@
 // //TR: Bu görünüm Proje Yolculuğu'dur (FA-V2-PRODUCT): seçili mission için OTONOM ZİNCİRİ premium bir faz zaman çizelgesi olarak gösterir — pre-dev fazları (BusinessAnalysis -> Requirements -> Plan -> Architecture -> UxSpec) gerçek artefakt durumuyla (GET /v1/predev/:missionId), ardından ekip koordinasyon ledger'ı ve geliştirme -> bağımsız inceleme -> teslim zaman çizelgesi (GET /v1/crew/:missionId). Yalnız bu iki salt-okunur GET'ten okunur; HİÇBİR faz/artefakt/onay/verdict UYDURULMAZ ve PRODUCT_VERIFIED ASLA gösterilmez (okuma-modeli bunu iddia etmez). Teslim yalnız kaynak düzeyindedir (ürün doğrulanmadı). Mission seçimi mevcut seçimi (forms.js selection.missionId) ve mission listesini yeniden kullanır. Backend verisi yoksa dürüst boş durum, okuma başarısızsa OFFLINE/UNAVAILABLE/ERROR gösterilir. API verisi HTML olarak yorumlanmaz; yalnız h()/textContent kullanılır.
+import {safeErrorCode} from "../error-code.js";
 import {h,panel,statePill,missionPill,emptyNote} from "../components.js";
 import {MISSING,formatTime} from "../model.js";
 import {selection} from "../forms.js";
@@ -32,7 +33,7 @@ function stateBlock(ctx,res,source){
   return h(doc,"div",{class:`journey-state state-${state.toLowerCase()}`,role:"status",dataset:{journeyState:state}},
     h(doc,"p",{class:"journey-state-head"},statePill(ctx,failKind(state)),h(doc,"strong",{text:ctx.t(`journey.state.${state}`)})),
     h(doc,"p",{class:"note",text:ctx.t(`journey.hint.${state}`,{source:`GET ${source}`})}),
-    res.message?h(doc,"p",{class:"note mono",text:res.message}):null);
+    safeErrorCode(res.message)?h(doc,"p",{class:"note mono",dataset:{stateErrorCode:safeErrorCode(res.message)},text:safeErrorCode(res.message)}):null);
 }
 
 /** Artefakt/atama durumu rozeti: ham durum kodu etiket olur, kategori ikon+renk taşır (renk tek başına anlam taşımaz). */
