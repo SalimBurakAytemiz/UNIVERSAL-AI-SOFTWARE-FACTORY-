@@ -10,6 +10,7 @@ import {completeNotOffered} from "./work.js";
 import {deriveApprovalRequired} from "../approval-core.js";
 import {ATTENTION_KINDS,attentionSummary} from "../attention-core.js";
 import {attentionNotes} from "./attention-notes.js";
+import {safeErrorCode} from "../error-code.js";
 
 // //TR: Metin alanlarını güvenli biçimde sınırlar (API verisi asla sayı/HTML'e dönüştürülmez; boş/geçersiz => null, görünüm "—" veya dürüst durum gösterir).
 const str=(v,max=300)=>typeof v==="string"&&v.length?v.slice(0,max):null;
@@ -42,10 +43,19 @@ function actionLabel(ctx,a){
 // M1a c2: teslim kararı kartı koşunun test yürütme kanıtına göre NOT_VERIFIED rozetini gösterir; "kabul" (COMPLETE) yalnız PRODUCT_VERIFIED koşuda sunulur,
 // aksi halde iki eksen ve kaynak tesliminin Proje Stüdyosu > Teslim'de olduğu açıklaması gösterilir (onay kutusu ile COMPLETE yoktur).
 // //TR: UX WP-INBOX-APPROVAL: yüksek riskli/geri alınamaz onay (COMPLETE) performTransition içinde açık onay penceresi gerektirir; bu görünüm doğrudan POST yapmaz, yalnız tıklama işleyicisi performTransition'ı çağırır.
-function decisionCard(ctx,it,run){
-  const doc=ctx.doc,sid=actionStatusId(it.missionId),busy=drafts.busy[sid]===true,rid=`ib-reason-${it.missionId}`;
+// //TR: Karar kapısı: sunucunun kendi cockpit okuması Global Stop'un etkin olduğunu söylüyorsa ya da sunucu son kararı yeniden denemenin işe yaramadığı bir nedenle reddettiyse (423/401/403), kabul/ret düğmeleri devre dışıdır ve nedeni görünürdür. Bilinmeyen durumda tahmin yok: karar sunucunundur.
+const NON_RETRIABLE=new Set([401,403,423]);
+export function decisionGate(stop,st){
+  if(stop&&stop.known===true&&stop.active===true)return {code:"GLOBAL_STOP_ACTIVE",key:"inbox.gate.GLOBAL_STOP_ACTIVE"};
+  const r=st&&st.ok===false?st.refusal:null;
+  if(r&&NON_RETRIABLE.has(r.status))return {code:safeErrorCode(r.code)||`HTTP ${r.status}`,key:"inbox.gate.REFUSED"};
+  return null;
+}
+function decisionCard(ctx,it,run,stop){
+  const doc=ctx.doc,sid=actionStatusId(it.missionId),busy=drafts.busy[sid]===true,rid=`ib-reason-${it.missionId}`,st=drafts.status[sid],gate=decisionGate(stop,st),gid=`ib-gate-${it.missionId}`;
+  const refusalCode=st&&st.ok===false&&st.refusal?safeErrorCode(st.refusal.code):"";
   const actions=it.actions.filter(a=>a.to!=="COMPLETE"||canOfferComplete(run)),hidden=actions.length!==it.actions.length;
-  const buttons=actions.map(a=>h(doc,"button",{type:"button",class:`btn${a.type==="accept"?" btn-primary":""}`,id:`ib-${a.to}-${it.missionId}`,dataset:{focusKey:`ib-${a.to}-${it.missionId}`,action:a.type,to:a.to},disabled:busy,
+  const buttons=actions.map(a=>h(doc,"button",{type:"button",class:`btn${a.type==="accept"?" btn-primary":""}`,id:`ib-${a.to}-${it.missionId}`,dataset:gate?{focusKey:`ib-${a.to}-${it.missionId}`,action:a.type,to:a.to,decisionGate:gate.code}:{focusKey:`ib-${a.to}-${it.missionId}`,action:a.type,to:a.to},disabled:busy||gate!==null,"aria-describedby":gate?gid:undefined,
     on:{click:()=>performTransition(ctx,{missionId:it.missionId,title:it.title,from:it.status,to:a.to,reason:drafts.reasons[it.missionId]??"",statusId:sid})},text:actionLabel(ctx,a)}));
   return h(doc,"li",{class:"card decision-card",dataset:{decision:it.kind,decisionMission:it.missionId}},
     h(doc,"h3",{text:it.title}),
@@ -53,18 +63,20 @@ function decisionCard(ctx,it,run){
     h(doc,"p",{class:"note",text:ctx.t(it.kind==="DELIVERY_DECISION"?"inbox.kind.delivery":"inbox.kind.attention",{run:it.runId??""})}),
     field(ctx,{id:rid,labelKey:"work.transition.reason",value:drafts.reasons[it.missionId]??"",onInput:v=>{drafts.reasons[it.missionId]=v},hintKey:"inbox.reasonHint"}),
     hidden?completeNotOffered(ctx,run,`ib-complete-na-${it.missionId}`):null,
+    gate?h(doc,"p",{class:"note",id:gid,role:"status",dataset:{decisionGateWhy:gate.code}},ctx.t(gate.key,{code:gate.code})):null,
     h(doc,"div",{class:"btn-row",role:"group","aria-label":ctx.t("inbox.actions",{title:it.title})},buttons,
       h(doc,"button",{type:"button",class:"btn",id:`ib-open-${it.missionId}`,dataset:{focusKey:`ib-open-${it.missionId}`},on:{click:()=>{selection.missionId=it.missionId;ctx.navigate("work")}},text:ctx.t("inbox.open")})),
-    statusBlock(ctx,sid));
+    statusBlock(ctx,sid),
+    refusalCode?h(doc,"p",{class:"note mono",dataset:{stateErrorCode:refusalCode},text:refusalCode}):null);
 }
-function decisionsBody(ctx,missions,runs,runDetails){
+function decisionsBody(ctx,missions,runs,runDetails,stop){
   const doc=ctx.doc;
   if(missions.state!=="VERIFIED")return stateNote(ctx,missions.state);
   const items=deriveInbox(missions.items,runs.state==="VERIFIED"?runs.items:[]);
   const nodes=[];
   if(runs.state!=="VERIFIED")nodes.push(h(doc,"p",{class:`note note-${runs.state.toLowerCase()}`,role:"status",text:ctx.t("inbox.runsUnavailable")}));
   if(!items.length)nodes.push(emptyNote(ctx,"inbox.decisions.empty"));
-  else nodes.push(h(doc,"ul",{class:"cards"},items.map(it=>decisionCard(ctx,it,runDetails.get(it.runId)??(runs.state==="VERIFIED"?runs.items.find(r=>r.runId===it.runId):null)??null))));
+  else nodes.push(h(doc,"ul",{class:"cards"},items.map(it=>decisionCard(ctx,it,runDetails.get(it.runId)??(runs.state==="VERIFIED"?runs.items.find(r=>r.runId===it.runId):null)??null,stop))));
   return h(doc,"div",{},nodes);
 }
 
@@ -190,7 +202,7 @@ export async function render(ctx){
     header(ctx),
     sourceStrip(ctx,kinds),
     alertsPanel(ctx,c),
-    panel(ctx,{titleKey:"inbox.decisions",id:"inbox-decisions",className:"inbox-section"},decisionsBody(ctx,missions,runs,runDetails)),
+    panel(ctx,{titleKey:"inbox.decisions",id:"inbox-decisions",className:"inbox-section"},decisionsBody(ctx,missions,runs,runDetails,c.state==="OK"?c.data.globalStop:null)),
     requiredPanel(ctx,deriveApprovalRequired({cockpit:c,missions,runs})),
     panel(ctx,{titleKey:"inbox.approvals",id:"inbox-approvals",className:"inbox-section"},h(doc,"p",{class:"panel-meta"},chip(ctx,a)),approvals),
     attentionPanel(ctx,att));

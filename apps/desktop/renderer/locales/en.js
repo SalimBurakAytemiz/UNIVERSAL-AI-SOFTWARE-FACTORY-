@@ -883,6 +883,8 @@ export default {
   "inbox.action.reject":"Reject → {to}",
   "inbox.action.retry":"Send back → {to}",
   "inbox.open":"Open mission",
+  "inbox.gate.GLOBAL_STOP_ACTIVE":"Decisions are disabled: Global Stop is active, so the server refuses every mission transition ({code}). Resume first.",
+  "inbox.gate.REFUSED":"Decisions are disabled: the server refused the last decision ({code}) and retrying will not help. Refresh after the cause is resolved.",
   "inbox.eyebrow":"Founder inbox",
   "inbox.readonly":"This queue is derived only from real, allow-listed backends (cockpit, work runs, Founder-attention). Nothing is auto-approved.",
   "inbox.sources":"Inbox read sources",

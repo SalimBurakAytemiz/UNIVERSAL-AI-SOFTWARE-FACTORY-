@@ -3,6 +3,7 @@ import {describe, it, expect, beforeEach} from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import {pathToFileURL} from "node:url";
+import {registerInboxGateCases} from "./support/inbox-gate.cases.js"; // Builder I: Onay merkezi kapısı (gerçek sunucu)
 
 const root = path.resolve(__dirname, "..");
 const rend = path.join(root, "apps", "desktop", "renderer");
@@ -687,3 +688,6 @@ describe("LANE-A attention consumers: honest summary in Inbox strip, Delivery an
     expect(none.textContent).toContain("No pending blockers"); expect(byData(none, "attentionTruncated")).toEqual([]);
   });
 });
+
+// //TR: Builder I Onay merkezi kapısı vakaları (tests/support/inbox-gate.cases.ts) burada kaydedilir.
+registerInboxGateCases();

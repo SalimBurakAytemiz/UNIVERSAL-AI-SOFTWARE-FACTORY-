@@ -883,6 +883,8 @@ export default {
   "inbox.action.reject":"Reddet → {to}",
   "inbox.action.retry":"Ön kontrole geri gönder → {to}",
   "inbox.open":"Mission'ı aç",
+  "inbox.gate.GLOBAL_STOP_ACTIVE":"Kararlar devre dışı: Global Stop etkin, sunucu her mission geçişini reddeder ({code}). Önce devam ettirin.",
+  "inbox.gate.REFUSED":"Kararlar devre dışı: sunucu son kararı reddetti ({code}) ve yeniden denemek işe yaramaz. Neden giderildikten sonra yenileyin.",
   "inbox.eyebrow":"Founder gelen kutusu",
   "inbox.readonly":"Bu kuyruk yalnız gerçek, izin listesindeki arka uçlardan (cockpit, iş koşuları, Founder dikkati) türetilir. Hiçbir şey otomatik onaylanmaz.",
   "inbox.sources":"Gelen kutusu okuma kaynakları",

@@ -2,6 +2,7 @@
 import {buildTransitionRequest,buildRunRequest,requiresConfirm,describePostResult,parseStartedRun,linkableTasks,buildLinkRunRequest,classifyLinkResult} from "./work-core.js";
 import {drafts,freshRunLink,setStatus,focusStatus,focusResult} from "./forms.js";
 import {statusLabel} from "./components.js";
+import {safeErrorCode} from "./error-code.js";
 
 export const actionStatusId=missionId=>`act-${missionId}`;
 
@@ -24,7 +25,9 @@ export async function performTransition(ctx,{missionId,title,from,to,reason,stat
   drafts.busy[statusId]=true;
   let res;try{res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[statusId]=false}
   const d=describePostResult(res);
-  setStatus(statusId,{ok:d.ok,key:d.ok?"transition.done":d.key,vars:d.ok?{to:statusLabel(ctx,to)}:d.vars,errors:null});
+  // //TR: Sunucu reddi kodu ham iletiyle değil safeErrorCode ile saklanır (sabit kod / "HTTP nnn"); görünüm bunu data-state-error-code ile gösterir ve yeniden denemenin işe yaramadığı retlerde (423/401/403) karar düğmelerini kapatır.
+  const refusal=d.ok?null:{status:Number.isSafeInteger(res?.status)?res.status:null,code:safeErrorCode(typeof res?.body?.error==="string"?res.body.error:"")||safeErrorCode(res?.message)||(Number.isSafeInteger(res?.status)?`HTTP ${res.status}`:"")};
+  setStatus(statusId,{ok:d.ok,key:d.ok?"transition.done":d.key,vars:d.ok?{to:statusLabel(ctx,to)}:d.vars,errors:null,refusal});
   if(d.ok)delete drafts.reasons[missionId];
   await ctx.refreshAll({force:true});focusResult(ctx,statusId,keys);return {ok:d.ok,status:res?.status??null};
 }
