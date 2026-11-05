@@ -1,3 +1,4 @@
+// //TR: Bu test (Builder I) renderer'daki ham hata metni taramasını doğrular: düzeltilen her görünüm IPC sarılı HTTP 500'de yalnız durum kodunu gösterir; statik koruma açık PR dosyaları dışında hiçbir modülün ham .message yazmadığını denetler.
 // Builder I — raw-error sweep, against the REAL control-api (buildServer + app.inject) behind the desktop
 // bridge's own GET/POST allow-lists. Each test pins one defect fix and carries a positive control:
 //  A failed read no longer prints the bridge's raw error message (Electron's "Error invoking remote method ..." wrapping
