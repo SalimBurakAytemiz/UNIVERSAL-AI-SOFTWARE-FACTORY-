@@ -1,6 +1,6 @@
 {
   "schema": "uasco.factory-v2.shared-registry/1",
-  "phase": "section:refs/uasco/authority/probe-uasco",
+  "phase": "section:probe/B-prepared",
   "sections": {
     "probe-keys/session_015dYwb2b3yVQ6iay68HXCD8": {
       "session": "session_015dYwb2b3yVQ6iay68HXCD8",
@@ -512,6 +512,20 @@
         "stateDigest": "188599ac79498b47d9c4def62c20e7bd324d19d64742d61acebcdd71fff6fce5"
       },
       "digest": "97a681210141d584734d5adb87ad23bc83b25f26cab80cd573b4450d02eaebdb"
+    },
+    "probe/B-prepared": {
+      "session": "session_015dYwb4zVwFwg69iij2RdGq",
+      "at": 1793869360699,
+      "unresolved": [
+        "CLOUD-T0005",
+        "CLOUD-T0008",
+        "UASCO-T0045",
+        "UASCO-T0087",
+        "UASCO-T0042",
+        "CLOUD-T0010",
+        "CLOUD-T0015",
+        "UASCO-T0062"
+      ]
     }
   },
   "revs": {
@@ -521,7 +535,8 @@
     "refs/uasco/authority/probe-uasco": 3,
     "probe/B-forged": 1,
     "probe/A-reset": 1,
-    "refs/uasco/handover/probe-uasco/v1": 1
+    "refs/uasco/handover/probe-uasco/v1": 1,
+    "probe/B-prepared": 1
   },
-  "seq": 9
+  "seq": 10
 }
