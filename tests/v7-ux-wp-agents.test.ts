@@ -2194,10 +2194,16 @@ describe("UASCO-T0006 — Workforce view over the REAL Control API (renderer -> 
     expect(r.textContent).toContain("Role readiness is unavailable, so no counts are shown (they are not zero).");
   });
 
-  it("error: wrong bridge token -> identity unverified and every read is a real 403; nothing measured is shown", async () => {
+  it("error: wrong bridge token -> the bridge's identity proof fails before any /v1 read (and the server itself would answer 403); nothing measured is shown", async () => {
     seedRepo("real");
     const app = mkApp();
-    const {root: r} = await renderReal(injectT(app), "w".repeat(32));
+    // the server's own answer to the wrong token, asserted directly: the renderer never gets this far because the bridge stops at the identity check
+    for (const url of ["/v1/agents", "/v1/cockpit", "/v1/roles?limit=100", "/v1/roles/status-summary", "/v1/work-runs"]) {
+      const direct = await app.inject({method: "GET", url, headers: {"x-uasco-control-token": "w".repeat(32), host: `127.0.0.1:${PORT}`}});
+      expect(direct.statusCode, url).toBe(403);
+    }
+    const {root: r, calls} = await renderReal(injectT(app), "w".repeat(32));
+    expect(calls.length).toBeGreaterThan(0);                                         // the view did try its reads; each one failed at the bridge identity check
     expect(kpi(r, "wf-reg")).toBe("—");
     expect(kpi(r, "wf-act")).toBe("—");
     expect(chipOf(r, "wf-reg")).toBe("ERROR");
