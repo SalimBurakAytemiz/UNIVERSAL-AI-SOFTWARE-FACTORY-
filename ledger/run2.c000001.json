@@ -485,6 +485,36 @@
         "nonce": "7f90fee0-e268-4b77-a552-e59f4424dcfc",
         "signature": "ASZYABgPRlezKfxn9jH848Ez4KqgYcbQqla+wpBe8LvgjI0gOF1DM9Xe+lPLU++GDNv2y8OrfZ4KiLGAqtYNDA=="
       }
+    },
+    {
+      "kind": "WORKER",
+      "idempotencyKey": "worker:intent_fc98e72a5d96:RUNNING",
+      "data": {
+        "status": "RUNNING",
+        "sessionId": "session_015dYwb24Ho4ApWJke4bbFDn",
+        "boundAt": 1793907342388,
+        "intentId": "intent_fc98e72a5d96"
+      },
+      "fenceEpoch": 1,
+      "fenceToken": "session_015dYwb57qx21P4wudU5xauD:1:2a5bae8c-fdda-40ec-9cbc-23217de56578",
+      "seq": 14,
+      "at": 1793907346188,
+      "prev": "ebb6a7f47f033bdac8923ef5128025adf891f0e33b0dcc732de51cf2f5780e57",
+      "ledger": "probe-control/run2",
+      "sig": {
+        "schema": "uasco.factory-v2.signed-action/1",
+        "domain": "probe-control",
+        "action": "LEDGER",
+        "role": "V2_CANDIDATE",
+        "sessionId": "session_015dYwb57qx21P4wudU5xauD",
+        "keyId": "k_225059701e7e1b78",
+        "prev": "ebb6a7f47f033bdac8923ef5128025adf891f0e33b0dcc732de51cf2f5780e57",
+        "payloadDigest": "8896886ac0cd86680bf36816bce64daad570c128d18c1029087bb86b30954c59",
+        "issuedAt": 1793907349167,
+        "expiresAt": 1825443349167,
+        "nonce": "4c82a273-967a-4a18-a695-916a79fb059b",
+        "signature": "ZniEVINH/De9utMpNUo2nc05j0g6Z/i8KcD+d4kBqfj5LuEkE1rT6r0+f6cf5qvaUU0+z1LmNqT+DgSlBCneCA=="
+      }
     }
   ]
 }
