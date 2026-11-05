@@ -2,7 +2,7 @@
   "//TR": "Otonom döngünün kalıcı durumu: tamamlanan (merge edilmiş) görevler, sürmekte olan PR'lar ve Founder kararı bekleyenler. Her görev PR'ı ile birlikte güncellenir; kota/oturum kesintisinden sonra döngü buradan devam eder.",
   "schemaVersion": "1.0.0",
   "authority": "FD-2026-11-03-STANDING-AUTONOMY",
-  "updatedAt": "2026-11-03",
+  "updatedAt": "2026-11-05",
   "done": [
     {
       "task": "CLOUD-T0001",
@@ -19,22 +19,114 @@
     {
       "task": "V3-T1001",
       "pr": 303
+    },
+    {
+      "task": "UASCO-T0116",
+      "pr": 332
     }
   ],
   "inFlight": [
     {
       "task": "CLOUD-T0005",
       "prs": [
-        302
+        302,
+        335
       ],
-      "note": "increment merged; doneMerge needs a real Windows runner install/login/stream test and desktop wiring through protected files (Founder)"
+      "open": [
+        343,
+        345
+      ],
+      "note": "#302 view + #335 tenant-scoped job status/panel merged; #343 Founder-tier server.ts/main.mjs wiring + trust-root reseal (CLEAN, re-bind pending); #345 allow-list pins (CLEAN, re-bind pending). doneMerge needs a real Windows runner install/login/stream test."
+    },
+    {
+      "task": "CLOUD-T0002",
+      "prs": [],
+      "open": [
+        344
+      ],
+      "note": "#344 CloudWorker; B-1 safety fix (validate-all-before-put, jobs/<jobId>/a<attempt>/<rel> names, lease checks, resolveDeliverable, input provenance) CLEAN with RISK1/RISK2 MITIGATED; re-bind pending after #342. Follow-up b49cbbd9 (output I/O -> WORKER_IO_ERROR) on claude/builder-c-cloud-t0002-safety. N-4 (gate.authorize/CLOUD_JOB kind in core/workos/execution-gate.ts) = separate follow-up."
     },
     {
       "task": "CLOUD-T0008",
       "prs": [
         305
       ],
-      "note": "increment merged (staging filesystem backend); doneMerge needs two real downloaded projects + clean cloud npm ci/test (D-03 infrastructure)"
+      "note": "increment merged (staging filesystem backend); doneMerge needs two real downloaded projects + clean cloud npm ci/test (D-03 infrastructure). Store has no delete: aborted-attempt orphans stay but are undeliverable via resolveDeliverable."
+    },
+    {
+      "task": "CLOUD-T0010",
+      "prs": [
+        301,
+        330
+      ],
+      "stacked": [
+        "claude/builder-c-cloud-t0010-signed-confirm-v3@be647b25"
+      ],
+      "note": "DAG orchestrator + intake wiring merged; signed Founder-confirmation layer stacked on #344. doneMerge needs a real cloud predev/dispatch/review-to-artifact E2E (D-03)."
+    },
+    {
+      "task": "CLOUD-T0011",
+      "prs": [
+        330
+      ],
+      "note": "tests/cloud/acceptance-suite.mts merged as LOCAL loopback suite only (LOCAL_STUB planner); doneMerge '6 real cloud runs PASS' not met (D-03/D-29)."
+    },
+    {
+      "task": "CLOUD-T0012",
+      "prs": [
+        337,
+        338
+      ],
+      "note": "#308 split (Founder decision D): code #337 + runbook #338 merged; #308 draft superseded. Follow-ups: deploy-approval replay within 15-min TTL, production trusted clock not enforced, issue-side skew unchecked, in-memory key-reuse history. Acceptance needs real staging (D-03/D-29)."
+    },
+    {
+      "task": "CLOUD-T0015",
+      "prs": [
+        304
+      ],
+      "stacked": [
+        "claude/builder-c-cloud-t0015-planner-v3@6c68140a"
+      ],
+      "note": "provider routing/quota/fallback merged; planner layer stacked. doneMerge needs a real cloud model request (D-08: 0 USD, no paid provider)."
+    },
+    {
+      "task": "CLOUD-T0016",
+      "prs": [],
+      "stacked": [
+        "claude/builder-c-cloud-chain-host-v3@191ffc36"
+      ],
+      "note": "proposed in SA-2026-11-04 §2.C (merged #336) but not in task-index: FOUNDER_REQUIRED. v3 delivers only via resolveDeliverable(queue.get(jobId)); supersedes draft #340. At most LOCAL_E2E_VERIFIED."
+    },
+    {
+      "task": "UASCO-T0006",
+      "prs": [
+        318,
+        323,
+        329
+      ],
+      "note": "renderer -> real buildServer tests for 10 views merged, incl. 500-path cases honouring the pending /v1/cloud/jobs entry."
+    },
+    {
+      "task": "UASCO-T0010",
+      "prs": [
+        312,
+        328
+      ],
+      "note": "command intake core + Founder-tier POST allow-list merged."
+    },
+    {
+      "task": "UASCO-T0042",
+      "prs": [
+        310,
+        313,
+        315,
+        321,
+        325
+      ],
+      "open": [
+        339
+      ],
+      "note": "PAR-03/PAR-04 fixes merged; #339 Founder-tier PAR-03 blockers= diagnostic + C2/C2b tolerance (CLEAN, TASK_SCOPE_MISMATCH: test files outside targetFiles; re-bind pending). V3-EV record still open."
     },
     {
       "task": "UASCO-T0045",
@@ -44,49 +136,213 @@
       "note": "regression coverage merged; V3-EV-F020-1 hosted run and server.ts wiring still open"
     },
     {
-      "task": "UASCO-T0087",
+      "task": "UASCO-T0050",
       "prs": [
-        307
+        319,
+        320,
+        326
       ],
-      "note": "diagnostic detail and redaction hardening merged; V3-EV record still open"
-    },
-    {
-      "task": "UASCO-T0042",
-      "prs": [
-        310,
-        313
-      ],
-      "note": "#310 PAR-03 fsync fix and #313 PAR-04 Windows takeover fix merged; V3-EV record still open"
-    },
-    {
-      "task": "CLOUD-T0010",
-      "prs": [
-        301
-      ],
-      "note": "increment merged (#301: idempotent cloud task DAG orchestrator); doneMerge needs a real cloud predev/task dispatch/review-to-artifact E2E with no local agent (D-03 infrastructure)"
-    },
-    {
-      "task": "CLOUD-T0015",
-      "prs": [
-        304
-      ],
-      "note": "increment merged (#304: provider routing with quota, fallback and circuit breaker); doneMerge needs real cloud model request, auth deny, quota/fallback and token usage evidence (D-03 infrastructure)"
+      "note": "pkg-lease1 regression tests merged."
     },
     {
       "task": "UASCO-T0062",
       "prs": [
-        311
+        311,
+        316,
+        317
       ],
-      "note": "increment merged (#311: per-step routing record and Desktop line); journal and Desktop wiring still open (V3-AC-F026-1)"
+      "note": "routeModel core merged; no real provider calls (D-08)."
+    },
+    {
+      "task": "UASCO-T0065",
+      "prs": [
+        322
+      ],
+      "note": "OmniRoute discovery client regression tests merged."
+    },
+    {
+      "task": "UASCO-T0087",
+      "prs": [
+        307,
+        331
+      ],
+      "note": "diagnostic detail and redaction hardening merged; V3-EV record still open"
+    },
+    {
+      "task": "V3-T1012.a",
+      "prs": [
+        324
+      ],
+      "open": [
+        327
+      ],
+      "note": "#327 export lockfile gate: CLEAN but TASK_SCOPE_MISMATCH (project-studio.ts outside targetFiles) -> optional Founder merge; needs re-bind."
+    },
+    {
+      "task": "V3-T1034",
+      "prs": [
+        333
+      ],
+      "open": [
+        341
+      ],
+      "note": "reviewer-auth classifier merged; #341 OAuth scope diagnostic DRAFT/HOLD pending the Founder's optional local CLI comparison. 'UASCO Independent Review' check still 401 (not required)."
     }
   ],
   "blocked": [
     {
-      "task": "CLOUD-T0012",
-      "prs": [
-        308
-      ],
-      "reason": "FOUNDER_REQUIRED: reviewer attested TASK_SCOPE_MISMATCH (security code beyond the doc-only write-set)"
+      "task": "UASCO-T0029",
+      "reason": "cloud sandbox E2E: Founder decision D-23"
+    },
+    {
+      "task": "UASCO-T0033",
+      "reason": "real gitleaks/trivy/semgrep + SBOM: tooling/infrastructure"
+    },
+    {
+      "task": "UASCO-T0093",
+      "reason": "code signing + release: D-13"
+    },
+    {
+      "task": "UASCO-T0002",
+      "reason": "end-user acceptance: D-23/D-26"
+    },
+    {
+      "task": "CLOUD-T0009",
+      "reason": "real cloud provider/capacity: D-03/D-29; D-08 0 USD"
     }
-  ]
+  ],
+  "handoff": {
+    "//TR": "V4.1 -> Adaptive Parallel Factory V2 devir hazırlığı. Türetilmiş özet; görev kaynağı DEĞİLDİR. Kanonik kaynaklar: task-index.json, v41 matrisi, bu dosyanın done/inFlight/blocked alanları ve GitHub PR'ları.",
+    "target": "UASCO Adaptive Parallel Factory V2 (separate Claude Cloud session)",
+    "status": "PREPARING",
+    "authority": "V4.1 coordinator session_015dYwazi7LHFCg3dABbSW2P keeps dispatch and executor-merge authority until an atomic ownership+merge-authority transfer is recorded here; V2 has NO live task ownership yet.",
+    "asOf": {
+      "main": "a01c37d206d9847c7c8cc3da62d6e5ea31b83cea",
+      "at": "2026-11-05T07:45Z"
+    },
+    "canonicalSources": [
+      "docs/planning/autonomy/task-index.json",
+      "docs/planning/v41/UASCO_V4_1_CLOUD_MERGED.zip (frozen, SHA256SUMS)",
+      "docs/planning/autonomy/STATE.json (done/inFlight/blocked)",
+      "docs/planning/autonomy/standing-authority.json",
+      "docs/planning/authority/*.md",
+      "GitHub PRs on v7/integration (UASCO-TASK line + VERDICT-BINDING reviews)"
+    ],
+    "builders": [
+      {
+        "id": "A",
+        "session": "session_015dYwb21d58Ys4LtirPo4Mz",
+        "owns": [
+          "claude/builder-a-*"
+        ]
+      },
+      {
+        "id": "C",
+        "session": "session_015dYwazZccTReW5Rs2mAhq3",
+        "owns": [
+          "claude/builder-c-cloud-t0002-worker",
+          "claude/builder-c-cloud-t0002-safety",
+          "claude/builder-c-cloud-t0010-signed-confirm-v3",
+          "claude/builder-c-cloud-t0015-planner-v3",
+          "claude/builder-c-cloud-chain-host-v3"
+        ]
+      },
+      {
+        "id": "D",
+        "session": "session_015dYwb2SnQF4VdDrbv6gC6n",
+        "owns": [
+          "claude/builder-d-*"
+        ],
+        "role": "Windows flake classification C1-C5"
+      },
+      {
+        "id": "G",
+        "session": "session_015dYwb1WPfNEE3SrZ52qm7F",
+        "owns": [
+          "claude/builder-g-*"
+        ]
+      }
+    ],
+    "openPrs": [
+      {
+        "pr": 344,
+        "task": "CLOUD-T0002",
+        "tier": "routine",
+        "state": "CLEAN at b2a719db/a4dc7f51; base-merged to 1bdf7ab1 on a01c37d2, re-bind requested",
+        "reviewer": "session_015dYwb421w7Y1aC9cReqc8a"
+      },
+      {
+        "pr": 345,
+        "task": "CLOUD-T0005",
+        "tier": "routine",
+        "state": "CLEAN at 24957dc7/a4dc7f51; base-merged to f53f6812, re-bind requested",
+        "reviewer": "session_015dYwb4QdUScxpF6L9Ga65M"
+      },
+      {
+        "pr": 343,
+        "task": "CLOUD-T0005",
+        "tier": "FOUNDER (protected + trust-root)",
+        "state": "CLEAN at 42159d5b/a4dc7f51; base-merged to beab4432, re-bind requested",
+        "reviewer": "session_015dYwb1X55k736nw8md82UH"
+      },
+      {
+        "pr": 339,
+        "task": "UASCO-T0042",
+        "tier": "FOUNDER (TASK_SCOPE_MISMATCH)",
+        "state": "CLEAN at 4d27757b/a4dc7f51; base-merged to 59ec037f, re-bind requested",
+        "reviewer": "session_015dYwb4HikL42BrKcPFiuq6"
+      },
+      {
+        "pr": 327,
+        "task": "V3-T1012.a",
+        "tier": "FOUNDER optional (TASK_SCOPE_MISMATCH)",
+        "state": "CLEAN at 6d388cee on old base 10d37f8c; needs base-merge + re-bind"
+      },
+      {
+        "pr": 341,
+        "task": "V3-T1034",
+        "tier": "FOUNDER (CI-executed)",
+        "state": "DRAFT/HOLD"
+      },
+      {
+        "pr": 340,
+        "task": "CLOUD-T0016",
+        "state": "DRAFT, superseded by claude/builder-c-cloud-chain-host-v3"
+      },
+      {
+        "pr": 308,
+        "task": "CLOUD-T0012",
+        "state": "DRAFT, superseded by #337/#338"
+      },
+      {
+        "pr": 282,
+        "task": "UASCO-T0042",
+        "state": "legacy lane-C PAR-03 diag, superseded by #339; no owner"
+      }
+    ],
+    "nextQueue": [
+      "merge #344 (then PR for b49cbbd9)",
+      "merge #345",
+      "Founder: #343, #339 (and optional #327)",
+      "open v3 stack: CLOUD-T0010 signed-confirm -> CLOUD-T0015 planner -> CLOUD-T0016 chain host (Founder)",
+      "N-4 follow-up (CLOUD_JOB execution kind)",
+      "CLOUD-T0012 security follow-ups"
+    ],
+    "ciFlakeClasses": {
+      "C1": "role-context timeout (0 after #331)",
+      "C2": "PAR-03 lease fence (sync I/O stall; #339 names the call)",
+      "C2b": "HB-2 lease fence",
+      "C3": "bs1-c BS1_DE_ELEVATED PID liveness",
+      "C4": "bs1-e tree-kill PID liveness",
+      "C5": "bs1-e 600 s step budget (fixed by #342)"
+    },
+    "mergeProcedure": "executor.mjs merge --pr N --implementer-session <builder> --implementer-session <coordinator>; requires CI success on validate (ubuntu-latest)+(windows-latest) and a CLEAN VERDICT-BINDING bound to the exact head AND current base; after every merge: executor.mjs verify-main --sha <merge>, then base-merge the other PRs and re-bind. Never use the ruleset's strict=false to bypass base binding.",
+    "transferProtocol": [
+      "1. V2 reads this file + task-index.json + open PRs (read-only)",
+      "2. Founder confirms V2 readiness",
+      "3. V4.1 coordinator freezes NEW dispatch only (in-flight PRs continue)",
+      "4. ownership + executor-merge authority transferred in ONE governance PR recorded here (status=TRANSFERRED, with V2 supervisor session id)",
+      "5. V4.1 coordinator stops dispatching and merging; V2 must not restart tasks listed as done/inFlight"
+    ]
+  }
 }
