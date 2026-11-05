@@ -196,7 +196,7 @@ export function registerShellNavT0005Cases() {
           const id = a.dataset.route!, full = env.t(`area.${id}.title`), shown = a.querySelector(".nav-label")!.textContent;
           expect(shown.length, `${lang} ${id}: ${shown}`).toBeLessThanOrEqual(24);
           expect(a.getAttribute("title"), id).toBe(full);
-          if (shown !== full) { expect(a.getAttribute("aria-label"), id).toBe(full); expect(shown).not.toMatch(/^nav\.short\./); }
+          if (shown !== full) { expect(a.getAttribute("aria-label"), id).toContain(full); expect(shown).not.toMatch(/^nav\.short\./); }
           else expect(a.getAttribute("aria-label"), id).toBeNull();
         }
         expect(current(env.doc)).toEqual(["executive"]);
@@ -204,6 +204,33 @@ export function registerShellNavT0005Cases() {
       }
       expect(sk(en)).toEqual(sk(tr));
       expect(sk(en).length).toBeGreaterThan(0);
+    });
+
+    it("WCAG 2.5.3 Label in Name: for every nav item in en and tr (with and without counts) the accessible name contains the visible label text, case-insensitive", async () => {
+      const nav = await load("nav.js");
+      let checked = 0;
+      for (const lang of ["en", "tr"]) for (const counts of [false, true]) {
+        const env = await mkShell({hash: "#/home", lang});
+        if (counts) env.shell.data.cockpit = {projects: {value: 3}, missions: {value: 2}, approvals: {value: 1}};
+        env.renderRoute();
+        for (const a of all(env.doc.getElementById("navList")!).filter(n => n.tagName === "A")) {
+          const visible = a.querySelector(".nav-label")!.textContent, cnt = a.querySelector(".nav-count")!;
+          // erişilebilir ad: aria-label varsa o; yoksa görünür içerik (etiket + görünür sayaç)
+          const name = a.getAttribute("aria-label") ?? `${visible}${cnt.hidden ? "" : ` ${cnt.textContent}`}`;
+          expect(name.toLocaleLowerCase(), `${lang} ${a.dataset.route}: "${visible}" not in "${name}"`).toContain(visible.toLocaleLowerCase());
+          expect(name, `${lang} ${a.dataset.route}`).toContain(env.t(`area.${a.dataset.route}.title`)); // tam ad da korunur
+          if (counts && !cnt.hidden) expect(name).toContain(cnt.textContent);
+          checked++;
+        }
+      }
+      expect(checked).toBe(4 * (await load("routes.js")).ROUTES.length);
+      // kısa etiket + sayaç birlikte: ad görünen metni, tam adı ve sayacı içerir (doğrudan syncNav)
+      const d = new D(), list = new N(d, "ul"); d.body.append(list);
+      nav.syncNav(d, list, [{id: "x", hash: "#/x"}], {currentId: "x", counts: {x: 4}, labelOf: () => "Multi-Project Command Matrix", shortLabelOf: () => "Project Matrix", countLabel: (n: number) => `${n} items`});
+      expect(list.querySelector("a")!.getAttribute("aria-label")).toBe("Project Matrix — Multi-Project Command Matrix, 4 items");
+      expect(nav.navAccessibleName("Project Matrix", "Multi-Project Command Matrix")).toBe("Project Matrix — Multi-Project Command Matrix");
+      expect(nav.navAccessibleName("Home", "Home (Founder Cockpit)")).toBe("Home (Founder Cockpit)");
+      expect(nav.navAccessibleName("güvence", "Güvence (QA + Güvenlik)")).toBe("Güvence (QA + Güvenlik)");
     });
 
     it("skip link keeps the current route: default hash navigation is prevented and focus moves to <main>", async () => {
