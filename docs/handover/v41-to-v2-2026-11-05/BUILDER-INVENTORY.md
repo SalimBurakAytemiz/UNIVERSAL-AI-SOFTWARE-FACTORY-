@@ -24,6 +24,6 @@ C. Open PRs on SPLIT/BLOCKED IDs (FOUNDER_REQUIRED): T0007 #370; T0011 #372 #381
 
 D. Other:
 - CLOUD-T0016 is used in #361 and in merged commits, but it is absent from the index.
-- UASCO-T0124 (#396) is a supervisor-only register task ("LLM yazmaz"). A builder PR on it may clash with the task's owner, so a Founder decision is recommended before it merges.
+- UASCO-T0124 (#396) is a supervisor-only register task ("LLM yazmaz"). A builder PR on it may clash with the task's owner. **Verified by the coordinator** in the Founder's V4.1 matrix (`02_V4_1_EXECUTION_MATRIX.json`: model `deterministic`, targetFiles `EXT:register dalı (supervisor)`, tierReason `register/Founder aksiyonu/salt-okur`). #396 is therefore removed from auto-merge and is FOUNDER_REQUIRED.
 
 The index is supervisor-owned and was not edited.

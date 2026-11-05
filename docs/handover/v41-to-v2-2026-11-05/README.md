@@ -72,7 +72,7 @@
 | #393 | I | UASCO-T0006 | `6776947cea64` | ROUTINE |
 | #394 | G | UASCO-T0006 | `7c48985b087e` | ROUTINE |
 | #395 | G | UASCO-T0006 | `0b70484a2992` | ROUTINE |
-| #396 | C | UASCO-T0124 | `7e7d0158e086` | ROUTINE |
+| #396 | C | UASCO-T0124 | `7e7d0158e086` | FOUNDER_REQUIRED (V4.1 matrix: supervisor register task) |
 | #397 | I | none | `df2f0d3c2f2a` | FOUNDER_REQUIRED (no task id) |
 | #398 | D | UASCO-T0088 | `1ded4b6d7059` | FOUNDER_REQUIRED (dep V3-T1001,V3-T1002) |
 | #399 | C | UASCO-T0083 | `00aeffede3f7` | FOUNDER_REQUIRED (task SPLIT) |
@@ -129,7 +129,7 @@
 | D | `(not pushed; patch held by coordinator)` | UASCO-T0117 | `71acc4cf (builder local), code patch sha256 d9e380ad, expected tree 26eec82b` | routine prompts; coordinator to read prompts before capture; exclude trig_01BiCM (contains e-mail) |
 
 ## In-flight at record time
-- Merge loop (serial, single writer): #360 #391 #387 #392 #393 #394 #395 #396 #401. Base-merged onto 59c06dd7; re-binds requested from each reviewer; waiting on Windows CI.
+- Merge loop (serial, single writer): #360 #391 #387 #392 #393 #394 #395 #401 (#396 removed: supervisor register task per the V4.1 matrix). Base-merged onto 59c06dd7; re-binds requested from each reviewer; waiting on Windows CI.
 - #378: head 82a82662 (perf + same-line + base), re-review #3 requested.
 - #402: CLEAN on 3c824257; needs a base merge and a re-bind.
 - The I wizard fix (claude/builder-i-t0006-wizard): needs a base merge, then a PR and a review.

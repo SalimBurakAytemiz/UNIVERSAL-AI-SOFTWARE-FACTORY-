@@ -13,7 +13,7 @@
    "owner": "C",
    "ownerSession": "session_015dYwazZccTReW5Rs2mAhq3",
    "reviewerSession": null,
-   "classification": "DRAFT"
+   "classification": "DRAFT; FOUNDER_REQUIRED (V4.1 matrix target 'EXT:supervisor telemetri aracı')"
   },
   {
    "pr": 402,
@@ -104,7 +104,7 @@
    "owner": "C",
    "ownerSession": "session_015dYwazZccTReW5Rs2mAhq3",
    "reviewerSession": "session_015dYwazkQywLDxbocCgSeGg",
-   "classification": "ROUTINE"
+   "classification": "FOUNDER_REQUIRED (V4.1 matrix: T0124 model=deterministic, target 'EXT:register dalı (supervisor)'; builder PR conflicts with intended owner; CLEAN 7e7d0158/59c06dd7)"
   },
   {
    "pr": 395,
