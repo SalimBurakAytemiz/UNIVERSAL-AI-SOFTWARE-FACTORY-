@@ -348,3 +348,17 @@ describe("factory-v2 reviewer blockers (review of 3213d6a8)", () => {
     expect(sup.mergeDiff(env.base, head).sort()).toEqual(["config/x.json", "work/y.txt"]);
   });
 });
+
+describe("merge-base diff when canonical has moved past the merge-base (review of 5356c945)", () => {
+  it("checks exactly the head's changes, not canonical-only changes, and still sees a hidden protected commit", () => {
+    const env = makeRepo();
+    const {sup} = makeSupervisor(env, {backlog: []});
+    const c = (wt, f) => { fs.mkdirSync(path.dirname(path.join(wt, f)), {recursive: true}); fs.writeFileSync(path.join(wt, f), f + "\n"); git(wt, "add", "."); git(wt, "-c", "user.name=t", "-c", "user.email=t@invalid", "commit", "-q", "-m", f); return git(wt, "rev-parse", "HEAD"); };
+    const h = path.join(env.root, "h"); git(env.repo, "worktree", "add", "-q", "--detach", h, env.base);
+    c(h, "config/hidden.json"); const head = c(h, "work/t.txt");
+    const k = path.join(env.root, "k"); git(env.repo, "worktree", "add", "-q", "--detach", k, env.base);
+    const canonical = c(k, "other/canonical-only.txt"); // canonical moved past the merge-base
+    expect(sup.mergeDiff(canonical, head).sort()).toEqual(["config/hidden.json", "work/t.txt"]);
+    expect(sup.diff(canonical, head).sort()).toContain("other/canonical-only.txt"); // a direct diff would differ
+  });
+});

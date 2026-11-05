@@ -22,6 +22,10 @@ import {createRemoteDocStore, gitRunner} from "./ref-doc-store.mjs";
 import {AuthorityBridge, snapshotV41, buildManifest, reconcile} from "./bridge.mjs";
 import {createSharedRegistry} from "./shared-registry.mjs";
 import {Ownership} from "./ownership.mjs";
+import {runProbe, PROBE_DOMAIN} from "./probe-scenario.mjs";
+import {KEYRING_SCHEMA, generateRoleKey, signAction, canonDigest, loadCanonicalKeyring} from "./identity.mjs";
+import {verifyGates} from "./gate-verifier.mjs";
+import {liveGit, liveGateDeps, liveFreshness} from "./live-sources.mjs";
 import {execFileSync} from "node:child_process";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -100,8 +104,11 @@ async function bridge() {
   // --registry-branch uasco/<name>: the authorized shared registry (one allowed branch); otherwise refs/uasco/* (needs ref push rights).
   const rb = arg("registry-branch");
   const docs = rb ? createSharedRegistry({docStore: raw, ref: `refs/heads/${rb}`}) : raw;
-  const b = () => new AuthorityBridge({docStore: docs, domain: DOMAIN});
-  const actor = process.env.CLAUDE_SESSION_ID ?? arg("actor", "unknown");
+  // Identity = canonical keyring at the live canonical SHA; gate evidence and freshness = live GitHub + canonical git (never the caller).
+  const lg = liveGit({repoRoot: ROOT});
+  const b = () => new AuthorityBridge({docStore: docs, domain: DOMAIN, keyring: () => loadCanonicalKeyring({repoDir: ROOT, commitSha: lg.canonicalSha()}),
+    gateVerifier: (g, ctx) => verifyGates(g, ctx, liveGateDeps({repoRoot: ROOT})), live: liveFreshness({repoRoot: ROOT})});
+  const actor = process.env.CLAUDE_SESSION_ID ?? arg("actor", "unknown"); // label for probe refs only; never an identity
   if (sub === "snapshot") {
     const g = a => execFileSync("git", a, {cwd: ROOT, maxBuffer: 64 << 20}).toString("utf8");
     g(["fetch", "-q", "origin", BASE]);
@@ -117,7 +124,7 @@ async function bridge() {
     console.log(JSON.stringify({mode: "READ_ONLY_SYNC", authority: cur.authority, phase: cur.phase, baseSha, digest: m.digest, done: snapshot.done.length, mergedPrTasks: snapshot.mergedPrTasks.length,
       openPrs: snapshot.openPrs.map(p => `${p.pr}:${p.task ?? "-"}@${p.headSha.slice(0, 8)}${p.baseRef === BASE ? "" : ` (stacked on ${p.baseRef})`}`), inFlight: snapshot.inFlight.map(f => f.task), blocked: snapshot.blocked.map(f => f.task),
       reconcile: {planned: rec.plan.length, unresolvedWithoutDrainAck: rec.unresolved}}, null, 2));
-  } else if (sub === "status") console.log(JSON.stringify(b().read(), null, 2));
+  } else if (sub === "status") { try { console.log(JSON.stringify(b().read().core, null, 2)); } catch (e) { console.log(JSON.stringify({unverifiable: String(e?.message ?? e)})); process.exit(2); } }
   else if (sub === "probe-store") {
     const ref = `refs/uasco/factory-v2/probe/${String(actor).replace(/[^A-Za-z0-9_-]/g, "_")}`;
     const c = docs.cas(ref, null, {probe: true, at: Date.now()});
@@ -125,17 +132,24 @@ async function bridge() {
     const del = c.ok ? docs.remove(ref, c.sha) : false;
     console.log(JSON.stringify({ref, created: c.ok, secondCreateRefused: race ? !race.ok : null, deleted: del}));
     process.exit(c.ok && race && !race.ok && del ? 0 : 2);
-  } else if (sub === "prepare") console.log(JSON.stringify(b().prepare({manifest: readJson(arg("manifest")), gates: readJson(arg("gates")), actor}).doc, null, 2));
-  else if (sub === "ack") console.log(JSON.stringify(b().drainAck({manifestDigest: readJson(arg("manifest")).digest, drain: readJson(arg("drain")), actor}).doc, null, 2));
-  else if (sub === "commit") {
-    const g = a => execFileSync("git", a, {cwd: ROOT, maxBuffer: 64 << 20}).toString("utf8");
-    g(["fetch", "-q", "origin", BASE]);
-    const currentBaseSha = g(["rev-parse", `origin/${BASE}`]).trim();
-    const now = snapshotV41({baseRef: BASE, baseSha: currentBaseSha, autonomyState: JSON.parse(g(["show", `${currentBaseSha}:docs/planning/autonomy/STATE.json`])), taskIndex: {tasks: []}});
-    console.log(JSON.stringify(b().commit({manifest: readJson(arg("manifest")), currentOpenPrs: listPrs("open"), currentBaseSha, currentStateDigest: now.stateDigest, v2Session: arg("session"), actor}), null, 2));
+  } else if (sub === "keygen") {
+    // the private key stays in this container; print only the public keyring entry for a Founder-approved keyring PR
+    const k = {...generateRoleKey(), role: arg("role"), sessionId: arg("session")};
+    fs.writeFileSync(arg("out"), JSON.stringify(k), {mode: 0o600});
+    console.log(JSON.stringify({keyId: k.keyId, role: k.role, sessionId: k.sessionId, publicKeyPem: k.publicKeyPem}, null, 2));
+  } else if (sub === "sign-drain") {
+    // offline signing by the V4.1 owner for relay: bound to the current verified state, the manifest digest and the exact drain content
+    const br = b(), cur = br.read(), drain = readJson(arg("drain"));
+    const key = readJson(arg("key"));
+    console.log(JSON.stringify(signAction({...key, domain: DOMAIN, action: "DRAIN_ACK", prev: canonDigest(cur.core), payload: br.drainCore(cur, {manifestDigest: cur.core.manifest?.digest, drain})}), null, 2));
   }
-  else if (sub === "rollback") console.log(JSON.stringify(b().rollback({reason: arg("reason", "manual"), actor}).doc, null, 2));
-  else { console.error("bridge snapshot|status|probe-store|prepare|ack|commit|rollback"); process.exit(1); }
+  else if (sub === "prepare") console.log(JSON.stringify(b().prepare({manifest: readJson(arg("manifest")), gates: readJson(arg("gates")), signer: readJson(arg("key"))}).core, null, 2));
+  else if (sub === "relay-drain") { const br = b(); console.log(JSON.stringify(br.drainAck({manifestDigest: br.read().core.manifest?.digest, drain: readJson(arg("drain")), envelope: readJson(arg("envelope"))}).signer, null, 2)); }
+  else if (sub === "ack") console.log(JSON.stringify(b().drainAck({manifestDigest: readJson(arg("manifest")).digest, drain: readJson(arg("drain")), signer: readJson(arg("key"))}).core, null, 2));
+  else if (sub === "commit") console.log(JSON.stringify(b().commit({manifest: readJson(arg("manifest")), signer: readJson(arg("key"))}), null, 2)); // freshness read live by the bridge
+  else if (sub === "rollback") console.log(JSON.stringify(b().rollback({reason: arg("reason", "manual"), signer: readJson(arg("key"))}).core, null, 2));
+  else if (sub === "reset-invalid") console.log(JSON.stringify(b().resetInvalid({reason: arg("reason", "invalid record"), signer: readJson(arg("key"))}).core, null, 2));
+  else { console.error("bridge snapshot|status|probe-store|keygen|prepare|sign-drain|relay-drain|ack|commit|rollback|reset-invalid"); process.exit(1); }
 }
 
 /**
@@ -155,9 +169,12 @@ async function registry() {
   const until = async (pred, ms = 900_000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { const v = pred(); if (v) return v; await new Promise(r => setTimeout(r, 5_000)); } return null; };
   const own = new Ownership(leases, {leaseId: "supervisor--LIVE-probe", environment: `cloud:${role}`, workerId: "supervisor", sessionId: session, ttlMs: role === "A" ? 120_000 : 600_000});
   if (role === "A") {
-    const g = own.acquire(); const original = own.record ? {...own.record} : null; log("A_ACQUIRE_SUPERVISOR_LEASE", {granted: g.granted, epoch: own.epoch, registryHead: head()});
+    const g = own.acquire(); const original = own.record ? {...own.record} : null; const firstHead = head(); log("A_ACQUIRE_SUPERVISOR_LEASE", {granted: g.granted, epoch: own.epoch, registryHead: firstHead});
     const w = reg.cas("probe/A-hello", null, {session, token: own.token, at: Date.now()}); log("A_WRITE_SECTION", {ok: w.ok, registryHead: head()});
-    const stale = docs.cas(ref, "0".repeat(40), {schema: "uasco.factory-v2.shared-registry/1", sections: {}}); log("A_STALE_WHOLE_DOC_CAS_REFUSED_BY_SERVER", {refused: !stale.ok});
+    // a genuinely outdated expectation (A's own earlier registry version) — refused by the server's lease check, not locally
+    const older = firstHead; spawnSync("git", ["fetch", "-q", "origin", `+${ref}:${ref}`], {cwd: ROOT});
+    const stale = older ? docs.cas(ref, older, {schema: "uasco.factory-v2.shared-registry/1", sections: {}}) : {ok: true};
+    log("A_STALE_WHOLE_DOC_CAS_REFUSED_BY_SERVER", {refused: !stale.ok, expectedOld: older, registryHead: head()});
     const b = await until(() => reg.read("probe/B-hello").doc); log("A_SAW_B", {b});
     log("A_RELEASE", {released: own.release(), registryHead: head()});
     const ba = await until(() => reg.read("probe/B-acquired").doc); log("A_SAW_B_ACQUIRE", {ba});
@@ -177,10 +194,29 @@ async function registry() {
   if (arg("out")) fs.writeFileSync(arg("out"), JSON.stringify(ev, null, 2) + "\n");
 }
 
+/** Two-session security probe (probe- domain only). `probe-keyring` builds the PROBE keyring from keys the probe sessions published. */
+async function probe() {
+  const role = arg("role"), session = arg("session"), branch = arg("branch", "uasco/registry-probe2");
+  if (!["A", "B"].includes(role) || !/^session_[A-Za-z0-9]{8,}$/.test(session ?? "") || !/^uasco\/registry-probe[A-Za-z0-9._-]*$/.test(branch)) { console.error("probe --role A|B --session <id> [--branch uasco/registry-probe*]"); process.exit(1); }
+  const ev = [];
+  const log = (step, data = {}) => { const e = {at: new Date().toISOString(), role, session, step, ...data}; ev.push(e); console.log(JSON.stringify(e)); if (arg("out")) fs.writeFileSync(arg("out"), JSON.stringify(ev, null, 2) + "\n"); };
+  await runProbe({role, session, repoRoot: ROOT, branch, keyDir: arg("key-dir", "/tmp/fv2-probe-keys"), prBranch: arg("pr-branch", "claude/nice-sagan-c1zzow"), log});
+}
+function probeKeyring() {
+  const branch = arg("branch", "uasco/registry-probe2");
+  const reg = createSharedRegistry({docStore: createRemoteDocStore({runGit: gitRunner(ROOT)}), ref: `refs/heads/${branch}`});
+  const keys = reg.sections().filter(k => k.startsWith("probe-keys/")).map(k => { const d = reg.read(k).doc; return {keyId: d.keyId, role: d.role, sessionId: d.session, publicKeyPem: d.publicKeyPem}; });
+  const ring = {"//TR": "PROBE anahtar listesi: yalnız probe- alanında iki-oturumlu güvenlik probu için; canlı uasco-v7 otoritesini YETKİLENDİREMEZ (loader probe olmayan alanı reddeder).", schema: KEYRING_SCHEMA, mode: "PROBE", domain: PROBE_DOMAIN, sourceBranch: branch, keys};
+  fs.mkdirSync(path.dirname(arg("out")), {recursive: true}); fs.writeFileSync(arg("out"), JSON.stringify(ring, null, 2) + "\n");
+  console.log(JSON.stringify({keys: keys.map(k => `${k.role}:${k.sessionId}:${k.keyId}`)}));
+}
+
 const cmd = process.argv[2];
 if (cmd === "plan") plan();
 else if (cmd === "evidence") await evidence();
 else if (cmd === "intents") intents();
 else if (cmd === "bridge") await bridge();
 else if (cmd === "registry") await registry();
+else if (cmd === "probe") await probe();
+else if (cmd === "probe-keyring") probeKeyring();
 else { console.error("usage: cli.mjs plan|evidence|intents"); process.exit(1); }

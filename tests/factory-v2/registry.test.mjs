@@ -5,11 +5,12 @@ import os from "node:os";
 import path from "node:path";
 import {spawn} from "node:child_process";
 import {fileURLToPath} from "node:url";
+import {S, SESS, bridgeFor, commitLive, LIVE} from "./keys.mjs";
 import {git} from "./harness.mjs";
 import {createRemoteDocStore, gitRunner} from "../../automation/factory-v2/ref-doc-store.mjs";
 import {createSharedRegistry} from "../../automation/factory-v2/shared-registry.mjs";
 import {Ownership} from "../../automation/factory-v2/ownership.mjs";
-import {AuthorityBridge, snapshotV41, buildManifest} from "../../automation/factory-v2/bridge.mjs";
+import {snapshotV41, buildManifest} from "../../automation/factory-v2/bridge.mjs";
 import {FactorySupervisor} from "../../automation/factory-v2/supervisor.mjs";
 
 const T = 180_000;
@@ -85,22 +86,22 @@ for (let i = 0; i < 6; i++) if (!reg.cas("w/" + tag + "-" + i, null, {tag, i}).o
 
   it("authority bridge runs unchanged on the registry: full handover, V2 gate, rollback; STATE.json handoff.status is NOT authority", {timeout: T}, () => {
     const w = world();
-    const bA = new AuthorityBridge({docStore: w.reg(w.A), domain: "uasco-v7"});
-    const bB = new AuthorityBridge({docStore: w.reg(w.B), domain: "uasco-v7"});
+    const bA = bridgeFor(w.reg(w.A), "uasco-v7");
+    const bB = bridgeFor(w.reg(w.B), "uasco-v7");
     // a STATE.json that *claims* a completed handoff changes nothing: authority is only the CAS'd record
     const state = {done: [], inFlight: [], blocked: [], handoff: {status: "V2_AUTHORITATIVE", authority: "V2 owns everything"}};
     const snap = snapshotV41({baseRef: "integ", baseSha: w.base, autonomyState: state, taskIndex: {tasks: []}, openPrs: []});
     expect(JSON.stringify(snap)).not.toMatch(/V2_AUTHORITATIVE/);
     expect(bA.read().doc.authority).toBe("V4.1");
     expect(() => bA.assertV2("session_v2supervisor", null)).toThrow(/V2_NOT_AUTHORITATIVE/);
-    const m = buildManifest({domain: "uasco-v7", version: 1, snapshot: snap, fromSession: "v41", toSession: "session_v2supervisor"});
-    bB.prepare({manifest: m, gates: GATES, actor: "v2"});
+    const m = buildManifest({domain: "uasco-v7", version: 1, snapshot: snap, fromSession: SESS.V41, toSession: SESS.V2});
+    bB.prepare({manifest: m, gates: GATES, signer: S.V2});
     expect(bA.v41MayDispatch()).toBe(false);
-    bA.drainAck({manifestDigest: m.digest, drain: {acks: {}, builderSessionsStopped: []}, actor: "v41"});
-    const c = bB.commit({manifest: m, currentOpenPrs: [], currentBaseSha: m.snapshot.baseSha, currentStateDigest: m.snapshot.stateDigest, v2Session: "session_v2supervisor", actor: "v2"});
+    bA.drainAck({manifestDigest: m.digest, drain: {acks: {}, builderSessionsStopped: []}, signer: S.V41});
+    const c = commitLive(bB, {manifest: m, currentOpenPrs: [], currentBaseSha: m.snapshot.baseSha, currentStateDigest: m.snapshot.stateDigest, v2Session: "session_v2supervisor"});
     expect(c.doc).toMatchObject({authority: "V2", epoch: 1, holder: "session_v2supervisor"});
     expect(bA.assertV2("session_v2supervisor", 1)).toBe(1);
-    bA.rollback({reason: "test", actor: "v41"});
+    bA.rollback({reason: "test", signer: S.V41});
     expect(() => bB.assertV2("session_v2supervisor", 1)).toThrow(/V2_NOT_AUTHORITATIVE/);
     expect(bA.v41MayDispatch()).toBe(true);
     expect(w.reg(w.A).sections()).toEqual(["refs/uasco/authority/uasco-v7", "refs/uasco/handover/uasco-v7/v1"]);
@@ -109,10 +110,35 @@ for (let i = 0; i < 6; i++) if (!reg.cas("w/" + tag + "-" + i, null, {tag, i}).o
   it("LIVE supervisor accepts the registry lease store (shared) and stays STANDBY while V4.1 is authoritative", {timeout: T}, () => {
     const w = world();
     const reg = w.reg(w.B);
-    const bridge = new AuthorityBridge({docStore: reg, domain: "uasco-v7"});
+    const bridge = bridgeFor(reg, "uasco-v7");
     const sup = new FactorySupervisor({domain: "uasco-v7", mode: "LIVE", sessionId: "session_v2supervisor", journalDir: path.join(w.root, "j"), leaseStore: reg.leaseStore("live"),
       executor: {start: () => { throw new Error("must not dispatch"); }}, backlog: () => [], authority: (s, e) => bridge.assertV2(s, e)});
     expect(sup.start()).toMatchObject({owner: false});
     expect(reg.sections()).toEqual([]); // nothing claimed
+  });
+});
+
+describe("registry hardening (review of 5356c945)", () => {
+  it("stale takeover: two environments that observed the same expired lease cannot both win (lease-version guard)", {timeout: T}, () => {
+    const w = world();
+    let now = 5_000_000;
+    const lA = w.reg(w.A).leaseStore("live"), lB = w.reg(w.B).leaseStore("live");
+    const first = new Ownership(lA, {leaseId: "writer--x", environment: "e0", workerId: "w", sessionId: "session_firstowner", ttlMs: 1_000, now: () => now});
+    expect(first.acquire().granted).toBe(true);
+    now += 10_000;
+    const observed = lA.read("writer--x"); // both takers saw this expired record
+    const take = (store, sess) => store.cas("writer--x", observed, {...observed, sessionId: sess, workerId: "w", environment: sess, epoch: observed.epoch + 1, token: `${sess}:t`, heartbeatAt: now, expiresAt: now + 60_000});
+    const a = take(lA, "session_takerAAAAA"), b = take(lB, "session_takerBBBBB");
+    expect([a.ok, b.ok].filter(Boolean).length).toBe(1);
+    expect(lA.read("writer--x").sessionId).toBe(a.ok ? "session_takerAAAAA" : "session_takerBBBBB");
+  });
+  it("no ABA: a section that returns to an earlier value has a new version", {timeout: T}, () => {
+    const w = world();
+    const r = w.reg(w.A);
+    const v1 = r.cas("k", null, {x: "A"}).sha;
+    const v2 = r.cas("k", v1, {x: "B"}).sha;
+    const v3 = r.cas("k", v2, {x: "A"}).sha;
+    expect(v3).not.toBe(v1);
+    expect(r.cas("k", v1, {x: "stale"}).ok).toBe(false);
   });
 });

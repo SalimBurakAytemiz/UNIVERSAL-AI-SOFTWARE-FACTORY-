@@ -2,6 +2,7 @@
 import crypto from "node:crypto";
 import {assertSharedStore} from "./ownership.mjs";
 import {liveOwnedTasks, DONE_STATUSES} from "./scheduler.mjs";
+import {signAction, verifyAction, canonDigest} from "./identity.mjs";
 
 export const AUTHORITY_SCHEMA = "uasco.factory-v2.authority/1";
 export const MANIFEST_SCHEMA = "uasco.factory-v2.handover-manifest/1";
@@ -119,73 +120,151 @@ export function applyPlan(journal, manifest, plan, fence) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Authority record: one shared doc, CAS on the origin ref. Deterministic phase machine.
+// Authority record: one shared doc, CAS on the shared store. Every transition is a signed envelope bound to the digest of the
+// previous core state (hash chain from the implicit V4.1 genesis). Readers re-verify the whole chain against the canonical
+// keyring, so a registry writer without a registered role key can neither forge nor replay a transition.
 // ---------------------------------------------------------------------------------------------------------------
+const CORE_KEYS = ["domain", "authority", "phase", "epoch", "holder", "candidate", "outgoing", "manifest", "gatesDigest", "drainDigest"];
+export const coreOf = d => Object.fromEntries(CORE_KEYS.map(k => [k, d?.[k] ?? null]));
+const GENESIS = d => coreOf({...IMPLICIT_V41, domain: d});
+const ACTION_OF = {HANDOVER_PREPARED: "PREPARE", V41_DRAINED: "DRAIN_ACK", V2_AUTHORITATIVE: "COMMIT", V41_AUTHORITATIVE: "ROLLBACK"};
+
+/** Pure transition rules over cores; `signer` is the verified signer. Throws on any illegal step. */
+export function checkTransition(prev, next, signer) {
+  const action = ACTION_OF[next.phase];
+  if (!action) throw new BridgeError("PHASE_UNKNOWN", next.phase);
+  if (next.domain !== prev.domain) throw new BridgeError("DOMAIN_CHANGED");
+  if (action === "PREPARE") {
+    if (prev.phase !== "V41_AUTHORITATIVE") throw new BridgeError("PHASE_INVALID", `${prev.phase}->HANDOVER_PREPARED`);
+    if (signer.sessionId !== next.candidate) throw new BridgeError("PREPARE_SIGNER_NOT_CANDIDATE");
+    if (!next.outgoing || next.outgoing === next.candidate || !next.manifest?.digest || !next.gatesDigest) throw new BridgeError("PREPARE_FIELDS_INVALID");
+    if (next.epoch !== prev.epoch || next.authority !== "V4.1" || next.holder !== null) throw new BridgeError("PREPARE_AUTHORITY_CHANGED");
+  } else if (action === "DRAIN_ACK") {
+    if (prev.phase !== "HANDOVER_PREPARED") throw new BridgeError("PHASE_INVALID", `${prev.phase}->V41_DRAINED`);
+    if (signer.sessionId !== prev.outgoing || signer.sessionId === prev.candidate) throw new BridgeError("DRAIN_ACK_SIGNER_INVALID", signer.sessionId);
+    if (!next.drainDigest) throw new BridgeError("DRAIN_FIELDS_INVALID");
+    for (const k of ["authority", "epoch", "holder", "candidate", "outgoing", "manifest", "gatesDigest"]) if (canonDigest(next[k] ?? null) !== canonDigest(prev[k] ?? null)) throw new BridgeError("DRAIN_CHANGED_FIELD", k);
+  } else if (action === "COMMIT") {
+    if (prev.phase !== "V41_DRAINED") throw new BridgeError("PHASE_INVALID", `${prev.phase}->V2_AUTHORITATIVE`);
+    if (signer.sessionId !== prev.candidate || next.holder !== prev.candidate) throw new BridgeError("COMMIT_CANDIDATE_MISMATCH");
+    if (next.authority !== "V2" || next.epoch !== prev.epoch + 1) throw new BridgeError("COMMIT_EPOCH_INVALID");
+    for (const k of ["candidate", "outgoing", "manifest", "gatesDigest", "drainDigest"]) if (canonDigest(next[k] ?? null) !== canonDigest(prev[k] ?? null)) throw new BridgeError("COMMIT_CHANGED_FIELD", k);
+  } else if (action === "ROLLBACK") {
+    if (next.authority !== "V4.1" || next.epoch !== prev.epoch + 1 || next.holder !== null || next.candidate !== null) throw new BridgeError("ROLLBACK_FIELDS_INVALID");
+  }
+  return action;
+}
+
+/** Verify a whole authority document. Absent = genesis (V4.1). Any invalid link => throws (callers fail closed). */
+export function verifyAuthorityDoc(doc, {ring, domain}) {
+  if (!doc) return {core: GENESIS(domain), epoch: 0};
+  if (doc.schema !== AUTHORITY_SCHEMA || doc.domain !== domain || !Array.isArray(doc.chain) || doc.chain.length === 0) throw new BridgeError("AUTHORITY_DOC_INVALID");
+  let prev = GENESIS(domain);
+  for (const link of doc.chain) {
+    const action = ACTION_OF[link.core?.phase];
+    const signer = verifyAction(link.envelope, {ring, action, domain, prev: canonDigest(prev), payload: link.core, checkTime: false});
+    checkTransition(prev, link.core, signer);
+    prev = link.core;
+  }
+  if (canonDigest(prev) !== canonDigest(coreOf(doc))) throw new BridgeError("AUTHORITY_CORE_MISMATCH");
+  return {core: prev, epoch: prev.epoch};
+}
+
 export class AuthorityBridge {
-  constructor({docStore, domain, now = Date.now, requireShared = true}) {
+  /**
+   * keyring(): canonical keyring (identity.loadCanonicalKeyring); gateVerifier(gates, ctx) -> {verified}; live: {canonicalSha(), openPrs(), stateDigest(sha)}
+   * — freshness and gate evidence come from live canonical sources, never from the caller.
+   */
+  constructor({docStore, domain, now = Date.now, requireShared = true, keyring, gateVerifier, live}) {
     if (requireShared) assertSharedStore(docStore, "authority");
-    Object.assign(this, {docStore, domain, now});
+    if (typeof keyring !== "function") throw new BridgeError("KEYRING_REQUIRED");
+    Object.assign(this, {docStore, domain, now, keyring, gateVerifier, live});
   }
-  read() { const r = this.docStore.read(authorityRef(this.domain)); return {sha: r.sha, doc: r.doc ?? IMPLICIT_V41}; }
-  write(expected, next) {
-    const r = this.docStore.cas(authorityRef(this.domain), expected.sha, next);
-    if (!r.ok) throw new BridgeError("AUTHORITY_CAS_LOST", `expected ${expected.sha ?? "absent"}`);
-    return {sha: r.sha, doc: next};
+  /** Raw read + full verification. */
+  read() {
+    const r = this.docStore.read(authorityRef(this.domain));
+    const v = r.doc ? verifyAuthorityDoc(r.doc, {ring: this.keyring(), domain: this.domain}) : {core: GENESIS(this.domain)}; // no record = V4.1 genesis
+    return {sha: r.sha, doc: r.doc ?? {...IMPLICIT_V41, domain: this.domain, chain: []}, core: v.core};
   }
-  step(cur, phase, patch, actor) {
-    const hist = [...(cur.doc.history ?? []), {phase: cur.doc.phase, epoch: cur.doc.epoch, at: cur.doc.updatedAt ?? null, by: cur.doc.updatedBy ?? null}].slice(-20);
-    return {...cur.doc, ...patch, schema: AUTHORITY_SCHEMA, domain: this.domain, phase, updatedAt: this.now(), updatedBy: actor, history: hist};
+  /** Apply one transition: next core -> envelope (supplied pre-signed for relay, or signed here) -> verify -> rules -> CAS. */
+  apply(cur, nextCore, {signer, envelope, extra = {}}) {
+    const action = ACTION_OF[nextCore.phase];
+    const prev = canonDigest(cur.core);
+    const env = envelope ?? (signer ? signAction({...signer, domain: this.domain, action, prev, payload: nextCore, now: this.now()}) : null);
+    if (!env) throw new BridgeError("SIGNATURE_REQUIRED");
+    const who = verifyAction(env, {ring: this.keyring(), action, domain: this.domain, prev, payload: nextCore, now: this.now()});
+    checkTransition(cur.core, nextCore, who);
+    const doc = {...cur.doc, ...extra, ...nextCore, schema: AUTHORITY_SCHEMA, chain: [...(cur.doc.chain ?? []), {core: nextCore, envelope: env}], updatedAt: this.now(), updatedBy: who};
+    const r = this.docStore.cas(authorityRef(this.domain), cur.sha, doc);
+    if (!r.ok) throw new BridgeError("AUTHORITY_CAS_LOST", `expected ${cur.sha ?? "absent"}`);
+    return {sha: r.sha, doc, core: nextCore, signer: who};
   }
-  /** Publish the manifest (immutable versioned ref) and move to HANDOVER_PREPARED. All acceptance gates are required here. */
-  prepare({manifest, gates, actor}) {
+  /** Publish the manifest (immutable versioned section) and move to HANDOVER_PREPARED. Gates are verified from live sources. */
+  prepare({manifest, gates, signer, envelope}) {
     verifyManifest(manifest);
-    const missing = REQUIRED_GATES.filter(g => !gates?.[g] || !gates[g].evidence);
-    if (missing.length) throw new BridgeError("ACCEPTANCE_GATES_MISSING", missing.join(","));
+    if (!manifest.fromSession || manifest.fromSession === manifest.toSession) throw new BridgeError("MANIFEST_SESSIONS_INVALID");
+    if (typeof this.gateVerifier !== "function") throw new BridgeError("GATE_VERIFIER_REQUIRED");
     const cur = this.read();
-    if (cur.doc.phase !== "V41_AUTHORITATIVE") throw new BridgeError("PHASE_INVALID", `${cur.doc.phase}->HANDOVER_PREPARED`);
+    const {verified} = this.gateVerifier(gates, {domain: this.domain, candidate: manifest.toSession, manifestVersion: manifest.version});
     const mref = manifestRef(this.domain, manifest.version);
+    const nextCore = {...cur.core, phase: "HANDOVER_PREPARED", authority: "V4.1", holder: null, candidate: manifest.toSession, outgoing: manifest.fromSession,
+      manifest: {ref: mref, version: manifest.version, digest: manifest.digest}, gatesDigest: canonDigest(verified), drainDigest: null};
     const m = this.docStore.cas(mref, null, manifest);
     if (!m.ok && digest(m.current?.doc ?? {}) !== digest(manifest)) throw new BridgeError("MANIFEST_VERSION_TAKEN", mref);
-    if (!manifest.fromSession || manifest.fromSession === manifest.toSession) throw new BridgeError("MANIFEST_SESSIONS_INVALID");
-    return this.write(cur, this.step(cur, "HANDOVER_PREPARED", {authority: "V4.1", manifest: {ref: mref, version: manifest.version, digest: manifest.digest}, gates, candidate: manifest.toSession, outgoing: manifest.fromSession, drain: null}, actor));
+    return this.apply(cur, nextCore, {signer, envelope, extra: {gates: verified, drain: null}});
   }
-  /** V4.1 owner acknowledges: no new dispatch, in-flight dispositions given, manifest digest equals its own state. */
-  drainAck({manifestDigest, drain, actor}) {
-    const cur = this.read();
-    if (cur.doc.phase !== "HANDOVER_PREPARED") throw new BridgeError("PHASE_INVALID", `${cur.doc.phase}->V41_DRAINED`);
-    if (cur.doc.manifest?.digest !== manifestDigest) throw new BridgeError("DRAIN_MANIFEST_MISMATCH");
+  /** Next core for a drain ack — deterministic, so the V4.1 owner can sign it offline and anyone can relay it. */
+  drainCore(cur, {manifestDigest, drain}) {
+    if (cur.core.manifest?.digest !== manifestDigest) throw new BridgeError("DRAIN_MANIFEST_MISMATCH");
     if (!Array.isArray(drain?.builderSessionsStopped)) throw new BridgeError("DRAIN_ACK_INCOMPLETE", "builderSessionsStopped");
-    // Only the outgoing V4.1 owner named in the manifest may acknowledge; the incoming candidate can never ack its own handover.
-    if (actor !== cur.doc.outgoing || actor === cur.doc.candidate) throw new BridgeError("DRAIN_ACK_ACTOR_INVALID", actor);
-    return this.write(cur, this.step(cur, "V41_DRAINED", {drain: {...drain, by: actor}}, actor));
+    return {...cur.core, phase: "V41_DRAINED", drainDigest: canonDigest(drain)};
   }
-  /** Deterministic commit: reconciliation must have no UNRESOLVED and the manifest must still be fresh. Epoch strictly increases. */
-  commit({manifest, currentOpenPrs, currentBaseSha, currentStateDigest, v2Session, actor}) {
+  drainAck({manifestDigest, drain, signer, envelope}) {
     const cur = this.read();
-    if (cur.doc.phase !== "V41_DRAINED") throw new BridgeError("PHASE_INVALID", `${cur.doc.phase}->V2_AUTHORITATIVE`);
+    if (cur.core.phase !== "HANDOVER_PREPARED") throw new BridgeError("PHASE_INVALID", `${cur.core.phase}->V41_DRAINED`);
+    return this.apply(cur, this.drainCore(cur, {manifestDigest, drain}), {signer, envelope, extra: {drain}});
+  }
+  /** Commit: freshness is read from the live canonical branch and GitHub (never from the caller); reconciliation must be complete. */
+  commit({manifest, signer, envelope}) {
+    const cur = this.read();
+    if (cur.core.phase !== "V41_DRAINED") throw new BridgeError("PHASE_INVALID", `${cur.core.phase}->V2_AUTHORITATIVE`);
     verifyManifest(manifest);
-    if (manifest.digest !== cur.doc.manifest?.digest) throw new BridgeError("COMMIT_MANIFEST_MISMATCH");
-    if (cur.doc.candidate !== v2Session) throw new BridgeError("COMMIT_CANDIDATE_MISMATCH");
-    const fr = manifestFresh(manifest, currentOpenPrs, {currentBaseSha, currentStateDigest});
+    if (manifest.digest !== cur.core.manifest?.digest) throw new BridgeError("COMMIT_MANIFEST_MISMATCH");
+    if (!this.live) throw new BridgeError("LIVE_SOURCE_REQUIRED");
+    const currentBaseSha = this.live.canonicalSha();
+    const fr = manifestFresh(manifest, this.live.openPrs(), {currentBaseSha, currentStateDigest: this.live.stateDigest(currentBaseSha)});
     if (!fr.fresh) throw new BridgeError("MANIFEST_STALE", fr.stale.join(","));
+    if (canonDigest(cur.doc.drain ?? null) !== cur.core.drainDigest) throw new BridgeError("DRAIN_RECORD_TAMPERED");
     const rec = reconcile(manifest, cur.doc.drain);
     if (rec.unresolved.length) throw new BridgeError("RECONCILE_UNRESOLVED", rec.unresolved.map(u => `${u.task}:${u.reason}`).join(","));
-    const next = this.write(cur, this.step(cur, "V2_AUTHORITATIVE", {authority: "V2", epoch: cur.doc.epoch + 1, holder: v2Session}, actor));
-    return {...next, plan: rec.plan};
+    const nextCore = {...cur.core, phase: "V2_AUTHORITATIVE", authority: "V2", epoch: cur.core.epoch + 1, holder: cur.core.candidate};
+    return {...this.apply(cur, nextCore, {signer, envelope}), plan: rec.plan};
   }
-  /** Rollback from any phase to V4.1, with a strictly greater epoch so a V2 holder is fenced. */
-  rollback({reason, actor}) {
+  /** Rollback to V4.1 from any phase: only a registered V41_OWNER or FOUNDER key; epoch strictly increases so a V2 holder is fenced. */
+  rollbackCore(cur) { return {...cur.core, phase: "V41_AUTHORITATIVE", authority: "V4.1", epoch: cur.core.epoch + 1, holder: null, candidate: null, outgoing: null, manifest: null, gatesDigest: null, drainDigest: null}; }
+  rollback({reason, signer, envelope}) {
     const cur = this.read();
-    return this.write(cur, this.step(cur, "V41_AUTHORITATIVE", {authority: "V4.1", epoch: cur.doc.epoch + 1, holder: null, candidate: null, rollbackReason: reason}, actor));
+    return this.apply(cur, this.rollbackCore(cur), {signer, envelope, extra: {rollbackReason: String(reason ?? "")}});
   }
-  /** Gate the V2 Supervisor checks before every dispatch/merge: authority must name this session at this epoch. */
+  /**
+   * Recovery when the stored record does not verify (e.g. a registry writer overwrote it): a V41_OWNER or FOUNDER key restarts the chain
+   * from genesis with a signed ROLLBACK to V4.1. Only allowed while the record is unverifiable; a V2 holder that remembers its epoch stops.
+   */
+  resetInvalid({reason, signer, envelope}) {
+    const raw = this.docStore.read(authorityRef(this.domain));
+    try { verifyAuthorityDoc(raw.doc, {ring: this.keyring(), domain: this.domain}); throw new BridgeError("RESET_NOT_NEEDED"); } catch (e) { if (e?.code === "RESET_NOT_NEEDED") throw e; }
+    const genesis = GENESIS(this.domain);
+    const cur = {sha: raw.sha, doc: {schema: AUTHORITY_SCHEMA, ...genesis, chain: [], invalidRecordReplaced: canonDigest(raw.doc ?? null)}, core: genesis};
+    return this.apply(cur, {...genesis, phase: "V41_AUTHORITATIVE", authority: "V4.1", epoch: 1}, {signer, envelope, extra: {rollbackReason: `RESET_INVALID:${String(reason ?? "")}`}});
+  }
+  /** The V2 Supervisor gate: verified chain, V2 phase, this holder, this epoch. */
   assertV2(session, epoch) {
-    const {doc} = this.read();
-    if (doc.authority !== "V2" || doc.phase !== "V2_AUTHORITATIVE") throw new BridgeError("V2_NOT_AUTHORITATIVE", doc.phase);
-    if (doc.holder !== session) throw new BridgeError("V2_HOLDER_MISMATCH", doc.holder);
-    if (epoch != null && doc.epoch !== epoch) throw new BridgeError("V2_EPOCH_MISMATCH", `${doc.epoch}!=${epoch}`);
-    return doc.epoch;
+    const {core} = this.read();
+    if (core.authority !== "V2" || core.phase !== "V2_AUTHORITATIVE") throw new BridgeError("V2_NOT_AUTHORITATIVE", core.phase);
+    if (core.holder !== session) throw new BridgeError("V2_HOLDER_MISMATCH", core.holder);
+    if (epoch != null && core.epoch !== epoch) throw new BridgeError("V2_EPOCH_MISMATCH", `${core.epoch}!=${epoch}`);
+    return core.epoch;
   }
-  /** What V4.1 checks before each new dispatch/merge once the bridge exists. */
-  v41MayDispatch() { const {doc} = this.read(); return doc.phase === "V41_AUTHORITATIVE"; }
+  /** V4.1 side: dispatch/merge only while the VERIFIED record says V4.1 is authoritative; an unverifiable record halts it too. */
+  v41MayDispatch() { try { return this.read().core.phase === "V41_AUTHORITATIVE"; } catch { return false; } }
 }
