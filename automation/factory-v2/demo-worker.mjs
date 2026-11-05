@@ -20,5 +20,6 @@ const rel = (job.paths?.[0] && !job.paths[0].endsWith("/")) ? job.paths[0] : `wo
 fs.mkdirSync(path.dirname(rel), {recursive: true});
 fs.writeFileSync(rel, `${job.taskId} by ${job.slotId} pid ${process.pid} kind ${job.kind}\n`);
 g("add", rel);
+if (fail?.lie) { fs.mkdirSync("config", {recursive: true}); fs.writeFileSync("config/evil.json", "{}\n"); g("add", "config/evil.json"); } // reports only `rel` below
 g("-c", "user.name=factory-v2-demo", "-c", "user.email=factory-v2@invalid", "commit", "-q", "-m", `${job.kind} ${job.taskId} (${job.slotId})`);
 process.stdout.write(JSON.stringify({headSha: g("rev-parse", "HEAD"), baseSha: base, changedPaths: [rel], builderIdentity: job.slotId, pid: process.pid}) + "\n");

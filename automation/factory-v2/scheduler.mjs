@@ -56,7 +56,7 @@ export function assign(ready, idleBuilders, {inFlight = [], capacity = idleBuild
 export function liveOwnedTasks({autonomyState = null, openPrs = []} = {}) {
   const s = new Set();
   for (const f of autonomyState?.inFlight ?? []) if (f?.task) s.add(f.task);
-  for (const f of autonomyState?.founderRequired ?? autonomyState?.awaitingFounder ?? []) if (f?.task) s.add(f.task);
+  for (const f of [...(autonomyState?.blocked ?? []), ...(autonomyState?.founderRequired ?? [])]) if (f?.task) s.add(f.task);
   const re = /^UASCO-TASK: ([A-Z0-9]+-T\d{4}(?:\.[a-z0-9]+)?)\s*$/m;
   for (const pr of openPrs) { const m = re.exec(pr?.body ?? ""); if (m) s.add(m[1]); }
   return s;

@@ -3,6 +3,10 @@
 //   node automation/factory-v2/cli.mjs plan [--builders 8] [--open-prs prs.json]
 //   node automation/factory-v2/cli.mjs evidence [--out file.json] [--builders 8] [--hold-ms 1500]
 //   node automation/factory-v2/cli.mjs intents list|bind <intentId> <sessionId>|complete <intentId> <result.json> --dir <dir>
+//   node automation/factory-v2/cli.mjs bridge snapshot [--out manifest.json] [--version n]   (read-only: origin + GitHub API)
+//   node automation/factory-v2/cli.mjs bridge status                                         (read-only: shared authority record)
+//   node automation/factory-v2/cli.mjs bridge probe-store                                    (capability check: CAS create+delete of one probe ref)
+//   node automation/factory-v2/cli.mjs bridge prepare --manifest f --gates f | ack --manifest f --drain f | commit --manifest f | rollback --reason r
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -14,6 +18,9 @@ import {FactorySupervisor, maxOverlap} from "./supervisor.mjs";
 import {LocalProcessExecutor, CloudSessionIntentExecutor} from "./executors.mjs";
 import {createLocalGitIntegration} from "./merge-git.mjs";
 import {createGitStore} from "./ownership.mjs";
+import {createRemoteDocStore, gitRunner} from "./ref-doc-store.mjs";
+import {AuthorityBridge, snapshotV41, buildManifest, reconcile} from "./bridge.mjs";
+import {execFileSync} from "node:child_process";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..");
@@ -47,7 +54,7 @@ async function evidence() {
   const executor = new LocalProcessExecutor({repoDir: repo, worktreeRoot: path.join(root, "wt"), baseSha: base, command: () => [process.execPath, [path.join(HERE, "demo-worker.mjs")]], evidence: ev});
   const integ = createLocalGitIntegration({repoDir: repo, branch: "integ", scratchDir: path.join(root, "integration")});
   const backlog = Array.from({length: builders}, (_, i) => ({id: `EV-T${String(i + 1).padStart(4, "0")}`, tier: "T1", status: "PROPOSED", deps: [], paths: [`work/EV-T${String(i + 1).padStart(4, "0")}.txt`]}));
-  const sup = new FactorySupervisor({domain: "evidence", mode: "SHADOW", sessionId: `session_evidence${process.pid}`, journalDir: path.join(root, "journal"), leaseStore: createGitStore(repo, "SHADOW"),
+  const sup = new FactorySupervisor({repoDir: repo, domain: "evidence", mode: "SHADOW", sessionId: `session_evidence${process.pid}`, journalDir: path.join(root, "journal"), leaseStore: createGitStore(repo, "SHADOW"),
     executor, backlog: () => backlog, target: {...INITIAL_TARGET, builders: Math.max(builders, 1)},
     mergeFacts: t => ({candidate: {taskId: t.taskId, headSha: t.data.headSha, baseSha: t.data.baseSha, changedPaths: t.data.changedPaths, allowedPaths: ["work/"], builderIdentity: t.data.builderIdentity, priorBlockers: [], required: t.data.required},
       canonicalSha: integ.readCanonical(), conflicts: false, baseDeltaOverlaps: false, verdicts: t.data.verdicts, ci: {sha: t.data.headSha, requiredContexts: {"local-check": "success"}}, protectedPaths: readJson(path.join(ROOT, "config/protected-paths.json"))}),
@@ -82,8 +89,47 @@ function intents() {
   else { console.error("intents list|bind|complete"); process.exit(1); }
 }
 
+const REPO = "SalimBurakAytemiz/UNIVERSAL-AI-SOFTWARE-FACTORY-", BASE = "v7/integration", DOMAIN = "uasco-v7";
+const api = p => JSON.parse(execFileSync("curl", ["-sSf", "-H", "Accept: application/vnd.github+json", `https://api.github.com/repos/${REPO}/${p}`], {maxBuffer: 64 << 20}).toString("utf8"));
+const listPrs = state => { const out = []; for (let page = 1; page <= 10; page++) { const r = api(`pulls?state=${state}&per_page=100&page=${page}`); out.push(...r); if (r.length < 100) break; } return out; };
+async function bridge() {
+  const sub = process.argv[3];
+  const docs = createRemoteDocStore({runGit: gitRunner(ROOT)});
+  const b = () => new AuthorityBridge({docStore: docs, domain: DOMAIN});
+  const actor = process.env.CLAUDE_SESSION_ID ?? arg("actor", "unknown");
+  if (sub === "snapshot") {
+    const g = a => execFileSync("git", a, {cwd: ROOT, maxBuffer: 64 << 20}).toString("utf8");
+    g(["fetch", "-q", "origin", BASE]);
+    const baseSha = g(["rev-parse", `origin/${BASE}`]).trim();
+    const show = f => JSON.parse(g(["show", `${baseSha}:${f}`]));
+    const open = listPrs("open");
+    const merged = listPrs("closed").filter(p => p.merged_at && p.base?.ref === BASE);
+    const snapshot = snapshotV41({baseRef: BASE, baseSha, autonomyState: show("docs/planning/autonomy/STATE.json"), taskIndex: show("docs/planning/autonomy/task-index.json"), openPrs: open, mergedPrs: merged});
+    const cur = b().read().doc;
+    const m = buildManifest({domain: DOMAIN, version: Number(arg("version", (cur.manifest?.version ?? 0) + 1)), snapshot, fromSession: arg("from", "V4.1"), toSession: arg("to", "UNASSIGNED")});
+    const rec = reconcile(m, {acks: {}});
+    if (arg("out")) fs.writeFileSync(arg("out"), JSON.stringify(m, null, 2) + "\n");
+    console.log(JSON.stringify({mode: "READ_ONLY_SYNC", authority: cur.authority, phase: cur.phase, baseSha, digest: m.digest, done: snapshot.done.length, mergedPrTasks: snapshot.mergedPrTasks.length,
+      openPrs: snapshot.openPrs.map(p => `${p.pr}:${p.task ?? "-"}@${p.headSha.slice(0, 8)}${p.baseRef === BASE ? "" : ` (stacked on ${p.baseRef})`}`), inFlight: snapshot.inFlight.map(f => f.task), blocked: snapshot.blocked.map(f => f.task),
+      reconcile: {planned: rec.plan.length, unresolvedWithoutDrainAck: rec.unresolved}}, null, 2));
+  } else if (sub === "status") console.log(JSON.stringify(b().read(), null, 2));
+  else if (sub === "probe-store") {
+    const ref = `refs/uasco/factory-v2/probe/${String(actor).replace(/[^A-Za-z0-9_-]/g, "_")}`;
+    const c = docs.cas(ref, null, {probe: true, at: Date.now()});
+    const race = c.ok ? docs.cas(ref, null, {probe: "second"}) : null;
+    const del = c.ok ? docs.remove(ref, c.sha) : false;
+    console.log(JSON.stringify({ref, created: c.ok, secondCreateRefused: race ? !race.ok : null, deleted: del}));
+    process.exit(c.ok && race && !race.ok && del ? 0 : 2);
+  } else if (sub === "prepare") console.log(JSON.stringify(b().prepare({manifest: readJson(arg("manifest")), gates: readJson(arg("gates")), actor}).doc, null, 2));
+  else if (sub === "ack") console.log(JSON.stringify(b().drainAck({manifestDigest: readJson(arg("manifest")).digest, drain: readJson(arg("drain")), actor}).doc, null, 2));
+  else if (sub === "commit") console.log(JSON.stringify(b().commit({manifest: readJson(arg("manifest")), currentOpenPrs: listPrs("open"), v2Session: arg("session"), actor}), null, 2));
+  else if (sub === "rollback") console.log(JSON.stringify(b().rollback({reason: arg("reason", "manual"), actor}).doc, null, 2));
+  else { console.error("bridge snapshot|status|probe-store|prepare|ack|commit|rollback"); process.exit(1); }
+}
+
 const cmd = process.argv[2];
 if (cmd === "plan") plan();
 else if (cmd === "evidence") await evidence();
 else if (cmd === "intents") intents();
+else if (cmd === "bridge") await bridge();
 else { console.error("usage: cli.mjs plan|evidence|intents"); process.exit(1); }

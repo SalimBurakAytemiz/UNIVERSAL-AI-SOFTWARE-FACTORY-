@@ -46,30 +46,61 @@ Code: `automation/factory-v2/` · Tests: `tests/factory-v2/` · Evidence: `docs/
 | Coexistence with V4.1 | TESTED | A15: isolated namespace; live-owned tasks excluded |
 | Handover | TESTED (local) | A16 |
 | Model-backed Builders/Reviewers as Claude Cloud sessions | IMPLEMENTED (intent bridge), **not ACTIVATED** | needs live cutover |
-| Live cutover, live activation (A18) | **NOT DONE** | see blockers |
+| Integration bridge (sync, manifest, CAS authority, reconcile, handover, rollback) | IMPLEMENTED · TESTED (shared bare origin + two clones) | `bridge.test.mjs` |
+| Live read-only sync against real V4.1 state | VERIFIED (read-only) | see below |
+| Live cutover, live activation (A18) | **NOT DONE**, V4.1 stays authoritative | see blockers |
 
 Overall: **PARTIALLY COMPLETE**.
 
-## Live cutover procedure (needs the V4.1 supervisor session to take part)
+## Integration bridge (one UASCO execution system)
 
-1. Merge this change through the normal V4.1 path (CLAUDE_REVIEWER review + required CI + `executor.mjs`).
-2. V4.1 supervisor session: finish or checkpoint its current merge; stop starting new builders; write its in-flight list (task, PR, head SHA, builder session) into `STATE.json` `inFlight`.
-3. New supervisor session starts `FactorySupervisor` in `LIVE` mode with domain `uasco-v7`, using `createRemoteRefStore` against origin (first live use of `refs/uasco/claims/*`). It takes the domain lease and excludes every `inFlight` task, so nothing in flight is claimed twice.
-4. The V4.1 session keeps driving its in-flight PRs to merge/close (drain), then exits. New dispatches come only from the lease holder.
-5. The new supervisor spawns 8 Builder sessions (one `create_session` per spawn intent, tags `uasco-factory-v2`, `slot:builder-X`), binds each real session id, and reviewers per review intent (fresh, read-only, never the builder).
-6. Verify the topology with `list_sessions` (8 builder sessions running at once) and record session ids and overlapping timestamps as A18 evidence.
-7. Rollback: release the domain lease; the V4.1 loop resumes from `STATE.json`. Leases expire on their own if a session dies.
+Code: `bridge.mjs`, `ref-doc-store.mjs`, `github-writer.mjs`; tests: `tests/factory-v2/bridge.test.mjs`.
+
+- **Single authority record** `refs/uasco/authority/uasco-v7` on origin. Each version is a commit whose parent is the previous version. Updates are compare-and-swap (`push --force-with-lease=<ref>:<expected>`), so atomicity comes from the shared server, not from local locks. An absent record means V4.1 is authoritative.
+- **Phases** (deterministic, CAS-guarded, epoch only increases): `V41_AUTHORITATIVE → HANDOVER_PREPARED → V41_DRAINED → V2_AUTHORITATIVE`; `rollback` returns to `V41_AUTHORITATIVE` from any phase with a new epoch.
+  - `prepare` requires all four acceptance gates (`reviewClean`, `ciPassed`, `founderAuthorization`, `migrationAcceptance`, each with evidence). It publishes the immutable manifest `refs/uasco/handover/uasco-v7/v<N>`.
+  - `drainAck` is written by the V4.1 owner. It must match the manifest digest and list the stopped builder sessions and a disposition per in-flight task (`COMPLETED` / `FENCED`).
+  - `commit` re-checks every open PR head against the manifest (`MANIFEST_STALE` otherwise). It refuses any `RECONCILE_UNRESOLVED` item and names only the prepared candidate session.
+- **Read-only sync**: `bridge snapshot` reads `STATE.json` and `task-index.json` at the exact `origin/v7/integration` SHA, plus open and merged PRs from the GitHub API. It writes nothing.
+- **Reconciliation**:
+  - Tasks in `STATE.done` or with a task-index DONE status are imported as VERIFIED and never rebuilt.
+  - Every open PR with a `UASCO-TASK:` line becomes its own work item (`TASK#prN`) at its exact head/base SHA, adopted and not rebuilt. Its canonical task stays blocked as `AWAITING_ADOPTED_PRS`.
+  - Stacked PRs are tracked but never auto-merged.
+  - A merged increment PR is evidence, not completion.
+  - An in-flight task with no open PR needs an explicit drain disposition.
+  - PRs without a governed task line are left untouched.
+  - The plan is applied to the V2 journal idempotently (keyed by manifest digest), so a restart re-imports nothing.
+- **Gate in the Supervisor**: LIVE mode refuses a non-shared lease store and stays STANDBY unless the authority record names its session at the current epoch. It re-checks before every dispatch and before every merge write. A rollback revokes it on the next tick.
+- **Global exclusivity**: in LIVE mode the Supervisor, Writer and task leases use `createRemoteLeaseStore` (origin `refs/uasco/claims/*`). Tested across two independent clones of one shared origin.
+- **Live writer**: `github-writer.mjs` performs no git writes of its own. It calls the governed `docs/planning/autonomy/executor.mjs merge`. `FOUNDER_REQUIRED` and `BLOCK` are never treated as merged.
+
+### Live read-only sync result (this session, base `a01c37d`)
+
+Authority: V4.1 (no record on origin). 41 done tasks imported, 10 open PRs. Seven PRs carry a governed task line and are adopted at their exact head SHAs; #340 is stacked on another branch and is tracked but never auto-merged; #282, #340 and #341 have no governed task line and are left untouched. Without a V4.1 drain disposition, 5 in-flight tasks stay UNRESOLVED (CLOUD-T0008, UASCO-T0045, CLOUD-T0010, CLOUD-T0015, UASCO-T0062), so `commit` would be refused. This is the intended fail-closed behaviour.
+
+## Live cutover runbook
+
+1. Merge this change through the normal path: CLAUDE_REVIEWER review, required CI, and Founder approval. It is not a single V4.1 task, so `autonomy.mjs` returns FOUNDER_REQUIRED.
+2. V2 session: `node automation/factory-v2/cli.mjs bridge snapshot --to <v2 session id> --out m.json`, then `bridge prepare --manifest m.json --gates gates.json` (gate evidence: review id, CI run, Founder decision id, this test run).
+3. V4.1 session: stop new dispatch and merges (it checks `v41MayDispatch()`), then write `drain.json` with a disposition per in-flight task, `builderSessionsStopped` and `implementerSessions`. Then run `bridge ack --manifest m.json --drain drain.json`.
+4. V2 session: `bridge commit --manifest m.json --session <v2 session id>`, then start `FactorySupervisor` in LIVE mode with `createRemoteLeaseStore` and `authority: (s, e) => bridge.assertV2(s, e)`, and apply the plan.
+5. Spawn 8 Builder sessions and up to 4 Reviewer sessions from the spawn intents (`create_session`, tags `uasco-factory-v2`, `slot:*`), bind their real session ids, and verify overlap with `list_sessions` (A18).
+6. Rollback: `bridge rollback --reason ...`. V2 is revoked on its next tick and V4.1 resumes from `STATE.json`.
 
 ## Blockers (exact)
 
-1. **Live cutover needs the V4.1 session to take part.** This session is not the live owner. Stopping the V4.1 session's dispatch from outside would disrupt it, which the directive forbids. Steps 2 and 4 must be done by that session or by the Founder.
-2. **Protected path: `apps/control-api/src/server.ts`.** The in-app V7 MissionRunner stays at concurrency 1 until the constructor passes `maxConcurrentRuns`. The change below needs Founder authorization (PROTECTED_PATH):
+1. **Shared durable storage is not writable from this session.** `git push origin <sha>:refs/uasco/factory-v2/probe/x1` and `...:refs/uasco/factory-v2/probe/x2` both return `HTTP 403` from the session git proxy (policy denial). Only the designated branch is pushable. The authority record, manifest and cross-cloud leases therefore cannot be created on origin from here, and routing around the proxy (for example through REST ref creation) is not permitted.
+   - Fix: an environment or session whose GitHub access allows pushing `refs/uasco/*`, or a dedicated branch such as `uasco/authority` (the store accepts `refs/heads/uasco/*`) that both supervisor sessions may push.
+2. **V4.1 participation.** Steps 3 and 4 of the runbook need the live V4.1 supervisor (`session_015dYwazi7LHFCg3dABbSW2P`) to stop dispatch and write the drain acknowledgement. This session does not stop or redirect it.
+3. **Founder approval to merge this change.** It is not a covered single-task PR, so the governed merge path returns FOUNDER_REQUIRED.
+4. **Protected path `apps/control-api/src/server.ts`** (in-app MissionRunner concurrency, diff below). This is independent of the cloud factory.
    ```diff
    -    leaseTtlMs:r.leaseTtlMs,maxRemediations:r.maxRemediations,
    +    leaseTtlMs:r.leaseTtlMs,maxConcurrentRuns:r.maxConcurrentRuns??(Number(process.env.UASCO_WORKOS_MAX_CONCURRENT_RUNS)||1),maxRemediations:r.maxRemediations,
    ```
-3. **No real quota telemetry.** The governor accepts telemetry, but no authorized usage API is exposed to this session. Its decisions run on reported numbers and are labelled as estimates.
-4. **Live claim refs.** `createRemoteRefStore` pushes `refs/uasco/claims/*` to origin. That is a first live use and part of the cutover, not done here.
+5. **No real quota telemetry** is exposed to this session. The governor uses reported values, labelled as estimates.
+
+V4.1 ownership is preserved. No authority record, manifest or lease exists on origin (`git ls-remote origin 'refs/uasco/*'` returns nothing).
 
 ## Commands
 

@@ -47,6 +47,7 @@ export class StateJournal {
     this.keys.set(e.idempotencyKey, e); this.events.push(e);
     if (e.kind === "ENQUEUE") this.tasks.set(e.taskId, {taskId: e.taskId, state: "QUEUED", attempt: 0, data: {...e.data}, history: [e.seq]});
     else if (e.kind === "TRANSITION") { const t = this.tasks.get(e.taskId); t.state = e.to; t.attempt = e.attempt; t.data = {...t.data, ...e.data}; t.history.push(e.seq); }
+    else if (e.kind === "IMPORT") { if (!this.tasks.has(e.taskId)) this.tasks.set(e.taskId, {taskId: e.taskId, state: e.to, attempt: e.data?.attemptBump ? 1 : 0, data: {...e.data}, history: [e.seq]}); }
     else if (e.kind === "VERDICT") { const t = this.tasks.get(e.taskId); if (t) t.data = {...t.data, verdicts: [...(t.data.verdicts ?? []), e.data.verdict]}; }
     else if (e.kind === "NOTE") { const t = this.tasks.get(e.taskId); if (t) t.data = {...t.data, ...e.data}; }
   }
@@ -105,6 +106,12 @@ export class StateJournal {
   }
   get(taskId) { return this.tasks.get(taskId) ?? null; }
   inState(...states) { return [...this.tasks.values()].filter(t => states.includes(t.state)); }
+  /** Bridge import of a V4.1 task in a reconciled state. Only for unknown tasks; never overwrites V2 progress. */
+  importTask(taskId, to, data, fence, idempotencyKey) {
+    if (!STATES.includes(to)) throw new JournalError("JOURNAL_IMPORT_STATE", to);
+    if (this.tasks.has(taskId) && !this.keys.has(idempotencyKey)) return {duplicate: true, entry: null, existing: this.tasks.get(taskId).state};
+    return this.append({kind: "IMPORT", taskId, to, idempotencyKey, data}, fence);
+  }
   /** Durable per-task annotation without a state change (VERDICT accumulates review verdicts; NOTE merges data). */
   annotate(taskId, kind, data, fence, idempotencyKey) { if (!this.tasks.has(taskId)) throw new JournalError("JOURNAL_UNKNOWN_TASK", taskId); return this.append({kind, taskId, idempotencyKey, data}, fence); }
   record(kind, data, fence, idempotencyKey) { return this.append({kind, idempotencyKey: idempotencyKey ?? `${kind}:${this.seq + 1}`, data}, fence); }

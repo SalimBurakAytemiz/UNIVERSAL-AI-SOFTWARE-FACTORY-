@@ -34,7 +34,7 @@ export function makeSupervisor(env, o = {}) {
   const integ = createLocalGitIntegration({repoDir: repo, branch: "integ", scratchDir: path.join(root, "integration")});
   const backlog = o.backlog ?? tasks(8);
   const sup = new FactorySupervisor({
-    domain: o.domain ?? "test", mode: o.mode ?? "SHADOW", sessionId: o.sessionId ?? "session_supervisorA1", journalDir: o.journalDir ?? path.join(root, "journal"),
+    repoDir: repo, domain: o.domain ?? "test", mode: o.mode ?? "SHADOW", sessionId: o.sessionId ?? "session_supervisorA1", journalDir: o.journalDir ?? path.join(root, "journal"),
     leaseStore: o.leaseStore ?? createGitStore(repo, "SHADOW"), executor, backlog: () => backlog, leaseTtlMs: o.leaseTtlMs ?? 60_000, target: o.target,
     liveOwned: o.liveOwned, quota: o.quota, now: o.now,
     mergeFacts: t => ({

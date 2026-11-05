@@ -15,6 +15,7 @@ const isProtected = (p, protectedPaths) => {
  */
 export function prepareCandidate(f) {
   const c = f.candidate, reasons = [];
+  if (!Array.isArray(c?.changedPaths) || c.changedPaths.length === 0 || c.diffSource !== "GIT_DIFF") reasons.push("CHANGED_PATHS_UNVERIFIED"); // only a supervisor-computed git diff is trusted
   if (!SHA.test(c?.headSha ?? "")) reasons.push("HEAD_SHA_INVALID");
   if (!SHA.test(f.canonicalSha ?? "")) reasons.push("CANONICAL_SHA_UNKNOWN");
   if (f.conflicts) reasons.push("MERGE_CONFLICT");
@@ -25,7 +26,7 @@ export function prepareCandidate(f) {
   if (outOfScope.length) reasons.push(`SCOPE_VIOLATION:${outOfScope.join(",")}`);
   const prot = (c.changedPaths ?? []).filter(p => isProtected(p, f.protectedPaths) && !(f.founderAuthorizedPaths ?? []).includes(p));
   if (prot.length) reasons.push(`PROTECTED_PATH_FOUNDER_REQUIRED:${prot.join(",")}`);
-  const rv = reviewAuthorizes({verdicts: f.verdicts, required: c.required ?? [], baseSha: c.baseSha, headSha: c.headSha, builderIdentity: c.builderIdentity, priorBlockers: c.priorBlockers ?? []});
+  const rv = reviewAuthorizes({verdicts: f.verdicts, required: c.required, baseSha: c.baseSha, headSha: c.headSha, builderIdentity: c.builderIdentity, priorBlockers: c.priorBlockers ?? []});
   reasons.push(...rv.reasons);
   if (f.ci?.sha !== c.headSha) reasons.push("CI_NOT_BOUND_TO_HEAD");
   const ctx = f.ci?.requiredContexts ?? {};
@@ -46,7 +47,7 @@ export async function prepareAll(factsList, workers = 3, prepareFn = async f => 
  * Exclusive Merge Writer. git: {readCanonical()->sha, merge(candidate, expectedBaseSha)->{ok,resultSha,reason}, verifyRemote(sha)->bool}.
  * Each candidate: acquire/renew writer lease -> read canonical -> re-check readiness -> fence -> CAS merge -> verify -> record.
  */
-export async function writeMerges(readyList, {ownership, git, recheck, record = () => {}}) {
+export async function writeMerges(readyList, {ownership, git, recheck, record = () => {}, beforeWrite = () => {}}) {
   const results = [];
   const a = ownership.record ? {granted: ownership.renew()} : ownership.acquire();
   if (!a.granted) return {held: true, holder: ownership.holder(), results};
@@ -58,6 +59,7 @@ export async function writeMerges(readyList, {ownership, git, recheck, record = 
         if (!check.ready) { results.push({taskId: cand.taskId, status: "SKIPPED_NOT_READY", reasons: check.reasons}); continue; }
         if (!ownership.renew()) throw new OwnershipLost(ownership.leaseId, "RENEW_FAILED");
         ownership.fence();
+        beforeWrite(); // the Supervisor that ordered the merge must still own the domain (throws OWNERSHIP_LOST)
         const m = await git.merge(cand, base);
         if (!m.ok) { results.push({taskId: cand.taskId, status: m.reason === "BASE_MOVED" ? "RETRY_BASE_MOVED" : "MERGE_REFUSED", reasons: [m.reason]}); continue; }
         const verified = await git.verifyRemote(m.resultSha);

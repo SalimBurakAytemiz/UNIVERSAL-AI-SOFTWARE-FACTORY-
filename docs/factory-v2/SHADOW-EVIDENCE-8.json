@@ -2,9 +2,9 @@
   "//TR": "Factory V2 SHADOW kanıtı: geçici izole depoda gerçek alt süreçler (model çağrısı yok); canlı fabrika aktivasyonu DEĞİLDİR.",
   "kind": "SHADOW_LOCAL_PROCESS_EVIDENCE",
   "isLiveActivation": false,
-  "startedAt": "2026-11-05T07:44:59.170Z",
+  "startedAt": "2026-11-05T08:04:20.287Z",
   "supervisor": {
-    "sessionId": "session_evidence16908",
+    "sessionId": "session_evidence15604",
     "epoch": 1
   },
   "measured": {
@@ -19,218 +19,218 @@
   "processes": [
     {
       "role": "BUILDER",
-      "slotId": "builder-A",
-      "taskId": "EV-T0002",
-      "pid": 16963,
-      "startedAt": "2026-11-05T07:44:59.296Z",
-      "endedAt": "2026-11-05T07:45:00.953Z",
-      "exit": 0
-    },
-    {
-      "role": "BUILDER",
       "slotId": "builder-H",
       "taskId": "EV-T0001",
-      "pid": 16948,
-      "startedAt": "2026-11-05T07:44:59.258Z",
-      "endedAt": "2026-11-05T07:45:00.998Z",
-      "exit": 0
-    },
-    {
-      "role": "BUILDER",
-      "slotId": "builder-C",
-      "taskId": "EV-T0004",
-      "pid": 16993,
-      "startedAt": "2026-11-05T07:44:59.373Z",
-      "endedAt": "2026-11-05T07:45:01.040Z",
+      "pid": 15644,
+      "startedAt": "2026-11-05T08:04:20.383Z",
+      "endedAt": "2026-11-05T08:04:22.037Z",
       "exit": 0
     },
     {
       "role": "BUILDER",
       "slotId": "builder-B",
       "taskId": "EV-T0003",
-      "pid": 16978,
-      "startedAt": "2026-11-05T07:44:59.334Z",
-      "endedAt": "2026-11-05T07:45:01.074Z",
+      "pid": 15674,
+      "startedAt": "2026-11-05T08:04:20.455Z",
+      "endedAt": "2026-11-05T08:04:22.091Z",
       "exit": 0
     },
     {
       "role": "BUILDER",
       "slotId": "builder-G",
       "taskId": "EV-T0008",
-      "pid": 17053,
-      "startedAt": "2026-11-05T07:44:59.546Z",
-      "endedAt": "2026-11-05T07:45:01.314Z",
+      "pid": 15749,
+      "startedAt": "2026-11-05T08:04:20.631Z",
+      "endedAt": "2026-11-05T08:04:22.366Z",
       "exit": 0
     },
     {
       "role": "BUILDER",
       "slotId": "builder-F",
       "taskId": "EV-T0007",
-      "pid": 17038,
-      "startedAt": "2026-11-05T07:44:59.506Z",
-      "endedAt": "2026-11-05T07:45:01.353Z",
+      "pid": 15734,
+      "startedAt": "2026-11-05T08:04:20.599Z",
+      "endedAt": "2026-11-05T08:04:22.412Z",
       "exit": 0
     },
     {
       "role": "BUILDER",
       "slotId": "builder-E",
       "taskId": "EV-T0006",
-      "pid": 17023,
-      "startedAt": "2026-11-05T07:44:59.462Z",
-      "endedAt": "2026-11-05T07:45:01.391Z",
+      "pid": 15719,
+      "startedAt": "2026-11-05T08:04:20.559Z",
+      "endedAt": "2026-11-05T08:04:22.458Z",
       "exit": 0
     },
     {
       "role": "BUILDER",
       "slotId": "builder-D",
       "taskId": "EV-T0005",
-      "pid": 17008,
-      "startedAt": "2026-11-05T07:44:59.417Z",
-      "endedAt": "2026-11-05T07:45:01.429Z",
+      "pid": 15704,
+      "startedAt": "2026-11-05T08:04:20.523Z",
+      "endedAt": "2026-11-05T08:04:22.501Z",
       "exit": 0
     },
     {
-      "role": "REVIEWER",
-      "slotId": "reviewer-R4",
-      "taskId": "EV-T0002",
-      "pid": 17491,
-      "startedAt": "2026-11-05T07:45:01.309Z",
-      "endedAt": "2026-11-05T07:45:02.878Z",
+      "role": "BUILDER",
+      "slotId": "builder-C",
+      "taskId": "EV-T0004",
+      "pid": 15689,
+      "startedAt": "2026-11-05T08:04:20.490Z",
+      "endedAt": "2026-11-05T08:04:22.547Z",
       "exit": 0
     },
     {
-      "role": "REVIEWER",
-      "slotId": "reviewer-R2",
+      "role": "BUILDER",
+      "slotId": "builder-A",
       "taskId": "EV-T0002",
-      "pid": 17490,
-      "startedAt": "2026-11-05T07:45:01.307Z",
-      "endedAt": "2026-11-05T07:45:02.887Z",
+      "pid": 15659,
+      "startedAt": "2026-11-05T08:04:20.420Z",
+      "endedAt": "2026-11-05T08:04:22.595Z",
       "exit": 0
     },
     {
       "role": "REVIEWER",
       "slotId": "reviewer-R3",
       "taskId": "EV-T0001",
-      "pid": 17477,
-      "startedAt": "2026-11-05T07:45:01.294Z",
-      "endedAt": "2026-11-05T07:45:02.903Z",
+      "pid": 16171,
+      "startedAt": "2026-11-05T08:04:22.342Z",
+      "endedAt": "2026-11-05T08:04:23.887Z",
       "exit": 0
     },
     {
       "role": "REVIEWER",
       "slotId": "reviewer-R1",
       "taskId": "EV-T0001",
-      "pid": 17476,
-      "startedAt": "2026-11-05T07:45:01.291Z",
-      "endedAt": "2026-11-05T07:45:02.911Z",
+      "pid": 16170,
+      "startedAt": "2026-11-05T08:04:22.340Z",
+      "endedAt": "2026-11-05T08:04:23.897Z",
       "exit": 0
     },
     {
       "role": "REVIEWER",
-      "slotId": "reviewer-R1",
+      "slotId": "reviewer-R2",
       "taskId": "EV-T0003",
-      "pid": 17655,
-      "startedAt": "2026-11-05T07:45:03.022Z",
-      "endedAt": "2026-11-05T07:45:04.569Z",
+      "pid": 16185,
+      "startedAt": "2026-11-05T08:04:22.359Z",
+      "endedAt": "2026-11-05T08:04:23.910Z",
+      "exit": 0
+    },
+    {
+      "role": "REVIEWER",
+      "slotId": "reviewer-R4",
+      "taskId": "EV-T0003",
+      "pid": 16187,
+      "startedAt": "2026-11-05T08:04:22.361Z",
+      "endedAt": "2026-11-05T08:04:23.927Z",
       "exit": 0
     },
     {
       "role": "REVIEWER",
       "slotId": "reviewer-R3",
-      "taskId": "EV-T0003",
-      "pid": 17656,
-      "startedAt": "2026-11-05T07:45:03.024Z",
-      "endedAt": "2026-11-05T07:45:04.584Z",
+      "taskId": "EV-T0002",
+      "pid": 16397,
+      "startedAt": "2026-11-05T08:04:24.026Z",
+      "endedAt": "2026-11-05T08:04:25.589Z",
+      "exit": 0
+    },
+    {
+      "role": "REVIEWER",
+      "slotId": "reviewer-R1",
+      "taskId": "EV-T0002",
+      "pid": 16396,
+      "startedAt": "2026-11-05T08:04:24.024Z",
+      "endedAt": "2026-11-05T08:04:25.599Z",
+      "exit": 0
+    },
+    {
+      "role": "REVIEWER",
+      "slotId": "reviewer-R2",
+      "taskId": "EV-T0004",
+      "pid": 16411,
+      "startedAt": "2026-11-05T08:04:24.045Z",
+      "endedAt": "2026-11-05T08:04:25.610Z",
       "exit": 0
     },
     {
       "role": "REVIEWER",
       "slotId": "reviewer-R4",
       "taskId": "EV-T0004",
-      "pid": 17670,
-      "startedAt": "2026-11-05T07:45:03.037Z",
-      "endedAt": "2026-11-05T07:45:04.595Z",
-      "exit": 0
-    },
-    {
-      "role": "REVIEWER",
-      "slotId": "reviewer-R2",
-      "taskId": "EV-T0004",
-      "pid": 17669,
-      "startedAt": "2026-11-05T07:45:03.034Z",
-      "endedAt": "2026-11-05T07:45:04.605Z",
+      "pid": 16413,
+      "startedAt": "2026-11-05T08:04:24.047Z",
+      "endedAt": "2026-11-05T08:04:25.619Z",
       "exit": 0
     },
     {
       "role": "REVIEWER",
       "slotId": "reviewer-R1",
       "taskId": "EV-T0005",
-      "pid": 17845,
-      "startedAt": "2026-11-05T07:45:04.716Z",
-      "endedAt": "2026-11-05T07:45:06.276Z",
+      "pid": 16625,
+      "startedAt": "2026-11-05T08:04:25.746Z",
+      "endedAt": "2026-11-05T08:04:27.305Z",
       "exit": 0
     },
     {
       "role": "REVIEWER",
       "slotId": "reviewer-R3",
       "taskId": "EV-T0005",
-      "pid": 17846,
-      "startedAt": "2026-11-05T07:45:04.717Z",
-      "endedAt": "2026-11-05T07:45:06.291Z",
-      "exit": 0
-    },
-    {
-      "role": "REVIEWER",
-      "slotId": "reviewer-R4",
-      "taskId": "EV-T0006",
-      "pid": 17860,
-      "startedAt": "2026-11-05T07:45:04.732Z",
-      "endedAt": "2026-11-05T07:45:06.302Z",
+      "pid": 16626,
+      "startedAt": "2026-11-05T08:04:25.749Z",
+      "endedAt": "2026-11-05T08:04:27.317Z",
       "exit": 0
     },
     {
       "role": "REVIEWER",
       "slotId": "reviewer-R2",
       "taskId": "EV-T0006",
-      "pid": 17859,
-      "startedAt": "2026-11-05T07:45:04.729Z",
-      "endedAt": "2026-11-05T07:45:06.313Z",
+      "pid": 16640,
+      "startedAt": "2026-11-05T08:04:25.763Z",
+      "endedAt": "2026-11-05T08:04:27.330Z",
+      "exit": 0
+    },
+    {
+      "role": "REVIEWER",
+      "slotId": "reviewer-R4",
+      "taskId": "EV-T0006",
+      "pid": 16641,
+      "startedAt": "2026-11-05T08:04:25.764Z",
+      "endedAt": "2026-11-05T08:04:27.341Z",
       "exit": 0
     },
     {
       "role": "REVIEWER",
       "slotId": "reviewer-R1",
       "taskId": "EV-T0007",
-      "pid": 18034,
-      "startedAt": "2026-11-05T07:45:06.422Z",
-      "endedAt": "2026-11-05T07:45:07.973Z",
+      "pid": 16835,
+      "startedAt": "2026-11-05T08:04:27.425Z",
+      "endedAt": "2026-11-05T08:04:28.974Z",
       "exit": 0
     },
     {
       "role": "REVIEWER",
       "slotId": "reviewer-R3",
       "taskId": "EV-T0007",
-      "pid": 18035,
-      "startedAt": "2026-11-05T07:45:06.424Z",
-      "endedAt": "2026-11-05T07:45:07.984Z",
-      "exit": 0
-    },
-    {
-      "role": "REVIEWER",
-      "slotId": "reviewer-R2",
-      "taskId": "EV-T0008",
-      "pid": 18048,
-      "startedAt": "2026-11-05T07:45:06.441Z",
-      "endedAt": "2026-11-05T07:45:07.997Z",
+      "pid": 16836,
+      "startedAt": "2026-11-05T08:04:27.427Z",
+      "endedAt": "2026-11-05T08:04:28.984Z",
       "exit": 0
     },
     {
       "role": "REVIEWER",
       "slotId": "reviewer-R4",
       "taskId": "EV-T0008",
-      "pid": 18049,
-      "startedAt": "2026-11-05T07:45:06.442Z",
-      "endedAt": "2026-11-05T07:45:08.008Z",
+      "pid": 16851,
+      "startedAt": "2026-11-05T08:04:27.441Z",
+      "endedAt": "2026-11-05T08:04:29.000Z",
+      "exit": 0
+    },
+    {
+      "role": "REVIEWER",
+      "slotId": "reviewer-R2",
+      "taskId": "EV-T0008",
+      "pid": 16850,
+      "startedAt": "2026-11-05T08:04:27.440Z",
+      "endedAt": "2026-11-05T08:04:29.010Z",
       "exit": 0
     }
   ],
@@ -238,7 +238,7 @@
     "mode": "SHADOW",
     "supervisor": {
       "state": "ACTIVE",
-      "owner": "session_evidence16908",
+      "owner": "session_evidence15604",
       "epoch": 1
     },
     "target": {
@@ -273,7 +273,7 @@
       "RETRY_WAIT": 0
     },
     "lastDecision": {
-      "at": 1793864708095,
+      "at": 1793865869068,
       "builders": 0,
       "redirect": [],
       "reasons": [

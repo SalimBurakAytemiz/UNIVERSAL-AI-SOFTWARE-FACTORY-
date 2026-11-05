@@ -151,7 +151,8 @@ describe("factory-v2 exclusivity and fencing", () => {
     skew = 0; sup.lease.now = () => Date.now(); // keep the supervisor itself alive
     await new Promise(r => setTimeout(r, 1500));
     expect(sup.journal.events.some(e => e.kind === "FENCED_RESULT_DISCARDED")).toBe(true);
-    expect(sup.journal.get(t.taskId).state).toBe("BUILDING");
+    expect(sup.journal.get(t.taskId).state).toBe("RETRY_WAIT"); // slot freed; the result was never accepted
+    expect(sup.journal.get(t.taskId).data.headSha).toBeUndefined();
   });
 });
 
@@ -211,7 +212,7 @@ describe("factory-v2 review and CI integrity (A9, A10)", () => {
     expect(requiredFocuses(riskOf({paths: ["automation/factory-v2/scheduler.mjs"], tier: "T1"}))).toContain("ADVERSARIAL_CROSS_SYSTEM");
   });
   it("CI must be bound to the head SHA; protected paths and scope violations block; GitHub 'mergeable' is not a check", () => {
-    const base = {candidate: {taskId: "t", headSha: S2, baseSha: S1, changedPaths: ["work/a.txt"], allowedPaths: ["work/"], builderIdentity: "builder-A", required: ["ARCHITECTURE_CORRECTNESS"]},
+    const base = {candidate: {taskId: "t", headSha: S2, baseSha: S1, changedPaths: ["work/a.txt"], diffSource: "GIT_DIFF", allowedPaths: ["work/"], builderIdentity: "builder-A", required: ["ARCHITECTURE_CORRECTNESS"]},
       canonicalSha: S1, verdicts: [clean("R1", "ARCHITECTURE_CORRECTNESS")], ci: {sha: S2, requiredContexts: {validate: "success"}}, protectedPaths: {exactPaths: [], protectedPrefixes: ["config/"]}, githubMergeable: true};
     expect(prepareCandidate(base).ready).toBe(true);
     expect(prepareCandidate({...base, ci: {sha: S3, requiredContexts: {validate: "success"}}}).reasons).toContain("CI_NOT_BOUND_TO_HEAD");
@@ -281,3 +282,42 @@ describe("factory-v2 reviewer allocation", () => {
     expect(allocateReviewers(["ARCHITECTURE_CORRECTNESS"], [{...idle[0], identity: "builder-A"}], "builder-A").complete).toBe(false);
   });
 });
+
+describe("factory-v2 reviewer blockers (review of 2c94f31)", () => {
+  const S = "1".repeat(40), H = "2".repeat(40);
+  const v = {reviewerId: "reviewer-R1", reviewerIdentity: "reviewer-R1", focus: "ARCHITECTURE_CORRECTNESS", status: "CLEAN", headSha: H, baseSha: S, blockers: [], resolves: []};
+  it("B1: missing/empty review requirements and zero verdicts never authorize", () => {
+    expect(reviewAuthorizes({verdicts: [], required: [], baseSha: S, headSha: H, builderIdentity: "builder-A"}).reasons).toEqual(expect.arrayContaining(["REVIEW_REQUIREMENTS_MISSING", "NO_CLEAN_REVIEW_AT_HEAD"]));
+    expect(reviewAuthorizes({verdicts: [v], required: undefined, baseSha: S, headSha: H, builderIdentity: "builder-A"}).authorized).toBe(false);
+    const f = {candidate: {taskId: "t", headSha: H, baseSha: S, changedPaths: ["work/a"], diffSource: "GIT_DIFF", allowedPaths: ["work/"], builderIdentity: "builder-A"}, canonicalSha: S, verdicts: [], ci: {sha: H, requiredContexts: {v: "success"}}};
+    expect(prepareCandidate(f).ready).toBe(false);
+    expect(prepareCandidate({...f, candidate: {...f.candidate, required: ["ARCHITECTURE_CORRECTNESS"], diffSource: undefined}, verdicts: [v]}).reasons).toContain("CHANGED_PATHS_UNVERIFIED");
+  });
+  it("self-review is refused even when only reviewerId (not reviewerIdentity) matches the builder", () => {
+    const r = reviewAuthorizes({verdicts: [{...v, reviewerId: "builder-A"}], required: ["ARCHITECTURE_CORRECTNESS"], baseSha: S, headSha: H, builderIdentity: "builder-A"});
+    expect(r.reasons).toContain("SELF_REVIEW:builder-A");
+  });
+  it("B2: a builder that under-reports its changes is caught by the supervisor's own git diff", {timeout: 120_000}, async () => {
+    process.env.FACTORY_HOLD_MS = "200";
+    const backlog = tasks(2);
+    process.env.FACTORY_FAIL = JSON.stringify({[backlog[0].id]: {lie: true}});
+    const env = makeRepo();
+    const {sup} = makeSupervisor(env, {backlog});
+    sup.start();
+    await runUntil(sup, () => sup.journal.get(backlog[0].id)?.state === "BLOCKED" && sup.journal.get(backlog[1].id)?.state === "VERIFIED", {timeoutMs: 60_000});
+    const liar = sup.journal.get(backlog[0].id);
+    expect(liar.state).toBe("BLOCKED");
+    expect(liar.data.mergeBlock.join()).toMatch(/SCOPE_VIOLATION:.*config\/evil\.json|PROTECTED_PATH_FOUNDER_REQUIRED:config\/evil\.json/);
+    expect(liar.data.changedPaths).toContain("config/evil.json");
+    expect(liar.data.required).toContain("SECURITY_ISOLATION"); // risk from the true diff, not the claim
+    expect(sup.journal.get(backlog[1].id).state).toBe("VERIFIED");
+    expect(spawnSyncGit(env.repo, ["cat-file", "-e", "integ:config/evil.json"])).not.toBe(0);
+    delete process.env.FACTORY_FAIL;
+  });
+  it("SHADOW refuses a lease store outside the shadow namespace", () => {
+    const env = makeRepo();
+    expect(() => makeSupervisor(env, {leaseStore: {kind: "REMOTE_GIT_REF", namespace: NAMESPACES.LIVE, read: () => null}}).sup.start()).toThrow(/SHADOW_REQUIRES_SHADOW_NAMESPACE/);
+  });
+});
+import {spawnSync as _sp} from "node:child_process";
+const spawnSyncGit = (cwd, a) => _sp("git", a, {cwd}).status;

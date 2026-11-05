@@ -1,12 +1,15 @@
 // //TR: Factory V2 sahiplik katmanı: Supervisor alanı, Merge Writer entegrasyon dalı ve görev claim'leri mevcut task-lease durum makinesi (git ref create-if-absent/CAS) üzerinde fencing token ile tek sahipli tutulur; süresi dolmuş sahip yazamaz (fence), yarışı kaybeden fail-closed HELD alır. Bu modül automation/lib'i yalnız okur/çağırır, değiştirmez.
 import {claim, renew, release, isValidLeaseRecord, isExpired, leaseVersion} from "../lib/task-lease.mjs";
-import {createLocalGitRefStore} from "../lib/task-lease-git-store.mjs";
+import {createLocalGitRefStore, createRemoteRefStore} from "../lib/task-lease-git-store.mjs";
 
 // Isolated namespaces. SHADOW never touches the live claim namespace (refs/uasco/claims/) used by the canonical dispatcher.
 export const NAMESPACES = Object.freeze({
   LIVE: "refs/uasco/claims/",
   SHADOW: "refs/uasco/factory-v2/shadow/"
 });
+// Store kinds. Only REMOTE_GIT_REF (CAS on the shared origin's ref lock) counts as cross-cloud exclusive ownership.
+export const SHARED_KINDS = Object.freeze(["REMOTE_GIT_REF"]);
+export function assertSharedStore(store, what = "store") { if (!SHARED_KINDS.includes(store?.kind)) throw new Error(`OWNERSHIP_STORE_NOT_SHARED:${what}:${store?.kind ?? "unknown"}`); return store; }
 
 const safeId = s => String(s).replace(/[^A-Za-z0-9._-]/g, "_").replace(/\.{2,}/g, "_").replace(/(\.lock|\.)$/, "_").slice(0, 120);
 export const supervisorLeaseId = domain => `supervisor--${safeId(domain)}`;
@@ -22,7 +25,8 @@ export function createMemoryStore() {
     createIfAbsent(id, rec) { if (m.has(id)) return {created: false, current: clone(m.get(id))}; m.set(id, clone(rec)); return {created: true, current: clone(rec)}; },
     cas(id, expected, rec) { const cur = m.get(id); if (!leaseVersion(expected) || leaseVersion(cur) !== leaseVersion(expected)) return {ok: false, current: clone(cur)}; m.set(id, clone(rec)); return {ok: true, current: clone(rec)}; },
     remove(id, expected) { const cur = m.get(id); if (!leaseVersion(expected) || leaseVersion(cur) !== leaseVersion(expected)) return {ok: false}; m.delete(id); return {ok: true}; },
-    _dump: () => [...m.keys()]
+    _dump: () => [...m.keys()],
+    kind: "MEMORY"
   };
 }
 
@@ -30,7 +34,14 @@ export function createMemoryStore() {
 export function createGitStore(repoDir, mode = "SHADOW") {
   const refPrefix = NAMESPACES[mode];
   if (!refPrefix) throw new Error(`OWNERSHIP_MODE_INVALID:${mode}`);
-  return createLocalGitRefStore({repoDir, refPrefix});
+  return Object.assign(createLocalGitRefStore({repoDir, refPrefix}), {kind: "LOCAL_GIT_REF", namespace: refPrefix});
+}
+
+/** Cross-cloud store: leases live as refs on the shared origin; runGit runs git in a local clone of it. */
+export function createRemoteLeaseStore({runGit, remote = "origin", mode = "LIVE"}) {
+  const refPrefix = NAMESPACES[mode];
+  if (!refPrefix) throw new Error(`OWNERSHIP_MODE_INVALID:${mode}`);
+  return Object.assign(createRemoteRefStore({runGit, remote, refPrefix}), {kind: "REMOTE_GIT_REF", namespace: refPrefix});
 }
 
 export class OwnershipLost extends Error { constructor(what, detail) { super(`OWNERSHIP_LOST:${what}`); this.code = "OWNERSHIP_LOST"; this.detail = detail; } }

@@ -5,7 +5,8 @@ export const FAILURE_VERDICTS = Object.freeze(["REVIEWER_AUTH_REJECTED", "RATE_L
 /** Risk class from changed paths and task metadata (deterministic). */
 export function riskOf({paths = [], tier = "T1", domain = null} = {}) {
   const p = paths.join(" ").toLowerCase();
-  const security = domain === "SECURITY" || /auth|secret|sandbox|redact|token|credential|policy|permission|trust/.test(p);
+  const security = domain === "SECURITY" || /auth|secret|sandbox|redact|token|credential|policy|permission|trust/.test(p)
+    || paths.some(x => /^(config|prompts|\.github|automation\/lib|governance|docs\/planning\/(autonomy|authority))\//.test(String(x))); // trust-root areas are always security review
   const crossSystem = /orchestr|lease|scheduler|merge|supervisor|journal|runner|concurren|worker/.test(p) || domain === "CLOUD_EXECUTION";
   const high = tier === "T2" || security || crossSystem;
   return {level: high ? "HIGH" : tier === "T0" ? "LOW" : "MEDIUM", security, crossSystem};
@@ -45,6 +46,7 @@ export function allocateReviewers(required, idleReviewers, builderIdentity) {
 export function reviewAuthorizes({verdicts = [], required = [], baseSha, headSha, builderIdentity, priorBlockers = []}) {
   const reasons = [];
   if (!SHA.test(baseSha ?? "") || !SHA.test(headSha ?? "")) reasons.push("SHA_UNBOUND");
+  if (!Array.isArray(required) || required.length === 0) reasons.push("REVIEW_REQUIREMENTS_MISSING"); // no requirement is never "nothing to check"
   const current = verdicts.filter(v => v.headSha === headSha && v.baseSha === baseSha);
   if (verdicts.some(v => v.headSha !== headSha)) reasons.push(...(current.length ? [] : ["STALE_REVIEW"]));
   for (const v of current) {
@@ -53,8 +55,9 @@ export function reviewAuthorizes({verdicts = [], required = [], baseSha, headSha
     else if (v.status !== "CLEAN") reasons.push(`NOT_CLEAN:${v.reviewerId}:${v.status}`);
     if ((v.blockers ?? []).length) reasons.push(`OPEN_BLOCKERS:${v.reviewerId}`);
   }
-  const clean = current.filter(v => v.status === "CLEAN" && !(v.blockers ?? []).length && v.reviewerIdentity !== builderIdentity);
-  for (const f of required) if (!clean.some(v => v.focus === f)) reasons.push(`MISSING_FOCUS:${f}`);
+  const clean = current.filter(v => v.status === "CLEAN" && !(v.blockers ?? []).length && v.reviewerIdentity !== builderIdentity && v.reviewerId !== builderIdentity);
+  if (!clean.length) reasons.push("NO_CLEAN_REVIEW_AT_HEAD");
+  for (const f of required ?? []) if (!clean.some(v => v.focus === f)) reasons.push(`MISSING_FOCUS:${f}`);
   const distinct = new Set(clean.map(v => v.reviewerIdentity));
   if (required.length >= 2 && distinct.size < 2) reasons.push("DUAL_REVIEW_NOT_INDEPENDENT");
   const resolved = new Set(clean.flatMap(v => v.resolves ?? []));

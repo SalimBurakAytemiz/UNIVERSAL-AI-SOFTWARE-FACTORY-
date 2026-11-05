@@ -6,6 +6,9 @@ import {spawn, spawnSync} from "node:child_process";
 
 const git = (cwd, args) => { const r = spawnSync("git", args, {cwd, encoding: "utf8", windowsHide: true}); if (r.status !== 0) throw new Error(`GIT_FAILED:${args[0]}:${(r.stderr || "").trim().slice(0, 200)}`); return r.stdout.trim(); };
 const safe = s => String(s).replace(/[^A-Za-z0-9._-]/g, "_");
+// Workers get an allowlisted environment only (no supervisor secrets).
+const ENV_ALLOW = ["PATH", "HOME", "TMPDIR", "TEMP", "TMP", "SystemRoot", "LANG", "LC_ALL"];
+const childEnv = () => Object.fromEntries(Object.entries(process.env).filter(([k]) => ENV_ALLOW.includes(k) || k.startsWith("FACTORY_")));
 
 /** Isolated worktree per (task, attempt) on its own branch, created from an exact base SHA. */
 export function createWorktree(repoDir, rootDir, {taskId, slotId, attempt = 0, baseSha, tag = "build"}) {
@@ -27,7 +30,7 @@ export class LocalProcessExecutor {
     const wt = job.kind === "REVIEW" ? null : createWorktree(this.repoDir, this.worktreeRoot, {taskId: job.taskId, slotId: job.slotId, attempt: job.attempt ?? 0, baseSha: job.fromSha ?? this.baseSha, tag: String(job.kind).toLowerCase()});
     const [file, args] = this.command(job, wt);
     const startedAt = Date.now();
-    const child = spawn(file, args, {cwd: wt?.dir ?? this.repoDir, env: {...process.env, FACTORY_JOB: JSON.stringify({...job, jobId, worktree: wt})}, stdio: ["ignore", "pipe", "pipe"], windowsHide: true});
+    const child = spawn(file, args, {cwd: wt?.dir ?? this.repoDir, env: {...childEnv(), FACTORY_JOB: JSON.stringify({...job, jobId, worktree: wt})}, stdio: ["ignore", "pipe", "pipe"], windowsHide: true});
     const worker = {kind: "LOCAL_PROCESS", pid: child.pid, jobId, slotId: job.slotId};
     const done = new Promise((resolve, reject) => {
       let out = ""; let err = "";
