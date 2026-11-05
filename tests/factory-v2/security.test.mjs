@@ -211,8 +211,10 @@ describe("5. the canonical merge path refuses V4.1 merges after handover (indepe
     fs.rmSync(wt, {recursive: true});
     git(repo, "worktree", "add", "-q", "--detach", wt, "HEAD");
     try {
-      const ap = spawnSync("git", ["apply", path.join(repo, "docs/authority-requests/FV2-PROTECTED-EXECUTOR-AUTHORITY-FENCE.diff")], {cwd: wt, encoding: "utf8"});
-      expect(ap.status, ap.stderr).toBe(0);
+      // Apply the prepared patch; if the tree already contains it (the governance PR that lands it), test the tree as it is.
+      const diff = path.join(repo, "docs/authority-requests/FV2-PROTECTED-EXECUTOR-AUTHORITY-FENCE.diff");
+      const already = spawnSync("git", ["apply", "--reverse", "--check", diff], {cwd: wt}).status === 0;
+      if (!already) { const ap = spawnSync("git", ["apply", diff], {cwd: wt, encoding: "utf8"}); expect(ap.status, ap.stderr).toBe(0); }
       fs.symlinkSync(path.join(repo, "node_modules"), path.join(wt, "node_modules"), "junction"); // junction: no privilege needed on Windows
       fs.cpSync(path.join(repo, "automation/factory-v2"), path.join(wt, "automation/factory-v2"), {recursive: true}); // the code under test, as in this working tree
       const {executeMerge} = await import(pathToFileURL(path.join(wt, "docs/planning/autonomy/executor.mjs")).href);

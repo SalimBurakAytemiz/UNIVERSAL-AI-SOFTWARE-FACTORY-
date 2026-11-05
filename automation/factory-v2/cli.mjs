@@ -172,41 +172,51 @@ async function bridge() {
  * Role A and role B run in different Claude Cloud sessions and coordinate only through the registry itself.
  */
 async function registry() {
-  const sub = process.argv[3], role = arg("role"), branch = arg("branch", "uasco/registry-probe"), session = arg("session");
-  if (sub !== "verify" || !["A", "B"].includes(role) || !/^session_[A-Za-z0-9]{8,}$/.test(session ?? "")) { console.error("registry verify --role A|B --session <session id> [--branch uasco/x]"); process.exit(1); }
+  const sub = process.argv[3], role = arg("role"), branch = arg("branch", "uasco/registry-probe"), session = arg("session"), run = arg("run", "r1");
+  if (sub !== "verify" || !["A", "B"].includes(role) || !/^session_[A-Za-z0-9]{8,}$/.test(session ?? "") || !/^[A-Za-z0-9-]{1,40}$/.test(run)) { console.error("registry verify --role A|B --session <session id> --run <id> [--branch uasco/x]"); process.exit(1); }
   if (!/^uasco\/[A-Za-z0-9._-]{1,80}$/.test(branch)) { console.error("branch must be uasco/<name>"); process.exit(1); }
+  // Isolation: every key lives under probe/<run>/ and leases under namespace probe-<run>; no authority section is ever touched.
+  const K = name => `probe/${run}/${name}`;
   const ref = `refs/heads/${branch}`;
   const docs = createRemoteDocStore({runGit: gitRunner(ROOT)});
   const reg = createSharedRegistry({docStore: docs, ref});
-  const leases = reg.leaseStore("probe");
-  const ev = []; const log = (step, data = {}) => { const e = {at: new Date().toISOString(), role, session, step, ...data}; ev.push(e); console.log(JSON.stringify(e)); };
+  const leases = reg.leaseStore(`probe-${run}`);
+  const ev = []; const log = (step, data = {}) => { const e = {at: new Date().toISOString(), role, session, run, step, ...data}; ev.push(e); console.log(JSON.stringify(e)); if (arg("out")) fs.writeFileSync(arg("out"), JSON.stringify(ev, null, 2) + "\n"); };
   const head = () => { const r = spawnSync("git", ["ls-remote", "origin", ref], {cwd: ROOT, encoding: "utf8"}); return r.stdout.split(/\s+/)[0] || null; };
   const until = async (pred, ms = 900_000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { const v = pred(); if (v) return v; await new Promise(r => setTimeout(r, 5_000)); } return null; };
-  const own = new Ownership(leases, {leaseId: "supervisor--LIVE-probe", environment: `cloud:${role}`, workerId: "supervisor", sessionId: session, ttlMs: role === "A" ? 120_000 : 600_000});
+  const push = args => { const r = spawnSync("git", ["push", ...args], {cwd: ROOT, encoding: "utf8"}); return {exit: r.status, stderr: (r.stderr ?? "").split("\n").filter(l => /rule|reject|protect|GH0|denied|declined|non-fast-forward|error/i.test(l)).slice(0, 4).join(" | ").slice(0, 400)}; };
+  log("PROTECTION_AS_SEEN_BY_THIS_SESSION", {branch, protectedByActiveNoBypassRuleset: await branchProtected(githubClient(), branch)});
+  const own = new Ownership(leases, {leaseId: "supervisor--probe", environment: `cloud:${role}`, workerId: "supervisor", sessionId: session, ttlMs: role === "A" ? 120_000 : 600_000});
   if (role === "A") {
     const g = own.acquire(); const original = own.record ? {...own.record} : null; const firstHead = head(); log("A_ACQUIRE_SUPERVISOR_LEASE", {granted: g.granted, epoch: own.epoch, registryHead: firstHead});
-    const w = reg.cas("probe/A-hello", null, {session, token: own.token, at: Date.now()}); log("A_WRITE_SECTION", {ok: w.ok, registryHead: head()});
-    // a genuinely outdated expectation (A's own earlier registry version) — refused by the server's lease check, not locally
-    const older = firstHead; spawnSync("git", ["fetch", "-q", "origin", `+${ref}:${ref}`], {cwd: ROOT});
-    const stale = older ? docs.cas(ref, older, {schema: "uasco.factory-v2.shared-registry/1", sections: {}}) : {ok: true};
-    log("A_STALE_WHOLE_DOC_CAS_REFUSED_BY_SERVER", {refused: !stale.ok, expectedOld: older, registryHead: head()});
-    const b = await until(() => reg.read("probe/B-hello").doc); log("A_SAW_B", {b});
+    const w = reg.cas(K("A-hello"), null, {session, token: own.token, firstHead, at: Date.now()}); log("A_FAST_FORWARD_WRITE", {ok: w.ok, registryHead: head()});
+    // a genuinely outdated expectation (A's own earlier registry version) — refused by the server, not locally
+    spawnSync("git", ["fetch", "-q", "origin", `+${ref}:${ref}`], {cwd: ROOT});
+    const stale = firstHead ? docs.cas(ref, firstHead, {schema: "uasco.factory-v2.shared-registry/1", sections: {}}) : {ok: true};
+    log("A_STALE_WRITE_REFUSED_BY_SERVER", {refused: !stale.ok, expectedOld: firstHead, registryHead: head()});
+    const b = await until(() => reg.read(K("B-hello")).doc); log("A_SAW_B", {b});
     log("A_RELEASE", {released: own.release(), registryHead: head()});
-    const ba = await until(() => reg.read("probe/B-acquired").doc); log("A_SAW_B_ACQUIRE", {ba});
-    const stale2 = new Ownership(leases, {leaseId: "supervisor--LIVE-probe", environment: "cloud:A", workerId: "supervisor", sessionId: session, ttlMs: 120_000}); stale2.record = original; // A's real former grant
+    const ba = await until(() => reg.read(K("B-acquired")).doc); log("A_SAW_B_ACQUIRE", {ba});
+    const stale2 = new Ownership(leases, {leaseId: "supervisor--probe", environment: "cloud:A", workerId: "supervisor", sessionId: session, ttlMs: 120_000}); stale2.record = original; // A's real former grant
     let fenced = false; try { stale2.fence(); } catch (e) { fenced = e.code === "OWNERSHIP_LOST"; }
     log("A_OLD_OWNER_FENCED", {fenced, renewAfterLoss: stale2.renew()});
-    reg.cas("probe/A-done", null, {session, at: Date.now()});
+    reg.cas(K("A-done"), null, {session, at: Date.now()});
   } else {
-    const a = await until(() => reg.read("probe/A-hello").doc); log("B_SAW_A", {a, registryHead: head()});
+    const a = await until(() => reg.read(K("A-hello")).doc); log("B_SAW_A", {a, registryHead: head()});
     const g = own.acquire(); log("B_ACQUIRE_WHILE_A_HOLDS", {granted: g.granted, holderSession: g.holder?.sessionId ?? null});
-    reg.cas("probe/B-hello", null, {session, sawHolder: g.holder?.sessionId ?? null, grantedWhileHeld: g.granted, at: Date.now()});
+    reg.cas(K("B-hello"), null, {session, sawHolder: g.holder?.sessionId ?? null, grantedWhileHeld: g.granted, at: Date.now()});
     const got = await until(() => own.acquire().granted || null); log("B_ACQUIRE_AFTER_RELEASE", {granted: !!got, epoch: own.epoch, registryHead: head()});
-    reg.cas("probe/B-acquired", null, {session, epoch: own.epoch, at: Date.now()});
-    await until(() => reg.read("probe/A-done").doc, 300_000);
-    log("B_RELEASE", {released: own.release(), sections: reg.sections(), registryHead: head()});
+    reg.cas(K("B-acquired"), null, {session, epoch: own.epoch, at: Date.now()});
+    // server-side protection, attacked from this session's own push identity (expected: all rejected, head unchanged)
+    const before = head();
+    spawnSync("git", ["fetch", "-q", "origin", `+${ref}:${ref}`], {cwd: ROOT});
+    log("B_FORCE_PUSH_REWIND_ATTEMPT", {target: a.firstHead, ...push(["--force", "origin", `${a.firstHead}:${ref}`])});
+    log("B_NON_FAST_FORWARD_PUSH_ATTEMPT", push(["origin", `${a.firstHead}:${ref}`]));
+    log("B_BRANCH_DELETE_ATTEMPT", push(["origin", `:${ref}`]));
+    log("B_HEAD_UNCHANGED_AFTER_ATTACKS", {before, after: head()});
+    await until(() => reg.read(K("A-done")).doc, 300_000);
+    log("B_RELEASE", {released: own.release(), registryHead: head()});
   }
-  if (arg("out")) fs.writeFileSync(arg("out"), JSON.stringify(ev, null, 2) + "\n");
 }
 
 /** Two-session security probe (probe- domain only). `probe-keyring` builds the PROBE keyring from keys the probe sessions published. */
