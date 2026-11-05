@@ -294,19 +294,37 @@ export interface FounderIntakeConfirmation {
   signature: string;
 }
 export type UnsignedFounderConfirmation = Omit<FounderIntakeConfirmation, "signature">;
-/** Tek kullanımlık onay kimlikleri: consume() ilk çağrıda true, sonra (süre dolana dek) false. */
 /**
- * Tek kullanımlık onay kimlikleri: consume() ilk çağrıda true, sonra (süre dolana dek) false. `nowMs` doğrulayıcının saatidir (#350 L1: ayrı saat yok).
+ * Tek kullanımlık onay kimlikleri: consume() ilk çağrıda true, sonra (süre dolana dek) false. Durum bilinmiyorsa (kapasite, hata) istisna fırlatır;
+ * doğrulayıcı bunu REPLAY_STORE_UNAVAILABLE olarak reddeder (fail-closed).
  * #350 N2: tek kullanımlık garanti yalnız enjekte edilen deponun dayanıklılığı kadardır. InMemoryConfirmationReplayStore süreç başınadır (yeniden
  * başlatma 15 dk'lık bir tekrar penceresi açar); üretimde bir HTTP/Desktop yolu bu köprüyü çağırmadan önce dayanıklı, paylaşılan bir depo verilmelidir.
  */
 export interface ConfirmationReplayStore {consume(confirmationId: string, expiresAtMs: number, nowMs: number): boolean}
+/** Güvenilen saat ile kayıt süresi arasında tutulan güvenlik payı (deployment.ts MAX_CLOCK_SKEW_MS ile aynı değer). */
+export const CONFIRMATION_CLOCK_SKEW_MS = 5 * 60_000;
+/**
+ * #350 N-1 sonrası: budama doğrulayıcının/çağıranın `nowMs` değerine asla dayanmaz (ileri sapmış bir `now` canlı bir onayı silip tekrar oynatmayı
+ * açabilirdi). Yalnız kurucuya verilen güvenilen `clock` ile ve `exp + CONFIRMATION_CLOCK_SKEW_MS <= clock()` olan kayıtlar silinir. Saat yoksa,
+ * okunamazsa ya da sonlu değilse hiç budanmaz; kapasite dolunca consume() fırlatır (fail-closed).
+ */
 export class InMemoryConfirmationReplayStore implements ConfirmationReplayStore {
   private readonly used = new Map<string, number>();
+  constructor(private readonly capacity = 10_000, private readonly clock?: () => number) {
+    if (!Number.isSafeInteger(capacity) || capacity < 1) throw new Error("REPLAY_STORE_CAPACITY_INVALID");
+    if (clock !== undefined && typeof clock !== "function") throw new Error("REPLAY_STORE_CLOCK_INVALID");
+  }
+  private prune(): void {
+    if (this.clock === undefined) return;
+    let c: number; try { c = this.clock(); } catch { return; }
+    if (!Number.isFinite(c)) return;
+    for (const [k, exp] of this.used) if (exp + CONFIRMATION_CLOCK_SKEW_MS <= c) this.used.delete(k);
+  }
   consume(id: string, expiresAtMs: number, nowMs: number): boolean {
-    const t = nowMs;
-    for (const [k, exp] of this.used) if (exp < t) this.used.delete(k);
+    if (typeof id !== "string" || id.length === 0 || !Number.isFinite(expiresAtMs) || !Number.isFinite(nowMs)) throw new Error("REPLAY_STORE_INPUT_INVALID");
+    this.prune();   // `nowMs` yalnız doğrulanır; budamada kullanılmaz
     if (this.used.has(id)) return false;
+    if (this.used.size >= this.capacity) throw new Error("REPLAY_STORE_FULL");
     this.used.set(id, expiresAtMs); return true;
   }
 }
@@ -345,7 +363,10 @@ function verifyConfirmation(c: unknown, digest: string, v: ConfirmationVerifier)
   const iss = Date.parse(x.issuedAt), exp = Date.parse(x.expiresAt), now = v.now().getTime();
   if (!Number.isFinite(iss) || !Number.isFinite(exp) || exp <= iss || exp - iss > FOUNDER_CONFIRMATION_MAX_TTL_MS) return {ok: false, why: "LIFETIME_INVALID"};
   if (now < iss || now >= exp) return {ok: false, why: "EXPIRED_OR_NOT_YET_VALID"};
-  if (!v.replay.consume(x.confirmationId, exp, now)) return {ok: false, why: "REPLAYED"};
+  let fresh: unknown;
+  try { fresh = v.replay.consume(x.confirmationId, exp, now); } catch { return {ok: false, why: "REPLAY_STORE_UNAVAILABLE"}; }
+  if (fresh === false) return {ok: false, why: "REPLAYED"};
+  if (fresh !== true) return {ok: false, why: "REPLAY_STORE_UNAVAILABLE"};   // bilinmeyen yanıt: fail-closed
   return {ok: true, c: x};
 }
 
