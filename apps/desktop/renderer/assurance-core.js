@@ -127,7 +127,8 @@ export function aggregateSecurity(runs){
   let latestScanned=null;
   for(const r of runs){
     if(agg.byStatus[r.scanStatus]!==undefined)agg.byStatus[r.scanStatus]+=1;
-    if(r.scanned){agg.scanned+=1;if(!latestScanned)latestScanned=r}
+    // //TR: Satırlar sunucu sırasındadır (en eski önce): son taranmış satır EN YENİ taramadır (ilki en eskisi olurdu).
+    if(r.scanned){agg.scanned+=1;latestScanned=r}
   }
   agg.blocked=agg.byStatus.BLOCKED;
   // //TR: Araç kapsamı yalnız gerçek taranmış bir koşunun kanıtından; hiç tarama yoksa null (kurulu/kurulu değil durumu uydurulmaz).
@@ -135,17 +136,23 @@ export function aggregateSecurity(runs){
   return agg;
 }
 
+export const SECURITY_ROWS_MAX=500;
+/** //TR: Sunucu sırası (en eski önce) listesinin en yeni max öğesi, sunucu sırasıyla (girdi değişmez). */
+export function newestWindow(list,max){return list.slice(Math.max(0,list.length-max))}
+/** //TR: Sunucu sırasındaki satırları gösterim için en yeniden eskiye çevirir (girdi değişmez). */
+export function newestFirst(list){return [...list].reverse()}
 /** //TR: GET /v1/work-runs ham sonucunu (api.raw) güvenlik tarama görünümüne eşler; başarısızsa dürüst durum, asla boş "temiz" tablo. */
 export function mapSecurityScans(r){
   if(!isObj(r)||r.ok!==true){
     const state=isObj(r)&&typeof r.state==="string"?r.state:"ERROR";
-    return {state,runs:[],aggregate:emptyAggregate()};
+    return {state,runs:[],aggregate:emptyAggregate(),total:0,truncated:false};
   }
   const data=r.data;
   const list=isObj(data)?(Array.isArray(data.workRuns)?data.workRuns:Array.isArray(data.runs)?data.runs:Array.isArray(data.items)?data.items:null):null;
-  if(!list)return {state:"ERROR",runs:[],aggregate:emptyAggregate()};
-  const runs=list.slice(0,500).map(mapRunSecurity).filter(Boolean);
-  return {state:"VERIFIED",runs,aggregate:aggregateSecurity(runs)};
+  if(!list)return {state:"ERROR",runs:[],aggregate:emptyAggregate(),total:0,truncated:false};
+  // //TR: Sunucu koşuları EN ESKİ önce döndürür: en yeni SECURITY_ROWS_MAX koşu (sunucu sırasının SONU) tutulur, sunucu sırası korunur; böylece toplam/son tarama en yeni koşuları içerir. Kesildiyse total + truncated açıkça taşınır (sessiz kesme yok). Gösterim sırası (en yeni üstte) görünümde newestFirst ile verilir.
+  const runs=newestWindow(list,SECURITY_ROWS_MAX).map(mapRunSecurity).filter(Boolean);
+  return {state:"VERIFIED",runs,aggregate:aggregateSecurity(runs),total:list.length,truncated:list.length>SECURITY_ROWS_MAX};
 }
 
 /** //TR: cockpit.evidence bloğundan dürüst kanıt bütünlüğü özeti; yalnız VERIFIED/STALE blokta ve geçerli tamsayıysa sayı, aksi halde null (uydurma yok). */
