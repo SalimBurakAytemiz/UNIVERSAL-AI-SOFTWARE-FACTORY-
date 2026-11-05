@@ -1941,7 +1941,7 @@ __bi_describe('Builder I: renderer raw-error sweep', {timeout: 120_000}, () => {
     return {app, ctx, view, seen};
   }
   const leaked = (root: N) => all(root).some(n => n.children.length === 0 && /Error invoking remote method|uasco:api-get|\/v1\/\S*: HTTP/.test(n.textContent));
-  const codes = (root: N) => all(root).filter(n => n.dataset.errorCode !== undefined).map(n => [n.dataset.errorCode, n.textContent]);
+  const codes = (root: N) => all(root).filter(n => n.dataset.stateErrorCode !== undefined).map(n => [n.dataset.stateErrorCode, n.textContent]); // data-state-error-code (install.js keeps data-error-code for its own install-errors list)
 
   const VIEWS = ["journey", "scheduler", "operations", "install", "matrix", "integrations", "audit", "posture"] as const;
 
@@ -2006,10 +2006,19 @@ __bi_describe('Builder I: renderer raw-error sweep', {timeout: 120_000}, () => {
     it("the guard catches the sink shapes it claims to (positive controls)", () => {
       for (const bad of ['res.message?h(doc,"p",{class:"note mono",text:res.message}):null', 'h(doc,"p",{text:message})', 'el.textContent = r.error.message;', 'h(doc,"p",{text:String(e)})', 'h(doc,"p",{text: res?.message})'])
         expect(rawSinks(bad), bad).not.toEqual([]);
-      for (const good of ['h(doc,"p",{dataset:{errorCode:safeErrorCode(res.message)},text:safeErrorCode(res.message)})', '// text:res.message in a comment', 'h(doc,"p",{text:ctx.t("x")})'])
+      for (const good of ['h(doc,"p",{dataset:{stateErrorCode:safeErrorCode(res.message)},text:safeErrorCode(res.message)})', '// text:res.message in a comment', 'h(doc,"p",{text:ctx.t("x")})'])
         expect(rawSinks(good), good).toEqual([]);
     });
-    it("each exemption still matches exactly one line (a stale exemption fails)", () => {
+    it("the shared state-block code line uses data-state-error-code, never the install-errors list's data-error-code name", () => {
+    const files = rendererFiles();
+    // open-PR follow-up files (e.g. #382 company/academy/domains) are renamed when they are combined with this sweep
+    const old = files.filter(f => !OPEN_PR_FOLLOW_UPS.has(f) && /dataset:\{errorCode:safeErrorCode\(/.test(fs.readFileSync(path.join(rend, f), "utf8")));
+    expect(old).toEqual([]);
+    const users = files.filter(f => /dataset:\{stateErrorCode:safeErrorCode\(/.test(fs.readFileSync(path.join(rend, f), "utf8"))).sort();
+    for (const f of ["views/install.js", "views/integrations.js", "views/journey.js", "views/matrix.js", "views/operations.js", "views/scheduler.js"]) expect(users, f).toContain(f);
+    expect(fs.readFileSync(path.join(rend, "views", "install.js"), "utf8")).toContain('dataset:{errorCode:e}'); // the install-errors list keeps its own attribute
+  });
+  it("each exemption still matches exactly one line (a stale exemption fails)", () => {
       for (const [f, re] of EXEMPT) expect(rawSinks(fs.readFileSync(path.join(rend, f), "utf8")).filter(l => re.test(l)).length, f).toBe(1);
     });
     it("every allow-listed follow-up file exists (the list does not hide a renamed file)", () => {

@@ -21,7 +21,7 @@ function stateBlock(ctx,a,message){
     h(doc,"p",{class:"integ-state-head"},statePill(ctx,failKind(st)),h(doc,"strong",{text:ctx.t(`scheduler.state.${st}`)})),
     h(doc,"p",{class:"note",text:ctx.t(`scheduler.hint.${st}`,{source:`GET ${SCHEDULER_PATH}`})}),
     a.pendingStatus?h(doc,"p",{class:"note mono",dataset:{schedStatus:a.pendingStatus},text:a.pendingStatus}):null,
-    safeErrorCode(message)?h(doc,"p",{class:"note mono",dataset:{errorCode:safeErrorCode(message)},text:safeErrorCode(message)}):null);
+    safeErrorCode(message)?h(doc,"p",{class:"note mono",dataset:{stateErrorCode:safeErrorCode(message)},text:safeErrorCode(message)}):null);
 }
 function kpi(ctx,key,n,state){
   const doc=ctx.doc;

@@ -33,7 +33,7 @@ function stateBlock(ctx,res,source){
   return h(doc,"div",{class:`journey-state state-${state.toLowerCase()}`,role:"status",dataset:{journeyState:state}},
     h(doc,"p",{class:"journey-state-head"},statePill(ctx,failKind(state)),h(doc,"strong",{text:ctx.t(`journey.state.${state}`)})),
     h(doc,"p",{class:"note",text:ctx.t(`journey.hint.${state}`,{source:`GET ${source}`})}),
-    safeErrorCode(res.message)?h(doc,"p",{class:"note mono",dataset:{errorCode:safeErrorCode(res.message)},text:safeErrorCode(res.message)}):null);
+    safeErrorCode(res.message)?h(doc,"p",{class:"note mono",dataset:{stateErrorCode:safeErrorCode(res.message)},text:safeErrorCode(res.message)}):null);
 }
 
 /** Artefakt/atama durumu rozeti: ham durum kodu etiket olur, kategori ikon+renk taşır (renk tek başına anlam taşımaz). */
