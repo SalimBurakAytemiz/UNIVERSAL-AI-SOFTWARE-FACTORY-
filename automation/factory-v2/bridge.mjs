@@ -150,7 +150,9 @@ export function checkTransition(prev, next, signer) {
     if (next.authority !== "V2" || next.epoch !== prev.epoch + 1) throw new BridgeError("COMMIT_EPOCH_INVALID");
     for (const k of ["candidate", "outgoing", "manifest", "gatesDigest", "drainDigest"]) if (canonDigest(next[k] ?? null) !== canonDigest(prev[k] ?? null)) throw new BridgeError("COMMIT_CHANGED_FIELD", k);
   } else if (action === "ROLLBACK") {
-    if (next.authority !== "V4.1" || next.epoch !== prev.epoch + 1 || next.holder !== null || next.candidate !== null) throw new BridgeError("ROLLBACK_FIELDS_INVALID");
+    // A reset (first link from genesis) may jump to any higher epoch so it never collides with a replaced chain's epochs.
+    const epochOk = next.epoch === prev.epoch + 1 || (prev.epoch === 0 && prev.phase === "V41_AUTHORITATIVE" && prev.manifest === null && Number.isInteger(next.epoch) && next.epoch >= 1);
+    if (next.authority !== "V4.1" || !epochOk || next.holder !== null || next.candidate !== null) throw new BridgeError("ROLLBACK_FIELDS_INVALID");
   }
   return action;
 }
@@ -170,20 +172,54 @@ export function verifyAuthorityDoc(doc, {ring, domain}) {
   return {core: prev, epoch: prev.epoch};
 }
 
+/**
+ * Anti-rewind: the current record must extend the most advanced VALID chain ever stored (registry history), or be a signed reset to a
+ * strictly higher epoch. Deleting the record, writing back an older signed record, or truncating the chain to a prefix all fail —
+ * a registry writer cannot roll authority back without a V41_OWNER/FOUNDER key. `anchored` (canonical cutover record exists, or a
+ * reader's persisted high-water mark) also makes an absent record unverifiable rather than genesis.
+ */
+export function verifyAuthorityHistory({current, history = [], ring, domain, anchored = false, hwm = null}) {
+  let best = null;
+  for (const d of history) {
+    if (!d) continue;
+    let v; try { v = verifyAuthorityDoc(d, {ring, domain}); } catch { continue; } // invalid historical versions carry no authority
+    if (!best || v.epoch > best.epoch || (v.epoch === best.epoch && d.chain.length > best.chain.length)) best = {epoch: v.epoch, chain: d.chain};
+  }
+  const floor = Math.max(best?.epoch ?? 0, hwm?.epoch ?? 0);
+  if (!current) {
+    if (best || anchored || (hwm?.epoch ?? 0) > 0) throw new BridgeError("AUTHORITY_RECORD_REMOVED");
+    return {core: GENESIS(domain), epoch: 0};
+  }
+  const v = verifyAuthorityDoc(current, {ring, domain});
+  const sig = c => c.map(l => l.envelope?.signature);
+  const extendsBest = !best || (best.chain.length <= current.chain.length && sig(best.chain).every((s, i) => s === sig(current.chain)[i]));
+  const isReset = ACTION_OF[current.chain[0]?.core?.phase] === "ROLLBACK" && current.chain[0].core.epoch > (best?.epoch ?? 0);
+  if (!extendsBest && !isReset) throw new BridgeError("AUTHORITY_REGRESSION", `epoch ${v.epoch} does not extend stored epoch ${best.epoch}`);
+  if (v.epoch < floor && !(isReset && v.epoch >= floor)) throw new BridgeError("AUTHORITY_REGRESSION", `epoch ${v.epoch} < ${floor}`);
+  return v;
+}
+
 export class AuthorityBridge {
   /**
    * keyring(): canonical keyring (identity.loadCanonicalKeyring); gateVerifier(gates, ctx) -> {verified}; live: {canonicalSha(), openPrs(), stateDigest(sha)}
    * — freshness and gate evidence come from live canonical sources, never from the caller.
    */
-  constructor({docStore, domain, now = Date.now, requireShared = true, keyring, gateVerifier, live}) {
+  /** anchored(): true once the canonical branch carries a cutover authorization for this domain; hwm: {get()->{epoch}|null, set({epoch})} persisted by the reader. */
+  constructor({docStore, domain, now = Date.now, requireShared = true, keyring, gateVerifier, live, anchored = () => false, hwm = null}) {
     if (requireShared) assertSharedStore(docStore, "authority");
     if (typeof keyring !== "function") throw new BridgeError("KEYRING_REQUIRED");
-    Object.assign(this, {docStore, domain, now, keyring, gateVerifier, live});
+    Object.assign(this, {docStore, domain, now, keyring, gateVerifier, live, anchored, hwm});
   }
   /** Raw read + full verification. */
   read() {
     const r = this.docStore.read(authorityRef(this.domain));
-    const v = r.doc ? verifyAuthorityDoc(r.doc, {ring: this.keyring(), domain: this.domain}) : {core: GENESIS(this.domain)}; // no record = V4.1 genesis
+    const history = this.docStore.history ? this.docStore.history(authorityRef(this.domain)) : [];
+    const hw = this.hwm?.get() ?? null;
+    const needRing = r.doc || history.some(Boolean);
+    const v = needRing || this.anchored() || (hw?.epoch ?? 0) > 0
+      ? verifyAuthorityHistory({current: r.doc, history, ring: needRing ? this.keyring() : null, domain: this.domain, anchored: this.anchored(), hwm: hw})
+      : {core: GENESIS(this.domain), epoch: 0}; // nothing ever recorded and nothing anchored: V4.1 genesis
+    if (this.hwm && v.core.epoch > (hw?.epoch ?? 0)) this.hwm.set({epoch: v.core.epoch});
     return {sha: r.sha, doc: r.doc ?? {...IMPLICIT_V41, domain: this.domain, chain: []}, core: v.core};
   }
   /** Apply one transition: next core -> envelope (supplied pre-signed for relay, or signed here) -> verify -> rules -> CAS. */
@@ -252,10 +288,13 @@ export class AuthorityBridge {
    */
   resetInvalid({reason, signer, envelope}) {
     const raw = this.docStore.read(authorityRef(this.domain));
-    try { verifyAuthorityDoc(raw.doc, {ring: this.keyring(), domain: this.domain}); throw new BridgeError("RESET_NOT_NEEDED"); } catch (e) { if (e?.code === "RESET_NOT_NEEDED") throw e; }
+    try { this.read(); throw new BridgeError("RESET_NOT_NEEDED"); } catch (e) { if (e?.code === "RESET_NOT_NEEDED") throw e; } // invalid, rewound or removed
     const genesis = GENESIS(this.domain);
+    const ring = this.keyring();
+    let maxEpoch = this.hwm?.get()?.epoch ?? 0;
+    for (const d of (this.docStore.history ? this.docStore.history(authorityRef(this.domain)) : [])) { try { maxEpoch = Math.max(maxEpoch, verifyAuthorityDoc(d, {ring, domain: this.domain}).epoch); } catch {} }
     const cur = {sha: raw.sha, doc: {schema: AUTHORITY_SCHEMA, ...genesis, chain: [], invalidRecordReplaced: canonDigest(raw.doc ?? null)}, core: genesis};
-    return this.apply(cur, {...genesis, phase: "V41_AUTHORITATIVE", authority: "V4.1", epoch: 1}, {signer, envelope, extra: {rollbackReason: `RESET_INVALID:${String(reason ?? "")}`}});
+    return this.apply(cur, {...genesis, phase: "V41_AUTHORITATIVE", authority: "V4.1", epoch: maxEpoch + 1}, {signer, envelope, extra: {rollbackReason: `RESET_INVALID:${String(reason ?? "")}`}});
   }
   /** The V2 Supervisor gate: verified chain, V2 phase, this holder, this epoch. */
   assertV2(session, epoch) {

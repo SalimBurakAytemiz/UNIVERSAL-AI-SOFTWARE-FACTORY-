@@ -109,7 +109,7 @@ describe("4. a registry writer cannot impersonate a role by writing the document
     const c = w.bB.commit({manifest: w.m, signer: S.V2});
     const now = regX.read(authorityRef(D));
     expect(regX.cas(authorityRef(D), now.sha, old.doc).ok).toBe(true); // attacker rewinds
-    expect(() => w.bB.assertV2(SESS.V2, c.core.epoch)).toThrow(/V2_NOT_AUTHORITATIVE/); // V2 stops
+    expect(() => w.bB.assertV2(SESS.V2, c.core.epoch)).toThrow(/AUTHORITY_REGRESSION/); // V2 stops: the rewind itself is detected
     expect(w.bA.v41MayDispatch()).toBe(false); // mid-handover: V4.1 does not resume either until a signed rollback
   });
 });
@@ -122,6 +122,7 @@ describe("2. acceptance evidence is verified (source, SHA, scope, authority) —
       "pulls/347": {merged: true, merge_commit_sha: M, base: {ref: "v7/integration", sha: BASE}, head: {sha: H}, ...o.pr},
       "pulls/347/files?per_page=100": o.files ?? [{filename: "automation/factory-v2/bridge.mjs"}],
       "pulls/347/reviews?per_page=100": o.reviews ?? [binding()],
+      "pulls/347/commits?per_page=100": o.commits ?? [{sha: H, commit: {message: "work\n\nClaude-Session: https://claude.ai/code/session_builderPR347"}}],
       [`commits/${H}/check-runs?per_page=100`]: {check_runs: o.runs ?? ["validate (ubuntu-latest)", "validate (windows-latest)"].map(name => ({name, app: {slug: "github-actions"}, head_sha: H, status: "completed", conclusion: "success"}))},
       [`actions/runs?head_sha=${M}&event=push&per_page=50`]: {workflow_runs: o.push ?? [{id: 1, path: ".github/workflows/ci.yml", head_branch: "v7/integration", head_sha: M, status: "completed", conclusion: "success"}]}
     };
@@ -144,7 +145,10 @@ describe("2. acceptance evidence is verified (source, SHA, scope, authority) —
     ["out of scope PR", gates(), {files: [{filename: "README.md"}]}, /OUT_OF_SCOPE/],
     ["untrusted reviewer login", gates(), {reviews: [binding({user: {login: "someone-else"}})]}, /NO_TRUSTED_CLEAN_BINDING_AT_HEAD/],
     ["binding on another head", gates(), {reviews: [binding({body: `VERDICT-BINDING: verdict=CLEAN head=${"f".repeat(40)} base=${BASE} reviewer-session=session_reviewer01`})]}, /NO_TRUSTED_CLEAN_BINDING_AT_HEAD/],
-    ["reviewer is a builder session", gates(), {builders: ["session_reviewer01"]}, /NO_TRUSTED_CLEAN_BINDING_AT_HEAD/],
+    ["reviewer is a builder session (caller-supplied list)", gates(), {builders: ["session_reviewer01"]}, /NO_TRUSTED_CLEAN_BINDING_AT_HEAD/],
+    ["reviewer is the PR's own implementer (Claude-Session trailer, same login)", gates(), {commits: [{sha: H, commit: {message: "x\n\nClaude-Session: https://claude.ai/code/session_reviewer01"}}]}, /NO_TRUSTED_CLEAN_BINDING_AT_HEAD/],
+    ["PR commits without implementer trailers", gates(), {commits: [{sha: H, commit: {message: "no trailer"}}]}, /IMPLEMENTER_SESSIONS_UNKNOWN/],
+    ["migration run on another branch", gates(), {push: [{id: 1, path: ".github/workflows/ci.yml", head_branch: "other", head_sha: "c".repeat(40), status: "completed", conclusion: "success"}]}, /NO_PUSH_RUN/],
     ["CI on another SHA", gates({ciPassed: {headSha: "e".repeat(40)}}), {}, /GATE_CI:SHA_NOT_REVIEWED_HEAD/],
     ["CI context failed", gates(), {runs: [{name: "validate (ubuntu-latest)", app: {slug: "github-actions"}, head_sha: H, status: "completed", conclusion: "failure"}, {name: "validate (windows-latest)", app: {slug: "github-actions"}, head_sha: H, status: "completed", conclusion: "success"}]}, /CONTEXT_NOT_SUCCESS/],
     ["CI from a foreign app", gates(), {runs: ["validate (ubuntu-latest)", "validate (windows-latest)"].map(name => ({name, app: {slug: "other"}, head_sha: H, status: "completed", conclusion: "success"}))}, /CONTEXT_MISSING/],
@@ -243,8 +247,77 @@ describe("resetInvalid", () => {
     const regX = w.reg(w.X), cur = regX.read(authorityRef(D));
     regX.cas(authorityRef(D), cur.sha, {...cur.doc, holder: SESS.ATTACK});
     expect(() => w.bX.resetInvalid({reason: "x", signer: S.V2})).toThrow(/ROLE_NOT_ALLOWED/);
-    expect(w.bX.resetInvalid({reason: "forged", signer: S.FOUNDER}).core).toMatchObject({phase: "V41_AUTHORITATIVE", epoch: 1});
+    expect(w.bX.resetInvalid({reason: "forged", signer: S.FOUNDER}).core).toMatchObject({phase: "V41_AUTHORITATIVE", epoch: 2}); // above every epoch ever stored
     expect(w.bA.v41MayDispatch()).toBe(true);
     expect(() => w.bB.assertV2(SESS.V2, 1)).toThrow(/V2_NOT_AUTHORITATIVE/);
+  });
+});
+
+describe("anti-rewind (review of b31a0338, B1): a registry writer cannot roll authority back without a key", () => {
+  const key = authorityRef(D);
+  const guardOf = (w, o = {}) => v2Intent => mergeAuthority({readAuthority: () => w.reg(w.A).read(key).doc, readHistory: () => w.reg(w.A).history(key), keyring: () => ringFor(D), pr: 7, headSha: "a".repeat(40), v2Intent, ...o});
+  it("(a) deleting the record after a handover: V4.1 does NOT resume, the guard refuses, only a signed reset recovers (epoch above everything seen)", {timeout: T}, () => {
+    const w = world(); toV2(w);
+    const regX = w.reg(w.X), cur = regX.read(key);
+    expect(regX.remove(key, cur.sha)).toBe(true);
+    expect(w.bA.v41MayDispatch()).toBe(false);
+    expect(() => w.bB.read()).toThrow(/AUTHORITY_RECORD_REMOVED/);
+    expect(guardOf(w)(null)).toMatchObject({allowed: false});
+    expect(guardOf(w)(null).reason).toMatch(/AUTHORITY_RECORD_REMOVED/);
+    expect(() => w.bX.resetInvalid({reason: "x", signer: S.V2})).toThrow(/ROLE_NOT_ALLOWED/);
+    expect(w.bA.resetInvalid({reason: "record removed", signer: S.V41}).core).toMatchObject({phase: "V41_AUTHORITATIVE", epoch: 2});
+    expect(w.bA.v41MayDispatch()).toBe(true);
+  });
+  it("(b) writing back the older signed V2 record after a Founder rollback is refused (no replayed authority)", {timeout: T}, () => {
+    const w = world(); toV2(w);
+    const regX = w.reg(w.X), v2rec = regX.read(key).doc;
+    w.bX.rollback({reason: "founder", signer: S.FOUNDER});
+    const now = regX.read(key);
+    expect(regX.cas(key, now.sha, v2rec).ok).toBe(true);
+    expect(() => w.bB.assertV2(SESS.V2, 1)).toThrow(/AUTHORITY_REGRESSION/);
+    expect(w.bA.v41MayDispatch()).toBe(false);
+    expect(guardOf(w)(null).reason).toMatch(/AUTHORITY_REGRESSION/);
+  });
+  it("(c) truncating the chain to an earlier signed prefix is refused", {timeout: T}, () => {
+    const w = world();
+    w.bB.prepare({manifest: w.m, gates: GATES, signer: S.V2});
+    const regX = w.reg(w.X), prepared = regX.read(key).doc;
+    w.bA.drainAck({manifestDigest: w.m.digest, drain, signer: S.V41});
+    w.bB.commit({manifest: w.m, signer: S.V2});
+    const now = regX.read(key);
+    expect(regX.cas(key, now.sha, prepared).ok).toBe(true);
+    expect(() => w.bA.read()).toThrow(/AUTHORITY_REGRESSION/);
+  });
+  it("canonical anchor and the reader's high-water mark make an absent record unverifiable, not genesis", {timeout: T}, () => {
+    const w = world();
+    expect(guardOf(w, {anchored: () => true})(null).reason).toMatch(/AUTHORITY_RECORD_REMOVED/);
+    let mark = {epoch: 3};
+    expect(guardOf(w, {hwm: {get: () => mark, set: v => { mark = v; }}})(null).reason).toMatch(/AUTHORITY_RECORD_REMOVED/);
+    expect(guardOf(w)(null)).toMatchObject({allowed: true, by: "V4.1"}); // nothing ever recorded, nothing anchored: status quo
+    const b = bridgeFor(w.reg(w.B), D, {anchored: () => true});
+    expect(() => b.read()).toThrow(/AUTHORITY_RECORD_REMOVED/);
+  });
+});
+
+describe("mutation survivors of review b31a0338 (N1)", () => {
+  it("prev binding: a valid envelope signed for another prior state is STALE_OR_REPLAYED", {timeout: T}, () => {
+    const w = world();
+    w.bB.prepare({manifest: w.m, gates: GATES, signer: S.V2});
+    const cur = w.bA.read();
+    const next = w.bA.drainCore(cur, {manifestDigest: w.m.digest, drain});
+    const wrongPrev = signAction({...S.V41, domain: D, action: "DRAIN_ACK", prev: canonDigest({...cur.core, epoch: 99}), payload: next});
+    expect(() => w.bX.drainAck({manifestDigest: w.m.digest, drain, envelope: wrongPrev})).toThrow(/STALE_OR_REPLAYED/);
+  });
+  it("drain signer must be THE outgoing owner: another registered V41_OWNER key is refused", {timeout: T}, () => {
+    const w = world();
+    w.bB.prepare({manifest: w.m, gates: GATES, signer: S.V2});
+    expect(() => w.bX.drainAck({manifestDigest: w.m.digest, drain, signer: S.V41b})).toThrow(/DRAIN_ACK_SIGNER_INVALID/);
+  });
+  it("commit signer must be THE candidate: another registered V2_CANDIDATE key is refused", {timeout: T}, () => {
+    const w = world();
+    w.bB.prepare({manifest: w.m, gates: GATES, signer: S.V2});
+    w.bA.drainAck({manifestDigest: w.m.digest, drain, signer: S.V41});
+    expect(() => w.bX.commit({manifest: w.m, signer: S.V2b})).toThrow(/COMMIT_CANDIDATE_MISMATCH/);
+    expect(() => w.bX.prepare({manifest: w.m, gates: GATES, signer: S.V2b})).toThrow(/PHASE_INVALID|PREPARE_SIGNER_NOT_CANDIDATE/);
   });
 });

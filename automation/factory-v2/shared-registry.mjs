@@ -38,6 +38,8 @@ export function createSharedRegistry({docStore, ref, maxRetries = 8, backoffMs =
     cas: (key, expectedVersion, doc) => { const r = update(key, expectedVersion, doc); return r.ok ? {ok: true, sha: r.version} : {ok: false, sha: null, current: {sha: r.version, doc: r.current}}; },
     remove: (key, expectedVersion) => update(key, expectedVersion, null).ok,
     sections: () => Object.keys(readAll().doc.sections).sort(),
+    /** Every historical value of one section, oldest first (null where it was absent): lets readers detect deletion/rewind. */
+    history: key => (docStore.history ? docStore.history(ref) : []).map(h => h.doc?.sections?.[key] ?? null),
     /** task-lease Store contract (createIfAbsent/read/cas/remove) under `lease/<namespace>/<id>`; CAS on the lease VERSION like the ref store. */
     leaseStore(namespace) {
       const k = id => `lease/${namespace}/${id}`;

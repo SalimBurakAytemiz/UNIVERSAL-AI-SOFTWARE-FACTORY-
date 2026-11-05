@@ -4,10 +4,12 @@ import {AuthorityBridge, REQUIRED_GATES} from "../../automation/factory-v2/bridg
 
 export const SESS = {V41: "session_v41supervisor", V2: "session_v2supervisor", FOUNDER: "session_founderxx01", ATTACK: "session_attackerxx1"};
 const mk = (role, sessionId) => { const k = generateRoleKey(); return {...k, role, sessionId}; };
-export const S = {V41: mk("V41_OWNER", SESS.V41), V2: mk("V2_CANDIDATE", SESS.V2), FOUNDER: mk("FOUNDER", SESS.FOUNDER), ATTACK: mk("V2_CANDIDATE", SESS.ATTACK)};
+export const S = {V41: mk("V41_OWNER", SESS.V41), V2: mk("V2_CANDIDATE", SESS.V2), FOUNDER: mk("FOUNDER", SESS.FOUNDER), ATTACK: mk("V2_CANDIDATE", SESS.ATTACK),
+  // second REGISTERED keys per role (different sessions): a registered key of the right role but the wrong session must still be refused
+  V41b: mk("V41_OWNER", "session_otherv41owner"), V2b: mk("V2_CANDIDATE", "session_otherv2candidate")};
 export const signerFor = session => Object.values(S).find(s => s.sessionId === session) ?? S.ATTACK;
 const entry = s => ({keyId: s.keyId, role: s.role, sessionId: s.sessionId, publicKeyPem: s.publicKeyPem});
-export const ringFor = (domain = "uasco-v7") => parseKeyring({schema: KEYRING_SCHEMA, domain, keys: [entry(S.V41), entry(S.V2), entry(S.FOUNDER)]}, {kind: "TEST"});
+export const ringFor = (domain = "uasco-v7") => parseKeyring({schema: KEYRING_SCHEMA, domain, keys: [entry(S.V41), entry(S.V2), entry(S.FOUNDER), entry(S.V41b), entry(S.V2b)]}, {kind: "TEST"});
 /** Stand-in for the live gate verifier (gate-verifier.mjs has its own fixture tests): refuses missing/unshaped evidence. */
 export const okGates = gates => {
   for (const g of REQUIRED_GATES) if (!gates?.[g]?.evidence) throw new Error(`GATE_${g.toUpperCase()}:EVIDENCE_SHAPE`);

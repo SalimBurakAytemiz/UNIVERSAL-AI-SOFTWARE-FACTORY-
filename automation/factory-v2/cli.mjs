@@ -25,6 +25,7 @@ import {Ownership} from "./ownership.mjs";
 import {runProbe, PROBE_DOMAIN} from "./probe-scenario.mjs";
 import {KEYRING_SCHEMA, generateRoleKey, signAction, canonDigest, loadCanonicalKeyring} from "./identity.mjs";
 import {verifyGates} from "./gate-verifier.mjs";
+import {liveAuthorityReaders} from "./v41-guard.mjs";
 import {liveGit, liveGateDeps, liveFreshness, githubClient, prefetchGateEvidence, openPrsLive, closedPrsLive} from "./live-sources.mjs";
 import {execFileSync} from "node:child_process";
 
@@ -106,8 +107,9 @@ async function bridge() {
   // Identity = canonical keyring at the live canonical SHA; gate evidence and freshness = live GitHub + canonical git (never the caller).
   const lg = liveGit({repoRoot: ROOT}), ghc = githubClient(), live = liveFreshness({repoRoot: ROOT, gh: ghc});
   let ghReader = null; // filled by prefetchGateEvidence right before prepare
+  const lr = liveAuthorityReaders({repoRoot: ROOT, branch: rb ?? "uasco/registry", domain: DOMAIN}); // canonical anchor + persisted high-water mark
   const b = () => new AuthorityBridge({docStore: docs, domain: DOMAIN, keyring: () => loadCanonicalKeyring({repoDir: ROOT, commitSha: lg.canonicalSha()}),
-    gateVerifier: (g, ctx) => verifyGates(g, ctx, liveGateDeps({repoRoot: ROOT, gh: ghReader})), live});
+    gateVerifier: (g, ctx) => verifyGates(g, ctx, liveGateDeps({repoRoot: ROOT, gh: ghReader})), live, anchored: () => lr.anchored(), hwm: lr.hwm});
   const actor = process.env.CLAUDE_SESSION_ID ?? arg("actor", "unknown"); // label for probe refs only; never an identity
   if (sub === "snapshot") {
     const g = a => execFileSync("git", a, {cwd: ROOT, maxBuffer: 64 << 20}).toString("utf8");

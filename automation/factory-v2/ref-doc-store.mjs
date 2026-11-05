@@ -29,7 +29,15 @@ function makeDocStore(ops, kind) {
       if (ops.put(ref, n, expectedSha)) return {ok: true, sha: n};
       return {ok: false, sha: null, current: read(ref)};
     },
-    remove(ref, expectedSha) { return ops.del(checkRef(ref), expectedSha); }
+    remove(ref, expectedSha) { return ops.del(checkRef(ref), expectedSha); },
+    /** Every version of the document reachable from the ref, oldest first (first-parent chain; at most `max`). Fails closed. */
+    history(ref, max = 2000) {
+      const sha = ops.sha(checkRef(ref)); if (!sha) return [];
+      const r = ops.git(["rev-list", "--first-parent", `--max-count=${max}`, sha]); if (r.status !== 0) throw new Error("REFDOC_HISTORY_FAILED");
+      const shas = r.stdout.split("\n").filter(Boolean);
+      if (shas.length >= max) throw new Error("REFDOC_HISTORY_TOO_LONG");
+      return shas.reverse().map(c => { const s = ops.git(["show", `${c}:doc.json`]); if (s.status !== 0) throw new Error("REFDOC_HISTORY_UNREADABLE"); try { return {sha: c, doc: JSON.parse(s.stdout)}; } catch { throw new Error("REFDOC_HISTORY_UNPARSEABLE"); } });
+    }
   };
 }
 

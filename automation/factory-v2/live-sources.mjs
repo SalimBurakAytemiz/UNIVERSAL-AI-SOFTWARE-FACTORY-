@@ -19,7 +19,7 @@ export const closedPrsLive = (gh, maxPages = 10) => gh.paginate(repoPath(gh, "pu
 export async function prefetchGateEvidence(gh, gates) {
   const paths = [];
   const pr = gates?.reviewClean?.pr, head = gates?.ciPassed?.headSha, merge = gates?.migrationAcceptance?.mergeSha;
-  if (Number.isInteger(pr)) paths.push(`pulls/${pr}`, `pulls/${pr}/files?per_page=100`, `pulls/${pr}/reviews?per_page=100`);
+  if (Number.isInteger(pr)) paths.push(`pulls/${pr}`, `pulls/${pr}/files?per_page=100`, `pulls/${pr}/reviews?per_page=100`, `pulls/${pr}/commits?per_page=100`);
   if (/^[0-9a-f]{40}$/.test(head ?? "")) paths.push(`commits/${head}/check-runs?per_page=100`);
   if (/^[0-9a-f]{40}$/.test(merge ?? "")) paths.push(`actions/runs?head_sha=${merge}&event=push&per_page=50`);
   const out = {};

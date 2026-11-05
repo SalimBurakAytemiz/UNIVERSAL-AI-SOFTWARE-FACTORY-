@@ -4,6 +4,8 @@ import {parseBinding, REQUIRED_CONTEXTS, CI_WORKFLOW_PATH, CHECK_APP} from "../.
 const SHA = /^[0-9a-f]{40}$/;
 export const FACTORY_SCOPE_PREFIX = "automation/factory-v2/";
 export const FOUNDER_AUTH_PREFIX = "docs/planning/authority/";
+// Same trailer the independent-review pipeline uses to identify implementer sessions (scripts/ci/uasco-review/github.mjs).
+const SESSION_TRAILER_RE = /^Claude-Session:\s*https:\/\/claude\.ai\/code\/(session_[A-Za-z0-9]{8,64})\s*$/gm;
 const AUTH_LINE = /^AUTHORIZES: FACTORY_V2_CUTOVER domain=([a-z0-9-]{1,64}) candidate=(session_[A-Za-z0-9]{8,}) manifest-version=(\d{1,6})$/m;
 
 export class GateError extends Error { constructor(gate, code, detail) { super(`GATE_${gate}:${code}${detail ? ":" + detail : ""}`); this.code = code; this.gate = gate; } }
@@ -28,13 +30,20 @@ export function verifyGates(gates, context, deps) {
   if (!deps.git.isAncestor(pr.merge_commit_sha, canonical)) throw new GateError("REVIEW", "MERGE_NOT_IN_CANONICAL");
   const files = deps.gh(`pulls/${rv.pr}/files?per_page=100`).map(f => f.filename);
   if (!files.some(f => f.startsWith(FACTORY_SCOPE_PREFIX))) throw new GateError("REVIEW", "OUT_OF_SCOPE");
+  // Builder sessions come from the PR's own commits (Claude-Session trailers), not from the caller: every session posts as the same
+  // GitHub login, so the login alone cannot separate a builder's self-review from an independent one.
+  const commits = deps.gh(`pulls/${rv.pr}/commits?per_page=100`);
+  if (!Array.isArray(commits) || commits.length === 0 || commits.length >= 100) throw new GateError("REVIEW", "PR_COMMITS_UNVERIFIABLE");
+  const implementers = new Set(commits.flatMap(c => [...String(c?.commit?.message ?? "").matchAll(SESSION_TRAILER_RE)].map(m => m[1])));
+  if (implementers.size === 0) throw new GateError("REVIEW", "IMPLEMENTER_SESSIONS_UNKNOWN");
+  const builders = new Set([...implementers, ...(deps.builderSessions ?? [])]);
   const trusted = new Set((deps.trustedReviewerLogins ?? []).map(l => l.toLowerCase()));
   const reviews = deps.gh(`pulls/${rv.pr}/reviews?per_page=100`);
   const binding = reviews.map(r => ({r, b: parseBinding(r.body ?? "")}))
     .find(({r, b}) => b && !b.code && b.verdict === "CLEAN" && b.head === rv.headSha && b.base === pr.base?.sha && trusted.has(String(r.user?.login ?? "").toLowerCase())
-      && ["COMMENTED", "APPROVED"].includes(r.state) && !(deps.builderSessions ?? new Set()).has(b.session));
+      && ["COMMENTED", "APPROVED"].includes(r.state) && !builders.has(b.session));
   if (!binding) throw new GateError("REVIEW", "NO_TRUSTED_CLEAN_BINDING_AT_HEAD");
-  out.reviewClean = {pr: rv.pr, headSha: rv.headSha, baseSha: pr.base.sha, mergeSha: pr.merge_commit_sha, reviewId: binding.r.id, reviewerSession: binding.b.session};
+  out.reviewClean = {pr: rv.pr, headSha: rv.headSha, baseSha: pr.base.sha, mergeSha: pr.merge_commit_sha, reviewId: binding.r.id, reviewerSession: binding.b.session, implementerSessions: [...implementers].sort()};
   // --- CI on the reviewed head: required contexts, from the required workflow, by the Actions app, all success
   const ci = gates?.ciPassed;
   if (ci?.headSha !== rv.headSha) throw new GateError("CI", "SHA_NOT_REVIEWED_HEAD");
@@ -60,6 +69,8 @@ export function verifyGates(gates, context, deps) {
   const wr = (deps.gh(`actions/runs?head_sha=${ma.mergeSha}&event=push&per_page=50`).workflow_runs ?? [])
     .filter(r => r.path === CI_WORKFLOW_PATH && r.head_branch === deps.baseRef && r.head_sha === ma.mergeSha);
   if (!wr.length) throw new GateError("MIGRATION", "NO_PUSH_RUN");
+  // Deliberately "any completed run succeeded": a failed push run followed by a successful re-run of the SAME merge commit passes
+  // (re-runs are how flakes are retried); the commit, branch and workflow file are pinned above. The PR-head CI gate is stricter (every run).
   if (!wr.some(r => r.status === "completed" && r.conclusion === "success")) throw new GateError("MIGRATION", "PUSH_RUN_NOT_SUCCESS");
   out.migrationAcceptance = {mergeSha: ma.mergeSha, runIds: wr.map(r => r.id)};
   return {verified: out, canonicalSha: canonical};
