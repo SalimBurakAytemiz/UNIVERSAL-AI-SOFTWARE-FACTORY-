@@ -68,10 +68,10 @@ function seed(dataDir: string) {
   store.createMission({tenantId: "tA", projectId: p.projectId, title: MISSION, objective: "obj", acceptanceCriteria: ["ac"], riskLevel: "R1", createdBy: RECORDER});
   store.createMission({tenantId: "tA", projectId: p.projectId, title: `${MISSION} 2`, objective: "obj", acceptanceCriteria: ["ac"], riskLevel: "R2", createdBy: RECORDER});
 }
-function mkApp(): App {
+function mkApp(seedFn: (dataDir: string) => void = seed): App {
   const runtime = path.join(tmp, "runtime"), dataDir = path.join(tmp, "data");
   fs.mkdirSync(runtime, {recursive: true});
-  seed(dataDir);
+  seedFn(dataDir);
   // repoRoot = depo: rol kataloğu ve kanıt okumaları gerçek kaynaktan gelir (salt okunur; yazılar runtime/dataDir'e gider)
   const app = buildServer({controlToken: TOKEN, runtime, repoRoot: REPO, dataDir, tenantId: "tA", port: 3210, logger: false});
   apps.push(app); return app;
@@ -81,7 +81,7 @@ const serverJson = async (app: App, url: string) => { const r = await app.inject
 /** main.mjs uasco:api-get (main.mjs:321) + verifyServerIdentity + api() ile aynı sözleşme: izin listesi dışı yol INVALID_API_PATH; her okumadan önce
  *  sunucu kimliği belirtece bağlı challenge ile doğrulanır (uyuşmazsa CONTROL_API_IDENTITY_UNVERIFIED); /health için sabit nesne döner; /v1 okuması belirteç
  *  başlığıyla gider, 2xx değilse `${yol}: HTTP ${durum}` hatası. (main.mjs kimliği 2 sn önbelleğe alır; burada her okumada doğrulanır: daha sıkı.) */
-async function renderAgainstServer(app: App, view: string, token = TOKEN) {
+async function renderAgainstServer(app: App, view: string, token = TOKEN, lang: "en" | "tr" = "en") {
   const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js");
   const doc = new D(), store = st.createStore(null), seen: Array<{path: string; status: number}> = [], attention: string[] = [], refused: string[] = [], thrown: string[] = [];
   const verifyServerIdentity = async () => {
@@ -103,9 +103,9 @@ async function renderAgainstServer(app: App, view: string, token = TOKEN) {
     } catch (e) { thrown.push(`${p} -> ${(e as Error).message}`); throw e; }
   }};
   const api = apiMod.createApi({bridge, store});
-  const t = (k: string, v?: unknown) => i18n.translate("en", k, v);
+  const t = (k: string, v?: unknown) => i18n.translate(lang, k, v);
   // renderAttention app.js kabuğundandır (app.js içe aktarılınca boot eder): diğer renderer testleri gibi kayıt tutan bir ikame verilir
-  const ctx: Record<string, unknown> = {doc, store, api, i18n: {lang: "en", t}, t, navigate: () => undefined, rerender: async () => undefined, refreshAll: async () => undefined,
+  const ctx: Record<string, unknown> = {doc, store, api, i18n: {lang, t}, t, navigate: () => undefined, rerender: async () => undefined, refreshAll: async () => undefined,
     settleFocus: () => undefined, confirm: async () => false, selectProject: () => undefined, principal: "FOUNDER_LOCAL", now: () => Date.now(),
     renderAttention: (_c: unknown, att: {state?: string} | null) => { attention.push(String(att?.state)); }};
   const mod = await load("views", `${view}.js`);
@@ -125,7 +125,7 @@ const CLOUD_JOBS_PENDING = !desktopAllows("/v1/cloud/jobs");
 const pendingRefused = (view: string): string[] => (view === "tower" && CLOUD_JOBS_PENDING ? ["/v1/cloud/jobs"] : []);
 // Her rotanın gerçek sunucuda okuduğu yollar (sorgu dizesi hariç). Bir görünüm farklı/kayıtsız bir yol okumaya başlarsa test bunu söyler.
 const PATHS: Record<string, string[]> = {
-  home: ["/v1/cockpit", "/v1/projects"],
+  home: ["/v1/cockpit", "/v1/projects", "/v1/run-summaries"],
   projects: ["/v1/deliveries", "/v1/intakes", "/v1/missions", "/v1/projects", "/v1/work-runs"],
   work: ["/v1/missions", "/v1/projects", "/v1/work-runs"],
   workforce: ["/v1/agents", "/v1/cockpit", "/v1/roles", "/v1/roles/status-summary", "/v1/work-runs"],
@@ -139,7 +139,13 @@ const PATHS: Record<string, string[]> = {
 
 // Mutlu yolda gerçek sunucu verisinden türetilen, görünüme özgü bir doğrulama.
 const HAPPY: Record<string, (app: App, r: Awaited<ReturnType<typeof renderAgainstServer>>) => Promise<void>> = {
-  home: async (_a, r) => { expect(kpiText(r.root, "projects")).toMatch(/^Active Projects1VERIFIED/); expect(kpiText(r.root, "missions")).toMatch(/^Tasks2VERIFIED/); },
+  home: async (app, r) => {
+    expect(kpiText(r.root, "projects")).toMatch(/^Active Projects1VERIFIED/); expect(kpiText(r.root, "missions")).toMatch(/^Tasks2VERIFIED/);
+    // V3-T1027: per-project panel is built from the same server data (seed has no runs and no mission awaiting approval)
+    const [prj] = (await serverJson(app, "/v1/projects")).projects as Array<{projectId: string}>;
+    const row = all(r.root).find(n => n.dataset.projectCockpit === prj!.projectId)!;
+    expect(row.textContent).toBe(`${PROJECT}Runs0No runs yetBlockers0NoneMissions awaiting approval0NoneSpend—Not available: the Control API has no spend endpoint yet.`);
+  },
   projects: async (_a, r) => { expect(r.text).toContain(PROJECT); expect(kpiText(r.root, "pf-projects")).toMatch(/^Projects1VERIFIED/); expect(kpiText(r.root, "pf-missions")).toMatch(/^Missions2VERIFIED/); },
   work: async (_a, r) => { expect(r.text).toContain(MISSION); expect(r.text).toContain(PROJECT); expect(kpiText(r.root, "wk-missions")).toMatch(/^Missions2VERIFIED/); },
   workforce: async (app, r) => { const n = (await serverJson(app, "/v1/agents")).registeredRoles as number; expect(n).toBeGreaterThan(0); expect(r.text).toContain(`Registered roles${n}`); },
@@ -249,5 +255,148 @@ describe("UASCO-T0006: renderer -> real buildServer for the 10 formerly fake-bri
       expect(failureMarks(r.root).length, `${view}: a failure state is shown`).toBeGreaterThan(0);
     });
   }
+});
+
+// //TR: V3-T1027: Ana Sayfa proje bazlı cockpit paneli GERÇEK buildServer'a karşı: yüklü (gerçek koşu/engel/onay), boş, hata (500), kullanılamıyor (404) ve tr dili.
+// Harcama için kayıtlı uç nokta yoktur; hücre her durumda dürüst UNAVAILABLE'dır ve sayı içermez.
+describe("V3-T1027: home per-project cockpit (runs, blockers, pending approvals, spend) against the real buildServer", () => {
+  beforeEach(() => { tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-t1027-")); });
+  afterEach(async () => { for (const a of apps.splice(0)) { try { await a.close(); } catch { /* kapanış */ } } try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* Windows */ } });
+  const PLANTED = ["ghp_", "0123456789abcdefghijklmnopqrstuvwxyzAB"].join("");
+  const cockpitSeed = (dataDir: string) => {
+    const store = new WorkOsStore(dataDir), tenantId = "tA", scope = {tenantId};
+    const a = store.createProject({tenantId, orgId: "org1", name: "Alpha", environmentId: "env-dev", createdBy: RECORDER});
+    store.createProject({tenantId, orgId: "org1", name: "Beta", environmentId: "env-dev", createdBy: RECORDER});
+    const mk = (title: string, riskLevel: "R1" | "R2" | "R3" = "R1") => store.createMission({tenantId, projectId: a.projectId, title, objective: "obj", acceptanceCriteria: ["ac"], riskLevel, createdBy: RECORDER}).missionId;
+    const walk = (id: string, p: string[]) => { for (const to of p) store.transitionMission(scope, id, to as any, "go", RECORDER); };
+    walk(mk("Needs sign-off", "R3"), ["PREFLIGHT"]);
+    const start = (title: string) => { const m = mk(title); walk(m, ["PREFLIGHT", "AUTHORIZED"]); const r = store.createRun({tenantId, missionId: m, executor: {implementer: `I-${title}`, reviewer: `R-${title}`}, createdBy: RECORDER}); return {runId: r.runId, leaseId: store.acquireRunLease(r.runId, 600_000, "ENGINE").leaseId as string}; };
+    const busy = start("busy"); store.transitionRun(busy.runId, busy.leaseId, "RUNNING", "go", "ENGINE");
+    const stuck = start("stuck"); store.transitionRun(stuck.runId, stuck.leaseId, "RUNNING", "go", "ENGINE");
+    store.transitionRun(stuck.runId, stuck.leaseId, "BLOCKED", `needs credentials token=${PLANTED}`, "ENGINE");
+  };
+  const panelOf = (r: {root: N}) => all(r.root).find(n => n.id === "home-projects")!;
+  const cellOf = (row: N, key: string) => all(row).find(n => n.dataset.pc === key)!;
+  const rowsOf = (r: {root: N}) => all(panelOf(r)).filter(n => n.dataset.projectCockpit !== undefined);
+
+  it("loaded: per-project runs by status, blockers with redacted reasons, pending approvals and an honest spend gap match the server", { timeout: 120_000 }, async () => {
+    const app = mkApp(cockpitSeed);
+    const r = await renderAgainstServer(app, "home");
+    expect(r.paths).toEqual(["/v1/cockpit", "/v1/projects", "/v1/run-summaries"]);
+    expect(r.refused).toEqual([]); expect(r.thrown).toEqual([]); expect(failureMarks(r.root)).toEqual([]);
+    const projects = (await serverJson(app, "/v1/projects")).projects as Array<{projectId: string; name: string}>;
+    const runs = (await serverJson(app, "/v1/run-summaries?limit=100")).page.runs as Array<{projectId: string; status: string}>;
+    const ck = await serverJson(app, "/v1/cockpit");
+    expect(all(panelOf(r)).find(n => n.dataset.projectCockpitState !== undefined)?.dataset.projectCockpitState).toBe("VERIFIED");
+    expect(rowsOf(r).map(n => n.dataset.projectCockpit).sort()).toEqual(projects.map(p => p.projectId).sort());
+    for (const p of projects) {
+      const row = rowsOf(r).find(n => n.dataset.projectCockpit === p.projectId)!;
+      const mine = runs.filter(x => x.projectId === p.projectId), blocked = mine.filter(x => ["BLOCKED", "QUARANTINED", "RECOVERY_FAILED"].includes(x.status));
+      const pend = (ck.awaitingApproval.items as Array<{projectId: string}>).filter(x => x.projectId === p.projectId);
+      expect(all(cellOf(row, "runs")).find(n => n.className === "pc-value")?.textContent, p.name).toBe(String(mine.length));
+      expect(all(cellOf(row, "blockers")).find(n => n.className === "pc-value")?.textContent, p.name).toBe(String(blocked.length));
+      expect(all(cellOf(row, "approvals")).find(n => n.className === "pc-value")?.textContent, p.name).toBe(String(pend.length));
+      expect([cellOf(row, "spend").dataset.pcState, cellOf(row, "spend").textContent]).toEqual(["UNAVAILABLE", "Spend—Not available: the Control API has no spend endpoint yet."]);
+    }
+    const alpha = rowsOf(r).find(n => n.textContent.startsWith("Alpha"))!, beta = rowsOf(r).find(n => n.textContent.startsWith("Beta"))!;
+    expect(cellOf(alpha, "runs").textContent).toMatch(/^Runs2(Blocked|BLOCKED)[^·]*1 · .*1$/);
+    expect(cellOf(alpha, "blockers").textContent).toContain("needs credentials token=");
+    expect(panelOf(r).textContent).not.toContain(PLANTED);
+    expect(cellOf(alpha, "approvals").textContent).toContain("Needs sign-off · R3");
+    expect(beta.textContent).toBe("BetaRuns0No runs yetBlockers0NoneMissions awaiting approval0NoneSpend—Not available: the Control API has no spend endpoint yet.");
+    expect(all(panelOf(r)).some(n => n.dataset.pcPartial !== undefined)).toBe(false);
+    // the spend cell never shows a number in any row
+    for (const row of rowsOf(r)) expect(cellOf(row, "spend").textContent).not.toMatch(/\d/);
+  });
+
+  it("empty: a real server with no projects renders an honest empty state (not a failure)", { timeout: 120_000 }, async () => {
+    const app = mkApp(() => undefined);
+    const r = await renderAgainstServer(app, "home");
+    expect(r.thrown).toEqual([]); expect(failureMarks(r.root)).toEqual([]);
+    expect(all(panelOf(r)).find(n => n.dataset.projectCockpitState !== undefined)?.dataset.projectCockpitState).toBe("EMPTY");
+    expect(panelOf(r).textContent).toBe("Projects at a glanceNo projects yet.");
+  });
+
+  for (const [code, state, text] of [[500, "ERROR", "Error"], [404, "UNAVAILABLE", "Unavailable (UNAVAILABLE)"]] as const) {
+    it(`${state.toLowerCase()}: /v1/run-summaries answers ${code}; runs and blockers say ${state}, approvals and projects stay real, spend stays an honest gap`, { timeout: 120_000 }, async () => {
+      const app = mkApp(cockpitSeed);
+      app.addHook("onRequest", async (req, reply) => { if (req.url.startsWith("/v1/run-summaries")) return reply.code(code).send({error: "INJECTED"}); });
+      const r = await renderAgainstServer(app, "home");
+      expect(r.results.find(x => x.path.startsWith("/v1/run-summaries"))).toMatchObject({ok: false, state, message: `/v1/run-summaries?limit=100: HTTP ${code}`});
+      expect(rowsOf(r)).toHaveLength(2);
+      for (const row of rowsOf(r)) {
+        for (const k of ["runs", "blockers"]) expect([k, cellOf(row, k).dataset.pcState, cellOf(row, k).textContent]).toEqual([k, state, `${k === "runs" ? "Runs" : "Blockers"}${text}`]);
+        expect(cellOf(row, "approvals").dataset.pcState).toBe("VERIFIED");
+        expect(cellOf(row, "spend").dataset.pcState).toBe("UNAVAILABLE");
+      }
+      expect(cellOf(rowsOf(r).find(n => n.textContent.startsWith("Alpha"))!, "approvals").textContent).toContain("Needs sign-off · R3");
+      expect(failureMarks(r.root).length > 0).toBe(code === 500);
+    });
+  }
+
+  it("approvals error: when /v1/cockpit fails the approvals cell says ERROR (never 0) while runs and blockers stay real", { timeout: 120_000 }, async () => {
+    const app = mkApp(cockpitSeed);
+    app.addHook("onRequest", async (req, reply) => { if (req.url === "/v1/cockpit") return reply.code(500).send({error: "INJECTED"}); });
+    const r = await renderAgainstServer(app, "home");
+    expect(rowsOf(r)).toHaveLength(2);
+    for (const row of rowsOf(r)) expect([cellOf(row, "approvals").dataset.pcState, cellOf(row, "approvals").textContent]).toEqual(["ERROR", "Missions awaiting approvalError"]);
+    const alpha = rowsOf(r).find(n => n.textContent.startsWith("Alpha"))!;
+    expect([cellOf(alpha, "runs").dataset.pcState, all(cellOf(alpha, "runs")).find(n => n.className === "pc-value")?.textContent]).toEqual(["VERIFIED", "2"]);
+    expect(all(cellOf(alpha, "blockers")).find(n => n.className === "pc-value")?.textContent).toBe("1");
+  });
+
+  it("projects unavailable: when /v1/projects fails the panel shows the classified state and no rows", { timeout: 120_000 }, async () => {
+    const app = mkApp(cockpitSeed);
+    app.addHook("onRequest", async (req, reply) => { if (req.url === "/v1/projects") return reply.code(500).send({error: "INJECTED"}); });
+    const r = await renderAgainstServer(app, "home");
+    expect(rowsOf(r)).toEqual([]);
+    expect(all(panelOf(r)).find(n => n.dataset.projectCockpitState !== undefined)?.dataset.projectCockpitState).toBe("ERROR");
+    expect(panelOf(r).textContent).toBe("Projects at a glanceError");
+  });
+
+  it("partial: with more runs than one page (101 real runs, limit 100) both the Runs and Blockers cells label the counts as partial", { timeout: 180_000 }, async () => {
+    const app = mkApp((dataDir: string) => {
+      cockpitSeed(dataDir);
+      const store = new WorkOsStore(dataDir), tenantId = "tA", scope = {tenantId};
+      const [a] = store.listProjects(scope).filter(p => p.name === "Alpha");
+      for (let i = 0; i < 99; i++) {
+        const m = store.createMission({tenantId, projectId: a!.projectId, title: `bulk ${i}`, objective: "obj", acceptanceCriteria: ["ac"], riskLevel: "R1", createdBy: RECORDER}).missionId;
+        for (const to of ["PREFLIGHT", "AUTHORIZED"]) store.transitionMission(scope, m, to as any, "go", RECORDER);
+        store.createRun({tenantId, missionId: m, executor: {implementer: `I-b${i}`, reviewer: `R-b${i}`}, createdBy: RECORDER});
+      }
+    });
+    const page = (await serverJson(app, "/v1/run-summaries?limit=100")).page;
+    expect([page.runs.length, page.total, typeof page.nextCursor]).toEqual([100, 101, "string"]);
+    const r = await renderAgainstServer(app, "home");
+    const alpha = rowsOf(r).find(n => n.textContent.startsWith("Alpha"))!;
+    for (const k of ["runs", "blockers"]) expect([k, all(cellOf(alpha, k)).find(n => n.dataset.pcPartial === k)?.textContent]).toEqual([k, "Counted from the latest 100 of 101 runs."]);
+    expect(failureMarks(r.root)).toEqual([]);
+  });
+
+  it("tr: the panel is localized from the real server render", { timeout: 120_000 }, async () => {
+    const app = mkApp(cockpitSeed);
+    const r = await renderAgainstServer(app, "home", TOKEN, "tr");
+    const beta = rowsOf(r).find(n => n.textContent.startsWith("Beta"))!;
+    expect(panelOf(r).textContent.startsWith("Projelere genel bakış")).toBe(true);
+    expect(beta.textContent).toBe("BetaKoşular0Henüz koşu yokEngeller0YokOnay bekleyen görevler0YokHarcama—Kullanılamıyor: Control API'de henüz harcama uç noktası yok.");
+  });
+
+  it("pure core: partial pages, unknown statuses and malformed bodies are honest", async () => {
+    const core = await load("project-cockpit-core.js");
+    expect(core.mapRunSummaries({page: {runs: [], nextCursor: null, total: 0}})).toEqual({state: "VERIFIED", runs: [], total: 0, partial: false});
+    for (const bad of [null, {}, {page: {}}, {page: {runs: [], total: -1, nextCursor: null}}, {page: {runs: [], total: 1.5, nextCursor: null}}, {page: {runs: {}, total: 0, nextCursor: null}}, {page: {runs: [], total: 0, nextCursor: 5}}])
+      expect(core.mapRunSummaries(bad).state, JSON.stringify(bad)).toBe("ERROR");
+    const m = core.mapRunSummaries({page: {runs: [{runId: "run_1", projectId: "prj_a", status: "WEIRD"}, {runId: "run_2", projectId: "prj_a", status: "BLOCKED", reason: "x"}], nextCursor: "c", total: 250}});
+    expect(m).toMatchObject({state: "VERIFIED", total: 250, partial: true}); expect(m.runs[0].status).toBe("UNKNOWN");
+    const pc = core.buildProjectCockpit({projects: {state: "VERIFIED", items: [{projectId: "prj_a", name: "A"}]}, approvals: {state: "STALE", items: [{projectId: "prj_a", missionId: "m", title: "T", riskLevel: "R1"}]}, runs: m});
+    expect(pc.rows[0]).toMatchObject({runs: {state: "VERIFIED", count: 2, partial: true, shown: 2, total: 250}, blockers: {count: 1}, approvals: {state: "STALE", count: 1}, spend: {state: "UNAVAILABLE", reason: "NO_SPEND_ENDPOINT"}});
+    // LOW-1: client-side re-redaction is pinned independently of the server's redactSecrets
+    const raw = core.buildProjectCockpit({projects: {state: "VERIFIED", items: [{projectId: "prj_a", name: "A"}]}, approvals: {state: "VERIFIED", items: []},
+      runs: {state: "VERIFIED", partial: false, total: 1, runs: [{runId: "run_x", projectId: "prj_a", status: "BLOCKED", reason: `token=${PLANTED}`}]}});
+    expect(raw.rows[0].blockers.count).toBe(1); expect(JSON.stringify(raw)).not.toContain(PLANTED);
+    expect(core.buildProjectCockpit({projects: {state: "OFFLINE", items: []}, approvals: {state: "VERIFIED", items: []}, runs: m})).toEqual({state: "OFFLINE", rows: []});
+    expect(core.buildProjectCockpit({projects: {state: "VERIFIED", items: [{projectId: "prj_a", name: "A"}]}, approvals: {state: "UNAVAILABLE", items: []}, runs: {state: "OFFLINE"}}).rows[0])
+      .toMatchObject({runs: {state: "OFFLINE"}, blockers: {state: "OFFLINE"}, approvals: {state: "UNAVAILABLE"}});
+  });
 });
 }
