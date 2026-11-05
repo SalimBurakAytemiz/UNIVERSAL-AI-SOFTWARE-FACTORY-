@@ -7,6 +7,9 @@ const canon = v => Array.isArray(v) ? `[${v.map(canon).join(",")}]` : v && typeo
 export const sectionVersion = (v, rev = 0) => (v === undefined || v === null ? null : crypto.createHash("sha256").update(canon({rev, v})).digest("hex"));
 export const REGISTRY_SCHEMA = "uasco.factory-v2.shared-registry/1";
 const KEY = /^[A-Za-z0-9][A-Za-z0-9._/#:-]{0,240}$/;
+// Authority sections are also written as their own file so their history can be walked without reading lease traffic.
+export const sidecarPath = key => (key.startsWith("refs/uasco/authority/") ? `authority/${key.slice("refs/uasco/authority/".length).replace(/[^A-Za-z0-9._-]/g, "_")}.json` : null);
+const sidecarsOf = sections => Object.fromEntries(Object.entries(sections).map(([k, v]) => [sidecarPath(k), v]).filter(([p]) => p));
 const sleep = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
 /**
@@ -26,7 +29,7 @@ export function createSharedRegistry({docStore, ref, maxRetries = 8, backoffMs =
       if (sectionVersion(have, rev) !== expected) return {ok: false, current: have ?? null, version: sectionVersion(have, rev)};
       const sections = {...cur.doc.sections}, nextRevs = {...revs, [key]: rev + 1}; // revisions only grow, even across delete/recreate
       if (next === null) delete sections[key]; else sections[key] = next;
-      const r = docStore.cas(ref, cur.sha, {schema: REGISTRY_SCHEMA, phase: `section:${key}`, sections, revs: nextRevs, seq: (cur.doc.seq ?? 0) + 1});
+      const r = docStore.cas(ref, cur.sha, {schema: REGISTRY_SCHEMA, phase: `section:${key}`, sections, revs: nextRevs, seq: (cur.doc.seq ?? 0) + 1}, sidecarsOf(sections));
       if (r.ok) return {ok: true, version: sectionVersion(next, rev + 1), sha: r.sha};
       sleep(backoffMs * (i + 1) + Math.floor(Math.random() * backoffMs));
     }
@@ -39,7 +42,11 @@ export function createSharedRegistry({docStore, ref, maxRetries = 8, backoffMs =
     remove: (key, expectedVersion) => update(key, expectedVersion, null).ok,
     sections: () => Object.keys(readAll().doc.sections).sort(),
     /** Every historical value of one section, oldest first (null where it was absent): lets readers detect deletion/rewind. */
-    history: key => (docStore.history ? docStore.history(ref) : []).map(h => h.doc?.sections?.[key] ?? null),
+    history: key => {
+      const p = sidecarPath(key);
+      if (p && docStore.historyOf) return docStore.historyOf(ref, p);
+      return (docStore.history ? docStore.history(ref) : []).map(h => h.doc?.sections?.[key] ?? null);
+    },
     /** task-lease Store contract (createIfAbsent/read/cas/remove) under `lease/<namespace>/<id>`; CAS on the lease VERSION like the ref store. */
     leaseStore(namespace) {
       const k = id => `lease/${namespace}/${id}`;

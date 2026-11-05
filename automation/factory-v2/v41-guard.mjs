@@ -3,6 +3,7 @@ import {spawnSync} from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import {verifyAuthorityHistory, authorityRef} from "./bridge.mjs";
+import {sidecarPath} from "./shared-registry.mjs";
 import {verifyAction, canonDigest, loadCanonicalKeyring} from "./identity.mjs";
 
 export const REGISTRY_BRANCH = "uasco/registry";
@@ -13,11 +14,14 @@ const SHA = /^[0-9a-f]{40}$/;
  * Pure decision. readAuthority() -> authority doc | null (null = no record anywhere = genesis, V4.1);
  * keyring() -> canonical keyring (may throw when not yet registered); v2Intent = signed MERGE envelope or null.
  */
-export function mergeAuthority({readAuthority, readHistory = () => [], anchored = () => false, hwm = null, keyring, domain = DOMAIN, pr, headSha, v2Intent = null, now = Date.now()}) {
+export function mergeAuthority({readAuthority, readHistory = () => [], anchored = () => false, hwm = null, registryProtected = () => false, keyring, domain = DOMAIN, pr, headSha, v2Intent = null, now = Date.now()}) {
   let doc, history, anchor, hw;
   try { doc = readAuthority(); history = readHistory(); anchor = anchored(); hw = hwm?.get() ?? null; } catch (e) { return {allowed: false, reason: `AUTHORITY_UNREADABLE:${e?.message ?? e}`}; }
   // Genesis (V4.1 merges as today) only when NOTHING was ever recorded, nothing is anchored on the canonical branch and this reader never saw an epoch.
   if (!doc && !history.some(Boolean) && !anchor && !((hw?.epoch ?? 0) > 0)) return v2Intent ? {allowed: false, reason: "V2_INTENT_WITHOUT_V2_AUTHORITY"} : {allowed: true, by: "V4.1", reason: "NO_AUTHORITY_RECORD"};
+  // Once authority exists, its history is only trustworthy if the registry branch cannot be force-pushed or deleted (server-enforced).
+  let prot; try { prot = registryProtected(); } catch { prot = false; }
+  if (!prot) return {allowed: false, reason: "REGISTRY_NOT_PROTECTED"};
   let ring, core;
   try { ring = keyring(); core = verifyAuthorityHistory({current: doc, history, ring, domain, anchored: anchor, hwm: hw}).core; } catch (e) { return {allowed: false, reason: `AUTHORITY_UNVERIFIABLE:${e?.message ?? e}`}; }
   if (hwm && core.epoch > (hw?.epoch ?? 0)) { try { hwm.set({epoch: core.epoch}); } catch {} }
@@ -33,18 +37,30 @@ export function mergeAuthority({readAuthority, readHistory = () => [], anchored 
 }
 
 /** Live readers for the canonical merge path (read-only git against origin). */
-export function liveAuthorityReaders({repoRoot, remote = "origin", baseRef = "v7/integration", branch = REGISTRY_BRANCH, domain = DOMAIN}) {
+/** api: synchronous GitHub reader (the executor passes its own curlApi) used only for the branch-protection check. */
+export function liveAuthorityReaders({repoRoot, remote = "origin", baseRef = "v7/integration", branch = REGISTRY_BRANCH, domain = DOMAIN, api = null}) {
   const git = a => spawnSync("git", a, {cwd: repoRoot, encoding: "utf8"});
   const remoteSha = ref => { const r = git(["ls-remote", remote, ref]); if (r.status !== 0) throw new Error("REMOTE_UNREACHABLE"); return r.stdout.split(/\s+/)[0] || null; };
   const docs = () => {
     const sha = remoteSha(`refs/heads/${branch}`); if (!sha) return null;
     if (git(["fetch", "-q", "--no-tags", remote, `+refs/heads/${branch}:refs/uasco-guard/registry`]).status !== 0) throw new Error("REGISTRY_FETCH_FAILED");
-    const r = git(["rev-list", "--first-parent", "--max-count=2000", sha]); if (r.status !== 0) throw new Error("REGISTRY_HISTORY_FAILED");
-    return r.stdout.split("\n").filter(Boolean).reverse().map(c => { const s = git(["show", `${c}:doc.json`]); if (s.status !== 0) throw new Error("REGISTRY_DOC_MISSING"); return JSON.parse(s.stdout).sections?.[authorityRef(domain)] ?? null; });
+    // only commits that changed this domain's authority file (lease traffic never grows it); overflow fails closed
+    const file = sidecarPath(authorityRef(domain)), MAX = 10_000;
+    const r = git(["log", "--first-parent", "--format=%H", `--max-count=${MAX + 1}`, sha, "--", file]); if (r.status !== 0) throw new Error("REGISTRY_HISTORY_FAILED");
+    const shas = r.stdout.split("\n").filter(Boolean);
+    if (shas.length > MAX) throw new Error("REGISTRY_HISTORY_TOO_LONG");
+    return shas.reverse().map(c => { const s = git(["show", `${c}:${file}`]); return s.status === 0 ? JSON.parse(s.stdout) : null; });
   };
   const hwmFile = path.join(repoRoot, ".git", `uasco-authority-hwm-${domain}.json`);
   return {
     readHistory: () => docs() ?? [],
+    // server-enforced protection of the registry branch: both force-push (non_fast_forward) and deletion must be forbidden
+    registryProtected() {
+      if (typeof api !== "function") return false;
+      const rules = api(`rules/branches/${encodeURIComponent(branch)}`);
+      const types = new Set((Array.isArray(rules) ? rules : []).map(r => r?.type));
+      return types.has("non_fast_forward") && types.has("deletion");
+    },
     // canonical anchor: a governance-path cutover authorization for this domain exists on the canonical branch
     anchored() {
       const sha = remoteSha(`refs/heads/${baseRef}`);

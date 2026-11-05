@@ -9,6 +9,12 @@ export const BASE = "v7/integration";
 export const githubClient = ({token = process.env.GITHUB_TOKEN, repo = REPO} = {}) => client({token, repo});
 const repoPath = (gh, p) => `/repos/${gh.repo}/${p}`;
 export const ghGet = (gh, p) => gh.req("GET", repoPath(gh, p));
+/** Server-enforced protection of a branch (rulesets): force-push (non_fast_forward) and deletion both forbidden. */
+export async function branchProtected(gh, branch) {
+  const rules = await ghGet(gh, `rules/branches/${encodeURIComponent(branch)}`);
+  const types = new Set((Array.isArray(rules) ? rules : []).map(r => r?.type));
+  return types.has("non_fast_forward") && types.has("deletion");
+}
 /** All open PRs, read live through the adapter. */
 export const openPrsLive = gh => gh.paginate(repoPath(gh, "pulls?state=open"));
 export const closedPrsLive = (gh, maxPages = 10) => gh.paginate(repoPath(gh, "pulls?state=closed"), {maxPages});

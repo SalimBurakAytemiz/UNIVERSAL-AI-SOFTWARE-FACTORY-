@@ -9,9 +9,13 @@ const checkRef = r => { if (!NAME.test(r) || r.includes("..") || r.endsWith(".lo
 const AUTHOR = ["-c", "user.name=uasco-factory-v2", "-c", "user.email=uasco-factory-v2@invalid"];
 function makeDocStore(ops, kind) {
   const ok = r => { if (r.status !== 0) throw new Error("REFDOC_GIT_FAILED"); return r.stdout.trim(); };
-  const commitOf = (doc, parent) => {
-    const blob = ok(ops.git(["hash-object", "-w", "--stdin"], JSON.stringify(doc, null, 2) + "\n"));
-    const tree = ok(ops.git(["mktree"], `100644 blob ${blob}\tdoc.json\n`));
+  // files: extra one-level sidecar files {"dir/name.json": value}; a sidecar lets readers walk the history of ONE section cheaply.
+  const commitOf = (doc, parent, files = {}) => {
+    const blobOf = v => ok(ops.git(["hash-object", "-w", "--stdin"], JSON.stringify(v, null, 2) + "\n"));
+    const dirs = {};
+    for (const [p, v] of Object.entries(files)) { const m = /^([a-z0-9-]+)\/([A-Za-z0-9._-]+\.json)$/.exec(p); if (!m) throw new Error(`REFDOC_SIDECAR_INVALID:${p}`); (dirs[m[1]] ??= []).push(`100644 blob ${blobOf(v)}\t${m[2]}`); }
+    const entries = [`100644 blob ${blobOf(doc)}\tdoc.json`, ...Object.entries(dirs).map(([d, es]) => `040000 tree ${ok(ops.git(["mktree"], es.sort().join("\n") + "\n"))}\t${d}`)];
+    const tree = ok(ops.git(["mktree"], entries.join("\n") + "\n"));
     return ok(ops.git([...AUTHOR, "commit-tree", tree, ...(parent ? ["-p", parent] : []), "-m", `uasco doc ${doc?.phase ?? doc?.schema ?? "update"}`]));
   };
   const read = ref => {
@@ -21,11 +25,22 @@ function makeDocStore(ops, kind) {
   };
   return {
     kind, read,
+    /**
+     * Values of one sidecar file over the ref's first-parent history, oldest first: only commits that CHANGED that path are listed, so
+     * unrelated traffic (leases) never grows it. null where the file was absent. More than `max` changes fails closed.
+     */
+    historyOf(ref, path, max = 10_000) {
+      const sha = ops.sha(checkRef(ref)); if (!sha) return [];
+      const r = ops.git(["log", "--first-parent", "--format=%H", `--max-count=${max + 1}`, sha, "--", path]); if (r.status !== 0) throw new Error("REFDOC_HISTORY_FAILED");
+      const shas = r.stdout.split("\n").filter(Boolean);
+      if (shas.length > max) throw new Error("REFDOC_HISTORY_TOO_LONG");
+      return shas.reverse().map(c => { const s = ops.git(["show", `${c}:${path}`]); if (s.status !== 0) return null; try { return JSON.parse(s.stdout); } catch { throw new Error("REFDOC_HISTORY_UNPARSEABLE"); } });
+    },
     /** CAS: expectedSha null = must not exist. Returns {ok, sha, current}. */
-    cas(ref, expectedSha, doc) {
+    cas(ref, expectedSha, doc, files = {}) {
       checkRef(ref);
       if (expectedSha && ops.git(["cat-file", "-e", `${expectedSha}^{commit}`]).status !== 0) return {ok: false, sha: null, current: read(ref)}; // unknown expectation is never a write
-      const n = commitOf(doc, expectedSha);
+      const n = commitOf(doc, expectedSha, files);
       if (ops.put(ref, n, expectedSha)) return {ok: true, sha: n};
       return {ok: false, sha: null, current: read(ref)};
     },
@@ -58,7 +73,9 @@ export function createRemoteDocStore({runGit, remote = "origin"}) {
     return l[0];
   };
   return makeDocStore({git: runGit, sha,
-    put: (ref, n, o) => runGit(["push", "-q", remote, `${n}:${ref}`, `--force-with-lease=${ref}:${o ?? ""}`]).status === 0,
+    // Branches: a plain push. Our new commit's parent is the expected tip, so it fast-forwards only if the tip is unchanged (CAS by
+    // ancestry) and it never needs force — compatible with branch protection that forbids force-push and deletion. Other refs: lease CAS.
+    put: (ref, n, o) => runGit(ref.startsWith("refs/heads/") ? ["push", "-q", remote, `${n}:${ref}`] : ["push", "-q", remote, `${n}:${ref}`, `--force-with-lease=${ref}:${o ?? ""}`]).status === 0,
     del: (ref, o) => runGit(["push", "-q", remote, `:${ref}`, `--force-with-lease=${ref}:${o}`]).status === 0}, "REMOTE_GIT_REF");
 }
 

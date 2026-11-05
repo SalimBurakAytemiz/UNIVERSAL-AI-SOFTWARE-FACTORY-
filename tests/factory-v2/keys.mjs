@@ -17,7 +17,7 @@ export const okGates = gates => {
 };
 export const LIVE = {base: null, prs: [], state: null};
 export function bridgeFor(docStore, domain = "uasco-v7", o = {}) {
-  return new AuthorityBridge({docStore, domain, keyring: () => ringFor(domain), gateVerifier: okGates,
+  return new AuthorityBridge({docStore, domain, keyring: () => ringFor(domain), gateVerifier: okGates, storeProtected: () => true,
     live: {canonicalSha: () => LIVE.base, openPrs: () => LIVE.prs, stateDigest: () => LIVE.state}, ...o});
 }
 /** Commit with live sources set from the given observation (the bridge reads them itself, never from commit's arguments). */

@@ -205,11 +205,13 @@ export class AuthorityBridge {
    * — freshness and gate evidence come from live canonical sources, never from the caller.
    */
   /** anchored(): true once the canonical branch carries a cutover authorization for this domain; hwm: {get()->{epoch}|null, set({epoch})} persisted by the reader. */
-  constructor({docStore, domain, now = Date.now, requireShared = true, keyring, gateVerifier, live, anchored = () => false, hwm = null}) {
+  /** storeProtected(): the registry branch forbids force-push and deletion (server-enforced); required before prepare and commit. */
+  constructor({docStore, domain, now = Date.now, requireShared = true, keyring, gateVerifier, live, anchored = () => false, hwm = null, storeProtected = () => false}) {
     if (requireShared) assertSharedStore(docStore, "authority");
     if (typeof keyring !== "function") throw new BridgeError("KEYRING_REQUIRED");
-    Object.assign(this, {docStore, domain, now, keyring, gateVerifier, live, anchored, hwm});
+    Object.assign(this, {docStore, domain, now, keyring, gateVerifier, live, anchored, hwm, storeProtected});
   }
+  assertProtected() { let ok = false; try { ok = this.storeProtected() === true; } catch { ok = false; } if (!ok) throw new BridgeError("REGISTRY_NOT_PROTECTED"); }
   /** Raw read + full verification. */
   read() {
     const r = this.docStore.read(authorityRef(this.domain));
@@ -240,6 +242,7 @@ export class AuthorityBridge {
     verifyManifest(manifest);
     if (!manifest.fromSession || manifest.fromSession === manifest.toSession) throw new BridgeError("MANIFEST_SESSIONS_INVALID");
     if (typeof this.gateVerifier !== "function") throw new BridgeError("GATE_VERIFIER_REQUIRED");
+    this.assertProtected();
     const cur = this.read();
     const {verified} = this.gateVerifier(gates, {domain: this.domain, candidate: manifest.toSession, manifestVersion: manifest.version});
     const mref = manifestRef(this.domain, manifest.version);
@@ -264,6 +267,7 @@ export class AuthorityBridge {
   commit({manifest, signer, envelope}) {
     const cur = this.read();
     if (cur.core.phase !== "V41_DRAINED") throw new BridgeError("PHASE_INVALID", `${cur.core.phase}->V2_AUTHORITATIVE`);
+    this.assertProtected();
     verifyManifest(manifest);
     if (manifest.digest !== cur.core.manifest?.digest) throw new BridgeError("COMMIT_MANIFEST_MISMATCH");
     if (!this.live) throw new BridgeError("LIVE_SOURCE_REQUIRED");

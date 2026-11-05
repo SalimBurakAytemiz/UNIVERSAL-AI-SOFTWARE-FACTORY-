@@ -36,12 +36,12 @@ export function verifyGates(gates, context, deps) {
   if (!Array.isArray(commits) || commits.length === 0 || commits.length >= 100) throw new GateError("REVIEW", "PR_COMMITS_UNVERIFIABLE");
   const implementers = new Set(commits.flatMap(c => [...String(c?.commit?.message ?? "").matchAll(SESSION_TRAILER_RE)].map(m => m[1])));
   if (implementers.size === 0) throw new GateError("REVIEW", "IMPLEMENTER_SESSIONS_UNKNOWN");
-  const builders = new Set([...implementers, ...(deps.builderSessions ?? [])]);
+  const builders = new Set([...implementers, ...(deps.builderSessions ?? [])].map(x => String(x).toLowerCase())); // case-insensitive: no case-variant bypass
   const trusted = new Set((deps.trustedReviewerLogins ?? []).map(l => l.toLowerCase()));
   const reviews = deps.gh(`pulls/${rv.pr}/reviews?per_page=100`);
   const binding = reviews.map(r => ({r, b: parseBinding(r.body ?? "")}))
     .find(({r, b}) => b && !b.code && b.verdict === "CLEAN" && b.head === rv.headSha && b.base === pr.base?.sha && trusted.has(String(r.user?.login ?? "").toLowerCase())
-      && ["COMMENTED", "APPROVED"].includes(r.state) && !builders.has(b.session));
+      && ["COMMENTED", "APPROVED"].includes(r.state) && !builders.has(String(b.session).toLowerCase()));
   if (!binding) throw new GateError("REVIEW", "NO_TRUSTED_CLEAN_BINDING_AT_HEAD");
   out.reviewClean = {pr: rv.pr, headSha: rv.headSha, baseSha: pr.base.sha, mergeSha: pr.merge_commit_sha, reviewId: binding.r.id, reviewerSession: binding.b.session, implementerSessions: [...implementers].sort()};
   // --- CI on the reviewed head: required contexts, from the required workflow, by the Actions app, all success

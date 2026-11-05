@@ -23,7 +23,12 @@ The full diff is in `FV2-PROTECTED-EXECUTOR-AUTHORITY-FENCE.diff`.
   - Contents: schema `uasco.factory-v2.role-keys/1`, domain `uasco-v7`, mode `LIVE`. One entry per role session: `V41_OWNER` = the V4.1 coordinator, `V2_CANDIDATE` = the V2 supervisor session, and `FOUNDER`.
   - Each session generates its own key with `node automation/factory-v2/cli.mjs bridge keygen --role <ROLE> --session <its id> --out <private file>`. Only the printed public entry goes into the PR.
   - Without this file, no signed authority action verifies, so any handover attempt fails closed.
-- **Registry branch** `uasco/registry` that both supervisor sessions may push (set through `create_session` `outcome_branch`). Branch protection against force-push is recommended.
+- **Registry branch** `uasco/registry` that both supervisor sessions may push (set through `create_session` `outcome_branch`).
+- **Required (enforced in code):** a ruleset on `uasco/registry` with the `non_fast_forward` and `deletion` rules.
+  - The bridge refuses `prepare` and `commit`, and the guard refuses every merge once any authority exists, unless the GitHub rules API reports both rules (`REGISTRY_NOT_PROTECTED`).
+  - Reason: the anti-rewind check walks the registry's history, which is trustworthy only if nobody can force-push or delete it.
+  - All factory writes are plain fast-forward pushes, so they work under this protection.
+- **The patched executor** passes its own `curlApi` to the guard for this rules check.
 
 ## Evidence
 - `tests/factory-v2/security.test.mjs`, test "the prepared executor.mjs patch blocks the real merge call before any write when V2 is authoritative". It applies this diff in a temporary worktree and drives the patched `executeMerge`:

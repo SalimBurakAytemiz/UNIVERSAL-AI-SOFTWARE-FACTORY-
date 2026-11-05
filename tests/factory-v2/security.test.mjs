@@ -9,7 +9,8 @@ import {git} from "./harness.mjs";
 import {S, SESS, bridgeFor, commitLive, LIVE, ringFor} from "./keys.mjs";
 import {createRemoteDocStore, gitRunner} from "../../automation/factory-v2/ref-doc-store.mjs";
 import {createSharedRegistry} from "../../automation/factory-v2/shared-registry.mjs";
-import {snapshotV41, buildManifest, authorityRef, verifyAuthorityDoc} from "../../automation/factory-v2/bridge.mjs";
+import {Ownership} from "../../automation/factory-v2/ownership.mjs";
+import {snapshotV41, buildManifest, authorityRef, verifyAuthorityDoc, checkTransition} from "../../automation/factory-v2/bridge.mjs";
 import {signAction, canonDigest} from "../../automation/factory-v2/identity.mjs";
 import {verifyGates} from "../../automation/factory-v2/gate-verifier.mjs";
 import {mergeAuthority} from "../../automation/factory-v2/v41-guard.mjs";
@@ -88,7 +89,7 @@ describe("4. a registry writer cannot impersonate a role by writing the document
     expect(regX.cas(key, null, fake).ok).toBe(true); // the write itself succeeds (CAS is not identity)...
     expect(() => w.bB.assertV2(SESS.ATTACK, null)).toThrow(/SIGNER_KEY_UNKNOWN/); // ...but nobody accepts it
     expect(w.bA.v41MayDispatch()).toBe(false); // unverifiable record: V4.1 halts too (no split brain)
-    const guard = v2Intent => mergeAuthority({readAuthority: () => w.reg(w.A).read(key).doc, keyring: () => ringFor(D), pr: 1, headSha: "a".repeat(40), v2Intent});
+    const guard = v2Intent => mergeAuthority({readAuthority: () => w.reg(w.A).read(key).doc, readHistory: () => w.reg(w.A).history(key), registryProtected: () => true, keyring: () => ringFor(D), pr: 1, headSha: "a".repeat(40), v2Intent});
     expect(guard(null)).toMatchObject({allowed: false});
     expect(guard(null).reason).toMatch(/AUTHORITY_UNVERIFIABLE/);
   });
@@ -147,6 +148,8 @@ describe("2. acceptance evidence is verified (source, SHA, scope, authority) —
     ["binding on another head", gates(), {reviews: [binding({body: `VERDICT-BINDING: verdict=CLEAN head=${"f".repeat(40)} base=${BASE} reviewer-session=session_reviewer01`})]}, /NO_TRUSTED_CLEAN_BINDING_AT_HEAD/],
     ["reviewer is a builder session (caller-supplied list)", gates(), {builders: ["session_reviewer01"]}, /NO_TRUSTED_CLEAN_BINDING_AT_HEAD/],
     ["reviewer is the PR's own implementer (Claude-Session trailer, same login)", gates(), {commits: [{sha: H, commit: {message: "x\n\nClaude-Session: https://claude.ai/code/session_reviewer01"}}]}, /NO_TRUSTED_CLEAN_BINDING_AT_HEAD/],
+    ["100 or more commits (listing may be truncated)", gates(), {commits: Array.from({length: 100}, () => ({sha: H, commit: {message: "x\n\nClaude-Session: https://claude.ai/code/session_builderPR347"}}))}, /PR_COMMITS_UNVERIFIABLE/],
+    ["reviewer session is a case variant of the implementer", gates(), {commits: [{sha: H, commit: {message: "x\n\nClaude-Session: https://claude.ai/code/session_REVIEWER01"}}]}, /NO_TRUSTED_CLEAN_BINDING_AT_HEAD/],
     ["PR commits without implementer trailers", gates(), {commits: [{sha: H, commit: {message: "no trailer"}}]}, /IMPLEMENTER_SESSIONS_UNKNOWN/],
     ["migration run on another branch", gates(), {push: [{id: 1, path: ".github/workflows/ci.yml", head_branch: "other", head_sha: "c".repeat(40), status: "completed", conclusion: "success"}]}, /NO_PUSH_RUN/],
     ["CI on another SHA", gates({ciPassed: {headSha: "e".repeat(40)}}), {}, /GATE_CI:SHA_NOT_REVIEWED_HEAD/],
@@ -185,7 +188,7 @@ describe("5. the canonical merge path refuses V4.1 merges after handover (indepe
   it("guard decisions across phases", {timeout: T}, () => {
     const w = world();
     const read = () => w.reg(w.A).read(authorityRef(D)).doc;
-    const g = v2Intent => mergeAuthority({readAuthority: read, keyring: () => ringFor(D), pr: 7, headSha: "a".repeat(40), v2Intent});
+    const g = v2Intent => mergeAuthority({readAuthority: read, readHistory: () => w.reg(w.A).history(authorityRef(D)), registryProtected: () => true, keyring: () => ringFor(D), pr: 7, headSha: "a".repeat(40), v2Intent});
     expect(g(null)).toMatchObject({allowed: true, by: "V4.1"}); // no record yet: status quo
     w.bB.prepare({manifest: w.m, gates: GATES, signer: S.V2});
     expect(g(null)).toMatchObject({allowed: false, reason: "HANDOVER_IN_PROGRESS:HANDOVER_PREPARED"});
@@ -218,7 +221,7 @@ describe("5. the canonical merge path refuses V4.1 merges after handover (indepe
         decide: () => ({gate: {decision: "MERGE"}, result: {decision: "AUTO_MERGE", task: "X-T0001", expectedHeadSha: H, expectedBaseSha: B, reasons: []}}),
         api: p => (p.startsWith("branches/") ? {commit: {sha: B}} : {}), write: () => { writes++; return {merged: false}; }});
       const w = world(); toV2(w);
-      const v2 = a => mergeAuthority({readAuthority: () => w.reg(w.A).read(authorityRef(D)).doc, keyring: () => ringFor(D), ...a});
+      const v2 = a => mergeAuthority({readAuthority: () => w.reg(w.A).read(authorityRef(D)).doc, readHistory: () => w.reg(w.A).history(authorityRef(D)), registryProtected: () => true, keyring: () => ringFor(D), ...a});
       expect(run(v2)).toMatchObject({decision: "BLOCK", reasons: ["AUTHORITY:V41_FENCED_BY_V2_AUTHORITY"]});
       expect(writes).toBe(0);
       expect(run(() => { throw new Error("boom"); })).toMatchObject({decision: "BLOCK", reasons: ["AUTHORITY:AUTHORITY_CHECK_FAILED"]});
@@ -255,7 +258,7 @@ describe("resetInvalid", () => {
 
 describe("anti-rewind (review of b31a0338, B1): a registry writer cannot roll authority back without a key", () => {
   const key = authorityRef(D);
-  const guardOf = (w, o = {}) => v2Intent => mergeAuthority({readAuthority: () => w.reg(w.A).read(key).doc, readHistory: () => w.reg(w.A).history(key), keyring: () => ringFor(D), pr: 7, headSha: "a".repeat(40), v2Intent, ...o});
+  const guardOf = (w, o = {}) => v2Intent => mergeAuthority({readAuthority: () => w.reg(w.A).read(key).doc, readHistory: () => w.reg(w.A).history(key), registryProtected: () => true, keyring: () => ringFor(D), pr: 7, headSha: "a".repeat(40), v2Intent, ...o});
   it("(a) deleting the record after a handover: V4.1 does NOT resume, the guard refuses, only a signed reset recovers (epoch above everything seen)", {timeout: T}, () => {
     const w = world(); toV2(w);
     const regX = w.reg(w.X), cur = regX.read(key);
@@ -319,5 +322,57 @@ describe("mutation survivors of review b31a0338 (N1)", () => {
     w.bA.drainAck({manifestDigest: w.m.digest, drain, signer: S.V41});
     expect(() => w.bX.commit({manifest: w.m, signer: S.V2b})).toThrow(/COMMIT_CANDIDATE_MISMATCH/);
     expect(() => w.bX.prepare({manifest: w.m, gates: GATES, signer: S.V2b})).toThrow(/PHASE_INVALID|PREPARE_SIGNER_NOT_CANDIDATE/);
+  });
+});
+
+describe("review of af184254: history rewrite, history window, lease traffic, protection", () => {
+  const key = authorityRef(D);
+  it("server-side protection (no force-push, no delete): our own writes still work; an attacker's force-push and deletion are rejected", {timeout: T}, () => {
+    const w = world();
+    const origin = path.join(w.root, "origin.git");
+    git(origin, "config", "receive.denyNonFastForwards", "true"); git(origin, "config", "receive.denyDeletes", "true");
+    toV2(w); // prepare/drain/commit are plain fast-forward pushes
+    w.bX.rollback({reason: "founder", signer: S.FOUNDER});
+    const tip = git(origin, "rev-parse", "refs/heads/uasco/registry");
+    const pre = git(origin, "rev-parse", "refs/heads/uasco/registry~1"); // the V2 state before the rollback
+    const force = spawnSync("git", ["push", "--force", "origin", `${pre}:refs/heads/uasco/registry`], {cwd: w.X, encoding: "utf8"});
+    expect(force.status).not.toBe(0);
+    const del = spawnSync("git", ["push", "origin", ":refs/heads/uasco/registry"], {cwd: w.X, encoding: "utf8"});
+    expect(del.status).not.toBe(0);
+    expect(git(origin, "rev-parse", "refs/heads/uasco/registry")).toBe(tip);
+    expect(w.bA.v41MayDispatch()).toBe(true);
+  });
+  it("without verified protection: no prepare/commit, and the guard refuses once any authority exists", {timeout: T}, () => {
+    const w = world();
+    const unprot = bridgeFor(w.reg(w.B), D, {storeProtected: () => false});
+    expect(() => unprot.prepare({manifest: w.m, gates: GATES, signer: S.V2})).toThrow(/REGISTRY_NOT_PROTECTED/);
+    toV2(w);
+    expect(mergeAuthority({readAuthority: () => w.reg(w.A).read(key).doc, readHistory: () => w.reg(w.A).history(key), keyring: () => ringFor(D), pr: 7, headSha: "a".repeat(40)}))
+      .toMatchObject({allowed: false, reason: "REGISTRY_NOT_PROTECTED"});
+  });
+  it("authority history only lists authority changes: lease traffic does not grow it (no window overflow, no permanent lock-up)", {timeout: T}, () => {
+    const w = world(); toV2(w);
+    const reg = w.reg(w.A), leases = reg.leaseStore("live");
+    for (let i = 0; i < 25; i++) new Ownership(leases, {leaseId: `l${i}`, environment: "e", workerId: "w", sessionId: "session_leasetraffic"}).acquire();
+    expect(reg.history(key).length).toBe(3); // prepare, drain, commit
+    expect(() => createRemoteDocStore({runGit: gitRunner(w.A)}).historyOf("refs/heads/uasco/registry", "authority/uasco-v7.json", 2)).toThrow(/REFDOC_HISTORY_TOO_LONG/);
+    expect(w.bB.assertV2(SESS.V2, 1)).toBe(1);
+  });
+  it("M1: a different valid chain of the same epoch and length (not an extension of the stored one) is refused", {timeout: T}, () => {
+    const w = world();
+    w.bB.prepare({manifest: w.m, gates: GATES, signer: S.V2});
+    const regX = w.reg(w.X), stored = regX.read(key);
+    // an alternative, validly signed PREPARE for another manifest version, created against a scratch store, then written over the stored one
+    const alt = bridgeFor(createSharedRegistry({docStore: createRemoteDocStore({runGit: gitRunner(world().A)}), ref: "refs/heads/uasco/registry"}), D);
+    const m2 = buildManifest({...w.m, version: 7, snapshot: w.m.snapshot});
+    const altDoc = alt.prepare({manifest: m2, gates: GATES, signer: S.V2}).doc;
+    expect(regX.cas(key, stored.sha, altDoc).ok).toBe(true);
+    expect(() => w.bA.read()).toThrow(/AUTHORITY_REGRESSION/);
+  });
+  it("M7: only the first link from genesis may jump epochs; a rollback elsewhere must be exactly epoch+1", () => {
+    const prev = {domain: D, authority: "V4.1", phase: "V41_AUTHORITATIVE", epoch: 2, holder: null, candidate: null, outgoing: null, manifest: null, gatesDigest: null, drainDigest: null};
+    expect(() => checkTransition(prev, {...prev, epoch: 9}, {sessionId: SESS.V41})).toThrow(/ROLLBACK_FIELDS_INVALID/);
+    expect(checkTransition(prev, {...prev, epoch: 3}, {sessionId: SESS.V41})).toBe("ROLLBACK");
+    expect(checkTransition({...prev, epoch: 0}, {...prev, epoch: 9}, {sessionId: SESS.V41})).toBe("ROLLBACK");
   });
 });
