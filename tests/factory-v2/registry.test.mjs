@@ -135,9 +135,10 @@ describe("registry hardening (review of 5356c945)", () => {
   it("no ABA: a section that returns to an earlier value has a new version", {timeout: T}, () => {
     const w = world();
     const r = w.reg(w.A);
-    const v1 = r.cas("k", null, {x: "A"}).sha;
-    const v2 = r.cas("k", v1, {x: "B"}).sha;
-    const v3 = r.cas("k", v2, {x: "A"}).sha;
+    const c1 = r.cas("k", null, {x: "A"}), c2 = r.cas("k", c1.sha, {x: "B"}), c3 = r.cas("k", c2.sha, {x: "A"});
+    expect([c1.ok, c2.ok, c3.ok]).toEqual([true, true, true]); // every step of A -> B -> A must really land
+    const v1 = c1.sha, v3 = c3.sha;
+    expect(r.read("k")).toEqual({sha: v3, doc: {x: "A"}});
     expect(v3).not.toBe(v1);
     expect(r.cas("k", v1, {x: "stale"}).ok).toBe(false);
   });

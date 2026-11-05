@@ -32,6 +32,7 @@ export function writeRoleKey({role, sessionId, out}) {
   if (typeof out !== "string" || !out) throw new IdentityError("KEYGEN_OUT_REQUIRED");
   const abs = nodePath.resolve(out), dir = nodePath.dirname(abs);
   if (!fs.existsSync(dir)) throw new IdentityError("KEYGEN_OUT_DIR_MISSING");
+  if (spawnSync("git", ["--version"], {encoding: "utf8", windowsHide: true}).status !== 0) throw new IdentityError("KEYGEN_GIT_UNAVAILABLE"); // cannot prove "outside any repository": fail closed
   const inTree = spawnSync("git", ["-C", dir, "rev-parse", "--is-inside-work-tree"], {encoding: "utf8", windowsHide: true});
   if (inTree.status === 0 && inTree.stdout.trim() === "true") throw new IdentityError("KEYGEN_OUT_INSIDE_GIT_WORKTREE", dir);
   if (/^(true|false)$/.test((spawnSync("git", ["-C", dir, "rev-parse", "--is-bare-repository"], {encoding: "utf8", windowsHide: true}).stdout ?? "").trim())) throw new IdentityError("KEYGEN_OUT_INSIDE_GIT_REPOSITORY", dir);
