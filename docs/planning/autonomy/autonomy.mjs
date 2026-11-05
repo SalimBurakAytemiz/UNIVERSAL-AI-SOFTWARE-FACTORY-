@@ -25,7 +25,7 @@ export const NOT_PICKABLE = Object.freeze(["ASSET_DONE", "DONE_OBSERVED", "SPLIT
 export const NOT_MERGEABLE = Object.freeze(["SPLIT", "BLOCKED", "DEFERRED", "UNVERIFIABLE"]);
 // Paths that define this authority. Changing them would widen it, so a PR touching any of them is a Founder decision (B-1).
 // STATE.json is the loop's own progress record and is updated by routine PRs.
-export const GOVERNANCE_PREFIXES = Object.freeze(["docs/planning/autonomy/", "docs/planning/authority/", "docs/planning/v41/", "docs/planning/cloud-only/", ".claude/"]);
+export const GOVERNANCE_PREFIXES = Object.freeze(["docs/planning/autonomy/", "docs/planning/authority/", "docs/planning/v41/", "docs/planning/cloud-only/", ".claude/", "automation/factory-v2/"]);
 export const GOVERNANCE_EXACT = Object.freeze(["docs/planning/merge-gate.mjs", "docs/planning/merge-gate.proof.mjs", "docs/planning/merge_gate.md"]);
 export const GOVERNANCE_EXEMPT = Object.freeze(["docs/planning/autonomy/state.json"]);
 // Files decide trusts. Each must equal the base's blob, so a PR-head or stale checkout can never supply its own rules (B-2).
