@@ -452,7 +452,7 @@ describe("UI-106 empty-state next step: journey zero-mission and executive empty
     const b = btn(e.root, "executive-empty-open-work"); expect(b).toHaveLength(1);
     expect(b[0].dataset.navigate).toBe("work"); expect(b[0].dataset.focusKey).toBe("executive-empty-open-work");
     expect(text(e.root)).toContain("No work runs have been recorded yet.");
-    expect(all2(e.root).filter(n => n.tagName === "SECTION").map(n => n.id)).toEqual(["executive-return", "executive-summary", "executive-ledger"]);
+    expect(all2(e.root).filter(n => n.tagName === "SECTION").map(n => n.id)).toEqual(["executive-return", "executive-summary", "executive-ledger", "executive-export"]); // UASCO-T0020 dışa aktarma bölümü
     const before = e.calls.length;
     b[0].fire("click");
     expect(e.nav).toEqual(["work"]); expect(e.calls.length).toBe(before); expect(e.posts).toEqual([]);

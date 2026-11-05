@@ -341,7 +341,14 @@ describe("Executive — only already-allow-listed read-only GETs are used (prote
     }
     const imports = moduleSpecifiers({source: read("views", "executive.js")}).sort();
     // UI-003: tek ek içe aktarma Dönüş Özeti panelidir; onun tek (cihaz-içi) yazımı aşağıdaki ayrı testte sabitlenir.
-    expect(imports).toEqual(["../components.js", "../executive-core.js", "../model.js", "../work-core.js", "./return-summary.js"]);
+    expect(imports).toEqual(["../components.js", "../executive-core.js", "../model.js", "../work-core.js", "./report-export-panel.js", "./return-summary.js"]);
+    // UASCO-T0020: rapor dışa aktarma modülleri de okuma/yazma yapmaz (yalnız ctx.saveFile veya Blob indirmesi); aynı yasak kalıplar uygulanır.
+    for (const src of [read("views", "report-export-panel.js"), read("report-export.js")]) {
+      expect(src).not.toMatch(/\.post\(|\bapi\.|ctx\.api|window\.uasco|\bbridge\b|apiPost|apiGet|\bfetch\(|XMLHttpRequest|\beval\(|innerHTML|outerHTML|insertAdjacentHTML|new Function|localStorage|sessionStorage/);
+      expect(src).not.toContain(FORBIDDEN);
+    }
+    expect(moduleSpecifiers({source: read("views", "report-export-panel.js")}).sort()).toEqual(["../components.js", "../report-export.js"]);
+    expect(moduleSpecifiers({source: read("report-export.js")})).toEqual(["./executive-core.js"]);
     expect(moduleSpecifiers({source: read("executive-core.js")})).toEqual(["./attention-core.js", "./work-core.js"]);
     for (const m of ["execCockpit", "execMissions", "execWorkRuns", "execAttention"]) expect(read("views", "executive.js")).toContain(`api.${m}(`);
     // api.js: yalnız bu dört GET sabit yoldan okunur; yeni POST yolu eklenmez (tek apiPost çağrısı korunur).
@@ -563,7 +570,7 @@ describe("Executive — view honesty", () => {
   it("renders section A (executive summary) before section B (execution ledger) with real KPI values from the four sources", async () => {
     const {root, calls} = await renderView(serve());
     expect(calls.slice().sort()).toEqual(FOUR);
-    expect(root.children.map(c => c.id || c.className)).toEqual(["hero", "executive-return", "executive-summary", "executive-ledger"]);
+    expect(root.children.map(c => c.id || c.className)).toEqual(["hero", "executive-return", "executive-summary", "executive-ledger", "executive-export"]);
     expect(cls(root, "view-executive")).toBe(true);
     expect(["projects", "missions", "inProgress", "runs", "approvals", "attention", "deliveries", "evidence"].map(k => [k, kpiValue(root, k)])).toEqual([["projects", "3"], ["missions", "3"], ["inProgress", "2"], ["runs", "3"], ["approvals", "1"], ["attention", "2"], ["deliveries", "1"], ["evidence", "8"]]);
     expect(kpi(root, "runs").textContent).toContain("1 open · 1 awaiting Founder decision · 1 ended.");
@@ -771,7 +778,7 @@ describe("Executive — accessibility", () => {
     expect(h1.length).toBe(1);
     expect(h1[0].id).toBe("view-title");
     expect(h1[0].getAttribute("tabindex")).toBe("-1");
-    expect(all(root).filter(n => n.tagName === "SECTION").map(n => n.id)).toEqual(["executive-return", "executive-summary", "executive-ledger"]);
+    expect(all(root).filter(n => n.tagName === "SECTION").map(n => n.id)).toEqual(["executive-return", "executive-summary", "executive-ledger", "executive-export"]); // UASCO-T0020: dışa aktarma bölümü
     for (const id of ["executive-return", "executive-summary", "executive-ledger"]) {
       const sec = byId(root, id)!;
       expect(sec.tagName, id).toBe("SECTION");
@@ -1045,7 +1052,7 @@ describe("Executive — UI-003 return summary view (device-only marker, honest s
     try {
       const storage = await seeded(null);
       const {root, sec, ctx} = await renderReturn(serve(), storage);
-      expect(root.children.map(c => c.id || c.className)).toEqual(["hero", "executive-return", "executive-summary", "executive-ledger"]);
+      expect(root.children.map(c => c.id || c.className)).toEqual(["hero", "executive-return", "executive-summary", "executive-ledger", "executive-export"]);
       expect(byData(sec, "returnState")!.dataset.returnState).toBe("FIRST_VISIT");
       expect(sec.textContent).toContain("nothing is counted as new");
       expect(allData(sec, "returnCount").length).toBe(0);
@@ -1172,3 +1179,6 @@ describe("Executive — UI-003 return summary view (device-only marker, honest s
     expect(coreSrc).not.toMatch(/fetch\(|apiGet|\bapi\.|Date\.now\(|new Date\(\)/);
   });
 });
+// //TR: UASCO-T0020 Kurucu Yönetim Özeti rapor dışa aktarma (JSON/Markdown/CSV; gerçek buildServer; yeni okuma/yazma yok)
+import {registerReportExportT0020Cases} from "./support/report-export-t0020.cases.js";
+registerReportExportT0020Cases();
