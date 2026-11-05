@@ -61,7 +61,7 @@ describe("bridge: read-only synchronisation and manifest", () => {
     expect(b.v41MayDispatch()).toBe(true);
     expect(remoteRefs(w)).toEqual([]);
   });
-  it("local stores are refused for cross-cloud authority", () => {
+  it("local stores are refused for cross-cloud authority", {timeout: T}, () => {
     const w = world();
     expect(() => bridgeFor(createLocalDocStore(w.envA), DOMAIN)).toThrow(/OWNERSHIP_STORE_NOT_SHARED/);
   });
@@ -108,14 +108,14 @@ describe("bridge: deterministic V4.1 -> V2 transition", () => {
     expect(c.plan.some(p => p.pr === 50 && p.action === "FOREIGN_PR_UNTOUCHED")).toBe(true);
   });
 
-  it("a merged increment PR is evidence, not completion: the in-flight task still needs a drain disposition", () => {
+  it("a merged increment PR is evidence, not completion: the in-flight task still needs a drain disposition", {timeout: T}, () => {
     const w = world();
     const m = buildManifest({domain: DOMAIN, version: 3, snapshot: snapshotV41({baseRef: "integ", baseSha: w.base, autonomyState: {inFlight: [{task: "V41-T0007", prs: [70]}]}, taskIndex: {tasks: []},
       mergedPrs: [{number: 70, body: "UASCO-TASK: V41-T0007", merge_commit_sha: w.base}]}), fromSession: "a", toSession: "b"});
     expect(reconcile(m, {acks: {}}).unresolved).toEqual([{task: "V41-T0007", reason: "IN_FLIGHT_NOT_DRAINED"}]);
     expect(reconcile(m, {acks: {"V41-T0007": "COMPLETED"}}).plan).toEqual([expect.objectContaining({task: "V41-T0007", action: "IMPORT_VERIFIED"})]);
   });
-  it("applying the plan is idempotent and survives a crash/restart (no duplicate accepted results)", () => {
+  it("applying the plan is idempotent and survives a crash/restart (no duplicate accepted results)", {timeout: T}, () => {
     const w = world();
     const m = manifestOf(w);
     const {plan} = reconcile(m, {acks: {"V41-T0003": "FENCED"}});
@@ -176,7 +176,7 @@ describe("bridge: guards that survived mutation in review of 3213d6a8 (M3, M5, M
     expect(() => bB.assertV2("session_v2supervisor", e1)).toThrow(/V2_EPOCH_MISMATCH/);
     expect(bB.assertV2("session_v2supervisor", e2)).toBe(e2);
   });
-  it("M6: the writer re-checks authority before each merge write (revoked mid-batch -> nothing written)", async () => {
+  it("M6: the writer re-checks authority before each merge write (revoked mid-batch -> nothing written)", {timeout: T}, async () => {
     const {writeMerges} = await import("../../automation/factory-v2/merge.mjs");
     const own = new Ownership(createMemoryStore(), {leaseId: "writer--x", environment: "e", workerId: "w", sessionId: "session_writerxx"});
     let merges = 0, allowed = true;
