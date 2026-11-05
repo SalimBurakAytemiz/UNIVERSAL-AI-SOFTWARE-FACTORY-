@@ -37,7 +37,7 @@ function stateBlock(ctx,state,source,message){
   return h(doc,"div",{class:`audit-state state-${st.toLowerCase()}`,role:"status",dataset:{auditState:st,source}},
     h(doc,"p",{class:"audit-state-head"},statePill(ctx,failKind(st)),h(doc,"strong",{text:ctx.t(`audit.state.${st}`)})),
     h(doc,"p",{class:"note",text:ctx.t(`audit.hint.${st}`,{source:`GET ${AUDIT_SOURCE_PATHS[source]}`})}),
-    safeErrorCode(message)?h(doc,"p",{class:"note mono",dataset:{errorCode:safeErrorCode(message)},text:safeErrorCode(message)}):null);
+    safeErrorCode(message)?h(doc,"p",{class:"note mono",dataset:{stateErrorCode:safeErrorCode(message)},text:safeErrorCode(message)}):null);
 }
 
 function sourcesPanel(ctx,res,a){

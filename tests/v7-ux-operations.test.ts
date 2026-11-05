@@ -2015,7 +2015,7 @@ __bi_describe('Builder I: renderer raw-error sweep', {timeout: 120_000}, () => {
     const old = files.filter(f => !OPEN_PR_FOLLOW_UPS.has(f) && /dataset:\{errorCode:safeErrorCode\(/.test(fs.readFileSync(path.join(rend, f), "utf8")));
     expect(old).toEqual([]);
     const users = files.filter(f => /dataset:\{stateErrorCode:safeErrorCode\(/.test(fs.readFileSync(path.join(rend, f), "utf8"))).sort();
-    for (const f of ["views/install.js", "views/integrations.js", "views/journey.js", "views/matrix.js", "views/operations.js", "views/scheduler.js"]) expect(users, f).toContain(f);
+    for (const f of ["views/audit.js", "views/posture.js", "views/install.js", "views/integrations.js", "views/journey.js", "views/matrix.js", "views/operations.js", "views/scheduler.js"]) expect(users, f).toContain(f);
     expect(fs.readFileSync(path.join(rend, "views", "install.js"), "utf8")).toContain('dataset:{errorCode:e}'); // the install-errors list keeps its own attribute
   });
   it("each exemption still matches exactly one line (a stale exemption fails)", () => {
