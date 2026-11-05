@@ -119,6 +119,10 @@ async function renderAgainstServer(app: App, view: string, token = TOKEN) {
   return {root, seen, paths, attention, refused, thrown, results, text: root.textContent};
 }
 
+// //TR: CLOUD-T0005: tower bulut iş panelini GET /v1/cloud/jobs ile okur. Bu yol korumalı main.mjs izin listesine Kurucu kapılı PR ile eklenir; o zamana kadar
+// köprü yolu reddeder (INVALID_API_PATH) ve panel dürüst UNAVAILABLE gösterir. Beklenti main.mjs'in gerçek durumundan türetilir; giriş eklenince otomatik sıkılaşır.
+const CLOUD_JOBS_PENDING = !desktopAllows("/v1/cloud/jobs");
+const pendingRefused = (view: string): string[] => (view === "tower" && CLOUD_JOBS_PENDING ? ["/v1/cloud/jobs"] : []);
 // Her rotanın gerçek sunucuda okuduğu yollar (sorgu dizesi hariç). Bir görünüm farklı/kayıtsız bir yol okumaya başlarsa test bunu söyler.
 const PATHS: Record<string, string[]> = {
   home: ["/v1/cockpit", "/v1/projects"],
@@ -127,7 +131,7 @@ const PATHS: Record<string, string[]> = {
   workforce: ["/v1/agents", "/v1/cockpit", "/v1/roles", "/v1/roles/status-summary", "/v1/work-runs"],
   assurance: ["/v1/cockpit", "/v1/evidence", "/v1/reviews", "/v1/work-runs"],
   delivery: ["/health", "/v1/attention", "/v1/control/status", "/v1/work-runs"],
-  tower: ["/health", "/v1/adapters", "/v1/agents", "/v1/attention", "/v1/capabilities", "/v1/cockpit", "/v1/control/status", "/v1/install", "/v1/phase0", "/v1/retry", "/v1/roles", "/v1/runs", "/v1/scheduler", "/v1/work-runs"],
+  tower: ["/health", "/v1/adapters", "/v1/agents", "/v1/attention", "/v1/capabilities", ...(CLOUD_JOBS_PENDING ? [] : ["/v1/cloud/jobs"]), "/v1/cockpit", "/v1/control/status", "/v1/install", "/v1/phase0", "/v1/retry", "/v1/roles", "/v1/runs", "/v1/scheduler", "/v1/work-runs"],
   inbox: ["/v1/attention", "/v1/cockpit", "/v1/missions", "/v1/work-runs"],
   company: ["/v1/company/accounts", "/v1/company/contacts", "/v1/company/contracts", "/v1/company/invoices", "/v1/company/opportunities", "/v1/company/payments"],
   settings: ["/health", "/v1/adapters", "/v1/capabilities", "/v1/control/status", "/v1/factory", "/v1/system/executors"],
@@ -210,9 +214,15 @@ describe("UASCO-T0006: renderer -> real buildServer for the 10 formerly fake-bri
       const r = await renderAgainstServer(app, view);
       expect(r.paths, `${view} reads`).toEqual(PATHS[view]);
       expect(r.seen.filter(s => s.status !== 200), `${view}: non-200 reads`).toEqual([]);
-      expect(r.refused, `${view}: every read passes main.mjs's GET allow-list (N1a)`).toEqual([]);
-      expect(r.thrown, `${view}: no bridge failure`).toEqual([]);
-      expect(r.results.filter(x => !x.ok).map(x => x.path), `${view}: every api.get result is ok`).toEqual([]);
+      expect(r.refused, `${view}: every read passes main.mjs's GET allow-list (N1a)`).toEqual(pendingRefused(view));
+      expect(r.thrown.filter(t => !pendingRefused(view).some(p => t.startsWith(`${p} -> `))), `${view}: no bridge failure`).toEqual([]);
+      expect(r.results.filter(x => !x.ok && !pendingRefused(view).includes(x.path)).map(x => x.path), `${view}: every api.get result is ok`).toEqual([]);
+      for (const x of r.results.filter(x => pendingRefused(view).includes(x.path))) expect([x.path, x.ok, x.state]).toEqual([x.path, false, "UNAVAILABLE"]);
+      if (view === "tower") {
+        // Kurucu PR'ından önce UNAVAILABLE; sonra (server.ts kaydı, kuyruk null) NOT_CONFIGURED. Her iki durumda da örnek iş kartı yok.
+        expect(all(r.root).find(n => n.id === "cloud-jobs-status")?.dataset.cloudJobsState, "tower cloud panel").toBe(CLOUD_JOBS_PENDING ? "UNAVAILABLE" : "NOT_CONFIGURED");
+        expect(all(r.root).filter(n => n.dataset.cloudJob !== undefined)).toEqual([]);
+      }
       expect(failureMarks(r.root), `${view}: failure states`).toEqual([]);
       await HAPPY[view](app, r);
     });
@@ -223,11 +233,11 @@ describe("UASCO-T0006: renderer -> real buildServer for the 10 formerly fake-bri
     it(`${view}: error path (control token mismatch: identity handshake fails as in main.mjs; the real server refuses the same token with 403) renders an honest, classified failure and never throws`, { timeout: 120_000 }, async () => {
       const app = mkApp();
       const r = await renderAgainstServer(app, view, WRONG);
-      expect(r.refused, `${view}: allow-list`).toEqual([]);
+      expect(r.refused, `${view}: allow-list`).toEqual(pendingRefused(view));
       expect(r.results.length, `${view}: reads attempted`).toBeGreaterThan(0);
       // L2 (#323): /health is excluded because main.mjs answers it itself; /v1/roles?cursor=... pages and /v1/deliveries?projectId=... only follow a SUCCESSFUL first read (paging cursor / selected project), so they are not attempted when that read fails
       expect(r.results.map(x => x.path).sort(), `${view}: the same reads as the happy path`).toEqual(expect.arrayContaining(PATHS[view].filter(p => p !== "/health" && !p.includes("/v1/roles") && !p.includes("/v1/deliveries")).map(p => expect.stringMatching(new RegExp(`^${p.replace(/[/.]/g, "\\$&")}(\\?|$)`)))));
-      for (const x of r.results) expect([view, x.path, x.ok, x.state, x.message]).toEqual([view, x.path, false, "ERROR", "CONTROL_API_IDENTITY_UNVERIFIED"]);
+      for (const x of r.results.filter(x => !pendingRefused(view).includes(x.path))) expect([view, x.path, x.ok, x.state, x.message]).toEqual([view, x.path, false, "ERROR", "CONTROL_API_IDENTITY_UNVERIFIED"]);
       expect(r.seen, `${view}: nothing was read from /v1 with an unverified identity`).toEqual([]);
       for (const p of new Set(r.results.map(x => x.path).filter(p => p.startsWith("/v1/")))) {
         const direct = await app.inject({method: "GET", url: p, headers: {"x-uasco-control-token": WRONG, host: "127.0.0.1:3210"}});
