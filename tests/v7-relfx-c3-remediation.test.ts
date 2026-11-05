@@ -170,11 +170,11 @@ describe("LANE-C parallel runs: heartbeat and scheduling (C-PAR-1 PAR-03/05, #21
   let tmp = ""; beforeEach(() => { tmp = par.tmp(); });
   const REPO = PAR_REPO;
   const setup = (name?: string, seed?: Record<string, string>, clock?: () => number) => parSetup(tmp, name, seed, clock);
-  // //TR: #224 tur 3 (Windows HB-1, d77d1e4 + coordinator delta review): eşzamansız-lease testlerinin TTL/gecikme çifti BİRLİKTE ölçeklendi (TTL 2 s -> 5 s, gecikme 3 s -> 7 s; oran ve "gecikme > TTL" iddiası aynı; tüm HB-1/PAR-03 mutantları yeni sabitlerle de ÖLÜR). Shard 1'deki fence'in NEDENİ KANITLANMADI (günlükte yalnız fence edilen run kimliği vardı): ölçekleme bir "marj" olduğunu KANITLAMAZ. Başarısızlık iletisi artık fence edilen run'ı, ölçülen en büyük olay döngüsü gecikmesini ve CPU/duvar süresini yazar. Kural: TTL'yi aşan bir gecikme, aksi gösterilmedikçe bir gerilemedir; gecikme TTL'nin altında olduğu hâlde fence olduysa gerçek bir lease boşluğudur.
+  // //TR: #224 tur 3 (Windows HB-1, d77d1e4 + coordinator delta review): eşzamansız-lease testlerinin TTL/gecikme çifti BİRLİKTE ölçeklendi (TTL 2 s -> 5 s, gecikme 3 s -> 7 s; oran ve "gecikme > TTL" iddiası aynı; tüm HB-1/PAR-03 mutantları yeni sabitlerle de ÖLÜR). Shard 1'deki fence'in NEDENİ KANITLANMADI (günlükte yalnız fence edilen run kimliği vardı): ölçekleme bir "marj" olduğunu KANITLAMAZ. Başarısızlık iletisi artık fence edilen run'ı, ölçülen en büyük olay döngüsü gecikmesini ve CPU/duvar süresini yazar. Kural: toleransı aşan bir gecikme, aksi gösterilmedikçe bir gerilemedir. Gerçek tolerans TTL değil, TTL eksi bir heartbeat periyodudur: runner heartbeatMs() = floor(TTL/3) (core/workos/runner.ts heartbeatMs, adım heartbeat'i setInterval(renew, heartbeatMs) ~652. satır), iki yenileme arasındaki en uzun boşluk tek bir döngü gecikmesi + en çok bir heartbeat periyodudur; yani ~2/3 TTL'yi (TTL 5 s: 3334 ms, TTL 2 s: 1334 ms) aşan TEK bir gecikme kendi başına fence üretebilir ve bu bir defter boşluğu kanıtı değildir (C2, 2026-11-05 run 41971579107: 3451 ms > 3334 ms). Yalnız gecikme bu toleransın altında kaldığı hâlde fence olduysa sorun gerçek bir lease boşluğudur.
   const HB_TTL = 5000, HB_BLOCK = 7000;
   // //TR: UASCO-T0042: teşhis store kilidinin senkron bekleme istatistiğini de basar (en uzun withLock beklemesi + son geçici hata kodu): bir stall'ın kilitten mi geldiği günlükte görünür.
   const hbDiag = (c: {store: {engineGetRun(id: string): {status: string; reason?: string | null} | undefined; lockWaitStats?(): unknown}}, runs: Record<string, string>, fenced: string[], probe: {maxStallMs(): number; cpuMs(): number; wallMs(): number; blockers?(): string}, ttl: number) =>
-    `fenced=${JSON.stringify(fenced.map(id => Object.entries(runs).find(([, v]) => v === id)?.[0] ?? id))} maxLoopStallMs=${probe.maxStallMs()} cpuMs=${probe.cpuMs()} wallMs=${probe.wallMs()} ttlMs=${ttl} lockWait=${JSON.stringify(c.store.lockWaitStats?.() ?? null)} blockers=${probe.blockers?.() ?? "n/a"} ${Object.entries(runs).map(([k, id]) => `${k}=${c.store.engineGetRun(id)?.status}/${c.store.engineGetRun(id)?.reason ?? ""}`).join(" ")}`;
+    `fenced=${JSON.stringify(fenced.map(id => Object.entries(runs).find(([, v]) => v === id)?.[0] ?? id))} maxLoopStallMs=${probe.maxStallMs()} cpuMs=${probe.cpuMs()} wallMs=${probe.wallMs()} ttlMs=${ttl} toleranceMs=${ttl - Math.floor(ttl / 3)} lockWait=${JSON.stringify(c.store.lockWaitStats?.() ?? null)} blockers=${probe.blockers?.() ?? "n/a"} ${Object.entries(runs).map(([k, id]) => `${k}=${c.store.engineGetRun(id)?.status}/${c.store.engineGetRun(id)?.reason ?? ""}`).join(" ")}`;
 describe("C-PAR-1 PAR-03: synchronous git in one run must not starve another run's lease heartbeat (cap 2)", () => {
   // //TR: Aynı senaryo iki yavaş git noktası için: A'nın VERIFY tarama klonu ve A'nın WORKSPACE adımındaki depo kökü/HEAD probu (#218 ile birleşimde eşzamansız sürücü).
   const slowGitLeavesBUnfenced = async (slowMatch: (A: {runId: string}, srcRepo: string) => (cwd: string, args: string[]) => boolean) => {
@@ -500,9 +500,11 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
       return c.base.implementer.implement(w, spec, ctx);
     });
     slow.rule = {ms: 700, match: (cwd, args) => cwd.includes(A.runId) && args.includes("show")};
-    const rep = await c.runner({maxConcurrentRuns: 2, leaseTtlMs: TTL, executors: pair}).tick();
+    // //TR: C2b (2026-11-05, run 41971579107): HB-2 fence'i teşhissiz kalmıştı; başarısızlık iletisi artık diğer lease testleri gibi en büyük döngü gecikmesini, toleransı, CPU/duvar süresini ve en uzun durmayla örtüşen senkron çağrıları (blockers) yazar. İddia aynıdır.
+    const probe = stallProbe();
+    const rep = await c.runner({maxConcurrentRuns: 2, leaseTtlMs: TTL, executors: pair}).tick().finally(() => probe.stop());
     expect(slow.hits.sync, "the sync `git show` loop really ran").toBeGreaterThanOrEqual(3);
-    expect(rep.fenced).toEqual([]);
+    expect(rep.fenced, hbDiag(c, {A: A.runId, B: B.runId}, rep.fenced, probe, TTL)).toEqual([]);
     expect(calls.B).toBe(1);
     expect([c.status(A.runId), c.status(B.runId)], JSON.stringify([c.store.engineGetRun(A.runId)!.reason, c.store.engineGetRun(B.runId)!.reason])).toEqual(["AWAITING_APPROVAL", "AWAITING_APPROVAL"]);
   });
