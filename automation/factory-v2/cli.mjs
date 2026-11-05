@@ -270,4 +270,5 @@ else if (cmd === "bridge") await bridge();
 else if (cmd === "registry") await registry();
 else if (cmd === "probe") await probe();
 else if (cmd === "probe-keyring") probeKeyring();
-else { console.error("usage: cli.mjs plan|evidence|intents"); process.exit(1); }
+else if (cmd === "factory") await (await import("./control.mjs")).factoryCommand(process.argv.slice(3), {root: ROOT});
+else { console.error("usage: cli.mjs plan|evidence|intents|bridge|registry|probe|probe-keyring|factory"); process.exit(1); }

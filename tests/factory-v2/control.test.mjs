@@ -1,0 +1,223 @@
+// //TR: Factory V2 tek kontrol oturumu kabul testleri: paylaşımlı imzalı günlük (değiştirme/sıra bozma/yabancı imza reddi, eşzamanlı yazarlar, eski Supervisor fence reddi), gerçek oturum intent döngüsü (spawn isteği, gerçek oturum bağlama, kapasite, oturum kaybı ve yeniden atama), kimliği doğrulanmış sonuç kanalı (bağlı olmayan oturum, yanlış nonce, eski deneme, geç gelen kayıp-oturum sonucu, başka başa bağlı review reddi) ve süreç yeniden başladığında / başka Supervisor devraldığında kaldığı yerden devam.
+import {describe, it, expect} from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import {git} from "./harness.mjs";
+import {S, SESS, ringFor} from "./keys.mjs";
+import {createLocalDocStore, createRemoteDocStore, gitRunner} from "../../automation/factory-v2/ref-doc-store.mjs";
+import {createSharedRegistry} from "../../automation/factory-v2/shared-registry.mjs";
+import {registryLog} from "../../automation/factory-v2/ledger-log.mjs";
+import {StateJournal} from "../../automation/factory-v2/state-journal.mjs";
+import {createMemoryStore} from "../../automation/factory-v2/ownership.mjs";
+import {FactorySupervisor} from "../../automation/factory-v2/supervisor.mjs";
+import {CloudOrchestrator, parseResultText, RESULT_MARK} from "../../automation/factory-v2/cloud-orchestrator.mjs";
+
+const T = 180_000, D = "fv2-test";
+const REF = "refs/heads/uasco/registry";
+const sha = c => c.repeat(40);
+function repo() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "fv2-ctl-"));
+  git(root, "init", "-q", "-b", "integ", "r"); const r = path.join(root, "r");
+  fs.writeFileSync(path.join(r, "a.txt"), "a\n"); git(r, "add", "."); git(r, "-c", "user.name=t", "-c", "user.email=t@invalid", "commit", "-q", "-m", "a");
+  return {root, r};
+}
+const localLedger = (r, signer = S.V2, ns = "test") => registryLog({registry: createSharedRegistry({docStore: createLocalDocStore(r), ref: REF}), ns, signer, ring: ringFor(D), domain: D});
+
+describe("P0-3 shared signed ledger", () => {
+  it("events survive a new process, are hash-chained and Supervisor-signed; tampering, reordering or a foreign signer is refused", {timeout: T}, () => {
+    const {r} = repo();
+    const j1 = new StateJournal(localLedger(r));
+    const f = j1.openEpoch(SESS.V2, "tok1");
+    j1.enqueue("T1", {name: "t"}, f); j1.transition("T1", "CLAIMED", {fence: f});
+    j1.fact("T1", "PR", {number: 7}, f); j1.fact("T1", "EVIDENCE", {kind: "screenshot", path: "s.png"}, f); j1.fact("T1", "EVIDENCE", {kind: "e2e", result: "PASS"}, f);
+    const j2 = new StateJournal(localLedger(r)); // another process / container
+    expect(j2.get("T1")).toMatchObject({state: "CLAIMED"});
+    expect(j2.get("T1").facts).toEqual({PR: {number: 7}, EVIDENCE: [{kind: "screenshot", path: "s.png"}, {kind: "e2e", result: "PASS"}]});
+    expect(j2.events.every(e => e.signer === SESS.V2)).toBe(true);
+    // a registry writer without the Supervisor key: forged append, edited event, foreign signature
+    const reg = createSharedRegistry({docStore: createLocalDocStore(r), ref: REF});
+    const k = "ledger/test/c/000001", cur = reg.read(k);
+    const edited = structuredClone(cur.doc); edited.events[1].data.name = "evil";
+    expect(reg.cas(k, cur.sha, edited).ok).toBe(true);
+    expect(() => new StateJournal(localLedger(r))).toThrow(/LEDGER_EVENT_UNVERIFIED|LEDGER_CHAIN_BROKEN/);
+    const now = reg.read(k); expect(reg.cas(k, now.sha, cur.doc).ok).toBe(true); // restore
+    expect(new StateJournal(localLedger(r)).seq).toBe(6);
+    expect(() => new StateJournal(localLedger(r, S.ATTACK)).enqueue("T2", {}, f)).toThrow(/LEDGER_SIGNER_NOT_AUTHORIZED/); // unregistered key: refused before any write
+    expect(new StateJournal(localLedger(r)).get("T2")).toBe(null);
+    const swapped = structuredClone(cur.doc); [swapped.events[2], swapped.events[3]] = [swapped.events[3], swapped.events[2]];
+    expect(reg.cas(k, reg.read(k).sha, swapped).ok).toBe(true);
+    expect(() => new StateJournal(localLedger(r))).toThrow(/LEDGER_SEQ_GAP|LEDGER_CHAIN_BROKEN/);
+    expect(() => registryLog({registry: reg, ns: "../x", ring: ringFor(D), domain: D})).toThrow(/LEDGER_NS_INVALID/);
+  });
+  it("two environments append concurrently through server CAS without losing an event; a stale Supervisor epoch is fenced", {timeout: T}, () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "fv2-ctl2-")), origin = path.join(root, "o.git");
+    git(root, "init", "-q", "--bare", "-b", "integ", origin);
+    const seed = path.join(root, "seed"); git(root, "clone", "-q", origin, seed);
+    fs.writeFileSync(path.join(seed, "a"), "a"); git(seed, "add", "."); git(seed, "-c", "user.name=t", "-c", "user.email=t@invalid", "commit", "-q", "-m", "a"); git(seed, "push", "-q", "origin", "HEAD:integ");
+    const env = n => { const d = path.join(root, n); git(root, "clone", "-q", origin, d); return new StateJournal(registryLog({registry: createSharedRegistry({docStore: createRemoteDocStore({runGit: gitRunner(d)}), ref: REF}), ns: "p", signer: S.V2, ring: ringFor(D), domain: D})); };
+    const a = env("A"), b = env("B");
+    const fa = a.openEpoch(SESS.V2, "ta");
+    a.enqueue("X", {}, fa); b.reload(); const fb = b.openEpoch(SESS.V2, "tb"); // B is the newer Supervisor epoch
+    b.enqueue("Y", {}, fb);
+    expect(() => a.enqueue("Z", {}, fa)).toThrow(/JOURNAL_STALE_FENCE/); // A re-reads the shared log and is fenced
+    const c = env("C"); expect([...c.tasks.keys()].sort()).toEqual(["X", "Y"]); expect(c.seq).toBe(4);
+  });
+});
+
+/** Fake origin checks for the result channel (real git is exercised in the live cloud verification). */
+function fakeGit(o = {}) { return {tips: {}, trailers: {}, branchTip(b) { return this.tips[b] ?? null; }, fetch: () => true, sessionsOf(h) { return this.trailers[h] ?? null; }, isAncestor: () => true, ...o}; }
+function control({r, sessionId = SESS.V2, now = () => clock.t, g = fakeGit(), leaseStore = createMemoryStore(), backlog = [{id: "T1", name: "add feature", paths: ["work/"], spec: "do it"}], capacity}) {
+  const orch = new CloudOrchestrator({repoUrl: "https://example.invalid/r", domain: D, git: g, now, capacity});
+  const sup = new FactorySupervisor({domain: D, mode: "SHADOW", sessionId, journal: new StateJournal(localLedger(r)), leaseStore, executor: orch, backlog: () => backlog, now, leaseTtlMs: 3600_000,
+    target: {builders: 2, reviewers: 4, mergePreparers: 1, mergeWriters: 1, supervisors: 1}, dispatchBase: () => sha("b"), isAncestor: () => true, diffPaths: () => ["work/x.txt"]});
+  orch.attach(sup);
+  return {sup, orch, g, leaseStore};
+}
+const clock = {t: 1_000_000};
+const result = (w, extra) => `done\n${RESULT_MARK} ${JSON.stringify({intentId: w.intentId, nonce: w.nonce, taskId: w.taskId, attempt: w.attempt, ...extra})}`;
+
+describe("P0-1 + P0-2 real-session orchestration and authenticated result channel", () => {
+  it("intent -> create_session request -> bound real session -> verified result -> review -> CLEAN, across Supervisor process restarts", {timeout: T}, async () => {
+    const {r} = repo(); const leaseStore = createMemoryStore(), g = fakeGit();
+    let c = control({r, leaseStore, g});
+    expect(c.sup.start().owner).toBe(true);
+    await c.sup.tick();
+    const [act] = c.orch.actions();
+    expect(act).toMatchObject({role: "BUILDER", taskId: "T1", createSession: {source_revision: sha("b"), tags: expect.arrayContaining(["uasco-factory-v2", "role:builder"])}});
+    expect(act.createSession.outcome_branch).toMatch(/^fv2w\/fv2-test\/T1-a0-/);
+    expect(act.createSession.prompt).toContain(RESULT_MARK);
+    // a fresh process of the same Supervisor session (every `factory tick` is one) adopts its lease and epoch
+    c = control({r, leaseStore, g}); expect(c.sup.start()).toMatchObject({owner: true});
+    expect(() => c.orch.bind(act.intentId, "not-a-session")).toThrow(/SESSION_ID_INVALID/);
+    c.orch.bind(act.intentId, "session_builderAAAA1");
+    expect(() => c.orch.bind(c.orch.actions()[0]?.intentId ?? act.intentId, "session_builderAAAA1")).not.toThrow(); // same pair is idempotent
+    const w = c.orch.workers(x => x.intentId === act.intentId)[0];
+    // result channel negatives (each recorded as RESULT_REJECTED, nothing accepted)
+    expect(c.orch.submitResult(act.intentId, {sessionId: "session_intruderXX1", text: result(w, {ok: true, headSha: sha("c")})})).toMatchObject({accepted: false, reason: "SESSION_NOT_BOUND_TO_INTENT"});
+    expect(c.orch.submitResult(act.intentId, {sessionId: "session_builderAAAA1", text: result({...w, nonce: "x"}, {ok: true, headSha: sha("c")})}).reason).toBe("NONCE_OR_INTENT_MISMATCH");
+    expect(c.orch.submitResult(act.intentId, {sessionId: "session_builderAAAA1", text: result(w, {ok: true, headSha: sha("c")}) + "\n" + result(w, {ok: true, headSha: sha("d")})}).reason).toBe("RESULT_AMBIGUOUS");
+    expect(c.orch.submitResult(act.intentId, {sessionId: "session_builderAAAA1", text: result(w, {ok: true, headSha: sha("c")})}).reason).toBe("HEAD_NOT_BRANCH_TIP");
+    g.tips[w.branch] = sha("c"); g.trailers[sha("c")] = ["session_someoneelse1"];
+    expect(c.orch.submitResult(act.intentId, {sessionId: "session_builderAAAA1", text: result(w, {ok: true, headSha: sha("c")})}).reason).toBe("COMMIT_SESSION_MISMATCH");
+    g.trailers[sha("c")] = ["session_builderAAAA1"];
+    expect(c.orch.submitResult(act.intentId, {sessionId: "session_builderAAAA1", text: result(w, {ok: true, headSha: sha("c"), summary: "s"})})).toEqual({accepted: true});
+    expect(c.sup.journal.events.filter(e => e.kind === "RESULT_REJECTED").length).toBe(5);
+    // the next tick (another fresh process) re-attaches the in-flight job and consumes the verified result
+    c = control({r, leaseStore, g}); c.sup.start(); await c.sup.tick();
+    expect(c.sup.journal.get("T1")).toMatchObject({state: "REVIEWING", data: {headSha: sha("c"), branch: w.branch}});
+    const rvs = c.orch.actions().filter(a => a.role === "REVIEWER");
+    expect(rvs.length).toBeGreaterThan(0);
+    for (const [i, rv] of rvs.entries()) {
+      expect(rv.createSession).toMatchObject({source_revision: sha("c")}); expect(rv.createSession.outcome_branch).toBeUndefined();
+      const sid = `session_reviewerBB${i}x`;
+      c.orch.bind(rv.intentId, sid);
+      expect(() => c.orch.bind(rv.intentId, "session_builderAAAA1")).toThrow(/INTENT_NOT_PENDING/);
+      const rw = c.orch.workers(x => x.intentId === rv.intentId)[0];
+      expect(c.orch.submitResult(rv.intentId, {sessionId: sid, text: result(rw, {status: "CLEAN", headSha: sha("d"), baseSha: sha("b")})}).reason).toBe("REVIEW_NOT_BOUND_TO_HEAD");
+      expect(c.orch.submitResult(rv.intentId, {sessionId: sid, text: result(rw, {status: "CLEAN", headSha: sha("c"), baseSha: sha("b"), blockers: []})})).toEqual({accepted: true});
+    }
+    c = control({r, leaseStore, g}); c.sup.start(); await c.sup.tick();
+    const t = c.sup.journal.get("T1");
+    expect(t.state === "REVIEW_CLEAN" || t.state === "PREPARING").toBe(true);
+    expect(t.data.verdicts[0]).toMatchObject({status: "CLEAN", headSha: sha("c")});
+    expect([...c.sup.journal.workers.values()].map(x => [x.role, x.status])).toEqual([["BUILDER", "COMPLETED"], ...rvs.map(() => ["REVIEWER", "COMPLETED"])]);
+  });
+
+  it("a lost session is reassigned to a NEW session with attempt+1; its late result is refused; capacity is enforced", {timeout: T}, async () => {
+    const {r} = repo(); const leaseStore = createMemoryStore(), g = fakeGit();
+    let c = control({r, leaseStore, g, backlog: [{id: "T1", paths: ["a/"]}, {id: "T2", paths: ["b/"]}, {id: "T3", paths: ["c/"]}]});
+    c.sup.start(); await c.sup.tick();
+    expect(c.orch.actions().length).toBe(2); // 2 builder slots: T3 waits, nothing over capacity
+    expect(() => c.orch.start({role: "BUILDER", taskId: "T9", slotId: "x", fromSha: sha("b")})).toThrow(/CAPACITY_EXCEEDED/);
+    expect(() => c.orch.start({role: "WRITER", taskId: "T9"})).toThrow(/ROLE_INVALID/);
+    const a1 = c.orch.actions().find(a => a.taskId === "T1");
+    c.orch.bind(a1.intentId, "session_lostbuilder1");
+    expect(() => c.orch.bind(c.orch.actions()[0].intentId, "session_lostbuilder1")).toThrow(/SESSION_ALREADY_BOUND/);
+    c.orch.lost(a1.intentId, "SESSION_FAILED");
+    c = control({r, leaseStore, g, backlog: [{id: "T1", paths: ["a/"]}, {id: "T2", paths: ["b/"]}, {id: "T3", paths: ["c/"]}]}); c.sup.start(); await c.sup.tick();
+    expect(c.sup.journal.get("T1")).toMatchObject({state: "BUILDING", attempt: 1}); // re-dispatched in the same tick, as a new intent
+    expect(c.sup.journal.events.filter(e => e.kind === "SUPERVISOR_EPOCH").length).toBe(1); // same Supervisor session resumed its epoch
+    const w1 = c.orch.workers(x => x.intentId === a1.intentId)[0];
+    g.tips[w1.branch] = sha("e"); g.trailers[sha("e")] = ["session_lostbuilder1"];
+    expect(c.orch.submitResult(a1.intentId, {sessionId: "session_lostbuilder1", text: result(w1, {ok: true, headSha: sha("e")})}).reason).toBe("INTENT_NOT_RUNNING:LOST");
+    const again = c.orch.actions().filter(a => a.taskId === "T1");
+    expect(again.length).toBe(1); expect(again[0].intentId).not.toBe(a1.intentId);
+    expect(again[0].createSession.outcome_branch).toMatch(/T1-a1-/);
+  });
+
+  it("another Supervisor session takes over after the lease expires: new epoch, the old one is fenced, in-flight cloud work continues", {timeout: T}, async () => {
+    const {r} = repo(); const leaseStore = createMemoryStore(), g = fakeGit();
+    const old = control({r, leaseStore, g}); old.sup.start(); await old.sup.tick();
+    const a = old.orch.actions()[0]; old.orch.bind(a.intentId, "session_builderCCCC1");
+    clock.t += 2 * 3600_000; // old Supervisor's lease expired (container gone)
+    const neu = control({r, leaseStore, g, sessionId: "session_v2supervisorB"});
+    expect(neu.sup.start()).toMatchObject({owner: true, epoch: 2});
+    expect(() => old.orch.lost(a.intentId)).toThrow(); // stale epoch / lost lease: never writes again
+    const w = neu.orch.workers(x => x.intentId === a.intentId)[0];
+    g.tips[w.branch] = sha("f"); g.trailers[sha("f")] = ["session_builderCCCC1"];
+    expect(neu.orch.submitResult(a.intentId, {sessionId: "session_builderCCCC1", text: result(w, {ok: true, headSha: sha("f")})})).toEqual({accepted: true});
+    await neu.sup.tick();
+    expect(neu.sup.journal.get("T1").state).toMatch(/BUILT|REVIEWING/);
+    expect(neu.sup.journal.events.filter(e => e.kind === "SUPERVISOR_EPOCH").map(e => e.data.supervisorId)).toEqual([SESS.V2, "session_v2supervisorB"]);
+  });
+
+  it("result text parsing is strict", () => {
+    expect(() => parseResultText("nothing")).toThrow(/RESULT_MISSING/);
+    expect(() => parseResultText(`${RESULT_MARK} {bad`)).toThrow(/RESULT_UNPARSEABLE/);
+    expect(parseResultText(`x\n  ${RESULT_MARK} {"a":1}`)).toEqual({a: 1});
+  });
+});
+
+describe("P0-5 factory report", () => {
+  it("one report shows sessions, tasks with PR/review/CI/merge, queue and dependencies, Founder decisions and product evidence; unmeasured quota is UNKNOWN", {timeout: T}, async () => {
+    const {buildReport, renderMarkdown, parseAcceptance, UNKNOWN} = await import("../../automation/factory-v2/report.mjs");
+    const {r} = repo(); const backlog = [{id: "T1", name: "screen", domain: "UI_UX"}, {id: "T2", name: "api", deps: ["T1"], domain: "BACKEND"}];
+    const c = control({r, backlog}); c.sup.start(); await c.sup.tick();
+    const a = c.orch.actions()[0]; c.orch.bind(a.intentId, "session_builderRPT01");
+    c.sup.journal.fact("T1", "PR", {number: 901, url: "https://example.invalid/pr/901"}, c.sup.fence());
+    c.sup.journal.fact("T1", "EVIDENCE", {kind: "screenshot", path: "docs/evidence/t1.png"}, c.sup.fence());
+    const acceptance = parseAcceptance("| A2 | keyring | NOT_MET | x |\n| A1 | registry | MET (probe namespace) | y |");
+    expect(acceptance).toEqual([{id: "A2", condition: "keyring", status: "NOT_MET"}, {id: "A1", condition: "registry", status: "MET"}]);
+    const rep = buildReport({journal: c.sup.journal, backlog, supervisor: {mode: "SHADOW", sessionId: SESS.V2, epoch: 1, state: "ACTIVE", target: c.sup.topology.target},
+      github: {openPrs: [{number: 354, title: "x", headSha: sha("a"), baseRef: "v7/integration", checks: {"founder-authority": "waiting"}, binding: {verdict: "CLEAN", head: sha("a")}, founderWaiting: true}]}, acceptance});
+    expect(rep.quota).toBe(UNKNOWN);
+    expect(rep.capacity.builders).toMatchObject({capacity: 2, running: 1});
+    expect(rep.sessions[0]).toMatchObject({role: "BUILDER", status: "ACTIVE", sessionId: "session_builderRPT01", taskId: "T1"});
+    const t1 = rep.tasks.rows.find(x => x.taskId === "T1");
+    expect(t1).toMatchObject({area: "UI_UX", pr: {number: 901}, owners: ["BUILDER:session_builderRPT01"], evidence: [{kind: "screenshot", path: "docs/evidence/t1.png"}]});
+    expect(rep.queue.find(q => q.taskId === "T2")?.waitingOn ?? rep.tasks.rows.find(x => x.taskId === "T2").waitingOn).toEqual(["T1"]);
+    expect(rep.founderDecisions.map(d => d.kind)).toEqual(["PR_FOUNDER_AUTHORITY", "CUTOVER_CONDITION"]);
+    expect(rep.productEvidence).toEqual([{taskId: "T1", kind: "screenshot", path: "docs/evidence/t1.png"}]);
+    const md = renderMarkdown(rep);
+    for (const s of ["## Capacity and sessions", "session_builderRPT01", "#354", "UNKNOWN (no measured quota source)", "CUTOVER_CONDITION: A2", "docs/evidence/t1.png"]) expect(md).toContain(s);
+    expect(buildReport({journal: c.sup.journal}).github).toBe(UNKNOWN);
+  });
+});
+
+describe("guards that survived mutation", () => {
+  it("a correctly re-chained event signed by an unregistered key is refused (the chain alone is not identity)", {timeout: T}, async () => {
+    const {signAction, canonDigest} = await import("../../automation/factory-v2/identity.mjs");
+    const {r} = repo();
+    const j = new StateJournal(localLedger(r)); const f = j.openEpoch(SESS.V2, "t"); j.enqueue("T1", {}, f);
+    const reg = createSharedRegistry({docStore: createLocalDocStore(r), ref: REF});
+    const k = "ledger/test/c/000001", cur = reg.read(k), last = cur.doc.events.at(-1);
+    const body = {kind: "ENQUEUE", taskId: "EVIL", idempotencyKey: "enqueue:EVIL", data: {}, fenceEpoch: 1, fenceToken: "t", seq: 3, at: 1, prev: canonDigest(last)};
+    const forged = {...body, sig: signAction({...S.ATTACK, domain: D, action: "LEDGER", prev: body.prev, payload: body})};
+    expect(reg.cas(k, cur.sha, {events: [...cur.doc.events, forged]}).ok).toBe(true);
+    expect(() => new StateJournal(localLedger(r))).toThrow(/LEDGER_EVENT_UNVERIFIED:3:SIGNER_KEY_UNKNOWN/);
+  });
+  it("a result for an intent whose task attempt moved on is refused; a lease token cannot be adopted by another session", {timeout: T}, async () => {
+    const {Ownership} = await import("../../automation/factory-v2/ownership.mjs");
+    const {r} = repo(); const g = fakeGit(); const c = control({r, g}); c.sup.start(); await c.sup.tick();
+    const a = c.orch.actions()[0]; c.orch.bind(a.intentId, "session_builderSTALE"); const w = c.orch.workers(x => x.intentId === a.intentId)[0];
+    c.sup.journal.transition("T1", "RETRY_WAIT", {fence: c.sup.fence(), bumpAttempt: true, data: {retryAt: 0}});
+    g.tips[w.branch] = sha("9"); g.trailers[sha("9")] = ["session_builderSTALE"];
+    expect(c.orch.submitResult(a.intentId, {sessionId: "session_builderSTALE", text: result(w, {ok: true, headSha: sha("9")})}).reason).toBe("STALE_ATTEMPT");
+    const store = createMemoryStore();
+    const mine = new Ownership(store, {leaseId: "x", environment: "e", workerId: "w", sessionId: "session_holderAAAA1"}); mine.acquire();
+    const thief = new Ownership(store, {leaseId: "x", environment: "e", workerId: "w", sessionId: "session_thiefBBBBB1"});
+    expect(thief.adopt(mine.token)).toBe(false);
+    expect(new Ownership(store, {leaseId: "x", environment: "e", workerId: "w", sessionId: "session_holderAAAA1"}).adopt(mine.token)).toBe(true);
+  });
+});

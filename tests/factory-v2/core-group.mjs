@@ -2,3 +2,4 @@
 import "./factory-v2.test.mjs";
 import "./bridge.test.mjs";
 import "./registry.test.mjs";
+import "./control.test.mjs";

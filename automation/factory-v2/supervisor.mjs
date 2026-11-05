@@ -22,7 +22,7 @@ export class FactorySupervisor {
       ...Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined))};
     if (!["SHADOW", "LIVE"].includes(this.o.mode)) throw new Error("SUPERVISOR_MODE_INVALID");
     this.topology = buildTopology(this.o.target);
-    this.journal = new StateJournal(this.o.journalDir);
+    this.journal = this.o.journal ?? new StateJournal(this.o.journalLog ?? this.o.journalDir);
     this.lease = new Ownership(this.o.leaseStore, {leaseId: supervisorLeaseId(`${this.o.mode}-${this.o.domain}`), environment: this.o.environment, workerId: "supervisor", sessionId: this.o.sessionId, ttlMs: this.o.leaseTtlMs, safetyMarginMs: Math.min(5_000, this.o.leaseTtlMs / 4), now: this.o.now});
     this.handles = new Map(); // jobId -> {taskId, kind, slotId, startedAt, ...}
     this.taskLeases = new Map();
@@ -38,11 +38,14 @@ export class FactorySupervisor {
   start() {
     if (this.o.mode === "LIVE" && this.o.leaseStore?.kind !== "REMOTE_GIT_REF") throw new Error("LIVE_REQUIRES_SHARED_LEASE_STORE");
     // SHADOW may only ever claim in its own namespace (or an in-process store): never in the live claim refs.
-    if (this.o.mode === "SHADOW" && this.o.leaseStore?.kind !== "MEMORY" && this.o.leaseStore?.namespace !== NAMESPACES.SHADOW) throw new Error("SHADOW_REQUIRES_SHADOW_NAMESPACE");
+    if (this.o.mode === "SHADOW" && this.o.leaseStore?.kind !== "MEMORY" && this.o.leaseStore?.namespace !== NAMESPACES.SHADOW && this.o.leaseStore?.shadowNamespace !== true) throw new Error("SHADOW_REQUIRES_SHADOW_NAMESPACE");
     if (!this.authorityOk()) { this.state = "STANDBY"; return {owner: false, authority: this.authorityRefusal}; }
-    const a = this.lease.acquire();
+    let a = this.lease.acquire();
+    // A restarted process of the same Supervisor session (each `factory tick` is a fresh process) adopts its own valid lease and epoch.
+    const last = this.journal.lastEpoch;
+    if (!a.granted && last?.supervisorId === this.o.sessionId && this.lease.adopt(last.token)) a = {granted: true, adopted: true};
     if (!a.granted) { this.state = "STANDBY"; return {owner: false, holder: a.holder}; }
-    this.fenceRef = this.journal.openEpoch(this.o.sessionId, this.lease.token);
+    this.fenceRef = this.journal.resumeEpoch(this.o.sessionId, this.lease.token) || this.journal.openEpoch(this.o.sessionId, this.lease.token);
     this.state = "ACTIVE";
     this.recover();
     return {owner: true, epoch: this.fenceRef.epoch};
@@ -66,25 +69,59 @@ export class FactorySupervisor {
     const now = this.o.now();
     for (const t of this.journal.inState("CLAIMED", "BUILDING", "REMEDIATING", "REVIEWING", "MERGING")) {
       if ([...this.handles.values()].some(h => h.taskId === t.taskId)) continue;
+      if (this.reattach(t)) continue; // a durable cloud worker is still on it: keep waiting for its verified result
       const holder = this.o.leaseStore.read(taskLeaseId(t.taskId));
       if (holder && holder.expiresAt > now && holder.sessionId !== this.o.sessionId) continue; // another valid worker owns it
       if (t.state === "REVIEWING") { this.journal.transition(t.taskId, "BUILT", {fence: this.fenceRef, data: {verdicts: [], recovered: true}}); continue; }
       if (t.state === "MERGING") { this.journal.transition(t.taskId, "PREPARING", {fence: this.fenceRef, data: {recovered: true}}); continue; }
-      this.journal.transition(t.taskId, "RETRY_WAIT", {fence: this.fenceRef, bumpAttempt: true, data: {recovered: true, retryAt: now}});
+      // orphaned work (e.g. a lost worker session) is retried with the same bound as any crash: never an unbounded re-dispatch loop
+      const n = nextRetry(Object.assign(new Error("WORKER_CRASH:RECOVERED"), {code: "WORKER_CRASH"}), t.attempt + 1);
+      if (n.action === "RETRY") this.journal.transition(t.taskId, "RETRY_WAIT", {fence: this.fenceRef, bumpAttempt: true, data: {recovered: true, retryAt: now}});
+      else this.journal.transition(t.taskId, t.state === "CLAIMED" ? "RETRY_WAIT" : n.action === "BLOCK" ? "BLOCKED" : "FAILED", {fence: this.fenceRef, bumpAttempt: true, data: {recovered: true, lastError: "WORKER_CRASH:RECOVERED", errorKind: n.kind, ...(t.state === "CLAIMED" ? {retryAt: now} : {})}});
     }
   }
+  /** Re-attach in-flight work of durable workers (cloud sessions) after a Supervisor restart instead of re-dispatching it. */
+  reattach(t) {
+    const ex = this.o.executor;
+    if (typeof ex?.reattach !== "function") return false;
+    if (["BUILDING", "REMEDIATING"].includes(t.state) && t.data.jobId && t.data.worker?.kind === "CLOUD_SESSION") {
+      const lease = this.taskLease(t.taskId, t.data.slotId);
+      if (!lease.adopt(t.data.leaseToken) && !lease.acquire().granted) return false; // someone else validly owns it: hands off
+      const handle = ex.reattach(t.data.jobId); if (!handle) { lease.release(); return false; }
+      this.journal.annotate(t.taskId, "NOTE", {leaseToken: lease.token}, this.fenceRef, `reattach-lease:${t.data.jobId}:${lease.token}`);
+      this.taskLeases.set(t.taskId, lease);
+      this.handles.set(handle.jobId, {taskId: t.taskId, kind: t.state === "REMEDIATING" ? "REMEDIATE" : "BUILD", slotId: t.data.slotId, jobId: handle.jobId, startedAt: this.o.now(), worker: handle.worker, reattached: true});
+      handle.done.then(r => this.onBuildDone(handle.jobId, r), e => this.onBuildDone(handle.jobId, {ok: false, error: e}));
+      return true;
+    }
+    if (t.state === "REVIEWING" && Array.isArray(t.data.reviewJobs) && t.data.reviewJobs.length) {
+      const done = new Set((t.data.verdicts ?? []).map(v => v.reviewerId));
+      const open = t.data.reviewJobs.filter(j => !done.has(j.slotId));
+      const handles = open.map(j => [j, ex.reattach(j.jobId)]);
+      if (handles.some(([, h]) => !h)) return false;
+      for (const [j, handle] of handles) {
+        this.handles.set(handle.jobId, {taskId: t.taskId, kind: "REVIEW", slotId: j.slotId, jobId: handle.jobId, focus: j.focus, startedAt: this.o.now(), worker: handle.worker, reattached: true});
+        handle.done.then(v => this.onReviewDone(handle.jobId, v), e => this.onReviewDone(handle.jobId, {status: "ERROR", error: String(e)}));
+      }
+      return true;
+    }
+    return false;
+  }
+  taskLease(taskId, slotId) { return new Ownership(this.o.leaseStore, {leaseId: taskLeaseId(taskId), environment: this.o.environment, workerId: slotId ?? "builder", sessionId: this.o.sessionId, ttlMs: this.o.leaseTtlMs, safetyMarginMs: Math.min(5_000, this.o.leaseTtlMs / 4), now: this.o.now}); }
   // ---- main loop -------------------------------------------------------------------------------------------
   async tick() {
     if (this.state !== "ACTIVE") return {state: this.state};
     if (!this.lease.renew()) { this.state = "STANDBY"; return {state: "LOST_OWNERSHIP"}; }
     if (!this.authorityOk()) { this.state = "STANDBY"; this.lease.release(); return {state: "AUTHORITY_REVOKED", reason: this.authorityRefusal}; }
     this.fence();
+    // durable workers: collect verified results (and lost sessions) recorded since the last tick, then let their handlers run
+    if (typeof this.o.executor?.poll === "function") { await this.o.executor.poll(); await new Promise(r => setImmediate(r)); this.fence(); }
     const now = this.o.now();
     for (const [, l] of this.taskLeases) l.renew();
     // release retry waits whose delay elapsed
     for (const t of this.journal.inState("RETRY_WAIT")) if ((t.data.retryAt ?? 0) <= now) this.journal.transition(t.taskId, "QUEUED", {fence: this.fenceRef});
     const backlog = await this.o.backlog();
-    for (const task of backlog) this.journal.enqueue(task.id, {paths: task.paths ?? [], tier: task.tier, name: task.name}, this.fenceRef);
+    for (const task of backlog) this.journal.enqueue(task.id, {paths: task.paths ?? [], tier: task.tier, name: task.name, ...(task.spec ? {spec: task.spec} : {}), ...(task.domain ? {area: task.domain} : {})}, this.fenceRef);
     const quota = quotaMode(await this.o.quota(), now);
     const done = new Set(this.journal.inState("VERIFIED", "MERGED").map(t => t.taskId));
     const inFlight = this.journal.inState(...BUILDER_BUSY, "BUILT", "REVIEWING", "CHANGES_REQUESTED", "REVIEW_CLEAN", "PREPARING", "READY_TO_MERGE", "MERGING")
@@ -112,7 +149,7 @@ export class FactorySupervisor {
   }
   // ---- builders --------------------------------------------------------------------------------------------
   dispatchBuild(a, kind = "BUILD") {
-    const lease = new Ownership(this.o.leaseStore, {leaseId: taskLeaseId(a.taskId), environment: this.o.environment, workerId: a.slotId, sessionId: this.o.sessionId, ttlMs: this.o.leaseTtlMs, safetyMarginMs: Math.min(5_000, this.o.leaseTtlMs / 4), now: this.o.now});
+    const lease = this.taskLease(a.taskId, a.slotId);
     if (!lease.acquire().granted) return false; // somebody else owns this task: never duplicate
     try { return this.startBuild(a, kind, lease); } catch (e) { lease.release(); throw e; }
   }
@@ -123,11 +160,11 @@ export class FactorySupervisor {
     // The supervisor, never the worker, decides the commit a build starts from; every later diff/scope/risk check starts there.
     const dispatchBase = kind === "REMEDIATE" ? t.data.headSha : this.dispatchBase();
     if (!/^[0-9a-f]{40}$/.test(dispatchBase ?? "")) throw new Error("DISPATCH_BASE_UNKNOWN");
-    const handle = this.o.executor.start({kind, role: "BUILDER", slotId: a.slotId, taskId: a.taskId, attempt: t.attempt, paths: a.paths, findings: t.data.findings ?? [], fromSha: dispatchBase});
+    const handle = this.o.executor.start({kind, role: "BUILDER", slotId: a.slotId, taskId: a.taskId, attempt: t.attempt, paths: a.paths, findings: t.data.findings ?? [], fromSha: dispatchBase, name: t.data.name ?? null, spec: t.data.spec ?? null});
     this.taskLeases.set(a.taskId, lease);
     this.handles.set(handle.jobId, {taskId: a.taskId, kind, slotId: a.slotId, jobId: handle.jobId, startedAt: this.o.now(), worker: handle.worker});
     if (kind === "BUILD") this.journal.transition(a.taskId, "BUILDING", {fence: this.fenceRef, data: {jobId: handle.jobId, worker: handle.worker ?? null, dispatchBase}});
-    else this.journal.annotate(a.taskId, "NOTE", {remediationBase: dispatchBase}, this.fenceRef, `remediate-base:${handle.jobId}`);
+    else this.journal.annotate(a.taskId, "NOTE", {remediationBase: dispatchBase, jobId: handle.jobId, worker: handle.worker ?? null, leaseToken: lease.token}, this.fenceRef, `remediate-base:${handle.jobId}`);
     handle.done.then(r => this.onBuildDone(handle.jobId, r), e => this.onBuildDone(handle.jobId, {ok: false, error: e}));
     return true;
   }
@@ -182,11 +219,14 @@ export class FactorySupervisor {
       if (!alloc.complete) continue; // wait for reviewer capacity; other tasks proceed
       this.fence();
       this.journal.transition(t.taskId, "REVIEWING", {fence: this.fenceRef, data: {required, risk, verdicts: [], reviewers: alloc.picks.map(p => p.id)}});
+      const reviewJobs = [];
       for (const p of alloc.picks) {
-        const handle = this.o.executor.start({kind: "REVIEW", role: "REVIEWER", slotId: p.id, focus: p.focus, taskId: t.taskId, attempt: t.attempt, headSha: t.data.headSha, baseSha: t.data.baseSha});
+        const handle = this.o.executor.start({kind: "REVIEW", role: "REVIEWER", slotId: p.id, focus: p.focus, taskId: t.taskId, attempt: t.attempt, headSha: t.data.headSha, baseSha: t.data.baseSha, name: t.data.name ?? null, branch: t.data.branch ?? null});
         this.handles.set(handle.jobId, {taskId: t.taskId, kind: "REVIEW", slotId: p.id, jobId: handle.jobId, focus: p.focus, startedAt: this.o.now(), worker: handle.worker});
+        reviewJobs.push({jobId: handle.jobId, slotId: p.id, focus: p.focus, worker: handle.worker ?? null});
         handle.done.then(v => this.onReviewDone(handle.jobId, v), e => this.onReviewDone(handle.jobId, {status: "ERROR", error: String(e)}));
       }
+      this.journal.annotate(t.taskId, "NOTE", {reviewJobs}, this.fenceRef, `review-jobs:${t.taskId}:${t.attempt}:${reviewJobs.map(j => j.jobId).join(",")}`);
     }
   }
   onReviewDone(jobId, v) {
