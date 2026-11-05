@@ -4,6 +4,8 @@ import {icon} from "../icons.js";
 import {formatCount,MISSING,formatTime,pillKindFor,missionPillKind,topEntries} from "../model.js";
 import {ROUTES,FACTORY_AREA_ORDER} from "../routes.js";
 import {buildProjectCockpit} from "../project-cockpit-core.js";
+import {buildNotifications,loadReadIds,saveReadIds,NOTIFY_GROUPS} from "../notifications-core.js";
+import {selection} from "../forms.js";
 
 const LOADING={loading:true,state:"UNAVAILABLE",value:null};
 const TONE={BLOCKED:"danger",FAILED:"danger",ATTENTION:"warn",WAITING:"warn",ACTIVE:"accent",DONE:"ok",STOPPED:"muted",IDLE:"muted",NEUTRAL:"muted"};
@@ -114,13 +116,44 @@ function homeHeader(ctx,{asOf=null,tenant=null}={}){
       h(doc,"span",{class:"id-asof",text:ctx.t("home.asOf",{time:asOf?formatTime(asOf,ctx.i18n.lang):MISSING})})),
     h(doc,"p",{class:"hero-hint",text:ctx.t("home.drillHint")}));
 }
+/** //TR: UASCO-T0019: renderer okundu deposu. Test/kabuk ctx.storage verebilir (null = depo yok); verilmezse localStorage denenir, erişim atarsa depo yok sayılır. */
+const storageOf=ctx=>ctx.storage!==undefined?ctx.storage:(()=>{try{return globalThis.localStorage??null}catch{return null}})();
+/** //TR: UASCO-T0019: bildirim akışı. Okunmamış rozet, türe göre gruplar, her öğe gerçek hedef ekrana (seçili görev ile) bağlanır; kaynak düşerse dürüst durum notu, depo yoksa "okundu kaydedilemez" notu. */
+function notificationsPanel(ctx,feed){
+  const doc=ctx.doc,storage=storageOf(ctx);
+  const open=n=>{
+    if(feed.readAvailable){const r=loadReadIds(storage);r.ids.add(n.id);saveReadIds(storage,r.ids)}
+    if(n.missionId)selection.missionId=n.missionId;
+    ctx.navigate(n.route);
+  };
+  const markAll=()=>{const r=loadReadIds(storage);for(const n of feed.items)r.ids.add(n.id);if(saveReadIds(storage,r.ids))ctx.rerender()};
+  const sourceNote=k=>feed.sources[k]==="VERIFIED"?null:h(doc,"p",{class:`note note-${String(feed.sources[k]).toLowerCase()}`,role:"status",dataset:{notifySource:k},text:ctx.t("home.notify.sourceDown",{source:ctx.t(`home.notify.source.${k}`),state:ctx.t(`state.${feed.sources[k]}`)})});
+  const item=n=>h(doc,"li",{class:`notify-item${n.read?" is-read":""}`,dataset:{notifyId:n.id,notifyRead:n.read?"1":"0"}},
+    h(doc,"button",{type:"button",class:"link-btn",dataset:{notifyRoute:n.route,notifyMission:n.missionId??""},"aria-label":ctx.t("home.notify.openAria",{title:n.title,target:ctx.t(`area.${n.route}.title`)}),on:{click:()=>open(n)}},
+      h(doc,"span",{class:"notify-kind",text:ctx.t(`home.notify.kind.${n.kind}`)}),h(doc,"span",{class:"notify-sep","aria-hidden":"true",text:" · "}),h(doc,"span",{class:"notify-title",text:n.title})),
+    n.detail?h(doc,"p",{class:"notify-detail",text:n.detail}):null,
+    h(doc,"p",{class:"notify-meta",text:`${n.read?ctx.t("home.notify.read"):ctx.t("home.notify.unread")} · ${n.at?formatTime(n.at,ctx.i18n.lang):MISSING}`}));
+  const head=h(doc,"p",{class:"panel-meta"},
+    h(doc,"span",{class:"badge badge-count",dataset:{notifyUnread:feed.unread===null?"":String(feed.unread)},text:feed.unread===null?MISSING:ctx.t("home.notify.unreadCount",{n:formatCount(feed.unread)})}),
+    h(doc,"button",{type:"button",class:"btn btn-small",dataset:{notifyMarkAll:"1"},disabled:!feed.readAvailable||!feed.unread,on:{click:markAll},text:ctx.t("home.notify.markAll")}));
+  const body=feed.state==="EMPTY"?[emptyNote(ctx,"home.notify.empty")]
+    :feed.items.length===0&&feed.state!=="PARTIAL"?[h(doc,"p",{class:`note note-${String(feed.state).toLowerCase()}`,role:"status",text:ctx.t(`state.${feed.state}`)})]
+    :NOTIFY_GROUPS.filter(g=>feed.groups[g]).map(g=>h(doc,"section",{class:"notify-group",dataset:{notifyGroup:g}},
+      h(doc,"h3",{class:"notify-group-title",text:ctx.t("home.notify.groupTitle",{group:ctx.t(`home.notify.group.${g}`),n:formatCount(feed.groups[g].count),unread:formatCount(feed.groups[g].unread)})}),
+      h(doc,"ul",{class:"notify-list"},feed.items.filter(n=>n.group===g).slice(0,8).map(item))));
+  return panel(ctx,{titleKey:"home.notify.title",id:"home-notify"},h(doc,"div",{dataset:{notifyState:feed.state}},head,sourceNote("attention"),sourceNote("runs"),
+    feed.readAvailable?null:h(doc,"p",{class:"note",dataset:{notifyNoStore:"1"},text:ctx.t("home.notify.noStore")}),
+    feed.partial?h(doc,"p",{class:"note",dataset:{notifyPartial:"1"},text:ctx.t("home.notify.partial")}):null,
+    feed.state==="PARTIAL"&&feed.items.length===0?emptyNote(ctx,"home.notify.emptyPartial"):null,...body));
+}
 export async function render(ctx){
-  const doc=ctx.doc,[res,prj,runs]=await Promise.all([ctx.api.cockpit(),ctx.api.projects(),ctx.api.runSummaries()]),c=res.data;
+  const doc=ctx.doc,[res,prj,runs,att]=await Promise.all([ctx.api.cockpit(),ctx.api.projects(),ctx.api.runSummaries(),ctx.api.attention()]),c=res.data;
   const tenant=prj.state==="VERIFIED"?(prj.items.find(p=>p.projectId===ctx.store.projectId)??prj.items[0])?.tenantId??null:null;
   // //TR: Başarılı HTTP ama bozuk gövde (tüm bloklar ERROR) de açıklayıcı hata notu gösterir; sessiz boş ekran olmaz.
   const state=res.state==="OK"&&c.projects?.state==="ERROR"&&c.missions?.state==="ERROR"?"ERROR":res.state;
   const note=state==="OK"?null:h(doc,"p",{class:`note note-${state.toLowerCase()}`,role:"status",text:ctx.t(state==="UNAVAILABLE"?"cockpit.unavailable":"cockpit.failed")});
   return h(doc,"div",{class:"view view-home"},homeHeader(ctx,{asOf:c.generatedAt,tenant}),note,tiles(ctx,c),
+    notificationsPanel(ctx,buildNotifications({attention:att,runs,read:loadReadIds(storageOf(ctx))})),
     projectCockpitPanel(ctx,buildProjectCockpit({projects:prj,approvals:c.approvals,runs})),
     panel(ctx,{titleKey:"home.map",id:"home-map",className:"panel-map"},areaCards(ctx,c)),
     h(doc,"div",{class:"two-col"},orchestratorPanel(ctx,c.orchestrator),

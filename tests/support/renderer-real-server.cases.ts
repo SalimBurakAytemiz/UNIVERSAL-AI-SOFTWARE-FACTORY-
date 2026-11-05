@@ -81,7 +81,7 @@ const serverJson = async (app: App, url: string) => { const r = await app.inject
 /** main.mjs uasco:api-get (main.mjs:321) + verifyServerIdentity + api() ile aynı sözleşme: izin listesi dışı yol INVALID_API_PATH; her okumadan önce
  *  sunucu kimliği belirtece bağlı challenge ile doğrulanır (uyuşmazsa CONTROL_API_IDENTITY_UNVERIFIED); /health için sabit nesne döner; /v1 okuması belirteç
  *  başlığıyla gider, 2xx değilse `${yol}: HTTP ${durum}` hatası. (main.mjs kimliği 2 sn önbelleğe alır; burada her okumada doğrulanır: daha sıkı.) */
-async function renderAgainstServer(app: App, view: string, token = TOKEN, lang: "en" | "tr" = "en") {
+async function renderAgainstServer(app: App, view: string, token = TOKEN, lang: "en" | "tr" = "en", extra: Record<string, unknown> = {}) {
   const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js");
   const doc = new D(), store = st.createStore(null), seen: Array<{path: string; status: number}> = [], attention: string[] = [], refused: string[] = [], thrown: string[] = [];
   const verifyServerIdentity = async () => {
@@ -107,7 +107,7 @@ async function renderAgainstServer(app: App, view: string, token = TOKEN, lang: 
   // renderAttention app.js kabuğundandır (app.js içe aktarılınca boot eder): diğer renderer testleri gibi kayıt tutan bir ikame verilir
   const ctx: Record<string, unknown> = {doc, store, api, i18n: {lang, t}, t, navigate: () => undefined, rerender: async () => undefined, refreshAll: async () => undefined,
     settleFocus: () => undefined, confirm: async () => false, selectProject: () => undefined, principal: "FOUNDER_LOCAL", now: () => Date.now(),
-    renderAttention: (_c: unknown, att: {state?: string} | null) => { attention.push(String(att?.state)); }};
+    renderAttention: (_c: unknown, att: {state?: string} | null) => { attention.push(String(att?.state)); }, storage: null, ...extra};
   const mod = await load("views", `${view}.js`);
   const root: N = await mod.render(ctx);
   const paths = [...new Set(seen.map(s => s.path.replace(/\?.*$/, "")))].sort();
@@ -125,7 +125,7 @@ const CLOUD_JOBS_PENDING = !desktopAllows("/v1/cloud/jobs");
 const pendingRefused = (view: string): string[] => (view === "tower" && CLOUD_JOBS_PENDING ? ["/v1/cloud/jobs"] : []);
 // Her rotanın gerçek sunucuda okuduğu yollar (sorgu dizesi hariç). Bir görünüm farklı/kayıtsız bir yol okumaya başlarsa test bunu söyler.
 const PATHS: Record<string, string[]> = {
-  home: ["/v1/cockpit", "/v1/projects", "/v1/run-summaries"],
+  home: ["/v1/attention", "/v1/cockpit", "/v1/projects", "/v1/run-summaries"],
   projects: ["/v1/deliveries", "/v1/intakes", "/v1/missions", "/v1/projects", "/v1/work-runs"],
   work: ["/v1/missions", "/v1/projects", "/v1/work-runs"],
   workforce: ["/v1/agents", "/v1/cockpit", "/v1/roles", "/v1/roles/status-summary", "/v1/work-runs"],
@@ -145,6 +145,9 @@ const HAPPY: Record<string, (app: App, r: Awaited<ReturnType<typeof renderAgains
     const [prj] = (await serverJson(app, "/v1/projects")).projects as Array<{projectId: string}>;
     const row = all(r.root).find(n => n.dataset.projectCockpit === prj!.projectId)!;
     expect(row.textContent).toBe(`${PROJECT}Runs0No runs yetBlockers0NoneMissions awaiting approval0NoneSpend—Not available: the Control API has no spend endpoint yet.`);
+    // UASCO-T0019: the seed has no attention items and no runs, so the feed is an honest EMPTY (badge 0), not a failure
+    expect((await serverJson(app, "/v1/attention")).attention.items).toEqual([]);
+    expect(all(r.root).find(n => n.id === "home-notify")?.textContent).toBe("Notifications0 unreadMark all as readRead state cannot be saved on this device; every notification shows as unread.No notifications right now.");
   },
   projects: async (_a, r) => { expect(r.text).toContain(PROJECT); expect(kpiText(r.root, "pf-projects")).toMatch(/^Projects1VERIFIED/); expect(kpiText(r.root, "pf-missions")).toMatch(/^Missions2VERIFIED/); },
   work: async (_a, r) => { expect(r.text).toContain(MISSION); expect(r.text).toContain(PROJECT); expect(kpiText(r.root, "wk-missions")).toMatch(/^Missions2VERIFIED/); },
@@ -257,24 +260,24 @@ describe("UASCO-T0006: renderer -> real buildServer for the 10 formerly fake-bri
   }
 });
 
+const PLANTED = ["ghp_", "0123456789abcdefghijklmnopqrstuvwxyzAB"].join("");
+const cockpitSeed = (dataDir: string) => {
+  const store = new WorkOsStore(dataDir), tenantId = "tA", scope = {tenantId};
+  const a = store.createProject({tenantId, orgId: "org1", name: "Alpha", environmentId: "env-dev", createdBy: RECORDER});
+  store.createProject({tenantId, orgId: "org1", name: "Beta", environmentId: "env-dev", createdBy: RECORDER});
+  const mk = (title: string, riskLevel: "R1" | "R2" | "R3" = "R1") => store.createMission({tenantId, projectId: a.projectId, title, objective: "obj", acceptanceCriteria: ["ac"], riskLevel, createdBy: RECORDER}).missionId;
+  const walk = (id: string, p: string[]) => { for (const to of p) store.transitionMission(scope, id, to as any, "go", RECORDER); };
+  walk(mk("Needs sign-off", "R3"), ["PREFLIGHT"]);
+  const start = (title: string) => { const m = mk(title); walk(m, ["PREFLIGHT", "AUTHORIZED"]); const r = store.createRun({tenantId, missionId: m, executor: {implementer: `I-${title}`, reviewer: `R-${title}`}, createdBy: RECORDER}); return {runId: r.runId, leaseId: store.acquireRunLease(r.runId, 600_000, "ENGINE").leaseId as string}; };
+  const busy = start("busy"); store.transitionRun(busy.runId, busy.leaseId, "RUNNING", "go", "ENGINE");
+  const stuck = start("stuck"); store.transitionRun(stuck.runId, stuck.leaseId, "RUNNING", "go", "ENGINE");
+  store.transitionRun(stuck.runId, stuck.leaseId, "BLOCKED", `needs credentials token=${PLANTED}`, "ENGINE");
+};
 // //TR: V3-T1027: Ana Sayfa proje bazlı cockpit paneli GERÇEK buildServer'a karşı: yüklü (gerçek koşu/engel/onay), boş, hata (500), kullanılamıyor (404) ve tr dili.
 // Harcama için kayıtlı uç nokta yoktur; hücre her durumda dürüst UNAVAILABLE'dır ve sayı içermez.
 describe("V3-T1027: home per-project cockpit (runs, blockers, pending approvals, spend) against the real buildServer", () => {
   beforeEach(() => { tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-t1027-")); });
   afterEach(async () => { for (const a of apps.splice(0)) { try { await a.close(); } catch { /* kapanış */ } } try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* Windows */ } });
-  const PLANTED = ["ghp_", "0123456789abcdefghijklmnopqrstuvwxyzAB"].join("");
-  const cockpitSeed = (dataDir: string) => {
-    const store = new WorkOsStore(dataDir), tenantId = "tA", scope = {tenantId};
-    const a = store.createProject({tenantId, orgId: "org1", name: "Alpha", environmentId: "env-dev", createdBy: RECORDER});
-    store.createProject({tenantId, orgId: "org1", name: "Beta", environmentId: "env-dev", createdBy: RECORDER});
-    const mk = (title: string, riskLevel: "R1" | "R2" | "R3" = "R1") => store.createMission({tenantId, projectId: a.projectId, title, objective: "obj", acceptanceCriteria: ["ac"], riskLevel, createdBy: RECORDER}).missionId;
-    const walk = (id: string, p: string[]) => { for (const to of p) store.transitionMission(scope, id, to as any, "go", RECORDER); };
-    walk(mk("Needs sign-off", "R3"), ["PREFLIGHT"]);
-    const start = (title: string) => { const m = mk(title); walk(m, ["PREFLIGHT", "AUTHORIZED"]); const r = store.createRun({tenantId, missionId: m, executor: {implementer: `I-${title}`, reviewer: `R-${title}`}, createdBy: RECORDER}); return {runId: r.runId, leaseId: store.acquireRunLease(r.runId, 600_000, "ENGINE").leaseId as string}; };
-    const busy = start("busy"); store.transitionRun(busy.runId, busy.leaseId, "RUNNING", "go", "ENGINE");
-    const stuck = start("stuck"); store.transitionRun(stuck.runId, stuck.leaseId, "RUNNING", "go", "ENGINE");
-    store.transitionRun(stuck.runId, stuck.leaseId, "BLOCKED", `needs credentials token=${PLANTED}`, "ENGINE");
-  };
   const panelOf = (r: {root: N}) => all(r.root).find(n => n.id === "home-projects")!;
   const cellOf = (row: N, key: string) => all(row).find(n => n.dataset.pc === key)!;
   const rowsOf = (r: {root: N}) => all(panelOf(r)).filter(n => n.dataset.projectCockpit !== undefined);
@@ -282,7 +285,7 @@ describe("V3-T1027: home per-project cockpit (runs, blockers, pending approvals,
   it("loaded: per-project runs by status, blockers with redacted reasons, pending approvals and an honest spend gap match the server", { timeout: 120_000 }, async () => {
     const app = mkApp(cockpitSeed);
     const r = await renderAgainstServer(app, "home");
-    expect(r.paths).toEqual(["/v1/cockpit", "/v1/projects", "/v1/run-summaries"]);
+    expect(r.paths).toEqual(["/v1/attention", "/v1/cockpit", "/v1/projects", "/v1/run-summaries"]);
     expect(r.refused).toEqual([]); expect(r.thrown).toEqual([]); expect(failureMarks(r.root)).toEqual([]);
     const projects = (await serverJson(app, "/v1/projects")).projects as Array<{projectId: string; name: string}>;
     const runs = (await serverJson(app, "/v1/run-summaries?limit=100")).page.runs as Array<{projectId: string; status: string}>;
@@ -397,6 +400,171 @@ describe("V3-T1027: home per-project cockpit (runs, blockers, pending approvals,
     expect(core.buildProjectCockpit({projects: {state: "OFFLINE", items: []}, approvals: {state: "VERIFIED", items: []}, runs: m})).toEqual({state: "OFFLINE", rows: []});
     expect(core.buildProjectCockpit({projects: {state: "VERIFIED", items: [{projectId: "prj_a", name: "A"}]}, approvals: {state: "UNAVAILABLE", items: []}, runs: {state: "OFFLINE"}}).rows[0])
       .toMatchObject({runs: {state: "OFFLINE"}, blockers: {state: "OFFLINE"}, approvals: {state: "UNAVAILABLE"}});
+  });
+});
+
+// //TR: UASCO-T0019: Ana Sayfa bildirim akışı GERÇEK buildServer'a karşı: /v1/attention + /v1/run-summaries'ten türetilen bildirimler, türe göre gruplar, okunmamış rozeti,
+// renderer deposunda okundu bilgisi (depo yoksa dürüst not), gerçek hedef ekran + seçili görev ile derin bağlantı; boş, hata (500), kullanılamıyor (404) ve tr.
+describe("UASCO-T0019: home notification feed (unread/read, groups, deep links) against the real buildServer", () => {
+  beforeEach(() => { tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-t0019-")); });
+  afterEach(async () => { for (const a of apps.splice(0)) { try { await a.close(); } catch { /* kapanış */ } } try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* Windows */ } });
+  const notifySeed = (dataDir: string) => {
+    cockpitSeed(dataDir);
+    const store = new WorkOsStore(dataDir), tenantId = "tA", scope = {tenantId};
+    const [a] = store.listProjects(scope).filter(p => p.name === "Alpha");
+    const m = store.createMission({tenantId, projectId: a!.projectId, title: "halt", objective: "obj", acceptanceCriteria: ["ac"], riskLevel: "R1", createdBy: RECORDER}).missionId;
+    for (const to of ["PREFLIGHT", "AUTHORIZED"]) store.transitionMission(scope, m, to as any, "go", RECORDER);
+    const r = store.createRun({tenantId, missionId: m, executor: {implementer: "I-halt", reviewer: "R-halt"}, createdBy: RECORDER});
+    const leaseId = store.acquireRunLease(r.runId, 600_000, "ENGINE").leaseId as string;
+    store.transitionRun(r.runId, leaseId, "RUNNING", "go", "ENGINE"); store.transitionRun(r.runId, leaseId, "CANCELLING", "stop", "ENGINE"); store.transitionRun(r.runId, leaseId, "CANCELLED", `operator stop token=${PLANTED}`, "ENGINE");
+  };
+  const memStorage = () => { const m = new Map<string, string>(); return {m, getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => { m.set(k, v); }, removeItem: (k: string) => { m.delete(k); }}; };
+  const feedOf = (r: {root: N}) => all(r.root).find(n => n.id === "home-notify")!;
+  const stateOf = (r: {root: N}) => all(feedOf(r)).find(n => n.dataset.notifyState !== undefined)?.dataset.notifyState;
+  const itemsOf = (r: {root: N}) => all(feedOf(r)).filter(n => n.dataset.notifyId !== undefined);
+  const badgeOf = (r: {root: N}) => all(feedOf(r)).find(n => n.dataset.notifyUnread !== undefined)!;
+  const navSpy = () => { const calls: string[] = []; return {calls, navigate: (id: string) => { calls.push(id); }}; };
+
+  it("loaded: every notification is derived from the real /v1/attention + /v1/run-summaries, grouped by type with an unread badge; a run already in attention is not repeated", { timeout: 120_000 }, async () => {
+    const app = mkApp(notifySeed), st = memStorage();
+    const r = await renderAgainstServer(app, "home", TOKEN, "en", {storage: st});
+    expect(r.thrown).toEqual([]); expect(failureMarks(r.root)).toEqual([]);
+    const att = (await serverJson(app, "/v1/attention")).attention.items as Array<{kind: string; title: string; runId: string | null; missionId: string}>;
+    const runs = (await serverJson(app, "/v1/run-summaries?limit=100")).page.runs as Array<{runId: string; status: string; missionId: string}>;
+    const claimed = new Set(att.map(x => x.runId).filter(Boolean));
+    const runItems = runs.filter(x => ["SUCCEEDED", "FAILED", "BLOCKED", "QUARANTINED", "RECOVERY_FAILED", "CANCELLED"].includes(x.status) && !claimed.has(x.runId));
+    expect(att.length).toBeGreaterThan(0); expect(runItems.map(x => x.status)).toEqual(["CANCELLED"]);
+    expect(stateOf(r)).toBe("VERIFIED");
+    expect(itemsOf(r)).toHaveLength(att.length + runItems.length);
+    expect(badgeOf(r).dataset.notifyUnread).toBe(String(att.length + runItems.length));
+    expect(badgeOf(r).textContent).toBe(`${att.length + runItems.length} unread`);
+    const groupOfKind: Record<string, string> = {RUN_AWAITING_APPROVAL: "APPROVAL", MISSION_AUTHORIZATION_PENDING: "APPROVAL", RUN_NEEDS_DECISION: "DECISION", MISSION_FOUNDER_ATTENTION: "DECISION", MISSION_BLOCKED: "BLOCKED", TASK_BLOCKED: "BLOCKED"};
+    const want: Record<string, number> = {}; for (const x of att) want[groupOfKind[x.kind]!] = (want[groupOfKind[x.kind]!] ?? 0) + 1; if (runItems.length) want.RUN = runItems.length;
+    const groups = all(feedOf(r)).filter(n => n.dataset.notifyGroup !== undefined);
+    expect(Object.fromEntries(groups.map(g => [g.dataset.notifyGroup, all(g).filter(n => n.dataset.notifyId !== undefined).length]))).toEqual(want);
+    expect(groups.map(g => g.dataset.notifyGroup)).toEqual(["APPROVAL", "DECISION", "BLOCKED", "RUN", "DELIVERY"].filter(g => want[g]));
+    // deep-link targets: approvals/decisions -> inbox, run results -> work; each carries its real mission
+    for (const it of itemsOf(r)) {
+      const btn = all(it).find(n => n.tagName === "BUTTON")!, id = it.dataset.notifyId!;
+      const route = id.startsWith("att:MISSION_AUTHORIZATION_PENDING") || id.startsWith("att:RUN_AWAITING_APPROVAL") || id.startsWith("att:RUN_NEEDS_DECISION") || id.startsWith("att:MISSION_FOUNDER_ATTENTION") ? "inbox" : id.startsWith("run:") ? "work" : id.startsWith("dlv:") ? "delivery" : "work";
+      expect([id, btn.dataset.notifyRoute]).toEqual([id, route]);
+      const src = id.startsWith("run:") ? runs.find(x => id.startsWith(`run:${x.runId}:`)) : att.find(x => id.includes(`:${x.runId ?? x.missionId}:`));
+      expect([id, btn.dataset.notifyMission]).toEqual([id, src!.missionId]);
+    }
+    expect(feedOf(r).textContent).toContain("Run cancelled"); expect(feedOf(r).textContent).toContain("operator stop token=");
+    expect(feedOf(r).textContent).not.toContain(PLANTED);
+    expect(feedOf(r).textContent).toContain("Mission awaiting authorization"); expect(feedOf(r).textContent).toContain("Needs sign-off");
+  });
+
+  it("deep link + read state: opening an item stores it as read, selects its mission and navigates; re-render shows it read and the badge drops; mark-all clears the badge", { timeout: 120_000 }, async () => {
+    const app = mkApp(notifySeed), st = memStorage(), nav = navSpy(), forms = await load("forms.js");
+    forms.selection.missionId = null;
+    const r1 = await renderAgainstServer(app, "home", TOKEN, "en", {storage: st, navigate: nav.navigate});
+    const total = itemsOf(r1).length, first = itemsOf(r1).find(n => n.dataset.notifyId!.startsWith("run:"))!;
+    const btn = all(first).find(n => n.tagName === "BUTTON")!;
+    (btn as any).ls.get("click")[0]({});
+    expect(nav.calls).toEqual(["work"]);
+    expect(forms.selection.missionId).toBe(btn.dataset.notifyMission);
+    expect(JSON.parse(st.m.get("uasco.notify.read.v1")!)).toEqual([first.dataset.notifyId]);
+    const r2 = await renderAgainstServer(app, "home", TOKEN, "en", {storage: st, navigate: nav.navigate});
+    expect(badgeOf(r2).dataset.notifyUnread).toBe(String(total - 1));
+    const again = itemsOf(r2).find(n => n.dataset.notifyId === first.dataset.notifyId)!;
+    expect(again.dataset.notifyRead).toBe("1"); expect(again.textContent).toContain("Read · ");
+    expect(itemsOf(r2).at(-1)!.dataset.notifyId).toBe(first.dataset.notifyId); // read items sort after unread
+    const markAll = all(feedOf(r2)).find(n => n.dataset.notifyMarkAll !== undefined)!;
+    expect(markAll.attrs.has("disabled")).toBe(false);
+    (markAll as any).ls.get("click")[0]({});
+    const r3 = await renderAgainstServer(app, "home", TOKEN, "en", {storage: st});
+    expect([badgeOf(r3).dataset.notifyUnread, badgeOf(r3).textContent]).toEqual(["0", "0 unread"]);
+    expect(itemsOf(r3).every(n => n.dataset.notifyRead === "1")).toBe(true);
+    expect(all(feedOf(r3)).find(n => n.dataset.notifyMarkAll !== undefined)!.attrs.has("disabled")).toBe(true);
+    // an approval opens the inbox with its mission selected
+    const appr = itemsOf(r3).find(n => n.dataset.notifyId!.startsWith("att:MISSION_AUTHORIZATION_PENDING"))!;
+    const ab = all(appr).find(n => n.tagName === "BUTTON")!; const nav2 = navSpy();
+    const r4 = await renderAgainstServer(app, "home", TOKEN, "en", {storage: st, navigate: nav2.navigate});
+    (all(itemsOf(r4).find(n => n.dataset.notifyId === appr.dataset.notifyId)!).find(n => n.tagName === "BUTTON") as any).ls.get("click")[0]({});
+    expect(nav2.calls).toEqual(["inbox"]); expect(forms.selection.missionId).toBe(ab.dataset.notifyMission);
+  });
+
+  it("no storage / broken storage: honest note, everything unread, mark-all disabled, deep links still work", { timeout: 120_000 }, async () => {
+    const app = mkApp(notifySeed);
+    for (const storage of [null, {getItem: () => { throw new Error("SecurityError"); }, setItem: () => { throw new Error("SecurityError"); }}]) {
+      const nav = navSpy();
+      const r = await renderAgainstServer(app, "home", TOKEN, "en", {storage, navigate: nav.navigate});
+      expect(all(feedOf(r)).some(n => n.dataset.notifyNoStore === "1")).toBe(true);
+      expect(feedOf(r).textContent).toContain("Read state cannot be saved on this device; every notification shows as unread.");
+      expect(itemsOf(r).every(n => n.dataset.notifyRead === "0")).toBe(true);
+      expect(badgeOf(r).dataset.notifyUnread).toBe(String(itemsOf(r).length));
+      expect(all(feedOf(r)).find(n => n.dataset.notifyMarkAll !== undefined)!.attrs.has("disabled")).toBe(true);
+      (all(itemsOf(r)[0]!).find(n => n.tagName === "BUTTON") as any).ls.get("click")[0]({});
+      expect(nav.calls).toHaveLength(1);
+    }
+  });
+
+  it("empty: a real server with nothing to report shows an honest EMPTY feed with a 0 badge (not a failure)", { timeout: 120_000 }, async () => {
+    const app = mkApp(() => undefined);
+    const r = await renderAgainstServer(app, "home", TOKEN, "en", {storage: memStorage()});
+    expect(stateOf(r)).toBe("EMPTY"); expect(failureMarks(r.root)).toEqual([]);
+    expect(feedOf(r).textContent).toBe("Notifications0 unreadMark all as readNo notifications right now.");
+  });
+
+  for (const [code, state, text] of [[500, "ERROR", "Error"], [404, "UNAVAILABLE", "Unavailable (UNAVAILABLE)"]] as const) {
+    it(`attention ${code}: the feed is PARTIAL, says "Approvals and blockers: ${text}", and still lists the real run results`, { timeout: 120_000 }, async () => {
+      const app = mkApp(notifySeed);
+      app.addHook("onRequest", async (req, reply) => { if (req.url === "/v1/attention") return reply.code(code).send({error: "INJECTED"}); });
+      const r = await renderAgainstServer(app, "home", TOKEN, "en", {storage: memStorage()});
+      expect(stateOf(r)).toBe("PARTIAL");
+      expect(all(feedOf(r)).find(n => n.dataset.notifySource === "attention")?.textContent).toBe(`Approvals and blockers: ${text}`);
+      expect(all(feedOf(r)).find(n => n.dataset.notifySource === "attention")?.className).toBe(`note note-${state.toLowerCase()}`);
+      // with attention down nothing claims the runs, so every finished run is listed from the real server
+      const runs = (await serverJson(app, "/v1/run-summaries?limit=100")).page.runs as Array<{status: string}>;
+      expect(itemsOf(r).map(n => n.dataset.notifyId!.split(":")[0])).toEqual(runs.filter(x => ["CANCELLED", "FAILED", "BLOCKED"].includes(x.status)).map(() => "run"));
+      expect(all(feedOf(r)).some(n => n.dataset.notifyGroup === "APPROVAL")).toBe(false);
+    });
+  }
+
+  it("both sources fail: the feed says ERROR, the badge is unknown (—), never 0", { timeout: 120_000 }, async () => {
+    const app = mkApp(notifySeed);
+    app.addHook("onRequest", async (req, reply) => { if (req.url === "/v1/attention" || req.url.startsWith("/v1/run-summaries")) return reply.code(500).send({error: "INJECTED"}); });
+    const r = await renderAgainstServer(app, "home", TOKEN, "en", {storage: memStorage()});
+    expect(stateOf(r)).toBe("ERROR"); expect(itemsOf(r)).toEqual([]);
+    expect([badgeOf(r).dataset.notifyUnread, badgeOf(r).textContent]).toEqual(["", "—"]);
+    expect(all(feedOf(r)).find(n => n.dataset.notifyMarkAll !== undefined)!.attrs.has("disabled")).toBe(true);
+    expect(failureMarks(feedOf(r)).length).toBeGreaterThan(0);
+  });
+
+  it("tr: the feed is localized from the real server render", { timeout: 120_000 }, async () => {
+    const app = mkApp(notifySeed);
+    const r = await renderAgainstServer(app, "home", TOKEN, "tr", {storage: memStorage()});
+    expect(feedOf(r).textContent.startsWith(`Bildirimler${itemsOf(r).length} okunmamışTümünü okundu say`)).toBe(true);
+    expect(feedOf(r).textContent).toContain("Yetki bekleyen görev"); expect(feedOf(r).textContent).toContain("Koşu iptal edildi");
+  });
+
+  it("pure core: delivery stage links to delivery, dedupe by id and claimed run, order, corrupt/capped storage, unread helper", async () => {
+    const core = await load("notifications-core.js");
+    const run = (runId: string, status: string, delivery: Record<string, boolean> = {}, updatedAt = "2026-11-05T10:00:00.000Z") => ({runId, projectId: "prj_a", missionId: "msn_a", status, reason: null, updatedAt, delivery: {artifactPrepared: false, sourceAccepted: false, productVerified: false, ...delivery}});
+    const runs = {state: "VERIFIED", partial: false, runs: [run("r1", "SUCCEEDED", {artifactPrepared: true, sourceAccepted: true}), run("r2", "RUNNING", {}, "2026-11-05T11:00:00.000Z"), run("r3", "FAILED", {}, "2026-11-05T09:00:00.000Z")]};
+    const attention = {state: "VERIFIED", queue: {truncated: false, dropped: 0, items: [{kind: "RUN_NEEDS_DECISION", nextAction: "REVIEW_RUN", projectId: "prj_a", missionId: "msn_a", runId: "r3", taskId: null, title: "T", reason: null, since: "2026-11-05T12:00:00.000Z"}]}};
+    const f = core.buildNotifications({attention, runs, read: {available: true, ids: new Set(["dlv:r1:sourceAccepted"])}});
+    expect(f.items.map((n: any) => [n.id, n.route, n.read])).toEqual([
+      ["att:RUN_NEEDS_DECISION:r3:2026-11-05T12:00:00.000Z", "inbox", false], ["run:r1:SUCCEEDED:2026-11-05T10:00:00.000Z", "work", false], ["dlv:r1:sourceAccepted", "delivery", true]]);
+    expect([f.unread, f.state, f.groups]).toEqual([2, "VERIFIED", {DECISION: {count: 1, unread: 1}, RUN: {count: 1, unread: 1}, DELIVERY: {count: 1, unread: 0}}]);
+    expect(core.notificationsUnread(f)).toBe(2); expect(core.notificationsUnread(core.buildNotifications({attention: {state: "OFFLINE"}, runs: {state: "OFFLINE"}}))).toBe(null);
+    expect(core.buildNotifications({attention, runs: {...runs, partial: true}, read: {available: true, ids: new Set()}}).partial).toBe(true);
+    expect(core.buildNotifications({attention: {...attention, queue: {...attention.queue, truncated: true}}, runs, read: {available: true, ids: new Set()}}).partial).toBe(true);
+    const bad = {getItem: () => "{not json", setItem: () => undefined};
+    expect(core.loadReadIds(bad).available).toBe(false);
+    expect(core.loadReadIds({getItem: () => JSON.stringify({x: 1})})).toEqual({available: true, ids: new Set()});
+    expect([...core.loadReadIds({getItem: () => JSON.stringify(["ok:1", 5, "bad id with spaces", "ok:2"])}).ids]).toEqual(["ok:1", "ok:2"]);
+    const big = new Set(Array.from({length: 600}, (_, i) => `n:${i}`)); const m = new Map<string, string>();
+    expect(core.saveReadIds({setItem: (k: string, v: string) => { m.set(k, v); }}, big)).toBe(true);
+    const saved = JSON.parse(m.get(core.NOTIFY_READ_KEY)!); expect(saved).toHaveLength(500); expect(saved[0]).toBe("n:100");
+    expect(core.saveReadIds({setItem: () => { throw new Error("quota"); }}, big)).toBe(false);
+    expect(core.saveReadIds(null, big)).toBe(false);
+    // defence in depth: reasons are re-redacted client-side even if a server ever sent one raw
+    const leak = core.buildNotifications({attention: {state: "VERIFIED", queue: {truncated: false, dropped: 0, items: [{...attention.queue.items[0], runId: "r9", reason: `api_key=${PLANTED}`}]}},
+      runs: {state: "VERIFIED", partial: false, runs: [{...run("r8", "FAILED"), reason: `token=${PLANTED}`}]}, read: {available: true, ids: new Set()}});
+    expect(leak.items).toHaveLength(2); expect(JSON.stringify(leak.items)).not.toContain(PLANTED);
   });
 });
 }

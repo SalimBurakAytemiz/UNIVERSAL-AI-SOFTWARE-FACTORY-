@@ -11,12 +11,15 @@ export const SPEND_GAP=Object.freeze({state:"UNAVAILABLE",reason:"NO_SPEND_ENDPO
 const isObj=x=>x!==null&&typeof x==="object"&&!Array.isArray(x);
 const str=(x,max)=>typeof x==="string"&&x.length>0?x.slice(0,max):null;
 const LIVE=new Set(["VERIFIED","STALE"]);
+const ISO_RE=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
+const isoAt=x=>typeof x==="string"&&ISO_RE.test(x)&&Number.isFinite(Date.parse(x))?x:null;
 
 /** GET /v1/run-summaries gövdesini sıkı eşler: {page:{runs,nextCursor,total}}; bozuk gövde ERROR'dur (boş liste ile karışmaz). */
 export function mapRunSummaries(raw){
   const p=isObj(raw)?raw.page:null;
   if(!isObj(p)||!Array.isArray(p.runs)||!Number.isSafeInteger(p.total)||p.total<0||!(p.nextCursor===null||typeof p.nextCursor==="string"))return {state:"ERROR",runs:[],total:null,partial:false};
-  const runs=p.runs.filter(isObj).slice(0,RUN_SUMMARIES_LIMIT).map(r=>({runId:str(r.runId,80),projectId:str(r.projectId,80),status:RUN_STATUSES.has(r.status)?r.status:"UNKNOWN",reason:str(r.reason,200)})).filter(r=>r.runId&&r.projectId);
+  const runs=p.runs.filter(isObj).slice(0,RUN_SUMMARIES_LIMIT).map(r=>({runId:str(r.runId,80),projectId:str(r.projectId,80),missionId:str(r.missionId,80),status:RUN_STATUSES.has(r.status)?r.status:"UNKNOWN",reason:str(r.reason,200),updatedAt:isoAt(r.updatedAt),
+    delivery:isObj(r.delivery)?{artifactPrepared:r.delivery.artifactPrepared===true,sourceAccepted:r.delivery.sourceAccepted===true,productVerified:r.delivery.productVerified===true}:{artifactPrepared:false,sourceAccepted:false,productVerified:false}})).filter(r=>r.runId&&r.projectId);
   return {state:"VERIFIED",runs,total:p.total,partial:p.nextCursor!==null||p.total>runs.length};
 }
 
