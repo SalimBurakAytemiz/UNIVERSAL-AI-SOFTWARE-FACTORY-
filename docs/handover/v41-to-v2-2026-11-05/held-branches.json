@@ -351,6 +351,34 @@
       "task": "UASCO-T0124 (#396 N2-N4; Founder-tier)",
       "head": "fc3da07b1a7cc6411b2f50777109fd902c7a3252",
       "note": "FF on #396 head 7e7d0158; patch-id abe18b0e; checkArtifactDigest gains INVALID_INPUT"
+    },
+    {
+      "owner": "H",
+      "branch": "claude/builder-h-366-ready",
+      "task": "UASCO-T0012",
+      "head": "bc2e7f69",
+      "note": "FF of #366 head bfd994dd; test-only: desktop-shell register-line position + afterEach state reset; all 24 merge orders of the 4 PRs conflict-free; take as #366's new head when its turn comes"
+    },
+    {
+      "owner": "H",
+      "branch": "claude/builder-h-373-ready",
+      "task": "UASCO-T0013",
+      "head": "89057730",
+      "note": "FF of #373 head 3272b78a; test-only: desktop-shell register-line position + afterEach state reset; all 24 merge orders of the 4 PRs conflict-free; take as #373's new head when its turn comes"
+    },
+    {
+      "owner": "H",
+      "branch": "claude/builder-h-379-ready",
+      "task": "none (Founder-tier)",
+      "head": "aed2a0ba",
+      "note": "FF of #379 head 0e3d099c; test-only: desktop-shell register-line position + afterEach state reset; all 24 merge orders of the 4 PRs conflict-free; take as #379's new head when its turn comes"
+    },
+    {
+      "owner": "H",
+      "branch": "claude/builder-h-383-ready",
+      "task": "UASCO-T0017.A (Founder-tier)",
+      "head": "4eaba9c0",
+      "note": "FF of #383 head e58179c0; test-only: desktop-shell register-line position + afterEach state reset; all 24 merge orders of the 4 PRs conflict-free; take as #383's new head when its turn comes"
     }
   ]
 }

@@ -14,4 +14,6 @@ Data source: the builders' reports (I, E, F) plus the coordinator's gate checks.
 - **Builder C:** #396 (T0124, supervisor register), #403 (T0111, draft), #399 (T0083 SPLIT), #400 (T0081 BLOCKED), #367.
 
 ## Routine candidates (they will enter the integration window in turn)
-#360, #391, #378 (window) → #387, #393, #394, #395, #401, #402, #404, #405, #364 (T0005, ASSET_DONE, no deps).
+#360, #391, #378 (window) → #387, #393, #394, #395, #401, #402, #404, #405, #364 (T0005, ASSET_DONE, no deps), #366 (T0012) and #373 (T0013) via their H -ready heads.
+
+Note: #366/#373/#379/#383 conflict with each other in tests/v7-b4-desktop-shell.test.ts and leak test state; the fix is on the H `-ready` HELD branches (FF), to be pushed onto the PR branch when its turn comes.
