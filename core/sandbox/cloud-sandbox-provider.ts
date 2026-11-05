@@ -60,7 +60,8 @@ function readOutputSafely(wsReal: string, rel: string, maxBytes: number): Output
   if (lst.isSymbolicLink() || !lst.isFile()) return {ok: false, reason: "OUTPUT_INVALID"};
   try { if (!within(wsReal, fs.realpathSync(p))) return {ok: false, reason: "OUTPUT_INVALID"}; } catch { return {ok: false, reason: "OUTPUT_INVALID"}; }   // ara dizin symlink kaçışı
   let fd: number;
-  try { fd = fs.openSync(p, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0)); } catch { return {ok: false, reason: "OUTPUT_INVALID"}; }
+  // N-2: O_NOFOLLOW reddi (ELOOP) bir symlink'tir = OUTPUT_INVALID; diğer açılış hataları (EACCES/EIO/EMFILE...) G/Ç hatasıdır = WORKER_IO_ERROR.
+  try { fd = fs.openSync(p, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0)); } catch (e) { return {ok: false, reason: (e as NodeJS.ErrnoException)?.code === "ELOOP" ? "OUTPUT_INVALID" : "WORKER_IO_ERROR"}; }
   try {
     const st = fs.fstatSync(fd);
     if (!st.isFile() || st.dev !== lst.dev || st.ino !== lst.ino) return {ok: false, reason: "OUTPUT_INVALID"};   // lstat ile open arasında takas
@@ -71,7 +72,7 @@ function readOutputSafely(wsReal: string, rel: string, maxBytes: number): Output
     while (off < st.size) { const n = fs.readSync(fd, buf, off, st.size - off, off); if (n <= 0) break; off += n; }
     if (off !== st.size || fs.readSync(fd, Buffer.alloc(1), 0, 1, st.size) !== 0) return {ok: false, reason: "OUTPUT_CHANGED"};
     return {ok: true, content: buf};
-  } catch { return {ok: false, reason: "OUTPUT_INVALID"}; }
+  } catch { return {ok: false, reason: "WORKER_IO_ERROR"}; }   // fstat/read hatası (EISDIR/EIO...) = G/Ç hatası
   finally { try { fs.closeSync(fd); } catch { /* yut */ } }
 }
 

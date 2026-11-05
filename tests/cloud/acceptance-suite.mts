@@ -507,6 +507,14 @@ export function registerCloudAcceptanceSuite(): void {
       expect(q.get(id)!.status).toBe("FAILED");
     });
 
+    it("N-2: an unreadable OUTPUT (EACCES) -> FAILED WORKER_IO_ERROR, nothing stored (SKIPPED when running as root: root bypasses file permissions)", async ctx => {
+      if (process.platform === "win32" || (process.getuid?.() ?? 1) === 0) { ctx.skip(`EACCES cannot be produced ${process.platform === "win32" ? "with POSIX modes on win32" : "as root (uid 0 bypasses permission bits)"}`); return; }
+      const q = mkQueue(), store = mkStore(); const id = submitJob(q, pkgJob());
+      const sb = scripted(cwd => { wfile(cwd, "out/a.txt", "a"); wfile(cwd, "out/locked.txt", "secret"); fs.chmodSync(path.join(cwd, "out", "locked.txt"), 0o000); });
+      expect(await worker(q, store, sb, ["out/a.txt", "out/locked.txt"]).runOnce()).toMatchObject({state: "DONE", jobId: id, status: "FAILED", result: {message: "WORKER_IO_ERROR"}});
+      expect(store.backend.keys()).toEqual([]);
+    });
+
     it("N-3: output count / per-output / total byte caps (bound to the CLOUD-T0008 and T0001 limits) -> FAILED before any put, nothing stored", async () => {
       const q = mkQueue(), store = mkStore();
       expect(MAX_OUTPUTS).toBe(256);
