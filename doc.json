@@ -1,6 +1,6 @@
 {
   "schema": "uasco.factory-v2.shared-registry/1",
-  "phase": "section:probe/p1/B-hello",
+  "phase": "section:probe/p1/lease/supervisor--probe",
   "sections": {
     "probe/p1/lease/supervisor--probe": {
       "taskId": "supervisor--probe",
@@ -9,10 +9,11 @@
       "sessionId": "session_015dYwb3x1qKC6btpBicgWQP",
       "headSha": null,
       "epoch": 1,
-      "token": "session_015dYwb3x1qKC6btpBicgWQP:1:aab0040e-55c9-4765-8b8e-d7cb5a6b64d2",
+      "token": "released:session_015dYwb3x1qKC6btpBicgWQP:1:aab0040e-55c9-4765-8b8e-d7cb5a6b64d2",
       "acquiredAt": 1793878597562,
       "heartbeatAt": 1793878597562,
-      "expiresAt": 1793878717562
+      "expiresAt": 0,
+      "released": true
     },
     "probe/p1/A-hello": {
       "session": "session_015dYwb3x1qKC6btpBicgWQP",
@@ -28,9 +29,9 @@
     }
   },
   "revs": {
-    "probe/p1/lease/supervisor--probe": 1,
+    "probe/p1/lease/supervisor--probe": 2,
     "probe/p1/A-hello": 1,
     "probe/p1/B-hello": 1
   },
-  "seq": 3
+  "seq": 4
 }
