@@ -18,7 +18,8 @@ import {fakeSecurity} from "../core/workos/security-tools.js";
 import {FakeExecutors} from "../core/workos/executors.js";
 import {ProjectStudio, StudioError} from "../core/workos/project-studio.js";
 import {canonicalPath, pathOverlapsDataDir, managedRepoCanonical} from "../core/workos/path-guard.js";
-import {killProcessTree, pidAlive, treeDescendants} from "../core/workos/devrun.js";
+import {awaitVictimsDead, killProcessTree, pidAlive, treeDescendants} from "../core/workos/devrun.js";
+import type {ProcInfo} from "../core/workos/devrun.js";
 // Ölü olması beklenen süreçler pid + başlangıç zamanı ile denetlenir (Windows pid yeniden kullanımı: çıplak pidAlive yeni ve ilgisiz bir süreci canlı sayabilir); kimlik süreç canlıyken, durdurmadan önce yakalanır.
 import {captureIdentity, sameProcessAlive} from "./support/pid-identity.js";
 import type {Project} from "../core/workos/types.js";
@@ -355,4 +356,41 @@ describe("PS1A-C2-F2: a crashed dev process leaves no live descendants", () => {
     expect(await sameProcessAlive(gp3Id)).toBe(false);
     expect(await sameProcessAlive(gp4Id)).toBe(false);
   }, T);
+});
+
+// //TR: UASCO-T0042 PS1A-GRANDCHILD: reapTree'nin SIGKILL sonrası ölüm doğrulaması (awaitVictimsDead) sanal saat + sahte süreç tablosuyla deterministik sınanır: süre içinde yavaş ölüm 0/VERIFIED; ilgisiz bir sürecin yeniden kullandığı pid hayatta kalan SAYILMAZ; bütçeyi aşan gerçek kurban 1 ve VERIFIED değil; kimliği denetlenemeyen canlı pid asla ölü sayılmaz (null). Her durumun pozitif kontrolü vardır; bekleme sınırlıdır.
+describe("UASCO-T0042 PS1A-GRANDCHILD: post-SIGKILL death is verified by identity within a bounded budget (awaitVictimsDead)", () => {
+  const V: ProcInfo = {pid: 4242, ppid: 1, created: 1_000_000};
+  // Sanal dünya: now() sanal saattir, sleep onu ilerletir; alive/list zamana göre senaryoyu oynatır. Sonsuz döngü koruması: en çok 1000 uyku.
+  const world = (alive: (t: number) => boolean, table: (t: number) => ProcInfo[] | null) => {
+    let t = 0, sleeps = 0;
+    return {deps: {now: () => t, sleep: async (ms: number) => { if (++sleeps > 1000) throw new Error("UNBOUNDED_WAIT"); t += ms; }, alive: () => alive(t), list: async () => table(t)}, at: () => t, sleeps: () => sleeps};
+  };
+  it("a slow death within the budget -> survivors 0, VERIFIED (positive control: the same victim alive past the budget is 1, not VERIFIED)", async () => {
+    const slow = world(t => t < 1500, t => t < 1500 ? [V] : []);
+    expect(await awaitVictimsDead([V], slow.deps)).toEqual({survivors: 0, verified: true});
+    expect(slow.at()).toBeGreaterThanOrEqual(1500); expect(slow.at()).toBeLessThan(3000);   // it waited for the death, not for the whole budget
+    const never = world(() => true, () => [V]);
+    expect(await awaitVictimsDead([V], never.deps)).toEqual({survivors: 1, verified: false});
+  });
+  it("a pid reused by an unrelated process is not a survivor (positive control: the same pid with the victim's creation time IS one)", async () => {
+    const reused = world(() => true, () => [{pid: V.pid, ppid: 77, created: V.created + 5_000}]);
+    expect(await awaitVictimsDead([V], reused.deps)).toEqual({survivors: 0, verified: true});
+    const same = world(() => true, () => [{pid: V.pid, ppid: 77, created: V.created + 2}]);   // within the 2 ms identity tolerance: still the victim
+    expect(await awaitVictimsDead([V], same.deps)).toEqual({survivors: 1, verified: false});
+  });
+  it("a real survivor past the budget -> survivors 1, verification not VERIFIED, and the wait stays bounded (positive control: death just before the deadline is 0)", async () => {
+    const w = world(() => true, () => [V, {pid: 9, ppid: 1, created: 5}]);
+    expect(await awaitVictimsDead([V, {pid: 4243, ppid: 1, created: 1_000_001}], {...w.deps, alive: pid => pid === V.pid})).toEqual({survivors: 1, verified: false});
+    expect(w.at()).toBeGreaterThanOrEqual(3000); expect(w.at()).toBeLessThanOrEqual(3100); expect(w.sleeps()).toBeLessThanOrEqual(31);
+    const late = world(t => t < 2900, t => t < 2900 ? [V] : []);
+    expect(await awaitVictimsDead([V], late.deps)).toEqual({survivors: 0, verified: true});
+  });
+  it("a live pid whose identity cannot be checked is never counted dead: survivors null, not VERIFIED (positive control: once the table shows a different owner it is 0)", async () => {
+    expect(await awaitVictimsDead([V], world(() => true, () => null).deps)).toEqual({survivors: null, verified: false});        // no process table
+    expect(await awaitVictimsDead([V], world(() => true, () => [{pid: 1, ppid: 0, created: 1}]).deps)).toEqual({survivors: null, verified: false});   // pid alive but missing from the table
+    const later = world(() => true, t => t < 1000 ? [{pid: 1, ppid: 0, created: 1}] : [{pid: V.pid, ppid: 5, created: V.created + 9_000}]);
+    expect(await awaitVictimsDead([V], later.deps)).toEqual({survivors: 0, verified: true});
+    expect(await awaitVictimsDead([], world(() => true, () => null).deps)).toEqual({survivors: 0, verified: true});   // nothing to kill: verified at once
+  });
 });
