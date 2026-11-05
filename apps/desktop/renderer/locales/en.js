@@ -3578,5 +3578,8 @@ export default {
   "predev.notEnabled":"Pre-dev decisions are not enabled in this build yet: the desktop shell does not allow these requests. Nothing was sent and nothing was changed.",
   "predev.invalid":"The server answered, but the answer could not be read, so no result is claimed. Reload to see the recorded state.",
   "form.field.evidenceRefs":"Evidence references",
-  "form.field.artifact":"Artifact"
+  "form.field.artifact":"Artifact",
+  "studio.wizard.env":"Environment id",
+  "studio.wizard.envHint":"Required by the server. Prefilled with \"local\", the same default the idea intake uses; letters, digits, dot, underscore and hyphen, up to 100.",
+  "studio.err.envRequired":"Enter an environment id (for example local); the server does not create a project without one."
 };
