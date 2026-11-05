@@ -8,6 +8,7 @@ import type {WorkOsStoreOptions} from "../core/workos/store.js";
 import {FakeExecutors} from "../core/workos/executors.js";
 import {HDR, T, api, drive, journalFile, missionOf, okScript, rmTmp, runOf, runner, setup, startRun, tmpRoot} from "./support/relfx.js";
 import {registerV3T1016QuotaResumableSuite} from "./support/v3-t1016-quota-resumable.cases.js";
+import {registerUascoT0049ResumeSuite} from "./support/uasco-t0049-resume.cases.js";
 // //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
 vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
@@ -226,3 +227,4 @@ describe("REL-FX-4 provider quota / rate limit", () => {
   });
 });
 registerV3T1016QuotaResumableSuite();
+registerUascoT0049ResumeSuite();
