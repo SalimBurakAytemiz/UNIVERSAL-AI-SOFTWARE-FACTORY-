@@ -4,16 +4,15 @@
   "sections": {
     "probe/p1/lease/supervisor--probe": {
       "taskId": "supervisor--probe",
-      "environment": "cloud:A",
+      "environment": "cloud:B",
       "workerId": "supervisor",
-      "sessionId": "session_015dYwb3x1qKC6btpBicgWQP",
+      "sessionId": "session_015dYwb4CNXL5vnwbrRc42fx",
       "headSha": null,
-      "epoch": 1,
-      "token": "released:session_015dYwb3x1qKC6btpBicgWQP:1:aab0040e-55c9-4765-8b8e-d7cb5a6b64d2",
-      "acquiredAt": 1793878597562,
-      "heartbeatAt": 1793878597562,
-      "expiresAt": 0,
-      "released": true
+      "epoch": 2,
+      "token": "session_015dYwb4CNXL5vnwbrRc42fx:2:5b3c47df-26cc-4c39-a666-2cc055c28e1b",
+      "acquiredAt": 1793878620197,
+      "heartbeatAt": 1793878620197,
+      "expiresAt": 1793879220197
     },
     "probe/p1/A-hello": {
       "session": "session_015dYwb3x1qKC6btpBicgWQP",
@@ -29,9 +28,9 @@
     }
   },
   "revs": {
-    "probe/p1/lease/supervisor--probe": 2,
+    "probe/p1/lease/supervisor--probe": 3,
     "probe/p1/A-hello": 1,
     "probe/p1/B-hello": 1
   },
-  "seq": 4
+  "seq": 5
 }
