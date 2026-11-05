@@ -27,7 +27,7 @@
   /* Grid boyutları (px/16 rem). */
   --nav-w:15rem;--feed-w:22rem;--topbar-h:7.875rem;--contextbar-h:3.5rem;--inspector-w:21.25rem;--page-pad:1.5rem;--card-min:12.5rem;--card-gap:.75rem;--main-min:30rem;
   /* Kontrol boyutları (dokunma/tıklama hedefi >= 24 CSS px, WCAG 2.5.8). */
-  --topbar-h-stacked:10.5rem;--topbar-h-narrow:14rem;--control-h:2.25rem;--control-h-sm:1.75rem;--control-pad-x:.8rem;
+  --topbar-h-stacked:10.5rem;--topbar-h-narrow:14rem;--topbar-h-compact:16.5rem;--control-h:2.25rem;--control-h-sm:1.75rem;--control-pad-x:.8rem;
   /* Yarıçap ölçeği 8/12/16/20 px + hap. */
   --radius-sm:.5rem;--radius-md:.75rem;--radius-lg:1rem;--radius-xl:1.25rem;--radius-pill:99px;--radius:var(--radius-md);
   /* //TR: İnce ışık kenarı (hairline bevel) ve katmanlı yükseklik; nötr ışık/gölge, palet token'ı değildir. */
@@ -69,7 +69,7 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 /* Düzen */
 .app{display:grid;min-height:100vh;grid-template-columns:var(--nav-w) minmax(0,1fr) var(--feed-w);grid-template-rows:auto auto 1fr auto;
   grid-template-areas:"top top top" "ban ban ban" "nav main feed" "strip strip strip"}
-.topbar{grid-area:top;position:sticky;top:0;z-index:30;display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"brand search actions" "ctx ctx ctx";align-items:center;gap:.6rem .9rem;padding:.6rem var(--space-4);background:var(--veil-top);border-bottom:1px solid var(--border);box-shadow:var(--elev-2)}
+.topbar{grid-area:top;position:sticky;top:0;z-index:30;display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"brand search actions" "ctx ctx ctx";align-items:center;gap:.6rem .9rem;padding:.6rem var(--space-4);background:var(--veil-top);border-bottom:1px solid var(--border);box-shadow:var(--elev-2);min-height:var(--topbar-h);align-content:center}
 .stop-banner{grid-area:ban;display:flex;flex-wrap:wrap;gap:var(--space-3);align-items:center;justify-content:center;padding:.6rem var(--space-4);background:var(--danger-bg);color:var(--on-danger);border-bottom:2px solid var(--on-danger)}
 /* //TR: Kenar gezinme kendi kaydırma alanıdır: üst çubuğun hemen altında yapışkan, yüksekliği görünür alanla sınırlı; sayfa ile birlikte kaymaz ve üst çubuğun altına girmez. --topbar-h her kırılımda ölçülen üst çubuk yüksekliğini (biraz fazlasıyla) taşır; kabuk çalışma anında documentElement üzerinde ölçülen değerle geçersiz kılabilir. */
 .nav{grid-area:nav;position:sticky;top:var(--topbar-h);z-index:20;align-self:start;height:calc(100vh - var(--topbar-h));max-height:calc(100vh - var(--topbar-h));overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--border-ui) transparent;padding:var(--space-4) var(--space-3);border-right:1px solid var(--border);background:var(--veil-nav);min-width:0}
@@ -223,6 +223,9 @@ pre.code,.code{margin:var(--space-1) 0;padding:var(--space-2) var(--space-3);max
 
 /* Kartlar, tablo, harita */
 .cards{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(min(16rem,100%),1fr));gap:.8rem}
+/* //TR: Liste benzeri kart grupları için değiştiriciler (örn. onay kuyruğu): --wide daha geniş sütun (>= 26rem), --list tek sütun tam genişlik. Yalnız sınıf eklenerek benimsenir. */
+.cards.cards--wide{grid-template-columns:repeat(auto-fill,minmax(min(26rem,100%),1fr))}
+.cards.cards--list{grid-template-columns:minmax(0,1fr)}
 .card{display:grid;gap:var(--space-2);align-content:start;padding:.95rem 1rem;border:1px solid var(--border);border-radius:var(--radius-md);background:linear-gradient(170deg,var(--surface),var(--bg-2) 86%);box-shadow:var(--elev-1);min-width:0}
 .card h3{margin:0;font-size:var(--fs-h3);font-weight:700}.card-active{border-color:var(--glow);box-shadow:var(--glow-md)}
 .table-wrap{overflow-x:auto}.table{width:100%;border-collapse:collapse}.table th,.table td{text-align:left;padding:var(--space-2) .6rem;border-bottom:1px solid var(--border)}.table th{color:var(--muted);font-size:.78rem}
@@ -348,7 +351,14 @@ pre.code,.code{margin:var(--space-1) 0;padding:var(--space-2) var(--space-3);max
   .nav-link{justify-content:center;padding:.6rem .4rem}
   .nav-link .nav-count{position:absolute;top:.1rem;right:.1rem;min-width:1.1rem;height:1.1rem;font-size:.62rem}
 }
+/* //TR: 1021-1100 px bandı: bağlam satırı sarmaz (ölçülen EN/TR içerik sığar; aşırı uzun veri olursa satır içinde kayar, çubuğu büyütmez), böylece üst çubuk her zaman 2 satırdır ve --topbar-h tam eşleşir: nav üstünde boşluk ve çakışma yoktur. Üst çubuğun min-height:var(--topbar-h) değeri kalan farkı çubuğun içinde tutar (nav ile çubuk arasında asla boşluk kalmaz). */
+@media (min-width:1021px) and (max-width:1100px){
+  :root{--topbar-h:7.875rem}
+  .ctx{flex-wrap:nowrap;overflow-x:auto}
+}
 @media (max-width:760px){
+  /* //TR: <= 760 px bağlam satırı 3 satıra sarabilir (ölçülen EN 641 px: 215.8 px); dar token kullanılır. */
+  :root{--topbar-h:var(--topbar-h-narrow)}
   .brand-text{display:none}
   .actions{flex-wrap:wrap;justify-content:flex-end}
   .main{padding:var(--space-4) var(--space-3)}
@@ -378,6 +388,7 @@ pre.code,.code{margin:var(--space-1) 0;padding:var(--space-2) var(--space-3);max
   .btn,.field input,.field select,.field textarea{border-width:2px}
 }
 /* //TR: Çok dar pencere (<= 480 CSS px): tek sütun, tam genişlik eylem düğmeleri; ACİL DURDUR görünür kalır. */
+@media (max-width:520px){:root{--topbar-h:var(--topbar-h-compact)}}
 @media (max-width:480px){
   .main{padding:var(--space-3) var(--space-2)}
   .panel{padding:var(--space-4) var(--space-3)}

@@ -316,6 +316,24 @@ describe("FD 2026-11-05 design system (black-red-white tokens, contrast, layout,
       expect(media("max-width:640px")).toContain("--topbar-h:var(--topbar-h-narrow)");
       expect(rem(tokens["--topbar-h-narrow"])).toBeGreaterThan(rem(tokens["--topbar-h"]));
     });
+    it("no gap above the sticky nav: the top bar is at least --topbar-h tall, and in the 1021-1100px band the context row stays on one line so the 2-row token is exact", () => {
+      expect(/\n\.topbar\{([^}]*)\}/.exec(css)?.[1] ?? "").toMatch(/min-height:var\(--topbar-h\);align-content:center/);
+      const band = /@media \(min-width:1021px\) and \(max-width:1100px\)\{([\s\S]*?)\n\}/.exec(css)?.[1] ?? "";
+      expect(band).toContain(":root{--topbar-h:7.875rem}");
+      expect(band).toContain(".ctx{flex-wrap:nowrap;overflow-x:auto}");
+      // //TR: Bant kuralı genel <=1100 kuralından SONRA gelir (kaskadda kazanır).
+      expect(css.indexOf("@media (min-width:1021px) and (max-width:1100px)")).toBeGreaterThan(css.indexOf("@media (max-width:1100px){"));
+      expect(media("max-width:760px")).toContain(":root{--topbar-h:var(--topbar-h-narrow)}");
+      expect(css).toMatch(/@media \(max-width:520px\)\{:root\{--topbar-h:var\(--topbar-h-compact\)\}\}/);
+      const rem = (n: string) => Number(/^([\d.]+)rem$/.exec(tokens[n])![1]);
+      expect(rem("--topbar-h-compact")).toBeGreaterThan(rem("--topbar-h-narrow"));
+      expect(rem("--topbar-h-narrow")).toBeGreaterThan(rem("--topbar-h-stacked"));
+      expect(rem("--topbar-h-stacked")).toBeGreaterThan(rem("--topbar-h"));
+    });
+    it("list-like card groups can opt into wider (.cards--wide) or single-column (.cards--list) layouts without page overflow", () => {
+      expect(css).toMatch(/\n\.cards\.cards--wide\{grid-template-columns:repeat\(auto-fill,minmax\(min\(26rem,100%\),1fr\)\)\}/);
+      expect(css).toMatch(/\n\.cards\.cards--list\{grid-template-columns:minmax\(0,1fr\)\}/);
+    });
     it("at <=1100px the search keeps its own column and the context bar wraps instead of scrolling horizontally", () => {
       const m = media("max-width:1100px");
       expect(m).toMatch(/\.topbar\{grid-template-columns:auto minmax\(12rem,1fr\) auto\}/);
