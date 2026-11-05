@@ -444,3 +444,47 @@ describe("FD 2026-11-05 design system (black-red-white tokens, contrast, layout,
     });
   });
 });
+
+// //TR: FD 2026-11-05: Control Tower SVG'si (render-svg.js) eski lacivert/camgöbeği paleti sunum öznitelikleriyle yazar; styles.css her yayılan renk değerini (fill/stroke/stop-color) bir FD token'ına eşlemelidir. Test gerçek SVG'yi koşan, durdurulmuş, katalogsuz ve bilinmeyen durumlarda üretir; eşlenmemiş tek renk kalırsa (yeni bir hex eklenirse) kırılır. Yüksek kontrast için sistem rengi geri dönüşü de zorlanır.
+describe("FD 2026-11-05: Control Tower SVG colours are re-themed onto design tokens", () => {
+  it("every fill/stroke/stop-color the campus SVG emits has a token override, and forced-colors maps the map to system colours", async () => {
+    const {buildCampusModel} = await import("../apps/desktop/renderer/control-tower/model.js");
+    const {renderCampusSvg} = await import("../apps/desktop/renderer/control-tower/render-svg.js");
+    const raw = JSON.parse(fs.readFileSync(path.resolve(__dirname, "..", "registries", "role-definitions.json"), "utf8"));
+    const roles: Record<string, number> = {};
+    for (const r of raw.roles) roles[r.guildId] = (roles[r.guildId] ?? 0) + 1;
+    const catalog = {clusters: raw.clusters.map((c: any) => ({clusterId: c.clusterId, name: c.name})), guilds: raw.guilds.map((g: any) => ({guildId: g.guildId, name: g.name, clusterId: g.clusterId})), roles};
+    const cockpit = (active: boolean) => ({generatedAt: "2026-10-14T00:00:00.000Z", globalStop: {active, reason: active ? "test" : null}});
+    const run = (runId: string, status: string) => ({runId, missionId: "msn_1", status, roleId: null, guildId: "G01"});
+    const variants = [
+      buildCampusModel({cockpit: cockpit(false), catalog, runs: [run("r1", "RUNNING")]} as any),
+      buildCampusModel({cockpit: cockpit(true), catalog, runs: []} as any),
+      buildCampusModel({cockpit: cockpit(false), catalog: null, runs: []} as any),
+      buildCampusModel({cockpit: null, catalog, runs: []} as any)
+    ];
+    const used = new Set<string>();
+    for (const m of variants) for (const o of [{reducedMotion: true}, {t: 1}]) {
+      const svg = renderCampusSvg(m, o as any);
+      for (const x of svg.matchAll(/\b(fill|stroke|stop-color)="(#[0-9a-fA-F]{3,8})"/g)) used.add(`${x[1]}|${x[2].toLowerCase()}`);
+    }
+    expect(used.size).toBeGreaterThan(8);
+    for (const u of used) {
+      const [attr, hex] = u.split("|");
+      const m = new RegExp(`\\n\\.ct-map svg \\[${attr}="${hex}"\\]\\{${attr}:var\\((--[a-z0-9-]+)\\)\\}`).exec(css);
+      expect(m, `${attr}="${hex}" has no token override`).not.toBeNull();
+    }
+    const fc = /@media \(forced-colors:active\)\{\n  \.ct-map \.building\[data-selected="true"\] rect\{stroke:Highlight\}([\s\S]*?)\n\}/.exec(css)?.[1] ?? "";
+    for (const r of [".ct-map svg stop[stop-color]{stop-color:Canvas}", ".ct-map svg text[fill]{fill:CanvasText}", ".ct-map svg rect[stroke],.ct-map svg circle[stroke],.ct-map svg line[stroke]{stroke:CanvasText}", '.ct-map svg rect[fill]:not([fill="none"]),.ct-map svg circle[fill]:not([fill="none"]){fill:Canvas}']) expect(fc, r).toContain(r);
+    // //TR: Yüksek kontrast kuralları token eşlemelerinden daha özgül olmalıdır (aksi halde metin Canvas üzerinde beyaz kalır): sınıf+öznitelik (0,2,1) < sınıf+tip+öznitelik (0,2,2).
+    const spec = (sel: string) => { const a = (sel.match(/\[[^\]]*\]|\.[a-z-]+|:not\(\[[^\]]*\]\)/g) ?? []).length, t = (sel.replace(/\[[^\]]*\]|:not\([^)]*\)/g, "").match(/(^|[\s>])[a-z]+/g) ?? []).length; return a * 100 + t; };
+    expect(spec('.ct-map svg text[fill]')).toBeGreaterThan(spec('.ct-map svg [fill="#22d3ee"]'));
+    expect(spec('.ct-map svg rect[stroke]')).toBeGreaterThan(spec('.ct-map svg [stroke="#22d3ee"]'));
+  });
+  it("re-themed SVG text pairs meet AA on the plates they sit on", () => {
+    // //TR: Metin: --text/--muted/--emphasis/--ok/--danger; plakalar: --surface (bina), --surface-2 (bölge), --bg (durdurma kutusu).
+    for (const fg of ["text", "muted", "emphasis", "ok", "danger"]) for (const bg of ["surface", "surface-2", "bg"]) {
+      const f = fg === "emphasis" ? "#FFFFFF" : tok(fg);
+      expect(ratio(f, tok(bg)), `${fg} on ${bg}`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+});

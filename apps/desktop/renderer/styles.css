@@ -474,9 +474,38 @@ pre.code,.code{margin:var(--space-1) 0;padding:var(--space-2) var(--space-3);max
 .ct-detail{padding:var(--space-3);border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-2)}
 .ct-list .ct-note,.ct-list .ct-global,.ct-list .ct-notice{margin:.4rem 0}
 .ct-list button[aria-pressed="true"]{font-weight:700;text-decoration-thickness:2px}
+/* //TR: Control Tower SVG (control-tower/render-svg.js, Builder I) eski lacivert/camgöbeği paleti sunum öznitelikleriyle (fill/stroke/stop-color) yazar; CSS sunum özniteliklerini ezdiği için burada her eski değer FD 2026-11-05 tokenına eşlenir (JS değişmeden). Durum anlamı korunur: canlı=ok, durdurulmuş=danger, doğrulanmamış=border-ui + kesik çizgi. Eksiksizliği testle zorlanır. */
+.ct-map svg [fill="#0a1a36"]{fill:var(--surface-2)}
+.ct-map svg [fill="#0d2748"]{fill:var(--surface)}
+.ct-map svg [fill="#22d3ee"]{fill:var(--emphasis)}
+.ct-map svg [fill="#e6f7ff"]{fill:var(--text)}
+.ct-map svg [fill="#7fa6c4"]{fill:var(--muted)}
+.ct-map svg [fill="#34d399"]{fill:var(--ok)}
+.ct-map svg [fill="#64748b"]{fill:var(--muted)}
+.ct-map svg [fill="#ff4d6d"]{fill:var(--danger)}
+.ct-map svg [fill="#1a0610"]{fill:var(--bg)}
+.ct-map svg [stroke="#22d3ee"]{stroke:var(--accent-2)}
+.ct-map svg [stroke="#34d399"]{stroke:var(--ok)}
+.ct-map svg [stroke="#64748b"]{stroke:var(--border-ui)}
+.ct-map svg [stroke="#ff4d6d"]{stroke:var(--danger)}
+.ct-map svg [stop-color="#07142c"]{stop-color:var(--surface)}
+.ct-map svg [stop-color="#030814"]{stop-color:var(--bg)}
+.ct-map svg [stop-color="#7be9ff"]{stop-color:var(--border)}
+.ct-map svg [stop-color="#1a6fb4"]{stop-color:var(--surface-2)}
+.ct-map svg [stop-color="#0a2a55"]{stop-color:var(--bg-2)}
 @media (forced-colors:active){
   .ct-map .building[data-selected="true"] rect{stroke:Highlight}
   .ct-map .building:focus-visible{outline:3px solid Highlight}
+  /* //TR: Yüksek kontrastta harita sistem renklerine düşer: zemin/plakalar Canvas, metin/çizgiler CanvasText, canlı ve durdurulmuş durumlar Highlight. */
+  /* //TR: Seçiciler yukarıdaki token eşlemelerinden (sınıf+öznitelik) daha özgüldür (sınıf+tip+öznitelik[+:not]) ki yüksek kontrastta kazansınlar. */
+  .ct-map svg stop[stop-color]{stop-color:Canvas}
+  .ct-map svg rect[fill]:not([fill="none"]),.ct-map svg circle[fill]:not([fill="none"]){fill:Canvas}
+  .ct-map svg rect[stroke],.ct-map svg circle[stroke],.ct-map svg line[stroke]{stroke:CanvasText}
+  .ct-map svg rect[stroke],.ct-map svg circle[stroke]{stroke-opacity:1}
+  .ct-map svg text[fill]{fill:CanvasText}
+  .ct-map svg line[stroke][stroke="#34d399"],.ct-map svg rect[stroke][stroke="#ff4d6d"],.ct-map svg circle[stroke][stroke="#34d399"]{stroke:Highlight}
+  .ct-map svg text[fill][fill="#34d399"],.ct-map svg text[fill][fill="#ff4d6d"],.ct-map svg circle[fill][fill="#34d399"]{fill:Highlight}
+  .ct-map svg .stopped-overlay>rect:first-child{fill-opacity:0}
 }
 /* //TR: UX WP3: Company OS (CRM/Finans/Hukuk) görünümü. Durum ve kayıt rozetleri ikon+metin taşır (renk tek başına anlam değildir); sayısal sütunlar sağa hizalı; para birimleri ayrı satırlarda listelenir; glow yalnız mevcut KPI sınıflarından gelir. */
 .company-toolbar{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:var(--space-3) var(--space-4)}
