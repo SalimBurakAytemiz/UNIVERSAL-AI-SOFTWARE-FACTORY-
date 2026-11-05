@@ -20,6 +20,8 @@ import {createLocalGitIntegration} from "./merge-git.mjs";
 import {createGitStore} from "./ownership.mjs";
 import {createRemoteDocStore, gitRunner} from "./ref-doc-store.mjs";
 import {AuthorityBridge, snapshotV41, buildManifest, reconcile} from "./bridge.mjs";
+import {createSharedRegistry} from "./shared-registry.mjs";
+import {Ownership} from "./ownership.mjs";
 import {execFileSync} from "node:child_process";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -94,7 +96,10 @@ const api = p => JSON.parse(execFileSync("curl", ["-sSf", "-H", "Accept: applica
 const listPrs = state => { const out = []; for (let page = 1; page <= 10; page++) { const r = api(`pulls?state=${state}&per_page=100&page=${page}`); out.push(...r); if (r.length < 100) break; } return out; };
 async function bridge() {
   const sub = process.argv[3];
-  const docs = createRemoteDocStore({runGit: gitRunner(ROOT)});
+  const raw = createRemoteDocStore({runGit: gitRunner(ROOT)});
+  // --registry-branch uasco/<name>: the authorized shared registry (one allowed branch); otherwise refs/uasco/* (needs ref push rights).
+  const rb = arg("registry-branch");
+  const docs = rb ? createSharedRegistry({docStore: raw, ref: `refs/heads/${rb}`}) : raw;
   const b = () => new AuthorityBridge({docStore: docs, domain: DOMAIN});
   const actor = process.env.CLAUDE_SESSION_ID ?? arg("actor", "unknown");
   if (sub === "snapshot") {
@@ -122,9 +127,54 @@ async function bridge() {
     process.exit(c.ok && race && !race.ok && del ? 0 : 2);
   } else if (sub === "prepare") console.log(JSON.stringify(b().prepare({manifest: readJson(arg("manifest")), gates: readJson(arg("gates")), actor}).doc, null, 2));
   else if (sub === "ack") console.log(JSON.stringify(b().drainAck({manifestDigest: readJson(arg("manifest")).digest, drain: readJson(arg("drain")), actor}).doc, null, 2));
-  else if (sub === "commit") console.log(JSON.stringify(b().commit({manifest: readJson(arg("manifest")), currentOpenPrs: listPrs("open"), v2Session: arg("session"), actor}), null, 2));
+  else if (sub === "commit") {
+    const g = a => execFileSync("git", a, {cwd: ROOT, maxBuffer: 64 << 20}).toString("utf8");
+    g(["fetch", "-q", "origin", BASE]);
+    const currentBaseSha = g(["rev-parse", `origin/${BASE}`]).trim();
+    const now = snapshotV41({baseRef: BASE, baseSha: currentBaseSha, autonomyState: JSON.parse(g(["show", `${currentBaseSha}:docs/planning/autonomy/STATE.json`])), taskIndex: {tasks: []}});
+    console.log(JSON.stringify(b().commit({manifest: readJson(arg("manifest")), currentOpenPrs: listPrs("open"), currentBaseSha, currentStateDigest: now.stateDigest, v2Session: arg("session"), actor}), null, 2));
+  }
   else if (sub === "rollback") console.log(JSON.stringify(b().rollback({reason: arg("reason", "manual"), actor}).doc, null, 2));
   else { console.error("bridge snapshot|status|probe-store|prepare|ack|commit|rollback"); process.exit(1); }
+}
+
+/**
+ * Two-session verification of the shared registry on an allowed branch (each session started with outcome_branch=<branch>).
+ * Role A and role B run in different Claude Cloud sessions and coordinate only through the registry itself.
+ */
+async function registry() {
+  const sub = process.argv[3], role = arg("role"), branch = arg("branch", "uasco/registry-probe"), session = arg("session");
+  if (sub !== "verify" || !["A", "B"].includes(role) || !/^session_[A-Za-z0-9]{8,}$/.test(session ?? "")) { console.error("registry verify --role A|B --session <session id> [--branch uasco/x]"); process.exit(1); }
+  if (!/^uasco\/[A-Za-z0-9._-]{1,80}$/.test(branch)) { console.error("branch must be uasco/<name>"); process.exit(1); }
+  const ref = `refs/heads/${branch}`;
+  const docs = createRemoteDocStore({runGit: gitRunner(ROOT)});
+  const reg = createSharedRegistry({docStore: docs, ref});
+  const leases = reg.leaseStore("probe");
+  const ev = []; const log = (step, data = {}) => { const e = {at: new Date().toISOString(), role, session, step, ...data}; ev.push(e); console.log(JSON.stringify(e)); };
+  const head = () => { const r = spawnSync("git", ["ls-remote", "origin", ref], {cwd: ROOT, encoding: "utf8"}); return r.stdout.split(/\s+/)[0] || null; };
+  const until = async (pred, ms = 900_000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { const v = pred(); if (v) return v; await new Promise(r => setTimeout(r, 5_000)); } return null; };
+  const own = new Ownership(leases, {leaseId: "supervisor--LIVE-probe", environment: `cloud:${role}`, workerId: "supervisor", sessionId: session, ttlMs: role === "A" ? 120_000 : 600_000});
+  if (role === "A") {
+    const g = own.acquire(); const original = own.record ? {...own.record} : null; log("A_ACQUIRE_SUPERVISOR_LEASE", {granted: g.granted, epoch: own.epoch, registryHead: head()});
+    const w = reg.cas("probe/A-hello", null, {session, token: own.token, at: Date.now()}); log("A_WRITE_SECTION", {ok: w.ok, registryHead: head()});
+    const stale = docs.cas(ref, "0".repeat(40), {schema: "uasco.factory-v2.shared-registry/1", sections: {}}); log("A_STALE_WHOLE_DOC_CAS_REFUSED_BY_SERVER", {refused: !stale.ok});
+    const b = await until(() => reg.read("probe/B-hello").doc); log("A_SAW_B", {b});
+    log("A_RELEASE", {released: own.release(), registryHead: head()});
+    const ba = await until(() => reg.read("probe/B-acquired").doc); log("A_SAW_B_ACQUIRE", {ba});
+    const stale2 = new Ownership(leases, {leaseId: "supervisor--LIVE-probe", environment: "cloud:A", workerId: "supervisor", sessionId: session, ttlMs: 120_000}); stale2.record = original; // A's real former grant
+    let fenced = false; try { stale2.fence(); } catch (e) { fenced = e.code === "OWNERSHIP_LOST"; }
+    log("A_OLD_OWNER_FENCED", {fenced, renewAfterLoss: stale2.renew()});
+    reg.cas("probe/A-done", null, {session, at: Date.now()});
+  } else {
+    const a = await until(() => reg.read("probe/A-hello").doc); log("B_SAW_A", {a, registryHead: head()});
+    const g = own.acquire(); log("B_ACQUIRE_WHILE_A_HOLDS", {granted: g.granted, holderSession: g.holder?.sessionId ?? null});
+    reg.cas("probe/B-hello", null, {session, sawHolder: g.holder?.sessionId ?? null, grantedWhileHeld: g.granted, at: Date.now()});
+    const got = await until(() => own.acquire().granted || null); log("B_ACQUIRE_AFTER_RELEASE", {granted: !!got, epoch: own.epoch, registryHead: head()});
+    reg.cas("probe/B-acquired", null, {session, epoch: own.epoch, at: Date.now()});
+    await until(() => reg.read("probe/A-done").doc, 300_000);
+    log("B_RELEASE", {released: own.release(), sections: reg.sections(), registryHead: head()});
+  }
+  if (arg("out")) fs.writeFileSync(arg("out"), JSON.stringify(ev, null, 2) + "\n");
 }
 
 const cmd = process.argv[2];
@@ -132,4 +182,5 @@ if (cmd === "plan") plan();
 else if (cmd === "evidence") await evidence();
 else if (cmd === "intents") intents();
 else if (cmd === "bridge") await bridge();
+else if (cmd === "registry") await registry();
 else { console.error("usage: cli.mjs plan|evidence|intents"); process.exit(1); }

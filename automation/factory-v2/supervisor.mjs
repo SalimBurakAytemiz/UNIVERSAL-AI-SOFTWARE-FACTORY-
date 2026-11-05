@@ -120,10 +120,14 @@ export class FactorySupervisor {
     this.fence();
     if (kind === "BUILD") this.journal.transition(a.taskId, "CLAIMED", {fence: this.fenceRef, data: {slotId: a.slotId, leaseToken: lease.token}});
     const t = this.journal.get(a.taskId);
-    const handle = this.o.executor.start({kind, role: "BUILDER", slotId: a.slotId, taskId: a.taskId, attempt: t.attempt, paths: a.paths, findings: t.data.findings ?? [], fromSha: kind === "REMEDIATE" ? t.data.headSha : undefined});
+    // The supervisor, never the worker, decides the commit a build starts from; every later diff/scope/risk check starts there.
+    const dispatchBase = kind === "REMEDIATE" ? t.data.headSha : this.dispatchBase();
+    if (!/^[0-9a-f]{40}$/.test(dispatchBase ?? "")) throw new Error("DISPATCH_BASE_UNKNOWN");
+    const handle = this.o.executor.start({kind, role: "BUILDER", slotId: a.slotId, taskId: a.taskId, attempt: t.attempt, paths: a.paths, findings: t.data.findings ?? [], fromSha: dispatchBase});
     this.taskLeases.set(a.taskId, lease);
     this.handles.set(handle.jobId, {taskId: a.taskId, kind, slotId: a.slotId, jobId: handle.jobId, startedAt: this.o.now(), worker: handle.worker});
-    if (kind === "BUILD") this.journal.transition(a.taskId, "BUILDING", {fence: this.fenceRef, data: {jobId: handle.jobId, worker: handle.worker ?? null}});
+    if (kind === "BUILD") this.journal.transition(a.taskId, "BUILDING", {fence: this.fenceRef, data: {jobId: handle.jobId, worker: handle.worker ?? null, dispatchBase}});
+    else this.journal.annotate(a.taskId, "NOTE", {remediationBase: dispatchBase}, this.fenceRef, `remediate-base:${handle.jobId}`);
     handle.done.then(r => this.onBuildDone(handle.jobId, r), e => this.onBuildDone(handle.jobId, {ok: false, error: e}));
     return true;
   }
@@ -151,7 +155,14 @@ export class FactorySupervisor {
     }
     const t = this.journal.get(h.taskId);
     if (r.ok) {
-      this.journal.transition(h.taskId, "BUILT", {fence: this.fenceRef, key: `built:${jobId}`, data: {headSha: r.headSha, baseSha: h.kind === "REMEDIATE" ? t.data.baseSha : r.baseSha, branch: r.branch, changedPaths: this.diff(h.kind === "REMEDIATE" ? t.data.baseSha : r.baseSha, r.headSha), builderIdentity: h.slotId, verdicts: []}});
+      const startedFrom = h.kind === "REMEDIATE" ? t.data.remediationBase : t.data.dispatchBase; // recorded by the supervisor at dispatch
+      const base = h.kind === "REMEDIATE" ? t.data.baseSha : t.data.dispatchBase;
+      const refuse = reason => { this.journal.transition(h.taskId, "BLOCKED", {fence: this.fenceRef, key: `built-refused:${jobId}`, data: {reason, reportedBase: r.baseSha ?? null, headSha: r.headSha ?? null}}); lease?.release(); this.taskLeases.delete(h.taskId); };
+      if (r.baseSha && r.baseSha !== startedFrom) return refuse("WORKER_BASE_MISMATCH");
+      if (!this.isAncestor(startedFrom, r.headSha)) return refuse("HEAD_NOT_DESCENDANT_OF_DISPATCH_BASE");
+      const changed = this.diff(base, r.headSha);
+      if (!changed) return refuse("DIFF_UNVERIFIABLE");
+      this.journal.transition(h.taskId, "BUILT", {fence: this.fenceRef, key: `built:${jobId}`, data: {headSha: r.headSha, baseSha: base, branch: r.branch, changedPaths: changed, builderIdentity: h.slotId, verdicts: []}});
     } else {
       const n = nextRetry(r.error, t.attempt + 1);
       if (n.action === "RETRY") this.journal.transition(h.taskId, "RETRY_WAIT", {fence: this.fenceRef, bumpAttempt: true, data: {retryAt: this.o.now() + n.delayMs, lastError: String(r.error?.message ?? r.error)}});
@@ -221,6 +232,7 @@ export class FactorySupervisor {
     const recheck = async (c, base) => prepareCandidate({...(await this.facts(this.journal.get(c.taskId))), canonicalSha: base});
     const out = await writeMerges(cands, {ownership: writer, git: this.o.git, recheck, beforeWrite: () => { this.fence(); if (!this.authorityOk()) throw Object.assign(new Error("AUTHORITY_REVOKED"), {code: "OWNERSHIP_LOST", detail: "AUTHORITY_REVOKED"}); }});
     if (out.held) { for (const t of ready) this.journal.transition(t.taskId, "PREPARING", {fence: this.fenceRef, data: {mergeWait: ["WRITER_HELD"]}}); return; }
+    for (const t of ready) if (!out.results.some(r => r.taskId === t.taskId)) this.journal.transition(t.taskId, "PREPARING", {fence: this.fenceRef, data: {mergeWait: ["WRITER_BATCH_ABORTED"]}});
     for (const r of out.results) {
       if (r.status === "MERGED") { this.journal.transition(r.taskId, "MERGED", {fence: this.fenceRef, data: {resultSha: r.resultSha}}); }
       else this.journal.transition(r.taskId, "PREPARING", {fence: this.fenceRef, data: {mergeWait: r.reasons ?? [r.status]}});
@@ -229,6 +241,18 @@ export class FactorySupervisor {
       const ok = this.o.postMergeVerify ? await this.o.postMergeVerify(t) : false;
       if (ok) this.journal.transition(t.taskId, "VERIFIED", {fence: this.fenceRef, data: {postMerge: "PASS"}});
     }
+  }
+  dispatchBase() { return this.o.dispatchBase ? this.o.dispatchBase() : this.o.git?.readCanonical?.() ?? null; }
+  isAncestor(a, b) {
+    if (typeof this.o.isAncestor === "function") return this.o.isAncestor(a, b);
+    if (!this.o.repoDir || !/^[0-9a-f]{40}$/.test(a ?? "") || !/^[0-9a-f]{40}$/.test(b ?? "")) return false;
+    return spawnSync("git", ["merge-base", "--is-ancestor", a, b], {cwd: this.o.repoDir}).status === 0;
+  }
+  /** Diff for merge checks: from merge-base(canonical, head) so everything the merge would bring in is checked, whatever base was recorded. */
+  mergeDiff(canonicalSha, headSha) {
+    if (!this.o.repoDir || !/^[0-9a-f]{40}$/.test(canonicalSha ?? "") || !/^[0-9a-f]{40}$/.test(headSha ?? "")) return null;
+    const mb = spawnSync("git", ["merge-base", canonicalSha, headSha], {cwd: this.o.repoDir, encoding: "utf8"});
+    return mb.status === 0 ? this.diff(mb.stdout.trim(), headSha) : null;
   }
   /** Changed paths from git itself (never from worker output). null = cannot be verified. */
   diff(baseSha, headSha) {
@@ -240,7 +264,8 @@ export class FactorySupervisor {
   /** Merge facts with supervisor-owned fields overriding the provider: trusted diff, required focuses, assigned identity. */
   async facts(t) {
     const f = await this.o.mergeFacts(t);
-    return {...f, candidate: {...f.candidate, taskId: t.taskId, headSha: t.data.headSha, baseSha: t.data.baseSha, changedPaths: this.diff(t.data.baseSha, t.data.headSha), diffSource: "GIT_DIFF",
+    const merged = this.o.diffPaths ? this.diff(t.data.baseSha, t.data.headSha) : this.mergeDiff(f.canonicalSha, t.data.headSha);
+    return {...f, candidate: {...f.candidate, taskId: t.taskId, headSha: t.data.headSha, baseSha: t.data.baseSha, changedPaths: merged, diffSource: "GIT_DIFF",
       required: t.data.required, builderIdentity: t.data.builderIdentity ?? `V41:${t.data.pr ?? "unknown"}`, priorBlockers: t.data.priorBlockers ?? []}, verdicts: t.data.verdicts ?? []};
   }
   // ---- observability ---------------------------------------------------------------------------------------

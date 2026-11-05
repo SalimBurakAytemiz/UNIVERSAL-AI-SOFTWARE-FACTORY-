@@ -59,7 +59,7 @@ export function reviewAuthorizes({verdicts = [], required = [], baseSha, headSha
   if (!clean.length) reasons.push("NO_CLEAN_REVIEW_AT_HEAD");
   for (const f of required ?? []) if (!clean.some(v => v.focus === f)) reasons.push(`MISSING_FOCUS:${f}`);
   const distinct = new Set(clean.map(v => v.reviewerIdentity));
-  if (required.length >= 2 && distinct.size < 2) reasons.push("DUAL_REVIEW_NOT_INDEPENDENT");
+  if ((required?.length ?? 0) >= 2 && distinct.size < 2) reasons.push("DUAL_REVIEW_NOT_INDEPENDENT");
   const resolved = new Set(clean.flatMap(v => v.resolves ?? []));
   for (const b of priorBlockers) if (!resolved.has(b.id)) reasons.push(`UNRESOLVED_PRIOR_BLOCKER:${b.id}`);
   return {authorized: reasons.length === 0, reasons: [...new Set(reasons)]};

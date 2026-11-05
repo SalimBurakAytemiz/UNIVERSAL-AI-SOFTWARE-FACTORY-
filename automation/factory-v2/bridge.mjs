@@ -89,13 +89,17 @@ export function reconcile(manifest, drain = {acks: {}}) {
 }
 
 /** Live re-check before commit: every adopted PR must still be open at the manifest's head/base SHA. */
-export function manifestFresh(manifest, currentOpenPrs) {
+export function manifestFresh(manifest, currentOpenPrs, {currentBaseSha, currentStateDigest} = {}) {
   const stale = [];
+  // The canonical branch and V4.1's STATE.json must be exactly what the manifest captured (no dispatch/merge after the snapshot).
+  if (currentBaseSha !== manifest.snapshot.baseSha) stale.push("CANONICAL_BASE_MOVED");
+  if (currentStateDigest !== manifest.snapshot.stateDigest) stale.push("STATE_CHANGED");
   const cur = new Map(currentOpenPrs.map(p => [p.number, p]));
   for (const pr of manifest.snapshot.openPrs) {
     const c = cur.get(pr.pr);
     if (!c) stale.push(`PR_${pr.pr}_NO_LONGER_OPEN`);
     else if (c.head?.sha !== pr.headSha) stale.push(`PR_${pr.pr}_HEAD_MOVED`);
+    else if ((c.base?.ref ?? null) !== (pr.baseRef ?? null)) stale.push(`PR_${pr.pr}_BASE_CHANGED`);
   }
   for (const c of currentOpenPrs) if (!manifest.snapshot.openPrs.some(p => p.pr === c.number)) stale.push(`PR_${c.number}_OPENED_AFTER_MANIFEST`);
   return {fresh: stale.length === 0, stale};
@@ -142,7 +146,8 @@ export class AuthorityBridge {
     const mref = manifestRef(this.domain, manifest.version);
     const m = this.docStore.cas(mref, null, manifest);
     if (!m.ok && digest(m.current?.doc ?? {}) !== digest(manifest)) throw new BridgeError("MANIFEST_VERSION_TAKEN", mref);
-    return this.write(cur, this.step(cur, "HANDOVER_PREPARED", {authority: "V4.1", manifest: {ref: mref, version: manifest.version, digest: manifest.digest}, gates, candidate: manifest.toSession, drain: null}, actor));
+    if (!manifest.fromSession || manifest.fromSession === manifest.toSession) throw new BridgeError("MANIFEST_SESSIONS_INVALID");
+    return this.write(cur, this.step(cur, "HANDOVER_PREPARED", {authority: "V4.1", manifest: {ref: mref, version: manifest.version, digest: manifest.digest}, gates, candidate: manifest.toSession, outgoing: manifest.fromSession, drain: null}, actor));
   }
   /** V4.1 owner acknowledges: no new dispatch, in-flight dispositions given, manifest digest equals its own state. */
   drainAck({manifestDigest, drain, actor}) {
@@ -150,16 +155,18 @@ export class AuthorityBridge {
     if (cur.doc.phase !== "HANDOVER_PREPARED") throw new BridgeError("PHASE_INVALID", `${cur.doc.phase}->V41_DRAINED`);
     if (cur.doc.manifest?.digest !== manifestDigest) throw new BridgeError("DRAIN_MANIFEST_MISMATCH");
     if (!Array.isArray(drain?.builderSessionsStopped)) throw new BridgeError("DRAIN_ACK_INCOMPLETE", "builderSessionsStopped");
+    // Only the outgoing V4.1 owner named in the manifest may acknowledge; the incoming candidate can never ack its own handover.
+    if (actor !== cur.doc.outgoing || actor === cur.doc.candidate) throw new BridgeError("DRAIN_ACK_ACTOR_INVALID", actor);
     return this.write(cur, this.step(cur, "V41_DRAINED", {drain: {...drain, by: actor}}, actor));
   }
   /** Deterministic commit: reconciliation must have no UNRESOLVED and the manifest must still be fresh. Epoch strictly increases. */
-  commit({manifest, currentOpenPrs, v2Session, actor}) {
+  commit({manifest, currentOpenPrs, currentBaseSha, currentStateDigest, v2Session, actor}) {
     const cur = this.read();
     if (cur.doc.phase !== "V41_DRAINED") throw new BridgeError("PHASE_INVALID", `${cur.doc.phase}->V2_AUTHORITATIVE`);
     verifyManifest(manifest);
     if (manifest.digest !== cur.doc.manifest?.digest) throw new BridgeError("COMMIT_MANIFEST_MISMATCH");
     if (cur.doc.candidate !== v2Session) throw new BridgeError("COMMIT_CANDIDATE_MISMATCH");
-    const fr = manifestFresh(manifest, currentOpenPrs);
+    const fr = manifestFresh(manifest, currentOpenPrs, {currentBaseSha, currentStateDigest});
     if (!fr.fresh) throw new BridgeError("MANIFEST_STALE", fr.stale.join(","));
     const rec = reconcile(manifest, cur.doc.drain);
     if (rec.unresolved.length) throw new BridgeError("RECONCILE_UNRESOLVED", rec.unresolved.map(u => `${u.task}:${u.reason}`).join(","));

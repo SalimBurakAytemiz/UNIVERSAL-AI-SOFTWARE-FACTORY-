@@ -321,3 +321,30 @@ describe("factory-v2 reviewer blockers (review of 2c94f31)", () => {
 });
 import {spawnSync as _sp} from "node:child_process";
 const spawnSyncGit = (cwd, a) => _sp("git", a, {cwd}).status;
+
+describe("factory-v2 reviewer blockers (review of 3213d6a8)", () => {
+  it("B2': a worker cannot choose the diff base — a hidden protected commit below a reported base is refused and never merged", {timeout: 120_000}, async () => {
+    process.env.FACTORY_HOLD_MS = "200";
+    const backlog = tasks(2);
+    process.env.FACTORY_FAIL = JSON.stringify({[backlog[0].id]: {sneak: true}});
+    const env = makeRepo();
+    const {sup} = makeSupervisor(env, {backlog});
+    sup.start();
+    await runUntil(sup, () => sup.journal.get(backlog[0].id)?.state === "BLOCKED" && sup.journal.get(backlog[1].id)?.state === "VERIFIED", {timeoutMs: 60_000});
+    expect(sup.journal.get(backlog[0].id)).toMatchObject({state: "BLOCKED", data: {reason: "WORKER_BASE_MISMATCH"}});
+    expect(sup.journal.get(backlog[1].id).state).toBe("VERIFIED");
+    expect(spawnSyncGit(env.repo, ["cat-file", "-e", "integ:config/evil.json"])).not.toBe(0);
+    delete process.env.FACTORY_FAIL;
+  });
+  it("merge checks diff from merge-base(canonical, head), so a wrong recorded base cannot hide changes", () => {
+    const env = makeRepo();
+    const {sup} = makeSupervisor(env, {backlog: []});
+    const wt = path.join(env.root, "m"); git(env.repo, "worktree", "add", "-q", "--detach", wt, env.base);
+    fs.mkdirSync(path.join(wt, "config")); fs.writeFileSync(path.join(wt, "config/x.json"), "{}\n"); git(wt, "add", "."); git(wt, "-c", "user.name=t", "-c", "user.email=t@invalid", "commit", "-q", "-m", "a");
+    const mid = git(wt, "rev-parse", "HEAD");
+    fs.mkdirSync(path.join(wt, "work")); fs.writeFileSync(path.join(wt, "work/y.txt"), "y\n"); git(wt, "add", "."); git(wt, "-c", "user.name=t", "-c", "user.email=t@invalid", "commit", "-q", "-m", "b");
+    const head = git(wt, "rev-parse", "HEAD");
+    expect(sup.diff(mid, head)).toEqual(["work/y.txt"]);
+    expect(sup.mergeDiff(env.base, head).sort()).toEqual(["config/x.json", "work/y.txt"]);
+  });
+});

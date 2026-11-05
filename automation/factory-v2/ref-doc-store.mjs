@@ -23,7 +23,9 @@ function makeDocStore(ops, kind) {
     kind, read,
     /** CAS: expectedSha null = must not exist. Returns {ok, sha, current}. */
     cas(ref, expectedSha, doc) {
-      checkRef(ref); const n = commitOf(doc, expectedSha);
+      checkRef(ref);
+      if (expectedSha && ops.git(["cat-file", "-e", `${expectedSha}^{commit}`]).status !== 0) return {ok: false, sha: null, current: read(ref)}; // unknown expectation is never a write
+      const n = commitOf(doc, expectedSha);
       if (ops.put(ref, n, expectedSha)) return {ok: true, sha: n};
       return {ok: false, sha: null, current: read(ref)};
     },

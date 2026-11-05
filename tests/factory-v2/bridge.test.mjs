@@ -73,26 +73,26 @@ describe("bridge: deterministic V4.1 -> V2 transition", () => {
     const bB = new AuthorityBridge({docStore: w.docs(w.envB), domain: DOMAIN}); // V2 side
     const m = manifestOf(w);
     expect(() => bB.prepare({manifest: m, gates: {...GATES, founderAuthorization: undefined}, actor: "v2"})).toThrow(/ACCEPTANCE_GATES_MISSING:founderAuthorization/);
-    expect(() => bB.commit({manifest: m, currentOpenPrs: openPrs(w), v2Session: "session_v2supervisor", actor: "v2"})).toThrow(/PHASE_INVALID/);
+    expect(() => bB.commit({manifest: m, currentOpenPrs: openPrs(w), currentBaseSha: m.snapshot.baseSha, currentStateDigest: m.snapshot.stateDigest, v2Session: "session_v2supervisor", actor: "v2"})).toThrow(/PHASE_INVALID/);
     const stale = bA.read(); // A observes before B prepares
     bB.prepare({manifest: m, gates: GATES, actor: "v2"});
     expect(() => bA.write(stale, {...stale.doc, phase: "V41_AUTHORITATIVE"})).toThrow(/AUTHORITY_CAS_LOST/);
     expect(bA.v41MayDispatch()).toBe(false); // V4.1 stops dispatching new work once prepared
     expect(remoteRefs(w)).toEqual([authorityRef(DOMAIN), `refs/uasco/handover/${DOMAIN}/v1`].sort());
     // V4.1 acks drain, but V41-T0003 (in flight, no PR) is not dispositioned -> unresolved
-    bA.drainAck({manifestDigest: m.digest, drain: {acks: {}, builderSessionsStopped: []}, actor: "v41"});
-    expect(() => bB.commit({manifest: m, currentOpenPrs: openPrs(w), v2Session: "session_v2supervisor", actor: "v2"})).toThrow(/RECONCILE_UNRESOLVED:V41-T0003:IN_FLIGHT_NOT_DRAINED/);
+    bA.drainAck({manifestDigest: m.digest, drain: {acks: {}, builderSessionsStopped: []}, actor: "session_v41supervisor"});
+    expect(() => bB.commit({manifest: m, currentOpenPrs: openPrs(w), currentBaseSha: m.snapshot.baseSha, currentStateDigest: m.snapshot.stateDigest, v2Session: "session_v2supervisor", actor: "v2"})).toThrow(/RECONCILE_UNRESOLVED:V41-T0003:IN_FLIGHT_NOT_DRAINED/);
     // rollback and redo with a proper drain ack
-    bA.rollback({reason: "drain incomplete", actor: "v41"});
+    bA.rollback({reason: "drain incomplete", actor: "session_v41supervisor"});
     expect(bA.read().doc).toMatchObject({phase: "V41_AUTHORITATIVE", epoch: 1});
     const m2 = manifestOf(w, 2);
     bB.prepare({manifest: m2, gates: GATES, actor: "v2"});
-    bA.drainAck({manifestDigest: m2.digest, drain: {acks: {"V41-T0003": "FENCED"}, builderSessionsStopped: ["session_v41builderC"], implementerSessions: {"V41-T0002": ["session_v41builderB"]}}, actor: "v41"});
+    bA.drainAck({manifestDigest: m2.digest, drain: {acks: {"V41-T0003": "FENCED"}, builderSessionsStopped: ["session_v41builderC"], implementerSessions: {"V41-T0002": ["session_v41builderB"]}}, actor: "session_v41supervisor"});
     // PR head moved after the manifest -> stale, refused
     const moved = openPrs(w).map(p => p.number === 41 ? {...p, head: {...p.head, sha: "f".repeat(40)}} : p);
-    expect(() => bB.commit({manifest: m2, currentOpenPrs: moved, v2Session: "session_v2supervisor", actor: "v2"})).toThrow(/MANIFEST_STALE:PR_41_HEAD_MOVED/);
-    expect(() => bB.commit({manifest: m2, currentOpenPrs: openPrs(w), v2Session: "session_intruder", actor: "x"})).toThrow(/COMMIT_CANDIDATE_MISMATCH/);
-    const c = bB.commit({manifest: m2, currentOpenPrs: openPrs(w), v2Session: "session_v2supervisor", actor: "v2"});
+    expect(() => bB.commit({manifest: m2, currentOpenPrs: moved, currentBaseSha: m2.snapshot.baseSha, currentStateDigest: m2.snapshot.stateDigest, v2Session: "session_v2supervisor", actor: "v2"})).toThrow(/MANIFEST_STALE:PR_41_HEAD_MOVED/);
+    expect(() => bB.commit({manifest: m2, currentOpenPrs: openPrs(w), currentBaseSha: m2.snapshot.baseSha, currentStateDigest: m2.snapshot.stateDigest, v2Session: "session_intruder", actor: "x"})).toThrow(/COMMIT_CANDIDATE_MISMATCH/);
+    const c = bB.commit({manifest: m2, currentOpenPrs: openPrs(w), currentBaseSha: m2.snapshot.baseSha, currentStateDigest: m2.snapshot.stateDigest, v2Session: "session_v2supervisor", actor: "v2"});
     expect(c.doc).toMatchObject({authority: "V2", phase: "V2_AUTHORITATIVE", epoch: 2, holder: "session_v2supervisor"});
     expect(bA.v41MayDispatch()).toBe(false);
     expect(bA.assertV2("session_v2supervisor", 2)).toBe(2);
@@ -132,6 +132,58 @@ describe("bridge: deterministic V4.1 -> V2 transition", () => {
     expect(j2.get("V41-T0002").state).toBe("BLOCKED");
     expect(j2.get("V41-T0003")).toMatchObject({state: "QUEUED", attempt: 1});
     expect(j2.get("V41-T0009").state).toBe("BLOCKED");
+  });
+});
+
+describe("bridge: guards that survived mutation in review of 3213d6a8 (M3, M5, M6, M8) and drain/freshness hardening", () => {
+  const setup = () => {
+    const w = world();
+    const bA = new AuthorityBridge({docStore: w.docs(w.envA), domain: DOMAIN}), bB = new AuthorityBridge({docStore: w.docs(w.envB), domain: DOMAIN});
+    const m = manifestOf(w);
+    bB.prepare({manifest: m, gates: GATES, actor: "v2"});
+    return {w, bA, bB, m};
+  };
+  const fresh = (m, w) => ({currentOpenPrs: openPrs(w), currentBaseSha: m.snapshot.baseSha, currentStateDigest: m.snapshot.stateDigest});
+  it("M3: drain ack must carry the prepared manifest digest; only the outgoing owner may ack", {timeout: T}, () => {
+    const {bA, bB, m} = setup();
+    const drain = {acks: {"V41-T0003": "FENCED"}, builderSessionsStopped: []};
+    expect(() => bA.drainAck({manifestDigest: "0".repeat(64), drain, actor: "session_v41supervisor"})).toThrow(/DRAIN_MANIFEST_MISMATCH/);
+    expect(() => bB.drainAck({manifestDigest: m.digest, drain, actor: "session_v2supervisor"})).toThrow(/DRAIN_ACK_ACTOR_INVALID/);
+    expect(() => bB.drainAck({manifestDigest: m.digest, drain, actor: "anyone"})).toThrow(/DRAIN_ACK_ACTOR_INVALID/);
+  });
+  it("M5 + freshness: a PR opened, a PR re-based, the canonical base moved or STATE.json changed after the manifest all refuse commit", {timeout: T}, () => {
+    const {w, bA, bB, m} = setup();
+    bA.drainAck({manifestDigest: m.digest, drain: {acks: {"V41-T0003": "FENCED"}, builderSessionsStopped: []}, actor: "session_v41supervisor"});
+    const c = o => () => bB.commit({manifest: m, v2Session: "session_v2supervisor", actor: "v2", ...fresh(m, w), ...o});
+    expect(c({currentOpenPrs: [...openPrs(w), {number: 77, body: "", head: {sha: w.prHead, ref: "z"}, base: {sha: w.base, ref: "integ"}}]})).toThrow(/PR_77_OPENED_AFTER_MANIFEST/);
+    expect(c({currentOpenPrs: openPrs(w).map(p => p.number === 41 ? {...p, base: {...p.base, ref: "elsewhere"}} : p)})).toThrow(/PR_41_BASE_CHANGED/);
+    expect(c({currentBaseSha: "e".repeat(40)})).toThrow(/CANONICAL_BASE_MOVED/);
+    expect(c({currentStateDigest: "d".repeat(64)})).toThrow(/STATE_CHANGED/);
+    expect(c({}) ()).toMatchObject({doc: {phase: "V2_AUTHORITATIVE"}});
+  });
+  it("M8: the V2 gate is pinned to the epoch — a rollback and re-commit to the same holder invalidates the old epoch", {timeout: T}, () => {
+    const {w, bA, bB, m} = setup();
+    bA.drainAck({manifestDigest: m.digest, drain: {acks: {"V41-T0003": "FENCED"}, builderSessionsStopped: []}, actor: "session_v41supervisor"});
+    const e1 = bB.commit({manifest: m, v2Session: "session_v2supervisor", actor: "v2", ...fresh(m, w)}).doc.epoch;
+    bA.rollback({reason: "x", actor: "session_v41supervisor"});
+    const m2 = manifestOf(w, 2);
+    bB.prepare({manifest: m2, gates: GATES, actor: "v2"});
+    bA.drainAck({manifestDigest: m2.digest, drain: {acks: {"V41-T0003": "FENCED"}, builderSessionsStopped: []}, actor: "session_v41supervisor"});
+    const e2 = bB.commit({manifest: m2, v2Session: "session_v2supervisor", actor: "v2", ...fresh(m2, w)}).doc.epoch;
+    expect(e2).toBeGreaterThan(e1);
+    expect(() => bB.assertV2("session_v2supervisor", e1)).toThrow(/V2_EPOCH_MISMATCH/);
+    expect(bB.assertV2("session_v2supervisor", e2)).toBe(e2);
+  });
+  it("M6: the writer re-checks authority before each merge write (revoked mid-batch -> nothing written)", async () => {
+    const {writeMerges} = await import("../../automation/factory-v2/merge.mjs");
+    const own = new Ownership(createMemoryStore(), {leaseId: "writer--x", environment: "e", workerId: "w", sessionId: "session_writerxx"});
+    let merges = 0, allowed = true;
+    const git = {readCanonical: () => "1".repeat(40), merge: async () => { merges++; return {ok: true, resultSha: "2".repeat(40)}; }, verifyRemote: async () => true};
+    const beforeWrite = () => { if (!allowed) throw Object.assign(new Error("AUTHORITY_REVOKED"), {code: "OWNERSHIP_LOST", detail: "AUTHORITY_REVOKED"}); };
+    allowed = false;
+    const out = await writeMerges([{taskId: "a"}, {taskId: "b"}], {ownership: own, git, beforeWrite});
+    expect(merges).toBe(0);
+    expect(out.results[0]).toMatchObject({status: "FENCED", reasons: ["AUTHORITY_REVOKED"]});
   });
 });
 
@@ -175,8 +227,8 @@ describe("bridge: LIVE activation after handover — one execution system at 8 b
     // handover
     const m = manifestOf(w);
     bB.prepare({manifest: m, gates: GATES, actor: "v2"});
-    bA.drainAck({manifestDigest: m.digest, drain: {acks: {"V41-T0003": "FENCED"}, builderSessionsStopped: ["session_v41builderC"]}, actor: "v41"});
-    const c = bB.commit({manifest: m, currentOpenPrs: openPrs(w), v2Session: "session_v2supervisor", actor: "v2"});
+    bA.drainAck({manifestDigest: m.digest, drain: {acks: {"V41-T0003": "FENCED"}, builderSessionsStopped: ["session_v41builderC"]}, actor: "session_v41supervisor"});
+    const c = bB.commit({manifest: m, currentOpenPrs: openPrs(w), currentBaseSha: m.snapshot.baseSha, currentStateDigest: m.snapshot.stateDigest, v2Session: "session_v2supervisor", actor: "v2"});
     sup = mk();
     expect(sup.start().owner).toBe(true);
     applyPlan(sup.journal, m, c.plan, sup.fenceRef);
@@ -189,7 +241,7 @@ describe("bridge: LIVE activation after handover — one execution system at 8 b
     expect(sup.journal.get("V41-T0009").state).toBe("BLOCKED");
     expect(spawnSync("git", ["merge-base", "--is-ancestor", w.prHead, "integ"], {cwd: w.envB}).status).toBe(0); // the V4.1 PR head landed as-is
     // rollback: V2 is revoked on its next tick; V4.1 may dispatch again
-    bA.rollback({reason: "test rollback", actor: "v41"});
+    bA.rollback({reason: "test rollback", actor: "session_v41supervisor"});
     expect((await sup.tick()).state).toBe("AUTHORITY_REVOKED");
     expect(bA.v41MayDispatch()).toBe(true);
   });

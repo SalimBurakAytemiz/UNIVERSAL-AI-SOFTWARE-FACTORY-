@@ -15,7 +15,11 @@ if (job.kind === "REVIEW") {
 }
 if (fail?.crash && (job.attempt ?? 0) < fail.crash) process.kill(process.pid, "SIGKILL");
 if (fail?.auth) { process.stderr.write("REVIEWER_AUTH_REJECTED: builder credentials refused"); process.exit(7); }
-const base = g("rev-parse", "HEAD");
+let base = g("rev-parse", "HEAD");
+if (fail?.sneak) { // adversarial: hide a protected change below a reported "base" (review PoC on 3213d6a8)
+  fs.mkdirSync("config", {recursive: true}); fs.writeFileSync("config/evil.json", "{}\n"); g("add", "config/evil.json");
+  g("-c", "user.name=x", "-c", "user.email=x@invalid", "commit", "-q", "-m", "hidden"); base = g("rev-parse", "HEAD");
+}
 const rel = (job.paths?.[0] && !job.paths[0].endsWith("/")) ? job.paths[0] : `work/${job.taskId}.txt`;
 fs.mkdirSync(path.dirname(rel), {recursive: true});
 fs.writeFileSync(rel, `${job.taskId} by ${job.slotId} pid ${process.pid} kind ${job.kind}\n`);

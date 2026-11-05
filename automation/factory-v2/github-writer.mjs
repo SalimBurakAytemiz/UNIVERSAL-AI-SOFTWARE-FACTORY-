@@ -2,11 +2,13 @@
 import {spawnSync} from "node:child_process";
 import path from "node:path";
 const SHA = /^[0-9a-f]{40}$/;
-export function createGovernedGithubWriter({repoRoot, baseRef = "v7/integration", remote = "origin", run = (f, a, o) => spawnSync(f, a, {encoding: "utf8", ...o})}) {
+export function createGovernedGithubWriter({repoRoot, prHead, baseRef = "v7/integration", remote = "origin", run = (f, a, o) => spawnSync(f, a, {encoding: "utf8", ...o})}) {
   return {
     readCanonical() { const r = run("git", ["ls-remote", remote, `refs/heads/${baseRef}`], {cwd: repoRoot}); const sha = r.stdout?.split(/\s+/)[0]; if (r.status !== 0 || !SHA.test(sha ?? "")) throw new Error("CANONICAL_UNREADABLE"); return sha; },
     async merge(cand) {
       if (!Number.isInteger(cand.pr)) return {ok: false, reason: "NO_PR"};
+      // The executor merges the head it reads; refuse before calling it unless that head is exactly the reviewed one.
+      if (typeof prHead !== "function" || prHead(cand.pr) !== cand.headSha) return {ok: false, reason: "PR_HEAD_NOT_REVIEWED_HEAD"};
       const sessions = (cand.implementerSessions ?? []).flatMap(s => ["--implementer-session", s]);
       if (!sessions.length) return {ok: false, reason: "IMPLEMENTER_SESSION_MISSING"};
       const r = run(process.execPath, [path.join(repoRoot, "docs/planning/autonomy/executor.mjs"), "merge", "--pr", String(cand.pr), ...sessions], {cwd: repoRoot});
