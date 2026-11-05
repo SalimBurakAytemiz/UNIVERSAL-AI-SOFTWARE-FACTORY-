@@ -55,6 +55,17 @@ describe("V3-T1016 simulated provider quota -> BLOCKED_RESUMABLE with a checkpoi
     expect(blockClass(run)).toBe("BLOCKED_RESUMABLE");
   });
 
+  it("#360 N-1: the checkpoint records the run's CURRENT retryCount (a transient failure first, then quota: retryCount 1 is preserved, not reset)", { timeout: T }, async () => {
+    const c = setup(tmp, "tA");
+    let n = 0;
+    const fake = new FakeExecutors(okScript({implement: () => (++n === 1 ? {exitCode: 75} : {exitCode: 75, stderr: QUOTA_STDERR})}));
+    const created = startRun(c, fake);
+    const run = await drive(c, runner(c, fake, {maxRetries: 2, retryBackoffMs: [0]}), created.runId);
+    expect(fake.calls.implement).toBe(2);
+    expect(run).toEqual(expect.objectContaining({status: "BLOCKED", reason: "PROVIDER_QUOTA", retryCount: 1}));
+    expect(lastCheckpoint(run).data).toEqual(expect.objectContaining({outcome: "BLOCKED_RESUMABLE", step: "IMPLEMENT", retryCount: 1}));
+  });
+
   it("control: a non-quota block (DISK_FULL) stays terminal BLOCKED: no resumable checkpoint, blockClass BLOCKED_TERMINAL", { timeout: T }, async () => {
     const c = setup(tmp, "tA");
     const fake = new FakeExecutors(okScript({implement: () => ({exitCode: 1, stderr: "ENOSPC: no space left on device, write"})}));
