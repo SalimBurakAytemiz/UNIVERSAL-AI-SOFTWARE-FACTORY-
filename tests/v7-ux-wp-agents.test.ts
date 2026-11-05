@@ -4,9 +4,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {pathToFileURL} from "node:url";
-import crypto from "node:crypto";
-import net from "node:net";
 import {buildServer} from "../apps/control-api/src/server.js";
+import {TEST_TOKEN, DEFAULT_TEST_PORT, injectTransport, httpTransport, freeLoopbackPort, realBridge, type Transport} from "./support/real-bridge.js";
 import {computeRoleReadiness, loadReadinessInputFromRepo, reconcileLegacyStatusSummary} from "../core/agents/readiness-audit.js";
 import {computeRoleStatusSummary} from "../core/agents/role-lifecycle.js";
 import {buildAdapterRealityMap, ADAPTER_REALITY_RECORDS} from "../core/capabilities/adapter-reality.js";
@@ -2052,11 +2051,11 @@ describe("LANE-A A2a Tools panel (TOOL_READY only; not measured is never zero; n
 // //TR: UASCO-T0006 (İş Gücü dilimi): görünüm sahte köprü yerine GERÇEK Control API (buildServer) yanıtlarıyla çizilir. Test köprüsü main.mjs "uasco:api-get" işleyicisini aynen taklit eder (masaüstü
 // GET allow-list'i, /health kimlik kanıtı, kontrol token'ı, "<yol>: HTTP <kod>" hata biçimi). Sunucu repoRoot'u yalnız rol/okuma kayıt dosyalarının KOPYASINI içeren geçici bir dizindir (gerçek depo değiştirilmez).
 describe("UASCO-T0006 — Workforce view over the REAL Control API (renderer -> real buildServer)", () => {
-  const TOKEN = "t".repeat(32);
-  let PORT = 3210, tmp = "";
+  const TOKEN = TEST_TOKEN;
+  let PORT = DEFAULT_TEST_PORT, tmp = "";
   const apps: Array<{close: () => Promise<unknown>}> = [];
   beforeEach(async () => { tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-wf-")); (await load("views", "workforce.js")).resetWorkforceView(); });
-  afterEach(async () => { PORT = 3210; for (const a of apps.splice(0)) { try { await a.close(); } catch { /* kapanış */ } } try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* Windows */ } });
+  afterEach(async () => { PORT = DEFAULT_TEST_PORT; for (const a of apps.splice(0)) { try { await a.close(); } catch { /* kapanış */ } } try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* Windows */ } });
   const repoCopy = () => path.join(tmp, "repo");
   /** Gerçek rol kayıtları salt-okunur KOPYA olarak verilir (registries + knowledge/technologies); gerçek depo sunucuya verilmez. */
   function seedRepo(files: "real" | "none" = "real") {
@@ -2068,41 +2067,10 @@ describe("UASCO-T0006 — Workforce view over the REAL Control API (renderer -> 
     const app = buildServer({controlToken, runtime: path.join(tmp, "runtime"), repoRoot: repoCopy(), dataDir: path.join(tmp, "data"), tenantId: "tA", port: PORT, logger: false});
     apps.push(app); return app;
   }
-  async function allowList() {
-    const extra = loadGet();
-    const boundary = await import(pathToFileURL(path.join(root, "automation", "lib", "control-boundary.mjs")).href);
-    return {allowed: (p: string) => boundary.desktopGetPathAllowed(p) || extra(p), proof: boundary.controlChallengeProof as (t: string, c: string) => string | null};
-  }
-  type Transport = (url: string, headers: Record<string, string>) => Promise<{statusCode: number; json: () => any}>;
-  const injectT = (app: ReturnType<typeof buildServer>): Transport => async (url, headers) => app.inject({method: "GET", url, headers});
-  const httpT = (base: string): Transport => async (url, headers) => { const r = await fetch(base + url, {headers, redirect: "error", cache: "no-store"}); const body = await r.text(); return {statusCode: r.status, json: () => JSON.parse(body)}; };
-  /** main.mjs uasco:api-get + verifyServerIdentity + api() ile aynı. */
-  async function realBridge(transport: Transport, bridgeToken = TOKEN) {
-    const {allowed, proof} = await allowList();
-    const calls: string[] = [];
-    const verify = async () => {
-      const challenge = crypto.randomBytes(32).toString("hex"), expected = proof(bridgeToken, challenge);
-      if (!expected) throw new Error("CONTROL_TOKEN_NOT_CONFIGURED");
-      const r = await transport(`/health?challenge=${challenge}`, {host: `127.0.0.1:${PORT}`});
-      if (r.statusCode !== 200) throw new Error(`health: HTTP ${r.statusCode}`);
-      const h = r.json();
-      if (h.status !== "HEALTHY" || h.system !== "UNIVERSAL-AI-SOFTWARE-COMPANY-OS" || h.bindHost !== "127.0.0.1" || Number(h.port) !== PORT || h.controlProof !== expected) throw new Error("CONTROL_API_IDENTITY_UNVERIFIED");
-    };
-    const bridge = {apiGet: async (p: string) => {
-      calls.push(p);
-      if (!allowed(p)) throw new Error("INVALID_API_PATH");
-      if (p === "/health") { await verify(); return {status: "HEALTHY", system: "UNIVERSAL-AI-SOFTWARE-COMPANY-OS", serverIdentity: "VERIFIED"}; }
-      if (!p.startsWith("/v1/")) throw new Error("CONTROL_API_PATH_INVALID");
-      await verify();
-      const r = await transport(p, {"x-uasco-control-token": bridgeToken, host: `127.0.0.1:${PORT}`});
-      if (r.statusCode < 200 || r.statusCode >= 300) throw new Error(`${p}: HTTP ${r.statusCode}`);
-      return r.json();
-    }, apiPost: async (p: string) => { throw new Error(`POST must never be called (${p})`); }};
-    return {bridge, calls, allowed};
-  }
+  const injectT = injectTransport, httpT = httpTransport;
   async function renderReal(transport: Transport, bridgeToken = TOKEN, lang = "en") {
     const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js");
-    const {bridge, calls, allowed} = await realBridge(transport, bridgeToken);
+    const {bridge, calls, allowed} = await realBridge(transport, {token: bridgeToken, port: () => PORT});
     const doc = new D(), store = st.createStore(null);
     const api = apiMod.createApi({bridge, store, now: () => 1_760_000_000_000});
     const tr = (k: string, v?: any) => i18n.translate(lang, k, v);
@@ -2110,7 +2078,6 @@ describe("UASCO-T0006 — Workforce view over the REAL Control API (renderer -> 
     const {node} = await renderWf(ctx);
     return {root: node, calls, allowed, ctx};
   }
-  const pillsOf = (n: N | null) => n ? all(n).filter(x => "pill" in x.dataset).map(x => x.dataset.pill) : [];
 
   const kpi = (r: N, id: string) => all(byId(r, id)!).find(n => (n.getAttribute("class") ?? "").split(" ").includes("kpi-value"))!.textContent;
   const chipOf = (r: N, id: string) => byData(byId(r, id)!, "chip")[0]?.dataset.chip;
@@ -2216,7 +2183,7 @@ describe("UASCO-T0006 — Workforce view over the REAL Control API (renderer -> 
   it("error: the Control API process goes away -> real HTTP fetch fails; the view goes from real counts to unknown, never to 0", async () => {
     seedRepo("real");
     seedJournal();
-    PORT = await new Promise<number>((res, rej) => { const srv = net.createServer(); srv.once("error", rej); srv.listen(0, "127.0.0.1", () => { const a = srv.address() as {port: number}; srv.close(() => res(a.port)); }); });
+    PORT = await freeLoopbackPort();
     const app = mkApp();
     await app.listen({port: PORT, host: "127.0.0.1"});
     const t = httpT(`http://127.0.0.1:${PORT}`);
