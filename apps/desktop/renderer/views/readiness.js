@@ -50,7 +50,7 @@ function stateBlock(ctx,res,source){
   return h(doc,"div",{class:`readiness-state state-${state.toLowerCase()}`,role:"status",dataset:{readinessState:state,source}},
     h(doc,"p",{class:"readiness-state-head"},statePill(ctx,failKind(state)),h(doc,"strong",{text:ctx.t(`readiness.state.${state}`)})),
     h(doc,"p",{class:"note",text:ctx.t(`readiness.hint.${state}`,{source:`GET ${READINESS_SOURCE_PATHS[source]}`})}),
-    safeErrorCode(res.message)?h(doc,"p",{class:"note mono",dataset:{errorCode:safeErrorCode(res.message)},text:safeErrorCode(res.message)}):null);
+    safeErrorCode(res.message)?h(doc,"p",{class:"note mono",dataset:{stateErrorCode:safeErrorCode(res.message)},text:safeErrorCode(res.message)}):null);
 }
 
 /** Kaynak şeridi: her gerçek okuma kaynağının ayrık durum rozeti (renk tek başına anlam taşımaz). */
