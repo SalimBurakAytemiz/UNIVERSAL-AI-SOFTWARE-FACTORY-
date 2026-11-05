@@ -187,3 +187,6 @@ registerCloudAcceptanceSuite();
 // //TR: UASCO-T0011 sunucu yetki kapısı: POST /v1/intakes INSTRUCTION_LIKE/PROTECTED_PATH bayraklı fikri TAM onay olmadan reddeder (422); diğer bayraklar kayda yazılır (gerçek buildServer)
 import {registerIntakeServerGateCases} from "./support/intake-server-gate.cases.js";
 registerIntakeServerGateCases();
+// //TR: UASCO-T0010 PRODUCT-INTAKE profili: ürün açıklamaları operasyonel talimat sayılmaz, operasyonel talimatlar ve INSTRUCTION_LIKE/PROTECTED_PATH her iki profilde bayraklanır; varsayılan değişmez
+import {registerCommandIntakeProductProfileCases} from "./support/command-intake-product-profile.cases.js";
+registerCommandIntakeProductProfileCases();

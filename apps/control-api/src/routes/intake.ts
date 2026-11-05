@@ -3,7 +3,7 @@ import {LANE_WRITE_BODY_LIMIT} from "./deps.js";
 import type {RouteDeps} from "./deps.js";
 import path from "node:path";
 import {ProjectStudio, StudioError} from "../../../../core/workos/project-studio.js";
-import {intakeCommand, INTAKE_MAX_LENGTH} from "../../../../core/mission/command-intake.js";
+import {intakeCommand, INTAKE_MAX_LENGTH, INTAKE_PROFILES} from "../../../../core/mission/command-intake.js";
 import {submitIntake, listIntakes, getIntake, validateIntakeCreate, intakeAuthorityCheck, IntakeError} from "../../../../core/workos/intake.js";
 
 export const COMMAND_INTAKE_PATH = "/v1/command-intake";
@@ -51,10 +51,12 @@ export function registerIntakeRoutes(app: any, d: RouteDeps): void {
   // //TR: UASCO-T0010 komut girişi: tek alan -> saf DRAFT önerisi (asla yetkilendirmez, hiçbir şey yazmaz/yürütmez); belirsiz komutta netleştirme sorusu döner. Köken istemciden alınmaz, sunucu "CONTROL_API" atar.
   app.post(COMMAND_INTAKE_PATH, {bodyLimit: LANE_WRITE_BODY_LIMIT}, async (req: any, reply: any) => {
     const body = req.body;
-    if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some(k => k !== "text")) return reply.code(400).send({error: "INVALID_BODY", maxLength: INTAKE_MAX_LENGTH});
-    const r = intakeCommand(body.text, {origin: "CONTROL_API"});
+    // //TR: UASCO-T0010 isteğe bağlı profile: yalnız intake fikir alanı "product-intake" gönderir (ürün açıklaması); verilmezse varsayılan komut kuralları AYNEN uygulanır. Bilinmeyen profil 400.
+    if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).some(k => k !== "text" && k !== "profile") || (body.profile !== undefined && !INTAKE_PROFILES.includes(body.profile))) return reply.code(400).send({error: "INVALID_BODY", maxLength: INTAKE_MAX_LENGTH});
+    const profile = body.profile ?? "command";
+    const r = intakeCommand(body.text, {origin: "CONTROL_API", profile});
     if (!r.ok) return reply.code(400).send({error: r.code, maxLength: INTAKE_MAX_LENGTH});
-    d.audit("COMMAND_INTAKE_DRAFTED", {actor: d.actor, outcome: r.proposal.outcome, type: r.proposal.type, riskLevel: r.proposal.riskLevel});
+    d.audit("COMMAND_INTAKE_DRAFTED", {actor: d.actor, profile, outcome: r.proposal.outcome, type: r.proposal.type, riskLevel: r.proposal.riskLevel});
     return reply.code(200).send({proposal: r.proposal});
   });
 }
