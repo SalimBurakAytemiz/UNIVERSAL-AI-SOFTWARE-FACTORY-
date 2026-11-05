@@ -474,7 +474,11 @@ describe("M1a dictionary", () => {
 // //TR: Teslim kontrol listesi (UASCO-T0015 renderer kapsamı): artefakt / sha256 / bütünlük / paket secret taraması / koşu güvenlik aşaması / doğrulama / kabul; kanıtsız satır asla "Tamam" değildir.
 describe("Delivery checklist: artifact, sha256, integrity, secret scans, verification and acceptance (honest levels)", () => {
   const SEC = (o: any = {}) => ({schemaVersion: 1, status: "PASSED", blockReason: null, baseSha: "0".repeat(40), headSha: HEAD, cycle: 0,
-    secrets: {builtin: {status: "CLEAN", hits: 0}, gitleaks: {status: "NOT_INSTALLED", findings: 0, items: [], rawReportSha256: null}}, sca: {status: "NOT_INSTALLED", counts: {}, blocking: 0, findings: [], truncated: false, rawReportSha256: null}, ...o});
+    secrets: {builtin: {status: "CLEAN", hits: 0}, gitleaks: {status: "CLEAN", findings: 0, items: [], rawReportSha256: null}}, sca: {status: "CLEAN", counts: {}, blocking: 0, findings: [], truncated: false, rawReportSha256: null}, ...o});
+  // Sunucunun gerçek biçimi: özet WorkRun alanı değil, run.evidence içindeki SECURITY_REPORT kanıtının `.security` alanıdır.
+  const secEv = (sec: any, commitSha = HEAD) => ({...ev("SECURITY_REPORT", 40), commitSha, security: sec});
+  const R = (sec: any, commitSha = HEAD) => ({run: {evidence: [secEv(sec, commitSha)]}});
+  const WS = (...reports: any[]) => ({run: {...m1aRun(), evidence: [...m1aRun().evidence.filter((e: any) => e.kind !== "SECURITY_REPORT"), ...reports]}});
   const levels = (n: N) => Object.fromEntries(byData(n, "checkRow").map(x => [x.dataset.checkRow, x.dataset.checkLevel]));
   async function checklistPanel(deliveries: any[], detail: Record<string, any> | null = {}, lang = "en") {
     const dp = await load(rend, "views", "delivery-panel.js");
@@ -486,24 +490,49 @@ describe("Delivery checklist: artifact, sha256, integrity, secret scans, verific
   }
   it("pure: mapRunSecurity is strict; deliveryChecklist never marks product verification or an unread security stage as done", async () => {
     const dc = await load(rend, "delivery-core.js");
-    expect(dc.mapRunSecurity({run: {security: SEC()}})).toEqual({state: "VERIFIED", status: "PASSED", blockReason: null, builtin: "CLEAN", gitleaks: "NOT_INSTALLED", sca: "NOT_INSTALLED", headSha: HEAD});
-    expect(dc.mapRunSecurity({run: {}})).toEqual({state: "NOT_RUN"});
-    for (const bad of [null, {}, {run: {security: {status: "OK"}}}, {run: {security: SEC({status: "passed"})}}, {run: {security: SEC({secrets: {builtin: {status: "MAYBE"}, gitleaks: {status: "CLEAN"}}})}},
-      {run: {security: SEC({secrets: {builtin: {status: "CLEAN"}, gitleaks: {status: "WHATEVER"}}})}}, {run: {security: SEC({sca: {status: "OK"}})}}, {run: {security: SEC({blockReason: "BAD"})}}])
+    expect(dc.mapRunSecurity(R(SEC()))).toEqual({state: "VERIFIED", status: "PASSED", blockReason: null, builtin: "CLEAN", gitleaks: "CLEAN", sca: "CLEAN", headSha: HEAD});
+    expect(dc.mapRunSecurity({run: {evidence: []}})).toEqual({state: "NOT_RUN"});
+    expect(dc.mapRunSecurity({run: {...m1aRun(), evidence: m1aRun().evidence.filter((e: any) => e.kind !== "SECURITY_REPORT")}})).toEqual({state: "NOT_RUN"});
+    // B1: a WorkRun has no `security` member; a stray one is ignored, only SECURITY_REPORT evidence counts
+    expect(dc.mapRunSecurity({run: {evidence: [], security: SEC()}})).toEqual({state: "NOT_RUN"});
+    expect(dc.mapRunSecurity({run: {}}).state).toBe("ERROR");                          // no evidence array: unreadable, not "not run"
+    expect(dc.mapRunSecurity({run: m1aRun()}).state).toBe("ERROR");                     // SECURITY_REPORT evidence without its summary
+    // selection: the report for the delivery's commit wins over a later report for another commit; without a commit the latest report is used
+    const OTHER = "9".repeat(40), two = {run: {evidence: [secEv(SEC()), secEv(SEC({status: "BLOCKED", blockReason: "SECRET_DETECTED", headSha: OTHER, secrets: {builtin: {status: "FINDINGS", hits: 1}, gitleaks: {status: "CLEAN", findings: 0, items: []}}}), OTHER)]}};
+    expect(dc.mapRunSecurity(two, HEAD)).toMatchObject({status: "PASSED", headSha: HEAD});
+    expect(dc.mapRunSecurity(two)).toMatchObject({status: "BLOCKED", headSha: OTHER});
+    expect(dc.mapRunSecurity(two, "8".repeat(40))).toMatchObject({status: "BLOCKED"});   // no report for that commit: latest one
+    const twoSame = {run: {evidence: [secEv(SEC({status: "BLOCKED", blockReason: "SECURITY_TOOL_ERROR", secrets: {builtin: {status: "CLEAN", hits: 0}, gitleaks: {status: "ERROR", findings: 0, items: []}}})), secEv(SEC())]}};
+    expect(dc.mapRunSecurity(twoSame, HEAD).status).toBe("PASSED");                      // latest of several reports for the same commit
+    // only kind SECURITY_REPORT carries the stage summary; other SECURITY_* evidence (tool probes etc.) is ignored even if it looks like one
+    const decoy = {run: {evidence: [secEv(SEC()), {...secEv(SEC({status: "BLOCKED", blockReason: "SECURITY_TOOL_ERROR"})), kind: "SECURITY_TOOLS"}]}};
+    expect(dc.mapRunSecurity(decoy, HEAD).status).toBe("PASSED");
+    expect(dc.mapRunSecurity({run: {evidence: [{...secEv(SEC()), kind: "SECURITY_TOOLS"}]}})).toEqual({state: "NOT_RUN"});
+    for (const bad of [null, {}, R({status: "OK"}), R(SEC({status: "passed"})), R(SEC({secrets: {builtin: {status: "MAYBE"}, gitleaks: {status: "CLEAN"}}})),
+      R(SEC({secrets: {builtin: {status: "CLEAN"}, gitleaks: {status: "WHATEVER"}}})), R(SEC({sca: {status: "OK"}})), R(SEC({blockReason: "BAD"}))])
       expect(dc.mapRunSecurity(bad).state, JSON.stringify(bad)).toBe("ERROR");
     const md = (await load(rend, "delivery-core.js")).mapDelivery(deliveryOf());
     const lv = (rows: any[]) => Object.fromEntries(rows.map(r => [r.key, r.level]));
-    expect(lv(dc.deliveryChecklist(md, dc.mapRunSecurity({run: {security: SEC()}})))).toEqual({artifact: "OK", sha256: "OK", integrity: "OK", archiveScan: "OK", securityStage: "OK", verification: "UNKNOWN", acceptance: "PENDING"});
+    expect(lv(dc.deliveryChecklist(md, dc.mapRunSecurity(R(SEC()))))).toEqual({artifact: "OK", sha256: "OK", integrity: "OK", archiveScan: "OK", securityStage: "OK", verification: "UNKNOWN", acceptance: "PENDING"});
     expect(lv(dc.deliveryChecklist(md, undefined)).securityStage).toBe("UNKNOWN");
     expect(lv(dc.deliveryChecklist(md, {state: "NOT_RUN"})).securityStage).toBe("UNKNOWN");
-    expect(lv(dc.deliveryChecklist(md, dc.mapRunSecurity({run: {security: SEC({headSha: "9".repeat(40)})}}))).securityStage).toBe("UNKNOWN");   // other commit: not OK
-    expect(lv(dc.deliveryChecklist(md, dc.mapRunSecurity({run: {security: SEC({status: "BLOCKED", blockReason: "SECRET_DETECTED", secrets: {builtin: {status: "FINDINGS", hits: 1}, gitleaks: {status: "CLEAN", findings: 0, items: []}}})}}))).securityStage).toBe("ATTENTION");
-    expect(lv(dc.deliveryChecklist(md, dc.mapRunSecurity({run: {security: SEC({status: "PARTIAL"})}}))).securityStage).toBe("UNKNOWN");
-    expect(lv(dc.deliveryChecklist(md, dc.mapRunSecurity({run: {security: SEC({status: "BLOCKED", blockReason: "SECURITY_TOOL_ERROR", secrets: {builtin: {status: "CLEAN", hits: 0}, gitleaks: {status: "ERROR", findings: 0, items: []}}})}}))).securityStage).toBe("ATTENTION");   // blocked without findings
-    expect(lv(dc.deliveryChecklist(md, dc.mapRunSecurity({run: {security: SEC({status: "PARTIAL", secrets: {builtin: {status: "FINDINGS", hits: 1}, gitleaks: {status: "NOT_INSTALLED", findings: 0, items: []}}})}}))).securityStage).toBe("ATTENTION");   // built-in findings alone
+    expect(lv(dc.deliveryChecklist(md, dc.mapRunSecurity(R(SEC({headSha: "9".repeat(40)}))))).securityStage).toBe("UNKNOWN");   // other commit: not OK
+    expect(lv(dc.deliveryChecklist(md, dc.mapRunSecurity(R(SEC({status: "BLOCKED", blockReason: "SECRET_DETECTED", secrets: {builtin: {status: "FINDINGS", hits: 1}, gitleaks: {status: "CLEAN", findings: 0, items: []}}}))))).securityStage).toBe("ATTENTION");
+    expect(lv(dc.deliveryChecklist(md, dc.mapRunSecurity(R(SEC({status: "PARTIAL"}))))).securityStage).toBe("UNKNOWN");
+    expect(lv(dc.deliveryChecklist(md, dc.mapRunSecurity(R(SEC({status: "BLOCKED", blockReason: "SECURITY_TOOL_ERROR", secrets: {builtin: {status: "CLEAN", hits: 0}, gitleaks: {status: "ERROR", findings: 0, items: []}}}))))).securityStage).toBe("ATTENTION");   // blocked without findings
+    expect(lv(dc.deliveryChecklist(md, dc.mapRunSecurity(R(SEC({status: "PARTIAL", secrets: {builtin: {status: "FINDINGS", hits: 1}, gitleaks: {status: "NOT_INSTALLED", findings: 0, items: []}}}))))).securityStage).toBe("ATTENTION");   // built-in findings alone
     expect(lv(dc.deliveryChecklist(md, {state: "ERROR"})).securityStage).toBe("UNKNOWN");
-    expect(lv(dc.deliveryChecklist(md, dc.mapRunSecurity({run: {security: SEC({status: "PARTIAL", sca: {status: "FINDINGS", counts: {high: 1}, blocking: 0, findings: [], truncated: false, rawReportSha256: null}})}}))).securityStage).toBe("ATTENTION");   // dependency findings surface
-    expect(lv(dc.deliveryChecklist(md, dc.mapRunSecurity({run: {security: SEC({status: "PASSED", secrets: {builtin: {status: "CLEAN", hits: 0}, gitleaks: {status: "FINDINGS", findings: 1, items: []}}})}}))).securityStage).toBe("ATTENTION");
+    // N1: PASSED but a component not CLEAN (internally inconsistent) is not Done
+    for (const o of [{secrets: {builtin: {status: "CLEAN", hits: 0}, gitleaks: {status: "NOT_INSTALLED", findings: 0, items: []}}}, {sca: {status: "PARTIAL", counts: {}, blocking: 0, findings: [], truncated: false, rawReportSha256: null}}, {sca: {status: "NOT_INSTALLED", counts: {}, blocking: 0, findings: [], truncated: false, rawReportSha256: null}}])
+      expect(lv(dc.deliveryChecklist(md, dc.mapRunSecurity(R(SEC(o))))).securityStage, JSON.stringify(o)).toBe("UNKNOWN");
+    // N2: PASSED and all CLEAN, but headSha missing or malformed -> not bound to this commit -> not Done
+    for (const h of [undefined, null, "xyz", "A".repeat(40)])
+      expect(lv(dc.deliveryChecklist(md, dc.mapRunSecurity(R(SEC({headSha: h}))))).securityStage, String(h)).toBe("UNKNOWN");
+    // N3: prepared package whose file state was not reported -> UNKNOWN (never OK, never ATTENTION)
+    expect(lv(dc.deliveryChecklist({...md, fileState: null}, undefined)).integrity).toBe("UNKNOWN");
+    expect(lv(dc.deliveryChecklist({...md, fileState: undefined}, undefined)).integrity).toBe("UNKNOWN");
+    expect(lv(dc.deliveryChecklist(md, dc.mapRunSecurity(R(SEC({status: "PARTIAL", sca: {status: "FINDINGS", counts: {high: 1}, blocking: 0, findings: [], truncated: false, rawReportSha256: null}}))))).securityStage).toBe("ATTENTION");   // dependency findings surface
+    expect(lv(dc.deliveryChecklist(md, dc.mapRunSecurity(R(SEC({status: "PASSED", secrets: {builtin: {status: "CLEAN", hits: 0}, gitleaks: {status: "FINDINGS", findings: 1, items: []}}}))))).securityStage).toBe("ATTENTION");
     expect(lv(dc.deliveryChecklist({...md, productVerification: {state: "PRODUCT_VERIFIED", reason: null}}, undefined)).verification).toBe("OK");   // positive control
     expect(lv(dc.deliveryChecklist({...md, productVerification: {state: "FAILED", reason: "X"}}, undefined)).verification).toBe("ATTENTION");
     const np = dc.deliveryChecklist(dc.mapDelivery(deliveryOf({artifact: null, fileState: null})), undefined);
@@ -513,12 +542,12 @@ describe("Delivery checklist: artifact, sha256, integrity, secret scans, verific
     expect(lv(dc.deliveryChecklist(dc.mapDelivery(deliveryOf({artifact: {...deliveryOf().artifact, sourceCommit: "4".repeat(40)}})), undefined)).artifact).toBe("ATTENTION");   // stale package
   });
   it("rendered card: seven rows with level badges, the sha256 shown, the run security stage read from GET /v1/work-runs/:id, and the NOT_VERIFIED explanation", async () => {
-    const {root} = await checklistPanel([deliveryOf()], {[RUN]: {run: {...m1aRun(), security: SEC()}}});
+    const {root} = await checklistPanel([deliveryOf()], {[RUN]: WS(secEv(SEC()))});
     const card = byData(root, "deliveryChecklist", RUN)[0];
     expect(Object.keys(levels(card))).toEqual(["artifact", "sha256", "integrity", "archiveScan", "securityStage", "verification", "acceptance"]);
     expect(levels(card)).toMatchObject({securityStage: "OK", verification: "UNKNOWN", acceptance: "PENDING"});
     expect(card.textContent).toContain(H1);
-    expect(card.textContent).toContain("built-in secrets CLEAN, gitleaks NOT_INSTALLED, dependencies NOT_INSTALLED");
+    expect(card.textContent).toContain("built-in secrets CLEAN, gitleaks CLEAN, dependencies CLEAN");
     expect(card.textContent).toContain("no secret found when the package was prepared");
     const explain = byData(card, "notVerifiedExplain")[0];
     expect(explain.dataset.notVerifiedExplain).toBe("NOT_VERIFIED");
@@ -528,22 +557,24 @@ describe("Delivery checklist: artifact, sha256, integrity, secret scans, verific
     expect(vrow.textContent).not.toMatch(/\bDone\b/);
   });
   it("states: not prepared, modified file, accepted, security stage missing / unreadable / blocked — each with its own level (killing cases) and a positive control", async () => {
-    const np = await checklistPanel([deliveryOf({artifact: null, fileState: null})], {[RUN]: {run: m1aRun()}});
+    const np = await checklistPanel([deliveryOf({artifact: null, fileState: null})], {[RUN]: {run: {...m1aRun(), evidence: m1aRun().evidence.filter((e: any) => e.kind !== "SECURITY_REPORT")}}});
     expect(levels(np.root)).toMatchObject({artifact: "PENDING", sha256: "PENDING", archiveScan: "PENDING", securityStage: "UNKNOWN"});
     expect(np.root.textContent).toContain("no security stage recorded for this run");
-    const mod = await checklistPanel([deliveryOf({fileState: "MODIFIED"})], {[RUN]: {run: {...m1aRun(), security: SEC()}}});
+    const mod = await checklistPanel([deliveryOf({fileState: "MODIFIED"})], {[RUN]: WS(secEv(SEC()))});
     expect(levels(mod.root).integrity).toBe("ATTENTION");
     expect(mod.root.textContent).toContain("do not export");
-    const acc = await checklistPanel([deliveryOf({accepted: {runId: RUN, missionId: MID, sourceCommit: HEAD, exportArtifactHash: H1, acceptedAt: "2026-11-05T10:00:00Z"}})], {[RUN]: {run: {...m1aRun(), security: SEC()}}});
+    const acc = await checklistPanel([deliveryOf({accepted: {runId: RUN, missionId: MID, sourceCommit: HEAD, exportArtifactHash: H1, acceptedAt: "2026-11-05T10:00:00Z"}})], {[RUN]: WS(secEv(SEC()))});
     expect(levels(acc.root)).toMatchObject({acceptance: "OK", verification: "UNKNOWN"});    // accepted is still not product-verified
     const off = await checklistPanel([deliveryOf()], null);                                   // GET /v1/work-runs/:id fails
     expect(levels(off.root).securityStage).toBe("UNKNOWN");
     expect(off.root.textContent).toContain("could not be read");
-    const blocked = await checklistPanel([deliveryOf()], {[RUN]: {run: {...m1aRun(), security: SEC({status: "BLOCKED", blockReason: "SECRET_DETECTED", secrets: {builtin: {status: "FINDINGS", hits: 2}, gitleaks: {status: "NOT_INSTALLED", findings: 0, items: []}}})}}});
+    const blocked = await checklistPanel([deliveryOf()], {[RUN]: WS(secEv(SEC({status: "BLOCKED", blockReason: "SECRET_DETECTED", secrets: {builtin: {status: "FINDINGS", hits: 2}, gitleaks: {status: "NOT_INSTALLED", findings: 0, items: []}}})))});
     expect(levels(blocked.root).securityStage).toBe("ATTENTION");
-    const tr = await checklistPanel([deliveryOf()], {[RUN]: {run: {...m1aRun(), security: SEC()}}}, "tr");
+    const tr = await checklistPanel([deliveryOf()], {[RUN]: WS(secEv(SEC()))}, "tr");
     expect(tr.root.textContent).toContain("Teslim kontrol listesi"); expect(tr.root.textContent).toContain("Neden NOT_VERIFIED");
-    const ok = await checklistPanel([deliveryOf({productVerification: {state: "PRODUCT_VERIFIED", reason: "EXECUTED", label: "x"}})], {[RUN]: {run: {...m1aRun(), security: SEC()}}});
+    const pref = await checklistPanel([deliveryOf()], {[RUN]: WS(secEv(SEC()), secEv(SEC({status: "BLOCKED", blockReason: "SECRET_DETECTED", headSha: "9".repeat(40), secrets: {builtin: {status: "FINDINGS", hits: 1}, gitleaks: {status: "CLEAN", findings: 0, items: []}}}), "9".repeat(40)))});
+    expect(levels(pref.root).securityStage).toBe("OK");   // the panel asks for the delivery's own sourceCommit
+    const ok = await checklistPanel([deliveryOf({productVerification: {state: "PRODUCT_VERIFIED", reason: "EXECUTED", label: "x"}})], {[RUN]: WS(secEv(SEC()))});
     expect(levels(ok.root).verification).toBe("OK");
     expect(byData(ok.root, "notVerifiedExplain")).toHaveLength(0);
   });

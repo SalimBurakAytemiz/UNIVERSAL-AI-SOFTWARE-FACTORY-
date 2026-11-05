@@ -86,14 +86,14 @@ export function deliveryChecklistBlock(ctx,d,sec){
     d.productVerification?.state!=="PRODUCT_VERIFIED"?h(doc,"p",{class:"note",role:"note",dataset:{notVerifiedExplain:d.productVerification?.state??"UNKNOWN"}},
       ctx.t("delivery.check.notVerified",{reason:d.productVerification?.reason??"—"})):null);
 }
-/** Kart başına koşu güvenlik aşaması: yalnız SOURCE_GENERATION_COMPLETE teslimler için mevcut izinli GET /v1/work-runs/:id (en çok 20); okunamayan koşu UNAVAILABLE kalır. */
+/** Kart başına koşu güvenlik aşaması (teslimin sourceCommit'ine bağlı SECURITY_REPORT kanıtı): yalnız SOURCE_GENERATION_COMPLETE teslimler için mevcut izinli GET /v1/work-runs/:id (en çok 20); okunamayan koşu UNAVAILABLE kalır. */
 export async function loadDeliverySecurity(ctx,list,limit=20){
   const out={};
   if(!list||list.state!=="VERIFIED")return out;
-  const ids=list.items.filter(isSourceComplete).map(d=>d.runId).slice(0,limit);
-  await Promise.all(ids.map(async id=>{
-    let r=null;try{r=await ctx.api.raw(`/v1/work-runs/${id}`)}catch{r=null}
-    out[id]=r&&r.ok?mapRunSecurity(r.data):{state:r&&typeof r.state==="string"?r.state:"UNAVAILABLE"};
+  const items=list.items.filter(isSourceComplete).slice(0,limit);
+  await Promise.all(items.map(async d=>{
+    const id=d.runId;let r=null;try{r=await ctx.api.raw(`/v1/work-runs/${id}`)}catch{r=null}
+    out[id]=r&&r.ok?mapRunSecurity(r.data,d.sourceCommit):{state:r&&typeof r.state==="string"?r.state:"UNAVAILABLE"};
   }));
   return out;
 }

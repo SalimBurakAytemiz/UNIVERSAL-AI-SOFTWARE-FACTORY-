@@ -82,12 +82,16 @@ export function buildAcceptanceRequest(d,checks){
 export const SECURITY_STATUSES=Object.freeze(["PASSED","PARTIAL","BLOCKED"]);
 const BUILTIN_STATES=Object.freeze(["CLEAN","FINDINGS"]),GITLEAKS_STATES=Object.freeze(["CLEAN","FINDINGS","NOT_INSTALLED","ERROR"]),SCA_STATES=Object.freeze(["CLEAN","FINDINGS","PARTIAL","NOT_INSTALLED","ERROR"]);
 const BLOCK_REASONS=Object.freeze(["SECRET_DETECTED","VULNERABLE_DEPENDENCY","SECURITY_TOOL_ERROR"]);
-/** GET /v1/work-runs/:id gövdesi (ya da api.raw sonucu) -> {state:"VERIFIED",...} | {state:"NOT_RUN"} (güvenlik aşaması kaydı yok) | {state:"ERROR"} (biçim bozuk). */
-export function mapRunSecurity(raw){
+/** GET /v1/work-runs/:id gövdesi -> {state:"VERIFIED",...} | {state:"NOT_RUN"} | {state:"ERROR"}. Güvenlik aşaması özeti WorkRun'da alan olarak DEĞİL, yalnız
+ *  run.evidence içindeki SECURITY_REPORT kanıtında (`.security`) bulunur (runner.ts SECURITY_REPORT; project-studio prepare ile aynı seçim). Seçim: `commit` verilmişse o commit'e
+ *  bağlı en son SECURITY_REPORT, yoksa en son SECURITY_REPORT (kanıt dizisi ekleme sırasındadır). Hiç SECURITY_REPORT yoksa NOT_RUN; özeti eksik/bozuksa ERROR. */
+export function mapRunSecurity(raw,commit){
   const run=isObj(raw)?(isObj(raw.run)?raw.run:isObj(raw.workRun)?raw.workRun:null):null;
-  if(!run)return {state:"ERROR"};
-  if(run.security===undefined||run.security===null)return {state:"NOT_RUN"};
-  const s=run.security;
+  if(!run||!Array.isArray(run.evidence))return {state:"ERROR"};
+  const reports=run.evidence.filter(e=>isObj(e)&&e.kind==="SECURITY_REPORT");
+  if(!reports.length)return {state:"NOT_RUN"};
+  const forCommit=typeof commit==="string"?reports.filter(e=>e.commitSha===commit):[];
+  const s=(forCommit.length?forCommit:reports).at(-1).security;
   if(!isObj(s)||!SECURITY_STATUSES.includes(s.status)||!isObj(s.secrets)||!isObj(s.secrets.builtin)||!isObj(s.secrets.gitleaks)||!isObj(s.sca))return {state:"ERROR"};
   const b=s.secrets.builtin.status,g=s.secrets.gitleaks.status,c=s.sca.status;
   if(!BUILTIN_STATES.includes(b)||!GITLEAKS_STATES.includes(g)||!SCA_STATES.includes(c))return {state:"ERROR"};
@@ -101,7 +105,7 @@ export function deliveryChecklist(d,sec){
   const rows=[];
   rows.push({key:"artifact",value:prepared?"PREPARED":"NOT_PREPARED",level:prepared?(src==="VALID"?"OK":src==="STALE"?"ATTENTION":"UNKNOWN"):"PENDING",detail:prepared?src:null});
   rows.push({key:"sha256",value:prepared?a.exportArtifactHash:null,level:prepared?"OK":"PENDING",detail:null});
-  rows.push({key:"integrity",value:prepared?(d.fileState??"UNKNOWN"):null,level:!prepared?"PENDING":d.fileState==="VERIFIED"?"OK":d.fileState===null?"UNKNOWN":"ATTENTION",detail:null});
+  rows.push({key:"integrity",value:prepared?(d.fileState??"UNKNOWN"):null,level:!prepared?"PENDING":d.fileState==="VERIFIED"?"OK":d.fileState==null?"UNKNOWN":"ATTENTION",detail:null});
   rows.push({key:"archiveScan",value:prepared?"CLEAN_AT_PREPARE":"NOT_YET",level:prepared?"OK":"PENDING",detail:null});
   let st,lvl,detail=null;
   if(!sec||sec.state==="UNAVAILABLE"||sec.state==="OFFLINE"){st="UNAVAILABLE";lvl="UNKNOWN"}
@@ -110,7 +114,9 @@ export function deliveryChecklist(d,sec){
   else if(sec.state==="VERIFIED"){
     const sameHead=sec.headSha!==null&&sec.headSha===d.sourceCommit;
     st=sec.status;detail={builtin:sec.builtin,gitleaks:sec.gitleaks,sca:sec.sca,blockReason:sec.blockReason,sameHead};
-    lvl=sec.status==="BLOCKED"||sec.builtin==="FINDINGS"||sec.gitleaks==="FINDINGS"||sec.sca==="FINDINGS"?"ATTENTION":sec.status==="PASSED"&&sameHead?"OK":"UNKNOWN";
+    // OK yalnız PASSED + aynı commit + TÜM bileşenler CLEAN iken (iç tutarsız "PASSED ama araç yok/kısmi" kaydı Tamam sayılmaz).
+    const allClean=sec.builtin==="CLEAN"&&sec.gitleaks==="CLEAN"&&sec.sca==="CLEAN";
+    lvl=sec.status==="BLOCKED"||sec.builtin==="FINDINGS"||sec.gitleaks==="FINDINGS"||sec.sca==="FINDINGS"?"ATTENTION":sec.status==="PASSED"&&sameHead&&allClean?"OK":"UNKNOWN";
   }else{st="UNAVAILABLE";lvl="UNKNOWN"}
   rows.push({key:"securityStage",value:st,level:lvl,detail});
   const pv=d.productVerification?.state??null;
