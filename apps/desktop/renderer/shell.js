@@ -11,6 +11,7 @@ import {maybeOpenFirstRun} from "./views/firstrun.js";
 import {recoveryPanel} from "./recovery-panel.js";
 import {shouldShowApiRecovery} from "./recovery-core.js";
 import {createInspector,isInspectableRef} from "./inspector.js";
+import {buildNotifications,loadReadIds,notificationsUnread,notifyStorage} from "./notifications-core.js";
 
 export const PRINCIPAL="FOUNDER_LOCAL";
 const FEED_TABS=Object.freeze(["flow","health","agenda"]);
@@ -32,6 +33,8 @@ export function createShell(ctx){
   function renderNav(){
     const counts={projects:data.cockpit?.projects.value??(data.projects.state==="VERIFIED"?data.projects.items.length:null),work:data.cockpit?.missions.value??null,inbox:data.cockpit?.approvals.value??null};
     syncNav(doc,el("navList"),ROUTES,{currentId:routeById(ctx.currentRouteId())?.id,counts,labelOf:r=>t(`area.${r.id}.title`),countLabel:n=>t("nav.count",{n}),makeIcon:r=>icon(doc,r.icon,20)});
+    // //TR: app.js (korumalı) her rota çiziminde renderNav çağırır; zil de burada yeniden çizilir ki Ana Sayfa'da okundu işaretlenince rozet yeniden okuma yapmadan güncellensin.
+    renderBell();
   }
   function renderContext(){
     const p=selectedProject(),first=data.projects.items[0],sel=el("projectSelect");
@@ -44,8 +47,19 @@ export function createShell(ctx){
     el("ctxApi").replaceChildren(chip(ctx,null,{kind:apiKind}),h(doc,"span",{class:"ctx-api-text",text:t(`ctx.api.${apiKind}`)}));
     el("ctxRefresh").textContent=formatTime(store.lastRefreshAt,ctx.i18n.lang);if(store.lastRefreshAt)el("ctxRefresh").setAttribute("datetime",store.lastRefreshAt);
     if(lastApiState!==null&&lastApiState!==apiKind)announce(t(`ctx.api.${apiKind}`));lastApiState=apiKind;
-    const approvals=data.cockpit?.approvals.value,bell=el("notifyCount");bell.textContent=Number.isSafeInteger(approvals)&&approvals>0?String(approvals):"";bell.hidden=!bell.textContent;
-    el("notifyBtn").setAttribute("aria-label",Number.isSafeInteger(approvals)&&approvals>0?t("notify.count",{n:approvals}):t("notify.none"));
+    renderBell();
+  }
+  /**
+   * //TR: UASCO-T0019 kabuk zili: rozet Ana Sayfa bildirim akışıyla AYNI sayıdır (okunmamış bildirimler; onay, karar, engel, koşu sonucu, teslim). Kaynaklar yenilemede okunur,
+   * okundu kümesi her çizimde depodan okunur; böylece Ana Sayfa'da okundu işaretlenince zil bir sonraki rota çiziminde (renderNav) hemen güncellenir. Akış okunamıyorsa rozet gizlenir ve
+   * etiket "okunamadı" der (0 uydurulmaz); liste eksikse (kesilmiş kaynak) sayı "N+" gösterilir. Tıklama bildirim akışının bulunduğu Ana Sayfa'ya gider.
+   */
+  function renderBell(){
+    const bell=el("notifyCount"),btn=el("notifyBtn");if(!bell||!btn)return;
+    const feed=data.notify?buildNotifications({...data.notify,read:loadReadIds(notifyStorage(ctx))}):null,n=notificationsUnread(feed),more=feed?.partial===true;
+    bell.textContent=n!==null&&n>0?`${n}${more?"+":""}`:"";bell.hidden=!bell.textContent;
+    btn.dataset.notifyUnread=n===null?"":String(n);
+    btn.setAttribute("aria-label",n===null?t(data.notify?"notify.unavailable":"notify.none"):n>0?t(more?"notify.unreadPartial":"notify.unread",{n}):t("notify.none"));
   }
   function renderStop(){
     const active=data.control.active===true,banner=el("stopBanner"),btn=el("stopBtn");
@@ -113,9 +127,9 @@ export function createShell(ctx){
 
   async function refresh(){
     const epoch=store.epoch;
-    const [health,projects,cockpit,control,missions,attention,runs]=await Promise.all([api.health(),api.projects(),api.cockpit(),api.control(),api.missions(),api.attention(),api.runs()]);
+    const [health,projects,cockpit,control,missions,attention,runs,runSummaries]=await Promise.all([api.health(),api.projects(),api.cockpit(),api.control(),api.missions(),api.attention(),api.runs(),api.runSummaries()]);
     if(epoch!==store.epoch)return false;
-    data.health=health;data.projects=projects;data.cockpit=cockpit.data;data.control=control;data.missions=missions;data.attention=attention;
+    data.health=health;data.projects=projects;data.cockpit=cockpit.data;data.control=control;data.missions=missions;data.attention=attention;data.notify={attention,runs:runSummaries,approvals:cockpit.data?.approvals};
     if(store.projectId&&projects.state==="VERIFIED"&&!projects.items.some(p=>p.projectId===store.projectId)){store.selectProject(null);return false}
     const c=cockpit.data;
     for(const [k,v] of [["projects",c.projects.value],["missions",c.missions.value],["approvals",c.approvals.value],["alerts",c.alerts.value]])store.samples.set(k,pushSample(store.samples.get(k)??[],v));
@@ -203,7 +217,7 @@ export function createShell(ctx){
     el("stopConfirm").addEventListener("click",async()=>{closeStopDialog();await ctx.stop()});
     el("resumeBtn").addEventListener("click",()=>confirmAndResume(ctx,{onCancel:announce}));
     el("refreshBtn").addEventListener("click",()=>ctx.refreshAll({force:true}));
-    el("notifyBtn").addEventListener("click",()=>ctx.navigate("inbox"));
+    el("notifyBtn").addEventListener("click",()=>ctx.navigate("home"));
     el("langBtn").addEventListener("click",()=>ctx.i18n.setLang(ctx.i18n.lang==="tr"?"en":"tr"));
     el("projectSelect").addEventListener("change",e=>{ctx.selectProject(e.target.value||null)});
     wireSearch();
@@ -211,5 +225,5 @@ export function createShell(ctx){
     // //TR: UX WP-FIRSTRUN: ilk açılışta (güvenli per-user tercih "görülmedi" ise) kurulum/onboarding sihirbazını bir kez aç. Sihirbaz KAPI DEĞİLDİR (atlanır/başarısız olursa uygulama yine açılır) ve asla giriş yapmaz/durum uydurmaz; her hata yutulur.
     try{maybeOpenFirstRun(ctx)}catch{/* ilk kurulum sihirbazı açılamadı; uygulama yine açılır */}
   }
-  return {data,wireStatic,renderAll,renderNav,renderContext,renderStop,refresh,announce,showStopError,clearStopError,openStopDialog,closeStopDialog,openInspector,inspector};
+  return {data,wireStatic,renderAll,renderNav,renderBell,renderContext,renderStop,refresh,announce,showStopError,clearStopError,openStopDialog,closeStopDialog,openInspector,inspector};
 }

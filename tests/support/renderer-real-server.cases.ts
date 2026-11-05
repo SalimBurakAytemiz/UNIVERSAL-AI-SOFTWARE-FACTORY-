@@ -51,7 +51,7 @@ class D {
   createElement(t: string) { return new N(this, t); }
   createElementNS(_ns: string, t: string) { return new N(this, t); }
   createTextNode(s: string) { const n = new N(this, "#text"); n._text = s; return n; }
-  getElementById() { return null; }
+  getElementById(_id?: string): N | null { return null; }
 }
 const all = (n: N): N[] => n.children.flatMap(c => [c, ...all(c)]);
 const kpiText = (r: N, key: string) => all(r).find(n => n.dataset.kpi === key)?.textContent ?? `<no kpi ${key}>`;
@@ -116,7 +116,7 @@ async function renderAgainstServer(app: App, view: string, token = TOKEN, lang: 
   const entries = [...store.cache.entries()] as Array<[string, {promise?: Promise<{ok: boolean; state?: string; message?: string}>}]>;
   for (const [k, v] of entries) if (!v || typeof v.promise?.then !== "function") throw new Error(`renderer store.cache shape changed at ${k}: re-sync renderAgainstServer with apps/desktop/renderer/state.js + api.js`);
   const results = await Promise.all(entries.map(async ([k, v]) => ({path: k, ...(await v.promise!)})));
-  return {root, seen, paths, attention, refused, thrown, results, text: root.textContent};
+  return {root, seen, paths, attention, refused, thrown, results, text: root.textContent, ctx};
 }
 
 // //TR: CLOUD-T0005: tower bulut iş panelini GET /v1/cloud/jobs ile okur. Bu yol korumalı main.mjs izin listesine Kurucu kapılı PR ile eklenir; o zamana kadar
@@ -621,6 +621,67 @@ describe("UASCO-T0019: home notification feed (unread/read, groups, deep links) 
       runs: {state: "VERIFIED", partial: false, runs: [run("r1", "msn_b", "SUCCEEDED", {productVerified: true}), run("r2", "msn_t", "FAILED"), run("r3", "msn_c", "CANCELLED")]},
       read: {available: true, ids: new Set()}, approvals: {items: [{missionId: "msn_b", title: "Cockpit B"}]}});
     expect(f.items.filter((n: any) => n.runId).map((n: any) => [n.id.split(":")[0], n.runId, n.title]).sort()).toEqual([["dlv", "r1", "Cockpit B"], ["run", "r1", "Cockpit B"], ["run", "r2", "r2"], ["run", "r3", "r3"]]);
+  });
+
+  // //TR: Kabuk zili (shell.js) Ana Sayfa akışıyla aynı okunmamış sayıyı gösterir: aynı gerçek sunucu, aynı api.js, aynı okundu deposu. Kimlik düğümleri isteğe göre yaratılır.
+  class ShellDoc extends D {
+    ids = new Map<string, N>(); ls = new Map<string, unknown[]>();
+    getElementById(id: string): N { let n = this.ids.get(id); if (!n) { n = new N(this, id === "projectSelect" ? "select" : id === "stopDialog" ? "dialog" : "span"); n.setAttribute("id", id); if (id === "stopBtn") { const tx = new N(this, "span"); n.querySelector = (() => tx) as never; } this.ids.set(id, n); } return n; }
+    addEventListener(ev: string, fn: unknown) { this.ls.set(ev, [...(this.ls.get(ev) ?? []), fn]); }
+  }
+  const shellOn = async (app: App, st: unknown, lang: "en" | "tr" = "en") => {
+    const nav = navSpy(), doc = new ShellDoc();
+    const r = await renderAgainstServer(app, "home", TOKEN, lang, {storage: st, doc, navigate: nav.navigate, currentRouteId: () => "home"});
+    const shell = (await load("shell.js")).createShell(r.ctx);
+    const bell = () => ({text: doc.getElementById("notifyCount").textContent, hidden: doc.getElementById("notifyCount").hidden, aria: doc.getElementById("notifyBtn").getAttribute("aria-label"), unread: doc.getElementById("notifyBtn").dataset.notifyUnread});
+    return {r, shell, doc, nav, bell};
+  };
+
+  it("shell bell: shows the same unread count as the Home feed (not just approvals), drops when Home marks read, says 'could not be read' when both sources fail, and opens Home", { timeout: 120_000 }, async () => {
+    const app = mkApp(notifySeed), st = memStorage();
+    const {r, shell, doc, nav, bell} = await shellOn(app, st);
+    shell.renderContext();
+    expect(bell()).toEqual({text: "", hidden: true, aria: "No notifications", unread: ""}); // before the first refresh nothing is claimed
+    expect(await shell.refresh()).toBe(true);
+    const unread = Number(badgeOf(r).dataset.notifyUnread), approvals = (shell.data.cockpit as {approvals: {value: number}}).approvals.value;
+    expect(unread).toBe(itemsOf(r).length); expect(unread).toBeGreaterThan(approvals); // the bell now counts runs/decisions too, not only approvals
+    expect(bell()).toEqual({text: String(unread), hidden: false, aria: `${unread} unread notification(s)`, unread: String(unread)});
+    // Home "mark all read" writes the shared store; the next route render (protected app.js renderRoute calls shell.renderNav, which re-draws the bell) reflects it without a refetch
+    const seen = r.seen.length;
+    all(feedOf(r)).find(n => n.dataset.notifyMarkAll === "1")!.ls.get("click")![0]!({});
+    shell.renderNav();
+    expect(bell()).toEqual({text: "", hidden: true, aria: "No notifications", unread: "0"}); expect(r.seen.length).toBe(seen);
+    // one read item un-read again -> exactly one
+    const ids = JSON.parse(st.m.get("uasco.notify.read.v1")!) as string[]; st.m.set("uasco.notify.read.v1", JSON.stringify(ids.slice(1))); shell.renderBell();
+    expect(bell().text).toBe("1");
+    shell.data.cockpit = null; shell.renderBell(); expect(bell().text).toBe("1"); // not gated on the approvals KPI
+    shell.wireStatic(); (doc.getElementById("notifyBtn").ls.get("click")![0] as (e: unknown) => void)({});
+    expect(nav.calls).toEqual(["home"]);
+    // the hook relies on the protected app.js calling shell.renderNav() on every route render (read-only check; app.js is not changed here)
+    expect(fs.readFileSync(path.join(REND, "app.js"), "utf8")).toMatch(/main\.removeAttribute\("aria-busy"\);shell\.renderNav\(\);/);
+    // no storage: everything unread (honest), same as the Home feed's own count
+    const noStore = await shellOn(app, null); await noStore.shell.refresh();
+    expect(noStore.bell().text).toBe(String(unread));
+    // both sources fail (api.js ERROR results for /v1/attention + /v1/run-summaries): unknown, never 0, and not the approvals number
+    const bad = await shellOn(app, st); bad.shell.data.cockpit = null;
+    bad.shell.data.notify = {attention: {state: "ERROR", blocked: [], queue: null}, runs: {state: "ERROR", runs: [], total: null, partial: false}, approvals: undefined}; bad.shell.renderBell();
+    expect(bad.bell()).toEqual({text: "", hidden: true, aria: "Notifications could not be read", unread: ""});
+  });
+
+  it("shell bell: a truncated source shows N+ with an 'incomplete' label; tr localized", { timeout: 120_000 }, async () => {
+    const core = await load("notifications-core.js");
+    const app = mkApp(notifySeed), st = memStorage();
+    const {shell, bell} = await shellOn(app, st, "tr");
+    await shell.refresh();
+    const n = core.notificationsUnread(core.buildNotifications({...(shell.data.notify as object), read: core.loadReadIds(st)}));
+    expect(bell().aria).toBe(`${n} okunmamış bildirim`);
+    const nf = shell.data.notify as {runs: {partial: boolean}}; nf.runs = {...nf.runs, partial: true}; shell.renderBell();
+    expect(bell()).toEqual({text: `${n}+`, hidden: false, aria: `${n}+ okunmamış bildirim (liste eksik)`, unread: String(n)});
+    // explicit ctx.storage wins (null = "no store", never silently localStorage); absent -> localStorage
+    const g = globalThis as {localStorage?: unknown}, had = Object.getOwnPropertyDescriptor(g, "localStorage"), ls = memStorage();
+    Object.defineProperty(g, "localStorage", {value: ls, configurable: true});
+    try { expect(core.notifyStorage({storage: null})).toBe(null); expect(core.notifyStorage({storage: st})).toBe(st); expect(core.notifyStorage({})).toBe(ls); }
+    finally { if (had) Object.defineProperty(g, "localStorage", had); else delete g.localStorage; }
   });
 
   it("tr: the feed is localized from the real server render", { timeout: 120_000 }, async () => {

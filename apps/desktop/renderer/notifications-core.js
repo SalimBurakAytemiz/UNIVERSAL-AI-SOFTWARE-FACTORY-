@@ -29,6 +29,9 @@ export function saveReadIds(storage,ids){
   try{storage.setItem(NOTIFY_READ_KEY,JSON.stringify([...ids].filter(x=>typeof x==="string"&&ID_RE.test(x)).slice(-NOTIFY_READ_MAX)));return true}catch{return false}
 }
 
+/** //TR: Okundu deposu tek yerden seçilir (Ana Sayfa akışı ve kabuk zili aynı depoyu okur). ctx.storage verilmişse o (null = depo yok); yoksa localStorage denenir, erişim atarsa depo yok sayılır. */
+export function notifyStorage(ctx){return ctx&&ctx.storage!==undefined?ctx.storage:(()=>{try{return globalThis.localStorage??null}catch{return null}})()}
+
 function fromAttention(item){
   const group=ATTENTION_GROUP[item.kind];if(!group)return null;
   const subject=item.taskId??item.runId??item.missionId;

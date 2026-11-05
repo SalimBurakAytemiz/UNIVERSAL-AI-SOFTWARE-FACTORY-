@@ -4,7 +4,7 @@ import {icon} from "../icons.js";
 import {formatCount,MISSING,formatTime,pillKindFor,missionPillKind,topEntries} from "../model.js";
 import {ROUTES,FACTORY_AREA_ORDER} from "../routes.js";
 import {buildProjectCockpit} from "../project-cockpit-core.js";
-import {buildNotifications,loadReadIds,saveReadIds,NOTIFY_GROUPS} from "../notifications-core.js";
+import {buildNotifications,loadReadIds,saveReadIds,NOTIFY_GROUPS,notifyStorage} from "../notifications-core.js";
 import {selection} from "../forms.js";
 
 const LOADING={loading:true,state:"UNAVAILABLE",value:null};
@@ -117,8 +117,8 @@ function homeHeader(ctx,{asOf=null,tenant=null}={}){
       h(doc,"span",{class:"id-asof",text:ctx.t("home.asOf",{time:asOf?formatTime(asOf,ctx.i18n.lang):MISSING})})),
     h(doc,"p",{class:"hero-hint",text:ctx.t("home.drillHint")}));
 }
-/** //TR: UASCO-T0019: renderer okundu deposu. Test/kabuk ctx.storage verebilir (null = depo yok); verilmezse localStorage denenir, erişim atarsa depo yok sayılır. */
-const storageOf=ctx=>ctx.storage!==undefined?ctx.storage:(()=>{try{return globalThis.localStorage??null}catch{return null}})();
+/** //TR: UASCO-T0019: renderer okundu deposu (kabuk zili ile ortak seçici, notifications-core.js). */
+const storageOf=notifyStorage;
 /** //TR: UASCO-T0019: bildirim akışı. Okunmamış rozet, türe göre gruplar, her öğe gerçek hedef ekrana (seçili görev ile) bağlanır; kaynak düşerse dürüst durum notu, depo yoksa "okundu kaydedilemez" notu. */
 function notificationsPanel(ctx,feed){
   const doc=ctx.doc,storage=storageOf(ctx);
