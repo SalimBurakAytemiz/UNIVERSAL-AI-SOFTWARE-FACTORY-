@@ -5,6 +5,7 @@ import {disabledTestMarkers, evaluateTestSurface, isTestPath, parseExecutedTestC
 import type {NameStatusEntry} from "../core/workos/test-surface.js";
 import {executorLimit, providerLimit} from "../core/workos/runner.js";
 import {T, drive, okScript, rmTmp, runner, setup, startRun, tmpRoot} from "./support/relfx.js";
+import {registerUascoT0043ProviderLimitSuite} from "./support/uasco-t0043-provider-limit-classify.cases.js";
 
 let tmp = "";
 beforeEach(() => { tmp = tmpRoot("uasco-relfxc2-"); });
@@ -204,3 +205,4 @@ describe("RV-RELFX-C1-004 provider-limit classification", () => {
     expect(run.reason).toBe("REVIEW_FAILED");
   });
 });
+registerUascoT0043ProviderLimitSuite();
