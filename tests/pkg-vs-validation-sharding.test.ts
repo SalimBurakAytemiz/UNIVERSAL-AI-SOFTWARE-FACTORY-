@@ -69,6 +69,17 @@ describe("validation test sharding coverage",()=>{
     expect(bs1Steps,"every tests-bs1-<k> step has a BS1_PARTITION shard and vice versa").toEqual(Object.keys(BS1_PARTITION).sort());
     expect(WIN32_ONLY_STEPS.filter(id=>id.startsWith("tests-bs1-")).map(id=>id.slice("tests-bs1-".length)).sort()).toEqual(Object.keys(BS1_PARTITION).sort());
   });
+  // //TR: C5 (2026-11-05): e kabuğunun kritik yolu entry-heals grubudur (36 koşuda medyan 359 / en çok 592 sn); tick-öldürme/kilit çifti d kabuğunda REG'den AYRI bir paralel grupta çalışır, entry-heals ve kills-a-hung e'de tek başına kalır. Kapsam (her senaryo tam bir kez) checkBs1Partition'dadır.
+  it("keeps shard e's critical path alone and runs the tick-kill/lock pair in shard d as its own group (C5 rebalance)",()=>{
+    const heals="entry-heals-an-interrupted-link-switch-and-refuses-broken-or-unproven-planes",hung="entry-kills-a-hung-supervisor-whose-heartbeat-is-frozen";
+    const pair=["entry-kills-the-whole-tick-process-tree-on-timeout-and-clears-its-lock","entry-clears-only-provably-stale-locks-and-replaces-a-dangling-link"];
+    const reg="bootstrap-task-registration-succeeds-or-rolls-back-without-a-runnable-task";
+    expect(BS1_PARTITION.e).toHaveLength(3);
+    expect(BS1_PARTITION.e).toContainEqual([heals]);expect(BS1_PARTITION.e).toContainEqual([hung]);
+    expect(BS1_PARTITION.e.flat().filter(n=>pair.includes(n))).toEqual([]);
+    expect(BS1_PARTITION.d).toEqual([[reg],pair]);
+    expect(checkBs1Partition(BS1_PARTITION,fs.readFileSync(BS1_SELFTEST,"utf8"))).toEqual([]);
+  });
   it("the partition check fails when a scenario is unassigned, duplicated or stale (mutation)",()=>{
     expect(checkBs1Partition(BS1_PARTITION,selftest+'\nscenario("zz-new-unassigned-scenario",()=>{});')).toContain("scenario-not-assigned:zz-new-unassigned-scenario");
     const first=Object.keys(BS1_PARTITION)[0],dropped=structuredClone(BS1_PARTITION) as Record<string,string[][]>,victim=dropped[first][0].shift() as string;
