@@ -33,7 +33,8 @@ export const TRUST_FILES = Object.freeze(["docs/planning/autonomy/autonomy.mjs",
   "docs/planning/autonomy/task-index.json", "docs/planning/merge-gate.mjs",
   // The executor's authority fence (Factory V2) and its whole import closure: a stale or PR-head checkout can never run an older guard.
   "automation/factory-v2/v41-guard.mjs", "automation/factory-v2/bridge.mjs", "automation/factory-v2/identity.mjs", "automation/factory-v2/shared-registry.mjs",
-  "automation/factory-v2/ownership.mjs", "automation/factory-v2/scheduler.mjs", "automation/factory-v2/topology.mjs"]);
+  "automation/factory-v2/ownership.mjs", "automation/factory-v2/scheduler.mjs", "automation/factory-v2/topology.mjs",
+  "automation/lib/task-lease.mjs", "automation/lib/task-lease-git-store.mjs"]);
 export const MAX_PAGES = 30;
 
 export const loadJson = p => JSON.parse(fs.readFileSync(p, "utf8"));

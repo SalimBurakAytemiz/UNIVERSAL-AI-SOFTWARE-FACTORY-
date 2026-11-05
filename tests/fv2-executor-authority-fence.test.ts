@@ -25,6 +25,7 @@ describe("FV2 protected change: authority fence before the canonical merge write
   it("automation/factory-v2/ is a governance prefix (the guard cannot be weakened by a routine PR)", () => { expect(GOVERNANCE_PREFIXES).toContain("automation/factory-v2/"); });
   it("the guard and its import closure are trust files (byte-identical to the base before any decision)", () => {
     for (const f of ["v41-guard", "bridge", "identity", "shared-registry", "ownership", "scheduler", "topology"]) expect(TRUST_FILES).toContain(`automation/factory-v2/${f}.mjs`);
+    for (const f of ["task-lease", "task-lease-git-store"]) expect(TRUST_FILES).toContain(`automation/lib/${f}.mjs`);
     for (const f of TRUST_FILES) expect(fs.existsSync(f)).toBe(true);
   });
   it("--v2-intent: more than one is refused before anything runs; an unreadable or unparseable file never reaches executeMerge", () => {
@@ -32,5 +33,15 @@ describe("FV2 protected change: authority fence before the canonical merge write
     expect(() => runCli(["merge", "--pr", "7", "--v2-intent", path.join(os.tmpdir(), "fv2-no-such-intent.json")])).toThrow();
     const bad = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "fv2-intent-")), "i.json"); fs.writeFileSync(bad, "{not json");
     expect(() => runCli(["merge", "--pr", "7", "--v2-intent", bad])).toThrow();
+  });
+  it("the authority check receives exactly the PR, the head being merged and the V2 intent", () => {
+    const seen: unknown[] = [];
+    let writes = 0;
+    executeMerge({pr: 7, implementerSessions: ["s"], v2Intent: {signed: "intent"}, authority: (a: unknown) => { seen.push(a); return {allowed: false, reason: "X"}; },
+      collect: () => ({policy: {mergeMethod: "merge"}, evidence: {pr: {base: {ref: "v7/integration"}}}}),
+      decide: () => ({gate: {decision: "MERGE"}, result: {decision: "AUTO_MERGE", task: "X-T0001", expectedHeadSha: H, expectedBaseSha: B, reasons: []}}),
+      api: (p: string) => (p.startsWith("branches/") ? {commit: {sha: B}} : {}), write: () => { writes++; return {merged: false}; }});
+    expect(seen).toEqual([{pr: 7, headSha: H, v2Intent: {signed: "intent"}}]);
+    expect(writes).toBe(0);
   });
 });
