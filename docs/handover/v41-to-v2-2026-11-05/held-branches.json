@@ -407,6 +407,13 @@
       "task": "WIN-3 (pkg-r4 EPERM teardown, test-only)",
       "head": "aca2d0f3",
       "note": "on #398 head 1ded4b6d (Founder-tier); patch-id 45c72f17 (D's original 9a05e5ea); coordinator push; Windows-only tests (Linux 4 skipped)"
+    },
+    {
+      "owner": "E (resolved by coordinator)",
+      "branch": "claude/builder-e-export-fix-test-resolved",
+      "task": "UASCO-T0016.A (#390)",
+      "head": "cf491ac0",
+      "note": "#390 + main 8378d083, EOF conflict kept both; FF onto the PR branch once the regex is fixed"
     }
   ]
 }

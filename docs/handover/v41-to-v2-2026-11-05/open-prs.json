@@ -146,32 +146,6 @@
       "classification": "ROUTINE"
     },
     {
-      "pr": 392,
-      "branch": "claude/builder-g-rw053-delivery-sre",
-      "head": "2f16b8e50213535b404c5db90fb72917deeac84d",
-      "base": "v7/integration",
-      "draft": false,
-      "title": "UASCO-T0006 (RW-053): Delivery & SRE view over the real Control API",
-      "task": "UASCO-T0006",
-      "owner": "G",
-      "ownerSession": "session_015dYwb1WPfNEE3SrZ52qm7F",
-      "reviewerSession": "session_015dYwazyej1rWtprAxMmW8v",
-      "classification": "ROUTINE"
-    },
-    {
-      "pr": 391,
-      "branch": "claude/builder-d-qa-api-validators",
-      "head": "d15ed71703459f9b890b5716751a83dd61ec2bf0",
-      "base": "v7/integration",
-      "draft": false,
-      "title": "UASCO-T0129: one strict policy for the core API validator and the Postman template (RW-056)",
-      "task": "UASCO-T0129",
-      "owner": "D",
-      "ownerSession": "session_015dYwb2SnQF4VdDrbv6gC6n",
-      "reviewerSession": "session_015dYwazwobabvVJGzEiJ9Gz",
-      "classification": "ROUTINE"
-    },
-    {
       "pr": 390,
       "branch": "claude/builder-e-export-fix-test",
       "head": "6c3933c9cbeb1e77084af8e2a28296e1e80f3b7e",
@@ -326,20 +300,6 @@
       "ownerSession": "session_015dYwb57pxAry59xkxbE6NL",
       "reviewerSession": null,
       "classification": "FOUNDER_REQUIRED (no task id)"
-    },
-    {
-      "pr": 378,
-      "branch": "claude/builder-d-t0067-test-surface",
-      "head": "2d0f5b55077955df9c6243366ad8ff6b1d56d141",
-      "base": "v7/integration",
-      "draft": false,
-      "title": "UASCO-T0067: test-surface catches commented-out, it.fails/test.failing, snapshot and tautology weakening",
-      "task": "UASCO-T0067",
-      "owner": "D",
-      "ownerSession": "session_015dYwb2SnQF4VdDrbv6gC6n",
-      "reviewerSession": "session_015dYwb2DG4PwRxXbhVSycUt",
-      "classification": "ROUTINE",
-      "note": "82a82662 CLEAN; de-flake 2d0f5b55 (patch-id b126253e) pushed, re-review #4 pending"
     },
     {
       "pr": 377,
@@ -524,19 +484,6 @@
       "classification": "FOUNDER_REQUIRED (task unknown)"
     },
     {
-      "pr": 360,
-      "branch": "claude/builder-c-v3-t1016-quota-resumable",
-      "head": "ee770cc2e336dcce1f262329f585d1da170dab46",
-      "base": "v7/integration",
-      "draft": false,
-      "title": "V3-T1016: quota event model (BLOCKED_RESUMABLE classification + checkpoint, no auto-resume)",
-      "task": "V3-T1016",
-      "owner": "C",
-      "ownerSession": "session_015dYwazZccTReW5Rs2mAhq3",
-      "reviewerSession": "session_015dYwb2ShwPG5f27RgoAVit",
-      "classification": "ROUTINE"
-    },
-    {
       "pr": 356,
       "branch": "claude/fv2-gov-role-keys",
       "head": "1a73bf66d7d8caaada9b6c0f3ca797f4f248fb65",
@@ -679,6 +626,25 @@
       "reviewerSession": "session_015dYwb2gzuiaM1PESRTk6Yw",
       "classification": "ROUTINE",
       "note": "CLEAN on d548583/59c06dd; in merge loop"
+    },
+    {
+      "pr": 405,
+      "branch": "claude/builder-i-t0006-wizard",
+      "head": "7154f47a4dcfed93581aaf4477c1f70c5453e951",
+      "base": "v7/integration",
+      "draft": false,
+      "title": "fix(desktop): UASCO-T0006 the Project Studio wizard sends the server-required environmentId",
+      "task": "UASCO-T0006",
+      "owner": "I",
+      "ownerSession": "session_015dYwb2F7BNWaAJn1Uad5FN",
+      "reviewerSession": "session_015dYwb2gzuiaM1PESRTk6Yw",
+      "classification": "ROUTINE"
     }
+  ],
+  "merged_since_handover_start": [
+    "#360 6eada4bd",
+    "#391 64e563fa",
+    "#378 8378d083",
+    "#392 b4bbe4b0"
   ]
 }
