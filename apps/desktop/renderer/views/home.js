@@ -46,7 +46,7 @@ function tiles(ctx,c){
   return h(ctx.doc,"div",{class:"kpi-row",role:"group","aria-label":ctx.t("home.kpiGroup")},
     kpiTile(ctx,{id:"projects",iconName:"folder",labelKey:"kpi.projects",block:b(c.projects),sampleKey:"projects",route:"projects",qualifier:ctx.t("kpi.q.projects"),deltaGood:"neutral"}),
     kpiTile(ctx,{id:"missions",iconName:"tasks",labelKey:"kpi.missions",block:b(m),sampleKey:"missions",route:"work",qualifier:missionQual,bars:missionBars,deltaGood:"neutral"}),
-    kpiTile(ctx,{id:"approvals",iconName:"clock",labelKey:"kpi.approvals",block:b(c.approvals),sampleKey:"approvals",route:"inbox",qualifier:ctx.t("kpi.q.approvals"),bars:approvalBars,deltaGood:"down"}),
+    kpiTile(ctx,{id:"approvals",iconName:"clock",labelKey:"kpi.approvals",block:b(c.approvals),sampleKey:"approvals",route:"inbox",qualifier:!loadingAll&&c.approvals?.truncated===true?ctx.t("kpi.q.approvalsTruncated",{shown:formatCount(c.approvals.items.length),total:formatCount(c.approvals.total)}):ctx.t("kpi.q.approvals"),bars:approvalBars,deltaGood:"down"}),
     kpiTile(ctx,{id:"alerts",iconName:"alert",labelKey:"kpi.alerts",block:b(c.alerts),sampleKey:"alerts",route:"work",hintKey:"kpi.alertsHint",bars:alertBars,risk:(c.alerts?.value??0)>0,deltaGood:"down"}),
     kpiTile(ctx,{id:"evidence",iconName:"evidence",labelKey:"kpi.evidence",block:b(ev),route:"assurance",qualifier:evQual,bars:evBars,pillKind:evKind,wide:true,risk:evLive&&(ev.mismatch??0)>0}),
     workforceTile(ctx,loadingAll?{...LOADING,registeredRoles:null,targetRoles:null,activeWorkerRuns:null}:c.workforce));
@@ -93,7 +93,8 @@ function projectCockpitPanel(ctx,pc){
     b.partial?h(doc,"p",{class:"pc-partial",dataset:{pcPartial:"blockers"},text:ctx.t("home.pc.partial",{shown:formatCount(b.shown),total:formatCount(b.total)})}):null);
   const approvalsCell=a=>a.state!=="VERIFIED"&&a.state!=="STALE"?cell("approvals",a.state,na(a.state)):cell("approvals",a.state,
     h(doc,"p",{class:"pc-value",text:formatCount(a.count)}),
-    a.count?h(doc,"ul",{class:"pc-list"},a.items.map(x=>h(doc,"li",{dataset:{pcMission:x.missionId},text:`${x.title??x.missionId} · ${x.riskLevel??MISSING}`}))):h(doc,"p",{class:"pc-sub",text:ctx.t("home.pc.none")}));
+    a.count?h(doc,"ul",{class:"pc-list"},a.items.map(x=>h(doc,"li",{dataset:{pcMission:x.missionId},text:`${x.title??x.missionId} · ${x.riskLevel??MISSING}`}))):h(doc,"p",{class:"pc-sub",text:ctx.t("home.pc.none")}),
+    a.partial?h(doc,"p",{class:"pc-partial",dataset:{pcPartial:"approvals"},text:ctx.t("home.pc.partialApprovals",{shown:formatCount(a.shown),total:formatCount(a.total)})}):null);
   // Harcama: hata değil, bilinen bir veri açığı; note-error sınıfı kullanılmaz ki gerçek hata ile karışmasın.
   const spendCell=()=>cell("spend","UNAVAILABLE",h(doc,"p",{class:"pc-value",text:MISSING}),h(doc,"p",{class:"pc-na",dataset:{pcGap:"NO_SPEND_ENDPOINT"},text:ctx.t("home.pc.spendNA")}));
   const body=pc.state==="EMPTY"?emptyNote(ctx,"home.pc.empty"):pc.state!=="VERIFIED"?na(pc.state):h(doc,"div",{class:"pc-rows"},pc.rows.map(r=>h(doc,"article",{class:"pc-row",dataset:{projectCockpit:r.projectId}},

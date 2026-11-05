@@ -211,6 +211,8 @@ export default {
   "home.pc.spend":"Spend",
   "home.pc.spendNA":"Not available: the Control API has no spend endpoint yet.",
   "home.pc.partial":"Counted from the latest {shown} of {total} runs.",
+  "home.pc.partialApprovals":"Counted from the first {shown} of {total} pending approvals.",
+  "kpi.q.approvalsTruncated":"Only the first {shown} of {total} are counted here; open the Inbox for all.",
   "home.pc.noRuns":"No runs yet",
   "home.pc.none":"None",
   "home.pc.noReason":"no reason recorded",

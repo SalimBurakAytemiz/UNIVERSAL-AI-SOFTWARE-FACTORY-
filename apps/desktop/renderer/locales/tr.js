@@ -211,6 +211,8 @@ export default {
   "home.pc.spend":"Harcama",
   "home.pc.spendNA":"Kullanılamıyor: Control API'de henüz harcama uç noktası yok.",
   "home.pc.partial":"{total} koşunun en son {shown} tanesinden sayıldı.",
+  "home.pc.partialApprovals":"{total} bekleyen onayın ilk {shown} tanesinden sayıldı.",
+  "kpi.q.approvalsTruncated":"Burada {total} öğenin yalnız ilk {shown} tanesi sayılıyor; tümü için Gelen Kutusu'nu açın.",
   "home.pc.noRuns":"Henüz koşu yok",
   "home.pc.none":"Yok",
   "home.pc.noReason":"gerekçe kaydedilmedi",

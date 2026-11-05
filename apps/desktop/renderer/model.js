@@ -53,8 +53,10 @@ export function mapCockpit(raw){
   if(isObj(raw.missions)){const s=normState(raw.missions.state);out.missions=tile(s,withValue(s,raw.missions.total),{source:"COCKPIT:missions",asOf,byStatus:byStatus(raw.missions.byStatus,s)})}
   if(isObj(raw.awaitingApproval)){
     const s=normState(raw.awaitingApproval.state),live=s==="VERIFIED"||s==="STALE";
-    const items=live&&Array.isArray(raw.awaitingApproval.items)?raw.awaitingApproval.items.filter(isObj).slice(0,200).map(x=>({missionId:str(x.missionId,80),projectId:str(x.projectId,80),title:str(x.title,200),riskLevel:str(x.riskLevel,8)})).filter(x=>x.missionId):[];
-    out.approvals={...tile(s,live?items.length:null,{source:"COCKPIT:awaitingApproval",asOf,byStatus:{}}),items};
+    const all=live&&Array.isArray(raw.awaitingApproval.items)?raw.awaitingApproval.items.filter(isObj):[];
+    const items=live?all.slice(0,200).map(x=>({missionId:str(x.missionId,80),projectId:str(x.projectId,80),title:str(x.title,200),riskLevel:str(x.riskLevel,8)})).filter(x=>x.missionId):[];
+    // //TR: V3-T1027 (#363 LOW-2): liste 200'de kesilir; "value" eski çağıranlar için aynı kalır, kesinti yalnız truncated/total bayraklarıyla dürüstçe bildirilir.
+    out.approvals={...tile(s,live?items.length:null,{source:"COCKPIT:awaitingApproval",asOf,byStatus:{}}),items,truncated:live&&all.length>items.length,total:live?all.length:null};
   }
   if(isObj(raw.orchestrator)){
     const s=normState(raw.orchestrator.state),p=isObj(raw.orchestrator.packages)?raw.orchestrator.packages:{};

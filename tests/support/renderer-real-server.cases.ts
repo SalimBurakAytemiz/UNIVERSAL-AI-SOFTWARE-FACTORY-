@@ -376,6 +376,45 @@ describe("V3-T1027: home per-project cockpit (runs, blockers, pending approvals,
     expect(failureMarks(r.root)).toEqual([]);
   });
 
+  it("approvals over 200 (#363 LOW-2): the KPI tile and every project's approvals cell say the list is truncated; counts are never silently short", { timeout: 180_000 }, async () => {
+    const app = mkApp((dataDir: string) => {
+      cockpitSeed(dataDir);
+      const store = new WorkOsStore(dataDir), tenantId = "tA", scope = {tenantId};
+      const [a] = store.listProjects(scope).filter(p => p.name === "Alpha");
+      for (let i = 0; i < 204; i++) {
+        const m = store.createMission({tenantId, projectId: a!.projectId, title: `wait ${i}`, objective: "obj", acceptanceCriteria: ["ac"], riskLevel: "R1", createdBy: RECORDER}).missionId;
+        store.transitionMission(scope, m, "PREFLIGHT" as any, "go", RECORDER);
+      }
+    });
+    const total = ((await serverJson(app, "/v1/cockpit")).awaitingApproval.items as unknown[]).length;
+    expect(total).toBe(205);
+    const r = await renderAgainstServer(app, "home");
+    expect(kpiText(r.root, "approvals")).toContain("Only the first 200 of 205 are counted here; open the Inbox for all.");
+    for (const row of rowsOf(r)) expect(all(cellOf(row, "approvals")).find(n => n.dataset.pcPartial === "approvals")?.textContent, row.textContent.slice(0, 5)).toBe("Counted from the first 200 of 205 pending approvals.");
+    expect(failureMarks(r.root)).toEqual([]);
+  });
+
+  it("approvals at or under 200: no truncation note on the KPI tile or any project cell (positive control)", { timeout: 120_000 }, async () => {
+    const app2 = mkApp(cockpitSeed);
+    const r2 = await renderAgainstServer(app2, "home");
+    expect(kpiText(r2.root, "approvals")).not.toContain("Only the first");
+    expect(all(panelOf(r2)).some(n => n.dataset.pcPartial === "approvals")).toBe(false);
+  });
+
+  it("mapCockpit truncation flag is additive: approvals.value/items keep their old meaning for every other caller (shell badge, inbox, executive)", async () => {
+    const model = await load("model.js");
+    const item = (i: number) => ({missionId: `msn_${String(i).padStart(24, "0")}`, projectId: "prj_a", title: `t${i}`, riskLevel: "R1"});
+    const raw = (n: number) => ({generatedAt: "2026-11-05T10:00:00.000Z", awaitingApproval: {state: "VERIFIED", items: Array.from({length: n}, (_, i) => item(i))}, projects: {state: "VERIFIED", count: 1}, missions: {state: "VERIFIED", total: n, byStatus: {PREFLIGHT: n}}});
+    const at = model.mapCockpit(raw(200)), over = model.mapCockpit(raw(250));
+    expect([at.approvals.value, at.approvals.items.length, at.approvals.truncated, at.approvals.total]).toEqual([200, 200, false, 200]);
+    expect([over.approvals.value, over.approvals.items.length, over.approvals.truncated, over.approvals.total]).toEqual([200, 200, true, 250]);
+    // nothing else in the model changes with truncation
+    const strip = (c: any) => ({...c, approvals: {...c.approvals, truncated: undefined, total: undefined}, missions: undefined});
+    expect(strip(over)).toEqual(strip(at));
+    for (const st of ["ERROR", "UNAVAILABLE"]) { const c = model.mapCockpit({awaitingApproval: {state: st, items: [item(1)]}}); expect([c.approvals.value, c.approvals.items, c.approvals.truncated, c.approvals.total]).toEqual([null, [], false, null]); }
+    expect(model.emptyCockpit().approvals.items).toEqual([]);
+  });
+
   it("tr: the panel is localized from the real server render", { timeout: 120_000 }, async () => {
     const app = mkApp(cockpitSeed);
     const r = await renderAgainstServer(app, "home", TOKEN, "tr");
