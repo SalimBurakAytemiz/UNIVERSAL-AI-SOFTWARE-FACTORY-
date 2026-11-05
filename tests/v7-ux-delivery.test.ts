@@ -3,11 +3,10 @@ import {describe, it, expect, beforeEach, afterEach} from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import crypto from "node:crypto";
-import net from "node:net";
 import {pathToFileURL} from "node:url";
 import {WorkOsStore} from "../core/workos/store.js";
 import {buildServer} from "../apps/control-api/src/server.js";
+import {TEST_TOKEN, DEFAULT_TEST_PORT, injectTransport, httpTransport, freeLoopbackPort, desktopAllowList, realBridge as sharedBridge, type Transport} from "./support/real-bridge.js";
 
 const rend = path.resolve(__dirname, "..", "apps", "desktop", "renderer");
 const load = async (...p: string[]): Promise<any> => import(pathToFileURL(path.join(rend, ...p)).href);
@@ -291,53 +290,21 @@ describe("UX WP-DELIVERY — negative paths, accessibility and locale parity", (
 describe("UASCO-RW-053 — Delivery & SRE view over the REAL Control API (renderer -> real buildServer)", () => {
   const root = path.resolve(__dirname, "..");
   const mainSrc = fs.readFileSync(path.join(root, "apps", "desktop", "main.mjs"), "utf8");
-  const TOKEN = "t".repeat(32);
-  let PORT = 3210;
+  const TOKEN = TEST_TOKEN;
+  let PORT = DEFAULT_TEST_PORT;
   let tmp = "";
   const apps: Array<{close: () => Promise<unknown>}> = [];
   beforeEach(() => { tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-dlv-")); });
-  afterEach(async () => { PORT = 3210; for (const a of apps.splice(0)) { try { await a.close(); } catch { /* kapanış */ } } try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* Windows */ } });
+  afterEach(async () => { PORT = DEFAULT_TEST_PORT; for (const a of apps.splice(0)) { try { await a.close(); } catch { /* kapanış */ } } try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* Windows */ } });
   const dataDir = () => path.join(tmp, "data"), runtimeDir = () => path.join(tmp, "runtime");
   function mkApp(controlToken = TOKEN) {
     fs.mkdirSync(runtimeDir(), {recursive: true});
     const app = buildServer({controlToken, runtime: runtimeDir(), repoRoot: tmp, dataDir: dataDir(), tenantId: "tA", port: PORT, logger: false});
     apps.push(app); return app;
   }
-  async function allowList() {
-    const m = /\/\/ B4-ALLOWLIST-BEGIN\n([\s\S]*?)\/\/ B4-ALLOWLIST-END/.exec(mainSrc);
-    expect(m, "main.mjs B4-ALLOWLIST block").not.toBeNull();
-    const extra = new Function(`${m![1]}\nreturn desktopExtraGetPathAllowed;`)() as (v: unknown) => boolean;
-    const boundary = await import(pathToFileURL(path.join(root, "automation", "lib", "control-boundary.mjs")).href);
-    return {allowed: (p: string) => boundary.desktopGetPathAllowed(p) || extra(p), proof: boundary.controlChallengeProof as (t: string, c: string) => string | null};
-  }
-  /** main.mjs uasco:api-get + verifyServerIdentity + api() birebir: token'ı köprü bilir (renderer bilmez). */
-  type Transport = (url: string, headers: Record<string, string>) => Promise<{statusCode: number; json: () => any}>;
-  const injectT = (app: ReturnType<typeof buildServer>): Transport => async (url, headers) => app.inject({method: "GET", url, headers});
-  // main.mjs ile aynı: gerçek HTTP fetch (sunucu kapalıysa gerçek "fetch failed" hatası -> OFFLINE)
-  const httpT = (base: string): Transport => async (url, headers) => { const r = await fetch(base + url, {headers, redirect: "error", cache: "no-store"}); const body = await r.text(); return {statusCode: r.status, json: () => JSON.parse(body)}; };
-  async function realBridge(app: ReturnType<typeof buildServer>, bridgeToken = TOKEN, transport: Transport = injectT(app)) {
-    const {allowed, proof} = await allowList();
-    const calls: string[] = [];
-    const verify = async () => {
-      const challenge = crypto.randomBytes(32).toString("hex"), expected = proof(bridgeToken, challenge);
-      if (!expected) throw new Error("CONTROL_TOKEN_NOT_CONFIGURED");
-      const r = await transport(`/health?challenge=${challenge}`, {host: `127.0.0.1:${PORT}`});
-      if (r.statusCode !== 200) throw new Error(`health: HTTP ${r.statusCode}`);
-      const h = r.json();
-      if (h.status !== "HEALTHY" || h.system !== "UNIVERSAL-AI-SOFTWARE-COMPANY-OS" || h.bindHost !== "127.0.0.1" || Number(h.port) !== PORT || h.controlProof !== expected) throw new Error("CONTROL_API_IDENTITY_UNVERIFIED");
-    };
-    const bridge = {apiGet: async (p: string) => {
-      calls.push(p);
-      if (!allowed(p)) throw new Error("INVALID_API_PATH");
-      if (p === "/health") { await verify(); return {status: "HEALTHY", system: "UNIVERSAL-AI-SOFTWARE-COMPANY-OS", serverIdentity: "VERIFIED"}; }
-      if (!p.startsWith("/v1/")) throw new Error("CONTROL_API_PATH_INVALID");
-      await verify();
-      const r = await transport(p, {"x-uasco-control-token": bridgeToken, host: `127.0.0.1:${PORT}`});
-      if (r.statusCode < 200 || r.statusCode >= 300) throw new Error(`${p}: HTTP ${r.statusCode}`);
-      return r.json();
-    }, apiPost: async (p: string) => { throw new Error(`POST must never be called (${p})`); }};
-    return {bridge, calls, allowed};
-  }
+  const allowList = desktopAllowList;
+  const httpT = httpTransport;
+  const realBridge = (app: ReturnType<typeof buildServer>, bridgeToken = TOKEN, transport: Transport = injectTransport(app)) => sharedBridge(transport, {token: bridgeToken, port: () => PORT});
   async function renderReal(app: ReturnType<typeof buildServer>, bridgeToken = TOKEN, lang = "en", transport?: Transport) {
     const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js"), view = await load("views", "delivery.js");
     const {bridge, calls, allowed} = await realBridge(app, bridgeToken, transport);
@@ -404,6 +371,8 @@ describe("UASCO-RW-053 — Delivery & SRE view over the REAL Control API (render
       const direct = await app.inject({method: "GET", url, headers: {"x-uasco-control-token": "w".repeat(32), host: `127.0.0.1:${PORT}`}});
       expect(direct.statusCode, url).toBe(403);
     }
+    // the failure is the bridge's identity proof (the token-bound controlProof does not match), not the 403
+    await expect((await realBridge(app, "w".repeat(32))).bridge.apiGet("/v1/work-runs")).rejects.toThrow("CONTROL_API_IDENTITY_UNVERIFIED");
     const {root: r, calls} = await renderReal(app, "w".repeat(32));
     expect([...calls].sort()).toEqual([...READS].sort());                             // the view did try its four reads; each failed at the bridge identity check
     for (const k of ["health", "control", "attention", "runs"]) expect(sourceState(r, k), k).toBe("FAILED");
@@ -430,7 +399,7 @@ describe("UASCO-RW-053 — Delivery & SRE view over the REAL Control API (render
   it("error: the Control API process goes away -> real HTTP fetch fails and every source is OFFLINE (distinct from FAILED); Turkish strings render too", async () => {
     seedRun();
     // like the packaged app: the server is built for, and listens on, the same loopback port (host check and identity proof bind to it)
-    PORT = await new Promise<number>((res, rej) => { const srv = net.createServer(); srv.once("error", rej); srv.listen(0, "127.0.0.1", () => { const a = srv.address() as {port: number}; srv.close(() => res(a.port)); }); });
+    PORT = await freeLoopbackPort();
     const app = mkApp();
     await app.listen({port: PORT, host: "127.0.0.1"});
     const t = httpT(`http://127.0.0.1:${PORT}`);

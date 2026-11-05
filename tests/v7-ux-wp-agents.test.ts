@@ -2169,6 +2169,8 @@ describe("UASCO-T0006 — Workforce view over the REAL Control API (renderer -> 
       const direct = await app.inject({method: "GET", url, headers: {"x-uasco-control-token": "w".repeat(32), host: `127.0.0.1:${PORT}`}});
       expect(direct.statusCode, url).toBe(403);
     }
+    // the failure is the bridge's identity proof (the token-bound controlProof does not match), not the 403
+    await expect((await realBridge(injectT(app), {token: "w".repeat(32), port: () => PORT})).bridge.apiGet("/v1/work-runs")).rejects.toThrow("CONTROL_API_IDENTITY_UNVERIFIED");
     const {root: r, calls} = await renderReal(injectT(app), "w".repeat(32));
     expect(calls.length).toBeGreaterThan(0);                                         // the view did try its reads; each one failed at the bridge identity check
     expect(kpi(r, "wf-reg")).toBe("—");
