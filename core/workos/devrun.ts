@@ -176,7 +176,7 @@ export async function awaitVictimsDead(victims: readonly ProcInfo[], deps: Victi
   for (;;) {
     const pending = victims.filter(v => deps.alive(v.pid));   // pid yok ya da zombi: kesin ölü (kimlik gerekmez)
     if (!pending.length) return {survivors: 0, verified: true};
-    const ps = await deps.list().catch(() => null);
+    const ps = await Promise.resolve().then(() => deps.list()).catch(() => null);   // senkron atan ya da reddeden liste: tablo yok (bilinmiyor)
     // Canlı pid için: tabloda aynı oluşturma zamanı = hâlâ kurbanın kendisi; farklı oluşturma zamanı = pid yeniden kullanılmış (kurban ölü); tabloda yok/tablo yok = bilinmiyor (ölü SAYILMAZ).
     let live = 0, unknown = 0;
     for (const v of pending) { const e = ps?.find(p => p.pid === v.pid); if (!e) unknown++; else if (Math.abs(e.created - v.created) <= 2) live++; }
@@ -225,6 +225,8 @@ export class DevRunManager {
   private stopTimer: NodeJS.Timeout | null = null;
   private readonly o: Required<Omit<DevRunOptions, "audit" | "executionGate" | "bridgeOptions">> & {bridgeOptions: NsenterOptions} & {audit: (event: string, details: Record<string, unknown>) => void; executionGate: ExecutionGate};
   readonly recoveries: Array<{projectId: string} & DevRunRecovery> = [];
+  // UASCO-T0042 W1: reapTree'nin ölüm doğrulaması bağımlılıkları (varsayılan gerçek süreç tablosu/saat); yalnız testler sahte tablo/sanal saat enjekte eder, davranış değişmez.
+  private deathDeps: VictimDeathDeps = REAL_DEATH_DEPS;
 
   constructor(opts: DevRunOptions) {
     this.o = {audit: () => undefined, startTimeOf: processStartTime, freePort: freeLoopbackPort, logRingBytes: 256 * 1024, logTailBytes: 16 * 1024, startWaitMs: 15_000, graceMs: 1_000, probeIntervalMs: 500, stopPollMs: 500, stopWaitMs: 15_000, treeSnapshotMs: 2_000, ...Object.fromEntries(Object.entries(opts).filter(([, v]) => v !== undefined))} as unknown as DevRunManager["o"];
@@ -531,7 +533,7 @@ export class DevRunManager {
         method = "PROCESS_GROUP_PPID_WALK";
         const vs = treeDescendants(ps, root, a.known); victims = vs.map(p => p.pid);
         for (const v of victims) { try { process.kill(v, "SIGKILL"); } catch { /* bu arada bitti */ } }
-        death = await awaitVictimsDead(vs, REAL_DEATH_DEPS);
+        death = await awaitVictimsDead(vs, this.deathDeps);
       }
     } else {
       const ps = await listProcesses();
@@ -542,7 +544,7 @@ export class DevRunManager {
         for (let i = 0; i < victims.length; i += 20) {
           cp.spawnSync("taskkill", ["/F", "/T", ...victims.slice(i, i + 20).flatMap(p => ["/PID", String(p)])], {windowsHide: true, stdio: "ignore", timeout: 15_000});
         }
-        death = await awaitVictimsDead(vs, REAL_DEATH_DEPS);
+        death = await awaitVictimsDead(vs, this.deathDeps);
       }
     }
     const st = a.state;

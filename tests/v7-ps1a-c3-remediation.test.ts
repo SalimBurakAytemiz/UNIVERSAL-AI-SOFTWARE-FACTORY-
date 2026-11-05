@@ -18,8 +18,8 @@ import {fakeSecurity} from "../core/workos/security-tools.js";
 import {FakeExecutors} from "../core/workos/executors.js";
 import {ProjectStudio, StudioError} from "../core/workos/project-studio.js";
 import {canonicalPath, pathOverlapsDataDir, managedRepoCanonical} from "../core/workos/path-guard.js";
-import {awaitVictimsDead, killProcessTree, pidAlive, treeDescendants} from "../core/workos/devrun.js";
-import type {ProcInfo} from "../core/workos/devrun.js";
+import {awaitVictimsDead, DevRunManager, killProcessTree, listProcesses, pidAlive, treeDescendants} from "../core/workos/devrun.js";
+import type {ProcInfo, VictimDeathDeps} from "../core/workos/devrun.js";
 // Ölü olması beklenen süreçler pid + başlangıç zamanı ile denetlenir (Windows pid yeniden kullanımı: çıplak pidAlive yeni ve ilgisiz bir süreci canlı sayabilir); kimlik süreç canlıyken, durdurmadan önce yakalanır.
 import {captureIdentity, sameProcessAlive} from "./support/pid-identity.js";
 import type {Project} from "../core/workos/types.js";
@@ -393,4 +393,66 @@ describe("UASCO-T0042 PS1A-GRANDCHILD: post-SIGKILL death is verified by identit
     expect(await awaitVictimsDead([V], later.deps)).toEqual({survivors: 0, verified: true});
     expect(await awaitVictimsDead([], world(() => true, () => null).deps)).toEqual({survivors: 0, verified: true});   // nothing to kill: verified at once
   });
+});
+
+// //TR: UASCO-T0042 #369 inceleme izleri: W1-W3 reapTree'nin awaitVictimsDead bağlantısı gerçek bir ayrık torunla (kendi sonucundaki kurbanlar) ve enjekte edilen ölüm bağımlılıklarıyla sabitlenir: yeniden kullanılmış pid 0/VERIFIED, canlı kurban killed kadar/UNVERIFIED (yalnız pid sayan eski ifade bunu 0 sayardı), atan süreç tablosu null/UNVERIFIED. M5 senkron atan ya da reddeden süreç tablosu bilinmiyor sayılır ve bekleme sınırlıdır. M8 son uykudan sonra kurban yeniden denetlenir: tam bütçe sınırındaki ölüm görülür, ölmeyen kurban tam bütçede (fazladan uyku yok) biter.
+describe("UASCO-T0042 #369 follow-ups: reapTree is wired to awaitVictimsDead; a throwing process table and the deadline edge are pinned", () => {
+  const V: ProcInfo = {pid: 4242, ppid: 1, created: 1_000_000};
+  const clock = () => { let t = 0, sleeps = 0; return {now: () => t, sleep: async (ms: number) => { if (++sleeps > 1000) throw new Error("UNBOUNDED_WAIT"); t += ms; }, at: () => t, sleeps: () => sleeps}; };
+  it("M5: a process table that rejects or throws synchronously is unknown -> survivors null, not VERIFIED, bounded wait (positive control: a table that recovers after throwing still verifies a reused pid)", async () => {
+    for (const list of [() => Promise.reject(new Error("ps failed")), () => { throw new Error("ps threw"); }] as VictimDeathDeps["list"][]) {
+      const c = clock();
+      expect(await awaitVictimsDead([V], {now: c.now, sleep: c.sleep, alive: () => true, list})).toEqual({survivors: null, verified: false});
+      expect(c.at()).toBe(3000); expect(c.sleeps()).toBe(30);
+    }
+    const c = clock(); let n = 0;
+    const recovering: VictimDeathDeps["list"] = () => { if (n++ < 3) throw new Error("ps threw"); return Promise.resolve([{pid: V.pid, ppid: 5, created: V.created + 9_000}]); };
+    expect(await awaitVictimsDead([V], {now: c.now, sleep: c.sleep, alive: () => true, list: recovering})).toEqual({survivors: 0, verified: true});
+    expect(c.at()).toBe(300);
+  });
+  it("M8: after the last sleep the victim is re-checked before the deadline verdict (a death exactly at the deadline is seen); a victim that never dies ends exactly at the budget with no extra sleep", async () => {
+    const edge = clock();
+    expect(await awaitVictimsDead([V], {now: edge.now, sleep: edge.sleep, alive: () => edge.at() < 3000, list: async () => [V]})).toEqual({survivors: 0, verified: true});
+    expect(edge.at()).toBe(3000); expect(edge.sleeps()).toBe(30);
+    const never = clock();
+    expect(await awaitVictimsDead([V], {now: never.now, sleep: never.sleep, alive: () => true, list: async () => [V]})).toEqual({survivors: 1, verified: false});
+    expect(never.at()).toBe(3000); expect(never.sleeps()).toBe(30);
+    const short = clock();
+    expect(await awaitVictimsDead([V], {now: short.now, sleep: short.sleep, alive: () => true, list: async () => [V]}, 250, 100)).toEqual({survivors: 1, verified: false});
+    expect(short.at()).toBe(300); expect(short.sleeps()).toBe(3);
+  });
+  it("W1-W3: reapTree reports the identity verdict for its own victims (reused pid 0/VERIFIED, live victim = killed/UNVERIFIED, throwing table null/UNVERIFIED) and still really kills the detached grandchild", async () => {
+    if (!WIN && process.platform !== "linux") return;   // yalnız PPID yürüyüşü olan platformlar (CI: Linux + Windows)
+    const dataDir = path.join(tmp, "wire-data"), stopFile = path.join(tmp, "wire-runtime", "GLOBAL_STOP.json");
+    fs.mkdirSync(dataDir, {recursive: true}); fs.mkdirSync(path.dirname(stopFile), {recursive: true});
+    const m = new DevRunManager({executionGate: testExecutionGate(), studio: new ProjectStudio({dataDir, envPolicyFile: ENV_POLICY}), envPolicyFile: ENV_POLICY, globalStopFile: stopFile, stopPollMs: 100, probeIntervalMs: 100});
+    const idleJs = "setInterval(() => {}, 1000)";
+    const reap = async (k: number, deps: (snap: ProcInfo[]) => VictimDeathDeps) => {
+      const pidFile = path.join(ext, `wire-${k}.pid`), startedAt = new Date(Date.now() - 1).toISOString();
+      const src = `const c=require('child_process').spawn(process.execPath,['-e',${JSON.stringify(idleJs)}],{detached:true,stdio:'ignore'});require('fs').writeFileSync(${JSON.stringify(pidFile)},String(c.pid));c.unref();${idleJs};`;
+      const root = cp.spawn(process.execPath, ["-e", src], {detached: !WIN, stdio: "ignore", windowsHide: true}); pids.push(root.pid!);
+      await until(() => fs.existsSync(pidFile) && fs.readFileSync(pidFile, "utf8").length > 0, x => x, 15_000);
+      const gpid = Number(fs.readFileSync(pidFile, "utf8")); pids.push(gpid);
+      const snap = await until(() => listProcesses(), ps => Boolean(ps?.some(p => p.pid === gpid)), 15_000) as ProcInfo[];
+      const g = snap.find(p => p.pid === gpid)!;
+      // Gerçek çalışmadaki gibi: torun periyodik görüntüyle kaydedilmiştir (Linux: kök grubu öldürülünce ppid'i kaybolur).
+      const a = {state: {projectId: `p_wire_${k}`, startedAt, pidStartTime: null}, child: root, known: new Map([[gpid, g.created]]), snapTimer: null};
+      (m as unknown as {deathDeps: VictimDeathDeps}).deathDeps = deps(snap);
+      await (m as unknown as {reapTree: (x: unknown) => Promise<void>}).reapTree(a);
+      return {tc: (a.state as {treeCleanup?: {method: string; killed: number; survivors: number | null; verification: string}}).treeCleanup!, gpid};
+    };
+    const virt = (list: VictimDeathDeps["list"]): VictimDeathDeps => { const c = clock(); return {now: c.now, sleep: c.sleep, alive: () => true, list}; };
+    try {
+      const method = WIN ? "PPID_WALK" : "PROCESS_GROUP_PPID_WALK";
+      const reused = await reap(1, snap => virt(async () => snap.map(p => ({...p, created: p.created + 5_000}))));
+      expect(reused.tc).toMatchObject({method, survivors: 0, verification: "VERIFIED"}); expect(reused.tc.killed).toBeGreaterThanOrEqual(1);
+      const live = await reap(2, snap => virt(async () => snap));
+      expect(live.tc).toMatchObject({method, verification: "UNVERIFIED"}); expect(live.tc.killed).toBeGreaterThanOrEqual(1);
+      expect(live.tc.survivors).toBe(live.tc.killed);   // her kurban kimliğiyle canlı: pid'e bakan eski sayım burada 0 derdi
+      const broken = await reap(3, () => virt(() => { throw new Error("ps threw"); }));
+      expect(broken.tc).toMatchObject({method, survivors: null, verification: "UNVERIFIED"}); expect(broken.tc.killed).toBeGreaterThanOrEqual(1);
+      // Pozitif kontrol: enjekte edilen yalnız doğrulamadır; SIGKILL/taskkill gerçektir ve torun gerçekten ölür.
+      for (const r of [reused, live, broken]) expect(await until(() => pidAlive(r.gpid), x => !x, 10_000)).toBe(false);
+    } finally { await m.close().catch(() => undefined); }
+  }, T);
 });
