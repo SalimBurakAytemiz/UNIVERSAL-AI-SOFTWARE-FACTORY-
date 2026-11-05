@@ -7,7 +7,7 @@ import {createHash, randomUUID} from "node:crypto";
 import {CloudJobQueue, signWorkerAuth, type WorkerAuth} from "../../apps/control-api/src/cloud/jobs.js";
 import {CLOUD_CONTRACT_VERSION, signScope, type SignedScope, type UnsignedScope} from "../../core/cloud/contracts.js";
 import {CloudArtifactStore, InMemoryArtifactBackend} from "../../core/cloud/artifacts.js";
-import {FOUNDER_CONFIRMATION_TYPE, InMemoryConfirmationReplayStore, TaskOrchestrator, dagOutsideScope, dispatchIntakeCommand, intentFromIntake, planCacheKey, signFounderConfirmation,
+import {CONFIRMATION_CLOCK_SKEW_MS, FOUNDER_CONFIRMATION_TYPE, InMemoryConfirmationReplayStore, TaskOrchestrator, dagOutsideScope, dispatchIntakeCommand, intentFromIntake, planCacheKey, signFounderConfirmation,
   type ConfirmationAuditRecord, type ConfirmationVerifier, type PlannerModel, type TaskDag, type UnsignedFounderConfirmation} from "../../core/cloud/task-orchestrator.js";
 import {intakeCommand} from "../../core/mission/command-intake.js";
 import {CloudWorker, MAX_OUTPUTS, resolveDeliverable, scopedArtifactName, type CloudJobHandlers, type WorkerArtifactStore, type WorkerQueuePort} from "../../core/sandbox/cloud-sandbox-provider.js";
@@ -15,13 +15,18 @@ import type {SandboxProvider, SandboxRunOptions} from "../../core/workos/executi
 import type {ProcResult} from "../../core/workos/executors.js";
 import {LinuxUnshareSandboxProvider} from "../../core/agents/linux-unshare-sandbox.js";
 import type {CloudJobRequest} from "../../core/cloud/contracts.js";
+import http from "node:http";
+import {ProviderRouter, modelsFromDiscovery, routedPlannerModel, type PlannerUsage, type ProviderRoute, type QuotaLimits, type RoutingAuditRecord} from "../../models/cloud-router/provider-routing.js";
+import {TenantBudget, type ModelRequest} from "../../apps/control-api/src/cloud/remote-gateway.js";
+import {discoverOmniRouteModels} from "../../models/omniroute/client.js";
 
 /** Günlük rapor için halka tablosu: REAL = bu testte çalışan ürün kodu; STUB = testteki deterministik taklit; MISSING = ürün kodu yok (test yerine geçmez). */
 export const HOPS = Object.freeze([
   {hop: "desktop command (Founder text)", status: "STUB", where: "test input string; no Desktop UI involved"},
   {hop: "command intake", status: "REAL", where: "core/mission/command-intake.ts intakeCommand (same function as POST /v1/command-intake)"},
   {hop: "Founder confirmation -> orchestrator", status: "REAL", where: "core/cloud/task-orchestrator.ts intentFromIntake/dispatchIntakeCommand: supervisor-signed (SignedScope HMAC scheme and key), single-use, <=15 min, bound to objective digest + tenant/project/environment, audited. Proves the supervisor issued it; the human Founder's identity (Desktop login) is NOT verified by this layer"},
-  {hop: "task decomposition planner model", status: "STUB", where: "LOCAL_STUB PlannerModel (deterministic, no provider; models/cloud-router not wired)"},
+  {hop: "planner routing (capability/model, context window, quota, 429 fallback, circuit breaker, budget, usage)", status: "REAL", where: "models/cloud-router/provider-routing.ts routedPlannerModel + ProviderRouter (CLOUD-T0015); model ids from OmniRoute discovery (loopback)"},
+  {hop: "planner model call", status: "STUB", where: "LOCAL_STUB_PROVIDER / LOCAL_STUB (deterministic, injected; no real or paid provider is ever called, D-08)"},
   {hop: "DAG build + dependency dispatch", status: "REAL", where: "core/cloud/task-orchestrator.ts decomposeIntent/buildTaskDag/TaskOrchestrator.dispatch"},
   {hop: "job queue (lease, retry, STOP, tenant scope)", status: "REAL", where: "apps/control-api/src/cloud/jobs.ts CloudJobQueue"},
   {hop: "cloud worker (claim/lease/heartbeat/complete, STOP, tenant, allowlist)", status: "REAL", where: "core/sandbox/cloud-sandbox-provider.ts CloudWorker (CLOUD-T0002)"},
@@ -142,7 +147,8 @@ export function registerCloudAcceptanceSuite(): void {
     it("hop table is honest: the worker is REAL, the chain's sandbox and the model are STUBs, real sandboxing only via linux-unshare; no hop claims cloud", () => {
       expect(HOPS.find(h => h.hop.startsWith("cloud worker"))!.status).toBe("REAL");
       expect(HOPS.find(h => h.hop === "sandbox execution in the chain test")!.status).toBe("STUB");
-      expect(HOPS.filter(h => h.status === "STUB").map(h => h.hop)).toEqual(expect.arrayContaining(["task decomposition planner model", "model/agent code + test execution"]));
+      expect(HOPS.filter(h => h.status === "STUB").map(h => h.hop)).toEqual(expect.arrayContaining(["planner model call", "model/agent code + test execution"]));
+      expect(HOPS.find(h => h.hop.startsWith("planner routing"))!.status).toBe("REAL");
       expect(HOPS.some(h => /cloud e2e/i.test(h.where))).toBe(false);
     });
 
@@ -607,11 +613,41 @@ export function registerCloudAcceptanceSuite(): void {
       expect(intentFromIntake(intake(), confirm(COMMAND, "tenant-a", {keyId: "k-2"}), {...ver2(), confirmationKeyIds: new Set(["k-2"])})).toMatchObject({ok: true});
       expect(intentFromIntake(intake(), confirm(COMMAND, "tenant-a", {issuedAt: "Wed, 04 Nov 2026 08:55:00 GMT"}), ver())).toEqual({ok: false, reason: "INTAKE_NOT_CONFIRMED", detail: "LIFETIME_INVALID"});
     });
-    it("L1: the replay store prunes with the verifier's clock (no second clock)", () => {
+    it("#350 N-1: the replay store never prunes by the caller's `now`; only a trusted clock past exp + skew prunes (supersedes L1)", () => {
       const st = new InMemoryConfirmationReplayStore();
       expect(st.consume("c-1", 1_000, 500)).toBe(true);
-      expect(st.consume("c-1", 1_000, 900)).toBe(false);   // still within its lifetime by the verifier's clock
-      expect(st.consume("c-1", 1_000, 1_001)).toBe(true);  // expired by the verifier's clock -> pruned
+      expect(st.consume("c-1", 1_000, 1_001)).toBe(false);                    // caller time past exp: NOT pruned (old L1 behaviour removed)
+      expect(st.consume("c-1", 1_000, 10 ** 13)).toBe(false);                 // even a far-future caller time cannot evict it
+      let wall = 500;
+      const tc = new InMemoryConfirmationReplayStore(10, () => wall);
+      expect(tc.consume("c-1", 1_000, 500)).toBe(true);
+      wall = 1_000 + CONFIRMATION_CLOCK_SKEW_MS - 1;
+      expect(tc.consume("c-1", 1_000, 10 ** 13)).toBe(false);                 // trusted clock just inside exp + skew: kept
+      wall = 1_000 + CONFIRMATION_CLOCK_SKEW_MS;
+      expect(tc.consume("c-1", 1_000, 0)).toBe(true);                         // positive control: trusted clock past exp + skew prunes
+      const thrower = new InMemoryConfirmationReplayStore(10, () => { throw new Error("ntp down"); });
+      expect(thrower.consume("c-1", 1_000, 500)).toBe(true); expect(thrower.consume("c-1", 1_000, 10 ** 13)).toBe(false);
+      const inf = new InMemoryConfirmationReplayStore(10, () => Number.POSITIVE_INFINITY);
+      expect(inf.consume("c-1", 1_000, 500)).toBe(true); expect(inf.consume("c-1", 1_000, 10 ** 13)).toBe(false);
+      expect(() => new InMemoryConfirmationReplayStore(0)).toThrow("REPLAY_STORE_CAPACITY_INVALID");
+      expect(() => new InMemoryConfirmationReplayStore(10, 5 as unknown as () => number)).toThrow("REPLAY_STORE_CLOCK_INVALID");
+    });
+    it("#350 N-1: a forward-skewed verifier `now` cannot evict a live confirmation and replay it", () => {
+      const store = new InMemoryConfirmationReplayStore();
+      const v = (at: Date): ConfirmationVerifier => ({keys: new Map([["k-1", SCOPE_KEY]]), scope: mkScope("tenant-a"), now: () => at, replay: store});
+      const token = confirm();                                                // valid 08:55–09:05
+      const other = confirm(COMMAND, "tenant-a", {issuedAt: "2026-11-05T08:55:00Z", expiresAt: "2026-11-05T09:05:00Z"});
+      expect(intentFromIntake(intake(), token, v(clock))).toMatchObject({ok: true});
+      expect(intentFromIntake(intake(), other, v(new Date("2026-11-05T09:00:00Z")))).toMatchObject({ok: true});   // a day ahead: old code pruned here
+      expect(intentFromIntake(intake(), token, v(new Date(clock.getTime() + 1000)))).toEqual({ok: false, reason: "INTAKE_NOT_CONFIRMED", detail: "REPLAYED"});
+    });
+    it("#350 N-1: a full or failing replay store fails closed (REPLAY_STORE_UNAVAILABLE), never evicting live entries", () => {
+      const full = new InMemoryConfirmationReplayStore(1); full.consume("other", Date.parse("2026-11-04T09:05:00Z"), clock.getTime());
+      const vf = (replay: ConfirmationVerifier["replay"]): ConfirmationVerifier => ({keys: new Map([["k-1", SCOPE_KEY]]), scope: mkScope("tenant-a"), now, replay});
+      expect(intentFromIntake(intake(), confirm(), vf(full))).toEqual({ok: false, reason: "INTAKE_NOT_CONFIRMED", detail: "REPLAY_STORE_UNAVAILABLE"});
+      expect(intentFromIntake(intake(), confirm(), vf({consume: () => { throw new Error("down"); }}))).toEqual({ok: false, reason: "INTAKE_NOT_CONFIRMED", detail: "REPLAY_STORE_UNAVAILABLE"});
+      expect(intentFromIntake(intake(), confirm(), vf({consume: () => "maybe" as unknown as boolean}))).toEqual({ok: false, reason: "INTAKE_NOT_CONFIRMED", detail: "REPLAY_STORE_UNAVAILABLE"});
+      expect(intentFromIntake(intake(), confirm(), vf(new InMemoryConfirmationReplayStore(2)))).toMatchObject({ok: true});   // positive control
     });
 
     // ---- B2 ----
@@ -663,6 +699,126 @@ export function registerCloudAcceptanceSuite(): void {
       expect(await run(sc, planner, cache)).toMatchObject({ok: false, stage: "DECOMPOSE", reason: "CACHED_PLAN_OUT_OF_SCOPE", detail: "SCOPE_MISMATCH"});
       expect(dagOutsideScope(first.dag, scopeOf({allowNetwork: false, jobKinds: ["BUILD"]}))).toBe("KIND_NOT_IN_SCOPE");
       expect(planner.calls).toBe(1);
+    });
+  });
+
+  describe("CLOUD-T0015 planner behind the cloud router (LOCAL_STUB_PROVIDER; OmniRoute discovery on loopback; no real/paid provider)", () => {
+    beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-cloud-planner-")); });
+    afterEach(() => { while (open.length) open.pop()!.close(); fs.rmSync(dir, {recursive: true, force: true}); });
+    const PLAN = JSON.stringify({tasks: [{key: "build", kind: "BUILD", title: "LOCAL_STUB build", deps: [], needsNetwork: false, estimatedCostUsd: 0, timeoutMs: 60_000, retry: {maxAttempts: 1, backoffMs: 0}}]});
+    const FIXTURE_CREDENTIAL = "planner-fixture-not-a-real-credential-01";   // yalnız redaksiyon denetimi için; hiçbir sağlayıcıya gönderilmez
+    type Behaviour = "ok" | "rate_limited" | "error" | "overrun";
+    /** LOCAL_STUB_PROVIDER: deterministik, enjekte edilen sahte sağlayıcı; gerçek bir model veya ağ çağrısı yapmaz. */
+    const stubProvider = (name: string, behave: () => Behaviour) => {
+      const p = {name: `LOCAL_STUB_PROVIDER:${name}`, calls: [] as ModelRequest[], async invoke(req: ModelRequest) {
+        p.calls.push(req);
+        const b = behave();
+        if (b === "rate_limited") throw Object.assign(new Error(`429 from ${name} key=${FIXTURE_CREDENTIAL}`), {code: "RATE_LIMITED"});
+        if (b === "error") throw Object.assign(new Error(`500 from ${name}`), {code: "UPSTREAM"});
+        return {text: PLAN, inputTokens: 40, outputTokens: 60, costUsd: b === "overrun" ? req.maxCostUsd * 5 : 0.01};
+      }};
+      return p;
+    };
+    const quota = (over: Partial<QuotaLimits> = {}): QuotaLimits => ({windowMs: 60_000, maxRequests: 100, maxTokens: 1_000_000, maxCostUsd: 100, ...over});
+    async function omniLoopback(ids: string[]) {
+      const seen: {auth: string | undefined}[] = [];
+      const srv = http.createServer((req, res) => { seen.push({auth: req.headers.authorization}); res.setHeader("content-type", "application/json"); res.end(JSON.stringify({data: ids.map(id => ({id}))})); });
+      await new Promise<void>(r => srv.listen(0, "127.0.0.1", () => r()));
+      const port = (srv.address() as {port: number}).port;
+      try { return {models: await discoverOmniRouteModels(`http://127.0.0.1:${port}/v1`, "", {timeoutMs: 2_000}), seen}; } finally { srv.close(); }
+    }
+    async function setup(o: {primary?: () => Behaviour; fallback?: () => Behaviour; pQuota?: QuotaLimits; tQuota?: QuotaLimits; budgetUsd?: number; contextWindow?: number} = {}) {
+      const {models, seen} = await omniLoopback(["stub-plan-large", "stub-plan-small", "unrelated-model"]);
+      const clock = {t: 1_000};
+      const primary = stubProvider("primary", o.primary ?? (() => "ok")), fallback = stubProvider("fallback", o.fallback ?? (() => "ok"));
+      const routes: ProviderRoute[] = [
+        {id: "primary", provider: primary, tier: "LOCAL", priority: 1, quota: o.pQuota ?? quota(), models: modelsFromDiscovery(models, {"plan.decompose": ["stub-plan-large", "stub-plan-small"]})},
+        {id: "fallback", provider: fallback, tier: "LOCAL", priority: 2, quota: quota(), models: modelsFromDiscovery(models, {"plan.decompose": ["missing-model", "stub-plan-small"]})},
+      ];
+      const audit: RoutingAuditRecord[] = [], usage: PlannerUsage[] = [];
+      const router = new ProviderRouter({routes, budget: new TenantBudget(new Map([["tenant-a", o.budgetUsd ?? 5]])), tenantQuotas: new Map([["tenant-a", o.tQuota ?? quota()]]),
+        audit: a => audit.push(a), knownSecrets: [FIXTURE_CREDENTIAL], now: () => clock.t, attemptTimeoutMs: 2_000, breaker: {failureThreshold: 2, baseCooldownMs: 60_000, maxCooldownMs: 120_000}});
+      const planner = routedPlannerModel({router, ctx: {sessionTenantId: "tenant-a", tenantId: "tenant-a", subject: "founder-001"}, dataClass: "INTERNAL",
+        capabilities: new Set(["plan.decompose"]), contextWindowTokens: o.contextWindow ?? 8_000, maxTotalCostUsd: 0.3, onUsage: u => usage.push(u)});
+      const q = mkQueue2(), orch = new TaskOrchestrator({queue: q, scope: mkScope("tenant-a"), now});
+      const run = () => dispatchIntakeCommand(COMMAND, confirm(), ver(), planner, {model: "plan.decompose", maxOutputTokens: 500, maxCostUsd: 0.1}, orch);
+      return {primary, fallback, audit, usage, run, router, clock, seen, q, routes};
+    }
+
+    it("routes by capability and discovered model, records usage/cost, and the planned task reaches the queue", async () => {
+      const x = await setup();
+      expect(x.routes[0].models).toEqual({"plan.decompose": "stub-plan-large"});
+      expect(x.routes[1].models).toEqual({"plan.decompose": "stub-plan-small"});
+      expect(x.seen.every(v => v.auth === undefined)).toBe(true);   // no credential sent to the loopback discovery server
+      const r = await x.run();
+      expect(r.ok, JSON.stringify(r)).toBe(true);
+      expect(x.primary.calls.map(c => c.model)).toEqual(["stub-plan-large"]);
+      expect(x.fallback.calls).toEqual([]);
+      expect(x.usage).toEqual([expect.objectContaining({ok: true, capability: "plan.decompose", providerId: "primary", model: "stub-plan-large", inputTokens: 40, outputTokens: 60, chargedUsd: 0.01})]);
+      expect(r.ok && r.plannerCostUsd).toBe(0.01);
+      expect(r.ok && r.report.submitted.length).toBe(1);
+    });
+
+    it("429 -> fallback: a rate-limited primary falls back to the next route; the credential in the provider error is redacted from the audit", async () => {
+      const x = await setup({primary: () => "rate_limited"});
+      const r = await x.run();
+      expect(r.ok, JSON.stringify(r)).toBe(true);
+      expect(x.usage[0]).toMatchObject({ok: true, providerId: "fallback", model: "stub-plan-small"});
+      expect(x.usage[0].attempts.map(a => `${a.providerId}:${a.outcome}`)).toEqual(["primary:PROVIDER_RATE_LIMITED", "fallback:OK"]);
+      expect(JSON.stringify(x.audit)).not.toContain(FIXTURE_CREDENTIAL);
+      expect(JSON.stringify(x.usage)).not.toContain(FIXTURE_CREDENTIAL);
+    });
+
+    it("circuit breaker: after repeated primary failures the circuit opens and the primary is skipped without being called", async () => {
+      const x = await setup({primary: () => "error"});
+      await x.run(); await x.run();
+      const callsBefore = x.primary.calls.length;
+      expect(x.router.breakerState("primary").state).toBe("OPEN");
+      const r = await x.run();
+      expect(r.ok).toBe(true);
+      expect(x.primary.calls.length).toBe(callsBefore);
+      expect(x.usage.at(-1)!.attempts.map(a => `${a.providerId}:${a.outcome}`)).toEqual(["primary:SKIPPED_CIRCUIT_OPEN", "fallback:OK"]);
+    });
+
+    it("quota: an exhausted provider quota falls back; an exhausted tenant quota stops planning (nothing reaches the queue)", async () => {
+      const x = await setup({pQuota: quota({maxRequests: 1})});
+      expect((await x.run()).ok).toBe(true);
+      const second = await dispatchIntakeCommand("Birim testlerini doğrula", confirm("Birim testlerini doğrula"), ver(), routedPlannerModel({router: x.router, ctx: {sessionTenantId: "tenant-a", tenantId: "tenant-a", subject: "founder-001"},
+        dataClass: "INTERNAL", capabilities: new Set(["plan.decompose"]), contextWindowTokens: 8_000, maxTotalCostUsd: 0.3, onUsage: u => x.usage.push(u)}), {model: "plan.decompose", maxOutputTokens: 500, maxCostUsd: 0.1}, new TaskOrchestrator({queue: x.q, scope: mkScope("tenant-a"), now}));
+      expect(second.ok).toBe(true);
+      expect(x.usage.at(-1)!.attempts.map(a => `${a.providerId}:${a.outcome}`)).toEqual(["primary:SKIPPED_QUOTA", "fallback:OK"]);
+      const y = await setup({tQuota: quota({maxRequests: 1})});
+      expect((await y.run()).ok).toBe(true);
+      const qBefore = y.primary.calls.length + y.fallback.calls.length;
+      const denied = await dispatchIntakeCommand("Birim testlerini doğrula", confirm("Birim testlerini doğrula"), ver(), routedPlannerModel({router: y.router, ctx: {sessionTenantId: "tenant-a", tenantId: "tenant-a", subject: "founder-001"},
+        dataClass: "INTERNAL", capabilities: new Set(["plan.decompose"]), contextWindowTokens: 8_000, maxTotalCostUsd: 0.3, onUsage: u => y.usage.push(u)}), {model: "plan.decompose", maxOutputTokens: 500, maxCostUsd: 0.1}, new TaskOrchestrator({queue: y.q, scope: mkScope("tenant-a"), now}));
+      expect(denied).toMatchObject({ok: false, stage: "DECOMPOSE", reason: "PLANNER_FAILED"});
+      expect(y.usage.at(-1)).toMatchObject({ok: false, reason: "TENANT_QUOTA_EXCEEDED"});
+      expect(y.primary.calls.length + y.fallback.calls.length).toBe(qBefore);
+    });
+
+    it("budget: an exhausted tenant budget never calls a provider; a reported cost above the cap (overrun) is charged but the plan is not used", async () => {
+      const x = await setup({budgetUsd: 0.05});
+      expect(await x.run()).toMatchObject({ok: false, stage: "DECOMPOSE", reason: "PLANNER_FAILED"});
+      expect(x.usage.at(-1)).toMatchObject({ok: false, reason: "BUDGET_EXCEEDED"});
+      expect(x.primary.calls.length + x.fallback.calls.length).toBe(0);
+      const y = await setup({primary: () => "overrun"});
+      expect(await y.run()).toMatchObject({ok: false, stage: "DECOMPOSE", reason: "PLANNER_FAILED"});
+      expect(y.usage.at(-1)).toMatchObject({ok: false, reason: "BUDGET_OVERRUN", providerId: "primary"});
+      expect(y.usage.at(-1)!.chargedUsd).toBeGreaterThan(0.1);
+      expect(y.q.claim(auth("claim", "*"))).toEqual({ok: false, reason: "NO_JOB"});
+    });
+
+    it("context window and capability allowlist are enforced before any provider is called", async () => {
+      const x = await setup({contextWindow: 600});
+      expect(await x.run()).toMatchObject({ok: false, stage: "DECOMPOSE", reason: "PLANNER_FAILED"});
+      expect(x.usage.at(-1)).toMatchObject({ok: false, reason: "CONTEXT_WINDOW_EXCEEDED"});
+      const y = await setup();
+      const r = await dispatchIntakeCommand(COMMAND, confirm(), ver(), routedPlannerModel({router: y.router, ctx: {sessionTenantId: "tenant-a", tenantId: "tenant-a", subject: "founder-001"}, dataClass: "INTERNAL",
+        capabilities: new Set(["plan.decompose"]), contextWindowTokens: 8_000, maxTotalCostUsd: 0.3, onUsage: u => y.usage.push(u)}), {model: "code.review", maxOutputTokens: 500, maxCostUsd: 0.1}, new TaskOrchestrator({queue: y.q, scope: mkScope("tenant-a"), now}));
+      expect(r).toMatchObject({ok: false, reason: "PLANNER_FAILED"});
+      expect(y.usage.at(-1)).toMatchObject({ok: false, reason: "PLANNER_CAPABILITY_NOT_ALLOWED"});
+      expect(x.primary.calls.length + x.fallback.calls.length + y.primary.calls.length + y.fallback.calls.length).toBe(0);
     });
   });
 }
