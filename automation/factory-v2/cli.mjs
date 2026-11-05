@@ -23,7 +23,7 @@ import {AuthorityBridge, snapshotV41, buildManifest, reconcile} from "./bridge.m
 import {createSharedRegistry} from "./shared-registry.mjs";
 import {Ownership} from "./ownership.mjs";
 import {runProbe, PROBE_DOMAIN} from "./probe-scenario.mjs";
-import {KEYRING_SCHEMA, generateRoleKey, signAction, canonDigest, loadCanonicalKeyring} from "./identity.mjs";
+import {KEYRING_SCHEMA, generateRoleKey, writeRoleKey, signAction, canonDigest, loadCanonicalKeyring} from "./identity.mjs";
 import {verifyGates, reviewBinding} from "./gate-verifier.mjs";
 import {liveAuthorityReaders} from "./v41-guard.mjs";
 import {liveGit, liveGateDeps, liveFreshness, githubClient, prefetchGateEvidence, openPrsLive, closedPrsLive, branchProtected, ghGet} from "./live-sources.mjs";
@@ -149,9 +149,8 @@ async function bridge() {
     catch (e) { console.log(JSON.stringify({pr: n, ready: false, headSha: pr.head.sha, baseSha: pr.base?.sha, reason: String(e?.message ?? e)}, null, 2)); process.exit(2); }
   } else if (sub === "keygen") {
     // the private key stays in this container; print only the public keyring entry for a Founder-approved keyring PR
-    const k = {...generateRoleKey(), role: arg("role"), sessionId: arg("session")};
-    fs.writeFileSync(arg("out"), JSON.stringify(k), {mode: 0o600});
-    console.log(JSON.stringify({keyId: k.keyId, role: k.role, sessionId: k.sessionId, publicKeyPem: k.publicKeyPem}, null, 2));
+    // refuses an --out inside any git work tree/repository and never overwrites; prints only the public entry
+    console.log(JSON.stringify(writeRoleKey({role: arg("role"), sessionId: arg("session"), out: arg("out")}), null, 2));
   } else if (sub === "sign-drain") {
     // offline signing by the V4.1 owner for relay: bound to the current verified state, the manifest digest and the exact drain content
     const br = b(), cur = br.read(), drain = readJson(arg("drain"));
