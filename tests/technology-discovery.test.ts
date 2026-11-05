@@ -19,7 +19,8 @@ import path from "node:path";
 import {afterAll,afterEach,beforeAll,beforeEach} from "vitest";
 import {ProjectMemory} from "../core/knowledge/project-memory.js";
 import {MEMORY_LIMITS, ProjectMemoryError} from "../core/knowledge/project-memory-types.js";
-describe("SC-14 Project Memory core",()=>{
+// //TR: WIN-2a: bu blok gerçek fsync'li dayanıklı yazı yapar (append başına 2 fsync); yoğun GitHub Windows runner'da senkron testler bittikten sonra 5 sn varsayılanını aşmış sayıldı (askıda kalma değil: vitest senkron testi tamamlanınca işaretler). Depodaki gerçek G/Ç'li dosyalarla aynı ilke (ör. pkg-bs1 vi.setConfig): yalnız süre bütçesi, hiçbir iddia değişmez. Ayrılabilir commit: SC14_TIMING ölçümü gelene kadar geri alınabilir.
+describe("SC-14 Project Memory core",{timeout:30_000},()=>{
   const PID="prj_"+"a1".repeat(12);
   const dirs:string[]=[];
   afterEach(()=>{for(const d of dirs.splice(0))fs.rmSync(d,{recursive:true,force:true})});
