@@ -99,6 +99,10 @@ describe("UASCO-T0013: analysis / pre-dev phase timeline and confirmed decisions
   beforeEach(() => { tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-t0013-")); failOn = null; holdOn = null; });
   afterEach(async () => {
     failOn = null; holdOn = null;
+    // the renderer modules are shared by every case in this vitest file: leave no selected mission, draft or lock behind for the next registered suite
+    const forms = await load("forms.js"), dec = await load("views", "predev-decisions.js"), an = await load("views", "analysis-step.js");
+    forms.selection.missionId = null; dec.resetPredevDraft(null, null); an.resetAnalysis(null);
+    for (const f of ["predev-start", "predev-approve", "predev-reject", "analysis-step", "analysis-reapprove", "analysis-plan"]) { delete forms.drafts.status[f]; forms.drafts.busy[f] = false; }
     for (const a of apps.splice(0)) { try { await a.close(); } catch { /* kapanış */ } }
     try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* Windows */ }
   });
