@@ -12,7 +12,19 @@
       "sawHolder": "session_015dYwb2S8xAzNEs1GWUEheS",
       "grantedWhileHeld": false,
       "at": 1793866701565
+    },
+    "lease/probe/supervisor--LIVE-probe": {
+      "taskId": "supervisor--LIVE-probe",
+      "environment": "cloud:B",
+      "workerId": "supervisor",
+      "sessionId": "session_015dYwb31nmLGx3QYYLp81ys",
+      "headSha": null,
+      "epoch": 1,
+      "token": "session_015dYwb31nmLGx3QYYLp81ys:1:bda9a5ce-bc10-40c9-b216-276ba8808877",
+      "acquiredAt": 1793866710063,
+      "heartbeatAt": 1793866710063,
+      "expiresAt": 1793867310063
     }
   },
-  "seq": 4
+  "seq": 5
 }
