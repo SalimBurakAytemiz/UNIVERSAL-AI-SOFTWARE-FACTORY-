@@ -1943,7 +1943,7 @@ __bi_describe('Builder I: renderer raw-error sweep', {timeout: 120_000}, () => {
   const leaked = (root: N) => all(root).some(n => n.children.length === 0 && /Error invoking remote method|uasco:api-get|\/v1\/\S*: HTTP/.test(n.textContent));
   const codes = (root: N) => all(root).filter(n => n.dataset.errorCode !== undefined).map(n => [n.dataset.errorCode, n.textContent]);
 
-  const VIEWS = ["journey", "scheduler", "operations", "install", "matrix", "integrations"] as const;
+  const VIEWS = ["journey", "scheduler", "operations", "install", "matrix", "integrations", "audit", "posture"] as const;
 
   describe("raw-error sweep — healthy real reads show no error code (control)", () => {
     for (const id of VIEWS) it(`${id}: no code line and no leaked bridge text`, async () => {
@@ -1982,7 +1982,7 @@ __bi_describe('Builder I: renderer raw-error sweep', {timeout: 120_000}, () => {
   // Static guard: no renderer module renders an error object's or result's `.message` (or a bare `message`) straight into the DOM.
   // Files touched by an open PR are allow-listed here and reported as follow-ups (they are fixed or will be fixed in their own PR).
   const OPEN_PR_FOLLOW_UPS = new Set([
-    "views/audit.js", "views/posture.js",            // #371
+    // #371: audit.js and posture.js are fixed in the #371 follow-up
     "views/queue.js", "views/readiness.js", "views/tower.js", // #377
     "views/company.js", "views/academy.js", "views/domains.js", // #382 (fixed there)
     "views/executive.js"                              // #374

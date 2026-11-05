@@ -376,7 +376,7 @@ describe("Posture — only already-allow-listed read-only GETs are used (protect
       expect(src).not.toMatch(/transition|performTransition|work-actions/);
     }
     const imports = moduleSpecifiers({source: read("views", "posture.js")}).sort();
-    expect(imports).toEqual(["../components.js", "../model.js", "../posture-core.js", "../work-core.js"]);
+    expect(imports).toEqual(["../components.js", "../error-code.js", "../model.js", "../posture-core.js", "../work-core.js"]);
     expect(moduleSpecifiers({source: read("posture-core.js")}).sort()).toEqual(["./readiness-core.js"]);
     for (const m of ["commandCenterWorkRuns", "commandCenterReviews", "commandCenterEvidence"]) expect(read("views", "posture.js")).toContain(`api.${m}(`);
     // api.js: tek apiPost çağrısı korunur (yeni POST yolu eklenmez); duruş erişimcileri yalnız sabit GET yollarını okur.

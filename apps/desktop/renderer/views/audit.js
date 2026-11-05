@@ -1,4 +1,5 @@
 // //TR: Bu görünüm Denetim İzi'dir (FA-V2-PRODUCT, UI-070): YALNIZ salt-okunur ve zaten izinli GET'lerden okunur — GET /v1/runs (en yeni N koşu), GET /v1/runs/RUN-*/events (koşu başına olay günlüğü) ve GET /v1/evidence (kanıt referansları). Olaylar koşular arasında yeni-önce tek listede birleştirilir. Okunamayan/bozuk kaynak asla boş-temiz liste olarak gösterilmez (ayrık dürüst durum, kısmi okuma işareti, okunamayan sayı 0 değil "—"); "temiz/sorunsuz/doğrulanmış" iddiası yoktur, kayıt yokluğu yalnız "kayıt yok" demektir. Etiketler ctx.t ile, sunucu metinleri yalnız textContent ile yazılır; yazma, POST veya eylem yoktur.
+import {safeErrorCode} from "../error-code.js";
 import {h,panel,statePill,kpiTile,stateNote} from "../components.js";
 import {MISSING} from "../model.js";
 import {formatDateTime,verificationChipKind} from "../work-core.js";
@@ -36,7 +37,7 @@ function stateBlock(ctx,state,source,message){
   return h(doc,"div",{class:`audit-state state-${st.toLowerCase()}`,role:"status",dataset:{auditState:st,source}},
     h(doc,"p",{class:"audit-state-head"},statePill(ctx,failKind(st)),h(doc,"strong",{text:ctx.t(`audit.state.${st}`)})),
     h(doc,"p",{class:"note",text:ctx.t(`audit.hint.${st}`,{source:`GET ${AUDIT_SOURCE_PATHS[source]}`})}),
-    message?h(doc,"p",{class:"note mono",text:message}):null);
+    safeErrorCode(message)?h(doc,"p",{class:"note mono",dataset:{errorCode:safeErrorCode(message)},text:safeErrorCode(message)}):null);
 }
 
 function sourcesPanel(ctx,res,a){
