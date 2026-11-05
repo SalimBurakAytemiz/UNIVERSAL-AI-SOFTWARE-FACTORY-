@@ -2,6 +2,7 @@
 import {planFormPanel} from "./plan-form.js";
 import {taskStatusControls} from "./task-status.js";
 import {taskRunsPanel,loadTaskRuns} from "./task-runs.js";
+import {pageMissions,missionMore,filterTasks,taskFilterKey,taskFilterBar,taskFilterNone,roving,workEmpty} from "./work-polish.js";
 import {h,panel,stateNote,emptyNote,chip,statusPill,statusLabel,badge,verificationChip,kpiTile,statePill,missionPill,timelineItem} from "../components.js";
 import {formatTime,formatCount,MISSING,missionPillKind} from "../model.js";
 import {MISSION_STATUSES,MISSION_PATH,RISK_LEVELS,RUN_EXPERTS,RUN_EXPERT_NONE,allowedNext,requiresConfirm,canStartRun,buildMissionRequest,filterMissions,taskFollowsRun,formatDateTime,deriveTaskInspector,deriveWorkTimeline,runReadiness,runReasonHintKey,runStepRows,liveRuns} from "../work-core.js";
@@ -132,17 +133,20 @@ function filterBar(ctx,items){
     on:{click:()=>{drafts.missionFilter=k;ctx.rerender()}},text:`${k==="ALL"?ctx.t("work.filter.all"):statusLabel(ctx,k)} (${k==="ALL"?items.length:counts.get(k)})`})));
 }
 function missionTable(ctx,items,projectNames,allRuns){
-  const doc=ctx.doc,shown=filterMissions(items,drafts.missionFilter);
+  const doc=ctx.doc,page=pageMissions(filterMissions(items,drafts.missionFilter),drafts.missionFilter),shown=page.rows,titles=[];
   if(!shown.length)return emptyNote(ctx,"work.filter.none");
-  return h(doc,"div",{class:"table-wrap"},h(doc,"table",{class:"table"},
+  // //TR: V3-T1023 alternatifi: uzun tablo sayfalanır (dürüst N / M) ve başlık sütununda dolaşan tabindex (yukarı/aşağı, Home/End) vardır.
+  const table=h(doc,"div",{class:"table-wrap"},h(doc,"table",{class:"table"},
     h(doc,"caption",{class:"sr-only",text:ctx.t("work.caption")}),
     h(doc,"thead",{},h(doc,"tr",{},["work.col.title","work.col.project","work.col.status","work.col.risk","work.col.created"].map(k=>h(doc,"th",{scope:"col",text:ctx.t(k)})))),
     h(doc,"tbody",{},shown.map(m=>{
       const sel=selection.missionId===m.missionId;
       return h(doc,"tr",{class:sel?"row-selected":null},
-        h(doc,"td",{},h(doc,"button",{type:"button",class:"link-btn",dataset:{missionId:m.missionId},"aria-current":sel?"true":null,on:{click:()=>{selection.missionId=m.missionId;ctx.rerender()}},text:m.title})),
+        h(doc,"td",{},(()=>{const b=h(doc,"button",{type:"button",class:"link-btn",id:`mission-row-${titles.length}`,dataset:{missionId:m.missionId},"aria-current":sel?"true":null,on:{click:()=>{selection.missionId=m.missionId;ctx.rerender()}},text:m.title});titles.push(b);return b})()),
         h(doc,"td",{text:projectNames.get(m.projectId)??MISSING}),h(doc,"td",{},statusPill(ctx,m.status),missionNotVerified(allRuns,m.missionId)?[" ",notVerifiedBadge(ctx,"mission")]:null),h(doc,"td",{text:m.riskLevel}),h(doc,"td",{text:formatTime(m.createdAt,ctx.i18n.lang)}));
     }))));
+  roving(titles);
+  return h(doc,"div",{},table,missionMore(ctx,page));
 }
 // ---------- UI-023 Görev Kanban Panosu (liste/pano düzeni) ----------
 /** //TR: Düzen seçici: liste (varsayılan, mevcut filtre+tablo) ya da pano; yalnız bellek-içi oturum durumu, depo/ağ yok. */
@@ -349,12 +353,18 @@ export function workTimeline(ctx,detail,runsRes){
   return h(doc,"div",{class:"wtl",id:"work-wtl",role:"region","aria-label":ctx.t("work.wtl.title"),dataset:{wtlState:d.state}},h(doc,"h4",{text:ctx.t("work.wtl.title")}),inner);
 }
 function taskList(ctx,tasks,missionId){
-  const doc=ctx.doc;
-  return h(doc,"ul",{class:"task-list"},tasks.map(t=>{
+  const doc=ctx.doc,btns=[];
+  // //TR: V3-T1023 alternatifi: durum süzgeci (sayılarla) ve dolaşan tabindex; eşleşme yoksa dürüst boş not.
+  const shown=filterTasks(tasks,taskFilterKey(missionId));
+  if(!shown.length)return taskFilterNone(ctx,missionId);
+  const list=h(doc,"ul",{class:"task-list","aria-label":ctx.t("work.detail.tasks")},shown.map(t=>{
     const on=inspectedTask?.missionId===missionId&&inspectedTask.taskId===t.taskId;
     return h(doc,"li",{},h(doc,"button",{type:"button",class:"link-btn",dataset:{taskInspect:t.taskId,focusKey:`task-${t.taskId}`},"aria-pressed":on?"true":"false","aria-controls":"task-inspector",
       on:{click:()=>{inspectedTask=on?null:{missionId,taskId:t.taskId};ctx.rerender()}},text:t.title})," ",statusPill(ctx,t.status));
   }));
+  for(const li of list.children)if(li.children?.[0])btns.push(li.children[0]);
+  roving(btns);
+  return list;
 }
 /** Seçili görevin koşu bölümü (görev seçili ve okuması yapılmışsa); yoksa null. */
 function taskRunsFor(ctx,m,runsRes,taskRuns){
@@ -372,7 +382,7 @@ function detailPanel(ctx,detail,runsRes,runDetails,evRes,project=null,taskRuns=n
     h(doc,"p",{class:"panel-meta"},statusPill(ctx,m.status),badge(ctx,m.riskLevel,"badge-risk"),h(doc,"span",{class:"mono",text:m.missionId}),missionNotVerified(runsRes.state==="VERIFIED"?runsRes.items:[],m.missionId)?notVerifiedBadge(ctx,"mission"):null),
     h(doc,"p",{text:m.objective}),
     h(doc,"h4",{text:ctx.t("work.detail.criteria")}),m.acceptanceCriteria.length?h(doc,"ul",{},m.acceptanceCriteria.map(c=>h(doc,"li",{text:c}))):emptyNote(ctx,"work.detail.noCriteria"),
-    m.tasks.length?h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),taskList(ctx,m.tasks,m.missionId),taskInspector(ctx,detail,runsRes,m.missionId,taskRuns),taskStatusControls(ctx,m,inspectedTask?.missionId===m.missionId?inspectedTask.taskId:null),taskRunsFor(ctx,m,runsRes,taskRuns)):h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),h(doc,"p",{class:"note",dataset:{noTasks:m.missionId},text:ctx.t("work.detail.noTasks")})),
+    m.tasks.length?h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),taskFilterBar(ctx,m.missionId,m.tasks),taskList(ctx,m.tasks,m.missionId),taskInspector(ctx,detail,runsRes,m.missionId,taskRuns),taskStatusControls(ctx,m,inspectedTask?.missionId===m.missionId?inspectedTask.taskId:null),taskRunsFor(ctx,m,runsRes,taskRuns)):h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),h(doc,"p",{class:"note",dataset:{noTasks:m.missionId},text:ctx.t("work.detail.noTasks")})),
     workTimeline(ctx,detail,runsRes),
     planFormPanel(ctx,m),
     h(doc,"h4",{text:ctx.t("work.timeline.title")}),statusTimeline(ctx,m.status),
@@ -389,7 +399,7 @@ export async function render(ctx){
   const projects=projRes.state==="VERIFIED"?projRes.items:[],names=new Map(projects.map(p=>[p.projectId,p.name]));
   let body;
   if(res.state!=="VERIFIED")body=stateNote(ctx,res.state);
-  else if(!res.items.length)body=emptyNote(ctx,"work.empty");
+  else if(!res.items.length)body=workEmpty(ctx,"work.empty");
   else body=h(doc,"div",{},layoutToggle(ctx),...(boardLayout()==="board"?[missionBoard(ctx,res.items,names,allRuns)]:[filterBar(ctx,res.items),missionTable(ctx,res.items,names,allRuns)]));
   let detailNode=null;
   if(selection.missionId){
