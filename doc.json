@@ -1,6 +1,6 @@
 {
   "schema": "uasco.factory-v2.shared-registry/1",
-  "phase": "section:probe/go-lease",
+  "phase": "section:lease/probe/writer--LIVE-probe-uasco",
   "sections": {
     "probe-keys/session_015dYwb2b3yVQ6iay68HXCD8": {
       "session": "session_015dYwb2b3yVQ6iay68HXCD8",
@@ -621,6 +621,18 @@
     "probe/go-lease": {
       "session": "session_015dYwb4zVwFwg69iij2RdGq",
       "at": 1793869411914
+    },
+    "lease/probe/writer--LIVE-probe-uasco": {
+      "taskId": "writer--LIVE-probe-uasco",
+      "environment": "cloud:A",
+      "workerId": "merge-writer",
+      "sessionId": "session_015dYwb2b3yVQ6iay68HXCD8",
+      "headSha": null,
+      "epoch": 1,
+      "token": "session_015dYwb2b3yVQ6iay68HXCD8:1:c9e8dcbb-7ab9-45f3-bb2b-e208f752acca",
+      "acquiredAt": 1793869411931,
+      "heartbeatAt": 1793869411931,
+      "expiresAt": 1793869441931
     }
   },
   "revs": {
@@ -635,7 +647,8 @@
     "relay/drain": 1,
     "probe/B-commit": 1,
     "probe/A-guard-checked": 1,
-    "probe/go-lease": 1
+    "probe/go-lease": 1,
+    "lease/probe/writer--LIVE-probe-uasco": 1
   },
-  "seq": 15
+  "seq": 16
 }
