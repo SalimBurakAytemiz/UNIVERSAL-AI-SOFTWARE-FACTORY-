@@ -1,0 +1,100 @@
+42093245968	CI	pull_request	queued		2026-11-05T19:22:22Z	2026-11-05T19:22:22Z	2026-11-05T19:23:09Z	claude/builder-i-t0006-subpanels
+42093241302	UASCO Independent Review	pull_request_target	queued		2026-11-05T19:22:20Z	2026-11-05T19:22:20Z	2026-11-05T19:22:24Z	claude/builder-i-t0006-subpanels
+42093184545	CI	pull_request	queued		2026-11-05T19:21:59Z	2026-11-05T19:21:59Z	2026-11-05T19:23:20Z	claude/builder-c-t0124-evidence-digests
+42093177390	UASCO Independent Review	pull_request_target	queued		2026-11-05T19:21:56Z	2026-11-05T19:21:56Z	2026-11-05T19:22:01Z	claude/builder-c-t0124-evidence-digests
+42093117687	CI	pull_request	queued		2026-11-05T19:21:34Z	2026-11-05T19:21:34Z	2026-11-05T19:22:15Z	claude/builder-d-t0067-test-surface
+42093116224	CI	pull_request	queued		2026-11-05T19:21:33Z	2026-11-05T19:21:33Z	2026-11-05T19:21:35Z	claude/builder-g-t0006-assurance
+42093109864	UASCO Independent Review	pull_request_target	pending		2026-11-05T19:21:31Z	2026-11-05T19:21:31Z	2026-11-05T19:21:32Z	claude/builder-d-t0067-test-surface
+42093111149	UASCO Independent Review	pull_request_target	queued		2026-11-05T19:21:31Z	2026-11-05T19:21:31Z	2026-11-05T19:21:37Z	claude/builder-g-t0006-assurance
+42093039226	CI	pull_request	queued		2026-11-05T19:21:04Z	2026-11-05T19:21:04Z	2026-11-05T19:21:06Z	claude/builder-g-t0006-workforce
+42093034717	UASCO Independent Review	pull_request_target	queued		2026-11-05T19:21:03Z	2026-11-05T19:21:03Z	2026-11-05T19:21:07Z	claude/builder-g-t0006-workforce
+42092952296	CI	pull_request	queued		2026-11-05T19:20:33Z	2026-11-05T19:20:33Z	2026-11-05T19:20:43Z	claude/builder-i-real-server-ext
+42092947033	UASCO Independent Review	pull_request_target	queued		2026-11-05T19:20:31Z	2026-11-05T19:20:31Z	2026-11-05T19:20:36Z	claude/builder-i-real-server-ext
+42092872875	CI	pull_request	queued		2026-11-05T19:20:05Z	2026-11-05T19:20:05Z	2026-11-05T19:20:28Z	claude/builder-g-rw053-delivery-sre
+42092868496	UASCO Independent Review	pull_request_target	queued		2026-11-05T19:20:03Z	2026-11-05T19:20:03Z	2026-11-05T19:20:07Z	claude/builder-g-rw053-delivery-sre
+42092816816	CI	pull_request	pending		2026-11-05T19:19:44Z	2026-11-05T19:19:44Z	2026-11-05T19:19:45Z	claude/builder-h-desktop-tour
+42092805630	UASCO Independent Review	pull_request_target	queued		2026-11-05T19:19:39Z	2026-11-05T19:19:39Z	2026-11-05T19:19:43Z	claude/builder-h-desktop-tour
+42092752404	CI	pull_request	queued		2026-11-05T19:19:19Z	2026-11-05T19:19:19Z	2026-11-05T19:19:57Z	claude/builder-d-qa-api-validators
+42092747214	UASCO Independent Review	pull_request_target	queued		2026-11-05T19:19:17Z	2026-11-05T19:19:17Z	2026-11-05T19:19:21Z	claude/builder-d-qa-api-validators
+42092681391	CI	pull_request	queued		2026-11-05T19:18:52Z	2026-11-05T19:18:52Z	2026-11-05T19:18:52Z	claude/builder-c-v3-t1016-quota-resumable
+42092675972	UASCO Independent Review	pull_request_target	queued		2026-11-05T19:18:50Z	2026-11-05T19:18:50Z	2026-11-05T19:18:55Z	claude/builder-c-v3-t1016-quota-resumable
+42092215571	UASCO Independent Review	pull_request_target	completed	skipped	2026-11-05T19:15:54Z	2026-11-05T19:15:54Z	2026-11-05T19:15:55Z	claude/builder-c-t0111-cost-telemetry
+42092214874	CI	pull_request	queued		2026-11-05T19:15:53Z	2026-11-05T19:15:53Z	2026-11-05T19:15:53Z	claude/builder-c-t0111-cost-telemetry
+42091667471	CI	push	queued		2026-11-05T19:12:27Z	2026-11-05T19:12:27Z	2026-11-05T19:12:27Z	v7/integration
+42091667220	Windows Installer	push	queued		2026-11-05T19:12:27Z	2026-11-05T19:12:27Z	2026-11-05T19:12:27Z	v7/integration
+42091208209	CI	pull_request	queued		2026-11-05T19:09:41Z	2026-11-05T19:09:41Z	2026-11-05T19:09:41Z	claude/builder-g-t0006-release-newest
+42091207835	UASCO Independent Review	pull_request_target	queued		2026-11-05T19:09:41Z	2026-11-05T19:09:41Z	2026-11-05T19:09:44Z	claude/builder-g-t0006-release-newest
+42090151914	UASCO Independent Review	pull_request_target	completed	cancelled	2026-11-05T19:03:12Z	2026-11-05T19:03:12Z	2026-11-05T19:22:22Z	claude/builder-i-t0006-subpanels
+42090151351	CI	pull_request	completed	cancelled	2026-11-05T19:03:11Z	2026-11-05T19:03:11Z	2026-11-05T19:23:09Z	claude/builder-i-t0006-subpanels
+42089932738	CI	pull_request	in_progress		2026-11-05T19:01:49Z	2026-11-05T19:01:49Z	2026-11-05T19:23:21Z	claude/builder-c-t0083-core-tests-in-ci
+42089930326	UASCO Independent Review	pull_request_target	queued		2026-11-05T19:01:48Z	2026-11-05T19:01:48Z	2026-11-05T19:01:52Z	claude/builder-c-t0083-core-tests-in-ci
+42089532379	CI	pull_request	completed	cancelled	2026-11-05T18:59:25Z	2026-11-05T18:59:25Z	2026-11-05T19:01:51Z	claude/builder-c-t0083-core-tests-in-ci
+42089529803	UASCO Independent Review	pull_request_target	completed	cancelled	2026-11-05T18:59:24Z	2026-11-05T18:59:24Z	2026-11-05T19:01:50Z	claude/builder-c-t0083-core-tests-in-ci
+42089418070	CI	pull_request	completed	cancelled	2026-11-05T18:58:40Z	2026-11-05T18:58:40Z	2026-11-05T18:59:27Z	claude/builder-c-t0083-core-tests-in-ci
+42089417344	UASCO Independent Review	pull_request_target	completed	cancelled	2026-11-05T18:58:40Z	2026-11-05T18:58:40Z	2026-11-05T18:59:26Z	claude/builder-c-t0083-core-tests-in-ci
+42088874675	UASCO Independent Review	pull_request_target	queued		2026-11-05T18:55:14Z	2026-11-05T18:55:14Z	2026-11-05T18:55:17Z	claude/builder-c-t0083-route-truth
+42088875614	CI	pull_request	queued		2026-11-05T18:55:14Z	2026-11-05T18:55:14Z	2026-11-05T19:07:19Z	claude/builder-c-t0083-route-truth
+42087225383	CI	pull_request	completed	cancelled	2026-11-05T18:45:01Z	2026-11-05T18:45:01Z	2026-11-05T19:22:15Z	claude/builder-d-t0067-test-surface
+42087219285	UASCO Independent Review	pull_request_target	completed	cancelled	2026-11-05T18:44:58Z	2026-11-05T18:44:58Z	2026-11-05T19:21:32Z	claude/builder-d-t0067-test-surface
+42085076583	UASCO Independent Review	pull_request_target	queued		2026-11-05T18:31:37Z	2026-11-05T18:31:37Z	2026-11-05T18:31:40Z	claude/builder-d-pkg-r4-timing
+42085077280	CI	pull_request	in_progress		2026-11-05T18:31:37Z	2026-11-05T18:31:37Z	2026-11-05T19:12:37Z	claude/builder-d-pkg-r4-timing
+42084896007	UASCO Independent Review	pull_request_target	queued		2026-11-05T18:30:31Z	2026-11-05T18:30:31Z	2026-11-05T18:30:34Z	claude/builder-i-raw-error-sweep
+42084896000	CI	pull_request	in_progress		2026-11-05T18:30:31Z	2026-11-05T18:30:31Z	2026-11-05T19:21:47Z	claude/builder-i-raw-error-sweep
+42083832183	UASCO Independent Review	pull_request_target	completed	cancelled	2026-11-05T18:23:55Z	2026-11-05T18:23:55Z	2026-11-05T19:21:59Z	claude/builder-c-t0124-evidence-digests
+42083832266	CI	pull_request	completed	cancelled	2026-11-05T18:23:55Z	2026-11-05T18:23:55Z	2026-11-05T19:23:19Z	claude/builder-c-t0124-evidence-digests
+42083715663	CI	pull_request	completed	cancelled	2026-11-05T18:23:12Z	2026-11-05T18:23:12Z	2026-11-05T19:21:35Z	claude/builder-g-t0006-assurance
+42083715980	UASCO Independent Review	pull_request_target	completed	cancelled	2026-11-05T18:23:12Z	2026-11-05T18:23:12Z	2026-11-05T19:21:34Z	claude/builder-g-t0006-assurance
+42082691501	CI	pull_request	completed	cancelled	2026-11-05T18:16:47Z	2026-11-05T18:16:47Z	2026-11-05T19:21:06Z	claude/builder-g-t0006-workforce
+42082691459	UASCO Independent Review	pull_request_target	completed	cancelled	2026-11-05T18:16:47Z	2026-11-05T18:16:47Z	2026-11-05T19:21:05Z	claude/builder-g-t0006-workforce
+42081945157	CI	pull_request	completed	cancelled	2026-11-05T18:12:09Z	2026-11-05T18:12:09Z	2026-11-05T18:45:02Z	claude/builder-d-t0067-test-surface
+42081938285	UASCO Independent Review	pull_request_target	completed	cancelled	2026-11-05T18:12:07Z	2026-11-05T18:12:07Z	2026-11-05T18:45:00Z	claude/builder-d-t0067-test-surface
+42081642057	UASCO Independent Review	pull_request_target	completed	cancelled	2026-11-05T18:10:14Z	2026-11-05T18:10:14Z	2026-11-05T19:20:34Z	claude/builder-i-real-server-ext
+42081642212	CI	pull_request	completed	cancelled	2026-11-05T18:10:14Z	2026-11-05T18:10:14Z	2026-11-05T19:20:43Z	claude/builder-i-real-server-ext
+42081564710	CI	pull_request	queued		2026-11-05T18:09:45Z	2026-11-05T18:09:45Z	2026-11-05T18:45:18Z	claude/builder-a-v3-t1027-cockpit
+42081559525	UASCO Independent Review	pull_request_target	pending		2026-11-05T18:09:43Z	2026-11-05T18:09:43Z	2026-11-05T18:09:44Z	claude/builder-a-v3-t1027-cockpit
+42080940596	CI	pull_request	completed	cancelled	2026-11-05T18:05:46Z	2026-11-05T18:05:46Z	2026-11-05T19:20:54Z	claude/builder-h-desktop-tour
+42080936866	UASCO Independent Review	pull_request_target	completed	cancelled	2026-11-05T18:05:44Z	2026-11-05T18:05:44Z	2026-11-05T19:19:41Z	claude/builder-h-desktop-tour
+42080919426	UASCO Independent Review	pull_request_target	completed	cancelled	2026-11-05T18:05:37Z	2026-11-05T18:05:37Z	2026-11-05T19:20:05Z	claude/builder-g-rw053-delivery-sre
+42080919309	CI	pull_request	completed	cancelled	2026-11-05T18:05:37Z	2026-11-05T18:05:37Z	2026-11-05T19:20:28Z	claude/builder-g-rw053-delivery-sre
+42079381945	UASCO Independent Review	pull_request_target	completed	cancelled	2026-11-05T17:55:54Z	2026-11-05T17:55:54Z	2026-11-05T19:19:19Z	claude/builder-d-qa-api-validators
+42079382010	CI	pull_request	completed	cancelled	2026-11-05T17:55:54Z	2026-11-05T17:55:54Z	2026-11-05T19:19:57Z	claude/builder-d-qa-api-validators
+42079155830	UASCO Independent Review	pull_request_target	queued		2026-11-05T17:54:28Z	2026-11-05T17:54:28Z	2026-11-05T17:54:31Z	claude/builder-e-export-fix-test
+42079156216	CI	pull_request	in_progress		2026-11-05T17:54:28Z	2026-11-05T17:54:28Z	2026-11-05T19:17:00Z	claude/builder-e-export-fix-test
+42079046757	CI	pull_request	completed	failure	2026-11-05T17:53:47Z	2026-11-05T17:53:47Z	2026-11-05T19:22:19Z	claude/fv2-gov-dispatch-fence
+42079019311	CI	pull_request	in_progress		2026-11-05T17:53:37Z	2026-11-05T17:53:37Z	2026-11-05T19:23:07Z	claude/fv2-p0-control
+42078927711	UASCO Independent Review	pull_request_target	completed	cancelled	2026-11-05T17:53:02Z	2026-11-05T17:53:02Z	2026-11-05T18:05:46Z	claude/builder-h-desktop-tour
+42078927583	CI	pull_request	completed	cancelled	2026-11-05T17:53:02Z	2026-11-05T17:53:02Z	2026-11-05T18:06:23Z	claude/builder-h-desktop-tour
+42078083571	CI	pull_request	in_progress		2026-11-05T17:47:43Z	2026-11-05T17:47:43Z	2026-11-05T19:11:06Z	claude/builder-g-delivery-checklist
+42078077596	UASCO Independent Review	pull_request_target	queued		2026-11-05T17:47:41Z	2026-11-05T17:47:41Z	2026-11-05T17:47:45Z	claude/builder-g-delivery-checklist
+42077866387	UASCO Independent Review	pull_request_target	queued		2026-11-05T17:46:22Z	2026-11-05T17:46:22Z	2026-11-05T17:46:25Z	claude/builder-e-backend-reconnect
+42077866498	CI	pull_request	in_progress		2026-11-05T17:46:22Z	2026-11-05T17:46:22Z	2026-11-05T19:19:59Z	claude/builder-e-backend-reconnect
+42077170383	CI	pull_request	in_progress		2026-11-05T17:42:03Z	2026-11-05T17:42:03Z	2026-11-05T19:23:11Z	claude/builder-c-mobile-companion
+42077162203	UASCO Independent Review	pull_request_target	pending		2026-11-05T17:42:00Z	2026-11-05T17:42:00Z	2026-11-05T17:42:01Z	claude/builder-c-mobile-companion
+42077064981	CI	pull_request	completed	success	2026-11-05T17:41:22Z	2026-11-05T17:41:22Z	2026-11-05T19:21:19Z	claude/builder-h-revision
+42077059364	UASCO Independent Review	pull_request_target	queued		2026-11-05T17:41:20Z	2026-11-05T17:41:20Z	2026-11-05T17:41:24Z	claude/builder-h-revision
+42076743834	UASCO Independent Review	pull_request_target	queued		2026-11-05T17:39:23Z	2026-11-05T17:39:23Z	2026-11-05T17:39:27Z	claude/builder-f-layout-fixes-2
+42076744115	CI	pull_request	completed	success	2026-11-05T17:39:23Z	2026-11-05T17:39:23Z	2026-11-05T19:22:24Z	claude/builder-f-layout-fixes-2
+42076614798	CI	pull_request	in_progress		2026-11-05T17:38:34Z	2026-11-05T17:38:34Z	2026-11-05T19:23:13Z	claude/builder-c-v3-t1032-a-b
+42076609638	UASCO Independent Review	pull_request_target	queued		2026-11-05T17:38:32Z	2026-11-05T17:38:32Z	2026-11-05T17:38:36Z	claude/builder-c-v3-t1032-a-b
+42076597327	CI	pull_request	completed	success	2026-11-05T17:38:27Z	2026-11-05T17:38:27Z	2026-11-05T19:06:50Z	claude/builder-i-company-academy
+42076593089	UASCO Independent Review	pull_request_target	queued		2026-11-05T17:38:26Z	2026-11-05T17:38:26Z	2026-11-05T17:38:30Z	claude/builder-i-company-academy
+42076591693	CI	pull_request	in_progress		2026-11-05T17:38:25Z	2026-11-05T17:38:25Z	2026-11-05T19:09:49Z	claude/builder-i-tower-ops
+42076588133	UASCO Independent Review	pull_request_target	queued		2026-11-05T17:38:24Z	2026-11-05T17:38:24Z	2026-11-05T17:54:05Z	claude/builder-i-tower-ops
+42076588393	CI	pull_request	completed	success	2026-11-05T17:38:24Z	2026-11-05T17:38:24Z	2026-11-05T18:51:09Z	claude/builder-i-projects-ux
+42076584770	UASCO Independent Review	pull_request_target	queued		2026-11-05T17:38:23Z	2026-11-05T17:38:23Z	2026-11-05T17:38:27Z	claude/builder-i-projects-ux
+42076582148	CI	pull_request	completed	success	2026-11-05T17:38:22Z	2026-11-05T17:38:22Z	2026-11-05T18:33:31Z	claude/builder-i-flow-qa-ui
+42076577600	CI	pull_request	completed	failure	2026-11-05T17:38:20Z	2026-11-05T17:38:20Z	2026-11-05T19:15:10Z	claude/builder-i-flow-card-honesty
+42076576806	UASCO Independent Review	pull_request_target	queued		2026-11-05T17:38:20Z	2026-11-05T17:38:20Z	2026-11-05T19:23:12Z	claude/builder-i-flow-qa-ui
+42076571038	UASCO Independent Review	pull_request_target	queued		2026-11-05T17:38:18Z	2026-11-05T17:38:18Z	2026-11-05T19:15:01Z	claude/builder-i-flow-card-honesty
+42076180421	CI	pull_request	completed	failure	2026-11-05T17:35:52Z	2026-11-05T17:35:52Z	2026-11-05T19:17:07Z	claude/builder-c-v3-t1016-quota-resumable
+42076173483	UASCO Independent Review	pull_request_target	completed	cancelled	2026-11-05T17:35:49Z	2026-11-05T17:35:49Z	2026-11-05T19:18:52Z	claude/builder-c-v3-t1016-quota-resumable
+42075866435	CI	pull_request	completed	success	2026-11-05T17:34:00Z	2026-11-05T17:34:00Z	2026-11-05T19:11:03Z	claude/builder-d-qa-ps1a-diag
+42075859697	UASCO Independent Review	pull_request_target	pending		2026-11-05T17:33:58Z	2026-11-05T17:33:58Z	2026-11-05T17:33:59Z	claude/builder-d-qa-ps1a-diag
+42075513429	CI	pull_request	completed	cancelled	2026-11-05T17:31:52Z	2026-11-05T17:31:52Z	2026-11-05T17:38:26Z	claude/builder-i-projects-ux
+42075508810	UASCO Independent Review	pull_request_target	completed	cancelled	2026-11-05T17:31:51Z	2026-11-05T17:31:51Z	2026-11-05T17:38:24Z	claude/builder-i-projects-ux
+42075478402	CI	pull_request	completed	cancelled	2026-11-05T17:31:40Z	2026-11-05T17:31:40Z	2026-11-05T17:38:29Z	claude/builder-i-company-academy
+42075473549	UASCO Independent Review	pull_request_target	completed	cancelled	2026-11-05T17:31:38Z	2026-11-05T17:31:38Z	2026-11-05T17:38:28Z	claude/builder-i-company-academy
+42075438682	CI	pull_request	completed	cancelled	2026-11-05T17:31:25Z	2026-11-05T17:31:25Z	2026-11-05T17:38:23Z	claude/builder-i-flow-qa-ui
+42075433070	UASCO Independent Review	pull_request_target	completed	cancelled	2026-11-05T17:31:23Z	2026-11-05T17:31:23Z	2026-11-05T17:38:21Z	claude/builder-i-flow-qa-ui
+42075427068	CI	pull_request	completed	cancelled	2026-11-05T17:31:21Z	2026-11-05T17:31:21Z	2026-11-05T17:39:35Z	claude/builder-i-tower-ops
+42075422961	UASCO Independent Review	pull_request_target	completed	cancelled	2026-11-05T17:31:19Z	2026-11-05T17:31:19Z	2026-11-05T17:38:26Z	claude/builder-i-tower-ops
