@@ -110,6 +110,12 @@ describe("Final Approval Center: Inbox approval queue grouped by kind, with conf
   beforeEach(() => { tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-aq-")); failOn = null; });
   afterEach(async () => {
     N.prototype.focus = focusRestore; failOn = null;
+    // shared renderer modules: leave no selected mission, reason, status or lock behind for the next registered suite
+    const forms = await load("forms.js");
+    forms.selection.missionId = null;
+    for (const k of Object.keys(forms.drafts.reasons)) delete forms.drafts.reasons[k];
+    for (const k of Object.keys(forms.drafts.busy)) forms.drafts.busy[k] = false;
+    for (const k of Object.keys(forms.drafts.status)) if (k.startsWith("act-")) delete forms.drafts.status[k];
     for (const a of apps.splice(0)) { try { await a.close(); } catch { /* kapanış */ } }
     try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* Windows */ }
   });
