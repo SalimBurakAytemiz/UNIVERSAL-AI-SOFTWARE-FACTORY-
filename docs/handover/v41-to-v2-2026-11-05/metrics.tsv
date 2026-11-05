@@ -1,2 +1,3 @@
 ts	window_h	created	merged	open	lead_med_h	win_q_med_min	win_q_max_min	features_done	note
 2026-11-05T20:56Z	3	14	2	52	2.5	19.9	66.2	-	baseline
+2026-11-05T23:03Z	2.1	0	5	47	3.7	0.1	0.3	3	after 5 merges (#360,#391,#378,#404,#405); CI runs 30 (0 failures), Windows run med 20.3 min; window 2

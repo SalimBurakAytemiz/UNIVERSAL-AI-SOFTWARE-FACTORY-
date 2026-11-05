@@ -24,3 +24,18 @@ Source: Founder directive "THROUGHPUT CONTROL / EXECUTE NOW" (2026-11-05). V4.1 
 | active CI runs / stale SHA | 32 / 0 |
 
 Structural limit: binding to the exact base forces every merge to restart the next PR's base merge + full CI (~40–60 min) + re-bind. So at most ~1–1.5 merges/hour with serial merging; this limit is not loosened.
+
+## Comparison after 5 merges (2026-11-05 23:03Z; 2.1 hours since the directive)
+| metric | baseline (previous 3 h) | after 5 merges (2.1 h) |
+|---|---|---|
+| new PRs | 14 | **0** (1 PR #405 was opened just before the directive; no new PR after the directive) |
+| merged PRs | 2 | **5** (#360, #391, #378, #404, #405; each verify-main MAIN_RUNNING) |
+| total open PRs | 52 | **47** |
+| median delivery time (created→merged) | 2.5 h | 3.7 h (older PRs being drained) |
+| Windows job queue median / max | 19.9 / 66.2 min | **0.1 / 0.3 min** |
+| Windows job run time (median) | 20.4 min | 20.3 min |
+| CI runs / failures | 85 / 3 | 30 / 0 |
+| merge interval | — | ~30 min (21:04, 21:36, 22:08, 22:34, 23:01) |
+
+Completed product changes (merged + main verified): #405 Project Studio wizard sends environmentId (real 400 bug fixed), #404 Assurance shows the newest runs first and states the cut, #360 V3-T1016 quota-resumable. #391 (API validator QA) and #378 (test-surface protection) are quality/safety work.
+Finding: the Windows queue wait dropped to nearly zero; the limit is now Windows run time (~20 min) + re-bind per merge; the pace of ~2 merges/hour is limited by the exact-base binding (not loosened).
