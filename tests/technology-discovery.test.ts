@@ -16,13 +16,20 @@ describe("technology discovery",()=>{
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import {afterEach} from "vitest";
+import {afterAll,afterEach,beforeAll,beforeEach} from "vitest";
 import {ProjectMemory} from "../core/knowledge/project-memory.js";
 import {MEMORY_LIMITS, ProjectMemoryError} from "../core/knowledge/project-memory-types.js";
 describe("SC-14 Project Memory core",()=>{
   const PID="prj_"+"a1".repeat(12);
   const dirs:string[]=[];
   afterEach(()=>{for(const d of dirs.splice(0))fs.rmSync(d,{recursive:true,force:true})});
+  // //TR: WIN-2a tanısı (davranış/iddia değişmez): Windows CI'da bu senkron testler 5 sn'yi aşınca vitest bunları BİTTİKTEN sonra "timed out" sayar (askıda kalma değil). Hangi senkron dosya çağrısının süreyi yediği ölçülsün diye her testte fsync/open/write/rm/mkdir sayısı ve süresi toplanır; test 1 sn'yi aşarsa tek satır SC14_TIMING stderr'e yazılır (hızlı koşuda sessiz).
+  const IO=["fsyncSync","openSync","writeSync","writeFileSync","closeSync","rmSync","mkdirSync","readFileSync"] as const;
+  const io=new Map<string,{n:number;ms:number}>(),orig=new Map<string,unknown>();let t0=0;
+  beforeAll(()=>{const f=fs as unknown as Record<string,(...a:unknown[])=>unknown>;for(const k of IO){const o=f[k];orig.set(k,o);f[k]=(...a:unknown[])=>{const s=performance.now();try{return o.apply(fs,a)}finally{const c=io.get(k)??{n:0,ms:0};c.n++;c.ms+=performance.now()-s;io.set(k,c)}}}});
+  afterAll(()=>{const f=fs as unknown as Record<string,unknown>;for(const [k,o] of orig)f[k]=o});
+  beforeEach(()=>{io.clear();t0=performance.now()});
+  afterEach(()=>{const ms=performance.now()-t0;if(ms>1000)process.stderr.write(`SC14_TIMING ${process.platform} ${JSON.stringify(expect.getState().currentTestName)} ms=${Math.round(ms)} ${[...io].map(([k,c])=>`${k}=${c.n}/${Math.round(c.ms)}ms`).join(" ")}\n`)});
   const tmp=()=>{const d=fs.mkdtempSync(path.join(os.tmpdir(),"pm-"));dirs.push(d);return d};
   const clock=(start="2026-10-21T00:00:00.000Z")=>{let t=Date.parse(start);return ()=>{const d=new Date(t);t+=1000;return d}};
   const mk=(root:string,now=clock())=>new ProjectMemory({rootDir:root,projectId:PID,now});
