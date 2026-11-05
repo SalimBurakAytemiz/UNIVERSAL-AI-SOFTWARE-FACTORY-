@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {pathToFileURL} from "node:url";
 import {desktopGetPathAllowed} from "../automation/lib/control-boundary.mjs";
+import {registerMobileMonitoringCoreSuite} from "./support/mobile-monitoring-core.cases.js";
 
 const root = path.resolve(__dirname, "..");
 const rend = path.join(root, "apps", "desktop", "renderer");
@@ -481,3 +482,4 @@ describe("UI-106 empty-state next step: journey zero-mission and executive empty
     expect(text(j.root)).not.toMatch(/journey\.[a-z]+\./); expect(text(x.root)).not.toMatch(/executive\.ledger\./);
   });
 });
+registerMobileMonitoringCoreSuite();
