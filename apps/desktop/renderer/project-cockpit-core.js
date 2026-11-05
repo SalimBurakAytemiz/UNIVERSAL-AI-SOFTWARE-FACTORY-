@@ -32,7 +32,7 @@ export function buildProjectCockpit({projects,approvals,runs}){
     return {
       projectId:p.projectId,name:p.name,
       runs:runsLive?{state:"VERIFIED",count:mine.length,byStatus,partial:runs.partial,shown:runs.runs.length,total:runs.total}:{state:runs?.state??"ERROR"},
-      blockers:runsLive?{state:"VERIFIED",count:blocked.length,partial:runs.partial,items:blocked.slice(0,3).map(r=>({runId:r.runId,status:r.status,reason:r.reason===null?null:redactText(r.reason).slice(0,200)}))}:{state:runs?.state??"ERROR"},
+      blockers:runsLive?{state:"VERIFIED",count:blocked.length,partial:runs.partial,shown:runs.runs.length,total:runs.total,items:blocked.slice(0,3).map(r=>({runId:r.runId,status:r.status,reason:r.reason===null?null:redactText(r.reason).slice(0,200)}))}:{state:runs?.state??"ERROR"},
       approvals:apprLive?{state:approvals.state,count:pending.length,items:pending.slice(0,3).map(a=>({missionId:a.missionId,title:a.title,riskLevel:a.riskLevel}))}:{state:approvals?.state??"ERROR"},
       spend:{...SPEND_GAP},
     };

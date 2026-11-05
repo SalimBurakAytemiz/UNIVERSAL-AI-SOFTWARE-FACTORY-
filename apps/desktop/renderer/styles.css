@@ -785,6 +785,7 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
   .matrix-scroll,.matrix-table th,.matrix-table td{border:1px solid CanvasText}
   .matrix-row[data-status] .matrix-project{box-shadow:none;border-left:4px solid CanvasText}
   .matrix-section :focus-visible,.matrix-scroll:focus-visible{outline:3px solid Highlight}
+}
 /* //TR: FA-V2-PRODUCT Operasyon ve Kurtarma: KPI satırı mevcut kpiTile bileşenini, kontrol listesi/denetim/koşu kartları mevcut `.cards > .card` desenini ve mevcut token tabanını kullanır (palet değişmez, yeni renk token'ı yok). Durum anlamı rozet METNİNDE ve ikonunda taşınır; renk (sol kenar vurgusu) yalnız ek ipucudur ve zorunlu-renk modunda sistem renklerine düşer. */
 .view-operations{container-type:inline-size;display:grid;gap:var(--space-4)}
 .ops-sub{margin:var(--space-4) 0 var(--space-1);font-size:var(--fs-h3)}
@@ -864,3 +865,14 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 .view-scheduler .integ-state{border-left:4px solid var(--warn);padding-left:var(--space-2)}
 .view-scheduler .integ-state.state-error,.view-scheduler .integ-state.state-offline,.view-scheduler .integ-state.state-rejected{border-left-color:var(--danger)}
 .view-scheduler .integ-row[data-status="BLOCKED"]{border-left:4px solid var(--danger)}
+/* //TR: V3-T1027 "Projelere genel bakış": her proje bir satır; ad + dört hücre (koşular, engeller, onay bekleyen görevler, harcama) yan yana ızgara. Etiket küçük/soluk, değer büyük/kalın: sayı ile etiket karışmaz. Yalnız token kullanılır (ham HEX yok); dar ekranda 2 sütuna iner. */
+.pc-rows{display:grid;gap:var(--space-3)}
+.pc-row{display:grid;grid-template-columns:minmax(8rem,1.2fr) repeat(4,minmax(0,1fr));gap:var(--space-3) var(--space-4);align-items:start;padding:var(--space-3) var(--space-4);border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface-2)}
+.pc-name{margin:0;font-size:var(--fs-body);font-weight:700;overflow-wrap:anywhere}
+.pc-cell{min-width:0}
+.pc-label{margin:0 0 var(--space-1);font-size:var(--fs-caption);color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.pc-value{margin:0;font-size:var(--fs-title);font-weight:700;line-height:1.1;color:var(--text)}
+.pc-sub,.pc-na,.pc-partial{margin:var(--space-1) 0 0;font-size:var(--fs-caption);color:var(--muted);overflow-wrap:anywhere}
+.pc-list{margin:var(--space-1) 0 0;padding-left:var(--space-4);font-size:var(--fs-caption);overflow-wrap:anywhere}
+.pc-cell .note{margin:0;font-size:var(--fs-caption)}
+@media (max-width:1100px){.pc-row{grid-template-columns:repeat(2,minmax(0,1fr))}.pc-name{grid-column:1/-1}}

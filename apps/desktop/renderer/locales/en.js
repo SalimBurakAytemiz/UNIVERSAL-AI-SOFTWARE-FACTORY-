@@ -207,7 +207,7 @@ export default {
   "home.pc.title":"Projects at a glance",
   "home.pc.runs":"Runs",
   "home.pc.blockers":"Blockers",
-  "home.pc.approvals":"Pending approvals",
+  "home.pc.approvals":"Missions awaiting approval",
   "home.pc.spend":"Spend",
   "home.pc.spendNA":"Not available: the Control API has no spend endpoint yet.",
   "home.pc.partial":"Counted from the latest {shown} of {total} runs.",

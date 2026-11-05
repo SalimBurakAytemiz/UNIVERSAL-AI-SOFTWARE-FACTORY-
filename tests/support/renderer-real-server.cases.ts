@@ -144,7 +144,7 @@ const HAPPY: Record<string, (app: App, r: Awaited<ReturnType<typeof renderAgains
     // V3-T1027: per-project panel is built from the same server data (seed has no runs and no mission awaiting approval)
     const [prj] = (await serverJson(app, "/v1/projects")).projects as Array<{projectId: string}>;
     const row = all(r.root).find(n => n.dataset.projectCockpit === prj!.projectId)!;
-    expect(row.textContent).toBe(`${PROJECT}Runs0No runs yetBlockers0NonePending approvals0NoneSpend—Not available: the Control API has no spend endpoint yet.`);
+    expect(row.textContent).toBe(`${PROJECT}Runs0No runs yetBlockers0NoneMissions awaiting approval0NoneSpend—Not available: the Control API has no spend endpoint yet.`);
   },
   projects: async (_a, r) => { expect(r.text).toContain(PROJECT); expect(kpiText(r.root, "pf-projects")).toMatch(/^Projects1VERIFIED/); expect(kpiText(r.root, "pf-missions")).toMatch(/^Missions2VERIFIED/); },
   work: async (_a, r) => { expect(r.text).toContain(MISSION); expect(r.text).toContain(PROJECT); expect(kpiText(r.root, "wk-missions")).toMatch(/^Missions2VERIFIED/); },
@@ -303,7 +303,7 @@ describe("V3-T1027: home per-project cockpit (runs, blockers, pending approvals,
     expect(cellOf(alpha, "blockers").textContent).toContain("needs credentials token=");
     expect(panelOf(r).textContent).not.toContain(PLANTED);
     expect(cellOf(alpha, "approvals").textContent).toContain("Needs sign-off · R3");
-    expect(beta.textContent).toBe("BetaRuns0No runs yetBlockers0NonePending approvals0NoneSpend—Not available: the Control API has no spend endpoint yet.");
+    expect(beta.textContent).toBe("BetaRuns0No runs yetBlockers0NoneMissions awaiting approval0NoneSpend—Not available: the Control API has no spend endpoint yet.");
     expect(all(panelOf(r)).some(n => n.dataset.pcPartial !== undefined)).toBe(false);
     // the spend cell never shows a number in any row
     for (const row of rowsOf(r)) expect(cellOf(row, "spend").textContent).not.toMatch(/\d/);
@@ -339,7 +339,7 @@ describe("V3-T1027: home per-project cockpit (runs, blockers, pending approvals,
     app.addHook("onRequest", async (req, reply) => { if (req.url === "/v1/cockpit") return reply.code(500).send({error: "INJECTED"}); });
     const r = await renderAgainstServer(app, "home");
     expect(rowsOf(r)).toHaveLength(2);
-    for (const row of rowsOf(r)) expect([cellOf(row, "approvals").dataset.pcState, cellOf(row, "approvals").textContent]).toEqual(["ERROR", "Pending approvalsError"]);
+    for (const row of rowsOf(r)) expect([cellOf(row, "approvals").dataset.pcState, cellOf(row, "approvals").textContent]).toEqual(["ERROR", "Missions awaiting approvalError"]);
     const alpha = rowsOf(r).find(n => n.textContent.startsWith("Alpha"))!;
     expect([cellOf(alpha, "runs").dataset.pcState, all(cellOf(alpha, "runs")).find(n => n.className === "pc-value")?.textContent]).toEqual(["VERIFIED", "2"]);
     expect(all(cellOf(alpha, "blockers")).find(n => n.className === "pc-value")?.textContent).toBe("1");
@@ -354,12 +354,31 @@ describe("V3-T1027: home per-project cockpit (runs, blockers, pending approvals,
     expect(panelOf(r).textContent).toBe("Projects at a glanceError");
   });
 
+  it("partial: with more runs than one page (101 real runs, limit 100) both the Runs and Blockers cells label the counts as partial", { timeout: 180_000 }, async () => {
+    const app = mkApp((dataDir: string) => {
+      cockpitSeed(dataDir);
+      const store = new WorkOsStore(dataDir), tenantId = "tA", scope = {tenantId};
+      const [a] = store.listProjects(scope).filter(p => p.name === "Alpha");
+      for (let i = 0; i < 99; i++) {
+        const m = store.createMission({tenantId, projectId: a!.projectId, title: `bulk ${i}`, objective: "obj", acceptanceCriteria: ["ac"], riskLevel: "R1", createdBy: RECORDER}).missionId;
+        for (const to of ["PREFLIGHT", "AUTHORIZED"]) store.transitionMission(scope, m, to as any, "go", RECORDER);
+        store.createRun({tenantId, missionId: m, executor: {implementer: `I-b${i}`, reviewer: `R-b${i}`}, createdBy: RECORDER});
+      }
+    });
+    const page = (await serverJson(app, "/v1/run-summaries?limit=100")).page;
+    expect([page.runs.length, page.total, typeof page.nextCursor]).toEqual([100, 101, "string"]);
+    const r = await renderAgainstServer(app, "home");
+    const alpha = rowsOf(r).find(n => n.textContent.startsWith("Alpha"))!;
+    for (const k of ["runs", "blockers"]) expect([k, all(cellOf(alpha, k)).find(n => n.dataset.pcPartial === k)?.textContent]).toEqual([k, "Counted from the latest 100 of 101 runs."]);
+    expect(failureMarks(r.root)).toEqual([]);
+  });
+
   it("tr: the panel is localized from the real server render", { timeout: 120_000 }, async () => {
     const app = mkApp(cockpitSeed);
     const r = await renderAgainstServer(app, "home", TOKEN, "tr");
     const beta = rowsOf(r).find(n => n.textContent.startsWith("Beta"))!;
     expect(panelOf(r).textContent.startsWith("Projelere genel bakış")).toBe(true);
-    expect(beta.textContent).toBe("BetaKoşular0Henüz koşu yokEngeller0YokBekleyen onaylar0YokHarcama—Kullanılamıyor: Control API'de henüz harcama uç noktası yok.");
+    expect(beta.textContent).toBe("BetaKoşular0Henüz koşu yokEngeller0YokOnay bekleyen görevler0YokHarcama—Kullanılamıyor: Control API'de henüz harcama uç noktası yok.");
   });
 
   it("pure core: partial pages, unknown statuses and malformed bodies are honest", async () => {
@@ -371,6 +390,10 @@ describe("V3-T1027: home per-project cockpit (runs, blockers, pending approvals,
     expect(m).toMatchObject({state: "VERIFIED", total: 250, partial: true}); expect(m.runs[0].status).toBe("UNKNOWN");
     const pc = core.buildProjectCockpit({projects: {state: "VERIFIED", items: [{projectId: "prj_a", name: "A"}]}, approvals: {state: "STALE", items: [{projectId: "prj_a", missionId: "m", title: "T", riskLevel: "R1"}]}, runs: m});
     expect(pc.rows[0]).toMatchObject({runs: {state: "VERIFIED", count: 2, partial: true, shown: 2, total: 250}, blockers: {count: 1}, approvals: {state: "STALE", count: 1}, spend: {state: "UNAVAILABLE", reason: "NO_SPEND_ENDPOINT"}});
+    // LOW-1: client-side re-redaction is pinned independently of the server's redactSecrets
+    const raw = core.buildProjectCockpit({projects: {state: "VERIFIED", items: [{projectId: "prj_a", name: "A"}]}, approvals: {state: "VERIFIED", items: []},
+      runs: {state: "VERIFIED", partial: false, total: 1, runs: [{runId: "run_x", projectId: "prj_a", status: "BLOCKED", reason: `token=${PLANTED}`}]}});
+    expect(raw.rows[0].blockers.count).toBe(1); expect(JSON.stringify(raw)).not.toContain(PLANTED);
     expect(core.buildProjectCockpit({projects: {state: "OFFLINE", items: []}, approvals: {state: "VERIFIED", items: []}, runs: m})).toEqual({state: "OFFLINE", rows: []});
     expect(core.buildProjectCockpit({projects: {state: "VERIFIED", items: [{projectId: "prj_a", name: "A"}]}, approvals: {state: "UNAVAILABLE", items: []}, runs: {state: "OFFLINE"}}).rows[0])
       .toMatchObject({runs: {state: "OFFLINE"}, blockers: {state: "OFFLINE"}, approvals: {state: "UNAVAILABLE"}});

@@ -207,7 +207,7 @@ export default {
   "home.pc.title":"Projelere genel bakış",
   "home.pc.runs":"Koşular",
   "home.pc.blockers":"Engeller",
-  "home.pc.approvals":"Bekleyen onaylar",
+  "home.pc.approvals":"Onay bekleyen görevler",
   "home.pc.spend":"Harcama",
   "home.pc.spendNA":"Kullanılamıyor: Control API'de henüz harcama uç noktası yok.",
   "home.pc.partial":"{total} koşunun en son {shown} tanesinden sayıldı.",

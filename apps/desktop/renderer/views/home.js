@@ -84,10 +84,11 @@ function projectCockpitPanel(ctx,pc){
   const runsCell=r=>r.state!=="VERIFIED"?cell("runs",r.state,na(r.state)):cell("runs","VERIFIED",
     h(doc,"p",{class:"pc-value",text:formatCount(r.count)}),
     h(doc,"p",{class:"pc-sub",text:r.count?topEntries(r.byStatus,4).map(e=>`${statusLabel(ctx,e.key)} ${e.value}`).join(" · "):ctx.t("home.pc.noRuns")}),
-    r.partial?h(doc,"p",{class:"pc-partial",dataset:{pcPartial:"1"},text:ctx.t("home.pc.partial",{shown:formatCount(r.shown),total:formatCount(r.total)})}):null);
+    r.partial?h(doc,"p",{class:"pc-partial",dataset:{pcPartial:"runs"},text:ctx.t("home.pc.partial",{shown:formatCount(r.shown),total:formatCount(r.total)})}):null);
   const blockersCell=b=>b.state!=="VERIFIED"?cell("blockers",b.state,na(b.state)):cell("blockers","VERIFIED",
     h(doc,"p",{class:"pc-value",text:formatCount(b.count)}),
-    b.count?h(doc,"ul",{class:"pc-list"},b.items.map(x=>h(doc,"li",{dataset:{pcRun:x.runId},text:`${statusLabel(ctx,x.status)} · ${x.reason??ctx.t("home.pc.noReason")}`}))):h(doc,"p",{class:"pc-sub",text:ctx.t("home.pc.none")}));
+    b.count?h(doc,"ul",{class:"pc-list"},b.items.map(x=>h(doc,"li",{dataset:{pcRun:x.runId},text:`${statusLabel(ctx,x.status)} · ${x.reason??ctx.t("home.pc.noReason")}`}))):h(doc,"p",{class:"pc-sub",text:ctx.t("home.pc.none")}),
+    b.partial?h(doc,"p",{class:"pc-partial",dataset:{pcPartial:"blockers"},text:ctx.t("home.pc.partial",{shown:formatCount(b.shown),total:formatCount(b.total)})}):null);
   const approvalsCell=a=>a.state!=="VERIFIED"&&a.state!=="STALE"?cell("approvals",a.state,na(a.state)):cell("approvals",a.state,
     h(doc,"p",{class:"pc-value",text:formatCount(a.count)}),
     a.count?h(doc,"ul",{class:"pc-list"},a.items.map(x=>h(doc,"li",{dataset:{pcMission:x.missionId},text:`${x.title??x.missionId} · ${x.riskLevel??MISSING}`}))):h(doc,"p",{class:"pc-sub",text:ctx.t("home.pc.none")}));
