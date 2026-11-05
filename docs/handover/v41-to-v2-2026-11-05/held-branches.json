@@ -379,6 +379,13 @@
       "task": "UASCO-T0017.A (Founder-tier)",
       "head": "4eaba9c0",
       "note": "FF of #383 head e58179c0; test-only: desktop-shell register-line position + afterEach state reset; all 24 merge orders of the 4 PRs conflict-free; take as #383's new head when its turn comes"
+    },
+    {
+      "owner": "F",
+      "branch": "claude/builder-f-ds-defects",
+      "task": "none (FD 2026-11-05 design system; Founder-tier)",
+      "head": "549465879bf2186956b29cfd241adc08127b6a23",
+      "note": "stacked on a11y-2 32eb0aba; CSS-only Control Tower SVG palette → FD tokens + forced-colors; test in listed visual-parity file"
     }
   ]
 }
