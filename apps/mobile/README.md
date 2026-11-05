@@ -8,4 +8,4 @@ Pure TypeScript under `src/core/`: read-only store, view models and STALE/OFFLIN
 - States: LOADING, EMPTY, ERROR, OFFLINE, STALE (with age), UNAVAILABLE, DENIED. A cached read is always STALE, never VERIFIED (ADR-MOB-001 section 5).
 - No approve, STOP, RESUME, retry-queue or any write surface.
 
-Test: the suite lives in `tests/support/mobile-monitoring-core.cases.ts`, registered from `tests/v7-ux-shell.test.ts`, so CI validation runs it. Status: TESTED (unit, CI); not INTEGRATED.
+Test: `npx vitest run apps/mobile/src/core/monitoring.test.ts` (also run by `npm test`). CI validation runs the same suite via `tests/support/mobile-monitoring-core.cases.ts`, registered from `tests/v7-ux-shell.test.ts`; keep both copies in sync. Status: TESTED (unit, local + CI); not INTEGRATED.

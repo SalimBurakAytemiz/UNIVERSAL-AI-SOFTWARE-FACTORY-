@@ -5,7 +5,7 @@ import { classifyCached, formatAge, MAX_CACHE_AGE_MS } from "../../apps/mobile/s
 import { agentTrackingViewModel, frameOf, homeViewModel, offlineViewModel, taskFlowViewModel } from "../../apps/mobile/src/core/view-models.js";
 import { MOBILE_ROUTES, ROUTE_CONNECTION, type CacheEntry, type Envelope, type LiveResult, type MobileRoute, type MonitoringReader } from "../../apps/mobile/src/core/types.js";
 
-/** Registered from tests/v7-ux-shell.test.ts (listed in config/validation.json) so CI runs the PQ-008 core tests; moved unchanged from apps/mobile/src/core/monitoring.test.ts. */
+/** Registered from tests/v7-ux-shell.test.ts (listed in config/validation.json) so CI runs the PQ-008 core tests; a byte-for-byte copy (paths aside) of apps/mobile/src/core/monitoring.test.ts, which `npm test` still runs; keep both in sync. */
 export function registerMobileMonitoringCoreSuite(): void {
   describe("PQ-008 mobile monitoring core", () => {
 
