@@ -1,6 +1,6 @@
 {
   "schema": "uasco.factory-v2.shared-registry/1",
-  "phase": "section:lease/shadow-probe-control/supervisor--SHADOW-probe-control",
+  "phase": "section:ledger/run1/c/000001",
   "sections": {
     "lease/shadow-probe-control/supervisor--SHADOW-probe-control": {
       "taskId": "supervisor--SHADOW-probe-control",
@@ -281,6 +281,43 @@
             "nonce": "6ed9d207-5934-4d81-b6d7-f365616585a8",
             "signature": "qFTkn1eT3L4gg0PmIDrb0T3CPaJ94UUnaIWQqcrteB2ms/IP6W0ZZZbgbiqwB0nc4YU41Ea4W9fq/va/c8eqBg=="
           }
+        },
+        {
+          "kind": "WORKER",
+          "idempotencyKey": "worker:intent_a4099e9aec52:RESULT_ACCEPTED",
+          "data": {
+            "status": "RESULT_ACCEPTED",
+            "result": {
+              "ok": true,
+              "headSha": "8ef00d2ed9b38645e8c21e63f3106309d948bb9e",
+              "baseSha": "70cb71d40a09b7fae86313b8bf0ad7502ba8dde5",
+              "branch": "fv2w/probe-control/FV2-PROBE-CTL-1-a0-a4099e9aec52",
+              "summary": "Added docs/factory-v2/probe/control/hello-run1.md with the two specified lines; only file changed",
+              "tests": "diff of file vs expected two lines: CONTENT_OK; git diff --name-only 70cb71d HEAD: only hello-run1.md",
+              "evidence": []
+            },
+            "resultAt": 1793900162341,
+            "intentId": "intent_a4099e9aec52"
+          },
+          "fenceEpoch": 1,
+          "fenceToken": "session_015dYwb57qx21P4wudU5xauD:1:2a5bae8c-fdda-40ec-9cbc-23217de56578",
+          "seq": 9,
+          "at": 1793900164583,
+          "prev": "66d2dcf77e3dbc8842af85d9c4c23074cf1cbe7c5f4214eda815877b24c189a4",
+          "sig": {
+            "schema": "uasco.factory-v2.signed-action/1",
+            "domain": "probe-control",
+            "action": "LEDGER",
+            "role": "V2_CANDIDATE",
+            "sessionId": "session_015dYwb57qx21P4wudU5xauD",
+            "keyId": "k_225059701e7e1b78",
+            "prev": "66d2dcf77e3dbc8842af85d9c4c23074cf1cbe7c5f4214eda815877b24c189a4",
+            "payloadDigest": "ace9bd1bf44fe896196b78bc9f9322de07fdc3d62e34e2fa2068ca0fc8e8db58",
+            "issuedAt": 1793900166010,
+            "expiresAt": 1825436166010,
+            "nonce": "e9f9bd1a-0649-41b3-b999-43d0c1d2cef6",
+            "signature": "8FcbTwcPzQVG2c/oqYl50hJlMCe3bqJSZzcshNKGXRpNFYbPyo3/TsjGxiVYXeeHUYPf0QS+PSbptA5gI38IBw=="
+          }
         }
       ]
     },
@@ -299,8 +336,8 @@
   },
   "revs": {
     "lease/shadow-probe-control/supervisor--SHADOW-probe-control": 6,
-    "ledger/run1/c/000001": 8,
+    "ledger/run1/c/000001": 9,
     "lease/shadow-probe-control/task--FV2-PROBE-CTL-1": 1
   },
-  "seq": 15
+  "seq": 16
 }
