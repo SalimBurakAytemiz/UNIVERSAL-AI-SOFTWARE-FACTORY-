@@ -47,6 +47,15 @@ export function registerArtifactDigestManifestSuite(): void {
         ["schema", {...good(), schema: "v0" as never}],
         ["source", {...good(), source: "SCRAPED" as never}],
         ["collection", {...good(), collection: {method: "x", verification: "INDEPENDENT_DOUBLE_READ" as never}}],
+        ["top-extra-key", {...good(), note: "x"} as never],
+        ["top-missing-key", (({repository, ...rest}) => rest)(good()) as never],
+        ["scope-extra-key", {...good(), scope: {...good().scope, extra: 1}} as never],
+        ["collection-extra-key", {...good(), collection: {...good().collection, extra: 1}} as never],
+        ["run-after-generation", man([rec({runCreatedAt: "2026-11-05T18:00:01Z"})])],
+        ["run-inconsistent-sha", man([rec(), rec({artifactId: 6, headSha: "b".repeat(40)})])],
+        ["run-inconsistent-attempt", man([rec(), rec({artifactId: 6, runAttempt: 2})])],
+        ["run-inconsistent-created", man([rec(), rec({artifactId: 6, runCreatedAt: "2026-11-01T10:00:01Z"})])],
+        ["run-inconsistent-workflow", man([rec(), rec({artifactId: 6, workflow: "Windows Installer"})])],
       ];
       for (const [what, m] of bad) expect(verifyArtifactDigestManifest(m).ok, what).toBe(false);
       expect(verifyArtifactDigestManifest({...good(), summary: {...good().summary, mcpCrossChecked: 2}}).problems).toEqual(["summary"]);
@@ -60,6 +69,8 @@ export function registerArtifactDigestManifestSuite(): void {
       expect(checkArtifactDigest(m, 5, H("3"))).toBe("MISMATCH");
       expect(checkArtifactDigest(m, 7, H("1"))).toBe("UNKNOWN");
       expect(checkArtifactDigest(m, 999, H("1"))).toBe("UNKNOWN");
+      for (const x of ["", "1".repeat(63), "1".repeat(65), "g".repeat(64), `sha256:${H("1")}`, 5 as never]) expect(checkArtifactDigest(m, 5, x), String(x)).toBe("INVALID_INPUT");
+      expect(verifyArtifactDigestManifest(man([rec({runCreatedAt: "2026-11-05T18:00:00Z"})])).ok).toBe(true);   // positive control: created exactly at generatedAt
     });
 
     it("every committed manifest under docs/evidence/ci-artifact-digests verifies and carries an MCP cross-check", () => {

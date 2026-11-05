@@ -27,6 +27,10 @@ const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
 const SHA40_RE = /^[0-9a-f]{40}$/;
 const DIGEST_RE = /^sha256:[0-9a-f]{64}$/;
 const iso = (x: unknown): x is string => typeof x === "string" && ISO_RE.test(x) && Number.isFinite(Date.parse(x));
+const TOP_KEYS = ["//TR", "collection", "generatedAt", "records", "repository", "schema", "scope", "source", "summary"].join(",");
+const SCOPE_KEYS = ["branch", "event", "since", "workflows"].join(",");
+const COLLECTION_KEYS = ["method", "verification"].join(",");
+const HEX64_RE = /^[0-9a-fA-F]{64}$/;
 const posInt = (x: unknown, min: number): x is number => typeof x === "number" && Number.isSafeInteger(x) && x >= min;
 const obj = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
 const RECORD_KEYS = ["artifactId", "digest", "expired", "expiresAt", "headSha", "name", "runAttempt", "runCreatedAt", "runId", "sizeInBytes", "status", "verification", "workflow"].join(",");
@@ -52,7 +56,7 @@ function recordProblems(r: unknown, i: number, generatedAtMs: number, sinceMs: n
   if (!posInt(r.runId, 1)) p.push(`${at}.runId`);
   if (!posInt(r.runAttempt, 1)) p.push(`${at}.runAttempt`);
   if (typeof r.headSha !== "string" || !SHA40_RE.test(r.headSha)) p.push(`${at}.headSha`);
-  if (!iso(r.runCreatedAt) || Date.parse(r.runCreatedAt) < sinceMs) p.push(`${at}.runCreatedAt`);
+  if (!iso(r.runCreatedAt) || Date.parse(r.runCreatedAt) < sinceMs || !(Date.parse(r.runCreatedAt) <= generatedAtMs)) p.push(`${at}.runCreatedAt`);
   if (!["MACHINE_COPIED", "MCP_CROSSCHECKED"].includes(r.verification as string)) p.push(`${at}.verification`);
   if (r.status === "NO_ARTIFACTS_LISTED") {
     if ([r.artifactId, r.name, r.sizeInBytes, r.digest, r.expired, r.expiresAt].some(v => v !== null)) p.push(`${at}: NO_ARTIFACTS_LISTED carries artifact fields`);
@@ -78,6 +82,10 @@ function recordProblems(r: unknown, i: number, generatedAtMs: number, sinceMs: n
 export function verifyArtifactDigestManifest(m: unknown): {ok: boolean; problems: string[]} {
   if (!obj(m)) return {ok: false, problems: ["manifest: not an object"]};
   const p: string[] = [];
+  // Closed key sets (review N2): an unexpected top-level, scope or collection field is a problem, like an unexpected record field.
+  if (Object.keys(m).sort().join(",") !== TOP_KEYS) p.push("keys");
+  if (obj(m.scope) && Object.keys(m.scope).sort().join(",") !== SCOPE_KEYS) p.push("scope: keys");
+  if (obj(m.collection) && Object.keys(m.collection).sort().join(",") !== COLLECTION_KEYS) p.push("collection: keys");
   if (typeof m["//TR"] !== "string" || m["//TR"].length === 0) p.push("//TR");
   if (m.schema !== ARTIFACT_DIGEST_SCHEMA) p.push("schema");
   if (!iso(m.generatedAt)) p.push("generatedAt");
@@ -94,14 +102,24 @@ export function verifyArtifactDigestManifest(m: unknown): {ok: boolean; problems
     const ids = recs.filter(r => r.artifactId !== null).map(r => r.artifactId);
     if (new Set(ids).size !== ids.length) p.push("records: duplicate artifactId");
     if (obj(sc) && Array.isArray(sc.workflows) && recs.some(r => !(sc.workflows as unknown[]).includes(r.workflow))) p.push("records: workflow outside scope");
+    // Per-run consistency (review N3): every record of one runId carries the same workflow, attempt, head SHA and creation time.
+    const runs = new Map<number, string>();
+    for (const r of recs) {
+      const k = JSON.stringify([r.workflow, r.runAttempt, r.headSha, r.runCreatedAt]), seen = runs.get(r.runId);
+      if (seen === undefined) runs.set(r.runId, k); else if (seen !== k) { p.push(`records: run ${r.runId} inconsistent`); break; }
+    }
     for (let i = 1; i < recs.length; i++) if (recordOrder(recs[i - 1], recs[i]) >= 0) { p.push(`records: order at ${i}`); break; }
     if (JSON.stringify(m.summary) !== JSON.stringify(summarize(recs))) p.push("summary");
   }
   return {ok: p.length === 0, problems: p};
 }
 
-/** Compare a downloaded artifact archive's sha256 (hex) with the manifest. UNKNOWN when the artifact or its digest is not recorded. */
-export function checkArtifactDigest(m: ArtifactDigestManifest, artifactId: number, sha256Hex: string): "MATCH" | "MISMATCH" | "UNKNOWN" {
+/**
+ * Compare a downloaded artifact archive's sha256 (hex) with the manifest. UNKNOWN when the artifact or its digest is not recorded.
+ * INVALID_INPUT when sha256Hex is not 64 hex characters (review N4): a malformed hash is a caller error, not a digest mismatch.
+ */
+export function checkArtifactDigest(m: ArtifactDigestManifest, artifactId: number, sha256Hex: string): "MATCH" | "MISMATCH" | "UNKNOWN" | "INVALID_INPUT" {
+  if (typeof sha256Hex !== "string" || !HEX64_RE.test(sha256Hex)) return "INVALID_INPUT";
   const r = m.records.find(x => x.artifactId === artifactId);
   if (!r || r.digest === null) return "UNKNOWN";
   return r.digest === `sha256:${String(sha256Hex).toLowerCase()}` ? "MATCH" : "MISMATCH";
