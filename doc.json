@@ -1,6 +1,6 @@
 {
   "schema": "uasco.factory-v2.shared-registry/1",
-  "phase": "section:probe-keys/session_015dYwb4zVwFwg69iij2RdGq",
+  "phase": "section:probe/A-ready",
   "sections": {
     "probe-keys/session_015dYwb2b3yVQ6iay68HXCD8": {
       "session": "session_015dYwb2b3yVQ6iay68HXCD8",
@@ -15,11 +15,16 @@
       "role": "V2_CANDIDATE",
       "keyId": "k_4c65579e51b3e8a4",
       "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAPHxzx6jXCWksYIMKnEoHz4IWxp1EC1iH0blX4weCUHI=\n-----END PUBLIC KEY-----\n"
+    },
+    "probe/A-ready": {
+      "session": "session_015dYwb2b3yVQ6iay68HXCD8",
+      "at": 1793869315933
     }
   },
   "revs": {
     "probe-keys/session_015dYwb2b3yVQ6iay68HXCD8": 1,
-    "probe-keys/session_015dYwb4zVwFwg69iij2RdGq": 1
+    "probe-keys/session_015dYwb4zVwFwg69iij2RdGq": 1,
+    "probe/A-ready": 1
   },
-  "seq": 2
+  "seq": 3
 }
