@@ -61,6 +61,38 @@
         "nonce": "17469563-4916-41ce-8eca-4de52dfeecc8",
         "signature": "GWDf4y1m8ieNMcPZajy9nruWdPVqYsH3NY0iUCN8diqwcIFal0q9g0HFZtFEpZf3ohdJWBwrnyx/+z+Zz+s2DA=="
       }
+    },
+    {
+      "kind": "TRANSITION",
+      "taskId": "FV2-PROBE-S2-1",
+      "from": "QUEUED",
+      "to": "CLAIMED",
+      "attempt": 0,
+      "idempotencyKey": "FV2-PROBE-S2-1:1:CLAIMED",
+      "data": {
+        "slotId": "builder-A",
+        "leaseToken": "session_015dYwb57qx21P4wudU5xauD:1:ddaf65b1-98dc-42c4-9832-e8e23d070fd7"
+      },
+      "fenceEpoch": 1,
+      "fenceToken": "session_015dYwb57qx21P4wudU5xauD:1:2a5bae8c-fdda-40ec-9cbc-23217de56578",
+      "seq": 3,
+      "at": 1793906980494,
+      "prev": "5cd0e76c96fb6a48a8b46bc1c998f134f34a4875a02b56dfa25b642bbe050cb9",
+      "ledger": "probe-control/run2",
+      "sig": {
+        "schema": "uasco.factory-v2.signed-action/1",
+        "domain": "probe-control",
+        "action": "LEDGER",
+        "role": "V2_CANDIDATE",
+        "sessionId": "session_015dYwb57qx21P4wudU5xauD",
+        "keyId": "k_225059701e7e1b78",
+        "prev": "5cd0e76c96fb6a48a8b46bc1c998f134f34a4875a02b56dfa25b642bbe050cb9",
+        "payloadDigest": "eb6fb141843146f233938c7581f6456a52f1a903c69209b5b42ac316dc6f4ff9",
+        "issuedAt": 1793906983587,
+        "expiresAt": 1825442983587,
+        "nonce": "242fdeee-bcd7-46b9-9ef1-44237425e9a0",
+        "signature": "rkal4Z2DWv6VEtDAd9Tj3IX1ZRAsbOdW8zzfmRB3h1wjP2c0v9upgcNMREX5krZqXFJblGGjkx/CY92RpQKHAQ=="
+      }
     }
   ]
 }
