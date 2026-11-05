@@ -4,7 +4,7 @@ import path from "node:path";
 import {createHash, randomUUID} from "node:crypto";
 import {CloudJobQueue, signWorkerAuth, type WorkerAuth} from "./jobs.js";
 import {CloudArtifactStore, FileSystemArtifactBackend} from "../../../../core/cloud/artifacts.js";
-import {signScope, type SignedScope, type UnsignedScope} from "../../../../core/cloud/contracts.js";
+import {signScope, verifyScopeSignature, type SignedScope, type UnsignedScope} from "../../../../core/cloud/contracts.js";
 import {
   InMemoryConfirmationReplayStore, TaskOrchestrator, dispatchIntakeCommand, signFounderConfirmation,
   type ConfirmationAuditRecord, type IntakeDispatchResult, type PlannerModel, type TaskDag, type UnsignedFounderConfirmation,
@@ -76,7 +76,7 @@ export function createCloudChainHost(o: ChainHostOptions): CloudChainHost {
   const queue = new CloudJobQueue({dir: path.join(root, "queue"), scopeKeys, workerKeys: new Map([[workerId, o.keys.workerKey]]), now});
   const store = new CloudArtifactStore({backend: new FileSystemArtifactBackend(path.join(root, "artifacts")), masterKey: o.keys.artifactKey,
     deliveryKeys: new Map([["d-1", o.keys.deliveryKey]]), activeDeliveryKeyId: "d-1", deliveryBaseUrl: "https://loopback.invalid/deliver"});
-  const replay = new InMemoryConfirmationReplayStore(() => now().getTime());
+  const replay = new InMemoryConfirmationReplayStore();
   const planCache = new Map<string, TaskDag>();
   const orchestrators = new Map<string, TaskOrchestrator>();
   const auth = (action: WorkerAuth["action"], jobId: string, body: unknown = {}) => signWorkerAuth({workerId, action, jobId, at: now().toISOString(), nonce: randomUUID()}, o.keys.workerKey, body);
@@ -95,7 +95,13 @@ export function createCloudChainHost(o: ChainHostOptions): CloudChainHost {
     queue, store,
     async dispatch(text, confirmation, scope, approvals = new Set()) {
       if (stopRequested()) queue.stopAll();
-      const k = `${scope.tenantId}\u0000${scope.projectId}\u0000${scope.environment}`;
+      // #350 dersi (v4): çağıranın kapsamı her dispatch'te imzasıyla doğrulanır (fail-closed) ve orkestratör tenant/proje/ortam üçlüsüyle DEĞİL, tam imzalı
+      // kapsamla (imza = kapsamın tüm alanları + keyId üzerinden MAC) anahtarlanır: aynı üçlüye ait sahte/genişletilmiş ya da başka bir imzalı kapsam,
+      // ilk önbelleğe alınan kapsamın orkestratörüne (ve onun imzasıyla kuyruğa) asla sızmaz.
+      let sk: string | Buffer | undefined, valid = false;
+      try { sk = scopeKeys.get(scope.keyId); valid = sk !== undefined && verifyScopeSignature(scope, sk); } catch { valid = false; }
+      if (!valid) return {ok: false, stage: "INTAKE", reason: "SCOPE_SIGNATURE_INVALID"};
+      const k = scope.signature;
       let orch = orchestrators.get(k);
       if (!orch) { orch = new TaskOrchestrator({queue, scope, now}); orchestrators.set(k, orch); }
       return dispatchIntakeCommand(text, confirmation, {keys: scopeKeys, scope, now, replay, ...(o.audit ? {audit: o.audit} : {})}, o.planner,

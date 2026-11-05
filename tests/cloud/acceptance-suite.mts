@@ -959,4 +959,69 @@ export function registerCloudAcceptanceSuite(): void {
       expect(o.delivery.sha256).toBe(o.artifacts.find(a => a.name === "dist/app.txt")!.sha256);
     }, 240_000);
   });
+
+  // //TR: chain-host v4 (#350 dersi): imzalı kapsam her dispatch'te doğrulanır; orkestratör tam imzalı kapsamla anahtarlanır; her imzalı kapsam alanı kendi yeniden hedefleme testiyle MAC'a bağlı.
+  describe("chain-host v4: caller scope is signature-verified on every dispatch; orchestrator keyed by the exact signed scope (per-field retarget tests)", () => {
+    beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-chain-v4-")); });
+    afterEach(() => { fs.rmSync(dir, {recursive: true, force: true}); });
+    const rnd = () => createHash("sha256").update(randomUUID()).digest("hex");   // çalışma anında üretilir; repoda değer yok
+    const keysV4 = (): ChainHostKeys => { const k = cloudKeysFromEnv({[CHAIN_HOST_ENV.scopeKeyId]: "k-local", [CHAIN_HOST_ENV.scopeKey]: rnd(), [CHAIN_HOST_ENV.workerKey]: rnd(),
+      [CHAIN_HOST_ENV.artifactKey]: rnd(), [CHAIN_HOST_ENV.deliveryKey]: rnd()}); if (!k.ok) throw new Error(k.missing.join(",")); return k.keys; };
+    const hostV4 = (keys: ChainHostKeys) => createCloudChainHost({dataDir: path.join(dir, "host"), keys, sandbox: new FakeSandbox(), planner: localStubPlanner(), plannerModel: "LOCAL_STUB",
+      handlers: stubHandlers(j => j.kind.toLowerCase()), globalStopFile: path.join(dir, "GLOBAL_STOP.json"), now});
+    const COMMAND2 = "Giriş sayfasını geliştir";
+    const conf = (keys: ChainHostKeys, text = COMMAND) => supervisorTestSigner(keys, now).confirmation({objectiveSha256: createHash("sha256").update(text).digest("hex"),
+      tenantId: "tenant-a", projectId: "proj-web", environment: "staging"});
+    const U: UnsignedScope = {tenantId: "tenant-a", projectId: "proj-web", environment: "staging", jobKinds: ["BUILD", "TEST", "PACKAGE", "DELIVERY"], allowNetwork: false, maxCostUsd: 10,
+      issuedAt: "2026-11-04T08:30:00.000Z", expiresAt: "2026-11-04T10:00:00.000Z", keyId: "k-local"};
+    const unsigned = (x: SignedScope): UnsignedScope => { const {signature: _s, ...rest} = x; return rest; };
+    // her satır: imza REDDEDİLEN değerle atılır, alan KABUL edilen değere yeniden yazılır (girdiler pozitif kontrolle birebir aynı; yalnız imza farklı)
+    const RETARGETS: ReadonlyArray<[keyof UnsignedScope, unknown]> = [
+      ["tenantId", "tenant-b"], ["projectId", "proj-other"], ["environment", "production"], ["jobKinds", ["BUILD"]], ["allowNetwork", true], ["maxCostUsd", 0.000001],
+      ["issuedAt", "2026-11-03T08:00:00.000Z"], ["expiresAt", "2026-11-04T08:59:00.000Z"], ["keyId", "k-other"],
+    ];
+
+    it("every signed scope field is MAC-bound at the host: a scope signed for another value and retargeted is refused before planning; positive control accepted", async () => {
+      const keys = keysV4(), host = hostV4(keys);
+      try {
+        const control = signScope(U, keys.scopeKey);
+        for (const [field, refused] of RETARGETS) {
+          const forged = {...signScope({...U, [field]: refused} as UnsignedScope, keys.scopeKey), [field]: U[field]} as SignedScope;   // keyId satırı: aynı sır, farklı keyId
+          expect(unsigned(forged), field).toEqual(unsigned(control));
+          expect(await host.dispatch(COMMAND, conf(keys), forged), field).toEqual({ok: false, stage: "INTAKE", reason: "SCOPE_SIGNATURE_INVALID"});
+          const pos = await host.dispatch(COMMAND, conf(keys), signScope({...U}, keys.scopeKey));
+          expect(pos.ok, `${field}: ${JSON.stringify(pos)}`).toBe(true);
+        }
+        for (const bad of [null, undefined, {}, {...control, keyId: "k-unknown"}, {...control, signature: "zz"}]) {
+          expect(await host.dispatch(COMMAND, conf(keys), bad as unknown as SignedScope)).toEqual({ok: false, stage: "INTAKE", reason: "SCOPE_SIGNATURE_INVALID"});
+        }
+      } finally { await host.stop(); }
+    });
+
+    it("a forged widening of an already-used scope (same tenant/project/env, reused signature) never reaches the cached orchestrator or the queue", async () => {
+      const keys = keysV4(), host = hostV4(keys);
+      try {
+        const a = signScope(U, keys.scopeKey);
+        expect((await host.dispatch(COMMAND, conf(keys), a)).ok).toBe(true);
+        const before = host.queue.list("tenant-a").length;
+        const forged = {...a, maxCostUsd: 1_000, jobKinds: ["BUILD", "TEST", "PACKAGE", "DELIVERY", "DEPLOY"]} as SignedScope;
+        expect(await host.dispatch(COMMAND2, conf(keys, COMMAND2), forged)).toEqual({ok: false, stage: "INTAKE", reason: "SCOPE_SIGNATURE_INVALID"});
+        expect(host.queue.list("tenant-a").length).toBe(before);
+      } finally { await host.stop(); }
+    });
+
+    it("a second validly signed scope for the same tenant/project/env gets its own orchestrator: its jobs carry ITS scope, not the first cached scope's", async () => {
+      const keys = keysV4(), host = hostV4(keys);
+      try {
+        const a = signScope(U, keys.scopeKey), b = signScope({...U, maxCostUsd: 9}, keys.scopeKey);
+        const ra = await host.dispatch(COMMAND, conf(keys), a), rb = await host.dispatch(COMMAND2, conf(keys, COMMAND2), b);
+        expect(ra.ok && rb.ok, JSON.stringify([ra, rb])).toBe(true);
+        if (!ra.ok || !rb.ok) return;
+        const sigs = (r: typeof ra) => r.ok ? [...r.dag.tasks.values()].map(t => host.queue.get(t.taskId)?.job.scope.maxCostUsd).filter(v => v !== undefined) : [];   // kuyruk imzayı redakte saklar; ayırt edici alan maxCostUsd
+        expect(sigs(ra).length).toBeGreaterThan(0); expect(sigs(rb).length).toBeGreaterThan(0);
+        expect(new Set(sigs(ra))).toEqual(new Set([10]));
+        expect(new Set(sigs(rb))).toEqual(new Set([9]));
+      } finally { await host.stop(); }
+    });
+  });
 }
