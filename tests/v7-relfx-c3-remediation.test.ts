@@ -194,9 +194,16 @@ describe("C-PAR-1 PAR-03: synchronous git in one run must not starve another run
       return c.base.implementer.implement(w, spec, ctx);
     });
     slow.rule = {ms: BLOCK, match: slowMatch(A, c.repo)};
+    // //TR: UASCO-T0088 (Windows shard 1, run 41995510532: "fired 0"): senaryo ateşlenmediyse NEDENİ yazılır: A ve B'nin son durum/adım/gerekçesi, claimed/fenced ve A'nın run dizinindeki SON git çağrıları (A VERIFY tarama klonuna hiç ulaşmadı mı, yoksa eşleştirici mi kaçırdı ayrımı). Davranış ve iddialar değişmez.
+    const gitA: string[] = [];
+    const gitLabel = (args: string[]) => { const a = args.filter((x, i, all) => x !== "-c" && all[i - 1] !== "-c"); return [...a.slice(0, 3), ...(a.length > 3 ? [`…${path.basename(a[a.length - 1])}`] : [])].map(x => x.length > 40 ? `…${x.slice(-24)}` : x).join(" "); };   // ilk 3 argüman + son argümanın adı (klon hedefi: scan-c0)
+    slow.observe = (cwd, args) => { if (cwd.includes(A.runId)) gitA.push(gitLabel(args)); };
+    slow.observeSync = (cwd, args) => { if (cwd.includes(A.runId)) gitA.push(`sync:${gitLabel(args)}`); };
     const probe = stallProbe();
-    const rep = await c.runner({maxConcurrentRuns: 2, leaseTtlMs: TTL, executors: pair}).tick().finally(() => probe.stop());
-    expect(slow.hits.sync + slow.hits.async, "the slow-git scenario really fired once").toBe(1);
+    const rep = await c.runner({maxConcurrentRuns: 2, leaseTtlMs: TTL, executors: pair}).tick().finally(() => { probe.stop(); slow.observe = null; slow.observeSync = null; });
+    const runInfo = (id: string) => { const r = c.store.engineGetRun(id) as {status?: string; step?: string; reason?: string | null} | undefined; return `${r?.status}/${r?.step}/${r?.reason ?? ""}`; };
+    const scenarioDiag = `hits=${JSON.stringify(slow.hits)} A=${runInfo(A.runId)} B=${runInfo(B.runId)} claimed=${rep.claimed.length} fenced=${JSON.stringify(rep.fenced.map(id => id === A.runId ? "A" : id === B.runId ? "B" : id))} calls=${JSON.stringify(calls)} gitAClones=${JSON.stringify(gitA.filter(x => x.startsWith("clone")).map(x => x.split("…").pop()))} gitA(last 12 of ${gitA.length})=${JSON.stringify(gitA.slice(-12))} ${hbDiag(c, {A: A.runId, B: B.runId}, rep.fenced, probe, TTL)}`;
+    expect(slow.hits.sync + slow.hits.async, `the slow-git scenario really fired once: ${scenarioDiag}`).toBe(1);
     expect(rep.claimed.sort()).toEqual([A.runId, B.runId].sort());
     expect(rep.fenced, hbDiag(c, {A: A.runId, B: B.runId}, rep.fenced, probe, TTL)).toEqual([]);
     expect(calls.B).toBe(1);
