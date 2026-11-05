@@ -1,5 +1,5 @@
 // //TR: Bu dosya worker run durumlarının (Master §06) açık allowlist geçiş tablosunu tanımlar; tabloda olmayan her geçiş fail-closed reddedilir ve journal replay'inde tamper sayılır.
-import type {RunStatus, RunStep} from "./types.js";
+import type {RunCheckpoint, RunStatus, RunStep} from "./types.js";
 
 const transitions: Record<RunStatus, readonly RunStatus[]> = {
   CREATED: ["QUEUED", "BLOCKED", "CANCELLING"],
@@ -38,3 +38,62 @@ export function assertRunTransition(from: RunStatus, to: RunStatus): void {
 }
 // Bir run hâlâ yürütülebilir/aktif mi (aynı mission için ikinci run başlatılamaz).
 export const isOpenRun = (s: RunStatus) => !TERMINAL_RUN_STATUSES.includes(s) && s !== "AWAITING_APPROVAL";
+
+// //TR: V3-T1016 kota olay modeli: sağlayıcı kotası/hız sınırı (PROVIDER_QUOTA) run'ı BLOCKED yapar ama bu engel DEVAM ETTİRİLEBİLİR (BLOCKED_RESUMABLE) sınıftadır;
+// diğer her BLOCKED terminaldir (BLOCKED_TERMINAL). Engel noktasında şemalı bir checkpoint kaydı yazılır (adım, deneme, son kanıt ref'i, biliniyorsa resumeAfter).
+// Devam ettirilebilir engel ASLA kendiliğinden (devralma/crash-resume/zamanlayıcı) sürdürülmez; yalnız açık bir resume çağrısı (P2, bu pakette yok) sürdürebilir.
+export const RESUMABLE_BLOCK_REASONS = ["PROVIDER_QUOTA"] as const;
+export type ResumableBlockReason = (typeof RESUMABLE_BLOCK_REASONS)[number];
+export const isResumableBlockReason = (x: unknown): x is ResumableBlockReason => typeof x === "string" && (RESUMABLE_BLOCK_REASONS as readonly string[]).includes(x);
+export type ProviderLimitKind = "QUOTA_EXHAUSTED" | "RATE_LIMIT";
+/** Engel noktasında yazılan checkpoint verisi (RunCheckpoint.data). schema sürümlüdür; alanlar kesin doğrulanır. */
+export interface ResumableBlockCheckpoint {
+  outcome: "BLOCKED_RESUMABLE"; schema: 1; reason: ResumableBlockReason; limit: ProviderLimitKind;
+  step: RunStep; attempt: number; retryCount: number; lastEvidenceRef: string | null; resumeAfter: string | null; blockedAt: string; resume: "EXPLICIT_ONLY";
+}
+const ISO_UTC_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
+const EVIDENCE_REF_RE = /^[A-Za-z0-9_-]{1,64}$/;
+const RESUMABLE_KEYS = ["attempt", "blockedAt", "lastEvidenceRef", "limit", "outcome", "reason", "resume", "resumeAfter", "retryCount", "schema", "step"];
+const isIso = (x: unknown): x is string => typeof x === "string" && ISO_UTC_RE.test(x) && Number.isFinite(Date.parse(x));
+const isCount = (x: unknown, min: number): x is number => typeof x === "number" && Number.isSafeInteger(x) && x >= min;
+export function isResumableBlockCheckpoint(x: unknown): x is ResumableBlockCheckpoint {
+  if (!x || typeof x !== "object" || Array.isArray(x)) return false;
+  const o = x as Record<string, unknown>;
+  if (Object.keys(o).sort().join(",") !== RESUMABLE_KEYS.join(",")) return false;
+  return o.outcome === "BLOCKED_RESUMABLE" && o.schema === 1 && isResumableBlockReason(o.reason) && (o.limit === "QUOTA_EXHAUSTED" || o.limit === "RATE_LIMIT")
+    && isRunStep(o.step) && isCount(o.attempt, 1) && isCount(o.retryCount, 0)
+    && (o.lastEvidenceRef === null || (typeof o.lastEvidenceRef === "string" && EVIDENCE_REF_RE.test(o.lastEvidenceRef)))
+    && (o.resumeAfter === null || isIso(o.resumeAfter)) && isIso(o.blockedAt) && o.resume === "EXPLICIT_ONLY";
+}
+/** Doğrulanmış kayıt üretir; geçersiz girdi hata fırlatır (fail-closed: bozuk kayıt yazılmaz). */
+export function resumableBlockCheckpoint(i: Omit<ResumableBlockCheckpoint, "outcome" | "schema" | "resume">): ResumableBlockCheckpoint {
+  const c: ResumableBlockCheckpoint = {outcome: "BLOCKED_RESUMABLE", schema: 1, reason: i.reason, limit: i.limit, step: i.step, attempt: i.attempt, retryCount: i.retryCount,
+    lastEvidenceRef: i.lastEvidenceRef, resumeAfter: i.resumeAfter, blockedAt: i.blockedAt, resume: "EXPLICIT_ONLY"};
+  if (!isResumableBlockCheckpoint(c)) throw new Error("INVALID_RESUMABLE_BLOCK_CHECKPOINT");
+  return c;
+}
+type RunView = {status: RunStatus; reason: string | null; step: RunStep; checkpoints: readonly RunCheckpoint[]};
+/** Son checkpoint geçerli bir devam-ettirilebilir engel kaydıysa onu döndürür (sonraki bir checkpoint onu geçersiz kılar). */
+export function pendingResumableBlock(run: Pick<RunView, "step" | "checkpoints">): ResumableBlockCheckpoint | null {
+  const last = run.checkpoints[run.checkpoints.length - 1];
+  return last && last.step === run.step && isResumableBlockCheckpoint(last.data) && last.data.step === run.step ? last.data : null;
+}
+/** BLOCKED bir run'ın sınıfı: kayıtlı ve nedeni eşleşen kota engeli BLOCKED_RESUMABLE; diğer her BLOCKED BLOCKED_TERMINAL; BLOCKED değilse null. */
+export function blockClass(run: RunView): "BLOCKED_RESUMABLE" | "BLOCKED_TERMINAL" | null {
+  if (run.status !== "BLOCKED") return null;
+  const p = pendingResumableBlock(run);
+  return p && run.reason === p.reason ? "BLOCKED_RESUMABLE" : "BLOCKED_TERMINAL";
+}
+/** Kendiliğinden devam (devralma, crash-resume, zamanlayıcı) yasağı: bekleyen devam-ettirilebilir engel varsa adım yeniden yürütülmez. */
+export const autoResumeAllowed = (run: Pick<RunView, "step" | "checkpoints">): boolean => pendingResumableBlock(run) === null;
+export type ResumeRequest = {explicit: true; requestedBy: string};
+export type ResumeGateResult = {ok: true; checkpoint: ResumableBlockCheckpoint} | {ok: false; reason: "RESUME_REQUIRES_EXPLICIT_CALL" | "NOT_RESUMABLE" | "RESUME_NOT_YET_DUE"};
+/** Açık resume kapısı (P2 sürdürme bunu kullanacak; bu paket sürdürmez): yalnız açık istek + BLOCKED_RESUMABLE + resumeAfter geçmiş. */
+export function resumeGate(run: RunView, request: unknown, nowMs: number): ResumeGateResult {
+  const r = request as Partial<ResumeRequest> | null | undefined;
+  if (!r || typeof r !== "object" || r.explicit !== true || typeof r.requestedBy !== "string" || r.requestedBy.trim().length === 0) return {ok: false, reason: "RESUME_REQUIRES_EXPLICIT_CALL"};
+  if (blockClass(run) !== "BLOCKED_RESUMABLE") return {ok: false, reason: "NOT_RESUMABLE"};
+  const c = pendingResumableBlock(run)!;
+  if (c.resumeAfter !== null && !(nowMs >= Date.parse(c.resumeAfter))) return {ok: false, reason: "RESUME_NOT_YET_DUE"};
+  return {ok: true, checkpoint: c};
+}
