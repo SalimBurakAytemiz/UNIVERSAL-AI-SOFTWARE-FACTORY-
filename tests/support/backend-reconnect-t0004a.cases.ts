@@ -38,7 +38,10 @@ class Timers {
   async run() { const p = this.pending.shift(); if (!p) throw new Error("no pending timer"); await p.fn(); return p.ms; }
 }
 class D {
-  status: N; defaultView: any; constructor(public timers: Timers) { this.status = new N(this, "p"); this.status.setAttribute("id", "status"); this.defaultView = {setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout}; }
+  status: N; defaultView: any; winLs = new Map<string, Array<() => unknown>>();
+  constructor(public timers: Timers) { this.status = new N(this, "p"); this.status.setAttribute("id", "status");
+    this.defaultView = {setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout, addEventListener: (ev: string, fn: () => unknown) => this.winLs.set(ev, [...(this.winLs.get(ev) ?? []), fn])}; }
+  fireWindow(ev: string) { for (const fn of this.winLs.get(ev) ?? []) fn(); }
   createElement(t: string) { return new N(this, t); }
   createElementNS(_ns: string, t: string) { return new N(this, t); }
   createTextNode(s: string) { const n = new N(this, "#text"); n._text = s; return n; }
@@ -154,6 +157,21 @@ export function registerBackendReconnectT0004aCases(): void {
       expect(e.ctx.panel.dataset.recovery).toBe("API_DOWN");
     });
 
+    it("#386 follow-up: pagehide (document teardown) stops the loop: the pending wait is cancelled and nothing is re-planned", async () => {
+      const holder: {app: App | null} = {app: null};
+      const e = await mkCtx(holder);
+      await e.ctx.refreshAll();
+      expect(e.timers.pending.map(p => p.ms)).toEqual([2000]);
+      const id = e.timers.seq;
+      e.ctx.doc.fireWindow("pagehide");
+      expect(e.timers.pending).toEqual([]);
+      expect(e.timers.cancelled).toContain(id);
+      expect(e.ctx.doc.winLs.get("pagehide")?.length).toBe(1); // tek kayıt (yeniden çizimde çoğalmaz)
+      await e.ctx.refreshAll(); await e.ctx.refreshAll();
+      expect(e.ctx.doc.winLs.get("pagehide")?.length).toBe(1);
+      expect(e.timers.pending.map(p => p.ms)).toEqual([2000]); // sayfa geri gelirse (bfcache) baştan başlar
+    });
+
     it("a VIEW_FAILED panel never starts the reconnect loop; an API_DOWN panel with health LOADING/VERIFIED is not shown at all", async () => {
       const holder: {app: App | null} = {app: null};
       const e = await mkCtx(holder);
@@ -193,6 +211,21 @@ export function registerBackendReconnectT0004aCases(): void {
       expect(recovered).toBe(1); expect(t.pending).toEqual([]); expect(r.snapshot()).toMatchObject({active: false, attempt: 0, nextAt: null});
       healthy = false; r.noteDown(); expect(t.pending.map(p => p.ms)).toEqual([2000]);
       r.stop(); expect(t.pending).toEqual([]); expect(r.snapshot().active).toBe(false);
+      // #386 M10: stop() deneme sayacını sıfırlar: başarısızlıklardan sonra stop + noteDown yine 2 sn'den başlar
+      const t4 = new Timers();
+      const r4 = c.createReconnector({schedule: t4.setTimeout, cancel: t4.clearTimeout, now: () => 0, attemptOnce: async () => {}, isHealthy: async () => false, onRecovered: () => {}});
+      r4.noteDown(); await t4.run(); await t4.run();
+      expect(t4.pending.map(p => p.ms)).toEqual([8000]); expect(r4.snapshot().attempt).toBe(2);
+      r4.stop(); expect(r4.snapshot().attempt).toBe(0);
+      r4.noteDown(); expect(t4.pending.map(p => p.ms)).toEqual([2000]);
+      // #386 M12: bir deneme sürerken retryNow ikinci bir deneme başlatmaz
+      const t5 = new Timers(); let n5 = 0, rel5: () => void = () => {};
+      const r5 = c.createReconnector({schedule: t5.setTimeout, cancel: t5.clearTimeout, now: () => 0, attemptOnce: () => { n5++; return new Promise<void>(res => { rel5 = res; }); }, isHealthy: async () => false, onRecovered: () => {}});
+      r5.noteDown(); const run5 = t5.run();
+      await r5.retryNow(); await r5.retryNow();
+      expect(n5).toBe(1);
+      rel5(); await run5;
+      expect(n5).toBe(1); expect(t5.pending.map(p => p.ms)).toEqual([4000]);
       // stop() bir deneme sürerken çağrılırsa deneme bitince yeni bekleme PLANLANMAZ
       const t3 = new Timers(); let release: () => void = () => {};
       const r3 = c.createReconnector({schedule: t3.setTimeout, cancel: t3.clearTimeout, now: () => 0, attemptOnce: () => new Promise<void>(res => { release = res; }), isHealthy: async () => false, onRecovered: () => {}});

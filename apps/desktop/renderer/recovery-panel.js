@@ -29,6 +29,8 @@ export function reconnectorFor(ctx){
     isHealthy:async()=>{const hres=typeof ctx.api?.health==="function"?await ctx.api.health():null;return hres?.state==="VERIFIED"},
     onRecovered:()=>{const n=typeof doc.getElementById==="function"?doc.getElementById("status"):null;if(n)n.textContent=recoveryText(ctx,"recovery.reconnected")}
   });
+  // #386 izlemesi: belge kapanırken/gezinirken (pagehide) döngü durdurulur; bekleyen zamanlayıcı kalmaz. shell.js'e dokunmayan güvenli kapanış kancası.
+  if(typeof w.addEventListener==="function")w.addEventListener("pagehide",()=>r.stop());
   RECONNECTORS.set(doc,r);return r;
 }
 /** opts: {routeId, health, reason, titleId?} — titleId verilirse başlık görünüm başlığı olur (odak hedefi). API_DOWN'da otomatik yeniden bağlanma planlanır ve durumu gösterilir. */
