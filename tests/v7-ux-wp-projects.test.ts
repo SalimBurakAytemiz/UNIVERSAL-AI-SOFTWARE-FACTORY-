@@ -3,6 +3,7 @@ import {describe, it, expect, beforeEach} from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import {pathToFileURL} from "node:url";
+import {registerWizardRealServerCases} from "./support/wizard-real-server.cases.js"; // UASCO-T0006: sihirbaz -> gerçek sunucu (environmentId kusuru ve düzeltmesi)
 
 const rend = path.resolve(__dirname, "..", "apps", "desktop", "renderer");
 const load = async (...p: string[]): Promise<any> => import(pathToFileURL(path.join(rend, ...p)).href);
@@ -462,3 +463,6 @@ describe("UI-132 closure honest-state follow-ups", () => {
     expect(st(buildClosure({projectId: P1, missions: m, runs: runs(499), deliveries: del}), "noActiveRuns")).toBe("MET");
   });
 });
+
+// //TR: UASCO-T0006 sihirbaz gerçek sunucu vakaları (tests/support/wizard-real-server.cases.ts) burada kaydedilir.
+registerWizardRealServerCases();
