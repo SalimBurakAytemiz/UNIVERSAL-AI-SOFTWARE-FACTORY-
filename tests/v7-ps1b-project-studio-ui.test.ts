@@ -2197,7 +2197,7 @@ describe("LANE-A first-delivery flow stepper (fake DOM)", () => {
     const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js");
     const E = en.default ?? en.EN ?? en, T = tr.default ?? tr.TR ?? tr;
     const keys = Object.keys(E).filter(k => k.startsWith("flow."));
-    expect(keys.length).toBe(35);
+    expect(keys.length).toBe(36); // +flow.state.AWAITING_APPROVAL (UASCO-T0007)
     for (const k of keys) expect(T[k], k).toBeTruthy();
   });
 });
@@ -2846,7 +2846,7 @@ describe("LANE-A A-FLOW-4: running product after delivery (B-RUN-1 contract, run
     expect(d(423, {error: "GLOBAL_STOP_ACTIVE"}).key).toBe("post.err.423"); expect(d(403, {error: "ACTION_DENIED"}).key).toBe("post.err.auth");
     const en = await load(rend, "locales", "en.js"), tr = await load(rend, "locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
     const keys = Object.keys(E).filter(k => k.startsWith("product.") || /^post\.err\.409\.(DEVRUN|PRODUCT)/.test(k));
-    expect(keys.length).toBe(48);
+    expect(keys.length).toBe(49); // +product.startDisabled.SANDBOX_UNAVAILABLE (UASCO-T0007)
     // LOW (review #226): the keys the card can reach exist, and no key is left unreachable
     for (const k of ["product.reason.DEVRUN_BRIDGE_FAILED", "product.reason.DEVRUN_COMMAND_NOT_CONFIGURED", "product.reason.DEVRUN_COMMAND_NOT_ALLOWED", "product.reason.REPOSITORY_NOT_CONFIGURED", "product.reason.DEVRUN_DELIVERY_HEAD_MISSING", "product.reason.DEVRUN_SPAWN_FAILED"]) expect(E[k], k).toBeTruthy();
     for (const k of ["product.reason.DEVRUN_BLOCKED", "product.detail.DEVRUN_BRIDGE_FAILED", "product.notDelivered"]) expect(E[k], k).toBeUndefined();
