@@ -1,6 +1,6 @@
 {
   "schema": "uasco.factory-v2.shared-registry/1",
-  "phase": "section:ledger/run2/c/000001",
+  "phase": "section:lease/shadow-probe-control/supervisor--SHADOW-probe-control",
   "sections": {
     "lease/shadow-probe-control/supervisor--SHADOW-probe-control": {
       "taskId": "supervisor--SHADOW-probe-control",
@@ -11,8 +11,8 @@
       "epoch": 1,
       "token": "session_015dYwb57qx21P4wudU5xauD:1:2a5bae8c-fdda-40ec-9cbc-23217de56578",
       "acquiredAt": 1793899955316,
-      "heartbeatAt": 1793906936298,
-      "expiresAt": 1793928536298
+      "heartbeatAt": 1793907028708,
+      "expiresAt": 1793928628708
     },
     "ledger/run1/c/000001": {
       "events": [
@@ -1773,12 +1773,12 @@
     }
   },
   "revs": {
-    "lease/shadow-probe-control/supervisor--SHADOW-probe-control": 34,
+    "lease/shadow-probe-control/supervisor--SHADOW-probe-control": 35,
     "ledger/run1/c/000001": 44,
     "lease/shadow-probe-control/task--FV2-PROBE-CTL-1": 2,
     "lease/shadow-probe-control/task--FV2-PROBE-CTL-2": 4,
     "ledger/run2/c/000001": 5,
     "lease/shadow-probe-control/task--FV2-PROBE-S2-1": 1
   },
-  "seq": 90
+  "seq": 91
 }
