@@ -1,6 +1,6 @@
 {
   "schema": "uasco.factory-v2.shared-registry/1",
-  "phase": "section:probe/A-reset",
+  "phase": "section:refs/uasco/handover/probe-uasco/v1",
   "sections": {
     "probe-keys/session_015dYwb2b3yVQ6iay68HXCD8": {
       "session": "session_015dYwb2b3yVQ6iay68HXCD8",
@@ -78,6 +78,400 @@
     "probe/A-reset": {
       "session": "session_015dYwb2b3yVQ6iay68HXCD8",
       "at": 1793869343671
+    },
+    "refs/uasco/handover/probe-uasco/v1": {
+      "schema": "uasco.factory-v2.handover-manifest/1",
+      "domain": "probe-uasco",
+      "version": 1,
+      "fromSession": "session_015dYwb2b3yVQ6iay68HXCD8",
+      "toSession": "session_015dYwb4zVwFwg69iij2RdGq",
+      "snapshot": {
+        "baseRef": "v7/integration",
+        "baseSha": "063383c158bd8a6d66875846327211ea5e91d2b6",
+        "done": [
+          {
+            "task": "CLOUD-T0001",
+            "source": "STATE.done",
+            "pr": 296
+          },
+          {
+            "task": "CLOUD-T0003",
+            "source": "STATE.done",
+            "pr": 297
+          },
+          {
+            "task": "CLOUD-T0004",
+            "source": "STATE.done",
+            "pr": 298
+          },
+          {
+            "task": "UASCO-T0001",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0005",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0009",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0012",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0013",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0015",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0019",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0021",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0022",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0025",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0027",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0030",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0032",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0034",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0036",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0042",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0043",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0048",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0052",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0053",
+            "source": "task-index:DONE_OBSERVED",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0054",
+            "source": "task-index:DONE_OBSERVED",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0055",
+            "source": "task-index:DONE_OBSERVED",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0058",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0060",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0067",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0068",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0073",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0075",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0076",
+            "source": "task-index:DONE_OBSERVED",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0079",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0087",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0089",
+            "source": "task-index:DONE_OBSERVED",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0092",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0104",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0105",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0114",
+            "source": "task-index:ASSET_DONE",
+            "pr": null
+          },
+          {
+            "task": "UASCO-T0128",
+            "source": "task-index:DONE_OBSERVED",
+            "pr": null
+          },
+          {
+            "task": "V3-T1001",
+            "source": "STATE.done",
+            "pr": 303
+          }
+        ],
+        "mergedPrTasks": [],
+        "openPrs": [
+          {
+            "pr": 282,
+            "task": null,
+            "headSha": "5d66b0336fab3e6aeba1573d3cd4bdbbc37064b8",
+            "headRef": "claude/lane-c-par03-diag-1",
+            "baseSha": "d5f4365fda64b898d9e1f0bdc264111d9080a7f0",
+            "baseRef": "v7/integration"
+          },
+          {
+            "pr": 308,
+            "task": "CLOUD-T0012",
+            "headSha": "0e71d6110feeacf498fc3919542f15d22d6c1a14",
+            "headRef": "claude/builder-d-cloud-t0012",
+            "baseSha": "849343e0f39820d4c0e38a94d3f33659c25e1078",
+            "baseRef": "v7/integration"
+          },
+          {
+            "pr": 327,
+            "task": "V3-T1012.a",
+            "headSha": "6d388ceed6e8d14a8f1528e5c7e80448a07518fe",
+            "headRef": "claude/builder-a-v3-t1012a-gate",
+            "baseSha": "10d37f8c213247c37cacaedb30b8b31f1929b21f",
+            "baseRef": "v7/integration"
+          },
+          {
+            "pr": 339,
+            "task": "UASCO-T0042",
+            "headSha": "59ec037ffc3f705482867e63a61afae1046eea5b",
+            "headRef": "claude/builder-d-qa-par03-diag",
+            "baseSha": "a01c37d206d9847c7c8cc3da62d6e5ea31b83cea",
+            "baseRef": "v7/integration"
+          },
+          {
+            "pr": 340,
+            "task": null,
+            "headSha": "0d2fbc27cefa16924424712fd7db7cd19307d190",
+            "headRef": "claude/builder-c-cloud-chain-host-v2",
+            "baseSha": "10d36938d06a0ed1dae62f9900e72823e5d8873d",
+            "baseRef": "claude/builder-c-cloud-t0015-planner-v2"
+          },
+          {
+            "pr": 341,
+            "task": null,
+            "headSha": "011abbb5cbbb56a15b992bb7b4c970d02556a403",
+            "headRef": "claude/coord-oauth-scope-diagnose",
+            "baseSha": "ee66bdf7deefdacf2e460333a10f77071d791125",
+            "baseRef": "v7/integration"
+          },
+          {
+            "pr": 343,
+            "task": "CLOUD-T0005",
+            "headSha": "beab44328d75fb1c6908ed87bce524ed0214dbf7",
+            "headRef": "claude/cloud-t0005-founder-wiring",
+            "baseSha": "a01c37d206d9847c7c8cc3da62d6e5ea31b83cea",
+            "baseRef": "v7/integration"
+          },
+          {
+            "pr": 346,
+            "task": "V3-T1001",
+            "headSha": "5fa714646cc793434a455e276e8c2774d16bae58",
+            "headRef": "claude/coord-state-v2-handoff",
+            "baseSha": "063383c158bd8a6d66875846327211ea5e91d2b6",
+            "baseRef": "v7/integration"
+          },
+          {
+            "pr": 347,
+            "task": null,
+            "headSha": "e65169fad80732314348948e71b9bccb343e1041",
+            "headRef": "claude/nice-sagan-c1zzow",
+            "baseSha": "c443ef4bb4fce94bd8134927ef2663fb1d96f88f",
+            "baseRef": "v7/integration"
+          },
+          {
+            "pr": 348,
+            "task": "CLOUD-T0002",
+            "headSha": "404373e9a72094063a5098ec1c7da788c46e5bd7",
+            "headRef": "claude/builder-c-cloud-t0002-io-errors",
+            "baseSha": "063383c158bd8a6d66875846327211ea5e91d2b6",
+            "baseRef": "v7/integration"
+          },
+          {
+            "pr": 349,
+            "task": "CLOUD-T0012",
+            "headSha": "bda5545881e53a0336b606a916dd311b2f8cb128",
+            "headRef": "claude/builder-g-cloud-t0012-hardening",
+            "baseSha": "063383c158bd8a6d66875846327211ea5e91d2b6",
+            "baseRef": "v7/integration"
+          }
+        ],
+        "inFlight": [
+          {
+            "task": "CLOUD-T0005",
+            "prs": [
+              302
+            ],
+            "note": "increment merged; doneMerge needs a real Windows runner install/login/stream test and desktop wiring through protected files (Founder)"
+          },
+          {
+            "task": "CLOUD-T0008",
+            "prs": [
+              305
+            ],
+            "note": "increment merged (staging filesystem backend); doneMerge needs two real downloaded projects + clean cloud npm ci/test (D-03 infrastructure)"
+          },
+          {
+            "task": "UASCO-T0045",
+            "prs": [
+              309
+            ],
+            "note": "regression coverage merged; V3-EV-F020-1 hosted run and server.ts wiring still open"
+          },
+          {
+            "task": "UASCO-T0087",
+            "prs": [
+              307
+            ],
+            "note": "diagnostic detail and redaction hardening merged; V3-EV record still open"
+          },
+          {
+            "task": "UASCO-T0042",
+            "prs": [
+              310,
+              313
+            ],
+            "note": "#310 PAR-03 fsync fix and #313 PAR-04 Windows takeover fix merged; V3-EV record still open"
+          },
+          {
+            "task": "CLOUD-T0010",
+            "prs": [
+              301
+            ],
+            "note": "increment merged (#301: idempotent cloud task DAG orchestrator); doneMerge needs a real cloud predev/task dispatch/review-to-artifact E2E with no local agent (D-03 infrastructure)"
+          },
+          {
+            "task": "CLOUD-T0015",
+            "prs": [
+              304
+            ],
+            "note": "increment merged (#304: provider routing with quota, fallback and circuit breaker); doneMerge needs real cloud model request, auth deny, quota/fallback and token usage evidence (D-03 infrastructure)"
+          },
+          {
+            "task": "UASCO-T0062",
+            "prs": [
+              311
+            ],
+            "note": "increment merged (#311: per-step routing record and Desktop line); journal and Desktop wiring still open (V3-AC-F026-1)"
+          }
+        ],
+        "blocked": [
+          {
+            "task": "CLOUD-T0012",
+            "prs": [
+              308
+            ],
+            "reason": "FOUNDER_REQUIRED: reviewer attested TASK_SCOPE_MISMATCH (security code beyond the doc-only write-set)"
+          }
+        ],
+        "liveOwned": [
+          "CLOUD-T0002",
+          "CLOUD-T0005",
+          "CLOUD-T0008",
+          "CLOUD-T0010",
+          "CLOUD-T0012",
+          "CLOUD-T0015",
+          "UASCO-T0042",
+          "UASCO-T0045",
+          "UASCO-T0062",
+          "UASCO-T0087",
+          "V3-T1001",
+          "V3-T1012.a"
+        ],
+        "taskIndexDigest": "e7df5108ef54bfadf15a8b1a042e04e1e61c665b598da034bb3e7b4f0ce62606",
+        "stateDigest": "188599ac79498b47d9c4def62c20e7bd324d19d64742d61acebcdd71fff6fce5"
+      },
+      "digest": "97a681210141d584734d5adb87ad23bc83b25f26cab80cd573b4450d02eaebdb"
     }
   },
   "revs": {
@@ -86,7 +480,8 @@
     "probe/A-ready": 1,
     "refs/uasco/authority/probe-uasco": 2,
     "probe/B-forged": 1,
-    "probe/A-reset": 1
+    "probe/A-reset": 1,
+    "refs/uasco/handover/probe-uasco/v1": 1
   },
-  "seq": 7
+  "seq": 8
 }
