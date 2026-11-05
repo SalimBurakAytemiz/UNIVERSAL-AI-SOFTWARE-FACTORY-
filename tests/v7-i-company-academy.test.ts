@@ -1,3 +1,4 @@
+// //TR: Bu test (Builder I) Company OS, Skill Academy ve Domains ekranlarının okuma hatasında köprünün ham hata metnini değil yalnız sabit kodu ya da HTTP durumunu gösterdiğini gerçek control-api ile doğrular.
 // Builder I — Company OS / Skill Academy / Domains UX, against the REAL control-api (buildServer + app.inject) behind the desktop
 // bridge's own GET/POST allow-lists. Each test pins one defect fix and carries a positive control:
 //  A failed read no longer prints the bridge's raw error message (Electron's "Error invoking remote method ..." wrapping
