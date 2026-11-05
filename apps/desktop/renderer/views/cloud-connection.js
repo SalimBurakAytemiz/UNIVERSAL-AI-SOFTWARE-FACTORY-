@@ -108,6 +108,19 @@ const TEXT=Object.freeze({
   "cloud.endpoint":"Uç nokta","cloud.environment":"Ortam","cloud.subject":"Kullanıcı","cloud.tenant":"Tenant","cloud.roles":"Roller","cloud.errorCode":"Hata kodu",
   "cloud.jobs":"Bulut işleri","cloud.noJobs":"Gösterilecek iş yok.",
   "cloud.cmd.job.submit":"İş gönder","cloud.cmd.job.cancel":"İptal et","cloud.cmd.artifact.download":"İndir","cloud.cmd.system.stop":"STOP",
+  "cloud.jobsStatus.OK":"Bulut işleri Control API'den okundu (salt-okunur).",
+  "cloud.jobsStatus.NOT_CONFIGURED":"Bulut iş kuyruğu yapılandırılmadı (NOT_CONFIGURED). Gösterilecek gerçek iş yok; örnek veri gösterilmez.",
+  "cloud.jobsStatus.UNAVAILABLE":"Bulut iş durumu bu masaüstü derlemesinde açık değil (UNAVAILABLE).",
+  "cloud.jobsStatus.OFFLINE":"Control API'ye ulaşılamadı (OFFLINE).",
+  "cloud.jobsStatus.ERROR":"Bulut iş durumu okunamadı (ERROR).",
+  "cloud.jobsStopped":"Global STOP etkin: yeni iş kabul edilmez.",
+  "cloud.jobCode.WORKER_FAILED":"İş bulutta başarısız oldu. Güvenlik nedeniyle worker çıktısı saklanmaz.",
+  "cloud.jobCode.TIMED_OUT":"İş zaman aşımına uğradı.",
+  "cloud.jobCode.RETRYING":"İş başarısız oldu ve yeniden denenecek.",
+  "cloud.jobCode.LEASE_EXPIRED":"Worker yanıt vermeyi bıraktı (lease süresi doldu).",
+  "cloud.jobCode.SANDBOX_UNAVAILABLE":"Bulut yalıtım ortamı (sandbox) kullanılamıyor.",
+  "cloud.jobCode.CANCELLED":"İş iptal edildi.",
+  "cloud.jobCode.STOPPED":"İş global STOP ile durduruldu.",
 });
 const tr=(ctx,k)=>{const v=typeof ctx?.t==="function"?ctx.t(k):k;return typeof v==="string"&&v!==k?v:(TEXT[k]??k)};
 /** Komut yalnız ctx.sendRemoteCommand'a (bulut Control API köprüsü) iletilir; yoksa hiçbir şey yapılmaz. */
@@ -140,4 +153,45 @@ export function cloudConnectionView(ctx,model){
     h(doc,"p",{class:"note",dataset:{cloudLocal:"none"},text:tr(ctx,"cloud.localExecution")}),
     global.length?h(doc,"div",{class:"btn-row"},global.map(c=>h(doc,"button",{type:"button",class:`btn${c==="system.stop"?" btn-danger":" btn-primary"}`,dataset:{cloudCmd:c},text:tr(ctx,`cloud.cmd.${c}`),on:{click:send(ctx,c,{})}}))):null,
     jobs);
+}
+
+// //TR: CLOUD-T0005 gerçek durum: GET /v1/cloud/jobs yanıtı (apps/control-api/src/routes/cloud-jobs.ts) yalnız bu yükleyiciyle okunur; hata/yokluk dürüstçe
+// NOT_CONFIGURED / UNAVAILABLE / OFFLINE / ERROR olarak gösterilir, asla örnek veri üretilmez. Sunucu metni temizlenip yalnız textContent ile çizilir.
+export const CLOUD_JOBS_PATH="/v1/cloud/jobs";
+export const CLOUD_JOBS_STATES=Object.freeze(["OK","NOT_CONFIGURED","UNAVAILABLE","OFFLINE","ERROR"]);
+const JOB_STATUSES=new Set(["QUEUED","RUNNING","SUCCEEDED","FAILED","CANCELLED","TIMED_OUT","STOPPED"]);
+// //TR: CLOUD-T0005: sunucu worker metni döndürmez; yalnız bu kapalı listedeki kod gösterilir, bilinmeyen kod genel WORKER_FAILED'a düşer (ham metin asla çizilmez).
+export const CLOUD_JOB_MESSAGE_CODES=Object.freeze(["WORKER_FAILED","TIMED_OUT","RETRYING","LEASE_EXPIRED","SANDBOX_UNAVAILABLE","CANCELLED","STOPPED"]);
+const jobCode=c=>c===null||c===undefined?null:CLOUD_JOB_MESSAGE_CODES.includes(c)?c:"WORKER_FAILED";
+function jobSummaryOk(j){
+  return j&&typeof j==="object"&&rawIf(j.jobId,CLOUD_ID_RE)!==null&&JOB_STATUSES.has(j.status)&&Number.isSafeInteger(j.attempt)&&Number.isSafeInteger(j.maxAttempts);
+}
+/** api: renderer createApi() örneği. Dönen değer: {state, jobs, stopped, code}. */
+export async function loadCloudJobs(api){
+  const r=await api.get(CLOUD_JOBS_PATH);
+  if(!r||!r.ok){
+    const state=r?.state==="UNAVAILABLE"?"UNAVAILABLE":r?.state==="OFFLINE"?"OFFLINE":"ERROR";
+    return {state,jobs:[],stopped:false,code:sanitizeServerText(r?.message??"")};
+  }
+  const d=r.data;
+  if(d&&d.state==="NOT_CONFIGURED")return {state:"NOT_CONFIGURED",jobs:[],stopped:false,code:""};
+  if(!d||d.state!=="OK"||!Array.isArray(d.jobs)||!d.jobs.every(jobSummaryOk))return {state:"ERROR",jobs:[],stopped:false,code:"CLOUD_JOBS_MALFORMED"};
+  return {state:"OK",stopped:d.stopped===true,code:"",jobs:d.jobs.slice(0,100).map(j=>({
+    jobId:sanitizeServerText(j.jobId),status:j.status,kind:sanitizeServerText(j.kind),attempt:`${j.attempt}/${j.maxAttempts}`,
+    updatedAt:sanitizeServerText(j.updatedAt??""),messageCode:jobCode(j.messageCode),
+    artifacts:(Array.isArray(j.artifacts)?j.artifacts:[]).filter(a=>a&&typeof a.name==="string").map(a=>sanitizeServerText(a.name))}))};
+}
+/** Salt-okunur panel: komut düğmesi yoktur (komutlar cloudConnectionView'da, oturum yetkisine bağlıdır). */
+export function cloudJobsPanel(ctx,loaded){
+  const doc=ctx.doc,st=CLOUD_JOBS_STATES.includes(loaded?.state)?loaded.state:"ERROR",jobs=st==="OK"?loaded.jobs:[];
+  return h(doc,"section",{class:"cloud-jobs-status",id:"cloud-jobs-status",role:"region","aria-label":tr(ctx,"cloud.jobs"),dataset:{cloudJobsState:st}},
+    h(doc,"h4",{text:tr(ctx,"cloud.jobs")}),
+    h(doc,"p",{class:`note${st==="OK"?"":` note-${st.toLowerCase()}`}`,role:"status",dataset:{cloudJobsStatus:st},text:tr(ctx,`cloud.jobsStatus.${st}`)}),
+    st!=="OK"&&loaded?.code?h(doc,"p",{class:"note mono",dataset:{cloudJobsCode:loaded.code},text:loaded.code}):null,
+    st==="OK"&&loaded.stopped?h(doc,"p",{class:"note note-error",dataset:{cloudJobsStopped:"true"},text:tr(ctx,"cloud.jobsStopped")}):null,
+    st==="OK"?(jobs.length?h(doc,"ul",{class:"cards"},jobs.map(j=>h(doc,"li",{class:"card",dataset:{cloudJob:j.jobId,cloudJobStatus:j.status}},
+      h(doc,"span",{class:"mono",text:j.jobId})," ",h(doc,"span",{text:j.status})," ",h(doc,"span",{class:"note",text:`${j.kind} · ${j.attempt}`}),
+      j.messageCode?h(doc,"p",{class:"note",dataset:{cloudJobCode:j.messageCode}},h(doc,"span",{class:"mono",text:j.messageCode})," ",h(doc,"span",{text:tr(ctx,`cloud.jobCode.${j.messageCode}`)})):null,
+      j.artifacts.length?h(doc,"ul",{class:"cloud-artifacts"},j.artifacts.map(a=>h(doc,"li",{class:"mono",text:a}))):null)))
+      :h(doc,"p",{class:"note note-empty",text:tr(ctx,"cloud.noJobs")})):null);
 }
