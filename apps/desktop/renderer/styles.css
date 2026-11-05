@@ -876,3 +876,5 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 .pc-list{margin:var(--space-1) 0 0;padding-left:var(--space-4);font-size:var(--fs-caption);overflow-wrap:anywhere}
 .pc-cell .note{margin:0;font-size:var(--fs-caption)}
 @media (max-width:1100px){.pc-row{grid-template-columns:repeat(2,minmax(0,1fr))}.pc-name{grid-column:1/-1}}
+/* //TR: Ana Sayfa "Bölüme atla" bağlantıları: tek satır, küçük, yalnız mevcut token'lar; yalnız .home-skip kapsamı. */
+.home-skip-list{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-4);margin:0 0 var(--space-3);padding:0;list-style:none;font-size:var(--fs-caption)}

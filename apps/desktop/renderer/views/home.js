@@ -147,16 +147,26 @@ function notificationsPanel(ctx,feed){
     feed.partial?h(doc,"p",{class:"note",dataset:{notifyPartial:"1"},text:ctx.t("home.notify.partial")}):null,
     feed.state==="PARTIAL"&&feed.items.length===0?emptyNote(ctx,"home.notify.emptyPartial"):null,...body));
 }
+/** //TR: Ana Sayfa erişilebilirlik: uzun sayfada klavyeyle her ana panele birkaç Tab'da ulaşılır. Hash yönlendirmesi bozulmasın diye <a href="#..."> yerine düğme kullanılır; düğme panel başlığına (tabindex=-1) odak taşır. */
+export const HOME_SKIP_TARGETS=Object.freeze([["home-notify","home.notify.title"],["home-projects","home.pc.title"],["home-map","home.map"],["home-orch","home.orchestrator"]]);
+function skipNav(ctx,panels){
+  const doc=ctx.doc;
+  const jump=sec=>{const head=sec?.children?.[0];if(!head)return;head.setAttribute("tabindex","-1");if(typeof head.focus==="function")head.focus();if(typeof head.scrollIntoView==="function")head.scrollIntoView({block:"start"})};
+  return h(doc,"nav",{class:"home-skip","aria-label":ctx.t("home.skip.label")},h(doc,"ul",{class:"home-skip-list"},HOME_SKIP_TARGETS.filter(([id])=>panels[id]).map(([id,key])=>
+    h(doc,"li",{},h(doc,"button",{type:"button",class:"link-btn",dataset:{skipTo:id},on:{click:()=>jump(panels[id])},text:ctx.t("home.skip.to",{section:ctx.t(key)})})))));
+}
 export async function render(ctx){
   const doc=ctx.doc,[res,prj,runs,att]=await Promise.all([ctx.api.cockpit(),ctx.api.projects(),ctx.api.runSummaries(),ctx.api.attention()]),c=res.data;
   const tenant=prj.state==="VERIFIED"?(prj.items.find(p=>p.projectId===ctx.store.projectId)??prj.items[0])?.tenantId??null:null;
   // //TR: Başarılı HTTP ama bozuk gövde (tüm bloklar ERROR) de açıklayıcı hata notu gösterir; sessiz boş ekran olmaz.
   const state=res.state==="OK"&&c.projects?.state==="ERROR"&&c.missions?.state==="ERROR"?"ERROR":res.state;
   const note=state==="OK"?null:h(doc,"p",{class:`note note-${state.toLowerCase()}`,role:"status",text:ctx.t(state==="UNAVAILABLE"?"cockpit.unavailable":"cockpit.failed")});
-  return h(doc,"div",{class:"view view-home"},homeHeader(ctx,{asOf:c.generatedAt,tenant}),note,tiles(ctx,c),
-    notificationsPanel(ctx,buildNotifications({attention:att,runs,read:loadReadIds(storageOf(ctx))})),
-    projectCockpitPanel(ctx,buildProjectCockpit({projects:prj,approvals:c.approvals,runs})),
-    panel(ctx,{titleKey:"home.map",id:"home-map",className:"panel-map"},areaCards(ctx,c)),
-    h(doc,"div",{class:"two-col"},orchestratorPanel(ctx,c.orchestrator),
+  const panels={"home-notify":notificationsPanel(ctx,buildNotifications({attention:att,runs,read:loadReadIds(storageOf(ctx))})),
+    "home-projects":projectCockpitPanel(ctx,buildProjectCockpit({projects:prj,approvals:c.approvals,runs})),
+    "home-map":panel(ctx,{titleKey:"home.map",id:"home-map",className:"panel-map"},areaCards(ctx,c)),
+    "home-orch":orchestratorPanel(ctx,c.orchestrator)};
+  return h(doc,"div",{class:"view view-home"},homeHeader(ctx,{asOf:c.generatedAt,tenant}),skipNav(ctx,panels),note,tiles(ctx,c),
+    panels["home-notify"],panels["home-projects"],panels["home-map"],
+    h(doc,"div",{class:"two-col"},panels["home-orch"],
       panel(ctx,{titleKey:"home.workforceNote.title",id:"home-wf"},emptyNote(ctx,"home.workforceNote.body"))));
 }

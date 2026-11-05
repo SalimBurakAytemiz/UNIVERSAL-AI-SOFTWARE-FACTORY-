@@ -572,6 +572,35 @@ describe("UASCO-T0019: home notification feed (unread/read, groups, deep links) 
     expect(failureMarks(feedOf(r)).length).toBeGreaterThan(0);
   });
 
+  it("keyboard reach (60-Tab budget): Home starts with skip buttons that move focus to each long panel's heading, so every panel is reachable in a few presses", { timeout: 120_000 }, async () => {
+    const app = mkApp(notifySeed);
+    const r = await renderAgainstServer(app, "home", TOKEN, "en", {storage: memStorage()});
+    const home = await load("views", "home.js");
+    // a tab stop: native focusable (button, link with href, form field) or tabindex >= 0; never disabled or tabindex -1
+    const isStop = (n: N) => !n.attrs.has("disabled") && n.attrs.get("tabindex") !== "-1" && (["BUTTON", "INPUT", "SELECT", "TEXTAREA"].includes(n.tagName) || (n.tagName === "A" && n.attrs.has("href")) || Number(n.attrs.get("tabindex")) >= 0);
+    const stops = all(r.root).filter(isStop);
+    const targets = home.HOME_SKIP_TARGETS.map(([id]: [string]) => id);
+    expect(targets).toEqual(["home-notify", "home-projects", "home-map", "home-orch"]);
+    // the skip buttons are the first tab stops on the page, in panel order
+    expect(stops.slice(0, targets.length).map(n => n.dataset.skipTo)).toEqual(targets);
+    expect(all(r.root).find(n => n.tagName === "NAV" && n.className === "home-skip")?.attrs.get("aria-label")).toBe("Jump to a section");
+    for (const [i, id] of targets.entries()) {
+      const btn = stops[i]!, sec = all(r.root).find(n => n.id === id)!, head = sec.children[0]!;
+      expect([id, head.tagName, head.id]).toEqual([id, "H2", `${id}-t`]);
+      let focused = false; (head as any).focus = () => { focused = true; };
+      (btn as any).ls.get("click")[0]({});
+      expect([id, focused, head.attrs.get("tabindex")]).toEqual([id, true, "-1"]);
+      // presses to land in the panel: Tab to its skip button (i+1) + Enter
+      expect(i + 2, id).toBeLessThanOrEqual(60);
+      expect(btn.textContent).toBe(`Jump to ${head.textContent}`);
+    }
+    // without the skip links, panels that hold no tab stop (projects, orchestrator) cannot be reached with Tab at all
+    const inside = (id: string) => all(all(r.root).find(n => n.id === id)!).filter(isStop).length;
+    expect(inside("home-projects")).toBe(0); expect(inside("home-orch")).toBe(0);
+    // and the whole page stays within the per-page budget of 60 tab stops on this real seed
+    expect(stops.length).toBeLessThanOrEqual(60);
+  });
+
   it("tr: the feed is localized from the real server render", { timeout: 120_000 }, async () => {
     const app = mkApp(notifySeed);
     const r = await renderAgainstServer(app, "home", TOKEN, "tr", {storage: memStorage()});
