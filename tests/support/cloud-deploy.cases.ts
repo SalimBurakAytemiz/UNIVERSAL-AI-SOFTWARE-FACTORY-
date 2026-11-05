@@ -192,6 +192,15 @@ export function registerCloudDeployCases(): void {
       const other = founder(d.production.keys);
       expect(run(base, {deployApproval: issueDeployApproval(d.production.keys, sidOf(other), SHA, at(500))})).toBe("DEPLOY_APPROVAL_INVALID");
       expect(run(base, {deployApproval: approval.replace(SHA, otherSha)})).toBe("DEPLOY_APPROVAL_INVALID");   // tampered sha
+      // //TR: #349 B-1 (2. tur): yeniden hedefleme; kapı girdileri yeniden yazılan alanla EŞLEŞİR, böylece yalnız MAC reddedebilir (sid/sha MAC dışında kalırsa bu satırlar düşer).
+      const f = approval.split("."), sidAt = f.length - 4, shaAt = f.length - 3;
+      const sidRetarget = [...f]; sidRetarget[sidAt] = sidOf(other);
+      expect(run(base, {deployToken: other, deployApproval: issueDeployApproval(d.production.keys, sidOf(other), SHA, at(500))})).toBe("OK");   // the other session is otherwise acceptable
+      expect(run(base, {deployToken: other, deployApproval: sidRetarget.join(".")})).toBe("DEPLOY_APPROVAL_INVALID");
+      const shaRetarget = [...f]; shaRetarget[shaAt] = otherSha;
+      const otherArtifact = {artifactSha256: otherSha, evidence: evidence({artifactSha256: otherSha, stagingHealth: {...healthy, artifactSha256: otherSha}})};
+      expect(run(base, {...otherArtifact, deployApproval: issueDeployApproval(d.production.keys, sidOf(tok), otherSha, at(500))})).toBe("OK");   // the other artifact is otherwise acceptable
+      expect(run(base, {...otherArtifact, deployApproval: shaRetarget.join(".")})).toBe("DEPLOY_APPROVAL_INVALID");
       expect(run(base, {deployApproval: approval.slice(0, -1) + (approval.endsWith("0") ? "1" : "0")})).toBe("DEPLOY_APPROVAL_INVALID");
       expect(run(base, {now: at(500 + MAX_DEPLOY_APPROVAL_TTL_MS)})).toBe("DEPLOY_APPROVAL_EXPIRED");
       const p = approval.split("."); const ei = p.length - 2; p[ei] = String(Number(p[ei]) + 3_600_000);   // da2 layout: exp is the field before the mac
