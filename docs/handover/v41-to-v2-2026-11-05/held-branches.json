@@ -391,8 +391,8 @@
       "owner": "A",
       "branch": "claude/builder-a-cloud-t0010",
       "task": "WIN-2a/WIN-2b (Windows CI test robustness)",
-      "head": "c4d2d6c6ce1dc37daeda286990be5da084b1bfe9",
-      "note": "tests only: b87bfd70 relfx-1 fixture fixes (exitOnFile interval, ENGINE_START_MS 90s), 79b5117a SC14_TIMING diagnostic, c4d2d6c6 SC-14 timeout 30s (separable, pending Windows measurement)"
+      "head": "cd8204076abfaa530ac4fbc158fc44af1326efce",
+      "note": "tests only: b87bfd70 relfx-1 fixture fixes (exitOnFile interval, ENGINE_START_MS 90s), 79b5117a SC14_TIMING diagnostic, c4d2d6c6 SC-14 timeout 30s (separable, pending Windows measurement); base-merged 8378d083 (gates ok; related 60/60)"
     },
     {
       "owner": "D",

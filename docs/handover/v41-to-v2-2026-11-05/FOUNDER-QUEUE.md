@@ -7,7 +7,12 @@ Data source: the builders' reports (I, E, F) plus the coordinator's gate checks.
 2. **TASK_LINE_RE suffix bug** (`docs/planning/autonomy/autonomy.mjs`): `(?:\.[a-z0-9]+)?` accepts only a single lowercase suffix; task-index.json has 63 IDs with uppercase or double suffixes (`.A`, `.a.A`), so none of them can be declared. Proposal: `(?:\.[A-Za-z0-9]+)*` (+ the title-id parse ~:229), or lowercase the suffixes in build-task-index.mjs. If fixed, #386 (T0004.A) and #390 (T0016.A) become eligible for autonomous merge.
 
 3. **WIN-4 (protected `scripts/bootstrap-autonomy-selftest.mjs`):** stopTickCases waits a fixed `setTimeout(1000)` before asserting the old tick pid is dead → races with Windows process-tree teardown (pkg-bs1 shard b, 2 failures). Proposal (Builder A): a bounded poll ≤15 s + print the pid's image/start time. The protected owner must apply it.
-4. **WIN-3 task ID:** the main-based EPERM fix (`claude/builder-d-win3-main` 7e295f3f, independent of #398) is covered honestly only by UASCO-T0088 (RW-013 Windows CI stability); T0088 needs dep V3-T1002 MERGED, so FOUNDER_REQUIRED. Decision: resolve the T0088 dependency, or create a new small task ID for this test-only fix.
+4. **UASCO-T0088 (Windows CI stability, RW-013) dependency, a single decision that unblocks several Windows fixes:** T0088 deps = V3-T1001 MERGED + V3-T1002 REVIEWED.
+   - **Stale record in the index:** V3-T1001 is `PROPOSED` in task-index.json, but it actually merged via PR #303 (merged 2026-11-03T21:01Z, dfd0918c, `UASCO-TASK: V3-T1001`). Verified correction proposal: V3-T1001 → MERGED (this is a governance record edit; the coordinator has not done it).
+   - V3-T1002 is `PROPOSED` (no PR or review), so T0088 stays FOUNDER_REQUIRED even after that correction.
+   - Waiting on it: #398 (D, T0088), `claude/builder-d-win3-main` 7e295f3f (EPERM teardown, independent of #398), `claude/builder-a-cloud-t0010` cd820407 commit b87bfd70 (relfx-1 LANE-C fixture de-masking; T0088 explicitly names relfx-1).
+   - Builder A's SC-14 commits (79b5117a timing diagnostic, c4d2d6c6 30 s budget) have no exact task match: either under T0088 ("Windows flake beyond the 4 named sources") or a new ID.
+   - Decision options: (a) waive/resolve the V3-T1002 dependency → T0088 work enters the routine window; (b) create a new small T2 task ID for these test-only Windows fixes.
 
 ## Founder-tier PRs (dependency order)
 - **Builder I renderer UX** (`UASCO-TASK: none`, Founder product directive): #370 (T0007 SPLIT) → #371 (stacked on #370) → #377 → #382 → #397 (shares error-code.js with #382, so after #382). HELD after these: 371-safe cc3db0c, 377-safe f8ff0ae, 382-safe c2297f4 → 374-safe 7dbc56f → approval-gate 9d21537 → cloud-sink-guard 1f195e7. #375 has no deps.
