@@ -40,7 +40,7 @@ function stateBlock(ctx,res){
   return h(doc,"div",{class:`academy-state state-${String(state).toLowerCase()}`,role:"status",dataset:{academyState:state}},
     h(doc,"p",{class:"academy-state-head"},statePill(ctx,failKind(state)),h(doc,"strong",{text:ctx.t(`academy.state.${state}`)})),
     h(doc,"p",{class:"note",text:ctx.t(`academy.hint.${state}`,{source:`GET ${ACADEMY_PATH}`})}),
-    safeErrorCode(res.message)?h(doc,"p",{class:"note mono",dataset:{errorCode:safeErrorCode(res.message)},text:safeErrorCode(res.message)}):null);
+    safeErrorCode(res.message)?h(doc,"p",{class:"note mono",dataset:{stateErrorCode:safeErrorCode(res.message)},text:safeErrorCode(res.message)}):null);
 }
 
 function tableWrap(ctx,id,captionKey,cols,rows){

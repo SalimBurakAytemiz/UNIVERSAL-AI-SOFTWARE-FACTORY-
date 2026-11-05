@@ -300,7 +300,7 @@ describe("WP-ACADEMY — negative paths never fabricate or claim verification", 
       const root = await academy.render(ctx);
       expect(all(root).some(n => n.dataset.academyState === "ERROR"), "the failure path was not exercised").toBe(true);
       expect(all(root).some(n => n.textContent.includes(payload)), `raw error text leaked: ${payload}`).toBe(false);
-      expect(all(root).some(n => n.dataset.errorCode !== undefined)).toBe(false); // no code in free text -> no code line
+      expect(all(root).some(n => n.dataset.stateErrorCode !== undefined)).toBe(false); // no code in free text -> no code line
       expect(all(root).filter(n => ["IMG", "SCRIPT", "IFRAME"].includes(n.tagName)).map(n => n.tagName)).toEqual([]);
     }
   });
@@ -544,7 +544,7 @@ __bi_describe('Builder I: Company OS / Academy / Domains never print raw bridge 
     return {app, ctx, view, seen};
   }
   const leaked = (root: N) => all(root).some(n => /Error invoking remote method|uasco:api-get|\/v1\/[a-z]+.*: HTTP/.test(n.textContent) && n.children.length === 0);
-  const codes = (root: N) => all(root).filter(n => n.dataset.errorCode !== undefined).map(n => [n.dataset.errorCode, n.textContent]);
+  const codes = (root: N) => all(root).filter(n => n.dataset.stateErrorCode !== undefined).map(n => [n.dataset.stateErrorCode, n.textContent]);
 
   describe("Company OS / Academy / Domains — real reads succeed and show no error code (control)", () => {
     it("all three screens read the real control-api (HTTP 200) and show no code line", async () => {

@@ -20,7 +20,7 @@ function stateBlock(ctx,a,message){
   return h(doc,"div",{class:`integ-state state-${st.toLowerCase()}`,role:"status",dataset:{domainState:st}},
     h(doc,"p",{class:"integ-state-head"},statePill(ctx,failKind(st)),h(doc,"strong",{text:ctx.t(`domains.state.${st}`)})),
     h(doc,"p",{class:"note",text:ctx.t(`domains.hint.${st}`,{source:`GET ${DOMAINS_PATH}`})}),
-    safeErrorCode(message)?h(doc,"p",{class:"note mono",dataset:{errorCode:safeErrorCode(message)},text:safeErrorCode(message)}):null);
+    safeErrorCode(message)?h(doc,"p",{class:"note mono",dataset:{stateErrorCode:safeErrorCode(message)},text:safeErrorCode(message)}):null);
 }
 function countPanel(ctx,a){
   const doc=ctx.doc,n=a.count;

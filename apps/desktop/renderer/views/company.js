@@ -36,7 +36,7 @@ function stateBlock(ctx,key,res){
   return h(doc,"div",{class:`company-state state-${String(state).toLowerCase()}`,role:"status",dataset:{companyState:state,source:key}},
     h(doc,"p",{class:"company-state-head"},statePill(ctx,companyPillKind(res)),h(doc,"strong",{text:ctx.t(`company.state.${state}`)})),
     h(doc,"p",{class:"note",text:ctx.t(`company.hint.${state}`,{source:srcLabel(key)})}),
-    safeErrorCode(res.message)&&state!=="NOT_CONNECTED"?h(doc,"p",{class:"note mono",dataset:{errorCode:safeErrorCode(res.message)},text:safeErrorCode(res.message)}):null);
+    safeErrorCode(res.message)&&state!=="NOT_CONNECTED"?h(doc,"p",{class:"note mono",dataset:{stateErrorCode:safeErrorCode(res.message)},text:safeErrorCode(res.message)}):null);
 }
 function staleBanner(ctx,key,res){
   const doc=ctx.doc;
