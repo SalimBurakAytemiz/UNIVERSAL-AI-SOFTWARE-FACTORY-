@@ -736,7 +736,10 @@ export function registerCloudAcceptanceSuite(): void {
         }
         expect(last && last.ok && Object.values(last.report.statuses).sort()).toEqual(["BLOCKED_FOUNDER_GATE", "SUCCEEDED", "SUCCEEDED", "SUCCEEDED"]);
         expect(audit.every(a => a.decision === "ACCEPTED" && a.confirmedBy === "supervisor-test")).toBe(true);
-        const g = await host.store.get({tenantId: "tenant-a", subject: "observer-01"}, {tenantId: "tenant-a", projectId: "proj-web", name: "dist/app.zip"});
+        const pkgId = last && last.ok ? [...last.dag.tasks.values()].find(t => t.kind === "PACKAGE")!.taskId : "";
+        const refs = host.resultArtifacts(pkgId);
+        expect(refs.map(a => a.name)).toEqual([scopedArtifactName(pkgId, 1, "dist/app.zip")]);   // accepted result, job+attempt-scoped
+        const g = await host.store.get({tenantId: "tenant-a", subject: "observer-01"}, {tenantId: "tenant-a", projectId: "proj-web", name: refs[0].name});
         expect(g.ok).toBe(true);
         expect(fs.readdirSync(path.join(dir, "host", "artifacts")).length).toBeGreaterThan(0);   // file-system backend, durable
       } finally { await host.stop(); }
@@ -746,20 +749,40 @@ export function registerCloudAcceptanceSuite(): void {
       const keys = keysOf(envKeys()), host = mkHost(keys);
       try {
         const scope = scopeFor(keys);
+        let pkgId = "", testId = "";
         for (let round = 0; round < 6; round++) {
           const d = await host.dispatch(COMMAND, confFor(keys), scope);
+          if (d.ok) { pkgId = [...d.dag.tasks.values()].find(t => t.kind === "PACKAGE")!.taskId; testId = [...d.dag.tasks.values()].find(t => t.kind === "TEST")!.taskId; }
           if (!d.ok || Object.values(d.report.statuses).every(v => v === "SUCCEEDED" || v === "BLOCKED_FOUNDER_GATE")) break;
           for (let i = 0; i < 5; i++) { if ((await host.runWorkerOnce()).state !== "DONE") break; }
         }
-        const ok = await host.deliver("tenant-a", "proj-web", "dist/app.zip");
+        const ok = await host.deliver("tenant-a", "proj-web", pkgId, "dist/app.zip");
         expect(ok).toMatchObject({issued: true, redeemed: true, verified: true});
-        expect(await host.deliver("tenant-b", "proj-web", "dist/app.zip")).toMatchObject({verified: false, issued: false});
+        expect(await host.deliver("tenant-b", "proj-web", pkgId, "dist/app.zip")).toMatchObject({verified: false, issued: false, reason: "TENANT_MISMATCH"});
+        expect(await host.deliver("tenant-a", "proj-web", testId, "dist/app.zip")).toMatchObject({verified: false, reason: "NOT_A_RESULT_ARTIFACT"});   // not that job's result
+        expect(await host.deliver("tenant-a", "proj-web", "task-unknown", "dist/app.zip")).toMatchObject({verified: false, issued: false});
         // tamper every stored blob on disk: redemption must fail closed
         const walk = (d: string): string[] => fs.readdirSync(d, {withFileTypes: true}).flatMap(e => e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
         for (const f of walk(path.join(dir, "host", "artifacts"))) { const b = fs.readFileSync(f); if (b.length > 0) { b[b.length - 1] ^= 0xff; fs.writeFileSync(f, b); } }
-        const bad = await host.deliver("tenant-a", "proj-web", "dist/app.zip");
+        const bad = await host.deliver("tenant-a", "proj-web", pkgId, "dist/app.zip");
         expect(bad.verified).toBe(false);
         expect(bad.sha256).toBeNull();
+      } finally { await host.stop(); }
+    });
+
+    it("#344 B-1: the host delivers only from an accepted (SUCCEEDED) job result: a job cancelled mid-run has no result artifacts and delivery for it is refused (mid-put orphans: worker-level T2/T7)", async () => {
+      const keys = keysOf(envKeys());
+      let cancelTarget = "", hostRef: ReturnType<typeof createCloudChainHost> | null = null;
+      const sb = new FakeSandbox(new Set(), true, () => { if (cancelTarget) hostRef!.queue.cancel(cancelTarget); });
+      const host = hostRef = mkHost(keys, sb);
+      try {
+        const d = await host.dispatch(COMMAND, confFor(keys), scopeFor(keys));
+        if (!d.ok) throw new Error(JSON.stringify(d));
+        const buildId = d.report.submitted[0];
+        cancelTarget = buildId;
+        expect(await host.runWorkerOnce()).toMatchObject({state: "ABANDONED", jobId: buildId, reason: "JOB_CANCELLED"});
+        expect(host.resultArtifacts(buildId)).toEqual([]);
+        expect(await host.deliver("tenant-a", "proj-web", buildId, "dist/app.zip")).toMatchObject({verified: false, issued: false, reason: "JOB_NOT_SUCCEEDED"});
       } finally { await host.stop(); }
     });
 

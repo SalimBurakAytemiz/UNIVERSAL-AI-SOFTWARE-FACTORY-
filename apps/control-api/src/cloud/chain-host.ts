@@ -9,7 +9,8 @@ import {
   InMemoryConfirmationReplayStore, TaskOrchestrator, dispatchIntakeCommand, signFounderConfirmation,
   type ConfirmationAuditRecord, type IntakeDispatchResult, type PlannerModel, type TaskDag, type UnsignedFounderConfirmation,
 } from "../../../../core/cloud/task-orchestrator.js";
-import {CloudWorker, type CloudJobHandlers, type WorkerQueuePort, type WorkerStep} from "../../../../core/sandbox/cloud-sandbox-provider.js";
+import {CloudWorker, resolveDeliverable, type CloudJobHandlers, type WorkerQueuePort, type WorkerStep} from "../../../../core/sandbox/cloud-sandbox-provider.js";
+import type {ArtifactRef} from "../../../../core/cloud/contracts.js";
 import type {SandboxProvider} from "../../../../core/workos/execution-gate.js";
 
 /** Ortam değişkeni ADLARI (değerler asla repoda/günlükte değildir). */
@@ -49,8 +50,14 @@ export interface CloudChainHost {
   readonly queue: CloudJobQueue;
   readonly store: CloudArtifactStore;
   dispatch(text: unknown, confirmation: unknown, scope: SignedScope, approvals?: ReadonlySet<string>): Promise<IntakeDispatchResult>;
-  /** Doğrulanmış teslim: sha'ya bağlı imzalı URL üretir, geri alır; içerik özeti hem depolanan manifestle hem URL'nin bağladığı özetle eşleşmelidir. */
-  deliver(tenantId: string, projectId: string, name: string, subject?: string): Promise<DeliveryCheck>;
+  /**
+   * #344 B-1 teslim değişmezi: teslim AD ile değil İŞ ile yapılır. Artifact yalnız kuyruğun kabul ettiği (SUCCEEDED) iş sonucunun son denemesinde
+   * referans verdiği kapsamlı ad ise (resolveDeliverable) imzalı URL üretilir; içerik özeti kabul edilen sonuç, depolanan manifest ve URL özetiyle eşleşmelidir.
+   * İptal/STOP/lease kaybıyla depoda kalan yetim çıktılar buradan asla teslim edilmez.
+   */
+  deliver(tenantId: string, projectId: string, jobId: string, rel: string, subject?: string): Promise<DeliveryCheck>;
+  /** Kuyruğun kabul ettiği iş sonucunun artifact referansları (SUCCEEDED değilse boş). */
+  resultArtifacts(jobId: string): ArtifactRef[];
   /** GLOBAL_STOP denetimi + bir worker adımı. */
   runWorkerOnce(): Promise<WorkerStep>;
   startWorker(intervalMs: number): void;
@@ -94,14 +101,24 @@ export function createCloudChainHost(o: ChainHostOptions): CloudChainHost {
       return dispatchIntakeCommand(text, confirmation, {keys: scopeKeys, scope, now, replay, ...(o.audit ? {audit: o.audit} : {})}, o.planner,
         {model: o.plannerModel, maxOutputTokens: 2000, maxCostUsd: 0.1}, orch, approvals, planCache);
     },
-    async deliver(tenantId, projectId, name, subject = "chain-host") {
-      const loc = {tenantId, projectId, name}, who = {tenantId, subject};
-      const url = await store.issueDeliveryUrl(who, loc);
-      if (!url.ok) return {issued: false, redeemed: false, sha256: null, verified: false, reason: url.reason};
+    resultArtifacts(jobId) {
+      const v = queue.get(jobId);
+      if (!v || v.status !== "SUCCEEDED") return [];
+      return v.events.filter(e => e.type === "ARTIFACT" && e.attempt === v.attempt && e.artifact).map(e => ({...e.artifact!}));
+    },
+    async deliver(tenantId, projectId, jobId, rel, subject = "chain-host") {
+      const none = {issued: false, redeemed: false, sha256: null, verified: false};
+      const view = queue.get(jobId);
+      const name = host.resultArtifacts(jobId).find(a => a.name.endsWith(`/${rel}`))?.name;
+      if (!view || !name) return {...none, reason: view && view.status !== "SUCCEEDED" ? "JOB_NOT_SUCCEEDED" : "NOT_A_RESULT_ARTIFACT"};
+      const d = resolveDeliverable(view, tenantId, projectId, name);
+      if (!d.ok) return {...none, reason: d.reason};
+      const url = await store.issueDeliveryUrl({tenantId, subject}, {tenantId, projectId, name: d.ref.name});
+      if (!url.ok) return {...none, reason: url.reason};
       const red = await store.redeemDeliveryUrl(url.url);
       if (!red.ok) return {issued: true, redeemed: false, sha256: null, verified: false, reason: red.reason};
       const sha = createHash("sha256").update(red.content).digest("hex");
-      const verified = sha === red.manifest.sha256 && sha === url.sha256;
+      const verified = sha === d.ref.sha256 && sha === red.manifest.sha256 && sha === url.sha256;
       return {issued: true, redeemed: true, sha256: sha, verified, ...(verified ? {} : {reason: "HASH_MISMATCH"})};
     },
     async runWorkerOnce() {

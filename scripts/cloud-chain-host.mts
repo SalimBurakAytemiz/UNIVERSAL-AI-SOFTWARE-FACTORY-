@@ -52,17 +52,20 @@ try {
     if (!st.ok) break;
     for (let i = 0; i < 10; i++) { const s = await host.runWorkerOnce(); steps.push(s); if (s.state !== "DONE") break; }
   }
+  // #344 B-1: artifact'lar AD ile değil, kuyruğun kabul ettiği iş sonuçlarından listelenir (iş+deneme kapsamlı adlar).
   const artifacts = [];
-  for (const name of ["out/build.txt", "out/test.txt", "dist/app.txt"]) {
-    const g = await host.store.get({tenantId, subject: "chain-host"}, {tenantId, projectId, name});
-    artifacts.push(g.ok ? {name, sha256: g.manifest.sha256, sizeBytes: g.manifest.sizeBytes, content: g.content.toString().trim()} : {name, missing: g.reason});
+  for (const t of dagTasks) for (const ref of host.resultArtifacts(t.taskId)) {
+    const g = await host.store.get({tenantId, subject: "chain-host"}, {tenantId, projectId, name: ref.name});
+    const rel = ref.name.split("/").slice(3).join("/");
+    artifacts.push(g.ok ? {job: t.key, name: rel, storedAs: ref.name, sha256: g.manifest.sha256, sizeBytes: g.manifest.sizeBytes, content: g.content.toString().trim()} : {job: t.key, name: rel, storedAs: ref.name, missing: g.reason});
   }
   // İş başına kuyruk durum geçişleri (QUEUED -> STARTED -> HEARTBEAT* -> ARTIFACT* -> SUCCEEDED/RETRYING/FAILED/STOPPED)
   const jobs = dagTasks.map(t => { const j = host.queue.get(t.taskId); return {key: t.key, status: j?.status ?? "NOT_SUBMITTED", attempt: j?.attempt ?? 0, transitions: (j?.events ?? []).map(e => e.type)}; });
   // Doğrulanmış teslim: paket için sha'ya bağlı imzalı URL üretilir, geri alınır ve içerik özeti manifestle karşılaştırılır.
-  let delivery: unknown = {skipped: "no package artifact"};
-  if ((await host.store.get({tenantId, subject: "chain-host"}, {tenantId, projectId, name: "dist/app.txt"})).ok) {
-    delivery = await host.deliver(tenantId, projectId, "dist/app.txt");
+  let delivery: unknown = {skipped: "no accepted package result"};
+  const pkg = dagTasks.find(t => t.key === "package");
+  if (pkg && host.resultArtifacts(pkg.taskId).length > 0) {
+    delivery = {job: "package", ...(await host.deliver(tenantId, projectId, pkg.taskId, "dist/app.txt"))};
     if (!(delivery as {verified: boolean}).verified) exit = exit || 1;
   }
   const detail = String((st as {detail?: unknown}).detail ?? "self-test failed").slice(0, 200);
