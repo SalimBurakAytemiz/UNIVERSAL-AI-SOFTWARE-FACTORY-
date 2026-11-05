@@ -343,7 +343,7 @@ describe("Executive — only already-allow-listed read-only GETs are used (prote
     }
     const imports = moduleSpecifiers({source: read("views", "executive.js")}).sort();
     // UI-003: tek ek içe aktarma Dönüş Özeti panelidir; onun tek (cihaz-içi) yazımı aşağıdaki ayrı testte sabitlenir.
-    expect(imports).toEqual(["../components.js", "../executive-core.js", "../model.js", "../work-core.js", "./report-export-panel.js", "./return-summary.js"]);
+    expect(imports).toEqual(["../components.js", "../error-code.js", "../executive-core.js", "../model.js", "../work-core.js", "./report-export-panel.js", "./return-summary.js"]);
     // UASCO-T0020: rapor dışa aktarma modülleri de okuma/yazma yapmaz (yalnız ctx.saveFile veya Blob indirmesi); aynı yasak kalıplar uygulanır.
     for (const src of [read("views", "report-export-panel.js"), read("report-export.js")]) {
       // isteğe bağlı çağrı (fetch?.(), boşluklu çağrı, köşeli parantezli dize erişimi (["fetch"]) ve dinamik import da yakalanır

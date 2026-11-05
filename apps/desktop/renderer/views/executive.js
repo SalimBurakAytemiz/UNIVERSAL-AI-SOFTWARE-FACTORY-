@@ -1,4 +1,5 @@
 // //TR: Bu görünüm Kurucu Yönetim Özeti ve İcra Defteri'dir (FA-V2-PRODUCT, UI-236): YALNIZ dört salt-okunur ve zaten izinli GET'ten okunur — GET /v1/cockpit (başlık göstergeleri), GET /v1/missions (hat içi mission), GET /v1/work-runs (İcra Defteri satırları + teslim durumları) ve GET /v1/attention (Founder'ı bekleyen öğeler). HİÇBİR sayı, koşu, karar veya teslim UYDURULMAZ: bozuk yanıt tümden ERROR olarak gösterilir (kısmi/tahmini değer yok), okunamayan kaynak 0 değil dürüst OFFLINE/UNAVAILABLE/ERROR gösterir. Teslim yalnız kaynak düzeyindedir (doğrulanmadı); ürün doğrulaması bu görünümde ASLA iddia edilmez ve ilgili sabit değer hiçbir yerde üretilmez. Şirket/gelir/müşteri/uptime metriği yoktur. API verisi HTML olarak yorumlanmaz; yalnız h()/textContent kullanılır.
+import {safeErrorCode} from "../error-code.js";
 import {h,panel,statePill,kpiTile,miniBars,emptyNote} from "../components.js";
 import {MISSING,topEntries} from "../model.js";
 import {formatDateTime} from "../work-core.js";
@@ -32,7 +33,7 @@ function stateBlock(ctx,res,source){
   return h(doc,"div",{class:`executive-state state-${state.toLowerCase()}`,role:"status",dataset:{executiveState:state,source}},
     h(doc,"p",{class:"executive-state-head"},statePill(ctx,failKind(state)),h(doc,"strong",{text:ctx.t(`executive.state.${state}`)})),
     h(doc,"p",{class:"note",text:ctx.t(`executive.hint.${state}`,{source:`GET ${EXECUTIVE_SOURCE_PATHS[source]}`})}),
-    res.message?h(doc,"p",{class:"note mono",text:res.message}):null);
+    safeErrorCode(res.message)?h(doc,"p",{class:"note mono",dataset:{stateErrorCode:safeErrorCode(res.message)},text:safeErrorCode(res.message)}):null);
 }
 
 /** Kaynak şeridi (Bölüm A içinde): her gerçek okuma kaynağının ayrık durum rozeti (renk tek başına anlam taşımaz). */
