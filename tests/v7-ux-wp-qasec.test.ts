@@ -7,6 +7,7 @@ import {describe, it, expect, beforeEach} from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import {pathToFileURL} from "node:url";
+import {registerRendererRealServerExtCases} from "./support/renderer-real-server-ext.cases.js"; // UASCO-T0006 uzantısı: RW-053 dışındaki 13 görünüm için renderer -> gerçek sunucu vakaları
 
 const root = path.resolve(__dirname, "..");
 const rend = path.join(root, "apps", "desktop", "renderer");
@@ -1016,3 +1017,6 @@ describe("PQ-003 evidence lineage graph (nodes/edges from list fields only)", ()
     for (const k of keys) expect(T[k], k).toBeTruthy();
   });
 });
+
+// //TR: UASCO-T0006 uzantısı (Builder I): 13 görünümün gerçek sunucu vakaları burada kaydedilir (tests/support/renderer-real-server-ext.cases.ts).
+registerRendererRealServerExtCases();
