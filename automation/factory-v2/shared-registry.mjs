@@ -8,7 +8,12 @@ export const sectionVersion = (v, rev = 0) => (v === undefined || v === null ? n
 export const REGISTRY_SCHEMA = "uasco.factory-v2.shared-registry/1";
 const KEY = /^[A-Za-z0-9][A-Za-z0-9._/#:-]{0,240}$/;
 // Authority sections are also written as their own file so their history can be walked without reading lease traffic.
-export const sidecarPath = key => (key.startsWith("refs/uasco/authority/") ? `authority/${key.slice("refs/uasco/authority/".length).replace(/[^A-Za-z0-9._-]/g, "_")}.json` : null);
+const LEDGER_CHUNK_KEY = /^ledger\/([A-Za-z0-9._-]{1,80})\/c\/(\d{6})$/;
+// Authority sections and ledger chunks are also written as their own file, so their full history can be walked (anti-rewind).
+export const sidecarPath = key => {
+  if (key.startsWith("refs/uasco/authority/")) return `authority/${key.slice("refs/uasco/authority/".length).replace(/[^A-Za-z0-9._-]/g, "_")}.json`;
+  const m = LEDGER_CHUNK_KEY.exec(key); return m ? `ledger/${m[1]}.c${m[2]}.json` : null;
+};
 const sidecarsOf = sections => Object.fromEntries(Object.entries(sections).map(([k, v]) => [sidecarPath(k), v]).filter(([p]) => p));
 const sleep = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 

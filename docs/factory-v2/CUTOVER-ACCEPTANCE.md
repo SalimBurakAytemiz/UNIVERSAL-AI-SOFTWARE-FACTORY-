@@ -18,7 +18,7 @@ While V4.1 is authoritative, **no second live Supervisor is created.** V2 sessio
 | A1 | Signed, hash-chained authority record on a protected shared registry; CAS and fencing verified by two real Cloud sessions | MET (probe namespace) | `PROTECTED-REGISTRY-EVIDENCE.json`: ruleset `UASCO-REGISTRY-PROTECTION`, linear fast-forward CAS, lease A→B at epoch 2, stale lease fenced, stale write refused |
 | A2 | Canonical role keyring holds only public keys of the real V41_OWNER, V2_CANDIDATE and FOUNDER holders | NOT_MET | `docs/planning/authority/FACTORY-V2-ROLE-KEYS.json` is empty (PR #356). Each holder runs `bridge keygen` in its own container; the private key goes to a new 0600 file outside any git tree. Only the printed public entry is added, through a Founder-approved PR |
 | A3 | The V4.1 merge path refuses merges once authority is not V41_AUTHORITATIVE | PARTIAL | PR #355 (`executor.mjs` fence through `v41-guard` `mergeAuthority`) is stacked on #347 and not merged |
-| A4 | V4.1 new-work dispatch stops at handover | PARTIAL | Governance branch `claude/fv2-gov-dispatch-fence` (stacked on #355, not merged, review pending): `v41-guard.dispatchAuthority` fences `autonomy.mjs next` (the only code that selects V4.1 work). Gap: the V4.1 coordinator spawns sessions from prose and can call `create_session` without `next`; that path cannot be fenced in code |
+| A4 | V4.1 new-work dispatch stops at handover: code fence AND operational drain | PARTIAL | Code: #389 `v41-guard.dispatchAuthority` fences `autonomy.mjs next` (the only code that selects V4.1 work). The V4.1 coordinator can still call `create_session` directly, which no code fence can stop. Operational drain is therefore an acceptance condition of its own: before the drain ack, (1) the V4.1 coordinator acknowledges the stop of new `create_session` calls in its signed drain record, (2) the control session lists the coordinator's child sessions (`list_sessions` / `get_session`) and every builder/reviewer session it spawned is idle, archived or recorded with a drain disposition, and (3) no new child session appears between the ack and `bridge commit` (re-checked immediately before commit) |
 | A5 | Founder cutover record (`AUTHORIZES: FACTORY_V2_CUTOVER …`) plus a verified V4.1 drain acknowledgement | NOT_MET | Requires a Founder decision and the V4.1 session's signed drain ack (relay protocol) |
 
 ## B. Single control session (Founder directive "SINGLE CONTROL SESSION")
@@ -39,6 +39,14 @@ After cutover, the V2 Supervisor Cloud session is the only session the Founder t
 | B10 | No task state is lost on a session or quota interruption; restart resumes from durable records | PARTIAL | `ledger-log.mjs`: Supervisor-signed, hash-chained ledger on the shared registry (fail closed on gap/edit/reorder/foreign signer); every `factory` command rebuilds from it. Verified live: a tick from a fresh clone with no local state resumed the task. The live registry needs the canonical keyring (A2) before it can be written |
 | B11 | Routine work uses the existing autonomy rules; Founder-tier decisions are presented from the control session only | PARTIAL | V4.1's `autonomy.mjs` classification (FOUNDER_REQUIRED, etc.) exists. V2 does not yet route its decisions through it |
 | B12 | Running software, screenshots, test results and product progress are part of the main report | NOT_MET | No product-evidence collector exists yet |
+
+## Security conditions of the shared ledger (#388 review, P0 blockers)
+
+| # | Condition | Status | Evidence |
+|---|---|---|---|
+| S1 | Ledger tail truncation, rollback to an older consistent state and deletion of chunks are detected | MET (code + tests) | `ledger-log.mjs` anti-rewind against the append-only registry history (every chunk is a tracked file); tests: truncation, rollback, trailing-chunk deletion, bogus history carries no weight; mutations caught. Requires the registry branch protection (no force-push, no deletion) verified for the live registry (ruleset `UASCO-REGISTRY-PROTECTION`) |
+| S2 | A signed chain cannot be replayed into another ledger or domain | MET (code + tests) | every event signs `ledger = <domain>/<ns>`; copied chain refused (`LEDGER_IDENTITY_MISMATCH`) |
+| S3 | A concurrent LOST / rebind / attempt change can never be followed by an accepted result; one session binds one intent even under races | MET (code + tests) | final checks of `bind`, `lost`, `submitResult` run inside the ledger CAS on re-read state; race tests with two processes; mutations caught |
 
 ## Hard blockers before live activation
 

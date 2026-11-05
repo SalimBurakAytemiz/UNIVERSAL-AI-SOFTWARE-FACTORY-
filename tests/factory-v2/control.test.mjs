@@ -22,7 +22,7 @@ function repo() {
   fs.writeFileSync(path.join(r, "a.txt"), "a\n"); git(r, "add", "."); git(r, "-c", "user.name=t", "-c", "user.email=t@invalid", "commit", "-q", "-m", "a");
   return {root, r};
 }
-const localLedger = (r, signer = S.V2, ns = "test") => registryLog({registry: createSharedRegistry({docStore: createLocalDocStore(r), ref: REF}), ns, signer, ring: ringFor(D), domain: D});
+const localLedger = (r, signer = S.V2, ns = "test", chunkSize = 100) => registryLog({registry: createSharedRegistry({docStore: createLocalDocStore(r), ref: REF}), ns, signer, ring: ringFor(D), domain: D, chunkSize});
 
 describe("P0-3 shared signed ledger", () => {
   it("events survive a new process, are hash-chained and Supervisor-signed; tampering, reordering or a foreign signer is refused", {timeout: T}, () => {
@@ -202,7 +202,7 @@ describe("guards that survived mutation", () => {
     const j = new StateJournal(localLedger(r)); const f = j.openEpoch(SESS.V2, "t"); j.enqueue("T1", {}, f);
     const reg = createSharedRegistry({docStore: createLocalDocStore(r), ref: REF});
     const k = "ledger/test/c/000001", cur = reg.read(k), last = cur.doc.events.at(-1);
-    const body = {kind: "ENQUEUE", taskId: "EVIL", idempotencyKey: "enqueue:EVIL", data: {}, fenceEpoch: 1, fenceToken: "t", seq: 3, at: 1, prev: canonDigest(last)};
+    const body = {kind: "ENQUEUE", taskId: "EVIL", idempotencyKey: "enqueue:EVIL", data: {}, fenceEpoch: 1, fenceToken: "t", seq: 3, at: 1, prev: canonDigest(last), ledger: `${D}/test`};
     const forged = {...body, sig: signAction({...S.ATTACK, domain: D, action: "LEDGER", prev: body.prev, payload: body})};
     expect(reg.cas(k, cur.sha, {events: [...cur.doc.events, forged]}).ok).toBe(true);
     expect(() => new StateJournal(localLedger(r))).toThrow(/LEDGER_EVENT_UNVERIFIED:3:SIGNER_KEY_UNKNOWN/);
@@ -247,3 +247,66 @@ describe("reviewer capacity below the required focuses", () => {
     expect(c.orch.workers(x => x.role === "REVIEWER")).toEqual([]); // and creates no partial reviewer set (no ledger churn)
   });
 });
+
+describe("P0 blockers from the #388 review: rollback, ledger identity, lost/result race", () => {
+  const build = (r, n, ns = "test", chunkSize = 100) => { const j = new StateJournal(localLedger(r, S.V2, ns, chunkSize)); const f = j.openEpoch(SESS.V2, "t"); for (let i = 1; i <= n; i++) j.enqueue(`T${i}`, {}, f); return j; };
+  const reg = r => createSharedRegistry({docStore: createLocalDocStore(r), ref: REF});
+  it("tail truncation and rollback to an older, fully consistent state are detected from the append-only branch history", {timeout: T}, () => {
+    const {r} = repo(); build(r, 4);
+    const k = "ledger/test/c/000001", cur = reg(r).read(k);
+    const truncated = {events: cur.doc.events.slice(0, 3)}; // a valid prefix: every remaining event is genuine and chained
+    expect(reg(r).cas(k, cur.sha, truncated).ok).toBe(true);
+    expect(() => new StateJournal(localLedger(r))).toThrow(/LEDGER_ROLLBACK_DETECTED/);
+    expect(reg(r).cas(k, reg(r).read(k).sha, cur.doc).ok).toBe(true); // restored: readable again
+    expect(new StateJournal(localLedger(r)).seq).toBe(5);
+  });
+  it("deleting whole trailing chunks is detected; an attacker-written bogus history version carries no weight", {timeout: T}, () => {
+    const {r} = repo(); build(r, 7, "test", 3); // 8 events -> chunks 1,2,3
+    const g = reg(r), k3 = "ledger/test/c/000003";
+    expect(g.remove(k3, g.read(k3).sha)).toBe(true);
+    expect(() => new StateJournal(localLedger(r, S.V2, "test", 3))).toThrow(/LEDGER_ROLLBACK_DETECTED/);
+    const {r: r2} = repo(); build(r2, 2);
+    const g2 = reg(r2), k = "ledger/test/c/000002"; // a never-signed junk chunk written into history and removed again
+    expect(g2.cas(k, null, {events: [{seq: 99, kind: "X", sig: {}}]}).ok).toBe(true);
+    expect(g2.remove(k, g2.read(k).sha)).toBe(true);
+    expect(new StateJournal(localLedger(r2)).seq).toBe(3);
+  });
+  it("a genuine signed chain copied into another ledger (namespace) is refused", {timeout: T}, () => {
+    const {r} = repo(); build(r, 2, "alpha");
+    const g = reg(r), src = g.read("ledger/alpha/c/000001").doc;
+    expect(g.cas("ledger/beta/c/000001", null, src).ok).toBe(true);
+    expect(() => new StateJournal(localLedger(r, S.V2, "beta"))).toThrow(/LEDGER_IDENTITY_MISMATCH/);
+    expect(new StateJournal(localLedger(r, S.V2, "alpha")).seq).toBe(3);
+  });
+  it("a session marked LOST while its result is being verified is never accepted (checks re-run inside the ledger CAS)", {timeout: T}, async () => {
+    const {r} = repo(); const leaseStore = createMemoryStore(), g = fakeGit();
+    const c = control({r, leaseStore, g}); c.sup.start(); await c.sup.tick();
+    const a = c.orch.actions()[0]; c.orch.bind(a.intentId, "session_builderRACE1"); const w = c.orch.workers(x => x.intentId === a.intentId)[0];
+    g.tips[w.branch] = sha("5"); g.trailers[sha("5")] = ["session_builderRACE1"];
+    const other = control({r, leaseStore, g}); other.sup.start(); // a second process of the control session
+    g.sessionsOf = h => { other.orch.lost(a.intentId, "SESSION_FAILED"); return g.trailers[h]; }; // LOST lands mid-verification
+    expect(c.orch.submitResult(a.intentId, {sessionId: "session_builderRACE1", text: result(w, {ok: true, headSha: sha("5")})})).toMatchObject({accepted: false, reason: "INTENT_NOT_RUNNING:LOST"});
+    expect(new StateJournal(localLedger(r)).workers.get(a.intentId).status).toBe("LOST");
+    // and two processes binding the same intent concurrently: exactly one wins, the other is told so
+    await c.sup.tick(); clock.t += 60_000; await c.sup.tick(); const b = c.orch.actions()[0]; // bounded retry after its backoff
+    expect(b).toBeTruthy();
+    const g2 = control({r, leaseStore, g}); g2.sup.start();
+    expect(c.orch.bind(b.intentId, "session_binderAAAAA1")).toEqual({bound: true});
+    expect(() => g2.orch.bind(b.intentId, "session_binderBBBBB1")).toThrow(/INTENT_NOT_PENDING/);
+  });
+  it("LIVE mode is refused by the control stack (cutover not authorised)", async () => {
+    const {controlStack} = await import("../../automation/factory-v2/control.mjs");
+    expect(() => controlStack({mode: "LIVE", domain: "uasco-v7"}, {repoDir: "."})).toThrow(/CONTROL_LIVE_REQUIRES_CUTOVER/);
+    expect(() => controlStack({mode: "SHADOW", domain: "probe-x", registryBranch: "main"}, {repoDir: "."})).toThrow(/CONTROL_REGISTRY_BRANCH_INVALID/);
+  });
+  it("one session cannot be bound to two intents even when the pre-check saw a stale view (race window)", {timeout: T}, async () => {
+    const {r} = repo(); const leaseStore = createMemoryStore();
+    const backlog = [{id: "T1", paths: ["a/"]}, {id: "T2", paths: ["b/"]}];
+    const c = control({r, leaseStore, backlog}); c.sup.start(); await c.sup.tick();
+    const [x, y] = c.orch.actions(); const other = control({r, leaseStore, backlog}); other.sup.start();
+    const stale = c.orch.workers(); c.orch.workers = () => stale; // c's pre-check runs on a view taken before other's bind lands
+    other.orch.bind(x.intentId, "session_sharedSESS01");
+    expect(() => c.orch.bind(y.intentId, "session_sharedSESS01")).toThrow(/SESSION_ALREADY_BOUND/);
+  });
+});
+

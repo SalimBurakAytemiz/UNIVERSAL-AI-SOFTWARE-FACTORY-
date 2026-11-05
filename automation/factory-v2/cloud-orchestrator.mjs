@@ -108,15 +108,17 @@ export class CloudOrchestrator {
     if (rec.status === "RUNNING" && rec.sessionId === sessionId) return {duplicate: true};
     if (rec.status !== "PENDING_SPAWN") throw new OrchestratorError("INTENT_NOT_PENDING", rec.status);
     if (all.some(w => w.sessionId === sessionId)) throw new OrchestratorError("SESSION_ALREADY_BOUND", sessionId);
-    this.journal.worker(intentId, {status: "RUNNING", sessionId, boundAt: this.now()}, this.fence());
+    const w = this.journal.worker(intentId, {status: "RUNNING", sessionId, boundAt: this.now()}, this.fence(), undefined,
+      (cur, j) => cur?.status !== "PENDING_SPAWN" ? `INTENT_NOT_PENDING:${cur?.status}` : [...j.workers.values()].some(x => x.sessionId === sessionId) ? "SESSION_ALREADY_BOUND" : null);
+    if (w.rejected) throw new OrchestratorError(w.rejected.split(":")[0], w.rejected.split(":")[1] ?? sessionId); // lost a concurrent race
     return {bound: true};
   }
   /** Session lost (failed/archived/timeout/quota): the task goes back through bounded retry; a late result from it is refused. */
   lost(intentId, reason = "SESSION_LOST") {
     const rec = this.workers().find(w => w.intentId === intentId);
     if (!rec || !ACTIVE.includes(rec.status)) return {changed: false, status: rec?.status ?? null};
-    this.journal.worker(intentId, {status: "LOST", reason, lostAt: this.now()}, this.fence(), `worker:${intentId}:LOST`);
-    return {changed: true};
+    const w = this.journal.worker(intentId, {status: "LOST", reason, lostAt: this.now()}, this.fence(), `worker:${intentId}:LOST`, cur => ACTIVE.includes(cur?.status) ? null : `NOT_ACTIVE:${cur?.status}`);
+    return w.rejected ? {changed: false, status: w.rejected} : {changed: true};
   }
   /**
    * Result channel. `sessionId` is the session whose transcript the control session read with list_events(session_id), so the platform
@@ -133,7 +135,11 @@ export class CloudOrchestrator {
     if (r.taskId !== rec.taskId || r.attempt !== rec.attempt) return reject("TASK_OR_ATTEMPT_MISMATCH");
     const task = this.journal.get(rec.taskId);
     if (!task || task.attempt !== rec.attempt) return reject("STALE_ATTEMPT");
-    if (r.ok === false) { this.journal.worker(intentId, {status: "FAILED", reason: String(r.error ?? "WORKER_REPORTED_FAILURE").slice(0, 300)}, this.fence()); return {accepted: true, failed: true}; }
+    // Final checks run INSIDE the ledger CAS on re-read state: a concurrent LOST / rebind / attempt change between the checks above
+    // (including the slow git checks below) and this write refuses the result instead of accepting it.
+    const still = (cur, j) => cur?.status !== "RUNNING" ? `INTENT_NOT_RUNNING:${cur?.status}` : cur.sessionId !== sessionId ? "SESSION_NOT_BOUND_TO_INTENT" : j.get(rec.taskId)?.attempt !== rec.attempt ? "STALE_ATTEMPT" : null;
+    const finalWrite = data => { const w = this.journal.worker(intentId, data, this.fence(), undefined, still); return w.rejected ? reject(w.rejected) : null; };
+    if (r.ok === false) return finalWrite({status: "FAILED", reason: String(r.error ?? "WORKER_REPORTED_FAILURE").slice(0, 300)}) ?? {accepted: true, failed: true};
     let result;
     if (rec.role === "BUILDER") {
       if (!SHA.test(r.headSha ?? "")) return reject("HEAD_INVALID");
@@ -150,8 +156,7 @@ export class CloudOrchestrator {
       if (!["CLEAN", "CHANGES_REQUESTED", "BLOCKED"].includes(r.status)) return reject("REVIEW_STATUS_INVALID");
       result = {status: r.status, headSha: r.headSha, baseSha: r.baseSha, blockers: Array.isArray(r.blockers) ? r.blockers.slice(0, 50) : [], resolves: Array.isArray(r.resolves) ? r.resolves : [], reviewerSession: sessionId};
     }
-    this.journal.worker(intentId, {status: "RESULT_ACCEPTED", result, resultAt: this.now()}, this.fence());
-    return {accepted: true};
+    return finalWrite({status: "RESULT_ACCEPTED", result, resultAt: this.now()}) ?? {accepted: true};
   }
 }
 

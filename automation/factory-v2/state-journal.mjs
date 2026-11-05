@@ -64,9 +64,12 @@ export class StateJournal {
     }
     throw new JournalError("JOURNAL_CONTENDED");
   }
-  append(entry, fence) {
+  /** guard(journal) runs inside the CAS loop on freshly re-read state: a non-null reason refuses the write ({rejected}). */
+  append(entry, fence, guard = null) {
     return this.writeEntry(() => {
       if (this.keys.has(entry.idempotencyKey)) return {done: {duplicate: true, entry: this.keys.get(entry.idempotencyKey)}};
+      const reason = guard ? guard(this) : null;
+      if (reason) return {done: {rejected: reason}};
       const fenceEpoch = fence?.epoch ?? 0;
       if (fenceEpoch < this.maxFenceEpoch) throw new JournalError("JOURNAL_STALE_FENCE", `${fenceEpoch}<${this.maxFenceEpoch}`);
       if (entry.kind === "TRANSITION") { const t = this.tasks.get(entry.taskId); if (!t || t.state !== entry.from) throw new JournalError("JOURNAL_STATE_CONFLICT", `${entry.taskId}:${t?.state}!=${entry.from}`); }
@@ -115,6 +118,6 @@ export class StateJournal {
     return this.append({kind: "FACT", taskId, idempotencyKey: idempotencyKey ?? `fact:${taskId}:${fact}:${canonKey(value)}`, data: {fact, value}}, fence);
   }
   /** Worker session record (intent lifecycle: PENDING_SPAWN -> RUNNING -> COMPLETED | FAILED | LOST). */
-  worker(intentId, data, fence, idempotencyKey) { return this.append({kind: "WORKER", idempotencyKey: idempotencyKey ?? `worker:${intentId}:${data.status}`, data: {...data, intentId}}, fence); }
+  worker(intentId, data, fence, idempotencyKey, guard = null) { return this.append({kind: "WORKER", idempotencyKey: idempotencyKey ?? `worker:${intentId}:${data.status}`, data: {...data, intentId}}, fence, guard ? j => guard(j.workers.get(intentId) ?? null, j) : null); }
   record(kind, data, fence, idempotencyKey) { return this.append({kind, idempotencyKey: idempotencyKey ?? `${kind}:${this.seq + 1}`, data}, fence); }
 }
