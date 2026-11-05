@@ -229,13 +229,22 @@ describe("UASCO-T0067 test-surface protection: commented-out, inverted, snapshot
     // G2 receivers: only a test constructor, never a property or a longer identifier
     expect(disabledTestMarkers("submit.fails(x); obj.test.failing(y); edit.fails(z);")).toBe(0);
   });
-  it("#378 review: stripping is linear (a 300 KB test file strips in well under the old ~12 s) and a JSX apostrophe cannot shift string boundaries on later lines", () => {
-    // PERF: the look-behind (previous word / regex start) only reads the last 64 characters of the output
+  it("#378 review: stripping is truly linear (300 KB → 1 MB grows like n, not n²) and a JSX apostrophe cannot shift string boundaries on later lines", { timeout: 60_000 }, () => {
+    // PERF: output is collected in parts (joined once) and the look-behind reads at most the last 64 characters, so stripping is O(n).
+    // Pinned by the growth RATIO (size ×3.33: linear ≈3–4, quadratic ≈11), not by a tight absolute time; the absolute bounds are generous (linear: ~0.1 s / ~0.3 s on Linux).
     const unit = 'it("case", () => { if (ok(x)) { expect(f(a, "b")).toBe(`c ${d}`); } /* c */ const r = /x[/]y/; // note\n});\n';
-    const big = unit.repeat(Math.ceil(300_000 / unit.length));
-    const t0 = performance.now(); const out = stripComments(big, P); const ms = performance.now() - t0;
-    expect(ms, `${ms.toFixed(0)} ms for ${big.length} chars`).toBeLessThan(2000);   // quadratic version: ~12 s on this size; linear: tens of ms
-    expect(assertionCount(out)).toBe(assertionCount(big));
+    const sized = (n: number) => unit.repeat(Math.ceil(n / unit.length));
+    const best = (src: string) => { let m = Infinity; for (let k = 0; k < 2; k++) { const t0 = performance.now(); stripComments(src, P); m = Math.min(m, performance.now() - t0); } return m; };
+    const small = sized(300_000), large = sized(1_000_000);
+    stripComments(sized(30_000), P);   // JIT warm-up
+    const tS = best(small);
+    expect(tS, `${tS.toFixed(0)} ms for ${small.length} chars`).toBeLessThan(1000);   // checked first: a quadratic build stops here instead of spending ~40 s on 1 MB
+    const tL = best(large);
+    expect(tL, `${tL.toFixed(0)} ms for ${large.length} chars`).toBeLessThan(3000);
+    expect(tL / Math.max(tS, 1), `growth ${tS.toFixed(0)} ms → ${tL.toFixed(0)} ms`).toBeLessThan(6);
+    const out = stripComments(small, P);
+    expect(assertionCount(out)).toBe(assertionCount(small));
+    expect(stripComments(large, P)).toBe(stripComments(unit, P).repeat(large.length / unit.length));   // joined parts == per-unit result (no part lost or reordered)
     // FP: an honest JSX text edit with an apostrophe, followed later by a string containing "//", is not a weakening (a ' or " string ends at the line end)
     const BEFORE = REAL + "const link = 'http://example.com'; expect(link).toBeTruthy();\n";
     const AFTER = 'const el = <p>don\'t</p>;\n' + BEFORE;

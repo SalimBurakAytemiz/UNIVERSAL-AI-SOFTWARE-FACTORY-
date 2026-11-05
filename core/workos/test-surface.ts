@@ -111,50 +111,52 @@ export function stripComments(s: string, filePath: string): string {
   const ext = (/\.([A-Za-z0-9]+)$/.exec(filePath)?.[1] ?? "").toLowerCase();
   const slash = /^(m?[jt]sx?|cjs|cts|mts|go|rs|java|cs|kt|php)$/.test(ext), hash = /^(py|rb|php)$/.test(ext), js = /^(m?[jt]sx?|cjs|cts|mts)$/.test(ext);
   if (!slash && !hash) return s;
-  let out = "", i = 0;
+  const parts: string[] = []; let i = 0;
+  // #378 inceleme PERF-2: çıktı parça dizisinde birikir ve sonda bir kez birleştirilir; geriye bakış (tail) yalnız son parçalardan en fazla 64 karakter toplar.
+  // (out += ... ile out.slice(-64) her çağrıda dev rope dizesini düzleştiriyordu: 1 MB ~40 sn. Şimdi put O(1), tail O(64), toplam O(n).)
+  const put = (x: string) => { if (x) parts.push(x); };
   // #378 B1 (b): JS şablon değişmezleri bir yığınla izlenir: "tpl" = şablon metni (yorum yok), sayı = ${ } ifadesindeki açık { derinliği. ${ } içi normal kod gibi taranır (iç içe şablon, dize, düzenli ifade, yorum).
   const stack: Array<"tpl" | number> = [];
   // #378 B1: açılış parantezinden önce if/while/for/with varsa, kapanıştan sonra gelen "/" bir düzenli ifadedir (if (x) /a[//]/.test(s)); başka ")" sonrası bölmedir.
   const parens: boolean[] = []; let kwParenClosed = false;
-  // #378 inceleme PERF: geriye bakış yalnız çıktının son 64 karakterinde yapılır (tüm çıktı üzerinde regex O(n²) idi: 300 KB test dosyası ~12 sn).
-  const tail = () => out.slice(-64);
+  const tail = () => { let t = ""; for (let k = parts.length - 1; k >= 0 && t.length < 64; k--) { const p = parts[k], need = 64 - t.length; t = (p.length > need ? p.slice(-need) : p) + t; } return t; };
   const prevWord = () => /(?:^|[^\w$])([A-Za-z_$][\w$]*)\s*$/.exec(tail())?.[1] ?? "";
   // Düzenli ifade değişmezi (JS ailesi) yalnız bir ifadenin başlayabileceği yerde başlar: önceki anlamlı karakter yoksa ya da işleç/ayraçsa ya da önceki sözcük return/typeof/case/... ise. İçindeki tırnak/yorum benzeri dizgeler dize veya yorum sayılmaz.
   const rxStart = () => { const t = tail().replace(/\s+$/, ""); if (!t) return true; if (/[(,=:[!&|?{};+\-*%<>~^]$/.test(t)) return true; if (t.endsWith(")")) return kwParenClosed; return /(?:^|[^\w$])(?:return|typeof|case|in|of|new|delete|void|throw|yield|await|else|do)$/.test(t); };
   while (i < s.length) {
     const c = s[i], n = s[i + 1], top = stack[stack.length - 1];
     if (top === "tpl") {
-      out += c;
-      if (c === "\\" && i + 1 < s.length) { out += n; i += 2; continue; }
+      put(c);
+      if (c === "\\" && i + 1 < s.length) { put(n); i += 2; continue; }
       if (c === "`") { stack.pop(); i++; continue; }
-      if (c === "$" && n === "{") { out += n; stack.push(0); i += 2; continue; }
+      if (c === "$" && n === "{") { put(n); stack.push(0); i += 2; continue; }
       i++; continue;
     }
-    if (js && c === "`") { stack.push("tpl"); out += c; i++; continue; }
+    if (js && c === "`") { stack.push("tpl"); put(c); i++; continue; }
     // #378 (aynı satırdaki kesme işareti): JS'de iki harf arasındaki ' (don't, it's) hiçbir zaman dize başlatmaz; geçerli tek istisna anahtar sözcükten hemen sonra gelen dizedir (case'a', return'x'). JSX metnindeki kesme işareti bu yüzden düz karakterdir.
-    if (js && c === "'" && /[A-Za-z]/.test(n ?? "") && /[A-Za-z]$/.test(tail()) && !/(?:^|[^\w$])(?:return|typeof|case|in|of|new|delete|void|throw|yield|await|else|do|instanceof)$/.test(tail())) { out += c; i++; continue; }
+    if (js && c === "'" && /[A-Za-z]/.test(n ?? "") && /[A-Za-z]$/.test(tail()) && !/(?:^|[^\w$])(?:return|typeof|case|in|of|new|delete|void|throw|yield|await|else|do|instanceof)$/.test(tail())) { put(c); i++; continue; }
     if (c === '"' || c === "'" || (c === "`" && slash)) {   // dize (JS dışı dillerde ters tırnak da düz dizedir): kaçışlarla sonuna kadar olduğu gibi geçer
-      let j = i + 1; out += c;
+      let j = i + 1; put(c);
       // #378 inceleme FP: JS'de ' ve " dizeleri satır sonunda biter (sonlanmamış dize sözdizimi hatasıdır): JSX metnindeki bir kesme işareti (<p>don't</p>) sonraki satırların dize/kod sınırlarını kaydıramaz.
-      while (j < s.length) { const d = s[j]; if (js && c !== "`" && EOL.has(d)) break; out += d; j++; if (d === "\\" && j < s.length) { out += s[j]; j++; continue; } if (d === c) break; }
+      while (j < s.length) { const d = s[j]; if (js && c !== "`" && EOL.has(d)) break; put(d); j++; if (d === "\\" && j < s.length) { put(s[j]); j++; continue; } if (d === c) break; }
       i = j; continue;
     }
-    if (typeof top === "number" && c === "{") { stack[stack.length - 1] = top + 1; out += c; i++; continue; }
-    if (typeof top === "number" && c === "}") { if (top === 0) stack.pop(); else stack[stack.length - 1] = top - 1; out += c; i++; continue; }
-    if (js && c === "(") { parens.push(/^(?:if|while|for|with)$/.test(prevWord())); out += c; i++; continue; }
-    if (js && c === ")") { kwParenClosed = parens.pop() ?? false; out += c; i++; continue; }
+    if (typeof top === "number" && c === "{") { stack[stack.length - 1] = top + 1; put(c); i++; continue; }
+    if (typeof top === "number" && c === "}") { if (top === 0) stack.pop(); else stack[stack.length - 1] = top - 1; put(c); i++; continue; }
+    if (js && c === "(") { parens.push(/^(?:if|while|for|with)$/.test(prevWord())); put(c); i++; continue; }
+    if (js && c === ")") { kwParenClosed = parens.pop() ?? false; put(c); i++; continue; }
     if (js && c === "/" && n !== "/" && n !== "*" && rxStart()) {
       let j = i + 1, cls = false, ok = false;
       for (; j < s.length && !EOL.has(s[j]); j++) { const d = s[j]; if (d === "\\") { j++; continue; } if (cls) { if (d === "]") cls = false; continue; } if (d === "[") cls = true; else if (d === "/") { ok = true; break; } }
-      if (ok) { out += s.slice(i, j + 1); i = j + 1; continue; }   // kapanmayan "/" bölme işlecidir: olduğu gibi geçer
+      if (ok) { put(s.slice(i, j + 1)); i = j + 1; continue; }   // kapanmayan "/" bölme işlecidir: olduğu gibi geçer
     }
-    if (c === "\\" && slash && i + 1 < s.length) { out += c + n; i += 2; continue; }   // tanınmayan düzenli ifadedeki \/ çifti yorum başlatmaz
+    if (c === "\\" && slash && i + 1 < s.length) { put(c + n); i += 2; continue; }   // tanınmayan düzenli ifadedeki \/ çifti yorum başlatmaz
     if (slash && c === "/" && n === "/") { while (i < s.length && !EOL.has(s[i])) i++; continue; }
-    if (slash && c === "/" && n === "*") { const e = s.indexOf("*/", i + 2); const end = e < 0 ? s.length : e + 2; out += s.slice(i, end).replace(/[^\n]/g, ""); i = end; continue; }
+    if (slash && c === "/" && n === "*") { const e = s.indexOf("*/", i + 2); const end = e < 0 ? s.length : e + 2; put(s.slice(i, end).replace(/[^\n]/g, "")); i = end; continue; }
     if (hash && c === "#" && !(ext === "php" && n === "[")) { while (i < s.length && !EOL.has(s[i])) i++; continue; }
-    out += c; i++;
+    put(c); i++;
   }
-  return out;
+  return parts.join("");
 }
 // UASCO-T0067 G4: kendi kendini doğrulayan (totolojik) iddialar hiçbir şeyi sınamaz: expect(<değişmez>).toBe/toEqual/toStrictEqual(<aynı değişmez>),
 // expect(<doğru değişmez>).toBeTruthy/toBeDefined(), expect(<yanlış değişmez>).toBeFalsy(), assert(true)/assert.ok(true), assert.equal/strictEqual/deepEqual/deepStrictEqual(<L>, <aynı L>).
