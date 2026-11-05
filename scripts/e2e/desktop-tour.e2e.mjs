@@ -15,11 +15,13 @@ const shotsDir = path.join(outDir, "screenshots");
 fs.mkdirSync(shotsDir, {recursive: true});
 const dataRoot = fs.mkdtempSync(path.join(outDir, "data-"));
 export const ROUTES = Object.freeze(["home", "projects", "work", "inbox", "workforce", "assurance", "audit", "posture", "delivery", "tower", "queue", "readiness", "operations", "executive", "company", "academy", "domains", "journey", "matrix", "scheduler", "integrations", "install", "settings"]);
+const SELFTEST = argv.includes("--selftest");
 const routes = onlyArg >= 0 && argv[onlyArg + 1] ? argv[onlyArg + 1].split(",").filter(r => ROUTES.includes(r)) : ROUTES;
 export const LANGS = Object.freeze(["en", "tr"]);
 export const WIDTHS = Object.freeze([1280, 1024, 800]);
 const HEIGHT = 800;
-export const CHECKS = Object.freeze(["h1", "noHorizontalOverflow", "noRawBridgeError", "noUntranslatedKey", "stickyNavUnderTopbar"]);
+export const CHECKS = Object.freeze(["h1", "noHorizontalOverflow", "noRawBridgeError", "noUntranslatedKey", "stickyNavUnderTopbar", "keyboardReach", "focusVisible", "noFocusTrap", "contrastAA"]);
+export const TAB_LIMIT = 60;
 // (c) ham köprü/IPC hata metni
 export const RAW_ERROR_RES = Object.freeze([/Error invoking remote method/i, /uasco:api-/, /\/v1\/\S*: HTTP \d{3}/]);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -103,6 +105,104 @@ const measure = () => win.evaluate(() => {
     before: {top: bounds(before.top), nav: bounds(before.nav)}, after: {top: bounds(after.top), nav: bounds(after.nav), scrolled: after.scrolled},
   };
 });
+// ---- (f) klavye erişimi + (g) görünür odak + (h) odak tuzağı + (i) WCAG AA kontrast ----
+// //TR: Tarayıcı tarafı: main ve nav içindeki görünür etkileşimli öğeler etiketlenir (data-tour-k); Tab en çok TAB_LIMIT kez basılır, her adımda odaklanan öğe ve odak göstergesi (outline genişliği ≥2px ya da box-shadow) kaydedilir.
+const tagInteractive = () => win.evaluate(() => {
+  const SEL = "a[href],button,input:not([type=hidden]),select,textarea,summary,[tabindex]";
+  const vis = n => { const r = n.getBoundingClientRect(), cs = getComputedStyle(n); const closedDetails = n.closest("details:not([open])"); if (closedDetails && !(n.tagName === "SUMMARY" && n.parentElement === closedDetails)) return false; // kapalı <details> içeriği Tab ile ulaşılamaz ve görünmez
+    return r.width > 0 && r.height > 0 && cs.visibility !== "hidden" && cs.display !== "none" && !n.closest("[hidden],[inert],dialog:not([open])"); };
+  const desc = n => `${n.tagName.toLowerCase()}${n.id ? `#${n.id}` : ""}${n.dataset.focusKey && !n.id ? `[data-focus-key=${n.dataset.focusKey}]` : ""}${(n.innerText || n.getAttribute("aria-label") || "").trim() ? ` "${(n.innerText || n.getAttribute("aria-label")).trim().replace(/\s+/g, " ").slice(0, 30)}"` : ""}`;
+  let i = 0; const out = [];
+  for (const scope of [document.getElementById("nav"), document.getElementById("main")]) {
+    if (!scope) continue;
+    for (const n of scope.querySelectorAll(SEL)) {
+      if (n.disabled || n.getAttribute("tabindex") === "-1" || n.getAttribute("aria-hidden") === "true" || !vis(n)) continue;
+      n.dataset.tourK = String(i++); out.push({k: n.dataset.tourK, desc: desc(n), scope: scope.id});
+    }
+  }
+  return out;
+});
+const focusInfo = () => win.evaluate(() => {
+  const a = document.activeElement;
+  if (!a || a === document.body || a === document.documentElement) return {k: null, desc: "body", visible: null};
+  const cs = getComputedStyle(a), ow = parseFloat(cs.outlineWidth) || 0;
+  const visible = (cs.outlineStyle !== "none" && ow >= 2) || (cs.boxShadow && cs.boxShadow !== "none");
+  return {k: a.dataset.tourK ?? null, desc: `${a.tagName.toLowerCase()}${a.id ? `#${a.id}` : ""}`, visible, outline: `${cs.outlineStyle} ${cs.outlineWidth}`, shadow: cs.boxShadow};
+});
+async function keyboardWalk() {
+  const expected = await tagInteractive();
+  // //TR: Gezinme belgenin başından başlar: üst çubuğun ilk odaklanabilir öğesine odak verilir (blur, sıralı gezinme başlangıç noktasını main içinde bırakır ve uzun sayfalarda nav'a hiç dönülmezdi).
+  const started = await win.evaluate(() => { window.scrollTo(0, 0); const f = document.querySelector("#topbar a[href],#topbar button:not([disabled]),#topbar input,#topbar select,#topbar [tabindex]:not([tabindex='-1'])"); if (f) { f.focus(); return true; } document.activeElement?.blur?.(); return false; });
+  const seen = new Map(), order = [], noFocusRing = [], path = [];
+  let prev = null, stuck = 0, maxStuck = 0, presses = 0;
+  for (; presses < TAB_LIMIT; presses++) {
+    await win.keyboard.press("Tab");
+    const f = await focusInfo();
+    const id = f.k ?? `x:${f.desc}`;
+    if (id === prev) { stuck++; maxStuck = Math.max(maxStuck, stuck); } else stuck = 0;
+    prev = id; order.push(id); path.push(f.desc);
+    if (f.k !== null && !seen.has(f.k)) { seen.set(f.k, f); if (f.visible === false) noFocusRing.push(`${f.desc} (outline ${f.outline}, shadow ${f.shadow})`); }
+    if (expected.length && expected.every(e => seen.has(e.k))) break;
+  }
+  // //TR: Ulaşılamayan = sırada kendisinden SONRAKİ bir öğeye ulaşıldığı hâlde atlanan öğe (gerçek atlama). TAB_LIMIT'e takılan, son ulaşılandan sonraki öğeler ayrıca "limit" olarak bildirilir, başarısızlık sayılmaz.
+  const lastReached = Math.max(-1, ...[...seen.keys()].map(Number));
+  const skipped = expected.filter(e => !seen.has(e.k) && Number(e.k) < lastReached);
+  const beyond = expected.filter(e => !seen.has(e.k) && Number(e.k) > lastReached);
+  await win.evaluate(() => { for (const n of document.querySelectorAll("[data-tour-k]")) delete n.dataset.tourK; document.activeElement?.blur?.(); });
+  // odak tuzağı: aynı öğede ardışık ≥2 Tab ya da beklenen öğeler bitmeden yalnız ≤2 öğe arasında dönen son 10 adım
+  const tail = order.slice(-10), cycling = order.length >= 10 && new Set(tail).size <= 2 && expected.some(e => !seen.has(e.k));
+  return {started, path, expected: expected.length, reached: seen.size, presses: presses + 1, skipped: skipped.map(e => e.desc), beyond: beyond.length, noFocusRing, trap: maxStuck >= 2 || cycling ? `focus stayed on ${prev} for ${maxStuck + 1} presses${cycling ? " (cycling)" : ""}` : null};
+}
+const contrastScan = () => win.evaluate(() => {
+  const parse = c => { const m = /rgba?\(([^)]+)\)/.exec(c); if (!m) return null; const p = m[1].split(/[ ,/]+/).filter(Boolean).map(Number); return {r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1}; };
+  const lum = ({r, g, b}) => { const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+  const blend = (fg, bg) => ({r: fg.r * fg.a + bg.r * (1 - fg.a), g: fg.g * fg.a + bg.g * (1 - fg.a), b: fg.b * fg.a + bg.b * (1 - fg.a), a: 1});
+  // etkin arka plan: ata zinciri boyunca saydam olmayan ilk arka plan rengi (yarı saydamlar karıştırılır); görsel/gradyan varsa ölçülemez (null)
+  // //TR: Gradyan arka planda her renk durağı ayrı aday arka plan sayılır ve EN KÖTÜ kontrast alınır; url() görseli ölçülemez (null).
+  const allColors = s => [...String(s).matchAll(/rgba?\([^)]+\)/g)].map(m => parse(m[0])).filter(Boolean);
+  const bgOf = n => {
+    const layers = [];
+    for (let e = n; e; e = e.parentElement) {
+      const cs = getComputedStyle(e), img = cs.backgroundImage;
+      if (img && img !== "none") {
+        if (/url\(/.test(img)) return null;
+        const stops = allColors(img); if (stops.length) layers.push({stops});
+      }
+      const c = parse(cs.backgroundColor); if (c && c.a > 0) { layers.push({stops: [c]}); if (c.a >= 1 && !(img && img !== "none")) break; if (c.a >= 1) break; }
+    }
+    let cands = [{r: 255, g: 255, b: 255, a: 1}];
+    for (const l of layers.reverse()) cands = l.stops.flatMap(st => cands.map(b => blend(st, b)));
+    return cands.slice(0, 64);
+  };
+  const fails = []; let checked = 0, unknown = 0;
+  for (const scope of [document.getElementById("topbar"), document.getElementById("nav"), document.getElementById("main")]) {
+    if (!scope) continue;
+    const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT);
+    const done = new Set();
+    for (let t = walker.nextNode(); t; t = walker.nextNode()) {
+      const el = t.parentElement; if (!el || done.has(el) || !t.textContent.trim()) continue; done.add(el);
+      const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
+      if (r.width === 0 || r.height === 0 || cs.visibility === "hidden" || el.closest("[hidden],.sr-only,dialog:not([open])") || el.closest("button:disabled,[aria-disabled=true],input:disabled")) continue;
+      const fg = parse(cs.color), bgs = bgOf(el);
+      if (!fg || !bgs || !bgs.length) { unknown++; continue; }
+      const op = parseFloat(cs.opacity);
+      let ratio = Infinity, bg = bgs[0];
+      for (const b of bgs) { const c = blend({...fg, a: fg.a * (isNaN(op) ? 1 : op)}, b), L1 = lum(c), L2 = lum(b), q = (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05); if (q < ratio) { ratio = q; bg = b; } }
+      const size = parseFloat(cs.fontSize), bold = Number(cs.fontWeight) >= 700, large = size >= 24 || (bold && size >= 18.66);
+      checked++;
+      if (ratio < (large ? 3 : 4.5)) fails.push(`${el.tagName.toLowerCase()}${el.className && typeof el.className === "string" ? "." + el.className.trim().split(/\s+/).slice(0, 2).join(".") : ""} "${t.textContent.trim().replace(/\s+/g, " ").slice(0, 28)}" ${ratio.toFixed(2)}:1 (${cs.color} on rgb(${Math.round(bg.r)},${Math.round(bg.g)},${Math.round(bg.b)}), ${size}px${bold ? " bold" : ""}, need ${large ? 3 : 4.5})`);
+    }
+  }
+  return {checked, unknown, fails};
+});
+export function evaluateA11y(k, c) {
+  const res = {};
+  res.keyboardReach = k.skipped.length ? {status: "FAIL", evidence: `${k.skipped.length} of ${k.expected} skipped by Tab: ${k.skipped.slice(0, 6).join("; ")}`, tabPath: k.path} : {status: "PASS", ...(k.beyond ? {note: `${k.beyond} element(s) after the ${TAB_LIMIT}-press limit not visited`} : {})};
+  res.focusVisible = k.noFocusRing.length ? {status: "FAIL", evidence: `${k.noFocusRing.length} focused element(s) without a visible focus ring: ${k.noFocusRing.slice(0, 4).join("; ")}`} : {status: "PASS"};
+  res.noFocusTrap = k.trap ? {status: "FAIL", evidence: `${k.trap}; last focus path: ${k.path.slice(-12).join(" > ")}`} : {status: "PASS"};
+  res.contrastAA = c.fails.length ? {status: "FAIL", evidence: `${c.fails.length} of ${c.checked} text element(s) below AA: ${c.fails.slice(0, 5).join("; ")}`} : {status: "PASS", ...(c.unknown ? {note: `${c.unknown} over an image/gradient not measured`} : {})};
+  return res;
+}
 export function evaluateChecks(m) {
   const res = {};
   res.h1 = m.h1 ? {status: "PASS"} : {status: "FAIL", evidence: `main has no h1 (aria-busy=${m.busy})`};
@@ -152,6 +252,34 @@ async function main() {
   await win.evaluate(() => { localStorage.setItem("uasco.lang", "en"); }); await win.reload(); // tek başlangıç yüklemesi; dil değişimi sonra yalnız #langBtn ile
   await win.waitForSelector("main", {state: "attached", timeout: 30000}); await sleep(1500);
   if (await win.$("#firstRunDialog[open]")) { await win.keyboard.press("Escape"); await sleep(500); }
+  // //TR: --selftest: kontrollerin gerçekten FAIL verebildiği kanıtlanır: main'e düşük kontrastlı metin, odak halkası olmayan bir düğme ve kendini geri odaklayan bir tuzak eklenir; dördü de FAIL olmalı; sonra kaldırılır ve sonuç report.json'a yazılır.
+  let selftest = null;
+  if (SELFTEST) {
+    // CSP inline stil özniteliklerini ve eklenen <style> öğelerini engeller: stiller CSSOM ile (el.style.setProperty) verilir.
+    const inject = withTrap => win.evaluate(trapOn => {
+      document.getElementById("tour-selftest")?.remove();
+      const m = document.getElementById("main"), box = document.createElement("div"), mk = (tag, id, text) => { const n = document.createElement(tag); if (id) n.id = id; n.textContent = text; if (tag === "button") n.type = "button"; box.append(n); return n; };
+      box.id = "tour-selftest"; box.style.setProperty("background", "#ffffff", "important"); box.style.setProperty("background-image", "none", "important");
+      const p = mk("p", "tour-st-low", "low contrast selftest text"); p.style.setProperty("color", "#bbbbbb", "important"); p.style.setProperty("font-size", "14px", "important");
+      const ring = mk("button", "tour-st-ring", "no ring"); for (const k of ["outline", "box-shadow"]) ring.style.setProperty(k, "none", "important");
+      const jump = mk("button", "tour-st-jump", "jumps over next"), skipped = mk("button", "tour-st-skipped", "skipped"), after = mk("button", "tour-st-after", "after");
+      jump.addEventListener("keydown", e => { if (e.key === "Tab" && !e.shiftKey) { e.preventDefault(); after.focus(); } });
+      if (trapOn) after.addEventListener("keydown", e => { if (e.key === "Tab") { e.preventDefault(); after.focus(); } });
+      void skipped; m.prepend(box);
+    }, withTrap);
+    await visit(routes[0]);
+    await inject(false);
+    const c = await contrastScan(), k1 = await keyboardWalk(), a1 = evaluateA11y(k1, c);
+    await inject(true);
+    const k2 = await keyboardWalk(), a2 = evaluateA11y(k2, c);
+    await win.evaluate(() => document.getElementById("tour-selftest")?.remove());
+    selftest = {contrastAA: a1.contrastAA.status, focusVisible: a1.focusVisible.status, keyboardReach: a1.keyboardReach.status, noFocusTrap: a2.noFocusTrap.status,
+      evidence: {contrast: a1.contrastAA.evidence, ring: a1.focusVisible.evidence, reach: a1.keyboardReach.evidence, trap: a2.noFocusTrap.evidence}};
+    const ok = ["contrastAA", "focusVisible", "keyboardReach", "noFocusTrap"].every(x => selftest[x] === "FAIL") && /tour-st-low|low contrast/.test(selftest.evidence.contrast) && /tour-st-ring/.test(selftest.evidence.ring) && /skipped/.test(selftest.evidence.reach);
+    console.log(`SELFTEST ${ok ? "PASS (all four injected defects detected)" : "FAIL (a check did not detect its injected defect)"} ${JSON.stringify(selftest).slice(0, 900)}`);
+    if (!ok) { fs.writeFileSync(path.join(outDir, "report.json"), JSON.stringify({selftest, result: "SELFTEST_FAIL"}, null, 2)); return 2; }
+    await visit(routes[0]);
+  }
   const results = [];
   for (const lang of LANGS) {
     await setLang(lang);
@@ -160,7 +288,7 @@ async function main() {
       for (const route of routes) {
         await visit(route);
         let m, checks;
-        try { m = await measure(); checks = evaluateChecks(m); } catch (e) { checks = Object.fromEntries(CHECKS.map(c => [c, {status: "FAIL", evidence: `measure failed: ${String(e?.message ?? e).slice(0, 200)}`}])); m = null; }
+        try { m = await measure(); checks = evaluateChecks(m); const cs = await contrastScan(); const kw = await keyboardWalk(); Object.assign(checks, evaluateA11y(kw, cs)); } catch (e) { checks = Object.fromEntries(CHECKS.map(c => [c, {status: "FAIL", evidence: `measure failed: ${String(e?.message ?? e).slice(0, 200)}`}])); m = null; }
         if (m && m.lang !== lang) checks.h1 = {status: "FAIL", evidence: `document lang ${m.lang} != ${lang}`};
         const file = `${route}-${lang}-${w}.png`;
         try { await win.screenshot({path: path.join(shotsDir, file), timeout: 10000}); } catch { /* görüntü alınamadı */ }
@@ -172,7 +300,7 @@ async function main() {
   }
   const failures = results.flatMap(r => CHECKS.filter(c => r.checks[c].status === "FAIL").map(c => ({route: r.route, lang: r.lang, width: r.width, check: c, evidence: r.checks[c].evidence, screenshot: r.screenshot})));
   const byCheck = Object.fromEntries(CHECKS.map(c => [c, {pass: results.filter(r => r.checks[c].status === "PASS").length, fail: results.filter(r => r.checks[c].status === "FAIL").length}]));
-  const report = {platform: process.platform, node: process.version, scope: "Linux xvfb only; not Windows acceptance", seeded, routes, langs: LANGS, widths: WIDTHS, pages: results.length, byCheck, failures, results, result: failures.length ? "FAIL" : "PASS"};
+  const report = {platform: process.platform, node: process.version, scope: "Linux xvfb only; not Windows acceptance", seeded, selftest, routes, langs: LANGS, widths: WIDTHS, pages: results.length, byCheck, failures, results, result: failures.length ? "FAIL" : "PASS"};
   fs.writeFileSync(path.join(outDir, "report.json"), JSON.stringify(report, null, 2));
   console.log(`RESULT ${report.result} pages=${results.length} failures=${failures.length} ${JSON.stringify(byCheck)} out=${outDir}`);
   return failures.length ? 1 : 0;
