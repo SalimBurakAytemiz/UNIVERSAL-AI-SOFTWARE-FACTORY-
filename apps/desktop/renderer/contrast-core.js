@@ -11,12 +11,12 @@ export const CONTRAST_PAIRS=Object.freeze([
   // //TR: FD 2026-11-05 tasarım sistemi: birincil (kırmızı) eylem durumları, bağlantı ve odak halkası en koyu/en açık zeminlerde.
   ["muted-surface-2","--muted","--surface-2","text"],["accent-bg","--accent","--bg","text"],["accent-surface-2","--accent","--surface-2","text"],["danger-surface-2","--danger","--surface-2","text"],
   ["on-primary-primary","--on-primary","--primary","text"],["on-primary-primary-hover","--on-primary","--primary-hover","text"],["on-primary-primary-active","--on-primary","--primary-active","text"],
-  ["on-danger-danger-bg-active","--on-danger","--danger-bg-active","text"],["link-surface","--link","--surface","text"],
+  ["on-danger-danger-bg-active","--on-danger","--danger-bg-active","text"],["link-surface","--link","--surface","text"],["text-surface-raised","--text","--surface-raised","text"],["muted-surface-raised","--muted","--surface-raised","text"],
   ["border-ui-surface-2","--border-ui","--surface-2","ui"],["focus-bg","--focus","--bg","ui"],["focus-surface-2","--focus","--surface-2","ui"],["primary-bg","--primary","--bg","ui"]
 ].map(p=>Object.freeze(p)));
 /** //TR: Tasarım sistemi token grupları (FD 2026-11-05): stil sayfası :root bloğu bu adların HEPSİNİ tanımlamalıdır; eksik varsa missingDesignTokens listeler. */
 export const DESIGN_TOKEN_GROUPS=Object.freeze({
-  color:Object.freeze(["--bg","--bg-2","--surface","--surface-2","--border","--border-ui","--text","--muted","--emphasis","--link","--link-hover","--accent","--accent-2","--on-accent","--primary","--primary-hover","--primary-active","--on-primary","--danger","--danger-bg","--danger-bg-active","--danger-border","--on-danger","--ok","--warn","--purple","--focus"]),
+  color:Object.freeze(["--bg","--bg-2","--surface","--surface-2","--surface-raised","--border","--border-ui","--text","--muted","--emphasis","--link","--link-hover","--accent","--accent-2","--on-accent","--primary","--primary-hover","--primary-active","--on-primary","--danger","--danger-bg","--danger-bg-active","--danger-border","--on-danger","--ok","--warn","--purple","--focus"]),
   spacing:Object.freeze(["--space-1","--space-2","--space-3","--space-4","--space-5","--space-6","--space-8","--space-10","--space-12","--space-16"]),
   type:Object.freeze(["--font-ui","--font-mono","--fs-caption","--fs-label","--fs-body","--fs-h3","--fs-h2","--fs-kpi-sm","--fs-kpi","--fs-title","--lh-tight","--lh-body","--fw-regular","--fw-medium","--fw-bold","--fw-heavy"]),
   radius:Object.freeze(["--radius-sm","--radius-md","--radius-lg","--radius-xl","--radius-pill","--radius"]),
