@@ -27,14 +27,16 @@ function makeDocStore(ops, kind) {
     kind, read,
     /**
      * Values of one sidecar file over the ref's first-parent history, oldest first: only commits that CHANGED that path are listed, so
-     * unrelated traffic (leases) never grows it. null where the file was absent. More than `max` changes fails closed.
+     * unrelated traffic (leases) never grows it. null where the file was absent or unparseable. More than `max` changes fails closed.
      */
     historyOf(ref, path, max = 10_000) {
       const sha = ops.sha(checkRef(ref)); if (!sha) return [];
       const r = ops.git(["log", "--first-parent", "--format=%H", `--max-count=${max + 1}`, sha, "--", path]); if (r.status !== 0) throw new Error("REFDOC_HISTORY_FAILED");
       const shas = r.stdout.split("\n").filter(Boolean);
       if (shas.length > max) throw new Error("REFDOC_HISTORY_TOO_LONG");
-      return shas.reverse().map(c => { const s = ops.git(["show", `${c}:${path}`]); if (s.status !== 0) return null; try { return JSON.parse(s.stdout); } catch { throw new Error("REFDOC_HISTORY_UNPARSEABLE"); } });
+      // An unparseable historical entry carries no authority (like an invalid one): null, not a throw — otherwise one junk commit that
+      // branch protection keeps forever would fail every reader permanently. The CURRENT record (read()) stays strict.
+      return shas.reverse().map(c => { const s = ops.git(["show", `${c}:${path}`]); if (s.status !== 0) return null; try { return JSON.parse(s.stdout); } catch { return null; } });
     },
     /** CAS: expectedSha null = must not exist. Returns {ok, sha, current}. */
     cas(ref, expectedSha, doc, files = {}) {

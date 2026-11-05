@@ -49,7 +49,8 @@ export function liveAuthorityReaders({repoRoot, remote = "origin", baseRef = "v7
     const r = git(["log", "--first-parent", "--format=%H", `--max-count=${MAX + 1}`, sha, "--", file]); if (r.status !== 0) throw new Error("REGISTRY_HISTORY_FAILED");
     const shas = r.stdout.split("\n").filter(Boolean);
     if (shas.length > MAX) throw new Error("REGISTRY_HISTORY_TOO_LONG");
-    return shas.reverse().map(c => { const s = git(["show", `${c}:${file}`]); return s.status === 0 ? JSON.parse(s.stdout) : null; });
+    // unparseable historical entries carry no authority (null, like invalid ones); the CURRENT record (readAuthority) stays strict
+    return shas.reverse().map(c => { const s = git(["show", `${c}:${file}`]); if (s.status !== 0) return null; try { return JSON.parse(s.stdout); } catch { return null; } });
   };
   const hwmFile = path.join(repoRoot, ".git", `uasco-authority-hwm-${domain}.json`);
   return {

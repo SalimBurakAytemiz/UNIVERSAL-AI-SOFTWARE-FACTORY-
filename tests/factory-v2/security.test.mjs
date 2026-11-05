@@ -13,7 +13,7 @@ import {Ownership} from "../../automation/factory-v2/ownership.mjs";
 import {snapshotV41, buildManifest, authorityRef, verifyAuthorityDoc, checkTransition} from "../../automation/factory-v2/bridge.mjs";
 import {signAction, canonDigest} from "../../automation/factory-v2/identity.mjs";
 import {verifyGates} from "../../automation/factory-v2/gate-verifier.mjs";
-import {mergeAuthority} from "../../automation/factory-v2/v41-guard.mjs";
+import {mergeAuthority, liveAuthorityReaders} from "../../automation/factory-v2/v41-guard.mjs";
 
 const T = 180_000, D = "uasco-v7";
 const GATES = {reviewClean: {evidence: "r"}, ciPassed: {evidence: "c"}, founderAuthorization: {evidence: "f"}, migrationAcceptance: {evidence: "m"}};
@@ -150,6 +150,7 @@ describe("2. acceptance evidence is verified (source, SHA, scope, authority) —
     ["reviewer is the PR's own implementer (Claude-Session trailer, same login)", gates(), {commits: [{sha: H, commit: {message: "x\n\nClaude-Session: https://claude.ai/code/session_reviewer01"}}]}, /NO_TRUSTED_CLEAN_BINDING_AT_HEAD/],
     ["100 or more commits (listing may be truncated)", gates(), {commits: Array.from({length: 100}, () => ({sha: H, commit: {message: "x\n\nClaude-Session: https://claude.ai/code/session_builderPR347"}}))}, /PR_COMMITS_UNVERIFIABLE/],
     ["reviewer session is a case variant of the implementer", gates(), {commits: [{sha: H, commit: {message: "x\n\nClaude-Session: https://claude.ai/code/session_REVIEWER01"}}]}, /NO_TRUSTED_CLEAN_BINDING_AT_HEAD/],
+    ["reviewer-side case variant: binding session is an upper-case variant of a lower-case implementer", gates(), {reviews: [binding({body: `VERDICT-BINDING: verdict=CLEAN head=${H} base=${BASE} reviewer-session=session_REVIEWER01`})], commits: [{sha: H, commit: {message: "x\n\nClaude-Session: https://claude.ai/code/session_reviewer01"}}]}, /NO_TRUSTED_CLEAN_BINDING_AT_HEAD/],
     ["PR commits without implementer trailers", gates(), {commits: [{sha: H, commit: {message: "no trailer"}}]}, /IMPLEMENTER_SESSIONS_UNKNOWN/],
     ["migration run on another branch", gates(), {push: [{id: 1, path: ".github/workflows/ci.yml", head_branch: "other", head_sha: "c".repeat(40), status: "completed", conclusion: "success"}]}, /NO_PUSH_RUN/],
     ["CI on another SHA", gates({ciPassed: {headSha: "e".repeat(40)}}), {}, /GATE_CI:SHA_NOT_REVIEWED_HEAD/],
@@ -374,5 +375,58 @@ describe("review of af184254: history rewrite, history window, lease traffic, pr
     expect(() => checkTransition(prev, {...prev, epoch: 9}, {sessionId: SESS.V41})).toThrow(/ROLLBACK_FIELDS_INVALID/);
     expect(checkTransition(prev, {...prev, epoch: 3}, {sessionId: SESS.V41})).toBe("ROLLBACK");
     expect(checkTransition({...prev, epoch: 0}, {...prev, epoch: 9}, {sessionId: SESS.V41})).toBe("ROLLBACK");
+  });
+});
+
+describe("review of aec2ff87 (follow-ups)", () => {
+  const key = authorityRef(D), RB = "refs/heads/uasco/registry";
+  it("commit() refuses when storeProtected() is false (prepare and drain done under protection)", {timeout: T}, () => {
+    const w = world();
+    w.bB.prepare({manifest: w.m, gates: GATES, signer: S.V2}); w.bA.drainAck({manifestDigest: w.m.digest, drain, signer: S.V41});
+    const before = w.reg(w.A).read(key).doc;
+    expect(() => bridgeFor(w.reg(w.B), D, {storeProtected: () => false}).commit({manifest: w.m, signer: S.V2})).toThrow(/REGISTRY_NOT_PROTECTED/);
+    expect(() => bridgeFor(w.reg(w.B), D, {storeProtected: () => { throw new Error("rules api down"); }}).commit({manifest: w.m, signer: S.V2})).toThrow(/REGISTRY_NOT_PROTECTED/);
+    expect(w.reg(w.A).read(key).doc).toEqual(before); // nothing written
+    expect(w.bB.commit({manifest: w.m, signer: S.V2}).doc.chain.at(-1).core.phase).toBe("V2_AUTHORITATIVE");
+  });
+  it("an unparseable historical authority sidecar (pushed without any key) carries no authority: bridge and guard still verify the real chain", {timeout: T}, () => {
+    const w = world(); toV2(w);
+    // attacker: a plain fast-forward commit that keeps doc.json but replaces the authority sidecar with junk
+    const X = w.X;
+    git(X, "fetch", "-q", "origin", `+${RB}:${RB}`);
+    const tip = git(X, "rev-parse", RB), sub = git(X, "rev-parse", `${tip}:authority`);
+    const junk = spawnSync("git", ["hash-object", "-w", "--stdin"], {cwd: X, input: "{not json", encoding: "utf8"}).stdout.trim();
+    const ls = git(X, "ls-tree", sub).split("\n").map(l => l.endsWith("\tuasco-v7.json") ? `100644 blob ${junk}\tuasco-v7.json` : l);
+    const subJunk = spawnSync("git", ["mktree"], {cwd: X, input: ls.join("\n") + "\n", encoding: "utf8"}).stdout.trim();
+    const top = git(X, "ls-tree", tip).split("\n").map(l => l.endsWith("\tauthority") ? `040000 tree ${subJunk}\tauthority` : l);
+    const treeJunk = spawnSync("git", ["mktree"], {cwd: X, input: top.join("\n") + "\n", encoding: "utf8"}).stdout.trim();
+    const c = git(X, "-c", "user.name=x", "-c", "user.email=x@invalid", "commit-tree", treeJunk, "-p", tip, "-m", "junk");
+    git(X, "push", "-q", "origin", `${c}:${RB}`);
+    const origin = path.join(w.root, "origin.git");
+    git(origin, "config", "receive.denyNonFastForwards", "true"); git(origin, "config", "receive.denyDeletes", "true"); // the junk now stays in history
+    // the latest sidecar entry is junk -> null; the current record (doc.json) is untouched and verifies against the real chain
+    expect(w.reg(w.A).history(key).at(-1)).toBeNull();
+    expect(w.bA.read().core.phase).toBe("V2_AUTHORITATIVE");
+    expect(w.bB.assertV2(SESS.V2, 1)).toBe(1);
+    // a signed transition still lands; afterwards the junk is a historical entry and every reader keeps working
+    w.bX.rollback({reason: "founder", signer: S.FOUNDER});
+    expect(w.reg(w.A).history(key).some(h => h === null)).toBe(true);
+    expect(w.bA.read().core.phase).toBe("V41_AUTHORITATIVE");
+    // the canonical merge guard's live readers (git history of the sidecar) tolerate the junk entry too
+    const live = liveAuthorityReaders({repoRoot: w.A, baseRef: "integ", api: () => [{type: "non_fast_forward"}, {type: "deletion"}]});
+    const hist = live.readHistory();
+    expect(hist.some(h => h === null)).toBe(true);
+    expect(live.registryProtected()).toBe(true);
+    const guard = mergeAuthority({readAuthority: live.readAuthority, readHistory: live.readHistory, registryProtected: live.registryProtected, keyring: () => ringFor(D), pr: 7, headSha: "a".repeat(40)});
+    expect(guard).toMatchObject({allowed: true, by: "V4.1"});
+    // the current record itself stays strict: an unparseable doc.json fails closed
+    git(X, "fetch", "-q", "origin", `+${RB}:${RB}`);
+    const t2 = git(X, "rev-parse", RB);
+    const docJunk = spawnSync("git", ["hash-object", "-w", "--stdin"], {cwd: X, input: "{not json", encoding: "utf8"}).stdout.trim();
+    const top2 = git(X, "ls-tree", t2).split("\n").map(l => l.endsWith("\tdoc.json") ? `100644 blob ${docJunk}\tdoc.json` : l);
+    const tree2 = spawnSync("git", ["mktree"], {cwd: X, input: top2.join("\n") + "\n", encoding: "utf8"}).stdout.trim();
+    git(X, "push", "-q", "origin", `${git(X, "-c", "user.name=x", "-c", "user.email=x@invalid", "commit-tree", tree2, "-p", t2, "-m", "junk doc")}:${RB}`);
+    expect(() => w.bA.read()).toThrow(/UNPARSEABLE/);
+    expect(mergeAuthority({readAuthority: live.readAuthority, readHistory: live.readHistory, registryProtected: live.registryProtected, keyring: () => ringFor(D), pr: 7, headSha: "a".repeat(40)}).allowed).toBe(false);
   });
 });

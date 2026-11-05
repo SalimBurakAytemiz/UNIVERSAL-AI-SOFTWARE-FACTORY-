@@ -28,6 +28,9 @@ The full diff is in `FV2-PROTECTED-EXECUTOR-AUTHORITY-FENCE.diff`.
   - The bridge refuses `prepare` and `commit`, and the guard refuses every merge once any authority exists, unless the GitHub rules API reports both rules (`REGISTRY_NOT_PROTECTED`).
   - Reason: the anti-rewind check walks the registry's history, which is trustworthy only if nobody can force-push or delete it.
   - All factory writes are plain fast-forward pushes, so they work under this protection.
+- **Required (NOT checkable in code): the `uasco/registry` ruleset must have no bypass actors for any identity that pushes the registry branch** (the supervisor sessions, the GitHub App and the repository admin account they push as).
+  - GitHub's rules API (`rules/branches/<branch>`, used by `live-sources.mjs` `branchProtected` and `v41-guard.mjs` `registryProtected`) lists the rules that apply to a branch but does not expose the ruleset's bypass list. A bypass actor sees both rules reported and can still force-push or delete.
+  - The Founder confirms this in the ruleset settings when creating it and after any change to it. Code reporting both rules is necessary, not sufficient.
 - **The patched executor** passes its own `curlApi` to the guard for this rules check.
 
 ## Evidence
