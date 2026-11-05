@@ -286,13 +286,14 @@ describe("WP-ACADEMY — negative paths never fabricate or claim verification", 
   });
   it("hostile text in API data is rendered as text, never as markup", async () => {
     const academy = await load("views", "academy.js");
-    // Görünüm API verisini birebir yalnız hata mesajında (stateBlock → res.message) gösterir; yük gerçek api.js yolundan (bridge hatası) geçer.
+    // The bridge error message was the view's only verbatim sink; it is no longer rendered raw (Builder I: no leaked error text).
     const payloads = ["<img src=x onerror=alert(1)>", "<script>alert(1)</script>", "<iframe src=javascript:alert(1)></iframe>", `"quoted" & 'single' &amp; <b>`];
     for (const payload of payloads) {
       const {ctx} = await mkCtx(() => { throw new Error(payload); });
       const root = await academy.render(ctx);
-      const carriers = all(root).filter(n => n.textContent === payload);
-      expect(carriers.length, `payload reaches DOM verbatim: ${payload}`).toBeGreaterThan(0);
+      expect(all(root).some(n => n.dataset.academyState === "ERROR"), "the failure path was not exercised").toBe(true);
+      expect(all(root).some(n => n.textContent.includes(payload)), `raw error text leaked: ${payload}`).toBe(false);
+      expect(all(root).some(n => n.dataset.errorCode !== undefined)).toBe(false); // no code in free text -> no code line
       expect(all(root).filter(n => ["IMG", "SCRIPT", "IFRAME"].includes(n.tagName)).map(n => n.tagName)).toEqual([]);
     }
   });
