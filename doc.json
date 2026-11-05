@@ -1,6 +1,6 @@
 {
   "schema": "uasco.factory-v2.shared-registry/1",
-  "phase": "section:lease/probe/supervisor--LIVE-probe",
+  "phase": "section:probe/A-hello",
   "sections": {
     "lease/probe/supervisor--LIVE-probe": {
       "taskId": "supervisor--LIVE-probe",
@@ -13,7 +13,12 @@
       "acquiredAt": 1793866692320,
       "heartbeatAt": 1793866692320,
       "expiresAt": 1793866812320
+    },
+    "probe/A-hello": {
+      "session": "session_015dYwb2S8xAzNEs1GWUEheS",
+      "token": "session_015dYwb2S8xAzNEs1GWUEheS:1:28abf686-050f-4002-ab2b-469915714bae",
+      "at": 1793866695327
     }
   },
-  "seq": 1
+  "seq": 2
 }
