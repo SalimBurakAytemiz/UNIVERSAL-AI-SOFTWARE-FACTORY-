@@ -19,7 +19,9 @@ const root = path.resolve(__dirname, "..");
 const load = async (...p: string[]): Promise<any> => import(pathToFileURL(path.join(rend, ...p)).href);
 const read = (...p: string[]) => fs.readFileSync(path.join(rend, ...p), "utf8");
 const mainSrc = fs.readFileSync(path.join(root, "apps", "desktop", "main.mjs"), "utf8");
-const FORBIDDEN = "PRODUCT" + "_VERIFIED"; // yasak sabit değeri bu dosyada da düz yazılmaz; yalnız taranır.
+const FORBIDDEN = "PRODUCT" + "_VERIFIED";
+// UASCO-T0020 rapor modülleri için okuma/yazma yasağı: tanımlayıcılar kelime sınırıyla (isteğe bağlı çağrı ?.( ve boşluk varyantları dahil) ve köşeli parantezli dize erişimiyle aranır.
+const NO_WRITE_RE = /\b(?:fetch|XMLHttpRequest|eval|apiPost|apiGet|bridge|localStorage|sessionStorage|WebSocket|EventSource|sendBeacon|importScripts)\b|\.\s*(?:post|uasco|api)\b|\bapi\s*\??\.|\[\s*["'`][^"'`]*["'`]\s*\]|innerHTML|outerHTML|insertAdjacentHTML|\bFunction\s*\(|\bimport\s*\(/; // yasak sabit değeri bu dosyada da düz yazılmaz; yalnız taranır.
 
 // ---------------- fake DOM (journey testi ile aynı desen) ----------------
 class N {
@@ -344,11 +346,18 @@ describe("Executive — only already-allow-listed read-only GETs are used (prote
     expect(imports).toEqual(["../components.js", "../executive-core.js", "../model.js", "../work-core.js", "./report-export-panel.js", "./return-summary.js"]);
     // UASCO-T0020: rapor dışa aktarma modülleri de okuma/yazma yapmaz (yalnız ctx.saveFile veya Blob indirmesi); aynı yasak kalıplar uygulanır.
     for (const src of [read("views", "report-export-panel.js"), read("report-export.js")]) {
-      expect(src).not.toMatch(/\.post\(|\bapi\.|ctx\.api|window\.uasco|\bbridge\b|apiPost|apiGet|\bfetch\(|XMLHttpRequest|\beval\(|innerHTML|outerHTML|insertAdjacentHTML|new Function|localStorage|sessionStorage/);
+      // isteğe bağlı çağrı (fetch?.(), boşluklu çağrı, köşeli parantezli dize erişimi (["fetch"]) ve dinamik import da yakalanır
+      expect(src).not.toMatch(NO_WRITE_RE);
+      expect(src, "guard self-check").toBeTruthy();
       expect(src).not.toContain(FORBIDDEN);
     }
     expect(moduleSpecifiers({source: read("views", "report-export-panel.js")}).sort()).toEqual(["../components.js", "../report-export.js"]);
     expect(moduleSpecifiers({source: read("report-export.js")})).toEqual(["./executive-core.js"]);
+    // guard kendi kendini sınar: bilinen atlatma biçimleri yakalanır, modüllerin meşru kodu yakalanmaz
+    for (const bad of ["fetch?.(u)", "fetch (u)", "window[\"fetch\"](u)", "globalThis.fetch(u)", "x?.post(p)", "x.post (p)", "window?.uasco.apiPost", "ctx.api.get(p)", "api?.get(p)", "new Function(\"x\")", "Function(\"x\")()", "import(\"./x.js\")", "navigator.sendBeacon(u)"])
+      expect(NO_WRITE_RE.test(bad), bad).toBe(true);
+    for (const ok of ["titles.get(x.missionId)", "REPORT_MIME[format]", "row[c]", "kpis[k].state", "doc.createElement(\"a\")", "U.createObjectURL(b)"])
+      expect(NO_WRITE_RE.test(ok), ok).toBe(false);
     expect(moduleSpecifiers({source: read("executive-core.js")})).toEqual(["./attention-core.js", "./work-core.js"]);
     for (const m of ["execCockpit", "execMissions", "execWorkRuns", "execAttention"]) expect(read("views", "executive.js")).toContain(`api.${m}(`);
     // api.js: yalnız bu dört GET sabit yoldan okunur; yeni POST yolu eklenmez (tek apiPost çağrısı korunur).

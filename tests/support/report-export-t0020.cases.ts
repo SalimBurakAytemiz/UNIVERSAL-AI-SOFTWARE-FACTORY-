@@ -52,6 +52,18 @@ class D {
   getElementById() { return null; }
 }
 const byId = (n: N, id: string) => n.all().find(x => x.id === id);
+/** Küçük RFC 4180 ayrıştırıcı (tırnaklı alan, "" kaçışı, CRLF kayıt ayırıcı); son boş satır yok sayılır. */
+function parseCsv(text: string): string[][] {
+  const out: string[][] = []; let row: string[] = [], cell = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += c; continue; }
+    if (c === '"') q = true; else if (c === ",") { row.push(cell); cell = ""; } else if (c === "\r" && text[i + 1] === "\n") { row.push(cell); out.push(row); row = []; cell = ""; i++; } else cell += c;
+  }
+  if (cell !== "" || row.length) { row.push(cell); out.push(row); }
+  return out;
+}
+const rec = (t: string[][], i: number) => Object.fromEntries(t[0].map((h, j) => [h, t[i][j]]));
 
 type App = ReturnType<typeof buildServer>;
 let tmp = "";
@@ -136,8 +148,11 @@ export function registerReportExportT0020Cases(): void {
       const md = e.click("md").text;
       expect(md).toContain(`${e.t("report.md.ledgerState")}: ${rep.sources.workRuns}`);
       expect(md).toMatch(/\| runs \| \w+ \| — \|/);
-      const csv = e.click("csv").text;
-      expect(csv).toBe("runId,missionId,missionTitle,projectId,status,step,cycle,createdAt,updatedAt,headSha,reviewVerdict,deliveryState,reason\r\n");
+      const csv = parseCsv(e.click("csv").text);
+      // B1: okunamayan defter BOŞ defterle karıştırılamaz: ilk kayıt STATUS ve gerçek durumu taşır
+      expect(csv.length).toBe(2);
+      expect(rec(csv, 1)).toMatchObject({recordType: "STATUS", ledgerState: rep.sources.workRuns, ledgerTotal: "", ledgerIncluded: "0", ledgerTruncated: "false"});
+      expect(rec(csv, 1).ledgerState).not.toBe("VERIFIED");
     });
 
     it("Markdown headings follow the UI language (tr) while data cells stay raw", async () => {
@@ -160,6 +175,11 @@ export function registerReportExportT0020Cases(): void {
       const {csvCell} = await load("report-export.js");
       expect(csvCell("=HYPERLINK(\"http://x\")")).toBe("\"'=HYPERLINK(\"\"http://x\"\")\"");
       for (const c of ["+1", "-1", "@SUM(A1)", "\tx", "\rx"]) expect(csvCell(c).replace(/^"/, "").startsWith("'"), JSON.stringify(c)).toBe(true);
+      // B3: baştaki boşluk / NBSP / Unicode boşlukları ve BOM/sıfır genişlik atlanır; tam genişlik işaretler de yakalanır
+      for (const c of [" =1", "  +1", "\u00a0=HYPERLINK(1)", "\u2003-1", "\u2000@x", "\u200a=1", "\u200b=1", "\u202f=1", "\u3000=1", "\ufeff=1", "\u2060+1", " \t=1", "\uff1d1", "\uff0b1", "\uff0d1", "\uff20x"])
+        expect(csvCell(c).replace(/^"/, ""), JSON.stringify(c)).toBe(`'${c}`.replace(/"/g, '""'));
+      // pozitif kontroller: ortada geçen işaretler ve sıradan metin değişmez
+      for (const c of ["a=b", "x+y", "1-2", "mail@host", " plain", "\u00a0word", "Run 2 = done"]) expect(csvCell(c), JSON.stringify(c)).toBe(c);
       expect(csvCell("a,b")).toBe("\"a,b\"");
       expect(csvCell("line1\nline2")).toBe("\"line1\nline2\"");
       expect(csvCell("plain")).toBe("plain");
@@ -167,12 +187,17 @@ export function registerReportExportT0020Cases(): void {
       expect(csvCell(0)).toBe("0");
     });
 
-    it("reportToCsv: header + one CRLF line per row, every hostile cell neutralised", async () => {
-      const {reportToCsv, LEDGER_COLUMNS} = await load("report-export.js");
+    it("reportToCsv: header + STATUS record + one RUN record per row, constant field count (RFC 4180), every hostile cell neutralised", async () => {
+      const {reportToCsv, CSV_COLUMNS, LEDGER_COLUMNS} = await load("report-export.js");
       const csv = reportToCsv(rep([row({missionTitle: "=cmd|' /C calc'!A0", reason: "multi\nline, \"quoted\""})]));
       const lines = csv.split("\r\n");
-      expect(lines[0]).toBe(LEDGER_COLUMNS.join(","));
+      expect(lines[0]).toBe(CSV_COLUMNS.join(","));
+      expect(CSV_COLUMNS).toEqual(["recordType", ...LEDGER_COLUMNS, "ledgerState", "ledgerTotal", "ledgerIncluded", "ledgerTruncated", "generatedAt"]);
       expect(lines.at(-1)).toBe("");
+      const t = parseCsv(csv);
+      expect(t.every(r => r.length === CSV_COLUMNS.length)).toBe(true);
+      expect(t.map(r => r[0])).toEqual(["recordType", "STATUS", "RUN"]);
+      expect(rec(t, 2).reason).toBe("multi\nline, \"quoted\"");
       expect(csv).toContain("'=cmd|' /C calc'!A0");
       expect(csv).not.toMatch(/(^|,)=cmd/m);
       expect(csv).toContain("\"multi\nline, \"\"quoted\"\"\"");
@@ -184,11 +209,32 @@ export function registerReportExportT0020Cases(): void {
       expect(mdCell("a\nb\r\nc")).toBe("a b c");
       expect(mdCell("back\\slash")).toBe("back\\\\slash");
       expect(mdCell(null)).toBe("—");
+      // B2: ham HTML ve kod aralığı enjeksiyonu yok
+      expect(mdCell("<script>alert(1)</script>")).toBe("&lt;script&gt;alert(1)&lt;/script&gt;");
+      expect(mdCell("<img src=x onerror=y>")).not.toMatch(/[<>]/);
+      expect(mdCell("a & b")).toBe("a &amp; b");
+      expect(mdCell("&lt;already")).toBe("&amp;lt;already"); // önceden kaçışlı görünen metin de çözülmez
+      expect(mdCell("`code` span")).toBe("\\`code\\` span");
+      expect(mdCell("plain text 123")).toBe("plain text 123"); // pozitif kontrol
+      const html = reportToMarkdown(rep([row({missionTitle: "<b>bold</b> `x`", reason: "<!-- hidden -->"})]));
+      expect(html).not.toMatch(/<[a-z!/]/i);
+      expect(html).not.toMatch(/(^|[^\\])`/m);
       const md = reportToMarkdown(rep([row({missionTitle: "x|y\nz"})]));
       const tableRows = md.split("\n").filter((l: string) => l.startsWith("| run_"));
       expect(tableRows.length).toBe(1);
       expect(tableRows[0].split(/(?<!\\)\|/).length - 2).toBe(13); // 13 sütun, kaçışlı | sütun açmaz
       expect(tableRows[0]).toContain("x\\|y z");
+    });
+
+    it("B1: CSV STATUS record distinguishes EMPTY (VERIFIED, 0) from UNREADABLE (state) and states truncation (N of M)", async () => {
+      const {reportToCsv} = await load("report-export.js");
+      const empty = parseCsv(reportToCsv(rep([]))), bad = parseCsv(reportToCsv(rep([], {state: "OFFLINE", total: null})));
+      expect(rec(empty, 1)).toMatchObject({recordType: "STATUS", ledgerState: "VERIFIED", ledgerTotal: "0", ledgerIncluded: "0", ledgerTruncated: "false", generatedAt: "2026-11-05T10:20:30.000Z"});
+      expect(rec(bad, 1)).toMatchObject({recordType: "STATUS", ledgerState: "OFFLINE", ledgerTotal: "", ledgerIncluded: "0"});
+      expect(reportToCsv(rep([]))).not.toBe(reportToCsv(rep([], {state: "OFFLINE", total: null})));
+      const tr = parseCsv(reportToCsv(rep([row()], {total: 500, truncated: true})));
+      expect(rec(tr, 1)).toMatchObject({ledgerTotal: "500", ledgerIncluded: "1", ledgerTruncated: "true"});
+      expect(tr.length).toBe(3);
     });
 
     it("truncation is stated in Markdown; empty ledger says so; unknown format is refused (null)", async () => {

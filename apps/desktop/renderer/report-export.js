@@ -23,22 +23,31 @@ export function buildExecutiveReport(res,{generatedAt=new Date()}={}){
     ledger:{state:runs?"VERIFIED":(r.workRuns?.state??"ERROR"),total:runs?runs.total:null,included:rows.length,truncated:runs?rows.length<runs.total:false,rows}};
 }
 
-/** CSV hücresi: RFC 4180 kaçışı + formül enjeksiyonu nötrleme. null/undefined -> boş hücre. */
+/** CSV hücresi: RFC 4180 kaçışı + formül enjeksiyonu nötrleme. Baştaki TÜM boşluklar (NBSP U+00A0, U+2000-U+200B, U+202F, U+205F, U+3000, U+FEFF, U+2060, ...) atlandıktan sonra
+ *  =,+,-,@ (ve tam genişlik ＝＋－＠) ile başlayan ya da TAB/CR ile başlayan hücre "'" ile başlar. null/undefined -> boş hücre. */
+const LEAD_SPACE=/^[\s\u200b-\u200d\u2060\ufeff]*/;
+const FORMULA_START=/^[=+\-@\uff1d\uff0b\uff0d\uff20]/;
 export function csvCell(v){
   if(v===null||v===undefined)return "";
   let s=String(v);
-  if(/^[=+\-@\t\r]/.test(s))s=`'${s}`;
+  if(/^[\t\r]/.test(s)||FORMULA_START.test(s.replace(LEAD_SPACE,"")))s=`'${s}`;
   return /[",\r\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s;
 }
-/** Markdown tablo hücresi: | ve satır sonları kaçışlanır, ters eğik çizgi korunur; null -> "—". */
+/** Markdown hücresi: ters eğik çizgi, |, ` kaçışlanır; &, <, > HTML varlığına çevrilir (ham HTML veya kod aralığı enjeksiyonu yok); satır sonları boşluk olur; null -> "—". */
 export function mdCell(v){
   if(v===null||v===undefined||v==="")return "—";
-  return String(v).replace(/\\/g,"\\\\").replace(/\|/g,"\\|").replace(/\r?\n|\r/g," ");
+  return String(v).replace(/\\/g,"\\\\").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/`/g,"\\`").replace(/\|/g,"\\|").replace(/\r?\n|\r/g," ");
 }
 export function reportToJson(rep){return `${JSON.stringify(rep,null,2)}\n`}
-/** CSV: İcra Defteri satırları (başlık satırı + en çok MAX_LEDGER_ROWS satır); CRLF satır sonu. */
+/** CSV: sabit sütun sayılı tek tablo (RFC 4180): ilk sütun recordType. İlk kayıt HER ZAMAN STATUS'tur ve defterin durumunu (VERIFIED/OFFLINE/ERROR...), toplamını, dahil edilen
+ *  satır sayısını ve kesilip kesilmediğini taşır; böylece OKUNAMAYAN defter BOŞ defterle karıştırılamaz ve kesilme açıkça belirtilir. Sonra her koşu için bir RUN kaydı; CRLF satır sonu. */
+export const CSV_STATUS_COLUMNS=Object.freeze(["ledgerState","ledgerTotal","ledgerIncluded","ledgerTruncated","generatedAt"]);
+export const CSV_COLUMNS=Object.freeze(["recordType",...LEDGER_COLUMNS,...CSV_STATUS_COLUMNS]);
 export function reportToCsv(rep){
-  const lines=[LEDGER_COLUMNS.join(","),...rep.ledger.rows.map(row=>LEDGER_COLUMNS.map(c=>csvCell(row[c])).join(","))];
+  const L=rep.ledger;
+  const status=["STATUS",...LEDGER_COLUMNS.map(()=>null),L.state,L.total,L.included,L.truncated?"true":"false",rep.generatedAt];
+  const runs=L.rows.map(row=>["RUN",...LEDGER_COLUMNS.map(c=>row[c]),...CSV_STATUS_COLUMNS.map(()=>null)]);
+  const lines=[CSV_COLUMNS.join(","),...[status,...runs].map(r=>r.map(csvCell).join(","))];
   return `${lines.join("\r\n")}\r\n`;
 }
 /** Markdown: başlık, kaynak durumları, KPI tablosu, defter tablosu. t(key,vars) çevirisi yalnız başlıklar içindir; veri hücreleri kaçışlanır. */
