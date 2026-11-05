@@ -1,0 +1,17 @@
+{
+  "schema": "uasco.factory-v2.shared-registry/1",
+  "phase": "section:probe-keys/session_015dYwb2b3yVQ6iay68HXCD8",
+  "sections": {
+    "probe-keys/session_015dYwb2b3yVQ6iay68HXCD8": {
+      "session": "session_015dYwb2b3yVQ6iay68HXCD8",
+      "at": 1793868437657,
+      "role": "V41_OWNER",
+      "keyId": "k_d8f334bebf0fd76b",
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAIF5H3cMcfORM9oVsS/u1xFZB5F+qoMJTxNV+v5kL3ns=\n-----END PUBLIC KEY-----\n"
+    }
+  },
+  "revs": {
+    "probe-keys/session_015dYwb2b3yVQ6iay68HXCD8": 1
+  },
+  "seq": 1
+}
