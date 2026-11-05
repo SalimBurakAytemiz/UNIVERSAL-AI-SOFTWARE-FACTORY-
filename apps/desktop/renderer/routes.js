@@ -45,3 +45,8 @@ export const routeById=id=>ROUTES.find(r=>r.id===id)??null;
 export function routeFromHash(hash){
   const m=/^#\/([a-z]+)\/?$/.exec(String(hash??""));const r=m?routeById(m[1]):null;return r?r.id:DEFAULT_ROUTE;
 }
+/** UASCO-T0005: kayıtlı bir rotaya çözülmeyen, boş olmayan hash'i (ör. "#/nope", "#/Work", "#main") döndürür; boş hash, "#" ve kayıtlı rotalar null'dır. Shell bunu sessizce Ana sayfaya düşmek yerine dürüst bir "sayfa yok" bildirimiyle gösterir (routeFromHash sözleşmesi değişmez). */
+export function unknownRouteHash(hash){
+  const s=typeof hash==="string"?hash:"";if(s===""||s==="#")return null;
+  const m=/^#\/([a-z]+)\/?$/.exec(s);return m&&routeById(m[1])?null:s.slice(0,80);
+}
