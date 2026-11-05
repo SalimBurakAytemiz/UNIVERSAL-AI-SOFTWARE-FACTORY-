@@ -196,4 +196,37 @@ describe("UASCO-T0067 test-surface protection: commented-out, inverted, snapshot
     expect(stripComments("expect(a) // c", "notes.txt")).toBe("expect(a) // c");   // unknown extension: text unchanged
     for (const sep of ["\r", "\u2028", "\u2029"]) expect(assertionCount(stripComments("// note" + sep + "expect(add(1, 1)).toBe(2);", "a.test.ts")), JSON.stringify(sep)).toBe(1);   // ECMAScript line terminators end a // comment
   });
+  it("#378 B1: a line the comment stripper misreads can never hide a weakening the raw (base) check sees; template ${} nesting and a regex after if (...) are stripped correctly", () => {
+    // 3 constructs that the first stripper misread (rest of the line taken as a comment): nested template with a URL, regex after an if (...) paren, a backtick produced by ${"`"}
+    const LINES: Array<[string, string]> = [
+      ["nested template with a URL", 'const u = `${ok ? `http://h` : ""}`; expect(a).toBe(1); '],
+      ["regex after an if (...) paren", 'if (x) /a[//]/.test(s) && expect(a).toBe(1); '],
+      ["backtick produced by ${\"`\"}", 'const t = `${"`"}`; expect(a).toBe(1); '],
+    ];
+    for (const [name, line] of LINES) {
+      expect(assertionCount(stripComments(line + "expect(b).toBe(2);", P)), name).toBe(2);   // (b): nothing on the line is taken as a comment
+      expect(weakenedReason(line + "expect(b).toBe(2);\n" + REAL).length, name).toBe(0);   // positive control: unchanged
+      expect(surface(line + "expect(b).toBe(2);\n" + REAL, line + "\n" + REAL).weakened.map(w => w.reason), name).toEqual(["ASSERTION_COUNT_REDUCED"]);   // a deleted assertion on that line
+    }
+    expect(surface(LINES[0][1] + 'it("y", () => {});\n' + REAL, LINES[0][1] + 'it.skip("y", () => {});\n' + REAL).weakened.map(w => w.reason)).toEqual(["SKIP_OR_ONLY_ADDED"]);   // an added it.skip on that line
+    // stripped markers count too: un-commenting a skipped test adds a live skip although the raw count is unchanged
+    expect(surface('// it.skip("x", () => {});\n' + REAL, 'it.skip("x", () => {});\n' + REAL).weakened.map(w => w.reason)).toEqual(["SKIP_OR_ONLY_ADDED"]);
+    // a template literal is a string: "//" inside it is not a comment
+    expect(assertionCount(stripComments("const t = `a // b`; expect(a).toBe(1);", P))).toBe(1);
+    // a "\/" pair outside a recognised regex never starts a comment
+    expect(assertionCount(stripComments('x = a[0] /\\//g.length; expect(b).toBe(1);', P))).toBe(1);
+    // PHP 8 attributes (#[...]) are not comments
+    expect(assertionCount(stripComments("class T { #[Test] public function t() { $this->assertEquals(1, f()); } }", "tests/TTest.php"))).toBe(1);
+    // JSX text is not JS: a lexer without a JSX parser reads "//" in <p>http://h</p> as a comment; the raw (base) check still flags a deletion or an added skip on such a line
+    const AMB = 'const el = <p>see http://h</p>; expect(a).toBe(1); ';
+    expect(assertionCount(stripComments(AMB, P))).toBe(0);   // the known misread itself (so this row really exercises the raw fallback)
+    expect(surface(AMB + "expect(b).toBe(2);\n" + REAL, AMB + "\n" + REAL).weakened.map(w => w.reason)).toEqual(["ASSERTION_COUNT_REDUCED"]);
+    expect(surface(AMB + 'it("y", () => {});\n' + REAL, AMB + 'it.skip("y", () => {});\n' + REAL).weakened.map(w => w.reason)).toEqual(["SKIP_OR_ONLY_ADDED"]);
+    // object braces inside ${ } keep the expression open: a comment inside the expression is a comment, and the template resumes after the matching }
+    expect(assertionCount(stripComments("const u = `${ {a: 1}.a // expect(dead).toBe(0)\n }`; expect(a).toBe(1);", P))).toBe(1);
+    // Go raw strings (backtick) are strings: "//" inside them is not a comment
+    expect(assertionCount(stripComments("s := `x // y`; assert.Equal(t, 1, f())", "pkg/a_test.go"))).toBe(1);
+    // G2 receivers: only a test constructor, never a property or a longer identifier
+    expect(disabledTestMarkers("submit.fails(x); obj.test.failing(y); edit.fails(z);")).toBe(0);
+  });
 });

@@ -109,21 +109,41 @@ export function parseNameStatusZ(out: string): NameStatusEntry[] {
 const EOL: ReadonlySet<string> = new Set(["\n", "\r", "\u2028", "\u2029"]);
 export function stripComments(s: string, filePath: string): string {
   const ext = (/\.([A-Za-z0-9]+)$/.exec(filePath)?.[1] ?? "").toLowerCase();
-  const slash = /^(m?[jt]sx?|cjs|cts|mts|go|rs|java|cs|kt|php)$/.test(ext), hash = /^(py|rb|php)$/.test(ext);
+  const slash = /^(m?[jt]sx?|cjs|cts|mts|go|rs|java|cs|kt|php)$/.test(ext), hash = /^(py|rb|php)$/.test(ext), js = /^(m?[jt]sx?|cjs|cts|mts)$/.test(ext);
   if (!slash && !hash) return s;
-  let out = "", i = 0, q: string | null = null;
+  let out = "", i = 0;
+  // #378 B1 (b): JS şablon değişmezleri bir yığınla izlenir: "tpl" = şablon metni (yorum yok), sayı = ${ } ifadesindeki açık { derinliği. ${ } içi normal kod gibi taranır (iç içe şablon, dize, düzenli ifade, yorum).
+  const stack: Array<"tpl" | number> = [];
+  // #378 B1: açılış parantezinden önce if/while/for/with varsa, kapanıştan sonra gelen "/" bir düzenli ifadedir (if (x) /a[//]/.test(s)); başka ")" sonrası bölmedir.
+  const parens: boolean[] = []; let kwParenClosed = false;
+  const prevWord = () => /(?:^|[^\w$])([A-Za-z_$][\w$]*)\s*$/.exec(out)?.[1] ?? "";
   // Düzenli ifade değişmezi (JS ailesi) yalnız bir ifadenin başlayabileceği yerde başlar: önceki anlamlı karakter yoksa ya da işleç/ayraçsa ya da önceki sözcük return/typeof/case/... ise. İçindeki tırnak/yorum benzeri dizgeler dize veya yorum sayılmaz.
-  const rxStart = () => { const t = out.replace(/\s+$/, ""); if (!t) return true; if (/[(,=:[!&|?{};+\-*%<>~^]$/.test(t)) return true; return /(?:^|[^\w$])(?:return|typeof|case|in|of|new|delete|void|throw|yield|await|else|do)$/.test(t); };
+  const rxStart = () => { const t = out.replace(/\s+$/, ""); if (!t) return true; if (/[(,=:[!&|?{};+\-*%<>~^]$/.test(t)) return true; if (t.endsWith(")")) return kwParenClosed; return /(?:^|[^\w$])(?:return|typeof|case|in|of|new|delete|void|throw|yield|await|else|do)$/.test(t); };
   while (i < s.length) {
-    const c = s[i], n = s[i + 1];
-    if (q) { out += c; if (c === "\\" && i + 1 < s.length) { out += n; i += 2; continue; } if (c === q) q = null; i++; continue; }
-    if (c === '"' || c === "'" || (c === "`" && slash)) { q = c; out += c; i++; continue; }
-    if (slash && /^(m?[jt]sx?|cjs|cts|mts)$/.test(ext) && c === "/" && n !== "/" && n !== "*" && rxStart()) {
+    const c = s[i], n = s[i + 1], top = stack[stack.length - 1];
+    if (top === "tpl") {
+      out += c;
+      if (c === "\\" && i + 1 < s.length) { out += n; i += 2; continue; }
+      if (c === "`") { stack.pop(); i++; continue; }
+      if (c === "$" && n === "{") { out += n; stack.push(0); i += 2; continue; }
+      i++; continue;
+    }
+    if (js && c === "`") { stack.push("tpl"); out += c; i++; continue; }
+    if (c === '"' || c === "'" || (c === "`" && slash)) {   // dize (JS dışı dillerde ters tırnak da düz dizedir): kaçışlarla sonuna kadar olduğu gibi geçer
+      let j = i + 1; out += c;
+      while (j < s.length) { const d = s[j]; out += d; j++; if (d === "\\" && j < s.length) { out += s[j]; j++; continue; } if (d === c) break; }
+      i = j; continue;
+    }
+    if (typeof top === "number" && c === "{") { stack[stack.length - 1] = top + 1; out += c; i++; continue; }
+    if (typeof top === "number" && c === "}") { if (top === 0) stack.pop(); else stack[stack.length - 1] = top - 1; out += c; i++; continue; }
+    if (js && c === "(") { parens.push(/^(?:if|while|for|with)$/.test(prevWord())); out += c; i++; continue; }
+    if (js && c === ")") { kwParenClosed = parens.pop() ?? false; out += c; i++; continue; }
+    if (js && c === "/" && n !== "/" && n !== "*" && rxStart()) {
       let j = i + 1, cls = false, ok = false;
       for (; j < s.length && !EOL.has(s[j]); j++) { const d = s[j]; if (d === "\\") { j++; continue; } if (cls) { if (d === "]") cls = false; continue; } if (d === "[") cls = true; else if (d === "/") { ok = true; break; } }
       if (ok) { out += s.slice(i, j + 1); i = j + 1; continue; }   // kapanmayan "/" bölme işlecidir: olduğu gibi geçer
     }
-    if (c === "\\" && slash && i + 1 < s.length) { out += c + n; i += 2; continue; }
+    if (c === "\\" && slash && i + 1 < s.length) { out += c + n; i += 2; continue; }   // tanınmayan düzenli ifadedeki \/ çifti yorum başlatmaz
     if (slash && c === "/" && n === "/") { while (i < s.length && !EOL.has(s[i])) i++; continue; }
     if (slash && c === "/" && n === "*") { const e = s.indexOf("*/", i + 2); const end = e < 0 ? s.length : e + 2; out += s.slice(i, end).replace(/[^\n]/g, ""); i = end; continue; }
     if (hash && c === "#" && !(ext === "php" && n === "[")) { while (i < s.length && !EOL.has(s[i])) i++; continue; }
@@ -275,9 +295,12 @@ export function evaluateTestSurface(i: EvaluateInput): TestSurfaceSummary {
     // (mevcut fixture'lar ve yeni test sınıflaması onları iddia sayar; TRIVIAL_TEST_ADDED ham sayıyla kalır).
     const tb = stripComments(b, beforePath), ta = stripComments(a, afterPath);
     const nb = assertionCount(tb), na = assertionCount(ta), rb = nb - vacuousAssertionCount(tb), ra = na - vacuousAssertionCount(ta);
+    // #378 B1 (a): yorum çıkarma yalnız EK tespit getirir, hiçbir ham (temel) tespiti kaldırmaz: ham sayı düştüyse ya da ham işaret arttıysa da zayıflatmadır (çıkarıcının yanlış okuduğu bir satır yeni bir yanlış negatif üretemez).
+    const xb = assertionCount(b), xa = assertionCount(a);
     if (nb > 0 && na < nb) weakened.push({path: afterPath, before: nb, after: na, reason: "ASSERTION_COUNT_REDUCED"});
+    else if (xb > 0 && xa < xb) weakened.push({path: afterPath, before: xb, after: xa, reason: "ASSERTION_COUNT_REDUCED"});
     else if (rb > 0 && ra < rb) weakened.push({path: afterPath, before: rb, after: ra, reason: "ASSERTION_COUNT_REDUCED"});
-    else if (disabledTestMarkers(ta) > disabledTestMarkers(tb)) weakened.push({path: afterPath, before: nb, after: na, reason: "SKIP_OR_ONLY_ADDED"});
+    else if (disabledTestMarkers(ta) > disabledTestMarkers(tb) || disabledTestMarkers(a) > disabledTestMarkers(b)) weakened.push({path: afterPath, before: nb, after: na, reason: "SKIP_OR_ONLY_ADDED"});
   };
   for (const e of i.entries) {
     // RV-RELFX-C4-001: harness sınıflaması test-yolu dalından bağımsızdır. Harness kontrolü her name-status girişinde (RENAMED'de hem eski hem yeni yolda, isHarnessChange içinde)
