@@ -221,3 +221,29 @@ describe("guards that survived mutation", () => {
     expect(new Ownership(store, {leaseId: "x", environment: "e", workerId: "w", sessionId: "session_holderAAAA1"}).adopt(mine.token)).toBe(true);
   });
 });
+
+describe("found by the live probe", () => {
+  it("a backlog edit after enqueue cannot give a job paths that differ from its frozen spec", {timeout: T}, async () => {
+    const {r} = repo(); const leaseStore = createMemoryStore();
+    const backlog = [{id: "T1", paths: ["a/"], spec: "write a/x"}, {id: "T2", paths: ["b/"], spec: "write b/y"}];
+    let c = control({r, leaseStore, backlog, capacity: {BUILDER: 1}}); c.sup.start(); await c.sup.tick(); // T1 dispatched, T2 enqueued and waiting
+    backlog[1].paths = ["c/"]; // edited after enqueue
+    c.orch.lost(c.orch.actions()[0].intentId); c = control({r, leaseStore, backlog, capacity: {BUILDER: 1}}); c.sup.start(); await c.sup.tick();
+    const jobs = c.orch.workers(w => w.taskId === "T2");
+    for (const w of jobs) { expect(w.createSession.prompt).toContain("Allowed paths: b/."); expect(w.createSession.prompt).toContain("write b/y"); }
+  });
+});
+describe("reviewer capacity below the required focuses", () => {
+  it("withdraws the partial reviewer set and waits; no partial review, no crash", {timeout: T}, async () => {
+    const {r} = repo(); const g = fakeGit();
+    const c = control({r, g, capacity: {REVIEWER: 1}}); c.sup.o.diffPaths = () => ["automation/factory-v2/supervisor.mjs"]; // security + cross-system: several focuses
+    c.sup.start(); await c.sup.tick();
+    const a = c.orch.actions()[0]; c.orch.bind(a.intentId, "session_builderCAP01"); const w = c.orch.workers(x => x.intentId === a.intentId)[0];
+    g.tips[w.branch] = sha("7"); g.trailers[sha("7")] = ["session_builderCAP01"];
+    expect(c.orch.submitResult(a.intentId, {sessionId: "session_builderCAP01", text: result(w, {ok: true, headSha: sha("7")})})).toEqual({accepted: true});
+    await c.sup.tick();
+    await c.sup.tick();
+    expect(c.sup.journal.get("T1").state).toBe("BUILT"); // waits for enough reviewer sessions
+    expect(c.orch.workers(x => x.role === "REVIEWER")).toEqual([]); // and creates no partial reviewer set (no ledger churn)
+  });
+});

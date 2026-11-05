@@ -54,4 +54,13 @@ All state lives in the shared ledger: a Supervisor-signed, hash-chained event lo
 **Recovery:**
 - The next tick ran from a fresh clone with no local state. It rebuilt everything from the ledger, moved the task to `REVIEWING`, and created two reviewer intents bound to head `8ef00d2e`.
 
-**Reviewers:** results are listed in `CONTROL-SESSION-EVIDENCE.json`.
+**Reviewers:**
+- Two reviewer sessions, `session_015dYwb2QFbC2XUahXfzLY7E` and `session_015dYwazTwnin58kSnnBDRas`, each returned CLEAN bound to `8ef00d2e..70cb71d4`.
+- Cross-submitting one reviewer's result into the other's intent was refused.
+- The task reached `REVIEW_CLEAN`.
+
+**Loss and reassignment:**
+- Builder `session_015dYwb3PxWTSJPrVuUBDbxN` was marked lost. The next tick reassigned the task as attempt 1, with a new intent and branch, to `session_015dYwb4e7qKqpCPZKo3Dt1c`.
+- The lost session's late result was refused with `INTENT_NOT_RUNNING:LOST`.
+
+Full record: `CONTROL-SESSION-EVIDENCE.json`.

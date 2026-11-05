@@ -128,7 +128,9 @@ export class FactorySupervisor {
       .map(t => ({id: t.taskId, paths: t.data.paths}));
     const queuedIds = new Set(this.journal.inState("QUEUED").map(t => t.taskId));
     const live = await this.o.liveOwned(); // excluded in SHADOW as well: a test run never touches live-owned tasks
-    const ready = readyTasks(backlog.filter(t => queuedIds.has(t.id)), {done, excluded: live, inFlight});
+    // a queued task is dispatched exactly as it was enqueued (spec and paths frozen in the ledger): a later backlog edit cannot split them
+    const frozen = t => ({...t, paths: this.journal.get(t.id)?.data.paths ?? t.paths ?? []});
+    const ready = readyTasks(backlog.filter(t => queuedIds.has(t.id)).map(frozen), {done, excluded: live, inFlight});
     const q = await this.o.queues();
     const busyBuilders = this.journal.inState(...BUILDER_BUSY).length;
     const decision = decideBuilders({target: this.topology.target.builders, current: this.lastBuilders ?? this.topology.target.builders, readyBacklog: ready.length + busyBuilders,
@@ -160,7 +162,13 @@ export class FactorySupervisor {
     // The supervisor, never the worker, decides the commit a build starts from; every later diff/scope/risk check starts there.
     const dispatchBase = kind === "REMEDIATE" ? t.data.headSha : this.dispatchBase();
     if (!/^[0-9a-f]{40}$/.test(dispatchBase ?? "")) throw new Error("DISPATCH_BASE_UNKNOWN");
-    const handle = this.o.executor.start({kind, role: "BUILDER", slotId: a.slotId, taskId: a.taskId, attempt: t.attempt, paths: a.paths, findings: t.data.findings ?? [], fromSha: dispatchBase, name: t.data.name ?? null, spec: t.data.spec ?? null});
+    let handle;
+    try { handle = this.o.executor.start({kind, role: "BUILDER", slotId: a.slotId, taskId: a.taskId, attempt: t.attempt, paths: a.paths, findings: t.data.findings ?? [], fromSha: dispatchBase, name: t.data.name ?? null, spec: t.data.spec ?? null}); } catch (e) {
+      if (e?.code !== "CAPACITY_EXCEEDED") throw e;
+      // executor at capacity (e.g. cloud session limit below the topology): hand the task back, never fail the tick
+      if (kind === "BUILD") this.journal.transition(a.taskId, "QUEUED", {fence: this.fenceRef, key: `capacity:${a.taskId}:${t.history.length}`, data: {capacityWait: true}});
+      lease.release(); return false;
+    }
     this.taskLeases.set(a.taskId, lease);
     this.handles.set(handle.jobId, {taskId: a.taskId, kind, slotId: a.slotId, jobId: handle.jobId, startedAt: this.o.now(), worker: handle.worker});
     if (kind === "BUILD") this.journal.transition(a.taskId, "BUILDING", {fence: this.fenceRef, data: {jobId: handle.jobId, worker: handle.worker ?? null, dispatchBase}});
@@ -217,14 +225,21 @@ export class FactorySupervisor {
       const idle = this.idle("REVIEWER").map(s => ({...s, identity: s.id}));
       const alloc = allocateReviewers(required, idle, t.data.builderIdentity);
       if (!alloc.complete) continue; // wait for reviewer capacity; other tasks proceed
+      if (alloc.picks.length > (this.o.executor.capacityLeft?.("REVIEWER") ?? Infinity)) continue; // executor (session) capacity: all focuses or none
       this.fence();
       this.journal.transition(t.taskId, "REVIEWING", {fence: this.fenceRef, data: {required, risk, verdicts: [], reviewers: alloc.picks.map(p => p.id)}});
       const reviewJobs = [];
-      for (const p of alloc.picks) {
+      try { for (const p of alloc.picks) {
         const handle = this.o.executor.start({kind: "REVIEW", role: "REVIEWER", slotId: p.id, focus: p.focus, taskId: t.taskId, attempt: t.attempt, headSha: t.data.headSha, baseSha: t.data.baseSha, name: t.data.name ?? null, branch: t.data.branch ?? null});
         this.handles.set(handle.jobId, {taskId: t.taskId, kind: "REVIEW", slotId: p.id, jobId: handle.jobId, focus: p.focus, startedAt: this.o.now(), worker: handle.worker});
         reviewJobs.push({jobId: handle.jobId, slotId: p.id, focus: p.focus, worker: handle.worker ?? null});
         handle.done.then(v => this.onReviewDone(handle.jobId, v), e => this.onReviewDone(handle.jobId, {status: "ERROR", error: String(e)}));
+      } } catch (e) {
+        if (e?.code !== "CAPACITY_EXCEEDED") throw e;
+        // not enough reviewer sessions for every required focus: withdraw the partial set and wait (never a partial review)
+        for (const j of reviewJobs) { this.handles.delete(j.jobId); this.o.executor.lost?.(j.jobId, "WITHDRAWN_CAPACITY"); }
+        this.journal.transition(t.taskId, "BUILT", {fence: this.fenceRef, key: `review-capacity:${t.taskId}:${t.history.length}`, data: {verdicts: [], reviewCapacityWait: true}});
+        continue;
       }
       this.journal.annotate(t.taskId, "NOTE", {reviewJobs}, this.fenceRef, `review-jobs:${t.taskId}:${t.attempt}:${reviewJobs.map(j => j.jobId).join(",")}`);
     }

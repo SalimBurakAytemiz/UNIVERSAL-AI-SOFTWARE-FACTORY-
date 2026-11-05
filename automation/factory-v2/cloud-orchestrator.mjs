@@ -46,6 +46,7 @@ export class CloudOrchestrator {
   workers(filter = () => true) { this.journal.reload(); return [...this.journal.workers.values()].filter(filter); }
   /** Session capacity per role: explicit, else the Supervisor's current topology target (8 builders / 4 reviewers initially). */
   get capacity() { const t = this.sup?.topology?.target; return {...DEFAULT_CAPACITY, ...(t ? {BUILDER: t.builders, REVIEWER: t.reviewers} : {}), ...(this.explicitCapacity ?? {})}; }
+  capacityLeft(role) { return Math.max(0, (this.capacity[role] ?? 0) - this.active(role)); }
   active(role) { return this.workers(w => w.role === role && ACTIVE.includes(w.status)).length; }
 
   // ---- Supervisor side ---------------------------------------------------------------------------------------
