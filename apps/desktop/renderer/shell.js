@@ -2,7 +2,7 @@
 import {h,chip,badge,statusLabel,statePill,missionPill,timelineItem} from "./components.js";
 import {icon} from "./icons.js";
 import {confirmAndResume} from "./resume-confirm.js";
-import {ROUTES,routeById,unknownRouteHash,DEFAULT_ROUTE} from "./routes.js";
+import {ROUTES,routeById,unknownRouteHash,DEFAULT_ROUTE,NAV_SHORT} from "./routes.js";
 import {formatCount,formatTime,MISSING,pushSample,searchEntries,pillKindFor} from "./model.js";
 import {syncNav,syncTabs} from "./nav.js";
 import {keepFocus} from "./focus.js";
@@ -34,7 +34,7 @@ export function createShell(ctx){
   function renderNav(){
     const counts={projects:data.cockpit?.projects.value??(data.projects.state==="VERIFIED"?data.projects.items.length:null),work:data.cockpit?.missions.value??null,inbox:data.cockpit?.approvals.value??null};
     const cur=routeById(ctx.currentRouteId());
-    syncNav(doc,el("navList"),ROUTES,{currentId:cur?.id,counts,labelOf:r=>t(`area.${r.id}.title`),countLabel:n=>t("nav.count",{n}),makeIcon:r=>icon(doc,r.icon,20)});
+    syncNav(doc,el("navList"),ROUTES,{currentId:cur?.id,counts,labelOf:r=>t(`area.${r.id}.title`),shortLabelOf:r=>NAV_SHORT.has(r.id)?t(`nav.short.${r.id}`):null,countLabel:n=>t("nav.count",{n}),makeIcon:r=>icon(doc,r.icon,20)});
     // //TR: UASCO-T0005: pencere/görev çubuğu başlığı etkin alanı adlandırır (Windows'ta pencere değiştiricide hangi ekranın açık olduğu görünür).
     if(cur&&typeof doc.title==="string")doc.title=t("route.docTitle",{title:t(`area.${cur.id}.title`)});
     syncRouteNotice(cur);

@@ -185,6 +185,27 @@ export function registerShellNavT0005Cases() {
       }
     });
 
+    it("nav labels fit one line (<= 24 chars, en + tr); shortened links keep the full area name in title and aria-label; nav.short keys are in en/tr parity", async () => {
+      const en = (await load("locales", "en.js")).default, tr = (await load("locales", "tr.js")).default;
+      const sk = (d: Record<string, string>) => Object.keys(d).filter(k => k.startsWith("nav.short.")).sort();
+      for (const lang of ["en", "tr"]) {
+        const env = await mkShell({hash: "#/executive", lang});
+        env.renderRoute();
+        const links = all(env.doc.getElementById("navList")!).filter(n => n.tagName === "A");
+        for (const a of links) {
+          const id = a.dataset.route!, full = env.t(`area.${id}.title`), shown = a.querySelector(".nav-label")!.textContent;
+          expect(shown.length, `${lang} ${id}: ${shown}`).toBeLessThanOrEqual(24);
+          expect(a.getAttribute("title"), id).toBe(full);
+          if (shown !== full) { expect(a.getAttribute("aria-label"), id).toBe(full); expect(shown).not.toMatch(/^nav\.short\./); }
+          else expect(a.getAttribute("aria-label"), id).toBeNull();
+        }
+        expect(current(env.doc)).toEqual(["executive"]);
+        expect(env.main.querySelector("#view-title")!.textContent).toBe(env.t("area.executive.title")); // görünüm başlığı tam ad kalır
+      }
+      expect(sk(en)).toEqual(sk(tr));
+      expect(sk(en).length).toBeGreaterThan(0);
+    });
+
     it("skip link keeps the current route: default hash navigation is prevented and focus moves to <main>", async () => {
       const env = await mkShell({hash: "#/work"});
       env.renderRoute();
