@@ -104,18 +104,11 @@ Authority: V4.1 (no record on origin). 41 done tasks imported, 10 open PRs. Seve
 
 ## Blockers (exact)
 
-1. **Shared durable storage is not writable from this session.** `git push origin <sha>:refs/uasco/factory-v2/probe/x1` and `...:refs/uasco/factory-v2/probe/x2` both return `HTTP 403` from the session git proxy (policy denial). Only the designated branch is pushable. The authority record, manifest and cross-cloud leases therefore cannot be created on origin from here, and routing around the proxy (for example through REST ref creation) is not permitted.
-   - Fix: an environment or session whose GitHub access allows pushing `refs/uasco/*`, or a dedicated branch such as `uasco/authority` (the store accepts `refs/heads/uasco/*`) that both supervisor sessions may push.
-2. **V4.1 participation.** Steps 3 and 4 of the runbook need the live V4.1 supervisor (`session_015dYwazi7LHFCg3dABbSW2P`) to stop dispatch and write the drain acknowledgement. This session does not stop or redirect it.
-3. **Founder approval to merge this change.** It is not a covered single-task PR, so the governed merge path returns FOUNDER_REQUIRED.
-4. **Protected path `apps/control-api/src/server.ts`** (in-app MissionRunner concurrency, diff below). This is independent of the cloud factory.
-   ```diff
-   -    leaseTtlMs:r.leaseTtlMs,maxRemediations:r.maxRemediations,
-   +    leaseTtlMs:r.leaseTtlMs,maxConcurrentRuns:r.maxConcurrentRuns??(Number(process.env.UASCO_WORKOS_MAX_CONCURRENT_RUNS)||1),maxRemediations:r.maxRemediations,
-   ```
-5. **No real quota telemetry** is exposed to this session. The governor uses reported values, labelled as estimates.
+The authoritative and current list is [`CUTOVER-ACCEPTANCE.md`](CUTOVER-ACCEPTANCE.md). It covers the signed handover conditions and the Founder's single-control-session model, with the status and evidence for each.
 
-V4.1 ownership is preserved. No authority record, manifest or lease exists on origin (`git ls-remote origin 'refs/uasco/*'` returns nothing).
+The earlier `refs/uasco/*` HTTP 403 blocker is resolved: the shared registry lives on the ruleset-protected branch `uasco/registry` (see `PROTECTED-REGISTRY-EVIDENCE.json`). The protected `server.ts` change is PR #354, and the V4.1 merge fence is PR #355.
+
+V4.1 ownership is preserved. No live authority record or task lease exists on origin; only `probe/` sections do.
 
 ## Commands
 
