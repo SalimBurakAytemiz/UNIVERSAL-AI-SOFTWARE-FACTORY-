@@ -93,6 +93,11 @@ describe("UASCO-T0017.A alternative: 'Request changes' for an AWAITING_APPROVAL 
   beforeEach(() => { tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-rc-")); failOn = null; });
   afterEach(async () => {
     failOn = null;
+    // shared renderer modules: leave no selected mission, draft or lock behind for the next registered suite
+    const forms = await load("forms.js"), rc = await load("views", "request-changes.js");
+    forms.selection.missionId = null; rc.resetRequestChanges();
+    for (const k of Object.keys(forms.drafts.busy)) forms.drafts.busy[k] = false;
+    for (const k of Object.keys(forms.drafts.status)) if (k.startsWith("rc-") || k.startsWith("act-")) delete forms.drafts.status[k];
     for (const a of apps.splice(0)) { try { await a.close(); } catch { /* kapanış */ } }
     try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* Windows */ }
   });
