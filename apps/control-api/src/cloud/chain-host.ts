@@ -101,6 +101,9 @@ export function createCloudChainHost(o: ChainHostOptions): CloudChainHost {
       let sk: string | Buffer | undefined, valid = false;
       try { sk = scopeKeys.get(scope.keyId); valid = sk !== undefined && verifyScopeSignature(scope, sk); } catch { valid = false; }
       if (!valid) return {ok: false, stage: "INTAKE", reason: "SCOPE_SIGNATURE_INVALID"};
+      // #358 N-1: süresi dolmuş (imzası geçerli) kapsam, onay tüketilmeden ve planlayıcı çağrılmadan reddedilir (kuyruk zaten reddederdi; onay yanmaz).
+      const expMs = Date.parse(scope.expiresAt);
+      if (!Number.isFinite(expMs) || now().getTime() >= expMs) return {ok: false, stage: "INTAKE", reason: "SCOPE_EXPIRED"};
       const k = scope.signature;
       let orch = orchestrators.get(k);
       if (!orch) { orch = new TaskOrchestrator({queue, scope, now}); orchestrators.set(k, orch); }

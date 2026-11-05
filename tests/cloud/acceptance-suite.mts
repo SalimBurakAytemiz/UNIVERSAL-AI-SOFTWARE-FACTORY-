@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import {createHash, randomUUID} from "node:crypto";
 import {CloudJobQueue, signWorkerAuth, type WorkerAuth} from "../../apps/control-api/src/cloud/jobs.js";
-import {CLOUD_CONTRACT_VERSION, signScope, type SignedScope, type UnsignedScope} from "../../core/cloud/contracts.js";
+import {CLOUD_CONTRACT_VERSION, signScope, verifyEventStream, type SignedScope, type UnsignedScope} from "../../core/cloud/contracts.js";
 import {CloudArtifactStore, InMemoryArtifactBackend} from "../../core/cloud/artifacts.js";
 import {FOUNDER_CONFIRMATION_TYPE, InMemoryConfirmationReplayStore, TaskOrchestrator, dagOutsideScope, dispatchIntakeCommand, intentFromIntake, planCacheKey, signFounderConfirmation,
   type ConfirmationAuditRecord, type ConfirmationVerifier, type PlannerModel, type TaskDag, type UnsignedFounderConfirmation} from "../../core/cloud/task-orchestrator.js";
@@ -1023,5 +1023,96 @@ export function registerCloudAcceptanceSuite(): void {
         expect(new Set(sigs(rb))).toEqual(new Set([9]));
       } finally { await host.stop(); }
     });
+
+    // //TR: #358 B-1: teslimde içerik özeti üç kaynakla (kabul edilen sonuç ref'i, manifest, imzalı URL) AYRI AYRI karşılaştırılır; her biri tek başına sapınca HASH_MISMATCH.
+    const sha = (b: Buffer | string) => createHash("sha256").update(b).digest("hex");
+    const putBlob = async (host: ReturnType<typeof hostV4>, name: string, text: string) => {
+      const content = Buffer.from(text);
+      const r = await host.store.put({tenantId: "tenant-a", subject: "seed-user"}, {tenantId: "tenant-a", projectId: "proj-web", name, content, sha256: sha(content), sizeBytes: content.byteLength});
+      expect(r.ok, JSON.stringify(r)).toBe(true);
+      return {name, sha256: sha(content), sizeBytes: content.byteLength};
+    };
+    type Ev = {jobId: string; seq: number; type: string; at: string; attempt: number; artifact?: {name: string; sha256: string; sizeBytes: number}};
+    const evs = (jobId: string, rows: Array<[string, number, Ev["artifact"]?]>): Ev[] =>
+      rows.map(([type, attempt, artifact], seq) => ({jobId, seq, type, at: new Date(clock.getTime() + seq).toISOString(), attempt, ...(artifact ? {artifact} : {})}));
+    /** Kuyruk görünümü test çifti: yalnız verilen jobId için, akış doğrulamasından geçen (verifyEventStream ok) bir görünüm döndürür; diğerleri gerçek kuyruğa gider. */
+    const fakeView = (host: ReturnType<typeof hostV4>, jobId: string, attempt: number, events: Ev[]) => {
+      expect(verifyEventStream(events as never, {jobId, retry: {maxAttempts: 3, backoffMs: 0}})).toEqual({ok: true, terminal: "SUCCEEDED"});
+      const real = host.queue.get.bind(host.queue);
+      (host.queue as {get: unknown}).get = (id: string) => id === jobId
+        ? {status: "SUCCEEDED", attempt, job: {jobId, tenantId: "tenant-a", projectId: "proj-web"}, events} : real(id);
+    };
+
+    it("#358 B-1: deliver pins redeemed sha == accepted ref AND == manifest AND == signed URL; each single divergence alone is HASH_MISMATCH; positive control verified", async () => {
+      const keys = keysV4();
+      const scenario = async (tamper: "none" | "ref" | "manifest" | "url") => {
+        const host = hostV4(keys);
+        try {
+          const J = `job-b1-${tamper}`, ref = await putBlob(host, scopedArtifactName(J, 1, "dist/app.zip"), `b1 ${tamper} bytes`);
+          fakeView(host, J, 1, evs(J, [["QUEUED", 1], ["STARTED", 1], ["ARTIFACT", 1, tamper === "ref" ? {...ref, sha256: sha("not the stored bytes")} : ref], ["SUCCEEDED", 1]]));
+          if (tamper === "manifest") {
+            const redeem = host.store.redeemDeliveryUrl.bind(host.store);
+            (host.store as {redeemDeliveryUrl: unknown}).redeemDeliveryUrl = async (u: string) => { const r = await redeem(u); return r.ok ? {...r, manifest: {...r.manifest, sha256: sha("other manifest")}} : r; };
+          }
+          if (tamper === "url") {
+            const issue = host.store.issueDeliveryUrl.bind(host.store);
+            (host.store as {issueDeliveryUrl: unknown}).issueDeliveryUrl = async (...a: Parameters<typeof issue>) => { const r = await issue(...a); return r.ok ? {...r, sha256: sha("other url")} : r; };
+          }
+          return {res: await host.deliver("tenant-a", "proj-web", J, "dist/app.zip"), ref};
+        } finally { await host.stop(); }
+      };
+      const ok = await scenario("none");
+      expect(ok.res).toEqual({issued: true, redeemed: true, sha256: ok.ref.sha256, verified: true});   // positive control
+      for (const t of ["ref", "manifest", "url"] as const) {
+        const r = await scenario(t);
+        expect(r.res, t).toEqual({issued: true, redeemed: true, sha256: r.ref.sha256, verified: false, reason: "HASH_MISMATCH"});
+      }
+    });
+
+    // //TR: #358 B-2: önceki (sonuçsuz) denemenin aynı rel'li yetim artifact'ı asla teslim edilmez; hem host (resultArtifacts) hem çekirdek (resolveDeliverable) son denemeyle süzer.
+    const orphanView = async (host: ReturnType<typeof hostV4>, J: string) => {
+      const orphan = await putBlob(host, scopedArtifactName(J, 1, "dist/app.zip"), "attempt-1 orphan bytes");
+      const final = await putBlob(host, scopedArtifactName(J, 2, "dist/app.zip"), "attempt-2 final bytes");
+      // akış geçerli: deneme 1 artifact'ı sonuçlanmadan yeniden deneme (lease süresi doldu / durduruldu) -> deneme 2 aynı rel ile başarılı
+      const events = evs(J, [["QUEUED", 1], ["STARTED", 1], ["ARTIFACT", 1, orphan], ["RETRYING", 2], ["STARTED", 2], ["ARTIFACT", 2, final], ["SUCCEEDED", 2]]);
+      return {orphan, final, events, view: {status: "SUCCEEDED", attempt: 2, job: {jobId: J, tenantId: "tenant-a", projectId: "proj-web"}, events}};
+    };
+
+    it("#358 B-2 core: resolveDeliverable resolves only the FINAL attempt's artifact; the earlier attempt's orphan with the same rel is NOT_A_RESULT_ARTIFACT (positive control: final resolves)", async () => {
+      const host = hostV4(keysV4());
+      try {
+        const J = "job-b2-core", o = await orphanView(host, J);
+        expect(verifyEventStream(o.events as never, {jobId: J, retry: {maxAttempts: 3, backoffMs: 0}})).toEqual({ok: true, terminal: "SUCCEEDED"});
+        expect(resolveDeliverable(o.view, "tenant-a", "proj-web", o.orphan.name)).toEqual({ok: false, reason: "NOT_A_RESULT_ARTIFACT"});
+        expect(resolveDeliverable(o.view, "tenant-a", "proj-web", o.final.name)).toEqual({ok: true, ref: o.final});
+      } finally { await host.stop(); }
+    });
+
+    it("#358 B-2 host: resultArtifacts lists only the final attempt and deliver(rel) delivers the attempt-2 bytes, never the attempt-1 orphan (positive control: verified final sha)", async () => {
+      const host = hostV4(keysV4());
+      try {
+        const J = "job-b2-host", o = await orphanView(host, J);
+        fakeView(host, J, 2, o.events);
+        expect(host.resultArtifacts(J)).toEqual([o.final]);
+        expect(await host.deliver("tenant-a", "proj-web", J, "dist/app.zip")).toEqual({issued: true, redeemed: true, sha256: o.final.sha256, verified: true});
+        expect(o.final.sha256).not.toBe(o.orphan.sha256);
+      } finally { await host.stop(); }
+    });
+
+    it("#358 N-1: an expired but validly signed scope is refused before the confirmation is consumed or the planner runs", async () => {
+      const keys = keysV4(), planner = localStubPlanner();
+      const host = createCloudChainHost({dataDir: path.join(dir, "host"), keys, sandbox: new FakeSandbox(), planner, plannerModel: "LOCAL_STUB",
+        handlers: stubHandlers(j => j.kind.toLowerCase()), globalStopFile: path.join(dir, "GLOBAL_STOP.json"), now});
+      try {
+        const c = conf(keys);
+        const expired = signScope({...U, issuedAt: "2026-11-04T08:00:00.000Z", expiresAt: "2026-11-04T09:00:00.000Z"}, keys.scopeKey);   // expiresAt == now
+        expect(await host.dispatch(COMMAND, c, expired)).toEqual({ok: false, stage: "INTAKE", reason: "SCOPE_EXPIRED"});
+        expect(planner.calls).toBe(0);
+        const pos = await host.dispatch(COMMAND, c, signScope(U, keys.scopeKey));   // the SAME confirmation is still unconsumed
+        expect(pos.ok, JSON.stringify(pos)).toBe(true);
+        expect(planner.calls).toBe(1);
+      } finally { await host.stop(); }
+    });
+
   });
 }
