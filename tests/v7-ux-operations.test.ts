@@ -1998,7 +1998,29 @@ __bi_describe('Builder I: renderer raw-error sweep', {timeout: 120_000}, () => {
       const hits = files.flatMap(f => rawSinks(fs.readFileSync(path.join(rend, f), "utf8")).filter(l => !EXEMPT.some(([ef, re]) => ef === f && re.test(l))).map(l => `${f}: ${l}`));
       expect(hits).toEqual([]);
     });
-    it("the guard catches the sink shapes it claims to (positive controls)", () => {
+    // //TR: #397 incelemesi (engelleyici değil): ileti -> kod -> metin yolu (ör. loadCloudJobs `code`) yalnız çalışma zamanı vakasıyla görülüyordu. Bu kural onu statik olarak da kanıtlar:
+  // "message" dışındaki hiçbir özellik ham bir `.message`'tan türetilmez; tek izinli biçimler safeErrorCode(...)/safeCode(...) sarmalı, aynen geçen `message:` alanı (stateBlock'ta temizlenir)
+  // ve iletiden yalnız sabit bir durum türeten `/.../.test(String(x.message ...))` denetimidir.
+  const derivedFromMessage = (src: string): string[] => src.split("\n").filter(l => !l.trim().startsWith("//")).flatMap(l => {
+    const out: string[] = [];
+    for (const m of l.matchAll(/\b([\w$]+)\s*:\s*([^,{}]*?[\w$?.]*\.message\b[^,{}]*)/g)) {
+      const [, prop, val] = m;
+      if (prop === "message") continue;
+      if (/^(safeErrorCode|safeCode)\(/.test(val.trim())) continue;
+      if (/\/[^/]+\/\.test\(String\([\w$?.]*\.message\b/.test(val)) continue;
+      out.push(`${prop}: ${val.trim()}`.slice(0, 160));
+    }
+    return out;
+  });
+  it("no module derives a non-`message` property from a raw `.message` (the message -> code -> text path is safe by construction)", () => {
+    const hits = rendererFiles().flatMap(f => { const src = fs.readFileSync(path.join(rend, f), "utf8"); return derivedFromMessage(src).filter(h => !(EXEMPT.some(([ef]) => ef === f) && /^text: j\.message\b/.test(h))).map(h => `${f}: ${h}`); }); // only the documented cloud job card line
+    expect(hits).toEqual([]);
+    for (const bad of ['return {state,code:sanitizeServerText(r?.message??"")};', "x = {code: r.message};", "o = {label: String(e.message)};", 'h(doc,"p",{text:res.message})'])
+      expect(derivedFromMessage(bad), bad).not.toEqual([]);
+    for (const good of ["return {state,code:safeCode(r?.message)};", "o = {code: safeErrorCode(res.message)};", "x = {message:res.message};", 'return {state:/INVALID_API_PATH/.test(String(r.message??""))?"UNAVAILABLE":r.state,message:r.message};'])
+      expect(derivedFromMessage(good), good).toEqual([]);
+  });
+  it("the guard catches the sink shapes it claims to (positive controls)", () => {
       for (const bad of ['res.message?h(doc,"p",{class:"note mono",text:res.message}):null', 'h(doc,"p",{text:message})', 'el.textContent = r.error.message;', 'h(doc,"p",{text:String(e)})', 'h(doc,"p",{text: res?.message})'])
         expect(rawSinks(bad), bad).not.toEqual([]);
       for (const good of ['h(doc,"p",{dataset:{stateErrorCode:safeErrorCode(res.message)},text:safeErrorCode(res.message)})', '// text:res.message in a comment', 'h(doc,"p",{text:ctx.t("x")})'])
