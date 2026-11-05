@@ -37,6 +37,10 @@ The workflow `.github/workflows/uasco-independent-review.yml` uses a Claude OAut
 - It is **not** one of the checks the executor merge gate requires. The executor uses CI plus the CLAUDE_REVIEWER VERDICT-BINDING.
 - Its runs are now queued, pending, or cancelled. They hold job-queue slots on `ubuntu-latest`, and the cancelled ones still appear on every PR.
 
+Evidence (Builder D's probe, branch `claude/builder-d-reviewer-oauth-probe` 47d6c4ba):
+- All 130 executed ai-review runs since 2026-10-21 end the same way: `subtype success`, `is_error true`, 1 turn, $0, about 2 s after init, then "401 OAuth access token is invalid". This matches upstream issues anthropics/claude-code-action#1613/#1614.
+- The probe reproduces the check in an isolated headless CLI. The token comes only from env or a hidden prompt, and every output line is redacted. The Founder can run it locally to tell an invalid token apart from an action-side defect before rotating.
+
 Recommended, in order (all by the Founder; nobody pastes or transmits a token):
 1. **Rotate the credential in place.** In GitHub, Settings → Environments → `uasco-review`, replace the expired Claude OAuth secret with a fresh one created by the Founder. No code change and no required-check change.
 2. **Until then, disable only this workflow.** Use Actions → "UASCO Independent Review" → Disable workflow. This is reversible, and it stops the 25+ queued runs from competing for runner slots. The required checks (`validate (ubuntu-latest)`, `validate (windows-latest)`) are unaffected.

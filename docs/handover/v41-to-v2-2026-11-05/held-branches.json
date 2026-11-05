@@ -302,6 +302,13 @@
    "task": "V3-T1023 (to be re-tagged UASCO-T0012 on rebase)",
    "head": "da252f6c (builder-reported)",
    "note": "waits #366; FOUNDER_REQUIRED as tagged"
+  },
+  {
+   "owner": "D",
+   "branch": "claude/builder-d-reviewer-oauth-probe",
+   "task": "none (Founder-held)",
+   "head": "47d6c4baf3e0b8dd5c2a3acfc776e26c4dae9afd",
+   "note": "scripts/ci/uasco-review/oauth-probe.mjs (CI path → Founder-tier); local-only until 2026-11-05, pushed by coordinator; patch-id dc7d770b"
   }
  ]
 }
