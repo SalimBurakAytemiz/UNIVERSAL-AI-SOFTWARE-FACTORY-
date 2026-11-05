@@ -367,7 +367,7 @@ describe("Operations — only already-allow-listed read-only GETs are used (prot
     }
     // SEC-IMPORT-GUARD: içe aktarmalar satır regex'i yerine AST ile çıkarılır (çok satırlı import artık kaçamaz).
     const imports = moduleSpecifiers({source: read("views", "operations.js")}).sort();
-    expect(imports).toEqual(["../components.js", "../model.js", "../operations-core.js", "../work-core.js"]);
+    expect(imports).toEqual(["../components.js", "../error-code.js", "../model.js", "../operations-core.js", "../work-core.js"]);
     expect(moduleSpecifiers({source: read("operations-core.js")}).sort()).toEqual(["./queue-core.js"]);
     for (const m of ["operationsControl", "operationsRuns", "operationsAttention"]) expect(read("views", "operations.js")).toContain(`api.${m}(`);
     // api.js: tek apiPost çağrısı korunur (yeni POST yolu eklenmez); operasyon erişimcileri yalnız sabit GET yollarını okur.
@@ -1532,7 +1532,7 @@ describe("SEC-IMPORT-GUARD — AST import guard for the Operations modules", () 
   it("real modules: operations-core.js has exactly queue-core (the retired retry-core dependency is gone), views/operations.js its four modules", () => {
     expectOnlyAllowedImports(path.join(rend, "operations-core.js"), ALLOWED);
     expect(scanImports(path.join(rend, "operations-core.js"))).toEqual([{kind: "static", specifier: "./queue-core.js"}]);
-    expectOnlyAllowedImports(path.join(rend, "views", "operations.js"), ["../components.js", "../model.js", "../operations-core.js", "../work-core.js"]);
+    expectOnlyAllowedImports(path.join(rend, "views", "operations.js"), ["../components.js", "../error-code.js", "../model.js", "../operations-core.js", "../work-core.js"]);
     expect(read("operations-core.js")).not.toContain("retry-core");
   });
   it("real modules: none of operations-core.js, views/operations.js has a dynamic import, re-export-from or require", () => {
