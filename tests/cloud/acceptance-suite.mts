@@ -9,7 +9,7 @@ import {CLOUD_CONTRACT_VERSION, signScope, type UnsignedScope} from "../../core/
 import {CloudArtifactStore, InMemoryArtifactBackend} from "../../core/cloud/artifacts.js";
 import {TaskOrchestrator, dispatchIntakeCommand, intentFromIntake, type PlannerModel, type TaskDag} from "../../core/cloud/task-orchestrator.js";
 import {intakeCommand} from "../../core/mission/command-intake.js";
-import {CloudWorker, type CloudJobHandlers, type WorkerQueuePort} from "../../core/sandbox/cloud-sandbox-provider.js";
+import {CloudWorker, resolveDeliverable, scopedArtifactName, type CloudJobHandlers, type WorkerArtifactStore, type WorkerQueuePort} from "../../core/sandbox/cloud-sandbox-provider.js";
 import type {SandboxProvider, SandboxRunOptions} from "../../core/workos/execution-gate.js";
 import type {ProcResult} from "../../core/workos/executors.js";
 import {LinuxUnshareSandboxProvider} from "../../core/agents/linux-unshare-sandbox.js";
@@ -57,8 +57,17 @@ const mkQueue = () => { const q = new CloudJobQueue({dir, scopeKeys: new Map([["
 const auth = (action: WorkerAuth["action"], jobId: string, body: unknown = {}) => signWorkerAuth({workerId: "w-1", action, jobId, at: clock.toISOString(), nonce: randomUUID()}, WORKER_KEY, body);
 const mkQueue2 = () => { const d = fs.mkdtempSync(path.join(dir, "q-")); const q = new CloudJobQueue({dir: d, scopeKeys: new Map([["k-1", SCOPE_KEY]]), workerKeys: new Map([["w-1", WORKER_KEY]]), now}); open.push(q); return q; };
 const store0 = () => mkStore();
-const mkStore = () => new CloudArtifactStore({backend: new InMemoryArtifactBackend(), masterKey: Buffer.alloc(32, 7), deliveryKeys: new Map([["d-1", DELIVERY_KEY]]),
-  activeDeliveryKeyId: "d-1", deliveryBaseUrl: "https://loopback.invalid/deliver"});
+/** Depo + arka uç (testler "depoda hiçbir şey yok" iddiasını ad tahminiyle değil arka ucun anahtar sayısıyla yapar). */
+const mkStore = () => { const backend = new InMemoryArtifactBackend(); return Object.assign(new CloudArtifactStore({backend, masterKey: Buffer.alloc(32, 7), deliveryKeys: new Map([["d-1", DELIVERY_KEY]]),
+  activeDeliveryKeyId: "d-1", deliveryBaseUrl: "https://loopback.invalid/deliver"}), {backend}); };
+/** Kuyruğun KABUL ettiği iş sonucundan, teslim kapısından geçen kapsamlı artifact adı (rel ile biten). */
+const resultName = (q: CloudJobQueue, jobId: string, rel: string): string => {
+  const j = q.get(jobId); const ev = j?.events.find(e => e.type === "ARTIFACT" && e.artifact?.name.endsWith(`/${rel}`));
+  if (!j || !ev?.artifact) throw new Error(`no result artifact ${rel} for ${jobId}`);
+  const d = resolveDeliverable(j, j.job.tenantId, j.job.projectId, ev.artifact.name);
+  if (!d.ok) throw new Error(`not deliverable: ${d.reason}`);
+  return d.ref.name;
+};
 
 /** FAKE_SANDBOX: SandboxProvider arayüzünün test ikizi. Ana makinede süreç başlatmaz; yalnız `LOCAL_STUB <anahtar> <çıktılar...>` argv'sini tanır ve çıktıları cwd'ye yazar.
  *  `fail` içindeki anahtarın ilk koşusu çıkış kodu 1 ile biter; `onRun` koşu ortasına olay sokar; koşu shouldAbort'u yoklar (gerçek sağlayıcı gibi). */
@@ -149,7 +158,8 @@ export function registerCloudAcceptanceSuite(): void {
       expect(second.ran).toEqual(["deliver"]);
       expect(second.report!.complete).toBe(true);
       // verified delivery: sha-bound signed URL redeemed for the stored package
-      const url = await store.issueDeliveryUrl({tenantId: "tenant-a", subject: "founder-001"}, {tenantId: "tenant-a", projectId: "proj-web", name: "dist/app.zip"});
+      const pkgId = [...r.dag.tasks.values()].find(t => t.kind === "PACKAGE")!.taskId;
+      const url = await store.issueDeliveryUrl({tenantId: "tenant-a", subject: "founder-001"}, {tenantId: "tenant-a", projectId: "proj-web", name: resultName(q, pkgId, "dist/app.zip")});
       expect(url.ok).toBe(true);
       const got = url.ok ? await store.redeemDeliveryUrl(url.url) : null;
       expect(got && got.ok).toBe(true);
@@ -189,7 +199,7 @@ export function registerCloudAcceptanceSuite(): void {
       if (!r.ok) throw new Error(JSON.stringify(r));
       expect(orchB.dispatch(r.dag)).toMatchObject({ok: false, reason: "DAG_INVALID"});
       await drain(q, store, orchA, r.dag);
-      const loc = {tenantId: "tenant-a", projectId: "proj-web", name: "dist/app.zip"};
+      const loc = {tenantId: "tenant-a", projectId: "proj-web", name: resultName(q, [...r.dag.tasks.values()].find(t => t.kind === "PACKAGE")!.taskId, "dist/app.zip")};
       expect(await store.get({tenantId: "tenant-b", subject: "intruder"}, loc)).toMatchObject({ok: false, reason: "TENANT_DENIED"});
       expect(await store.issueDeliveryUrl({tenantId: "tenant-b", subject: "intruder"}, loc)).toMatchObject({ok: false, reason: "TENANT_DENIED"});
       // tenant B's own (identical) command gets its own DAG ids: no cross-tenant idempotency collision
@@ -205,7 +215,7 @@ export function registerCloudAcceptanceSuite(): void {
       q.stopAll();
       expect(q.claim(auth("claim", "*"))).toMatchObject({ok: false, reason: "GLOBAL_STOP_ACTIVE"});
       expect(orch.dispatch(r.dag)).toMatchObject({ok: false, reason: "SUBMIT_DENIED", detail: "GLOBAL_STOP_ACTIVE"});
-      expect(await store.get({tenantId: "tenant-a", subject: "founder-001"}, {tenantId: "tenant-a", projectId: "proj-web", name: "dist/app.zip"})).toMatchObject({ok: false, reason: "NOT_FOUND"});
+      expect(store.backend.keys()).toEqual([]);   // nothing of the aborted/stopped job was stored
       const again = await dispatchIntakeCommand(COMMAND, confirm(), localStubPlanner(), dOpts(), orch);
       expect(again).toMatchObject({ok: false, stage: "DISPATCH", reason: "SUBMIT_DENIED"});
     });
@@ -249,7 +259,7 @@ export function registerCloudAcceptanceSuite(): void {
       expect(await mkWorker(q, store, sb).runOnce()).toMatchObject({state: "ABANDONED", jobId: id, reason: "JOB_CANCELLED"});
       expect(sb.aborted).toBe(1);
       expect(q.get(id)?.status).toBe("CANCELLED");
-      expect(await store.get({tenantId: "tenant-a", subject: "observer-01"}, {tenantId: "tenant-a", projectId: "proj-web", name: "dist/app.zip"})).toMatchObject({ok: false, reason: "NOT_FOUND"});
+      expect(store.backend.keys()).toEqual([]);   // nothing of the aborted/stopped job was stored
     });
 
     it("lease: even a sandbox that ignores the abort request cannot get a cancelled job's output recorded (post-run lease check)", async () => {
@@ -258,7 +268,7 @@ export function registerCloudAcceptanceSuite(): void {
         run: async (argv, opts) => { q.cancel(id); await new Promise(r => setTimeout(r, 80)); const p = path.join(opts.cwd, "dist", "app.zip"); fs.mkdirSync(path.dirname(p), {recursive: true}); fs.writeFileSync(p, "late output");
           return {argv, exitCode: 0, stdout: "", stderr: "", startedAt: "", endedAt: "", timedOut: false, aborted: false, spawnError: false}; }};
       expect(await mkWorker(q, store, deaf).runOnce()).toMatchObject({state: "ABANDONED", jobId: id, reason: "JOB_CANCELLED"});
-      expect(await store.get({tenantId: "tenant-a", subject: "observer-01"}, {tenantId: "tenant-a", projectId: "proj-web", name: "dist/app.zip"})).toMatchObject({ok: false, reason: "NOT_FOUND"});
+      expect(store.backend.keys()).toEqual([]);   // nothing of the aborted/stopped job was stored
     });
 
     it("lease: an expired lease (clock passes the lease) aborts the run and the result is never recorded", async () => {
@@ -277,7 +287,7 @@ export function registerCloudAcceptanceSuite(): void {
       const sb = new FakeSandbox(new Set(), true, () => { q.stopAll(); });
       const w = mkWorker(q, store, sb);
       expect(await w.runOnce()).toMatchObject({state: "ABANDONED", jobId: id, reason: "GLOBAL_STOP_ACTIVE"});
-      expect(await store.get({tenantId: "tenant-a", subject: "observer-01"}, {tenantId: "tenant-a", projectId: "proj-web", name: "dist/app.zip"})).toMatchObject({ok: false, reason: "NOT_FOUND"});
+      expect(store.backend.keys()).toEqual([]);   // nothing of the aborted/stopped job was stored
       const runs = sb.runs;
       expect(await w.runOnce()).toMatchObject({state: "STOPPED", reason: "GLOBAL_STOP_ACTIVE"});
       expect(sb.runs).toBe(runs);
@@ -294,7 +304,8 @@ export function registerCloudAcceptanceSuite(): void {
       expect(sb.runs).toBe(0);
       const pid = submit(q, job("PACKAGE"));
       expect(await mkWorker(q, store, sb).runOnce()).toMatchObject({state: "DONE", jobId: pid, status: "SUCCEEDED"});
-      const loc = {tenantId: "tenant-a", projectId: "proj-web", name: "dist/app.zip"};
+      const loc = {tenantId: "tenant-a", projectId: "proj-web", name: resultName(q, pid, "dist/app.zip")};
+      expect(loc.name).toBe(scopedArtifactName(pid, 1, "dist/app.zip"));
       expect((await store.get({tenantId: "tenant-a", subject: "tenant-a-user"}, loc)).ok).toBe(true);
       expect(await store.get({tenantId: "tenant-b", subject: "tenant-b-user"}, loc)).toMatchObject({ok: false, reason: "TENANT_DENIED"});
     });
@@ -327,7 +338,7 @@ export function registerCloudAcceptanceSuite(): void {
           return {argv, exitCode: 0, stdout: "", stderr: "", startedAt: "", endedAt: "", timedOut: false, aborted: false, spawnError: false}; }};
       submit(q3, job("PACKAGE"));
       expect(await mkWorker(q3, store, evil).runOnce()).toMatchObject({status: "FAILED", result: {message: "OUTPUT_INVALID"}});
-      expect(await store.get({tenantId: "tenant-a", subject: "observer-01"}, {tenantId: "tenant-a", projectId: "proj-web", name: "dist/app.zip"})).toMatchObject({ok: false, reason: "NOT_FOUND"});
+      expect(store.backend.keys()).toEqual([]);   // nothing of the aborted/stopped job was stored
     });
 
     it("real sandbox: linux-unshare-v2 runs a BUILD job and the output becomes a tenant artifact (SKIPPED with the reason where its self-test fails)", async ctx => {
@@ -338,8 +349,148 @@ export function registerCloudAcceptanceSuite(): void {
       const w = new CloudWorker({queue: queuePort(q), sandbox: sb, store, workRoot: path.join(dir, "ws"), workerId: "w-1",
         handlers: {BUILD: () => ({argv: ["sh", "-c", "mkdir -p out && printf built > out/build.txt"], outputs: ["out/build.txt"]})}});
       expect(await w.runOnce()).toMatchObject({state: "DONE", jobId: id, status: "SUCCEEDED"});
-      const g = await store.get({tenantId: "tenant-a", subject: "tenant-a-user"}, {tenantId: "tenant-a", projectId: "proj-web", name: "out/build.txt"});
+      const g = await store.get({tenantId: "tenant-a", subject: "tenant-a-user"}, {tenantId: "tenant-a", projectId: "proj-web", name: resultName(q, id, "out/build.txt")});
       expect(g.ok && g.content.toString()).toBe("built");
     }, 120_000);
+  });
+
+  // //TR: #344 B-1 (Founder güvenlik düzeltmesi): tamamlanmamış/yetkisi düşmüş bir işin çıktısı teslim edilemez; çıktılar put'tan önce topluca doğrulanır; iş+deneme kapsamlı adlar.
+  describe("#344 B-1 worker output safety: validate-all-before-put, job+attempt-scoped names, lease checks around the put phase, delivery only via the accepted result", () => {
+    beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-b1-")); });
+    afterEach(() => { while (open.length) open.pop()!.close(); fs.rmSync(dir, {recursive: true, force: true}); });
+    const pkgJob = (over: Record<string, unknown> = {}) => ({contractVersion: CLOUD_CONTRACT_VERSION, jobId: `job-${randomUUID()}`, tenantId: "tenant-a", projectId: "proj-web", environment: "staging",
+      kind: "PACKAGE", idempotencyKey: `idem-${randomUUID()}`, timeoutMs: 60_000, retry: {maxAttempts: 1, backoffMs: 0}, needsNetwork: false, estimatedCostUsd: 0, inputArtifacts: [],
+      scope: mkScope("tenant-a"), requestedAt: clock.toISOString(), ...over});
+    const submitJob = (q: CloudJobQueue, j: ReturnType<typeof pkgJob>) => { const r = q.submit(j); if (!r.ok) throw new Error(r.reason); return j.jobId; };
+    /** Betikli sandbox: ana makinede süreç başlatmaz; `write(cwd, run)` çalışma alanına çıktı yazar. */
+    const scripted = (write: (cwd: string, run: number) => void): SandboxProvider & {runs: number} => {
+      const sb = {id: "FAKE_SANDBOX_SCRIPTED", runs: 0, selfTest: async () => ({ok: true}), spawn: (): never => { throw new Error("no spawn"); },
+        run: async (argv: string[], o: SandboxRunOptions) => { sb.runs += 1; write(o.cwd, sb.runs); return {argv, exitCode: 0, stdout: "", stderr: "", startedAt: "", endedAt: "", timedOut: false, aborted: false, spawnError: false}; }};
+      return sb;
+    };
+    const wfile = (cwd: string, rel: string, data: string) => { const p = path.join(cwd, rel); fs.mkdirSync(path.dirname(p), {recursive: true}); fs.writeFileSync(p, data); };
+    /** Depo sarmalayıcısı: her put'un İÇİNDE (depoya yazmadan önce) kanca çalışır. */
+    const hooked = (store: ReturnType<typeof mkStore>, onPut: (n: number, name: string) => void): WorkerArtifactStore => {
+      let n = 0;
+      return {get: (p, l) => store.get(p, l), put: async (p, i) => { n += 1; onPut(n, i.name); return store.put(p, i); }};
+    };
+    const worker = (q: CloudJobQueue, store: WorkerArtifactStore, sb: SandboxProvider, outputs: string[], nowFn: () => Date = now, extra: Record<string, unknown> = {}) =>
+      new CloudWorker({queue: queuePort(q, nowFn), sandbox: sb, store, workRoot: path.join(dir, "ws"), workerId: "w-1", heartbeatMs: 20,
+        handlers: {PACKAGE: () => ({argv: ["LOCAL_STUB", "package"], outputs}), BUILD: () => ({argv: ["LOCAL_STUB", "build"], outputs: []})}, ...extra});
+    const clockQueue = (t: {v: number}, leaseMs = 1_000) => { const q = new CloudJobQueue({dir: fs.mkdtempSync(path.join(dir, "q-")), scopeKeys: new Map([["k-1", SCOPE_KEY]]), workerKeys: new Map([["w-1", WORKER_KEY]]), now: () => new Date(t.v), leaseMs}); open.push(q); return q; };
+    const content = async (store: ReturnType<typeof mkStore>, name: string) => { const g = await store.get({tenantId: "tenant-a", subject: "observer-01"}, {tenantId: "tenant-a", projectId: "proj-web", name}); return g.ok ? g.content.toString() : `<${g.reason}>`; };
+
+    it("T1a: multi-output job whose LATER output is a symlink -> FAILED and no artifact of that attempt is stored (SKIPPED where symlinks are refused)", async ctx => {
+      const outside = path.join(dir, "outside.txt"); fs.writeFileSync(outside, "host file");
+      try { fs.symlinkSync(outside, path.join(dir, "probe")); } catch (e) { ctx.skip(`symlink creation refused on ${process.platform}: ${(e as NodeJS.ErrnoException).code}`); return; }
+      const q = mkQueue(), store = mkStore(); const id = submitJob(q, pkgJob());
+      const sb = scripted(cwd => { wfile(cwd, "out/a.txt", "good"); fs.symlinkSync(outside, path.join(cwd, "out", "b.txt")); });
+      expect(await worker(q, store, sb, ["out/a.txt", "out/b.txt"]).runOnce()).toMatchObject({state: "DONE", jobId: id, status: "FAILED", result: {message: "OUTPUT_INVALID"}});
+      expect(store.backend.keys()).toEqual([]);
+      for (const rel of ["out/a.txt", "out/b.txt"]) expect(await content(store, scopedArtifactName(id, 1, rel))).toBe("<NOT_FOUND>");
+    });
+
+    it("T1b: multi-output job whose LATER output is a HARDLINK to a file outside the workspace -> FAILED OUTPUT_HARDLINKED, nothing stored", async () => {
+      const outside = path.join(dir, "outside-secret.txt"); fs.writeFileSync(outside, "host secret");
+      const q = mkQueue(), store = mkStore(); const id = submitJob(q, pkgJob());
+      const sb = scripted(cwd => { wfile(cwd, "out/a.txt", "good"); fs.linkSync(outside, path.join(cwd, "out", "b.txt")); });
+      expect(await worker(q, store, sb, ["out/a.txt", "out/b.txt"]).runOnce()).toMatchObject({state: "DONE", jobId: id, status: "FAILED", result: {message: "OUTPUT_HARDLINKED"}});
+      expect(store.backend.keys()).toEqual([]);
+    });
+
+    it("T2: lease lost (job cancelled) DURING store.put -> ABANDONED; job not SUCCEEDED; no accepted result references the staged artifact; delivery for that job is refused", async () => {
+      const q = mkQueue(), store = mkStore(); const id = submitJob(q, pkgJob());
+      const sb = scripted(cwd => { wfile(cwd, "dist/app.zip", "attempt-1 bytes"); wfile(cwd, "dist/notes.txt", "n"); });
+      const st = hooked(store, n => { if (n === 1) q.cancel(id); });
+      expect(await worker(q, st, sb, ["dist/app.zip", "dist/notes.txt"]).runOnce()).toMatchObject({state: "ABANDONED", jobId: id, reason: "JOB_CANCELLED"});
+      const view = q.get(id)!;
+      expect(view.status).toBe("CANCELLED");
+      expect(view.events.some(e => e.type === "ARTIFACT")).toBe(false);
+      expect(resolveDeliverable(view, "tenant-a", "proj-web", scopedArtifactName(id, 1, "dist/app.zip"))).toEqual({ok: false, reason: "JOB_NOT_SUCCEEDED"});
+      expect(store.backend.keys().length).toBeLessThanOrEqual(2);   // at most the one staged orphan (manifest+blob), never the second output
+      expect(await content(store, "dist/app.zip")).toBe("<NOT_FOUND>");   // the aborted attempt never occupies the unscoped name a by-name delivery would use
+    });
+
+    it("T3a: STOP during store.put -> ABANDONED, job STOPPED, nothing deliverable", async () => {
+      const q = mkQueue(), store = mkStore(); const id = submitJob(q, pkgJob());
+      const st = hooked(store, () => { q.stopAll(); });
+      expect(await worker(q, st, scripted(cwd => wfile(cwd, "dist/app.zip", "x")), ["dist/app.zip"]).runOnce()).toMatchObject({state: "ABANDONED", jobId: id, reason: "GLOBAL_STOP_ACTIVE"});
+      expect(q.get(id)!.status).toBe("STOPPED");
+      expect(await content(store, "dist/app.zip")).toBe("<NOT_FOUND>");
+      expect(resolveDeliverable(q.get(id), "tenant-a", "proj-web", scopedArtifactName(id, 1, "dist/app.zip"))).toEqual({ok: false, reason: "JOB_NOT_SUCCEEDED"});
+    });
+
+    it("T3b: lease expiry between the LAST put and complete() -> ABANDONED, no SUCCEEDED result, nothing deliverable", async () => {
+      const t = {v: clock.getTime()}, q = clockQueue(t), store = mkStore(); const id = submitJob(q, pkgJob({retry: {maxAttempts: 1, backoffMs: 0}}));
+      const st = hooked(store, () => { t.v += 5_000; });   // the (only/last) put outlives the 1 s lease
+      expect(await worker(q, st, scripted(cwd => wfile(cwd, "dist/app.zip", "x")), ["dist/app.zip"], () => new Date(t.v)).runOnce()).toMatchObject({state: "ABANDONED", jobId: id, reason: "LEASE_EXPIRED"});
+      expect(q.get(id)!.status).not.toBe("SUCCEEDED");
+      expect(q.get(id)!.events.some(e => e.type === "ARTIFACT")).toBe(false);
+      expect(resolveDeliverable(q.get(id), "tenant-a", "proj-web", scopedArtifactName(id, 1, "dist/app.zip"))).toMatchObject({ok: false});
+      expect(await content(store, "dist/app.zip")).toBe("<NOT_FOUND>");
+    });
+
+    it("T4: attempt 1 abandoned after staging; attempt 2 writes DIFFERENT bytes to the same rel -> attempt 2 SUCCEEDS (no ARTIFACT_IMMUTABLE); the result resolves to attempt-2 content only", async () => {
+      const t = {v: clock.getTime()}, q = clockQueue(t), store = mkStore(); const id = submitJob(q, pkgJob({retry: {maxAttempts: 2, backoffMs: 0}}));
+      const sb = scripted((cwd, run) => wfile(cwd, "dist/app.zip", `attempt-${run} bytes`));
+      let first = true;
+      const st = hooked(store, () => { if (first) { first = false; t.v += 5_000; } });   // attempt 1: lease expires while staging
+      const w = worker(q, st, sb, ["dist/app.zip"], () => new Date(t.v));
+      expect(await w.runOnce()).toMatchObject({state: "ABANDONED", jobId: id, reason: "LEASE_EXPIRED"});
+      expect(await w.runOnce()).toMatchObject({state: "DONE", jobId: id, status: "SUCCEEDED"});   // reaped -> RETRYING -> attempt 2
+      const name = resultName(q, id, "dist/app.zip");
+      expect(name).toBe(scopedArtifactName(id, 2, "dist/app.zip"));
+      expect(await content(store, name)).toBe("attempt-2 bytes");
+      expect(resolveDeliverable(q.get(id), "tenant-a", "proj-web", scopedArtifactName(id, 1, "dist/app.zip"))).toEqual({ok: false, reason: "NOT_A_RESULT_ARTIFACT"});   // the attempt-1 orphan is never deliverable
+    });
+
+    it("T5: two different jobs, same project, same output name, different content -> both SUCCEED, each result resolves to its own content", async () => {
+      const q = mkQueue(), store = mkStore();
+      const j1 = submitJob(q, pkgJob()), j2 = submitJob(q, pkgJob());
+      const sb = scripted((cwd, run) => wfile(cwd, "dist/app.zip", `job-run-${run}`));
+      const w = worker(q, store, sb, ["dist/app.zip"]);
+      expect(await w.runOnce()).toMatchObject({state: "DONE", jobId: j1, status: "SUCCEEDED"});
+      expect(await w.runOnce()).toMatchObject({state: "DONE", jobId: j2, status: "SUCCEEDED"});
+      expect(await content(store, resultName(q, j1, "dist/app.zip"))).toBe("job-run-1");
+      expect(await content(store, resultName(q, j2, "dist/app.zip"))).toBe("job-run-2");
+      expect(resolveDeliverable(q.get(j1), "tenant-a", "proj-web", resultName(q, j2, "dist/app.zip"))).toEqual({ok: false, reason: "NOT_A_RESULT_ARTIFACT"});   // no cross-job resolution
+      const n1 = resultName(q, j1, "dist/app.zip");
+      expect(resolveDeliverable(q.get(j1), "tenant-b", "proj-web", n1)).toEqual({ok: false, reason: "TENANT_MISMATCH"});   // another tenant never resolves it
+      expect(resolveDeliverable(q.get(j1), "tenant-a", "proj-other", n1)).toEqual({ok: false, reason: "TENANT_MISMATCH"});
+    });
+
+    it("T6: an output-phase guard failure after partial validation leaves the store unchanged (count before == after)", async () => {
+      const q = mkQueue(), store = mkStore();
+      expect((await store.put({tenantId: "tenant-a", subject: "seed-user"}, {tenantId: "tenant-a", projectId: "proj-web", name: "seed.txt", content: Buffer.from("seed"), sha256: createHash("sha256").update("seed").digest("hex"), sizeBytes: 4})).ok).toBe(true);
+      const before = store.backend.keys().length;
+      const id = submitJob(q, pkgJob());
+      const sb = scripted(cwd => { wfile(cwd, "out/a.txt", "a"); wfile(cwd, "out/b.txt", "b"); });   // out/c.txt is never written
+      expect(await worker(q, store, sb, ["out/a.txt", "out/b.txt", "out/c.txt"]).runOnce()).toMatchObject({state: "DONE", jobId: id, status: "FAILED", result: {message: "OUTPUT_MISSING"}});
+      expect(store.backend.keys().length).toBe(before);
+      const big = submitJob(q, pkgJob());
+      const sb2 = scripted(cwd => { wfile(cwd, "out/a.txt", "a"); wfile(cwd, "out/huge.bin", "x".repeat(2048)); });
+      expect(await worker(q, store, sb2, ["out/a.txt", "out/huge.bin"], now, {maxOutputBytes: 1024}).runOnce()).toMatchObject({jobId: big, status: "FAILED", result: {message: "OUTPUT_TOO_LARGE"}});
+      expect(store.backend.keys().length).toBe(before);
+    });
+
+    it("T7: a staged orphan cannot be smuggled in as another job's input: jobs/ inputs need the producer's accepted result", async () => {
+      const q = mkQueue(), store = mkStore();
+      const aborted = submitJob(q, pkgJob());
+      await worker(q, hooked(store, () => { q.cancel(aborted); }), scripted(cwd => wfile(cwd, "dist/app.zip", "orphan")), ["dist/app.zip"]).runOnce();
+      const orphan = scopedArtifactName(aborted, 1, "dist/app.zip"), ref = {name: orphan, sha256: createHash("sha256").update("orphan").digest("hex"), sizeBytes: 6};
+      expect((await store.get({tenantId: "tenant-a", subject: "observer-01"}, {tenantId: "tenant-a", projectId: "proj-web", name: orphan})).ok).toBe(true);   // it IS in the store...
+      const sb = scripted(() => undefined);
+      const consumer = submitJob(q, pkgJob({kind: "BUILD", inputArtifacts: [ref]}));
+      expect(await worker(q, store, sb, []).runOnce()).toMatchObject({jobId: consumer, status: "FAILED", result: {message: "INPUT_PROVENANCE_UNVERIFIED"}});   // ...but no gate => refused
+      const gate = (tenantId: string, projectId: string, name: string) => resolveDeliverable(q.get(name.split("/")[1]), tenantId, projectId, name);
+      const consumer2 = submitJob(q, pkgJob({kind: "BUILD", inputArtifacts: [ref]}));
+      expect(await worker(q, store, sb, [], now, {inputGate: gate}).runOnce()).toMatchObject({jobId: consumer2, status: "FAILED", result: {message: "INPUT_PROVENANCE_UNVERIFIED"}});   // producer not SUCCEEDED
+      expect(sb.runs).toBe(0);
+      const good = submitJob(q, pkgJob());
+      await worker(q, store, scripted(cwd => wfile(cwd, "dist/app.zip", "accepted")), ["dist/app.zip"]).runOnce();
+      const okRef = {name: resultName(q, good, "dist/app.zip"), sha256: createHash("sha256").update("accepted").digest("hex"), sizeBytes: 8};
+      const consumer3 = submitJob(q, pkgJob({kind: "BUILD", inputArtifacts: [okRef]}));
+      expect(await worker(q, store, sb, [], now, {inputGate: gate}).runOnce()).toMatchObject({jobId: consumer3, status: "SUCCEEDED"});
+    });
   });
 }

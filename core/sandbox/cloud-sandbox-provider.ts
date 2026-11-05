@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {createHash} from "node:crypto";
 import {ExecutionGate, type SandboxProvider} from "../workos/execution-gate.js";
-import type {CloudArtifactStore} from "../cloud/artifacts.js";
+import {isSafeArtifactName, type CloudArtifactStore} from "../cloud/artifacts.js";
 import type {ArtifactRef, CloudJobKind, CloudJobRequest} from "../cloud/contracts.js";
 
 /** Worker'ın kuyruk yüzü. İmzalı worker kanıtını (anahtar) çağıranın bağdaştırıcısı üretir; worker gizli anahtar tutmaz. CLOUD-T0003 CloudJobQueue + signWorkerAuth ile sağlanır. */
@@ -17,11 +17,68 @@ export interface CloudJobResult {status: "SUCCEEDED" | "FAILED"; artifacts?: Art
 export interface CloudJobPlan {argv: string[]; outputs: string[]}
 export type CloudJobHandlers = Partial<Record<CloudJobKind, (job: CloudJobRequest, inputs: readonly string[]) => CloudJobPlan>>;
 
+/** Worker'ın depo yüzü (yalnız get/put): testler sarmalayıcı enjekte edebilir; CloudArtifactStore yapısal olarak sağlar. */
+export type WorkerArtifactStore = Pick<CloudArtifactStore, "get" | "put">;
+/** #344 B-1: çıktılar iş+deneme kapsamlı adlarla saklanır; iptal edilmiş bir deneme başka bir denemenin/işin adını asla işgal etmez. */
+export const scopedArtifactName = (jobId: string, attempt: number, rel: string) => `jobs/${jobId}/a${attempt}/${rel}`;
+export const DEFAULT_MAX_OUTPUT_BYTES = 64 * 1024 * 1024;
+
+/** Kuyruğun bir iş için tuttuğu görünüm (CloudJobQueue.get yapısal olarak sağlar). */
+export interface AcceptedJobView {
+  status: string; attempt: number;
+  job: {jobId: string; tenantId: string; projectId: string};
+  events: readonly {type: string; attempt: number; artifact?: ArtifactRef}[];
+}
+export type DeliverableDecision = {ok: true; ref: ArtifactRef} | {ok: false; reason: "JOB_UNKNOWN" | "JOB_NOT_SUCCEEDED" | "TENANT_MISMATCH" | "NOT_A_RESULT_ARTIFACT"};
+/**
+ * Teslim değişmezi: bir artifact YALNIZ kuyruğun kabul ettiği (SUCCEEDED) iş sonucunun son denemesinde referans verdiği ad+sha ise teslim edilebilir.
+ * İptal/STOP/lease kaybı/başarısızlık nedeniyle depoda kalan ara (yetim) çıktılar hiçbir zaman buradan geçmez. Teslim eden katman (ör. chain host) ad ile
+ * değil bu kararla teslim etmek ZORUNDADIR.
+ */
+export function resolveDeliverable(view: AcceptedJobView | undefined, tenantId: string, projectId: string, name: string): DeliverableDecision {
+  if (!view) return {ok: false, reason: "JOB_UNKNOWN"};
+  if (view.job.tenantId !== tenantId || view.job.projectId !== projectId) return {ok: false, reason: "TENANT_MISMATCH"};
+  if (view.status !== "SUCCEEDED") return {ok: false, reason: "JOB_NOT_SUCCEEDED"};
+  const ref = view.events.find(e => e.type === "ARTIFACT" && e.attempt === view.attempt && e.artifact?.name === name)?.artifact;
+  return ref ? {ok: true, ref: {name: ref.name, sha256: ref.sha256, sizeBytes: ref.sizeBytes}} : {ok: false, reason: "NOT_A_RESULT_ARTIFACT"};
+}
+/** `jobs/<jobId>/a<n>/...` adından üretici işin kimliği (değilse null). */
+export const producerJobOf = (name: string): string | null => { const m = /^jobs\/([A-Za-z0-9][A-Za-z0-9._-]{0,127})\/a\d+\//.exec(name); return m ? m[1] : null; };
+
+type OutputRead = {ok: true; content: Buffer} | {ok: false; reason: string};
+/** Çıktıyı güvenli okur: kaçış/symlink/hardlink/takas/boyut reddi; okuma AÇILAN aynı fd'den yapılır (lstat->readFile TOCTOU yok). */
+function readOutputSafely(wsReal: string, rel: string, maxBytes: number): OutputRead {
+  const p = path.join(wsReal, rel);
+  if (!within(wsReal, p)) return {ok: false, reason: "OUTPUT_INVALID"};
+  let lst: fs.Stats;
+  try { lst = fs.lstatSync(p); } catch { return {ok: false, reason: "OUTPUT_MISSING"}; }
+  if (lst.isSymbolicLink() || !lst.isFile()) return {ok: false, reason: "OUTPUT_INVALID"};
+  try { if (!within(wsReal, fs.realpathSync(p))) return {ok: false, reason: "OUTPUT_INVALID"}; } catch { return {ok: false, reason: "OUTPUT_INVALID"}; }   // ara dizin symlink kaçışı
+  let fd: number;
+  try { fd = fs.openSync(p, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0)); } catch { return {ok: false, reason: "OUTPUT_INVALID"}; }
+  try {
+    const st = fs.fstatSync(fd);
+    if (!st.isFile() || st.dev !== lst.dev || st.ino !== lst.ino) return {ok: false, reason: "OUTPUT_INVALID"};   // lstat ile open arasında takas
+    if (st.nlink !== 1) return {ok: false, reason: "OUTPUT_HARDLINKED"};   // N-1: çalışma alanı dışındaki bir dosyaya sabit bağ
+    if (st.size > maxBytes) return {ok: false, reason: "OUTPUT_TOO_LARGE"};
+    const buf = Buffer.alloc(st.size);
+    let off = 0;
+    while (off < st.size) { const n = fs.readSync(fd, buf, off, st.size - off, off); if (n <= 0) break; off += n; }
+    if (off !== st.size || fs.readSync(fd, Buffer.alloc(1), 0, 1, st.size) !== 0) return {ok: false, reason: "OUTPUT_CHANGED"};
+    return {ok: true, content: buf};
+  } catch { return {ok: false, reason: "OUTPUT_INVALID"}; }
+  finally { try { fs.closeSync(fd); } catch { /* yut */ } }
+}
+
 export interface CloudWorkerOptions {
   queue: WorkerQueuePort;
   /** Doğrulanmış (öz-testi geçen) sağlayıcı; null/geçersiz/öz-test başarısız => worker hiç iş almaz. */
   sandbox: SandboxProvider | null;
-  store: CloudArtifactStore;
+  store: WorkerArtifactStore;
+  /** Tek çıktının üst sınırı (varsayılan 64 MiB). */
+  maxOutputBytes?: number;
+  /** `jobs/` ad alanındaki girdiler için köken kapısı: üretici iş kuyrukta SUCCEEDED ve ad onun sonucunda olmalı. Yoksa böyle girdiler reddedilir. */
+  inputGate?: (tenantId: string, projectId: string, name: string) => DeliverableDecision;
   /** İş çalışma alanlarının kökü (her iş: <kök>/<tenant>/<jobId>-<deneme>, iş sonunda silinir). */
   workRoot: string;
   handlers: CloudJobHandlers;
@@ -80,6 +137,11 @@ export class CloudWorker {
       // Girdiler yalnız işin kendi tenant'ı adına alınır (depo başka tenant'a erişimi reddeder) ve özetleri işteki referansla eşleşmek zorundadır.
       const inputs: string[] = [];
       for (const a of job.inputArtifacts) {
+        // #344 B-1: iptal edilmiş/başarısız bir denemenin depoda kalan ara çıktısı başka bir işe girdi olarak sızamaz.
+        if (producerJobOf(a.name) !== null) {
+          const gate = this.o.inputGate?.(job.tenantId, job.projectId, a.name);
+          if (!gate || !gate.ok || gate.ref.sha256 !== a.sha256 || gate.ref.sizeBytes !== a.sizeBytes) return fail("INPUT_PROVENANCE_UNVERIFIED");
+        }
         const g = await this.o.store.get({tenantId: job.tenantId, subject: this.o.workerId}, {tenantId: job.tenantId, projectId: job.projectId, name: a.name});
         if (!g.ok) return fail(`INPUT_${g.reason}`);
         if (sha(g.content) !== a.sha256 || g.content.length !== a.sizeBytes) return fail("INPUT_HASH_MISMATCH");
@@ -100,19 +162,32 @@ export class CloudWorker {
       if (lost) return {state: "ABANDONED", jobId: job.jobId, reason: lost};
       if (res.aborted) return {state: "ABANDONED", jobId: job.jobId, reason: "ABORTED"};
       if (res.spawnError || res.timedOut || res.exitCode !== 0) return fail(res.timedOut ? "SANDBOX_TIMEOUT" : res.spawnError ? "SANDBOX_SPAWN_ERROR" : `EXIT_${res.exitCode}`);
-      const artifacts: ArtifactRef[] = [];
+      // #344 B-1 (a): TÜM çıktılar herhangi bir put'tan ÖNCE doğrulanır ve okunur; tek bir ret depoya hiçbir şey yazdırmaz.
+      const staged: {name: string; content: Buffer; ref: ArtifactRef}[] = [];
+      const seen = new Set<string>();
       for (const rel of plan.outputs) {
-        const p = path.join(wsReal, rel);
-        let st2: fs.Stats;
-        try { st2 = fs.lstatSync(p); } catch { return fail("OUTPUT_MISSING"); }
-        if (!st2.isFile() || st2.isSymbolicLink() || !within(wsReal, p) || !within(wsReal, fs.realpathSync(p))) return fail("OUTPUT_INVALID");
-        const content = fs.readFileSync(p), ref = {name: rel, sha256: sha(content), sizeBytes: content.length};
+        if (seen.has(rel)) return fail("OUTPUT_DUPLICATE");
+        seen.add(rel);
+        const name = scopedArtifactName(job.jobId, c.attempt, rel);   // (b) iş+deneme kapsamlı ad
+        if (!isSafeArtifactName(name)) return fail("OUTPUT_NAME_INVALID");
+        const r = readOutputSafely(wsReal, rel, this.o.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES);
+        if (!r.ok) return fail(r.reason);
+        staged.push({name, content: r.content, ref: {name, sha256: sha(r.content), sizeBytes: r.content.length}});
+      }
+      // (c) put aşamasından hemen önce lease denetimi
+      beat();
+      if (lost) return {state: "ABANDONED", jobId: job.jobId, reason: lost};
+      const artifacts: ArtifactRef[] = [];
+      for (const s2 of staged) {
+        const put = await this.o.store.put({tenantId: job.tenantId, subject: this.o.workerId}, {tenantId: job.tenantId, projectId: job.projectId, ...s2.ref, content: s2.content, jobId: job.jobId, producer: this.o.workerId});
+        if (!put.ok) return fail(`OUTPUT_${put.reason}`);
+        artifacts.push(s2.ref);
         beat();
         if (lost) return {state: "ABANDONED", jobId: job.jobId, reason: lost};
-        const put = await this.o.store.put({tenantId: job.tenantId, subject: this.o.workerId}, {tenantId: job.tenantId, projectId: job.projectId, ...ref, content, jobId: job.jobId, producer: this.o.workerId});
-        if (!put.ok) return fail(`OUTPUT_${put.reason}`);
-        artifacts.push(ref);
       }
+      // (c) son put'tan sonra, complete()'ten hemen önce lease denetimi
+      beat();
+      if (lost) return {state: "ABANDONED", jobId: job.jobId, reason: lost};
       return finish({status: "SUCCEEDED", artifacts});
     } finally {
       clearInterval(timer);
