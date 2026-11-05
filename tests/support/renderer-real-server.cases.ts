@@ -112,7 +112,10 @@ async function renderAgainstServer(app: App, view: string, token = TOKEN) {
   const root: N = await mod.render(ctx);
   const paths = [...new Set(seen.map(s => s.path.replace(/\?.*$/, "")))].sort();
   // api.get sonuçları (store.cache): görünümün ne gördüğünü — başarı mı, sınıflanmış hata mı — doğrudan gösterir (hata yutulursa ok:true olurdu)
-  const results = await Promise.all([...store.cache.entries()].map(async ([k, v]: [string, {promise: Promise<{ok: boolean; state?: string; message?: string}>}]) => ({path: k, ...(await v.promise)})));
+  // L1 (#323): store.cache is the {at, promise} map api.js itself writes (state.js createStore); if that shape changes this fails loudly instead of silently reading nothing
+  const entries = [...store.cache.entries()] as Array<[string, {promise?: Promise<{ok: boolean; state?: string; message?: string}>}]>;
+  for (const [k, v] of entries) if (!v || typeof v.promise?.then !== "function") throw new Error(`renderer store.cache shape changed at ${k}: re-sync renderAgainstServer with apps/desktop/renderer/state.js + api.js`);
+  const results = await Promise.all(entries.map(async ([k, v]) => ({path: k, ...(await v.promise!)})));
   return {root, seen, paths, attention, refused, thrown, results, text: root.textContent};
 }
 
@@ -179,12 +182,34 @@ describe("UASCO-T0006: renderer -> real buildServer for the 10 formerly fake-bri
     for (const v of Object.keys(PATHS)) expect(fs.existsSync(path.join(REND, "views", `${v}.js`)), v).toBe(true);
     // N1a/N1b: the bridge mirrors main.mjs's uasco:api-get handler; if that handler's allow-list gate or synthetic /health body drifts, this fails
     const handler = /ipcMain\.handle\("uasco:api-get",async\(event,p\)=>\{requireTrustedSender\(event\);if\(!desktopGetPathAllowed\(p\)&&!desktopExtraGetPathAllowed\(p\)\)throw new Error\("INVALID_API_PATH"\);if\(p==="\/health"\)\{await verifyServerIdentity\(true\);return (\{[^{}]*\})\}return api\(p\)\}\);/.exec(MAIN_SRC);
-    expect(handler, "main.mjs uasco:api-get handler shape").not.toBeNull();
+    expect(handler, "main.mjs uasco:api-get handler changed (L3): re-sync the bridge in tests/support/renderer-real-server.cases.ts (allow-list gate, identity check, synthetic /health) with main.mjs").not.toBeNull();
     expect(new Function(`return ${handler![1]}`)()).toEqual(SYNTHETIC_HEALTH);
     expect(desktopAllows("/v1/not-a-route"), "the allow-list is a real filter").toBe(false);
   });
 
   for (const view of Object.keys(PATHS)) {
+    // //TR: N1 (#323 incelemesi): kimlik GEÇERLİ (doğru belirteç, doğrulanmış /health), ama gerçek sunucu her /v1 rotasını 500 ile yanıtlar (sunucunun kendi
+    // kimlik/belirteç onRequest kancalarından SONRA eklenen bir kanca: istek doğrulanır, sonra başarısız olur). Köprü main.mjs gibi `${yol}: HTTP 500` fırlatır;
+    // görünümün gördüğü her /v1 sonucu ok:false, ERROR ve tam bu iletidir ve görünüm bir hata durumu gösterir. Yalnız "HTTP <n>" hatalarını yutan bir api.get bunu düşürür.
+    it(`${view}: server error path (identity verified, every /v1 route answers HTTP 500) surfaces "<path>: HTTP 500" as a classified ERROR and a failure state`, { timeout: 120_000 }, async () => {
+      const app = mkApp();
+      app.addHook("onRequest", async (req, reply) => { if (req.url.startsWith("/v1/")) return reply.code(500).send({error: "INJECTED_SERVER_FAILURE"}); });
+      const r = await renderAgainstServer(app, view);
+      expect(r.refused, `${view}: allow-list`).toEqual(pendingRefused(view));
+      expect(r.thrown.filter(t => /CONTROL_API_IDENTITY_UNVERIFIED|INVALID_API_PATH/.test(t) && !pendingRefused(view).some(p => t.startsWith(`${p} -> `))), `${view}: identity and allow-list hold`).toEqual([]);
+      const v1Seen = r.seen.filter(x => x.path.startsWith("/v1/"));
+      expect(v1Seen.length, `${view}: /v1 reads reached the server`).toBeGreaterThan(0);
+      expect([...new Set(v1Seen.map(x => x.status))], `${view}: every /v1 read answered 500`).toEqual([500]);
+      const v1Results = r.results.filter(x => x.path.startsWith("/v1/") && !pendingRefused(view).includes(x.path));
+      expect(v1Results.length).toBe(new Set(v1Seen.map(x => x.path)).size);
+      for (const x of r.results.filter(x => pendingRefused(view).includes(x.path))) expect([x.path, x.ok, x.state]).toEqual([x.path, false, "UNAVAILABLE"]);
+      for (const x of v1Results) expect([view, x.path, x.ok, x.state, x.message]).toEqual([view, x.path, false, "ERROR", `${x.path}: HTTP 500`]);
+      for (const x of r.results.filter(x => x.path === "/health")) expect([view, x.ok]).toEqual([view, true]); // main.mjs's own /health still answers
+      expect(r.text).not.toContain(PROJECT); expect(r.text).not.toContain(MISSION);
+      if (view === "tower") expect(r.attention).toEqual(["ERROR"]);
+      expect(failureMarks(r.root).length, `${view}: a failure state is shown`).toBeGreaterThan(0);
+    });
+
     it(`${view}: happy path against the real server (every read 200, no failure state, real data shown)`, { timeout: 120_000 }, async () => {
       const app = mkApp();
       const r = await renderAgainstServer(app, view);
@@ -211,6 +236,7 @@ describe("UASCO-T0006: renderer -> real buildServer for the 10 formerly fake-bri
       const r = await renderAgainstServer(app, view, WRONG);
       expect(r.refused, `${view}: allow-list`).toEqual(pendingRefused(view));
       expect(r.results.length, `${view}: reads attempted`).toBeGreaterThan(0);
+      // L2 (#323): /health is excluded because main.mjs answers it itself; /v1/roles?cursor=... pages and /v1/deliveries?projectId=... only follow a SUCCESSFUL first read (paging cursor / selected project), so they are not attempted when that read fails
       expect(r.results.map(x => x.path).sort(), `${view}: the same reads as the happy path`).toEqual(expect.arrayContaining(PATHS[view].filter(p => p !== "/health" && !p.includes("/v1/roles") && !p.includes("/v1/deliveries")).map(p => expect.stringMatching(new RegExp(`^${p.replace(/[/.]/g, "\\$&")}(\\?|$)`)))));
       for (const x of r.results.filter(x => !pendingRefused(view).includes(x.path))) expect([view, x.path, x.ok, x.state, x.message]).toEqual([view, x.path, false, "ERROR", "CONTROL_API_IDENTITY_UNVERIFIED"]);
       expect(r.seen, `${view}: nothing was read from /v1 with an unverified identity`).toEqual([]);
