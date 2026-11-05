@@ -45,7 +45,7 @@ export interface WorkTask {
 export type JournalType = "PROJECT_CREATED" | "MISSION_CREATED" | "TASK_CREATED" | "TASK_TRANSITIONED" | "MISSION_TRANSITIONED"
   | "RUN_CREATED" | "RUN_LEASE" | "RUN_TRANSITION" | "RUN_CHECKPOINT" | "RUN_EVIDENCE"
   // //TR: UASCO-T0049: BLOCKED_RESUMABLE bir run'ın açık, kapılı devamı (BLOCKED -> QUEUED, aynı adım; mission engel öncesi duruma); replay'de yeniden doğrulanır.
-  | "RUN_RESUMED"
+  | "RUN_RESUMED" | "RUN_PAUSE_REQUESTED"
   | "PROJECT_REPOSITORY_SET" | "PROJECT_EXPORT_RECORDED"
   // //TR: M1a c2 (D-M1A-ACCEPTANCE-CONDITIONS-2026-10-15): gerçek koşu çıktısının deterministik teslim artefaktı ve ona bağlı tek kullanımlık NOT_VERIFIED kaynak teslimi kabulü (COMPLETE değildir).
   | "DELIVERY_ARTIFACT_PREPARED" | "SOURCE_DELIVERY_ACCEPTED"
@@ -148,4 +148,6 @@ export interface WorkRun {
   // M1a c2: en son DELIVERY_ARTIFACT_PREPARED kaydı ve (varsa) tek SOURCE_DELIVERY_ACCEPTED kaydı; yalnız journal girdilerinden (replay ile aynı değer) set edilir.
   deliveryArtifact?: DeliveryArtifactRecord;
   sourceDelivery?: SourceDeliveryAcceptance;
+  // //TR: UASCO-T0049 (2): Founder'ın açık duraklatma isteği; runner bir sonraki adım sınırında run'ı BLOCKED(PAUSED) yapar; devam (RUN_RESUMED) isteği temizler.
+  pauseRequested?: {requestedBy: string; at: string};
 }

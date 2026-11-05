@@ -592,6 +592,13 @@ export class WorkOsStore {
         r.sourceDelivery = {...chk.record, acceptedAt: e.at};
         break;
       }
+      case "RUN_PAUSE_REQUESTED": {
+        // //TR: UASCO-T0049 (2): duraklatma isteği yalnız açık (terminal olmayan, Founder kararı beklemeyen) ve henüz istek taşımayan run'a; istekçi boş olamaz.
+        const r = this.runFor(st, p, e.seq);
+        if (!isOpenRun(r.status) || r.pauseRequested || typeof p.requestedBy !== "string" || p.requestedBy.trim().length === 0 || p.requestedBy.length > 200) throw tampered(`RUN_PAUSE_ILLEGAL:${e.seq}`);
+        r.pauseRequested = {requestedBy: p.requestedBy, at: e.at}; r.updatedAt = e.at;
+        break;
+      }
       case "RUN_RESUMED": {
         // //TR: UASCO-T0049: devam kaydı replay anında aynı kapıyla yeniden doğrulanır (açık istek + BLOCKED_RESUMABLE + resumeAfter girdi zamanında dolmuş), mission engel öncesi duruma,
         // aynı mission'da başka açık run yok, devam checkpoint'i birebir türetilene eşit; aksi hâlde tamper.
@@ -604,6 +611,7 @@ export class WorkOsStore {
         const c = p.checkpoint as RunCheckpoint, expect = this.resumeCheckpoint(r, gate.checkpoint.reason, String(p.requestedBy), e.at);
         if (JSON.stringify(c) !== JSON.stringify(expect)) throw tampered(`RUN_RESUME_CHECKPOINT:${e.seq}`);
         m.status = want;
+        delete r.pauseRequested;
         r.checkpoints.push(expect); r.status = "QUEUED"; r.reason = `RESUMED: ${String(p.requestedBy)}`; r.leaseId = null; r.leaseExpiresAt = null; r.updatedAt = e.at;
         break;
       }
@@ -971,6 +979,22 @@ export class WorkOsStore {
    * ({explicit: true, requestedBy}), a recorded resumable block whose resumeAfter is due, the mission still BLOCKED and no other open run on it.
    * The same run continues: BLOCKED -> QUEUED at the same step, retryCount and checkpoints kept, the mission returns to the step's status.
    */
+  /**
+   * UASCO-T0049 (2): explicit Founder pause request for an open run. Nothing stops mid-step: the runner honours it at the next step boundary
+   * (resumable checkpoint, BLOCKED(PAUSED)); resumeBlockedRun brings the same run back. Not for terminal or AWAITING_APPROVAL runs; one pending request at a time.
+   */
+  requestRunPause(scope: Scope, runId: string, request: unknown, actor: string): WorkRun {
+    return this.write(() => {
+      const r = this.state.runs[runId];
+      if (!r || r.tenantId !== scope.tenantId) throw new WorkOsError("WORKOS_NOT_FOUND", "run");
+      const q = request as {explicit?: unknown; requestedBy?: unknown} | null | undefined;
+      if (!q || typeof q !== "object" || q.explicit !== true || typeof q.requestedBy !== "string" || q.requestedBy.trim().length === 0) throw new WorkOsError("WORKOS_CONFLICT", "PAUSE_REQUIRES_EXPLICIT_CALL");
+      if (!isOpenRun(r.status)) throw new WorkOsError("WORKOS_CONFLICT", "RUN_NOT_PAUSABLE");
+      if (r.pauseRequested) throw new WorkOsError("WORKOS_CONFLICT", "PAUSE_ALREADY_REQUESTED");
+      this.append("RUN_PAUSE_REQUESTED", actor, {runId, requestedBy: q.requestedBy.trim().slice(0, 200)});
+      return clone(this.state.runs[runId]);
+    });
+  }
   resumeBlockedRun(scope: Scope, runId: string, request: unknown, actor: string): WorkRun {
     return this.write(() => {
       const r = this.state.runs[runId];

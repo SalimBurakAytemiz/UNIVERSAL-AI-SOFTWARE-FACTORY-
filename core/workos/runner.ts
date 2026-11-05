@@ -653,10 +653,25 @@ export class MissionRunner {
       if (run.status === "RETRY_SCHEDULED" && Date.parse(run.retryAt ?? "") > this.o.now()) { this.renew(runId, leaseId); return steps > 0; }
       if (steps >= this.o.maxStepsPerTick) { this.renew(runId, leaseId); return steps > 0; }
       if (run.status === "RECOVERING" && !(await this.recoverCheck(run, leaseId, own?.reap ?? null))) { this.owned.delete(runId); return true; }
+      // //TR: UASCO-T0049 (2): Founder duraklatması adım SINIRINDA uygulanır (adım ortasında asla): devam ettirilebilir checkpoint (PAUSED/FOUNDER_PAUSE) + BLOCKED(PAUSED); aynı run resumeBlockedRun ile döner.
+      if (run.pauseRequested) { this.pauseAtBoundary(run, leaseId); this.owned.delete(runId); return true; }
       this.renew(runId, leaseId); // her adımın başında (yani adımlar arasında da) lease yenilenir
       await this.executeStep(run, leaseId);
       steps += 1;
     }
+  }
+
+  private pauseAtBoundary(run: WorkRun, leaseId: string): void {
+    const s = this.o.store, a = this.o.actor, id = run.runId, why = `PAUSED: ${run.pauseRequested!.requestedBy}`;
+    const rec = resumableBlockCheckpoint({reason: "PAUSED", limit: "FOUNDER_PAUSE", step: run.step, attempt: run.attempt, retryCount: run.retryCount,
+      lastEvidenceRef: run.evidence[run.evidence.length - 1]?.evidenceId ?? null, resumeAfter: null, blockedAt: new Date(this.o.now()).toISOString()});
+    // CHECKPOINTING'e yalnız adım durumundan (RUNNING/VERIFYING) girilebilir: LEASED/RETRY_SCHEDULED/RECOVERING önce adımın durumuna geçer (adım YÜRÜTÜLMEZ).
+    if (run.status !== "CHECKPOINTING") {
+      if (run.status !== stepStatus(run.step)) s.transitionRun(id, leaseId, stepStatus(run.step), `pausing at the ${run.step} step boundary`, a);
+      s.transitionRun(id, leaseId, "CHECKPOINTING", `step ${run.step} paused before start`, a);
+    }
+    s.checkpointRun(id, leaseId, {step: run.step, data: {...rec}}, a);
+    s.transitionRun(id, leaseId, "BLOCKED", "PAUSED", a, {mission: {to: "BLOCKED", reason: why}});
   }
 
   // Crash-resume: son tamamlanmış checkpoint'ten devam; workspace/commit tutarsızsa RECOVERY_FAILED + kanıt (tahmin yok).

@@ -43,13 +43,16 @@ export const isOpenRun = (s: RunStatus) => !TERMINAL_RUN_STATUSES.includes(s) &&
 // //TR: V3-T1016 kota olay modeli: sağlayıcı kotası/hız sınırı (PROVIDER_QUOTA) run'ı BLOCKED yapar ama bu engel DEVAM ETTİRİLEBİLİR (BLOCKED_RESUMABLE) sınıftadır;
 // diğer her BLOCKED terminaldir (BLOCKED_TERMINAL). Engel noktasında şemalı bir checkpoint kaydı yazılır (adım, deneme, son kanıt ref'i, biliniyorsa resumeAfter).
 // Devam ettirilebilir engel ASLA kendiliğinden (devralma/crash-resume/zamanlayıcı) sürdürülmez; yalnız açık bir resume çağrısı (P2, bu pakette yok) sürdürebilir.
-export const RESUMABLE_BLOCK_REASONS = ["PROVIDER_QUOTA"] as const;
+// //TR: UASCO-T0049 (2): Founder duraklatması (PAUSED) da devam ettirilebilir engeldir; neden/limit çifti sabittir: PROVIDER_QUOTA <-> QUOTA_EXHAUSTED|RATE_LIMIT, PAUSED <-> FOUNDER_PAUSE.
+export const RESUMABLE_BLOCK_REASONS = ["PROVIDER_QUOTA", "PAUSED"] as const;
 export type ResumableBlockReason = (typeof RESUMABLE_BLOCK_REASONS)[number];
 export const isResumableBlockReason = (x: unknown): x is ResumableBlockReason => typeof x === "string" && (RESUMABLE_BLOCK_REASONS as readonly string[]).includes(x);
 export type ProviderLimitKind = "QUOTA_EXHAUSTED" | "RATE_LIMIT";
+export type BlockLimitKind = ProviderLimitKind | "FOUNDER_PAUSE";
+const limitFits = (reason: unknown, limit: unknown): boolean => reason === "PAUSED" ? limit === "FOUNDER_PAUSE" : reason === "PROVIDER_QUOTA" && (limit === "QUOTA_EXHAUSTED" || limit === "RATE_LIMIT");
 /** Engel noktasında yazılan checkpoint verisi (RunCheckpoint.data). schema sürümlüdür; alanlar kesin doğrulanır. */
 export interface ResumableBlockCheckpoint {
-  outcome: "BLOCKED_RESUMABLE"; schema: 1; reason: ResumableBlockReason; limit: ProviderLimitKind;
+  outcome: "BLOCKED_RESUMABLE"; schema: 1; reason: ResumableBlockReason; limit: BlockLimitKind;
   step: RunStep; attempt: number; retryCount: number; lastEvidenceRef: string | null; resumeAfter: string | null; blockedAt: string; resume: "EXPLICIT_ONLY";
 }
 const ISO_UTC_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
@@ -61,7 +64,7 @@ export function isResumableBlockCheckpoint(x: unknown): x is ResumableBlockCheck
   if (!x || typeof x !== "object" || Array.isArray(x)) return false;
   const o = x as Record<string, unknown>;
   if (Object.keys(o).sort().join(",") !== RESUMABLE_KEYS.join(",")) return false;
-  return o.outcome === "BLOCKED_RESUMABLE" && o.schema === 1 && isResumableBlockReason(o.reason) && (o.limit === "QUOTA_EXHAUSTED" || o.limit === "RATE_LIMIT")
+  return o.outcome === "BLOCKED_RESUMABLE" && o.schema === 1 && isResumableBlockReason(o.reason) && limitFits(o.reason, o.limit)
     && isRunStep(o.step) && isCount(o.attempt, 1) && isCount(o.retryCount, 0)
     && (o.lastEvidenceRef === null || (typeof o.lastEvidenceRef === "string" && EVIDENCE_REF_RE.test(o.lastEvidenceRef)))
     && (o.resumeAfter === null || isIso(o.resumeAfter)) && isIso(o.blockedAt) && o.resume === "EXPLICIT_ONLY";
