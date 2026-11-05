@@ -2,9 +2,10 @@
 import type {Scope, WorkRun} from "./types.js";
 import type {WorkOsStore} from "./store.js";
 import {redactSecrets} from "./secret-scan.js";
+import {listIntakes} from "./intake.js";
 
 export type AttentionKind =
-  | "RUN_AWAITING_APPROVAL" | "RUN_NEEDS_DECISION" | "MISSION_FOUNDER_ATTENTION" | "MISSION_AUTHORIZATION_PENDING" | "MISSION_BLOCKED" | "TASK_BLOCKED";
+  | "RUN_AWAITING_APPROVAL" | "RUN_NEEDS_DECISION" | "MISSION_FOUNDER_ATTENTION" | "INTAKE_AUTHORITY_FLAGGED" | "MISSION_AUTHORIZATION_PENDING" | "MISSION_BLOCKED" | "TASK_BLOCKED";
 export type NextAction = "PREPARE_DELIVERY" | "ACCEPT_DELIVERY" | "REVIEW_RUN" | "REVIEW_MISSION" | "AUTHORIZE_MISSION" | "UNBLOCK_TASK";
 export interface AttentionItem {
   kind: AttentionKind; nextAction: NextAction; projectId: string; missionId: string; runId: string | null; taskId: string | null;
@@ -13,12 +14,14 @@ export interface AttentionItem {
 export interface AttentionQueue { items: AttentionItem[]; counts: Record<AttentionKind, number>; truncated: boolean; source: "WORKOS" }
 
 export const ATTENTION_MAX_ITEMS = 200;
-const KINDS: readonly AttentionKind[] = ["RUN_AWAITING_APPROVAL", "RUN_NEEDS_DECISION", "MISSION_FOUNDER_ATTENTION", "MISSION_AUTHORIZATION_PENDING", "MISSION_BLOCKED", "TASK_BLOCKED"];
+const KINDS: readonly AttentionKind[] = ["RUN_AWAITING_APPROVAL", "RUN_NEEDS_DECISION", "MISSION_FOUNDER_ATTENTION", "INTAKE_AUTHORITY_FLAGGED", "MISSION_AUTHORIZATION_PENDING", "MISSION_BLOCKED", "TASK_BLOCKED"];
+// UASCO-T0011: yetki bayraklı intake'in mission'ı yalnız yetkilendirmeden ÖNCE (DRAFT/PREFLIGHT) dikkat ister; yetkilendirildikten sonra Founder kararını vermiştir.
+const INTAKE_FLAG_REVIEW = new Set(["DRAFT", "PREFLIGHT"]);
 // Karar gerektiren koşu sonları: başarısız/engelli koşu Founder'ın yeniden deneme veya iptal kararını bekler.
 const RUN_DECISION = new Set<WorkRun["status"]>(["FAILED", "RECOVERY_FAILED", "QUARANTINED", "BLOCKED"]);
 // Önem sırası: Founder'ın şimdi eylemi gereken öğeler önce.
 const RANK: Record<AttentionKind, number> = {
-  RUN_AWAITING_APPROVAL: 0, MISSION_FOUNDER_ATTENTION: 1, RUN_NEEDS_DECISION: 2, MISSION_AUTHORIZATION_PENDING: 3, MISSION_BLOCKED: 4, TASK_BLOCKED: 5
+  RUN_AWAITING_APPROVAL: 0, MISSION_FOUNDER_ATTENTION: 1, INTAKE_AUTHORITY_FLAGGED: 2, RUN_NEEDS_DECISION: 3, MISSION_AUTHORIZATION_PENDING: 4, MISSION_BLOCKED: 5, TASK_BLOCKED: 6
 };
 const clean = (s: string | null | undefined, max: number): string | null => (typeof s === "string" && s.trim() ? redactSecrets(s).slice(0, max) : null);
 
@@ -38,6 +41,18 @@ export function deriveAttention(store: WorkOsStore, scope: Scope): AttentionQueu
     for (const t of store.listTasks(scope, m.missionId)) {
       if (t.status === "BLOCKED") push({...base, kind: "TASK_BLOCKED", nextAction: "UNBLOCK_TASK", taskId: t.taskId, title: t.title.slice(0, 200)});
     }
+  }
+  // //TR: UASCO-T0011: sunucunun intake kaydına yazdığı yetki bayrakları (engellemeyen dört bayrak ve onaylı engelleyenler) Founder'a SALT-OKUNUR gösterilir; gerekçe bayrak kodlarıdır,
+  // onaylananlar "(acknowledged)" ile işaretlenir. Intake deposu okunamazsa (bozuk) bu tür atlanır; mission/koşu öğeleri etkilenmez.
+  let intakes: ReturnType<typeof listIntakes> = [];
+  try { intakes = listIntakes(store.dataDir, scope); } catch { intakes = []; }
+  for (const it of intakes) {
+    const flags = Array.isArray(it.authorityFlags) ? it.authorityFlags : [];
+    const m = flags.length ? mission(it.missionId) : undefined;
+    if (!m || !INTAKE_FLAG_REVIEW.has(m.status)) continue;
+    const ack = Array.isArray(it.acknowledgedRisks) ? it.acknowledgedRisks : [];
+    push({kind: "INTAKE_AUTHORITY_FLAGGED", nextAction: "REVIEW_MISSION", projectId: m.projectId, missionId: m.missionId, runId: null, taskId: null,
+      title: m.title.slice(0, 200), reason: clean(flags.map(f => ack.includes(f) ? `${f} (acknowledged)` : f).join(", "), 300), since: it.createdAt});
   }
   // Koşular: her mission için yalnız EN SON koşu değerlendirilir (eski başarısız koşu, yeni koşu varken dikkat istemez).
   const latest = new Map<string, WorkRun>();

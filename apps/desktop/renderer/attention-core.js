@@ -1,11 +1,12 @@
 // //TR: Bu modül Founder dikkat kuyruğunun (GET /v1/attention, Lane B: yalnız Work OS kayıtlarından türetilir, emekli scheduler kaynağı /v1/founder-attention DEĞİL) saf, DOM'suz sıkı eşleyicisidir. Bilinmeyen tür, tür-eylem çifti uyuşmayan ya da bozuk öğeler ATILIR ama sayılır (dropped) ve arayüzde söylenir; sayaçlar (altı tür) ve truncated sıkı doğrulanır, bozuk yanıt (sayaç/truncated/source) TÜM okumayı ERROR yapar. Öğeler önem sırasıyla (sunucu sırası eşitlikte korunur) gösterilir; her öğenin sonraki eylemi sunucunun bildirdiği değerdir.
 export const ATTENTION_PATH="/v1/attention";
 /** Önem sırası (sunucudaki RANK ile aynı): Founder'ın şimdi eylemi gereken öğeler önce. */
-export const ATTENTION_KINDS=Object.freeze(["RUN_AWAITING_APPROVAL","MISSION_FOUNDER_ATTENTION","RUN_NEEDS_DECISION","MISSION_AUTHORIZATION_PENDING","MISSION_BLOCKED","TASK_BLOCKED"]);
+export const ATTENTION_KINDS=Object.freeze(["RUN_AWAITING_APPROVAL","MISSION_FOUNDER_ATTENTION","INTAKE_AUTHORITY_FLAGGED","RUN_NEEDS_DECISION","MISSION_AUTHORIZATION_PENDING","MISSION_BLOCKED","TASK_BLOCKED"]);
 export const NEXT_ACTIONS=Object.freeze(["PREPARE_DELIVERY","ACCEPT_DELIVERY","REVIEW_RUN","REVIEW_MISSION","AUTHORIZE_MISSION","UNBLOCK_TASK"]);
 /** Türe göre geçerli sonraki eylemler (sunucu kuralı yansıması); eşleşmeyen öğe bozuk sayılır. */
-export const ACTIONS_FOR_KIND=Object.freeze({RUN_AWAITING_APPROVAL:["PREPARE_DELIVERY","ACCEPT_DELIVERY"],MISSION_FOUNDER_ATTENTION:["REVIEW_MISSION"],RUN_NEEDS_DECISION:["REVIEW_RUN"],MISSION_AUTHORIZATION_PENDING:["AUTHORIZE_MISSION"],MISSION_BLOCKED:["REVIEW_MISSION"],TASK_BLOCKED:["UNBLOCK_TASK"]});
+export const ACTIONS_FOR_KIND=Object.freeze({RUN_AWAITING_APPROVAL:["PREPARE_DELIVERY","ACCEPT_DELIVERY"],MISSION_FOUNDER_ATTENTION:["REVIEW_MISSION"],INTAKE_AUTHORITY_FLAGGED:["REVIEW_MISSION"],RUN_NEEDS_DECISION:["REVIEW_RUN"],MISSION_AUTHORIZATION_PENDING:["AUTHORIZE_MISSION"],MISSION_BLOCKED:["REVIEW_MISSION"],TASK_BLOCKED:["UNBLOCK_TASK"]});
 export const ATTENTION_MAX_ITEMS=200;
+export const OPTIONAL_KINDS=Object.freeze(["INTAKE_AUTHORITY_FLAGGED"]);
 const MAX_COUNT=1000000;
 const PROJECT_RE=/^prj_[0-9a-f]{24}$/,MISSION_RE=/^msn_[0-9a-f]{24}$/,TASK_RE=/^tsk_[0-9a-f]{24}$/,RUN_RE=/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/;
 const ISO_RE=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
@@ -19,6 +20,8 @@ function mapItem(x){
   if(x.runId!==null&&(typeof x.runId!=="string"||!RUN_RE.test(x.runId)))return null;
   if(x.taskId!==null&&(typeof x.taskId!=="string"||!TASK_RE.test(x.taskId)))return null;
   if(x.kind==="TASK_BLOCKED"&&x.taskId===null)return null;
+  // UASCO-T0011: bayraklı intake öğesi koşu/görev taşımaz ve gerekçesi (bayrak kodları) zorunludur.
+  if(x.kind==="INTAKE_AUTHORITY_FLAGGED"&&(x.runId!==null||x.taskId!==null||x.reason===null))return null;
   if((x.kind==="RUN_AWAITING_APPROVAL"||x.kind==="RUN_NEEDS_DECISION")&&x.runId===null)return null;
   const title=text(x.title,200);if(title===null)return null;
   if(x.reason!==null&&text(x.reason,300)===null)return null;
@@ -29,9 +32,12 @@ function mapItem(x){
 export function mapAttentionQueue(raw){
   const bad={state:"ERROR",queue:null};
   const a=isObj(raw)?raw.attention:null;
-  if(!isObj(a)||a.source!=="WORKOS"||typeof a.truncated!=="boolean"||!Array.isArray(a.items)||a.items.length>ATTENTION_MAX_ITEMS||!isObj(a.counts)||Object.keys(a.counts).length!==ATTENTION_KINDS.length)return bad;
+  if(!isObj(a)||a.source!=="WORKOS"||typeof a.truncated!=="boolean"||!Array.isArray(a.items)||a.items.length>ATTENTION_MAX_ITEMS||!isObj(a.counts))return bad;
+  // //TR: UASCO-T0011: INTAKE_AUTHORITY_FLAGGED eklemeli (isteğe bağlı) bir sayaçtır: bu türü bilmeyen eski sunucu onu göndermez ve sayacı gerçekten 0'dır. Diğer altı sayaç zorunludur; bilinmeyen anahtar yine reddedilir.
+  const keys=Object.keys(a.counts);
+  if(keys.some(k=>!ATTENTION_KINDS.includes(k)))return bad; // eksik ZORUNLU sayaç aşağıdaki değer denetiminde reddedilir
   const counts={};let total=0;
-  for(const k of ATTENTION_KINDS){if(!cnt(a.counts[k]))return bad;counts[k]=a.counts[k];total+=a.counts[k]}
+  for(const k of ATTENTION_KINDS){const v=a.counts[k]===undefined&&OPTIONAL_KINDS.includes(k)?0:a.counts[k];if(!cnt(v))return bad;counts[k]=v;total+=v}
   const items=[];let dropped=0;
   for(const x of a.items){const m=mapItem(x);if(m===null)dropped++;else items.push(m)}
   const shownCounts=Object.fromEntries(ATTENTION_KINDS.map(k=>[k,items.filter(i=>i.kind===k).length]));

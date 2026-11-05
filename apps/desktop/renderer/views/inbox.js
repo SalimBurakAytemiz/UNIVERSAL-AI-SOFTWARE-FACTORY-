@@ -118,7 +118,9 @@ function attentionItem(ctx,x){
       h(doc,"span",{class:"mono",text:x.missionId}),x.runId?h(doc,"span",{class:"mono",text:x.runId}):null,x.taskId?h(doc,"span",{class:"mono",text:x.taskId}):null),
     h(doc,"p",{class:"note",dataset:{nextAction:x.nextAction}},h(doc,"strong",{text:ctx.t("attention.next")})," ",ctx.t(`attention.next.${x.nextAction}`)),
     x.reason?h(doc,"p",{class:"note",text:ctx.t("inbox.attention.item.reason",{reason:x.reason})}):null,
-    x.since?h(doc,"p",{class:"note mono",text:ctx.t("attention.since",{when:formatDateTime(x.since,ctx.i18n.lang)})}):null);
+    x.since?h(doc,"p",{class:"note mono",text:ctx.t("attention.since",{when:formatDateTime(x.since,ctx.i18n.lang)})}):null,
+    // //TR: UASCO-T0011: bayraklı intake öğesi salt-okunurdur; tek eylemi mission'a GEZİNMEKtir (yazma yok).
+    x.kind==="INTAKE_AUTHORITY_FLAGGED"&&typeof ctx.navigate==="function"?h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn",dataset:{openMission:x.missionId,focusKey:`attention-open-${x.missionId}`},text:ctx.t("inbox.attention.openMission"),on:{click:()=>{selection.missionId=x.missionId;ctx.navigate("work")}}})):null);
 }
 function attentionPanel(ctx,att){
   const doc=ctx.doc;

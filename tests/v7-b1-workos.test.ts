@@ -1669,7 +1669,7 @@ describe("LANE-B founder attention queue", () => {
 
   it("is empty and honest without records, then lists each Founder-attention kind in severity order with the right next action", async () => {
     const {app, store, p} = await mkApp();
-    expect(await att(app)).toEqual({items: [], counts: {RUN_AWAITING_APPROVAL: 0, RUN_NEEDS_DECISION: 0, MISSION_FOUNDER_ATTENTION: 0, MISSION_AUTHORIZATION_PENDING: 0, MISSION_BLOCKED: 0, TASK_BLOCKED: 0}, truncated: false, source: "WORKOS"});
+    expect(await att(app)).toEqual({items: [], counts: {RUN_AWAITING_APPROVAL: 0, RUN_NEEDS_DECISION: 0, MISSION_FOUNDER_ATTENTION: 0, INTAKE_AUTHORITY_FLAGGED: 0, MISSION_AUTHORIZATION_PENDING: 0, MISSION_BLOCKED: 0, TASK_BLOCKED: 0}, truncated: false, source: "WORKOS"}); // UASCO-T0011: eklemeli tür
     mission(store, p.projectId, "pre", ["PREFLIGHT"]);
     mission(store, p.projectId, "fa", ["PREFLIGHT", "FOUNDER_ATTENTION_REQUIRED"]);
     const blocked = mission(store, p.projectId, "blk", ["BLOCKED"]);

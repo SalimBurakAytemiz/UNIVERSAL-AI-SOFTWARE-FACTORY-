@@ -187,3 +187,6 @@ registerCloudAcceptanceSuite();
 // //TR: UASCO-T0011 sunucu yetki kapısı: POST /v1/intakes INSTRUCTION_LIKE/PROTECTED_PATH bayraklı fikri TAM onay olmadan reddeder (422); diğer bayraklar kayda yazılır (gerçek buildServer)
 import {registerIntakeServerGateCases} from "./support/intake-server-gate.cases.js";
 registerIntakeServerGateCases();
+// //TR: UASCO-T0011 izleme: yetki bayraklı intake Founder dikkat kuyruğunda (INTAKE_AUTHORITY_FLAGGED, eklemeli sayaç) ve Inbox'ta salt-okunur görünür (gerçek buildServer)
+import {registerAttentionIntakeFlagsCases} from "./support/attention-intake-flags.cases.js";
+registerAttentionIntakeFlagsCases();

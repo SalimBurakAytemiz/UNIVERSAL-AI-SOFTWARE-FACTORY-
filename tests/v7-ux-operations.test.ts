@@ -76,7 +76,7 @@ const finishedRun = (id: string, status = "COMPLETE", startedAgo = 3 * H, over: 
 const openRun = (id: string, age: number | null, over: Record<string, any> = {}) => ({runId: id, summary: null, manifest: {runId: id, startedAt: age === null ? undefined : ago(age), status: "RUNNING", mode: "FULL_AUTO", ...over}});
 const runsBody = (rows: any[]) => ({count: rows.length, runs: rows});
 const ctlBody = (over: Record<string, any> = {}) => ({globalStop: {active: false}, workos: {state: "OK", reason: null, tornTail: null}, ...over});
-const ATT_KINDS = ["RUN_AWAITING_APPROVAL", "MISSION_FOUNDER_ATTENTION", "RUN_NEEDS_DECISION", "MISSION_AUTHORIZATION_PENDING", "MISSION_BLOCKED", "TASK_BLOCKED"];
+const ATT_KINDS = ["RUN_AWAITING_APPROVAL", "MISSION_FOUNDER_ATTENTION", "INTAKE_AUTHORITY_FLAGGED", "RUN_NEEDS_DECISION", "MISSION_AUTHORIZATION_PENDING", "MISSION_BLOCKED", "TASK_BLOCKED"];
 const PRJ_A = "prj_" + "ab".repeat(12), MSN_A = "msn_" + "cd".repeat(12), TSK = (n: number) => "tsk_" + String(n).padStart(24, "a");
 const countsOf = (items: any[]) => Object.fromEntries(ATT_KINDS.map(k => [k, items.filter(x => x && x.kind === k).length]));
 /** Bir Founder-dikkat öğesi (GET /v1/attention); varsayılan: engelli görev, 3 saattir bekliyor. */

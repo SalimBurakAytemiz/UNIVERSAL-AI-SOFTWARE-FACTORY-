@@ -103,11 +103,11 @@ describe("UX WP-INBOX-APPROVAL — Founder-attention queue bound to real data", 
     expect(items.map(n => n.dataset.attentionItem)).toEqual([RUN, "run_" + "cd".repeat(12), TSK]);
     expect(items[1].textContent).toContain("Run needs a decision"); expect(items[1].textContent).toContain("Review the run"); expect(items[1].textContent).toContain("Claude quota exhausted"); expect(items[1].textContent).toContain("Başarısız koşu");
     expect(items[0].textContent).toContain("Accept the delivery"); expect(items[2].textContent).toContain("Unblock the task"); expect(items[2].textContent).not.toContain("Reason:"); expect(items[0].textContent).toContain("Since");
-    expect(byData(panel, "counter").map(n => [n.dataset.counter, n.dataset.value])).toEqual([["RUN_AWAITING_APPROVAL", "1"], ["MISSION_FOUNDER_ATTENTION", "0"], ["RUN_NEEDS_DECISION", "1"], ["MISSION_AUTHORIZATION_PENDING", "0"], ["MISSION_BLOCKED", "0"], ["TASK_BLOCKED", "1"]]);
+    expect(byData(panel, "counter").map(n => [n.dataset.counter, n.dataset.value])).toEqual([["RUN_AWAITING_APPROVAL", "1"], ["MISSION_FOUNDER_ATTENTION", "0"], ["INTAKE_AUTHORITY_FLAGGED", "0"], ["RUN_NEEDS_DECISION", "1"], ["MISSION_AUTHORIZATION_PENDING", "0"], ["MISSION_BLOCKED", "0"], ["TASK_BLOCKED", "1"]]);
     expect(byData(panel, "attentionCount")[0].dataset.attentionCount).toBe("3");
     // the VISIBLE counter text (not only the data attribute) equals the server count for every kind (review #192 M13)
-    expect(byData(panel, "counter").map(n => n.children[0].textContent)).toEqual(["1", "0", "1", "0", "0", "1"]);
-    expect(byData(panel, "counter").map(n => n.textContent)).toEqual(["1 Run awaiting your approval", "0 Mission needs your attention", "1 Run needs a decision", "0 Mission awaiting authorization", "0 Mission blocked", "1 Task blocked"]);
+    expect(byData(panel, "counter").map(n => n.children[0].textContent)).toEqual(["1", "0", "0", "1", "0", "0", "1"]);
+    expect(byData(panel, "counter").map(n => n.textContent)).toEqual(["1 Run awaiting your approval", "0 Mission needs your attention", "0 Intake flagged for authority review", "1 Run needs a decision", "0 Mission awaiting authorization", "0 Mission blocked", "1 Task blocked"]);
     expect(byData(panel, "attentionCount")[0].textContent).toContain("3 item(s) awaiting Founder attention");
     expect(byData(panel, "attentionTruncated")).toEqual([]); expect(byData(panel, "attentionDropped")).toEqual([]);
     // no write/approve/reject control anywhere in the read-only queue panel
@@ -540,8 +540,8 @@ describe("LANE-A Founder attention core (GET /v1/attention)", () => {
   it("exposes the server's severity order and the kind-to-action rule", async () => {
     const m = await c();
     expect(m.ATTENTION_PATH).toBe("/v1/attention");
-    expect(m.ATTENTION_KINDS).toEqual(["RUN_AWAITING_APPROVAL", "MISSION_FOUNDER_ATTENTION", "RUN_NEEDS_DECISION", "MISSION_AUTHORIZATION_PENDING", "MISSION_BLOCKED", "TASK_BLOCKED"]);
-    expect(m.ACTIONS_FOR_KIND).toEqual({RUN_AWAITING_APPROVAL: ["PREPARE_DELIVERY", "ACCEPT_DELIVERY"], MISSION_FOUNDER_ATTENTION: ["REVIEW_MISSION"], RUN_NEEDS_DECISION: ["REVIEW_RUN"], MISSION_AUTHORIZATION_PENDING: ["AUTHORIZE_MISSION"], MISSION_BLOCKED: ["REVIEW_MISSION"], TASK_BLOCKED: ["UNBLOCK_TASK"]});
+    expect(m.ATTENTION_KINDS).toEqual(["RUN_AWAITING_APPROVAL", "MISSION_FOUNDER_ATTENTION", "INTAKE_AUTHORITY_FLAGGED", "RUN_NEEDS_DECISION", "MISSION_AUTHORIZATION_PENDING", "MISSION_BLOCKED", "TASK_BLOCKED"]);
+    expect(m.ACTIONS_FOR_KIND).toEqual({RUN_AWAITING_APPROVAL: ["PREPARE_DELIVERY", "ACCEPT_DELIVERY"], MISSION_FOUNDER_ATTENTION: ["REVIEW_MISSION"], INTAKE_AUTHORITY_FLAGGED: ["REVIEW_MISSION"], RUN_NEEDS_DECISION: ["REVIEW_RUN"], MISSION_AUTHORIZATION_PENDING: ["AUTHORIZE_MISSION"], MISSION_BLOCKED: ["REVIEW_MISSION"], TASK_BLOCKED: ["UNBLOCK_TASK"]});
     expect([...new Set(Object.values(m.ACTIONS_FOR_KIND).flat())].sort()).toEqual([...m.NEXT_ACTIONS].sort());
     expect(m.ATTENTION_MAX_ITEMS).toBe(200);
   });
