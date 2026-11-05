@@ -396,10 +396,16 @@ describe("UASCO-RW-053 — Delivery & SRE view over the REAL Control API (render
     expect(byData(after.root, "control")!.textContent).toContain("maintenance window");
   });
 
-  it("error: the bridge holds a wrong token -> the server identity cannot be verified and every /v1 read is a real 403; nothing is shown as VERIFIED and no table is drawn", async () => {
+  it("error: the bridge holds a wrong token -> the bridge's identity proof fails before any /v1 read (and the server itself would answer 403); nothing is shown as VERIFIED and no table is drawn", async () => {
     seedRun();
     const app = mkApp();
-    const {root: r} = await renderReal(app, "w".repeat(32));
+    // the server's own answer to the wrong token, asserted directly: the renderer never gets this far because the bridge stops at the identity check
+    for (const url of ["/v1/control/status", "/v1/attention", "/v1/work-runs"]) {
+      const direct = await app.inject({method: "GET", url, headers: {"x-uasco-control-token": "w".repeat(32), host: `127.0.0.1:${PORT}`}});
+      expect(direct.statusCode, url).toBe(403);
+    }
+    const {root: r, calls} = await renderReal(app, "w".repeat(32));
+    expect([...calls].sort()).toEqual([...READS].sort());                             // the view did try its four reads; each failed at the bridge identity check
     for (const k of ["health", "control", "attention", "runs"]) expect(sourceState(r, k), k).toBe("FAILED");
     expect(byData(r, "health")!.dataset.health).toBe("FAILED");
     expect(byData(r, "health")!.textContent).not.toContain("HEALTHY");
