@@ -1,3 +1,4 @@
+// //TR: Bu test (Builder I) Kuyruk ve Hazırlık ekranlarında koşu durumunun okunur etiketle gösterildiğini ve Control Tower bulut işleri panelinin yerelleştirildiğini, ham IPC hata metni göstermediğini gerçek control-api ile doğrular.
 // Builder I — Control Tower / Operations UX, against the REAL control-api (buildServer + app.inject) behind the desktop
 // bridge's own GET/POST allow-lists. Each test pins one defect fix and carries a positive control:
 //  (1) Queue and Readiness show a run's status as its readable label (mstatus.*), the raw code kept in data/title;
