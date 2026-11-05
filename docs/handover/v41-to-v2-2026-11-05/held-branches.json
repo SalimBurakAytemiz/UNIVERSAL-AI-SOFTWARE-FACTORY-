@@ -1,328 +1,342 @@
 {
- "//TR": "V4.1 HELD dal defteri: uzak dal SHA'larıyla; V2 devri için doğrulanacak.",
- "base": "59c06dd76934585e57e160967200f4b8fc472aa9",
- "held": [
-  {
-   "owner": "A",
-   "branch": "claude/builder-a-v3-t1027-skip",
-   "task": "V3-T1027",
-   "head": "df7af076c653cea402d43f75bef18751695bec71",
-   "note": "skip-links (on L2 64dd102f); SPLIT→Founder"
-  },
-  {
-   "owner": "A",
-   "branch": "claude/builder-a-uasco-t0019-titles",
-   "task": "UASCO-T0019",
-   "head": "9eb159b9fb1a3b64296a28372ebf56d91048797c",
-   "note": "mission titles (on skip df7af076)"
-  },
-  {
-   "owner": "A",
-   "branch": "claude/builder-a-uasco-t0019-bell",
-   "task": "UASCO-T0019",
-   "head": "2297c34102452b823114c7a1f7147498a0902627",
-   "note": "shell bell (on titles 9eb159b9)"
-  },
-  {
-   "owner": "A",
-   "branch": "claude/builder-a-uasco-t0019-notify",
-   "task": "UASCO-T0019",
-   "head": "5d6907de37841693439f535f23ff0126a8afbaf3",
-   "note": "notifications (on #363)"
-  },
-  {
-   "owner": "A",
-   "branch": "claude/builder-a-v3-t1027-l2",
-   "task": "V3-T1027",
-   "head": "64dd102f46ce8d49166f3ed7f4cabb7b280c094d",
-   "note": "L2"
-  },
-  {
-   "owner": "C",
-   "branch": "claude/builder-c-t0049-attention",
-   "task": "UASCO-T0049",
-   "head": "55c0bef9878b420207f8f7557eae1b4976346f66",
-   "note": "RESUME_RUN nextAction (dep V3-T1016)"
-  },
-  {
-   "owner": "C",
-   "branch": "claude/builder-c-t0083-resume-run-parse",
-   "task": "UASCO-T0083",
-   "head": "6e3da0ad9b78c3108088f02e0f1807b11598cef8",
-   "note": "mobile parse (on #367)"
-  },
-  {
-   "owner": "C",
-   "branch": "claude/builder-c-t0083-connection-state",
-   "task": "UASCO-T0083",
-   "head": "c87c31f33c158153e3918afb37bc52e584382413",
-   "note": "mobile connection state (on parse)"
-  },
-  {
-   "owner": "C",
-   "branch": "claude/builder-c-v3-t1027-kpi-honesty",
-   "task": "V3-T1027",
-   "head": "4dfac9beaa9fec031c19de03fae75851396ff517",
-   "note": "cockpit KPI tests (on A titles)"
-  },
-  {
-   "owner": "C",
-   "branch": "claude/builder-c-cockpit-kpi-honesty",
-   "task": "superseded-by",
-   "head": "5e553d73045b9b6e7c398874bff6e6be472fb630",
-   "note": "kpi-honesty (same tree)"
-  },
-  {
-   "owner": "D",
-   "branch": "claude/builder-d-t0067-sameline",
-   "task": "UASCO-T0067",
-   "head": "b3ae8f2cd17aca750231d337bd7a20930ce8cd59",
-   "note": "folded into #378"
-  },
-  {
-   "owner": "G",
-   "branch": "claude/builder-g-t0006-real-bridge",
-   "task": "UASCO-T0006",
-   "head": "9a3693d34e561df1ca839a76b9da6c343b08a3f1",
-   "note": "shared real-bridge helper (on workforce-f1)"
-  },
-  {
-   "owner": "G",
-   "branch": "claude/builder-g-t0006-real-bridge-migrate",
-   "task": "UASCO-T0006",
-   "head": "3e0fbcbe285969f0d397535bdffb3f55a51e5b15",
-   "note": "migration (merge of assurance-f1+rw053-f1)"
-  },
-  {
-   "owner": "G",
-   "branch": "claude/builder-g-t0006-provider-config",
-   "task": "UASCO-T0006",
-   "head": "9f065e0d8b2c2d0edc9b13155b34c914106b75b2",
-   "note": "AI provider NOT_CONFIGURED (on #368)"
-  },
-  {
-   "owner": "I",
-   "branch": "claude/builder-i-374-safe",
-   "task": "none",
-   "head": "7dbc56fa235bae3417f2924596c6064c15fdd4ef",
-   "note": "raw-sink superset (merge last)"
-  },
-  {
-   "owner": "I",
-   "branch": "claude/builder-i-approval-gate",
-   "task": "none",
-   "head": "9d21537e4d9dc4159db406cb8334729d718b7518",
-   "note": "approval gate (on 374-safe)"
-  },
-  {
-   "owner": "I",
-   "branch": "claude/builder-i-cloud-sink-guard",
-   "task": "none",
-   "head": "1f195e72859ce9532f9a71ed64c1ea19bd84261b",
-   "note": "static guard (on approval-gate)"
-  },
-  {
-   "owner": "I",
-   "branch": "claude/builder-i-t0006-wizard",
-   "task": "UASCO-T0006",
-   "head": "293d01fbbebef035d2ae9c68c42bd6b9713613eb",
-   "note": "wizard environmentId fix (PR pending basemerge)"
-  },
-  {
-   "owner": "C",
-   "branch": "claude/builder-c-t0043-quota-classify",
-   "task": "UASCO-T0043",
-   "head": "2ecd36dcb81e3a2e5ea6ec20673aea15f7ef5d7c",
-   "note": ""
-  },
-  {
-   "owner": "C",
-   "branch": "claude/builder-c-t0048-global-stop",
-   "task": "UASCO-T0048",
-   "head": "e56b9f17373356ae353c15f38f972843463100a5",
-   "note": ""
-  },
-  {
-   "owner": "C",
-   "branch": "claude/builder-c-t0049-pause",
-   "task": "UASCO-T0049",
-   "head": "93cfcf079370b4df57ab8365243931780362030b",
-   "note": "dep V3-T1016"
-  },
-  {
-   "owner": "C",
-   "branch": "claude/builder-c-t0049-resume",
-   "task": "UASCO-T0049",
-   "head": "998c0ef67fd8bbe751c62009763f770816da9260",
-   "note": "dep V3-T1016"
-  },
-  {
-   "owner": "C",
-   "branch": "claude/builder-c-v3-t1016-n1",
-   "task": "V3-T1016",
-   "head": "2bed3b758522d2b241bb74c25f50644e8ba970a7",
-   "note": "on #360"
-  },
-  {
-   "owner": "D",
-   "branch": "claude/builder-d-intake-product-profile",
-   "task": "?",
-   "head": "17b16f05fde5b14314cf002a8bb919fb17e9f491",
-   "note": "on #381"
-  },
-  {
-   "owner": "D",
-   "branch": "claude/builder-d-par03-scenario-fire",
-   "task": "?",
-   "head": "6d2d44d23f0a7a5b4017d1955cddf41cc34d8d5d",
-   "note": "on #339"
-  },
-  {
-   "owner": "E",
-   "branch": "claude/builder-e-attention-flags",
-   "task": "?",
-   "head": "a5b1a18b4b2986b1920d949824875279b4e3acdd",
-   "note": "INTAKE_AUTHORITY_FLAGGED; follow-up: ATTENTION_GROUP mapping (A)"
-  },
-  {
-   "owner": "E",
-   "branch": "claude/builder-e-command-field-on-364",
-   "task": "?",
-   "head": "2320887169358328ad00c23d9f00014e2dc29e01",
-   "note": "#372 merged into #364"
-  },
-  {
-   "owner": "E",
-   "branch": "claude/builder-e-reconnect-f1",
-   "task": "UASCO-T0004.A",
-   "head": "3bb7bf21bf526440bf5395f3c6e202f960918cef",
-   "note": "on #386"
-  },
-  {
-   "owner": "F",
-   "branch": "claude/builder-f-a11y-2",
-   "task": "?",
-   "head": "32eb0aba865c53675f30fbd1cbe14cf04ba1cbc7",
-   "note": ""
-  },
-  {
-   "owner": "F",
-   "branch": "claude/builder-f-polish-2-2",
-   "task": "?",
-   "head": "a9f48863284d1d27a0b6d1d6fb840d3880f7f6e3",
-   "note": ""
-  },
-  {
-   "owner": "F",
-   "branch": "claude/builder-f-polish-3-2",
-   "task": "?",
-   "head": "11c08cad0af664c05b94fcfcde134f440e2e279b",
-   "note": ""
-  },
-  {
-   "owner": "G",
-   "branch": "claude/builder-g-e2e-delivery",
-   "task": "?",
-   "head": "6f96e70afd625a3b877c6b3c84ea534acf392277",
-   "note": "on #384"
-  },
-  {
-   "owner": "G",
-   "branch": "claude/builder-g-rw053-f1",
-   "task": "UASCO-T0006",
-   "head": "39fd8561181cffeba041e664bc8dfca7bde4f036",
-   "note": "on #392"
-  },
-  {
-   "owner": "G",
-   "branch": "claude/builder-g-t0006-assurance-f1",
-   "task": "UASCO-T0006",
-   "head": "3abd8fd4f3531a52b5fff7be732e8de1f5c06143",
-   "note": "on #395"
-  },
-  {
-   "owner": "G",
-   "branch": "claude/builder-g-t0006-workforce-f1",
-   "task": "UASCO-T0006",
-   "head": "bbcf64cc7980f20119538772697683736f6b2a0a",
-   "note": "on #394"
-  },
-  {
-   "owner": "H",
-   "branch": "claude/builder-h-373-f1",
-   "task": "?",
-   "head": "80ce14b9a76b104cae18ccac5cf74159fc889e0a",
-   "note": "on #373"
-  },
-  {
-   "owner": "H",
-   "branch": "claude/builder-h-379-nb",
-   "task": "?",
-   "head": "a386d43ec8ec723c7b9c3573b96499cfc90f41f1",
-   "note": "on #379"
-  },
-  {
-   "owner": "H",
-   "branch": "claude/builder-h-tour-a11y",
-   "task": "?",
-   "head": "bf2fed4bc184a51ee0a41e83abe7cb0ee472a96d",
-   "note": "on #387"
-  },
-  {
-   "owner": "I",
-   "branch": "claude/builder-i-371-safe",
-   "task": "none",
-   "head": "cc3db0cb342a555d30de1098b0c057e677d0343e",
-   "note": "on #371"
-  },
-  {
-   "owner": "I",
-   "branch": "claude/builder-i-377-safe",
-   "task": "none",
-   "head": "f8ff0ae1487fbcf1c552efe54f7f67341893a4d2",
-   "note": "on #377"
-  },
-  {
-   "owner": "I",
-   "branch": "claude/builder-i-382-safe",
-   "task": "none",
-   "head": "c2297f457418ca3e823c61b3bde0d8f35d5f1814",
-   "note": "on #382"
-  },
-  {
-   "owner": "D",
-   "branch": "(not pushed; patch held by coordinator)",
-   "task": "UASCO-T0117",
-   "head": "71acc4cf (builder local), code patch sha256 d9e380ad, expected tree 26eec82b",
-   "note": "routine prompts; coordinator to read prompts before capture; exclude trig_01BiCM (contains e-mail)"
-  },
-  {
-   "owner": "H",
-   "branch": "claude/builder-h-work-polish",
-   "task": "V3-T1023 (to be re-tagged UASCO-T0012 on rebase)",
-   "head": "da252f6c (builder-reported)",
-   "note": "waits #366; FOUNDER_REQUIRED as tagged"
-  },
-  {
-   "owner": "D",
-   "branch": "claude/builder-d-reviewer-oauth-probe",
-   "task": "none (Founder-held)",
-   "head": "47d6c4baf3e0b8dd5c2a3acfc776e26c4dae9afd",
-   "note": "scripts/ci/uasco-review/oauth-probe.mjs (CI path → Founder-tier); local-only until 2026-11-05, pushed by coordinator; patch-id dc7d770b"
-  },
-  {
-   "owner": "A",
-   "branch": "claude/builder-a-uasco-t0116-fu",
-   "task": "UASCO-T0116 (merged #332) review follow-up",
-   "head": "2dc4f374e18a9c3d52677b1576efa2167daff6a2",
-   "note": "docs only; patch-ids 1ba74af4+ceb9ef06; was local-only, pushed by coordinator"
-  },
-  {
-   "owner": "A",
-   "branch": "claude/builder-a-uasco-t0065-fu",
-   "task": "UASCO-T0065 (merged #322) review follow-up",
-   "head": "e5938fa7d9333ead8475604af0936cf7ace871e6",
-   "note": "tests only; patch-id 9bbc76b3; OmniRoute 15/15; was local-only, pushed by coordinator"
-  }
- ]
+  "//TR": "V4.1 HELD dal defteri: uzak dal SHA'larıyla; V2 devri için doğrulanacak.",
+  "base": "59c06dd76934585e57e160967200f4b8fc472aa9",
+  "held": [
+    {
+      "owner": "A",
+      "branch": "claude/builder-a-v3-t1027-skip",
+      "task": "V3-T1027",
+      "head": "df7af076c653cea402d43f75bef18751695bec71",
+      "note": "skip-links (on L2 64dd102f); SPLIT→Founder"
+    },
+    {
+      "owner": "A",
+      "branch": "claude/builder-a-uasco-t0019-titles",
+      "task": "UASCO-T0019",
+      "head": "9eb159b9fb1a3b64296a28372ebf56d91048797c",
+      "note": "mission titles (on skip df7af076)"
+    },
+    {
+      "owner": "A",
+      "branch": "claude/builder-a-uasco-t0019-bell",
+      "task": "UASCO-T0019",
+      "head": "2297c34102452b823114c7a1f7147498a0902627",
+      "note": "shell bell (on titles 9eb159b9)"
+    },
+    {
+      "owner": "A",
+      "branch": "claude/builder-a-uasco-t0019-notify",
+      "task": "UASCO-T0019",
+      "head": "5d6907de37841693439f535f23ff0126a8afbaf3",
+      "note": "notifications (on #363)"
+    },
+    {
+      "owner": "A",
+      "branch": "claude/builder-a-v3-t1027-l2",
+      "task": "V3-T1027",
+      "head": "64dd102f46ce8d49166f3ed7f4cabb7b280c094d",
+      "note": "L2"
+    },
+    {
+      "owner": "C",
+      "branch": "claude/builder-c-t0049-attention",
+      "task": "UASCO-T0049",
+      "head": "55c0bef9878b420207f8f7557eae1b4976346f66",
+      "note": "RESUME_RUN nextAction (dep V3-T1016)"
+    },
+    {
+      "owner": "C",
+      "branch": "claude/builder-c-t0083-resume-run-parse",
+      "task": "UASCO-T0083",
+      "head": "6e3da0ad9b78c3108088f02e0f1807b11598cef8",
+      "note": "mobile parse (on #367)"
+    },
+    {
+      "owner": "C",
+      "branch": "claude/builder-c-t0083-connection-state",
+      "task": "UASCO-T0083",
+      "head": "c87c31f33c158153e3918afb37bc52e584382413",
+      "note": "mobile connection state (on parse)"
+    },
+    {
+      "owner": "C",
+      "branch": "claude/builder-c-v3-t1027-kpi-honesty",
+      "task": "V3-T1027",
+      "head": "4dfac9beaa9fec031c19de03fae75851396ff517",
+      "note": "cockpit KPI tests (on A titles)"
+    },
+    {
+      "owner": "C",
+      "branch": "claude/builder-c-cockpit-kpi-honesty",
+      "task": "superseded-by",
+      "head": "5e553d73045b9b6e7c398874bff6e6be472fb630",
+      "note": "kpi-honesty (same tree)"
+    },
+    {
+      "owner": "D",
+      "branch": "claude/builder-d-t0067-sameline",
+      "task": "UASCO-T0067",
+      "head": "b3ae8f2cd17aca750231d337bd7a20930ce8cd59",
+      "note": "folded into #378"
+    },
+    {
+      "owner": "G",
+      "branch": "claude/builder-g-t0006-real-bridge",
+      "task": "UASCO-T0006",
+      "head": "9a3693d34e561df1ca839a76b9da6c343b08a3f1",
+      "note": "shared real-bridge helper (on workforce-f1)"
+    },
+    {
+      "owner": "G",
+      "branch": "claude/builder-g-t0006-real-bridge-migrate",
+      "task": "UASCO-T0006",
+      "head": "3e0fbcbe285969f0d397535bdffb3f55a51e5b15",
+      "note": "migration (merge of assurance-f1+rw053-f1)"
+    },
+    {
+      "owner": "G",
+      "branch": "claude/builder-g-t0006-provider-config",
+      "task": "UASCO-T0006",
+      "head": "9f065e0d8b2c2d0edc9b13155b34c914106b75b2",
+      "note": "AI provider NOT_CONFIGURED (on #368)"
+    },
+    {
+      "owner": "I",
+      "branch": "claude/builder-i-374-safe",
+      "task": "none",
+      "head": "7dbc56fa235bae3417f2924596c6064c15fdd4ef",
+      "note": "raw-sink superset (merge last)"
+    },
+    {
+      "owner": "I",
+      "branch": "claude/builder-i-approval-gate",
+      "task": "none",
+      "head": "9d21537e4d9dc4159db406cb8334729d718b7518",
+      "note": "approval gate (on 374-safe)"
+    },
+    {
+      "owner": "I",
+      "branch": "claude/builder-i-cloud-sink-guard",
+      "task": "none",
+      "head": "1f195e72859ce9532f9a71ed64c1ea19bd84261b",
+      "note": "static guard (on approval-gate)"
+    },
+    {
+      "owner": "I",
+      "branch": "claude/builder-i-t0006-wizard",
+      "task": "UASCO-T0006",
+      "head": "293d01fbbebef035d2ae9c68c42bd6b9713613eb",
+      "note": "wizard environmentId fix (PR pending basemerge)"
+    },
+    {
+      "owner": "C",
+      "branch": "claude/builder-c-t0043-quota-classify",
+      "task": "UASCO-T0043",
+      "head": "2ecd36dcb81e3a2e5ea6ec20673aea15f7ef5d7c",
+      "note": ""
+    },
+    {
+      "owner": "C",
+      "branch": "claude/builder-c-t0048-global-stop",
+      "task": "UASCO-T0048",
+      "head": "e56b9f17373356ae353c15f38f972843463100a5",
+      "note": ""
+    },
+    {
+      "owner": "C",
+      "branch": "claude/builder-c-t0049-pause",
+      "task": "UASCO-T0049",
+      "head": "93cfcf079370b4df57ab8365243931780362030b",
+      "note": "dep V3-T1016"
+    },
+    {
+      "owner": "C",
+      "branch": "claude/builder-c-t0049-resume",
+      "task": "UASCO-T0049",
+      "head": "998c0ef67fd8bbe751c62009763f770816da9260",
+      "note": "dep V3-T1016"
+    },
+    {
+      "owner": "C",
+      "branch": "claude/builder-c-v3-t1016-n1",
+      "task": "V3-T1016",
+      "head": "2bed3b758522d2b241bb74c25f50644e8ba970a7",
+      "note": "on #360"
+    },
+    {
+      "owner": "D",
+      "branch": "claude/builder-d-intake-product-profile",
+      "task": "?",
+      "head": "17b16f05fde5b14314cf002a8bb919fb17e9f491",
+      "note": "on #381"
+    },
+    {
+      "owner": "D",
+      "branch": "claude/builder-d-par03-scenario-fire",
+      "task": "?",
+      "head": "6d2d44d23f0a7a5b4017d1955cddf41cc34d8d5d",
+      "note": "on #339"
+    },
+    {
+      "owner": "E",
+      "branch": "claude/builder-e-attention-flags",
+      "task": "?",
+      "head": "a5b1a18b4b2986b1920d949824875279b4e3acdd",
+      "note": "INTAKE_AUTHORITY_FLAGGED; follow-up: ATTENTION_GROUP mapping (A)"
+    },
+    {
+      "owner": "E",
+      "branch": "claude/builder-e-command-field-on-364",
+      "task": "?",
+      "head": "2320887169358328ad00c23d9f00014e2dc29e01",
+      "note": "#372 merged into #364"
+    },
+    {
+      "owner": "E",
+      "branch": "claude/builder-e-reconnect-f1",
+      "task": "UASCO-T0004.A",
+      "head": "3bb7bf21bf526440bf5395f3c6e202f960918cef",
+      "note": "on #386"
+    },
+    {
+      "owner": "F",
+      "branch": "claude/builder-f-a11y-2",
+      "task": "?",
+      "head": "32eb0aba865c53675f30fbd1cbe14cf04ba1cbc7",
+      "note": ""
+    },
+    {
+      "owner": "F",
+      "branch": "claude/builder-f-polish-2-2",
+      "task": "?",
+      "head": "a9f48863284d1d27a0b6d1d6fb840d3880f7f6e3",
+      "note": ""
+    },
+    {
+      "owner": "F",
+      "branch": "claude/builder-f-polish-3-2",
+      "task": "?",
+      "head": "11c08cad0af664c05b94fcfcde134f440e2e279b",
+      "note": ""
+    },
+    {
+      "owner": "G",
+      "branch": "claude/builder-g-e2e-delivery",
+      "task": "?",
+      "head": "6f96e70afd625a3b877c6b3c84ea534acf392277",
+      "note": "on #384"
+    },
+    {
+      "owner": "G",
+      "branch": "claude/builder-g-rw053-f1",
+      "task": "UASCO-T0006",
+      "head": "39fd8561181cffeba041e664bc8dfca7bde4f036",
+      "note": "on #392"
+    },
+    {
+      "owner": "G",
+      "branch": "claude/builder-g-t0006-assurance-f1",
+      "task": "UASCO-T0006",
+      "head": "3abd8fd4f3531a52b5fff7be732e8de1f5c06143",
+      "note": "on #395"
+    },
+    {
+      "owner": "G",
+      "branch": "claude/builder-g-t0006-workforce-f1",
+      "task": "UASCO-T0006",
+      "head": "bbcf64cc7980f20119538772697683736f6b2a0a",
+      "note": "on #394"
+    },
+    {
+      "owner": "H",
+      "branch": "claude/builder-h-373-f1",
+      "task": "?",
+      "head": "80ce14b9a76b104cae18ccac5cf74159fc889e0a",
+      "note": "on #373"
+    },
+    {
+      "owner": "H",
+      "branch": "claude/builder-h-379-nb",
+      "task": "?",
+      "head": "a386d43ec8ec723c7b9c3573b96499cfc90f41f1",
+      "note": "on #379"
+    },
+    {
+      "owner": "H",
+      "branch": "claude/builder-h-tour-a11y",
+      "task": "?",
+      "head": "bf2fed4bc184a51ee0a41e83abe7cb0ee472a96d",
+      "note": "on #387"
+    },
+    {
+      "owner": "I",
+      "branch": "claude/builder-i-371-safe",
+      "task": "none",
+      "head": "cc3db0cb342a555d30de1098b0c057e677d0343e",
+      "note": "on #371"
+    },
+    {
+      "owner": "I",
+      "branch": "claude/builder-i-377-safe",
+      "task": "none",
+      "head": "f8ff0ae1487fbcf1c552efe54f7f67341893a4d2",
+      "note": "on #377"
+    },
+    {
+      "owner": "I",
+      "branch": "claude/builder-i-382-safe",
+      "task": "none",
+      "head": "c2297f457418ca3e823c61b3bde0d8f35d5f1814",
+      "note": "on #382"
+    },
+    {
+      "owner": "D",
+      "branch": "(not pushed; patch held by coordinator)",
+      "task": "UASCO-T0117",
+      "head": "71acc4cf (builder local), code patch sha256 d9e380ad, expected tree 26eec82b",
+      "note": "routine prompts; coordinator to read prompts before capture; exclude trig_01BiCM (contains e-mail)"
+    },
+    {
+      "owner": "H",
+      "branch": "claude/builder-h-work-polish",
+      "task": "V3-T1023 (to be re-tagged UASCO-T0012 on rebase)",
+      "head": "da252f6c (builder-reported)",
+      "note": "waits #366; FOUNDER_REQUIRED as tagged"
+    },
+    {
+      "owner": "D",
+      "branch": "claude/builder-d-reviewer-oauth-probe",
+      "task": "none (Founder-held)",
+      "head": "47d6c4baf3e0b8dd5c2a3acfc776e26c4dae9afd",
+      "note": "scripts/ci/uasco-review/oauth-probe.mjs (CI path → Founder-tier); local-only until 2026-11-05, pushed by coordinator; patch-id dc7d770b"
+    },
+    {
+      "owner": "A",
+      "branch": "claude/builder-a-uasco-t0116-fu",
+      "task": "UASCO-T0116 (merged #332) review follow-up",
+      "head": "2dc4f374e18a9c3d52677b1576efa2167daff6a2",
+      "note": "docs only; patch-ids 1ba74af4+ceb9ef06; was local-only, pushed by coordinator"
+    },
+    {
+      "owner": "A",
+      "branch": "claude/builder-a-uasco-t0065-fu",
+      "task": "UASCO-T0065 (merged #322) review follow-up",
+      "head": "e5938fa7d9333ead8475604af0936cf7ace871e6",
+      "note": "tests only; patch-id 9bbc76b3; OmniRoute 15/15; was local-only, pushed by coordinator"
+    },
+    {
+      "owner": "G",
+      "branch": "claude/builder-g-v3-t1012-delivery-lockfile",
+      "task": "V3-T1012 (PROPOSED → Founder-tier)",
+      "head": "4b96758d0f7364eed0018e0658397d8be9f156bf",
+      "note": "parent c537f2d7; patch-id 7aa51b6c; was local-only, pushed by coordinator"
+    },
+    {
+      "owner": "G",
+      "branch": "claude/builder-g-v3-t1012-pm-lockfiles",
+      "task": "V3-T1012 (Founder decision A; Founder-tier)",
+      "head": "1a3a0536692e083ae055ce87d7435975821f516c",
+      "note": "original parent 3b8e5398 (not on any remote) → applied with am -3 onto 4b96758d; patch-id d649737d matches; tsc=0; pushed by coordinator"
+    }
+  ]
 }

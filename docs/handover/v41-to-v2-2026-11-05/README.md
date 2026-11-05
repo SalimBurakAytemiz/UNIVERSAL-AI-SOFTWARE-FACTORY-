@@ -54,7 +54,7 @@
 | #374 | E | UASCO-T0020 | `6e67dc4758e0` | FOUNDER_REQUIRED (task SPLIT) |
 | #375 | I | none | `c335e604fbc3` | FOUNDER_REQUIRED (no task id) |
 | #377 | I | none | `a462d629d28f` | FOUNDER_REQUIRED (no task id) |
-| #378 | D | UASCO-T0067 | `82a82662fe4a` | ROUTINE |
+| #378 | D | UASCO-T0067 | `2d0f5b550779` | ROUTINE (re-review #4) |
 | #379 | H | none | `0e3d099c23f7` | FOUNDER_REQUIRED (no task id) |
 | #380 | C | V3-T1032 | `8a496aa11036` | ROUTINE |
 | #381 | E | UASCO-T0011 | `24f914bf69d8` | FOUNDER_REQUIRED (task SPLIT) |
@@ -80,6 +80,7 @@
 | #401 | I | UASCO-T0006 | `be33322036f6` | ROUTINE |
 | #402 | G | UASCO-T0006 | `fcdfce9897cd` | ROUTINE |
 | #403 | C | UASCO-T0111 | `9b5740a2e7c2` | DRAFT |
+| #404 | G | UASCO-T0006 | `d548583451e0` | ROUTINE (CLEAN, merge loop) |
 
 ## HELD branches
 
@@ -98,6 +99,8 @@
 | D | `claude/builder-d-t0067-sameline` | UASCO-T0067 | `b3ae8f2cd17a` | folded into #378 |
 | G | `claude/builder-g-t0006-real-bridge` | UASCO-T0006 | `9a3693d34e56` | shared real-bridge helper (on workforce-f1) |
 | G | `claude/builder-g-t0006-real-bridge-migrate` | UASCO-T0006 | `3e0fbcbe2859` | migration (merge of assurance-f1+rw053-f1) |
+| G | `claude/builder-g-v3-t1012-delivery-lockfile` | V3-T1012 | `4b96758d0f73` | Founder-tier (PROPOSED); was local-only, patch-id 7aa51b6c |
+| G | `claude/builder-g-v3-t1012-pm-lockfiles` | V3-T1012 | `1a3a0536692e` | Founder-tier; on 4b96758d (original parent 3b8e5398 not on any remote), patch-id d649737d |
 | G | `claude/builder-g-t0006-provider-config` | UASCO-T0006 | `9f065e0d8b2c` | AI provider NOT_CONFIGURED (on #368) |
 | I | `claude/builder-i-374-safe` | none | `7dbc56fa235b` | raw-sink superset (merge last) |
 | I | `claude/builder-i-approval-gate` | none | `9d21537e4d9d` | approval gate (on 374-safe) |
@@ -130,7 +133,7 @@
 
 ## In-flight at record time
 - Merge loop (serial, single writer): #360 #391 #387 #392 #393 #394 #395 #401 (#396 removed: supervisor register task per the V4.1 matrix). Base-merged onto 59c06dd7; re-binds requested from each reviewer; waiting on Windows CI.
-- #378: head 82a82662 (perf + same-line + base), re-review #3 requested.
+- #378: 82a82662 CLEAN; the 1/17 ratio-test flake was fixed by D's de-flake → 2d0f5b55 (patch-id b126253e, relfx-2 16/16 ×5), re-review #4 requested.
 - #402: CLEAN on 3c824257; needs a base merge and a re-bind.
 - The I wizard fix (claude/builder-i-t0006-wizard): needs a base merge, then a PR and a review.
 - D T0117 routine prompts: held. The coordinator must read the prompts before capture, and exclude trig_01BiCM.
