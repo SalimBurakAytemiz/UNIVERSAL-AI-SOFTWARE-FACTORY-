@@ -5,6 +5,7 @@ import {registerQueueLockCases} from "./support/cloud-queue-lock.cases.js";     
 import {registerCloudGatewayCases} from "./support/cloud-gateway.cases.js";     // CLOUD-T0004 Control API kapısı vakaları
 import {registerCloudTaskOrchestratorCases} from "./support/cloud-task-orchestrator.cases.js";   // CLOUD-T0010 görev DAG vakaları
 import {registerCloudConnectionViewCases} from "./support/cloud-connection-view.cases.js"; // CLOUD-T0005 masaüstü bulut bağlantı görünümü vakaları
+import {registerCloudJobsStatusCases} from "./support/cloud-jobs-status.cases.js"; // CLOUD-T0005 gerçek bulut iş durumu (list + route + panel) vakaları
 import {registerWorkosStoreLockCases} from "./support/workos-store-lock.cases.js";   // V3-T1001 store kilidi kurtarma vakaları
 import {registerWorkosStoreIoCases} from "./support/workos-store-io.cases.js";     // UASCO-T0042 store işlem başına dayanıklı G/Ç vakaları
 import {registerAutonomyCases} from "./support/autonomy.cases.js";             // FD-2026-11-03 kalıcı otonomi karar modülü vakaları
@@ -179,4 +180,5 @@ registerCrewCoordinatorCases();
 registerLeaseClaimsCases();
 registerOmniRouteClientCases();
 registerTemplateLockfileCases();
+registerCloudJobsStatusCases();
 registerCloudAcceptanceSuite();
