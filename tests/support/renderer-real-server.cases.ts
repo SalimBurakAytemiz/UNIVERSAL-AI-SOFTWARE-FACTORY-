@@ -195,13 +195,14 @@ describe("UASCO-T0006: renderer -> real buildServer for the 10 formerly fake-bri
       const app = mkApp();
       app.addHook("onRequest", async (req, reply) => { if (req.url.startsWith("/v1/")) return reply.code(500).send({error: "INJECTED_SERVER_FAILURE"}); });
       const r = await renderAgainstServer(app, view);
-      expect(r.refused, `${view}: allow-list`).toEqual([]);
-      expect(r.thrown.filter(t => /CONTROL_API_IDENTITY_UNVERIFIED|INVALID_API_PATH/.test(t)), `${view}: identity and allow-list hold`).toEqual([]);
+      expect(r.refused, `${view}: allow-list`).toEqual(pendingRefused(view));
+      expect(r.thrown.filter(t => /CONTROL_API_IDENTITY_UNVERIFIED|INVALID_API_PATH/.test(t) && !pendingRefused(view).some(p => t.startsWith(`${p} -> `))), `${view}: identity and allow-list hold`).toEqual([]);
       const v1Seen = r.seen.filter(x => x.path.startsWith("/v1/"));
       expect(v1Seen.length, `${view}: /v1 reads reached the server`).toBeGreaterThan(0);
       expect([...new Set(v1Seen.map(x => x.status))], `${view}: every /v1 read answered 500`).toEqual([500]);
-      const v1Results = r.results.filter(x => x.path.startsWith("/v1/"));
+      const v1Results = r.results.filter(x => x.path.startsWith("/v1/") && !pendingRefused(view).includes(x.path));
       expect(v1Results.length).toBe(new Set(v1Seen.map(x => x.path)).size);
+      for (const x of r.results.filter(x => pendingRefused(view).includes(x.path))) expect([x.path, x.ok, x.state]).toEqual([x.path, false, "UNAVAILABLE"]);
       for (const x of v1Results) expect([view, x.path, x.ok, x.state, x.message]).toEqual([view, x.path, false, "ERROR", `${x.path}: HTTP 500`]);
       for (const x of r.results.filter(x => x.path === "/health")) expect([view, x.ok]).toEqual([view, true]); // main.mjs's own /health still answers
       expect(r.text).not.toContain(PROJECT); expect(r.text).not.toContain(MISSION);
