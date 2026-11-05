@@ -29,4 +29,4 @@ Factory V2 (`automation/factory-v2/identity.mjs`, `loadCanonicalKeyring`) reads 
 
 ## Not in this record
 - Private keys.
-- Cutover authorization. That is a separate Founder record with the line `AUTHORIZES: FACTORY_V2_CUTOVER domain=uasco-v7 candidate=<session> manifest-version=<n>`. This file must never contain that line, because it is also the canonical anchor.
+- Cutover authorization. That is a separate Founder record whose `AUTHORIZES` line names `FACTORY_V2_CUTOVER`, the domain, the candidate session and the manifest version. The exact format is in `automation/factory-v2/gate-verifier.mjs`. This file deliberately does not reproduce that line, because the line also acts as the canonical anchor.
