@@ -20,8 +20,8 @@ const rule = (sel: string): string => {
 };
 
 describe("V7 VISUAL-PARITY: design tokens reconcile with the approved reference palette", () => {
-  // //TR: NIHAI bölüm-2 başlangıç değerleri renderer token adlarına eşlenir; danger AA için ayarlı varyanttır.
-  const START: Record<string, string> = { bg: "#050E1E", surface: "#0A1D37", "surface-2": "#102844", border: "#214F75", focus: "#16B8FF", text: "#F1F8FF", muted: "#A5BAD2", ok: "#16DC9B", warn: "#FFBC42" };
+  // //TR: Founder FD 2026-11-05 siyah–kırmızı–beyaz paleti renderer token adlarına eşlenir (önceki NIHAI bölüm-2 lacivert/cyan başlangıç değerlerinin yerini alır; ok/warn aynen korunur); danger AA için ayarlı varyanttır. Oran eşikleri değişmedi.
+  const START: Record<string, string> = { bg: "#0A0A0B", surface: "#161618", "surface-2": "#1F1F23", border: "#2E2E34", focus: "#FFFFFF", text: "#F7F7F8", muted: "#ADADB6", ok: "#16DC9B", warn: "#FFBC42" };
   it("exact reference start values are kept for canvas/surface/elevated/border/focus/fg/muted/success/caution", () => {
     for (const [name, hex] of Object.entries(START)) expect(tok(name).toUpperCase(), name).toBe(hex.toUpperCase());
   });
