@@ -197,8 +197,10 @@ async function registry() {
     const g = own.acquire(); const original = own.record ? {...own.record} : null; const firstHead = head(); log("A_LEASE_ACQUIRED", {granted: g.granted, epoch: own.epoch, registryHead: firstHead});
     const w = reg.cas(K("A-hello"), null, {session, token: own.token, firstHead, at: Date.now()}); log("A_FAST_FORWARD_WRITE", {ok: w.ok, registryHead: head()});
     spawnSync("git", ["fetch", "-q", "origin", `+${ref}:${ref}`], {cwd: ROOT});
-    const stale = firstHead ? full.staleWriteProbe(firstHead, scoped(K("stale-write-marker")), {session, at: Date.now()}) : {ok: true};
-    log("A_STALE_WRITE_REFUSED_BY_SERVER", {refused: !stale.ok, expectedOld: firstHead, registryHead: head()});
+    // only a real, older commit id is ever used as the stale expectation; the probe is skipped (and reported) otherwise
+    const staleOk = /^[0-9a-f]{40}$/.test(firstHead ?? "") && firstHead !== head();
+    const stale = staleOk ? full.staleWriteProbe(firstHead, scoped(K("stale-write-marker")), {session, at: Date.now()}) : {ok: null, skipped: true};
+    log("A_STALE_WRITE_REFUSED_BY_SERVER", {refused: stale.skipped ? null : !stale.ok, skipped: !!stale.skipped, expectedOld: firstHead, registryHead: head()});
     const b = await until(() => reg.read(K("B-hello")).doc); log("A_SAW_B", {b});
     log("A_LEASE_RELEASED", {released: own.release(), registryHead: head()});
     const ba = await until(() => reg.read(K("B-acquired")).doc); log("A_SAW_B_ACQUIRE", {ba});
