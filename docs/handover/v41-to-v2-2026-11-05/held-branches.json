@@ -337,6 +337,20 @@
       "task": "V3-T1012 (Founder decision A; Founder-tier)",
       "head": "1a3a0536692e083ae055ce87d7435975821f516c",
       "note": "original parent 3b8e5398 (not on any remote) → applied with am -3 onto 4b96758d; patch-id d649737d matches; tsc=0; pushed by coordinator"
+    },
+    {
+      "owner": "C",
+      "branch": "claude/builder-c-v3-t1032-nb-held",
+      "task": "V3-T1032 (#380 non-blocking review fixes)",
+      "head": "26efe070d5f76d5d0e1d7d2c2c097c58541e0033",
+      "note": "FF on #380 head 8a496aa1; tests only; patch-id 401683af"
+    },
+    {
+      "owner": "C",
+      "branch": "claude/builder-c-t0124-nb-held",
+      "task": "UASCO-T0124 (#396 N2-N4; Founder-tier)",
+      "head": "fc3da07b1a7cc6411b2f50777109fd902c7a3252",
+      "note": "FF on #396 head 7e7d0158; patch-id abe18b0e; checkArtifactDigest gains INVALID_INPUT"
     }
   ]
 }
