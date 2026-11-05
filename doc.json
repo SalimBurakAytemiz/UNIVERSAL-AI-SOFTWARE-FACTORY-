@@ -624,15 +624,15 @@
     },
     "lease/probe/writer--LIVE-probe-uasco": {
       "taskId": "writer--LIVE-probe-uasco",
-      "environment": "cloud:A",
+      "environment": "cloud:B",
       "workerId": "merge-writer",
-      "sessionId": "session_015dYwb2b3yVQ6iay68HXCD8",
+      "sessionId": "session_015dYwb4zVwFwg69iij2RdGq",
       "headSha": null,
-      "epoch": 1,
-      "token": "session_015dYwb2b3yVQ6iay68HXCD8:1:c9e8dcbb-7ab9-45f3-bb2b-e208f752acca",
-      "acquiredAt": 1793869411931,
-      "heartbeatAt": 1793869411931,
-      "expiresAt": 1793869441931
+      "epoch": 2,
+      "token": "session_015dYwb4zVwFwg69iij2RdGq:2:80b8bcff-fff3-42bd-b4d2-d96c44842bfc",
+      "acquiredAt": 1793869454494,
+      "heartbeatAt": 1793869454494,
+      "expiresAt": 1793869484494
     }
   },
   "revs": {
@@ -648,7 +648,7 @@
     "probe/B-commit": 1,
     "probe/A-guard-checked": 1,
     "probe/go-lease": 1,
-    "lease/probe/writer--LIVE-probe-uasco": 1
+    "lease/probe/writer--LIVE-probe-uasco": 2
   },
-  "seq": 16
+  "seq": 17
 }
