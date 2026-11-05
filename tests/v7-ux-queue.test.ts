@@ -557,7 +557,7 @@ describe("Queue — view honesty", () => {
     expect(ph0.dataset.band).toBe("UNKNOWN");
     const gate = itemFor(root, K.gate);
     expect(field(gate, "run")!.textContent).toContain(R_GATE);
-    expect(field(gate, "run")!.textContent).toContain("AWAITING_APPROVAL");
+    expect(field(gate, "run")!.textContent).toContain("Awaiting approval"); expect(allData(field(gate, "run")!, "runStatusCode", "AWAITING_APPROVAL").length).toBe(1); // label shown, raw code kept
     expect(field(gate, "waiting")!.textContent).toContain("7 d 0 h");
     expect(field(gate, "waiting")!.textContent).toContain("since the run's last recorded update");
     expect(gate.dataset.band).toBe("OVER_7D");
@@ -1016,7 +1016,7 @@ describe("LANE-A Queue: a cut or partly unreadable attention list is never empty
     const r = await renderView(serve({"/v1/attention": attentionBody([{kind: "RUN_NEEDS_DECISION", nextAction: "REVIEW_RUN", projectId: PRJ_ATT, missionId: M_EXE, runId: R_OK, taskId: null, title: "Failed run", reason: "tests failed", since: "2026-10-17T08:00:00.000Z"}])}));
     const li = itemFor(r.root, `attention:RUN_NEEDS_DECISION:${R_OK}`), runField = field(li, "run")!;
     expect(runField.textContent).toContain(R_OK); expect(runField.textContent).not.toMatch(/Waiting/i);
-    const gate = itemFor((await renderView(serve())).root, K.gate); expect(field(gate, "run")!.textContent).toMatch(/AWAITING_APPROVAL/);
+    const gate = itemFor((await renderView(serve())).root, K.gate); expect(field(gate, "run")!.textContent).toMatch(/Awaiting approval/); expect(allData(field(gate, "run")!, "runStatusCode", "AWAITING_APPROVAL").length).toBe(1);
   });
   it("since is explained per kind: a blocked mission 'since' is its creation time, a run needing a decision is its last update", async () => {
     const {q} = await derive({"/v1/attention": attentionBody([
