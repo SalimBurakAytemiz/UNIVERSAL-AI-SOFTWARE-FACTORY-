@@ -78,6 +78,20 @@ Code: `bridge.mjs`, `ref-doc-store.mjs`, `github-writer.mjs`; tests: `tests/fact
 
 Authority: V4.1 (no record on origin). 41 done tasks imported, 10 open PRs. Seven PRs carry a governed task line and are adopted at their exact head SHAs; #340 is stacked on another branch and is tracked but never auto-merged; #282, #340 and #341 have no governed task line and are left untouched. Without a V4.1 drain disposition, 5 in-flight tasks stay UNRESOLVED (CLOUD-T0008, UASCO-T0045, CLOUD-T0010, CLOUD-T0015, UASCO-T0062), so `commit` would be refused. This is the intended fail-closed behaviour.
 
+## Handover security (Founder directive on PR #347)
+
+| Threat | Control | Evidence |
+|---|---|---|
+| A caller types `actor: "<V4.1 session>"` | `actor` is never identity. Every transition carries an ed25519 envelope signed by a key registered for that role and session. Public keys come only from `docs/planning/authority/FACTORY-V2-ROLE-KEYS.json` at an exact canonical commit (governance path, Founder-merged). | `security.test.mjs` §1 |
+| A registry writer forges, edits or rewinds the record | Each envelope is bound to the digest of the previous core state, forming a hash chain from the V4.1 genesis, and every reader re-verifies the whole chain. On a forged or edited record, V2 refuses and V4.1 halts; only a V41_OWNER or FOUNDER key can `resetInvalid`. On a rewind, a V2 holder that remembers its epoch stops. | §4, `resetInvalid` |
+| Replay or alteration of a relayed approval | An envelope signs `prev`, the action, the domain, the payload digest and an expiry. | §6 |
+| Text-only acceptance evidence | `gate-verifier.mjs` checks source, SHA, scope and authority from live GitHub and canonical git: a merged PR in canonical history, factory scope, a trusted-login `VERDICT-BINDING` CLEAN at the exact head and base, the required CI contexts from `github-actions`, a Founder `AUTHORIZES:` line under `docs/planning/authority/` naming domain, candidate and manifest version, and a successful `ci.yml` push run for the merge commit. | §2 (17 negative cases) |
+| Unauthorized rollback | Only `V41_OWNER` or `FOUNDER` keys may roll back. | §3 |
+| Caller-supplied freshness | `commit()` takes no freshness arguments. It reads the canonical SHA, open PRs and the STATE.json digest itself (`live-sources.mjs`). | §7 |
+| V4.1 keeps merging after the handover | The canonical `executor.mjs` checks `v41-guard.mjs` before its only write. The patch is prepared in `docs/authority-requests/FV2-PROTECTED-EXECUTOR-AUTHORITY-FENCE.*` and needs Founder approval. | §5 (applies the patch, zero writes) |
+| The V4.1 session cannot change its designated branch | No impersonating session is created. V4.1 signs its drain acknowledgement offline with its own key (`bridge sign-drain`); anyone relays it (`bridge relay-drain`); it cannot be altered. | §6 |
+| `uasco/registry-probe*` reused as the live store | The PROBE keyring loader refuses any non-`probe-` domain. The live domain uses only the canonical keyring and the `uasco/registry` branch. | `probe-scenario.mjs` |
+
 ## Live cutover runbook
 
 1. Merge this change through the normal path: CLAUDE_REVIEWER review, required CI, and Founder approval. It is not a single V4.1 task, so `autonomy.mjs` returns FOUNDER_REQUIRED.
