@@ -130,6 +130,16 @@ describe("FD 2026-11-05 design system: coordinator visual defects (header, badge
 });
 
 describe("Layout fixes: sticky nav scroll area, responsive top bar, route notice", () => {
+  it("styles.css has balanced braces, so no @media block swallows the rules after it (the matrix forced-colors block was left unclosed)", () => {
+    const body = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    let depth = 0, min = 0;
+    for (const ch of body) { if (ch === "{") depth++; else if (ch === "}") { depth--; min = Math.min(min, depth); } }
+    expect(min).toBe(0);
+    expect(depth).toBe(0);
+    // //TR: Dosya sonundaki kurallar üst düzeydedir (hiçbir @media içinde değildir).
+    const tail = body.slice(body.lastIndexOf("@media"));
+    expect(tail.indexOf("\n}")).toBeLessThan(tail.indexOf(".route-notice{"));
+  });
   const media = (q: string) => { const i = css.indexOf(`@media (${q}){`); if (i < 0) return ""; const j = css.indexOf("\n}", i); return css.slice(i, j); };
   it("the sidebar nav is its own sticky scroll area directly below the top bar", () => {
     const nav = /\n\.nav\{([^}]*)\}/.exec(css)?.[1] ?? "";

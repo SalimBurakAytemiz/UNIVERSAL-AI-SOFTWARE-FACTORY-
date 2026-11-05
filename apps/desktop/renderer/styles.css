@@ -317,9 +317,6 @@ pre.code,.code{margin:var(--space-1) 0;padding:var(--space-2) var(--space-3);max
 .empty-state .icon{color:var(--emphasis)}.empty-state-title{margin:0;font-size:var(--fs-h3);font-weight:var(--fw-bold);color:var(--text)}.empty-state-body{margin:0}
 .empty-state-error{border-style:solid;border-color:var(--danger)}.empty-state-error .icon{color:var(--danger)}
 ::selection{background:var(--danger-bg);color:var(--on-danger)}
-/* //TR: Bilinmeyen rota bildirimi (kabuk #routeNotice): uyarı kenarlı, metin + kapatma düğmesi tek satırda, dar pencerede sarar. */
-.route-notice{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--space-2) var(--space-3);margin:0 0 var(--space-4);padding:var(--space-3) var(--space-4);border:1px solid var(--border-ui);border-left:4px solid var(--warn);border-radius:var(--radius-md);background:var(--surface-2);color:var(--text);box-shadow:var(--elev-1)}
-.route-notice>span{flex:1 1 16rem;min-width:0;overflow-wrap:anywhere}.route-notice .btn{flex:none}
 
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 @keyframes stop-glow{0%,100%{box-shadow:var(--glow-risk-min)}50%{box-shadow:var(--glow-risk-max)}}
@@ -846,6 +843,7 @@ pre.code,.code{margin:var(--space-1) 0;padding:var(--space-2) var(--space-3);max
   .matrix-scroll,.matrix-table th,.matrix-table td{border:1px solid CanvasText}
   .matrix-row[data-status] .matrix-project{box-shadow:none;border-left:4px solid CanvasText}
   .matrix-section :focus-visible,.matrix-scroll:focus-visible{outline:3px solid Highlight}
+}
 /* //TR: FA-V2-PRODUCT Operasyon ve Kurtarma: KPI satırı mevcut kpiTile bileşenini, kontrol listesi/denetim/koşu kartları mevcut `.cards > .card` desenini ve mevcut token tabanını kullanır (palet değişmez, yeni renk token'ı yok). Durum anlamı rozet METNİNDE ve ikonunda taşınır; renk (sol kenar vurgusu) yalnız ek ipucudur ve zorunlu-renk modunda sistem renklerine düşer. */
 .view-operations{container-type:inline-size;display:grid;gap:var(--space-4)}
 .ops-sub{margin:var(--space-4) 0 var(--space-1);font-size:var(--fs-h3)}
@@ -925,3 +923,6 @@ pre.code,.code{margin:var(--space-1) 0;padding:var(--space-2) var(--space-3);max
 .view-scheduler .integ-state{border-left:4px solid var(--warn);padding-left:var(--space-2)}
 .view-scheduler .integ-state.state-error,.view-scheduler .integ-state.state-offline,.view-scheduler .integ-state.state-rejected{border-left-color:var(--danger)}
 .view-scheduler .integ-row[data-status="BLOCKED"]{border-left:4px solid var(--danger)}
+/* //TR: Bilinmeyen rota bildirimi (kabuk #routeNotice): uyarı kenarlı, metin + kapatma düğmesi tek satırda, dar pencerede sarar. (kabuk "note note-stale route-notice" sınıflarını birlikte verir; .note-stale görünüm kuralını ezmek için dosya SONUNDA durur) */
+.route-notice{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--space-2) var(--space-3);margin:0 0 var(--space-4);padding:var(--space-3) var(--space-4);border:1px solid var(--border-ui);border-left:4px solid var(--warn);border-radius:var(--radius-md);background:var(--surface-2);color:var(--text);box-shadow:var(--elev-1)}
+.route-notice>span{flex:1 1 16rem;min-width:0;overflow-wrap:anywhere}.route-notice .btn{flex:none}
