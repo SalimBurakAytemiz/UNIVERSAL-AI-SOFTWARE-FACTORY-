@@ -1,6 +1,6 @@
 {
   "schema": "uasco.factory-v2.shared-registry/1",
-  "phase": "section:lease/shadow-probe-control/supervisor--SHADOW-probe-control",
+  "phase": "section:ledger/run1/c/000001",
   "sections": {
     "lease/shadow-probe-control/supervisor--SHADOW-probe-control": {
       "taskId": "supervisor--SHADOW-probe-control",
@@ -1508,6 +1508,37 @@
             "nonce": "e3558c71-e6f4-44cf-93e8-4e94ed84cd47",
             "signature": "gSAO3jzwNMvgvLuf+bm8/YZcl1Eqp07AoqaRHZIy01zcWPge79+9JPdFnZHgF65tI2MGKr9VMCZy7qTNe+MABA=="
           }
+        },
+        {
+          "kind": "TRANSITION",
+          "taskId": "FV2-PROBE-CTL-2",
+          "from": "BUILDING",
+          "to": "FAILED",
+          "attempt": 2,
+          "idempotencyKey": "FV2-PROBE-CTL-2:7:FAILED",
+          "data": {
+            "lastError": "Scope conflict: target file docs/factory-v2/probe/control/hello-run2.md is outside allowed paths (docs/factory-v2/probe/control-run2/); refused to broaden scope, no changes made",
+            "errorKind": "PERMANENT"
+          },
+          "fenceEpoch": 1,
+          "fenceToken": "session_015dYwb57qx21P4wudU5xauD:1:2a5bae8c-fdda-40ec-9cbc-23217de56578",
+          "seq": 44,
+          "at": 1793900924195,
+          "prev": "103748c8c99f15bb13a463753832d2be9a2bad6292fe501452b92b4bc483781b",
+          "sig": {
+            "schema": "uasco.factory-v2.signed-action/1",
+            "domain": "probe-control",
+            "action": "LEDGER",
+            "role": "V2_CANDIDATE",
+            "sessionId": "session_015dYwb57qx21P4wudU5xauD",
+            "keyId": "k_225059701e7e1b78",
+            "prev": "103748c8c99f15bb13a463753832d2be9a2bad6292fe501452b92b4bc483781b",
+            "payloadDigest": "e4388bc8c5bb5ef2a9047218a636d108a31ee0b644c9b86bb19f6ac740036a1b",
+            "issuedAt": 1793900925003,
+            "expiresAt": 1825436925003,
+            "nonce": "95a978b1-14b4-4889-ade7-f31b3b1aad6b",
+            "signature": "TePvQGvp3QRBCcoV2dTGV/urFMEeOVf6BmA3SqFRAdeEqJtDNBvdB9TojonMdzJYHuHy3zLtnoHguEsOO8VUBw=="
+          }
         }
       ]
     },
@@ -1539,9 +1570,9 @@
   },
   "revs": {
     "lease/shadow-probe-control/supervisor--SHADOW-probe-control": 32,
-    "ledger/run1/c/000001": 43,
+    "ledger/run1/c/000001": 44,
     "lease/shadow-probe-control/task--FV2-PROBE-CTL-1": 2,
     "lease/shadow-probe-control/task--FV2-PROBE-CTL-2": 3
   },
-  "seq": 80
+  "seq": 81
 }
