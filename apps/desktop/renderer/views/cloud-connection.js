@@ -167,11 +167,13 @@ function jobSummaryOk(j){
   return j&&typeof j==="object"&&rawIf(j.jobId,CLOUD_ID_RE)!==null&&JOB_STATUSES.has(j.status)&&Number.isSafeInteger(j.attempt)&&Number.isSafeInteger(j.maxAttempts);
 }
 /** api: renderer createApi() örneği. Dönen değer: {state, jobs, stopped, code}. */
+// //TR: Ham köprü/IPC hata iletisi (yol ve iç ayrıntı taşır) koda indirgenir; error-code.js safeErrorCode ile aynı kural, bu modülün tek-import yalıtımı korunsun diye yerel kopya.
+function safeCode(m){if(typeof m!=="string"||!m)return "";if(/^[A-Z][A-Z0-9_]{0,63}$/.test(m))return m;const c=m.match(/\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b/g);if(c)return c[c.length-1];const x=m.match(/HTTP (\d{3})(?!\d)/);return x?`HTTP ${x[1]}`:""}
 export async function loadCloudJobs(api){
   const r=await api.get(CLOUD_JOBS_PATH);
   if(!r||!r.ok){
     const state=r?.state==="UNAVAILABLE"?"UNAVAILABLE":r?.state==="OFFLINE"?"OFFLINE":"ERROR";
-    return {state,jobs:[],stopped:false,code:sanitizeServerText(r?.message??"")};
+    return {state,jobs:[],stopped:false,code:safeCode(r?.message)};
   }
   const d=r.data;
   if(d&&d.state==="NOT_CONFIGURED")return {state:"NOT_CONFIGURED",jobs:[],stopped:false,code:""};

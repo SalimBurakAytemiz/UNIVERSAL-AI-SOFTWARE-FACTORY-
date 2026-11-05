@@ -1,4 +1,5 @@
 // //TR: Bu görünüm Uzantılar ve Entegrasyonlar'dır (FA-V2-PRODUCT, UI-078): YALNIZ üç salt-okunur GET'ten okunur — GET /v1/capabilities, GET /v1/adapters ve GET /v1/fabrics (kayıt defterleri). Kayıt değerleri (status, implementation, activation, requiresCertification) sunucudan AYNEN gösterilir; REGISTERED/NOT_IMPLEMENTED "bağlı, etkin, kurulu ya da sertifikalı" anlamına gelmez ve hiçbir değer yükseltilmez. Etkinleştirme/kurulum/bağlama denetimi, düğme veya POST yoktur. Okunamayan kaynağın sayısı 0 değil "—" olur; etiketler ctx.t ile, sunucu metinleri yalnız textContent ile yazılır.
+import {safeErrorCode} from "../error-code.js";
 import {h,panel,statePill,badge} from "../components.js";
 import {MISSING,formatCount} from "../model.js";
 import {INTEG_SOURCES,INTEG_SOURCE_PATHS,buildIntegrations} from "../integrations-core.js";
@@ -22,7 +23,7 @@ function stateBlock(ctx,state,source,message){
   return h(doc,"div",{class:`integ-state state-${st.toLowerCase()}`,role:"status",dataset:{integState:st,source}},
     h(doc,"p",{class:"integ-state-head"},statePill(ctx,failKind(st)),h(doc,"strong",{text:ctx.t(`integrations.state.${st}`)})),
     h(doc,"p",{class:"note",text:ctx.t(`integrations.hint.${st}`,{source:`GET ${INTEG_SOURCE_PATHS[source]}`})}),
-    message?h(doc,"p",{class:"note mono",text:message}):null);
+    safeErrorCode(message)?h(doc,"p",{class:"note mono",dataset:{errorCode:safeErrorCode(message)},text:safeErrorCode(message)}):null);
 }
 
 function sourcesPanel(ctx,res,a){
