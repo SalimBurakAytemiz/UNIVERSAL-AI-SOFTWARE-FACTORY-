@@ -138,3 +138,6 @@ describe("INT-R3 SBX-GATE honest BLOCKED reason in the desktop", () => {
     expect(all(mount(doc, work.runCard(ctx, clean))).some(n => "runReason" in n.dataset)).toBe(false);
   });
 });
+// //TR: UASCO-T0004.A arka uç çökme/yeniden başlatma: Recovery Center otomatik yeniden bağlanma (gerçek buildServer, elle sürülen zamanlayıcılar)
+import {registerBackendReconnectT0004aCases} from "./support/backend-reconnect-t0004a.cases.js";
+registerBackendReconnectT0004aCases();
