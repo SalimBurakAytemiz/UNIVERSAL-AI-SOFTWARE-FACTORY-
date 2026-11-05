@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {pathToFileURL} from "node:url";
 import {ACTIVE_WORKER_STATUSES, RUN_STATUSES as SERVER_RUN_STATUSES} from "../core/workos/run-state.js";
+import {registerRendererRealServerSubpanelCases} from "./support/renderer-real-server-subpanels.cases.js"; // UASCO-T0006 alt panel uzantısı (gerçek sunucu)
 
 const rend = path.resolve(__dirname, "..", "apps", "desktop", "renderer");
 const load = async (...p: string[]): Promise<any> => import(pathToFileURL(path.join(rend, ...p)).href);
@@ -706,3 +707,6 @@ describe("UI-110 run stop/failure reason (renderer-only)", () => {
     expect(read("views", "readiness.js")).toContain('"readiness.run.reason"');
   });
 });
+
+// //TR: UASCO-T0006 alt panel vakaları (tests/support/renderer-real-server-subpanels.cases.ts) burada kaydedilir.
+registerRendererRealServerSubpanelCases();
