@@ -109,6 +109,7 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 .btn-stop{display:inline-flex;align-items:center;gap:var(--space-2);padding:.6rem var(--space-4);border:2px solid var(--danger-border);border-radius:.7rem;background:var(--danger-bg);color:var(--on-danger);font:inherit;font-weight:800;letter-spacing:.04em;cursor:pointer;white-space:nowrap;box-shadow:var(--glow-risk-md);animation:stop-glow 2.8s ease-in-out infinite}
 .btn-stop[data-stopped="true"]{background:var(--danger-bg-active);border-style:dashed}
 .btn-row{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.kv+.btn-row,.facts+.btn-row,dl+.btn-row{margin-top:var(--space-4)}
 
 /* Navigasyon */
 .nav ul{list-style:none;margin:0;padding:0;display:grid;gap:var(--space-1)}
@@ -264,7 +265,9 @@ pre.code,.code{margin:var(--space-1) 0;padding:var(--space-2) var(--space-3);max
 .btn-primary{background:var(--accent);border-color:var(--accent);color:#031018;font-weight:700}
 .btn-primary:hover:not(:disabled){background:var(--primary-hover);border-color:var(--primary-hover)}
 .btn-primary:active:not(:disabled){background:var(--primary-active);border-color:var(--primary-active)}
-.btn-primary:disabled,.btn:disabled{opacity:.6;cursor:not-allowed}
+/* //TR: Devre dışı düğme durumu tüm varyantlarda aynıdır: kırmızı dolgu/parıltı yok, sessiz zemin + kesik kenar + sessiz metin (muted/bg-2 >= 4.5:1), cursor not-allowed. ACİL DURDUR (.btn-stop) bu kurala girmez. */
+.btn:disabled,.btn-primary:disabled,.btn-danger:disabled{opacity:1;background:var(--bg-2);border-color:var(--border-ui);border-style:dashed;color:var(--muted);font-weight:var(--fw-medium);box-shadow:none;cursor:not-allowed}
+.link-btn:disabled{color:var(--muted);text-decoration:none;cursor:not-allowed}
 .btn-small{padding:.3rem .55rem;min-width:2.2rem}
 .link-btn{padding:0;border:0;background:none;color:var(--link);font:inherit;text-decoration:underline;cursor:pointer;text-align:left;overflow-wrap:anywhere}
 .row-selected{background:var(--surface-2);outline:1px solid var(--glow)}
@@ -388,6 +391,7 @@ pre.code,.code{margin:var(--space-1) 0;padding:var(--space-2) var(--space-3);max
   .status-timeline .step-current{border:3px solid Highlight}
   .link-btn{color:LinkText}
   .btn-primary,.btn-danger,.empty-state{border:2px solid ButtonText}
+  .btn:disabled,.btn-primary:disabled,.btn-danger:disabled{border:2px dashed GrayText;color:GrayText;background:ButtonFace}
   .btn-stop{border:3px double CanvasText;background:ButtonFace;color:ButtonText}
   .nav-link[aria-current="page"]{border:3px solid Highlight}
   :focus-visible{outline:3px solid Highlight}

@@ -164,6 +164,20 @@ describe("FD 2026-11-05 design system: coordinator visual defects (header, badge
 });
 
 describe("Layout fixes: sticky nav scroll area, responsive top bar, route notice", () => {
+  it("disabled buttons (incl. danger/primary) drop the red fill: muted surface, muted AA label, dashed edge, not-allowed, forced-colors GrayText", () => {
+    const r = /\n\.btn:disabled,\.btn-primary:disabled,\.btn-danger:disabled\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    for (const d of ["opacity:1", "background:var(--bg-2)", "border-style:dashed", "color:var(--muted)", "box-shadow:none", "cursor:not-allowed"]) expect(r, d).toContain(d);
+    expect(r).not.toMatch(/var\(--(danger|accent|primary)/);
+    expect(refRatio(resolve("--muted"), resolve("--bg-2"))).toBeGreaterThanOrEqual(4.5);
+    // //TR: Daha sonra gelen hiçbir :disabled kuralı opaklığı düşürmez veya kırmızıyı geri getirmez.
+    const later = css.slice(css.indexOf(r) + r.length);
+    expect(later).not.toMatch(/:disabled[^{]*\{[^}]*(opacity:\.|var\(--(danger|accent|primary))/);
+    expect(css).toMatch(/@media \(forced-colors:active\)\{[^@]*\.btn:disabled,\.btn-primary:disabled,\.btn-danger:disabled\{border:2px dashed GrayText;color:GrayText/);
+    expect(css).not.toMatch(/\.btn-stop:disabled/);
+  });
+  it("a facts/kv list is separated from the button row that follows it", () => {
+    expect(css).toMatch(/\n\.kv\+\.btn-row,\.facts\+\.btn-row,dl\+\.btn-row\{margin-top:var\(--space-4\)\}/);
+  });
   it("NB-3: the focus ring is at least 2px and tabs carry the token focus outline (forced-colors Highlight for the selected tab)", () => {
     const w = /^(\d+(?:\.\d+)?)px$/.exec(tokens["--focus-ring-width"] ?? "");
     expect(w).not.toBeNull();
