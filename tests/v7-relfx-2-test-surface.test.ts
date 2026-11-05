@@ -6,6 +6,7 @@ import {assertionCount, evaluateTestSurface, isHarnessChange, isRealTestFile, is
 import {deriveOutcomes} from "../core/workos/outcomes.js";
 import {HDR, T, api, drive, okScript, rmTmp, runner, setup, startRun, tmpRoot} from "./support/relfx.js";
 import type {Ctx} from "./support/relfx.js";
+import "./factory-v2/core-group.mjs";                                             // Factory V2 (PR #347): fabrika, köprü, ortak kayıt vakaları (Windows shard yükü dengeli)
 
 let tmp = "";
 beforeEach(() => { tmp = tmpRoot("uasco-relfx2-"); });
