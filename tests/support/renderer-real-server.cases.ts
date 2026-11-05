@@ -601,6 +601,28 @@ describe("UASCO-T0019: home notification feed (unread/read, groups, deep links) 
     expect(stops.length).toBeLessThanOrEqual(60);
   });
 
+  it("run items are titled with their mission title when Home already has it (attention / cockpit approvals), else honestly with the runId", { timeout: 120_000 }, async () => {
+    const app = mkApp(notifySeed);
+    const r = await renderAgainstServer(app, "home", TOKEN, "en", {storage: memStorage()});
+    const runs = (await serverJson(app, "/v1/run-summaries?limit=100")).page.runs as Array<{runId: string; status: string; missionId: string}>;
+    const att = (await serverJson(app, "/v1/attention")).attention.items as Array<{missionId: string}>, ck = await serverJson(app, "/v1/cockpit");
+    const cancelled = runs.find(x => x.status === "CANCELLED")!;
+    // the cancelled run's mission is in neither source Home reads, so the title stays the runId (nothing invented)
+    expect(att.some(x => x.missionId === cancelled.missionId) || (ck.awaitingApproval.items as Array<{missionId: string}>).some(x => x.missionId === cancelled.missionId)).toBe(false);
+    const item = itemsOf(r).find(n => n.dataset.notifyId!.startsWith(`run:${cancelled.runId}:`))!;
+    expect(all(item).find(n => n.className === "notify-title")?.textContent).toBe(cancelled.runId);
+    // pure join: titles come only from attention (not TASK_BLOCKED) and cockpit approvals; cockpit wins, unknown falls back
+    const core = await load("notifications-core.js");
+    const idx = core.missionTitleIndex([{kind: "RUN_NEEDS_DECISION", missionId: "msn_a", title: "From attention"}, {kind: "TASK_BLOCKED", missionId: "msn_t", title: "A task title"}, {kind: "MISSION_BLOCKED", missionId: "msn_b", title: "Attention B"}],
+      [{missionId: "msn_b", title: "Cockpit B"}, {missionId: "msn_c", title: ""}]);
+    expect([...idx.entries()]).toEqual([["msn_b", "Cockpit B"], ["msn_a", "From attention"]]);
+    const run = (runId: string, missionId: string, status: string, delivery = {}) => ({runId, projectId: "prj_a", missionId, status, reason: null, updatedAt: "2026-11-05T10:00:00.000Z", delivery: {artifactPrepared: false, sourceAccepted: false, productVerified: false, ...delivery}});
+    const f = core.buildNotifications({attention: {state: "VERIFIED", queue: {truncated: false, dropped: 0, items: [{kind: "MISSION_BLOCKED", nextAction: "REVIEW_MISSION", projectId: "prj_a", missionId: "msn_b", runId: null, taskId: null, title: "Attention B", reason: null, since: null}]}},
+      runs: {state: "VERIFIED", partial: false, runs: [run("r1", "msn_b", "SUCCEEDED", {productVerified: true}), run("r2", "msn_t", "FAILED"), run("r3", "msn_c", "CANCELLED")]},
+      read: {available: true, ids: new Set()}, approvals: {items: [{missionId: "msn_b", title: "Cockpit B"}]}});
+    expect(f.items.filter((n: any) => n.runId).map((n: any) => [n.id.split(":")[0], n.runId, n.title]).sort()).toEqual([["dlv", "r1", "Cockpit B"], ["run", "r1", "Cockpit B"], ["run", "r2", "r2"], ["run", "r3", "r3"]]);
+  });
+
   it("tr: the feed is localized from the real server render", { timeout: 120_000 }, async () => {
     const app = mkApp(notifySeed);
     const r = await renderAgainstServer(app, "home", TOKEN, "tr", {storage: memStorage()});

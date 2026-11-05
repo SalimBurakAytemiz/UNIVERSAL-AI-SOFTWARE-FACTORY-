@@ -161,7 +161,7 @@ export async function render(ctx){
   // //TR: Başarılı HTTP ama bozuk gövde (tüm bloklar ERROR) de açıklayıcı hata notu gösterir; sessiz boş ekran olmaz.
   const state=res.state==="OK"&&c.projects?.state==="ERROR"&&c.missions?.state==="ERROR"?"ERROR":res.state;
   const note=state==="OK"?null:h(doc,"p",{class:`note note-${state.toLowerCase()}`,role:"status",text:ctx.t(state==="UNAVAILABLE"?"cockpit.unavailable":"cockpit.failed")});
-  const panels={"home-notify":notificationsPanel(ctx,buildNotifications({attention:att,runs,read:loadReadIds(storageOf(ctx))})),
+  const panels={"home-notify":notificationsPanel(ctx,buildNotifications({attention:att,runs,read:loadReadIds(storageOf(ctx)),approvals:c.approvals})),
     "home-projects":projectCockpitPanel(ctx,buildProjectCockpit({projects:prj,approvals:c.approvals,runs})),
     "home-map":panel(ctx,{titleKey:"home.map",id:"home-map",className:"panel-map"},areaCards(ctx,c)),
     "home-orch":orchestratorPanel(ctx,c.orchestrator)};

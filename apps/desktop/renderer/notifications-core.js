@@ -35,14 +35,21 @@ function fromAttention(item){
   return {id:`att:${item.kind}:${subject}:${item.since??"-"}`,group,kind:item.kind,title:item.title,detail:item.reason===null?null:redactText(item.reason).slice(0,300),at:item.since,
     projectId:item.projectId,missionId:item.missionId,runId:item.runId,taskId:item.taskId,route:GROUP_ROUTE[group]};
 }
-function fromRun(run,claimedRuns){
+/** //TR: Koşu bildirimine görev başlığı yalnız Ana Sayfa'nın zaten okuduğu verilerden eklenir: /v1/attention öğe başlıkları (TASK_BLOCKED hariç: onun başlığı iş başlığıdır) ve cockpit onay öğeleri. Başlık bilinmiyorsa runId gösterilir; başlık uydurulmaz. */
+export function missionTitleIndex(attentionItems,approvalItems){
+  const m=new Map();
+  for(const a of approvalItems??[])if(a&&typeof a.missionId==="string"&&typeof a.title==="string"&&a.title)m.set(a.missionId,a.title);
+  for(const x of attentionItems??[])if(x&&x.kind!=="TASK_BLOCKED"&&typeof x.missionId==="string"&&typeof x.title==="string"&&x.title&&!m.has(x.missionId))m.set(x.missionId,x.title);
+  return m;
+}
+function fromRun(run,claimedRuns,titles){
   const out=[];
   if(!run.missionId)return out;
   if(RUN_NOTIFY_STATUSES.includes(run.status)&&!claimedRuns.has(run.runId))
-    out.push({id:`run:${run.runId}:${run.status}:${run.updatedAt??"-"}`,group:"RUN",kind:`RUN_${run.status}`,title:run.runId,detail:run.reason===null?null:redactText(run.reason).slice(0,300),at:run.updatedAt,
+    out.push({id:`run:${run.runId}:${run.status}:${run.updatedAt??"-"}`,group:"RUN",kind:`RUN_${run.status}`,title:titles.get(run.missionId)??run.runId,detail:run.reason===null?null:redactText(run.reason).slice(0,300),at:run.updatedAt,
       projectId:run.projectId,missionId:run.missionId,runId:run.runId,taskId:null,route:GROUP_ROUTE.RUN});
   const stage=DELIVERY_STAGES.find(k=>run.delivery?.[k]===true);
-  if(stage)out.push({id:`dlv:${run.runId}:${stage}`,group:"DELIVERY",kind:`DELIVERY_${stage}`,title:run.runId,detail:null,at:run.updatedAt,
+  if(stage)out.push({id:`dlv:${run.runId}:${stage}`,group:"DELIVERY",kind:`DELIVERY_${stage}`,title:titles.get(run.missionId)??run.runId,detail:null,at:run.updatedAt,
     projectId:run.projectId,missionId:run.missionId,runId:run.runId,taskId:null,route:GROUP_ROUTE.DELIVERY});
   return out;
 }
@@ -51,14 +58,15 @@ function fromRun(run,claimedRuns){
  * //TR: attention ({state,queue}) + runs (mapRunSummaries) + okundu kümesi -> bildirim akışı. Her kaynak kendi gerçek durumunu taşır; biri düşerse diğerinin bildirimleri gösterilir ve
  * durum PARTIAL olur (eksik kaynak "boş" sayılmaz). Aynı koşu attention'da zaten varsa koşu sonucu ikinci kez bildirilmez. Sıra: okunmamış önce, sonra en yeni.
  */
-export function buildNotifications({attention,runs,read}){
+export function buildNotifications({attention,runs,read,approvals}){
   const attOk=attention?.state==="VERIFIED"&&Boolean(attention.queue),runsOk=runs?.state==="VERIFIED";
   const sources={attention:attOk?"VERIFIED":attention?.state??"ERROR",runs:runsOk?"VERIFIED":runs?.state??"ERROR"};
   const readIds=read?.ids??new Set(),readAvailable=read?.available===true;
   if(!attOk&&!runsOk)return {state:sources.attention,items:[],unread:null,groups:{},sources,readAvailable,partial:false};
   const att=attOk?attention.queue.items.map(fromAttention).filter(Boolean):[];
   const claimed=new Set(att.map(n=>n.runId).filter(Boolean));
-  const fromRuns=runsOk?runs.runs.flatMap(r=>fromRun(r,claimed)):[];
+  const titles=missionTitleIndex(attOk?attention.queue.items:[],approvals?.items);
+  const fromRuns=runsOk?runs.runs.flatMap(r=>fromRun(r,claimed,titles)):[];
   const seen=new Set(),items=[];
   for(const n of [...att,...fromRuns]){if(seen.has(n.id))continue;seen.add(n.id);items.push({...n,read:readIds.has(n.id)})}
   items.sort((a,b)=>Number(a.read)-Number(b.read)||String(b.at??"").localeCompare(String(a.at??"")));
