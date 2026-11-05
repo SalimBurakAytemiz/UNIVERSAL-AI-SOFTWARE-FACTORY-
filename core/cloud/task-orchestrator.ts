@@ -295,12 +295,16 @@ export interface FounderIntakeConfirmation {
 }
 export type UnsignedFounderConfirmation = Omit<FounderIntakeConfirmation, "signature">;
 /** Tek kullanımlık onay kimlikleri: consume() ilk çağrıda true, sonra (süre dolana dek) false. */
-export interface ConfirmationReplayStore {consume(confirmationId: string, expiresAtMs: number): boolean}
+/**
+ * Tek kullanımlık onay kimlikleri: consume() ilk çağrıda true, sonra (süre dolana dek) false. `nowMs` doğrulayıcının saatidir (#350 L1: ayrı saat yok).
+ * #350 N2: tek kullanımlık garanti yalnız enjekte edilen deponun dayanıklılığı kadardır. InMemoryConfirmationReplayStore süreç başınadır (yeniden
+ * başlatma 15 dk'lık bir tekrar penceresi açar); üretimde bir HTTP/Desktop yolu bu köprüyü çağırmadan önce dayanıklı, paylaşılan bir depo verilmelidir.
+ */
+export interface ConfirmationReplayStore {consume(confirmationId: string, expiresAtMs: number, nowMs: number): boolean}
 export class InMemoryConfirmationReplayStore implements ConfirmationReplayStore {
   private readonly used = new Map<string, number>();
-  constructor(private readonly now: () => number = Date.now) {}
-  consume(id: string, expiresAtMs: number): boolean {
-    const t = this.now();
+  consume(id: string, expiresAtMs: number, nowMs: number): boolean {
+    const t = nowMs;
     for (const [k, exp] of this.used) if (exp < t) this.used.delete(k);
     if (this.used.has(id)) return false;
     this.used.set(id, expiresAtMs); return true;
@@ -313,6 +317,8 @@ export interface ConfirmationVerifier {
   /** Supervisor'ın kapsam imza anahtarları (keyId -> sır); SignedScope doğrulamasıyla aynı harita. */
   keys: ReadonlyMap<string, string | Buffer>;
   scope: SignedScope; now: () => Date; replay: ConfirmationReplayStore;
+  /** #350 N3: verilirse onay jetonunun keyId'si bu kümede olmalıdır (onaya özgü anahtar; kapsam imzalama anahtarlarından ayrı tutulabilir). */
+  confirmationKeyIds?: ReadonlySet<string>;
   audit?: (r: ConfirmationAuditRecord) => void;
 }
 /** Supervisor tarafı: Founder bu hedefi onayladığında jetonu imzalar (signScope ile aynı HMAC ve anahtar uzunluğu kuralı). */
@@ -320,11 +326,13 @@ export function signFounderConfirmation(c: UnsignedFounderConfirmation, secret: 
   if (!secret || (typeof secret === "string" ? secret.length : secret.byteLength) < 32) throw new Error("Confirmation signing secret must be at least 32 bytes");
   return {...c, signature: createHmac("sha256", secret).update(canonicalJson(c)).digest("hex")};
 }
+const ISO_UTC_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
 const CONF_FIELDS = new Set(["type", "confirmationId", "confirmedBy", "objectiveSha256", "tenantId", "projectId", "environment", "issuedAt", "expiresAt", "keyId", "signature"]);
 function verifyConfirmation(c: unknown, digest: string, v: ConfirmationVerifier): {ok: true; c: FounderIntakeConfirmation} | {ok: false; why: string} {
   if (!isObj(c) || !onlyFields(c, CONF_FIELDS) || c.type !== FOUNDER_CONFIRMATION_TYPE) return {ok: false, why: "UNSIGNED_OR_MALFORMED"};
   const x = c as unknown as FounderIntakeConfirmation;
   if (![x.confirmationId, x.confirmedBy, x.tenantId, x.projectId, x.keyId].every(f => typeof f === "string" && ID_RE.test(f)) || typeof x.signature !== "string" || !SHA256_RE.test(x.signature)) return {ok: false, why: "UNSIGNED_OR_MALFORMED"};
+  if (v.confirmationKeyIds && !v.confirmationKeyIds.has(x.keyId)) return {ok: false, why: "KEY_NOT_FOR_CONFIRMATIONS"};
   const secret = v.keys.get(x.keyId);
   if (secret === undefined) return {ok: false, why: "KEY_UNKNOWN"};
   const {signature, ...unsigned} = x;
@@ -332,10 +340,12 @@ function verifyConfirmation(c: unknown, digest: string, v: ConfirmationVerifier)
   if (got.length !== expected.length || !timingSafeEqual(got, expected)) return {ok: false, why: "SIGNATURE_INVALID"};
   if (x.objectiveSha256 !== digest) return {ok: false, why: "DIGEST_MISMATCH"};
   if (x.tenantId !== v.scope.tenantId || x.projectId !== v.scope.projectId || x.environment !== v.scope.environment) return {ok: false, why: "SCOPE_MISMATCH"};
+  // #350 L2: yalnız katı ISO-8601 UTC (Date.parse'in gevşek biçimleri kabul edilmez)
+  if (!ISO_UTC_RE.test(String(x.issuedAt)) || !ISO_UTC_RE.test(String(x.expiresAt))) return {ok: false, why: "LIFETIME_INVALID"};
   const iss = Date.parse(x.issuedAt), exp = Date.parse(x.expiresAt), now = v.now().getTime();
   if (!Number.isFinite(iss) || !Number.isFinite(exp) || exp <= iss || exp - iss > FOUNDER_CONFIRMATION_MAX_TTL_MS) return {ok: false, why: "LIFETIME_INVALID"};
   if (now < iss || now >= exp) return {ok: false, why: "EXPIRED_OR_NOT_YET_VALID"};
-  if (!v.replay.consume(x.confirmationId, exp)) return {ok: false, why: "REPLAYED"};
+  if (!v.replay.consume(x.confirmationId, exp, now)) return {ok: false, why: "REPLAYED"};
   return {ok: true, c: x};
 }
 
@@ -369,6 +379,21 @@ export type IntakeDispatchResult =
   | {ok: true; namespace: string; dag: TaskDag; report: DispatchReport; plannerCostUsd: number; plannerCached: boolean; confirmation: {confirmedBy: string; confirmationId: string}}
   | {ok: false; stage: "INTAKE" | "DECOMPOSE" | "DISPATCH"; reason: string; detail?: string};
 
+/** #350 B2: plan önbelleği anahtarı = ad alanı (hedef özeti) + tenant + proje + ortam + imzalı kapsamın özeti (keyId + imza dahil). */
+export function planCacheKey(namespace: string, scope: SignedScope): string {
+  return sha256Hex(canonicalJson({ns: namespace, tenantId: scope.tenantId, projectId: scope.projectId, environment: scope.environment, scope: sha256Hex(canonicalJson(scope))}));
+}
+/** Önbellekteki DAG'ın verilen kapsama uyup uymadığı (buildTaskDag'ın kapsam ön kontrolleriyle aynı kurallar); uymuyorsa gerekçe. */
+export function dagOutsideScope(dag: TaskDag, scope: SignedScope): string | null {
+  if (dag.tenantId !== scope.tenantId || dag.projectId !== scope.projectId || dag.environment !== scope.environment) return "SCOPE_MISMATCH";
+  for (const t of dag.tasks.values()) {
+    if (!scope.jobKinds.includes(t.kind)) return "KIND_NOT_IN_SCOPE";
+    if (t.needsNetwork && !scope.allowNetwork) return "NETWORK_NOT_IN_SCOPE";
+  }
+  if (!(dag.totalCostUsd <= scope.maxCostUsd)) return "PLAN_COST_EXCEEDS_SCOPE";
+  return null;
+}
+
 /**
  * Founder komut metni -> intakeCommand -> imzalı onay doğrulaması -> decomposeIntent (PlannerModel) -> TaskOrchestrator.dispatch (CLOUD-T0003 kuyruğu).
  * NB-2: `planCache` verilirse ad alanı başına DAG önbelleğe alınır; aynı onaylı komutun yeniden gönderimi (ör. Founder kapısı onayı için) planlayıcıyı YENİDEN
@@ -381,12 +406,19 @@ export async function dispatchIntakeCommand(
 ): Promise<IntakeDispatchResult> {
   const it = intentFromIntake(intakeCommand(text, {origin: "cloud-intake"}), confirmation, verifier);
   if (!it.ok) return {ok: false, stage: "INTAKE", reason: it.reason, ...(it.detail ? {detail: it.detail} : {})};
-  let dag = planCache?.get(it.namespace), costUsd = 0;
+  // #350 B2: önbellek araması YALNIZ onay+kapsam doğrulaması geçtikten SONRA yapılır (yukarıda) ve anahtar tam ad alanıdır (hedef özeti + tenant/proje/ortam +
+  // imzalı kapsamın özeti): başka tenant/proje/ortamın ya da döndürülmüş/daraltılmış bir kapsamın DAG'ı asla yeniden kullanılmaz. İsabette DAG yine de
+  // bu kapsama karşı yeniden denetlenir (tür/ağ/toplam maliyet), plan tazeymiş gibi.
+  const key = planCacheKey(it.namespace, verifier.scope);
+  let dag = planCache?.get(key), costUsd = 0;
   const cached = dag !== undefined;
-  if (!dag) {
+  if (dag) {
+    const bad = dagOutsideScope(dag, verifier.scope);
+    if (bad) return {ok: false, stage: "DECOMPOSE", reason: "CACHED_PLAN_OUT_OF_SCOPE", detail: bad};
+  } else {
     const d = await decomposeIntent(it.intent, planner, {...o, scope: verifier.scope, namespace: it.namespace});
     if (!d.ok) return {ok: false, stage: "DECOMPOSE", reason: d.reason, ...(d.detail ? {detail: d.detail} : {})};
-    dag = d.dag; costUsd = d.costUsd; planCache?.set(it.namespace, dag);
+    dag = d.dag; costUsd = d.costUsd; planCache?.set(key, dag);
   }
   const r = orchestrator.dispatch(dag, approvals);
   if (!r.ok) return {ok: false, stage: "DISPATCH", reason: r.reason, ...(r.detail ? {detail: r.detail} : {})};
