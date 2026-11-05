@@ -1182,7 +1182,7 @@ async function renderAudit(getFn: (p: string) => any, lang = "en") {
   const rootNode: N = await view.render(m.ctx);
   return {root: rootNode, ...m};
 }
-const auditRows = (r: N) => allData(r, "auditEvent").filter(n => n.tagName === "LI");
+const auditRows = (r: N) => allData(r, "auditEvent").filter(n => n.tagName === "TR");
 const auditLabels = (r: N) => auditRows(r).map(n => all(n).find(c => cls(c, "audit-label"))!.textContent);
 function kpiValueAudit(r: N, id: string) {
   const k = allData(r, "kpi").find(n => n.dataset.kpi === `audit-${id}`)!;
@@ -1269,7 +1269,7 @@ describe("Audit Trail UI-070 — rendering (read-only, honest states)", () => {
     expect(byId(root, "view-title")!.textContent).toBe("Audit Trail");
     expect(auditLabels(root)).toEqual(["IMPLEMENT/b2", "IMPLEMENT/a2", `IMPLEMENT/${evil}`, "IMPLEMENT/a1"]);
     expect(auditRows(root).every(n => !!n.dataset.runId)).toBe(true);
-    expect(allData(root, "auditEvidence").filter(n => n.tagName === "LI").map(n => n.dataset.auditEvidence)).toEqual(["evd-new-0002", "evd-old-0001"]);
+    expect(allData(root, "auditEvidence").filter(n => n.tagName === "TR").map(n => n.dataset.auditEvidence)).toEqual(["evd-new-0002", "evd-old-0001"]);
     expect(byData(root, "auditPartial")).toBeUndefined();
     expect(posts).toEqual([]);
     expect(all(root).filter(n => n.tagName === "BUTTON").length).toBe(0);
@@ -1359,7 +1359,7 @@ describe("Audit Trail UI-070 remediation — evidence source states", () => {
     const {root} = await renderAudit(evServe({sources: {...OKSRC, review: "ERROR"}, evidence: TWO}));
     expect(sourceLi(root, "evidence").dataset.sourceState).toBe("PARTIAL");
     expect(sourceLi(root, "evidence").textContent).not.toContain("Read OK");
-    expect(allData(root, "auditEvidence").filter(n => n.tagName === "LI").length).toBe(2);
+    expect(allData(root, "auditEvidence").filter(n => n.tagName === "TR").length).toBe(2);
     expect(byData(root, "note", "coverage")!.dataset.coverage).toBe("PARTIAL");
     expect(byData(root, "auditPartial")!.dataset.auditPartial).toBe("evidence");
     const empty = await renderAudit(evServe({sources: {...OKSRC, review: "ERROR"}, evidence: []}));
@@ -1424,7 +1424,7 @@ describe("Audit Trail UI-070 remediation — KPI pills, duplicates, ISO, wording
     expect(m.evidence.items.map((e: any) => e.evidenceId).sort()).toEqual(["evd-dup-0001", "evd-two-0002"]);
     expect(m.evidence.skipped).toBe(2);
     const {root} = await renderAudit(evServe({sources: OKSRC, evidence: [EVID("evd-dup-0001", null), EVID("evd-dup-0001", null)]}));
-    expect(allData(root, "auditEvidence").filter(n => n.tagName === "LI").length).toBe(1);
+    expect(allData(root, "auditEvidence").filter(n => n.tagName === "TR").length).toBe(1);
     expect(byData(root, "note", "skipped")!.dataset.n).toBe("1");
   });
   it("non-ISO-8601 timestamps become null ('—'), for events and evidence", async () => {
@@ -1799,5 +1799,48 @@ describe("SEC-IMPORT-GUARD — AST import guard for the Operations modules", () 
     expect(oldRegex(mutated).sort()).toEqual(["./queue-core.js"]);
     expect(() => guard(mutated)).toThrow(/static \.\/work-actions\.js/);
     expect(read("operations-core.js")).toBe(real);
+  });
+});
+
+// Founder directive (QA & Security UX, Builder I): the audit event and evidence lists are tables with column headers;
+// severity carries a tone; an evidence record whose hash verification the server did not report says so instead of a bare dash.
+describe("Audit Trail — QA/Security UX: headed tables, labelled states (en + tr)", () => {
+  const tableOf = (r: N, panelId: string) => all(byId(r, panelId)!).find(n => n.tagName === "TABLE");
+  const heads = (t: N) => all(t).filter(n => n.tagName === "TH").map(n => [n.textContent, n.getAttribute("scope")]);
+  it("events: a table with scoped column headers (en) and severity tones; INFO stays neutral (positive control)", async () => {
+    const {root} = await renderAudit(auditServe({[`/v1/runs/${RID("01")}/events`]: evBody(RID("01"), [AEV("2026-10-16T08:00:01.000Z", "a1"), AEV("2026-10-16T08:00:05.000Z", "w", {severity: "WARN"})])}));
+    const t = tableOf(root, "audit-events")!;
+    expect(t).toBeDefined();
+    expect(heads(t)).toEqual([["Time", "col"], ["Severity", "col"], ["Run", "col"], ["Stage / event (verbatim)", "col"]]);
+    expect(all(t).find(n => n.tagName === "CAPTION")!.textContent).toBe("Merged run events, newest first");
+    const sevOf = (sev: string) => all(auditRows(root).find(n => n.dataset.severity === sev)!).find(n => cls(n, "audit-sev"))!;
+    expect(cls(sevOf("ERROR"), "badge-risk")).toBe(true);
+    expect(cls(sevOf("WARN"), "badge-notverified")).toBe(true);
+    expect(cls(sevOf("INFO"), "badge-risk") || cls(sevOf("INFO"), "badge-notverified")).toBe(false);
+  });
+  it("evidence: a table with headers; VERIFIED shows its state, an unreported verification is labelled 'Not reported' (never a bare dash); a missing run is a dash in the Run column", async () => {
+    const {root} = await renderAudit(auditServe({"/v1/evidence?limit=100": {sources: OKSRC, evidence: [EVID("evd-ok-0001", "2026-10-16T08:00:00.000Z", {runId: RID("01")}), EVID("evd-none-0002", "2026-10-16T09:00:00.000Z", {verification: null, kind: "AUDIT_CHECKPOINT"})]}}));
+    const t = tableOf(root, "audit-evidence")!;
+    expect(heads(t).map(h => h[0])).toEqual(["Recorded", "Hash verification", "Kind (verbatim)", "Evidence ID", "Run"]);
+    const row = (id: string) => allData(root, "auditEvidence", id).find(n => n.tagName === "TR")!;
+    const cells = (id: string) => row(id).children.map(c => c.textContent);
+    expect(cells("evd-none-0002").slice(1)).toEqual(["Not reported", "AUDIT_CHECKPOINT", "evd-none-0002", "—"]);
+    expect(allData(row("evd-none-0002"), "pill")[0].dataset.pill).toBe("NEUTRAL") // neutral tone: neither verified nor a failure;
+    expect(cells("evd-ok-0001").slice(1)).toEqual(["VERIFIED", "TEST_RESULT", "evd-ok-0001", RID("01")]);
+    expect(allData(row("evd-ok-0001"), "pill")[0].dataset.pill).toBe("VERIFIED");
+  });
+  it("tr: the same headers and the unreported label are localised", async () => {
+    const {root} = await renderAudit(auditServe({"/v1/evidence?limit=100": {sources: OKSRC, evidence: [EVID("evd-none-0002", "2026-10-16T09:00:00.000Z", {verification: null})]}}), "tr");
+    expect(heads(tableOf(root, "audit-events")!).map(h => h[0])).toEqual(["Zaman", "Önem", "Koşu", "Aşama / olay (aynen)"]);
+    expect(heads(tableOf(root, "audit-evidence")!).map(h => h[0])).toEqual(["Kaydedildi", "Hash doğrulaması", "Tür (aynen)", "Kanıt kimliği", "Koşu"]);
+    expect(allData(root, "auditEvidence", "evd-none-0002").find(n => n.tagName === "TR")!.children[1].textContent).toBe("Bildirilmedi");
+  });
+  it("empty and unreadable sources render no table (the honest state notes stay)", async () => {
+    const empty = await renderAudit(auditServe({"/v1/runs": runsBody([]), "/v1/evidence?limit=100": {sources: OKSRC, evidence: []}}));
+    expect(tableOf(empty.root, "audit-events")).toBeUndefined(); expect(tableOf(empty.root, "audit-evidence")).toBeUndefined();
+    expect(byData(empty.root, "auditEmpty", "events")).toBeDefined(); expect(byData(empty.root, "auditEmpty", "evidence")).toBeDefined();
+    const down = await renderAudit(auditServe({"/v1/evidence?limit=100": new Error("/v1/evidence?limit=100: HTTP 500")}));
+    expect(tableOf(down.root, "audit-evidence")).toBeUndefined();
+    expect(byId(down.root, "audit-evidence")!.textContent).toContain("could not be read");
   });
 });
