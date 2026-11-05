@@ -306,38 +306,53 @@ export function registerCloudDeployCases(): void {
       expect(go(ledger, {deployApproval: a1})).toBe("DEPLOY_APPROVAL_REPLAYED");
     });
     it("unknown ledger state fails closed", () => {
-      const {go} = ready();
+      const {d, go} = ready(); const d0 = () => d;
       expect(go(undefined)).toBe("DEPLOY_APPROVAL_LEDGER_UNAVAILABLE");
       expect(go({consume: () => { throw new Error("store down"); }})).toBe("DEPLOY_APPROVAL_LEDGER_UNAVAILABLE");
       expect(go({consume: () => "maybe"} as unknown as DeployApprovalLedger)).toBe("DEPLOY_APPROVAL_LEDGER_UNAVAILABLE");
       const full = new InMemoryDeployApprovalLedger(1); full.consume("other:1", at(60_000).getTime(), at(1000).getTime());
       expect(go(full)).toBe("DEPLOY_APPROVAL_LEDGER_UNAVAILABLE");                          // capacity reached: refuse, never evict live entries
-      const later = new InMemoryDeployApprovalLedger(1, () => at(900 + MAX_CLOCK_SKEW_MS).getTime()); later.consume("other:1", at(900).getTime(), at(0).getTime());
-      expect(go(later)).toBe("OK");                                                         // trusted clock past exp + skew: pruned first
+      const later = InMemoryDeployApprovalLedger.forRing(d0().production.keys, 1); later.consume("other:1", at(900).getTime(), at(0).getTime());
+      wallMs = at(900 + MAX_CLOCK_SKEW_MS).getTime();                                        // the ring's trusted clock passes exp + skew
+      expect(go(later)).toBe("OK"); wallMs = t0.getTime();                                   // ...so the stale entry is pruned first
       expect(() => new InMemoryDeployApprovalLedger(0)).toThrow("LEDGER_CAPACITY_INVALID");
     });
     it("a skewed-future caller `now` cannot prune a live consumed entry and re-enable a replay (#349 N-1)", () => {
-      const {approval, go} = ready();
+      const {d, approval, go} = ready();
       const t = at(1000).getTime(), exp = at(500 + MAX_DEPLOY_APPROVAL_TTL_MS).getTime();
       const noClock = new InMemoryDeployApprovalLedger();
       expect(go(noClock)).toBe("OK");                                                        // consumed at t
       expect(noClock.consume("other:1", t + 60_000, t + 365 * 86_400_000)).toBe(true);        // caller claims a year later
       expect(go(noClock, {now: at(2000)})).toBe("DEPLOY_APPROVAL_REPLAYED");                 // replay at t+1s inside TTL: still refused
-      let wallLedger = t;
-      const clocked = new InMemoryDeployApprovalLedger(10, () => wallLedger);
+      const clocked = InMemoryDeployApprovalLedger.forRing(d.production.keys, 10);          // ledger clock == the ring's trusted clock (#352 L-1)
       expect(go(clocked)).toBe("OK");
       expect(clocked.consume("other:2", t + 60_000, t + 365 * 86_400_000)).toBe(true);        // trusted clock still at t: nothing pruned
       expect(go(clocked, {now: at(2000)})).toBe("DEPLOY_APPROVAL_REPLAYED");
-      wallLedger = exp + MAX_CLOCK_SKEW_MS - 1;                                              // just inside exp + skew: kept
-      expect(clocked.consume("other:3", wallLedger + 60_000, wallLedger)).toBe(true);
-      expect(clocked.consume(`prd-k1:${approval.split(".")[2]}`, exp, wallLedger)).toBe(false);
-      wallLedger = exp + MAX_CLOCK_SKEW_MS;                                                  // trusted clock past exp + skew: pruned
-      expect(clocked.consume(`prd-k1:${approval.split(".")[2]}`, exp, wallLedger)).toBe(true);
+      wallMs = exp + MAX_CLOCK_SKEW_MS - 1;                                                  // just inside exp + skew: kept
+      expect(clocked.consume("other:3", wallMs + 60_000, wallMs)).toBe(true);
+      expect(clocked.consume(`prd-k1:${approval.split(".")[2]}`, exp, wallMs)).toBe(false);
+      wallMs = exp + MAX_CLOCK_SKEW_MS;                                                      // trusted clock past exp + skew: pruned
+      expect(clocked.consume(`prd-k1:${approval.split(".")[2]}`, exp, wallMs)).toBe(true);
+      wallMs = t0.getTime();
+      const year = t + 365 * 86_400_000;
       const broken = new InMemoryDeployApprovalLedger(10, () => { throw new Error("ntp down"); });
-      expect(go(broken)).toBe("OK"); expect(go(broken, {now: at(2000)})).toBe("DEPLOY_APPROVAL_REPLAYED");   // unreadable clock: no pruning
+      expect(broken.consume("c-1", t + 60_000, t)).toBe(true); expect(broken.consume("c-1", t + 60_000, year)).toBe(false);   // unreadable clock: no pruning
       const infinite = new InMemoryDeployApprovalLedger(10, () => Number.POSITIVE_INFINITY);
-      expect(go(infinite)).toBe("OK"); expect(go(infinite, {now: at(2000)})).toBe("DEPLOY_APPROVAL_REPLAYED"); // non-finite clock: no pruning
+      expect(infinite.consume("c-1", t + 60_000, t)).toBe(true); expect(infinite.consume("c-1", t + 60_000, year)).toBe(false); // non-finite clock: no pruning
       expect(() => new InMemoryDeployApprovalLedger(10, 5 as unknown as () => number)).toThrow("LEDGER_CLOCK_INVALID");
+    });
+    it("#352 L-1: a ledger whose clock is not the production ring's trusted clock is refused, so a skewed clock cannot prune a live approval", () => {
+      const {d, go} = ready();
+      const skewed = new InMemoryDeployApprovalLedger(10, () => at(365 * 86_400_000).getTime());   // a year ahead: would prune everything
+      expect(go(skewed)).toBe("DEPLOY_APPROVAL_LEDGER_CLOCK_MISMATCH");
+      expect(go(skewed, {now: at(2000)})).toBe("DEPLOY_APPROVAL_LEDGER_CLOCK_MISMATCH");      // never reaches consume: no prune, no replay
+      const lookalike = new InMemoryDeployApprovalLedger(10, () => wallMs);                   // same time today, but not the same trusted source
+      expect(go(lookalike)).toBe("DEPLOY_APPROVAL_LEDGER_CLOCK_MISMATCH");
+      const bound = InMemoryDeployApprovalLedger.forRing(d.production.keys);                  // positive control: derived from the ring
+      expect(go(bound)).toBe("OK"); expect(go(bound, {now: at(2000)})).toBe("DEPLOY_APPROVAL_REPLAYED");
+      const clockless = new InMemoryDeployApprovalLedger();                                    // never prunes: allowed
+      expect(go(clockless)).toBe("OK");
+      expect(() => InMemoryDeployApprovalLedger.forRing(d.staging.keys)).toThrow("LEDGER_RING_HAS_NO_CLOCK");
     });
     it("the old nonce-less da1 approval format is refused", () => {
       const {approval, go} = ready();

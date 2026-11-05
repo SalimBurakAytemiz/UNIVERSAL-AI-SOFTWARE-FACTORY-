@@ -322,3 +322,64 @@ export class ProviderRouter {
     }
   }
 }
+
+// ---------- CLOUD-T0015: PlannerModel adaptörü (CLOUD-T0010 görev kırılımı bu yönlendiricinin arkasında) ----------
+// //TR: Planlayıcı modeli artık doğrudan bir sağlayıcı değil, bu yönlendiricidir: yetenek (PlannerModelRequest.model) izin listesindeyse, giriş+çıkış token'ı bağlam
+// penceresine sığıyorsa yönlendirilir; kota/429 fallback/devre kesici/bütçe ProviderRouter'dadır. Başarısızlık sabit kodlu hatadır (sağlayıcı metni sızmaz; decomposeIntent
+// bunu PLANNER_FAILED yapar). Bildirilen maliyet istek tavanını aşarsa (bütçe aşımı) plan KULLANILMAZ, ama ücret kullanım kaydına yazılır. Kimlik bilgisi yoktur:
+// sağlayıcılar enjekte edilir (D-08: ücretli sağlayıcı çağrılmaz; anahtar yalnız sağlayıcının kendi ortam dolaylamasındadır).
+export interface PlannerUsage {
+  capability: string; ok: boolean; reason?: string; providerId: string | null; model: string | null;
+  attempts: AttemptRecord[]; chargedUsd: number; inputTokens: number; outputTokens: number;
+}
+export interface RoutedPlannerOptions {
+  router: ProviderRouter;
+  /** Doğrulanmış oturumdan türetilir (paidApproved istek gövdesinden ASLA gelmez). */
+  ctx: Omit<RoutingContext, "signal">;
+  dataClass: DataClass;
+  /** Orkestratörün `model` alanı olarak isteyebileceği yetenekler (ör. "plan.decompose"). */
+  capabilities: ReadonlySet<string>;
+  /** Giriş tahmini + maxOutputTokens bu sınırı aşamaz. */
+  contextWindowTokens: number;
+  /** Tüm denemelerin toplam tavanı; verilmezse istek tavanı. */
+  maxTotalCostUsd?: number;
+  onUsage?: (u: PlannerUsage) => void;
+}
+export class RoutedPlannerError extends Error {
+  constructor(readonly code: string) { super(code); this.name = "RoutedPlannerError"; }
+}
+export interface RoutedPlanner {readonly name: string; invoke(req: {model: string; prompt: string; maxOutputTokens: number; maxCostUsd: number}, signal: AbortSignal): Promise<ModelResponse>}
+
+/** ProviderRouter'ı core/cloud/task-orchestrator.ts PlannerModel sözleşmesine bağlar. */
+export function routedPlannerModel(o: RoutedPlannerOptions): RoutedPlanner {
+  if (!posInt(o.contextWindowTokens)) throw new Error("contextWindowTokens invalid");
+  const record = (u: PlannerUsage) => { try { o.onUsage?.(u); } catch { /* kayıt hatası yönlendirmeyi bozmaz */ } };
+  return {
+    name: "cloud-router",
+    async invoke(req, signal) {
+      const capability = String(req?.model ?? "");
+      const empty = {capability, providerId: null, model: null, attempts: [], chargedUsd: 0, inputTokens: 0, outputTokens: 0};
+      if (!o.capabilities.has(capability)) { record({...empty, ok: false, reason: "PLANNER_CAPABILITY_NOT_ALLOWED"}); throw new RoutedPlannerError("PLANNER_CAPABILITY_NOT_ALLOWED"); }
+      if (typeof req.prompt !== "string" || !posInt(req.maxOutputTokens) || estimateInputTokens(req.prompt) + req.maxOutputTokens > o.contextWindowTokens) {
+        record({...empty, ok: false, reason: "CONTEXT_WINDOW_EXCEEDED"}); throw new RoutedPlannerError("CONTEXT_WINDOW_EXCEEDED");
+      }
+      const r = await o.router.route({...o.ctx, signal}, {capability, dataClass: o.dataClass, prompt: req.prompt, maxOutputTokens: req.maxOutputTokens,
+        maxCostUsd: req.maxCostUsd, ...(o.maxTotalCostUsd !== undefined ? {maxTotalCostUsd: o.maxTotalCostUsd} : {})});
+      if (!r.ok) { record({...empty, ok: false, reason: r.reason, attempts: r.attempts, chargedUsd: r.chargedUsd}); throw new RoutedPlannerError(r.reason); }
+      const u = {capability, providerId: r.providerId, model: r.model, attempts: r.attempts, chargedUsd: r.chargedUsd, inputTokens: r.response.inputTokens, outputTokens: r.response.outputTokens};
+      // Aşım: tek yanıtın bildirdiği maliyet deneme tavanını ya da tüm denemelerin toplamı toplam tavanı aşarsa (fallback öncesi başarısız denemeler dahil).
+      const totalCap = o.maxTotalCostUsd ?? req.maxCostUsd;
+      if (r.response.costUsd > req.maxCostUsd + 1e-9 || r.chargedUsd > totalCap + 1e-9) { record({...u, ok: false, reason: "BUDGET_OVERRUN"}); throw new RoutedPlannerError("BUDGET_OVERRUN"); }
+      record({...u, ok: true});
+      return {text: r.response.text, inputTokens: r.response.inputTokens, outputTokens: r.response.outputTokens, costUsd: r.chargedUsd};
+    },
+  };
+}
+
+/** Yönlendirme modele göre: keşfedilen (ör. OmniRoute /models) model kimliklerinden her yetenek için tercih sırasındaki İLK mevcut model seçilir; hiçbiri yoksa yetenek eklenmez (o rota o yeteneği sunamaz). */
+export function modelsFromDiscovery(discovered: readonly {id: string}[], preferences: Readonly<Record<string, readonly string[]>>): Record<string, string> {
+  const have = new Set(discovered.map(m => m?.id).filter((x): x is string => typeof x === "string" && ID_RE.test(x)));
+  const out: Record<string, string> = {};
+  for (const [cap, prefs] of Object.entries(preferences)) { const hit = prefs.find(m => have.has(m)); if (hit && ID_RE.test(cap)) out[cap] = hit; }
+  return out;
+}
