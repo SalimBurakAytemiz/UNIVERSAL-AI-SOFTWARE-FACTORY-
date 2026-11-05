@@ -1,6 +1,8 @@
 // //TR: Factory V2 rol kimliği: otorite geçişlerini imzalayan her rol (V41_OWNER, V2_CANDIDATE, FOUNDER) ed25519 anahtarıyla imzalar; açık anahtarlar YALNIZ kanonik daldaki Founder onaylı yönetişim dosyasından (docs/planning/authority/FACTORY-V2-ROLE-KEYS.json, belirli commit SHA'sında) okunur — kayıt dalına yazabilen bir oturum anahtar listesini değiştiremez. Çağıranın verdiği "actor" metni kimlik sayılmaz: kimlik = kayıtlı anahtarla doğrulanan imza + rol + oturum + alan + geçerlilik süresi.
 import crypto from "node:crypto";
 import {spawnSync} from "node:child_process";
+import fs from "node:fs";
+import nodePath from "node:path";
 
 export const KEYRING_SCHEMA = "uasco.factory-v2.role-keys/1";
 export const ENVELOPE_SCHEMA = "uasco.factory-v2.signed-action/1";
@@ -20,6 +22,24 @@ export function generateRoleKey() {
 }
 
 /** Validate a keyring object. `source` records where it came from (canonical commit or probe), and must be stated by the loader. */
+/**
+ * Keygen for a real role holder: the private key is written ONLY to a new 0600 file outside every git work tree (so it cannot be
+ * committed by accident), never overwritten, never printed. Returns the public keyring entry, the only thing that may leave the container.
+ */
+export function writeRoleKey({role, sessionId, out}) {
+  if (!ROLES.includes(role)) throw new IdentityError("KEYGEN_ROLE_INVALID", role);
+  if (!/^session_[A-Za-z0-9]{8,}$/.test(sessionId ?? "")) throw new IdentityError("KEYGEN_SESSION_INVALID");
+  if (typeof out !== "string" || !out) throw new IdentityError("KEYGEN_OUT_REQUIRED");
+  const abs = nodePath.resolve(out), dir = nodePath.dirname(abs);
+  if (!fs.existsSync(dir)) throw new IdentityError("KEYGEN_OUT_DIR_MISSING");
+  const inTree = spawnSync("git", ["-C", dir, "rev-parse", "--is-inside-work-tree"], {encoding: "utf8", windowsHide: true});
+  if (inTree.status === 0 && inTree.stdout.trim() === "true") throw new IdentityError("KEYGEN_OUT_INSIDE_GIT_WORKTREE", dir);
+  if (/^(true|false)$/.test((spawnSync("git", ["-C", dir, "rev-parse", "--is-bare-repository"], {encoding: "utf8", windowsHide: true}).stdout ?? "").trim())) throw new IdentityError("KEYGEN_OUT_INSIDE_GIT_REPOSITORY", dir);
+  const k = {...generateRoleKey(), role, sessionId};
+  fs.writeFileSync(abs, JSON.stringify(k), {mode: 0o600, flag: "wx"}); // wx: never overwrite an existing key
+  return {keyId: k.keyId, role, sessionId, publicKeyPem: k.publicKeyPem};
+}
+
 export function parseKeyring(obj, source) {
   if (obj?.schema !== KEYRING_SCHEMA || !Array.isArray(obj.keys) || typeof obj.domain !== "string") throw new IdentityError("KEYRING_INVALID");
   const keys = new Map();

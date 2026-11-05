@@ -11,7 +11,7 @@ import {createRemoteDocStore, gitRunner} from "../../automation/factory-v2/ref-d
 import {createSharedRegistry} from "../../automation/factory-v2/shared-registry.mjs";
 import {Ownership} from "../../automation/factory-v2/ownership.mjs";
 import {snapshotV41, buildManifest, authorityRef, verifyAuthorityDoc, checkTransition} from "../../automation/factory-v2/bridge.mjs";
-import {signAction, canonDigest} from "../../automation/factory-v2/identity.mjs";
+import {signAction, canonDigest, writeRoleKey, parseKeyring} from "../../automation/factory-v2/identity.mjs";
 import {verifyGates} from "../../automation/factory-v2/gate-verifier.mjs";
 import {mergeAuthority, liveAuthorityReaders} from "../../automation/factory-v2/v41-guard.mjs";
 import {protectionFrom} from "../../automation/factory-v2/live-sources.mjs";
@@ -432,5 +432,28 @@ describe("registry protection must come from active rulesets with no bypass", ()
     expect(await protectionFrom(rules, async () => rs())).toBe(true);
     expect(await protectionFrom(rules, async () => rs({bypass_actors: [{actor_id: 1}]}))).toBe(false);
     expect(await protectionFrom(rules, async () => { throw new Error("x"); })).toBe(false);
+  });
+});
+
+describe("role key generation for real holders: the private key cannot land in a repository", () => {
+  it("keygen refuses an output inside a git work tree or .git, never overwrites, and returns only a valid public entry", {timeout: T}, () => {
+    const repo = fs.mkdtempSync(path.join(os.tmpdir(), "fv2-kg-repo-")); git(repo, "init", "-q");
+    fs.mkdirSync(path.join(repo, "sub"));
+    const sid = "session_KEYGENtest0001";
+    for (const out of [path.join(repo, "k.json"), path.join(repo, "sub", "k.json")])
+      expect(() => writeRoleKey({role: "V2_CANDIDATE", sessionId: sid, out})).toThrow(/KEYGEN_OUT_INSIDE_GIT_WORKTREE/);
+    expect(() => writeRoleKey({role: "V2_CANDIDATE", sessionId: sid, out: path.join(repo, ".git", "k.json")})).toThrow(/KEYGEN_OUT_INSIDE_GIT_REPOSITORY/);
+    expect(fs.existsSync(path.join(repo, "k.json"))).toBe(false);
+    expect(() => writeRoleKey({role: "ADMIN", sessionId: sid, out: "x"})).toThrow(/KEYGEN_ROLE_INVALID/);
+    expect(() => writeRoleKey({role: "FOUNDER", sessionId: "bob", out: "x"})).toThrow(/KEYGEN_SESSION_INVALID/);
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), "fv2-kg-out-")), out = path.join(outside, "k.json");
+    const pub = writeRoleKey({role: "V2_CANDIDATE", sessionId: sid, out});
+    expect(Object.keys(pub).sort()).toEqual(["keyId", "publicKeyPem", "role", "sessionId"]);
+    expect(JSON.stringify(pub)).not.toMatch(/PRIVATE KEY/);
+    expect(JSON.parse(fs.readFileSync(out, "utf8")).privateKeyPem).toMatch(/PRIVATE KEY/);
+    if (process.platform !== "win32") expect(fs.statSync(out).mode & 0o077).toBe(0);
+    expect(() => writeRoleKey({role: "V2_CANDIDATE", sessionId: sid, out})).toThrow(/EEXIST/);
+    // the printed entry is exactly what the canonical keyring loader accepts
+    expect(() => parseKeyring({schema: "uasco.factory-v2.role-keys/1", mode: "LIVE", domain: "uasco-v7", keys: [pub]}, "test")).not.toThrow();
   });
 });
