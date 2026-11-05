@@ -336,7 +336,7 @@ export default {
   "aq.unknown.runs":"The work runs could not be read, so delivery decisions cannot be listed. None are claimed.",
   "aq.unknown.attention":"The Founder-attention queue could not be read, so run decisions cannot be listed. None are claimed.",
   "aq.unknown.predev":"The pre-development state of {n} mission(s) could not be read, so their drafts are not listed.",
-  "aq.unknown.predevSkipped":"{n} more mission(s) were not checked for pre-development drafts (limit reached); open them in Project Journey.",
+  "aq.unknown.predevSkipped":"{n} more mission(s) were not checked for pre-development drafts (only the first {cap} are checked); open them in Project Journey.",
   "inbox.empty":"Nothing is waiting for approval.",
   "attention.none":"No pending blockers.",
   "attention.retry":"Retry",

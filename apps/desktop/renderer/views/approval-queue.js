@@ -3,7 +3,7 @@ import {h,panel,badge,statusLabel,stateNote} from "../components.js";
 import {drafts,selection,field,statusBlock,setStatus,focusResult} from "../forms.js";
 import {performTransition,actionStatusId} from "../work-actions.js";
 import {buildTransitionRequest} from "../work-core.js";
-import {AQ_MODE,AQ_LINK} from "../approval-queue-core.js";
+import {AQ_MODE,AQ_LINK,PREDEV_CHECK_CAP} from "../approval-queue-core.js";
 
 // Anahtarlar düz metin olarak yazılır (yerelleştirme taraması için).
 const GROUP_KEY=Object.freeze({AUTHORIZATION:"aq.group.AUTHORIZATION",DELIVERY:"aq.group.DELIVERY",FOUNDER_ATTENTION:"aq.group.FOUNDER_ATTENTION",PREDEV_DRAFT:"aq.group.PREDEV_DRAFT",RUN_DECISION:"aq.group.RUN_DECISION"});
@@ -60,7 +60,7 @@ function unknownNotes(ctx,q){
   if(u.runs)note("runs","aq.unknown.runs");
   if(u.attention)note("attention","aq.unknown.attention");
   if(u.predevUnread>0)note("predev","aq.unknown.predev",{n:u.predevUnread});
-  if(u.predevSkipped>0)note("predevSkipped","aq.unknown.predevSkipped",{n:u.predevSkipped});
+  if(u.predevSkipped>0)note("predevSkipped","aq.unknown.predevSkipped",{n:u.predevSkipped,cap:PREDEV_CHECK_CAP});
   return out;
 }
 /** q: buildApprovalQueue sonucu. */

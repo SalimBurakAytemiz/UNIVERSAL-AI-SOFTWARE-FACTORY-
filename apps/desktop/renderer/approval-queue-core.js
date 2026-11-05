@@ -1,5 +1,5 @@
 // //TR: Bu modül Gelen Kutusu'ndaki tek "Onay kuyruğu"nun saf (DOM'suz) çekirdeğidir (Final Approval Center): ZATEN okunan GET /v1/missions, GET /v1/work-runs, GET /v1/attention ve seçili mission'lar için GET /v1/predev/:id sonuçlarından, Founder kararı bekleyen her öğeyi TÜRÜNE göre gruplar. Her öğe yalnız gerçek olguları taşır (konu, risk düzeyi, onaylamanın ne yaptığı, derin bağlantı) ve yalnız mevcut, izinli bir rota varsa eylem taşır; rotası olmayan ya da girdi isteyen öğe salt okunurdur ve NEDENİ söylenir. Okunamayan kaynakta öğe uydurulmaz; kaç öğenin denetlenemediği açıkça bildirilir.
-import {deriveInbox,allowedNext,MISSION_ID_RE} from "./work-core.js";
+import {deriveInbox,allowedNext,MISSION_ID_RE,RISK_LEVELS} from "./work-core.js";
 import {PHASE_KIND} from "./journey-core.js";
 
 export const AQ_GROUPS=Object.freeze(["AUTHORIZATION","DELIVERY","FOUNDER_ATTENTION","PREDEV_DRAFT","RUN_DECISION"]);
@@ -10,6 +10,7 @@ export const PREDEV_CHECK_CAP=20;
 export const AQ_MODE=Object.freeze({AUTHORIZATION:"TRANSITION",DELIVERY:"DECIDE",FOUNDER_ATTENTION:"DECIDE",PREDEV_DRAFT:"READ_ONLY",RUN_DECISION:"READ_ONLY"});
 /** Derin bağlantının gittiği ekran. */
 export const AQ_LINK=Object.freeze({AUTHORIZATION:"work",DELIVERY:"work",FOUNDER_ATTENTION:"work",PREDEV_DRAFT:"journey",RUN_DECISION:"work"});
+export const riskOf=r=>typeof r==="string"&&RISK_LEVELS.includes(r)?r:null;
 const AUTH_TARGETS=Object.freeze([{to:"AUTHORIZED",type:"approve"},{to:"BLOCKED",type:"reject"}]);
 
 /** Pre-dev okuması yapılacak mission kimlikleri (sıralı, sınırlı) ve sınır nedeniyle atlananların sayısı. */
@@ -31,7 +32,8 @@ export function buildApprovalQueue({missions,runs,attention,predev=new Map(),pre
   if(!missions||missions.state!=="VERIFIED")return {state:missions?.state??"ERROR",groups:[],total:0,unknown:null};
   const list=Array.isArray(missions.items)?missions.items:[],byId=new Map(list.map(m=>[m.missionId,m]));
   const runsOk=runs?.state==="VERIFIED",attOk=attention?.state==="VERIFIED"&&Boolean(attention.queue);
-  const base=m=>({missionId:m.missionId,title:m.title??m.missionId,riskLevel:m.riskLevel??null,status:m.status});
+  // //TR: Risk yalnız geçerli bir düzeyse (R0–R4) taşınır; okuma katmanının "—" yer tutucusu ya da eksik değer null olur ve görünüm UNKNOWN der (uydurulmaz).
+  const base=m=>({missionId:m.missionId,title:m.title??m.missionId,riskLevel:riskOf(m.riskLevel),status:m.status});
   const items=[];
   for(const m of list){
     if(m.status!=="PREFLIGHT"||!MISSION_ID_RE.test(String(m.missionId)))continue;

@@ -27,9 +27,10 @@ const apps: App[] = [];
 let failOn: RegExp | null = null;
 
 interface Seed { pre: string; fa: string; rep: string; fl: string; pd: string; blk: string; repRun: string; flRun: string; artifactId: string }
-async function seed(dataDir: string, empty: boolean): Promise<Seed | null> {
+async function seed(dataDir: string, empty: boolean, drafts = 0): Promise<Seed | null> {
   const store = new WorkOsStore(dataDir);
   const p = store.createProject({tenantId: "tA", orgId: "org1", name: "AQ project", environmentId: "env-dev", createdBy: ACTOR});
+  for (let i = 0; i < drafts; i++) store.createMission({tenantId: "tA", projectId: p.projectId, title: `Draft ${i}`, objective: "obj", acceptanceCriteria: ["ac"], riskLevel: "R1", createdBy: ACTOR});
   if (empty) return null;
   const mk = (title: string, risk: string, path: string[]) => { const m = store.createMission({tenantId: "tA", projectId: p.projectId, title, objective: "obj", acceptanceCriteria: ["ac"], riskLevel: risk as any, createdBy: ACTOR}); for (const to of path) store.transitionMission(SCOPE, m.missionId, to as any, "seed", ACTOR); return m.missionId; };
   const pre = mk("Checkout flow", "R2", ["PREFLIGHT"]);
@@ -48,10 +49,10 @@ async function seed(dataDir: string, empty: boolean): Promise<Seed | null> {
   if (d.status !== "DRAFT_READY") throw new Error(`seed: ${JSON.stringify(d)}`);
   return {pre, fa, rep, fl, pd, blk, repRun: r.runId, flRun: rf.runId, artifactId: d.artifactId};
 }
-async function mkApp(empty = false): Promise<{app: App; s: Seed}> {
+async function mkApp(empty = false, drafts = 0): Promise<{app: App; s: Seed}> {
   const runtime = path.join(tmp, "runtime"), dataDir = path.join(tmp, "data");
   fs.mkdirSync(runtime, {recursive: true});
-  const s = await seed(dataDir, empty);
+  const s = await seed(dataDir, empty, drafts);
   const app = buildServer({controlToken: TOKEN, runtime, repoRoot: REPO, dataDir, tenantId: "tA", port: 3210, logger: false});
   app.addHook("onRequest", async (req, reply) => { if (failOn && failOn.test(req.url)) return reply.code(500).send({error: "INJECTED_SERVER_FAILURE"}); });
   apps.push(app); return {app, s: s as Seed};
@@ -212,6 +213,31 @@ describe("Final Approval Center: Inbox approval queue grouped by kind, with conf
     ({app} = await mkApp(true)); h = await harness(app);
     expect(h.find(n => n.dataset.aqTotal === "0")[0]?.textContent).toBe("Nothing waits for your decision right now.");
     expect(h.find(n => n.dataset.aqGroup !== undefined)).toEqual([]);
+  });
+
+  it("pre-dev check cap: with 22 candidate missions only 20 are read, and the note states the 2 unchecked ones and the cap of 20 (#379 NB)", async () => {
+    const {app} = await mkApp(true, 22), h = await harness(app);
+    expect(h.seen.filter(x => x.path.startsWith("/v1/predev/")).length).toBe(20);
+    const note = h.find(n => n.dataset.aqUnknown === "predevSkipped")[0];
+    expect(note?.textContent).toBe("2 more mission(s) were not checked for pre-development drafts (only the first 20 are checked); open them in Project Journey.");
+    const tr = (await load("locales", "tr.js")).default["aq.unknown.predevSkipped"];
+    expect(tr).toContain("{cap}"); expect(tr).toContain("{n}");
+  });
+
+  it("missing risk level is shown as UNKNOWN, never as a placeholder badge; a valid level is a badge (#379 NB)", async () => {
+    const c = await load("approval-queue-core.js"), aqv = await load("views", "approval-queue.js"), i18n = await load("i18n.js");
+    const id = (i: number) => "msn_" + i.toString(16).padStart(24, "0");
+    // mapMissions turns a missing risk into "—"; a RUN_DECISION whose mission is not in the list has no risk at all
+    const q = c.buildApprovalQueue({missions: {state: "VERIFIED", items: [{missionId: id(1), status: "PREFLIGHT", title: "No risk", riskLevel: "—"}, {missionId: id(2), status: "PREFLIGHT", title: "Bogus", riskLevel: "HIGH"}, {missionId: id(3), status: "PREFLIGHT", title: "Real", riskLevel: "R3"}]},
+      runs: {state: "VERIFIED", items: []}, attention: {state: "VERIFIED", queue: {items: [{kind: "RUN_NEEDS_DECISION", missionId: id(9), runId: "run_" + "c".repeat(24), title: "Orphan run"}]}}});
+    const items = q.groups.flatMap((g: any) => g.items);
+    expect(items.map((i: any) => [i.missionId, i.riskLevel])).toEqual([[id(1), null], [id(2), null], [id(3), "R3"], [id(9), null]]);
+    const t = (k: string, v?: unknown) => i18n.translate("en", k, v);
+    const root = aqv.approvalQueuePanel({doc: new D(), t, i18n: {lang: "en", t}, navigate: () => undefined}, q) as N;
+    const risk = (mid: string) => all(all(root).find(n => n.dataset.aqItem === mid)!).find(n => n.dataset.aqRisk !== undefined)!;
+    for (const mid of [id(1), id(2), id(9)]) { expect(risk(mid).dataset.aqRisk, mid).toBe(""); expect(risk(mid).textContent, mid).toBe("UNKNOWN"); }
+    expect(risk(id(3)).dataset.aqRisk).toBe("R3"); expect(risk(id(3)).textContent).toBe("R3");
+    expect(c.riskOf("R0")).toBe("R0"); expect(c.riskOf("—")).toBeNull(); expect(c.riskOf(undefined)).toBeNull();
   });
 
   it("pure core (mutant killers): modes, links, candidates and cap, current-phase drafts only; en/tr strings", async () => {

@@ -336,7 +336,7 @@ export default {
   "aq.unknown.runs":"Koşular okunamadı; bu yüzden teslim kararları listelenemiyor. Hiçbiri iddia edilmez.",
   "aq.unknown.attention":"Kurucu dikkati kuyruğu okunamadı; bu yüzden koşu kararları listelenemiyor. Hiçbiri iddia edilmez.",
   "aq.unknown.predev":"{n} mission'ın ön geliştirme durumu okunamadı; taslakları listelenmiyor.",
-  "aq.unknown.predevSkipped":"{n} mission daha ön geliştirme taslağı için denetlenmedi (sınıra ulaşıldı); onları Proje Yolculuğu'nda açın.",
+  "aq.unknown.predevSkipped":"{n} mission daha ön geliştirme taslağı için denetlenmedi (yalnız ilk {cap} tanesi denetlenir); onları Proje Yolculuğu'nda açın.",
   "inbox.empty":"Onay bekleyen iş yok.",
   "attention.none":"Bekleyen blocker yok.",
   "attention.retry":"Yeniden dene",
