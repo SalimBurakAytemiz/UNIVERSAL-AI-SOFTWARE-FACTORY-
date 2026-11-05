@@ -6,12 +6,13 @@ import {executeMerge, verifyMerge, verifyMain} from "../../docs/planning/autonom
 const H = "a".repeat(40), B = "b".repeat(40), M = "c".repeat(40), X = "d".repeat(40);
 const result = (decision: string) => ({decision, task: "CLOUD-T0010", expectedHeadSha: H, expectedBaseSha: B, reasons: decision === "AUTO_MERGE" ? [] : ["R"], authority: decision === "AUTO_MERGE" ? "FD" : null});
 const collect = () => ({evidence: {pr: {base: {ref: "v7/integration"}}}, policy: {mergeMethod: "merge"}});
-const api = (o: {parents?: string[], tip?: string, cmp?: string} = {}) => (p: string) => {
+const api = (o: {parents?: string[], tip?: string, cmp?: string, tip0?: string, pr?: unknown} = {}) => { let reads = 0; return (p: string) => {
   if (p === `commits/${M}`) return {parents: (o.parents ?? [B, H]).map(sha => ({sha}))};
-  if (p.startsWith("branches/")) return {commit: {sha: o.tip ?? M}};
+  if (p.startsWith("branches/")) return {commit: {sha: reads++ === 0 && o.tip0 !== "skip" ? (o.tip0 ?? B) : (o.tip ?? M)}};
+  if (p.startsWith("pulls/")) return o.pr ?? {merged: false};
   if (p.startsWith("compare/")) return {status: o.cmp ?? "ahead"};
   throw new Error(`unexpected ${p}`);
-};
+}; };
 
 export function registerAutonomyExecutorCases() {
   describe("FD-2026-11-03 executor", () => {
@@ -38,16 +39,16 @@ export function registerAutonomyExecutorCases() {
       }
     });
     it("E4 merge verification: wrong parents or a base that does not contain the merge fail", () => {
-      expect(verifyMerge({api: api({parents: [X, H]}), mergeSha: M, baseSha: B, headSha: H, baseRef: "v7/integration"}).reasons).toEqual(["MERGE_PARENTS_MISMATCH"]);
-      expect(verifyMerge({api: api({parents: [B]}), mergeSha: M, baseSha: B, headSha: H, baseRef: "v7/integration"}).reasons).toEqual(["MERGE_PARENTS_MISMATCH"]);
-      expect(verifyMerge({api: api({tip: X, cmp: "ahead"}), mergeSha: M, baseSha: B, headSha: H, baseRef: "v7/integration"}).ok).toBe(true);
-      expect(verifyMerge({api: api({tip: X, cmp: "diverged"}), mergeSha: M, baseSha: B, headSha: H, baseRef: "v7/integration"}).reasons).toEqual(["BASE_DOES_NOT_CONTAIN_MERGE"]);
+      expect(verifyMerge({api: api({parents: [X, H], tip0: "skip"}), mergeSha: M, baseSha: B, headSha: H, baseRef: "v7/integration"}).reasons).toEqual(["MERGE_PARENTS_MISMATCH"]);
+      expect(verifyMerge({api: api({parents: [B], tip0: "skip"}), mergeSha: M, baseSha: B, headSha: H, baseRef: "v7/integration"}).reasons).toEqual(["MERGE_PARENTS_MISMATCH"]);
+      expect(verifyMerge({api: api({tip: X, cmp: "ahead", tip0: "skip"}), mergeSha: M, baseSha: B, headSha: H, baseRef: "v7/integration"}).ok).toBe(true);
+      expect(verifyMerge({api: api({tip: X, cmp: "diverged", tip0: "skip"}), mergeSha: M, baseSha: B, headSha: H, baseRef: "v7/integration"}).reasons).toEqual(["BASE_DOES_NOT_CONTAIN_MERGE"]);
       const r = executeMerge({api: api({parents: [X, H]}), write: () => ({merged: true, sha: M}), pr: 7, implementerSessions: ["s"], collect, decide: () => ({gate: {}, result: result("AUTO_MERGE")})});
       expect(r.decision).toBe("VERIFY_FAILED");
     });
     it("E5 main verification needs both push workflows to pass on the merge commit", () => {
       const runs = (list: unknown[]) => () => ({workflow_runs: list});
-      const run = (p: string, status: string, conclusion: string | null, id = 1, head = M) => ({path: p, status, conclusion, id, run_attempt: 1, head_sha: head});
+      const run = (p: string, status: string, conclusion: string | null, id = 1, head = M, attempt = 1, branch = "v7/integration") => ({path: p, status, conclusion, id, run_attempt: attempt, head_sha: head, event: "push", head_branch: branch});
       const ci = ".github/workflows/ci.yml", wi = ".github/workflows/windows-installer.yml";
       expect(verifyMain({api: runs([run(ci, "completed", "success"), run(wi, "completed", "success")]), sha: M}).decision).toBe("MAIN_PASS");
       expect(verifyMain({api: runs([run(ci, "in_progress", null), run(wi, "completed", "success")]), sha: M}).decision).toBe("MAIN_RUNNING");
@@ -55,6 +56,26 @@ export function registerAutonomyExecutorCases() {
       expect(verifyMain({api: runs([run(ci, "completed", "failure"), run(wi, "completed", "success")]), sha: M}).decision).toBe("MAIN_FAIL");
       expect(verifyMain({api: runs([run(ci, "completed", "success", 1, X), run(wi, "completed", "success")]), sha: M}).decision).toBe("MAIN_RUNNING");
       expect(verifyMain({api: runs([]), sha: "nope"}).decision).toBe("INTERNAL_ERROR");
+      // NB-2/NB-3: the newest run wins whatever its attempt; other branches never count; cancelled fails.
+      expect(verifyMain({api: runs([run(ci, "completed", "success", 1, M, 2), run(ci, "completed", "failure", 2, M, 1), run(wi, "completed", "success")]), sha: M}).decision).toBe("MAIN_FAIL");
+      expect(verifyMain({api: runs([run(ci, "completed", "success", 1, M, 1, "other"), run(wi, "completed", "success")]), sha: M}).decision).toBe("MAIN_RUNNING");
+      expect(verifyMain({api: runs([run(ci, "completed", "cancelled"), run(wi, "completed", "success")]), sha: M}).decision).toBe("MAIN_FAIL");
+    });
+    it("E6 base moved before the merge => no write; lost response re-reads the PR; only the merge method is allowed", () => {
+      let writes = 0;
+      const w = () => { writes++; return {merged: true, sha: M}; };
+      const d = () => ({gate: {}, result: result("AUTO_MERGE")});
+      expect(executeMerge({api: api({tip0: X}), write: w, pr: 7, implementerSessions: ["s"], collect, decide: d}).reasons).toEqual(["BASE_MOVED_BEFORE_MERGE"]);
+      expect(writes).toBe(0);
+      const lost = executeMerge({api: api({pr: {merged: true, merge_commit_sha: M, head: {sha: H}}}), write: () => { throw new Error("EOF"); }, pr: 7, implementerSessions: ["s"], collect, decide: d});
+      expect(lost).toMatchObject({decision: "MERGED_VERIFIED", mergeSha: M});
+      const notMerged = executeMerge({api: api({pr: {merged: false}}), write: () => { throw new Error("EOF"); }, pr: 7, implementerSessions: ["s"], collect, decide: d});
+      expect(notMerged.decision).toBe("MERGE_FAILED");
+      const squash = executeMerge({api: api(), write: w, pr: 7, implementerSessions: ["s"], collect: () => ({...collect(), policy: {mergeMethod: "squash"}}), decide: d});
+      expect(squash.reasons).toEqual(["MERGE_METHOD_UNSUPPORTED"]);
+      expect(writes).toBe(0);
+      // A base that moves inside the remaining window is detected afterwards, never reported as verified.
+      expect(executeMerge({api: api({parents: [X, H]}), write: w, pr: 7, implementerSessions: ["s"], collect, decide: d}).decision).toBe("VERIFY_FAILED");
     });
   });
 }
