@@ -69,15 +69,49 @@ describe("FD 2026-11-05 design system: primary / danger / focus contrast (thresh
 describe("FD 2026-11-05 design system: red is reserved for primary action, danger and the brand marker", () => {
   // //TR: Kırmızı birincil token'ları (--accent, --primary*) yalnız bu seçicilerde görünür; diğer her yerde nötr --emphasis/--accent-2 kullanılır.
   const ALLOWED = [/^\.skip-link$/, /^\.brand-mark$/, /^\.btn-primary(:hover:not\(:disabled\)|:active:not\(:disabled\))?$/, /^\.nav-link\[aria-current="page"\]$/, /^\.panel-title::before$/];
-  it("no rule outside the allow-list references a red primary token", () => {
-    const body = css.replace(/\/\*[\s\S]*?\*\//g, "");
-    const offenders: string[] = [];
+  // //TR: NB-1: kırmızı tespiti takma adlara dayanıklıdır: var() zincirleri (bileşik değerler dahil) çözülür, ham hex (#rgb/#rrggbb/#rrggbbaa) ve rgb()/rgba() normalize edilir. Tehlike ailesi (--danger*, --on-danger, --glow-risk*) tehlike anlamıdır ve ayrıca izinlidir.
+  const toRgb = (v: string): number[] | null => {
+    const h = /^#([0-9a-f]{3,8})$/i.exec(v.trim());
+    if (h) { let x = h[1]; if (x.length === 3 || x.length === 4) x = [...x].map(c => c + c).join(""); return x.length >= 6 ? [0, 2, 4].map(i => parseInt(x.slice(i, i + 2), 16)) : null; }
+    const r = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(v.trim());
+    return r ? [r[1], r[2], r[3]].map(Number) : null;
+  };
+  const isRed = (c: number[] | null) => !!c && c[0] >= 150 && c[0] > 1.5 * Math.max(c[1], c[2]);
+  const literals = (v: string) => v.match(/#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)/g) ?? [];
+  const DANGER = /^--(danger|on-danger|glow-risk)/;
+  const redOffenders = (text: string, map: Record<string, string>): string[] => {
+    const memo = new Map<string, boolean>();
+    const primaryRed = (n: string, depth = 0): boolean => {
+      if (DANGER.test(n) || depth > 8) return false;
+      if (memo.has(n)) return memo.get(n)!;
+      const v = map[n] ?? "";
+      const out = literals(v).some(l => isRed(toRgb(l))) || [...v.matchAll(/var\(\s*(--[A-Za-z0-9_-]+)/g)].some(m => primaryRed(m[1], depth + 1));
+      memo.set(n, out); return out;
+    };
+    const body = text.replace(/\/\*[\s\S]*?\*\//g, ""), off: string[] = [];
     for (const m of body.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
       const sel = m[1].trim(), decl = m[2];
-      if (sel === ":root" || !/var\(--(accent|primary(-hover|-active)?)\)/.test(decl)) continue;
-      for (const s of sel.split(",").map(x => x.trim())) if (!ALLOWED.some(r => r.test(s))) offenders.push(s);
+      if (sel === ":root") continue;
+      const raw = literals(decl).some(l => isRed(toRgb(l)));
+      const viaToken = [...decl.matchAll(/var\(\s*(--[A-Za-z0-9_-]+)/g)].some(x => primaryRed(x[1]));
+      if (raw) off.push(`${sel} (raw red)`);
+      else if (viaToken) for (const s of sel.split(",").map(x => x.trim())) if (!ALLOWED.some(r => r.test(s))) off.push(s);
     }
-    expect(offenders).toEqual([]);
+    return off;
+  };
+  it("no rule outside the allow-list uses red: var() aliases are resolved and raw hex/rgb reds are caught", () => {
+    expect(redOffenders(css, tokens)).toEqual([]);
+  });
+  it("the red detector itself catches aliases, composite values and raw hex/rgb variants (no evasion)", () => {
+    const t = {...tokens, "--alias": "var(--accent)", "--alias2": "var(--alias)", "--shadowy": "0 0 4px var(--primary-hover)", "--warnish": "var(--danger)"};
+    const probe = ".a{color:var(--alias2)}\n.b{box-shadow:var(--shadowy)}\n.c{color:#f12}\n.d{border-color:#FF0011cc}\n.e{background:rgb(230, 20, 40)}\n.f{color:var(--warnish)}\n.btn-primary{background:var(--alias)}\n@media (x){\n  .g{outline-color:var(--color-primary)}\n}";
+    expect(redOffenders(probe, t)).toEqual([".a", ".b", ".c (raw red)", ".d (raw red)", ".e (raw red)", ".g"]);
+  });
+  it("LOW: ::selection and the ambient body glow are neutral, not red", () => {
+    const sel = /\n::selection\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(sel).toBe("background:var(--emphasis);color:var(--bg)");
+    expect(refRatio(resolve("--emphasis"), resolve("--bg"))).toBeGreaterThanOrEqual(7);
+    for (const n of ["--ambient-blue", "--ambient-cyan"]) expect(isRed(toRgb(tokens[n])), n).toBe(false);
   });
   it("body text, links and inline link-buttons are white, not red", () => {
     expect(css).toMatch(/body\{[^}]*color:var\(--text\)/);
@@ -130,6 +164,20 @@ describe("FD 2026-11-05 design system: coordinator visual defects (header, badge
 });
 
 describe("Layout fixes: sticky nav scroll area, responsive top bar, route notice", () => {
+  it("NB-3: the focus ring is at least 2px and tabs carry the token focus outline (forced-colors Highlight for the selected tab)", () => {
+    const w = /^(\d+(?:\.\d+)?)px$/.exec(tokens["--focus-ring-width"] ?? "");
+    expect(w).not.toBeNull();
+    expect(Number(w![1])).toBeGreaterThanOrEqual(2);
+    expect(css).toMatch(/\n\.tabs \[role="tab"\]:focus-visible\{outline:var\(--focus-ring\);outline-offset:var\(--focus-ring-offset\)\}/);
+    expect(css).not.toMatch(/\.tabs[^{]*\{[^}]*outline\s*:\s*(none|0)\b/);
+    expect(css).toMatch(/@media \(forced-colors:active\)\{[^@]*\n  \.tabs \[role="tab"\]\[aria-selected="true"\]\{border:3px solid Highlight\}/);
+    expect(css).toMatch(/@media \(forced-colors:active\)\{[^@]*\n  :focus-visible\{outline:3px solid Highlight\}/);
+  });
+  it("the focused run card (aria-current / data-run-focused) has a visible white ring meeting 3:1 and a forced-colors outline", () => {
+    expect(css).toMatch(/\n\.run-card\[aria-current="true"\],\.run-card\[data-run-focused\]\{border-color:var\(--emphasis\);box-shadow:0 0 0 2px var\(--emphasis\)/);
+    for (const s of ["--bg", "--bg-2", "--surface", "--surface-2"]) expect(refRatio(resolve("--emphasis"), resolve(s)), s).toBeGreaterThanOrEqual(3);
+    expect(css).toMatch(/@media \(forced-colors:active\)\{[^@]*\.run-card\[aria-current="true"\],\.run-card\[data-run-focused\]\{outline:3px solid Highlight/);
+  });
   it("styles.css has balanced braces, so no @media block swallows the rules after it (the matrix forced-colors block was left unclosed)", () => {
     const body = css.replace(/\/\*[\s\S]*?\*\//g, "");
     let depth = 0, min = 0;
