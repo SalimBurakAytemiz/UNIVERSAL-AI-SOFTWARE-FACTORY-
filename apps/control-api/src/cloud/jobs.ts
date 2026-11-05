@@ -7,6 +7,7 @@ import {
   type ArtifactRef, type CloudJobEvent, type CloudJobEventType, type CloudJobRequest,
 } from "../../../../core/cloud/contracts.js";
 import {acquireQueueLock, type QueueLock} from "./queue-lock.js";
+import {redactSecrets} from "../../../../core/workos/secret-scan.js";
 
 export const WORKER_AUTH_MAX_SKEW_MS = 2 * 60 * 1000;
 export const DEFAULT_LEASE_MS = 5 * 60 * 1000;
@@ -45,6 +46,70 @@ export function signWorkerAuth(a: Omit<WorkerAuth, "signature">, secret: string 
 export {pidAlive} from "./queue-lock.js";
 
 const isTerminal = (t: string) => (TERMINAL_EVENT_TYPES as readonly string[]).includes(t);
+
+/** CLOUD-T0005: worker'dan gelen serbest metin API'den ASLA çıkmaz; yalnız bu kapalı listedeki sabit kod döner (bilinmeyen metin genel koda düşer). */
+export const JOB_MESSAGE_CODES = ["WORKER_FAILED", "TIMED_OUT", "RETRYING", "LEASE_EXPIRED", "SANDBOX_UNAVAILABLE", "CANCELLED", "STOPPED"] as const;
+export type JobMessageCode = (typeof JOB_MESSAGE_CODES)[number];
+/** Worker/kuyruk tarafından üretilen tanınan makine kodları; metin bunlardan biriyle BİREBİR eşleşmiyorsa kod türetilmez. */
+const KNOWN_MACHINE_CODES: ReadonlySet<string> = new Set(["LEASE_EXPIRED", "SANDBOX_UNAVAILABLE"]);
+const machineCode = (msg: unknown): JobMessageCode | null => (typeof msg === "string" && KNOWN_MACHINE_CODES.has(msg) ? msg as JobMessageCode : null);
+
+/** CLOUD-T0005: masaüstüne giden iş özeti (izin verilen alanların kapalı listesi; serbest metin alanı yoktur). */
+export interface JobSummary {
+  jobId: string; projectId: string; environment: string; kind: string; status: JobState["status"]; attempt: number; maxAttempts: number;
+  requestedAt: string; updatedAt: string | null; lastEventType: CloudJobEventType | null; messageCode: JobMessageCode | null; artifacts: ArtifactRef[];
+}
+const REASON_EVENTS: readonly string[] = ["RETRYING", "FAILED", "TIMED_OUT"];
+export const JOB_MESSAGE_MAX = 200;
+const SENSITIVE_WORD = "(?:token|secret|password|passwd|pwd|api[_-]?key|access[_-]?key|client[_-]?secret|authorization|auth|credentials?|session|cookie)";
+const QUOTED_VALUE = `"(?:[^"\\\\\\r\\n]|\\\\.){0,4096}"|'(?:[^'\\\\\\r\\n]|\\\\.){0,4096}'`;
+/** CLOUD-T0005: tırnaklı/tırnaksız anahtar + ":" veya "=" + tırnaklı/tırnaksız değer. Tüm nicelikler sınırlı. */
+const SENSITIVE_KEY_VALUE = new RegExp(
+  `(?<![A-Za-z0-9_-])(["']?)([A-Za-z0-9_.-]{0,64}?${SENSITIVE_WORD}[A-Za-z0-9_.-]{0,64})\\1(\\s{0,8}[:=]\\s{0,8})(${QUOTED_VALUE}|(?:(?:Bearer|Basic)[ \\t]{1,16})?[^\\s"',;&}\\]]{1,4096})`, "gi");
+/** CLI bayrağı: -x / --x adında anahtar kelime, ardından "=" ya da boşluk ve değer. */
+const SENSITIVE_FLAG = new RegExp(
+  `(?<![A-Za-z0-9_-])(--?[A-Za-z0-9_-]{0,64}?${SENSITIVE_WORD}[A-Za-z0-9_-]{0,64})(=|[ \\t]{1,8})(${QUOTED_VALUE}|(?!-)[^\\s"']{1,4096})`, "gi");
+const quoteLike = (v: string) => (v.startsWith('"') ? '"' : v.startsWith("'") ? "'" : "");
+/** CLOUD-T0005 redaksiyon yardımcısı (bağımsız birim olarak test edilir). Kuyruk worker metnini hiçbir yerde saklamaz: API, journal ve denetim kaydı yalnız kapalı messageCode taşır.
+ *  Sıra: bilinen secret desenleri (redactSecrets) -> kimlik bilgili URL -> anahtar=değer -> kısa Bearer/Basic -> anahtar biçimli uzun diziler -> mutlak yollar -> kontrol karakterleri; en son 200'e kırpılır.
+ *  Tüm nicelikler sınırlıdır (doğrusal süre). */
+export function redactJobMessage(text: string): string {
+  let s = redactSecrets(String(text).slice(0, 4096));
+  s = s
+    .replace(/\b([A-Za-z][A-Za-z0-9+.-]{0,16}):\/\/[^\s/?#@]{1,512}@/g, "$1://[REDACTED:URL_CREDENTIALS]@")
+    // Hassas anahtar HER biçimde: "k": "v", 'k': 'v', 'k': "v", k: 'v', k=v, export/set K=v (anahtar kelime tanımlayıcının parçası olabilir: DB_PASSWORD, authToken).
+    // Değer çift/tek tırnaklı ya da tırnaksızdır; tırnak korunur, içerik gizlenir.
+    .replace(SENSITIVE_KEY_VALUE, (_m, q: string, key: string, sep: string, val: string) => `${q}${key}${q}${sep}${quoteLike(val)}[REDACTED:KEY_VALUE]${quoteLike(val)}`)
+    // CLI bayrakları: --password v / --password=v / -api-key v (yalnız bayrak adı anahtar kelime içeriyorsa; "-" ile başlayan değer bir sonraki bayraktır, dokunulmaz)
+    .replace(SENSITIVE_FLAG, (_m, flag: string, sep: string, val: string) => `${flag}${sep}${quoteLike(val)}[REDACTED:FLAG_VALUE]${quoteLike(val)}`)
+    .replace(/\b(Bearer|Basic)[ \t]{1,16}(?!\[REDACTED)(?=[^\s,;]{0,4096}[0-9._~+/=-])[^\s,;]{6,4096}/gi, "$1 [REDACTED:AUTH_TOKEN]")
+    .replace(/(?<![A-Za-z0-9_\[-])(?=[A-Za-z0-9+/_-]{0,4096}\d)(?=[A-Za-z0-9+/_-]{0,4096}[A-Za-z])[A-Za-z0-9+/_-]{32,4096}={0,2}/g, "[REDACTED:KEY_SHAPED]")
+    .replace(/\b[A-Za-z]:[\\/][^\s"'<>|]{0,4096}/g, "[path]")
+    .replace(/(?<![A-Za-z0-9._:/~-])\/(?:[^\s/"'<>]{1,256}\/){1,64}[^\s"'<>]{0,256}/g, "[path]")
+    .replace(/[\u0000-\u0008\u000B-\u001F\u007F]/g, "");
+  return s.slice(0, JOB_MESSAGE_MAX);
+}
+/** Kod yalnız durum + olay türü + tanınan makine kodundan türetilir; worker metni yalnız KNOWN_MACHINE_CODES ile birebir karşılaştırılır, asla kopyalanmaz. */
+export function messageCodeFor(s: Pick<JobState, "status" | "events">): JobMessageCode | null {
+  const reason = [...s.events].reverse().find(e => REASON_EVENTS.includes(e.type));
+  switch (s.status) {
+    case "CANCELLED": return "CANCELLED";
+    case "STOPPED": return "STOPPED";
+    case "TIMED_OUT": return machineCode(reason?.message) === "LEASE_EXPIRED" ? "LEASE_EXPIRED" : "TIMED_OUT";
+    case "FAILED": return machineCode(reason?.message) ?? "WORKER_FAILED";
+    case "QUEUED": case "RUNNING": return reason?.type === "RETRYING" ? (machineCode(reason.message) ?? "RETRYING") : null;
+    default: return null;
+  }
+}
+function summarize(s: JobState): JobSummary {
+  const last = s.events.length ? s.events[s.events.length - 1]! : null;
+  return {
+    jobId: s.job.jobId, projectId: s.job.projectId, environment: s.job.environment, kind: s.job.kind, status: s.status, attempt: s.attempt,
+    maxAttempts: s.job.retry.maxAttempts, requestedAt: s.job.requestedAt, updatedAt: last ? last.at : null, lastEventType: last ? last.type : null,
+    messageCode: messageCodeFor(s),
+    artifacts: s.events.filter(e => e.type === "ARTIFACT" && e.artifact).map(e => ({name: e.artifact!.name, sha256: e.artifact!.sha256, sizeBytes: e.artifact!.sizeBytes})),
+  };
+}
 
 export class CloudJobQueue {
   private readonly jobs = new Map<string, JobState>();
@@ -238,13 +303,16 @@ export class CloudJobQueue {
       for (const a of artifacts) this.emit(s, "ARTIFACT", {artifact: a});
       this.emit(s, "SUCCEEDED");
     } else this.failOrRetry(s, result.message);
-    this.auditLog({decision: "RESULT_ACCEPTED", jobId, status: s.status, attempt: s.attempt});
+    // Denetim kaydı worker metnini (redakte bile) tutmaz; yalnız kapalı messageCode yazılır.
+    this.auditLog({decision: "RESULT_ACCEPTED", jobId, status: s.status, attempt: s.attempt, messageCode: messageCodeFor(s)});
     return {ok: true, status: s.status as CloudJobEventType};
   }
 
   private failOrRetry(s: JobState, why?: string): void {
-    if (s.attempt < s.job.retry.maxAttempts) this.emit(s, "RETRYING", why ? {message: why.slice(0, 200)} : {});
-    else this.emit(s, "FAILED", why ? {message: why.slice(0, 200)} : {});
+    // Ham worker metni hiçbir yerde saklanmaz: journal'a yalnız birebir tanınan makine kodu yazılır.
+    const code = machineCode(why);
+    if (s.attempt < s.job.retry.maxAttempts) this.emit(s, "RETRYING", code ? {message: code} : {});
+    else this.emit(s, "FAILED", code ? {message: code} : {});
   }
 
   /** İptal: iş hemen CANCELLED (terminal). Çalışan worker'ın heartbeat ve sonucu JOB_CANCELLED ile reddedilir; çıktısı asla kaydedilmez. */
@@ -282,5 +350,24 @@ export class CloudJobQueue {
   }
 
   get(jobId: string): Readonly<JobState> | undefined { return this.jobs.get(jobId); }
+
+  /** CLOUD-T0005 salt-okunur durum özeti: yalnız çağıranın tenant'ındaki işler, en yeni önce, en çok `limit` (1..100). Lease, worker kimliği, imza/scope,
+   *  idempotency anahtarı ve olay mesajları (STARTED/HEARTBEAT lease taşır) ASLA dönmez; yalnız terminal/yeniden deneme olaylarının kısa nedeni (≤200) döner. */
+  list(tenantId: string, limit = 100): JobSummary[] {
+    if (typeof tenantId !== "string" || tenantId.length === 0) return [];
+    const max = Number.isSafeInteger(limit) ? Math.min(Math.max(limit, 1), 100) : 100;
+    const out: JobSummary[] = [];
+    for (const s of [...this.jobs.values()].reverse()) {
+      if (s.job.tenantId !== tenantId) continue;
+      out.push(summarize(s));
+      if (out.length >= max) break;
+    }
+    return out;
+  }
+  /** Tek iş özeti; başka tenant'ın işi bulunmamış gibi davranır (varlık sızdırılmaz). */
+  summary(tenantId: string, jobId: string): JobSummary | null {
+    const s = this.jobs.get(jobId);
+    return s && s.job.tenantId === tenantId ? summarize(s) : null;
+  }
   get isStopped(): boolean { return this.stopped; }
 }

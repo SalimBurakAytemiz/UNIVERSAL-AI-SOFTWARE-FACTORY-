@@ -169,6 +169,7 @@ async function verdictUnreadableStep() {
 // //TR: reviewer-diagnose: reviewer adımının yürütme kaydı (yalnız EXECUTION_FILE ortam değişkenindeki yol, argv metni asla) en fazla 4 MiB okunur ve yalnız bellekte sabit bir koda sınıflandırılır; diske yalnız beş sabit anahtarlı kayıt, adım özetine yalnız tek sabit satır yazılır ve bu adım işi hiçbir koşulda başarısız yapmaz.
 // ai-review, always after the reviewer step: why did it give (or not give) a verdict? Only the fixed five-key record and one fixed summary line are written;
 // no text of the execution record leaves memory (it can hold PR content, prompt injection or secrets). This step never fails the job.
+// The record has REVIEWER_DIAGNOSTIC_KEYS: code, isError, turns, durationMs, modelUsed, authSubcode and httpStatus.
 async function reviewerDiagnoseStep() {
   let d;
   try { d = diagnoseReviewerOutput(readCapped(env("EXECUTION_FILE"), EXECUTION_FILE_MAX_BYTES)); } catch { d = diagnoseReviewerOutput(null); }
@@ -178,7 +179,8 @@ async function reviewerDiagnoseStep() {
     fs.mkdirSync(dir, {recursive: true});
     fs.writeFileSync(path.join(dir, "reviewer-diagnostics.json"), JSON.stringify(rec) + "\n");
   } catch { /* a diagnosis that cannot be written is simply absent: decide then works as without it */ }
-  const line = `UASCO reviewer diagnosis: ${rec.code}\n`;
+  // Only fixed values: the code, the auth subcode (an enum, AUTH only) and the HTTP status (an integer 400-599).
+  const line = `UASCO reviewer diagnosis: ${rec.code}${rec.authSubcode ? ` ${rec.authSubcode}` : ""}${Number.isSafeInteger(rec.httpStatus) ? ` http=${rec.httpStatus}` : ""}\n`;
   try { const f = env("GITHUB_STEP_SUMMARY"); if (f) fs.appendFileSync(f, line); } catch { /* never fails the job */ }
   try { process.stdout.write(line); } catch { /* never fails the job */ }
 }
