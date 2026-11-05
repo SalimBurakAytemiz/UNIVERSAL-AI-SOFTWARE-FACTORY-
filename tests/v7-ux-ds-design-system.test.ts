@@ -196,6 +196,9 @@ describe("Layout fixes: sticky nav scroll area, responsive top bar, route notice
     // //TR: Üst çubuk nav'ın üstünde kalır (yapışkan nav onun altına girmez, üstüne çıkmaz).
     const z = (sel: string) => Number(new RegExp(`\\n${sel.replace(".", "\\.")}\\{[^}]*z-index:(\\d+)`).exec(css)?.[1]);
     expect(z(".topbar")).toBeGreaterThan(z(".nav"));
+    // //TR: Sayfa sonundaki opak alt şerit yapışkan nav\'ın üstünde çizilir (nav onun üzerine taşmaz).
+    expect(z(".strip")).toBeGreaterThan(z(".nav"));
+    expect(resolve("--veil-strip")).toMatch(/^#[0-9A-Fa-f]{6}$/);
     expect(/\n\.topbar\{[^}]*position:sticky;top:0/.test(css)).toBe(true);
   });
   it("every top-bar layout has a --topbar-h token at least as tall as the rows it stacks", () => {
