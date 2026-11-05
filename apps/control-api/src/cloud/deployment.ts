@@ -239,16 +239,27 @@ const NONCE_RE = /^[0-9a-f]{32}$/;
  */
 export interface DeployApprovalLedger { consume(approvalId: string, expiresAtMs: number, nowMs: number): boolean }
 
-/** Süreç içi kayıt: yalnız tek örnek ve testler için. Yeniden başlatmada unutur; production için kalıcı depo kullanılmalıdır. */
+/**
+ * Süreç içi kayıt: yalnız tek örnek ve testler için. Yeniden başlatmada unutur; production için kalıcı depo kullanılmalıdır.
+ * Budama çağıranın `now` değerine asla dayanmaz (ileri sapmış bir `now` canlı kaydı silip tekrar oynatmayı açabilirdi):
+ * yalnız güvenilen `clock` verilirse ve kayıt `exp + MAX_CLOCK_SKEW_MS <= clock()` ise silinir. Saat yoksa ya da okunamazsa
+ * hiç budanmaz; kapasite dolunca kapı reddeder (fail-closed).
+ */
 export class InMemoryDeployApprovalLedger implements DeployApprovalLedger {
   private readonly used = new Map<string, number>();
-  constructor(private readonly capacity = 10_000) {
+  constructor(private readonly capacity = 10_000, private readonly clock?: () => number) {
     if (!Number.isSafeInteger(capacity) || capacity < 1) throw new Error("LEDGER_CAPACITY_INVALID");
+    if (clock !== undefined && typeof clock !== "function") throw new Error("LEDGER_CLOCK_INVALID");
+  }
+  private prune(): void {
+    if (this.clock === undefined) return;
+    let c: number; try { c = this.clock(); } catch { return; }
+    if (!Number.isFinite(c)) return;
+    for (const [id, exp] of this.used) if (exp + MAX_CLOCK_SKEW_MS <= c) this.used.delete(id);
   }
   consume(approvalId: string, expiresAtMs: number, nowMs: number): boolean {
     if (typeof approvalId !== "string" || approvalId.length === 0 || !Number.isFinite(expiresAtMs) || !Number.isFinite(nowMs)) throw new Error("LEDGER_INPUT_INVALID");
-    // Kayıt, onayın kendi süresi dolana kadar tutulur; sonrasında süre denetimi zaten reddeder.
-    for (const [id, exp] of this.used) if (exp <= nowMs) this.used.delete(id);
+    this.prune();   // `nowMs` yalnız doğrulanır; budamada kullanılmaz
     if (this.used.has(approvalId)) return false;
     if (this.used.size >= this.capacity) throw new Error("LEDGER_FULL");   // bilinmeyen durum: kapı reddeder
     this.used.set(approvalId, expiresAtMs);
