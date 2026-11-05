@@ -3,30 +3,56 @@ import {h,panel,stateNote,emptyNote,badge} from "../components.js";
 import {drafts,selection,field,listEditor,statusBlock,setStatus,recordPost,focusResult,settle} from "../forms.js";
 import {createIdempotencyTracker} from "../work-core.js";
 import {studio,openProject} from "../studio-state.js";
-import {buildIntakeRequest,mapIntake,mapIntakes,INTAKES_PATH,INTAKE_PROJECT_TYPES,INTAKE_OS,INTAKE_RISKS,INTAKE_TEMPLATES} from "../intake-core.js";
+import {buildIntakeRequest,mapIntake,mapIntakes,INTAKES_PATH,INTAKE_PROJECT_TYPES,INTAKE_OS,INTAKE_RISKS,INTAKE_TEMPLATES,checkCommand,commandCreateGate,COMMAND_MAX_LENGTH} from "../intake-core.js";
 import {runReadinessBlock} from "./run-readiness.js";
 
 export const INTAKE_FORM="intake";
 // //TR: UASCO-T0010 komut girişi paneli: tek alan -> POST /v1/command-intake -> yalnız DRAFT öneri gösterilir (asla yetkilendirmez/yürütmez); belirsiz komutta sunucunun netleştirme sorusu gösterilir; 3 örnek komut tek tıkla DRAFT üretir. Sunucu metni yalnız textContent ile çizilir. Yanıt DRAFT ve yetkisiz değilse fail-closed hata gösterilir.
 export const COMMAND_INTAKE_PATH="/v1/command-intake";
 export const COMMAND_INTAKE_EXAMPLES=Object.freeze(["Ayarlar sayfasını geliştir","Audit the login module","Birim testlerini doğrula"]);
-export const commandUi={text:"",busy:false,result:null};
+export const commandUi={text:"",busy:false,result:null,previewText:null,created:null,createBusy:false,focusPending:false};
+const commandTracker=createIdempotencyTracker();
+/** UASCO-T0011: shell girişi (Ctrl+K "Yeni komut" / Ctrl+Shift+N) komut alanına odak ister; panel bir sonraki çizimden sonra (app.js başlığa odakladıktan sonra) alanı odaklar. */
+export function requestCommandFocus(){commandUi.focusPending=true}
+/** Önizleme: istemci doğrulaması (sunucuyla aynı kodlar) geçmezse istek GÖNDERİLMEZ; geçerse POST /v1/command-intake yalnız DRAFT öneri döndürür (hiçbir şey yazılmaz). */
 export async function submitCommand(ctx,text){
   const t=typeof text==="string"?text:commandUi.text;commandUi.text=t;
   if(commandUi.busy)return {ok:false,busy:true};
-  if(!t.trim()){commandUi.result={kind:"error",code:"INTAKE_EMPTY"};await ctx.rerender();return {ok:false}}
+  const check=checkCommand(t);
+  if(!check.ok){commandUi.result={kind:"error",code:check.code,client:true};commandUi.previewText=null;commandUi.created=null;await ctx.rerender();settle(ctx,["id:command-intake-text"]);return {ok:false}}
   commandUi.busy=true;let res;try{res=await ctx.api.post(COMMAND_INTAKE_PATH,{text:t})}finally{commandUi.busy=false}
   const p=res?.ok?res.body?.proposal:null;
   const draft=p&&typeof p==="object"&&p.status==="DRAFT"&&p.authorization?.verified===false;
   commandUi.result=draft?{kind:"draft",proposal:p}:{kind:"error",code:typeof res?.body?.error==="string"?res.body.error:"UNAVAILABLE"};
-  await ctx.rerender();return {ok:Boolean(draft)};
+  commandUi.previewText=draft?t:null;commandUi.created=null;
+  await ctx.rerender();settle(ctx,draft?["id:command-intake-create","id:command-intake-result"]:["id:command-intake-text"]);return {ok:Boolean(draft)};
+}
+const gateNow=()=>commandCreateGate(commandUi.result?.kind==="draft"?commandUi.result.proposal:null,commandUi.previewText,commandUi.text);
+/** Oluşturma: kapı (güncel PROPOSED önizleme) geçmezse istek gönderilmez; geçerse POST /v1/intakes {idea, idempotencyKey} (zaten izinli). Sonuç dürüsttür: oluşturulan intake kimliği, sunucu ret kodu veya erişilemezlik. */
+export async function createFromCommand(ctx){
+  if(commandUi.createBusy)return {ok:false,busy:true};
+  const gate=gateNow();
+  if(!gate.allowed){commandUi.created={kind:"blocked",code:gate.reason};await ctx.rerender();return {ok:false,blocked:gate.reason}}
+  const plain=buildIntakeRequest({idea:commandUi.text});
+  if(!plain.ok){commandUi.created={kind:"blocked",code:"INVALID_INTAKE"};await ctx.rerender();return {ok:false,blocked:"INVALID_INTAKE"}}
+  const req=buildIntakeRequest({idea:commandUi.text},{key:commandTracker.keyFor(plain.body)});
+  commandUi.createBusy=true;let res;try{res=await ctx.api.post(req.path,req.body)}finally{commandUi.createBusy=false}
+  let out;
+  if(res?.ok){const rec=mapIntake(res.body?.intake);out=rec?{kind:"created",rec}:{kind:"refused",code:"INVALID_RESPONSE",status:res.status}}
+  else if(Number.isSafeInteger(res?.status))out={kind:"refused",code:typeof res.body?.error==="string"?res.body.error:`HTTP_${res.status}`,status:res.status};
+  else out={kind:"unavailable",code:"UNAVAILABLE"};
+  commandUi.created=out;
+  if(out.kind==="created"){commandTracker.reset();commandUi.previewText=null;commandUi.result=null} // önizleme tüketildi: oluşturma satırı kalkar, yalnız sonuç kartı kalır
+  if(typeof ctx.refreshAll==="function")await ctx.refreshAll({force:true});else await ctx.rerender();
+  settle(ctx,["id:command-intake-created","id:command-intake-refused","id:command-intake-text"]);
+  return {ok:out.kind==="created",...(out.kind==="created"?{intakeId:out.rec.intakeId}:{code:out.code})};
 }
 function commandResult(ctx,r){
   const doc=ctx.doc;
   if(!r)return null;
-  if(r.kind!=="draft")return h(doc,"p",{class:"field-error",id:"command-intake-error",role:"alert",dataset:{commandError:String(r.code)}},`${ctx.t("cmdIntake.error")} `,h(doc,"span",{class:"mono",text:String(r.code)}));
+  if(r.kind!=="draft")return h(doc,"p",{class:"field-error",id:"command-intake-error",role:"alert",tabindex:"-1",dataset:{commandError:String(r.code)}},`${ctx.t(r.client?"cmdIntake.invalid":"cmdIntake.error")} `,h(doc,"span",{class:"mono",text:String(r.code)}));
   const p=r.proposal,c=p.clarification&&typeof p.clarification.question==="string"?p.clarification:null;
-  return h(doc,"div",{class:"card",id:"command-intake-result",dataset:{commandStatus:"DRAFT",commandOutcome:String(p.outcome)}},
+  return h(doc,"div",{class:"card",id:"command-intake-result",tabindex:"-1",dataset:{commandStatus:"DRAFT",commandOutcome:String(p.outcome)}},
     h(doc,"p",{},badge(ctx,ctx.t("cmdIntake.draft"),"badge-notverified")," ",h(doc,"span",{class:"note",text:ctx.t("cmdIntake.neverAuthorizes")})),
     h(doc,"dl",{class:"kv"},
       h(doc,"dt",{text:ctx.t("cmdIntake.outcome")}),h(doc,"dd",{class:"mono",text:String(p.outcome)}),
@@ -35,18 +61,54 @@ function commandResult(ctx,r){
       h(doc,"dt",{text:ctx.t("cmdIntake.reasons")}),h(doc,"dd",{class:"mono",text:Array.isArray(p.reasons)&&p.reasons.length?p.reasons.join(", "):"—"})),
     c?h(doc,"p",{id:"command-intake-clarify",role:"status",dataset:{clarifyCode:String(c.code)}},h(doc,"strong",{text:`${ctx.t("cmdIntake.clarify")} `}),h(doc,"span",{text:c.question})):null);
 }
+/** Oluşturma bölümü (yalnız DRAFT önizlemeden sonra): düğme kapıya bağlıdır; engelliyse neden yerinde gösterilir. Metin yazılırken (yeniden çizim olmadan) güncellenir. */
+function createSection(ctx){
+  const doc=ctx.doc;
+  if(commandUi.result?.kind!=="draft")return null;
+  const g=gateNow();
+  const note=h(doc,"p",{class:"note note-stale",id:"command-intake-blocked",role:"status",hidden:g.allowed,dataset:{blockedReason:g.reason??""},text:g.allowed?"":ctx.t(`cmdIntake.blocked.${g.reason}`)});
+  const btn=h(doc,"button",{type:"button",class:"btn btn-primary",id:"command-intake-create",dataset:{focusKey:"command-intake-create"},disabled:!g.allowed||commandUi.createBusy,text:ctx.t("cmdIntake.create"),on:{click:()=>createFromCommand(ctx)}});
+  btn.disabled=!g.allowed||commandUi.createBusy;note.hidden=g.allowed;
+  return {node:h(doc,"div",{class:"btn-row",id:"command-intake-create-row"},btn,note),btn,note};
+}
+function createdResult(ctx,r){
+  const doc=ctx.doc;
+  if(!r)return null;
+  if(r.kind==="created"){const rec=r.rec;
+    return h(doc,"div",{class:"card",id:"command-intake-created",role:"status",tabindex:"-1",dataset:{intakeId:rec.intakeId}},
+      h(doc,"p",{},h(doc,"strong",{text:ctx.t("cmdIntake.created")})," ",h(doc,"span",{class:"note",text:ctx.t("cmdIntake.createdNote")})),
+      h(doc,"dl",{class:"kv"},
+        h(doc,"dt",{text:ctx.t("cmdIntake.intakeId")}),h(doc,"dd",{class:"mono",text:rec.intakeId}),
+        h(doc,"dt",{text:ctx.t("intake.res.project")}),h(doc,"dd",{class:"mono",text:rec.projectId}),
+        h(doc,"dt",{text:ctx.t("intake.res.mission")}),h(doc,"dd",{class:"mono",text:rec.missionId})),
+      h(doc,"div",{class:"btn-row"},
+        h(doc,"button",{type:"button",class:"btn",id:"command-open-mission",dataset:{focusKey:"command-open-mission"},text:ctx.t("intake.openMission"),on:{click:()=>{selection.missionId=rec.missionId;ctx.navigate("work")}}})));}
+  if(r.kind==="blocked")return h(doc,"p",{class:"field-error",id:"command-intake-refused",role:"alert",tabindex:"-1",dataset:{refusedCode:String(r.code),refusedKind:"blocked"}},ctx.t(`cmdIntake.blocked.${r.code}`));
+  return h(doc,"p",{class:"field-error",id:"command-intake-refused",role:"alert",tabindex:"-1",dataset:{refusedCode:String(r.code),refusedKind:r.kind}},
+    `${ctx.t(r.kind==="unavailable"?"cmdIntake.unavailable":"cmdIntake.refused")} `,r.kind==="unavailable"?null:h(doc,"span",{class:"mono",text:`${r.code}${r.status?` (HTTP ${r.status})`:""}`}));
+}
 export function commandIntakePanel(ctx){
   const doc=ctx.doc;
-  const ta=h(doc,"textarea",{id:"command-intake-text",rows:"3",maxlength:"2000","aria-labelledby":"command-intake-label",dataset:{focusKey:"command-intake-text"}});
-  ta.value=commandUi.text;ta.addEventListener("input",()=>{commandUi.text=ta.value});
+  const ta=h(doc,"textarea",{id:"command-intake-text",rows:"3",maxlength:String(COMMAND_MAX_LENGTH),"aria-labelledby":"command-intake-label","aria-describedby":"command-intake-hint command-intake-count",dataset:{focusKey:"command-intake-text"}});
+  ta.value=commandUi.text;
+  const count=h(doc,"p",{class:"note mono",id:"command-intake-count","aria-live":"polite",text:ctx.t("cmdIntake.count",{n:String(commandUi.text.length),max:String(COMMAND_MAX_LENGTH)})});
+  const create=createSection(ctx);
+  ta.addEventListener("input",()=>{
+    commandUi.text=ta.value;count.textContent=ctx.t("cmdIntake.count",{n:String(ta.value.length),max:String(COMMAND_MAX_LENGTH)});
+    if(create){const g=gateNow();create.btn.disabled=!g.allowed||commandUi.createBusy;create.note.hidden=g.allowed;create.note.dataset.blockedReason=g.reason??"";create.note.textContent=g.allowed?"":ctx.t(`cmdIntake.blocked.${g.reason}`)}
+  });
+  // Klavye öncelikli: Ctrl/Cmd+Enter önizler (Enter yeni satırdır).
+  ta.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key==="Enter"){e.preventDefault();if(!commandUi.busy)submitCommand(ctx,ta.value)}});
+  if(commandUi.focusPending){commandUi.focusPending=false;const tick=(doc.defaultView?.setTimeout??globalThis.setTimeout);tick(()=>{if(ta.isConnected!==false){try{ta.scrollIntoView?.({block:"center"})}catch{/* yok */}ta.focus?.()}},0)}
   return h(doc,"section",{class:"card",id:"command-intake","aria-labelledby":"command-intake-t"},
     h(doc,"h3",{id:"command-intake-t",text:ctx.t("cmdIntake.title")}),
     h(doc,"p",{class:"note",text:ctx.t("cmdIntake.lead")}),
     h(doc,"label",{id:"command-intake-label",for:"command-intake-text",text:ctx.t("cmdIntake.label")}),ta,
+    h(doc,"p",{class:"note",id:"command-intake-hint",text:ctx.t("cmdIntake.hint")}),count,
     h(doc,"div",{class:"btn-row",id:"command-intake-examples","aria-label":ctx.t("cmdIntake.examples")},COMMAND_INTAKE_EXAMPLES.map((ex,i)=>
       h(doc,"button",{type:"button",class:"btn",dataset:{commandExample:String(i)},disabled:commandUi.busy,text:ex,on:{click:()=>submitCommand(ctx,ex)}}))),
     h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn btn-primary",id:"command-intake-submit",disabled:commandUi.busy,text:ctx.t("cmdIntake.submit"),on:{click:()=>submitCommand(ctx)}})),
-    commandResult(ctx,commandUi.result));
+    commandResult(ctx,commandUi.result),create?create.node:null,createdResult(ctx,commandUi.created));
 }
 const KEYS=["id:intake-submit","id:intake-t"];
 const fresh=()=>({idea:"",title:"",projectType:"",techStack:[""],targetOS:[],acceptanceCriteria:[""],riskLevel:"",template:"web-node"});
@@ -125,9 +187,9 @@ export async function intakePanel(ctx){
     h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"submit",class:"btn btn-primary",id:"intake-submit",dataset:{focusKey:"intake-submit"},disabled:drafts.busy[INTAKE_FORM]===true,text:ctx.t("intake.submit")})));
   const details=h(doc,"details",{class:"panel form-panel",id:"intake",open:intakeUi.open||Boolean(st)||Boolean(intakeUi.last)},
     h(doc,"summary",{id:"intake-t",dataset:{focusKey:"intake-summary"},text:ctx.t("intake.title")}),
-    commandIntakePanel(ctx),
     h(doc,"p",{class:"note",text:ctx.t("intake.lead")}),form,
     h(doc,"h3",{text:ctx.t("intake.history")}),history(ctx,list));
   details.addEventListener("toggle",()=>{intakeUi.open=details.open===true});
-  return details;
+  // //TR: UASCO-T0011: tek komut alanı katlanmış "Fikirden başla" panelinin İÇİNDE değil, onun üstünde her zaman görünür ve shell'den (Ctrl+K / Ctrl+Shift+N) ulaşılabilir.
+  return h(doc,"div",{class:"intake-host",id:"intake-host"},commandIntakePanel(ctx),details);
 }

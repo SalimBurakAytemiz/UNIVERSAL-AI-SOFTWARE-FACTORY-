@@ -3296,3 +3296,6 @@ describe("LANE-A A-UI125-1 import success shows the agent configuration quaranti
     for (const k of keys) { expect(tr[k], k).toBeTruthy(); expect(ph(tr[k]), k).toBe(ph(en[k])); }
   });
 });
+// //TR: UASCO-T0011 tek komut alanı: gönderim öncesi doğrulama, önizleme, kapılı intake oluşturma, dürüst sonuç ve shell girişi (gerçek buildServer)
+import {registerCommandFieldT0011Cases} from "./support/command-field-t0011.cases.js";
+registerCommandFieldT0011Cases();
