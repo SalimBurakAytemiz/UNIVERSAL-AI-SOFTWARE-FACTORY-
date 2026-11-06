@@ -178,11 +178,8 @@ describe("LANE-C parallel runs: heartbeat and scheduling (C-PAR-1 PAR-03/05, #21
 describe("C-PAR-1 PAR-03: synchronous git in one run must not starve another run's lease heartbeat (cap 2)", () => {
   // //TR: Aynı senaryo iki yavaş git noktası için: A'nın VERIFY tarama klonu ve A'nın WORKSPACE adımındaki depo kökü/HEAD probu (#218 ile birleşimde eşzamansız sürücü).
   const slowGitLeavesBUnfenced = async (slowMatch: (A: {runId: string}, srcRepo: string) => (cwd: string, args: string[]) => boolean) => {
-    // //TR: WIN-1 (Windows CI 42059115488: fenced=["B"], 7.5 sn'lik stall'ın tamamı fsyncSync, en büyük dördü 928+911+869+718 ms): runner bir lease'i yazıdan önce yalnız yaşı TTL/3'ü geçtiyse yeniler, yani yenileme boşluğu TTL - TTL/3'tür (toleranceMs=3334). O diskte TEK dayanıklı store yazısı (kilit + journal + iki snapshot, her biri fsync) ~3.4 sn sürdü ve bu boşluğu aştı: B'nin lease'i GERÇEKTEN doldu, fence doğruydu (fence hatası yok). Bu yüzden TTL, ölçülen yazı süresine göre ölçeklenir (TTL 5-7 sn, gecikme en çok 9 sn: HEAD probunun 10 sn'lik sert zaman aşımının altında kalır; "gecikme > TTL" iddiası her değerde geçerli); hızlı diskte TTL 5 sn'dir (davranış değişmez).
-    const c = setup(); const A = c.mkRun("A"); const t0 = performance.now(); const B = c.mkRun("B");
-    const writeMs = (performance.now() - t0) / 4;   // mkRun = createMission + 2 transitionMission + createRun: 4 durable store writes
-    // headroom: a lease is renewed once older than TTL/3, so one write must fit in 2·TTL/3 (needs TTL > 1.5·write; 2.5× leaves margin). Capped at 7 s TTL / 9 s delay: the WORKSPACE HEAD probe has a hard 10 s timeout, so the slow call must stay below it (delay > TTL holds at every value).
-    const TTL = Math.min(7_000, Math.max(HB_TTL, Math.ceil(writeMs * 2.5 / 500) * 500)), BLOCK = Math.min(9_000, Math.round(TTL * HB_BLOCK / HB_TTL));
+    const TTL = HB_TTL, BLOCK = HB_BLOCK;
+    const c = setup(); const A = c.mkRun("A"), B = c.mkRun("B");
     const calls = {A: 0, B: 0, Baborted: 0};
     const pair = wrapImplementer(c.base, async (w, spec, ctx) => {
       if (spec.title === "A") { calls.A += 1; return c.base.implementer.implement(w, spec, ctx); }
@@ -201,15 +198,15 @@ describe("C-PAR-1 PAR-03: synchronous git in one run must not starve another run
     const rep = await c.runner({maxConcurrentRuns: 2, leaseTtlMs: TTL, executors: pair}).tick().finally(() => probe.stop());
     expect(slow.hits.sync + slow.hits.async, "the slow-git scenario really fired once").toBe(1);
     expect(rep.claimed.sort()).toEqual([A.runId, B.runId].sort());
-    expect(rep.fenced, `${hbDiag(c, {A: A.runId, B: B.runId}, rep.fenced, probe, TTL)} calibratedWriteMs=${writeMs.toFixed(0)} blockMs=${BLOCK}`).toEqual([]);
+    expect(rep.fenced, hbDiag(c, {A: A.runId, B: B.runId}, rep.fenced, probe, TTL)).toEqual([]);
     expect(calls.B).toBe(1);
     expect(calls.Baborted).toBe(0);
     expect([c.status(A.runId), c.status(B.runId)]).toEqual(["AWAITING_APPROVAL", "AWAITING_APPROVAL"]);
   };
-  it("run A's slow git clone (7 s, TTL 5 s; both scaled to the measured write cost on a slow disk) leaves run B (long async implementer call) unfenced: no abort, no re-run", { timeout: 180_000 }, async () => {
+  it("run A's slow git clone (7 s, TTL 5 s) leaves run B (long async implementer call) unfenced: no abort, no re-run", { timeout: 90_000 }, async () => {
     await slowGitLeavesBUnfenced(A => (cwd, args) => cwd.includes(A.runId) && args.includes("clone") && args.some(a => a.endsWith("scan-c0"))); // A'nın VERIFY tarama klonu
   });
-  it("run A's slow repository HEAD probe (7 s, TTL 5 s; both scaled to the measured write cost on a slow disk, WORKSPACE step) leaves run B unfenced too: the probe is asynchronous", { timeout: 180_000 }, async () => {
+  it("run A's slow repository HEAD probe (7 s, TTL 5 s, WORKSPACE step) leaves run B unfenced too: the probe is asynchronous", { timeout: 90_000 }, async () => {
     let fired = false; // yalnız İLK HEAD okuması yavaş (A'nınki); B'ninki ve sonraki adımlar hızlı
     await slowGitLeavesBUnfenced((_A, srcRepo) => (cwd, args) => { const here = canonicalPath(cwd), repo = canonicalPath(srcRepo); const hit = !fired && here.ok && repo.ok && here.key === repo.key && args.includes("HEAD^{commit}") && args.includes("HEAD"); if (hit) fired = true; return hit; }); // //TR: Windows CI: runner depo yolunu path-guard'ın kanonik biçimine (8.3 kısa adları açılmış, harf büyüklüğü katlanmış) çevirir; sabit `===` eşleşmeyip yavaş-git senaryosu hiç tetiklenmiyordu
   });
