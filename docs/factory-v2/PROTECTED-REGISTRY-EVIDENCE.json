@@ -1,0 +1,23 @@
+{
+  "//TR": "Korumalı uasco/registry dalında (ruleset UASCO-REGISTRY-PROTECTION 26607801) iki gerçek Claude Cloud oturumunun Founder kapsamındaki güvenli testi: yalnız probe/p1/ anahtarları, normal fast-forward CAS, lease devri/fencing, sunucu tarafı stale-write reddi; yıkıcı saldırılar yalnız izole bare-origin'de. Canlı otorite kaydı yazılmadı.",
+  "kind": "PROTECTED_REGISTRY_TWO_SESSION_VERIFICATION",
+  "authorizedBy": "Founder, coordinating session (scope: probe/p1/ only; no force-push/rewind/delete on the live branch); confirmed by the Founder directly in both participant sessions",
+  "code": "1d2b9c37285b672b26d9a191b401d21642c53147",
+  "ruleset": {"id": 26607801, "name": "UASCO-REGISTRY-PROTECTION", "enforcement": "active", "include": ["refs/heads/uasco/registry"], "rules": ["deletion", "non_fast_forward"], "bypass_actors": [], "current_user_can_bypass": "never"},
+  "sessions": {"A": "session_015dYwb3x1qKC6btpBicgWQP", "B": "session_015dYwb4CNXL5vnwbrRc42fx"},
+  "registryBranchHeadAtEnd": "6b206daa3d521101b261ac0d7989e13bd96f458c",
+  "registryCommitChain": ["7e28f51 lease A epoch1", "af84858 A-hello (fast-forward write)", "5c90104 B-hello", "e8d2dcf lease A released (tombstone)", "d8d0dd6 lease B epoch2", "024404a B-acquired", "a7c4284 A-done", "6b206da lease B released"],
+  "treeAtEnd": ["doc.json"],
+  "sectionsAtEnd": ["probe/p1/A-done", "probe/p1/A-hello", "probe/p1/B-acquired", "probe/p1/B-hello", "probe/p1/lease/supervisor--probe"],
+  "outsideScope": [],
+  "results": {
+    "protectionVerifiedInBothSessions": true,
+    "fastForwardWrites": "8 linear commits, no merge, no force",
+    "staleWriteRefusedByServer": "A's write with an old parent (7e28f51) refused; head unchanged at af84858; marker never landed",
+    "leaseRefusedWhileHeld": "B HELD while A owned it (holder session_015dYwb3x1qKC6btpBicgWQP)",
+    "leaseHandover": "A released (tombstone) -> B acquired at epoch 2 -> B released",
+    "staleLeaseFenced": "A's former grant: fenced=true, renewAfterLoss=false",
+    "isolatedAttackSim": "both sessions: force-push rewind, non-fast-forward push and deletion rejected; head unchanged; fast-forward write after attacks ok (local bare origin, denyNonFastForwards + denyDeletes)"
+  },
+  "notDone": ["no authority record written", "no bridge prepare / drain ack / commit", "no supervisor activation", "no destructive attempt against the live branch"]
+}
