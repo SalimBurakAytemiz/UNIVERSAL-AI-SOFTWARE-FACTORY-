@@ -3,10 +3,16 @@
 // secret/bağımlılık/araç durumunu DÜRÜST taşır (gitleaks/trivy/semgrep INSTALLED/NOT_INSTALLED/ERROR; kanıt yoksa NOT_EXECUTED; başka commit'e bağlıysa STALE; asla sahte PASSED/temiz); (3) kanıt yüzeyi (GET /v1/evidence)
 // değişmeden çalışır; (4) dinamik QA (test çalıştırma, görsel/API/web/mobil/masaüstü yürütme, cihaz farmı, canlı önizleme) Founder kapısında (FD-REL-1 + cihaz farmı) BLOCKED/NOT_EXECUTED gösterilir, "koş" düğmesi yoktur ve hiçbir yürütme tetiklenmez.
 // Görünüm yalnız izinli salt-okunur GET'leri (/v1/cockpit, /v1/work-runs, /v1/evidence[/:id]) çağırır; qa.* sözlüğü EN/TR'de birebirdir; veri HTML olarak yorumlanmaz (yalnız h()/textContent).
-import {describe, it, expect, beforeEach} from "vitest";
+import {describe, it, expect, beforeEach, afterEach} from "vitest";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import crypto from "node:crypto";
+import net from "node:net";
 import {pathToFileURL} from "node:url";
+import {WorkOsStore} from "../core/workos/store.js";
+import {buildServer} from "../apps/control-api/src/server.js";
+import {registerRendererRealServerExtCases} from "./support/renderer-real-server-ext.cases.js"; // UASCO-T0006 uzantısı: RW-053 dışındaki 13 görünüm için renderer -> gerçek sunucu vakaları
 
 const root = path.resolve(__dirname, "..");
 const rend = path.join(root, "apps", "desktop", "renderer");
@@ -513,7 +519,10 @@ describe("UI-051 per-run test report (recorded evidence else NOT_EXECUTED, never
       expect(got.state, name).toBe(want.state);
       if (want.state === "VERIFIED") {
         expect(got.total, name).toBe(want.runs.total);
-        got.runs.forEach((g: any, i: number) => { expect(g.runId, name).toBe(want.runs.items[i].runId); expect(g.state, name).toBe(want.runs.items[i].tests); });
+        // mapTestReports keeps the NEWEST TEST_ROWS_MAX runs (the tail of the oldest-first server list); row i maps to readiness item off+i
+        const off = Math.max(0, want.runs.items.length - core.TEST_ROWS_MAX);
+        expect(got.runs.length, name).toBe(want.runs.items.length - off);
+        got.runs.forEach((g: any, i: number) => { expect(g.runId, name).toBe(want.runs.items[off + i].runId); expect(g.state, name).toBe(want.runs.items[off + i].tests); });
       } else {
         expect(got.runs, name).toEqual([]);
       }
@@ -528,6 +537,9 @@ describe("UI-051 per-run test report (recorded evidence else NOT_EXECUTED, never
     const runs = DIFF_CASES.find(c => c[0] === "600 runs")![1]();
     const m = core.mapTestReports({ok: true, data: {runs}});
     expect(m.state).toBe("VERIFIED"); expect(m.runs.length).toBe(500); expect(m.total).toBe(600); expect(m.truncated).toBe(true);
+    // the cut drops the 100 OLDEST runs (server lists oldest first), never the newest
+    expect(m.runs[0].runId).toBe(hexRun(101)); expect(m.runs[499].runId).toBe(hexRun(600));
+    expect(m.runs.map((x: any) => x.runId)).not.toContain(hexRun(1));
     const {ctx} = await mkCtx({workRunsData: {runs}}, "en");
     const {node} = await renderAssurance(ctx);
     expect(text(byData(byId(node, "as-testrep")!, "results", "testreport")[0])).toBe("Showing 150 of 600 runs.");
@@ -1016,3 +1028,152 @@ describe("PQ-003 evidence lineage graph (nodes/edges from list fields only)", ()
     for (const k of keys) expect(T[k], k).toBeTruthy();
   });
 });
+
+// //TR: UASCO-T0006 (Güvence dilimi): Güvence görünümü sahte köprü yerine GERÇEK Control API (buildServer) yanıtlarıyla çizilir. Test köprüsü main.mjs "uasco:api-get" işleyicisini aynen taklit eder
+// (masaüstü GET allow-list'i, /health kimlik kanıtı, kontrol token'ı, "<yol>: HTTP <kod>" hata biçimi). Kayıtlar gerçek Work OS store API'siyle (lease + kanıt + geçiş) üretilir.
+describe("UASCO-T0006 — Assurance view over the REAL Control API (renderer -> real buildServer)", () => {
+  const TOKEN = "t".repeat(32);
+  let PORT = 3210, tmp = "";
+  const apps: Array<{close: () => Promise<unknown>}> = [];
+  beforeEach(async () => { tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-as-")); });
+  afterEach(async () => { PORT = 3210; for (const a of apps.splice(0)) { try { await a.close(); } catch { /* kapanış */ } } try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* Windows */ } });
+  function mkApp(controlToken = TOKEN) {
+    fs.mkdirSync(path.join(tmp, "runtime"), {recursive: true}); fs.mkdirSync(path.join(tmp, "repo"), {recursive: true});
+    const app = buildServer({controlToken, runtime: path.join(tmp, "runtime"), repoRoot: path.join(tmp, "repo"), dataDir: path.join(tmp, "data"), tenantId: "tA", port: PORT, logger: false});
+    apps.push(app); return app;
+  }
+  async function allowList() {
+    const extra = loadGet();
+    const boundary = await import(pathToFileURL(path.join(root, "automation", "lib", "control-boundary.mjs")).href);
+    return {allowed: (p: string) => boundary.desktopGetPathAllowed(p) || extra(p), proof: boundary.controlChallengeProof as (t: string, c: string) => string | null};
+  }
+  type Transport = (url: string, headers: Record<string, string>) => Promise<{statusCode: number; json: () => any}>;
+  const injectT = (app: ReturnType<typeof buildServer>): Transport => async (url, headers) => app.inject({method: "GET", url, headers});
+  const httpT = (base: string): Transport => async (url, headers) => { const r = await fetch(base + url, {headers, redirect: "error", cache: "no-store"}); const body = await r.text(); return {statusCode: r.status, json: () => JSON.parse(body)}; };
+  /** main.mjs uasco:api-get + verifyServerIdentity + api() ile aynı. */
+  async function realBridge(transport: Transport, bridgeToken = TOKEN) {
+    const {allowed, proof} = await allowList();
+    const calls: string[] = [];
+    const verify = async () => {
+      const challenge = crypto.randomBytes(32).toString("hex"), expected = proof(bridgeToken, challenge);
+      if (!expected) throw new Error("CONTROL_TOKEN_NOT_CONFIGURED");
+      const r = await transport(`/health?challenge=${challenge}`, {host: `127.0.0.1:${PORT}`});
+      if (r.statusCode !== 200) throw new Error(`health: HTTP ${r.statusCode}`);
+      const h = r.json();
+      if (h.status !== "HEALTHY" || h.system !== "UNIVERSAL-AI-SOFTWARE-COMPANY-OS" || h.bindHost !== "127.0.0.1" || Number(h.port) !== PORT || h.controlProof !== expected) throw new Error("CONTROL_API_IDENTITY_UNVERIFIED");
+    };
+    const bridge = {apiGet: async (p: string) => {
+      calls.push(p);
+      if (!allowed(p)) throw new Error("INVALID_API_PATH");
+      if (p === "/health") { await verify(); return {status: "HEALTHY", system: "UNIVERSAL-AI-SOFTWARE-COMPANY-OS", serverIdentity: "VERIFIED"}; }
+      if (!p.startsWith("/v1/")) throw new Error("CONTROL_API_PATH_INVALID");
+      await verify();
+      const r = await transport(p, {"x-uasco-control-token": bridgeToken, host: `127.0.0.1:${PORT}`});
+      if (r.statusCode < 200 || r.statusCode >= 300) throw new Error(`${p}: HTTP ${r.statusCode}`);
+      return r.json();
+    }, apiPost: async (p: string) => { throw new Error(`POST must never be called (${p})`); }};
+    return {bridge, calls, allowed};
+  }
+  async function renderReal(transport: Transport, bridgeToken = TOKEN, lang = "en") {
+    const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js");
+    const {bridge, calls, allowed} = await realBridge(transport, bridgeToken);
+    const doc = new D(), store = st.createStore(null);
+    const api = apiMod.createApi({bridge, store, now: () => 1_760_000_000_000});
+    const tr = (k: string, v?: any) => i18n.translate(lang, k, v);
+    const ctx: any = {doc, store, api, i18n: {lang, t: tr}, t: tr, navigate: () => {}, principal: "FOUNDER_LOCAL", rerender: async () => {}, settleFocus: () => {}};
+    const {node} = await renderAssurance(ctx);
+    return {root: node, calls, allowed, ctx};
+  }
+  const RECORDER = "FOUNDER_LOCAL", BASE = "b".repeat(40), HEAD = "a".repeat(40);
+  const evBase = (step: string, kind: string) => ({step, cycle: 0, kind, argv: ["x"], startedAt: "2026-10-16T08:00:00.000Z", endedAt: "2026-10-16T08:00:01.000Z", exitCode: 0, logPath: null, logSha256: null}) as any;
+  const SEC = (o: any = {}) => ({schemaVersion: 1, status: "PASSED", blockReason: null, baseSha: BASE, headSha: HEAD, cycle: 0,
+    secrets: {builtin: {status: "CLEAN", hits: 0}, gitleaks: {status: "CLEAN", findings: 0, items: [], rawReportSha256: null}}, sca: {status: "CLEAN", counts: {}, blocking: 0, findings: [], truncated: false, rawReportSha256: null},
+    sast: {status: "NOT_AVAILABLE", reason: "SEMGREP_NOT_INSTALLED", tool: "semgrep"}, sbom: {status: "NOT_AVAILABLE", reason: "NOT_IMPLEMENTED"}, gaps: [], tools: [], founderNote: "", ...o});
+  /** Gerçek store API'si: proje/görev/koşu, lease, IMPLEMENT + SECURITY_REPORT kanıtı. */
+  function seedRun(sec: any, reportCommit = HEAD) {
+    const store = new WorkOsStore(path.join(tmp, "data")), tenantId = "tA", scope = {tenantId};
+    const p = store.createProject({tenantId, orgId: "org1", name: "Assurance", environmentId: "env-dev", createdBy: RECORDER});
+    const m = store.createMission({tenantId, projectId: p.projectId, title: "Scan", objective: "obj", acceptanceCriteria: ["ac"], riskLevel: "R1", createdBy: RECORDER});
+    for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission(scope, m.missionId, to, "go", RECORDER);
+    const r = store.createRun({tenantId, missionId: m.missionId, executor: {implementer: "IMPL", reviewer: "REV"}, createdBy: RECORDER});
+    const leaseId = store.acquireRunLease(r.runId, 600_000, "ENGINE").leaseId as string;
+    store.transitionRun(r.runId, leaseId, "RUNNING", "t", "ENGINE", {patch: {baseSha: BASE, headSha: HEAD}});
+    store.addRunEvidence(r.runId, leaseId, {...evBase("IMPLEMENT", "IMPLEMENT"), baseSha: BASE, commitSha: HEAD}, "ENGINE");
+    if (sec) store.addRunEvidence(r.runId, leaseId, {...evBase("SECURITY", "SECURITY_REPORT"), baseSha: BASE, commitSha: reportCommit, exitCode: sec.status === "BLOCKED" ? 1 : 0, security: sec, note: `security=${sec.status}`}, "ENGINE");
+    return {runId: r.runId, missionId: m.missionId};
+  }
+  const panelText = (r: N, id: string) => byId(r, id)?.textContent ?? "";
+  const stateNotes = (r: N, id: string) => all(byId(r, id)!).filter(n => /\bnote-[a-z_]+\b/.test(n.getAttribute("class") ?? "") && n.getAttribute("role") === "status").map(n => (n.getAttribute("class") ?? "").match(/note-([a-z_]+)/)![1]);
+  const statVal = (r: N, id: string, key: string) => byData(byId(r, id)!, "stat", key)[0]?.textContent;
+
+  const scanRow = (r: N, runId: string) => byData(byId(r, "qa-security")!, "runId", runId).find(n => n.tagName === "TR");
+  const testRowOf = (r: N, runId: string) => byData(byId(r, "as-testrep")!, "testRun", runId)[0];
+  const evRows = (r: N) => all(byId(r, "assurance-list")!).filter(n => n.tagName === "TR" && n.parent?.tagName === "TBODY");
+  const READS = ["/v1/evidence?limit=100", "/v1/cockpit", "/v1/work-runs", "/v1/reviews"];
+
+  it("happy path, empty factory: the four real reads; zero runs reported as zero runs (not PASSED); no evidence and no reviews stated honestly", async () => {
+    const app = mkApp();
+    const {root: r, calls, allowed} = await renderReal(injectT(app));
+    expect([...calls].sort()).toEqual([...READS].sort());
+    for (const p of calls) expect(allowed(p), p).toBe(true);
+    expect(panelText(r, "qa-posture")).toContain("0 runs · 0 with a security stage · 0 BLOCKED · 0 PARTIAL · 0 PASSED.");
+    expect(stateNotes(r, "qa-evidence")).toEqual(["unavailable"]);                 // the real cockpit has no evidence index yet: never "verified"
+    expect(panelText(r, "assurance-list")).toContain("No evidence recorded yet.");
+    expect(evRows(r)).toHaveLength(0);
+  });
+
+  it("happy path with real records: a real SECURITY_REPORT (PASSED, all CLEAN) is shown per run with its commit; the real evidence index lists the run steps as NO VERIFICATION; tests are NOT_EXECUTED", async () => {
+    const run = seedRun(SEC());
+    const app = mkApp();
+    const {root: r} = await renderReal(injectT(app));
+    expect(panelText(r, "qa-posture")).toContain("1 runs · 1 with a security stage · 0 BLOCKED · 0 PARTIAL · 1 PASSED.");
+    expect(byData(byId(r, "qa-posture")!, "posture")[0].dataset.posture).toBe("OK");
+    const row = scanRow(r, run.runId)!;
+    expect(row.dataset.scan).toBe("PASSED");
+    expect(row.textContent).toContain(HEAD.slice(0, 12));
+    expect(row.textContent).toContain("CLEAN");
+    const t = testRowOf(r, run.runId);
+    expect(t.dataset.testState).toBe("NOT_EXECUTED");                              // no VERIFY/REGRESSION test evidence -> never a pass
+    expect(evRows(r).length).toBeGreaterThan(0);
+    for (const e of evRows(r)) expect(e.textContent, "evidence row").not.toMatch(/\bVERIFIED\b/);
+  });
+
+  it("happy path, blocked scan: a real BLOCKED SECURITY_REPORT (secret detected) is counted as BLOCKED and flips the posture; a run without a report is NOT_EXECUTED", async () => {
+    const blocked = seedRun(SEC({status: "BLOCKED", blockReason: "SECRET_DETECTED", secrets: {builtin: {status: "FINDINGS", hits: 1}, gitleaks: {status: "CLEAN", findings: 0, items: [], rawReportSha256: null}}}));
+    const none = seedRun(null);
+    const stale = seedRun(SEC({headSha: "c".repeat(40)}), "c".repeat(40));          // a PASSED report for another commit than the run's head
+    const app = mkApp();
+    const {root: r} = await renderReal(injectT(app));
+    expect(panelText(r, "qa-posture")).toContain("3 runs · 2 with a security stage · 1 BLOCKED · 0 PARTIAL · 0 PASSED.");
+    expect(scanRow(r, stale.runId)!.dataset.scan).toBe("STALE");                   // never shown as a current pass
+    expect(byData(byId(r, "qa-posture")!, "posture")[0].dataset.posture).toBe("BLOCKED");
+    expect(scanRow(r, blocked.runId)!.dataset.scan).toBe("BLOCKED");
+    expect(scanRow(r, none.runId)!.dataset.scan).toBe("NOT_EXECUTED");
+  });
+
+  it("error: wrong bridge token -> identity unverified, every read a real 403; every panel says error, no zero counts are presented as measured", async () => {
+    seedRun(SEC());
+    const app = mkApp();
+    const {root: r} = await renderReal(injectT(app), "w".repeat(32));
+    for (const id of ["qa-posture", "qa-security", "as-testrep", "assurance-list"]) expect(stateNotes(r, id), id).toEqual(["error"]);
+    expect(panelText(r, "qa-posture")).not.toContain("0 runs ·");
+    expect(byData(r, "runId").filter(n => n.tagName === "TR")).toHaveLength(0);
+  });
+
+  it("error: the Control API process goes away -> real HTTP fetch fails; real records turn into OFFLINE notes, never into an empty or passed state", async () => {
+    const run = seedRun(SEC());
+    PORT = await new Promise<number>((res, rej) => { const srv = net.createServer(); srv.once("error", rej); srv.listen(0, "127.0.0.1", () => { const a = srv.address() as {port: number}; srv.close(() => res(a.port)); }); });
+    const app = mkApp();
+    await app.listen({port: PORT, host: "127.0.0.1"});
+    const t = httpT(`http://127.0.0.1:${PORT}`);
+    const up = await renderReal(t, TOKEN, "tr");
+    expect(scanRow(up.root, run.runId)!.dataset.scan).toBe("PASSED");
+    await app.close();
+    const down = await renderReal(t, TOKEN, "tr");
+    for (const id of ["qa-posture", "qa-security", "as-testrep", "assurance-list"]) expect(stateNotes(down.root, id), id).toEqual(["offline"]);
+    expect(byData(down.root, "runId").filter(n => n.tagName === "TR")).toHaveLength(0);
+  });
+
+});
+// //TR: UASCO-T0006 uzantısı (Builder I): 13 görünümün gerçek sunucu vakaları burada kaydedilir (tests/support/renderer-real-server-ext.cases.ts).
+registerRendererRealServerExtCases();
