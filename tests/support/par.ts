@@ -30,6 +30,8 @@ const spanned = <T>(what: () => string, f: () => T): T => {
 const argLabel = (args: unknown): string => (Array.isArray(args) ? args.map(String) : []).filter((x, i, all) => x !== "-c" && all[i - 1] !== "-c").slice(0, 3).map(x => path.basename(x).slice(0, 40)).join(" ");
 // //TR: renameSync/copyFileSync/readFileSync burada SARILMAZ: bu dosyayı kullanan testler onları kendi casuslarıyla bozar ve "gerçek" işlevi casus kurulduktan sonra yakalar (sarmalanırsa özyineleme olur).
 const FS_SPANNED = ["fsyncSync", "writeFileSync", "rmSync", "cpSync"] as const;
+// //TR: WIN-1 v2 (#339 inceleme B1, Windows CI 42059115488): yavaş-git heartbeat senaryoları GİT eşzamansızlığını sınar, diskin dayanıklılık maliyetini değil. Yavaş runner diskinde (fsync 400-650 ms) her store append'i 4 fsync yapar (journal + 3 snapshot); talep zinciri olay döngüsünü 11-19 sn bloklar, bu da TTL'den ve HEAD probunun 10 sn sınırından uzundur (hiçbir TTL kalibrasyonu senaryoyu kurtaramaz). Bu senaryolar fsync'i atlar (çökme yok, dayanıklılık burada sınanmıyor; yavaş dayanıklı yazı zinciri sanal saatli ayrı testte sınanır). Atlanan çağrılar sayılır: test atlamanın gerçekten etkin olduğunu doğrular.
+export const durability = {skipFsync: false, skipped: 0};
 const realFs = Object.fromEntries(FS_SPANNED.map(n => [n, (fs as unknown as Record<string, (...x: unknown[]) => unknown>)[n]])) as Record<(typeof FS_SPANNED)[number], (...x: unknown[]) => unknown>;
 export function installSlowGit() {
   vi.spyOn(cp, "spawnSync").mockImplementation(((...a: Parameters<typeof cp.spawnSync>) => spanned(() => `spawnSync:${path.basename(String(a[0]))} ${argLabel(a[1])}`, () => {
@@ -37,7 +39,7 @@ export function installSlowGit() {
     if (isSlow(a[0], a[1], a[2])) { slow.hits.sync += 1; for (const until = Date.now() + slow.rule!.ms; Date.now() < until;) { /* senkron git: olay döngüsü bloklanır */ } }
     return realSpawnSync(...a);
   })) as typeof cp.spawnSync);
-  for (const n of FS_SPANNED) vi.spyOn(fs as unknown as Record<string, (...x: unknown[]) => unknown>, n).mockImplementation((...x: unknown[]) => spanned(() => `${n}:${typeof x[0] === "string" ? path.basename(x[0]).slice(0, 40) : typeof x[0]}`, () => realFs[n](...x)));
+  for (const n of FS_SPANNED) vi.spyOn(fs as unknown as Record<string, (...x: unknown[]) => unknown>, n).mockImplementation((...x: unknown[]) => spanned(() => `${n}:${typeof x[0] === "string" ? path.basename(x[0]).slice(0, 40) : typeof x[0]}`, () => { if (n === "fsyncSync" && durability.skipFsync) { durability.skipped += 1; return undefined; } return realFs[n](...x); }));
   vi.spyOn(cp, "spawn").mockImplementation(((...a: unknown[]) => {
     const [cmd, args, opts] = a as [string, string[], unknown];
     if (cmd === "git") slow.observe?.(String((opts as {cwd?: unknown} | undefined)?.cwd ?? ""), Array.isArray(args) ? args.map(String) : [], ((opts as {env?: NodeJS.ProcessEnv} | undefined)?.env) ?? {});
@@ -67,7 +69,7 @@ export const git = (cwd: string, args: string[]) => { const r = spawnGitSync(cwd
 export function parHarness(): {tmp: () => string} {
   let tmp = "";
   beforeEach(() => { tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-par-")); slow.rule = null; slow.observe = null; slow.hits = {sync: 0, async: 0}; installSlowGit(); });
-  afterEach(() => { slow.rule = null; slow.observe = null; slow.observeSync = null; vi.restoreAllMocks(); try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* Windows: kapanan süreçler dosyayı kısa süre tutabilir */ } });
+  afterEach(() => { slow.rule = null; slow.observe = null; slow.observeSync = null; durability.skipFsync = false; durability.skipped = 0; vi.restoreAllMocks(); try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* Windows: kapanan süreçler dosyayı kısa süre tutabilir */ } });
   return {tmp: () => tmp};
 }
 

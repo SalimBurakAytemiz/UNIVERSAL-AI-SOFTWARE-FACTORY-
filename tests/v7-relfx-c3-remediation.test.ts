@@ -17,7 +17,7 @@ import {REPO, T, drive, okScript, rmTmp, runner, setup, startRun, tmpRoot} from 
 import {repositoryHead, repositoryHeadAsync} from "../core/workos/runner.js";
 import {canonicalPath} from "../core/workos/path-guard.js";
 import type {RepositoryHead} from "../core/workos/runner.js";
-import {ENV_POLICY, REPO as PAR_REPO, descendantPids, git, groupLive, journal, parHarness, procAlive, setup as parSetup, slow, sleep, stallProbe, stopWithin, waitUntil, withFinalStop, wrapImplementer} from "./support/par.js";
+import {ENV_POLICY, REPO as PAR_REPO, descendantPids, durability, git, groupLive, journal, parHarness, procAlive, setup as parSetup, slow, sleep, stallProbe, stopWithin, waitUntil, withFinalStop, wrapImplementer} from "./support/par.js";
 import cp from "node:child_process";
 import os from "node:os";
 import {EventEmitter} from "node:events";
@@ -179,6 +179,7 @@ describe("C-PAR-1 PAR-03: synchronous git in one run must not starve another run
   // //TR: Aynı senaryo iki yavaş git noktası için: A'nın VERIFY tarama klonu ve A'nın WORKSPACE adımındaki depo kökü/HEAD probu (#218 ile birleşimde eşzamansız sürücü).
   const slowGitLeavesBUnfenced = async (slowMatch: (A: {runId: string}, srcRepo: string) => (cwd: string, args: string[]) => boolean) => {
     const TTL = HB_TTL, BLOCK = HB_BLOCK;
+    durability.skipFsync = true;   // WIN-1 v2: the disk's fsync latency is not what this scenario tests (see tests/support/par.ts `durability`)
     const c = setup(); const A = c.mkRun("A"), B = c.mkRun("B");
     const calls = {A: 0, B: 0, Baborted: 0};
     const pair = wrapImplementer(c.base, async (w, spec, ctx) => {
@@ -197,6 +198,7 @@ describe("C-PAR-1 PAR-03: synchronous git in one run must not starve another run
     const probe = stallProbe();
     const rep = await c.runner({maxConcurrentRuns: 2, leaseTtlMs: TTL, executors: pair}).tick().finally(() => probe.stop());
     expect(slow.hits.sync + slow.hits.async, "the slow-git scenario really fired once").toBe(1);
+    expect(durability.skipped, "fsync was really neutralised in this scenario (durable-write stalls are tested separately with a virtual clock)").toBeGreaterThan(0);
     expect(rep.claimed.sort()).toEqual([A.runId, B.runId].sort());
     expect(rep.fenced, hbDiag(c, {A: A.runId, B: B.runId}, rep.fenced, probe, TTL)).toEqual([]);
     expect(calls.B).toBe(1);
