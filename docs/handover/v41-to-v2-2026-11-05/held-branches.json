@@ -399,7 +399,7 @@
       "branch": "claude/builder-d-win1-ttl-calibration",
       "task": "WIN-1 (relfx-c3 PAR-03 Windows fence, test-only)",
       "head": "109be1de",
-      "note": "on #339 head c6cde356; patch-id 1eb9224d (D's original d80872f3); coordinator push; prepr ok, relfx-c3 66/66 (Linux)"
+      "note": "on #339 head c6cde356; patch-id 1eb9224d (D's original d80872f3); coordinator push; prepr ok, relfx-c3 66/66 (Linux); BLOCKED by CLAUDE_REVIEWER #339 B1 (does not fix flake under slow disk: CI stall 7.5 s chained fsyncs > TTL); reverted from #339 (1b9f2c45); returned to D for rework"
     },
     {
       "owner": "D",

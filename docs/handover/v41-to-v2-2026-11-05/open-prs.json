@@ -81,19 +81,6 @@
       "classification": "FOUNDER_REQUIRED (V4.1 matrix: T0124 model=deterministic, target 'EXT:register dalı (supervisor)'; builder PR conflicts with intended owner; CLEAN 7e7d0158/59c06dd7)"
     },
     {
-      "pr": 393,
-      "branch": "claude/builder-i-real-server-ext",
-      "head": "6776947cea64476a528af9dfe7ca6e81f28aaaa9",
-      "base": "v7/integration",
-      "draft": false,
-      "title": "UASCO-T0006 extension: renderer→real buildServer coverage for 13 more desktop views",
-      "task": "UASCO-T0006",
-      "owner": "I",
-      "ownerSession": "session_015dYwb2F7BNWaAJn1Uad5FN",
-      "reviewerSession": "session_015dYwb4gqYkEaPawSBG75A1",
-      "classification": "ROUTINE"
-    },
-    {
       "pr": 390,
       "branch": "claude/builder-e-export-fix-test",
       "head": "6c3933c9cbeb1e77084af8e2a28296e1e80f3b7e",
@@ -131,19 +118,6 @@
       "ownerSession": null,
       "reviewerSession": null,
       "classification": "V2_OWNED (not V4.1)"
-    },
-    {
-      "pr": 387,
-      "branch": "claude/builder-h-desktop-tour",
-      "head": "a9315518e628dc0a2f5a0d6d18c1c359c8096e29",
-      "base": "v7/integration",
-      "draft": false,
-      "title": "UASCO-T0006 follow-up: desktop tour e2e (23 routes × EN/TR × 3 widths, layout/i18n/raw-error checks)",
-      "task": "UASCO-T0006",
-      "owner": "H",
-      "ownerSession": "session_015dYwb57pxAry59xkxbE6NL",
-      "reviewerSession": "session_015dYwazjJ1k3tykL86rvfMA",
-      "classification": "ROUTINE"
     },
     {
       "pr": 386,
@@ -560,6 +534,19 @@
       "ownerSession": null,
       "reviewerSession": null,
       "classification": "FOUNDER_REQUIRED (no task id)"
+    },
+    {
+      "pr": 406,
+      "branch": "claude/builder-g-t0006-testreports-newest",
+      "head": "6d1af4478a3f33f7f610ab1b23cd2072f30730b2",
+      "base": "v7/integration",
+      "draft": false,
+      "title": "fix(desktop): UASCO-T0006 Assurance test reports keep the newest 500 runs",
+      "task": "UASCO-T0006",
+      "owner": "G",
+      "ownerSession": "session_015dYwb1WPfNEE3SrZ52qm7F",
+      "reviewerSession": "session_015dYwb1RCsEL6GajU6LAxB3",
+      "classification": "ROUTINE"
     }
   ],
   "merged_since_handover_start": [
@@ -572,6 +559,8 @@
     "#402 b2d7e146",
     "#401 81ae454e",
     "#394 c705b1af",
-    "#395 bb6e0ab7"
+    "#395 bb6e0ab7",
+    "#387 c7e56c11",
+    "#393 96f2e139"
   ]
 }
