@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
+import {pathToFileURL} from "node:url";
 import {spawnGitSync} from "../automation/lib/git-isolation.mjs";
 import {WorkOsStore} from "../core/workos/store.js";
 import {MissionRunner} from "../core/workos/runner.js";
@@ -388,5 +389,130 @@ describe("UI-049 — read-only reviews allow-list is fail-closed and EXTRA_GET_R
     expect(mainSrc).toContain("const REVIEW_DETAIL_RE=/^\\/v1\\/reviews\\/evd_[0-9a-f]{24}$/;");
     expect(mainSrc).toMatch(/REVIEW_DETAIL_RE\.test\(/);
     expect(mainSrc).toMatch(/listQueryAllowed\(value,"\/v1\/reviews",\["missionId","runId"\]\)/);
+  });
+});
+
+// //TR: Güvence / QA & Güvenlik (UASCO-T0006): /v1/work-runs en eski önce döner; güvenlik eşleyicisi en YENİ 500 koşuyu tutar (toplam + truncated açık), "son tarama" en yeni taramadır ve tablolar en yeni üstte gösterilir. Sessiz kesme yok.
+describe("Assurance security & test-report lists — newest runs kept and shown first, the cut stated, latest scan is the newest", () => {
+  const rend = path.join(REPO, "apps", "desktop", "renderer");
+  const load = async (...p: string[]): Promise<any> => import(pathToFileURL(path.join(rend, ...p)).href);
+  class N {
+    tagName: string; children: N[] = []; parent: N | null = null; attrs = new Map<string, string>(); dataset: Record<string, string> = {}; className = ""; _text = ""; ls = new Map<string, Array<(e: any) => void>>(); value = "";
+    constructor(public doc: D, tag: string) { this.tagName = tag.toUpperCase(); }
+    get id() { return this.attrs.get("id") ?? ""; }
+    get textContent(): string { return this._text + this.children.map(c => c.textContent).join(""); }
+    set textContent(v: string) { this.children = []; this._text = String(v); }
+    append(...n: Array<N | string>) { for (const c of n) { const node = typeof c === "string" ? this.doc.createTextNode(c) : c; node.parent = this; this.children.push(node); } }
+    appendChild(n: N) { this.append(n); return n; }
+    replaceChildren(...n: Array<N | string>) { this.children = []; this._text = ""; this.append(...n); }
+    setAttribute(k: string, v: string) { this.attrs.set(k, String(v)); if (k === "class") this.className = String(v); }
+    getAttribute(k: string) { return k === "class" && this.className ? this.className : this.attrs.get(k) ?? null; }
+    addEventListener(ev: string, fn: (e: any) => void) { this.ls.set(ev, [...(this.ls.get(ev) ?? []), fn]); }
+    focus() { /* test double */ }
+  }
+  class D {
+    body: N; constructor() { this.body = new N(this, "body"); }
+    createElement(t: string) { return new N(this, t); }
+    createElementNS(_ns: string, t: string) { return new N(this, t); }
+    createTextNode(s: string) { const n = new N(this, "#text"); n._text = s; return n; }
+    getElementById(id: string) { return allN(this.body).find(n => n.id === id) ?? null; }
+  }
+  const allN = (n: N): N[] => n.children.flatMap(c => [c, ...allN(c)]);
+  const byData = (r: N, k: string) => allN(r).filter(n => k in n.dataset);
+  const secIds = (r: N) => byData(r, "runId").filter(n => n.tagName === "TR").map(n => n.dataset.runId);
+  const testIds = (r: N) => byData(r, "testRun").filter(n => n.tagName === "TR").map(n => n.dataset.testRun);
+  const rid = (i: number) => `run_${String(i).padStart(24, "0")}`;
+  const H = (i: number) => (i % 16).toString(16).repeat(40);
+  const secSummary = (status: string, headSha: string) => ({schemaVersion: 1, status, blockReason: status === "BLOCKED" ? "SECRET_DETECTED" : null, baseSha: "0".repeat(40), headSha, cycle: 1,
+    secrets: {builtin: {status: "CLEAN", hits: 0}, gitleaks: {status: status === "BLOCKED" ? "FINDINGS" : "CLEAN", findings: status === "BLOCKED" ? 1 : 0, items: [], rawReportSha256: null}},
+    sca: {status: "CLEAN", counts: {}, blocking: 0, findings: [], truncated: false, rawReportSha256: null},
+    sast: {status: "NOT_AVAILABLE", reason: "TOOL_NOT_INSTALLED", tool: "semgrep"}, sbom: {status: "NOT_AVAILABLE", reason: "NOT_IMPLEMENTED"},
+    gaps: [], tools: [{tool: status === "BLOCKED" ? "gitleaks" : "trivy", status: "INSTALLED", path: null, version: status === "BLOCKED" ? "9.9.9" : "0.1", sha256: null}], founderNote: "n"});
+  const secEv = (status: string, headSha: string) => ({evidenceId: `evi_${"1".repeat(32)}`, step: "SECURITY", cycle: 1, kind: "SECURITY_REPORT", argv: [], startedAt: "", endedAt: "", exitCode: 0, logPath: null, logSha256: null, commitSha: headSha, security: secSummary(status, headSha)});
+  const fakeRun = (i: number, evidence: any[] = []) => ({runId: rid(i), missionId: `msn_${"0".repeat(24)}`, projectId: `prj_${"0".repeat(24)}`, status: "AWAITING_APPROVAL", step: "REVIEW", createdAt: "2026-10-16T00:00:00.000Z", updatedAt: "2026-10-16T00:00:00.000Z", remediationCycle: 0, headSha: H(i), evidence});
+  async function renderAssurance(getFn: (p: string) => any, lang = "en") {
+    const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js"), v = await load("views", "assurance.js");
+    v.resetAssuranceView();
+    const doc = new D(), store = st.createStore(null), calls: string[] = [];
+    const bridge = {apiGet: async (p: string) => { calls.push(p); return getFn(p); }, apiPost: async (p: string) => { throw new Error(`POST must never be called (${p})`); }};
+    const t = (k: string, x?: any) => i18n.translate(lang, k, x);
+    const ctx: any = {doc, store, api: apiMod.createApi({bridge, store}), i18n: {lang, t, setLang: () => {}}, t, navigate: () => {}, rerender: async () => {}, refreshAll: async () => {}, confirm: async () => false, settleFocus: () => {}};
+    return {root: (await v.render(ctx)) as N, calls};
+  }
+  const only = (runs: unknown) => (p: string) => { if (p === "/v1/work-runs") return runs; throw new Error(`${p}: HTTP 404`); };
+
+  it("pure: newestWindow keeps the server-order tail, newestFirst reverses for display, neither mutates its input", async () => {
+    const c = await load("assurance-core.js");
+    const xs = [1, 2, 3, 4, 5];
+    expect(c.newestWindow(xs, 3)).toEqual([3, 4, 5]); expect(c.newestWindow(xs, 9)).toEqual(xs); expect(c.newestWindow([], 3)).toEqual([]);
+    expect(c.newestFirst(xs)).toEqual([5, 4, 3, 2, 1]); expect(xs).toEqual([1, 2, 3, 4, 5]);
+    expect(c.SECURITY_ROWS_MAX).toBe(500);
+  });
+  it("mapper: >500 runs keeps the NEWEST 500 with total + truncated; the newest BLOCKED scan counts and its tools are the latest seen", async () => {
+    const c = await load("assurance-core.js");
+    const list = Array.from({length: 503}, (_, i) => fakeRun(i, i === 0 ? [secEv("PASSED", H(0))] : i === 502 ? [secEv("BLOCKED", H(502))] : []));
+    const r = c.mapSecurityScans({ok: true, data: {workRuns: list}});
+    expect([r.state, r.total, r.truncated, r.runs.length]).toEqual(["VERIFIED", 503, true, 500]);
+    expect(r.runs[0].runId).toBe(rid(3)); expect(r.runs[499].runId).toBe(rid(502));          // server order kept; the three OLDEST are the ones cut
+    expect(r.aggregate.blocked).toBe(1);                                                    // the newest run's BLOCKED scan is never dropped
+    expect(r.aggregate.toolsSeen.map((x: any) => x.version)).toEqual(["9.9.9"]);
+    const small = c.mapSecurityScans({ok: true, data: {workRuns: [fakeRun(1, [secEv("PASSED", H(1))]), fakeRun(2, [secEv("BLOCKED", H(2))])]}});
+    expect([small.total, small.truncated]).toEqual([2, false]);
+    expect(small.aggregate.toolsSeen.map((x: any) => x.version)).toEqual(["9.9.9"]);      // latest scan = the newer run, not the first scanned
+    expect(c.mapSecurityScans({ok: false, state: "OFFLINE"})).toMatchObject({state: "OFFLINE", runs: [], total: 0, truncated: false});
+    expect(c.mapSecurityScans({ok: true, data: {nope: 1}})).toMatchObject({state: "ERROR", total: 0, truncated: false});
+  });
+  it("view: the security and test-report tables show the newest runs on top; the cut is stated with the real total (en + tr)", async () => {
+    const list = Array.from({length: 503}, (_, i) => fakeRun(i, i === 502 ? [secEv("BLOCKED", H(502))] : []));
+    const {root} = await renderAssurance(only({workRuns: list}));
+    const ids = secIds(root);
+    expect(ids.length).toBe(150); expect(ids[0]).toBe(rid(502)); expect(ids[149]).toBe(rid(353));
+    expect(byData(root, "results").find(n => n.dataset.results === "1")!.textContent).toBe("Showing 150 of 503 runs.");
+    expect(byData(root, "truncated").find(n => n.dataset.truncated === "1")!.textContent).toBe("353 more runs not shown.");
+    const pt = byData(root, "postureTruncated")[0]!;
+    expect([pt.dataset.postureTruncated, pt.textContent]).toEqual(["3", "3 more runs not shown."]);
+    expect(byData(root, "posture")[0]!.dataset.posture).toBe("BLOCKED");
+    const few = await renderAssurance(only({workRuns: [fakeRun(1), fakeRun(2), fakeRun(3)]}));
+    expect(secIds(few.root)).toEqual([rid(3), rid(2), rid(1)]);
+    expect(testIds(few.root)).toEqual([rid(3), rid(2), rid(1)]);
+    expect(byData(few.root, "postureTruncated")).toEqual([]);
+    expect(byData(few.root, "truncated").filter(n => n.dataset.truncated === "1")).toEqual([]);
+    // a row the mapper rejects (bad runId) is still a run the server returned: it counts in the total and is stated as not shown, never silently dropped
+    const bad = await renderAssurance(only({workRuns: [fakeRun(1), {...fakeRun(2), runId: "x"}, fakeRun(3)]}));
+    expect(secIds(bad.root)).toEqual([rid(3), rid(1)]);
+    expect(byData(bad.root, "results").find(n => n.dataset.results === "1")!.textContent).toBe("Showing 2 of 3 runs.");
+    expect(byData(bad.root, "truncated").find(n => n.dataset.truncated === "1")!.textContent).toBe("1 more runs not shown.");
+    const tr = await renderAssurance(only({workRuns: list}), "tr");
+    expect(byData(tr.root, "postureTruncated")[0]!.textContent).not.toBe("");
+  });
+  it("real buildServer + real Work OS store: 503 runs, the newest has a BLOCKED scan -> posture is BLOCKED, newest on top, 3 cut runs stated", { timeout: T }, async () => {
+    const store = new WorkOsStore(dataDirS());
+    const p = store.createProject({tenantId: "tA", orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL"});
+    const created: string[] = [];
+    for (let i = 0; i < 503; i++) {
+      const m = store.createMission({tenantId: "tA", projectId: p.projectId, title: `M${i}`, objective: "O", acceptanceCriteria: ["c"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
+      for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
+      const run = store.createRun({tenantId: "tA", missionId: m.missionId, executor: {implementer: "IMPL", reviewer: "REV"}, createdBy: "FOUNDER_LOCAL"});
+      created.push(run.runId);
+      if (i === 502) {
+        const head = sha40("e"), leaseId = store.acquireRunLease(run.runId, 600_000, "ENGINE").leaseId as string;
+        store.transitionRun(run.runId, leaseId, "RUNNING", "go", "ENGINE", {patch: {baseSha: sha40("0"), headSha: head}});
+        const {evidenceId: _e, ...ev} = secEv("BLOCKED", head) as any;
+        store.addRunEvidence(run.runId, leaseId, {...ev, startedAt: "2026-10-17T10:00:00.000Z", endedAt: "2026-10-17T10:00:01.000Z"}, "ENGINE");
+      }
+    }
+    const app = mkApp(dataDirS(), runtimeS());
+    const body = (await get(app, "/v1/work-runs")).json();
+    const serverIds = (body.workRuns ?? body.runs ?? body.items).map((r: any) => r.runId);
+    expect(serverIds.length).toBe(503);
+    expect(serverIds.indexOf(created[502])).toBe(502);                                      // measured: the server lists the newest run LAST
+    const {root, calls} = await renderAssurance(async (q: string) => { const r = await get(app, q); if (r.statusCode !== 200) throw new Error(`${q}: HTTP ${r.statusCode}`); return r.json(); });
+    expect(calls).toContain("/v1/work-runs");
+    expect(byData(root, "posture")[0]!.dataset.posture).toBe("BLOCKED");                   // before the fix the newest BLOCKED run was cut away -> "OK"
+    const ids = secIds(root);
+    expect(ids[0]).toBe(created[502]);
+    expect(ids).not.toContain(created[0]);
+    expect(byData(root, "postureTruncated")[0]!.dataset.postureTruncated).toBe("3");
+    expect(byData(root, "results").find(n => n.dataset.results === "1")!.textContent).toBe("Showing 150 of 503 runs.");
   });
 });
