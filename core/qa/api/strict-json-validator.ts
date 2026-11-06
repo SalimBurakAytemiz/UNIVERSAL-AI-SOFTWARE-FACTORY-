@@ -5,6 +5,8 @@ import addFormatsModule from "ajv-formats";
 const Ajv = AjvModule.default;
 const addFormats = addFormatsModule.default;
 
+// UASCO-T0129: şema tipi buradan dışa verilir (doldurucu ajv'yi doğrudan içe aktarmaz; ajv'nin tek içe aktaranı bu dosya kalır).
+export type StrictSchema = AnySchema;
 export interface StrictValuePolicy {
   allowNullPaths?: string[];
   allowEmptyPaths?: string[];
@@ -41,8 +43,14 @@ function scan(value: unknown, path: string, p: Required<StrictValuePolicy>, erro
     for (const [k,v] of entries) scan(v,`${path}.${k}`,p,errors);
   }
 }
+// UASCO-T0129: politika varsayılanları tek yerde; Postman şablonu da bu normalize edilmiş politikayla doldurulur (postman-strict-test.ts).
+export function normalizeStrictPolicy(policy: StrictValuePolicy = {}): Required<StrictValuePolicy> {
+  return {allowNullPaths:[...(policy.allowNullPaths??[])],allowEmptyPaths:[...(policy.allowEmptyPaths??[])],denyEmptyStrings:policy.denyEmptyStrings??true,denyWhitespaceStrings:policy.denyWhitespaceStrings??true,denyEmptyArrays:policy.denyEmptyArrays??false,denyEmptyObjects:policy.denyEmptyObjects??false};
+}
+/** Şema bu doğrulayıcının (strict, formatlı) Ajv örneğiyle derlenebiliyor mu. */
+export function strictSchemaCompiles(schema: AnySchema): boolean { try { ajv.compile(schema); return true; } catch { return false; } }
 export function validateStrictJson(schema: AnySchema, data: unknown, policy: StrictValuePolicy = {}): StrictValidationResult {
-  const normalized: Required<StrictValuePolicy>={allowNullPaths:policy.allowNullPaths??[],allowEmptyPaths:policy.allowEmptyPaths??[],denyEmptyStrings:policy.denyEmptyStrings??true,denyWhitespaceStrings:policy.denyWhitespaceStrings??true,denyEmptyArrays:policy.denyEmptyArrays??false,denyEmptyObjects:policy.denyEmptyObjects??false};
+  const normalized = normalizeStrictPolicy(policy);
   const validate=ajv.compile(schema); const schemaValid=validate(data); const valuePolicyErrors:string[]=[];
   scan(data,'$',normalized,valuePolicyErrors);
   return {valid:Boolean(schemaValid)&&valuePolicyErrors.length===0,schemaErrors:[...(validate.errors??[])],valuePolicyErrors};

@@ -332,7 +332,10 @@ describe("PS1A-C2-F2: a crashed dev process leaves no live descendants", () => {
     expect(c).toMatchObject({status: "CRASHED", exitCode: 7, reason: "PROCESS_EXITED:7"});
     // Linux: süreç grubu + kaydedilmiş soy (setsid ile gruptan kaçan ayrık torunlar) ppid yürüyüşü; Windows: ppid yürüyüşü.
     expect(c.treeCleanup.method).toBe(WIN ? "PPID_WALK" : process.platform === "linux" ? "PROCESS_GROUP_PPID_WALK" : "PROCESS_GROUP");
-    expect(c.treeCleanup.survivors).toBe(0); expect(c.treeCleanup.verification).toBe(WIN || process.platform === "linux" ? "VERIFIED" : "UNVERIFIED");
+    // //TR: PS1A-GRANDCHILD (2026-11-05, run 42037094881 ubuntu: survivors 1): survivors ürünün reapTree'inde SIGKILL'den sonra en çok 3 sn'lik pid-tabanlı ölüm beklemesinin sonucudur; test bunu yalnız okur. Başarısızlık iletisi artık temizlik kaydını ve iki torunun o andaki /proc durumunu (Linux; R/S/D/Z) yazar: kalan süreç yavaş ölen bir kurban mı, gerçek bir sızıntı mı ayırt edilir. İddia aynıdır.
+    const procState = (pid: number) => { if (process.platform !== "linux") return "n/a"; try { const t = fs.readFileSync(`/proc/${pid}/stat`, "utf8"); return t.slice(t.lastIndexOf(")") + 2).split(" ")[0] ?? "?"; } catch { return "gone"; } };
+    const reapDiag = () => JSON.stringify({treeCleanup: c.treeCleanup, gp1: {pid: gp1, state: procState(gp1)}, gp2: {pid: gp2, state: procState(gp2)}});
+    expect(c.treeCleanup.survivors, reapDiag()).toBe(0); expect(c.treeCleanup.verification).toBe(WIN || process.platform === "linux" ? "VERIFIED" : "UNVERIFIED");
     await until(async () => !(await sameProcessAlive(gp1Id)) && !(await sameProcessAlive(gp2Id)), x => x, 10_000);
     expect(await sameProcessAlive(gp1Id)).toBe(false);
     expect(await sameProcessAlive(gp2Id)).toBe(false);
