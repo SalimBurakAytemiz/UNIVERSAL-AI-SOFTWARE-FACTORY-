@@ -201,7 +201,8 @@ describe("WP-SHELL-REFINE Ctrl+K command palette: actions section + preserved se
     const { doc, routes } = env;
     doc.getElementById("searchInput")!.fire("focus");
     const opts = options(doc);
-    expect(opts.length).toBe(routes.ROUTES.length + 2); // 10 go-to + inspect + stopall
+    expect(opts.length).toBe(routes.ROUTES.length + 3); // UASCO-T0011 new command + go-to per route + inspect + stopall
+    expect(text(opts[0])).toContain(env.t("palette.newCommand"));
     expect(groups(doc).map(g => text(g))).toContain(env.t("palette.group.action"));
     // Her 10 rota için bir go-to-view eylemi
     for (const r of routes.ROUTES) expect(opts.some(o => text(o).includes(env.t(`area.${r.id}.title`))), r.id).toBe(true);

@@ -8,6 +8,7 @@ import {syncNav,syncTabs} from "./nav.js";
 import {keepFocus} from "./focus.js";
 import {selection} from "./forms.js";
 import {maybeOpenFirstRun} from "./views/firstrun.js";
+import {requestCommandFocus} from "./views/intake.js";
 import {recoveryPanel} from "./recovery-panel.js";
 import {shouldShowApiRecovery} from "./recovery-core.js";
 import {createInspector,isInspectableRef} from "./inspector.js";
@@ -132,8 +133,10 @@ export function createShell(ctx){
     if(selection.missionId&&data.missions.items.some(m=>m.missionId===selection.missionId))return {kind:"mission",id:selection.missionId};
     const p=selectedProject();return p?{kind:"project",id:p.projectId}:null;
   }
+  /** UASCO-T0011: tek komut alanına git (Projeler ekranı) ve alanı odakla; yazma yoktur, yalnız gezinme + odak isteği. */
+  function openCommandEntry(){requestCommandFocus();ctx.navigate("projects")}
   function actionEntries(){
-    const acts=ROUTES.map(r=>({kind:"action",action:"goto",group:"action",id:`goto:${r.id}`,routeId:r.id,label:t("palette.goto",{name:t(`area.${r.id}.title`)}),keywords:`${r.id} ${t(`area.${r.id}.title`)} ${t("palette.goKeyword")}`}));
+    const acts=[{kind:"action",action:"command",group:"action",id:"action:command",label:t("palette.newCommand"),keywords:t("palette.commandKeyword")},...ROUTES.map(r=>({kind:"action",action:"goto",group:"action",id:`goto:${r.id}`,routeId:r.id,label:t("palette.goto",{name:t(`area.${r.id}.title`)}),keywords:`${r.id} ${t(`area.${r.id}.title`)} ${t("palette.goKeyword")}`}))];
     const sel=currentSelectionRef();
     if(sel){const m=data.missions.items.find(x=>x.missionId===sel.id),p=selectedProject(),name=sel.kind==="mission"?(m?.title??sel.id):(p?.name??sel.id);
       acts.push({kind:"action",action:"inspect",group:"action",id:"inspect:selection",ref:sel,label:t("palette.inspect",{name}),keywords:`${t("palette.inspectKeyword")} ${sel.id} ${name}`});}
@@ -156,7 +159,8 @@ export function createShell(ctx){
     if(!hit)return;
     closeSearch();el("searchInput").value="";
     if(hit.kind==="action"){
-      if(hit.action==="goto")ctx.navigate(hit.routeId);
+      if(hit.action==="command")openCommandEntry();
+      else if(hit.action==="goto")ctx.navigate(hit.routeId);
       else if(hit.action==="inspect")openInspector(hit.ref);
       else if(hit.action==="stopall")openStopDialog();
       return;
@@ -207,9 +211,11 @@ export function createShell(ctx){
     el("langBtn").addEventListener("click",()=>ctx.i18n.setLang(ctx.i18n.lang==="tr"?"en":"tr"));
     el("projectSelect").addEventListener("change",e=>{ctx.selectProject(e.target.value||null)});
     wireSearch();
+    // //TR: UASCO-T0011: Ctrl/Cmd+Shift+N her ekrandan tek komut alanına götürür (klavye öncelikli giriş).
+    doc.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.shiftKey&&!e.altKey&&String(e.key).toLowerCase()==="n"){e.preventDefault();openCommandEntry()}});
     doc.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&!e.altKey&&e.key.toLowerCase()==="k"){e.preventDefault();el("searchInput").focus();el("searchInput").select();openPalette()}});
     // //TR: UX WP-FIRSTRUN: ilk açılışta (güvenli per-user tercih "görülmedi" ise) kurulum/onboarding sihirbazını bir kez aç. Sihirbaz KAPI DEĞİLDİR (atlanır/başarısız olursa uygulama yine açılır) ve asla giriş yapmaz/durum uydurmaz; her hata yutulur.
     try{maybeOpenFirstRun(ctx)}catch{/* ilk kurulum sihirbazı açılamadı; uygulama yine açılır */}
   }
-  return {data,wireStatic,renderAll,renderNav,renderContext,renderStop,refresh,announce,showStopError,clearStopError,openStopDialog,closeStopDialog,openInspector,inspector};
+  return {data,openCommandEntry,wireStatic,renderAll,renderNav,renderContext,renderStop,refresh,announce,showStopError,clearStopError,openStopDialog,closeStopDialog,openInspector,inspector};
 }

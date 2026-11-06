@@ -66,3 +66,25 @@ export function mapIntakes(raw){
   const items=[];for(const x of list.slice(0,200)){const m=mapIntake(x);if(m===null)return {state:"ERROR",items:[]};items.push(m)}
   return {state:"VERIFIED",items:items.sort((a,b)=>String(b.createdAt??"").localeCompare(String(a.createdAt??"")))};
 }
+
+// //TR: UASCO-T0011 tek komut alanı: istemci doğrulaması sunucu çekirdeğiyle (core/mission/command-intake.ts) aynı sırayla ve aynı kodlarla çalışır; geçersiz komut istek GÖNDERİLMEDEN reddedilir.
+export const COMMAND_MAX_LENGTH=2000;
+const COMMAND_CONTROL=/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
+/** Komut metni ön denetimi: {ok:true,length} | {ok:false,code,length}; kodlar sunucunun INTAKE_* kodlarıdır. */
+export function checkCommand(text){
+  if(typeof text!=="string")return {ok:false,code:"INTAKE_NOT_STRING",length:0};
+  if(COMMAND_CONTROL.test(text))return {ok:false,code:"INTAKE_CONTROL_CHARS",length:text.length};
+  if(text.trim().length===0)return {ok:false,code:"INTAKE_EMPTY",length:text.length};
+  if(text.length>COMMAND_MAX_LENGTH)return {ok:false,code:"INTAKE_TOO_LONG",length:text.length};
+  return {ok:true,length:text.length};
+}
+/** Önizlenen DRAFT öneriden intake oluşturma kapısı: yalnız güncel (metin değişmemiş), DRAFT/yetkisiz, PROPOSED, yetki gerektirmeyen ve intake fikir alt sınırını geçen komut oluşturulabilir; aksi halde engel nedeni döner (istek gönderilmez). */
+export function commandCreateGate(proposal,previewText,currentText){
+  if(!isObj(proposal))return {allowed:false,reason:"NO_PREVIEW"};
+  if(typeof previewText!=="string"||previewText!==currentText)return {allowed:false,reason:"PREVIEW_STALE"};
+  if(proposal.status!=="DRAFT"||!isObj(proposal.authorization)||proposal.authorization.verified!==false)return {allowed:false,reason:"NOT_DRAFT"};
+  if(proposal.outcome!=="PROPOSED")return {allowed:false,reason:"FOUNDER_ATTENTION_REQUIRED"};
+  if(proposal.authorityRequired!==false)return {allowed:false,reason:"AUTHORITY_REQUIRED"};
+  if(trim(currentText).length<IDEA_MIN)return {allowed:false,reason:"IDEA_TOO_SHORT"};
+  return {allowed:true,reason:null};
+}
