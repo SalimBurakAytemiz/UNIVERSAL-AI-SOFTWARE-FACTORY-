@@ -393,38 +393,12 @@
       "classification": "FOUNDER_REQUIRED (task unknown)"
     },
     {
-      "pr": 356,
-      "branch": "claude/fv2-gov-role-keys",
-      "head": "1a73bf66d7d8caaada9b6c0f3ca797f4f248fb65",
-      "base": "v7/integration",
-      "draft": false,
-      "title": "[FOUNDER-TIER] FV2 governance: canonical role keyring (empty, fail-closed) + registration procedure",
-      "task": "none",
-      "owner": "V2",
-      "ownerSession": null,
-      "reviewerSession": null,
-      "classification": "V2_OWNED (not V4.1)"
-    },
-    {
       "pr": 355,
       "branch": "claude/fv2-gov-executor-fence",
       "head": "bbcf4edeb8ad5bf1120a4a9cf5529cf5e957affa",
       "base": "claude/nice-sagan-c1zzow",
       "draft": true,
       "title": "[FOUNDER-TIER] FV2 governance: authority fence in the canonical merge path (stacked on #347)",
-      "task": "none",
-      "owner": "V2",
-      "ownerSession": null,
-      "reviewerSession": null,
-      "classification": "V2_OWNED (not V4.1)"
-    },
-    {
-      "pr": 354,
-      "branch": "claude/fv2-gov-runner-concurrency",
-      "head": "f43c679432d1163bc569c192726a4d0b29559ca2",
-      "base": "v7/integration",
-      "draft": false,
-      "title": "[FOUNDER-TIER] FV2 protected: MissionRunner concurrency wiring in server.ts (+ trust-root reseal)",
       "task": "none",
       "owner": "V2",
       "ownerSession": null,
@@ -443,19 +417,6 @@
       "ownerSession": null,
       "reviewerSession": null,
       "classification": "FOUNDER_REQUIRED (no task id)"
-    },
-    {
-      "pr": 347,
-      "branch": "claude/nice-sagan-c1zzow",
-      "head": "89b95f75565d2beab8cda0576c18b5853277d8af",
-      "base": "v7/integration",
-      "draft": false,
-      "title": "Factory V2: adaptive parallel factory + V4.1 integration bridge (shadow; no live authority)",
-      "task": "none",
-      "owner": "V2",
-      "ownerSession": null,
-      "reviewerSession": null,
-      "classification": "V2_OWNED (not V4.1)"
     },
     {
       "pr": 343,
@@ -527,5 +488,13 @@
     "#369 e09288b9",
     "#339 c374e04e",
     "#407 b44ffa47"
+  ],
+  "founder_merged_v2_line": [
+    "#347 e16bd66a (2026-11-06T04:05Z)",
+    "#354 db3088eb",
+    "#356 e2ba1dee — merged by the Founder; the V4.1 merge gate (docs/planning/autonomy) is unchanged; V4.1 remains the live authority until the signed handover"
+  ],
+  "founder_auto_merge_enabled": [
+    "#343 (CLOUD-T0005, 2026-11-06T04:06Z)"
   ]
 }
