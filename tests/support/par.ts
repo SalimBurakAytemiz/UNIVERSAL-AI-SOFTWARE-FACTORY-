@@ -19,12 +19,25 @@ export const slow = {rule: null as null | {ms: number; match: (cwd: string, args
 const realSpawnSync = cp.spawnSync, realSpawn = cp.spawn as (...x: unknown[]) => cp.ChildProcess;
 const isSlow = (cmd: unknown, args: unknown, opts: unknown) => cmd === "git" && slow.rule !== null && slow.rule.match(String((opts as {cwd?: unknown} | undefined)?.cwd ?? ""), Array.isArray(args) ? args.map(String) : []);
 // //TR: #224 tur 3: eşzamansız git artık `cp.spawn` ile çalışır (execFile `detached`ı yok sayıyordu, bkz. git-async.ts). Yavaş model aynı kalır: eşleşen çağrının "close" olayı ms kadar geciktirilir (gerçek git hemen biter; sonuç gecikir).
+// //TR: Teşhis (QA C-PAR, PAR-03 Windows fence'leri 2026-11-03/04: maxLoopStallMs 4161-10469, cpuMs duvar süresinin çok altında = senkron G/Ç beklemesi): stallProbe açıkken ana iş parçacığını bloklayabilen senkron çağrılar (spawnSync, fsyncSync, writeFileSync, rmSync, cpSync) zamanlanır; 50 ms'den uzun olanlar kaydedilir ve başarısızlık iletisi en uzun durmayla örtüşenleri adlarıyla yazar. Yalnız gözlemdir: çağrılar aynen gerçek işleve gider, hiçbir iddia değişmez.
+export const syncSpans: {on: boolean; list: Array<{what: string; t0: number; t1: number}>} = {on: false, list: []};
+const SPAN_MIN_MS = 50;
+const spanned = <T>(what: () => string, f: () => T): T => {
+  if (!syncSpans.on) return f();
+  const t0 = performance.now();
+  try { return f(); } finally { const t1 = performance.now(); if (t1 - t0 >= SPAN_MIN_MS && syncSpans.list.length < 2000) syncSpans.list.push({what: what(), t0, t1}); }
+};
+const argLabel = (args: unknown): string => (Array.isArray(args) ? args.map(String) : []).filter((x, i, all) => x !== "-c" && all[i - 1] !== "-c").slice(0, 3).map(x => path.basename(x).slice(0, 40)).join(" ");
+// //TR: renameSync/copyFileSync/readFileSync burada SARILMAZ: bu dosyayı kullanan testler onları kendi casuslarıyla bozar ve "gerçek" işlevi casus kurulduktan sonra yakalar (sarmalanırsa özyineleme olur).
+const FS_SPANNED = ["fsyncSync", "writeFileSync", "rmSync", "cpSync"] as const;
+const realFs = Object.fromEntries(FS_SPANNED.map(n => [n, (fs as unknown as Record<string, (...x: unknown[]) => unknown>)[n]])) as Record<(typeof FS_SPANNED)[number], (...x: unknown[]) => unknown>;
 export function installSlowGit() {
-  vi.spyOn(cp, "spawnSync").mockImplementation(((...a: Parameters<typeof cp.spawnSync>) => {
+  vi.spyOn(cp, "spawnSync").mockImplementation(((...a: Parameters<typeof cp.spawnSync>) => spanned(() => `spawnSync:${path.basename(String(a[0]))} ${argLabel(a[1])}`, () => {
     if (a[0] === "git") slow.observeSync?.(String((a[2] as {cwd?: unknown} | undefined)?.cwd ?? ""), Array.isArray(a[1]) ? a[1].map(String) : []); // //TR: yalnız senkron git çağrılarını gözler (span içinde mi sorusu için)
     if (isSlow(a[0], a[1], a[2])) { slow.hits.sync += 1; for (const until = Date.now() + slow.rule!.ms; Date.now() < until;) { /* senkron git: olay döngüsü bloklanır */ } }
     return realSpawnSync(...a);
-  }) as typeof cp.spawnSync);
+  })) as typeof cp.spawnSync);
+  for (const n of FS_SPANNED) vi.spyOn(fs as unknown as Record<string, (...x: unknown[]) => unknown>, n).mockImplementation((...x: unknown[]) => spanned(() => `${n}:${typeof x[0] === "string" ? path.basename(x[0]).slice(0, 40) : typeof x[0]}`, () => realFs[n](...x)));
   vi.spyOn(cp, "spawn").mockImplementation(((...a: unknown[]) => {
     const [cmd, args, opts] = a as [string, string[], unknown];
     if (cmd === "git") slow.observe?.(String((opts as {cwd?: unknown} | undefined)?.cwd ?? ""), Array.isArray(args) ? args.map(String) : [], ((opts as {env?: NodeJS.ProcessEnv} | undefined)?.env) ?? {});
@@ -88,16 +101,23 @@ export const stopWithin = async (p: Promise<unknown>, ms = 15_000): Promise<"OK"
   let t: NodeJS.Timeout | undefined;
   try { return await Promise.race([p.then(() => "OK" as const), new Promise<"STOP_HUNG">(r => { t = setTimeout(() => r("STOP_HUNG"), ms); })]); } finally { clearTimeout(t); }
 };
-// //TR: #224 tur 3 (Windows HB-1 onarımı): lease testlerinde olay döngüsü gecikmesini ÖLÇER (50 ms'lik bir zamanlayıcının en büyük sapması) ve harcanan CPU süresini (process.cpuUsage) kaydeder. Başarısızlık iletisine eklenir. Yorum kuralı: TTL'yi aşan bir gecikme, aksi KANITLANMADIKÇA bir gerilemedir. Bu testlerin koruduğu gerileme, olay döngüsünü bloklayan senkron bekleme/iştir: böyle bir bekleme CPU'yu YAKAR ya da bloklar ve duvar süresi boyunca döngü akmaz, yani cpuMs duvar süresine yakındır (senkron iş) ya da döngü tamamen durur; bu bir "marj" değildir. Süreç CPU'dan yoksun kaldıysa cpuMs duvar süresinin çok altındadır ve bu AYRICA gösterilmelidir; tek başına sorunu "marj" yapmaz. Gecikme TTL'nin altında olduğu hâlde bir run fence edildiyse sorun gerçek bir lease boşluğudur.
+// //TR: #224 tur 3 (Windows HB-1 onarımı): lease testlerinde olay döngüsü gecikmesini ÖLÇER (50 ms'lik bir zamanlayıcının en büyük sapması) ve harcanan CPU süresini (process.cpuUsage) kaydeder. Başarısızlık iletisine eklenir. Yorum kuralı: TTL'yi aşan bir gecikme, aksi KANITLANMADIKÇA bir gerilemedir. Bu testlerin koruduğu gerileme, olay döngüsünü bloklayan senkron bekleme/iştir: böyle bir bekleme CPU'yu YAKAR ya da bloklar ve duvar süresi boyunca döngü akmaz, yani cpuMs duvar süresine yakındır (senkron iş) ya da döngü tamamen durur; bu bir "marj" değildir. Süreç CPU'dan yoksun kaldıysa cpuMs duvar süresinin çok altındadır ve bu AYRICA gösterilmelidir; tek başına sorunu "marj" yapmaz. Gerçek tolerans TTL değil, TTL eksi bir heartbeat periyodudur: runner heartbeatMs() = floor(TTL/3) (core/workos/runner.ts heartbeatMs, adım heartbeat'i setInterval(renew, heartbeatMs) ~652. satır), iki yenileme arasındaki en uzun boşluk tek bir döngü gecikmesi + en çok bir heartbeat periyodudur; yani ~2/3 TTL'yi (TTL 5 s: 3334 ms, TTL 2 s: 1334 ms) aşan TEK bir gecikme kendi başına fence üretebilir ve bu bir defter boşluğu kanıtı değildir (C2, 2026-11-05 run 41971579107: 3451 ms > 3334 ms). Yalnız gecikme bu toleransın altında kaldığı hâlde fence olduysa sorun gerçek bir lease boşluğudur.
 export const stallProbe = (tickMs = 50) => {
-  let last = performance.now(), max = 0;
+  let last = performance.now(), max = 0, win: [number, number] = [0, 0];
   const t0 = performance.now(), cpu0 = process.cpuUsage();
-  const t = setInterval(() => { const n = performance.now(); max = Math.max(max, n - last - tickMs); last = n; }, tickMs);
+  syncSpans.on = true; syncSpans.list = [];
+  const t = setInterval(() => { const n = performance.now(); if (n - last - tickMs > max) { max = n - last - tickMs; win = [last, n]; } last = n; }, tickMs);
   return {
     maxStallMs: () => Math.round(max),
     cpuMs: () => { const u = process.cpuUsage(cpu0); return Math.round((u.user + u.system) / 1000); },
     wallMs: () => Math.round(performance.now() - t0),
-    stop: () => clearInterval(t)
+    // //TR: En uzun durma penceresiyle örtüşen senkron çağrılar (örtüşme ms'si, büyükten küçüğe, en çok 4) ve bunların pencerenin ne kadarını kapsadığı; kapsam düşükse durma kaydedilmeyen bir işten (CPU, GC, başka senkron G/Ç) gelmiştir.
+    blockers: () => {
+      const ov = syncSpans.list.map(s => ({what: s.what, ms: Math.min(s.t1, win[1]) - Math.max(s.t0, win[0])})).filter(s => s.ms > 0).sort((x, y) => y.ms - x.ms);
+      const covered = Math.min(win[1] - win[0], ov.reduce((n, s) => n + s.ms, 0));
+      return `${JSON.stringify(ov.slice(0, 4).map(s => `${s.what}=${Math.round(s.ms)}`))} covered=${Math.round(covered)}/${Math.round(win[1] - win[0])}ms`;
+    },
+    stop: () => { clearInterval(t); syncSpans.on = false; }
   };
 };
 // //TR: #224 tur 3 (coordinator delta review, 2 tur): stop() sonucu `finally` içinde YUTULMAZ. Gövde çalışır, sonra (her durumda) cleanup ve sınırlı stop yapılır; gövde hatası BİRİNCİL kalır ve aynı anda oluşan diğer sorunlar (cleanup fırlattı, stop() reddedildi, stop() asıldı) onun iletisine EKLENİR; gövde başarılıysa bu sorunların kendisi başarısızlıktır. Böylece asılı/reddedilen bir stop() testi geçirmez ve gövdenin gerçek hatasını da örtmez.
