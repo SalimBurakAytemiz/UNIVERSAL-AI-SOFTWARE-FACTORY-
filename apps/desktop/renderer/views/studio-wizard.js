@@ -11,7 +11,7 @@ export const IDEA_FORM="studio-idea";
 const IDEA_KEYS=["id:studio-idea-submit","id:studio-idea-t"];
 // Odak yedekleri (focusKey biçimi): eylemden sonra aynı denetim varsa o, yoksa sonuç/başlık öğesi.
 const WIZARD_KEYS=["id:studio-wizard-submit","id:studio-wizard-t"],IMPORT_KEYS=["id:studio-import-pick","id:studio-import-submit","id:studio-import-t"];
-const wizardInput=()=>({name:wizard.name,template:wizard.template,projectType:wizard.projectType,techStack:wizard.techStack,targetOS:wizard.targetOS,acceptanceCriteria:wizard.acceptanceCriteria,maxRuns:wizard.maxRuns,maxTokens:wizard.maxTokens,devCommand:wizard.devCommand,testCommand:wizard.testCommand});
+const wizardInput=()=>({name:wizard.name,environmentId:wizard.environmentId,template:wizard.template,projectType:wizard.projectType,techStack:wizard.techStack,targetOS:wizard.targetOS,acceptanceCriteria:wizard.acceptanceCriteria,maxRuns:wizard.maxRuns,maxTokens:wizard.maxTokens,devCommand:wizard.devCommand,testCommand:wizard.testCommand});
 
 /** Sihirbazı doğrular; geçerliyse idempotency anahtarıyla POST eder (yalnız kullanıcı gönderimi çağırır). */
 export async function submitWizard(ctx){
@@ -81,6 +81,7 @@ export function wizardPanel(ctx){
     choiceGroup(ctx,{id:"studio-template",legendKey:"studio.wizard.template",hintKey:"studio.wizard.templateHint",type:"radio",errorKey:errs.template,
       options:TEMPLATES.map(v=>({value:v,label:ctx.t(`studio.template.${v}`),desc:ctx.t(`studio.template.${v}.desc`)})),isChecked:v=>d.template===v,onChange:v=>{d.template=v}}),
     field(ctx,{id:"studio-name",labelKey:"studio.wizard.name",value:d.name,onInput:v=>{d.name=v},errorKey:errs.name,required:true}),
+    field(ctx,{id:"studio-env",labelKey:"studio.wizard.env",value:d.environmentId,onInput:v=>{d.environmentId=v},errorKey:errs.environmentId,required:true,hintKey:"studio.wizard.envHint"}),
     field(ctx,{id:"studio-type",labelKey:"studio.wizard.type",value:d.projectType,onInput:v=>{d.projectType=v},errorKey:errs.projectType,hintKey:"studio.wizard.typeHint"}),
     listEditor(ctx,{id:"studio-tech",labelKey:"studio.wizard.tech",itemLabelKey:"studio.wizard.techN",addKey:"studio.wizard.techAdd",removeKey:"studio.wizard.techRemove",items:d.techStack,errorKey:errs.techStack,hintKey:"studio.wizard.techHint"}),
     choiceGroup(ctx,{id:"studio-os",legendKey:"studio.wizard.os",hintKey:"studio.wizard.osHint",type:"checkbox",errorKey:errs.targetOS,
