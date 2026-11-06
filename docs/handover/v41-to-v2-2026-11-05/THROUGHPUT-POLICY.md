@@ -39,3 +39,20 @@ Structural limit: binding to the exact base forces every merge to restart the ne
 
 Completed product changes (merged + main verified): #405 Project Studio wizard sends environmentId (real 400 bug fixed), #404 Assurance shows the newest runs first and states the cut, #360 V3-T1016 quota-resumable. #391 (API validator QA) and #378 (test-surface protection) are quality/safety work.
 Finding: the Windows queue wait dropped to nearly zero; the limit is now Windows run time (~20 min) + re-bind per merge; the pace of ~2 merges/hour is limited by the exact-base binding (not loosened).
+
+## Comparison after 15 merges (2026-11-06 03:50Z; 6.9 hours since the directive)
+| metric | baseline (3 h) | after 5 merges (2.1 h) | after 15 merges (6.9 h) |
+|---|---|---|---|
+| new PRs | 14 | 0 | **2** (#406, #407; both opened by the coordinator with a PR-PERMIT and merged in the same window) |
+| merged PRs | 2 | 5 | **15** |
+| total open PRs | 52 | 47 | **39** |
+| median delivery time | 2.5 h | 3.7 h | 4.9 h (draining old PRs; #406/#407 merged within ~25 min of opening) |
+| Windows queue median / max | 19.9 / 66.2 min | 0.1 / 0.3 | **0.1 / 0.1 min** |
+| Windows run time (median) | 20.4 min | 20.3 | 20.0 min |
+| CI runs / failures | 85 / 3 | 30 / 0 | 92 / 4 |
+| merge rate | ~0.7/h | ~2.4/h | ~2.2/h (every ~27 min) |
+
+Merged (each verify-main MAIN_RUNNING): #360, #391, #378, #404, #405, #402, #401, #394, #395, #387, #393, #406, #339, #369, #407.
+Completed product changes: Project Studio wizard environmentId (#405), Assurance newest runs/tests (#404, #406), release-newest (#402), real-server panels (#401, #394, #395, #393), desktop tour (#387), quota-resumable (#360). Quality/safety: #391, #378, #339 (PAR-03 diagnostic), #369 (devrun reap identity), #407 (WIN-1 v2: root cause of the relfx-c3 Windows flake).
+Remaining Windows flakes (last 4.8 h, 4 failed runs): relfx-c3 PAR-03 fence (#407 merged → expected to be fixed), a heartbeat timing assertion (2390 < 1666 ms, on #380's old head), EPERM/180 s timeout (on #387's old head), pkg-bs1 runas (WIN-4, protected; FOUNDER-QUEUE #3).
+Process notes: (1) the merge gate refuses a malformed `AUTONOMY-EXCEPTIONS` line (fail-closed); reviewer briefs now give the exact format. (2) Reviewer isolation: every PR gets its own fresh reviewer session; one reviewer is never moved onto another PR.

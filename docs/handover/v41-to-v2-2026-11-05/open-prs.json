@@ -315,19 +315,6 @@
       "classification": "FOUNDER_REQUIRED (task SPLIT)"
     },
     {
-      "pr": 369,
-      "branch": "claude/builder-d-devrun-identity",
-      "head": "95f2f58fef95ec4f1ad2fc97392600be710c160b",
-      "base": "v7/integration",
-      "draft": false,
-      "title": "UASCO-T0042: devrun reapTree verifies post-SIGKILL death by identity (PS1A-GRANDCHILD product fix)",
-      "task": "UASCO-T0042",
-      "owner": "D",
-      "ownerSession": "session_015dYwb2SnQF4VdDrbv6gC6n",
-      "reviewerSession": null,
-      "classification": "ROUTINE"
-    },
-    {
       "pr": 368,
       "branch": "claude/builder-g-model-settings-ui",
       "head": "03208b24fb09c9c24d0ce203ac2e59890b218a0f",
@@ -497,19 +484,6 @@
       "classification": "DRAFT"
     },
     {
-      "pr": 339,
-      "branch": "claude/builder-d-qa-par03-diag",
-      "head": "c6cde35690c2b451bedd3a527cb55bb307f60d44",
-      "base": "v7/integration",
-      "draft": false,
-      "title": "UASCO-T0042 QA(C-PAR): PAR-03 fence diagnostic names the synchronous call behind the longest loop stall",
-      "task": "UASCO-T0042",
-      "owner": "D",
-      "ownerSession": "session_015dYwb2SnQF4VdDrbv6gC6n",
-      "reviewerSession": null,
-      "classification": "ROUTINE"
-    },
-    {
       "pr": 327,
       "branch": "claude/builder-a-v3-t1012a-gate",
       "head": "6d388ceed6e8d14a8f1528e5c7e80448a07518fe",
@@ -534,19 +508,6 @@
       "ownerSession": null,
       "reviewerSession": null,
       "classification": "FOUNDER_REQUIRED (no task id)"
-    },
-    {
-      "pr": 406,
-      "branch": "claude/builder-g-t0006-testreports-newest",
-      "head": "6d1af4478a3f33f7f610ab1b23cd2072f30730b2",
-      "base": "v7/integration",
-      "draft": false,
-      "title": "fix(desktop): UASCO-T0006 Assurance test reports keep the newest 500 runs",
-      "task": "UASCO-T0006",
-      "owner": "G",
-      "ownerSession": "session_015dYwb1WPfNEE3SrZ52qm7F",
-      "reviewerSession": "session_015dYwb1RCsEL6GajU6LAxB3",
-      "classification": "ROUTINE"
     }
   ],
   "merged_since_handover_start": [
@@ -561,6 +522,10 @@
     "#394 c705b1af",
     "#395 bb6e0ab7",
     "#387 c7e56c11",
-    "#393 96f2e139"
+    "#393 96f2e139",
+    "#406 c5711e9a",
+    "#369 e09288b9",
+    "#339 c374e04e",
+    "#407 b44ffa47"
   ]
 }
