@@ -24,6 +24,7 @@ import {registerOmniRouteClientCases} from "./support/omniroute-client.cases.js"
 import {registerTemplateLockfileCases} from "./support/template-lockfile.cases.js"; // V3-T1012.a şablon kilit dosyası / npm ci && npm test vakaları
 import {registerCloudDeployCases} from "./support/cloud-deploy.cases.js";     // CLOUD-T0012 ortam ayrımı / anahtar rotasyonu / sağlık / terfi vakaları
 import {registerCloudAcceptanceSuite} from "./cloud/acceptance-suite.mjs";   // CLOUD-T0011 ilk bağlı zincir (loopback, LOCAL_STUB)
+import {registerFv2ExecutorFenceCases} from "./support/fv2-executor-fence.cases.js"; // FV2 governance: executor authority fence (same CI registration)
 
 const SIGNING_FIXTURE="test-scope-key-".repeat(3);
 const now=new Date("2026-11-02T12:00:00Z");
@@ -173,6 +174,7 @@ registerWorkosStoreLockCases();
 registerWorkosStoreIoCases();
 registerAutonomyCases();
 registerAutonomyExecutorCases();
+registerFv2ExecutorFenceCases();
 registerCommandIntakeCases();
 registerModelRouterCases();
 registerCloudProviderRoutingCases();
