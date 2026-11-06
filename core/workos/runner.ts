@@ -244,6 +244,9 @@ export class MissionRunner {
   private readonly boot = bootId();
   private readonly loopDelay: (() => number) | undefined;
 
+  /** Effective concurrent-run limit (1..16), for the start audit: proves what the engine actually runs with. */
+  get maxConcurrentRuns(): number { return this.o.maxConcurrentRuns; }
+
   constructor(opts: RunnerOptions) {
     assertIndependentExecutors(opts.executors);
     this.o = {
