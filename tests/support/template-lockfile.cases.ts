@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import {spawnSync} from "node:child_process";
 import {renderTemplate,lockfileStatus} from "../../core/workos/project-templates.js";
-import {ProjectStudio} from "../../core/workos/project-studio.js";
+import {ProjectStudio,StudioError} from "../../core/workos/project-studio.js";
 import {listZipEntries,readZipEntry} from "../../core/workos/zip.js";
 import type {Project} from "../../core/workos/types.js";
 
@@ -55,7 +55,7 @@ export function registerTemplateLockfileCases():void{
       const ci2=npm(bare,["ci","--offline","--ignore-scripts"]);expect(ci2.code,ci2.out).not.toBe(0);
     },180_000);
 
-    it("project export reports the lockfile in its record and README: PRESENT for the template, MISSING once the lock is removed",()=>{
+    it("project export: PRESENT for the template (record + README); once the lock is removed the export is REFUSED (EXPORT_LOCKFILE_MISSING 409) and nothing is written",()=>{
       const dataDir=path.join(root,"data"),studio=new ProjectStudio({dataDir,envPolicyFile:ENV_POLICY});
       const readme=(file:string)=>{const buf=fs.readFileSync(path.join(dataDir,file));const e=listZipEntries(buf).find(x=>x.name==="README.md")!;return readZipEntry(buf,e).toString("utf8")};
       const id="prj_"+"a".repeat(24),repo=studio.createTemplateRepository(id,"node-lib","Lock Demo");
@@ -64,8 +64,13 @@ export function registerTemplateLockfileCases():void{
       expect(ok.lockfile).toBe("PRESENT");expect(readme(ok.file)).toContain("| Lockfile | PRESENT");
       const g=(args:string[])=>{const r=spawnSync("git",args,{cwd:repo.path,encoding:"utf8",env:{...process.env,GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@x",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@x"}});expect(r.status,r.stderr).toBe(0)};
       g(["rm","-q","package-lock.json"]);g(["commit","-q","-m","drop lock"]);
-      const bad=studio.exportProject(project,[],undefined,"tester");
-      expect(bad.lockfile).toBe("MISSING");expect(readme(bad.file)).toContain("| Lockfile | MISSING");
+      // V3-T1012.a (#324 NB-1): "teslimde kilit dosyası zorunlu": kilitsiz Node teslimi reddedilir; exports dizinine hiçbir şey (zip ya da geçici dizin) yazılmaz
+      const exportsDir=path.join(dataDir,"exports"),before=fs.readdirSync(exportsDir).sort();
+      let refused:unknown=null;try{studio.exportProject(project,[],undefined,"tester")}catch(e){refused=e}
+      expect(refused).toBeInstanceOf(StudioError);
+      expect({code:(refused as StudioError).code,status:(refused as StudioError).status}).toEqual({code:"EXPORT_LOCKFILE_MISSING",status:409});
+      expect(fs.readdirSync(exportsDir).sort(),"no zip, no temp dir").toEqual(before);
+      expect(before.filter(f=>f.endsWith(".zip"))).toEqual([`${ok.exportId}.zip`]);
       const eid="prj_"+"b".repeat(24),erepo=studio.createTemplateRepository(eid,"empty","Empty");
       expect(studio.exportProject({projectId:eid,name:"Empty",repository:{path:erepo.path,managed:true}} as unknown as Project,[],undefined,"tester").lockfile).toBe("NOT_APPLICABLE");
     },60_000);
