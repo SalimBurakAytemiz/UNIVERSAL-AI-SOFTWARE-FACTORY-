@@ -4,7 +4,7 @@ import type {RouteDeps} from "./deps.js";
 import path from "node:path";
 import {ProjectStudio, StudioError} from "../../../../core/workos/project-studio.js";
 import {intakeCommand, INTAKE_MAX_LENGTH} from "../../../../core/mission/command-intake.js";
-import {submitIntake, listIntakes, getIntake, validateIntakeCreate, IntakeError} from "../../../../core/workos/intake.js";
+import {submitIntake, listIntakes, getIntake, validateIntakeCreate, intakeAuthorityCheck, IntakeError} from "../../../../core/workos/intake.js";
 
 export const COMMAND_INTAKE_PATH = "/v1/command-intake";
 const validIntakeId = (x: unknown) => typeof x === "string" && /^itk_[0-9a-f]{24}$/.test(x);
@@ -14,7 +14,7 @@ export function registerIntakeRoutes(app: any, d: RouteDeps): void {
     try { return await fn(req, reply); }
     catch (e) {
       if (e instanceof IntakeError) {
-        const status = e.code === "INTAKE_IDEMPOTENCY_CONFLICT" ? 409 : e.code === "INTAKE_NOT_FOUND" ? 404 : 503;
+        const status = e.code === "INTAKE_IDEMPOTENCY_CONFLICT" ? 409 : e.code === "INTAKE_NOT_FOUND" ? 404 : e.code === "INTAKE_AUTHORITY_REQUIRED" ? 422 : 503;
         return reply.code(status).send({error: e.code});
       }
       if (e instanceof StudioError) return reply.code(e.status).send({error: e.code});
@@ -35,11 +35,17 @@ export function registerIntakeRoutes(app: any, d: RouteDeps): void {
     if (!decision.allowed) { d.audit("WORKOS_WRITE_DENIED", {actor: d.actor, action: "workos.intake.create", reason: decision.reason}); return reply.code(403).send({error: "ACTION_DENIED", reason: decision.reason}); }
     const v = validateIntakeCreate(body);
     if (!v.ok) return reply.code(400).send({error: "INVALID_BODY", detail: v.errors});
+    // //TR: UASCO-T0011 sunucu yetki kapısı (UI kapısından bağımsız; doğrudan API çağrısı da buradan geçer): INSTRUCTION_LIKE/PROTECTED_PATH bayrakları Founder acknowledgedRisks ile TAM onaylamadıkça
+    // 422 ile reddedilir (nedenlerle, denetlenir). Diğer yetki bayrakları engellemez; intake kaydına authorityFlags olarak yazılır ve denetlenir.
+    const gate = intakeAuthorityCheck(body as any);
+    if (!gate.ok) { d.audit("WORKOS_INTAKE_AUTHORITY_REQUIRED", {actor: d.actor, action: "workos.intake.create", reasons: gate.blocking, acknowledged: (body as any).acknowledgedRisks ?? []}); return reply.code(422).send({error: "INTAKE_AUTHORITY_REQUIRED", reasons: gate.blocking}); }
     const store = d.getStore();
     // //TR: Studio yalnız template istendiğinde kurulur (server.ts studio vermişse o örnek kullanılır; yoksa aynı seçeneklerle yerel örnek).
     const studio = (body as any).template === undefined ? undefined : (d.studio?.() ?? new ProjectStudio({dataDir: store.dataDir, envPolicyFile: path.resolve("config", "environment-policy.json")}));
     const r = submitIntake({store, scope: d.scope, orgId: d.orgId, actor: d.actor, ...(studio ? {studio} : {})}, body as any);
     d.audit(r.replayed ? "WORKOS_IDEMPOTENT_REPLAY" : "WORKOS_INTAKE_CREATED", {actor: d.actor, kind: "intake", intakeId: r.intake.intakeId, projectId: r.intake.projectId, missionId: r.intake.missionId, ...(r.intake.template ? {template: r.intake.template} : {})});
+    if (!r.replayed && gate.acknowledged) d.audit("WORKOS_INTAKE_RISK_ACKNOWLEDGED", {actor: d.actor, intakeId: r.intake.intakeId, missionId: r.intake.missionId, reasons: gate.blocking});
+    if (!r.replayed && gate.flags.length) d.audit("WORKOS_INTAKE_AUTHORITY_FLAGGED", {actor: d.actor, intakeId: r.intake.intakeId, missionId: r.intake.missionId, flags: gate.flags});
     return reply.code(r.replayed ? 200 : 201).send({intake: r.intake});
   }));
   // //TR: UASCO-T0010 komut girişi: tek alan -> saf DRAFT önerisi (asla yetkilendirmez, hiçbir şey yazmaz/yürütmez); belirsiz komutta netleştirme sorusu döner. Köken istemciden alınmaz, sunucu "CONTROL_API" atar.
