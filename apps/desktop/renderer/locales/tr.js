@@ -3591,5 +3591,8 @@ export default {
   "predev.notEnabled":"Pre-dev kararları bu sürümde henüz etkin değil: masaüstü kabuğu bu isteklere izin vermiyor. Hiçbir şey gönderilmedi, hiçbir şey değişmedi.",
   "predev.invalid":"Sunucu yanıt verdi ama yanıt okunamadı; bu yüzden sonuç iddia edilmez. Kayıtlı durumu görmek için yeniden yükleyin.",
   "form.field.evidenceRefs":"Kanıt referansları",
-  "form.field.artifact":"Artefakt"
+  "form.field.artifact":"Artefakt",
+  "studio.wizard.env":"Ortam kimliği",
+  "studio.wizard.envHint":"Sunucu bunu zorunlu tutar. Fikir alımının kullandığı varsayılanla aynı olan \"local\" ile önceden doldurulur; harf, rakam, nokta, alt çizgi ve tire, en çok 100.",
+  "studio.err.envRequired":"Bir ortam kimliği girin (örneğin local); sunucu ortam kimliği olmadan proje oluşturmaz."
 };
