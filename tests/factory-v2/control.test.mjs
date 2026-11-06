@@ -294,10 +294,32 @@ describe("P0 blockers from the #388 review: rollback, ledger identity, lost/resu
     expect(c.orch.bind(b.intentId, "session_binderAAAAA1")).toEqual({bound: true});
     expect(() => g2.orch.bind(b.intentId, "session_binderBBBBB1")).toThrow(/INTENT_NOT_PENDING/);
   });
-  it("LIVE mode is refused by the control stack (cutover not authorised)", async () => {
+  it("LIVE control stack: only the live domain on the protected live registry with a non-empty canonical keyring; SHADOW only for probe domains", async () => {
     const {controlStack} = await import("../../automation/factory-v2/control.mjs");
-    expect(() => controlStack({mode: "LIVE", domain: "uasco-v7"}, {repoDir: "."})).toThrow(/CONTROL_LIVE_REQUIRES_CUTOVER/);
+    const {parseKeyring, KEYRING_SCHEMA} = await import("../../automation/factory-v2/identity.mjs");
+    const empty = parseKeyring({schema: KEYRING_SCHEMA, mode: "LIVE", domain: "uasco-v7", keys: []}, {kind: "TEST"});
+    expect(() => controlStack({mode: "LIVE", domain: "probe-x", registryBranch: "uasco/registry"}, {repoDir: ".", registryProtected: true})).toThrow(/CONTROL_LIVE_DOMAIN_OR_REGISTRY_INVALID/);
+    expect(() => controlStack({mode: "LIVE", domain: "uasco-v7", registryBranch: "uasco/other"}, {repoDir: ".", registryProtected: true})).toThrow(/CONTROL_LIVE_DOMAIN_OR_REGISTRY_INVALID/);
+    expect(() => controlStack({mode: "LIVE", domain: "uasco-v7", registryBranch: "uasco/registry"}, {repoDir: "."})).toThrow(/CONTROL_LIVE_REGISTRY_NOT_PROTECTED/);
+    expect(() => controlStack({mode: "LIVE", domain: "uasco-v7", registryBranch: "uasco/registry"}, {repoDir: ".", registryProtected: true, deps: {ring: empty, registry: {}}})).toThrow(/CONTROL_LIVE_KEYRING_EMPTY/);
+    expect(() => controlStack({mode: "SHADOW", domain: "uasco-v7", registryBranch: "uasco/x"}, {repoDir: "."})).toThrow(/CONTROL_SHADOW_REQUIRES_PROBE_DOMAIN/);
     expect(() => controlStack({mode: "SHADOW", domain: "probe-x", registryBranch: "main"}, {repoDir: "."})).toThrow(/CONTROL_REGISTRY_BRANCH_INVALID/);
+    expect(() => controlStack({mode: "TURBO", domain: "probe-x", registryBranch: "uasco/x"}, {repoDir: "."})).toThrow(/CONTROL_MODE_INVALID/);
+  });
+  it("LIVE Supervisor with keys and a protected registry stays STANDBY while no signed V2 authority names it (no dispatch, no ledger epoch)", {timeout: T}, async () => {
+    const {controlStack} = await import("../../automation/factory-v2/control.mjs");
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "fv2-live-")), origin = path.join(root, "o.git");
+    git(root, "init", "-q", "--bare", "-b", "integ", origin); const seed = path.join(root, "seed"); git(root, "clone", "-q", origin, seed);
+    fs.writeFileSync(path.join(seed, "a"), "a"); git(seed, "add", "."); git(seed, "-c", "user.name=t", "-c", "user.email=t@invalid", "commit", "-q", "-m", "a"); git(seed, "push", "-q", "origin", "HEAD:integ");
+    const env = path.join(root, "env"); git(root, "clone", "-q", origin, env);
+    const registry = createSharedRegistry({docStore: createRemoteDocStore({runGit: gitRunner(env)}), ref: "refs/heads/uasco/registry"});
+    const keyFile = path.join(root, "k.json"); fs.writeFileSync(keyFile, JSON.stringify(S.V2));
+    const s = controlStack({mode: "LIVE", domain: "uasco-v7", registryBranch: "uasco/registry", ledgerNs: "live", sessionId: SESS.V2, signerKeyFile: keyFile, repoUrl: "x", dispatchRef: "integ"},
+      {repoDir: env, registryProtected: true, deps: {registry, ring: ringFor("uasco-v7"), liveReaders: {anchored: () => false, hwm: null}}});
+    const st = s.sup.start();
+    expect(st.owner).toBe(false); expect(String(st.authority)).toMatch(/./); // refused by the authority gate (no V2 record for this session)
+    expect((await s.sup.tick()).state).toBe("STANDBY");
+    expect(s.journal.events.length).toBe(0); expect(s.orch.actions()).toEqual([]);
   });
   it("one session cannot be bound to two intents even when the pre-check saw a stale view (race window)", {timeout: T}, async () => {
     const {r} = repo(); const leaseStore = createMemoryStore();

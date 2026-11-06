@@ -44,7 +44,11 @@ Every event signs `ledger = <domain>/<ns>`. Ledgers written before this rule (th
 - Keyring per domain:
   - The live domain `uasco-v7` only uses the canonical keyring at `v7/integration`. That keyring is empty today, so the live ledger cannot be written; this fails closed.
   - `probe-*` domains may use a PROBE keyring file.
-- `mode: "LIVE"` is refused until the Founder cutover (see `CUTOVER-ACCEPTANCE.md`).
+- `mode: "LIVE"` runs only the live domain `uasco-v7` on the protected `uasco/registry` (protection is read through the GitHub adapter on every command), and only when the canonical keyring holds keys.
+  - The Supervisor is gated on every tick by the signed authority record (`bridge.assertV2`).
+  - Until a Founder-authorised cutover commits V2 authority to this session, it stays STANDBY: it writes no ledger epoch and dispatches nothing.
+  - The control commands never prepare, ack or commit a handover.
+- `mode: "SHADOW"` is accepted only for `probe-*` domains.
 - Merge Preparers and the Merge Writer are deterministic, in-process roles of the Supervisor under the exclusive writer lease. They are not model sessions.
 
 ## Verified with real Cloud sessions (2026-11-05, domain `probe-control`, ledger `uasco/fv2-ledger-probe`)
