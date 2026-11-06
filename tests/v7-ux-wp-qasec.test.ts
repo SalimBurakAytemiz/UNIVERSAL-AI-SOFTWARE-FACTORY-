@@ -518,7 +518,10 @@ describe("UI-051 per-run test report (recorded evidence else NOT_EXECUTED, never
       expect(got.state, name).toBe(want.state);
       if (want.state === "VERIFIED") {
         expect(got.total, name).toBe(want.runs.total);
-        got.runs.forEach((g: any, i: number) => { expect(g.runId, name).toBe(want.runs.items[i].runId); expect(g.state, name).toBe(want.runs.items[i].tests); });
+        // mapTestReports keeps the NEWEST TEST_ROWS_MAX runs (the tail of the oldest-first server list); row i maps to readiness item off+i
+        const off = Math.max(0, want.runs.items.length - core.TEST_ROWS_MAX);
+        expect(got.runs.length, name).toBe(want.runs.items.length - off);
+        got.runs.forEach((g: any, i: number) => { expect(g.runId, name).toBe(want.runs.items[off + i].runId); expect(g.state, name).toBe(want.runs.items[off + i].tests); });
       } else {
         expect(got.runs, name).toEqual([]);
       }
@@ -533,6 +536,9 @@ describe("UI-051 per-run test report (recorded evidence else NOT_EXECUTED, never
     const runs = DIFF_CASES.find(c => c[0] === "600 runs")![1]();
     const m = core.mapTestReports({ok: true, data: {runs}});
     expect(m.state).toBe("VERIFIED"); expect(m.runs.length).toBe(500); expect(m.total).toBe(600); expect(m.truncated).toBe(true);
+    // the cut drops the 100 OLDEST runs (server lists oldest first), never the newest
+    expect(m.runs[0].runId).toBe(hexRun(101)); expect(m.runs[499].runId).toBe(hexRun(600));
+    expect(m.runs.map((x: any) => x.runId)).not.toContain(hexRun(1));
     const {ctx} = await mkCtx({workRunsData: {runs}}, "en");
     const {node} = await renderAssurance(ctx);
     expect(text(byData(byId(node, "as-testrep")!, "results", "testreport")[0])).toBe("Showing 150 of 600 runs.");
