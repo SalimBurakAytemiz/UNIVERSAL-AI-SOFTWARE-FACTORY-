@@ -421,6 +421,13 @@
       "task": "UASCO-T0088 scope (FOUNDER_REQUIRED: dep V3-T1002 not MERGED)",
       "head": "7e295f3f",
       "note": "WIN-3 standalone on main 8378d083 (independent of #398): git autoDetach=false env + removeTree 30s teardown; patch-id 061d2e89, blob d54cd746; prepr ok; Windows-only tests"
+    },
+    {
+      "owner": "G",
+      "branch": "claude/builder-g-t0006-testreports-newest",
+      "task": "UASCO-T0006 (routine; PR-PERMIT candidate after #393)",
+      "head": "6d15a24e",
+      "note": "mapTestReports keeps the newest TEST_ROWS_MAX runs (non-blocking finding on #404/#395); on main bb6e0ab7; patch-id 4f43ba28 (G's original 135ac57e); prepr ok, related 79/79"
     }
   ]
 }

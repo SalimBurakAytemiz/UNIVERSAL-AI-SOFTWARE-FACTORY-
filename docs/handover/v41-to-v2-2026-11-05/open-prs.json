@@ -16,32 +16,6 @@
       "classification": "DRAFT; FOUNDER_REQUIRED (V4.1 matrix target 'EXT:supervisor telemetri aracı')"
     },
     {
-      "pr": 402,
-      "branch": "claude/builder-g-t0006-release-newest",
-      "head": "fcdfce9897cdb016dfb07279a22d73b735c32836",
-      "base": "v7/integration",
-      "draft": false,
-      "title": "fix(desktop): UASCO-T0006 Delivery release table shows the newest runs and states the cut",
-      "task": "UASCO-T0006",
-      "owner": "G",
-      "ownerSession": "session_015dYwb1WPfNEE3SrZ52qm7F",
-      "reviewerSession": "session_015dYwb4PkPKNHhtgMbJ34G2",
-      "classification": "ROUTINE"
-    },
-    {
-      "pr": 401,
-      "branch": "claude/builder-i-t0006-subpanels",
-      "head": "be33322036f683f0bda898960662f93ffd0c12e7",
-      "base": "v7/integration",
-      "draft": false,
-      "title": "test(desktop): UASCO-T0006 real-server coverage for five studio/work sub-panels",
-      "task": "UASCO-T0006",
-      "owner": "I",
-      "ownerSession": "session_015dYwb2F7BNWaAJn1Uad5FN",
-      "reviewerSession": "session_015dYwb2LHxqh4LEPVzxsKi1",
-      "classification": "ROUTINE"
-    },
-    {
       "pr": 400,
       "branch": "claude/builder-c-t0083-core-tests-in-ci",
       "head": "3916b44f23787f335c1fcae409c02cffbb7de8b5",
@@ -105,32 +79,6 @@
       "ownerSession": "session_015dYwazZccTReW5Rs2mAhq3",
       "reviewerSession": "session_015dYwazkQywLDxbocCgSeGg",
       "classification": "FOUNDER_REQUIRED (V4.1 matrix: T0124 model=deterministic, target 'EXT:register dalı (supervisor)'; builder PR conflicts with intended owner; CLEAN 7e7d0158/59c06dd7)"
-    },
-    {
-      "pr": 395,
-      "branch": "claude/builder-g-t0006-assurance",
-      "head": "0b70484a2992d3d0e01891057320f90ede470788",
-      "base": "v7/integration",
-      "draft": false,
-      "title": "UASCO-T0006: Assurance view over the real Control API",
-      "task": "UASCO-T0006",
-      "owner": "G",
-      "ownerSession": "session_015dYwb1WPfNEE3SrZ52qm7F",
-      "reviewerSession": "session_015dYwb2ZhNs2qDcsJRHUf1i",
-      "classification": "ROUTINE"
-    },
-    {
-      "pr": 394,
-      "branch": "claude/builder-g-t0006-workforce",
-      "head": "7c48985b087e55c47780eca37f1af266844e9501",
-      "base": "v7/integration",
-      "draft": false,
-      "title": "UASCO-T0006: Workforce view over the real Control API",
-      "task": "UASCO-T0006",
-      "owner": "G",
-      "ownerSession": "session_015dYwb1WPfNEE3SrZ52qm7F",
-      "reviewerSession": "session_015dYwb1py7KfsrkrEFwCGbc",
-      "classification": "ROUTINE"
     },
     {
       "pr": 393,
@@ -612,39 +560,18 @@
       "ownerSession": null,
       "reviewerSession": null,
       "classification": "FOUNDER_REQUIRED (no task id)"
-    },
-    {
-      "pr": 404,
-      "branch": "claude/builder-g-t0006-assurance-newest",
-      "head": "d548583451e072cdca2ce80c244b3e2fa8351191",
-      "base": "v7/integration",
-      "draft": false,
-      "title": "fix(desktop): UASCO-T0006 Assurance keeps the newest runs, shows them first and states the cut",
-      "task": "UASCO-T0006",
-      "owner": "G",
-      "ownerSession": "session_015dYwb1WPfNEE3SrZ52qm7F",
-      "reviewerSession": "session_015dYwb2gzuiaM1PESRTk6Yw",
-      "classification": "ROUTINE",
-      "note": "CLEAN on d548583/59c06dd; in merge loop"
-    },
-    {
-      "pr": 405,
-      "branch": "claude/builder-i-t0006-wizard",
-      "head": "7154f47a4dcfed93581aaf4477c1f70c5453e951",
-      "base": "v7/integration",
-      "draft": false,
-      "title": "fix(desktop): UASCO-T0006 the Project Studio wizard sends the server-required environmentId",
-      "task": "UASCO-T0006",
-      "owner": "I",
-      "ownerSession": "session_015dYwb2F7BNWaAJn1Uad5FN",
-      "reviewerSession": "session_015dYwb2gzuiaM1PESRTk6Yw",
-      "classification": "ROUTINE"
     }
   ],
   "merged_since_handover_start": [
+    "#392 b4bbe4b0",
     "#360 6eada4bd",
     "#391 64e563fa",
     "#378 8378d083",
-    "#392 b4bbe4b0"
+    "#404 591925b8",
+    "#405 fd8b89a6",
+    "#402 b2d7e146",
+    "#401 81ae454e",
+    "#394 c705b1af",
+    "#395 bb6e0ab7"
   ]
 }
