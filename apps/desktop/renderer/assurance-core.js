@@ -290,8 +290,10 @@ export function mapTestReports(r){
   if(!list)return bad("ERROR");
   const rd=mapReadinessWorkRuns({runs:list});
   if(rd.state!=="VERIFIED"||!rd.runs||rd.runs.items.length!==list.length)return bad("ERROR");
-  const runs=list.slice(0,TEST_ROWS_MAX).map((x,i)=>{
-    const row=rd.runs.items[i],head=row.headSha;
+  // //TR: Güvenlik tablosuyla aynı kural: sunucu en eski önce döndürür; en yeni TEST_ROWS_MAX koşu (sunucu sırasının SONU) tutulur, sunucu sırası korunur (gösterim newestFirst ile).
+  const start=Math.max(0,list.length-TEST_ROWS_MAX);
+  const runs=newestWindow(list,TEST_ROWS_MAX).map((x,j)=>{
+    const i=start+j,row=rd.runs.items[i],head=row.headSha;
     const records=x.evidence.map(e=>mapTestRecord(e,head)).filter(Boolean);
     const surface=lastOf(records.filter(q=>q.atHead),q=>q.kind==="TEST_SURFACE"&&q.acceptance!==null);
     return {runId:row.runId,missionId:row.missionId,headSha:head,state:row.tests,records,executedTests:surface?surface.executedTests:null};
