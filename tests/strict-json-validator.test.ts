@@ -6,3 +6,6 @@ describe("strict api json",()=>{
  it("rejects empty and null by default",()=>{const r=validateStrictJson(schema,{id:1,name:"",deletedAt:null});expect(r.valid).toBe(false);expect(r.valuePolicyErrors.length).toBeGreaterThan(0)});
  it("allows explicit nullable path",()=>{const r=validateStrictJson(schema,{id:1,name:"Burak",deletedAt:null},{allowNullPaths:["$.deletedAt"]});expect(r.valid).toBe(true)});
 });
+// //TR: UASCO-T0129 Postman şablonu ile core doğrulayıcı aynı sözleşmede aynı kararı verir (doldurucu + sahte pm sandbox; ayrı kayıt gerektirmez)
+import {registerPostmanStrictParityCases} from "./support/postman-strict-parity.cases.js";
+registerPostmanStrictParityCases();
