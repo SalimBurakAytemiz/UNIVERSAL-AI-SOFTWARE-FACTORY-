@@ -61,11 +61,15 @@ export function parseKeyring(obj, source) {
  */
 export function proposeKeyring(current, entries) {
   if (current?.schema !== KEYRING_SCHEMA) throw new IdentityError("KEYRING_INVALID");
+  const seen = new Set((current.keys ?? []).map(k => `${k.role}|${k.sessionId}`));
   for (const e of entries) {
-    if (/PRIVATE KEY/.test(JSON.stringify(e)) || "privateKeyPem" in (e ?? {})) throw new IdentityError("KEYRING_PRIVATE_MATERIAL_REFUSED");
+    if (!e || typeof e !== "object" || Array.isArray(e)) throw new IdentityError("KEYRING_ENTRY_INVALID");
+    if (/PRIVATE KEY/.test(JSON.stringify(e)) || "privateKeyPem" in e) throw new IdentityError("KEYRING_PRIVATE_MATERIAL_REFUSED");
     const extra = Object.keys(e ?? {}).filter(k => !["keyId", "role", "sessionId", "publicKeyPem", "validUntil"].includes(k));
     if (extra.length) throw new IdentityError("KEYRING_ENTRY_FIELDS", extra.join(","));
-    if ((current.keys ?? []).some(k => k.role === e.role && k.sessionId === e.sessionId)) throw new IdentityError("KEYRING_ROLE_SESSION_ALREADY_REGISTERED", `${e.role}/${e.sessionId}`);
+    const pair = `${e.role}|${e.sessionId}`; // one key per role+session, across the existing keyring AND within this batch
+    if (seen.has(pair)) throw new IdentityError("KEYRING_ROLE_SESSION_ALREADY_REGISTERED", `${e.role}/${e.sessionId}`);
+    seen.add(pair);
   }
   const next = {...current, keys: [...(current.keys ?? []), ...entries.map(({keyId, role, sessionId, publicKeyPem, validUntil}) => ({keyId, role, sessionId, publicKeyPem, ...(validUntil ? {validUntil} : {})}))]};
   parseKeyring(next, {kind: "PROPOSAL"}); // keyId recomputation, roles, session ids, duplicates

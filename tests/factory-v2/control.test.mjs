@@ -363,6 +363,10 @@ describe("P0 blockers from the #388 review: rollback, ledger identity, lost/resu
     expect(() => proposeKeyring(cur, [S.V2])).toThrow(/KEYRING_PRIVATE_MATERIAL_REFUSED/); // a full keygen file, private key included
     expect(() => proposeKeyring(cur, [{...pub(S.V2), note: "x"}])).toThrow(/KEYRING_ENTRY_FIELDS/);
     expect(() => proposeKeyring(next, [pub(S.V2)])).toThrow(/KEYRING_ROLE_SESSION_ALREADY_REGISTERED/);
+    const {generateRoleKey} = await import("../../automation/factory-v2/identity.mjs");
+    const other = generateRoleKey(); // a second, different key for the SAME role+session, in the same batch
+    expect(() => proposeKeyring(cur, [pub(S.V2), {keyId: other.keyId, role: "V2_CANDIDATE", sessionId: S.V2.sessionId, publicKeyPem: other.publicKeyPem}])).toThrow(/KEYRING_ROLE_SESSION_ALREADY_REGISTERED/);
+    expect(() => proposeKeyring(cur, [null])).toThrow(/KEYRING_ENTRY_INVALID/);
     expect(() => proposeKeyring(cur, [{...pub(S.V2), keyId: "k_0000000000000000"}])).toThrow(/KEYRING_KEYID_MISMATCH/);
   });
 });
