@@ -1,6 +1,6 @@
 {
   "//TR": "V4.1 açık PR defteri: her PR tam head SHA, görev, sahip, reviewer oturumu ve kapı sınıfıyla kayıtlıdır (taban 59c06dd7).",
-  "base": "59c06dd76934585e57e160967200f4b8fc472aa9",
+  "base": "bf801870 (2026-11-08 reconciliation; main verify-main MAIN_PASS)",
   "prs": [
     {
       "pr": 403,
@@ -146,19 +146,6 @@
       "classification": "FOUNDER_REQUIRED (no task id)"
     },
     {
-      "pr": 384,
-      "branch": "claude/builder-g-delivery-checklist",
-      "head": "b0020bab3df26a8313393a175cdd1e523b56dc52",
-      "base": "v7/integration",
-      "draft": false,
-      "title": "feat(desktop): delivery checklist with honest levels and run security stage (UASCO-T0015)",
-      "task": "UASCO-T0015",
-      "owner": "G",
-      "ownerSession": "session_015dYwb1WPfNEE3SrZ52qm7F",
-      "reviewerSession": null,
-      "classification": "ROUTINE"
-    },
-    {
       "pr": 383,
       "branch": "claude/builder-h-revision",
       "head": "e58179c0302be6306da2827496c509d7d2aaf5dd",
@@ -196,19 +183,6 @@
       "ownerSession": "session_015dYwb251iBPt3c4oBT7zpK",
       "reviewerSession": null,
       "classification": "FOUNDER_REQUIRED (task SPLIT)"
-    },
-    {
-      "pr": 380,
-      "branch": "claude/builder-c-v3-t1032-a-b",
-      "head": "8a496aa11036b3173dd5f471da72c535f84bfa44",
-      "base": "v7/integration",
-      "draft": false,
-      "title": "V3-T1032: prove the one-open-run/lease-fence invariant + read-only per-task evidence view (whole-run coverage)",
-      "task": "V3-T1032",
-      "owner": "C",
-      "ownerSession": "session_015dYwazZccTReW5Rs2mAhq3",
-      "reviewerSession": null,
-      "classification": "ROUTINE"
     },
     {
       "pr": 379,
@@ -354,19 +328,6 @@
       "classification": "ROUTINE"
     },
     {
-      "pr": 364,
-      "branch": "claude/builder-e-ui-shell-nav",
-      "head": "136acf69b8c5dff71d772263d267611d6362ccb6",
-      "base": "v7/integration",
-      "draft": false,
-      "title": "UASCO-T0005: desktop shell/navigation fixes (unknown routes, skip link, palette focus, window title)",
-      "task": "UASCO-T0005",
-      "owner": "E",
-      "ownerSession": "session_015dYwb251iBPt3c4oBT7zpK",
-      "reviewerSession": null,
-      "classification": "ROUTINE"
-    },
-    {
       "pr": 363,
       "branch": "claude/builder-a-v3-t1027-cockpit",
       "head": "5ec09add0b6bd754dc03ddac33c0991c34a7fe32",
@@ -487,7 +448,10 @@
     "#406 c5711e9a",
     "#369 e09288b9",
     "#339 c374e04e",
-    "#407 b44ffa47"
+    "#407 b44ffa47",
+    "#380 cb88743a",
+    "#384 76a562f1",
+    "#364 bf801870"
   ],
   "founder_merged_v2_line": [
     "#347 e16bd66a (2026-11-06T04:05Z)",
