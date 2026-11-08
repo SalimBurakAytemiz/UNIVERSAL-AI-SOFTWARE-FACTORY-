@@ -586,3 +586,6 @@ registerRendererRealServerCases();
 // //TR: UASCO-T0010 masaüstü köprüsü: POST /v1/command-intake izin listesi (main.mjs POST_ROUTE_RES, Kurucu kapılı) ve gerçek buildServer'a giden panel senaryoları
 import {registerDesktopCommandIntakeBridgeCases} from "./support/desktop-command-intake-bridge.cases.js";
 registerDesktopCommandIntakeBridgeCases();
+// //TR: UASCO-T0005 shell/navigasyon kalitesi: bilinmeyen rota dürüst geri dönüşü, skip-link, palet Tab odağı, pencere başlığı ve gerçek buildServer okumaları
+import {registerShellNavT0005Cases} from "./support/shell-nav-t0005.cases.js";
+registerShellNavT0005Cases();
