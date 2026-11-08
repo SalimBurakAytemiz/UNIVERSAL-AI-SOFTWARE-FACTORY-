@@ -67,8 +67,8 @@ describe("P0-3 shared signed ledger", () => {
 
 /** Fake origin checks for the result channel (real git is exercised in the live cloud verification). */
 function fakeGit(o = {}) { return {tips: {}, trailers: {}, branchTip(b) { return this.tips[b] ?? null; }, fetch: () => true, sessionsOf(h) { return this.trailers[h] ?? null; }, isAncestor: () => true, ...o}; }
-function control({r, sessionId = SESS.V2, now = () => clock.t, g = fakeGit(), leaseStore = createMemoryStore(), backlog = [{id: "T1", name: "add feature", paths: ["work/"], spec: "do it"}], capacity}) {
-  const orch = new CloudOrchestrator({repoUrl: "https://example.invalid/r", domain: D, git: g, now, capacity});
+function control({r, sessionId = SESS.V2, now = () => clock.t, g = fakeGit(), leaseStore = createMemoryStore(), backlog = [{id: "T1", name: "add feature", paths: ["work/"], spec: "do it"}], capacity, requireModelEvidence = false}) {
+  const orch = new CloudOrchestrator({repoUrl: "https://example.invalid/r", domain: D, git: g, now, capacity, requireModelEvidence});
   const sup = new FactorySupervisor({domain: D, mode: "SHADOW", sessionId, journal: new StateJournal(localLedger(r)), leaseStore, executor: orch, backlog: () => backlog, now, leaseTtlMs: 3600_000,
     target: {builders: 2, reviewers: 4, mergePreparers: 1, mergeWriters: 1, supervisors: 1}, dispatchBase: () => sha("b"), isAncestor: () => true, diffPaths: () => ["work/x.txt"]});
   orch.attach(sup);

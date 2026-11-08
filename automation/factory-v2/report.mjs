@@ -23,7 +23,8 @@ export function buildReport({journal, backlog = [], supervisor = {}, github = nu
   const sessions = workers.filter(w => ["RUNNING", "PENDING_SPAWN"].includes(w.status)).map(w => {
     const t = journal.get(w.taskId);
     return {intentId: w.intentId, role: w.role, status: w.status === "RUNNING" ? "ACTIVE" : "AWAITING_SPAWN", sessionId: w.sessionId ?? null, taskId: w.taskId, attempt: w.attempt,
-      taskState: t?.state ?? UNKNOWN, branch: w.branch ?? null, ageMin: Math.round((now - (w.boundAt ?? w.createdAt ?? now)) / 60_000)};
+      taskState: t?.state ?? UNKNOWN, branch: w.branch ?? null, ageMin: Math.round((now - (w.boundAt ?? w.createdAt ?? now)) / 60_000),
+      modelRequested: w.routing?.requestedModel ?? UNKNOWN, modelClass: w.routing?.modelClass ?? UNKNOWN, modelServed: w.model?.servedModel ?? UNKNOWN, costUsdReported: w.model?.costUsdReported ?? UNKNOWN};
   });
   const blockedSessions = workers.filter(w => w.status === "LOST" && journal.get(w.taskId) && !["VERIFIED", "MERGED", "FAILED"].includes(journal.get(w.taskId).state))
     .map(w => ({intentId: w.intentId, role: w.role, sessionId: w.sessionId ?? null, taskId: w.taskId, reason: w.reason ?? null}));
@@ -47,6 +48,14 @@ export function buildReport({journal, backlog = [], supervisor = {}, github = nu
     ...(acceptance ?? []).filter(a => a.status !== "MET").map(a => ({kind: "CUTOVER_CONDITION", id: a.id, status: a.status, condition: a.condition}))
   ];
   const productEvidence = taskRows.flatMap(t => t.evidence.map(e => ({taskId: t.taskId, ...e})));
+  // per model: only platform-reported figures (get_session usage.cost_usd); a worker without an observation is counted as unknown, never estimated
+  const models = {};
+  for (const w of workers.filter(x => x.routing)) {
+    const k = w.model?.servedModel ?? `${w.routing.requestedModel} (not yet observed)`;
+    const m = models[k] ??= {workers: 0, costUsdReported: 0, unknownCost: 0};
+    m.workers++;
+    if (typeof w.model?.costUsdReported === "number") m.costUsdReported += w.model.costUsdReported; else m.unknownCost++;
+  }
   return {
     generatedAt: new Date(now).toISOString(),
     supervisor: {mode: supervisor.mode ?? UNKNOWN, state: supervisor.state ?? UNKNOWN, sessionId: supervisor.sessionId ?? UNKNOWN, epoch: supervisor.epoch ?? UNKNOWN, ledgerSeq: journal.seq},
@@ -56,7 +65,7 @@ export function buildReport({journal, backlog = [], supervisor = {}, github = nu
     queue: queued,
     github: github ? {openPrs: github.openPrs} : UNKNOWN,
     quota: quota ?? UNKNOWN,
-    founderDecisions, productEvidence: productEvidence.length ? productEvidence : [],
+    founderDecisions, productEvidence: productEvidence.length ? productEvidence : [], models,
     remaining: {open: taskRows.filter(t => !["VERIFIED", "MERGED", "FAILED"].includes(t.state)).length + queued.filter(q => !journal.get(q.taskId)).length,
       blockers: taskRows.filter(t => t.blocker).map(t => ({taskId: t.taskId, blocker: t.blocker}))}
   };
@@ -70,7 +79,12 @@ export function renderMarkdown(r) {
   L.push("## Capacity and sessions", "| Role | Capacity | Active | Awaiting spawn | Idle slots | Lost | Completed |", "|---|---|---|---|---|---|---|");
   for (const [k, v] of [["Builders", r.capacity.builders], ["Reviewers", r.capacity.reviewers]]) L.push(`| ${k} | ${cell(v.capacity)} | ${v.running} | ${v.pendingSpawn} | ${cell(v.idleSlots)} | ${v.lost} | ${v.completed} |`);
   L.push(`| Merge preparers | ${cell(r.capacity.mergePreparers)} | in-process | - | - | - | - |`, `| Merge writer | ${cell(r.capacity.mergeWriters)} | in-process | - | - | - | - |`, "");
-  if (r.sessions.length) { L.push("| Session | Role | Status | Task | Task state | Age (min) |", "|---|---|---|---|---|---|"); for (const s of r.sessions) L.push(`| ${cell(s.sessionId ?? s.intentId)} | ${s.role} | ${s.status} | ${cell(s.taskId)} a${s.attempt} | ${s.taskState} | ${s.ageMin} |`); L.push(""); }
+  if (r.sessions.length) { L.push("| Session | Role | Status | Task | Task state | Model requested / served | Age (min) |", "|---|---|---|---|---|---|---|"); for (const s of r.sessions) L.push(`| ${cell(s.sessionId ?? s.intentId)} | ${s.role} | ${s.status} | ${cell(s.taskId)} a${s.attempt} | ${s.taskState} | ${cell(s.modelRequested)} / ${cell(s.modelServed)} | ${s.ageMin} |`); L.push(""); }
+  if (Object.keys(r.models ?? {}).length) {
+    L.push("Models (served model, platform-reported cost; UNKNOWN where not reported):");
+    for (const [k, v] of Object.entries(r.models)) L.push(`- ${k}: ${v.workers} worker(s), USD ${v.costUsdReported.toFixed(4)} reported${v.unknownCost ? `, ${v.unknownCost} without a reported cost` : ""}`);
+    L.push("");
+  }
   if (r.blockedSessions.length) { L.push("Lost sessions with unfinished tasks:"); for (const s of r.blockedSessions) L.push(`- ${cell(s.sessionId ?? s.intentId)} (${s.role}) task ${s.taskId}: ${cell(s.reason)}`); L.push(""); }
   L.push("## Tasks", `Counts: ${cell(r.tasks.counts)}`, "", "| Task | Area | State | Owners | PR | Review | CI | Merge | Blocker |", "|---|---|---|---|---|---|---|---|---|");
   for (const t of r.tasks.rows) L.push(`| ${cell(t.taskId)} ${cell(t.name)} | ${cell(t.area)} | ${t.state} a${t.attempt} | ${cell(t.owners.join(", "))} | ${cell(t.pr)} | ${cell(t.review)} | ${cell(t.ci)} | ${cell(t.merge)} | ${cell(t.blocker)} |`);

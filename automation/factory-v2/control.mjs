@@ -11,6 +11,7 @@ import {CloudOrchestrator, gitChecks} from "./cloud-orchestrator.mjs";
 import {parseKeyring, loadCanonicalKeyring} from "./identity.mjs";
 import {buildReport, renderMarkdown, parseAcceptance} from "./report.mjs";
 import {AuthorityBridge} from "./bridge.mjs";
+import {sessionModelFacts} from "./model-router.mjs";
 import {liveAuthorityReaders} from "./v41-guard.mjs";
 
 const readJson = p => JSON.parse(fs.readFileSync(p, "utf8"));
@@ -113,5 +114,8 @@ export async function factoryCommand(argv, {root}) {
     return out(s.journal.fact(arg("task"), arg("fact"), JSON.parse(arg("value")), s.sup.fence()));
   }
   if (sub === "workers") return out(s.orch.workers());
-  throw new Error("usage: factory tick|actions|bind --intent --session|result --intent --session --text-file|lost --intent [--reason]|fact --task --fact --value|workers|report [--github] [--quota f] [--json f] --config c.json");
+  // --session-info <file>: the get_session JSON of the bound worker session, as the control session read it from the platform
+  if (sub === "observe") { const f = sessionModelFacts(readJson(arg("session-info"))); return out(s.orch.observe(arg("intent"), {...f, sessionId: arg("session") ?? f.sessionId})); }
+  if (sub === "model-failure") return out(s.orch.modelFailure(arg("intent"), fs.readFileSync(arg("error-file"), "utf8")));
+  throw new Error("usage: factory tick|actions|bind --intent --session|result --intent --session --text-file|lost --intent [--reason]|fact --task --fact --value|workers|observe --intent --session --session-info f|model-failure --intent --error-file f|report [--github] [--quota f] [--json f] --config c.json");
 }

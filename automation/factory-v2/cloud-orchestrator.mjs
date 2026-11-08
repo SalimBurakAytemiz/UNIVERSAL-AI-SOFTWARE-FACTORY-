@@ -2,6 +2,7 @@
 import crypto from "node:crypto";
 const canonKey = v => crypto.createHash("sha256").update(JSON.stringify(v)).digest("hex").slice(0, 16);
 import {spawnSync} from "node:child_process";
+import {routeJob, availabilityFrom, classifyModelError, classOfModel, servedSatisfies, DEFAULT_MODELS} from "./model-router.mjs";
 
 export const WORKER_ROLES = Object.freeze({BUILDER: "BUILDER", REVIEWER: "CLAUDE_REVIEWER"});
 export const DEFAULT_CAPACITY = Object.freeze({BUILDER: 8, REVIEWER: 4});
@@ -36,8 +37,8 @@ export function gitChecks({repoDir, remote = "origin"}) {
  * start/reattach/poll are called by the Supervisor; actions/bind/lost/submitResult/expire are called by the control session (CLI).
  */
 export class CloudOrchestrator {
-  constructor({repoUrl, domain, promptFor = defaultPrompt, capacity, git, now = Date.now, spawnTimeoutMs = 30 * 60_000, runTimeoutMs = 6 * 3600_000}) {
-    Object.assign(this, {repoUrl, domain, promptFor, explicitCapacity: capacity ?? null, git, now, spawnTimeoutMs, runTimeoutMs});
+  constructor({repoUrl, domain, promptFor = defaultPrompt, capacity, git, now = Date.now, spawnTimeoutMs = 30 * 60_000, runTimeoutMs = 6 * 3600_000, models = DEFAULT_MODELS, requireModelEvidence = true, quotaBackoffMs = 3600_000}) {
+    Object.assign(this, {repoUrl, domain, promptFor, explicitCapacity: capacity ?? null, git, now, spawnTimeoutMs, runTimeoutMs, models, requireModelEvidence, quotaBackoffMs});
     this.waiters = new Map();
   }
   /** Bind to the Supervisor whose journal (shared ledger) and fence this orchestrator writes with. */
@@ -59,12 +60,50 @@ export class CloudOrchestrator {
     const branch = role === "BUILDER" ? `fv2w/${safe(this.domain)}/${safe(job.taskId)}-a${job.attempt ?? 0}-${intentId.slice(7)}` : null;
     const revision = role === "BUILDER" ? job.fromSha : job.headSha;
     if (!SHA.test(revision ?? "")) throw new OrchestratorError("REVISION_INVALID");
+    // Model routing (core/policy/model-routing.ts contract): class from complexity/risk, only upward, CRITICAL never below SENIOR,
+    // availability from what the platform actually served before; escalation is bounded by the task's own attempts.
+    const builder = role === "REVIEWER" ? this.workers(w => w.role === "BUILDER" && w.taskId === job.taskId && w.attempt === (job.attempt ?? 0) && w.sessionId).at(-1) : null;
+    const escalate = role === "BUILDER" ? this.workers(w => w.role === "BUILDER" && w.taskId === job.taskId && w.status === "FAILED" && !w.modelError).length : 0;
+    const route = routeJob({...job, role, builderSession: builder?.sessionId ?? null}, {models: this.models, availability: this.availability(), escalate});
+    if (route.decision !== "ROUTE") throw new OrchestratorError(route.decision === "WAIT" ? "MODEL_QUOTA_WAIT" : "MODEL_UNAVAILABLE", `${route.code}:${route.requiredClass ?? ""}`);
+    const routing = {complexity: route.complexity, requiredClass: route.requiredClass, modelClass: route.modelClass, requestedModel: route.model, reasons: route.reasons, escalate};
     const ctx = {...job, role, intentId, nonce, branch, domain: this.domain};
     const createSession = {title: `UASCO ${WORKER_ROLES[role]} ${job.slotId} ${job.taskId} a${job.attempt ?? 0}`, source_url: this.repoUrl, source_revision: revision,
-      ...(branch ? {outcome_branch: branch} : {}), tags: ["uasco-factory-v2", `role:${role.toLowerCase()}`, `slot:${job.slotId}`, `task:${job.taskId}`, `intent:${intentId}`], prompt: this.promptFor(ctx)};
+      ...(branch ? {outcome_branch: branch} : {}), tags: ["uasco-factory-v2", `role:${role.toLowerCase()}`, `slot:${job.slotId}`, `task:${job.taskId}`, `intent:${intentId}`, `model:${route.modelClass.toLowerCase()}`], model: route.model, prompt: this.promptFor(ctx)};
     this.journal.worker(intentId, {status: "PENDING_SPAWN", role, kind: job.kind, slotId: job.slotId, taskId: job.taskId, attempt: job.attempt ?? 0, focus: job.focus ?? null, nonce, branch,
-      fromSha: job.fromSha ?? null, headSha: job.headSha ?? null, baseSha: job.baseSha ?? null, createSession, createdAt: this.now()}, this.fence());
+      fromSha: job.fromSha ?? null, headSha: job.headSha ?? null, baseSha: job.baseSha ?? null, createSession, routing, createdAt: this.now()}, this.fence());
     return this.handle(intentId);
+  }
+  /** Platform observations of which models this account could actually use (MODEL_OBSERVATION events in the shared ledger). */
+  availability() { this.journal.reload(); return availabilityFrom(this.journal.events.filter(e => e.kind === "MODEL_OBSERVATION").map(e => ({...e.data, at: e.at})), this.now()); }
+  /**
+   * Record what the platform reports for a bound worker session (get_session: configured_model, session_context.model,
+   * external_metadata.last_served_model). The served model is the evidence; a fallback below the required class is a MODEL_DOWNGRADED worker.
+   */
+  observe(intentId, {sessionId, configuredModel = null, sessionModel = null, servedModel = null, costUsdReported = null, rateLimit = null}) {
+    const rec = this.workers().find(w => w.intentId === intentId);
+    if (!rec) throw new OrchestratorError("INTENT_UNKNOWN", intentId);
+    if (rec.sessionId !== sessionId) throw new OrchestratorError("SESSION_NOT_BOUND_TO_INTENT");
+    if (!servedModel) return {recorded: false, reason: "NOT_YET_SERVED"};
+    const req = rec.routing?.requestedModel ?? null, reqClass = rec.routing?.requiredClass ?? null;
+    const sameFamily = !!req && classOfModel(servedModel) === classOfModel(req);
+    const satisfies = reqClass ? servedSatisfies(reqClass, servedModel) : true;
+    const model = {configuredModel, sessionModel, servedModel, sameFamily, satisfiesRequired: satisfies, costUsdReported, rateLimit, observedAt: this.now()};
+    this.journal.worker(intentId, {status: rec.status, model}, this.fence(), `worker:${intentId}:model:${servedModel}:${sessionModel}:${costUsdReported}`);
+    this.journal.record("MODEL_OBSERVATION", {model: req, outcome: sameFamily ? "OK" : "FALLBACK", servedModel, intentId}, this.fence(), `model-obs:${intentId}:${servedModel}`);
+    if (sameFamily) this.journal.record("MODEL_OBSERVATION", {model: servedModel, outcome: "OK", intentId}, this.fence(), `model-obs-served:${intentId}:${servedModel}`);
+    return {recorded: true, ...model};
+  }
+  /** create_session (or the session) failed for a model reason: classify (QUOTA / ACCESS / AUTH), mark the model, release the task. */
+  modelFailure(intentId, errorText) {
+    const rec = this.workers().find(w => w.intentId === intentId);
+    if (!rec) throw new OrchestratorError("INTENT_UNKNOWN", intentId);
+    const kind = classifyModelError(errorText);
+    if (!kind) return {classified: false};
+    const model = rec.routing?.requestedModel ?? null;
+    this.journal.record("MODEL_OBSERVATION", {model, outcome: kind, ...(kind === "QUOTA" ? {until: this.now() + this.quotaBackoffMs} : {}), intentId}, this.fence(), `model-obs:${intentId}:${kind}`);
+    this.journal.worker(intentId, {status: rec.status, modelError: kind}, this.fence(), `worker:${intentId}:modelError:${kind}`);
+    return {classified: true, kind, model, lost: this.lost(intentId, `MODEL_${kind}`)};
   }
   handle(intentId) {
     let w = this.waiters.get(intentId);
@@ -132,6 +171,10 @@ export class CloudOrchestrator {
     if (!rec) return reject("INTENT_UNKNOWN");
     if (rec.status !== "RUNNING") return reject(`INTENT_NOT_RUNNING:${rec.status}`);
     if (rec.sessionId !== sessionId) return reject("SESSION_NOT_BOUND_TO_INTENT");
+    if (this.requireModelEvidence && rec.routing) { // the routed model must be proven by what the platform served, not only requested
+      if (!rec.model?.servedModel) return reject("MODEL_NOT_VERIFIED");
+      if (!rec.model.satisfiesRequired) return reject(`MODEL_DOWNGRADED:${rec.model.servedModel}<${rec.routing.requiredClass}`);
+    }
     let r; try { r = parseResultText(text); } catch (e) { return reject(e.code); }
     if (r.intentId !== intentId || r.nonce !== rec.nonce) return reject("NONCE_OR_INTENT_MISMATCH");
     if (r.taskId !== rec.taskId || r.attempt !== rec.attempt) return reject("TASK_OR_ATTEMPT_MISMATCH");
