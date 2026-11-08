@@ -380,12 +380,13 @@ const wf = fs.readFileSync(path.join(ROOT, ".github/workflows/uasco-independent-
 const jobBlock = name => { const m = wf.split(/\n  (?=[a-z-]+:\n)/).find(b => b.startsWith(`${name}:`)); return m ?? ""; };
 check("W1 triggers: pull_request_target on v7/integration and manual dispatch only (never pull_request)", /pull_request_target:\n\s+types:.*\n\s+branches: \[v7\/integration\]/.test(wf) && !/^\s+pull_request:/m.test(wf));
 check("W2 workflow-level permissions are empty", /\npermissions: \{\}\n/.test(wf));
-check("W3 every checkout is trusted default-branch code without persisted credentials (ai-review: the base SHA its verdict is bound to)", (wf.match(/actions\/checkout@/g) ?? []).length === 4
-  && (wf.match(/with: \{ref: "\$\{\{ github\.sha \}\}", persist-credentials: false\}/g) ?? []).length === 3
+check("W3 every checkout is trusted default-branch code without persisted credentials (ai-review: the base SHA its verdict is bound to)", (wf.match(/actions\/checkout@/g) ?? []).length === 5
+  && (wf.match(/with: \{ref: "\$\{\{ github\.sha \}\}", persist-credentials: false\}/g) ?? []).length === 4
   && jobBlock("ai-review").includes('with: {ref: "${{ needs.collect.outputs.base_sha }}", persist-credentials: false}') && !/pull_request\.head\.(sha|ref)/.test(wf));
-check("W4 the App key is used only by scope and finish; the Claude token only by ai-review", jobBlock("ai-review").length > 0 && !jobBlock("ai-review").includes("UASCO_REVIEW_APP_PRIVATE_KEY")
+check("W4 the App key is used only by scope and finish; the Claude token only by ai-review and the tool-less token-health probe", jobBlock("ai-review").length > 0 && !jobBlock("ai-review").includes("UASCO_REVIEW_APP_PRIVATE_KEY")
+  && !jobBlock("token-health").includes("UASCO_REVIEW_APP_PRIVATE_KEY") && jobBlock("token-health").includes("CLAUDE_CODE_OAUTH_TOKEN")
   && jobBlock("scope").includes("UASCO_REVIEW_APP_PRIVATE_KEY") && jobBlock("finish").includes("UASCO_REVIEW_APP_PRIVATE_KEY") && !jobBlock("collect").includes("secrets.")
-  && (wf.match(/CLAUDE_CODE_OAUTH_TOKEN/g) ?? []).length === 1 && jobBlock("ai-review").includes("CLAUDE_CODE_OAUTH_TOKEN"));
+  && (wf.match(/CLAUDE_CODE_OAUTH_TOKEN/g) ?? []).length === 2 && jobBlock("ai-review").includes("CLAUDE_CODE_OAUTH_TOKEN"));
 check("W5 every action is pinned to a full commit SHA", (wf.match(/uses: [^\s]+/g) ?? []).every(u => /@[0-9a-f]{40}$/.test(u)));
 check("W6 no untrusted PR text is interpolated into the workflow", !/github\.event\.pull_request\.(title|body|head\.ref|head\.label)/.test(wf) && !/github\.event\.comment/.test(wf));
 check("W7 the reviewer has read-only tools and no shell, write or network tool", /--allowedTools Read,Glob,Grep/.test(wf) && /--disallowedTools Bash,Edit,Write,MultiEdit,NotebookEdit,WebFetch,WebSearch,Task/.test(wf));
@@ -401,12 +402,21 @@ check("W12 uploads carry the run attempt; the input is downloaded by collect's r
 let doc = null;
 try { doc = createRequire(import.meta.url)("js-yaml").load(wf); } catch { doc = null; }
 const jobs = doc?.jobs ?? {};
-check("W13 the workflow is valid YAML with exactly the five expected jobs", doc !== null && JSON.stringify(Object.keys(jobs)) === JSON.stringify(["scope", "founder-authority", "collect", "ai-review", "finish"]));
+check("W13 the workflow is valid YAML with exactly the six expected jobs", doc !== null && JSON.stringify(Object.keys(jobs)) === JSON.stringify(["scope", "founder-authority", "token-health", "collect", "ai-review", "finish"]));
 check("W14 parsed structure: triggers, empty top permissions, environments and job dependencies", doc !== null && JSON.stringify(Object.keys(doc.on ?? {})) === JSON.stringify(["pull_request_target", "workflow_dispatch"])
   && JSON.stringify(doc.on.pull_request_target.branches) === JSON.stringify(["v7/integration"]) && JSON.stringify(doc.permissions) === "{}"
   && jobs.scope?.environment === "uasco-review" && jobs["ai-review"]?.environment === "uasco-review" && jobs.finish?.environment === "uasco-review"
   && jobs.collect?.environment === undefined && jobs["founder-authority"]?.environment === FOUNDER_ENVIRONMENT
-  && JSON.stringify(jobs.finish?.needs) === JSON.stringify(["scope", "founder-authority", "collect", "ai-review"]) && !JSON.stringify(jobs["ai-review"]?.permissions ?? {}).includes("write"));
+  && JSON.stringify(jobs.finish?.needs) === JSON.stringify(["scope", "token-health", "founder-authority", "collect", "ai-review"]) && !JSON.stringify(jobs["ai-review"]?.permissions ?? {}).includes("write")
+  && jobs["token-health"]?.environment === "uasco-review" && JSON.stringify(jobs["token-health"]?.permissions) === JSON.stringify({contents: "read"})
+  && JSON.stringify(jobs["token-health"]?.needs) === "\"scope\"" && JSON.stringify(jobs.collect?.needs) === JSON.stringify(["scope", "token-health"]));
+check("W25 the token-health probe: fixed prompt, one turn, every tool disallowed, no PR content or artifact, only an explicit false skips the CI wait, and it can only add a failure reason",
+  doc !== null && (() => { const steps = jobs["token-health"]?.steps ?? [], probe = steps.find(x => x.id === "probe"), health = steps.find(x => x.id === "health");
+    return probe?.with?.prompt === "Reply with the single word OK." && probe?.with?.claude_args === "--max-turns 1 --disallowedTools Bash,Read,Glob,Grep,Edit,Write,MultiEdit,NotebookEdit,WebFetch,WebSearch,Task"
+      && probe?.["continue-on-error"] === true && health?.run === "node scripts/ci/uasco-review/run.mjs token-health" && health?.["continue-on-error"] === true
+      && !steps.some(x => String(x.uses ?? "").includes("download-artifact")) && !JSON.stringify(steps).includes("pull_request")
+      && jobs.collect?.if === "needs.scope.result == 'success' && needs.token-health.outputs.healthy != 'false'"
+      && (jobs.finish?.steps ?? []).some(x => x.env?.TOKEN_HEALTHY === "${{ needs.token-health.outputs.healthy }}" && x.run === "node scripts/ci/uasco-review/run.mjs decide"); })());
 check("W15 the check-write token never carries pull-request write; approval uses its own token, only after a passed check", jobBlock("finish").split("id: approval-token")[0].includes("permission-checks: write")
   && !jobBlock("finish").split("id: approval-token")[0].includes("permission-pull-requests") && /id: approval-token\n\s+if: \$\{\{ !cancelled\(\) && steps\.finish\.outputs\.final == 'success' && vars\.UASCO_REVIEW_SUBMIT_APPROVAL == 'true' \}\}/.test(wf)
   && /permission-pull-requests: write\n/.test(jobBlock("finish").split("id: approval-token")[1] ?? ""));
@@ -787,6 +797,14 @@ const green = [{name: UBU, status: "completed", conclusion: "success"}, {name: W
   const srec = fs.readFileSync(path.join(sdir, "reviewer-diagnostics.json"), "utf8");
   check("E21g a refused schema is written as REVIEWER_SCHEMA_REJECTED with only the five keys; none of the record's text is kept",
     rs.code === 0 && JSON.parse(srec).code === "REVIEWER_SCHEMA_REJECTED" && onlyKeys(JSON.parse(srec)) && !leakedE(srec) && !srec.includes("invalid_request_error") && !leakedE(rs.out));
+  { // token-health: healthy=false ONLY for an explicit credential rejection; ok, unreadable and unclassified records leave the normal (fail-closed) flow in charge
+    const th = async (body, name) => { const f = path.join(tmp, `th-${name}.json`), o = path.join(tmp, `th-${name}.out`); if (body !== null) fs.writeFileSync(f, body); fs.writeFileSync(o, "");
+      const r = await runPhase("token-health", {EXECUTION_FILE: body === null ? path.join(tmp, "th-absent.json") : f, GITHUB_OUTPUT: o, GITHUB_STEP_SUMMARY: ""}); return {code: r.code, out: fs.readFileSync(o, "utf8"), log: r.out + r.err}; };
+    const auth = await th(execFile(errResult("Invalid API key · Please run /login")), "auth"), ok = await th(execFile(okResult), "ok"), absent = await th(null, "absent"), other = await th(execFile(errResult(undefined)), "other");
+    check("E21i token-health: an explicit credential rejection => healthy=false; a served reply, a missing record or an unclassified error => healthy=true; never fails the job, never copies record text",
+      [auth, ok, absent, other].every(x => x.code === 0) && /^healthy=false$/m.test(auth.out) && /^healthy=true$/m.test(ok.out) && /^healthy=true$/m.test(absent.out) && /^healthy=true$/m.test(other.out)
+      && /REVIEWER_TOKEN_INVALID/.test(auth.log) && !/Invalid API key/.test(auth.out + auth.log));
+  }
   check("E21c the execution file is taken only from EXECUTION_FILE, never from argv", argv.code === 0 && fs.readFileSync(path.join(tmp, "out-argv", "reviewer-diagnostics.json"), "utf8").trim() === UNREADABLE_REC);
   const auth = {code: "REVIEWER_AUTH_REJECTED", isError: true, turns: 1, durationMs: 305, modelUsed: false};
   const dec = r => JSON.parse(fs.readFileSync(path.join(r.dir, "decision.json"), "utf8"));
