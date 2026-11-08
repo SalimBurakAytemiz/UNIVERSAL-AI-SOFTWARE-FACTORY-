@@ -1,6 +1,6 @@
 {
   "schema": "uasco.factory-v2.shared-registry/1",
-  "phase": "section:lease/shadow-probe-control/task--FV2-MR-1",
+  "phase": "section:ledger/run3-models/c/000001",
   "sections": {
     "lease/shadow-probe-control/supervisor--SHADOW-probe-control": {
       "taskId": "supervisor--SHADOW-probe-control",
@@ -2740,6 +2740,48 @@
             "nonce": "3c330f60-e95d-4222-aec8-1f6e96d2c628",
             "signature": "iLjrd4yKdRISC1HFxajIJEjCmbpp8sONRWwCPMeFTal2QjRl38JmufimQt/oNQtXe7U6MQ6ihOyZG5A1dOQrAg=="
           }
+        },
+        {
+          "kind": "TRANSITION",
+          "taskId": "FV2-MR-1",
+          "from": "BUILT",
+          "to": "REVIEWING",
+          "attempt": 0,
+          "idempotencyKey": "FV2-MR-1:4:REVIEWING",
+          "data": {
+            "required": [
+              "ARCHITECTURE_CORRECTNESS"
+            ],
+            "risk": {
+              "level": "LOW",
+              "security": false,
+              "crossSystem": false
+            },
+            "verdicts": [],
+            "reviewers": [
+              "reviewer-R1"
+            ]
+          },
+          "fenceEpoch": 1,
+          "fenceToken": "session_015dYwb57qx21P4wudU5xauD:2:310a38c8-dae4-4ab5-b816-ca2a1f037a2e",
+          "seq": 15,
+          "at": 1794160948283,
+          "prev": "14b88751499e6f4c519ca31e0fe50144484dac253872ec4987669c92318ed41b",
+          "ledger": "probe-control/run3-models",
+          "sig": {
+            "schema": "uasco.factory-v2.signed-action/1",
+            "domain": "probe-control",
+            "action": "LEDGER",
+            "role": "V2_CANDIDATE",
+            "sessionId": "session_015dYwb57qx21P4wudU5xauD",
+            "keyId": "k_225059701e7e1b78",
+            "prev": "14b88751499e6f4c519ca31e0fe50144484dac253872ec4987669c92318ed41b",
+            "payloadDigest": "9a08b9fc26aa36a7590e92e5497ce2d885a47f5965eb88f448302e6646e5ad08",
+            "issuedAt": 1794160950975,
+            "expiresAt": 1825696950975,
+            "nonce": "4ee6dac5-6a5b-4407-bcd9-16c5aca923b2",
+            "signature": "4AHpH+my6Ozcg+b9v1aHcLifrJHEfEWqn5SJs2yblJjxaTBxFmWvM84/1kH9r+dmJe1ERJdCt/a7mZT4Km/wCg=="
+          }
         }
       ]
     },
@@ -2764,8 +2806,8 @@
     "lease/shadow-probe-control/task--FV2-PROBE-CTL-2": 4,
     "ledger/run2/c/000001": 18,
     "lease/shadow-probe-control/task--FV2-PROBE-S2-1": 2,
-    "ledger/run3-models/c/000001": 14,
+    "ledger/run3-models/c/000001": 15,
     "lease/shadow-probe-control/task--FV2-MR-1": 2
   },
-  "seq": 138
+  "seq": 139
 }
