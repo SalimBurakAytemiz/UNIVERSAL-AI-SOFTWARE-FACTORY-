@@ -236,19 +236,20 @@ let core: any;
 beforeEach(async () => { core = await load(rend, "project-core.js"); });
 
 describe("PS-1B wizard and request builders", () => {
-  const base = () => ({name: " Mağaza ", template: "web-node", projectType: "web", techStack: ["Node.js", "", "React"], targetOS: ["windows", "linux"], acceptanceCriteria: ["Giriş çalışır", " "], maxRuns: "20", maxTokens: "2000000", devCommand: ["npm", "run", "dev", ""], testCommand: ["node", "--test"]});
+  const base = () => ({name: " Mağaza ", environmentId: " local ", template: "web-node", projectType: "web", techStack: ["Node.js", "", "React"], targetOS: ["windows", "linux"], acceptanceCriteria: ["Giriş çalışır", " "], maxRuns: "20", maxTokens: "2000000", devCommand: ["npm", "run", "dev", ""], testCommand: ["node", "--test"]});
   it("builds the exact POST /v1/projects body with argv arrays, trimmed values, budget and no extra keys", () => {
     const r = core.buildWizardRequest(base(), {key: "ui-abc"});
     expect(r.ok).toBe(true);
     expect(r.path).toBe("/v1/projects");
-    expect(r.body).toEqual({name: "Mağaza", template: "web-node", projectType: "web", techStack: ["Node.js", "React"], targetOS: ["windows", "linux"], acceptanceCriteria: ["Giriş çalışır"], budget: {maxRuns: 20, maxTokens: 2000000}, devCommand: ["npm", "run", "dev"], testCommand: ["node", "--test"], idempotencyKey: "ui-abc"});
+    expect(r.body).toEqual({name: "Mağaza", environmentId: "local", template: "web-node", projectType: "web", techStack: ["Node.js", "React"], targetOS: ["windows", "linux"], acceptanceCriteria: ["Giriş çalışır"], budget: {maxRuns: 20, maxTokens: 2000000}, devCommand: ["npm", "run", "dev"], testCommand: ["node", "--test"], idempotencyKey: "ui-abc"});
     expect(Array.isArray(r.body.devCommand)).toBe(true);
     expect(JSON.stringify(r.body)).not.toMatch(/"devCommand":"/);
   });
-  it("supports the empty template with only a name; optional fields are omitted, not sent blank", () => {
-    const r = core.buildWizardRequest({name: "Boş", template: "empty", techStack: [""], targetOS: [], acceptanceCriteria: [""], maxRuns: "", maxTokens: "", devCommand: [""], testCommand: [""]});
-    expect(r).toEqual({ok: true, path: "/v1/projects", body: {name: "Boş", template: "empty"}});
-    for (const t of core.TEMPLATES) expect(core.buildWizardRequest({name: "x", template: t}).ok).toBe(true);
+  it("supports the empty template with only a name and the (server-required) environment; optional fields are omitted, not sent blank", () => {
+    const r = core.buildWizardRequest({name: "Boş", environmentId: "local", template: "empty", techStack: [""], targetOS: [], acceptanceCriteria: [""], maxRuns: "", maxTokens: "", devCommand: [""], testCommand: [""]});
+    expect(r).toEqual({ok: true, path: "/v1/projects", body: {name: "Boş", environmentId: "local", template: "empty"}});
+    for (const t of core.TEMPLATES) expect(core.buildWizardRequest({name: "x", environmentId: "local", template: t}).ok).toBe(true);
+    expect(core.buildWizardRequest({name: "x", template: "empty"}).ok).toBe(false); // UASCO-T0006: the real server requires environmentId (400 INVALID_BODY without it)
     expect([...core.TEMPLATES]).toEqual(["web-node", "node-lib", "empty"]);
   });
   it("rejects shell-string commands, bad templates, OS values, budgets, oversize bodies and bad keys", () => {
@@ -257,6 +258,8 @@ describe("PS-1B wizard and request builders", () => {
     expect(err({template: ""}).template).toBe("studio.err.template");
     expect(err({name: " "}).name).toBe("err.nameRequired");
     expect(err({name: "a".repeat(201)}).name).toBe("err.nameLong");
+    expect(err({environmentId: ""}).environmentId).toBe("studio.err.envRequired"); expect(err({environmentId: "  "}).environmentId).toBe("studio.err.envRequired");
+    expect(err({environmentId: "bad env!"}).environmentId).toBe("err.envInvalid"); expect(err({environmentId: "e".repeat(101)}).environmentId).toBe("err.envInvalid");
     expect(err({devCommand: ["npm run dev"]}).devCommand).toBe("studio.err.argvShellString");
     expect(err({devCommand: "npm run dev"}).devCommand).toBe("studio.err.argvInvalid");
     expect(err({devCommand: ["npm", "a\u0000b"]}).devCommand).toBe("studio.err.argvControl");

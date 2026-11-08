@@ -8,7 +8,7 @@ import {notVerifiedBadge,runNotVerified} from "../m1a.js";
 import {STUDIO_TABS,GIT_LOG_LIMIT,buildDevRunRequest,buildExportRequest,previewOpenable,devRunActions,diffLineKind,formatBytes,joinRel,parentRel,validRelPath,latestRunFor,securitySummary} from "../project-core.js";
 import {studio,setTab} from "../studio-state.js";
 import {importPanel} from "./studio-wizard.js";
-import {runDeliveriesPanel} from "./delivery-panel.js";
+import {runDeliveriesPanel,loadDeliverySecurity} from "./delivery-panel.js";
 import {flowPanel} from "./flow-panel.js";
 import {productCard} from "./product-card.js";
 import {knowledgePanel} from "./knowledge-panel.js";
@@ -266,6 +266,7 @@ async function deliveryTab(ctx,project){
     field(ctx,{id:"studio-export-commit",labelKey:"studio.export.commit",value:studio.commit,onInput:v=>{studio.commit=v},errorKey:errs.commit,hintKey:"studio.export.commitHint"}),
     statusBlock(ctx,EXPORT_FORM),
     h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"submit",class:"btn btn-primary",id:"studio-export-submit",dataset:{focusKey:"studio-export-submit"},disabled:drafts.busy[EXPORT_FORM]===true,text:ctx.t("studio.export.submit")})));
+  deliveries.security=await loadDeliverySecurity(ctx,deliveries);   // teslim kontrol listesi: koşu güvenlik aşaması (GET /v1/work-runs/:id)
   let body;
   if(list.state!=="VERIFIED")body=stateNote(ctx,list.state);
   else if(!list.items.length)body=emptyNote(ctx,"studio.export.empty");

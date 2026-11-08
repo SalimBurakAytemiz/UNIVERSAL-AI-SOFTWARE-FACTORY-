@@ -1,0 +1,36 @@
+{
+  "//TR": "İki gerçek Claude Cloud oturumunda (yalnız probe-uasco alanı, uasco/registry-probe2 dalı, PROBE anahtar listesi) koşan devir güvenliği probunun özet kanıtı; ham satırlar oturum dökümlerindedir. Canlı uasco-v7 otoritesi DEĞİŞMEDİ.",
+  "kind": "TWO_SESSION_SECURITY_PROBE",
+  "isLiveAuthority": false,
+  "code": "b745afe3159f3d931118a04c61d848ea0f9e3520",
+  "probeKeyringCommit": "e65169fad80732314348948e71b9bccb343e1041",
+  "registryBranch": "uasco/registry-probe2",
+  "registryHeadAtEnd": "a1312764de87f3f873e19e410cc1e9d37c584f59",
+  "sessions": {"A_V41_OWNER": "session_015dYwb2b3yVQ6iay68HXCD8", "B_V2_CANDIDATE_AND_ATTACKER": "session_015dYwb4zVwFwg69iij2RdGq"},
+  "note": "An earlier B session (session_015dYwb329M5DxuP1jpVG3EJ) declined to run the probe; it was replaced, not pressured.",
+  "refused": {
+    "B_DIRECT_FORGED_WRITE_then_ASSERT_V2": "SIGNER_KEY_UNKNOWN (the write landed; nobody accepted it)",
+    "A_V41_MAY_DISPATCH_AFTER_FORGERY": "false (V4.1 halts on an unverifiable record)",
+    "B_RESET_INVALID_WITH_CANDIDATE_KEY": "ROLE_NOT_ALLOWED:V2_CANDIDATE->ROLLBACK",
+    "B_PREPARE_TEXT_EVIDENCE": "GATE_REVIEW:EVIDENCE_SHAPE",
+    "B_PREPARE_REAL_BUT_UNMERGED_PR_347": "GATE_REVIEW:PR_NOT_MERGED:347 (live GitHub)",
+    "B_DRAIN_ACK_ACTOR_STRING_AS_V41": "SIGNATURE_REQUIRED",
+    "B_DRAIN_ACK_UNREGISTERED_KEY_CLAIMING_V41": "SIGNER_KEY_UNKNOWN",
+    "B_DRAIN_ACK_WITH_CANDIDATE_KEY": "ROLE_NOT_ALLOWED:V2_CANDIDATE->DRAIN_ACK",
+    "B_RELAY_ALTERED_DRAIN": "PAYLOAD_MISMATCH",
+    "B_COMMIT_WITH_LIVE_FRESHNESS": "MANIFEST_STALE:CANONICAL_BASE_MOVED,PR_348_NO_LONGER_OPEN (real V4.1 activity during the probe)",
+    "A_GUARD_V41_MERGE_MID_HANDOVER": "HANDOVER_IN_PROGRESS:V41_DRAINED",
+    "A_GUARD_SIGNED_INTENT_MID_HANDOVER": "HANDOVER_IN_PROGRESS:V41_DRAINED",
+    "B_ROLLBACK_WITH_CANDIDATE_KEY": "ROLE_NOT_ALLOWED:V2_CANDIDATE->ROLLBACK",
+    "B_ROLLBACK_WITH_UNREGISTERED_KEY": "SIGNER_KEY_UNKNOWN",
+    "WRITER_LEASE_RACE": "exactly one granted (A, epoch 1); B HELD",
+    "STALE_WRITER_FENCED_AFTER_TAKEOVER": "A fenced=true, renewAfterLoss=false after B took over at epoch 2"
+  },
+  "accepted": {
+    "A_RESET_INVALID_WITH_V41_KEY": "V41_AUTHORITATIVE epoch 1",
+    "B_PREPARE_PROBE_WAIVER": "HANDOVER_PREPARED (probe- domain only)",
+    "B_RELAY_UNCHANGED_DRAIN": "attributed to V41_OWNER session_015dYwb2b3yVQ6iay68HXCD8 key k_d8f334bebf0fd76b",
+    "A_ROLLBACK_WITH_V41_KEY": "V41_AUTHORITATIVE epoch 2; v41MayDispatch=true"
+  },
+  "notExercisedLive": ["the signed post-commit V2 path (commit refused as stale): covered by tests/factory-v2/probe.test.mjs (two-process rehearsal) and security.test.mjs"]
+}

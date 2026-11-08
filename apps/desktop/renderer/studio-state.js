@@ -2,7 +2,9 @@
 import {createIdempotencyTracker} from "./work-core.js";
 import {STUDIO_TABS} from "./project-core.js";
 
-const freshWizard=()=>({name:"",template:"web-node",projectType:"",techStack:[""],targetOS:[],acceptanceCriteria:[""],maxRuns:"",maxTokens:"",devCommand:[""],testCommand:[""]});
+// //TR: UASCO-T0006: sunucu POST /v1/projects için environmentId ister (core/workos/schemas.ts required); varsayılan, fikir alımının kullandığı değerle aynıdır (core/workos/intake.ts: environmentId ?? "local") ve formda görünür.
+export const DEFAULT_ENVIRONMENT_ID="local";
+const freshWizard=()=>({name:"",environmentId:DEFAULT_ENVIRONMENT_ID,template:"web-node",projectType:"",techStack:[""],targetOS:[],acceptanceCriteria:[""],maxRuns:"",maxTokens:"",devCommand:[""],testCommand:[""]});
 const freshImport=()=>({projectId:"",kind:"git",path:"",pickedFor:null});
 const freshStudio=()=>({projectId:null,tab:"overview",dir:"",file:null,diffFrom:"",diffTo:"",diffRequested:false,commit:"",lastCreated:null});
 
