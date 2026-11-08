@@ -298,10 +298,19 @@ async function runSteps() {
     await waitSel("#analysis-reapprove-status[data-result='invalid']", 10000);
     expectCount("approve requests without Founder-typed evidence", await requestCount("POST", approve), 0);
     await win.fill("#analysis-reapprove-evidence", "e2e-evidence-1");
-    await win.click("#analysis-reapprove-submit", {clickCount: 2}); // a double click must still post exactly once
+    // UASCO-T0013: Re-approve is a decision and asks for confirmation. Cancelling posts nothing.
+    await win.click("#analysis-reapprove-submit");
+    await win.waitForSelector("#confirmDialog[open]", {timeout: 10000, state: "attached"});
+    await win.click("#confirmCancel"); await waitFn(() => !document.querySelector("#confirmDialog[open]"), null, 10000, "re-approve confirm cancelled");
+    expectCount("approve requests after the Founder cancelled the confirmation", await requestCount("POST", approve), 0);
+    // A second press while the dialog is open (the modal blocks the pointer, so it is dispatched directly) must open no second dialog and post nothing extra.
+    await win.click("#analysis-reapprove-submit");
+    await win.waitForSelector("#confirmDialog[open]", {timeout: 10000, state: "attached"});
+    await win.evaluate(() => document.querySelector("#analysis-reapprove-submit")?.click());
+    await confirmDialog("re-approve");
     await waitSel("#analysis-reapprove-status[data-result='ok']", 20000);
     const posted = ((await serverGet("/__e2e/requests"))?.requests ?? []).filter(r => r.method === "POST" && approve.test(r.url));
-    expectCount("Re-approve request (a double click must post once)", posted.length, 1);
+    expectCount("Re-approve request (a second press during the confirmation must post once)", posted.length, 1);
     must(posted[0].url === `/v1/missions/${stuckMission}/predev/artifacts/${seeded.artifactId}/approve` && posted[0].status >= 200 && posted[0].status < 300, `approve request: ${JSON.stringify(posted[0])}`);
     must(await win.evaluate(() => !document.querySelector("#analysis-step [data-analysis-stuck]")), "the stuck block is still shown after a successful Re-approve");
     const phase = (await serverGet(`/v1/predev/${stuckMission}`))?.predev?.phase;
