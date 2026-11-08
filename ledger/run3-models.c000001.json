@@ -768,6 +768,43 @@
         "nonce": "231328ad-7e4c-4c0f-9583-ad36b072293f",
         "signature": "ZjGqBCB337kHl4y9aG0pQZz4mc5G963e8WyV9/r7d19jQ8salanoupgVmDZsSZLPw1yPXKDu/+ssiF4w4qkpAg=="
       }
+    },
+    {
+      "kind": "WORKER",
+      "idempotencyKey": "worker:intent_23a7b0adec9e:RESULT_ACCEPTED:c29d2951f670949f",
+      "data": {
+        "status": "RESULT_ACCEPTED",
+        "result": {
+          "status": "CLEAN",
+          "headSha": "4c4cd6a04e2d37bbf19afa7b4b00ba52bfc1fd8d",
+          "baseSha": "177428568df91a5d61ce5c6f4796ad25b60112cd",
+          "blockers": [],
+          "resolves": [],
+          "reviewerSession": "session_015dYwb1VWptD1pzo2ycYfP1"
+        },
+        "resultAt": 1794161128253,
+        "intentId": "intent_23a7b0adec9e"
+      },
+      "fenceEpoch": 1,
+      "fenceToken": "session_015dYwb57qx21P4wudU5xauD:2:310a38c8-dae4-4ab5-b816-ca2a1f037a2e",
+      "seq": 22,
+      "at": 1794161132026,
+      "prev": "449c4d136e75d26d5c72021c2ccc6c00e690cd8f69f81099cf7713c5147d8cc2",
+      "ledger": "probe-control/run3-models",
+      "sig": {
+        "schema": "uasco.factory-v2.signed-action/1",
+        "domain": "probe-control",
+        "action": "LEDGER",
+        "role": "V2_CANDIDATE",
+        "sessionId": "session_015dYwb57qx21P4wudU5xauD",
+        "keyId": "k_225059701e7e1b78",
+        "prev": "449c4d136e75d26d5c72021c2ccc6c00e690cd8f69f81099cf7713c5147d8cc2",
+        "payloadDigest": "2d23156b883e4fa5bebe1b43a55aeb8f88a14292d992e0f44d1338f51b20640d",
+        "issuedAt": 1794161135218,
+        "expiresAt": 1825697135218,
+        "nonce": "405b52e0-2994-4f52-9cc0-ecd91ec0dedd",
+        "signature": "4jj3JFaQ2/JBGzXVHNhE2JIH/Rw6VmQA1xXZIBQr5GvfuG8HpuzmDOEj3LnkDKpd01n+N3wfPi82tAIwNe//AA=="
+      }
     }
   ]
 }
