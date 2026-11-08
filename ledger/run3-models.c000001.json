@@ -600,6 +600,47 @@
         "nonce": "5e07e43e-df76-4989-ab60-266be1be7b02",
         "signature": "jb7pxGgcHR+QZufSlSstrcHe75Aj1/cUqGZ1J4NUb36myp5s1/tWlkalTGWzM8dNs1rkHXpq03cmyeJM6NGpBw=="
       }
+    },
+    {
+      "kind": "NOTE",
+      "taskId": "FV2-MR-1",
+      "idempotencyKey": "review-jobs:FV2-MR-1:0:intent_23a7b0adec9e",
+      "data": {
+        "reviewJobs": [
+          {
+            "jobId": "intent_23a7b0adec9e",
+            "slotId": "reviewer-R1",
+            "focus": "ARCHITECTURE_CORRECTNESS",
+            "worker": {
+              "kind": "CLOUD_SESSION",
+              "intentId": "intent_23a7b0adec9e",
+              "role": "REVIEWER",
+              "sessionId": null,
+              "branch": null
+            }
+          }
+        ]
+      },
+      "fenceEpoch": 1,
+      "fenceToken": "session_015dYwb57qx21P4wudU5xauD:2:310a38c8-dae4-4ab5-b816-ca2a1f037a2e",
+      "seq": 17,
+      "at": 1794160972434,
+      "prev": "1f2d827a1f419d55f105669333592a9eb5dcf04694327ec0973c5f5bb6fc88fa",
+      "ledger": "probe-control/run3-models",
+      "sig": {
+        "schema": "uasco.factory-v2.signed-action/1",
+        "domain": "probe-control",
+        "action": "LEDGER",
+        "role": "V2_CANDIDATE",
+        "sessionId": "session_015dYwb57qx21P4wudU5xauD",
+        "keyId": "k_225059701e7e1b78",
+        "prev": "1f2d827a1f419d55f105669333592a9eb5dcf04694327ec0973c5f5bb6fc88fa",
+        "payloadDigest": "b222137974a968c14de3145553d66074ad6a211c3a0f9e5bd7c8b540413e535a",
+        "issuedAt": 1794160975085,
+        "expiresAt": 1825696975085,
+        "nonce": "7dc093d0-69f5-4a00-81a9-27bc7fd9d5c9",
+        "signature": "cTL03fKEuwpJLKoIos3w9iDyiqHpsfpe3pp2JWl/Jq502jMwrG48zmQ+XvoedY708XwQIoCO/C+cxnIprx9bAg=="
+      }
     }
   ]
 }
