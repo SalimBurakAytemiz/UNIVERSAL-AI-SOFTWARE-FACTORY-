@@ -387,6 +387,44 @@
         "nonce": "fe0ede06-a52e-48fe-beb0-a5e14a35ac8c",
         "signature": "Ets2Z3wS8zcA+q/Hza8uo1IP5JTcUVwa8pL7mXjmLNryT3n8uHnCq/V/PDMdRnAOg+FpIBhhFs86nIC/7mLsAQ=="
       }
+    },
+    {
+      "kind": "WORKER",
+      "idempotencyKey": "worker:intent_a10293e77240:RESULT_ACCEPTED:1583a2b49b0b4d31",
+      "data": {
+        "status": "RESULT_ACCEPTED",
+        "result": {
+          "ok": true,
+          "headSha": "4c4cd6a04e2d37bbf19afa7b4b00ba52bfc1fd8d",
+          "baseSha": "177428568df91a5d61ce5c6f4796ad25b60112cd",
+          "branch": "fv2w/probe-control/FV2-MR-1-a0-a10293e77240",
+          "summary": "Added docs/factory-v2/probe/model-router/hello.md (two lines) and pushed to fv2w/probe-control/FV2-MR-1-a0-a10293e77240",
+          "tests": "npm run validate:tr -> TR_VALIDATION: PASS (exit 0)",
+          "evidence": []
+        },
+        "resultAt": 1794160888134,
+        "intentId": "intent_a10293e77240"
+      },
+      "fenceEpoch": 1,
+      "fenceToken": "session_015dYwb57qx21P4wudU5xauD:2:310a38c8-dae4-4ab5-b816-ca2a1f037a2e",
+      "seq": 12,
+      "at": 1794160891626,
+      "prev": "f1230d0eee70cd0725406ce48267553724c019c73a36c083e055db9facd6d556",
+      "ledger": "probe-control/run3-models",
+      "sig": {
+        "schema": "uasco.factory-v2.signed-action/1",
+        "domain": "probe-control",
+        "action": "LEDGER",
+        "role": "V2_CANDIDATE",
+        "sessionId": "session_015dYwb57qx21P4wudU5xauD",
+        "keyId": "k_225059701e7e1b78",
+        "prev": "f1230d0eee70cd0725406ce48267553724c019c73a36c083e055db9facd6d556",
+        "payloadDigest": "96de41bef98890f1cb857d4dabc6e828ef3d44f74bfb49f902355f844576b8f5",
+        "issuedAt": 1794160894447,
+        "expiresAt": 1825696894447,
+        "nonce": "049ef106-85f5-4e46-8926-3c7f48c51af3",
+        "signature": "zpIuOoyVtMphuyCQm5u8jYMpsmuslCyXzabmJta45aQych6uEeG0szCfqxJ92jKuCGUmZG6dAkRtV2R7ChWcDg=="
+      }
     }
   ]
 }
