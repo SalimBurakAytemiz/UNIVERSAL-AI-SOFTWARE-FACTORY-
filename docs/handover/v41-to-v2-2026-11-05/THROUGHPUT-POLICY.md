@@ -56,3 +56,8 @@ Merged (each verify-main MAIN_RUNNING): #360, #391, #378, #404, #405, #402, #401
 Completed product changes: Project Studio wizard environmentId (#405), Assurance newest runs/tests (#404, #406), release-newest (#402), real-server panels (#401, #394, #395, #393), desktop tour (#387), quota-resumable (#360). Quality/safety: #391, #378, #339 (PAR-03 diagnostic), #369 (devrun reap identity), #407 (WIN-1 v2: root cause of the relfx-c3 Windows flake).
 Remaining Windows flakes (last 4.8 h, 4 failed runs): relfx-c3 PAR-03 fence (#407 merged → expected to be fixed), a heartbeat timing assertion (2390 < 1666 ms, on #380's old head), EPERM/180 s timeout (on #387's old head), pkg-bs1 runas (WIN-4, protected; FOUNDER-QUEUE #3).
 Process notes: (1) the merge gate refuses a malformed `AUTONOMY-EXCEPTIONS` line (fail-closed); reviewer briefs now give the exact format. (2) Reviewer isolation: every PR gets its own fresh reviewer session; one reviewer is never moved onto another PR.
+
+## 2026-11-08: Factory V2 model router (Founder note)
+- V2 has started its automatic Claude Haiku/Sonnet/Opus model routing integration. V4.1 makes **no parallel changes** to its files or PRs (they are not opened in the V4.1 merge window and no V4.1 builder is assigned to them).
+- Until the V2 router PR is verified and merged, the V4.1 model behavior stays as it is: builder and reviewer sessions are created with the current model (no model parameter), and executor/merge behavior is unchanged.
+- The production line keeps running (window ≤ 2, single writer, CLEAN + CI gate).
