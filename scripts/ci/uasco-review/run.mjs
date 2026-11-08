@@ -189,10 +189,13 @@ async function reviewerDiagnoseStep() {
 // Early reviewer-credential probe, before the CI wait. healthy=false only when the probe's own execution record is classified
 // REVIEWER_AUTH_REJECTED by the same fixed classifier the review uses; then collect (and its up-to-100-minute CI wait) is skipped and finish
 // concludes the check as failure as before. It never passes anything; an unreadable or ambiguous record leaves the normal flow in charge.
+const TOKEN_DEAD_SUBCODES = Object.freeze(["AUTH_TOKEN_INVALID", "AUTH_TOKEN_EXPIRED", "AUTH_TOKEN_REVOKED"]);
 async function tokenHealthStep() {
   let d;
   try { d = diagnoseReviewerOutput(readCapped(env("EXECUTION_FILE"), EXECUTION_FILE_MAX_BYTES)); } catch { d = diagnoseReviewerOutput(null); }
-  const healthy = d.code !== "REVIEWER_AUTH_REJECTED";
+  // Only an EXPLICIT bad-token signal may skip the CI wait. A 403 / permission / "log in again" / unspecified auth text is ambiguous
+  // (account, plan, transient) and must leave the normal review flow - and its own fail-closed gate - in charge.
+  const healthy = !(d.code === "REVIEWER_AUTH_REJECTED" && TOKEN_DEAD_SUBCODES.includes(d.authSubcode));
   try { output("healthy", healthy ? "true" : "false"); output("code", d.code); } catch { /* never fails the job */ }
   const line = `UASCO reviewer token health: ${healthy ? "OK" : "REVIEWER_TOKEN_INVALID"} (${d.code}${d.authSubcode ? ` ${d.authSubcode}` : ""}${Number.isSafeInteger(d.httpStatus) ? ` http=${d.httpStatus}` : ""})\n`;
   try { const f = env("GITHUB_STEP_SUMMARY"); if (f) fs.appendFileSync(f, line); } catch { /* never fails the job */ }

@@ -75,7 +75,7 @@ jobs:
     if: needs.scope.result == 'success'
     runs-on: ubuntu-latest
     environment: uasco-review
-    timeout-minutes: 5
+    timeout-minutes: 6
     permissions: {contents: read}
     outputs:
       healthy: ${{ steps.health.outputs.healthy }}
@@ -86,6 +86,7 @@ jobs:
         with: {node-version: "24"}
       - id: probe
         continue-on-error: true
+        timeout-minutes: 3
         uses: anthropics/claude-code-action@db77d4d3c98f3f6380e7cd45ffba2342a3dbde3c # v1.0.254
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -101,7 +102,7 @@ jobs:
   collect:
     needs: [scope, token-health]
     # a probe that could not run (healthy is empty) leaves the normal flow in charge; only an explicit false skips the CI wait
-    if: needs.scope.result == 'success' && needs.token-health.outputs.healthy != 'false'
+    if: ${{ !cancelled() && needs.scope.result == 'success' && needs.token-health.outputs.healthy != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions: {contents: read, pull-requests: read, checks: read, actions: read}

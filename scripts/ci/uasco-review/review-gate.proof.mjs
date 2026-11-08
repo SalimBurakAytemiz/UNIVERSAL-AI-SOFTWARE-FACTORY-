@@ -410,12 +410,12 @@ check("W14 parsed structure: triggers, empty top permissions, environments and j
   && JSON.stringify(jobs.finish?.needs) === JSON.stringify(["scope", "token-health", "founder-authority", "collect", "ai-review"]) && !JSON.stringify(jobs["ai-review"]?.permissions ?? {}).includes("write")
   && jobs["token-health"]?.environment === "uasco-review" && JSON.stringify(jobs["token-health"]?.permissions) === JSON.stringify({contents: "read"})
   && JSON.stringify(jobs["token-health"]?.needs) === "\"scope\"" && JSON.stringify(jobs.collect?.needs) === JSON.stringify(["scope", "token-health"]));
-check("W25 the token-health probe: fixed prompt, one turn, every tool disallowed, no PR content or artifact, only an explicit false skips the CI wait, and it can only add a failure reason",
+check("W25 the token-health probe: fixed prompt, one turn, every tool disallowed, bounded, no PR content or artifact; a failed or timed-out probe job never skips collect (!cancelled()); only an explicit false skips the CI wait",
   doc !== null && (() => { const steps = jobs["token-health"]?.steps ?? [], probe = steps.find(x => x.id === "probe"), health = steps.find(x => x.id === "health");
     return probe?.with?.prompt === "Reply with the single word OK." && probe?.with?.claude_args === "--max-turns 1 --disallowedTools Bash,Read,Glob,Grep,Edit,Write,MultiEdit,NotebookEdit,WebFetch,WebSearch,Task"
       && probe?.["continue-on-error"] === true && health?.run === "node scripts/ci/uasco-review/run.mjs token-health" && health?.["continue-on-error"] === true
       && !steps.some(x => String(x.uses ?? "").includes("download-artifact")) && !JSON.stringify(steps).includes("pull_request")
-      && jobs.collect?.if === "needs.scope.result == 'success' && needs.token-health.outputs.healthy != 'false'"
+      && jobs.collect?.if === "${{ !cancelled() && needs.scope.result == 'success' && needs.token-health.outputs.healthy != 'false' }}" && probe?.["timeout-minutes"] === 3
       && (jobs.finish?.steps ?? []).some(x => x.env?.TOKEN_HEALTHY === "${{ needs.token-health.outputs.healthy }}" && x.run === "node scripts/ci/uasco-review/run.mjs decide"); })());
 check("W15 the check-write token never carries pull-request write; approval uses its own token, only after a passed check", jobBlock("finish").split("id: approval-token")[0].includes("permission-checks: write")
   && !jobBlock("finish").split("id: approval-token")[0].includes("permission-pull-requests") && /id: approval-token\n\s+if: \$\{\{ !cancelled\(\) && steps\.finish\.outputs\.final == 'success' && vars\.UASCO_REVIEW_SUBMIT_APPROVAL == 'true' \}\}/.test(wf)
@@ -597,7 +597,7 @@ const runPhase = (phase, envx, args = []) => new Promise(resolve => {
   let out = "", err = ""; c.stdout.on("data", d => out += d); c.stderr.on("data", d => err += d); c.on("close", code => resolve({code, out, err}));
 });
 async function e2e({ci, verdictObj, headAfterCollect = HEAD, headAtApprove = headAfterCollect, submitApproval = "false", skipDecision = false, prior = {}, runApprovals = [], diff, prNumber = "7", needsFounder,
-  files, prCommits, checkHead, rerun, commits, diagnostics}) {
+  files, prCommits, checkHead, rerun, commits, diagnostics, tokenHealthy}) {
   const state = {log: [], checks: [], approvals: [], ci, phase: "scope", prior, runApprovals, diff, files, prCommits: prCommits ?? commits?.length, checkHead, commits};
   state.head = () => state.phase === "approve" ? headAtApprove : ["decide", "finish"].includes(state.phase) ? headAfterCollect : HEAD;
   const srv = mockGithub(state); await new Promise(r => srv.listen(0, "127.0.0.1", r));
@@ -606,6 +606,7 @@ async function e2e({ci, verdictObj, headAfterCollect = HEAD, headAtApprove = hea
     RUN_URL: "https://github.com/o/r/actions/runs/1", GITHUB_RUN_ID: "1", FOUNDER_LOGIN: "SalimBurakAytemiz", REVIEWER_SESSION: "0e9c1f6a-reviewer", HEAD_SHA: HEAD, CHECK_ID: "99",
     CI_WAIT_MINUTES: "0", SUBMIT_APPROVAL: submitApproval, GITHUB_OUTPUT: "", APP_SLUG: "uasco-reviewer", PR_NUMBER: prNumber};
   const out = {};
+  if (tokenHealthy !== undefined) base.TOKEN_HEALTHY = tokenHealthy;
   for (const ph of ["scope", "collect", "decide", "finish", "approve"]) {
     state.phase = ph;
     // decide reads the Founder approvals only when scope said they are needed (the workflow passes scope's output).
@@ -627,6 +628,13 @@ async function e2e({ci, verdictObj, headAfterCollect = HEAD, headAtApprove = hea
   return {state, out, concluded, dir};
 }
 const green = [{name: UBU, status: "completed", conclusion: "success"}, {name: WIN, status: "completed", conclusion: "success"}];
+{ // the early token probe can only ADD a failure reason through the real decide/finish phases: an otherwise passing review fails, nothing else changes
+  const bad = await e2e({ci: green, verdictObj: verdict(), tokenHealthy: "false"}), good = await e2e({ci: green, verdictObj: verdict(), tokenHealthy: "true"}), unset = await e2e({ci: green, verdictObj: verdict(), tokenHealthy: ""});
+  const dec = r => JSON.parse(fs.readFileSync(path.join(r.dir, "decision.json"), "utf8"));
+  check("E22 TOKEN_HEALTHY=false through the real decide and finish: conclusion failure with REVIEWER_TOKEN_INVALID; true or empty leaves a full pass a pass",
+    bad.concluded?.conclusion === "failure" && dec(bad).conclusion === "failure" && dec(bad).reasons.includes("REVIEWER_TOKEN_INVALID")
+    && good.concluded?.conclusion === "success" && dec(good).reasons.length === 0 && unset.concluded?.conclusion === "success");
+}
 {
   const r = await e2e({ci: green, verdictObj: verdict()});
   check("E1 full pass: check created in_progress on the head, then concluded success with the digest", r.state.checks[0]?.created?.name === CHECK_NAME && r.state.checks[0].created.head_sha === HEAD
@@ -801,8 +809,11 @@ const green = [{name: UBU, status: "completed", conclusion: "success"}, {name: W
     const th = async (body, name) => { const f = path.join(tmp, `th-${name}.json`), o = path.join(tmp, `th-${name}.out`); if (body !== null) fs.writeFileSync(f, body); fs.writeFileSync(o, "");
       const r = await runPhase("token-health", {EXECUTION_FILE: body === null ? path.join(tmp, "th-absent.json") : f, GITHUB_OUTPUT: o, GITHUB_STEP_SUMMARY: ""}); return {code: r.code, out: fs.readFileSync(o, "utf8"), log: r.out + r.err}; };
     const auth = await th(execFile(errResult("Invalid API key · Please run /login")), "auth"), ok = await th(execFile(okResult), "ok"), absent = await th(null, "absent"), other = await th(execFile(errResult(undefined)), "other");
-    check("E21i token-health: an explicit credential rejection => healthy=false; a served reply, a missing record or an unclassified error => healthy=true; never fails the job, never copies record text",
-      [auth, ok, absent, other].every(x => x.code === 0) && /^healthy=false$/m.test(auth.out) && /^healthy=true$/m.test(ok.out) && /^healthy=true$/m.test(absent.out) && /^healthy=true$/m.test(other.out)
+    const ambiguous = await Promise.all(["API Error: 403 Forbidden", "permission_error: you do not have permission", "Please log in again"].map((t, i) => th(execFile(errResult(t)), `amb${i}`)));
+    const expired = await th(execFile(errResult("OAuth token has expired. Please obtain a new token or refresh your existing token.")), "expired");
+    check("E21t token-health: only an explicit dead-token signal (invalid / expired / revoked) => healthy=false; a served reply, a missing record, an unclassified error, 403, permission and log-in texts => healthy=true; never fails the job, never copies record text",
+      [auth, ok, absent, other, expired, ...ambiguous].every(x => x.code === 0) && /^healthy=false$/m.test(auth.out) && /^healthy=false$/m.test(expired.out) && /^healthy=true$/m.test(ok.out) && /^healthy=true$/m.test(absent.out) && /^healthy=true$/m.test(other.out)
+      && ambiguous.every(x => /^healthy=true$/m.test(x.out)) // 403 / permission / "log in again": ambiguous, the review is never skipped on them
       && /REVIEWER_TOKEN_INVALID/.test(auth.log) && !/Invalid API key/.test(auth.out + auth.log));
   }
   check("E21c the execution file is taken only from EXECUTION_FILE, never from argv", argv.code === 0 && fs.readFileSync(path.join(tmp, "out-argv", "reviewer-diagnostics.json"), "utf8").trim() === UNREADABLE_REC);
