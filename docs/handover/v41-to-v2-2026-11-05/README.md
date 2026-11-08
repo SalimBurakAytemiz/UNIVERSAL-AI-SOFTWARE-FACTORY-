@@ -148,3 +148,8 @@
 2. The coordinator stops the merge loop. Nothing merges during the transfer.
 3. V2 verifies every SHA in this ledger against the remote (`git ls-remote`) and acknowledges.
 4. Authority transfers only on the Founder's signed instruction. Until then V4.1 remains the only Supervisor.
+
+## 2026-11-08 update
+- #410 (UASCO-T0030, ubuntu-26.04 sandbox toolchain fix) merged at 485d9991 (verify-main MAIN_PASS). V2 merged main into #355/#389/#388/#408/#409.
+- V2's A6 lease-fencing timing flake is fixed by V2 in its own PR #411; V4.1 is not touching it. Windows PAR04-GSTOP-NO-REAP (V4.1) is with Builder A.
+- Cutover preparation (V2 coordinator message, information only): the Founder gives the V4.1 coordinator the role `V41_OWNER`. The key (`node automation/factory-v2/cli.mjs bridge keygen --role V41_OWNER ...`) is generated **only when the cutover window opens** and **only with a Founder instruction verified in this session**; the private key stays outside the git checkout and only the public JSON is shared. Until then V4.1 remains the live authority.
