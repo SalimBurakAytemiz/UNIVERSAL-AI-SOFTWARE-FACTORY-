@@ -14,6 +14,8 @@ Data source: the builders' reports (I, E, F) plus the coordinator's gate checks.
    - Builder A's SC-14 commits (79b5117a timing diagnostic, c4d2d6c6 30 s budget) have no exact task match: either under T0088 ("Windows flake beyond the 4 named sources") or a new ID.
    - Decision options: (a) waive/resolve the V3-T1002 dependency → T0088 work enters the routine window; (b) create a new small T2 task ID for these test-only Windows fixes.
 
+5. **#327 (V3-T1012.a, Builder A: project export refuses a Node project without a lockfile, EXPORT_LOCKFILE_MISSING 409):** CLEAN at head c34c37f7 / base d96e92b0, but the reviewer attested `AUTONOMY-EXCEPTIONS: TASK_SCOPE_MISMATCH` → FOUNDER_REQUIRED. Reason: the matrix `targetFiles` for V3-T1012.a lists only `core/workos/project-templates.ts`; the PR also touches `core/workos/project-studio.ts`, `apps/desktop/renderer/work-core.js`, `locales/{en,tr}.js` and tests, and no `docs/planning/authority/*` record widens the write set. Decision: approve the scope (Founder merge), or a record that widens the write set.
+
 ## Founder-tier PRs (dependency order)
 - **Builder I renderer UX** (`UASCO-TASK: none`, Founder product directive): #370 (T0007 SPLIT) → #371 (stacked on #370) → #377 → #382 → #397 (shares error-code.js with #382, so after #382). HELD after these: 371-safe cc3db0c, 377-safe f8ff0ae, 382-safe c2297f4 → 374-safe 7dbc56f → approval-gate 9d21537 → cloud-sink-guard 1f195e7. #375 has no deps.
 - **Builder E:** #381 (T0011.B; deps T0035/T0014/T0044 MISSING, T0028 UNVERIFIABLE, T0029 BLOCKED) → #372 (T0011.A, needs T0011.B REVIEWED). #374 (T0020.A ← T0020.B ← T0016.A + T0016.D).
