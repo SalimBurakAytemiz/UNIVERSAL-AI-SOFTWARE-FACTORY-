@@ -98,9 +98,10 @@ export function readOnlyRootProblem(root: unknown, homes: readonly string[] = ho
 export function nodeToolchainRoots(execPath: string = process.execPath, homes: readonly string[] = homeDirs()): {roots: string[]; problem?: string} {
   let real: string;
   try { real = fs.realpathSync(execPath); } catch { return {roots: [], problem: "NODE_PATH_UNRESOLVABLE"}; }
+  // //TR: /usr altındaki her çalıştırılabilir dosya zaten salt-okunur bağlıdır; bu kontrol bin-dizini kontrolünden ÖNCE yapılır. Ubuntu 26.04'te /usr/bin/env -> ../lib/cargo/bin/coreutils/env (uutils çoklu-çağrı ikilisine sert bağ): gerçek yol /usr altında ama dizini "bin" değil; eski sıra burada yanlışlıkla NODE_NOT_IN_BIN_DIRECTORY bildiriyordu (bağlanan kök yine boştu).
+  if (under("/usr", real)) return {roots: []};
   const binDir = path.dirname(real), prefix = path.dirname(binDir);
   if (path.basename(binDir) !== "bin") return {roots: [], problem: "NODE_NOT_IN_BIN_DIRECTORY"};
-  if (under("/usr", prefix)) return {roots: []}; // /usr zaten salt-okunur bağlıdır
   if (!fs.existsSync(path.join(prefix, "lib", "node_modules")) && !fs.existsSync(path.join(prefix, "include", "node"))) return {roots: [], problem: "NODE_PREFIX_LAYOUT_UNRECOGNIZED"};
   const pp = readOnlyRootProblem(prefix, homes);
   if (pp) return {roots: [], problem: `NODE_PREFIX_${pp}`};
