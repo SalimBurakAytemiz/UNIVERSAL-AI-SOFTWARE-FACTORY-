@@ -65,7 +65,7 @@ describe("Claude-native adaptive model routing", () => {
     const later = availabilityFrom([{model: "sonnet", outcome: "QUOTA", until: now + 60_000}], now + 61_000);
     expect(routeJob({role: "BUILDER", complexity: "ROUTINE"}, {availability: later}).model).toBe("sonnet");
     // an inaccessible cheaper class is climbed past (never below the requirement)
-    const noHaiku = availabilityFrom([{model: "haiku", outcome: "ACCESS"}, {model: "claude-haiku-5-5", outcome: "ACCESS"}]);
+    const noHaiku = availabilityFrom([{model: "haiku", outcome: "ACCESS", at: Date.now()}, {model: "claude-haiku-5-5", outcome: "ACCESS", at: Date.now()}]);
     expect(routeJob({role: "BUILDER", complexity: "MECHANICAL"}, {availability: noHaiku})).toMatchObject({decision: "ROUTE", modelClass: "STANDARD", requiredClass: "CHEAP"});
   });
 
@@ -142,4 +142,26 @@ describe("Claude-native adaptive model routing", () => {
     expect(tsNoSenior.decision).toBe("REFUSE");
     expect(routeJob({role: "BUILDER", complexity: "CRITICAL"}, {models: {CHEAP: ["haiku"], STANDARD: ["sonnet"], SENIOR: []}}).decision).toBe("REFUSE");
   });
+  it("review of 17742856: a stale observe can never resurrect a LOST worker; quota wording wins over auth; refusals are re-probed; foreign get_session data refused", {timeout: T}, async () => {
+    const {ACCESS_REPROBE_MS} = await import("../../automation/factory-v2/model-router.mjs");
+    const {sup, orch, g} = stack({backlog: [{id: "FEAT", paths: ["apps/web/"], tier: "T1"}]});
+    await sup.tick();
+    const a = byTask(orch, "FEAT"); orch.bind(a.intentId, "session_builderRACE9");
+    const stale = orch.workers(); orch.lost(a.intentId, "RUN_TIMEOUT"); // the supervisor marks it LOST between observe's read and write
+    const realWorkers = orch.workers.bind(orch); orch.workers = () => stale;
+    expect(orch.observe(a.intentId, {...sessionModelFacts(served("claude-sonnet-5-5")), sessionId: "session_builderRACE9"})).toMatchObject({recorded: false, reason: "NOT_OBSERVABLE:LOST"});
+    orch.workers = realWorkers;
+    const w = orch.workers(x => x.intentId === a.intentId)[0];
+    expect(w.status).toBe("LOST");
+    g.tips[w.branch] = sha("8"); g.trailers[sha("8")] = ["session_builderRACE9"];
+    expect(orch.submitResult(a.intentId, {sessionId: "session_builderRACE9", text: result(w, {ok: true, headSha: sha("8")})}).reason).toBe("INTENT_NOT_RUNNING:LOST");
+    expect(classifyModelError("rate limit exceeded for this OAuth token")).toBe("QUOTA");
+    expect(classifyModelError("429 authentication quota exhausted")).toBe("QUOTA");
+    expect(availabilityFrom([{model: "opus", outcome: "ACCESS", at: 0}], ACCESS_REPROBE_MS - 1).get("opus").state).toBe("ACCESS");
+    expect(availabilityFrom([{model: "opus", outcome: "ACCESS", at: 0}], ACCESS_REPROBE_MS + 1).get("opus").state).toBe("UNKNOWN"); // re-probed, never pinned forever
+    await sup.tick(); clock.t += 60_000; await sup.tick();
+    const b = byTask(orch, "FEAT"); orch.bind(b.intentId, "session_builderRACE10");
+    expect(() => orch.observe(b.intentId, {...sessionModelFacts({ccr: {id: "session_otherSESSION1", external_metadata: {last_served_model: "claude-sonnet-5-5"}}}), sessionId: "session_builderRACE10", fileSessionId: "session_otherSESSION1"})).toThrow(/SESSION_INFO_FOR_ANOTHER_SESSION/);
+  });
 });
+

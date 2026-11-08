@@ -80,16 +80,20 @@ export class CloudOrchestrator {
    * Record what the platform reports for a bound worker session (get_session: configured_model, session_context.model,
    * external_metadata.last_served_model). The served model is the evidence; a fallback below the required class is a MODEL_DOWNGRADED worker.
    */
-  observe(intentId, {sessionId, configuredModel = null, sessionModel = null, servedModel = null, costUsdReported = null, rateLimit = null}) {
+  observe(intentId, {sessionId, fileSessionId = null, configuredModel = null, sessionModel = null, servedModel = null, costUsdReported = null, rateLimit = null}) {
     const rec = this.workers().find(w => w.intentId === intentId);
     if (!rec) throw new OrchestratorError("INTENT_UNKNOWN", intentId);
     if (rec.sessionId !== sessionId) throw new OrchestratorError("SESSION_NOT_BOUND_TO_INTENT");
+    if (fileSessionId && fileSessionId !== sessionId) throw new OrchestratorError("SESSION_INFO_FOR_ANOTHER_SESSION", fileSessionId); // a get_session read of a different session
     if (!servedModel) return {recorded: false, reason: "NOT_YET_SERVED"};
     const req = rec.routing?.requestedModel ?? null, reqClass = rec.routing?.requiredClass ?? null;
     const sameFamily = !!req && classOfModel(servedModel) === classOfModel(req);
     const satisfies = reqClass ? servedSatisfies(reqClass, servedModel) : true;
     const model = {configuredModel, sessionModel, servedModel, sameFamily, satisfiesRequired: satisfies, costUsdReported, rateLimit, observedAt: this.now()};
-    this.journal.worker(intentId, {status: rec.status, model}, this.fence(), `worker:${intentId}:model:${servedModel}:${sessionModel}:${costUsdReported}`);
+    // never writes a status (a stale read must not resurrect a LOST worker); re-checked inside the ledger CAS
+    const w = this.journal.worker(intentId, {model}, this.fence(), `worker:${intentId}:model:${servedModel}:${sessionModel}:${costUsdReported}`,
+      cur => cur?.sessionId === sessionId && ACTIVE.includes(cur.status) ? null : `NOT_OBSERVABLE:${cur?.status}`);
+    if (w.rejected) return {recorded: false, reason: w.rejected};
     this.journal.record("MODEL_OBSERVATION", {model: req, outcome: sameFamily ? "OK" : "FALLBACK", servedModel, intentId}, this.fence(), `model-obs:${intentId}:${servedModel}`);
     if (sameFamily) this.journal.record("MODEL_OBSERVATION", {model: servedModel, outcome: "OK", intentId}, this.fence(), `model-obs-served:${intentId}:${servedModel}`);
     return {recorded: true, ...model};
@@ -102,7 +106,7 @@ export class CloudOrchestrator {
     if (!kind) return {classified: false};
     const model = rec.routing?.requestedModel ?? null;
     this.journal.record("MODEL_OBSERVATION", {model, outcome: kind, ...(kind === "QUOTA" ? {until: this.now() + this.quotaBackoffMs} : {}), intentId}, this.fence(), `model-obs:${intentId}:${kind}`);
-    this.journal.worker(intentId, {status: rec.status, modelError: kind}, this.fence(), `worker:${intentId}:modelError:${kind}`);
+    this.journal.worker(intentId, {modelError: kind}, this.fence(), `worker:${intentId}:modelError:${kind}`, cur => ACTIVE.includes(cur?.status) ? null : `NOT_ACTIVE:${cur?.status}`);
     return {classified: true, kind, model, lost: this.lost(intentId, `MODEL_${kind}`)};
   }
   handle(intentId) {

@@ -115,7 +115,7 @@ export async function factoryCommand(argv, {root}) {
   }
   if (sub === "workers") return out(s.orch.workers());
   // --session-info <file>: the get_session JSON of the bound worker session, as the control session read it from the platform
-  if (sub === "observe") { const f = sessionModelFacts(readJson(arg("session-info"))); return out(s.orch.observe(arg("intent"), {...f, sessionId: arg("session") ?? f.sessionId})); }
+  if (sub === "observe") { const f = sessionModelFacts(readJson(arg("session-info"))); return out(s.orch.observe(arg("intent"), {...f, sessionId: arg("session") ?? f.sessionId, fileSessionId: f.sessionId})); }
   if (sub === "model-failure") return out(s.orch.modelFailure(arg("intent"), fs.readFileSync(arg("error-file"), "utf8")));
   throw new Error("usage: factory tick|actions|bind --intent --session|result --intent --session --text-file|lost --intent [--reason]|fact --task --fact --value|workers|observe --intent --session --session-info f|model-failure --intent --error-file f|report [--github] [--quota f] [--json f] --config c.json");
 }

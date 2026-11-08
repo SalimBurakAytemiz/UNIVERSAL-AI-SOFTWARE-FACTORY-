@@ -51,7 +51,7 @@ export class StateJournal {
     else if (e.kind === "VERDICT") { const t = this.tasks.get(e.taskId); if (t) t.data = {...t.data, verdicts: [...(t.data.verdicts ?? []), e.data.verdict]}; }
     else if (e.kind === "NOTE") { const t = this.tasks.get(e.taskId); if (t) t.data = {...t.data, ...e.data}; }
     else if (e.kind === "FACT") { const t = this.tasks.get(e.taskId); if (t) { const f = {...(t.facts ?? {})}; f[e.data.fact] = e.data.fact === "EVIDENCE" ? [...(f.EVIDENCE ?? []), e.data.value] : e.data.value; t.facts = f; } }
-    else if (e.kind === "WORKER") { const w = this.workers.get(e.data.intentId) ?? {}; this.workers.set(e.data.intentId, {...w, ...e.data, updatedAt: e.at, history: [...(w.history ?? []), {status: e.data.status, at: e.at, seq: e.seq}]}); }
+    else if (e.kind === "WORKER") { const w = this.workers.get(e.data.intentId) ?? {}; this.workers.set(e.data.intentId, {...w, ...e.data, updatedAt: e.at, history: e.data.status ? [...(w.history ?? []), {status: e.data.status, at: e.at, seq: e.seq}] : (w.history ?? [])}); }
     else if (e.kind === "SUPERVISOR_EPOCH") this.lastEpoch = {epoch: e.fenceEpoch, token: e.fenceToken, supervisorId: e.data?.supervisorId ?? null};
   }
   /** Append with optimistic concurrency against the backend; a concurrent writer forces a reload and a re-check (never a blind write). */

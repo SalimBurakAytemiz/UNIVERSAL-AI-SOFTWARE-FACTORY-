@@ -18,8 +18,9 @@ export class RoutingError extends Error { constructor(code, detail) { super(`${c
 /** Model-access failures, kept apart from task failures: QUOTA waits, ACCESS/AUTH never silently downgrade a class. */
 export function classifyModelError(text) {
   const t = String(text ?? "");
-  if (/\b401\b|unauthori[sz]ed|authentication|invalid (api )?(key|token)|oauth/i.test(t)) return "AUTH";
+  // QUOTA first: "rate limit exceeded for this OAuth token" is a quota condition (it resets), not an authorisation failure
   if (/\b429\b|rate.?limit|usage limit|quota|overloaded|five_hour|weekly limit|limit reached/i.test(t)) return "QUOTA";
+  if (/\b401\b|unauthori[sz]ed|authentication|invalid (api )?(key|token)|oauth/i.test(t)) return "AUTH";
   if (/\b403\b|not (available|permitted|allowed|enabled)|no access|model.*(unavailable|not found|unsupported)|forbidden/i.test(t)) return "ACCESS";
   return null;
 }
@@ -41,13 +42,14 @@ export function complexityOf(job) {
  * Availability per model id, from platform observations recorded in the ledger:
  * OK (a session was served by it), ACCESS / AUTH (refused), QUOTA (until `until`). Unknown = not yet observed (allowed: first use is the probe).
  */
-export function availabilityFrom(observations, now = Date.now()) {
+export const ACCESS_REPROBE_MS = 6 * 3600_000; // an ACCESS / AUTH refusal is re-probed after this, so it never pins routing forever
+export function availabilityFrom(observations, now = Date.now(), reprobeMs = ACCESS_REPROBE_MS) {
   const m = new Map();
   for (const o of observations) {
     if (!o?.model) continue;
     if (o.outcome === "OK") m.set(o.model, {state: "OK", at: o.at});
     else if (o.outcome === "QUOTA") m.set(o.model, {state: (o.until ?? 0) > now ? "QUOTA" : "UNKNOWN", until: o.until});
-    else if (["ACCESS", "AUTH"].includes(o.outcome)) m.set(o.model, {state: o.outcome, at: o.at});
+    else if (["ACCESS", "AUTH"].includes(o.outcome)) m.set(o.model, (o.at ?? 0) + reprobeMs > now ? {state: o.outcome, at: o.at} : {state: "UNKNOWN", at: o.at});
   }
   return m;
 }
