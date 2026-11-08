@@ -353,5 +353,17 @@ describe("P0 blockers from the #388 review: rollback, ledger identity, lost/resu
     const {r} = repo(); const g = createSharedRegistry({docStore: createLocalDocStore(r), ref: REF});
     expect(() => new StateJournal(registryLog({registry: {...g, history: undefined}, ns: "h", signer: S.V2, ring: ringFor(D), domain: D}))).toThrow(/LEDGER_HISTORY_UNAVAILABLE/);
   });
+  it("keyring registration: public entries only, validated as the loader will; private material and double registration refused", async () => {
+    const {proposeKeyring, KEYRING_SCHEMA, parseKeyring} = await import("../../automation/factory-v2/identity.mjs");
+    const pub = k => ({keyId: k.keyId, role: k.role, sessionId: k.sessionId, publicKeyPem: k.publicKeyPem});
+    const cur = {schema: KEYRING_SCHEMA, mode: "LIVE", domain: "uasco-v7", keys: []};
+    const next = proposeKeyring(cur, [pub(S.V41), pub(S.V2), pub(S.FOUNDER)]);
+    expect(parseKeyring(next, {kind: "T"}).keys.size).toBe(3);
+    expect(JSON.stringify(next)).not.toMatch(/PRIVATE/);
+    expect(() => proposeKeyring(cur, [S.V2])).toThrow(/KEYRING_PRIVATE_MATERIAL_REFUSED/); // a full keygen file, private key included
+    expect(() => proposeKeyring(cur, [{...pub(S.V2), note: "x"}])).toThrow(/KEYRING_ENTRY_FIELDS/);
+    expect(() => proposeKeyring(next, [pub(S.V2)])).toThrow(/KEYRING_ROLE_SESSION_ALREADY_REGISTERED/);
+    expect(() => proposeKeyring(cur, [{...pub(S.V2), keyId: "k_0000000000000000"}])).toThrow(/KEYRING_KEYID_MISMATCH/);
+  });
 });
 

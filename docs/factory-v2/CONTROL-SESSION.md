@@ -33,6 +33,15 @@ All state lives in the shared ledger: a Supervisor-signed, hash-chained event lo
    - product evidence;
    - blockers.
 
+## Registering the role keys (before cutover)
+
+1. Each holder runs `node automation/factory-v2/cli.mjs bridge keygen --role <V41_OWNER|V2_CANDIDATE|FOUNDER> --session <its own session id> --out <file outside any git tree>` inside its own session. The private key stays in that file (mode 0600) and never leaves that container.
+2. Only the printed public entry is passed on. The control session runs `bridge keyring-propose --entries <a.json,b.json,c.json> --out <file>`. This refuses:
+   - any private material or extra fields;
+   - a second key for the same role and session;
+   - anything the canonical loader would reject.
+3. Its output becomes `docs/planning/authority/FACTORY-V2-ROLE-KEYS.json` in a Founder-approved governance PR. The keyring is read only from `v7/integration` at an exact commit.
+
 ## Ledger format note
 
 Every event signs `ledger = <domain>/<ns>`. Ledgers written before this rule (the probe run `run1`) can no longer be read, by design. Start a new `ledgerNs` instead of migrating. The live ledger has never been written.
