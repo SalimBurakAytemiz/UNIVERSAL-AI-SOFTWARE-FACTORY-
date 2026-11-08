@@ -1,6 +1,6 @@
 {
   "//TR": "V4.1 açık PR defteri: her PR tam head SHA, görev, sahip, reviewer oturumu ve kapı sınıfıyla kayıtlıdır (taban 59c06dd7).",
-  "base": "bf801870 (2026-11-08 reconciliation; main verify-main MAIN_PASS)",
+  "base": "a56b5f12 (2026-11-08; routine queue empty; all remaining open PRs are Founder-tier, V2 or HELD)",
   "prs": [
     {
       "pr": 403,
@@ -237,19 +237,6 @@
       "classification": "FOUNDER_REQUIRED (task SPLIT)"
     },
     {
-      "pr": 373,
-      "branch": "claude/builder-h-analysis-ui",
-      "head": "3272b78a1e1ff7dc681db7350904b56dfcac436d",
-      "base": "v7/integration",
-      "draft": false,
-      "title": "UASCO-T0013: pre-dev phase/decision timeline + confirmation for Approve/Reject/Re-approve",
-      "task": "UASCO-T0013",
-      "owner": "H",
-      "ownerSession": "session_015dYwb57pxAry59xkxbE6NL",
-      "reviewerSession": null,
-      "classification": "ROUTINE"
-    },
-    {
       "pr": 372,
       "branch": "claude/builder-e-command-field",
       "head": "55d7f1d24d8f9c62d21890b594a8934fe675853f",
@@ -313,19 +300,6 @@
       "ownerSession": "session_015dYwazZccTReW5Rs2mAhq3",
       "reviewerSession": null,
       "classification": "FOUNDER_REQUIRED (task SPLIT)"
-    },
-    {
-      "pr": 366,
-      "branch": "claude/builder-h-work-plan-ui",
-      "head": "bfd994ddbd5604868468d0cf17c2ba5309eeb13f",
-      "base": "v7/integration",
-      "draft": false,
-      "title": "UASCO-T0012: Work screen task↔run navigation both ways + plan overview",
-      "task": "UASCO-T0012",
-      "owner": "H",
-      "ownerSession": "session_015dYwb57pxAry59xkxbE6NL",
-      "reviewerSession": null,
-      "classification": "ROUTINE"
     },
     {
       "pr": 363,
@@ -451,7 +425,10 @@
     "#407 b44ffa47",
     "#380 cb88743a",
     "#384 76a562f1",
-    "#364 bf801870"
+    "#364 bf801870",
+    "#410 485d9991",
+    "#373 d96e92b0",
+    "#366 a56b5f12"
   ],
   "founder_merged_v2_line": [
     "#347 e16bd66a (2026-11-06T04:05Z)",
