@@ -99,14 +99,18 @@ export class CloudOrchestrator {
     return {recorded: true, ...model};
   }
   /** create_session (or the session) failed for a model reason: classify (QUOTA / ACCESS / AUTH), mark the model, release the task. */
-  modelFailure(intentId, errorText) {
+  modelFailure(intentId, errorText, {sessionId = null} = {}) {
     const rec = this.workers().find(w => w.intentId === intentId);
     if (!rec) throw new OrchestratorError("INTENT_UNKNOWN", intentId);
+    if (sessionId && rec.sessionId !== sessionId) throw new OrchestratorError("SESSION_NOT_BOUND_TO_INTENT"); // an error read from another session
     const kind = classifyModelError(errorText);
     if (!kind) return {classified: false};
     const model = rec.routing?.requestedModel ?? null;
+    // guarded write FIRST: a stale or late error for a worker that is no longer active marks no model (review of e413c42f)
+    const w = this.journal.worker(intentId, {modelError: kind}, this.fence(), `worker:${intentId}:modelError:${kind}`,
+      cur => !ACTIVE.includes(cur?.status) ? `NOT_ACTIVE:${cur?.status}` : sessionId && cur.sessionId !== sessionId ? "SESSION_NOT_BOUND_TO_INTENT" : null);
+    if (w.rejected) return {classified: true, kind, model, recorded: false, reason: w.rejected};
     this.journal.record("MODEL_OBSERVATION", {model, outcome: kind, ...(kind === "QUOTA" ? {until: this.now() + this.quotaBackoffMs} : {}), intentId}, this.fence(), `model-obs:${intentId}:${kind}`);
-    this.journal.worker(intentId, {modelError: kind}, this.fence(), `worker:${intentId}:modelError:${kind}`, cur => ACTIVE.includes(cur?.status) ? null : `NOT_ACTIVE:${cur?.status}`);
     return {classified: true, kind, model, lost: this.lost(intentId, `MODEL_${kind}`)};
   }
   handle(intentId) {

@@ -163,5 +163,14 @@ describe("Claude-native adaptive model routing", () => {
     const b = byTask(orch, "FEAT"); orch.bind(b.intentId, "session_builderRACE10");
     expect(() => orch.observe(b.intentId, {...sessionModelFacts({ccr: {id: "session_otherSESSION1", external_metadata: {last_served_model: "claude-sonnet-5-5"}}}), sessionId: "session_builderRACE10", fileSessionId: "session_otherSESSION1"})).toThrow(/SESSION_INFO_FOR_ANOTHER_SESSION/);
   });
+  it("review of e413c42f: a late or foreign model error marks no model (guarded write first)", {timeout: T}, async () => {
+    const {sup, orch} = stack({backlog: [{id: "FEAT", paths: ["apps/web/"], tier: "T1"}]});
+    await sup.tick();
+    const a = byTask(orch, "FEAT"); orch.bind(a.intentId, "session_builderMF001");
+    expect(() => orch.modelFailure(a.intentId, "429 rate limit", {sessionId: "session_someoneelse1"})).toThrow(/SESSION_NOT_BOUND_TO_INTENT/);
+    orch.lost(a.intentId, "RUN_TIMEOUT");
+    expect(orch.modelFailure(a.intentId, "429 rate limit", {sessionId: "session_builderMF001"})).toMatchObject({classified: true, recorded: false, reason: "NOT_ACTIVE:LOST"});
+    expect(orch.availability().get("sonnet")).toBeUndefined(); // no QUOTA mark from a stale error
+  });
 });
 
