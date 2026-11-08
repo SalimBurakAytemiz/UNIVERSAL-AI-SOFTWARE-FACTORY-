@@ -18,13 +18,13 @@ const TOKEN = "t".repeat(32), WRONG = "w".repeat(32), RECORDER = "implementer@lo
 const MAIN_SRC = fs.readFileSync(path.join(REPO, "apps", "desktop", "main.mjs"), "utf8");
 const allowBlock = (() => { const a = MAIN_SRC.indexOf("// B4-ALLOWLIST-BEGIN"), b = MAIN_SRC.indexOf("// B4-ALLOWLIST-END"); if (a < 0 || b < 0) throw new Error("main.mjs B4-ALLOWLIST block not found"); return MAIN_SRC.slice(a, b); })();
 const desktopExtraGetPathAllowed = new Function(`${allowBlock}\nreturn desktopExtraGetPathAllowed;`)() as (v: unknown) => boolean;
-const desktopAllows = (p: string) => desktopGetPathAllowed(p) || desktopExtraGetPathAllowed(p);
+export const desktopAllows = (p: string) => desktopGetPathAllowed(p) || desktopExtraGetPathAllowed(p);
 // //TR: N1b: üretimde /health gövdesi sunucudan değil main.mjs'ten gelir (kimlik doğrulandıktan sonra sabit nesne); köprü bunu aynen taklit eder.
-const SYNTHETIC_HEALTH = {status: "HEALTHY", system: "UNIVERSAL-AI-SOFTWARE-COMPANY-OS", serverIdentity: "VERIFIED"};
+export const SYNTHETIC_HEALTH = {status: "HEALTHY", system: "UNIVERSAL-AI-SOFTWARE-COMPANY-OS", serverIdentity: "VERIFIED"};
 const PROJECT = "UASCO-T0006 project", MISSION = "UASCO-T0006 mission";
 
 // ---------------- minimal DOM (diğer renderer testleriyle aynı desen) ----------------
-class N {
+export class N {
   tagName: string; children: N[] = []; parent: N | null = null; attrs = new Map<string, string>(); dataset: Record<string, string> = {}; className = ""; _text = "";
   ls = new Map<string, Array<(e: unknown) => void>>(); style: Record<string, string> = {}; hidden = false; value = ""; checked = false; disabled = false;
   constructor(public doc: D, tag: string) { this.tagName = tag.toUpperCase(); }
@@ -46,14 +46,14 @@ class N {
   querySelector() { return null; }
   querySelectorAll() { return []; }
 }
-class D {
+export class D {
   body: N; constructor() { this.body = new N(this, "body"); }
   createElement(t: string) { return new N(this, t); }
   createElementNS(_ns: string, t: string) { return new N(this, t); }
   createTextNode(s: string) { const n = new N(this, "#text"); n._text = s; return n; }
   getElementById() { return null; }
 }
-const all = (n: N): N[] => n.children.flatMap(c => [c, ...all(c)]);
+export const all = (n: N): N[] => n.children.flatMap(c => [c, ...all(c)]);
 const kpiText = (r: N, key: string) => all(r).find(n => n.dataset.kpi === key)?.textContent ?? `<no kpi ${key}>`;
 // hata işaretleri: ortak durum notları (note-error / note-failed) ve Company OS kaynak durumları
 const failureMarks = (r: N) => all(r).filter(n => /\bnote-(error|failed|offline)\b/.test(n.className) || ["ERROR", "OFFLINE"].includes(n.dataset.companyState ?? "")).map(n => `${n.className}|${n.dataset.companyState ?? ""}`);
@@ -112,10 +112,17 @@ async function renderAgainstServer(app: App, view: string, token = TOKEN) {
   const root: N = await mod.render(ctx);
   const paths = [...new Set(seen.map(s => s.path.replace(/\?.*$/, "")))].sort();
   // api.get sonuçları (store.cache): görünümün ne gördüğünü — başarı mı, sınıflanmış hata mı — doğrudan gösterir (hata yutulursa ok:true olurdu)
-  const results = await Promise.all([...store.cache.entries()].map(async ([k, v]: [string, {promise: Promise<{ok: boolean; state?: string; message?: string}>}]) => ({path: k, ...(await v.promise)})));
+  // L1 (#323): store.cache is the {at, promise} map api.js itself writes (state.js createStore); if that shape changes this fails loudly instead of silently reading nothing
+  const entries = [...store.cache.entries()] as Array<[string, {promise?: Promise<{ok: boolean; state?: string; message?: string}>}]>;
+  for (const [k, v] of entries) if (!v || typeof v.promise?.then !== "function") throw new Error(`renderer store.cache shape changed at ${k}: re-sync renderAgainstServer with apps/desktop/renderer/state.js + api.js`);
+  const results = await Promise.all(entries.map(async ([k, v]) => ({path: k, ...(await v.promise!)})));
   return {root, seen, paths, attention, refused, thrown, results, text: root.textContent};
 }
 
+// //TR: CLOUD-T0005: tower bulut iş panelini GET /v1/cloud/jobs ile okur. Bu yol korumalı main.mjs izin listesine Kurucu kapılı PR ile eklenir; o zamana kadar
+// köprü yolu reddeder (INVALID_API_PATH) ve panel dürüst UNAVAILABLE gösterir. Beklenti main.mjs'in gerçek durumundan türetilir; giriş eklenince otomatik sıkılaşır.
+const CLOUD_JOBS_PENDING = !desktopAllows("/v1/cloud/jobs");
+const pendingRefused = (view: string): string[] => (view === "tower" && CLOUD_JOBS_PENDING ? ["/v1/cloud/jobs"] : []);
 // Her rotanın gerçek sunucuda okuduğu yollar (sorgu dizesi hariç). Bir görünüm farklı/kayıtsız bir yol okumaya başlarsa test bunu söyler.
 const PATHS: Record<string, string[]> = {
   home: ["/v1/cockpit", "/v1/projects"],
@@ -124,7 +131,7 @@ const PATHS: Record<string, string[]> = {
   workforce: ["/v1/agents", "/v1/cockpit", "/v1/roles", "/v1/roles/status-summary", "/v1/work-runs"],
   assurance: ["/v1/cockpit", "/v1/evidence", "/v1/reviews", "/v1/work-runs"],
   delivery: ["/health", "/v1/attention", "/v1/control/status", "/v1/work-runs"],
-  tower: ["/health", "/v1/adapters", "/v1/agents", "/v1/attention", "/v1/capabilities", "/v1/cockpit", "/v1/control/status", "/v1/install", "/v1/phase0", "/v1/retry", "/v1/roles", "/v1/runs", "/v1/scheduler", "/v1/work-runs"],
+  tower: ["/health", "/v1/adapters", "/v1/agents", "/v1/attention", "/v1/capabilities", ...(CLOUD_JOBS_PENDING ? [] : ["/v1/cloud/jobs"]), "/v1/cockpit", "/v1/control/status", "/v1/install", "/v1/phase0", "/v1/retry", "/v1/roles", "/v1/runs", "/v1/scheduler", "/v1/work-runs"],
   inbox: ["/v1/attention", "/v1/cockpit", "/v1/missions", "/v1/work-runs"],
   company: ["/v1/company/accounts", "/v1/company/contacts", "/v1/company/contracts", "/v1/company/invoices", "/v1/company/opportunities", "/v1/company/payments"],
   settings: ["/health", "/v1/adapters", "/v1/capabilities", "/v1/control/status", "/v1/factory", "/v1/system/executors"],
@@ -175,20 +182,48 @@ describe("UASCO-T0006: renderer -> real buildServer for the 10 formerly fake-bri
     for (const v of Object.keys(PATHS)) expect(fs.existsSync(path.join(REND, "views", `${v}.js`)), v).toBe(true);
     // N1a/N1b: the bridge mirrors main.mjs's uasco:api-get handler; if that handler's allow-list gate or synthetic /health body drifts, this fails
     const handler = /ipcMain\.handle\("uasco:api-get",async\(event,p\)=>\{requireTrustedSender\(event\);if\(!desktopGetPathAllowed\(p\)&&!desktopExtraGetPathAllowed\(p\)\)throw new Error\("INVALID_API_PATH"\);if\(p==="\/health"\)\{await verifyServerIdentity\(true\);return (\{[^{}]*\})\}return api\(p\)\}\);/.exec(MAIN_SRC);
-    expect(handler, "main.mjs uasco:api-get handler shape").not.toBeNull();
+    expect(handler, "main.mjs uasco:api-get handler changed (L3): re-sync the bridge in tests/support/renderer-real-server.cases.ts (allow-list gate, identity check, synthetic /health) with main.mjs").not.toBeNull();
     expect(new Function(`return ${handler![1]}`)()).toEqual(SYNTHETIC_HEALTH);
     expect(desktopAllows("/v1/not-a-route"), "the allow-list is a real filter").toBe(false);
   });
 
   for (const view of Object.keys(PATHS)) {
+    // //TR: N1 (#323 incelemesi): kimlik GEÇERLİ (doğru belirteç, doğrulanmış /health), ama gerçek sunucu her /v1 rotasını 500 ile yanıtlar (sunucunun kendi
+    // kimlik/belirteç onRequest kancalarından SONRA eklenen bir kanca: istek doğrulanır, sonra başarısız olur). Köprü main.mjs gibi `${yol}: HTTP 500` fırlatır;
+    // görünümün gördüğü her /v1 sonucu ok:false, ERROR ve tam bu iletidir ve görünüm bir hata durumu gösterir. Yalnız "HTTP <n>" hatalarını yutan bir api.get bunu düşürür.
+    it(`${view}: server error path (identity verified, every /v1 route answers HTTP 500) surfaces "<path>: HTTP 500" as a classified ERROR and a failure state`, { timeout: 120_000 }, async () => {
+      const app = mkApp();
+      app.addHook("onRequest", async (req, reply) => { if (req.url.startsWith("/v1/")) return reply.code(500).send({error: "INJECTED_SERVER_FAILURE"}); });
+      const r = await renderAgainstServer(app, view);
+      expect(r.refused, `${view}: allow-list`).toEqual(pendingRefused(view));
+      expect(r.thrown.filter(t => /CONTROL_API_IDENTITY_UNVERIFIED|INVALID_API_PATH/.test(t) && !pendingRefused(view).some(p => t.startsWith(`${p} -> `))), `${view}: identity and allow-list hold`).toEqual([]);
+      const v1Seen = r.seen.filter(x => x.path.startsWith("/v1/"));
+      expect(v1Seen.length, `${view}: /v1 reads reached the server`).toBeGreaterThan(0);
+      expect([...new Set(v1Seen.map(x => x.status))], `${view}: every /v1 read answered 500`).toEqual([500]);
+      const v1Results = r.results.filter(x => x.path.startsWith("/v1/") && !pendingRefused(view).includes(x.path));
+      expect(v1Results.length).toBe(new Set(v1Seen.map(x => x.path)).size);
+      for (const x of r.results.filter(x => pendingRefused(view).includes(x.path))) expect([x.path, x.ok, x.state]).toEqual([x.path, false, "UNAVAILABLE"]);
+      for (const x of v1Results) expect([view, x.path, x.ok, x.state, x.message]).toEqual([view, x.path, false, "ERROR", `${x.path}: HTTP 500`]);
+      for (const x of r.results.filter(x => x.path === "/health")) expect([view, x.ok]).toEqual([view, true]); // main.mjs's own /health still answers
+      expect(r.text).not.toContain(PROJECT); expect(r.text).not.toContain(MISSION);
+      if (view === "tower") expect(r.attention).toEqual(["ERROR"]);
+      expect(failureMarks(r.root).length, `${view}: a failure state is shown`).toBeGreaterThan(0);
+    });
+
     it(`${view}: happy path against the real server (every read 200, no failure state, real data shown)`, { timeout: 120_000 }, async () => {
       const app = mkApp();
       const r = await renderAgainstServer(app, view);
       expect(r.paths, `${view} reads`).toEqual(PATHS[view]);
       expect(r.seen.filter(s => s.status !== 200), `${view}: non-200 reads`).toEqual([]);
-      expect(r.refused, `${view}: every read passes main.mjs's GET allow-list (N1a)`).toEqual([]);
-      expect(r.thrown, `${view}: no bridge failure`).toEqual([]);
-      expect(r.results.filter(x => !x.ok).map(x => x.path), `${view}: every api.get result is ok`).toEqual([]);
+      expect(r.refused, `${view}: every read passes main.mjs's GET allow-list (N1a)`).toEqual(pendingRefused(view));
+      expect(r.thrown.filter(t => !pendingRefused(view).some(p => t.startsWith(`${p} -> `))), `${view}: no bridge failure`).toEqual([]);
+      expect(r.results.filter(x => !x.ok && !pendingRefused(view).includes(x.path)).map(x => x.path), `${view}: every api.get result is ok`).toEqual([]);
+      for (const x of r.results.filter(x => pendingRefused(view).includes(x.path))) expect([x.path, x.ok, x.state]).toEqual([x.path, false, "UNAVAILABLE"]);
+      if (view === "tower") {
+        // Kurucu PR'ından önce UNAVAILABLE; sonra (server.ts kaydı, kuyruk null) NOT_CONFIGURED. Her iki durumda da örnek iş kartı yok.
+        expect(all(r.root).find(n => n.id === "cloud-jobs-status")?.dataset.cloudJobsState, "tower cloud panel").toBe(CLOUD_JOBS_PENDING ? "UNAVAILABLE" : "NOT_CONFIGURED");
+        expect(all(r.root).filter(n => n.dataset.cloudJob !== undefined)).toEqual([]);
+      }
       expect(failureMarks(r.root), `${view}: failure states`).toEqual([]);
       await HAPPY[view](app, r);
     });
@@ -199,10 +234,11 @@ describe("UASCO-T0006: renderer -> real buildServer for the 10 formerly fake-bri
     it(`${view}: error path (control token mismatch: identity handshake fails as in main.mjs; the real server refuses the same token with 403) renders an honest, classified failure and never throws`, { timeout: 120_000 }, async () => {
       const app = mkApp();
       const r = await renderAgainstServer(app, view, WRONG);
-      expect(r.refused, `${view}: allow-list`).toEqual([]);
+      expect(r.refused, `${view}: allow-list`).toEqual(pendingRefused(view));
       expect(r.results.length, `${view}: reads attempted`).toBeGreaterThan(0);
+      // L2 (#323): /health is excluded because main.mjs answers it itself; /v1/roles?cursor=... pages and /v1/deliveries?projectId=... only follow a SUCCESSFUL first read (paging cursor / selected project), so they are not attempted when that read fails
       expect(r.results.map(x => x.path).sort(), `${view}: the same reads as the happy path`).toEqual(expect.arrayContaining(PATHS[view].filter(p => p !== "/health" && !p.includes("/v1/roles") && !p.includes("/v1/deliveries")).map(p => expect.stringMatching(new RegExp(`^${p.replace(/[/.]/g, "\\$&")}(\\?|$)`)))));
-      for (const x of r.results) expect([view, x.path, x.ok, x.state, x.message]).toEqual([view, x.path, false, "ERROR", "CONTROL_API_IDENTITY_UNVERIFIED"]);
+      for (const x of r.results.filter(x => !pendingRefused(view).includes(x.path))) expect([view, x.path, x.ok, x.state, x.message]).toEqual([view, x.path, false, "ERROR", "CONTROL_API_IDENTITY_UNVERIFIED"]);
       expect(r.seen, `${view}: nothing was read from /v1 with an unverified identity`).toEqual([]);
       for (const p of new Set(r.results.map(x => x.path).filter(p => p.startsWith("/v1/")))) {
         const direct = await app.inject({method: "GET", url: p, headers: {"x-uasco-control-token": WRONG, host: "127.0.0.1:3210"}});

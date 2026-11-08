@@ -405,3 +405,49 @@ describe("LANE-B delivery routes: write gates and refusal audit events", () => {
     expect(all).not.toContain(c.tmp);
   });
 });
+
+// //TR: Teslim kontrol listesi — gerçek buildServer: hazırlanmadı / hazırlandı / dosya değişti / kabul edildi durumları, gerçek GET /v1/deliveries ve GET /v1/work-runs/:id yanıtlarından renderer çekirdeğiyle türetilir (uydurma yok).
+describe("Delivery checklist from the real Control API (renderer core over real responses)", () => {
+  const rend = async (f: string): Promise<any> => import(new URL(`../apps/desktop/renderer/${f}`, import.meta.url).href);
+  const levelsOf = async (app: App, pid: string, runId: string) => {
+    const dc = await rend("delivery-core.js");
+    const list = dc.mapDeliveries((await app.inject({method: "GET", url: `/v1/deliveries?projectId=${pid}`, headers: HDR})).json());
+    const d = list.items.find((x: any) => x.runId === runId);
+    const sec = dc.mapRunSecurity((await app.inject({method: "GET", url: `/v1/work-runs/${runId}`, headers: HDR})).json(), d.sourceCommit);
+    const rows = dc.deliveryChecklist(d, sec);
+    return {lv: Object.fromEntries(rows.map((r: any) => [r.key, r.level])), rows, sec, d};
+  };
+  it("each real state yields its own checklist; product verification is never Done; the security stage is the run's own record", { timeout: T }, async () => {
+    const c = setup(tmp), app = noProviderApi(c), pid = await studioProject(c, app, "c2-check");
+    const {run} = await m1aRun(c, app, pid);
+    const s0 = await levelsOf(app, pid, run.runId);
+    // B1: the real runner ran the static security stage; its summary lives only on the SECURITY_REPORT evidence (not on the WorkRun), and the checklist reads exactly that record.
+    const secEv = [...run.evidence].reverse().find(e => e.kind === "SECURITY_REPORT" && e.commitSha === run.headSha)!;
+    expect(secEv?.security, "the real run has a SECURITY_REPORT evidence with a summary").toBeTruthy();
+    expect("security" in (run as object)).toBe(false);
+    const real = secEv.security!;
+    expect(s0.sec).toEqual({state: "VERIFIED", status: real.status, blockReason: real.blockReason, builtin: real.secrets.builtin.status, gitleaks: real.secrets.gitleaks.status, sca: real.sca.status, headSha: run.headSha});
+    expect(s0.d.sourceCommit).toBe(run.headSha);
+    const st = s0.rows.find((r: any) => r.key === "securityStage");
+    expect(st.value).toBe(real.status);
+    expect(st.detail).toMatchObject({builtin: real.secrets.builtin.status, gitleaks: real.secrets.gitleaks.status, sca: real.sca.status, sameHead: true});
+    // the level follows the real record: OK only for PASSED with every component CLEAN; ATTENTION on BLOCKED/findings; otherwise UNKNOWN
+    const allClean = [real.secrets.builtin.status, real.secrets.gitleaks.status, real.sca.status].every(x => x === "CLEAN");
+    const findings = [real.secrets.builtin.status, real.secrets.gitleaks.status, real.sca.status].includes("FINDINGS");
+    expect(st.level).toBe(real.status === "BLOCKED" || findings ? "ATTENTION" : real.status === "PASSED" && allClean ? "OK" : "UNKNOWN");
+    expect(s0.lv).toMatchObject({artifact: "PENDING", sha256: "PENDING", integrity: "PENDING", archiveScan: "PENDING", verification: "UNKNOWN", acceptance: "PENDING"});
+    const art = (await prepare(app, run.runId)).json().artifact;
+    const s1 = await levelsOf(app, pid, run.runId);
+    expect(s1.lv).toMatchObject({artifact: "OK", sha256: "OK", integrity: "OK", archiveScan: "OK", verification: "UNKNOWN", acceptance: "PENDING"});
+    expect(s1.rows.find((r: any) => r.key === "sha256").value).toBe(art.exportArtifactHash);
+    expect(s1.rows.find((r: any) => r.key === "verification").value).toBe("NOT_VERIFIED");
+    const file = path.join(c.dataDir, art.artifactPath), orig = fs.readFileSync(file);
+    fs.writeFileSync(file, Buffer.concat([orig, Buffer.from("x")]));
+    expect((await levelsOf(app, pid, run.runId)).lv.integrity).toBe("ATTENTION");
+    fs.writeFileSync(file, orig);
+    expect((await levelsOf(app, pid, run.runId)).lv.integrity).toBe("OK");
+    expect((await accept(app, run.runId, acceptanceOf(art))).statusCode).toBe(200);
+    const s3 = await levelsOf(app, pid, run.runId);
+    expect(s3.lv).toMatchObject({acceptance: "OK", verification: "UNKNOWN"});
+  });
+});

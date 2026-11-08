@@ -1,6 +1,12 @@
 // //TR: Bu modül sol navigasyonu ve sağ akış sekmelerini yerinde (in-place) günceller: düğümler bir kez kurulur, yenilemede yalnız aria-current, etiket, sayaç ve aria-selected değişir; böylece odaklı bağlantı/sekme periyodik yenilemede veya dil değişiminde <body>'ye düşmez.
 /** Sol navigasyon listesini kurar (ilk çağrıda) ve her çağrıda yerinde günceller; route öğeleri kararlı kalır. */
-export function syncNav(doc,list,routes,{currentId,counts,labelOf,countLabel,makeIcon}){
+/** UASCO-T0005: kısa etiketli bağlantının erişilebilir adı (WCAG 2.5.3 Label in Name): görünen metin her zaman adın içindedir; tam ad görünen metni zaten içeriyorsa (büyük/küçük harf duyarsız) tam ad, değilse "<görünen> — <tam ad>". */
+export function navAccessibleName(shown,full){
+  const lc=s=>String(s).toLocaleLowerCase();
+  return lc(full).includes(lc(shown))?String(full):`${shown} — ${full}`;
+}
+/** UASCO-T0005: shortLabelOf(r) varsa görünen etiket kısa olur (uzun alan adları 2-3 satıra kırılmaz); tam ad title'da ve (görünen metinle başlayan/onu içeren) aria-label'da kalır. */
+export function syncNav(doc,list,routes,{currentId,counts,labelOf,shortLabelOf,countLabel,makeIcon}){
   const built=list.children.length===routes.length&&routes.every((r,i)=>list.children[i].dataset?.route===r.id);
   if(!built){
     list.replaceChildren(...routes.map(r=>{
@@ -12,8 +18,9 @@ export function syncNav(doc,list,routes,{currentId,counts,labelOf,countLabel,mak
     }));
   }
   routes.forEach((r,i)=>{
-    const a=list.children[i].children[0],kids=a.children,lab=kids[1],cnt=kids[2],n=counts?.[r.id],label=labelOf(r);
-    a.setAttribute("title",label);if(lab.textContent!==label)lab.textContent=label;
+    const a=list.children[i].children[0],kids=a.children,lab=kids[1],cnt=kids[2],n=counts?.[r.id],label=labelOf(r),shown=(shortLabelOf?shortLabelOf(r):null)||label;
+    a.setAttribute("title",label);if(lab.textContent!==shown)lab.textContent=shown;
+    if(shown!==label){const name=navAccessibleName(shown,label);a.setAttribute("aria-label",Number.isSafeInteger(n)&&n>0?`${name}, ${countLabel(n)}`:name)}else a.removeAttribute("aria-label");
     if(r.id===currentId)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current");
     if(Number.isSafeInteger(n)&&n>0){cnt.textContent=String(n);cnt.setAttribute("aria-label",countLabel(n));cnt.hidden=false}
     else{cnt.textContent="";cnt.removeAttribute("aria-label");cnt.hidden=true}

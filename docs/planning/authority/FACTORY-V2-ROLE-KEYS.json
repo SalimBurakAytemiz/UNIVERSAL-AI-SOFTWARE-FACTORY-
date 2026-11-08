@@ -1,0 +1,7 @@
+{
+  "//TR": "Factory V2 kanonik rol anahtar listesi (Founder onaylı yönetişim kaydı): yalnız AÇIK anahtarlar ve kapsamları; özel anahtar ASLA bu depoya yazılmaz. Boş liste = hiçbir imzalı otorite geçişi doğrulanamaz (fail-closed). Girişler her rol sahibi oturumun kendi ürettiği anahtarla, ayrı Founder onaylı PR ile eklenir.",
+  "schema": "uasco.factory-v2.role-keys/1",
+  "mode": "LIVE",
+  "domain": "uasco-v7",
+  "keys": []
+}
