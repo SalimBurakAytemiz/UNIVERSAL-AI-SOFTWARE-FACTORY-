@@ -5,6 +5,8 @@ import {describe, it, expect} from "vitest";
 import {verifiedState, mentionsAttestation, decideAutoMerge, nextTasks, taskOf, openGates, decideFor, loadPolicy, loadIndex, loadState, isGovernancePath, attestationOf, collectEvidence, pages, TRUST_FILES} from "../../docs/planning/autonomy/autonomy.mjs";
 import {createHash} from "node:crypto";
 import os from "node:os";
+// @ts-expect-error untyped .mjs module
+import {fv2Tasks} from "../../docs/planning/autonomy/build-task-index.mjs";
 import path from "node:path";
 
 const SHA = "a".repeat(40), BASE = "b".repeat(40);
@@ -74,8 +76,11 @@ export function registerAutonomyCases() {
       expect(p.decisionId).toBe("FD-2026-11-03-STANDING-AUTONOMY");
       expect(fs.existsSync(p.record)).toBe(true);
       expect(p.coveredTiers).not.toContain("T3");
-      expect(ix.count).toBe(256);
-      expect(ix.tasks).toHaveLength(256);
+      // 256 V4.1 matrix tasks, unchanged, plus the Founder-approved Factory V2 registry (factory-v2-tasks.json): the count covers both.
+      expect(ix.tasks.filter((x: {id: string}) => !x.id.startsWith("FV2-"))).toHaveLength(256);
+      expect(ix.extraSources.map((x: {count: number}) => x.count)).toEqual([7]);
+      expect(ix.count).toBe(256 + 7);
+      expect(ix.tasks).toHaveLength(ix.count);
       expect(ix.source.sha256).toMatch(/^[0-9a-f]{64}$/);
       for (const d of st.done) expect(ix.tasks.some((x: {id: string}) => x.id === d.task)).toBe(true);
     });
@@ -251,6 +256,57 @@ export function registerAutonomyCases() {
         const {result} = decideFor({evidence, body: body("CLOUD-T0010")});
         expect(result.decision).toBe("BLOCK");
       }
+    });
+  });
+  describe("Factory V2 task registry (factory-v2-tasks.json -> task-index.json)", () => {
+    const realPolicy = loadPolicy(), realIndex = loadIndex();
+    const fv2Raw = fs.readFileSync("docs/planning/autonomy/factory-v2-tasks.json", "utf8");
+    const fv2 = realIndex.tasks.filter((x: {id: string}) => x.id.startsWith("FV2-"));
+    const matrixIds = new Set(realIndex.tasks.filter((x: {id: string}) => !x.id.startsWith("FV2-")).map((x: {id: string}) => x.id));
+    const entry = (o: Record<string, unknown> = {}) => ({id: "FV2-T0001", tier: "T1", status: "VERIFY_PENDING", wave: "FV2", deps: [], startGates: [], mergeGates: ["D-31"], exec: "CLOUD", name: "x", ...o});
+    const src = (...tasks: unknown[]) => JSON.stringify({schemaVersion: "1.0.0", tasks});
+    it("F1 the committed index holds exactly the registry's tasks, bound by the registry's SHA-256, after the unchanged matrix", () => {
+      expect(fv2).toEqual(fv2Tasks(fv2Raw, matrixIds));
+      expect(realIndex.extraSources).toEqual([{path: "docs/planning/autonomy/factory-v2-tasks.json", sha256: createHash("sha256").update(fv2Raw).digest("hex"), count: fv2.length}]);
+      expect(realIndex.count).toBe(realIndex.tasks.length);
+      expect(realIndex.tasks.slice(-fv2.length).map((x: {id: string}) => x.id)).toEqual(fv2.map((x: {id: string}) => x.id));
+    });
+    it("F2 governance, CI-review and authority-fence work is T3; no FV2 task is ever picked as new work", () => {
+      const tier = Object.fromEntries(fv2.map((x: {id: string; tier: string}) => [x.id, x.tier]));
+      for (const id of ["FV2-T0002", "FV2-T0003", "FV2-T0007"]) expect(tier[id]).toBe("T3");
+      const picked = nextTasks({index: realIndex, state: {}, policy: realPolicy, limit: 1000});
+      expect(JSON.stringify(picked)).not.toContain("FV2-");
+    });
+    it("F3 real policy: a T2 FV2 task auto-merges only with its typed dependency merged; T3 stays FOUNDER_REQUIRED", () => {
+      const e = ev({reviews: [cleanReview()]});
+      const mergeGate = {...merge};
+      const p = {...realPolicy, trustedReviewerLogins: ["rev"]};
+      expect(decideAutoMerge({gate: mergeGate, body: body("FV2-T0004"), policy: p, index: realIndex, evidence: e}).decision).toBe("AUTO_MERGE");
+      const unmet = decideAutoMerge({gate: mergeGate, body: body("FV2-T0005"), policy: p, index: realIndex, evidence: e});
+      expect(unmet).toMatchObject({decision: "FOUNDER_REQUIRED", reasons: ["TASK_DEPENDENCY_UNMET:FV2-T0004"]});
+      expect(decideAutoMerge({gate: mergeGate, body: body("FV2-T0005"), policy: p, index: realIndex, evidence: e, state: {done: [{task: "FV2-T0004", pr: 388}]}}).decision).toBe("AUTO_MERGE");
+      const t3 = decideAutoMerge({gate: mergeGate, body: body("FV2-T0002"), policy: p, index: realIndex, evidence: e});
+      expect(t3.decision).toBe("FOUNDER_REQUIRED");
+      expect(t3.reasons).toContain("TIER_NOT_COVERED:T3");
+    });
+    it("F4 the registry builder fails closed on collisions, bad ids, untyped or forward deps, extra keys, unknown tier/status", () => {
+      expect(fv2Tasks(src(entry(), entry({id: "FV2-T0002", deps: [["FV2-T0001", "MERGED"]]})), new Set())).toHaveLength(2);
+      const bad: Array<[unknown[], string]> = [
+        [[entry(), entry()], "FV2_TASK_ID_COLLISION"],
+        [[entry({id: "CLOUD-T0001"})], "FV2_TASK_ID"],
+        [[entry({id: "FV2-T001"})], "FV2_TASK_ID"],
+        [[entry({deps: ["FV2-T0000"]})], "FV2_TASK_DEPS"],
+        [[entry({deps: [["FV2-T0002", "MERGED"]]}), entry({id: "FV2-T0002"})], "FV2_TASK_DEPS"],
+        [[entry({deps: [["FV2-T0000", "REVIEWED"]]})], "FV2_TASK_DEPS"],
+        [[{...entry(), owner: "x"}], "FV2_TASK_KEYS"],
+        [[entry({tier: "T4"})], "FV2_TASK_TIER"],
+        [[entry({status: "READY"})], "FV2_TASK_STATUS"],
+        [[entry({mergeGates: ["anything"]})], "FV2_TASK_GATES"],
+        [[entry({exec: "LOCAL"})], "FV2_TASK_FIELDS"],
+      ];
+      for (const [tasks, code] of bad) expect(() => fv2Tasks(src(...tasks), new Set())).toThrow(code);
+      expect(() => fv2Tasks(src(entry({id: "FV2-T0009"})), new Set(["FV2-T0009"]))).toThrow("FV2_TASK_ID_COLLISION");
+      expect(() => fv2Tasks(JSON.stringify({schemaVersion: "2", tasks: []}), new Set())).toThrow("FV2_TASKS_SCHEMA");
     });
   });
 }
