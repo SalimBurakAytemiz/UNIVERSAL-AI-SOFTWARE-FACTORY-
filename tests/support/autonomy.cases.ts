@@ -6,7 +6,7 @@ import {verifiedState, mentionsAttestation, decideAutoMerge, nextTasks, taskOf, 
 import {createHash} from "node:crypto";
 import os from "node:os";
 // @ts-expect-error untyped .mjs module
-import {fv2Tasks} from "../../docs/planning/autonomy/build-task-index.mjs";
+import {fv2Tasks, buildIndex} from "../../docs/planning/autonomy/build-task-index.mjs";
 import path from "node:path";
 
 const SHA = "a".repeat(40), BASE = "b".repeat(40);
@@ -271,9 +271,9 @@ export function registerAutonomyCases() {
       expect(realIndex.count).toBe(realIndex.tasks.length);
       expect(realIndex.tasks.slice(-fv2.length).map((x: {id: string}) => x.id)).toEqual(fv2.map((x: {id: string}) => x.id));
     });
-    it("F2 governance, CI-review and authority-fence work is T3; no FV2 task is ever picked as new work", () => {
+    it("F2 governance, CI-review, authority-fence and LIVE-wiring work is T3; no FV2 task is ever picked as new work", () => {
       const tier = Object.fromEntries(fv2.map((x: {id: string; tier: string}) => [x.id, x.tier]));
-      for (const id of ["FV2-T0002", "FV2-T0003", "FV2-T0007"]) expect(tier[id]).toBe("T3");
+      for (const id of ["FV2-T0002", "FV2-T0003", "FV2-T0005", "FV2-T0007"]) expect(tier[id]).toBe("T3");
       const picked = nextTasks({index: realIndex, state: {}, policy: realPolicy, limit: 1000});
       expect(JSON.stringify(picked)).not.toContain("FV2-");
     });
@@ -282,12 +282,14 @@ export function registerAutonomyCases() {
       const mergeGate = {...merge};
       const p = {...realPolicy, trustedReviewerLogins: ["rev"]};
       expect(decideAutoMerge({gate: mergeGate, body: body("FV2-T0004"), policy: p, index: realIndex, evidence: e}).decision).toBe("AUTO_MERGE");
-      const unmet = decideAutoMerge({gate: mergeGate, body: body("FV2-T0005"), policy: p, index: realIndex, evidence: e});
-      expect(unmet).toMatchObject({decision: "FOUNDER_REQUIRED", reasons: ["TASK_DEPENDENCY_UNMET:FV2-T0004"]});
-      expect(decideAutoMerge({gate: mergeGate, body: body("FV2-T0005"), policy: p, index: realIndex, evidence: e, state: {done: [{task: "FV2-T0004", pr: 388}]}}).decision).toBe("AUTO_MERGE");
-      const t3 = decideAutoMerge({gate: mergeGate, body: body("FV2-T0002"), policy: p, index: realIndex, evidence: e});
-      expect(t3.decision).toBe("FOUNDER_REQUIRED");
-      expect(t3.reasons).toContain("TIER_NOT_COVERED:T3");
+      const unmet = decideAutoMerge({gate: mergeGate, body: body("FV2-T0006"), policy: p, index: realIndex, evidence: e});
+      expect(unmet).toMatchObject({decision: "FOUNDER_REQUIRED", reasons: ["TASK_DEPENDENCY_UNMET:FV2-T0005"]});
+      expect(decideAutoMerge({gate: mergeGate, body: body("FV2-T0006"), policy: p, index: realIndex, evidence: e, state: {done: [{task: "FV2-T0005", pr: 408}]}}).decision).toBe("AUTO_MERGE");
+      for (const id of ["FV2-T0002", "FV2-T0005"]) {
+        const t3 = decideAutoMerge({gate: mergeGate, body: body(id), policy: p, index: realIndex, evidence: e, state: {done: [{task: "FV2-T0004", pr: 388}]}});
+        expect(t3.decision).toBe("FOUNDER_REQUIRED");
+        expect(t3.reasons).toContain("TIER_NOT_COVERED:T3");
+      }
     });
     it("F4 the registry builder fails closed on collisions, bad ids, untyped or forward deps, extra keys, unknown tier/status", () => {
       expect(fv2Tasks(src(entry(), entry({id: "FV2-T0002", deps: [["FV2-T0001", "MERGED"]]})), new Set())).toHaveLength(2);
@@ -301,12 +303,15 @@ export function registerAutonomyCases() {
         [[{...entry(), owner: "x"}], "FV2_TASK_KEYS"],
         [[entry({tier: "T4"})], "FV2_TASK_TIER"],
         [[entry({status: "READY"})], "FV2_TASK_STATUS"],
+        [[entry({status: "ASSET_DONE"})], "FV2_TASK_STATUS"],
+        [[entry({status: "DONE_OBSERVED"})], "FV2_TASK_STATUS"],
         [[entry({mergeGates: ["anything"]})], "FV2_TASK_GATES"],
         [[entry({exec: "LOCAL"})], "FV2_TASK_FIELDS"],
       ];
       for (const [tasks, code] of bad) expect(() => fv2Tasks(src(...tasks), new Set())).toThrow(code);
       expect(() => fv2Tasks(src(entry({id: "FV2-T0009"})), new Set(["FV2-T0009"]))).toThrow("FV2_TASK_ID_COLLISION");
       expect(() => fv2Tasks(JSON.stringify({schemaVersion: "2", tasks: []}), new Set())).toThrow("FV2_TASKS_SCHEMA");
+      expect(() => buildIndex(JSON.stringify({tasks: []}))).toThrow("FV2_TASKS_MISSING");
     });
   });
 }

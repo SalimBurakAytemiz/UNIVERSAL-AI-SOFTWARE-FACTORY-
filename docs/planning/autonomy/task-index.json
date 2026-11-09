@@ -8,7 +8,7 @@
  "extraSources": [
   {
    "path": "docs/planning/autonomy/factory-v2-tasks.json",
-   "sha256": "79a52eee1d8b3ff4428bc65adf7b6c4e24230380d81f262fa9ea124e2c4f8d0b",
+   "sha256": "a30ff54e5695c5b0cce83a0a2403255bb21de1fa1c0fd51f9bfe655ad3ee0125",
    "count": 7
   }
  ],
@@ -4728,7 +4728,7 @@
   },
   {
    "id": "FV2-T0005",
-   "tier": "T2",
+   "tier": "T3",
    "status": "VERIFY_PENDING",
    "wave": "FV2",
    "deps": [
@@ -4742,7 +4742,7 @@
     "D-31"
    ],
    "exec": "CLOUD",
-   "name": "Factory V2 rol anahtarı kayıt önerisi aracı: yalnız açık anahtar girdisi, özel materyal reddi (identity/cli; PR #408)"
+   "name": "Factory V2 LIVE kontrol yığını bağlantısı (controlStack LIVE kipi, uasco-v7/uasco/registry, live lease, AuthorityBridge.assertV2 kapısı; cutover öncesi son kod parçası) + rol anahtarı kayıt önerisi aracı (yalnız açık anahtar; identity/cli/control; PR #408)"
   },
   {
    "id": "FV2-T0006",

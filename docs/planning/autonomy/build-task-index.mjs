@@ -12,7 +12,8 @@ const OUT = "docs/planning/autonomy/task-index.json";
 const FV2 = "docs/planning/autonomy/factory-v2-tasks.json";
 const FV2_ID = /^FV2-T\d{4}$/;
 const TIERS = ["T0", "T1", "T2", "T3"];
-const FV2_STATUSES = ["VERIFY_PENDING", "ASSET_DONE", "DONE_OBSERVED", "DEFERRED", "BLOCKED"];
+// No done-counting status (ASSET_DONE/DONE_OBSERVED): an FV2 task is done only through a verified STATE.json entry of a merged PR.
+const FV2_STATUSES = ["VERIFY_PENDING", "DEFERRED", "BLOCKED"];
 const FV2_KEYS = ["id", "tier", "status", "wave", "deps", "startGates", "mergeGates", "exec", "name"];
 const GATE = /^D-\d{2}$/;
 
@@ -37,7 +38,8 @@ export function fv2Tasks(raw, matrixIds) {
   return f.tasks.map(t => Object.fromEntries(FV2_KEYS.map(k => [k, t[k]])));
 }
 
-export function buildIndex(raw, fv2Raw = null) {
+export function buildIndex(raw, fv2Raw) {
+  if (typeof fv2Raw !== "string") throw new Error("FV2_TASKS_MISSING"); // the registry is never silently dropped
   const m = JSON.parse(raw);
   const tasks = m.tasks.map(t => ({
     id: t.id, tier: t.authorityTier, status: t.v31Status, wave: t.wave ?? null,
@@ -46,11 +48,11 @@ export function buildIndex(raw, fv2Raw = null) {
     exec: t.executionLocation ?? null, name: t.name,
   }));
   const sha = x => createHash("sha256").update(x).digest("hex");
-  const extra = fv2Raw === null ? [] : fv2Tasks(fv2Raw, new Set(tasks.map(t => t.id)));
+  const extra = fv2Tasks(fv2Raw, new Set(tasks.map(t => t.id)));
   return {
     "//TR": "build-task-index.mjs tarafından V4.1 yürütme matrisinden ve factory-v2-tasks.json kaydından türetilir; elle düzenlenmez.",
     source: {zip: ZIP, entry: ENTRY, sha256: sha(raw)},
-    ...(fv2Raw === null ? {} : {extraSources: [{path: FV2, sha256: sha(fv2Raw), count: extra.length}]}),
+    extraSources: [{path: FV2, sha256: sha(fv2Raw), count: extra.length}],
     count: tasks.length + extra.length, tasks: [...tasks, ...extra],
   };
 }
