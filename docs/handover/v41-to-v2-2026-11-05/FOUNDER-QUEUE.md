@@ -18,6 +18,8 @@ Data source: the builders' reports (I, E, F) plus the coordinator's gate checks.
 
 6. **#343 (CLOUD-T0005, auto-merge enabled by the Founder) is stuck:** mergeable_state=dirty; conflicts with main in `apps/control-api/src/server.ts`, `apps/desktop/main.mjs` and the protected `config/trust-root-manifest.json` (mostly from the V2 merges). The trust-root conflict needs a reseal by the protected owner, so the coordinator does not resolve it. Decision: assign the protected owner/V2 to resolve it, or withdraw auto-merge.
 
+7. **V2 routine merges through the V4.1 writer (V2_CANDIDATE request, 2026-11-09):** after the Founder merges #416 (FV2-T0001..7 task registration), V2 asks for one integration window at a time for #411 → #388 → #408 → #409, with V4.1's writer merging each one through the executor when it gives AUTO_MERGE, plus a STATE.json done writeback. #355/#389/#412 remain Founder merges. This conflicts with the Founder's instruction "don't touch V2 PRs", so the coordinator **did nothing**; it sent only a protocol proposal (one PR, HOLD ≤90 min, merge only on AUTO_MERGE + verify-main). Decision: (a) approve the protocol in the V4.1 session, (b) the STATE.json writeback method.
+
 ## Founder-tier PRs (dependency order)
 - **Builder I renderer UX** (`UASCO-TASK: none`, Founder product directive): #370 (T0007 SPLIT) → #371 (stacked on #370) → #377 → #382 → #397 (shares error-code.js with #382, so after #382). HELD after these: 371-safe cc3db0c, 377-safe f8ff0ae, 382-safe c2297f4 → 374-safe 7dbc56f → approval-gate 9d21537 → cloud-sink-guard 1f195e7. #375 has no deps.
 - **Builder E:** #381 (T0011.B; deps T0035/T0014/T0044 MISSING, T0028 UNVERIFIABLE, T0029 BLOCKED) → #372 (T0011.A, needs T0011.B REVIEWED). #374 (T0020.A ← T0020.B ← T0016.A + T0016.D).
