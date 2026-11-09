@@ -1,0 +1,21 @@
+{
+  "//TR": "PROBE anahtar listesi: yalnız probe- alanında iki-oturumlu güvenlik probu için; canlı uasco-v7 otoritesini YETKİLENDİREMEZ (loader probe olmayan alanı reddeder).",
+  "schema": "uasco.factory-v2.role-keys/1",
+  "mode": "PROBE",
+  "domain": "probe-uasco",
+  "sourceBranch": "uasco/registry-probe2",
+  "keys": [
+    {
+      "keyId": "k_d8f334bebf0fd76b",
+      "role": "V41_OWNER",
+      "sessionId": "session_015dYwb2b3yVQ6iay68HXCD8",
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAIF5H3cMcfORM9oVsS/u1xFZB5F+qoMJTxNV+v5kL3ns=\n-----END PUBLIC KEY-----\n"
+    },
+    {
+      "keyId": "k_4c65579e51b3e8a4",
+      "role": "V2_CANDIDATE",
+      "sessionId": "session_015dYwb4zVwFwg69iij2RdGq",
+      "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAPHxzx6jXCWksYIMKnEoHz4IWxp1EC1iH0blX4weCUHI=\n-----END PUBLIC KEY-----\n"
+    }
+  ]
+}

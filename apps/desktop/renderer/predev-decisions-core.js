@@ -1,5 +1,5 @@
 // //TR: Bu modül Pre-dev Founder kararlarının (LANE-A) saf, DOM'suz çekirdeğidir: POST /v1/missions/:id/predev/start, POST .../predev/artifacts/:artifactId/approve {evidenceRefs} ve POST .../reject {reason} isteklerini kurar ve yanıtlarını sınıflar. Karar kapıları (bağımsız onaylayan, kanıt zorunlu, faz sırası) SUNUCUDADIR; burada yeniden uygulanmaz, onaylayan her zaman sunucunun aktörüdür ve istemci onaylayan/kanıt uydurmaz. Girdi yalnız sunucu şemasının izin verdiği biçimde kurulur (kanıt 1..20, benzersiz, ^[A-Za-z0-9._:-]+$ ve en çok 128 karakter; gerekçe boş olmayan en çok 1000 karakter). Reddedilme nedeni sunucunun döndüğü PREDEV_* kodudur ve AYNEN gösterilir; bilinmeyen ama biçimi geçerli kod da aynen gösterilir, biçimi bozuk/eksik neden ise "neden bildirilmedi" olur (asla uydurulmaz). Başarılı yanıt GET /v1/predev okuma-modeliyle aynı sıkı eşleyiciden geçer; bozuk 2xx yanıt başarı sayılmaz. Ana süreç izin listesinde yol yoksa (INVALID_API_PATH) ya da sunucu rotayı bilmiyorsa sonuç "etkin değil"dir ve hiçbir sonuç uydurulmaz. Bu modül ürün doğrulamasını hesaplamaz.
-import {MISSION_ID_RE,mapPredev} from "./journey-core.js";
+import {MISSION_ID_RE,mapPredev,PHASE_KIND} from "./journey-core.js";
 import {describePostResult} from "./work-core.js";
 
 export const ARTIFACT_ID_RE=/^pda_[0-9a-f]{24}$/;
@@ -85,4 +85,15 @@ export function predevStatusKey(c,res,verb){
   if(c.kind==="NOT_ENABLED")return {ok:false,key:"predev.notEnabled",vars:{}};
   if(c.kind==="INVALID")return {ok:false,key:"predev.invalid",vars:{}};
   const d=describePostResult(res);return {ok:false,key:d.key,vars:d.vars};
+}
+
+// //TR: UASCO-T0013: faz zaman çizelgesi (saf). Karar YALNIZ kayıtlı artefakt durumundan türetilir: APPROVED/REJECTED = karar verildi, DRAFT/SUBMITTED = Founder kararı bekliyor, NOT_STARTED = karar yok. Sunucunun bildirmediği bir karar uydurulmaz.
+export const DECISION_OF=Object.freeze({APPROVED:"APPROVED",REJECTED:"REJECTED",DRAFT:"PENDING",SUBMITTED:"PENDING",NOT_STARTED:"NONE"});
+/** mapPredev().predev -> {rows:[{kind,state,decision,current}],taken,pending,notStarted,complete,currentKind} | null. */
+export function phaseTimeline(predev){
+  if(!predev||typeof predev!=="object"||!Array.isArray(predev.artifacts))return null;
+  const currentKind=PHASE_KIND[predev.phase]??null;
+  const rows=predev.artifacts.map(a=>({kind:a.kind,state:a.state,decision:DECISION_OF[a.state]??"NONE",current:a.kind===currentKind}));
+  const n=d=>rows.filter(r=>r.decision===d).length;
+  return {rows,taken:n("APPROVED")+n("REJECTED"),pending:n("PENDING"),notStarted:n("NONE"),complete:predev.phase==="PRE_DEV_COMPLETE",currentKind};
 }
