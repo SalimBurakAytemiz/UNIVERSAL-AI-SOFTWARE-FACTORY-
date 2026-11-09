@@ -16,6 +16,8 @@ Data source: the builders' reports (I, E, F) plus the coordinator's gate checks.
 
 5. **#327 (V3-T1012.a, Builder A: project export refuses a Node project without a lockfile, EXPORT_LOCKFILE_MISSING 409):** CLEAN at head c34c37f7 / base d96e92b0, but the reviewer attested `AUTONOMY-EXCEPTIONS: TASK_SCOPE_MISMATCH` → FOUNDER_REQUIRED. Reason: the matrix `targetFiles` for V3-T1012.a lists only `core/workos/project-templates.ts`; the PR also touches `core/workos/project-studio.ts`, `apps/desktop/renderer/work-core.js`, `locales/{en,tr}.js` and tests, and no `docs/planning/authority/*` record widens the write set. Decision: approve the scope (Founder merge), or a record that widens the write set.
 
+6. **#343 (CLOUD-T0005, auto-merge enabled by the Founder) is stuck:** mergeable_state=dirty; conflicts with main in `apps/control-api/src/server.ts`, `apps/desktop/main.mjs` and the protected `config/trust-root-manifest.json` (mostly from the V2 merges). The trust-root conflict needs a reseal by the protected owner, so the coordinator does not resolve it. Decision: assign the protected owner/V2 to resolve it, or withdraw auto-merge.
+
 ## Founder-tier PRs (dependency order)
 - **Builder I renderer UX** (`UASCO-TASK: none`, Founder product directive): #370 (T0007 SPLIT) → #371 (stacked on #370) → #377 → #382 → #397 (shares error-code.js with #382, so after #382). HELD after these: 371-safe cc3db0c, 377-safe f8ff0ae, 382-safe c2297f4 → 374-safe 7dbc56f → approval-gate 9d21537 → cloud-sink-guard 1f195e7. #375 has no deps.
 - **Builder E:** #381 (T0011.B; deps T0035/T0014/T0044 MISSING, T0028 UNVERIFIABLE, T0029 BLOCKED) → #372 (T0011.A, needs T0011.B REVIEWED). #374 (T0020.A ← T0020.B ← T0016.A + T0016.D).
