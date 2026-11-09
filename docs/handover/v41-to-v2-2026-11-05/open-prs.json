@@ -431,7 +431,8 @@
     "#366 a56b5f12",
     "#414 22bca661",
     "#415 63ee9593 (Windows PAR04 fix)",
-    "#413 0920d7a1"
+    "#413 0920d7a1",
+    "#411 430e4c39 (FV2-T0001, repair window)"
   ],
   "founder_merged_v2_line": [
     "#347 e16bd66a (2026-11-06T04:05Z)",
