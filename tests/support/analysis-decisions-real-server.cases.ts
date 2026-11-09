@@ -163,6 +163,26 @@ describe("UASCO-T0013: analysis / pre-dev phase timeline and confirmed decisions
     expect(row.dataset.tlDecision).toBe("REJECTED"); expect(row.textContent).toContain("decision taken: rejected, rework requested");
   });
 
+  it("mission switched while the Approve / Reject dialog is open: even a confirmed dialog posts nothing for the old mission, the lock is released and the draft stays decidable (#373 F1)", async () => {
+    const {app, s} = await mkApp(), h = await harness(app, s.pending);
+    for (const verb of ["approve", "reject"] as const) {
+      h.dec.resetPredevDraft(s.pending, s.artifactId); h.dec.predevDraft.evidence = "ev-1"; h.dec.predevDraft.reason = "Scope is unclear";
+      let release!: (v: boolean) => void; h.out.answer = new Promise<boolean>(r => { release = r; });
+      const p = verb === "approve" ? h.dec.submitApprove(h.ctx, s.pending, s.artifactId, "BusinessAnalysis") : h.dec.submitReject(h.ctx, s.pending, s.artifactId, "BusinessAnalysis");
+      for (let i = 0; i < 5; i++) await tick();
+      expect(h.forms.drafts.busy[`predev-${verb}`], `${verb}: locked while the dialog is open`).toBe(true);
+      h.forms.selection.missionId = s.idle; await h.ctx.rerender(); // the Founder opened another mission meanwhile
+      expect(h.dec.predevDraft.missionId).toBe(s.idle);
+      release(true);
+      expect(await p, verb).toEqual({ok: false, stale: true, status: null});
+      expect(h.posts(), `${verb}: nothing posted for the old mission`).toEqual([]);
+      expect(h.forms.drafts.busy[`predev-${verb}`], `${verb}: lock released`).toBe(false);
+      expect((await h.serverPredev()).artifacts.BusinessAnalysis.state, verb).toBe("DRAFT");
+      h.forms.selection.missionId = s.pending; await h.ctx.rerender();
+    }
+    expect(h.out.confirms).toHaveLength(2);
+  });
+
   it("loading: while the confirmed request is in flight the panel says so and Approve / Reject are disabled; a second press sends nothing", async () => {
     const {app, s} = await mkApp(), h = await harness(app, s.pending);
     let open!: () => void; holdOn = {re: /\/predev\/artifacts\/[^/]+\/approve$/, gate: new Promise<void>(r => { open = r; })};
