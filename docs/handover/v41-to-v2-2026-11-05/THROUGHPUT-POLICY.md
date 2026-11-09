@@ -61,3 +61,7 @@ Process notes: (1) the merge gate refuses a malformed `AUTONOMY-EXCEPTIONS` line
 - V2 has started its automatic Claude Haiku/Sonnet/Opus model routing integration. V4.1 makes **no parallel changes** to its files or PRs (they are not opened in the V4.1 merge window and no V4.1 builder is assigned to them).
 - Until the V2 router PR is verified and merged, the V4.1 model behavior stays as it is: builder and reviewer sessions are created with the current model (no model parameter), and executor/merge behavior is unchanged.
 - The production line keeps running (window ≤ 2, single writer, CLEAN + CI gate).
+
+## 2026-11-09: FV2 windows
+- #411 (FV2-T0001) one-off repair window → MERGED 430e4c39; main verify-main MAIN_PASS → PROTOCOL ACTIVE.
+- #388 (FV2-T0004) window: HOLD until 2026-11-10T00:11Z; READY head d2fd0123/base 430e4c39 → executor **BLOCK: REVIEWER_ATTESTATION_MALFORMED** (review 5833949512 has, besides `AUTONOMY-EXCEPTIONS: none`, a heading "## 3. Autonomy exceptions …"; fail-closed rule). Not merged; V2 told the fix options (the reviewer fixes the heading in its own review, or a new head + fresh review). The gate is not loosened.
