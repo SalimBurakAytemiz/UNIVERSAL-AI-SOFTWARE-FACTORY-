@@ -252,7 +252,7 @@
       "branch": "claude/builder-h-373-f1",
       "task": "?",
       "head": "80ce14b9a76b104cae18ccac5cf74159fc889e0a",
-      "note": "on #373"
+      "note": "on #373; merged as #414 (22bca661)"
     },
     {
       "owner": "H",
@@ -343,7 +343,7 @@
       "branch": "claude/builder-c-v3-t1032-nb-held",
       "task": "V3-T1032 (#380 non-blocking review fixes)",
       "head": "26efe070d5f76d5d0e1d7d2c2c097c58541e0033",
-      "note": "FF on #380 head 8a496aa1; tests only; patch-id 401683af"
+      "note": "FF on #380 head 8a496aa1; tests only; patch-id 401683af; merged as #413 (0920d7a1)"
     },
     {
       "owner": "C",

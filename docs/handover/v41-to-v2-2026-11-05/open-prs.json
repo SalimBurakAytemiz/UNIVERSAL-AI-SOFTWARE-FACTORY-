@@ -1,6 +1,6 @@
 {
   "//TR": "V4.1 açık PR defteri: her PR tam head SHA, görev, sahip, reviewer oturumu ve kapı sınıfıyla kayıtlıdır (taban 59c06dd7).",
-  "base": "63ee9593 (2026-11-09)",
+  "base": "0920d7a1 (2026-11-09; V4.1 routine queue empty)",
   "prs": [
     {
       "pr": 403,
@@ -430,7 +430,8 @@
     "#373 d96e92b0",
     "#366 a56b5f12",
     "#414 22bca661",
-    "#415 63ee9593 (Windows PAR04 fix)"
+    "#415 63ee9593 (Windows PAR04 fix)",
+    "#413 0920d7a1"
   ],
   "founder_merged_v2_line": [
     "#347 e16bd66a (2026-11-06T04:05Z)",
