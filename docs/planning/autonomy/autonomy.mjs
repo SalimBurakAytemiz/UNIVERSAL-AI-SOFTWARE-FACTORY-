@@ -25,8 +25,19 @@ export const NOT_PICKABLE = Object.freeze(["ASSET_DONE", "DONE_OBSERVED", "SPLIT
 export const NOT_MERGEABLE = Object.freeze(["SPLIT", "BLOCKED", "DEFERRED", "UNVERIFIABLE"]);
 // Paths that define this authority. Changing them would widen it, so a PR touching any of them is a Founder decision (B-1).
 // STATE.json is the loop's own progress record and is updated by routine PRs.
-export const GOVERNANCE_PREFIXES = Object.freeze(["docs/planning/autonomy/", "docs/planning/authority/", "docs/planning/v41/", "docs/planning/cloud-only/", ".claude/", "automation/factory-v2/"]);
-export const GOVERNANCE_EXACT = Object.freeze(["docs/planning/merge-gate.mjs", "docs/planning/merge-gate.proof.mjs", "docs/planning/merge_gate.md"]);
+export const GOVERNANCE_PREFIXES = Object.freeze(["docs/planning/autonomy/", "docs/planning/authority/", "docs/planning/v41/", "docs/planning/cloud-only/", ".claude/"]);
+// Factory V2 authority code: the static, re-export and literal dynamic import closure of the authority entry points, i.e. the executor's fence
+// (v41-guard), LIVE control (control), the bridge/keygen/factory CLI (cli), cutover, V2 merge writing (github-writer, merge-git) and the gate
+// verifier. Every file a protected file can load is protected, so a routine PR cannot change authority behaviour through an import.
+// tests/support/fv2-executor-fence.cases.ts recomputes the closure from these roots and fails if the code and this list drift; closure files
+// outside automation/factory-v2/ are already Founder paths (automation/lib/ and scripts/ci/ via merge-gate, merge-gate.mjs below).
+// A file outside the closure (today only demo-worker.mjs, or a new module no protected file imports) stays routine: wiring it in edits a protected file.
+export const FV2_AUTHORITY_ROOTS = Object.freeze(["automation/factory-v2/v41-guard.mjs", "automation/factory-v2/control.mjs", "automation/factory-v2/cli.mjs",
+  "automation/factory-v2/cutover.mjs", "automation/factory-v2/github-writer.mjs", "automation/factory-v2/merge-git.mjs", "automation/factory-v2/gate-verifier.mjs"]);
+export const FV2_AUTHORITY_FILES = Object.freeze(["bridge", "cli", "cloud-orchestrator", "control", "cutover", "executors", "failures", "gate-verifier", "github-writer",
+  "identity", "ledger-log", "live-sources", "merge-git", "merge", "model-router", "ownership", "probe-scenario", "quota-governor", "ref-doc-store", "report", "review",
+  "scheduler", "shared-registry", "state-journal", "supervisor", "topology", "v41-guard"].map(f => `automation/factory-v2/${f}.mjs`));
+export const GOVERNANCE_EXACT = Object.freeze(["docs/planning/merge-gate.mjs", "docs/planning/merge-gate.proof.mjs", "docs/planning/merge_gate.md", ...FV2_AUTHORITY_FILES]);
 export const GOVERNANCE_EXEMPT = Object.freeze(["docs/planning/autonomy/state.json"]);
 // Files decide trusts. Each must equal the base's blob, so a PR-head or stale checkout can never supply its own rules (B-2).
 export const TRUST_FILES = Object.freeze(["docs/planning/autonomy/autonomy.mjs", "docs/planning/autonomy/executor.mjs", "docs/planning/autonomy/standing-authority.json",
