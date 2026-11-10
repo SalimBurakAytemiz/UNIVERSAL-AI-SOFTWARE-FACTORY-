@@ -1,18 +1,28 @@
-# Factory V2 PR readiness (independent assessment by the V4.1 coordinator), 2026-11-10 ~05:15Z
+# Factory V2 / governance Founder decision file (independently verified by the V4.1 coordinator), 2026-11-10 ~06:05Z
 
-main = e81ac373 (#388 merged); verify-main = **MAIN_PASS** (all jobs success; #388 verified on main).
-Method: GitHub PR, check-run and review data; `parseBinding` (merge-gate.mjs) + `reviewAttestation` (autonomy.mjs); task-index.json; STATE.json. The coordinator has not written to the V2 branches.
+main = e81ac373176247cd32e6c4ff9e82339c6c427ac1, verify-main **MAIN_PASS**. The coordinator did not write to the V2 branches.
 
-| PR | task / tier | base.ref (base sha) | draft | CI on head | CLEAN binding on head | attestation line | status |
-|---|---|---|---|---|---|---|---|
-| #355 | FV2-T0002 / T3 | v7/integration (485d9991, stale; main e81ac373) | yes | all PASS (old head 193e7d35) | 5820099417, base 485d9991 (old) | **none** | WAITING: V2 prep (refresh onto main → CI → fresh review with attestation) |
-| #389 | FV2-T0003 / T3, dep FV2-T0002 | **claude/fv2-gov-executor-fence (stacked on #355)** | yes | PASS (70cbcbc0) | 5820099735, base 193e7d35 | none | WAITING: after #355 merges, retarget to v7/integration + refresh + fresh review |
-| #408 | FV2-T0005 / **T3** (Founder merge), dep FV2-T0004 | **claude/fv2-p0-control (#388's merged branch)** | yes | PASS (460ede23) | 5820100234, base c427ecc4 (old #388 head) | none | WAITING: V2 prep (retarget to v7/integration + refresh + fresh review) |
-| #409 | FV2-T0006 / T2 (routine), dep FV2-T0005 | claude/fv2-p0-live (stacked on #408) | yes | PASS (4bc62535) | 5820100705, base 460ede23 | none | WAITING: #408 merge + a verified STATE.json FV2-T0005 entry + retarget/refresh/review |
-| #412 | FV2-T0007 / T3 (reviewer OAuth repair) | v7/integration (485d9991, stale) | yes | PASS (0ba4ea8e) | 5820241290, base 485d9991 | none | WAITING: a separate Founder-tier track; refresh + fresh review |
+## #355: FV2-T0002, T3, "authority fence in the canonical merge path" (Founder merge)
+- head **083a78fe22e9314b1d9e7a191a9bae2d63bbf663**, base **e81ac373176247cd32e6c4ff9e82339c6c427ac1** (= main), base.ref v7/integration, not a draft.
+- Required CI (on head): preflight, validate (ubuntu-latest), windows shard 1/2/3, validate (windows-latest) = **all success**.
+- Independent review **5837178618** (session_015dYwb2tVU1fHo6ss2zAjRB): CLEAN, binding = exact head/base, `reviewAttestation` = **none**.
+- Non-required "UASCO Independent Review" = FAIL (401 token, the known issue; not required).
+- Scope (5 files): `docs/planning/autonomy/autonomy.mjs` (+6/-2), `docs/planning/autonomy/executor.mjs` (+14/-2), tests (+62).
+- **Real authority effect (exact):**
+  1. Every `executor merge` asks `mergeAuthority` (automation/factory-v2/v41-guard.mjs) before writing. No authority record (today: `uasco/registry` has only the lease doc.json, no `uasco-v7` authority file) → **V4.1 merges as today** (`NO_AUTHORITY_RECORD`). Once a record exists: the registry ruleset must be protected (today **26607801 UASCO-REGISTRY-PROTECTION: active, non_fast_forward + deletion, 0 bypass, current_user_can_bypass=never ✓**) + the signed history must verify. `V41_AUTHORITATIVE` → V4.1 merges; HANDOVER phase → **nobody merges**; `V2_AUTHORITATIVE` → V4.1 is fenced and only a merge with a signed V2 intent from the holder passes. If the registry is unreadable → BLOCK (fail-closed).
+  2. `automation/factory-v2/` is added to `GOVERNANCE_PREFIXES` (+ v41-guard and its import closure join the trust files) → **from then on every PR touching `automation/factory-v2/` is FOUNDER_REQUIRED (GOVERNANCE_PATH).**
+- Remaining blocker: none (only the Founder merge decision). After the merge: verify-main MAIN_PASS → #389 (stacked) is prepared.
 
-Dependency evidence:
-- FV2-T0004 (#388): **actually merged** (e81ac373; head d2fd0123; the old head c427ecc4 is also in main). But **there is no `{FV2-T0004, 388}` entry in STATE.json** → when the executor computes #408's dependency it reports `TASK_DEPENDENCY_UNMET:FV2-T0004` (#408 is a Founder merge, so this does not block the merge, but the dependency record is missing). Likewise `{FV2-T0001, 411}` has no entry.
-- #409's FV2-T0005 dependency requires a verified entry for #408 in STATE.json → **FOUNDER-QUEUE decision 8 (DONE writeback method) is now on the critical path.**
+## #408: FV2-T0005, T3, "LIVE wiring gated by the signed authority record (fail-closed, STANDBY)" (Founder merge)
+- head **16c81f5b3ce559d5bde206706032bfb07035ffea**, base **e81ac373176247cd32e6c4ff9e82339c6c427ac1** (= main), base.ref v7/integration (retargeted), not a draft, **no STATE.json entry** (A′ cancelled).
+- Required CI: **all success** (same 6 checks).
+- Independent review **5837211650** (session_015dYwb2YWw7uqBRygTTbbGZ): CLEAN, exact head/base binding, attestation **none**.
+- Scope (5 files): automation/factory-v2/{cli,control,identity}.mjs, docs/factory-v2/CONTROL-SESSION.md, tests/factory-v2/control.test.mjs. LIVE wiring opens only with a signed authority record; default STANDBY (does not start cutover by itself).
+- Dependency FV2-T0004 (#388): actually merged (e81ac373, MAIN_PASS); STATE.json entry → via FV2-T0008 (#417).
+- Remaining blocker: none (only the Founder merge decision).
 
-None of these PRs is "mergeable now": all are drafts, the reviews are bound to pre-refresh heads/bases, and they lack the attestation line required by the 2026-11-09 protocol.
+## #417: governance, FV2-T0008 ledger writeback task (Founder merge)
+- head **b4deaa0fead5e95e5c0c9e6cfbab77c7e3b5eb40**, base e81ac373 (= main). Independent review **5837339796** (session_015dYwb4kWZKWcEzz1FUWT2V) CLEAN, attestation none. **Required CI: running** → not yet "mergeable".
+
+## Sequencing note
+- **#409 (FV2-T0006, T2) changes 6 files under `automation/factory-v2/`. After #355 merges it can NO LONGER be routine AUTO_MERGE: GOVERNANCE_PATH → FOUNDER_REQUIRED.** That is the natural result of #355's design, not a gate loosening; #409 then also becomes a Founder merge decision.
