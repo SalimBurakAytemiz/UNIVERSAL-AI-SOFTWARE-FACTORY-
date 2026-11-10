@@ -1,0 +1,14 @@
+# Reviewer attestation line: canonical instruction block (for V4.1 and V2 reviewer prompts)
+
+Source: FD-2026-11-03-STANDING-AUTONOMY.md §2a; parser: `docs/planning/autonomy/autonomy.mjs` (`ATTEST_RE`, `MENTION_RE`, `reviewAttestation`). The parser is NOT loosened; this text only makes reviewers comply.
+
+Lesson (2026-11-09, #388 review 5833949512): besides the correct line, the heading "## 3. Autonomy exceptions …" made the review MALFORMED → executor BLOCK. `MENTION_RE` = `autonomy[^\p{L}\p{N}]{0,8}exceptions` (case-insensitive; also matches after HTML entities, invisible characters and tags are stripped): **any** line where the words "autonomy" and "exceptions" sit side by side counts as a mention, heading, quote, code block or prose alike.
+
+Block every reviewer prompt must contain verbatim:
+
+> Attestation rule (FD-2026-11-03 §2a; any violation makes the review MALFORMED and fails closed):
+> - The review contains EXACTLY ONE line, at column 0, that is exactly `AUTONOMY-EXCEPTIONS: none` or `AUTONOMY-EXCEPTIONS: <CODE>[,<CODE>...]` (no spaces after commas, no explanation on that line).
+> - Allowed codes only: `PAID_SPEND`, `NEW_ACCOUNT_OR_CREDENTIAL`, `PRODUCTION_RISK`, `AUTHORITY_WIDENING`, `LEGAL`, `TASK_SCOPE_MISMATCH`. Any code makes the decision Founder-only.
+> - Nowhere else in the review, not in a heading, a quote, a code block, a table or prose, may the words "autonomy" and "exceptions" appear next to each other, in any case or punctuation. Title a section, for example, "Exceptions (FD §2a)" or "Scope / authority".
+> - Explanations go in the body as normal prose. The final line is `VERDICT-BINDING: verdict=<CLEAN|BLOCKED> head=<full sha> base=<full sha> reviewer-session=<id>`.
+> - Before posting, self-check the body: `node -e` with `reviewAttestation` from `docs/planning/autonomy/autonomy.mjs` must NOT return `MALFORMED`.
