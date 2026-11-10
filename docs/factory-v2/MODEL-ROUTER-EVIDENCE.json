@@ -1,0 +1,21 @@
+{
+  "//TR": "Factory V2 model yönlendirici gerçek Claude Cloud kanıtı: create_session `model` alanıyla istenen model ve platformun get_session ile bildirdiği gerçekte hizmet veren model ayrı ayrı; maliyetler platformun bildirdiği değerlerdir, tahmin değildir. Probe alanında, canlı otoriteye dokunmadan.",
+  "schema": "uasco.factory-v2.model-router-evidence/1",
+  "date": "2026-11-08",
+  "mechanism": "Claude Cloud create_session `model` parameter; verification via get_session configured_model, session_context.model, external_metadata.last_served_model, usage.cost_usd, and the transcript's modelUsage",
+  "probes": [
+    {"session": "session_015dYwb4JZqyPAcxMEJYMLcv", "requested": "claude-haiku-5-5", "configuredModel": "claude-haiku-5-5", "servedModel": "claude-haiku-5-5", "costUsdReported": 0.00346899},
+    {"session": "session_015dYwazShPAaPv5ogLiVogE", "requested": "sonnet", "configuredModel": "sonnet", "servedModel": "claude-sonnet-5-5", "costUsdReported": 0.0564422}
+  ],
+  "factoryLoop": {
+    "domain": "probe-control", "ledger": "uasco/fv2-ledger-probe ns run3-models", "code": "claude/fv2-model-router 177428568df91a5d61ce5c6f4796ad25b60112cd",
+    "task": {"id": "FV2-MR-1", "tier": "T0", "paths": ["docs/factory-v2/probe/model-router/"], "complexity": "MECHANICAL"},
+    "builder": {"intent": "intent_a10293e77240", "session": "session_015dYwb2S4EkToh5D7JhmjTG", "routed": "haiku", "configuredModel": "haiku", "servedModel": "claude-haiku-5-5", "transcriptModelUsage": ["claude-haiku-5-5"], "costUsdReported": 0.01358603, "headSha": "4c4cd6a04e2d37bbf19afa7b4b00ba52bfc1fd8d",
+      "resultBeforeObserve": "MODEL_NOT_VERIFIED", "resultAfterObserve": "ACCEPTED"},
+    "reviewer": {"intent": "intent_23a7b0adec9e", "session": "session_015dYwb1VWptD1pzo2ycYfP1", "routed": "haiku", "configuredModel": "haiku", "servedModel": "claude-haiku-5-5", "transcriptModelUsage": ["claude-haiku-5-5"], "costUsdReported": 0.01118604, "verdict": "CLEAN"},
+    "finalState": "REVIEW_CLEAN",
+    "reportModels": {"claude-haiku-5-5": {"workers": 2, "costUsdReported": 0.0248}}
+  },
+  "opus": "served claude-opus-5-5 for the control session and every Opus-routed reviewer session in this work (configured_model opus / claude-opus-5-5)",
+  "testOnly": ["Sonnet and Opus routing inside the factory loop is exercised by tests/factory-v2/model-router.test.mjs, not by a live factory-loop run (cost)"]
+}

@@ -163,8 +163,8 @@ export class FactorySupervisor {
     const dispatchBase = kind === "REMEDIATE" ? t.data.headSha : this.dispatchBase();
     if (!/^[0-9a-f]{40}$/.test(dispatchBase ?? "")) throw new Error("DISPATCH_BASE_UNKNOWN");
     let handle;
-    try { handle = this.o.executor.start({kind, role: "BUILDER", slotId: a.slotId, taskId: a.taskId, attempt: t.attempt, paths: a.paths, findings: t.data.findings ?? [], fromSha: dispatchBase, name: t.data.name ?? null, spec: t.data.spec ?? null}); } catch (e) {
-      if (e?.code !== "CAPACITY_EXCEEDED") throw e;
+    try { handle = this.o.executor.start({kind, role: "BUILDER", slotId: a.slotId, taskId: a.taskId, attempt: t.attempt, paths: a.paths, findings: t.data.findings ?? [], fromSha: dispatchBase, name: t.data.name ?? null, spec: t.data.spec ?? null, tier: t.data.tier ?? null, area: t.data.area ?? null}); } catch (e) {
+      if (!["CAPACITY_EXCEEDED", "MODEL_UNAVAILABLE", "MODEL_QUOTA_WAIT"].includes(e?.code)) throw e;
       // executor at capacity (e.g. cloud session limit below the topology): hand the task back, never fail the tick
       if (kind === "BUILD") this.journal.transition(a.taskId, "QUEUED", {fence: this.fenceRef, key: `capacity:${a.taskId}:${t.history.length}`, data: {capacityWait: true}});
       lease.release(); return false;
@@ -230,12 +230,12 @@ export class FactorySupervisor {
       this.journal.transition(t.taskId, "REVIEWING", {fence: this.fenceRef, data: {required, risk, verdicts: [], reviewers: alloc.picks.map(p => p.id)}});
       const reviewJobs = [];
       try { for (const p of alloc.picks) {
-        const handle = this.o.executor.start({kind: "REVIEW", role: "REVIEWER", slotId: p.id, focus: p.focus, taskId: t.taskId, attempt: t.attempt, headSha: t.data.headSha, baseSha: t.data.baseSha, name: t.data.name ?? null, branch: t.data.branch ?? null});
+        const handle = this.o.executor.start({kind: "REVIEW", role: "REVIEWER", slotId: p.id, focus: p.focus, taskId: t.taskId, attempt: t.attempt, headSha: t.data.headSha, baseSha: t.data.baseSha, name: t.data.name ?? null, branch: t.data.branch ?? null, paths, tier: t.data.tier ?? null, area: t.data.area ?? null});
         this.handles.set(handle.jobId, {taskId: t.taskId, kind: "REVIEW", slotId: p.id, jobId: handle.jobId, focus: p.focus, startedAt: this.o.now(), worker: handle.worker});
         reviewJobs.push({jobId: handle.jobId, slotId: p.id, focus: p.focus, worker: handle.worker ?? null});
         handle.done.then(v => this.onReviewDone(handle.jobId, v), e => this.onReviewDone(handle.jobId, {status: "ERROR", error: String(e)}));
       } } catch (e) {
-        if (e?.code !== "CAPACITY_EXCEEDED") throw e;
+        if (!["CAPACITY_EXCEEDED", "MODEL_UNAVAILABLE", "MODEL_QUOTA_WAIT"].includes(e?.code)) throw e;
         // not enough reviewer sessions for every required focus: withdraw the partial set and wait (never a partial review)
         for (const j of reviewJobs) { this.handles.delete(j.jobId); this.o.executor.lost?.(j.jobId, "WITHDRAWN_CAPACITY"); }
         this.journal.transition(t.taskId, "BUILT", {fence: this.fenceRef, key: `review-capacity:${t.taskId}:${t.history.length}`, data: {verdicts: [], reviewCapacityWait: true}});
