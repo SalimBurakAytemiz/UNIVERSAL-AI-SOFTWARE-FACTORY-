@@ -9,7 +9,7 @@ export const ENVELOPE_SCHEMA = "uasco.factory-v2.signed-action/1";
 export const CANONICAL_KEYRING_PATH = "docs/planning/authority/FACTORY-V2-ROLE-KEYS.json";
 export const ROLES = Object.freeze(["V41_OWNER", "V2_CANDIDATE", "FOUNDER"]);
 /** Which roles may sign which authority action. Rollback is never available to an arbitrary registry writer. */
-export const ACTION_ROLES = Object.freeze({PREPARE: ["V2_CANDIDATE"], DRAIN_ACK: ["V41_OWNER"], COMMIT: ["V2_CANDIDATE"], ROLLBACK: ["V41_OWNER", "FOUNDER"], MERGE: ["V2_CANDIDATE"]});
+export const ACTION_ROLES = Object.freeze({PREPARE: ["V2_CANDIDATE"], DRAIN_ACK: ["V41_OWNER"], COMMIT: ["V2_CANDIDATE"], ROLLBACK: ["V41_OWNER", "FOUNDER"], MERGE: ["V2_CANDIDATE"], LEDGER: ["V2_CANDIDATE"]}); // LEDGER: Supervisor-signed shared journal events
 const canon = v => Array.isArray(v) ? `[${v.map(canon).join(",")}]` : v && typeof v === "object" ? `{${Object.keys(v).sort().map(k => `${JSON.stringify(k)}:${canon(v[k])}`).join(",")}}` : JSON.stringify(v);
 export const canonDigest = v => crypto.createHash("sha256").update(canon(v)).digest("hex");
 

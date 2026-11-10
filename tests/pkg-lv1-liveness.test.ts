@@ -4,6 +4,7 @@ import {describe,it,expect,vi} from "vitest";
 vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 import fs from "node:fs";
 import cp from "node:child_process";
+import "./factory-v2/control-group.mjs";                                         // Factory V2 (#388): tek kontrol oturumu vakaları (Windows adım süresi dengeli)
 describe("liveness hardening (LV1)",{timeout:540_000},()=>{
   it("passes every liveness scenario",(ctx)=>{const r=cp.spawnSync(process.execPath,["scripts/liveness-selftest.mjs"],{encoding:"utf8",timeout:530_000});expect(r.status,r.stdout.slice(-3000)+r.stderr.slice(-1500)).toBe(0);const line=r.stdout.trim().split(/\r?\n/).pop()??"";
     if(process.platform!=="win32"){expect(line).toBe("LIVENESS_SELFTEST: SKIP NOT_WINDOWS");return ctx.skip("NOT_WINDOWS: LV1 selftest reported SKIP NOT_WINDOWS; scenarios not executed on "+process.platform)}

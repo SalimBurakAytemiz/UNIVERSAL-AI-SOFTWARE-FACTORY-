@@ -78,6 +78,12 @@ export class Ownership {
     if (isExpired(cur, t) || cur.expiresAt - t < this.safetyMarginMs) { this.record = null; throw new OwnershipLost(this.leaseId, "EXPIRED_OR_EXPIRING"); }
     return {token: cur.token, epoch: cur.epoch};
   }
+  /** A restarted process of the SAME holder resumes its still-valid lease by token (never another session's lease, never an expired one). */
+  adopt(token) {
+    const cur = this.store.read(this.leaseId);
+    if (!token || !isValidLeaseRecord(cur) || cur.token !== token || cur.sessionId !== this.sessionId || isExpired(cur, this.now())) return false;
+    this.record = cur; return true;
+  }
   release() { if (!this.record) return false; const r = release(this.store, {taskId: this.leaseId, environment: this.environment, workerId: this.workerId, sessionId: this.sessionId, token: this.record.token}); this.record = null; return r.status === "RELEASED"; }
   holder() { return this.store.read(this.leaseId); }
 }

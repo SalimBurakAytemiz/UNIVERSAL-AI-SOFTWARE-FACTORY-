@@ -1,0 +1,27 @@
+{
+ "//TR": "Factory V2 görev kaydı: V4.1 matrisinde bulunmayan Factory V2 işlerinin elle yazılan, Founder onaylı kaynağıdır. build-task-index.mjs bu dosyayı matrisle birleştirip task-index.json'u üretir; task-index.json elle düzenlenmez. Yeni FV2 görevi yalnız bu dosyaya Founder-tier governance PR'ı ile eklenir. Teslim edilmiş bir görevin düzeltmesi aynı görev kimliğini kullanır.",
+ "schemaVersion": "1.0.0",
+ "idPattern": "FV2-T####",
+ "rules": [
+  "A task id is never reused, renamed or moved to other work; retired tasks stay listed with a terminal status.",
+  "tier is set by the real risk and authority scope (V4.1 roadmap section 2): T3 for anything that changes merge/dispatch authority, enables V2 LIVE authority wiring, CI-executed review or reviewer credentials; T2 for supervisor, ledger, identity, security-enforcing or model-routing code; T1 for low-risk code and tests.",
+  "status VERIFY_PENDING = implemented in an open PR and not yet merged: never picked as new work by V4.1 or the V2 scheduler, still mergeable. Done-counting statuses are not allowed here: a task counts as done only through a verified STATE.json done entry of a merged PR.",
+  "deps are typed [taskId, \"MERGED\"] and are met only by a merged task (matrix DONE status or a verified STATE.json done entry)."
+ ],
+ "tasks": [
+  {"id": "FV2-T0001", "tier": "T1", "status": "VERIFY_PENDING", "wave": "FV2", "deps": [], "startGates": [], "mergeGates": ["D-31"], "exec": "CLOUD",
+   "name": "Factory V2 A6 testi: fenced sonuç atma koşulunu sabit beklemek yerine koşula bağlı bekle (yalnız test; PR #411)"},
+  {"id": "FV2-T0002", "tier": "T3", "status": "VERIFY_PENDING", "wave": "FV2", "deps": [], "startGates": [], "mergeGates": ["D-31"], "exec": "CLOUD",
+   "name": "V4.1 executor merge yetki çiti: V2 otoritesi devredildiyse V4.1 merge yazmaz (governance: autonomy.mjs/executor.mjs; PR #355)"},
+  {"id": "FV2-T0003", "tier": "T3", "status": "VERIFY_PENDING", "wave": "FV2", "deps": [["FV2-T0002", "MERGED"]], "startGates": [], "mergeGates": ["D-31"], "exec": "CLOUD",
+   "name": "V4.1 görev dağıtım çiti: V2 otoritesi devredildiyse V4.1 yeni görev dağıtmaz (governance: autonomy.mjs + v41-guard; PR #389)"},
+  {"id": "FV2-T0004", "tier": "T2", "status": "VERIFY_PENDING", "wave": "FV2", "deps": [], "startGates": [], "mergeGates": ["D-31"], "exec": "CLOUD",
+   "name": "Factory V2 tek kontrol oturumu: paylaşımlı imzalı ledger, bulut oturum orkestrasyonu, sonuç kanalı, rapor; LIVE yalnız imzalı cutover sonrası (PR #388)"},
+  {"id": "FV2-T0005", "tier": "T3", "status": "VERIFY_PENDING", "wave": "FV2", "deps": [["FV2-T0004", "MERGED"]], "startGates": [], "mergeGates": ["D-31"], "exec": "CLOUD",
+   "name": "Factory V2 LIVE kontrol yığını bağlantısı (controlStack LIVE kipi, uasco-v7/uasco/registry, live lease, AuthorityBridge.assertV2 kapısı; cutover öncesi son kod parçası) + rol anahtarı kayıt önerisi aracı (yalnız açık anahtar; identity/cli/control; PR #408)"},
+  {"id": "FV2-T0006", "tier": "T2", "status": "VERIFY_PENDING", "wave": "FV2", "deps": [["FV2-T0005", "MERGED"]], "startGates": [], "mergeGates": ["D-31"], "exec": "CLOUD",
+   "name": "Factory V2 uyarlanabilir model yönlendirici: create_session model seçimi, sunulan model kanıtı, kota/erişim sınıflaması; ücretli API yok (PR #409)"},
+  {"id": "FV2-T0007", "tier": "T3", "status": "VERIFY_PENDING", "wave": "FV2", "deps": [], "startGates": [], "mergeGates": ["D-31"], "exec": "CLOUD",
+   "name": "Bağımsız inceleme iş akışı token-health ön kontrolü: geçersiz token kesin FAIL, boşa inceleme koşusu yok (.github + scripts/ci; PR #412)"}
+ ]
+}

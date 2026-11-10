@@ -149,7 +149,8 @@ describe("factory-v2 exclusivity and fencing", () => {
     const thief = new Ownership(store, {leaseId: `task--${t.taskId}`, environment: "cloud", workerId: "other", sessionId: "session_otherxxx", now: () => Date.now() + skew});
     expect(thief.acquire().granted).toBe(true);
     skew = 0; sup.lease.now = () => Date.now(); // keep the supervisor itself alive
-    await new Promise(r => setTimeout(r, 1500));
+    // wait for the worker process to finish (slow CI runners: bounded wait on the condition, not a fixed sleep)
+    for (let i = 0; i < 600 && !sup.journal.events.some(e => e.kind === "FENCED_RESULT_DISCARDED"); i++) await new Promise(r => setTimeout(r, 100));
     expect(sup.journal.events.some(e => e.kind === "FENCED_RESULT_DISCARDED")).toBe(true);
     expect(sup.journal.get(t.taskId).state).toBe("RETRY_WAIT"); // slot freed; the result was never accepted
     expect(sup.journal.get(t.taskId).data.headSha).toBeUndefined();
