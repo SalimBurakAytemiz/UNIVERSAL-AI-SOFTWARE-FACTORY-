@@ -78,8 +78,8 @@ export function registerAutonomyCases() {
       expect(p.coveredTiers).not.toContain("T3");
       // 256 V4.1 matrix tasks, unchanged, plus the Founder-approved Factory V2 registry (factory-v2-tasks.json): the count covers both.
       expect(ix.tasks.filter((x: {id: string}) => !x.id.startsWith("FV2-"))).toHaveLength(256);
-      expect(ix.extraSources.map((x: {count: number}) => x.count)).toEqual([7]);
-      expect(ix.count).toBe(256 + 7);
+      expect(ix.extraSources.map((x: {count: number}) => x.count)).toEqual([8]);
+      expect(ix.count).toBe(256 + 8);
       expect(ix.tasks).toHaveLength(ix.count);
       expect(ix.source.sha256).toMatch(/^[0-9a-f]{64}$/);
       for (const d of st.done) expect(ix.tasks.some((x: {id: string}) => x.id === d.task)).toBe(true);
@@ -274,6 +274,8 @@ export function registerAutonomyCases() {
     it("F2 governance, CI-review, authority-fence and LIVE-wiring work is T3; no FV2 task is ever picked as new work", () => {
       const tier = Object.fromEntries(fv2.map((x: {id: string; tier: string}) => [x.id, x.tier]));
       for (const id of ["FV2-T0002", "FV2-T0003", "FV2-T0005", "FV2-T0007"]) expect(tier[id]).toBe("T3");
+      // //TR: FV2-T0008 kalıcı DONE ledger writeback görevidir; kurallara göre ledger işi T2 (T3 değil): yetki değiştirmez, yalnız doğrulanmış merge kaydı yazar.
+      expect(tier["FV2-T0008"]).toBe("T2");
       const picked = nextTasks({index: realIndex, state: {}, policy: realPolicy, limit: 1000});
       expect(JSON.stringify(picked)).not.toContain("FV2-");
     });

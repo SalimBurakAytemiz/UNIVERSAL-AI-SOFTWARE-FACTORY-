@@ -33,6 +33,15 @@ All state lives in the shared ledger: a Supervisor-signed, hash-chained event lo
    - product evidence;
    - blockers.
 
+## Registering the role keys (before cutover)
+
+1. Each holder runs `node automation/factory-v2/cli.mjs bridge keygen --role <V41_OWNER|V2_CANDIDATE|FOUNDER> --session <its own session id> --out <file outside any git tree>` inside its own session. The private key stays in that file (mode 0600) and never leaves that container.
+2. Only the printed public entry is passed on. The control session runs `bridge keyring-propose --entries <a.json,b.json,c.json> --out <file>`. This refuses:
+   - any private material or extra fields;
+   - a second key for the same role and session;
+   - anything the canonical loader would reject.
+3. Its output becomes `docs/planning/authority/FACTORY-V2-ROLE-KEYS.json` in a Founder-approved governance PR. The keyring is read only from `v7/integration` at an exact commit.
+
 ## Ledger format note
 
 Every event signs `ledger = <domain>/<ns>`. Ledgers written before this rule (the probe run `run1`) can no longer be read, by design. Start a new `ledgerNs` instead of migrating. The live ledger has never been written.
@@ -44,7 +53,11 @@ Every event signs `ledger = <domain>/<ns>`. Ledgers written before this rule (th
 - Keyring per domain:
   - The live domain `uasco-v7` only uses the canonical keyring at `v7/integration`. That keyring is empty today, so the live ledger cannot be written; this fails closed.
   - `probe-*` domains may use a PROBE keyring file.
-- `mode: "LIVE"` is refused until the Founder cutover (see `CUTOVER-ACCEPTANCE.md`).
+- `mode: "LIVE"` runs only the live domain `uasco-v7` on the protected `uasco/registry` (protection is read through the GitHub adapter on every command), and only when the canonical keyring holds keys.
+  - The Supervisor is gated on every tick by the signed authority record (`bridge.assertV2`).
+  - Until a Founder-authorised cutover commits V2 authority to this session, it stays STANDBY: it writes no ledger epoch and dispatches nothing.
+  - The control commands never prepare, ack or commit a handover.
+- `mode: "SHADOW"` is accepted only for `probe-*` domains.
 - Merge Preparers and the Merge Writer are deterministic, in-process roles of the Supervisor under the exclusive writer lease. They are not model sessions.
 
 ## Verified with real Cloud sessions (2026-11-05, domain `probe-control`, ledger `uasco/fv2-ledger-probe`)

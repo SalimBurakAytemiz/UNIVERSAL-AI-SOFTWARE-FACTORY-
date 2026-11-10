@@ -22,6 +22,8 @@
   {"id": "FV2-T0006", "tier": "T2", "status": "VERIFY_PENDING", "wave": "FV2", "deps": [["FV2-T0005", "MERGED"]], "startGates": [], "mergeGates": ["D-31"], "exec": "CLOUD",
    "name": "Factory V2 uyarlanabilir model yönlendirici: create_session model seçimi, sunulan model kanıtı, kota/erişim sınıflaması; ücretli API yok (PR #409)"},
   {"id": "FV2-T0007", "tier": "T3", "status": "VERIFY_PENDING", "wave": "FV2", "deps": [], "startGates": [], "mergeGates": ["D-31"], "exec": "CLOUD",
-   "name": "Bağımsız inceleme iş akışı token-health ön kontrolü: geçersiz token kesin FAIL, boşa inceleme koşusu yok (.github + scripts/ci; PR #412)"}
+   "name": "Bağımsız inceleme iş akışı token-health ön kontrolü: geçersiz token kesin FAIL, boşa inceleme koşusu yok (.github + scripts/ci; PR #412)"},
+  {"id": "FV2-T0008", "tier": "T2", "status": "VERIFY_PENDING", "wave": "FV2", "deps": [], "startGates": [], "mergeGates": ["D-31"], "exec": "CLOUD",
+   "name": "Factory V2 DONE ledger writeback (kalıcı görev): V4.1 tek yazıcısı docs/planning/autonomy/STATE.json `done` listesine YALNIZ merge edilmiş, ana dalda verify-main MAIN_PASS almış ve tam olarak o FV2 görevini beyan eden bir PR için {task, pr} kaydı ekler, updatedAt'i günceller; başka dosya, mevcut kayıt veya inFlight/blocked değişikliği yok; her writeback PR'ı UASCO-TASK: FV2-T0008 beyan eder"}
  ]
 }

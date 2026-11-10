@@ -8,11 +8,11 @@
  "extraSources": [
   {
    "path": "docs/planning/autonomy/factory-v2-tasks.json",
-   "sha256": "a30ff54e5695c5b0cce83a0a2403255bb21de1fa1c0fd51f9bfe655ad3ee0125",
-   "count": 7
+   "sha256": "65bedf955034aa154134a674a23cac4566bef8381742f5b49a0d674d076cc683",
+   "count": 8
   }
  ],
- "count": 263,
+ "count": 264,
  "tasks": [
   {
    "id": "CLOUD-T0001",
@@ -4774,6 +4774,19 @@
    ],
    "exec": "CLOUD",
    "name": "Bağımsız inceleme iş akışı token-health ön kontrolü: geçersiz token kesin FAIL, boşa inceleme koşusu yok (.github + scripts/ci; PR #412)"
+  },
+  {
+   "id": "FV2-T0008",
+   "tier": "T2",
+   "status": "VERIFY_PENDING",
+   "wave": "FV2",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "Factory V2 DONE ledger writeback (kalıcı görev): V4.1 tek yazıcısı docs/planning/autonomy/STATE.json `done` listesine YALNIZ merge edilmiş, ana dalda verify-main MAIN_PASS almış ve tam olarak o FV2 görevini beyan eden bir PR için {task, pr} kaydı ekler, updatedAt'i günceller; başka dosya, mevcut kayıt veya inFlight/blocked değişikliği yok; her writeback PR'ı UASCO-TASK: FV2-T0008 beyan eder"
   }
  ]
 }
