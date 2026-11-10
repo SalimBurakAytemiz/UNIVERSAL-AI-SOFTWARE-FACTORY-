@@ -3,7 +3,7 @@ import {h,statePill} from "../components.js";
 import {MISSING} from "../model.js";
 import {drafts,field,statusBlock,setStatus,focusResult,settle,missionWriteBusy} from "../forms.js";
 import {PHASE_KIND} from "../journey-core.js";
-import {ARTIFACT_ID_RE,buildStartRequest,buildApproveRequest,buildRejectRequest,classifyPredevPost,predevStatusKey} from "../predev-decisions-core.js";
+import {ARTIFACT_ID_RE,buildStartRequest,buildApproveRequest,buildRejectRequest,classifyPredevPost,predevStatusKey,phaseTimeline} from "../predev-decisions-core.js";
 
 export const PREDEV_START_FORM="predev-start";
 export const PREDEV_APPROVE_FORM="predev-approve";
@@ -15,9 +15,31 @@ export function resetPredevDraft(missionId=null,artifactId=null){
   for(const f of [PREDEV_START_FORM,PREDEV_APPROVE_FORM,PREDEV_REJECT_FORM])delete drafts.status[f];
 }
 
-async function submit(ctx,formId,verb,req,keys,missionId){
+/** //TR: UASCO-T0013: karar eylemleri (onayla/reddet/yeniden onayla) istek doğrulandıktan sonra ve göndermeden önce açık onay ister. Onay penceresi açıkken form KİLİTLİDİR (ikinci basış ikinci pencere/istek açmaz); vazgeçilirse ya da onay işlevi yoksa hiçbir istek gitmez ve durum dürüstçe "onaylanmadı" der. */
+export async function confirmDecision(ctx,formId,spec){
+  drafts.busy[formId]=true;
+  let yes=false;try{yes=typeof ctx.confirm==="function"?(await ctx.confirm(spec))===true:false}finally{drafts.busy[formId]=false}
+  return yes;
+}
+// Anahtarlar düz metin olarak yazılır (yerelleştirme testleri dosyadaki "predev.*" anahtarlarını tarar).
+const CONFIRM_KEYS=Object.freeze({
+  approve:{title:"predev.confirm.approve.title",body:"predev.confirm.approve.body",action:"predev.confirm.approve.action",ok:"predev.confirm.approve.ok"},
+  reject:{title:"predev.confirm.reject.title",body:"predev.confirm.reject.body",action:"predev.confirm.reject.action",ok:"predev.confirm.reject.ok"},
+  reapprove:{title:"predev.confirm.reapprove.title",body:"predev.confirm.reapprove.body",action:"predev.confirm.reapprove.action",ok:"predev.confirm.reapprove.ok"}});
+const TL_STATE=Object.freeze({NOT_STARTED:"predev.tl.state.NOT_STARTED",DRAFT:"predev.tl.state.DRAFT",SUBMITTED:"predev.tl.state.SUBMITTED",APPROVED:"predev.tl.state.APPROVED",REJECTED:"predev.tl.state.REJECTED"});
+const TL_DECISION=Object.freeze({APPROVED:"predev.tl.decision.APPROVED",REJECTED:"predev.tl.decision.REJECTED",PENDING:"predev.tl.decision.PENDING",NONE:"predev.tl.decision.NONE"});
+export function decisionSpec(ctx,verb,{kind,artifactId}){
+  const K=CONFIRM_KEYS[verb],k=kind?ctx.t(`journey.kind.${kind}`):ctx.t("predev.confirm.kindUnknown");
+  return {title:ctx.t(K.title),body:ctx.t(K.body),action:ctx.t(K.action,{kind:k}),target:`${k} (${artifactId})`,confirmLabel:ctx.t(K.ok)};
+}
+async function submit(ctx,formId,verb,req,keys,missionId,confirm=null){
   if(missionWriteBusy())return {ok:false,busy:true}; // başka bir mission-yazma eylemi sürerken gönderilmez
   if(!req.ok){setStatus(formId,{ok:false,errors:req.errors});await ctx.rerender();focusResult(ctx,formId,keys);return {ok:false,validation:true}}
+  if(confirm){
+    const yes=await confirmDecision(ctx,formId,confirm);
+    if(predevDraft.missionId!==missionId){await ctx.rerender();return {ok:false,stale:true,status:null}}
+    if(!yes){setStatus(formId,{ok:false,key:"confirm.cancelled",vars:{},errors:null});await ctx.rerender();focusResult(ctx,formId,keys);return {ok:false,cancelled:true}}
+  }
   drafts.busy[formId]=true;
   // //TR: kilit görünür olsun (diğer düğmeler istek sürerken kapanır); yeniden çizim reddedilirse de kilit BIRAKILIR (try/finally); düğme kapandığı için odak not bloğuna alınır.
   let res;try{await ctx.rerender();settle(ctx,["id:predev-in-flight"]);res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[formId]=false}
@@ -29,8 +51,21 @@ async function submit(ctx,formId,verb,req,keys,missionId){
   await ctx.rerender();focusResult(ctx,formId,keys);return {ok:k.ok,kind:c.kind,status:res?.status??null};
 }
 export const submitStart=(ctx,missionId)=>submit(ctx,PREDEV_START_FORM,"start",buildStartRequest({missionId}),["id:predev-start-submit"],missionId);
-export const submitApprove=(ctx,missionId,artifactId)=>submit(ctx,PREDEV_APPROVE_FORM,"approve",buildApproveRequest({missionId,artifactId,evidenceText:predevDraft.evidence}),["id:predev-approve-submit","id:predev-evidence"],missionId);
-export const submitReject=(ctx,missionId,artifactId)=>submit(ctx,PREDEV_REJECT_FORM,"reject",buildRejectRequest({missionId,artifactId,reason:predevDraft.reason}),["id:predev-reject-submit","id:predev-reason"],missionId);
+export const submitApprove=(ctx,missionId,artifactId,kind=null)=>submit(ctx,PREDEV_APPROVE_FORM,"approve",buildApproveRequest({missionId,artifactId,evidenceText:predevDraft.evidence}),["id:predev-approve-submit","id:predev-evidence"],missionId,decisionSpec(ctx,"approve",{kind,artifactId}));
+export const submitReject=(ctx,missionId,artifactId,kind=null)=>submit(ctx,PREDEV_REJECT_FORM,"reject",buildRejectRequest({missionId,artifactId,reason:predevDraft.reason}),["id:predev-reject-submit","id:predev-reason"],missionId,decisionSpec(ctx,"reject",{kind,artifactId}));
+
+/** //TR: UASCO-T0013: faz zaman çizelgesi: her faz, kayıtlı durumu, şu anki faz işareti ve kararı (verildi/bekliyor/yok) + özet sayılar. */
+export function phaseTimelineBlock(ctx,predev){
+  const doc=ctx.doc,tl=phaseTimeline(predev);
+  if(!tl)return null;
+  return h(doc,"div",{class:"predev-timeline",id:"predev-timeline",role:"region","aria-label":ctx.t("predev.tl.title"),dataset:{tlTaken:String(tl.taken),tlPending:String(tl.pending),tlNone:String(tl.notStarted),tlComplete:tl.complete?"1":"0"}},
+    h(doc,"h4",{text:ctx.t("predev.tl.title")}),
+    h(doc,"p",{class:"note",dataset:{tlSummary:"1"},text:ctx.t(tl.complete?"predev.tl.summaryComplete":"predev.tl.summary",{taken:tl.taken,pending:tl.pending,none:tl.notStarted})}),
+    h(doc,"ul",{class:"predev-tl-list","aria-label":ctx.t("predev.tl.title")},tl.rows.map((r,i)=>h(doc,"li",{dataset:{tlKind:r.kind,tlDecision:r.decision,tlCurrent:r.current?"1":"0"},"aria-current":r.current?"step":null},
+      h(doc,"span",{class:"mono",text:`${i+1}.`})," ",h(doc,"strong",{text:ctx.t(`journey.kind.${r.kind}`)})," ",statePill(ctx,r.decision==="APPROVED"?"DONE":r.decision==="REJECTED"?"ATTENTION":r.decision==="PENDING"?"WAITING":"NOT_EXECUTED",{label:ctx.t(TL_STATE[r.state]??"predev.tl.state.NOT_STARTED")}),
+      r.current?h(doc,"span",{class:"note",dataset:{tlCurrentMark:"1"},text:` ${ctx.t("predev.tl.current")}`}):null,
+      h(doc,"span",{class:"note",text:` — ${ctx.t(TL_DECISION[r.decision])}`}))))); 
+}
 
 /** pre: GET /v1/predev eşlemesi (VERIFIED); okunamıyorsa bu bölüm çizilmez (Yolculuk zaten okuma hatasını gösterir). */
 export function decisionsPanel(ctx,{missionId,pre}){
@@ -71,15 +106,15 @@ export function decisionsPanel(ctx,{missionId,pre}){
         h(doc,"h4",{text:ctx.t("predev.approve.title")}),
         field(ctx,{id:"predev-evidence",labelKey:"predev.evidence.label",value:predevDraft.evidence,onInput:v=>{predevDraft.evidence=v},hintKey:"predev.evidence.hint",multiline:true,required:true}),
         h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn",id:"predev-approve-submit",dataset:{focusKey:"predev-approve-submit"},disabled:busyA,text:ctx.t("predev.approve.button"),
-          on:{click:()=>{if(!missionWriteBusy())submitApprove(ctx,missionId,art.artifactId)}}})),
+          on:{click:()=>{if(!missionWriteBusy())submitApprove(ctx,missionId,art.artifactId,kind)}}})),
         statusBlock(ctx,PREDEV_APPROVE_FORM)),
       h(doc,"div",{class:"predev-reject",role:"group","aria-label":ctx.t("predev.reject.title")},
         h(doc,"h4",{text:ctx.t("predev.reject.title")}),
         field(ctx,{id:"predev-reason",labelKey:"predev.reason.label",value:predevDraft.reason,onInput:v=>{predevDraft.reason=v},hintKey:"predev.reason.hint",multiline:true,required:true}),
         h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn",id:"predev-reject-submit",dataset:{focusKey:"predev-reject-submit"},disabled:busyR,text:ctx.t("predev.reject.button"),
-          on:{click:()=>{if(!missionWriteBusy())submitReject(ctx,missionId,art.artifactId)}}})),
+          on:{click:()=>{if(!missionWriteBusy())submitReject(ctx,missionId,art.artifactId,kind)}}})),
         statusBlock(ctx,PREDEV_REJECT_FORM))];
   }
   return h(doc,"div",{class:"predev-decisions",id:"predev-decisions",role:"region","aria-label":ctx.t("predev.title"),dataset:{predevDecisions:missionId}},
-    h(doc,"h3",{text:ctx.t("predev.title")}),missionWriteBusy()?h(doc,"p",{class:"note",id:"predev-in-flight",tabindex:"-1",role:"status",dataset:{predevBusy:"1",focusKey:"predev-in-flight"},text:ctx.t("busy.missionWrite")}):null,body,p.active?statusBlock(ctx,PREDEV_START_FORM):null);
+    h(doc,"h3",{text:ctx.t("predev.title")}),p.active?phaseTimelineBlock(ctx,p):null,missionWriteBusy()?h(doc,"p",{class:"note",id:"predev-in-flight",tabindex:"-1",role:"status",dataset:{predevBusy:"1",focusKey:"predev-in-flight"},text:ctx.t("busy.missionWrite")}):null,body,p.active?statusBlock(ctx,PREDEV_START_FORM):null);
 }

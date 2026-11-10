@@ -46,7 +46,8 @@ function followNote(ctx,f){
   return h(doc,"p",{class:"note",dataset:{taskRunFollow:f.target}},ctx.t("taskruns.follow.rule")," ",statusPill(ctx,f.target));
 }
 /** linked: loadTaskRuns sonucu; runsRes: mission koşu okuması (api.workRuns). */
-export function taskRunsPanel(ctx,{task,linked,runsRes}){
+/** runLink (UASCO-T0012, isteğe bağlı): koşu kimliğini koşu kartına giden düğmeye çeviren işlev; verilmezse kimlik düz metindir. */
+export function taskRunsPanel(ctx,{task,linked,runsRes,runLink=null}){
   const doc=ctx.doc,lang=ctx.i18n.lang;
   if(taskRunsDraft.taskId!==task.taskId)resetTaskRunsDraft(task.taskId);
   let list;
@@ -55,7 +56,7 @@ export function taskRunsPanel(ctx,{task,linked,runsRes}){
   else{
     const follow=taskFollowsRun(linked.items);
     list=h(doc,"ul",{class:"cards task-run-list"},linked.items.map((l,i)=>h(doc,"li",{class:"card",dataset:{taskRun:l.runId,taskRunGoverning:follow[i].governing?"1":"0"}},
-      h(doc,"span",{class:"mono",text:l.runId})," ",l.status?statusPill(ctx,l.status):h(doc,"span",{class:"note",text:ctx.t("taskruns.statusUnknown")})," ",h(doc,"time",{text:formatDateTime(l.linkedAt,lang)}),
+      (runLink?runLink(l.runId):h(doc,"span",{class:"mono",text:l.runId}))," ",l.status?statusPill(ctx,l.status):h(doc,"span",{class:"note",text:ctx.t("taskruns.statusUnknown")})," ",h(doc,"time",{text:formatDateTime(l.linkedAt,lang)}),
       followNote(ctx,follow[i]),
       // //TR: Görevi en son bağlanan koşu yönetir (sunucu kuralı); durum güncellemesi yalnız o satırda sunulur.
       follow[i].governing?h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn",id:"taskreconcile-submit",dataset:{focusKey:"taskreconcile-submit",reconcileRun:l.runId},disabled:drafts.busy[RECONCILE_FORM]===true,text:ctx.t("taskruns.recon.button"),
