@@ -1,6 +1,6 @@
 # Factory V2 PR readiness (independent assessment by the V4.1 coordinator), 2026-11-10 ~05:15Z
 
-main = e81ac373 (#388 merged); verify-main = MAIN_RUNNING (preflight+ubuntu PASS, windows shards 1/2/3 running since 04:59Z, normal duration).
+main = e81ac373 (#388 merged); verify-main = **MAIN_PASS** (all jobs success; #388 verified on main).
 Method: GitHub PR, check-run and review data; `parseBinding` (merge-gate.mjs) + `reviewAttestation` (autonomy.mjs); task-index.json; STATE.json. The coordinator has not written to the V2 branches.
 
 | PR | task / tier | base.ref (base sha) | draft | CI on head | CLEAN binding on head | attestation line | status |
