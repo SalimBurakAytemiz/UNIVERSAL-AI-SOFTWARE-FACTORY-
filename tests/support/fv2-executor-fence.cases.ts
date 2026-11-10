@@ -3,7 +3,7 @@ import {describe, it, expect} from "vitest";
 // @ts-expect-error untyped governance module
 import {executeMerge, runCli} from "../../docs/planning/autonomy/executor.mjs";
 // @ts-expect-error untyped governance module
-import {GOVERNANCE_PREFIXES, GOVERNANCE_EXACT, TRUST_FILES, FV2_AUTHORITY_ROOTS, FV2_AUTHORITY_FILES, isGovernancePath, decideAutoMerge, loadPolicy, loadIndex} from "../../docs/planning/autonomy/autonomy.mjs";
+import {GOVERNANCE_PREFIXES, GOVERNANCE_EXACT, GOVERNANCE_EXEMPT, TRUST_FILES, FV2_AUTHORITY_ROOTS, FV2_AUTHORITY_FILES, FV2_AUTHORITY_DEPS, isGovernancePath, decideAutoMerge, loadPolicy, loadIndex} from "../../docs/planning/autonomy/autonomy.mjs";
 // @ts-expect-error untyped governance module
 import {PROTECTED_FLOOR, CI_EXECUTED_FLOOR} from "../../docs/planning/merge-gate.mjs";
 // @ts-expect-error untyped module
@@ -81,7 +81,7 @@ export function registerFv2ExecutorFenceCases(): void {
     it("G3 the executor fence: the closure of v41-guard is in TRUST_FILES (base-blob identical) and every trust file is a Founder path", () => {
       for (const f of closure(["automation/factory-v2/v41-guard.mjs"])) expect(TRUST_FILES, f).toContain(f);
       for (const f of TRUST_FILES) expect(protectedPath(f), f).toBe(true);
-      for (const f of ["automation/lib/task-lease.mjs", "automation/lib/task-lease-git-store.mjs"]) expect(floor(f), f).toBe(true);
+      for (const f of ["automation/lib/task-lease.mjs", "automation/lib/task-lease-git-store.mjs"]) { expect(floor(f), f).toBe(true); expect(isGovernancePath(f), f).toBe(true); }
       expect(isGovernancePath(CANONICAL_KEYRING_PATH)).toBe(true);
     });
     // Decisions with the real policy and task index: a T2 FV2 task, merge-gate MERGE, a CLEAN attestation. Only the diff varies.
@@ -94,7 +94,8 @@ export function registerFv2ExecutorFenceCases(): void {
       for (const d of [[{filename: f, status: "modified"}], [{filename: f, status: "removed"}], [{filename: "automation/factory-v2/x-moved.mjs", previous_filename: f, status: "renamed"}],
         [{filename: f.toUpperCase(), status: "modified"}]]) { const r = decide(d); expect(r.decision).toBe("FOUNDER_REQUIRED"); expect(r.reasons).toContain("GOVERNANCE_PATH"); }
     });
-    it("G5 automation/lib lease files: merge-gate's protected floor maps to FOUNDER_REQUIRED (never routine)", () => {
+    it("G5 automation/lib lease files are governance paths AND merge-gate floor: FOUNDER_REQUIRED either way (never routine)", () => {
+      for (const f of ["automation/lib/task-lease.mjs", "automation/lib/task-lease-git-store.mjs"]) { const r = decide([{filename: f, status: "modified"}]); expect(r.decision).toBe("FOUNDER_REQUIRED"); expect(r.reasons).toContain("GOVERNANCE_PATH"); }
       const r = decideAutoMerge({gate: {decision: "BLOCK", reasons: ["PROTECTED_PATH"], expectedHeadSha: H, expectedBaseSha: B}, body: "UASCO-TASK: FV2-T0004\n", policy, index,
         evidence: {implementerSessions: ["session_builder"], diffFiles: [{filename: "automation/lib/task-lease.mjs", status: "modified"}], reviews: [rev], pr: {user: {login: "x"}}}});
       expect(r.decision).toBe("FOUNDER_REQUIRED"); expect(r.reasons).toContain("PROTECTED_GOVERNANCE:PROTECTED_PATH");
@@ -103,6 +104,18 @@ export function registerFv2ExecutorFenceCases(): void {
       for (const d of [[{filename: "automation/factory-v2/demo-worker.mjs", status: "modified"}], [{filename: "automation/factory-v2/new-module.mjs", status: "added"}],
         [{filename: "tests/factory-v2/model-router.test.mjs", status: "modified"}], [{filename: "docs/factory-v2/CONTROL-SESSION.md", status: "modified"}]])
         expect(decide(d)).toMatchObject({decision: "AUTO_MERGE", reasons: []});
+    });
+    it("G8 every repo file the protected code names (data, config, keyrings, acceptance) is a Founder path; STATE.json is the one documented exemption", () => {
+      const LIT = /["'`]((?:docs|config|automation|scripts|tests|governance|schemas|\.github)\/[A-Za-z0-9._\/-]+)["'`]/g;
+      const named = new Set<string>();
+      for (const f of closure(FV2_AUTHORITY_ROOTS)) for (const m of (disk(f) ?? "").matchAll(LIT)) named.add(m[1]);
+      expect(named.size).toBeGreaterThan(5);
+      // STATE.json: routine by design (GOVERNANCE_EXEMPT); its done entries only count after verifiedState checks the merged PR that declares the task.
+      // Directory literals are scope patterns, not reads: gate-verifier's FACTORY_SCOPE_PREFIX locates the PR that brought V2 code (cutover gate); authority/ is governance.
+      const SCOPE_PATTERNS = ["automation/factory-v2/", "docs/planning/authority/"];
+      const unprotected = [...named].filter(p => !protectedPath(p) && !GOVERNANCE_EXEMPT.includes(p.toLowerCase()) && !SCOPE_PATTERNS.includes(p));
+      expect(unprotected).toEqual([]);
+      for (const p of ["docs/factory-v2/CUTOVER-ACCEPTANCE.md", "docs/factory-v2/probe/PROBE-ROLE-KEYS.json"]) expect(decide([{filename: p, status: "modified"}]).decision).toBe("FOUNDER_REQUIRED");
     });
     it("G7 bypasses are detected: a new import, a re-export, a literal dynamic import, an opaque loader in a protected file", () => {
       const patched = (f: string, add: string): Read => g => (g === f ? (disk(g) ?? "") + "\n" + add + "\n" : g.endsWith("/evil.mjs") ? "export const x = 1;" : disk(g));
@@ -114,7 +127,7 @@ export function registerFv2ExecutorFenceCases(): void {
         expect(opaque(closure(FV2_AUTHORITY_ROOTS), patched("automation/factory-v2/supervisor.mjs", add)), add).toEqual(["automation/factory-v2/supervisor.mjs"]);
       // the drift test itself only runs on Founder-tier changes: wiring a new file into authority code means editing a protected file
       expect(isGovernancePath("automation/factory-v2/evil.mjs")).toBe(false);
-      expect(GOVERNANCE_EXACT.length).toBe(3 + FV2_AUTHORITY_FILES.length);
+      expect(GOVERNANCE_EXACT.length).toBe(3 + FV2_AUTHORITY_FILES.length + FV2_AUTHORITY_DEPS.length);
     });
   });
 }

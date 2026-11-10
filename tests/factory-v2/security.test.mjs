@@ -214,7 +214,9 @@ describe("5. the canonical merge path refuses V4.1 merges after handover (indepe
     try {
       // Apply the prepared patch; if the tree already contains it (the governance PR that lands it), test the tree as it is.
       const diff = path.join(repo, "docs/authority-requests/FV2-PROTECTED-EXECUTOR-AUTHORITY-FENCE.diff");
-      const already = spawnSync("git", ["apply", "--reverse", "--check", diff], {cwd: wt}).status === 0;
+      // Landed = the executor fence hunk is in the tree (#355). Its autonomy.mjs hunk (the whole-folder prefix) was later superseded by the computed
+      // FV2 authority list, so only executor.mjs decides; the behaviour below is always checked against the real executor.mjs of this tree.
+      const already = spawnSync("git", ["apply", "--reverse", "--check", "--include=docs/planning/autonomy/executor.mjs", diff], {cwd: wt}).status === 0;
       if (!already) { const ap = spawnSync("git", ["apply", diff], {cwd: wt, encoding: "utf8"}); expect(ap.status, ap.stderr).toBe(0); }
       fs.symlinkSync(path.join(repo, "node_modules"), path.join(wt, "node_modules"), "junction"); // junction: no privilege needed on Windows
       fs.cpSync(path.join(repo, "automation/factory-v2"), path.join(wt, "automation/factory-v2"), {recursive: true}); // the code under test, as in this working tree

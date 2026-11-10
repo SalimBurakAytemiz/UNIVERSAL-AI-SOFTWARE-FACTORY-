@@ -37,7 +37,12 @@ export const FV2_AUTHORITY_ROOTS = Object.freeze(["automation/factory-v2/v41-gua
 export const FV2_AUTHORITY_FILES = Object.freeze(["bridge", "cli", "cloud-orchestrator", "control", "cutover", "executors", "failures", "gate-verifier", "github-writer",
   "identity", "ledger-log", "live-sources", "merge-git", "merge", "model-router", "ownership", "probe-scenario", "quota-governor", "ref-doc-store", "report", "review",
   "scheduler", "shared-registry", "state-journal", "supervisor", "topology", "v41-guard"].map(f => `automation/factory-v2/${f}.mjs`));
-export const GOVERNANCE_EXACT = Object.freeze(["docs/planning/merge-gate.mjs", "docs/planning/merge-gate.proof.mjs", "docs/planning/merge_gate.md", ...FV2_AUTHORITY_FILES]);
+// Files outside automation/factory-v2/ that the authority closure loads or reads, made governance paths here too (not only merge-gate floor or
+// trust files): the lease engine, the cutover acceptance conditions LIVE control reads, and the probe keyring.
+export const FV2_AUTHORITY_DEPS = Object.freeze(["automation/lib/task-lease.mjs", "automation/lib/task-lease-git-store.mjs", "docs/factory-v2/cutover-acceptance.md",
+  "docs/factory-v2/probe/probe-role-keys.json"]);
+export const GOVERNANCE_EXACT = Object.freeze(["docs/planning/merge-gate.mjs", "docs/planning/merge-gate.proof.mjs", "docs/planning/merge_gate.md", ...FV2_AUTHORITY_FILES,
+  ...FV2_AUTHORITY_DEPS]);
 export const GOVERNANCE_EXEMPT = Object.freeze(["docs/planning/autonomy/state.json"]);
 // Files decide trusts. Each must equal the base's blob, so a PR-head or stale checkout can never supply its own rules (B-2).
 export const TRUST_FILES = Object.freeze(["docs/planning/autonomy/autonomy.mjs", "docs/planning/autonomy/executor.mjs", "docs/planning/autonomy/standing-authority.json",
