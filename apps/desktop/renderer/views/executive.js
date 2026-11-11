@@ -4,6 +4,7 @@ import {MISSING,topEntries} from "../model.js";
 import {formatDateTime} from "../work-core.js";
 import {EXECUTIVE_SOURCES,EXECUTIVE_SOURCE_PATHS,PILL_FOR_RUN_STATUS,RUN_STOPPED_STATUSES,MAX_LEDGER_ROWS,executiveSummary,shortSha} from "../executive-core.js";
 import {returnPanel} from "./return-summary.js";
+import {exportPanel} from "./report-export-panel.js";
 
 const isOk=res=>Boolean(res)&&res.state==="VERIFIED";
 /** Okuma hatasının ayrık dürüst durumu; uydurma yok. */
@@ -186,5 +187,6 @@ export async function render(ctx){
   // executiveSummary dört okumayı {cockpit,missions,runs,attention} adlarıyla bekler; ledger/kaynak şeridi workRuns adını kullanır.
   const res={cockpit,missions,workRuns,attention,runs:workRuns};
   // UI-003 Dönüş Özeti ayrı modüldedir (yalnız cihaz-içi işaret yazar); bu görünüm kendisi hiçbir şey yazmaz.
-  return h(doc,"div",{class:"view view-executive"},header(ctx),returnPanel(ctx,res),summaryPanel(ctx,res),ledgerPanel(ctx,res));
+  // UASCO-T0020: rapor dışa aktarma aynı `res` üzerinden çalışır (yeni okuma yok).
+  return h(doc,"div",{class:"view view-executive"},header(ctx),returnPanel(ctx,res),summaryPanel(ctx,res),ledgerPanel(ctx,res),exportPanel(ctx,res));
 }
