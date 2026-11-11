@@ -19,6 +19,7 @@ import {CAPABILITIES_PATH,ADAPTERS_PATH,FABRICS_PATH,mapCapabilities,mapAdapters
 import {knowledgePath,mapKnowledge,provenancePath,mapProvenance,mapMemoryList} from "./knowledge-core.js";
 import {STATUS_SUMMARY_PATH,mapStatusSummary,mapReadiness} from "./agent-factory-core.js";
 import {ATTENTION_PATH as WORKOS_ATTENTION_PATH,mapAttentionQueue,attentionAsBlocked} from "./attention-core.js";
+import {RUN_SUMMARIES_PATH,mapRunSummaries} from "./project-cockpit-core.js";
 import {INSTALL_PATH,PHASE0_PATH,mapInstallReport,mapPhase0Report} from "./install-core.js";
 import {RUNS_PATH as AUDIT_RUNS_PATH,EVIDENCE_PATH as AUDIT_EVIDENCE_PATH,runEventsPath,mapAuditRuns,mapAuditEvents,mapAuditEvidence} from "./audit-core.js";
 
@@ -62,6 +63,8 @@ export function createApi({bridge,store,now=()=>Date.now()}){
     get,post,stale,
     async cockpit(){const r=await get("/v1/cockpit");return r.ok?{state:"OK",data:mapCockpit(r.data)}:{state:r.state,data:emptyCockpit(r.state),message:r.message}},
     async projects(){const r=await get("/v1/projects");return r.ok?mapProjects(r.data):{state:r.state,items:[],message:r.message}},
+    /** V3-T1027: proje bazlı cockpit için hafif koşu özetleri (ilk 100; kısmi ise partial). */
+    async runSummaries(){const r=await get(RUN_SUMMARIES_PATH);return r.ok?mapRunSummaries(r.data):{state:r.state,runs:[],total:null,partial:false,message:r.message}},
     async missions(){const q=store.projectId?`/v1/missions?projectId=${store.projectId}`:"/v1/missions";const r=await get(q);return r.ok?mapMissions(r.data):{state:r.state,items:[],message:r.message}},
     async control(){const r=await get("/v1/control/status");return r.ok?mapControlStatus(r.data):{state:r.state,active:false,reason:null,message:r.message}},
     // //TR: Founder dikkati artık GET /v1/attention'dan (yalnız Work OS kayıtları) okunur; emekli scheduler kaynağı /v1/founder-attention bu okumada KULLANILMAZ. Eski tüketiciler için blocked[] aynı öğelerden türetilir, tam kuyruk queue alanındadır. Ana süreç izin listesi girişi tabandadır (main.mjs EXTRA bloğu); yine de köprü yolu reddederse (INVALID_API_PATH) durum UNAVAILABLE'dır, öğe uydurulmaz.
