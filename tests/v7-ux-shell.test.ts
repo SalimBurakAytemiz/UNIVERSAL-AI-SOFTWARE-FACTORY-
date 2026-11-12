@@ -168,11 +168,11 @@ function mountHost(doc: D) {
   for (const id of HOST_IDS) { const n = new N(doc, id === "projectSelect" ? "select" : id === "searchInput" ? "input" : id === "stopDialog" ? "dialog" : id === "searchResults" ? "ul" : "button"); n.setAttribute("id", id); doc.body.append(n); }
   // stopBtn needs a .stop-text child only if renderStop runs; palette path does not call renderStop.
 }
-async function mkShell(lang = "tr", confirmImpl?: (o: any) => Promise<boolean>) {
+async function mkShell(lang = "tr", confirmImpl?: (o: any) => Promise<boolean>, overrides: Record<string, (p: string) => any> = {}) {
   const shellMod = await load("shell.js"), apiMod = await load("api.js"), i18n = await load("i18n.js"), forms = await load("forms.js");
   const doc = new D(); mountHost(doc);
   const store: any = { projectId: null, epoch: 0, cache: new Map(), samples: new Map(), lastRefreshAt: null, markRefreshed() {} };
-  const { bridge, calls, posts } = makeBridge();
+  const { bridge, calls, posts } = makeBridge(overrides);
   const api = apiMod.createApi({ bridge, store });
   const t = (k: string, v?: any) => i18n.translate(lang, k, v);
   const nav: string[] = [], sel: Array<string | null> = [];
@@ -479,5 +479,85 @@ describe("UI-106 empty-state next step: journey zero-mission and executive empty
     }
     const j = await render("journey.js", EMPTY_M, { lang: "tr" }), x = await render("executive.js", EMPTY_R, { lang: "tr" });
     expect(text(j.root)).not.toMatch(/journey\.[a-z]+\./); expect(text(x.root)).not.toMatch(/executive\.ledger\./);
+  });
+});
+
+// //TR: DSK-T0005 (UI-124): ACİL DURDUR onay penceresi, onaydan ÖNCE durdurmanın etkileyeceği çalışan/sıradaki koşu, görev ve onay bekleyen iş sayısını yalnız mevcut GET'lerle gösterir; okunamayan kaynak dürüstçe "okunamadı/bilinmiyor" der; onay butonu sayıları beklemez ve durdurma davranışı değişmez.
+describe("DSK-T0005 stop dialog live impact counts (UI-124)", () => {
+  const TSK = (c: string) => "tsk_" + c.repeat(24), RUN2 = "run_" + "e".repeat(24), RUN3 = "run_" + "f".repeat(24), RUN4 = "run_" + "1".repeat(24);
+  const row = (runId: string, status: string) => ({ runId, missionId: MSN, projectId: PRJ, status, step: "IMPLEMENT", createdAt: "2026-11-12T08:00:00.000Z", updatedAt: "2026-11-12T08:05:00.000Z" });
+  const links = (runId: string, ...ids: string[]) => ({ links: ids.map(taskId => ({ taskId, runId, missionId: MSN, linkedAt: "2026-11-12T08:01:00.000Z" })) });
+  const runs = (...r: any[]) => () => ({ runs: r });
+  const tick = async () => { for (let i = 0; i < 5; i++) await new Promise(r => setTimeout(r, 0)); };
+  const impact = (doc: D) => doc.getElementById("stopImpact");
+  const items = (doc: D) => Object.fromEntries(within(impact(doc)).filter(n => n.tagName === "LI").map(n => [n.getAttribute("data-impact"), text(n)]));
+
+  it("pure core: groups recorded run statuses into halts / will-not-start / awaiting approval; unknown statuses fail closed", async () => {
+    const core = await load("stop-impact-core.js");
+    const g = core.groupRuns([row(RUN, "RUNNING"), row(RUN2, "QUEUED"), row(RUN3, "AWAITING_APPROVAL"), row(RUN4, "SUCCEEDED")]);
+    expect(g).toEqual({ halts: [RUN], wontStart: [RUN2], awaiting: [RUN3] });
+    expect(core.groupRuns([row(RUN, "MADE_UP")])).toBeNull();
+    expect(core.buildStopImpact({ state: "ERROR", runs: null })).toEqual({ state: "ERROR" });
+    expect(core.buildStopImpact({ state: "VERIFIED", runs: { items: [row(RUN4, "SUCCEEDED")] } }).state).toBe("EMPTY");
+    const r = core.buildStopImpact({ state: "VERIFIED", runs: { items: [row(RUN, "RUNNING"), row(RUN2, "QUEUED")] } }, { [RUN]: { state: "VERIFIED", links: [{ taskId: TSK("d") }, { taskId: TSK("a") }] }, [RUN2]: { state: "ERROR", links: [] } });
+    expect(r).toMatchObject({ state: "VERIFIED", runsHalting: 1, runsNotStarting: 1, approvals: 0, tasks: { state: "PARTIAL", count: 2, checked: 1, affected: 2 } });
+    expect(core.buildStopImpact({ state: "VERIFIED", runs: { items: [row(RUN, "RUNNING")] } }, {}).tasks).toEqual({ state: "UNKNOWN", count: null, checked: 0, affected: 1 });
+  });
+
+  it("opening the dialog reads ONLY allow-listed GETs and shows the counts before the user confirms; no POST is made", async () => {
+    const env = await mkShell("en", undefined, {
+      "/v1/work-runs": runs(row(RUN, "RUNNING"), row(RUN2, "QUEUED"), row(RUN3, "AWAITING_APPROVAL"), row(RUN4, "FAILED")),
+      [`/v1/work-runs/${RUN}/tasks`]: () => links(RUN, TSK("d"), TSK("a")), [`/v1/work-runs/${RUN2}/tasks`]: () => links(RUN2, TSK("b")),
+    });
+    env.doc.getElementById("stopBtn")!.fire("click");
+    expect(env.doc.getElementById("stopDialog")!.open).toBe(true);
+    expect(impact(env.doc)!.dataset.state).toBe("LOADING");
+    await tick();
+    expect(impact(env.doc)!.dataset.state).toBe("VERIFIED");
+    expect(items(env.doc)).toEqual({ runsHalting: env.t("stop.impact.runsHalting", { n: "1" }), runsNotStarting: env.t("stop.impact.runsNotStarting", { n: "1" }),
+      tasks: env.t("stop.impact.tasks", { n: "3" }), approvals: env.t("stop.impact.approvals", { n: "1" }) });
+    expect(impact(env.doc)!.getAttribute("role")).toBe("status");
+    const reads = env.calls.filter(c => c.startsWith("/v1/work-runs"));
+    expect(new Set(reads)).toEqual(new Set(["/v1/work-runs", `/v1/work-runs/${RUN}/tasks`, `/v1/work-runs/${RUN2}/tasks`]));
+    for (const p of reads) expect(allowGet(p), p).toBe(true);
+    expect(env.posts).toEqual([]);
+  });
+
+  it("honest states: nothing recorded => EMPTY note; runs unreadable => ERROR note (stop still possible); task lists unreadable => 'at least' / 'unknown'", async () => {
+    const empty = await mkShell("en", undefined, { "/v1/work-runs": runs(row(RUN4, "SUCCEEDED")) });
+    empty.doc.getElementById("stopBtn")!.fire("click"); await tick();
+    expect(impact(empty.doc)!.dataset.state).toBe("EMPTY"); expect(text(impact(empty.doc)!)).toBe(empty.t("stop.impact.empty"));
+    const bad = await mkShell("en", undefined, { "/v1/work-runs": () => { throw new Error("fetch failed"); } });
+    bad.doc.getElementById("stopBtn")!.fire("click"); await tick();
+    expect(impact(bad.doc)!.dataset.state).toBe("ERROR"); expect(text(impact(bad.doc)!)).toBe(bad.t("stop.impact.error"));
+    expect(text(impact(bad.doc)!)).not.toMatch(/\b0\b/); // no fabricated zero
+    const partial = await mkShell("en", undefined, { "/v1/work-runs": runs(row(RUN, "RUNNING"), row(RUN2, "RUNNING")), [`/v1/work-runs/${RUN}/tasks`]: () => links(RUN, TSK("d")) });
+    partial.doc.getElementById("stopBtn")!.fire("click"); await tick();
+    expect(items(partial.doc).tasks).toBe(partial.t("stop.impact.tasksAtLeast", { n: "1" }));
+    const unknown = await mkShell("tr", undefined, { "/v1/work-runs": runs(row(RUN, "RUNNING")) });
+    unknown.doc.getElementById("stopBtn")!.fire("click"); await tick();
+    expect(items(unknown.doc).tasks).toBe(unknown.t("stop.impact.tasksUnknown"));
+  });
+
+  it("stop behaviour is unchanged: confirm stops immediately without waiting for the counts; cancel stops nothing", async () => {
+    let release: (v: any) => void = () => {};
+    const env = await mkShell("en", undefined, { "/v1/work-runs": () => new Promise(r => { release = r; }) });
+    const stopped: number[] = []; env.ctx.stop = async () => { stopped.push(1); };
+    env.doc.getElementById("stopBtn")!.fire("click");
+    expect(impact(env.doc)!.dataset.state).toBe("LOADING");
+    env.doc.getElementById("stopCancel")!.fire("click");
+    expect(stopped).toEqual([]); expect(env.doc.getElementById("stopDialog")!.open).toBe(false);
+    env.doc.getElementById("stopBtn")!.fire("click");
+    env.doc.getElementById("stopConfirm")!.fire("click");
+    expect(stopped).toEqual([1]); expect(env.doc.getElementById("stopDialog")!.open).toBe(false);
+    release({ runs: [row(RUN, "RUNNING")] }); await tick();
+    expect(impact(env.doc)!.dataset.state).toBe("LOADING"); // a late result is not painted into a closed dialog
+    expect(env.posts).toEqual([]);
+  });
+
+  it("every stop.impact key exists in both locales", async () => {
+    const i18n = await load("i18n.js");
+    for (const k of ["title", "loading", "error", "empty", "runsHalting", "runsNotStarting", "tasks", "tasksAtLeast", "tasksUnknown", "approvals"])
+      for (const lang of ["tr", "en"]) expect(i18n.translate(lang, `stop.impact.${k}`, { n: "1" }), `${lang}:${k}`).not.toBe(`stop.impact.${k}`);
   });
 });
