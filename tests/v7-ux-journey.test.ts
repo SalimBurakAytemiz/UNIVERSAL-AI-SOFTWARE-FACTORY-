@@ -2258,3 +2258,6 @@ describe("LANE-A A-UI011-EVIDENCE-1: the analysis step and the run-the-product s
     await expectLocalClaudeStillOff(s, before);
   });
 });
+// //TR: DSK-T0002 (UI-014): okunur analiz raporu (salt-okunur GET /v1/missions/:id/analysis/report + Proje Yolculuğu rapor paneli) gerçek buildServer senaryoları bu kayıtlı dosyadan koşar.
+import {registerAnalysisReportRealServerCases} from "./support/analysis-report-real-server.cases.js";
+registerAnalysisReportRealServerCases();

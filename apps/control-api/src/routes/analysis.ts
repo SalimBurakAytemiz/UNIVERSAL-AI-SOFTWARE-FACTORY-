@@ -7,6 +7,7 @@ import {PREDEV_OPEN_MISSION_STATUSES} from "../../../../core/workos/predev/types
 import type {RouteDeps} from "./deps.js";
 import {AnalysisError, AnalysisStoppedError} from "../../../../core/workos/crew/analysis.js";
 import type {AnalysisFlow} from "../../../../core/workos/crew/analysis.js";
+import type {PreDevArtifact} from "../../../../core/workos/predev/types.js";
 
 const Ajv = AjvModule.default;
 const ajv = new Ajv({allErrors: true, strict: true});
@@ -17,6 +18,23 @@ const validMissionId = (x: unknown) => typeof x === "string" && /^msn_[0-9a-f]{2
 export interface AnalysisBuilderTrace { roleId?: string | null; kind?: string | null; identity?: string | null; outputSha256?: string | null; exitCode?: number | null; durationMs?: number | null }
 export type AnalysisFlowWithTrace = AnalysisFlow & { builderTrace?: () => AnalysisBuilderTrace | null };
 export interface AnalysisRouteDeps extends RouteDeps { analysisFlow: (stopped: () => boolean) => AnalysisFlowWithTrace }
+
+// //TR: DSK-T0002 (UI-014): okunur analiz raporu için SALT-OKUNUR projeksiyon. Yalnız kayıtlı pre-dev artefakt içeriğinden (read-model'in seçtiği artefakt kimliği) türetilir; alanlar sınırlanır, eksik/bozuk alan boş döner, hiçbir içerik UYDURULMAZ. Durum kayıttan AYNEN taşınır (onay ima edilmez).
+const REPORT_KINDS = ["BusinessAnalysis", "Requirements", "Plan", "Architecture"] as const;
+const rStr = (x: unknown, n = 2000): string | null => typeof x === "string" && x.trim() !== "" ? x.slice(0, n) : null;
+const rStrs = (x: unknown, max = 100, n = 1000): string[] => Array.isArray(x) ? x.map(v => rStr(v, n)).filter((v): v is string => v !== null).slice(0, max) : [];
+const rObjs = (x: unknown, max = 200): Record<string, unknown>[] => Array.isArray(x) ? x.filter((v): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v)).slice(0, max) : [];
+const rReq = (r: Record<string, unknown>) => ({id: rStr(r.id, 80), statement: rStr(r.statement), acceptanceCriteria: rStrs(r.acceptanceCriteria, 50), tracesTo: rStrs(r.tracesTo, 50, 80)});
+function reportContent(kind: string, c: unknown): Record<string, unknown> | null {
+  if (!c || typeof c !== "object" || Array.isArray(c)) return null;
+  const o = c as Record<string, unknown>;
+  switch (kind) {
+    case "BusinessAnalysis": return {problem: rStr(o.problem, 4000), stakeholders: rStrs(o.stakeholders), goals: rObjs(o.goals).map(g => ({id: rStr(g.id, 80), statement: rStr(g.statement)})), constraints: rStrs(o.constraints), successMetrics: rStrs(o.successMetrics), assumptions: rStrs(o.assumptions), risks: rStrs(o.risks)};
+    case "Requirements": return {functional: rObjs(o.functional).map(rReq), nonFunctional: rObjs(o.nonFunctional).map(rReq)};
+    case "Plan": return {scope: rObjs(o.scope).map(x => ({id: rStr(x.id, 80), statement: rStr(x.statement)})), workPackages: rObjs(o.workPackages).map(w => ({id: rStr(w.id, 80), title: rStr(w.title, 500), estimate: rStr(w.estimate, 80), dependsOn: rStrs(w.dependsOn, 50, 80), satisfies: rStrs(w.satisfies, 50, 80)})), milestones: rObjs(o.milestones).map(m => ({id: rStr(m.id, 80), title: rStr(m.title, 500), workPackageIds: rStrs(m.workPackageIds, 100, 80)})), outOfScope: rStrs(o.outOfScope)};
+    default: return {components: rObjs(o.components).map(x => ({id: rStr(x.id, 80), name: rStr(x.name, 300), responsibility: rStr(x.responsibility)})), integrations: rStrs(o.integrations), infraNeeds: rStrs(o.infraNeeds), risks: rStrs(o.risks)};
+  }
+}
 
 export function registerAnalysisRoutes(app: any, d: AnalysisRouteDeps): void {
   const guard = (fn: (req: any, reply: any) => unknown) => async (req: any, reply: any) => {
@@ -80,5 +98,21 @@ export function registerAnalysisRoutes(app: any, d: AnalysisRouteDeps): void {
     if (!out.ok) return reply.code(PLAN_ERROR_STATUS[out.code] ?? 409).send({error: out.code});
     d.audit(out.replayed ? "WORKOS_IDEMPOTENT_REPLAY" : "WORKOS_ANALYSIS_PLAN", {actor: d.actor, missionId: req.params.id, tasks: out.tasks.length});
     return {tasks: out.tasks, replayed: out.replayed, trace: out.trace, summary: out.summary};
+  }));
+  // //TR: DSK-T0002 (UI-014): GET /v1/missions/:id/analysis/report — SALT-OKUNUR okunur rapor (özet, önerilen işler + kabul kriterleri, riskler/varsayımlar, karar durumu). Yazma, ücretli çağrı, kilit, politika yazma kapısı YOKTUR; Global Stop okumayı engellemez. Dizi yoksa dürüst active:false ve içeriksiz bölümler.
+  app.get("/v1/missions/:id/analysis/report", guard(async (req: any, reply: any) => {
+    if (!validMissionId(req.params.id)) return reply.code(400).send({error: "INVALID_MISSION_ID"});
+    const st = d.getStore(), id: string = req.params.id;
+    if (!st.getMission(d.scope, id)) return reply.code(404).send({error: "WORKOS_NOT_FOUND"});
+    const rm = st.preDevReadModel(d.scope, id);
+    const byId = new Map<string, PreDevArtifact>();
+    if (rm.preDevId) for (const a of st.listPreDevArtifacts(d.scope, rm.preDevId)) byId.set(a.id, a);
+    const sections: Record<string, unknown> = {};
+    for (const kind of REPORT_KINDS) {
+      const e = rm.artifacts[kind], art = e && e.artifactId ? byId.get(e.artifactId) : undefined;
+      sections[kind] = {state: e ? e.state : "NOT_STARTED", artifactId: e?.artifactId ?? null, version: e?.version ?? null, authorRoleId: e?.authorRoleId ?? null, content: art ? reportContent(kind, art.content) : null};
+    }
+    const tasks = st.listTasks(d.scope, id).slice(0, 500).map(t => ({taskId: t.taskId, title: String(t.title).slice(0, 500), status: t.status}));
+    return {report: {missionId: id, active: rm.active, phase: rm.phase, sections, tasks}};
   }));
 }

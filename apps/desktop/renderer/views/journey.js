@@ -5,6 +5,7 @@ import {selection} from "../forms.js";
 import {MISSION_ID_RE,PREDEV_KINDS,PHASE_KIND,PILL_FOR_STATE,downstreamOf} from "../journey-core.js";
 import {decisionsPanel} from "./predev-decisions.js";
 import {analysisPanel,analysisUi} from "./analysis-step.js";
+import {analysisReportPanel} from "./analysis-report.js";
 
 const PREDEV_SRC="/v1/predev/:missionId",CREW_SRC="/v1/crew/:missionId";
 const isLive=res=>res&&res.state==="VERIFIED";
@@ -135,7 +136,7 @@ function predevPanel(ctx,pre,missionId,exec=null){
     body=[h(doc,"p",{class:"note",dataset:{phase:p.phase},text:ctx.t("journey.predev.phase",{phase:ctx.t(`journey.phase.${p.phase}`)})}),
       h(doc,"ol",{class:"journey-phases","aria-label":ctx.t("journey.predev.aria")},rows)];
   }
-  const sec=panel(ctx,{titleKey:"journey.predev.title",id:"journey-predev",className:"journey-section"},h(doc,"p",{class:"note",text:ctx.t("journey.predev.lead")}),body,analysisPanel(ctx,{missionId,exec}),decisionsPanel(ctx,{missionId,pre}));
+  const sec=panel(ctx,{titleKey:"journey.predev.title",id:"journey-predev",className:"journey-section"},h(doc,"p",{class:"note",text:ctx.t("journey.predev.lead")}),body,analysisPanel(ctx,{missionId,exec}),analysisReportPanel(ctx,{missionId,pre}),decisionsPanel(ctx,{missionId,pre}));
   sec.setAttribute("tabindex","-1");return sec;
 }
 
