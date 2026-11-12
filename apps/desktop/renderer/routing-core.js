@@ -51,3 +51,30 @@ export function buildRoutingRows(exec){
     return {role,executor:local?"LOCAL_CLAUDE":null,executorState,profileState,sandbox,model:null,blockers};
   });
 }
+
+// //TR: Model ve sağlayıcı ayarları tablosu (Founder yönergesi, UASCO-T0063 öncesi salt-okunur). Kaynaklar YALNIZ mevcut, izinli GET'lerdir:
+// GET /v1/system/executors (LOCAL_CLAUDE yürütücüsü + Claude profilleri) ve GET /v1/adapters (MODEL_GATEWAY / LOCAL_MODEL kayıtları). Yedek zinciri,
+// kota ve maliyet sınıfı için hiçbir okuma yolu yoktur: bu alanlar her zaman null + gerekçe NO_READ_ROUTE'dur (uydurulmaz). Kimlik bilgisi yalnız
+// var/yok/bilinmiyor olarak türetilir (profil READY = giriş sinyali var); hiçbir sır değeri, yol ya da komut taşınmaz.
+export const MODEL_ADAPTER_CATEGORIES=Object.freeze(["MODEL_GATEWAY","LOCAL_MODEL"]);
+export const MODEL_GAP="NO_READ_ROUTE";
+const credentialOf=state=>state==="READY"?"PRESENT":state==="LOGIN_REQUIRED"||state==="REFUSED"?"ABSENT":"UNKNOWN";
+/**
+ * exec: mapExecutors çıktısı; adapters: mapAdapters çıktısı. Dönüş: {state, sources:{executors,adapters}, rows:[...]}.
+ * state: iki kaynak da doğrulanmadıysa UNAVAILABLE (ya da ikisi de ERROR ise ERROR); en az biri doğrulandı ve satır yoksa EMPTY; aksi halde VERIFIED.
+ * Satır: {id, kind, roles:[{role,state,credential}], executorState, inUse, status, implementation, fallback:null, quota:null, costClass:null, gap}.
+ */
+export function buildModelProviderRows(exec,adapters){
+  const ex=exec&&exec.state==="VERIFIED"?exec:null,ad=adapters&&adapters.state==="VERIFIED"?adapters:null;
+  const sources={executors:exec&&typeof exec.state==="string"?exec.state:"UNAVAILABLE",adapters:adapters&&typeof adapters.state==="string"?adapters.state:"UNAVAILABLE"};
+  if(!ex&&!ad)return {state:sources.executors==="ERROR"&&sources.adapters==="ERROR"?"ERROR":"UNAVAILABLE",sources,rows:[]};
+  const rows=[];
+  const local=ex?(ex.items??[]).find(e=>e.id==="LOCAL_CLAUDE")??null:null;
+  if(local){
+    const roles=["implementer","reviewer"].map(role=>{const p=(ex.profiles??[]).find(x=>x.role===role)??null;const state=p&&typeof p.state==="string"?p.state:null;return {role,state,credential:credentialOf(state)}});
+    rows.push({id:"LOCAL_CLAUDE",kind:"EXECUTOR",roles,executorState:local.state??null,inUse:ex.active==="LOCAL_CLAUDE",status:null,implementation:null,fallback:null,quota:null,costClass:null,gap:MODEL_GAP});
+  }
+  if(ad)for(const a of ad.items)if(MODEL_ADAPTER_CATEGORIES.includes(a.category))
+    rows.push({id:a.id,kind:a.category,roles:[],executorState:null,inUse:false,status:a.status,implementation:a.implementation,fallback:null,quota:null,costClass:null,gap:MODEL_GAP});
+  return {state:rows.length?"VERIFIED":"EMPTY",sources,rows};
+}

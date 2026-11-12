@@ -888,3 +888,109 @@ describe("LANE-A A-SETUP-FIX-1: EXECUTOR_NOT_ENABLED and package-provenance code
     expect(E["setup.reason.CLAUDE_PACKAGE_PROVENANCE_CHANGED"]).toBeTruthy(); expect(T["setup.reason.CLAUDE_PACKAGE_PROVENANCE_CHANGED"]).toBeTruthy();
   });
 });
+
+// //TR: Founder yönergesi (model ve sağlayıcı ayarları): yönlendirme rolü / yedek zinciri / kota / maliyet sınıfı tablosu yalnız mevcut izinli GET'lerden; okuma yolu olmayan alanlar dürüstçe "kullanılamıyor", yazma düğmesi gerekçesiyle devre dışı, sır asla yok.
+describe("Model & provider settings (read-only; fallback/quota/cost honestly unavailable)", () => {
+  const MODEL_ADS = {adapters: [{id: "omniroute", category: "MODEL_GATEWAY", status: "REGISTERED", implementation: "NOT_IMPLEMENTED", requiresCertification: true},
+    {id: "ollama", category: "LOCAL_MODEL", status: "REGISTERED", implementation: "NOT_IMPLEMENTED", requiresCertification: true},
+    {id: "playwright", category: "BROWSER", status: "REGISTERED", implementation: "NOT_IMPLEMENTED", requiresCertification: true}]};
+  const modelPanel = async (feed: Feed, lang = "en") => { const {ctx, calls} = await mkCtx(feed, lang); const m = await load("views", "model-settings.js"); return {node: (await m.modelSettingsPanel(ctx)) as N, calls}; };
+  const rowsOf = (n: N) => within(n).filter(x => x.dataset.modelRow);
+
+  it("buildModelProviderRows: only model categories, credential is presence only, fallback/quota/cost are always null with the NO_READ_ROUTE gap", async () => {
+    const c = await load("routing-core.js");
+    const exec = {state: "VERIFIED", items: [{id: "LOCAL_CLAUDE", state: "READY"}], active: "LOCAL_CLAUDE", profiles: [{role: "implementer", state: "READY"}, {role: "reviewer", state: "LOGIN_REQUIRED"}]};
+    const r = c.buildModelProviderRows(exec, c.mapAdapters(MODEL_ADS));
+    expect(r.state).toBe("VERIFIED");
+    expect(r.rows.map((x: any) => [x.id, x.kind])).toEqual([["LOCAL_CLAUDE", "EXECUTOR"], ["omniroute", "MODEL_GATEWAY"], ["ollama", "LOCAL_MODEL"]]);
+    expect(r.rows[0].roles).toEqual([{role: "implementer", state: "READY", credential: "PRESENT"}, {role: "reviewer", state: "LOGIN_REQUIRED", credential: "ABSENT"}]);
+    expect(r.rows[0].inUse).toBe(true);
+    for (const x of r.rows) { expect([x.fallback, x.quota, x.costClass]).toEqual([null, null, null]); expect(x.gap).toBe("NO_READ_ROUTE"); }
+    expect(r.rows[1].roles).toEqual([]);
+    // credential states: anything but READY / LOGIN_REQUIRED / REFUSED is UNKNOWN (never "present")
+    const odd = c.buildModelProviderRows({...exec, active: null, profiles: [{role: "implementer", state: "PENDING"}]}, {state: "ERROR", items: []});
+    expect(odd.rows[0].roles.map((x: any) => x.credential)).toEqual(["UNKNOWN", "UNKNOWN"]);
+    expect(odd.rows[0].inUse).toBe(false);
+    expect(c.buildModelProviderRows({...exec, profiles: [{role: "reviewer", state: "REFUSED"}]}, null).rows[0].roles[1].credential).toBe("ABSENT");
+  });
+  it("buildModelProviderRows states: UNAVAILABLE when no source verified, ERROR when both errored, EMPTY when verified but no model source", async () => {
+    const c = await load("routing-core.js");
+    expect(c.buildModelProviderRows({state: "UNAVAILABLE"}, {state: "UNAVAILABLE"}).state).toBe("UNAVAILABLE");
+    expect(c.buildModelProviderRows(null, undefined).state).toBe("UNAVAILABLE");
+    expect(c.buildModelProviderRows({state: "ERROR"}, {state: "ERROR"}).state).toBe("ERROR");
+    expect(c.buildModelProviderRows({state: "ERROR"}, {state: "UNAVAILABLE"}).state).toBe("UNAVAILABLE");
+    const empty = c.buildModelProviderRows({state: "VERIFIED", items: [], profiles: []}, {state: "VERIFIED", items: [{id: "playwright", category: "BROWSER", status: "REGISTERED", implementation: "NOT_IMPLEMENTED"}]});
+    expect(empty).toMatchObject({state: "EMPTY", rows: []});
+    expect(c.buildModelProviderRows({state: "VERIFIED", items: []}, null)).toMatchObject({state: "EMPTY", sources: {executors: "VERIFIED", adapters: "UNAVAILABLE"}});
+  });
+  it("loaded: renders the table from the two existing GETs only; gap cells say unavailable; no POST; no secret or login command in the DOM", async () => {
+    const {node, calls} = await modelPanel({adapters: MODEL_ADS});
+    expect(node.id).toBe("settings-models");
+    expect(rowsOf(node).map(n => n.dataset.modelRow)).toEqual(["LOCAL_CLAUDE", "omniroute", "ollama"]);
+    expect(new Set(calls)).toEqual(new Set(["/v1/system/executors", "/v1/adapters"]));
+    const gaps = within(node).filter(n => n.dataset.gap);
+    expect(gaps.length).toBe(9);
+    expect(gaps.every(n => text(n) === "Not available (no read route)")).toBe(true);
+    const t = text(node);
+    expect(t).not.toContain("CLAUDE_CONFIG_DIR"); expect(t).not.toContain(LOGIN);
+    expect(within(node).filter(n => n.dataset.credential).map(n => n.dataset.credential)).toEqual(["PRESENT", "ABSENT"]);
+    expect(t).toContain("Not routed");
+    const edit = within(node).find(n => n.dataset.modelEdit)!;
+    expect(edit.getAttribute("disabled")).toBe(""); expect(edit.getAttribute("aria-describedby")).toBe("models-edit-reason");
+    expect(t).toContain("no allowed write route");
+    const src = fs.readFileSync(path.join(rend, "views", "model-settings.js"), "utf8");
+    expect(src.includes(".post(")).toBe(false);
+  });
+  it("empty / error / unavailable states never render rows or invent values (positive control: loaded renders rows)", async () => {
+    const nonModel = await modelPanel({adapters: {adapters: [MODEL_ADS.adapters[2]]}, profiles: null});
+    expect(rowsOf(nonModel.node).map(n => n.dataset.modelRow)).toEqual(["LOCAL_CLAUDE"]);                   // non-model adapters never become rows
+    expect(within(nonModel.node).filter(n => n.dataset.credential).map(n => n.dataset.credential)).toEqual(["UNKNOWN", "UNKNOWN"]);   // no profiles: not verified
+    const off = await modelPanel({execOff: true});
+    expect(rowsOf(off.node).length).toBe(0);
+    const pills = within(off.node).filter(n => n.dataset.source).map(n => [n.dataset.source, within(n).find(x => x.dataset.pill)?.dataset.pill]);
+    expect(pills.map(p => p[0])).toEqual(["executors", "adapters"]);
+    expect(pills.every(p => p[1] !== "VERIFIED")).toBe(true);                                  // a failed read is never shown as verified
+    expect(text(off.node)).not.toContain("LOCAL_CLAUDE");
+    const bad = await modelPanel({execOff: true, adapters: {adapters: "nope"}});
+    expect(rowsOf(bad.node).length).toBe(0);
+    expect(within(within(bad.node).find(n => n.dataset.source === "adapters")!).find(x => x.dataset.pill)!.dataset.pill).toBe("FAILED");   // malformed registry = ERROR
+    const onlyAds = await modelPanel({execOff: true, adapters: {adapters: [MODEL_ADS.adapters[2]]}});
+    expect(rowsOf(onlyAds.node).length).toBe(0);
+    expect(text(onlyAds.node)).toContain("report no model source");
+    const loaded = await modelPanel({adapters: MODEL_ADS});
+    expect(rowsOf(loaded.node).length).toBe(3);
+  });
+  it("Turkish labels and the en/tr key set for the new section are complete", async () => {
+    const {node} = await modelPanel({adapters: MODEL_ADS}, "tr");
+    expect(text(node)).toContain("Kullanılamıyor (okuma yolu yok)");
+    const i18n = await load("i18n.js");
+    for (const lang of ["en", "tr"]) for (const k of ["models.title", "models.lead", "models.caption", "models.col.fallback", "models.col.quota", "models.col.cost", "models.gap.cell", "models.gap.note", "models.edit", "models.editDisabled", "models.empty", "models.secretNote", "models.kind.EXECUTOR", "models.kind.MODEL_GATEWAY", "models.kind.LOCAL_MODEL", "models.cred.PRESENT", "models.cred.ABSENT", "models.cred.UNKNOWN", "models.role.none", "models.inUse", "models.source.executors", "models.source.adapters"])
+      expect(i18n.translate(lang, k), `${lang} ${k}`).not.toBe(k);
+  });
+  it("the settings view includes the model section, and both GETs it uses are on the desktop GET allow-list", async () => {
+    const {ctx} = await mkCtx({adapters: MODEL_ADS}, "en");
+    const v = await renderView(ctx);
+    expect(within(v).some(n => n.id === "settings-models")).toBe(true);
+    expect(desktopGetPathAllowed("/v1/adapters")).toBe(true);
+    const src = readMain();
+    expect(src.includes('value==="/v1/system/executors"')).toBe(true);                       // allowed by the existing main.mjs GET rule (no new route)
+  });
+  it("real buildServer: the panel's mappers accept the live /v1/system/executors and /v1/adapters bodies (model registry rows verbatim)", async () => {
+    const {buildServer} = await import("../apps/control-api/src/server.js");
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "uasco-models-")), TOKEN = crypto.randomBytes(24).toString("hex");
+    const app = buildServer({controlToken: TOKEN, runtime: path.join(tmp, "rt"), repoRoot: root, dataDir: path.join(tmp, "data"), port: 3210, logger: false} as any);
+    try {
+      const get = (url: string) => app.inject({method: "GET", url, headers: {"x-uasco-control-token": TOKEN, host: "127.0.0.1:3210"}});
+      const [er, ar] = await Promise.all([get("/v1/system/executors"), get("/v1/adapters")]);
+      expect(er.statusCode).toBe(200); expect(ar.statusCode).toBe(200);
+      const pc = await load("project-core.js"), rc = await load("routing-core.js");
+      const res = rc.buildModelProviderRows(pc.mapExecutors(er.json()), rc.mapAdapters(ar.json()));
+      expect(res.sources.adapters).toBe("VERIFIED");
+      const reg = JSON.parse(fs.readFileSync(path.join(root, "registries", "tool-adapters.json"), "utf8")).adapters.filter((a: any) => ["MODEL_GATEWAY", "LOCAL_MODEL"].includes(a.category));
+      const adRows = res.rows.filter((r: any) => r.kind !== "EXECUTOR");
+      expect(adRows.map((r: any) => [r.id, r.status, r.implementation])).toEqual(reg.map((a: any) => [a.id, a.status, a.implementation]));
+      expect(adRows.length).toBeGreaterThan(0);
+      for (const r of res.rows) expect([r.fallback, r.quota, r.costClass]).toEqual([null, null, null]);
+    } finally { await app.close(); fs.rmSync(tmp, {recursive: true, force: true}); }
+  });
+});
