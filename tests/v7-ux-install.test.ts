@@ -222,7 +222,7 @@ describe("Install — only already-allow-listed read-only GETs are used (protect
       expect(src).not.toContain(FORBIDDEN);
       expect(src).not.toMatch(/transition|performTransition|work-actions|createMission|startRun|enableLocalClaude|buildEnableExecutorRequest/);
     }
-    expect(moduleSpecifiers({source: read("views", "install.js")}).sort()).toEqual(["../components.js", "../install-core.js", "../model.js", "../work-core.js"]);
+    expect(moduleSpecifiers({source: read("views", "install.js")}).sort()).toEqual(["../components.js", "../error-code.js", "../install-core.js", "../model.js", "../work-core.js"]);
     expect(moduleSpecifiers({source: read("install-core.js")}).sort()).toEqual(["./executive-core.js", "./project-core.js"]);
     for (const m of ["installInstall", "installPhase0", "executors"]) expect(read("views", "install.js")).toContain(`api.${m}(`);
     // api.js: tek apiPost çağrısı korunur; yeni erişimciler yalnız sabit GET yollarını okur; executors() kopyalanmaz.
