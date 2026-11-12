@@ -5,6 +5,7 @@ import {selection} from "../forms.js";
 import {MISSION_ID_RE,PREDEV_KINDS,PHASE_KIND,PILL_FOR_STATE,downstreamOf} from "../journey-core.js";
 import {decisionsPanel} from "./predev-decisions.js";
 import {analysisPanel,analysisUi} from "./analysis-step.js";
+import {buildPlanChanges} from "../plan-compare-core.js";
 
 const PREDEV_SRC="/v1/predev/:missionId",CREW_SRC="/v1/crew/:missionId";
 const isLive=res=>res&&res.state==="VERIFIED";
@@ -140,6 +141,33 @@ function predevPanel(ctx,pre,missionId,exec=null){
 }
 
 // ---- crew koordinasyon ledger'ı ----
+// //TR: DSK-T0004 (UI-018/UI-019): Plan Değişim Merkezi — aynı mission'ın ardışık Plan sürümleri arasında eklenen, kaldırılan ve değişen iş paketleri (alan bazında önce/sonra). Plan geçmişi yoksa, tek sürüm varsa, sunucu alanı sağlamıyorsa veya okunamıyorsa bunu açıkça söyler; değişiklik uydurmaz.
+function planChangesPanel(ctx,res){
+  const doc=ctx.doc,c=buildPlanChanges(res);
+  const note=k=>h(doc,"p",{class:"note",role:"status",dataset:{planChanges:c.state},text:ctx.t(k)});
+  let body;
+  if(c.state==="ERROR")body=note(res?.state==="OFFLINE"?"journey.planChanges.offline":"journey.planChanges.error");
+  else if(c.state==="UNSUPPORTED")body=note("journey.planChanges.unsupported");
+  else if(c.state==="NO_PLAN")body=note("journey.planChanges.noPlan");
+  else if(c.state==="SINGLE_VERSION")body=note("journey.planChanges.single");
+  else{
+    const val=(f,w)=>Array.isArray(w[f])?(w[f].length?w[f].join(", "):MISSING):(w[f]||MISSING);
+    const wpLine=w=>h(doc,"li",{class:"plan-wp",dataset:{wp:w.id}},h(doc,"span",{class:"mono",text:w.id})," ",w.title);
+    const group=(kind,list,render)=>h(doc,"div",{class:"plan-change-group",dataset:{change:kind}},
+      h(doc,"h4",{class:"plan-change-head",text:ctx.t(`journey.planChanges.${kind}`,{n:String(list.length)})}),
+      list.length?h(doc,"ul",{class:"plan-change-list"},list.map(render)):h(doc,"p",{class:"note",text:ctx.t("journey.planChanges.none")}));
+    const changedLine=x=>h(doc,"li",{class:"plan-wp",dataset:{wp:x.id}},h(doc,"span",{class:"mono",text:x.id})," ",x.after.title,
+      h(doc,"dl",{class:"plan-diff"},x.fields.flatMap(f=>[h(doc,"dt",{text:ctx.t(`journey.planChanges.field.${f}`)}),
+        h(doc,"dd",{},h(doc,"span",{class:"plan-before",text:ctx.t("journey.planChanges.before",{v:val(f,x.before)})})," ",h(doc,"span",{class:"plan-after",text:ctx.t("journey.planChanges.after",{v:val(f,x.after)})}))])));
+    const byVer=new Map(c.versions.map(v=>[v.version,v]));
+    body=h(doc,"ol",{class:"plan-pairs","aria-label":ctx.t("journey.planChanges.pairsAria")},c.pairs.map(p=>h(doc,"li",{class:"plan-pair",dataset:{from:String(p.from),to:String(p.to)}},
+      h(doc,"h3",{class:"plan-pair-head",text:ctx.t("journey.planChanges.pair",{from:String(p.from),to:String(p.to),fromState:ctx.t(`journey.planChanges.state.${byVer.get(p.from).state}`),toState:ctx.t(`journey.planChanges.state.${byVer.get(p.to).state}`)})}),
+      h(doc,"p",{class:"note",text:ctx.t("journey.planChanges.unchanged",{n:String(p.unchanged)})}),
+      group("added",p.added,wpLine),group("removed",p.removed,wpLine),group("changed",p.changed,changedLine))));
+  }
+  return panel(ctx,{titleKey:"journey.planChanges.title",id:"journey-plan-changes",className:"journey-plan-changes"},body);
+}
+
 function crewPanel(ctx,crew){
   const doc=ctx.doc;
   let body;
@@ -225,13 +253,15 @@ export async function render(ctx){
       h(doc,"h2",{class:"panel-title",id:"journey-none-t",text:ctx.t("journey.chain.title")}),emptyNote(ctx,isLive(mres)&&!mres.items.length?"journey.noMission.none":"journey.noMission")));
     return root;
   }
-  let pre,crew,exec=null;
-  [pre,crew,exec]=await Promise.all([
+  let pre,crew,exec=null,plans;
+  [pre,crew,exec,plans]=await Promise.all([
     Promise.resolve().then(()=>ctx.api.predev(id)).then(stateRes,()=>({state:"ERROR",predev:null})),
     Promise.resolve().then(()=>ctx.api.crew(id)).then(stateRes,()=>({state:"ERROR",crew:null})),
     // Giriş komutu için yürütücü durumu YALNIZ analiz BLOCKED iken okunur (diğer durumlarda ek okuma yok).
-    analysisUi.missionId===id&&analysisUi.step&&analysisUi.step.status==="BLOCKED"?Promise.resolve().then(()=>ctx.api.executors()).catch(()=>null):null
+    analysisUi.missionId===id&&analysisUi.step&&analysisUi.step.status==="BLOCKED"?Promise.resolve().then(()=>ctx.api.executors()).catch(()=>null):null,
+    // DSK-T0004: plan sürüm karşılaştırması (salt-okunur; okunamazsa panel dürüst durum gösterir, diğer paneller etkilenmez).
+    typeof ctx.api.planVersions==="function"?Promise.resolve().then(()=>ctx.api.planVersions(id)).then(stateRes,()=>({state:"ERROR",versions:null})):Promise.resolve({state:"UNSUPPORTED",versions:null})
   ]);
-  root.append(chainRail(ctx,pre,crew),predevPanel(ctx,pre,id,exec),crewPanel(ctx,crew),devPanel(ctx,crew));
+  root.append(chainRail(ctx,pre,crew),predevPanel(ctx,pre,id,exec),planChangesPanel(ctx,plans),crewPanel(ctx,crew),devPanel(ctx,crew));
   return root;
 }

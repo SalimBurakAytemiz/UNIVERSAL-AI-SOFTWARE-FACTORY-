@@ -6,6 +6,7 @@ import {deliveriesPath,deliveryPath,mapDeliveries,mapDelivery} from "./delivery-
 import {COMPANY_KEYS,COMPANY_PATHS,COMPANY_MAPPERS,companyFailureState} from "./company-core.js";
 import {ACADEMY_PATH,mapAcademy} from "./academy-core.js";
 import {predevPath,crewPath,mapPredev,mapCrew} from "./journey-core.js";
+import {planVersionsPath,mapPlanVersions} from "./plan-compare-core.js";
 import {COCKPIT_PATH,MISSIONS_PATH,WORK_RUNS_PATH,ATTENTION_PATH,mapExecCockpit,mapExecMissions,mapExecWorkRuns,mapExecAttention} from "./executive-core.js";
 import {mapQueueMissions,mapQueueWorkRuns,mapQueueAttention} from "./queue-core.js";
 import {REVIEWS_PATH,mapReadinessWorkRuns,mapReadinessReviews,mapReadinessEvidence} from "./readiness-core.js";
@@ -165,6 +166,8 @@ export function createApi({bridge,store,now=()=>Date.now()}){
     async academy(){const r=await get(ACADEMY_PATH);return r.ok?mapAcademy(r.data):{state:r.state,learnings:[],sources:[],reuses:0,globalKnowledge:[],byStatus:{},metrics:null,message:r.message}},
     // //TR: FA-V2-PRODUCT: Proje Yolculuğu salt-okunur okuma-modelleri (GET /v1/predev/:missionId, GET /v1/crew/:missionId; ikisi de CORE-8'de izinli). Yalnız kanonik msn_ kimliği istek üretir; başarılıysa sanitize edilir, bozuk yanıt dürüst ERROR olur, okuma hatası ayrık dürüst durumdur (uydurma yok).
     async predev(missionId){const p=predevPath(missionId);if(!p)return {state:"ERROR",predev:null};const r=await get(p);return r.ok?mapPredev(r.data):{state:r.state,predev:null,message:r.message}},
+    // //TR: DSK-T0004: plan sürümleri yalnız zaten izinli GET /v1/missions/:id/tasks yanıtından okunur (planVersions alanı; yoksa UNSUPPORTED).
+    async planVersions(missionId){const p=planVersionsPath(missionId);if(!p)return {state:"ERROR",versions:null};const r=await get(p);return r.ok?mapPlanVersions(r.data):{state:r.state,versions:null,message:r.message}},
     async crew(missionId){const p=crewPath(missionId);if(!p)return {state:"ERROR",crew:null};const r=await get(p);return r.ok?mapCrew(r.data):{state:r.state,crew:null,message:r.message}},
     // //TR: FA-V2-PRODUCT (UI-236): Kurucu Yönetim Özeti ve İcra Defteri salt-okunur okumaları; dört sabit yol da main allow-list'inde zaten vardır (yeni uç nokta yok). Başarılıysa executive-core eşleyicileriyle fail-closed sanitize edilir (bozuk yanıt dürüst ERROR), okuma hatası ayrık dürüst durumdur; uydurma yok.
     async execCockpit(){const r=await get(COCKPIT_PATH);return r.ok?mapExecCockpit(r.data):{state:r.state,cockpit:null,message:r.message}},
