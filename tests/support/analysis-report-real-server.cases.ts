@@ -1,5 +1,5 @@
 // //TR: Bu vaka dosyası (kayıtlı tests/v7-ux-journey.test.ts tarafından içe aktarılır) DSK-T0002 (UI-014) okunur analiz raporunu doğrular: sunucu tarafında salt-okunur GET /v1/missions/:id/analysis/report (400/404, başlamamış dizi, tam TaskHub analizi, yazma yok) ve renderer tarafında Proje Yolculuğu rapor paneli gerçek buildServer'a (Fastify inject) karşı çizilir.
-// Köprü main.mjs'in GERÇEK GET izin listesini uygular: rota listede yoksa panel dürüst "etkin değil" der. İçeriğin çizimi ayrıca YALNIZ bu tek tam yolu da geçiren bir köprüyle sınanır (izin listesi kaydı koordinatörde bekliyor); bu bir "etkin" iddiası değildir.
+// Köprü main.mjs'in GERÇEK GET izin listesini uygular (B4 bloğunda çapalı rapor kaydı vardır; varyantlar reddedilir). Okuma yolu "etkin değil" durumu (INVALID_API_PATH) model düzeyinde sınanır.
 // Analiz, fake-backend ile aynı biçimde (ücretsiz sabit TaskHub üreticisi, gerçek Claude YOK) tohumlanır; ücretli/ağ çağrısı yoktur.
 import {describe, it, expect, beforeEach, afterEach} from "vitest";
 import fs from "node:fs";
@@ -56,13 +56,13 @@ const get = (app: App, url: string) => app.inject({method: "GET", url, headers: 
 const reportUrl = (id: string) => `/v1/missions/${id}/analysis/report`;
 const REPORT_RE = /^\/v1\/missions\/msn_[0-9a-f]{24}\/analysis\/report$/;
 
-// allowReport: false = main.mjs'in gerçek izin listesi; true = ek olarak YALNIZ rapor yolu (bekleyen izin listesi kaydının benzetimi)
-async function harness(app: App, missionId: string, {allowReport = false, lang = "en"} = {}) {
+// allowReport: ek olarak YALNIZ rapor yolu; denyReport: rapor yolu izin listesinde olmayan eski bir masaüstü derlemesinin benzetimi (INVALID_API_PATH)
+async function harness(app: App, missionId: string, {allowReport = false, denyReport = false, lang = "en"} = {}) {
   const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js"), journey = await load("views", "journey.js"), forms = await load("forms.js"), rep = await load("views", "analysis-report.js"), an = await load("views", "analysis-step.js"), dec = await load("views", "predev-decisions.js");
   const doc = new D(), store = st.createStore(null), seen: Array<{path: string; status: number}> = [], refused: string[] = [];
   const bridge = {
     apiGet: async (p: string) => {
-      if (!desktopAllows(p) && !(allowReport && REPORT_RE.test(p))) { refused.push(p); throw new Error("INVALID_API_PATH"); }
+      if ((denyReport && REPORT_RE.test(p)) || (!desktopAllows(p) && !(allowReport && REPORT_RE.test(p)))) { refused.push(p); throw new Error("INVALID_API_PATH"); }
       const challenge = crypto.randomBytes(32).toString("hex");
       const hr = await app.inject({method: "GET", url: `/health?challenge=${challenge}`, headers: {host: "127.0.0.1:3210"}});
       if (String(hr.json().controlProof ?? "") !== controlChallengeProof(TOKEN, challenge)) throw new Error("CONTROL_API_IDENTITY_UNVERIFIED");
@@ -99,6 +99,14 @@ describe("DSK-T0002 (UI-014): readable analysis report per mission against the r
     try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* Windows */ }
   });
 
+  it("desktop allow-list (main.mjs B4): exactly the anchored report path is a permitted GET; variants are refused", () => {
+    const ok = "/v1/missions/msn_" + "a1".repeat(12) + "/analysis/report";
+    expect(desktopAllows(ok)).toBe(true);
+    for (const bad of [ok + "/", ok + "?x=1", ok + "#x", ok.toUpperCase(), ok.replace("msn_", "prj_"), "/v1/missions/msn_" + "a".repeat(23) + "/analysis/report", "/v1/missions/msn_" + "A".repeat(24) + "/analysis/report",
+      "/v1/missions/msn_" + "a".repeat(25) + "/analysis/report", ok.replace("/report", "/reports"), ok.replace("/analysis/report", "/analysis/step"), ok.replace("/analysis/report", "/analysis/plan"), ok.replace("/analysis/report", "/analysis"), "/v1/missions/../analysis/report", " " + ok])
+      expect(desktopAllows(bad), bad).toBe(false);
+  });
+
   it("server: GET report rejects a bad id (400) and an unknown mission (404); a mission with no analysis is honestly empty", async () => {
     const {app, s} = await mkApp();
     for (const bad of ["msn_x", "msn_" + "A".repeat(24), "msn_" + "a".repeat(23)]) expect((await get(app, reportUrl(bad))).statusCode, bad).toBe(400);
@@ -133,7 +141,7 @@ describe("DSK-T0002 (UI-014): readable analysis report per mission against the r
     for (const m of ["POST", "PUT", "DELETE"]) expect((await app.inject({method: m as any, url: reportUrl(s.full), headers: HDR, payload: m === "POST" ? {} : undefined})).statusCode, m).toBe(404);
   });
 
-  it("renderer, real desktop allow-list: the decision state is shown live; the report is read only on request and an unlisted route is honestly 'not enabled'", async () => {
+  it("renderer, real desktop allow-list: the decision state is shown live and the report is read only on request", async () => {
     const {app, s} = await mkApp(), h = await harness(app, s.full);
     expect(h.panel(), "report panel rendered in the journey").toBeTruthy();
     expect(h.state()).toBe("NOT_LOADED");
@@ -145,8 +153,10 @@ describe("DSK-T0002 (UI-014): readable analysis report per mission against the r
     expect(h.find(n => n.id === "analysis-step-submit")).toHaveLength(1);
     expect(h.find(n => n.id === "analysis-step")).toHaveLength(1);
     await h.click();
-    if (desktopAllows(reportUrl(s.full))) expect(h.state()).toBe("VERIFIED");
-    else { expect(h.state()).toBe("UNAVAILABLE"); expect(h.refused).toEqual([reportUrl(s.full)]); expect(h.panel().textContent).toContain("not enabled in this desktop build"); expect(h.panel().textContent).not.toContain(TH.BusinessAnalysis.problem); }
+    // main.mjs B4 allow-list carries the anchored report entry: the real bridge reads it and the report renders
+    expect(h.state()).toBe("VERIFIED"); expect(h.refused).toEqual([]);
+    expect(all(h.panel()).find(n => n.dataset.reportProblem)?.textContent).toBe(TH.BusinessAnalysis.problem);
+    expect(h.seen.filter(x => REPORT_RE.test(x.path))).toEqual([{path: reportUrl(s.full), status: 200}]);
   });
 
   it("renderer, report route permitted: summary, proposed tasks with acceptance criteria, risks and open questions come from the server data", async () => {
@@ -168,6 +178,12 @@ describe("DSK-T0002 (UI-014): readable analysis report per mission against the r
     const tr = await harness(app, s.planned, {allowReport: true, lang: "tr"}); await tr.click();
     expect(tr.state()).toBe("VERIFIED"); expect(tr.panel().textContent).toContain("Önerilen görevler ve kabul kriterleri"); expect(tr.panel().textContent).not.toContain("analysisReport.");
     expect(all(tr.panel()).find(n => n.dataset.reportCreatedTasks !== undefined)!.dataset.reportCreatedTasks).toBe(String(TH.Plan.workPackages.length));
+  });
+
+  it("renderer: a desktop build without the report route says 'not enabled' and shows no content", async () => {
+    const {app, s} = await mkApp(), h = await harness(app, s.full, {denyReport: true}); await h.click();
+    expect(h.state()).toBe("UNAVAILABLE"); expect(h.refused).toEqual([reportUrl(s.full)]);
+    expect(h.panel().textContent).toContain("not enabled in this desktop build"); expect(h.panel().textContent).not.toContain(TH.BusinessAnalysis.problem);
   });
 
   it("renderer: honest empty state for a mission with no analysis, honest error on a server failure, and retry recovers", async () => {
