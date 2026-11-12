@@ -4,7 +4,9 @@
   "productName": "UASCO",
   "copyright": "UASCO - unsigned development build",
   "asar": false,
-  "nativeModules": {"npmRebuild": false, "nodeGypRebuild": false, "buildDependenciesFromSource": false},
+  "npmRebuild": false,
+  "nodeGypRebuild": false,
+  "buildDependenciesFromSource": false,
   "includePdb": false,
   "publish": null,
   "artifactName": "UASCO-Setup-${version}-win-x64.${ext}",
@@ -12,7 +14,6 @@
     "target": [{"target": "nsis", "arch": ["x64"]}],
     "executableName": "UASCO",
     "requestedExecutionLevel": "asInvoker",
-    "sign": false,
     "verifyUpdateCodeSignature": false
   },
   "nsis": {
