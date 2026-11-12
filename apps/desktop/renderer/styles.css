@@ -751,6 +751,43 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
   .posture-section :focus-visible{outline:3px solid Highlight}
 }
 
+/* //TR: DSK-T0003 görev bağımlılık haritası: yalnız token renkleri; kritik yol kalın çizgi + yıldızla (renge bağlı olmadan), hazır/engelli türleri metinle de belirtilir. */
+.tg-toggle-row{margin:var(--space-2) 0}
+.task-graph{margin-top:var(--space-2)}
+.tg-summary{font-weight:600}
+.tg-errors ul{margin:var(--space-1) 0;padding-left:1.2rem}
+.tg-legend{list-style:none;display:flex;flex-wrap:wrap;gap:var(--space-2);margin:var(--space-2) 0;padding:0;font-size:.85rem}
+.tg-legend-item{display:inline-flex;align-items:center;gap:var(--space-1)}
+.tg-swatch{display:inline-block;width:.9rem;height:.9rem;border-radius:3px;border:2px solid var(--border-ui);background:var(--surface-2)}
+.tg-scroll{overflow:auto;max-width:100%;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-2)}
+.tg-scroll:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.tg-svg{display:block}
+.tg-node rect{fill:var(--surface-2);stroke:var(--border-ui);stroke-width:1.5}
+.tg-node-title{fill:var(--text);font-size:12px;font-weight:600}
+.tg-node-kind{fill:var(--muted);font-size:10.5px}
+.tg-edge{fill:none;stroke:var(--border-ui);stroke-width:1.5}
+.tg-arrowhead{fill:var(--border-ui)}
+.tg-edge-critical{stroke:var(--purple);stroke-width:3}
+.tg-arrowhead-critical{fill:var(--purple)}
+.tg-edge-related{stroke:var(--accent);stroke-width:2.5}
+.tg-k-ready rect,.tg-k-ready .tg-swatch{stroke:var(--ok);border-color:var(--ok)}
+.tg-k-active rect,.tg-k-active .tg-swatch{stroke:var(--accent);border-color:var(--accent)}
+.tg-k-blocked rect,.tg-k-blocked .tg-swatch,.tg-k-unresolved rect,.tg-k-unresolved .tg-swatch{stroke:var(--danger);border-color:var(--danger);stroke-width:2}
+.tg-k-waiting rect,.tg-k-waiting .tg-swatch{stroke:var(--warn);border-color:var(--warn);stroke-dasharray:5 3}
+.tg-k-done rect{opacity:.7}
+.tg-k-unknown rect{stroke-dasharray:3 3}
+.tg-node.tg-critical rect{stroke-width:3.5}
+.tg-legend-item.tg-critical .tg-swatch{border-color:var(--purple);border-width:3px}
+.tg-node.tg-selected rect{stroke:var(--focus);stroke-width:4}
+.tg-node.tg-related rect{stroke:var(--accent);stroke-width:3}
+.tg-list{margin:0;padding-left:1.4rem;display:grid;gap:var(--space-1)}
+.tg-item-btn[aria-pressed="true"]{font-weight:700;color:var(--text)}
+.tg-kind{font-size:.85rem}
+.tg-kind-ready{color:var(--ok)}
+.tg-kind-blocked,.tg-kind-unresolved{color:var(--danger)}
+.tg-kind-waiting{color:var(--warn)}
+.tg-crit-badge{font-size:.8rem;font-weight:700;color:var(--purple)}
+@media (forced-colors:active){.tg-node rect,.tg-edge{stroke:CanvasText}.tg-node-title,.tg-node-kind{fill:CanvasText}.tg-arrowhead{fill:CanvasText}.tg-node.tg-selected rect{stroke:Highlight}}
 /* //TR: FA-V2-PRODUCT Çoklu Proje Komuta Matrisi: KPI satırı mevcut kpiTile bileşenini kullanır, matris mevcut token tabanıyla gerçek bir <table> olarak kurulur (palet değişmez, yeni renk token'ı yok). Proje durumunun anlamı rozet METNİNDE ve ikonunda taşınır; renk (sol kenar vurgusu) yalnız ek ipucudur ve zorunlu-renk modunda sistem renklerine düşer. Geniş tablo kendi klavye ile kaydırılabilir bölgesinde kalır (sayfa yatay taşmaz). */
 .view-matrix{container-type:inline-size;display:grid;gap:var(--space-4)}
 .matrix-sub{margin:var(--space-4) 0 var(--space-1);font-size:var(--fs-h3)}
