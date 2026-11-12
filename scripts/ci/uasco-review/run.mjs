@@ -1,5 +1,5 @@
 // //TR: Bu betik UASCO Independent Review workflow'unun aşama yürütücüsüdür (scope, collect, reviewer-diagnose, decide, finish, approve): yalnız varsayılan daldaki (v7/integration) güvenilir koddan çalışır, PR kodunu asla checkout etmez veya çalıştırmaz, kanıtı ve kararı SHA'ya bağlı dosyalara yazar ve her hata yolunda kontrolü failure olarak kapatır.
-// Usage: node scripts/ci/uasco-review/run.mjs <scope|collect|reviewer-diagnose|verdict|verdict-unreadable|decide|finish|approve>   (inputs come from env, never from argv text)
+// Usage: node scripts/ci/uasco-review/run.mjs <scope|collect|token-health|reviewer-diagnose|verdict|verdict-unreadable|decide|finish|approve>   (inputs come from env, never from argv text)
 import fs from "node:fs";
 import path from "node:path";
 import {fileURLToPath, pathToFileURL} from "node:url";
@@ -185,6 +185,23 @@ async function reviewerDiagnoseStep() {
   try { process.stdout.write(line); } catch { /* never fails the job */ }
 }
 
+// //TR: token-health: CI beklemesinden ÖNCE çalışan ucuz bir reviewer kimlik denemesinin yürütme kaydını aynı sabit kod sınıflandırıcısıyla değerlendirir; yalnız REVIEWER_AUTH_REJECTED açıkça görülürse healthy=false yazar (collect atlanır, finish kontrolü her zamanki gibi failure ile kapatır). Bu adım asla PASS üretmez, bir kontrolü geçirmez ve işi hiçbir koşulda başarısız yapmaz; belirsiz kayıt "sağlıklı" sayılır ki normal akış ve onun fail-closed kapısı karar versin.
+// Early reviewer-credential probe, before the CI wait. healthy=false only when the probe's own execution record is classified
+// REVIEWER_AUTH_REJECTED by the same fixed classifier the review uses; then collect (and its up-to-100-minute CI wait) is skipped and finish
+// concludes the check as failure as before. It never passes anything; an unreadable or ambiguous record leaves the normal flow in charge.
+const TOKEN_DEAD_SUBCODES = Object.freeze(["AUTH_TOKEN_INVALID", "AUTH_TOKEN_EXPIRED", "AUTH_TOKEN_REVOKED"]);
+async function tokenHealthStep() {
+  let d;
+  try { d = diagnoseReviewerOutput(readCapped(env("EXECUTION_FILE"), EXECUTION_FILE_MAX_BYTES)); } catch { d = diagnoseReviewerOutput(null); }
+  // Only an EXPLICIT bad-token signal may skip the CI wait. A 403 / permission / "log in again" / unspecified auth text is ambiguous
+  // (account, plan, transient) and must leave the normal review flow - and its own fail-closed gate - in charge.
+  const healthy = !(d.code === "REVIEWER_AUTH_REJECTED" && TOKEN_DEAD_SUBCODES.includes(d.authSubcode));
+  try { output("healthy", healthy ? "true" : "false"); output("code", d.code); } catch { /* never fails the job */ }
+  const line = `UASCO reviewer token health: ${healthy ? "OK" : "REVIEWER_TOKEN_INVALID"} (${d.code}${d.authSubcode ? ` ${d.authSubcode}` : ""}${Number.isSafeInteger(d.httpStatus) ? ` http=${d.httpStatus}` : ""})\n`;
+  try { const f = env("GITHUB_STEP_SUMMARY"); if (f) fs.appendFileSync(f, line); } catch { /* never fails the job */ }
+  try { process.stdout.write(line); } catch { /* never fails the job */ }
+}
+
 // 3. decide: re-read the head (staleness), the Founder approvals of THIS run, and gate the verdict.
 async function decideStep() {
   const gh = readGh(), n = prNumber();
@@ -210,6 +227,8 @@ async function decideStep() {
     reviewerDiagnostics});
   // Pre-check blockers (CI timeout, oversized diff) are folded in so a skipped review can never read as success.
   if (pre && Array.isArray(pre.blockers) && pre.blockers.length) { d.reasons = [...new Set([...pre.blockers, ...d.reasons])]; d.conclusion = "failure"; const {digest, ...rec} = d; d.digest = sha256(canonical(rec)); }
+  // The early token probe can only ADD a reason (and so only ever make the conclusion failure), never remove one or pass anything.
+  if (env("TOKEN_HEALTHY") === "false") { d.reasons = [...new Set(["REVIEWER_TOKEN_INVALID", ...d.reasons])]; d.conclusion = "failure"; const {digest, ...rec} = d; d.digest = sha256(canonical(rec)); }
   writeJson("decision.json", d);
   output("conclusion", d.conclusion);
 }
@@ -256,9 +275,9 @@ async function approveStep() {
   output("approved", true);
 }
 
-export const phases = {scope, collect, "reviewer-diagnose": reviewerDiagnoseStep, verdict: verdictStep, "verdict-unreadable": verdictUnreadableStep, decide: decideStep, finish: finishStep, approve: approveStep};
+export const phases = {scope, collect, "token-health": tokenHealthStep, "reviewer-diagnose": reviewerDiagnoseStep, verdict: verdictStep, "verdict-unreadable": verdictUnreadableStep, decide: decideStep, finish: finishStep, approve: approveStep};
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const phase = process.argv[2];
-  if (!Object.hasOwn(phases, phase)) { console.error("USAGE: run.mjs <scope|collect|reviewer-diagnose|verdict|verdict-unreadable|decide|finish|approve>"); process.exit(2); }
+  if (!Object.hasOwn(phases, phase)) { console.error("USAGE: run.mjs <scope|collect|token-health|reviewer-diagnose|verdict|verdict-unreadable|decide|finish|approve>"); process.exit(2); }
   phases[phase]().catch(e => { console.error(`${CHECK_NAME}: ${phase} failed: ${String(e?.code ?? e?.message ?? "ERROR").slice(0, 80)}`); process.exit(1); });
 }
