@@ -2140,6 +2140,7 @@ export default {
   "post.err.409.DELIVERY_ARTIFACT_MISSING":"Refused (DELIVERY_ARTIFACT_MISSING): the artifact file is missing; prepare the package again.",
   "post.err.409.DELIVERY_SOURCE_UNAVAILABLE":"Refused (DELIVERY_SOURCE_UNAVAILABLE): the run's source commit could not be read.",
   "post.err.409.EXPORT_BLOCKED_SECRET":"Refused (EXPORT_BLOCKED_SECRET): a secret was found in the package; nothing was published.",
+  "post.err.409.EXPORT_LOCKFILE_MISSING":"Refused (EXPORT_LOCKFILE_MISSING): this Node project has a package.json but no package-lock.json. Commit a package-lock.json (run npm install, then commit the lock file) before exporting; nothing was published.",
   "pill.LOADING":"LOADING",
   "pill.EMPTY":"EMPTY",
   "pill.VERIFIED":"VERIFIED",
