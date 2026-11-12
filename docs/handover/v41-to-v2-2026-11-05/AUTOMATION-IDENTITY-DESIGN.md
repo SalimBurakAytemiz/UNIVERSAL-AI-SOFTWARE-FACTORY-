@@ -14,6 +14,13 @@ Hazırlayan: V4.1 koordinatörü, 2026-11-12. Kanıt: 2026-11-10 incelemesi (#35
 - Repoda `CODEOWNERS` dosyası yok. `UASCO Independent Review` zorunlu bir kontrol değil ve 401 veriyor (#412).
 - T2/T3 ayrımı yalnız executor kodunda var (`FOUNDER_REQUIRED`). Token'a sahip herhangi bir oturum merge API'sini doğrudan çağırarak bu ayrımı atlayabilir.
 
+### 1a. V2 ölçümleri (2026-11-12, salt-okunur; FV2-T0009 tasarımı E1–E8)
+- **E1:** Konteyner uid 0 ve tüm capability'ler açık; seccomp, Yama ve LSM yok.
+- **E2/E3:** Bir süreç 0600 izinli anahtar dosyasını okuyabiliyor; yalnız stdin'den verilen bir sır başka bir sürecin belleğinde (`/proc/<pid>/mem`) görülebiliyor.
+- **E4/E5:** Ajan proxy'si GitHub kimlik bilgisini **her sürece** enjekte ediyor. Ayrı, root olmayan bir OS kullanıcısı bile `GET /user` ile 200 ve `SalimBurakAytemiz` sonucunu alıyor. OS kullanıcısı ayrımı anahtarı ve belleği korur, **GitHub yetkisini korumaz**.
+- **E7:** İki ruleset'te de bypass yok; ama kimin merge ya da push yapabileceği konusunda bir kısıt da yok. Main ve registry için "tek yazıcı" kuralı yalnız konvansiyonla sağlanıyor.
+- **Sonuç:** GitHub yetki ayrımı, **ortam düzeyindeki kimlik bilgisi** ile yapılmalı. Rutin ortamların proxy secret'ı, admin ve administration yetkisi olmayan otomasyon kimliği olmalı. Founder ve çekirdek kimliği yalnız ayrı bir ortamda bulunmalı.
+
 ## 2. Hedef model
 | Kimlik | Kim | İzin | Yapabildikleri |
 |---|---|---|---|
