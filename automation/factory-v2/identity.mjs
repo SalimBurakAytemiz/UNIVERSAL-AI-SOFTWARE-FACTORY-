@@ -9,7 +9,7 @@ export const ENVELOPE_SCHEMA = "uasco.factory-v2.signed-action/1";
 export const CANONICAL_KEYRING_PATH = "docs/planning/authority/FACTORY-V2-ROLE-KEYS.json";
 export const ROLES = Object.freeze(["V41_OWNER", "V2_CANDIDATE", "FOUNDER"]);
 /** Which roles may sign which authority action. Rollback is never available to an arbitrary registry writer. */
-export const ACTION_ROLES = Object.freeze({PREPARE: ["V2_CANDIDATE"], DRAIN_ACK: ["V41_OWNER"], COMMIT: ["V2_CANDIDATE"], ROLLBACK: ["V41_OWNER", "FOUNDER"], MERGE: ["V2_CANDIDATE"]});
+export const ACTION_ROLES = Object.freeze({PREPARE: ["V2_CANDIDATE"], DRAIN_ACK: ["V41_OWNER"], COMMIT: ["V2_CANDIDATE"], ROLLBACK: ["V41_OWNER", "FOUNDER"], MERGE: ["V2_CANDIDATE"], LEDGER: ["V2_CANDIDATE"]}); // LEDGER: Supervisor-signed shared journal events
 const canon = v => Array.isArray(v) ? `[${v.map(canon).join(",")}]` : v && typeof v === "object" ? `{${Object.keys(v).sort().map(k => `${JSON.stringify(k)}:${canon(v[k])}`).join(",")}}` : JSON.stringify(v);
 export const canonDigest = v => crypto.createHash("sha256").update(canon(v)).digest("hex");
 
@@ -52,6 +52,28 @@ export function parseKeyring(obj, source) {
     keys.set(id, {...k, key: crypto.createPublicKey(k.publicKeyPem)});
   }
   return {domain: obj.domain, keys, source, mode: obj.mode ?? "LIVE"};
+}
+
+/**
+ * Keyring registration (Founder-approved governance PR): merge public entries printed by `bridge keygen` into the current canonical
+ * keyring. Refuses any private material, unknown fields, a second key for the same role+session, or an entry the loader would reject.
+ * Returns the exact file content for the PR; private keys never pass through here.
+ */
+export function proposeKeyring(current, entries) {
+  if (current?.schema !== KEYRING_SCHEMA) throw new IdentityError("KEYRING_INVALID");
+  const seen = new Set((current.keys ?? []).map(k => `${k.role}|${k.sessionId}`));
+  for (const e of entries) {
+    if (!e || typeof e !== "object" || Array.isArray(e)) throw new IdentityError("KEYRING_ENTRY_INVALID");
+    if (/PRIVATE KEY/.test(JSON.stringify(e)) || "privateKeyPem" in e) throw new IdentityError("KEYRING_PRIVATE_MATERIAL_REFUSED");
+    const extra = Object.keys(e ?? {}).filter(k => !["keyId", "role", "sessionId", "publicKeyPem", "validUntil"].includes(k));
+    if (extra.length) throw new IdentityError("KEYRING_ENTRY_FIELDS", extra.join(","));
+    const pair = `${e.role}|${e.sessionId}`; // one key per role+session, across the existing keyring AND within this batch
+    if (seen.has(pair)) throw new IdentityError("KEYRING_ROLE_SESSION_ALREADY_REGISTERED", `${e.role}/${e.sessionId}`);
+    seen.add(pair);
+  }
+  const next = {...current, keys: [...(current.keys ?? []), ...entries.map(({keyId, role, sessionId, publicKeyPem, validUntil}) => ({keyId, role, sessionId, publicKeyPem, ...(validUntil ? {validUntil} : {})}))]};
+  parseKeyring(next, {kind: "PROPOSAL"}); // keyId recomputation, roles, session ids, duplicates
+  return next;
 }
 
 /** Canonical keyring: the governance file at an exact commit of the canonical branch (merged only through a Founder-approved PR). */

@@ -90,6 +90,11 @@ export function registerV3T1032TaskEvidenceSuite(): void {
           {evidenceId: e1.evidenceId, kind: "IMPLEMENT", step: "IMPLEMENT", cycle: 0, logSha256: "1".repeat(64)},
           {evidenceId: e2.evidenceId, kind: "TEST", step: "VERIFY", cycle: 0, logSha256: "2".repeat(64)}]);
         expect(v.runs[1].evidence.map(e => e.evidenceId)).toEqual([e3.evidenceId]);
+        // linkedAt is the link record's own timestamp (R4): read back from the link store, in link order
+        const linkRecs = fs.readFileSync(path.join(tmp, "data", "task-run-links.jsonl"), "utf8").trim().split("\n").map(l => JSON.parse(l)).filter(l => l.taskId === t1.taskId);
+        expect(linkRecs.map(l => l.runId)).toEqual([r1.runId, r2.runId]);
+        expect(v.runs.map(r => r.linkedAt)).toEqual(linkRecs.map(l => l.linkedAt));
+        expect(v.runs.every(r => typeof r.linkedAt === "string" && !Number.isNaN(Date.parse(r.linkedAt)))).toBe(true);
         const s = taskEvidence(w.store, SC, t2.taskId);
         expect(s.ok && s.runs.map(r => r.runId)).toEqual([r2.runId]);
         expect(s.ok && s.runs[0].evidence).toEqual(v.runs[1].evidence);   // the same whole-run chain, no per-task attribution
@@ -125,6 +130,9 @@ export function registerV3T1032TaskEvidenceSuite(): void {
         const rec = (runId: string, missionId: string) => JSON.stringify({taskId: t.taskId, runId, missionId, tenantId: "tA", linkedAt: "2026-11-05T10:00:00.000Z", linkedBy: ACT}) + "\n";
         const good = fs.readFileSync(links, "utf8");
         fs.writeFileSync(links, good + rec(other.runId, w.m.missionId));
+        expect(taskEvidence(w.store, SC, t.taskId)).toEqual({ok: false, reason: "SCOPE_MISMATCH"});
+        // B5: the link's own missionId disagrees with the task while the run itself is the task's mission -> refused (positive control: the honest link is ok above)
+        fs.writeFileSync(links, good + rec(r.runId, m2.missionId));
         expect(taskEvidence(w.store, SC, t.taskId)).toEqual({ok: false, reason: "SCOPE_MISMATCH"});
         fs.writeFileSync(links, good + rec("run_000000000000000000000000", w.m.missionId));
         expect(taskEvidence(w.store, SC, t.taskId)).toEqual({ok: false, reason: "RUN_NOT_FOUND"});

@@ -23,7 +23,7 @@ import {AuthorityBridge, snapshotV41, buildManifest, reconcile} from "./bridge.m
 import {createSharedRegistry} from "./shared-registry.mjs";
 import {Ownership} from "./ownership.mjs";
 import {runProbe, PROBE_DOMAIN} from "./probe-scenario.mjs";
-import {KEYRING_SCHEMA, generateRoleKey, writeRoleKey, signAction, canonDigest, loadCanonicalKeyring} from "./identity.mjs";
+import {KEYRING_SCHEMA, generateRoleKey, writeRoleKey, proposeKeyring, signAction, canonDigest, loadCanonicalKeyring} from "./identity.mjs";
 import {verifyGates, reviewBinding} from "./gate-verifier.mjs";
 import {liveAuthorityReaders} from "./v41-guard.mjs";
 import {liveGit, liveGateDeps, liveFreshness, githubClient, prefetchGateEvidence, openPrsLive, closedPrsLive, branchProtected, ghGet} from "./live-sources.mjs";
@@ -151,6 +151,12 @@ async function bridge() {
     // the private key stays in this container; print only the public keyring entry for a Founder-approved keyring PR
     // refuses an --out inside any git work tree/repository and never overwrites; prints only the public entry
     console.log(JSON.stringify(writeRoleKey({role: arg("role"), sessionId: arg("session"), out: arg("out")}), null, 2));
+  } else if (sub === "keyring-propose") {
+    // input: public entries from each holder's own `bridge keygen`; output: the governance file for a Founder-approved PR (never private keys)
+    const current = JSON.parse(execFileSync("git", ["show", `origin/${BASE}:docs/planning/authority/FACTORY-V2-ROLE-KEYS.json`], {cwd: ROOT}).toString("utf8"));
+    const next = proposeKeyring(current, String(arg("entries", "")).split(",").filter(Boolean).map(readJson));
+    fs.writeFileSync(arg("out"), JSON.stringify(next, null, 2) + "\n");
+    console.log(JSON.stringify({keys: next.keys.map(k => `${k.role}:${k.sessionId}:${k.keyId}`), out: arg("out")}, null, 2));
   } else if (sub === "sign-drain") {
     // offline signing by the V4.1 owner for relay: bound to the current verified state, the manifest digest and the exact drain content
     const br = b(), cur = br.read(), drain = readJson(arg("drain"));
@@ -163,7 +169,7 @@ async function bridge() {
   else if (sub === "commit") { await live.refresh(); protectedNow = await branchProtected(ghc, rb ?? "uasco/registry"); console.log(JSON.stringify(b().commit({manifest: readJson(arg("manifest")), signer: readJson(arg("key"))}), null, 2)); } // open PRs fetched just now through the adapter; base/STATE read from git by the bridge
   else if (sub === "rollback") console.log(JSON.stringify(b().rollback({reason: arg("reason", "manual"), signer: readJson(arg("key"))}).core, null, 2));
   else if (sub === "reset-invalid") console.log(JSON.stringify(b().resetInvalid({reason: arg("reason", "invalid record"), signer: readJson(arg("key"))}).core, null, 2));
-  else { console.error("bridge snapshot|status|probe-store|keygen|prepare|sign-drain|relay-drain|ack|commit|rollback|reset-invalid"); process.exit(1); }
+  else { console.error("bridge snapshot|status|probe-store|keygen|keyring-propose|prepare|sign-drain|relay-drain|ack|commit|rollback|reset-invalid"); process.exit(1); }
 }
 
 /**
@@ -270,4 +276,5 @@ else if (cmd === "bridge") await bridge();
 else if (cmd === "registry") await registry();
 else if (cmd === "probe") await probe();
 else if (cmd === "probe-keyring") probeKeyring();
-else { console.error("usage: cli.mjs plan|evidence|intents"); process.exit(1); }
+else if (cmd === "factory") await (await import("./control.mjs")).factoryCommand(process.argv.slice(3), {root: ROOT});
+else { console.error("usage: cli.mjs plan|evidence|intents|bridge|registry|probe|probe-keyring|factory"); process.exit(1); }

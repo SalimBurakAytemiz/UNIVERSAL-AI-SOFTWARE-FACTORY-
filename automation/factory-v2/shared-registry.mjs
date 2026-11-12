@@ -8,7 +8,12 @@ export const sectionVersion = (v, rev = 0) => (v === undefined || v === null ? n
 export const REGISTRY_SCHEMA = "uasco.factory-v2.shared-registry/1";
 const KEY = /^[A-Za-z0-9][A-Za-z0-9._/#:-]{0,240}$/;
 // Authority sections are also written as their own file so their history can be walked without reading lease traffic.
-export const sidecarPath = key => (key.startsWith("refs/uasco/authority/") ? `authority/${key.slice("refs/uasco/authority/".length).replace(/[^A-Za-z0-9._-]/g, "_")}.json` : null);
+const LEDGER_CHUNK_KEY = /^ledger\/([A-Za-z0-9._-]{1,80})\/c\/(\d{6})$/;
+// Authority sections and ledger chunks are also written as their own file, so their full history can be walked (anti-rewind).
+export const sidecarPath = key => {
+  if (key.startsWith("refs/uasco/authority/")) return `authority/${key.slice("refs/uasco/authority/".length).replace(/[^A-Za-z0-9._-]/g, "_")}.json`;
+  const m = LEDGER_CHUNK_KEY.exec(key); return m ? `ledger/${m[1]}.c${m[2]}.json` : null;
+};
 const sidecarsOf = sections => Object.fromEntries(Object.entries(sections).map(([k, v]) => [sidecarPath(k), v]).filter(([p]) => p));
 const sleep = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
@@ -41,6 +46,8 @@ export function createSharedRegistry({docStore, ref, maxRetries = 8, backoffMs =
     cas: (key, expectedVersion, doc) => { const r = update(key, expectedVersion, doc); return r.ok ? {ok: true, sha: r.version} : {ok: false, sha: null, current: {sha: r.version, doc: r.current}}; },
     remove: (key, expectedVersion) => update(key, expectedVersion, null).ok,
     sections: () => Object.keys(readAll().doc.sections).sort(),
+    /** One consistent read of every section with its version (one fetch instead of one per section). */
+    snapshot: () => { const d = readAll().doc; return Object.fromEntries(Object.entries(d.sections).map(([k, v]) => [k, {sha: sectionVersion(v, d.revs?.[k] ?? 0), doc: v}])); },
     /**
      * Server-side stale-write probe: a whole-document write (current content + one marker section, all sidecars kept) whose parent is
      * `oldSha`. A protected or simply moved branch must refuse it. Even if it were accepted it could only add the marker.
