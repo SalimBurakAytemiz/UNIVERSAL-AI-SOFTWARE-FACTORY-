@@ -12,11 +12,18 @@ import {buildStageTimeline,formatMs} from "../trace-core.js";
 import {loadCloudJobs,cloudJobsPanel} from "./cloud-connection.js";
 
 const okData=r=>r.ok?r.data:null;
+// //TR: Bulut işleri okunamadığında köprünün ham hata iletisi (ör. "Error invoking remote method 'uasco:api-get': Error: INVALID_API_PATH") ekrana gitmez; yalnız sabit biçimli kod (BÜYÜK_HARF) ya da "HTTP nnn" gösterilir, aksi halde kod satırı hiç gösterilmez.
+export function safeCloudCode(loaded){
+  if(!loaded||typeof loaded.code!=="string"||!loaded.code)return loaded;
+  const raw=loaded.code,http=/HTTP (\d{3})(?!\d)/.exec(raw),codes=raw.match(/\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b/g);
+  const code=/^[A-Z][A-Z0-9_]{0,63}$/.test(raw)?raw:codes?codes[codes.length-1]:http?`HTTP ${http[1]}`:"";
+  return {...loaded,code};
+}
 export async function render(ctx){
   const doc=ctx.doc,api=ctx.api;
   const [health,phase0,install,sched,agents,caps,tools,retry,runs,att,control,cockpit,roleList,workRuns]=await Promise.all([api.health(),api.raw("/v1/phase0"),api.raw("/v1/install"),api.raw("/v1/scheduler"),api.raw("/v1/agents"),api.raw("/v1/capabilities"),api.raw("/v1/adapters"),api.raw("/v1/retry"),api.runs(),api.attention(),api.control(),api.cockpit(),api.roles(),api.workRuns()]);
   // //TR: CLOUD-T0005: gerçek bulut iş durumu GET /v1/cloud/jobs ile okunur; masaüstü izin listesi/route yoksa dürüst UNAVAILABLE/NOT_CONFIGURED, asla örnek veri.
-  const cloudJobs=await loadCloudJobs(api);
+  const cloudJobs=safeCloudCode(await loadCloudJobs(api));
   const campus=mountCampus(ctx,buildCampusInput({cockpit,control,roles:roleList,workRuns}));
   const s=okData(sched),completed=Array.isArray(s?.phases)?s.phases.filter(x=>x.status==="COMPLETED").length:0;
   const fact=(labelKey,value,state)=>h(doc,"div",{class:"fact",dataset:{fact:labelKey}},h(doc,"span",{class:"fact-label",text:ctx.t(labelKey)}),h(doc,"strong",{class:"fact-value",text:value}),state?chip(ctx,{state,value:1}):null);
