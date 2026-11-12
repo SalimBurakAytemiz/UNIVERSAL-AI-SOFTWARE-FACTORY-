@@ -13,6 +13,7 @@ import {notVerifiedBadge,runNotVerified,missionNotVerified,axisBadges} from "../
 import {testResultOf} from "../work-core.js";
 import {canOfferComplete} from "../delivery-core.js";
 import {runEngineBlock} from "./run-engine.js";
+import {runDiffBlock} from "./run-diff.js";
 import {BOARD_LAYOUTS,boardLayout,setBoardLayout,boardColumns} from "../kanban-core.js";
 
 const FORM="mission";
@@ -248,7 +249,7 @@ export function runCard(ctx,run,linked=null){
       ...(run.status==="RETRY_SCHEDULED"?[h(doc,"dt",{text:ctx.t("run.retryScheduledFor")}),h(doc,"dd",{dataset:{runRetryAt:run.retryAt??""},text:formatDateTime(run.retryAt,lang)})]:[]),
       // SBX-GATE: BLOCKED/FAILED nedeni dürüstçe gösterilir; SANDBOX_UNAVAILABLE için kodun yanında açıklama vardır.
       ...(run.reason?[h(doc,"dt",{text:ctx.t("run.reason")}),h(doc,"dd",{dataset:{runReason:run.reason},text:run.reason==="SANDBOX_UNAVAILABLE"?`SANDBOX_UNAVAILABLE — ${ctx.t("run.reason.SANDBOX_UNAVAILABLE")}`:runReasonHintKey(run.reason)?`${run.reason} — ${ctx.t(runReasonHintKey(run.reason))}`:run.reason})]:[])),
-    linked?linkedTasksBlock(ctx,run,linked):null,h(doc,"h6",{text:ctx.t("run.checkpoints")}),cps,steps?h(doc,"h6",{text:ctx.t("run.steps.title")}):null,steps,h(doc,"h6",{text:ctx.t("run.evidence")}),ev);
+    linked?linkedTasksBlock(ctx,run,linked):null,runDiffBlock(ctx,run),h(doc,"h6",{text:ctx.t("run.checkpoints")}),cps,steps?h(doc,"h6",{text:ctx.t("run.steps.title")}):null,steps,h(doc,"h6",{text:ctx.t("run.evidence")}),ev);
 }
 // //TR: A-FLOW-GAP-2: test sonucu satırı; sunucunun kuralından türeyen tür + kesin neden kodu. Genel NOT_VERIFIED rozeti (Founder kararı) değişmez, bu satır nedenini doğru söyler.
 function testResultRow(ctx,run){

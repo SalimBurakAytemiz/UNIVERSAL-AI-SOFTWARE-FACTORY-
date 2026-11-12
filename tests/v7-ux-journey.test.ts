@@ -2258,3 +2258,105 @@ describe("LANE-A A-UI011-EVIDENCE-1: the analysis step and the run-the-product s
     await expectLocalClaudeStillOff(s, before);
   });
 });
+
+// //TR: DSK-T0001 (FAKE_EXECUTOR): masaüstü ilk-teslim akışı yürütmeye kadar. (a) GERÇEK control-api (buildServer + FakeExecutors + sahte güvenlik tarayıcıları, sandbox:null, runner açık) ve GERÇEK görünümler: koşu AWAITING_APPROVAL'a gider, koşu kartı test satırını NOT_EXECUTED (SANDBOX_UNAVAILABLE) gösterir ve "Bu koşudaki değişiklikler" bloğu base..head farkını sunucudan okur. (b) Betiklerin dürüstlük etiketi statik olarak kilitlenir. (c) Gerçek Electron E2E yalnız doğrulanmış Electron ikilisi + root olmayan kullanıcı + ekran varken çalışır; aksi halde AÇIK nedenle atlanır. Hiçbiri gerçek model/sandbox kanıtı değildir.
+describe("DSK-T0001 FAKE_EXECUTOR desktop flow up to execution (real control-api, real views)", () => {
+  const FAKE_FILES = {"src/streak.js": "// FAKE_EXECUTOR output\nexport const streak = days => days.length;\n", "FAKE_EXECUTOR.md": "fake\n"};
+  async function fakeServer() {
+    fs.mkdirSync(runtime(), {recursive: true});
+    const {FakeExecutors} = await import("../core/workos/executors.js");
+    const {fakeSecurity} = await import("../core/workos/security-tools.js");
+    const fake = new FakeExecutors({implement: () => ({files: {...FAKE_FILES}, message: "FAKE_EXECUTOR"}), review: () => ({verdict: "CLEAN"})});
+    const app = buildServer({controlToken: TOKEN, runtime: runtime(), dataDir: dataDir(), tenantId: "tA", port: 3210, logger: false, executors: fake.pair(), sandbox: null,
+      runner: {enabled: true, intervalMs: 250, security: fakeSecurity(path.join(tmp, "sec")).options}});
+    apps.push(app); await app.ready(); return {app};
+  }
+  const post = async (app: App, url: string, body: unknown) => { const r = await app.inject({method: "POST", url, headers: {...hdr, "content-type": "application/json"}, payload: JSON.stringify(body)}); return {status: r.statusCode, body: r.json()}; };
+
+  it("drives wizard project -> mission -> plan -> AUTHORIZED -> run to AWAITING_APPROVAL; the run card says NOT_EXECUTED and the run diff lists the FAKE files", async () => {
+    const {app} = await fakeServer();
+    const p = await post(app, "/v1/projects", {name: "Reading tracker", environmentId: "dev", template: "web-node", idempotencyKey: "dsk-t0001-p1"});
+    expect(p.status).toBe(201);
+    const projectId: string = p.body.project.projectId;
+    const m = await post(app, "/v1/missions", {projectId, title: "Streak", objective: "Show a reading streak", acceptanceCriteria: ["streak shown"], riskLevel: "R1"});
+    expect(m.status).toBe(201);
+    const missionId: string = m.body.mission.missionId;
+    expect((await post(app, `/v1/missions/${missionId}/plan`, {tasks: [{title: "Store days"}, {title: "Show streak", dependsOn: [0]}]})).status).toBe(201);
+    for (const to of ["PREFLIGHT", "AUTHORIZED"]) expect((await post(app, `/v1/missions/${missionId}/transition`, {to, reason: "e2e"})).status).toBe(200);
+    const started = await post(app, `/v1/missions/${missionId}/runs`, {});
+    expect(started.status).toBe(201);
+    expect(started.body.run.executor).toEqual({implementer: "FAKE_IMPLEMENTER", reviewer: "FAKE_REVIEWER"});
+    const runId: string = started.body.run.runId;
+    let raw: any = null;
+    for (let i = 0; i < 400; i++) { raw = await getJson(app, `/v1/work-runs/${runId}`); if (["AWAITING_APPROVAL", "BLOCKED", "FAILED"].includes(raw.run.status)) break; await new Promise(r => setTimeout(r, 250)); }
+    expect(raw.run.status).toBe("AWAITING_APPROVAL");
+    expect(raw.run.evidence.map((e: any) => e.kind)).toContain("VERIFY_TESTS_NOT_EXECUTED");
+    expect(raw.run.evidence.map((e: any) => e.kind)).not.toContain("VERIFY_TESTS");
+    expect(raw.outcomes.functionalAcceptance).toBe("NOT_EXECUTED");
+    // real views through the real api.js against the real server (bridge = app.inject)
+    const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js"), work = await load("views", "work.js"), rd = await load("views", "run-diff.js");
+    rd.resetRunDiffs();
+    const store = st.createStore(null), doc = new D();
+    const bridge = {apiGet: async (u: string) => getJson(app, u), apiPost: async () => { throw new Error("NO_POST_IN_THIS_TEST"); }};
+    const t = (k: string, v?: any) => i18n.translate("en", k, v);
+    const ctx: any = {doc, store, api: apiMod.createApi({bridge, store}), i18n: {lang: "en", t}, t, rerender: async () => { store.cache.clear(); }, settleFocus: () => {}};
+    const detail = await ctx.api.workRunDetail(runId);
+    expect(detail.state).toBe("VERIFIED");
+    expect([detail.run.projectId, detail.run.baseSha, detail.run.headSha]).toEqual([projectId, raw.run.baseSha, raw.run.headSha]);
+    const card = () => { const c = work.runCard(ctx, detail.run); doc.body.replaceChildren(c); return c; };
+    let c = card();
+    expect(c.dataset.runStatus).toBe("AWAITING_APPROVAL");
+    expect(c.textContent).toContain("FAKE_REVIEWER");
+    const test = byData(c, "runTestResult")!;
+    expect([test.dataset.runTestResult, test.dataset.runTestReason]).toEqual(["NOT_EXECUTED", "SANDBOX_UNAVAILABLE"]);
+    expect(byId(c, `run-diff-${runId}`)!.dataset.runDiff).toBe("NOT_LOADED"); // nothing is fetched before the Founder asks
+    fire(byId(c, `run-diff-show-${runId}`)!, "click");
+    for (let i = 0; i < 80 && rd.runDiffs.get(runId)?.state !== "VERIFIED"; i++) await new Promise(r => setTimeout(r, 50));
+    c = card();
+    expect(byId(c, `run-diff-${runId}`)!.dataset.runDiff).toBe("VERIFIED");
+    expect(allData(c, "runDiffFile").map(n => n.dataset.runDiffFile).sort()).toEqual(["FAKE_EXECUTOR.md", "src/streak.js"]);
+    expect(byId(c, `run-diff-view-${runId}`)!.textContent).toContain("+export const streak = days => days.length;");
+  });
+
+  it("maps the server's diff file rows ({file,added,deleted}) and still accepts the older {path,additions,deletions} shape", async () => {
+    const core = await load("project-core.js");
+    expect(core.mapGitDiff({diff: "+x", files: [{file: "a.js", added: 2, deleted: 1}]}).diff.files).toEqual([{path: "a.js", additions: 2, deletions: 1}]);
+    expect(core.mapGitDiff({diff: "+x", files: [{path: "b.js", additions: 3, deletions: 0}]}).diff.files).toEqual([{path: "b.js", additions: 3, deletions: 0}]);
+    expect(core.mapGitDiff({diff: "+x", files: [{file: "c.js", added: null, deleted: null}]}).diff.files).toEqual([{path: "c.js", additions: null, deletions: null}]);
+  });
+
+  it("offers no run diff without a valid project, base and head commit", async () => {
+    const rd = await load("views", "run-diff.js"), i18n = await load("i18n.js");
+    const ctx: any = {doc: new D(), t: (k: string, v?: any) => i18n.translate("en", k, v)};
+    const sha = "a".repeat(40), pid = "prj_" + "0".repeat(24);
+    for (const r of [{runId: "run_x", projectId: null, baseSha: sha, headSha: "b".repeat(40)}, {runId: "run_x", projectId: pid, baseSha: null, headSha: sha}, {runId: "run_x", projectId: pid, baseSha: sha, headSha: sha}]) expect(rd.runDiffBlock(ctx, r)).toBeNull();
+    for (const k of ["run.diff.title", "run.diff.note", "run.diff.show", "run.diff.reload", "run.diff.loading", "run.diff.label"]) { expect(i18n.translate("en", k), k).not.toBe(k); expect(i18n.translate("tr", k), k).not.toBe(k); }
+  });
+
+  it("the E2E scripts label their evidence FAKE_EXECUTOR, inject no sandbox and never enable LOCAL_CLAUDE", () => {
+    const launcher = fs.readFileSync("scripts/e2e-fake-executor-api.mjs", "utf8"), e2e = fs.readFileSync("scripts/e2e-desktop-fake-delivery-electron.mjs", "utf8");
+    expect(launcher.split(/\r?\n/)[0]).toMatch(/^\/\/ \/\/TR: /);
+    expect(e2e.split(/\r?\n/)[0]).toMatch(/^\/\/ \/\/TR: /);
+    expect(launcher).toContain("new FakeExecutors(");
+    expect(launcher).toContain("sandbox: null");
+    expect(launcher).not.toMatch(/LocalClaudeExecutors|local-claude|UASCO_WORKOS_EXECUTOR/);
+    expect(e2e).toContain('evidenceClass: "FAKE_EXECUTOR"');
+    expect(e2e).toContain('"real-model output", "real sandbox execution"');
+    expect(e2e).toContain("scripts/e2e-fake-executor-api.mjs");
+    expect(e2e).not.toMatch(/UASCO_WORKOS_EXECUTOR|local-claude|UASCO_SMOKE/);
+  });
+
+  // //TR: Gerçek Electron koşusu: CI'da doğrulanmış Electron ikilisi temin edilmez ve Chromium sandbox'ı root altında açılmaz; bu yüzden yalnız UASCO_E2E_ELECTRON_BIN verilmiş, root olmayan, ekranlı (DISPLAY) Linux'ta çalışır. Atlama nedeni test adında açıkça yazılır; atlanan test PASS sayılmaz.
+  const electronBin = process.env.UASCO_E2E_ELECTRON_BIN ?? "";
+  const skipReason = process.platform !== "linux" ? "NOT_LINUX" : !electronBin ? "UASCO_E2E_ELECTRON_BIN_NOT_SET (no provisioned Electron binary)" : !fs.existsSync(electronBin) ? "ELECTRON_BIN_MISSING"
+    : process.getuid?.() === 0 ? "RUNNING_AS_ROOT (Chromium sandbox needs a non-root user)" : !process.env.DISPLAY ? "NO_DISPLAY (run under xvfb-run -a)" : "";
+  it.skipIf(skipReason !== "")(`real Electron FAKE_EXECUTOR E2E (scripts/e2e-desktop-fake-delivery-electron.mjs)${skipReason ? ` [SKIPPED: ${skipReason}]` : ""}`, {timeout: 360_000}, async () => {
+    const cp = await import("node:child_process");
+    const out = path.join(tmp, "dsk-t0001-report.json");
+    const r = cp.spawnSync(process.execPath, ["scripts/e2e-desktop-fake-delivery-electron.mjs", ".", out, electronBin], {encoding: "utf8", timeout: 340_000, env: {...process.env, UASCO_E2E_HOME: path.join(tmp, "home")}});
+    const report = JSON.parse(fs.readFileSync(out, "utf8"));
+    expect(report.evidenceClass).toBe("FAKE_EXECUTOR");
+    expect(report.steps.filter((s: any) => !s.ok), String(r.stdout).slice(-2000)).toEqual([]);
+    expect(report.status).toBe("PASS");
+  });
+});
