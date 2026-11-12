@@ -4,6 +4,7 @@
 // (3) Kanıt yüzeyi (DEĞİŞMEDİ): GET /v1/evidence listesi doğrulama çipleriyle (VERIFIED/MISMATCH/MISSING/UNVERIFIABLE) + detay (kaynak yolu, sha256, redakte log);
 // (3b) UI-049 Reviews: GET /v1/reviews (+ /:evd_id) bağımsız review kararları AYNEN, yükseltilmeden; veri yoksa dürüst boş/UNAVAILABLE/ERROR durumu;
 // (3c) UI-050 Soyağacı: GET /v1/evidence liste alanlarından (missionId, runId) mission->run->evidence; eksik alan gruplanmamış, bağ çıkarımı yok;
+// (3e) DSK-T0006 UI-038..045 proje başına test stratejisi ve kapsam (views/test-strategy-panel.js): liste ek okuma yapmaz; seçimde salt-okunur /v1/projects + /v1/work-runs/:id; test ekseni ve ürün doğrulama ekseni ayrıdır;
 // (3d) UI-051 Test raporu: GET /v1/work-runs test kanıt kayıtlarından koşu başına durum (+ GET /v1/evidence?runId= çapraz doğrulama); kanıt yoksa NOT_EXECUTED, "geçti" asla üretilmez;
 // (4) Dinamik QA — Founder kapısı (BLOCKED): testleri çalıştırma, görsel/API/web/mobil/masaüstü yürütme, cihaz farmı, canlı önizleme FD-REL-1 (yürütme) + ücretli cihaz farmı kapısındadır; bu yüzey ASLA sahte koş/geçti/kapsam göstermez, "koş" düğmesi yoktur ve SOURCE_GENERATION_COMPLETE asla PRODUCT_VERIFIED sayılmaz. 404 => UNAVAILABLE; veri yalnız h()/textContent ile çizilir, HTML olarak yorumlanmaz.
 import {h,panel,stateNote,emptyNote,chip,verificationChip,statePill,miniBars,badge} from "../components.js";
@@ -12,12 +13,13 @@ import {VERIFICATION_STATES,filterEvidence,formatDateTime} from "../work-core.js
 import {drafts,selection,field} from "../forms.js";
 import {mapSecurityScans,newestFirst,evidenceIntegrity,buildLineage,buildLineageGraph,linkedNodeIds,lineageNavigate,GRAPH_KINDS,reviewRowVerified,mapTestReports} from "../assurance-core.js";
 import {icon} from "../icons.js";
+import {testStrategyPanel,testStrategyDetail,resetTestStrategy} from "./test-strategy-panel.js";
 
 const PAGE_LIMIT=100;
 const SCAN_LIMIT=150;
 // //TR: Seçili güvenlik tarama koşusu görünüm ömrü boyunca korunur (periyodik yenileme seçimi bozmaz).
 const secState={runId:null};
-export function resetAssuranceView(){secState.runId=null;revState.id=null;trState.runId=null}
+export function resetAssuranceView(){secState.runId=null;revState.id=null;trState.runId=null;resetTestStrategy()}
 
 // //TR: Dinamik QA yetenekleri Founder kapısındadır; her satır dürüst BLOCKED/NOT_EXECUTED taşır, hiçbiri yürütme tetiklemez.
 const DYNAMIC_QA=Object.freeze([
@@ -500,6 +502,8 @@ export async function render(ctx){
     securityDetail(ctx,scans),
     testReportPanel(ctx,tests),
     await testReportDetail(ctx,tests),
+    testStrategyPanel(ctx,tests),
+    await testStrategyDetail(ctx,tests),
     reviewsPanel(ctx,revRes),
     await reviewDetailPanel(ctx),
     h(doc,"p",{class:"panel-meta"},chip(ctx,{state:res.state,value:res.items?.length??null}),h(doc,"span",{text:ctx.t("assurance.source")})),

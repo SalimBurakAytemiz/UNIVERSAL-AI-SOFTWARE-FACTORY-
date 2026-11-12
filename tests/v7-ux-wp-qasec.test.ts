@@ -12,7 +12,8 @@ import net from "node:net";
 import {pathToFileURL} from "node:url";
 import {WorkOsStore} from "../core/workos/store.js";
 import {buildServer} from "../apps/control-api/src/server.js";
-import {registerRendererRealServerExtCases} from "./support/renderer-real-server-ext.cases.js"; // UASCO-T0006 uzantısı: RW-053 dışındaki 13 görünüm için renderer -> gerçek sunucu vakaları
+import {registerRendererRealServerExtCases} from "./support/renderer-real-server-ext.cases.js";
+import {registerDskT0006Cases} from "./support/dsk-t0006-test-strategy.cases.js"; // DSK-T0006: proje başına test stratejisi paneli (saf çekirdek + gerçek sunucu) // UASCO-T0006 uzantısı: RW-053 dışındaki 13 görünüm için renderer -> gerçek sunucu vakaları
 
 const root = path.resolve(__dirname, "..");
 const rend = path.join(root, "apps", "desktop", "renderer");
@@ -1177,3 +1178,4 @@ describe("UASCO-T0006 — Assurance view over the REAL Control API (renderer -> 
 });
 // //TR: UASCO-T0006 uzantısı (Builder I): 13 görünümün gerçek sunucu vakaları burada kaydedilir (tests/support/renderer-real-server-ext.cases.ts).
 registerRendererRealServerExtCases();
+registerDskT0006Cases();
