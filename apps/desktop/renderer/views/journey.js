@@ -5,6 +5,7 @@ import {selection} from "../forms.js";
 import {MISSION_ID_RE,PREDEV_KINDS,PHASE_KIND,PILL_FOR_STATE,downstreamOf} from "../journey-core.js";
 import {decisionsPanel} from "./predev-decisions.js";
 import {analysisPanel,analysisUi} from "./analysis-step.js";
+import {missionAuthPanel} from "./mission-auth-panel.js";
 
 const PREDEV_SRC="/v1/predev/:missionId",CREW_SRC="/v1/crew/:missionId";
 const isLive=res=>res&&res.state==="VERIFIED";
@@ -232,6 +233,8 @@ export async function render(ctx){
     // Giriş komutu için yürütücü durumu YALNIZ analiz BLOCKED iken okunur (diğer durumlarda ek okuma yok).
     analysisUi.missionId===id&&analysisUi.step&&analysisUi.step.status==="BLOCKED"?Promise.resolve().then(()=>ctx.api.executors()).catch(()=>null):null
   ]);
-  root.append(chainRail(ctx,pre,crew),predevPanel(ctx,pre,id,exec),crewPanel(ctx,crew),devPanel(ctx,crew));
+  // DSK-T0008: görev başı yetki önizlemesi (gönderim kapalı, yeni okuma yok); mission riski liste okumasından gelir, okunamazsa form MISSION_RISK_UNKNOWN der.
+  const mission=isLive(mres)?mres.items.find(m=>m.missionId===id)??null:null;
+  root.append(chainRail(ctx,pre,crew),predevPanel(ctx,pre,id,exec),missionAuthPanel(ctx,mission??{missionId:id,riskLevel:null}),crewPanel(ctx,crew),devPanel(ctx,crew));
   return root;
 }

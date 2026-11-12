@@ -134,7 +134,7 @@ const PATHS: Record<string, string[]> = {
   tower: ["/health", "/v1/adapters", "/v1/agents", "/v1/attention", "/v1/capabilities", ...(CLOUD_JOBS_PENDING ? [] : ["/v1/cloud/jobs"]), "/v1/cockpit", "/v1/control/status", "/v1/install", "/v1/phase0", "/v1/retry", "/v1/roles", "/v1/runs", "/v1/scheduler", "/v1/work-runs"],
   inbox: ["/v1/attention", "/v1/cockpit", "/v1/missions", "/v1/work-runs"],
   company: ["/v1/company/accounts", "/v1/company/contacts", "/v1/company/contracts", "/v1/company/invoices", "/v1/company/opportunities", "/v1/company/payments"],
-  settings: ["/health", "/v1/adapters", "/v1/capabilities", "/v1/control/status", "/v1/factory", "/v1/system/executors"],
+  settings: ["/health", "/v1/adapters", "/v1/capabilities", "/v1/control/status", "/v1/factory", "/v1/system/executors", "/v1/work-runs"], // DSK-T0008: usage panel (existing allow-listed read)
 };
 
 // Mutlu yolda gerçek sunucu verisinden türetilen, görünüme özgü bir doğrulama.
