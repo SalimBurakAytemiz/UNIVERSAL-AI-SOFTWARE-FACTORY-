@@ -125,3 +125,20 @@ export function viewSkeleton(ctx,route){
     return h(ctx.doc,"p",{class:"note",role:"status",text:ctx.t("state.LOADING")});
   }
 }
+/** //TR: Tasarım sistemi düğme ilkeli (FD 2026-11-05): mevcut .btn sınıflarını üretir (geriye uyumlu). variant: "secondary" (varsayılan) | "primary" (kırmızı birincil eylem) | "danger" (tehlikeli eylem) | "link". Etiket yalnız textContent'tir; bilinmeyen variant "secondary"ye düşer. */
+export const BUTTON_VARIANTS=Object.freeze(["secondary","primary","danger","link"]);
+export function button(ctx,{label,labelKey,variant="secondary",small=false,iconName,type="button",disabled=false,on,id,dataset,title}={}){
+  const doc=ctx.doc,v=BUTTON_VARIANTS.includes(variant)?variant:"secondary";
+  const cls=v==="link"?"link-btn":`btn${v==="secondary"?"":` btn-${v}`}${small?" btn-small":""}${iconName?" btn-icon":""}`;
+  const text=label??(labelKey?ctx.t(labelKey):"");
+  return h(doc,"button",{class:cls,type,disabled:disabled===true,id,title,dataset,on},iconName?icon(doc,iconName,16):null,h(doc,"span",{class:"btn-label",text}));
+}
+/** //TR: Boş/hata durumu ilkeli: ikon + başlık + açıklama (+ isteğe bağlı eylem). kind "error" ise kırmızı kenar yalnız tehlike anlamı taşır; metin her zaman sözlükten gelir, veri uydurulmaz. */
+export function emptyState(ctx,{titleKey,bodyKey,kind="empty",iconName,action}={}){
+  const doc=ctx.doc,err=kind==="error";
+  return h(doc,"div",{class:`empty-state${err?" empty-state-error":""}`,role:"status",dataset:{emptyState:err?"error":"empty"}},
+    icon(doc,iconName??(err?"alert":"inbox"),24),
+    titleKey?h(doc,"p",{class:"empty-state-title",text:ctx.t(titleKey)}):null,
+    bodyKey?h(doc,"p",{class:"empty-state-body",text:ctx.t(bodyKey)}):null,
+    action??null);
+}
