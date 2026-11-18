@@ -41,6 +41,8 @@ export async function productCard(ctx,project,run,runsState="VERIFIED"){
     h(doc,"div",{class:"btn-row"},h(doc,"button",{type:"button",class:"btn",id:"product-open-run",dataset:{focusKey:"product-open-run"},text:ctx.t("product.openRunTab"),on:{click:async()=>{setTab("run");await ctx.rerender()}}})));
   const p=prod.product,r=p.run,offer=productOffer(p,detail.state==="VERIFIED"&&detail.run?detail.run.delivery:null);
   const sb=exec&&exec.state==="VERIFIED"&&exec.sandbox?exec.sandbox.state:null,busy=drafts.busy[PRODUCT_FORM]===true;
+  // //TR: UASCO-T0007: Sunucu sandbox'ı UNAVAILABLE bildirdiyse Başlat devre dışıdır ve nedeni görünür; sunucu tarafı ret (409 SANDBOX_UNAVAILABLE) değişmez. Bilinmeyen durumda (okuma yok) tahmin yapılmaz, karar sunucunundur.
+  const startBlocked=offer.start&&sb==="UNAVAILABLE";
   const sgState=detail.state==="VERIFIED"&&detail.run&&detail.run.delivery?detail.run.delivery.sourceGeneration.state:null;
   const body=[
     h(doc,"p",{},badge(ctx,ctx.t(`devrun.state.${r.status}`),r.status==="RUNNING"&&p.tiedToThisRun?"badge-ok":r.status==="STOPPED"?"":"badge-risk"),
@@ -53,8 +55,9 @@ export async function productCard(ctx,project,run,runsState="VERIFIED"){
     offer.deliverable===null?h(doc,"p",{class:"note",dataset:{productDelivery:"UNKNOWN"},text:ctx.t("product.deliveryUnknown")}):
       offer.deliverable===false?h(doc,"p",{class:"note",dataset:{productDelivery:"NOT_DELIVERABLE"},text:ctx.t("product.notDeliverable",{why:p.deliverable&&p.deliverable.reason?p.deliverable.reason:(sgState??"NO_DELIVERED_COMMIT")})}):null,
     h(doc,"p",{class:"note",dataset:{productSandbox:sb??"UNKNOWN"},text:ctx.t(sb==="AVAILABLE"?"product.sandbox.AVAILABLE":sb==="UNAVAILABLE"?"product.sandbox.UNAVAILABLE":"product.sandbox.UNKNOWN")}),
+    startBlocked?h(doc,"p",{class:"note",id:"product-start-why",role:"status",dataset:{productStartWhy:"SANDBOX_UNAVAILABLE"},text:ctx.t("product.startDisabled.SANDBOX_UNAVAILABLE")}):null,
     h(doc,"div",{class:"btn-row"},
-      offer.start?h(doc,"button",{type:"button",class:"btn btn-primary",id:"product-start",dataset:{focusKey:"product-start"},disabled:busy,text:ctx.t("product.start"),on:{click:()=>{productAction(ctx,project,run.runId,"start")}}}):null,
+      offer.start?h(doc,"button",{type:"button",class:"btn btn-primary",id:"product-start",dataset:startBlocked?{focusKey:"product-start",productStartBlocked:"SANDBOX_UNAVAILABLE"}:{focusKey:"product-start"},disabled:busy||startBlocked,"aria-describedby":startBlocked?"product-start-why":undefined,text:ctx.t("product.start"),on:{click:()=>{productAction(ctx,project,run.runId,"start")}}}):null,
       offer.stop?h(doc,"button",{type:"button",class:"btn btn-danger",id:"product-stop",dataset:{focusKey:"product-stop"},disabled:busy,text:ctx.t("product.stop"),on:{click:()=>{productAction(ctx,project,run.runId,"stop")}}}):null,
       h(doc,"button",{type:"button",class:"btn",id:"product-open-run",dataset:{focusKey:"product-open-run"},text:ctx.t("product.openRunTab"),on:{click:async()=>{setTab("run");await ctx.rerender()}}})),
     statusBlock(ctx,PRODUCT_FORM),
