@@ -11,7 +11,8 @@ import {CrewCoordinator, type ReworkDecider, type CrewStore} from "../core/worko
 import {buildCrewPlan} from "../core/workos/crew/assignment.js";
 import {TASKHUB_BRIEF} from "../core/workos/predev/fixtures/taskhub-brief.js";
 import {TASKHUB_ARTIFACTS} from "../core/workos/predev/fixtures/taskhub/index.js";
-import type {ArtifactKind} from "../core/workos/predev/types.js";
+import type {ArtifactKind, PlanContent} from "../core/workos/predev/types.js";
+import {PRE_DEV_ROLE_MAP} from "../core/workos/predev/types.js";
 // //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
 vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
@@ -161,7 +162,7 @@ describe("Project Journey — GENUINE control-api read-models flow through mappe
     const {ctx, calls, selection} = await mkCtx(async p => p === "/v1/missions" ? missionsBody : getJson(app, p));
     selection.missionId = seeded.missionId;
     const root = await journey.render(ctx);
-    expect(calls.slice().sort()).toEqual(["/v1/crew/" + seeded.missionId, "/v1/missions", "/v1/predev/" + seeded.missionId].sort());
+    expect(calls.slice().sort()).toEqual(["/v1/crew/" + seeded.missionId, "/v1/missions", "/v1/predev/" + seeded.missionId, `/v1/missions/${seeded.missionId}/tasks`].sort()); // DSK-T0004: + the allow-listed plan-versions read
     const phases = allData(root, "kind").filter(n => n.tagName === "LI" && "artState" in n.dataset);
     expect(phases.map(n => n.dataset.kind)).toEqual(["BusinessAnalysis", "Requirements", "Plan", "Architecture", "UxSpec"]);
     expect(phases.every(n => n.dataset.artState === "APPROVED" && n.dataset.approved === "1")).toBe(true);
@@ -301,7 +302,7 @@ describe("Project Journey — view honesty", () => {
     const {ctx, calls, selection} = await mkCtx(serve());
     selection.missionId = MSN;
     const root = await journey.render(ctx);
-    expect(calls.slice().sort()).toEqual(["/v1/crew/" + MSN, "/v1/missions", "/v1/predev/" + MSN].sort());
+    expect(calls.slice().sort()).toEqual(["/v1/crew/" + MSN, "/v1/missions", "/v1/predev/" + MSN, `/v1/missions/${MSN}/tasks`].sort()); // DSK-T0004: + the allow-listed plan-versions read
     const rail = byData(root, "journeyRail")!;
     expect(rail.tagName).toBe("OL");
     expect(rail.getAttribute("aria-label")).toBeTruthy();
@@ -2256,5 +2257,114 @@ describe("LANE-A A-UI011-EVIDENCE-1: the analysis step and the run-the-product s
     expect(res).toEqual({ok: false, status: 404, body: {error: "RUN_NOT_FOUND"}});
     expect((await s.ctx.api.runProduct(ghost)).state).not.toBe("VERIFIED");
     await expectLocalClaudeStillOff(s, before);
+  });
+});
+
+// //TR: DSK-T0004 (UI-018/UI-019): Plan Karşılaştırma ve Plan Değişim Merkezi — GERÇEK control-api GET /v1/missions/:id/tasks planVersions alanı (pre-dev Plan sürümleri, supersedes zinciri), saf karşılaştırma çekirdeği ve Proje Yolculuğu paneli; plan geçmişi yoksa / tek sürüm / desteklenmiyor / okunamıyor durumları dürüst gösterilir, yazma yoktur.
+describe("DSK-T0004 plan comparison and change center (UI-018/UI-019)", () => {
+  const EV = ["evd_0123456789abcdef"];
+  const wp = (id: string, title: string, o: Record<string, any> = {}) => ({id, title, dependsOn: [], estimate: "1d", satisfies: ["FR1"], ...o});
+  const version = (n: number, wps: any[], state = "APPROVED") => ({artifactId: "pda_" + String(n).repeat(24).slice(0, 24).replace(/[^0-9a-f]/g, "a"), version: n, state, supersedes: n === 1 ? null : "pda_" + String(n - 1).repeat(24).slice(0, 24), createdAt: "2026-11-12T08:00:00.000Z", workPackages: wps});
+  const tasksBody = (versions?: any[]) => (versions === undefined ? {tasks: []} : {tasks: [], planVersions: versions});
+
+  it("pure core: strict mapping, honest states and an id-based diff (added / removed / changed fields / unchanged)", async () => {
+    const core = await load("plan-compare-core.js");
+    expect(core.planVersionsPath(MSN)).toBe(`/v1/missions/${MSN}/tasks`);
+    for (const bad of ["bad", MSN + "/x", undefined]) expect(core.planVersionsPath(bad)).toBeNull();
+    expect(core.mapPlanVersions(tasksBody()).state).toBe("UNSUPPORTED");
+    expect(core.mapPlanVersions(tasksBody([])).state).toBe("VERIFIED");
+    for (const bad of [null, {planVersions: {}}, tasksBody([version(2, [])]), tasksBody([{...version(1, []), state: "MADE_UP"}]),
+      tasksBody([version(1, [wp("WP1", "a"), wp("WP1", "b")])]), tasksBody([version(1, [{id: "WP1"}])])]) expect(core.mapPlanVersions(bad).state, JSON.stringify(bad)?.slice(0, 80)).toBe("ERROR");
+    const v1 = version(1, [wp("WP1", "auth"), wp("WP2", "api", {dependsOn: ["WP1"]}), wp("WP3", "ui")], "REJECTED");
+    const v2 = version(2, [wp("WP1", "auth"), wp("WP2", "public api", {dependsOn: ["WP1"], estimate: "2d"}), wp("WP4", "board")], "DRAFT");
+    const d = core.comparePlanVersions(v1, v2);
+    expect(d.added.map((w: any) => w.id)).toEqual(["WP4"]); expect(d.removed.map((w: any) => w.id)).toEqual(["WP3"]);
+    expect(d.changed).toEqual([{id: "WP2", before: v1.workPackages[1], after: v2.workPackages[1], fields: ["title", "estimate"]}]);
+    expect(d.unchanged).toBe(1);
+    expect(core.buildPlanChanges(core.mapPlanVersions(tasksBody([]))).state).toBe("NO_PLAN");
+    expect(core.buildPlanChanges(core.mapPlanVersions(tasksBody([v1]))).state).toBe("SINGLE_VERSION");
+    const c = core.buildPlanChanges(core.mapPlanVersions(tasksBody([v1, v2, version(3, v2.workPackages)])));
+    expect(c.pairs.map((p: any) => `${p.from}->${p.to}`)).toEqual(["2->3", "1->2"]); // newest first
+    expect(c.pairs[0]).toMatchObject({added: [], removed: [], changed: [], unchanged: 3});
+  });
+
+  it("REAL control-api: GET /v1/missions/:id/tasks returns every Plan version (v1 rejected, v2 superseding) and the journey panel shows the real diff", async () => {
+    const seeded = seedMission();
+    const store = new WorkOsStore(dataDir()), scope = {tenantId: "tA"};
+    const seq = store.openPreDevSequence(scope, seeded.missionId, RECORDER);
+    const phase = (kind: "BusinessAnalysis" | "Requirements", next: string) => {
+      const a = store.recordPreDevArtifact(scope, seq.preDevId, {kind, authorRoleId: PRE_DEV_ROLE_MAP[kind][0], content: TASKHUB_ARTIFACTS[kind] as never}, RECORDER);
+      store.transitionPreDevArtifact(scope, seq.preDevId, a.id, "SUBMITTED", {}, RECORDER);
+      store.transitionPreDevArtifact(scope, seq.preDevId, a.id, "APPROVED", {evidenceRefs: EV}, APPROVER);
+      store.advancePreDevPhase(scope, seq.preDevId, next as never, APPROVER);
+    };
+    store.advancePreDevPhase(scope, seq.preDevId, "BUSINESS_ANALYSIS", RECORDER);
+    phase("BusinessAnalysis", "REQUIREMENTS"); phase("Requirements", "PLANNING");
+    const plan1 = TASKHUB_ARTIFACTS.Plan as PlanContent;
+    const a1 = store.recordPreDevArtifact(scope, seq.preDevId, {kind: "Plan", authorRoleId: PRE_DEV_ROLE_MAP.Plan[0], content: plan1 as never}, RECORDER);
+    store.transitionPreDevArtifact(scope, seq.preDevId, a1.id, "SUBMITTED", {}, RECORDER);
+    store.transitionPreDevArtifact(scope, seq.preDevId, a1.id, "REJECTED", {reason: "split the API work"}, APPROVER);
+    const first = plan1.workPackages[0];
+    const plan2: PlanContent = {...plan1, workPackages: [...plan1.workPackages.map((w, i) => (i === 1 ? {...w, title: w.title + " (revised)", estimate: "9d"} : w)),
+      {id: "WP99", title: "Audit log", dependsOn: [first.id], estimate: "2d", satisfies: [...first.satisfies]}]};
+    const a2 = store.recordPreDevArtifact(scope, seq.preDevId, {kind: "Plan", authorRoleId: PRE_DEV_ROLE_MAP.Plan[0], content: plan2 as never, supersedes: a1.id}, RECORDER);
+    const app = mkApp();
+    const body = await getJson(app, `/v1/missions/${seeded.missionId}/tasks`);
+    expect(Array.isArray(body.tasks)).toBe(true);
+    expect(body.planVersions.map((v: any) => [v.version, v.state, v.supersedes])).toEqual([[1, "REJECTED", null], [2, "DRAFT", a1.id]]);
+    expect(body.planVersions[1].artifactId).toBe(a2.id);
+    expect(Object.keys(body.planVersions[0]).sort()).toEqual(["artifactId", "createdAt", "state", "supersedes", "version", "workPackages"]);
+    // a mission with no pre-dev sequence: an honest empty list, never invented history
+    const other = store.createMission({tenantId: "tA", projectId: store.listProjects({tenantId: "tA"})[0].projectId, title: "No plan", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R0", createdBy: RECORDER});
+    expect((await getJson(app, `/v1/missions/${other.missionId}/tasks`)).planVersions).toEqual([]);
+    // the renderer, over the real server
+    const {ctx, doc, calls, selection} = await mkCtx(p => getJson(app, p));
+    selection.missionId = seeded.missionId;
+    const root = await renderJourney(ctx);
+    const panelNode = all(root).find(n => n.id === "journey-plan-changes")!;
+    expect(panelNode).toBeTruthy();
+    const pair = all(panelNode).find(n => n.dataset.from === "1" && n.dataset.to === "2")!;
+    expect(pair).toBeTruthy();
+    const group = (k: string) => all(pair).find(n => n.dataset.change === k)!;
+    expect(all(group("added")).filter(n => n.dataset.wp).map(n => n.dataset.wp)).toEqual(["WP99"]);
+    expect(all(group("removed")).filter(n => n.dataset.wp)).toEqual([]);
+    expect(all(group("changed")).filter(n => n.dataset.wp).map(n => n.dataset.wp)).toEqual([plan1.workPackages[1].id]);
+    expect(group("changed").textContent).toContain("9d");
+    expect(calls).toContain(`/v1/missions/${seeded.missionId}/tasks`);
+  });
+
+  it("journey panel honest states: no plan / single version / unsupported server / unreadable; other panels still render", async () => {
+    const route = (tasks: () => any) => (p: string) => (p === "/v1/missions" ? MISSIONS : p === `/v1/predev/${MSN}` ? predevBody() : p === `/v1/missions/${MSN}/tasks` ? tasks() : fail(p));
+    const state = async (tasks: () => any, lang = "en") => {
+      const {ctx, selection} = await mkCtx(route(tasks), lang); selection.missionId = MSN;
+      const root = await renderJourney(ctx); const node = all(root).find(n => n.id === "journey-plan-changes")!;
+      return {node, root, t: ctx.t, note: all(node).find(n => n.dataset.planChanges)};
+    };
+    const none = await state(() => tasksBody([]));
+    expect(none.note!.dataset.planChanges).toBe("NO_PLAN"); expect(none.note!.textContent).toBe(none.t("journey.planChanges.noPlan"));
+    const single = await state(() => tasksBody([version(1, [wp("WP1", "a")])]));
+    expect(single.note!.dataset.planChanges).toBe("SINGLE_VERSION");
+    const unsup = await state(() => tasksBody());
+    expect(unsup.note!.dataset.planChanges).toBe("UNSUPPORTED");
+    const err = await state(() => fail("x", 500));
+    expect(err.note!.dataset.planChanges).toBe("ERROR"); expect(err.note!.textContent).toBe(err.t("journey.planChanges.error"));
+    expect(all(err.root).some(n => n.id === "journey-plan-changes")).toBe(true);
+    const tr = await state(() => tasksBody([]), "tr");
+    expect(tr.note!.textContent).toBe(tr.t("journey.planChanges.noPlan")); expect(tr.note!.textContent).not.toContain("journey.");
+  });
+
+  it("the read path is the already allow-listed GET; every planChanges key exists in both locales", async () => {
+    const main = fs.readFileSync(path.resolve(__dirname, "..", "apps", "desktop", "main.mjs"), "utf8");
+    const src = /const MISSION_TASKS_RE=\/(.+)\/;/.exec(main)?.[1];
+    expect(src).toBeTruthy(); // the renderer may already GET this path: no allow-list change is needed (main.mjs is untouched)
+    const re = new RegExp(src!);
+    const core = await load("plan-compare-core.js");
+    expect(re.test(core.planVersionsPath(MSN))).toBe(true);
+    for (const bad of [`/v1/missions/${MSN}/tasks/x`, `/v1/missions/${MSN}/plan-history`]) expect(re.test(bad)).toBe(false);
+    const i18n = await load("i18n.js");
+    const en = (await load("locales", "en.js")).default ?? (await load("locales", "en.js"));
+    const keys = Object.keys(en).filter(k => k.startsWith("journey.planChanges."));
+    expect(keys.length).toBe(23);
+    for (const k of keys) expect(i18n.translate("tr", k, {n: "1", v: "x", from: "1", to: "2", fromState: "a", toState: "b"}), k).not.toBe(k);
   });
 });
