@@ -1,5 +1,5 @@
 // //TR: Bu görünüm İnsan Onayı Bekleyen İş Kuyruğu'dur (FA-V2-PRODUCT, UI-211): YALNIZ üç salt-okunur ve zaten izinli GET'ten okunur — GET /v1/attention (Founder dikkati: karar bekleyen koşu, engelli mission ve görev), GET /v1/missions (onay bekleyen mission durumları) ve GET /v1/work-runs (kapı bekleyen koşular). Kuyruk, öncelik düzeyine (türden türetilen belgelenmiş sıra) ve GERÇEK zaman damgasından hesaplanan bekleme süresine göre gruplanır/sıralanır; SLA hedefi kontrol düzleminde kayıtlı olmadığı için hiçbir SLA/son tarih değeri uydurulmaz, bekleme bantları yalnız geçen sürenin görüntü gruplamasıdır. HİÇBİR sayı, öğe veya onay UYDURULMAZ: bozuk yanıt tümden ERROR olarak gösterilir (kısmi/tahmini değer yok), okunamayan kaynak varsa toplam/öncelik sayıları gösterilmez ve kuyruk "boş" diye sunulmaz. Bu görünüm SALT-OKUNURDUR: onay/ret/yeniden-deneme burada yapılmaz; her öğe için MEVCUT akışlara (Gelen Kutusu, Work) gezinme sunulur. Toplu (bulk) eylem YOKTUR: her geçiş kendi gerekçesini ve yüksek riskli hedefte kendi onayını ister, bu yüzden her öğe mevcut akışta tek tek karara bağlanır. Ürün doğrulaması bu görünümde ASLA iddia edilmez ve ilgili sabit değer hiçbir yerde üretilmez. API verisi HTML olarak yorumlanmaz; yalnız h()/textContent kullanılır.
-import {h,panel,statePill,statusPill,badge,kpiTile} from "../components.js";
+import {h,panel,statePill,statusPill,badge,kpiTile,statusLabel} from "../components.js";
 import {MISSING} from "../model.js";
 import {formatDateTime} from "../work-core.js";
 import {selection} from "../forms.js";
@@ -19,6 +19,8 @@ const PILL_FOR_KIND=Object.freeze({FOUNDER_ATTENTION:"ATTENTION",BLOCKED_ITEM:"A
 const INBOX_KINDS=Object.freeze(["FOUNDER_ATTENTION","BLOCKED_ITEM","DELIVERY_DECISION","MISSION_STATUS_UNKNOWN","AUTHORIZATION"]);
 const safeId=key=>String(key).replace(/[^A-Za-z0-9_-]/g,"_");
 
+// Koşu durumu okunur etiketle gösterilir (mstatus.*; yoksa ham kod); ham kod pill'in title'ında ve data-run-status-code'da kalır.
+function runStatusPill(ctx,code){const p=statePill(ctx,"WAITING",{label:statusLabel(ctx,code)});p.setAttribute("title",String(code));p.dataset.runStatusCode=String(code);return p}
 function header(ctx){
   const doc=ctx.doc;
   return h(doc,"div",{class:"hero"},
@@ -112,7 +114,7 @@ function facts(ctx,it,q){
     add("mission","queue.field.mission",title," · ",mono(doc,it.missionId),it.missionStatus!==null?" ":null,it.missionStatus!==null?statusPill(ctx,it.missionStatus):null);
   }
   // //TR: Koşu durumu yalnız koşu kaynağından gelir; BLOCKED_ITEM için bilinmez (null) -> "Bekliyor" rozeti uydurulmaz (başarısız koşuya "Waiting" denmez).
-  if(it.runId!==null)add("run","queue.field.run",mono(doc,it.runId),it.runStatus!==null?[" · ",statePill(ctx,"WAITING",{label:it.runStatus})]:null,it.step!==null?[" · ",mono(doc,it.step)]:null);
+  if(it.runId!==null)add("run","queue.field.run",mono(doc,it.runId),it.runStatus!==null?[" · ",runStatusPill(ctx,it.runStatus)]:null,it.step!==null?[" · ",mono(doc,it.step)]:null);
   if(it.kind==="BLOCKED_ITEM"){
     if(it.taskId!==null)add("task","queue.field.task",mono(doc,it.taskId));
     add("blocker","queue.field.blocker",statePill(ctx,"ATTENTION",{label:t(`attention.kind.${it.blockerKind}`)}));

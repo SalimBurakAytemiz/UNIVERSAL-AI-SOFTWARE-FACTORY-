@@ -1,5 +1,5 @@
 // //TR: Bu görünüm Kalite Kapısı ve Release Readiness'tır (FA-V2-PRODUCT, UI-227): YALNIZ dört salt-okunur ve zaten izinli GET'ten okunur — GET /v1/work-runs (koşular, güvenlik/QA kanıtı, teslim paketi, tamamlanma kaydı), GET /v1/reviews (bağımsız inceleme kararları, UI-049), GET /v1/cockpit (yalnız evidence bloğu: hash-doğrulanmış kanıt bütünlüğü) ve GET /v1/missions (yalnız mission başlığı). Her koşu için yedi kapı gösterilir (koşu, bağımsız inceleme, güvenlik taraması, QA testleri, teslim paketi, tamamlanma kaydı, kanıt bütünlüğü) ve genel hazırlık DÜRÜSTTÜR: READY yalnız yedi kapının HEPSİ gerçekten sağlandığında görünür; aksi halde tam olarak neyin eksik olduğu listelenir. Bağımsız inceleme kararı (CLEAN/BLOCKED/NO_VERDICT/NOT_REVIEWED/INDEPENDENCE_UNVERIFIED) sunucudan aynen taşınır; BLOCKED bu arayüzde "engellendi/reddedildi" olarak gösterilir. Teslim yalnız kaynak düzeyindedir (kod çalıştırılmadı, NOT_VERIFIED). HİÇBİR sayı, kapı geçişi, karar veya teslim UYDURULMAZ: bozuk yanıt tümden ERROR olarak gösterilir (kısmi/tahmini değer yok), okunamayan kaynak 0 ya da "geçti" değil dürüst OFFLINE/UNAVAILABLE/ERROR gösterir ve ilgili kapı UNKNOWN olur. Ürün doğrulaması bu görünümde ASLA iddia edilmez ve ilgili sabit değer hiçbir yerde üretilmez. Bu görünüm SALT-OKUNURDUR: onay/ret/teslim burada yapılmaz, yalnız mevcut akışlara gezinme sunulur. API verisi HTML olarak yorumlanmaz; yalnız h()/textContent kullanılır.
-import {h,panel,statePill,kpiTile} from "../components.js";
+import {h,panel,statePill,kpiTile,statusLabel} from "../components.js";
 import {MISSING} from "../model.js";
 import {formatDateTime} from "../work-core.js";
 import {selection} from "../forms.js";
@@ -27,7 +27,8 @@ function gateKind(g){
 }
 function gateLabel(ctx,g){
   if(g.status==="UNKNOWN")return ctx.t(`readiness.detail.UNKNOWN.${g.detail}`);
-  if(g.id==="run")return g.detail;
+  // Koşu durumu sözlükten okunur etikete çevrilir (mstatus.*; sözlükte yoksa ham kod); ham kod data-gate-detail'da kalır.
+  if(g.id==="run")return statusLabel(ctx,g.detail);
   return ctx.t(`readiness.detail.${g.id}.${g.detail}`);
 }
 
