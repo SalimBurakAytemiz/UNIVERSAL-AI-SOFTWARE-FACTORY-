@@ -198,7 +198,7 @@ export function registerCloudJobsStatusCases(): void {
       const boom = mkServer(throwingQueue());
       const e = await renderPanel(boom, proposedAllows);
       expect([e.state, e.cards.length, e.seen]).toEqual(["ERROR", 0, [{path: CLOUD_JOBS_PATH, status: 500}]]);
-      expect(e.loaded.code).toBe(`${CLOUD_JOBS_PATH}: HTTP 500`);
+      expect(e.loaded.code).toBe("HTTP 500"); // only the status code; the path/IPC text is never kept for display
       const none = mkServer(null);
       const nc = await renderPanel(none, proposedAllows);
       expect([nc.state, nc.cards.length]).toEqual(["NOT_CONFIGURED", 0]);
