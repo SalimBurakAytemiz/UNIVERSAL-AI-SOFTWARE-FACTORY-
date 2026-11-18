@@ -1,7 +1,7 @@
 // //TR: UX WP-PROJECTS: Bu görünüm Project Studio girişidir ve Kurucu-Kokpiti sınıfı premium portföy katmanıdır: üstte gerçek /v1/projects + /v1/missions + /v1/work-runs okumalarından beslenen portföy özeti (KPI karoları), portföy geneli görev durumu şeridi ve proje başına yoğun bilgi kartları (bağlam/kapsam özeti + görev durumu dağılımı + son koşu) vardır. Hiçbir sayı/durum uydurulmaz: proje listesi yoksa dürüst boş/OFFLINE/UNAVAILABLE durumu gösterilir, görev/koşu verisi canlı değilse kart içinde dürüst "veri yok/kullanılamıyor" denir; yeni kapsam-hiyerarşisi arka ucu icat edilmez. WP2 token/kart/rozet bileşenleri yeniden kullanılır (palet değişmez). Alt kısımda "Yeni Proje" sihirbazı, "İçe Aktar" paneli ve B5 "mevcut yerel depoyu kaydet" formu korunur; bir proje açıldığında bağlamsal çalışma alanı (sekmeler) render edilir. API verisi asla HTML olarak yorumlanmaz; yalnız h()/textContent kullanılır. Önceki B5 açıklaması: GET /v1/projects gerçek proje listesi ve "Yeni Proje" formu; gövde work-core kurucusuyla doğrulanır, her gönderim için idempotency anahtarı üretilir, proje seçimi store.selectProject ile önbelleği geçersiz kılar (DSK-061-06).
 import {h,panel,stateNote,emptyNote,chip,kpiTile,statePill,missionPill,badge} from "../components.js";
-import {formatTime,MISSING,missionPillKind} from "../model.js";
-import {buildProjectRequest} from "../work-core.js";
+import {MISSING,missionPillKind} from "../model.js";
+import {buildProjectRequest,formatDateTime} from "../work-core.js";
 import {latestRunFor} from "../project-core.js";
 import {buildClosure} from "../closure-core.js";
 import {drafts,trackers,field,listEditor,statusBlock,setStatus,recordPost,resetProjectDraft,focusResult,settle} from "../forms.js";
@@ -87,7 +87,7 @@ function projectCard(ctx,p,{miss,runs,byProject,runsByProject}){
     h(doc,"dt",{text:ctx.t("projects.env")}),h(doc,"dd",{text:p.environmentId??MISSING}),
     h(doc,"dt",{text:ctx.t("projects.tenant")}),h(doc,"dd",{text:p.tenantId??MISSING}),
     h(doc,"dt",{text:ctx.t("projects.repo")}),h(doc,"dd",{class:"mono",text:p.repositoryPath??MISSING}),
-    h(doc,"dt",{text:ctx.t("projects.created")}),h(doc,"dd",{text:formatTime(p.createdAt,ctx.i18n.lang)}),
+    h(doc,"dt",{text:ctx.t("projects.created")}),h(doc,"dd",{dataset:{projectCreated:p.createdAt??""},text:formatDateTime(p.createdAt,ctx.i18n.lang)}),
     h(doc,"dt",{text:ctx.t("projects.id")}),h(doc,"dd",{class:"mono",text:p.projectId}));
   // Görev durumu dağılımı: yalnız görev verisi canlıyken; aksi halde dürüst durum.
   let missionBody;
