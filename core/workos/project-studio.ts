@@ -341,6 +341,11 @@ export class ProjectStudio {
   exportProject(project: Project, runs: WorkRun[], commit: string | undefined, actor: string): Omit<ProjectExport, "tenantId"> {
     const root = this.repoRoot(project), alt = this.alternatesEnv(runs);
     const sha = this.resolveCommit(project, runs, commit ?? "HEAD");
+    // V3-T1012.a (#324 NB-1): "teslimde kilit dosyası zorunlu": package.json'u olup kilidi (package-lock.json / npm-shrinkwrap.json) olmayan bir Node teslimi
+    // `npm ci` ile kurulamaz; dışa aktarım HİÇBİR ŞEY yazılmadan (geçici dizin, arşiv, kayıt yok) EXPORT_LOCKFILE_MISSING 409 ile reddedilir. Kök ağaç okunamazsa da reddedilir (fail-closed).
+    const ls = this.git(root, ["ls-tree", "--name-only", sha], alt);
+    const lockfile = ls.status === 0 ? lockfileStatus(String(ls.stdout ?? "").split("\n").map(x => x.trim()).filter(Boolean)) : "MISSING";
+    if (lockfile === "MISSING") throw new StudioError("EXPORT_LOCKFILE_MISSING", 409);
     const exportId = `exp_${crypto.randomBytes(12).toString("hex")}`;
     const outDir = this.exportsDir(), tmp = path.join(outDir, `.tmp-${exportId}`);
     fs.mkdirSync(tmp, {recursive: true});
@@ -357,9 +362,6 @@ export class ProjectStudio {
       // M1a (D-SBX1-PATH-2026-10-15): VERIFICATION_STATUS.json arşiv köküne yazılır; yalnız kanıttan türetilir. M1a c2: bu varsayılan proje dışa aktarımı bir koşu teslimi DEĞİLDİR;
       // her zaman NO_RUN/NOT_VERIFIED etiketlenir (koşu teslimi yalnız prepareRunDelivery artefaktıdır).
       const vs = verificationStatus(run, sha);
-      // V3-T1012.a: kilit dosyası olmayan Node teslimi `npm ci` ile kurulamaz; durum README'de ve export kaydında raporlanır.
-      const ls = this.git(root, ["ls-tree", "--name-only", sha], alt);
-      const lockfile = ls.status === 0 ? lockfileStatus(String(ls.stdout ?? "").split("\n").map(x => x.trim()).filter(Boolean)) : "MISSING";
       if (run && tests.length) {
         const f = path.join(reportDir, "test-report.json");
         const last = tests[tests.length - 1];
@@ -390,7 +392,7 @@ export class ProjectStudio {
         `| Security | ${sec ? `${sec.status}${sec.gaps.length ? ` (gaps: ${sec.gaps.join(", ")})` : ""}` : "NOT_AVAILABLE"} |`,
         `| Independent review | ${review ? `${review.verdict} by ${review.reviewerIdentity ?? "unknown"}` : "NOT_AVAILABLE"} |`,
         "| Export secret scan | CLEAN (built-in scanner over every archived file) |",
-        `| Lockfile | ${lockfile === "PRESENT" ? "PRESENT (`npm ci` installs exactly the locked tree)" : lockfile === "MISSING" ? "MISSING (package.json without package-lock.json: `npm ci` will fail)" : "NOT_APPLICABLE (no package.json)"} |`, "",
+        `| Lockfile | ${lockfile === "PRESENT" ? "PRESENT (`npm ci` installs exactly the locked tree)" : "NOT_APPLICABLE (no package.json)"} |`, "",
         "## How to run", "",
         `- Tests: ${fmt(project.testCommand)}`, `- Development server: ${fmt(project.devCommand)}`, "",
         "Run the commands from the `source/` directory. Reports (when available) are under `reports/`.", "",
