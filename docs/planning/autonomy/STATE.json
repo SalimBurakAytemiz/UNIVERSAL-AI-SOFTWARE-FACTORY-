@@ -50,21 +50,22 @@
       "task": "CLOUD-T0005",
       "prs": [
         302,
-        335
-      ],
-      "open": [
-        343,
+        335,
         345
       ],
-      "note": "#302 view + #335 tenant-scoped job status/panel merged; #343 Founder-tier server.ts/main.mjs wiring + trust-root reseal (CLEAN, re-bind pending); #345 allow-list pins (CLEAN, re-bind pending). doneMerge needs a real Windows runner install/login/stream test."
+      "open": [
+        343
+      ],
+      "note": "#302 view + #335 tenant-scoped job status/panel + #345 allow-list pins merged; #343 Founder-tier server.ts/main.mjs wiring + trust-root reseal (CLEAN on an older base; needs base-merge + fresh reviewer). doneMerge needs a real Windows runner install/login/stream test."
     },
     {
       "task": "CLOUD-T0002",
-      "prs": [],
-      "open": [
-        344
+      "prs": [
+        344,
+        348
       ],
-      "note": "#344 CloudWorker; B-1 safety fix (validate-all-before-put, jobs/<jobId>/a<attempt>/<rel> names, lease checks, resolveDeliverable, input provenance) CLEAN with RISK1/RISK2 MITIGATED; re-bind pending after #342. Follow-up b49cbbd9 (output I/O -> WORKER_IO_ERROR) on claude/builder-c-cloud-t0002-safety. N-4 (gate.authorize/CLOUD_JOB kind in core/workos/execution-gate.ts) = separate follow-up."
+      "open": [],
+      "note": "#344 CloudWorker (B-1 safety fix: validate-all-before-put, jobs/<jobId>/a<attempt>/<rel> names, lease checks, resolveDeliverable, input provenance; RISK1/RISK2 MITIGATED) + #348 output I/O -> WORKER_IO_ERROR merged. Follow-ups: N-4 gate.authorize/CLOUD_JOB kind (core/workos/execution-gate.ts), per-component openat, orphan GC. doneMerge needs a real cloud sandbox run."
     },
     {
       "task": "CLOUD-T0008",
@@ -79,10 +80,11 @@
         301,
         330
       ],
-      "stacked": [
-        "claude/builder-c-cloud-t0010-signed-confirm-v3@be647b25"
-      ],
-      "note": "DAG orchestrator + intake wiring merged; signed Founder-confirmation layer stacked on #344. doneMerge needs a real cloud predev/dispatch/review-to-artifact E2E (D-03)."
+      "stacked": [],
+      "note": "DAG orchestrator + intake wiring merged (#301,#330); #350 signed single-use Founder intake confirmation + namespace-keyed plan cache (round 2 CLEAN, 10/10 per-field MAC mutants killed). doneMerge needs a real cloud predev/dispatch/review-to-artifact E2E (D-03).",
+      "open": [
+        350
+      ]
     },
     {
       "task": "CLOUD-T0011",
@@ -97,7 +99,10 @@
         337,
         338
       ],
-      "note": "#308 split (Founder decision D): code #337 + runbook #338 merged; #308 draft superseded. Follow-ups: deploy-approval replay within 15-min TTL, production trusted clock not enforced, issue-side skew unchecked, in-memory key-reuse history. Acceptance needs real staging (D-03/D-29)."
+      "note": "code #337 + runbook #338 merged; #349 hardening (single-use da2 approvals, mandatory production clock, issue-side skew; round 3 CLEAN). Open follow-up: in-memory approval ledger prunes by caller now (N-1). Acceptance needs real staging (D-03/D-29).",
+      "open": [
+        349
+      ]
     },
     {
       "task": "CLOUD-T0015",
@@ -105,7 +110,7 @@
         304
       ],
       "stacked": [
-        "claude/builder-c-cloud-t0015-planner-v3@6c68140a"
+        "claude/builder-c-cloud-t0015-planner-v4@5f1b3959"
       ],
       "note": "provider routing/quota/fallback merged; planner layer stacked. doneMerge needs a real cloud model request (D-08: 0 USD, no paid provider)."
     },
@@ -113,9 +118,9 @@
       "task": "CLOUD-T0016",
       "prs": [],
       "stacked": [
-        "claude/builder-c-cloud-chain-host-v3@191ffc36"
+        "claude/builder-c-cloud-chain-host-v4@d10b3d99"
       ],
-      "note": "proposed in SA-2026-11-04 §2.C (merged #336) but not in task-index: FOUNDER_REQUIRED. v3 delivers only via resolveDeliverable(queue.get(jobId)); supersedes draft #340. At most LOCAL_E2E_VERIFIED."
+      "note": "proposed in SA-2026-11-04 §2.C but not in task-index: FOUNDER_REQUIRED. v4 verifies the caller's SignedScope before confirmation/cache/queue and keys orchestrators by the exact signed scope (v3 gap fixed); delivers only via resolveDeliverable. Supersedes draft #340. At most LOCAL_E2E_VERIFIED."
     },
     {
       "task": "UASCO-T0006",
@@ -196,7 +201,7 @@
       "open": [
         327
       ],
-      "note": "#327 export lockfile gate: CLEAN but TASK_SCOPE_MISMATCH (project-studio.ts outside targetFiles) -> optional Founder merge; needs re-bind."
+      "note": "#327 export lockfile gate: CLEAN but TASK_SCOPE_MISMATCH -> optional Founder merge; needs base-merge + re-bind."
     },
     {
       "task": "V3-T1034",
@@ -235,10 +240,10 @@
     "//TR": "V4.1 -> Adaptive Parallel Factory V2 devir hazırlığı. Türetilmiş özet; görev kaynağı DEĞİLDİR. Kanonik kaynaklar: task-index.json, v41 matrisi, bu dosyanın done/inFlight/blocked alanları ve GitHub PR'ları.",
     "target": "UASCO Adaptive Parallel Factory V2 (separate Claude Cloud session)",
     "status": "PREPARING",
-    "authority": "V4.1 coordinator session_015dYwazi7LHFCg3dABbSW2P keeps dispatch and executor-merge authority until an atomic ownership+merge-authority transfer is recorded here; V2 has NO live task ownership yet.",
+    "authority": "V4.1 coordinator session_015dYwazi7LHFCg3dABbSW2P keeps dispatch and executor-merge authority until an atomic ownership+merge-authority transfer is recorded in a Founder-merged governance record (docs/planning/authority/*.md or standing-authority.json), never in this file; V2 has NO live task ownership yet.",
     "asOf": {
-      "main": "a01c37d206d9847c7c8cc3da62d6e5ea31b83cea",
-      "at": "2026-11-05T07:45Z"
+      "integration": "28fafd56e2d0f18c0e3889a2bacdfc23e6349dde",
+      "at": "2026-11-05T09:40Z"
     },
     "canonicalSources": [
       "docs/planning/autonomy/task-index.json",
@@ -260,11 +265,9 @@
         "id": "C",
         "session": "session_015dYwazZccTReW5Rs2mAhq3",
         "owns": [
-          "claude/builder-c-cloud-t0002-worker",
-          "claude/builder-c-cloud-t0002-safety",
           "claude/builder-c-cloud-t0010-signed-confirm-v3",
-          "claude/builder-c-cloud-t0015-planner-v3",
-          "claude/builder-c-cloud-chain-host-v3"
+          "claude/builder-c-cloud-t0015-planner-v4",
+          "claude/builder-c-cloud-chain-host-v4"
         ]
       },
       {
@@ -285,38 +288,36 @@
     ],
     "openPrs": [
       {
-        "pr": 344,
-        "task": "CLOUD-T0002",
+        "pr": 349,
+        "task": "CLOUD-T0012",
         "tier": "routine",
-        "state": "CLEAN at b2a719db/a4dc7f51; base-merged to 1bdf7ab1 on a01c37d2, re-bind requested",
-        "reviewer": "session_015dYwb421w7Y1aC9cReqc8a"
+        "state": "CLEAN round 3; base-merged to f64f7fcd on 28fafd56, re-bind requested",
+        "reviewer": "session_015dYwazvG4yNijkpcWFygX8"
       },
       {
-        "pr": 345,
-        "task": "CLOUD-T0005",
+        "pr": 350,
+        "task": "CLOUD-T0010",
         "tier": "routine",
-        "state": "CLEAN at 24957dc7/a4dc7f51; base-merged to f53f6812, re-bind requested",
-        "reviewer": "session_015dYwb4QdUScxpF6L9Ga65M"
+        "state": "CLEAN round 2; base-merged to 0b190118 on 28fafd56, re-bind requested",
+        "reviewer": "session_015dYwb1vSmJt6igVy2MgsBS"
       },
       {
         "pr": 343,
         "task": "CLOUD-T0005",
         "tier": "FOUNDER (protected + trust-root)",
-        "state": "CLEAN at 42159d5b/a4dc7f51; base-merged to beab4432, re-bind requested",
-        "reviewer": "session_015dYwb1X55k736nw8md82UH"
+        "state": "CLEAN at beab4432 on old base; needs base-merge + fresh reviewer"
       },
       {
         "pr": 339,
         "task": "UASCO-T0042",
         "tier": "FOUNDER (TASK_SCOPE_MISMATCH)",
-        "state": "CLEAN at 4d27757b/a4dc7f51; base-merged to 59ec037f, re-bind requested",
-        "reviewer": "session_015dYwb4HikL42BrKcPFiuq6"
+        "state": "CLEAN at 59ec037f on old base; needs base-merge + fresh reviewer"
       },
       {
         "pr": 327,
         "task": "V3-T1012.a",
         "tier": "FOUNDER optional (TASK_SCOPE_MISMATCH)",
-        "state": "CLEAN at 6d388cee on old base 10d37f8c; needs base-merge + re-bind"
+        "state": "CLEAN at 6d388cee on old base"
       },
       {
         "pr": 341,
@@ -327,7 +328,7 @@
       {
         "pr": 340,
         "task": "CLOUD-T0016",
-        "state": "DRAFT, superseded by claude/builder-c-cloud-chain-host-v3"
+        "state": "DRAFT, superseded by claude/builder-c-cloud-chain-host-v4"
       },
       {
         "pr": 308,
@@ -337,16 +338,14 @@
       {
         "pr": 282,
         "task": "UASCO-T0042",
-        "state": "legacy lane-C PAR-03 diag, superseded by #339; no owner"
+        "state": "legacy, superseded by #339; no owner"
       }
     ],
     "nextQueue": [
-      "merge #344 (then PR for b49cbbd9)",
-      "merge #345",
-      "Founder: #343, #339 (and optional #327)",
-      "open v3 stack: CLOUD-T0010 signed-confirm -> CLOUD-T0015 planner -> CLOUD-T0016 chain host (Founder)",
-      "N-4 follow-up (CLOUD_JOB execution kind)",
-      "CLOUD-T0012 security follow-ups"
+      "merge #349, #350",
+      "open CLOUD-T0015 planner-v4 PR, then CLOUD-T0016 chain-host-v4 PR (Founder)",
+      "Founder: #343, #339 (optional #327)",
+      "follow-ups: ledger/replay-store pruning by trusted clock (#349 N-1, #350 N-1), N-4 CLOUD_JOB execution kind, C3/C4 identity-checked liveness probe (protected selftest, Founder)"
     ],
     "ciFlakeClasses": {
       "C1": "role-context timeout (0 after #331)",
@@ -361,8 +360,16 @@
       "1. V2 reads this file + task-index.json + open PRs (read-only)",
       "2. Founder confirms V2 readiness",
       "3. V4.1 coordinator freezes NEW dispatch only (in-flight PRs continue)",
-      "4. ownership + executor-merge authority transferred in ONE governance PR recorded here (status=TRANSFERRED, with V2 supervisor session id)",
+      "4. ownership + executor-merge authority transferred in ONE Founder-merged governance PR under docs/planning/authority/ (or standing-authority.json) naming the V2 supervisor session id; this file may then be updated for information only (see authorityNote)",
       "5. V4.1 coordinator stops dispatching and merging; V2 must not restart tasks listed as done/inFlight"
+    ],
+    "authorityNote": "This 'handoff' block is informational. STATE.json is GOVERNANCE_EXEMPT (autonomy.mjs), so a routine PR can edit it; therefore handoff.status (including any future TRANSFERRED value) NEVER grants, widens or transfers authority. Authority comes only from docs/planning/autonomy/standing-authority.json and Founder-merged records under docs/planning/authority/. V2 and V4.1 must ignore handoff.status as an authority source.",
+    "statePrDeclaration": "State-only PRs that change no task deliverable declare 'UASCO-TASK: none' (FOUNDER_REQUIRED) instead of borrowing an unrelated task id; earlier STATE.json commits used V3-T1001 by convention.",
+    "sharedStoreRequirements": [
+      "1. A shared durable store both coordinator sessions can write: refs/uasco/* or a dedicated branch refs/heads/uasco/authority. V2 reports HTTP 403 for refs/uasco/* from its session git proxy; access is chosen when a session starts, so a V2 session with that access may have to be started. No such ref exists on origin yet; the V4.1 coordinator has not created or probed one.",
+      "2. Because every session pushes as the same GitHub identity, a ref write alone proves nothing. A Founder-merged governance record (docs/planning/authority/*.md or standing-authority.json) must name the authority ref, the allowed coordinator session ids and the transfer gates (independent CLEAN review, green required CI, Founder decision id, drain acknowledgement). V2 must validate the ref content against that record.",
+      "3. V2's own code (claude/nice-sagan-c1zzow) must pass independent review, required CI and a Founder merge; its protected apps/control-api/src/server.ts change is a separate Founder-tier PR. Its open PR #347 failed the adapter-reality census at 4e02fbb7 (COMMAND_UNMAPPED:curl); V2 reports curl removed in 89cf3649 — re-verify on its current head's CI.",
+      "4. The V4.1 drain acknowledgement (bridge ack) is written only after 1-3 are done and the Founder explicitly authorizes the cutover; until then V4.1 keeps dispatching and merging."
     ]
   }
 }
