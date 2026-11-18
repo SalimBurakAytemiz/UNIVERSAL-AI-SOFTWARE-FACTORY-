@@ -236,6 +236,7 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 /* Onay penceresi */
 .dialog{max-width:min(32rem,92vw);padding:1.2rem 1.4rem;border:2px solid var(--danger-border);border-radius:var(--radius);background:var(--surface-2);color:var(--text);box-shadow:var(--glow-risk-xl)}
 .dialog::backdrop{background:var(--scrim)}.dialog h2{margin-top:0}
+.stop-impact{margin:.6rem 0 .9rem;padding:.6rem .8rem;border:1px solid var(--danger-border);border-radius:var(--radius);background:var(--surface)}.stop-impact-title{margin:0 0 .3rem;font-weight:600}.stop-impact-list{margin:0;padding-left:1.1rem}.stop-impact-note{margin:0}
 
 /* B5: formlar, liste editörü, iş ekranları */
 .btn-primary{background:var(--accent);border-color:var(--accent);color:#031018;font-weight:700}
