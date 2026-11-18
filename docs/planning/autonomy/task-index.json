@@ -1,5 +1,5 @@
 {
- "//TR": "build-task-index.mjs tarafından V4.1 yürütme matrisinden ve factory-v2-tasks.json kaydından türetilir; elle düzenlenmez.",
+ "//TR": "build-task-index.mjs tarafından V4.1 yürütme matrisinden, factory-v2-tasks.json ve desktop-product-tasks.json kayıtlarından türetilir; elle düzenlenmez.",
  "source": {
   "zip": "docs/planning/v41/UASCO_V4_1_CLOUD_MERGED.zip",
   "entry": "UASCO_V4_1_CLOUD/02_V4_1_EXECUTION_MATRIX.json",
@@ -10,9 +10,14 @@
    "path": "docs/planning/autonomy/factory-v2-tasks.json",
    "sha256": "d761b9ebd088e1ab78380df077e6912736a3c329ca34ff60eeabefe4951b39ed",
    "count": 9
+  },
+  {
+   "path": "docs/planning/autonomy/desktop-product-tasks.json",
+   "sha256": "e9f00ff3dc2ef2ac83bcac8de5475995551e1d3b64e3c68b50e5727c06a54701",
+   "count": 9
   }
  ],
- "count": 265,
+ "count": 274,
  "tasks": [
   {
    "id": "CLOUD-T0001",
@@ -4805,6 +4810,124 @@
    ],
    "exec": "CLOUD",
    "name": "Factory V2 authority core extraction (K modeli, Founder kararı 2026-11-12): kimlik/imza, registry doğrulaması, lease/ownership, epoch, authority fence (v41-guard), cutover, merge gate kararı ve merge writer küçük güvenilir bir çekirdekte (automation/factory-v2/core/) toplanır; çekirdek rutin kodu (model router, rapor, worker, orkestrasyon) import etmez, yalnız şemayla doğrulanmış veri sözleşmesi kabul eder; control/cli yetki ve rutin işlemleri ayrılır; V2 merge kararı journal beyanı yerine GitHub CI + bağımsız review binding + attestation ile yeniden doğrulanır; CUTOVER-ACCEPTANCE.md ve probe/PROBE-ROLE-KEYS.json çekirdeğe ait korumalı veri olur; fail-closed CI testleri (spawn/child_process, dinamik import, parçalı dosya yolu, yeni modül/rename, env yolları, lease/yetki kaydı yazımı; M1-M12) ve ayrı OS kullanıcısı/konteyner, PID, dosya sistemi, sır ayrımı izolasyon testleri; fazlar R -> P1 (ayrım, governance daraltması YOK) -> P2 (bağımsız güvenlik doğrulaması); P3 kapsam daraltması ve S (policy sandbox) üretim/AUTO_MERGE kullanımı ayrı Founder kararı olmadan yok; LIVE cutover, yetki kaydı veya merge yetkisi devri yok"
+  },
+  {
+   "id": "DSK-T0001",
+   "tier": "T2",
+   "status": "VERIFY_PENDING",
+   "wave": "DSK",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "Electron uçtan uca otomatik test (FakeExecutors, ücretsiz): masaüstünden proje oluştur → görev/plan → koşu başlat → sonuç, test raporu ve diff ekranda; sahte yürütücü olduğu testte ve raporda açıkça etiketlenir ve gerçek model kod üretimi veya gerçek sandbox test kanıtı olarak SUNULMAZ. Kapsam: apps/desktop/renderer/** (korumalı app.js/index.html hariç), tests/** ve gerekirse mevcut apps/control-api/src/routes/*.ts modüllerine yalnız salt-okunur GET; korumalı dosyaya (apps/control-api/src/server.ts, apps/desktop/main.mjs, preload.mjs, renderer/app.js, renderer/index.html, config/, .github/, scripts/ci/, docs/planning/) dokunma gerekirse PR durur ve Founder'a raporlanır; uydurma veri, sahte PASS veya kanıtı güçlü gösterme yok."
+  },
+  {
+   "id": "DSK-T0002",
+   "tier": "T2",
+   "status": "VERIFY_PENDING",
+   "wave": "DSK",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "UI-014 okunabilir analiz raporu: mevcut analiz/plan verisinden (POST /v1/missions/:id/analysis/*, GET /v1/missions/:id/tasks) mission başına okunabilir analiz özeti, kabul kriterleri ve risk listesi; onay/ret akışı korunur. Kapsam: apps/desktop/renderer/** (korumalı app.js/index.html hariç), tests/** ve gerekirse mevcut apps/control-api/src/routes/*.ts modüllerine yalnız salt-okunur GET; korumalı dosyaya (apps/control-api/src/server.ts, apps/desktop/main.mjs, preload.mjs, renderer/app.js, renderer/index.html, config/, .github/, scripts/ci/, docs/planning/) dokunma gerekirse PR durur ve Founder'a raporlanır; uydurma veri, sahte PASS veya kanıtı güçlü gösterme yok."
+  },
+  {
+   "id": "DSK-T0003",
+   "tier": "T2",
+   "status": "VERIFY_PENDING",
+   "wave": "DSK",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "UI-024/UI-207 görev bağımlılık haritası ve kritik yol: GET /v1/missions/:id/tasks bağımlılıklarından DAG görünümü, kritik yol ve bloklu görev vurgusu; döngü veya eksik bağımlılık dürüst hata olarak gösterilir. Kapsam: apps/desktop/renderer/** (korumalı app.js/index.html hariç), tests/** ve gerekirse mevcut apps/control-api/src/routes/*.ts modüllerine yalnız salt-okunur GET; korumalı dosyaya (apps/control-api/src/server.ts, apps/desktop/main.mjs, preload.mjs, renderer/app.js, renderer/index.html, config/, .github/, scripts/ci/, docs/planning/) dokunma gerekirse PR durur ve Founder'a raporlanır; uydurma veri, sahte PASS veya kanıtı güçlü gösterme yok."
+  },
+  {
+   "id": "DSK-T0004",
+   "tier": "T2",
+   "status": "VERIFY_PENDING",
+   "wave": "DSK",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "UI-018/UI-019 plan karşılaştırma ve plan değişikliği merkezi: aynı mission'ın plan sürümleri arasında eklenen/çıkan/değişen görevler; veri yoksa dürüst boş durum. Kapsam: apps/desktop/renderer/** (korumalı app.js/index.html hariç), tests/** ve gerekirse mevcut apps/control-api/src/routes/*.ts modüllerine yalnız salt-okunur GET; korumalı dosyaya (apps/control-api/src/server.ts, apps/desktop/main.mjs, preload.mjs, renderer/app.js, renderer/index.html, config/, .github/, scripts/ci/, docs/planning/) dokunma gerekirse PR durur ve Founder'a raporlanır; uydurma veri, sahte PASS veya kanıtı güçlü gösterme yok."
+  },
+  {
+   "id": "DSK-T0005",
+   "tier": "T2",
+   "status": "VERIFY_PENDING",
+   "wave": "DSK",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "UI-124 durdurma diyaloğunda canlı etki sayıları: durdurmadan önce etkilenecek koşu, görev ve bekleyen onay sayıları mevcut okuma uçlarından gösterilir; durdurma davranışı değişmez. Kapsam: apps/desktop/renderer/** (korumalı app.js/index.html hariç), tests/** ve gerekirse mevcut apps/control-api/src/routes/*.ts modüllerine yalnız salt-okunur GET; korumalı dosyaya (apps/control-api/src/server.ts, apps/desktop/main.mjs, preload.mjs, renderer/app.js, renderer/index.html, config/, .github/, scripts/ci/, docs/planning/) dokunma gerekirse PR durur ve Founder'a raporlanır; uydurma veri, sahte PASS veya kanıtı güçlü gösterme yok."
+  },
+  {
+   "id": "DSK-T0006",
+   "tier": "T2",
+   "status": "VERIFY_PENDING",
+   "wave": "DSK",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "UI-038..UI-045 test stratejisi ve kapsam görünümü: mevcut test raporu/kanıt verisinden proje başına test stratejisi, test vakaları ve son koşu sonuçları; NOT_EXECUTED ile PRODUCT_VERIFIED ayrımı korunur. Kapsam: apps/desktop/renderer/** (korumalı app.js/index.html hariç), tests/** ve gerekirse mevcut apps/control-api/src/routes/*.ts modüllerine yalnız salt-okunur GET; korumalı dosyaya (apps/control-api/src/server.ts, apps/desktop/main.mjs, preload.mjs, renderer/app.js, renderer/index.html, config/, .github/, scripts/ci/, docs/planning/) dokunma gerekirse PR durur ve Founder'a raporlanır; uydurma veri, sahte PASS veya kanıtı güçlü gösterme yok."
+  },
+  {
+   "id": "DSK-T0007",
+   "tier": "T3",
+   "status": "VERIFY_PENDING",
+   "wave": "DSK",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "Windows'ta güvenli test çalıştırma sandbox'ı (Founder-tier güvenlik işi): stepVerify için Windows sandbox tasarımı ve uygulaması (ayrı kullanıcı/izolasyon, dosya sistemi ve ağ sınırı, sır ayrımı); kanıtlanamayan izolasyonda fail-closed NOT_EXECUTED; Founder kararı olmadan etkinleştirilmez."
+  },
+  {
+   "id": "DSK-T0008",
+   "tier": "T3",
+   "status": "VERIFY_PENDING",
+   "wave": "DSK",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31",
+    "D-08"
+   ],
+   "exec": "CLOUD",
+   "name": "Masaüstünden gerçek kod üretimi (Founder-tier): kullanıcının seçtiği Claude veya izinli model sağlayıcısıyla paketlenmiş uygulamada runner ve yürütücü etkinleştirme akışı; mevcut Founder kapıları (local-claude etkinleştirme, runner, D-08 ücretli servis) atlanmaz, her etkinleştirme açık Founder kararıdır."
+  },
+  {
+   "id": "DSK-T0009",
+   "tier": "T3",
+   "status": "VERIFY_PENDING",
+   "wave": "DSK",
+   "deps": [],
+   "startGates": [],
+   "mergeGates": [
+    "D-31"
+   ],
+   "exec": "CLOUD",
+   "name": "Company OS yazma işlemleri (Founder-tier): CRM/finans/hukuk kayıt oluşturma için korumalı apps/desktop/main.mjs POST izin listesinin genişletilmesi ve görünüm formları; yalnız sunucuda zaten var olan POST rotaları."
   }
  ]
 }

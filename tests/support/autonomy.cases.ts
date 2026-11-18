@@ -6,7 +6,7 @@ import {verifiedState, mentionsAttestation, decideAutoMerge, nextTasks, taskOf, 
 import {createHash} from "node:crypto";
 import os from "node:os";
 // @ts-expect-error untyped .mjs module
-import {fv2Tasks, buildIndex} from "../../docs/planning/autonomy/build-task-index.mjs";
+import {fv2Tasks, dskTasks, buildIndex} from "../../docs/planning/autonomy/build-task-index.mjs";
 import path from "node:path";
 
 const SHA = "a".repeat(40), BASE = "b".repeat(40);
@@ -52,7 +52,12 @@ export function registerAutonomyCases() {
       expect(taskOf("UASCO-TASK: CLOUD-T0010\nUASCO-TASK: CLOUD-T0015")).toBeNull();
       expect(taskOf("> UASCO-TASK: CLOUD-T0010")).toBeNull();
       expect(taskOf("  UASCO-TASK: CLOUD-T0010")).toBeNull();
-      expect(taskOf("UASCO-TASK: UASCO-T0016.A")).toBeNull();
+      // //TR: Alt görev kimliği task-index.json'daki yazımıyla aynen kabul edilir (".a" ve ".A" ikisi de); indekste olmayan kimlik TASK_UNKNOWN ile reddedilir.
+      expect(taskOf("UASCO-TASK: UASCO-T0016.A")).toBe("UASCO-T0016.A");
+      expect(taskOf("UASCO-TASK: V3-T1033.E")).toBe("V3-T1033.E");
+      expect(taskOf("UASCO-TASK: UASCO-T0016.A.")).toBeNull();
+      expect(taskOf("UASCO-TASK: UASCO-T0016.A.b.c")).toBeNull();
+      expect(decideAutoMerge({gate: merge, body: body("CLOUD-T0010.Z"), policy, index, evidence: ev()}).reasons).toContain("TASK_UNKNOWN");
       expect(taskOf("UASCO-TASK: V3-T1012.a")).toBe("V3-T1012.a");
       expect(taskOf("```\nUASCO-TASK: CLOUD-T0010\n```")).toBeNull();
       expect(taskOf("<!--\nUASCO-TASK: CLOUD-T0010\n-->")).toBeNull();
@@ -77,9 +82,9 @@ export function registerAutonomyCases() {
       expect(fs.existsSync(p.record)).toBe(true);
       expect(p.coveredTiers).not.toContain("T3");
       // 256 V4.1 matrix tasks, unchanged, plus the Founder-approved Factory V2 registry (factory-v2-tasks.json): the count covers both.
-      expect(ix.tasks.filter((x: {id: string}) => !x.id.startsWith("FV2-"))).toHaveLength(256);
-      expect(ix.extraSources.map((x: {count: number}) => x.count)).toEqual([9]);
-      expect(ix.count).toBe(256 + 9);
+      expect(ix.tasks.filter((x: {id: string}) => !x.id.startsWith("FV2-") && !x.id.startsWith("DSK-"))).toHaveLength(256);
+      expect(ix.extraSources.map((x: {count: number}) => x.count)).toEqual([9, 9]);
+      expect(ix.count).toBe(256 + 9 + 9);
       expect(ix.tasks).toHaveLength(ix.count);
       expect(ix.source.sha256).toMatch(/^[0-9a-f]{64}$/);
       for (const d of st.done) expect(ix.tasks.some((x: {id: string}) => x.id === d.task)).toBe(true);
@@ -262,14 +267,14 @@ export function registerAutonomyCases() {
     const realPolicy = loadPolicy(), realIndex = loadIndex();
     const fv2Raw = fs.readFileSync("docs/planning/autonomy/factory-v2-tasks.json", "utf8");
     const fv2 = realIndex.tasks.filter((x: {id: string}) => x.id.startsWith("FV2-"));
-    const matrixIds = new Set(realIndex.tasks.filter((x: {id: string}) => !x.id.startsWith("FV2-")).map((x: {id: string}) => x.id));
+    const matrixIds = new Set(realIndex.tasks.filter((x: {id: string}) => !x.id.startsWith("FV2-") && !x.id.startsWith("DSK-")).map((x: {id: string}) => x.id));
     const entry = (o: Record<string, unknown> = {}) => ({id: "FV2-T0001", tier: "T1", status: "VERIFY_PENDING", wave: "FV2", deps: [], startGates: [], mergeGates: ["D-31"], exec: "CLOUD", name: "x", ...o});
     const src = (...tasks: unknown[]) => JSON.stringify({schemaVersion: "1.0.0", tasks});
     it("F1 the committed index holds exactly the registry's tasks, bound by the registry's SHA-256, after the unchanged matrix", () => {
       expect(fv2).toEqual(fv2Tasks(fv2Raw, matrixIds));
-      expect(realIndex.extraSources).toEqual([{path: "docs/planning/autonomy/factory-v2-tasks.json", sha256: createHash("sha256").update(fv2Raw).digest("hex"), count: fv2.length}]);
+      expect(realIndex.extraSources[0]).toEqual({path: "docs/planning/autonomy/factory-v2-tasks.json", sha256: createHash("sha256").update(fv2Raw).digest("hex"), count: fv2.length});
       expect(realIndex.count).toBe(realIndex.tasks.length);
-      expect(realIndex.tasks.slice(-fv2.length).map((x: {id: string}) => x.id)).toEqual(fv2.map((x: {id: string}) => x.id));
+      expect(realIndex.tasks.slice(matrixIds.size, matrixIds.size + fv2.length).map((x: {id: string}) => x.id)).toEqual(fv2.map((x: {id: string}) => x.id));
     });
     it("F2 governance, CI-review, authority-fence and LIVE-wiring work is T3; no FV2 task is ever picked as new work", () => {
       const tier = Object.fromEntries(fv2.map((x: {id: string; tier: string}) => [x.id, x.tier]));
@@ -314,6 +319,48 @@ export function registerAutonomyCases() {
       expect(() => fv2Tasks(src(entry({id: "FV2-T0009"})), new Set(["FV2-T0009"]))).toThrow("FV2_TASK_ID_COLLISION");
       expect(() => fv2Tasks(JSON.stringify({schemaVersion: "2", tasks: []}), new Set())).toThrow("FV2_TASKS_SCHEMA");
       expect(() => buildIndex(JSON.stringify({tasks: []}))).toThrow("FV2_TASKS_MISSING");
+      expect(() => buildIndex(JSON.stringify({tasks: []}), src())).toThrow("DSK_TASKS_MISSING");
+    });
+  });
+  describe("UASCO Desktop App product registry (desktop-product-tasks.json -> task-index.json)", () => {
+    const realPolicy = loadPolicy(), realIndex = loadIndex();
+    const dskRaw = fs.readFileSync("docs/planning/autonomy/desktop-product-tasks.json", "utf8");
+    const dsk = realIndex.tasks.filter((x: {id: string}) => x.id.startsWith("DSK-"));
+    const known = new Set(realIndex.tasks.filter((x: {id: string}) => !x.id.startsWith("DSK-")).map((x: {id: string}) => x.id));
+    const entry = (o: Record<string, unknown> = {}) => ({id: "DSK-T0001", tier: "T2", status: "VERIFY_PENDING", wave: "DSK", deps: [], startGates: [], mergeGates: ["D-31"], exec: "CLOUD", name: "x", ...o});
+    const src = (...tasks: unknown[]) => JSON.stringify({schemaVersion: "1.0.0", tasks});
+    it("P1 the committed index holds exactly the product registry's tasks, bound by its SHA-256, after the matrix and FV2 tasks", () => {
+      expect(dsk).toEqual(dskTasks(dskRaw, known));
+      expect(realIndex.extraSources[1]).toEqual({path: "docs/planning/autonomy/desktop-product-tasks.json", sha256: createHash("sha256").update(dskRaw).digest("hex"), count: dsk.length});
+      expect(realIndex.tasks.slice(-dsk.length).map((x: {id: string}) => x.id)).toEqual(dsk.map((x: {id: string}) => x.id));
+      // //TR: Güvenlik/sandbox, gerçek kod üretimi (ücretli olabilir) ve korumalı main.mjs izin listesi işleri T3 kalır; rutin ürün ekranları T2.
+      const tier = Object.fromEntries(dsk.map((x: {id: string; tier: string}) => [x.id, x.tier]));
+      for (const id of ["DSK-T0007", "DSK-T0008", "DSK-T0009"]) expect(tier[id]).toBe("T3");
+      for (const id of ["DSK-T0001", "DSK-T0002", "DSK-T0003", "DSK-T0004", "DSK-T0005", "DSK-T0006"]) expect(tier[id]).toBe("T2");
+    });
+    it("P2 real policy: a T2 product task auto-merges; T3 product tasks and the paid-spend gate stay FOUNDER_REQUIRED; uppercase subtask ids work", () => {
+      const e = ev({reviews: [cleanReview()]});
+      const p = {...realPolicy, trustedReviewerLogins: ["rev"]};
+      expect(decideAutoMerge({gate: {...merge}, body: body("DSK-T0003"), policy: p, index: realIndex, evidence: e}).decision).toBe("AUTO_MERGE");
+      for (const id of ["DSK-T0007", "DSK-T0008", "DSK-T0009"]) {
+        const t3 = decideAutoMerge({gate: {...merge}, body: body(id), policy: p, index: realIndex, evidence: e});
+        expect(t3.decision).toBe("FOUNDER_REQUIRED");
+        expect(t3.reasons).toContain("TIER_NOT_COVERED:T3");
+      }
+      expect(decideAutoMerge({gate: {...merge}, body: body("UASCO-T0016.A"), policy: p, index: realIndex, evidence: e}).decision).toBe("AUTO_MERGE");
+      expect(JSON.stringify(nextTasks({index: realIndex, state: {}, policy: realPolicy, limit: 1000}))).not.toContain("DSK-");
+    });
+    it("P3 the product registry builder fails closed on bad ids, collisions, untyped or forward deps, extra keys, unknown tier/status", () => {
+      expect(dskTasks(src(entry(), entry({id: "DSK-T0002", deps: [["DSK-T0001", "MERGED"], ["FV2-T0002", "MERGED"]]})), new Set(["FV2-T0002"]))).toHaveLength(2);
+      const bad: Array<[unknown[], string]> = [
+        [[entry(), entry()], "DSK_TASK_ID_COLLISION"], [[entry({id: "FV2-T0001"})], "DSK_TASK_ID"], [[entry({id: "DSK-T01"})], "DSK_TASK_ID"],
+        [[entry({deps: [["DSK-T0002", "MERGED"]]}), entry({id: "DSK-T0002"})], "DSK_TASK_DEPS"], [[entry({deps: [["UASCO-T0001", "REVIEWED"]]})], "DSK_TASK_DEPS"],
+        [[{...entry(), owner: "x"}], "DSK_TASK_KEYS"], [[entry({tier: "T4"})], "DSK_TASK_TIER"], [[entry({status: "DONE_OBSERVED"})], "DSK_TASK_STATUS"],
+        [[entry({wave: "FV2"})], "DSK_TASK_FIELDS"], [[entry({mergeGates: ["x"]})], "DSK_TASK_GATES"],
+      ];
+      for (const [tasks, code] of bad) expect(() => dskTasks(src(...tasks), new Set())).toThrow(code);
+      expect(() => dskTasks(src(entry()), new Set(["DSK-T0001"]))).toThrow("DSK_TASK_ID_COLLISION");
+      expect(() => dskTasks(JSON.stringify({schemaVersion: "2", tasks: []}), new Set())).toThrow("DSK_TASKS_SCHEMA");
     });
   });
 }
