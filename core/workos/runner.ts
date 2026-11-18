@@ -13,7 +13,8 @@ import type {MissionStatus} from "../mission/types.js";
 import type {WorkOsStore, RunPatch, RunWriteOptions} from "./store.js";
 import {WorkOsError} from "./types.js";
 import type {RunEvidence, RunStatus, RunStep, SecurityStageSummary, WorkRun} from "./types.js";
-import {LEASED_RUN_STATUSES} from "./run-state.js";
+import {LEASED_RUN_STATUSES, isResumableBlockReason, pendingResumableBlock, resumableBlockCheckpoint} from "./run-state.js";
+import type {ProviderLimitKind} from "./run-state.js";
 import {testCommandAllowed} from "./schemas.js";
 import {canonicalPath, managedRepoCanonical, pathOverlapsDataDir} from "./path-guard.js";
 import {runGitAsync} from "./git-async.js";
@@ -61,7 +62,7 @@ export interface TickReport { skipped?: "BUSY" | "LOCKED"; recovered: string[]; 
 type Outcome =
   | {kind: "DONE"; next: RunStep | "FINISHED"; data: Record<string, unknown>; patch?: RunPatch; mission?: MissionStatus; approvalReason?: string}
   | {kind: "REMEDIATE"; reason: string; data: Record<string, unknown>; findings: string[]}
-  | {kind: "BLOCK"; reason: string; status?: "BLOCKED" | "FAILED" | "QUARANTINED"}
+  | {kind: "BLOCK"; reason: string; status?: "BLOCKED" | "FAILED" | "QUARANTINED"; limit?: ProviderLimitKind; resumeAfter?: string | null}
   | {kind: "RETRY"; reason: string}
   | {kind: "CANCEL"; reason: string};
 
@@ -103,7 +104,19 @@ export function providerLimit(exitCode: number | null, log: string): "QUOTA_EXHA
   return l === "QUOTA_EXHAUSTED" || l === "RATE_LIMIT" ? l : null;
 }
 const limitNote = (l: ExecutorLimit) => (l === "DISK_FULL" ? "RESOURCE_LIMIT: DISK_FULL" : `PROVIDER_LIMIT: ${l}`);
-const limitBlock = (l: ExecutorLimit): Outcome => ({kind: "BLOCK", reason: l === "DISK_FULL" ? "DISK_FULL" : "PROVIDER_QUOTA"});
+// //TR: V3-T1016: Claude CLI kota satırı "usage limit reached|<unix saniye>" sıfırlanma zamanını taşıyabilir; yalnız bu biçim ve makul aralık (2020..2100) resumeAfter olur, aksi hâlde null (tahmin yok).
+const USAGE_RESET_RE = /usage limit reached\|(\d{10})\s*$/i;
+export function providerResumeAfter(log: string): string | null {
+  const lines = stripAnsi(String(log ?? "").slice(-8192)).split("\n").map(l => l.trim()).filter(Boolean);
+  for (const l of lines.reverse()) {
+    const m = CLAUDE_CLI_ERROR_RE.test(l) ? USAGE_RESET_RE.exec(l) : null;
+    if (!m) continue;
+    const sec = Number(m[1]);
+    return sec >= 1_577_836_800 && sec < 4_102_444_800 ? new Date(sec * 1000).toISOString() : null;
+  }
+  return null;
+}
+const limitBlock = (l: ExecutorLimit, log: string): Outcome => (l === "DISK_FULL" ? {kind: "BLOCK", reason: "DISK_FULL"} : {kind: "BLOCK", reason: "PROVIDER_QUOTA", limit: l, resumeAfter: providerResumeAfter(log)});
 // //TR: Test komutu önceliği (mission komutu proje komutunu ezer) ve depo/workspace önkoşulu SAF fonksiyonlardır; runner aynı noktada aynı sırayla çağırır, readiness.ts (salt-okunur) aynı fonksiyonları içe aktarır — ikinci kural yoktur.
 export const effectiveTestCommand = (m: {testCommand?: string[]} | undefined, p: {testCommand?: string[]} | undefined): string[] | undefined => m?.testCommand ?? p?.testCommand;
 export type RepositoryPrecondition = {ok: true; src: string} | {ok: false; reason: string};
@@ -230,6 +243,9 @@ export class MissionRunner {
   private forwardOff: (() => void) | null = null;
   private readonly boot = bootId();
   private readonly loopDelay: (() => number) | undefined;
+
+  /** Effective concurrent-run limit (1..16), for the start audit: proves what the engine actually runs with. */
+  get maxConcurrentRuns(): number { return this.o.maxConcurrentRuns; }
 
   constructor(opts: RunnerOptions) {
     assertIndependentExecutors(opts.executors);
@@ -587,6 +603,9 @@ export class MissionRunner {
       if (this.halted(epoch)) { this.owned.delete(runId); return steps > 0; } // motor kapanıyor: yeni adım yok, run bırakılır (lease dolunca sonraki engine devralır)
       const stop = this.stopActive();
       if (stop || run.status === "CANCELLING") { const w = own?.reap; this.cancelLeased(run, leaseId, stop ?? run.reason ?? "CANCEL_REQUESTED", w ? `${w.problem ? `${w.problem}: ` : ""}${w.note}`.replace(/: $/, "") : ""); return "CANCELLED"; }
+      // //TR: V3-T1016 guard: bekleyen devam-ettirilebilir kota engeli (checkpoint yazıldı, BLOCKED yazılamadan çökme) kendiliğinden sürdürülmez: adım yeniden yürütülmez, engel tamamlanır.
+      const pend = pendingResumableBlock(run);
+      if (pend) { s.transitionRun(runId, leaseId, "BLOCKED", pend.reason, this.o.actor, {mission: {to: "BLOCKED", reason: pend.reason}}); this.owned.delete(runId); return true; }
       if (run.status === "RETRY_SCHEDULED" && Date.parse(run.retryAt ?? "") > this.o.now()) { this.renew(runId, leaseId); return steps > 0; }
       if (steps >= this.o.maxStepsPerTick) { this.renew(runId, leaseId); return steps > 0; }
       if (run.status === "RECOVERING" && !(await this.recoverCheck(run, leaseId, own?.reap ?? null))) { this.owned.delete(runId); return true; }
@@ -704,6 +723,15 @@ export class MissionRunner {
         return;
       }
       case "BLOCK": {
+        // //TR: V3-T1016: sağlayıcı kota engeli BLOCKED_RESUMABLE sınıfındadır: engel noktasında şemalı checkpoint (adım, deneme, son kanıt ref'i, resumeAfter) yazılır, sonra BLOCKED.
+        // Adım/retry yamalanmaz (retryCount tüketilmez; REL-FX-4). Checkpoint ile BLOCKED arasında çökme olursa devralma adımı yeniden yürütmez (drive: pendingResumableBlock).
+        if ((out.status ?? "BLOCKED") === "BLOCKED" && isResumableBlockReason(out.reason) && out.limit) {
+          const latest = s.engineGetRun(id);
+          const rec = resumableBlockCheckpoint({reason: out.reason, limit: out.limit, step, attempt: run.attempt, retryCount: run.retryCount,
+            lastEvidenceRef: latest?.evidence[latest.evidence.length - 1]?.evidenceId ?? null, resumeAfter: out.resumeAfter ?? null, blockedAt: new Date(this.o.now()).toISOString()});
+          s.transitionRun(id, leaseId, "CHECKPOINTING", `step ${step} blocked (resumable): ${out.reason}`, a);
+          s.checkpointRun(id, leaseId, {step, data: {...rec}}, a);
+        }
         s.transitionRun(id, leaseId, out.status ?? "BLOCKED", out.reason, a, {mission: {to: "BLOCKED", reason: out.reason}});
         return;
       }
@@ -865,7 +893,7 @@ export class MissionRunner {
     if (run.roleId !== null) this.recordAgentTrace(run, leaseId, assertImplementerRole(run.roleId), r.aborted ? "ABORTED" : produced ? "COMPLETED" : "FAILED", r, this.o.executors.implementer.identity, "");
     if (r.aborted) return {kind: "CANCEL", reason: this.cancelReason()};
     // REL-FX-4: sağlayıcı kota/hız sınırı kör retry ile bütçe tüketmez: run BLOCKED(PROVIDER_QUOTA), retryCount değişmez; disk dolu/kotası BLOCKED(DISK_FULL).
-    if (limit) return limitBlock(limit);
+    if (limit) return limitBlock(limit, r.log);
     // Edit-only builder çıktısını engine commit etmeyi reddettiyse (değişiklik yok, .git/workspace dışı değişiklik) veya builder hiç başlatılmadıysa (SBX-8: profil oturumu yok) run BLOCKED olur.
     // INT-R4 kompozisyon: blockReason, exitCode!=0 dalından ÖNCE kalır; profil oturumu yok refüzü exitCode=null + blockReason=CLAUDE_PROFILE_LOGIN_REQUIRED ile gelir ve null!==0 doğru olduğundan generic IMPLEMENT_FAILED'e düşmemelidir (SBX-8 v7-sbx8-reviewer).
     if (r.blockReason) return {kind: "BLOCK", reason: r.blockReason.slice(0, 200)};
@@ -1106,7 +1134,7 @@ export class MissionRunner {
     if (r.aborted) return {kind: "CANCEL", reason: this.cancelReason()};
     if (!untouched) return {kind: "BLOCK", reason: "REVIEWER_MUTATED_CLONE"};
     // REL-FX: reviewer sağlayıcı kota/hız sınırına çarptıysa BLOCKED(PROVIDER_QUOTA/DISK_FULL), yeniden deneme bütçesi tüketilmez; SBX-8 geçersizlik dalından önce.
-    if (limit) return limitBlock(limit);
+    if (limit) return limitBlock(limit, r.log);
     // SBX-8: adapter'ın geçersizlik nedeni (profil oturumu yok -> BLOCKED; çalışma alanı değişti -> FAILED) korunur; geçersiz review asla CLEAN değildir.
     if (!r.valid) return r.transient ? {kind: "RETRY", reason: "REVIEW_TRANSIENT_FAILURE"} : {kind: "BLOCK", reason: (r.invalidReason ?? "REVIEW_FAILED").slice(0, 200), status: FOUNDER_ACTIONABLE_REFUSAL.test(r.invalidReason ?? "") ? "BLOCKED" : "FAILED"};
     if (r.verdict === "CLEAN") return {kind: "DONE", next: "REGRESSION", data: {verdict: "CLEAN", reviewerIdentity: reviewer.identity, commitSha: run.headSha}};

@@ -56,6 +56,20 @@ function healthPanel(ctx,health,control,attention,kinds){
       h(doc,"div",{class:"fact",dataset:{fact:"attention"}},h(doc,"span",{class:"fact-label",text:ctx.t("delivery.src.attention")}),attentionLine)));
 }
 
+// //TR: Sunucu koşuları EN ESKİ önce döndürür (work-core WORK_RUNS_CAP notu); tablo en yeni RELEASE_ROWS koşuyu gösterir (başlangıç zamanına göre yeniden eskiye,
+// eşitlikte sunucu sırasının tersi) ve kesildiğinde bunu "{shown} / {total}" olarak açıkça söyler; sunucu listeyi kestiyse toplam bilinmez ("500+"), asla kesin sayı denmez.
+export const RELEASE_ROWS=100;
+const startedMs=r=>{const t=Date.parse(r.startedAt??"");return Number.isNaN(t)?-Infinity:t};
+export function newestRuns(items,max=RELEASE_ROWS){
+  return items.map((r,i)=>({r,i})).sort((a,b)=>startedMs(b.r)-startedMs(a.r)||b.i-a.i).slice(0,max).map(x=>x.r);
+}
+function shownNote(ctx,runs,shown){
+  const doc=ctx.doc,total=runs.items.length;
+  if(runs.truncated===true)return h(doc,"p",{class:"note",dataset:{releaseShown:String(shown),releaseTotal:"UNKNOWN"}},ctx.t("attention.truncated",{shown:formatCount(shown),total:`${formatCount(total)}+`}));
+  if(total>shown)return h(doc,"p",{class:"note",dataset:{releaseShown:String(shown),releaseTotal:String(total)}},ctx.t("work.board.shown",{shown:formatCount(shown),total:formatCount(total)}));
+  return null;
+}
+
 /** Yayın hazırlığı tablosu: GET /v1/work-runs gerçek koşuları; ürün yalnız test yürütme kanıtı varsa PRODUCT_VERIFIED, aksi halde NOT_VERIFIED (sahte COMPLETE/PASS yok). Teslim/dışa aktarım Project Studio'daki gerçek köprüdedir. */
 function releasePanel(ctx,runs,kinds){
   const doc=ctx.doc;
@@ -63,11 +77,12 @@ function releasePanel(ctx,runs,kinds){
   if(runs.state!=="VERIFIED")body=stateNote(ctx,kinds.runs);
   else if(!runs.items.length)body=emptyNote(ctx,"delivery.release.none");
   else{
+    const rows=newestRuns(runs.items);
     const cols=["delivery.release.col.run","delivery.release.col.status","delivery.release.col.product","delivery.release.col.started"];
     body=h(doc,"div",{class:"table-wrap"},h(doc,"table",{class:"table",id:"delivery-runs-table",dataset:{deliveryTable:"runs"}},
       h(doc,"caption",{class:"sr-only",text:ctx.t("delivery.release.title")}),
       h(doc,"thead",{},h(doc,"tr",{},cols.map(k=>h(doc,"th",{scope:"col",text:ctx.t(k)})))),
-      h(doc,"tbody",{},runs.items.slice(0,100).map(r=>{
+      h(doc,"tbody",{},rows.map(r=>{
         const verified=isProductVerified(r);
         return h(doc,"tr",{dataset:{deliveryRun:r.runId,product:verified?"PRODUCT_VERIFIED":"NOT_VERIFIED"}},
           h(doc,"td",{class:"mono",text:r.runId}),
@@ -75,6 +90,7 @@ function releasePanel(ctx,runs,kinds){
           h(doc,"td",{},verified?statePill(ctx,"PRODUCT_VERIFIED"):h(doc,"span",{},statePill(ctx,"NOT_VERIFIED"),badge(ctx,ctx.t("delivery.release.notVerified"),"badge-notverified"))),
           h(doc,"td",{class:"mono",text:r.startedAt?formatDateTime(r.startedAt,ctx.i18n.lang):MISSING}));
       }))));
+    body=h(doc,"div",{},shownNote(ctx,runs,rows.length),body);
   }
   return panel(ctx,{titleKey:"delivery.release.title",id:"delivery-release",className:"delivery-section"},
     h(doc,"p",{class:"note",text:ctx.t("delivery.release.lead")}),

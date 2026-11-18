@@ -1,9 +1,12 @@
 // //TR: Bu test UX WP-AGENTS AI İş Gücü rol kataloğu görünümünü (apps/desktop/renderer/views/workforce.js) ve destekleyen saf modelini (mapRoleCatalogPage/mapRoleDetail) + api.roleCatalog()/roleDetail() + main.mjs allow-list'ini doğrular: katalog yalnız canlı /v1/roles kanonik kaydından (tam-ya-da-boş sayfalama) okunur; 599 rol TANIMI dürüst sayılır ama runtimeStatus UNKNOWN ve proficiencyStatus NOT_EVALUATED (0 sertifikalı) belirgin gösterilir, asla N aktif ajan/sertifikalı işçi ima edilmez; küme/lonca/başlık süzgeci gerçek veriden çalışır; rol tanımı ayrıntısı GET /v1/roles/:roleId'den sorumluluklar/uzmanlık/yasak eylemler/değerlendirme şartnamelerini gösterir; /v1/roles/:roleId yalnız kanonik kimlikle fail-closed allow-list'tedir; workforce.cat.* sözlüğü EN/TR'de birebirdir; eksik/bozuk katalogda dürüst durum, uydurma yok.
-import {describe, it, expect, beforeEach} from "vitest";
+import {describe, it, expect, beforeEach, afterEach} from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {pathToFileURL} from "node:url";
+import crypto from "node:crypto";
+import net from "node:net";
+import {buildServer} from "../apps/control-api/src/server.js";
 import {computeRoleReadiness, loadReadinessInputFromRepo, reconcileLegacyStatusSummary} from "../core/agents/readiness-audit.js";
 import {computeRoleStatusSummary} from "../core/agents/role-lifecycle.js";
 import {buildAdapterRealityMap, ADAPTER_REALITY_RECORDS} from "../core/capabilities/adapter-reality.js";
@@ -2044,4 +2047,183 @@ describe("LANE-A A2a Tools panel (TOOL_READY only; not measured is never zero; n
     expect(byData(panel, "toolsReadiness")[0].dataset.toolsReadiness).toBe("ADAPTERS_SUPPLIED");
     expect(m.calls.some(p => p.includes("adapters"))).toBe(false);
   });
+});
+
+// //TR: UASCO-T0006 (İş Gücü dilimi): görünüm sahte köprü yerine GERÇEK Control API (buildServer) yanıtlarıyla çizilir. Test köprüsü main.mjs "uasco:api-get" işleyicisini aynen taklit eder (masaüstü
+// GET allow-list'i, /health kimlik kanıtı, kontrol token'ı, "<yol>: HTTP <kod>" hata biçimi). Sunucu repoRoot'u yalnız rol/okuma kayıt dosyalarının KOPYASINI içeren geçici bir dizindir (gerçek depo değiştirilmez).
+describe("UASCO-T0006 — Workforce view over the REAL Control API (renderer -> real buildServer)", () => {
+  const TOKEN = "t".repeat(32);
+  let PORT = 3210, tmp = "";
+  const apps: Array<{close: () => Promise<unknown>}> = [];
+  beforeEach(async () => { tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-wf-")); (await load("views", "workforce.js")).resetWorkforceView(); });
+  afterEach(async () => { PORT = 3210; for (const a of apps.splice(0)) { try { await a.close(); } catch { /* kapanış */ } } try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* Windows */ } });
+  const repoCopy = () => path.join(tmp, "repo");
+  /** Gerçek rol kayıtları salt-okunur KOPYA olarak verilir (registries + knowledge/technologies); gerçek depo sunucuya verilmez. */
+  function seedRepo(files: "real" | "none" = "real") {
+    fs.mkdirSync(repoCopy(), {recursive: true});
+    if (files === "real") { fs.cpSync(path.join(root, "registries"), path.join(repoCopy(), "registries"), {recursive: true}); fs.cpSync(path.join(root, "knowledge", "technologies"), path.join(repoCopy(), "knowledge", "technologies"), {recursive: true}); }
+  }
+  function mkApp(controlToken = TOKEN) {
+    fs.mkdirSync(path.join(tmp, "runtime"), {recursive: true});
+    const app = buildServer({controlToken, runtime: path.join(tmp, "runtime"), repoRoot: repoCopy(), dataDir: path.join(tmp, "data"), tenantId: "tA", port: PORT, logger: false});
+    apps.push(app); return app;
+  }
+  async function allowList() {
+    const extra = loadGet();
+    const boundary = await import(pathToFileURL(path.join(root, "automation", "lib", "control-boundary.mjs")).href);
+    return {allowed: (p: string) => boundary.desktopGetPathAllowed(p) || extra(p), proof: boundary.controlChallengeProof as (t: string, c: string) => string | null};
+  }
+  type Transport = (url: string, headers: Record<string, string>) => Promise<{statusCode: number; json: () => any}>;
+  const injectT = (app: ReturnType<typeof buildServer>): Transport => async (url, headers) => app.inject({method: "GET", url, headers});
+  const httpT = (base: string): Transport => async (url, headers) => { const r = await fetch(base + url, {headers, redirect: "error", cache: "no-store"}); const body = await r.text(); return {statusCode: r.status, json: () => JSON.parse(body)}; };
+  /** main.mjs uasco:api-get + verifyServerIdentity + api() ile aynı. */
+  async function realBridge(transport: Transport, bridgeToken = TOKEN) {
+    const {allowed, proof} = await allowList();
+    const calls: string[] = [];
+    const verify = async () => {
+      const challenge = crypto.randomBytes(32).toString("hex"), expected = proof(bridgeToken, challenge);
+      if (!expected) throw new Error("CONTROL_TOKEN_NOT_CONFIGURED");
+      const r = await transport(`/health?challenge=${challenge}`, {host: `127.0.0.1:${PORT}`});
+      if (r.statusCode !== 200) throw new Error(`health: HTTP ${r.statusCode}`);
+      const h = r.json();
+      if (h.status !== "HEALTHY" || h.system !== "UNIVERSAL-AI-SOFTWARE-COMPANY-OS" || h.bindHost !== "127.0.0.1" || Number(h.port) !== PORT || h.controlProof !== expected) throw new Error("CONTROL_API_IDENTITY_UNVERIFIED");
+    };
+    const bridge = {apiGet: async (p: string) => {
+      calls.push(p);
+      if (!allowed(p)) throw new Error("INVALID_API_PATH");
+      if (p === "/health") { await verify(); return {status: "HEALTHY", system: "UNIVERSAL-AI-SOFTWARE-COMPANY-OS", serverIdentity: "VERIFIED"}; }
+      if (!p.startsWith("/v1/")) throw new Error("CONTROL_API_PATH_INVALID");
+      await verify();
+      const r = await transport(p, {"x-uasco-control-token": bridgeToken, host: `127.0.0.1:${PORT}`});
+      if (r.statusCode < 200 || r.statusCode >= 300) throw new Error(`${p}: HTTP ${r.statusCode}`);
+      return r.json();
+    }, apiPost: async (p: string) => { throw new Error(`POST must never be called (${p})`); }};
+    return {bridge, calls, allowed};
+  }
+  async function renderReal(transport: Transport, bridgeToken = TOKEN, lang = "en") {
+    const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js");
+    const {bridge, calls, allowed} = await realBridge(transport, bridgeToken);
+    const doc = new D(), store = st.createStore(null);
+    const api = apiMod.createApi({bridge, store, now: () => 1_760_000_000_000});
+    const tr = (k: string, v?: any) => i18n.translate(lang, k, v);
+    const ctx: any = {doc, store, api, i18n: {lang, t: tr}, t: tr, navigate: () => {}, principal: "FOUNDER_LOCAL", rerender: async () => {}, settleFocus: () => {}};
+    const {node} = await renderWf(ctx);
+    return {root: node, calls, allowed, ctx};
+  }
+  const pillsOf = (n: N | null) => n ? all(n).filter(x => "pill" in x.dataset).map(x => x.dataset.pill) : [];
+
+  const kpi = (r: N, id: string) => all(byId(r, id)!).find(n => (n.getAttribute("class") ?? "").split(" ").includes("kpi-value"))!.textContent;
+  const chipOf = (r: N, id: string) => byData(byId(r, id)!, "chip")[0]?.dataset.chip;
+  const layers = (r: N) => byData(byId(r, "wf-readiness")!, "readinessLayer");
+  const RECORDER = "FOUNDER_LOCAL";
+  function seedJournal() {
+    const store = new WorkOsStore(path.join(tmp, "data")), tenantId = "tA", scope = {tenantId};
+    const p = store.createProject({tenantId, orgId: "org1", name: "Workforce", environmentId: "env-dev", createdBy: RECORDER});
+    const m = store.createMission({tenantId, projectId: p.projectId, title: "Roles", objective: "obj", acceptanceCriteria: ["ac"], riskLevel: "R1", createdBy: RECORDER});
+    for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission(scope, m.missionId, to, "go", RECORDER);
+    return store.createRun({tenantId, missionId: m.missionId, executor: {implementer: "IMPL", reviewer: "REV"}, createdBy: RECORDER});
+  }
+  const REAL_ROLES = (JSON.parse(fs.readFileSync(path.join(root, "registries", "role-definitions.json"), "utf8")).roles as unknown[]).length;
+  const LEGACY = (JSON.parse(fs.readFileSync(path.join(root, "registries", "agents.json"), "utf8")).agents as unknown[]).length;
+
+  it("happy path, no Work OS journal yet: the real registry gives the canonical role count, the full catalog and the 8 readiness layers; active workers and target are honestly unknown, never 0", async () => {
+    seedRepo("real");
+    const app = mkApp();
+    const {root: r, calls, allowed} = await renderReal(injectT(app));
+    expect(kpi(r, "wf-reg")).toBe(String(REAL_ROLES));
+    expect(chipOf(r, "wf-reg")).toBe("VERIFIED");                                    // from GET /v1/agents (canonical registry)
+    expect(byId(r, "wf-reg")!.textContent).toContain(String(LEGACY));                 // legacy count only as LEGACY_REFERENCE_ONLY note
+    expect(byData(r, "legacyReference", "LEGACY_REFERENCE_ONLY")).toHaveLength(1);
+    // the real cockpit reports workforce UNAVAILABLE without a journal: the view must not invent an active count or a target
+    expect(kpi(r, "wf-act")).toBe("—");
+    expect(chipOf(r, "wf-act")).not.toBe("VERIFIED");
+    expect(byId(r, "wf-reg")!.textContent).toContain("Target roles: —");
+    // catalog: all pages of the real /v1/roles were read and shown as DEFINITIONS (not live agents)
+    const pages = calls.filter(p => p.startsWith("/v1/roles?limit=100"));
+    expect(pages).toHaveLength(Math.ceil(REAL_ROLES / 100));
+    expect(byId(r, "wf-catalog")!.textContent).toContain(`${REAL_ROLES} role DEFINITIONS`);
+    // readiness: every layer is measured over the real registry denominator
+    expect(layers(r).length).toBeGreaterThanOrEqual(8);
+    for (const n of layers(r)) expect(n.textContent, n.dataset.readinessLayer).toContain(`of ${REAL_ROLES}`);
+    expect(byId(r, "wf-fleet")!.textContent).toContain("There are no live work runs");
+    // only allow-listed read-only GETs (the bridge throws on anything else and on any POST)
+    for (const p of calls) expect(allowed(p), p).toBe(true);
+    expect(new Set(calls.filter(p => !p.startsWith("/v1/roles?")))).toEqual(new Set(["/v1/cockpit", "/v1/agents", "/v1/work-runs", "/v1/roles/status-summary"]));
+  });
+
+  it("happy path with a real journal: the cockpit becomes VERIFIED, so the target and a real active-worker count (0 for a queued run) appear", async () => {
+    seedRepo("real");
+    seedJournal();
+    const app = mkApp();
+    const {root: r} = await renderReal(injectT(app));
+    expect(kpi(r, "wf-act")).toBe("0");                                               // a QUEUED run is not an active worker
+    expect(chipOf(r, "wf-act")).toBe("EMPTY");                                        // chipFor: a VERIFIED zero is EMPTY, not "unknown"
+    expect(byId(r, "wf-reg")!.textContent).toContain(`Target roles: ${REAL_ROLES}`);
+    expect(kpi(r, "wf-reg")).toBe(String(REAL_ROLES));
+  });
+
+  it("happy path, role detail: choosing a real role reads the real GET /v1/roles/:roleId and shows that registry entry as a DEFINITION", async () => {
+    seedRepo("real");
+    const app = mkApp();
+    const first = await renderReal(injectT(app));
+    const btn = byData(first.root, "roleBtn")[0];
+    expect(btn, "a role button from the real catalog").toBeTruthy();
+    const roleId = btn.dataset.roleBtn;
+    btn.fire("click");
+    const again: N = (await renderWf(first.ctx)).node;
+    expect(first.calls).toContain(`/v1/roles/${roleId}`);
+    expect(first.allowed(`/v1/roles/${roleId}`)).toBe(true);
+    const real = (JSON.parse(fs.readFileSync(path.join(root, "registries", "role-definitions.json"), "utf8")).roles as any[]).find(x => x.roleId === roleId);
+    const detail = byId(again, "wf-detail")!;
+    expect(detail.textContent).toContain(roleId!);
+    expect(detail.textContent).toContain(real.title);
+    expect(detail.textContent).toContain(String(real.proficiencyStatus));            // the registry's own status, never promoted
+  });
+
+  it("error: the server has no role registry -> the real routes answer 503/ERROR; no role count, catalog or readiness is shown as if it were measured", async () => {
+    seedRepo("none");
+    const app = mkApp();
+    const direct = await app.inject({method: "GET", url: "/v1/roles?limit=100", headers: {"x-uasco-control-token": TOKEN, host: `127.0.0.1:${PORT}`}});
+    expect(direct.statusCode).toBe(503);
+    const {root: r} = await renderReal(injectT(app));
+    expect(kpi(r, "wf-reg")).toBe("—");
+    expect(chipOf(r, "wf-reg")).toBe("UNVERIFIED");
+    expect(layers(r)).toHaveLength(0);
+    expect(byId(r, "wf-catalog")!.textContent).not.toContain("role DEFINITIONS ·");
+    expect(r.textContent).not.toContain(`of ${REAL_ROLES}`);
+    expect(r.textContent).toContain("Role readiness is unavailable, so no counts are shown (they are not zero).");
+  });
+
+  it("error: wrong bridge token -> identity unverified and every read is a real 403; nothing measured is shown", async () => {
+    seedRepo("real");
+    const app = mkApp();
+    const {root: r} = await renderReal(injectT(app), "w".repeat(32));
+    expect(kpi(r, "wf-reg")).toBe("—");
+    expect(kpi(r, "wf-act")).toBe("—");
+    expect(chipOf(r, "wf-reg")).toBe("ERROR");
+    expect(chipOf(r, "wf-act")).not.toBe("VERIFIED");
+    expect(layers(r)).toHaveLength(0);
+    expect(r.textContent).not.toContain(`of ${REAL_ROLES}`);
+    expect(r.textContent).not.toContain(`${REAL_ROLES} role DEFINITIONS`);
+  });
+
+  it("error: the Control API process goes away -> real HTTP fetch fails; the view goes from real counts to unknown, never to 0", async () => {
+    seedRepo("real");
+    seedJournal();
+    PORT = await new Promise<number>((res, rej) => { const srv = net.createServer(); srv.once("error", rej); srv.listen(0, "127.0.0.1", () => { const a = srv.address() as {port: number}; srv.close(() => res(a.port)); }); });
+    const app = mkApp();
+    await app.listen({port: PORT, host: "127.0.0.1"});
+    const t = httpT(`http://127.0.0.1:${PORT}`);
+    const up = await renderReal(t, TOKEN, "tr");
+    expect(kpi(up.root, "wf-reg")).toBe(String(REAL_ROLES));
+    expect(kpi(up.root, "wf-act")).toBe("0");
+    await app.close();
+    const down = await renderReal(t, TOKEN, "tr");
+    expect(kpi(down.root, "wf-reg")).toBe("—");
+    expect(kpi(down.root, "wf-act")).toBe("—");
+    expect(chipOf(down.root, "wf-reg")).toBe("OFFLINE");
+    expect(chipOf(down.root, "wf-act")).not.toBe("VERIFIED");
+    expect(layers(down.root)).toHaveLength(0);
+  });
+
 });
