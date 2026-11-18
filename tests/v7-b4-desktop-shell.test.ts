@@ -591,3 +591,6 @@ registerDesktopCommandIntakeBridgeCases();
 // //TR: UASCO-T0005 shell/navigasyon kalitesi: bilinmeyen rota dürüst geri dönüşü, skip-link, palet Tab odağı, pencere başlığı ve gerçek buildServer okumaları
 import {registerShellNavT0005Cases} from "./support/shell-nav-t0005.cases.js";
 registerShellNavT0005Cases();
+// //TR: DSK-T0003 görev bağımlılık haritası + kritik yol: saf grafik vakaları ve Work görünümünün gerçek buildServer'a karşı çizimi bu kayıtlı dosyadan koşar (korunan validation.json kaydı gerekmez).
+import {registerTaskGraphCases} from "./support/task-graph.cases.js";
+registerTaskGraphCases();
