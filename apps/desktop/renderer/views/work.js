@@ -2,10 +2,11 @@
 import {planFormPanel} from "./plan-form.js";
 import {taskStatusControls} from "./task-status.js";
 import {taskRunsPanel,loadTaskRuns} from "./task-runs.js";
+import {planOverview,orderedTaskRows} from "./plan-view.js";
 import {h,panel,stateNote,emptyNote,chip,statusPill,statusLabel,badge,verificationChip,kpiTile,statePill,missionPill,timelineItem} from "../components.js";
 import {formatTime,formatCount,MISSING,missionPillKind} from "../model.js";
 import {MISSION_STATUSES,MISSION_PATH,RISK_LEVELS,RUN_EXPERTS,RUN_EXPERT_NONE,allowedNext,requiresConfirm,canStartRun,buildMissionRequest,filterMissions,taskFollowsRun,formatDateTime,deriveTaskInspector,deriveWorkTimeline,runReadiness,runReasonHintKey,runStepRows,liveRuns} from "../work-core.js";
-import {drafts,selection,trackers,field,listEditor,statusBlock,setStatus,recordPost,resetMissionDraft,focusResult} from "../forms.js";
+import {drafts,selection,trackers,field,listEditor,statusBlock,setStatus,recordPost,resetMissionDraft,focusResult,settle} from "../forms.js";
 import {performTransition,startRun,actionStatusId} from "../work-actions.js";
 import {runLinkPanel} from "./run-link.js";
 import {notVerifiedBadge,runNotVerified,missionNotVerified,axisBadges} from "../m1a.js";
@@ -21,6 +22,20 @@ const EVIDENCE_LIMIT=12;
 // //TR: Görev durumu kategorilerinin yaşam-döngüsü sırası (soldan sağa); yalnız gerçekten mission bulunan kategoriler şeritte gösterilir. Bu, arka ucun bildirmediği bir "aşama" icat etmez, yalnız gerçek mission durumlarını kategoriye göre toplar (WP-PROJECTS ile aynı sıra).
 const CATEGORY_ORDER=Object.freeze(["IDLE","WAITING","ACTIVE","ATTENTION","BLOCKED","FAILED","DONE","STOPPED","NEUTRAL"]);
 let inspectedTask=null;
+// //TR: UASCO-T0012: görev<->koşu gezinmesi. focusedRun yalnız bellekte tutulur ve yalnız SEÇİLİ mission için geçerlidir; koşu kartı bu mission'ın koşu listesinde yoksa dürüst not gösterilir, kart uydurulmaz.
+let focusedRun=null;
+export function navState(){return {inspectedTask,focusedRun}}
+export function resetNav(){inspectedTask=null;focusedRun=null}
+/** Görev tarafından koşu kartına git: kartın ayrıntısı (ve geri-bağ okuması) yüklenir, odak karta taşınır. */
+// //TR: Yeniden çizimde kabuk odağı tıklanan bağlantıya geri yükler; bu yüzden hedef (kart/denetçi) doğrudan odaklanır ve görünür kaydırılır, yoksa settle yedeğine düşülür.
+function takeTarget(ctx,id,keys){const n=ctx.doc.getElementById?.(id);if(n&&typeof n.focus==="function"){n.focus();if(typeof n.scrollIntoView==="function")n.scrollIntoView({block:"nearest"});return n}return settle(ctx,keys)}
+export async function gotoRun(ctx,missionId,runId){focusedRun={missionId,runId};await ctx.rerender();return takeTarget(ctx,`run-card-${runId}`,[`id:run-card-${runId}`,"id:run-focus-missing"])}
+/** Koşu kartından göreve dön: görev denetçisi o görevle açılır, odak denetçiye taşınır. */
+export async function gotoTask(ctx,missionId,taskId){inspectedTask={missionId,taskId};await ctx.rerender();return takeTarget(ctx,"task-inspector",["id:task-inspector",`task-${taskId}`])}
+function runIdButton(ctx,missionId,runId,where){
+  return h(ctx.doc,"button",{type:"button",class:"link-btn mono",dataset:{gotoRun:runId,gotoFrom:where,focusKey:`goto-run-${where}-${runId}`},"aria-controls":`run-card-${runId}`,title:ctx.t("nav.gotoRun"),
+    on:{click:()=>gotoRun(ctx,missionId,runId)},text:runId});
+}
 const LIVE=r=>r&&(r.state==="VERIFIED"||r.state==="STALE");
 const inputOf=()=>({projectId:drafts.mission.projectId,title:drafts.mission.title,objective:drafts.mission.objective,acceptanceCriteria:drafts.mission.criteria,riskLevel:drafts.mission.riskLevel,testCommand:drafts.mission.testCommand});
 
@@ -193,7 +208,7 @@ function linkedTasksBlock(ctx,run,linked){
   if(res.state==="VERIFIED"){
     const byId=new Map((Array.isArray(linked.tasks)?linked.tasks:[]).map(t=>[t.taskId,t]));
     body=res.links.length
-      ?h(doc,"ul",{class:"run-linked-tasks"},res.links.map(l=>{const t=byId.get(l.taskId);return h(doc,"li",{dataset:{runLinkedTask:l.taskId}},h(doc,"span",{text:t?t.title:ctx.t("run.linked.unknownTask")})," ",t&&t.status?statusPill(ctx,t.status):null," ",h(doc,"span",{class:"mono",text:l.taskId}))}))
+      ?h(doc,"ul",{class:"run-linked-tasks"},res.links.map(l=>{const t=byId.get(l.taskId);return h(doc,"li",{dataset:{runLinkedTask:l.taskId}},t&&linked.missionId?h(doc,"button",{type:"button",class:"link-btn",dataset:{gotoTask:l.taskId,focusKey:`goto-task-${run.runId}-${l.taskId}`},"aria-controls":"task-inspector",title:ctx.t("nav.gotoTask"),on:{click:()=>gotoTask(ctx,linked.missionId,l.taskId)},text:t.title}):h(doc,"span",{text:t?t.title:ctx.t("run.linked.unknownTask")})," ",t&&t.status?statusPill(ctx,t.status):null," ",h(doc,"span",{class:"mono",text:l.taskId}))}))
       :h(doc,"p",{class:"note",role:"status",dataset:{runLinked:"none"},text:ctx.t("run.linked.none")});
   }else body=h(doc,"p",{class:"note",role:"status",dataset:{runLinked:res.state==="UNAVAILABLE"?"unavailable":"error"},text:ctx.t(res.state==="UNAVAILABLE"?"run.linked.unavailable":"run.linked.error")});
   return h(doc,"div",{class:"run-linked",dataset:{runLinkedFor:run.runId}},h(doc,"h6",{text:ctx.t("run.linked.title")}),body);
@@ -212,7 +227,8 @@ export function runCard(ctx,run,linked=null){
       h(doc,"td",{text:formatDateTime(r.startedAt,lang)}),h(doc,"td",{class:"mono",text:r.durationMs===null?MISSING:ctx.t("run.steps.seconds",{s:(r.durationMs/1000).toFixed(1)})}))))),
     h(doc,"p",{class:"note",text:ctx.t("run.steps.note")})):null;
   const cps=run.checkpoints.length?h(doc,"ol",{class:"checkpoints"},run.checkpoints.map(c=>h(doc,"li",{},h(doc,"span",{text:c.name}),c.status?statusPill(ctx,c.status):null,h(doc,"time",{text:formatDateTime(c.at,lang)})))):h(doc,"p",{class:"note",text:ctx.t(run.checkpointsReported===false?"run.checkpointsNotReported":"run.noCheckpoints")});
-  return h(doc,"li",{class:"card run-card",dataset:{runId:run.runId,runStatus:run.status}},
+  const focused=focusedRun!==null&&focusedRun.runId===run.runId&&focusedRun.missionId===selection.missionId;
+  return h(doc,"li",{class:`card run-card${focused?" run-card-focused":""}`,id:`run-card-${run.runId}`,tabindex:"-1","aria-current":focused?"true":null,dataset:{runId:run.runId,runStatus:run.status,runFocused:focused?"1":"0"}},
     h(doc,"h5",{},h(doc,"span",{class:"mono",text:run.runId})," ",statusPill(ctx,run.status),runNotVerified(run)?[" ",notVerifiedBadge(ctx,"run")]:null),
     // M1a c2: iki ayrı eksen (sunucu etiketleri) yalnız ayrıntı görünümünde bilinir.
     run.delivery?h(doc,"p",{class:"panel-meta"},axisBadges(ctx,run.delivery.sourceGeneration,run.delivery.productVerification,"run")):null,
@@ -304,7 +320,7 @@ function runLinkCell(ctx,res,unk){
   const hidden=Math.max(0,res.items.length-RUNLINK_SHOWN),shown=res.items.slice(hidden),follow=taskFollowsRun(res.items).slice(hidden);
   return h(doc,"dd",{dataset:{taskField:"runLink",taskRunLinks:"linked"}},
     hidden>0?h(doc,"p",{class:"note",dataset:{runLinkMore:String(hidden)},text:ctx.t("work.task.runLink.more",{n:hidden})}):null,
-    h(doc,"ul",{class:"task-runlink-list"},shown.map((l,k)=>h(doc,"li",{dataset:{taskRunLink:l.runId,taskRunLinkGoverning:follow[k].governing?"1":"0"}},h(doc,"span",{class:"mono",text:l.runId})," ",l.status?statusPill(ctx,l.status):h(doc,"span",{class:"task-unknown",text:ctx.t("work.task.unknown")})))));
+    h(doc,"ul",{class:"task-runlink-list"},shown.map((l,k)=>h(doc,"li",{dataset:{taskRunLink:l.runId,taskRunLinkGoverning:follow[k].governing?"1":"0"}},inspectedTask?runIdButton(ctx,inspectedTask.missionId,l.runId,"inspector"):h(doc,"span",{class:"mono",text:l.runId})," ",l.status?statusPill(ctx,l.status):h(doc,"span",{class:"task-unknown",text:ctx.t("work.task.unknown")})))));
 }
 // //TR: UI-026 (A-UI026-1): "Koşu bağı" satırı, hemen altındaki görev-koşu panelinin okuduğu GET /v1/tasks/:id/runs sonucundan beslenir (ikinci okuma yok). Okuma VERIFIED değilse UNKNOWN kalır; VERIFIED ve boşsa "bağlı koşu yok"; yoksa en YENİ RUNLINK_SHOWN koşu kimliği + durum (yönetici koşu son bağlanandır ve her zaman görünür; eski bağlar "+N daha eski" notuyla sayılır).
 export const RUNLINK_SHOWN=5;
@@ -331,7 +347,7 @@ export function taskInspector(ctx,detail,runsRes,missionId,taskRuns=null){
         ...t.unknownFields.flatMap(k=>[h(doc,"dt",{text:ctx.t(`work.task.f.${k}`)}),unk(k)])));
     }
   }
-  return h(doc,"div",{class:"task-inspector",id:"task-inspector",role:"region","aria-label":ctx.t("work.task.title"),dataset:{taskInspector:sel?"open":"closed"}},h(doc,"h4",{text:ctx.t("work.task.title")}),inner);
+  return h(doc,"div",{class:"task-inspector",id:"task-inspector",tabindex:"-1",role:"region","aria-label":ctx.t("work.task.title"),dataset:{taskInspector:sel?"open":"closed"}},h(doc,"h4",{text:ctx.t("work.task.title")}),inner);
 }
 /** //TR: UI-025 görev/koşu zaman çizelgesi (salt okunur): mission oluşturma, koşu başlangıcı ve kontrol noktaları; zaman damgası olmayan olay UNKNOWN gösterilir, uydurulmaz. POST/depolama/yakınlaştırma durumu yoktur. */
 export function workTimeline(ctx,detail,runsRes){
@@ -350,17 +366,25 @@ export function workTimeline(ctx,detail,runsRes){
 }
 function taskList(ctx,tasks,missionId){
   const doc=ctx.doc;
-  return h(doc,"ul",{class:"task-list"},tasks.map(t=>{
-    const on=inspectedTask?.missionId===missionId&&inspectedTask.taskId===t.taskId;
-    return h(doc,"li",{},h(doc,"button",{type:"button",class:"link-btn",dataset:{taskInspect:t.taskId,focusKey:`task-${t.taskId}`},"aria-pressed":on?"true":"false","aria-controls":"task-inspector",
-      on:{click:()=>{inspectedTask=on?null:{missionId,taskId:t.taskId};ctx.rerender()}},text:t.title})," ",statusPill(ctx,t.status));
+  // //TR: UASCO-T0012: sıralı plan satırları; bağımlılık yalnız sunucu dependsOn döndürdüyse "#n sonra" olarak gösterilir, aksi halde hiçbir şey iddia edilmez.
+  return h(doc,"ul",{class:"task-list plan-list","aria-label":ctx.t("planview.list")},orderedTaskRows(tasks).map(r=>{
+    const t=r.task,on=inspectedTask?.missionId===missionId&&inspectedTask.taskId===t.taskId;
+    return h(doc,"li",{dataset:{planRow:String(r.n),planTask:t.taskId,planStatus:r.statusKind}},h(doc,"span",{class:"mono",text:`${r.n}.`})," ",h(doc,"button",{type:"button",class:"link-btn",dataset:{taskInspect:t.taskId,focusKey:`task-${t.taskId}`},"aria-pressed":on?"true":"false","aria-controls":"task-inspector",
+      on:{click:()=>{inspectedTask=on?null:{missionId,taskId:t.taskId};ctx.rerender()}},text:t.title})," ",t.status===MISSING?h(doc,"span",{class:"task-unknown",text:ctx.t("work.task.unknown")}):statusPill(ctx,t.status),
+      r.after===null?null:r.after.length?h(doc,"span",{class:"note",dataset:{planAfter:r.after.join(",")},text:` ${ctx.t("planview.after",{list:r.after.map(n=>typeof n==="number"?`#${n}`:n).join(", ")})}`}):null);
   }));
 }
 /** Seçili görevin koşu bölümü (görev seçili ve okuması yapılmışsa); yoksa null. */
 function taskRunsFor(ctx,m,runsRes,taskRuns){
   if(!taskRuns||inspectedTask?.missionId!==m.missionId||taskRuns.taskId!==inspectedTask.taskId)return null;
   const task=m.tasks.find(t=>t.taskId===taskRuns.taskId);
-  return task?taskRunsPanel(ctx,{task,linked:taskRuns.res,runsRes}):null;
+  return task?taskRunsPanel(ctx,{task,linked:taskRuns.res,runsRes,runLink:runId=>runIdButton(ctx,m.missionId,runId,"taskruns")}):null;
+}
+/** Odaklanan koşu bu mission'ın koşu okumasında yoksa (okuma canlı değil, liste kesik ya da başka mission) dürüst not; aksi halde null. */
+function focusMissingNote(ctx,runsRes){
+  if(!focusedRun||focusedRun.missionId!==selection.missionId)return null;
+  if(runsRes.state==="VERIFIED"&&runsRes.items.some(r=>r.runId===focusedRun.runId))return null;
+  return h(ctx.doc,"p",{class:"note note-unknown",id:"run-focus-missing",tabindex:"-1",role:"status",dataset:{runFocusMissing:focusedRun.runId},text:ctx.t(runsRes.state==="VERIFIED"?"nav.runNotListed":"nav.runsUnread",{runId:focusedRun.runId})});
 }
 function detailPanel(ctx,detail,runsRes,runDetails,evRes,project=null,taskRuns=null,runLinks=new Map(),engine=undefined){
   const doc=ctx.doc;
@@ -372,14 +396,14 @@ function detailPanel(ctx,detail,runsRes,runDetails,evRes,project=null,taskRuns=n
     h(doc,"p",{class:"panel-meta"},statusPill(ctx,m.status),badge(ctx,m.riskLevel,"badge-risk"),h(doc,"span",{class:"mono",text:m.missionId}),missionNotVerified(runsRes.state==="VERIFIED"?runsRes.items:[],m.missionId)?notVerifiedBadge(ctx,"mission"):null),
     h(doc,"p",{text:m.objective}),
     h(doc,"h4",{text:ctx.t("work.detail.criteria")}),m.acceptanceCriteria.length?h(doc,"ul",{},m.acceptanceCriteria.map(c=>h(doc,"li",{text:c}))):emptyNote(ctx,"work.detail.noCriteria"),
-    m.tasks.length?h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),taskList(ctx,m.tasks,m.missionId),taskInspector(ctx,detail,runsRes,m.missionId,taskRuns),taskStatusControls(ctx,m,inspectedTask?.missionId===m.missionId?inspectedTask.taskId:null),taskRunsFor(ctx,m,runsRes,taskRuns)):h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),h(doc,"p",{class:"note",dataset:{noTasks:m.missionId},text:ctx.t("work.detail.noTasks")})),
+    m.tasks.length?h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),planOverview(ctx,m.tasks),taskList(ctx,m.tasks,m.missionId),taskInspector(ctx,detail,runsRes,m.missionId,taskRuns),taskStatusControls(ctx,m,inspectedTask?.missionId===m.missionId?inspectedTask.taskId:null),taskRunsFor(ctx,m,runsRes,taskRuns)):h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),h(doc,"p",{class:"note",dataset:{noTasks:m.missionId},text:ctx.t("work.detail.noTasks")})),
     workTimeline(ctx,detail,runsRes),
     planFormPanel(ctx,m),
     h(doc,"h4",{text:ctx.t("work.timeline.title")}),statusTimeline(ctx,m.status),
     transitionControls(ctx,m,awaitingRun(runsRes,runDetails),runReadiness({project,mission:m}),engine),
     runLinkPanel(ctx,m),
     tl?[h(doc,"h4",{text:ctx.t("work.runtl.title")}),h(doc,"p",{class:"note",text:ctx.t("work.runtl.lead")}),tl]:null,
-    h(doc,"h4",{text:ctx.t("run.timeline")}),runsSection(ctx,runsRes,runDetails,id=>{const res=runLinks.get(id);return res?{res,tasks:detail.mission.tasks}:null}),
+    h(doc,"h4",{text:ctx.t("run.timeline")}),focusMissingNote(ctx,runsRes),runsSection(ctx,runsRes,runDetails,id=>{const res=runLinks.get(id);return res?{res,tasks:detail.mission.tasks,missionId:m.missionId}:null}),
     h(doc,"h4",{text:ctx.t("work.evidence.title")}),h(doc,"p",{class:"note",text:ctx.t("work.evidence.lead")}),evidenceSection(ctx,evRes));
 }
 
@@ -395,7 +419,10 @@ export async function render(ctx){
   if(selection.missionId){
     const [detail,runsRes,evRes]=await Promise.all([ctx.api.missionDetail(selection.missionId),ctx.api.workRuns({missionId:selection.missionId}),ctx.api.evidenceList({missionId:selection.missionId,limit:EVIDENCE_LIMIT})]);
     const runDetails=new Map();
-    if(runsRes.state==="VERIFIED")await Promise.all([...new Set([...runsRes.items.slice(0,RUN_DETAIL_LIMIT),...runsRes.items.filter(r=>r.status==="AWAITING_APPROVAL")])].map(async r=>{const d=await ctx.api.workRunDetail(r.runId);if(d.state==="VERIFIED"&&d.run)runDetails.set(r.runId,d.run)}));
+    if(focusedRun&&focusedRun.missionId!==selection.missionId)focusedRun=null;
+    // //TR: UASCO-T0012: görevden gidilen koşu ilk RUN_DETAIL_LIMIT içinde olmasa da ayrıntısı ve bağlı-görev okuması yüklenir (geri-bağ görünür).
+    const focusItem=focusedRun&&runsRes.state==="VERIFIED"?runsRes.items.filter(r=>r.runId===focusedRun.runId):[];
+    if(runsRes.state==="VERIFIED")await Promise.all([...new Set([...runsRes.items.slice(0,RUN_DETAIL_LIMIT),...runsRes.items.filter(r=>r.status==="AWAITING_APPROVAL"),...focusItem])].map(async r=>{const d=await ctx.api.workRunDetail(r.runId);if(d.state==="VERIFIED"&&d.run)runDetails.set(r.runId,d.run)}));
     const engine=await ctx.api.executors();
     const runLinks=new Map();
     await Promise.all([...runDetails.keys()].map(async id=>{runLinks.set(id,await ctx.api.runTasks(id))}));

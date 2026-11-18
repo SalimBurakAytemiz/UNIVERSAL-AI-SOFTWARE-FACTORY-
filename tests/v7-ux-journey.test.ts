@@ -110,7 +110,9 @@ async function mkCtx(getFn: (p: string) => any, lang = "en") {
   const api = apiMod.createApi({bridge, store, now: () => 1_760_000_000_000});
   const tr = (k: string, v?: any) => i18n.translate(lang, k, v);
   let rerenders = 0;
-  const ctx: any = {doc, store, api, i18n: {lang, t: tr}, t: tr, navigate: () => {}, rerender: async () => { rerenders += 1; }, settleFocus: () => {}};
+  // UASCO-T0013: decisions (approve / reject / re-approve) ask for confirmation first; the Founder confirms here unless a test says otherwise
+  const confirms: any[] = [];
+  const ctx: any = {doc, store, api, i18n: {lang, t: tr}, t: tr, navigate: () => {}, rerender: async () => { rerenders += 1; }, settleFocus: () => {}, confirm: async (o: any) => { confirms.push(o); return true; }, confirms};
   return {ctx, doc, calls, selection: forms.selection, rerenders: () => rerenders};
 }
 const fail = (p: string, status = 404) => { throw new Error(`${p}: HTTP ${status}`); };
@@ -592,7 +594,9 @@ async function mkDecisionCtx(getFn: (p: string) => any, postFn: (p: string, b: u
   const api = apiMod.createApi({bridge, store, now: () => 1_760_000_000_000});
   const tr = (k: string, v?: any) => i18n.translate(lang, k, v);
   let rerenders = 0;
-  const ctx: any = {doc, store, api, i18n: {lang, t: tr}, t: tr, navigate: () => {}, rerender: async () => { rerenders += 1; }, settleFocus: () => {}};
+  // UASCO-T0013: decisions (approve / reject / re-approve) ask for confirmation first; the Founder confirms here unless a test says otherwise
+  const confirms: any[] = [];
+  const ctx: any = {doc, store, api, i18n: {lang, t: tr}, t: tr, navigate: () => {}, rerender: async () => { rerenders += 1; }, settleFocus: () => {}, confirm: async (o: any) => { confirms.push(o); return true; }, confirms};
   dec.resetPredevDraft(null, null); for (const f of ["predev-start", "predev-approve", "predev-reject"]) { delete forms.drafts.status[f]; forms.drafts.busy[f] = false; }
   forms.selection.missionId = MSN;
   return {ctx, posts, dec, forms, rerenders: () => rerenders};
@@ -1539,12 +1543,33 @@ describe("LANE-A A-ANALYSIS-STUCK-1: an approved artefact whose phase did not ad
       if (label !== "analyse") await press(b, "analysis-step-submit");
       if (label === "re-approve") setVal(b.root, "analysis-reapprove-evidence", "ev");
       const seen: boolean[] = [], orig = b.ctx.rerender; b.ctx.rerender = async () => { seen.push(b.an.analysisBusy()); return orig(); }; // the lock state at every repaint
-      const pending = start(b); b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null});
+      // UASCO-T0013: re-approve first asks for confirmation; the mission is switched only once the POST is really in flight (the case this test covers)
+      const pending = start(b); await new Promise(r => setTimeout(r, 0)); b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null});
       const before = b.rerenders(); d.res(answer); const r = await pending;
       expect(r, label).toMatchObject({ok: false, stale: true}); expect(b.rerenders() - before, `${label}: one repaint for the dropped answer`).toBe(1);
       expect(seen, `${label}: busy at each repaint (set, then released before the stale repaint)`).toEqual([true, false]); expect(b.an.analysisBusy(), `${label}: the lock is released`).toBe(false);
       const fresh = b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null}) as N; expect(byId(fresh, "analysis-step-submit")!.attrs.get("disabled"), `${label}: a fresh panel's Analyse is enabled`).toBeUndefined();
     }
+  });
+
+  it("UASCO-T0013: re-approve asks for confirmation; cancelled or switched mission while the dialog is open posts nothing; a second press during the dialog opens no second dialog", async () => {
+    // cancelled
+    let b = await open(stuck()); await press(b, "analysis-step-submit"); setVal(b.root, "analysis-reapprove-evidence", "ev");
+    b.ctx.confirm = async (o: any) => { b.ctx.confirms.push(o); return false; };
+    expect(await b.an.submitReapprove(b.ctx, MSN)).toEqual({ok: false, cancelled: true});
+    expect(b.approves).toEqual([]); expect(b.ctx.confirms).toHaveLength(1);
+    expect(b.ctx.confirms[0].target).toContain(A1); expect(b.ctx.confirms[0].action).toBe("Approve the Requirements artefact again");
+    expect(b.an.analysisBusy()).toBe(false);
+    // no confirm function at all: fail closed
+    b = await open(stuck()); await press(b, "analysis-step-submit"); setVal(b.root, "analysis-reapprove-evidence", "ev"); delete b.ctx.confirm;
+    expect(await b.an.submitReapprove(b.ctx, MSN)).toEqual({ok: false, cancelled: true}); expect(b.approves).toEqual([]);
+    // switched mission while the dialog is open, and a second press meanwhile
+    b = await open(stuck()); await press(b, "analysis-step-submit"); setVal(b.root, "analysis-reapprove-evidence", "ev");
+    const gate = deferred(); let asks = 0; b.ctx.confirm = async () => { asks += 1; return gate.p; };
+    const first = b.an.submitReapprove(b.ctx, MSN);
+    expect(await b.an.submitReapprove(b.ctx, MSN)).toEqual({ok: false, busy: true}); expect(asks).toBe(1);
+    b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null}); gate.res(true);
+    expect(await first).toMatchObject({ok: false, stale: true}); expect(b.approves).toEqual([]); expect(b.an.analysisBusy()).toBe(false);
   });
 
   it("the typed evidence is cleared after a successful re-approve and a later stuck answer starts with an empty field", async () => {

@@ -1,8 +1,13 @@
 // //TR: Bu test UX WP-DELIVERY Teslimat & SRE görünümünün (apps/desktop/renderer/views/delivery.js) dürüstlüğünü gerçek görünüm modülü + sahte DOM ile doğrular: operasyonel sağlık (GET /health, /v1/control/status, /v1/founder-attention) ve yayın hazırlığı (GET /v1/work-runs) yalnız gerçek, allow-list'li veriden okunur; test yürütme kanıtı yoksa koşu NOT_VERIFIED kalır, asla COMPLETE/PASS/VERIFIED gösterilmez; gerçek üretim deploy BLOCKED ve canlı SRE izleme NOT_CONNECTED olarak Founder kapısını anarak gösterilir (sahte buton veya uydurma uptime/SLO/metrik yok); veri yokken ayrık dürüst durumlar gösterilir; rota WP3 gibi planned.js üzerinden devreder; delivery.* sözlüğü EN/TR'de birebirdir.
-import {describe, it, expect} from "vitest";
+import {describe, it, expect, beforeEach, afterEach} from "vitest";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import crypto from "node:crypto";
+import net from "node:net";
 import {pathToFileURL} from "node:url";
+import {WorkOsStore} from "../core/workos/store.js";
+import {buildServer} from "../apps/control-api/src/server.js";
 
 const rend = path.resolve(__dirname, "..", "apps", "desktop", "renderer");
 const load = async (...p: string[]): Promise<any> => import(pathToFileURL(path.join(rend, ...p)).href);
@@ -277,5 +282,167 @@ describe("UX WP-DELIVERY — negative paths, accessibility and locale parity", (
     // Görünümün dinamik kullandığı durum anahtarları da iki dilde vardır.
     const src = read("views", "delivery.js");
     for (const m of src.matchAll(/\bt\("([a-zA-Z0-9_.]+)"/g)) { expect(en[m[1]], m[1]).toBeTruthy(); expect(tr[m[1]], m[1]).toBeTruthy(); }
+  });
+});
+
+// //TR: UASCO-RW-053 (Teslimat & SRE dilimi): görünüm sahte köprü yerine GERÇEK Control API (buildServer) yanıtlarıyla çizilir. Test köprüsü main.mjs "uasco:api-get" işleyicisini aynen
+// taklit eder: masaüstü GET allow-list'i (control-boundary + main B4-ALLOWLIST bloğu), /health için challenge + controlProof kimlik doğrulaması ve sentezlenmiş gövde, diğer yollar için
+// kontrol token'ı ve "<yol>: HTTP <kod>" hata biçimi. Mutlu yol + gerçek hata durumları (yanlış token -> 403 + kimlik doğrulanamaz; token yapılandırılmamış -> 503).
+describe("UASCO-RW-053 — Delivery & SRE view over the REAL Control API (renderer -> real buildServer)", () => {
+  const root = path.resolve(__dirname, "..");
+  const mainSrc = fs.readFileSync(path.join(root, "apps", "desktop", "main.mjs"), "utf8");
+  const TOKEN = "t".repeat(32);
+  let PORT = 3210;
+  let tmp = "";
+  const apps: Array<{close: () => Promise<unknown>}> = [];
+  beforeEach(() => { tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "uasco-dlv-")); });
+  afterEach(async () => { PORT = 3210; for (const a of apps.splice(0)) { try { await a.close(); } catch { /* kapanış */ } } try { fs.rmSync(tmp, {recursive: true, force: true}); } catch { /* Windows */ } });
+  const dataDir = () => path.join(tmp, "data"), runtimeDir = () => path.join(tmp, "runtime");
+  function mkApp(controlToken = TOKEN) {
+    fs.mkdirSync(runtimeDir(), {recursive: true});
+    const app = buildServer({controlToken, runtime: runtimeDir(), repoRoot: tmp, dataDir: dataDir(), tenantId: "tA", port: PORT, logger: false});
+    apps.push(app); return app;
+  }
+  async function allowList() {
+    const m = /\/\/ B4-ALLOWLIST-BEGIN\n([\s\S]*?)\/\/ B4-ALLOWLIST-END/.exec(mainSrc);
+    expect(m, "main.mjs B4-ALLOWLIST block").not.toBeNull();
+    const extra = new Function(`${m![1]}\nreturn desktopExtraGetPathAllowed;`)() as (v: unknown) => boolean;
+    const boundary = await import(pathToFileURL(path.join(root, "automation", "lib", "control-boundary.mjs")).href);
+    return {allowed: (p: string) => boundary.desktopGetPathAllowed(p) || extra(p), proof: boundary.controlChallengeProof as (t: string, c: string) => string | null};
+  }
+  /** main.mjs uasco:api-get + verifyServerIdentity + api() birebir: token'ı köprü bilir (renderer bilmez). */
+  type Transport = (url: string, headers: Record<string, string>) => Promise<{statusCode: number; json: () => any}>;
+  const injectT = (app: ReturnType<typeof buildServer>): Transport => async (url, headers) => app.inject({method: "GET", url, headers});
+  // main.mjs ile aynı: gerçek HTTP fetch (sunucu kapalıysa gerçek "fetch failed" hatası -> OFFLINE)
+  const httpT = (base: string): Transport => async (url, headers) => { const r = await fetch(base + url, {headers, redirect: "error", cache: "no-store"}); const body = await r.text(); return {statusCode: r.status, json: () => JSON.parse(body)}; };
+  async function realBridge(app: ReturnType<typeof buildServer>, bridgeToken = TOKEN, transport: Transport = injectT(app)) {
+    const {allowed, proof} = await allowList();
+    const calls: string[] = [];
+    const verify = async () => {
+      const challenge = crypto.randomBytes(32).toString("hex"), expected = proof(bridgeToken, challenge);
+      if (!expected) throw new Error("CONTROL_TOKEN_NOT_CONFIGURED");
+      const r = await transport(`/health?challenge=${challenge}`, {host: `127.0.0.1:${PORT}`});
+      if (r.statusCode !== 200) throw new Error(`health: HTTP ${r.statusCode}`);
+      const h = r.json();
+      if (h.status !== "HEALTHY" || h.system !== "UNIVERSAL-AI-SOFTWARE-COMPANY-OS" || h.bindHost !== "127.0.0.1" || Number(h.port) !== PORT || h.controlProof !== expected) throw new Error("CONTROL_API_IDENTITY_UNVERIFIED");
+    };
+    const bridge = {apiGet: async (p: string) => {
+      calls.push(p);
+      if (!allowed(p)) throw new Error("INVALID_API_PATH");
+      if (p === "/health") { await verify(); return {status: "HEALTHY", system: "UNIVERSAL-AI-SOFTWARE-COMPANY-OS", serverIdentity: "VERIFIED"}; }
+      if (!p.startsWith("/v1/")) throw new Error("CONTROL_API_PATH_INVALID");
+      await verify();
+      const r = await transport(p, {"x-uasco-control-token": bridgeToken, host: `127.0.0.1:${PORT}`});
+      if (r.statusCode < 200 || r.statusCode >= 300) throw new Error(`${p}: HTTP ${r.statusCode}`);
+      return r.json();
+    }, apiPost: async (p: string) => { throw new Error(`POST must never be called (${p})`); }};
+    return {bridge, calls, allowed};
+  }
+  async function renderReal(app: ReturnType<typeof buildServer>, bridgeToken = TOKEN, lang = "en", transport?: Transport) {
+    const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js"), view = await load("views", "delivery.js");
+    const {bridge, calls, allowed} = await realBridge(app, bridgeToken, transport);
+    const doc = new D(), store = st.createStore(null);
+    const api = apiMod.createApi({bridge, store, now: () => 1_760_000_000_000});
+    const tr = (k: string, v?: any) => i18n.translate(lang, k, v);
+    const ctx: any = {doc, store, api, i18n: {lang, t: tr}, t: tr, navigate: () => {}, principal: "FOUNDER_LOCAL", rerender: async () => {}};
+    const rootNode: N = await view.render(ctx);
+    return {root: rootNode, calls, allowed};
+  }
+  const READS = ["/health", "/v1/control/status", "/v1/attention", "/v1/work-runs"];
+  let EN: Record<string, string> = {};
+  beforeEach(async () => { EN = (await load("locales", "en.js")).default; });
+  const i18nEn = (k: string) => { expect(EN[k], k).toBeTruthy(); return EN[k]; };
+  const RECORDER = "FOUNDER_LOCAL";
+  function seedRun() {
+    const store = new WorkOsStore(dataDir()), tenantId = "tA", scope = {tenantId};
+    const p = store.createProject({tenantId, orgId: "org1", name: "Delivery", environmentId: "env-dev", createdBy: RECORDER});
+    const m = store.createMission({tenantId, projectId: p.projectId, title: "Ship it", objective: "obj", acceptanceCriteria: ["ac"], riskLevel: "R1", createdBy: RECORDER});
+    for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission(scope, m.missionId, to, "go", RECORDER);
+    return store.createRun({tenantId, missionId: m.missionId, executor: {implementer: "IMPL", reviewer: "REV"}, createdBy: RECORDER});
+  }
+
+  it("happy path, empty factory: the four real sources verify; health is the identity-checked server; no runs means an honest empty note, never a fake row", async () => {
+    const app = mkApp();
+    const {root: r, calls, allowed} = await renderReal(app);
+    for (const k of ["health", "control", "attention", "runs"]) expect(sourceState(r, k), k).toBe("VERIFIED");
+    expect(byData(r, "health")!.textContent).toContain("HEALTHY · UNIVERSAL-AI-SOFTWARE-COMPANY-OS · VERIFIED");
+    expect(byData(r, "control")!.dataset.control).toBe("RUNNING");
+    expect(byData(r, "attention")!.dataset.attention).toBe("0");
+    expect(rows(r)).toHaveLength(0);
+    expect(r.textContent).toContain(i18nEn("delivery.release.none"));
+    expect(all(r).find(n => n.dataset.gate === "deploy")!.dataset.gateState).toBe("BLOCKED");
+    expect(all(r).find(n => n.dataset.gate === "sre")!.dataset.gateState).toBe("NOT_CONNECTED");
+    // only the four allow-listed read-only GETs, each exactly once; every one is admitted by the real desktop allow-list
+    expect([...calls].sort()).toEqual([...READS].sort());
+    for (const p of calls) expect(allowed(p), p).toBe(true);
+  });
+
+  it("happy path with real records: a real queued run appears with its real status and NOT_VERIFIED product; a real Global Stop shows as STOPPED with its reason", async () => {
+    const run = seedRun();
+    const app = mkApp();
+    const before = await renderReal(app);
+    const row = rows(before.root).find(n => n.dataset.deliveryRun === run.runId);
+    expect(row, "the real run is listed").toBeTruthy();
+    expect(row!.dataset.product).toBe("NOT_VERIFIED");                     // no test execution evidence -> never PRODUCT_VERIFIED
+    expect(pillsIn(row)).toContain("NOT_VERIFIED");
+    expect(pillsIn(row)).not.toContain("PRODUCT_VERIFIED");
+    expect(row!.textContent).toContain(run.runId);
+    expect(rows(before.root)).toHaveLength(1);
+    const stop = await app.inject({method: "POST", url: "/v1/control/stop", headers: {"x-uasco-control-token": TOKEN, host: `127.0.0.1:${PORT}`, "content-type": "application/json"}, payload: {reason: "maintenance window"}});
+    expect(stop.statusCode).toBe(200);
+    const after = await renderReal(app);
+    expect(byData(after.root, "control")!.dataset.control).toBe("STOPPED");
+    expect(sourceState(after.root, "control")).toBe("STOPPED");
+    expect(byData(after.root, "control")!.textContent).toContain("maintenance window");
+  });
+
+  it("error: the bridge holds a wrong token -> the server identity cannot be verified and every /v1 read is a real 403; nothing is shown as VERIFIED and no table is drawn", async () => {
+    seedRun();
+    const app = mkApp();
+    const {root: r} = await renderReal(app, "w".repeat(32));
+    for (const k of ["health", "control", "attention", "runs"]) expect(sourceState(r, k), k).toBe("FAILED");
+    expect(byData(r, "health")!.dataset.health).toBe("FAILED");
+    expect(byData(r, "health")!.textContent).not.toContain("HEALTHY");
+    expect(rows(r)).toHaveLength(0);
+    expect(pillsIn(r)).not.toContain("VERIFIED");
+    expect(pillsIn(r)).not.toContain("PRODUCT_VERIFIED");
+    // the gated panels never turn into something else because reads failed
+    expect(all(r).find(n => n.dataset.gate === "deploy")!.dataset.gateState).toBe("BLOCKED");
+    expect(all(r).find(n => n.dataset.gate === "sre")!.dataset.gateState).toBe("NOT_CONNECTED");
+  });
+
+  it("error: the server has no control token configured -> /v1 reads are a real 503 and the identity proof is absent; all sources FAILED (never VERIFIED, never 'none')", async () => {
+    const app = mkApp("");
+    const direct = await app.inject({method: "GET", url: "/v1/work-runs", headers: {"x-uasco-control-token": TOKEN, host: `127.0.0.1:${PORT}`}});
+    expect(direct.statusCode).toBe(503);
+    const {root: r} = await renderReal(app);
+    for (const k of ["health", "control", "attention", "runs"]) expect(sourceState(r, k), k).toBe("FAILED");
+    expect(r.textContent).not.toContain(i18nEn("delivery.release.none"));
+    expect(byData(r, "attention")!.dataset.attention).not.toBe("0");
+  });
+
+  it("error: the Control API process goes away -> real HTTP fetch fails and every source is OFFLINE (distinct from FAILED); Turkish strings render too", async () => {
+    seedRun();
+    // like the packaged app: the server is built for, and listens on, the same loopback port (host check and identity proof bind to it)
+    PORT = await new Promise<number>((res, rej) => { const srv = net.createServer(); srv.once("error", rej); srv.listen(0, "127.0.0.1", () => { const a = srv.address() as {port: number}; srv.close(() => res(a.port)); }); });
+    const app = mkApp();
+    await app.listen({port: PORT, host: "127.0.0.1"});
+    const t = httpT(`http://127.0.0.1:${PORT}`);
+    const up = await renderReal(app, TOKEN, "tr", t);
+    for (const k of ["health", "control", "attention", "runs"]) expect(sourceState(up.root, k), k).toBe("VERIFIED");
+    expect(rows(up.root)).toHaveLength(1);
+    await app.close();
+    const down = await renderReal(app, TOKEN, "tr", t);
+    for (const k of ["health", "control", "attention", "runs"]) expect(sourceState(down.root, k), k).toBe("OFFLINE");
+    expect(rows(down.root)).toHaveLength(0);
+    expect(pillsIn(down.root)).not.toContain("VERIFIED");
+  });
+
+  it("the desktop allow-list rejects paths this view must never read (writes, other runs routes, retired attention), so the view cannot widen its reach", async () => {
+    const {allowed} = await allowList();
+    for (const p of READS) expect(allowed(p), p).toBe(true);
+    for (const p of ["/v1/control/stop", "/v1/deploy", "/v1/sre", "/v1/work-runs/", "/v1/attention?x=1", "/health?challenge=1"]) expect(allowed(p), p).toBe(false);
+    const src = read("views", "delivery.js");
+    expect(src).not.toMatch(/\.post\(|apiPost|\bfetch\(|XMLHttpRequest|innerHTML|insertAdjacentHTML/);
   });
 });

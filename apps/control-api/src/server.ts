@@ -84,7 +84,7 @@ const DEFAULT_RUN_ROLE_ID=bindingForFunction("developer").roleId;
 // //TR: B1: buildServer testlerin ve CLI başlatmanın ortak girişidir; varsayılanlar eski sabit davranışla aynıdır (127.0.0.1 bind, token/Host kontrolü), opts yalnızca test enjeksiyonu içindir.
 // //TR: B3a: executors yalnız programatik test enjeksiyonudur; gerçek adapter yalnız UASCO_WORKOS_EXECUTOR=local-claude ile seçilir. runner.enabled (veya UASCO_WORKOS_RUNNER=1) olmadan engine tick'i başlamaz.
 // //TR: PS-1A: controlRoot provenance/ayar kontrol köküdür (paketli: userData, geliştirme: repo); studio/executorSetup yalnız test enjeksiyonudur (sahte provenance yakalayıcı, CLI keşfi, dev-run zamanlamaları, ZIP sınırları).
-export interface BuildServerOptions{controlToken?:string;runtime?:string;port?:number;dataDir?:string;repoRoot?:string;tenantId?:string;orgId?:string;actor?:string;policyContext?:Partial<ActionPolicyContext>;logger?:boolean;executors?:ExecutorPair;runner?:{enabled?:boolean;intervalMs?:number}&Partial<Pick<RunnerOptions,"leaseTtlMs"|"maxRemediations"|"maxRetries"|"retryBackoffMs"|"testTimeoutMs"|"executorTimeoutMs"|"security">>;
+export interface BuildServerOptions{controlToken?:string;runtime?:string;port?:number;dataDir?:string;repoRoot?:string;tenantId?:string;orgId?:string;actor?:string;policyContext?:Partial<ActionPolicyContext>;logger?:boolean;executors?:ExecutorPair;runner?:{enabled?:boolean;intervalMs?:number}&Partial<Pick<RunnerOptions,"leaseTtlMs"|"maxRemediations"|"maxRetries"|"retryBackoffMs"|"testTimeoutMs"|"executorTimeoutMs"|"security"|"maxConcurrentRuns">>;
   controlRoot?:string;studio?:{zipLimits?:Partial<ZipLimits>;devrun?:Partial<Pick<DevRunOptions,"startTimeOf"|"startWaitMs"|"graceMs"|"probeIntervalMs"|"stopPollMs"|"logRingBytes"|"logTailBytes"|"treeSnapshotMs">>};executorSetup?:Pick<ExecutorSetupOptions,"captureProvenance"|"findClaudeCli">;
   // //TR: SBX-GATE: sandbox yalnız programatik test enjeksiyonudur (testlerdeki sahte sağlayıcı); env/config/journal/API gövdesi/masaüstü ayarı sağlayıcı kaydedemez. Seçenek hiç verilmezse Linux'ta varsayılan LinuxUnshareSandboxProvider denenir; selfTest geçmeden hiçbir proje kodu yürütülmez (SANDBOX_UNAVAILABLE). Açıkça null/undefined verilirse sağlayıcı yoktur ve yürütme her zaman SANDBOX_UNAVAILABLE ile reddedilir.
   sandbox?:SandboxProvider|null;workosStoreOptions?:WorkOsStoreOptions}
@@ -304,12 +304,12 @@ function getRunner(){
   const ex=getExecutors();if(!ex.pair)return null;
   const r=opts.runner??{};
   workRunner=new MissionRunner({store:getStore(),dataDir:getStore().dataDir,globalStopFile:path.join(runtime,"GLOBAL_STOP.json"),envPolicyFile:path.join(repoRoot,"config","environment-policy.json"),executors:ex.pair,executionGate,
-    leaseTtlMs:r.leaseTtlMs,maxRemediations:r.maxRemediations,maxRetries:r.maxRetries,retryBackoffMs:r.retryBackoffMs,testTimeoutMs:r.testTimeoutMs,executorTimeoutMs:r.executorTimeoutMs,security:r.security});
+    leaseTtlMs:r.leaseTtlMs,maxConcurrentRuns:r.maxConcurrentRuns??(process.env.UASCO_WORKOS_MAX_CONCURRENT_RUNS===undefined?undefined:Number(process.env.UASCO_WORKOS_MAX_CONCURRENT_RUNS)),maxRemediations:r.maxRemediations,maxRetries:r.maxRetries,retryBackoffMs:r.retryBackoffMs,testTimeoutMs:r.testTimeoutMs,executorTimeoutMs:r.executorTimeoutMs,security:r.security});
   return workRunner;
 }
 const runnerEnabled=opts.runner?.enabled??process.env.UASCO_WORKOS_RUNNER==="1";
 if(runnerEnabled){
-  app.addHook("onReady",async()=>{try{const r=getRunner();if(r){r.start(opts.runner?.intervalMs??2000);audit("WORKOS_RUNNER_STARTED",{engineId:r.engineId,executor:getExecutors().reason})}else audit("WORKOS_RUNNER_NOT_STARTED",{reason:getExecutors().reason})}catch{audit("WORKOS_RUNNER_NOT_STARTED",{reason:"EXECUTOR_CONFIG_REFUSED"})}});
+  app.addHook("onReady",async()=>{try{const r=getRunner();if(r){r.start(opts.runner?.intervalMs??2000);audit("WORKOS_RUNNER_STARTED",{engineId:r.engineId,maxConcurrentRuns:r.maxConcurrentRuns,executor:getExecutors().reason})}else audit("WORKOS_RUNNER_NOT_STARTED",{reason:getExecutors().reason})}catch{audit("WORKOS_RUNNER_NOT_STARTED",{reason:"EXECUTOR_CONFIG_REFUSED"})}});
   app.addHook("onClose",async()=>{workRunner?.stop()});
 }
 app.post<{Params:{id:string}}>("/v1/missions/:id/runs",wos(async(req,reply)=>{
@@ -484,7 +484,7 @@ app.post("/v1/system/executors/local-claude/enable",wos(async(req,reply)=>{
   const r=await getExecSetup().enableLocalClaude(actor);
   if(!r.ok){audit("WORKOS_EXECUTOR_ENABLE_REFUSED",{actor,executor:"LOCAL_CLAUDE",reason:r.reason});return reply.code(409).send({error:"EXECUTOR_ENABLE_REFUSED",reason:r.reason,executors:r.status})}
   executorsCache=null;
-  if(runnerEnabled&&!workRunner){try{const rn=getRunner();if(rn){rn.start(opts.runner?.intervalMs??2000);audit("WORKOS_RUNNER_STARTED",{engineId:rn.engineId,executor:getExecutors().reason})}}catch{audit("WORKOS_RUNNER_NOT_STARTED",{reason:"EXECUTOR_CONFIG_REFUSED"})}}
+  if(runnerEnabled&&!workRunner){try{const rn=getRunner();if(rn){rn.start(opts.runner?.intervalMs??2000);audit("WORKOS_RUNNER_STARTED",{engineId:rn.engineId,maxConcurrentRuns:rn.maxConcurrentRuns,executor:getExecutors().reason})}}catch{audit("WORKOS_RUNNER_NOT_STARTED",{reason:"EXECUTOR_CONFIG_REFUSED"})}}
   audit("WORKOS_EXECUTOR_ENABLED",{actor,executor:"LOCAL_CLAUDE",source:"SETTING"});
   return {executors:r.status,active:{reason:getExecutors().reason}};
 }));

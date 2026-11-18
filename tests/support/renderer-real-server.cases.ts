@@ -18,13 +18,13 @@ const TOKEN = "t".repeat(32), WRONG = "w".repeat(32), RECORDER = "implementer@lo
 const MAIN_SRC = fs.readFileSync(path.join(REPO, "apps", "desktop", "main.mjs"), "utf8");
 const allowBlock = (() => { const a = MAIN_SRC.indexOf("// B4-ALLOWLIST-BEGIN"), b = MAIN_SRC.indexOf("// B4-ALLOWLIST-END"); if (a < 0 || b < 0) throw new Error("main.mjs B4-ALLOWLIST block not found"); return MAIN_SRC.slice(a, b); })();
 const desktopExtraGetPathAllowed = new Function(`${allowBlock}\nreturn desktopExtraGetPathAllowed;`)() as (v: unknown) => boolean;
-const desktopAllows = (p: string) => desktopGetPathAllowed(p) || desktopExtraGetPathAllowed(p);
+export const desktopAllows = (p: string) => desktopGetPathAllowed(p) || desktopExtraGetPathAllowed(p);
 // //TR: N1b: üretimde /health gövdesi sunucudan değil main.mjs'ten gelir (kimlik doğrulandıktan sonra sabit nesne); köprü bunu aynen taklit eder.
-const SYNTHETIC_HEALTH = {status: "HEALTHY", system: "UNIVERSAL-AI-SOFTWARE-COMPANY-OS", serverIdentity: "VERIFIED"};
+export const SYNTHETIC_HEALTH = {status: "HEALTHY", system: "UNIVERSAL-AI-SOFTWARE-COMPANY-OS", serverIdentity: "VERIFIED"};
 const PROJECT = "UASCO-T0006 project", MISSION = "UASCO-T0006 mission";
 
 // ---------------- minimal DOM (diğer renderer testleriyle aynı desen) ----------------
-class N {
+export class N {
   tagName: string; children: N[] = []; parent: N | null = null; attrs = new Map<string, string>(); dataset: Record<string, string> = {}; className = ""; _text = "";
   ls = new Map<string, Array<(e: unknown) => void>>(); style: Record<string, string> = {}; hidden = false; value = ""; checked = false; disabled = false;
   constructor(public doc: D, tag: string) { this.tagName = tag.toUpperCase(); }
@@ -46,14 +46,14 @@ class N {
   querySelector() { return null; }
   querySelectorAll() { return []; }
 }
-class D {
+export class D {
   body: N; constructor() { this.body = new N(this, "body"); }
   createElement(t: string) { return new N(this, t); }
   createElementNS(_ns: string, t: string) { return new N(this, t); }
   createTextNode(s: string) { const n = new N(this, "#text"); n._text = s; return n; }
   getElementById() { return null; }
 }
-const all = (n: N): N[] => n.children.flatMap(c => [c, ...all(c)]);
+export const all = (n: N): N[] => n.children.flatMap(c => [c, ...all(c)]);
 const kpiText = (r: N, key: string) => all(r).find(n => n.dataset.kpi === key)?.textContent ?? `<no kpi ${key}>`;
 // hata işaretleri: ortak durum notları (note-error / note-failed) ve Company OS kaynak durumları
 const failureMarks = (r: N) => all(r).filter(n => /\bnote-(error|failed|offline)\b/.test(n.className) || ["ERROR", "OFFLINE"].includes(n.dataset.companyState ?? "")).map(n => `${n.className}|${n.dataset.companyState ?? ""}`);
