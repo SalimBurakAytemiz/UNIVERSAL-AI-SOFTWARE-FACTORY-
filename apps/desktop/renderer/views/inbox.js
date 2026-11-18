@@ -10,6 +10,8 @@ import {completeNotOffered} from "./work.js";
 import {deriveApprovalRequired} from "../approval-core.js";
 import {ATTENTION_KINDS,attentionSummary} from "../attention-core.js";
 import {attentionNotes} from "./attention-notes.js";
+import {approvalQueuePanel} from "./approval-queue.js";
+import {buildApprovalQueue,predevCandidates} from "../approval-queue-core.js";
 
 // //TR: Metin alanlarını güvenli biçimde sınırlar (API verisi asla sayı/HTML'e dönüştürülmez; boş/geçersiz => null, görünüm "—" veya dürüst durum gösterir).
 const str=(v,max=300)=>typeof v==="string"&&v.length?v.slice(0,max):null;
@@ -185,10 +187,15 @@ export async function render(ctx){
   // M1a c2: teslim kararı bekleyen koşuların ayrıntısı (iki eksen + teslim görünümü) yalnız sunucudan okunur.
   const runDetails=new Map();
   if(missions.state==="VERIFIED"&&runs.state==="VERIFIED")await Promise.all(deriveInbox(missions.items,runs.items).filter(it=>it.runId).slice(0,10).map(async it=>{const d=await ctx.api.workRunDetail(it.runId);if(d.state==="VERIFIED"&&d.run)runDetails.set(it.runId,d.run)}));
+  // //TR: Final Approval Center: pre-dev taslakları yalnız uygun durumdaki mission'lar için (sınırlı sayıda) GET /v1/predev/:id ile okunur; okunamayan sayılır, uydurulmaz.
+  const predev=new Map(),cand=missions.state==="VERIFIED"?predevCandidates(missions.items):{ids:[],skipped:0};
+  await Promise.all(cand.ids.map(async id=>{let r;try{r=await ctx.api.predev(id)}catch{r={state:"ERROR",predev:null}}predev.set(id,r)}));
+  const queue=buildApprovalQueue({missions,runs,attention:att,predev,predevSkipped:cand.skipped});
   const kinds={decisions:decisionsKind(missions,runs),approvals:approvalsKind(c,a),attention:attentionKind(att),alerts:alertsKind(c)};
   return h(doc,"div",{class:"view view-inbox"},
     header(ctx),
     sourceStrip(ctx,kinds),
+    approvalQueuePanel(ctx,queue),
     alertsPanel(ctx,c),
     panel(ctx,{titleKey:"inbox.decisions",id:"inbox-decisions",className:"inbox-section"},decisionsBody(ctx,missions,runs,runDetails)),
     requiredPanel(ctx,deriveApprovalRequired({cockpit:c,missions,runs})),
