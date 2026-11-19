@@ -3,6 +3,7 @@ import {planFormPanel} from "./plan-form.js";
 import {taskStatusControls} from "./task-status.js";
 import {taskRunsPanel,loadTaskRuns} from "./task-runs.js";
 import {planOverview,orderedTaskRows} from "./plan-view.js";
+import {taskGraphSection,loadTaskGraph,isTaskGraphOpen} from "./task-graph.js";
 import {h,panel,stateNote,emptyNote,chip,statusPill,statusLabel,badge,verificationChip,kpiTile,statePill,missionPill,timelineItem} from "../components.js";
 import {formatTime,formatCount,MISSING,missionPillKind} from "../model.js";
 import {MISSION_STATUSES,MISSION_PATH,RISK_LEVELS,RUN_EXPERTS,RUN_EXPERT_NONE,allowedNext,requiresConfirm,canStartRun,buildMissionRequest,filterMissions,taskFollowsRun,formatDateTime,deriveTaskInspector,deriveWorkTimeline,runReadiness,runReasonHintKey,runStepRows,liveRuns} from "../work-core.js";
@@ -13,6 +14,7 @@ import {notVerifiedBadge,runNotVerified,missionNotVerified,axisBadges} from "../
 import {testResultOf} from "../work-core.js";
 import {canOfferComplete} from "../delivery-core.js";
 import {runEngineBlock} from "./run-engine.js";
+import {runDiffBlock} from "./run-diff.js";
 import {BOARD_LAYOUTS,boardLayout,setBoardLayout,boardColumns} from "../kanban-core.js";
 
 const FORM="mission";
@@ -248,7 +250,7 @@ export function runCard(ctx,run,linked=null){
       ...(run.status==="RETRY_SCHEDULED"?[h(doc,"dt",{text:ctx.t("run.retryScheduledFor")}),h(doc,"dd",{dataset:{runRetryAt:run.retryAt??""},text:formatDateTime(run.retryAt,lang)})]:[]),
       // SBX-GATE: BLOCKED/FAILED nedeni dürüstçe gösterilir; SANDBOX_UNAVAILABLE için kodun yanında açıklama vardır.
       ...(run.reason?[h(doc,"dt",{text:ctx.t("run.reason")}),h(doc,"dd",{dataset:{runReason:run.reason},text:run.reason==="SANDBOX_UNAVAILABLE"?`SANDBOX_UNAVAILABLE — ${ctx.t("run.reason.SANDBOX_UNAVAILABLE")}`:runReasonHintKey(run.reason)?`${run.reason} — ${ctx.t(runReasonHintKey(run.reason))}`:run.reason})]:[])),
-    linked?linkedTasksBlock(ctx,run,linked):null,h(doc,"h6",{text:ctx.t("run.checkpoints")}),cps,steps?h(doc,"h6",{text:ctx.t("run.steps.title")}):null,steps,h(doc,"h6",{text:ctx.t("run.evidence")}),ev);
+    linked?linkedTasksBlock(ctx,run,linked):null,runDiffBlock(ctx,run),h(doc,"h6",{text:ctx.t("run.checkpoints")}),cps,steps?h(doc,"h6",{text:ctx.t("run.steps.title")}):null,steps,h(doc,"h6",{text:ctx.t("run.evidence")}),ev);
 }
 // //TR: A-FLOW-GAP-2: test sonucu satırı; sunucunun kuralından türeyen tür + kesin neden kodu. Genel NOT_VERIFIED rozeti (Founder kararı) değişmez, bu satır nedenini doğru söyler.
 function testResultRow(ctx,run){
@@ -386,7 +388,7 @@ function focusMissingNote(ctx,runsRes){
   if(runsRes.state==="VERIFIED"&&runsRes.items.some(r=>r.runId===focusedRun.runId))return null;
   return h(ctx.doc,"p",{class:"note note-unknown",id:"run-focus-missing",tabindex:"-1",role:"status",dataset:{runFocusMissing:focusedRun.runId},text:ctx.t(runsRes.state==="VERIFIED"?"nav.runNotListed":"nav.runsUnread",{runId:focusedRun.runId})});
 }
-function detailPanel(ctx,detail,runsRes,runDetails,evRes,project=null,taskRuns=null,runLinks=new Map(),engine=undefined){
+function detailPanel(ctx,detail,runsRes,runDetails,evRes,project=null,taskRuns=null,runLinks=new Map(),engine=undefined,graphRes=null){
   const doc=ctx.doc;
   if(detail.state!=="VERIFIED")return panel(ctx,{titleKey:"work.detail",id:"work-detail"},stateNote(ctx,detail.state));
   const m=detail.mission;
@@ -396,7 +398,7 @@ function detailPanel(ctx,detail,runsRes,runDetails,evRes,project=null,taskRuns=n
     h(doc,"p",{class:"panel-meta"},statusPill(ctx,m.status),badge(ctx,m.riskLevel,"badge-risk"),h(doc,"span",{class:"mono",text:m.missionId}),missionNotVerified(runsRes.state==="VERIFIED"?runsRes.items:[],m.missionId)?notVerifiedBadge(ctx,"mission"):null),
     h(doc,"p",{text:m.objective}),
     h(doc,"h4",{text:ctx.t("work.detail.criteria")}),m.acceptanceCriteria.length?h(doc,"ul",{},m.acceptanceCriteria.map(c=>h(doc,"li",{text:c}))):emptyNote(ctx,"work.detail.noCriteria"),
-    m.tasks.length?h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),planOverview(ctx,m.tasks),taskList(ctx,m.tasks,m.missionId),taskInspector(ctx,detail,runsRes,m.missionId,taskRuns),taskStatusControls(ctx,m,inspectedTask?.missionId===m.missionId?inspectedTask.taskId:null),taskRunsFor(ctx,m,runsRes,taskRuns)):h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),h(doc,"p",{class:"note",dataset:{noTasks:m.missionId},text:ctx.t("work.detail.noTasks")})),
+    m.tasks.length?h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),planOverview(ctx,m.tasks),taskList(ctx,m.tasks,m.missionId),taskGraphSection(ctx,m.missionId,graphRes),taskInspector(ctx,detail,runsRes,m.missionId,taskRuns),taskStatusControls(ctx,m,inspectedTask?.missionId===m.missionId?inspectedTask.taskId:null),taskRunsFor(ctx,m,runsRes,taskRuns)):h(doc,"div",{},h(doc,"h4",{text:ctx.t("work.detail.tasks")}),h(doc,"p",{class:"note",dataset:{noTasks:m.missionId},text:ctx.t("work.detail.noTasks")})),
     workTimeline(ctx,detail,runsRes),
     planFormPanel(ctx,m),
     h(doc,"h4",{text:ctx.t("work.timeline.title")}),statusTimeline(ctx,m.status),
@@ -427,7 +429,9 @@ export async function render(ctx){
     const runLinks=new Map();
     await Promise.all([...runDetails.keys()].map(async id=>{runLinks.set(id,await ctx.api.runTasks(id))}));
     const taskRuns=inspectedTask?.missionId===selection.missionId?{taskId:inspectedTask.taskId,res:await loadTaskRuns(ctx,inspectedTask.taskId,inspectedTask.missionId)}:null;
-    detailNode=detailPanel(ctx,detail,runsRes,runDetails,evRes,detail.state==="VERIFIED"?(projects.find(p=>p.projectId===detail.mission.projectId)??null):null,taskRuns,runLinks,engine);
+    // //TR: DSK-T0003: bağımlılık haritası yalnız açıkken GET /v1/missions/:id/tasks okur.
+    const graphRes=isTaskGraphOpen(selection.missionId)?await loadTaskGraph(ctx,selection.missionId):null;
+    detailNode=detailPanel(ctx,detail,runsRes,runDetails,evRes,detail.state==="VERIFIED"?(projects.find(p=>p.projectId===detail.mission.projectId)??null):null,taskRuns,runLinks,engine,graphRes);
   }
   // //TR: Premium başlık (hero): göz üstü etiket + başlık + alt başlık + dürüst kaynak çipi/kapsam. Mevcut h1#view-title korunur (odak hedefi).
   const header=h(doc,"div",{class:"hero"},
