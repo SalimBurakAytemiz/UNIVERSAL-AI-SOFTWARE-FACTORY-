@@ -146,4 +146,6 @@ export interface WorkRun {
   // M1a c2: en son DELIVERY_ARTIFACT_PREPARED kaydı ve (varsa) tek SOURCE_DELIVERY_ACCEPTED kaydı; yalnız journal girdilerinden (replay ile aynı değer) set edilir.
   deliveryArtifact?: DeliveryArtifactRecord;
   sourceDelivery?: SourceDeliveryAcceptance;
+  // DSK-T0008: journal time of the run's FIRST lease acquisition (replay sets it from the ACQUIRE entry; never written directly). Daily real-model run limit counts runs by this value.
+  firstLeasedAt?: string;
 }
