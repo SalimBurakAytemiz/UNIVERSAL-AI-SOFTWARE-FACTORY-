@@ -7,6 +7,9 @@ import crypto from "node:crypto";
 import {buildServer} from "../../apps/control-api/src/server.js";
 import {packagedServerOptions, packagedControlRoot} from "../../apps/control-api/src/packaged-entry.js";
 import {ensureClaudeProfile, claudeProfileDir} from "../../core/workos/claude-profiles.js";
+import {WorkOsStore} from "../../core/workos/store.js";
+import {activateGlobalStop} from "../../automation/lib/global-stop.mjs";
+import {spawnGitSync} from "../../automation/lib/git-isolation.mjs";
 
 export function registerDskRunnerPassiveCases(): void {
  describe("DSK-T0008 P-A passive runner (MANUAL start mode)", () => {
@@ -14,7 +17,7 @@ export function registerDskRunnerPassiveCases(): void {
   const apps: Array<{close: () => Promise<unknown>}> = [];
   afterEach(async () => { while (apps.length) await apps.pop()!.close(); });
 
-  async function mk(o: {mode?: "AUTO" | "MANUAL"; kind?: "FAKE" | "LOCAL_CLAUDE"; ready?: boolean} = {}) {
+  async function mk(o: {mode?: "AUTO" | "MANUAL"; kind?: "FAKE" | "LOCAL_CLAUDE"; ready?: boolean; intervalMs?: number; policyContext?: Record<string, boolean>; counter?: {implement: number}} = {}) {
     const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "dsk-pa-"));
     const runtime = path.join(tmp, "runtime"), control = path.join(tmp, "control"), data = path.join(tmp, "data");
     for (const d of [runtime, control]) fs.mkdirSync(d, {recursive: true});
@@ -25,16 +28,31 @@ export function registerDskRunnerPassiveCases(): void {
       for (const role of ["implementer", "reviewer"] as const) { ensureClaudeProfile(control, role, {forbiddenRoots: [data]}); fs.writeFileSync(path.join(claudeProfileDir(control, role), ".credentials.json"), ""); }
     }
     const {FakeExecutors} = await import("../../core/workos/executors.js");
-    const pair = {...new FakeExecutors({implement: () => ({files: {"f.txt": "x\n"}}), review: () => ({verdict: "CLEAN"})}).pair(), kind: o.kind ?? "LOCAL_CLAUDE"};
+    const counter = o.counter ?? {implement: 0};
+    const pair = {...new FakeExecutors({implement: () => { counter.implement += 1; return {files: {"feature.txt": "ok\n"}}; }, review: () => ({verdict: "CLEAN"})}).pair(), kind: o.kind ?? "LOCAL_CLAUDE"};
     const app = buildServer({controlToken: TOKEN, runtime, dataDir: data, controlRoot: control, tenantId: "tA", port: 3210, logger: false, executors: pair as never,
-      executorSetup: {findClaudeCli: () => process.execPath, captureProvenance: async () => ({ok: true})}, runner: {enabled: true, intervalMs: 600_000, startMode: o.mode ?? "MANUAL"}} as never);
+      executorSetup: {findClaudeCli: () => process.execPath, captureProvenance: async () => ({ok: true})}, sandbox: null, ...(o.policyContext ? {policyContext: o.policyContext} : {}),
+      runner: {enabled: true, intervalMs: o.intervalMs ?? 600_000, startMode: o.mode ?? "MANUAL", retryBackoffMs: [0, 0]}} as never);
     apps.push(app); await app.ready();
     const auth = {"x-uasco-control-token": TOKEN, host: "127.0.0.1:3210", "content-type": "application/json"};
     const events = () => { const f = path.join(runtime, "control-api-events.jsonl"); return fs.existsSync(f) ? fs.readFileSync(f, "utf8").split("\n").filter(Boolean).map(l => JSON.parse(l)).map(e => String(e.event ?? e.type ?? "")) : []; };
     const runner = async () => (await app.inject({method: "GET", url: "/v1/system/executors", headers: auth})).json().runner;
     const start = async (payload: unknown = {}) => app.inject({method: "POST", url: "/v1/system/runner/start", headers: auth, payload: JSON.stringify(payload)});
     const enable = async () => app.inject({method: "POST", url: "/v1/system/executors/local-claude/enable", headers: auth, payload: "{}"});
-    return {app, events, runner, start, enable};
+    // a real git project + authorized mission + queued run, written through the same journal the server reads
+    const queueRun = () => {
+      const repo = path.join(tmp, `src-${crypto.randomBytes(3).toString("hex")}`); fs.mkdirSync(repo, {recursive: true});
+      const git = (a: string[]) => { const r = spawnGitSync(repo, a); if (r.status !== 0) throw new Error(String(r.stderr)); };
+      git(["init", "-q", "-b", "main"]); fs.writeFileSync(path.join(repo, "test.mjs"), "process.exit(0);\n"); git(["add", "-A"]); git(["-c", "user.name=S", "-c", "user.email=s@local.invalid", "commit", "-q", "-m", "seed"]);
+      const st = new WorkOsStore(data);
+      const p = st.createProject({tenantId: "tA", orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL", repository: {path: repo}, testCommand: ["node", "test.mjs"]});
+      const m = st.createMission({tenantId: "tA", projectId: p.projectId, title: "F", objective: "feature.txt says ok", acceptanceCriteria: ["tests pass"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
+      for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) st.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
+      return st.createRun({tenantId: "tA", missionId: m.missionId, executor: {implementer: pair.implementer.identity, reviewer: pair.reviewer.identity}, createdBy: "FOUNDER_LOCAL"}).runId;
+    };
+    const runOf = (id: string) => new WorkOsStore(data).getRun({tenantId: "tA"}, id)!;
+    const stop = () => activateGlobalStop(path.join(runtime, "GLOBAL_STOP.json"), "test stop", "FOUNDER");
+    return {app, events, runner, start, enable, queueRun, runOf, stop, counter, control};
   }
 
   it("the packaged app runs the runner in MANUAL start mode", () => {
@@ -76,6 +94,74 @@ export function registerDskRunnerPassiveCases(): void {
     expect(r.statusCode).toBe(200); expect(r.json().runner).toMatchObject({state: "ACTIVE", startMode: "MANUAL", maxConcurrentRuns: 1});
     expect(s.events()).toContain("WORKOS_RUNNER_STARTED");
     expect((await s.start()).json().runner.state).toBe("ACTIVE");
+  });
+
+  const until = async (cond: () => boolean, ms = 60_000) => { const t0 = Date.now(); while (!cond()) { if (Date.now() - t0 > ms) throw new Error("timeout"); await new Promise(r => setTimeout(r, 100)); } };
+
+  it("PASSIVE never leases or executes a queued run, even with the executor enabled", async () => {
+    const s = await mk({ready: true, intervalMs: 250});
+    expect((await s.enable()).statusCode).toBe(200);
+    const id = s.queueRun();
+    await new Promise(r => setTimeout(r, 1200));
+    expect(s.runOf(id)).toMatchObject({status: "QUEUED", leaseId: null, attempt: 0});
+    expect(s.counter.implement).toBe(0);
+  });
+
+  it("Global Stop: start is refused with 423 and the runner stays PASSIVE", async () => {
+    const s = await mk({ready: true});
+    expect((await s.enable()).statusCode).toBe(200);
+    s.stop();
+    const r = await s.start();
+    expect(r.statusCode).toBe(423); expect(r.json().error).toBe("GLOBAL_STOP_ACTIVE");
+    expect((await s.runner()).state).toBe("PASSIVE");
+    expect(s.events()).not.toContain("WORKOS_RUNNER_STARTED");
+  });
+
+  it("a denied action policy refuses start with 403 (write gate), nothing starts", async () => {
+    const s = await mk({ready: true, policyContext: {scopeAllowed: false}});
+    const r = await s.start();
+    expect(r.statusCode).toBe(403); expect(r.json().error).toBe("ACTION_DENIED");
+    expect((await s.runner()).state).toBe("PASSIVE");
+  });
+
+  it("an unverified launcher (provenance hash no longer matches) refuses start; one missing sign-in names only that role", async () => {
+    const s = await mk({ready: true});
+    expect((await s.enable()).statusCode).toBe(200);
+    const pf = path.join(s.control, ".ai", "runtime", "PROVIDER_PROVENANCE.json"), prov = JSON.parse(fs.readFileSync(pf, "utf8"));
+    fs.writeFileSync(pf, JSON.stringify({...prov, claude: {...prov.claude, launcherSha256: "0".repeat(64)}}));
+    const r = await s.start();
+    expect(r.statusCode).toBe(409); expect(r.json().blockers).toEqual(["IMPLEMENTER_NOT_READY", "REVIEWER_NOT_READY"]);
+    const s2 = await mk({ready: true});
+    expect((await s2.enable()).statusCode).toBe(200);
+    fs.rmSync(path.join(claudeProfileDir(s2.control, "reviewer"), ".credentials.json"));
+    const r2 = await s2.start();
+    expect(r2.statusCode).toBe(409); expect(r2.json().blockers).toEqual(["REVIEWER_NOT_READY"]);
+    expect((await s2.runner()).state).toBe("PASSIVE");
+  });
+
+  it("no verified sandbox: start is allowed, but the run's tests are NOT_EXECUTED and it stops at AWAITING_APPROVAL (never SUCCEEDED)", { timeout: 120_000 }, async () => {
+    const s = await mk({ready: true, intervalMs: 250});
+    expect((await s.app.inject({method: "GET", url: "/v1/system/executors", headers: {"x-uasco-control-token": TOKEN, host: "127.0.0.1:3210"}})).json().sandbox.state).toBe("UNAVAILABLE");
+    expect((await s.enable()).statusCode).toBe(200);
+    const id = s.queueRun();
+    expect((await s.start()).statusCode).toBe(200);
+    await until(() => ["AWAITING_APPROVAL", "SUCCEEDED", "FAILED", "BLOCKED"].includes(s.runOf(id).status));
+    const run = s.runOf(id);
+    expect(run.status).toBe("AWAITING_APPROVAL");
+    expect(run.evidence.map(e => e.kind)).toContain("VERIFY_TESTS_NOT_EXECUTED");
+    expect(run.completion).toBeUndefined();
+    expect(s.counter.implement).toBe(1);
+  });
+
+  it("cancellation: after start, Global Stop cancels a queued run before any executor call", { timeout: 120_000 }, async () => {
+    const s = await mk({ready: true, intervalMs: 250});
+    expect((await s.enable()).statusCode).toBe(200);
+    expect((await s.start()).statusCode).toBe(200);
+    s.stop();
+    const id = s.queueRun();
+    await until(() => s.runOf(id).status !== "QUEUED");
+    expect(s.runOf(id).status).toMatch(/^(CANCELLED|CANCELLING)$/);
+    expect(s.counter.implement).toBe(0);
   });
 
   it("AUTO (default) keeps today's behaviour: started at boot, and start is refused as RUNNER_NOT_MANUAL", async () => {
