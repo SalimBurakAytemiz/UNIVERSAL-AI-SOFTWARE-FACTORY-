@@ -1,0 +1,70 @@
+# //TR: Bu korunan teşhis workflow'u yalnız elle (workflow_dispatch) ve yalnız v7/integration'dan çalışır: CLAUDE_CODE_OAUTH_TOKEN'ın depo kapsamında (environment yok) ve 'uasco-review' environment kapsamında var olup olmadığını ve aynı sabitlenmiş claude-code-action ile tek turluk bir doğrulama denemesinin sonucunu yalnız sabit kodlarla yazar. Sırrın değeri, öneki, uzunluğu, özeti veya parmak izi asla yazdırılmaz, saklanmaz, yüklenmez ya da hash'lenmez; artifact yoktur.
+# How to read the two summary lines "<scope> <presence> <code> <httpStatus>":
+#   repo-scope REVIEWER_OK + env-scope AUTH_* 401  -> the uasco-review environment secret is stale and shadows the repository secret.
+#   both AUTH_* 401                                -> token or integration issue (see anthropics/claude-code-action#1613 and #1614).
+#   env-scope SECRET_ABSENT                        -> the environment has no such secret; ai-review uses the repository secret.
+# REVIEWER_OK means a schema-valid structured output was returned; subtype=success with is_error=true is an error, never OK.
+name: UASCO OAuth Diagnose
+on:
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: uasco-oauth-diagnose
+  cancel-in-progress: false
+jobs:
+  repo-scope:
+    # No environment: only a repository (or organization) secret can be seen here.
+    if: github.ref == 'refs/heads/v7/integration'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions: {contents: read}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: {node-version: "24"}
+      # Presence only: the expression yields the string true or false; the value never reaches a shell, a file or the log.
+      - id: presence
+        env: {SECRET_PRESENT: "${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}"}
+        run: echo "present=$SECRET_PRESENT" >> "$GITHUB_OUTPUT"
+      # A minimal probe (at most 3 turns: --json-schema answers through a tool call) through the same pinned action and token input as ai-review, with a tiny --json-schema like the real run. Subscription OAuth, no API key.
+      - id: probe
+        if: steps.presence.outputs.present == 'true'
+        continue-on-error: true
+        uses: anthropics/claude-code-action@db77d4d3c98f3f6380e7cd45ffba2342a3dbde3c # v1.0.254
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          prompt: "Return {\"ok\": true}."
+          claude_args: "--json-schema '{\"type\":\"object\",\"properties\":{\"ok\":{\"type\":\"boolean\"}},\"required\":[\"ok\"],\"additionalProperties\":false}' --allowedTools Read --disallowedTools Bash,Edit,Write,MultiEdit,NotebookEdit,WebFetch,WebSearch,Task --max-turns 3"
+      - if: always()
+        env: {PROBE_SCOPE: repo-scope, SECRET_PRESENT: "${{ steps.presence.outputs.present }}", EXECUTION_FILE: "${{ steps.probe.outputs.execution_file }}"}
+        run: node scripts/ci/uasco-review/oauth-diagnose.mjs
+
+  env-scope:
+    # The same probe in the environment ai-review uses: an environment secret of the same name shadows the repository secret here.
+    if: github.ref == 'refs/heads/v7/integration'
+    runs-on: ubuntu-latest
+    environment: uasco-review
+    timeout-minutes: 10
+    permissions: {contents: read}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: {node-version: "24"}
+      - id: presence
+        env: {SECRET_PRESENT: "${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}"}
+        run: echo "present=$SECRET_PRESENT" >> "$GITHUB_OUTPUT"
+      - id: probe
+        if: steps.presence.outputs.present == 'true'
+        continue-on-error: true
+        uses: anthropics/claude-code-action@db77d4d3c98f3f6380e7cd45ffba2342a3dbde3c # v1.0.254
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          prompt: "Return {\"ok\": true}."
+          claude_args: "--json-schema '{\"type\":\"object\",\"properties\":{\"ok\":{\"type\":\"boolean\"}},\"required\":[\"ok\"],\"additionalProperties\":false}' --allowedTools Read --disallowedTools Bash,Edit,Write,MultiEdit,NotebookEdit,WebFetch,WebSearch,Task --max-turns 3"
+      - if: always()
+        env: {PROBE_SCOPE: env-scope, SECRET_PRESENT: "${{ steps.presence.outputs.present }}", EXECUTION_FILE: "${{ steps.probe.outputs.execution_file }}"}
+        run: node scripts/ci/uasco-review/oauth-diagnose.mjs

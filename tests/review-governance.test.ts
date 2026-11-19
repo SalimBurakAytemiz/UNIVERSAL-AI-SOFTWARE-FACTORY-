@@ -11,6 +11,8 @@ registerAutonomousAuthorityCases();
 import {spawnSync} from "node:child_process";
 describe("UASCO Independent Review gate",{timeout:180000},()=>{
   it("passes every scenario of the review-gate proof",()=>{const r=spawnSync(process.execPath,["scripts/ci/uasco-review/review-gate.proof.mjs"],{encoding:"utf8",timeout:170000});expect(r.status,r.stdout+r.stderr).toBe(0);const line=r.stdout.trim().split(/\r?\n/).pop()??"";expect(line).toMatch(/^UASCO_REVIEW_PROOF: PASS (\d+)\/\1$/);expect(Number(line.match(/PASS (\d+)/)?.[1])).toBeGreaterThanOrEqual(80)});
+  // //TR: uasco-oauth-diagnose workflow'u ve tek satırlık sabit kod çıktısı için ağsız kanıt.
+  it("passes every scenario of the OAuth diagnose proof",()=>{const r=spawnSync(process.execPath,["scripts/ci/uasco-review/oauth-diagnose.proof.mjs"],{encoding:"utf8",timeout:60000});expect(r.status,r.stdout+r.stderr).toBe(0);const line=r.stdout.trim().split(/\r?\n/).pop()??"";expect(line).toMatch(/^UASCO_OAUTH_DIAG_PROOF: PASS (\d+)\/\1$/);expect(Number(line.match(/PASS (\d+)/)?.[1])).toBeGreaterThanOrEqual(13)});
 });
 
 // //TR: A-Z üretim hattı kaydı + dispatcher entegrasyonu (gerçek LANES.json, gerçek dispatch.mjs, geçici git remote) bu kayıtlı dosyadan çalışır; korunan validation.json kaydı gerektirmez.
