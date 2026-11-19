@@ -14,7 +14,9 @@ import {evaluateMergeGate, parseBinding, normPath, INVISIBLE_RE} from "../merge-
 export const EXIT = {AUTO_MERGE: 0, BLOCK: 2, INTERNAL_ERROR: 3, FOUNDER_REQUIRED: 4};
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, "..", "..", "..");
-const TASK_LINE_RE = /^UASCO-TASK: ([A-Z0-9]+-T\d{4}(?:\.[a-z0-9]+)?)\s*$/;
+// The id must be spelled exactly as in task-index.json (case-sensitive); the index uses both ".a" and ".A" subtask suffixes (e.g. UASCO-T0016.A,
+// V3-T1012.a, V3-T1033.E), so both are parsed; an id that is not in the index still fails closed as TASK_UNKNOWN.
+const TASK_LINE_RE = /^UASCO-TASK: ([A-Z0-9]+-T\d{4}(?:\.[A-Za-z0-9]+){0,2})\s*$/;
 // The reviewer's attestation for the exceptions code cannot see (spend, new account/credential, production operation, authority widening).
 const ATTEST_RE = /^AUTONOMY-EXCEPTIONS: (none|[A-Z_]{1,32}(?:,[A-Z_]{1,32})*)\s*$/;
 // Matrix statuses that count as delivered for dependency purposes, and statuses that are never picked as new work.
