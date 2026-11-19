@@ -364,7 +364,18 @@ export function mapExecutors(raw){
   }).filter(Boolean);
   // //TR: LANE-A A-FLOW-3: `active.reason` sunucunun şu an KULLANDIĞI yürütücüdür (LOCAL_CLAUDE ya da EXECUTOR_NOT_CONFIGURED/EXECUTOR_UNKNOWN/...); desen dışı ya da yoksa null (uydurulmaz).
   const ar=isObj(raw.active)&&typeof raw.active.reason==="string"&&/^[A-Z][A-Z0-9_]{0,63}$/.test(raw.active.reason)?raw.active.reason:null;
-  return {state:"VERIFIED",items,profiles:mapClaudeProfiles(raw.claudeProfiles),sandbox:mapSandbox(raw.sandbox),active:ar,readiness:(items.find(i=>i.id==="LOCAL_CLAUDE")??{}).readiness??null};
+  return {state:"VERIFIED",items,profiles:mapClaudeProfiles(raw.claudeProfiles),sandbox:mapSandbox(raw.sandbox),active:ar,readiness:(items.find(i=>i.id==="LOCAL_CLAUDE")??{}).readiness??null,runner:mapRunnerState(raw.runner)};
+}
+// //TR: DSK-T0008 P-A: GET /v1/system/executors runner -> {state,startMode,reason,maxConcurrentRuns}; bilinmeyen biçim null (arayüz BİLİNMİYOR der, ACTIVE uydurulmaz).
+export const RUNNER_STATES=Object.freeze(["DISABLED","PASSIVE","ACTIVE","NOT_STARTED"]);
+export const RUNNER_START_PATH="/v1/system/runner/start";
+/** Başlat eylemi yalnız runner PASSIVE iken ve motor hazırlığı READY iken sunulur (sunucu aynı koşulu ayrıca uygular; 409 dürüstçe gösterilir). */
+export const canStartRunner=exec=>Boolean(exec)&&exec.state==="VERIFIED"&&exec.runner!=null&&exec.runner.state==="PASSIVE"&&engineVerdict(exec).kind==="READY";
+export function mapRunnerState(raw){
+  if(!isObj(raw)||!RUNNER_STATES.includes(raw.state)||!["AUTO","MANUAL"].includes(raw.startMode))return null;
+  const reason=typeof raw.reason==="string"&&/^[A-Z][A-Z0-9_:]{0,119}$/.test(raw.reason)?raw.reason:null;
+  const max=Number.isInteger(raw.maxConcurrentRuns)&&raw.maxConcurrentRuns>=1&&raw.maxConcurrentRuns<=16?raw.maxConcurrentRuns:null;
+  return {state:raw.state,startMode:raw.startMode,reason,maxConcurrentRuns:max};
 }
 const BLOCKER_RE=/^[A-Z][A-Z0-9_]{0,63}(?::[A-Z][A-Z0-9_]{0,63})?$/;
 /** //TR: C-IMPL-WIN-1: LOCAL_CLAUDE.cli.state (FOUND | NOT_FOUND | SHIM_UNSUPPORTED); yol ve sunucunun serbest metni (founderAction) bilerek TAŞINMAZ. Bilinmeyen biçim null. */

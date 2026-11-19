@@ -536,7 +536,7 @@ describe("INT-R3 D-M1-03 packaged Work OS runner", () => {
     const {packagedServerOptions, packagedControlRoot, packagedAppRoot} = await load("apps", "control-api", "src", "packaged-entry.ts");
     const ud = path.join(os.tmpdir(), "uasco-ud", "UASCO"), cfg = {runtime: path.join(ud, "runtime"), dataDir: path.join(ud, "workos"), port: 50000};
     const o = packagedServerOptions(cfg, "a".repeat(64), packagedControlRoot(cfg));
-    expect(o).toEqual({controlToken: "a".repeat(64), runtime: cfg.runtime, dataDir: cfg.dataDir, port: 50000, logger: true, repoRoot: packagedAppRoot(), controlRoot: path.join(ud, "control"), runner: {enabled: true}});
+    expect(o).toEqual({controlToken: "a".repeat(64), runtime: cfg.runtime, dataDir: cfg.dataDir, port: 50000, logger: true, repoRoot: packagedAppRoot(), controlRoot: path.join(ud, "control"), runner: {enabled: true, startMode: "MANUAL"}}); // DSK-T0008 P-A: packaged runner starts PASSIVE
     for (const k of ["runtime", "dataDir", "controlRoot"]) { const rel = path.relative(ud, o[k]); expect(rel.startsWith("..") || path.isAbsolute(rel), k).toBe(false); }
     expect("sandbox" in o).toBe(false);
   });

@@ -888,3 +888,57 @@ describe("LANE-A A-SETUP-FIX-1: EXECUTOR_NOT_ENABLED and package-provenance code
     expect(E["setup.reason.CLAUDE_PACKAGE_PROVENANCE_CHANGED"]).toBeTruthy(); expect(T["setup.reason.CLAUDE_PACKAGE_PROVENANCE_CHANGED"]).toBeTruthy();
   });
 });
+
+// //TR: DSK-T0008 P-A: Yürütücüler panelindeki runner bloğu sunucunun bildirdiği durumu (DISABLED/PASSIVE/ACTIVE/NOT_STARTED) aynen gösterir, bilinmeyen biçimi BİLİNMİYOR sayar; "Başlat" düğmesi yalnız PASSIVE + motor hazırlığı READY iken görünür ve onay (varsayılan Vazgeç) olmadan hiçbir POST gönderilmez.
+describe("DSK-T0008 P-A runner block (Settings > AI executors)", () => {
+  const CMD = (r: string) => `$env:CLAUDE_CONFIG_DIR='C:\\Users\\f\\.uasco\\${r}'; claude`;
+  const role = (r: string, ready = true) => ({ready, blockers: ready ? [] : ["CLAUDE_PROFILE_LOGIN_REQUIRED"], profile: ready ? "READY" : "LOGIN_REQUIRED", loginCommand: CMD(r)});
+  const body = (runner: any, ready = true) => ({executors: {LOCAL_CLAUDE: {state: "READY", cli: {state: "FOUND"}, readiness: {implementer: role("implementer", ready), reviewer: role("reviewer")}}, FAKE: {state: "TEST_ONLY"}},
+    active: {reason: "LOCAL_CLAUDE"}, sandbox: {state: "AVAILABLE", reason: null, detail: null, providerId: "wsl-unshare-v1"},
+    claudeProfiles: {implementer: {state: ready ? "READY" : "LOGIN_REQUIRED", loginCommand: CMD("implementer")}, reviewer: {state: "READY", loginCommand: CMD("reviewer")}}, ...(runner === undefined ? {} : {runner})});
+  const PASSIVE = {state: "PASSIVE", startMode: "MANUAL", reason: null, maxConcurrentRuns: null};
+  const panelOf = async (b: any, over: any = {}) => {
+    const {ctx} = await mkCtx({}, "en"), pc = await load("project-core.js"), posts: Array<[string, unknown]> = [];
+    ctx.api.executors = async () => pc.mapExecutors(b);
+    ctx.api.post = async (p: string, x: unknown) => { posts.push([p, x]); return {ok: true, status: 200, data: {runner: {...PASSIVE, state: "ACTIVE"}}}; };
+    Object.assign(ctx, over);
+    const root = (await (await load("views", "executors-panel.js")).executorsPanel(ctx)) as N;
+    return {root, posts, block: within(root).find(n => n.id === "settings-runner")!, ctx};
+  };
+
+  it("maps the server runner state strictly and offers Start only when PASSIVE and the engine is READY", async () => {
+    const pc = await load("project-core.js");
+    expect(pc.mapRunnerState(PASSIVE)).toEqual(PASSIVE);
+    for (const bad of [null, {}, {state: "RUNNING", startMode: "MANUAL"}, {state: "ACTIVE", startMode: "LATER"}]) expect(pc.mapRunnerState(bad)).toBe(null);
+    expect(pc.canStartRunner(pc.mapExecutors(body(PASSIVE)))).toBe(true);
+    expect(pc.canStartRunner(pc.mapExecutors(body(PASSIVE, false)))).toBe(false);
+    expect(pc.canStartRunner(pc.mapExecutors(body({...PASSIVE, state: "ACTIVE", startMode: "MANUAL"})))).toBe(false);
+    expect(pc.canStartRunner(pc.mapExecutors(body(undefined)))).toBe(false);
+  });
+
+  it("renders the reported state; an unreported state is UNKNOWN with no button", async () => {
+    const p = await panelOf(body(PASSIVE));
+    expect(p.block.dataset.runnerState).toBe("PASSIVE");
+    expect(within(p.block).some(n => n.id === "runner-start")).toBe(true);
+    const u = await panelOf(body(undefined));
+    expect(u.block.dataset.runnerState).toBe("UNKNOWN");
+    expect(within(u.block).some(n => n.id === "runner-start")).toBe(false);
+    const nr = await panelOf(body(PASSIVE, false));
+    expect(within(nr.block).some(n => n.id === "runner-start")).toBe(false);
+  });
+
+  it("start needs the confirmation: cancel sends nothing, confirm sends one empty-body POST to the fixed route", async () => {
+    const m = await load("views", "executors-panel.js");
+    const no = await panelOf(body(PASSIVE));
+    await m.startRunner(no.ctx); expect(no.posts).toEqual([]);
+    const yes = await panelOf(body(PASSIVE), {confirm: async () => true});
+    await m.startRunner(yes.ctx); expect(yes.posts).toEqual([["/v1/system/runner/start", {}]]);
+  });
+
+  it("has complete Turkish text for the runner keys", async () => {
+    const en = await load("locales", "en.js"), tr = await load("locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
+    const keys = Object.keys(E).filter(k => k.startsWith("exec.runner."));
+    expect(keys.length).toBe(16);
+    for (const k of keys) { expect(T[k], k).toBeTruthy(); expect(T[k], k).not.toBe(E[k]); }
+  });
+});

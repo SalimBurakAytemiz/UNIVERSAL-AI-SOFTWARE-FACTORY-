@@ -3797,5 +3797,21 @@ export default {
   "form.field.artifact":"Artifact",
   "studio.wizard.env":"Environment id",
   "studio.wizard.envHint":"Required by the server. Prefilled with \"local\", the same default the idea intake uses; letters, digits, dot, underscore and hyphen, up to 100.",
-  "studio.err.envRequired":"Enter an environment id (for example local); the server does not create a project without one."
+  "studio.err.envRequired":"Enter an environment id (for example local); the server does not create a project without one.",
+  "exec.runner.title":"Background runner",
+  "exec.runner.state.DISABLED":"Off",
+  "exec.runner.state.PASSIVE":"Passive",
+  "exec.runner.state.ACTIVE":"Running",
+  "exec.runner.state.NOT_STARTED":"Not started",
+  "exec.runner.state.UNKNOWN":"Unknown",
+  "exec.runner.hint.DISABLED":"The runner is turned off in this build. No run starts.",
+  "exec.runner.hint.PASSIVE":"The runner is waiting. It starts only when you start it, and only after Claude is installed, verified and signed in for both profiles.",
+  "exec.runner.hint.ACTIVE":"The runner is taking queued runs (at most 2 at a time and 20 new runs a day for real-model runs).",
+  "exec.runner.hint.NOT_STARTED":"The runner could not start. Fix the reason below, then try again.",
+  "exec.runner.hint.UNKNOWN":"The app did not report the runner state.",
+  "exec.runner.start":"Start runner",
+  "exec.runner.started":"The runner started.",
+  "exec.runner.confirm.title":"Start the background runner?",
+  "exec.runner.confirm.body":"Queued runs will start using your own Claude subscription sign-in. No API key is used. You can stop everything with Emergency Stop.",
+  "exec.runner.confirm.action":"Start real runs"
 };

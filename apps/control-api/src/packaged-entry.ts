@@ -50,11 +50,11 @@ export function packagedControlRoot(cfg: {runtime: string; dataDir: string}): st
 export const packagedAppRoot = (): string => path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
 /**
- * INT-R3 D-M1-03: kurulu uygulamanın buildServer seçenekleri: Work OS runner etkin (veri/çalışma/kontrol kökleri userData altında, uygulama kökü kurulum dizini).
+ * INT-R3 D-M1-03: kurulu uygulamanın buildServer seçenekleri: Work OS runner etkin ama PASSIVE (DSK-T0008 P-A: yalnız Founder'ın başlat isteğiyle ve hazırlık tamken başlar) (veri/çalışma/kontrol kökleri userData altında, uygulama kökü kurulum dizini).
  * sandbox seçeneği YOKTUR: proje kodu yürütmesi SBX-GATE ile her zaman SANDBOX_UNAVAILABLE'dır.
  */
 export function packagedServerOptions(cfg: {runtime: string; dataDir: string; port: number}, controlToken: string, controlRoot: string) {
-  return {controlToken, runtime: cfg.runtime, dataDir: cfg.dataDir, port: cfg.port, logger: true, repoRoot: packagedAppRoot(), controlRoot, runner: {enabled: true}};
+  return {controlToken, runtime: cfg.runtime, dataDir: cfg.dataDir, port: cfg.port, logger: true, repoRoot: packagedAppRoot(), controlRoot, runner: {enabled: true, startMode: "MANUAL" as const}};
 }
 
 async function main(): Promise<void> {

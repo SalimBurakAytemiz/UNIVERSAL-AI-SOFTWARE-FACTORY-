@@ -146,7 +146,7 @@ describe("SBX-8 B: GET /v1/system/executors exposes profile status and the Found
     const app = buildServer({controlToken: TOKEN, runtime, dataDir, repoRoot: REPO, controlRoot, port: 3210, logger: false, tenantId: "tA"});
     apps.push(app);
     const j = (await call(app)).json();
-    expect(Object.keys(j).sort()).toEqual(["active", "claudeProfiles", "executors", "sandbox"]);
+    expect(Object.keys(j).sort()).toEqual(["active", "claudeProfiles", "executors", "runner", "sandbox"]); // DSK-T0008 P-A: runner state added
     expect(j.executors.FAKE).toEqual({state: "TEST_ONLY"});
     for (const role of ["implementer", "reviewer"]) {
       const dir = path.join(controlRoot, "claude-profiles", role);

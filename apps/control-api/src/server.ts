@@ -84,7 +84,7 @@ const DEFAULT_RUN_ROLE_ID=bindingForFunction("developer").roleId;
 // //TR: B1: buildServer testlerin ve CLI başlatmanın ortak girişidir; varsayılanlar eski sabit davranışla aynıdır (127.0.0.1 bind, token/Host kontrolü), opts yalnızca test enjeksiyonu içindir.
 // //TR: B3a: executors yalnız programatik test enjeksiyonudur; gerçek adapter yalnız UASCO_WORKOS_EXECUTOR=local-claude ile seçilir. runner.enabled (veya UASCO_WORKOS_RUNNER=1) olmadan engine tick'i başlamaz.
 // //TR: PS-1A: controlRoot provenance/ayar kontrol köküdür (paketli: userData, geliştirme: repo); studio/executorSetup yalnız test enjeksiyonudur (sahte provenance yakalayıcı, CLI keşfi, dev-run zamanlamaları, ZIP sınırları).
-export interface BuildServerOptions{controlToken?:string;runtime?:string;port?:number;dataDir?:string;repoRoot?:string;tenantId?:string;orgId?:string;actor?:string;policyContext?:Partial<ActionPolicyContext>;logger?:boolean;executors?:ExecutorPair;runner?:{enabled?:boolean;intervalMs?:number}&Partial<Pick<RunnerOptions,"leaseTtlMs"|"maxRemediations"|"maxRetries"|"retryBackoffMs"|"testTimeoutMs"|"executorTimeoutMs"|"security"|"maxConcurrentRuns">>;
+export interface BuildServerOptions{controlToken?:string;runtime?:string;port?:number;dataDir?:string;repoRoot?:string;tenantId?:string;orgId?:string;actor?:string;policyContext?:Partial<ActionPolicyContext>;logger?:boolean;executors?:ExecutorPair;runner?:{enabled?:boolean;intervalMs?:number;startMode?:"AUTO"|"MANUAL"}&Partial<Pick<RunnerOptions,"leaseTtlMs"|"maxRemediations"|"maxRetries"|"retryBackoffMs"|"testTimeoutMs"|"executorTimeoutMs"|"security"|"maxConcurrentRuns">>;
   controlRoot?:string;studio?:{zipLimits?:Partial<ZipLimits>;devrun?:Partial<Pick<DevRunOptions,"startTimeOf"|"startWaitMs"|"graceMs"|"probeIntervalMs"|"stopPollMs"|"logRingBytes"|"logTailBytes"|"treeSnapshotMs">>};executorSetup?:Pick<ExecutorSetupOptions,"captureProvenance"|"findClaudeCli">;
   // //TR: SBX-GATE: sandbox yalnız programatik test enjeksiyonudur (testlerdeki sahte sağlayıcı); env/config/journal/API gövdesi/masaüstü ayarı sağlayıcı kaydedemez. Seçenek hiç verilmezse Linux'ta varsayılan LinuxUnshareSandboxProvider denenir; selfTest geçmeden hiçbir proje kodu yürütülmez (SANDBOX_UNAVAILABLE). Açıkça null/undefined verilirse sağlayıcı yoktur ve yürütme her zaman SANDBOX_UNAVAILABLE ile reddedilir.
   sandbox?:SandboxProvider|null;workosStoreOptions?:WorkOsStoreOptions}
@@ -308,10 +308,23 @@ function getRunner(){
   return workRunner;
 }
 const runnerEnabled=opts.runner?.enabled??process.env.UASCO_WORKOS_RUNNER==="1";
-if(runnerEnabled){
-  app.addHook("onReady",async()=>{try{const r=getRunner();if(r){r.start(opts.runner?.intervalMs??2000);audit("WORKOS_RUNNER_STARTED",{engineId:r.engineId,maxConcurrentRuns:r.maxConcurrentRuns,executor:getExecutors().reason})}else audit("WORKOS_RUNNER_NOT_STARTED",{reason:getExecutors().reason})}catch{audit("WORKOS_RUNNER_NOT_STARTED",{reason:"EXECUTOR_CONFIG_REFUSED"})}});
+// //TR: DSK-T0008 P-A: MANUAL kipte (kurulu uygulama) runner açılışta ve executor etkinleştirmesinde KENDİLİĞİNDEN başlamaz (PASSIVE); yalnız Founder'ın POST /v1/system/runner/start isteğiyle ve yürütücü hazırlığı tamken başlar. AUTO (varsayılan; geliştirme/test) davranışı değişmez.
+const runnerManual=opts.runner?.startMode==="MANUAL";
+let runnerRefusal:string|null=null,runnerStarted=false; // ACTIVE yalnız start() başarıyla döndükten sonra (örnek oluşup başlatma hata verirse ACTIVE uydurulmaz)
+const runnerState=():{state:"DISABLED"|"PASSIVE"|"ACTIVE"|"NOT_STARTED";startMode:"AUTO"|"MANUAL";reason:string|null;maxConcurrentRuns:number|null}=>({
+  state:!runnerEnabled?"DISABLED":runnerStarted?"ACTIVE":runnerManual&&runnerRefusal===null?"PASSIVE":"NOT_STARTED",startMode:runnerManual?"MANUAL":"AUTO",reason:runnerStarted?null:runnerRefusal,maxConcurrentRuns:runnerStarted&&workRunner?workRunner.maxConcurrentRuns:null});
+// //TR: Başlatma ön koşulu: etkin yürütücü LOCAL_CLAUDE ve implementer + reviewer hazırlığı (CLI, başlatıcı kanıtı, oturum) tam. Engel kodları sabittir; hiçbir model çağrılmaz.
+function runnerStartBlockers():string[]{
+  const ex=getExecutors();if(ex.reason!=="LOCAL_CLAUDE")return [`EXECUTOR_NOT_READY:${ex.reason}`];
+  const rd=getExecSetup().status().LOCAL_CLAUDE.readiness,b:string[]=[];
+  for(const role of ["implementer","reviewer"] as const){const x=rd[role];if(!x||x.ready!==true)b.push(`${role.toUpperCase()}_NOT_READY`)}
+  return b;
+}
+if(runnerEnabled&&!runnerManual){
+  app.addHook("onReady",async()=>{try{const r=getRunner();if(r){r.start(opts.runner?.intervalMs??2000);runnerStarted=true;audit("WORKOS_RUNNER_STARTED",{engineId:r.engineId,maxConcurrentRuns:r.maxConcurrentRuns,executor:getExecutors().reason})}else{runnerRefusal=getExecutors().reason;audit("WORKOS_RUNNER_NOT_STARTED",{reason:runnerRefusal})}}catch{runnerRefusal="EXECUTOR_CONFIG_REFUSED";audit("WORKOS_RUNNER_NOT_STARTED",{reason:runnerRefusal})}});
   app.addHook("onClose",async()=>{workRunner?.stop()});
 }
+if(runnerEnabled&&runnerManual)app.addHook("onClose",async()=>{workRunner?.stop()});
 app.post<{Params:{id:string}}>("/v1/missions/:id/runs",wos(async(req,reply)=>{
   if(!validMissionId(req.params.id))return reply.code(400).send({error:"INVALID_MISSION_ID"});
   const body=req.body??{};if(!workosWrite(reply,"workos.run.start",req.params.id,body,validateRunStart))return reply;
@@ -478,13 +491,25 @@ app.get<{Params:{id:string;exportId:string}}>("/v1/projects/:id/exports/:exportI
 // //TR: Executor kurulumu: durum okunur; etkinleştirme aynı yazma kapısından geçer, model çağrılmaz (provenance yakalama yalnız --version).
 // //TR: SBX-8 (D-SBX-11 b): implementer/reviewer UASCO Claude profillerinin durumu (READY/LOGIN_REQUIRED/REFUSED) ve Founder'ın kendisinin çalıştıracağı giriş komutu; UASCO yalnız kendi settings.json dosyasını yazar, kimlik bilgisi okumaz/kopyalamaz.
 const claudeProfiles=()=>{try{return ensureClaudeProfiles(controlRoot,{forbiddenRoots:[getStore().dataDir]})}catch{return {error:"CLAUDE_PROFILE_STATUS_UNAVAILABLE"}}};
-app.get("/v1/system/executors",wos(async()=>({executors:getExecSetup().status(),active:{reason:getExecutors().reason},sandbox:await executionGate.status(),claudeProfiles:claudeProfiles()})));
+app.get("/v1/system/executors",wos(async()=>({executors:getExecSetup().status(),active:{reason:getExecutors().reason},sandbox:await executionGate.status(),claudeProfiles:claudeProfiles(),runner:runnerState()})));
+// //TR: DSK-T0008 P-A: PASSIVE runner'ı başlatır (yalnız MANUAL kip). Aynı yazma kapısı (GLOBAL_STOP, politika, boş gövde); hazırlık tam değilse 409 ve engel kodları. Zaten çalışıyorsa idempotent.
+app.post("/v1/system/runner/start",wos(async(req,reply)=>{
+  const body=req.body??{};if(!workosWrite(reply,"workos.system.runner.start","NONE",body,validateEmptyBody))return reply;
+  if(!runnerEnabled||!runnerManual)return reply.code(409).send({error:"RUNNER_START_REFUSED",reason:"RUNNER_NOT_MANUAL",runner:runnerState()});
+  if(runnerStarted)return {runner:runnerState()};
+  const blockers=runnerStartBlockers();
+  if(blockers.length){audit("WORKOS_RUNNER_START_REFUSED",{actor,blockers});return reply.code(409).send({error:"RUNNER_START_REFUSED",reason:"EXECUTOR_NOT_READY",blockers,runner:runnerState()})}
+  try{const rn=getRunner();if(!rn){runnerRefusal=getExecutors().reason;return reply.code(409).send({error:"RUNNER_START_REFUSED",reason:runnerRefusal,runner:runnerState()})}
+    rn.start(opts.runner?.intervalMs??2000);runnerStarted=true;runnerRefusal=null;audit("WORKOS_RUNNER_STARTED",{actor,engineId:rn.engineId,maxConcurrentRuns:rn.maxConcurrentRuns,executor:getExecutors().reason,startMode:"MANUAL"})}
+  catch{runnerRefusal="EXECUTOR_CONFIG_REFUSED";audit("WORKOS_RUNNER_NOT_STARTED",{reason:runnerRefusal});return reply.code(409).send({error:"RUNNER_START_REFUSED",reason:runnerRefusal,runner:runnerState()})}
+  return {runner:runnerState()};
+}));
 app.post("/v1/system/executors/local-claude/enable",wos(async(req,reply)=>{
   const body=req.body??{};if(!workosWrite(reply,"workos.system.executor.enable","NONE",body,validateEmptyBody))return reply;
   const r=await getExecSetup().enableLocalClaude(actor);
   if(!r.ok){audit("WORKOS_EXECUTOR_ENABLE_REFUSED",{actor,executor:"LOCAL_CLAUDE",reason:r.reason});return reply.code(409).send({error:"EXECUTOR_ENABLE_REFUSED",reason:r.reason,executors:r.status})}
   executorsCache=null;
-  if(runnerEnabled&&!workRunner){try{const rn=getRunner();if(rn){rn.start(opts.runner?.intervalMs??2000);audit("WORKOS_RUNNER_STARTED",{engineId:rn.engineId,maxConcurrentRuns:rn.maxConcurrentRuns,executor:getExecutors().reason})}}catch{audit("WORKOS_RUNNER_NOT_STARTED",{reason:"EXECUTOR_CONFIG_REFUSED"})}}
+  if(runnerEnabled&&!runnerManual&&!workRunner){try{const rn=getRunner();if(rn){rn.start(opts.runner?.intervalMs??2000);runnerStarted=true;runnerRefusal=null;audit("WORKOS_RUNNER_STARTED",{engineId:rn.engineId,maxConcurrentRuns:rn.maxConcurrentRuns,executor:getExecutors().reason})}}catch{audit("WORKOS_RUNNER_NOT_STARTED",{reason:"EXECUTOR_CONFIG_REFUSED"})}}
   audit("WORKOS_EXECUTOR_ENABLED",{actor,executor:"LOCAL_CLAUDE",source:"SETTING"});
   return {executors:r.status,active:{reason:getExecutors().reason}};
 }));
