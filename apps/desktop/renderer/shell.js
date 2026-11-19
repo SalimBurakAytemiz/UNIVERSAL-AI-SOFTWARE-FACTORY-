@@ -11,6 +11,7 @@ import {maybeOpenFirstRun} from "./views/firstrun.js";
 import {recoveryPanel} from "./recovery-panel.js";
 import {shouldShowApiRecovery} from "./recovery-core.js";
 import {createInspector,isInspectableRef} from "./inspector.js";
+import {loadStopImpact} from "./stop-impact-core.js";
 
 export const PRINCIPAL="FOUNDER_LOCAL";
 const FEED_TABS=Object.freeze(["flow","health","agenda"]);
@@ -217,7 +218,36 @@ export function createShell(ctx){
   }
 
   // ACİL DURDUR
-  function openStopDialog(){const d=el("stopDialog");if(typeof d.showModal==="function"&&!d.open)d.showModal();else d.setAttribute("open","")}
+  // //TR: DSK-T0005 (UI-124): onay penceresi açılınca durdurmanın etkileyeceği koşu/görev/bekleyen onay sayıları yalnız mevcut GET'lerle okunur ve pencerede gösterilir. Sayılar yalnız bilgi verir: onay butonu beklemez, durdurma davranışı değişmez; okunamayan kaynak dürüstçe "okunamadı" der.
+  let stopImpactToken=0;
+  function stopImpactNode(){
+    let n=el("stopImpact");if(n)return n;
+    const d=el("stopDialog");if(!d)return null;
+    n=doc.createElement("div");n.setAttribute("id","stopImpact");n.setAttribute("role","status");n.setAttribute("aria-live","polite");n.className="stop-impact";
+    const row=typeof d.querySelector==="function"?d.querySelector(".btn-row"):null;
+    if(row&&typeof d.insertBefore==="function")d.insertBefore(n,row);else d.append(n);
+    return n;
+  }
+  function paintStopImpact(r){
+    const n=stopImpactNode();if(!n)return;
+    const p=k=>h(doc,"p",{class:"stop-impact-note"},t(k));
+    if(r.state==="LOADING"){n.dataset.state="LOADING";n.replaceChildren(p("stop.impact.loading"));return}
+    if(r.state==="ERROR"){n.dataset.state="ERROR";n.replaceChildren(p("stop.impact.error"));return}
+    if(r.state==="EMPTY"){n.dataset.state="EMPTY";n.replaceChildren(p("stop.impact.empty"));return}
+    const tasks=r.tasks.state==="VERIFIED"?t("stop.impact.tasks",{n:formatCount(r.tasks.count)}):r.tasks.state==="PARTIAL"?t("stop.impact.tasksAtLeast",{n:formatCount(r.tasks.count)}):t("stop.impact.tasksUnknown");
+    const li=(key,text)=>h(doc,"li",{"data-impact":key},text);
+    n.dataset.state="VERIFIED";
+    n.replaceChildren(h(doc,"p",{class:"stop-impact-title"},t("stop.impact.title")),h(doc,"ul",{class:"stop-impact-list"},
+      li("runsHalting",t("stop.impact.runsHalting",{n:formatCount(r.runsHalting)})),li("runsNotStarting",t("stop.impact.runsNotStarting",{n:formatCount(r.runsNotStarting)})),
+      li("tasks",tasks),li("approvals",t("stop.impact.approvals",{n:formatCount(r.approvals)}))));
+  }
+  async function refreshStopImpact(){
+    const tok=++stopImpactToken;paintStopImpact({state:"LOADING"});
+    let r;try{r=await loadStopImpact(api)}catch{r={state:"ERROR"}}
+    if(tok!==stopImpactToken||!el("stopDialog")?.open)return; // pencere kapandıysa veya yeniden açıldıysa eski sonuç yazılmaz
+    paintStopImpact(r);
+  }
+  function openStopDialog(){const d=el("stopDialog");if(typeof d.showModal==="function"&&!d.open)d.showModal();else d.setAttribute("open","");void refreshStopImpact()}
   function closeStopDialog(){const d=el("stopDialog");if(typeof d.close==="function")d.close();else d.removeAttribute("open")}
   function wireStatic(){
     el("bellIcon").replaceChildren(icon(doc,"bell",20));
