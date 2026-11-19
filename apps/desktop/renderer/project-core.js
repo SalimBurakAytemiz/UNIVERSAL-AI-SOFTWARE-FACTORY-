@@ -317,7 +317,8 @@ export function mapGitDiff(raw){
   if(!isObj(raw))return {state:"ERROR",diff:null};
   const text=pick(raw.diff,raw.patch,raw.text);if(typeof text!=="string")return {state:"ERROR",diff:null};
   const cut=redactHead(text,DIFF_VIEW_MAX_CHARS),all=cut.text.split(/\r?\n/),lines=all.slice(0,DIFF_VIEW_MAX_LINES);
-  const files=arr(raw.files,200).filter(isObj).map(f=>({path:str(f.path,300),additions:safeInt(f.additions),deletions:safeInt(f.deletions)})).filter(f=>f.path);
+  // //TR: DSK-T0001: sunucu (core/workos/project-studio.ts gitDiff) dosya satırını {file,added,deleted} olarak verir; eski {path,additions,deletions} biçimi de kabul edilir.
+  const files=arr(raw.files,200).filter(isObj).map(f=>({path:str(pick(f.path,f.file),300),additions:safeInt(pick(f.additions,f.added)),deletions:safeInt(pick(f.deletions,f.deleted))})).filter(f=>f.path);
   return {state:"VERIFIED",diff:{lines,files,truncated:cut.truncated||all.length>DIFF_VIEW_MAX_LINES||raw.truncated===true,empty:text.trim().length===0}};
 }
 /** Diff satırı türü: yalnız görsel sınıf; anlam ayrıca "+"/"-" önekiyle okunur (renk tek başına taşıyıcı değildir). */

@@ -278,7 +278,25 @@ function mapTestRecord(e,head){
   const sha=typeof e.commitSha==="string"&&SHA_RE.test(e.commitSha)?e.commitSha:null,ts=isObj(e.testSurface)?e.testSurface:null;
   return {evidenceId:typeof e.evidenceId==="string"&&e.evidenceId.length<=80?e.evidenceId:null,kind:e.kind,cycle:safeInt(e.cycle),commitSha:sha,atHead:head!==null&&sha===head,
     exitCode:Number.isSafeInteger(e.exitCode)?e.exitCode:null,attested:typeof e.sandboxProviderId==="string"&&e.sandboxProviderId.length>0,
-    acceptance:ts&&typeof ts.functionalAcceptance==="string"?str(ts.functionalAcceptance,40):null,executedTests:ts?safeInt(ts.executedTests):null};
+    acceptance:ts&&typeof ts.functionalAcceptance==="string"?str(ts.functionalAcceptance,40):null,executedTests:ts?safeInt(ts.executedTests):null,
+    files:ts?surfaceFiles(ts):null,testRun:ts?testRunOf(ts.testRun):null};
+}
+// //TR: DSK-T0006: TEST_SURFACE kaydındaki test dosyası listeleri (eklenen/değişen/silinen/yeniden adlandırılan) AYNEN taşınır; biçimsiz öğe atılır, liste TEST_FILES_MAX ile kırpılır ve kırpma işaretlenir. Bu liste yalnız "bu koşuda dokunulan test dosyaları"dır, kapsam ölçümü değildir.
+export const TEST_FILES_MAX=200;
+const pathList=v=>Array.isArray(v)?v.filter(x=>typeof x==="string"&&x.length>0&&x.length<=500):[];
+function surfaceFiles(ts){
+  const renamed=Array.isArray(ts.renamed)?ts.renamed.filter(x=>isObj(x)&&typeof x.to==="string"&&x.to.length>0&&x.to.length<=500).map(x=>x.to):[];
+  const all={added:pathList(ts.added),modified:pathList(ts.modified),deleted:pathList(ts.deleted),renamed};
+  const total=all.added.length+all.modified.length+all.deleted.length+all.renamed.length;
+  let left=TEST_FILES_MAX;const cut=l=>{const k=l.slice(0,Math.max(0,left));left-=k.length;return k};
+  return {added:cut(all.added),modified:cut(all.modified),deleted:cut(all.deleted),renamed:cut(all.renamed),total,truncated:total>TEST_FILES_MAX||ts.truncated===true};
+}
+// //TR: DSK-T0006: ayrıştırılmış test koşusu özeti (core/workos/test-surface.ts TestRunSummary) yalnız tüm sayılar geçerli tamsayıysa ve executed = passed + failed ise taşınır; aksi halde null (asla tahmini sayı yok).
+function testRunOf(t){
+  if(!isObj(t)||typeof t.format!=="string")return null;
+  const n=["executed","passed","failed","skipped","todo"].map(k=>safeInt(t[k]));
+  if(n.some(x=>x===null)||n[0]!==n[1]+n[2])return null;
+  return {format:str(t.format,20),executed:n[0],passed:n[1],failed:n[2],skipped:n[3],todo:n[4]};
 }
 // //TR: Durum (EXECUTED/FAILED/...) readiness-core'un testsOf'u ile BİREBİR aynı kaynaktan gelir: tüm liste önce mapReadinessWorkRuns ile fail-closed doğrulanır (bozuk kanıt öğesi, biçimsiz commit/exitCode/sağlayıcı/kabul, yinelenen runId, bozuk koşu satırı => TÜM okuma ERROR) ve satır başına `tests` değeri oradan alınır; burada ikinci bir kural kopyası YOKTUR. Kayıtlar yalnız doğrulanmış ham öğelerden gösterim için türetilir.
 export const TEST_ROWS_MAX=500;
@@ -296,7 +314,7 @@ export function mapTestReports(r){
     const i=start+j,row=rd.runs.items[i],head=row.headSha;
     const records=x.evidence.map(e=>mapTestRecord(e,head)).filter(Boolean);
     const surface=lastOf(records.filter(q=>q.atHead),q=>q.kind==="TEST_SURFACE"&&q.acceptance!==null);
-    return {runId:row.runId,missionId:row.missionId,headSha:head,state:row.tests,records,executedTests:surface?surface.executedTests:null};
+    return {runId:row.runId,missionId:row.missionId,projectId:row.projectId,headSha:head,updatedAt:row.updatedAt,state:row.tests,records,executedTests:surface?surface.executedTests:null};
   });
   return {state:"VERIFIED",runs,total:list.length,truncated:list.length>TEST_ROWS_MAX};
 }
