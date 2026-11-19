@@ -8,6 +8,7 @@ import {pathToFileURL} from "node:url";
 import {WorkOsStore} from "../core/workos/store.js";
 import {buildServer} from "../apps/control-api/src/server.js";
 import {scanImports, moduleSpecifiers, disallowedImports, expectOnlyAllowedImports, relativeImportClosure, syntaxDiagnostics, NON_LITERAL, MODULE_LOAD_KINDS} from "./support/static-imports.js";
+import {registerCostTelemetryCases} from "./support/cost-telemetry.cases.js";
 // //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
 vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
@@ -1801,3 +1802,6 @@ describe("SEC-IMPORT-GUARD — AST import guard for the Operations modules", () 
     expect(read("operations-core.js")).toBe(real);
   });
 });
+
+// UASCO-T0111: pure dev-plane cost telemetry core (synthetic fixtures; no wiring).
+registerCostTelemetryCases();
