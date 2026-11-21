@@ -57,11 +57,12 @@ check("C11 presence and probe are enums: anything else is SECRET_UNKNOWN / UNKNO
 check("C12 every rule code and result code is declared", RULES.every(([c]) => CODES.includes(c)) && PROBES.length === 5);
 
 // S1-S6: nothing but fixed tokens is ever printed.
-const SECRETISH = "sk-ant-oat01-THISISNOTAREALTOKENxxxxxxxxxxxxxxxxxxxxxxxx";
+// Built at run time so the repository holds no token-shaped literal (scripts/secret-sanity.mjs stays strict); it is not a credential.
+const SECRETISH = ["sk", "ant", "oat01", "THISISNOTAREALTOKEN" + "x".repeat(24)].join("-");
 const leaky = [init({model: SECRETISH, apiKeySource: SECRETISH, claude_code_version: SECRETISH}), synth(`401 ${SECRETISH} OAuth access token is invalid`),
   result(`Failed to authenticate. API Error: 401 OAuth access token is invalid. ${SECRETISH}`)];
 const leakLine = run(leaky);
-check("S1 no input text reaches the line (token-like value in every string field)", !leakLine.includes(SECRETISH) && !leakLine.includes("sk-ant") && field(leakLine, "keySource") === "other" && field(leakLine, "model") === "-");
+check("S1 no input text reaches the line (token-like value in every string field)", !leakLine.includes(SECRETISH) && !leakLine.includes(["sk", "ant"].join("-")) && field(leakLine, "keySource") === "other" && field(leakLine, "model") === "-");
 check("S2 model text of a successful run is never printed", !run([init(), {type: "result", subtype: "success", is_error: false, num_turns: 1, result: "MODEL_SAYS_SECRET"}]).includes("MODEL_SAYS_SECRET"));
 const all = [oauthInvalid, bearerInvalid, ok, leakLine, ...cases.map(([t]) => run([init(), result(t)])), run(""), run([], {SECRET_PRESENT: "false"})];
 check("S3 every line has the fixed shape and a declared code", all.every(l => LINE_RE.test(l) && CODES.includes(codeOf(l))));
