@@ -272,6 +272,7 @@ export class MissionRunner {
     if (!Number.isInteger(this.o.maxConcurrentRuns) || this.o.maxConcurrentRuns < 1 || this.o.maxConcurrentRuns > 16) throw new Error("RUNNER_MAX_CONCURRENT_RUNS_INVALID");
     // SBX-GATE: yalnız gerçek bir ExecutionGate örneği kabul edilir; başka her değer (eksik, düz nesne) sağlayıcısız kapıdır (fail-closed).
     if (!(this.o.executionGate instanceof ExecutionGate)) this.o.executionGate = new ExecutionGate(null);
+    if (this.o.executors.kind === "LOCAL_CLAUDE") void this.o.executionGate.status().catch(() => null); // DSK-T0008: servis kipinde (pump) ilk geçişten önce öz-testi başlat
     // //TR: PAR-03 (RCA relfx-c3:200, Windows shard 1 #259/#261): her journal YAZISI kendisi olay döngüsünü bloklayan senkron, dayanıklı bir aralıktır (kilit dosyası + journal'ın tamamının yeniden okunup doğrulanması + iki snapshot yazımı + fsync'ler). Adım sınırında bir run bunları ARA VERMEDEN art arda yapar (kanıt -> CHECKPOINTING -> checkpoint -> yenileme -> sonraki adım RUNNING); yavaş diskte (Windows CI) bu zincir TTL - heartbeat aralığını aşar ve öbür, sağlıklı run'ın setInterval heartbeat'i hiç çalışamadan lease'i dolar: gerçek bir fence (sahte "kayıp"). span() ile aynı kural: runner'ın her run yazısından ÖNCE, heartbeat'i gecikmiş (son yenilemesi bir heartbeat periyodundan, TTL/3, eski) sahip olunan BÜTÜN lease'ler yenilenir; döngü akıyorsa heartbeat zaten yeniler ve kanca ek yazı üretmez. Fence kuralı değişmez: süresi dolmuş lease yine yenilenemez ve yazının kendisi fencedRun ile reddedilir.
     const store = this.o.store;
     this.o.store = new Proxy(store, {get: (t, p) => {
@@ -520,6 +521,8 @@ export class MissionRunner {
     if (this.busy) return {...rep, skipped: "BUSY"};
     this.busy = true;
     try {
+      // //TR: DSK-T0008: gerçek model yürütücüsünde talep geçişi (senkron) sandbox öz-testinin sonucunu görsün diye öz-test önce sonuçlandırılır; hata = kullanılamaz (snapshot fail-closed kalır).
+      if (this.realModel) await this.o.executionGate.status().catch(() => null);
       const drives = this.claimAndDrive(rep, false);
       if (drives === "LOCKED") return {...rep, skipped: "LOCKED"};
       await Promise.all(drives);
