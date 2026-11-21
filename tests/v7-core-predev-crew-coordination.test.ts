@@ -940,7 +940,7 @@ process.exit(s.exit ?? 0);
     const scenario = (s: Record<string, Scenario>) => fs.writeFileSync(scenarioFile, JSON.stringify(s));
     scenario({});
     const runReviewer = (argv: string[], po: ProcOptions): Promise<ProcResult> => runProcess([process.execPath, script, ...argv.slice(1)], o.timeoutMs ? {...po, timeoutMs: o.timeoutMs} : po);
-    const pair = () => new LocalClaudeExecutors(REPO, control, {runReviewer, profile: {forbiddenRoots: [data]}}).pair();
+    const pair = () => new LocalClaudeExecutors(REPO, control, {testOnlyIsolationProviderId: "TEST_ONLY_HOST_PASSTHROUGH", runReviewer, profile: {forbiddenRoots: [data]}}).pair();
     let last: ReturnType<NonNullable<ReturnType<typeof pair>["preDevBuilder"]>> | null = null;
     const builder: BuilderPort = {produce(kind, prompt, ctx) { last = pair().preDevBuilder!(); return last.produce(kind, prompt, ctx); }};
     const readiness = () => claudeAnalysisReadiness({controlRoot: control, profile: {forbiddenRoots: [data]}, cli: FOUND});

@@ -57,6 +57,7 @@ export interface RunnerOptions {
   // PAR-03: olay döngüsü gecikmesinin (p99, ms; çözünürlük payı düşülmüş) programatik kaynağı; tanımsız = perf_hooks monitorEventLoopDelay. Yalnız test enjeksiyonudur.
   loopDelayP99Ms?: () => number;
 }
+export type IsolationRefusal = "SANDBOX_REQUIRED" | "NOT_ISOLATED";
 export interface TickReport { skipped?: "BUSY" | "LOCKED"; recovered: string[]; claimed: string[]; cancelled: string[]; fenced: string[]; advanced: string[]; deferred: string[] }
 
 type Outcome =
@@ -246,6 +247,19 @@ export class MissionRunner {
 
   /** Effective concurrent-run limit (1..16), for the start audit: proves what the engine actually runs with. */
   get maxConcurrentRuns(): number { return this.o.maxConcurrentRuns; }
+  /** DSK-T0008: true when the executor pair runs a real model (LOCAL_CLAUDE). */
+  get realModel(): boolean { return this.o.executors.kind === "LOCAL_CLAUDE"; }
+  /** DSK-T0008 strict sandbox: null when real-model execution is allowed; otherwise SANDBOX_REQUIRED (no verified provider/self-test) or NOT_ISOLATED (the executor does not spawn the model inside that provider). A sandbox status alone never allows it. */
+  isolationRefusal(): IsolationRefusal | null {
+    if (!this.realModel) return null;
+    const g = this.o.executionGate.snapshot();
+    if (!g.ok || g.providerId === null) return "SANDBOX_REQUIRED";
+    const iso = this.o.executors.isolation;
+    return iso && iso.state === "ISOLATED" && iso.providerId === g.providerId ? null : "NOT_ISOLATED";
+  }
+  /** DSK-T0008: the last isolation refusal that kept a run unleased in a claim pass (null when none). */
+  get lastIsolation(): IsolationRefusal | null { return this.isolationHit; }
+  private isolationHit: IsolationRefusal | null = null;
 
   constructor(opts: RunnerOptions) {
     assertIndependentExecutors(opts.executors);
@@ -527,17 +541,21 @@ export class MissionRunner {
       const store = this.o.store, stop = this.stopActive();
       let stalled: boolean | null = null;
       const full = () => this.owned.size >= this.o.maxConcurrentRuns || (this.owned.size >= 1 && (stalled ??= this.loopStalled()));
+      // //TR: DSK-T0008 sıkı sandbox: gerçek model yürütücüsü izole değilse hiçbir YENİ lease ve devralma yapılmaz; run QUEUED (ya da lease'i dolmuş haliyle) kalır.
+      const iso = this.isolationRefusal(); this.isolationHit = null;
       for (const run of store.engineListRuns()) {
         if (this.owned.get(run.runId)?.drive) continue; // sürüşü süren run'a dokunulmaz: kendi heartbeat'i yönetir, kendi kendini devralma yok
         try {
           if (run.status === "CREATED" || run.status === "QUEUED") {
             if (stop) { this.cancelUnleased(run, stop); rep.cancelled.push(run.runId); continue; }
             // //TR: Sahiplik sınırı: sınır doluysa run'a lease ALINMAZ (sırasını beklerken lease'i yenilenmeden dolup sahte fence/recovery yaşamasın); QUEUED kalır, sonraki geçiş alır.
+            if (iso) { this.isolationHit = iso; rep.deferred.push(run.runId); continue; }
             if (full()) { rep.deferred.push(run.runId); continue; }
             const queued = run.status === "CREATED" ? store.transitionRun(run.runId, null, "QUEUED", "queued for runner", this.o.actor) : run;
             const leased = store.acquireRunLease(queued.runId, this.o.leaseTtlMs, this.o.actor);
             this.own(run.runId, leased.leaseId!); rep.claimed.push(run.runId); fresh.add(run.runId);
           } else if (LEASED_RUN_STATUSES.includes(run.status) && run.leaseId && Date.parse(run.leaseExpiresAt ?? "") <= this.o.now()) {
+            if (iso) { this.isolationHit = iso; rep.deferred.push(run.runId); continue; }
             if (full()) { rep.deferred.push(run.runId); continue; }
             // Süresi dolmuş lease: crash/askıda kalma -> devral, RECOVERING (yeni leaseId eski sahibi fence eder).
             const taken = store.takeoverRunLease(run.runId, this.o.leaseTtlMs, this.o.actor);
@@ -807,6 +825,8 @@ export class MissionRunner {
   private authorizeTests(kind: ProjectExecutionKind): Promise<GateDecision> { return this.o.executionGate.authorize(kind); }
 
   private async performStep(run: WorkRun, leaseId: string, abort: () => boolean): Promise<Outcome> {
+    // //TR: DSK-T0008 sıkı sandbox: gerçek model adımından (IMPLEMENT, REVIEW) HEMEN ÖNCE izolasyon yeniden doğrulanır (devralma/kurtarma ve sandbox kaybı dahil); geçmezse model süreci başlatılmadan run BLOCKED olur.
+    if (this.realModel && (run.step === "IMPLEMENT" || run.step === "REVIEW")) { const iso = this.isolationRefusal(); if (iso) return {kind: "BLOCK", reason: iso}; }
     switch (run.step) {
       case "WORKSPACE": return this.stepWorkspace(run, leaseId);
       case "IMPLEMENT": return this.stepImplement(run, leaseId, abort);

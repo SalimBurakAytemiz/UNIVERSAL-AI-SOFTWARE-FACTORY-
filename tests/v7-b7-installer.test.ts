@@ -570,11 +570,11 @@ describe("INT-R3 D-M1-03 packaged Work OS runner", () => {
       // SBX-8: broker yalnız oturum açılmış UASCO implementer profiliyle başlatılır; Founder girişi boş bir yer tutucu kimlik dosyasıyla taklit edilir (içeriği okunmaz).
       const {ensureClaudeProfile} = await load("core", "workos", "claude-profiles.ts");
       expect(ensureClaudeProfile(controlRoot, "implementer").state).toBe("LOGIN_REQUIRED");
-      const refused = await new LocalClaudeExecutors(appRoot, controlRoot).pair().implementer.implement(ws, {runId: "run_" + "0".repeat(24), missionId: "msn_" + "1".repeat(24), projectId: "prj_" + "2".repeat(24), title: "t", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", cycle: 0, baseSha: head, startSha: head}, {timeoutMs: 60_000});
+      const refused = await new LocalClaudeExecutors(appRoot, controlRoot, {testOnlyIsolationProviderId: "TEST_ONLY_HOST_PASSTHROUGH"}).pair().implementer.implement(ws, {runId: "run_" + "0".repeat(24), missionId: "msn_" + "1".repeat(24), projectId: "prj_" + "2".repeat(24), title: "t", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", cycle: 0, baseSha: head, startSha: head}, {timeoutMs: 60_000});
       expect(refused).toMatchObject({exitCode: null, blockReason: "CLAUDE_PROFILE_LOGIN_REQUIRED", argv: []});
       expect(fs.existsSync(out)).toBe(false);
       fs.writeFileSync(path.join(controlRoot, "claude-profiles", "implementer", ".credentials.json"), "");
-      const pair = new LocalClaudeExecutors(appRoot, controlRoot).pair();
+      const pair = new LocalClaudeExecutors(appRoot, controlRoot, {testOnlyIsolationProviderId: "TEST_ONLY_HOST_PASSTHROUGH"}).pair();
       const r = await pair.implementer.implement(ws, {runId: "run_" + "0".repeat(24), missionId: "msn_" + "1".repeat(24), projectId: "prj_" + "2".repeat(24), title: "t", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", cycle: 0, baseSha: head, startSha: head}, {timeoutMs: 60_000});
       expect(r.exitCode, r.log).toBe(0);
       expect(r.commitSha).toMatch(/^[0-9a-f]{40}$/);
@@ -591,7 +591,7 @@ describe("INT-R3 D-M1-03 packaged Work OS runner", () => {
       fs.rmSync(path.join(controlRoot, ".ai"), {recursive: true, force: true});
       fs.mkdirSync(path.join(appRoot, ".ai", "runtime"), {recursive: true});
       fs.writeFileSync(path.join(appRoot, ".ai", "runtime", "PROVIDER_PROVENANCE.json"), prov);
-      const rv = await new LocalClaudeExecutors(appRoot, controlRoot).pair().reviewer.review(ws, {runId: "run_" + "0".repeat(24), missionId: "m", projectId: "p", title: "t", objective: "o", acceptanceCriteria: [], riskLevel: "R1", cycle: 0, baseSha: head}, "", {timeoutMs: 10_000});
+      const rv = await new LocalClaudeExecutors(appRoot, controlRoot, {testOnlyIsolationProviderId: "TEST_ONLY_HOST_PASSTHROUGH"}).pair().reviewer.review(ws, {runId: "run_" + "0".repeat(24), missionId: "m", projectId: "p", title: "t", objective: "o", acceptanceCriteria: [], riskLevel: "R1", cycle: 0, baseSha: head}, "", {timeoutMs: 10_000});
       expect(rv.verdict).toBe("BLOCKED");
       expect(rv.log).toContain("PROVENANCE_REFUSED");
     } finally { fs.rmSync(base, {recursive: true, force: true}); }

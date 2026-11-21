@@ -1236,7 +1236,7 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       const kind = /# ARTEFAKT TÜRÜ: (\w+)/.exec(String(opts.input))?.[1] ?? "";
       return procResult(argv, {stdout: JSON.stringify({type: "result", subtype: "success", is_error: false, result: replyFor(kind)}) + "\n", ...over});
     };
-    return new LocalClaudeExecutors(REPO, control, {runReviewer}).pair();
+    return new LocalClaudeExecutors(REPO, control, {testOnlyIsolationProviderId: "TEST_ONLY_HOST_PASSTHROUGH", runReviewer}).pair();
   };
   const evaluated = (o: EvaluationOutcome, label?: string) => { if (o.status !== "EVALUATED") throw new Error(`${label ? `[${label}] ` : ""}expected EVALUATED, got ${JSON.stringify(o)}`); return o; };
   const listing = (d: string): string[] => fs.existsSync(d) ? fs.readdirSync(d, {recursive: true}).map(String).sort() : [];
@@ -2230,12 +2230,12 @@ describe("LANE-C C-EVAL-PIPELINE: governed role evaluation (staging only; FAKE a
       expect(JSON.parse(r.err)).toMatchObject({status: "REFUSED", reason: "EXECUTE_NOT_ALLOWED", blockers: expect.arrayContaining(["CLAUDE_PROFILE_REVIEWER_REFUSED:PROFILE_PATH_INSIDE_GIT_WORKTREE"])});
       expect(fs.readdirSync(d)).toEqual(["settings"]);
     });
-    it("the real (non-injected) --execute path builds LocalClaudeExecutors, never the FAKE pair: a launcher that exits non-zero is NOT_EXECUTED (exit 1), nothing is staged and the data dir stays clean", { timeout: 120_000 }, async () => {
+    it("the real (non-injected) --execute path builds LocalClaudeExecutors, never the FAKE pair: it refuses NOT_ISOLATED before any launcher starts (DSK-T0008 strict sandbox) -> NOT_EXECUTED (exit 1), nothing is staged and the data dir stays clean", { timeout: 120_000 }, async () => {
       const d = workDir(), control = controlRootWithProvenance(); enable(d); login(control, "implementer");
       const r = await cli(["--role", DEV, "--data-dir", d, "--execute", "--control-root", control]);
       expect(r.err).toBe("");
       expect(r.code).toBe(1);
-      expect(JSON.parse(r.out)).toMatchObject({mode: "EXECUTED", status: "NOT_EXECUTED", roleId: DEV, evaluationId: "EV-01", reason: "IMPLEMENT_EXIT_NONZERO"});
+      expect(JSON.parse(r.out)).toMatchObject({mode: "EXECUTED", status: "NOT_EXECUTED", roleId: DEV, evaluationId: "EV-01", reason: "IMPLEMENT_BLOCKED:NOT_ISOLATED"}); // only the production LocalClaudeExecutors gives this reason (FAKE never does)
       expect(listing(path.join(d, "evaluations"))).toEqual([]);
       expect(fs.readdirSync(d)).toEqual(["settings"]);
     });

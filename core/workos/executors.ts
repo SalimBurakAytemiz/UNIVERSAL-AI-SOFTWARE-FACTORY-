@@ -47,7 +47,10 @@ export interface ReviewResult {
 export interface ImplementerAdapter { readonly identity: string; implement(workspace: string, spec: MissionSpec, ctx: ExecContext): Promise<ImplementResult> }
 export interface ReviewerAdapter { readonly identity: string; review(cleanClone: string, spec: MissionSpec, diff: string, ctx: ExecContext): Promise<ReviewResult> }
 // //TR: preDevBuilder (isteğe bağlı): pre-dev artefakt üretimi için üretim BuilderPort'u; yalnız LOCAL_CLAUDE sağlar ve her çağrı TAZE bir adaptör döndürür. FAKE çiftinde yoktur (route 409 PREDEV_DRIVER_BUILDER_NOT_CONFIGURED verir).
-export interface ExecutorPair { kind: "FAKE" | "LOCAL_CLAUDE"; implementer: ImplementerAdapter; reviewer: ReviewerAdapter; preDevBuilder?: () => ClaudePreDevBuilder }
+// //TR: DSK-T0008 sıkı sandbox (Founder kararı 2026-11-21): gerçek model süreci (implementer/reviewer/pre-dev) yalnız doğrulanmış bir sandbox sağlayıcısının İÇİNDE başlatılıyorsa ISOLATED'dır (providerId o sağlayıcıdır). Ana makinede başlatan yürütücü NOT_ISOLATED'dır ve gerçek yürütmesi kapalıdır. FAKE yürütücüde alan yoktur (model yok).
+export type ExecutorIsolation = {state: "ISOLATED"; providerId: string} | {state: "NOT_ISOLATED"; reason: "HOST_SPAWN"};
+export const NOT_ISOLATED = "NOT_ISOLATED" as const;
+export interface ExecutorPair { kind: "FAKE" | "LOCAL_CLAUDE"; implementer: ImplementerAdapter; reviewer: ReviewerAdapter; preDevBuilder?: () => ClaudePreDevBuilder; isolation?: ExecutorIsolation }
 
 // Bağımsız review zorunluluğu (config/execution-backends.json pipeline.producerMayReviewOwnOutput=false): aynı kimlik reddedilir.
 export function assertIndependentExecutors(pair: ExecutorPair): void {
@@ -277,6 +280,8 @@ export interface LocalClaudeOptions {
   profile?: ClaudeProfileOptions;
   // Yalnız testler: reviewer sürecini gerçek CLI yerine kaydeden sahte çalıştırıcı (programatik enjeksiyon; env ile seçilemez).
   runReviewer?: (argv: string[], opts: ProcOptions) => Promise<ProcResult>;
+  // //TR: DSK-T0008: YALNIZ testler (programatik; env/config/API ile seçilemez). Sahte CLI ile ana makinede başlatmayı bu TEST sağlayıcısının kimliğiyle "izole" sayar; üretimde verilmez, dolayısıyla gerçek model süreci hiç başlatılmaz (NOT_ISOLATED).
+  testOnlyIsolationProviderId?: string;
 }
 export class LocalClaudeExecutors {
   readonly implementerIdentity: string; readonly reviewerIdentity: string;
@@ -298,14 +303,19 @@ export class LocalClaudeExecutors {
     if (!c.ok) throw new Error(c.code);
     return c.resolvedPath;
   }
+  // //TR: DSK-T0008: bu sınıf Claude sürecini ana makinede başlatır (fork/spawn; sandbox sağlayıcısı üzerinden DEĞİL). Bu yüzden üretimde NOT_ISOLATED'dır ve üç gerçek model yolu (implementer, reviewer, pre-dev) KAYNAKTA, süreç başlatılmadan reddedilir. Doğrulanmış izole başlatma (DSK-T0007) gelene kadar gerçek yürütme kapalıdır.
+  get isolation(): ExecutorIsolation { const t = this.opts.testOnlyIsolationProviderId; return typeof t === "string" && t.length > 0 ? {state: "ISOLATED", providerId: t} : {state: "NOT_ISOLATED", reason: "HOST_SPAWN"}; }
   pair(): ExecutorPair {
     const self = this;
+    const isolated = () => self.isolation.state === "ISOLATED";
     return {
       kind: "LOCAL_CLAUDE",
+      isolation: self.isolation,
       // Broker ve config/builder-execution-policy.json değişmeden çalışır (Bash yok, commit edemez); commit'i engine atar.
       // SBX-8: implementer profili hazır değilse (oturum açılmamış / yol reddi) broker hiç başlatılmaz; kişisel profile geri düşülmez. Broker aynı kontrolü bağımsız olarak tekrarlar.
       implementer: new EditOnlyImplementer(this.implementerIdentity, path.join(this.repoRoot, "config", "environment-policy.json"),
         (_workspace, spec) => {
+          if (!isolated()) return {refuse: NOT_ISOLATED};
           const prof = claudeProfileForRun(self.controlRoot, "implementer", self.opts.profile);
           if (!prof.ok) return {refuse: prof.reason};
           // C-IMPL-WIN-1: CLI/başlatıcı kanıtı yoksa broker HİÇ başlatılmaz (asılı kalma/genel hata yok): kesin neden BLOCKED olarak run'a yazılır.
@@ -319,6 +329,7 @@ export class LocalClaudeExecutors {
         async review(cleanClone, spec, diff, ctx) {
           let launcher: string;
           const at = new Date().toISOString();
+          if (!isolated()) return {verdict: "BLOCKED", findings: [], valid: false, invalidReason: NOT_ISOLATED, exitCode: null, log: `NOT_EXECUTED: ${NOT_ISOLATED} (reviewer not started)\n`, argv: ["claude"], startedAt: at, endedAt: at, timedOut: false, aborted: false, transient: false};
           try { launcher = self.verifiedLauncher(); } catch (e) {
             return {verdict: "BLOCKED", findings: [], valid: false, invalidReason: (e as Error).message.slice(0, 200), exitCode: null, log: `PROVENANCE_REFUSED: ${(e as Error).message}\n`, argv: ["claude"], startedAt: at, endedAt: new Date().toISOString(), timedOut: false, aborted: false, transient: false};
           }
@@ -342,7 +353,7 @@ export class LocalClaudeExecutors {
       },
       // //TR: Pre-dev artefakt üretimi AYNI reviewer rotasının yetkisini kullanır (provenance-doğrulanmış launcher, ayrı salt-okunur reviewer profili, reviewerArgv, allowPaidApi env politikası); yeni yetki/env bayrağı yoktur.
       preDevBuilder: () => new ClaudePreDevBuilder({
-        identity: self.reviewerIdentity, launcher: () => self.verifiedLauncher(),
+        identity: self.reviewerIdentity, launcher: () => { if (!isolated()) throw new Error(NOT_ISOLATED); return self.verifiedLauncher(); },
         profile: () => { const p = claudeProfileForRun(self.controlRoot, "reviewer", self.opts.profile); return p.ok ? {ok: true, dir: p.dir} : {ok: false, reason: p.reason}; },
         env: dir => withClaudeProfileEnv(self.env(), dir), argv: l => reviewerArgv(l, "json"), outputFormat: "claude-json", run: self.opts.runReviewer ?? runProcess
       })

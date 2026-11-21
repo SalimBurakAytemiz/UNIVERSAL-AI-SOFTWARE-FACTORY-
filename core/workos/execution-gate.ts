@@ -31,6 +31,7 @@ const isProvider = (p: unknown): p is SandboxProvider => {
 export class ExecutionGate {
   private readonly provider: SandboxProvider | null;
   private selfTestResult: Promise<{ok: boolean; detail: SandboxDenialDetail | null}> | null = null;
+  private settled: {ok: boolean; detail: SandboxDenialDetail | null} | null = null;
   /** provider yalnız programatik verilir (testlerde enjekte edilen sahte sağlayıcı); null/eksik/geçersiz = doğrulanmış sağlayıcı yok = BLOCKED. */
   constructor(provider: SandboxProvider | null = null) { this.provider = isProvider(provider) ? provider : null; }
   get registered(): boolean { return this.provider !== null; }
@@ -40,7 +41,7 @@ export class ExecutionGate {
     // Öz-test süreç (kapı örneği) başına bir kez çalışır; yalnız açık {ok: true} geçer, hata/zaman aşımı/başka değer fail-closed'dur.
     return this.selfTestResult ??= Promise.resolve().then(() => p.selfTest()).then(
       r => (r && typeof r === "object" && r.ok === true ? {ok: true, detail: null} : {ok: false, detail: "SELF_TEST_FAILED" as const}),
-      () => ({ok: false, detail: "SELF_TEST_ERROR" as const}));
+      () => ({ok: false, detail: "SELF_TEST_ERROR" as const})).then(v => { this.settled = v; return v; });
   }
   /** Tek karar noktası: izin yalnız kayıtlı sağlayıcı + geçmiş öz-test ile verilir; aksi halde SANDBOX_UNAVAILABLE (ana makinede yürütme yok). */
   async authorize(kind: ProjectExecutionKind): Promise<GateDecision> {
@@ -48,6 +49,11 @@ export class ExecutionGate {
     const v = await this.verified();
     if (!v.ok || !this.provider) return {allowed: false, kind, reason: SANDBOX_UNAVAILABLE, detail: v.detail ?? "NO_VERIFIED_PROVIDER"};
     return {allowed: true, kind, providerId: this.provider.id, provider: this.provider};
+  }
+  /** //TR: DSK-T0008 sıkı sandbox: runner'ın SENKRON talep geçişi için anlık görüntü. Öz-test henüz sonuçlanmadıysa doğrulama başlatılır ve sonuç "yok" sayılır (fail-closed); yalnız geçmiş öz-test + kayıtlı sağlayıcı ok:true verir. */
+  snapshot(): {ok: boolean; providerId: string | null} {
+    if (this.settled === null) { void this.verified(); return {ok: false, providerId: null}; }
+    return this.settled.ok && this.provider ? {ok: true, providerId: this.provider.id} : {ok: false, providerId: null};
   }
   /** Durum görünümü (sır/yol içermez). */
   async status(): Promise<{state: "AVAILABLE" | "UNAVAILABLE"; reason: typeof SANDBOX_UNAVAILABLE | null; detail: SandboxDenialDetail | null; providerId: string | null}> {

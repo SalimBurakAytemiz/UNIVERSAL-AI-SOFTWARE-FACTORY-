@@ -10,6 +10,11 @@ import {ensureClaudeProfile, claudeProfileDir} from "../../core/workos/claude-pr
 import {WorkOsStore} from "../../core/workos/store.js";
 import {activateGlobalStop} from "../../automation/lib/global-stop.mjs";
 import {spawnGitSync} from "../../automation/lib/git-isolation.mjs";
+import {TEST_HOST_PASSTHROUGH_SANDBOX} from "./test-sandbox.js";
+import {LocalClaudeExecutors, NOT_ISOLATED, FakeExecutors as FakeEx} from "../../core/workos/executors.js";
+import {MissionRunner} from "../../core/workos/runner.js";
+import {ExecutionGate} from "../../core/workos/execution-gate.js";
+import {fakeSecurity} from "../../core/workos/security-tools.js";
 
 export function registerDskRunnerPassiveCases(): void {
  describe("DSK-T0008 P-A passive runner (MANUAL start mode)", () => {
@@ -17,7 +22,7 @@ export function registerDskRunnerPassiveCases(): void {
   const apps: Array<{close: () => Promise<unknown>}> = [];
   afterEach(async () => { while (apps.length) await apps.pop()!.close(); });
 
-  async function mk(o: {mode?: "AUTO" | "MANUAL"; kind?: "FAKE" | "LOCAL_CLAUDE"; ready?: boolean; intervalMs?: number; policyContext?: Record<string, boolean>; counter?: {implement: number}} = {}) {
+  async function mk(o: {mode?: "AUTO" | "MANUAL"; kind?: "FAKE" | "LOCAL_CLAUDE"; ready?: boolean; intervalMs?: number; policyContext?: Record<string, boolean>; counter?: {implement: number; review?: number}; sandbox?: boolean; isolated?: boolean} = {}) {
     const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "dsk-pa-"));
     const runtime = path.join(tmp, "runtime"), control = path.join(tmp, "control"), data = path.join(tmp, "data");
     for (const d of [runtime, control]) fs.mkdirSync(d, {recursive: true});
@@ -28,10 +33,12 @@ export function registerDskRunnerPassiveCases(): void {
       for (const role of ["implementer", "reviewer"] as const) { ensureClaudeProfile(control, role, {forbiddenRoots: [data]}); fs.writeFileSync(path.join(claudeProfileDir(control, role), ".credentials.json"), ""); }
     }
     const {FakeExecutors} = await import("../../core/workos/executors.js");
-    const counter = o.counter ?? {implement: 0};
-    const pair = {...new FakeExecutors({implement: () => { counter.implement += 1; return {files: {"feature.txt": "ok\n"}}; }, review: () => ({verdict: "CLEAN"})}).pair(), kind: o.kind ?? "LOCAL_CLAUDE"};
+    const counter = o.counter ?? {implement: 0, review: 0} as {implement: number; review?: number};
+    // a test pair labelled LOCAL_CLAUDE; it is "isolated" only when the test says so (bound to the TEST provider id), like a future DSK-T0007 executor
+    const pair = {...new FakeExecutors({implement: () => { counter.implement += 1; return {files: {"feature.txt": "ok\n"}}; }, review: () => { counter.review = (counter.review ?? 0) + 1; return {verdict: "CLEAN"}; }}).pair(), kind: o.kind ?? "LOCAL_CLAUDE",
+      ...(o.isolated ? {isolation: {state: "ISOLATED", providerId: TEST_HOST_PASSTHROUGH_SANDBOX.id}} : {})};
     const app = buildServer({controlToken: TOKEN, runtime, dataDir: data, controlRoot: control, tenantId: "tA", port: 3210, logger: false, executors: pair as never,
-      executorSetup: {findClaudeCli: () => process.execPath, captureProvenance: async () => ({ok: true})}, sandbox: null, ...(o.policyContext ? {policyContext: o.policyContext} : {}),
+      executorSetup: {findClaudeCli: () => process.execPath, captureProvenance: async () => ({ok: true})}, sandbox: o.sandbox ? TEST_HOST_PASSTHROUGH_SANDBOX : null, ...(o.policyContext ? {policyContext: o.policyContext} : {}),
       runner: {enabled: true, intervalMs: o.intervalMs ?? 600_000, startMode: o.mode ?? "MANUAL", retryBackoffMs: [0, 0]}} as never);
     apps.push(app); await app.ready();
     const auth = {"x-uasco-control-token": TOKEN, host: "127.0.0.1:3210", "content-type": "application/json"};
@@ -141,47 +148,93 @@ export function registerDskRunnerPassiveCases(): void {
     expect((await s2.runner()).state).toBe("PASSIVE");
   });
 
-  it("no verified sandbox: start is allowed, but the run's tests are NOT_EXECUTED and it stops at AWAITING_APPROVAL (never SUCCEEDED)", { timeout: 120_000 }, async () => {
-    const s = await mk({ready: true, intervalMs: 250});
-    expect((await s.app.inject({method: "GET", url: "/v1/system/executors", headers: {"x-uasco-control-token": TOKEN, host: "127.0.0.1:3210"}})).json().sandbox.state).toBe("UNAVAILABLE");
+  const waitTicks = () => new Promise(r => setTimeout(r, 1500));
+  const unleased = (s: Awaited<ReturnType<typeof mk>>, id: string) => expect(s.runOf(id)).toMatchObject({status: "QUEUED", leaseId: null, attempt: 0});
+
+  it("STRICT SANDBOX: with no verified sandbox an ACTIVE runner leases nothing (SANDBOX_REQUIRED): zero executor calls, zero host changes, zero delivery", { timeout: 120_000 }, async () => {
+    const s = await mk({ready: true, intervalMs: 250, isolated: true});
+    expect((await s.enable()).statusCode).toBe(200);
+    const marker = path.join(s.control, "..", "PROJECT_CODE_EXECUTED"), id = s.queueRun({marker});
+    const repo = s.repo(), headBefore = String(spawnGitSync(repo, ["rev-parse", "HEAD"]).stdout).trim();
+    expect((await s.start()).json().runner.state).toBe("ACTIVE");
+    await waitTicks();
+    unleased(s, id);
+    expect(s.counter.implement).toBe(0); expect(s.counter.review ?? 0).toBe(0);
+    expect(fs.existsSync(marker)).toBe(false);
+    expect(String(spawnGitSync(repo, ["rev-parse", "HEAD"]).stdout).trim()).toBe(headBefore);
+    expect(String(spawnGitSync(repo, ["status", "--porcelain"]).stdout).trim()).toBe("");
+    expect(fs.existsSync(path.join(s.data, "deliveries"))).toBe(false);
+    expect(fs.existsSync(path.join(s.data, "runs", id))).toBe(false); // not even a workspace clone
+  });
+
+  it("STRICT SANDBOX: a verified sandbox alone is not enough — an executor that spawns on the host stays NOT_ISOLATED and leases nothing", { timeout: 120_000 }, async () => {
+    const s = await mk({ready: true, intervalMs: 250, sandbox: true, isolated: false});
+    expect((await s.app.inject({method: "GET", url: "/v1/system/executors", headers: {"x-uasco-control-token": TOKEN, host: "127.0.0.1:3210"}})).json().sandbox.state).toBe("AVAILABLE");
+    expect((await s.enable()).statusCode).toBe(200);
+    const id = s.queueRun();
+    expect((await s.start()).statusCode).toBe(200);
+    await waitTicks();
+    unleased(s, id);
+    expect(s.counter.implement).toBe(0);
+  });
+
+  it("STRICT SANDBOX positive path (test-only isolated executor bound to the verified TEST provider): the run is leased and executed", { timeout: 120_000 }, async () => {
+    const s = await mk({ready: true, intervalMs: 250, sandbox: true, isolated: true});
     expect((await s.enable()).statusCode).toBe(200);
     const id = s.queueRun();
     expect((await s.start()).statusCode).toBe(200);
     await until(() => ["AWAITING_APPROVAL", "SUCCEEDED", "FAILED", "BLOCKED"].includes(s.runOf(id).status));
-    const run = s.runOf(id);
-    expect(run.status).toBe("AWAITING_APPROVAL");
-    expect(run.evidence.map(e => e.kind)).toContain("VERIFY_TESTS_NOT_EXECUTED");
-    expect(run.completion).toBeUndefined();
     expect(s.counter.implement).toBe(1);
   });
 
-  it("SANDBOX BOUNDARY: without a verified sandbox no project code runs, the user's repository is untouched and no delivery artifact exists; the implementer IS invoked (edit-only, in the run's own clone)", { timeout: 120_000 }, async () => {
-    const s = await mk({ready: true, intervalMs: 250});
-    expect((await s.enable()).statusCode).toBe(200);
-    const marker = path.join(s.control, "..", "PROJECT_CODE_EXECUTED"), id = s.queueRun({marker});
-    const repo = s.repo(), headBefore = String(spawnGitSync(repo, ["rev-parse", "HEAD"]).stdout).trim();
-    expect((await s.start()).statusCode).toBe(200);
-    await until(() => ["AWAITING_APPROVAL", "SUCCEEDED", "FAILED", "BLOCKED"].includes(s.runOf(id).status));
-    const run = s.runOf(id);
-    expect(run.status).toBe("AWAITING_APPROVAL");
-    // project code (the test command) never ran on the host
-    expect(fs.existsSync(marker)).toBe(false);
-    expect(run.evidence.map(e => e.kind)).toEqual(expect.arrayContaining(["VERIFY_TESTS_NOT_EXECUTED", "REGRESSION_TESTS_NOT_EXECUTED"]));
-    expect(run.evidence.some(e => e.kind === "VERIFY_TESTS" || e.kind === "REGRESSION_TESTS")).toBe(false);
-    // the Founder's repository is unchanged: the edit happened only in the run's workspace clone under the data dir
-    expect(String(spawnGitSync(repo, ["rev-parse", "HEAD"]).stdout).trim()).toBe(headBefore);
-    expect(fs.existsSync(path.join(repo, "feature.txt"))).toBe(false);
-    expect(String(spawnGitSync(repo, ["status", "--porcelain"]).stdout).trim()).toBe("");
-    // no delivery artifact or completion is created by the runner (delivery needs a separate Founder action)
-    expect(run.deliveryArtifact).toBeUndefined(); expect(run.sourceDelivery).toBeUndefined(); expect(run.completion).toBeUndefined();
-    expect(fs.existsSync(path.join(s.data, "deliveries"))).toBe(false);
-    // the model executor IS called once without a sandbox (documented boundary: the gate covers project-code execution, not IMPLEMENT)
-    expect(s.counter.implement).toBe(1);
+  it("REVALIDATION: if isolation is lost after the lease (e.g. recovery onto a host without the provider), IMPLEMENT is refused before the model runs", { timeout: 120_000 }, async () => {
+    const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "dsk-reval-")), repo = path.join(tmp, "repo"), data = path.join(tmp, "data"); fs.mkdirSync(repo);
+    const git = (a: string[]) => { const r = spawnGitSync(repo, a); if (r.status !== 0) throw new Error(String(r.stderr)); };
+    git(["init", "-q", "-b", "main"]); fs.writeFileSync(path.join(repo, "test.mjs"), "process.exit(0);\n"); git(["add", "-A"]); git(["-c", "user.name=S", "-c", "user.email=s@local.invalid", "commit", "-q", "-m", "s"]);
+    let calls = 0;
+    const pair: any = {...new FakeEx({implement: () => { calls += 1; return {files: {"feature.txt": "ok\n"}}; }, review: () => ({verdict: "CLEAN"})}).pair(), kind: "LOCAL_CLAUDE", isolation: {state: "ISOLATED", providerId: TEST_HOST_PASSTHROUGH_SANDBOX.id}};
+    const st = new WorkOsStore(data);
+    const p = st.createProject({tenantId: "tA", orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL", repository: {path: repo}, testCommand: ["node", "test.mjs"]});
+    const m = st.createMission({tenantId: "tA", projectId: p.projectId, title: "F", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
+    for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) st.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
+    const id = st.createRun({tenantId: "tA", missionId: m.missionId, executor: {implementer: pair.implementer.identity, reviewer: pair.reviewer.identity}, createdBy: "FOUNDER_LOCAL"}).runId;
+    const gate = new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX); await gate.status(); // settle the self-test so the synchronous snapshot is AVAILABLE
+    const r = new MissionRunner({executionGate: gate, store: st, dataDir: data, globalStopFile: path.join(tmp, "GLOBAL_STOP.json"), envPolicyFile: path.resolve(import.meta.dirname, "..", "..", "config", "environment-policy.json"),
+      executors: pair, maxStepsPerTick: 1, retryBackoffMs: [0, 0], security: fakeSecurity(`${data}-sec`).options});
+    expect(r.isolationRefusal()).toBe(null);
+    expect((await r.tick()).claimed).toEqual([id]); // leased; WORKSPACE step done (no model)
+    pair.isolation = {state: "NOT_ISOLATED", reason: "HOST_SPAWN"};
+    expect(r.isolationRefusal()).toBe("NOT_ISOLATED");
+    await r.tick();
+    const run = st.getRun({tenantId: "tA"}, id)!;
+    expect(run.status).toBe("BLOCKED"); expect(run.reason).toContain("NOT_ISOLATED");
+    expect(calls).toBe(0);
+    await r.stop();
   });
 
-  it("LEASE BOUNDARY: a run of a mission that is not AUTHORIZED cannot even be created, so it can never be leased", async () => {
-    const s = await mk({ready: true});
-    expect(() => s.queueRun({missionTo: ["PREFLIGHT"]})).toThrow();
+  it("the synchronous gate snapshot is fail-closed until the self-test settled, and a failing self-test is never AVAILABLE", async () => {
+    const g = new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX);
+    expect(g.snapshot()).toEqual({ok: false, providerId: null});
+    await g.status(); expect(g.snapshot()).toEqual({ok: true, providerId: TEST_HOST_PASSTHROUGH_SANDBOX.id});
+    const bad = new ExecutionGate({...TEST_HOST_PASSTHROUGH_SANDBOX, id: "BAD", selfTest: async () => ({ok: false})});
+    await bad.status(); expect(bad.snapshot().ok).toBe(false);
+    expect(new ExecutionGate(null).snapshot().ok).toBe(false);
+  });
+
+  it("PRODUCTION executor: LocalClaudeExecutors is NOT_ISOLATED and refuses all three real-model paths at the source, before any process starts", async () => {
+    const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "dsk-iso-")), calls: string[][] = [];
+    const ex = new LocalClaudeExecutors(path.resolve(import.meta.dirname, "..", ".."), tmp, {runReviewer: async argv => { calls.push(argv); throw new Error("must not run"); }});
+    expect(ex.isolation).toEqual({state: "NOT_ISOLATED", reason: "HOST_SPAWN"});
+    const pair = ex.pair(); expect(pair.isolation).toEqual({state: "NOT_ISOLATED", reason: "HOST_SPAWN"});
+    const spec = {runId: "run_" + "0".repeat(24), missionId: "msn_" + "1".repeat(24), projectId: "prj_" + "2".repeat(24), title: "t", objective: "o", acceptanceCriteria: ["a"], startSha: "a".repeat(40)} as never;
+    const ws = path.join(tmp, "ws"); fs.mkdirSync(ws); spawnGitSync(ws, ["init", "-q", "-b", "main"]); fs.writeFileSync(path.join(ws, "a.txt"), "a\n"); spawnGitSync(ws, ["add", "-A"]); spawnGitSync(ws, ["-c", "user.name=S", "-c", "user.email=s@local.invalid", "commit", "-q", "-m", "s"]);
+    const impl = await pair.implementer.implement(ws, spec, {timeoutMs: 1000});
+    expect(impl.blockReason).toBe(NOT_ISOLATED); expect(impl.exitCode).toBe(null);
+    const rv = await pair.reviewer.review(ws, spec, "", {timeoutMs: 1000});
+    expect(rv).toMatchObject({verdict: "BLOCKED", valid: false, invalidReason: NOT_ISOLATED});
+    const pre = await pair.preDevBuilder!().produce("BusinessAnalysis" as never, "Analyse the mission.", {} as never).then(() => null, (e: {code?: string; detail?: string}) => e);
+    expect(pre).toMatchObject({code: "PREDEV_BUILDER_PROVENANCE_REFUSED", detail: NOT_ISOLATED});
+    expect(calls).toEqual([]);
   });
 
   it("cancellation: after start, Global Stop cancels a queued run before any executor call", { timeout: 120_000 }, async () => {
