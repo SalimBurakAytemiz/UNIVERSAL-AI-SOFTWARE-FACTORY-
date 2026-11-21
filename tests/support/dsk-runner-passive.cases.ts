@@ -40,19 +40,21 @@ export function registerDskRunnerPassiveCases(): void {
     const start = async (payload: unknown = {}) => app.inject({method: "POST", url: "/v1/system/runner/start", headers: auth, payload: JSON.stringify(payload)});
     const enable = async () => app.inject({method: "POST", url: "/v1/system/executors/local-claude/enable", headers: auth, payload: "{}"});
     // a real git project + authorized mission + queued run, written through the same journal the server reads
-    const queueRun = () => {
+    const queueRun = (o2: {marker?: string; missionTo?: Array<"PREFLIGHT" | "AUTHORIZED">} = {}) => {
       const repo = path.join(tmp, `src-${crypto.randomBytes(3).toString("hex")}`); fs.mkdirSync(repo, {recursive: true});
       const git = (a: string[]) => { const r = spawnGitSync(repo, a); if (r.status !== 0) throw new Error(String(r.stderr)); };
-      git(["init", "-q", "-b", "main"]); fs.writeFileSync(path.join(repo, "test.mjs"), "process.exit(0);\n"); git(["add", "-A"]); git(["-c", "user.name=S", "-c", "user.email=s@local.invalid", "commit", "-q", "-m", "seed"]);
+      git(["init", "-q", "-b", "main"]); fs.writeFileSync(path.join(repo, "test.mjs"), o2.marker ? `import fs from "node:fs";\nfs.writeFileSync(${JSON.stringify(o2.marker)}, "EXECUTED");\nprocess.exit(0);\n` : "process.exit(0);\n"); git(["add", "-A"]); git(["-c", "user.name=S", "-c", "user.email=s@local.invalid", "commit", "-q", "-m", "seed"]);
       const st = new WorkOsStore(data);
       const p = st.createProject({tenantId: "tA", orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL", repository: {path: repo}, testCommand: ["node", "test.mjs"]});
       const m = st.createMission({tenantId: "tA", projectId: p.projectId, title: "F", objective: "feature.txt says ok", acceptanceCriteria: ["tests pass"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
-      for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) st.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
+      for (const to of o2.missionTo ?? (["PREFLIGHT", "AUTHORIZED"] as const)) st.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
+      lastRepo = repo;
       return st.createRun({tenantId: "tA", missionId: m.missionId, executor: {implementer: pair.implementer.identity, reviewer: pair.reviewer.identity}, createdBy: "FOUNDER_LOCAL"}).runId;
     };
+    let lastRepo = "";
     const runOf = (id: string) => new WorkOsStore(data).getRun({tenantId: "tA"}, id)!;
     const stop = () => activateGlobalStop(path.join(runtime, "GLOBAL_STOP.json"), "test stop", "FOUNDER");
-    return {app, events, runner, start, enable, queueRun, runOf, stop, counter, control};
+    return {app, events, runner, start, enable, queueRun, runOf, stop, counter, control, data, repo: () => lastRepo};
   }
 
   it("the packaged app runs the runner in MANUAL start mode", () => {
@@ -151,6 +153,35 @@ export function registerDskRunnerPassiveCases(): void {
     expect(run.evidence.map(e => e.kind)).toContain("VERIFY_TESTS_NOT_EXECUTED");
     expect(run.completion).toBeUndefined();
     expect(s.counter.implement).toBe(1);
+  });
+
+  it("SANDBOX BOUNDARY: without a verified sandbox no project code runs, the user's repository is untouched and no delivery artifact exists; the implementer IS invoked (edit-only, in the run's own clone)", { timeout: 120_000 }, async () => {
+    const s = await mk({ready: true, intervalMs: 250});
+    expect((await s.enable()).statusCode).toBe(200);
+    const marker = path.join(s.control, "..", "PROJECT_CODE_EXECUTED"), id = s.queueRun({marker});
+    const repo = s.repo(), headBefore = String(spawnGitSync(repo, ["rev-parse", "HEAD"]).stdout).trim();
+    expect((await s.start()).statusCode).toBe(200);
+    await until(() => ["AWAITING_APPROVAL", "SUCCEEDED", "FAILED", "BLOCKED"].includes(s.runOf(id).status));
+    const run = s.runOf(id);
+    expect(run.status).toBe("AWAITING_APPROVAL");
+    // project code (the test command) never ran on the host
+    expect(fs.existsSync(marker)).toBe(false);
+    expect(run.evidence.map(e => e.kind)).toEqual(expect.arrayContaining(["VERIFY_TESTS_NOT_EXECUTED", "REGRESSION_TESTS_NOT_EXECUTED"]));
+    expect(run.evidence.some(e => e.kind === "VERIFY_TESTS" || e.kind === "REGRESSION_TESTS")).toBe(false);
+    // the Founder's repository is unchanged: the edit happened only in the run's workspace clone under the data dir
+    expect(String(spawnGitSync(repo, ["rev-parse", "HEAD"]).stdout).trim()).toBe(headBefore);
+    expect(fs.existsSync(path.join(repo, "feature.txt"))).toBe(false);
+    expect(String(spawnGitSync(repo, ["status", "--porcelain"]).stdout).trim()).toBe("");
+    // no delivery artifact or completion is created by the runner (delivery needs a separate Founder action)
+    expect(run.deliveryArtifact).toBeUndefined(); expect(run.sourceDelivery).toBeUndefined(); expect(run.completion).toBeUndefined();
+    expect(fs.existsSync(path.join(s.data, "deliveries"))).toBe(false);
+    // the model executor IS called once without a sandbox (documented boundary: the gate covers project-code execution, not IMPLEMENT)
+    expect(s.counter.implement).toBe(1);
+  });
+
+  it("LEASE BOUNDARY: a run of a mission that is not AUTHORIZED cannot even be created, so it can never be leased", async () => {
+    const s = await mk({ready: true});
+    expect(() => s.queueRun({missionTo: ["PREFLIGHT"]})).toThrow();
   });
 
   it("cancellation: after start, Global Stop cancels a queued run before any executor call", { timeout: 120_000 }, async () => {
