@@ -1,0 +1,113 @@
+# UASCO OAuth layer diagnostic (LOCAL REVIEW DRAFT, Founder-tier: .github/ is protected). Manual only. Not a required check, not read by any gate.
+# Purpose: find WHICH layer rejects the reviewer credential (HTTP 401 AUTH_TOKEN_INVALID in ai-review), using the existing uasco-review
+# environment secret CLAUDE_CODE_OAUTH_TOKEN, with one-turn, no-tool prompts and no repository content, diff or schema.
+#   P1 cli-304-oauth        direct `claude -p`, CLI 2.1.304 (the version the pinned action installs), only CLAUDE_CODE_OAUTH_TOKEN set
+#   P2 cli-304-emptykey     same, plus ANTHROPIC_API_KEY="" exactly as the pinned action's env block sets it
+#   P3 cli-stable-oauth     direct `claude -p`, current stable CLI from the same installer
+#   P4 action-pinned        anthropics/claude-code-action@db77d4d3 (v1.0.254), minimal prompt, no tools
+#   P5 action-pinned-stable same action, but given the stable CLI via path_to_claude_code_executable
+# Each probe prints ONE fixed line from scripts/ci/uasco-review/oauth-layer-classify.mjs. The token, its length/prefix/hash and model text are
+# never printed; raw output stays in RUNNER_TEMP, is not uploaded and is deleted. Subscription OAuth only: no API key is set or used (D-08 = 0 USD).
+name: UASCO OAuth Layer Diagnose
+on:
+  workflow_dispatch: {}
+permissions: {}
+concurrency:
+  group: uasco-oauth-layer-diagnose
+  cancel-in-progress: false
+env:
+  PROMPT: "Reply with the single word OK."
+  NO_TOOLS: "Bash,Edit,Write,MultiEdit,NotebookEdit,Read,Glob,Grep,WebFetch,WebSearch,Task,TodoWrite"
+  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+  DISABLE_AUTOUPDATER: "1"
+jobs:
+  cli:
+    if: github.ref == 'refs/heads/v7/integration'
+    runs-on: ubuntu-latest
+    environment: uasco-review
+    timeout-minutes: 10
+    permissions: {contents: read}
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - {probe: cli-304-oauth, version: "2.1.304", emptykey: "0"}
+          - {probe: cli-304-emptykey, version: "2.1.304", emptykey: "1"}
+          - {probe: cli-stable-oauth, version: "stable", emptykey: "0"}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: {path: diag, sparse-checkout: scripts/ci/uasco-review/oauth-layer-classify.mjs, sparse-checkout-cone-mode: false, persist-credentials: false}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: {node-version: 24}
+      - name: Probe
+        env:
+          TOK: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          PROBE: ${{ matrix.probe }}
+          VERSION: ${{ matrix.version }}
+          EMPTYKEY: ${{ matrix.emptykey }}
+        run: |
+          set -u
+          CLS="$GITHUB_WORKSPACE/diag/scripts/ci/uasco-review/oauth-layer-classify.mjs"
+          PRESENT=0; [ -n "${TOK:-}" ] && PRESENT=1
+          WS=0; case "${TOK:-}" in *[[:space:]]*) WS=1;; esac
+          echo "$PROBE token_has_whitespace=$WS"
+          # Fresh HOME and an empty working directory: no repository content, no user settings, no cached login.
+          export HOME="$RUNNER_TEMP/h-$PROBE"; WORK="$RUNNER_TEMP/w-$PROBE"; OUT="$RUNNER_TEMP/o-$PROBE.jsonl"; mkdir -p "$HOME" "$WORK"
+          INSTALL=1
+          if ! curl -fsSL https://claude.ai/install.sh -o "$RUNNER_TEMP/install.sh" || ! bash "$RUNNER_TEMP/install.sh" "$VERSION" >/dev/null 2>&1; then INSTALL=0; fi
+          CLAUDE="$HOME/.local/bin/claude"; [ -x "$CLAUDE" ] || INSTALL=0
+          [ "$INSTALL" = 1 ] && echo "$PROBE cli_version=$("$CLAUDE" --version 2>/dev/null | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+          if [ "$PRESENT" = 1 ] && [ "$INSTALL" = 1 ]; then
+            ( cd "$WORK"
+              unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL
+              [ "$EMPTYKEY" = 1 ] && export ANTHROPIC_API_KEY=""
+              CLAUDE_CODE_OAUTH_TOKEN="$TOK" timeout 180 "$CLAUDE" -p "$PROMPT" --output-format stream-json --verbose --max-turns 1 \
+                --disallowedTools "$NO_TOOLS" >"$OUT" 2>/dev/null ) || true
+          fi
+          node "$CLS" "$PROBE" "$PRESENT" "$OUT" "$INSTALL" | tee -a "$GITHUB_STEP_SUMMARY"
+          rm -f "$OUT"
+  action:
+    if: github.ref == 'refs/heads/v7/integration'
+    needs: cli
+    runs-on: ubuntu-latest
+    environment: uasco-review
+    timeout-minutes: 15
+    permissions: {contents: read}
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - {probe: action-pinned, stablecli: "0"}
+          - {probe: action-pinned-stable, stablecli: "1"}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: {path: diag, sparse-checkout: scripts/ci/uasco-review/oauth-layer-classify.mjs, sparse-checkout-cone-mode: false, persist-credentials: false}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: {node-version: 24}
+      - id: cli
+        if: matrix.stablecli == '1'
+        run: |
+          curl -fsSL https://claude.ai/install.sh -o "$RUNNER_TEMP/install.sh" && bash "$RUNNER_TEMP/install.sh" stable >/dev/null 2>&1 || true
+          [ -x "$HOME/.local/bin/claude" ] && echo "path=$HOME/.local/bin/claude" >>"$GITHUB_OUTPUT"
+      - id: claude
+        continue-on-error: true
+        uses: anthropics/claude-code-action@db77d4d3c98f3f6380e7cd45ffba2342a3dbde3c # v1.0.254
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          prompt: ${{ env.PROMPT }}
+          path_to_claude_code_executable: ${{ steps.cli.outputs.path }}
+          claude_args: "--max-turns 1 --disallowedTools ${{ env.NO_TOOLS }}"
+      - name: Classify
+        env:
+          PRESENT: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' && '1' || '0' }}
+          EXEC: ${{ steps.claude.outputs.execution_file }}
+          PROBE: ${{ matrix.probe }}
+          WANT_STABLE: ${{ matrix.stablecli }}
+          HAVE_STABLE: ${{ steps.cli.outputs.path != '' && '1' || '0' }}
+        run: |
+          INSTALL=1; [ "$WANT_STABLE" = 1 ] && [ "$HAVE_STABLE" != 1 ] && INSTALL=0
+          node "$GITHUB_WORKSPACE/diag/scripts/ci/uasco-review/oauth-layer-classify.mjs" "$PROBE" "$PRESENT" "${EXEC:-}" "$INSTALL" | tee -a "$GITHUB_STEP_SUMMARY"
+          [ -n "${EXEC:-}" ] && rm -f "$EXEC" || true
