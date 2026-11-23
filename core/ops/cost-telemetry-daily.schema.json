@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "uasco.cost-telemetry.daily/v1",
+  "$comment": "//TR: UASCO-T0111 geliştirme düzlemi günlük maliyet anlık görüntüsünün kesin şeması; eksik maliyet null/UNKNOWN olarak saklanır, asla 0 değildir. core/ops/cost-telemetry.ts validateDailySnapshot ile birebir uyumludur.",
+  "title": "UASCO dev-plane daily cost snapshot (API-equivalent cost_usd from get_session; a missing cost is null/UNKNOWN, never 0)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "day", "basis", "source", "aggregate", "records"],
+  "properties": {
+    "schema": {"const": "uasco.cost-telemetry.daily/v1"},
+    "day": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+    "basis": {"const": "API_EQUIVALENT"},
+    "source": {"const": "get_session"},
+    "aggregate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["day", "sessions", "routineFires", "knownCostUsd", "unknownCostCount", "completeness", "tokens"],
+      "properties": {
+        "day": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+        "sessions": {"type": "integer", "minimum": 0},
+        "routineFires": {"type": "integer", "minimum": 0},
+        "knownCostUsd": {"type": "number", "minimum": 0},
+        "unknownCostCount": {"type": "integer", "minimum": 0},
+        "completeness": {"enum": ["COMPLETE", "INCOMPLETE"]},
+        "tokens": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["input", "output", "cacheRead", "cacheCreation", "unknownTokenFields"],
+          "properties": {
+            "input": {"type": "integer", "minimum": 0},
+            "output": {"type": "integer", "minimum": 0},
+            "cacheRead": {"type": "integer", "minimum": 0},
+            "cacheCreation": {"type": "integer", "minimum": 0},
+            "unknownTokenFields": {"type": "integer", "minimum": 0}
+          }
+        }
+      }
+    },
+    "records": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sessionId", "kind", "model", "capturedAt", "day", "costState", "costUsd", "tokens", "basis"],
+        "properties": {
+          "sessionId": {"type": "string", "pattern": "^session_[A-Za-z0-9]{1,128}$"},
+          "kind": {"enum": ["SESSION", "ROUTINE_FIRE"]},
+          "model": {"type": ["string", "null"], "minLength": 1, "maxLength": 200},
+          "capturedAt": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,3})?Z$"},
+          "day": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+          "costState": {"enum": ["KNOWN", "UNKNOWN"]},
+          "costUsd": {"type": ["number", "null"], "minimum": 0},
+          "basis": {"const": "API_EQUIVALENT"},
+          "tokens": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["input", "output", "cacheRead", "cacheCreation"],
+            "properties": {
+              "input": {"type": ["integer", "null"], "minimum": 0},
+              "output": {"type": ["integer", "null"], "minimum": 0},
+              "cacheRead": {"type": ["integer", "null"], "minimum": 0},
+              "cacheCreation": {"type": ["integer", "null"], "minimum": 0}
+            }
+          }
+        },
+        "allOf": [
+          {"if": {"properties": {"costState": {"const": "UNKNOWN"}}}, "then": {"properties": {"costUsd": {"type": "null"}}}},
+          {"if": {"properties": {"costState": {"const": "KNOWN"}}}, "then": {"properties": {"costUsd": {"type": "number"}}}}
+        ]
+      }
+    }
+  }
+}

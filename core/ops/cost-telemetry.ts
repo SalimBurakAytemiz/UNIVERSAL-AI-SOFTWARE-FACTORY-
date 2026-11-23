@@ -147,6 +147,9 @@ export function decideBudget(agg: DailyAggregate, thresholdUsd: number): BudgetV
 /** The only gate a caller may use to keep going: true for CONTINUE, false for STOP and UNKNOWN. */
 export const mayContinue = (v: BudgetVerdict): boolean => v.decision === "CONTINUE";
 
+const RECORD_KEYS = new Set(["sessionId", "kind", "model", "capturedAt", "day", "costState", "costUsd", "tokens", "basis"]);
+const TOKEN_FIELD_KEYS = new Set(TOKEN_KEYS.map(([k]) => k as string));
+
 export interface DailySnapshot { schema: typeof COST_TELEMETRY_SCHEMA; day: string; basis: "API_EQUIVALENT"; source: "get_session"; aggregate: DailyAggregate; records: CostRecord[] }
 
 export function buildDailySnapshot(records: readonly CostRecord[], day: string): DailySnapshot {
@@ -167,6 +170,10 @@ export function validateDailySnapshot(raw: unknown): {ok: true; snapshot: DailyS
   const seen = new Set<string>();
   for (const r of raw.records as unknown[]) {
     if (!isObj(r) || typeof r.sessionId !== "string" || !SESSION_ID.test(r.sessionId)) return fail("RECORD_INVALID");
+    // UASCO-T0111: kayıt ve token nesneleri kesin anahtar kümesi taşır (şema ile aynı; fazladan alan reddedilir)
+    for (const k of Object.keys(r)) if (!RECORD_KEYS.has(k)) return fail(`RECORD_UNKNOWN_KEY:${r.sessionId}:${k}`);
+    if (isObj(r.tokens)) for (const k of Object.keys(r.tokens)) if (!TOKEN_FIELD_KEYS.has(k)) return fail(`RECORD_TOKENS:${r.sessionId}`);
+    if (!(r.model === null || (typeof r.model === "string" && r.model.length > 0 && r.model.length <= 200))) return fail(`RECORD_INVALID:${r.sessionId}`);
     if (seen.has(r.sessionId)) return fail(`RECORD_DUPLICATE:${r.sessionId}`);
     seen.add(r.sessionId);
     if (r.day !== raw.day || isoInstant(r.capturedAt) === null || (r.capturedAt as string).slice(0, 10) !== raw.day) return fail(`RECORD_DAY:${r.sessionId}`);
@@ -182,4 +189,45 @@ export function validateDailySnapshot(raw: unknown): {ok: true; snapshot: DailyS
   try { recomputed = aggregateDaily(records, raw.day); } catch (e) { return fail(e instanceof CostTelemetryError ? e.code : "AGGREGATE_FAILED"); }
   if (JSON.stringify(recomputed) !== JSON.stringify(raw.aggregate)) return fail("AGGREGATE_MISMATCH");
   return {ok: true, snapshot: raw as unknown as DailySnapshot};
+}
+
+// ---- UASCO-T0111 completion: 7-day series (RW-018 verificationMethod "7 günlük maliyet serisi"). A day without a stored snapshot is MISSING: its cost is null, never 0. ----
+export const COST_SERIES_SCHEMA = "uasco.cost-telemetry.series/v1" as const;
+export type SeriesDayState = "COMPLETE" | "INCOMPLETE" | "MISSING";
+export interface SeriesDay { day: string; state: SeriesDayState; knownCostUsd: number | null; unknownCostCount: number | null; sessions: number | null; routineFires: number | null }
+export interface CostSeries {
+  schema: typeof COST_SERIES_SCHEMA; basis: "API_EQUIVALENT"; endDay: string; days: SeriesDay[];
+  totals: {knownCostUsd: number; daysComplete: number; daysIncomplete: number; daysMissing: number; completeness: "COMPLETE" | "INCOMPLETE"};
+}
+/** UTC calendar day `offset` days from `day` (YYYY-MM-DD); throws DAY_INVALID for a malformed or rolled-over day. */
+export function shiftDay(day: string, offset: number): string {
+  if (!DAY.test(day) || isoInstant(`${day}T00:00:00Z`) === null || !Number.isSafeInteger(offset)) throw new CostTelemetryError("DAY_INVALID");
+  return new Date(Date.parse(`${day}T00:00:00Z`) + offset * 86_400_000).toISOString().slice(0, 10);
+}
+/**
+ * Builds the `days`-long series ending at `endDay` (inclusive) from stored daily snapshots. Every snapshot is re-validated (aggregate recomputed);
+ * an invalid snapshot or two snapshots for the same day throw. Snapshots outside the window are ignored. The total is COMPLETE only when every day in the
+ * window has a COMPLETE snapshot; otherwise totals.knownCostUsd is a lower bound.
+ */
+export function buildCostSeries(snapshots: readonly unknown[], endDay: string, days = 7): CostSeries {
+  if (!Number.isSafeInteger(days) || days < 1 || days > 366) throw new CostTelemetryError("SERIES_DAYS_INVALID");
+  const window = Array.from({length: days}, (_, i) => shiftDay(endDay, i - days + 1));
+  const inWindow = new Set(window), byDay = new Map<string, DailySnapshot>();
+  for (const s of snapshots) {
+    const v = validateDailySnapshot(s);
+    if (!v.ok) throw new CostTelemetryError(`SNAPSHOT_INVALID:${v.code}`);
+    if (!inWindow.has(v.snapshot.day)) continue;
+    if (byDay.has(v.snapshot.day)) throw new CostTelemetryError(`SERIES_DUPLICATE_DAY:${v.snapshot.day}`);
+    byDay.set(v.snapshot.day, v.snapshot);
+  }
+  const out: SeriesDay[] = window.map(day => {
+    const s = byDay.get(day);
+    if (!s) return {day, state: "MISSING", knownCostUsd: null, unknownCostCount: null, sessions: null, routineFires: null};
+    const a = s.aggregate;
+    return {day, state: a.completeness, knownCostUsd: a.knownCostUsd, unknownCostCount: a.unknownCostCount, sessions: a.sessions, routineFires: a.routineFires};
+  });
+  const count = (st: SeriesDayState) => out.filter(d => d.state === st).length;
+  const known = round6(out.reduce((n, d) => n + (d.knownCostUsd ?? 0), 0));
+  return {schema: COST_SERIES_SCHEMA, basis: "API_EQUIVALENT", endDay, days: out,
+    totals: {knownCostUsd: known, daysComplete: count("COMPLETE"), daysIncomplete: count("INCOMPLETE"), daysMissing: count("MISSING"), completeness: count("COMPLETE") === days ? "COMPLETE" : "INCOMPLETE"}};
 }
