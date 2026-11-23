@@ -321,11 +321,22 @@ export class LocalClaudeExecutors {
   get isolation(): ExecutorIsolation {
     const t = this.opts.testOnlyIsolationProviderId;
     // //TR: Test geçersiz kılması yalnız TEST_ONLY_ önekli kimlikle ve gerçek bir izolasyon kapısı VERİLMEMİŞKEN geçerlidir; üretim kapısıyla birlikte verilirse yok sayılır (gerçek sağlayıcı yerine ana makinede başlatmaya düşülemez). Runner ayrıca kimliğin kendi kapısının doğrulanmış sağlayıcısıyla eşleşmesini ister.
-    if (typeof t === "string" && TEST_ONLY_ID.test(t) && !this.opts.isolationGate) return {state: "ISOLATED", providerId: t};
+    if (this.testHostAllowed()) return {state: "ISOLATED", providerId: t as string};
     const p = this.opts.isolationGate?.verifiedProvider() ?? null;
     return p ? {state: "ISOLATED", providerId: p.id} : {state: "NOT_ISOLATED", reason: "HOST_SPAWN"};
   }
-  /** DSK-T0007: model process runner through the verified provider (null when no verified provider: the host route is reachable only under the test-only override). */
+  /** //TR: Ana makinede başlatma (sahte CLI/mock) YALNIZ şu üçü birlikteyken: TEST_ONLY_ kimliği, gerçek izolasyon kapısı yok ve test çalışma zamanı (vitest). Paketli/üretim süreçte bu koşul hiç sağlanamaz; yanlışlıkla verilse bile gerçek model ana makinede çalışmaz (yalnız reddeden kontrol). */
+  private testHostAllowed(): boolean {
+    const t = this.opts.testOnlyIsolationProviderId;
+    return typeof t === "string" && TEST_ONLY_ID.test(t) && !this.opts.isolationGate && typeof process.env.VITEST === "string";
+  }
+  /** //TR: Model sürecinin TEK çalıştırıcı seçimi: doğrulanmış sağlayıcı varsa o (mock dahil hiçbir şey onu geçersiz kılamaz); yoksa yalnız test ana makine izni varken test mock'u ya da ana makine; ikisi de yoksa null = süreç başlamaz. Ana makineye sessiz geri düşüş yoktur. */
+  private modelRunner(mock?: (argv: string[], po: ProcOptions) => Promise<ProcResult>): ((argv: string[], po: ProcOptions) => Promise<ProcResult>) | null {
+    const via = this.modelRun();
+    if (via) return via;
+    return this.testHostAllowed() ? (mock ?? runProcess) : null;
+  }
+  /** DSK-T0007: model process runner through the verified provider (null when no verified provider). */
   private modelRun(): ((argv: string[], po: ProcOptions) => Promise<ProcResult>) | null {
     const p = this.opts.isolationGate?.verifiedProvider() ?? null;
     if (!p) return null;
@@ -356,6 +367,7 @@ export class LocalClaudeExecutors {
           if (!lc.ok) return {refuse: lc.code};
           syncBrokerControlConfig(self.repoRoot, self.controlRoot);
           const via = self.modelRun();
+          if (!via && !self.testHostAllowed()) return {refuse: NOT_ISOLATED}; // no host fork without the test-only host permission
           return {argv: [path.join(self.repoRoot, "scripts", "claude-builder-broker.mjs")], nodeScript: true, env: withClaudeProfileEnv(self.env(), prof.dir), input: implementPrompt(spec), ...(via ? {runVia: via} : {})};
         }),
       reviewer: {
@@ -375,7 +387,9 @@ export class LocalClaudeExecutors {
           const sp: <T>(fn: () => T) => T = ctx.span ?? (fn => fn()); // HB-1: anlık görüntüdeki senkron git çağrıları runner span'ına sarılır
           const before = sp(() => reviewWorkspaceSnapshot(cleanClone, envPolicyFile));
           const po: ProcOptions = {cwd: cleanClone, env: withWriterEnv(withClaudeProfileEnv(self.env(), prof.dir), ctx), timeoutMs: ctx.timeoutMs, input: reviewPrompt(spec, diff), shouldAbort: ctx.shouldAbort, newSession: true, onSpawn: ctx.onSpawn};
-          const r = toReview(await (self.opts.runReviewer ?? self.modelRun() ?? runProcess)(argv, po));
+          const run = self.modelRunner(self.opts.runReviewer);
+          if (!run) return {verdict: "BLOCKED", findings: [], valid: false, invalidReason: NOT_ISOLATED, exitCode: null, log: `NOT_EXECUTED: ${NOT_ISOLATED} (reviewer not started)\n`, argv, startedAt: at, endedAt: new Date().toISOString(), timedOut: false, aborted: false, transient: false};
+          const r = toReview(await run(argv, po));
           // C-IMPL-WIN-1: oturum süresi dolmuş (kimlik dosyası var ama CLI giriş istiyor): genel REVIEW_FAILED değil, kesin neden.
           // //TR: yalnız BAŞARISIZ çıkışta (uygulayıcıyla aynı kural): çıkış 0 iken güvenilmeyen çıktıdan (alıntı/prompt injection) "oturum doldu" sonucu çıkarılmaz; ve süresi dolmuş oturum yeniden DENENMEZ (çıkış 75 geçici sayılsa bile).
           if (!r.valid && !r.aborted && !r.timedOut && r.exitCode !== 0 && claudeAuthFailure(r.log)) { r.invalidReason = "CLAUDE_PROFILE_LOGIN_EXPIRED"; r.transient = false; }
@@ -389,7 +403,7 @@ export class LocalClaudeExecutors {
       preDevBuilder: () => new ClaudePreDevBuilder({
         identity: self.reviewerIdentity, launcher: () => { if (!isolated()) throw new Error(NOT_ISOLATED); return self.verifiedLauncher(); },
         profile: () => { const p = claudeProfileForRun(self.controlRoot, "reviewer", self.opts.profile); return p.ok ? {ok: true, dir: p.dir} : {ok: false, reason: p.reason}; },
-        env: dir => withClaudeProfileEnv(self.env(), dir), argv: l => reviewerArgv(l, "json"), outputFormat: "claude-json", run: self.opts.runReviewer ?? self.modelRun() ?? runProcess
+        env: dir => withClaudeProfileEnv(self.env(), dir), argv: l => reviewerArgv(l, "json"), outputFormat: "claude-json", run: (argv, po) => { const run = self.modelRunner(self.opts.runReviewer); if (!run) throw new Error(NOT_ISOLATED); return run(argv, po); }
       })
     };
   }
