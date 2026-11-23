@@ -60,7 +60,8 @@ describe("M1a c2 TEST identity is separate from the real UASCO", () => {
       expect(id.uninstallKey).toBe(`HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${id.uninstallKeyName}`);
     }
     // the namespace is the one electron-builder itself uses for appGuid
-    expect(read("node_modules", "app-builder-lib", "dist", "targets", "win", "nsis", "progId.js")).toContain(b.ELECTRON_BUILDER_NS_UUID);
+    // //TR: electron-builder 26.x (UASCO-T0077 kararlı sürüm) ad alanı UUID'sini app-builder-lib/out/targets/nsis/NsisTarget.js içinde tanımlar (27-alpha'daki dist/targets/win/nsis/progId.js yoktur).
+    expect(read("node_modules", "app-builder-lib", "out", "targets", "nsis", "NsisTarget.js")).toContain(b.ELECTRON_BUILDER_NS_UUID);
     expect(rel).toMatchObject({appId: "com.uasco.desktop", productName: "UASCO", executable: "UASCO.exe", userDataDir: "%APPDATA%\\UASCO", defaultInstallDir: "%LOCALAPPDATA%\\Programs\\UASCO", appUserModelId: "com.uasco.desktop"});
     expect(tst).toMatchObject({appId: "com.uasco.desktop.test", productName: "UASCO Test", executable: "UASCO Test.exe", userDataDir: "%APPDATA%\\UASCO Test", defaultInstallDir: "%LOCALAPPDATA%\\Programs\\UASCO Test", windowTitleContains: "UASCO Test", appUserModelId: "com.uasco.desktop.test"});
     const lc = (s: string) => s.toLowerCase();

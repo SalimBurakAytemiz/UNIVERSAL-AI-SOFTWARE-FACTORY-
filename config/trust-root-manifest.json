@@ -70,7 +70,7 @@
     },
     {
       "path": "apps/desktop/main.mjs",
-      "sha256": "fddce59f10cb7eb548212ffa29354cd01f2ca33e4858582bd9e50170eaa56536"
+      "sha256": "d0512143b430d8ae9e8a338d0842de615acb12a239475a2514903a9521aa144e"
     },
     {
       "path": "apps/desktop/preload.mjs",
