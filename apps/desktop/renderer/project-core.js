@@ -1,6 +1,6 @@
 // //TR: Bu modül PS-1B Project Studio'nun saf (DOM'suz) çekirdeğidir: sihirbaz/içe aktarma/dev-run/dışa aktarma/yürütücü istek gövdesi kurucuları (argv dizisi, idempotency), main allow-list ile aynı kurallı GET yol kurucuları, dev-run/dosya/git/dışa aktarma/yürütücü eşleyicileri, renderer tarafı gizli bilgi sansürü (backend sansürüne ek savunma), boyut sınırları ve önizleme kapısı; eksik veri asla uydurulmaz, 404 dürüst UNAVAILABLE olarak kalır.
 import {MISSING} from "./model.js";
-import {describePostResult,normalizeArgv,validatePath,IDEMPOTENCY_KEY_RE,PROJECT_ID_RE,SAFE_ID_RE,MAX_BODY_BYTES,MAX_CRITERIA} from "./work-core.js";
+import {describePostResult,normalizeArgv,validatePath,IDEMPOTENCY_KEY_RE,PROJECT_ID_RE,SAFE_ID_RE,MAX_BODY_BYTES,MAX_CRITERIA,ENVIRONMENT_ID_RE} from "./work-core.js";
 
 export const TEMPLATES=Object.freeze(["web-node","node-lib","empty"]);
 export const TARGET_OS=Object.freeze(["windows","macos","linux"]);
@@ -110,6 +110,9 @@ export function buildWizardRequest(input,{key}={}){
   const errors={},name=trim(input?.name),template=trim(input?.template),type=trim(input?.projectType);
   if(!name)errors.name="err.nameRequired";else if(name.length>200)errors.name="err.nameLong";
   if(!TEMPLATES.includes(template))errors.template="studio.err.template";
+  // //TR: UASCO-T0006: environmentId sunucuda zorunludur; boş değer gönderilmez, doğrulama iletisi verilir.
+  const env=trim(input?.environmentId);
+  if(!env)errors.environmentId="studio.err.envRequired";else if(!ENVIRONMENT_ID_RE.test(env))errors.environmentId="err.envInvalid";
   if(type.length>MAX_TECH_LENGTH||CONTROL_RE.test(type))errors.projectType="studio.err.typeLong";
   const tech=arr(input?.techStack,100).map(trim).filter(Boolean);
   if(tech.length>MAX_TECH_ITEMS||tech.some(t=>t.length>MAX_TECH_LENGTH||CONTROL_RE.test(t)))errors.techStack="studio.err.techInvalid";
@@ -122,7 +125,7 @@ export function buildWizardRequest(input,{key}={}){
   if(tokens.error)errors.budgetMaxTokens="studio.err.budgetTokens";
   const dev=argvOrError(input?.devCommand,errors,"devCommand"),test=argvOrError(input?.testCommand,errors,"testCommand");
   if(key!==undefined&&!IDEMPOTENCY_KEY_RE.test(String(key)))errors.idempotencyKey="err.idempotencyKey";
-  const body={name,template};
+  const body={name,environmentId:env,template};
   if(type)body.projectType=type;
   if(tech.length)body.techStack=tech;
   if(os.length)body.targetOS=os;
@@ -314,7 +317,8 @@ export function mapGitDiff(raw){
   if(!isObj(raw))return {state:"ERROR",diff:null};
   const text=pick(raw.diff,raw.patch,raw.text);if(typeof text!=="string")return {state:"ERROR",diff:null};
   const cut=redactHead(text,DIFF_VIEW_MAX_CHARS),all=cut.text.split(/\r?\n/),lines=all.slice(0,DIFF_VIEW_MAX_LINES);
-  const files=arr(raw.files,200).filter(isObj).map(f=>({path:str(f.path,300),additions:safeInt(f.additions),deletions:safeInt(f.deletions)})).filter(f=>f.path);
+  // //TR: DSK-T0001: sunucu (core/workos/project-studio.ts gitDiff) dosya satırını {file,added,deleted} olarak verir; eski {path,additions,deletions} biçimi de kabul edilir.
+  const files=arr(raw.files,200).filter(isObj).map(f=>({path:str(pick(f.path,f.file),300),additions:safeInt(pick(f.additions,f.added)),deletions:safeInt(pick(f.deletions,f.deleted))})).filter(f=>f.path);
   return {state:"VERIFIED",diff:{lines,files,truncated:cut.truncated||all.length>DIFF_VIEW_MAX_LINES||raw.truncated===true,empty:text.trim().length===0}};
 }
 /** Diff satırı türü: yalnız görsel sınıf; anlam ayrıca "+"/"-" önekiyle okunur (renk tek başına taşıyıcı değildir). */

@@ -475,6 +475,10 @@ describe("LANE-C Linux unshare sandbox provider v2 (SandboxProvider contract)", 
       expect(nodeToolchainRoots(mk("flat/node", true), [])).toEqual({roots: [], problem: "NODE_NOT_IN_BIN_DIRECTORY"});
       expect(nodeToolchainRoots(path.join(base!, "missing/bin/node"), [])).toEqual({roots: [], problem: "NODE_PATH_UNRESOLVABLE"});
       if (fs.existsSync("/usr/bin/env")) expect(nodeToolchainRoots("/usr/bin/env", [])).toEqual({roots: []}); // already bound read-only through /usr
+      // an executable whose REAL path is under /usr but not in a bin/ directory (Ubuntu 26.04: /usr/bin/env -> /usr/lib/cargo/bin/coreutils/env, the uutils multicall
+      // binary), reached through a symlink from outside /usr: already bound read-only, so no extra root and no problem (the /usr check runs before the bin-directory check)
+      const usrNonBin = ["/usr/lib/cargo/bin/coreutils/env", "/usr/lib/git-core/git", "/usr/libexec/coreutils"].find(p => { try { const r = fs.realpathSync(p); return r.startsWith("/usr/") && path.basename(path.dirname(r)) !== "bin"; } catch { return false; } });
+      if (usrNonBin) { const viaTmp = path.join(base!, "via-usr"); fs.symlinkSync(usrNonBin, viaTmp); expect(nodeToolchainRoots(viaTmp, []), usrNonBin).toEqual({roots: []}); }
       // explicit roots
       for (const bad of ["/", "/opt", "/home", "/home/alice", "/root", "/usr/local", "/var", "/etc", "/proc/1", "/dev/shm", "opt/x", "/opt/x y", "/opt//x", "/opt/x/", "/opt/a:b", "/tmp/x", "/work/x"]) expect([bad, readOnlyRootProblem(bad, [])]).toEqual([bad, expect.any(String)]);
       expect(readOnlyRootProblem(path.join(base!, "ok/bin"), [])).toBeNull();
