@@ -458,6 +458,22 @@ export function registerDskRunnerPassiveCases(): void {
     expect(ok.calls).toEqual([["/usr/bin/node", "/opt/uasco/claude-builder-broker.mjs"]]);
   });
 
+  it("WIRING (Founder-tier, server.ts + main.mjs): the authorization routes are live on the real server and exactly allow-listed in the desktop bridge", async () => {
+    const s = await mk({ready: true}); s.queueRun({auth: false}); const mid = s.mission(), H = {"x-uasco-control-token": TOKEN, host: "127.0.0.1:3210", "content-type": "application/json"};
+    const url = `/v1/missions/${mid}/authorization`;
+    expect((await s.app.inject({method: "GET", url, headers: H})).json()).toEqual({authorization: null, state: "NONE"});
+    const g = await s.app.inject({method: "POST", url, headers: H, payload: JSON.stringify({maxRisk: "R1", maxRuns: 2, expiresAt: new Date(Date.now() + 86_400_000).toISOString()})});
+    expect(g.statusCode).toBe(200); expect(g.json().state).toBe("LIVE");
+    expect((await s.app.inject({method: "POST", url: `${url}/revoke`, headers: H, payload: "{}"})).json().state).toBe("REVOKED");
+    const main = fs.readFileSync(path.resolve(import.meta.dirname, "..", "..", "apps", "desktop", "main.mjs"), "utf8");
+    const blk = (tag: string) => main.slice(main.indexOf(`// ${tag}-BEGIN`), main.indexOf(`// ${tag}-END`));
+    const post = new Function(`${blk("B5-POST-ALLOWLIST")}\nreturn desktopPostPathAllowed;`)() as (p: string) => boolean;
+    const id = "msn_" + "a".repeat(24);
+    expect(post(`/v1/missions/${id}/authorization`)).toBe(true); expect(post(`/v1/missions/${id}/authorization/revoke`)).toBe(true);
+    for (const bad of [`/v1/missions/${id}/authorization/`, `/v1/missions/${id}/authorization?x=1`, `/v1/missions/${id}/authorization/widen`, "/v1/missions/msn_x/authorization"]) expect(post(bad), bad).toBe(false);
+    expect(main).toContain("const MISSION_AUTH_RE=/^\\/v1\\/missions\\/msn_[0-9a-f]{24}\\/authorization$/;");
+  });
+
   it("PRODUCTION executor: LocalClaudeExecutors is NOT_ISOLATED and refuses all three real-model paths at the source, before any process starts", async () => {
     const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "dsk-iso-")), calls: string[][] = [];
     const ex = new LocalClaudeExecutors(path.resolve(import.meta.dirname, "..", ".."), tmp, {runReviewer: async argv => { calls.push(argv); throw new Error("must not run"); }});
