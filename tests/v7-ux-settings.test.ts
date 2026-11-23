@@ -946,6 +946,19 @@ describe("DSK-T0008 readiness wizard, measured-only usage and authorization prev
     expect(src.includes(".post(")).toBe(false);
   });
 
+  it("carries firstLeasedAt from the raw GET /v1/work-runs payload through the queue mapper into the usage count (B1)", async () => {
+    const q = await load("queue-core.js"), u = await load("usage-core.js");
+    const hex = (n: number) => n.toString(16).padStart(24, "0");
+    const raw = (id: number, status: string, createdAt: string, firstLeasedAt?: string) => ({runId: `run_${hex(id)}`, missionId: `msn_${hex(1)}`, projectId: `prj_${hex(1)}`,
+      status, step: "IMPLEMENT", createdAt, updatedAt: createdAt, ...(firstLeasedAt === undefined ? {} : {firstLeasedAt})});
+    const mapped = q.mapQueueWorkRuns({runs: [raw(1, "RUNNING", at(12), at(12, 2)), raw(2, "QUEUED", at(12, 14)), raw(3, "SUCCEEDED", at(11), at(11, 11))]});
+    expect(mapped.state).toBe("VERIFIED");
+    expect(mapped.runs.items[0].firstLeasedAt).toBe(at(12, 2)); expect("firstLeasedAt" in mapped.runs.items[1]).toBe(false);
+    expect(u.buildUsage(mapped, {state: "VERIFIED", active: "LOCAL_CLAUDE"}, NOW)).toMatchObject({state: "VERIFIED", runsToday: 1, activeNow: 1});
+    // A present but malformed firstLeasedAt fails the whole read closed, like any other field.
+    expect(q.mapQueueWorkRuns({runs: [raw(1, "RUNNING", at(12), "not-a-date")]})).toEqual({state: "ERROR", runs: null});
+  });
+
   it("validates the mission authorization strictly, previews it only when valid, and never records it", async () => {
     const a = await load("mission-auth-core.js");
     const mission = {missionId: "msn_0123456789abcdef01234567", riskLevel: "R2"};
