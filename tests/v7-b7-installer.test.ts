@@ -37,7 +37,9 @@ describe("B7 electron-builder configuration (static)", () => {
     expect(ebConfig.artifactName).toBe("UASCO-Setup-${version}-win-x64.${ext}");
     expect(ebConfig.win.target).toEqual([{target: "nsis", arch: ["x64"]}]);
     expect(ebConfig.win.requestedExecutionLevel).toBe("asInvoker");
-    expect(ebConfig.win.sign).toBe(false);
+    expect(ebConfig.win.sign).toBeUndefined();
+    expect(ebConfig.nativeModules).toBeUndefined();
+    expect([ebConfig.npmRebuild, ebConfig.nodeGypRebuild, ebConfig.buildDependenciesFromSource]).toEqual([false, false, false]);
     const n = ebConfig.nsis;
     expect(n.oneClick).toBe(false);
     expect(n.perMachine).toBe(false);
@@ -98,7 +100,7 @@ describe("B7 electron-builder configuration (static)", () => {
   });
   it("adds only the approved exact-pinned electron-builder devDependency and the dist scripts; dev mode scripts are unchanged", () => {
     const pkg = JSON.parse(read("package.json"));
-    expect(pkg.devDependencies["electron-builder"]).toMatch(/^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/);
+    expect(pkg.devDependencies["electron-builder"]).toMatch(/^\d+\.\d+\.\d+$/);
     expect(pkg.version).toMatch(/^0\.\d+\.\d+(-[0-9A-Za-z.]+)?$/);
     expect(pkg.dependencies).toEqual({"ajv": "8.20.0", "ajv-formats": "3.0.1", "fastify": "5.12.7"});
     expect(pkg.scripts["dist:win"]).toBe("node scripts/build-installer.mjs");
