@@ -221,6 +221,39 @@ export function registerDskRunnerPassiveCases(): void {
     expect(new ExecutionGate(null).snapshot().ok).toBe(false);
   });
 
+  it("DSK-T0007 routing: with a gate whose provider PASSED its self-test, all three model processes start through that provider (never a host fork/spawn); a failed self-test leaves the executor NOT_ISOLATED", { timeout: 60_000 }, async () => {
+    const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "dsk-route-")), control = path.join(tmp, "control"), data = path.join(tmp, "data");
+    const sha = crypto.createHash("sha256").update(fs.readFileSync(process.execPath)).digest("hex");
+    fs.mkdirSync(path.join(control, ".ai", "runtime"), {recursive: true});
+    fs.writeFileSync(path.join(control, ".ai", "runtime", "PROVIDER_PROVENANCE.json"), JSON.stringify({final: "PASS", claude: {provenanceLevel: "STANDALONE_LAUNCHER", resolvedPath: process.execPath, launcherSha256: sha, version: "fake"}}));
+    for (const role of ["implementer", "reviewer"] as const) { ensureClaudeProfile(control, role, {forbiddenRoots: [data]}); fs.writeFileSync(path.join(claudeProfileDir(control, role), ".credentials.json"), ""); }
+    const ws = path.join(tmp, "ws"); fs.mkdirSync(ws); for (const a of [["init", "-q", "-b", "main"], ["-c", "user.name=S", "-c", "user.email=s@local.invalid", "commit", "-q", "--allow-empty", "-m", "s"]]) spawnGitSync(ws, a);
+    const calls: Array<{argv: string[]; cwd: string; env: string[]}> = [];
+    const recording = {id: "RECORDING_PROVIDER", async selfTest() { return {ok: true}; },
+      async run(argv: string[], o: {cwd: string; env: NodeJS.ProcessEnv}) { calls.push({argv, cwd: o.cwd, env: Object.keys(o.env)}); const at = new Date().toISOString(); return {argv, exitCode: 1, stdout: "", stderr: "recorded", startedAt: at, endedAt: at, timedOut: false, aborted: false, spawnError: false}; },
+      spawn() { throw new Error("spawn must not be used"); }};
+    const gate = new ExecutionGate(recording as never); await gate.status();
+    const ex = new LocalClaudeExecutors(path.resolve(import.meta.dirname, "..", ".."), control, {isolationGate: gate, profile: {forbiddenRoots: [data]}});
+    expect(ex.isolation).toEqual({state: "ISOLATED", providerId: "RECORDING_PROVIDER"});
+    const pair = ex.pair();
+    const spec = {runId: "run_" + "0".repeat(24), missionId: "msn_" + "1".repeat(24), projectId: "prj_" + "2".repeat(24), title: "t", objective: "o", acceptanceCriteria: ["a"], startSha: String(spawnGitSync(ws, ["rev-parse", "HEAD"]).stdout).trim()} as never;
+    await pair.implementer.implement(ws, spec, {timeoutMs: 5000});
+    await pair.reviewer.review(ws, spec, "", {timeoutMs: 5000});
+    await pair.preDevBuilder!().produce("BusinessAnalysis" as never, "Analyse the mission.", {} as never).catch(() => null);
+    expect(calls.length).toBe(3);
+    expect(calls[0].argv[0]).toBe(process.execPath); expect(calls[0].argv[1]).toMatch(/claude-builder-broker\.mjs$/); expect(calls[0].cwd).toBe(ws);
+    expect(calls[1].argv[0]).toBe(process.execPath); // the provenance-verified launcher (here: the node binary fixture)
+    expect(calls[2].argv[0]).toBe(process.execPath);
+    for (const c of calls) { expect(c.env).not.toContain("ANTHROPIC_API_KEY"); expect(c.env).toContain("CLAUDE_CONFIG_DIR"); }
+    // a provider whose self-test fails gives no isolation and no process
+    const failing = new ExecutionGate({...recording, id: "FAILING", async selfTest() { return {ok: false}; }} as never); await failing.status();
+    const ex2 = new LocalClaudeExecutors(path.resolve(import.meta.dirname, "..", ".."), control, {isolationGate: failing, profile: {forbiddenRoots: [data]}});
+    expect(ex2.isolation.state).toBe("NOT_ISOLATED");
+    const before = calls.length;
+    expect((await ex2.pair().implementer.implement(ws, spec, {timeoutMs: 5000})).blockReason).toBe(NOT_ISOLATED);
+    expect(calls.length).toBe(before);
+  });
+
   it("PRODUCTION executor: LocalClaudeExecutors is NOT_ISOLATED and refuses all three real-model paths at the source, before any process starts", async () => {
     const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "dsk-iso-")), calls: string[][] = [];
     const ex = new LocalClaudeExecutors(path.resolve(import.meta.dirname, "..", ".."), tmp, {runReviewer: async argv => { calls.push(argv); throw new Error("must not run"); }});

@@ -55,6 +55,8 @@ export class ExecutionGate {
     if (this.settled === null) { void this.verified(); return {ok: false, providerId: null}; }
     return this.settled.ok && this.provider ? {ok: true, providerId: this.provider.id} : {ok: false, providerId: null};
   }
+  /** //TR: DSK-T0007: öz-testi GEÇMİŞ kayıtlı sağlayıcı (senkron; sonuçlanmamış/başarısız/kayıtsız = null). Gerçek model süreçleri yalnız bunun üzerinden başlatılır. */
+  verifiedProvider(): SandboxProvider | null { return this.settled !== null && this.settled.ok && this.provider ? this.provider : null; }
   /** Durum görünümü (sır/yol içermez). */
   async status(): Promise<{state: "AVAILABLE" | "UNAVAILABLE"; reason: typeof SANDBOX_UNAVAILABLE | null; detail: SandboxDenialDetail | null; providerId: string | null}> {
     const v = await this.verified();
