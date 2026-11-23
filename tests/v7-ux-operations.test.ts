@@ -1946,7 +1946,10 @@ __bi_describe('Builder I: renderer raw-error sweep', {timeout: 120_000}, () => {
   ]);
   // Exact line-level exemptions: not a bridge/IPC error but server job data already passed through sanitizeServerText; whether the
   // remote cloud job view should show any worker text is a cloud-policy follow-up (cd77e80), not a raw-error sink.
-  const EXEMPT: Array<[string, RegExp]> = [["views/cloud-connection.js", /^j\.message\?h\(doc,"p",\{class:"note",text:j\.message\}\):null,$/]];
+  // shell.js routeNotice (UASCO-T0005, merged after this sweep was written): `msg` is the i18n string t("route.unknown",{hash}) naming
+  // the unknown route hash, not error text; the exemption is pinned to the exact line and the stale-exemption check keeps it honest.
+  const EXEMPT: Array<[string, RegExp]> = [["views/cloud-connection.js", /^j\.message\?h\(doc,"p",\{class:"note",text:j\.message\}\):null,$/],
+    ["shell.js", /^const n=h\(doc,"div",\{id:"routeNotice",class:"note note-stale route-notice",role:"status"\},h\(doc,"span",\{text:msg\}\),dismiss\);$/]];
   const SINK_RES = [/text:\s*[\w$?.]*\.message\b/, /text:\s*(message|msg|err|error)\b/, /textContent\s*=\s*[^;]*\.message\b/, /text:\s*String\((e|err|error)\)/];
   function rendererFiles(dir = rend, rel = ""): string[] {
     return fs.readdirSync(dir, {withFileTypes: true}).flatMap(d => d.isDirectory() ? (d.name === "locales" ? [] : rendererFiles(path.join(dir, d.name), rel ? `${rel}/${d.name}` : d.name)) : d.name.endsWith(".js") ? [rel ? `${rel}/${d.name}` : d.name] : []);

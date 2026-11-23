@@ -221,7 +221,9 @@ describe("UASCO-T0013: analysis / pre-dev phase timeline and confirmed decisions
     expect(h.find(n => n.id === "predev-approve-submit" || n.id === "predev-reject-submit")).toEqual([]);
     const st = all(h.find(n => n.id === "journey-predev")[0]!).find(n => n.dataset.journeyState !== undefined);
     expect(st?.dataset.journeyState, "journey's classified failure block").toBe("ERROR");
-    expect(st?.textContent).toContain(`/v1/predev/${s.pending}: HTTP 500`);
+    // raw-error sweep (#397): the block shows only the safe code, never the raw bridge text with the concrete path/id
+    expect(st?.textContent).toContain("HTTP 500");
+    expect(st?.textContent).not.toContain(`/v1/predev/${s.pending}`);
   });
 
   it("unavailable: the decision route answers 404 without a server code -> 'not enabled in this build', the draft is not called approved", async () => {
