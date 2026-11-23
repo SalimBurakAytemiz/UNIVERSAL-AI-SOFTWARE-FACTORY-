@@ -7,6 +7,8 @@ import path from "node:path";
 import {execFileSync} from "node:child_process";
 import {fileURLToPath} from "node:url";
 import {collectEvidence, decideFor, curlApi} from "./autonomy.mjs";
+import fs from "node:fs";
+import {mergeAuthority, liveAuthorityReaders} from "../../../automation/factory-v2/v41-guard.mjs";
 
 export const EXIT = {MERGED_VERIFIED: 0, MAIN_PASS: 0, BLOCK: 2, INTERNAL_ERROR: 3, FOUNDER_REQUIRED: 4, MERGE_FAILED: 5, VERIFY_FAILED: 5, MAIN_RUNNING: 5, MAIN_FAIL: 2};
 const SHA_RE = /^[0-9a-f]{40}$/;
@@ -23,7 +25,11 @@ export const curlWrite = repo => (method, p, body) => JSON.parse(execFileSync("c
  * Decide, and only on AUTO_MERGE merge with expectedHeadSha, then verify the merge commit's parents are exactly (base, head).
  * Nothing is written for any other decision. A merge that GitHub refuses, or a merge commit that does not verify, is reported, never retried.
  */
-export function executeMerge({api, write, pr, implementerSessions, decide = decideFor, collect = collectEvidence}) {
+/** Factory V2 authority fence: before any write, the verified shared authority record must allow this merge (V4.1 while authoritative; V2 only with a signed holder intent). */
+const ROOT_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+// api = the executor's own GitHub reader, used for the registry branch-protection check (no force-push, no deletion).
+const liveAuthority = a => mergeAuthority({...liveAuthorityReaders({repoRoot: ROOT_DIR, api: curlApi(REPO)}), ...a});
+export function executeMerge({api, write, pr, implementerSessions, decide = decideFor, collect = collectEvidence, authority = liveAuthority, v2Intent = null}) {
   const c = collect({api, pr, implementerSessions});
   const {gate, result} = decide(c);
   const base = {pr, task: result.task, expectedHeadSha: result.expectedHeadSha, expectedBaseSha: result.expectedBaseSha, reasons: result.reasons,
@@ -38,6 +44,9 @@ export function executeMerge({api, write, pr, implementerSessions, decide = deci
   let tip0;
   try { tip0 = api(`branches/${encodeURIComponent(baseRef)}`).commit.sha; } catch { return {...base, decision: "INTERNAL_ERROR", reasons: ["BASE_UNREADABLE"]}; }
   if (tip0 !== result.expectedBaseSha) return {...base, decision: "BLOCK", reasons: ["BASE_MOVED_BEFORE_MERGE"]};
+  let g;
+  try { g = authority({pr, headSha: result.expectedHeadSha, v2Intent}); } catch { g = {allowed: false, reason: "AUTHORITY_CHECK_FAILED"}; }
+  if (!g?.allowed) return {...base, decision: "BLOCK", reasons: [`AUTHORITY:${g?.reason ?? "UNKNOWN"}`]};
   let m;
   try { m = write("PUT", `pulls/${pr}/merge`, {sha: result.expectedHeadSha, merge_method: "merge"}); } catch { m = null; }
   if (!m || m.merged !== true || !SHA_RE.test(m.sha ?? "")) {
@@ -88,7 +97,10 @@ const args = (argv, k) => argv.flatMap((a, i) => (a === k && i + 1 < argv.length
 export function runCli(argv) {
   const api = curlApi(REPO);
   if (argv[0] === "merge" && args(argv, "--pr").length === 1 && /^[1-9]\d{0,9}$/.test(args(argv, "--pr")[0])) {
-    const r = executeMerge({api, write: curlWrite(REPO), pr: Number(args(argv, "--pr")[0]), implementerSessions: args(argv, "--implementer-session")});
+    const intent = args(argv, "--v2-intent");
+    if (intent.length > 1) return {exit: EXIT.INTERNAL_ERROR, res: {decision: "INTERNAL_ERROR", reasons: ["ARG_INVALID"]}};
+    const r = executeMerge({api, write: curlWrite(REPO), pr: Number(args(argv, "--pr")[0]), implementerSessions: args(argv, "--implementer-session"),
+      v2Intent: intent.length ? JSON.parse(fs.readFileSync(intent[0], "utf8")) : null});
     return {exit: EXIT[r.decision] ?? EXIT.INTERNAL_ERROR, res: r};
   }
   if (argv[0] === "verify-main" && args(argv, "--sha").length === 1) {

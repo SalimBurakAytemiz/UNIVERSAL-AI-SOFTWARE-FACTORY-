@@ -2,6 +2,7 @@
 import {h,badge} from "../components.js";
 import {drafts,field,statusBlock,setStatus,focusResult,settle,missionWriteBusy} from "../forms.js";
 import {selection} from "../forms.js";
+import {confirmDecision,decisionSpec} from "./predev-decisions.js";
 import {buildAnalysisStepRequest,buildAnalysisPlanRequest,classifyAnalysisStep,classifyAnalysisPlan,analysisStatusKey,ANALYSIS_KINDS,buildReapproveRequest,reapproveOutcome} from "../analysis-core.js";
 
 export const ANALYSIS_STEP_FORM="analysis-step";
@@ -40,6 +41,10 @@ export async function submitReapprove(ctx,missionId){
   const step=analysisUi.missionId===missionId?analysisUi.step:null;
   const req=buildReapproveRequest({missionId,step,evidenceText:analysisUi.evidence});
   if(!req.ok){setStatus(ANALYSIS_REAPPROVE_FORM,{ok:false,errors:req.errors});await ctx.rerender();focusResult(ctx,ANALYSIS_REAPPROVE_FORM,["id:analysis-reapprove-submit","id:analysis-reapprove-evidence"]);return {ok:false,validation:true}}
+  // //TR: UASCO-T0013: yeniden onay da bir karardır: göndermeden önce açık onay; vazgeçilirse istek yok, engel görünür kalır.
+  const yes=await confirmDecision(ctx,ANALYSIS_REAPPROVE_FORM,decisionSpec(ctx,"reapprove",{kind:step.target.kind,artifactId:step.target.artifactId}));
+  if(analysisUi.missionId!==missionId){await ctx.rerender();return {ok:false,stale:true,status:null}}
+  if(!yes){setStatus(ANALYSIS_REAPPROVE_FORM,{ok:false,key:"confirm.cancelled",vars:{},errors:null});await ctx.rerender();focusResult(ctx,ANALYSIS_REAPPROVE_FORM,["id:analysis-reapprove-submit"]);return {ok:false,cancelled:true}}
   drafts.busy[ANALYSIS_REAPPROVE_FORM]=true;
   // //TR: kilit görünür olsun (diğer düğmeler istek sürerken kapanır); yeniden çizim reddedilirse de kilit BIRAKILIR (try/finally içinde); düğme kapandığı için odak not bloğuna alınır.
   let res;try{await ctx.rerender();settle(ctx,["id:analysis-in-flight"]);res=await ctx.api.post(req.path,req.body)}finally{drafts.busy[ANALYSIS_REAPPROVE_FORM]=false}
