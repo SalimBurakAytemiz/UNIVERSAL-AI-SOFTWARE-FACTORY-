@@ -2,6 +2,8 @@
 import {describe, it, expect} from "vitest";
 // @ts-expect-error untyped .mjs module
 import {executeMerge, verifyMerge, verifyMain} from "../../docs/planning/autonomy/executor.mjs";
+// FV2 authority fence: these cases exercise the merge path itself, so the fence is given an explicit V4.1 allowance (no registry); the fence is tested in fv2-executor-fence.cases.ts.
+const ALLOW_V41 = () => ({allowed: true, by: "V4.1", reason: "TEST_NO_AUTHORITY_RECORD"});
 
 const H = "a".repeat(40), B = "b".repeat(40), M = "c".repeat(40), X = "d".repeat(40);
 const result = (decision: string) => ({decision, task: "CLOUD-T0010", expectedHeadSha: H, expectedBaseSha: B, reasons: decision === "AUTO_MERGE" ? [] : ["R"], authority: decision === "AUTO_MERGE" ? "FD" : null});
@@ -19,21 +21,21 @@ export function registerAutonomyExecutorCases() {
     it("E1 nothing is written unless the decision is AUTO_MERGE", () => {
       for (const d of ["BLOCK", "FOUNDER_REQUIRED", "INTERNAL_ERROR"]) {
         let writes = 0;
-        const r = executeMerge({api: api(), write: () => { writes++; return {}; }, pr: 1, implementerSessions: ["s"], collect, decide: () => ({gate: {}, result: result(d)})});
+        const r = executeMerge({api: api(), write: () => { writes++; return {}; }, pr: 1, implementerSessions: ["s"], authority: ALLOW_V41, collect, decide: () => ({gate: {}, result: result(d)})});
         expect(r.decision).toBe(d);
         expect(writes).toBe(0);
       }
     });
     it("E2 AUTO_MERGE merges once with expectedHeadSha and verifies parents (base, head)", () => {
       const calls: unknown[] = [];
-      const r = executeMerge({api: api(), write: (m: string, p: string, b: unknown) => { calls.push([m, p, b]); return {merged: true, sha: M}; }, pr: 7, implementerSessions: ["s"], collect, decide: () => ({gate: {}, result: result("AUTO_MERGE")})});
+      const r = executeMerge({api: api(), write: (m: string, p: string, b: unknown) => { calls.push([m, p, b]); return {merged: true, sha: M}; }, pr: 7, implementerSessions: ["s"], authority: ALLOW_V41, collect, decide: () => ({gate: {}, result: result("AUTO_MERGE")})});
       expect(calls).toEqual([["PUT", "pulls/7/merge", {sha: H, merge_method: "merge"}]]);
       expect(r).toMatchObject({decision: "MERGED_VERIFIED", mergeSha: M, reasons: [], authority: "FD"});
     });
     it("E3 a refused or failed merge is reported, never retried", () => {
       for (const write of [() => { throw new Error("409"); }, () => ({merged: false}), () => ({merged: true, sha: "zz"})]) {
         let n = 0;
-        const r = executeMerge({api: api(), write: () => { n++; return write(); }, pr: 7, implementerSessions: ["s"], collect, decide: () => ({gate: {}, result: result("AUTO_MERGE")})});
+        const r = executeMerge({api: api(), write: () => { n++; return write(); }, pr: 7, implementerSessions: ["s"], authority: ALLOW_V41, collect, decide: () => ({gate: {}, result: result("AUTO_MERGE")})});
         expect(r.decision).toBe("MERGE_FAILED");
         expect(n).toBe(1);
       }
@@ -43,7 +45,7 @@ export function registerAutonomyExecutorCases() {
       expect(verifyMerge({api: api({parents: [B], tip0: "skip"}), mergeSha: M, baseSha: B, headSha: H, baseRef: "v7/integration"}).reasons).toEqual(["MERGE_PARENTS_MISMATCH"]);
       expect(verifyMerge({api: api({tip: X, cmp: "ahead", tip0: "skip"}), mergeSha: M, baseSha: B, headSha: H, baseRef: "v7/integration"}).ok).toBe(true);
       expect(verifyMerge({api: api({tip: X, cmp: "diverged", tip0: "skip"}), mergeSha: M, baseSha: B, headSha: H, baseRef: "v7/integration"}).reasons).toEqual(["BASE_DOES_NOT_CONTAIN_MERGE"]);
-      const r = executeMerge({api: api({parents: [X, H]}), write: () => ({merged: true, sha: M}), pr: 7, implementerSessions: ["s"], collect, decide: () => ({gate: {}, result: result("AUTO_MERGE")})});
+      const r = executeMerge({api: api({parents: [X, H]}), write: () => ({merged: true, sha: M}), pr: 7, implementerSessions: ["s"], authority: ALLOW_V41, collect, decide: () => ({gate: {}, result: result("AUTO_MERGE")})});
       expect(r.decision).toBe("VERIFY_FAILED");
     });
     it("E5 main verification needs both push workflows to pass on the merge commit", () => {
@@ -65,17 +67,17 @@ export function registerAutonomyExecutorCases() {
       let writes = 0;
       const w = () => { writes++; return {merged: true, sha: M}; };
       const d = () => ({gate: {}, result: result("AUTO_MERGE")});
-      expect(executeMerge({api: api({tip0: X}), write: w, pr: 7, implementerSessions: ["s"], collect, decide: d}).reasons).toEqual(["BASE_MOVED_BEFORE_MERGE"]);
+      expect(executeMerge({api: api({tip0: X}), write: w, pr: 7, implementerSessions: ["s"], authority: ALLOW_V41, collect, decide: d}).reasons).toEqual(["BASE_MOVED_BEFORE_MERGE"]);
       expect(writes).toBe(0);
-      const lost = executeMerge({api: api({pr: {merged: true, merge_commit_sha: M, head: {sha: H}}}), write: () => { throw new Error("EOF"); }, pr: 7, implementerSessions: ["s"], collect, decide: d});
+      const lost = executeMerge({api: api({pr: {merged: true, merge_commit_sha: M, head: {sha: H}}}), write: () => { throw new Error("EOF"); }, pr: 7, implementerSessions: ["s"], authority: ALLOW_V41, collect, decide: d});
       expect(lost).toMatchObject({decision: "MERGED_VERIFIED", mergeSha: M});
-      const notMerged = executeMerge({api: api({pr: {merged: false}}), write: () => { throw new Error("EOF"); }, pr: 7, implementerSessions: ["s"], collect, decide: d});
+      const notMerged = executeMerge({api: api({pr: {merged: false}}), write: () => { throw new Error("EOF"); }, pr: 7, implementerSessions: ["s"], authority: ALLOW_V41, collect, decide: d});
       expect(notMerged.decision).toBe("MERGE_FAILED");
-      const squash = executeMerge({api: api(), write: w, pr: 7, implementerSessions: ["s"], collect: () => ({...collect(), policy: {mergeMethod: "squash"}}), decide: d});
+      const squash = executeMerge({api: api(), write: w, pr: 7, implementerSessions: ["s"], authority: ALLOW_V41, collect: () => ({...collect(), policy: {mergeMethod: "squash"}}), decide: d});
       expect(squash.reasons).toEqual(["MERGE_METHOD_UNSUPPORTED"]);
       expect(writes).toBe(0);
       // A base that moves inside the remaining window is detected afterwards, never reported as verified.
-      expect(executeMerge({api: api({parents: [X, H]}), write: w, pr: 7, implementerSessions: ["s"], collect, decide: d}).decision).toBe("VERIFY_FAILED");
+      expect(executeMerge({api: api({parents: [X, H]}), write: w, pr: 7, implementerSessions: ["s"], authority: ALLOW_V41, collect, decide: d}).decision).toBe("VERIFY_FAILED");
     });
   });
 }
