@@ -414,6 +414,31 @@ export function registerDskRunnerPassiveCases(): void {
     expect(users.map(f => path.relative(r.repo, f).replace(/\\/g, "/"))).toEqual(["core/workos/executors.ts"]);
   });
 
+  it("NO HOST FALLBACK: without a verified provider no model process starts on the host, even with an injected mock; TEST_ONLY_ needs the test runtime; a verified provider beats any mock", async () => {
+    const r = rig(), mockCalls: string[][] = [];
+    const mock = async (argv: string[]) => { mockCalls.push(argv); const at = new Date().toISOString(); return {argv, exitCode: 0, stdout: "", stderr: "", startedAt: at, endedAt: at, timedOut: false, aborted: false, spawnError: false}; };
+    // 1) no gate, no override: the injected mock is never used (production shape)
+    const p0 = new LocalClaudeExecutors(r.repo, r.control, {runReviewer: mock, profile: {forbiddenRoots: [r.data]}}).pair();
+    expect((await p0.reviewer.review(r.ws, r.spec, "", {timeoutMs: 2000})).invalidReason).toBe(NOT_ISOLATED);
+    expect(await p0.preDevBuilder!().produce("BusinessAnalysis" as never, "x", {} as never).then(() => null, (e: {detail?: string}) => e.detail)).toBe(NOT_ISOLATED);
+    expect((await p0.implementer.implement(r.ws, r.spec, {timeoutMs: 2000})).blockReason).toBe(NOT_ISOLATED);
+    // 2) TEST_ONLY_ outside the test runtime authorizes nothing
+    const saved = process.env.VITEST; delete process.env.VITEST;
+    try {
+      const ex = new LocalClaudeExecutors(r.repo, r.control, {runReviewer: mock, testOnlyIsolationProviderId: "TEST_ONLY_HOST_PASSTHROUGH", profile: {forbiddenRoots: [r.data]}});
+      expect(ex.isolation.state).toBe("NOT_ISOLATED");
+      expect((await ex.pair().reviewer.review(r.ws, r.spec, "", {timeoutMs: 2000})).invalidReason).toBe(NOT_ISOLATED);
+    } finally { if (saved !== undefined) process.env.VITEST = saved; }
+    expect(mockCalls).toEqual([]);
+    // 3) with a verified provider the provider runs the reviewer, not the mock
+    const {prov, calls} = iso({selfTest: async () => ({ok: true})}); const gate = new ExecutionGate(prov); await gate.status();
+    await new LocalClaudeExecutors(r.repo, r.control, {isolationGate: gate, runReviewer: mock, profile: {forbiddenRoots: [r.data]}}).pair().reviewer.review(r.ws, r.spec, "", {timeoutMs: 2000});
+    expect(calls.length).toBe(1); expect(mockCalls).toEqual([]);
+    // 4) the test runtime + TEST_ONLY_ still reaches the mock (deterministic tests keep working)
+    await new LocalClaudeExecutors(r.repo, r.control, {runReviewer: mock, testOnlyIsolationProviderId: "TEST_ONLY_HOST_PASSTHROUGH", profile: {forbiddenRoots: [r.data]}}).pair().reviewer.review(r.ws, r.spec, "", {timeoutMs: 2000});
+    expect(mockCalls.length).toBe(1);
+  });
+
   it("WSL BOUNDARY: Windows paths never reach a Linux guest; an unmapped WSL provider starts nothing, a mapper's Linux paths are passed through", async () => {
     const {windowsPathIn} = await import("../../core/workos/executors.js");
     expect(windowsPathIn({argv: ["C:\\Program Files\\nodejs\\node.exe"], cwd: "/w", env: {}})).toBe("WINDOWS_PATH_IN_ARGV");
