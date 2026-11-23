@@ -18,3 +18,6 @@ describe("UASCO Independent Review gate",{timeout:180000},()=>{
 // //TR: A-Z üretim hattı kaydı + dispatcher entegrasyonu (gerçek LANES.json, gerçek dispatch.mjs, geçici git remote) bu kayıtlı dosyadan çalışır; korunan validation.json kaydı gerektirmez.
 import {registerProductionLaneCases} from "./support/production-lanes.cases.js";
 registerProductionLaneCases();
+// //TR: UASCO-T0121 (RW-049) ürün/meta satır payı ölçüm aracı senaryoları bu kayıtlı dosyadan çalışır; korunan validation.json kaydı gerektirmez.
+import {registerProductShareCases} from "./support/product-share.cases.js";
+registerProductShareCases();
