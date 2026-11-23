@@ -1,6 +1,6 @@
 // //TR: Bu görünüm parçası Ayarlar'daki "Hazır mı?" Founder kurulum denetimidir (A-SETUP-1): Claude CLI (yerel mi .cmd kısayolu mu), implementer ve reviewer oturumu, test sandbox'ı ve çalışan ürün köprüsü için PASS / BLOCKED (kesin kodla) / UNKNOWN satırları gösterir; her engel için Founder'ın kendi çalıştıracağı düzeltme METİN olarak yazılır. Yalnızca mevcut salt-okunur okumalardan beslenir; hiçbir şey çalıştırılmaz ya da değiştirilmez, API'nin bildirmediği hiçbir şey PASS görünmez. Windows kabul kiti komutu yalnız metindir.
 import {h,panel,stateNote,badge} from "../components.js";
-import {buildSetupChecks,ACCEPTANCE_COMMAND} from "../setup-check-core.js";
+import {buildSetupChecks,nextStep,ACCEPTANCE_COMMAND} from "../setup-check-core.js";
 
 const tOr=(ctx,k,fallback)=>{const v=ctx.t(k);return v===k?fallback:v};
 const KIND={PASS:"badge-ok",BLOCKED:"badge-risk",UNKNOWN:""};
@@ -35,11 +35,22 @@ export function setupCheckPanel(ctx,exec){
       r.note?h(doc,"p",{class:"note",dataset:{setupNote:r.note},text:ctx.t(`setup.note.${r.note}`)}):null,
       fk?h(doc,"p",{class:"note",dataset:{setupFix:fk},text:ctx.t(fk)}):null,
       r.login?h(doc,"p",{class:"note",text:ctx.t("exec.profile.loginHint")}):null,
-      r.login?h(doc,"pre",{class:"code",dataset:{setupLogin:r.id}},h(doc,"code",{text:r.login})):null);
+      r.login?h(doc,"pre",{class:"code",dataset:{setupLogin:r.id}},h(doc,"code",{text:r.login})):null,
+      r.id==="SANDBOX"&&r.state!=="PASS"?h(doc,"p",{class:"note",dataset:{setupConsequence:"TESTS_NOT_EXECUTED"},text:ctx.t("setup.wizard.sandboxConsequence")}):null);
   }));
-  return panel(ctx,{titleKey:"setup.title",id},h(doc,"p",{class:"note",text:ctx.t("setup.lead")}),head,note,list,
+  return panel(ctx,{titleKey:"setup.title",id},h(doc,"p",{class:"note",text:ctx.t("setup.lead")}),head,wizardBlock(ctx,c),note,list,
     h(doc,"h3",{text:ctx.t("setup.kit.title")}),h(doc,"p",{class:"note",text:ctx.t("setup.kit.lead")}),
     h(doc,"pre",{class:"code",dataset:{setupKit:"1"}},h(doc,"code",{text:ACCEPTANCE_COMMAND})),
     h(doc,"p",{class:"note",dataset:{setupKitPending:"1"},text:ctx.t("setup.kit.pending")}),
     h(doc,"p",{class:"note",text:ctx.t("setup.kit.note")}));
+}
+
+// //TR: DSK-T0008 sihirbaz özeti: sıradaki adım (PASS olmayan ilk satır), genel durum ve runner durumu (sunucu bildirmediği için BİLİNMİYOR). Bu panelde düğme yoktur (A-SETUP-1): giriş komutu seçilebilir metindir, Founder kendisi kopyalayıp çalıştırır.
+function wizardBlock(ctx,c){
+  const doc=ctx.doc,w=nextStep(c);
+  return h(doc,"section",{class:"setup-wizard",id:"setup-wizard",dataset:{wizardKind:w.kind,wizardStep:w.step??"NONE"}},
+    h(doc,"h3",{text:ctx.t("setup.wizard.title")}),
+    h(doc,"p",{role:"status",text:ctx.t(`setup.wizard.kind.${w.kind}`)}),
+    w.step?h(doc,"p",{class:"note",dataset:{wizardNext:w.step},text:ctx.t("setup.wizard.next",{n:String(w.index),total:String(w.total),step:ctx.t(`setup.row.${w.step}`)})}):null,
+    h(doc,"p",{class:"note",dataset:{wizardRunner:w.runner},text:ctx.t("setup.wizard.runner")}));
 }
