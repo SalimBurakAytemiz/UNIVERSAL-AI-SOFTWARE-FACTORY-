@@ -15,6 +15,7 @@ import type {FakeScript} from "../core/workos/executors.js";
 import type {WorkRun, RunEvidence} from "../core/workos/types.js";
 import {buildServer} from "../apps/control-api/src/server.js";
 import {testExecutionGate} from "./support/test-sandbox.js";
+import {chainEntries, journalPath, realTemplate, writeFillerRunsJournal, writeJournal} from "./support/workos-journal-fixture.js";
 // //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
 vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
@@ -486,10 +487,13 @@ describe("Assurance security & test-report lists — newest runs kept and shown 
     expect(byData(tr.root, "postureTruncated")[0]!.textContent).not.toBe("");
   });
   it("real buildServer + real Work OS store: 503 runs, the newest has a BLOCKED scan -> posture is BLOCKED, newest on top, 3 cut runs stated", { timeout: T }, async () => {
+    // //TR: UASCO-T0118: 502 dolgu run'ı GERÇEK store'un yazdığı şablondan zincirlenmiş journal olarak kurulur (store API'si ile kurulum her yazıda tüm journal'ı yeniden doğruladığı için karesel: Linux 55 sn, Windows >180 sn). Journal'ı aşağıda GERÇEK store load()/replay doğrular; en yeni run (i === 502) yine gerçek API ile oluşturulur.
+    const filler = writeFillerRunsJournal(dataDirS(), 502);
     const store = new WorkOsStore(dataDirS());
-    const p = store.createProject({tenantId: "tA", orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL"});
-    const created: string[] = [];
-    for (let i = 0; i < 503; i++) {
+    const p = store.getProject({tenantId: "tA"}, filler.projectId)!;
+    expect(store.listRuns({tenantId: "tA"}).length).toBe(502);                              // the real store loaded and replayed the whole synthesized chain
+    const created: string[] = [...filler.runIds];
+    for (let i = 502; i < 503; i++) {
       const m = store.createMission({tenantId: "tA", projectId: p.projectId, title: `M${i}`, objective: "O", acceptanceCriteria: ["c"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
       for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
       const run = store.createRun({tenantId: "tA", missionId: m.missionId, executor: {implementer: "IMPL", reviewer: "REV"}, createdBy: "FOUNDER_LOCAL"});
@@ -514,5 +518,19 @@ describe("Assurance security & test-report lists — newest runs kept and shown 
     expect(ids).not.toContain(created[0]);
     expect(byData(root, "postureTruncated")[0]!.dataset.postureTruncated).toBe("3");
     expect(byData(root, "results").find(n => n.dataset.results === "1")!.textContent).toBe("Showing 150 of 503 runs.");
+  });
+  it("UASCO-T0118 fixture guard: a journal chained by the test helper loads in the REAL store; one tampered byte is rejected (fails if the private entry shape or hash drifts)", () => {
+    const tpl = realTemplate();
+    const dir = path.join(tmp, "fixture-guard"), bad = path.join(tmp, "fixture-guard-bad");
+    const entries = chainEntries([tpl.project, tpl.perRun[0]]);
+    writeJournal(dir, entries);
+    const ok = new WorkOsStore(dir);
+    expect(ok.getProject({tenantId: "tA"}, tpl.projectId)?.projectId).toBe(tpl.projectId);
+    expect(ok.getMission({tenantId: "tA"}, tpl.missionId)?.missionId).toBe(tpl.missionId);
+    const text = fs.readFileSync(journalPath(dir), "utf8"), at = text.lastIndexOf("UASCO_T0118_FILLER_TITLE");
+    expect(at).toBeGreaterThan(0);
+    fs.mkdirSync(bad, {recursive: true});
+    fs.writeFileSync(journalPath(bad), text.slice(0, at) + "X" + text.slice(at + 1));
+    expect(() => new WorkOsStore(bad).listProjects({tenantId: "tA"})).toThrow(/WORKOS_JOURNAL_TAMPERED/);
   });
 });
