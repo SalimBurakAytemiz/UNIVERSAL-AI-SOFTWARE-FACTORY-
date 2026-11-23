@@ -61,3 +61,14 @@ export function buildSetupChecks(exec){
   const count=s=>rows.filter(r=>r.state===s).length,pass=count("PASS"),blocked=count("BLOCKED"),unknown=count("UNKNOWN");
   return {readable,rows,pass,blocked,unknown,kind:blocked>0?"BLOCKED":unknown>0?"UNKNOWN":"ALL_PASS"};
 }
+
+// //TR: DSK-T0008 hazırlık sihirbazı: satırlar sabit sırayla adım sayılır (CLI -> yürütücü -> implementer oturumu -> reviewer oturumu -> sandbox -> ürün); "sıradaki adım" PASS olmayan ilk satırdır. Sandbox ve ürün köprüsü koşuyu engellemez (testler NOT_EXECUTED olur, teslim doğrulanmamış kalır), bu yüzden ilk dört adım geçtiyse sihirbaz READY_UNVERIFIED der; READY yalnız altı satırın HEPSİ PASS iken. Runner'ın açık/pasif olduğu sunucu tarafından henüz bildirilmez: her zaman UNKNOWN (P-A ile gelir).
+export const BLOCKING_ROWS=Object.freeze(["CLI","EXECUTOR","IMPLEMENTER","REVIEWER"]);
+export const RUNNER_STATE="UNKNOWN";
+export function nextStep(c){
+  const rows=c&&Array.isArray(c.rows)?c.rows:[];
+  const first=rows.find(r=>r.state!=="PASS")??null;
+  const core=BLOCKING_ROWS.every(id=>rows.some(r=>r.id===id&&r.state==="PASS"));
+  const kind=!c||!c.readable?"UNKNOWN":first===null?"READY":core?"READY_UNVERIFIED":"BLOCKED";
+  return {kind,step:first?first.id:null,index:first?rows.indexOf(first)+1:null,total:rows.length,login:first?first.login:null,runner:RUNNER_STATE};
+}
