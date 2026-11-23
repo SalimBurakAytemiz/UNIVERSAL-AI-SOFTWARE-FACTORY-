@@ -1,4 +1,5 @@
 // //TR: Bu görünüm Çoklu Proje Komuta Matrisi'dir (FA-V2-PRODUCT, UI-205): YALNIZ dört salt-okunur ve zaten izinli GET'ten okunur — GET /v1/projects (matris satırları), GET /v1/missions (mission sayıları), GET /v1/work-runs (koşu sayıları, son inceleme kararı, kaynak düzeyinde teslim) ve GET /v1/cockpit (portföy toplamı). Proje başına tek satır gösterilir ve satırlar "önce dikkat gerektirenler" olarak gruplanır (ATTENTION_NEEDED, UNKNOWN, ACTIVE, IDLE, NO_ACTIVITY). Proje durumu DÜRÜSTTÜR: kayıtlı etkinliğin sınıflandırmasıdır, sağlık iddiası DEĞİLDİR — "sağlıklı", "doğrulanmış" ya da başarı rozetli bir proje durumu YOKTUR. Bir sayı yalnız bağlı olduğu kaynak okunabiliyorsa gösterilir; okunamıyorsa 0 değil "—" ve dürüst durum rozeti görünür. İnceleme kararı (CLEAN/BLOCKED) sunucudan AYNEN gösterilir ve CLEAN yalnız koşunun güncel head'ine bağlıysa başarı rozeti alır; bağımsızlık burada yeniden türetilmez. Teslim yalnız kaynak düzeyindedir ve daima NOT_VERIFIED'dır. Bu görünüm SALT-OKUNURDUR: onay/ret/başlatma/teslim/toplu eylem yoktur; satır eylemleri yalnız mevcut ekranlara (projects/work/journey) gezinmedir. API verisi HTML olarak yorumlanmaz; yalnız h()/textContent kullanılır.
+import {safeErrorCode} from "../error-code.js";
 import {h,panel,statePill,kpiTile,miniBars} from "../components.js";
 import {MISSING,topEntries} from "../model.js";
 import {formatDateTime} from "../work-core.js";
@@ -36,7 +37,7 @@ function stateBlock(ctx,res,source){
   return h(doc,"div",{class:`matrix-state state-${state.toLowerCase()}`,role:"status",dataset:{matrixState:state,source}},
     h(doc,"p",{class:"matrix-state-head"},statePill(ctx,failKind(state)),h(doc,"strong",{text:ctx.t(`matrix.state.${state}`)})),
     h(doc,"p",{class:"note",text:ctx.t(`matrix.hint.${state}`,{source:`GET ${MATRIX_SOURCE_PATHS[source]}`})}),
-    res.message?h(doc,"p",{class:"note mono",text:res.message}):null);
+    safeErrorCode(res.message)?h(doc,"p",{class:"note mono",dataset:{stateErrorCode:safeErrorCode(res.message)},text:safeErrorCode(res.message)}):null);
 }
 /** Kaynak şeridi: her gerçek okuma kaynağının ayrık durum rozeti (renk tek başına anlam taşımaz). */
 function sourcesList(ctx,a){

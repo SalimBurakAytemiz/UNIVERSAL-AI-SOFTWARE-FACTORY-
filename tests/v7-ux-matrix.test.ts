@@ -355,7 +355,7 @@ describe("Matrix — only already-allow-listed read-only GETs are used (protecte
       expect(src).not.toMatch(/transition|performTransition|work-actions|createMission|startRun/);
     }
     const imports = moduleSpecifiers({source: read("views", "matrix.js")}).sort();
-    expect(imports).toEqual(["../components.js", "../forms.js", "../matrix-core.js", "../model.js", "../work-core.js"]);
+    expect(imports).toEqual(["../components.js", "../error-code.js", "../forms.js", "../matrix-core.js", "../model.js", "../work-core.js"]);
     expect(moduleSpecifiers({source: read("matrix-core.js")}).sort()).toEqual(["./executive-core.js", "./work-core.js"]);
     for (const m of ["matrixProjects", "matrixMissions", "matrixWorkRuns", "matrixCockpit"]) expect(read("views", "matrix.js")).toContain(`api.${m}(`);
     // api.js: tek apiPost çağrısı korunur (yeni POST yolu eklenmez); matris erişimcileri yalnız sabit GET yollarını okur.
