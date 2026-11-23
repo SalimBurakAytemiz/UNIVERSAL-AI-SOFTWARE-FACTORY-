@@ -19,6 +19,7 @@ import {GITLEAKS_ERROR_LINE, buildAddedLineStream, evaluateSecurityPolicy, fakeS
 import type {FakeSecurityDirective, SecurityOptions} from "../core/workos/security-tools.js";
 import {buildServer} from "../apps/control-api/src/server.js";
 import type {WorkRun} from "../core/workos/types.js";
+import "./factory-v2/security-group.mjs";                                         // Factory V2 (PR #347): devir güvenliği + iki-oturum probe vakaları (Windows shard yükü dengeli)
 
 const REPO = path.resolve(import.meta.dirname, "..");
 const ENV_POLICY = path.join(REPO, "config", "environment-policy.json");
