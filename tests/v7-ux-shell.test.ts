@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {pathToFileURL} from "node:url";
 import {desktopGetPathAllowed} from "../automation/lib/control-boundary.mjs";
+import {registerMobileMonitoringCoreSuite} from "./support/mobile-monitoring-core.cases.js";
 
 const root = path.resolve(__dirname, "..");
 const rend = path.join(root, "apps", "desktop", "renderer");
@@ -561,3 +562,4 @@ describe("DSK-T0005 stop dialog live impact counts (UI-124)", () => {
       for (const lang of ["tr", "en"]) expect(i18n.translate(lang, `stop.impact.${k}`, { n: "1" }), `${lang}:${k}`).not.toBe(`stop.impact.${k}`);
   });
 });
+registerMobileMonitoringCoreSuite();
