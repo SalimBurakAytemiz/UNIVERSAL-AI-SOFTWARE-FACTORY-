@@ -14,6 +14,7 @@ import {notVerifiedBadge,runNotVerified,missionNotVerified,axisBadges} from "../
 import {testResultOf} from "../work-core.js";
 import {canOfferComplete} from "../delivery-core.js";
 import {runEngineBlock} from "./run-engine.js";
+import {requestChangesPanel} from "./request-changes.js";
 import {runDiffBlock} from "./run-diff.js";
 import {BOARD_LAYOUTS,boardLayout,setBoardLayout,boardColumns} from "../kanban-core.js";
 
@@ -403,6 +404,7 @@ function detailPanel(ctx,detail,runsRes,runDetails,evRes,project=null,taskRuns=n
     planFormPanel(ctx,m),
     h(doc,"h4",{text:ctx.t("work.timeline.title")}),statusTimeline(ctx,m.status),
     transitionControls(ctx,m,awaitingRun(runsRes,runDetails),runReadiness({project,mission:m}),engine),
+    requestChangesPanel(ctx,m,runsRes),
     runLinkPanel(ctx,m),
     tl?[h(doc,"h4",{text:ctx.t("work.runtl.title")}),h(doc,"p",{class:"note",text:ctx.t("work.runtl.lead")}),tl]:null,
     h(doc,"h4",{text:ctx.t("run.timeline")}),focusMissingNote(ctx,runsRes),runsSection(ctx,runsRes,runDetails,id=>{const res=runLinks.get(id);return res?{res,tasks:detail.mission.tasks,missionId:m.missionId}:null}),
