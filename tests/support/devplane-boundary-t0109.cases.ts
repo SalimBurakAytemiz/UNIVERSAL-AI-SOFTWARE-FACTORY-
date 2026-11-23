@@ -7,7 +7,6 @@
 import {describe, it, expect} from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
 import {pathToFileURL} from "node:url";
 import ts from "typescript";
 
@@ -111,12 +110,19 @@ export function registerDevplaneBoundaryT0109Cases(): void {
     });
 
     it("the guard is not vacuous: a synthetic product file importing docs/, factory-v2 or an unlisted automation module is caught; a non-literal import is flagged", () => {
-      const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "t0109-guard-")), up = path.relative(dir, ROOT).split(path.sep).join("/");
+      // Sentetik dizin depo İÇİNDE (git-ignore'lu node_modules/ altında) açılır: os.tmpdir() başka bir sürücüdeyse (Windows CI: C: vs D:) path.relative mutlak "D:/..." verir ve
+      // göreli belirteç olmadığı için bekçi onu atlar (test boşa geçerdi). Belirtecin gerçekten göreli olduğu ayrıca doğrulanır.
+      const base = path.join(ROOT, "node_modules");
+      fs.mkdirSync(base, {recursive: true});
+      const dir = fs.mkdtempSync(path.join(base, ".t0109-guard-")), up = path.relative(dir, ROOT).split(path.sep).join("/");
       try {
+        expect(up.startsWith("../") && !path.isAbsolute(up) && !/^[A-Za-z]:/.test(up), up).toBe(true);
         fs.writeFileSync(path.join(dir, "entry.ts"), `import "./ok.js";\nimport x from "${up}/automation/lib/scheduler.mjs";\nconst m = "${up}/x"; await import(m);\nexport default x;\n`);
         fs.writeFileSync(path.join(dir, "ok.ts"), `export const ok = 1;\nimport "${up}/automation/lib/dependency-install.mjs";\n`);
         const g = productImportGraph([path.join(dir, "entry.ts")]);
-        const outside = g.files.filter(f => !f.startsWith("../") && !PRODUCT_PREFIXES.some(p => f.startsWith(p)));
+        const synthetic = `${rel(dir)}/`;
+        expect(g.files).toEqual(expect.arrayContaining([`${synthetic}entry.ts`, `${synthetic}ok.ts`]));
+        const outside = g.files.filter(f => !f.startsWith(synthetic) && !PRODUCT_PREFIXES.some(p => f.startsWith(p)));
         expect(outside).toContain("automation/lib/dependency-install.mjs");
         expect(outside.filter(f => !(f in KNOWN_DEVPLANE_DEPENDENCIES))).toContain("automation/lib/dependency-install.mjs");
         expect(g.problems.some(p => p.startsWith("NON_LITERAL_LOAD") && p.includes("entry.ts"))).toBe(true);
