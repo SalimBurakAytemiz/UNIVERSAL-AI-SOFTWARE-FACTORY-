@@ -1,7 +1,19 @@
-//TR: Bu dosya mission görev planı route'larını sağlar (POST /v1/missions/:id/plan, GET /v1/missions/:id/tasks); server.ts'e tek satırlık kayıt gerekir (docs/authority-requests/LANE-B-plan.md).
+//TR: Bu dosya mission görev planı route'larını sağlar (POST /v1/missions/:id/plan, GET /v1/missions/:id/tasks); server.ts'e tek satırlık kayıt gerekir (docs/authority-requests/LANE-B-plan.md). DSK-T0004 (UI-018/019): GET /v1/missions/:id/tasks ayrıca salt-okunur planVersions alanını döndürür — mission'ın pre-dev Plan artefaktının TÜM sürümleri (v1, v2 ... supersedes zinciri) yalnız güvenli iş paketi alanlarıyla; plan geçmişi yoksa boş dizi (uydurma yok).
 import {LANE_WRITE_BODY_LIMIT} from "./deps.js";
 import type {RouteDeps} from "./deps.js";
 import {submitPlan, validatePlanCreate, PlanError} from "../../../../core/workos/plan.js";
+import type {PlanContent} from "../../../../core/workos/predev/types.js";
+
+/** Plan artefaktının tüm sürümleri, eskiden yeniye; yalnız karşılaştırma için gereken alanlar kopyalanır (içerik referansı dışarı sızmaz). */
+export function planVersionsOf(store: any, scope: {tenantId: string}, missionId: string) {
+  const seq = store.getPreDevSequence(scope, missionId);
+  if (!seq) return [];
+  return store.listPreDevArtifacts(scope, seq.preDevId).filter((a: any) => a.kind === "Plan").sort((a: any, b: any) => a.version - b.version).map((a: any) => {
+    const c = a.content as PlanContent;
+    return {artifactId: a.id, version: a.version, state: a.state, supersedes: a.supersedes, createdAt: a.createdAt,
+      workPackages: (c?.workPackages ?? []).map(w => ({id: w.id, title: w.title, dependsOn: [...w.dependsOn], estimate: w.estimate, satisfies: [...w.satisfies]}))};
+  });
+}
 
 const validMissionId = (x: unknown) => typeof x === "string" && /^msn_[0-9a-f]{24}$/.test(x);
 export const STATUS: Record<string, number> = {PLAN_ALREADY_EXISTS: 409, MISSION_NOT_PLANNABLE: 409, PLAN_MISSION_NOT_FOUND: 404, PLAN_STORE_CORRUPT: 503};
@@ -15,7 +27,7 @@ export function registerPlanRoutes(app: any, d: RouteDeps): void {
   app.get("/v1/missions/:id/tasks", guard(async (req: any, reply: any) => {
     if (!validMissionId(req.params.id)) return reply.code(400).send({error: "INVALID_MISSION_ID"});
     if (!d.getStore().getMission(d.scope, req.params.id)) return reply.code(404).send({error: "WORKOS_NOT_FOUND"});
-    return {tasks: d.getStore().listTasks(d.scope, req.params.id)};
+    return {tasks: d.getStore().listTasks(d.scope, req.params.id), planVersions: planVersionsOf(d.getStore(), d.scope, req.params.id)};
   }));
   app.post("/v1/missions/:id/plan", {bodyLimit: LANE_WRITE_BODY_LIMIT}, guard(async (req: any, reply: any) => {
     if (!validMissionId(req.params.id)) return reply.code(400).send({error: "INVALID_MISSION_ID"});
