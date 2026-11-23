@@ -48,9 +48,12 @@ export function mapQueueMissions(raw){
 }
 
 // ---------- GET /v1/work-runs ----------
+// DSK-T0008: firstLeasedAt (journal time of the run's first lease, #433) is kept when present; the usage panel counts today's runs by it. A present but
+// non-ISO value makes the row invalid (fail-closed, like every other field).
 function mapRunRow(r){
   if(!isObj(r)||!matches(RUN_RE,r.runId)||!matches(MISSION_ID_RE,r.missionId)||!matches(PROJECT_ID_RE,r.projectId)||!RUN_STATUSES.includes(r.status)||!RUN_STEPS.includes(r.step)||iso(r.createdAt)===null||iso(r.updatedAt)===null)return null;
-  return {runId:r.runId,missionId:r.missionId,projectId:r.projectId,status:r.status,step:r.step,createdAt:r.createdAt,updatedAt:r.updatedAt};
+  if(r.firstLeasedAt!==undefined&&iso(r.firstLeasedAt)===null)return null;
+  return {runId:r.runId,missionId:r.missionId,projectId:r.projectId,status:r.status,step:r.step,createdAt:r.createdAt,updatedAt:r.updatedAt,...(r.firstLeasedAt===undefined?{}:{firstLeasedAt:r.firstLeasedAt})};
 }
 /** GET /v1/work-runs -> {state:"VERIFIED",runs:{total,awaiting,items}} | {state:"ERROR",runs:null}. Tek bozuk koşu (ya da yinelenen kimlik) tüm okumayı ERROR yapar. */
 export function mapQueueWorkRuns(raw){
