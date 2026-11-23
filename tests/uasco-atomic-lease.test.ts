@@ -19,17 +19,34 @@ const B=(o:Record<string,unknown>={})=>A({environment:"local-windows",workerId:"
 const WORKER=`const {workerData:w,parentPort}=require("node:worker_threads");(async()=>{const {claim}=await import(w.lease);const {createLocalGitRefStore}=await import(w.gstore);const store=createLocalGitRefStore({repoDir:w.repoDir});Atomics.add(new Int32Array(w.sab),0,1);while(Atomics.load(new Int32Array(w.sab),1)===0)Atomics.wait(new Int32Array(w.sab),1,0,50);const r=claim(store,{taskId:w.taskId,environment:w.i%2?"cloud-linux":"local-windows",workerId:"w"+w.i,sessionId:"s"+w.i,headSha:"f".repeat(40),now:5000,ttlMs:60000});parentPort.postMessage({i:w.i,status:r.status,epoch:r.record?.epoch??null})})().catch(e=>parentPort.postMessage({err:String(e)}));`;
 describe("atomic cross-environment task lease",()=>{
   let repo:string;beforeAll(()=>{repo=mkRepo()});afterAll(()=>{fs.rmSync(repo,{recursive:true,force:true})});
+  // //TR: UASCO-T0088: RACE işçileri her yolda (başarısız iddia dahil) sonlandırılır; aksi halde hazır-olmama yolunda 16 işçi Atomics.wait döngüsünde sonsuza dek döner. withWorkers işçileri kurar, gövdeyi çalıştırır ve finally'de hepsini terminate eder.
+  const withWorkers=async<T>(n:number,data:(i:number)=>Record<string,unknown>,body:(ws:Worker[])=>Promise<T>,exits?:Promise<number>[]):Promise<T>=>{
+    const ws=Array.from({length:n},(_,i)=>new Worker(WORKER,{eval:true,workerData:data(i)}));
+    exits?.push(...ws.map(w=>new Promise<number>(res=>w.once("exit",res))));
+    try{return await body(ws)}finally{await Promise.all(ws.map(w=>w.terminate()))}
+  };
   it("RACE: 16 real worker_threads claim one task through the git-ref store -> exactly 1 GRANTED, 15 HELD",async()=>{
     const N=16,sab=new SharedArrayBuffer(8),ctl=new Int32Array(sab);
-    const ws=Array.from({length:N},(_,i)=>new Worker(WORKER,{eval:true,workerData:{i,sab,repoDir:repo,taskId:"RACE-1",lease:LIB("task-lease.mjs"),gstore:LIB("task-lease-git-store.mjs")}}));
-    const done=ws.map(w=>new Promise<any>((res,rej)=>{w.once("message",res);w.once("error",rej)}));
-    const t0=Date.now();while(Atomics.load(ctl,0)<N&&Date.now()-t0<30000)await new Promise(r=>setTimeout(r,10));
-    expect(Atomics.load(ctl,0),"all workers ready").toBe(N);Atomics.store(ctl,1,1);Atomics.notify(ctl,1);
-    const out=await Promise.all(done);await Promise.all(ws.map(w=>w.terminate()));
+    const out=await withWorkers(N,i=>({i,sab,repoDir:repo,taskId:"RACE-1",lease:LIB("task-lease.mjs"),gstore:LIB("task-lease-git-store.mjs")}),async ws=>{
+      const done=ws.map(w=>new Promise<any>((res,rej)=>{w.once("message",res);w.once("error",rej)}));
+      const t0=Date.now();while(Atomics.load(ctl,0)<N&&Date.now()-t0<30000)await new Promise(r=>setTimeout(r,10));
+      expect(Atomics.load(ctl,0),"all workers ready").toBe(N);Atomics.store(ctl,1,1);Atomics.notify(ctl,1);
+      return Promise.all(done);
+    });
     expect(out.filter(o=>o.err)).toEqual([]);
     expect(out.filter(o=>o.status==="GRANTED").length).toBe(1);expect(out.filter(o=>o.status==="HELD").length).toBe(N-1);
     const holder=createLocalGitRefStore({repoDir:repo}).read("RACE-1")!,winner=out.find(o=>o.status==="GRANTED");
     expect(holder.workerId).toBe("w"+winner.i);expect(holder.epoch).toBe(1);
+  },60000);
+  it("a failing RACE leaves no worker running: workers still waiting for the start signal are terminated when the body throws",async()=>{
+    const sab=new SharedArrayBuffer(8),ctl=new Int32Array(sab),exits:Promise<number>[]=[];
+    await expect(withWorkers(4,i=>({i,sab,repoDir:repo,taskId:"RACE-LEAK",lease:LIB("task-lease.mjs"),gstore:LIB("task-lease-git-store.mjs")}),async()=>{
+      const t0=Date.now();while(Atomics.load(ctl,0)<4&&Date.now()-t0<30000)await new Promise(r=>setTimeout(r,10));
+      throw new Error("readiness assertion failed");   // the start signal (ctl[1]) is never given: without cleanup these workers spin forever
+    },exits)).rejects.toThrow("readiness assertion failed");
+    const timeout=new Promise<"STILL_RUNNING">(r=>setTimeout(()=>r("STILL_RUNNING"),5000));
+    expect(await Promise.race([Promise.all(exits),timeout]),"every worker exited").not.toBe("STILL_RUNNING");
+    expect(Atomics.load(ctl,1),"the start signal was never given").toBe(0);
   },60000);
   it("TTL: unexpired claim is HELD for others; after expiry a second claimant is GRANTED with epoch+1",()=>{
     const s=createLocalGitRefStore({repoDir:repo}),g=claim(s,A({taskId:"TTL-1"}));expect(g.status).toBe("GRANTED");expect(g.record!.epoch).toBe(1);
