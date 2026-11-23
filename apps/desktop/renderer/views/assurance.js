@@ -4,20 +4,22 @@
 // (3) Kanıt yüzeyi (DEĞİŞMEDİ): GET /v1/evidence listesi doğrulama çipleriyle (VERIFIED/MISMATCH/MISSING/UNVERIFIABLE) + detay (kaynak yolu, sha256, redakte log);
 // (3b) UI-049 Reviews: GET /v1/reviews (+ /:evd_id) bağımsız review kararları AYNEN, yükseltilmeden; veri yoksa dürüst boş/UNAVAILABLE/ERROR durumu;
 // (3c) UI-050 Soyağacı: GET /v1/evidence liste alanlarından (missionId, runId) mission->run->evidence; eksik alan gruplanmamış, bağ çıkarımı yok;
+// (3e) DSK-T0006 UI-038..045 proje başına test stratejisi ve kapsam (views/test-strategy-panel.js): liste ek okuma yapmaz; seçimde salt-okunur /v1/projects + /v1/work-runs/:id; test ekseni ve ürün doğrulama ekseni ayrıdır;
 // (3d) UI-051 Test raporu: GET /v1/work-runs test kanıt kayıtlarından koşu başına durum (+ GET /v1/evidence?runId= çapraz doğrulama); kanıt yoksa NOT_EXECUTED, "geçti" asla üretilmez;
 // (4) Dinamik QA — Founder kapısı (BLOCKED): testleri çalıştırma, görsel/API/web/mobil/masaüstü yürütme, cihaz farmı, canlı önizleme FD-REL-1 (yürütme) + ücretli cihaz farmı kapısındadır; bu yüzey ASLA sahte koş/geçti/kapsam göstermez, "koş" düğmesi yoktur ve SOURCE_GENERATION_COMPLETE asla PRODUCT_VERIFIED sayılmaz. 404 => UNAVAILABLE; veri yalnız h()/textContent ile çizilir, HTML olarak yorumlanmaz.
 import {h,panel,stateNote,emptyNote,chip,verificationChip,statePill,miniBars,badge} from "../components.js";
 import {MISSING,formatCount} from "../model.js";
 import {VERIFICATION_STATES,filterEvidence,formatDateTime} from "../work-core.js";
 import {drafts,selection,field} from "../forms.js";
-import {mapSecurityScans,evidenceIntegrity,buildLineage,buildLineageGraph,linkedNodeIds,lineageNavigate,GRAPH_KINDS,reviewRowVerified,mapTestReports} from "../assurance-core.js";
+import {mapSecurityScans,newestFirst,evidenceIntegrity,buildLineage,buildLineageGraph,linkedNodeIds,lineageNavigate,GRAPH_KINDS,reviewRowVerified,mapTestReports} from "../assurance-core.js";
 import {icon} from "../icons.js";
+import {testStrategyPanel,testStrategyDetail,resetTestStrategy} from "./test-strategy-panel.js";
 
 const PAGE_LIMIT=100;
 const SCAN_LIMIT=150;
 // //TR: Seçili güvenlik tarama koşusu görünüm ömrü boyunca korunur (periyodik yenileme seçimi bozmaz).
 const secState={runId:null};
-export function resetAssuranceView(){secState.runId=null;revState.id=null;trState.runId=null}
+export function resetAssuranceView(){secState.runId=null;revState.id=null;trState.runId=null;resetTestStrategy()}
 
 // //TR: Dinamik QA yetenekleri Founder kapısındadır; her satır dürüst BLOCKED/NOT_EXECUTED taşır, hiçbiri yürütme tetiklemez.
 const DYNAMIC_QA=Object.freeze([
@@ -77,6 +79,8 @@ function evidencePanel(ctx,ev){
     bars??emptyNote(ctx,"qa.evidence.noBars"),
     h(doc,"p",{class:"note mono",text:ctx.t("qa.overview.source")}));
 }
+// //TR: Güvenlik okumasının gerçek toplamı (sunucunun döndürdüğü koşu sayısı); eşleyici en yeni SECURITY_ROWS_MAX koşuyu tutar, kesik kısım sayıyla söylenir.
+const scanTotal=scans=>Number.isSafeInteger(scans.total)&&scans.total>=scans.runs.length?scans.total:scans.runs.length;
 function posturePanel(ctx,scans){
   const doc=ctx.doc;
   if(scans.state!=="VERIFIED")return panel(ctx,{titleKey:"qa.posture.title",id:"qa-posture",className:"qa-posture"},
@@ -97,6 +101,7 @@ function posturePanel(ctx,scans){
       stat(ctx,"blocked","qa.scan.BLOCKED",bs.BLOCKED,{tone:bs.BLOCKED>0?"danger":null}),
       stat(ctx,"notrun","qa.scan.NOT_EXECUTED",bs.NOT_EXECUTED,{tone:"muted"})),
     bars??null,
+    scans.truncated===true?h(doc,"p",{class:"note note-stale",role:"note",dataset:{postureTruncated:String(scanTotal(scans)-scans.runs.length)},text:ctx.t("qa.security.more",{n:String(scanTotal(scans)-scans.runs.length)})}):null,
     h(doc,"p",{class:"note",text:ctx.t("qa.posture.note")}),
     h(doc,"p",{class:"note mono",text:ctx.t("qa.security.source")}));
 }
@@ -137,16 +142,16 @@ function securityPanel(ctx,scans){
   const runs=scans.runs;
   if(!runs.length)return panel(ctx,{titleKey:"qa.security.title",id:"qa-security",className:"qa-security"},
     h(doc,"p",{class:"note",text:ctx.t("qa.security.lead")}),emptyNote(ctx,"qa.security.none"),h(doc,"p",{class:"note mono",text:ctx.t("qa.security.source")}));
-  const page=runs.slice(0,SCAN_LIMIT);
+  const page=newestFirst(runs).slice(0,SCAN_LIMIT);
   const cols=["qa.security.col.run","qa.security.col.status","qa.security.col.secrets","qa.security.col.sca","qa.security.col.tools","qa.security.col.commit"];
   return panel(ctx,{titleKey:"qa.security.title",id:"qa-security",className:"qa-security"},
     h(doc,"p",{class:"note",text:ctx.t("qa.security.lead")}),
-    h(doc,"p",{class:"note",dataset:{results:"1"},text:ctx.t("qa.security.results",{shown:String(page.length),total:String(runs.length)})}),
+    h(doc,"p",{class:"note",dataset:{results:"1"},text:ctx.t("qa.security.results",{shown:String(page.length),total:String(scanTotal(scans))})}),
     h(doc,"div",{class:"table-wrap"},h(doc,"table",{class:"table qa-sec-table"},
       h(doc,"caption",{class:"sr-only",text:ctx.t("qa.security.caption")}),
       h(doc,"thead",{},h(doc,"tr",{},cols.map(k=>h(doc,"th",{scope:"col",text:ctx.t(k)})))),
       h(doc,"tbody",{},page.map(r=>securityRow(ctx,r))))),
-    runs.length>SCAN_LIMIT?h(doc,"p",{class:"note",dataset:{truncated:"1"},text:ctx.t("qa.security.more",{n:String(runs.length-SCAN_LIMIT)})}):null,
+    scanTotal(scans)>page.length?h(doc,"p",{class:"note",dataset:{truncated:"1"},text:ctx.t("qa.security.more",{n:String(scanTotal(scans)-page.length)})}):null,
     h(doc,"p",{class:"note",text:ctx.t("qa.tool.installedNote")}),
     h(doc,"p",{class:"note mono",text:ctx.t("qa.security.source")}));
 }
@@ -382,7 +387,7 @@ function testReportPanel(ctx,reports){
   const doc=ctx.doc,mk=(...k)=>panel(ctx,{titleKey:"assurance.testreport.title",id:"as-testrep",className:"as-testrep"},h(doc,"p",{class:"note",text:ctx.t("assurance.testreport.lead")}),...k,h(doc,"p",{class:"note mono",text:ctx.t("assurance.testreport.source")}));
   if(reports.state!=="VERIFIED")return mk(stateNote(ctx,reports.state));
   if(!reports.runs.length)return mk(emptyNote(ctx,"assurance.testreport.none"));
-  const page=reports.runs.slice(0,SCAN_LIMIT),cols=["assurance.testreport.col.run","assurance.testreport.col.state","assurance.testreport.col.executed","assurance.testreport.col.records","assurance.testreport.col.head"];
+  const page=newestFirst(reports.runs).slice(0,SCAN_LIMIT),cols=["assurance.testreport.col.run","assurance.testreport.col.state","assurance.testreport.col.executed","assurance.testreport.col.records","assurance.testreport.col.head"];
   return mk(
     h(doc,"p",{class:"note",dataset:{results:"testreport"},text:ctx.t("assurance.testreport.results",{shown:String(page.length),total:String(reports.total)})}),
     h(doc,"div",{class:"table-wrap"},h(doc,"table",{class:"table as-testrep-table"},
@@ -497,6 +502,8 @@ export async function render(ctx){
     securityDetail(ctx,scans),
     testReportPanel(ctx,tests),
     await testReportDetail(ctx,tests),
+    testStrategyPanel(ctx,tests),
+    await testStrategyDetail(ctx,tests),
     reviewsPanel(ctx,revRes),
     await reviewDetailPanel(ctx),
     h(doc,"p",{class:"panel-meta"},chip(ctx,{state:res.state,value:res.items?.length??null}),h(doc,"span",{text:ctx.t("assurance.source")})),

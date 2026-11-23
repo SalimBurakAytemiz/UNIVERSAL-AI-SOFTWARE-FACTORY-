@@ -1,0 +1,138 @@
+# //TR: Tek seferlik OAuth katman teşhisi (Founder-tier, elle tetiklenir). Hiçbir kapı veya zorunlu kontrol bunu okumaz. uasco-review environment'ındaki mevcut CLAUDE_CODE_OAUTH_TOKEN ile, şemasız tek turluk ve araçsız bir istemle, repo içeriği, diff veya şema vermeden, reddin hangi katmanda olduğunu ayırır. Token, öneki, uzunluğu, parmak izi ve model çıktısı yazılmaz; ücretli API anahtarı yoktur.
+# One-time OAuth layer diagnostic. Manual only; no gate or required check reads it. It separates the layer that rejects the reviewer credential (ai-review:
+# HTTP 401 AUTH_TOKEN_INVALID) using the existing uasco-review environment secret, a one-turn non-schema prompt, no tools, and no repository content.
+#   cli-304-plain      `claude -p`, Claude Code 2.1.304 (the version the pinned action installs, same install command), only CLAUDE_CODE_OAUTH_TOKEN set
+#   cli-304-actionenv  the same, plus the auth-relevant env the pinned action adds: ANTHROPIC_API_KEY="", CLAUDE_CODE_ENTRYPOINT, CLAUDE_CODE_ACTION
+#   cli-323-plain      `claude -p`, Claude Code 2.1.323 (the "stable" release channel on 2026-11-21), only CLAUDE_CODE_OAUTH_TOKEN set
+#   action-pinned      anthropics/claude-code-action@db77d4d3 (v1.0.254, agent mode for workflow_dispatch), same prompt, no tools
+#   action-pinned-323  the same action given Claude Code 2.1.323 through path_to_claude_code_executable
+# Every probe uses the same model argument (repository variable UASCO_REVIEW_MODEL, validated as in run.mjs modelArg; CLI default if unset), the same
+# prompt and an ubuntu-latest runner, and prints ONE fixed line (scripts/ci/uasco-review/oauth-layer-classify.mjs). Raw output stays in RUNNER_TEMP, is
+# never uploaded or printed, and is deleted. Subscription OAuth only: no API key input is set (D-08 = 0 USD).
+name: UASCO OAuth Layer Diagnose
+on:
+  workflow_dispatch: {}
+permissions: {}
+concurrency:
+  group: uasco-oauth-layer-diagnose
+  cancel-in-progress: false
+env:
+  PROMPT: "Reply with the single word OK."
+  NO_TOOLS: "Bash,Edit,Write,MultiEdit,NotebookEdit,Read,Glob,Grep,WebFetch,WebSearch,Task,TodoWrite"
+jobs:
+  cli:
+    if: github.ref == 'refs/heads/v7/integration'
+    runs-on: ubuntu-latest
+    environment: uasco-review
+    timeout-minutes: 10
+    permissions: {contents: read}
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - {probe: cli-304-plain, version: "2.1.304", actionenv: "0"}
+          - {probe: cli-304-actionenv, version: "2.1.304", actionenv: "1"}
+          - {probe: cli-323-plain, version: "2.1.323", actionenv: "0"}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with: {path: diag, persist-credentials: false}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: {node-version: 24}
+      - id: model
+        env: {M: "${{ vars.UASCO_REVIEW_MODEL }}"}
+        run: if printf '%s' "$M" | grep -Eqx '[A-Za-z0-9][A-Za-z0-9._:-]{0,63}'; then echo "arg=--model $M" >>"$GITHUB_OUTPUT"; else echo "arg=" >>"$GITHUB_OUTPUT"; fi
+      # The pinned action's own install command (src/entrypoints/run.ts buildInstallCommand), three attempts, into a fresh HOME. No secret in this step.
+      - id: install
+        env: {VERSION: "${{ matrix.version }}", PROBE: "${{ matrix.probe }}"}
+        run: |
+          export HOME="$RUNNER_TEMP/h-$PROBE"; mkdir -p "$HOME"
+          ok=false
+          for i in 1 2 3; do if bash -c "set -o pipefail; curl -fsSL https://claude.ai/install.sh | bash -s -- $VERSION" >/dev/null 2>&1; then ok=true; break; fi; sleep 5; done
+          C="$HOME/.local/bin/claude"
+          if [ "$ok" = true ] && [ -x "$C" ] && "$C" --version 2>/dev/null | grep -Eq "^$VERSION( |$)"; then echo "ok=true" >>"$GITHUB_OUTPUT"; else echo "ok=false" >>"$GITHUB_OUTPUT"; fi
+          echo "home=$HOME" >>"$GITHUB_OUTPUT"
+      - name: Probe
+        if: steps.install.outputs.ok == 'true'
+        env:
+          TOK: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          PH: ${{ steps.install.outputs.home }}
+          PROBE: ${{ matrix.probe }}
+          ACTIONENV: ${{ matrix.actionenv }}
+          MODEL_ARG: ${{ steps.model.outputs.arg }}
+        run: |
+          W="$RUNNER_TEMP/w-$PROBE"; mkdir -p "$W"; cd "$W"
+          [ -n "$TOK" ] || exit 0
+          (
+            unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL ANTHROPIC_CUSTOM_HEADERS
+            export HOME="$PH" CLAUDE_CODE_OAUTH_TOKEN="$TOK"; unset TOK
+            if [ "$ACTIONENV" = 1 ]; then export ANTHROPIC_API_KEY="" CLAUDE_CODE_ENTRYPOINT=claude-code-github-action CLAUDE_CODE_ACTION=1; fi
+            # shellcheck disable=SC2086
+            timeout 180 "$HOME/.local/bin/claude" -p "$PROMPT" --output-format stream-json --verbose --max-turns 1 --disallowedTools "$NO_TOOLS" $MODEL_ARG \
+              >"$RUNNER_TEMP/o-$PROBE.jsonl" 2>/dev/null
+          ) || true
+      - name: Classify
+        if: always()
+        env:
+          PROBE: ${{ matrix.probe }}
+          SECRET_PRESENT: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+          INSTALL_OK: ${{ steps.install.outputs.ok == 'true' }}
+          EXPECT_CLI: ${{ matrix.version }}
+        run: |
+          OUTPUT_FILE="$RUNNER_TEMP/o-$PROBE.jsonl" node "$GITHUB_WORKSPACE/diag/scripts/ci/uasco-review/oauth-layer-classify.mjs" || true
+          rm -f "$RUNNER_TEMP/o-$PROBE.jsonl"
+  action:
+    if: github.ref == 'refs/heads/v7/integration'
+    needs: cli
+    runs-on: ubuntu-latest
+    environment: uasco-review
+    timeout-minutes: 15
+    permissions: {contents: read}
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - {probe: action-pinned, version: "2.1.304", custom: "0"}
+          - {probe: action-pinned-323, version: "2.1.323", custom: "1"}
+    steps:
+      - id: model
+        env: {M: "${{ vars.UASCO_REVIEW_MODEL }}"}
+        run: if printf '%s' "$M" | grep -Eqx '[A-Za-z0-9][A-Za-z0-9._:-]{0,63}'; then echo "arg=--model $M" >>"$GITHUB_OUTPUT"; else echo "arg=" >>"$GITHUB_OUTPUT"; fi
+      - id: install
+        if: matrix.custom == '1'
+        env: {VERSION: "${{ matrix.version }}"}
+        run: |
+          export HOME="$RUNNER_TEMP/h-custom"; mkdir -p "$HOME"
+          ok=false
+          for i in 1 2 3; do if bash -c "set -o pipefail; curl -fsSL https://claude.ai/install.sh | bash -s -- $VERSION" >/dev/null 2>&1; then ok=true; break; fi; sleep 5; done
+          C="$HOME/.local/bin/claude"
+          if [ "$ok" = true ] && [ -x "$C" ] && "$C" --version 2>/dev/null | grep -Eq "^$VERSION( |$)"; then echo "path=$C" >>"$GITHUB_OUTPUT"; fi
+      # The action runs before any checkout: the workspace is empty, so no repository content is reachable even in principle.
+      - id: claude
+        if: matrix.custom == '0' || steps.install.outputs.path != ''
+        continue-on-error: true
+        uses: anthropics/claude-code-action@db77d4d3c98f3f6380e7cd45ffba2342a3dbde3c # v1.0.254
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          prompt: ${{ env.PROMPT }}
+          path_to_claude_code_executable: ${{ steps.install.outputs.path }}
+          claude_args: "--max-turns 1 --disallowedTools ${{ env.NO_TOOLS }} ${{ steps.model.outputs.arg }}"
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        if: always()
+        with: {path: diag, persist-credentials: false}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: always()
+        with: {node-version: 24}
+      - name: Classify
+        if: always()
+        env:
+          PROBE: ${{ matrix.probe }}
+          SECRET_PRESENT: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+          INSTALL_OK: ${{ matrix.custom == '0' || steps.install.outputs.path != '' }}
+          EXPECT_CLI: ${{ matrix.version }}
+          OUTPUT_FILE: ${{ steps.claude.outputs.execution_file }}
+        run: |
+          node "$GITHUB_WORKSPACE/diag/scripts/ci/uasco-review/oauth-layer-classify.mjs" || true
+          rm -f "$RUNNER_TEMP/claude-execution-output.json"
