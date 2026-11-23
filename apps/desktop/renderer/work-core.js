@@ -536,6 +536,9 @@ export function mapWorkRun(x){
     testsExecuted:arr(x.evidence,100).some(e=>isObj(e)&&(e.kind==="VERIFY_TESTS"||e.kind==="REGRESSION_TESTS")),
     testsNotExecuted:arr(x.evidence,100).some(e=>isObj(e)&&(e.kind==="VERIFY_TESTS_NOT_EXECUTED"||e.kind==="REGRESSION_TESTS_NOT_EXECUTED")),
     headSha:typeof x.headSha==="string"&&/^[0-9a-f]{40}$/.test(x.headSha)?x.headSha:null,
+    // //TR: DSK-T0001: koşu farkı (baseSha..headSha) için proje kimliği ve taban commit; geçersizse null (fark düğmesi gösterilmez).
+    projectId:typeof x.projectId==="string"&&/^prj_[0-9a-f]{24}$/.test(x.projectId)?x.projectId:null,
+    baseSha:typeof x.baseSha==="string"&&/^[0-9a-f]{40}$/.test(x.baseSha)?x.baseSha:null,
     evidenceVerification:productVerificationOf(x.headSha,arr(x.evidence,100)),
     evidence:mapRunEvidence(x.evidence),reviewer:identity||verdict?{identity,verdict}:null
   };

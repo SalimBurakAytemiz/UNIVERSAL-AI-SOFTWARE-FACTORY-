@@ -127,7 +127,8 @@ export function aggregateSecurity(runs){
   let latestScanned=null;
   for(const r of runs){
     if(agg.byStatus[r.scanStatus]!==undefined)agg.byStatus[r.scanStatus]+=1;
-    if(r.scanned){agg.scanned+=1;if(!latestScanned)latestScanned=r}
+    // //TR: Satırlar sunucu sırasındadır (en eski önce): son taranmış satır EN YENİ taramadır (ilki en eskisi olurdu).
+    if(r.scanned){agg.scanned+=1;latestScanned=r}
   }
   agg.blocked=agg.byStatus.BLOCKED;
   // //TR: Araç kapsamı yalnız gerçek taranmış bir koşunun kanıtından; hiç tarama yoksa null (kurulu/kurulu değil durumu uydurulmaz).
@@ -135,17 +136,23 @@ export function aggregateSecurity(runs){
   return agg;
 }
 
+export const SECURITY_ROWS_MAX=500;
+/** //TR: Sunucu sırası (en eski önce) listesinin en yeni max öğesi, sunucu sırasıyla (girdi değişmez). */
+export function newestWindow(list,max){return list.slice(Math.max(0,list.length-max))}
+/** //TR: Sunucu sırasındaki satırları gösterim için en yeniden eskiye çevirir (girdi değişmez). */
+export function newestFirst(list){return [...list].reverse()}
 /** //TR: GET /v1/work-runs ham sonucunu (api.raw) güvenlik tarama görünümüne eşler; başarısızsa dürüst durum, asla boş "temiz" tablo. */
 export function mapSecurityScans(r){
   if(!isObj(r)||r.ok!==true){
     const state=isObj(r)&&typeof r.state==="string"?r.state:"ERROR";
-    return {state,runs:[],aggregate:emptyAggregate()};
+    return {state,runs:[],aggregate:emptyAggregate(),total:0,truncated:false};
   }
   const data=r.data;
   const list=isObj(data)?(Array.isArray(data.workRuns)?data.workRuns:Array.isArray(data.runs)?data.runs:Array.isArray(data.items)?data.items:null):null;
-  if(!list)return {state:"ERROR",runs:[],aggregate:emptyAggregate()};
-  const runs=list.slice(0,500).map(mapRunSecurity).filter(Boolean);
-  return {state:"VERIFIED",runs,aggregate:aggregateSecurity(runs)};
+  if(!list)return {state:"ERROR",runs:[],aggregate:emptyAggregate(),total:0,truncated:false};
+  // //TR: Sunucu koşuları EN ESKİ önce döndürür: en yeni SECURITY_ROWS_MAX koşu (sunucu sırasının SONU) tutulur, sunucu sırası korunur; böylece toplam/son tarama en yeni koşuları içerir. Kesildiyse total + truncated açıkça taşınır (sessiz kesme yok). Gösterim sırası (en yeni üstte) görünümde newestFirst ile verilir.
+  const runs=newestWindow(list,SECURITY_ROWS_MAX).map(mapRunSecurity).filter(Boolean);
+  return {state:"VERIFIED",runs,aggregate:aggregateSecurity(runs),total:list.length,truncated:list.length>SECURITY_ROWS_MAX};
 }
 
 /** //TR: cockpit.evidence bloğundan dürüst kanıt bütünlüğü özeti; yalnız VERIFIED/STALE blokta ve geçerli tamsayıysa sayı, aksi halde null (uydurma yok). */
@@ -271,7 +278,25 @@ function mapTestRecord(e,head){
   const sha=typeof e.commitSha==="string"&&SHA_RE.test(e.commitSha)?e.commitSha:null,ts=isObj(e.testSurface)?e.testSurface:null;
   return {evidenceId:typeof e.evidenceId==="string"&&e.evidenceId.length<=80?e.evidenceId:null,kind:e.kind,cycle:safeInt(e.cycle),commitSha:sha,atHead:head!==null&&sha===head,
     exitCode:Number.isSafeInteger(e.exitCode)?e.exitCode:null,attested:typeof e.sandboxProviderId==="string"&&e.sandboxProviderId.length>0,
-    acceptance:ts&&typeof ts.functionalAcceptance==="string"?str(ts.functionalAcceptance,40):null,executedTests:ts?safeInt(ts.executedTests):null};
+    acceptance:ts&&typeof ts.functionalAcceptance==="string"?str(ts.functionalAcceptance,40):null,executedTests:ts?safeInt(ts.executedTests):null,
+    files:ts?surfaceFiles(ts):null,testRun:ts?testRunOf(ts.testRun):null};
+}
+// //TR: DSK-T0006: TEST_SURFACE kaydındaki test dosyası listeleri (eklenen/değişen/silinen/yeniden adlandırılan) AYNEN taşınır; biçimsiz öğe atılır, liste TEST_FILES_MAX ile kırpılır ve kırpma işaretlenir. Bu liste yalnız "bu koşuda dokunulan test dosyaları"dır, kapsam ölçümü değildir.
+export const TEST_FILES_MAX=200;
+const pathList=v=>Array.isArray(v)?v.filter(x=>typeof x==="string"&&x.length>0&&x.length<=500):[];
+function surfaceFiles(ts){
+  const renamed=Array.isArray(ts.renamed)?ts.renamed.filter(x=>isObj(x)&&typeof x.to==="string"&&x.to.length>0&&x.to.length<=500).map(x=>x.to):[];
+  const all={added:pathList(ts.added),modified:pathList(ts.modified),deleted:pathList(ts.deleted),renamed};
+  const total=all.added.length+all.modified.length+all.deleted.length+all.renamed.length;
+  let left=TEST_FILES_MAX;const cut=l=>{const k=l.slice(0,Math.max(0,left));left-=k.length;return k};
+  return {added:cut(all.added),modified:cut(all.modified),deleted:cut(all.deleted),renamed:cut(all.renamed),total,truncated:total>TEST_FILES_MAX||ts.truncated===true};
+}
+// //TR: DSK-T0006: ayrıştırılmış test koşusu özeti (core/workos/test-surface.ts TestRunSummary) yalnız tüm sayılar geçerli tamsayıysa ve executed = passed + failed ise taşınır; aksi halde null (asla tahmini sayı yok).
+function testRunOf(t){
+  if(!isObj(t)||typeof t.format!=="string")return null;
+  const n=["executed","passed","failed","skipped","todo"].map(k=>safeInt(t[k]));
+  if(n.some(x=>x===null)||n[0]!==n[1]+n[2])return null;
+  return {format:str(t.format,20),executed:n[0],passed:n[1],failed:n[2],skipped:n[3],todo:n[4]};
 }
 // //TR: Durum (EXECUTED/FAILED/...) readiness-core'un testsOf'u ile BİREBİR aynı kaynaktan gelir: tüm liste önce mapReadinessWorkRuns ile fail-closed doğrulanır (bozuk kanıt öğesi, biçimsiz commit/exitCode/sağlayıcı/kabul, yinelenen runId, bozuk koşu satırı => TÜM okuma ERROR) ve satır başına `tests` değeri oradan alınır; burada ikinci bir kural kopyası YOKTUR. Kayıtlar yalnız doğrulanmış ham öğelerden gösterim için türetilir.
 export const TEST_ROWS_MAX=500;
@@ -283,11 +308,13 @@ export function mapTestReports(r){
   if(!list)return bad("ERROR");
   const rd=mapReadinessWorkRuns({runs:list});
   if(rd.state!=="VERIFIED"||!rd.runs||rd.runs.items.length!==list.length)return bad("ERROR");
-  const runs=list.slice(0,TEST_ROWS_MAX).map((x,i)=>{
-    const row=rd.runs.items[i],head=row.headSha;
+  // //TR: Güvenlik tablosuyla aynı kural: sunucu en eski önce döndürür; en yeni TEST_ROWS_MAX koşu (sunucu sırasının SONU) tutulur, sunucu sırası korunur (gösterim newestFirst ile).
+  const start=Math.max(0,list.length-TEST_ROWS_MAX);
+  const runs=newestWindow(list,TEST_ROWS_MAX).map((x,j)=>{
+    const i=start+j,row=rd.runs.items[i],head=row.headSha;
     const records=x.evidence.map(e=>mapTestRecord(e,head)).filter(Boolean);
     const surface=lastOf(records.filter(q=>q.atHead),q=>q.kind==="TEST_SURFACE"&&q.acceptance!==null);
-    return {runId:row.runId,missionId:row.missionId,headSha:head,state:row.tests,records,executedTests:surface?surface.executedTests:null};
+    return {runId:row.runId,missionId:row.missionId,projectId:row.projectId,headSha:head,updatedAt:row.updatedAt,state:row.tests,records,executedTests:surface?surface.executedTests:null};
   });
   return {state:"VERIFIED",runs,total:list.length,truncated:list.length>TEST_ROWS_MAX};
 }

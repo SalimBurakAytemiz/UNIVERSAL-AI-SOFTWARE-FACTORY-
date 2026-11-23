@@ -2,7 +2,7 @@
 import {h,chip,badge,statusLabel,statePill,missionPill,timelineItem} from "./components.js";
 import {icon} from "./icons.js";
 import {confirmAndResume} from "./resume-confirm.js";
-import {ROUTES,routeById} from "./routes.js";
+import {ROUTES,routeById,unknownRouteHash,DEFAULT_ROUTE,NAV_SHORT} from "./routes.js";
 import {formatCount,formatTime,MISSING,pushSample,searchEntries,pillKindFor} from "./model.js";
 import {syncNav,syncTabs} from "./nav.js";
 import {keepFocus} from "./focus.js";
@@ -11,6 +11,7 @@ import {maybeOpenFirstRun} from "./views/firstrun.js";
 import {recoveryPanel} from "./recovery-panel.js";
 import {shouldShowApiRecovery} from "./recovery-core.js";
 import {createInspector,isInspectableRef} from "./inspector.js";
+import {loadStopImpact} from "./stop-impact-core.js";
 
 export const PRINCIPAL="FOUNDER_LOCAL";
 const FEED_TABS=Object.freeze(["flow","health","agenda"]);
@@ -18,7 +19,9 @@ const FEED_TABS=Object.freeze(["flow","health","agenda"]);
 export function createShell(ctx){
   const doc=ctx.doc,el=id=>doc.getElementById(id),{t,store,api}=ctx;
   const data={projects:{state:"LOADING",items:[]},cockpit:null,control:{state:"LOADING",active:false,reason:null},health:{state:"LOADING"},missions:{state:"LOADING",items:[]},attention:{state:"LOADING",blocked:[]},events:{state:"LOADING",runId:null,events:[]}};
-  let feedTab="flow",searchHits=[],searchIndex=-1,lastStopActive=null,lastApiState=null;
+  let feedTab="flow",searchHits=[],searchIndex=-1,lastStopActive=null,lastApiState=null,unknownFrom=null;
+  // //TR: UASCO-T0005: ham hash ctx.currentHash (test) veya pencere konumundan okunur; yoksa "" (bilinmeyen rota bildirimi devre dışı).
+  const win=doc.defaultView??null,currentHash=()=>{try{return String((typeof ctx.currentHash==="function"?ctx.currentHash():win?.location?.hash)??"")}catch{return ""}};
   const inspector=createInspector(ctx);
 
   const announce=msg=>{const n=el("status");if(n)n.textContent=msg};
@@ -31,7 +34,26 @@ export function createShell(ctx){
 
   function renderNav(){
     const counts={projects:data.cockpit?.projects.value??(data.projects.state==="VERIFIED"?data.projects.items.length:null),work:data.cockpit?.missions.value??null,inbox:data.cockpit?.approvals.value??null};
-    syncNav(doc,el("navList"),ROUTES,{currentId:routeById(ctx.currentRouteId())?.id,counts,labelOf:r=>t(`area.${r.id}.title`),countLabel:n=>t("nav.count",{n}),makeIcon:r=>icon(doc,r.icon,20)});
+    const cur=routeById(ctx.currentRouteId());
+    syncNav(doc,el("navList"),ROUTES,{currentId:cur?.id,counts,labelOf:r=>t(`area.${r.id}.title`),shortLabelOf:r=>NAV_SHORT.has(r.id)?t(`nav.short.${r.id}`):null,countLabel:n=>t("nav.count",{n}),makeIcon:r=>icon(doc,r.icon,20)});
+    // //TR: UASCO-T0005: pencere/görev çubuğu başlığı etkin alanı adlandırır (Windows'ta pencere değiştiricide hangi ekranın açık olduğu görünür).
+    if(cur&&typeof doc.title==="string")doc.title=t("route.docTitle",{title:t(`area.${cur.id}.title`)});
+    syncRouteNotice(cur);
+  }
+  /** UASCO-T0005 dürüst bilinmeyen-rota geri dönüşü: kayıtlı olmayan hash sessizce Ana sayfayı (ve vurgulu "Ana sayfa"yı) göstermez. URL varsayılan rotaya (replaceState, yeni hashchange yok) eşitlenir; böylece adres, etkin nav öğesi ve içerik tutarlı kalır ve ana görünümün üstünde istenen hash'i adlandıran role=status bildirimi (Kapat düğmeli) gösterilir. Kullanıcı başka bir rotaya gidince veya Kapat'a basınca kaldırılır. */
+  function syncRouteNotice(cur){
+    const bad=unknownRouteHash(currentHash());
+    if(bad){unknownFrom=bad;const home=routeById(DEFAULT_ROUTE);try{win?.history?.replaceState?.(win.history.state??null,"",home.hash)}catch{/* adres eşitlenemedi; bildirim yine gösterilir */}}
+    else if(cur&&cur.id!==DEFAULT_ROUTE)unknownFrom=null;
+    const main=el("main");if(!main)return;
+    const existing=[...main.children].find(n=>n.id==="routeNotice")??null;
+    if(!unknownFrom){if(existing)existing.remove();return}
+    if(main.dataset?.route&&main.dataset.route!==DEFAULT_ROUTE)return; // eski görünüm hâlâ ekranda; yeni çizimden sonra yeniden çağrılır
+    const msg=t("route.unknown",{hash:unknownFrom});
+    if(existing){const p=existing.children[0];if(p&&p.textContent!==msg)p.textContent=msg;return}
+    const dismiss=h(doc,"button",{type:"button",class:"btn btn-small",dataset:{focusKey:"route-notice-dismiss"},text:t("route.unknownDismiss"),on:{click:()=>{unknownFrom=null;const n=el("routeNotice");if(n)n.remove();const title=el("view-title");if(title)title.focus();else main.focus?.()}}});
+    const n=h(doc,"div",{id:"routeNotice",class:"note note-stale route-notice",role:"status"},h(doc,"span",{text:msg}),dismiss);
+    if(typeof main.insertBefore==="function"&&main.firstChild!==undefined)main.insertBefore(n,main.firstChild);else main.replaceChildren(n,...main.children);
   }
   function renderContext(){
     const p=selectedProject(),first=data.projects.items[0],sel=el("projectSelect");
@@ -181,19 +203,51 @@ export function createShell(ctx){
   function openPalette(){searchHits=computeHits("");searchIndex=searchHits.length?0:-1;paintSearch()}
   function wireSearch(){
     const inp=el("searchInput");
+    el("searchResults").setAttribute("tabindex","-1"); // seçenekler aria-activedescendant ile gezilir; liste Tab sırasında değildir
     inp.addEventListener("input",()=>{searchHits=computeHits(inp.value);searchIndex=searchHits.length?0:-1;if(!inp.value.trim()){openPalette();return}paintSearch()});
     inp.addEventListener("focus",()=>{if(!inp.value.trim())openPalette()});
     inp.addEventListener("keydown",e=>{
       if(e.key==="ArrowDown"&&searchHits.length){e.preventDefault();searchIndex=(searchIndex+1)%searchHits.length;paintSearch()}
       else if(e.key==="ArrowUp"&&searchHits.length){e.preventDefault();searchIndex=(searchIndex-1+searchHits.length)%searchHits.length;paintSearch()}
       else if(e.key==="Enter"&&searchHits[searchIndex]){e.preventDefault();pick(searchHits[searchIndex])}
+      // //TR: UASCO-T0005: Tab palet listesini klavye odağı almadan kapatır; aksi halde Chromium kaydırılabilir listbox'a odak verir, blur listeyi gizler ve odak <body>'ye düşerdi.
+      else if(e.key==="Tab"){if(!el("searchResults").hidden)closeSearch()}
       else if(e.key==="Escape"){if(!el("searchResults").hidden||inp.value){e.preventDefault();inp.value="";closeSearch()}else inp.blur()}
     });
     inp.addEventListener("blur",()=>closeSearch());
   }
 
   // ACİL DURDUR
-  function openStopDialog(){const d=el("stopDialog");if(typeof d.showModal==="function"&&!d.open)d.showModal();else d.setAttribute("open","")}
+  // //TR: DSK-T0005 (UI-124): onay penceresi açılınca durdurmanın etkileyeceği koşu/görev/bekleyen onay sayıları yalnız mevcut GET'lerle okunur ve pencerede gösterilir. Sayılar yalnız bilgi verir: onay butonu beklemez, durdurma davranışı değişmez; okunamayan kaynak dürüstçe "okunamadı" der.
+  let stopImpactToken=0;
+  function stopImpactNode(){
+    let n=el("stopImpact");if(n)return n;
+    const d=el("stopDialog");if(!d)return null;
+    n=doc.createElement("div");n.setAttribute("id","stopImpact");n.setAttribute("role","status");n.setAttribute("aria-live","polite");n.className="stop-impact";
+    const row=typeof d.querySelector==="function"?d.querySelector(".btn-row"):null;
+    if(row&&typeof d.insertBefore==="function")d.insertBefore(n,row);else d.append(n);
+    return n;
+  }
+  function paintStopImpact(r){
+    const n=stopImpactNode();if(!n)return;
+    const p=k=>h(doc,"p",{class:"stop-impact-note"},t(k));
+    if(r.state==="LOADING"){n.dataset.state="LOADING";n.replaceChildren(p("stop.impact.loading"));return}
+    if(r.state==="ERROR"){n.dataset.state="ERROR";n.replaceChildren(p("stop.impact.error"));return}
+    if(r.state==="EMPTY"){n.dataset.state="EMPTY";n.replaceChildren(p("stop.impact.empty"));return}
+    const tasks=r.tasks.state==="VERIFIED"?t("stop.impact.tasks",{n:formatCount(r.tasks.count)}):r.tasks.state==="PARTIAL"?t("stop.impact.tasksAtLeast",{n:formatCount(r.tasks.count)}):t("stop.impact.tasksUnknown");
+    const li=(key,text)=>h(doc,"li",{"data-impact":key},text);
+    n.dataset.state="VERIFIED";
+    n.replaceChildren(h(doc,"p",{class:"stop-impact-title"},t("stop.impact.title")),h(doc,"ul",{class:"stop-impact-list"},
+      li("runsHalting",t("stop.impact.runsHalting",{n:formatCount(r.runsHalting)})),li("runsNotStarting",t("stop.impact.runsNotStarting",{n:formatCount(r.runsNotStarting)})),
+      li("tasks",tasks),li("approvals",t("stop.impact.approvals",{n:formatCount(r.approvals)}))));
+  }
+  async function refreshStopImpact(){
+    const tok=++stopImpactToken;paintStopImpact({state:"LOADING"});
+    let r;try{r=await loadStopImpact(api)}catch{r={state:"ERROR"}}
+    if(tok!==stopImpactToken||!el("stopDialog")?.open)return; // pencere kapandıysa veya yeniden açıldıysa eski sonuç yazılmaz
+    paintStopImpact(r);
+  }
+  function openStopDialog(){const d=el("stopDialog");if(typeof d.showModal==="function"&&!d.open)d.showModal();else d.setAttribute("open","");void refreshStopImpact()}
   function closeStopDialog(){const d=el("stopDialog");if(typeof d.close==="function")d.close();else d.removeAttribute("open")}
   function wireStatic(){
     el("bellIcon").replaceChildren(icon(doc,"bell",20));
@@ -207,6 +261,9 @@ export function createShell(ctx){
     el("langBtn").addEventListener("click",()=>ctx.i18n.setLang(ctx.i18n.lang==="tr"?"en":"tr"));
     el("projectSelect").addEventListener("change",e=>{ctx.selectProject(e.target.value||null)});
     wireSearch();
+    // //TR: UASCO-T0005: "Ana içeriğe geç" bağlantısı (href="#main") hash'i "#main" yapıp hashchange ile kullanıcıyı Ana sayfaya atıyordu; tıklama varsayılanı engellenir ve odak <main>'e taşınır, rota korunur.
+    const skip=typeof doc.querySelector==="function"?doc.querySelector(".skip-link"):null;
+    if(skip)skip.addEventListener("click",e=>{e.preventDefault();const m=el("main");if(m){m.focus();m.scrollIntoView?.({block:"start"})}});
     doc.addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&!e.altKey&&e.key.toLowerCase()==="k"){e.preventDefault();el("searchInput").focus();el("searchInput").select();openPalette()}});
     // //TR: UX WP-FIRSTRUN: ilk açılışta (güvenli per-user tercih "görülmedi" ise) kurulum/onboarding sihirbazını bir kez aç. Sihirbaz KAPI DEĞİLDİR (atlanır/başarısız olursa uygulama yine açılır) ve asla giriş yapmaz/durum uydurmaz; her hata yutulur.
     try{maybeOpenFirstRun(ctx)}catch{/* ilk kurulum sihirbazı açılamadı; uygulama yine açılır */}

@@ -13,7 +13,8 @@ import type {MissionStatus} from "../mission/types.js";
 import type {WorkOsStore, RunPatch, RunWriteOptions} from "./store.js";
 import {WorkOsError} from "./types.js";
 import type {RunEvidence, RunStatus, RunStep, SecurityStageSummary, WorkRun} from "./types.js";
-import {LEASED_RUN_STATUSES} from "./run-state.js";
+import {LEASED_RUN_STATUSES, isResumableBlockReason, pendingResumableBlock, resumableBlockCheckpoint} from "./run-state.js";
+import type {ProviderLimitKind} from "./run-state.js";
 import {testCommandAllowed} from "./schemas.js";
 import {canonicalPath, managedRepoCanonical, pathOverlapsDataDir} from "./path-guard.js";
 import {runGitAsync} from "./git-async.js";
@@ -56,12 +57,16 @@ export interface RunnerOptions {
   // PAR-03: olay döngüsü gecikmesinin (p99, ms; çözünürlük payı düşülmüş) programatik kaynağı; tanımsız = perf_hooks monitorEventLoopDelay. Yalnız test enjeksiyonudur.
   loopDelayP99Ms?: () => number;
 }
+// //TR: DSK-T0008 (Founder Q5): gerçek model (LOCAL_CLAUDE) koşuları için harcama sınırları; ileride Founder kararıyla yükseltilebilir. FAKE yürütücü etkilenmez. Eşzamanlılık yapılandırılan değerle en çok 2'ye kırpılır; günde (motorun yerel takvim günü) en çok 20 YENİ koşuya ilk lease verilir (zaten başlamış koşunun devri/kurtarması sayılmaz ve engellenmez). Sayı journal'dan türetilen firstLeasedAt ile hesaplanır.
+export const REAL_MODEL_LIMITS = Object.freeze({runsPerDay: 20, concurrentRuns: 2});
+export type RealModelLimit = "DAILY_LIMIT" | "CONCURRENCY_LIMIT";
+const sameLocalDay = (iso: string, nowMs: number): boolean => { const a = new Date(iso), b = new Date(nowMs); return Number.isFinite(a.getTime()) && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); };
 export interface TickReport { skipped?: "BUSY" | "LOCKED"; recovered: string[]; claimed: string[]; cancelled: string[]; fenced: string[]; advanced: string[]; deferred: string[] }
 
 type Outcome =
   | {kind: "DONE"; next: RunStep | "FINISHED"; data: Record<string, unknown>; patch?: RunPatch; mission?: MissionStatus; approvalReason?: string}
   | {kind: "REMEDIATE"; reason: string; data: Record<string, unknown>; findings: string[]}
-  | {kind: "BLOCK"; reason: string; status?: "BLOCKED" | "FAILED" | "QUARANTINED"}
+  | {kind: "BLOCK"; reason: string; status?: "BLOCKED" | "FAILED" | "QUARANTINED"; limit?: ProviderLimitKind; resumeAfter?: string | null}
   | {kind: "RETRY"; reason: string}
   | {kind: "CANCEL"; reason: string};
 
@@ -103,7 +108,19 @@ export function providerLimit(exitCode: number | null, log: string): "QUOTA_EXHA
   return l === "QUOTA_EXHAUSTED" || l === "RATE_LIMIT" ? l : null;
 }
 const limitNote = (l: ExecutorLimit) => (l === "DISK_FULL" ? "RESOURCE_LIMIT: DISK_FULL" : `PROVIDER_LIMIT: ${l}`);
-const limitBlock = (l: ExecutorLimit): Outcome => ({kind: "BLOCK", reason: l === "DISK_FULL" ? "DISK_FULL" : "PROVIDER_QUOTA"});
+// //TR: V3-T1016: Claude CLI kota satırı "usage limit reached|<unix saniye>" sıfırlanma zamanını taşıyabilir; yalnız bu biçim ve makul aralık (2020..2100) resumeAfter olur, aksi hâlde null (tahmin yok).
+const USAGE_RESET_RE = /usage limit reached\|(\d{10})\s*$/i;
+export function providerResumeAfter(log: string): string | null {
+  const lines = stripAnsi(String(log ?? "").slice(-8192)).split("\n").map(l => l.trim()).filter(Boolean);
+  for (const l of lines.reverse()) {
+    const m = CLAUDE_CLI_ERROR_RE.test(l) ? USAGE_RESET_RE.exec(l) : null;
+    if (!m) continue;
+    const sec = Number(m[1]);
+    return sec >= 1_577_836_800 && sec < 4_102_444_800 ? new Date(sec * 1000).toISOString() : null;
+  }
+  return null;
+}
+const limitBlock = (l: ExecutorLimit, log: string): Outcome => (l === "DISK_FULL" ? {kind: "BLOCK", reason: "DISK_FULL"} : {kind: "BLOCK", reason: "PROVIDER_QUOTA", limit: l, resumeAfter: providerResumeAfter(log)});
 // //TR: Test komutu önceliği (mission komutu proje komutunu ezer) ve depo/workspace önkoşulu SAF fonksiyonlardır; runner aynı noktada aynı sırayla çağırır, readiness.ts (salt-okunur) aynı fonksiyonları içe aktarır — ikinci kural yoktur.
 export const effectiveTestCommand = (m: {testCommand?: string[]} | undefined, p: {testCommand?: string[]} | undefined): string[] | undefined => m?.testCommand ?? p?.testCommand;
 export type RepositoryPrecondition = {ok: true; src: string} | {ok: false; reason: string};
@@ -231,6 +248,14 @@ export class MissionRunner {
   private readonly boot = bootId();
   private readonly loopDelay: (() => number) | undefined;
 
+  /** Effective concurrent-run limit (1..16), for the start audit: proves what the engine actually runs with. */
+  get maxConcurrentRuns(): number { return this.o.maxConcurrentRuns; }
+  /** DSK-T0008: true when the executor pair runs a real model (LOCAL_CLAUDE): the real-model limits apply. */
+  get realModel(): boolean { return this.o.executors.kind === "LOCAL_CLAUDE"; }
+  /** DSK-T0008: the last real-model limit that deferred a new run in a claim pass (null when none). */
+  get lastLimit(): RealModelLimit | null { return this.limitHit; }
+  private limitHit: RealModelLimit | null = null;
+
   constructor(opts: RunnerOptions) {
     assertIndependentExecutors(opts.executors);
     this.o = {
@@ -240,6 +265,8 @@ export class MissionRunner {
     } as unknown as Required<Omit<RunnerOptions, "now">> & {now: () => number};
     // //TR: Eş zamanlı sahiplik sınırı yalnız 1..16 tam sayı olabilir (geçersiz değer sessizce 1'e düşmez: kurulum hatası).
     if (!Number.isInteger(this.o.maxConcurrentRuns) || this.o.maxConcurrentRuns < 1 || this.o.maxConcurrentRuns > 16) throw new Error("RUNNER_MAX_CONCURRENT_RUNS_INVALID");
+    // //TR: DSK-T0008: gerçek model yürütücüsünde eşzamanlılık Founder sınırına kırpılır (yapılandırma daha yüksekse bile); başlangıç denetimi kırpılmış değeri kanıtlar.
+    if (this.o.executors.kind === "LOCAL_CLAUDE") this.o.maxConcurrentRuns = Math.min(this.o.maxConcurrentRuns, REAL_MODEL_LIMITS.concurrentRuns);
     // SBX-GATE: yalnız gerçek bir ExecutionGate örneği kabul edilir; başka her değer (eksik, düz nesne) sağlayıcısız kapıdır (fail-closed).
     if (!(this.o.executionGate instanceof ExecutionGate)) this.o.executionGate = new ExecutionGate(null);
     // //TR: PAR-03 (RCA relfx-c3:200, Windows shard 1 #259/#261): her journal YAZISI kendisi olay döngüsünü bloklayan senkron, dayanıklı bir aralıktır (kilit dosyası + journal'ın tamamının yeniden okunup doğrulanması + iki snapshot yazımı + fsync'ler). Adım sınırında bir run bunları ARA VERMEDEN art arda yapar (kanıt -> CHECKPOINTING -> checkpoint -> yenileme -> sonraki adım RUNNING); yavaş diskte (Windows CI) bu zincir TTL - heartbeat aralığını aşar ve öbür, sağlıklı run'ın setInterval heartbeat'i hiç çalışamadan lease'i dolar: gerçek bir fence (sahte "kayıp"). span() ile aynı kural: runner'ın her run yazısından ÖNCE, heartbeat'i gecikmiş (son yenilemesi bir heartbeat periyodundan, TTL/3, eski) sahip olunan BÜTÜN lease'ler yenilenir; döngü akıyorsa heartbeat zaten yeniler ve kanca ek yazı üretmez. Fence kuralı değişmez: süresi dolmuş lease yine yenilenemez ve yazının kendisi fencedRun ile reddedilir.
@@ -511,15 +538,22 @@ export class MissionRunner {
       const store = this.o.store, stop = this.stopActive();
       let stalled: boolean | null = null;
       const full = () => this.owned.size >= this.o.maxConcurrentRuns || (this.owned.size >= 1 && (stalled ??= this.loopStalled()));
-      for (const run of store.engineListRuns()) {
+      const runs = store.engineListRuns(), now = this.o.now();
+      // //TR: DSK-T0008: bugün ilk lease'i alınmış koşu sayısı (journal'dan); bu geçişte verilen her yeni lease sayıya eklenir.
+      let startedToday = this.realModel ? runs.filter(r => typeof r.firstLeasedAt === "string" && sameLocalDay(r.firstLeasedAt, now)).length : 0;
+      this.limitHit = null;
+      for (const run of runs) {
         if (this.owned.get(run.runId)?.drive) continue; // sürüşü süren run'a dokunulmaz: kendi heartbeat'i yönetir, kendi kendini devralma yok
         try {
           if (run.status === "CREATED" || run.status === "QUEUED") {
             if (stop) { this.cancelUnleased(run, stop); rep.cancelled.push(run.runId); continue; }
             // //TR: Sahiplik sınırı: sınır doluysa run'a lease ALINMAZ (sırasını beklerken lease'i yenilenmeden dolup sahte fence/recovery yaşamasın); QUEUED kalır, sonraki geçiş alır.
-            if (full()) { rep.deferred.push(run.runId); continue; }
+            if (full()) { if (this.realModel && this.owned.size >= this.o.maxConcurrentRuns) this.limitHit ??= "CONCURRENCY_LIMIT"; rep.deferred.push(run.runId); continue; }
+            // //TR: DSK-T0008: günlük sınır yalnız HİÇ başlamamış koşuya uygulanır (yeniden kuyruğa alınan koşu firstLeasedAt taşır, sayılmış ve engellenmez); koşu QUEUED kalır, lease alınmaz.
+            if (this.realModel && run.firstLeasedAt === undefined && startedToday >= REAL_MODEL_LIMITS.runsPerDay) { this.limitHit = "DAILY_LIMIT"; rep.deferred.push(run.runId); continue; }
             const queued = run.status === "CREATED" ? store.transitionRun(run.runId, null, "QUEUED", "queued for runner", this.o.actor) : run;
             const leased = store.acquireRunLease(queued.runId, this.o.leaseTtlMs, this.o.actor);
+            if (run.firstLeasedAt === undefined) startedToday += 1;
             this.own(run.runId, leased.leaseId!); rep.claimed.push(run.runId); fresh.add(run.runId);
           } else if (LEASED_RUN_STATUSES.includes(run.status) && run.leaseId && Date.parse(run.leaseExpiresAt ?? "") <= this.o.now()) {
             if (full()) { rep.deferred.push(run.runId); continue; }
@@ -587,6 +621,9 @@ export class MissionRunner {
       if (this.halted(epoch)) { this.owned.delete(runId); return steps > 0; } // motor kapanıyor: yeni adım yok, run bırakılır (lease dolunca sonraki engine devralır)
       const stop = this.stopActive();
       if (stop || run.status === "CANCELLING") { const w = own?.reap; this.cancelLeased(run, leaseId, stop ?? run.reason ?? "CANCEL_REQUESTED", w ? `${w.problem ? `${w.problem}: ` : ""}${w.note}`.replace(/: $/, "") : ""); return "CANCELLED"; }
+      // //TR: V3-T1016 guard: bekleyen devam-ettirilebilir kota engeli (checkpoint yazıldı, BLOCKED yazılamadan çökme) kendiliğinden sürdürülmez: adım yeniden yürütülmez, engel tamamlanır.
+      const pend = pendingResumableBlock(run);
+      if (pend) { s.transitionRun(runId, leaseId, "BLOCKED", pend.reason, this.o.actor, {mission: {to: "BLOCKED", reason: pend.reason}}); this.owned.delete(runId); return true; }
       if (run.status === "RETRY_SCHEDULED" && Date.parse(run.retryAt ?? "") > this.o.now()) { this.renew(runId, leaseId); return steps > 0; }
       if (steps >= this.o.maxStepsPerTick) { this.renew(runId, leaseId); return steps > 0; }
       if (run.status === "RECOVERING" && !(await this.recoverCheck(run, leaseId, own?.reap ?? null))) { this.owned.delete(runId); return true; }
@@ -704,6 +741,15 @@ export class MissionRunner {
         return;
       }
       case "BLOCK": {
+        // //TR: V3-T1016: sağlayıcı kota engeli BLOCKED_RESUMABLE sınıfındadır: engel noktasında şemalı checkpoint (adım, deneme, son kanıt ref'i, resumeAfter) yazılır, sonra BLOCKED.
+        // Adım/retry yamalanmaz (retryCount tüketilmez; REL-FX-4). Checkpoint ile BLOCKED arasında çökme olursa devralma adımı yeniden yürütmez (drive: pendingResumableBlock).
+        if ((out.status ?? "BLOCKED") === "BLOCKED" && isResumableBlockReason(out.reason) && out.limit) {
+          const latest = s.engineGetRun(id);
+          const rec = resumableBlockCheckpoint({reason: out.reason, limit: out.limit, step, attempt: run.attempt, retryCount: run.retryCount,
+            lastEvidenceRef: latest?.evidence[latest.evidence.length - 1]?.evidenceId ?? null, resumeAfter: out.resumeAfter ?? null, blockedAt: new Date(this.o.now()).toISOString()});
+          s.transitionRun(id, leaseId, "CHECKPOINTING", `step ${step} blocked (resumable): ${out.reason}`, a);
+          s.checkpointRun(id, leaseId, {step, data: {...rec}}, a);
+        }
         s.transitionRun(id, leaseId, out.status ?? "BLOCKED", out.reason, a, {mission: {to: "BLOCKED", reason: out.reason}});
         return;
       }
@@ -865,7 +911,7 @@ export class MissionRunner {
     if (run.roleId !== null) this.recordAgentTrace(run, leaseId, assertImplementerRole(run.roleId), r.aborted ? "ABORTED" : produced ? "COMPLETED" : "FAILED", r, this.o.executors.implementer.identity, "");
     if (r.aborted) return {kind: "CANCEL", reason: this.cancelReason()};
     // REL-FX-4: sağlayıcı kota/hız sınırı kör retry ile bütçe tüketmez: run BLOCKED(PROVIDER_QUOTA), retryCount değişmez; disk dolu/kotası BLOCKED(DISK_FULL).
-    if (limit) return limitBlock(limit);
+    if (limit) return limitBlock(limit, r.log);
     // Edit-only builder çıktısını engine commit etmeyi reddettiyse (değişiklik yok, .git/workspace dışı değişiklik) veya builder hiç başlatılmadıysa (SBX-8: profil oturumu yok) run BLOCKED olur.
     // INT-R4 kompozisyon: blockReason, exitCode!=0 dalından ÖNCE kalır; profil oturumu yok refüzü exitCode=null + blockReason=CLAUDE_PROFILE_LOGIN_REQUIRED ile gelir ve null!==0 doğru olduğundan generic IMPLEMENT_FAILED'e düşmemelidir (SBX-8 v7-sbx8-reviewer).
     if (r.blockReason) return {kind: "BLOCK", reason: r.blockReason.slice(0, 200)};
@@ -1106,7 +1152,7 @@ export class MissionRunner {
     if (r.aborted) return {kind: "CANCEL", reason: this.cancelReason()};
     if (!untouched) return {kind: "BLOCK", reason: "REVIEWER_MUTATED_CLONE"};
     // REL-FX: reviewer sağlayıcı kota/hız sınırına çarptıysa BLOCKED(PROVIDER_QUOTA/DISK_FULL), yeniden deneme bütçesi tüketilmez; SBX-8 geçersizlik dalından önce.
-    if (limit) return limitBlock(limit);
+    if (limit) return limitBlock(limit, r.log);
     // SBX-8: adapter'ın geçersizlik nedeni (profil oturumu yok -> BLOCKED; çalışma alanı değişti -> FAILED) korunur; geçersiz review asla CLEAN değildir.
     if (!r.valid) return r.transient ? {kind: "RETRY", reason: "REVIEW_TRANSIENT_FAILURE"} : {kind: "BLOCK", reason: (r.invalidReason ?? "REVIEW_FAILED").slice(0, 200), status: FOUNDER_ACTIONABLE_REFUSAL.test(r.invalidReason ?? "") ? "BLOCKED" : "FAILED"};
     if (r.verdict === "CLEAN") return {kind: "DONE", next: "REGRESSION", data: {verdict: "CLEAN", reviewerIdentity: reviewer.identity, commitSha: run.headSha}};

@@ -1,6 +1,9 @@
 // //TR: Bu Postman post-response template'i contract schema + Ajv + recursive null/empty + header checks için adapter tarafından gerçek schema/policy ile doldurulur; tek response'tan sahte expected contract üretmez.
+// UASCO-T0129: politika anahtarları, varsayılanları ve hata metinleri core/qa/api/strict-json-validator.ts ile AYNIDIR (postman-strict-test.ts doldurur; parite testle bağlıdır).
+// ajv-formats yoksa "format" kullanan şema derlenmez ve test başarısız olur (fail-closed; format sessizce atlanmaz).
 const Ajv = require('ajv');
 const ajv = new Ajv({ allErrors: true, strict: true });
+try { require('ajv-formats')(ajv); } catch (e) { /* format yok: format kullanan şema derlemede hata verir */ }
 
 // Adapter bu sabitleri approved contract/policy'den üretir.
 const schema = __UASCO_SCHEMA__;
@@ -15,22 +18,22 @@ function pathMatches(path, patterns) {
 }
 function scan(value, path = '$', errors = []) {
   if (value === null) {
-    if (!pathMatches(path, policy.allowNullPaths)) errors.push(`${path}: null yasak`);
+    if (!pathMatches(path, policy.allowNullPaths)) errors.push(`${path}: null forbidden`);
     return errors;
   }
   if (typeof value === 'string') {
-    const empty = policy.trimStrings ? value.trim().length === 0 : value.length === 0;
-    if (empty && !pathMatches(path, policy.allowEmptyPaths)) errors.push(`${path}: boş string yasak`);
+    const empty = value.length === 0, ws = value.trim().length === 0;
+    if (((policy.denyEmptyStrings !== false && empty) || (policy.denyWhitespaceStrings !== false && ws)) && !pathMatches(path, policy.allowEmptyPaths)) errors.push(`${path}: empty string forbidden`);
     return errors;
   }
   if (Array.isArray(value)) {
-    if (value.length === 0 && policy.denyEmptyArrays && !pathMatches(path, policy.allowEmptyPaths)) errors.push(`${path}: boş array yasak`);
+    if (value.length === 0 && policy.denyEmptyArrays && !pathMatches(path, policy.allowEmptyPaths)) errors.push(`${path}: empty array forbidden`);
     value.forEach((item, i) => scan(item, `${path}.${i}`, errors));
     return errors;
   }
   if (typeof value === 'object') {
     const keys = Object.keys(value);
-    if (keys.length === 0 && policy.denyEmptyObjects && !pathMatches(path, policy.allowEmptyPaths)) errors.push(`${path}: boş object yasak`);
+    if (keys.length === 0 && policy.denyEmptyObjects && !pathMatches(path, policy.allowEmptyPaths)) errors.push(`${path}: empty object forbidden`);
     keys.forEach(k => scan(value[k], `${path}.${k}`, errors));
   }
   return errors;

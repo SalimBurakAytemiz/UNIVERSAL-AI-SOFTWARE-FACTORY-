@@ -16,6 +16,9 @@ import cp from "node:child_process";
 import {ENGINE, ORPHAN_MS, REPO as PAR_REPO, git, groupLive, parHarness, procAlive, release, setup as parSetup, sleep, waitUntil, writerParked} from "./support/par.js";
 // //TR: POSIX: yazar kendi oturumundadır ve çöken motoru geçer. Windows: libuv ayrık olmayan çocukları motorun iş nesnesine koyar (KILL_ON_JOB_CLOSE), motor ölünce ağaç da ölür.
 const WRITER_OUTLIVES_ENGINE = process.platform !== "win32";
+// //TR: PAR04-GSTOP-NO-REAP (Windows CI job 128809794659): win32'de yazar motorla birlikte biter (iş nesnesi), devir onu "yok" bulur. Ürün (runner.ts stopRecordedGroup) bunun İKİ doğrulanmış-GONE dalını yazar: ilk okumada GONE -> "was already gone"; ilk okumada hâlâ ALIVE (yıkım bitmemiş), kimlik sorgusu null ve YENİDEN okuma GONE -> "ended during the identity check" (UASCO-T0042 Windows RCA). İkisi de yalnız writerState GONE ile döner, problem=null ve sonrası aynıdır; güvenlik farkı yoktur. Beklenti yalnız bu iki notu ve BU grubun pgid'ini kabul eder; başka her not (pid reused, survived, identity cannot be proven, stopped…) yine başarısızdır. groupAlive=false ve ORPHAN denetimi aynen kalır.
+const winWriterGone = (pgid: number) => new RegExp(`writer group ${pgid} (was already gone|ended during the identity check)`);
+const takeoverWriterNote = (pgid: number) => WRITER_OUTLIVES_ENGINE ? /stopped writer group/ : winWriterGone(pgid);
 
 let tmp = "";
 beforeEach(() => { tmp = tmpRoot("uasco-relfx1-"); });
@@ -463,7 +466,7 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
     expect(run.status, why()).toBe("CANCELLED");
     expect(groupAlive(x.pgid), why()).toBe(false);
     expect(fs.existsSync(path.join(x.work, "ORPHAN.txt")), why()).toBe(false);
-    expect(run.evidence.find(e => e.kind === "CANCEL")?.note ?? "", why()).toMatch(WRITER_OUTLIVES_ENGINE ? /stopped writer group/ : /was already gone/);
+    expect(run.evidence.find(e => e.kind === "CANCEL")?.note ?? "", why()).toMatch(takeoverWriterNote(x.pgid));
   });
 
   it("TK-2 / PAR04-EXHAUSTED-NO-REAP: a takeover that exhausts the recovery budget still stops the writer; the reason stays RECOVERY_BUDGET_EXHAUSTED and the note names the stopped group", { timeout: 180_000 }, async () => {
@@ -476,7 +479,7 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
     expect([run.status, run.reason], why()).toEqual(["RECOVERY_FAILED", "RECOVERY_BUDGET_EXHAUSTED"]);
     expect(groupAlive(x.pgid), why()).toBe(false);
     expect(fs.existsSync(path.join(x.work, "ORPHAN.txt")), why()).toBe(false);
-    expect(recoveryNote(x.dir, x.runId), why()).toMatch(WRITER_OUTLIVES_ENGINE ? /stopped writer group/ : /was already gone/);
+    expect(recoveryNote(x.dir, x.runId), why()).toMatch(takeoverWriterNote(x.pgid));
   });
 
   it("TEST-PAR04-DEFENCES (M7): a descendant in the writer's process group is stopped too, not only the leader", { timeout: 180_000 }, async () => {
@@ -836,12 +839,20 @@ describe("C-PAR-1 review round 1 (#224): writer reaping, identity and durability
     const kill = vi.spyOn(G, "killWriterGroup").mockResolvedValue(undefined);
     try {
       await asWin32(async () => {
+        states = ["GONE"]; // //TR: PAR04-GSTOP-NO-REAP: diğer doğrulanmış-GONE dalı da sabitlenir: ilk okumada GONE -> kimlik sorgusu yapılmaz
+        const gone1 = await runner.stopRecordedGroup(ownerRec(), 4242);
+        expect(gone1).toEqual({problem: null, note: "writer group 4242 was already gone"});
+        expect(tk, "no identity query when the first look is already GONE").not.toHaveBeenCalled();
         states = ["ALIVE", "GONE"]; // the window: alive at the first look, gone once the (slow) identity query returned nothing
-        expect(await runner.stopRecordedGroup(ownerRec(), 4242)).toEqual({problem: null, note: "writer group 4242 ended during the identity check"});
+        const gone2 = await runner.stopRecordedGroup(ownerRec(), 4242);
+        expect(gone2).toEqual({problem: null, note: "writer group 4242 ended during the identity check"});
+        // //TR: e2e Windows beklentisi (takeoverWriterNote) ürünün GERÇEK notlarına bağlıdır: iki GONE notunu kabul eder, başka grubun notunu ve fail-closed notu reddeder (not metni değişirse burada, Linux'ta yakalanır).
+        for (const g of [gone1, gone2]) { expect(g.note).toMatch(winWriterGone(4242)); expect(g.note).not.toMatch(winWriterGone(4243)); }
         expect(kill, "nothing is killed when the writer is already gone").not.toHaveBeenCalled();
         states = ["ALIVE", "ALIVE"]; // still alive and no identity: unchanged fail-closed verdict
         const r = await runner.stopRecordedGroup(ownerRec(), 4242);
         expect([r.problem, r.note, r.transient]).toEqual(["WORKSPACE_WRITER_ALIVE", "writer group 4242 is alive but its identity cannot be proven", undefined]);
+        expect(r.note).not.toMatch(winWriterGone(4242));
         expect(kill).not.toHaveBeenCalled();
       });
     } finally { st.mockRestore(); tk.mockRestore(); kill.mockRestore(); }
