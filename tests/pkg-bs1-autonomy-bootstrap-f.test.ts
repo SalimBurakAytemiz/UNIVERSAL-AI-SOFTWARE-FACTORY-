@@ -4,6 +4,7 @@ import {describe,it,expect,vi} from "vitest";
 vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 import cp from "node:child_process";
 import {BS1_PARTITION,BS1_REAL_AUT1B_SCENARIO,AUT1B_COMMIT,runBs1Shard} from "./support/bs1-shard.js";
+import "./factory-v2/router-group.mjs";                                         // Factory V2 (#409): model yönlendirici vakaları (tests-lv1 Windows 600 sn sınırına dayandığı için bu adımda)
 describe("one-time autonomy bootstrap (BS1) shard f",{timeout:1_800_000},()=>{
   it("passes every scenario assigned to this shard",async(ctx)=>{
     const r=await runBs1Shard("f");expect(r.ok,r.detail).toBe(true);

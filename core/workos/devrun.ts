@@ -169,6 +169,23 @@ export function treeDescendants(procs: ProcInfo[], root: {pid: number; notBefore
   }
   return [...out.values()];
 }
+// //TR: UASCO-T0042 PS1A-GRANDCHILD (2026-11-05, run 42037094881: survivors 1): SIGKILL sonrası ölüm KİMLİKLE doğrulanır. Kurban (pid + oluşturma zamanı) ancak pid'i hâlâ canlıysa VE taze süreç tablosunda aynı pid aynı oluşturma zamanıyla (<= 2 ms, treeDescendants ile aynı tolerans) görünüyorsa hayatta sayılır: yeniden kullanılmış bir pid asla hayatta kalan sayılmaz, gerçekten canlı bir kurban asla ölü sayılmaz. Bekleme süreyle sınırlıdır (varsayılan 3 sn, önceki 30 x 100 ms ile aynı). Bütçe sonunda bir kurbanın kimliği denetlenemiyorsa (süreç tablosu alınamadı ya da canlı pid tabloda yok) kalan sayılamaz: survivors null, verified false.
+export interface VictimDeathDeps {list: () => Promise<ProcInfo[] | null>; alive: (pid: number) => boolean; now: () => number; sleep: (ms: number) => Promise<unknown>}
+export async function awaitVictimsDead(victims: readonly ProcInfo[], deps: VictimDeathDeps, budgetMs = 3000, pollMs = 100): Promise<{survivors: number | null; verified: boolean}> {
+  const deadline = deps.now() + budgetMs;
+  for (;;) {
+    const pending = victims.filter(v => deps.alive(v.pid));   // pid yok ya da zombi: kesin ölü (kimlik gerekmez)
+    if (!pending.length) return {survivors: 0, verified: true};
+    const ps = await deps.list().catch(() => null);
+    // Canlı pid için: tabloda aynı oluşturma zamanı = hâlâ kurbanın kendisi; farklı oluşturma zamanı = pid yeniden kullanılmış (kurban ölü); tabloda yok/tablo yok = bilinmiyor (ölü SAYILMAZ).
+    let live = 0, unknown = 0;
+    for (const v of pending) { const e = ps?.find(p => p.pid === v.pid); if (!e) unknown++; else if (Math.abs(e.created - v.created) <= 2) live++; }
+    if (live === 0 && unknown === 0) return {survivors: 0, verified: true};   // kalan pid'lerin hepsi başka (yeniden kullanılmış) süreçlerin
+    if (deps.now() >= deadline) return {survivors: unknown ? null : live, verified: false};
+    await deps.sleep(pollMs);
+  }
+}
+const REAL_DEATH_DEPS: VictimDeathDeps = {list: () => listProcesses(), alive: pidAlive, now: () => Date.now(), sleep};
 export function freeLoopbackPort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const s = net.createServer();
@@ -504,7 +521,7 @@ export class DevRunManager {
     if (a.snapTimer) clearInterval(a.snapTimer); a.snapTimer = null;
     const root = this.rootInfo(a);
     if (!root) return;
-    let method: NonNullable<DevRunState["treeCleanup"]>["method"], victims: number[] = [];
+    let method: NonNullable<DevRunState["treeCleanup"]>["method"], victims: number[] = [], death: {survivors: number | null; verified: boolean} | null = null;
     if (process.platform !== "win32") {
       // Önce süreç grubu (grup üyeleri atomik olarak); ardından setsid ile gruptan kaçan kaydedilmiş/ppid bağlı soy da tek tek SIGKILL edilir.
       try { process.kill(-root.pid, "SIGKILL"); } catch { /* grup boş */ }
@@ -512,26 +529,26 @@ export class DevRunManager {
       if (!ps) method = "PROCESS_GROUP";
       else {
         method = "PROCESS_GROUP_PPID_WALK";
-        victims = treeDescendants(ps, root, a.known).map(p => p.pid);
+        const vs = treeDescendants(ps, root, a.known); victims = vs.map(p => p.pid);
         for (const v of victims) { try { process.kill(v, "SIGKILL"); } catch { /* bu arada bitti */ } }
-        for (let i = 0; i < 30 && victims.some(pidAlive); i++) await sleep(100);
+        death = await awaitVictimsDead(vs, REAL_DEATH_DEPS);
       }
     } else {
       const ps = await listProcesses();
       if (!ps) method = "UNAVAILABLE";
       else {
         method = "PPID_WALK";
-        victims = treeDescendants(ps, root, a.known).map(p => p.pid);
+        const vs = treeDescendants(ps, root, a.known); victims = vs.map(p => p.pid);
         for (let i = 0; i < victims.length; i += 20) {
           cp.spawnSync("taskkill", ["/F", "/T", ...victims.slice(i, i + 20).flatMap(p => ["/PID", String(p)])], {windowsHide: true, stdio: "ignore", timeout: 15_000});
         }
-        for (let i = 0; i < 30 && victims.some(pidAlive); i++) await sleep(100);
+        death = await awaitVictimsDead(vs, REAL_DEATH_DEPS);
       }
     }
     const st = a.state;
     // PROCESS_GROUP / UNAVAILABLE: süreç listesi alınamadı, kalan süreç sayılamaz => survivors null + UNVERIFIED (0 DEĞİL).
-    const verifiable = method === "PPID_WALK" || method === "PROCESS_GROUP_PPID_WALK";
-    st.treeCleanup = {at: new Date().toISOString(), method, killed: victims.length, survivors: verifiable ? victims.filter(pidAlive).length : null, verification: verifiable ? "VERIFIED" : "UNVERIFIED"};
+    // PPID yürüyüşlerinde survivors KİMLİKLE sayılır (awaitVictimsDead); VERIFIED yalnız her kurbanın ölümü doğrulandıysa (survivors 0) verilir.
+    st.treeCleanup = {at: new Date().toISOString(), method, killed: victims.length, survivors: death ? death.survivors : null, verification: death?.verified ? "VERIFIED" : "UNVERIFIED"};
     if (victims.length || method === "UNAVAILABLE") this.o.audit("DEVRUN_TREE_REAPED", {projectId: st.projectId, method, killed: victims.length, survivors: st.treeCleanup.survivors});
     // Yalnız aynı çalıştırmanın kaydı hâlâ geçerliyse yazılır (bu arada başlatılan yeni çalıştırma ezilmez).
     const cur = this.readState(st.projectId);

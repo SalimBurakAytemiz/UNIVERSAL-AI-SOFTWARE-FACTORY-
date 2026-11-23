@@ -1,0 +1,37 @@
+{
+  "//TR": "Factory V2 tek kontrol oturumu canlı doğrulama kanıtı: gerçek Claude Cloud oturumlarıyla intent -> create_session -> bağlama -> kimliği doğrulanmış sonuç -> bağımsız review -> REVIEW_CLEAN, yerel durumsuz kurtarma, oturum kaybında yeniden atama ve sahte/eski sonuç redleri; probe alanında, canlı otoriteye dokunmadan.",
+  "schema": "uasco.factory-v2.control-session-evidence/1",
+  "date": "2026-11-05",
+  "domain": "probe-control",
+  "liveAuthorityTouched": false,
+  "controlSession": "session_015dYwb57qx21P4wudU5xauD",
+  "ledger": {"branch": "uasco/fv2-ledger-probe", "ns": "run1", "headAtRecord": "834434732e388ac29d66325187db4d2c45758a0c", "signedBy": "V2_CANDIDATE probe key k_225059701e7e1b78 (PROBE keyring file, never valid for uasco-v7)"},
+  "codeUnderTest": "claude/fv2-p0-control 70cb71d40a09b7fae86313b8bf0ad7502ba8dde5",
+  "task1": {
+    "taskId": "FV2-PROBE-CTL-1",
+    "builder": {"intent": "intent_a4099e9aec52", "session": "session_015dYwb4nkjtpNd57C6VAFFQ", "branch": "fv2w/probe-control/FV2-PROBE-CTL-1-a0-a4099e9aec52", "headSha": "8ef00d2ed9b38645e8c21e63f3106309d948bb9e", "commitTrailer": "Claude-Session: .../session_015dYwb4nkjtpNd57C6VAFFQ", "result": "ACCEPTED (branch tip, dispatch-base ancestry, trailer = bound session)"},
+    "reviewers": [
+      {"intent": "intent_f49be5c97c54", "focus": "ARCHITECTURE_CORRECTNESS", "session": "session_015dYwb2QFbC2XUahXfzLY7E", "verdict": "CLEAN", "boundTo": {"head": "8ef00d2e", "base": "70cb71d4"}},
+      {"intent": "intent_326bf84e2639", "focus": "QUALITY_ACCEPTANCE", "session": "session_015dYwazTwnin58kSnnBDRas", "verdict": "CLEAN", "boundTo": {"head": "8ef00d2e", "base": "70cb71d4"}}
+    ],
+    "finalState": "REVIEW_CLEAN (SHADOW: no merge into any canonical branch)",
+    "recovery": "the tick that consumed the builder result and created both reviewer intents ran from a fresh clone with no local state"
+  },
+  "task2": {
+    "taskId": "FV2-PROBE-CTL-2",
+    "lost": {"intent": "intent_958d590d70b6", "session": "session_015dYwb3PxWTSJPrVuUBDbxN", "reason": "QUOTA_CUT_SIMULATED_BY_CONTROL_SESSION"},
+    "reassigned": {"intent": "intent_904006f7923b", "attempt": 1, "session": "session_015dYwb4e7qKqpCPZKo3Dt1c", "branch": "fv2w/probe-control/FV2-PROBE-CTL-2-a1-904006f7923b"},
+    "outcome": "both builders refused the task (spec path vs allowed path conflict); the attempt-1 refusal was accepted as FAILED; no retry loop",
+    "defectFound": "the backlog was edited after enqueue: spec frozen in the ledger, paths taken live from the backlog. Fixed: a queued task is dispatched with its frozen paths (test: 'found by the live probe')"
+  },
+  "refusals": [
+    {"case": "builder result attributed to another session", "reason": "SESSION_NOT_BOUND_TO_INTENT"},
+    {"case": "second session bound to a running intent", "reason": "INTENT_NOT_PENDING"},
+    {"case": "reviewer A's result submitted by reviewer B for A's intent", "reason": "SESSION_NOT_BOUND_TO_INTENT"},
+    {"case": "reviewer B's result submitted into reviewer A's intent by A", "reason": "NONCE_OR_INTENT_MISMATCH"},
+    {"case": "late result from the LOST session", "reason": "INTENT_NOT_RUNNING:LOST"},
+    {"case": "lost session's result replayed into the replacement intent", "reason": "SESSION_NOT_BOUND_TO_INTENT"}
+  ],
+  "report": "cli.mjs factory report --github ran in about 38 s over the ledger plus live GitHub (35 open PRs, bindings, check-runs); quota reported as UNKNOWN",
+  "notYetVerified": ["full 8 Builder / 4 Reviewer chain (Founder decision: cost)", "LIVE mode (requires cutover)", "merge of a factory-built change through the fenced canonical merge path", "push notification from workers (the control session reads finished workers with list_events)"]
+}

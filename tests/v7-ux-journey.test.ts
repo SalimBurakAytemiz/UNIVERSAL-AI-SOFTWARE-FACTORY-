@@ -11,7 +11,8 @@ import {CrewCoordinator, type ReworkDecider, type CrewStore} from "../core/worko
 import {buildCrewPlan} from "../core/workos/crew/assignment.js";
 import {TASKHUB_BRIEF} from "../core/workos/predev/fixtures/taskhub-brief.js";
 import {TASKHUB_ARTIFACTS} from "../core/workos/predev/fixtures/taskhub/index.js";
-import type {ArtifactKind} from "../core/workos/predev/types.js";
+import type {ArtifactKind, PlanContent} from "../core/workos/predev/types.js";
+import {PRE_DEV_ROLE_MAP} from "../core/workos/predev/types.js";
 // //TR: Bu dosyadaki gerçek G/Ç'li testler (git, alt süreç, HTTP, disk) yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (PR #49 Windows CI ölçümleri: 1-4 sn normal koşu, yavaş koşuda zaman aşımı). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir.
 vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 
@@ -110,7 +111,9 @@ async function mkCtx(getFn: (p: string) => any, lang = "en") {
   const api = apiMod.createApi({bridge, store, now: () => 1_760_000_000_000});
   const tr = (k: string, v?: any) => i18n.translate(lang, k, v);
   let rerenders = 0;
-  const ctx: any = {doc, store, api, i18n: {lang, t: tr}, t: tr, navigate: () => {}, rerender: async () => { rerenders += 1; }, settleFocus: () => {}};
+  // UASCO-T0013: decisions (approve / reject / re-approve) ask for confirmation first; the Founder confirms here unless a test says otherwise
+  const confirms: any[] = [];
+  const ctx: any = {doc, store, api, i18n: {lang, t: tr}, t: tr, navigate: () => {}, rerender: async () => { rerenders += 1; }, settleFocus: () => {}, confirm: async (o: any) => { confirms.push(o); return true; }, confirms};
   return {ctx, doc, calls, selection: forms.selection, rerenders: () => rerenders};
 }
 const fail = (p: string, status = 404) => { throw new Error(`${p}: HTTP ${status}`); };
@@ -159,7 +162,7 @@ describe("Project Journey — GENUINE control-api read-models flow through mappe
     const {ctx, calls, selection} = await mkCtx(async p => p === "/v1/missions" ? missionsBody : getJson(app, p));
     selection.missionId = seeded.missionId;
     const root = await journey.render(ctx);
-    expect(calls.slice().sort()).toEqual(["/v1/crew/" + seeded.missionId, "/v1/missions", "/v1/predev/" + seeded.missionId].sort());
+    expect(calls.slice().sort()).toEqual(["/v1/crew/" + seeded.missionId, "/v1/missions", "/v1/predev/" + seeded.missionId, `/v1/missions/${seeded.missionId}/tasks`].sort()); // DSK-T0004: + the allow-listed plan-versions read
     const phases = allData(root, "kind").filter(n => n.tagName === "LI" && "artState" in n.dataset);
     expect(phases.map(n => n.dataset.kind)).toEqual(["BusinessAnalysis", "Requirements", "Plan", "Architecture", "UxSpec"]);
     expect(phases.every(n => n.dataset.artState === "APPROVED" && n.dataset.approved === "1")).toBe(true);
@@ -299,7 +302,7 @@ describe("Project Journey — view honesty", () => {
     const {ctx, calls, selection} = await mkCtx(serve());
     selection.missionId = MSN;
     const root = await journey.render(ctx);
-    expect(calls.slice().sort()).toEqual(["/v1/crew/" + MSN, "/v1/missions", "/v1/predev/" + MSN].sort());
+    expect(calls.slice().sort()).toEqual(["/v1/crew/" + MSN, "/v1/missions", "/v1/predev/" + MSN, `/v1/missions/${MSN}/tasks`].sort()); // DSK-T0004: + the allow-listed plan-versions read
     const rail = byData(root, "journeyRail")!;
     expect(rail.tagName).toBe("OL");
     expect(rail.getAttribute("aria-label")).toBeTruthy();
@@ -592,7 +595,9 @@ async function mkDecisionCtx(getFn: (p: string) => any, postFn: (p: string, b: u
   const api = apiMod.createApi({bridge, store, now: () => 1_760_000_000_000});
   const tr = (k: string, v?: any) => i18n.translate(lang, k, v);
   let rerenders = 0;
-  const ctx: any = {doc, store, api, i18n: {lang, t: tr}, t: tr, navigate: () => {}, rerender: async () => { rerenders += 1; }, settleFocus: () => {}};
+  // UASCO-T0013: decisions (approve / reject / re-approve) ask for confirmation first; the Founder confirms here unless a test says otherwise
+  const confirms: any[] = [];
+  const ctx: any = {doc, store, api, i18n: {lang, t: tr}, t: tr, navigate: () => {}, rerender: async () => { rerenders += 1; }, settleFocus: () => {}, confirm: async (o: any) => { confirms.push(o); return true; }, confirms};
   dec.resetPredevDraft(null, null); for (const f of ["predev-start", "predev-approve", "predev-reject"]) { delete forms.drafts.status[f]; forms.drafts.busy[f] = false; }
   forms.selection.missionId = MSN;
   return {ctx, posts, dec, forms, rerenders: () => rerenders};
@@ -1539,12 +1544,33 @@ describe("LANE-A A-ANALYSIS-STUCK-1: an approved artefact whose phase did not ad
       if (label !== "analyse") await press(b, "analysis-step-submit");
       if (label === "re-approve") setVal(b.root, "analysis-reapprove-evidence", "ev");
       const seen: boolean[] = [], orig = b.ctx.rerender; b.ctx.rerender = async () => { seen.push(b.an.analysisBusy()); return orig(); }; // the lock state at every repaint
-      const pending = start(b); b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null});
+      // UASCO-T0013: re-approve first asks for confirmation; the mission is switched only once the POST is really in flight (the case this test covers)
+      const pending = start(b); await new Promise(r => setTimeout(r, 0)); b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null});
       const before = b.rerenders(); d.res(answer); const r = await pending;
       expect(r, label).toMatchObject({ok: false, stale: true}); expect(b.rerenders() - before, `${label}: one repaint for the dropped answer`).toBe(1);
       expect(seen, `${label}: busy at each repaint (set, then released before the stale repaint)`).toEqual([true, false]); expect(b.an.analysisBusy(), `${label}: the lock is released`).toBe(false);
       const fresh = b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null}) as N; expect(byId(fresh, "analysis-step-submit")!.attrs.get("disabled"), `${label}: a fresh panel's Analyse is enabled`).toBeUndefined();
     }
+  });
+
+  it("UASCO-T0013: re-approve asks for confirmation; cancelled or switched mission while the dialog is open posts nothing; a second press during the dialog opens no second dialog", async () => {
+    // cancelled
+    let b = await open(stuck()); await press(b, "analysis-step-submit"); setVal(b.root, "analysis-reapprove-evidence", "ev");
+    b.ctx.confirm = async (o: any) => { b.ctx.confirms.push(o); return false; };
+    expect(await b.an.submitReapprove(b.ctx, MSN)).toEqual({ok: false, cancelled: true});
+    expect(b.approves).toEqual([]); expect(b.ctx.confirms).toHaveLength(1);
+    expect(b.ctx.confirms[0].target).toContain(A1); expect(b.ctx.confirms[0].action).toBe("Approve the Requirements artefact again");
+    expect(b.an.analysisBusy()).toBe(false);
+    // no confirm function at all: fail closed
+    b = await open(stuck()); await press(b, "analysis-step-submit"); setVal(b.root, "analysis-reapprove-evidence", "ev"); delete b.ctx.confirm;
+    expect(await b.an.submitReapprove(b.ctx, MSN)).toEqual({ok: false, cancelled: true}); expect(b.approves).toEqual([]);
+    // switched mission while the dialog is open, and a second press meanwhile
+    b = await open(stuck()); await press(b, "analysis-step-submit"); setVal(b.root, "analysis-reapprove-evidence", "ev");
+    const gate = deferred(); let asks = 0; b.ctx.confirm = async () => { asks += 1; return gate.p; };
+    const first = b.an.submitReapprove(b.ctx, MSN);
+    expect(await b.an.submitReapprove(b.ctx, MSN)).toEqual({ok: false, busy: true}); expect(asks).toBe(1);
+    b.an.analysisPanel(b.ctx, {missionId: MSN2, exec: null}); gate.res(true);
+    expect(await first).toMatchObject({ok: false, stale: true}); expect(b.approves).toEqual([]); expect(b.an.analysisBusy()).toBe(false);
   });
 
   it("the typed evidence is cleared after a successful re-approve and a later stuck answer starts with an empty field", async () => {
@@ -2233,3 +2259,218 @@ describe("LANE-A A-UI011-EVIDENCE-1: the analysis step and the run-the-product s
     await expectLocalClaudeStillOff(s, before);
   });
 });
+
+// //TR: DSK-T0001 (FAKE_EXECUTOR): masaüstü ilk-teslim akışı yürütmeye kadar. (a) GERÇEK control-api (buildServer + FakeExecutors + sahte güvenlik tarayıcıları, sandbox:null, runner açık) ve GERÇEK görünümler: koşu AWAITING_APPROVAL'a gider, koşu kartı test satırını NOT_EXECUTED (SANDBOX_UNAVAILABLE) gösterir ve "Bu koşudaki değişiklikler" bloğu base..head farkını sunucudan okur. (b) Betiklerin dürüstlük etiketi statik olarak kilitlenir. (c) Gerçek Electron E2E yalnız doğrulanmış Electron ikilisi + root olmayan kullanıcı + ekran varken çalışır; aksi halde AÇIK nedenle atlanır. Hiçbiri gerçek model/sandbox kanıtı değildir.
+describe("DSK-T0001 FAKE_EXECUTOR desktop flow up to execution (real control-api, real views)", () => {
+  const FAKE_FILES = {"src/streak.js": "// FAKE_EXECUTOR output\nexport const streak = days => days.length;\n", "FAKE_EXECUTOR.md": "fake\n"};
+  async function fakeServer() {
+    fs.mkdirSync(runtime(), {recursive: true});
+    const {FakeExecutors} = await import("../core/workos/executors.js");
+    const {fakeSecurity} = await import("../core/workos/security-tools.js");
+    const fake = new FakeExecutors({implement: () => ({files: {...FAKE_FILES}, message: "FAKE_EXECUTOR"}), review: () => ({verdict: "CLEAN"})});
+    const app = buildServer({controlToken: TOKEN, runtime: runtime(), dataDir: dataDir(), tenantId: "tA", port: 3210, logger: false, executors: fake.pair(), sandbox: null,
+      runner: {enabled: true, intervalMs: 250, security: fakeSecurity(path.join(tmp, "sec")).options}});
+    apps.push(app); await app.ready(); return {app};
+  }
+  const post = async (app: App, url: string, body: unknown) => { const r = await app.inject({method: "POST", url, headers: {...hdr, "content-type": "application/json"}, payload: JSON.stringify(body)}); return {status: r.statusCode, body: r.json()}; };
+
+  it("drives wizard project -> mission -> plan -> AUTHORIZED -> run to AWAITING_APPROVAL; the run card says NOT_EXECUTED and the run diff lists the FAKE files", async () => {
+    const {app} = await fakeServer();
+    const p = await post(app, "/v1/projects", {name: "Reading tracker", environmentId: "dev", template: "web-node", idempotencyKey: "dsk-t0001-p1"});
+    expect(p.status).toBe(201);
+    const projectId: string = p.body.project.projectId;
+    const m = await post(app, "/v1/missions", {projectId, title: "Streak", objective: "Show a reading streak", acceptanceCriteria: ["streak shown"], riskLevel: "R1"});
+    expect(m.status).toBe(201);
+    const missionId: string = m.body.mission.missionId;
+    expect((await post(app, `/v1/missions/${missionId}/plan`, {tasks: [{title: "Store days"}, {title: "Show streak", dependsOn: [0]}]})).status).toBe(201);
+    for (const to of ["PREFLIGHT", "AUTHORIZED"]) expect((await post(app, `/v1/missions/${missionId}/transition`, {to, reason: "e2e"})).status).toBe(200);
+    const started = await post(app, `/v1/missions/${missionId}/runs`, {});
+    expect(started.status).toBe(201);
+    expect(started.body.run.executor).toEqual({implementer: "FAKE_IMPLEMENTER", reviewer: "FAKE_REVIEWER"});
+    const runId: string = started.body.run.runId;
+    let raw: any = null;
+    for (let i = 0; i < 400; i++) { raw = await getJson(app, `/v1/work-runs/${runId}`); if (["AWAITING_APPROVAL", "BLOCKED", "FAILED"].includes(raw.run.status)) break; await new Promise(r => setTimeout(r, 250)); }
+    expect(raw.run.status).toBe("AWAITING_APPROVAL");
+    expect(raw.run.evidence.map((e: any) => e.kind)).toContain("VERIFY_TESTS_NOT_EXECUTED");
+    expect(raw.run.evidence.map((e: any) => e.kind)).not.toContain("VERIFY_TESTS");
+    expect(raw.outcomes.functionalAcceptance).toBe("NOT_EXECUTED");
+    // real views through the real api.js against the real server (bridge = app.inject)
+    const apiMod = await load("api.js"), st = await load("state.js"), i18n = await load("i18n.js"), work = await load("views", "work.js"), rd = await load("views", "run-diff.js");
+    rd.resetRunDiffs();
+    const store = st.createStore(null), doc = new D();
+    const bridge = {apiGet: async (u: string) => getJson(app, u), apiPost: async () => { throw new Error("NO_POST_IN_THIS_TEST"); }};
+    const t = (k: string, v?: any) => i18n.translate("en", k, v);
+    const ctx: any = {doc, store, api: apiMod.createApi({bridge, store}), i18n: {lang: "en", t}, t, rerender: async () => { store.cache.clear(); }, settleFocus: () => {}};
+    const detail = await ctx.api.workRunDetail(runId);
+    expect(detail.state).toBe("VERIFIED");
+    expect([detail.run.projectId, detail.run.baseSha, detail.run.headSha]).toEqual([projectId, raw.run.baseSha, raw.run.headSha]);
+    const card = () => { const c = work.runCard(ctx, detail.run); doc.body.replaceChildren(c); return c; };
+    let c = card();
+    expect(c.dataset.runStatus).toBe("AWAITING_APPROVAL");
+    expect(c.textContent).toContain("FAKE_REVIEWER");
+    const test = byData(c, "runTestResult")!;
+    expect([test.dataset.runTestResult, test.dataset.runTestReason]).toEqual(["NOT_EXECUTED", "SANDBOX_UNAVAILABLE"]);
+    expect(byId(c, `run-diff-${runId}`)!.dataset.runDiff).toBe("NOT_LOADED"); // nothing is fetched before the Founder asks
+    fire(byId(c, `run-diff-show-${runId}`)!, "click");
+    for (let i = 0; i < 80 && rd.runDiffs.get(runId)?.state !== "VERIFIED"; i++) await new Promise(r => setTimeout(r, 50));
+    c = card();
+    expect(byId(c, `run-diff-${runId}`)!.dataset.runDiff).toBe("VERIFIED");
+    expect(allData(c, "runDiffFile").map(n => n.dataset.runDiffFile).sort()).toEqual(["FAKE_EXECUTOR.md", "src/streak.js"]);
+    expect(byId(c, `run-diff-view-${runId}`)!.textContent).toContain("+export const streak = days => days.length;");
+  });
+
+  it("maps the server's diff file rows ({file,added,deleted}) and still accepts the older {path,additions,deletions} shape", async () => {
+    const core = await load("project-core.js");
+    expect(core.mapGitDiff({diff: "+x", files: [{file: "a.js", added: 2, deleted: 1}]}).diff.files).toEqual([{path: "a.js", additions: 2, deletions: 1}]);
+    expect(core.mapGitDiff({diff: "+x", files: [{path: "b.js", additions: 3, deletions: 0}]}).diff.files).toEqual([{path: "b.js", additions: 3, deletions: 0}]);
+    expect(core.mapGitDiff({diff: "+x", files: [{file: "c.js", added: null, deleted: null}]}).diff.files).toEqual([{path: "c.js", additions: null, deletions: null}]);
+  });
+
+  it("offers no run diff without a valid project, base and head commit", async () => {
+    const rd = await load("views", "run-diff.js"), i18n = await load("i18n.js");
+    const ctx: any = {doc: new D(), t: (k: string, v?: any) => i18n.translate("en", k, v)};
+    const sha = "a".repeat(40), pid = "prj_" + "0".repeat(24);
+    for (const r of [{runId: "run_x", projectId: null, baseSha: sha, headSha: "b".repeat(40)}, {runId: "run_x", projectId: pid, baseSha: null, headSha: sha}, {runId: "run_x", projectId: pid, baseSha: sha, headSha: sha}]) expect(rd.runDiffBlock(ctx, r)).toBeNull();
+    for (const k of ["run.diff.title", "run.diff.note", "run.diff.show", "run.diff.reload", "run.diff.loading", "run.diff.label"]) { expect(i18n.translate("en", k), k).not.toBe(k); expect(i18n.translate("tr", k), k).not.toBe(k); }
+  });
+
+  it("the E2E scripts label their evidence FAKE_EXECUTOR, inject no sandbox and never enable LOCAL_CLAUDE", () => {
+    const launcher = fs.readFileSync("scripts/e2e-fake-executor-api.mjs", "utf8"), e2e = fs.readFileSync("scripts/e2e-desktop-fake-delivery-electron.mjs", "utf8");
+    expect(launcher.split(/\r?\n/)[0]).toMatch(/^\/\/ \/\/TR: /);
+    expect(e2e.split(/\r?\n/)[0]).toMatch(/^\/\/ \/\/TR: /);
+    expect(launcher).toContain("new FakeExecutors(");
+    expect(launcher).toContain("sandbox: null");
+    expect(launcher).not.toMatch(/LocalClaudeExecutors|local-claude|UASCO_WORKOS_EXECUTOR/);
+    expect(e2e).toContain('evidenceClass: "FAKE_EXECUTOR"');
+    expect(e2e).toContain('"real-model output", "real sandbox execution"');
+    expect(e2e).toContain("scripts/e2e-fake-executor-api.mjs");
+    expect(e2e).not.toMatch(/UASCO_WORKOS_EXECUTOR|local-claude|UASCO_SMOKE/);
+  });
+
+  // //TR: Gerçek Electron koşusu: CI'da doğrulanmış Electron ikilisi temin edilmez ve Chromium sandbox'ı root altında açılmaz; bu yüzden yalnız UASCO_E2E_ELECTRON_BIN verilmiş, root olmayan, ekranlı (DISPLAY) Linux'ta çalışır. Atlama nedeni test adında açıkça yazılır; atlanan test PASS sayılmaz.
+  const electronBin = process.env.UASCO_E2E_ELECTRON_BIN ?? "";
+  const skipReason = process.platform !== "linux" ? "NOT_LINUX" : !electronBin ? "UASCO_E2E_ELECTRON_BIN_NOT_SET (no provisioned Electron binary)" : !fs.existsSync(electronBin) ? "ELECTRON_BIN_MISSING"
+    : process.getuid?.() === 0 ? "RUNNING_AS_ROOT (Chromium sandbox needs a non-root user)" : !process.env.DISPLAY ? "NO_DISPLAY (run under xvfb-run -a)" : "";
+  it.skipIf(skipReason !== "")(`real Electron FAKE_EXECUTOR E2E (scripts/e2e-desktop-fake-delivery-electron.mjs)${skipReason ? ` [SKIPPED: ${skipReason}]` : ""}`, {timeout: 360_000}, async () => {
+    const cp = await import("node:child_process");
+    const out = path.join(tmp, "dsk-t0001-report.json");
+    const r = cp.spawnSync(process.execPath, ["scripts/e2e-desktop-fake-delivery-electron.mjs", ".", out, electronBin], {encoding: "utf8", timeout: 340_000, env: {...process.env, UASCO_E2E_HOME: path.join(tmp, "home")}});
+    const report = JSON.parse(fs.readFileSync(out, "utf8"));
+    expect(report.evidenceClass).toBe("FAKE_EXECUTOR");
+    expect(report.steps.filter((s: any) => !s.ok), String(r.stdout).slice(-2000)).toEqual([]);
+    expect(report.status).toBe("PASS");
+  });
+});
+
+// //TR: DSK-T0004 (UI-018/UI-019): Plan Karşılaştırma ve Plan Değişim Merkezi — GERÇEK control-api GET /v1/missions/:id/tasks planVersions alanı (pre-dev Plan sürümleri, supersedes zinciri), saf karşılaştırma çekirdeği ve Proje Yolculuğu paneli; plan geçmişi yoksa / tek sürüm / desteklenmiyor / okunamıyor durumları dürüst gösterilir, yazma yoktur.
+describe("DSK-T0004 plan comparison and change center (UI-018/UI-019)", () => {
+  const EV = ["evd_0123456789abcdef"];
+  const wp = (id: string, title: string, o: Record<string, any> = {}) => ({id, title, dependsOn: [], estimate: "1d", satisfies: ["FR1"], ...o});
+  const version = (n: number, wps: any[], state = "APPROVED") => ({artifactId: "pda_" + String(n).repeat(24).slice(0, 24).replace(/[^0-9a-f]/g, "a"), version: n, state, supersedes: n === 1 ? null : "pda_" + String(n - 1).repeat(24).slice(0, 24), createdAt: "2026-11-12T08:00:00.000Z", workPackages: wps});
+  const tasksBody = (versions?: any[]) => (versions === undefined ? {tasks: []} : {tasks: [], planVersions: versions});
+
+  it("pure core: strict mapping, honest states and an id-based diff (added / removed / changed fields / unchanged)", async () => {
+    const core = await load("plan-compare-core.js");
+    expect(core.planVersionsPath(MSN)).toBe(`/v1/missions/${MSN}/tasks`);
+    for (const bad of ["bad", MSN + "/x", undefined]) expect(core.planVersionsPath(bad)).toBeNull();
+    expect(core.mapPlanVersions(tasksBody()).state).toBe("UNSUPPORTED");
+    expect(core.mapPlanVersions(tasksBody([])).state).toBe("VERIFIED");
+    for (const bad of [null, {planVersions: {}}, tasksBody([version(2, [])]), tasksBody([{...version(1, []), state: "MADE_UP"}]),
+      tasksBody([version(1, [wp("WP1", "a"), wp("WP1", "b")])]), tasksBody([version(1, [{id: "WP1"}])])]) expect(core.mapPlanVersions(bad).state, JSON.stringify(bad)?.slice(0, 80)).toBe("ERROR");
+    const v1 = version(1, [wp("WP1", "auth"), wp("WP2", "api", {dependsOn: ["WP1"]}), wp("WP3", "ui")], "REJECTED");
+    const v2 = version(2, [wp("WP1", "auth"), wp("WP2", "public api", {dependsOn: ["WP1"], estimate: "2d"}), wp("WP4", "board")], "DRAFT");
+    const d = core.comparePlanVersions(v1, v2);
+    expect(d.added.map((w: any) => w.id)).toEqual(["WP4"]); expect(d.removed.map((w: any) => w.id)).toEqual(["WP3"]);
+    expect(d.changed).toEqual([{id: "WP2", before: v1.workPackages[1], after: v2.workPackages[1], fields: ["title", "estimate"]}]);
+    expect(d.unchanged).toBe(1);
+    expect(core.buildPlanChanges(core.mapPlanVersions(tasksBody([]))).state).toBe("NO_PLAN");
+    expect(core.buildPlanChanges(core.mapPlanVersions(tasksBody([v1]))).state).toBe("SINGLE_VERSION");
+    const c = core.buildPlanChanges(core.mapPlanVersions(tasksBody([v1, v2, version(3, v2.workPackages)])));
+    expect(c.pairs.map((p: any) => `${p.from}->${p.to}`)).toEqual(["2->3", "1->2"]); // newest first
+    expect(c.pairs[0]).toMatchObject({added: [], removed: [], changed: [], unchanged: 3});
+  });
+
+  it("REAL control-api: GET /v1/missions/:id/tasks returns every Plan version (v1 rejected, v2 superseding) and the journey panel shows the real diff", async () => {
+    const seeded = seedMission();
+    const store = new WorkOsStore(dataDir()), scope = {tenantId: "tA"};
+    const seq = store.openPreDevSequence(scope, seeded.missionId, RECORDER);
+    const phase = (kind: "BusinessAnalysis" | "Requirements", next: string) => {
+      const a = store.recordPreDevArtifact(scope, seq.preDevId, {kind, authorRoleId: PRE_DEV_ROLE_MAP[kind][0], content: TASKHUB_ARTIFACTS[kind] as never}, RECORDER);
+      store.transitionPreDevArtifact(scope, seq.preDevId, a.id, "SUBMITTED", {}, RECORDER);
+      store.transitionPreDevArtifact(scope, seq.preDevId, a.id, "APPROVED", {evidenceRefs: EV}, APPROVER);
+      store.advancePreDevPhase(scope, seq.preDevId, next as never, APPROVER);
+    };
+    store.advancePreDevPhase(scope, seq.preDevId, "BUSINESS_ANALYSIS", RECORDER);
+    phase("BusinessAnalysis", "REQUIREMENTS"); phase("Requirements", "PLANNING");
+    const plan1 = TASKHUB_ARTIFACTS.Plan as PlanContent;
+    const a1 = store.recordPreDevArtifact(scope, seq.preDevId, {kind: "Plan", authorRoleId: PRE_DEV_ROLE_MAP.Plan[0], content: plan1 as never}, RECORDER);
+    store.transitionPreDevArtifact(scope, seq.preDevId, a1.id, "SUBMITTED", {}, RECORDER);
+    store.transitionPreDevArtifact(scope, seq.preDevId, a1.id, "REJECTED", {reason: "split the API work"}, APPROVER);
+    const first = plan1.workPackages[0];
+    const plan2: PlanContent = {...plan1, workPackages: [...plan1.workPackages.map((w, i) => (i === 1 ? {...w, title: w.title + " (revised)", estimate: "9d"} : w)),
+      {id: "WP99", title: "Audit log", dependsOn: [first.id], estimate: "2d", satisfies: [...first.satisfies]}]};
+    const a2 = store.recordPreDevArtifact(scope, seq.preDevId, {kind: "Plan", authorRoleId: PRE_DEV_ROLE_MAP.Plan[0], content: plan2 as never, supersedes: a1.id}, RECORDER);
+    const app = mkApp();
+    const body = await getJson(app, `/v1/missions/${seeded.missionId}/tasks`);
+    expect(Array.isArray(body.tasks)).toBe(true);
+    expect(body.planVersions.map((v: any) => [v.version, v.state, v.supersedes])).toEqual([[1, "REJECTED", null], [2, "DRAFT", a1.id]]);
+    expect(body.planVersions[1].artifactId).toBe(a2.id);
+    expect(Object.keys(body.planVersions[0]).sort()).toEqual(["artifactId", "createdAt", "state", "supersedes", "version", "workPackages"]);
+    // a mission with no pre-dev sequence: an honest empty list, never invented history
+    const other = store.createMission({tenantId: "tA", projectId: store.listProjects({tenantId: "tA"})[0].projectId, title: "No plan", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R0", createdBy: RECORDER});
+    expect((await getJson(app, `/v1/missions/${other.missionId}/tasks`)).planVersions).toEqual([]);
+    // the renderer, over the real server
+    const {ctx, doc, calls, selection} = await mkCtx(p => getJson(app, p));
+    selection.missionId = seeded.missionId;
+    const root = await renderJourney(ctx);
+    const panelNode = all(root).find(n => n.id === "journey-plan-changes")!;
+    expect(panelNode).toBeTruthy();
+    const pair = all(panelNode).find(n => n.dataset.from === "1" && n.dataset.to === "2")!;
+    expect(pair).toBeTruthy();
+    const group = (k: string) => all(pair).find(n => n.dataset.change === k)!;
+    expect(all(group("added")).filter(n => n.dataset.wp).map(n => n.dataset.wp)).toEqual(["WP99"]);
+    expect(all(group("removed")).filter(n => n.dataset.wp)).toEqual([]);
+    expect(all(group("changed")).filter(n => n.dataset.wp).map(n => n.dataset.wp)).toEqual([plan1.workPackages[1].id]);
+    expect(group("changed").textContent).toContain("9d");
+    expect(calls).toContain(`/v1/missions/${seeded.missionId}/tasks`);
+  });
+
+  it("journey panel honest states: no plan / single version / unsupported server / unreadable; other panels still render", async () => {
+    const route = (tasks: () => any) => (p: string) => (p === "/v1/missions" ? MISSIONS : p === `/v1/predev/${MSN}` ? predevBody() : p === `/v1/missions/${MSN}/tasks` ? tasks() : fail(p));
+    const state = async (tasks: () => any, lang = "en") => {
+      const {ctx, selection} = await mkCtx(route(tasks), lang); selection.missionId = MSN;
+      const root = await renderJourney(ctx); const node = all(root).find(n => n.id === "journey-plan-changes")!;
+      return {node, root, t: ctx.t, note: all(node).find(n => n.dataset.planChanges)};
+    };
+    const none = await state(() => tasksBody([]));
+    expect(none.note!.dataset.planChanges).toBe("NO_PLAN"); expect(none.note!.textContent).toBe(none.t("journey.planChanges.noPlan"));
+    const single = await state(() => tasksBody([version(1, [wp("WP1", "a")])]));
+    expect(single.note!.dataset.planChanges).toBe("SINGLE_VERSION");
+    const unsup = await state(() => tasksBody());
+    expect(unsup.note!.dataset.planChanges).toBe("UNSUPPORTED");
+    const err = await state(() => fail("x", 500));
+    expect(err.note!.dataset.planChanges).toBe("ERROR"); expect(err.note!.textContent).toBe(err.t("journey.planChanges.error"));
+    expect(all(err.root).some(n => n.id === "journey-plan-changes")).toBe(true);
+    const tr = await state(() => tasksBody([]), "tr");
+    expect(tr.note!.textContent).toBe(tr.t("journey.planChanges.noPlan")); expect(tr.note!.textContent).not.toContain("journey.");
+  });
+
+  it("the read path is the already allow-listed GET; every planChanges key exists in both locales", async () => {
+    const main = fs.readFileSync(path.resolve(__dirname, "..", "apps", "desktop", "main.mjs"), "utf8");
+    const src = /const MISSION_TASKS_RE=\/(.+)\/;/.exec(main)?.[1];
+    expect(src).toBeTruthy(); // the renderer may already GET this path: no allow-list change is needed (main.mjs is untouched)
+    const re = new RegExp(src!);
+    const core = await load("plan-compare-core.js");
+    expect(re.test(core.planVersionsPath(MSN))).toBe(true);
+    for (const bad of [`/v1/missions/${MSN}/tasks/x`, `/v1/missions/${MSN}/plan-history`]) expect(re.test(bad)).toBe(false);
+    const i18n = await load("i18n.js");
+    const en = (await load("locales", "en.js")).default ?? (await load("locales", "en.js"));
+    const keys = Object.keys(en).filter(k => k.startsWith("journey.planChanges."));
+    expect(keys.length).toBe(23);
+    for (const k of keys) expect(i18n.translate("tr", k, {n: "1", v: "x", from: "1", to: "2", fromState: "a", toState: "b"}), k).not.toBe(k);
+  });
+});
+
+// //TR: DSK-T0002 (UI-014): okunur analiz raporu (salt-okunur GET /v1/missions/:id/analysis/report + Proje Yolculuğu rapor paneli) gerçek buildServer senaryoları bu kayıtlı dosyadan koşar.
+import {registerAnalysisReportRealServerCases} from "./support/analysis-report-real-server.cases.js";
+registerAnalysisReportRealServerCases();
