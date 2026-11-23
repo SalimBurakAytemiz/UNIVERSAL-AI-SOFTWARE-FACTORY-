@@ -855,6 +855,7 @@ import {FakeExecutors} from "../core/workos/executors.js";
 import {fakeSecurity} from "../core/workos/security-tools.js";
 import {testExecutionGate} from "./support/test-sandbox.js";
 import {spawnGitSync} from "../automation/lib/git-isolation.mjs";
+import {registerV3T1032TaskEvidenceSuite} from "./support/v3-t1032-task-evidence.cases.js";
 
 describe("COORD-INTEGRATION-L1 first-delivery chain (real modules, temp data dir)", () => {
   const token = "t".repeat(32), hdr = {"x-uasco-control-token": token, host: "127.0.0.1:3210"};
@@ -3569,4 +3570,4 @@ describe("LANE-B P3 legacy reads: /v1/adapters, /v1/scheduler and the retry-bloc
     expect(fs.readFileSync(target, "utf8")).toBe("{}");
   });
 });
-
+registerV3T1032TaskEvidenceSuite();

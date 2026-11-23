@@ -652,6 +652,43 @@ export function registerCloudAcceptanceSuite(): void {
       expect(intentFromIntake(intake(), confirm(), vf({consume: () => "maybe" as unknown as boolean}))).toEqual({ok: false, reason: "INTAKE_NOT_CONFIRMED", detail: "REPLAY_STORE_UNAVAILABLE"});
       expect(intentFromIntake(intake(), confirm(), vf(new InMemoryConfirmationReplayStore(2)))).toMatchObject({ok: true});   // positive control
     });
+    it("#357 L-3: a NaN, infinite, non-Date or throwing verifier `now` is CLOCK_INVALID and never touches the replay store", () => {
+      let calls = 0;
+      const spy: ConfirmationVerifier["replay"] = {consume: () => { calls++; return true; }};
+      const vn = (n: () => Date): ConfirmationVerifier => ({keys: new Map([["k-1", SCOPE_KEY]]), scope: mkScope("tenant-a"), now: n, replay: spy});
+      const bad: Array<[string, () => Date]> = [["NaN", () => new Date(Number.NaN)], ["Infinity", () => ({getTime: () => Number.POSITIVE_INFINITY}) as unknown as Date],
+        ["non-Date", () => 1_800_000_000_000 as unknown as Date], ["throws", () => { throw new Error("clock down"); }],
+        ["Date-like", () => ({getTime: () => clock.getTime()}) as unknown as Date]];             // in-window number, but not a real Date
+      for (const [why, n] of bad) {
+        expect(intentFromIntake(intake(), confirm(), vn(n)), why).toEqual({ok: false, reason: "INTAKE_NOT_CONFIRMED", detail: "CLOCK_INVALID"});
+        expect(calls, `${why}: replay store not consulted`).toBe(0);
+      }
+      expect(intentFromIntake(intake(), confirm(), vn(now))).toMatchObject({ok: true});   // positive control: a valid clock reaches the store once
+      expect(calls).toBe(1);
+    });
+    it("#357 L-1: a clocked in-memory replay store must be bound to this verifier's `now` (REPLAY_STORE_CLOCK_MISMATCH before consume)", () => {
+      const vr = (replay: InMemoryConfirmationReplayStore, n: () => Date = now): ConfirmationVerifier => ({keys: new Map([["k-1", SCOPE_KEY]]), scope: mkScope("tenant-a"), now: n, replay});
+      const raw = new InMemoryConfirmationReplayStore(10, () => clock.getTime() + 365 * 86_400_000);   // unbound numeric clock, a year ahead
+      expect(intentFromIntake(intake(), confirm(), vr(raw))).toEqual({ok: false, reason: "INTAKE_NOT_CONFIRMED", detail: "REPLAY_STORE_CLOCK_MISMATCH"});
+      const otherNow = () => new Date(clock.getTime());                                       // same instant, different source
+      const boundElsewhere = InMemoryConfirmationReplayStore.forVerifier(otherNow);
+      expect(intentFromIntake(intake(), confirm(), vr(boundElsewhere))).toEqual({ok: false, reason: "INTAKE_NOT_CONFIRMED", detail: "REPLAY_STORE_CLOCK_MISMATCH"});
+      const bound = InMemoryConfirmationReplayStore.forVerifier(now);                         // positive control: bound to this verifier
+      const token = confirm();
+      expect(intentFromIntake(intake(), token, vr(bound))).toMatchObject({ok: true});
+      expect(intentFromIntake(intake(), token, vr(bound))).toEqual({ok: false, reason: "INTAKE_NOT_CONFIRMED", detail: "REPLAYED"});
+      expect(intentFromIntake(intake(), confirm(), vr(new InMemoryConfirmationReplayStore()))).toMatchObject({ok: true});   // clockless: never prunes, allowed
+      // the bound clock prunes only past exp + skew by the verifier's own time, and a broken verifier clock never prunes
+      let t = clock.getTime(); const moving = () => new Date(t); const mv = InMemoryConfirmationReplayStore.forVerifier(moving);
+      expect(mv.consume("c-1", t + 1000, t)).toBe(true);
+      t += 1000 + CONFIRMATION_CLOCK_SKEW_MS - 1; expect(mv.consume("c-1", 0, t)).toBe(false);
+      t += 1; expect(mv.consume("c-1", 0, t)).toBe(true);
+      const broken = InMemoryConfirmationReplayStore.forVerifier(() => 5 as unknown as Date);
+      expect(broken.consume("c-1", 1, 0)).toBe(true); expect(broken.consume("c-1", 1, 10 ** 13)).toBe(false);
+      const coercible = InMemoryConfirmationReplayStore.forVerifier(() => ({valueOf: () => 10 ** 13}) as unknown as Date);   // not a Date: never coerced
+      expect(coercible.consume("c-1", 1, 0)).toBe(true); expect(coercible.consume("c-1", 1, 0)).toBe(false);
+      expect(() => InMemoryConfirmationReplayStore.forVerifier(5 as unknown as () => Date)).toThrow("REPLAY_STORE_CLOCK_INVALID");
+    });
 
     // ---- B2 ----
     const scopeOf = (over: Partial<UnsignedScope> = {}) => signScope({tenantId: "tenant-a", projectId: "proj-web", environment: "staging", jobKinds: ["BUILD", "TEST", "PACKAGE", "DELIVERY"],
