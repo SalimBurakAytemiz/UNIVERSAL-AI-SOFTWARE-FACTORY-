@@ -254,6 +254,82 @@ export function registerDskRunnerPassiveCases(): void {
     expect(calls.length).toBe(before);
   });
 
+  // ---- Founder review 2026-11-23: isolation lifecycle (no stale construction-time snapshot) ----
+  const iso = (o: {selfTest: () => Promise<{ok: boolean}>; id?: string; linuxGuest?: boolean; map?: any}) => {
+    const calls: string[][] = [];
+    const prov: any = {id: o.id ?? "RECORDING_PROVIDER", selfTest: o.selfTest, spawn() { throw new Error("no spawn"); }, ...(o.linuxGuest ? {linuxGuest: true} : {}), ...(o.map ? {mapModelProcess: o.map} : {}),
+      async run(argv: string[]) { calls.push(argv); const at = new Date().toISOString(); return {argv, exitCode: 1, stdout: "", stderr: "", startedAt: at, endedAt: at, timedOut: false, aborted: false, spawnError: false}; }};
+    return {prov, calls};
+  };
+  const rig = () => {
+    const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "dsk-life-")), control = path.join(tmp, "control"), data = path.join(tmp, "data");
+    const sha = crypto.createHash("sha256").update(fs.readFileSync(process.execPath)).digest("hex");
+    fs.mkdirSync(path.join(control, ".ai", "runtime"), {recursive: true});
+    fs.writeFileSync(path.join(control, ".ai", "runtime", "PROVIDER_PROVENANCE.json"), JSON.stringify({final: "PASS", claude: {provenanceLevel: "STANDALONE_LAUNCHER", resolvedPath: process.execPath, launcherSha256: sha, version: "fake"}}));
+    for (const role of ["implementer", "reviewer"] as const) { ensureClaudeProfile(control, role, {forbiddenRoots: [data]}); fs.writeFileSync(path.join(claudeProfileDir(control, role), ".credentials.json"), ""); }
+    const ws = path.join(tmp, "ws"); fs.mkdirSync(ws); for (const a of [["init", "-q", "-b", "main"], ["-c", "user.name=S", "-c", "user.email=s@local.invalid", "commit", "-q", "--allow-empty", "-m", "s"]]) spawnGitSync(ws, a);
+    const spec = {runId: "run_" + "0".repeat(24), missionId: "msn_" + "1".repeat(24), projectId: "prj_" + "2".repeat(24), title: "t", objective: "o", acceptanceCriteria: ["a"], startSha: String(spawnGitSync(ws, ["rev-parse", "HEAD"]).stdout).trim()} as never;
+    return {control, data, ws, spec, repo: path.resolve(import.meta.dirname, "..", "..")};
+  };
+
+  it("LIFECYCLE: a pair built BEFORE the self-test settles becomes eligible once it passes, without rebuilding the pair; the runner sees it", async () => {
+    const r = rig(); let release!: () => void; const gateOpen = new Promise<void>(res => { release = res; });
+    const {prov, calls} = iso({selfTest: async () => { await gateOpen; return {ok: true}; }});
+    const gate = new ExecutionGate(prov);
+    const pair = new LocalClaudeExecutors(r.repo, r.control, {isolationGate: gate, profile: {forbiddenRoots: [r.data]}}).pair();
+    const runner = new MissionRunner({executionGate: gate, store: new WorkOsStore(r.data), dataDir: r.data, globalStopFile: path.join(r.data, "..", "STOP.json"), envPolicyFile: path.join(r.repo, "config", "environment-policy.json"), executors: pair, security: fakeSecurity(`${r.data}-sec`).options});
+    expect(pair.isolation?.state).toBe("NOT_ISOLATED"); expect(runner.isolationRefusal()).toBe("SANDBOX_REQUIRED");
+    expect((await pair.implementer.implement(r.ws, r.spec, {timeoutMs: 2000})).blockReason).toBe(NOT_ISOLATED); expect(calls).toEqual([]);
+    release(); await gate.status();
+    expect(pair.isolation).toEqual({state: "ISOLATED", providerId: "RECORDING_PROVIDER"}); // same object, live value
+    expect(runner.isolationRefusal()).toBe(null);
+    await pair.implementer.implement(r.ws, r.spec, {timeoutMs: 2000}); expect(calls.length).toBe(1);
+    await runner.stop();
+  });
+
+  it("LIFECYCLE: a failing, throwing or never-settling self-test keeps every real-model path closed", async () => {
+    const r = rig();
+    for (const st of [async () => ({ok: false}), async () => { throw new Error("x"); }, () => new Promise<{ok: boolean}>(() => {})]) {
+      const {prov, calls} = iso({selfTest: st as never}); const gate = new ExecutionGate(prov); void gate.status(); await new Promise(res => setTimeout(res, 20));
+      const pair = new LocalClaudeExecutors(r.repo, r.control, {isolationGate: gate, profile: {forbiddenRoots: [r.data]}}).pair();
+      expect(pair.isolation?.state).toBe("NOT_ISOLATED");
+      expect((await pair.implementer.implement(r.ws, r.spec, {timeoutMs: 2000})).blockReason).toBe(NOT_ISOLATED);
+      expect((await pair.reviewer.review(r.ws, r.spec, "", {timeoutMs: 2000})).invalidReason).toBe(NOT_ISOLATED);
+      expect(await pair.preDevBuilder!().produce("BusinessAnalysis" as never, "x", {} as never).then(() => null, (e: {detail?: string}) => e.detail)).toBe(NOT_ISOLATED);
+      expect(calls).toEqual([]);
+    }
+  });
+
+  it("TEST OVERRIDE cannot bypass production isolation: ignored next to a real gate, refused without the TEST_ONLY_ prefix, never referenced by production code", async () => {
+    const r = rig(), {prov} = iso({selfTest: async () => ({ok: false})}), gate = new ExecutionGate(prov); await gate.status();
+    expect(new LocalClaudeExecutors(r.repo, r.control, {isolationGate: gate, testOnlyIsolationProviderId: "TEST_ONLY_HOST_PASSTHROUGH"}).isolation.state).toBe("NOT_ISOLATED");
+    expect(new LocalClaudeExecutors(r.repo, r.control, {testOnlyIsolationProviderId: "linux-unshare-v2"}).isolation.state).toBe("NOT_ISOLATED");
+    expect(new LocalClaudeExecutors(r.repo, r.control, {testOnlyIsolationProviderId: "TEST_ONLY_HOST_PASSTHROUGH"}).isolation.state).toBe("ISOLATED");
+    // a production gate never carries a TEST_ONLY_ provider, so the runner's id match fails even if the override were set
+    const scan = (d: string): string[] => fs.readdirSync(d, {withFileTypes: true}).flatMap(e => e.name === "node_modules" ? [] : e.isDirectory() ? scan(path.join(d, e.name)) : /\.(ts|mts|mjs|js)$/.test(e.name) ? [path.join(d, e.name)] : []);
+    const users = ["apps", "core", "scripts", "automation"].flatMap(d => scan(path.join(r.repo, d))).filter(f => fs.readFileSync(f, "utf8").includes("testOnlyIsolationProviderId"));
+    expect(users.map(f => path.relative(r.repo, f).replace(/\\/g, "/"))).toEqual(["core/workos/executors.ts"]);
+  });
+
+  it("WSL BOUNDARY: Windows paths never reach a Linux guest; an unmapped WSL provider starts nothing, a mapper's Linux paths are passed through", async () => {
+    const {windowsPathIn} = await import("../../core/workos/executors.js");
+    expect(windowsPathIn({argv: ["C:\\Program Files\\nodejs\\node.exe"], cwd: "/w", env: {}})).toBe("WINDOWS_PATH_IN_ARGV");
+    expect(windowsPathIn({argv: ["/usr/bin/node"], cwd: "C:/Users/f/run", env: {}})).toBe("WINDOWS_PATH_IN_CWD");
+    expect(windowsPathIn({argv: ["/usr/bin/node"], cwd: "/w", env: {CLAUDE_CONFIG_DIR: "C:\\Users\\f\\.uasco\\implementer"}})).toBe("WINDOWS_PATH_IN_ENV_CLAUDE_CONFIG_DIR");
+    expect(windowsPathIn({argv: ["/usr/bin/node", "/opt/uasco/broker.mjs"], cwd: "/work", env: {HOME: "/home/uasco", CLAUDE_CONFIG_DIR: "/profiles/implementer"}})).toBe(null);
+    const r = rig();
+    // a guest-Linux provider without a mapper: the host paths (this host's node binary path is treated as foreign by the WSL id) are refused unless they are Linux paths; simulate a Windows host path
+    const win = iso({selfTest: async () => ({ok: true}), id: "wsl-test", linuxGuest: true, map: (argv: string[], o: {cwd: string; env: NodeJS.ProcessEnv}) => ({argv: ["C:\\node.exe", ...argv.slice(1)], cwd: o.cwd, env: o.env})});
+    const g1 = new ExecutionGate(win.prov); await g1.status();
+    const p1 = new LocalClaudeExecutors(r.repo, r.control, {isolationGate: g1, profile: {forbiddenRoots: [r.data]}}).pair();
+    const out = await p1.implementer.implement(r.ws, r.spec, {timeoutMs: 2000});
+    expect(out.exitCode).toBe(null); expect(win.calls).toEqual([]);
+    const ok = iso({selfTest: async () => ({ok: true}), id: "wsl-test", linuxGuest: true, map: (argv: string[], o: {cwd: string; env: NodeJS.ProcessEnv}) => ({argv: ["/usr/bin/node", "/opt/uasco/" + path.basename(argv[1] ?? "x")], cwd: "/work", env: {...Object.fromEntries(Object.entries(o.env).filter(([k]) => k !== "CLAUDE_CONFIG_DIR" && k !== "HOME" && k !== "PATH")), HOME: "/home/uasco", CLAUDE_CONFIG_DIR: "/profiles/implementer", PATH: "/usr/bin:/bin"}})});
+    const g2 = new ExecutionGate(ok.prov); await g2.status();
+    await new LocalClaudeExecutors(r.repo, r.control, {isolationGate: g2, profile: {forbiddenRoots: [r.data]}}).pair().implementer.implement(r.ws, r.spec, {timeoutMs: 2000});
+    expect(ok.calls).toEqual([["/usr/bin/node", "/opt/uasco/claude-builder-broker.mjs"]]);
+  });
+
   it("PRODUCTION executor: LocalClaudeExecutors is NOT_ISOLATED and refuses all three real-model paths at the source, before any process starts", async () => {
     const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "dsk-iso-")), calls: string[][] = [];
     const ex = new LocalClaudeExecutors(path.resolve(import.meta.dirname, "..", ".."), tmp, {runReviewer: async argv => { calls.push(argv); throw new Error("must not run"); }});

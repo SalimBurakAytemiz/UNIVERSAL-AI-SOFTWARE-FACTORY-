@@ -17,6 +17,10 @@ export interface SandboxProvider {
   selfTest(): Promise<{ok: boolean; detail?: string}>;
   run(argv: string[], opts: SandboxRunOptions): Promise<ProcResult>;
   spawn(command: string, args: string[], opts: SpawnOptions): ChildProcess;
+  /** //TR: DSK-T0007: konuk ortamı Linux ise (WSL2) true; ana makine yolları eşlenmeden süreç başlatılmaz. */
+  readonly linuxGuest?: boolean;
+  /** //TR: DSK-T0007: ana makine argv/cwd/env yollarını konuk ortamına eşler (WSL2: C:\... -> /mnt değil, aktarılmış çalışma alanı ve konuk içi node/launcher). Eşleyemezse null (süreç başlamaz). */
+  mapModelProcess?(argv: string[], o: {cwd: string; env: NodeJS.ProcessEnv}): {argv: string[]; cwd: string; env: NodeJS.ProcessEnv} | null;
 }
 export type SandboxDenialDetail = "NO_VERIFIED_PROVIDER" | "SELF_TEST_FAILED" | "SELF_TEST_ERROR";
 export type GateDecision =

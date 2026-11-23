@@ -51,6 +51,16 @@ export interface ReviewerAdapter { readonly identity: string; review(cleanClone:
 // //TR: DSK-T0008 sıkı sandbox (Founder kararı 2026-11-21): gerçek model süreci (implementer/reviewer/pre-dev) yalnız doğrulanmış bir sandbox sağlayıcısının İÇİNDE başlatılıyorsa ISOLATED'dır (providerId o sağlayıcıdır). Ana makinede başlatan yürütücü NOT_ISOLATED'dır ve gerçek yürütmesi kapalıdır. FAKE yürütücüde alan yoktur (model yok).
 export type ExecutorIsolation = {state: "ISOLATED"; providerId: string} | {state: "NOT_ISOLATED"; reason: "HOST_SPAWN"};
 export const NOT_ISOLATED = "NOT_ISOLATED" as const;
+const TEST_ONLY_ID = /^TEST_ONLY_[A-Z0-9_]{1,48}$/;
+const WIN_PATH = /^[A-Za-z]:[\\/]|\\/;
+const PATH_ENV = ["HOME", "CLAUDE_CONFIG_DIR", "PATH", "USERPROFILE", "TMPDIR", "UASCO_CONTROL_ROOT"];
+/** //TR: Linux konuk ortamına (WSL2) giden süreçte Windows yolu kalmışsa sabit neden; yoksa null. */
+export function windowsPathIn(p: {argv: string[]; cwd: string; env: NodeJS.ProcessEnv}): string | null {
+  if (p.argv.some(a => WIN_PATH.test(a))) return "WINDOWS_PATH_IN_ARGV";
+  if (WIN_PATH.test(p.cwd)) return "WINDOWS_PATH_IN_CWD";
+  for (const k of PATH_ENV) { const v = p.env[k]; if (typeof v === "string" && WIN_PATH.test(v)) return `WINDOWS_PATH_IN_ENV_${k}`; }
+  return null;
+}
 export interface ExecutorPair { kind: "FAKE" | "LOCAL_CLAUDE"; implementer: ImplementerAdapter; reviewer: ReviewerAdapter; preDevBuilder?: () => ClaudePreDevBuilder; isolation?: ExecutorIsolation }
 
 // Bağımsız review zorunluluğu (config/execution-backends.json pipeline.producerMayReviewOwnOutput=false): aynı kimlik reddedilir.
@@ -310,21 +320,30 @@ export class LocalClaudeExecutors {
   // //TR: DSK-T0008: bu sınıf Claude sürecini ana makinede başlatır (fork/spawn; sandbox sağlayıcısı üzerinden DEĞİL). Bu yüzden üretimde NOT_ISOLATED'dır ve üç gerçek model yolu (implementer, reviewer, pre-dev) KAYNAKTA, süreç başlatılmadan reddedilir. Doğrulanmış izole başlatma (DSK-T0007) gelene kadar gerçek yürütme kapalıdır.
   get isolation(): ExecutorIsolation {
     const t = this.opts.testOnlyIsolationProviderId;
-    if (typeof t === "string" && t.length > 0) return {state: "ISOLATED", providerId: t};
+    // //TR: Test geçersiz kılması yalnız TEST_ONLY_ önekli kimlikle ve gerçek bir izolasyon kapısı VERİLMEMİŞKEN geçerlidir; üretim kapısıyla birlikte verilirse yok sayılır (gerçek sağlayıcı yerine ana makinede başlatmaya düşülemez). Runner ayrıca kimliğin kendi kapısının doğrulanmış sağlayıcısıyla eşleşmesini ister.
+    if (typeof t === "string" && TEST_ONLY_ID.test(t) && !this.opts.isolationGate) return {state: "ISOLATED", providerId: t};
     const p = this.opts.isolationGate?.verifiedProvider() ?? null;
     return p ? {state: "ISOLATED", providerId: p.id} : {state: "NOT_ISOLATED", reason: "HOST_SPAWN"};
   }
   /** DSK-T0007: model process runner through the verified provider (null when no verified provider: the host route is reachable only under the test-only override). */
   private modelRun(): ((argv: string[], po: ProcOptions) => Promise<ProcResult>) | null {
     const p = this.opts.isolationGate?.verifiedProvider() ?? null;
-    return p ? (argv, po) => p.run(argv, {cwd: po.cwd, env: po.env, timeoutMs: po.timeoutMs, input: po.input, shouldAbort: po.shouldAbort}) : null;
+    if (!p) return null;
+    return async (argv, po) => {
+      // //TR: Sınır geçişi: sağlayıcı ana makine yollarını kendi ortamına eşleyebiliyorsa (WSL2: Windows -> Linux) önce eşler; eşlenmiş sonuçta (ya da eşleyicisi olmayan WSL sağlayıcısında) Windows yolu kalırsa süreç başlatılmaz.
+      const mapped = p.mapModelProcess ? p.mapModelProcess(argv, {cwd: po.cwd, env: po.env}) : {argv, cwd: po.cwd, env: po.env};
+      const bad = mapped === null ? "PATH_MAPPING_REFUSED" : (p.linuxGuest === true || p.id.startsWith("wsl")) ? windowsPathIn(mapped) : null;
+      if (bad || mapped === null) { const at = new Date().toISOString(); return {argv, exitCode: null, stdout: "", stderr: `NOT_EXECUTED: ${bad}`, startedAt: at, endedAt: at, timedOut: false, aborted: false, spawnError: true}; }
+      return p.run(mapped.argv, {cwd: mapped.cwd, env: mapped.env, timeoutMs: po.timeoutMs, input: po.input, shouldAbort: po.shouldAbort});
+    };
   }
   pair(): ExecutorPair {
     const self = this;
     const isolated = () => self.isolation.state === "ISOLATED";
     return {
       kind: "LOCAL_CLAUDE",
-      isolation: self.isolation,
+      // //TR: Founder incelemesi (2026-11-23): izolasyon CANLI okunur (getter). Kapının öz-testi çift kurulduktan SONRA sonuçlansa bile runner güncel durumu görür; kurulum anındaki değer donmaz.
+      get isolation(): ExecutorIsolation { return self.isolation; },
       // Broker ve config/builder-execution-policy.json değişmeden çalışır (Bash yok, commit edemez); commit'i engine atar.
       // SBX-8: implementer profili hazır değilse (oturum açılmamış / yol reddi) broker hiç başlatılmaz; kişisel profile geri düşülmez. Broker aynı kontrolü bağımsız olarak tekrarlar.
       implementer: new EditOnlyImplementer(this.implementerIdentity, path.join(this.repoRoot, "config", "environment-policy.json"),
