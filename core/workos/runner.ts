@@ -27,6 +27,8 @@ import type {WorkspaceOwner} from "./writer-guard.js";
 import {redactSecrets, scanCommitMessagesForSecrets, scanDiffForSecrets} from "./secret-scan.js";
 // INT-R4: runProcess (REL-FX ana-makine test çalıştırıcısı) ARTIK kullanılmaz; yürütme yalnız execution-gate sağlayıcısı (gate.provider.run) üzerinden gider, ana makinede asla.
 import {assertIndependentExecutors} from "./executors.js";
+import {authorizationRefusal} from "./mission-authorization.js";
+import type {MissionAuthRefusal} from "./mission-authorization.js";
 import {ExecutionGate} from "./execution-gate.js";
 import {assertImplementerRole, assertRoleExecutes, bindingForFunction, taskLimitsFor} from "../agents/first-delivery-bindings.js";
 import {advanceAgent, agentTraceEnvelope, effectiveLimits, instantiateAgent} from "../agents/role-execution.js";
@@ -261,6 +263,17 @@ export class MissionRunner {
     const iso = this.o.executors.isolation;
     return iso && iso.state === "ISOLATED" && iso.providerId === g.providerId ? null : "NOT_ISOLATED";
   }
+  /** DSK-T0008 P-B: the scoped mission authorization decision for a real-model run (null = covered; FAKE never needs one). */
+  authRefusal(run: WorkRun): MissionAuthRefusal | null {
+    if (!this.realModel) return null;
+    const st = this.o.store, m = st.engineGetMission(run.missionId), a = st.engineGetMissionAuthorization(run.missionId);
+    if (!m) return "AUTH_MISSING";
+    const startedUnder = a ? st.engineListRuns().filter(r => r.missionId === run.missionId && typeof r.firstLeasedAt === "string" && Date.parse(r.firstLeasedAt) >= Date.parse(a.grantedAt)).length : 0;
+    return authorizationRefusal(a, m.riskLevel, this.o.now(), startedUnder, run.firstLeasedAt !== undefined);
+  }
+  /** DSK-T0008 P-B: the last authorization refusal that kept a run unleased in a claim pass (null when none). */
+  get lastAuthorization(): MissionAuthRefusal | null { return this.authHit; }
+  private authHit: MissionAuthRefusal | null = null;
   /** DSK-T0008: the last isolation refusal that kept a run unleased in a claim pass (null when none). */
   get lastIsolation(): IsolationRefusal | null { return this.isolationHit; }
   private isolationHit: IsolationRefusal | null = null;
@@ -558,7 +571,7 @@ export class MissionRunner {
       let startedToday = this.realModel ? runs.filter(r => typeof r.firstLeasedAt === "string" && sameLocalDay(r.firstLeasedAt, now)).length : 0;
       this.limitHit = null;
       // //TR: DSK-T0008 sıkı sandbox: gerçek model yürütücüsü izole değilse hiçbir YENİ lease ve devralma yapılmaz; run QUEUED (ya da lease'i dolmuş haliyle) kalır.
-      const iso = this.isolationRefusal(); this.isolationHit = null;
+      const iso = this.isolationRefusal(); this.isolationHit = null; this.authHit = null;
       for (const run of runs) {
         if (this.owned.get(run.runId)?.drive) continue; // sürüşü süren run'a dokunulmaz: kendi heartbeat'i yönetir, kendi kendini devralma yok
         try {
@@ -566,6 +579,8 @@ export class MissionRunner {
             if (stop) { this.cancelUnleased(run, stop); rep.cancelled.push(run.runId); continue; }
             // //TR: Sahiplik sınırı: sınır doluysa run'a lease ALINMAZ (sırasını beklerken lease'i yenilenmeden dolup sahte fence/recovery yaşamasın); QUEUED kalır, sonraki geçiş alır.
             if (iso) { this.isolationHit = iso; rep.deferred.push(run.runId); continue; }
+            // //TR: DSK-T0008 P-B: canlı, mission'ı kapsayan ve hakkı tükenmemiş görev yetkisi yoksa lease alınmaz (mission AUTHORIZED olsa bile); run QUEUED kalır.
+            { const ar = this.authRefusal(run); if (ar) { this.authHit = ar; rep.deferred.push(run.runId); continue; } }
             if (full()) { if (this.realModel && this.owned.size >= this.o.maxConcurrentRuns) this.limitHit ??= "CONCURRENCY_LIMIT"; rep.deferred.push(run.runId); continue; }
             // //TR: DSK-T0008: günlük sınır yalnız HİÇ başlamamış koşuya uygulanır (yeniden kuyruğa alınan koşu firstLeasedAt taşır, sayılmış ve engellenmez); koşu QUEUED kalır, lease alınmaz.
             if (this.realModel && run.firstLeasedAt === undefined && startedToday >= REAL_MODEL_LIMITS.runsPerDay) { this.limitHit = "DAILY_LIMIT"; rep.deferred.push(run.runId); continue; }
@@ -845,7 +860,11 @@ export class MissionRunner {
 
   private async performStep(run: WorkRun, leaseId: string, abort: () => boolean): Promise<Outcome> {
     // //TR: DSK-T0008 sıkı sandbox: gerçek model adımından (IMPLEMENT, REVIEW) HEMEN ÖNCE izolasyon yeniden doğrulanır (devralma/kurtarma ve sandbox kaybı dahil); geçmezse model süreci başlatılmadan run BLOCKED olur.
-    if (this.realModel && (run.step === "IMPLEMENT" || run.step === "REVIEW")) { const iso = this.isolationRefusal(); if (iso) return {kind: "BLOCK", reason: iso}; }
+    if (this.realModel && (run.step === "IMPLEMENT" || run.step === "REVIEW")) {
+      const iso = this.isolationRefusal(); if (iso) return {kind: "BLOCK", reason: iso};
+      // //TR: DSK-T0008 P-B: yetki koşu sürerken geri alındıysa, süresi dolduysa ya da kapsam dışına çıktıysa model adımı başlamaz.
+      const ar = this.authRefusal(run); if (ar) return {kind: "BLOCK", reason: ar};
+    }
     switch (run.step) {
       case "WORKSPACE": return this.stepWorkspace(run, leaseId);
       case "IMPLEMENT": return this.stepImplement(run, leaseId, abort);

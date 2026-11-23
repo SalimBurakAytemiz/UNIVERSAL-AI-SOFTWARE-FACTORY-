@@ -28,6 +28,8 @@ import type {PreDevReadModel} from "./predev/read-model.js";
 import {ACTIVE_WORKER_STATUSES, LEASED_RUN_STATUSES, UNLEASED_RUN_STATUSES, assertRunTransition, isOpenRun, isRunStatus, isRunStep} from "./run-state.js";
 import {completionEvidence, deliveryPrepareCheck, sourceDeliveryAcceptanceCheck, validDeliveryArtifactRecord} from "./outcomes.js";
 import {RISK_REFUSAL, riskAdmitted} from "./risk-admission.js";
+import {validRecord, validateGrant} from "./mission-authorization.js";
+import type {MissionAuthorization, MissionAuthorizationInput} from "./mission-authorization.js";
 
 const sha256 = sha256Untyped as (value: unknown) => string;
 const writeJsonAtomic = writeJsonAtomicUntyped as (file: string, value: unknown) => void;
@@ -41,8 +43,9 @@ interface State {
   projects: Record<string, Project>; missions: Record<string, WorkMission>; tasks: Record<string, WorkTask>; runs: Record<string, WorkRun>;
   exports: Record<string, ProjectExport>;
   idempotency: Record<string, IdemRecord>; lastSeq: number; lastHash: string; company: CompanyState; academy: AcademyState; predev: PreDevState;
+  authorizations: Record<string, MissionAuthorization>; // DSK-T0008 P-B: the CURRENT authorization per mission (a new grant supersedes)
 }
-const emptyState = (): State => ({projects: {}, missions: {}, tasks: {}, runs: {}, exports: {}, idempotency: {}, lastSeq: 0, lastHash: GENESIS, company: emptyCompanyState(), academy: emptyAcademyState(), predev: emptyPreDevState()});
+const emptyState = (): State => ({projects: {}, missions: {}, tasks: {}, runs: {}, exports: {}, idempotency: {}, lastSeq: 0, lastHash: GENESIS, company: emptyCompanyState(), academy: emptyAcademyState(), predev: emptyPreDevState(), authorizations: {}});
 const entryHash = (body: Omit<JournalEntry, "hash">): string => sha256(body);
 // //TR: F-B1-001: anahtar JSON dizisidir; ayırıcı karakter içeren tenant/anahtar değerleri çarpışamaz.
 const idemKey = (tenantId: string, kind: string, key: string) => JSON.stringify([tenantId, kind, key]);
@@ -506,6 +509,18 @@ export class WorkOsStore {
         if (!isObj(repo) || !isStr(repo.path) || repo.managed !== true) throw malformed(`REPOSITORY_SHAPE:${e.seq}`);
         if (!proj || proj.tenantId !== p.tenantId || proj.repository?.managed) throw tampered(`PROJECT_REPOSITORY_INCONSISTENT:${e.seq}`);
         proj.repository = {path: repo.path, managed: true}; break;
+      }
+      case "MISSION_AUTHORIZATION_GRANTED": {
+        const a = p.authorization as MissionAuthorization;
+        if (!validRecord(a)) throw malformed(`MISSION_AUTH_SHAPE:${e.seq}`);
+        const m = st.missions[a.missionId];
+        if (!m || m.tenantId !== a.tenantId || a.grantedAt !== e.at || Object.values(st.authorizations).some(x => x.authId === a.authId)) throw tampered(`MISSION_AUTH_INCONSISTENT:${e.seq}`);
+        st.authorizations[a.missionId] = {...a}; break;
+      }
+      case "MISSION_AUTHORIZATION_REVOKED": {
+        const cur = isStr(p.missionId) ? st.authorizations[p.missionId] : undefined;
+        if (!cur || cur.authId !== p.authId || cur.revokedAt !== null || !isStr(p.revokedBy)) throw tampered(`MISSION_AUTH_REVOKE_INCONSISTENT:${e.seq}`);
+        cur.revokedAt = e.at; cur.revokedBy = p.revokedBy; break;
       }
       case "PROJECT_EXPORT_RECORDED": {
         const ex = p.entity as ProjectExport;
@@ -976,6 +991,31 @@ export class WorkOsStore {
   countActiveWorkerRuns(scope: Scope): number { this.readGuard(); return Object.values(this.state.runs).filter(r => r.tenantId === scope.tenantId && ACTIVE_WORKER_STATUSES.includes(r.status)).length; }
   // Engine-only (sistem aktörü) okumalar: tenant'lar arası run kuyruğunu görür; API yolları bunları kullanmaz.
   engineListRuns(): WorkRun[] { this.readGuard(); return Object.values(this.state.runs).map(clone); }
+  // //TR: DSK-T0008 P-B: Founder görev yetkisini verir/geri alır. Veriliş zamanı journal girdisinin zamanıdır (replay ile aynı); sınırlar o andaki politikaya göre denetlenir.
+  grantMissionAuthorization(scope: Scope, missionId: string, input: MissionAuthorizationInput, actor: string): MissionAuthorization {
+    return this.write(() => {
+      const m = this.state.missions[missionId];
+      if (!m || m.tenantId !== scope.tenantId) throw new WorkOsError("WORKOS_NOT_FOUND", "mission");
+      if (m.status === "DRAFT" || m.status === "COMPLETE") throw new WorkOsError("WORKOS_CONFLICT", "MISSION_NOT_AUTHORIZABLE"); // a draft is not approved yet; a complete mission runs nothing
+      const at = new Date().toISOString(), v = validateGrant(input, m.riskLevel, Date.parse(at));
+      if (!v.ok) throw new WorkOsError("WORKOS_INVALID_INPUT", v.error);
+      const a: MissionAuthorization = {authId: newId("mau"), missionId, tenantId: m.tenantId, maxRisk: v.maxRisk, maxRuns: v.maxRuns, grantedAt: at, expiresAt: v.expiresAt, grantedBy: actor, revokedAt: null, revokedBy: null};
+      this.append("MISSION_AUTHORIZATION_GRANTED", actor, {authorization: a}, at);
+      return clone(this.state.authorizations[missionId]);
+    });
+  }
+  revokeMissionAuthorization(scope: Scope, missionId: string, actor: string): MissionAuthorization {
+    return this.write(() => {
+      const cur = this.state.authorizations[missionId];
+      if (!cur || cur.tenantId !== scope.tenantId) throw new WorkOsError("WORKOS_NOT_FOUND", "authorization");
+      if (cur.revokedAt !== null) throw new WorkOsError("WORKOS_CONFLICT", "AUTHORIZATION_ALREADY_REVOKED");
+      this.append("MISSION_AUTHORIZATION_REVOKED", actor, {missionId, authId: cur.authId, revokedBy: actor});
+      return clone(this.state.authorizations[missionId]);
+    });
+  }
+  getMissionAuthorization(scope: Scope, missionId: string): MissionAuthorization | undefined { this.readGuard(); const a = this.state.authorizations[missionId]; return a && a.tenantId === scope.tenantId ? clone(a) : undefined; }
+  engineGetMissionAuthorization(missionId: string): MissionAuthorization | undefined { this.readGuard(); const a = this.state.authorizations[missionId]; return a ? clone(a) : undefined; }
+  engineGetMission(missionId: string): WorkMission | undefined { this.readGuard(); const m = this.state.missions[missionId]; return m ? clone(m) : undefined; }
   engineGetRun(runId: string): WorkRun | undefined { this.readGuard(); const r = this.state.runs[runId]; return r ? clone(r) : undefined; }
 
   // ---- B11A Company OS: aynı journal, aynı lock, aynı hash zinciri; domain kuralları core/company altındadır ----
