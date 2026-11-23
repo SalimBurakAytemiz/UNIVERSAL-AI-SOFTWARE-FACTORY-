@@ -310,6 +310,19 @@ export const CONFIRMATION_CLOCK_SKEW_MS = 5 * 60_000;
  */
 export class InMemoryConfirmationReplayStore implements ConfirmationReplayStore {
   private readonly used = new Map<string, number>();
+  /** Saati bir doğrulayıcının `now` işlevinden türetilmişse o işlev (kimlik denetimi için); ham sayısal saatle kurulan depoda undefined. */
+  private boundNow?: () => Date;
+  /**
+   * #357 L-1: doğrulayıcının güvenilen saatine bağlı depo (önerilen yol). Saat `now().getTime()`dir; `now` Date dışı bir değer döner ya da fırlatırsa
+   * sonuç NaN'dir ve hiç budanmaz (fail-safe). verifyConfirmation, saatli bir depoyu yalnız aynı `now` işleviyle bağlanmışsa kabul eder.
+   */
+  static forVerifier(now: () => Date, capacity = 10_000): InMemoryConfirmationReplayStore {
+    if (typeof now !== "function") throw new Error("REPLAY_STORE_CLOCK_INVALID");
+    const st = new InMemoryConfirmationReplayStore(capacity, () => { const d = now(); return d instanceof Date ? d.getTime() : Number.NaN; });
+    st.boundNow = now; return st;
+  }
+  /** @internal verifyConfirmation denetimi için: saatli mi, saat hangi `now` işlevine bağlı. */
+  clockBinding(): {clocked: boolean; boundNow?: () => Date} { return {clocked: this.clock !== undefined, boundNow: this.boundNow}; }
   constructor(private readonly capacity = 10_000, private readonly clock?: () => number) {
     if (!Number.isSafeInteger(capacity) || capacity < 1) throw new Error("REPLAY_STORE_CAPACITY_INVALID");
     if (clock !== undefined && typeof clock !== "function") throw new Error("REPLAY_STORE_CLOCK_INVALID");
@@ -360,9 +373,20 @@ function verifyConfirmation(c: unknown, digest: string, v: ConfirmationVerifier)
   if (x.tenantId !== v.scope.tenantId || x.projectId !== v.scope.projectId || x.environment !== v.scope.environment) return {ok: false, why: "SCOPE_MISMATCH"};
   // #350 L2: yalnız katı ISO-8601 UTC (Date.parse'in gevşek biçimleri kabul edilmez)
   if (!ISO_UTC_RE.test(String(x.issuedAt)) || !ISO_UTC_RE.test(String(x.expiresAt))) return {ok: false, why: "LIFETIME_INVALID"};
-  const iss = Date.parse(x.issuedAt), exp = Date.parse(x.expiresAt), now = v.now().getTime();
+  const iss = Date.parse(x.issuedAt), exp = Date.parse(x.expiresAt);
   if (!Number.isFinite(iss) || !Number.isFinite(exp) || exp <= iss || exp - iss > FOUNDER_CONFIRMATION_MAX_TTL_MS) return {ok: false, why: "LIFETIME_INVALID"};
+  // #357 L-3: NaN/sonsuz ya da fırlatan `now` pencere denetiminden geçemez; tekrar deposuna dokunulmadan reddedilir.
+  let now: number;
+  try { const d = v.now(); now = d instanceof Date ? d.getTime() : Number.NaN; } catch { now = Number.NaN; }
+  if (!Number.isFinite(now)) return {ok: false, why: "CLOCK_INVALID"};
   if (now < iss || now >= exp) return {ok: false, why: "EXPIRED_OR_NOT_YET_VALID"};
+  // #357 L-1: saatli süreç içi depo yalnız bu doğrulayıcının `now` işlevine bağlıysa kullanılır (ayrı, sapmış bir saat canlı onayı budayamaz).
+  // Ham sayısal saatle kurulan depo bir kaynağa bağlanamadığı için reddedilir; saatsiz depo hiç budamadığı için kabul edilir.
+  // Başka ConfirmationReplayStore uygulamaları (kalıcı depolar) için bu bağ denetlenemez; aynı kural belgesel olarak geçerlidir.
+  if (v.replay instanceof InMemoryConfirmationReplayStore) {
+    const b = v.replay.clockBinding();
+    if (b.clocked && b.boundNow !== v.now) return {ok: false, why: "REPLAY_STORE_CLOCK_MISMATCH"};
+  }
   let fresh: unknown;
   try { fresh = v.replay.consume(x.confirmationId, exp, now); } catch { return {ok: false, why: "REPLAY_STORE_UNAVAILABLE"}; }
   if (fresh === false) return {ok: false, why: "REPLAYED"};
