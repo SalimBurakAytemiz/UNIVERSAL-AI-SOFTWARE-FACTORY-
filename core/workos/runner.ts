@@ -57,6 +57,10 @@ export interface RunnerOptions {
   // PAR-03: olay döngüsü gecikmesinin (p99, ms; çözünürlük payı düşülmüş) programatik kaynağı; tanımsız = perf_hooks monitorEventLoopDelay. Yalnız test enjeksiyonudur.
   loopDelayP99Ms?: () => number;
 }
+// //TR: DSK-T0008 (Founder Q5): gerçek model (LOCAL_CLAUDE) koşuları için harcama sınırları; ileride Founder kararıyla yükseltilebilir. FAKE yürütücü etkilenmez. Eşzamanlılık yapılandırılan değerle en çok 2'ye kırpılır; günde (motorun yerel takvim günü) en çok 20 YENİ koşuya ilk lease verilir (zaten başlamış koşunun devri/kurtarması sayılmaz ve engellenmez). Sayı journal'dan türetilen firstLeasedAt ile hesaplanır.
+export const REAL_MODEL_LIMITS = Object.freeze({runsPerDay: 20, concurrentRuns: 2});
+export type RealModelLimit = "DAILY_LIMIT" | "CONCURRENCY_LIMIT";
+const sameLocalDay = (iso: string, nowMs: number): boolean => { const a = new Date(iso), b = new Date(nowMs); return Number.isFinite(a.getTime()) && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); };
 export interface TickReport { skipped?: "BUSY" | "LOCKED"; recovered: string[]; claimed: string[]; cancelled: string[]; fenced: string[]; advanced: string[]; deferred: string[] }
 
 type Outcome =
@@ -246,6 +250,11 @@ export class MissionRunner {
 
   /** Effective concurrent-run limit (1..16), for the start audit: proves what the engine actually runs with. */
   get maxConcurrentRuns(): number { return this.o.maxConcurrentRuns; }
+  /** DSK-T0008: true when the executor pair runs a real model (LOCAL_CLAUDE): the real-model limits apply. */
+  get realModel(): boolean { return this.o.executors.kind === "LOCAL_CLAUDE"; }
+  /** DSK-T0008: the last real-model limit that deferred a new run in a claim pass (null when none). */
+  get lastLimit(): RealModelLimit | null { return this.limitHit; }
+  private limitHit: RealModelLimit | null = null;
 
   constructor(opts: RunnerOptions) {
     assertIndependentExecutors(opts.executors);
@@ -256,6 +265,8 @@ export class MissionRunner {
     } as unknown as Required<Omit<RunnerOptions, "now">> & {now: () => number};
     // //TR: Eş zamanlı sahiplik sınırı yalnız 1..16 tam sayı olabilir (geçersiz değer sessizce 1'e düşmez: kurulum hatası).
     if (!Number.isInteger(this.o.maxConcurrentRuns) || this.o.maxConcurrentRuns < 1 || this.o.maxConcurrentRuns > 16) throw new Error("RUNNER_MAX_CONCURRENT_RUNS_INVALID");
+    // //TR: DSK-T0008: gerçek model yürütücüsünde eşzamanlılık Founder sınırına kırpılır (yapılandırma daha yüksekse bile); başlangıç denetimi kırpılmış değeri kanıtlar.
+    if (this.o.executors.kind === "LOCAL_CLAUDE") this.o.maxConcurrentRuns = Math.min(this.o.maxConcurrentRuns, REAL_MODEL_LIMITS.concurrentRuns);
     // SBX-GATE: yalnız gerçek bir ExecutionGate örneği kabul edilir; başka her değer (eksik, düz nesne) sağlayıcısız kapıdır (fail-closed).
     if (!(this.o.executionGate instanceof ExecutionGate)) this.o.executionGate = new ExecutionGate(null);
     // //TR: PAR-03 (RCA relfx-c3:200, Windows shard 1 #259/#261): her journal YAZISI kendisi olay döngüsünü bloklayan senkron, dayanıklı bir aralıktır (kilit dosyası + journal'ın tamamının yeniden okunup doğrulanması + iki snapshot yazımı + fsync'ler). Adım sınırında bir run bunları ARA VERMEDEN art arda yapar (kanıt -> CHECKPOINTING -> checkpoint -> yenileme -> sonraki adım RUNNING); yavaş diskte (Windows CI) bu zincir TTL - heartbeat aralığını aşar ve öbür, sağlıklı run'ın setInterval heartbeat'i hiç çalışamadan lease'i dolar: gerçek bir fence (sahte "kayıp"). span() ile aynı kural: runner'ın her run yazısından ÖNCE, heartbeat'i gecikmiş (son yenilemesi bir heartbeat periyodundan, TTL/3, eski) sahip olunan BÜTÜN lease'ler yenilenir; döngü akıyorsa heartbeat zaten yeniler ve kanca ek yazı üretmez. Fence kuralı değişmez: süresi dolmuş lease yine yenilenemez ve yazının kendisi fencedRun ile reddedilir.
@@ -527,15 +538,22 @@ export class MissionRunner {
       const store = this.o.store, stop = this.stopActive();
       let stalled: boolean | null = null;
       const full = () => this.owned.size >= this.o.maxConcurrentRuns || (this.owned.size >= 1 && (stalled ??= this.loopStalled()));
-      for (const run of store.engineListRuns()) {
+      const runs = store.engineListRuns(), now = this.o.now();
+      // //TR: DSK-T0008: bugün ilk lease'i alınmış koşu sayısı (journal'dan); bu geçişte verilen her yeni lease sayıya eklenir.
+      let startedToday = this.realModel ? runs.filter(r => typeof r.firstLeasedAt === "string" && sameLocalDay(r.firstLeasedAt, now)).length : 0;
+      this.limitHit = null;
+      for (const run of runs) {
         if (this.owned.get(run.runId)?.drive) continue; // sürüşü süren run'a dokunulmaz: kendi heartbeat'i yönetir, kendi kendini devralma yok
         try {
           if (run.status === "CREATED" || run.status === "QUEUED") {
             if (stop) { this.cancelUnleased(run, stop); rep.cancelled.push(run.runId); continue; }
             // //TR: Sahiplik sınırı: sınır doluysa run'a lease ALINMAZ (sırasını beklerken lease'i yenilenmeden dolup sahte fence/recovery yaşamasın); QUEUED kalır, sonraki geçiş alır.
-            if (full()) { rep.deferred.push(run.runId); continue; }
+            if (full()) { if (this.realModel && this.owned.size >= this.o.maxConcurrentRuns) this.limitHit ??= "CONCURRENCY_LIMIT"; rep.deferred.push(run.runId); continue; }
+            // //TR: DSK-T0008: günlük sınır yalnız HİÇ başlamamış koşuya uygulanır (yeniden kuyruğa alınan koşu firstLeasedAt taşır, sayılmış ve engellenmez); koşu QUEUED kalır, lease alınmaz.
+            if (this.realModel && run.firstLeasedAt === undefined && startedToday >= REAL_MODEL_LIMITS.runsPerDay) { this.limitHit = "DAILY_LIMIT"; rep.deferred.push(run.runId); continue; }
             const queued = run.status === "CREATED" ? store.transitionRun(run.runId, null, "QUEUED", "queued for runner", this.o.actor) : run;
             const leased = store.acquireRunLease(queued.runId, this.o.leaseTtlMs, this.o.actor);
+            if (run.firstLeasedAt === undefined) startedToday += 1;
             this.own(run.runId, leased.leaseId!); rep.claimed.push(run.runId); fresh.add(run.runId);
           } else if (LEASED_RUN_STATUSES.includes(run.status) && run.leaseId && Date.parse(run.leaseExpiresAt ?? "") <= this.o.now()) {
             if (full()) { rep.deferred.push(run.runId); continue; }
