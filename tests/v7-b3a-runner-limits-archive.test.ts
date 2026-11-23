@@ -5,6 +5,7 @@ import {testExecutionGate} from "./support/test-sandbox.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import {pathToFileURL} from "node:url";
 import crypto from "node:crypto";
 // @ts-expect-error TS7016: atomic-json.mjs tip bildirimi yok (tamper testi için geçerli hash zinciri üretir)
 import {sha256 as sha256Untyped} from "../automation/lib/atomic-json.mjs";
@@ -562,6 +563,18 @@ describe("DSK-T0008 real-model run limits (20/day, 2 concurrent)", () => {
     globalStopFile: path.join(tmp, "GLOBAL_STOP.json"), envPolicyFile: ENV_POLICY, executors: pairOf(kind) as never, maxStepsPerTick: 0, security: fakeSecurity(`${c.dataDir}-sec`).options, ...extra});
   // 20 runs started (first lease) today, then finished: they count for the day but hold no concurrency slot.
   const startedAndFinished = (c: ReturnType<typeof mkStore>, n: number) => { for (let i = 0; i < n; i++) { const id = newRun(c); const l = c.store.acquireRunLease(id, 60_000, "T"); c.store.transitionRun(id, l.leaseId, "FAILED", "t", "T"); } };
+
+  it("firstLeasedAt from the real store reaches the desktop usage count through the GET /v1/work-runs payload and the renderer mapper (#432 B1 contract)", async () => {
+    const c = mkStore(); startedAndFinished(c, 2); newRun(c); // 2 runs first leased today, 1 never leased
+    // GET /v1/work-runs returns {runs: store.listRuns(scope)} as JSON (apps/control-api/src/server.ts); the renderer maps that payload.
+    const payload = JSON.parse(JSON.stringify({runs: c.store.listRuns({tenantId: "tA"} as never)}));
+    const rend = path.join(REPO, "apps", "desktop", "renderer");
+    const q = await import(pathToFileURL(path.join(rend, "queue-core.js")).href), u = await import(pathToFileURL(path.join(rend, "usage-core.js")).href);
+    const mapped = q.mapQueueWorkRuns(payload);
+    expect(mapped.state).toBe("VERIFIED");
+    expect(mapped.runs.items.filter((r: {firstLeasedAt?: string}) => typeof r.firstLeasedAt === "string").length).toBe(2);
+    expect(u.buildUsage(mapped, {state: "VERIFIED", active: "LOCAL_CLAUDE"}, new Date())).toMatchObject({state: "VERIFIED", runsToday: 2});
+  });
 
   it("LOCAL_CLAUDE concurrency is capped at 2 even when configured higher (CONCURRENCY_LIMIT); FAKE keeps its configured value", async () => {
     const c = mkStore(), ids = [newRun(c), newRun(c), newRun(c)];
