@@ -1,4 +1,5 @@
 // //TR: Bu görünüm Company OS'tir (SC-15): CRM (hesap, kişi, fırsat), Finans (fatura, ödeme) ve Hukuk (sözleşme) yalnız GET /v1/company/* gerçek verisinden okunur; salt-okunurdur (kayıt oluşturma/düzenleme kapsam dışı). Kaynak başına dürüst durum (EMPTY/UNAVAILABLE/NOT_CONNECTED/OFFLINE/FAILED/STALE) ayrık rozetle gösterilir, veri uydurulmaz; taslak fatura ödenmiş, fırsat/teklif imzalı görünmez; para birimleri ayrı toplanır. API verisi HTML olarak yorumlanmaz.
+import {safeErrorCode} from "../error-code.js";
 import {h,panel,statePill,kpiTile} from "../components.js";
 import {MISSING} from "../model.js";
 import {formatDateTime} from "../work-core.js";
@@ -35,7 +36,7 @@ function stateBlock(ctx,key,res){
   return h(doc,"div",{class:`company-state state-${String(state).toLowerCase()}`,role:"status",dataset:{companyState:state,source:key}},
     h(doc,"p",{class:"company-state-head"},statePill(ctx,companyPillKind(res)),h(doc,"strong",{text:ctx.t(`company.state.${state}`)})),
     h(doc,"p",{class:"note",text:ctx.t(`company.hint.${state}`,{source:srcLabel(key)})}),
-    res.message&&state!=="NOT_CONNECTED"?h(doc,"p",{class:"note mono",text:res.message}):null);
+    safeErrorCode(res.message)&&state!=="NOT_CONNECTED"?h(doc,"p",{class:"note mono",dataset:{errorCode:safeErrorCode(res.message)},text:safeErrorCode(res.message)}):null);
 }
 function staleBanner(ctx,key,res){
   const doc=ctx.doc;

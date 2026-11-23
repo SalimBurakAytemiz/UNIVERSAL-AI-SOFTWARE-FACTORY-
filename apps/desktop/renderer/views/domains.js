@@ -1,4 +1,5 @@
 // //TR: Bu görünüm Alan Paketleri'dir (FA-V2-PRODUCT, UI-DOMAIN-PACKS): YALNIZ salt-okunur ve zaten izinli GET /v1/domains kayıt defterinden okunur (automation/lib/control-boundary.mjs desktopGetPathAllowed). Kayıt değerleri (status, activation, knowledgeState, freshnessPolicy) sunucudan AYNEN gösterilir; REGISTERED/ON_DEMAND/SEED_DOMAIN_PROFILE "etkin, güncel, doğrulanmış, uyumlu ya da sertifikalı" anlamına gelmez ve hiçbir değer yükseltilmez. Etkinleştirme denetimi, düğme veya POST yoktur. Okunamayan kaynağın sayısı 0 değil "—" olur; etiketler ctx.t ile, sunucu metinleri yalnız textContent ile yazılır.
+import {safeErrorCode} from "../error-code.js";
 import {h,panel,statePill,badge} from "../components.js";
 import {MISSING,formatCount} from "../model.js";
 import {DOMAINS_PATH,buildDomains} from "../domains-core.js";
@@ -19,7 +20,7 @@ function stateBlock(ctx,a,message){
   return h(doc,"div",{class:`integ-state state-${st.toLowerCase()}`,role:"status",dataset:{domainState:st}},
     h(doc,"p",{class:"integ-state-head"},statePill(ctx,failKind(st)),h(doc,"strong",{text:ctx.t(`domains.state.${st}`)})),
     h(doc,"p",{class:"note",text:ctx.t(`domains.hint.${st}`,{source:`GET ${DOMAINS_PATH}`})}),
-    message?h(doc,"p",{class:"note mono",text:message}):null);
+    safeErrorCode(message)?h(doc,"p",{class:"note mono",dataset:{errorCode:safeErrorCode(message)},text:safeErrorCode(message)}):null);
 }
 function countPanel(ctx,a){
   const doc=ctx.doc,n=a.count;

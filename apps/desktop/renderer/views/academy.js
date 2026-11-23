@@ -1,4 +1,5 @@
 // //TR: Bu görünüm Skill Academy'dir (Öğrenme & Yetkinlik; FA-V2-PRODUCT): YALNIZ salt-okunur GET /v1/academy gerçek okuma-modelinden okunur ve HİÇBİR veri uydurulmaz. KRİTİK DÜRÜSTLÜK: bu bir öğrenme/yetkinlik KATALOĞUDUR; hiçbir rolün sertifikalı ya da hiçbir ajanın eğitilmiş olduğunun KANITI DEĞİLDİR. Terfi etmiş öğrenme yalnız READONLY_KNOWLEDGE / SKILL_CANDIDATE_NOT_EXECUTABLE'dır (çalıştırılabilir değil), authorityEffect NONE'dır; sertifikalı sayısı daima 0 gösterilir ve proficiency NOT_EVALUATED olarak dürüstçe belirtilir. Backend verisi yoksa dürüst EMPTY/UNAVAILABLE gösterilir. API verisi HTML olarak yorumlanmaz; yalnız h()/textContent kullanılır.
+import {safeErrorCode} from "../error-code.js";
 import {h,panel,statePill,kpiTile,badge,stateNote,emptyNote} from "../components.js";
 import {MISSING} from "../model.js";
 import {ACADEMY_PATH,PROMOTED_STATUSES,LEARNING_STATUSES} from "../academy-core.js";
@@ -39,7 +40,7 @@ function stateBlock(ctx,res){
   return h(doc,"div",{class:`academy-state state-${String(state).toLowerCase()}`,role:"status",dataset:{academyState:state}},
     h(doc,"p",{class:"academy-state-head"},statePill(ctx,failKind(state)),h(doc,"strong",{text:ctx.t(`academy.state.${state}`)})),
     h(doc,"p",{class:"note",text:ctx.t(`academy.hint.${state}`,{source:`GET ${ACADEMY_PATH}`})}),
-    res.message?h(doc,"p",{class:"note mono",text:res.message}):null);
+    safeErrorCode(res.message)?h(doc,"p",{class:"note mono",dataset:{errorCode:safeErrorCode(res.message)},text:safeErrorCode(res.message)}):null);
 }
 
 function tableWrap(ctx,id,captionKey,cols,rows){
