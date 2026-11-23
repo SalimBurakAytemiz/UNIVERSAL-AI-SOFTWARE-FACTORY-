@@ -1,8 +1,8 @@
-// //TR: Bu modül Ayarlar > "Kullanım ve sınırlar" panelinin saf (DOM'suz) çekirdeğidir (DSK-T0008): YALNIZ mevcut salt-okunur GET'lerden (GET /v1/work-runs ve GET /v1/system/executors) ölçülen değerleri türetir — bugün (yerel gün) oluşturulan koşu sayısı ve şu an etkin (lease altındaki) koşu sayısı. Koşu kaydı yürütücüyü bildirmediği için "gerçek model koşusu" yalnız sunucunun etkin yürütücüsü LOCAL_CLAUDE iken öyle sayılır; aksi halde bilinmiyor. Token ve maliyet için kaynak yoktur: her zaman UNKNOWN (null) kalır, hiçbir sayı uydurulmaz. Founder politika sınırları (20 koşu/gün, 2 eşzamanlı gerçek-model koşusu) yalnız GÖSTERİLİR; sunucu bunları henüz zorlamadığı için durum her zaman ENFORCEMENT_PENDING'dir ve arayüz "zorlanıyor" demez.
+// //TR: Bu modül Ayarlar > "Kullanım ve sınırlar" panelinin saf (DOM'suz) çekirdeğidir (DSK-T0008): YALNIZ mevcut salt-okunur GET'lerden (GET /v1/work-runs ve GET /v1/system/executors) ölçülen değerleri türetir — bugün (yerel gün) ilk lease'i alınmış, yani başlamış koşu sayısı (firstLeasedAt; çalıştırıcının günlük sınırı da aynı alanla sayar) ve şu an etkin (lease altındaki) koşu sayısı. Koşu kaydı yürütücüyü bildirmediği için "gerçek model koşusu" yalnız sunucunun etkin yürütücüsü LOCAL_CLAUDE iken öyle sayılır; aksi halde bilinmiyor. Token ve maliyet için kaynak yoktur: her zaman UNKNOWN (null) kalır, hiçbir sayı uydurulmaz. Founder politika sınırları (20 yeni koşu/gün, 2 eşzamanlı gerçek-model koşusu) çalıştırıcı (core/workos/runner.ts REAL_MODEL_LIMITS, DSK-T0008 #433) tarafından LOCAL_CLAUDE yürütücüsünde zorlanır; bu modül yalnız gösterir, hiçbir şeyi engellemez.
 import {RUN_STATUSES} from "./executive-core.js";
 
-/** Founder kararı (DSK-T0008 Q5): ileride yükseltilebilir politika değerleri. Zorlama sunucu tarafında ayrı Founder PR'ındadır; bu modül hiçbir şeyi engellemez. */
-export const USAGE_POLICY=Object.freeze({runsPerDay:20,concurrentRealRuns:2,enforcement:"ENFORCEMENT_PENDING"});
+/** Founder kararı (DSK-T0008 Q5): ileride yükseltilebilir politika değerleri; runner.ts REAL_MODEL_LIMITS ile aynı. Zorlama çalıştırıcıdadır (#433, bu PR'dan önce birleşir); bu modül hiçbir şeyi engellemez. */
+export const USAGE_POLICY=Object.freeze({runsPerDay:20,concurrentRealRuns:2,enforcement:"RUNNER_ENFORCED"});
 /** Lease altında model süreci çalışıyor olabilecek durumlar (eşzamanlılık sayımı). */
 export const ACTIVE_RUN_STATUSES=Object.freeze(["LEASED","RUNNING","CHECKPOINTING","VERIFYING","RECOVERING"]);
 export const USAGE_STATES=Object.freeze(["VERIFIED","ERROR"]);
@@ -17,9 +17,9 @@ const sameLocalDay=(iso,now)=>{const d=new Date(iso);return !Number.isNaN(d.getT
 export function buildUsage(runsRes,exec,now=new Date()){
   if(!runsRes||runsRes.state!=="VERIFIED"||!runsRes.runs||!Array.isArray(runsRes.runs.items))return {state:"ERROR"};
   const items=runsRes.runs.items;
-  if(!items.every(r=>r&&RUN_STATUSES.includes(r.status)&&typeof r.createdAt==="string"))return {state:"ERROR"};
+  if(!items.every(r=>r&&RUN_STATUSES.includes(r.status)&&typeof r.createdAt==="string"&&(r.firstLeasedAt===undefined||typeof r.firstLeasedAt==="string")))return {state:"ERROR"};
   const active=exec&&exec.state==="VERIFIED"&&typeof exec.active==="string"?exec.active:null;
-  return {state:"VERIFIED",runsToday:items.filter(r=>sameLocalDay(r.createdAt,now)).length,activeNow:items.filter(r=>ACTIVE_RUN_STATUSES.includes(r.status)).length,
+  return {state:"VERIFIED",runsToday:items.filter(r=>typeof r.firstLeasedAt==="string"&&sameLocalDay(r.firstLeasedAt,now)).length,activeNow:items.filter(r=>ACTIVE_RUN_STATUSES.includes(r.status)).length,
     realModel:active===null?null:active==="LOCAL_CLAUDE",tokens:null,cost:null,policy:USAGE_POLICY};
 }
 /** Politika değerine göre bilgi amaçlı düzey (zorlama değil): AT_LIMIT / BELOW / UNKNOWN. Gerçek model koşusu olduğu bilinmiyorsa UNKNOWN. */

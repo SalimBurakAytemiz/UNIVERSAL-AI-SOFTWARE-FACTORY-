@@ -917,26 +917,30 @@ describe("DSK-T0008 readiness wizard, measured-only usage and authorization prev
   const runs = (items: any[]) => ({state: "VERIFIED", runs: {total: items.length, awaiting: 0, items}});
   const NOW = new Date(2026, 10, 12, 15, 0, 0);
   const at = (d: number, h = 10) => new Date(2026, 10, d, h, 0, 0).toISOString();
-  const r = (status: string, createdAt: string) => ({runId: `run_${Math.random().toString(16).slice(2)}`, status, createdAt});
+  const r = (status: string, createdAt: string, firstLeasedAt?: string) => ({runId: `run_${Math.random().toString(16).slice(2)}`, status, createdAt, ...(firstLeasedAt === undefined ? {} : {firstLeasedAt})});
 
-  it("counts only measured runs, keeps tokens and cost UNKNOWN, and never labels the 20/2 policy as enforced", async () => {
+  it("counts runs by first lease (as the runner limit does), keeps tokens and cost UNKNOWN, and labels the 20/2 policy as applied by the runner", async () => {
     const u = await load("usage-core.js");
-    expect(u.USAGE_POLICY).toMatchObject({runsPerDay: 20, concurrentRealRuns: 2, enforcement: "ENFORCEMENT_PENDING"});
+    expect(u.USAGE_POLICY).toMatchObject({runsPerDay: 20, concurrentRealRuns: 2, enforcement: "RUNNER_ENFORCED"});
     const ex = {state: "VERIFIED", active: "LOCAL_CLAUDE"};
-    const v = u.buildUsage(runs([r("RUNNING", at(12)), r("LEASED", at(12, 1)), r("SUCCEEDED", at(11)), r("QUEUED", at(12, 14))]), ex, NOW);
-    expect(v).toMatchObject({state: "VERIFIED", runsToday: 3, activeNow: 2, realModel: true, tokens: null, cost: null});
+    // Counted: first lease today (also a run created yesterday). Not counted: never leased (QUEUED, created today), first lease yesterday (resumed today).
+    const v = u.buildUsage(runs([r("RUNNING", at(12), at(12, 2)), r("LEASED", at(11, 23), at(12, 1)), r("SUCCEEDED", at(11), at(11, 11)), r("QUEUED", at(12, 14)), r("CREATED", at(12, 14))]), ex, NOW);
+    expect(v).toMatchObject({state: "VERIFIED", runsToday: 2, activeNow: 2, realModel: true, tokens: null, cost: null});
     expect(u.usageLevel(v, "concurrent")).toBe("AT_LIMIT"); expect(u.usageLevel(v, "day")).toBe("BELOW");
     expect(u.buildUsage(runs([]), {state: "VERIFIED", active: "EXECUTOR_NOT_CONFIGURED"}, NOW).realModel).toBe(false);
     const unk = u.buildUsage(runs([r("RUNNING", at(12))]), {state: "OFFLINE"}, NOW);
     expect(unk.realModel).toBe(null); expect(u.usageLevel(unk, "concurrent")).toBe("UNKNOWN");
     expect(u.buildUsage({state: "ERROR", runs: null}, ex, NOW)).toEqual({state: "ERROR"});
     expect(u.buildUsage(runs([{runId: "x", status: "MADE_UP", createdAt: at(12)}]), ex, NOW)).toEqual({state: "ERROR"});
+    expect(u.buildUsage(runs([{runId: "x", status: "RUNNING", createdAt: at(12), firstLeasedAt: 5}]), ex, NOW)).toEqual({state: "ERROR"});
+    // The day limit: 20 runs first leased today => AT_LIMIT.
+    expect(u.usageLevel(u.buildUsage(runs(Array.from({length: 20}, (_, i) => r("SUCCEEDED", at(12, 0), at(12, 1 + (i % 10))))), ex, NOW), "day")).toBe("AT_LIMIT");
     const {ctx} = await mkCtx({}, "en"), m = await load("views", "usage-panel.js");
     const root = m.usagePanel(ctx, runs([r("RUNNING", at(12))]), ex, NOW) as N;
     expect(within(root).find(n => n.dataset.usageTokens)!.dataset.usageTokens).toBe("UNKNOWN");
     expect(within(root).find(n => n.dataset.usageCost)!.dataset.usageCost).toBe("UNKNOWN");
-    expect(within(root).find(n => n.dataset.usageEnforcement)!.dataset.usageEnforcement).toBe("ENFORCEMENT_PENDING");
-    expect(text(root)).toContain("server enforcement pending"); expect(text(root)).not.toMatch(/\benforced\b/i);
+    expect(within(root).find(n => n.dataset.usageEnforcement)!.dataset.usageEnforcement).toBe("RUNNER_ENFORCED");
+    expect(text(root)).toContain("applied by the runner"); expect(text(root)).not.toMatch(/enforcement pending|does not enforce/i);
     expect(within(root).filter(n => n.tagName === "BUTTON" || n.tagName === "INPUT").length).toBe(0);
     const src = fs.readFileSync(path.join(rend, "views", "usage-panel.js"), "utf8") + fs.readFileSync(path.join(rend, "usage-core.js"), "utf8");
     expect(src.includes(".post(")).toBe(false);

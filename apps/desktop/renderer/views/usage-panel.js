@@ -1,4 +1,4 @@
-// //TR: Bu görünüm parçası Ayarlar > "Kullanım ve sınırlar" panelidir (DSK-T0008): yalnız ölçülen değerleri (bugünkü koşular, şu an etkin koşular) mevcut salt-okunur GET'lerden gösterir; token ve maliyet her zaman BİLİNMİYOR'dur. Founder politika sınırları (20/gün, 2 eşzamanlı) "politika — sunucu zorlaması bekliyor" etiketiyle gösterilir, asla zorlanıyor denmez. Hiçbir yazma yapılmaz.
+// //TR: Bu görünüm parçası Ayarlar > "Kullanım ve sınırlar" panelidir (DSK-T0008): yalnız ölçülen değerleri (bugünkü koşular, şu an etkin koşular) mevcut salt-okunur GET'lerden gösterir; token ve maliyet her zaman BİLİNMİYOR'dur. Founder politika sınırları (20 yeni koşu/gün, 2 eşzamanlı) çalıştırıcının zorladığı sınırlar olarak gösterilir (runner.ts REAL_MODEL_LIMITS); bugünkü koşular ilk lease zamanına göre sayılır. Hiçbir yazma yapılmaz.
 import {h,panel,stateNote,badge} from "../components.js";
 import {buildUsage,usageLevel} from "../usage-core.js";
 
