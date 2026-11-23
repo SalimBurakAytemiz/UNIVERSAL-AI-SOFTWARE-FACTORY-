@@ -538,6 +538,8 @@ export class WorkOsStore {
         if (p.kind === "ACQUIRE") {
           if (r.status !== "QUEUED" || r.leaseId !== null) throw tampered(`LEASE_ILLEGAL:${e.seq}`);
           r.status = "LEASED"; r.attempt += 1;
+          // //TR: DSK-T0008: ilk lease zamanı yalnız journal girdisinden türetilir (replay = canlı); günlük gerçek-model koşu sınırı bununla sayılır, yeniden başlatma sayacı sıfırlamaz.
+          if (r.firstLeasedAt === undefined && Number.isFinite(Date.parse(e.at))) r.firstLeasedAt = e.at;
         } else if (p.kind === "RENEW") {
           if (r.leaseId === null || r.leaseId !== p.leaseId) throw tampered(`LEASE_ILLEGAL:${e.seq}`);
         } else if (p.kind === "TAKEOVER") {
