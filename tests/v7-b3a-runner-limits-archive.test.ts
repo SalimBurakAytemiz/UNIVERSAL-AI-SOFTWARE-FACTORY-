@@ -540,3 +540,71 @@ describe("LANE-C runner exports: effectiveTestCommand and repositoryPrecondition
     expect([label, runOf(c, r.runId).status]).toEqual([label, expected]);
   }, T);
 });
+
+// //TR: DSK-T0008 PR-3: gerçek model (LOCAL_CLAUDE) koşuları için Founder harcama sınırları — en çok 2 eşzamanlı ve günde en çok 20 yeni koşu. Gerçek model çağrılmaz: FakeExecutors çifti yalnız tür etiketi LOCAL_CLAUDE ile enjekte edilir; maxStepsPerTick 0 olduğundan koşular yalnız talep edilir, hiçbir adım yürütülmez. FAKE yürütücü etkilenmez; günlük sayı journal'dan türetildiği için yeniden başlatma sayacı sıfırlamaz; zaten başlamış koşunun devri sınırdan etkilenmez.
+describe("DSK-T0008 real-model run limits (20/day, 2 concurrent)", () => {
+  const mkStore = () => {
+    const dataDir = path.join(tmp, `lim-data-${crypto.randomBytes(3).toString("hex")}`), repo = path.join(tmp, "lim-repo");
+    fs.mkdirSync(repo, {recursive: true});
+    const store = new WorkOsStore(dataDir);
+    const p = store.createProject({tenantId: "tA", orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL", repository: {path: repo}, testCommand: ["node", "test.mjs"]});
+    return {dataDir, store, projectId: p.projectId};
+  };
+  // one active run per mission: every run gets its own authorized mission
+  const mission = (c: {store: WorkOsStore; projectId: string}) => {
+    const m = c.store.createMission({tenantId: "tA", projectId: c.projectId, title: "Limits", objective: "limits", acceptanceCriteria: ["x"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
+    for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) c.store.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
+    return m.missionId;
+  };
+  // LOCAL_CLAUDE-labelled test pair declared ISOLATED in the TEST provider (strict sandbox requires it; production LocalClaudeExecutors is NOT_ISOLATED)
+  const pairOf = (kind: "FAKE" | "LOCAL_CLAUDE") => ({...new FakeExecutors({implement: () => ({files: {"f.txt": "x\n"}}), review: () => ({verdict: "CLEAN"})}).pair(), kind, ...(kind === "LOCAL_CLAUDE" ? {isolation: {state: "ISOLATED" as const, providerId: "TEST_ONLY_HOST_PASSTHROUGH"}} : {})});
+  const newRun = (c: ReturnType<typeof mkStore>) => { const p = pairOf("FAKE"); return c.store.createRun({tenantId: "tA", missionId: mission(c), executor: {implementer: p.implementer.identity, reviewer: p.reviewer.identity}, createdBy: "FOUNDER_LOCAL"}).runId; };
+  const mkRunner = (c: ReturnType<typeof mkStore>, kind: "FAKE" | "LOCAL_CLAUDE", extra: Partial<RunnerOptions> = {}) => new MissionRunner({executionGate: testExecutionGate(), store: c.store, dataDir: c.dataDir,
+    globalStopFile: path.join(tmp, "GLOBAL_STOP.json"), envPolicyFile: ENV_POLICY, executors: pairOf(kind) as never, maxStepsPerTick: 0, security: fakeSecurity(`${c.dataDir}-sec`).options, ...extra});
+  // 20 runs started (first lease) today, then finished: they count for the day but hold no concurrency slot.
+  const startedAndFinished = (c: ReturnType<typeof mkStore>, n: number) => { for (let i = 0; i < n; i++) { const id = newRun(c); const l = c.store.acquireRunLease(id, 60_000, "T"); c.store.transitionRun(id, l.leaseId, "FAILED", "t", "T"); } };
+
+  it("LOCAL_CLAUDE concurrency is capped at 2 even when configured higher (CONCURRENCY_LIMIT); FAKE keeps its configured value", async () => {
+    const c = mkStore(), ids = [newRun(c), newRun(c), newRun(c)];
+    const r = mkRunner(c, "LOCAL_CLAUDE", {maxConcurrentRuns: 8});
+    expect(r.maxConcurrentRuns).toBe(2); expect(r.realModel).toBe(true);
+    const rep = await r.tick();
+    expect(rep.claimed.length).toBe(2); expect(rep.deferred).toEqual([ids[2]]); expect(r.lastLimit).toBe("CONCURRENCY_LIMIT");
+    expect(c.store.engineGetRun(ids[2])!.status).toBe("QUEUED");
+    const c2 = mkStore(); for (let i = 0; i < 3; i++) newRun(c2);
+    const f = mkRunner(c2, "FAKE", {maxConcurrentRuns: 8});
+    expect(f.maxConcurrentRuns).toBe(8); expect(f.realModel).toBe(false);
+    expect((await f.tick()).claimed.length).toBe(3); expect(f.lastLimit).toBe(null);
+  });
+
+  it("the 21st new LOCAL_CLAUDE run of the day gets no lease (DAILY_LIMIT), the count survives a restart, the next day admits it, and FAKE is unaffected", async () => {
+    const c = mkStore();
+    startedAndFinished(c, 20);
+    const id = newRun(c);
+    const r = mkRunner(c, "LOCAL_CLAUDE");
+    const rep = await r.tick();
+    expect(rep.claimed).toEqual([]); expect(rep.deferred).toEqual([id]); expect(r.lastLimit).toBe("DAILY_LIMIT");
+    expect(c.store.engineGetRun(id)!.status).toBe("QUEUED"); expect(c.store.engineGetRun(id)!.leaseId).toBe(null); // no lease
+    // restart: a fresh store replays firstLeasedAt from the journal, so the limit still holds
+    const reopened = {...c, store: new WorkOsStore(c.dataDir)};
+    expect(reopened.store.engineListRuns().filter(x => typeof x.firstLeasedAt === "string").length).toBe(20);
+    const r2 = mkRunner(reopened, "LOCAL_CLAUDE"); expect((await r2.tick()).deferred).toEqual([id]); expect(r2.lastLimit).toBe("DAILY_LIMIT");
+    // next calendar day: admitted
+    const r3 = mkRunner(reopened, "LOCAL_CLAUDE", {now: () => Date.now() + 86_400_000 + 3_600_000});
+    expect((await r3.tick()).claimed).toEqual([id]);
+    // FAKE executors ignore the real-model limit
+    const c2 = mkStore(); startedAndFinished(c2, 20); const id2 = newRun(c2);
+    expect((await mkRunner(c2, "FAKE").tick()).claimed).toEqual([id2]);
+  });
+
+  it("a run already started today is still recovered at the daily limit (the limit gates new starts only)", async () => {
+    const c = mkStore();
+    startedAndFinished(c, 19);
+    const id = newRun(c); c.store.acquireRunLease(id, 1, "T"); // 20th start; its lease expires at once (store and runner share the real clock)
+    const fresh = newRun(c);
+    await new Promise(res => setTimeout(res, 25));
+    const r = mkRunner(c, "LOCAL_CLAUDE", {maxConcurrentRuns: 2}); // a free slot remains, so only the daily limit can defer the new run
+    const rep = await r.tick();
+    expect(rep.recovered).toEqual([id]); expect(rep.deferred).toEqual([fresh]); expect(r.lastLimit).toBe("DAILY_LIMIT");
+  });
+});
