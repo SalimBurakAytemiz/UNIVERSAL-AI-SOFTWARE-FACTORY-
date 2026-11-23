@@ -13,7 +13,7 @@ export const selection={missionId:null,evidenceId:null};
 export const trackers={project:createIdempotencyTracker(),mission:createIdempotencyTracker()};
 export function resetProjectDraft(){drafts.project=freshProject();trackers.project.reset()}
 export function resetMissionDraft(){const keep=drafts.mission.projectId;drafts.mission=freshMission();drafts.mission.projectId=keep;trackers.mission.reset()}
-export function resetAllForms(){drafts.project=freshProject();drafts.mission=freshMission();drafts.open={project:false,mission:false};drafts.status={};drafts.busy={};drafts.missionFilter="ALL";drafts.reasons={};drafts.runExpert={};drafts.runLink=freshRunLink();drafts.evidence={verification:"ALL",kind:"ALL",cursor:null,stack:[]};selection.missionId=null;selection.evidenceId=null;trackers.project.reset();trackers.mission.reset();delete drafts.deliveryAcks;delete drafts.deliveryDialog}
+export function resetAllForms(){drafts.project=freshProject();drafts.mission=freshMission();drafts.open={project:false,mission:false};drafts.status={};drafts.busy={};drafts.missionFilter="ALL";drafts.reasons={};drafts.runExpert={};drafts.runLink=freshRunLink();drafts.evidence={verification:"ALL",kind:"ALL",cursor:null,stack:[]};selection.missionId=null;selection.evidenceId=null;trackers.project.reset();trackers.mission.reset();delete drafts.deliveryAcks;delete drafts.deliveryDialog;delete drafts.deliveryExport}
 
 /** Etiketli giriş alanı: etiket for/id ile bağlı, ipucu ve hata aria-describedby ile, hata varsa aria-invalid. */
 export function field(ctx,{id,labelKey,value="",onInput,errorKey=null,hintKey=null,multiline=false,type="text",required=false,options=null}){
