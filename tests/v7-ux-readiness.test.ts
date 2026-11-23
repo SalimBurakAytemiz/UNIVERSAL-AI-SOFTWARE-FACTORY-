@@ -1146,3 +1146,74 @@ describe("Readiness — route delegation (app.js VIEWS unchanged)", () => {
     expect(i18n.translate("en", "area.readiness.desc")).toContain("Read-only.");
   });
 });
+
+// //TR: Teslimat & SRE yayın hazırlığı tablosu (UASCO-T0006): sunucu koşuları en eski önce döndürür; tablo en yeni 100 koşuyu gösterir ve kesildiğini "{shown} / {total}" ile söyler, sunucu kestiyse toplamı "500+" yazar (kesin sayı uydurmaz).
+describe("Delivery & SRE release table — newest runs first, an honest shown-of-total note, never a silent cut", () => {
+  const RUN = (i: number, at: string | null) => ({runId: `run-${String(i).padStart(4, "0")}`, missionId: "m-1", status: "RUNNING", ...(at ? {startedAt: at} : {}), evidence: []});
+  const iso = (i: number) => new Date(Date.UTC(2026, 9, 1) + i * 60_000).toISOString();
+  const deliveryServe = (runs: unknown) => async (p: string) => { if (p === "/v1/work-runs") return runs; return fail(p, 503); };
+  const renderDelivery = async (getFn: (p: string) => any, lang = "en") => { const v = await load("views", "delivery.js"); const m = await mkCtx(getFn, lang); return {root: (await v.render(m.ctx)) as N, ...m}; };
+  const rowIds = (r: N) => allData(r, "deliveryRun").filter(n => n.tagName === "TR").map(n => n.dataset.deliveryRun);
+  const shown = (r: N) => byData(r, "releaseShown");
+
+  it("newestRuns: start time descending, ties broken by later server position, unparsable times last, capped", async () => {
+    const v = await load("views", "delivery.js");
+    const items = [RUN(0, iso(0)), RUN(1, iso(5)), RUN(2, iso(5)), RUN(3, null), RUN(4, iso(2))].map(x => ({runId: x.runId, startedAt: (x as any).startedAt ?? null}));
+    expect(v.newestRuns(items).map((r: any) => r.runId)).toEqual(["run-0002", "run-0001", "run-0004", "run-0000", "run-0003"]);
+    expect(v.newestRuns(items, 2).map((r: any) => r.runId)).toEqual(["run-0002", "run-0001"]);
+    expect(v.RELEASE_ROWS).toBe(100);
+    expect(items.map(r => r.runId)).toEqual(["run-0000", "run-0001", "run-0002", "run-0003", "run-0004"]);   // input order is not mutated
+  });
+  it("more than 100 runs (server order: oldest first): the 100 NEWEST are shown, newest on top, and the note says 100 of N (en + tr)", async () => {
+    const raw = {workRuns: Array.from({length: 130}, (_, i) => RUN(i, iso(i)))};
+    const {root, calls} = await renderDelivery(deliveryServe(raw));
+    expect(calls).toContain("/v1/work-runs");
+    const ids = rowIds(root);
+    expect(ids.length).toBe(100);
+    expect(ids[0]).toBe("run-0129"); expect(ids[99]).toBe("run-0030");
+    expect(ids).not.toContain("run-0000");                                                               // the oldest are the ones left out, not the newest
+    const note = shown(root)!;
+    expect([note.dataset.releaseShown, note.dataset.releaseTotal]).toEqual(["100", "130"]);
+    expect(note.textContent).toBe("Showing 100 of 130.");
+    const tr = await renderDelivery(deliveryServe(raw), "tr");
+    expect(shown(tr.root)!.textContent).toBe("130 kayıttan 100 tanesi gösteriliyor.");
+  });
+  it("100 or fewer runs: every run is shown newest first and no cut is claimed; a server-truncated list says the total is unknown (500+)", async () => {
+    const few = await renderDelivery(deliveryServe({workRuns: Array.from({length: 100}, (_, i) => RUN(i, iso(i)))}));
+    expect(rowIds(few.root).length).toBe(100); expect(rowIds(few.root)[0]).toBe("run-0099");
+    expect(shown(few.root)).toBeUndefined();
+    const cut = await renderDelivery(deliveryServe({workRuns: Array.from({length: 501}, (_, i) => RUN(i, iso(i)))}));
+    expect(rowIds(cut.root).length).toBe(100);
+    const note = shown(cut.root)!;
+    expect(note.dataset.releaseTotal).toBe("UNKNOWN");
+    expect(note.textContent).toBe("Showing 100 of 500+ items; the server cut the list.");
+    expect(note.textContent).not.toMatch(/\b501\b/);                                                     // the dropped run is never counted as known
+  });
+  it("real buildServer + real Work OS store: 103 runs -> the release table shows the 100 newest and says 100 of 103", { timeout: T }, async () => {
+    const store = new WorkOsStore(dataDir());
+    const p = store.createProject({tenantId: "tA", orgId: "org1", name: "Release", environmentId: "env-dev", createdBy: RECORDER});
+    const created: string[] = [];
+    for (let i = 0; i < 103; i++) {
+      const m = store.createMission({tenantId: "tA", projectId: p.projectId, title: `R${i}`, objective: "obj", acceptanceCriteria: ["ac"], riskLevel: "R1", createdBy: RECORDER});
+      for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) store.transitionMission({tenantId: "tA"}, m.missionId, to, "go", RECORDER);
+      created.push(store.createRun({tenantId: "tA", missionId: m.missionId, executor: {implementer: "IMPL", reviewer: "REV"}, createdBy: RECORDER}).runId);
+      if (i % 25 === 0) await sleep(2);
+    }
+    const app = mkApp();
+    const raw = await getJson(app, "/v1/work-runs");
+    const serverOrder = (raw.workRuns ?? raw.runs ?? raw.items).map((r: any) => r.runId);
+    expect(serverOrder.length).toBe(103);
+    const {root} = await renderDelivery(async q => getJson(app, q));
+    const ids = rowIds(root);
+    expect(ids.length).toBe(100);
+    const core = await load("work-core.js"), v = await load("views", "delivery.js");
+    expect(ids).toEqual(v.newestRuns(core.mapWorkRuns(raw).items).map((r: any) => r.runId));            // measured order from the real body
+    const left = created.filter(id => !ids.includes(id));
+    expect(left.length).toBe(3);
+    expect(left.every(id => created.indexOf(id) < 3 || serverOrder.indexOf(id) < 3)).toBe(true);        // the cut drops the oldest runs
+    expect(ids).toContain(created[102]);                                                                // the newest run is always visible
+    const note = shown(root)!;
+    expect([note.dataset.releaseShown, note.dataset.releaseTotal]).toEqual(["100", "103"]);
+    expect(note.textContent).toBe("Showing 100 of 103.");
+  });
+});
