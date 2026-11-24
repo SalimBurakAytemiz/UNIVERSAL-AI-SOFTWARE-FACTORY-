@@ -141,3 +141,5 @@ describe("INT-R3 SBX-GATE honest BLOCKED reason in the desktop", () => {
 // //TR: UASCO-T0004.A arka uç çökme/yeniden başlatma: Recovery Center otomatik yeniden bağlanma (gerçek buildServer, elle sürülen zamanlayıcılar)
 import {registerBackendReconnectT0004aCases} from "./support/backend-reconnect-t0004a.cases.js";
 registerBackendReconnectT0004aCases();
+import {registerBackendLifecycleT0004aCases} from "./support/backend-lifecycle-t0004a.cases.js";
+registerBackendLifecycleT0004aCases();

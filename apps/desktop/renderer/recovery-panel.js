@@ -2,6 +2,8 @@
 import {h,statePill} from "./components.js";
 import {ROUTES,routeById} from "./routes.js";
 import {recoveryModel,createReconnector} from "./recovery-core.js";
+import {backendStatusModel} from "./backend-lifecycle-core.js";
+import {formatTime} from "./model.js";
 
 const KNOWN=ROUTES.map(r=>r.id);
 // //TR: UASCO-T0004.A metinleri: önce ctx.t (locale anahtarı eklenince o kullanılır), yoksa bu modülün en/tr yedeği; locale dosyaları açık PR'larla paylaşıldığından şimdilik burada tutulur.
@@ -31,13 +33,31 @@ export function reconnectorFor(ctx){
   });
   RECONNECTORS.set(doc,r);return r;
 }
-/** opts: {routeId, health, reason, titleId?} — titleId verilirse başlık görünüm başlığı olur (odak hedefi). API_DOWN'da otomatik yeniden bağlanma planlanır ve durumu gösterilir. */
-export function recoveryPanel(ctx,{routeId,health,reason,titleId}={}){
+/**
+ * UASCO-T0004.A: arka uç yaşam döngüsü bloğu (yalnız API_DOWN ve lifecycle verildiğinde). Ne olduğunu (bağlantı koptu / hiç kurulamadı / doğrulanamadı), son doğrulanmış
+ * bağlantı ve kesinti zamanını ve güvenli kurtarma yolunu söyler: bu sürümde uygulama arka ucu kendiliğinden yeniden başlatmaz, bu yüzden "yeniden başlatılıyor" denmez;
+ * kullanıcıya "Şimdi yeniden dene" ve sürerse "UASCO'yu kapatıp yeniden aç" (arka ucu yeniden başlatan tek yol) ile kayıt dosyasının yeri gösterilir.
+ */
+export function backendLifecycleBlock(ctx,lifecycle,reconnect){
+  const doc=ctx.doc,t=ctx.t,b=backendStatusModel(lifecycle,reconnect),lang=ctx.i18n?.lang??"tr";
+  if(!b.down)return null;
+  const rows=[h(doc,"dt",{text:recoveryText(ctx,"backend.diag.state")}),h(doc,"dd",{dataset:{backendState:b.status},text:recoveryText(ctx,`backend.state.${b.status}`)})];
+  rows.push(h(doc,"dt",{text:recoveryText(ctx,"backend.diag.lastConnected")}),h(doc,"dd",{text:b.lastConnectedAt?formatTime(b.lastConnectedAt,lang):recoveryText(ctx,"backend.never")}));
+  if(b.downSince)rows.push(h(doc,"dt",{text:recoveryText(ctx,"backend.diag.downSince")}),h(doc,"dd",{text:formatTime(b.downSince,lang)}));
+  return h(doc,"div",{class:"backend-lifecycle",dataset:{backendLifecycle:b.status,backendPhase:b.phase,backendEscalate:b.escalate?"true":"false"}},
+    h(doc,"dl",{class:"kv"},...rows),
+    h(doc,"p",{class:"note",text:recoveryText(ctx,"backend.noAutoRestart")}),
+    h(doc,"p",{class:b.escalate?"note note-error":"note",dataset:{backendGuide:"reopen"},text:recoveryText(ctx,"backend.guide.reopen")}),
+    h(doc,"p",{class:"note mono",dataset:{backendGuide:"log"},text:recoveryText(ctx,"backend.guide.log")}));
+}
+/** opts: {routeId, health, reason, titleId?, lifecycle?} — titleId verilirse başlık görünüm başlığı olur (odak hedefi). API_DOWN'da otomatik yeniden bağlanma planlanır ve durumu gösterilir; lifecycle (backend-lifecycle-core anlık görüntüsü) verilirse başlık/açıklama dürüst yaşam döngüsü durumuna göre seçilir. */
+export function recoveryPanel(ctx,{routeId,health,reason,titleId,lifecycle}={}){
   const doc=ctx.doc,t=ctx.t,m=recoveryModel({reason,routeId,health,knownRouteIds:KNOWN}),uid=`recovery-${m.reason}`;
   const auto=m.reason==="API_DOWN"&&m.apiDown?reconnectorFor(ctx):null;
   if(auto)auto.noteDown();
   const retry=()=>m.reason==="VIEW_FAILED"&&typeof ctx.rerender==="function"?ctx.rerender():auto?auto.retryNow():ctx.refreshAll({force:true});
-  const home=routeById("home"),title=h(doc,"h2",{id:titleId??`${uid}-title`,tabindex:"-1",text:t(`recovery.title.${m.reason}`)});
+  const life=auto&&lifecycle?backendLifecycleBlock(ctx,lifecycle,auto.snapshot()):null,lifeState=life?life.dataset.backendLifecycle:null;
+  const home=routeById("home"),title=h(doc,"h2",{id:titleId??`${uid}-title`,tabindex:"-1",text:lifeState?recoveryText(ctx,`backend.title.${lifeState}`):t(`recovery.title.${m.reason}`)});
   let autoNode=null;
   if(auto){
     const sn=auto.snapshot(),nowMs=typeof ctx.now==="function"?ctx.now():Date.now();
@@ -48,11 +68,12 @@ export function recoveryPanel(ctx,{routeId,health,reason,titleId}={}){
   }
   return h(doc,"section",{class:"note note-error recovery-panel",role:"alert","aria-labelledby":title.getAttribute("id"),dataset:{recovery:m.reason}},
     title,
-    h(doc,"p",{text:t(`recovery.desc.${m.reason}`)}),
+    h(doc,"p",{text:lifeState?recoveryText(ctx,`backend.desc.${lifeState}`):t(`recovery.desc.${m.reason}`)}),
     h(doc,"dl",{class:"kv"},
       h(doc,"dt",{text:t("recovery.diag.route")}),h(doc,"dd",{text:m.routeId}),
       h(doc,"dt",{text:t("recovery.diag.health")}),h(doc,"dd",{},statePill(ctx,m.pill,{label:t(`recovery.health.${m.health}`)}))),
     autoNode,
+    life,
     h(doc,"div",{class:"row"},
       h(doc,"button",{type:"button",class:"btn",dataset:{recovery:"retry"},on:{click:retry}},t("recovery.retry")),
       h(doc,"a",{class:"link-more",href:home?.hash??"#/home",dataset:{recovery:"home",focusKey:"recovery-home"},text:t("recovery.home")})));

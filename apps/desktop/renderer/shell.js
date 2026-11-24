@@ -8,7 +8,8 @@ import {syncNav,syncTabs} from "./nav.js";
 import {keepFocus} from "./focus.js";
 import {selection} from "./forms.js";
 import {maybeOpenFirstRun} from "./views/firstrun.js";
-import {recoveryPanel} from "./recovery-panel.js";
+import {recoveryPanel,reconnectorFor,recoveryText} from "./recovery-panel.js";
+import {createBackendLifecycle,backendStatusModel} from "./backend-lifecycle-core.js";
 import {shouldShowApiRecovery} from "./recovery-core.js";
 import {createInspector,isInspectableRef} from "./inspector.js";
 import {loadStopImpact} from "./stop-impact-core.js";
@@ -23,6 +24,8 @@ export function createShell(ctx){
   // //TR: UASCO-T0005: ham hash ctx.currentHash (test) veya pencere konumundan okunur; yoksa "" (bilinmeyen rota bildirimi devre dışı).
   const win=doc.defaultView??null,currentHash=()=>{try{return String((typeof ctx.currentHash==="function"?ctx.currentHash():win?.location?.hash)??"")}catch{return ""}};
   const inspector=createInspector(ctx);
+  // //TR: UASCO-T0004.A: arka uç yaşam döngüsü yalnız gerçek GET /health sonuçlarından türetilir (yeni IPC yok); CONNECTED dışında hiçbir durumda "çalışıyor" gösterilmez.
+  const lifecycle=createBackendLifecycle({now:()=>typeof ctx.now==="function"?ctx.now():Date.now()});data.backend=lifecycle.snapshot();
 
   const announce=msg=>{const n=el("status");if(n)n.textContent=msg};
   /** Inspector çekmecesini verilen varlık referansıyla açar; çağıran denetim (invoker) kapanışta odağı geri alır. Referans geçersizse sessizce yok sayılır. */
@@ -63,9 +66,10 @@ export function createShell(ctx){
     sel.value=data.projects.items.some(x=>x.projectId===store.projectId)?store.projectId:"";sel.disabled=data.projects.state!=="VERIFIED";
     sel.title=data.projects.state==="VERIFIED"?"":t(`state.${data.projects.state}`);
     const apiKind=data.health.state==="VERIFIED"?"VERIFIED":data.health.state==="LOADING"?"LOADING":data.health.state==="OFFLINE"?"OFFLINE":"ERROR";
-    el("ctxApi").replaceChildren(chip(ctx,null,{kind:apiKind}),h(doc,"span",{class:"ctx-api-text",text:t(`ctx.api.${apiKind}`)}));
+    const apiText=apiKind==="OFFLINE"&&data.backend?.status==="CONNECTION_LOST"?recoveryText(ctx,"ctx.api.LOST"):t(`ctx.api.${apiKind}`);
+    el("ctxApi").replaceChildren(chip(ctx,null,{kind:apiKind}),h(doc,"span",{class:"ctx-api-text",text:apiText}));
     el("ctxRefresh").textContent=formatTime(store.lastRefreshAt,ctx.i18n.lang);if(store.lastRefreshAt)el("ctxRefresh").setAttribute("datetime",store.lastRefreshAt);
-    if(lastApiState!==null&&lastApiState!==apiKind)announce(t(`ctx.api.${apiKind}`));lastApiState=apiKind;
+    if(lastApiState!==null&&lastApiState!==apiKind)announce(apiText);lastApiState=apiKind;
     const approvals=data.cockpit?.approvals.value,bell=el("notifyCount");bell.textContent=Number.isSafeInteger(approvals)&&approvals>0?String(approvals):"";bell.hidden=!bell.textContent;
     el("notifyBtn").setAttribute("aria-label",Number.isSafeInteger(approvals)&&approvals>0?t("notify.count",{n:approvals}):t("notify.none"));
   }
@@ -99,7 +103,7 @@ export function createShell(ctx){
         h(doc,"dt",{text:t("feed.orchestrator")}),h(doc,"dd",{},statePill(ctx,o?pillKindFor(o):"LOADING"),h(doc,"span",{text:` ${o?formatCount(o.value):MISSING}`})),
         h(doc,"dt",{text:t("feed.workforce")}),h(doc,"dd",{},statePill(ctx,c?pillKindFor(c.workforce):"LOADING"))));
       // //TR: UI-251: control API erişilemezken (OFFLINE/ERROR/…) sağlık sekmesinde Recovery Center paneli gösterilir; LOADING/VERIFIED'da gösterilmez.
-      if(shouldShowApiRecovery(data.health.state))body.append(recoveryPanel(ctx,{routeId:ctx.currentRouteId(),health:data.health.state,reason:"API_DOWN"}));
+      if(shouldShowApiRecovery(data.health.state))body.append(recoveryPanel(ctx,{routeId:ctx.currentRouteId(),health:data.health.state,reason:"API_DOWN",lifecycle:data.backend}));
     }else{
       const a=data.cockpit?.approvals,items=a?.items??[];
       if(!a)body.append(chip(ctx,null,{kind:"LOADING"}));
@@ -131,13 +135,35 @@ export function createShell(ctx){
     list.replaceChildren(...nodes.map(n=>n.tagName==="LI"?n:h(doc,"li",{class:"strip-item"},n)));
     el("stripRun").textContent=e.runId??MISSING;
   }
-  function renderAll(){renderNav();renderContext();renderStop();renderFeed();renderStrip()}
+  /**
+   * UASCO-T0004.A: arka uç erişilemezken (CONNECTION_LOST/UNAVAILABLE/UNVERIFIED) üst çubukta (sticky, tam genişlik satır) kalıcı, erişilebilir bir şerit gösterir: ne olduğunu,
+   * güvenli kurtarma yolunu ("Şimdi yeniden dene" mevcut yeniden bağlanma denetleyicisini kullanır; "Ayrıntılar" sağlık sekmesindeki Recovery Center'ı açar) söyler.
+   * Şerit #topbar içindedir (görünüm yeniden çizimi onu silmez, ACİL DURDUR şeridiyle çakışmaz); yalnız durum anahtarı değişince yeniden kurulur (role=alert tekrar tekrar okunmaz). CONNECTED'da kaldırılır.
+   */
+  function renderBackendBanner(){
+    const host=el("topbar"),b=backendStatusModel(data.backend);let n=el("backendBanner");
+    if(!b.showBanner){if(n&&typeof n.remove==="function")n.remove();return}
+    if(!host||typeof host.appendChild!=="function")return;
+    reconnectorFor(ctx).noteDown(); // sekmeden bağımsız otomatik yeniden bağlanma (idempotent)
+    const key=`${b.status}|${b.escalate}|${ctx.i18n?.lang??""}`;
+    if(n&&n.dataset.key===key)return;
+    if(!n){n=h(doc,"section",{id:"backendBanner",class:"note note-error backend-banner",role:"alert","aria-labelledby":"backendBannerTitle"});host.appendChild(n)}
+    n.dataset.key=key;n.dataset.backendBanner=b.status;n.dataset.backendEscalate=b.escalate?"true":"false";
+    n.replaceChildren(
+      h(doc,"strong",{id:"backendBannerTitle",text:recoveryText(ctx,`backend.title.${b.status}`)}),
+      h(doc,"p",{text:recoveryText(ctx,`backend.desc.${b.status}`)}),
+      h(doc,"p",{class:"note",dataset:{backendGuide:b.escalate?"reopen":"noAutoRestart"},text:recoveryText(ctx,b.escalate?"backend.guide.reopen":"backend.noAutoRestart")}),
+      h(doc,"div",{class:"row"},
+        h(doc,"button",{type:"button",class:"btn",dataset:{backendAction:"retry"},on:{click:()=>reconnectorFor(ctx).retryNow()}},recoveryText(ctx,"backend.banner.retry")),
+        h(doc,"button",{type:"button",class:"btn",dataset:{backendAction:"details"},on:{click:()=>selectFeedTab("health")}},recoveryText(ctx,"backend.banner.details"))));
+  }
+  function renderAll(){renderNav();renderContext();renderStop();renderFeed();renderStrip();renderBackendBanner()}
 
   async function refresh(){
     const epoch=store.epoch;
     const [health,projects,cockpit,control,missions,attention,runs]=await Promise.all([api.health(),api.projects(),api.cockpit(),api.control(),api.missions(),api.attention(),api.runs()]);
     if(epoch!==store.epoch)return false;
-    data.health=health;data.projects=projects;data.cockpit=cockpit.data;data.control=control;data.missions=missions;data.attention=attention;
+    data.health=health;data.backend=lifecycle.observe(health.state);data.projects=projects;data.cockpit=cockpit.data;data.control=control;data.missions=missions;data.attention=attention;
     if(store.projectId&&projects.state==="VERIFIED"&&!projects.items.some(p=>p.projectId===store.projectId)){store.selectProject(null);return false}
     const c=cockpit.data;
     for(const [k,v] of [["projects",c.projects.value],["missions",c.missions.value],["approvals",c.approvals.value],["alerts",c.alerts.value]])store.samples.set(k,pushSample(store.samples.get(k)??[],v));
