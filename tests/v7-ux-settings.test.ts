@@ -197,7 +197,7 @@ describe("UX WP-SETTINGS reads only already-allow-listed GETs (no new GET route 
     await renderView(ctx);
     const extra = loadGet();
     const gets = [...new Set(calls)];
-    expect(gets.sort()).toEqual(["/health", "/v1/adapters", "/v1/capabilities", "/v1/control/status", "/v1/factory", "/v1/system/executors", "/v1/work-runs"]); // DSK-T0008: kullanım paneli mevcut allow-list'teki /v1/work-runs okumasını kullanır; PQ-005: iki kayıt okuması (zaten allow-list'te) eklendi; aşağıdaki allow-list doğrulaması bunları da kapsar
+    expect(gets.sort()).toEqual(["/health", "/v1/adapters", "/v1/capabilities", "/v1/control/status", "/v1/factory", "/v1/system/executors", "/v1/system/sandbox/install", "/v1/work-runs"]); // DSK-T0007 sandbox kurulum durumu (allow-list'te); DSK-T0008: kullanım paneli mevcut allow-list'teki /v1/work-runs okumasını kullanır; PQ-005: iki kayıt okuması (zaten allow-list'te) eklendi; aşağıdaki allow-list doğrulaması bunları da kapsar
     for (const p of gets) expect(desktopGetPathAllowed(p) || extra(p), p).toBe(true);
     // Dürüstlük: settings.js hiçbir yazma (POST) çağrısı yapmaz.
     const src = fs.readFileSync(path.join(rend, "views", "settings.js"), "utf8");
@@ -769,7 +769,7 @@ describe("LANE-A A-SETUP-1: 'Ready to build?' setup check (read-only, only what 
     const root = (await v.render(ctx, ROUTE)) as N;
     const idx = (id: string) => all(root).findIndex(n => n.id === id);
     expect(idx("settings-setup")).toBeGreaterThan(-1); expect(idx("settings-setup")).toBeLessThan(idx("settings-connection"));
-    expect(new Set(calls)).toEqual(new Set(["/health", "/v1/adapters", "/v1/capabilities", "/v1/control/status", "/v1/factory", "/v1/system/executors", "/v1/work-runs"])); // DSK-T0008: /v1/work-runs yalnız kullanım panelinin okumasıdır (zaten allow-list'te); kurulum paneli ek yol okumaz
+    expect(new Set(calls)).toEqual(new Set(["/health", "/v1/adapters", "/v1/capabilities", "/v1/control/status", "/v1/factory", "/v1/system/executors", "/v1/system/sandbox/install", "/v1/work-runs"])); // DSK-T0007 + DSK-T0008: /v1/work-runs yalnız kullanım panelinin okumasıdır (zaten allow-list'te); kurulum paneli ek yol okumaz
     const en = await load("locales", "en.js"), tr = await load("locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
     const keys = Object.keys(E).filter(k => k.startsWith("setup."));
     expect(keys.length).toBe(60); // DSK-T0008: +8 setup.wizard.* anahtarı expect(E["setup.reason.PROVENANCE_MISSING"]).toBeTruthy();
@@ -1013,11 +1013,12 @@ describe("DSK-T0008 readiness wizard, measured-only usage and authorization prev
     expect(q.mapQueueWorkRuns({runs: [raw(1, "RUNNING", at(12), "not-a-date")]})).toEqual({state: "ERROR", runs: null});
   });
 
-  it("validates the mission authorization strictly, previews it only when valid, and never records it", async () => {
+  it("validates the mission authorization strictly, previews it only when valid, and records it only by one confirmed POST (nothing stored locally)", async () => {
     const a = await load("mission-auth-core.js");
     const mission = {missionId: "msn_0123456789abcdef01234567", riskLevel: "R2"};
     const ok = a.validateMissionAuthorization({missionId: mission.missionId, maxRisk: "R1", maxRuns: "20", maxConcurrent: "2", expiresAt: "2026-11-19"}, mission, NOW);
-    expect(ok.ok).toBe(true); expect(ok.submit).toBe("RECORDING_UNAVAILABLE");
+    expect(ok.ok).toBe(true); expect(ok.submit).toBe("READY"); // DSK-T0007/P-B wiring: the server records it
+    expect(a.buildAuthorizationRequest(ok)).toEqual({path: `/v1/missions/${mission.missionId}/authorization`, body: {maxRisk: "R1", maxRuns: 20, expiresAt: ok.preview.expiresAt}});
     expect(ok.preview).toMatchObject({maxRisk: "R1", maxRuns: 20, maxConcurrent: 2, excludes: ["SCOPE_WIDENING", "SPEND", "RISKY_ACTIONS"]});
     const codes = (x: any, m: any = mission) => a.validateMissionAuthorization(x, m, NOW).errors.map((e: any) => `${e.field}:${e.code}`);
     expect(codes({missionId: mission.missionId, maxRisk: "R3", maxRuns: "21", maxConcurrent: "3", expiresAt: "2026-11-30"})).toEqual(["maxRisk:ABOVE_MISSION_RISK", "maxRuns:ABOVE_POLICY", "maxConcurrent:ABOVE_POLICY", "expiresAt:ABOVE_POLICY"]);
@@ -1028,11 +1029,20 @@ describe("DSK-T0008 readiness wizard, measured-only usage and authorization prev
     Object.assign(m.authDraft, {missionId: mission.missionId, maxRisk: "R1", maxRuns: "5", maxConcurrent: "1", expiresAt: "2026-11-15"});
     const root = m.missionAuthPanel(ctx, mission, NOW) as N;
     const submit = within(root).find(n => n.id === "auth-submit")!;
-    expect(submit.attrs.has("disabled")).toBe(true); expect(submit.dataset.authSubmit).toBe("RECORDING_UNAVAILABLE");
+    expect(submit.attrs.has("disabled")).toBe(false); expect(submit.dataset.authSubmit).toBe("READY");
+    // an invalid form keeps the submit disabled
+    Object.assign(m.authDraft, {maxRuns: "99"}); expect(within(m.missionAuthPanel(ctx, mission, NOW) as N).find(n => n.id === "auth-submit")!.attrs.has("disabled")).toBe(true);
+    Object.assign(m.authDraft, {maxRuns: "5"});
+    // cancel sends nothing; confirm sends exactly one POST with exactly the three fields
+    const posts: Array<[string, unknown]> = []; ctx.api.post = async (p: string, b: unknown) => { posts.push([p, b]); return {ok: true, status: 200, data: {}}; };
+    const v = a.validateMissionAuthorization(m.authDraft, mission, NOW);
+    expect(await m.submitAuthorization({...ctx, confirm: async () => false}, v)).toMatchObject({cancelled: true}); expect(posts).toEqual([]);
+    await m.submitAuthorization({...ctx, confirm: async () => true}, v);
+    expect(posts).toEqual([[`/v1/missions/${mission.missionId}/authorization`, {maxRisk: "R1", maxRuns: 5, expiresAt: v.preview.expiresAt}]]);
     expect(within(root).some(n => n.dataset.authPreview)).toBe(true);
-    expect(text(root)).toContain("Nothing is saved");
+    expect(text(root)).toContain("nothing is stored in this app");
     const src = fs.readFileSync(path.join(rend, "views", "mission-auth-panel.js"), "utf8") + fs.readFileSync(path.join(rend, "mission-auth-core.js"), "utf8");
-    for (const bad of [".post(", "localStorage", "sessionStorage", "indexedDB", "window.uasco"]) expect(src.includes(bad), bad).toBe(false);
+    for (const bad of ["localStorage", "sessionStorage", "indexedDB", "window.uasco"]) expect(src.includes(bad), bad).toBe(false); // the only write is the confirmed server POST above
   });
 
   it("adds complete Turkish text for every new key", async () => {

@@ -474,6 +474,24 @@ export function registerDskRunnerPassiveCases(): void {
     expect(main).toContain("const MISSION_AUTH_RE=/^\\/v1\\/missions\\/msn_[0-9a-f]{24}\\/authorization$/;");
   });
 
+  it("WIRING: sandbox install route is win32-only (409 elsewhere, nothing runs), behind the write gate, and exactly allow-listed", async () => {
+    const s = await mk({ready: true}), H = {"x-uasco-control-token": TOKEN, host: "127.0.0.1:3210", "content-type": "application/json"};
+    const g = (await s.app.inject({method: "GET", url: "/v1/system/sandbox/install", headers: H})).json();
+    expect(g).toEqual({supported: process.platform === "win32", state: "IDLE", step: null});
+    if (process.platform !== "win32") {
+      const r = await s.app.inject({method: "POST", url: "/v1/system/sandbox/install", headers: H, payload: "{}"});
+      expect(r.statusCode).toBe(409); expect(r.json().reason).toBe("PLATFORM_NOT_WIN32");
+      expect((await s.app.inject({method: "GET", url: "/v1/system/sandbox/install", headers: H})).json().state).toBe("IDLE");
+    }
+    expect((await s.app.inject({method: "POST", url: "/v1/system/sandbox/install", headers: H, payload: JSON.stringify({distro: "Ubuntu"})})).statusCode).toBe(400); // no distro/path can be chosen
+    s.stop(); expect((await s.app.inject({method: "POST", url: "/v1/system/sandbox/install", headers: H, payload: "{}"})).statusCode).toBe(423);
+    const main = fs.readFileSync(path.resolve(import.meta.dirname, "..", "..", "apps", "desktop", "main.mjs"), "utf8");
+    const blk = (tag: string) => main.slice(main.indexOf(`// ${tag}-BEGIN`), main.indexOf(`// ${tag}-END`));
+    const post = new Function(`${blk("B5-POST-ALLOWLIST")}\nreturn desktopPostPathAllowed;`)() as (p: string) => boolean;
+    expect(post("/v1/system/sandbox/install")).toBe(true);
+    for (const bad of ["/v1/system/sandbox/install/", "/v1/system/sandbox/uninstall", "/v1/system/sandbox/install?d=Ubuntu"]) expect(post(bad), bad).toBe(false);
+  });
+
   it("PRODUCTION executor: LocalClaudeExecutors is NOT_ISOLATED and refuses all three real-model paths at the source, before any process starts", async () => {
     const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "dsk-iso-")), calls: string[][] = [];
     const ex = new LocalClaudeExecutors(path.resolve(import.meta.dirname, "..", ".."), tmp, {runReviewer: async argv => { calls.push(argv); throw new Error("must not run"); }});

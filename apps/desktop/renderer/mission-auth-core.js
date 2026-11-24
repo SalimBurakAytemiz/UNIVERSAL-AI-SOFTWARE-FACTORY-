@@ -1,10 +1,12 @@
-// //TR: Bu modül görev başı kapsamlı yetkilendirme formunun saf (DOM'suz) çekirdeğidir (DSK-T0008, Founder kararı Q4): Founder bir mission başlarken kapsamı (mission, izin verilen en yüksek risk), sınırları (en çok koşu, en çok eşzamanlı koşu) ve bitiş zamanını belirler. Bu modül YALNIZ doğrular ve önizleme üretir; hiçbir yetki kaydı tutmaz, göndermez ya da yerelde saklamaz. Kayıt ve zorlama ayrı, Founder onaylı sunucu değişikliğine (P-B) bağlıdır; o gelene kadar gönderim her zaman kapalıdır (RECORDING_UNAVAILABLE). Sınırlar Founder politikasını aşamaz (20 koşu, 2 eşzamanlı, en çok 7 gün); kapsam genişletme, harcama ve riskli eylemler bu formla verilemez, ayrı onay ister.
+// //TR: Bu modül görev başı kapsamlı yetkilendirme formunun saf (DOM'suz) çekirdeğidir (DSK-T0008, Founder kararı Q4): Founder bir mission başlarken kapsamı (mission, izin verilen en yüksek risk), sınırları (en çok koşu, en çok eşzamanlı koşu) ve bitiş zamanını belirler. Bu modül doğrular, önizleme ve sunucuya gidecek tam isteği üretir; yerelde hiçbir yetki kaydı tutmaz. Kayıt sunucuda (P-B) journal'a yazılır ve runner tarafından uygulanır; gönderim yalnız geçerli önizlemeden ve onaydan sonra yapılır. Sınırlar Founder politikasını aşamaz (20 koşu, 2 eşzamanlı, en çok 7 gün); kapsam genişletme, harcama ve riskli eylemler bu formla verilemez, ayrı onay ister.
 import {MISSION_ID_RE,RISK_LEVELS} from "./work-core.js";
 import {USAGE_POLICY} from "./usage-core.js";
 
 export const AUTH_LIMITS=Object.freeze({maxRuns:USAGE_POLICY.runsPerDay,maxConcurrent:USAGE_POLICY.concurrentRealRuns,maxDays:7});
 /** Sunucu kaydı yokken gönderim durumu; P-B gelene kadar sabit. */
-export const AUTH_SUBMIT="RECORDING_UNAVAILABLE";
+export const AUTH_SUBMIT="READY";
+/** DSK-T0008 P-B: the exact request the server accepts (exactly maxRisk, maxRuns, expiresAt; concurrency is fixed by policy). Only from a valid preview. */
+export const buildAuthorizationRequest=v=>v&&v.ok&&v.preview?{path:`/v1/missions/${v.preview.missionId}/authorization`,body:{maxRisk:v.preview.maxRisk,maxRuns:v.preview.maxRuns,expiresAt:v.preview.expiresAt}}:null;
 const DAY_MS=86400000;
 const int=x=>typeof x==="string"&&/^[0-9]{1,4}$/.test(x.trim())?Number(x.trim()):(Number.isSafeInteger(x)?x:null);
 
@@ -30,5 +32,5 @@ export function validateMissionAuthorization(input,mission,now=new Date()){
   else if(exp.getTime()<=now.getTime())err("expiresAt","IN_PAST");
   else if(exp.getTime()-now.getTime()>AUTH_LIMITS.maxDays*DAY_MS)err("expiresAt","ABOVE_POLICY");
   const ok=errors.length===0;
-  return {ok,errors,submit:AUTH_SUBMIT,preview:ok?{missionId,maxRisk,maxRuns,maxConcurrent,expiresAt:exp.toISOString(),excludes:["SCOPE_WIDENING","SPEND","RISKY_ACTIONS"]}:null};
+  return {ok,errors,submit:ok?AUTH_SUBMIT:"INVALID",preview:ok?{missionId,maxRisk,maxRuns,maxConcurrent,expiresAt:exp.toISOString(),excludes:["SCOPE_WIDENING","SPEND","RISKY_ACTIONS"]}:null};
 }

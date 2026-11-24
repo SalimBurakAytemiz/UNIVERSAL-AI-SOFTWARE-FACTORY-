@@ -3922,5 +3922,20 @@ export default {
   "analysisReport.empty.summary":"No business analysis summary recorded yet.",
   "analysisReport.empty.tasks":"No plan recorded yet, so no tasks are proposed.",
   "analysisReport.empty.risks":"No risks recorded.",
-  "analysisReport.empty.questions":"No assumptions, constraints or out-of-scope items recorded."
+  "analysisReport.empty.questions":"No assumptions, constraints or out-of-scope items recorded.",
+  "exec.sbx.title":"Isolated sandbox (Windows)",
+  "exec.sbx.install":"Install sandbox",
+  "exec.sbx.started":"Sandbox installation started.",
+  "exec.sbx.state.IDLE":"Not installed by this app yet. Real runs need it.",
+  "exec.sbx.state.RUNNING":"Installing… (downloads are hash-checked)",
+  "exec.sbx.state.DONE":"Installed. The sandbox self-test runs again now.",
+  "exec.sbx.state.FAILED":"Installation failed at the step below. Real runs stay disabled.",
+  "exec.sbx.confirm.title":"Install the isolated sandbox?",
+  "exec.sbx.confirm.body":"Adds a separate WSL distribution named UASCO-Sandbox. Your existing WSL distributions are not changed. Only pinned, hash-checked files are downloaded.",
+  "exec.sbx.confirm.action":"Install the sandbox",
+  "auth.confirm.title":"Record this mission authorization?",
+  "auth.confirm.body":"Allows at most {runs} real runs of this mission until {until}. You can revoke it at any time.",
+  "auth.confirm.action":"Authorize real runs",
+  "auth.recorded":"Authorization recorded. Real runs of this mission can start (within the limits).",
+  "auth.submitNote":"Recording writes a revocable authorization on the server; nothing is stored in this app."
 };

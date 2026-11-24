@@ -61,6 +61,8 @@ export class ExecutionGate {
   }
   /** //TR: DSK-T0007: öz-testi GEÇMİŞ kayıtlı sağlayıcı (senkron; sonuçlanmamış/başarısız/kayıtsız = null). Gerçek model süreçleri yalnız bunun üzerinden başlatılır. */
   verifiedProvider(): SandboxProvider | null { return this.settled !== null && this.settled.ok && this.provider ? this.provider : null; }
+  /** //TR: DSK-T0007: kurulum/onarım sonrası öz-test YENİDEN koşulur (önceki geçti/kaldı sonucu kullanılmaz); sağlayıcı destekliyorsa kendi önbelleğini de sıfırlar. Bu yalnız doğrulamayı yeniler, hiçbir şeyi doğrulanmış saymaz. */
+  reverify(): void { this.selfTestResult = null; this.settled = null; (this.provider as {resetVerification?: () => void} | null)?.resetVerification?.(); }
   /** Durum görünümü (sır/yol içermez). */
   async status(): Promise<{state: "AVAILABLE" | "UNAVAILABLE"; reason: typeof SANDBOX_UNAVAILABLE | null; detail: SandboxDenialDetail | null; providerId: string | null}> {
     const v = await this.verified();

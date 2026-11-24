@@ -128,7 +128,7 @@ const noteError = (r: N) => nodes(r).some(n => /\bnote-error\b/.test(n.className
 // Her panelin okuduğu yollar (proje kimliği yer tutucusuyla).
 const PATHS: Record<string, string[]> = {
   knowledge: ["/v1/projects/:pid/knowledge"], readiness: ["/v1/projects/:pid/readiness"], engine: ["/v1/system/executors"],
-  tools: ["/v1/roles/status-summary"], executors: ["/v1/adapters", "/v1/capabilities", "/v1/system/executors"],
+  tools: ["/v1/roles/status-summary"], executors: ["/v1/adapters", "/v1/capabilities", "/v1/system/executors", "/v1/system/sandbox/install"], // DSK-T0007: sandbox install state (allow-listed)
 };
 const pathsOf = (c: Ctx) => [...new Set(c.seen.map(s => s.path.replace(/\?.*$/, "").replace(PID, ":pid")))].sort();
 // Hata yolunda panelin sınıflanmış işareti (metinden bağımsız): ya panel kendi ERROR/UNKNOWN durumunu yazar ya da veri bölümü hiç çizilmez.

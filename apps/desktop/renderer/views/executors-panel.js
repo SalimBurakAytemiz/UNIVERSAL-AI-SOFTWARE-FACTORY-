@@ -7,7 +7,7 @@ import {sandboxBlock} from "../m1a.js";
 import {mapCapabilities,mapAdapters,countBy,buildRoutingRows,ROUTING_LIST_LIMIT} from "../routing-core.js";
 
 export const EXEC_FORM="executors";
-const EXEC_KEYS=["id:exec-enable","id:runner-start"];
+const EXEC_KEYS=["id:exec-enable","id:runner-start","id:sbx-install"];
 const stateLabel=(ctx,e)=>{
   if(e.state===null)return ctx.t("exec.state.UNKNOWN");
   const k=`exec.state.${e.state}`,v=ctx.t(k);return v===k?e.state:v;
@@ -42,8 +42,30 @@ function runnerBlock(ctx,res){
     r&&r.reason?h(doc,"p",{class:"note mono",dataset:{runnerReason:r.reason},text:r.reason}):null,
     canStartRunner(res)?h(doc,"button",{type:"button",class:"btn btn-primary",id:"runner-start",dataset:{focusKey:"runner-start"},disabled:drafts.busy[EXEC_FORM]===true,text:ctx.t("exec.runner.start"),on:{click:()=>{startRunner(ctx)}}}):null);
 }
+// //TR: DSK-T0007: ayrılmış UASCO-Sandbox WSL2 dağıtımını kur/yeniden doğrula (yalnız sunucu destekliyorsa = win32). Onay (varsayılan Vazgeç) sonrası sabit boş gövdeli POST; durum GET ile okunur. Bu, gerçek yürütmeyi AÇMAZ: sandbox öz-testi ve görev yetkisi yine gerekir.
+export const SANDBOX_INSTALL_PATH="/v1/system/sandbox/install";
+export async function installSandbox(ctx){
+  const yes=await ctx.confirm({title:ctx.t("exec.sbx.confirm.title"),body:ctx.t("exec.sbx.confirm.body"),action:ctx.t("exec.sbx.confirm.action"),target:"UASCO-Sandbox",confirmLabel:ctx.t("exec.sbx.install")});
+  if(yes!==true){setStatus(EXEC_FORM,{ok:false,key:"confirm.cancelled",vars:{},errors:null});await ctx.rerender();focusResult(ctx,EXEC_FORM,EXEC_KEYS);return {ok:false,cancelled:true}}
+  drafts.busy[EXEC_FORM]=true;
+  let res;try{res=await ctx.api.post(SANDBOX_INSTALL_PATH,{})}finally{drafts.busy[EXEC_FORM]=false}
+  const d=describePostResult(res);
+  setStatus(EXEC_FORM,{ok:d.ok,key:d.ok?"exec.sbx.started":d.key,vars:d.ok?{}:d.vars,errors:null});
+  await ctx.refreshAll({force:true});focusResult(ctx,EXEC_FORM,EXEC_KEYS);return {ok:d.ok,status:res?.status??null};
+}
+const SBX_STATES=["IDLE","RUNNING","DONE","FAILED"];
+function sandboxInstallBlock(ctx,raw,sandbox){
+  const doc=ctx.doc,ok=raw&&raw.ok&&raw.data&&raw.data.supported===true&&SBX_STATES.includes(raw.data.state);
+  if(!ok)return null;
+  const st=raw.data.state,step=typeof raw.data.step==="string"&&/^[A-Z][A-Z0-9_:]{0,119}$/.test(raw.data.step)?raw.data.step:null,verified=sandbox&&sandbox.state==="AVAILABLE";
+  return h(doc,"section",{id:"settings-sandbox-install",dataset:{sbxInstall:st}},
+    h(doc,"h3",{text:ctx.t("exec.sbx.title")}),
+    h(doc,"p",{class:"note",text:ctx.t(`exec.sbx.state.${st}`)}),
+    step?h(doc,"p",{class:"note mono",dataset:{sbxStep:step},text:step}):null,
+    !verified&&st!=="RUNNING"?h(doc,"button",{type:"button",class:"btn btn-primary",id:"sbx-install",dataset:{focusKey:"sbx-install"},disabled:drafts.busy[EXEC_FORM]===true,text:ctx.t("exec.sbx.install"),on:{click:()=>{installSandbox(ctx)}}}):null);
+}
 export async function executorsPanel(ctx){
-  const doc=ctx.doc,res=await ctx.api.executors();
+  const doc=ctx.doc,[res,sbx]=await Promise.all([ctx.api.executors(),Promise.resolve().then(()=>ctx.api.raw(SANDBOX_INSTALL_PATH)).catch(()=>null)]);
   let body;
   if(res.state!=="VERIFIED")body=stateNote(ctx,res.state);
   else if(!res.items.length)body=emptyNote(ctx,"exec.none");
@@ -56,7 +78,7 @@ export async function executorsPanel(ctx){
       canEnableExecutor(e)?h(doc,"button",{type:"button",class:"btn btn-primary",id:"exec-enable",dataset:{focusKey:"exec-enable"},disabled:drafts.busy[EXEC_FORM]===true,text:ctx.t("exec.enable"),on:{click:()=>{enableLocalClaude(ctx)}}}):null);
   }));
   // M1a: sandbox durumu sunucudan okunur (doğrulanmış sağlayıcı yoksa "UNAVAILABLE — M1a modu"); profiller ayrı UASCO profilleridir, kişisel profile düşülmez.
-  return panel(ctx,{titleKey:"exec.title",id:"settings-executors"},h(doc,"p",{class:"note",text:ctx.t("exec.lead")}),sandboxBlock(ctx,res.state==="VERIFIED"?res.sandbox:null),body,profilesBlock(ctx,res.profiles),runnerBlock(ctx,res),statusBlock(ctx,EXEC_FORM));
+  return panel(ctx,{titleKey:"exec.title",id:"settings-executors"},h(doc,"p",{class:"note",text:ctx.t("exec.lead")}),sandboxBlock(ctx,res.state==="VERIFIED"?res.sandbox:null),body,profilesBlock(ctx,res.profiles),sandboxInstallBlock(ctx,sbx,res.state==="VERIFIED"?res.sandbox:null),runnerBlock(ctx,res),statusBlock(ctx,EXEC_FORM));
 }
 const tOr=(ctx,k,fallback)=>{const v=ctx.t(k);return v===k?fallback:v};
 /** SBX-8 (D-SBX-11 b): ayrı UASCO Claude profilleri (implementer / salt-okunur reviewer) için durum ve Founder'ın kendisinin çalıştıracağı giriş komutu (yalnız metin; UASCO oturum açmaz, kişisel ayar/kimlik aktarmaz). */

@@ -3922,5 +3922,20 @@ export default {
   "analysisReport.empty.summary":"Henüz iş analizi özeti kaydedilmedi.",
   "analysisReport.empty.tasks":"Henüz plan kaydedilmedi; bu yüzden önerilen görev yok.",
   "analysisReport.empty.risks":"Kayıtlı risk yok.",
-  "analysisReport.empty.questions":"Kayıtlı varsayım, kısıt ya da kapsam dışı madde yok."
+  "analysisReport.empty.questions":"Kayıtlı varsayım, kısıt ya da kapsam dışı madde yok.",
+  "exec.sbx.title":"Yalıtılmış sandbox (Windows)",
+  "exec.sbx.install":"Sandbox'ı kur",
+  "exec.sbx.started":"Sandbox kurulumu başladı.",
+  "exec.sbx.state.IDLE":"Bu uygulama henüz kurmadı. Gerçek koşular için gerekli.",
+  "exec.sbx.state.RUNNING":"Kuruluyor… (indirilen dosyaların özetleri denetlenir)",
+  "exec.sbx.state.DONE":"Kuruldu. Sandbox öz-testi şimdi yeniden çalışır.",
+  "exec.sbx.state.FAILED":"Kurulum aşağıdaki adımda başarısız oldu. Gerçek koşular kapalı kalır.",
+  "exec.sbx.confirm.title":"Yalıtılmış sandbox kurulsun mu?",
+  "exec.sbx.confirm.body":"UASCO-Sandbox adında ayrı bir WSL dağıtımı eklenir. Mevcut WSL dağıtımlarınız değişmez. Yalnız sabitlenmiş, özeti denetlenen dosyalar indirilir.",
+  "exec.sbx.confirm.action":"Sandbox'ı kur",
+  "auth.confirm.title":"Bu görev yetkisi kaydedilsin mi?",
+  "auth.confirm.body":"Bu görevin {until} tarihine kadar en çok {runs} gerçek koşusuna izin verir. İstediğiniz zaman geri alabilirsiniz.",
+  "auth.confirm.action":"Gerçek koşulara izin ver",
+  "auth.recorded":"Yetki kaydedildi. Bu görevin gerçek koşuları (sınırlar içinde) başlayabilir.",
+  "auth.submitNote":"Kayıt sunucuda geri alınabilir bir yetki olarak yazılır; bu uygulamada hiçbir şey saklanmaz."
 };

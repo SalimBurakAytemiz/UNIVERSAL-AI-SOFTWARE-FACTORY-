@@ -60,6 +60,7 @@ const INTAKE_DETAIL_RE=/^\/v1\/intakes\/itk_[0-9a-f]{24}$/;
 const MISSION_TASKS_RE=/^\/v1\/missions\/msn_[0-9a-f]{24}\/tasks$/;
 // DSK-T0008 P-B (Founder onayı bekliyor): görev yetkisinin salt-okunur durumu.
 const MISSION_AUTH_RE=/^\/v1\/missions\/msn_[0-9a-f]{24}\/authorization$/;
+const SANDBOX_INSTALL_RE=/^\/v1\/system\/sandbox\/install$/;
 const PROJECT_FLOW_RE=/^\/v1\/projects\/prj_[0-9a-f]{24}\/flow$/;
 const TASK_DETAIL_RE=/^\/v1\/tasks\/tsk_[0-9a-f]{24}$/;
 const TASK_RUNS_RE=/^\/v1\/tasks\/tsk_[0-9a-f]{24}\/runs$/;
@@ -68,7 +69,7 @@ const WORK_RUN_TASKS_RE=/^\/v1\/work-runs\/run_[0-9a-f]{24}\/tasks$/;
 const PROJECT_READINESS_RE=/^\/v1\/projects\/prj_[0-9a-f]{24}\/readiness$/;
 // //TR: COORD korumalı paket 4b (LANE-A-devrun-allowlist, LANE-B-devrun-bridge B-RUN-1): teslim edilen ürünün koşu durumu (run_ + 24 hex) yalnız sorgusuz, çapalı tam eşleşmeyle GET olarak izinlenir.
 const WORK_RUN_PRODUCT_RE=/^\/v1\/work-runs\/run_[0-9a-f]{24}\/product$/;
-const FIRST_DELIVERY_GET_RES=[INTAKES_LIST_RE,INTAKE_DETAIL_RE,MISSION_TASKS_RE,MISSION_AUTH_RE,PROJECT_FLOW_RE,TASK_DETAIL_RE,TASK_RUNS_RE,WORK_RUN_TASKS_RE,PROJECT_READINESS_RE,WORK_RUN_PRODUCT_RE];
+const FIRST_DELIVERY_GET_RES=[INTAKES_LIST_RE,INTAKE_DETAIL_RE,MISSION_TASKS_RE,MISSION_AUTH_RE,SANDBOX_INSTALL_RE,PROJECT_FLOW_RE,TASK_DETAIL_RE,TASK_RUNS_RE,WORK_RUN_TASKS_RE,PROJECT_READINESS_RE,WORK_RUN_PRODUCT_RE];
 // //TR: COORD protected batch 3 (LANE-B-memory-api, LANE-B-knowledge-api): proje belleği ve bilgi özeti salt-okunur okumaları çapalı desenlerle izinlenir: bellek kaydı mem_ + 6-12 rakam, current/health/provenance sorgusuz, bilgi özeti sorgusuz. Bellek listesi isteğe bağlı en çok üç anahtar alır, SABİT sırada (kind, tag, q) ve tekrarsız; kind sabit kümedendir, tag 1-64 ve q 1-200 karakterdir, değerler renderer ile aynı kanonik kodlayıcıyla (psEncodeRel) kodlanmış olmalı ve çözülmüş değer kontrol karakteri içeremez. Bellek yazma (POST) bu pakette izinlenmez.
 const MEMORY_GET_RES=[/^\/v1\/projects\/prj_[0-9a-f]{24}\/memory\/(?:current|health)$/,/^\/v1\/projects\/prj_[0-9a-f]{24}\/memory\/mem_[0-9]{6,12}(?:\/provenance)?$/,
   /^\/v1\/projects\/prj_[0-9a-f]{24}\/knowledge$/];
@@ -170,6 +171,8 @@ const POST_ROUTE_RES=[/^\/v1\/projects$/,/^\/v1\/missions$/,/^\/v1\/missions\/ms
   /^\/v1\/missions\/msn_[0-9a-f]{24}\/authorization$/,/^\/v1\/missions\/msn_[0-9a-f]{24}\/authorization\/revoke$/,
   // DSK-T0008 P-A (Founder onayı 2026-11-18): kurulu uygulamada PASSIVE runner'ı başlat; gövde boş nesne, kapılar sunucuda (Global Stop 423, politika 403, hazırlık eksikse 409).
   /^\/v1\/system\/runner\/start$/,
+  // DSK-T0007 (Founder onayı 2026-11-24): ayrılmış UASCO-Sandbox dağıtımını kur/yeniden doğrula; gövde boş nesne, kapılar sunucuda.
+  /^\/v1\/system\/sandbox\/install$/,
   // COORD-FIRST-DELIVERY-WIRING (Founder onayı 2026-10-21): fikir -> proje + ilk mission, görev planı ve görev durum geçişi; kimlikler sıkı biçimli, gövde aynı 32 KB sınırında.
   /^\/v1\/intakes$/,/^\/v1\/missions\/msn_[0-9a-f]{24}\/plan$/,/^\/v1\/tasks\/tsk_[0-9a-f]{24}\/transition$/,/^\/v1\/tasks\/tsk_[0-9a-f]{24}\/runs$/,
   // COORD protected batch 3 (LANE-A reconcile button, LANE-B task outcomes): bir koşunun görev sonuçlarını Work OS journal'ından yeniden türet; gövde boş nesne, aynı kapılar (Global Stop 423, politika 403).
