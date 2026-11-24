@@ -289,10 +289,16 @@ export function safeCredentialsBack(profileDir: string, tarData: Buffer): void {
 }
 
 /** Provisioning plan for the dedicated distro (every artifact sha256-pinned; refused without pins). */
-export interface ProvisionInput { installDir: string; rootfs: {path: string; sha256: string}; node: {path: string; sha256: string}; claude: {path: string; sha256: string}; appScriptsTar: {path: string; sha256: string} }
+export interface ProvisionInput { installDir: string; rootfs: {path: string; sha256: string}; node: {path: string; sha256: string}; claude: {path: string; sha256: string}; appScriptsTar: {path: string; sha256: string}; nodeBinarySha256: string; claudeBinarySha256: string }
+/** The pinned official artifacts (core/sandbox/wsl2-artifacts.json): download locations and exact hashes. */
+export const WSL2_ARTIFACTS = JSON.parse(fs.readFileSync(new URL("./wsl2-artifacts.json", import.meta.url), "utf8")) as Record<"rootfs" | "node" | "claude", {url: string; sha256: string; binarySha256?: string}>;
 const HEX64 = /^[0-9a-f]{64}$/;
 export function provisionPlan(i: ProvisionInput): {ok: true; steps: Array<{what: string; args: string[]; guest: boolean; input?: string; inputFile?: string; verify?: {path: string; sha256: string}}>} | {ok: false; error: string} {
   for (const [k, v] of Object.entries({rootfs: i.rootfs, node: i.node, claude: i.claude, app: i.appScriptsTar})) if (!v || !HEX64.test(v.sha256) || typeof v.path !== "string" || !v.path) return {ok: false, error: `PIN_MISSING_${k.toUpperCase()}`};
+  if (!HEX64.test(i.nodeBinarySha256 ?? "") || !HEX64.test(i.claudeBinarySha256 ?? "")) return {ok: false, error: "PIN_MISSING_BINARY"};
+  // only the official pinned artifacts (an unknown rootfs/node/claude, even with a self-consistent hash, is untrusted)
+  for (const [k, v] of [["rootfs", i.rootfs], ["node", i.node], ["claude", i.claude]] as const) if (v.sha256 !== WSL2_ARTIFACTS[k].sha256) return {ok: false, error: `ARTIFACT_NOT_PINNED_${k.toUpperCase()}`};
+  if (i.nodeBinarySha256 !== WSL2_ARTIFACTS.node.binarySha256 || i.claudeBinarySha256 !== WSL2_ARTIFACTS.claude.binarySha256) return {ok: false, error: "ARTIFACT_NOT_PINNED_BINARY"};
   if (!/^[A-Za-z]:\\/.test(i.installDir)) return {ok: false, error: "INSTALL_DIR_NOT_ABSOLUTE_WINDOWS"};
   const g = (what: string, cmd: string, input?: string) => ({what, args: ["-d", WSL_DISTRO, "-u", "root", "--exec", "/bin/sh", "-c", cmd], guest: true, ...(input !== undefined ? {input} : {})});
   return {ok: true, steps: [
@@ -302,18 +308,18 @@ export function provisionPlan(i: ProvisionInput): {ok: true; steps: Array<{what:
     g("user and layout", `id uasco >/dev/null 2>&1 || useradd -m uasco; mkdir -p /opt/uasco/node /opt/uasco/claude /opt/uasco/app /opt/uasco/sbx /opt/uasco/control ${GUEST.runs} && chmod 0755 /opt/uasco && chmod 0700 ${GUEST.runs}`),
     g("install relay", `cat > ${GUEST.sbx}/relay.cjs`, RELAY_JS),
     {what: "install the pinned Linux node", args: ["-d", WSL_DISTRO, "-u", "root", "--exec", "/bin/sh", "-c", `echo ${i.node.sha256}  - > /tmp/n.sha; tee /tmp/node.tar.xz | sha256sum -c /tmp/n.sha >/dev/null && tar -x -J -f /tmp/node.tar.xz -C /opt/uasco/node --strip-components=1`], guest: true, inputFile: i.node.path, verify: i.node} as never,
-    {what: "install the pinned Linux Claude Code CLI", args: ["-d", WSL_DISTRO, "-u", "root", "--exec", "/bin/sh", "-c", `echo ${i.claude.sha256}  - > /tmp/c.sha; tee /tmp/claude.tgz | sha256sum -c /tmp/c.sha >/dev/null && tar -x -z -f /tmp/claude.tgz -C /opt/uasco/claude --strip-components=1 && mkdir -p /opt/uasco/claude/bin && ln -sf ../cli.js /opt/uasco/claude/bin/claude`], guest: true, inputFile: i.claude.path, verify: i.claude} as never,
+    {what: "install the pinned Linux Claude Code CLI", args: ["-d", WSL_DISTRO, "-u", "root", "--exec", "/bin/sh", "-c", `echo ${i.claude.sha256}  - > /tmp/c.sha; tee /tmp/claude.tgz | sha256sum -c /tmp/c.sha >/dev/null && tar -x -z -f /tmp/claude.tgz -C /opt/uasco/claude --strip-components=1 package/claude && chmod 0755 /opt/uasco/claude/claude && mkdir -p /opt/uasco/claude/bin && ln -sf ../claude /opt/uasco/claude/bin/claude`], guest: true, inputFile: i.claude.path, verify: i.claude} as never,
     {what: "install the pinned app scripts (broker, egress proxy)", args: ["-d", WSL_DISTRO, "-u", "root", "--exec", "/bin/sh", "-c", `echo ${i.appScriptsTar.sha256}  - > /tmp/a.sha; tee /tmp/app.tar | sha256sum -c /tmp/a.sha >/dev/null && tar -x -f /tmp/app.tar -C /opt/uasco/app && cp /opt/uasco/app/sbx/egress.cjs ${GUEST.sbx}/egress.cjs`], guest: true, inputFile: i.appScriptsTar.path, verify: i.appScriptsTar} as never,
-    g("verify the guest toolchain pins", `sha256sum ${GUEST.node} ${GUEST.claude}`)
+    g("verify the guest toolchain pins (binary sha256 from wsl2-artifacts.json)", `echo "${i.nodeBinarySha256}  ${GUEST.node}\n${i.claudeBinarySha256}  ${GUEST.claude}" | sha256sum -c -`)
   ]};
 }
 
 /** Executes a provision plan (host wsl.exe only; artifacts streamed from pinned files, verified inside the guest). Stops at the first failing step. */
-export async function provision(plan: ReturnType<typeof provisionPlan>, runner: WslRunner, readFile: (p: string) => Buffer = p => fs.readFileSync(p)): Promise<{ok: true} | {ok: false; step: string}> {
+export async function provision(plan: ReturnType<typeof provisionPlan>, runner: WslRunner, readFile: (p: string) => Buffer = p => fs.readFileSync(p), sha256 = (b: Buffer) => crypto.createHash("sha256").update(b).digest("hex")): Promise<{ok: true} | {ok: false; step: string}> {
   if (!plan.ok) return {ok: false, step: plan.error};
   for (const st of plan.steps) {
     // the artifact is verified on the HOST before it is imported/streamed (missing, changed or unpinned = stop); the guest re-verifies after transfer
-    if (st.verify) { let b: Buffer; try { b = readFile(st.verify.path); } catch { return {ok: false, step: `ARTIFACT_MISSING:${st.what}`}; } if (crypto.createHash("sha256").update(b).digest("hex") !== st.verify.sha256) return {ok: false, step: `ARTIFACT_HASH_MISMATCH:${st.what}`}; }
+    if (st.verify) { let b: Buffer; try { b = readFile(st.verify.path); } catch { return {ok: false, step: `ARTIFACT_MISSING:${st.what}`}; } if (sha256(b) !== st.verify.sha256) return {ok: false, step: `ARTIFACT_HASH_MISMATCH:${st.what}`}; }
     const input = st.inputFile ? readFile(st.inputFile) : st.input;
     const r = await runner(st.args, {timeoutMs: 600_000, input});
     if (r.exitCode !== 0) return {ok: false, step: st.what};

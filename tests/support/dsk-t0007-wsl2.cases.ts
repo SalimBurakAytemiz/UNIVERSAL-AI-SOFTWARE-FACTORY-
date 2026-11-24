@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import cp from "node:child_process";
 import {createRequire} from "node:module";
-import {Wsl2SandboxProvider, WSL_DISTRO, WSL_CONF, GUEST, PROBE_SCRIPT, parseWslList, checkWslConf, evaluateProbe, provisionPlan, provision, safeMirror, safeCredentialsBack, readTarSafe, safeRelPath, guestIsolationScript} from "../../core/sandbox/wsl2-provider.js";
+import {Wsl2SandboxProvider, WSL_DISTRO, WSL_CONF, GUEST, PROBE_SCRIPT, parseWslList, checkWslConf, evaluateProbe, provisionPlan, provision, safeMirror, safeCredentialsBack, readTarSafe, safeRelPath, guestIsolationScript, WSL2_ARTIFACTS} from "../../core/sandbox/wsl2-provider.js";
 import {decideEgress} from "../../core/sandbox/egress-proxy.js";
 import {ExecutionGate} from "../../core/workos/execution-gate.js";
 
@@ -165,24 +165,27 @@ export function registerDskWsl2Cases(): void {
     expect(fs.readFileSync(path.join(prof, ".credentials.json"), "utf8")).toBe("{\"t\":1}");
   });
   it("provisioning: every artifact is sha256-pinned (refused otherwise), only the dedicated distro is imported, wsl.conf is written, and execution stops at the first failing step", async () => {
-    const pin = (n: string) => ({path: `C:\\pkg\\${n}`, sha256: "d".repeat(64)});
-    const base = {installDir: "C:\\Users\\f\\AppData\\Local\\UASCO\\wsl", rootfs: pin("rootfs.tar"), node: pin("node.tar.xz"), claude: pin("claude.tgz"), appScriptsTar: pin("app.tar")};
+    const A = WSL2_ARTIFACTS, at = (n: string, sha256: string) => ({path: `C:\\pkg\\${n}`, sha256});
+    const base = {installDir: "C:\\Users\\f\\AppData\\Local\\UASCO\\wsl", rootfs: at("rootfs.tar.gz", A.rootfs.sha256), node: at("node.tar.xz", A.node.sha256), claude: at("claude.tgz", A.claude.sha256), appScriptsTar: at("app.tar", "e".repeat(64)), nodeBinarySha256: A.node.binarySha256!, claudeBinarySha256: A.claude.binarySha256!};
+    for (const k of ["rootfs", "node", "claude"] as const) { expect(A[k].url).toMatch(/^https:\/\/(cloud-images\.ubuntu\.com|nodejs\.org|registry\.npmjs\.org)\//); expect(A[k].sha256).toMatch(/^[0-9a-f]{64}$/); }
     expect(provisionPlan({...base, claude: {path: "x", sha256: "nope"}})).toEqual({ok: false, error: "PIN_MISSING_CLAUDE"});
     expect(provisionPlan({...base, installDir: "relative"})).toEqual({ok: false, error: "INSTALL_DIR_NOT_ABSOLUTE_WINDOWS"});
+    expect(provisionPlan({...base, rootfs: at("other.tar", "f".repeat(64))})).toEqual({ok: false, error: "ARTIFACT_NOT_PINNED_ROOTFS"}); // a self-consistent but unknown rootfs is untrusted
+    expect(provisionPlan({...base, claudeBinarySha256: "0".repeat(64)})).toEqual({ok: false, error: "ARTIFACT_NOT_PINNED_BINARY"});
     const plan = provisionPlan(base); if (!plan.ok) throw new Error(plan.error);
-    expect(plan.steps[0].args).toEqual(["--import", WSL_DISTRO, base.installDir, base.rootfs.path, "--version", "2"]);
+    expect(plan.steps[0].args).toEqual(["--import", WSL_DISTRO, base.installDir, base.rootfs.path, "--version", "2"]); expect(plan.steps[0].verify).toEqual(base.rootfs);
     expect(plan.steps.find(s => s.input === WSL_CONF)).toBeTruthy();
-    for (const s of plan.steps.filter(x => x.inputFile)) expect(s.args.join(" ")).toMatch(/sha256sum -c/);
+    for (const s of plan.steps.filter(x => x.inputFile)) { expect(s.args.join(" ")).toMatch(/sha256sum -c/); expect(s.verify).toBeTruthy(); }
+    expect(plan.steps.at(-1)!.args.join(" ")).toContain(A.claude.binarySha256!);
     expect(plan.steps.every(s => !s.args.includes("Ubuntu"))).toBe(true);
-    // host-side verification BEFORE wsl --import: a changed rootfs never reaches wsl.exe; a missing one either
-    const crypto = await import("node:crypto"), good = Buffer.from("rootfs-bytes"), goodSha = crypto.createHash("sha256").update(good).digest("hex");
-    const plan2 = provisionPlan({...base, rootfs: {path: "C:\\pkg\\rootfs.tar", sha256: goodSha}, node: {path: "C:\\pkg\\n", sha256: goodSha}, claude: {path: "C:\\pkg\\c", sha256: goodSha}, appScriptsTar: {path: "C:\\pkg\\a", sha256: goodSha}}); if (!plan2.ok) throw new Error(plan2.error);
-    const seen: string[] = [];
-    const run = async (args: string[]) => { seen.push(args.join(" ")); return ok("", 0); };
-    expect(await provision(plan2, run, () => Buffer.from("tampered"))).toEqual({ok: false, step: `ARTIFACT_HASH_MISMATCH:${plan2.steps[0].what}`}); expect(seen).toEqual([]);
-    expect(await provision(plan2, run, () => { throw new Error("ENOENT"); })).toEqual({ok: false, step: `ARTIFACT_MISSING:${plan2.steps[0].what}`}); expect(seen).toEqual([]);
-    const res = await provision(plan2, async args => { seen.push(args.join(" ")); return ok("", seen.length === 3 ? 1 : 0); }, () => good);
-    expect(res).toEqual({ok: false, step: plan2.steps[2].what}); expect(seen.length).toBe(3);
+    // host-side verification BEFORE wsl --import: a changed or missing rootfs never reaches wsl.exe
+    const seen: string[] = [], run = async (args: string[]) => { seen.push(args.join(" ")); return ok("", 0); };
+    expect(await provision(plan, run, () => Buffer.from("tampered"))).toEqual({ok: false, step: `ARTIFACT_HASH_MISMATCH:${plan.steps[0].what}`}); expect(seen).toEqual([]);
+    expect(await provision(plan, run, () => { throw new Error("ENOENT"); })).toEqual({ok: false, step: `ARTIFACT_MISSING:${plan.steps[0].what}`}); expect(seen).toEqual([]);
+    // with matching artifacts it runs in order and stops at the first failing step (the hash function is a test seam: real files are not in CI)
+    const byPath: Record<string, string> = Object.fromEntries([base.rootfs, base.node, base.claude, base.appScriptsTar].map(x => [x.path, x.sha256]));
+    const res = await provision(plan, async args => { seen.push(args.join(" ")); return ok("", seen.length === 3 ? 1 : 0); }, p => Buffer.from(p), b => byPath[b.toString()] ?? "x");
+    expect(res).toEqual({ok: false, step: plan.steps[2].what}); expect(seen.length).toBe(3);
   });
   it("the guest egress proxy decides exactly like the host proxy (no drift)", () => {
     const guest = createRequire(import.meta.url)("../../core/sandbox/guest/egress.cjs") as {decide: (h: string) => unknown};
