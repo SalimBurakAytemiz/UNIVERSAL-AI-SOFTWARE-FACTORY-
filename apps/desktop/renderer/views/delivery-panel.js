@@ -2,11 +2,11 @@
 import {h,panel,stateNote,emptyNote,statusPill,statePill,badge} from "../components.js";
 import {drafts,statusBlock,setStatus,focusResult,settle} from "../forms.js";
 import {describePostResult} from "../work-core.js";
-import {buildPrepareRequest,buildAcceptanceRequest,isSourceComplete,deliverySourceState,deliveryChecklist,mapRunSecurity} from "../delivery-core.js";
+import {buildPrepareRequest,buildAcceptanceRequest,isSourceComplete,deliverySourceState,deliveryChecklist,mapRunSecurity,describeExportResult,exportMessage} from "../delivery-core.js";
 import {axisBadges,axisLabel,deliveryAckBlock,deliveryAckState,resetDeliveryAcks} from "../m1a.js";
 
 export const deliveryStatusId=runId=>`dl-${runId}`;
-const EXPORT_REASONS=["CANCELLED","DELIVERY_UNAVAILABLE","DELIVERY_RECORD_INVALID","DELIVERY_ARTIFACT_HASH_MISMATCH","DELIVERY_ARTIFACT_MISSING","DELIVERY_PATH_REJECTED","DELIVERY_WRITE_FAILED","DELIVERY_ARTIFACT_NOT_PREPARED"];
+export const deliveryExportResult=runId=>drafts.deliveryExport?.[runId]??null;
 const dialogOpen=runId=>drafts.deliveryDialog?.[runId]===true;
 function setDialog(runId,open){drafts.deliveryDialog??={};if(open)drafts.deliveryDialog[runId]=true;else delete drafts.deliveryDialog[runId]}
 
@@ -42,16 +42,31 @@ export async function acceptDelivery(ctx,d){
   if(r.ok){resetDeliveryAcks(d.runId);setDialog(d.runId,false);await ctx.rerender();focusResult(ctx,sid,[`id:dl-export-${d.runId}`])}
   return r;
 }
-/** "Teslim paketini dışa aktar": renderer yalnız run kimliği verir; ana süreç sunucunun yeniden doğruladığı kaydı alır, dosya hash'ini tekrar doğrular ve seçilen konuma yazar. */
+/** "Teslim paketini dışa aktar": renderer yalnız run kimliği verir; ana süreç sunucunun yeniden doğruladığı kaydı alır, dosya hash'ini tekrar doğrular ve seçilen konuma yazar.
+ *  UASCO-T0016.A: sonuç (başarıda kayıt konumu + dosya adı + sha256, başarısızlıkta GERÇEK neden kodu) karta yapısal olarak yazılır; dışa aktarma sürerken düğme kapalıdır. */
 export async function exportDelivery(ctx,d){
-  const sid=deliveryStatusId(d.runId),native=ctx.native;let msg;
-  if(!native||typeof native.exportDelivery!=="function")msg={ok:false,key:"m1a.delivery.noNative",vars:{},errors:null};
+  const sid=deliveryStatusId(d.runId),native=ctx.native;
+  if(drafts.busy[sid]===true)return {ok:false,busy:true};
+  let x;
+  if(!native||typeof native.exportDelivery!=="function")x=describeExportResult(null,{noBridge:true});
   else{
-    let r=null;try{r=await native.exportDelivery(d.runId)}catch{r=null}
-    msg=r&&r.exported===true?{ok:true,key:"m1a.delivery.exported",vars:{hash:String(r.sha256??""),file:String(r.savedTo??r.fileName??"")},errors:null}
-      :{ok:false,key:`m1a.delivery.reason.${r&&EXPORT_REASONS.includes(r.reason)?r.reason:"DELIVERY_UNAVAILABLE"}`,vars:{},errors:null};
+    drafts.busy[sid]=true;
+    try{let r=null,thrown=false;try{r=await native.exportDelivery(d.runId)}catch{thrown=true}x=describeExportResult(r,{thrown})}
+    finally{drafts.busy[sid]=false}
   }
-  setStatus(sid,msg);await ctx.rerender();focusResult(ctx,sid,[`id:dl-export-${d.runId}`]);return {ok:msg.ok};
+  drafts.deliveryExport??={};drafts.deliveryExport[d.runId]=x;
+  const m=exportMessage(x);
+  setStatus(sid,{ok:x.ok,key:m.key,vars:m.vars,errors:null});await ctx.rerender();focusResult(ctx,sid,[`id:dl-export-${d.runId}`]);
+  return {ok:x.ok,code:x.code,savedTo:x.savedTo};
+}
+/** Son dışa aktarma sonucunun yapısal bloğu: başarıda kayıt konumu / dosya adı / SHA-256, başarısızlıkta neden kodu (yalnız renk değil, metin + kod). */
+function exportResultBlock(ctx,d){
+  const x=deliveryExportResult(d.runId);if(!x)return null;
+  const doc=ctx.doc,row=(k,v,cls="mono")=>v?[h(doc,"dt",{text:ctx.t(k)}),h(doc,"dd",{class:cls,dataset:{exportField:k.split(".").pop()},text:v})]:[];
+  return h(doc,"section",{class:"delivery-export-result",dataset:{exportResult:x.ok?"EXPORTED":"FAILED",...(x.ok?{}:{exportReason:x.code})},"aria-labelledby":`dl-exp-t-${d.runId}`},
+    h(doc,"h4",{id:`dl-exp-t-${d.runId}`,text:ctx.t(x.ok?"m1a.delivery.exportResult.ok":"m1a.delivery.exportResult.failed")}),
+    h(doc,"dl",{class:"kv"},...(x.ok?[...row("m1a.delivery.exportResult.savedTo",x.savedTo),...row("m1a.delivery.exportResult.fileName",x.fileName),...row("m1a.delivery.exportResult.sha256",x.sha256)]
+      :row("m1a.delivery.exportResult.code",x.code))));
 }
 
 /** Kaynak durumu notu (metin + etiket, yalnız renk değil); VALID yalnız "güncel head'den üretildi" der, doğrulanmış ürün iddiası yok. */
@@ -120,7 +135,8 @@ function deliveryCard(ctx,d,sec){
     deliveryChecklistBlock(ctx,d,sec),
     h(doc,"div",{class:"btn-row",role:"group","aria-label":ctx.t("m1a.delivery.actions",{run:d.runId})},buttons),
     dialog,
-    statusBlock(ctx,sid));
+    statusBlock(ctx,sid),
+    exportResultBlock(ctx,d));
 }
 /** Koşu teslimleri paneli: SOURCE_GENERATION_COMPLETE koşular eylemli kartlar, diğerleri yalnız iki eksen etiketiyle tablo. */
 export function runDeliveriesPanel(ctx,list,securityByRun=list?.security??{}){

@@ -1,5 +1,7 @@
 // //TR: Bu test registry'de bilinmeyen teknoloji geldiğinde sistemin "biliyorum" varsaymak yerine DETECTED gap üretmesini doğrular.
-import {describe,it,expect} from "vitest";
+import {describe,it,expect,vi} from "vitest";
+// //TR: Bu dosyadaki SC-14 Project Memory testleri gerçek disk G/Ç'si (geçici dizin, dosya yazma, hash zinciri doğrulama) yapar; yavaş GitHub-hosted Windows runner'da vitest'in varsayılan 5 sn test / 10 sn kanca sınırını aşabiliyor (main a38c073f validate-windows-shard 1: "Test timed out in 5000ms" satır 129; #436: satır 38 ve 141). Yalnız süre bütçesi; hiçbir iddia değişmez, korunan 600 sn adım sınırı geçerlidir (tests/v7-b3a-runner-limits-archive.test.ts ile aynı desen).
+vi.setConfig({testTimeout: 120_000, hookTimeout: 180_000});
 import {requireKnownOrGap} from "../core/knowledge/technology-discovery.js";
 describe("technology discovery",()=>{
   it("returns known technology",()=>{
