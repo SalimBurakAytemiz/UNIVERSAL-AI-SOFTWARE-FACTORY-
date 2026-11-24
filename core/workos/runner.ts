@@ -27,6 +27,7 @@ import type {WorkspaceOwner} from "./writer-guard.js";
 import {redactSecrets, scanCommitMessagesForSecrets, scanDiffForSecrets} from "./secret-scan.js";
 // INT-R4: runProcess (REL-FX ana-makine test çalıştırıcısı) ARTIK kullanılmaz; yürütme yalnız execution-gate sağlayıcısı (gate.provider.run) üzerinden gider, ana makinede asla.
 import {assertIndependentExecutors} from "./executors.js";
+import {gitControlDigest} from "./builder-output.js";
 import {authorizationRefusal} from "./mission-authorization.js";
 import type {MissionAuthRefusal} from "./mission-authorization.js";
 import {ExecutionGate} from "./execution-gate.js";
@@ -1177,8 +1178,11 @@ export class MissionRunner {
     const testExecution = this.testsNotExecuted(run) ? {executed: false as const, reason: "SANDBOX_UNAVAILABLE" as const} : undefined;
     // //TR: Rol atanmış run'da reviewer zaman aşımı = min(run varsayılanı, bağlı security-reviewer limiti); profil run varsayılanını yalnız SIKILAŞTIRIR. (maxFilesWritten 0 aşağıdaki untouched-clone kapısıdır; maxCycles 1 = bu adımda tek review geçişi.) Rolsüz run değişmez.
     const reviewTimeoutMs = reviewerProfile ? effectiveLimits(reviewerProfile.limits, {maxRemediations: this.o.maxRemediations, executorTimeoutMs: this.o.executorTimeoutMs}).executorTimeoutMs : this.o.executorTimeoutMs;
+    const gitBefore = gitControlDigest(clone); // #446 N10: the reviewed clone's .git is digested before the reviewer runs
     const r = await this.withChild(run, leaseId, onSpawn => reviewer.review(clone, {...this.missionSpec(run), ...(testSurface ? {testSurface} : {}), ...(testExecution ? {testExecution} : {})}, diff, {timeoutMs: reviewTimeoutMs, shouldAbort: abort, onSpawn, writerEnv: writerEnvFor(run.runId, leaseId), span: fn => this.span(fn)}));
-    const untouched = (await this.gitOk(clone, ["rev-parse", "HEAD"])) === run.headSha && (await this.gitOk(clone, ["status", "--porcelain", "--untracked-files=all"])) === "";
+    // //TR: #446 N10: .git özeti değiştiyse incelenen klonda HİÇBİR git komutu çalışmaz (yerleştirilmiş fsmonitor/hook/filtre yürütülemez); değişmediyse git yalnız sertleştirilmiş seçeneklerle çalışır.
+    const gitAfter = gitControlDigest(clone), HARD = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false"];
+    const untouched = gitBefore !== null && gitAfter === gitBefore && (await this.gitOk(clone, [...HARD, "rev-parse", "HEAD"])) === run.headSha && (await this.gitOk(clone, [...HARD, "status", "--porcelain", "--untracked-files=all"])) === "";
     const log = this.writeLog(run, "review", r.log);
     const limit = !r.valid && !r.aborted && !r.timedOut ? executorLimit(r.exitCode, r.log) : null;
     // INT-R4 kompozisyon: REVIEW kanıt notu SBX-8 anlambilimini birebir korur (çalışma alanı değişti -> REVIEW_CLONE_MUTATED; geçersiz -> REVIEW_INVALID <neden>), REL-FX provider kota/hız sınırı notunu (limitNote) ekler. Test yüzeyi reviewer'a ayrıca verilir (reviewer.review) ve VERIFY'de ayrı TEST_SURFACE kanıtı olarak kaydedilir; notta tekrarlanmaz.

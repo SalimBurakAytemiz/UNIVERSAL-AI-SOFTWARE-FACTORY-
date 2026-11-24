@@ -219,7 +219,9 @@ export function safeRelPath(raw: string): string | null {
   const parts = p.split("/");
   for (const s of parts) if (!s || s === "." || s === ".." || /[. ]$/.test(s) || /^(con|prn|aux|nul|com\d|lpt\d)(\..*)?$/i.test(s)) return null;
   // #446 B2: no NTFS 8.3 short names (GIT~1 aliases .git) — any "~" in a segment is refused; and no ".git" at ANY depth, any case
-  if (parts.some(s => s.includes("~") || s.toLowerCase() === ".git")) return null;
+  // #446 N11: compare after NFKC folding with invisible/ignorable characters removed (no non-ASCII ".git" look-alike)
+  const fold = (x: string) => x.normalize("NFKC").replace(/[\u00ad\u034f\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]/g, "").toLowerCase();
+  if (parts.some(s => fold(s).includes("~") || fold(s) === ".git" || fold(s) !== s.toLowerCase() && fold(s).replace(/[^a-z0-9.]/g, "") === ".git")) return null;
   return parts.join("/");
 }
 const field = (h: Buffer, o: number, n: number) => h.subarray(o, o + n).toString("latin1").replace(/\0.*$/s, "");

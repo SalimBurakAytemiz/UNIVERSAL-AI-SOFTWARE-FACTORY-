@@ -504,6 +504,30 @@ export function registerDskRunnerPassiveCases(): void {
     for (const bad of ["/v1/system/sandbox/install/", "/v1/system/sandbox/uninstall", "/v1/system/sandbox/install?d=Ubuntu"]) expect(post(bad), bad).toBe(false);
   });
 
+  it("#446 N10: a reviewer that plants core.fsmonitor in the review clone never gets it executed by the runner; the run is BLOCKED REVIEWER_MUTATED_CLONE", { timeout: 120_000 }, async () => {
+    const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "dsk-n10-")), repo = path.join(tmp, "repo"), data = path.join(tmp, "data"), marker = path.join(tmp, "FSMONITOR_RAN");
+    fs.mkdirSync(repo); const git = (a: string[]) => { const r = spawnGitSync(repo, a); if (r.status !== 0) throw new Error(String(r.stderr)); };
+    git(["init", "-q", "-b", "main"]); fs.writeFileSync(path.join(repo, "test.mjs"), "process.exit(0);\n"); git(["add", "-A"]); git(["-c", "user.name=S", "-c", "user.email=s@local.invalid", "commit", "-q", "-m", "s"]);
+    const hook = path.join(tmp, "fsmon.sh"); fs.writeFileSync(hook, `#!/bin/sh\ntouch ${marker}\n`, {mode: 0o755});
+    const base = new FakeEx({implement: () => ({files: {"feature.txt": "ok\n"}}), review: () => ({verdict: "CLEAN"})}).pair();
+    const pair: any = {...base, reviewer: {identity: base.reviewer.identity, async review(clone: string, spec: any, diff: string, ctx: any) {
+      fs.appendFileSync(path.join(clone, ".git", "config"), `[core]\n\tfsmonitor = ${hook}\n`); // the planted payload
+      return base.reviewer.review(clone, spec, diff, ctx); }}};
+    const st = new WorkOsStore(data);
+    const p = st.createProject({tenantId: "tA", orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL", repository: {path: repo}, testCommand: ["node", "test.mjs"]});
+    const m = st.createMission({tenantId: "tA", projectId: p.projectId, title: "F", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
+    for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) st.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
+    const id = st.createRun({tenantId: "tA", missionId: m.missionId, executor: {implementer: pair.implementer.identity, reviewer: pair.reviewer.identity}, createdBy: "FOUNDER_LOCAL"}).runId;
+    const {testExecutionGate} = await import("./test-sandbox.js");
+    const r = new MissionRunner({executionGate: testExecutionGate(), store: st, dataDir: data, globalStopFile: path.join(tmp, "STOP.json"), envPolicyFile: path.resolve(import.meta.dirname, "..", "..", "config", "environment-policy.json"),
+      executors: pair, retryBackoffMs: [0, 0], security: fakeSecurity(`${data}-sec`).options});
+    for (let i = 0; i < 12; i++) { await r.tick(); if (["BLOCKED", "FAILED", "SUCCEEDED", "AWAITING_APPROVAL"].includes(st.getRun({tenantId: "tA"}, id)!.status)) break; }
+    const run = st.getRun({tenantId: "tA"}, id)!;
+    expect(run.status).toBe("BLOCKED"); expect(run.reason).toContain("REVIEWER_MUTATED_CLONE");
+    expect(fs.existsSync(marker)).toBe(false);
+    await r.stop();
+  });
+
   it("PRODUCTION executor: LocalClaudeExecutors is NOT_ISOLATED and refuses all three real-model paths at the source, before any process starts", async () => {
     const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "dsk-iso-")), calls: string[][] = [];
     const ex = new LocalClaudeExecutors(path.resolve(import.meta.dirname, "..", ".."), tmp, {runReviewer: async argv => { calls.push(argv); throw new Error("must not run"); }});
