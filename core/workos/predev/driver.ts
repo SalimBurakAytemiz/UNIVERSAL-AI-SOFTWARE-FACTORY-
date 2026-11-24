@@ -2,6 +2,8 @@
 import {validateArtifactContent, type UpstreamContents} from "./validators.js";
 import {composeRolePrompt, getRolePrompt} from "./role-prompts.js";
 import {hasPlaceholder} from "./placeholder.js";
+import {promptRef, type PromptRef} from "../../prompt-registry/versioning.js";
+import {PROMPT_MANIFEST} from "../../prompt-registry/prompt-manifest.js";
 import {PHASE_ARTIFACT_KIND, PRE_DEV_PHASE_TRANSITIONS} from "./types.js";
 import type {Scope} from "../types.js";
 import type {
@@ -52,9 +54,10 @@ export interface PreDevDriverDeps {
 }
 
 // //TR: Bir faz üretim denemesinin dürüst sonucu. RECORDED: içerik doğrulandı ve DRAFT olarak kaydedildi. REJECTED: içerik (parse veya doğrulayıcı) kapısından geçemedi; HİÇBİR geçersiz artefakt kaydedilmedi ve faz İLERLEMEDİ; reason doğrulayıcının sabit hata kodudur (uydurma değil).
+// //TR: UASCO-T0117: her sonuç, builder'a gönderilen rol isteminin sürümünü + şablon özetini + gönderilen GERÇEK metnin özetini (prompt) taşır.
 export type ProduceOutcome =
-  | {status: "RECORDED"; kind: ArtifactKind; phase: PreDevPhase; artifactId: string; version: number}
-  | {status: "REJECTED"; kind: ArtifactKind; phase: PreDevPhase; reason: string};
+  | {status: "RECORDED"; kind: ArtifactKind; phase: PreDevPhase; artifactId: string; version: number; prompt: PromptRef}
+  | {status: "REJECTED"; kind: ArtifactKind; phase: PreDevPhase; reason: string; prompt: PromptRef};
 
 // Faz artefakt zincirinin sabit sırası (üst/alt ilişkisi bundan türetilir).
 const PREDEV_KIND_ORDER: readonly ArtifactKind[] = ["BusinessAnalysis", "Requirements", "Plan", "Architecture", "UxSpec"];
@@ -119,20 +122,21 @@ export class PreDevDriver {
     const ctx = this.buildMissionContext(scope, missionId, kind);
     const rolePrompt = composeRolePrompt(kind, ctx);
     const authorRoleId = getRolePrompt(kind).roleId;
+    const prompt = promptRef(PROMPT_MANIFEST, `predev.role.${kind}`, rolePrompt);
 
     const raw = await this.deps.builder.produce(kind, rolePrompt, ctx);
     let parsed: unknown;
     try { parsed = JSON.parse(raw); }
-    catch { return {status: "REJECTED", kind, phase, reason: "PREDEV_DRIVER_INVALID_JSON"}; }
+    catch { return {status: "REJECTED", kind, phase, reason: "PREDEV_DRIVER_INVALID_JSON", prompt}; }
 
     // //TR: C-FLOW-ANALYSIS-2: yer tutucu işareti (her varyantı, anahtarlar dahil) taşıyan içerik kaydedilmez; aynı koruma validateArtifactContent içinde de vardır, burada yalnız sabit sürücü kodu için önce sorulur (çok derin içerik doğrulayıcıdan CONTENT_TOO_DEEP ile döner).
-    if (hasPlaceholder(parsed)) return {status: "REJECTED", kind, phase, reason: "PREDEV_DRIVER_PLACEHOLDER_VALUE"};
+    if (hasPlaceholder(parsed)) return {status: "REJECTED", kind, phase, reason: "PREDEV_DRIVER_PLACEHOLDER_VALUE", prompt};
 
     const v = validateArtifactContent(kind, parsed, toUpstreamContents(kind, ctx.approvedUpstream));
-    if (!v.ok) return {status: "REJECTED", kind, phase, reason: v.errors};
+    if (!v.ok) return {status: "REJECTED", kind, phase, reason: v.errors, prompt};
 
     const art = this.deps.store.recordPreDevArtifact(scope, rm.preDevId, {kind, authorRoleId, content: parsed as ArtifactContent, ...(supersedes ? {supersedes} : {})}, recordedBy);
-    return {status: "RECORDED", kind, phase, artifactId: art.id, version: art.version};
+    return {status: "RECORDED", kind, phase, artifactId: art.id, version: art.version, prompt};
   }
 
   // //TR: Kaydedilmiş DRAFT'ı MEVCUT onay mekanizmasıyla SUBMITTED->APPROVED yapar ve o fazdan sonraki faza ilerletir. Kaydeden submit eder; onaylayan kaydedenden bağımsız olmalı ve evidenceRefs boş olamaz (bunları store zorlar; driver zayıflatmaz). APPROVED değilse faz kapısı ilerlemeyi reddeder.
