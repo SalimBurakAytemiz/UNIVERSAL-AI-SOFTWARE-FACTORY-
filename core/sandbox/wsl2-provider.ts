@@ -27,16 +27,12 @@ export interface Wsl2Options {
   /** Host path roots the mapper translates (the app install dir and the UASCO control root). */
   hostAppRoot?: string; hostControlRoot?: string;
   /** Host-side archive helpers (default: the system tar; on Windows the absolute System32\\tar.exe). */
-  hostTar?: (dir: string, exclude?: string[]) => Buffer; hostUntar?: (dir: string, data: Buffer) => void;
+  hostTar?: (dir: string, exclude?: string[]) => Buffer;
 }
 const sysTar = (systemRoot?: string) => process.platform === "win32" ? path.win32.join(systemRoot ?? process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe") : "tar";
 export const defaultHostTar = (systemRoot?: string) => (dir: string, exclude: string[] = []): Buffer => {
   const r = cp.spawnSync(sysTar(systemRoot), ["-c", "-f", "-", ...exclude.flatMap(e => ["--exclude", e]), "-C", dir, "."], {maxBuffer: 1024 * 1024 * 1024, windowsHide: true});
   if (r.status !== 0) throw new Error("HOST_TAR_FAILED"); return r.stdout;
-};
-export const defaultHostUntar = (systemRoot?: string) => (dir: string, data: Buffer): void => {
-  const r = cp.spawnSync(sysTar(systemRoot), ["-x", "-f", "-", "-C", dir], {input: data, windowsHide: true});
-  if (r.status !== 0) throw new Error("HOST_UNTAR_FAILED");
 };
 
 /** `wsl.exe -l -v` prints UTF-16LE; returns rows {name, state, version, isDefault}. */
@@ -103,7 +99,8 @@ export function evaluateProbe(stdout: string): {ok: true} | {ok: false; reason: 
 export const checkWslConf = (text: string): boolean => text.replace(/\r\n/g, "\n").trim() === WSL_CONF.trim();
 
 /** One run's guest scratch: /var/uasco/runs/<key>/{repo,profile,.egress.sock}; the key is derived (no host path text reaches the guest). */
-export const runKey = (hostCwd: string): string => crypto.createHash("sha256").update(hostCwd).digest("hex").slice(0, 24);
+/** Fresh random key per mapping: two simultaneous tasks (even on the same host path) never share a guest scratch or a host mapping. */
+export const runKey = (): string => crypto.randomBytes(12).toString("hex");
 
 export class Wsl2SandboxProvider implements SandboxProvider {
   readonly id = WSL2_SANDBOX_ID;
@@ -111,6 +108,7 @@ export class Wsl2SandboxProvider implements SandboxProvider {
   lastRefusal: WslRefusal | null = null;
   private verified = false;
   private readonly hostOf = new Map<string, {cwd: string; profile: string | null}>();
+  private readonly inFlight = new Set<string>();
   private probing: Promise<{ok: boolean; detail?: string}> | null = null;
   constructor(private readonly o: Wsl2Options = {}) {}
   private get runner(): WslRunner { return this.o.runner ?? defaultWslRunner(wslExe(this.o.systemRoot)); }
@@ -152,7 +150,8 @@ export class Wsl2SandboxProvider implements SandboxProvider {
   }
   /** Windows host -> Linux guest mapping. Only known roots map; anything else is refused (null). */
   mapModelProcess(argv: string[], o: {cwd: string; env: NodeJS.ProcessEnv}): {argv: string[]; cwd: string; env: NodeJS.ProcessEnv} | null {
-    const key = runKey(o.cwd), app = this.o.hostAppRoot, root = `${GUEST.runs}/${key}`;
+    let key = runKey(); while (this.hostOf.has(key)) key = runKey();
+    const app = this.o.hostAppRoot, root = `${GUEST.runs}/${key}`;
     this.hostOf.set(key, {cwd: o.cwd, profile: typeof o.env.CLAUDE_CONFIG_DIR === "string" ? o.env.CLAUDE_CONFIG_DIR : null});
     const mapArg = (a: string, i: number): string | null => {
       if (i === 0) return /node(\.exe)?$/i.test(a) || a === process.execPath ? GUEST.node : /claude(\.exe|\.cmd)?$/i.test(a) ? GUEST.claude : null;
@@ -173,11 +172,13 @@ export class Wsl2SandboxProvider implements SandboxProvider {
     if (argv.some(a => /^[A-Za-z]:[\\/]|\\/.test(a))) return Promise.resolve(refuse("WINDOWS_PATH_IN_ARGV"));
     const key = m[1], host = this.hostOf.get(key);
     if (!host) return Promise.resolve(refuse("RUN_NOT_MAPPED"));
-    return this.runMapped(key, host, argv, opts, at).catch(() => refuse("TRANSFER_FAILED"));
+    if (this.inFlight.has(key)) return Promise.resolve(refuse("RUN_KEY_IN_USE")); // one mapping = one run
+    this.inFlight.add(key);
+    return this.runMapped(key, host, argv, opts, at).catch((e: Error) => refuse(/^(UNSAFE_|TAR_)/.test(e?.message ?? "") ? e.message : "TRANSFER_FAILED")).finally(() => this.inFlight.delete(key));
   }
   /** In: workspace (incl. .git) and ONLY the role profile; run isolated; out: workspace changes (mirror, .git excluded on the host side) and refreshed credentials; scratch always removed. */
   private async runMapped(key: string, host: {cwd: string; profile: string | null}, argv: string[], opts: SandboxRunOptions, at: string): Promise<ProcResult> {
-    const tar = this.o.hostTar ?? defaultHostTar(this.o.systemRoot), untar = this.o.hostUntar ?? defaultHostUntar(this.o.systemRoot), scratch = `${GUEST.runs}/${key}`;
+    const tar = this.o.hostTar ?? defaultHostTar(this.o.systemRoot), scratch = `${GUEST.runs}/${key}`;
     const put = async (sub: string, data: Buffer) => { const r = await this.exec(["/bin/sh", "-c", `rm -rf ${sq(`${scratch}/${sub}`)} && mkdir -p ${sq(`${scratch}/${sub}`)} && tar -x -f - -C ${sq(`${scratch}/${sub}`)}`], {input: data, timeoutMs: 300_000}); if (r.exitCode !== 0) throw new Error("PUT"); };
     try {
       await put("repo", tar(host.cwd));
@@ -185,10 +186,12 @@ export class Wsl2SandboxProvider implements SandboxProvider {
       const egress = argv[0] === GUEST.node || argv[0] === GUEST.claude;
       const r = await this.isolated(key, ["/bin/sh", "-c", 'cd /work/repo && exec "$@"', "sh", ...argv], {env: opts.env, timeoutMs: opts.timeoutMs, input: opts.input, shouldAbort: opts.shouldAbort, egress});
       if (r.aborted || opts.shouldAbort?.()) await this.stopAll();
-      const back = await this.exec(["/bin/sh", "-c", `cd ${sq(`${scratch}/repo`)} && find . -path ./.git -prune -o -type f -print && printf '\\0' && tar -c -f - --exclude ./.git .`], {timeoutMs: 300_000});
+      // Guest output is UNTRUSTED: parsed by our own strict reader (no host tar, no links, no traversal), validated in full before any host write.
+      const back = await this.exec(["/bin/sh", "-c", `cd ${sq(`${scratch}/repo`)} && find . -path ./.git -prune -o -type f -print && printf '\\0' && { find . -mindepth 1 -path ./.git -prune -o \\( -type f -o -type d \\) -print0 | tar -c -f - --format=ustar --no-recursion --null -T -; }`], {timeoutMs: 300_000});
       const sep = back.stdout.indexOf(0);
-      if (back.exitCode === 0 && sep >= 0) mirrorBack(host.cwd, back.stdout.subarray(0, sep).toString("utf8").split("\n").filter(Boolean), back.stdout.subarray(sep + 1), untar);
-      if (host.profile) { const c = await this.exec(["/bin/sh", "-c", `cd ${sq(`${scratch}/profile`)} && tar -c -f - .credentials.json 2>/dev/null`], {timeoutMs: 60_000}); if (c.exitCode === 0 && c.stdout.length) untar(host.profile, c.stdout); }
+      if (back.exitCode !== 0 || sep < 0) throw new Error("TAR_BACK_FAILED");
+      safeMirror(host.cwd, back.stdout.subarray(0, sep).toString("utf8").split("\n").filter(Boolean), back.stdout.subarray(sep + 1));
+      if (host.profile) { const c = await this.exec(["/bin/sh", "-c", `cd ${sq(`${scratch}/profile`)} && [ -f .credentials.json ] && [ ! -L .credentials.json ] && tar -c -f - --format=ustar .credentials.json`], {timeoutMs: 60_000}); if (c.exitCode === 0 && c.stdout.length) safeCredentialsBack(host.profile, c.stdout); }
       return {argv, exitCode: r.aborted || r.timedOut ? null : r.exitCode, stdout: r.stdout.toString("utf8"), stderr: r.stderr.toString("utf8"), startedAt: at, endedAt: new Date().toISOString(), timedOut: r.timedOut, aborted: r.aborted, spawnError: r.exitCode === null && !r.timedOut && !r.aborted};
     } finally {
       await this.exec(["/bin/rm", "-rf", scratch], {timeoutMs: 60_000}).catch(() => undefined);
@@ -203,33 +206,104 @@ export class Wsl2SandboxProvider implements SandboxProvider {
   spawn(_c: string, _a: string[], _o: SpawnOptions): ChildProcess { throw new Error("WSL2_SPAWN_NOT_SUPPORTED: use run()"); }
 }
 
-/** Host mirror of the guest workspace: files the guest no longer has are removed (never inside .git), then the guest tar is extracted over the tree. */
-export function mirrorBack(hostDir: string, guestFiles: string[], data: Buffer, untar: (dir: string, data: Buffer) => void): void {
-  const keep = new Set(guestFiles.map(f => f.replace(/^\.\//, "")));
-  const walk = (rel: string): string[] => fs.readdirSync(path.join(hostDir, rel), {withFileTypes: true}).flatMap(e => {
-    const r = rel ? `${rel}/${e.name}` : e.name; if (r === ".git") return [];
-    return e.isDirectory() ? walk(r) : [r];
+// ---------- Untrusted guest archive -> Windows host (path traversal / link / outside-write safe) ----------
+export const TAR_LIMITS = Object.freeze({maxEntries: 20_000, maxFileBytes: 64 * 1024 * 1024, maxTotalBytes: 512 * 1024 * 1024});
+export interface TarEntry { path: string; type: "file" | "dir"; data: Buffer }
+/** Relative, forward-slash, no ".."/"."/empty segment, no absolute/drive/backslash/NUL/colon, no .git, no Windows-reserved names. Returns the canonical path or null. */
+export function safeRelPath(raw: string): string | null {
+  const p = raw.replace(/^\.\//, "").replace(/\/$/, "");
+  if (!p || p.length > 1024 || /[\\\u0000:*?"<>|]/.test(p) || p.startsWith("/") || /^[A-Za-z]:/.test(p)) return null;
+  const parts = p.split("/");
+  for (const s of parts) if (!s || s === "." || s === ".." || /[. ]$/.test(s) || /^(con|prn|aux|nul|com\d|lpt\d)(\..*)?$/i.test(s)) return null;
+  if (parts[0].toLowerCase() === ".git") return null;
+  return parts.join("/");
+}
+const field = (h: Buffer, o: number, n: number) => h.subarray(o, o + n).toString("latin1").replace(/\0.*$/s, "");
+/** Strict ustar reader: only regular files and directories; any link, device, fifo, pax/GNU extension, bad checksum or limit breach rejects the WHOLE archive. */
+export function readTarSafe(buf: Buffer): {ok: true; entries: TarEntry[]} | {ok: false; reason: string} {
+  const out: TarEntry[] = []; let off = 0, total = 0;
+  while (off + 512 <= buf.length) {
+    const h = buf.subarray(off, off + 512);
+    if (h.every(b => b === 0)) return {ok: true, entries: out};
+    const sum = [...h].reduce((a, b, i) => a + (i >= 148 && i < 156 ? 32 : b), 0);
+    if (Number.parseInt(field(h, 148, 8).trim() || "x", 8) !== sum) return {ok: false, reason: "TAR_BAD_CHECKSUM"};
+    if (!field(h, 257, 6).startsWith("ustar")) return {ok: false, reason: "TAR_NOT_USTAR"};
+    const t = String.fromCharCode(h[156] || 48);
+    if (t !== "0" && t !== "5") return {ok: false, reason: `UNSAFE_TAR_TYPE_${t === "1" ? "HARDLINK" : t === "2" ? "SYMLINK" : t === "x" || t === "g" ? "PAX" : t === "L" || t === "K" ? "GNU_LONG" : "SPECIAL"}`};
+    const name = [field(h, 345, 155), field(h, 0, 100)].filter(Boolean).join("/");
+    const rel = safeRelPath(name);
+    if (rel === null) return {ok: false, reason: "UNSAFE_TAR_PATH"};
+    const size = Number.parseInt(field(h, 124, 12).trim() || "0", 8);
+    if (!Number.isSafeInteger(size) || size < 0 || size > TAR_LIMITS.maxFileBytes || (t === "5" && size !== 0)) return {ok: false, reason: "UNSAFE_TAR_SIZE"};
+    total += size; if (total > TAR_LIMITS.maxTotalBytes || out.length >= TAR_LIMITS.maxEntries) return {ok: false, reason: "UNSAFE_TAR_LIMIT"};
+    const start = off + 512, end = start + size;
+    if (end > buf.length) return {ok: false, reason: "TAR_TRUNCATED"};
+    out.push({path: rel, type: t === "5" ? "dir" : "file", data: t === "5" ? Buffer.alloc(0) : Buffer.from(buf.subarray(start, end))});
+    off = start + Math.ceil(size / 512) * 512;
+  }
+  return {ok: false, reason: "TAR_TRUNCATED"};
+}
+/** Every existing component from the root down to the target must be a real directory (never a link/junction); the target, if present, a regular file. */
+function hostPathSafe(root: string, rel: string, target: "file" | "dir"): boolean {
+  let cur = root; const parts = rel.split("/");
+  for (let i = 0; i < parts.length; i++) {
+    cur = path.join(cur, parts[i]);
+    let st: fs.Stats; try { st = fs.lstatSync(cur); } catch { return true; } // the rest does not exist yet: created as real dirs/files
+    if (st.isSymbolicLink()) return false;
+    const last = i === parts.length - 1;
+    if (!last && !st.isDirectory()) return false;
+    if (last && (target === "dir" ? !st.isDirectory() : !st.isFile())) return false;
+  }
+  return true;
+}
+/** Mirror the guest workspace onto the host workspace: validate everything first, then delete host files absent in the guest (never .git, never through links), then write. Nothing outside `hostDir` is touched. */
+export function safeMirror(hostDir: string, guestFiles: string[], tarData: Buffer): void {
+  const root = fs.realpathSync(hostDir);
+  const t = readTarSafe(tarData); if (!t.ok) throw new Error(t.reason);
+  const keep = new Set<string>();
+  for (const f of guestFiles) { const r = safeRelPath(f); if (r === null) throw new Error("UNSAFE_FILE_LIST"); keep.add(r); }
+  for (const e of t.entries) if (!hostPathSafe(root, e.path, e.type)) throw new Error("UNSAFE_HOST_LINK");
+  for (const e of t.entries) if (e.type === "file" && !keep.has(e.path)) throw new Error("UNSAFE_UNLISTED_FILE");
+  const walk = (rel: string): string[] => fs.readdirSync(path.join(root, rel), {withFileTypes: true}).flatMap(d => {
+    const r = rel ? `${rel}/${d.name}` : d.name; if (!rel && d.name === ".git") return [];
+    return d.isDirectory() && !d.isSymbolicLink() ? walk(r) : [r];
   });
-  for (const f of walk("")) if (!keep.has(f)) fs.rmSync(path.join(hostDir, f), {force: true});
-  untar(hostDir, data);
+  for (const f of walk("")) if (!keep.has(f)) fs.rmSync(path.join(root, f), {force: true}); // removes a link itself, never its target
+  for (const e of t.entries) {
+    const dest = path.join(root, e.path);
+    if (path.relative(root, dest).startsWith("..")) throw new Error("UNSAFE_TAR_PATH");
+    if (e.type === "dir") { fs.mkdirSync(dest, {recursive: true}); continue; }
+    fs.mkdirSync(path.dirname(dest), {recursive: true});
+    if (!hostPathSafe(root, e.path, "file")) throw new Error("UNSAFE_HOST_LINK"); // re-check just before the write
+    fs.writeFileSync(dest, e.data, {flag: "w"});
+  }
+}
+/** Only `.credentials.json`, a regular file, into a real (non-link) profile dir. */
+export function safeCredentialsBack(profileDir: string, tarData: Buffer): void {
+  const t = readTarSafe(tarData); if (!t.ok) throw new Error(t.reason);
+  if (t.entries.length !== 1 || t.entries[0].path !== ".credentials.json" || t.entries[0].type !== "file") throw new Error("UNSAFE_CREDENTIALS_ARCHIVE");
+  const st = fs.lstatSync(profileDir); if (st.isSymbolicLink() || !st.isDirectory()) throw new Error("UNSAFE_HOST_LINK");
+  const dest = path.join(profileDir, ".credentials.json");
+  try { if (fs.lstatSync(dest).isSymbolicLink()) throw new Error("UNSAFE_HOST_LINK"); } catch (e) { if ((e as Error).message === "UNSAFE_HOST_LINK") throw e; }
+  fs.writeFileSync(dest, t.entries[0].data, {mode: 0o600});
 }
 
 /** Provisioning plan for the dedicated distro (every artifact sha256-pinned; refused without pins). */
 export interface ProvisionInput { installDir: string; rootfs: {path: string; sha256: string}; node: {path: string; sha256: string}; claude: {path: string; sha256: string}; appScriptsTar: {path: string; sha256: string} }
 const HEX64 = /^[0-9a-f]{64}$/;
-export function provisionPlan(i: ProvisionInput): {ok: true; steps: Array<{what: string; args: string[]; guest: boolean; input?: string; inputFile?: string}>} | {ok: false; error: string} {
+export function provisionPlan(i: ProvisionInput): {ok: true; steps: Array<{what: string; args: string[]; guest: boolean; input?: string; inputFile?: string; verify?: {path: string; sha256: string}}>} | {ok: false; error: string} {
   for (const [k, v] of Object.entries({rootfs: i.rootfs, node: i.node, claude: i.claude, app: i.appScriptsTar})) if (!v || !HEX64.test(v.sha256) || typeof v.path !== "string" || !v.path) return {ok: false, error: `PIN_MISSING_${k.toUpperCase()}`};
   if (!/^[A-Za-z]:\\/.test(i.installDir)) return {ok: false, error: "INSTALL_DIR_NOT_ABSOLUTE_WINDOWS"};
   const g = (what: string, cmd: string, input?: string) => ({what, args: ["-d", WSL_DISTRO, "-u", "root", "--exec", "/bin/sh", "-c", cmd], guest: true, ...(input !== undefined ? {input} : {})});
   return {ok: true, steps: [
-    {what: "import the dedicated distro (never the user's)", args: ["--import", WSL_DISTRO, i.installDir, i.rootfs.path, "--version", "2"], guest: false},
+    {what: "import the dedicated distro (never the user's)", args: ["--import", WSL_DISTRO, i.installDir, i.rootfs.path, "--version", "2"], guest: false, verify: i.rootfs},
     g("write wsl.conf (no automount, no interop)", "cat > /etc/wsl.conf", WSL_CONF),
     {what: "restart to apply wsl.conf", args: ["--terminate", WSL_DISTRO], guest: false},
     g("user and layout", `id uasco >/dev/null 2>&1 || useradd -m uasco; mkdir -p /opt/uasco/node /opt/uasco/claude /opt/uasco/app /opt/uasco/sbx /opt/uasco/control ${GUEST.runs} && chmod 0755 /opt/uasco && chmod 0700 ${GUEST.runs}`),
     g("install relay", `cat > ${GUEST.sbx}/relay.cjs`, RELAY_JS),
-    {what: "install the pinned Linux node", args: ["-d", WSL_DISTRO, "-u", "root", "--exec", "/bin/sh", "-c", `echo ${i.node.sha256}  - > /tmp/n.sha; tee /tmp/node.tar.xz | sha256sum -c /tmp/n.sha >/dev/null && tar -x -J -f /tmp/node.tar.xz -C /opt/uasco/node --strip-components=1`], guest: true, inputFile: i.node.path} as never,
-    {what: "install the pinned Linux Claude Code CLI", args: ["-d", WSL_DISTRO, "-u", "root", "--exec", "/bin/sh", "-c", `echo ${i.claude.sha256}  - > /tmp/c.sha; tee /tmp/claude.tgz | sha256sum -c /tmp/c.sha >/dev/null && tar -x -z -f /tmp/claude.tgz -C /opt/uasco/claude --strip-components=1 && mkdir -p /opt/uasco/claude/bin && ln -sf ../cli.js /opt/uasco/claude/bin/claude`], guest: true, inputFile: i.claude.path} as never,
-    {what: "install the pinned app scripts (broker, egress proxy)", args: ["-d", WSL_DISTRO, "-u", "root", "--exec", "/bin/sh", "-c", `echo ${i.appScriptsTar.sha256}  - > /tmp/a.sha; tee /tmp/app.tar | sha256sum -c /tmp/a.sha >/dev/null && tar -x -f /tmp/app.tar -C /opt/uasco/app && cp /opt/uasco/app/sbx/egress.cjs ${GUEST.sbx}/egress.cjs`], guest: true, inputFile: i.appScriptsTar.path} as never,
+    {what: "install the pinned Linux node", args: ["-d", WSL_DISTRO, "-u", "root", "--exec", "/bin/sh", "-c", `echo ${i.node.sha256}  - > /tmp/n.sha; tee /tmp/node.tar.xz | sha256sum -c /tmp/n.sha >/dev/null && tar -x -J -f /tmp/node.tar.xz -C /opt/uasco/node --strip-components=1`], guest: true, inputFile: i.node.path, verify: i.node} as never,
+    {what: "install the pinned Linux Claude Code CLI", args: ["-d", WSL_DISTRO, "-u", "root", "--exec", "/bin/sh", "-c", `echo ${i.claude.sha256}  - > /tmp/c.sha; tee /tmp/claude.tgz | sha256sum -c /tmp/c.sha >/dev/null && tar -x -z -f /tmp/claude.tgz -C /opt/uasco/claude --strip-components=1 && mkdir -p /opt/uasco/claude/bin && ln -sf ../cli.js /opt/uasco/claude/bin/claude`], guest: true, inputFile: i.claude.path, verify: i.claude} as never,
+    {what: "install the pinned app scripts (broker, egress proxy)", args: ["-d", WSL_DISTRO, "-u", "root", "--exec", "/bin/sh", "-c", `echo ${i.appScriptsTar.sha256}  - > /tmp/a.sha; tee /tmp/app.tar | sha256sum -c /tmp/a.sha >/dev/null && tar -x -f /tmp/app.tar -C /opt/uasco/app && cp /opt/uasco/app/sbx/egress.cjs ${GUEST.sbx}/egress.cjs`], guest: true, inputFile: i.appScriptsTar.path, verify: i.appScriptsTar} as never,
     g("verify the guest toolchain pins", `sha256sum ${GUEST.node} ${GUEST.claude}`)
   ]};
 }
@@ -238,6 +312,8 @@ export function provisionPlan(i: ProvisionInput): {ok: true; steps: Array<{what:
 export async function provision(plan: ReturnType<typeof provisionPlan>, runner: WslRunner, readFile: (p: string) => Buffer = p => fs.readFileSync(p)): Promise<{ok: true} | {ok: false; step: string}> {
   if (!plan.ok) return {ok: false, step: plan.error};
   for (const st of plan.steps) {
+    // the artifact is verified on the HOST before it is imported/streamed (missing, changed or unpinned = stop); the guest re-verifies after transfer
+    if (st.verify) { let b: Buffer; try { b = readFile(st.verify.path); } catch { return {ok: false, step: `ARTIFACT_MISSING:${st.what}`}; } if (crypto.createHash("sha256").update(b).digest("hex") !== st.verify.sha256) return {ok: false, step: `ARTIFACT_HASH_MISMATCH:${st.what}`}; }
     const input = st.inputFile ? readFile(st.inputFile) : st.input;
     const r = await runner(st.args, {timeoutMs: 600_000, input});
     if (r.exitCode !== 0) return {ok: false, step: st.what};

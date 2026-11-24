@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import cp from "node:child_process";
 import {createRequire} from "node:module";
-import {Wsl2SandboxProvider, WSL_DISTRO, WSL_CONF, GUEST, PROBE_SCRIPT, parseWslList, checkWslConf, evaluateProbe, provisionPlan, provision, mirrorBack, runKey, guestIsolationScript} from "../../core/sandbox/wsl2-provider.js";
+import {Wsl2SandboxProvider, WSL_DISTRO, WSL_CONF, GUEST, PROBE_SCRIPT, parseWslList, checkWslConf, evaluateProbe, provisionPlan, provision, safeMirror, safeCredentialsBack, readTarSafe, safeRelPath, guestIsolationScript} from "../../core/sandbox/wsl2-provider.js";
 import {decideEgress} from "../../core/sandbox/egress-proxy.js";
 import {ExecutionGate} from "../../core/workos/execution-gate.js";
 
@@ -76,7 +76,7 @@ export function registerDskWsl2Cases(): void {
     const m = p.mapModelProcess(["C:\\Program Files\\UASCO\\node.exe", "C:\\Program Files\\UASCO\\resources\\app\\scripts\\claude-builder-broker.mjs"],
       {cwd, env: {CLAUDE_CONFIG_DIR: "C:\\Users\\f\\AppData\\Roaming\\UASCO\\control\\claude-profiles\\implementer", USERPROFILE: "C:\\Users\\f", ANTHROPIC_API_KEY: "k", UASCO_PROVIDER: "ANTHROPIC"}})!;
     expect(m.argv).toEqual([GUEST.node, `${GUEST.app}/scripts/claude-builder-broker.mjs`]);
-    expect(m.cwd).toBe(`${GUEST.runs}/${runKey(cwd)}/repo`);
+    expect(m.cwd).toMatch(new RegExp(`^${GUEST.runs}/[0-9a-f]{24}/repo$`));
     expect(m.env).toEqual({UASCO_PROVIDER: "ANTHROPIC", CLAUDE_CONFIG_DIR: "/work/profile", UASCO_CONTROL_ROOT: "/opt/uasco/control"});
     expect(JSON.stringify(m)).not.toMatch(/[A-Za-z]:\\\\|\\\\/);
     expect(p.mapModelProcess(["C:\\node.exe", "D:\\elsewhere\\evil.mjs"], {cwd, env: {}})).toBe(null);
@@ -98,15 +98,71 @@ export function registerDskWsl2Cases(): void {
     const g = fakeWsl(), q = new Wsl2SandboxProvider({runner: g.runner, pins: PIN}); await q.stopAll();
     expect(g.calls.some(c => c[0] === "--terminate")).toBe(false);
   });
-  it("mirrors the guest workspace back to the host (deleted files removed, new/changed files written, .git untouched) with a real tar", () => {
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dsk-wsl-mirror-")), host = path.join(tmp, "host"), guest = path.join(tmp, "guest");
-    for (const d of [host, guest, path.join(host, ".git")]) fs.mkdirSync(d, {recursive: true});
+  it("CONCURRENCY: two simultaneous mappings (even of the same host workspace) get distinct guest scratch dirs and host mappings; a key runs only once at a time", async () => {
+    const p = new Wsl2SandboxProvider({runner: fakeWsl().runner, pins: PIN});
+    const cwd = "C:\\w\\run\\work";
+    const a = p.mapModelProcess(["C:\\node.exe"], {cwd, env: {}})!, b = p.mapModelProcess(["C:\\node.exe"], {cwd, env: {}})!;
+    expect(a.cwd).not.toBe(b.cwd);
+    const keys = new Set(Array.from({length: 200}, () => p.mapModelProcess(["C:\\node.exe"], {cwd, env: {}})!.cwd)); expect(keys.size).toBe(200);
+  });
+  // a ustar archive built byte by byte so every unsafe shape can be crafted
+  const tarOf = (entries: Array<{name: string; type?: string; data?: string; prefix?: string; link?: string; magic?: string}>) => {
+    const blocks: Buffer[] = [];
+    for (const e of entries) {
+      const h = Buffer.alloc(512), data = Buffer.from(e.data ?? ""), put = (o: number, v: string) => h.write(v, o, "latin1");
+      put(0, e.name); put(100, "0000644\0"); put(108, "0000000\0"); put(116, "0000000\0"); put(124, data.length.toString(8).padStart(11, "0") + "\0"); put(136, "00000000000\0");
+      h[156] = (e.type ?? "0").charCodeAt(0); if (e.link) put(157, e.link); put(257, e.magic ?? "ustar\0"); put(263, "00"); if (e.prefix) put(345, e.prefix);
+      h.fill(32, 148, 156); put(148, [...h].reduce((x, y) => x + y, 0).toString(8).padStart(6, "0") + "\0 ");
+      blocks.push(h, Buffer.concat([data, Buffer.alloc((512 - (data.length % 512)) % 512)]));
+    }
+    return Buffer.concat([...blocks, Buffer.alloc(1024)]);
+  };
+  it("UNTRUSTED ARCHIVE: traversal, absolute/drive paths, links, devices, pax/GNU extensions, .git, Windows-reserved names and bad checksums are rejected whole", () => {
+    const reason = (t: Buffer) => { const r = readTarSafe(t); return r.ok ? "OK" : r.reason; };
+    expect(reason(tarOf([{name: "src/a.txt", data: "x"}, {name: "src", type: "5"}]))).toBe("OK");
+    expect(reason(tarOf([{name: "../evil.txt", data: "x"}]))).toBe("UNSAFE_TAR_PATH");
+    expect(reason(tarOf([{name: "evil.txt", prefix: "a/../.."}]))).toBe("UNSAFE_TAR_PATH");
+    expect(reason(tarOf([{name: "/etc/passwd", data: "x"}]))).toBe("UNSAFE_TAR_PATH");
+    expect(reason(tarOf([{name: "C:/Windows/x", data: "x"}]))).toBe("UNSAFE_TAR_PATH");
+    expect(reason(tarOf([{name: "a\\..\\..\\x", data: "x"}]))).toBe("UNSAFE_TAR_PATH");
+    expect(reason(tarOf([{name: ".git/config", data: "x"}]))).toBe("UNSAFE_TAR_PATH");
+    expect(reason(tarOf([{name: "CON.txt", data: "x"}]))).toBe("UNSAFE_TAR_PATH");
+    expect(reason(tarOf([{name: "link", type: "2", link: "/etc/passwd"}]))).toBe("UNSAFE_TAR_TYPE_SYMLINK");
+    expect(reason(tarOf([{name: "hard", type: "1", link: "x"}]))).toBe("UNSAFE_TAR_TYPE_HARDLINK");
+    expect(reason(tarOf([{name: "pax", type: "x", data: "30 path=../../escape\n"}]))).toBe("UNSAFE_TAR_TYPE_PAX");
+    expect(reason(tarOf([{name: "././@LongLink", type: "L", data: "../../x"}]))).toBe("UNSAFE_TAR_TYPE_GNU_LONG");
+    expect(reason(tarOf([{name: "dev", type: "3"}]))).toBe("UNSAFE_TAR_TYPE_SPECIAL");
+    expect(reason(tarOf([{name: "a", data: "x", magic: "xxxxx\0"}]))).toBe("TAR_NOT_USTAR");
+    const bad = tarOf([{name: "a", data: "x"}]); bad[0] ^= 1; expect(reason(bad)).toBe("TAR_BAD_CHECKSUM");
+    expect(reason(tarOf([{name: "a", data: "x"}]).subarray(0, 600))).toBe("TAR_TRUNCATED");
+    expect(safeRelPath("./ok/file.ts")).toBe("ok/file.ts"); expect(safeRelPath("a/./b")).toBe(null); expect(safeRelPath("trailing.")).toBe(null);
+  });
+  it("UNTRUSTED ARCHIVE: the mirror never writes outside the workspace — not through a host symlink, not via an unlisted file, never into .git; on any refusal NOTHING changes", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dsk-wsl-mirror-")), host = path.join(tmp, "host"), outside = path.join(tmp, "outside");
+    for (const d of [host, outside, path.join(host, ".git")]) fs.mkdirSync(d, {recursive: true});
     fs.writeFileSync(path.join(host, ".git", "HEAD"), "ref"); fs.writeFileSync(path.join(host, "keep.txt"), "old"); fs.writeFileSync(path.join(host, "gone.txt"), "x");
-    fs.writeFileSync(path.join(guest, "keep.txt"), "new"); fs.writeFileSync(path.join(guest, "added.txt"), "a");
-    const data = cp.spawnSync("tar", ["-c", "-f", "-", "-C", guest, "."]).stdout;
-    mirrorBack(host, ["./keep.txt", "./added.txt"], data, (dir, d) => { cp.spawnSync("tar", ["-x", "-f", "-", "-C", dir], {input: d}); });
-    expect(fs.readFileSync(path.join(host, "keep.txt"), "utf8")).toBe("new"); expect(fs.existsSync(path.join(host, "added.txt"))).toBe(true);
+    fs.symlinkSync(outside, path.join(host, "linkdir")); fs.writeFileSync(path.join(outside, "secret.txt"), "S");
+    const snapshot = () => JSON.stringify([fs.readdirSync(host).sort(), fs.readFileSync(path.join(host, "keep.txt"), "utf8"), fs.readdirSync(outside).sort(), fs.readFileSync(path.join(outside, "secret.txt"), "utf8")]);
+    const before = snapshot();
+    expect(() => safeMirror(host, ["linkdir/secret.txt"], tarOf([{name: "linkdir/secret.txt", data: "PWNED"}]))).toThrow(/UNSAFE_HOST_LINK/);
+    expect(() => safeMirror(host, ["keep.txt"], tarOf([{name: "keep.txt", data: "n"}, {name: "extra.txt", data: "e"}]))).toThrow(/UNSAFE_UNLISTED_FILE/);
+    expect(() => safeMirror(host, ["../outside/secret.txt"], tarOf([{name: "keep.txt", data: "n"}]))).toThrow(/UNSAFE_FILE_LIST/);
+    expect(() => safeMirror(host, ["keep.txt"], tarOf([{name: "link", type: "2", link: "/etc"}]))).toThrow(/UNSAFE_TAR_TYPE_SYMLINK/);
+    expect(snapshot()).toBe(before); expect(fs.readFileSync(path.join(outside, "secret.txt"), "utf8")).toBe("S");
+    // a valid archive: changed + added files written, absent files deleted, .git and the outside target untouched (the link itself is removed, not its target)
+    safeMirror(host, ["keep.txt", "src/added.txt"], tarOf([{name: "keep.txt", data: "new"}, {name: "src", type: "5"}, {name: "src/added.txt", data: "a"}]));
+    expect(fs.readFileSync(path.join(host, "keep.txt"), "utf8")).toBe("new"); expect(fs.readFileSync(path.join(host, "src", "added.txt"), "utf8")).toBe("a");
     expect(fs.existsSync(path.join(host, "gone.txt"))).toBe(false); expect(fs.readFileSync(path.join(host, ".git", "HEAD"), "utf8")).toBe("ref");
+    expect(fs.readFileSync(path.join(outside, "secret.txt"), "utf8")).toBe("S");
+  });
+  it("credentials copy-back accepts exactly one regular .credentials.json into a real profile dir", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dsk-wsl-cred-")), prof = path.join(tmp, "p"), other = path.join(tmp, "o"); fs.mkdirSync(prof); fs.mkdirSync(other);
+    expect(() => safeCredentialsBack(prof, tarOf([{name: ".credentials.json", data: "{}"}, {name: "x", data: "y"}]))).toThrow(/UNSAFE_CREDENTIALS_ARCHIVE/);
+    expect(() => safeCredentialsBack(prof, tarOf([{name: "settings.json", data: "{}"}]))).toThrow(/UNSAFE_CREDENTIALS_ARCHIVE/);
+    fs.symlinkSync(path.join(other, "c"), path.join(prof, ".credentials.json"));
+    expect(() => safeCredentialsBack(prof, tarOf([{name: ".credentials.json", data: "{}"}]))).toThrow(/UNSAFE_HOST_LINK/); expect(fs.existsSync(path.join(other, "c"))).toBe(false);
+    fs.rmSync(path.join(prof, ".credentials.json")); safeCredentialsBack(prof, tarOf([{name: ".credentials.json", data: "{\"t\":1}"}]));
+    expect(fs.readFileSync(path.join(prof, ".credentials.json"), "utf8")).toBe("{\"t\":1}");
   });
   it("provisioning: every artifact is sha256-pinned (refused otherwise), only the dedicated distro is imported, wsl.conf is written, and execution stops at the first failing step", async () => {
     const pin = (n: string) => ({path: `C:\\pkg\\${n}`, sha256: "d".repeat(64)});
@@ -118,9 +174,15 @@ export function registerDskWsl2Cases(): void {
     expect(plan.steps.find(s => s.input === WSL_CONF)).toBeTruthy();
     for (const s of plan.steps.filter(x => x.inputFile)) expect(s.args.join(" ")).toMatch(/sha256sum -c/);
     expect(plan.steps.every(s => !s.args.includes("Ubuntu"))).toBe(true);
+    // host-side verification BEFORE wsl --import: a changed rootfs never reaches wsl.exe; a missing one either
+    const crypto = await import("node:crypto"), good = Buffer.from("rootfs-bytes"), goodSha = crypto.createHash("sha256").update(good).digest("hex");
+    const plan2 = provisionPlan({...base, rootfs: {path: "C:\\pkg\\rootfs.tar", sha256: goodSha}, node: {path: "C:\\pkg\\n", sha256: goodSha}, claude: {path: "C:\\pkg\\c", sha256: goodSha}, appScriptsTar: {path: "C:\\pkg\\a", sha256: goodSha}}); if (!plan2.ok) throw new Error(plan2.error);
     const seen: string[] = [];
-    const res = await provision(plan, async args => { seen.push(args.join(" ")); return ok("", seen.length === 3 ? 1 : 0); }, () => Buffer.from("x"));
-    expect(res).toEqual({ok: false, step: plan.steps[2].what}); expect(seen.length).toBe(3);
+    const run = async (args: string[]) => { seen.push(args.join(" ")); return ok("", 0); };
+    expect(await provision(plan2, run, () => Buffer.from("tampered"))).toEqual({ok: false, step: `ARTIFACT_HASH_MISMATCH:${plan2.steps[0].what}`}); expect(seen).toEqual([]);
+    expect(await provision(plan2, run, () => { throw new Error("ENOENT"); })).toEqual({ok: false, step: `ARTIFACT_MISSING:${plan2.steps[0].what}`}); expect(seen).toEqual([]);
+    const res = await provision(plan2, async args => { seen.push(args.join(" ")); return ok("", seen.length === 3 ? 1 : 0); }, () => good);
+    expect(res).toEqual({ok: false, step: plan2.steps[2].what}); expect(seen.length).toBe(3);
   });
   it("the guest egress proxy decides exactly like the host proxy (no drift)", () => {
     const guest = createRequire(import.meta.url)("../../core/sandbox/guest/egress.cjs") as {decide: (h: string) => unknown};
