@@ -334,17 +334,15 @@ describe("C-RDY-2a adapter-reality", () => {
     expect(censusProblems(fxCensus, [], {registryIds: {}, commands: {}})).toEqual(["COMMAND_UNMAPPED:acme-run:core/x.ts", "REGISTRY_ID_UNMAPPED:acme-tool:core/x.ts", "REGISTRY_ID_UNMAPPED:acme-tools:core/x.ts", "SOURCE_UNPARSEABLE:scripts/z.mjs"]);
   });
 
-  it("package importers: the ajv caller lists are complete (excluded importers are named)", () => {
-    // //TR: Kayıtlardaki ajv/ajv-formats çağıran listeleri üretim içe aktaranların TAM kümesidir; yalnız aşağıdaki iki dosya gerekçeyle dışarıdadır.
-    const EXCLUDED: Record<string, string> = {
-      "core/qa/api/strict-json-validator.ts": "imported only by tests/strict-json-validator.test.ts; no production importer",
-      "scripts/runtime-schema-conformance-selftest.mjs": "self-test script, not a runtime path"
-    };
+  it("package importers: the ajv caller lists are complete (no exclusions)", () => {
+    // //TR: Kayıtlardaki ajv/ajv-formats çağıran listeleri üretim içe aktaranların TAM kümesidir ve istisna yoktur. UASCO-T0129: core/qa/api/strict-json-validator.ts memory append route'u üzerinden üretimde (bayat "yalnız testler" istisnası kaldırıldı); scripts/*-selftest.mjs zaten tarayıcıda test destek dosyasıdır, istisna gerektirmez.
     for (const pkg of ["ajv", "ajv-formats"]) {
       const callers = real(pkg).callers.map(c => c.file).sort();
       const importers = findPackageImporters(REPO, pkg);
-      expect(callers, `${pkg} callers`).toEqual(importers.filter(f => EXCLUDED[f] === undefined));
-      expect(importers.filter(f => EXCLUDED[f] !== undefined).length, `${pkg} exclusions still import it`).toBeGreaterThan(0);
+      expect(callers, `${pkg} callers`).toEqual(importers);
+      expect(importers, `${pkg} wired through core/qa/api`).toContain("core/qa/api/strict-json-validator.ts");
+      expect(importers, `${pkg} memory route no longer imports it directly`).not.toContain("apps/control-api/src/routes/memory.ts");
+      expect(importers, `${pkg} self-test is test support`).not.toContain("scripts/runtime-schema-conformance-selftest.mjs");
     }
     const root = fx({"core/a.ts": "import A from \"ajv\";\n", "core/b.mjs": "import Ajv2020 from \"ajv/dist/2020.js\";\n", "core/c.ts": "// import A from \"ajv\";\nconst s = 'from \"ajv\"';\nimport F from \"ajv-formats\";\n", "core/d.test.ts": "import A from \"ajv\";\n", "core/node_modules/ajv/index.js": "import A from \"ajv\";\n"});
     expect(findPackageImporters(root, "ajv")).toEqual(["core/a.ts", "core/b.mjs"]);
@@ -406,7 +404,7 @@ describe("C-RDY-2a adapter-reality", () => {
     const names = fs.readdirSync(wfDir).filter(n => /\.ya?ml$/.test(n)).sort();
     const texts = readWorkflowTexts(REPO);
     expect(texts.length).toBe(names.length);
-    expect(names).toEqual(["ci.yml", "uasco-independent-review.yml", "windows-installer.yml"]);
+    expect(names).toEqual(["ci.yml", "uasco-independent-review.yml", "uasco-oauth-layer-diagnose.yml", "windows-installer.yml"]);
     // //TR: İş akışlarında geçen kayıt-defteri/harita kimlikleri AÇIKÇA sabitlenir. gitleaks/trivy/playwright/semgrep hiçbir iş akışında geçmez; biri geçerse (ör. gitleaks/trivy'yi CI'a ekleyen bir PR, #251 gibi) bu pin adıyla patlar ve ciEvidence sınıfını gözden geçirmek gerekir.
     const ids = [...new Set([...loadRegistryAdapters(REPO).map(a => a.id), ...ADAPTER_REALITY_RECORDS.map(r => r.adapterId)])].sort();
     const mentions: Record<string, string[]> = {};
@@ -416,8 +414,8 @@ describe("C-RDY-2a adapter-reality", () => {
       if (hits.length > 0) mentions[id] = hits;
     }
     expect(mentions, messageDrift("a workflow now mentions another tool", "classify that tool's ciEvidence in adapter-reality.ts (REAL needs ciTokens that a workflow holds) and update this pin; do not leave a REAL claim without a token")).toEqual({
-      github: ["ci.yml", "uasco-independent-review.yml", "windows-installer.yml"],
-      node: ["ci.yml", "uasco-independent-review.yml", "windows-installer.yml"],
+      github: ["ci.yml", "uasco-independent-review.yml", "uasco-oauth-layer-diagnose.yml", "windows-installer.yml"],
+      node: ["ci.yml", "uasco-independent-review.yml", "uasco-oauth-layer-diagnose.yml", "windows-installer.yml"],
       npm: ["ci.yml", "windows-installer.yml"]
     });
     for (const tool of ["gitleaks", "trivy", "playwright", "semgrep", "omniroute"]) expect(real(tool).ciEvidence, tool).not.toBe("REAL");

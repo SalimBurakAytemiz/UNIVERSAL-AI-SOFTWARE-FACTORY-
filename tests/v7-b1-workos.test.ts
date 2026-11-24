@@ -1428,6 +1428,24 @@ describe("LANE-B project memory routes", () => {
     expect((await get(app, base)).json().records).toHaveLength(2);
     expect(audits.filter(x => x.e === "WORKOS_MEMORY_APPEND_REFUSED").map(x => x.x.reason)).toEqual(["MEMORY_SECRET_REJECTED", "MEMORY_SUPERSEDES_MISSING", "MEMORY_SUPERSEDES_NOT_HEAD"]);
   });
+  // //TR: UASCO-T0129 append gövdesi gerçek route yolunda core/qa/api validateStrictJson'dan geçer: şemanın yakalamadığı yalnız-boşluk/boş sources[].ref artık 400'dür, hata yolu adlandırır ama değeri yazmaz, hiçbir kayıt/denetim yazılmaz.
+  it("validates the append body through core/qa/api validateStrictJson (strict null/empty policy on every path)", async () => {
+    const {app, p, audits} = await mkApp(), base = `/v1/projects/${p.projectId}/memory`;
+    const ok = {kind: "FACT", title: "t", body: "b"};
+    const ws = await add(app, p.projectId, {...ok, sources: [{ref: "   \t", retrievedAt: NOW}]});
+    expect(ws.statusCode).toBe(400);
+    expect(ws.json()).toEqual({error: "INVALID_BODY", detail: "$.sources.0.ref: empty string forbidden"});
+    const nul = await add(app, p.projectId, {...ok, tags: [null]});
+    expect(nul.statusCode).toBe(400);
+    expect(nul.json().detail).toContain("data/tags/0 must be string");
+    expect(nul.json().detail).toContain("$.tags.0: null forbidden");
+    const fmt = await add(app, p.projectId, {...ok, sources: [{ref: "r", retrievedAt: "yesterday"}]});
+    expect(fmt.statusCode).toBe(400); expect(fmt.json().detail).toBe('data/sources/0/retrievedAt must match format "date-time"');
+    expect((await add(app, p.projectId, {...ok, title: ""})).json().detail).toContain("data/title must NOT have fewer than 1 characters");
+    expect((await get(app, base)).json().records).toHaveLength(0);
+    expect(audits).toEqual([]);
+    expect((await add(app, p.projectId, {...ok, sources: [{ref: "r", retrievedAt: NOW}]})).statusCode).toBe(201);
+  });
   it("enforces token, Global Stop, policy, ids, queries and tenant isolation (no memory file touched for another tenant)", async () => {
     const {app, p} = await mkApp(), ok = {kind: "FACT", title: "t", body: "b"};
     expect((await add(app, p.projectId, ok, {...hdr, "x-uasco-control-token": "x"})).statusCode).toBe(403);
@@ -2011,6 +2029,13 @@ describe("LANE-C pre-dev produce route (fake process runner only)", () => {
     expect(a[0]).toMatchObject({actor: ACT, missionId: id, outcome: "RECORDED", roleId: "UASCO-0022", artifactKind: "BusinessAnalysis", executor: "claude-reviewer@local.invalid", exitCode: 0, phase: "BUSINESS_ANALYSIS", artifactId: r1.json().produced.artifactId, version: 1});
     expect(a[0].outputSha256).toMatch(/^[0-9a-f]{64}$/);
     expect(JSON.stringify(c.audits)).not.toContain("problem"); // raw model output never reaches the audit log
+    // UASCO-T0117: the audit and the response record the versioned role prompt that was sent (id, manifest version, template + rendered digests; never the prompt text)
+    const {PROMPT_MANIFEST} = await import("../core/prompt-registry/prompt-manifest.js"), {latestVersion} = await import("../core/prompt-registry/versioning.js");
+    const pv = latestVersion(PROMPT_MANIFEST, "predev.role.BusinessAnalysis")!;
+    expect(a[0]).toMatchObject({promptId: "predev.role.BusinessAnalysis", promptVersion: pv.version, promptTemplateSha256: pv.sha256});
+    expect(a[0].promptSha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(r1.json().produced.prompt).toEqual({id: "predev.role.BusinessAnalysis", version: pv.version, templateSha256: pv.sha256, renderedSha256: a[0].promptSha256});
+    expect(JSON.stringify(c.audits)).not.toContain("GÖREV"); // the prompt text itself is not audited
 
     // a pending DRAFT blocks the next produce BEFORE any process (no second paid call)
     const again = await post(c.app, `/v1/missions/${id}/predev/produce`);
