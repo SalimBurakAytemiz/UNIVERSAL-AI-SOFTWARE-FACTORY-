@@ -8,6 +8,10 @@ import {WorkOsError} from "../../../../core/workos/types.js";
 import {briefFromRecords} from "../../../../core/workos/predev/brief.js";
 import {PREDEV_AGENT_ACTOR, PreDevBuilderError} from "../../../../core/workos/predev/claude-builder.js";
 import type {ClaudePreDevBuilder} from "../../../../core/workos/predev/claude-builder.js";
+import type {PromptRef} from "../../../../core/prompt-registry/versioning.js";
+
+// //TR: UASCO-T0117: üretim audit kaydı gönderilen rol isteminin kimliğini, sürümünü, şablon özetini ve gönderilen gerçek metnin özetini taşır (istem metni audit'e girmez).
+const promptAudit = (p: PromptRef) => ({promptId: p.id, promptVersion: p.version, promptTemplateSha256: p.templateSha256, promptSha256: p.renderedSha256});
 
 const Ajv = AjvModule.default;
 const ajv = new Ajv({allErrors: true, strict: true});
@@ -129,11 +133,11 @@ export function registerPredevDecisionRoutes(app: any, d: PredevRouteDeps): void
       }
       // //TR: out.reason doğrulayıcının SABİT hata kodudur (PREDEV_DRIVER_INVALID_JSON veya validators.ts kodları); model metni asla yansıtılmaz.
       if (out.status === "REJECTED") {
-        audit("REJECTED", {phase: out.phase, reason: out.reason});
+        audit("REJECTED", {phase: out.phase, reason: out.reason, ...promptAudit(out.prompt)});
         return reply.code(422).send({error: "PREDEV_OUTPUT_REJECTED", kind: out.kind, phase: out.phase, reason: out.reason});
       }
-      audit("RECORDED", {phase: out.phase, artifactId: out.artifactId, version: out.version});
-      return reply.code(201).send({produced: {status: "RECORDED", kind: out.kind, phase: out.phase, artifactId: out.artifactId, version: out.version, roleId: trace()?.roleId ?? null}, predev: model(id)});
+      audit("RECORDED", {phase: out.phase, artifactId: out.artifactId, version: out.version, ...promptAudit(out.prompt)});
+      return reply.code(201).send({produced: {status: "RECORDED", kind: out.kind, phase: out.phase, artifactId: out.artifactId, version: out.version, roleId: trace()?.roleId ?? null, prompt: out.prompt}, predev: model(id)});
     } finally { lock.release(); }
   }));
 }

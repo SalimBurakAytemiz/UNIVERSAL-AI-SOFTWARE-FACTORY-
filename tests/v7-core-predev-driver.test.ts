@@ -580,3 +580,5 @@ describe("LANE-C ClaudePreDevBuilder: production BuilderPort over the reviewer-r
     expect(prompt).toContain(BRIEF_NOT_PROVIDED_NOTE);
   });
 });
+import {registerPromptVersioningT0117Cases} from "./support/prompt-versioning-t0117.cases.js";
+registerPromptVersioningT0117Cases();

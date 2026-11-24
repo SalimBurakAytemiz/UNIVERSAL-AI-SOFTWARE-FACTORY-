@@ -1,14 +1,10 @@
 //TR: Bu dosya Proje Belleği route'larını sağlar (proje başına liste/ayrıntı/güncel görünüm/köken okuma ve append yazma); server.ts'e tek satırlık kayıt gerekir (docs/authority-requests/LANE-B-memory-api.md).
-import AjvModule from "ajv";
-import addFormatsModule from "ajv-formats";
 import {LANE_WRITE_BODY_LIMIT} from "./deps.js";
 import type {RouteDeps} from "./deps.js";
 import {ProjectMemory} from "../../../../core/knowledge/project-memory.js";
+import {validateStrictJson, type StrictValidationResult} from "../../../../core/qa/api/strict-json-validator.js";
 import {ProjectMemoryError, MEMORY_KINDS, MEMORY_ID_RE, PROJECT_ID_RE, type MemoryKind, type MemoryRecord} from "../../../../core/knowledge/project-memory-types.js";
 
-const Ajv = AjvModule.default;
-const ajv = new Ajv({allErrors: true, strict: true});
-addFormatsModule.default(ajv);
 // Yazar gövdeden gelmez: sunucu aktörü yazar rolüdür (additionalProperties:false ile istemci author gönderemez). Ayrıntılı sınırları (bayt, sır taraması, supersedes) çekirdek uygular.
 const appendSchema = {
   type: "object", additionalProperties: false, required: ["kind", "title", "body"],
@@ -20,7 +16,9 @@ const appendSchema = {
     tags: {type: "array", maxItems: 32, items: {type: "string", minLength: 1, maxLength: 64, pattern: "\\S"}}
   }
 } as const;
-const check = ajv.compile(appendSchema);
+// //TR: UASCO-T0129 gövde core/qa/api validateStrictJson ile doğrulanır (aynı strict+formatlı Ajv, ayrıca varsayılan politika: null ve boş/yalnız-boşluk dize HİÇBİR yolda kabul edilmez; ör. sources[].ref "  " artık 400). Şema hata metni eski ajv.errorsText biçimini korur; politika ihlali yalnız yolu yazar, değeri yazmaz.
+const checkAppend = (body: unknown): StrictValidationResult => validateStrictJson(appendSchema, body);
+const detailOf = (r: StrictValidationResult): string => [...r.schemaErrors.map(e => `data${e.instancePath} ${e.message}`), ...r.valuePolicyErrors].join(" | ");
 // Sabit kod -> HTTP durumu; çekirdek hata ayrıntısı (yol, sır türü) yanıta yazılmaz, yalnız kod döner.
 const STATUS: Record<string, number> = {
   MEMORY_INVALID_PROJECT_ID: 400, MEMORY_PATH_REJECTED: 400, MEMORY_INVALID_INPUT: 400, MEMORY_LIMIT_EXCEEDED: 413, MEMORY_SECRET_REJECTED: 400,
@@ -69,7 +67,8 @@ export function registerMemoryRoutes(app: any, d: RouteDeps): void {
     if (d.workosStopped()) return reply.code(423).send({error: "GLOBAL_STOP_ACTIVE"});
     const decision = d.workosPolicy("workos.project.memory.append", typeof req.params.id === "string" ? req.params.id : "NONE", body);
     if (!decision.allowed) { d.audit("WORKOS_WRITE_DENIED", {actor: d.actor, action: "workos.project.memory.append", reason: decision.reason}); return reply.code(403).send({error: "ACTION_DENIED", reason: decision.reason}); }
-    if (!check(body)) return reply.code(400).send({error: "INVALID_BODY", detail: ajv.errorsText(check.errors, {separator: " | "})});
+    const v = checkAppend(body);
+    if (!v.valid) return reply.code(400).send({error: "INVALID_BODY", detail: detailOf(v)});
     const m = memoryFor(req, reply); if (!m) return reply;
     const b = body as {kind: MemoryKind; title: string; body: string; sources?: {ref: string; sha256?: string; retrievedAt: string}[]; supersedes?: string; tags?: string[]};
     let rec: MemoryRecord;
