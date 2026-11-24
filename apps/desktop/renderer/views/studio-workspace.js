@@ -1,6 +1,6 @@
 // //TR: Bu görünüm Project Studio proje çalışma alanıdır (yeni kenar çubuğu öğesi yok, bağlamsal sekmeler): Genel Bakış (durum, mission'lar, son koşu, güvenlik/inceleme durumu), Çalıştır & Önizle (dev-run başlat/durdur/yeniden başlat; sansürlü log kuyruğu yerinde yenilenir ve odağı bozmaz; önizleme yalnız backend AVAILABLE derken ve kesin loopback biçimindeyken, varsayılan tarayıcıda), Dosyalar (salt-okunur, sansürlü, boyut sınırlı), Değişiklikler (git log + diff), Görevler (B5 ekranına bağlantı) ve Teslim (dışa aktarma + ana süreçte çözülen klasörde göster). Backend verisi yalnız metin olarak render edilir; uydurma durum yoktur.
 import {h,panel,stateNote,emptyNote,statusPill,statusLabel,badge} from "../components.js";
-import {formatTime,mapMissions,MISSING} from "../model.js";
+import {mapMissions,MISSING} from "../model.js";
 import {formatDateTime,describePostResult} from "../work-core.js";
 import {drafts,selection,field,statusBlock,setStatus,focusResult,settle} from "../forms.js";
 import {focusLost} from "../focus.js";
@@ -45,7 +45,7 @@ async function overviewTab(ctx,project,projects){
   const [mres,rres]=await Promise.all([ctx.api.raw(`/v1/missions?projectId=${id}`),ctx.api.workRuns()]);
   const missions=mres.ok?mapMissions(mres.data):{state:mres.state,items:[]};
   const info=panel(ctx,{titleKey:"studio.ov.project",id:"studio-ov-project"},h(doc,"dl",{class:"kv"},
-    ...fact(doc,ctx.t("projects.id"),id,"mono"),...fact(doc,ctx.t("projects.env"),project.environmentId??MISSING),...fact(doc,ctx.t("projects.created"),formatTime(project.createdAt,ctx.i18n.lang)),...fact(doc,ctx.t("projects.repo"),project.repositoryPath??MISSING,"mono")));
+    ...fact(doc,ctx.t("projects.id"),id,"mono"),...fact(doc,ctx.t("projects.env"),project.environmentId??MISSING),...fact(doc,ctx.t("projects.created"),formatDateTime(project.createdAt,ctx.i18n.lang)),...fact(doc,ctx.t("projects.repo"),project.repositoryPath??MISSING,"mono")));
   let mBody;
   if(missions.state!=="VERIFIED")mBody=stateNote(ctx,missions.state);
   else if(!missions.items.length)mBody=emptyNote(ctx,"studio.ov.noMissions");
@@ -86,7 +86,9 @@ function paintRun(ctx,nodes,run){
   nodes.state.dataset.status=run.status;
   nodes.facts.replaceChildren(...fact(ctx.doc,"PID",run.pid===null?MISSING:String(run.pid),"mono"),...fact(ctx.doc,t("studio.run.port"),run.port===null?MISSING:String(run.port),"mono"),...fact(ctx.doc,t("studio.run.started"),formatDateTime(run.startedAt,ctx.i18n.lang)),
     ...fact(ctx.doc,t("studio.run.exitCode"),run.exitCode===null?MISSING:String(run.exitCode),"mono"),...fact(ctx.doc,t("studio.run.lastProbe"),formatDateTime(run.preview.lastProbeAt,ctx.i18n.lang)));
-  nodes.start.disabled=!acts.start||drafts.busy[DEV_FORM]===true;nodes.stop.disabled=!acts.stop||drafts.busy[DEV_FORM]===true;nodes.restart.disabled=!acts.restart||drafts.busy[DEV_FORM]===true;
+  const sbx=nodes.sandboxBlocked===true;
+  nodes.start.disabled=sbx||!acts.start||drafts.busy[DEV_FORM]===true;nodes.stop.disabled=!acts.stop||drafts.busy[DEV_FORM]===true;nodes.restart.disabled=sbx||!acts.restart||drafts.busy[DEV_FORM]===true;
+  for(const b of [nodes.start,nodes.restart]){if(sbx){b.setAttribute("aria-describedby","studio-run-sandbox-why");b.dataset.runSandboxBlocked="SANDBOX_UNAVAILABLE"}}
   const openable=previewOpenable(run);
   nodes.preview.disabled=!openable;
   nodes.previewNote.textContent=openable?t("studio.run.previewReady",{url:run.preview.url}):t("studio.run.previewNone",{state:t(`devrun.preview.${run.preview.state}`)});
@@ -147,9 +149,11 @@ export async function openPreview(ctx,project,nodes){
   setDevStatus(nodes,msg);repaintStatus(ctx,nodes.statusWrap,DEV_FORM);settle(ctx,["id:studio-run-preview",`id:${DEV_FORM}-status`,"id:studio-run-state"]);return {ok:msg.ok};
 }
 async function runTab(ctx,project){
-  const doc=ctx.doc,res=await ctx.api.devrun(project.projectId,{force:true});
+  const doc=ctx.doc,[res,ex]=await Promise.all([ctx.api.devrun(project.projectId,{force:true}),Promise.resolve().then(()=>ctx.api.executors()).catch(()=>null)]);
   if(res.state!=="VERIFIED")return panel(ctx,{titleKey:"studio.run.title",id:"studio-run"},stateNote(ctx,res.state),h(doc,"p",{class:"note",text:ctx.t("studio.run.unavailable")}));
-  const nodes={current:null};
+  // //TR: Sunucu sandbox'ı UNAVAILABLE bildirdiyse Başlat/Yeniden başlat devre dışıdır ve nedeni görünür (sunucu DEVRUN_SANDBOX_UNAVAILABLE 409 reddi değişmez). Sandbox okunamazsa tahmin yok: karar sunucunundur.
+  const sb=ex&&ex.state==="VERIFIED"&&ex.sandbox?ex.sandbox.state:null;
+  const nodes={current:null,sandboxBlocked:sb==="UNAVAILABLE"};
   const btn=(key,text,onClick,extra={})=>h(doc,"button",{type:"button",class:"btn",id:`studio-run-${key}`,dataset:{focusKey:`studio-run-${key}`},text,on:{click:onClick},...extra});
   nodes.state=h(doc,"p",{class:"studio-run-state",id:"studio-run-state",role:"status","aria-live":"polite",tabindex:"-1"});
   nodes.facts=h(doc,"dl",{class:"kv"});
@@ -158,11 +162,13 @@ async function runTab(ctx,project){
   nodes.restart=btn("restart",ctx.t("studio.run.restart"),()=>runAction(ctx,project,nodes,"restart"));
   nodes.preview=btn("preview",ctx.t("studio.run.openPreview"),()=>openPreview(ctx,project,nodes),{class:"btn btn-primary"});
   nodes.previewNote=h(doc,"p",{class:"field-hint",id:"studio-run-preview-note"});
+  nodes.sandboxWhy=nodes.sandboxBlocked?h(doc,"p",{class:"note",id:"studio-run-sandbox-why",role:"status",dataset:{runSandbox:"UNAVAILABLE"},text:ctx.t("studio.run.sandboxBlocked")}):null;
   nodes.statusWrap=h(doc,"div",{id:"studio-run-status-wrap"},statusBlock(ctx,DEV_FORM));
   nodes.log=h(doc,"pre",{class:"log mono",id:"studio-log",tabindex:"0","aria-label":ctx.t("studio.run.logLabel"),"aria-live":"off",dataset:{focusKey:"studio-log"}});
   nodes.root=h(doc,"section",{class:"panel",id:"studio-run","aria-labelledby":"studio-run-t"},
     h(doc,"h2",{class:"panel-title",id:"studio-run-t",text:ctx.t("studio.run.title")}),
     nodes.state,nodes.facts,
+    nodes.sandboxWhy,
     h(doc,"div",{class:"btn-row",role:"group","aria-label":ctx.t("studio.run.actions")},nodes.start,nodes.stop,nodes.restart,nodes.preview),
     nodes.previewNote,h(doc,"p",{class:"field-hint",text:ctx.t("studio.run.previewWhy")}),nodes.statusWrap,
     h(doc,"h3",{class:"planned-sub",text:ctx.t("studio.run.log")}),nodes.log,h(doc,"p",{class:"field-hint",text:ctx.t("studio.run.logNote")}));
@@ -170,13 +176,21 @@ async function runTab(ctx,project){
   return nodes.root;
 }
 
+// //TR: Projeler UX (Builder I): okunamayan studio yüzeyi yalnız "Hata" demez; neyin okunamadığını, HTTP durumunu (köprü iletisinde varsa) ve bunun boş liste OLMADIĞINI söyler. Sunucu gövdesi masaüstü köprüsünden geçmez; durum kodu dışında hiçbir neden uydurulmaz.
+function readFail(ctx,res,surface){
+  const note=stateNote(ctx,res.state);
+  if(res.state!=="ERROR")return note;
+  const m=/HTTP (\d{3})(?!\d)/.exec(typeof res.message==="string"?res.message:""),status=m?m[1]:null;
+  return h(ctx.doc,"div",{class:"studio-read-fail",dataset:{readFail:surface,readFailStatus:status??"UNKNOWN"}},note,
+    h(ctx.doc,"p",{class:"note",role:"status",text:`${ctx.t(`studio.readFail.${surface}`)} ${status?ctx.t("studio.readFail.http",{status}):ctx.t("studio.readFail.noStatus")} ${ctx.t("studio.readFail.next")}`}));
+}
 // ---------- Dosyalar ----------
 async function filesTab(ctx,project){
   const doc=ctx.doc,id=project.projectId,dir=studio.dir,list=await ctx.api.projectFiles(id,dir);
   const crumb=h(doc,"p",{class:"mono path-chosen",id:"studio-files-path",tabindex:"-1","aria-label":ctx.t("studio.files.here"),text:`/${dir}`});
   const up=dir?h(doc,"button",{type:"button",class:"btn btn-small",id:"studio-files-up",dataset:{focusKey:"studio-files-up"},text:ctx.t("studio.files.up"),on:{click:async()=>{studio.dir=parentRel(dir);studio.file=null;await ctx.rerender();settle(ctx,[`id:fe-${dir}`,"id:studio-files-path"])}}}):null;
   let tree;
-  if(list.state!=="VERIFIED")tree=stateNote(ctx,list.state);
+  if(list.state!=="VERIFIED")tree=readFail(ctx,list,"files");
   else if(!list.entries.length)tree=emptyNote(ctx,"studio.files.empty");
   else tree=h(doc,"div",{},h(doc,"ul",{class:"file-list"},list.entries.map((e,i)=>{
     const rel=joinRel(dir,e.name),ok=validRelPath(rel),isSel=!e.dir&&studio.file===rel;
@@ -186,7 +200,7 @@ async function filesTab(ctx,project){
   let viewer=emptyNote(ctx,"studio.files.pick");
   if(studio.file){
     const f=await ctx.api.projectFile(id,studio.file);
-    if(f.state!=="VERIFIED")viewer=stateNote(ctx,f.state);
+    if(f.state!=="VERIFIED")viewer=readFail(ctx,f,"file");
     else if(f.file.binary)viewer=h(doc,"p",{class:"note",text:ctx.t("studio.files.binary")});
     else viewer=h(doc,"div",{},h(doc,"p",{class:"mono",text:studio.file}),h(doc,"pre",{class:"log mono code-view",id:"studio-file-view",tabindex:"0","aria-label":ctx.t("studio.files.viewLabel",{path:studio.file}),dataset:{focusKey:"studio-file-view"},text:f.file.text||ctx.t("studio.files.emptyFile")}),
       f.file.truncated?h(doc,"p",{class:"note",text:ctx.t("studio.files.truncated")}):null,h(doc,"p",{class:"field-hint",text:ctx.t("studio.files.note")}));
@@ -197,7 +211,7 @@ async function filesTab(ctx,project){
 // ---------- Değişiklikler ----------
 async function changesTab(ctx,project){
   const doc=ctx.doc,id=project.projectId,log=await ctx.api.gitLog(id,GIT_LOG_LIMIT);
-  if(log.state!=="VERIFIED")return panel(ctx,{titleKey:"studio.git.log",id:"studio-git-log"},stateNote(ctx,log.state));
+  if(log.state!=="VERIFIED")return panel(ctx,{titleKey:"studio.git.log",id:"studio-git-log"},readFail(ctx,log,"gitLog"));
   if(!log.commits.length)return panel(ctx,{titleKey:"studio.git.log",id:"studio-git-log"},emptyNote(ctx,"studio.git.empty"));
   const hashes=new Set(log.commits.map(c=>c.hash));
   if(!hashes.has(studio.diffTo))studio.diffTo=log.commits[0].hash;
@@ -214,7 +228,7 @@ async function changesTab(ctx,project){
   let diffBody=null;
   if(studio.diffRequested){
     const d=await ctx.api.gitDiff(id,studio.diffFrom,studio.diffTo);
-    if(d.state!=="VERIFIED")diffBody=stateNote(ctx,d.state);
+    if(d.state!=="VERIFIED")diffBody=readFail(ctx,d,"gitDiff");
     else if(d.diff.empty)diffBody=emptyNote(ctx,"studio.git.noDiff");
     else diffBody=h(doc,"div",{},
       d.diff.files.length?h(doc,"ul",{class:"inline-list"},d.diff.files.map(f=>h(doc,"li",{class:"mono",text:`${f.path} (+${f.additions??"?"} −${f.deletions??"?"})`}))):null,
