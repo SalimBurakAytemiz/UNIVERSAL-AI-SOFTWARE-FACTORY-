@@ -187,6 +187,47 @@ export function registerDskWsl2Cases(): void {
     const res = await provision(plan, async args => { seen.push(args.join(" ")); return ok("", seen.length === 3 ? 1 : 0); }, p => Buffer.from(p), b => byPath[b.toString()] ?? "x");
     expect(res).toEqual({ok: false, step: plan.steps[2].what}); expect(seen.length).toBe(3);
   });
+  it("INSTALL: never touches the user's distros, verifies every download, never re-imports an existing UASCO-Sandbox, and writes the pin record only on success", async () => {
+    const {installSandbox, SANDBOX_RECORD, GUEST_APP_FILES} = await import("../../core/sandbox/wsl2-install.js");
+    const crypto = await import("node:crypto");
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dsk-wsl-inst-")), control = path.join(tmp, "control"), work = path.join(tmp, "work");
+    const A = WSL2_ARTIFACTS, byUrl: Record<string, string> = {[A.rootfs.url]: "rootfs", [A.node.url]: "node", [A.claude.url]: "claude"};
+    // the stub downloader writes marker bytes; a hash stub maps marker bytes to the pinned values (real artifacts are not in CI)
+    const pinned: Record<string, string> = {rootfs: A.rootfs.sha256, node: A.node.sha256, claude: A.claude.sha256};
+    const realHash = (b: Buffer) => crypto.createHash("sha256").update(b).digest("hex");
+    const sha = (b: Buffer) => pinned[b.toString()] ?? realHash(b); // test seam: marker bytes stand for the pinned artifacts
+    const deps = (list: string, fail?: string, tamper?: string) => {
+      const calls: string[][] = [];
+      return {calls, d: {runner: async (args: string[]) => { calls.push(args); if (args[0] === "-l") return {...ok(), stdout: utf16(list)}; return ok("", fail && args.join(" ").includes(fail) ? 1 : 0); },
+        download: async (url: string, dest: string) => { fs.writeFileSync(dest, tamper === byUrl[url] ? "evil" : byUrl[url]); }, packApp: (_r: string, files: readonly string[], dest: string) => { fs.writeFileSync(dest, files.join("\n")); }, sha256: sha}};
+    };
+    {
+      const USER = "  NAME STATE VERSION\n* Ubuntu Running 2\n  Debian Stopped 2\n";
+      const fresh = deps(USER);
+      const r1 = await installSandbox({appRoot: "/app", controlRoot: control, installDir: "C:\\Users\\f\\AppData\\Local\\UASCO\\wsl", workDir: work}, fresh.d);
+      expect(r1).toMatchObject({ok: true, installed: true});
+      expect(JSON.parse(fs.readFileSync(SANDBOX_RECORD(control), "utf8"))).toMatchObject({distro: WSL_DISTRO, node: A.node.binarySha256, claude: A.claude.binarySha256});
+      expect(fresh.calls.some(c => c[0] === "--import" && c[1] === WSL_DISTRO)).toBe(true);
+      expect(fresh.calls.flat().some(a => a === "Ubuntu" || a === "Debian")).toBe(false); // the user's distros are never named
+      expect(GUEST_APP_FILES).toContain("scripts/claude-builder-broker.mjs");
+      // an existing UASCO-Sandbox is re-verified, never re-imported
+      fs.rmSync(SANDBOX_RECORD(control));
+      const again = deps(USER + `  ${WSL_DISTRO} Stopped 2\n`);
+      expect(await installSandbox({appRoot: "/app", controlRoot: control, installDir: "C:\\x", workDir: work}, again.d)).toMatchObject({ok: true, installed: false});
+      expect(again.calls.some(c => c[0] === "--import")).toBe(false);
+      // a tampered download stops before wsl.exe imports anything and leaves no record
+      fs.rmSync(SANDBOX_RECORD(control)); fs.rmSync(work, {recursive: true, force: true});
+      const bad = deps(USER, undefined, "node");
+      expect(await installSandbox({appRoot: "/app", controlRoot: control, installDir: "C:\\x", workDir: work}, bad.d)).toEqual({ok: false, step: "ARTIFACT_HASH_MISMATCH_NODE"});
+      expect(bad.calls.some(c => c[0] === "--import")).toBe(false); expect(fs.existsSync(SANDBOX_RECORD(control))).toBe(false);
+      // a failing guest step leaves no record (real execution stays disabled)
+      fs.rmSync(work, {recursive: true, force: true});
+      const fail = deps(USER, "sha256sum -c -");
+      const r4 = await installSandbox({appRoot: "/app", controlRoot: control, installDir: "C:\\x", workDir: work}, fail.d);
+      expect(r4.ok).toBe(false); expect(fs.existsSync(SANDBOX_RECORD(control))).toBe(false);
+    }
+  });
+
   it("the guest egress proxy decides exactly like the host proxy (no drift)", () => {
     const guest = createRequire(import.meta.url)("../../core/sandbox/guest/egress.cjs") as {decide: (h: string) => unknown};
     for (const h of ["CONNECT api.anthropic.com:443 HTTP/1.1", "CONNECT claude.ai:443 HTTP/1.1", "CONNECT evil.com:443 HTTP/1.1", "CONNECT 1.2.3.4:443 HTTP/1.1", "CONNECT [::1]:443 HTTP/1.1",
