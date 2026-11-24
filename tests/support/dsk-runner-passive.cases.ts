@@ -452,9 +452,13 @@ export function registerDskRunnerPassiveCases(): void {
     const p1 = new LocalClaudeExecutors(r.repo, r.control, {isolationGate: g1, profile: {forbiddenRoots: [r.data]}}).pair();
     const out = await p1.implementer.implement(r.ws, r.spec, {timeoutMs: 2000});
     expect(out.exitCode).toBe(null); expect(win.calls).toEqual([]);
-    const ok = iso({selfTest: async () => ({ok: true}), id: "wsl-test", linuxGuest: true, map: (argv: string[], o: {cwd: string; env: NodeJS.ProcessEnv}) => ({argv: ["/usr/bin/node", "/opt/uasco/" + path.basename(argv[1] ?? "x")], cwd: "/work", env: {...Object.fromEntries(Object.entries(o.env).filter(([k]) => k !== "CLAUDE_CONFIG_DIR" && k !== "HOME" && k !== "PATH")), HOME: "/home/uasco", CLAUDE_CONFIG_DIR: "/profiles/implementer", PATH: "/usr/bin:/bin"}})});
+    const ok = iso({selfTest: async () => ({ok: true}), id: "wsl-test", linuxGuest: true, map: (argv: string[], o: {cwd: string; env: NodeJS.ProcessEnv}) => ({argv: ["/usr/bin/node", "/opt/uasco/" + path.basename(argv[1] ?? "x")], cwd: "/work", env: {HOME: "/home/uasco", CLAUDE_CONFIG_DIR: "/profiles/implementer", PATH: "/usr/bin:/bin", UASCO_PROVIDER: String(o.env.UASCO_PROVIDER ?? "")}})}); // a fully Linux env built from scratch (no host USERPROFILE/TMPDIR/... can leak through on Windows)
     const g2 = new ExecutionGate(ok.prov); await g2.status();
-    await new LocalClaudeExecutors(r.repo, r.control, {isolationGate: g2, profile: {forbiddenRoots: [r.data]}}).pair().implementer.implement(r.ws, r.spec, {timeoutMs: 2000});
+    // emulate a Windows host env (validate-windows-shard): host path variables hold C:\ paths; the mapper must not let them through
+    const saved = {USERPROFILE: process.env.USERPROFILE, TMPDIR: process.env.TMPDIR};
+    process.env.USERPROFILE = "C:\\Users\\f"; process.env.TMPDIR = "C:\\Users\\f\\AppData\\Local\\Temp";
+    try { await new LocalClaudeExecutors(r.repo, r.control, {isolationGate: g2, profile: {forbiddenRoots: [r.data]}}).pair().implementer.implement(r.ws, r.spec, {timeoutMs: 2000}); }
+    finally { for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } }
     expect(ok.calls).toEqual([["/usr/bin/node", "/opt/uasco/claude-builder-broker.mjs"]]);
   });
 

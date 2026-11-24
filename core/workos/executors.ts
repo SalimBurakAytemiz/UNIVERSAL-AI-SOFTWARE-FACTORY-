@@ -294,7 +294,7 @@ export interface LocalClaudeOptions {
   runReviewer?: (argv: string[], opts: ProcOptions) => Promise<ProcResult>;
   // //TR: DSK-T0008: YALNIZ testler (programatik; env/config/API ile seçilemez). Sahte CLI ile ana makinede başlatmayı bu TEST sağlayıcısının kimliğiyle "izole" sayar; üretimde verilmez, dolayısıyla gerçek model süreci hiç başlatılmaz (NOT_ISOLATED).
   testOnlyIsolationProviderId?: string;
-  // //TR: DSK-T0007: gerçek izolasyon kaynağı. Bu kapının sağlayıcısı öz-testini GEÇMİŞSE (verifiedProvider) yürütücü ISOLATED olur ve üç model süreci de o sağlayıcıda başlatılır; ISOLATED asla yürütücünün kendi beyanı değildir. Sunucu aynı kapıyı runner'a da verir.
+  // //TR: DSK-T0007: gerçek izolasyon kaynağı. Bu kapının sağlayıcısı öz-testini GEÇMİŞSE (verifiedProvider) yürütücü ISOLATED olur ve üç model süreci de o sağlayıcıda başlatılır; ISOLATED asla yürütücünün kendi beyanı değildir. ÖNEMLİ: bu PR'da sunucu (server.ts) bu seçeneği henüz VERMEZ; korumalı bağlantı ayrı PR'dadır. O birleşene kadar üretimde her LOCAL_CLAUDE yolu (implementer, reviewer, pre-dev/analiz) NOT_ISOLATED olarak reddedilir: gerçek model yürütmesi tamamen kapalıdır.
   isolationGate?: ExecutionGate;
 }
 export class LocalClaudeExecutors {
