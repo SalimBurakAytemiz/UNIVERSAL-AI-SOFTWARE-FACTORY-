@@ -4,6 +4,8 @@ import type {RouteDeps} from "./deps.js";
 import {LANE_WRITE_BODY_LIMIT} from "./deps.js";
 
 const MISSION_ID_RE = /^msn_[0-9a-f]{24}$/;
+/** The local Founder principal (the desktop app's only principal); grant/revoke are Founder-only. */
+export const FOUNDER_PRINCIPAL = "FOUNDER_LOCAL";
 const isObj = (x: unknown): x is Record<string, unknown> => x !== null && typeof x === "object" && !Array.isArray(x);
 /** Strict body: exactly {maxRisk, maxRuns, expiresAt}; any other key is refused (no scope widening, spend or risky-action field can be smuggled in). */
 export function validateGrantBody(x: unknown): {ok: true} | {ok: false; errors: string} {
@@ -19,6 +21,8 @@ export const authorizationState = (a: {revokedAt: string | null; expiresAt: stri
 
 export function registerMissionAuthorizationRoutes(app: FastifyInstance, d: RouteDeps): void {
   const gate = (reply: any, action: string, missionId: string, body: unknown, validate: (x: unknown) => {ok: true} | {ok: false; errors: string}): boolean => {
+    // #446 N9: granting or revoking a real-run authorization is a Founder decision; any other principal is refused before any other check.
+    if (d.actor !== FOUNDER_PRINCIPAL) { d.audit("WORKOS_WRITE_DENIED", {actor: d.actor, action, reason: "FOUNDER_ONLY"}); reply.code(403).send({error: "ACTION_DENIED", reason: "FOUNDER_ONLY"}); return false; }
     if (d.workosStopped()) { reply.code(423).send({error: "GLOBAL_STOP_ACTIVE"}); return false; }
     const dec = d.workosPolicy(action, missionId, body);
     if (!dec.allowed) { d.audit("WORKOS_WRITE_DENIED", {actor: d.actor, action, reason: dec.reason}); reply.code(403).send({error: "ACTION_DENIED", reason: dec.reason}); return false; }

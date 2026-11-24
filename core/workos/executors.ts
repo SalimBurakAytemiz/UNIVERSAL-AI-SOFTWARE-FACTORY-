@@ -271,20 +271,35 @@ export const REVIEWER_DISALLOWED_TOOLS = ["Edit", "Write", "MultiEdit", "Bash", 
 export function reviewerArgv(launcher: string, outputFormat: "text" | "json" = "text"): string[] {
   return [launcher, "-p", "--permission-mode", "dontAsk", "--tools", REVIEWER_TOOLS.join(","), "--disallowedTools", REVIEWER_DISALLOWED_TOOLS.join(","), ...CLAUDE_ISOLATION_FLAGS, "--output-format", outputFormat];
 }
-const REVIEW_GIT_HARDEN = ["-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false"];
+// #446 B2 (c): no fsmonitor/untracked cache, no optional locks (no index refresh write). Hooks are already pointed at the isolated empty hooks dir (git-isolation).
+const REVIEW_GIT_HARDEN = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false"];
 export interface ReviewWorkspaceSnapshot { head: string | null; status: string | null; gitDigest: string | null }
 // Review çalışma alanının bayt düzeyinde değişmediğinin kanıtı: HEAD aynı, status (izlenmeyen + yok sayılan dahil) boş, .git kontrol dosyaları özeti aynı.
-export function reviewWorkspaceSnapshot(dir: string, envPolicyFile: string): ReviewWorkspaceSnapshot {
+export function reviewWorkspaceSnapshot(dir: string, envPolicyFile: string, expectedGitDigest?: string | null): ReviewWorkspaceSnapshot {
+  // #446 B2 (c): .git integrity is checked BEFORE any git command on a (possibly guest-touched) clone; a changed .git runs no git at all.
+  const gitDigest = gitControlDigest(dir);
+  if (expectedGitDigest !== undefined && gitDigest !== expectedGitDigest) return {head: headWithoutGit(dir), status: null, gitDigest};
   const env = safeChildEnv(envPolicyFile, {provider: "DETERMINISTIC"});
   const git = (args: string[]) => { const r = spawnGitSync(dir, [...REVIEW_GIT_HARDEN, ...args], {env, maxBuffer: 16 * 1024 * 1024}); return r.status === 0 ? String(r.stdout ?? "") : null; };
   const head = git(["rev-parse", "--verify", "HEAD^{commit}"]);
-  return {head: head === null ? null : head.trim(), status: git(["status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored=matching"]), gitDigest: gitControlDigest(dir)};
+  return {head: head === null ? null : head.trim(), status: git(["status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored=matching"]), gitDigest};
+}
+/** HEAD commit read from the files only (HEAD -> loose ref or packed-refs); no git process. null if unreadable/unusual. */
+function headWithoutGit(dir: string): string | null {
+  try {
+    const g = path.join(dir, ".git"), head = fs.readFileSync(path.join(g, "HEAD"), "utf8").trim();
+    if (/^[0-9a-f]{40,64}$/.test(head)) return head;
+    const m = /^ref: (refs\/[A-Za-z0-9._\/-]{1,200})$/.exec(head); if (!m || m[1].includes("..")) return null;
+    try { const v = fs.readFileSync(path.join(g, ...m[1].split("/")), "utf8").trim(); return /^[0-9a-f]{40,64}$/.test(v) ? v : null; } catch { /* packed */ }
+    const line = fs.readFileSync(path.join(g, "packed-refs"), "utf8").split("\n").find(l => l.endsWith(` ${m[1]}`));
+    return line && /^[0-9a-f]{40,64} /.test(line) ? line.split(" ")[0] : null;
+  } catch { return null; }
 }
 export function reviewWorkspaceChange(before: ReviewWorkspaceSnapshot, after: ReviewWorkspaceSnapshot): string | null {
   if (!before.head || before.status !== "" || !before.gitDigest) return "REVIEW_WORKSPACE_NOT_CLEAN_BEFORE";
-  if (after.head !== before.head) return "REVIEW_WORKSPACE_HEAD_CHANGED";
-  if (after.status !== "") return "REVIEW_WORKSPACE_MODIFIED";
+  if (after.head !== before.head) return "REVIEW_WORKSPACE_HEAD_CHANGED"; // a changed .git: HEAD read from files, no git process
   if (after.gitDigest !== before.gitDigest) return "REVIEW_WORKSPACE_GIT_CHANGED";
+  if (after.status !== "") return "REVIEW_WORKSPACE_MODIFIED";
   return null;
 }
 export interface LocalClaudeOptions {
@@ -394,7 +409,7 @@ export class LocalClaudeExecutors {
           // //TR: yalnız BAŞARISIZ çıkışta (uygulayıcıyla aynı kural): çıkış 0 iken güvenilmeyen çıktıdan (alıntı/prompt injection) "oturum doldu" sonucu çıkarılmaz; ve süresi dolmuş oturum yeniden DENENMEZ (çıkış 75 geçici sayılsa bile).
           if (!r.valid && !r.aborted && !r.timedOut && r.exitCode !== 0 && claudeAuthFailure(r.log)) { r.invalidReason = "CLAUDE_PROFILE_LOGIN_EXPIRED"; r.transient = false; }
           // Review sonrası çalışma alanı bayt düzeyinde aynı olmalı; değilse review GEÇERSİZ (verdict ne olursa olsun CLEAN sayılmaz).
-          const changed = reviewWorkspaceChange(before, sp(() => reviewWorkspaceSnapshot(cleanClone, envPolicyFile)));
+          const changed = reviewWorkspaceChange(before, sp(() => reviewWorkspaceSnapshot(cleanClone, envPolicyFile, before.gitDigest)));
           if (changed) return {...r, verdict: "BLOCKED", findings: [], valid: false, invalidReason: changed, transient: false, log: `${r.log}REVIEW_INVALID: ${changed}\n`};
           return r;
         }

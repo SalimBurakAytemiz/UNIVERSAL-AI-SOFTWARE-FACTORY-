@@ -155,6 +155,34 @@ export function registerDskWsl2Cases(): void {
     expect(fs.existsSync(path.join(host, "gone.txt"))).toBe(false); expect(fs.readFileSync(path.join(host, ".git", "HEAD"), "utf8")).toBe("ref");
     expect(fs.readFileSync(path.join(outside, "secret.txt"), "utf8")).toBe("S");
   });
+  it("#446 B2: NTFS 8.3 short names and any .git (any depth/case) are refused; a link into .git is refused; nothing is written", () => {
+    for (const bad of ["GIT~1/config", "git~1/hooks/pre-commit", "PROGRA~1/x.txt", "src/GIT~1/config", "a/.git/config", "a/.GiT/hooks/x", ".Git/config", "x~/y", "~/z"]) expect(safeRelPath(bad), bad).toBe(null);
+    const reason = (t: Buffer) => { const r = readTarSafe(t); return r.ok ? "OK" : r.reason; };
+    expect(reason(tarOf([{name: "GIT~1/config", data: "[core]\n\tfsmonitor = touch /tmp/pwned\n"}]))).toBe("UNSAFE_TAR_PATH");
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dsk-wsl-git-")), host = path.join(tmp, "host");
+    fs.mkdirSync(path.join(host, ".git", "hooks"), {recursive: true}); fs.writeFileSync(path.join(host, ".git", "config"), "[core]\n");
+    fs.symlinkSync(path.join(host, ".git"), path.join(host, "gitlink")); // a link (POSIX symlink / Windows junction) into .git
+    expect(() => safeMirror(host, ["gitlink/config"], tarOf([{name: "gitlink/config", data: "[core]\n\tfsmonitor = x\n"}]))).toThrow(/UNSAFE_HOST_LINK|UNSAFE_GIT_PATH/);
+    expect(() => safeMirror(host, ["GIT~1/config"], tarOf([{name: "GIT~1/config", data: "x"}]))).toThrow(/UNSAFE_TAR_PATH/);
+    expect(fs.readFileSync(path.join(host, ".git", "config"), "utf8")).toBe("[core]\n");
+  });
+  it("#446 B2 (c): a planted fsmonitor in a guest-touched clone never executes — .git integrity is checked before any git command", async () => {
+    const {reviewWorkspaceSnapshot, reviewWorkspaceChange} = await import("../../core/workos/executors.js");
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dsk-wsl-fsmon-")), repo = path.join(tmp, "r"), marker = path.join(tmp, "FSMONITOR_RAN");
+    fs.mkdirSync(repo); const g = (a: string[]) => cp.spawnSync("git", a, {cwd: repo});
+    g(["init", "-q", "-b", "main"]); fs.writeFileSync(path.join(repo, "a.txt"), "a"); g(["add", "-A"]); g(["-c", "user.name=S", "-c", "user.email=s@local.invalid", "commit", "-q", "-m", "s"]);
+    const policy = path.resolve(import.meta.dirname, "..", "..", "config", "environment-policy.json");
+    const before = reviewWorkspaceSnapshot(repo, policy);
+    expect(before.status).toBe("");
+    const hook = path.join(tmp, "fsmon.sh"); fs.writeFileSync(hook, `#!/bin/sh\ntouch ${marker}\n`, {mode: 0o755});
+    fs.appendFileSync(path.join(repo, ".git", "config"), `[core]\n\tfsmonitor = ${hook}\n\thooksPath = ${tmp}\n`); // planted by an untrusted mirror
+    const after = reviewWorkspaceSnapshot(repo, policy, before.gitDigest);
+    expect(after.status).toBe(null); // no git process ran
+    expect(fs.existsSync(marker)).toBe(false);
+    expect(reviewWorkspaceChange(before, after)).toBe("REVIEW_WORKSPACE_GIT_CHANGED");
+    // even without the digest guard, the hardened git invocation never runs the planted fsmonitor
+    reviewWorkspaceSnapshot(repo, policy); expect(fs.existsSync(marker)).toBe(false);
+  });
   it("credentials copy-back accepts exactly one regular .credentials.json into a real profile dir", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dsk-wsl-cred-")), prof = path.join(tmp, "p"), other = path.join(tmp, "o"); fs.mkdirSync(prof); fs.mkdirSync(other);
     expect(() => safeCredentialsBack(prof, tarOf([{name: ".credentials.json", data: "{}"}, {name: "x", data: "y"}]))).toThrow(/UNSAFE_CREDENTIALS_ARCHIVE/);

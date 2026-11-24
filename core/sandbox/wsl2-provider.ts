@@ -218,7 +218,8 @@ export function safeRelPath(raw: string): string | null {
   if (!p || p.length > 1024 || /[\\\u0000:*?"<>|]/.test(p) || p.startsWith("/") || /^[A-Za-z]:/.test(p)) return null;
   const parts = p.split("/");
   for (const s of parts) if (!s || s === "." || s === ".." || /[. ]$/.test(s) || /^(con|prn|aux|nul|com\d|lpt\d)(\..*)?$/i.test(s)) return null;
-  if (parts[0].toLowerCase() === ".git") return null;
+  // #446 B2: no NTFS 8.3 short names (GIT~1 aliases .git) — any "~" in a segment is refused; and no ".git" at ANY depth, any case
+  if (parts.some(s => s.includes("~") || s.toLowerCase() === ".git")) return null;
   return parts.join("/");
 }
 const field = (h: Buffer, o: number, n: number) => h.subarray(o, o + n).toString("latin1").replace(/\0.*$/s, "");
@@ -246,6 +247,15 @@ export function readTarSafe(buf: Buffer): {ok: true; entries: TarEntry[]} | {ok:
   }
   return {ok: false, reason: "TAR_TRUNCATED"};
 }
+/** #446 B2 (b): the host-side canonical path (long names, links resolved: realpath.native maps GIT~1 to .git) of the nearest existing ancestor must stay inside the workspace and never inside or equal to a .git dir. */
+function canonicalInsideWorkspaceNotGit(root: string, abs: string): boolean {
+  let cur = abs;
+  for (;;) { try { fs.lstatSync(cur); break; } catch { const up = path.dirname(cur); if (up === cur) return false; cur = up; } }
+  let real: string; try { real = fs.realpathSync.native(cur); } catch { return false; }
+  const rel = path.relative(root, real);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) return false;
+  return !rel.split(/[\\/]/).some(seg => seg.toLowerCase() === ".git" || seg.includes("~"));
+}
 /** Every existing component from the root down to the target must be a real directory (never a link/junction); the target, if present, a regular file. */
 function hostPathSafe(root: string, rel: string, target: "file" | "dir"): boolean {
   let cur = root; const parts = rel.split("/");
@@ -261,11 +271,12 @@ function hostPathSafe(root: string, rel: string, target: "file" | "dir"): boolea
 }
 /** Mirror the guest workspace onto the host workspace: validate everything first, then delete host files absent in the guest (never .git, never through links), then write. Nothing outside `hostDir` is touched. */
 export function safeMirror(hostDir: string, guestFiles: string[], tarData: Buffer): void {
-  const root = fs.realpathSync(hostDir);
+  const root = fs.realpathSync.native(hostDir);
   const t = readTarSafe(tarData); if (!t.ok) throw new Error(t.reason);
   const keep = new Set<string>();
   for (const f of guestFiles) { const r = safeRelPath(f); if (r === null) throw new Error("UNSAFE_FILE_LIST"); keep.add(r); }
   for (const e of t.entries) if (!hostPathSafe(root, e.path, e.type)) throw new Error("UNSAFE_HOST_LINK");
+  for (const e of t.entries) if (!canonicalInsideWorkspaceNotGit(root, path.join(root, e.path))) throw new Error("UNSAFE_GIT_PATH");
   for (const e of t.entries) if (e.type === "file" && !keep.has(e.path)) throw new Error("UNSAFE_UNLISTED_FILE");
   const walk = (rel: string): string[] => fs.readdirSync(path.join(root, rel), {withFileTypes: true}).flatMap(d => {
     const r = rel ? `${rel}/${d.name}` : d.name; if (!rel && d.name === ".git") return [];
@@ -275,9 +286,10 @@ export function safeMirror(hostDir: string, guestFiles: string[], tarData: Buffe
   for (const e of t.entries) {
     const dest = path.join(root, e.path);
     if (path.relative(root, dest).startsWith("..")) throw new Error("UNSAFE_TAR_PATH");
-    if (e.type === "dir") { fs.mkdirSync(dest, {recursive: true}); continue; }
+    if (e.type === "dir") { fs.mkdirSync(dest, {recursive: true}); if (!canonicalInsideWorkspaceNotGit(root, dest)) throw new Error("UNSAFE_GIT_PATH"); continue; }
     fs.mkdirSync(path.dirname(dest), {recursive: true});
     if (!hostPathSafe(root, e.path, "file")) throw new Error("UNSAFE_HOST_LINK"); // re-check just before the write
+    if (!canonicalInsideWorkspaceNotGit(root, dest)) throw new Error("UNSAFE_GIT_PATH");
     fs.writeFileSync(dest, e.data, {flag: "w"});
   }
 }
