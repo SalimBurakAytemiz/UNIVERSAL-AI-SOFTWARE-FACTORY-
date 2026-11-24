@@ -5,6 +5,8 @@ import {selection} from "../forms.js";
 import {MISSION_ID_RE,PREDEV_KINDS,PHASE_KIND,PILL_FOR_STATE,downstreamOf} from "../journey-core.js";
 import {decisionsPanel} from "./predev-decisions.js";
 import {analysisPanel,analysisUi} from "./analysis-step.js";
+import {missionAuthPanel} from "./mission-auth-panel.js";
+import {analysisReportPanel} from "./analysis-report.js";
 import {buildPlanChanges} from "../plan-compare-core.js";
 
 const PREDEV_SRC="/v1/predev/:missionId",CREW_SRC="/v1/crew/:missionId";
@@ -136,7 +138,7 @@ function predevPanel(ctx,pre,missionId,exec=null){
     body=[h(doc,"p",{class:"note",dataset:{phase:p.phase},text:ctx.t("journey.predev.phase",{phase:ctx.t(`journey.phase.${p.phase}`)})}),
       h(doc,"ol",{class:"journey-phases","aria-label":ctx.t("journey.predev.aria")},rows)];
   }
-  const sec=panel(ctx,{titleKey:"journey.predev.title",id:"journey-predev",className:"journey-section"},h(doc,"p",{class:"note",text:ctx.t("journey.predev.lead")}),body,analysisPanel(ctx,{missionId,exec}),decisionsPanel(ctx,{missionId,pre}));
+  const sec=panel(ctx,{titleKey:"journey.predev.title",id:"journey-predev",className:"journey-section"},h(doc,"p",{class:"note",text:ctx.t("journey.predev.lead")}),body,analysisPanel(ctx,{missionId,exec}),analysisReportPanel(ctx,{missionId,pre}),decisionsPanel(ctx,{missionId,pre}));
   sec.setAttribute("tabindex","-1");return sec;
 }
 
@@ -262,6 +264,8 @@ export async function render(ctx){
     // DSK-T0004: plan sürüm karşılaştırması (salt-okunur; okunamazsa panel dürüst durum gösterir, diğer paneller etkilenmez).
     typeof ctx.api.planVersions==="function"?Promise.resolve().then(()=>ctx.api.planVersions(id)).then(stateRes,()=>({state:"ERROR",versions:null})):Promise.resolve({state:"UNSUPPORTED",versions:null})
   ]);
-  root.append(chainRail(ctx,pre,crew),predevPanel(ctx,pre,id,exec),planChangesPanel(ctx,plans),crewPanel(ctx,crew),devPanel(ctx,crew));
+  // DSK-T0008: görev başı yetki önizlemesi (gönderim kapalı, yeni okuma yok); mission riski liste okumasından gelir, okunamazsa form MISSION_RISK_UNKNOWN der.
+  const mission=isLive(mres)?mres.items.find(m=>m.missionId===id)??null:null;
+  root.append(chainRail(ctx,pre,crew),predevPanel(ctx,pre,id,exec),planChangesPanel(ctx,plans),missionAuthPanel(ctx,mission??{missionId:id,riskLevel:null}),crewPanel(ctx,crew),devPanel(ctx,crew));
   return root;
 }

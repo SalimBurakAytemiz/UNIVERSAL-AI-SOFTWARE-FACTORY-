@@ -902,3 +902,7 @@ kbd{font-family:inherit;font-size:var(--fs-caption);padding:.1rem .4rem;border:1
 .view-scheduler .integ-state{border-left:4px solid var(--warn);padding-left:var(--space-2)}
 .view-scheduler .integ-state.state-error,.view-scheduler .integ-state.state-offline,.view-scheduler .integ-state.state-rejected{border-left-color:var(--danger)}
 .view-scheduler .integ-row[data-status="BLOCKED"]{border-left:4px solid var(--danger)}
+/* UASCO-T0004.A: arka uç erişilemez şeridi — üst çubukta tam genişlik satır (ACİL DURDUR şeridinin ızgara hücresiyle çakışmaz). */
+.backend-banner{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:var(--space-2) var(--space-3);align-items:center;margin:0;padding:.5rem var(--space-3);border:1px solid var(--danger);border-radius:8px;background:var(--danger-bg);color:var(--on-danger)}
+.backend-banner p{margin:0}
+.backend-banner .row{display:flex;gap:var(--space-2)}

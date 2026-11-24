@@ -2470,3 +2470,7 @@ describe("DSK-T0004 plan comparison and change center (UI-018/UI-019)", () => {
     for (const k of keys) expect(i18n.translate("tr", k, {n: "1", v: "x", from: "1", to: "2", fromState: "a", toState: "b"}), k).not.toBe(k);
   });
 });
+
+// //TR: DSK-T0002 (UI-014): okunur analiz raporu (salt-okunur GET /v1/missions/:id/analysis/report + Proje Yolculuğu rapor paneli) gerçek buildServer senaryoları bu kayıtlı dosyadan koşar.
+import {registerAnalysisReportRealServerCases} from "./support/analysis-report-real-server.cases.js";
+registerAnalysisReportRealServerCases();

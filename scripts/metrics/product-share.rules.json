@@ -1,0 +1,16 @@
+{
+  "//TR": "Bu dosya UASCO-T0121 (RW-049) ürün/meta satır payı ölçümünün yol sınıflama kurallarını tanımlar; kurallar docs/closure/uasco-remaining-work/evidence/G7-workplan.md §12 sınıflama kuralının (classify.mjs) aynısıdır. İlk eşleşen kural kazanır; hiçbiri eşleşmezse defaultClass uygulanır. Bilgilendirme amaçlıdır, bir kapı değildir.",
+  "schema": "uasco.product-share-rules/v1",
+  "source": "docs/closure/uasco-remaining-work/evidence/G7-workplan.md#12-meta-infrastructure-share-classification-of-the-last-100-merged-prs",
+  "productClasses": ["PRODUCT"],
+  "defaultClass": "META_OTHER",
+  "rules": [
+    {"class": "PRODUCT", "include": ["apps/desktop/**", "apps/control-api/**", "apps/mobile/**"], "exclude": ["**/*.md"]},
+    {"class": "PRODUCT", "include": ["core/**"]},
+    {"class": "TEST", "include": ["tests/**"]},
+    {"class": "META_CI", "include": [".github/**", "scripts/**", "package.json", "package-lock.json", ".nvmrc", "docs/cloud-production/ci/**"]},
+    {"class": "META_GOV", "include": ["config/**", "registries/**", "audit/**", "automation/**", "docs/{cloud-production,planning,lanes,authority-requests,authority,governance,inventory}/**"]},
+    {"class": "DOC_PRODUCT", "include": ["docs/**", "**/*.md"]}
+  ],
+  "target": {"minProductShare": 0.40, "windowPrs": 30, "mode": "INFORMATIONAL", "basis": "RW-049 completionCriteria (ESTIMATE)"}
+}

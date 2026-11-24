@@ -189,7 +189,7 @@ export class FakeExecutors {
 
 // ---- LOCAL_CLAUDE adapter (varsayılan KAPALI; yalnız UASCO_WORKOS_EXECUTOR=local-claude ile açılır; bu paketin test/komutlarında çağrılmaz) ----
 function readJson(file: string): any { return JSON.parse(fs.readFileSync(file, "utf8")); }
-function implementPrompt(spec: MissionSpec): string {
+export function implementPrompt(spec: MissionSpec): string {
   return [
     "You are the UASCO implementer (CLAUDE_BUILDER) working in an isolated git workspace on a run branch.",
     "Implement the mission below by editing files in the current directory only. Do NOT commit and do not touch the .git directory: the engine commits your file changes after you finish.",
