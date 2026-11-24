@@ -599,3 +599,5 @@ describe("INT-R3 D-M1-03 packaged Work OS runner", () => {
     } finally { fs.rmSync(base, {recursive: true, force: true}); }
   });
 });
+import {registerDevplaneBoundaryT0109Cases} from "./support/devplane-boundary-t0109.cases.js";
+registerDevplaneBoundaryT0109Cases();
