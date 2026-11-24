@@ -124,3 +124,29 @@ export function deliveryChecklist(d,sec){
   rows.push({key:"acceptance",value:d.accepted?"ACCEPTED":"NOT_ACCEPTED",level:d.accepted?"OK":"PENDING",detail:d.accepted?.acceptedAt??null});
   return rows;
 }
+
+// //TR: UASCO-T0016.A (A_UI): ana süreç köprüsünün (uasco.exportDelivery) yanıtı saf biçimde sınıflanır. Başarı yalnız exported===true + 64-hex sha256 + boş olmayan kayıt konumu
+// ile kabul edilir (hash'siz/konumsuz "başarı" iddia edilmez: DELIVERY_RESULT_INVALID). Başarısızlıkta gerçek neden kodu korunur: bilinen kodlar yerelleştirilmiş metne, bilinmeyen ama
+// güvenli biçimli kodlar (A-Z0-9_) aynen "tanınmayan neden" metnine taşınır; asla genel "kayıt okunamadı" metnine çökertilmez. Köprü istisnası BRIDGE_ERROR'dur. Yol/metin yalnız düz metindir.
+export const DELIVERY_EXPORT_REASONS=Object.freeze(["CANCELLED","DELIVERY_UNAVAILABLE","DELIVERY_RECORD_INVALID","DELIVERY_ARTIFACT_HASH_MISMATCH","DELIVERY_ARTIFACT_MISSING","DELIVERY_PATH_REJECTED",
+  "DELIVERY_WRITE_FAILED","DELIVERY_ARTIFACT_NOT_PREPARED","DELIVERY_RESULT_INVALID","BRIDGE_ERROR","NO_BRIDGE","WORKOS_NOT_FOUND","INVALID_RUN_ID","ACTION_DENIED","GLOBAL_STOP_ACTIVE","NON_JSON_ERROR"]);
+const EXPORT_CODE_RE=/^[A-Z][A-Z0-9_]{1,63}$/;
+const fail=code=>({ok:false,code,known:DELIVERY_EXPORT_REASONS.includes(code),savedTo:null,fileName:null,sha256:null});
+/** Köprü yanıtı -> {ok, code, known, savedTo, fileName, sha256}. `thrown` köprü çağrısının istisna attığını, `noBridge` köprünün olmadığını belirtir. */
+export function describeExportResult(r,{thrown=false,noBridge=false}={}){
+  if(noBridge)return fail("NO_BRIDGE");
+  if(thrown)return fail("BRIDGE_ERROR");
+  if(!isObj(r))return fail("DELIVERY_RESULT_INVALID");
+  if(r.exported===true){
+    const savedTo=text(r.savedTo,1024),fileName=text(r.fileName,260);
+    if(!SHA256_RE.test(String(r.sha256))||!(savedTo||fileName))return fail("DELIVERY_RESULT_INVALID");
+    return {ok:true,code:"EXPORTED",known:true,savedTo,fileName,sha256:r.sha256};
+  }
+  const code=typeof r.reason==="string"&&EXPORT_CODE_RE.test(r.reason)?r.reason:"UNKNOWN";
+  return fail(code);
+}
+/** Durum satırı için yerelleştirme anahtarı + değişkenler (bilinmeyen kod metne aynen girer). */
+export function exportMessage(x){
+  if(x.ok)return {key:"m1a.delivery.exported",vars:{file:x.savedTo??x.fileName,hash:x.sha256}};
+  return x.known?{key:`m1a.delivery.reason.${x.code}`,vars:{code:x.code}}:{key:"m1a.delivery.reason.UNRECOGNISED",vars:{code:x.code}};
+}
