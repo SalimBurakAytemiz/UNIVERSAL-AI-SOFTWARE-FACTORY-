@@ -156,6 +156,9 @@ export function registerDskWsl2Cases(): void {
     expect(fs.readFileSync(path.join(outside, "secret.txt"), "utf8")).toBe("S");
   });
   it("#446 B2: NTFS 8.3 short names and any .git (any depth/case) are refused; a link into .git is refused; nothing is written", () => {
+    // N11: non-ASCII / invisible-character look-alikes of .git (fullwidth, zero-width, soft hyphen) and fullwidth tilde
+    for (const bad of [".\uff47\uff49\uff54/config", ".g\u200bit/config", ".gi\u00adt/config", "\uff0egit/config", "GIT\uff5e1/config"]) expect(safeRelPath(bad), JSON.stringify(bad)).toBe(null);
+    expect(safeRelPath("src/über.ts")).toBe("src/über.ts"); // ordinary non-ASCII names stay allowed
     for (const bad of ["GIT~1/config", "git~1/hooks/pre-commit", "PROGRA~1/x.txt", "src/GIT~1/config", "a/.git/config", "a/.GiT/hooks/x", ".Git/config", "x~/y", "~/z"]) expect(safeRelPath(bad), bad).toBe(null);
     const reason = (t: Buffer) => { const r = readTarSafe(t); return r.ok ? "OK" : r.reason; };
     expect(reason(tarOf([{name: "GIT~1/config", data: "[core]\n\tfsmonitor = touch /tmp/pwned\n"}]))).toBe("UNSAFE_TAR_PATH");
