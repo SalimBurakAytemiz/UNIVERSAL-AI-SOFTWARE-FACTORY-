@@ -1,3 +1,4 @@
+<!-- //TR: DSK-T0007 Windows kabul prosedürü: tek makinede yalıtım sondaları, abonelik girişi, yetkili tek gerçek görev, iptal/Acil Durdur ve ağ çıkışı denetimi; tam PASS olmadan gerçek yürütme kapalı kalır. -->
 # DSK-T0007 Windows acceptance (Founder, one machine, ~45 minutes)
 
 Run on a real Windows 10 22H2+ / 11 machine with WSL 2 enabled (`wsl --status` shows default version 2).
