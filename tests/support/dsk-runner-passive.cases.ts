@@ -355,6 +355,14 @@ export function registerDskRunnerPassiveCases(): void {
     expect((await app.inject({method: "GET", url: "/v1/missions/bad/authorization"})).statusCode).toBe(400);
     expect(audits).toEqual(expect.arrayContaining(["WORKOS_MISSION_AUTHORIZATION_GRANTED", "WORKOS_MISSION_AUTHORIZATION_REVOKED", "WORKOS_WRITE_DENIED"]));
     await app.close();
+    // #446 N9: a non-Founder principal can neither grant nor revoke (403 FOUNDER_ONLY), and nothing is recorded
+    const app2 = Fastify({logger: false}), st2 = new WorkOsStore(s.data);
+    registerMissionAuthorizationRoutes(app2 as never, {getStore: () => st2, scope: {tenantId: "tA"}, orgId: "o1", actor: "OPERATOR_X", audit: () => {}, workosStopped: () => false, workosPolicy: () => ({allowed: true}), workosFail: (reply: any) => reply.code(500).send({})} as never);
+    await app2.ready();
+    const r1 = await app2.inject({method: "POST", url, payload: ok}); expect(r1.statusCode).toBe(403); expect(r1.json().reason).toBe("FOUNDER_ONLY");
+    expect((await app2.inject({method: "POST", url: `${url}/revoke`, payload: {}})).json().reason).toBe("FOUNDER_ONLY");
+    expect(st2.getMissionAuthorization({tenantId: "tA"}, mid)?.revokedAt).not.toBe(null); // unchanged (still the earlier revoked record)
+    await app2.close();
   });
 
   // ---- Founder review 2026-11-23: isolation lifecycle (no stale construction-time snapshot) ----
