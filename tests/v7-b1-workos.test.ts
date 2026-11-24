@@ -2029,6 +2029,13 @@ describe("LANE-C pre-dev produce route (fake process runner only)", () => {
     expect(a[0]).toMatchObject({actor: ACT, missionId: id, outcome: "RECORDED", roleId: "UASCO-0022", artifactKind: "BusinessAnalysis", executor: "claude-reviewer@local.invalid", exitCode: 0, phase: "BUSINESS_ANALYSIS", artifactId: r1.json().produced.artifactId, version: 1});
     expect(a[0].outputSha256).toMatch(/^[0-9a-f]{64}$/);
     expect(JSON.stringify(c.audits)).not.toContain("problem"); // raw model output never reaches the audit log
+    // UASCO-T0117: the audit and the response record the versioned role prompt that was sent (id, manifest version, template + rendered digests; never the prompt text)
+    const {PROMPT_MANIFEST} = await import("../core/prompt-registry/prompt-manifest.js"), {latestVersion} = await import("../core/prompt-registry/versioning.js");
+    const pv = latestVersion(PROMPT_MANIFEST, "predev.role.BusinessAnalysis")!;
+    expect(a[0]).toMatchObject({promptId: "predev.role.BusinessAnalysis", promptVersion: pv.version, promptTemplateSha256: pv.sha256});
+    expect(a[0].promptSha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(r1.json().produced.prompt).toEqual({id: "predev.role.BusinessAnalysis", version: pv.version, templateSha256: pv.sha256, renderedSha256: a[0].promptSha256});
+    expect(JSON.stringify(c.audits)).not.toContain("GÖREV"); // the prompt text itself is not audited
 
     // a pending DRAFT blocks the next produce BEFORE any process (no second paid call)
     const again = await post(c.app, `/v1/missions/${id}/predev/produce`);
