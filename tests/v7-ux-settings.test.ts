@@ -197,7 +197,7 @@ describe("UX WP-SETTINGS reads only already-allow-listed GETs (no new GET route 
     await renderView(ctx);
     const extra = loadGet();
     const gets = [...new Set(calls)];
-    expect(gets.sort()).toEqual(["/health", "/v1/adapters", "/v1/capabilities", "/v1/control/status", "/v1/factory", "/v1/system/executors"]); // PQ-005: iki kayıt okuması (zaten allow-list'te) eklendi; aşağıdaki allow-list doğrulaması bunları da kapsar
+    expect(gets.sort()).toEqual(["/health", "/v1/adapters", "/v1/capabilities", "/v1/control/status", "/v1/factory", "/v1/system/executors", "/v1/work-runs"]); // DSK-T0008: kullanım paneli mevcut allow-list'teki /v1/work-runs okumasını kullanır; PQ-005: iki kayıt okuması (zaten allow-list'te) eklendi; aşağıdaki allow-list doğrulaması bunları da kapsar
     for (const p of gets) expect(desktopGetPathAllowed(p) || extra(p), p).toBe(true);
     // Dürüstlük: settings.js hiçbir yazma (POST) çağrısı yapmaz.
     const src = fs.readFileSync(path.join(rend, "views", "settings.js"), "utf8");
@@ -769,10 +769,10 @@ describe("LANE-A A-SETUP-1: 'Ready to build?' setup check (read-only, only what 
     const root = (await v.render(ctx, ROUTE)) as N;
     const idx = (id: string) => all(root).findIndex(n => n.id === id);
     expect(idx("settings-setup")).toBeGreaterThan(-1); expect(idx("settings-setup")).toBeLessThan(idx("settings-connection"));
-    expect(new Set(calls)).toEqual(new Set(["/health", "/v1/adapters", "/v1/capabilities", "/v1/control/status", "/v1/factory", "/v1/system/executors"]));
+    expect(new Set(calls)).toEqual(new Set(["/health", "/v1/adapters", "/v1/capabilities", "/v1/control/status", "/v1/factory", "/v1/system/executors", "/v1/work-runs"])); // DSK-T0008: /v1/work-runs yalnız kullanım panelinin okumasıdır (zaten allow-list'te); kurulum paneli ek yol okumaz
     const en = await load("locales", "en.js"), tr = await load("locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
     const keys = Object.keys(E).filter(k => k.startsWith("setup."));
-    expect(keys.length).toBe(52); expect(E["setup.reason.PROVENANCE_MISSING"]).toBeTruthy();
+    expect(keys.length).toBe(60); // DSK-T0008: +8 setup.wizard.* anahtarı expect(E["setup.reason.PROVENANCE_MISSING"]).toBeTruthy();
     for (const k of keys) expect(T[k], k).toBeTruthy();
     const trRoot = await panelFor(body(), "tr");
     expect(text(rowNode(trRoot, "CLI"))).toContain("Claude CLI (yerel kurulum)"); expect(text(trRoot)).toContain("Windows kabul denetimi");
@@ -939,6 +939,106 @@ describe("DSK-T0008 P-A runner block (Settings > AI executors)", () => {
     const en = await load("locales", "en.js"), tr = await load("locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
     const keys = Object.keys(E).filter(k => k.startsWith("exec.runner."));
     expect(keys.length).toBe(16);
+    for (const k of keys) { expect(T[k], k).toBeTruthy(); expect(T[k], k).not.toBe(E[k]); }
+  });
+});
+
+// //TR: DSK-T0008 PR-1: kurulum sihirbazı (sıradaki adım, runner BİLİNMİYOR, sandbox sonucu), yalnız ölçülen kullanım paneli (token/maliyet BİLİNMİYOR, sınırlar "zorlama bekliyor") ve gönderimi kapalı görev yetki önizlemesi. Gerçek model, yazma çağrısı ya da yerel yetki kaydı yoktur.
+describe("DSK-T0008 readiness wizard, measured-only usage and authorization preview", () => {
+  const CMD = (r: string) => `$env:CLAUDE_CONFIG_DIR='C:\\Users\\f\\.uasco\\${r}'; claude`;
+  const role = (blockers: string[] = [], profile = "READY", r = "implementer") => ({ready: blockers.length === 0, blockers, profile, loginCommand: CMD(r)});
+  const body = (over: any = {}) => ({executors: {LOCAL_CLAUDE: {state: "READY", cli: {state: "FOUND"}, readiness: {implementer: role([]), reviewer: role([], "READY", "reviewer")}}, FAKE: {state: "TEST_ONLY"}},
+    active: {reason: "LOCAL_CLAUDE"}, sandbox: {state: "AVAILABLE", reason: null, detail: null, providerId: "wsl-unshare-v1"}, claudeProfiles: {implementer: {state: "READY", loginCommand: CMD("implementer")}, reviewer: {state: "READY", loginCommand: CMD("reviewer")}}, ...over});
+  const mapped = async (b: any) => (await load("project-core.js")).mapExecutors(b);
+  const wizard = async (b: any) => { const {ctx} = await mkCtx({}, "en"); const root = (await (await load("views", "setup-check.js")).setupCheckPanel(ctx, b === null ? null : await mapped(b))) as N; return within(root).find(n => n.id === "setup-wizard")!; };
+
+  it("names the first non-passing step, keeps the runner UNKNOWN, and never calls a sandbox-less setup READY", async () => {
+    const blocked = await wizard(body({executors: {LOCAL_CLAUDE: {state: "READY", cli: {state: "FOUND"}, readiness: {implementer: role(["CLAUDE_PROFILE_LOGIN_REQUIRED"], "LOGIN_REQUIRED"), reviewer: role([], "READY", "reviewer")}}},
+      claudeProfiles: {implementer: {state: "LOGIN_REQUIRED", loginCommand: CMD("implementer")}, reviewer: {state: "READY", loginCommand: CMD("reviewer")}}}));
+    expect(blocked.dataset).toMatchObject({wizardKind: "BLOCKED", wizardStep: "IMPLEMENTER"});
+    expect(text(blocked)).toContain("Next step 3 of 6");
+    expect(within(blocked).find(n => n.dataset.wizardRunner)!.dataset.wizardRunner).toBe("UNKNOWN");
+    const noSandbox = await wizard(body({sandbox: {state: "UNAVAILABLE", reason: "SANDBOX_UNAVAILABLE", detail: null, providerId: null}}));
+    expect(noSandbox.dataset).toMatchObject({wizardKind: "READY_UNVERIFIED", wizardStep: "SANDBOX"});
+    expect(text(noSandbox)).toContain("NOT_EXECUTED");
+    // the product bridge is never tested by the app, so even a full setup is not READY
+    expect((await wizard(body())).dataset).toMatchObject({wizardKind: "READY_UNVERIFIED", wizardStep: "PRODUCT"});
+    expect((await wizard(null)).dataset.wizardKind).toBe("UNKNOWN");
+    const core = await load("setup-check-core.js");
+    expect(core.nextStep({readable: true, rows: core.SETUP_ROWS.map((id: string) => ({id, state: "PASS", login: null}))}).kind).toBe("READY");
+  });
+
+  const runs = (items: any[]) => ({state: "VERIFIED", runs: {total: items.length, awaiting: 0, items}});
+  const NOW = new Date(2026, 10, 12, 15, 0, 0);
+  const at = (d: number, h = 10) => new Date(2026, 10, d, h, 0, 0).toISOString();
+  const r = (status: string, createdAt: string, firstLeasedAt?: string) => ({runId: `run_${Math.random().toString(16).slice(2)}`, status, createdAt, ...(firstLeasedAt === undefined ? {} : {firstLeasedAt})});
+
+  it("counts runs by first lease (as the runner limit does), keeps tokens and cost UNKNOWN, and labels the 20/2 policy as applied by the runner", async () => {
+    const u = await load("usage-core.js");
+    expect(u.USAGE_POLICY).toMatchObject({runsPerDay: 20, concurrentRealRuns: 2, enforcement: "RUNNER_ENFORCED"});
+    const ex = {state: "VERIFIED", active: "LOCAL_CLAUDE"};
+    // Counted: first lease today (also a run created yesterday). Not counted: never leased (QUEUED, created today), first lease yesterday (resumed today).
+    const v = u.buildUsage(runs([r("RUNNING", at(12), at(12, 2)), r("LEASED", at(11, 23), at(12, 1)), r("SUCCEEDED", at(11), at(11, 11)), r("QUEUED", at(12, 14)), r("CREATED", at(12, 14))]), ex, NOW);
+    expect(v).toMatchObject({state: "VERIFIED", runsToday: 2, activeNow: 2, realModel: true, tokens: null, cost: null});
+    expect(u.usageLevel(v, "concurrent")).toBe("AT_LIMIT"); expect(u.usageLevel(v, "day")).toBe("BELOW");
+    expect(u.buildUsage(runs([]), {state: "VERIFIED", active: "EXECUTOR_NOT_CONFIGURED"}, NOW).realModel).toBe(false);
+    const unk = u.buildUsage(runs([r("RUNNING", at(12))]), {state: "OFFLINE"}, NOW);
+    expect(unk.realModel).toBe(null); expect(u.usageLevel(unk, "concurrent")).toBe("UNKNOWN");
+    expect(u.buildUsage({state: "ERROR", runs: null}, ex, NOW)).toEqual({state: "ERROR"});
+    expect(u.buildUsage(runs([{runId: "x", status: "MADE_UP", createdAt: at(12)}]), ex, NOW)).toEqual({state: "ERROR"});
+    expect(u.buildUsage(runs([{runId: "x", status: "RUNNING", createdAt: at(12), firstLeasedAt: 5}]), ex, NOW)).toEqual({state: "ERROR"});
+    // The day limit: 20 runs first leased today => AT_LIMIT.
+    expect(u.usageLevel(u.buildUsage(runs(Array.from({length: 20}, (_, i) => r("SUCCEEDED", at(12, 0), at(12, 1 + (i % 10))))), ex, NOW), "day")).toBe("AT_LIMIT");
+    const {ctx} = await mkCtx({}, "en"), m = await load("views", "usage-panel.js");
+    const root = m.usagePanel(ctx, runs([r("RUNNING", at(12))]), ex, NOW) as N;
+    expect(within(root).find(n => n.dataset.usageTokens)!.dataset.usageTokens).toBe("UNKNOWN");
+    expect(within(root).find(n => n.dataset.usageCost)!.dataset.usageCost).toBe("UNKNOWN");
+    expect(within(root).find(n => n.dataset.usageEnforcement)!.dataset.usageEnforcement).toBe("RUNNER_ENFORCED");
+    expect(text(root)).toContain("applied by the runner"); expect(text(root)).not.toMatch(/enforcement pending|does not enforce/i);
+    expect(within(root).filter(n => n.tagName === "BUTTON" || n.tagName === "INPUT").length).toBe(0);
+    const src = fs.readFileSync(path.join(rend, "views", "usage-panel.js"), "utf8") + fs.readFileSync(path.join(rend, "usage-core.js"), "utf8");
+    expect(src.includes(".post(")).toBe(false);
+  });
+
+  it("carries firstLeasedAt from the raw GET /v1/work-runs payload through the queue mapper into the usage count (B1)", async () => {
+    const q = await load("queue-core.js"), u = await load("usage-core.js");
+    const hex = (n: number) => n.toString(16).padStart(24, "0");
+    const raw = (id: number, status: string, createdAt: string, firstLeasedAt?: string) => ({runId: `run_${hex(id)}`, missionId: `msn_${hex(1)}`, projectId: `prj_${hex(1)}`,
+      status, step: "IMPLEMENT", createdAt, updatedAt: createdAt, ...(firstLeasedAt === undefined ? {} : {firstLeasedAt})});
+    const mapped = q.mapQueueWorkRuns({runs: [raw(1, "RUNNING", at(12), at(12, 2)), raw(2, "QUEUED", at(12, 14)), raw(3, "SUCCEEDED", at(11), at(11, 11))]});
+    expect(mapped.state).toBe("VERIFIED");
+    expect(mapped.runs.items[0].firstLeasedAt).toBe(at(12, 2)); expect("firstLeasedAt" in mapped.runs.items[1]).toBe(false);
+    expect(u.buildUsage(mapped, {state: "VERIFIED", active: "LOCAL_CLAUDE"}, NOW)).toMatchObject({state: "VERIFIED", runsToday: 1, activeNow: 1});
+    // A present but malformed firstLeasedAt fails the whole read closed, like any other field.
+    expect(q.mapQueueWorkRuns({runs: [raw(1, "RUNNING", at(12), "not-a-date")]})).toEqual({state: "ERROR", runs: null});
+  });
+
+  it("validates the mission authorization strictly, previews it only when valid, and never records it", async () => {
+    const a = await load("mission-auth-core.js");
+    const mission = {missionId: "msn_0123456789abcdef01234567", riskLevel: "R2"};
+    const ok = a.validateMissionAuthorization({missionId: mission.missionId, maxRisk: "R1", maxRuns: "20", maxConcurrent: "2", expiresAt: "2026-11-19"}, mission, NOW);
+    expect(ok.ok).toBe(true); expect(ok.submit).toBe("RECORDING_UNAVAILABLE");
+    expect(ok.preview).toMatchObject({maxRisk: "R1", maxRuns: 20, maxConcurrent: 2, excludes: ["SCOPE_WIDENING", "SPEND", "RISKY_ACTIONS"]});
+    const codes = (x: any, m: any = mission) => a.validateMissionAuthorization(x, m, NOW).errors.map((e: any) => `${e.field}:${e.code}`);
+    expect(codes({missionId: mission.missionId, maxRisk: "R3", maxRuns: "21", maxConcurrent: "3", expiresAt: "2026-11-30"})).toEqual(["maxRisk:ABOVE_MISSION_RISK", "maxRuns:ABOVE_POLICY", "maxConcurrent:ABOVE_POLICY", "expiresAt:ABOVE_POLICY"]);
+    expect(codes({missionId: mission.missionId, maxRisk: "R1", maxRuns: "0", maxConcurrent: "x", expiresAt: "2026-11-01"})).toEqual(["maxRuns:INVALID_NUMBER", "maxConcurrent:INVALID_NUMBER", "expiresAt:IN_PAST"]);
+    expect(codes({missionId: mission.missionId, maxRisk: "R0", maxRuns: "1", maxConcurrent: "1", expiresAt: "2026-11-13"}, {missionId: mission.missionId, riskLevel: null})).toEqual(["maxRisk:MISSION_RISK_UNKNOWN"]);
+    expect(codes({missionId: "bad", maxRisk: "R0", maxRuns: "1", maxConcurrent: "1", expiresAt: "nope"})).toEqual(["missionId:INVALID_MISSION", "expiresAt:INVALID_DATE"]);
+    const {ctx} = await mkCtx({}, "en"), m = await load("views", "mission-auth-panel.js");
+    Object.assign(m.authDraft, {missionId: mission.missionId, maxRisk: "R1", maxRuns: "5", maxConcurrent: "1", expiresAt: "2026-11-15"});
+    const root = m.missionAuthPanel(ctx, mission, NOW) as N;
+    const submit = within(root).find(n => n.id === "auth-submit")!;
+    expect(submit.attrs.has("disabled")).toBe(true); expect(submit.dataset.authSubmit).toBe("RECORDING_UNAVAILABLE");
+    expect(within(root).some(n => n.dataset.authPreview)).toBe(true);
+    expect(text(root)).toContain("Nothing is saved");
+    const src = fs.readFileSync(path.join(rend, "views", "mission-auth-panel.js"), "utf8") + fs.readFileSync(path.join(rend, "mission-auth-core.js"), "utf8");
+    for (const bad of [".post(", "localStorage", "sessionStorage", "indexedDB", "window.uasco"]) expect(src.includes(bad), bad).toBe(false);
+  });
+
+  it("adds complete Turkish text for every new key", async () => {
+    const en = await load("locales", "en.js"), tr = await load("locales", "tr.js"), E = en.default ?? en, T = tr.default ?? tr;
+    const keys = Object.keys(E).filter(k => k.startsWith("usage.") || k.startsWith("auth.") || k.startsWith("setup.wizard."));
+    expect(keys.length).toBeGreaterThan(30);
     for (const k of keys) { expect(T[k], k).toBeTruthy(); expect(T[k], k).not.toBe(E[k]); }
   });
 });

@@ -446,3 +446,9 @@ describe("UASCO-RW-053 — Delivery & SRE view over the REAL Control API (render
     expect(src).not.toMatch(/\.post\(|apiPost|\bfetch\(|XMLHttpRequest|innerHTML|insertAdjacentHTML/);
   });
 });
+
+// //TR: UASCO-T0016.A / AUD-022 birleşik scrubber + masaüstü dışa aktarma testi (gerçek buildServer teslimi, main.mjs'nin gerçek fonksiyonları; önerilen Founder-tier düzeltme doğrulanır)
+import {registerDeliveryExportAud022Cases} from "./support/delivery-export-aud022.cases.js";
+registerDeliveryExportAud022Cases();
+import {registerDeliveryExportUiT0016aCases} from "./support/delivery-export-ui-t0016a.cases.js";
+registerDeliveryExportUiT0016aCases();
