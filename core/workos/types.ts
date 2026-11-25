@@ -47,6 +47,8 @@ export type JournalType = "PROJECT_CREATED" | "MISSION_CREATED" | "TASK_CREATED"
   | "PROJECT_REPOSITORY_SET" | "PROJECT_EXPORT_RECORDED"
   // //TR: M1a c2 (D-M1A-ACCEPTANCE-CONDITIONS-2026-10-15): gerçek koşu çıktısının deterministik teslim artefaktı ve ona bağlı tek kullanımlık NOT_VERIFIED kaynak teslimi kabulü (COMPLETE değildir).
   | "DELIVERY_ARTIFACT_PREPARED" | "SOURCE_DELIVERY_ACCEPTED"
+  // //TR: DSK-T0008 P-B: görev başı kapsamlı yetki (kapsam, koşu sınırı, bitiş) ve geri alınması; kurallar mission-authorization.ts içindedir.
+  | "MISSION_AUTHORIZATION_GRANTED" | "MISSION_AUTHORIZATION_REVOKED"
   // //TR: B11A: Company OS (CRM/Finans/Hukuk) girdileri aynı hash zincirli journal içindedir; kurallar core/company altındadır.
   | CompanyJournalType
   // //TR: WFR-04a: Skill Academy (kaynak, öğrenme yaşam döngüsü, terfi, drift, yeniden kullanım) girdileri de aynı journal içindedir; kurallar core/academy altındadır.

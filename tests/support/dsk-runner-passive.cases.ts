@@ -47,7 +47,7 @@ export function registerDskRunnerPassiveCases(): void {
     const start = async (payload: unknown = {}) => app.inject({method: "POST", url: "/v1/system/runner/start", headers: auth, payload: JSON.stringify(payload)});
     const enable = async () => app.inject({method: "POST", url: "/v1/system/executors/local-claude/enable", headers: auth, payload: "{}"});
     // a real git project + authorized mission + queued run, written through the same journal the server reads
-    const queueRun = (o2: {marker?: string; missionTo?: Array<"PREFLIGHT" | "AUTHORIZED">} = {}) => {
+    const queueRun = (o2: {marker?: string; missionTo?: Array<"PREFLIGHT" | "AUTHORIZED">; auth?: false | Record<string, unknown>} = {}) => {
       const repo = path.join(tmp, `src-${crypto.randomBytes(3).toString("hex")}`); fs.mkdirSync(repo, {recursive: true});
       const git = (a: string[]) => { const r = spawnGitSync(repo, a); if (r.status !== 0) throw new Error(String(r.stderr)); };
       git(["init", "-q", "-b", "main"]); fs.writeFileSync(path.join(repo, "test.mjs"), o2.marker ? `import fs from "node:fs";\nfs.writeFileSync(${JSON.stringify(o2.marker)}, "EXECUTED");\nprocess.exit(0);\n` : "process.exit(0);\n"); git(["add", "-A"]); git(["-c", "user.name=S", "-c", "user.email=s@local.invalid", "commit", "-q", "-m", "seed"]);
@@ -55,13 +55,14 @@ export function registerDskRunnerPassiveCases(): void {
       const p = st.createProject({tenantId: "tA", orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL", repository: {path: repo}, testCommand: ["node", "test.mjs"]});
       const m = st.createMission({tenantId: "tA", projectId: p.projectId, title: "F", objective: "feature.txt says ok", acceptanceCriteria: ["tests pass"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
       for (const to of o2.missionTo ?? (["PREFLIGHT", "AUTHORIZED"] as const)) st.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
-      lastRepo = repo;
+      if (o2.auth !== false && !o2.missionTo) st.grantMissionAuthorization({tenantId: "tA"}, m.missionId, (o2.auth ?? {maxRisk: "R1", maxRuns: 20, expiresAt: new Date(Date.now() + 6 * 86_400_000).toISOString()}) as never, "FOUNDER_LOCAL");
+      lastRepo = repo; lastMission = m.missionId;
       return st.createRun({tenantId: "tA", missionId: m.missionId, executor: {implementer: pair.implementer.identity, reviewer: pair.reviewer.identity}, createdBy: "FOUNDER_LOCAL"}).runId;
     };
-    let lastRepo = "";
+    let lastRepo = "", lastMission = "";
     const runOf = (id: string) => new WorkOsStore(data).getRun({tenantId: "tA"}, id)!;
     const stop = () => activateGlobalStop(path.join(runtime, "GLOBAL_STOP.json"), "test stop", "FOUNDER");
-    return {app, events, runner, start, enable, queueRun, runOf, stop, counter, control, data, repo: () => lastRepo};
+    return {app, events, runner, start, enable, queueRun, runOf, stop, counter, control, data, repo: () => lastRepo, mission: () => lastMission};
   }
 
   it("the packaged app runs the runner in MANUAL start mode", () => {
@@ -197,6 +198,7 @@ export function registerDskRunnerPassiveCases(): void {
     const p = st.createProject({tenantId: "tA", orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL", repository: {path: repo}, testCommand: ["node", "test.mjs"]});
     const m = st.createMission({tenantId: "tA", projectId: p.projectId, title: "F", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
     for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) st.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
+    st.grantMissionAuthorization({tenantId: "tA"}, m.missionId, {maxRisk: "R1", maxRuns: 20, expiresAt: new Date(Date.now() + 6 * 86_400_000).toISOString()}, "FOUNDER_LOCAL");
     const id = st.createRun({tenantId: "tA", missionId: m.missionId, executor: {implementer: pair.implementer.identity, reviewer: pair.reviewer.identity}, createdBy: "FOUNDER_LOCAL"}).runId;
     const gate = new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX); await gate.status(); // settle the self-test so the synchronous snapshot is AVAILABLE
     const r = new MissionRunner({executionGate: gate, store: st, dataDir: data, globalStopFile: path.join(tmp, "GLOBAL_STOP.json"), envPolicyFile: path.resolve(import.meta.dirname, "..", "..", "config", "environment-policy.json"),
@@ -208,6 +210,31 @@ export function registerDskRunnerPassiveCases(): void {
     await r.tick();
     const run = st.getRun({tenantId: "tA"}, id)!;
     expect(run.status).toBe("BLOCKED"); expect(run.reason).toContain("NOT_ISOLATED");
+    expect(calls).toBe(0);
+    await r.stop();
+  });
+
+  it("P-B REVALIDATION: an authorization revoked after the lease stops the run before IMPLEMENT (no model call)", { timeout: 120_000 }, async () => {
+    const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "dsk-reval-auth-")), repo = path.join(tmp, "repo"), data = path.join(tmp, "data"); fs.mkdirSync(repo);
+    const git = (a: string[]) => { const r = spawnGitSync(repo, a); if (r.status !== 0) throw new Error(String(r.stderr)); };
+    git(["init", "-q", "-b", "main"]); fs.writeFileSync(path.join(repo, "test.mjs"), "process.exit(0);\n"); git(["add", "-A"]); git(["-c", "user.name=S", "-c", "user.email=s@local.invalid", "commit", "-q", "-m", "s"]);
+    let calls = 0;
+    const pair: any = {...new FakeEx({implement: () => { calls += 1; return {files: {"feature.txt": "ok\n"}}; }, review: () => ({verdict: "CLEAN"})}).pair(), kind: "LOCAL_CLAUDE", isolation: {state: "ISOLATED", providerId: TEST_HOST_PASSTHROUGH_SANDBOX.id}};
+    const st = new WorkOsStore(data);
+    const p = st.createProject({tenantId: "tA", orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL", repository: {path: repo}, testCommand: ["node", "test.mjs"]});
+    const m = st.createMission({tenantId: "tA", projectId: p.projectId, title: "F", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
+    for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) st.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
+    st.grantMissionAuthorization({tenantId: "tA"}, m.missionId, {maxRisk: "R1", maxRuns: 20, expiresAt: new Date(Date.now() + 6 * 86_400_000).toISOString()}, "FOUNDER_LOCAL");
+    const id = st.createRun({tenantId: "tA", missionId: m.missionId, executor: {implementer: pair.implementer.identity, reviewer: pair.reviewer.identity}, createdBy: "FOUNDER_LOCAL"}).runId;
+    const gate = new ExecutionGate(TEST_HOST_PASSTHROUGH_SANDBOX); await gate.status(); // settle the self-test so the synchronous snapshot is AVAILABLE
+    const r = new MissionRunner({executionGate: gate, store: st, dataDir: data, globalStopFile: path.join(tmp, "GLOBAL_STOP.json"), envPolicyFile: path.resolve(import.meta.dirname, "..", "..", "config", "environment-policy.json"),
+      executors: pair, maxStepsPerTick: 1, retryBackoffMs: [0, 0], security: fakeSecurity(`${data}-sec`).options});
+    expect(r.isolationRefusal()).toBe(null);
+    expect((await r.tick()).claimed).toEqual([id]); // leased; WORKSPACE step done (no model)
+    st.revokeMissionAuthorization({tenantId: "tA"}, m.missionId, "FOUNDER_LOCAL");
+    await r.tick();
+    const run = st.getRun({tenantId: "tA"}, id)!;
+    expect(run.status).toBe("BLOCKED"); expect(run.reason).toContain("AUTH_REVOKED");
     expect(calls).toBe(0);
     await r.stop();
   });
@@ -252,6 +279,90 @@ export function registerDskRunnerPassiveCases(): void {
     const before = calls.length;
     expect((await ex2.pair().implementer.implement(ws, spec, {timeoutMs: 5000})).blockReason).toBe(NOT_ISOLATED);
     expect(calls.length).toBe(before);
+  });
+
+  // ---- DSK-T0008 P-B: scoped, expiring, revocable mission authorization (isolated test executor, verified TEST provider) ----
+  const runAuthCase = async (setup: (s: Awaited<ReturnType<typeof mk>>, st: WorkOsStore) => void, queueOpts: Record<string, unknown> = {}) => {
+    const s = await mk({ready: true, intervalMs: 250, sandbox: true, isolated: true});
+    expect((await s.enable()).statusCode).toBe(200);
+    const id = s.queueRun(queueOpts as never);
+    setup(s, new WorkOsStore(s.data));
+    expect((await s.start()).statusCode).toBe(200);
+    await new Promise(r => setTimeout(r, 1500));
+    return {s, id};
+  };
+  it("P-B: an AUTHORIZED mission WITHOUT a scoped authorization is never leased (AUTH_MISSING): zero executor calls", { timeout: 120_000 }, async () => {
+    const {s, id} = await runAuthCase(() => {}, {auth: false});
+    expect(s.runOf(id)).toMatchObject({status: "QUEUED", leaseId: null}); expect(s.counter.implement).toBe(0);
+  });
+  it("P-B: a revoked authorization is never leased (AUTH_REVOKED)", { timeout: 120_000 }, async () => {
+    const {s, id} = await runAuthCase((s2, st) => { st.revokeMissionAuthorization({tenantId: "tA"}, s2.mission(), "FOUNDER_LOCAL"); });
+    expect(s.runOf(id)).toMatchObject({status: "QUEUED", leaseId: null}); expect(s.counter.implement).toBe(0);
+  });
+  it("P-B: an exhausted authorization (its single run already started) never leases the mission's next run (AUTH_RUNS_EXHAUSTED)", { timeout: 120_000 }, async () => {
+    let second = "";
+    const {s} = await runAuthCase((s2, st) => {
+      const first = st.engineListRuns().find(r => r.missionId === s2.mission())!;
+      const l = st.acquireRunLease(first.runId, 60_000, "T"); st.transitionRun(first.runId, l.leaseId, "FAILED", "t", "T"); // the one authorized run was used
+      const ex = st.engineGetRun(first.runId)!;
+      second = st.createRun({tenantId: "tA", missionId: s2.mission(), executor: ex.executor, createdBy: "FOUNDER_LOCAL"}).runId;
+    }, {auth: {maxRisk: "R1", maxRuns: 1, expiresAt: new Date(Date.now() + 86_400_000).toISOString()}});
+    expect(s.runOf(second)).toMatchObject({status: "QUEUED", leaseId: null}); expect(s.counter.implement).toBe(0);
+  });
+  it("P-B: grants are policy-bounded and replayed from the journal (restart keeps revocation)", async () => {
+    const s = await mk({ready: true}); s.queueRun({auth: false}); const mid = s.mission(), st = new WorkOsStore(s.data), sc = {tenantId: "tA"}, day = 86_400_000;
+    const g = (x: Record<string, unknown>) => { try { st.grantMissionAuthorization(sc, mid, x as never, "FOUNDER_LOCAL"); return "OK"; } catch (e) { return (e as Error).message; } };
+    expect(g({maxRisk: "R2", maxRuns: 1, expiresAt: new Date(Date.now() + day).toISOString()})).toMatch(/ABOVE_MISSION_RISK/);
+    expect(g({maxRisk: "R0", maxRuns: 1, expiresAt: new Date(Date.now() + day).toISOString()})).toMatch(/BELOW_MISSION_RISK/);
+    expect(g({maxRisk: "R1", maxRuns: 21, expiresAt: new Date(Date.now() + day).toISOString()})).toMatch(/MAX_RUNS_ABOVE_POLICY/);
+    expect(g({maxRisk: "R1", maxRuns: 1, expiresAt: new Date(Date.now() - 1000).toISOString()})).toMatch(/EXPIRY_IN_PAST/);
+    expect(g({maxRisk: "R1", maxRuns: 1, expiresAt: new Date(Date.now() + 8 * day).toISOString()})).toMatch(/EXPIRY_ABOVE_POLICY/);
+    expect(g({maxRisk: "R1", maxRuns: 3, expiresAt: new Date(Date.now() + day).toISOString()})).toBe("OK");
+    st.revokeMissionAuthorization(sc, mid, "FOUNDER_LOCAL");
+    const again = new WorkOsStore(s.data).getMissionAuthorization(sc, mid)!;
+    expect(again).toMatchObject({maxRisk: "R1", maxRuns: 3, revokedBy: "FOUNDER_LOCAL"}); expect(again.revokedAt).not.toBe(null);
+  });
+  it("P-B: the pure decision covers missing, revoked, expired, out-of-scope and exhausted; an already started run is not counted twice", async () => {
+    const {authorizationRefusal} = await import("../../core/workos/mission-authorization.js");
+    const now = Date.now(), a = {authId: "mau_" + "a".repeat(24), missionId: "m", tenantId: "tA", maxRisk: "R1", maxRuns: 2, grantedAt: new Date(now - 1000).toISOString(), expiresAt: new Date(now + 60_000).toISOString(), grantedBy: "F", revokedAt: null, revokedBy: null} as const;
+    expect(authorizationRefusal(undefined, "R1", now, 0, false)).toBe("AUTH_MISSING");
+    expect(authorizationRefusal({...a, revokedAt: new Date(now).toISOString(), revokedBy: "F"}, "R1", now, 0, false)).toBe("AUTH_REVOKED");
+    expect(authorizationRefusal(a, "R1", now + 120_000, 0, false)).toBe("AUTH_EXPIRED");
+    expect(authorizationRefusal(a, "R2", now, 0, false)).toBe("AUTH_SCOPE");
+    expect(authorizationRefusal(a, "R1", now, 2, false)).toBe("AUTH_RUNS_EXHAUSTED");
+    expect(authorizationRefusal(a, "R1", now, 2, true)).toBe(null);
+    expect(authorizationRefusal(a, "R1", now, 1, false)).toBe(null);
+  });
+
+  it("P-B routes (module only; server.ts registration pending): strict body, gates, grant/revoke, honest state", async () => {
+    const Fastify = (await import("fastify")).default, {registerMissionAuthorizationRoutes} = await import("../../apps/control-api/src/routes/mission-authorization.js");
+    const s = await mk({ready: true}); s.queueRun({auth: false}); const mid = s.mission(), st = new WorkOsStore(s.data);
+    let stopped = false, allowed = true; const audits: string[] = [];
+    const app = Fastify({logger: false});
+    registerMissionAuthorizationRoutes(app as never, {getStore: () => st, scope: {tenantId: "tA"}, orgId: "o1", actor: "FOUNDER_LOCAL", audit: (e: string) => { audits.push(e); },
+      workosStopped: () => stopped, workosPolicy: () => (allowed ? {allowed: true} : {allowed: false, reason: "DENIED"}), workosFail: (reply: any, e: any) => reply.code(e?.code === "WORKOS_INVALID_INPUT" ? 400 : e?.code === "WORKOS_NOT_FOUND" ? 404 : 409).send({error: e?.code, detail: e?.message})} as never);
+    await app.ready();
+    const url = `/v1/missions/${mid}/authorization`, ok = {maxRisk: "R1", maxRuns: 3, expiresAt: new Date(Date.now() + 86_400_000).toISOString()};
+    expect((await app.inject({method: "GET", url})).json()).toEqual({authorization: null, state: "NONE"});
+    expect((await app.inject({method: "POST", url, payload: {...ok, spend: 10}})).statusCode).toBe(400); // no extra field (scope widening/spend) accepted
+    expect((await app.inject({method: "POST", url, payload: {...ok, maxRuns: 99}})).statusCode).toBe(400); // policy enforced by the store
+    stopped = true; expect((await app.inject({method: "POST", url, payload: ok})).statusCode).toBe(423); stopped = false;
+    allowed = false; expect((await app.inject({method: "POST", url, payload: ok})).statusCode).toBe(403); allowed = true;
+    const g = await app.inject({method: "POST", url, payload: ok}); expect(g.statusCode).toBe(200); expect(g.json().state).toBe("LIVE");
+    expect((await app.inject({method: "POST", url: `${url}/revoke`, payload: {x: 1}})).statusCode).toBe(400);
+    const r = await app.inject({method: "POST", url: `${url}/revoke`, payload: {}}); expect(r.json().state).toBe("REVOKED");
+    expect((await app.inject({method: "GET", url})).json().state).toBe("REVOKED");
+    expect((await app.inject({method: "GET", url: "/v1/missions/bad/authorization"})).statusCode).toBe(400);
+    expect(audits).toEqual(expect.arrayContaining(["WORKOS_MISSION_AUTHORIZATION_GRANTED", "WORKOS_MISSION_AUTHORIZATION_REVOKED", "WORKOS_WRITE_DENIED"]));
+    await app.close();
+    // #446 N9: a non-Founder principal can neither grant nor revoke (403 FOUNDER_ONLY), and nothing is recorded
+    const app2 = Fastify({logger: false}), st2 = new WorkOsStore(s.data);
+    registerMissionAuthorizationRoutes(app2 as never, {getStore: () => st2, scope: {tenantId: "tA"}, orgId: "o1", actor: "OPERATOR_X", audit: () => {}, workosStopped: () => false, workosPolicy: () => ({allowed: true}), workosFail: (reply: any) => reply.code(500).send({})} as never);
+    await app2.ready();
+    const r1 = await app2.inject({method: "POST", url, payload: ok}); expect(r1.statusCode).toBe(403); expect(r1.json().reason).toBe("FOUNDER_ONLY");
+    expect((await app2.inject({method: "POST", url: `${url}/revoke`, payload: {}})).json().reason).toBe("FOUNDER_ONLY");
+    expect(st2.getMissionAuthorization({tenantId: "tA"}, mid)?.revokedAt).not.toBe(null); // unchanged (still the earlier revoked record)
+    await app2.close();
   });
 
   // ---- Founder review 2026-11-23: isolation lifecycle (no stale construction-time snapshot) ----
@@ -357,6 +468,30 @@ export function registerDskRunnerPassiveCases(): void {
     try { await new LocalClaudeExecutors(r.repo, r.control, {isolationGate: g2, profile: {forbiddenRoots: [r.data]}}).pair().implementer.implement(r.ws, r.spec, {timeoutMs: 2000}); }
     finally { for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } }
     expect(ok.calls).toEqual([["/usr/bin/node", "/opt/uasco/claude-builder-broker.mjs"]]);
+  });
+
+  it("#446 N10: a reviewer that plants core.fsmonitor in the review clone never gets it executed by the runner; the run is BLOCKED REVIEWER_MUTATED_CLONE", { timeout: 120_000 }, async () => {
+    const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "dsk-n10-")), repo = path.join(tmp, "repo"), data = path.join(tmp, "data"), marker = path.join(tmp, "FSMONITOR_RAN");
+    fs.mkdirSync(repo); const git = (a: string[]) => { const r = spawnGitSync(repo, a); if (r.status !== 0) throw new Error(String(r.stderr)); };
+    git(["init", "-q", "-b", "main"]); fs.writeFileSync(path.join(repo, "test.mjs"), "process.exit(0);\n"); git(["add", "-A"]); git(["-c", "user.name=S", "-c", "user.email=s@local.invalid", "commit", "-q", "-m", "s"]);
+    const hook = path.join(tmp, "fsmon.sh"); fs.writeFileSync(hook, `#!/bin/sh\ntouch ${marker}\n`, {mode: 0o755});
+    const base = new FakeEx({implement: () => ({files: {"feature.txt": "ok\n"}}), review: () => ({verdict: "CLEAN"})}).pair();
+    const pair: any = {...base, reviewer: {identity: base.reviewer.identity, async review(clone: string, spec: any, diff: string, ctx: any) {
+      fs.appendFileSync(path.join(clone, ".git", "config"), `[core]\n\tfsmonitor = ${hook}\n`); // the planted payload
+      return base.reviewer.review(clone, spec, diff, ctx); }}};
+    const st = new WorkOsStore(data);
+    const p = st.createProject({tenantId: "tA", orgId: "o1", name: "P", environmentId: "dev", createdBy: "FOUNDER_LOCAL", repository: {path: repo}, testCommand: ["node", "test.mjs"]});
+    const m = st.createMission({tenantId: "tA", projectId: p.projectId, title: "F", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
+    for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) st.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
+    const id = st.createRun({tenantId: "tA", missionId: m.missionId, executor: {implementer: pair.implementer.identity, reviewer: pair.reviewer.identity}, createdBy: "FOUNDER_LOCAL"}).runId;
+    const {testExecutionGate} = await import("./test-sandbox.js");
+    const r = new MissionRunner({executionGate: testExecutionGate(), store: st, dataDir: data, globalStopFile: path.join(tmp, "STOP.json"), envPolicyFile: path.resolve(import.meta.dirname, "..", "..", "config", "environment-policy.json"),
+      executors: pair, retryBackoffMs: [0, 0], security: fakeSecurity(`${data}-sec`).options});
+    for (let i = 0; i < 12; i++) { await r.tick(); if (["BLOCKED", "FAILED", "SUCCEEDED", "AWAITING_APPROVAL"].includes(st.getRun({tenantId: "tA"}, id)!.status)) break; }
+    const run = st.getRun({tenantId: "tA"}, id)!;
+    expect(run.status).toBe("BLOCKED"); expect(run.reason).toContain("REVIEWER_MUTATED_CLONE");
+    expect(fs.existsSync(marker)).toBe(false);
+    await r.stop();
   });
 
   it("PRODUCTION executor: LocalClaudeExecutors is NOT_ISOLATED and refuses all three real-model paths at the source, before any process starts", async () => {

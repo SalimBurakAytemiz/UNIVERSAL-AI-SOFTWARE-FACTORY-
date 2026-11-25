@@ -181,6 +181,7 @@ describe("LANE-C run workspace archive + prune (default OFF; archive first, veri
   function addMission(c: MCtx): string {
     const m = c.store.createMission({tenantId: "tA", projectId: c.projectId, title: "Add feature", objective: "feature.txt must say ok", acceptanceCriteria: ["x"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
     for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) c.store.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
+    c.store.grantMissionAuthorization({tenantId: "tA"}, m.missionId, {maxRisk: "R1", maxRuns: 20, expiresAt: new Date(Date.now() + 6 * 86_400_000).toISOString()}, "FOUNDER_LOCAL"); // DSK-T0008 P-B: real-model runs need a scoped authorization
     return m.missionId;
   }
   function managedSetup(kind: "managed" | "external" = "managed"): MCtx {
@@ -555,9 +556,10 @@ describe("DSK-T0008 real-model run limits (20/day, 2 concurrent)", () => {
   const mission = (c: {store: WorkOsStore; projectId: string}) => {
     const m = c.store.createMission({tenantId: "tA", projectId: c.projectId, title: "Limits", objective: "limits", acceptanceCriteria: ["x"], riskLevel: "R1", createdBy: "FOUNDER_LOCAL"});
     for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) c.store.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
+    c.store.grantMissionAuthorization({tenantId: "tA"}, m.missionId, {maxRisk: "R1", maxRuns: 20, expiresAt: new Date(Date.now() + 6 * 86_400_000).toISOString()}, "FOUNDER_LOCAL"); // DSK-T0008 P-B: real-model runs need a scoped authorization
     return m.missionId;
   };
-  // LOCAL_CLAUDE-labelled test pair declared ISOLATED in the TEST provider (the strict sandbox requires it; production LocalClaudeExecutors is NOT_ISOLATED)
+  // LOCAL_CLAUDE-labelled test pair declared ISOLATED in the TEST provider (strict sandbox requires it; production LocalClaudeExecutors is NOT_ISOLATED)
   const pairOf = (kind: "FAKE" | "LOCAL_CLAUDE") => ({...new FakeExecutors({implement: () => ({files: {"f.txt": "x\n"}}), review: () => ({verdict: "CLEAN"})}).pair(), kind, ...(kind === "LOCAL_CLAUDE" ? {isolation: {state: "ISOLATED" as const, providerId: "TEST_ONLY_HOST_PASSTHROUGH"}} : {})});
   const newRun = (c: ReturnType<typeof mkStore>) => { const p = pairOf("FAKE"); return c.store.createRun({tenantId: "tA", missionId: mission(c), executor: {implementer: p.implementer.identity, reviewer: p.reviewer.identity}, createdBy: "FOUNDER_LOCAL"}).runId; };
   const mkRunner = (c: ReturnType<typeof mkStore>, kind: "FAKE" | "LOCAL_CLAUDE", extra: Partial<RunnerOptions> = {}) => new MissionRunner({executionGate: testExecutionGate(), store: c.store, dataDir: c.dataDir,

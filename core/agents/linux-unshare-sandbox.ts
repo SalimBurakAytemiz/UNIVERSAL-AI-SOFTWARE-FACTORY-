@@ -67,6 +67,8 @@ const SETUP = [
   'exec "$SETPRIV" --no-new-privs --bounding-set=-all --inh-caps=-all "$SUPSH" -c "$INNER" sh "$@"'
 ].join("\n");
 
+// //TR: DSK-T0007: aynı izolasyon (namespace bayrakları + kurulum betiği) WSL2 konuğu İÇİNDE de kullanılır; tek kaynak burasıdır, kopya yoktur.
+export const LINUX_ISOLATION = Object.freeze({nsFlags: NS_FLAGS, setup: SETUP, helperPath: HELPER_PATH});
 const now = () => new Date().toISOString();
 function refusal(argv: string[], why: string): ProcResult {
   const t = now();

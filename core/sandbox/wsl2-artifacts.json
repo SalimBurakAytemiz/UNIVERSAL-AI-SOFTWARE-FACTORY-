@@ -1,0 +1,24 @@
+{
+  "//TR": "DSK-T0007: UASCO-Sandbox WSL2 dağıtımının SABİT, resmi ve yeniden üretilebilir kurulum dosyaları. Her sha256 değeri resmi kaynaktan indirilen dosyadan hesaplandı ve yayıncının kendi özet/imza kaydıyla karşılaştırıldı (uydurma değer yok). Kurulum bu değerleri ana makinede wsl --import / aktarım ÖNCESİNDE, konukta aktarım SONRASINDA yeniden doğrular; uymayan dosya kurulumu durdurur.",
+  "rootfs": {
+    "name": "Ubuntu 24.04 LTS (noble) WSL rootfs, amd64, dated release 20240423",
+    "url": "https://cloud-images.ubuntu.com/wsl/releases/24.04/20240423/ubuntu-noble-wsl-amd64-wsl.rootfs.tar.gz",
+    "sha256": "8251e27ffff381a4af5f41dcb94d867de3e0d9774a9241908ab34555d99315ea",
+    "evidence": "SHA256SUMS of that release, GPG signature verified (Good) with the UEC Image Automatic Signing Key, fingerprint D2EB44626FDDC30B513D5BB71A5D6C4C7DB87C81"
+  },
+  "node": {
+    "name": "Node.js v24.22.3 (LTS Krypton) linux-x64",
+    "url": "https://nodejs.org/dist/v24.22.3/node-v24.22.3-linux-x64.tar.xz",
+    "sha256": "4f2b175a6d53a5c617a80dba2676238a0688cef28c6da4eba35c7d844e66fcfb",
+    "binarySha256": "a7ec1b37e6ff9d187e4198c5b6df9a4eb1c74dd31804fb3bac55cc4ceca1ac01",
+    "evidence": "matches https://nodejs.org/dist/v24.22.3/SHASUMS256.txt; bin/node hashed after extraction (not executed)"
+  },
+  "claude": {
+    "name": "Claude Code 2.1.321 native Linux x64 (glibc) build, npm @anthropic-ai/claude-code-linux-x64",
+    "url": "https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-2.1.321.tgz",
+    "sha256": "249f294c2f6bfc1e6503f0780b610e880f7e9d7ae15ab34dd4ebdf23adf7664a",
+    "npmIntegrity": "sha512-lW+MhUThnU2hr6QnQ9xgD8c6OWAJbYNpiMzIQ4OJaLxcByTs53v7wV/2IzGspBbcMhnxFox1vvoltuWym/h6uw==",
+    "binarySha256": "426c33815ca6645a772f722fbff10dbf2cbdb124a8aeab733c1365dbf8bbf61f",
+    "evidence": "registry dist.integrity equals the downloaded tarball's sha512; package/claude hashed after extraction (not executed)"
+  }
+}
