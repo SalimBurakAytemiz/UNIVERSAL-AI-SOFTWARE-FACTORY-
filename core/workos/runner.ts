@@ -57,6 +57,7 @@ export interface RunnerOptions {
   // PAR-03: olay döngüsü gecikmesinin (p99, ms; çözünürlük payı düşülmüş) programatik kaynağı; tanımsız = perf_hooks monitorEventLoopDelay. Yalnız test enjeksiyonudur.
   loopDelayP99Ms?: () => number;
 }
+export type IsolationRefusal = "SANDBOX_REQUIRED" | "NOT_ISOLATED";
 // //TR: DSK-T0008 (Founder Q5): gerçek model (LOCAL_CLAUDE) koşuları için harcama sınırları; ileride Founder kararıyla yükseltilebilir. FAKE yürütücü etkilenmez. Eşzamanlılık yapılandırılan değerle en çok 2'ye kırpılır; günde (motorun yerel takvim günü) en çok 20 YENİ koşuya ilk lease verilir (zaten başlamış koşunun devri/kurtarması sayılmaz ve engellenmez). Sayı journal'dan türetilen firstLeasedAt ile hesaplanır.
 export const REAL_MODEL_LIMITS = Object.freeze({runsPerDay: 20, concurrentRuns: 2});
 export type RealModelLimit = "DAILY_LIMIT" | "CONCURRENCY_LIMIT";
@@ -250,8 +251,19 @@ export class MissionRunner {
 
   /** Effective concurrent-run limit (1..16), for the start audit: proves what the engine actually runs with. */
   get maxConcurrentRuns(): number { return this.o.maxConcurrentRuns; }
-  /** DSK-T0008: true when the executor pair runs a real model (LOCAL_CLAUDE): the real-model limits apply. */
+  /** DSK-T0008: true when the executor pair runs a real model (LOCAL_CLAUDE). */
   get realModel(): boolean { return this.o.executors.kind === "LOCAL_CLAUDE"; }
+  /** DSK-T0008 strict sandbox: null when real-model execution is allowed; otherwise SANDBOX_REQUIRED (no verified provider/self-test) or NOT_ISOLATED (the executor does not spawn the model inside that provider). A sandbox status alone never allows it. */
+  isolationRefusal(): IsolationRefusal | null {
+    if (!this.realModel) return null;
+    const g = this.o.executionGate.snapshot();
+    if (!g.ok || g.providerId === null) return "SANDBOX_REQUIRED";
+    const iso = this.o.executors.isolation;
+    return iso && iso.state === "ISOLATED" && iso.providerId === g.providerId ? null : "NOT_ISOLATED";
+  }
+  /** DSK-T0008: the last isolation refusal that kept a run unleased in a claim pass (null when none). */
+  get lastIsolation(): IsolationRefusal | null { return this.isolationHit; }
+  private isolationHit: IsolationRefusal | null = null;
   /** DSK-T0008: the last real-model limit that deferred a new run in a claim pass (null when none). */
   get lastLimit(): RealModelLimit | null { return this.limitHit; }
   private limitHit: RealModelLimit | null = null;
@@ -269,6 +281,7 @@ export class MissionRunner {
     if (this.o.executors.kind === "LOCAL_CLAUDE") this.o.maxConcurrentRuns = Math.min(this.o.maxConcurrentRuns, REAL_MODEL_LIMITS.concurrentRuns);
     // SBX-GATE: yalnız gerçek bir ExecutionGate örneği kabul edilir; başka her değer (eksik, düz nesne) sağlayıcısız kapıdır (fail-closed).
     if (!(this.o.executionGate instanceof ExecutionGate)) this.o.executionGate = new ExecutionGate(null);
+    if (this.o.executors.kind === "LOCAL_CLAUDE") void this.o.executionGate.status().catch(() => null); // DSK-T0008: servis kipinde (pump) ilk geçişten önce öz-testi başlat
     // //TR: PAR-03 (RCA relfx-c3:200, Windows shard 1 #259/#261): her journal YAZISI kendisi olay döngüsünü bloklayan senkron, dayanıklı bir aralıktır (kilit dosyası + journal'ın tamamının yeniden okunup doğrulanması + iki snapshot yazımı + fsync'ler). Adım sınırında bir run bunları ARA VERMEDEN art arda yapar (kanıt -> CHECKPOINTING -> checkpoint -> yenileme -> sonraki adım RUNNING); yavaş diskte (Windows CI) bu zincir TTL - heartbeat aralığını aşar ve öbür, sağlıklı run'ın setInterval heartbeat'i hiç çalışamadan lease'i dolar: gerçek bir fence (sahte "kayıp"). span() ile aynı kural: runner'ın her run yazısından ÖNCE, heartbeat'i gecikmiş (son yenilemesi bir heartbeat periyodundan, TTL/3, eski) sahip olunan BÜTÜN lease'ler yenilenir; döngü akıyorsa heartbeat zaten yeniler ve kanca ek yazı üretmez. Fence kuralı değişmez: süresi dolmuş lease yine yenilenemez ve yazının kendisi fencedRun ile reddedilir.
     const store = this.o.store;
     this.o.store = new Proxy(store, {get: (t, p) => {
@@ -517,6 +530,8 @@ export class MissionRunner {
     if (this.busy) return {...rep, skipped: "BUSY"};
     this.busy = true;
     try {
+      // //TR: DSK-T0008: gerçek model yürütücüsünde talep geçişi (senkron) sandbox öz-testinin sonucunu görsün diye öz-test önce sonuçlandırılır; hata = kullanılamaz (snapshot fail-closed kalır).
+      if (this.realModel) await this.o.executionGate.status().catch(() => null);
       const drives = this.claimAndDrive(rep, false);
       if (drives === "LOCKED") return {...rep, skipped: "LOCKED"};
       await Promise.all(drives);
@@ -542,12 +557,15 @@ export class MissionRunner {
       // //TR: DSK-T0008: bugün ilk lease'i alınmış koşu sayısı (journal'dan); bu geçişte verilen her yeni lease sayıya eklenir.
       let startedToday = this.realModel ? runs.filter(r => typeof r.firstLeasedAt === "string" && sameLocalDay(r.firstLeasedAt, now)).length : 0;
       this.limitHit = null;
+      // //TR: DSK-T0008 sıkı sandbox: gerçek model yürütücüsü izole değilse hiçbir YENİ lease ve devralma yapılmaz; run QUEUED (ya da lease'i dolmuş haliyle) kalır.
+      const iso = this.isolationRefusal(); this.isolationHit = null;
       for (const run of runs) {
         if (this.owned.get(run.runId)?.drive) continue; // sürüşü süren run'a dokunulmaz: kendi heartbeat'i yönetir, kendi kendini devralma yok
         try {
           if (run.status === "CREATED" || run.status === "QUEUED") {
             if (stop) { this.cancelUnleased(run, stop); rep.cancelled.push(run.runId); continue; }
             // //TR: Sahiplik sınırı: sınır doluysa run'a lease ALINMAZ (sırasını beklerken lease'i yenilenmeden dolup sahte fence/recovery yaşamasın); QUEUED kalır, sonraki geçiş alır.
+            if (iso) { this.isolationHit = iso; rep.deferred.push(run.runId); continue; }
             if (full()) { if (this.realModel && this.owned.size >= this.o.maxConcurrentRuns) this.limitHit ??= "CONCURRENCY_LIMIT"; rep.deferred.push(run.runId); continue; }
             // //TR: DSK-T0008: günlük sınır yalnız HİÇ başlamamış koşuya uygulanır (yeniden kuyruğa alınan koşu firstLeasedAt taşır, sayılmış ve engellenmez); koşu QUEUED kalır, lease alınmaz.
             if (this.realModel && run.firstLeasedAt === undefined && startedToday >= REAL_MODEL_LIMITS.runsPerDay) { this.limitHit = "DAILY_LIMIT"; rep.deferred.push(run.runId); continue; }
@@ -556,6 +574,7 @@ export class MissionRunner {
             if (run.firstLeasedAt === undefined) startedToday += 1;
             this.own(run.runId, leased.leaseId!); rep.claimed.push(run.runId); fresh.add(run.runId);
           } else if (LEASED_RUN_STATUSES.includes(run.status) && run.leaseId && Date.parse(run.leaseExpiresAt ?? "") <= this.o.now()) {
+            if (iso) { this.isolationHit = iso; rep.deferred.push(run.runId); continue; }
             if (full()) { rep.deferred.push(run.runId); continue; }
             // Süresi dolmuş lease: crash/askıda kalma -> devral, RECOVERING (yeni leaseId eski sahibi fence eder).
             const taken = store.takeoverRunLease(run.runId, this.o.leaseTtlMs, this.o.actor);
@@ -825,6 +844,8 @@ export class MissionRunner {
   private authorizeTests(kind: ProjectExecutionKind): Promise<GateDecision> { return this.o.executionGate.authorize(kind); }
 
   private async performStep(run: WorkRun, leaseId: string, abort: () => boolean): Promise<Outcome> {
+    // //TR: DSK-T0008 sıkı sandbox: gerçek model adımından (IMPLEMENT, REVIEW) HEMEN ÖNCE izolasyon yeniden doğrulanır (devralma/kurtarma ve sandbox kaybı dahil); geçmezse model süreci başlatılmadan run BLOCKED olur.
+    if (this.realModel && (run.step === "IMPLEMENT" || run.step === "REVIEW")) { const iso = this.isolationRefusal(); if (iso) return {kind: "BLOCK", reason: iso}; }
     switch (run.step) {
       case "WORKSPACE": return this.stepWorkspace(run, leaseId);
       case "IMPLEMENT": return this.stepImplement(run, leaseId, abort);

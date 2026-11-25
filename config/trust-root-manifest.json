@@ -66,11 +66,11 @@
     },
     {
       "path": "apps/control-api/src/server.ts",
-      "sha256": "dd9824a3a003a68504a74460365592976219262854cd3a436c4f6e85f8d0404c"
+      "sha256": "eee1c64c650f3e711112b08cb594beea573fc885a7b981ade9963cc1ea14bbb9"
     },
     {
       "path": "apps/desktop/main.mjs",
-      "sha256": "d0512143b430d8ae9e8a338d0842de615acb12a239475a2514903a9521aa144e"
+      "sha256": "419f6b7c436b160dcc8f408dcce6564854d7fd9180383968a80e9ed379b9087f"
     },
     {
       "path": "apps/desktop/preload.mjs",

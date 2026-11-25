@@ -69,7 +69,7 @@ describe("SBX-8 D: reviewer argv, profile and read-only enforcement", () => {
   it("reviewer profile not logged in -> invalid review CLAUDE_PROFILE_LOGIN_REQUIRED, reviewer process never started, never CLEAN", async () => {
     const control = controlRoot(), clone = cleanClone(), calls: Array<{argv: string[]; opts: ProcOptions}> = [];
     login(control, "implementer"); // implementer login must not satisfy the reviewer
-    const r = await new LocalClaudeExecutors(REPO, control, {runReviewer: fakeReviewer(calls)}).pair().reviewer.review(clone, SPEC, "", {timeoutMs: 10_000});
+    const r = await new LocalClaudeExecutors(REPO, control, {testOnlyIsolationProviderId: "TEST_ONLY_HOST_PASSTHROUGH", runReviewer: fakeReviewer(calls)}).pair().reviewer.review(clone, SPEC, "", {timeoutMs: 10_000});
     expect(r).toMatchObject({verdict: "BLOCKED", valid: false, invalidReason: "CLAUDE_PROFILE_LOGIN_REQUIRED", exitCode: null, transient: false});
     expect(calls).toHaveLength(0);
     expect(fs.readdirSync(claudeProfileDir(control, "reviewer"))).toEqual(["settings.json"]);
@@ -80,7 +80,7 @@ describe("SBX-8 D: reviewer argv, profile and read-only enforcement", () => {
     const prev = process.env.CLAUDE_CONFIG_DIR;
     process.env.CLAUDE_CONFIG_DIR = path.join(tmp, "personal-like", ".claude");
     let r;
-    try { r = await new LocalClaudeExecutors(REPO, control, {runReviewer: fakeReviewer(calls)}).pair().reviewer.review(clone, SPEC, "diff", {timeoutMs: 10_000}); }
+    try { r = await new LocalClaudeExecutors(REPO, control, {testOnlyIsolationProviderId: "TEST_ONLY_HOST_PASSTHROUGH", runReviewer: fakeReviewer(calls)}).pair().reviewer.review(clone, SPEC, "diff", {timeoutMs: 10_000}); }
     finally { if (prev === undefined) delete process.env.CLAUDE_CONFIG_DIR; else process.env.CLAUDE_CONFIG_DIR = prev; }
     expect(calls).toHaveLength(1);
     expect(calls[0].argv).toEqual(reviewerArgv(process.execPath));
@@ -103,7 +103,7 @@ describe("SBX-8 D: reviewer argv, profile and read-only enforcement", () => {
     it(`reviewer that ${name} -> review INVALID (${reason}) even though it printed CLEAN`, async () => {
       const control = controlRoot(), clone = cleanClone(), calls: Array<{argv: string[]; opts: ProcOptions}> = [];
       login(control, "reviewer");
-      const r = await new LocalClaudeExecutors(REPO, control, {runReviewer: fakeReviewer(calls, mutate)}).pair().reviewer.review(clone, SPEC, "", {timeoutMs: 10_000});
+      const r = await new LocalClaudeExecutors(REPO, control, {testOnlyIsolationProviderId: "TEST_ONLY_HOST_PASSTHROUGH", runReviewer: fakeReviewer(calls, mutate)}).pair().reviewer.review(clone, SPEC, "", {timeoutMs: 10_000});
       expect(calls).toHaveLength(1);
       expect(r).toMatchObject({verdict: "BLOCKED", valid: false, invalidReason: reason, findings: []});
       expect(r.log).toContain(`REVIEW_INVALID: ${reason}`);
@@ -170,7 +170,7 @@ describe("LANE-C pre-dev builder from the LOCAL_CLAUDE pair: reviewer-route auth
   it("reviewer profile not logged in (an implementer login does not count) -> PREDEV_BUILDER_PROFILE_REFUSED, no process, no personal-profile fallback", async () => {
     const control = controlRoot(), calls: Array<{argv: string[]; opts: ProcOptions}> = [];
     login(control, "implementer");
-    const b = new LocalClaudeExecutors(REPO, control, {runReviewer: fakeReviewer(calls)}).pair().preDevBuilder!();
+    const b = new LocalClaudeExecutors(REPO, control, {testOnlyIsolationProviderId: "TEST_ONLY_HOST_PASSTHROUGH", runReviewer: fakeReviewer(calls)}).pair().preDevBuilder!();
     expect(await errCode(b.produce("BusinessAnalysis", "prompt", ctx))).toBe("PREDEV_BUILDER_PROFILE_REFUSED");
     expect(b.lastTrace).toMatchObject({failure: "PREDEV_BUILDER_PROFILE_REFUSED", roleId: "UASCO-0022"});
     expect(calls).toHaveLength(0);
@@ -181,7 +181,7 @@ describe("LANE-C pre-dev builder from the LOCAL_CLAUDE pair: reviewer-route auth
     const prov = path.join(control, ".ai", "runtime", "PROVIDER_PROVENANCE.json"), good = fs.readFileSync(prov, "utf8");
     for (const bad of [null, good.replace(/"launcherSha256":"[0-9a-f]{64}"/, `"launcherSha256":"${"0".repeat(64)}"`), good.replace('"final":"PASS"', '"final":"FAIL"')]) {
       if (bad === null) fs.rmSync(prov); else fs.writeFileSync(prov, bad);
-      const b = new LocalClaudeExecutors(REPO, control, {runReviewer: fakeReviewer(calls)}).pair().preDevBuilder!();
+      const b = new LocalClaudeExecutors(REPO, control, {testOnlyIsolationProviderId: "TEST_ONLY_HOST_PASSTHROUGH", runReviewer: fakeReviewer(calls)}).pair().preDevBuilder!();
       expect(await errCode(b.produce("Plan", "prompt", ctx))).toBe("PREDEV_BUILDER_PROVENANCE_REFUSED");
     }
     expect(calls).toHaveLength(0);
@@ -193,7 +193,7 @@ describe("LANE-C pre-dev builder from the LOCAL_CLAUDE pair: reviewer-route auth
     const prevCfg = process.env.CLAUDE_CONFIG_DIR, prevKey = process.env.ANTHROPIC_API_KEY;
     process.env.CLAUDE_CONFIG_DIR = path.join(tmp, "personal-like", ".claude"); process.env.ANTHROPIC_API_KEY = "sk-test-not-real";
     let out = "";
-    try { out = await new LocalClaudeExecutors(REPO, control, {runReviewer: run}).pair().preDevBuilder!().produce("BusinessAnalysis", "the role prompt", ctx); }
+    try { out = await new LocalClaudeExecutors(REPO, control, {testOnlyIsolationProviderId: "TEST_ONLY_HOST_PASSTHROUGH", runReviewer: run}).pair().preDevBuilder!().produce("BusinessAnalysis", "the role prompt", ctx); }
     finally { if (prevCfg === undefined) delete process.env.CLAUDE_CONFIG_DIR; else process.env.CLAUDE_CONFIG_DIR = prevCfg; if (prevKey === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = prevKey; }
     expect(out).toBe('{"problem":"x"}');
     expect(calls).toHaveLength(1);

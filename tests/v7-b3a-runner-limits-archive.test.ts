@@ -557,7 +557,8 @@ describe("DSK-T0008 real-model run limits (20/day, 2 concurrent)", () => {
     for (const to of ["PREFLIGHT", "AUTHORIZED"] as const) c.store.transitionMission({tenantId: "tA"}, m.missionId, to, "test", "FOUNDER_LOCAL");
     return m.missionId;
   };
-  const pairOf = (kind: "FAKE" | "LOCAL_CLAUDE") => ({...new FakeExecutors({implement: () => ({files: {"f.txt": "x\n"}}), review: () => ({verdict: "CLEAN"})}).pair(), kind});
+  // LOCAL_CLAUDE-labelled test pair declared ISOLATED in the TEST provider (the strict sandbox requires it; production LocalClaudeExecutors is NOT_ISOLATED)
+  const pairOf = (kind: "FAKE" | "LOCAL_CLAUDE") => ({...new FakeExecutors({implement: () => ({files: {"f.txt": "x\n"}}), review: () => ({verdict: "CLEAN"})}).pair(), kind, ...(kind === "LOCAL_CLAUDE" ? {isolation: {state: "ISOLATED" as const, providerId: "TEST_ONLY_HOST_PASSTHROUGH"}} : {})});
   const newRun = (c: ReturnType<typeof mkStore>) => { const p = pairOf("FAKE"); return c.store.createRun({tenantId: "tA", missionId: mission(c), executor: {implementer: p.implementer.identity, reviewer: p.reviewer.identity}, createdBy: "FOUNDER_LOCAL"}).runId; };
   const mkRunner = (c: ReturnType<typeof mkStore>, kind: "FAKE" | "LOCAL_CLAUDE", extra: Partial<RunnerOptions> = {}) => new MissionRunner({executionGate: testExecutionGate(), store: c.store, dataDir: c.dataDir,
     globalStopFile: path.join(tmp, "GLOBAL_STOP.json"), envPolicyFile: ENV_POLICY, executors: pairOf(kind) as never, maxStepsPerTick: 0, security: fakeSecurity(`${c.dataDir}-sec`).options, ...extra});

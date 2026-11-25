@@ -1,13 +1,13 @@
 // //TR: Bu görünüm parçası Ayarlar → "AI Yürütücüleri" panelidir: GET /v1/system/executors durumunu (LOCAL_CLAUDE: READY, NOT_CONFIGURED, PROVENANCE_MISSING, CLI_NOT_FOUND) dürüstçe gösterir, FAKE'i yalnız test olarak işaretler ve "Etkinleştir" eylemini yalnız NOT_CONFIGURED iken, kullanıcının kendi Claude Code girişiyle yerel CLI çalıştıracağını açıklayan erişilebilir onaydan sonra gönderir; arka uç yoksa UNAVAILABLE gösterilir, durum uydurulmaz.
 import {h,panel,stateNote,emptyNote,badge} from "../components.js";
 import {drafts,statusBlock,setStatus,focusResult} from "../forms.js";
-import {buildEnableExecutorRequest,canEnableExecutor} from "../project-core.js";
+import {buildEnableExecutorRequest,canEnableExecutor,canStartRunner,RUNNER_START_PATH} from "../project-core.js";
 import {describePostResult} from "../work-core.js";
 import {sandboxBlock} from "../m1a.js";
 import {mapCapabilities,mapAdapters,countBy,buildRoutingRows,ROUTING_LIST_LIMIT} from "../routing-core.js";
 
 export const EXEC_FORM="executors";
-const EXEC_KEYS=["id:exec-enable"];
+const EXEC_KEYS=["id:exec-enable","id:runner-start"];
 const stateLabel=(ctx,e)=>{
   if(e.state===null)return ctx.t("exec.state.UNKNOWN");
   const k=`exec.state.${e.state}`,v=ctx.t(k);return v===k?e.state:v;
@@ -23,6 +23,25 @@ export async function enableLocalClaude(ctx){
   setStatus(EXEC_FORM,{ok:d.ok,key:d.ok?"exec.enabled":d.key,vars:d.ok?{}:d.vars,errors:null});
   await ctx.refreshAll({force:true});focusResult(ctx,EXEC_FORM,EXEC_KEYS);return {ok:d.ok,status:res?.status??null};
 }
+/** DSK-T0008 P-A: PASSIVE runner'ı başlatma; erişilebilir onay (varsayılan odak "Vazgeç") sonrası sabit boş gövdeli POST. Sunucu hazırlığı yeniden denetler; ret (409) kodlarıyla duyurulur. */
+export async function startRunner(ctx){
+  const yes=await ctx.confirm({title:ctx.t("exec.runner.confirm.title"),body:ctx.t("exec.runner.confirm.body"),action:ctx.t("exec.runner.confirm.action"),target:ctx.t("exec.name.LOCAL_CLAUDE"),confirmLabel:ctx.t("exec.runner.start")});
+  if(yes!==true){setStatus(EXEC_FORM,{ok:false,key:"confirm.cancelled",vars:{},errors:null});await ctx.rerender();focusResult(ctx,EXEC_FORM,EXEC_KEYS);return {ok:false,cancelled:true}}
+  drafts.busy[EXEC_FORM]=true;
+  let res;try{res=await ctx.api.post(RUNNER_START_PATH,{})}finally{drafts.busy[EXEC_FORM]=false}
+  const d=describePostResult(res);
+  setStatus(EXEC_FORM,{ok:d.ok,key:d.ok?"exec.runner.started":d.key,vars:d.ok?{}:d.vars,errors:null});
+  await ctx.refreshAll({force:true});focusResult(ctx,EXEC_FORM,EXEC_KEYS);return {ok:d.ok,status:res?.status??null};
+}
+function runnerBlock(ctx,res){
+  const doc=ctx.doc,r=res&&res.state==="VERIFIED"?res.runner:null,state=r?r.state:"UNKNOWN";
+  return h(doc,"section",{id:"settings-runner",dataset:{runnerState:state}},
+    h(doc,"h3",{text:ctx.t("exec.runner.title")}),
+    h(doc,"p",{},badge(ctx,ctx.t(`exec.runner.state.${state}`),state==="ACTIVE"?"badge-ok":"badge-risk")),
+    h(doc,"p",{class:"note",text:ctx.t(`exec.runner.hint.${state}`)}),
+    r&&r.reason?h(doc,"p",{class:"note mono",dataset:{runnerReason:r.reason},text:r.reason}):null,
+    canStartRunner(res)?h(doc,"button",{type:"button",class:"btn btn-primary",id:"runner-start",dataset:{focusKey:"runner-start"},disabled:drafts.busy[EXEC_FORM]===true,text:ctx.t("exec.runner.start"),on:{click:()=>{startRunner(ctx)}}}):null);
+}
 export async function executorsPanel(ctx){
   const doc=ctx.doc,res=await ctx.api.executors();
   let body;
@@ -37,7 +56,7 @@ export async function executorsPanel(ctx){
       canEnableExecutor(e)?h(doc,"button",{type:"button",class:"btn btn-primary",id:"exec-enable",dataset:{focusKey:"exec-enable"},disabled:drafts.busy[EXEC_FORM]===true,text:ctx.t("exec.enable"),on:{click:()=>{enableLocalClaude(ctx)}}}):null);
   }));
   // M1a: sandbox durumu sunucudan okunur (doğrulanmış sağlayıcı yoksa "UNAVAILABLE — M1a modu"); profiller ayrı UASCO profilleridir, kişisel profile düşülmez.
-  return panel(ctx,{titleKey:"exec.title",id:"settings-executors"},h(doc,"p",{class:"note",text:ctx.t("exec.lead")}),sandboxBlock(ctx,res.state==="VERIFIED"?res.sandbox:null),body,profilesBlock(ctx,res.profiles),statusBlock(ctx,EXEC_FORM));
+  return panel(ctx,{titleKey:"exec.title",id:"settings-executors"},h(doc,"p",{class:"note",text:ctx.t("exec.lead")}),sandboxBlock(ctx,res.state==="VERIFIED"?res.sandbox:null),body,profilesBlock(ctx,res.profiles),runnerBlock(ctx,res),statusBlock(ctx,EXEC_FORM));
 }
 const tOr=(ctx,k,fallback)=>{const v=ctx.t(k);return v===k?fallback:v};
 /** SBX-8 (D-SBX-11 b): ayrı UASCO Claude profilleri (implementer / salt-okunur reviewer) için durum ve Founder'ın kendisinin çalıştıracağı giriş komutu (yalnız metin; UASCO oturum açmaz, kişisel ayar/kimlik aktarmaz). */

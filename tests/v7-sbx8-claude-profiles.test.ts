@@ -146,7 +146,7 @@ describe("SBX-8 B: GET /v1/system/executors exposes profile status and the Found
     const app = buildServer({controlToken: TOKEN, runtime, dataDir, repoRoot: REPO, controlRoot, port: 3210, logger: false, tenantId: "tA"});
     apps.push(app);
     const j = (await call(app)).json();
-    expect(Object.keys(j).sort()).toEqual(["active", "claudeProfiles", "executors", "sandbox"]);
+    expect(Object.keys(j).sort()).toEqual(["active", "claudeProfiles", "executors", "runner", "sandbox"]); // DSK-T0008 P-A: runner state added
     expect(j.executors.FAKE).toEqual({state: "TEST_ONLY"});
     for (const role of ["implementer", "reviewer"]) {
       const dir = path.join(controlRoot, "claude-profiles", role);
@@ -346,7 +346,7 @@ describe("C-IMPL-WIN-1: a run refuses with the exact reason, instantly, and neve
     g(["init", "-q", "-b", "main"]); fs.writeFileSync(path.join(ws, "README.txt"), "base\n"); g(["add", "-A"]); g(["-c", "user.name=Seed", "-c", "user.email=seed@local.invalid", "commit", "-q", "-m", "seed"]);
     const head = g(["rev-parse", "HEAD"]);
     const spec = {runId: "run_" + "0".repeat(24), missionId: "msn_" + "1".repeat(24), projectId: "prj_" + "2".repeat(24), title: "t", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1" as const, cycle: 0, baseSha: head, startSha: head};
-    return {appRoot, controlRoot, ws, spec, pair: () => new LocalClaudeExecutors(appRoot, controlRoot, {profile: {forbiddenRoots: [path.join(tmp, "data")]}}).pair()};
+    return {appRoot, controlRoot, ws, spec, pair: () => new LocalClaudeExecutors(appRoot, controlRoot, {testOnlyIsolationProviderId: "TEST_ONLY_HOST_PASSTHROUGH", profile: {forbiddenRoots: [path.join(tmp, "data")]}}).pair()};
   };
   const prov = (controlRoot: string, launcher: string, patch: Record<string, unknown> = {}) => {
     const sha = crypto.createHash("sha256").update(fs.readFileSync(launcher)).digest("hex");
@@ -395,7 +395,7 @@ describe("C-IMPL-WIN-1: a run refuses with the exact reason, instantly, and neve
   it("L1/L2: the reviewer's expired sign-in is never retried (exit 75 too) and is concluded only from a FAILED exit, never from text inside a successful run's output", { timeout: 60_000 }, async () => {
     const a = setupApp(), launcher = path.join(tmp, "launcher.bin"); fs.writeFileSync(launcher, "v1"); prov(a.controlRoot, launcher);
     ensureClaudeProfile(a.controlRoot, "reviewer", {forbiddenRoots: [path.join(tmp, "data")]}); fs.writeFileSync(path.join(claudeProfileDir(a.controlRoot, "reviewer"), ".credentials.json"), "");
-    const review = (exitCode: number, stdout: string, stderr: string) => new LocalClaudeExecutors(a.appRoot, a.controlRoot, {profile: {forbiddenRoots: [path.join(tmp, "data")]}, runReviewer: async (argv) => ({argv, exitCode, stdout, stderr, startedAt: "t", endedAt: "t", timedOut: false, aborted: false, spawnError: false})})
+    const review = (exitCode: number, stdout: string, stderr: string) => new LocalClaudeExecutors(a.appRoot, a.controlRoot, {testOnlyIsolationProviderId: "TEST_ONLY_HOST_PASSTHROUGH", profile: {forbiddenRoots: [path.join(tmp, "data")]}, runReviewer: async (argv) => ({argv, exitCode, stdout, stderr, startedAt: "t", endedAt: "t", timedOut: false, aborted: false, spawnError: false})})
       .pair().reviewer.review(a.ws, {runId: a.spec.runId, missionId: "m", projectId: "p", title: "t", objective: "o", acceptanceCriteria: [], riskLevel: "R1", cycle: 0, baseSha: a.spec.baseSha}, "", {timeoutMs: 10_000});
     expect(await review(75, "", "Invalid API key · Please run /login\n")).toMatchObject({valid: false, invalidReason: "CLAUDE_PROFILE_LOGIN_EXPIRED", transient: false}); // 75 normally means "retry"
     expect(await review(1, "", "OAuth token has expired. Please run /login\n")).toMatchObject({valid: false, invalidReason: "CLAUDE_PROFILE_LOGIN_EXPIRED"});
@@ -420,7 +420,7 @@ describe("C-IMPL-WIN-1: a run refuses with the exact reason, instantly, and neve
     // reviewer with the same CLI message (injected runner; a verified launcher and a signed-in reviewer profile exist)
     const launcher = path.join(tmp, "launcher.bin"); fs.writeFileSync(launcher, "v1"); prov(a.controlRoot, launcher);
     ensureClaudeProfile(a.controlRoot, "reviewer", {forbiddenRoots: [path.join(tmp, "data")]}); fs.writeFileSync(path.join(claudeProfileDir(a.controlRoot, "reviewer"), ".credentials.json"), "");
-    const ex = new LocalClaudeExecutors(a.appRoot, a.controlRoot, {profile: {forbiddenRoots: [path.join(tmp, "data")]}, runReviewer: async (argv) => ({argv, exitCode: 1, stdout: "", stderr: "OAuth token has expired. Please run /login\n", startedAt: "t", endedAt: "t", timedOut: false, aborted: false, spawnError: false})});
+    const ex = new LocalClaudeExecutors(a.appRoot, a.controlRoot, {testOnlyIsolationProviderId: "TEST_ONLY_HOST_PASSTHROUGH", profile: {forbiddenRoots: [path.join(tmp, "data")]}, runReviewer: async (argv) => ({argv, exitCode: 1, stdout: "", stderr: "OAuth token has expired. Please run /login\n", startedAt: "t", endedAt: "t", timedOut: false, aborted: false, spawnError: false})});
     const r = await ex.pair().reviewer.review(a.ws, {runId: a.spec.runId, missionId: "m", projectId: "p", title: "t", objective: "o", acceptanceCriteria: [], riskLevel: "R1", cycle: 0, baseSha: a.spec.baseSha}, "", {timeoutMs: 10_000});
     expect(r).toMatchObject({valid: false, invalidReason: "CLAUDE_PROFILE_LOGIN_EXPIRED"});
   });

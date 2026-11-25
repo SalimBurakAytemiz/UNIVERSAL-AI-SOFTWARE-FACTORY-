@@ -542,7 +542,7 @@ describe("C-PAR-1 review round 1 (#224): heartbeat and scheduling", () => {
     slow.rule = {ms: 0, match: (cwd, args) => { if (cwd === clone && (args.includes("status") || args.includes("rev-parse"))) insideSpan.push(depth > 0); return false; }}; // yalnız gözler: gecikme yok
     const runReviewer = async (argv: string[], _opts: ProcOptions): Promise<ProcResult> => { const at = new Date().toISOString(); return {argv, exitCode: 0, stdout: '{"verdict":"CLEAN","findings":[]}\n', stderr: "", startedAt: at, endedAt: at, timedOut: false, aborted: false, spawnError: false}; };
     const spec: MissionSpec = {runId: "run_" + "0".repeat(24), missionId: "msn_" + "1".repeat(24), projectId: "prj_" + "2".repeat(24), title: "t", objective: "o", acceptanceCriteria: ["a"], riskLevel: "R1", cycle: 0, baseSha: ""};
-    const r = await new LocalClaudeExecutors(PAR_REPO, control, {runReviewer}).pair().reviewer.review(clone, spec, "", {timeoutMs: 10_000, span: fn => { depth += 1; spans += 1; try { return fn(); } finally { depth -= 1; } }});
+    const r = await new LocalClaudeExecutors(PAR_REPO, control, {testOnlyIsolationProviderId: "TEST_ONLY_HOST_PASSTHROUGH", runReviewer}).pair().reviewer.review(clone, spec, "", {timeoutMs: 10_000, span: fn => { depth += 1; spans += 1; try { return fn(); } finally { depth -= 1; } }});
     expect([r.valid, r.verdict], r.log).toEqual([true, "CLEAN"]);
     expect(insideSpan.length, "both snapshots ran their git calls").toBeGreaterThanOrEqual(4);
     expect(insideSpan.every(Boolean), "a snapshot git call ran outside ctx.span").toBe(true);

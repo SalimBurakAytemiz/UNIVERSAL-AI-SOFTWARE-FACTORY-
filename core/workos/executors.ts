@@ -6,6 +6,7 @@ import cp from "node:child_process";
 import {fileURLToPath} from "node:url";
 import {safeChildEnv} from "../../automation/lib/env-policy.mjs";
 import {agentConfigInWorkspace, commitBuilderOutputAsync, gitControlDigest} from "./builder-output.js";
+import type {ExecutionGate} from "./execution-gate.js";
 import {spawnGitSync} from "../../automation/lib/git-isolation.mjs";
 import {CLAUDE_ISOLATION_FLAGS, claudeAuthFailure, claudeLauncherCheck, claudeProfileForRun, withClaudeProfileEnv} from "./claude-profiles.js";
 import type {ClaudeProfileOptions} from "./claude-profiles.js";
@@ -47,7 +48,20 @@ export interface ReviewResult {
 export interface ImplementerAdapter { readonly identity: string; implement(workspace: string, spec: MissionSpec, ctx: ExecContext): Promise<ImplementResult> }
 export interface ReviewerAdapter { readonly identity: string; review(cleanClone: string, spec: MissionSpec, diff: string, ctx: ExecContext): Promise<ReviewResult> }
 // //TR: preDevBuilder (isteğe bağlı): pre-dev artefakt üretimi için üretim BuilderPort'u; yalnız LOCAL_CLAUDE sağlar ve her çağrı TAZE bir adaptör döndürür. FAKE çiftinde yoktur (route 409 PREDEV_DRIVER_BUILDER_NOT_CONFIGURED verir).
-export interface ExecutorPair { kind: "FAKE" | "LOCAL_CLAUDE"; implementer: ImplementerAdapter; reviewer: ReviewerAdapter; preDevBuilder?: () => ClaudePreDevBuilder }
+// //TR: DSK-T0008 sıkı sandbox (Founder kararı 2026-11-21): gerçek model süreci (implementer/reviewer/pre-dev) yalnız doğrulanmış bir sandbox sağlayıcısının İÇİNDE başlatılıyorsa ISOLATED'dır (providerId o sağlayıcıdır). Ana makinede başlatan yürütücü NOT_ISOLATED'dır ve gerçek yürütmesi kapalıdır. FAKE yürütücüde alan yoktur (model yok).
+export type ExecutorIsolation = {state: "ISOLATED"; providerId: string} | {state: "NOT_ISOLATED"; reason: "HOST_SPAWN"};
+export const NOT_ISOLATED = "NOT_ISOLATED" as const;
+const TEST_ONLY_ID = /^TEST_ONLY_[A-Z0-9_]{1,48}$/;
+const WIN_PATH = /^[A-Za-z]:[\\/]|\\/;
+const PATH_ENV = ["HOME", "CLAUDE_CONFIG_DIR", "PATH", "USERPROFILE", "TMPDIR", "UASCO_CONTROL_ROOT"];
+/** //TR: Linux konuk ortamına (WSL2) giden süreçte Windows yolu kalmışsa sabit neden; yoksa null. */
+export function windowsPathIn(p: {argv: string[]; cwd: string; env: NodeJS.ProcessEnv}): string | null {
+  if (p.argv.some(a => WIN_PATH.test(a))) return "WINDOWS_PATH_IN_ARGV";
+  if (WIN_PATH.test(p.cwd)) return "WINDOWS_PATH_IN_CWD";
+  for (const k of PATH_ENV) { const v = p.env[k]; if (typeof v === "string" && WIN_PATH.test(v)) return `WINDOWS_PATH_IN_ENV_${k}`; }
+  return null;
+}
+export interface ExecutorPair { kind: "FAKE" | "LOCAL_CLAUDE"; implementer: ImplementerAdapter; reviewer: ReviewerAdapter; preDevBuilder?: () => ClaudePreDevBuilder; isolation?: ExecutorIsolation }
 
 // Bağımsız review zorunluluğu (config/execution-backends.json pipeline.producerMayReviewOwnOutput=false): aynı kimlik reddedilir.
 export function assertIndependentExecutors(pair: ExecutorPair): void {
@@ -207,7 +221,7 @@ export function reviewPrompt(spec: MissionSpec, diff: string): string {
 // commitBuilderOutput değişiklikleri sabit builder kimliğiyle commit eder; değişiklik yoksa veya .git/workspace dışı değiştiyse BLOCKED.
 // INT-R3 D-M1-03: nodeScript=true ise argv[0] UASCO'nun kendi node script'idir ve runNodeScript (fork) ile çalışır (paketli Electron node modu); aksi halde argv doğrudan spawn edilir.
 // SBX-8: makeProcess süreç başlatmadan reddedebilir ({refuse}); builder hiç çalışmaz, kanıt NOT_EXECUTED (exitCode null) ve run bu nedenle BLOCKED olur.
-export interface EditOnlyProcess { argv: string[]; env: NodeJS.ProcessEnv; input: string; nodeScript?: boolean }
+export interface EditOnlyProcess { argv: string[]; env: NodeJS.ProcessEnv; input: string; nodeScript?: boolean; runVia?: (argv: string[], opts: ProcOptions) => Promise<ProcResult> }
 export class EditOnlyImplementer implements ImplementerAdapter {
   constructor(readonly identity: string, private readonly envPolicyFile: string, private readonly makeProcess: (workspace: string, spec: MissionSpec) => EditOnlyProcess | {refuse: string}, private readonly transientExitCodes: number[] = []) {}
   async implement(workspace: string, spec: MissionSpec, ctx: ExecContext): Promise<ImplementResult> {
@@ -224,7 +238,8 @@ export class EditOnlyImplementer implements ImplementerAdapter {
       return {exitCode: null, blockReason: p.refuse, log: `NOT_EXECUTED: ${p.refuse} (builder not started)${detail}\n`, argv: [], startedAt: at, endedAt: at, timedOut: false, aborted: false, transient: false};
     }
     const po = {cwd: workspace, env: withWriterEnv(p.env, ctx), timeoutMs: ctx.timeoutMs, input: p.input, shouldAbort: ctx.shouldAbort, newSession: true, onSpawn: ctx.onSpawn};
-    const r = p.nodeScript ? await runNodeScript(p.argv[0], p.argv.slice(1), po) : await runProcess(p.argv, po);
+    // //TR: DSK-T0007: runVia verilmişse süreç doğrulanmış sandbox sağlayıcısında başlatılır (node betiği node ikilisiyle); ana makine fork/spawn yolu kullanılmaz.
+    const r = p.runVia ? await p.runVia(p.nodeScript ? [process.execPath, ...p.argv] : p.argv, po) : p.nodeScript ? await runNodeScript(p.argv[0], p.argv.slice(1), po) : await runProcess(p.argv, po);
     const base = {argv: r.argv, startedAt: r.startedAt, timedOut: r.timedOut, aborted: r.aborted, transient: r.timedOut || r.spawnError || (r.exitCode !== null && this.transientExitCodes.includes(r.exitCode))};
     // C-IMPL-WIN-1: kimlik dosyası var ama CLI oturum istiyor (süresi dolmuş): beklemeden/yeniden denemeden kesin neden (Founder kendi giriş komutunu yeniden çalıştırır).
     if (r.exitCode !== 0 && !r.aborted && !r.timedOut && claudeAuthFailure(procLog(r))) return {...base, transient: false, exitCode: r.exitCode, blockReason: "CLAUDE_PROFILE_LOGIN_EXPIRED", log: procLog(r), endedAt: r.endedAt};
@@ -277,6 +292,10 @@ export interface LocalClaudeOptions {
   profile?: ClaudeProfileOptions;
   // Yalnız testler: reviewer sürecini gerçek CLI yerine kaydeden sahte çalıştırıcı (programatik enjeksiyon; env ile seçilemez).
   runReviewer?: (argv: string[], opts: ProcOptions) => Promise<ProcResult>;
+  // //TR: DSK-T0008: YALNIZ testler (programatik; env/config/API ile seçilemez). Sahte CLI ile ana makinede başlatmayı bu TEST sağlayıcısının kimliğiyle "izole" sayar; üretimde verilmez, dolayısıyla gerçek model süreci hiç başlatılmaz (NOT_ISOLATED).
+  testOnlyIsolationProviderId?: string;
+  // //TR: DSK-T0007: gerçek izolasyon kaynağı. Bu kapının sağlayıcısı öz-testini GEÇMİŞSE (verifiedProvider) yürütücü ISOLATED olur ve üç model süreci de o sağlayıcıda başlatılır; ISOLATED asla yürütücünün kendi beyanı değildir. ÖNEMLİ: bu PR'da sunucu (server.ts) bu seçeneği henüz VERMEZ; korumalı bağlantı ayrı PR'dadır. O birleşene kadar üretimde her LOCAL_CLAUDE yolu (implementer, reviewer, pre-dev/analiz) NOT_ISOLATED olarak reddedilir: gerçek model yürütmesi tamamen kapalıdır.
+  isolationGate?: ExecutionGate;
 }
 export class LocalClaudeExecutors {
   readonly implementerIdentity: string; readonly reviewerIdentity: string;
@@ -298,27 +317,65 @@ export class LocalClaudeExecutors {
     if (!c.ok) throw new Error(c.code);
     return c.resolvedPath;
   }
+  // //TR: DSK-T0008: bu sınıf Claude sürecini ana makinede başlatır (fork/spawn; sandbox sağlayıcısı üzerinden DEĞİL). Bu yüzden üretimde NOT_ISOLATED'dır ve üç gerçek model yolu (implementer, reviewer, pre-dev) KAYNAKTA, süreç başlatılmadan reddedilir. Doğrulanmış izole başlatma (DSK-T0007) gelene kadar gerçek yürütme kapalıdır.
+  get isolation(): ExecutorIsolation {
+    const t = this.opts.testOnlyIsolationProviderId;
+    // //TR: Test geçersiz kılması yalnız TEST_ONLY_ önekli kimlikle ve gerçek bir izolasyon kapısı VERİLMEMİŞKEN geçerlidir; üretim kapısıyla birlikte verilirse yok sayılır (gerçek sağlayıcı yerine ana makinede başlatmaya düşülemez). Runner ayrıca kimliğin kendi kapısının doğrulanmış sağlayıcısıyla eşleşmesini ister.
+    if (this.testHostAllowed()) return {state: "ISOLATED", providerId: t as string};
+    const p = this.opts.isolationGate?.verifiedProvider() ?? null;
+    return p ? {state: "ISOLATED", providerId: p.id} : {state: "NOT_ISOLATED", reason: "HOST_SPAWN"};
+  }
+  /** //TR: Ana makinede başlatma (sahte CLI/mock) YALNIZ şu üçü birlikteyken: TEST_ONLY_ kimliği, gerçek izolasyon kapısı yok ve test çalışma zamanı (vitest). Paketli/üretim süreçte bu koşul hiç sağlanamaz; yanlışlıkla verilse bile gerçek model ana makinede çalışmaz (yalnız reddeden kontrol). */
+  private testHostAllowed(): boolean {
+    const t = this.opts.testOnlyIsolationProviderId;
+    return typeof t === "string" && TEST_ONLY_ID.test(t) && !this.opts.isolationGate && typeof process.env.VITEST === "string";
+  }
+  /** //TR: Model sürecinin TEK çalıştırıcı seçimi: doğrulanmış sağlayıcı varsa o (mock dahil hiçbir şey onu geçersiz kılamaz); yoksa yalnız test ana makine izni varken test mock'u ya da ana makine; ikisi de yoksa null = süreç başlamaz. Ana makineye sessiz geri düşüş yoktur. */
+  private modelRunner(mock?: (argv: string[], po: ProcOptions) => Promise<ProcResult>): ((argv: string[], po: ProcOptions) => Promise<ProcResult>) | null {
+    const via = this.modelRun();
+    if (via) return via;
+    return this.testHostAllowed() ? (mock ?? runProcess) : null;
+  }
+  /** DSK-T0007: model process runner through the verified provider (null when no verified provider). */
+  private modelRun(): ((argv: string[], po: ProcOptions) => Promise<ProcResult>) | null {
+    const p = this.opts.isolationGate?.verifiedProvider() ?? null;
+    if (!p) return null;
+    return async (argv, po) => {
+      // //TR: Sınır geçişi: sağlayıcı ana makine yollarını kendi ortamına eşleyebiliyorsa (WSL2: Windows -> Linux) önce eşler; eşlenmiş sonuçta (ya da eşleyicisi olmayan WSL sağlayıcısında) Windows yolu kalırsa süreç başlatılmaz.
+      const mapped = p.mapModelProcess ? p.mapModelProcess(argv, {cwd: po.cwd, env: po.env}) : {argv, cwd: po.cwd, env: po.env};
+      const bad = mapped === null ? "PATH_MAPPING_REFUSED" : (p.linuxGuest === true || p.id.startsWith("wsl")) ? windowsPathIn(mapped) : null;
+      if (bad || mapped === null) { const at = new Date().toISOString(); return {argv, exitCode: null, stdout: "", stderr: `NOT_EXECUTED: ${bad}`, startedAt: at, endedAt: at, timedOut: false, aborted: false, spawnError: true}; }
+      return p.run(mapped.argv, {cwd: mapped.cwd, env: mapped.env, timeoutMs: po.timeoutMs, input: po.input, shouldAbort: po.shouldAbort});
+    };
+  }
   pair(): ExecutorPair {
     const self = this;
+    const isolated = () => self.isolation.state === "ISOLATED";
     return {
       kind: "LOCAL_CLAUDE",
+      // //TR: Founder incelemesi (2026-11-23): izolasyon CANLI okunur (getter). Kapının öz-testi çift kurulduktan SONRA sonuçlansa bile runner güncel durumu görür; kurulum anındaki değer donmaz.
+      get isolation(): ExecutorIsolation { return self.isolation; },
       // Broker ve config/builder-execution-policy.json değişmeden çalışır (Bash yok, commit edemez); commit'i engine atar.
       // SBX-8: implementer profili hazır değilse (oturum açılmamış / yol reddi) broker hiç başlatılmaz; kişisel profile geri düşülmez. Broker aynı kontrolü bağımsız olarak tekrarlar.
       implementer: new EditOnlyImplementer(this.implementerIdentity, path.join(this.repoRoot, "config", "environment-policy.json"),
         (_workspace, spec) => {
+          if (!isolated()) return {refuse: NOT_ISOLATED};
           const prof = claudeProfileForRun(self.controlRoot, "implementer", self.opts.profile);
           if (!prof.ok) return {refuse: prof.reason};
           // C-IMPL-WIN-1: CLI/başlatıcı kanıtı yoksa broker HİÇ başlatılmaz (asılı kalma/genel hata yok): kesin neden BLOCKED olarak run'a yazılır.
           const lc = claudeLauncherCheck(self.controlRoot);
           if (!lc.ok) return {refuse: lc.code};
           syncBrokerControlConfig(self.repoRoot, self.controlRoot);
-          return {argv: [path.join(self.repoRoot, "scripts", "claude-builder-broker.mjs")], nodeScript: true, env: withClaudeProfileEnv(self.env(), prof.dir), input: implementPrompt(spec)};
+          const via = self.modelRun();
+          if (!via && !self.testHostAllowed()) return {refuse: NOT_ISOLATED}; // no host fork without the test-only host permission
+          return {argv: [path.join(self.repoRoot, "scripts", "claude-builder-broker.mjs")], nodeScript: true, env: withClaudeProfileEnv(self.env(), prof.dir), input: implementPrompt(spec), ...(via ? {runVia: via} : {})};
         }),
       reviewer: {
         identity: this.reviewerIdentity,
         async review(cleanClone, spec, diff, ctx) {
           let launcher: string;
           const at = new Date().toISOString();
+          if (!isolated()) return {verdict: "BLOCKED", findings: [], valid: false, invalidReason: NOT_ISOLATED, exitCode: null, log: `NOT_EXECUTED: ${NOT_ISOLATED} (reviewer not started)\n`, argv: ["claude"], startedAt: at, endedAt: at, timedOut: false, aborted: false, transient: false};
           try { launcher = self.verifiedLauncher(); } catch (e) {
             return {verdict: "BLOCKED", findings: [], valid: false, invalidReason: (e as Error).message.slice(0, 200), exitCode: null, log: `PROVENANCE_REFUSED: ${(e as Error).message}\n`, argv: ["claude"], startedAt: at, endedAt: new Date().toISOString(), timedOut: false, aborted: false, transient: false};
           }
@@ -330,7 +387,9 @@ export class LocalClaudeExecutors {
           const sp: <T>(fn: () => T) => T = ctx.span ?? (fn => fn()); // HB-1: anlık görüntüdeki senkron git çağrıları runner span'ına sarılır
           const before = sp(() => reviewWorkspaceSnapshot(cleanClone, envPolicyFile));
           const po: ProcOptions = {cwd: cleanClone, env: withWriterEnv(withClaudeProfileEnv(self.env(), prof.dir), ctx), timeoutMs: ctx.timeoutMs, input: reviewPrompt(spec, diff), shouldAbort: ctx.shouldAbort, newSession: true, onSpawn: ctx.onSpawn};
-          const r = toReview(await (self.opts.runReviewer ?? runProcess)(argv, po));
+          const run = self.modelRunner(self.opts.runReviewer);
+          if (!run) return {verdict: "BLOCKED", findings: [], valid: false, invalidReason: NOT_ISOLATED, exitCode: null, log: `NOT_EXECUTED: ${NOT_ISOLATED} (reviewer not started)\n`, argv, startedAt: at, endedAt: new Date().toISOString(), timedOut: false, aborted: false, transient: false};
+          const r = toReview(await run(argv, po));
           // C-IMPL-WIN-1: oturum süresi dolmuş (kimlik dosyası var ama CLI giriş istiyor): genel REVIEW_FAILED değil, kesin neden.
           // //TR: yalnız BAŞARISIZ çıkışta (uygulayıcıyla aynı kural): çıkış 0 iken güvenilmeyen çıktıdan (alıntı/prompt injection) "oturum doldu" sonucu çıkarılmaz; ve süresi dolmuş oturum yeniden DENENMEZ (çıkış 75 geçici sayılsa bile).
           if (!r.valid && !r.aborted && !r.timedOut && r.exitCode !== 0 && claudeAuthFailure(r.log)) { r.invalidReason = "CLAUDE_PROFILE_LOGIN_EXPIRED"; r.transient = false; }
@@ -342,9 +401,9 @@ export class LocalClaudeExecutors {
       },
       // //TR: Pre-dev artefakt üretimi AYNI reviewer rotasının yetkisini kullanır (provenance-doğrulanmış launcher, ayrı salt-okunur reviewer profili, reviewerArgv, allowPaidApi env politikası); yeni yetki/env bayrağı yoktur.
       preDevBuilder: () => new ClaudePreDevBuilder({
-        identity: self.reviewerIdentity, launcher: () => self.verifiedLauncher(),
+        identity: self.reviewerIdentity, launcher: () => { if (!isolated()) throw new Error(NOT_ISOLATED); return self.verifiedLauncher(); },
         profile: () => { const p = claudeProfileForRun(self.controlRoot, "reviewer", self.opts.profile); return p.ok ? {ok: true, dir: p.dir} : {ok: false, reason: p.reason}; },
-        env: dir => withClaudeProfileEnv(self.env(), dir), argv: l => reviewerArgv(l, "json"), outputFormat: "claude-json", run: self.opts.runReviewer ?? runProcess
+        env: dir => withClaudeProfileEnv(self.env(), dir), argv: l => reviewerArgv(l, "json"), outputFormat: "claude-json", run: (argv, po) => { const run = self.modelRunner(self.opts.runReviewer); if (!run) throw new Error(NOT_ISOLATED); return run(argv, po); }
       })
     };
   }

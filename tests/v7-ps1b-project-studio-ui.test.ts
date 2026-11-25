@@ -3299,3 +3299,12 @@ describe("LANE-A A-UI125-1 import success shows the agent configuration quaranti
     for (const k of keys) { expect(tr[k], k).toBeTruthy(); expect(ph(tr[k]), k).toBe(ph(en[k])); }
   });
 });
+
+// //TR: DSK-T0008 P-A: main POST allow-list'i yalnız tam /v1/system/runner/start yolunu kabul eder (varyantlar, sorgu dizesi, sondaki eğik çizgi ve kardeş eylemler reddedilir).
+describe("DSK-T0008 P-A: runner start is one exact allow-listed POST", () => {
+  it("accepts only the exact path", () => {
+    const ok = loadPost().desktopPostPathAllowed;
+    expect(ok("/v1/system/runner/start")).toBe(true);
+    for (const p of ["/v1/system/runner/start/", "/v1/system/runner/start?x=1", "/v1/system/runner/stop", "/v1/system/runner", "/v1/system/runner/start\n", "/v1/system/runner/START"]) expect(ok(p), p).toBe(false);
+  });
+});
