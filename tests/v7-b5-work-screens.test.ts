@@ -6,6 +6,7 @@ import crypto from "node:crypto";
 import {pathToFileURL} from "node:url";
 import {logicalTestFiles} from "./support/validation-test-shards.js";
 import {moduleSpecifiers} from "./support/static-imports.js";
+import {registerMobileRouteTruthSuite} from "./support/mobile-route-truth.cases.js";
 
 const root = path.resolve(__dirname, "..");
 const desk = path.join(root, "apps", "desktop");
@@ -3159,4 +3160,4 @@ describe("LANE-A A-PREDEV-BUSY-1: the hand plan shares the mission-write lock", 
     const r = await c.pf.submitPlan(c.ctx, MID); expect(r).toMatchObject({validation: true}); expect(forms.drafts.status["mission-plan"]).toBeDefined(); // without the lock the same input is a validation error
   });
 });
-
+registerMobileRouteTruthSuite();
